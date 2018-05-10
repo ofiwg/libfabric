@@ -59,7 +59,7 @@ static int fi_ibv_msg_ep_setname(fid_t ep_fid, void *addr, size_t addrlen)
 	struct rdma_cm_id *id;
 	int ret;
 	struct fi_ibv_ep *ep =
-		container_of(ep_fid, struct fi_ibv_ep, ep_fid);
+		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 
 	if (addrlen != ep->info->src_addrlen) {
 		VERBS_INFO(FI_LOG_EP_CTRL,"addrlen expected: %zu, got: %zu.\n",
@@ -99,7 +99,7 @@ static int fi_ibv_msg_ep_getname(fid_t ep, void *addr, size_t *addrlen)
 {
 	struct sockaddr *sa;
 	struct fi_ibv_ep *_ep =
-		container_of(ep, struct fi_ibv_ep, ep_fid);
+		container_of(ep, struct fi_ibv_ep, util_ep.ep_fid);
 	sa = rdma_get_local_addr(_ep->id);
 	return fi_ibv_copy_addr(addr, addrlen, sa);
 }
@@ -108,7 +108,7 @@ static int fi_ibv_msg_ep_getpeer(struct fid_ep *ep, void *addr, size_t *addrlen)
 {
 	struct sockaddr *sa;
 	struct fi_ibv_ep *_ep =
-		container_of(ep, struct fi_ibv_ep, ep_fid);
+		container_of(ep, struct fi_ibv_ep, util_ep.ep_fid);
 	sa = rdma_get_peer_addr(_ep->id);
 	return fi_ibv_copy_addr(addr, addrlen, sa);
 }
@@ -121,7 +121,7 @@ fi_ibv_msg_ep_connect(struct fid_ep *ep, const void *addr,
 	struct sockaddr *src_addr, *dst_addr;
 	int ret;
 	struct fi_ibv_ep *_ep =
-		container_of(ep, struct fi_ibv_ep, ep_fid);	
+		container_of(ep, struct fi_ibv_ep, util_ep.ep_fid);	
 
 	if (!_ep->id->qp) {
 		ret = ep->fid.ops->control(&ep->fid, FI_ENABLE, NULL);
@@ -165,7 +165,7 @@ fi_ibv_msg_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 	struct fi_ibv_connreq *connreq;
 	int ret;
 	struct fi_ibv_ep *_ep =
-		container_of(ep, struct fi_ibv_ep, ep_fid);
+		container_of(ep, struct fi_ibv_ep, util_ep.ep_fid);
 	if (!_ep->id->qp) {
 		ret = ep->fid.ops->control(&ep->fid, FI_ENABLE, NULL);
 		if (ret)
@@ -209,7 +209,7 @@ fi_ibv_msg_ep_reject(struct fid_pep *pep, fid_t handle,
 static int fi_ibv_msg_ep_shutdown(struct fid_ep *ep, uint64_t flags)
 {
 	struct fi_ibv_ep *_ep =
-		container_of(ep, struct fi_ibv_ep, ep_fid);
+		container_of(ep, struct fi_ibv_ep, util_ep.ep_fid);
 	return rdma_disconnect(_ep->id) ? -errno : 0;
 }
 

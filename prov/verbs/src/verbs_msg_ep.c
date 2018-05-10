@@ -108,12 +108,12 @@ static void fi_ibv_free_ep(struct fi_ibv_ep *ep)
 
 static int fi_ibv_ep_close(fid_t fid)
 {
-	struct fi_ibv_ep *ep;
+	struct fi_ibv_ep *ep =
+		container_of(fid, struct fi_ibv_ep, util_ep.ep_fid.fid);
 
-	ep = container_of(fid, struct fi_ibv_ep, ep_fid.fid);
 	rdma_destroy_ep(ep->id);
-
 	fi_ibv_cleanup_cq(ep);
+	ofi_endpoint_close(&ep->util_ep);
 
 	VERBS_INFO(FI_LOG_DOMAIN, "EP %p was closed \n", ep);
 
@@ -125,15 +125,20 @@ static int fi_ibv_ep_close(fid_t fid)
 static int fi_ibv_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct fi_ibv_ep *ep;
+	struct util_cq *cq;
 	int ret;
 
-	ep = container_of(fid, struct fi_ibv_ep, ep_fid.fid);
+	ep = container_of(fid, struct fi_ibv_ep, util_ep.ep_fid.fid);
 	ret = ofi_ep_bind_valid(&fi_ibv_prov, bfid, flags);
 	if (ret)
 		return ret;
 
 	switch (bfid->fclass) {
 	case FI_CLASS_CQ:
+		cq = container_of(bfid, struct util_cq, cq_fid.fid);
+		ret = ofi_ep_bind_cq(&ep->util_ep, cq, flags);
+		if (ret)
+			return ret;
 		/* Must bind a CQ to either RECV or SEND completions, and
 		 * the FI_SELECTIVE_COMPLETION flag is only valid when binding the
 		 * FI_SEND CQ. */
@@ -151,11 +156,8 @@ static int fi_ibv_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			if (ep->scq)
 				return -EINVAL;
 			ep->scq = container_of(bfid, struct fi_ibv_cq, util_cq.cq_fid.fid);
-			if (flags & FI_SELECTIVE_COMPLETION)
-				ep->ep_flags |= FI_SELECTIVE_COMPLETION;
-			else
-				ep->info->tx_attr->op_flags |= FI_COMPLETION;
 		}
+		
 		break;
 	case FI_CLASS_EQ:
 		ep->eq = container_of(bfid, struct fi_ibv_eq, eq_fid.fid);
@@ -181,7 +183,7 @@ static int fi_ibv_ep_enable(struct fid_ep *ep_fid)
 	struct ibv_pd *pd;
 	int ret;
 
-	ep = container_of(ep_fid, struct fi_ibv_ep, ep_fid);
+	ep = container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	if (!ep->eq) {
 		VERBS_WARN(FI_LOG_EP_CTRL,
 			   "Endpoint is not bound to an event queue\n");
@@ -194,15 +196,15 @@ static int fi_ibv_ep_enable(struct fid_ep *ep_fid)
 		return -FI_ENOCQ;
 	}
 
-	if (!ep->scq && (ofi_send_allowed(ep->info->caps) ||
-				ofi_rma_initiate_allowed(ep->info->caps))) {
+	if (!ep->scq && (ofi_send_allowed(ep->util_ep.caps) ||
+				ofi_rma_initiate_allowed(ep->util_ep.caps))) {
 		VERBS_WARN(FI_LOG_EP_CTRL, "Endpoint is not bound to "
 			   "a send completion queue when it has transmit "
 			   "capabilities enabled (FI_SEND | FI_RMA).\n");
 		return -FI_ENOCQ;
 	}
 
-	if (!ep->rcq && ofi_recv_allowed(ep->info->caps)) {
+	if (!ep->rcq && ofi_recv_allowed(ep->util_ep.caps)) {
 		VERBS_WARN(FI_LOG_EP_CTRL, "Endpoint is not bound to "
 			   "a receive completion queue when it has receive "
 			   "capabilities enabled. (FI_RECV)\n");
@@ -240,7 +242,7 @@ static int fi_ibv_ep_enable(struct fid_ep *ep_fid)
 
 		/* Override the default ops to prevent the user from posting WRs to a
 		 * QP where a SRQ is attached to */
-		ep->ep_fid.msg = &fi_ibv_msg_srq_ep_msg_ops;
+		ep->util_ep.ep_fid.msg = &fi_ibv_msg_srq_ep_msg_ops;
 	}
 
 	attr.qp_type = IBV_QPT_RC;
@@ -285,6 +287,12 @@ static struct fi_ops fi_ibv_ep_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
+void fi_ibv_util_ep_progress_noop(struct util_ep *util_ep)
+{
+	/* This routine shouldn't be called */
+	assert(0);
+}
+
 int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 		   struct fid_ep **ep_fid, void *context)
 {
@@ -327,10 +335,15 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	if (!ep)
 		return -FI_ENOMEM;
 
+	ret = ofi_endpoint_init(domain, &fi_ibv_util_prov, info, &ep->util_ep, context,
+				fi_ibv_util_ep_progress_noop);
+	if (ret)
+		goto err1;
+
 	if (!info->handle) {
 		ret = fi_ibv_create_ep(NULL, NULL, 0, info, NULL, &ep->id);
 		if (ret)
-			goto err1;
+			goto err2;
 	} else if (info->handle->fclass == FI_CLASS_CONNREQ) {
 		connreq = container_of(info->handle, struct fi_ibv_connreq, handle);
 		ep->id = connreq->id;
@@ -343,35 +356,33 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 				      VERBS_RESOLVE_TIMEOUT)) {
 			ret = -errno;
 			VERBS_INFO(FI_LOG_DOMAIN, "Unable to rdma_resolve_addr\n");
-			goto err2;
+			goto err3;
 		}
 
 		if (rdma_resolve_route(ep->id, VERBS_RESOLVE_TIMEOUT)) {
 			ret = -errno;
 			VERBS_INFO(FI_LOG_DOMAIN, "Unable to rdma_resolve_route\n");
-			goto err2;
+			goto err3;
 		}
 	} else {
 		ret = -FI_ENOSYS;
-		goto err1;
+		goto err2;
 	}
 
-	ep->id->context = &ep->ep_fid.fid;
-	ep->ep_fid.fid.fclass = FI_CLASS_EP;
-	ep->ep_fid.fid.context = context;
-	ep->ep_fid.fid.ops = &fi_ibv_ep_ops;
-	ep->ep_fid.ops = &fi_ibv_ep_base_ops;
-	ep->ep_fid.msg = &fi_ibv_msg_ep_msg_ops;
-	ep->ep_fid.cm = &fi_ibv_msg_ep_cm_ops;
-	ep->ep_fid.rma = &fi_ibv_msg_ep_rma_ops;
-	ep->ep_fid.atomic = &fi_ibv_msg_ep_atomic_ops;
-
-	ep->domain = dom;
-	*ep_fid = &ep->ep_fid;
+	ep->id->context = &ep->util_ep.ep_fid.fid;
+	*ep_fid = &ep->util_ep.ep_fid;
+	ep->util_ep.ep_fid.fid.ops = &fi_ibv_ep_ops;
+	ep->util_ep.ep_fid.ops = &fi_ibv_ep_base_ops;
+	ep->util_ep.ep_fid.msg = &fi_ibv_msg_ep_msg_ops;
+	ep->util_ep.ep_fid.cm = &fi_ibv_msg_ep_cm_ops;
+	ep->util_ep.ep_fid.rma = &fi_ibv_msg_ep_rma_ops;
+	ep->util_ep.ep_fid.atomic = &fi_ibv_msg_ep_atomic_ops;
 
 	return FI_SUCCESS;
-err2:
+err3:
 	rdma_destroy_ep(ep->id);
+err2:
+	ofi_endpoint_close(&ep->util_ep);
 err1:
 	fi_ibv_free_ep(ep);
 	return ret;
@@ -609,7 +620,7 @@ static inline ssize_t
 fi_ibv_msg_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
 {
 	struct fi_ibv_ep *ep =
-		container_of(ep_fid, struct fi_ibv_ep, ep_fid);
+		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_recv_wr wr = {
 		.wr_id = (uintptr_t)msg->context,
 		.num_sge = msg->iov_count,
@@ -662,7 +673,7 @@ static ssize_t
 fi_ibv_msg_ep_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
 {
 	struct fi_ibv_ep *ep =
-		container_of(ep_fid, struct fi_ibv_ep, ep_fid);
+		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
 		.wr_id = (uintptr_t)msg->context,
 	};
@@ -682,7 +693,7 @@ fi_ibv_msg_ep_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 		void *desc, fi_addr_t dest_addr, void *context)
 {
 	struct fi_ibv_ep *ep =
-		container_of(ep_fid, struct fi_ibv_ep, ep_fid);
+		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
 		.wr_id = (uintptr_t)context,
 		.opcode = IBV_WR_SEND,
@@ -697,7 +708,7 @@ fi_ibv_msg_ep_senddata(struct fid_ep *ep_fid, const void *buf, size_t len,
 		       void *desc, uint64_t data, fi_addr_t dest_addr, void *context)
 {
 	struct fi_ibv_ep *ep =
-		container_of(ep_fid, struct fi_ibv_ep, ep_fid);
+		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
 		.wr_id = (uintptr_t)context,
 		.opcode = IBV_WR_SEND_WITH_IMM,
@@ -713,7 +724,7 @@ fi_ibv_msg_ep_sendv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 		    size_t count, fi_addr_t dest_addr, void *context)
 {
 	struct fi_ibv_ep *ep =
-		container_of(ep_fid, struct fi_ibv_ep, ep_fid);
+		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
 		.wr_id = (uintptr_t)context,
 		.opcode = IBV_WR_SEND,
@@ -726,7 +737,7 @@ static ssize_t fi_ibv_msg_ep_inject(struct fid_ep *ep_fid, const void *buf, size
 		fi_addr_t dest_addr)
 {
 	struct fi_ibv_ep *ep =
-		container_of(ep_fid, struct fi_ibv_ep, ep_fid);
+		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
 		.opcode = IBV_WR_SEND,
 		.send_flags = IBV_SEND_INLINE,
@@ -739,7 +750,7 @@ static ssize_t fi_ibv_msg_ep_injectdata(struct fid_ep *ep_fid, const void *buf, 
 		    uint64_t data, fi_addr_t dest_addr)
 {
 	struct fi_ibv_ep *ep =
-		container_of(ep_fid, struct fi_ibv_ep, ep_fid);
+		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
 		.opcode = IBV_WR_SEND_WITH_IMM,
 		.imm_data = htonl((uint32_t)data),
@@ -969,12 +980,15 @@ err1:
 	return ret;
 }
 
-#define VERBS_COMP_READ_FLAGS(ep, flags) \
-	((!VERBS_SELECTIVE_COMP(ep) || (flags & \
-	  (FI_COMPLETION | FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE))) ? \
-	   IBV_SEND_SIGNALED : 0)
-#define VERBS_COMP_READ(ep) \
-	VERBS_COMP_READ_FLAGS(ep, ep->info->tx_attr->op_flags)
+#define VERBS_COMP_READ_FLAGS(ep, flags)			\
+	((ep->util_ep.tx_op_flags | flags) &			\
+	 (FI_COMPLETION | FI_TRANSMIT_COMPLETE |		\
+	  FI_DELIVERY_COMPLETE) ? IBV_SEND_SIGNALED : 0)
+
+#define VERBS_COMP_READ(ep)					\
+	((ep->util_ep.tx_op_flags) &				\
+	 (FI_COMPLETION | FI_TRANSMIT_COMPLETE |		\
+	  FI_DELIVERY_COMPLETE) ? IBV_SEND_SIGNALED : 0)
 
 static ssize_t
 fi_ibv_msg_ep_rma_write(struct fid_ep *ep_fid, const void *buf, size_t len,
@@ -982,7 +996,7 @@ fi_ibv_msg_ep_rma_write(struct fid_ep *ep_fid, const void *buf, size_t len,
 		     uint64_t addr, uint64_t key, void *context)
 {
 	struct fi_ibv_ep *ep =
-		container_of(ep_fid, struct fi_ibv_ep, ep_fid);
+		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
 		.wr_id = (uintptr_t)context,
 		.opcode = IBV_WR_RDMA_WRITE,
@@ -1000,7 +1014,7 @@ fi_ibv_msg_ep_rma_writev(struct fid_ep *ep_fid, const struct iovec *iov, void **
 		      uint64_t addr, uint64_t key, void *context)
 {
 	struct fi_ibv_ep *ep =
-		container_of(ep_fid, struct fi_ibv_ep, ep_fid);
+		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
 		.wr_id = (uintptr_t)context,
 		.opcode = IBV_WR_RDMA_WRITE,
@@ -1016,7 +1030,7 @@ fi_ibv_msg_ep_rma_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 			uint64_t flags)
 {
 	struct fi_ibv_ep *ep =
-		container_of(ep_fid, struct fi_ibv_ep, ep_fid);
+		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
 		.wr_id = (uintptr_t)msg->context,
 		.wr.rdma.remote_addr = msg->rma_iov->addr,
@@ -1039,7 +1053,7 @@ fi_ibv_msg_ep_rma_read(struct fid_ep *ep_fid, void *buf, size_t len,
 		    uint64_t addr, uint64_t key, void *context)
 {
 	struct fi_ibv_ep *ep =
-		container_of(ep_fid, struct fi_ibv_ep, ep_fid);
+		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
 		.wr_id = (uintptr_t)context,
 		.opcode = IBV_WR_RDMA_READ,
@@ -1057,7 +1071,7 @@ fi_ibv_msg_ep_rma_readv(struct fid_ep *ep_fid, const struct iovec *iov, void **d
 		     uint64_t addr, uint64_t key, void *context)
 {
 	struct fi_ibv_ep *ep =
-		container_of(ep_fid, struct fi_ibv_ep, ep_fid);
+		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
 		.wr_id = (uintptr_t)context,
 		.opcode = IBV_WR_RDMA_READ,
@@ -1077,7 +1091,7 @@ fi_ibv_msg_ep_rma_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 			uint64_t flags)
 {
 	struct fi_ibv_ep *ep =
-		container_of(ep_fid, struct fi_ibv_ep, ep_fid);
+		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
 		.wr_id = (uintptr_t)msg->context,
 		.opcode = IBV_WR_RDMA_READ,
@@ -1098,7 +1112,7 @@ fi_ibv_msg_ep_rma_writedata(struct fid_ep *ep_fid, const void *buf, size_t len,
 			uint64_t addr, uint64_t key, void *context)
 {
 	struct fi_ibv_ep *ep =
-		container_of(ep_fid, struct fi_ibv_ep, ep_fid);
+		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
 		.wr_id = (uintptr_t)context,
 		.opcode = IBV_WR_RDMA_WRITE_WITH_IMM,
@@ -1116,7 +1130,7 @@ fi_ibv_msg_ep_rma_inject_write(struct fid_ep *ep_fid, const void *buf, size_t le
 		     fi_addr_t dest_addr, uint64_t addr, uint64_t key)
 {
 	struct fi_ibv_ep *ep =
-		container_of(ep_fid, struct fi_ibv_ep, ep_fid);
+		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
 		.opcode = IBV_WR_RDMA_WRITE,
 		.wr.rdma.remote_addr = addr,
@@ -1133,7 +1147,7 @@ fi_ibv_msg_ep_rma_inject_writedata(struct fid_ep *ep_fid, const void *buf, size_
 			uint64_t key)
 {
 	struct fi_ibv_ep *ep =
-		container_of(ep_fid, struct fi_ibv_ep, ep_fid);
+		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
 		.opcode = IBV_WR_RDMA_WRITE_WITH_IMM,
 		.imm_data = htonl((uint32_t)data),
@@ -1160,21 +1174,20 @@ struct fi_ops_rma fi_ibv_msg_ep_rma_ops = {
 
 #define fi_ibv_atomicvalid(name, flags)					\
 static int fi_ibv_msg_ep_atomic_ ## name(struct fid_ep *ep_fid,		\
-			      enum fi_datatype datatype,  		\
-			      enum fi_op op, size_t *count)             \
-{                                                                       \
-	struct fi_ibv_ep *ep = container_of(ep_fid,			\
-						struct fi_ibv_ep,   \
-						ep_fid);                \
-	struct fi_atomic_attr attr;                                     \
-	int ret;                                                        \
-                                                                        \
-	ret = fi_ibv_query_atomic(&ep->domain->util_domain.domain_fid,	\
+					 enum fi_datatype datatype,	\
+					 enum fi_op op, size_t *count)	\
+{									\
+	struct fi_ibv_ep *ep = container_of(ep_fid, struct fi_ibv_ep,	\
+					    util_ep.ep_fid);		\
+	struct fi_atomic_attr attr;					\
+	int ret;							\
+									\
+	ret = fi_ibv_query_atomic(&ep->util_ep.domain->domain_fid,	\
 				  datatype, op, &attr, flags);		\
-	if (!ret)                                                       \
-		*count = attr.count;                                    \
-	return ret;                                                     \
-}                                                                       \
+	if (!ret)							\
+		*count = attr.count;					\
+	return ret;							\
+}
 
 fi_ibv_atomicvalid(writevalid, 0);
 fi_ibv_atomicvalid(readwritevalid, FI_FETCH_ATOMIC);
@@ -1255,7 +1268,7 @@ fi_ibv_msg_ep_atomic_write(struct fid_ep *ep_fid, const void *buf, size_t count,
 			enum fi_datatype datatype, enum fi_op op, void *context)
 {
 	struct fi_ibv_ep *ep =
-		container_of(ep_fid, struct fi_ibv_ep, ep_fid);
+		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
 		.wr_id = (uintptr_t)context,
 		.opcode = IBV_WR_RDMA_WRITE,
@@ -1300,7 +1313,7 @@ fi_ibv_msg_ep_atomic_writemsg(struct fid_ep *ep_fid,
                         const struct fi_msg_atomic *msg, uint64_t flags)
 {
 	struct fi_ibv_ep *ep =
-		container_of(ep_fid, struct fi_ibv_ep, ep_fid);
+		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
 		.wr_id = (uintptr_t)msg->context,
 		.wr.rdma.remote_addr = msg->rma_iov->addr,
@@ -1343,7 +1356,7 @@ fi_ibv_msg_ep_atomic_readwrite(struct fid_ep *ep_fid, const void *buf, size_t co
 			enum fi_op op, void *context)
 {
 	struct fi_ibv_ep *ep =
-		container_of(ep_fid, struct fi_ibv_ep, ep_fid);
+		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
 		.wr_id = (uintptr_t)context,
 		.send_flags = VERBS_COMP(ep) | IBV_SEND_FENCE,
@@ -1404,7 +1417,7 @@ fi_ibv_msg_ep_atomic_readwritemsg(struct fid_ep *ep_fid,
 				size_t result_count, uint64_t flags)
 {
 	struct fi_ibv_ep *ep =
-		container_of(ep_fid, struct fi_ibv_ep, ep_fid);
+		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
 		.wr_id = (uintptr_t)msg->context,
 		.send_flags = VERBS_COMP_FLAGS(ep, flags) | IBV_SEND_FENCE,
@@ -1456,7 +1469,7 @@ fi_ibv_msg_ep_atomic_compwrite(struct fid_ep *ep_fid, const void *buf, size_t co
 			enum fi_op op, void *context)
 {
 	struct fi_ibv_ep *ep =
-		container_of(ep_fid, struct fi_ibv_ep, ep_fid);
+		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
 		.wr_id = (uintptr_t)context,
 		.opcode = IBV_WR_ATOMIC_CMP_AND_SWP,
@@ -1511,7 +1524,7 @@ fi_ibv_msg_ep_atomic_compwritemsg(struct fid_ep *ep_fid,
 				uint64_t flags)
 {
 	struct fi_ibv_ep *ep =
-		container_of(ep_fid, struct fi_ibv_ep, ep_fid);
+		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
 		.wr_id = (uintptr_t)msg->context,
 		.opcode = IBV_WR_ATOMIC_CMP_AND_SWP,
