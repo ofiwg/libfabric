@@ -76,7 +76,7 @@ static int rxm_match_unexp_msg(struct dlist_entry *item, const void *arg)
 	struct rxm_unexp_msg *unexp_msg;
 
 	unexp_msg = container_of(item, struct rxm_unexp_msg, entry);
-	return rxm_match_addr(unexp_msg->addr, attr->addr);
+	return rxm_match_addr(attr->addr, unexp_msg->addr);
 }
 
 static int rxm_match_unexp_msg_tagged(struct dlist_entry *item, const void *arg)
