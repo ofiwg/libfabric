@@ -47,13 +47,13 @@ int tcpx_send_msg(struct tcpx_pe_entry *pe_entry)
 	if (bytes_sent < 0)
 		return -errno;
 
+	pe_entry->done_len += bytes_sent;
 	if (pe_entry->done_len < ntohll(pe_entry->msg_hdr.hdr.size)) {
 		ofi_consume_iov(pe_entry->msg_data.iov,
 				&pe_entry->msg_data.iov_cnt,
 				bytes_sent);
+		return -FI_EAGAIN;
 	}
-
-	pe_entry->done_len += bytes_sent;
 	return FI_SUCCESS;
 }
 
@@ -84,12 +84,12 @@ int tcpx_recv_msg_data(struct tcpx_pe_entry *pe_entry)
 	if (bytes_recvd <= 0)
 		return (bytes_recvd)? -errno: -FI_ENOTCONN;
 
+	pe_entry->done_len += bytes_recvd;
 	if (pe_entry->done_len < ntohll(pe_entry->msg_hdr.hdr.size)) {
 		ofi_consume_iov(pe_entry->msg_data.iov,
 				&pe_entry->msg_data.iov_cnt,
 				bytes_recvd);
+		return -FI_EAGAIN;
 	}
-
-	pe_entry->done_len += bytes_recvd;
 	return FI_SUCCESS;
 }

@@ -113,7 +113,8 @@ int tcpx_send_msg(struct tcpx_pe_entry *pe_entry);
 int tcpx_recv_hdr(SOCKET sock, struct tcpx_rx_detect *rx_detect);
 
 struct tcpx_pe_entry *tcpx_pe_entry_alloc(struct tcpx_cq *cq);
-void tcpx_pe_entry_release(struct tcpx_pe_entry *pe_entry);
+void tcpx_pe_entry_release(struct tcpx_cq *tcpx_cq,
+			   struct tcpx_pe_entry *pe_entry);
 void tcpx_progress(struct util_ep *util_ep);
 int tcpx_ep_shutdown_report(struct tcpx_ep *ep, fid_t fid);
 int tcpx_progress_ep_add(struct tcpx_ep *ep);

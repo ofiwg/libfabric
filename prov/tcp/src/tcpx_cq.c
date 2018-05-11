@@ -75,33 +75,15 @@ struct tcpx_pe_entry *tcpx_pe_entry_alloc(struct tcpx_cq *tcpx_cq)
 	return pe_entry;
 }
 
-void tcpx_pe_entry_release(struct tcpx_pe_entry *pe_entry)
+void tcpx_pe_entry_release(struct tcpx_cq *tcpx_cq,
+			   struct tcpx_pe_entry *pe_entry)
 {
-	struct util_cq *cq;
-	struct tcpx_cq *tcpx_cq;
-
-	switch (pe_entry->msg_hdr.hdr.op_data) {
-	case TCPX_OP_MSG_SEND:
-	case TCPX_OP_WRITE:
-		cq = pe_entry->ep->util_ep.tx_cq;
-		break;
-	case TCPX_OP_MSG_RECV:
-	case TCPX_OP_REMOTE_WRITE:
-		cq = pe_entry->ep->util_ep.rx_cq;
-		break;
-	default:
-		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,"invalid pe_entry\n");
-		return;
-	}
-
-	tcpx_cq = container_of(cq, struct tcpx_cq, util_cq);
-
 	if (pe_entry->ep->cur_rx_entry == pe_entry)
 		pe_entry->ep->cur_rx_entry = NULL;
 
-	fastlock_acquire(&cq->cq_lock);
+	fastlock_acquire(&tcpx_cq->util_cq.cq_lock);
 	util_buf_release(tcpx_cq->pe_entry_pool, pe_entry);
-	fastlock_release(&cq->cq_lock);
+	fastlock_release(&tcpx_cq->util_cq.cq_lock);
 }
 
 void tcpx_cq_report_completion(struct util_cq *cq,

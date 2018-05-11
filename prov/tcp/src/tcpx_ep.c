@@ -475,20 +475,25 @@ static void tcpx_ep_tx_rx_queues_release(struct tcpx_ep *ep)
 {
 	struct dlist_entry *entry;
 	struct tcpx_pe_entry *pe_entry;
+	struct tcpx_cq *tcpx_cq;
 
 	fastlock_acquire(&ep->queue_lock);
 	while (!dlist_empty(&ep->tx_queue)) {
 		entry = ep->tx_queue.next;
 		pe_entry = container_of(entry, struct tcpx_pe_entry, entry);
 		dlist_remove(entry);
-		tcpx_pe_entry_release(pe_entry);
+		tcpx_cq = container_of(pe_entry->ep->util_ep.tx_cq,
+				       struct tcpx_cq, util_cq);
+		tcpx_pe_entry_release(tcpx_cq, pe_entry);
 	}
 
 	while (!dlist_empty(&ep->rx_queue)) {
 		entry = ep->rx_queue.next;
 		pe_entry = container_of(entry, struct tcpx_pe_entry, entry);
 		dlist_remove(entry);
-		tcpx_pe_entry_release(pe_entry);
+		tcpx_cq = container_of(pe_entry->ep->util_ep.rx_cq,
+				       struct tcpx_cq, util_cq);
+		tcpx_pe_entry_release(tcpx_cq, pe_entry);
 	}
 	fastlock_release(&ep->queue_lock);
 }

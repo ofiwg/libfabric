@@ -42,16 +42,6 @@
 #include <ofi_util.h>
 #include <ofi_iov.h>
 
-static void tcpx_pe_entry_remove(struct tcpx_pe_entry *pe_entry)
-{
-	switch (pe_entry->msg_hdr.hdr.op_data) {
-	case TCPX_OP_REMOTE_WRITE:
-		break;
-	default:
-		dlist_remove(&pe_entry->entry);
-	}
-}
-
 int tcpx_ep_shutdown_report(struct tcpx_ep *ep, fid_t fid)
 {
 	struct fi_eq_cm_entry cm_entry = {0};
@@ -76,60 +66,78 @@ int tcpx_ep_shutdown_report(struct tcpx_ep *ep, fid_t fid)
 
 void process_tx_pe_entry(struct tcpx_pe_entry *pe_entry)
 {
-	uint64_t total_len = ntohll(pe_entry->msg_hdr.hdr.size);
+	struct tcpx_cq *tcpx_cq;
 	int ret;
 
 	ret = tcpx_send_msg(pe_entry);
 	if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
 		return;
 
-	if (ret) {
-		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN, "msg send failed\n");
-		goto err;
-	}
-
-	if (pe_entry->done_len == total_len)
+	if (!ret)
 		goto done;
-	return;
-err:
-	if (ret == -FI_ENOTCONN) {
+
+	FI_WARN(&tcpx_prov, FI_LOG_DOMAIN, "msg send failed\n");
+
+	if (ret == -FI_ENOTCONN)
 		tcpx_ep_shutdown_report(pe_entry->ep,
 					&pe_entry->ep->util_ep.ep_fid.fid);
-	}
 done:
 	tcpx_cq_report_completion(pe_entry->ep->util_ep.tx_cq,
 				  pe_entry, ret);
-	tcpx_pe_entry_remove(pe_entry);
-	tcpx_pe_entry_release(pe_entry);
+	dlist_remove(&pe_entry->entry);
+	tcpx_cq = container_of(pe_entry->ep->util_ep.tx_cq,
+			       struct tcpx_cq, util_cq);
+	tcpx_pe_entry_release(tcpx_cq, pe_entry);
 }
 
 static void process_rx_pe_entry(struct tcpx_pe_entry *pe_entry)
 {
+	struct tcpx_cq *tcpx_cq;
 	int ret;
 
 	ret = tcpx_recv_msg_data(pe_entry);
 	if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
 		return;
 
-	if (ret) {
-		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN, "msg recv Failed ret = %d\n", ret);
-		goto err;
-	}
-
-	if (pe_entry->done_len &&
-	    pe_entry->done_len == ntohll(pe_entry->msg_hdr.hdr.size))
+	if (!ret)
 		goto done;
-	return;
-err:
-	if (ret == -FI_ENOTCONN) {
+
+	FI_WARN(&tcpx_prov, FI_LOG_DOMAIN, "msg recv Failed ret = %d\n", ret);
+
+	if (ret == -FI_ENOTCONN)
 		tcpx_ep_shutdown_report(pe_entry->ep,
 					&pe_entry->ep->util_ep.ep_fid.fid);
-	}
 done:
 	tcpx_cq_report_completion(pe_entry->ep->util_ep.rx_cq,
 				  pe_entry, ret);
-	tcpx_pe_entry_remove(pe_entry);
-	tcpx_pe_entry_release(pe_entry);
+	dlist_remove(&pe_entry->entry);
+	tcpx_cq = container_of(pe_entry->ep->util_ep.rx_cq,
+			       struct tcpx_cq, util_cq);
+	tcpx_pe_entry_release(tcpx_cq, pe_entry);
+}
+
+static void process_remote_write_entry(struct tcpx_pe_entry *pe_entry)
+{
+	struct tcpx_cq *tcpx_cq;
+	int ret;
+
+	ret = tcpx_recv_msg_data(pe_entry);
+	if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
+		return;
+
+	if (!ret)
+		goto done;
+
+	FI_WARN(&tcpx_prov, FI_LOG_DOMAIN, "msg recv Failed ret = %d\n", ret);
+
+	if (ret == -FI_ENOTCONN)
+		tcpx_ep_shutdown_report(pe_entry->ep,
+					&pe_entry->ep->util_ep.ep_fid.fid);
+done:
+	tcpx_cq = container_of(pe_entry->ep->util_ep.rx_cq,
+			       struct tcpx_cq, util_cq);
+	tcpx_pe_entry_release(tcpx_cq, pe_entry);
+
 }
 
 static int tcpx_process_remote_write(struct tcpx_pe_entry *pe_entry)
@@ -232,7 +240,7 @@ static int tcpx_get_rx_pe_entry(struct tcpx_rx_detect *rx_detect,
 			tcpx_cq_report_completion(pe_entry->ep->util_ep.rx_cq,
 						  pe_entry, ret);
 			dlist_remove(&pe_entry->entry);
-			tcpx_pe_entry_release(pe_entry);
+			tcpx_pe_entry_release(tcpx_cq, pe_entry);
 			return ret;
 		}
 		break;
@@ -282,7 +290,18 @@ static void tcpx_process_rx_msg(struct tcpx_ep *ep)
 			return;
 	}
 
-	process_rx_pe_entry(ep->cur_rx_entry);
+	switch(ep->cur_rx_entry->msg_hdr.hdr.op_data){
+	case TCPX_OP_MSG_RECV:
+		process_rx_pe_entry(ep->cur_rx_entry);
+		break;
+	case TCPX_OP_REMOTE_WRITE:
+		process_remote_write_entry(ep->cur_rx_entry);
+		break;
+	default:
+		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,
+			"invalid op type\n");
+		return;
+	}
 	return;
 err:
 	if (ret == -FI_ENOTCONN)
