@@ -358,7 +358,6 @@ struct fi_ibv_cq {
 	int			signal_fd[2];
 	fi_ibv_cq_read_entry	read_entry;
 	struct slist		wcq;
-	fastlock_t		lock;
 	fi_ibv_trywait_func	trywait;
 	ofi_atomic32_t		nevents;
 	struct util_buf_pool	*wce_pool;
@@ -483,8 +482,6 @@ struct fi_ibv_ep {
 		};
 	};
 	struct fi_ibv_eq	*eq;
-	struct fi_ibv_cq	*rcq;
-	struct fi_ibv_cq	*scq;
 	struct fi_ibv_srq_ep	*srq_ep;
 	struct fi_info		*info;
 	/* TODO: it would be removed */

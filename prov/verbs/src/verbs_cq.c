@@ -89,7 +89,7 @@ fi_ibv_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
 
 	cq = container_of(cq_fid, struct fi_ibv_cq, util_cq.cq_fid);
 
-	cq->util_cq.cq_fastlock_acquire(&cq->lock);
+	cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
 	if (slist_empty(&cq->wcq))
 		goto err;
 
@@ -100,7 +100,7 @@ fi_ibv_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
 	api_version = cq->util_cq.domain->fabric->fabric_fid.api_version;
 
 	slist_entry = slist_remove_head(&cq->wcq);
-	cq->util_cq.cq_fastlock_release(&cq->lock);
+	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
 
 	wce = container_of(slist_entry, struct fi_ibv_wce, entry);
 
@@ -122,7 +122,7 @@ fi_ibv_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
 	util_buf_release(cq->wce_pool, wce);
 	return sizeof(*entry);
 err:
-	cq->util_cq.cq_fastlock_release(&cq->lock);
+	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
 	return -FI_EAGAIN;
 }
 
@@ -266,17 +266,19 @@ void fi_ibv_cleanup_cq(struct fi_ibv_ep *ep)
 {
 	int ret;
 
-	ep->rcq->util_cq.cq_fastlock_acquire(&ep->rcq->lock);
+	ep->util_ep.rx_cq->cq_fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
 	do {
-		ret = fi_ibv_poll_outstanding_cq(ep, ep->rcq);
+		ret = fi_ibv_poll_outstanding_cq(ep, container_of(ep->util_ep.rx_cq,
+								  struct fi_ibv_cq, util_cq));
 	} while (ret > 0);
-	ep->rcq->util_cq.cq_fastlock_release(&ep->rcq->lock);
+	ep->util_ep.rx_cq->cq_fastlock_release(&ep->util_ep.rx_cq->cq_lock);
 
-	ep->scq->util_cq.cq_fastlock_acquire(&ep->scq->lock);
+	ep->util_ep.tx_cq->cq_fastlock_acquire(&ep->util_ep.tx_cq->cq_lock);
 	do {
-		ret = fi_ibv_poll_outstanding_cq(ep, ep->scq);
+		ret = fi_ibv_poll_outstanding_cq(ep, container_of(ep->util_ep.tx_cq,
+								  struct fi_ibv_cq, util_cq));
 	} while (ret > 0);
-	ep->scq->util_cq.cq_fastlock_release(&ep->scq->lock);
+	ep->util_ep.tx_cq->cq_fastlock_release(&ep->util_ep.tx_cq->cq_lock);
 }
 
 /* Must call with cq->lock held */
@@ -302,7 +304,7 @@ static ssize_t fi_ibv_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 
 	cq = container_of(cq_fid, struct fi_ibv_cq, util_cq.cq_fid);
 
-	cq->util_cq.cq_fastlock_acquire(&cq->lock);
+	cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
 
 	for (i = 0; i < count; i++) {
 		if (!slist_empty(&cq->wcq)) {
@@ -326,7 +328,7 @@ static ssize_t fi_ibv_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 		if (wc.status) {
 			wce = util_buf_alloc(cq->wce_pool);
 			if (!wce) {
-				cq->util_cq.cq_fastlock_release(&cq->lock);
+				cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
 				return -FI_ENOMEM;
 			}
 			memset(wce, 0, sizeof(*wce));
@@ -339,7 +341,7 @@ static ssize_t fi_ibv_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 		cq->read_entry(&wc, (char *)buf + i * cq->entry_size);
 	}
 
-	cq->util_cq.cq_fastlock_release(&cq->lock);
+	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
 	return i ? i : (ret ? ret : -FI_EAGAIN);
 }
 
@@ -381,7 +383,7 @@ static int fi_ibv_cq_trywait(struct fid *fid)
 		return -FI_EINVAL;
 	}
 
-	cq->util_cq.cq_fastlock_acquire(&cq->lock);
+	cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
 	if (!slist_empty(&cq->wcq))
 		goto out;
 
@@ -424,7 +426,7 @@ static int fi_ibv_cq_trywait(struct fid *fid)
 err:
 	util_buf_release(cq->wce_pool, wce);
 out:
-	cq->util_cq.cq_fastlock_release(&cq->lock);
+	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
 	return ret;
 }
 
@@ -474,18 +476,16 @@ static int fi_ibv_cq_close(fid_t fid)
 	if (ofi_atomic_get32(&cq->nevents))
 		ibv_ack_cq_events(cq->cq, ofi_atomic_get32(&cq->nevents));
 
-	cq->util_cq.cq_fastlock_acquire(&cq->lock);
+	cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
 	while (!slist_empty(&cq->wcq)) {
 		entry = slist_remove_head(&cq->wcq);
 		wce = container_of(entry, struct fi_ibv_wce, entry);
 		util_buf_release(cq->wce_pool, wce);
 	}
 
-	cq->util_cq.cq_fastlock_release(&cq->lock);
+	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
 
 	util_buf_pool_destroy(cq->wce_pool);
-
-	fastlock_destroy(&cq->lock);
 
 	if (cq->cq) {
 		ret = ibv_destroy_cq(cq->cq);
@@ -631,8 +631,6 @@ int fi_ibv_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 		ret = -FI_ENOSYS;
 		goto err6;
 	}
-
-	fastlock_init(&cq->lock);
 
 	slist_init(&cq->wcq);
 

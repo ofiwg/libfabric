@@ -139,25 +139,6 @@ static int fi_ibv_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		ret = ofi_ep_bind_cq(&ep->util_ep, cq, flags);
 		if (ret)
 			return ret;
-		/* Must bind a CQ to either RECV or SEND completions, and
-		 * the FI_SELECTIVE_COMPLETION flag is only valid when binding the
-		 * FI_SEND CQ. */
-		if (!(flags & (FI_RECV|FI_SEND))
-				|| (flags & (FI_SEND|FI_SELECTIVE_COMPLETION))
-							== FI_SELECTIVE_COMPLETION) {
-			return -EINVAL;
-		}
-		if (flags & FI_RECV) {
-			if (ep->rcq)
-				return -EINVAL;
-			ep->rcq = container_of(bfid, struct fi_ibv_cq, util_cq.cq_fid.fid);
-		}
-		if (flags & FI_SEND) {
-			if (ep->scq)
-				return -EINVAL;
-			ep->scq = container_of(bfid, struct fi_ibv_cq, util_cq.cq_fid.fid);
-		}
-		
 		break;
 	case FI_CLASS_EQ:
 		ep->eq = container_of(bfid, struct fi_ibv_eq, eq_fid.fid);
@@ -190,13 +171,13 @@ static int fi_ibv_ep_enable(struct fid_ep *ep_fid)
 		return -FI_ENOEQ;
 	}
 
-	if (!ep->scq && !ep->rcq) {
+	if (!ep->util_ep.tx_cq && !ep->util_ep.rx_cq) {
 		VERBS_WARN(FI_LOG_EP_CTRL, "Endpoint is not bound to "
 			   "a send or receive completion queue\n");
 		return -FI_ENOCQ;
 	}
 
-	if (!ep->scq && (ofi_send_allowed(ep->util_ep.caps) ||
+	if (!ep->util_ep.tx_cq && (ofi_send_allowed(ep->util_ep.caps) ||
 				ofi_rma_initiate_allowed(ep->util_ep.caps))) {
 		VERBS_WARN(FI_LOG_EP_CTRL, "Endpoint is not bound to "
 			   "a send completion queue when it has transmit "
@@ -204,33 +185,45 @@ static int fi_ibv_ep_enable(struct fid_ep *ep_fid)
 		return -FI_ENOCQ;
 	}
 
-	if (!ep->rcq && ofi_recv_allowed(ep->util_ep.caps)) {
+	if (!ep->util_ep.rx_cq && ofi_recv_allowed(ep->util_ep.caps)) {
 		VERBS_WARN(FI_LOG_EP_CTRL, "Endpoint is not bound to "
 			   "a receive completion queue when it has receive "
 			   "capabilities enabled. (FI_RECV)\n");
 		return -FI_ENOCQ;
 	}
 
-	if (ep->scq) {
+	if (ep->util_ep.tx_cq) {
+		struct fi_ibv_cq *cq =
+			container_of(ep->util_ep.tx_cq, struct fi_ibv_cq, util_cq);
+
 		attr.cap.max_send_wr = ep->info->tx_attr->size;
 		attr.cap.max_send_sge = ep->info->tx_attr->iov_limit;
-		attr.send_cq = ep->scq->cq;
-		domain = container_of(ep->scq->util_cq.domain, struct fi_ibv_domain,
+		attr.send_cq = cq->cq;
+		domain = container_of(ep->util_ep.tx_cq->domain, struct fi_ibv_domain,
 				      util_domain);
 		pd = domain->pd;
 	} else {
-		attr.send_cq = ep->rcq->cq;
-		domain = container_of(ep->rcq->util_cq.domain, struct fi_ibv_domain,
+		struct fi_ibv_cq *cq =
+			container_of(ep->util_ep.rx_cq, struct fi_ibv_cq, util_cq);
+
+		attr.send_cq = cq->cq;
+		domain = container_of(ep->util_ep.rx_cq->domain, struct fi_ibv_domain,
 				      util_domain);
 		pd = domain->pd;
 	}
 
-	if (ep->rcq) {
+	if (ep->util_ep.rx_cq) {
+		struct fi_ibv_cq *cq =
+			container_of(ep->util_ep.rx_cq, struct fi_ibv_cq, util_cq);
+
 		attr.cap.max_recv_wr = ep->info->rx_attr->size;
 		attr.cap.max_recv_sge = ep->info->rx_attr->iov_limit;
-		attr.recv_cq = ep->rcq->cq;
-	} else {
-		attr.recv_cq = ep->scq->cq;
+		attr.recv_cq = cq->cq;
+	} else {		
+		struct fi_ibv_cq *cq =
+			container_of(ep->util_ep.tx_cq, struct fi_ibv_cq, util_cq);
+
+		attr.recv_cq = cq->cq;
 	}
 
 	attr.cap.max_inline_data = ep->info->tx_attr->inject_size;
@@ -518,26 +511,28 @@ static inline int fi_ibv_poll_reap_unsig_cq(struct fi_ibv_ep *ep)
 	struct fi_ibv_wce *wce;
 	struct ibv_wc wc[10];
 	int ret, i;
+	struct fi_ibv_cq *cq =
+		container_of(ep->util_ep.tx_cq, struct fi_ibv_cq, util_cq);
 
-	ep->scq->util_cq.cq_fastlock_acquire(&ep->scq->lock);
+	cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
 	/* TODO: retrieve WCs as much as possbile in a single
 	 * ibv_poll_cq call */
 	while (1) {
-		ret = ibv_poll_cq(ep->scq->cq, 10, wc);
+		ret = ibv_poll_cq(cq->cq, 10, wc);
 		if (ret <= 0) {
-			ep->scq->util_cq.cq_fastlock_release(&ep->scq->lock);
+			cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
 			return ret;
 		}
 
 		for (i = 0; i < ret; i++) {
-			if (!fi_ibv_process_wc(ep->scq, &wc[i]))
+			if (!fi_ibv_process_wc(cq, &wc[i]))
 				continue;
-			if (OFI_LIKELY(!fi_ibv_wc_2_wce(ep->scq, &wc[i], &wce)))
-				slist_insert_tail(&wce->entry, &ep->scq->wcq);
+			if (OFI_LIKELY(!fi_ibv_wc_2_wce(cq, &wc[i], &wce)))
+				slist_insert_tail(&wce->entry, &cq->wcq);
 		}
 	}
 
-	ep->scq->util_cq.cq_fastlock_release(&ep->scq->lock);
+	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
 	return FI_SUCCESS;
 }
 
@@ -628,7 +623,7 @@ fi_ibv_msg_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t 
 	};
 	struct ibv_recv_wr *bad_wr;
 
-	assert(ep->rcq);
+	assert(ep->util_ep.rx_cq);
 
 	fi_ibv_set_sge_iov(wr.sg_list, msg->msg_iov, msg->iov_count, msg->desc);
 
