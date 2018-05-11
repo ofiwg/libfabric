@@ -729,6 +729,8 @@ static void fi_ibv_fini(void)
 
 VERBS_INI
 {
+	setenv("MLX4_SINGLE_THREADED", "1", 0);
+	setenv("MLX5_SINGLE_THREADED", "1", 0);
 	if (fi_ibv_read_params()|| fi_ibv_init_info(&fi_ibv_util_prov.info))
 		return NULL;
 	return &fi_ibv_prov;
