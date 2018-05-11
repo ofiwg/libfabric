@@ -221,8 +221,10 @@ static int rxd_ep_recv_data(struct rxd_ep *ep, struct rxd_x_entry *rx_entry,
 		if (cntr)
 			cntr->cntr_fid.ops->add(&cntr->cntr_fid, 1);
 	} else {
+		memset(&err_entry, 0, sizeof(err_entry));
 		err_entry.op_context = rx_entry->cq_entry.op_context;
 		err_entry.flags = (FI_MSG | FI_RECV);
+		err_entry.len = rx_entry->bytes_done;
 		err_entry.err = FI_ETRUNC;
 		err_entry.prov_errno = -FI_ETRUNC;
 		rxd_cq_report_error(rx_cq, &err_entry);
