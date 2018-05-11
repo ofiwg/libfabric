@@ -192,11 +192,13 @@ struct rxd_x_entry *rxd_rx_entry_init(struct rxd_ep *ep,
 	rx_entry = freestack_pop(ep->rx_fs);
 
 	rx_entry->rx_id = rxd_rx_fs_index(ep->rx_fs, rx_entry);
+	rx_entry->state = RXD_RTS;
 	rx_entry->peer = addr;
 	rx_entry->flags = rxd_flags(flags);
 	rx_entry->bytes_done = 0;
 	rx_entry->next_seg_no = 0;
 	rx_entry->next_start = 0;
+	rx_entry->window = 0;
 	rx_entry->iov_count = msg->iov_count;
 
 	memcpy(rx_entry->iov, msg->msg_iov, sizeof(*rx_entry->iov) * msg->iov_count);
@@ -385,6 +387,7 @@ void rxd_init_ctrl_pkt(struct rxd_ep *ep, struct rxd_x_entry *x_entry,
 	pkt_entry->pkt->hdr.key = x_entry->key;
 	pkt_entry->pkt->hdr.peer = x_entry->peer;
 	pkt_entry->pkt->ctrl.type = type;
+	pkt_entry->pkt->ctrl.window = x_entry->window;
 	pkt_entry->pkt->ctrl.version = RXD_PROTOCOL_VERSION;
 	pkt_entry->pkt_size = RXD_CTRL_PKT_SIZE + ep->prefix_size;
 }
@@ -410,7 +413,6 @@ struct rxd_x_entry *rxd_tx_entry_init(struct rxd_ep *ep,
 	tx_entry->bytes_done = 0;
 	tx_entry->next_seg_no = 0;
 	tx_entry->next_start = 0;
-	tx_entry->window = RXD_MAX_UNACKED;
 	tx_entry->retry_cnt = 0;
 	tx_entry->seg_size = rxd_ep_domain(ep)->max_seg_sz;
 	tx_entry->iov_count = msg->iov_count;
@@ -423,6 +425,10 @@ struct rxd_x_entry *rxd_tx_entry_init(struct rxd_ep *ep,
 	tx_entry->cq_entry.len = ofi_total_iov_len(msg->msg_iov, msg->iov_count);
 	tx_entry->cq_entry.buf = msg->msg_iov[0].iov_base;
 	tx_entry->cq_entry.flags = (FI_TRANSMIT | FI_MSG);
+
+	tx_entry->num_segs = ofi_div_ceil(tx_entry->cq_entry.len,
+					  tx_entry->seg_size);
+	tx_entry->window = MIN(tx_entry->num_segs, RXD_MAX_UNACKED);
 
 	slist_init(&tx_entry->pkt_list);
 	dlist_insert_tail(&tx_entry->entry, &ep->tx_list);
@@ -513,7 +519,6 @@ static ssize_t rxd_ep_post_rts(struct rxd_ep *rxd_ep, struct rxd_x_entry *tx_ent
 	pkt_entry->pkt->ctrl.size = tx_entry->cq_entry.len;
 	pkt_entry->pkt->ctrl.data = tx_entry->cq_entry.data;
 	pkt_entry->pkt->ctrl.seg_size = tx_entry->seg_size;
-	pkt_entry->pkt->ctrl.window = RXD_MAX_UNACKED;
 
 	slist_insert_tail(&pkt_entry->s_entry, &tx_entry->pkt_list);
 
@@ -533,8 +538,10 @@ ssize_t rxd_ep_post_ack(struct rxd_ep *rxd_ep, struct rxd_x_entry *rx_entry)
 		return -FI_ENOMEM;
 
 	rxd_init_ctrl_pkt(rxd_ep, rx_entry, pkt_entry, RXD_ACK);
-
 	pkt_entry->pkt->hdr.seg_no = rx_entry->next_seg_no;
+
+	pkt_entry->pkt->ctrl.window = rx_entry->window;
+
 	ret = rxd_ep_retry_pkt(rxd_ep, pkt_entry, rx_entry);
 
 	if (ret) {
@@ -978,7 +985,7 @@ static void rxd_ep_progress(struct util_ep *util_ep)
 	}
 
 out:
-	while (ep->posted_bufs < ep->rx_size)
+	while (ep->posted_bufs < ep->rx_size && !ret)
 		ret = rxd_ep_post_buf(ep);
 
 	fastlock_release(&ep->util_ep.lock);
