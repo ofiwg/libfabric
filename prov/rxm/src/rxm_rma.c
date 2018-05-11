@@ -331,6 +331,10 @@ rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t 
 				return -FI_EAGAIN;
 			}
 		}
+		if (handle->state == CMAP_CONNECTED_NOTIFY) {
+			ofi_cmap_process_conn_notify(rxm_ep->util_ep.cmap, handle);
+			goto rma_continue;
+		}
 		ret = ofi_cmap_handle_connect(rxm_ep->util_ep.cmap,
 					      msg->addr, handle);
 		if (OFI_UNLIKELY(ret != -FI_EAGAIN))
@@ -344,6 +348,7 @@ cmap_err:
 		fastlock_release(&rxm_ep->util_ep.cmap->lock);
 		return ret;
 	}
+rma_continue:
 	fastlock_release(&rxm_ep->util_ep.cmap->lock);
 	rxm_conn = container_of(handle, struct rxm_conn, handle);
 
@@ -459,6 +464,10 @@ rxm_ep_rma_inject(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t 
 				return -FI_EAGAIN;
 			}
 		}
+		if (handle->state == CMAP_CONNECTED_NOTIFY) {
+			ofi_cmap_process_conn_notify(rxm_ep->util_ep.cmap, handle);
+			goto rma_inject_continue;
+		}
 		ret = ofi_cmap_handle_connect(rxm_ep->util_ep.cmap,
 					      msg->addr, handle);
 		if (OFI_UNLIKELY(ret != -FI_EAGAIN))
@@ -470,6 +479,7 @@ cmap_err:
 		fastlock_release(&rxm_ep->util_ep.cmap->lock);
 		return ret;
 	}
+rma_inject_continue:
 	fastlock_release(&rxm_ep->util_ep.cmap->lock);
 	rxm_conn = container_of(handle, struct rxm_conn, handle);
 

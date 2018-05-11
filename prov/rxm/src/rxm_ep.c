@@ -1030,6 +1030,10 @@ rxm_ep_inject_common(struct rxm_ep *rxm_ep, const void *buf, size_t len,
 				return -FI_EAGAIN;
 			}
 		}
+		if (handle->state == CMAP_CONNECTED_NOTIFY) {
+			ofi_cmap_process_conn_notify(rxm_ep->util_ep.cmap, handle);
+			goto inject_continue;
+		}
 		struct iovec iov = {
 			.iov_base = (void *)buf,
 			.iov_len = len,
@@ -1046,6 +1050,7 @@ cmap_err:
 		fastlock_release(&rxm_ep->util_ep.cmap->lock);
 		return ret;
 	}
+inject_continue:
 	fastlock_release(&rxm_ep->util_ep.cmap->lock);
 	rxm_conn = container_of(handle, struct rxm_conn, handle);
 
@@ -1104,6 +1109,10 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 				return -FI_EAGAIN;
 			}
 		}
+		if (handle->state == CMAP_CONNECTED_NOTIFY) {
+			ofi_cmap_process_conn_notify(rxm_ep->util_ep.cmap, handle);
+			goto send_continue;
+		}
 		ret = ofi_cmap_handle_connect(rxm_ep->util_ep.cmap,
 					      dest_addr, handle);
 		if (OFI_UNLIKELY(ret != -FI_EAGAIN))
@@ -1120,6 +1129,7 @@ cmap_err:
 		fastlock_release(&rxm_ep->util_ep.cmap->lock);
 		return ret;
 	}
+send_continue:
 	fastlock_release(&rxm_ep->util_ep.cmap->lock);
 	rxm_conn = container_of(handle, struct rxm_conn, handle);
 
