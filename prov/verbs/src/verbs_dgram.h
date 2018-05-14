@@ -51,7 +51,7 @@ typedef int(*handle_wr_cb)(struct util_cq *util_cq,
 struct fi_ibv_dgram_wr_entry_hdr {
 	struct dlist_entry		entry;
 	void				*desc;
-	struct fi_ibv_dgram_ep		*ep;
+	struct fi_ibv_ep		*ep;
 	void				*context;
 	uint64_t			flags;
 	handle_wr_cb			suc_cb;
@@ -197,18 +197,6 @@ struct fi_ibv_dgram_cntr {
 struct fi_ibv_dgram_av_entry {
 	struct ofi_ib_ud_ep_name	*addr;
 	struct ibv_ah			*ah;
-};
-
-struct fi_ibv_dgram_ep {
-	struct util_ep			util_ep;
-	struct ibv_qp			*ibv_qp;
-	struct fi_info			*info;
-	struct fi_ibv_dgram_av		*av;
-	struct fi_ibv_domain		*domain;
-	struct fi_ibv_dgram_buf_pool	grh_pool;
-	struct ofi_ib_ud_ep_name	ep_name;
-	int				service;
-	int				ep_flags;
 };
 
 extern struct fi_ops_msg fi_ibv_dgram_msg_ops;
