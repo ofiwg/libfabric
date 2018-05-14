@@ -124,7 +124,7 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	uint64_t data_len;
 
 	tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
-	tcpx_cq = container_of(tcpx_ep->util_ep.rx_cq, struct tcpx_cq,
+	tcpx_cq = container_of(tcpx_ep->util_ep.tx_cq, struct tcpx_cq,
 			       util_cq);
 
 	send_entry = tcpx_pe_entry_alloc(tcpx_cq);
@@ -678,6 +678,8 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	dlist_init(&ep->rx_queue);
 	dlist_init(&ep->tx_queue);
+	dlist_init(&ep->rma_list.list);
+	ep->rma_list.msg_id_tracker = 0;
 
 	*ep_fid = &ep->util_ep.ep_fid;
 	(*ep_fid)->fid.ops = &tcpx_ep_fi_ops;

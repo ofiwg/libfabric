@@ -132,6 +132,9 @@ enum tcpx_xfer_op_codes {
 	TCPX_OP_MSG_RECV,
 	TCPX_OP_WRITE,
 	TCPX_OP_REMOTE_WRITE,
+	TCPX_OP_READ,
+	TCPX_OP_REMOTE_READ_REQ,
+	TCPX_OP_REMOTE_READ_RSP,
 };
 
 enum poll_fd_type {
@@ -204,6 +207,11 @@ struct tcpx_rx_detect {
 	uint64_t		done_len;
 };
 
+struct tcpx_rma_list {
+	struct dlist_entry	list;
+	uint64_t		msg_id_tracker;
+};
+
 struct tcpx_ep {
 	struct util_ep		util_ep;
 	SOCKET			conn_fd;
@@ -212,7 +220,8 @@ struct tcpx_ep {
 	struct dlist_entry	ep_entry;
 	struct dlist_entry	rx_queue;
 	struct dlist_entry	tx_queue;
-	/* lock for protecting tx/rx queues */
+	struct tcpx_rma_list	rma_list;
+	/* lock for protecting tx/rx queues and rma list*/
 	fastlock_t		queue_lock;
 	enum tcpx_cm_state	cm_state;
 	fastlock_t		cm_state_lock;
