@@ -631,26 +631,27 @@ fi_ibv_msg_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t 
 }
 
 static ssize_t
-fi_ibv_msg_ep_recv(struct fid_ep *ep, void *buf, size_t len,
+fi_ibv_msg_ep_recv(struct fid_ep *ep_fid, void *buf, size_t len,
 		void *desc, fi_addr_t src_addr, void *context)
 {
-	struct iovec iov = {
-		.iov_base = buf,
-		.iov_len = len,
+	struct fi_ibv_ep *ep =
+		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
+	struct ibv_sge sge = fi_ibv_init_sge(buf, len, desc);
+	struct ibv_recv_wr wr = {
+		.wr_id = (uintptr_t)context,
+		.num_sge = 1,
+		.sg_list = &sge,
+		.next = NULL,
 	};
-	struct fi_msg msg = {
-		.msg_iov = &iov,
-		.desc = &desc,
-		.iov_count = 1,
-		.addr = src_addr,
-		.context = context,
-	};
+	struct ibv_recv_wr *bad_wr;
 
-	return fi_ibv_msg_ep_recvmsg(ep, &msg, 0);
+	assert(ep->util_ep.rx_cq);
+
+	return fi_ibv_handle_post(ibv_post_recv(ep->id->qp, &wr, &bad_wr));
 }
 
 static ssize_t
-fi_ibv_msg_ep_recvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
+fi_ibv_msg_ep_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
                  size_t count, fi_addr_t src_addr, void *context)
 {
 	struct fi_msg msg = {
@@ -661,7 +662,7 @@ fi_ibv_msg_ep_recvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 		.context = context,
 	};
 
-	return fi_ibv_msg_ep_recvmsg(ep, &msg, 0);
+	return fi_ibv_msg_ep_recvmsg(ep_fid, &msg, 0);
 }
 
 static ssize_t
@@ -855,26 +856,25 @@ fi_ibv_srq_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t 
 }
 
 static ssize_t
-fi_ibv_srq_ep_recv(struct fid_ep *ep, void *buf, size_t len,
+fi_ibv_srq_ep_recv(struct fid_ep *ep_fid, void *buf, size_t len,
 		void *desc, fi_addr_t src_addr, void *context)
 {
-	struct iovec iov = {
-		.iov_base = buf,
-		.iov_len = len,
+	struct fi_ibv_srq_ep *ep =
+		container_of(ep_fid, struct fi_ibv_srq_ep, ep_fid);
+	struct ibv_sge sge = fi_ibv_init_sge(buf, len, desc);
+	struct ibv_recv_wr wr = {
+		.wr_id = (uintptr_t)context,
+		.num_sge = 1,
+		.sg_list = &sge,
+		.next = NULL,
 	};
-	struct fi_msg msg = {
-		.msg_iov = &iov,
-		.desc = &desc,
-		.iov_count = 1,
-		.addr = src_addr,
-		.context = context,
-	};
+	struct ibv_recv_wr *bad_wr;
 
-	return fi_ibv_srq_ep_recvmsg(ep, &msg, 0);
+	return fi_ibv_handle_post(ibv_post_srq_recv(ep->srq, &wr, &bad_wr));
 }
 
 static ssize_t
-fi_ibv_srq_ep_recvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
+fi_ibv_srq_ep_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
                  size_t count, fi_addr_t src_addr, void *context)
 {
 	struct fi_msg msg = {
@@ -885,7 +885,7 @@ fi_ibv_srq_ep_recvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 		.context = context,
 	};
 
-	return fi_ibv_srq_ep_recvmsg(ep, &msg, 0);
+	return fi_ibv_srq_ep_recvmsg(ep_fid, &msg, 0);
 }
 
 static struct fi_ops_msg fi_ibv_srq_msg_ops = {
