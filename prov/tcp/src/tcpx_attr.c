@@ -81,7 +81,8 @@ static struct fi_fabric_attr tcpx_fabric_attr = {
 
 struct fi_info tcpx_info = {
 	.caps = FI_MSG | FI_SEND | FI_RECV |
-		FI_RMA | FI_WRITE | FI_REMOTE_WRITE,
+		FI_RMA | FI_WRITE | FI_REMOTE_WRITE |
+		FI_READ | FI_REMOTE_READ,
 	.addr_format = FI_SOCKADDR,
 	.tx_attr = &tcpx_tx_attr,
 	.rx_attr = &tcpx_rx_attr,

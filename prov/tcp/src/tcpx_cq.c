@@ -43,7 +43,7 @@ static int tcpx_cq_close(struct fid *fid)
 	struct tcpx_cq *tcpx_cq;
 
 	tcpx_cq = container_of(fid, struct tcpx_cq, util_cq.cq_fid.fid);
-	util_buf_pool_destroy(tcpx_cq->pe_entry_pool);
+	util_buf_pool_destroy(tcpx_cq->xfer_entry_pool);
 	ret = ofi_cq_cleanup(&tcpx_cq->util_cq);
 	if (ret)
 		return ret;
@@ -52,9 +52,9 @@ static int tcpx_cq_close(struct fid *fid)
 	return 0;
 }
 
-struct tcpx_pe_entry *tcpx_pe_entry_alloc(struct tcpx_cq *tcpx_cq)
+struct tcpx_xfer_entry *tcpx_xfer_entry_alloc(struct tcpx_cq *tcpx_cq)
 {
-	struct tcpx_pe_entry *pe_entry;
+	struct tcpx_xfer_entry *xfer_entry;
 
 	fastlock_acquire(&tcpx_cq->util_cq.cq_lock);
 
@@ -64,61 +64,43 @@ struct tcpx_pe_entry *tcpx_pe_entry_alloc(struct tcpx_cq *tcpx_cq)
 		return NULL;
 	}
 
-	pe_entry = util_buf_alloc(tcpx_cq->pe_entry_pool);
-	if (!pe_entry) {
+	xfer_entry = util_buf_alloc(tcpx_cq->xfer_entry_pool);
+	if (!xfer_entry) {
 		fastlock_release(&tcpx_cq->util_cq.cq_lock);
 		FI_INFO(&tcpx_prov, FI_LOG_DOMAIN,"failed to get buffer\n");
 		return NULL;
 	}
 	fastlock_release(&tcpx_cq->util_cq.cq_lock);
-	memset(pe_entry, 0, sizeof(*pe_entry));
-	return pe_entry;
+	memset(xfer_entry, 0, sizeof(*xfer_entry));
+	return xfer_entry;
 }
 
-void tcpx_pe_entry_release(struct tcpx_pe_entry *pe_entry)
+void tcpx_xfer_entry_release(struct tcpx_cq *tcpx_cq,
+			   struct tcpx_xfer_entry *xfer_entry)
 {
-	struct util_cq *cq;
-	struct tcpx_cq *tcpx_cq;
+	if (xfer_entry->ep->cur_rx_entry == xfer_entry)
+		xfer_entry->ep->cur_rx_entry = NULL;
 
-	switch (pe_entry->msg_hdr.hdr.op_data) {
-	case TCPX_OP_MSG_SEND:
-	case TCPX_OP_WRITE:
-		cq = pe_entry->ep->util_ep.tx_cq;
-		break;
-	case TCPX_OP_MSG_RECV:
-	case TCPX_OP_REMOTE_WRITE:
-		cq = pe_entry->ep->util_ep.rx_cq;
-		break;
-	default:
-		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,"invalid pe_entry\n");
-		return;
-	}
-
-	tcpx_cq = container_of(cq, struct tcpx_cq, util_cq);
-
-	if (pe_entry->ep->cur_rx_entry == pe_entry)
-		pe_entry->ep->cur_rx_entry = NULL;
-
-	fastlock_acquire(&cq->cq_lock);
-	util_buf_release(tcpx_cq->pe_entry_pool, pe_entry);
-	fastlock_release(&cq->cq_lock);
+	fastlock_acquire(&tcpx_cq->util_cq.cq_lock);
+	util_buf_release(tcpx_cq->xfer_entry_pool, xfer_entry);
+	fastlock_release(&tcpx_cq->util_cq.cq_lock);
 }
 
 void tcpx_cq_report_completion(struct util_cq *cq,
-			       struct tcpx_pe_entry *pe_entry,
+			       struct tcpx_xfer_entry *xfer_entry,
 			       int err)
 {
 	struct fi_cq_err_entry err_entry;
 
-	if (pe_entry->flags & TCPX_NO_COMPLETION)
+	if (xfer_entry->flags & TCPX_NO_COMPLETION)
 		return;
 
 	if (err) {
-		err_entry.op_context = pe_entry->context;
-		err_entry.flags = pe_entry->flags;
+		err_entry.op_context = xfer_entry->context;
+		err_entry.flags = xfer_entry->flags;
 		err_entry.len = 0;
 		err_entry.buf = NULL;
-		err_entry.data = pe_entry->msg_hdr.hdr.data;
+		err_entry.data = xfer_entry->msg_hdr.hdr.data;
 		err_entry.tag = 0;
 		err_entry.olen = 0;
 		err_entry.err = err;
@@ -128,9 +110,9 @@ void tcpx_cq_report_completion(struct util_cq *cq,
 
 		ofi_cq_write_error(cq, &err_entry);
 	} else {
-		ofi_cq_write(cq, pe_entry->context,
-			      pe_entry->flags, 0, NULL,
-			      pe_entry->msg_hdr.hdr.data, 0);
+		ofi_cq_write(cq, xfer_entry->context,
+			      xfer_entry->flags, 0, NULL,
+			      xfer_entry->msg_hdr.hdr.data, 0);
 
 		if (cq->wait)
 			ofi_cq_signal(&cq->cq_fid);
@@ -181,8 +163,8 @@ int tcpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	if (!attr->size)
 		attr->size = TCPX_DEF_CQ_SIZE;
 
-	ret =  util_buf_pool_create(&tcpx_cq->pe_entry_pool,
-				    sizeof(struct tcpx_pe_entry),
+	ret =  util_buf_pool_create(&tcpx_cq->xfer_entry_pool,
+				    sizeof(struct tcpx_xfer_entry),
 				    16, 0, 1024);
 	if (ret)
 		goto free_cq;
@@ -197,7 +179,7 @@ int tcpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	return 0;
 
 destroy_pool:
-	util_buf_pool_destroy(tcpx_cq->pe_entry_pool);
+	util_buf_pool_destroy(tcpx_cq->xfer_entry_pool);
 free_cq:
 	free(tcpx_cq);
 	return ret;
