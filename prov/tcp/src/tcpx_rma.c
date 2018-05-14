@@ -49,7 +49,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 
-static void tcpx_rma_read_send_entry_fill(struct tcpx_pe_entry *send_entry,
+static void tcpx_rma_read_send_entry_fill(struct tcpx_xfer_entry *send_entry,
 					  struct tcpx_ep *tcpx_ep,
 					  const struct fi_msg_rma *msg)
 {
@@ -74,7 +74,7 @@ static void tcpx_rma_read_send_entry_fill(struct tcpx_pe_entry *send_entry,
 	send_entry->done_len = 0;
 }
 
-static void tcpx_rma_read_recv_entry_fill(struct tcpx_pe_entry *recv_entry,
+static void tcpx_rma_read_recv_entry_fill(struct tcpx_xfer_entry *recv_entry,
 					  struct tcpx_ep *tcpx_ep,
 					  const struct fi_msg_rma *msg,
 					  uint64_t flags)
@@ -104,8 +104,8 @@ static ssize_t tcpx_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 {
 	struct tcpx_ep *tcpx_ep;
 	struct tcpx_cq *tcpx_cq;
-	struct tcpx_pe_entry *send_entry;
-	struct tcpx_pe_entry *recv_entry;
+	struct tcpx_xfer_entry *send_entry;
+	struct tcpx_xfer_entry *recv_entry;
 
 	tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
 	tcpx_cq = container_of(tcpx_ep->util_ep.tx_cq, struct tcpx_cq,
@@ -114,14 +114,14 @@ static ssize_t tcpx_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	assert(msg->iov_count <= TCPX_IOV_LIMIT);
 	assert(msg->rma_iov_count <= TCPX_IOV_LIMIT);
 
-	send_entry = tcpx_pe_entry_alloc(tcpx_cq);
+	send_entry = tcpx_xfer_entry_alloc(tcpx_cq);
 	if (!send_entry)
 		return -FI_EAGAIN;
 
-	recv_entry = tcpx_pe_entry_alloc(tcpx_cq);
+	recv_entry = tcpx_xfer_entry_alloc(tcpx_cq);
 	if (!recv_entry) {
 		send_entry->msg_hdr.hdr.op_data = TCPX_OP_READ;
-		tcpx_pe_entry_release(tcpx_cq, send_entry);
+		tcpx_xfer_entry_release(tcpx_cq, send_entry);
 		return -FI_EAGAIN;
 	}
 	tcpx_rma_read_send_entry_fill(send_entry, tcpx_ep, msg);
@@ -191,14 +191,14 @@ static ssize_t tcpx_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg
 {
 	struct tcpx_ep *tcpx_ep;
 	struct tcpx_cq *tcpx_cq;
-	struct tcpx_pe_entry *send_entry;
+	struct tcpx_xfer_entry *send_entry;
 	uint64_t data_len;
 
 	tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
 	tcpx_cq = container_of(tcpx_ep->util_ep.tx_cq, struct tcpx_cq,
 			       util_cq);
 
-	send_entry = tcpx_pe_entry_alloc(tcpx_cq);
+	send_entry = tcpx_xfer_entry_alloc(tcpx_cq);
 	if (!send_entry)
 		return -FI_EAGAIN;
 
@@ -249,7 +249,7 @@ static ssize_t tcpx_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg
 	fastlock_acquire(&tcpx_ep->queue_lock);
 	if (dlist_empty(&tcpx_ep->tx_queue)) {
 		dlist_insert_tail(&send_entry->entry, &tcpx_ep->tx_queue);
-		process_tx_pe_entry(send_entry);
+		process_tx_entry(send_entry);
 	} else {
 		dlist_insert_tail(&send_entry->entry, &tcpx_ep->tx_queue);
 	}

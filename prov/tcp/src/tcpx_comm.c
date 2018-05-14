@@ -37,20 +37,20 @@
 #include <ofi_iov.h>
 #include "tcpx.h"
 
-int tcpx_send_msg(struct tcpx_pe_entry *pe_entry)
+int tcpx_send_msg(struct tcpx_xfer_entry *tx_entry)
 {
 	ssize_t bytes_sent;
 
-	bytes_sent = ofi_writev_socket(pe_entry->ep->conn_fd,
-				       pe_entry->msg_data.iov,
-				       pe_entry->msg_data.iov_cnt);
+	bytes_sent = ofi_writev_socket(tx_entry->ep->conn_fd,
+				       tx_entry->msg_data.iov,
+				       tx_entry->msg_data.iov_cnt);
 	if (bytes_sent < 0)
 		return -errno;
 
-	pe_entry->done_len += bytes_sent;
-	if (pe_entry->done_len < ntohll(pe_entry->msg_hdr.hdr.size)) {
-		ofi_consume_iov(pe_entry->msg_data.iov,
-				&pe_entry->msg_data.iov_cnt,
+	tx_entry->done_len += bytes_sent;
+	if (tx_entry->done_len < ntohll(tx_entry->msg_hdr.hdr.size)) {
+		ofi_consume_iov(tx_entry->msg_data.iov,
+				&tx_entry->msg_data.iov_cnt,
 				bytes_sent);
 		return -FI_EAGAIN;
 	}
@@ -74,20 +74,20 @@ int tcpx_recv_hdr(SOCKET sock, struct tcpx_rx_detect *rx_detect)
 	return (rem_len == bytes_recvd)? FI_SUCCESS : -FI_EAGAIN;
 }
 
-int tcpx_recv_msg_data(struct tcpx_pe_entry *pe_entry)
+int tcpx_recv_msg_data(struct tcpx_xfer_entry *rx_entry)
 {
 	ssize_t bytes_recvd;
 
-	bytes_recvd = ofi_readv_socket(pe_entry->ep->conn_fd,
-				       pe_entry->msg_data.iov,
-				       pe_entry->msg_data.iov_cnt);
+	bytes_recvd = ofi_readv_socket(rx_entry->ep->conn_fd,
+				       rx_entry->msg_data.iov,
+				       rx_entry->msg_data.iov_cnt);
 	if (bytes_recvd <= 0)
 		return (bytes_recvd)? -errno: -FI_ENOTCONN;
 
-	pe_entry->done_len += bytes_recvd;
-	if (pe_entry->done_len < ntohll(pe_entry->msg_hdr.hdr.size)) {
-		ofi_consume_iov(pe_entry->msg_data.iov,
-				&pe_entry->msg_data.iov_cnt,
+	rx_entry->done_len += bytes_recvd;
+	if (rx_entry->done_len < ntohll(rx_entry->msg_hdr.hdr.size)) {
+		ofi_consume_iov(rx_entry->msg_data.iov,
+				&rx_entry->msg_data.iov_cnt,
 				bytes_recvd);
 		return -FI_EAGAIN;
 	}
