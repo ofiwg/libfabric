@@ -36,10 +36,9 @@ static inline
 void fi_ibv_dgram_recv_setup(struct fi_ibv_dgram_wr_entry *wr_entry,
 			     struct ibv_recv_wr *wr)
 {
-	struct fi_ibv_dgram_ep *ep = wr_entry->hdr.ep;
+	struct fi_ibv_ep *ep = wr_entry->hdr.ep;
 
-	if (fi_ibv_dgram_is_completion(ep->ep_flags,
-				       wr_entry->hdr.flags)) {
+	if ((ep->util_ep.rx_op_flags | wr_entry->hdr.flags) & FI_COMPLETION) {
 		wr_entry->hdr.suc_cb = fi_ibv_dgram_rx_cq_comp;
 		wr_entry->hdr.err_cb = fi_ibv_dgram_rx_cq_report_error;
 	} else {
@@ -52,15 +51,14 @@ static inline ssize_t
 fi_ibv_dgram_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 		     uint64_t flags)
 {
-	struct fi_ibv_dgram_ep *ep;
+	struct fi_ibv_ep *ep;
 	struct ibv_recv_wr wr = { 0 };
 	struct ibv_sge *sge;
 	struct fi_ibv_dgram_wr_entry *wr_entry;
 	ssize_t i;
 	struct ibv_recv_wr *bad_wr;
 
-	ep = container_of(ep_fid, struct fi_ibv_dgram_ep,
-			  util_ep.ep_fid.fid);
+	ep = container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid.fid);
 	assert(ep && ep->util_ep.rx_cq);
 
 	wr_entry = (struct fi_ibv_dgram_wr_entry *)
@@ -125,11 +123,11 @@ void fi_ibv_dgram_send_setup(struct fi_ibv_dgram_wr_entry *wr_entry,
 			     struct ibv_send_wr *wr,
 			     size_t total_len)
 {
-	struct fi_ibv_dgram_ep *ep = wr_entry->hdr.ep;
+	struct fi_ibv_ep *ep = wr_entry->hdr.ep;
 
 	wr->send_flags |= IBV_SEND_SIGNALED;
-	if (fi_ibv_dgram_is_completion(ep->ep_flags,
-				       wr_entry->hdr.flags)) {
+
+	if ((ep->util_ep.tx_op_flags | wr_entry->hdr.flags) & FI_COMPLETION) {
 		wr_entry->hdr.suc_cb = fi_ibv_dgram_tx_cq_comp;
 		wr_entry->hdr.err_cb = fi_ibv_dgram_tx_cq_report_error;
 	} else {
@@ -146,7 +144,7 @@ static inline ssize_t
 fi_ibv_dgram_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 		     uint64_t flags)
 {
-	struct fi_ibv_dgram_ep *ep;
+	struct fi_ibv_ep *ep;
 	struct ibv_send_wr wr = { 0 };
 	struct ibv_sge *sge;
 	struct fi_ibv_dgram_wr_entry *wr_entry = NULL;
@@ -157,8 +155,7 @@ fi_ibv_dgram_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 
 	assert(!(flags & FI_FENCE));
 
-	ep = container_of(ep_fid, struct fi_ibv_dgram_ep,
-			  util_ep.ep_fid.fid);
+	ep = container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid.fid);
 	assert(ep && ep->util_ep.tx_cq);
 
 	wr_entry = (struct fi_ibv_dgram_wr_entry *)

@@ -34,20 +34,23 @@
 
 static int fi_ibv_dgram_ep_enable(struct fid_ep *ep_fid)
 {
-	struct fi_ibv_dgram_ep *ep;
+	struct fi_ibv_ep *ep;
 	struct fi_ibv_dgram_cq *tx_cq = NULL, *rx_cq = NULL;
 	struct fi_ibv_fabric *fab;
 	int ret = FI_SUCCESS;
 	union ibv_gid gid;
 	uint16_t p_key;
+	struct fi_ibv_domain *domain;
 
 	assert(ep_fid->fid.fclass == FI_CLASS_EP);
 	if (ep_fid->fid.fclass != FI_CLASS_EP)
 		return -FI_EINVAL;
 
-	ep = container_of(ep_fid, struct fi_ibv_dgram_ep, util_ep.ep_fid);
+	ep = container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	if (!ep)
 		return -FI_EINVAL;
+
+	domain = container_of(ep->util_ep.domain, struct fi_ibv_domain, util_domain);
 
 	if (!ep->util_ep.rx_cq && !ep->util_ep.tx_cq) {
 		VERBS_WARN(FI_LOG_EP_CTRL, "Endpoint is not bound to "
@@ -91,7 +94,7 @@ static int fi_ibv_dgram_ep_enable(struct fid_ep *ep_fid)
 	       	.qp_type 	= IBV_QPT_UD,
        	};
 
-	ep->ibv_qp = ibv_create_qp(ep->domain->pd, &init_attr);
+	ep->ibv_qp = ibv_create_qp(domain->pd, &init_attr);
 	if (!ep->ibv_qp) {
 		VERBS_WARN(FI_LOG_EP_CTRL, "Unable to create IBV "
 			   "Queue Pair\n");
@@ -140,14 +143,14 @@ static int fi_ibv_dgram_ep_enable(struct fid_ep *ep_fid)
 		}
 	}
 
-	if (ibv_query_gid(ep->domain->verbs, 1, 0, &gid)) {
+	if (ibv_query_gid(domain->verbs, 1, 0, &gid)) {
 		VERBS_WARN(FI_LOG_EP_CTRL,
 			   "Unable to query GID, errno = %d",
 			   errno);
 		return -errno;
 	}
 
-	if (ibv_query_pkey(ep->domain->verbs, 1, 0, &p_key)) {
+	if (ibv_query_pkey(domain->verbs, 1, 0, &p_key)) {
 		VERBS_WARN(FI_LOG_EP_CTRL,
 			   "Unable to query P_Key, errno = %d",
 			   errno);
@@ -155,7 +158,7 @@ static int fi_ibv_dgram_ep_enable(struct fid_ep *ep_fid)
 	}
 
 	struct ibv_port_attr port_attr;
-	if (ibv_query_port(ep->domain->verbs, 1, &port_attr)) {
+	if (ibv_query_port(domain->verbs, 1, &port_attr)) {
 		VERBS_WARN(FI_LOG_EP_CTRL,
 			   "Unable to query port attributes, errno = %d",
 			   errno);
@@ -179,13 +182,13 @@ static int fi_ibv_dgram_ep_enable(struct fid_ep *ep_fid)
 
 static int fi_ibv_dgram_ep_control(fid_t ep_fid, int command, void *arg)
 {
-	struct fi_ibv_dgram_ep *ep;
+	struct fi_ibv_ep *ep;
 
 	assert(ep_fid->fclass == FI_CLASS_EP);
 	if (ep_fid->fclass != FI_CLASS_EP)
 		return -FI_EINVAL;
 
-	ep = container_of(ep_fid, struct fi_ibv_dgram_ep, util_ep.ep_fid.fid);
+	ep = container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid.fid);
 	if (!ep)
 		return -FI_EINVAL;
 
@@ -199,7 +202,7 @@ static int fi_ibv_dgram_ep_control(fid_t ep_fid, int command, void *arg)
 
 static int fi_ibv_dgram_ep_close(fid_t ep_fid)
 {
-	struct fi_ibv_dgram_ep *ep;
+	struct fi_ibv_ep *ep;
 	struct fi_ibv_fabric *fab;
 	int ret = FI_SUCCESS;
 
@@ -207,7 +210,7 @@ static int fi_ibv_dgram_ep_close(fid_t ep_fid)
 	if (ep_fid->fclass != FI_CLASS_EP)
 		return -FI_EINVAL;
 
-	ep = container_of(ep_fid, struct fi_ibv_dgram_ep, util_ep.ep_fid.fid);
+	ep = container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid.fid);
 	if (!ep)
 		return -FI_EINVAL;
 
@@ -237,7 +240,7 @@ static int fi_ibv_dgram_ep_close(fid_t ep_fid)
 static int fi_ibv_dgram_ep_bind(fid_t ep_fid, struct fid *bfid, uint64_t flags)
 {
 	int ret = FI_SUCCESS;
-	struct fi_ibv_dgram_ep *ep;
+	struct fi_ibv_ep *ep;
 	struct fi_ibv_dgram_cq *cq;
 	struct fi_ibv_dgram_av *av;
 	struct fi_ibv_dgram_eq *eq;
@@ -247,7 +250,7 @@ static int fi_ibv_dgram_ep_bind(fid_t ep_fid, struct fid *bfid, uint64_t flags)
 	if (ep_fid->fclass != FI_CLASS_EP)
 		return -FI_EINVAL;
 
-	ep = container_of(ep_fid, struct fi_ibv_dgram_ep, util_ep.ep_fid.fid);
+	ep = container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid.fid);
 	if (!ep)
 		return -FI_EINVAL;
 
@@ -301,14 +304,14 @@ static int fi_ibv_dgram_ep_bind(fid_t ep_fid, struct fid *bfid, uint64_t flags)
 
 static int fi_ibv_dgram_ep_setname(fid_t ep_fid, void *addr, size_t addrlen)
 {
-	struct fi_ibv_dgram_ep *ep;
+	struct fi_ibv_ep *ep;
 	void *save_addr;
 	int ret = FI_SUCCESS;
 
 	if (ep_fid->fclass != FI_CLASS_EP)
 		return -FI_EINVAL;
 
-	ep = container_of(ep_fid, struct fi_ibv_dgram_ep, util_ep.ep_fid.fid);
+	ep = container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid.fid);
 	if (!ep)
 		return -FI_EINVAL;
 
@@ -342,12 +345,12 @@ err:
 
 static int fi_ibv_dgram_ep_getname(fid_t ep_fid, void *addr, size_t *addrlen)
 {
-	struct fi_ibv_dgram_ep *ep;
+	struct fi_ibv_ep *ep;
 
 	if (ep_fid->fclass != FI_CLASS_EP)
 		return -FI_EINVAL;
 
-	ep = container_of(ep_fid, struct fi_ibv_dgram_ep, util_ep.ep_fid.fid);
+	ep = container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid.fid);
 	if (!ep)
 		return -FI_EINVAL;
 
@@ -403,7 +406,7 @@ int fi_ibv_dgram_endpoint_open(struct fid_domain *domain_fid,
 			       struct fid_ep **ep_fid,
 			       void *context)
 {
-	struct fi_ibv_dgram_ep *ep;
+	struct fi_ibv_ep *ep;
 	int ret = FI_SUCCESS;
 
 	assert(info && info->ep_attr && info->rx_attr && info->tx_attr);
@@ -450,7 +453,7 @@ int fi_ibv_dgram_endpoint_open(struct fid_domain *domain_fid,
 		ret = -FI_ENOMEM;
 		goto err3;
 	}
-	ep->domain = domain;
+
 	ep->service = (info->src_addr) ?
 			(((struct ofi_ib_ud_ep_name *)info->src_addr)->service) :
 			(((getpid() & 0x7FFF) << 16) + ((uintptr_t)ep & 0xFFFF));
