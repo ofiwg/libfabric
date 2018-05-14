@@ -206,17 +206,7 @@ static int cxi_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 static const char *cxi_av_straddr(struct fid_av *av, const void *addr,
 				  char *buf, size_t *len)
 {
-	const struct cxi_addr *cxi_addr;
-	char straddr[100];
-	int size;
-
-	cxi_addr = addr;
-	size = snprintf(straddr, sizeof(straddr), "0x%x:%u:%u",
-			cxi_addr->nic, cxi_addr->domain, cxi_addr->port);
-	snprintf(buf, *len, "%s", straddr);
-	*len = size + 1;
-
-	return buf;
+	return ofi_straddr(buf, len, FI_ADDR_CXI, addr);
 }
 
 static int cxi_av_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
