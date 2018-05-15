@@ -471,8 +471,6 @@ static int fi_ibv_cq_close(fid_t fid)
 	struct fi_ibv_cq *cq =
 		container_of(fid, struct fi_ibv_cq, util_cq.cq_fid);
 
-	ofi_cq_cleanup(&cq->util_cq);
-
 	if (ofi_atomic_get32(&cq->nevents))
 		ibv_ack_cq_events(cq->cq, ofi_atomic_get32(&cq->nevents));
 
@@ -482,7 +480,6 @@ static int fi_ibv_cq_close(fid_t fid)
 		wce = container_of(entry, struct fi_ibv_wce, entry);
 		util_buf_release(cq->wce_pool, wce);
 	}
-
 	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
 
 	util_buf_pool_destroy(cq->wce_pool);
@@ -499,6 +496,8 @@ static int fi_ibv_cq_close(fid_t fid)
 	if (cq->signal_fd[1]) {
 		ofi_close_socket(cq->signal_fd[1]);
 	}
+
+	ofi_cq_cleanup(&cq->util_cq);
 
 	if (cq->channel)
 		ibv_destroy_comp_channel(cq->channel);
