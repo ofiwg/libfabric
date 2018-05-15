@@ -240,7 +240,7 @@ static int tcpx_match_read_rsp(struct dlist_entry *entry, const void *arg)
 	xfer_entry = container_of(entry, struct tcpx_xfer_entry,
 				entry);
 	return (xfer_entry->msg_hdr.hdr.remote_idx ==
-		ntohll(rx_detect->hdr.hdr.remote_idx))?1:0;
+		ntohll(rx_detect->hdr.hdr.remote_idx));
 }
 
 static int tcpx_get_rx_entry(struct tcpx_rx_detect *rx_detect,
