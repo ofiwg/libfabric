@@ -73,7 +73,7 @@ static ssize_t tcpx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	       msg->iov_count * sizeof(struct iovec));
 
 	recv_entry->ep = tcpx_ep;
-	recv_entry->flags = flags;
+	recv_entry->flags = flags | FI_MSG | FI_RECV;
 	recv_entry->context = msg->context;
 	recv_entry->done_len = 0;
 
@@ -170,6 +170,7 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	tx_entry->ep = tcpx_ep;
 	tx_entry->context = msg->context;
 	tx_entry->done_len = 0;
+	tx_entry->flags = flags | FI_MSG | FI_SEND;
 
 	fastlock_acquire(&tcpx_ep->queue_lock);
 	if (dlist_empty(&tcpx_ep->tx_queue)) {
