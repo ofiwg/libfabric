@@ -177,11 +177,6 @@ fi_ibv_dgram_pool_create(struct fi_ibv_dgram_pool_attr *attr,
 }
 /* ~Verbs UD Pool functionality */
 
-struct fi_ibv_dgram_cq {
-	struct util_cq	util_cq;
-	struct ibv_cq	*ibv_cq;
-};
-
 struct fi_ibv_dgram_av {
 	struct util_av	util_av;
 };

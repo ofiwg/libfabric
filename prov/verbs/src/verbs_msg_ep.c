@@ -33,7 +33,7 @@
 #include "config.h"
 
 #include "fi_verbs.h"
-
+#include "verbs_dgram.h"
 
 #define VERBS_CM_DATA_SIZE 56
 #define VERBS_RESOLVE_TIMEOUT 2000	// ms
@@ -108,12 +108,38 @@ static void fi_ibv_free_ep(struct fi_ibv_ep *ep)
 
 static int fi_ibv_ep_close(fid_t fid)
 {
+	int ret;
+	struct fi_ibv_fabric *fab;
 	struct fi_ibv_ep *ep =
 		container_of(fid, struct fi_ibv_ep, util_ep.ep_fid.fid);
 
-	rdma_destroy_ep(ep->id);
-	fi_ibv_cleanup_cq(ep);
-	ofi_endpoint_close(&ep->util_ep);
+	switch (ep->util_ep.type) {
+	case FI_EP_MSG:
+		rdma_destroy_ep(ep->id);
+		fi_ibv_cleanup_cq(ep);
+		break;
+	case FI_EP_DGRAM:
+		fab = container_of(&ep->util_ep.domain->fabric->fabric_fid,
+				   struct fi_ibv_fabric, util_fabric.fabric_fid.fid);
+		ofi_ns_del_local_name(&fab->name_server,
+				      &ep->service, &ep->ep_name);
+		fi_ibv_dgram_pool_destroy(&ep->grh_pool);
+		ret = ibv_destroy_qp(ep->ibv_qp);
+		if (ret) {
+			VERBS_WARN(FI_LOG_EP_CTRL,
+				   "Unable to destroy QP (errno = %d)\n", errno);
+			return -errno;
+		}
+		break;
+	default:
+		VERBS_INFO(FI_LOG_DOMAIN, "Unknown EP type\n");
+		assert(0);
+		return -FI_EINVAL;
+	}
+
+	ret = ofi_endpoint_close(&ep->util_ep);
+	if (ret)
+		return ret;
 
 	VERBS_INFO(FI_LOG_DOMAIN, "EP %p was closed \n", ep);
 
@@ -126,6 +152,10 @@ static int fi_ibv_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct fi_ibv_ep *ep;
 	struct util_cq *cq;
+	struct fi_ibv_cq *ibv_cq;
+	struct fi_ibv_dgram_av *av;
+	struct fi_ibv_dgram_eq *eq;
+	struct fi_ibv_dgram_cntr *cntr;
 	int ret;
 
 	ep = container_of(fid, struct fi_ibv_ep, util_ep.ep_fid.fid);
@@ -133,25 +163,168 @@ static int fi_ibv_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	if (ret)
 		return ret;
 
-	switch (bfid->fclass) {
-	case FI_CLASS_CQ:
-		cq = container_of(bfid, struct util_cq, cq_fid.fid);
-		ret = ofi_ep_bind_cq(&ep->util_ep, cq, flags);
-		if (ret)
-			return ret;
+	switch (ep->util_ep.type) {
+	case FI_EP_MSG:
+		switch (bfid->fclass) {
+		case FI_CLASS_CQ:
+			cq = container_of(bfid, struct util_cq, cq_fid.fid);
+			ret = ofi_ep_bind_cq(&ep->util_ep, cq, flags);
+			if (ret)
+				return ret;
+			break;
+		case FI_CLASS_EQ:
+			ep->eq = container_of(bfid, struct fi_ibv_eq, eq_fid.fid);
+			ret = rdma_migrate_id(ep->id, ep->eq->channel);
+			if (ret)
+				return -errno;
+			break;
+		case FI_CLASS_SRX_CTX:
+			ep->srq_ep = container_of(bfid, struct fi_ibv_srq_ep, ep_fid.fid);
+			break;
+		default:
+			return -FI_EINVAL;
+		}
 		break;
-	case FI_CLASS_EQ:
-		ep->eq = container_of(bfid, struct fi_ibv_eq, eq_fid.fid);
-		ret = rdma_migrate_id(ep->id, ep->eq->channel);
-		if (ret)
-			return -errno;
-		break;
-	case FI_CLASS_SRX_CTX:
-		ep->srq_ep = container_of(bfid, struct fi_ibv_srq_ep, ep_fid.fid);
+	case FI_EP_DGRAM:
+		switch (bfid->fclass) {
+		case FI_CLASS_CQ:
+			ibv_cq = container_of(bfid, struct fi_ibv_cq, util_cq.cq_fid.fid);
+			if (!ibv_cq)
+				return -FI_EINVAL;
+			if (flags & (FI_RECV | FI_TRANSMIT))
+				ep->util_ep.progress =
+					fi_ibv_dgram_send_recv_cq_progress;
+			else if (flags & FI_RECV)
+				ep->util_ep.progress = (ep->util_ep.tx_cq) ?
+					fi_ibv_dgram_send_recv_cq_progress :
+					fi_ibv_dgram_recv_cq_progress;
+			else if (flags & FI_TRANSMIT)
+				ep->util_ep.progress = (ep->util_ep.rx_cq) ?
+					fi_ibv_dgram_send_recv_cq_progress :
+					fi_ibv_dgram_send_cq_progress;
+			return ofi_ep_bind_cq(&ep->util_ep, &ibv_cq->util_cq, flags);
+		case FI_CLASS_EQ:
+			eq = container_of(bfid, struct fi_ibv_dgram_eq,
+					  util_eq.eq_fid.fid);
+			if (!eq)
+				return -FI_EINVAL;
+			return ofi_ep_bind_eq(&ep->util_ep, &eq->util_eq);
+		case FI_CLASS_AV:
+			av = container_of(bfid, struct fi_ibv_dgram_av,
+					  util_av.av_fid.fid);
+			if (!av)
+				return -FI_EINVAL;
+			return ofi_ep_bind_av(&ep->util_ep, &av->util_av);
+		case FI_CLASS_CNTR:
+			cntr = container_of(bfid, struct fi_ibv_dgram_cntr,
+					    util_cntr.cntr_fid.fid);
+			if (!cntr)
+				return -FI_EINVAL;
+			return ofi_ep_bind_cntr(&ep->util_ep, &cntr->util_cntr, flags);
+		default:
+			return -FI_EINVAL;
+		}
 		break;
 	default:
-		return -EINVAL;
+		VERBS_INFO(FI_LOG_DOMAIN, "Unknown EP type\n");
+		assert(0);
+		return -FI_EINVAL;
 	}
+
+	return 0;
+}
+
+static int fi_ibv_create_dgram_ep(struct fi_ibv_domain *domain, struct fi_ibv_ep *ep,
+				  struct ibv_qp_init_attr *init_attr)
+{
+	struct fi_ibv_fabric *fab;
+	struct ibv_qp_attr attr = {
+		.qp_state = IBV_QPS_INIT,
+		.pkey_index = 0,
+		.port_num = 1,
+		.qkey = 0x11111111,
+	};
+	int ret = 0;
+	union ibv_gid gid;
+	uint16_t p_key;
+	struct ibv_port_attr port_attr;
+
+	init_attr->qp_type = IBV_QPT_UD;
+
+	ep->ibv_qp = ibv_create_qp(domain->pd, init_attr);
+	if (!ep->ibv_qp) {
+		VERBS_WARN(FI_LOG_EP_CTRL, "Unable to create IBV "
+			   "Queue Pair\n");
+		return -errno;
+	}
+
+	ret = ibv_modify_qp(ep->ibv_qp, &attr,
+			    IBV_QP_STATE |
+			    IBV_QP_PKEY_INDEX |
+			    IBV_QP_PORT |
+			    IBV_QP_QKEY);
+	if (ret) {
+		VERBS_WARN(FI_LOG_EP_CTRL, "Unable to modify QP state "
+			   "to INIT\n");
+		return -errno;
+	}
+
+	memset(&attr, 0, sizeof(attr));
+	attr.qp_state = IBV_QPS_RTR;
+	ret = ibv_modify_qp(ep->ibv_qp, &attr,
+			    IBV_QP_STATE);
+	if (ret) {
+		VERBS_WARN(FI_LOG_EP_CTRL, "Unable to modify QP state "
+			   "to RTR\n");
+		return -errno;
+	}
+
+	if (ep->util_ep.tx_cq) {
+		memset(&attr, 0, sizeof(attr));
+		attr.qp_state = IBV_QPS_RTS;
+		attr.sq_psn = 0xffffff;
+		ret = ibv_modify_qp(ep->ibv_qp, &attr,
+				    IBV_QP_STATE |
+				    IBV_QP_SQ_PSN);
+		if (ret) {
+			VERBS_WARN(FI_LOG_EP_CTRL, "Unable to modify QP state "
+				   "to RTS\n");
+			return -errno;
+		}
+	}
+
+	if (ibv_query_gid(domain->verbs, 1, 0, &gid)) {
+		VERBS_WARN(FI_LOG_EP_CTRL,
+			   "Unable to query GID, errno = %d",
+			   errno);
+		return -errno;
+	}
+
+	if (ibv_query_pkey(domain->verbs, 1, 0, &p_key)) {
+		VERBS_WARN(FI_LOG_EP_CTRL,
+			   "Unable to query P_Key, errno = %d",
+			   errno);
+		return -errno;
+	}
+
+	if (ibv_query_port(domain->verbs, 1, &port_attr)) {
+		VERBS_WARN(FI_LOG_EP_CTRL,
+			   "Unable to query port attributes, errno = %d",
+			   errno);
+		return -errno;
+	}
+
+	ep->ep_name.lid = port_attr.lid;
+	ep->ep_name.sl = port_attr.sm_sl;
+	ep->ep_name.gid = gid;
+	ep->ep_name.qpn = ep->ibv_qp->qp_num;
+	ep->ep_name.pkey = p_key;
+
+	fab = container_of(&ep->util_ep.domain->fabric,
+			   struct fi_ibv_fabric, util_fabric);
+
+	ofi_ns_add_local_name(&fab->name_server,
+			      &ep->service, &ep->ep_name);
 
 	return 0;
 }
@@ -165,7 +338,7 @@ static int fi_ibv_ep_enable(struct fid_ep *ep_fid)
 	int ret;
 
 	ep = container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
-	if (!ep->eq) {
+	if (!ep->eq && (ep->util_ep.type == FI_EP_MSG)) {
 		VERBS_WARN(FI_LOG_EP_CTRL,
 			   "Endpoint is not bound to an event queue\n");
 		return -FI_ENOEQ;
@@ -228,26 +401,43 @@ static int fi_ibv_ep_enable(struct fid_ep *ep_fid)
 
 	attr.cap.max_inline_data = ep->info->tx_attr->inject_size;
 
-	if (ep->srq_ep) {
-		attr.srq = ep->srq_ep->srq;
-		/* Use of SRQ, no need to allocate recv_wr entries in the QP */
-		attr.cap.max_recv_wr = 0;
+	switch (ep->util_ep.type) {
+	case FI_EP_MSG:
+		if (ep->srq_ep) {
+			attr.srq = ep->srq_ep->srq;
+			/* Use of SRQ, no need to allocate recv_wr entries in the QP */
+			attr.cap.max_recv_wr = 0;
 
-		/* Override the default ops to prevent the user from posting WRs to a
-		 * QP where a SRQ is attached to */
-		ep->util_ep.ep_fid.msg = &fi_ibv_msg_srq_ep_msg_ops;
-	}
+			/* Override the default ops to prevent the user from posting WRs to a
+			 * QP where a SRQ is attached to */
+			ep->util_ep.ep_fid.msg = &fi_ibv_msg_srq_ep_msg_ops;
+		}
 
-	attr.qp_type = IBV_QPT_RC;
-	attr.sq_sig_all = 1;
-	attr.qp_context = ep;
+		attr.qp_type = IBV_QPT_RC;
+		attr.sq_sig_all = 1;
+		attr.qp_context = ep;
 
-	ret = rdma_create_qp(ep->id, pd, &attr);
-	if (ret) {
-		ret = -errno;
-		VERBS_WARN(FI_LOG_EP_CTRL, "Unable to create rdma qp: %s (%d)\n",
-			   fi_strerror(-ret), -ret);
-		return ret;
+		ret = rdma_create_qp(ep->id, pd, &attr);
+		if (ret) {
+			ret = -errno;
+			VERBS_WARN(FI_LOG_EP_CTRL, "Unable to create rdma qp: %s (%d)\n",
+				   fi_strerror(-ret), -ret);
+			return ret;
+		}
+		break;
+	case FI_EP_DGRAM:
+		assert(domain);
+		ret = fi_ibv_create_dgram_ep(domain, ep, &attr);
+		if (ret) {
+			VERBS_WARN(FI_LOG_EP_CTRL, "Unable to create dgram EP: %s (%d)\n",
+				   fi_strerror(-ret), -ret);
+			return ret;
+		}
+		break;
+	default:
+		VERBS_INFO(FI_LOG_DOMAIN, "Unknown EP type\n");
+		assert(0);
+		return -FI_EINVAL;
 	}
 	return 0;
 }
@@ -272,12 +462,92 @@ static int fi_ibv_ep_control(struct fid *fid, int command, void *arg)
 	}
 }
 
+static int fi_ibv_dgram_ep_setname(fid_t ep_fid, void *addr, size_t addrlen)
+{
+	struct fi_ibv_ep *ep;
+	void *save_addr;
+	int ret = FI_SUCCESS;
+
+	if (ep_fid->fclass != FI_CLASS_EP)
+		return -FI_EINVAL;
+
+	ep = container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid.fid);
+	if (!ep)
+		return -FI_EINVAL;
+
+	if (addrlen < ep->info->src_addrlen) {
+		VERBS_INFO(FI_LOG_EP_CTRL,
+			   "addrlen expected: %"PRIu64", got: %"PRIu64"\n",
+			   ep->info->src_addrlen, addrlen);
+		return -FI_ETOOSMALL;
+	}
+	/*
+	 * save previous address to be able make
+	 * a roll back on the previous one
+	 */
+	save_addr = ep->info->src_addr;
+
+	ep->info->src_addr = calloc(1, ep->info->src_addrlen);
+	if (!ep->info->src_addr) {
+		ep->info->src_addr = save_addr;
+		ret = -FI_ENOMEM;
+		goto err;
+	}
+
+	memcpy(ep->info->src_addr, addr, ep->info->src_addrlen);
+	memcpy(&ep->ep_name, addr, ep->info->src_addrlen);
+
+err:
+	ep->info->src_addr = save_addr;
+	return ret;
+	
+}
+
+static int fi_ibv_dgram_ep_getname(fid_t ep_fid, void *addr, size_t *addrlen)
+{
+	struct fi_ibv_ep *ep;
+
+	if (ep_fid->fclass != FI_CLASS_EP)
+		return -FI_EINVAL;
+
+	ep = container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid.fid);
+	if (!ep)
+		return -FI_EINVAL;
+
+	if (*addrlen < sizeof(ep->ep_name)) {
+		*addrlen = sizeof(ep->ep_name);
+		VERBS_INFO(FI_LOG_EP_CTRL,
+			   "addrlen expected: %"PRIu64", got: %"PRIu64"\n",
+			   sizeof(ep->ep_name), *addrlen);
+		return -FI_ETOOSMALL;
+	}
+
+	memset(addr, 0, *addrlen);
+	memcpy(addr, &ep->ep_name, sizeof(ep->ep_name));
+	*addrlen = sizeof(ep->ep_name);
+
+	return FI_SUCCESS;
+}
+
 static struct fi_ops fi_ibv_ep_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = fi_ibv_ep_close,
 	.bind = fi_ibv_ep_bind,
 	.control = fi_ibv_ep_control,
 	.ops_open = fi_no_ops_open,
+};
+
+static struct fi_ops_cm fi_ibv_dgram_cm_ops = {
+	.size = sizeof(fi_ibv_dgram_cm_ops),
+	.setname = fi_ibv_dgram_ep_setname,
+	.getname = fi_ibv_dgram_ep_getname,
+	.getpeer = fi_no_getpeer,
+	.connect = fi_no_connect,
+	.listen = fi_no_listen,
+	.accept = fi_no_accept,
+	.reject = fi_no_reject,
+	.shutdown = fi_no_shutdown,
+	.join = fi_no_join,
 };
 
 void fi_ibv_util_ep_progress_noop(struct util_ep *util_ep)
@@ -294,12 +564,18 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	struct fi_ibv_connreq *connreq;
 	struct fi_ibv_pep *pep;
 	struct fi_info *fi;
+	struct fi_ibv_dgram_pool_attr pool_attr;
 	int ret;
 
 	dom = container_of(domain, struct fi_ibv_domain,
 			   util_domain.domain_fid);
-	if (strcmp(dom->verbs->device->name, info->domain_attr->name)) {
-		VERBS_INFO(FI_LOG_DOMAIN, "Invalid info->domain_attr->name\n");
+	/* strncmp is used here, because the function is used
+	 * to allocate DGRAM (has prefix <dev_name>-dgram) and MSG EPs */
+	if (strncmp(dom->verbs->device->name, info->domain_attr->name,
+		    strlen(dom->verbs->device->name))) {
+		VERBS_INFO(FI_LOG_DOMAIN,
+			   "Invalid info->domain_attr->name: %s and %s\n",
+			   dom->verbs->device->name, info->domain_attr->name);
 		return -FI_EINVAL;
 	}
 
@@ -333,43 +609,72 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		goto err1;
 
-	if (!info->handle) {
-		ret = fi_ibv_create_ep(NULL, NULL, 0, info, NULL, &ep->id);
+	switch (info->ep_attr->type) {
+	case FI_EP_MSG:
+		if (!info->handle) {
+			ret = fi_ibv_create_ep(NULL, NULL, 0, info, NULL, &ep->id);
+			if (ret)
+			goto err2;
+		} else if (info->handle->fclass == FI_CLASS_CONNREQ) {
+			connreq = container_of(info->handle, struct fi_ibv_connreq, handle);
+			ep->id = connreq->id;
+		} else if (info->handle->fclass == FI_CLASS_PEP) {
+			pep = container_of(info->handle, struct fi_ibv_pep, pep_fid.fid);
+			ep->id = pep->id;
+			pep->id = NULL;
+
+			if (rdma_resolve_addr(ep->id, info->src_addr, info->dest_addr,
+					      VERBS_RESOLVE_TIMEOUT)) {
+				ret = -errno;
+				VERBS_INFO(FI_LOG_DOMAIN, "Unable to rdma_resolve_addr\n");
+				goto err3;
+			}
+
+			if (rdma_resolve_route(ep->id, VERBS_RESOLVE_TIMEOUT)) {
+				ret = -errno;
+				VERBS_INFO(FI_LOG_DOMAIN, "Unable to rdma_resolve_route\n");
+				goto err3;
+			}
+		} else {
+			ret = -FI_ENOSYS;
+			goto err2;
+		}
+
+		ep->id->context = &ep->util_ep.ep_fid.fid;
+		ep->util_ep.ep_fid.msg = &fi_ibv_msg_ep_msg_ops;
+		ep->util_ep.ep_fid.cm = &fi_ibv_msg_ep_cm_ops;
+		ep->util_ep.ep_fid.rma = &fi_ibv_msg_ep_rma_ops;
+		ep->util_ep.ep_fid.atomic = &fi_ibv_msg_ep_atomic_ops;
+		break;
+	case FI_EP_DGRAM:
+		pool_attr = (struct fi_ibv_dgram_pool_attr) {
+			.count		= MIN(info->rx_attr->size, info->tx_attr->size),
+			.size		= VERBS_DGRAM_WR_ENTRY_SIZE,
+			.pool_ctx	= domain,
+			.cancel_hndlr	= fi_ibv_dgram_pool_wr_entry_cancel,
+			.alloc_hndlr	= fi_ibv_dgram_mr_buf_reg,
+			.free_hndlr	= fi_ibv_dgram_mr_buf_close,
+		};
+		ret = fi_ibv_dgram_pool_create(&pool_attr, &ep->grh_pool);
 		if (ret)
 			goto err2;
-	} else if (info->handle->fclass == FI_CLASS_CONNREQ) {
-		connreq = container_of(info->handle, struct fi_ibv_connreq, handle);
-		ep->id = connreq->id;
-        } else if (info->handle->fclass == FI_CLASS_PEP) {
-		pep = container_of(info->handle, struct fi_ibv_pep, pep_fid.fid);
-		ep->id = pep->id;
-		pep->id = NULL;
+		ep->service = (info->src_addr) ?
+			(((struct ofi_ib_ud_ep_name *)info->src_addr)->service) :
+			(((getpid() & 0x7FFF) << 16) + ((uintptr_t)ep & 0xFFFF));
 
-		if (rdma_resolve_addr(ep->id, info->src_addr, info->dest_addr,
-				      VERBS_RESOLVE_TIMEOUT)) {
-			ret = -errno;
-			VERBS_INFO(FI_LOG_DOMAIN, "Unable to rdma_resolve_addr\n");
-			goto err3;
-		}
-
-		if (rdma_resolve_route(ep->id, VERBS_RESOLVE_TIMEOUT)) {
-			ret = -errno;
-			VERBS_INFO(FI_LOG_DOMAIN, "Unable to rdma_resolve_route\n");
-			goto err3;
-		}
-	} else {
-		ret = -FI_ENOSYS;
+		ep->util_ep.ep_fid.msg = &fi_ibv_dgram_msg_ops;
+		ep->util_ep.ep_fid.cm = &fi_ibv_dgram_cm_ops;
+		break;
+	default:
+		VERBS_INFO(FI_LOG_DOMAIN, "Unknown EP type\n");
+		ret = -FI_EINVAL;
+		assert(0);
 		goto err2;
 	}
 
-	ep->id->context = &ep->util_ep.ep_fid.fid;
 	*ep_fid = &ep->util_ep.ep_fid;
 	ep->util_ep.ep_fid.fid.ops = &fi_ibv_ep_ops;
 	ep->util_ep.ep_fid.ops = &fi_ibv_ep_base_ops;
-	ep->util_ep.ep_fid.msg = &fi_ibv_msg_ep_msg_ops;
-	ep->util_ep.ep_fid.cm = &fi_ibv_msg_ep_cm_ops;
-	ep->util_ep.ep_fid.rma = &fi_ibv_msg_ep_rma_ops;
-	ep->util_ep.ep_fid.atomic = &fi_ibv_msg_ep_atomic_ops;
 
 	return FI_SUCCESS;
 err3:

@@ -189,15 +189,15 @@ void fi_ibv_dgram_cq_handle_wc(struct util_cq *util_cq,
 
 void fi_ibv_dgram_recv_cq_progress(struct util_ep *util_ep)
 {
-	struct fi_ibv_dgram_cq *cq;
+	struct fi_ibv_cq *cq;
 	int num_ent, i;
 	struct ibv_wc *wcs = alloca(fi_ibv_gl_data.cqread_bunch_size *
 				    sizeof(struct ibv_wc));
 
-	cq = container_of(&util_ep->rx_cq->cq_fid, struct fi_ibv_dgram_cq,
+	cq = container_of(&util_ep->rx_cq->cq_fid, struct fi_ibv_cq,
 			  util_cq.cq_fid);
 
-	num_ent = ibv_poll_cq(cq->ibv_cq,
+	num_ent = ibv_poll_cq(cq->cq,
 			      fi_ibv_gl_data.cqread_bunch_size,
 			      wcs);
 	for (i = 0; i < num_ent; i++)
@@ -208,15 +208,15 @@ void fi_ibv_dgram_recv_cq_progress(struct util_ep *util_ep)
 
 void fi_ibv_dgram_send_cq_progress(struct util_ep *util_ep)
 {
-	struct fi_ibv_dgram_cq *cq;
+	struct fi_ibv_cq *cq;
 	int num_ent, i;
 	struct ibv_wc *wcs = alloca(fi_ibv_gl_data.cqread_bunch_size *
 				    sizeof(struct ibv_wc));
 
-	cq = container_of(&util_ep->tx_cq->cq_fid, struct fi_ibv_dgram_cq,
+	cq = container_of(&util_ep->tx_cq->cq_fid, struct fi_ibv_cq,
 			  util_cq.cq_fid);
 
-	num_ent = ibv_poll_cq(cq->ibv_cq,
+	num_ent = ibv_poll_cq(cq->cq,
 			      fi_ibv_gl_data.cqread_bunch_size,
 			      wcs);
 	for (i = 0; i < num_ent; i++)
@@ -227,18 +227,18 @@ void fi_ibv_dgram_send_cq_progress(struct util_ep *util_ep)
 
 void fi_ibv_dgram_send_recv_cq_progress(struct util_ep *util_ep)
 {
-	struct fi_ibv_dgram_cq *tx_cq, *rx_cq;
+	struct fi_ibv_cq *tx_cq, *rx_cq;
 	int num_ent, i;
 	struct ibv_wc *wcs = alloca(fi_ibv_gl_data.cqread_bunch_size *
 				    sizeof(struct ibv_wc));
 
-	tx_cq = container_of(&util_ep->tx_cq->cq_fid, struct fi_ibv_dgram_cq,
+	tx_cq = container_of(&util_ep->tx_cq->cq_fid, struct fi_ibv_cq,
 			     util_cq.cq_fid);
-	rx_cq = container_of(&util_ep->rx_cq->cq_fid, struct fi_ibv_dgram_cq,
+	rx_cq = container_of(&util_ep->rx_cq->cq_fid, struct fi_ibv_cq,
 			     util_cq.cq_fid);
 
 	/* Poll Transmit events */
-	num_ent = ibv_poll_cq(tx_cq->ibv_cq,
+	num_ent = ibv_poll_cq(tx_cq->cq,
 			      fi_ibv_gl_data.cqread_bunch_size,
 			      wcs);
 	for (i = 0; i < num_ent; i++)
@@ -247,7 +247,7 @@ void fi_ibv_dgram_send_recv_cq_progress(struct util_ep *util_ep)
 					  &wcs[i]);
 
 	/* Poll Receive events */
-	num_ent = ibv_poll_cq(rx_cq->ibv_cq,
+	num_ent = ibv_poll_cq(rx_cq->cq,
 			      fi_ibv_gl_data.cqread_bunch_size,
 			      wcs);
 	for (i = 0; i < num_ent; i++)
@@ -268,10 +268,10 @@ const char *fi_ibv_dgram_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
 static int fi_ibv_dgram_cq_close(fid_t cq_fid)
 {
 	int ret = FI_SUCCESS;
-	struct fi_ibv_dgram_cq *cq;
+	struct fi_ibv_cq *cq;
 	struct fi_ibv_domain *domain;
 
-	cq = container_of(cq_fid, struct fi_ibv_dgram_cq, util_cq.cq_fid.fid);
+	cq = container_of(cq_fid, struct fi_ibv_cq, util_cq.cq_fid.fid);
 	if (!cq)
 		return -FI_EINVAL;
 
@@ -284,7 +284,7 @@ static int fi_ibv_dgram_cq_close(fid_t cq_fid)
 	if (ret)
 		return ret;
 
-	if (ibv_destroy_cq(cq->ibv_cq)) {
+	if (ibv_destroy_cq(cq->cq)) {
 		VERBS_WARN(FI_LOG_CQ,
 			   "unable to destroy completion queue "
 			   "(errno %d)\n", errno);
@@ -318,7 +318,7 @@ static struct fi_ops_cq fi_ibv_dgram_cq_ops = {
 int fi_ibv_dgram_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 			 struct fid_cq **cq_fid, void *context)
 {
-	struct fi_ibv_dgram_cq *cq;
+	struct fi_ibv_cq *cq;
 	struct fi_ibv_domain *domain;
 	int ret;
 	size_t cq_size;
@@ -346,9 +346,9 @@ int fi_ibv_dgram_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 		  attr->size : MIN(VERBS_DEF_CQ_SIZE,
 				   domain->info->domain_attr->cq_cnt);
 
-	cq->ibv_cq = ibv_create_cq(domain->verbs, cq_size, cq,
-					   NULL, attr->signaling_vector);
-	if (!cq->ibv_cq) {
+	cq->cq = ibv_create_cq(domain->verbs, cq_size, cq,
+			       NULL, attr->signaling_vector);
+	if (!cq->cq) {
 		VERBS_WARN(FI_LOG_CQ,
 			   "unable to create completion queue for "
 			   "transsmission (errno %d)\n", errno);

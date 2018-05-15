@@ -247,6 +247,7 @@ struct util_ep {
 	struct util_cntr	*rem_rd_cntr; /* remote read   */
 	struct util_cntr	*rem_wr_cntr; /* remote write  */
 
+	enum fi_ep_type		type;
 	uint64_t		caps;
 	uint64_t		flags;
 	ofi_ep_progress_func	progress;

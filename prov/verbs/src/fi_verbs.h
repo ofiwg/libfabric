@@ -502,9 +502,6 @@ int fi_rbv_rdm_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 			struct fid_cntr **cntr, void *context);
 int fi_ibv_rdm_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 			struct fid_av **av_fid, void *context);
-int fi_ibv_dgram_endpoint_open(struct fid_domain *domain_fid,
-			       struct fi_info *info, struct fid_ep **ep_fid,
-			       void *context);
 int fi_ibv_dgram_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 			 struct fid_cq **cq_fid, void *context);
 int fi_ibv_dgram_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
