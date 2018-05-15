@@ -324,9 +324,6 @@ static int tcpx_get_rx_entry(struct tcpx_rx_detect *rx_detect,
 		tcpx_copy_rma_iov_to_msg_iov(rx_entry);
 		break;
 	case ofi_op_read_rsp:
-		if (dlist_empty(&tcpx_ep->rma_list.list))
-			return -FI_EINVAL;
-
 		entry = dlist_find_first_match(&tcpx_ep->rma_list.list,
 					       tcpx_match_read_rsp,
 					       rx_detect);
