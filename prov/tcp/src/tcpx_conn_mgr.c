@@ -340,12 +340,14 @@ static void handle_connect(struct poll_fd_mgr *poll_mgr,
 
 		poll_info->state = RCV_RESP;
 		poll_mgr->poll_fds[index].events = POLLIN;
+		FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "Sent Connreq\n");
 		break;
 	case RCV_RESP:
 		ret = proc_conn_resp(poll_mgr, poll_info, ep, index);
 		if (ret)
 			goto err;
 
+		FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "Received Conn Response\n");
 		poll_info->state = CONNECT_DONE;
 		break;
 	default:
@@ -376,6 +378,7 @@ static void handle_connreq(struct poll_fd_mgr *poll_mgr,
 	int ret;
 
 	assert(poll_info->fid->fclass == FI_CLASS_PEP);
+	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "Received Connreq\n");
 	pep = container_of(poll_info->fid, struct tcpx_pep, util_pep.pep_fid.fid);
 
 	sock = accept(pep->sock, NULL, 0);
@@ -413,8 +416,9 @@ static void handle_connreq(struct poll_fd_mgr *poll_mgr,
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
 		goto err4;
 	}
-
+	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "Accepted Connection\n");
 	free(cm_entry);
+
 	return;
 err4:
 	fi_freeinfo(cm_entry->info);
@@ -452,7 +456,7 @@ static void handle_accept_conn(struct poll_fd_mgr *poll_mgr,
 	if (ret < 0) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
 	}
-
+	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "Received accept from server\n");
 	return;
 err:
 	memset(&err_entry, 0, sizeof err_entry);
