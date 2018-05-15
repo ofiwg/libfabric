@@ -190,7 +190,7 @@ static void tcpx_prepare_rx_remote_read_resp(struct tcpx_xfer_entry *resp_entry)
 	resp_entry->msg_hdr.hdr.size = resp_entry->msg_data.iov[0].iov_len;
 	for ( i = 0 ; i < resp_entry->msg_hdr.rma_iov_cnt ; i++ ) {
 		resp_entry->msg_data.iov[i+1].iov_base =
-			(void *) resp_entry->msg_hdr.rma_iov[i].addr;
+			(void *) (uintptr_t)resp_entry->msg_hdr.rma_iov[i].addr;
 		resp_entry->msg_data.iov[i+1].iov_len =
 			resp_entry->msg_hdr.rma_iov[i].len;
 		resp_entry->msg_hdr.hdr.size +=
