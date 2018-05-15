@@ -32,13 +32,15 @@
 
 #include "tcpx.h"
 
+#define TCPX_DOMAIN_CAPS FI_LOCAL_COMM | FI_REMOTE_COMM
 
 static struct fi_tx_attr tcpx_tx_attr = {
 	.caps = FI_MSG | FI_SEND,
 	.comp_order = FI_ORDER_STRICT,
 	.inject_size = 64,
 	.size = 1024,
-	.iov_limit = TCPX_IOV_LIMIT
+	.iov_limit = TCPX_IOV_LIMIT,
+	.rma_iov_limit = TCPX_IOV_LIMIT,
 };
 
 static struct fi_rx_attr tcpx_rx_attr = {
@@ -60,6 +62,7 @@ static struct fi_ep_attr tcpx_ep_attr = {
 
 static struct fi_domain_attr tcpx_domain_attr = {
 	.name = "tcp",
+	.caps = TCPX_DOMAIN_CAPS,
 	.threading = FI_THREAD_SAFE,
 	.control_progress = FI_PROGRESS_AUTO,
 	.data_progress = FI_PROGRESS_AUTO,
@@ -82,7 +85,7 @@ static struct fi_fabric_attr tcpx_fabric_attr = {
 struct fi_info tcpx_info = {
 	.caps = FI_MSG | FI_SEND | FI_RECV |
 		FI_RMA | FI_WRITE | FI_REMOTE_WRITE |
-		FI_READ | FI_REMOTE_READ,
+		FI_READ | FI_REMOTE_READ | TCPX_DOMAIN_CAPS,
 	.addr_format = FI_SOCKADDR,
 	.tx_attr = &tcpx_tx_attr,
 	.rx_attr = &tcpx_rx_attr,

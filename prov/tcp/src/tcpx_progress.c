@@ -190,7 +190,7 @@ static void tcpx_prepare_rx_remote_read_resp(struct tcpx_xfer_entry *resp_entry)
 	resp_entry->msg_hdr.hdr.size = resp_entry->msg_data.iov[0].iov_len;
 	for ( i = 0 ; i < resp_entry->msg_hdr.rma_iov_cnt ; i++ ) {
 		resp_entry->msg_data.iov[i+1].iov_base =
-			(void *) resp_entry->msg_hdr.rma_iov[i].addr;
+			(void *) (uintptr_t)resp_entry->msg_hdr.rma_iov[i].addr;
 		resp_entry->msg_data.iov[i+1].iov_len =
 			resp_entry->msg_hdr.rma_iov[i].len;
 		resp_entry->msg_hdr.hdr.size +=
@@ -240,7 +240,7 @@ static int tcpx_match_read_rsp(struct dlist_entry *entry, const void *arg)
 	xfer_entry = container_of(entry, struct tcpx_xfer_entry,
 				entry);
 	return (xfer_entry->msg_hdr.hdr.remote_idx ==
-		ntohll(rx_detect->hdr.hdr.remote_idx))?1:0;
+		ntohll(rx_detect->hdr.hdr.remote_idx));
 }
 
 static int tcpx_get_rx_entry(struct tcpx_rx_detect *rx_detect,
@@ -324,9 +324,6 @@ static int tcpx_get_rx_entry(struct tcpx_rx_detect *rx_detect,
 		tcpx_copy_rma_iov_to_msg_iov(rx_entry);
 		break;
 	case ofi_op_read_rsp:
-		if (dlist_empty(&tcpx_ep->rma_list.list))
-			return -FI_EINVAL;
-
 		entry = dlist_find_first_match(&tcpx_ep->rma_list.list,
 					       tcpx_match_read_rsp,
 					       rx_detect);
