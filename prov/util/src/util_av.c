@@ -1346,6 +1346,7 @@ void ofi_cmap_update(struct util_cmap *cmap, const void *addr, fi_addr_t fi_addr
 	if (!handle)
 		goto out;
 	util_cmap_move_handle(handle, fi_addr);
+	cmap->av_updated = 1;
 out:
 	fastlock_release(&cmap->lock);
 }
