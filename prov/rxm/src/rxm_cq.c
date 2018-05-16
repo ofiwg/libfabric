@@ -240,6 +240,20 @@ static inline int rxm_finish_send(struct rxm_tx_entry *tx_entry)
 	return rxm_finish_send_nobuf(tx_entry);
 }
 
+static inline int rxm_finish_sar_segment_send(struct rxm_tx_entry *tx_entry)
+{
+	struct rxm_tx_buf *tx_buf;
+
+	dlist_pop_front(&tx_entry->in_flight_tx_buf_list, struct rxm_tx_buf,
+			tx_buf, in_flight_entry);
+
+	rxm_tx_buf_release(tx_entry->ep, tx_buf);
+	/* If `segs_left` == 0, all segments of the message have been fully sent */
+	if (!--tx_entry->segs_left)
+		return rxm_finish_send_nobuf(tx_entry);
+	return FI_SUCCESS;
+}
+
 static inline int rxm_finish_send_lmt_ack(struct rxm_rx_buf *rx_buf)
 {
 	RXM_LOG_STATE(FI_LOG_CQ, rx_buf->pkt, RXM_LMT_ACK_SENT, RXM_LMT_FINISH);
@@ -550,6 +564,9 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 	case RXM_TX:
 		assert(comp->flags & FI_SEND);
 		return rxm_finish_send(tx_entry);
+	case RXM_SAR_TX:
+		assert(comp->flags & FI_SEND);
+		return rxm_finish_sar_segment_send(tx_entry);
 	case RXM_TX_RMA:
 		assert(comp->flags & (FI_WRITE | FI_READ));
 		if (tx_entry->ep->msg_mr_local && !tx_entry->ep->rxm_mr_local)
