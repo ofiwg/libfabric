@@ -267,6 +267,7 @@ static int tcpx_ep_msg_xfer_enable(struct tcpx_ep *ep)
 		fastlock_release(&ep->lock);
 		return -FI_EINVAL;
 	}
+	ep->progress_func = tcpx_ep_progress;
 	ret = fi_fd_nonblock(ep->conn_fd);
 	if (ret)
 		goto err;

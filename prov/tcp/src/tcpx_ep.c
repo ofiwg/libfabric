@@ -611,6 +611,9 @@ err:
 	return INVALID_SOCKET;
 }
 
+static void tcpx_empty_progress(struct tcpx_ep *ep)
+{}
+
 int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep_fid, void *context)
 {
@@ -669,6 +672,7 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 	}
 
 	ep->cm_state = TCPX_EP_CONNECTING;
+	ep->progress_func = tcpx_empty_progress;
 	ret = fastlock_init(&ep->lock);
 	if (ret)
 		goto err3;

@@ -415,14 +415,19 @@ static void process_tx_queue(struct tcpx_ep *ep)
 	process_tx_entry(tx_entry);
 }
 
+void tcpx_ep_progress(struct tcpx_ep *ep)
+{
+	tcpx_process_rx_msg(ep);
+	process_tx_queue(ep);
+}
+
 void tcpx_progress(struct util_ep *util_ep)
 {
 	struct tcpx_ep *ep;
 
 	ep = container_of(util_ep, struct tcpx_ep, util_ep);
 	fastlock_acquire(&ep->lock);
-	tcpx_process_rx_msg(ep);
-	process_tx_queue(ep);
+	ep->progress_func(ep);
 	fastlock_release(&ep->lock);
 	return;
 }

@@ -116,10 +116,12 @@ struct tcpx_xfer_entry *tcpx_xfer_entry_alloc(struct tcpx_cq *cq);
 void tcpx_xfer_entry_release(struct tcpx_cq *tcpx_cq,
 			   struct tcpx_xfer_entry *xfer_entry);
 void tcpx_progress(struct util_ep *util_ep);
+void tcpx_ep_progress(struct tcpx_ep *ep);
 int tcpx_ep_shutdown_report(struct tcpx_ep *ep, fid_t fid);
 int tcpx_progress_ep_add(struct tcpx_ep *ep);
 void tcpx_progress_ep_del(struct tcpx_ep *ep);
 void process_tx_entry(struct tcpx_xfer_entry *tx_entry);
+typedef void (*tcpx_ep_progress_func_t)(struct tcpx_ep *ep);
 
 enum tcpx_pep_state{
 	TCPX_PEP_CREATED,
@@ -224,6 +226,7 @@ struct tcpx_ep {
 	enum tcpx_cm_state	cm_state;
 	/* lock for protecting tx/rx queues,rma list,cm_state*/
 	fastlock_t		lock;
+	tcpx_ep_progress_func_t progress_func;
 };
 
 struct tcpx_fabric {
