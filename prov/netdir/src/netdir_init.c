@@ -109,6 +109,7 @@ static int ofi_nd_adapter_cb(const ND2_ADAPTER_INFO *adapter, const char *name)
 	info->tx_attr->iov_limit = ND_MSG_IOV_LIMIT;
 	info->tx_attr->rma_iov_limit = ND_MSG_IOV_LIMIT;
 	info->tx_attr->op_flags = OFI_ND_TX_OP_FLAGS;
+	info->tx_attr->msg_order = OFI_ND_MSG_ORDER;
 
 	info->rx_attr->caps = FI_MSG | FI_RECV;
 	info->rx_attr->comp_order = FI_ORDER_STRICT;
@@ -117,6 +118,7 @@ static int ofi_nd_adapter_cb(const ND2_ADAPTER_INFO *adapter, const char *name)
 	/* TODO: if optimization will be needed, we can use adapter->MaxInitiatorSge,
 	 * and use ND SGE to recv iovecs */
 	info->rx_attr->iov_limit = ND_MSG_IOV_LIMIT;
+	info->rx_attr->msg_order = OFI_ND_MSG_ORDER;
 
 	info->ep_attr->type = FI_EP_MSG;
 	info->ep_attr->protocol = FI_PROTO_NETWORKDIRECT;

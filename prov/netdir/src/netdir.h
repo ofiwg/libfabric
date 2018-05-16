@@ -67,6 +67,9 @@ extern "C" {
 				 FI_INJECT_COMPLETE | FI_DELIVERY_COMPLETE |		\
 				 FI_SELECTIVE_COMPLETION)
 
+#define OFI_ND_MSG_ORDER (FI_ORDER_RAR | FI_ORDER_RAW | FI_ORDER_RAS | \
+			FI_ORDER_WAW | FI_ORDER_WAS | FI_ORDER_SAW | FI_ORDER_SAS )
+
 extern struct gl_data {
 	int	inline_thr;
 	int	prepost_cnt;
