@@ -594,9 +594,8 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 	}
 }
 
-static ssize_t rxm_cq_write_error(struct fid_cq *msg_cq,
-				  struct fi_cq_data_entry *comp,
-				  ssize_t err)
+ssize_t rxm_cq_write_error(struct fid_cq *msg_cq, struct fi_cq_data_entry *comp,
+			   ssize_t err)
 {
 	struct rxm_tx_entry *tx_entry;
 	struct rxm_rx_buf *rx_buf;
