@@ -69,6 +69,7 @@ static struct fi_domain_attr tcpx_domain_attr = {
 	.resource_mgmt = FI_RM_ENABLED,
 	.av_type = FI_AV_UNSPEC,
 	.mr_mode = 0,
+	.cq_data_size = sizeof(uint64_t),
 	.cq_cnt = 256,
 	.ep_cnt = 8192,
 	.tx_ctx_cnt = 8192,

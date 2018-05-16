@@ -92,7 +92,7 @@ static void tcpx_rma_read_recv_entry_fill(struct tcpx_xfer_entry *recv_entry,
 	recv_entry->ep = tcpx_ep;
 	recv_entry->context = msg->context;
 	recv_entry->done_len = 0;
-	recv_entry->flags = flags;
+	recv_entry->flags = flags | FI_RMA | FI_READ;
 	memcpy(&recv_entry->msg_data.iov[0], &msg->msg_iov[0],
 	       msg->iov_count * sizeof(struct iovec));
 
@@ -245,6 +245,7 @@ static ssize_t tcpx_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg
 	send_entry->ep = tcpx_ep;
 	send_entry->context = msg->context;
 	send_entry->done_len = 0;
+	send_entry->flags = flags | FI_RMA | FI_WRITE;
 
 	fastlock_acquire(&tcpx_ep->queue_lock);
 	if (dlist_empty(&tcpx_ep->tx_queue)) {

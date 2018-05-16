@@ -100,7 +100,7 @@ void tcpx_cq_report_completion(struct util_cq *cq,
 		err_entry.flags = xfer_entry->flags;
 		err_entry.len = 0;
 		err_entry.buf = NULL;
-		err_entry.data = xfer_entry->msg_hdr.hdr.data;
+		err_entry.data = ntohll(xfer_entry->msg_hdr.hdr.data);
 		err_entry.tag = 0;
 		err_entry.olen = 0;
 		err_entry.err = err;
@@ -111,8 +111,8 @@ void tcpx_cq_report_completion(struct util_cq *cq,
 		ofi_cq_write_error(cq, &err_entry);
 	} else {
 		ofi_cq_write(cq, xfer_entry->context,
-			      xfer_entry->flags, 0, NULL,
-			      xfer_entry->msg_hdr.hdr.data, 0);
+			     xfer_entry->flags, 0, NULL,
+			     ntohll(xfer_entry->msg_hdr.hdr.data), 0);
 
 		if (cq->wait)
 			ofi_cq_signal(&cq->cq_fid);

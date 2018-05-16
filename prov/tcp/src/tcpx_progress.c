@@ -134,6 +134,8 @@ static void process_rx_remote_write_entry(struct tcpx_xfer_entry *rx_entry)
 		tcpx_ep_shutdown_report(rx_entry->ep,
 					&rx_entry->ep->util_ep.ep_fid.fid);
 done:
+	tcpx_cq_report_completion(rx_entry->ep->util_ep.rx_cq,
+				  rx_entry, ret);
 	tcpx_cq = container_of(rx_entry->ep->util_ep.rx_cq,
 			       struct tcpx_cq, util_cq);
 	tcpx_xfer_entry_release(tcpx_cq, rx_entry);
@@ -269,6 +271,9 @@ static int tcpx_get_rx_entry(struct tcpx_rx_detect *rx_detect,
 		rx_entry->msg_hdr.hdr.op_data = TCPX_OP_MSG_RECV;
 		rx_entry->done_len = sizeof(rx_detect->hdr);
 
+		if (ntohl(rx_detect->hdr.hdr.flags) & OFI_REMOTE_CQ_DATA)
+			rx_entry->flags |= FI_REMOTE_CQ_DATA;
+
 		ret = ofi_truncate_iov(rx_entry->msg_data.iov,
 				       &rx_entry->msg_data.iov_cnt,
 				       (ntohll(rx_entry->msg_hdr.hdr.size) -
@@ -307,10 +312,17 @@ static int tcpx_get_rx_entry(struct tcpx_rx_detect *rx_detect,
 		if (!rx_entry)
 			return -FI_EAGAIN;
 
+		if (ntohl(rx_detect->hdr.hdr.flags) & OFI_REMOTE_CQ_DATA) {
+			rx_entry->flags |= (FI_REMOTE_CQ_DATA |
+					    FI_REMOTE_WRITE);
+
+		} else {
+			rx_entry->flags = TCPX_NO_COMPLETION;
+		}
+
 		rx_entry->msg_hdr = rx_detect->hdr;
 		rx_entry->msg_hdr.hdr.op_data = TCPX_OP_REMOTE_WRITE;
 		rx_entry->ep = tcpx_ep;
-		rx_entry->flags = TCPX_NO_COMPLETION;
 		rx_entry->done_len = sizeof(rx_detect->hdr);
 
 		ret = tcpx_validate_rx_rma_data(rx_entry, FI_REMOTE_WRITE);
