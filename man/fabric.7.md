@@ -238,6 +238,28 @@ FI_LOG_SUBSYS environment variables.
 - *mr*
 : Provides output specific to memory registration.
 
+# PROVIDER INSTALLATION AND SELECTION
+
+The libfabric build scripts will install all providers that are supported
+by the installation system.  Providers that are missing build prerequisites
+will be disabled.  Installed providers will dynamically check for necessary
+hardware on library initialization and respond appropriately to application
+queries.
+
+Users can enable or disable available providers through build configuration
+options.  See 'configure --help' for details.  In general, a specific provider
+can be controlled using the configure option '--enable-<provider_name>'.  For
+example, '--enable-udp' (or '--enable-udp=yes') will add the udp provider to the
+build.  To disable the provider, '--enable-udp=no' can be used.
+
+Providers can also be enable or disabled at run time using the FI_PROVIDER
+environment variable.  The FI_PROVIDER variable is set to a comma separated
+list of providers to include.  If the list begins with the '^' symbol, then
+the list will be negated.
+
+  Example: To enable the udp and tcp providers only, set:
+	FI_PROVIDER="udp,tcp"
+
 # NOTES
 
 Because libfabric is designed to provide applications direct access to
