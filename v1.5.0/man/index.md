@@ -49,3 +49,8 @@ v1.5.0](https://github.com/ofiwg/libfabric/releases/tag/v1.5.0).
   * [fi_tagged(3)](fi_tagged.3.html)
   * [fi_trigger(3)](fi_trigger.3.html)
   * [fi_version(3)](fi_version.3.html)
+
+* Utilities
+  * [fi_info(1)](fi_info.1.html)
+  * [fi_pingpong(1)](fi_pingpong.1.html)
+  * [fi_strerror(1)](fi_strerror.1.html)

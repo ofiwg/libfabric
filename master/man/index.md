@@ -16,13 +16,15 @@ You have been warned.
 
 * General information
   * [fabric(7)](fabric.7.html)
-  * [fi_bgq(7)](fi_bgq.7.html)
   * [fi_direct(7)](fi_direct.7.html)
+  * [fi_provider(7)](fi_provider.7.html)
+
+* Provider details
+  * [fi_bgq(7)](fi_bgq.7.html)
   * [fi_gni(7)](fi_gni.7.html)
   * [fi_hook(7)](fi_hook.7.html)
   * [fi_mlx(7)](fi_mlx.7.html)
   * [fi_netdir(7)](fi_netdir.7.html)
-  * [fi_provider(7)](fi_provider.7.html)
   * [fi_psm(7)](fi_psm.7.html)
   * [fi_psm2(7)](fi_psm2.7.html)
   * [fi_rxd(7)](fi_rxd.7.html)
@@ -53,3 +55,8 @@ You have been warned.
   * [fi_tagged(3)](fi_tagged.3.html)
   * [fi_trigger(3)](fi_trigger.3.html)
   * [fi_version(3)](fi_version.3.html)
+
+* Utilities
+  * [fi_info(1)](fi_info.1.html)
+  * [fi_pingpong(1)](fi_pingpong.1.html)
+  * [fi_strerror(1)](fi_strerror.1.html)
