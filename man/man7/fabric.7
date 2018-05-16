@@ -1,4 +1,4 @@
-.TH "fabric" "7" "2017\-12\-01" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fabric" "7" "2018\-05\-16" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fabric \- Fabric Interface Library
@@ -231,6 +231,39 @@ operations.
 \f[I]eq\f[] : Provides output specific to event queue operations.
 .IP \[bu] 2
 \f[I]mr\f[] : Provides output specific to memory registration.
+.SH PROVIDER INSTALLATION AND SELECTION
+.PP
+The libfabric build scripts will install all providers that are
+supported by the installation system.
+Providers that are missing build prerequisites will be disabled.
+Installed providers will dynamically check for necessary hardware on
+library initialization and respond appropriately to application queries.
+.PP
+Users can enable or disable available providers through build
+configuration options.
+See \[aq]configure \-\-help\[aq] for details.
+In general, a specific provider can be controlled using the configure
+option \[aq]\-\-enable\-\[aq].
+For example, \[aq]\-\-enable\-udp\[aq] (or
+\[aq]\-\-enable\-udp=yes\[aq]) will add the udp provider to the build.
+To disable the provider, \[aq]\-\-enable\-udp=no\[aq] can be used.
+.PP
+Providers can also be enable or disabled at run time using the
+FI_PROVIDER environment variable.
+The FI_PROVIDER variable is set to a comma separated list of providers
+to include.
+If the list begins with the \[aq]^\[aq] symbol, then the list will be
+negated.
+.PP
+Example: To enable the udp and tcp providers only, set:
+FI_PROVIDER="udp,tcp"
+.PP
+The fi_info utility, which is included as part of the libfabric package,
+can be used to retrieve information about which providers are available
+in the system.
+Additionally, it can retrieve a list of all environment variables that
+may be used to configure libfabric and each provider.
+See \f[C]fi_info\f[](1) for more details.
 .SH NOTES
 .PP
 Because libfabric is designed to provide applications direct access to
@@ -252,7 +285,7 @@ may not be available in a child process because of copy on write
 restrictions.
 .SH SEE ALSO
 .PP
-\f[C]fi_provider\f[](7), \f[C]fi_getinfo\f[](3),
+\f[C]fi_info\f[](1), \f[C]fi_provider\f[](7), \f[C]fi_getinfo\f[](3),
 \f[C]fi_endpoint\f[](3), \f[C]fi_domain\f[](3), \f[C]fi_av\f[](3),
 \f[C]fi_eq\f[](3), \f[C]fi_cq\f[](3), \f[C]fi_cntr\f[](3),
 \f[C]fi_mr\f[](3)
