@@ -76,6 +76,7 @@ int fi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout_ms);
 typedef struct {
 	fastlock_t_ impl;
 	int is_initialized;
+	int in_use;
 } fastlock_t;
 
 static inline int fastlock_init(fastlock_t *lock)
@@ -84,6 +85,8 @@ static inline int fastlock_init(fastlock_t *lock)
 
 	ret = fastlock_init_(&lock->impl);
 	lock->is_initialized = !ret;
+	lock->in_use = 0;
+
 	return ret;
 }
 
@@ -104,19 +107,28 @@ static inline void fastlock_acquire(fastlock_t *lock)
 	assert(lock->is_initialized);
 	ret = fastlock_acquire_(&lock->impl);
 	assert(!ret);
+	lock->in_use++;
 }
 
 static inline int fastlock_tryacquire(fastlock_t *lock)
 {
+	int ret;
+
 	assert(lock->is_initialized);
-	return fastlock_tryacquire_(&lock->impl);
+	ret = fastlock_tryacquire_(&lock->impl);
+	if (!ret)
+		lock->in_use++;
+
+	return ret;
 }
 
 static inline void fastlock_release(fastlock_t *lock)
 {
 	int ret;
 
+	assert(lock->in_use);
 	assert(lock->is_initialized);
+	lock->in_use--;
 	ret = fastlock_release_(&lock->impl);
 	assert(!ret);
 }
@@ -145,9 +157,18 @@ static inline void ofi_fastlock_release(fastlock_t *lock)
 }
 static inline void ofi_fastlock_acquire_noop(fastlock_t *lock)
 {
+#if ENABLE_DEBUG
+	/* These non-op routines must be used only by a single-threaded code*/
+	assert(!lock->in_use);
+	lock->in_use = 1;
+#endif
 }
 static inline void ofi_fastlock_release_noop(fastlock_t *lock)
 {
+#if ENABLE_DEBUG
+	assert(lock->in_use);
+	lock->in_use = 0;
+#endif
 }
 
 #ifdef __cplusplus
