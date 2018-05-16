@@ -494,7 +494,7 @@ static ssize_t rxm_lmt_send_ack_fast(struct rxm_rx_buf *rx_buf)
 
 	pkt.hdr.op		= ofi_op_msg;
 	pkt.hdr.version		= OFI_OP_VERSION;
-	pkt.ctrl_hdr.version	= OFI_CTRL_VERSION;
+	pkt.ctrl_hdr.version	= RXM_CTRL_VERSION;
 	pkt.ctrl_hdr.type	= ofi_ctrl_ack;
 	pkt.ctrl_hdr.conn_id 	= rx_buf->conn->handle.remote_key;
 	pkt.ctrl_hdr.msg_id 	= rx_buf->pkt.ctrl_hdr.msg_id;
@@ -559,7 +559,7 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 	case RXM_RX:
 		assert(!(comp->flags & FI_REMOTE_READ));
 		assert((rx_buf->pkt.hdr.version == OFI_OP_VERSION) &&
-		       (rx_buf->pkt.ctrl_hdr.version == OFI_CTRL_VERSION));
+		       (rx_buf->pkt.ctrl_hdr.version == RXM_CTRL_VERSION));
 
 		if (rx_buf->pkt.ctrl_hdr.type == ofi_ctrl_ack)
 			return rxm_lmt_handle_ack(rx_buf);

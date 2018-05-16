@@ -124,15 +124,54 @@ static struct util_cmap_handle *rxm_conn_alloc(void)
 	return &rxm_conn->handle;
 }
 
+static inline int
+rxm_conn_verify_cm_data(struct rxm_cm_data *remote_cm_data,
+			struct rxm_cm_data *local_cm_data)
+{
+	if (remote_cm_data->proto.ctrl_version != local_cm_data->proto.ctrl_version) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+			"ctrl_version of two peers (%"PRIu8" vs %"PRIu8")"
+			"are mismatched\n",
+			remote_cm_data->proto.ctrl_version,
+			local_cm_data->proto.ctrl_version);
+		goto err;
+	}
+	if (remote_cm_data->proto.eager_size != local_cm_data->proto.eager_size) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+			"inject_size of two peers (%"PRIu64" vs %"PRIu64")"
+			"are mismatched\n",
+			remote_cm_data->proto.eager_size,
+			local_cm_data->proto.eager_size);
+		goto err;
+	}
+	return FI_SUCCESS;
+err:
+	return -FI_EINVAL;
+}
+
 static int
 rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 			void *data)
 {
 	struct rxm_conn *rxm_conn;
 	struct rxm_cm_data *remote_cm_data = data;
-	struct rxm_cm_data cm_data;
+	struct rxm_cm_data cm_data = {
+		.proto = {
+			.ctrl_version = RXM_CTRL_VERSION,
+			.eager_size = rxm_ep->rxm_info->tx_attr->inject_size,
+		},
+	};
 	struct util_cmap_handle *handle;
 	int ret;
+
+	remote_cm_data->proto.eager_size = ntohll(remote_cm_data->proto.eager_size);
+
+	if (rxm_conn_verify_cm_data(remote_cm_data, &cm_data)) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+			"CM data mismatch was detected\n");
+		ret = -FI_EINVAL;
+		goto err1;
+	}
 
 	ret = ofi_cmap_process_connreq(rxm_ep->util_ep.cmap,
 				       &remote_cm_data->name, &handle);
@@ -148,6 +187,7 @@ rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 		goto err2;
 
 	cm_data.conn_id = rxm_conn->handle.key;
+	cm_data.proto.eager_size = htonll(cm_data.proto.eager_size);
 
 	ret = fi_accept(rxm_conn->msg_ep, &cm_data, sizeof(cm_data));
 	if (ret) {
@@ -318,15 +358,18 @@ static int
 rxm_conn_connect(struct util_ep *util_ep, struct util_cmap_handle *handle,
 		 const void *addr, size_t addrlen)
 {
-	struct rxm_ep *rxm_ep;
-	struct rxm_conn *rxm_conn;
 	struct fi_info *msg_info;
-	struct rxm_cm_data cm_data;
 	int ret;
-
-	rxm_ep = container_of(util_ep, struct rxm_ep, util_ep);
-
-	rxm_conn = container_of(handle, struct rxm_conn, handle);
+	struct rxm_ep *rxm_ep =
+		container_of(util_ep, struct rxm_ep, util_ep);
+	struct rxm_conn *rxm_conn =
+		container_of(handle, struct rxm_conn, handle);
+	struct rxm_cm_data cm_data = {
+		.proto = {
+			.ctrl_version = RXM_CTRL_VERSION,
+			.eager_size = rxm_ep->rxm_info->tx_attr->inject_size,
+		},
+	};
 
 	free(rxm_ep->msg_info->dest_addr);
 	rxm_ep->msg_info->dest_addrlen = addrlen;
@@ -350,6 +393,8 @@ rxm_conn_connect(struct util_ep *util_ep, struct util_cmap_handle *handle,
 	ret = rxm_prepare_cm_data(rxm_ep->msg_pep, &rxm_conn->handle, &cm_data);
 	if (ret)
 		goto err2;
+
+	cm_data.proto.eager_size = htonll(cm_data.proto.eager_size);
 
 	ret = fi_connect(rxm_conn->msg_ep, msg_info->dest_addr, &cm_data, sizeof(cm_data));
 	if (ret) {

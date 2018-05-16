@@ -60,6 +60,8 @@
 #define RXM_MAJOR_VERSION 1
 #define RXM_MINOR_VERSION 0
 
+#define RXM_CTRL_VERSION 3
+
 #define RXM_BUF_SIZE	16384
 #define RXM_SAR_LIMIT	262144
 #define RXM_IOV_LIMIT 4
@@ -127,9 +129,16 @@ struct rxm_mr {
 	struct fid_mr *msg_mr;
 };
 
+struct rxm_ep_wire_proto {
+	uint8_t	ctrl_version;
+	uint8_t ctrl_version_pad[7];
+	uint64_t eager_size;
+};
+
 struct rxm_cm_data {
 	struct sockaddr name;
 	uint64_t conn_id;
+	struct rxm_ep_wire_proto proto;
 };
 
 struct rxm_rma_iov {

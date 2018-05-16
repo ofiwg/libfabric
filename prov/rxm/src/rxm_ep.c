@@ -134,7 +134,7 @@ static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 		} else {
 			tx_buf = (struct rxm_tx_buf *)((char *)addr + i * entry_sz);
 			tx_buf->type = pool->type;
-			tx_buf->pkt.ctrl_hdr.version = OFI_CTRL_VERSION;
+			tx_buf->pkt.ctrl_hdr.version = RXM_CTRL_VERSION;
 			tx_buf->pkt.hdr.version = OFI_OP_VERSION;
 			if (rxm_ep_tx_flags(pool->rxm_ep) & FI_TRANSMIT_COMPLETE)
 				tx_buf->pkt.hdr.flags |= OFI_TRANSMIT_COMPLETE;
