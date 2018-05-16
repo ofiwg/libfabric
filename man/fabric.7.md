@@ -260,6 +260,12 @@ the list will be negated.
   Example: To enable the udp and tcp providers only, set:
 	FI_PROVIDER="udp,tcp"
 
+The fi_info utility, which is included as part of the libfabric package, can
+be used to retrieve information about which providers are available in the
+system.  Additionally, it can retrieve a list of all environment variables
+that may be used to configure libfabric and each provider.  See
+[`fi_info`(1)](fi_info.1.html) for more details.
+
 # NOTES
 
 Because libfabric is designed to provide applications direct access to
@@ -280,6 +286,7 @@ portability across providers.
 
 # SEE ALSO
 
+[`fi_info`(1)](fi_info.1.html),
 [`fi_provider`(7)](fi_provider.7.html),
 [`fi_getinfo`(3)](fi_getinfo.3.html),
 [`fi_endpoint`(3)](fi_endpoint.3.html),
