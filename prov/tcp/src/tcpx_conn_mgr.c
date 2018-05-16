@@ -262,9 +262,9 @@ static int tcpx_ep_msg_xfer_enable(struct tcpx_ep *ep)
 {
 	int ret;
 
-	fastlock_acquire(&ep->cm_state_lock);
+	fastlock_acquire(&ep->lock);
 	if (ep->cm_state != TCPX_EP_CONNECTING) {
-		fastlock_release(&ep->cm_state_lock);
+		fastlock_release(&ep->lock);
 		return -FI_EINVAL;
 	}
 	ret = fi_fd_nonblock(ep->conn_fd);
@@ -277,7 +277,7 @@ static int tcpx_ep_msg_xfer_enable(struct tcpx_ep *ep)
 
 	ep->cm_state = TCPX_EP_CONNECTED;
 err:
-	fastlock_release(&ep->cm_state_lock);
+	fastlock_release(&ep->lock);
 	return ret;
 }
 

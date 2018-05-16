@@ -221,10 +221,9 @@ struct tcpx_ep {
 	struct dlist_entry	rx_queue;
 	struct dlist_entry	tx_queue;
 	struct tcpx_rma_list	rma_list;
-	/* lock for protecting tx/rx queues and rma list*/
-	fastlock_t		queue_lock;
 	enum tcpx_cm_state	cm_state;
-	fastlock_t		cm_state_lock;
+	/* lock for protecting tx/rx queues,rma list,cm_state*/
+	fastlock_t		lock;
 };
 
 struct tcpx_fabric {
