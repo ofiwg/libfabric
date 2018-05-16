@@ -1019,28 +1019,14 @@ rxm_ep_inject_common(struct rxm_ep *rxm_ep, const void *buf, size_t len,
 	fastlock_acquire(&rxm_ep->util_ep.cmap->lock);
 	handle = ofi_cmap_acquire_handle(rxm_ep->util_ep.cmap, dest_addr);
 	if (OFI_UNLIKELY(!handle || handle->state != CMAP_CONNECTED)) {
-		if (OFI_UNLIKELY(!handle)) {
-			FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
-			       "No handle found for given fi_addr\n");
-			ret = util_cmap_alloc_handle(rxm_ep->util_ep.cmap,
-						     dest_addr, CMAP_IDLE,
-						     &handle);
-			if (OFI_UNLIKELY(ret)) {
-				fastlock_release(&rxm_ep->util_ep.cmap->lock);
-				return -FI_EAGAIN;
-			}
-		}
-		if (handle->state == CMAP_CONNECTED_NOTIFY) {
-			ofi_cmap_process_conn_notify(rxm_ep->util_ep.cmap, handle);
-			goto inject_continue;
-		}
 		struct iovec iov = {
 			.iov_base = (void *)buf,
 			.iov_len = len,
 		};
-		ret = ofi_cmap_handle_connect(rxm_ep->util_ep.cmap,
-					      dest_addr, handle);
-		if (OFI_UNLIKELY(ret != -FI_EAGAIN))
+		ret = rxm_ep_handle_unconnected(rxm_ep, &handle, dest_addr);
+		if (!ret)
+			goto inject_continue;
+		else if (OFI_UNLIKELY(ret != -FI_EAGAIN))
 			goto cmap_err;
 		rxm_conn = container_of(handle, struct rxm_conn, handle);
 		ret = rxm_ep_postpone_send(rxm_ep, rxm_conn, NULL, 1,
@@ -1098,24 +1084,10 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 	fastlock_acquire(&rxm_ep->util_ep.cmap->lock);
 	handle = ofi_cmap_acquire_handle(rxm_ep->util_ep.cmap, dest_addr);
 	if (OFI_UNLIKELY(!handle || handle->state != CMAP_CONNECTED)) {
-		if (OFI_UNLIKELY(!handle)) {
-			FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
-			       "No handle found for given fi_addr\n");
-			ret = util_cmap_alloc_handle(rxm_ep->util_ep.cmap,
-						     dest_addr, CMAP_IDLE,
-						     &handle);
-			if (OFI_UNLIKELY(ret)) {
-				fastlock_release(&rxm_ep->util_ep.cmap->lock);
-				return -FI_EAGAIN;
-			}
-		}
-		if (handle->state == CMAP_CONNECTED_NOTIFY) {
-			ofi_cmap_process_conn_notify(rxm_ep->util_ep.cmap, handle);
+		ret = rxm_ep_handle_unconnected(rxm_ep, &handle, dest_addr);
+		if (!ret)
 			goto send_continue;
-		}
-		ret = ofi_cmap_handle_connect(rxm_ep->util_ep.cmap,
-					      dest_addr, handle);
-		if (OFI_UNLIKELY(ret != -FI_EAGAIN))
+		else if (OFI_UNLIKELY(ret != -FI_EAGAIN))
 			goto cmap_err;
 		rxm_conn = container_of(handle, struct rxm_conn, handle);
 		ret = rxm_ep_postpone_send(
