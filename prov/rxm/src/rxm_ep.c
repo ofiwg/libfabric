@@ -941,6 +941,8 @@ void rxm_ep_handle_postponed_tx_op(struct rxm_ep *rxm_ep,
 				   struct rxm_conn *rxm_conn,
 				   struct rxm_tx_entry *tx_entry)
 {
+	ssize_t ret;
+	struct fi_cq_data_entry comp = { 0 };
 	size_t tx_size = rxm_pkt_size + tx_entry->tx_buf->pkt.hdr.size;
 
 	tx_entry->tx_buf->pkt.ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
@@ -958,11 +960,19 @@ void rxm_ep_handle_postponed_tx_op(struct rxm_ep *rxm_ep,
 			rxm_ep->rxm_info->tx_attr->inject_size) {
 		struct rxm_rma_iov *rma_iov =
 			(struct rxm_rma_iov *)&tx_entry->tx_buf->pkt.data;
-		(void) rxm_ep_lmt_tx_send(rxm_ep, rxm_conn, tx_entry,
-					  rxm_pkt_size + sizeof(*rma_iov) +
-					  sizeof(*rma_iov->iov) * tx_entry->count);
+		ret = rxm_ep_lmt_tx_send(rxm_ep, rxm_conn, tx_entry,
+					 rxm_pkt_size + sizeof(*rma_iov) +
+					 sizeof(*rma_iov->iov) * tx_entry->count);
+		if (OFI_UNLIKELY(ret)) {
+			comp.op_context = tx_entry->context;
+			rxm_cq_write_error(rxm_ep->msg_cq, &comp, ret);
+		}
 	} else {
-		(void) rxm_ep_normal_send(rxm_ep, rxm_conn, tx_entry, tx_size);
+		ret = rxm_ep_normal_send(rxm_ep, rxm_conn, tx_entry, tx_size);
+		if (OFI_UNLIKELY(ret)) {
+			comp.op_context = tx_entry->context;
+			rxm_cq_write_error(rxm_ep->msg_cq, &comp, ret);
+		}
 	}
 }
 
