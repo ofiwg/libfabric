@@ -550,10 +550,18 @@ static int util_av_init(struct util_av *av, const struct fi_av_attr *attr,
 			const struct util_av_attr *util_attr)
 {
 	int *entry, i, ret = 0;
+	size_t max_count;
+
+	if (attr->count) {
+		max_count = attr->count;
+	} else {
+		if (fi_param_get_size_t(NULL, "universe_size", &max_count))
+			max_count = UTIL_DEFAULT_AV_SIZE;
+	}
 
 	ofi_atomic_initialize32(&av->ref, 0);
 	fastlock_init(&av->lock);
-	av->count = attr->count ? attr->count : UTIL_DEFAULT_AV_SIZE;
+	av->count = max_count ? max_count : UTIL_DEFAULT_AV_SIZE;
 	av->count = roundup_power_of_two(av->count);
 	av->addrlen = util_attr->addrlen;
 	av->flags = util_attr->flags | attr->flags;
