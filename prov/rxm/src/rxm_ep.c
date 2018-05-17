@@ -1766,6 +1766,8 @@ static int rxm_ep_msg_res_open(struct util_domain *util_domain,
 			   rxm_ep->msg_info->rx_attr->size) / 2;
 	rxm_ep->comp_per_progress = (rxm_ep->comp_per_progress > max_prog_val) ?
 				    max_prog_val : rxm_ep->comp_per_progress;
+	rxm_ep->eager_pkt_size =
+		rxm_ep->rxm_info->tx_attr->inject_size + sizeof(struct rxm_pkt);
 
 	dlist_init(&rxm_ep->msg_cq_fd_ref_list);
 

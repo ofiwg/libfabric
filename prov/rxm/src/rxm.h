@@ -386,6 +386,7 @@ struct rxm_ep {
 	struct dlist_entry	msg_cq_fd_ref_list;
 	struct fid_ep 		*srx_ctx;
 	size_t 			comp_per_progress;
+	size_t 			eager_pkt_size;
 	int			msg_mr_local;
 	int			rxm_mr_local;
 	size_t			min_multi_recv_size;
