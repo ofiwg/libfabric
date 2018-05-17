@@ -77,9 +77,9 @@ static ssize_t tcpx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	recv_entry->context = msg->context;
 	recv_entry->done_len = 0;
 
-	fastlock_acquire(&tcpx_ep->queue_lock);
+	fastlock_acquire(&tcpx_ep->lock);
 	dlist_insert_tail(&recv_entry->entry, &tcpx_ep->rx_queue);
-	fastlock_release(&tcpx_ep->queue_lock);
+	fastlock_release(&tcpx_ep->lock);
 	return FI_SUCCESS;
 }
 
@@ -172,14 +172,14 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	tx_entry->done_len = 0;
 	tx_entry->flags = flags | FI_MSG | FI_SEND;
 
-	fastlock_acquire(&tcpx_ep->queue_lock);
+	fastlock_acquire(&tcpx_ep->lock);
 	if (dlist_empty(&tcpx_ep->tx_queue)) {
 		dlist_insert_tail(&tx_entry->entry, &tcpx_ep->tx_queue);
 		process_tx_entry(tx_entry);
 	} else {
 		dlist_insert_tail(&tx_entry->entry, &tcpx_ep->tx_queue);
 	}
-	fastlock_release(&tcpx_ep->queue_lock);
+	fastlock_release(&tcpx_ep->lock);
 	return FI_SUCCESS;
 }
 
@@ -397,7 +397,9 @@ static int tcpx_ep_shutdown(struct fid_ep *ep, uint64_t flags)
 		FI_WARN(&tcpx_prov, FI_LOG_EP_DATA, "ep shutdown unsuccessful\n");
 	}
 
+	fastlock_acquire(&tcpx_ep->lock);
 	ret = tcpx_ep_shutdown_report(tcpx_ep, &ep->fid);
+	fastlock_release(&tcpx_ep->lock);
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_DATA, "Error writing to EQ\n");
 	}
@@ -478,7 +480,7 @@ static void tcpx_ep_tx_rx_queues_release(struct tcpx_ep *ep)
 	struct tcpx_xfer_entry *xfer_entry;
 	struct tcpx_cq *tcpx_cq;
 
-	fastlock_acquire(&ep->queue_lock);
+	fastlock_acquire(&ep->lock);
 	while (!dlist_empty(&ep->tx_queue)) {
 		entry = ep->tx_queue.next;
 		xfer_entry = container_of(entry, struct tcpx_xfer_entry, entry);
@@ -496,7 +498,7 @@ static void tcpx_ep_tx_rx_queues_release(struct tcpx_ep *ep)
 				       struct tcpx_cq, util_cq);
 		tcpx_xfer_entry_release(tcpx_cq, xfer_entry);
 	}
-	fastlock_release(&ep->queue_lock);
+	fastlock_release(&ep->lock);
 }
 
 static int tcpx_ep_close(struct fid *fid)
@@ -507,8 +509,7 @@ static int tcpx_ep_close(struct fid *fid)
 	tcpx_ep_tx_rx_queues_release(ep);
 	tcpx_progress_ep_del(ep);
 	ofi_close_socket(ep->conn_fd);
-	fastlock_destroy(&ep->queue_lock);
-	fastlock_destroy(&ep->cm_state_lock);
+	fastlock_destroy(&ep->lock);
 	ofi_endpoint_close(&ep->util_ep);
 
 	free(ep);
@@ -610,6 +611,9 @@ err:
 	return INVALID_SOCKET;
 }
 
+static void tcpx_empty_progress(struct tcpx_ep *ep)
+{}
+
 int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep_fid, void *context)
 {
@@ -667,15 +671,11 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 			goto err3;
 	}
 
-	ret = fastlock_init(&ep->queue_lock);
+	ep->cm_state = TCPX_EP_CONNECTING;
+	ep->progress_func = tcpx_empty_progress;
+	ret = fastlock_init(&ep->lock);
 	if (ret)
 		goto err3;
-
-	ep->cm_state = TCPX_EP_CONNECTING;
-
-	ret = fastlock_init(&ep->cm_state_lock);
-	if (ret)
-		goto err4;
 
 	dlist_init(&ep->rx_queue);
 	dlist_init(&ep->tx_queue);
@@ -690,8 +690,6 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 	(*ep_fid)->rma = &tcpx_rma_ops;
 
 	return 0;
-err4:
-	fastlock_destroy(&ep->queue_lock);
 err3:
 	ofi_close_socket(ep->conn_fd);
 err2:

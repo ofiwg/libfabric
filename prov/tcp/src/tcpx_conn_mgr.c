@@ -262,11 +262,12 @@ static int tcpx_ep_msg_xfer_enable(struct tcpx_ep *ep)
 {
 	int ret;
 
-	fastlock_acquire(&ep->cm_state_lock);
+	fastlock_acquire(&ep->lock);
 	if (ep->cm_state != TCPX_EP_CONNECTING) {
-		fastlock_release(&ep->cm_state_lock);
+		fastlock_release(&ep->lock);
 		return -FI_EINVAL;
 	}
+	ep->progress_func = tcpx_ep_progress;
 	ret = fi_fd_nonblock(ep->conn_fd);
 	if (ret)
 		goto err;
@@ -277,7 +278,7 @@ static int tcpx_ep_msg_xfer_enable(struct tcpx_ep *ep)
 
 	ep->cm_state = TCPX_EP_CONNECTED;
 err:
-	fastlock_release(&ep->cm_state_lock);
+	fastlock_release(&ep->lock);
 	return ret;
 }
 
@@ -347,7 +348,7 @@ static void handle_connect(struct poll_fd_mgr *poll_mgr,
 		if (ret)
 			goto err;
 
-		FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "Received Conn Response\n");
+		FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "Received accept from server\n");
 		poll_info->state = CONNECT_DONE;
 		break;
 	default:
@@ -416,7 +417,6 @@ static void handle_connreq(struct poll_fd_mgr *poll_mgr,
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
 		goto err4;
 	}
-	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "Accepted Connection\n");
 	free(cm_entry);
 
 	return;
@@ -456,7 +456,7 @@ static void handle_accept_conn(struct poll_fd_mgr *poll_mgr,
 	if (ret < 0) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
 	}
-	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "Received accept from server\n");
+	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "Accepted Connection\n");
 	return;
 err:
 	memset(&err_entry, 0, sizeof err_entry);

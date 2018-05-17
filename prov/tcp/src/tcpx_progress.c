@@ -47,13 +47,10 @@ int tcpx_ep_shutdown_report(struct tcpx_ep *ep, fid_t fid)
 	struct fi_eq_cm_entry cm_entry = {0};
 	ssize_t len;
 
-	fastlock_acquire(&ep->cm_state_lock);
-	if (ep->cm_state == TCPX_EP_SHUTDOWN) {
-		fastlock_release(&ep->cm_state_lock);
+	if (ep->cm_state == TCPX_EP_SHUTDOWN)
 		return FI_SUCCESS;
-	}
+
 	ep->cm_state = TCPX_EP_SHUTDOWN;
-	fastlock_release(&ep->cm_state_lock);
 
 	cm_entry.fid = fid;
 	len =  fi_eq_write(&ep->util_ep.eq->eq_fid, FI_SHUTDOWN,
@@ -418,15 +415,20 @@ static void process_tx_queue(struct tcpx_ep *ep)
 	process_tx_entry(tx_entry);
 }
 
+void tcpx_ep_progress(struct tcpx_ep *ep)
+{
+	tcpx_process_rx_msg(ep);
+	process_tx_queue(ep);
+}
+
 void tcpx_progress(struct util_ep *util_ep)
 {
 	struct tcpx_ep *ep;
 
 	ep = container_of(util_ep, struct tcpx_ep, util_ep);
-	fastlock_acquire(&ep->queue_lock);
-	tcpx_process_rx_msg(ep);
-	process_tx_queue(ep);
-	fastlock_release(&ep->queue_lock);
+	fastlock_acquire(&ep->lock);
+	ep->progress_func(ep);
+	fastlock_release(&ep->lock);
 	return;
 }
 
@@ -449,7 +451,7 @@ int tcpx_progress_ep_add(struct tcpx_ep *ep)
 
 void tcpx_progress_ep_del(struct tcpx_ep *ep)
 {
-	fastlock_acquire(&ep->cm_state_lock);
+	fastlock_acquire(&ep->lock);
 	if (ep->cm_state == TCPX_EP_CONNECTING) {
 		goto out;
 	}
@@ -458,5 +460,5 @@ void tcpx_progress_ep_del(struct tcpx_ep *ep)
 		ofi_wait_fd_del(ep->util_ep.rx_cq->wait, ep->conn_fd);
 	}
 out:
-	fastlock_release(&ep->cm_state_lock);
+	fastlock_release(&ep->lock);
 }
