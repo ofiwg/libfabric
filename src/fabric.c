@@ -451,6 +451,7 @@ libdl_done:
 
 	ofi_register_provider(UDP_INIT, NULL);
 	ofi_register_provider(SOCKETS_INIT, NULL);
+	ofi_register_provider(TCP_INIT, NULL);
 
 	ofi_init = 1;
 
