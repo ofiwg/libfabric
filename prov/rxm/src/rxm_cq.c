@@ -541,7 +541,7 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 	if (comp->flags & FI_REMOTE_WRITE)
 		return rxm_handle_remote_write(rxm_ep, comp);
 
-	switch (RXM_GET_PROTO_STATE(comp)) {
+	switch (RXM_GET_PROTO_STATE(comp->op_context)) {
 	case RXM_TX_NOBUF:
 		assert(comp->flags & (FI_SEND | FI_WRITE | FI_READ));
 		if (tx_entry->ep->msg_mr_local && !tx_entry->ep->rxm_mr_local)
@@ -622,7 +622,7 @@ ssize_t rxm_cq_write_error(struct fid_cq *msg_cq, struct fi_cq_data_entry *comp,
 		err_entry.prov_errno = (int)err;
 	}
 
-	switch (RXM_GET_PROTO_STATE(comp)) {
+	switch (RXM_GET_PROTO_STATE(comp->op_context)) {
 	case RXM_TX:
 	case RXM_LMT_TX:
 		tx_entry = (struct rxm_tx_entry *)op_context;

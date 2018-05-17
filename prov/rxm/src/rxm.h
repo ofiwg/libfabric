@@ -91,10 +91,9 @@
 	       " (fi_addr: 0x%" PRIx64 " tag: 0x%" PRIx64 ")\n",\
 	       addr, tag)
 
-#define RXM_GET_PROTO_STATE(comp)			\
-	(*(enum rxm_proto_state *)			\
-	  ((unsigned char *)(comp)->op_context +	\
-		offsetof(struct rxm_buf, state)))
+#define RXM_GET_PROTO_STATE(context)					\
+	(*(enum rxm_proto_state *)					\
+	  ((unsigned char *)context + offsetof(struct rxm_buf, state)))
 
 #define RXM_SET_PROTO_STATE(comp, new_state)				\
 do {									\
