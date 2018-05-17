@@ -232,11 +232,12 @@ static int rxm_send_queue_init(struct rxm_ep *rxm_ep, struct rxm_send_queue *sen
 	return 0;
 }
 
-static int rxm_recv_queue_init(struct rxm_recv_queue *recv_queue, size_t size,
-			       enum rxm_recv_queue_type type)
+static int rxm_recv_queue_init(struct rxm_ep *rxm_ep,  struct rxm_recv_queue *recv_queue,
+			       size_t size, enum rxm_recv_queue_type type)
 {
 	ssize_t i;
 
+	recv_queue->rxm_ep = rxm_ep;
 	recv_queue->type = type;
 	recv_queue->fs = rxm_recv_fs_create(size);
 	if (!recv_queue->fs)
@@ -346,13 +347,13 @@ static int rxm_ep_txrx_queue_init(struct rxm_ep *rxm_ep)
 	if (ret)
 		return ret;
 
-	ret = rxm_recv_queue_init(&rxm_ep->recv_queue,
+	ret = rxm_recv_queue_init(rxm_ep, &rxm_ep->recv_queue,
 				  rxm_ep->rxm_info->rx_attr->size,
 				  RXM_RECV_QUEUE_MSG);
 	if (ret)
 		goto err_recv_msg;
 
-	ret = rxm_recv_queue_init(&rxm_ep->trecv_queue,
+	ret = rxm_recv_queue_init(rxm_ep, &rxm_ep->trecv_queue,
 				  rxm_ep->rxm_info->rx_attr->size,
 				  RXM_RECV_QUEUE_TAGGED);
 	if (ret)

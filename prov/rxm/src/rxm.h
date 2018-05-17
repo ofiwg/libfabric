@@ -322,6 +322,7 @@ enum rxm_recv_queue_type {
 };
 
 struct rxm_recv_queue {
+	struct rxm_ep *rxm_ep;
 	enum rxm_recv_queue_type type;
 	struct rxm_recv_fs *fs;
 	struct dlist_entry recv_list;
