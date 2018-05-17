@@ -299,6 +299,13 @@ RXM_INI
 			"Messages of size greater than this (default: 256 Kb) "
 			"would be transmitted via rendezvous protocol.");
 
+	fi_param_define(&rxm_prov, "use_srx", FI_PARAM_BOOL,
+			"Set this enivronment variable to control the RxM "
+			"receive path. If this variable set to 1 (default: 0), "
+			"the RxM uses Shared Receive Context. This mode improves "
+			"memory consumption, but it may increase small message "
+			"latency as a side-effect.");
+
 	if (rxm_init_info()) {
 		FI_WARN(&rxm_prov, FI_LOG_CORE, "Unable to initialize rxm_info\n");
 		return NULL;
