@@ -664,10 +664,8 @@ static inline int rxm_ep_repost_buf(struct rxm_rx_buf *rx_buf)
 	rx_buf->conn = NULL;
 	rx_buf->hdr.state = RXM_RX;
 
-	if (fi_recv(rx_buf->hdr.msg_ep, &rx_buf->pkt,
-		    rx_buf->ep->rxm_info->tx_attr->inject_size +
-		    sizeof(struct rxm_pkt), rx_buf->hdr.desc,
-		    FI_ADDR_UNSPEC, rx_buf)) {
+	if (fi_recv(rx_buf->hdr.msg_ep, &rx_buf->pkt, rx_buf->ep->eager_pkt_size,
+		    rx_buf->hdr.desc, FI_ADDR_UNSPEC, rx_buf)) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to repost buf\n");
 		return -FI_EAVAIL;
 	}

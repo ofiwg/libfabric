@@ -1753,6 +1753,7 @@ static int rxm_ep_msg_res_open(struct util_domain *util_domain,
 {
 	int ret;
 	size_t max_prog_val;
+	int use_srx;
 	struct rxm_domain *rxm_domain =
 		container_of(util_domain, struct rxm_domain, util_domain);
 
@@ -1765,10 +1766,15 @@ static int rxm_ep_msg_res_open(struct util_domain *util_domain,
 			   rxm_ep->msg_info->rx_attr->size) / 2;
 	rxm_ep->comp_per_progress = (rxm_ep->comp_per_progress > max_prog_val) ?
 				    max_prog_val : rxm_ep->comp_per_progress;
+	rxm_ep->eager_pkt_size =
+		rxm_ep->rxm_info->tx_attr->inject_size + sizeof(struct rxm_pkt);
 
 	dlist_init(&rxm_ep->msg_cq_fd_ref_list);
 
-	if (rxm_ep->msg_info->ep_attr->rx_ctx_cnt == FI_SHARED_CONTEXT) {
+	if (fi_param_get_bool(&rxm_prov, "use_srx", &use_srx))
+		use_srx = 0;
+
+	if ((rxm_ep->msg_info->ep_attr->rx_ctx_cnt == FI_SHARED_CONTEXT) && use_srx) {
 		ret = fi_srx_context(rxm_domain->msg_domain, rxm_ep->msg_info->rx_attr,
 				     &rxm_ep->srx_ctx, NULL);
 		if (ret) {
