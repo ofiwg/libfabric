@@ -8,7 +8,7 @@ _verbs_files =							\
 	prov/verbs/src/verbs_mr.c				\
 	prov/verbs/src/verbs_eq.c				\
 	prov/verbs/src/verbs_info.c				\
-	prov/verbs/src/verbs_msg_ep.c				\
+	prov/verbs/src/verbs_ep.c				\
 	prov/verbs/src/ep_rdm/verbs_av_ep_rdm.c			\
 	prov/verbs/src/ep_rdm/verbs_cq_ep_rdm.c			\
 	prov/verbs/src/ep_rdm/verbs_ep_rdm.c			\
@@ -24,7 +24,6 @@ _verbs_files =							\
 	prov/verbs/src/ep_rdm/verbs_utils.c			\
 	prov/verbs/src/ep_rdm/verbs_utils.h			\
 	prov/verbs/src/verbs_dgram.h				\
-	prov/verbs/src/verbs_dgram_ep.c				\
 	prov/verbs/src/verbs_dgram_ep_msg.c			\
 	prov/verbs/src/verbs_dgram_cq.c				\
 	prov/verbs/src/verbs_dgram_cntr.c			\
