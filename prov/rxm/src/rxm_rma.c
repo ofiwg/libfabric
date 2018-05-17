@@ -320,20 +320,10 @@ rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t 
 	fastlock_acquire(&rxm_ep->util_ep.cmap->lock);
 	handle = ofi_cmap_acquire_handle(rxm_ep->util_ep.cmap, msg->addr);
 	if (OFI_UNLIKELY(!handle || handle->state != CMAP_CONNECTED)) {
-		if (OFI_UNLIKELY(!handle)) {
-			FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
-			       "No handle found for given fi_addr\n");
-			ret = util_cmap_alloc_handle(rxm_ep->util_ep.cmap,
-						     msg->addr, CMAP_IDLE,
-						     &handle);
-			if (OFI_UNLIKELY(ret)) {
-				fastlock_release(&rxm_ep->util_ep.cmap->lock);
-				return -FI_EAGAIN;
-			}
-		}
-		ret = ofi_cmap_handle_connect(rxm_ep->util_ep.cmap,
-					      msg->addr, handle);
-		if (OFI_UNLIKELY(ret != -FI_EAGAIN))
+		ret = rxm_ep_handle_unconnected(rxm_ep, &handle, msg->addr);
+		if (!ret)
+			goto rma_continue;
+		else if (OFI_UNLIKELY(ret != -FI_EAGAIN))
 			goto cmap_err;
 		rxm_conn = container_of(handle, struct rxm_conn, handle);
 		ret = rxm_ep_postpone_rma(rxm_ep, rxm_conn,
@@ -344,6 +334,7 @@ cmap_err:
 		fastlock_release(&rxm_ep->util_ep.cmap->lock);
 		return ret;
 	}
+rma_continue:
 	fastlock_release(&rxm_ep->util_ep.cmap->lock);
 	rxm_conn = container_of(handle, struct rxm_conn, handle);
 
@@ -448,20 +439,10 @@ rxm_ep_rma_inject(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t 
 	fastlock_acquire(&rxm_ep->util_ep.cmap->lock);
 	handle = ofi_cmap_acquire_handle(rxm_ep->util_ep.cmap, msg->addr);
 	if (OFI_UNLIKELY(!handle || handle->state != CMAP_CONNECTED)) {
-		if (OFI_UNLIKELY(!handle)) {
-			FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
-			       "No handle found for given fi_addr\n");
-			ret = util_cmap_alloc_handle(rxm_ep->util_ep.cmap,
-						     msg->addr, CMAP_IDLE,
-						     &handle);
-			if (OFI_UNLIKELY(ret)) {
-				fastlock_release(&rxm_ep->util_ep.cmap->lock);
-				return -FI_EAGAIN;
-			}
-		}
-		ret = ofi_cmap_handle_connect(rxm_ep->util_ep.cmap,
-					      msg->addr, handle);
-		if (OFI_UNLIKELY(ret != -FI_EAGAIN))
+		ret = rxm_ep_handle_unconnected(rxm_ep, &handle, msg->addr);
+		if (!ret)
+			goto rma_inject_continue;
+		else if (OFI_UNLIKELY(ret != -FI_EAGAIN))
 			goto cmap_err;
 		rxm_conn = container_of(handle, struct rxm_conn, handle);
 		ret = rxm_ep_postpone_rma(rxm_ep, rxm_conn, total_size,
@@ -470,6 +451,7 @@ cmap_err:
 		fastlock_release(&rxm_ep->util_ep.cmap->lock);
 		return ret;
 	}
+rma_inject_continue:
 	fastlock_release(&rxm_ep->util_ep.cmap->lock);
 	rxm_conn = container_of(handle, struct rxm_conn, handle);
 

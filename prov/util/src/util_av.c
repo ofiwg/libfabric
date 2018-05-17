@@ -1372,13 +1372,23 @@ void ofi_cmap_process_shutdown(struct util_cmap *cmap,
 }
 
 /* Caller must hold cmap->lock */
+void ofi_cmap_process_conn_notify(struct util_cmap *cmap,
+				  struct util_cmap_handle *handle)
+{
+	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
+	       "Processing connection notification for handle: %p.\n", handle);
+	handle->state = CMAP_CONNECTED;
+	cmap->attr.connected_handler(handle);
+}
+
+/* Caller must hold cmap->lock */
 void ofi_cmap_process_connect(struct util_cmap *cmap,
 			      struct util_cmap_handle *handle,
 			      uint64_t *remote_key)
 {
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
-		"Processing connect for handle: %p\n", handle);
-	handle->state = CMAP_CONNECTED;
+	       "Processing connect for handle: %p\n", handle);
+	handle->state = CMAP_CONNECTED_NOTIFY;
 	if (remote_key)
 		handle->remote_key = *remote_key;
 }
@@ -1392,6 +1402,7 @@ void ofi_cmap_process_reject(struct util_cmap *cmap,
 	switch (handle->state) {
 	case CMAP_CONNREQ_RECV:
 	case CMAP_CONNECTED:
+	case CMAP_CONNECTED_NOTIFY:
 		/* Handle is being re-used for incoming connection request */
 		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 			"Connection handle is being re-used. Ignoring reject\n");
@@ -1449,6 +1460,7 @@ int ofi_cmap_process_connreq(struct util_cmap *cmap, void *addr,
 	}
 
 	switch (handle->state) {
+	case CMAP_CONNECTED_NOTIFY:
 	case CMAP_CONNECTED:
 		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 			"Connection already present.\n");
@@ -1495,7 +1507,8 @@ int ofi_cmap_handle_connect(struct util_cmap *cmap, fi_addr_t fi_addr,
 {
 	int ret;
 
-	if (handle->state == CMAP_CONNECTED)
+	if (handle->state == CMAP_CONNECTED_NOTIFY ||
+	    handle->state == CMAP_CONNECTED)
 		return FI_SUCCESS;
 
 	switch (handle->state) {

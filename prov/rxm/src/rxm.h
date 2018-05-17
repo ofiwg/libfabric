@@ -116,6 +116,9 @@ struct rxm_conn {
 	struct fid_ep *msg_ep;
 	struct dlist_entry postponed_tx_list;
 	struct util_cmap_handle handle;
+	/* This is saved MSG EP fid, that hasn't been closed during
+	 * handling of CONN_RECV in CMAP_CONNREQ_SENT for passive side */
+	struct fid_ep *saved_msg_ep;
 };
 
 struct rxm_domain {
@@ -567,6 +570,36 @@ rxm_process_recv_entry(struct rxm_recv_queue *recv_queue,
 	recv_queue->rxm_ep->res_fastlock_release(&recv_queue->lock);
 
 	return FI_SUCCESS;
+}
+
+/* Caller must hold `cmap::lock` */
+static inline int
+rxm_ep_handle_unconnected(struct rxm_ep *rxm_ep, struct util_cmap_handle **handle,
+			  fi_addr_t dest_addr)
+{
+	int ret;
+
+	if (OFI_UNLIKELY(!*handle)) {
+		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
+		       "No handle found for given fi_addr\n");
+		ret = util_cmap_alloc_handle(rxm_ep->util_ep.cmap,
+					     dest_addr, CMAP_IDLE,
+					     handle);
+		if (OFI_UNLIKELY(ret))
+			return -FI_ENOMEM;
+	}
+	if ((*handle)->state == CMAP_CONNECTED_NOTIFY) {
+		ofi_cmap_process_conn_notify(rxm_ep->util_ep.cmap, *handle);
+		return 0;
+	}
+	/* Since we handling unoonnected state and `cmap:lock`
+	 * is on hold, it shouldn't return 0 */
+	ret = ofi_cmap_handle_connect(rxm_ep->util_ep.cmap,
+				      dest_addr, *handle);
+	if (OFI_UNLIKELY(ret != -FI_EAGAIN))
+		return ret;
+
+	return -FI_EAGAIN;
 }
 
 static inline

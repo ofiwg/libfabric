@@ -94,7 +94,19 @@ err:
 	return ret;
 }
 
-void rxm_conn_close(struct util_cmap_handle *handle)
+static void rxm_conn_close(struct util_cmap_handle *handle)
+{
+	struct rxm_conn *rxm_conn = container_of(handle, struct rxm_conn, handle);
+	if (!rxm_conn->msg_ep)
+		return;
+
+	rxm_conn->saved_msg_ep = rxm_conn->msg_ep;
+	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
+	       "Saved MSG EP fid for further deletion in main thread\n");
+	rxm_conn->msg_ep = NULL;
+}
+
+static void rxm_conn_free(struct util_cmap_handle *handle)
 {
 	struct rxm_conn *rxm_conn = container_of(handle, struct rxm_conn, handle);
 	if (!rxm_conn->msg_ep)
@@ -106,12 +118,21 @@ void rxm_conn_close(struct util_cmap_handle *handle)
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to close msg_ep\n");
 	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Closed msg_ep\n");
 	rxm_conn->msg_ep = NULL;
+
+	free(container_of(handle, struct rxm_conn, handle));
 }
 
-static void rxm_conn_free(struct util_cmap_handle *handle)
+static void rxm_conn_connected_handler(struct util_cmap_handle *handle)
 {
-	rxm_conn_close(handle);
-	free(container_of(handle, struct rxm_conn, handle));
+	struct rxm_conn *rxm_conn = container_of(handle, struct rxm_conn, handle);
+	if (!rxm_conn->saved_msg_ep)
+		return;
+	/* Assuming fi_close also shuts down the connection gracefully if the
+	 * endpoint is in connected state */
+	if (fi_close(&rxm_conn->saved_msg_ep->fid))
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to close saved msg_ep\n");
+	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Closed saved msg_ep\n");
+	rxm_conn->saved_msg_ep = NULL;
 }
 
 static struct util_cmap_handle *rxm_conn_alloc(void)
@@ -460,6 +481,7 @@ struct util_cmap *rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep)
 	attr.close 		= rxm_conn_close;
 	attr.free 		= rxm_conn_free;
 	attr.connect 		= rxm_conn_connect;
+	attr.connected_handler	= rxm_conn_connected_handler;
 	attr.event_handler	= rxm_conn_event_handler;
 	attr.signal		= rxm_conn_signal;
 
