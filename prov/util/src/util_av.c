@@ -364,8 +364,19 @@ int ofi_av_insert_addr(struct util_av *av, const void *addr, int slot, int *inde
 
 	dlist_foreach(&av->ep_list, av_entry) {
 		ep = container_of(av_entry, struct util_ep, av_entry);
-		if (ep->cmap)
-			ofi_cmap_update(ep->cmap, addr, (fi_addr_t)(*index));
+		if (ep->cmap) {
+			ret = ofi_cmap_update(ep->cmap, addr, (fi_addr_t)(*index));
+			if (OFI_UNLIKELY(ret)) {
+				int retv;
+				FI_WARN(av->prov, FI_LOG_AV,
+					"Unable to update CM for OFI endpoints\n");
+				retv = ofi_av_remove_addr(av, slot, *index);
+				if (retv)
+					FI_WARN(av->prov, FI_LOG_AV,
+						"Failed to remove addr from AV during error handling\n");
+				return ret;
+			}
+		}
 	}
 	return 0;
 }
@@ -1345,18 +1356,22 @@ static void util_cmap_move_handle(struct util_cmap_handle *handle,
 	handle->cmap->handles_av[fi_addr] = handle;
 }
 
-void ofi_cmap_update(struct util_cmap *cmap, const void *addr, fi_addr_t fi_addr)
+int ofi_cmap_update(struct util_cmap *cmap, const void *addr, fi_addr_t fi_addr)
 {
 	struct util_cmap_handle *handle;
+	int ret = 0;
 
 	fastlock_acquire(&cmap->lock);
 	handle = util_cmap_get_handle_peer(cmap, addr);
-	if (!handle)
+	if (!handle) {
+		ret = util_cmap_alloc_handle(cmap, fi_addr, CMAP_IDLE, &handle);
 		goto out;
+	}
 	util_cmap_move_handle(handle, fi_addr);
 	cmap->av_updated = 1;
 out:
 	fastlock_release(&cmap->lock);
+	return ret;
 }
 
 /* Caller must hold cmap->lock */
@@ -1495,6 +1510,9 @@ int ofi_cmap_process_connreq(struct util_cmap *cmap, void *addr,
 			*handle_ret = handle;
 		}
 		break;
+	case CMAP_IDLE:
+		handle->state = CMAP_CONNREQ_RECV;
+		/* Fall through */
 	case CMAP_CONNREQ_RECV:
 		*handle_ret = handle;
 		break;
