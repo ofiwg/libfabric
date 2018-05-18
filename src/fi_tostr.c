@@ -208,6 +208,7 @@ static void fi_tostr_caps(char *buf, uint64_t caps)
 	IFFLAGSTR(caps, FI_TRIGGER);
 	IFFLAGSTR(caps, FI_FENCE);
 
+	IFFLAGSTR(caps, FI_VARIABLE_MSG);
 	IFFLAGSTR(caps, FI_RMA_PMEM);
 	IFFLAGSTR(caps, FI_SOURCE_ERR);
 	IFFLAGSTR(caps, FI_LOCAL_COMM);
@@ -274,6 +275,7 @@ static void fi_tostr_mode(char *buf, uint64_t mode)
 	IFFLAGSTR(mode, FI_NOTIFY_FLAGS_ONLY);
 	IFFLAGSTR(mode, FI_RESTRICTED_COMP);
 	IFFLAGSTR(mode, FI_CONTEXT2);
+	IFFLAGSTR(mode, FI_BUFFERED_RECV);
 
 	fi_remove_comma(buf);
 }
@@ -644,6 +646,8 @@ static void fi_tostr_cq_event_flags(char *buf, uint64_t flags)
 	IFFLAGSTR(flags, FI_REMOTE_WRITE);
 	IFFLAGSTR(flags, FI_REMOTE_CQ_DATA);
 	IFFLAGSTR(flags, FI_MULTI_RECV);
+	IFFLAGSTR(flags, FI_MORE);
+	IFFLAGSTR(flags, FI_CLAIM);
 	fi_remove_comma(buf);
 }
 
