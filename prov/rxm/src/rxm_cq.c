@@ -594,8 +594,25 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 	}
 }
 
-ssize_t rxm_cq_write_error(struct fid_cq *msg_cq, struct fi_cq_data_entry *comp,
-			   ssize_t err)
+void rxm_cq_write_error(struct util_cq *cq, struct util_cntr *cntr,
+			void *op_context, int err)
+{
+	struct fi_cq_err_entry err_entry = {0};
+	err_entry.op_context = op_context;
+	err_entry.prov_errno = err;
+	err_entry.err = err;
+
+	if (cntr)
+		rxm_cntr_incerr(cntr);
+	if (ofi_cq_write_error(cq, &err_entry)) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ, "Unable to ofi_cq_write_error\n");
+		assert(0);
+	}
+}
+
+static size_t rxm_cq_read_write_error(struct fid_cq *msg_cq,
+				      struct fi_cq_data_entry *comp,
+				      ssize_t err)
 {
 	struct rxm_tx_entry *tx_entry;
 	struct rxm_rx_buf *rx_buf;
@@ -815,7 +832,7 @@ void rxm_ep_progress_one(struct util_ep *util_ep)
 
 	return;
 err:
-	if (rxm_cq_write_error(rxm_ep->msg_cq, &comp, ret))
+	if (rxm_cq_read_write_error(rxm_ep->msg_cq, &comp, ret))
 		assert(0);
 }
 
@@ -851,7 +868,7 @@ void rxm_ep_progress_multi(struct util_ep *util_ep)
 
 	return;
 err:
-	if (rxm_cq_write_error(rxm_ep->msg_cq, &comp, ret))
+	if (rxm_cq_read_write_error(rxm_ep->msg_cq, &comp, ret))
 		assert(0);
 }
 
