@@ -53,7 +53,7 @@ bin_PROGRAMS = \
 	unit/fi_av_test \
 	unit/fi_dom_test \
 	unit/fi_getinfo_test \
-	complex/fi_ubertest
+	ubertest/fi_ubertest
 
 dist_bin_SCRIPTS = \
 	scripts/runfabtests.sh \
@@ -311,20 +311,20 @@ unit_fi_getinfo_test_SOURCES = \
 	$(unit_srcs)
 unit_fi_getinfo_test_LDADD = libfabtests.la
 
-complex_fi_ubertest_SOURCES = \
-	complex/fabtest.h \
-	complex/ofi_atomic.h \
-	complex/ofi_atomic.c \
-	complex/ft_main.c \
-	complex/ft_comm.c \
-	complex/ft_comp.c \
-	complex/ft_config.c \
-	complex/ft_domain.c \
-	complex/ft_endpoint.c \
-	complex/ft_msg.c \
-	complex/ft_verify.c \
-	complex/ft_test.c
-complex_fi_ubertest_LDADD = libfabtests.la
+ubertest_fi_ubertest_SOURCES = \
+	ubertest/fabtest.h \
+	ubertest/ofi_atomic.h \
+	ubertest/ofi_atomic.c \
+	ubertest/uber.c \
+	ubertest/connect.c \
+	ubertest/cq.c \
+	ubertest/config.c \
+	ubertest/domain.c \
+	ubertest/ep.c \
+	ubertest/xfer.c \
+	ubertest/verify.c \
+	ubertest/test_ctrl.c
+ubertest_fi_ubertest_LDADD = libfabtests.la
 
 man_MANS = man/fabtests.7
 

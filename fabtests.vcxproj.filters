@@ -19,10 +19,10 @@
     <Filter Include="Source Files\simple">
       <UniqueIdentifier>{660dbead-4d8e-4589-8eb4-43dfab9566bd}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\complex">
+    <Filter Include="Source Files\ubertest">
       <UniqueIdentifier>{401b54c2-4a43-40a2-b707-50b5f6ebb556}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\complex\test_configs">
+    <Filter Include="Source Files\test_configs">
       <UniqueIdentifier>{b3a8fe06-b4cf-48f9-b123-60cb55a123a7}</UniqueIdentifier>
     </Filter>
     <Filter Include="Source Files\unit">
@@ -93,29 +93,29 @@
     <ClCompile Include="simple\inj_complete.c">
       <Filter>Source Files\simple</Filter>
     </ClCompile>
-    <ClCompile Include="complex\ft_comm.c">
-      <Filter>Source Files\complex</Filter>
+    <ClCompile Include="ubertest\connect.c">
+      <Filter>Source Files\ubertest</Filter>
     </ClCompile>
-    <ClCompile Include="complex\ft_comp.c">
-      <Filter>Source Files\complex</Filter>
+    <ClCompile Include="ubertest\cq.c">
+      <Filter>Source Files\ubertest</Filter>
     </ClCompile>
-    <ClCompile Include="complex\ft_config.c">
-      <Filter>Source Files\complex</Filter>
+    <ClCompile Include="ubertest\config.c">
+      <Filter>Source Files\ubertest</Filter>
     </ClCompile>
-    <ClCompile Include="complex\ft_domain.c">
-      <Filter>Source Files\complex</Filter>
+    <ClCompile Include="ubertest\domain.c">
+      <Filter>Source Files\ubertest</Filter>
     </ClCompile>
-    <ClCompile Include="complex\ft_endpoint.c">
-      <Filter>Source Files\complex</Filter>
+    <ClCompile Include="ubertest\ep.c">
+      <Filter>Source Files\ubertest</Filter>
     </ClCompile>
-    <ClCompile Include="complex\ft_main.c">
-      <Filter>Source Files\complex</Filter>
+    <ClCompile Include="ubertest\uber.c">
+      <Filter>Source Files\ubertest</Filter>
     </ClCompile>
-    <ClCompile Include="complex\ft_msg.c">
-      <Filter>Source Files\complex</Filter>
+    <ClCompile Include="ubertest\xfer.c">
+      <Filter>Source Files\ubertest</Filter>
     </ClCompile>
-    <ClCompile Include="complex\ft_test.c">
-      <Filter>Source Files\complex</Filter>
+    <ClCompile Include="ubertest\test_ctrl.c">
+      <Filter>Source Files\ubertest</Filter>
     </ClCompile>
     <ClCompile Include="unit\av_test.c">
       <Filter>Source Files\unit</Filter>
@@ -191,8 +191,8 @@
     <ClInclude Include="include\unit_common.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="complex\fabtest.h">
-      <Filter>Source Files\complex</Filter>
+    <ClInclude Include="ubertest\fabtest.h">
+      <Filter>Source Files\ubertest</Filter>
     </ClInclude>
     <ClInclude Include="include\windows\netdb.h">
       <Filter>Header Files\osd</Filter>
@@ -233,17 +233,17 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Makefile.win" />
-    <None Include="complex\test_configs\eq_cq.json">
-      <Filter>Source Files\complex\test_configs</Filter>
+    <None Include="test_configs\eq_cq.json">
+      <Filter>Source Files\test_configs</Filter>
     </None>
-    <None Include="complex\test_configs\lat_bw.json">
-      <Filter>Source Files\complex\test_configs</Filter>
+    <None Include="test_configs\lat_bw.json">
+      <Filter>Source Files\test_configs</Filter>
     </None>
-    <None Include="complex\test_configs\sockets.json">
-      <Filter>Source Files\complex\test_configs</Filter>
+    <None Include="test_configs\sockets.json">
+      <Filter>Source Files\test_configs</Filter>
     </None>
-    <None Include="complex\test_configs\verbs.json">
-      <Filter>Source Files\complex\test_configs</Filter>
+    <None Include="test_configs\verbs.json">
+      <Filter>Source Files\test_configs</Filter>
     </None>
   </ItemGroup>
 </Project>
