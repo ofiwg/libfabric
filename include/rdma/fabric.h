@@ -158,6 +158,7 @@ typedef struct fid *fid_t;
 #define FI_AFFINITY		(1ULL << 29)
 #define FI_COMMIT_COMPLETE	(1ULL << 30)
 
+#define FI_VARIABLE_MSG		(1ULL << 48)
 #define FI_RMA_PMEM		(1ULL << 49)
 #define FI_SOURCE_ERR		(1ULL << 50)
 #define FI_LOCAL_COMM		(1ULL << 51)
