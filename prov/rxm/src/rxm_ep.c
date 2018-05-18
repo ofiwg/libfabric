@@ -136,10 +136,6 @@ static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 			tx_buf->type = pool->type;
 			tx_buf->pkt.ctrl_hdr.version = RXM_CTRL_VERSION;
 			tx_buf->pkt.hdr.version = OFI_OP_VERSION;
-			if (rxm_ep_tx_flags(pool->rxm_ep) & FI_TRANSMIT_COMPLETE)
-				tx_buf->pkt.hdr.flags |= OFI_TRANSMIT_COMPLETE;
-			if (rxm_ep_tx_flags(pool->rxm_ep) & FI_DELIVERY_COMPLETE)
-				tx_buf->pkt.hdr.flags |= OFI_DELIVERY_COMPLETE;
 			tx_buf->hdr.desc = mr_desc;
 
 			switch (pool->type) {
@@ -775,7 +771,7 @@ rxm_ep_format_tx_res_lightweight(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_con
 	(*tx_buf)->pkt.hdr.tag = tag;
 
 	if (flags & FI_REMOTE_CQ_DATA) {
-		(*tx_buf)->pkt.hdr.flags = OFI_REMOTE_CQ_DATA;
+		(*tx_buf)->pkt.hdr.flags = FI_REMOTE_CQ_DATA;
 		(*tx_buf)->pkt.hdr.data = data;
 	}
 

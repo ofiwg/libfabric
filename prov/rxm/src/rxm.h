@@ -60,7 +60,7 @@
 #define RXM_MAJOR_VERSION 1
 #define RXM_MINOR_VERSION 0
 
-#define RXM_OP_VERSION		2
+#define RXM_OP_VERSION		3
 #define RXM_CTRL_VERSION	3
 
 #define RXM_BUF_SIZE	16384
