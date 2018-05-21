@@ -85,6 +85,12 @@ int mrail_get_core_info(uint32_t version, const char *node, const char *service,
 	if (!core_hints)
 		return -FI_ENOMEM;
 
+	if (!hints) {
+		core_hints->mode = MRAIL_PASSTHROUGH_MODES;
+		assert(core_hints->domain_attr);
+		core_hints->domain_attr->mr_mode = MRAIL_PASSTHROUGH_MR_MODES;
+	}
+
 	if (!core_hints->fabric_attr)
 		core_hints->fabric_attr = calloc(1, sizeof(*core_hints->fabric_attr));
 
@@ -222,7 +228,7 @@ static void mrail_fini(void)
 }
 
 struct fi_provider mrail_prov = {
-	.name = "ofi_mrail",
+	.name = OFI_UTIL_PREFIX "mrail",
 	.version = FI_VERSION(MRAIL_MAJOR_VERSION, MRAIL_MINOR_VERSION),
 	.fi_version = FI_VERSION(1, 6),
 	.getinfo = mrail_getinfo,
