@@ -32,9 +32,9 @@ bin_PROGRAMS = \
 	functional/fi_unexpected_msg \
 	functional/fi_inj_complete \
 	functional/fi_resource_freeing \
-	streaming/fi_resmgmt_test \
-	streaming/fi_rdm_atomic \
-	streaming/fi_rdm_multi_recv \
+	functional/fi_resmgmt_test \
+	functional/fi_rdm_atomic \
+	functional/fi_rdm_multi_recv \
 	benchmarks/fi_msg_pingpong \
 	benchmarks/fi_msg_bw \
 	benchmarks/fi_rma_bw \
@@ -208,17 +208,17 @@ functional_fi_resource_freeing_SOURCES = \
 	functional/resource_freeing.c
 functional_fi_resource_freeing_LDADD = libfabtests.la
 
-streaming_fi_resmgmt_test_SOURCES = \
-	streaming/resmgmt_test.c
-streaming_fi_resmgmt_test_LDADD = libfabtests.la
+functional_fi_resmgmt_test_SOURCES = \
+	functional/resmgmt_test.c
+functional_fi_resmgmt_test_LDADD = libfabtests.la
 
-streaming_fi_rdm_atomic_SOURCES = \
-	streaming/rdm_atomic.c
-streaming_fi_rdm_atomic_LDADD = libfabtests.la
+functional_fi_rdm_atomic_SOURCES = \
+	functional/rdm_atomic.c
+functional_fi_rdm_atomic_LDADD = libfabtests.la
 
-streaming_fi_rdm_multi_recv_SOURCES = \
-	streaming/rdm_multi_recv.c
-streaming_fi_rdm_multi_recv_LDADD = libfabtests.la
+functional_fi_rdm_multi_recv_SOURCES = \
+	functional/rdm_multi_recv.c
+functional_fi_rdm_multi_recv_LDADD = libfabtests.la
 
 benchmarks_fi_msg_pingpong_SOURCES = \
 	benchmarks/msg_pingpong.c \
