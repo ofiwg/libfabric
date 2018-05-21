@@ -181,6 +181,12 @@ static void rxm_alter_info(const struct fi_info *hints, struct fi_info *info)
 				cur->caps &= ~FI_DIRECTED_RECV;
 			if (!(hints->caps & FI_SOURCE))
 				cur->caps &= ~FI_SOURCE;
+
+			if (!ofi_mr_local(hints)) {
+				cur->mode &= ~FI_LOCAL_MR;
+				cur->domain_attr->mr_mode &= ~FI_MR_LOCAL;
+			}
+
 			if (hints->ep_attr && hints->ep_attr->mem_tag_format &&
 			    (info->caps & FI_TAGGED)) {
 				FI_INFO(&rxm_prov, FI_LOG_CORE,
@@ -199,7 +205,7 @@ static int rxm_getinfo(uint32_t version, const char *node, const char *service,
 			uint64_t flags, const struct fi_info *hints,
 			struct fi_info **info)
 {
-	struct fi_info *cur, *dup;
+	struct fi_info *cur;
 	struct addrinfo *ai;
 	uint16_t port_save = 0;
 	int ret;
@@ -233,33 +239,6 @@ static int rxm_getinfo(uint32_t version, const char *node, const char *service,
 	}
 
 	rxm_alter_info(hints, *info);
-
-	/* If app supports FI_MR_LOCAL, prioritize requiring it for
-	 * better performance. */
-	if (hints && hints->domain_attr &&
-	    (OFI_CHECK_MR_LOCAL(hints))) {
-		for (cur = *info; cur; cur = cur->next) {
-			if (!OFI_CHECK_MR_LOCAL(cur))
-				continue;
-			dup = fi_dupinfo(cur);
-			if (!dup) {
-				fi_freeinfo(*info);
-				return -FI_ENOMEM;
-			} 
-
-			dup->mode &= ~FI_LOCAL_MR;
-			dup->domain_attr->mr_mode &= ~FI_MR_LOCAL;
-
-			dup->next = cur->next;
-			cur->next = dup;
-			cur = dup;
-		}
-	} else {
-		for (cur = *info; cur; cur = cur->next) {
-			cur->mode &= ~FI_LOCAL_MR;
-			cur->domain_attr->mr_mode &= ~FI_MR_LOCAL;
-		}
-	}
 	return 0;
 }
 

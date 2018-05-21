@@ -51,10 +51,23 @@
 
 /* FI_LOCAL_MR is valid in pre-libfaric-1.5 and can be valid in
  * post-libfabric-1.5 */
-#define OFI_CHECK_MR_LOCAL(info)						\
-	((info->domain_attr->mr_mode & FI_MR_LOCAL) ||				\
-	 (!(info->domain_attr->mr_mode & ~(FI_MR_BASIC | FI_MR_SCALABLE)) &&	\
-	  (info->mode & FI_LOCAL_MR)))
+static inline int ofi_mr_local(const struct fi_info *info)
+{
+	if (!info)
+		return 0;
+
+	if (!info->domain_attr)
+		goto check_local_mr;
+
+	if (info->domain_attr->mr_mode & FI_MR_LOCAL)
+		return 1;
+
+	if (info->domain_attr->mr_mode & ~(FI_MR_BASIC | FI_MR_SCALABLE))
+		return 0;
+
+check_local_mr:
+	return (info->mode & FI_LOCAL_MR) ? 1 : 0;
+}
 
 #define OFI_MR_MODE_RMA_TARGET (FI_MR_RAW | FI_MR_VIRT_ADDR |			\
 				 FI_MR_PROV_KEY | FI_MR_RMA_EVENT)
