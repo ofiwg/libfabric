@@ -33,11 +33,8 @@ bin_PROGRAMS = \
 	simple/fi_inj_complete \
 	simple/fi_resource_freeing \
 	streaming/fi_resmgmt_test \
-	streaming/fi_msg_rma \
 	streaming/fi_rdm_atomic \
 	streaming/fi_rdm_multi_recv \
-	streaming/fi_rdm_rma \
-	streaming/fi_msg_stream \
 	benchmarks/fi_msg_pingpong \
 	benchmarks/fi_msg_bw \
 	benchmarks/fi_rma_bw \
@@ -215,14 +212,6 @@ streaming_fi_resmgmt_test_SOURCES = \
 	streaming/resmgmt_test.c
 streaming_fi_resmgmt_test_LDADD = libfabtests.la
 
-streaming_fi_msg_rma_SOURCES = \
-	streaming/msg_rma.c
-streaming_fi_msg_rma_LDADD = libfabtests.la
-
-streaming_fi_msg_stream_SOURCES = \
-	streaming/msg.c
-streaming_fi_msg_stream_LDADD = libfabtests.la
-
 streaming_fi_rdm_atomic_SOURCES = \
 	streaming/rdm_atomic.c
 streaming_fi_rdm_atomic_LDADD = libfabtests.la
@@ -230,10 +219,6 @@ streaming_fi_rdm_atomic_LDADD = libfabtests.la
 streaming_fi_rdm_multi_recv_SOURCES = \
 	streaming/rdm_multi_recv.c
 streaming_fi_rdm_multi_recv_LDADD = libfabtests.la
-
-streaming_fi_rdm_rma_SOURCES = \
-	streaming/rdm_rma.c
-streaming_fi_rdm_rma_LDADD = libfabtests.la
 
 benchmarks_fi_msg_pingpong_SOURCES = \
 	benchmarks/msg_pingpong.c \

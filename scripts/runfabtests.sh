@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 #
-# Copyright (c) 2017, Intel Corporation.  All rights reserved.
+# Copyright (c) 2017-2018, Intel Corporation.  All rights reserved.
 # Copyright (c) 2016-2018, Cisco Systems, Inc. All rights reserved.
 # Copyright (c) 2016, Cray, Inc. All rights reserved.
 #
@@ -133,18 +133,11 @@ short_tests=(
 	"rma_bw -e rdm -o write -I 5"
 	"rma_bw -e rdm -o read -I 5"
 	"rma_bw -e rdm -o writedata -I 5"
-	"msg_rma -o write -I 5"
-	"msg_rma -o read -I 5"
-	"msg_rma -o writedata -I 5"
-	"msg_stream -I 5"
 	"rdm_atomic -I 5 -o all"
 	"rdm_cntr_pingpong -I 5"
 	"rdm_multi_recv -I 5"
 	"rdm_pingpong -I 5"
 	"rdm_pingpong -I 5 -v"
-	"rdm_rma -o write -I 5"
-	"rdm_rma -o read -I 5"
-	"rdm_rma -o writedata -I 5"
 	"rdm_tagged_pingpong -I 5"
 	"rdm_tagged_pingpong -I 5 -v"
 	"rdm_tagged_bw -I 5"
@@ -165,10 +158,6 @@ standard_tests=(
 	"rma_bw -e rdm -o write"
 	"rma_bw -e rdm -o read"
 	"rma_bw -e rdm -o writedata"
-	"msg_rma -o write"
-	"msg_rma -o read"
-	"msg_rma -o writedata"
-	"msg_stream"
 	"rdm_atomic -o all -I 1000"
 	"rdm_cntr_pingpong"
 	"rdm_multi_recv"
@@ -176,9 +165,6 @@ standard_tests=(
 	"rdm_pingpong -v"
 	"rdm_pingpong -k"
 	"rdm_pingpong -k -v"
-	"rdm_rma -o write"
-	"rdm_rma -o read"
-	"rdm_rma -o writedata"
 	"rdm_tagged_pingpong"
 	"rdm_tagged_pingpong -v"
 	"rdm_tagged_bw"
