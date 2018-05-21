@@ -942,12 +942,11 @@ void rxm_ep_handle_postponed_tx_op(struct rxm_ep *rxm_ep,
 				   struct rxm_tx_entry *tx_entry)
 {
 	ssize_t ret;
-	struct fi_cq_data_entry comp = { 0 };
 	size_t tx_size = rxm_pkt_size + tx_entry->tx_buf->pkt.hdr.size;
 
 	tx_entry->tx_buf->pkt.ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
 	FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
-	       "Send deffered TX request (len - %zd) for %p conn\n",
+	       "Send deferred TX request (len - %zd) for %p conn\n",
 	       tx_entry->tx_buf->pkt.hdr.size, rxm_conn);
 
 	if ((tx_size <= rxm_ep->msg_info->tx_attr->inject_size) &&
@@ -964,14 +963,20 @@ void rxm_ep_handle_postponed_tx_op(struct rxm_ep *rxm_ep,
 					 rxm_pkt_size + sizeof(*rma_iov) +
 					 sizeof(*rma_iov->iov) * tx_entry->count);
 		if (OFI_UNLIKELY(ret)) {
-			comp.op_context = tx_entry->context;
-			rxm_cq_write_error(rxm_ep->msg_cq, &comp, ret);
+			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+				"Unable to perform deferred large send operation\n");
+			rxm_cq_write_error(rxm_ep->util_ep.tx_cq,
+					   rxm_ep->util_ep.tx_cntr,
+					   tx_entry->context, (int)ret);
 		}
 	} else {
 		ret = rxm_ep_normal_send(rxm_ep, rxm_conn, tx_entry, tx_size);
 		if (OFI_UNLIKELY(ret)) {
-			comp.op_context = tx_entry->context;
-			rxm_cq_write_error(rxm_ep->msg_cq, &comp, ret);
+			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+				"Unable to perform deferred send operation\n");
+			rxm_cq_write_error(rxm_ep->util_ep.tx_cq,
+					   rxm_ep->util_ep.tx_cntr,
+					   tx_entry->context, (int)ret);
 		}
 	}
 }

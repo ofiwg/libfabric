@@ -91,10 +91,9 @@
 	       " (fi_addr: 0x%" PRIx64 " tag: 0x%" PRIx64 ")\n",\
 	       addr, tag)
 
-#define RXM_GET_PROTO_STATE(comp)			\
-	(*(enum rxm_proto_state *)			\
-	  ((unsigned char *)(comp)->op_context +	\
-		offsetof(struct rxm_buf, state)))
+#define RXM_GET_PROTO_STATE(context)					\
+	(*(enum rxm_proto_state *)					\
+	  ((unsigned char *)context + offsetof(struct rxm_buf, state)))
 
 #define RXM_SET_PROTO_STATE(comp, new_state)				\
 do {									\
@@ -447,8 +446,8 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 			  struct fid_ep **ep, void *context);
 
 struct util_cmap *rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep);
-ssize_t rxm_cq_write_error(struct fid_cq *msg_cq, struct fi_cq_data_entry *comp,
-			   ssize_t err);
+void rxm_cq_write_error(struct util_cq *cq, struct util_cntr *cntr,
+			void *op_context, int err);
 void rxm_ep_progress_one(struct util_ep *util_ep);
 void rxm_ep_progress_multi(struct util_ep *util_ep);
 

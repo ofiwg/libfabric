@@ -184,12 +184,9 @@ void rxm_ep_handle_postponed_rma_op(struct rxm_ep *rxm_ep,
 				    struct rxm_tx_entry *tx_entry)
 {
 	ssize_t ret;
-	struct util_cntr *cntr;
-	struct util_cq *cq;
-	struct fi_cq_err_entry err_entry;
 
 	FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
-	       "Perform deffered RMA operation (len - %zd) for %p conn\n",
+	       "Perform deferred RMA operation (len - %zd) for %p conn\n",
 	       tx_entry->rma_buf->pkt.hdr.size, rxm_conn);
 
 	if (tx_entry->comp_flags & FI_WRITE) {
@@ -200,35 +197,26 @@ void rxm_ep_handle_postponed_rma_op(struct rxm_ep *rxm_ep,
 				  &tx_entry->rma_buf->msg,
 				  flags);
 		if (OFI_UNLIKELY(ret)) {
-			cntr = rxm_ep->util_ep.wr_cntr;
-			cq = rxm_ep->util_ep.tx_cq;
-			goto err;
+			rxm_cq_write_error(rxm_ep->util_ep.tx_cq,
+					   rxm_ep->util_ep.wr_cntr,
+					   tx_entry->context, (int)ret);
+			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+				"Unable to perform deferred RMA write operation\n");
 		}
 	} else if (tx_entry->comp_flags & FI_READ) {
 		ret = fi_readmsg(rxm_conn->msg_ep,
 				 &tx_entry->rma_buf->msg,
 				 tx_entry->flags);
 		if (OFI_UNLIKELY(ret)) {
-			cntr = rxm_ep->util_ep.rd_cntr;
-			cq = rxm_ep->util_ep.tx_cq;
-			goto err;
+			rxm_cq_write_error(rxm_ep->util_ep.tx_cq,
+					   rxm_ep->util_ep.rd_cntr,
+					   tx_entry->context, (int)ret);
+			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+				"Unable to perform deferred RMA read operation\n");
 		}
 	} else {
 		assert(0);
 	}
-
-	return;
-err:
-	FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
-		"Unable to perform deffered RMA operation\n");
-
-	memset(&err_entry, 0, sizeof(err_entry));
-	err_entry.op_context = tx_entry->context;
-	err_entry.prov_errno = (int)ret;
-
-	rxm_cntr_incerr(cntr);
-	if (ofi_cq_write_error(cq, &err_entry))
-		assert(0);
 }
 
 static inline ssize_t
