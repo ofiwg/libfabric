@@ -33,6 +33,7 @@
 #ifndef _OFI_OSD_H_
 #define _OFI_OSD_H_
 
+#include <stdint.h>
 
 /* We use macros to create atomic and complex function definitions,
  * and we can't have spaces in function names */
@@ -75,5 +76,35 @@ typedef long double long_double;
 #define OFI_LIKELY(x)	(x)
 #define OFI_UNLIKELY(x)	(x)
 #endif
+
+enum {
+	OFI_ENDIAN_UNKNOWN,
+	OFI_ENDIAN_BIG,
+	OFI_ENDIAN_LITTLE,
+	OFI_ENDIAN_BIG_WORD,	/* Middle-endian, Honeywell 316 style */
+	OFI_ENDIAN_LITTLE_WORD,	/* Middle-endian, PDP-11 style */
+};
+
+static inline int ofi_detect_endianness(void)
+{
+	union {
+		uint8_t data[sizeof(uint32_t)];
+		uint32_t value;
+	} checker = {
+		.data = { 0x00, 0x01, 0x02, 0x03 },
+	};
+	switch (checker.value) {
+	case 0x00010203UL:
+		return OFI_ENDIAN_BIG;
+	case 0x03020100UL:
+		return OFI_ENDIAN_LITTLE;
+	case 0x02030001UL:
+		return OFI_ENDIAN_BIG_WORD;
+	case 0x01000302UL:
+		return OFI_ENDIAN_LITTLE_WORD;
+	default:
+		return OFI_ENDIAN_UNKNOWN;
+	}
+}
 
 #endif /* _OFI_OSD_H_ */
