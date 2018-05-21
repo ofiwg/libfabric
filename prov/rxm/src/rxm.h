@@ -136,6 +136,7 @@ struct rxm_mr {
 struct rxm_ep_wire_proto {
 	uint8_t	ctrl_version;
 	uint8_t	op_version;
+	uint8_t endianness;
 	uint8_t padding[6];
 	uint64_t eager_size;
 };
