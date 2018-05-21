@@ -78,7 +78,7 @@ neg_unit_tests=(
 	"msg g00n13s"
 )
 
-simple_tests=(
+functional_tests=(
 	"av_xfer -e rdm"
 	"av_xfer -e dgram"
 	"cm_data"
@@ -465,12 +465,12 @@ function main {
 	local complex_cfg="quick"
 
 	if [[ $1 == "quick" ]]; then
-		local -r tests="unit simple short"
+		local -r tests="unit functional short"
 	elif [[ $1 == "verify" ]]; then
 		local -r tests="complex"
 		complex_cfg=$1
 	else
-		local -r tests=$(echo $1 | sed 's/all/unit,simple,standard,complex/g' | tr ',' ' ')
+		local -r tests=$(echo $1 | sed 's/all/unit,functional,standard,complex/g' | tr ',' ' ')
 		if [[ $1 == "all" ]]; then
 			complex_cfg=$1
 		fi
@@ -498,8 +498,8 @@ function main {
 				done
 			fi
 		;;
-		simple)
-			for test in "${simple_tests[@]}"; do
+		functional)
+			for test in "${functional_tests[@]}"; do
 				cs_test "$test"
 			done
 		;;
@@ -556,7 +556,7 @@ function usage {
 	errcho -e " -v\tprint output of failing"
 	errcho -e " -vv\tprint output of failing/notrun"
 	errcho -e " -vvv\tprint output of failing/notrun/passing"
-	errcho -e " -t\ttest set(s): all,quick,unit,simple,standard,short,complex (default quick)"
+	errcho -e " -t\ttest set(s): all,quick,unit,functional,standard,short,complex (default quick)"
 	errcho -e " -e\texclude tests: comma delimited list of test names /
 			 regex patterns (with -R) e.g. \"dgram,rma.*write\""
 	errcho -e " -f\texclude tests file: File containing list of test names /
