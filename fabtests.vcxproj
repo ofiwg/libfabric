@@ -111,14 +111,14 @@
     <ClCompile Include="common\shared.c" />
     <ClCompile Include="common\windows\getopt.c" />
     <ClCompile Include="common\windows\osd.c" />
-    <ClCompile Include="complex\ft_comm.c" />
-    <ClCompile Include="complex\ft_comp.c" />
-    <ClCompile Include="complex\ft_config.c" />
-    <ClCompile Include="complex\ft_domain.c" />
-    <ClCompile Include="complex\ft_endpoint.c" />
-    <ClCompile Include="complex\ft_main.c" />
-    <ClCompile Include="complex\ft_msg.c" />
-    <ClCompile Include="complex\ft_test.c" />
+    <ClCompile Include="ubertest\connect.c" />
+    <ClCompile Include="ubertest\cq.c" />
+    <ClCompile Include="ubertest\config.c" />
+    <ClCompile Include="ubertest\domain.c" />
+    <ClCompile Include="ubertest\ep.c" />
+    <ClCompile Include="ubertest\uber.c" />
+    <ClCompile Include="ubertest\xfer.c" />
+    <ClCompile Include="ubertest\test_ctrl.c" />
     <ClCompile Include="simple\cq_data.c" />
     <ClCompile Include="simple\dgram.c" />
     <ClCompile Include="simple\dgram_waitset.c" />
@@ -146,7 +146,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="benchmarks\benchmark_shared.h" />
-    <ClInclude Include="complex\fabtest.h" />
+    <ClInclude Include="ubertest\fabtest.h" />
     <ClInclude Include="include\ft_osd.h" />
     <ClInclude Include="include\jsmn.h" />
     <ClInclude Include="include\shared.h" />
@@ -163,10 +163,10 @@
     <ClInclude Include="include\windows\unistd.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="complex\test_configs\eq_cq.json" />
-    <None Include="complex\test_configs\lat_bw.json" />
-    <None Include="complex\test_configs\sockets.json" />
-    <None Include="complex\test_configs\verbs.json" />
+    <None Include="test_configs\eq_cq.json" />
+    <None Include="test_configs\lat_bw.json" />
+    <None Include="test_configs\sockets.json" />
+    <None Include="test_configs\verbs.json" />
     <None Include="Makefile.win" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
