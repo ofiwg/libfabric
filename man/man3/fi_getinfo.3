@@ -1,4 +1,4 @@
-.TH "fi_getinfo" "3" "2018\-03\-16" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_getinfo" "3" "2018\-05\-22" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_getinfo, fi_freeinfo \- Obtain / free fabric interface information
@@ -585,6 +585,17 @@ when this mode bit is enabled.
 will only share completion queues and counters among endpoints, transmit
 contexts, and receive contexts that have the same set of capability
 flags.
+.PP
+\f[I]FI_BUFFERED_RECV\f[] : The buffered receive mode bit indicates that
+the provider owns the data buffer(s) that are accessed by the networking
+layer for received messages.
+Typically, this implies that data must be copied from the provider
+buffer into the application buffer.
+Applications that can handle message processing from network allocated
+data buffers can set this mode bit to avoid copies.
+For full details on application requirements to support this mode, see
+the \[aq]Buffered Receives\[aq] section in \f[C]fi_msg\f[](3).
+This mode bit applies to FI_MSG and FI_TAGGED receive operations.
 .SH ADDRESSING FORMATS
 .PP
 Multiple fabric interfaces take as input either a source or destination
