@@ -109,6 +109,13 @@ static void rxm_conn_close(struct util_cmap_handle *handle)
 static void rxm_conn_free(struct util_cmap_handle *handle)
 {
 	struct rxm_conn *rxm_conn = container_of(handle, struct rxm_conn, handle);
+
+	/* This handles case when saved_msg_ep wasn't closed */
+	if (rxm_conn->saved_msg_ep) {
+		if (fi_close(&rxm_conn->saved_msg_ep->fid))
+			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to close saved msg_ep\n");
+	}
+
 	if (!rxm_conn->msg_ep)
 		return;
 
