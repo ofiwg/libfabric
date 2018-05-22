@@ -618,14 +618,10 @@ int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
 	return 0;
 }
 
-int ofi_check_ep_attr(const struct util_prov *util_prov, uint32_t api_version,
-		      const struct fi_info *prov_info,
-		      const struct fi_info *user_info)
+static int ofi_check_ep_type(const struct fi_provider *prov,
+			     const struct fi_ep_attr *prov_attr,
+			     const struct fi_ep_attr *user_attr)
 {
-	const struct fi_ep_attr *prov_attr = prov_info->ep_attr;
-	const struct fi_ep_attr *user_attr = user_info->ep_attr;
-	const struct fi_provider *prov = util_prov->prov;
-
 	if ((user_attr->type != FI_EP_UNSPEC) &&
 	    (prov_attr->type != FI_EP_UNSPEC) &&
 	    (user_attr->type != prov_attr->type)) {
@@ -633,6 +629,21 @@ int ofi_check_ep_attr(const struct util_prov *util_prov, uint32_t api_version,
 		FI_INFO_CHECK(prov, prov_attr, user_attr, type, FI_TYPE_EP_TYPE);
 		return -FI_ENODATA;
 	}
+	return 0;
+}
+
+int ofi_check_ep_attr(const struct util_prov *util_prov, uint32_t api_version,
+		      const struct fi_info *prov_info,
+		      const struct fi_info *user_info)
+{
+	const struct fi_ep_attr *prov_attr = prov_info->ep_attr;
+	const struct fi_ep_attr *user_attr = user_info->ep_attr;
+	const struct fi_provider *prov = util_prov->prov;
+	int ret;
+
+	ret = ofi_check_ep_type(prov, prov_attr, user_attr);
+	if (ret)
+		return ret;
 
 	if ((user_attr->protocol != FI_PROTO_UNSPEC) &&
 	    (user_attr->protocol != prov_attr->protocol)) {
@@ -972,6 +983,15 @@ int ofi_check_info(const struct util_prov *util_prov,
 
 	if (!user_info)
 		return 0;
+
+	/* Check oft-used endpoint type attribute first to avoid any other
+	 * unnecessary check */
+	if (user_info->ep_attr) {
+		ret = ofi_check_ep_type(prov, prov_info->ep_attr,
+					user_info->ep_attr);
+		if (ret)
+			return ret;
+	}
 
 	if (user_info->caps & ~(prov_info->caps)) {
 		FI_INFO(prov, FI_LOG_CORE, "Unsupported capabilities\n");
