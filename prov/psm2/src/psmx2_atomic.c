@@ -877,7 +877,7 @@ ssize_t psmx2_atomic_write_generic(struct fid_ep *ep,
 	psm2_am_request_short(psm2_epaddr,
 			      PSMX2_AM_ATOMIC_HANDLER, args, 5,
 			      (void *)buf, len, am_flags, NULL, NULL);
-
+	psmx2_am_poll(ep_priv->tx);
 	return 0;
 }
 
@@ -996,7 +996,7 @@ ssize_t psmx2_atomic_writev_generic(struct fid_ep *ep,
 	psm2_am_request_short(psm2_epaddr,
 			      PSMX2_AM_ATOMIC_HANDLER, args, 5,
 			      (void *)buf, len, am_flags, NULL, NULL);
-
+	psmx2_am_poll(ep_priv->tx);
 	return 0;
 }
 
@@ -1189,7 +1189,7 @@ ssize_t psmx2_atomic_readwrite_generic(struct fid_ep *ep,
 	psm2_am_request_short(psm2_epaddr,
 			      PSMX2_AM_ATOMIC_HANDLER, args, 5,
 			      (void *)buf, (buf?len:0), am_flags, NULL, NULL);
-
+	psmx2_am_poll(ep_priv->tx);
 	return 0;
 }
 
@@ -1372,7 +1372,7 @@ ssize_t psmx2_atomic_readwritev_generic(struct fid_ep *ep,
 	psm2_am_request_short(psm2_epaddr,
 			      PSMX2_AM_ATOMIC_HANDLER, args, 5,
 			      (void *)buf, (buf?len:0), am_flags, NULL, NULL);
-
+	psmx2_am_poll(ep_priv->tx);
 	return 0;
 }
 
@@ -1588,7 +1588,7 @@ ssize_t psmx2_atomic_compwrite_generic(struct fid_ep *ep,
 			      PSMX2_AM_ATOMIC_HANDLER, args, 5,
 			      (void *)buf, len * 2, am_flags,
 			      NULL, NULL);
-
+	psmx2_am_poll(ep_priv->tx);
 	return 0;
 }
 
@@ -1796,7 +1796,7 @@ ssize_t psmx2_atomic_compwritev_generic(struct fid_ep *ep,
 	psm2_am_request_short(psm2_epaddr,
 			      PSMX2_AM_ATOMIC_HANDLER, args, 5,
 			      buf, len * 2, am_flags, NULL, NULL);
-
+	psmx2_am_poll(ep_priv->tx);
 	return 0;
 }
 
