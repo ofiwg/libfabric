@@ -1,4 +1,4 @@
-.TH "fi_endpoint" "3" "2018\-03\-23" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_endpoint" "3" "2018\-05\-22" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_endpoint \- Fabric endpoint operations
@@ -553,12 +553,9 @@ maximum size of the data that may be present as part of a connection
 request event.
 This option is read only.
 .IP \[bu] 2
-\f[I]FI_OPT_VARIABLE_THRESHOLD \- size_t\f[] : Defines the minimum size
-for variable length messages.
-Transfers equal to FI_OPT_VARIABLE_THRESHOLD size or smaller are handled
-as standard message transfers.
-Message transfers larger than the threshold are handled by the provider
-as variable length transfers.
+\f[I]FI_OPT_BUFFERED_LIMIT \- size_t\f[] : Defines the maximum size of a
+buffered message that will be reported to users as part of a receive
+completion when the FI_BUFFERED_RECV mode is enabled on an endpoint.
 .PP
 fi_getopt() will return the currently configured threshold, or the
 provider\[aq]s default threshold if one has not be set by the
