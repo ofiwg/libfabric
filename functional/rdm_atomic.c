@@ -451,7 +451,7 @@ static int init_fabric(void)
 	if (ret)
 		return ret;
 
-	ret = ft_init_ep();
+	ret = ft_enable_ep_recv();
 	if (ret)
 		return ret;
 

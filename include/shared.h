@@ -335,11 +335,10 @@ int ft_connect_ep(struct fid_ep *ep,
 		struct fid_eq *eq, fi_addr_t *remote_addr);
 int ft_alloc_ep_res(struct fi_info *fi);
 int ft_alloc_active_res(struct fi_info *fi);
-int ft_init_ep(void);
-int ft_setup_ep(struct fid_ep *ep, struct fid_eq *eq,
-		struct fid_av *av, struct fid_cq *txcq,
-		struct fid_cq *rxcq, struct fid_cntr *txcntr,
-		struct fid_cntr *rxcntr, bool post_initial_recv);
+int ft_enable_ep_recv(void);
+int ft_enable_ep(struct fid_ep *ep, struct fid_eq *eq, struct fid_av *av,
+		 struct fid_cq *txcq, struct fid_cq *rxcq,
+		 struct fid_cntr *txcntr, struct fid_cntr *rxcntr);
 int ft_init_alias_ep(uint64_t flags);
 int ft_av_insert(struct fid_av *av, void *addr, size_t count, fi_addr_t *fi_addr,
 		uint64_t flags, void *context);

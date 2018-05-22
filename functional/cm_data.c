@@ -102,7 +102,7 @@ static int client_setup(void)
 	if (ret)
 		return ret;
 
-	ret = ft_init_ep();
+	ret = ft_enable_ep_recv();
 	if (ret)
 		return ret;
 
@@ -179,7 +179,7 @@ static int server_accept(size_t paramlen)
 		goto err;
 	}
 
-	ret = ft_init_ep();
+	ret = ft_enable_ep_recv();
 	if (ret) {
 		FT_PRINTERR("init_ep", ret);
 		goto err;
@@ -263,7 +263,7 @@ static int client_open_new_ep()
 		return ret;
 	}
 
-	ret = ft_init_ep();
+	ret = ft_enable_ep_recv();
 	if (ret)
 		return ret;
 
