@@ -288,6 +288,89 @@ fi_sendmsg.
   be used in all multicast transfers, in conjunction with a multicast
   fi_addr_t.
 
+# Buffered Receives
+
+Buffered receives indicate that the networking layer allocates and
+manages the data buffers used to receive network data transfers.  As
+a result, received messages must be copied from the network buffers
+into application buffers for processing.  However, applications can
+avoid this copy if they are able to process the message in place
+(directly from the networking buffers).
+
+Handling buffered receives differs based on the size of the message
+being sent.  In general, smaller messages are passed directly to the
+application for processing.  However, for large messages, an application
+will only receive the start of the message and must claim the rest.
+The details for how small messages are reported and large messages may
+be claimed are described below.
+
+When a provider receives a message, it will write an entry to the completion
+queue associated with the receiving endpoint.  For discussion purposes,
+the completion queue is assumed to be configured for FI_CQ_FORMAT_DATA.
+Since buffered receives are not associated with application posted buffers,
+the CQ entry op_context will point to a struct fi_recv_context.
+
+{% highlight c %}
+struct fi_recv_context {
+	struct fid_ep *ep;
+	void *context;
+};
+{% endhighlight %}
+
+The 'ep' field will point to the receiving endpoint or Rx context, and
+'context' will be NULL.  The CQ entry's 'buf' will point to a provider
+managed buffer where the start of the received message is located, and
+'len' will be set to the total size of the message.
+
+The maximum sized message that a provider can buffer is limited by
+an FI_OPT_BUFFERED_LIMIT.  This threshold can be obtained and may be adjusted
+by the application using the fi_getopt and fi_setopt calls, respectively.
+Any adjustments must be made prior to enabling the endpoint. The
+CQ entry 'buf' will point to a buffer that is the _minimum_ of 'len' and
+the FI_OPT_BUFFERED_LIMIT value.  If the sent message is larger than the
+buffered limit, the CQ entry 'flags' will have the FI_MORE bit set.
+
+After being notified that a buffered receive has arrived,
+applications must either claim or discard the message.  Typically,
+small messages are processed and discarded, while large messages
+are claimed.  However, an application is free to claim or discard any
+message regardless of message size.
+
+To claim a message, an application must post a receive operation with the
+FI_CLAIM flag set.  The struct fi_recv_context returned as part of the
+notification must be provided as the receive operation's context.  The
+struct fi_recv_context contains a 'context' field.  Applications may
+modify this field prior to claiming the message.  When the claim
+operation completes, a standard receive completion entry will be
+generated on the completion queue.  The 'context' of the associated
+CQ entry will be set to the 'context' value passed in through
+the fi_recv_context structure, and the CQ entry flags will have the
+FI_CLAIM bit set.
+
+Buffered receives that are not claimed must be discarded by the application
+when it is done processing the CQ entry data.  To discard a message, an
+application must post a receive operation with the FI_DISCARD flag set.
+The struct fi_recv_context returned as part of the notification must be
+provided as the receive operation's context. When the FI_DISCARD flag is set
+for a receive operation, the receive input buffer(s) and length parameters
+are ignored.
+
+IMPORTANT: Buffered receives must be claimed or discarded in a timely manner.
+Failure to do so may result in increased memory usage for network buffering
+or communication stalls.  Once a buffered receive has been claimed or
+discarded, the original CQ entry 'buf' or struct fi_recv_context data may no
+longer be accessed by the application.
+
+The use of the FI_CLAIM and FI_DISCARD operation flags is also
+described with respect to tagged message transfers in fi_tagged.3.
+Buffered receives of tagged messages will include the message tag as part
+of the CQ entry, if available.
+
+The handling of buffered receives follows all message ordering
+restrictions assigned to and endpoint.  For example, completions
+may indicate the order in which received messages arrived at the
+receiver based on the endpoint attributes.
+
 # Variable Length Messages
 
 Variable length messages, or simply variable messages, are transfers
@@ -296,74 +379,21 @@ message being sent.  It indicates that the recipient of a message does
 not know the amount of data to expect prior to the message arriving.
 It is most commonly used when the size of message transfers varies
 greatly, with very large messages interspersed with much smaller
-messages.  Variable messages are not subject to max message length
+messages, making receive side message buffering difficult to manage.
+Variable messages are not subject to max message length
 restrictions (i.e. struct fi_ep_attr::max_msg_size limits), and may
 be up to the maximum value of size_t (e.g. SIZE_MAX) in length.
 
-Variable messages are associated with a variable message threshold.
-The variable threshold indicates the size above which a transfer
-becomes a variable message.  The completion mechanism of variable
-messages differ from standard receive completions; however,
-completions at the sender remain unchanged.  Messages smaller than the
-threshold are treated as standard messages (or tagged messages if
-using the fi_tagged.3 operations).  That is, they consume posted
-application receive buffers and generate standard completions, including
-generating any possible errors that may arise.  The variable message
-threshold is configurable per endpoint, subject to provider limitations.
-Under most conditions, the threshold limit must be the same at both the
-sending and receiving endpoints, and must be configured prior to
-enabling the endpoint.
-
-When a variable message is ready to be received, a notification is
-generated on the associated receive completion queue.  Such
-completions will have the FI_VARIABLE_MSG flag set as part of the CQ
-entry.  The entry will report the length of the message to the receiver.
-Since variable message notifications are not directly associated with
-an application's posted receive operation, the CQ entry's op_context
-field will point to a struct fi_var_context.
-
-{% highlight c %}
-struct fi_var_context {
-	void *op_context;
-};
-{% endhighlight %}
-
-After being notified that a variable message is ready to be received,
-applications should either claim or discard the message.  To claim a
-message, an application must post a receive operation with the
-FI_CLAIM flag set.  The struct fi_var_context returned as part of the
-notification must be provided as the receive operation's context.  The
-struct fi_var_context contains an op_context field.  Applications may
-modify this field prior to claiming the message.  When the claim
-operation completes, a standard receive completion entry will be
-generated on the completion queue.  The op_context of the associated
-CQ entry will be set to the op_context value passed in through
-the fi_var_context structure.
-
-Applications that do not wish to receive a variable message that they
-were notified of may discard it.  To discard a message, an application
-must post a receive operation with the FI_DISCARD flag set.  The
-receive context should be the struct fi_var_context from the
-notification.  When the FI_DISCARD flag is set, the receive input
-buffer(s) and length parameters are ignored.
-
-The use of the FI_CLAIM and FI_DISCARD operation flags is also
-described with respect to tagged message transfers in fi_tagged.3.
-Variable length tagged messages will include the message tag as part
-of the message notification.
+Variable length messages support requests that the provider allocate and
+manage the network message buffers.  As a result, the application
+requirements and provider behavior is identical as those defined
+for supporting the FI_BUFFERED_RECV mode bit.  See the Buffered
+Receive section above for details.  The main difference is that buffered
+receives are limited by the fi_ep_attr::max_msg_size threshold, whereas
+variable length messages are not.
 
 Support for variable messages is indicated through the FI_VARIABLE_MSG
-capability bit.  Additionally, the variable length message threshold
-may be obtained and/or adjusted using an endpoint's
-fi_getopt/fi_setopt operations.
-
-The handling of variable message headers follows all message ordering
-restrictions assigned to and endpoint.  For example, completions
-may indicate the order in which variable messages arrived at the
-receiver.  However, the transfer of variable message data should be
-treated as conceptually occurring out of band.  No ordering within or
-between the data of variable messages is implied.
-
+capability bit.
 
 # NOTES
 

@@ -513,12 +513,11 @@ The following option levels and option names and parameters are defined.
   the maximum size of the data that may be present as part of a connection
   request event. This option is read only.
 
-- *FI_OPT_VARIABLE_THRESHOLD - size_t*
-: Defines the minimum size for variable length messages.  Transfers
-  equal to FI_OPT_VARIABLE_THRESHOLD size or smaller are handled as
-  standard message transfers.  Message transfers larger than the
-  threshold are handled by the provider as variable length transfers.
-
+- *FI_OPT_BUFFERED_LIMIT - size_t*
+: Defines the maximum size of a buffered message that will be reported
+  to users as part of a receive completion when the FI_BUFFERED_RECV mode
+  is enabled on an endpoint.
+  
   fi_getopt() will return the currently configured threshold, or the
   provider's default threshold if one has not be set by the application.
   fi_setopt() allows an application to configure the threshold.  If the
