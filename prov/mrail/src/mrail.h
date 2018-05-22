@@ -57,6 +57,9 @@
 
 #define MRAIL_MAX_INFO 100
 
+#define MRAIL_PASSTHROUGH_MODES		0
+#define MRAIL_PASSTHROUGH_MR_MODES	(FI_MR_LOCAL | OFI_MR_BASIC_MAP)
+
 extern struct fi_info mrail_info;
 extern struct fi_provider mrail_prov;
 extern struct util_prov mrail_util_prov;
