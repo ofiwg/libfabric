@@ -506,6 +506,7 @@ struct psmx2_trx_ctxt {
 	psm2_mq_t		psm2_mq;
 	int			am_initialized;
 	int			am_progress;
+	int			am_poll_count;
 	int			id;
 	int			usage_flags;
 	struct psm2_am_parameters psm2_am_param;
@@ -1072,6 +1073,21 @@ static inline void psmx2_progress_all(struct psmx2_fid_domain *domain)
 		psmx2_progress(trx_ctxt);
 	}
 	psmx2_unlock(&domain->trx_ctxt_lock, 1);
+}
+
+/*
+ * There is a limitation in PSM2 AM implementation that can cause significant
+ * delay if too many AM requests are enqueued in a row without progress calls
+ * being made in between. As a workaround, call this function after each AM
+ * request is enqueued whenever possible.
+ */
+#define PSMX2_AM_POLL_INTERVAL	64
+static inline void psmx2_am_poll(struct psmx2_trx_ctxt *trx_ctxt)
+{
+	if (OFI_UNLIKELY(++trx_ctxt->am_poll_count > PSMX2_AM_POLL_INTERVAL)) {
+		trx_ctxt->am_poll_count = 0;
+		psm2_poll(trx_ctxt->psm2_ep);
+	}
 }
 
 #ifdef __cplusplus
