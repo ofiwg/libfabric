@@ -158,6 +158,7 @@ typedef struct fid *fid_t;
 #define FI_AFFINITY		(1ULL << 29)
 #define FI_COMMIT_COMPLETE	(1ULL << 30)
 
+#define FI_VARIABLE_MSG		(1ULL << 48)
 #define FI_RMA_PMEM		(1ULL << 49)
 #define FI_SOURCE_ERR		(1ULL << 50)
 #define FI_LOCAL_COMM		(1ULL << 51)
@@ -169,6 +170,11 @@ typedef struct fid *fid_t;
 #define FI_SOURCE		(1ULL << 57)
 #define FI_NAMED_RX_CTX		(1ULL << 58)
 #define FI_DIRECTED_RECV	(1ULL << 59)
+
+
+/* Tagged messages, buffered receives, CQ flags */
+#define FI_CLAIM		(1ULL << 59)
+#define FI_DISCARD		(1ULL << 58)
 
 
 struct fi_ioc {
@@ -301,6 +307,7 @@ enum {
 #define FI_NOTIFY_FLAGS_ONLY	(1ULL << 54)
 #define FI_RESTRICTED_COMP	(1ULL << 53)
 #define FI_CONTEXT2		(1ULL << 52)
+#define FI_BUFFERED_RECV	(1ULL << 51)
 
 struct fi_tx_attr {
 	uint64_t		caps;
@@ -599,6 +606,11 @@ struct fi_context2 {
 	void			*internal[8];
 };
 #endif
+
+struct fi_recv_context {
+	struct fid_ep		*ep;
+	void			*context;
+};
 
 #ifdef __cplusplus
 }

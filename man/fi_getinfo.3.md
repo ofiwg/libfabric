@@ -555,6 +555,17 @@ supported set of modes will be returned in the info structure(s).
   and counters among endpoints, transmit contexts, and receive contexts that
   have the same set of capability flags.
 
+*FI_BUFFERED_RECV*
+: The buffered receive mode bit indicates that the provider owns the
+  data buffer(s) that are accessed by the networking layer for received
+  messages.  Typically, this implies that data must be copied from the
+  provider buffer into the application buffer.  Applications that can
+  handle message processing from network allocated data buffers can set
+  this mode bit to avoid copies.  For full details on application
+  requirements to support this mode, see the 'Buffered Receives' section
+  in `fi_msg`(3).  This mode bit applies to FI_MSG and FI_TAGGED receive
+  operations.
+
 # ADDRESSING FORMATS
 
 Multiple fabric interfaces take as input either a source or

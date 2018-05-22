@@ -96,20 +96,9 @@ static void strcatf(char *dest, const char *fmt, ...)
 	va_end (arglist);
 }
 
-static void fi_tostr_flags(char *buf, uint64_t flags)
+static void fi_tostr_opflags(char *buf, uint64_t flags)
 {
-	IFFLAGSTR(flags, FI_MSG);
-	IFFLAGSTR(flags, FI_RMA);
-	IFFLAGSTR(flags, FI_TAGGED);
-	IFFLAGSTR(flags, FI_ATOMIC);
 	IFFLAGSTR(flags, FI_MULTICAST);
-
-	IFFLAGSTR(flags, FI_READ);
-	IFFLAGSTR(flags, FI_WRITE);
-	IFFLAGSTR(flags, FI_RECV);
-	IFFLAGSTR(flags, FI_SEND);
-	IFFLAGSTR(flags, FI_REMOTE_READ);
-	IFFLAGSTR(flags, FI_REMOTE_WRITE);
 
 	IFFLAGSTR(flags, FI_MULTI_RECV);
 	IFFLAGSTR(flags, FI_REMOTE_CQ_DATA);
@@ -125,7 +114,8 @@ static void fi_tostr_flags(char *buf, uint64_t flags)
 	IFFLAGSTR(flags, FI_DELIVERY_COMPLETE);
 	IFFLAGSTR(flags, FI_AFFINITY);
 
-	IFFLAGSTR(flags, FI_RMA_PMEM);
+	IFFLAGSTR(flags, FI_CLAIM);
+	IFFLAGSTR(flags, FI_DISCARD);
 
 	fi_remove_comma(buf);
 }
@@ -200,17 +190,34 @@ static void fi_tostr_order(char *buf, uint64_t flags)
 
 static void fi_tostr_caps(char *buf, uint64_t caps)
 {
+	IFFLAGSTR(caps, FI_MSG);
+	IFFLAGSTR(caps, FI_RMA);
+	IFFLAGSTR(caps, FI_TAGGED);
+	IFFLAGSTR(caps, FI_ATOMIC);
+	IFFLAGSTR(caps, FI_MULTICAST);
+
+	IFFLAGSTR(caps, FI_READ);
+	IFFLAGSTR(caps, FI_WRITE);
+	IFFLAGSTR(caps, FI_RECV);
+	IFFLAGSTR(caps, FI_SEND);
+	IFFLAGSTR(caps, FI_REMOTE_READ);
+	IFFLAGSTR(caps, FI_REMOTE_WRITE);
+
+	IFFLAGSTR(caps, FI_MULTI_RECV);
+	IFFLAGSTR(caps, FI_REMOTE_CQ_DATA);
+	IFFLAGSTR(caps, FI_TRIGGER);
+	IFFLAGSTR(caps, FI_FENCE);
+
+	IFFLAGSTR(caps, FI_VARIABLE_MSG);
 	IFFLAGSTR(caps, FI_RMA_PMEM);
 	IFFLAGSTR(caps, FI_SOURCE_ERR);
 	IFFLAGSTR(caps, FI_LOCAL_COMM);
 	IFFLAGSTR(caps, FI_REMOTE_COMM);
 	IFFLAGSTR(caps, FI_SHARED_AV);
-	IFFLAGSTR(caps, FI_NUMERICHOST);
 	IFFLAGSTR(caps, FI_RMA_EVENT);
 	IFFLAGSTR(caps, FI_SOURCE);
 	IFFLAGSTR(caps, FI_NAMED_RX_CTX);
 	IFFLAGSTR(caps, FI_DIRECTED_RECV);
-	fi_tostr_flags(buf, caps);
 
 	fi_remove_comma(buf);
 }
@@ -268,6 +275,7 @@ static void fi_tostr_mode(char *buf, uint64_t mode)
 	IFFLAGSTR(mode, FI_NOTIFY_FLAGS_ONLY);
 	IFFLAGSTR(mode, FI_RESTRICTED_COMP);
 	IFFLAGSTR(mode, FI_CONTEXT2);
+	IFFLAGSTR(mode, FI_BUFFERED_RECV);
 
 	fi_remove_comma(buf);
 }
@@ -306,7 +314,7 @@ static void fi_tostr_tx_attr(char *buf, const struct fi_tx_attr *attr,
 	strcatf(buf, " ]\n");
 
 	strcatf(buf, "%s%sop_flags: [ ", prefix, TAB);
-	fi_tostr_flags(buf, attr->op_flags);
+	fi_tostr_opflags(buf, attr->op_flags);
 	strcatf(buf, " ]\n");
 
 	strcatf(buf, "%s%smsg_order: [ ", prefix, TAB);
@@ -341,7 +349,7 @@ static void fi_tostr_rx_attr(char *buf, const struct fi_rx_attr *attr,
 	strcatf(buf, " ]\n");
 
 	strcatf(buf, "%s%sop_flags: [ ", prefix, TAB);
-	fi_tostr_flags(buf, attr->op_flags);
+	fi_tostr_opflags(buf, attr->op_flags);
 	strcatf(buf, " ]\n");
 
 	strcatf(buf, "%s%smsg_order: [ ", prefix, TAB);
@@ -638,6 +646,8 @@ static void fi_tostr_cq_event_flags(char *buf, uint64_t flags)
 	IFFLAGSTR(flags, FI_REMOTE_WRITE);
 	IFFLAGSTR(flags, FI_REMOTE_CQ_DATA);
 	IFFLAGSTR(flags, FI_MULTI_RECV);
+	IFFLAGSTR(flags, FI_MORE);
+	IFFLAGSTR(flags, FI_CLAIM);
 	fi_remove_comma(buf);
 }
 
@@ -674,7 +684,7 @@ char *DEFAULT_SYMVER_PRE(fi_tostr)(const void *data, enum fi_type datatype)
 		fi_tostr_caps(buf, *val64);
 		break;
 	case FI_TYPE_OP_FLAGS:
-		fi_tostr_flags(buf, *val64);
+		fi_tostr_opflags(buf, *val64);
 		break;
 	case FI_TYPE_ADDR_FORMAT:
 		fi_tostr_addr_format(buf, *val32);
