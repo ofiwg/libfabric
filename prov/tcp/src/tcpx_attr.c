@@ -35,8 +35,8 @@
 #define TCPX_DOMAIN_CAPS FI_LOCAL_COMM | FI_REMOTE_COMM
 
 #define TCPX_MSG_ORDER (FI_ORDER_RAR | FI_ORDER_RAW | FI_ORDER_RAS |	\
-			FI_ORDER_WAR | FI_ORDER_WAW | FI_ORDER_WAS |	\
-			FI_ORDER_SAR | FI_ORDER_SAW | FI_ORDER_SAS)
+			FI_ORDER_WAW | FI_ORDER_WAS |	\
+			FI_ORDER_SAW | FI_ORDER_SAS)
 
 static struct fi_tx_attr tcpx_tx_attr = {
 	.caps = FI_MSG | FI_SEND,
@@ -63,7 +63,9 @@ static struct fi_ep_attr tcpx_ep_attr = {
 	.protocol_version = 0,
 	.max_msg_size = SIZE_MAX,
 	.tx_ctx_cnt = 1,
-	.rx_ctx_cnt = 1
+	.rx_ctx_cnt = 1,
+	.max_order_raw_size = SIZE_MAX,
+	.max_order_waw_size = SIZE_MAX,
 };
 
 static struct fi_domain_attr tcpx_domain_attr = {
