@@ -32,4 +32,4 @@ before_test:
 
 test_script:
   - set PATH=%CD%\x64\%CONFIGURATION%;%PATH%
-  - scripts\runfabtests.cmd
+  - scripts\runfabtests.cmd sockets
