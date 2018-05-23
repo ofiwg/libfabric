@@ -136,10 +136,6 @@ static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 			tx_buf->type = pool->type;
 			tx_buf->pkt.ctrl_hdr.version = RXM_CTRL_VERSION;
 			tx_buf->pkt.hdr.version = OFI_OP_VERSION;
-			if (rxm_ep_tx_flags(pool->rxm_ep) & FI_TRANSMIT_COMPLETE)
-				tx_buf->pkt.hdr.flags |= OFI_TRANSMIT_COMPLETE;
-			if (rxm_ep_tx_flags(pool->rxm_ep) & FI_DELIVERY_COMPLETE)
-				tx_buf->pkt.hdr.flags |= OFI_DELIVERY_COMPLETE;
 			tx_buf->hdr.desc = mr_desc;
 
 			switch (pool->type) {
@@ -775,7 +771,7 @@ rxm_ep_format_tx_res_lightweight(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_con
 	(*tx_buf)->pkt.hdr.tag = tag;
 
 	if (flags & FI_REMOTE_CQ_DATA) {
-		(*tx_buf)->pkt.hdr.flags = OFI_REMOTE_CQ_DATA;
+		(*tx_buf)->pkt.hdr.flags = FI_REMOTE_CQ_DATA;
 		(*tx_buf)->pkt.hdr.data = data;
 	}
 
@@ -1022,9 +1018,7 @@ rxm_ep_inject_common(struct rxm_ep *rxm_ep, const void *buf, size_t len,
 		     uint64_t tag, uint64_t comp_flags,
 		     struct rxm_buf_pool *pool)
 {
-	struct util_cmap_handle *handle;
 	struct rxm_conn *rxm_conn;
-	struct rxm_tx_entry *tx_entry = NULL;
 	struct rxm_tx_buf *tx_buf;
 	size_t pkt_size = rxm_pkt_size + len;
 	ssize_t ret;
@@ -1032,18 +1026,17 @@ rxm_ep_inject_common(struct rxm_ep *rxm_ep, const void *buf, size_t len,
 	assert(len <= rxm_ep->rxm_info->tx_attr->inject_size);
 
 	fastlock_acquire(&rxm_ep->util_ep.cmap->lock);
-	handle = ofi_cmap_acquire_handle(rxm_ep->util_ep.cmap, dest_addr);
-	if (OFI_UNLIKELY(!handle || handle->state != CMAP_CONNECTED)) {
+	rxm_conn = rxm_acquire_conn(rxm_ep, dest_addr);
+	if (OFI_UNLIKELY(rxm_conn->handle.state != CMAP_CONNECTED)) {
 		struct iovec iov = {
 			.iov_base = (void *)buf,
 			.iov_len = len,
 		};
-		ret = rxm_ep_handle_unconnected(rxm_ep, &handle, dest_addr);
+		ret = rxm_ep_handle_unconnected(rxm_ep, &rxm_conn->handle, dest_addr);
 		if (!ret)
 			goto inject_continue;
 		else if (OFI_UNLIKELY(ret != -FI_EAGAIN))
 			goto cmap_err;
-		rxm_conn = container_of(handle, struct rxm_conn, handle);
 		ret = rxm_ep_postpone_send(rxm_ep, rxm_conn, NULL, 1,
 					   &iov, NULL, len, data, flags,
 					   tag, comp_flags, pool, 0);
@@ -1053,7 +1046,6 @@ cmap_err:
 	}
 inject_continue:
 	fastlock_release(&rxm_ep->util_ep.cmap->lock);
-	rxm_conn = container_of(handle, struct rxm_conn, handle);
 
 	assert(dlist_empty(&rxm_conn->postponed_tx_list));
 
@@ -1066,6 +1058,8 @@ inject_continue:
 		memcpy(tx_buf->pkt.data, buf, tx_buf->pkt.hdr.size);
 		return rxm_ep_inject_send(rxm_ep, rxm_conn, tx_buf, pkt_size);
 	} else {
+		struct rxm_tx_entry *tx_entry;
+
 		FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "passed data (size = %zu) "
 		       "is too big for MSG provider (max inject size = %zd)\n",
 		       pkt_size, rxm_ep->msg_info->tx_attr->inject_size);
@@ -1087,7 +1081,6 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 		   uint64_t flags, uint64_t tag, uint64_t comp_flags,
 		   struct rxm_buf_pool *pool, uint8_t op)
 {
-	struct util_cmap_handle *handle;
 	struct rxm_conn *rxm_conn;
 	struct rxm_tx_entry *tx_entry;
 	struct rxm_tx_buf *tx_buf;
@@ -1097,14 +1090,13 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 	assert(count <= rxm_ep->rxm_info->tx_attr->iov_limit);
 
 	fastlock_acquire(&rxm_ep->util_ep.cmap->lock);
-	handle = ofi_cmap_acquire_handle(rxm_ep->util_ep.cmap, dest_addr);
-	if (OFI_UNLIKELY(!handle || handle->state != CMAP_CONNECTED)) {
-		ret = rxm_ep_handle_unconnected(rxm_ep, &handle, dest_addr);
+	rxm_conn = rxm_acquire_conn(rxm_ep, dest_addr);
+	if (OFI_UNLIKELY(rxm_conn->handle.state != CMAP_CONNECTED)) {
+		ret = rxm_ep_handle_unconnected(rxm_ep, &rxm_conn->handle, dest_addr);
 		if (!ret)
 			goto send_continue;
 		else if (OFI_UNLIKELY(ret != -FI_EAGAIN))
 			goto cmap_err;
-		rxm_conn = container_of(handle, struct rxm_conn, handle);
 		ret = rxm_ep_postpone_send(
 				rxm_ep, rxm_conn, context, count, iov,
 				desc, data_len, data, flags, tag, comp_flags,
@@ -1118,7 +1110,6 @@ cmap_err:
 	}
 send_continue:
 	fastlock_release(&rxm_ep->util_ep.cmap->lock);
-	rxm_conn = container_of(handle, struct rxm_conn, handle);
 
 	assert(dlist_empty(&rxm_conn->postponed_tx_list));
 

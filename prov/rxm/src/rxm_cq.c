@@ -148,8 +148,7 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 		ret = ofi_cq_write_error_trunc(rx_buf->ep->util_ep.rx_cq,
 					       rx_buf->recv_entry->context,
 					       rx_buf->recv_entry->comp_flags |
-					       ((rx_buf->pkt.hdr.flags & OFI_REMOTE_CQ_DATA) ?
-					        FI_REMOTE_CQ_DATA : 0),
+					       rx_buf->pkt.hdr.flags,
 					       rx_buf->pkt.hdr.size,
 					       rx_buf->recv_entry->rxm_iov.iov[0].iov_base,
 					       rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag,
@@ -169,8 +168,7 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 			ret = ofi_cq_write(rx_buf->ep->util_ep.rx_cq,
 					   rx_buf->recv_entry->context,
 					   rx_buf->recv_entry->comp_flags |
-					   ((rx_buf->pkt.hdr.flags & OFI_REMOTE_CQ_DATA) ?
-					    FI_REMOTE_CQ_DATA : 0),
+					   rx_buf->pkt.hdr.flags,
 					   rx_buf->pkt.hdr.size,
 					   rx_buf->recv_entry->rxm_iov.iov[0].iov_base,
 					   rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
@@ -375,15 +373,11 @@ ssize_t rxm_cq_handle_data(struct rxm_rx_buf *rx_buf)
 
 ssize_t rxm_cq_handle_rx_buf(struct rxm_rx_buf *rx_buf)
 {
-	switch (rx_buf->pkt.ctrl_hdr.type) {
-	case ofi_ctrl_data:
+	if (OFI_LIKELY(rx_buf->pkt.ctrl_hdr.type == ofi_ctrl_data)) {
 		return rxm_cq_handle_data(rx_buf);
-	case ofi_ctrl_large_data:
+	} else {
+		assert(rx_buf->pkt.ctrl_hdr.type == ofi_ctrl_large_data);
 		return rxm_cq_handle_large_data(rx_buf);
-	default:
-		FI_WARN(&rxm_prov, FI_LOG_CQ, "Unknown message type\n");
-		assert(0);
-		return -FI_EINVAL;
 	}
 }
 

@@ -156,12 +156,28 @@ static inline int
 rxm_conn_verify_cm_data(struct rxm_cm_data *remote_cm_data,
 			struct rxm_cm_data *local_cm_data)
 {
+	if (remote_cm_data->proto.endianness != local_cm_data->proto.endianness) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+			"endianness of two peers (%"PRIu8" vs %"PRIu8")"
+			"are mismatched\n",
+			remote_cm_data->proto.endianness,
+			local_cm_data->proto.endianness);
+		goto err;
+	}
 	if (remote_cm_data->proto.ctrl_version != local_cm_data->proto.ctrl_version) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 			"ctrl_version of two peers (%"PRIu8" vs %"PRIu8")"
 			"are mismatched\n",
 			remote_cm_data->proto.ctrl_version,
 			local_cm_data->proto.ctrl_version);
+		goto err;
+	}
+	if (remote_cm_data->proto.op_version != local_cm_data->proto.op_version) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+			"op_version of two peers (%"PRIu8" vs %"PRIu8")"
+			"are mismatched\n",
+			remote_cm_data->proto.op_version,
+			local_cm_data->proto.op_version);
 		goto err;
 	}
 	if (remote_cm_data->proto.eager_size != local_cm_data->proto.eager_size) {
@@ -186,6 +202,8 @@ rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 	struct rxm_cm_data cm_data = {
 		.proto = {
 			.ctrl_version = RXM_CTRL_VERSION,
+			.op_version = RXM_OP_VERSION,
+			.endianness = ofi_detect_endianness(),
 			.eager_size = rxm_ep->rxm_info->tx_attr->inject_size,
 		},
 	};
@@ -395,6 +413,8 @@ rxm_conn_connect(struct util_ep *util_ep, struct util_cmap_handle *handle,
 	struct rxm_cm_data cm_data = {
 		.proto = {
 			.ctrl_version = RXM_CTRL_VERSION,
+			.op_version = RXM_OP_VERSION,
+			.endianness = ofi_detect_endianness(),
 			.eager_size = rxm_ep->rxm_info->tx_attr->inject_size,
 		},
 	};
