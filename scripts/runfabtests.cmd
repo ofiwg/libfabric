@@ -15,7 +15,7 @@ set unit_tests=^
 rem Disabling this test since it fails on windows (appveyor). Re-enable after root cause is identified and fixed
 rem "dom_test -n 2"
 
-set simple_tests=^
+set functional_tests=^
 	"cq_data"^
 	"dgram -p sockets"^
 	"dgram_waitset -p sockets"^
@@ -95,7 +95,7 @@ rem	"dgram_pingpong"^
 rem	"dgram_pingpong -k"^
 
 
-set test_types=unit simple short
+set test_types=unit functional short
 
 
 goto :main
@@ -213,7 +213,7 @@ exit /b !err!
 exit /b
 
 
-:run_test__simple
+:run_test__functional
 	call :test client_server %*
 exit /b
 

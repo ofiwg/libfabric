@@ -793,7 +793,7 @@ int ft_server_connect(void)
 	if (ret)
 		goto err;
 
-	ret = ft_init_ep();
+	ret = ft_enable_ep_recv();
 	if (ret)
 		goto err;
 
@@ -847,7 +847,7 @@ int ft_client_connect(void)
 	if (ret)
 		return ret;
 
-	ret = ft_init_ep();
+	ret = ft_enable_ep_recv();
 	if (ret)
 		return ret;
 
@@ -879,7 +879,7 @@ int ft_init_fabric(void)
 	if (ret)
 		return ret;
 
-	ret = ft_init_ep();
+	ret = ft_enable_ep_recv();
 	if (ret)
 		return ret;
 
@@ -914,15 +914,9 @@ int ft_init_alias_ep(uint64_t flags)
 	return 0;
 }
 
-int ft_init_ep(void)
-{
-	return ft_setup_ep(ep, eq, av, txcq, rxcq, txcntr, rxcntr, true);
-}
-
-int ft_setup_ep(struct fid_ep *ep, struct fid_eq *eq,
-		struct fid_av *av, struct fid_cq *txcq,
-		struct fid_cq *rxcq, struct fid_cntr *txcntr,
-		struct fid_cntr *rxcntr, bool post_initial_recv)
+int ft_enable_ep(struct fid_ep *ep, struct fid_eq *eq, struct fid_av *av,
+		 struct fid_cq *txcq, struct fid_cq *rxcq,
+		 struct fid_cntr *txcntr, struct fid_cntr *rxcntr)
 {
 	uint64_t flags;
 	int ret;
@@ -977,8 +971,19 @@ int ft_setup_ep(struct fid_ep *ep, struct fid_eq *eq,
 		return ret;
 	}
 
-	if (fi->rx_attr->op_flags != FI_MULTI_RECV && post_initial_recv
-		&& (fi->caps & (FI_MSG | FI_TAGGED))) {
+	return 0;
+}
+
+int ft_enable_ep_recv(void)
+{
+	int ret;
+
+	ret = ft_enable_ep(ep, eq, av, txcq, rxcq, txcntr, rxcntr);
+	if (ret)
+		return ret;
+
+	if (fi->rx_attr->op_flags != FI_MULTI_RECV &&
+	    (fi->caps & (FI_MSG | FI_TAGGED))) {
 		/* Initial receive will get remote address for unconnected EPs */
 		ret = ft_post_rx(ep, MAX(rx_size, FT_MAX_CTRL_MSG), &rx_ctx);
 		if (ret)

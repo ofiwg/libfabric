@@ -197,7 +197,7 @@ static int server_connect(void)
 	if (ret)
 		 goto err;
 
-	ret = ft_init_ep();
+	ret = ft_enable_ep_recv();
 	if (ret)
 		goto err;
 
@@ -265,7 +265,7 @@ static int client_connect(void)
 	 * from */
 	FT_CLOSE_FID(pep);
 
-	ret = ft_init_ep();
+	ret = ft_enable_ep_recv();
 	if (ret)
 		return ret;
 

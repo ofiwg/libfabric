@@ -73,7 +73,7 @@ static int init_fabric(void)
 	if (ret)
 		return ret;
 
-	return ft_init_ep();
+	return ft_enable_ep_recv();
 }
 
 static int send_recv()

@@ -7,37 +7,34 @@ os_excludes = -f ./test_configs/osx.exclude
 endif
 
 bin_PROGRAMS = \
-	simple/fi_av_xfer \
-	simple/fi_msg \
-	simple/fi_msg_sockets \
-	simple/fi_rdm \
-	simple/fi_rdm_rma_simple \
-	simple/fi_rdm_rma_trigger \
-	simple/fi_rdm_deferred_wq \
-	simple/fi_dgram \
-	simple/fi_mcast \
-	simple/fi_dgram_waitset \
-	simple/fi_rdm_tagged_peek \
-	simple/fi_cq_data \
-	simple/fi_poll \
-	simple/fi_scalable_ep \
-	simple/fi_shared_ctx \
-	simple/fi_msg_epoll \
-	simple/fi_rdm_shared_av \
-	simple/fi_cm_data \
-	simple/fi_multi_mr \
-	simple/fi_rdm_multi_domain \
-	simple/fi_multi_ep \
-	simple/fi_recv_cancel \
-	simple/fi_unexpected_msg \
-	simple/fi_inj_complete \
-	simple/fi_resource_freeing \
-	streaming/fi_resmgmt_test \
-	streaming/fi_msg_rma \
-	streaming/fi_rdm_atomic \
-	streaming/fi_rdm_multi_recv \
-	streaming/fi_rdm_rma \
-	streaming/fi_msg_stream \
+	functional/fi_av_xfer \
+	functional/fi_msg \
+	functional/fi_msg_sockets \
+	functional/fi_rdm \
+	functional/fi_rdm_rma_simple \
+	functional/fi_rdm_rma_trigger \
+	functional/fi_rdm_deferred_wq \
+	functional/fi_dgram \
+	functional/fi_mcast \
+	functional/fi_dgram_waitset \
+	functional/fi_rdm_tagged_peek \
+	functional/fi_cq_data \
+	functional/fi_poll \
+	functional/fi_scalable_ep \
+	functional/fi_shared_ctx \
+	functional/fi_msg_epoll \
+	functional/fi_rdm_shared_av \
+	functional/fi_cm_data \
+	functional/fi_multi_mr \
+	functional/fi_rdm_multi_domain \
+	functional/fi_multi_ep \
+	functional/fi_recv_cancel \
+	functional/fi_unexpected_msg \
+	functional/fi_inj_complete \
+	functional/fi_resource_freeing \
+	functional/fi_resmgmt_test \
+	functional/fi_rdm_atomic \
+	functional/fi_rdm_multi_recv \
 	benchmarks/fi_msg_pingpong \
 	benchmarks/fi_msg_bw \
 	benchmarks/fi_rma_bw \
@@ -73,7 +70,7 @@ nobase_dist_config_DATA = \
         test_configs/udp/all.test \
         test_configs/udp/lat_bw.test \
         test_configs/udp/quick.test \
-        test_configs/udp/simple.test \
+        test_configs/udp/functional.test \
 	test_configs/udp/udp.exclude \
         test_configs/verbs/all.test \
         test_configs/verbs/quick.test \
@@ -111,129 +108,117 @@ libfabtests_la_SOURCES += common/osx/osd.c
 endif
 endif
 
-simple_fi_av_xfer_SOURCES = \
-	simple/av_xfer.c
-simple_fi_av_xfer_LDADD = libfabtests.la
+functional_fi_av_xfer_SOURCES = \
+	functional/av_xfer.c
+functional_fi_av_xfer_LDADD = libfabtests.la
 
-simple_fi_msg_sockets_SOURCES = \
-	simple/msg_sockets.c
-simple_fi_msg_sockets_LDADD = libfabtests.la
+functional_fi_msg_sockets_SOURCES = \
+	functional/msg_sockets.c
+functional_fi_msg_sockets_LDADD = libfabtests.la
 
-simple_fi_msg_epoll_SOURCES = \
-	simple/msg_epoll.c
-simple_fi_msg_epoll_LDADD = libfabtests.la
+functional_fi_msg_epoll_SOURCES = \
+	functional/msg_epoll.c
+functional_fi_msg_epoll_LDADD = libfabtests.la
 
-simple_fi_msg_SOURCES = \
-	simple/msg.c
-simple_fi_msg_LDADD = libfabtests.la
+functional_fi_msg_SOURCES = \
+	functional/msg.c
+functional_fi_msg_LDADD = libfabtests.la
 
-simple_fi_rdm_SOURCES = \
-	simple/rdm.c
-simple_fi_rdm_LDADD = libfabtests.la
+functional_fi_rdm_SOURCES = \
+	functional/rdm.c
+functional_fi_rdm_LDADD = libfabtests.la
 
-simple_fi_rdm_shared_av_SOURCES = \
-	simple/rdm_shared_av.c
-simple_fi_rdm_shared_av_LDADD = libfabtests.la
+functional_fi_rdm_shared_av_SOURCES = \
+	functional/rdm_shared_av.c
+functional_fi_rdm_shared_av_LDADD = libfabtests.la
 
-simple_fi_rdm_rma_simple_SOURCES = \
-	simple/rdm_rma_simple.c
-simple_fi_rdm_rma_simple_LDADD = libfabtests.la
+functional_fi_rdm_rma_simple_SOURCES = \
+	functional/rdm_rma_simple.c
+functional_fi_rdm_rma_simple_LDADD = libfabtests.la
 
-simple_fi_rdm_rma_trigger_SOURCES = \
-	simple/rdm_rma_trigger.c
-simple_fi_rdm_rma_trigger_LDADD = libfabtests.la
+functional_fi_rdm_rma_trigger_SOURCES = \
+	functional/rdm_rma_trigger.c
+functional_fi_rdm_rma_trigger_LDADD = libfabtests.la
 
-simple_fi_rdm_deferred_wq_SOURCES = \
-	simple/rdm_deferred_wq.c
-simple_fi_rdm_deferred_wq_LDADD = libfabtests.la
+functional_fi_rdm_deferred_wq_SOURCES = \
+	functional/rdm_deferred_wq.c
+functional_fi_rdm_deferred_wq_LDADD = libfabtests.la
 
-simple_fi_dgram_SOURCES = \
-	simple/dgram.c
-simple_fi_dgram_LDADD = libfabtests.la
+functional_fi_dgram_SOURCES = \
+	functional/dgram.c
+functional_fi_dgram_LDADD = libfabtests.la
 
-simple_fi_mcast_SOURCES = \
-	simple/mcast.c
-simple_fi_mcast_LDADD = libfabtests.la
+functional_fi_mcast_SOURCES = \
+	functional/mcast.c
+functional_fi_mcast_LDADD = libfabtests.la
 
-simple_fi_dgram_waitset_SOURCES = \
-	simple/dgram_waitset.c
-simple_fi_dgram_waitset_LDADD = libfabtests.la
+functional_fi_dgram_waitset_SOURCES = \
+	functional/dgram_waitset.c
+functional_fi_dgram_waitset_LDADD = libfabtests.la
 
-simple_fi_rdm_tagged_peek_SOURCES = \
-	simple/rdm_tagged_peek.c
-simple_fi_rdm_tagged_peek_LDADD = libfabtests.la
+functional_fi_rdm_tagged_peek_SOURCES = \
+	functional/rdm_tagged_peek.c
+functional_fi_rdm_tagged_peek_LDADD = libfabtests.la
 
-simple_fi_cq_data_SOURCES = \
-	simple/cq_data.c
-simple_fi_cq_data_LDADD = libfabtests.la
+functional_fi_cq_data_SOURCES = \
+	functional/cq_data.c
+functional_fi_cq_data_LDADD = libfabtests.la
 
-simple_fi_cm_data_SOURCES = \
-	simple/cm_data.c
-simple_fi_cm_data_LDADD = libfabtests.la
+functional_fi_cm_data_SOURCES = \
+	functional/cm_data.c
+functional_fi_cm_data_LDADD = libfabtests.la
 
-simple_fi_scalable_ep_SOURCES = \
-	simple/scalable_ep.c
-simple_fi_scalable_ep_LDADD = libfabtests.la
+functional_fi_scalable_ep_SOURCES = \
+	functional/scalable_ep.c
+functional_fi_scalable_ep_LDADD = libfabtests.la
 
-simple_fi_shared_ctx_SOURCES = \
-	simple/shared_ctx.c
-simple_fi_shared_ctx_LDADD = libfabtests.la
+functional_fi_shared_ctx_SOURCES = \
+	functional/shared_ctx.c
+functional_fi_shared_ctx_LDADD = libfabtests.la
 
-simple_fi_poll_SOURCES = \
-	simple/poll.c
-simple_fi_poll_LDADD = libfabtests.la
+functional_fi_poll_SOURCES = \
+	functional/poll.c
+functional_fi_poll_LDADD = libfabtests.la
 
-simple_fi_multi_ep_SOURCES = \
-	simple/multi_ep.c
-simple_fi_multi_ep_LDADD = libfabtests.la
+functional_fi_multi_ep_SOURCES = \
+	functional/multi_ep.c
+functional_fi_multi_ep_LDADD = libfabtests.la
 
-simple_fi_multi_mr_SOURCES = \
-	simple/multi_mr.c
-simple_fi_multi_mr_LDADD = libfabtests.la
+functional_fi_multi_mr_SOURCES = \
+	functional/multi_mr.c
+functional_fi_multi_mr_LDADD = libfabtests.la
 
-simple_fi_unexpected_msg_SOURCES = \
-	simple/unexpected_msg.c
-simple_fi_unexpected_msg_LDADD = libfabtests.la
+functional_fi_unexpected_msg_SOURCES = \
+	functional/unexpected_msg.c
+functional_fi_unexpected_msg_LDADD = libfabtests.la
 
-simple_fi_rdm_multi_domain_SOURCES = \
-	simple/rdm_multi_domain.c
-simple_fi_rdm_multi_domain_LDADD = libfabtests.la
+functional_fi_rdm_multi_domain_SOURCES = \
+	functional/rdm_multi_domain.c
+functional_fi_rdm_multi_domain_LDADD = libfabtests.la
 
-simple_fi_recv_cancel_SOURCES = \
-	simple/recv_cancel.c
-simple_fi_recv_cancel_LDADD = libfabtests.la
+functional_fi_recv_cancel_SOURCES = \
+	functional/recv_cancel.c
+functional_fi_recv_cancel_LDADD = libfabtests.la
 
-simple_fi_inj_complete_SOURCES = \
-	simple/inj_complete.c
-simple_fi_inj_complete_LDADD = libfabtests.la
+functional_fi_inj_complete_SOURCES = \
+	functional/inj_complete.c
+functional_fi_inj_complete_LDADD = libfabtests.la
 
-simple_fi_resource_freeing_SOURCES = \
-	simple/resource_freeing.c
-simple_fi_resource_freeing_LDADD = libfabtests.la
+functional_fi_resource_freeing_SOURCES = \
+	functional/resource_freeing.c
+functional_fi_resource_freeing_LDADD = libfabtests.la
 
-streaming_fi_resmgmt_test_SOURCES = \
-	streaming/resmgmt_test.c
-streaming_fi_resmgmt_test_LDADD = libfabtests.la
+functional_fi_resmgmt_test_SOURCES = \
+	functional/resmgmt_test.c
+functional_fi_resmgmt_test_LDADD = libfabtests.la
 
-streaming_fi_msg_rma_SOURCES = \
-	streaming/msg_rma.c
-streaming_fi_msg_rma_LDADD = libfabtests.la
+functional_fi_rdm_atomic_SOURCES = \
+	functional/rdm_atomic.c
+functional_fi_rdm_atomic_LDADD = libfabtests.la
 
-streaming_fi_msg_stream_SOURCES = \
-	streaming/msg.c
-streaming_fi_msg_stream_LDADD = libfabtests.la
-
-streaming_fi_rdm_atomic_SOURCES = \
-	streaming/rdm_atomic.c
-streaming_fi_rdm_atomic_LDADD = libfabtests.la
-
-streaming_fi_rdm_multi_recv_SOURCES = \
-	streaming/rdm_multi_recv.c
-streaming_fi_rdm_multi_recv_LDADD = libfabtests.la
-
-streaming_fi_rdm_rma_SOURCES = \
-	streaming/rdm_rma.c
-streaming_fi_rdm_rma_LDADD = libfabtests.la
+functional_fi_rdm_multi_recv_SOURCES = \
+	functional/rdm_multi_recv.c
+functional_fi_rdm_multi_recv_LDADD = libfabtests.la
 
 benchmarks_fi_msg_pingpong_SOURCES = \
 	benchmarks/msg_pingpong.c \

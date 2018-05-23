@@ -37,15 +37,15 @@ libs = ..\libfabric\$(arch)\$(config)\libfabric.lib Ws2_32.lib
 
 CFLAGS = $(CFLAGS) $(includes) $(defines)
 
-#all: complex simple
+#all: complex functional
 
-all: benchmarks simple unit
+all: benchmarks functional unit
 
 {benchmarks}.c{$(outdir)}.exe:
 	if not exist $(@D) mkdir $(@D)
 	$(CC) /Fe$@ $** $(baseincludes) $(CFLAGS) $(libs)
 
-{simple}.c{$(outdir)}.exe:
+{functional}.c{$(outdir)}.exe:
 	if not exist $(@D) mkdir $(@D)
 	$(CC) /Fe$@ $** $(baseincludes) $(CFLAGS) $(libs)
 
@@ -57,7 +57,7 @@ all: benchmarks simple unit
 benchmarks: $(outdir)\msg_pingpong.exe $(outdir)\rdm_cntr_pingpong.exe \
 	$(outdir)\rdm_pingpong.exe $(outdir)\rdm_tagged_pingpong.exe
 
-simple: $(outdir)\cq_data.exe $(outdir)\dgram.exe $(outdir)\dgram_waitset.exe $(outdir)\msg.exe \
+functional: $(outdir)\cq_data.exe $(outdir)\dgram.exe $(outdir)\dgram_waitset.exe $(outdir)\msg.exe \
 	$(outdir)\msg_epoll.exe $(outdir)\msg_sockets.exe \
 	$(outdir)\poll.exe $(outdir)\rdm.exe $(outdir)\rdm_rma_simple.exe $(outdir)\rdm_rma_trigger.exe \
 	$(outdir)\rdm_tagged_peek.exe $(outdir)\scalable_ep.exe $(outdir)\inj_complete.exe
@@ -79,31 +79,31 @@ $(outdir)\rdm_pingpong.exe: {benchmarks}rdm_pingpong.c $(basedeps) {benchmarks}b
 $(outdir)\rdm_tagged_pingpong.exe: {benchmarks}rdm_tagged_pingpong.c $(basedeps) {benchmarks}benchmark_shared.c
 
 
-$(outdir)\cq_data.exe: {simple}cq_data.c $(basedeps)
+$(outdir)\cq_data.exe: {functional}cq_data.c $(basedeps)
 
-$(outdir)\dgram.exe: {simple}dgram.c $(basedeps)
+$(outdir)\dgram.exe: {functional}dgram.c $(basedeps)
 
-$(outdir)\dgram_waitset.exe: {simple}dgram_waitset.c $(basedeps)
+$(outdir)\dgram_waitset.exe: {functional}dgram_waitset.c $(basedeps)
 
-$(outdir)\msg.exe: {simple}msg.c $(basedeps)
+$(outdir)\msg.exe: {functional}msg.c $(basedeps)
 
-$(outdir)\msg_epoll.exe: {simple}msg_epoll.c $(basedeps)
+$(outdir)\msg_epoll.exe: {functional}msg_epoll.c $(basedeps)
 
-$(outdir)\msg_sockets.exe: {simple}msg_sockets.c $(basedeps)
+$(outdir)\msg_sockets.exe: {functional}msg_sockets.c $(basedeps)
 
-$(outdir)\poll.exe: {simple}poll.c $(basedeps)
+$(outdir)\poll.exe: {functional}poll.c $(basedeps)
 
-$(outdir)\rdm.exe: {simple}rdm.c $(basedeps)
+$(outdir)\rdm.exe: {functional}rdm.c $(basedeps)
 
-$(outdir)\rdm_rma_simple.exe: {simple}rdm_rma_simple.c $(basedeps)
+$(outdir)\rdm_rma_simple.exe: {functional}rdm_rma_simple.c $(basedeps)
 
-$(outdir)\rdm_rma_trigger.exe: {simple}rdm_rma_trigger.c $(basedeps)
+$(outdir)\rdm_rma_trigger.exe: {functional}rdm_rma_trigger.c $(basedeps)
 
-$(outdir)\rdm_tagged_peek.exe: {simple}rdm_tagged_peek.c $(basedeps)
+$(outdir)\rdm_tagged_peek.exe: {functional}rdm_tagged_peek.c $(basedeps)
 
-$(outdir)\scalable_ep.exe: {simple}scalable_ep.c $(basedeps)
+$(outdir)\scalable_ep.exe: {functional}scalable_ep.c $(basedeps)
 
-$(outdir)\inj_complete.exe: {simple}inj_complete.c $(basedeps)
+$(outdir)\inj_complete.exe: {functional}inj_complete.c $(basedeps)
 
 $(outdir)\av_test.exe: {unit}av_test.c $(basedeps) {unit}common.c
 

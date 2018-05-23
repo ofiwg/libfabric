@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 #
-# Copyright (c) 2017, Intel Corporation.  All rights reserved.
+# Copyright (c) 2017-2018, Intel Corporation.  All rights reserved.
 # Copyright (c) 2016-2018, Cisco Systems, Inc. All rights reserved.
 # Copyright (c) 2016, Cray, Inc. All rights reserved.
 #
@@ -78,7 +78,7 @@ neg_unit_tests=(
 	"msg g00n13s"
 )
 
-simple_tests=(
+functional_tests=(
 	"av_xfer -e rdm"
 	"av_xfer -e dgram"
 	"cm_data"
@@ -133,18 +133,11 @@ short_tests=(
 	"rma_bw -e rdm -o write -I 5"
 	"rma_bw -e rdm -o read -I 5"
 	"rma_bw -e rdm -o writedata -I 5"
-	"msg_rma -o write -I 5"
-	"msg_rma -o read -I 5"
-	"msg_rma -o writedata -I 5"
-	"msg_stream -I 5"
 	"rdm_atomic -I 5 -o all"
 	"rdm_cntr_pingpong -I 5"
 	"rdm_multi_recv -I 5"
 	"rdm_pingpong -I 5"
 	"rdm_pingpong -I 5 -v"
-	"rdm_rma -o write -I 5"
-	"rdm_rma -o read -I 5"
-	"rdm_rma -o writedata -I 5"
 	"rdm_tagged_pingpong -I 5"
 	"rdm_tagged_pingpong -I 5 -v"
 	"rdm_tagged_bw -I 5"
@@ -165,10 +158,6 @@ standard_tests=(
 	"rma_bw -e rdm -o write"
 	"rma_bw -e rdm -o read"
 	"rma_bw -e rdm -o writedata"
-	"msg_rma -o write"
-	"msg_rma -o read"
-	"msg_rma -o writedata"
-	"msg_stream"
 	"rdm_atomic -o all -I 1000"
 	"rdm_cntr_pingpong"
 	"rdm_multi_recv"
@@ -176,9 +165,6 @@ standard_tests=(
 	"rdm_pingpong -v"
 	"rdm_pingpong -k"
 	"rdm_pingpong -k -v"
-	"rdm_rma -o write"
-	"rdm_rma -o read"
-	"rdm_rma -o writedata"
 	"rdm_tagged_pingpong"
 	"rdm_tagged_pingpong -v"
 	"rdm_tagged_bw"
@@ -479,12 +465,12 @@ function main {
 	local complex_cfg="quick"
 
 	if [[ $1 == "quick" ]]; then
-		local -r tests="unit simple short"
+		local -r tests="unit functional short"
 	elif [[ $1 == "verify" ]]; then
 		local -r tests="complex"
 		complex_cfg=$1
 	else
-		local -r tests=$(echo $1 | sed 's/all/unit,simple,standard,complex/g' | tr ',' ' ')
+		local -r tests=$(echo $1 | sed 's/all/unit,functional,standard,complex/g' | tr ',' ' ')
 		if [[ $1 == "all" ]]; then
 			complex_cfg=$1
 		fi
@@ -512,8 +498,8 @@ function main {
 				done
 			fi
 		;;
-		simple)
-			for test in "${simple_tests[@]}"; do
+		functional)
+			for test in "${functional_tests[@]}"; do
 				cs_test "$test"
 			done
 		;;
@@ -570,7 +556,7 @@ function usage {
 	errcho -e " -v\tprint output of failing"
 	errcho -e " -vv\tprint output of failing/notrun"
 	errcho -e " -vvv\tprint output of failing/notrun/passing"
-	errcho -e " -t\ttest set(s): all,quick,unit,simple,standard,short,complex (default quick)"
+	errcho -e " -t\ttest set(s): all,quick,unit,functional,standard,short,complex (default quick)"
 	errcho -e " -e\texclude tests: comma delimited list of test names /
 			 regex patterns (with -R) e.g. \"dgram,rma.*write\""
 	errcho -e " -f\texclude tests file: File containing list of test names /
