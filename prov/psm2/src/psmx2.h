@@ -440,14 +440,17 @@ struct psmx2_iov_info {
 };
 
 struct psmx2_sendv_request {
+#if !HAVE_PSM2_MQ_REQ_USER
+	PSMX2_STATUS_DECL(status);
+#endif
 	struct fi_context fi_context;
 	struct fi_context fi_context_iov;
-	PSMX2_STATUS_DECL(status);
 	void *user_context;
 	int iov_protocol;
 	int no_completion;
 	int comp_flag;
 	uint32_t iov_done;
+	psm2_mq_tag_t tag;
 	union {
 		struct psmx2_iov_info iov_info;
 		char buf[PSMX2_IOV_BUF_SIZE];
@@ -618,6 +621,13 @@ struct psmx2_ep_name {
 };
 
 #define PSMX2_MAX_STRING_NAME_LEN	64	/* "fi_addr_psmx2://<uint64_t>:<uint64_t>"  */
+
+struct psmx2_status_data {
+	struct psmx2_fid_cq		*poll_cq;
+	struct psmx2_trx_ctxt	*trx_ctxt;
+	fi_addr_t				*src_addr;
+	void					*event_buffer;
+};
 
 struct psmx2_cq_event {
 	union {
@@ -1124,7 +1134,11 @@ static inline void psmx2_get_source_string_name(fi_addr_t source, char *name, si
 static inline void psmx2_progress(struct psmx2_trx_ctxt *trx_ctxt)
 {
 	if (trx_ctxt) {
+#if HAVE_PSM2_MQ_REQ_USER
+		psmx2_cq_poll_mq(NULL, trx_ctxt, NULL, 1, NULL);
+#else
 		psmx2_cq_poll_mq(NULL, trx_ctxt, NULL, 0, NULL);
+#endif
 		if (trx_ctxt->am_progress)
 			psmx2_am_progress(trx_ctxt);
 	}
