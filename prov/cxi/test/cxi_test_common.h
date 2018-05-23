@@ -14,6 +14,8 @@ extern struct fid_domain *cxit_domain;
 extern struct fid_ep *cxit_ep;
 extern struct fi_cq_attr cxit_tx_cq_attr, cxit_rx_cq_attr;
 extern struct fid_cq *cxit_tx_cq, *cxit_rx_cq;
+extern struct fi_av_attr cxit_av_attr;
+extern struct fid_av *cxit_av;
 extern char *cxit_node, *cxit_service;
 extern uint64_t cxit_flags;
 extern int cxit_n_ifs;
@@ -28,6 +30,8 @@ void cxit_create_ep(void);
 void cxit_destroy_ep(void);
 void cxit_create_cqs(void);
 void cxit_destroy_cqs(void);
+void cxit_create_av(void);
+void cxit_destroy_av(void);
 
 void cxit_setup_getinfo(void);
 void cxit_teardown_getinfo(void);
@@ -39,5 +43,7 @@ void cxit_setup_ep(void);
 void cxit_teardown_ep(void);
 #define cxit_setup_cq cxit_setup_ep
 #define cxit_teardown_cq cxit_teardown_ep
+#define cxit_setup_av cxit_setup_ep
+#define cxit_teardown_av cxit_teardown_ep
 
 #endif

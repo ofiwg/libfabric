@@ -18,6 +18,8 @@ struct fid_domain *cxit_domain;
 struct fid_ep *cxit_ep;
 struct fi_cq_attr cxit_tx_cq_attr, cxit_rx_cq_attr;
 struct fid_cq *cxit_tx_cq, *cxit_rx_cq;
+struct fi_av_attr cxit_av_attr;
+struct fid_av *cxit_av;
 char *cxit_node, *cxit_service;
 uint64_t cxit_flags;
 int cxit_n_ifs;
@@ -111,6 +113,23 @@ void cxit_destroy_cqs(void)
 	ret = fi_close(&cxit_tx_cq->fid);
 	cr_assert(ret == FI_SUCCESS, "fi_close TX CQ");
 	cxit_tx_cq = NULL;
+}
+
+void cxit_create_av(void)
+{
+	int ret;
+
+	ret = fi_av_open(cxit_domain, &cxit_av_attr, &cxit_av, NULL);
+	cr_assert(ret == FI_SUCCESS, "fi_av_open");
+}
+
+void cxit_destroy_av(void)
+{
+	int ret;
+
+	ret = fi_close(&cxit_av->fid);
+	cr_assert(ret == FI_SUCCESS, "fi_close AV");
+	cxit_av = NULL;
 }
 
 static void cxit_init(void)
