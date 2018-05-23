@@ -56,21 +56,21 @@ struct tcpx_xfer_entry *tcpx_xfer_entry_alloc(struct tcpx_cq *tcpx_cq)
 {
 	struct tcpx_xfer_entry *xfer_entry;
 
-	fastlock_acquire(&tcpx_cq->util_cq.cq_lock);
+	tcpx_cq->util_cq.cq_fastlock_acquire(&tcpx_cq->util_cq.cq_lock);
 
 	/* optimization: don't allocate queue_entry when cq is full */
 	if (ofi_cirque_isfull(tcpx_cq->util_cq.cirq)) {
-		fastlock_release(&tcpx_cq->util_cq.cq_lock);
+		tcpx_cq->util_cq.cq_fastlock_release(&tcpx_cq->util_cq.cq_lock);
 		return NULL;
 	}
 
 	xfer_entry = util_buf_alloc(tcpx_cq->xfer_entry_pool);
 	if (!xfer_entry) {
-		fastlock_release(&tcpx_cq->util_cq.cq_lock);
+		tcpx_cq->util_cq.cq_fastlock_release(&tcpx_cq->util_cq.cq_lock);
 		FI_INFO(&tcpx_prov, FI_LOG_DOMAIN,"failed to get buffer\n");
 		return NULL;
 	}
-	fastlock_release(&tcpx_cq->util_cq.cq_lock);
+	tcpx_cq->util_cq.cq_fastlock_release(&tcpx_cq->util_cq.cq_lock);
 	memset(xfer_entry, 0, sizeof(*xfer_entry));
 	return xfer_entry;
 }
@@ -81,9 +81,9 @@ void tcpx_xfer_entry_release(struct tcpx_cq *tcpx_cq,
 	if (xfer_entry->ep->cur_rx_entry == xfer_entry)
 		xfer_entry->ep->cur_rx_entry = NULL;
 
-	fastlock_acquire(&tcpx_cq->util_cq.cq_lock);
+	tcpx_cq->util_cq.cq_fastlock_acquire(&tcpx_cq->util_cq.cq_lock);
 	util_buf_release(tcpx_cq->xfer_entry_pool, xfer_entry);
-	fastlock_release(&tcpx_cq->util_cq.cq_lock);
+	tcpx_cq->util_cq.cq_fastlock_release(&tcpx_cq->util_cq.cq_lock);
 }
 
 void tcpx_cq_report_completion(struct util_cq *cq,
