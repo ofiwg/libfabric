@@ -340,6 +340,7 @@ static void *rxm_conn_event_handler(void *arg)
 				goto exit;
 			}
 			rxm_msg_process_connreq(rxm_ep, entry->info, entry->data);
+			fi_freeinfo(entry->info);
 			break;
 		case FI_CONNECTED:
 			FI_DBG(&rxm_prov, FI_LOG_FABRIC,
