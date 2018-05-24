@@ -1846,7 +1846,7 @@ static int pp_finalize(struct ct_pingpong *ct)
 {
 	struct iovec iov;
 	int ret;
-	struct fi_context ctx;
+	struct fi_context ctx[2];
 	struct fi_msg msg;
 	struct fi_msg_tagged tmsg;
 
@@ -1861,7 +1861,7 @@ static int pp_finalize(struct ct_pingpong *ct)
 		msg.msg_iov = &iov;
 		msg.iov_count = 1;
 		msg.addr = ct->remote_fi_addr;
-		msg.context = &ctx;
+		msg.context = ctx;
 
 		ret = fi_sendmsg(ct->ep, &msg, FI_INJECT | FI_TRANSMIT_COMPLETE);
 		if (ret) {
@@ -1873,7 +1873,7 @@ static int pp_finalize(struct ct_pingpong *ct)
 		tmsg.msg_iov = &iov;
 		tmsg.iov_count = 1;
 		tmsg.addr = ct->remote_fi_addr;
-		tmsg.context = &ctx;
+		tmsg.context = ctx;
 		tmsg.tag = TAG;
 
 		ret = fi_tsendmsg(ct->ep, &tmsg, FI_INJECT | FI_TRANSMIT_COMPLETE);
