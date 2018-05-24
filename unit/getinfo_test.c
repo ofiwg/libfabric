@@ -129,7 +129,9 @@ static int validate_msg_ordering_bits(char *node, char *service, uint64_t flags,
 	for (i = 0; i < cnt; i++) {
 		hints->tx_attr->msg_order = msg_order_combinations[i];
 		ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, info);
-		if (ret && ret != -FI_ENODATA) {
+		if (ret) {
+			if (ret == -FI_ENODATA)
+				continue;
 			FT_UNIT_STRERR(err_buf, "fi_getinfo failed", ret);
 			goto failed_getinfo;
 		}
@@ -154,7 +156,9 @@ static int validate_msg_ordering_bits(char *node, char *service, uint64_t flags,
 		hints->tx_attr->msg_order = 0;
 		hints->rx_attr->msg_order = msg_order_combinations[i];
 		ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, info);
-		if (ret && ret != -FI_ENODATA) {
+		if (ret) {
+			if (ret == -FI_ENODATA)
+				continue;
 			FT_UNIT_STRERR(err_buf, "fi_getinfo failed", ret);
 			goto failed_getinfo;
 		}
@@ -452,8 +456,12 @@ static int test_mr_modes(char *node, char *service, uint64_t flags,
 	for (i = 0; i < cnt; i++) {
 		hints->domain_attr->mr_mode = (uint32_t) mr_modes[i];
 		ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, info);
-		if (ret && ret != -FI_ENODATA)
+		if (ret) {
+			if (ret == -FI_ENODATA)
+				continue;
+			FT_UNIT_STRERR(err_buf, "fi_getinfo failed", ret);
 			goto out;
+		}
 
 		ft_foreach_info(fi, *info) {
 			if (fi->domain_attr->mr_mode & ~hints->domain_attr->mr_mode) {
