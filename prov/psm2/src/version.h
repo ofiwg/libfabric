@@ -63,6 +63,8 @@
 
 #define PSMX2_STATUS_TYPE	struct psm2_mq_req
 #define PSMX2_STATUS_DECL(s)	struct psm2_mq_req *s
+#define PSMX2_STATUS_INIT(s)
+#define PSMX2_STATUS_SAVE(s,t)	do { t = s; } while (0)
 #define PSMX2_STATUS_ERROR(s)	((s)->error_code)
 #define PSMX2_STATUS_TAG(s)	((s)->tag)
 #define PSMX2_STATUS_RCVLEN(s)	((s)->recv_msglen)
@@ -86,7 +88,9 @@
 #define PSMX2_USE_REQ_CONTEXT	0
 
 #define PSMX2_STATUS_TYPE	psm2_mq_status2_t
-#define PSMX2_STATUS_DECL(s)	psm2_mq_status2_t s##_priv, *s=&s##_priv
+#define PSMX2_STATUS_DECL(s)	psm2_mq_status2_t s##_priv, *s
+#define PSMX2_STATUS_INIT(s)	do { s = &s##_priv; } while (0)
+#define PSMX2_STATUS_SAVE(s,t)	do { *(t) = *(s); } while (0)
 #define PSMX2_STATUS_ERROR(s)	((s)->error_code)
 #define PSMX2_STATUS_TAG(s)	((s)->msg_tag)
 #define PSMX2_STATUS_RCVLEN(s)	((s)->nbytes)

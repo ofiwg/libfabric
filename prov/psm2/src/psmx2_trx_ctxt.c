@@ -32,7 +32,7 @@
 
 #include "psmx2.h"
 
-static int psmx2_trx_ctxt_cnt = 0;
+int psmx2_trx_ctxt_cnt = 0;
 
 /*
  * Tx/Rx context disconnect protocol:

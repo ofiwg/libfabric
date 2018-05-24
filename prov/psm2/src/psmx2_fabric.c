@@ -32,6 +32,7 @@
 
 #include "psmx2.h"
 
+extern int psmx2_trx_ctxt_cnt;
 struct psmx2_fid_fabric *psmx2_active_fabric = NULL;
 
 static int psmx2_fabric_close(fid_t fid)
@@ -138,6 +139,7 @@ int psmx2_fabric(struct fi_fabric_attr *attr,
 
 	*fabric = &fabric_priv->util_fabric.fabric_fid;
 	psmx2_active_fabric = fabric_priv;
+	psmx2_trx_ctxt_cnt = 0;
 
 	return 0;
 }
