@@ -267,6 +267,7 @@ static int fi_ibv_domain_close(fid_t fid)
 			ofi_freealign(av_entry);
 		}
 		rdma_destroy_ep(domain->rdm_cm->listener);
+		rdma_destroy_event_channel(domain->rdm_cm->ec);
 		free(domain->rdm_cm);
 		break;
 	case FI_EP_DGRAM:
