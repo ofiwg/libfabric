@@ -859,7 +859,7 @@ static int fi_ibv_getifaddrs(struct dlist_entry *verbs_devs)
 	freeifaddrs(ifaddr);
 	return num_verbs_ifs ? 0 : -FI_ENODATA;
 err2:
-	rdma_destroy_ep(id);
+	fi_ibv_destroy_ep(rai, &id);
 err1:
 	fi_ibv_verbs_devs_free(verbs_devs);
 	freeifaddrs(ifaddr);
