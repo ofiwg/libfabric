@@ -37,54 +37,68 @@
 
 #include "rxm.h"
 
-#define RXM_EP_RECV_SANITIZE_SRC_ADDR(rxm_ep, src_addr)	\
-	((rxm_ep->rxm_info->caps & FI_DIRECTED_RECV) ?	\
-	 src_addr : FI_ADDR_UNSPEC)
-
 const size_t rxm_pkt_size = sizeof(struct rxm_pkt);
+
+static int rxm_match_noop(struct dlist_entry *item, const void *arg)
+{
+	OFI_UNUSED(item);
+	OFI_UNUSED(arg);
+	return 1;
+}
 
 static int rxm_match_recv_entry(struct dlist_entry *item, const void *arg)
 {
 	struct rxm_recv_match_attr *attr = (struct rxm_recv_match_attr *) arg;
-	struct rxm_recv_entry *recv_entry;
-
-	recv_entry = container_of(item, struct rxm_recv_entry, entry);
+	struct rxm_recv_entry *recv_entry =
+		container_of(item, struct rxm_recv_entry, entry);
 	return rxm_match_addr(recv_entry->addr, attr->addr);
 }
 
-static int rxm_match_recv_entry_tagged(struct dlist_entry *item, const void *arg)
+static int rxm_match_recv_entry_tag(struct dlist_entry *item, const void *arg)
 {
 	struct rxm_recv_match_attr *attr = (struct rxm_recv_match_attr *)arg;
-	struct rxm_recv_entry *recv_entry;
+	struct rxm_recv_entry *recv_entry =
+		container_of(item, struct rxm_recv_entry, entry);
+	return rxm_match_tag(recv_entry->tag, recv_entry->ignore, attr->tag);
+}
 
-	recv_entry = container_of(item, struct rxm_recv_entry, entry);
+static int rxm_match_recv_entry_tag_addr(struct dlist_entry *item, const void *arg)
+{
+	struct rxm_recv_match_attr *attr = (struct rxm_recv_match_attr *)arg;
+	struct rxm_recv_entry *recv_entry =
+		container_of(item, struct rxm_recv_entry, entry);
 	return rxm_match_addr(recv_entry->addr, attr->addr) &&
 		rxm_match_tag(recv_entry->tag, recv_entry->ignore, attr->tag);
 }
 
 static int rxm_match_recv_entry_context(struct dlist_entry *item, const void *context)
 {
-	struct rxm_recv_entry *recv_entry;
-
-	recv_entry = container_of(item, struct rxm_recv_entry, entry);
+	struct rxm_recv_entry *recv_entry =
+		container_of(item, struct rxm_recv_entry, entry);
 	return recv_entry->context == context;
 }
 
 static int rxm_match_unexp_msg(struct dlist_entry *item, const void *arg)
 {
 	struct rxm_recv_match_attr *attr = (struct rxm_recv_match_attr *)arg;
-	struct rxm_unexp_msg *unexp_msg;
-
-	unexp_msg = container_of(item, struct rxm_unexp_msg, entry);
+	struct rxm_unexp_msg *unexp_msg =
+		container_of(item, struct rxm_unexp_msg, entry);
 	return rxm_match_addr(attr->addr, unexp_msg->addr);
 }
 
-static int rxm_match_unexp_msg_tagged(struct dlist_entry *item, const void *arg)
+static int rxm_match_unexp_msg_tag(struct dlist_entry *item, const void *arg)
 {
 	struct rxm_recv_match_attr *attr = (struct rxm_recv_match_attr *)arg;
-	struct rxm_unexp_msg *unexp_msg;
+	struct rxm_unexp_msg *unexp_msg =
+		container_of(item, struct rxm_unexp_msg, entry);
+	return rxm_match_tag(attr->tag, attr->ignore, unexp_msg->tag);
+}
 
-	unexp_msg = container_of(item, struct rxm_unexp_msg, entry);
+static int rxm_match_unexp_msg_tag_addr(struct dlist_entry *item, const void *arg)
+{
+	struct rxm_recv_match_attr *attr = (struct rxm_recv_match_attr *)arg;
+	struct rxm_unexp_msg *unexp_msg =
+		container_of(item, struct rxm_unexp_msg, entry);
 	return rxm_match_addr(attr->addr, unexp_msg->addr) &&
 		rxm_match_tag(attr->tag, attr->ignore, unexp_msg->tag);
 }
@@ -246,15 +260,25 @@ static int rxm_recv_queue_init(struct rxm_ep *rxm_ep,  struct rxm_recv_queue *re
 	dlist_init(&recv_queue->recv_list);
 	dlist_init(&recv_queue->unexp_msg_list);
 	if (type == RXM_RECV_QUEUE_MSG) {
-		recv_queue->match_recv = rxm_match_recv_entry;
-		recv_queue->match_unexp = rxm_match_unexp_msg;
+		if (rxm_ep->rxm_info->caps & FI_DIRECTED_RECV) {
+			recv_queue->match_recv = rxm_match_recv_entry;
+			recv_queue->match_unexp = rxm_match_unexp_msg;
+		} else {
+			recv_queue->match_recv = rxm_match_noop;
+			recv_queue->match_unexp = rxm_match_noop;
+		}
 		for (i = recv_queue->fs->size - 1; i >= 0; i--) {
 			recv_queue->fs->buf[i].comp_flags = FI_MSG | FI_RECV;
 			recv_queue->fs->buf[i].recv_queue = recv_queue;
 		}
 	} else {
-		recv_queue->match_recv = rxm_match_recv_entry_tagged;
-		recv_queue->match_unexp = rxm_match_unexp_msg_tagged;
+		if (rxm_ep->rxm_info->caps & FI_DIRECTED_RECV) {
+			recv_queue->match_recv = rxm_match_recv_entry_tag_addr;
+			recv_queue->match_unexp = rxm_match_unexp_msg_tag_addr;
+		} else {
+			recv_queue->match_recv = rxm_match_recv_entry_tag;
+			recv_queue->match_unexp = rxm_match_unexp_msg_tag;
+		}
 		for (i = recv_queue->fs->size - 1; i >= 0; i--) {
 			recv_queue->fs->buf[i].comp_flags = FI_TAGGED | FI_RECV;
 			recv_queue->fs->buf[i].recv_queue = recv_queue;
@@ -608,7 +632,7 @@ rxm_ep_format_rx_res(struct rxm_ep *rxm_ep, const struct iovec *iov,
 		return -FI_EAGAIN;
 
 	(*recv_entry)->rxm_iov.count 	= (uint8_t)count;
-	(*recv_entry)->addr 		= RXM_EP_RECV_SANITIZE_SRC_ADDR(rxm_ep, src_addr);
+	(*recv_entry)->addr 		= src_addr;
 	(*recv_entry)->context 		= context;
 	(*recv_entry)->flags 		= flags;
 	(*recv_entry)->ignore 		= ignore;
@@ -664,10 +688,8 @@ static ssize_t rxm_ep_recv_common_flags(struct rxm_ep *rxm_ep, const struct iove
 		(recv_queue->type == RXM_RECV_QUEUE_MSG));
 
 	if (flags & FI_PEEK)
-		return rxm_ep_peek_recv(rxm_ep,
-					RXM_EP_RECV_SANITIZE_SRC_ADDR(rxm_ep, src_addr),
-					tag, ignore, context,
-					flags, recv_queue);
+		return rxm_ep_peek_recv(rxm_ep, src_addr, tag, ignore,
+					context, flags, recv_queue);
 
 	if (flags & FI_CLAIM) {
 		ssize_t ret;
@@ -679,10 +701,8 @@ static ssize_t rxm_ep_recv_common_flags(struct rxm_ep *rxm_ep, const struct iove
 		if (flags & FI_DISCARD)
 			return rxm_ep_discard_recv(rxm_ep, rx_buf, context);
 
-		ret = rxm_ep_format_rx_res(rxm_ep, iov, desc, count,
-					   RXM_EP_RECV_SANITIZE_SRC_ADDR(rxm_ep, src_addr),
-					   tag, ignore, context,
-					   flags | op_flags,
+		ret = rxm_ep_format_rx_res(rxm_ep, iov, desc, count, src_addr,
+					   tag, ignore, context, flags | op_flags,
 					   recv_queue, &recv_entry);
 		if (OFI_UNLIKELY(ret))
 			return ret;
