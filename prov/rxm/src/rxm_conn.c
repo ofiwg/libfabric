@@ -81,12 +81,6 @@ static int rxm_msg_ep_open(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 		goto err;
 	}
 
-	if (!rxm_ep->srx_ctx) {
-		ret = rxm_ep_prepost_buf(rxm_ep, msg_ep);
-		if (ret)
-			goto err;
-	}
-
 	rxm_conn->msg_ep = msg_ep;
 	return 0;
 err:
@@ -308,6 +302,7 @@ static void *rxm_conn_event_handler(void *arg)
 	size_t len = sizeof(*entry) + datalen;
 	struct rxm_ep *rxm_ep = container_of(arg, struct rxm_ep, util_ep);
 	struct rxm_cm_data *cm_data;
+	struct rxm_conn *rxm_conn;
 	uint32_t event;
 	ssize_t rd;
 
@@ -347,6 +342,11 @@ static void *rxm_conn_event_handler(void *arg)
 			       "Connection successful\n");
 			fastlock_acquire(&rxm_ep->util_ep.cmap->lock);
 			cm_data = (void *)entry->data;
+			rxm_conn = container_of(entry->fid->context, struct rxm_conn, handle);
+			if (!rxm_ep->srx_ctx) {
+				if (rxm_ep_prepost_buf(rxm_ep, rxm_conn->msg_ep))
+					goto exit;
+			}
 			ofi_cmap_process_connect(rxm_ep->util_ep.cmap,
 						 entry->fid->context,
 						 ((rd - sizeof(*entry)) ?
