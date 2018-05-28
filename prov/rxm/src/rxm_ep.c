@@ -1171,9 +1171,6 @@ send_continue:
 	}
 }
 
-#define rxm_ep_tx_flags_inject(rxm_ep) \
-	((rxm_ep_tx_flags(rxm_ep) & ~FI_COMPLETION) | FI_INJECT)
-
 static ssize_t rxm_ep_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 			      uint64_t flags)
 {
@@ -1222,8 +1219,8 @@ static ssize_t rxm_ep_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
 					     util_ep.ep_fid.fid);
 
 	return rxm_ep_inject_common(rxm_ep, buf, len, dest_addr, 0,
-				    rxm_ep_tx_flags_inject(rxm_ep),
-				    0, FI_MSG, &rxm_ep->buf_pools[RXM_BUF_POOL_TX_MSG]);
+				    rxm_ep->util_ep.inject_op_flags, 0, FI_MSG,
+				    &rxm_ep->buf_pools[RXM_BUF_POOL_TX_MSG]);
 }
 
 static ssize_t rxm_ep_senddata(struct fid_ep *ep_fid, const void *buf, size_t len,
@@ -1250,7 +1247,7 @@ static ssize_t rxm_ep_injectdata(struct fid_ep *ep_fid, const void *buf, size_t 
 					     util_ep.ep_fid.fid);
 
 	return rxm_ep_inject_common(rxm_ep, buf, len, dest_addr, data,
-				    rxm_ep_tx_flags_inject(rxm_ep) | FI_REMOTE_CQ_DATA,
+				    rxm_ep->util_ep.inject_op_flags | FI_REMOTE_CQ_DATA,
 				    0, FI_MSG, &rxm_ep->buf_pools[RXM_BUF_POOL_TX_MSG]);
 }
 
@@ -1358,7 +1355,7 @@ static ssize_t rxm_ep_tinject(struct fid_ep *ep_fid, const void *buf, size_t len
 					     util_ep.ep_fid.fid);
 
 	return rxm_ep_inject_common(rxm_ep, buf, len, dest_addr, 0,
-				    rxm_ep_tx_flags_inject(rxm_ep), tag, FI_TAGGED,
+				    rxm_ep->util_ep.inject_op_flags, tag, FI_TAGGED,
 				    &rxm_ep->buf_pools[RXM_BUF_POOL_TX_TAGGED]);
 }
 
@@ -1387,9 +1384,8 @@ static ssize_t rxm_ep_tinjectdata(struct fid_ep *ep_fid, const void *buf, size_t
 					     util_ep.ep_fid.fid);
 
 	return rxm_ep_inject_common(rxm_ep, buf, len, dest_addr, data,
-				    rxm_ep_tx_flags_inject(rxm_ep) | FI_REMOTE_CQ_DATA,
-				    tag, FI_TAGGED,
-				    &rxm_ep->buf_pools[RXM_BUF_POOL_TX_TAGGED]);
+				    rxm_ep->util_ep.inject_op_flags | FI_REMOTE_CQ_DATA,
+				    tag, FI_TAGGED, &rxm_ep->buf_pools[RXM_BUF_POOL_TX_TAGGED]);
 }
 
 struct fi_ops_tagged rxm_ops_tagged = {
