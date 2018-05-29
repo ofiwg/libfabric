@@ -402,6 +402,49 @@ struct fi_info {
 	struct fi_fabric_attr	*fabric_attr;
 };
 
+struct fi_device_attr {
+	char			*name;
+	char			*device_id;
+	char			*device_version;
+	char			*vendor_id;
+	char			*driver;
+	char			*firmware;
+};
+
+enum fi_bus_type {
+	FI_BUS_UNSPEC,
+	FI_BUS_UNKNOWN = FI_BUS_UNSPEC,
+	FI_BUS_PCI,
+};
+
+struct fi_pci_attr {
+	uint16_t		domain_id;
+	uint8_t			bus_id;
+	uint8_t			device_id;
+	uint8_t			function_id;
+};
+
+struct fi_bus_attr {
+	enum fi_bus_type	bus_type;
+	union {
+		struct fi_pci_attr	pci;
+	};
+};
+
+enum fi_link_state {
+	FI_LINK_UNKNOWN,
+	FI_LINK_DOWN,
+	FI_LINK_UP,
+};
+
+struct fi_link_attr {
+	char			*address;
+	size_t			mtu;
+	size_t			speed;
+	enum fi_link_state	state;
+	char			*network_type;
+};
+
 enum {
 	FI_CLASS_UNSPEC,
 	FI_CLASS_FABRIC,
@@ -423,6 +466,7 @@ enum {
 	FI_CLASS_POLL,
 	FI_CLASS_CONNREQ,
 	FI_CLASS_MC,
+	FI_CLASS_NIC,
 };
 
 struct fi_eq_attr;
@@ -479,6 +523,14 @@ struct fid_fabric {
 };
 
 int fi_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric, void *context);
+
+struct fid_nic {
+	struct fid		fid;
+	struct fi_device_attr	*device_attr;
+	struct fi_bus_attr	*bus_attr;
+	struct fi_link_attr	*link_attr;
+	void			*prov_attr;
+};
 
 #define FI_CHECK_OP(ops, opstype, op) \
 	((ops->size > offsetof(opstype, op)) && ops->op)
@@ -571,6 +623,7 @@ enum fi_type {
 	FI_TYPE_CQ_EVENT_FLAGS,
 	FI_TYPE_MR_MODE,
 	FI_TYPE_OP_TYPE,
+	FI_TYPE_DEVICE_ATTR,
 };
 
 char *fi_tostr(const void *data, enum fi_type datatype);
