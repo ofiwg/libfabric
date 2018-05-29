@@ -1,0 +1,170 @@
+// Copyright (c) 2018. Cray Inc. All rights reserved.
+// Libfabric Verbs provider Jenkins Pipeline file
+
+// This pipeline uses shared pipeline libraries for the following
+// functions:
+//   -- launch
+//   -- publish
+
+pipeline {
+    options {
+        // Generic build options
+        timeout (time: 30, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '5'))
+
+        // Build options
+        disableConcurrentBuilds()
+        skipStagesAfterUnstable()
+        timestamps()
+    }
+    agent {
+        node {
+            label 'wham'
+        }
+    }
+    stages {
+        stage('Prepare') {
+            steps {
+                echo "creating git short hash"
+                script {
+                    GIT_SHORT_COMMIT = sh(returnStdout: true, script: "git log -n 1 --pretty=format:'%h'").trim()
+                }
+                echo "checking for prerequisite test software"
+
+                echo " -- checking for presence of fabtests"
+                sh 'test -e $FABTEST_PATH/bin/runfabtests.sh'
+
+                echo " -- checking for the presence of OMB"
+                sh 'test -e $OMB_BUILD_PATH/pt2pt/osu_bw'
+            }
+        }
+        stage('Build') {
+            steps {
+                sh './autogen.sh'
+                sh './configure --prefix=$TMP_INSTALL_PATH'
+                sh 'make -j 12'
+                sh 'make install'
+            }
+        }
+        stage('Test: Phase 1') {
+            failFast true
+            parallel {
+                stage('Unit tests') {
+                    steps {
+                        echo 'placeholder'
+                    }
+                }
+                stage('Smoke tests') {
+                    environment {
+                        LD_LIBRARY_PATH = "$TMP_INSTALL_PATH/lib:$LD_LIBRARY_PATH"
+                    }
+                    steps {
+                        echo 'checking for the presence of the verbs provider'
+                        script {
+                            launch '$TMP_INSTALL_PATH/bin/fi_info -p \'ofi_rxm;verbs\'', 1, 1
+                        }
+                    }
+                }
+                stage('Functional tests') {
+                    steps {
+                        echo 'placeholder'
+                    }
+                }
+                stage('Fabtests') {
+                    environment {
+                        LD_LIBRARY_PATH = "$TMP_INSTALL_PATH/lib:$LD_LIBRARY_PATH"
+                    }
+                    steps {
+                        // ignore the return code for fabtests until we can establish a fingerprint
+                        timeout (time: 20, unit: 'MINUTES') {
+                            script {
+                                def command = '$FABTEST_PATH/bin/runfabtests.sh -p $FABTEST_PATH/bin -v -T 60 \'ofi_rxm;verbs\' 10.100.49.8 10.100.49.9 || true' 
+                                launch "$command", 1, 1, 'wham-0-cn8'
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        stage("Deploy: Install") {
+            steps {
+                sh "make clean"
+                sh "./configure --prefix=$ROOT_BUILD_PATH/libfabric/$GIT_SHORT_COMMIT"
+                sh "make -j 12"
+                sh "make install"
+            }
+        }
+        stage("Deploy: latest") {
+            when {
+                expression { env.BRANCH_NAME == 'master' }
+            }
+            steps {
+                script {
+                    publish env.LIBFABRIC_BUILD_PATH, "latest", "$GIT_SHORT_COMMIT"
+                }
+            }
+        }
+        stage("Test: Phase 2") {
+            failFast true
+            parallel {
+                stage("System tests") {
+                    steps {
+                        echo 'placeholder'
+                    }
+                }
+                stage("Application tests") {
+                    environment {
+                        MPIR_CVAR_OFI_USE_PROVIDER = 'verbs'
+                    }
+                    steps {
+                        echo "checking potential hosts"
+                        launch "hostname", 4, 1   
+
+                        echo "running 2 process, 2 node latency test"
+                        launch "$OMB_BUILD_PATH/pt2pt/osu_latency", 2, 1
+
+                        echo "running 2 process, 2 node bandwidth test"
+                        launch "$OMB_BUILD_PATH/pt2pt/osu_bw", 2, 1
+                        
+                        echo "running 160 processes, 4 node Allreduce test"
+                        launch "$OMB_BUILD_PATH/collective/osu_allreduce -f", 160, 40
+
+                        echo "running 160 processes, 4 node Broadcast test"
+                        launch "$OMB_BUILD_PATH/collective/osu_bcast -f", 160, 40
+
+                        echo "running 80 processes, 4 node Alltoall test"   
+                        launch "$OMB_BUILD_PATH/collective/osu_alltoall -f", 80, 40
+                    }
+                }
+            }
+        }
+        stage("Deploy: Stable") {
+            when {
+                expression { env.BRANCH_NAME == 'master' }
+            }
+            steps {
+                script {
+                    publish env.LIBFABRIC_BUILD_PATH, "stable", "$GIT_SHORT_COMMIT"
+                }
+            }
+        }
+        stage("Deploy: Tags") {
+            when {
+                buildingTag()
+            }
+            steps {
+                script {
+                    publish env.LIBFABRIC_BUILD_PATH, "$BRANCH_NAME", "$GIT_SHORT_COMMIT"
+                }
+            }
+        }
+    }
+    environment {
+        GIT_SHORT_COMMIT = "$GIT_COMMIT"
+        TMP_INSTALL_PATH = pwd tmp: true
+        ROOT_BUILD_PATH = "/scratch/jenkins/builds"
+        FABTEST_PATH = "${ROOT_BUILD_PATH + '/fabtests/stable'}"
+        LIBFABRIC_BUILD_PATH = "${ROOT_BUILD_PATH + '/libfabric'}"
+        OMB_BUILD_PATH = "${ROOT_BUILD_PATH + '/osu-micro-benchmarks/5.4.2/libexec/osu-micro-benchmarks/mpi'}"
+    }
+ }
