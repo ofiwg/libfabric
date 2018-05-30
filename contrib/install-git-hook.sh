@@ -1,18 +1,17 @@
 #!/bin/bash
-
 # Install git hook to run checkpatch on commits
 
-if [[ ! -d .git ]]; then
-	echo "Install script must be run from the project root: ./contrib/install-git-hook.sh"
+BASE_REPO_DIR=$(git rev-parse --show-toplevel)
+
+if [[ -e ${BASE_REPO_DIR}/.git/hooks/pre-commit ]]; then
+	echo "Error! The pre-commit git hook is already present."
 	exit 1
 fi
 
-if [[ -e .git/hooks/post-commit ]]; then
-	echo "post-commit git hooks already present"
-	exit 1
-fi
+cat > ${BASE_REPO_DIR}/.git/hooks/pre-commit << EOL
+#!/usr/bin/env bash
+exec git diff --cached | ./contrib/checkpatch.pl --no-tree --no-signoff
+EOL
+chmod +x ${BASE_REPO_DIR}/.git/hooks/pre-commit
 
-echo "exec git show --format=email HEAD | ./contrib/checkpatch.pl --no-tree --no-signoff" > .git/hooks/post-commit
-chmod +x .git/hooks/post-commit
-
-echo "Hook installed"
+echo "The pre-commit git hook was installed successfully."
