@@ -126,6 +126,7 @@ const struct fi_tx_attr verbs_tx_attr = {
 	.msg_order		= VERBS_MSG_ORDER,
 	.comp_order		= FI_ORDER_STRICT,
 	.inject_size		= 0,
+	.rma_iov_limit		= 1,
 };
 
 const struct fi_tx_attr verbs_rdm_tx_attr = {
@@ -515,7 +516,6 @@ static int fi_ibv_get_device_attrs(struct ibv_context *ctx,
 
 	info->tx_attr->size 			= device_attr.max_qp_wr;
 	info->tx_attr->iov_limit 		= device_attr.max_sge;
-	info->tx_attr->rma_iov_limit		= device_attr.max_sge;
 
 	info->rx_attr->size 			= device_attr.max_srq_wr ?
 						  MIN(device_attr.max_qp_wr,
