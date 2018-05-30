@@ -45,7 +45,7 @@ int tcpx_send_msg(struct tcpx_xfer_entry *tx_entry)
 				       tx_entry->msg_data.iov,
 				       tx_entry->msg_data.iov_cnt);
 	if (bytes_sent < 0)
-		return -errno;
+		return -ofi_sockerr();
 
 	tx_entry->done_len += bytes_sent;
 	if (tx_entry->done_len < ntohll(tx_entry->msg_hdr.hdr.size)) {
@@ -68,7 +68,7 @@ int tcpx_recv_hdr(SOCKET sock, struct tcpx_rx_detect *rx_detect)
 
 	bytes_recvd = ofi_recv_socket(sock, rem_buf, rem_len, 0);
 	if (bytes_recvd <= 0)
-		return (bytes_recvd)? -errno: -FI_ENOTCONN;
+		return (bytes_recvd)? -ofi_sockerr(): -FI_ENOTCONN;
 
 	rx_detect->done_len += bytes_recvd;
 	return (rem_len == bytes_recvd)? FI_SUCCESS : -FI_EAGAIN;
@@ -82,7 +82,7 @@ int tcpx_recv_msg_data(struct tcpx_xfer_entry *rx_entry)
 				       rx_entry->msg_data.iov,
 				       rx_entry->msg_data.iov_cnt);
 	if (bytes_recvd <= 0)
-		return (bytes_recvd)? -errno: -FI_ENOTCONN;
+		return (bytes_recvd)? -ofi_sockerr(): -FI_ENOTCONN;
 
 	rx_entry->done_len += bytes_recvd;
 	if (rx_entry->done_len < ntohll(rx_entry->msg_hdr.hdr.size)) {

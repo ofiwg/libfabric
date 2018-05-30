@@ -104,7 +104,7 @@ void tcpx_cq_report_completion(struct util_cq *cq,
 		err_entry.tag = 0;
 		err_entry.olen = 0;
 		err_entry.err = err;
-		err_entry.prov_errno = errno;
+		err_entry.prov_errno = ofi_sockerr();
 		err_entry.err_data = NULL;
 		err_entry.err_data_size = 0;
 
