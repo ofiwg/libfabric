@@ -502,42 +502,42 @@ void freeifaddrs(struct ifaddrs *ifa)
 
 ssize_t ofi_writev_socket(SOCKET fd, const struct iovec *iovec, size_t iov_cnt)
 {
-	ssize_t size;
+	ssize_t size = 0;
 	int ret, i;
-	WSABUF *wsa_buf;
-	DWORD flags = 0;
 
-	wsa_buf = (WSABUF *)alloca(iov_cnt * sizeof(WSABUF));
+	if (iov_cnt == 1)
+		return send(fd, iovec[0].iov_base, iovec[0].iov_len, 0);
 
 	for (i = 0; i < iov_cnt; i++) {
-		wsa_buf[i].buf = (char *)iovec[i].iov_base;
-		wsa_buf[i].len = iovec[i].iov_len;
+		ret = send(fd, iovec[i].iov_base, iovec[i].iov_len, 0);
+		if (ret >= 0) {
+			size += ret;
+			if (ret != iovec[i].iov_len)
+				return size;
+		} else {
+			return size ? size : ret;
+		}
 	}
-
-	ret = WSASend(fd, wsa_buf, iov_cnt, &size, &flags, NULL, NULL);
-	if (ret)
-		size = (ssize_t)ret;
-
 	return size;
 }
 
 ssize_t ofi_readv_socket(SOCKET fd, const struct iovec *iovec, size_t iov_cnt)
 {
-	ssize_t size;
-	int ret,i;
-	WSABUF *wsa_buf;
-	DWORD flags = 0;
+	ssize_t size = 0;
+	int ret, i;
 
-	wsa_buf = (WSABUF *)alloca(iov_cnt *sizeof(WSABUF));
+	if (iov_cnt == 1)
+		return recv(fd, iovec[0].iov_base, iovec[0].iov_len, 0);
 
-	for (i = 0; i <iov_cnt; i++) {
-		wsa_buf[i].buf = (char *)iovec[i].iov_base;
-		wsa_buf[i].len = iovec[i].iov_len;
+	for (i = 0; i < iov_cnt; i++) {
+		ret = recv(fd, iovec[i].iov_base, iovec[i].iov_len, 0);
+		if (ret >= 0) {
+			size += ret;
+			if (ret != iovec[i].iov_len)
+				return size;
+		} else {
+			return size ? size : ret;
+		}
 	}
-
-	ret = WSARecv(fd, wsa_buf, iov_cnt, &size, &flags, NULL, NULL);
-	if (ret)
-		size = (ssize_t)ret;
-
 	return size;
 }
