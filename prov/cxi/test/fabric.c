@@ -53,7 +53,7 @@ Test(getinfo, prov_name)
 				  cxi_prov_name));
 		infos++;
 	} while ((cxit_fi = cxit_fi->next));
-	cr_assert(infos == cxit_n_ifs);
+	cr_assert(infos == (cxit_n_ifs * cxi_num_vpids));
 }
 
 /* Test fabric selection with domain name */
@@ -162,6 +162,7 @@ Test(getinfo, src_node)
 			cr_assert(!strcmp(cxit_fi->fabric_attr->prov_name,
 					  cxi_prov_name));
 
+			cr_assert(cxit_fi->src_addr);
 			addr = (struct cxi_addr *)cxit_fi->src_addr;
 			cr_assert(addr->nic == if_entry->if_nic);
 			cr_assert(addr->domain == 0);
@@ -224,6 +225,7 @@ Test(getinfo, src_node_service)
 			cr_assert(!strcmp(cxit_fi->fabric_attr->prov_name,
 					  cxi_prov_name));
 
+			cr_assert(cxit_fi->src_addr);
 			addr = (struct cxi_addr *)cxit_fi->src_addr;
 			cr_assert(addr->nic == if_entry->if_nic);
 			cr_assert(addr->domain == dom);
@@ -252,8 +254,142 @@ Test(getinfo, src_node_service)
 	cr_assert(infos == 1);
 }
 
-/* Select fabric by service */
-Test(getinfo, src_service)
+/* Select fabric by node */
+Test(getinfo, dest_node)
+{
+	int ret, infos = 0;
+	struct cxi_addr *addr;
+	struct cxi_if_list_entry *if_entry;
+	char *fab_name, *dom_name;
+	int nic_id = 130;
+
+	cxit_fi_hints->fabric_attr->prov_name = strdup(cxi_prov_name);
+
+	infos = 0;
+
+	/* Make up the NIC of a remote node */
+	ret = asprintf(&cxit_node, "0x%x", nic_id);
+	cr_assert(ret > 0);
+
+	cxit_create_fabric_info();
+	cr_assert(cxit_fi != NULL);
+
+	/* All FIs use the first available src address.  All FI data
+	 * will match the first interface found.  Additional, node is
+	 * used to create a dest addr.
+	 */
+	if_entry = container_of((cxi_if_list.head), struct cxi_if_list_entry,
+				entry);
+
+	/* Make sure we have only 1 FI */
+	do {
+		cr_assert(!strcmp(cxit_fi->fabric_attr->prov_name,
+				  cxi_prov_name));
+
+		cr_assert(cxit_fi->src_addr);
+		addr = (struct cxi_addr *)cxit_fi->src_addr;
+		cr_assert(addr->nic == if_entry->if_nic);
+		cr_assert(addr->domain == 0);
+		cr_assert(addr->port == 0);
+
+		fab_name = get_fab_name(if_entry->if_fabric);
+		cr_assert(!strcmp(cxit_fi->fabric_attr->name,
+				  fab_name));
+		free(fab_name);
+
+		dom_name = get_dom_name(if_entry->if_idx, 0);
+		cr_assert(!strcmp(cxit_fi->domain_attr->name,
+				  dom_name));
+		free(dom_name);
+
+		cr_assert(!strcmp(cxit_fi->fabric_attr->prov_name,
+				  cxi_prov_name));
+
+		cr_assert(cxit_fi->dest_addr);
+		addr = (struct cxi_addr *)cxit_fi->dest_addr;
+		cr_assert(addr->nic == nic_id);
+		cr_assert(addr->domain == 0);
+		cr_assert(addr->port == 0);
+
+		infos++;
+	} while ((cxit_fi = cxit_fi->next));
+
+	cr_assert(infos == 1);
+
+	cxit_destroy_fabric_info();
+	free(cxit_node);
+}
+
+/* Select fabric by node and service */
+Test(getinfo, dest_node_service)
+{
+	int ret, infos = 0;
+	struct cxi_addr *addr;
+	struct cxi_if_list_entry *if_entry;
+	char *fab_name, *dom_name;
+	int nic_id = 130, dom_id = 5, port_id = 6;
+
+	cxit_fi_hints->fabric_attr->prov_name = strdup(cxi_prov_name);
+
+	infos = 0;
+
+	ret = asprintf(&cxit_node, "0x%x", nic_id);
+	cr_assert(ret > 0);
+
+	ret = asprintf(&cxit_service, "%d:%d", dom_id, port_id);
+	cr_assert(ret > 0);
+
+	cxit_create_fabric_info();
+	cr_assert(cxit_fi != NULL);
+
+	/* All FIs use the first available src address.  All FI data
+	 * will match the first interface found.  Additionally, node
+	 * and service are used to create a dest addr.
+	 */
+	if_entry = container_of((cxi_if_list.head), struct cxi_if_list_entry,
+				entry);
+
+	/* Make sure we have only 1 FI */
+	do {
+		cr_assert(!strcmp(cxit_fi->fabric_attr->prov_name,
+				  cxi_prov_name));
+
+		cr_assert(cxit_fi->src_addr);
+		addr = (struct cxi_addr *)cxit_fi->src_addr;
+		cr_assert(addr->nic == if_entry->if_nic);
+		cr_assert(addr->domain == 0);
+		cr_assert(addr->port == 0);
+
+		fab_name = get_fab_name(if_entry->if_fabric);
+		cr_assert(!strcmp(cxit_fi->fabric_attr->name,
+				  fab_name));
+		free(fab_name);
+
+		dom_name = get_dom_name(if_entry->if_idx, 0);
+		cr_assert(!strcmp(cxit_fi->domain_attr->name,
+				  dom_name));
+		free(dom_name);
+
+		cr_assert(!strcmp(cxit_fi->fabric_attr->prov_name,
+				  cxi_prov_name));
+
+		cr_assert(cxit_fi->dest_addr);
+		addr = (struct cxi_addr *)cxit_fi->dest_addr;
+		cr_assert(addr->nic == nic_id);
+		cr_assert(addr->domain == dom_id);
+		cr_assert(addr->port == port_id);
+
+		infos++;
+	} while ((cxit_fi = cxit_fi->next));
+	cr_assert(infos == 1);
+
+	cxit_destroy_fabric_info();
+	free(cxit_service);
+	free(cxit_node);
+}
+
+/* Select fabric by service.  FI_SOURCE is effectively ignored. */
+Test(getinfo, service)
 {
 	int ret, infos = 0;
 	struct cxi_addr *addr;
@@ -284,6 +420,7 @@ Test(getinfo, src_service)
 			if_entry = container_of(entry,
 					struct cxi_if_list_entry, entry);
 
+			cr_assert(cxit_fi->src_addr);
 			addr = (struct cxi_addr *)cxit_fi->src_addr;
 			if (addr->nic != if_entry->if_nic)
 				continue;
@@ -309,22 +446,10 @@ Test(getinfo, src_service)
 			break;
 		}
 	} while ((cxit_fi = cxit_fi->next));
-	cr_assert(infos == cxit_n_ifs);
+	cr_assert(infos == (cxit_n_ifs));
 
 	cxit_destroy_fabric_info();
 	free(cxit_service);
-}
-
-Test(getinfo, dest_node, .disabled = true)
-{
-}
-
-Test(getinfo, dest_node_service, .disabled = true)
-{
-}
-
-Test(getinfo, dest_service, .disabled = true)
-{
 }
 
 TestSuite(fabric, .init = cxit_setup_fabric, .fini = cxit_teardown_fabric);

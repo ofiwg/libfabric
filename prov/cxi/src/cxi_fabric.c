@@ -44,6 +44,7 @@ static struct dlist_entry cxi_fab_list;
 static struct dlist_entry cxi_dom_list;
 static fastlock_t cxi_list_lock;
 struct slist cxi_if_list;
+int cxi_num_vpids;
 static int read_default_params;
 
 struct cxi_if_list_entry *cxi_if_lookup(struct cxi_addr *src_addr)
@@ -393,13 +394,6 @@ int cxi_get_src_addr(struct cxi_addr *dest_addr, struct cxi_addr *src_addr)
 {
 	struct cxi_if_list_entry *if_entry;
 
-	if_entry = cxi_if_lookup(dest_addr);
-	if (if_entry) {
-		/* Dest addr is loopback */
-		memcpy(src_addr, dest_addr, sizeof(*src_addr));
-		return 0;
-	}
-
 	/* TODO how to select an address on matching network? */
 
 	/* Just say the first IF matches */
@@ -441,7 +435,7 @@ static int cxi_parse_node(const char *node, uint32_t *nic)
 		return FI_SUCCESS;
 	}
 
-	if (sscanf(node, "%x", &scan_nic) == 1) {
+	if (sscanf(node, "%i", &scan_nic) == 1) {
 		*nic = scan_nic;
 		return FI_SUCCESS;
 	}
@@ -492,7 +486,7 @@ static int cxi_ep_getinfo(uint32_t version, const char *node,
 			  const struct fi_info *hints, enum fi_ep_type ep_type,
 			  struct fi_info **info)
 {
-	struct cxi_addr addr = CXI_ADDR_INIT,
+	struct cxi_addr saddr = CXI_ADDR_INIT, daddr = CXI_ADDR_INIT,
 			*src_addr = NULL, *dest_addr = NULL;
 	int ret;
 
@@ -500,7 +494,7 @@ static int cxi_ep_getinfo(uint32_t version, const char *node,
 		if (!node && !service)
 			return -FI_ENODATA;
 
-		src_addr = &addr;
+		src_addr = &saddr;
 		ret = cxi_parse_addr(node, service, src_addr);
 		if (ret)
 			return ret;
@@ -509,7 +503,7 @@ static int cxi_ep_getinfo(uint32_t version, const char *node,
 			dest_addr = hints->dest_addr;
 	} else {
 		if (node || service) {
-			dest_addr = &addr;
+			dest_addr = &daddr;
 			ret = cxi_parse_addr(node, service, dest_addr);
 			if (ret)
 				return ret;
@@ -522,9 +516,11 @@ static int cxi_ep_getinfo(uint32_t version, const char *node,
 	}
 
 	if (dest_addr && !src_addr) {
-		src_addr = &addr;
+		src_addr = &saddr;
 		cxi_get_src_addr(dest_addr, src_addr);
 	}
+
+	CXI_LOG_DBG("node: %s service: %s\n", node, service);
 
 	if (src_addr)
 		CXI_LOG_DBG("src_addr: 0x%x:%u:%u\n",
@@ -733,7 +729,8 @@ static int cxi_getinfo(uint32_t version, const char *node, const char *service,
 
 	(void) prev; /* Makes compiler happy */
 	slist_foreach(&cxi_if_list, entry, prev) {
-		char *local_node;
+		char *local_node, *local_service;
+		int i;
 
 		if_entry = container_of(entry, struct cxi_if_list_entry, entry);
 		ret = asprintf(&local_node, "0x%x", if_entry->if_nic);
@@ -744,8 +741,26 @@ static int cxi_getinfo(uint32_t version, const char *node, const char *service,
 		}
 
 		flags |= FI_SOURCE;
-		ret = cxi_node_getinfo(version, local_node, service, flags,
-				       hints, info, &tail);
+		if (service) {
+			ret = cxi_node_getinfo(version, local_node, service,
+					       flags, hints, info, &tail);
+		} else {
+			for (i = 0; i < cxi_num_vpids; i++) {
+				ret = asprintf(&local_service, "%d:0", i);
+				if (ret == -1) {
+					CXI_LOG_ERROR("asprintf failed: %s\n",
+						      strerror(ofi_syserr()));
+					local_service = NULL;
+				}
+				ret = cxi_node_getinfo(version, local_node,
+						       local_service, flags,
+						       hints, info, &tail);
+				free(local_service);
+
+				if (ret && ret != -FI_ENODATA)
+					return ret;
+			}
+		}
 		free(local_node);
 
 		if (ret) {
@@ -781,6 +796,8 @@ CXI_INI
 	slist_init(&cxi_if_list);
 
 	cxi_get_list_of_if(&cxi_if_list);
+
+	cxi_num_vpids = CXI_NUM_VPIDS_DEF;
 
 	return &cxi_prov;
 }

@@ -112,6 +112,8 @@ extern uint64_t CXI_EP_RDM_CAP;
 
 #define CXI_WIRE_PROTO_VERSION (1)
 
+#define CXI_NUM_VPIDS_DEF 128
+
 extern const char cxi_fab_fmt[];
 extern const char cxi_dom_fmt[];
 extern const char cxi_prov_name[];
@@ -120,6 +122,7 @@ extern int cxi_av_def_sz;
 extern int cxi_cq_def_sz;
 extern int cxi_eq_def_sz;
 extern struct slist cxi_if_list;
+extern int cxi_num_vpids;
 
 extern struct fi_provider cxi_prov;
 
