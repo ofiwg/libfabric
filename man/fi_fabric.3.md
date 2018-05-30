@@ -70,7 +70,7 @@ values for the datatype are listed below, along with the corresponding
 datatype or field value.
 
 *FI_TYPE_INFO*
-: struct fi_info
+: struct fi_info, including all substructures and fields
 
 *FI_TYPE_EP_TYPE*
 : struct fi_info::type field
@@ -99,24 +99,47 @@ datatype or field value.
 *FI_TYPE_FABRIC_ATTR*
 : struct fi_fabric_attr
 
-*FI_TYPE_DOMAIN_CAP*
-: struct fi_info::domain_cap field
-
 *FI_TYPE_THREADING*
 : enum fi_threading
 
 *FI_TYPE_PROGRESS*
 : enum fi_progress
 
-*FI_TYPE_PROTO*
+*FI_TYPE_PROTOCOL*
 : struct fi_ep_attr::protocol field
 
 *FI_TYPE_MSG_ORDER*
 : struct fi_ep_attr::msg_order field
 
+*FI_TYPE_MODE*
+: struct fi_info::mode field
+
+*FI_TYPE_AV_TYPE*
+: enum fi_av_type
+
+*FI_TYPE_ATOMIC_TYPE*
+: enum fi_datatype
+
+*FI_TYPE_ATOMIC_OP*
+: enum fi_op
+
 *FI_TYPE_VERSION*
 : Returns the library version of libfabric in string form.  The data
   parameter is ignored.
+
+*FI_TYPE_EQ_EVENT*
+: uint32_t event parameter returned from fi_eq_read().  See `fi_eq(3)`
+  for a list of known values.
+
+*FI_TYPE_CQ_EVENT_FLAGS*
+: uint64_t flags field in fi_cq_xxx_entry structures.  See `fi_cq(3)`
+  for valid flags.
+
+*FI_TYPE_MR_MODE*
+: struct fi_domain_attr::mr_mode flags
+
+*FI_TYPE_OP_TYPE*
+: enum fi_op_type
 
 fi_tostr() will return a pointer to an internal libfabric buffer that
 should not be modified, and will be overwritten the next time
