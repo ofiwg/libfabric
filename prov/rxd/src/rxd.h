@@ -149,7 +149,9 @@ struct rxd_ep {
 
 	struct dlist_entry tx_list;
 	struct dlist_entry unexp_list;
+	struct dlist_entry unexp_tag_list;
 	struct dlist_entry rx_list;
+	struct dlist_entry rx_tag_list;
 	struct dlist_entry active_rx_list;
 };
 
@@ -197,6 +199,7 @@ struct rxd_x_entry {
 	uint64_t seg_size;
 
 	uint32_t flags;
+	uint64_t ignore;
 	uint8_t iov_count;
 	struct iovec iov[RXD_IOV_LIMIT];
 
@@ -208,13 +211,18 @@ struct rxd_x_entry {
 DECLARE_FREESTACK(struct rxd_x_entry, rxd_tx_fs);
 DECLARE_FREESTACK(struct rxd_x_entry, rxd_rx_fs);
 
+#define rxd_ep_rx_flags(rxd_ep) ((rxd_ep)->util_ep.rx_op_flags)
+#define rxd_ep_tx_flags(rxd_ep) ((rxd_ep)->util_ep.tx_op_flags)
+
 struct rxd_ctrl_hdr {
 	uint32_t version;
 	uint16_t type;
 	uint16_t window;
 	uint64_t size;
 	uint64_t data;
-	uint64_t seg_size;
+	uint64_t tag;
+	uint32_t op;
+	uint32_t seg_size;
 };
 
 struct rxd_pkt_hdr {
@@ -266,6 +274,16 @@ static inline void *rxd_pkt_start(struct rxd_pkt_entry *pkt_entry)
 	return (void *) ((char *) pkt_entry + sizeof(*pkt_entry));
 }
 
+static inline int rxd_match_addr(fi_addr_t addr, fi_addr_t match_addr)
+{
+	return (addr == FI_ADDR_UNSPEC || addr == match_addr);
+}
+
+static inline int rxd_match_tag(uint64_t tag, uint64_t ignore, uint64_t match_tag)
+{
+	return ((tag | ignore ) == (match_tag | ignore));
+}
+
 int rxd_info_to_core(uint32_t version, const struct fi_info *rxd_info,
 		     struct fi_info *core_info);
 int rxd_info_to_rxd(uint32_t version, const struct fi_info *core_info,
@@ -305,8 +323,6 @@ int rxd_ep_retry_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry,
 		     struct rxd_x_entry *x_entry);
 
 /* Tx/Rx entry sub-functions */
-struct rxd_x_entry *rxd_tx_entry_init(struct rxd_ep *ep,
-		const struct fi_msg *msg, fi_addr_t addr, uint64_t flags);
 void rxd_tx_entry_free(struct rxd_ep *ep, struct rxd_x_entry *tx_entry);
 void rxd_rx_entry_free(struct rxd_ep *ep, struct rxd_x_entry *rx_entry);
 void rxd_ep_free_acked_pkts(struct rxd_ep *ep, struct rxd_x_entry *x_entry,

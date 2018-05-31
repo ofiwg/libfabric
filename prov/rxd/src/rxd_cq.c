@@ -160,7 +160,6 @@ static int rxd_cq_write_tagged_signal(struct rxd_cq *cq,
 
 void rxd_rx_entry_free(struct rxd_ep *ep, struct rxd_x_entry *rx_entry)
 {
-	rxd_ep_free_acked_pkts(ep, rx_entry, 0);
 	rx_entry->state = RXD_FREE;
 	rx_entry->key = ~0;
 	dlist_remove(&rx_entry->entry);
@@ -286,15 +285,26 @@ void rxd_post_cts(struct rxd_ep *rxd_ep, struct rxd_x_entry *rx_entry,
 		rxd_release_tx_pkt(rxd_ep, pkt_entry);
 }
 
-static int rxd_match_recv(struct dlist_entry *item, const void *arg)
+static int rxd_match_msg(struct dlist_entry *item, const void *arg)
 {
-	const struct rxd_pkt_entry *pkt_entry = arg;
+	const struct rxd_pkt_entry *pkt_entry = (struct rxd_pkt_entry *) arg;
 	struct rxd_x_entry *rx_entry;
 
 	rx_entry = container_of(item, struct rxd_x_entry, entry);
 
-	return (rx_entry->peer == FI_ADDR_UNSPEC ||
-		rx_entry->peer == pkt_entry->peer);
+	return rxd_match_addr(rx_entry->peer, pkt_entry->peer);
+}
+
+static int rxd_match_tmsg(struct dlist_entry *item, const void *arg)
+{
+	struct rxd_pkt_entry *pkt_entry = (struct rxd_pkt_entry *) arg;
+	struct rxd_x_entry *rx_entry;
+
+	rx_entry = container_of(item, struct rxd_x_entry, entry);
+
+	return rxd_match_addr(rx_entry->peer, pkt_entry->peer) &&
+	       rxd_match_tag(rx_entry->cq_entry.tag, rx_entry->ignore,
+			     pkt_entry->pkt->ctrl.tag);
 }
 
 static void rxd_handle_data(struct rxd_ep *ep, struct fi_cq_msg_entry *comp,
@@ -347,18 +357,20 @@ static int rxd_check_active(struct rxd_ep *ep, struct rxd_pkt_entry *rts_pkt)
 	return -FI_ENOMSG;
 }
 
-static int rxd_check_post_unexp(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
+static int rxd_check_post_unexp(struct dlist_entry *list,
+				struct rxd_pkt_entry *pkt_entry)
 {
 	struct rxd_pkt_entry *unexp;
 	struct dlist_entry *item;
 
-	dlist_foreach(&ep->unexp_list, item) {
+	dlist_foreach(list, item) {
 		unexp = container_of(item, struct rxd_pkt_entry, d_entry);
 		if (unexp->pkt->hdr.tx_id == pkt_entry->pkt->hdr.tx_id &&
-		    unexp->pkt->hdr.key == pkt_entry->pkt->hdr.key)
+		    unexp->pkt->hdr.key == pkt_entry->pkt->hdr.key &&
+		    unexp->peer == pkt_entry->peer)
 			return 0;
 	}
-	dlist_insert_tail(&pkt_entry->d_entry, &ep->unexp_list);
+	dlist_insert_tail(&pkt_entry->d_entry, list);
 	return -FI_ENOMSG;
 }
 
@@ -369,6 +381,7 @@ static int rxd_handle_rts(struct rxd_ep *ep, struct fi_cq_msg_entry *comp,
 	struct ofi_rbnode *node;
 	struct rxd_x_entry *rx_entry;
 	struct dlist_entry *match;
+	struct dlist_entry *unexp_list;
 	fi_addr_t dg_addr;
 	int ret;
 
@@ -391,10 +404,17 @@ static int rxd_handle_rts(struct rxd_ep *ep, struct fi_cq_msg_entry *comp,
 			return 0;
 	}
 
-	match = dlist_remove_first_match(&ep->rx_list, &rxd_match_recv,
+	if (pkt_entry->pkt->ctrl.op == ofi_op_tagged) {
+		match = dlist_remove_first_match(&ep->rx_tag_list, &rxd_match_tmsg,
 					 (void *) pkt_entry);
+		unexp_list = &ep->unexp_tag_list;
+	} else {
+		match = dlist_remove_first_match(&ep->rx_list, &rxd_match_msg,
+					 (void *) pkt_entry);
+		unexp_list = &ep->unexp_list;
+	}
 	if (!match)
-		return rxd_check_post_unexp(ep, pkt_entry);
+		return rxd_check_post_unexp(unexp_list, pkt_entry);
 
 	rx_entry = container_of(match, struct rxd_x_entry, entry);
 
@@ -455,7 +475,7 @@ static void rxd_handle_ack(struct rxd_ep *ep, struct fi_cq_msg_entry *comp,
 		return;
 
 	rxd_ep_free_acked_pkts(ep, tx_entry, pkt_entry->pkt->hdr.seg_no - 1);
-	if (tx_entry->next_seg_no != pkt_entry->pkt->hdr.seg_no)
+	if (!slist_empty(&tx_entry->pkt_list))
 		return;
 
 	if (!(tx_entry->flags & RXD_INJECT)) {
