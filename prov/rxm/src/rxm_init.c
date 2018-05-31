@@ -183,6 +183,9 @@ static void rxm_alter_info(const struct fi_info *hints, struct fi_info *info)
 			if (!(hints->caps & FI_SOURCE))
 				cur->caps &= ~FI_SOURCE;
 
+			if (hints->mode & FI_BUFFERED_RECV)
+				cur->mode |= FI_BUFFERED_RECV;
+
 			if (!ofi_mr_local(hints)) {
 				cur->mode &= ~FI_LOCAL_MR;
 				cur->tx_attr->mode &= ~FI_LOCAL_MR;

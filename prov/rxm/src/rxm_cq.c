@@ -137,6 +137,23 @@ static int rxm_match_rma_iov(struct rxm_recv_entry *recv_entry,
 	return FI_SUCCESS;
 }
 
+static int rxm_finish_buf_recv(struct rxm_rx_buf *rx_buf)
+{
+	/* TODO set flags to FI_MORE and handle send/recv partial data */
+	if (OFI_UNLIKELY((rx_buf->ep->rxm_info->mode & FI_BUFFERED_RECV) &&
+	    rx_buf->pkt.hdr.size > rx_buf->ep->rxm_info->tx_attr->inject_size))
+		assert(0);
+
+	FI_DBG(&rxm_prov, FI_LOG_CQ, "writing buffered recv completion: "
+	       "length: %" PRIu64 "\n", rx_buf->pkt.hdr.size);
+	rx_buf->recv_context.ep = &rx_buf->ep->util_ep.ep_fid;
+	return ofi_cq_write(rx_buf->ep->util_ep.rx_cq, &rx_buf->recv_context,
+			    rx_buf->pkt.hdr.flags | FI_RECV |
+			    (rx_buf->pkt.hdr.flags & (FI_MSG | FI_TAGGED)),
+			    rx_buf->pkt.hdr.size, &rx_buf->pkt,
+			    rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
+}
+
 static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 {
 	int ret;
@@ -435,6 +452,9 @@ static inline ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 				ofi_cirque_windex(rx_buf->ep->util_ep.rx_cq->cirq)] =
 					rx_buf->conn->handle.fi_addr;
 	}
+
+	if (rx_buf->ep->rxm_info->mode & FI_BUFFERED_RECV)
+		return rxm_finish_buf_recv(rx_buf);
 
 	switch(rx_buf->pkt.hdr.op) {
 	case ofi_op_msg:

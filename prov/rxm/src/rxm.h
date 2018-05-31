@@ -257,6 +257,7 @@ struct rxm_rx_buf {
 	struct rxm_recv_entry *recv_entry;
 	struct rxm_unexp_msg unexp_msg;
 	uint64_t comp_flags;
+	struct fi_recv_context recv_context;
 
 	/* Used for large messages */
 	struct rxm_iov match_iov[RXM_IOV_LIMIT];
