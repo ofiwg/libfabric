@@ -309,9 +309,6 @@ Windows OS to expose the capabilities of the networking devices if the hardware
 vendors of the devices implemented the Network Direct service provider interface
 (SPI) for their hardware.
 
-The Network Direct is an experimental provider. The full support of the Network
-Direct provider will be added to 1.6 release version of libfabric.
-
 See the `fi_netdir(7)` man page for more details.
 
 #### Dependencies
