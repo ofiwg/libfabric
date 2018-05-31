@@ -107,10 +107,9 @@ static void tcpx_getinfo_ifs(struct fi_info **info)
 			assert(!tail->next);
 			tail->next = loopback;
 		}
-
-		fi_freeinfo(*info);
-		*info = head;
 	}
+	fi_freeinfo(*info);
+	*info = head;
 }
 #else
 #define tcpx_getinfo_ifs(info) do{ } while(0)

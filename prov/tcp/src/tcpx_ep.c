@@ -328,9 +328,9 @@ static int tcpx_ep_connect(struct fid_ep *ep, const void *addr,
 
 	ret = connect(tcpx_ep->conn_fd, (struct sockaddr *) addr,
 		      (socklen_t) ofi_sizeofaddr(addr));
-	if (ret && errno != FI_EINPROGRESS) {
+	if (ret && ofi_sockerr() != FI_EINPROGRESS) {
 		free(fd_info);
-		return -errno;
+		return -ofi_sockerr();
 	}
 
 	fd_info->fid = &tcpx_ep->util_ep.ep_fid.fid;
@@ -393,7 +393,7 @@ static int tcpx_ep_shutdown(struct fid_ep *ep, uint64_t flags)
 	tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
 
 	ret = ofi_shutdown(tcpx_ep->conn_fd, SHUT_RDWR);
-	if (ret && errno != ENOTCONN) {
+	if (ret && ofi_sockerr() != ENOTCONN) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_DATA, "ep shutdown unsuccessful\n");
 	}
 
@@ -426,7 +426,8 @@ static int tcpx_pep_sock_create(struct tcpx_pep *pep)
 	pep->sock = ofi_socket(af, SOCK_STREAM, 0);
 	if (pep->sock == INVALID_SOCKET) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-			"failed to create listener: %s\n", strerror(errno));
+			"failed to create listener: %s\n",
+			strerror(ofi_sockerr()));
 		return -FI_EIO;
 	}
 
@@ -439,7 +440,8 @@ static int tcpx_pep_sock_create(struct tcpx_pep *pep)
 		   (socklen_t) pep->info.src_addrlen);
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-			"failed to bind listener: %s\n", strerror(errno));
+			"failed to bind listener: %s\n",
+			strerror(ofi_sockerr()));
 		goto err;
 	}
 	return FI_SUCCESS;
@@ -456,7 +458,7 @@ static int tcpx_ep_getname(fid_t fid, void *addr, size_t *addrlen)
 
 	tcpx_ep = container_of(fid, struct tcpx_ep, util_ep.ep_fid);
 	if (getsockname(tcpx_ep->conn_fd, addr, (socklen_t *)addrlen))
-		return (addrlen_in < *addrlen)? -FI_ETOOSMALL: -errno;
+		return (addrlen_in < *addrlen)? -FI_ETOOSMALL: -ofi_sockerr();
 
 	return FI_SUCCESS;
 }
@@ -641,7 +643,7 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 			ep->conn_fd = create_ep_sock_from_pep_sock(pep->sock);
 			if (ep->conn_fd == INVALID_SOCKET) {
-				ret = -errno;
+				ret = -ofi_sockerr();
 				goto err2;
 			}
 		} else {
@@ -662,7 +664,7 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 		ep->conn_fd = ofi_socket(af, SOCK_STREAM, 0);
 		if (ep->conn_fd == INVALID_SOCKET) {
-			ret = -errno;
+			ret = -ofi_sockerr();
 			goto err2;
 		}
 
@@ -796,7 +798,7 @@ static int tcpx_pep_getname(fid_t fid, void *addr, size_t *addrlen)
 
 	tcpx_pep = container_of(fid, struct tcpx_pep, util_pep.pep_fid);
 	if (getsockname(tcpx_pep->sock, addr, (socklen_t *)addrlen))
-		return (addrlen_in < *addrlen)? -FI_ETOOSMALL: -errno;
+		return (addrlen_in < *addrlen)? -FI_ETOOSMALL: -ofi_sockerr();
 
 	return FI_SUCCESS;
 }
@@ -813,7 +815,7 @@ static int tcpx_pep_listen(struct fid_pep *pep)
 	if (listen(tcpx_pep->sock, SOMAXCONN)) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"socket listen failed\n");
-		return -errno;
+		return -ofi_sockerr();
 	}
 
 	fastlock_acquire(&tcpx_fabric->poll_mgr.lock);

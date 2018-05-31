@@ -245,13 +245,13 @@ static int send_conn_req(struct poll_fd_mgr *poll_mgr,
 	socklen_t len;
 	int status, ret = FI_SUCCESS;
 
-	assert(poll_mgr->poll_fds[index].revents == POLLOUT);
+	assert(poll_mgr->poll_fds[index].revents & POLLOUT);
 
 	len = sizeof(status);
 	ret = getsockopt(ep->conn_fd, SOL_SOCKET, SO_ERROR, (char *) &status, &len);
 	if (ret < 0 || status) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "connection failure\n");
-		return (ret < 0)? -errno : status;
+		return (ret < 0)? -ofi_sockerr() : status;
 	}
 
 	ret = tx_cm_data(ep->conn_fd, ofi_ctrl_connreq, poll_info);
@@ -292,7 +292,7 @@ static int proc_conn_resp(struct poll_fd_mgr *poll_mgr,
 	ssize_t len;
 	int ret = FI_SUCCESS;
 
-	assert(poll_mgr->poll_fds[index].revents == POLLIN);
+	assert(poll_mgr->poll_fds[index].revents & POLLIN);
 	ret = rx_cm_data(ep->conn_fd, &conn_resp, ofi_ctrl_connresp, poll_info);
 	if (ret)
 		return ret;
