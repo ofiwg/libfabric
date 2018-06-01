@@ -455,12 +455,14 @@ static int tcpx_ep_getname(fid_t fid, void *addr, size_t *addrlen)
 {
 	struct tcpx_ep *tcpx_ep;
 	size_t addrlen_in = *addrlen;
+	int ret;
 
 	tcpx_ep = container_of(fid, struct tcpx_ep, util_ep.ep_fid);
-	if (getsockname(tcpx_ep->conn_fd, addr, (socklen_t *)addrlen))
-		return (addrlen_in < *addrlen)? -FI_ETOOSMALL: -ofi_sockerr();
+	ret = ofi_getsockname(tcpx_ep->conn_fd, addr, (socklen_t *)addrlen);
+	if (ret)
+		return -ofi_sockerr();
 
-	return FI_SUCCESS;
+	return (addrlen_in < *addrlen)? -FI_ETOOSMALL: FI_SUCCESS;
 }
 
 static struct fi_ops_cm tcpx_cm_ops = {
@@ -795,12 +797,14 @@ static int tcpx_pep_getname(fid_t fid, void *addr, size_t *addrlen)
 {
 	struct tcpx_pep *tcpx_pep;
 	size_t addrlen_in = *addrlen;
+	int ret;
 
 	tcpx_pep = container_of(fid, struct tcpx_pep, util_pep.pep_fid);
-	if (getsockname(tcpx_pep->sock, addr, (socklen_t *)addrlen))
-		return (addrlen_in < *addrlen)? -FI_ETOOSMALL: -ofi_sockerr();
+	ret = ofi_getsockname(tcpx_pep->sock, addr, (socklen_t *)addrlen);
+	if (ret)
+		return -ofi_sockerr();
 
-	return FI_SUCCESS;
+	return (addrlen_in < *addrlen)? -FI_ETOOSMALL: FI_SUCCESS;
 }
 
 static int tcpx_pep_listen(struct fid_pep *pep)
