@@ -154,11 +154,14 @@ static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 
 			switch (pool->type) {
 			case RXM_BUF_POOL_TX_MSG:
+				tx_buf->pkt.hdr.flags = FI_MSG;
+				/* fall through */
 			case RXM_BUF_POOL_RMA:
 				tx_buf->pkt.ctrl_hdr.type = ofi_ctrl_data;
 				tx_buf->pkt.hdr.op = ofi_op_msg;
 				break;
 			case RXM_BUF_POOL_TX_TAGGED:
+				tx_buf->pkt.hdr.flags = FI_TAGGED;
 				tx_buf->pkt.ctrl_hdr.type = ofi_ctrl_data;
 				tx_buf->pkt.hdr.op = ofi_op_tagged;
 				break;
@@ -792,7 +795,7 @@ rxm_ep_format_tx_res_lightweight(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_con
 	(*tx_buf)->pkt.hdr.tag = tag;
 
 	if (flags & FI_REMOTE_CQ_DATA) {
-		(*tx_buf)->pkt.hdr.flags = FI_REMOTE_CQ_DATA;
+		(*tx_buf)->pkt.hdr.flags |= FI_REMOTE_CQ_DATA;
 		(*tx_buf)->pkt.hdr.data = data;
 	}
 
