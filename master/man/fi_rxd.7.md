@@ -52,6 +52,12 @@ The *rxd* provider checks for the following environment variables:
 : Number of times to read the core provider's CQ for a segment completion
   before trying to progress sends. Default is 1000.
 
+*FI_RXD_OOO_RDM*
+: Toggles out-of-order reliability mode. This indicates that the rxd provider
+  can assume the core provider will not drop any packets, but might deliver
+  packets out of order. As a result, resending is turned off and the receiver
+  will reassemble all received packets. This mode is turned off by default.
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),
