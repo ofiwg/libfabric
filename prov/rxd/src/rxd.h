@@ -83,8 +83,12 @@
 #define RXD_LAST		(1 << 4)
 #define RXD_CTRL		(1 << 5)
 
-extern int rxd_progress_spin_count;
+struct rxd_env {
+	int spin_count;
+	int ooo_rdm;
+};
 
+extern struct rxd_env rxd_env;
 extern struct fi_provider rxd_prov;
 extern struct fi_info rxd_info;
 extern struct fi_fabric_attr rxd_fabric_attr;
@@ -189,6 +193,8 @@ struct rxd_x_entry {
 	uint32_t next_start;
 	uint64_t retry_time;
 	uint8_t retry_cnt;
+	uint32_t num_segs;
+	uint64_t seg_size;
 
 	uint32_t flags;
 	uint8_t iov_count;
@@ -208,6 +214,7 @@ struct rxd_ctrl_hdr {
 	uint16_t window;
 	uint64_t size;
 	uint64_t data;
+	uint64_t seg_size;
 };
 
 struct rxd_pkt_hdr {

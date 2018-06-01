@@ -81,6 +81,8 @@ extern "C" {
 		_a > _b ? _a : _b; })
 #endif
 
+#define ofi_div_ceil(a, b) ((a + b - 1) / b)
+
 
 /*
  * CPU specific features
