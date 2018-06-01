@@ -115,10 +115,12 @@ struct rxm_fabric {
 struct rxm_conn {
 	struct fid_ep *msg_ep;
 	struct dlist_entry postponed_tx_list;
+	struct dlist_entry posted_rx_list;
 	struct util_cmap_handle handle;
 	/* This is saved MSG EP fid, that hasn't been closed during
 	 * handling of CONN_RECV in CMAP_CONNREQ_SENT for passive side */
 	struct fid_ep *saved_msg_ep;
+	struct dlist_entry saved_posted_rx_list;
 };
 
 struct rxm_domain {
@@ -396,7 +398,7 @@ struct rxm_ep {
 
 	struct rxm_buf_pool	buf_pools[RXM_BUF_POOL_MAX];
 
-	struct dlist_entry	post_rx_list;
+	struct dlist_entry	posted_srx_list;
 	struct dlist_entry	repost_ready_list;
 
 	struct rxm_send_queue	send_queue;
@@ -454,7 +456,10 @@ void rxm_cq_write_error(struct util_cq *cq, struct util_cntr *cntr,
 void rxm_ep_progress_one(struct util_ep *util_ep);
 void rxm_ep_progress_multi(struct util_ep *util_ep);
 
-int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep);
+int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep,
+		       struct dlist_entry *posted_rx_list);
+void rxm_ep_cleanup_posted_rx_list(struct rxm_ep *rxm_ep,
+				   struct dlist_entry *posted_rx_list);
 
 static inline
 void rxm_ep_msg_mr_closev(struct fid_mr **mr, size_t count)
