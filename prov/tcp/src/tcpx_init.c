@@ -44,11 +44,14 @@
 #if HAVE_GETIFADDRS
 static void tcpx_getinfo_ifs(struct fi_info **info)
 {
+	char *tcpx_interface_name = NULL;
 	struct ifaddrs *ifaddrs, *ifa;
 	struct fi_info *head, *tail, *cur, *loopback;
 	size_t addrlen;
 	uint32_t addr_format;
 	int ret;
+
+	fi_param_get_str(&tcpx_prov, "iface", &tcpx_interface_name);
 
 	ret = ofi_getifaddrs(&ifaddrs);
 	if (ret)
@@ -58,6 +61,18 @@ static void tcpx_getinfo_ifs(struct fi_info **info)
 	for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
 		if (ifa->ifa_addr == NULL || !(ifa->ifa_flags & IFF_UP))
 			continue;
+		if (tcpx_interface_name) {
+			if (strncmp(tcpx_interface_name, ifa->ifa_name,
+				    strlen(tcpx_interface_name)) != 0) {
+				FI_DBG(&tcpx_prov, FI_LOG_CORE,
+				       "Skip (%s) interface\n", ifa->ifa_name);
+				continue;
+			} else {
+				FI_DBG(&tcpx_prov, FI_LOG_CORE,
+				       "Matching interface (%s) found\n",
+				       ifa->ifa_name);
+			}
+		}
 
 		switch (ifa->ifa_addr->sa_family) {
 		case AF_INET:
@@ -148,5 +163,8 @@ struct fi_provider tcpx_prov = {
 
 TCP_INI
 {
+	fi_param_define(&tcpx_prov, "iface", FI_PARAM_STRING,
+			"Specify interface name");
+
 	return &tcpx_prov;
 }
