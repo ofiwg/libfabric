@@ -305,7 +305,7 @@ static void rxm_conn_handle_postponed_op(struct rxm_ep *rxm_ep,
 		dlist_pop_front(&rxm_conn->postponed_tx_list, struct rxm_tx_entry,
 				tx_entry, postponed_entry);
 		if (!(tx_entry->comp_flags & FI_RMA))
-			 rxm_ep_handle_postponed_tx_op(rxm_ep, rxm_conn, tx_entry);
+			rxm_ep_handle_postponed_tx_op(rxm_ep, rxm_conn, tx_entry);
 		else
 			rxm_ep_handle_postponed_rma_op(rxm_ep, rxm_conn, tx_entry);
 	}
