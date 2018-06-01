@@ -311,7 +311,7 @@ static int proc_conn_resp(struct poll_fd_mgr *poll_mgr,
 		goto err;
 
 	len = fi_eq_write(&ep->util_ep.eq->eq_fid, FI_CONNECTED, cm_entry,
-				sizeof(*cm_entry) + poll_info->cm_data_sz, 0);
+			  sizeof(*cm_entry) + poll_info->cm_data_sz, 0);
 	if (len < 0) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
 		ret = (int) len;

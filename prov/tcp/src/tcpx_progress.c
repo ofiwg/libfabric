@@ -235,7 +235,7 @@ static int tcpx_match_read_rsp(struct dlist_entry *entry, const void *arg)
 	struct tcpx_rx_detect *rx_detect = (struct tcpx_rx_detect *) arg;
 
 	xfer_entry = container_of(entry, struct tcpx_xfer_entry,
-				entry);
+				  entry);
 	return (xfer_entry->msg_hdr.hdr.remote_idx ==
 		ntohll(rx_detect->hdr.hdr.remote_idx));
 }
@@ -369,7 +369,7 @@ static void tcpx_process_rx_msg(struct tcpx_ep *ep)
 			goto err;
 
 		if (tcpx_get_rx_entry(&ep->rx_detect,
-					 &ep->cur_rx_entry))
+				      &ep->cur_rx_entry))
 			return;
 	}
 

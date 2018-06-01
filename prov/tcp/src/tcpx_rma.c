@@ -80,7 +80,7 @@ static void tcpx_rma_read_recv_entry_fill(struct tcpx_xfer_entry *recv_entry,
 }
 
 static ssize_t tcpx_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
-		uint64_t flags)
+				uint64_t flags)
 {
 	struct tcpx_ep *tcpx_ep;
 	struct tcpx_cq *tcpx_cq;
@@ -117,7 +117,7 @@ static ssize_t tcpx_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 }
 
 static ssize_t tcpx_rma_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
-		fi_addr_t src_addr, uint64_t addr, uint64_t key, void *context)
+			     fi_addr_t src_addr, uint64_t addr, uint64_t key, void *context)
 {
 	struct iovec msg_iov = {
 		.iov_base = (void *)buf,
@@ -143,8 +143,8 @@ static ssize_t tcpx_rma_read(struct fid_ep *ep, void *buf, size_t len, void *des
 }
 
 static ssize_t tcpx_rma_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
-		size_t count, fi_addr_t src_addr, uint64_t addr, uint64_t key,
-		void *context)
+			      size_t count, fi_addr_t src_addr, uint64_t addr, uint64_t key,
+			      void *context)
 {
 	struct fi_rma_iov rma_iov = {
 		.addr = addr,
@@ -166,7 +166,7 @@ static ssize_t tcpx_rma_readv(struct fid_ep *ep, const struct iovec *iov, void *
 }
 
 static ssize_t tcpx_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
-		uint64_t flags)
+				 uint64_t flags)
 {
 	struct tcpx_ep *tcpx_ep;
 	struct tcpx_cq *tcpx_cq;
@@ -238,7 +238,7 @@ static ssize_t tcpx_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg
 }
 
 static ssize_t tcpx_rma_write(struct fid_ep *ep, const void *buf, size_t len, void *desc,
-		fi_addr_t dest_addr, uint64_t addr, uint64_t key, void *context)
+			      fi_addr_t dest_addr, uint64_t addr, uint64_t key, void *context)
 {
 	struct iovec msg_iov = {
 		.iov_base = (void *)buf,
@@ -264,8 +264,8 @@ static ssize_t tcpx_rma_write(struct fid_ep *ep, const void *buf, size_t len, vo
 }
 
 static ssize_t tcpx_rma_writev(struct fid_ep *ep, const struct iovec *iov, void **desc,
-		size_t count, fi_addr_t dest_addr, uint64_t addr, uint64_t key,
-		void *context)
+			       size_t count, fi_addr_t dest_addr, uint64_t addr, uint64_t key,
+			       void *context)
 {
 	struct fi_rma_iov rma_iov = {
 		.addr = addr,
@@ -288,8 +288,8 @@ static ssize_t tcpx_rma_writev(struct fid_ep *ep, const struct iovec *iov, void 
 
 
 static ssize_t tcpx_rma_writedata(struct fid_ep *ep, const void *buf, size_t len, void *desc,
-		uint64_t data, fi_addr_t dest_addr, uint64_t addr, uint64_t key,
-		void *context)
+				  uint64_t data, fi_addr_t dest_addr, uint64_t addr, uint64_t key,
+				  void *context)
 {
 	struct iovec msg_iov = {
 		.iov_base = (void *)buf,
@@ -315,7 +315,7 @@ static ssize_t tcpx_rma_writedata(struct fid_ep *ep, const void *buf, size_t len
 }
 
 static ssize_t tcpx_rma_inject(struct fid_ep *ep, const void *buf, size_t len,
-		fi_addr_t dest_addr, uint64_t addr, uint64_t key)
+			       fi_addr_t dest_addr, uint64_t addr, uint64_t key)
 {
 	struct iovec msg_iov = {
 		.iov_base = (void *)buf,
@@ -341,7 +341,7 @@ static ssize_t tcpx_rma_inject(struct fid_ep *ep, const void *buf, size_t len,
 }
 
 static ssize_t tcpx_rma_injectdata(struct fid_ep *ep, const void *buf, size_t len,
-		uint64_t data, fi_addr_t dest_addr, uint64_t addr, uint64_t key)
+				   uint64_t data, fi_addr_t dest_addr, uint64_t addr, uint64_t key)
 {
 	struct iovec msg_iov = {
 		.iov_base = (void *)buf,

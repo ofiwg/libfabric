@@ -35,7 +35,7 @@
 #define TCPX_DOMAIN_CAPS FI_LOCAL_COMM | FI_REMOTE_COMM
 
 #define TCPX_MSG_ORDER (FI_ORDER_RAR | FI_ORDER_RAW | FI_ORDER_RAS |	\
-			FI_ORDER_WAW | FI_ORDER_WAS |	\
+			FI_ORDER_WAW | FI_ORDER_WAS |			\
 			FI_ORDER_SAW | FI_ORDER_SAS)
 
 static struct fi_tx_attr tcpx_tx_attr = {
