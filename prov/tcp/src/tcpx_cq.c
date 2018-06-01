@@ -37,13 +37,21 @@
 
 #define TCPX_DEF_CQ_SIZE (1024)
 
+static void tcpx_buf_pools_destroy(struct tcpx_buf_pool *buf_pools)
+{
+	int i;
+
+	for (i = 0; i < TCPX_OP_CODE_MAX; i++)
+		util_buf_pool_destroy(buf_pools[i].pool);
+}
+
 static int tcpx_cq_close(struct fid *fid)
 {
 	int ret;
 	struct tcpx_cq *tcpx_cq;
 
 	tcpx_cq = container_of(fid, struct tcpx_cq, util_cq.cq_fid.fid);
-	util_buf_pool_destroy(tcpx_cq->xfer_entry_pool);
+	tcpx_buf_pools_destroy(tcpx_cq->buf_pools);
 	ret = ofi_cq_cleanup(&tcpx_cq->util_cq);
 	if (ret)
 		return ret;
@@ -52,7 +60,8 @@ static int tcpx_cq_close(struct fid *fid)
 	return 0;
 }
 
-struct tcpx_xfer_entry *tcpx_xfer_entry_alloc(struct tcpx_cq *tcpx_cq)
+struct tcpx_xfer_entry *tcpx_xfer_entry_alloc(struct tcpx_cq *tcpx_cq,
+					      enum tcpx_xfer_op_codes type)
 {
 	struct tcpx_xfer_entry *xfer_entry;
 
@@ -64,25 +73,25 @@ struct tcpx_xfer_entry *tcpx_xfer_entry_alloc(struct tcpx_cq *tcpx_cq)
 		return NULL;
 	}
 
-	xfer_entry = util_buf_alloc(tcpx_cq->xfer_entry_pool);
+	xfer_entry = util_buf_alloc(tcpx_cq->buf_pools[type].pool);
 	if (!xfer_entry) {
 		tcpx_cq->util_cq.cq_fastlock_release(&tcpx_cq->util_cq.cq_lock);
 		FI_INFO(&tcpx_prov, FI_LOG_DOMAIN,"failed to get buffer\n");
 		return NULL;
 	}
 	tcpx_cq->util_cq.cq_fastlock_release(&tcpx_cq->util_cq.cq_lock);
-	memset(xfer_entry, 0, sizeof(*xfer_entry));
 	return xfer_entry;
 }
 
 void tcpx_xfer_entry_release(struct tcpx_cq *tcpx_cq,
-			   struct tcpx_xfer_entry *xfer_entry)
+			     struct tcpx_xfer_entry *xfer_entry)
 {
 	if (xfer_entry->ep->cur_rx_entry == xfer_entry)
 		xfer_entry->ep->cur_rx_entry = NULL;
 
 	tcpx_cq->util_cq.cq_fastlock_acquire(&tcpx_cq->util_cq.cq_lock);
-	util_buf_release(tcpx_cq->xfer_entry_pool, xfer_entry);
+	util_buf_release(tcpx_cq->buf_pools[xfer_entry->msg_hdr.hdr.op_data].pool,
+			 xfer_entry);
 	tcpx_cq->util_cq.cq_fastlock_release(&tcpx_cq->util_cq.cq_lock);
 }
 
@@ -150,6 +159,80 @@ static struct fi_ops tcpx_cq_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
+/* Using this function to preset some values of buffers managed by util_buf_pool api.
+ * Note that the util_buf_pool uses first sizeof(slist_entry) bytes in every buffer
+ * internally for keeping buf list. So don't try to set those values. They won't stick
+ */
+static int tcpx_buf_pool_init(void *pool_ctx, void *addr,
+			      size_t len, void **context)
+{
+	struct tcpx_buf_pool *pool = (struct tcpx_buf_pool *)pool_ctx;
+	struct tcpx_xfer_entry *xfer_entry;
+	int i;
+
+	for (i = 0; i < pool->pool->chunk_cnt; i++) {
+		xfer_entry = (struct tcpx_xfer_entry *)
+			((char *)addr + i * pool->pool->entry_sz);
+
+		xfer_entry->msg_hdr.hdr.version = OFI_CTRL_VERSION;
+		xfer_entry->msg_hdr.hdr.op_data = pool->op_type;
+		switch (pool->op_type) {
+		case TCPX_OP_MSG_RECV:
+		case TCPX_OP_MSG_SEND:
+			xfer_entry->msg_hdr.hdr.op = ofi_op_msg;
+			break;
+		case TCPX_OP_WRITE:
+		case TCPX_OP_REMOTE_WRITE:
+			xfer_entry->msg_hdr.hdr.op = ofi_op_write;
+			break;
+		case TCPX_OP_READ_REQ:
+			xfer_entry->msg_hdr.hdr.op = ofi_op_read_req;
+			xfer_entry->msg_hdr.hdr.size =
+				htonll(sizeof(xfer_entry->msg_hdr));
+			xfer_entry->flags = TCPX_NO_COMPLETION;
+			break;
+		case TCPX_OP_READ_RSP:
+			xfer_entry->msg_hdr.hdr.op = ofi_op_read_rsp;
+			break;
+		case TCPX_OP_REMOTE_READ:
+			xfer_entry->flags = TCPX_NO_COMPLETION;
+			break;
+		default:
+			assert(0);
+			break;
+		}
+	}
+	return FI_SUCCESS;
+}
+
+void tcpx_buf_pool_close(void *pool_ctx, void *context)
+{
+}
+
+static int tcpx_buf_pools_create(struct tcpx_buf_pool *buf_pools)
+{
+	int i, ret;
+
+	for (i = 0; i < TCPX_OP_CODE_MAX; i++) {
+		buf_pools[i].op_type = i;
+
+		ret = util_buf_pool_create_ex(&buf_pools[i].pool,
+					      sizeof(struct tcpx_xfer_entry),
+					      16, 0, 1024, tcpx_buf_pool_init,
+					      tcpx_buf_pool_close, &buf_pools[i]);
+		if (ret) {
+			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "Unable to create buf pool\n");
+			goto err;
+		}
+	}
+	return 0;
+err:
+	while (i--) {
+		util_buf_pool_destroy(buf_pools[i].pool);
+	}
+	return -FI_ENOMEM;
+}
+
 int tcpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq_fid, void *context)
 {
@@ -163,14 +246,12 @@ int tcpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	if (!attr->size)
 		attr->size = TCPX_DEF_CQ_SIZE;
 
-	ret =  util_buf_pool_create(&tcpx_cq->xfer_entry_pool,
-				    sizeof(struct tcpx_xfer_entry),
-				    16, 0, 1024);
+	ret = tcpx_buf_pools_create(tcpx_cq->buf_pools);
 	if (ret)
 		goto free_cq;
 
 	ret = ofi_cq_init(&tcpx_prov, domain, attr, &tcpx_cq->util_cq,
-			   &ofi_cq_progress, context);
+			  &ofi_cq_progress, context);
 	if (ret)
 		goto destroy_pool;
 
@@ -179,7 +260,7 @@ int tcpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	return 0;
 
 destroy_pool:
-	util_buf_pool_destroy(tcpx_cq->xfer_entry_pool);
+	tcpx_buf_pools_destroy(tcpx_cq->buf_pools);
 free_cq:
 	free(tcpx_cq);
 	return ret;

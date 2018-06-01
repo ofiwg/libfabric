@@ -64,7 +64,7 @@ static ssize_t tcpx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 
 	assert(msg->iov_count < TCPX_IOV_LIMIT);
 
-	recv_entry = tcpx_xfer_entry_alloc(tcpx_cq);
+	recv_entry = tcpx_xfer_entry_alloc(tcpx_cq, TCPX_OP_MSG_RECV);
 	if (!recv_entry)
 		return -FI_EAGAIN;
 
@@ -127,19 +127,13 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	tcpx_cq = container_of(tcpx_ep->util_ep.tx_cq, struct tcpx_cq,
 			       util_cq);
 
-	tx_entry = tcpx_xfer_entry_alloc(tcpx_cq);
+	tx_entry = tcpx_xfer_entry_alloc(tcpx_cq, TCPX_OP_MSG_SEND);
 	if (!tx_entry)
 		return -FI_EAGAIN;
 
 	assert(msg->iov_count <= TCPX_IOV_LIMIT);
-
 	data_len = ofi_total_iov_len(msg->msg_iov, msg->iov_count);
-
 	assert(!(flags & FI_INJECT) || (data_len <= TCPX_MAX_INJECT_SZ));
-
-	tx_entry->msg_hdr.hdr.version = OFI_CTRL_VERSION;
-	tx_entry->msg_hdr.hdr.op = ofi_op_msg;
-	tx_entry->msg_hdr.hdr.op_data = TCPX_OP_MSG_SEND;
 	tx_entry->msg_hdr.hdr.size = htonll(data_len + sizeof(tx_entry->msg_hdr));
 
 	tx_entry->msg_data.iov[0].iov_base = (void *) &tx_entry->msg_hdr;

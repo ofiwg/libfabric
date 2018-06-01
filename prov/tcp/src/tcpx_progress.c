@@ -196,9 +196,7 @@ static void tcpx_prepare_rx_remote_read_resp(struct tcpx_xfer_entry *resp_entry)
 			resp_entry->msg_data.iov[i+1].iov_len;
 	}
 
-	resp_entry->msg_hdr.hdr.version = OFI_CTRL_VERSION;
 	resp_entry->msg_hdr.hdr.op = ofi_op_read_rsp;
-	resp_entry->msg_hdr.hdr.op_data = TCPX_OP_REMOTE_READ_RSP;
 	resp_entry->msg_hdr.hdr.size =
 		htonll(resp_entry->msg_hdr.hdr.size);
 
@@ -237,7 +235,7 @@ static int tcpx_match_read_rsp(struct dlist_entry *entry, const void *arg)
 	struct tcpx_rx_detect *rx_detect = (struct tcpx_rx_detect *) arg;
 
 	xfer_entry = container_of(entry, struct tcpx_xfer_entry,
-				entry);
+				  entry);
 	return (xfer_entry->msg_hdr.hdr.remote_idx ==
 		ntohll(rx_detect->hdr.hdr.remote_idx));
 }
@@ -286,14 +284,13 @@ static int tcpx_get_rx_entry(struct tcpx_rx_detect *rx_detect,
 		}
 		break;
 	case ofi_op_read_req:
-		rx_entry = tcpx_xfer_entry_alloc(tcpx_cq);
+		rx_entry = tcpx_xfer_entry_alloc(tcpx_cq, TCPX_OP_REMOTE_READ);
 		if (!rx_entry)
 			return -FI_EAGAIN;
 
 		rx_entry->msg_hdr = rx_detect->hdr;
-		rx_entry->msg_hdr.hdr.op_data =	TCPX_OP_REMOTE_READ_REQ;
+		rx_entry->msg_hdr.hdr.op_data =	TCPX_OP_REMOTE_READ;
 		rx_entry->ep = tcpx_ep;
-		rx_entry->flags = TCPX_NO_COMPLETION;
 		rx_entry->done_len = sizeof(rx_detect->hdr);
 
 		ret = tcpx_validate_rx_rma_data(rx_entry, FI_REMOTE_READ);
@@ -305,7 +302,7 @@ static int tcpx_get_rx_entry(struct tcpx_rx_detect *rx_detect,
 		}
 		break;
 	case ofi_op_write:
-		rx_entry = tcpx_xfer_entry_alloc(tcpx_cq);
+		rx_entry = tcpx_xfer_entry_alloc(tcpx_cq, TCPX_OP_REMOTE_WRITE);
 		if (!rx_entry)
 			return -FI_EAGAIN;
 
@@ -346,7 +343,7 @@ static int tcpx_get_rx_entry(struct tcpx_rx_detect *rx_detect,
 					entry);
 
 		rx_entry->msg_hdr = rx_detect->hdr;
-		rx_entry->msg_hdr.hdr.op_data = TCPX_OP_READ;
+		rx_entry->msg_hdr.hdr.op_data = TCPX_OP_READ_RSP;
 		rx_entry->done_len = sizeof(rx_detect->hdr);
 		break;
 	default:
@@ -372,7 +369,7 @@ static void tcpx_process_rx_msg(struct tcpx_ep *ep)
 			goto err;
 
 		if (tcpx_get_rx_entry(&ep->rx_detect,
-					 &ep->cur_rx_entry))
+				      &ep->cur_rx_entry))
 			return;
 	}
 
@@ -383,10 +380,10 @@ static void tcpx_process_rx_msg(struct tcpx_ep *ep)
 	case TCPX_OP_REMOTE_WRITE:
 		process_rx_remote_write_entry(ep->cur_rx_entry);
 		break;
-	case TCPX_OP_READ:
+	case TCPX_OP_READ_RSP:
 		process_rx_read_entry(ep->cur_rx_entry);
 		break;
- 	case TCPX_OP_REMOTE_READ_REQ:
+ 	case TCPX_OP_REMOTE_READ:
 		tcpx_prepare_rx_remote_read_resp(ep->cur_rx_entry);
 		ep->cur_rx_entry = NULL;
 		break;

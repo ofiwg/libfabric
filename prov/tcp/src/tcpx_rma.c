@@ -53,24 +53,14 @@ static void tcpx_rma_read_send_entry_fill(struct tcpx_xfer_entry *send_entry,
 					  struct tcpx_ep *tcpx_ep,
 					  const struct fi_msg_rma *msg)
 {
-	send_entry->msg_hdr.hdr.version = OFI_CTRL_VERSION;
-	send_entry->msg_hdr.hdr.op = ofi_op_read_req;
-	send_entry->msg_hdr.hdr.op_data = TCPX_OP_READ;
-	send_entry->msg_hdr.hdr.size = htonll(sizeof(send_entry->msg_hdr));
-
 	memcpy(send_entry->msg_hdr.rma_iov, msg->rma_iov,
 	       msg->rma_iov_count * sizeof(msg->rma_iov[0]));
-
 	send_entry->msg_hdr.rma_iov_cnt = msg->rma_iov_count;
 
 	send_entry->msg_data.iov[0].iov_base = (void *) &send_entry->msg_hdr;
 	send_entry->msg_data.iov[0].iov_len = sizeof(send_entry->msg_hdr);
 	send_entry->msg_data.iov_cnt = 1;
-
-	send_entry->flags |= TCPX_NO_COMPLETION;
-	send_entry->msg_hdr.hdr.flags = htonl(send_entry->msg_hdr.hdr.flags);
 	send_entry->ep = tcpx_ep;
-	send_entry->context = msg->context;
 	send_entry->done_len = 0;
 }
 
@@ -79,28 +69,18 @@ static void tcpx_rma_read_recv_entry_fill(struct tcpx_xfer_entry *recv_entry,
 					  const struct fi_msg_rma *msg,
 					  uint64_t flags)
 {
-	uint64_t data_len;
-
-	data_len = ofi_total_iov_len(msg->msg_iov, msg->iov_count);
-
-	recv_entry->msg_hdr.hdr.version = OFI_CTRL_VERSION;
-	recv_entry->msg_hdr.hdr.op = ofi_op_read_rsp;
-	recv_entry->msg_hdr.hdr.op_data = TCPX_OP_READ;
-	recv_entry->msg_hdr.hdr.size = htonll(sizeof(recv_entry->msg_hdr) +
-					      data_len);
-	recv_entry->msg_hdr.hdr.flags = 0;
-	recv_entry->ep = tcpx_ep;
-	recv_entry->context = msg->context;
-	recv_entry->done_len = 0;
-	recv_entry->flags = flags | FI_RMA | FI_READ;
 	memcpy(&recv_entry->msg_data.iov[0], &msg->msg_iov[0],
 	       msg->iov_count * sizeof(struct iovec));
 
 	recv_entry->msg_data.iov_cnt = msg->iov_count;
+	recv_entry->ep = tcpx_ep;
+	recv_entry->context = msg->context;
+	recv_entry->done_len = 0;
+	recv_entry->flags = flags | FI_RMA | FI_READ;
 }
 
 static ssize_t tcpx_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
-		uint64_t flags)
+				uint64_t flags)
 {
 	struct tcpx_ep *tcpx_ep;
 	struct tcpx_cq *tcpx_cq;
@@ -114,13 +94,12 @@ static ssize_t tcpx_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	assert(msg->iov_count <= TCPX_IOV_LIMIT);
 	assert(msg->rma_iov_count <= TCPX_IOV_LIMIT);
 
-	send_entry = tcpx_xfer_entry_alloc(tcpx_cq);
+	send_entry = tcpx_xfer_entry_alloc(tcpx_cq, TCPX_OP_READ_REQ);
 	if (!send_entry)
 		return -FI_EAGAIN;
 
-	recv_entry = tcpx_xfer_entry_alloc(tcpx_cq);
+	recv_entry = tcpx_xfer_entry_alloc(tcpx_cq, TCPX_OP_READ_RSP);
 	if (!recv_entry) {
-		send_entry->msg_hdr.hdr.op_data = TCPX_OP_READ;
 		tcpx_xfer_entry_release(tcpx_cq, send_entry);
 		return -FI_EAGAIN;
 	}
@@ -138,7 +117,7 @@ static ssize_t tcpx_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 }
 
 static ssize_t tcpx_rma_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
-		fi_addr_t src_addr, uint64_t addr, uint64_t key, void *context)
+			     fi_addr_t src_addr, uint64_t addr, uint64_t key, void *context)
 {
 	struct iovec msg_iov = {
 		.iov_base = (void *)buf,
@@ -164,8 +143,8 @@ static ssize_t tcpx_rma_read(struct fid_ep *ep, void *buf, size_t len, void *des
 }
 
 static ssize_t tcpx_rma_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
-		size_t count, fi_addr_t src_addr, uint64_t addr, uint64_t key,
-		void *context)
+			      size_t count, fi_addr_t src_addr, uint64_t addr, uint64_t key,
+			      void *context)
 {
 	struct fi_rma_iov rma_iov = {
 		.addr = addr,
@@ -187,7 +166,7 @@ static ssize_t tcpx_rma_readv(struct fid_ep *ep, const struct iovec *iov, void *
 }
 
 static ssize_t tcpx_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
-		uint64_t flags)
+				 uint64_t flags)
 {
 	struct tcpx_ep *tcpx_ep;
 	struct tcpx_cq *tcpx_cq;
@@ -198,7 +177,7 @@ static ssize_t tcpx_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg
 	tcpx_cq = container_of(tcpx_ep->util_ep.tx_cq, struct tcpx_cq,
 			       util_cq);
 
-	send_entry = tcpx_xfer_entry_alloc(tcpx_cq);
+	send_entry = tcpx_xfer_entry_alloc(tcpx_cq, TCPX_OP_WRITE);
 	if (!send_entry)
 		return -FI_EAGAIN;
 
@@ -259,7 +238,7 @@ static ssize_t tcpx_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg
 }
 
 static ssize_t tcpx_rma_write(struct fid_ep *ep, const void *buf, size_t len, void *desc,
-		fi_addr_t dest_addr, uint64_t addr, uint64_t key, void *context)
+			      fi_addr_t dest_addr, uint64_t addr, uint64_t key, void *context)
 {
 	struct iovec msg_iov = {
 		.iov_base = (void *)buf,
@@ -285,8 +264,8 @@ static ssize_t tcpx_rma_write(struct fid_ep *ep, const void *buf, size_t len, vo
 }
 
 static ssize_t tcpx_rma_writev(struct fid_ep *ep, const struct iovec *iov, void **desc,
-		size_t count, fi_addr_t dest_addr, uint64_t addr, uint64_t key,
-		void *context)
+			       size_t count, fi_addr_t dest_addr, uint64_t addr, uint64_t key,
+			       void *context)
 {
 	struct fi_rma_iov rma_iov = {
 		.addr = addr,
@@ -309,8 +288,8 @@ static ssize_t tcpx_rma_writev(struct fid_ep *ep, const struct iovec *iov, void 
 
 
 static ssize_t tcpx_rma_writedata(struct fid_ep *ep, const void *buf, size_t len, void *desc,
-		uint64_t data, fi_addr_t dest_addr, uint64_t addr, uint64_t key,
-		void *context)
+				  uint64_t data, fi_addr_t dest_addr, uint64_t addr, uint64_t key,
+				  void *context)
 {
 	struct iovec msg_iov = {
 		.iov_base = (void *)buf,
@@ -336,7 +315,7 @@ static ssize_t tcpx_rma_writedata(struct fid_ep *ep, const void *buf, size_t len
 }
 
 static ssize_t tcpx_rma_inject(struct fid_ep *ep, const void *buf, size_t len,
-		fi_addr_t dest_addr, uint64_t addr, uint64_t key)
+			       fi_addr_t dest_addr, uint64_t addr, uint64_t key)
 {
 	struct iovec msg_iov = {
 		.iov_base = (void *)buf,
@@ -362,7 +341,7 @@ static ssize_t tcpx_rma_inject(struct fid_ep *ep, const void *buf, size_t len,
 }
 
 static ssize_t tcpx_rma_injectdata(struct fid_ep *ep, const void *buf, size_t len,
-		uint64_t data, fi_addr_t dest_addr, uint64_t addr, uint64_t key)
+				   uint64_t data, fi_addr_t dest_addr, uint64_t addr, uint64_t key)
 {
 	struct iovec msg_iov = {
 		.iov_base = (void *)buf,

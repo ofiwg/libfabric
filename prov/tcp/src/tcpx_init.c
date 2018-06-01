@@ -131,8 +131,8 @@ static void tcpx_getinfo_ifs(struct fi_info **info)
 #endif
 
 static int tcpx_getinfo(uint32_t version, const char *node, const char *service,
-			 uint64_t flags, const struct fi_info *hints,
-			 struct fi_info **info)
+			uint64_t flags, const struct fi_info *hints,
+			struct fi_info **info)
 {
 	int ret;
 
