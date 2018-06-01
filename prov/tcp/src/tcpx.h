@@ -78,50 +78,8 @@
 extern struct fi_provider	tcpx_prov;
 extern struct util_prov		tcpx_util_prov;
 extern struct fi_info		tcpx_info;
-struct tcpx_fabric;
-struct tcpx_domain;
 struct tcpx_xfer_entry;
-struct tcpx_cq;
 struct tcpx_ep;
-struct tcpx_rx_detect;
-
-int tcpx_create_fabric(struct fi_fabric_attr *attr,
-		       struct fid_fabric **fabric,
-		       void *context);
-
-int tcpx_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
-		    struct fid_pep **pep, void *context);
-
-int tcpx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
-		     struct fid_domain **domain, void *context);
-
-
-int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
-		  struct fid_ep **ep_fid, void *context);
-
-
-int tcpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
-		 struct fid_cq **cq_fid, void *context);
-void tcpx_cq_report_completion(struct util_cq *cq,
-			       struct tcpx_xfer_entry *xfer_entry,
-			       int err);
-
-int tcpx_conn_mgr_init(struct tcpx_fabric *tcpx_fabric);
-void tcpx_conn_mgr_close(struct tcpx_fabric *tcpx_fabric);
-int tcpx_recv_msg_data(struct tcpx_xfer_entry *recv_entry);
-int tcpx_send_msg(struct tcpx_xfer_entry *tx_entry);
-int tcpx_recv_hdr(SOCKET sock, struct tcpx_rx_detect *rx_detect);
-
-struct tcpx_xfer_entry *tcpx_xfer_entry_alloc(struct tcpx_cq *cq);
-void tcpx_xfer_entry_release(struct tcpx_cq *tcpx_cq,
-			   struct tcpx_xfer_entry *xfer_entry);
-void tcpx_progress(struct util_ep *util_ep);
-void tcpx_ep_progress(struct tcpx_ep *ep);
-int tcpx_ep_shutdown_report(struct tcpx_ep *ep, fid_t fid);
-int tcpx_progress_ep_add(struct tcpx_ep *ep);
-void tcpx_progress_ep_del(struct tcpx_ep *ep);
-void process_tx_entry(struct tcpx_xfer_entry *tx_entry);
-typedef void (*tcpx_ep_progress_func_t)(struct tcpx_ep *ep);
 
 enum tcpx_pep_state{
 	TCPX_PEP_CREATED,
@@ -134,9 +92,10 @@ enum tcpx_xfer_op_codes {
 	TCPX_OP_MSG_RECV,
 	TCPX_OP_WRITE,
 	TCPX_OP_REMOTE_WRITE,
-	TCPX_OP_READ,
-	TCPX_OP_REMOTE_READ_REQ,
-	TCPX_OP_REMOTE_READ_RSP,
+	TCPX_OP_READ_REQ,
+	TCPX_OP_READ_RSP,
+	TCPX_OP_REMOTE_READ,
+	TCPX_OP_CODE_MAX,
 };
 
 enum poll_fd_type {
@@ -214,6 +173,8 @@ struct tcpx_rma_list {
 	uint64_t		msg_id_tracker;
 };
 
+typedef void (*tcpx_ep_progress_func_t)(struct tcpx_ep *ep);
+
 struct tcpx_ep {
 	struct util_ep		util_ep;
 	SOCKET			conn_fd;
@@ -242,9 +203,9 @@ struct tcpx_msg_data {
 };
 
 struct tcpx_xfer_entry {
+	struct dlist_entry	entry;
 	struct tcpx_msg_hdr	msg_hdr;
 	struct tcpx_msg_data	msg_data;
-	struct dlist_entry	entry;
 	struct tcpx_ep		*ep;
 	uint64_t		flags;
 	void			*context;
@@ -255,9 +216,53 @@ struct tcpx_domain {
 	struct util_domain	util_domain;
 };
 
+struct tcpx_buf_pool {
+	struct util_buf_pool	*pool;
+	enum tcpx_xfer_op_codes	op_type;
+};
+
 struct tcpx_cq {
 	struct util_cq		util_cq;
-	struct util_buf_pool	*xfer_entry_pool;
+	/* buf_pools protected by util.cq_lock */
+	struct tcpx_buf_pool	buf_pools[TCPX_OP_CODE_MAX];
 };
+
+int tcpx_create_fabric(struct fi_fabric_attr *attr,
+		       struct fid_fabric **fabric,
+		       void *context);
+
+int tcpx_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
+		    struct fid_pep **pep, void *context);
+
+int tcpx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
+		     struct fid_domain **domain, void *context);
+
+
+int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
+		  struct fid_ep **ep_fid, void *context);
+
+
+int tcpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
+		 struct fid_cq **cq_fid, void *context);
+void tcpx_cq_report_completion(struct util_cq *cq,
+			       struct tcpx_xfer_entry *xfer_entry,
+			       int err);
+
+int tcpx_conn_mgr_init(struct tcpx_fabric *tcpx_fabric);
+void tcpx_conn_mgr_close(struct tcpx_fabric *tcpx_fabric);
+int tcpx_recv_msg_data(struct tcpx_xfer_entry *recv_entry);
+int tcpx_send_msg(struct tcpx_xfer_entry *tx_entry);
+int tcpx_recv_hdr(SOCKET sock, struct tcpx_rx_detect *rx_detect);
+
+struct tcpx_xfer_entry *tcpx_xfer_entry_alloc(struct tcpx_cq *cq,
+					      enum tcpx_xfer_op_codes type);
+void tcpx_xfer_entry_release(struct tcpx_cq *tcpx_cq,
+			     struct tcpx_xfer_entry *xfer_entry);
+void tcpx_progress(struct util_ep *util_ep);
+void tcpx_ep_progress(struct tcpx_ep *ep);
+int tcpx_ep_shutdown_report(struct tcpx_ep *ep, fid_t fid);
+int tcpx_progress_ep_add(struct tcpx_ep *ep);
+void tcpx_progress_ep_del(struct tcpx_ep *ep);
+void process_tx_entry(struct tcpx_xfer_entry *tx_entry);
 
 #endif //_TCP_H_
