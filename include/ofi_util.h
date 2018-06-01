@@ -238,6 +238,7 @@ struct util_ep {
 	uint64_t		rx_op_flags;
 	struct util_cq		*tx_cq;
 	uint64_t		tx_op_flags;
+	uint64_t		inject_op_flags;
 
 	/* CNTR entries */
 	struct util_cntr	*tx_cntr;     /* transmit/send */

@@ -206,6 +206,10 @@ int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_pr
 	ep->progress = progress;
 	ep->tx_op_flags = info->tx_attr->op_flags;
 	ep->rx_op_flags = info->rx_attr->op_flags;
+	ep->inject_op_flags =
+		((info->tx_attr->op_flags &
+		  ~(FI_COMPLETION | FI_INJECT_COMPLETE |
+		    FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)) | FI_INJECT);
 	ep->type = info->ep_attr->type;
 	ofi_atomic_inc32(&util_domain->ref);
 	if (util_domain->eq)
