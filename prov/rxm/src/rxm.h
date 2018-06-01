@@ -651,7 +651,7 @@ rxm_tx_buf_release(struct rxm_ep *rxm_ep, struct rxm_tx_buf *tx_buf)
 	assert((tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_data) ||
 	       (tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_large_data) ||
 	       (tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_ack));
-	tx_buf->pkt.hdr.flags &= ~OFI_REMOTE_CQ_DATA;
+	tx_buf->pkt.hdr.flags &= ~FI_REMOTE_CQ_DATA;
 	rxm_buf_release(&rxm_ep->buf_pools[tx_buf->type],
 			(struct rxm_buf *)tx_buf);
 }
