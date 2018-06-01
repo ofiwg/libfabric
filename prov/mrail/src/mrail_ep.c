@@ -387,7 +387,7 @@ int mrail_ep_open(struct fid_domain *domain_fid, struct fi_info *info,
 
 	for (i = 0, fi = mrail_ep->info->next; fi; fi = fi->next, i++) {
 		ret = fi_endpoint(mrail_domain->domains[i], fi,
-				  &mrail_ep->eps[i], context);
+				  &mrail_ep->eps[i], mrail_ep);
 		if (ret) {
 			FI_WARN(&mrail_prov, FI_LOG_EP_CTRL,
 				"Unable to open EP\n");
