@@ -317,6 +317,8 @@ rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t 
 	void *mr_desc[RXM_IOV_LIMIT] = { 0 };
 	int ret;
 
+	assert(msg->rma_iov_count <= rxm_ep->rxm_info->tx_attr->rma_iov_limit);
+
 	fastlock_acquire(&rxm_ep->util_ep.cmap->lock);
 	handle = ofi_cmap_acquire_handle(rxm_ep->util_ep.cmap, msg->addr);
 	if (OFI_UNLIKELY(!handle)) {
@@ -436,6 +438,8 @@ rxm_ep_rma_inject(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t 
 	struct rxm_conn *rxm_conn;
 	size_t total_size = ofi_total_iov_len(msg->msg_iov, msg->iov_count);
 	ssize_t ret;
+
+	assert(msg->rma_iov_count <= rxm_ep->rxm_info->tx_attr->rma_iov_limit);
 
 	fastlock_acquire(&rxm_ep->util_ep.cmap->lock);
 	handle = ofi_cmap_acquire_handle(rxm_ep->util_ep.cmap, msg->addr);
