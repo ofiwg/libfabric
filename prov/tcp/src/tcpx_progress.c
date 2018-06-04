@@ -331,10 +331,10 @@ static int tcpx_get_rx_entry(struct tcpx_rx_detect *rx_detect,
 		tcpx_copy_rma_iov_to_msg_iov(rx_entry);
 		break;
 	case ofi_op_read_rsp:
-		if (dlist_empty(&tcpx_ep->rma_list))
+		if (dlist_empty(&tcpx_ep->rma_read_queue))
 			return -FI_EINVAL;
 
-		entry = tcpx_ep->rma_list.next;
+		entry = tcpx_ep->rma_read_queue.next;
 		rx_entry = container_of(entry, struct tcpx_xfer_entry,
 					entry);
 

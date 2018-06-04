@@ -178,7 +178,7 @@ struct tcpx_ep {
 	struct dlist_entry	ep_entry;
 	struct dlist_entry	rx_queue;
 	struct dlist_entry	tx_queue;
-	struct dlist_entry	rma_list;
+	struct dlist_entry	rma_read_queue;
 	enum tcpx_cm_state	cm_state;
 	/* lock for protecting tx/rx queues,rma list,cm_state*/
 	fastlock_t		lock;
