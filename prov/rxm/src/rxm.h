@@ -424,17 +424,6 @@ extern struct fi_domain_attr rxm_domain_attr;
 extern struct fi_tx_attr rxm_tx_attr;
 extern struct fi_rx_attr rxm_rx_attr;
 
-// TODO move to common code?
-static inline int rxm_match_addr(fi_addr_t recv_addr, fi_addr_t rx_addr)
-{
-	return (recv_addr == FI_ADDR_UNSPEC) || (recv_addr == rx_addr);
-}
-
-static inline int rxm_match_tag(uint64_t tag, uint64_t ignore, uint64_t match_tag)
-{
-	return ((tag | ignore) == (match_tag | ignore));
-}
-
 #define rxm_ep_rx_flags(rxm_ep)	((rxm_ep)->util_ep.rx_op_flags)
 #define rxm_ep_tx_flags(rxm_ep)	((rxm_ep)->util_ep.tx_op_flags)
 
