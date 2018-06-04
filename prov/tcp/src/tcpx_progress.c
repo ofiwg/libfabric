@@ -93,7 +93,7 @@ void process_tx_entry(struct tcpx_xfer_entry *tx_entry)
 done:
 	tcpx_cq_report_completion(tx_entry->ep->util_ep.tx_cq,
 				  tx_entry, ret);
-	dlist_remove(&tx_entry->entry);
+	slist_remove_head(&tx_entry->ep->tx_queue);
 	tcpx_cq = container_of(tx_entry->ep->util_ep.tx_cq,
 			       struct tcpx_cq, util_cq);
 	tcpx_xfer_entry_release(tcpx_cq, tx_entry);
@@ -119,7 +119,7 @@ static void process_rx_entry(struct tcpx_xfer_entry *rx_entry)
 done:
 	tcpx_cq_report_completion(rx_entry->ep->util_ep.rx_cq,
 				  rx_entry, ret);
-	dlist_remove(&rx_entry->entry);
+	slist_remove_head(&rx_entry->ep->rx_queue);
 	tcpx_cq = container_of(rx_entry->ep->util_ep.rx_cq,
 			       struct tcpx_cq, util_cq);
 	tcpx_xfer_entry_release(tcpx_cq, rx_entry);
@@ -171,7 +171,7 @@ static void process_rx_read_entry(struct tcpx_xfer_entry *rx_entry)
 done:
 	tcpx_cq_report_completion(rx_entry->ep->util_ep.tx_cq,
 				  rx_entry, ret);
-	dlist_remove(&rx_entry->entry);
+	slist_remove_head(&rx_entry->ep->rma_read_queue);
 	tcpx_cq = container_of(rx_entry->ep->util_ep.tx_cq,
 			       struct tcpx_cq, util_cq);
 	tcpx_xfer_entry_release(tcpx_cq, rx_entry);
@@ -216,7 +216,7 @@ static void tcpx_prepare_rx_remote_read_resp(struct tcpx_xfer_entry *resp_entry)
 	resp_entry->context = NULL;
 	resp_entry->done_len = 0;
 
-	dlist_insert_tail(&resp_entry->entry, &resp_entry->ep->tx_queue);
+	slist_insert_tail(&resp_entry->entry, &resp_entry->ep->tx_queue);
 }
 
 static int tcpx_validate_rx_rma_data(struct tcpx_xfer_entry *rx_entry,
@@ -245,7 +245,7 @@ static int tcpx_get_rx_entry(struct tcpx_rx_detect *rx_detect,
 			     struct tcpx_xfer_entry **new_rx_entry)
 {
 	struct tcpx_xfer_entry *rx_entry;
-	struct dlist_entry *entry;
+	struct slist_entry *entry;
 	struct tcpx_ep *tcpx_ep;
 	struct tcpx_cq *tcpx_cq;
 	int ret;
@@ -256,10 +256,10 @@ static int tcpx_get_rx_entry(struct tcpx_rx_detect *rx_detect,
 
 	switch (rx_detect->hdr.hdr.op) {
 	case ofi_op_msg:
-		if (dlist_empty(&tcpx_ep->rx_queue))
+		if (slist_empty(&tcpx_ep->rx_queue))
 			return -FI_EAGAIN;
 
-		entry = tcpx_ep->rx_queue.next;
+		entry = tcpx_ep->rx_queue.head;
 		rx_entry = container_of(entry, struct tcpx_xfer_entry,
 					entry);
 
@@ -279,7 +279,7 @@ static int tcpx_get_rx_entry(struct tcpx_rx_detect *rx_detect,
 				"posted rx buffer size is not big enough\n");
 			tcpx_cq_report_completion(rx_entry->ep->util_ep.rx_cq,
 						  rx_entry, ret);
-			dlist_remove(&rx_entry->entry);
+			slist_remove_head(&rx_entry->ep->rx_queue);
 			tcpx_xfer_entry_release(tcpx_cq, rx_entry);
 			return ret;
 		}
@@ -331,10 +331,10 @@ static int tcpx_get_rx_entry(struct tcpx_rx_detect *rx_detect,
 		tcpx_copy_rma_iov_to_msg_iov(rx_entry);
 		break;
 	case ofi_op_read_rsp:
-		if (dlist_empty(&tcpx_ep->rma_read_queue))
+		if (slist_empty(&tcpx_ep->rma_read_queue))
 			return -FI_EINVAL;
 
-		entry = tcpx_ep->rma_read_queue.next;
+		entry = tcpx_ep->rma_read_queue.head;
 		rx_entry = container_of(entry, struct tcpx_xfer_entry,
 					entry);
 
@@ -404,12 +404,12 @@ err1:
 static void process_tx_queue(struct tcpx_ep *ep)
 {
 	struct tcpx_xfer_entry *tx_entry;
-	struct dlist_entry *entry;
+	struct slist_entry *entry;
 
-	if (dlist_empty(&ep->tx_queue))
+	if (slist_empty(&ep->tx_queue))
 		return;
 
-	entry = ep->tx_queue.next;
+	entry = ep->tx_queue.head;
 	tx_entry = container_of(entry, struct tcpx_xfer_entry,
 				entry);
 	process_tx_entry(tx_entry);
