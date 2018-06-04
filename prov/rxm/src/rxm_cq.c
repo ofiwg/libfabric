@@ -137,6 +137,23 @@ static int rxm_match_rma_iov(struct rxm_recv_entry *recv_entry,
 	return FI_SUCCESS;
 }
 
+static int rxm_finish_buf_recv(struct rxm_rx_buf *rx_buf)
+{
+	/* TODO set flags to FI_MORE and handle send/recv partial data */
+	if (OFI_UNLIKELY((rx_buf->ep->rxm_info->mode & FI_BUFFERED_RECV) &&
+	    rx_buf->pkt.hdr.size > rx_buf->ep->rxm_info->tx_attr->inject_size))
+		assert(0);
+
+	FI_DBG(&rxm_prov, FI_LOG_CQ, "writing buffered recv completion: "
+	       "length: %" PRIu64 "\n", rx_buf->pkt.hdr.size);
+	rx_buf->recv_context.ep = &rx_buf->ep->util_ep.ep_fid;
+	return ofi_cq_write(rx_buf->ep->util_ep.rx_cq, &rx_buf->recv_context,
+			    rx_buf->pkt.hdr.flags | FI_RECV |
+			    (rx_buf->pkt.hdr.flags & (FI_MSG | FI_TAGGED)),
+			    rx_buf->pkt.hdr.size, &rx_buf->pkt,
+			    rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
+}
+
 static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 {
 	int ret;
@@ -182,7 +199,10 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 			rxm_cntr_inc(rx_buf->ep->util_ep.rx_cntr);
 	}
 
+	rx_buf->ep->res_fastlock_acquire(&rx_buf->ep->util_ep.lock);
 	dlist_insert_tail(&rx_buf->repost_entry, &rx_buf->ep->repost_ready_list);
+	rx_buf->ep->res_fastlock_release(&rx_buf->ep->util_ep.lock);
+
 	if (rx_buf->recv_entry->flags & FI_MULTI_RECV) {
 		struct rxm_iov rxm_iov;
 
@@ -288,8 +308,12 @@ static int rxm_lmt_tx_finish(struct rxm_tx_entry *tx_entry)
 	ret = rxm_finish_send(tx_entry);
 	if (ret)
 		return ret;
+
+	tx_entry->ep->res_fastlock_acquire(&tx_entry->ep->util_ep.lock);
 	dlist_insert_tail(&tx_entry->rx_buf->repost_entry,
 			  &tx_entry->ep->repost_ready_list);
+	tx_entry->ep->res_fastlock_release(&tx_entry->ep->util_ep.lock);
+
 	return ret;
 }
 
@@ -429,6 +453,9 @@ static inline ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 					rx_buf->conn->handle.fi_addr;
 	}
 
+	if (rx_buf->ep->rxm_info->mode & FI_BUFFERED_RECV)
+		return rxm_finish_buf_recv(rx_buf);
+
 	switch(rx_buf->pkt.hdr.op) {
 	case ofi_op_msg:
 		FI_DBG(&rxm_prov, FI_LOG_CQ, "Got MSG op\n");
@@ -531,10 +558,13 @@ static int rxm_handle_remote_write(struct rxm_ep *rxm_ep,
 		return ret;
 	}
 	rxm_cntr_inc(rxm_ep->util_ep.rem_wr_cntr);
-	if (comp->op_context)
+	if (comp->op_context) {
+		rxm_ep->res_fastlock_acquire(&rxm_ep->util_ep.lock);
 		dlist_insert_tail(&((struct rxm_rx_buf *)
 					comp->op_context)->repost_entry,
 				  &rxm_ep->repost_ready_list);
+		rxm_ep->res_fastlock_release(&rxm_ep->util_ep.lock);
+	}
 	return 0;
 }
 
@@ -758,11 +788,13 @@ int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep,
 static inline void rxm_cq_repost_rx_buffers(struct rxm_ep *rxm_ep)
 {
 	struct rxm_rx_buf *buf;
+	rxm_ep->res_fastlock_acquire(&rxm_ep->util_ep.lock);
 	while (!dlist_empty(&rxm_ep->repost_ready_list)) {
 		dlist_pop_front(&rxm_ep->repost_ready_list, struct rxm_rx_buf,
 				buf, repost_entry);
 		(void) rxm_ep_repost_buf(buf);
 	}
+	rxm_ep->res_fastlock_release(&rxm_ep->util_ep.lock);
 }
 
 static int rxm_cq_reprocess_directed_recvs(struct rxm_recv_queue *recv_queue)
@@ -819,8 +851,12 @@ static int rxm_cq_reprocess_directed_recvs(struct rxm_recv_queue *recv_queue)
 					   &err_entry);
 			if (rx_buf->ep->util_ep.flags & OFI_CNTR_ENABLED)
 				rxm_cntr_incerr(rx_buf->ep->util_ep.rx_cntr);
+
+			rx_buf->ep->res_fastlock_acquire(&rx_buf->ep->util_ep.lock);
 			dlist_insert_tail(&rx_buf->repost_entry,
 					  &rx_buf->ep->repost_ready_list);
+			rx_buf->ep->res_fastlock_release(&rx_buf->ep->util_ep.lock);
+
 			if (!(rx_buf->recv_entry->flags & FI_MULTI_RECV))
 				rxm_recv_entry_release(recv_queue,
 						       rx_buf->recv_entry);

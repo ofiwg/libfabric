@@ -530,6 +530,7 @@ static ssize_t rxm_ep_cancel(fid_t fid_ep, void *context)
 	return 0;
 }
 
+// TODO add support for FI_OPT_BUFFERED_LIMIT
 static int rxm_ep_getopt(fid_t fid, int level, int optname, void *optval,
 			 size_t *optlen)
 {
@@ -576,8 +577,11 @@ static int rxm_ep_discard_recv(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_buf,
 	RXM_DBG_ADDR_TAG(FI_LOG_EP_DATA, "Discarding message",
 			 rx_buf->unexp_msg.addr, rx_buf->unexp_msg.tag);
 
+	rxm_ep->res_fastlock_acquire(&rxm_ep->util_ep.lock);
 	dlist_insert_tail(&rx_buf->repost_entry,
 			  &rx_buf->ep->repost_ready_list);
+	rxm_ep->res_fastlock_release(&rxm_ep->util_ep.lock);
+
 	return ofi_cq_write(rxm_ep->util_ep.rx_cq, context, FI_TAGGED | FI_RECV,
 			    0, NULL, rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
 }
@@ -684,39 +688,56 @@ static ssize_t rxm_ep_recv_common_flags(struct rxm_ep *rxm_ep, const struct iove
 {
 	struct rxm_recv_entry *recv_entry;
 	struct rxm_rx_buf *rx_buf;
+	ssize_t ret;
 
 	assert(count <= rxm_ep->rxm_info->rx_attr->iov_limit);
-	assert(!(flags & (FI_PEEK | FI_CLAIM | FI_DISCARD)) ||
+	assert(!(flags & FI_PEEK) ||
 		(recv_queue->type == RXM_RECV_QUEUE_TAGGED));
 	assert(!(flags & (FI_MULTI_RECV)) ||
 		(recv_queue->type == RXM_RECV_QUEUE_MSG));
+
+	if (rxm_ep->rxm_info->mode & FI_BUFFERED_RECV) {
+		assert(!(flags & FI_PEEK));
+		rx_buf = container_of((struct fi_recv_context *)context,
+				      struct rxm_rx_buf, recv_context);
+		if (flags & FI_CLAIM) {
+			FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
+			       "Claiming buffered receive\n");
+			rx_buf->pkt.hdr.flags |= FI_CLAIM;
+			goto claim;
+		}
+
+		assert(flags & FI_DISCARD);
+		FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Discarding buffered receive\n");
+		dlist_insert_tail(&rx_buf->repost_entry,
+				  &rx_buf->ep->repost_ready_list);
+		return 0;
+	}
 
 	if (flags & FI_PEEK)
 		return rxm_ep_peek_recv(rxm_ep, src_addr, tag, ignore,
 					context, flags, recv_queue);
 
-	if (flags & FI_CLAIM) {
-		ssize_t ret;
-
-		rx_buf = ((struct fi_context *)context)->internal[0];
-		assert(rx_buf);
-		FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Claim message\n");
-
-		if (flags & FI_DISCARD)
-			return rxm_ep_discard_recv(rxm_ep, rx_buf, context);
-
-		ret = rxm_ep_format_rx_res(rxm_ep, iov, desc, count, src_addr,
-					   tag, ignore, context, flags | op_flags,
-					   recv_queue, &recv_entry);
-		if (OFI_UNLIKELY(ret))
-			return ret;
-		rx_buf->recv_entry = recv_entry;
-		return rxm_cq_handle_rx_buf(rx_buf);
-	} else {
+	if (!(flags & FI_CLAIM))
 		return rxm_ep_recv_common(rxm_ep, iov, desc, count, src_addr,
 					  tag, ignore, context, flags | op_flags,
 					  recv_queue);
-	}
+
+	rx_buf = ((struct fi_context *)context)->internal[0];
+	assert(rx_buf);
+	FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Claim message\n");
+
+	if (flags & FI_DISCARD)
+		return rxm_ep_discard_recv(rxm_ep, rx_buf, context);
+
+claim:
+	ret = rxm_ep_format_rx_res(rxm_ep, iov, desc, count, src_addr,
+				   tag, ignore, context, flags | op_flags,
+				   recv_queue, &recv_entry);
+	if (OFI_UNLIKELY(ret))
+		return ret;
+	rx_buf->recv_entry = recv_entry;
+	return rxm_cq_handle_rx_buf(rx_buf);
 }
 
 static ssize_t rxm_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
