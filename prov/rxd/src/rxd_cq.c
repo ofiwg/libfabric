@@ -315,6 +315,7 @@ static void rxd_handle_data(struct rxd_ep *ep, struct fi_cq_msg_entry *comp,
 		tmp_entry.key = pkt_entry->pkt->hdr.key;
 		tmp_entry.peer = pkt_entry->pkt->hdr.peer;
 		tmp_entry.next_seg_no = pkt_entry->pkt->hdr.seg_no + 1;
+		tmp_entry.window = 1;
 		rxd_ep_post_ack(ep, &tmp_entry);
 		return;
 	}
