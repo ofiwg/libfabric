@@ -41,12 +41,13 @@
 
 #define PTHREAD_MUTEX_INITIALIZER {0}
 
-#define pthread_cond_signal WakeConditionVariable
-#define pthread_cond_broadcast WakeAllConditionVariable
 #define pthread_mutex_init(mutex, attr) (InitializeCriticalSection(mutex), 0)
 #define pthread_mutex_destroy(mutex) (DeleteCriticalSection(mutex), 0)
 #define pthread_cond_init(cond, attr) (InitializeConditionVariable(cond), 0)
 #define pthread_cond_destroy(x)	/* nothing to do */
+#define pthread_cond_signal WakeConditionVariable
+#define pthread_cond_broadcast WakeAllConditionVariable
+#define pthread_cond_wait(cond, mutex) (SleepConditionVariableCS(cond, mutex, INFINITE), 0)
 
 typedef CRITICAL_SECTION	pthread_mutex_t;
 typedef CONDITION_VARIABLE	pthread_cond_t;
