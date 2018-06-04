@@ -1108,20 +1108,7 @@ send_continue:
 
 	assert(dlist_empty(&rxm_conn->postponed_tx_list));
 
-	if (data_len > rxm_ep->rxm_info->tx_attr->inject_size) {
-		if (OFI_UNLIKELY(flags & FI_INJECT)) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
-				"inject size supported: %zu, msg size: %zu\n",
-				rxm_tx_attr.inject_size, data_len);
-			return -FI_EMSGSIZE;
-		}
-		ret = rxm_ep_alloc_lmt_tx_res(rxm_ep, rxm_conn, context, (uint8_t)count,
-					      iov, desc, data_len, data, flags, tag,
-					      op, &tx_entry);
-		if (OFI_UNLIKELY(ret < 0))
-			return ret;			
-		return rxm_ep_lmt_tx_send(rxm_ep, rxm_conn, tx_entry, rxm_pkt_size + ret);
-	} else {
+	if (data_len <= rxm_ep->rxm_info->tx_attr->inject_size) {
 		size_t total_len = rxm_pkt_size + data_len;
 
 		ret = rxm_ep_format_tx_res_lightweight(rxm_ep, rxm_conn, data_len, data,
@@ -1143,6 +1130,22 @@ send_continue:
 		}
 		tx_entry->state = RXM_TX;
 		return rxm_ep_normal_send(rxm_ep, rxm_conn, tx_entry, total_len);
+	} else {
+		assert(!(flags & FI_INJECT));
+		if (data_len <= rxm_ep->sar_limit) {
+			assert(0);
+			return -FI_ENOSYS;
+		} else {
+			assert(data_len > rxm_ep->sar_limit);
+			ret = rxm_ep_alloc_lmt_tx_res(rxm_ep, rxm_conn, context,
+						      (uint8_t)count, iov, desc,
+						      data_len, data, flags, tag,
+						      op, &tx_entry);
+			if (OFI_UNLIKELY(ret < 0))
+				return ret;
+			return rxm_ep_lmt_tx_send(rxm_ep, rxm_conn, tx_entry,
+						  rxm_pkt_size + ret);
+		}
 	}
 }
 
