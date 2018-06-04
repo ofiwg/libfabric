@@ -42,6 +42,18 @@
 #include <ofi_util.h>
 #include <ofi_iov.h>
 
+static void tcpx_report_error(struct tcpx_ep *tcpx_ep, int err)
+{
+	struct fi_eq_err_entry err_entry = {0};
+
+	err_entry.fid = &tcpx_ep->util_ep.ep_fid.fid;
+	err_entry.context = tcpx_ep->util_ep.ep_fid.fid.context;
+	err_entry.err = err;
+
+	fi_eq_write(&tcpx_ep->util_ep.eq->eq_fid, FI_NOTIFY,
+		    &err_entry, sizeof(err_entry), UTIL_FLAG_ERROR);
+}
+
 int tcpx_ep_shutdown_report(struct tcpx_ep *ep, fid_t fid)
 {
 	struct fi_eq_cm_entry cm_entry = {0};
@@ -229,17 +241,6 @@ static int tcpx_validate_rx_rma_data(struct tcpx_xfer_entry *rx_entry,
 	return FI_SUCCESS;
 }
 
-static int tcpx_match_read_rsp(struct dlist_entry *entry, const void *arg)
-{
-	struct tcpx_xfer_entry *xfer_entry;
-	struct tcpx_rx_detect *rx_detect = (struct tcpx_rx_detect *) arg;
-
-	xfer_entry = container_of(entry, struct tcpx_xfer_entry,
-				  entry);
-	return (xfer_entry->msg_hdr.hdr.remote_idx ==
-		ntohll(rx_detect->hdr.hdr.remote_idx));
-}
-
 static int tcpx_get_rx_entry(struct tcpx_rx_detect *rx_detect,
 			     struct tcpx_xfer_entry **new_rx_entry)
 {
@@ -330,15 +331,10 @@ static int tcpx_get_rx_entry(struct tcpx_rx_detect *rx_detect,
 		tcpx_copy_rma_iov_to_msg_iov(rx_entry);
 		break;
 	case ofi_op_read_rsp:
-		entry = dlist_find_first_match(&tcpx_ep->rma_list.list,
-					       tcpx_match_read_rsp,
-					       rx_detect);
-		if (!entry) {
-			FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,
-				"no matching RMA read for this response\n");
+		if (dlist_empty(&tcpx_ep->rma_list))
 			return -FI_EINVAL;
-		}
 
+		entry = tcpx_ep->rma_list.next;
 		rx_entry = container_of(entry, struct tcpx_xfer_entry,
 					entry);
 
@@ -366,11 +362,15 @@ static void tcpx_process_rx_msg(struct tcpx_ep *ep)
 			return;
 
 		if (ret)
-			goto err;
+			goto err1;
 
-		if (tcpx_get_rx_entry(&ep->rx_detect,
-				      &ep->cur_rx_entry))
+		ret = tcpx_get_rx_entry(&ep->rx_detect,
+				      &ep->cur_rx_entry);
+		if (ret == -FI_EAGAIN)
 			return;
+
+		if (ret)
+			goto err2;
 	}
 
 	switch(ep->cur_rx_entry->msg_hdr.hdr.op_data){
@@ -393,7 +393,10 @@ static void tcpx_process_rx_msg(struct tcpx_ep *ep)
 		return;
 	}
 	return;
-err:
+err2:
+	tcpx_report_error(ep, ret);
+	return;
+err1:
 	if (ret == -FI_ENOTCONN)
 		tcpx_ep_shutdown_report(ep, &ep->util_ep.ep_fid.fid);
 }

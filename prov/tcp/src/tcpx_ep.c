@@ -677,8 +677,7 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	dlist_init(&ep->rx_queue);
 	dlist_init(&ep->tx_queue);
-	dlist_init(&ep->rma_list.list);
-	ep->rma_list.msg_id_tracker = 0;
+	dlist_init(&ep->rma_list);
 
 	*ep_fid = &ep->util_ep.ep_fid;
 	(*ep_fid)->fid.ops = &tcpx_ep_fi_ops;

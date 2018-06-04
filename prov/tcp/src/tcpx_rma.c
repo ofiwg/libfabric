@@ -107,10 +107,7 @@ static ssize_t tcpx_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	tcpx_rma_read_recv_entry_fill(recv_entry, tcpx_ep, msg, flags);
 
 	fastlock_acquire(&tcpx_ep->lock);
-	recv_entry->msg_hdr.hdr.remote_idx = tcpx_ep->rma_list.msg_id_tracker;
-	send_entry->msg_hdr.hdr.remote_idx =
-		htonll(tcpx_ep->rma_list.msg_id_tracker++);
-	dlist_insert_tail(&recv_entry->entry, &tcpx_ep->rma_list.list);
+	dlist_insert_tail(&recv_entry->entry, &tcpx_ep->rma_list);
 	dlist_insert_tail(&send_entry->entry, &tcpx_ep->tx_queue);
 	fastlock_release(&tcpx_ep->lock);
 	return FI_SUCCESS;
