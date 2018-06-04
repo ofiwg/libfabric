@@ -5,6 +5,7 @@
 // functions:
 //   -- launch
 //   -- publish
+@Library('CrayNetworkCI@master') _
 
 pipeline {
     options {
