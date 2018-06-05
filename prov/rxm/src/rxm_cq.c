@@ -271,7 +271,7 @@ static inline int rxm_finish_sar_segment_send(struct rxm_tx_entry *tx_entry)
 		return rxm_finish_send_nobuf(tx_entry);
 	/* This branch takes true, when it's impossible to allocate TX buffer */
 	if (OFI_UNLIKELY((tx_entry->msg_id == UINT64_MAX) &&
-			 dlist_empty(&tx_entry->in_flight_tx_buf_list))) {
+			 dlist_empty(&tx_entry->deferred_tx_buf_list))) {
 		rxm_cq_write_error(tx_entry->ep->util_ep.tx_cq,
 				   tx_entry->ep->util_ep.tx_cntr,
 				   tx_entry->context, -FI_ENOMEM);

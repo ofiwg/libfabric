@@ -313,7 +313,12 @@ struct rxm_tx_entry {
 		struct {
 			size_t segs_left;
 			uint64_t msg_id;
+			/* These lists for the TX buffers that are: */
+			/* - Has been successfully sent to the peer */
 			struct dlist_entry in_flight_tx_buf_list;
+			/* - Has been queued until it would be possbile
+			 *   to send it  */
+			struct dlist_entry deferred_tx_buf_list;
 			struct rxm_iov rxm_iov;
 			uint64_t iov_offset;
 		};
@@ -653,6 +658,7 @@ rxm_tx_buf_release(struct rxm_ep *rxm_ep, struct rxm_tx_buf *tx_buf)
 	       (tx_buf->type == RXM_BUF_POOL_TX_SAR));
 	assert((tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_data) ||
 	       (tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_large_data) ||
+	       (tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_seg_data) ||
 	       (tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_ack));
 	tx_buf->pkt.hdr.flags &= ~FI_REMOTE_CQ_DATA;
 	rxm_buf_release(&rxm_ep->buf_pools[tx_buf->type],
