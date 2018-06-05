@@ -168,11 +168,6 @@ struct tcpx_rx_detect {
 	uint64_t		done_len;
 };
 
-struct tcpx_rma_list {
-	struct dlist_entry	list;
-	uint64_t		msg_id_tracker;
-};
-
 typedef void (*tcpx_ep_progress_func_t)(struct tcpx_ep *ep);
 
 struct tcpx_ep {
@@ -181,9 +176,9 @@ struct tcpx_ep {
 	struct tcpx_rx_detect	rx_detect;
 	struct tcpx_xfer_entry	*cur_rx_entry;
 	struct dlist_entry	ep_entry;
-	struct dlist_entry	rx_queue;
-	struct dlist_entry	tx_queue;
-	struct tcpx_rma_list	rma_list;
+	struct slist		rx_queue;
+	struct slist		tx_queue;
+	struct slist		rma_read_queue;
 	enum tcpx_cm_state	cm_state;
 	/* lock for protecting tx/rx queues,rma list,cm_state*/
 	fastlock_t		lock;
@@ -203,7 +198,7 @@ struct tcpx_msg_data {
 };
 
 struct tcpx_xfer_entry {
-	struct dlist_entry	entry;
+	struct slist_entry	entry;
 	struct tcpx_msg_hdr	msg_hdr;
 	struct tcpx_msg_data	msg_data;
 	struct tcpx_ep		*ep;

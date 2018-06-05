@@ -78,7 +78,7 @@ static ssize_t tcpx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	recv_entry->done_len = 0;
 
 	fastlock_acquire(&tcpx_ep->lock);
-	dlist_insert_tail(&recv_entry->entry, &tcpx_ep->rx_queue);
+	slist_insert_tail(&recv_entry->entry, &tcpx_ep->rx_queue);
 	fastlock_release(&tcpx_ep->lock);
 	return FI_SUCCESS;
 }
@@ -167,11 +167,11 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	tx_entry->flags = flags | FI_MSG | FI_SEND;
 
 	fastlock_acquire(&tcpx_ep->lock);
-	if (dlist_empty(&tcpx_ep->tx_queue)) {
-		dlist_insert_tail(&tx_entry->entry, &tcpx_ep->tx_queue);
+	if (slist_empty(&tcpx_ep->tx_queue)) {
+		slist_insert_tail(&tx_entry->entry, &tcpx_ep->tx_queue);
 		process_tx_entry(tx_entry);
 	} else {
-		dlist_insert_tail(&tx_entry->entry, &tcpx_ep->tx_queue);
+		slist_insert_tail(&tx_entry->entry, &tcpx_ep->tx_queue);
 	}
 	fastlock_release(&tcpx_ep->lock);
 	return FI_SUCCESS;
@@ -474,24 +474,24 @@ static struct fi_ops_cm tcpx_cm_ops = {
 
 static void tcpx_ep_tx_rx_queues_release(struct tcpx_ep *ep)
 {
-	struct dlist_entry *entry;
+	struct slist_entry *entry;
 	struct tcpx_xfer_entry *xfer_entry;
 	struct tcpx_cq *tcpx_cq;
 
 	fastlock_acquire(&ep->lock);
-	while (!dlist_empty(&ep->tx_queue)) {
-		entry = ep->tx_queue.next;
+	while (!slist_empty(&ep->tx_queue)) {
+		entry = ep->tx_queue.head;
 		xfer_entry = container_of(entry, struct tcpx_xfer_entry, entry);
-		dlist_remove(entry);
+		slist_remove_head(&ep->tx_queue);
 		tcpx_cq = container_of(xfer_entry->ep->util_ep.tx_cq,
 				       struct tcpx_cq, util_cq);
 		tcpx_xfer_entry_release(tcpx_cq, xfer_entry);
 	}
 
-	while (!dlist_empty(&ep->rx_queue)) {
-		entry = ep->rx_queue.next;
+	while (!slist_empty(&ep->rx_queue)) {
+		entry = ep->rx_queue.head;
 		xfer_entry = container_of(entry, struct tcpx_xfer_entry, entry);
-		dlist_remove(entry);
+		slist_remove_head(&ep->rx_queue);
 		tcpx_cq = container_of(xfer_entry->ep->util_ep.rx_cq,
 				       struct tcpx_cq, util_cq);
 		tcpx_xfer_entry_release(tcpx_cq, xfer_entry);
@@ -675,10 +675,9 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		goto err3;
 
-	dlist_init(&ep->rx_queue);
-	dlist_init(&ep->tx_queue);
-	dlist_init(&ep->rma_list.list);
-	ep->rma_list.msg_id_tracker = 0;
+	slist_init(&ep->rx_queue);
+	slist_init(&ep->tx_queue);
+	slist_init(&ep->rma_read_queue);
 
 	*ep_fid = &ep->util_ep.ep_fid;
 	(*ep_fid)->fid.ops = &tcpx_ep_fi_ops;
