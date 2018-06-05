@@ -79,7 +79,7 @@ pipeline {
                         // ignore the return code for fabtests until we can establish a fingerprint
                         timeout (time: 20, unit: 'MINUTES') {
                             script {
-                                def command = '$FABTEST_PATH/bin/runfabtests.sh -p $FABTEST_PATH/bin -v -T 60 \'ofi_rxm;verbs\' 10.100.49.8 10.100.49.9 || true' 
+                                def command = '$FABTEST_PATH/bin/runfabtests.sh -p $FABTEST_PATH/bin -v -T 60 \'ofi_rxm;verbs\' 10.100.49.8 10.100.49.9 || true'
                                 launch "$command", 1, 1, 'wham-0-cn8'
                             }
                         }
@@ -119,21 +119,21 @@ pipeline {
                     }
                     steps {
                         echo "checking potential hosts"
-                        launch "hostname", 4, 1   
+                        launch "hostname", 4, 1
 
                         echo "running 2 process, 2 node latency test"
                         launch "$OMB_BUILD_PATH/pt2pt/osu_latency", 2, 1
 
                         echo "running 2 process, 2 node bandwidth test"
                         launch "$OMB_BUILD_PATH/pt2pt/osu_bw", 2, 1
-                        
+
                         echo "running 160 processes, 4 node Allreduce test"
                         launch "$OMB_BUILD_PATH/collective/osu_allreduce -f", 160, 40
 
                         echo "running 160 processes, 4 node Broadcast test"
                         launch "$OMB_BUILD_PATH/collective/osu_bcast -f", 160, 40
 
-                        echo "running 80 processes, 4 node Alltoall test"   
+                        echo "running 80 processes, 4 node Alltoall test"
                         launch "$OMB_BUILD_PATH/collective/osu_alltoall -f", 80, 40
                     }
                 }
@@ -156,6 +156,36 @@ pipeline {
             steps {
                 script {
                     publish env.LIBFABRIC_BUILD_PATH, "$BRANCH_NAME", "$GIT_SHORT_COMMIT"
+                }
+            }
+        }
+        stage("Deploy: RPMs") {
+            when {
+                anyOf { expression { env.BRANCH_NAME == 'master' } ; buildingTag() }
+            }
+            steps {
+                sh 'make dist-bzip2'
+                sh '$WORKSPACE/contrib/buildrpm/buildrpmLibfabric.sh -i verbs -i sockets -osmv $(ls libfabric-*.tar.bz2)'
+                sh 'ls rpmbuild/RPMS/**/* rpmbuild/SOURCES/*'
+                stash name: 'rpms', includes: 'rpmbuild/RPMS/**/*'
+                stash name: 'sources',  includes: 'rpmbuild/SOURCES/*'
+            }
+        }
+    }
+    post {
+        success {
+            script {
+                try {
+                    unstash 'rpms'
+                    unstash 'sources'
+                    archiveArtifacts 'rpmbuild/SOURCES/*'
+                    archiveArtifacts 'rpmbuild/RPMS/**/*'
+                }
+                catch (Exception e) {
+                    echo 'No rpms to archive'
+                }
+                finally {
+                    echo "Tests passed"
                 }
             }
         }
