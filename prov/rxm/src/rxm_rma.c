@@ -108,11 +108,11 @@ rxm_ep_rma_fill_msg_buf(struct rxm_rma_buf *rma_buf,
 }
 
 static inline ssize_t
-rxm_ep_format_rma_res_lightweight(struct rxm_ep *rxm_ep, uint64_t flags,
+rxm_ep_format_rma_res_lightweight(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, uint64_t flags,
 				  uint64_t comp_flags, const struct fi_msg_rma *orig_msg,
 				  struct rxm_tx_entry **tx_entry)
 {
-	*tx_entry = rxm_tx_entry_get(&rxm_ep->send_queue);
+	*tx_entry = rxm_tx_entry_get(&rxm_conn->send_queue);
 	if (OFI_UNLIKELY(!*tx_entry)) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ,
 			"Unable to allocate TX entry for RMA!\n");
@@ -154,16 +154,15 @@ rxm_ep_format_rma_buf(struct rxm_ep *rxm_ep, size_t total_size,
 }
 
 static inline ssize_t
-rxm_ep_format_rma_res(struct rxm_ep *rxm_ep, size_t total_size,
-		      uint64_t flags, uint64_t comp_flags,
-		      const struct fi_msg_rma *orig_msg,
-		      struct rxm_rma_buf **rma_buf,
-		      struct rxm_tx_entry **tx_entry)
+rxm_ep_format_rma_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
+		      size_t total_size, uint64_t flags,
+		      uint64_t comp_flags, const struct fi_msg_rma *orig_msg,
+		      struct rxm_rma_buf **rma_buf, struct rxm_tx_entry **tx_entry)
 {
 	ssize_t ret;
 
-	ret = rxm_ep_format_rma_res_lightweight(rxm_ep, flags, comp_flags,
-						orig_msg, tx_entry);
+	ret = rxm_ep_format_rma_res_lightweight(rxm_ep, rxm_conn, flags,
+						comp_flags, orig_msg, tx_entry);
 	if (OFI_UNLIKELY(ret))
 		return ret;
 
@@ -175,7 +174,7 @@ rxm_ep_format_rma_res(struct rxm_ep *rxm_ep, size_t total_size,
 	return FI_SUCCESS;
 err:
 	FI_WARN(&rxm_prov, FI_LOG_CQ, "Unable to allocate RMA resources!\n");
-	rxm_tx_entry_release(&rxm_ep->send_queue, *tx_entry);
+	rxm_tx_entry_release(&rxm_conn->send_queue, *tx_entry);
 	return ret;
 }
 
@@ -220,14 +219,13 @@ void rxm_ep_handle_postponed_rma_op(struct rxm_ep *rxm_ep,
 }
 
 static inline ssize_t
-rxm_ep_format_rma_inject_res(struct rxm_ep *rxm_ep, size_t total_size,
-			     uint64_t flags, uint64_t comp_flags,
-			     const struct fi_msg_rma *orig_msg,
-			     struct rxm_rma_buf **rma_buf,
+rxm_ep_format_rma_inject_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
+			     size_t total_size, uint64_t flags, uint64_t comp_flags,
+			     const struct fi_msg_rma *orig_msg, struct rxm_rma_buf **rma_buf,
 			     struct rxm_tx_entry **tx_entry)
 {
-	ssize_t ret = rxm_ep_format_rma_res(rxm_ep, total_size, flags, comp_flags,
-					    orig_msg, rma_buf, tx_entry);
+	ssize_t ret = rxm_ep_format_rma_res(rxm_ep, rxm_conn, total_size, flags,
+					    comp_flags, orig_msg, rma_buf, tx_entry);
 	if (OFI_UNLIKELY(ret))
 		return ret;
 
@@ -237,14 +235,13 @@ rxm_ep_format_rma_inject_res(struct rxm_ep *rxm_ep, size_t total_size,
 }
 
 static inline ssize_t
-rxm_ep_format_rma_non_inject_res(struct rxm_ep *rxm_ep, size_t total_size,
-				 uint64_t flags, uint64_t comp_flags,
-				 const struct fi_msg_rma *orig_msg,
-				 struct rxm_rma_buf **rma_buf,
+rxm_ep_format_rma_non_inject_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
+				 size_t total_size, uint64_t flags, uint64_t comp_flags,
+				 const struct fi_msg_rma *orig_msg, struct rxm_rma_buf **rma_buf,
 				 struct rxm_tx_entry **tx_entry)
 {
-	ssize_t ret = rxm_ep_format_rma_res(rxm_ep, total_size, flags, comp_flags,
-					    orig_msg, rma_buf, tx_entry);
+	ssize_t ret = rxm_ep_format_rma_res(rxm_ep, rxm_conn, total_size, flags,
+					    comp_flags, orig_msg, rma_buf, tx_entry);
 	if (OFI_UNLIKELY(ret))
 		return ret;
 
@@ -262,7 +259,7 @@ rxm_ep_format_rma_non_inject_res(struct rxm_ep *rxm_ep, size_t total_size,
 	return ret;
 err:
 	rxm_rma_buf_release(rxm_ep, (*tx_entry)->rma_buf);
-	rxm_tx_entry_release(&rxm_ep->send_queue, *tx_entry);
+	rxm_tx_entry_release(&rxm_conn->send_queue, *tx_entry);
 	return ret;
 }
 
@@ -277,11 +274,11 @@ rxm_ep_postpone_rma(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 	if (flags & FI_INJECT) {
 		assert(comp_flags & FI_WRITE);
-		ret = rxm_ep_format_rma_inject_res(rxm_ep, total_size,
+		ret = rxm_ep_format_rma_inject_res(rxm_ep, rxm_conn, total_size,
 						   flags, comp_flags, orig_msg,
 						   &rma_buf, &tx_entry);
 	} else {
-		ret = rxm_ep_format_rma_non_inject_res(rxm_ep, total_size,
+		ret = rxm_ep_format_rma_non_inject_res(rxm_ep, rxm_conn, total_size,
 						       flags, comp_flags, orig_msg,
 						       &rma_buf, &tx_entry);
 	}
@@ -325,8 +322,8 @@ cmap_err:
 rma_continue:
 	fastlock_release(&rxm_ep->util_ep.cmap->lock);
 
-	ret = rxm_ep_format_rma_res_lightweight(rxm_ep, flags, comp_flags,
-						msg, &tx_entry);
+	ret = rxm_ep_format_rma_res_lightweight(rxm_ep, rxm_conn, flags,
+						comp_flags, msg, &tx_entry);
 	if (OFI_UNLIKELY(ret))
 		return -FI_EAGAIN;
 
@@ -346,7 +343,7 @@ rma_continue:
 	if ((rxm_ep->msg_mr_local) && (!rxm_ep->rxm_mr_local))
 		rxm_ep_msg_mr_closev(tx_entry->mr, tx_entry->count);
 err:
-	rxm_tx_entry_release(&rxm_ep->send_queue, tx_entry);
+	rxm_tx_entry_release(&rxm_conn->send_queue, tx_entry);
 	return ret;
 }
 
@@ -462,7 +459,7 @@ rma_inject_continue:
 					       msg->rma_iov->key);
 	}
 
-	ret = rxm_ep_format_rma_inject_res(rxm_ep, total_size, flags, FI_WRITE,
+	ret = rxm_ep_format_rma_inject_res(rxm_ep, rxm_conn, total_size, flags, FI_WRITE,
 					   msg, &rma_buf, &tx_entry);
 	if (OFI_UNLIKELY(ret))
 		return ret;
@@ -476,7 +473,7 @@ rma_inject_continue:
 	return 0;
 err:
 	rxm_rma_buf_release(rxm_ep, tx_entry->rma_buf);
-	rxm_tx_entry_release(&rxm_ep->send_queue, tx_entry);
+	rxm_tx_entry_release(&rxm_conn->send_queue, tx_entry);
 	return ret;
 }
 

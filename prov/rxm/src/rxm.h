@@ -112,17 +112,6 @@ struct rxm_fabric {
 	struct fid_fabric *msg_fabric;
 };
 
-struct rxm_conn {
-	struct fid_ep *msg_ep;
-	struct dlist_entry postponed_tx_list;
-	struct dlist_entry posted_rx_list;
-	struct util_cmap_handle handle;
-	/* This is saved MSG EP fid, that hasn't been closed during
-	 * handling of CONN_RECV in CMAP_CONNREQ_SENT for passive side */
-	struct fid_ep *saved_msg_ep;
-	struct dlist_entry saved_posted_rx_list;
-};
-
 struct rxm_domain {
 	struct util_domain util_domain;
 	struct fid_domain *msg_domain;
@@ -303,6 +292,7 @@ struct rxm_tx_entry {
 
 	enum rxm_proto_state state;
 
+	struct rxm_conn *conn;
 	struct rxm_ep *ep;
 	uint8_t count;
 	void *context;
@@ -353,6 +343,7 @@ DECLARE_FREESTACK(struct rxm_recv_entry, rxm_recv_fs);
 
 struct rxm_send_queue {
 	struct rxm_ep *rxm_ep;
+	struct rxm_conn *rxm_conn;
 	struct rxm_txe_fs *fs;
 	fastlock_t lock;
 };
@@ -402,12 +393,23 @@ struct rxm_ep {
 	struct dlist_entry	posted_srx_list;
 	struct dlist_entry	repost_ready_list;
 
-	struct rxm_send_queue	send_queue;
 	struct rxm_recv_queue	recv_queue;
 	struct rxm_recv_queue	trecv_queue;
 
 	ofi_fastlock_acquire_t	res_fastlock_acquire;
 	ofi_fastlock_release_t	res_fastlock_release;
+};
+
+struct rxm_conn {
+	struct fid_ep *msg_ep;
+	struct rxm_send_queue send_queue;
+	struct dlist_entry postponed_tx_list;
+	struct dlist_entry posted_rx_list;
+	struct util_cmap_handle handle;
+	/* This is saved MSG EP fid, that hasn't been closed during
+	 * handling of CONN_RECV in CMAP_CONNREQ_SENT for passive side */
+	struct fid_ep *saved_msg_ep;
+	struct dlist_entry saved_posted_rx_list;
 };
 
 struct rxm_ep_wait_ref {
@@ -749,6 +751,6 @@ static inline int rxm_finish_send_nobuf(struct rxm_tx_entry *tx_entry)
 		else
 			rxm_cntr_inc(tx_entry->ep->util_ep.rd_cntr);
 	}
-	rxm_tx_entry_release(&tx_entry->ep->send_queue, tx_entry);
+	rxm_tx_entry_release(&tx_entry->conn->send_queue, tx_entry);
 	return 0;
 }
