@@ -549,12 +549,12 @@ static int cxi_cq_verify_attr(struct fi_cq_attr *attr)
 	switch (attr->wait_obj) {
 	case FI_WAIT_NONE:
 	case FI_WAIT_FD:
-	case FI_WAIT_SET:
 	case FI_WAIT_MUTEX_COND:
 		break;
 	case FI_WAIT_UNSPEC:
 		attr->wait_obj = FI_WAIT_FD;
 		break;
+	case FI_WAIT_SET:
 	default:
 		return -FI_ENOSYS;
 	}
