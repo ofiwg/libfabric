@@ -138,6 +138,10 @@ struct cxi_addr {
 	};
 };
 
+#ifndef ARRAY_SIZE
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+#endif
+
 #define CXI_ADDR_INIT {{{0}}}
 #define CXI_ADDR_FLAG_AV_ENTRY_VALID 1
 #define CXI_ADDR_AV_ENTRY_VALID(addr) \
