@@ -313,7 +313,12 @@ struct rxm_tx_entry {
 		struct {
 			size_t segs_left;
 			uint64_t msg_id;
+			/* These lists for the TX buffers that are: */
+			/* - Has been successfully sent to the peer */
 			struct dlist_entry in_flight_tx_buf_list;
+			/* - Has been queued until it would be possbile
+			 *   to send it  */
+			struct dlist_entry deferred_tx_buf_list;
 			struct rxm_iov rxm_iov;
 			uint64_t iov_offset;
 		};
