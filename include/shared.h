@@ -277,12 +277,16 @@ size_t datatype_to_size(enum fi_datatype datatype);
 #endif
 
 #define FT_EQ_ERR(eq, entry, buf, len) \
-	FT_ERR("eq_readerr: %s", fi_eq_strerror(eq, entry.prov_errno, \
-				entry.err_data, buf, len))
+	FT_ERR("eq_readerr (Provider errno: %d) : %s",		 \
+		entry.prov_errno, fi_eq_strerror(eq, entry.err,	 \
+						 entry.err_data, \
+						 buf, len))	 \
 
 #define FT_CQ_ERR(cq, entry, buf, len) \
-	FT_ERR("cq_readerr: %s", fi_cq_strerror(cq, entry.prov_errno, \
-				entry.err_data, buf, len))
+	FT_ERR("cq_readerr (Provider errno: %d) : %s",		 \
+		entry.prov_errno, fi_cq_strerror(cq, entry.err,	 \
+						 entry.err_data, \
+						 buf, len))	 \
 
 #define FT_CLOSE_FID(fd)						\
 	do {								\
