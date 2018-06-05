@@ -128,6 +128,13 @@ int mrail_get_core_info(uint32_t version, const char *node, const char *service,
 		else
 			fi->next = info;
 		fi = info;
+
+		/* We only want the first fi_info entry per rail */
+		if (info->next) {
+			fi_freeinfo(info->next);
+			info->next = NULL;
+		}
+
 	}
 	goto out;
 err:
