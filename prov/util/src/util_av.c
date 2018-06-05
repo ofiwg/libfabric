@@ -1269,7 +1269,7 @@ int util_cmap_alloc_handle(struct util_cmap *cmap, fi_addr_t fi_addr,
 			   enum util_cmap_state state,
 			   struct util_cmap_handle **handle)
 {
-	*handle = cmap->attr.alloc();
+	*handle = cmap->attr.alloc(cmap);
 	if (OFI_UNLIKELY(!*handle))
 		return -FI_ENOMEM;
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "Allocated handle: %p for "
@@ -1289,7 +1289,7 @@ static int util_cmap_alloc_handle_peer(struct util_cmap *cmap, void *addr,
 	peer = calloc(1, sizeof(*peer) + cmap->av->addrlen);
 	if (!peer)
 		return -FI_ENOMEM;
-	*handle = cmap->attr.alloc();
+	*handle = cmap->attr.alloc(cmap);
 	if (!*handle) {
 		free(peer);
 		return -FI_ENOMEM;
