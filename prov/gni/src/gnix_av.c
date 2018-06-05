@@ -173,7 +173,7 @@ static int table_insert(struct gnix_fid_av *av_priv, const void *addr,
 		/* check if this ep_name fits in the av context bits */
 		if (ep_name.name_type & GNIX_EPN_TYPE_SEP) {
 			if ((1 << av_priv->rx_ctx_bits) < ep_name.rx_ctx_cnt) {
-				if (flags && FI_SYNC_ERR) {
+				if (flags & FI_SYNC_ERR) {
 					entry_err[i] = -FI_EINVAL;
 					fi_addr[i] = FI_ADDR_NOTAVAIL;
 					ret = -FI_EINVAL;
@@ -196,7 +196,7 @@ static int table_insert(struct gnix_fid_av *av_priv, const void *addr,
 		if (fi_addr)
 			fi_addr[i] = index;
 
-		if (flags && FI_SYNC_ERR) {
+		if (flags & FI_SYNC_ERR) {
 			entry_err[i] = FI_SUCCESS;
 		}
 	}
@@ -335,7 +335,7 @@ static int map_insert(struct gnix_fid_av *av_priv, const void *addr,
 		/* check if this ep_name fits in the av context bits */
 		if (ep_name.name_type & GNIX_EPN_TYPE_SEP) {
 			if ((1 << av_priv->rx_ctx_bits) < ep_name.rx_ctx_cnt) {
-				if (flags && FI_SYNC_ERR) {
+				if (flags & FI_SYNC_ERR) {
 					entry_err[i] = -FI_EINVAL;
 					fi_addr[i] = FI_ADDR_NOTAVAIL;
 					ret_cnt = -FI_EINVAL;
@@ -360,7 +360,7 @@ static int map_insert(struct gnix_fid_av *av_priv, const void *addr,
 				      key,
 				      the_entry);
 
-		if (flags && FI_SYNC_ERR) {
+		if (flags & FI_SYNC_ERR) {
 			entry_err[i] = FI_SUCCESS;
 		}
 
@@ -372,7 +372,7 @@ static int map_insert(struct gnix_fid_av *av_priv, const void *addr,
 			GNIX_WARN(FI_LOG_AV,
 				  "_gnix_ht_insert failed %d\n",
 				  ret);
-			if (flags && FI_SYNC_ERR) {
+			if (flags & FI_SYNC_ERR) {
 				entry_err[i] = ret;
 				fi_addr[i] = FI_ADDR_NOTAVAIL;
 				ret_cnt = ret;
