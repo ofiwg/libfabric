@@ -138,6 +138,7 @@ STATIC uint64_t psmx2_cntr_readerr(struct fid_cntr *cntr)
 	struct psmx2_fid_cntr *cntr_priv;
 
 	cntr_priv = container_of(cntr, struct psmx2_fid_cntr, cntr);
+	cntr_priv->error_avail = 0;
 
 	return ofi_atomic_get64(&cntr_priv->error_counter);
 }
@@ -181,6 +182,7 @@ STATIC int psmx2_cntr_adderr(struct fid_cntr *cntr, uint64_t value)
 
 	cntr_priv = container_of(cntr, struct psmx2_fid_cntr, cntr);
 	ofi_atomic_add64(&cntr_priv->error_counter, value);
+	cntr_priv->error_avail = 1;
 
 	psmx2_cntr_check_trigger(cntr_priv);
 
@@ -197,6 +199,7 @@ STATIC int psmx2_cntr_seterr(struct fid_cntr *cntr, uint64_t value)
 
 	cntr_priv = container_of(cntr, struct psmx2_fid_cntr, cntr);
 	ofi_atomic_set64(&cntr_priv->error_counter, value);
+	cntr_priv->error_avail = 1;
 
 	psmx2_cntr_check_trigger(cntr_priv);
 
@@ -221,6 +224,11 @@ STATIC int psmx2_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeou
 	clock_gettime(CLOCK_REALTIME, &ts0);
 
 	while (ofi_atomic_get64(&cntr_priv->counter) < threshold) {
+		if (cntr_priv->error_avail) {
+			ret = -FI_EAVAIL;
+			break;
+		}
+
 		if (cntr_priv->wait) {
 			ret = fi_wait((struct fid_wait *)cntr_priv->wait,
 				      timeout - msec_passed);
@@ -236,6 +244,11 @@ STATIC int psmx2_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeou
 				psmx2_progress(poll_ctxt->trx_ctxt);
 				(void) prev; /* suppress compiler warning */
 			}
+		}
+
+		if (cntr_priv->error_avail) {
+			ret = -FI_EAVAIL;
+			break;
 		}
 
 		if (ofi_atomic_get64(&cntr_priv->counter) >= threshold)
