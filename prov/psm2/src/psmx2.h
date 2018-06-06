@@ -633,8 +633,9 @@ struct psmx2_fid_cntr {
 	uint64_t		flags;
 	ofi_atomic64_t		counter;
 	ofi_atomic64_t		error_counter;
-	struct util_wait	*wait;
+	int			error_avail;
 	int			wait_is_local;
+	struct util_wait	*wait;
 	struct psmx2_trigger	*trigger;
 	fastlock_t		trigger_lock;
 };
@@ -1016,10 +1017,12 @@ int	psmx2_handle_sendv_req(struct psmx2_fid_ep *ep, PSMX2_STATUS_TYPE *status,
 
 static inline void psmx2_cntr_inc(struct psmx2_fid_cntr *cntr, int error)
 {
-	if (OFI_UNLIKELY(error))
+	if (OFI_UNLIKELY(error)) {
 		ofi_atomic_inc64(&cntr->error_counter);
-	else
+		cntr->error_avail = 1;
+	} else {
 		ofi_atomic_inc64(&cntr->counter);
+	}
 	psmx2_cntr_check_trigger(cntr);
 	if (cntr->wait)
 		cntr->wait->signal(cntr->wait);
