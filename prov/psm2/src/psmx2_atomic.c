@@ -457,10 +457,10 @@ int psmx2_am_atomic_handler(psm2_am_token_t token,
 			mr_cntr = mr->cntr;
 
 			if (cntr)
-				psmx2_cntr_inc(cntr);
+				psmx2_cntr_inc(cntr, 0);
 
 			if (mr_cntr && mr_cntr != cntr)
-				psmx2_cntr_inc(mr_cntr);
+				psmx2_cntr_inc(mr_cntr, 0);
 		}
 
 		rep_args[0].u32w0 = PSMX2_AM_REP_ATOMIC_WRITE;
@@ -507,10 +507,10 @@ int psmx2_am_atomic_handler(psm2_am_token_t token,
 			}
 
 			if (cntr)
-				psmx2_cntr_inc(cntr);
+				psmx2_cntr_inc(cntr, 0);
 
 			if (mr_cntr && mr_cntr != cntr)
-				psmx2_cntr_inc(mr_cntr);
+				psmx2_cntr_inc(mr_cntr, 0);
 		} else {
 			tmp_buf = NULL;
 		}
@@ -554,10 +554,10 @@ int psmx2_am_atomic_handler(psm2_am_token_t token,
 			mr_cntr = mr->cntr;
 
 			if (cntr)
-				psmx2_cntr_inc(cntr);
+				psmx2_cntr_inc(cntr, 0);
 
 			if (mr_cntr && mr_cntr != cntr)
-				psmx2_cntr_inc(mr_cntr);
+				psmx2_cntr_inc(mr_cntr, 0);
 		} else {
 			tmp_buf = NULL;
 		}
@@ -593,7 +593,7 @@ int psmx2_am_atomic_handler(psm2_am_token_t token,
 		}
 
 		if (req->ep->write_cntr)
-			psmx2_cntr_inc(req->ep->write_cntr);
+			psmx2_cntr_inc(req->ep->write_cntr, op_error);
 
 		free(req->tmpbuf);
 		psmx2_am_request_free(req->ep->tx, req);
@@ -631,7 +631,7 @@ int psmx2_am_atomic_handler(psm2_am_token_t token,
 		}
 
 		if (req->ep->read_cntr)
-			psmx2_cntr_inc(req->ep->read_cntr);
+			psmx2_cntr_inc(req->ep->read_cntr, op_error);
 
 		free(req->tmpbuf);
 		psmx2_am_request_free(req->ep->tx, req);
@@ -741,10 +741,12 @@ static int psmx2_atomic_self(int am_cmd,
 	}
 
 	if (cntr)
-		psmx2_cntr_inc(cntr);
+		psmx2_cntr_inc(cntr, 0);
 
 	if (mr_cntr && mr_cntr != cntr)
-		psmx2_cntr_inc(mr_cntr);
+		psmx2_cntr_inc(mr_cntr, 0);
+
+	op_error = err;
 
 gen_local_event:
 	no_event = ((flags & PSMX2_NO_COMPLETION) ||
@@ -769,12 +771,12 @@ gen_local_event:
 	switch (am_cmd) {
 	case PSMX2_AM_REQ_ATOMIC_WRITE:
 		if (ep->write_cntr)
-			psmx2_cntr_inc(ep->write_cntr);
+			psmx2_cntr_inc(ep->write_cntr, op_error);
 		break;
 	case PSMX2_AM_REQ_ATOMIC_READWRITE:
 	case PSMX2_AM_REQ_ATOMIC_COMPWRITE:
 		if (ep->read_cntr)
-			psmx2_cntr_inc(ep->read_cntr);
+			psmx2_cntr_inc(ep->read_cntr, op_error);
 		break;
 	}
 

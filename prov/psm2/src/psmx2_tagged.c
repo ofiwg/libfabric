@@ -214,7 +214,7 @@ ssize_t psmx2_tagged_recv_generic(struct fid_ep *ep, void *buf,
 			}
 
 			if (ep_priv->recv_cntr)
-				psmx2_cntr_inc(ep_priv->recv_cntr);
+				psmx2_cntr_inc(ep_priv->recv_cntr, 0);
 
 			return 0;
 		}
@@ -602,7 +602,7 @@ ssize_t psmx2_tagged_send_generic(struct fid_ep *ep,
 			return psmx2_errno(err);
 
 		if (ep_priv->send_cntr)
-			psmx2_cntr_inc(ep_priv->send_cntr);
+			psmx2_cntr_inc(ep_priv->send_cntr, 0);
 
 		if (ep_priv->send_cq && !no_completion) {
 			event = psmx2_cq_create_event(
@@ -853,7 +853,7 @@ psmx2_tagged_inject_specialized(struct fid_ep *ep, const void *buf,
 		return psmx2_errno(err);
 
 	if (ep_priv->send_cntr)
-		psmx2_cntr_inc(ep_priv->send_cntr);
+		psmx2_cntr_inc(ep_priv->send_cntr, 0);
 
 	return 0;
 }
@@ -1022,7 +1022,7 @@ ssize_t psmx2_tagged_sendv_generic(struct fid_ep *ep,
 			return psmx2_errno(err);
 
 		if (ep_priv->send_cntr)
-			psmx2_cntr_inc(ep_priv->send_cntr);
+			psmx2_cntr_inc(ep_priv->send_cntr, 0);
 
 		if (ep_priv->send_cq && !no_completion) {
 			event = psmx2_cq_create_event(
