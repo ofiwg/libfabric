@@ -1148,7 +1148,7 @@ static void rxd_ep_progress(struct util_ep *util_ep)
 			err_entry.op_context = tx_entry->cq_entry.op_context;
 			err_entry.flags = (FI_MSG | FI_SEND);
 			err_entry.err = FI_ECONNREFUSED;
-			err_entry.prov_errno = -FI_ECONNREFUSED;
+			err_entry.prov_errno = 0;
 			rxd_cq_report_error(rxd_ep_tx_cq(ep), &err_entry);
 		}
 

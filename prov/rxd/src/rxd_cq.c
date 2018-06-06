@@ -227,7 +227,7 @@ static void rxd_ep_recv_data(struct rxd_ep *ep, struct rxd_x_entry *rx_entry,
 		err_entry.flags = (FI_MSG | FI_RECV);
 		err_entry.len = rx_entry->bytes_done;
 		err_entry.err = FI_ETRUNC;
-		err_entry.prov_errno = -FI_ETRUNC;
+		err_entry.prov_errno = 0;
 		rxd_cq_report_error(rx_cq, &err_entry);
 	}
 	fastlock_release(&ep->util_ep.rx_cq->cq_lock);
