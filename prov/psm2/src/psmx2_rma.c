@@ -155,10 +155,10 @@ int psmx2_am_rma_handler(psm2_am_token_t token, psm2_amarg_t *args,
 				}
 
 				if (rx->ep->remote_write_cntr)
-					psmx2_cntr_inc(rx->ep->remote_write_cntr);
+					psmx2_cntr_inc(rx->ep->remote_write_cntr, 0);
 
 				if (mr->cntr && mr->cntr != rx->ep->remote_write_cntr)
-					psmx2_cntr_inc(mr->cntr);
+					psmx2_cntr_inc(mr->cntr, 0);
 			}
 		}
 		if (eom || op_error) {
@@ -239,7 +239,7 @@ int psmx2_am_rma_handler(psm2_am_token_t token, psm2_amarg_t *args,
 
 		if (eom && !op_error) {
 			if (rx->ep->remote_read_cntr)
-				psmx2_cntr_inc(rx->ep->remote_read_cntr);
+				psmx2_cntr_inc(rx->ep->remote_read_cntr, 0);
 		}
 		break;
 
@@ -307,7 +307,7 @@ int psmx2_am_rma_handler(psm2_am_token_t token, psm2_amarg_t *args,
 			}
 
 			if (req->ep->write_cntr)
-				psmx2_cntr_inc(req->ep->write_cntr);
+				psmx2_cntr_inc(req->ep->write_cntr, req->error);
 
 			free(req->tmpbuf);
 			psmx2_am_request_free(req->ep->tx, req);
@@ -351,7 +351,7 @@ int psmx2_am_rma_handler(psm2_am_token_t token, psm2_amarg_t *args,
 			}
 
 			if (req->ep->read_cntr)
-				psmx2_cntr_inc(req->ep->read_cntr);
+				psmx2_cntr_inc(req->ep->read_cntr, req->error);
  
 			free(req->tmpbuf);
 			psmx2_am_request_free(req->ep->tx, req);
@@ -476,10 +476,10 @@ static ssize_t psmx2_rma_self(int am_cmd,
 		}
 
 		if (cntr)
-			psmx2_cntr_inc(cntr);
+			psmx2_cntr_inc(cntr, 0);
 
 		if (mr_cntr)
-			psmx2_cntr_inc(mr_cntr);
+			psmx2_cntr_inc(mr_cntr, 0);
 	}
 
 	no_event = (flags & PSMX2_NO_COMPLETION) ||
@@ -506,13 +506,13 @@ static ssize_t psmx2_rma_self(int am_cmd,
 	case PSMX2_AM_REQ_WRITE:
 	case PSMX2_AM_REQ_WRITEV:
 		if (ep->write_cntr)
-			psmx2_cntr_inc(ep->write_cntr);
+			psmx2_cntr_inc(ep->write_cntr, op_error);
 		break;
 
 	case PSMX2_AM_REQ_READ:
 	case PSMX2_AM_REQ_READV:
 		if (ep->read_cntr)
-			psmx2_cntr_inc(ep->read_cntr);
+			psmx2_cntr_inc(ep->read_cntr, op_error);
 		break;
 	}
 
