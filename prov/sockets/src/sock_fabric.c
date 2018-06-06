@@ -276,6 +276,7 @@ int sock_verify_info(uint32_t version, const struct fi_info *hints)
 	case FI_FORMAT_UNSPEC:
 	case FI_SOCKADDR:
 	case FI_SOCKADDR_IN:
+	case FI_SOCKADDR_IN6:
 		break;
 	default:
 		SOCK_LOG_DBG("Unsupported address format\n");
@@ -393,26 +394,27 @@ static int sock_fabric(struct fi_fabric_attr *attr,
 	return 0;
 }
 
-int sock_get_src_addr(struct sockaddr_in *dest_addr,
-		      struct sockaddr_in *src_addr)
+int sock_get_src_addr(union ofi_sock_ip *dest_addr,
+		      union ofi_sock_ip *src_addr)
 {
 	int sock, ret;
 	socklen_t len;
 
-	sock = ofi_socket(AF_INET, SOCK_DGRAM, 0);
+	sock = ofi_socket(dest_addr->sa.sa_family, SOCK_DGRAM, 0);
 	if (sock < 0)
 		return -ofi_sockerr();
 
-	len = sizeof(*dest_addr);
-	ret = connect(sock, (struct sockaddr *) dest_addr, len);
+	len = ofi_sizeofaddr(&dest_addr->sa);
+	ret = connect(sock, &dest_addr->sa, len);
 	if (ret) {
 		SOCK_LOG_DBG("Failed to connect udp socket\n");
-		ret = sock_get_src_addr_from_hostname(src_addr, NULL);
+		ret = sock_get_src_addr_from_hostname(src_addr, NULL,
+						      dest_addr->sa.sa_family);
 		goto out;
 	}
 
-	ret = getsockname(sock, (struct sockaddr *) src_addr, &len);
-	src_addr->sin_port = 0;
+	ret = getsockname(sock, &src_addr->sa, &len);
+	ofi_addr_set_port(&src_addr->sa, 0);
 	if (ret) {
 		SOCK_LOG_DBG("getsockname failed\n");
 		ret = -ofi_sockerr();
@@ -442,12 +444,11 @@ static int sock_ep_getinfo(uint32_t version, const char *node,
 			   struct fi_info **info)
 {
 	struct addrinfo ai, *rai = NULL;
-	struct sockaddr_in *src_addr = NULL, *dest_addr = NULL;
-	struct sockaddr_in sin;
+	union ofi_sock_ip *src_addr = NULL, *dest_addr = NULL;
+	union ofi_sock_ip sip;
 	int ret;
 
 	memset(&ai, 0, sizeof(ai));
-	ai.ai_family = AF_INET;
 	ai.ai_socktype = SOCK_STREAM;
 	if (flags & FI_NUMERICHOST)
 		ai.ai_flags |= AI_NUMERICHOST;
@@ -459,7 +460,7 @@ static int sock_ep_getinfo(uint32_t version, const char *node,
 			SOCK_LOG_DBG("getaddrinfo failed!\n");
 			return -FI_ENODATA;
 		}
-		src_addr = (struct sockaddr_in *) rai->ai_addr;
+		src_addr = (union ofi_sock_ip *) rai->ai_addr;
 		if (hints && hints->dest_addr)
 			dest_addr = hints->dest_addr;
 	} else {
@@ -469,7 +470,7 @@ static int sock_ep_getinfo(uint32_t version, const char *node,
 				SOCK_LOG_DBG("getaddrinfo failed!\n");
 				return -FI_ENODATA;
 			}
-			dest_addr = (struct sockaddr_in *) rai->ai_addr;
+			dest_addr = (union ofi_sock_ip *) rai->ai_addr;
 		} else if (hints) {
 			dest_addr = hints->dest_addr;
 		}
@@ -479,15 +480,10 @@ static int sock_ep_getinfo(uint32_t version, const char *node,
 	}
 
 	if (dest_addr && !src_addr) {
-		ret = sock_get_src_addr(dest_addr, &sin);
+		ret = sock_get_src_addr(dest_addr, &sip);
 		if (!ret)
-			src_addr = &sin;
+			src_addr = &sip;
 	}
-
-	if (src_addr)
-		SOCK_LOG_DBG("src_addr: %s\n", inet_ntoa(src_addr->sin_addr));
-	if (dest_addr)
-		SOCK_LOG_DBG("dest_addr: %s\n", inet_ntoa(dest_addr->sin_addr));
 
 	switch (ep_type) {
 	case FI_EP_MSG:
@@ -513,15 +509,26 @@ static int sock_ep_getinfo(uint32_t version, const char *node,
 	return ret;
 }
 
-void sock_insert_loopback_addr(struct slist *addr_list)
+static void sock_insert_loopback_addr(struct slist *addr_list)
 {
 	struct sock_host_list_entry *addr_entry;
 
 	addr_entry = calloc(1, sizeof(struct sock_host_list_entry));
 	if (!addr_entry)
 		return;
-	addr_entry->ipaddr.sin_addr.s_addr = INADDR_LOOPBACK;
+
+	addr_entry->ipaddr.sin.sin_family = AF_INET;
+	addr_entry->ipaddr.sin.sin_addr.s_addr = INADDR_LOOPBACK;
 	strncpy(addr_entry->ipstr, "127.0.0.1", sizeof(addr_entry->ipstr));
+	slist_insert_tail(&addr_entry->entry, addr_list);
+
+	addr_entry = calloc(1, sizeof(struct sock_host_list_entry));
+	if (!addr_entry)
+		return;
+
+	addr_entry->ipaddr.sin6.sin6_family = AF_INET6;
+	addr_entry->ipaddr.sin6.sin6_addr = in6addr_loopback;
+	strncpy(addr_entry->ipstr, "::1", sizeof(addr_entry->ipstr));
 	slist_insert_tail(&addr_entry->entry, addr_list);
 }
 
@@ -551,9 +558,11 @@ void sock_get_list_of_addr(struct slist *addr_list)
 			}
 		}
 		for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
-			if (ifa->ifa_addr == NULL || !(ifa->ifa_flags & IFF_UP) ||
-			     (ifa->ifa_addr->sa_family != AF_INET) ||
-			     !strcmp(ifa->ifa_name, "lo"))
+			if (ifa->ifa_addr == NULL ||
+			    !(ifa->ifa_flags & IFF_UP) ||
+			    (ifa->ifa_flags & IFF_LOOPBACK) ||
+			    ((ifa->ifa_addr->sa_family != AF_INET) &&
+			     (ifa->ifa_addr->sa_family != AF_INET6)))
 				continue;
 			if (sock_interface_name &&
 			    strncmp(sock_interface_name, ifa->ifa_name,
@@ -561,12 +570,15 @@ void sock_get_list_of_addr(struct slist *addr_list)
 				SOCK_LOG_DBG("Skip (%s) interface\n", ifa->ifa_name);
 				continue;
 			}
+
 			addr_entry = calloc(1, sizeof(struct sock_host_list_entry));
 			if (!addr_entry)
 				continue;
+
 			memcpy(&addr_entry->ipaddr, ifa->ifa_addr,
 			       ofi_sizeofaddr(ifa->ifa_addr));
-			if (!inet_ntop(ifa->ifa_addr->sa_family, ifa->ifa_addr,
+			if (!inet_ntop(ifa->ifa_addr->sa_family,
+					ofi_get_ipaddr(ifa->ifa_addr),
 					addr_entry->ipstr,
 					sizeof(addr_entry->ipstr))) {
 				SOCK_LOG_DBG("inet_ntop failed: %d\n", errno);
@@ -609,8 +621,8 @@ void sock_get_list_of_addr(struct slist *addr_list)
 			if (!addr_entry)
 				break;
 
-			addr_entry->ipaddr.sin_family = AF_INET;
-			addr_entry->ipaddr.sin_addr.s_addr =
+			addr_entry->ipaddr.sin.sin_family = AF_INET;
+			addr_entry->ipaddr.sin.sin_addr.s_addr =
 						iptbl->table[i].dwAddr;
 			inet_ntop(AF_INET, &iptbl->table[i].dwAddr,
 				  addr_entry->ipstr,
@@ -705,15 +717,16 @@ static int sock_match_src_addr(struct slist_entry *entry, const void *src_addr)
 	struct sock_host_list_entry *host_entry;
 	host_entry = container_of(entry, struct sock_host_list_entry, entry);
 
-        return ofi_equals_ipaddr((struct sockaddr *) &host_entry->ipaddr, src_addr);
+        return ofi_equals_ipaddr(&host_entry->ipaddr.sa, src_addr);
 }
 
-static int sock_addr_matches_interface(struct slist *addr_list, struct sockaddr_in *src_addr)
+static int sock_addr_matches_interface(struct slist *addr_list,
+				       struct sockaddr *src_addr)
 {
 	struct slist_entry *entry;
 
 	/* Always match if it's localhost */
-	if (ofi_is_loopback_addr((struct sockaddr *)src_addr))
+	if (ofi_is_loopback_addr(src_addr))
 		return 1;
 
 	entry = slist_find_first_match(addr_list, sock_match_src_addr, src_addr);
@@ -722,9 +735,8 @@ static int sock_addr_matches_interface(struct slist *addr_list, struct sockaddr_
 
 static int sock_node_matches_interface(struct slist *addr_list, const char *node)
 {
-	struct sockaddr_in addr = { 0 };
+	union ofi_sock_ip addr;
 	struct addrinfo *rai = NULL, ai = {
-		.ai_family = AF_INET,
 		.ai_socktype = SOCK_STREAM,
 	};
 
@@ -732,10 +744,16 @@ static int sock_node_matches_interface(struct slist *addr_list, const char *node
 		SOCK_LOG_DBG("getaddrinfo failed!\n");
 		return -FI_EINVAL;
 	}
-	memcpy(&addr, rai->ai_addr, sizeof(struct sockaddr_in));
+	if (rai->ai_addrlen > sizeof(addr)) {
+		freeaddrinfo(rai);
+		return -FI_EINVAL;
+	}
+
+	memset(&addr, 0, sizeof addr);
+	memcpy(&addr, rai->ai_addr, rai->ai_addrlen);
 	freeaddrinfo(rai);
 
-	return sock_addr_matches_interface(addr_list, &addr);
+	return sock_addr_matches_interface(addr_list, &addr.sa);
 }
 
 static void sock_free_addr_list(struct slist *addr_list)
@@ -761,12 +779,12 @@ static int sock_getinfo(uint32_t version, const char *node, const char *service,
 	struct fi_info *tail;
 
 	if (!(flags & FI_SOURCE) && hints && hints->src_addr &&
-	    (hints->src_addrlen != sizeof(struct sockaddr_in)))
+	    (hints->src_addrlen != ofi_sizeofaddr(hints->src_addr)))
 		return -FI_ENODATA;
 
 	if (((!node && !service) || (flags & FI_SOURCE)) &&
 	    hints && hints->dest_addr &&
-	    (hints->dest_addrlen != sizeof(struct sockaddr_in)))
+	    (hints->dest_addrlen != ofi_sizeofaddr(hints->dest_addr)))
 		return -FI_ENODATA;
 
 	ret = sock_verify_info(version, hints);
@@ -779,7 +797,7 @@ static int sock_getinfo(uint32_t version, const char *node, const char *service,
 		ret = sock_node_matches_interface(&sock_addr_list, node);
 	} else if (hints && hints->src_addr) {
 		ret = sock_addr_matches_interface(&sock_addr_list,
-						  (struct sockaddr_in *)hints->src_addr);
+						  hints->src_addr);
 	}
 	if (!ret) {
 		SOCK_LOG_ERROR("Couldn't find a match with local interfaces\n");

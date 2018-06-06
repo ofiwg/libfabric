@@ -55,9 +55,8 @@ static ssize_t sock_comm_send_socket(struct sock_conn *conn,
 			ret = 0;
 		} else if (ofi_sockerr() == EPIPE) {
 			conn->connected = 0;
-			SOCK_LOG_DBG("Disconnected: %s:%d\n",
-				     inet_ntoa(conn->addr.sin_addr),
-				     ntohs(conn->addr.sin_port));
+			SOCK_LOG_DBG("Disconnected port: %d\n",
+				     ofi_addr_get_port(&conn->addr.sa));
 		} else {
 			SOCK_LOG_DBG("write error: %s\n",
 				     strerror(ofi_sockerr()));
@@ -136,9 +135,8 @@ static ssize_t sock_comm_recv_socket(struct sock_conn *conn,
 	ret = ofi_recv_socket(conn->sock_fd, buf, len, 0);
 	if (ret == 0) {
 		conn->connected = 0;
-		SOCK_LOG_DBG("Disconnected: %s:%d\n",
-			     inet_ntoa(conn->addr.sin_addr),
-			     ntohs(conn->addr.sin_port));
+		SOCK_LOG_DBG("Disconnected: port %d\n",
+			     ofi_addr_get_port(&conn->addr.sa));
 		return ret;
 	}
 

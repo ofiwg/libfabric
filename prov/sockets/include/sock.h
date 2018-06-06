@@ -178,7 +178,7 @@ enum {
 #define SOCK_MAJOR_VERSION 2
 #define SOCK_MINOR_VERSION 0
 
-#define SOCK_WIRE_PROTO_VERSION (1)
+#define SOCK_WIRE_PROTO_VERSION (2)
 
 struct sock_service_entry {
 	int service;
@@ -200,7 +200,7 @@ struct sock_conn {
 	int sock_fd;
 	int connected;
 	int address_published;
-	struct sockaddr_in addr;
+	union ofi_sock_ip addr;
 	struct sock_pe_entry *rx_pe_entry;
 	struct sock_pe_entry *tx_pe_entry;
 	struct sock_ep_attr *ep_attr;
@@ -349,7 +349,7 @@ struct sock_mr {
 };
 
 struct sock_av_addr {
-	struct sockaddr_storage addr;
+	union ofi_sock_ip addr;
 	uint8_t valid;
 	uint8_t reserved[7];
 };
@@ -574,8 +574,8 @@ struct sock_ep_attr {
 	struct fi_ep_attr ep_attr;
 
 	enum fi_ep_type ep_type;
-	struct sockaddr_in *src_addr;
-	struct sockaddr_in *dest_addr;
+	union ofi_sock_ip *src_addr;
+	union ofi_sock_ip *dest_addr;
 	uint16_t msg_src_port;
 	uint16_t msg_dest_port;
 
@@ -604,7 +604,7 @@ struct sock_pep {
 
 	struct sock_ep_cm_head cm_head;
 	struct sock_pep_cm_entry cm;
-	struct sockaddr_in src_addr;
+	union ofi_sock_ip src_addr;
 	struct fi_info info;
 	struct sock_eq *eq;
 	int name_set;
@@ -924,7 +924,7 @@ struct sock_conn_hdr {
 
 struct sock_conn_req {
 	struct sock_conn_hdr hdr;
-	struct sockaddr_in src_addr;
+	union ofi_sock_ip src_addr;
 	uint64_t caps;
 	char cm_data[0];
 };
@@ -956,14 +956,14 @@ struct sock_conn_req_handle {
 	struct sock_pep *pep;
 	struct sock_ep *ep;
 	size_t paramlen;
-	struct sockaddr_in dest_addr;
+	union ofi_sock_ip dest_addr;
 	struct dlist_entry entry;
 	char cm_data[SOCK_EP_MAX_CM_DATA_SZ];
 };
 
 struct sock_host_list_entry {
 	char ipstr[INET6_ADDRSTRLEN];
-	struct sockaddr_in ipaddr;
+	union ofi_sock_ip ipaddr;
 	struct slist_entry entry;
 };
 
@@ -1018,9 +1018,10 @@ int sock_dgram_verify_ep_attr(const struct fi_ep_attr *ep_attr,
 int sock_msg_verify_ep_attr(const struct fi_ep_attr *ep_attr,
 			    const struct fi_tx_attr *tx_attr,
 			    const struct fi_rx_attr *rx_attr);
-int sock_get_src_addr(struct sockaddr_in *dest_addr,
-		      struct sockaddr_in *src_addr);
-int sock_get_src_addr_from_hostname(struct sockaddr_in *src_addr, const char *service);
+int sock_get_src_addr(union ofi_sock_ip *dest_addr,
+		      union ofi_sock_ip *src_addr);
+int sock_get_src_addr_from_hostname(union ofi_sock_ip *src_addr,
+				    const char *service, uint16_t sa_family);
 
 struct fi_info *sock_fi_info(uint32_t version, enum fi_ep_type ep_type,
 			     const struct fi_info *hints, void *src_addr,
@@ -1153,10 +1154,10 @@ int sock_wait_close(fid_t fid);
 int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		 struct fid_av **av, void *context);
 int sock_av_compare_addr(struct sock_av *av, fi_addr_t addr1, fi_addr_t addr2);
-int sock_av_get_addr_index(struct sock_av *av, struct sockaddr_in *addr);
+int sock_av_get_addr_index(struct sock_av *av, union ofi_sock_ip *addr);
 
 struct sock_conn *sock_ep_lookup_conn(struct sock_ep_attr *attr, fi_addr_t index,
-                                      struct sockaddr_in *addr);
+				      union ofi_sock_ip *addr);
 int sock_ep_get_conn(struct sock_ep_attr *ep_attr, struct sock_tx_ctx *tx_ctx,
 		     fi_addr_t index, struct sock_conn **pconn);
 void sock_ep_remove_conn(struct sock_ep_attr *ep_attr, struct sock_conn *conn);

@@ -63,7 +63,7 @@
 				count * sizeof(struct sock_av_addr))
 #define SOCK_IS_SHARED_AV(av_name) ((av_name) ? 1 : 0)
 
-int sock_av_get_addr_index(struct sock_av *av, struct sockaddr_in *addr)
+int sock_av_get_addr_index(struct sock_av *av, union ofi_sock_ip *addr)
 {
 	int i;
 	struct sock_av_addr *av_addr;
@@ -73,8 +73,8 @@ int sock_av_get_addr_index(struct sock_av *av, struct sockaddr_in *addr)
 		if (!av_addr->valid)
 			continue;
 
-		 if (ofi_equals_sockaddr((struct sockaddr *) addr,
-					 (struct sockaddr *) &av_addr->addr))
+		 if (ofi_equals_sockaddr((const struct sockaddr *) addr,
+					 (const struct sockaddr *) &av_addr->addr))
 			return i;
 	}
 	SOCK_LOG_DBG("failed to get index in AV\n");
@@ -99,8 +99,8 @@ int sock_av_compare_addr(struct sock_av *av,
 	av_addr1 = &av->table[index1];
 	av_addr2 = &av->table[index2];
 
-	return memcmp(&av_addr1->addr, &av_addr2->addr,
-		      sizeof(struct sockaddr_in));
+	/* Return 0 if the addresses match */
+	return !ofi_equals_sockaddr(&av_addr1->addr.sa, &av_addr2->addr.sa);
 }
 
 static inline void sock_av_report_success(struct sock_av *av, void *context,
@@ -128,9 +128,9 @@ static inline void sock_av_report_error(struct sock_av *av,
 			     context, index, err, -err, NULL, 0);
 }
 
-static int sock_av_is_valid_address(struct sockaddr_in *addr)
+static int sock_av_is_valid_address(const struct sockaddr *addr)
 {
-	return addr->sin_family == AF_INET ? 1 : 0;
+	return ofi_sizeofaddr(addr);
 }
 
 static void sock_update_av_table(struct sock_av *_av, size_t count)
@@ -181,13 +181,13 @@ static int sock_av_get_next_index(struct sock_av *av)
 	return -1;
 }
 
-static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
+static int sock_check_table_in(struct sock_av *_av, const struct sockaddr *addr,
 			       fi_addr_t *fi_addr, int count, uint64_t flags,
 			       void *context)
 {
 	int i, ret = 0;
 	uint64_t j;
-	char sa_ip[INET_ADDRSTRLEN];
+	char sa_ip[INET6_ADDRSTRLEN];
 	struct sock_av_addr *av_addr;
 	int index;
 
@@ -208,7 +208,7 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 
 				av_addr = &_av->table[j];
 				if (memcmp(&av_addr->addr, &addr[i],
-					   sizeof(struct sockaddr_in)) == 0) {
+					   ofi_sizeofaddr(&addr[i])) == 0) {
 					SOCK_LOG_DBG("Found addr in shared av\n");
 					if (fi_addr)
 						fi_addr[i] = (fi_addr_t)j;
@@ -243,12 +243,13 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 		}
 
 		av_addr = &_av->table[index];
-		inet_ntop(addr[i].sin_family, &addr[i].sin_addr, sa_ip, INET_ADDRSTRLEN);
+		inet_ntop(addr[i].sa_family, ofi_get_ipaddr(&addr[i]),
+			  sa_ip, sizeof sa_ip);
 		SOCK_LOG_DBG("AV-INSERT: dst_addr family: %d, IP %s, port: %d\n",
-			      ((struct sockaddr_in *)&addr[i])->sin_family,
-				sa_ip, ntohs(((struct sockaddr_in *)&addr[i])->sin_port));
+			      (&addr[i])->sa_family, sa_ip,
+			      ofi_addr_get_port(&addr[i]));
 
-		memcpy(&av_addr->addr, &addr[i], sizeof(struct sockaddr_in));
+		memcpy(&av_addr->addr, &addr[i], ofi_sizeofaddr(&addr[i]));
 		if (fi_addr)
 			fi_addr[i] = (fi_addr_t)index;
 
@@ -264,7 +265,7 @@ static int sock_av_insert(struct fid_av *av, const void *addr, size_t count,
 {
 	struct sock_av *_av;
 	_av = container_of(av, struct sock_av, av_fid);
-	return sock_check_table_in(_av, (struct sockaddr_in *)addr,
+	return sock_check_table_in(_av, (const struct sockaddr *) addr,
 				   fi_addr, count, flags, context);
 }
 
@@ -299,6 +300,7 @@ static int _sock_av_insertsvc(struct fid_av *av, const char *node,
 
 	_av = container_of(av, struct sock_av, av_fid);
 	memset(&sock_hints, 0, sizeof(struct addrinfo));
+	/* Map all services to IPv4 addresses -- for compatibility */
 	sock_hints.ai_family = AF_INET;
 	sock_hints.ai_socktype = SOCK_STREAM;
 
@@ -311,7 +313,7 @@ static int _sock_av_insertsvc(struct fid_av *av, const char *node,
 		return -ret;
 	}
 
-	ret = sock_check_table_in(_av, (struct sockaddr_in *)result->ai_addr,
+	ret = sock_check_table_in(_av, result->ai_addr,
 				  fi_addr, 1, flags, context);
 	freeaddrinfo(result);
 	return ret;
@@ -427,15 +429,16 @@ static int sock_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 static const char *sock_av_straddr(struct fid_av *av, const void *addr,
 				   char *buf, size_t *len)
 {
-	const struct sockaddr_in *sin;
-	char straddr[24];
-	char ipaddr[24];
+	const struct sockaddr *sa = addr;
+	char straddr[OFI_ADDRSTRLEN];
+	char ipaddr[INET6_ADDRSTRLEN];
 	int size;
 
-	sin = addr;
-	inet_ntop(sin->sin_family, (void*)&sin->sin_addr, ipaddr, sizeof(ipaddr));
+	if (!inet_ntop(sa->sa_family, ofi_get_ipaddr(sa), ipaddr, sizeof(ipaddr)))
+		return NULL;
+
 	size = snprintf(straddr, sizeof(straddr), "%s:%d",
-			ipaddr, ntohs(sin->sin_port));
+			ipaddr, ofi_addr_get_port(sa));
 	snprintf(buf, *len, "%s", straddr);
 	*len = size + 1;
 	return buf;
@@ -612,8 +615,11 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	case FI_SOCKADDR_IN:
 		_av->addrlen = sizeof(struct sockaddr_in);
 		break;
+	case FI_SOCKADDR_IN6:
+		_av->addrlen = sizeof(struct sockaddr_in6);
+		break;
 	default:
-		SOCK_LOG_ERROR("Invalid address format: only IPv4 supported\n");
+		SOCK_LOG_ERROR("Invalid address format: only IP supported\n");
 		ret = -FI_EINVAL;
 		goto err2;
 	}

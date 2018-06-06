@@ -119,6 +119,13 @@ static inline int ofi_sendall_socket(SOCKET sock, const void *buf, size_t len)
 #define AF_IB 27
 #endif
 
+union ofi_sock_ip {
+	struct sockaddr		sa;
+	struct sockaddr_in	sin;
+	struct sockaddr_in6	sin6;
+	uint8_t			align[32];
+};
+
 int ofi_addr_cmp(const struct fi_provider *prov, const struct sockaddr *sa1,
 		const struct sockaddr *sa2);
 int ofi_getifaddrs(struct ifaddrs **ifap);

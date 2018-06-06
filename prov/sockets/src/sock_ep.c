@@ -1332,27 +1332,13 @@ int sock_srx_ctx(struct fid_domain *domain,
 }
 
 #if HAVE_GETIFADDRS
-static int sock_get_prefix_len(uint32_t net_addr)
-{
-	uint32_t addr;
-	int count = 0;
-
-	addr = ntohl(net_addr);
-	while (addr > 0) {
-		addr = addr << 1;
-		count++;
-	}
-	return count;
-}
-
-char *sock_get_fabric_name(struct sockaddr_in *src_addr)
+static char *sock_get_fabric_name(struct sockaddr *src_addr)
 {
 	int ret;
         struct ifaddrs *ifaddrs, *ifa;
 	char *fabric_name = NULL;
-	struct in_addr net_in_addr;
-	struct sockaddr_in *host_addr, *net_addr;
-	char netbuf[SOCK_MAX_NETWORK_ADDR_SZ];
+	union ofi_sock_ip net_in_addr;
+	char netbuf[OFI_ADDRSTRLEN];
 	int prefix_len;
 
 	ret = ofi_getifaddrs(&ifaddrs);
@@ -1360,20 +1346,17 @@ char *sock_get_fabric_name(struct sockaddr_in *src_addr)
 		return NULL;
 
 	for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
-		if (ifa->ifa_addr == NULL || !(ifa->ifa_flags & IFF_UP) ||
-		     (ifa->ifa_addr->sa_family != AF_INET))
+		if (ifa->ifa_addr == NULL || !(ifa->ifa_flags & IFF_UP))
 			continue;
-		if (ofi_equals_ipaddr(ifa->ifa_addr, (struct sockaddr *) src_addr)) {
-			host_addr = (struct sockaddr_in *)ifa->ifa_addr;
-			net_addr = (struct sockaddr_in *)ifa->ifa_netmask;
-			/* set fabric name to the network_adress in the format of a.b.c.d/e */
-			net_in_addr.s_addr = (uint32_t)((uint32_t) host_addr->sin_addr.s_addr &
-						(uint32_t) net_addr->sin_addr.s_addr);
-			inet_ntop(host_addr->sin_family, (void *)&(net_in_addr), netbuf,
-				   sizeof(netbuf));
-			prefix_len = sock_get_prefix_len(net_addr->sin_addr.s_addr);
+
+		if (ofi_equals_ipaddr(ifa->ifa_addr, src_addr)) {
+			prefix_len = ofi_mask_addr(&net_in_addr.sa,
+					ifa->ifa_addr, ifa->ifa_netmask);
+
+			inet_ntop(net_in_addr.sa.sa_family, &net_in_addr.sa,
+				  netbuf, sizeof(netbuf));
 			snprintf(netbuf + strlen(netbuf), sizeof(netbuf) - strlen(netbuf),
-				  "%s%d", "/", prefix_len);
+				 "%s%d", "/", prefix_len);
 			fabric_name = strdup(netbuf);
 			goto out;
 		}
@@ -1383,7 +1366,7 @@ out:
 	return fabric_name;
 }
 
-char *sock_get_domain_name(struct sockaddr_in *src_addr)
+char *sock_get_domain_name(struct sockaddr *src_addr)
 {
 	int ret;
         struct ifaddrs *ifaddrs, *ifa;
@@ -1394,10 +1377,10 @@ char *sock_get_domain_name(struct sockaddr_in *src_addr)
 		return NULL;
 
 	for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
-		if (ifa->ifa_addr == NULL || !(ifa->ifa_flags & IFF_UP) ||
-		     (ifa->ifa_addr->sa_family != AF_INET))
+		if (ifa->ifa_addr == NULL || !(ifa->ifa_flags & IFF_UP))
 			continue;
-		if (ofi_equals_ipaddr(ifa->ifa_addr, (struct sockaddr *) src_addr)) {
+
+		if (ofi_equals_ipaddr(ifa->ifa_addr, src_addr)) {
 			domain_name = strdup(ifa->ifa_name);
 			goto out;
 		}
@@ -1407,12 +1390,12 @@ out:
 	return domain_name;
 }
 #else
-char *sock_get_fabric_name(struct sockaddr_in *src_addr)
+static char *sock_get_fabric_name(struct sockaddr *src_addr)
 {
 	return NULL;
 }
 
-char *sock_get_domain_name(struct sockaddr_in *src_addr)
+char *sock_get_domain_name(struct sockaddr *src_addr)
 {
 	return NULL;
 }
@@ -1521,25 +1504,32 @@ struct fi_info *sock_fi_info(uint32_t version, enum fi_ep_type ep_type,
 	if (!info)
 		return NULL;
 
-	info->src_addr = calloc(1, sizeof(struct sockaddr_in));
+	info->src_addr = calloc(1, sizeof(union ofi_sock_ip));
 	if (!info->src_addr)
 		goto err;
 
 	info->mode = SOCK_MODE;
-	info->addr_format = FI_SOCKADDR_IN;
 
-	if (src_addr)
-		memcpy(info->src_addr, src_addr, sizeof(struct sockaddr_in));
+	if (src_addr) {
+		memcpy(info->src_addr, src_addr, ofi_sizeofaddr(src_addr));
+	} else {
+		sock_get_src_addr_from_hostname(info->src_addr, NULL,
+			dest_addr ? ((struct sockaddr *) dest_addr)->sa_family :
+			0);
+	}
+
+	info->src_addrlen = ofi_sizeofaddr(info->src_addr);
+	if (info->src_addrlen == sizeof(struct sockaddr_in6))
+		info->addr_format = FI_SOCKADDR_IN6;
 	else
-		sock_get_src_addr_from_hostname(info->src_addr, NULL);
-	info->src_addrlen = sizeof(struct sockaddr_in);
+		info->addr_format = FI_SOCKADDR_IN;
 
 	if (dest_addr) {
-		info->dest_addr = calloc(1, sizeof(struct sockaddr_in));
+		info->dest_addr = calloc(1, sizeof(union ofi_sock_ip));
 		if (!info->dest_addr)
 			goto err;
-		info->dest_addrlen = sizeof(struct sockaddr_in);
-		memcpy(info->dest_addr, dest_addr, sizeof(struct sockaddr_in));
+		info->dest_addrlen = ofi_sizeofaddr(dest_addr);
+		memcpy(info->dest_addr, dest_addr, info->dest_addrlen);
 	}
 
 	if (hints) {
@@ -1574,15 +1564,15 @@ err:
 	return NULL;
 }
 
-int sock_get_src_addr_from_hostname(struct sockaddr_in *src_addr,
-					const char *service)
+int sock_get_src_addr_from_hostname(union ofi_sock_ip *src_addr,
+				    const char *service, uint16_t sa_family)
 {
 	int ret;
 	struct addrinfo ai, *rai = NULL;
 	char hostname[HOST_NAME_MAX];
 
 	memset(&ai, 0, sizeof(ai));
-	ai.ai_family = AF_INET;
+	ai.ai_family = sa_family;
 	ai.ai_socktype = SOCK_STREAM;
 
 	ofi_getnodename(hostname, sizeof(hostname));
@@ -1591,22 +1581,22 @@ int sock_get_src_addr_from_hostname(struct sockaddr_in *src_addr,
 		SOCK_LOG_DBG("getaddrinfo failed!\n");
 		return -FI_EINVAL;
 	}
-	memcpy(src_addr, (struct sockaddr_in *)rai->ai_addr,
-		sizeof(*src_addr));
+	memcpy(src_addr, rai->ai_addr, rai->ai_addrlen);
 	freeaddrinfo(rai);
 	return 0;
 }
 
 static int sock_ep_assign_src_addr(struct sock_ep *sock_ep, struct fi_info *info)
 {
-	sock_ep->attr->src_addr = calloc(1, sizeof(struct sockaddr_in));
+	sock_ep->attr->src_addr = calloc(1, sizeof(union ofi_sock_ip));
 	if (!sock_ep->attr->src_addr)
 		return -FI_ENOMEM;
 
 	if (info && info->dest_addr)
 		return sock_get_src_addr(info->dest_addr, sock_ep->attr->src_addr);
 	else
-		return sock_get_src_addr_from_hostname(sock_ep->attr->src_addr, NULL);
+		return sock_get_src_addr_from_hostname(sock_ep->attr->src_addr,
+						       NULL, 0);
 }
 
 int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
@@ -1678,23 +1668,25 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 		}
 
 		if (info->src_addr) {
-			sock_ep->attr->src_addr = calloc(1, sizeof(struct sockaddr_in));
+			sock_ep->attr->src_addr = calloc(1, sizeof(*sock_ep->
+							 attr->src_addr));
 			if (!sock_ep->attr->src_addr) {
 				ret = -FI_ENOMEM;
 				goto err2;
 			}
 			memcpy(sock_ep->attr->src_addr, info->src_addr,
-			       sizeof(struct sockaddr_in));
+			       info->src_addrlen);
 		}
 
 		if (info->dest_addr) {
-			sock_ep->attr->dest_addr = calloc(1, sizeof(struct sockaddr_in));
+			sock_ep->attr->dest_addr = calloc(1, sizeof(*sock_ep->
+							  attr->dest_addr));
 			if (!sock_ep->attr->dest_addr) {
 				ret = -FI_ENOMEM;
 				goto err2;
 			}
 			memcpy(sock_ep->attr->dest_addr, info->dest_addr,
-			       sizeof(struct sockaddr_in));
+			       info->dest_addrlen);
 		}
 
 		if (info->tx_attr) {
@@ -1814,7 +1806,7 @@ void sock_ep_remove_conn(struct sock_ep_attr *attr, struct sock_conn *conn)
 }
 
 struct sock_conn *sock_ep_lookup_conn(struct sock_ep_attr *attr, fi_addr_t index,
-					struct sockaddr_in *addr)
+				      union ofi_sock_ip *addr)
 {
 	int i;
 	uint16_t idx;
@@ -1833,8 +1825,7 @@ struct sock_conn *sock_ep_lookup_conn(struct sock_ep_attr *attr, fi_addr_t index
 		if (!attr->cmap.table[i].connected)
 			continue;
 
-		if (ofi_equals_sockaddr((struct sockaddr *) &attr->cmap.table[i].addr,
-					(struct sockaddr *) addr)) {
+		if (ofi_equals_sockaddr(&attr->cmap.table[i].addr.sa, &addr->sa)) {
 			conn = &attr->cmap.table[i];
 			if (conn->av_index == FI_ADDR_NOTAVAIL)
 				conn->av_index = idx;
@@ -1850,13 +1841,13 @@ int sock_ep_get_conn(struct sock_ep_attr *attr, struct sock_tx_ctx *tx_ctx,
 	struct sock_conn *conn;
 	uint64_t av_index = (attr->ep_type == FI_EP_MSG) ?
 			    0 : (index & attr->av->mask);
-	struct sockaddr_in *addr;
+	union ofi_sock_ip *addr;
 	int ret = FI_SUCCESS;
 
 	if (attr->ep_type == FI_EP_MSG)
 		addr = attr->dest_addr;
 	else
-		addr = (struct sockaddr_in *)&attr->av->table[av_index].addr;
+		addr = &attr->av->table[av_index].addr;
 
 	fastlock_acquire(&attr->cmap.lock);
 	conn = sock_ep_lookup_conn(attr, av_index, addr);

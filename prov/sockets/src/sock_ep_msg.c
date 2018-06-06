@@ -255,49 +255,56 @@ static int sock_ep_cm_getname(fid_t fid, void *addr, size_t *addrlen)
 	struct sock_pep *sock_pep = NULL;
 	size_t len;
 
-	len = MIN(*addrlen, sizeof(struct sockaddr_in));
 	switch (fid->fclass) {
 	case FI_CLASS_EP:
 	case FI_CLASS_SEP:
 		sock_ep = container_of(fid, struct sock_ep, ep.fid);
 		if (sock_ep->attr->is_enabled == 0)
 			return -FI_EOPBADSTATE;
+
+		len = MIN(*addrlen, ofi_sizeofaddr(&sock_ep->attr->src_addr->sa));
 		memcpy(addr, sock_ep->attr->src_addr, len);
+		*addrlen = ofi_sizeofaddr(&sock_ep->attr->src_addr->sa);
 		break;
 	case FI_CLASS_PEP:
 		sock_pep = container_of(fid, struct sock_pep, pep.fid);
 		if (!sock_pep->name_set)
 			return -FI_EOPBADSTATE;
+
+		len = MIN(*addrlen, ofi_sizeofaddr(&sock_pep->src_addr.sa));
 		memcpy(addr, &sock_pep->src_addr, len);
+		*addrlen = ofi_sizeofaddr(&sock_pep->src_addr.sa);
 		break;
 	default:
 		SOCK_LOG_ERROR("Invalid argument\n");
 		return -FI_EINVAL;
 	}
 
-	*addrlen = sizeof(struct sockaddr_in);
-	return (len == sizeof(struct sockaddr_in)) ? 0 : -FI_ETOOSMALL;
+	return (len == *addrlen) ? 0 : -FI_ETOOSMALL;
 }
 
 static int sock_pep_create_listener(struct sock_pep *pep)
 {
 	int ret;
 	socklen_t addr_size;
-	struct sockaddr_in addr;
+	union ofi_sock_ip addr;
 	struct addrinfo *s_res = NULL, *p;
 	struct addrinfo hints;
-	char sa_ip[INET_ADDRSTRLEN];
+	char sa_ip[INET6_ADDRSTRLEN];
 	char sa_port[NI_MAXSERV];
 
 	pep->cm.do_listen = 1;
 	memset(&hints, 0, sizeof(hints));
-	hints.ai_family = AF_INET;
+	hints.ai_family = pep->src_addr.sa.sa_family;
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_flags = AI_PASSIVE;
 
-	memcpy(sa_ip, inet_ntoa(pep->src_addr.sin_addr), INET_ADDRSTRLEN);
-	sprintf(sa_port, "%d", ntohs(pep->src_addr.sin_port));
-	sa_ip[INET_ADDRSTRLEN - 1] = '\0';
+	if (!inet_ntop(hints.ai_family, ofi_get_ipaddr(&pep->src_addr.sa),
+		       sa_ip, sizeof sa_ip))
+		return -FI_EINVAL;
+
+	sprintf(sa_port, "%d", ofi_addr_get_port(&pep->src_addr.sa));
+	sa_ip[INET6_ADDRSTRLEN - 1] = '\0';
 	sa_port[NI_MAXSERV - 1] = '\0';
 
 	ret = getaddrinfo(sa_ip, sa_port, &hints, &s_res);
@@ -329,16 +336,18 @@ static int sock_pep_create_listener(struct sock_pep *pep)
 		return -FI_EIO;
 	}
 
-	if (pep->src_addr.sin_port == 0) {
+	if (ofi_addr_get_port(&pep->src_addr.sa) == 0) {
 		addr_size = sizeof(addr);
-		if (getsockname(pep->cm.sock, (struct sockaddr *)&addr, &addr_size))
+		if (getsockname(pep->cm.sock, &addr.sa, &addr_size))
 			return -FI_EINVAL;
-		pep->src_addr.sin_port = addr.sin_port;
-		sprintf(sa_port, "%d", ntohs(pep->src_addr.sin_port));
+
+		ofi_addr_set_port(&pep->src_addr.sa, ofi_addr_get_port(&addr.sa));
+		sprintf(sa_port, "%d", ofi_addr_get_port(&addr.sa));
 	}
 
-	if (pep->src_addr.sin_addr.s_addr == 0) {
-		ret = sock_get_src_addr_from_hostname(&pep->src_addr, sa_port);
+	if (ofi_is_any_addr(&pep->src_addr.sa)) {
+		ret = sock_get_src_addr_from_hostname(&pep->src_addr,
+				sa_port, pep->src_addr.sa.sa_family);
 		if (ret)
 			return -FI_EINVAL;
 	}
@@ -350,8 +359,7 @@ static int sock_pep_create_listener(struct sock_pep *pep)
 	}
 
 	pep->name_set = 1;
-	SOCK_LOG_DBG("Listener thread bound to %s:%d\n",
-		     sa_ip, ntohs(pep->src_addr.sin_port));
+	SOCK_LOG_DBG("Listener thread bound to %s:%s\n", sa_ip, sa_port);
 	return 0;
 }
 
@@ -360,7 +368,7 @@ static int sock_ep_cm_setname(fid_t fid, void *addr, size_t addrlen)
 	struct sock_ep *sock_ep = NULL;
 	struct sock_pep *sock_pep = NULL;
 
-	if (addrlen != sizeof(struct sockaddr_in))
+	if (!addrlen || addrlen != ofi_sizeofaddr(addr))
 		return -FI_EINVAL;
 
 	switch (fid->fclass) {
@@ -389,10 +397,10 @@ static int sock_ep_cm_getpeer(struct fid_ep *ep, void *addr, size_t *addrlen)
 	size_t len;
 
 	sock_ep = container_of(ep, struct sock_ep, ep);
-	len = MIN(*addrlen, sizeof(struct sockaddr_in));
+	len = MIN(*addrlen, ofi_sizeofaddr(&sock_ep->attr->dest_addr->sa));
 	memcpy(addr, sock_ep->attr->dest_addr, len);
-	*addrlen = sizeof(struct sockaddr_in);
-	return (len == sizeof(struct sockaddr_in)) ? 0 : -FI_ETOOSMALL;
+	*addrlen = ofi_sizeofaddr(&sock_ep->attr->dest_addr->sa);
+	return (len == *addrlen) ? 0 : -FI_ETOOSMALL;
 }
 
 static int sock_cm_send(int fd, const void *buf, int len)
@@ -709,7 +717,7 @@ static int sock_ep_cm_connect(struct fid_ep *ep, const void *addr,
 		memcpy(handle->cm_data, param, paramlen);
 	}
 
-	sock_fd = ofi_socket(AF_INET, SOCK_STREAM, 0);
+	sock_fd = ofi_socket(handle->dest_addr.sa.sa_family, SOCK_STREAM, 0);
 	if (sock_fd < 0) {
 		SOCK_LOG_ERROR("no socket\n");
 		ret = -ofi_sockerr();
