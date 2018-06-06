@@ -496,6 +496,15 @@ static void tcpx_ep_tx_rx_queues_release(struct tcpx_ep *ep)
 				       struct tcpx_cq, util_cq);
 		tcpx_xfer_entry_release(tcpx_cq, xfer_entry);
 	}
+
+	while (!slist_empty(&ep->rma_read_queue)) {
+		entry = ep->rma_read_queue.head;
+		xfer_entry = container_of(entry, struct tcpx_xfer_entry, entry);
+		slist_remove_head(&ep->rma_read_queue);
+		tcpx_cq = container_of(xfer_entry->ep->util_ep.tx_cq,
+				       struct tcpx_cq, util_cq);
+		tcpx_xfer_entry_release(tcpx_cq, xfer_entry);
+	}
 	fastlock_release(&ep->lock);
 }
 
