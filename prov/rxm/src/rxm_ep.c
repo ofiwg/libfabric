@@ -703,7 +703,6 @@ static ssize_t rxm_ep_recv_common_flags(struct rxm_ep *rxm_ep, const struct iove
 		if (flags & FI_CLAIM) {
 			FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
 			       "Claiming buffered receive\n");
-			rx_buf->pkt.hdr.flags |= FI_CLAIM;
 			goto claim;
 		}
 
