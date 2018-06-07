@@ -74,6 +74,8 @@
 #define RXM_MR_PROV_KEY(info) ((info->domain_attr->mr_mode == FI_MR_BASIC) ||\
 			       info->domain_attr->mr_mode & FI_MR_PROV_KEY)
 
+#define RXM_SAR_LAST_SEGMENT	0
+
 #define RXM_LOG_STATE(subsystem, pkt, prev_state, next_state) 			\
 	FI_DBG(&rxm_prov, subsystem, "[LMT] msg_id: 0x%" PRIx64 " %s -> %s\n",	\
 	       pkt.ctrl_hdr.msg_id, rxm_proto_state_str[prev_state],		\
@@ -340,6 +342,7 @@ struct rxm_recv_entry {
 	void *multi_recv_buf;
 	/* Used for SAR protocol */
 	struct {
+		struct dlist_entry sar_entry;
 		size_t total_recv_len;
 		uint64_t msg_id;
 	};
@@ -410,6 +413,7 @@ struct rxm_conn {
 	struct rxm_send_queue send_queue;
 	struct dlist_entry postponed_tx_list;
 	struct dlist_entry posted_rx_list;
+	struct dlist_entry sar_rx_msg_list;
 	struct util_cmap_handle handle;
 	/* This is saved MSG EP fid, that hasn't been closed during
 	 * handling of CONN_RECV in CMAP_CONNREQ_SENT for passive side */
@@ -577,7 +581,26 @@ rxm_process_recv_entry(struct rxm_recv_queue *recv_queue,
 		dlist_remove(&rx_buf->unexp_msg.entry);
 		rx_buf->recv_entry = recv_entry;
 		recv_queue->rxm_ep->res_fastlock_release(&recv_queue->lock);
-		return rxm_cq_handle_rx_buf(rx_buf);
+		if (rx_buf->pkt.ctrl_hdr.type != ofi_ctrl_seg_data) {
+			return rxm_cq_handle_rx_buf(rx_buf);
+		} else {
+			int last = (rx_buf->pkt.ctrl_hdr.seg_no == RXM_SAR_LAST_SEGMENT);
+			ssize_t ret = rxm_cq_handle_rx_buf(rx_buf);
+			recv_queue->rxm_ep->res_fastlock_acquire(&recv_queue->lock);
+			while (!ret && rx_buf && !last) {
+				rx_buf = rxm_check_unexp_msg_list(recv_queue, recv_entry->addr,
+								  recv_entry->tag, recv_entry->ignore);
+				if (rx_buf) {
+					assert(rx_buf->pkt.ctrl_hdr.type == ofi_ctrl_seg_data);
+					rx_buf->recv_entry = recv_entry;
+					dlist_remove(&rx_buf->unexp_msg.entry);
+					last = (rx_buf->pkt.ctrl_hdr.seg_no == RXM_SAR_LAST_SEGMENT);
+					ret = rxm_cq_handle_rx_buf(rx_buf);
+				}
+			}
+			recv_queue->rxm_ep->res_fastlock_release(&recv_queue->lock);
+			return ret;
+		}
 	}
 
 	RXM_DBG_ADDR_TAG(FI_LOG_EP_DATA, "Enqueuing recv", recv_entry->addr,

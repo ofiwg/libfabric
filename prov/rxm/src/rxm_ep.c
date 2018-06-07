@@ -257,6 +257,8 @@ static int rxm_recv_queue_init(struct rxm_ep *rxm_ep,  struct rxm_recv_queue *re
 		for (i = recv_queue->fs->size - 1; i >= 0; i--) {
 			recv_queue->fs->entry[i].buf.comp_flags = FI_MSG | FI_RECV;
 			recv_queue->fs->entry[i].buf.recv_queue = recv_queue;
+			recv_queue->fs->entry[i].buf.msg_id = UINT64_MAX;
+			recv_queue->fs->entry[i].buf.total_recv_len = 0;
 		}
 	} else {
 		if (rxm_ep->rxm_info->caps & FI_DIRECTED_RECV) {
@@ -269,6 +271,8 @@ static int rxm_recv_queue_init(struct rxm_ep *rxm_ep,  struct rxm_recv_queue *re
 		for (i = recv_queue->fs->size - 1; i >= 0; i--) {
 			recv_queue->fs->entry[i].buf.comp_flags = FI_TAGGED | FI_RECV;
 			recv_queue->fs->entry[i].buf.recv_queue = recv_queue;
+			recv_queue->fs->entry.[i].buf.msg_id = UINT64_MAX;
+			recv_queue->fs->entry[i].buf.total_recv_len = 0;
 		}
 	}
 	fastlock_init(&recv_queue->lock);

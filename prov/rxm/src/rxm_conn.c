@@ -205,6 +205,7 @@ static struct util_cmap_handle *rxm_conn_alloc(struct util_cmap *cmap)
 		return NULL;
 	}
 	dlist_init(&rxm_conn->posted_rx_list);
+	dlist_init(&rxm_conn->sar_rx_msg_list);
 	dlist_init(&rxm_conn->saved_posted_rx_list);
 	dlist_init(&rxm_conn->postponed_tx_list);
 	return &rxm_conn->handle;
