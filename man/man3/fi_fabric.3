@@ -1,4 +1,4 @@
-.TH "fi_fabric" "3" "2017\-10\-18" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_fabric" "3" "2018\-06\-07" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_fabric \- Fabric domain operations
@@ -59,7 +59,8 @@ referenced by the data parameter.
 Valid values for the datatype are listed below, along with the
 corresponding datatype or field value.
 .PP
-\f[I]FI_TYPE_INFO\f[] : struct fi_info
+\f[I]FI_TYPE_INFO\f[] : struct fi_info, including all substructures and
+fields
 .PP
 \f[I]FI_TYPE_EP_TYPE\f[] : struct fi_info::type field
 .PP
@@ -80,19 +81,37 @@ uint64_t flags
 .PP
 \f[I]FI_TYPE_FABRIC_ATTR\f[] : struct fi_fabric_attr
 .PP
-\f[I]FI_TYPE_DOMAIN_CAP\f[] : struct fi_info::domain_cap field
-.PP
 \f[I]FI_TYPE_THREADING\f[] : enum fi_threading
 .PP
 \f[I]FI_TYPE_PROGRESS\f[] : enum fi_progress
 .PP
-\f[I]FI_TYPE_PROTO\f[] : struct fi_ep_attr::protocol field
+\f[I]FI_TYPE_PROTOCOL\f[] : struct fi_ep_attr::protocol field
 .PP
 \f[I]FI_TYPE_MSG_ORDER\f[] : struct fi_ep_attr::msg_order field
+.PP
+\f[I]FI_TYPE_MODE\f[] : struct fi_info::mode field
+.PP
+\f[I]FI_TYPE_AV_TYPE\f[] : enum fi_av_type
+.PP
+\f[I]FI_TYPE_ATOMIC_TYPE\f[] : enum fi_datatype
+.PP
+\f[I]FI_TYPE_ATOMIC_OP\f[] : enum fi_op
 .PP
 \f[I]FI_TYPE_VERSION\f[] : Returns the library version of libfabric in
 string form.
 The data parameter is ignored.
+.PP
+\f[I]FI_TYPE_EQ_EVENT\f[] : uint32_t event parameter returned from
+fi_eq_read().
+See \f[C]fi_eq(3)\f[] for a list of known values.
+.PP
+\f[I]FI_TYPE_CQ_EVENT_FLAGS\f[] : uint64_t flags field in
+fi_cq_xxx_entry structures.
+See \f[C]fi_cq(3)\f[] for valid flags.
+.PP
+\f[I]FI_TYPE_MR_MODE\f[] : struct fi_domain_attr::mr_mode flags
+.PP
+\f[I]FI_TYPE_OP_TYPE\f[] : enum fi_op_type
 .PP
 fi_tostr() will return a pointer to an internal libfabric buffer that
 should not be modified, and will be overwritten the next time fi_tostr()
