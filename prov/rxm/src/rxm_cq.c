@@ -320,11 +320,13 @@ static int rxm_lmt_tx_finish(struct rxm_tx_entry *tx_entry)
 static int rxm_lmt_handle_ack(struct rxm_rx_buf *rx_buf)
 {
 	struct rxm_tx_entry *tx_entry;
+	struct rxm_conn *rxm_conn = rxm_key2conn(rx_buf->ep,
+						 rx_buf->pkt.ctrl_hdr.conn_id);
 
 	FI_DBG(&rxm_prov, FI_LOG_CQ, "Got ACK for msg_id: 0x%" PRIx64 "\n",
 	       rx_buf->pkt.ctrl_hdr.msg_id);
 
-	tx_entry = &rx_buf->ep->send_queue.fs->buf[rx_buf->pkt.ctrl_hdr.msg_id];
+	tx_entry = &rxm_conn->send_queue.fs->buf[rx_buf->pkt.ctrl_hdr.msg_id];
 
 	assert(tx_entry->tx_buf->pkt.ctrl_hdr.msg_id == rx_buf->pkt.ctrl_hdr.msg_id);
 
@@ -488,7 +490,7 @@ static ssize_t rxm_lmt_send_ack(struct rxm_rx_buf *rx_buf)
 	}
 	assert(tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_ack);
 
-	tx_entry = rxm_tx_entry_get(&rx_buf->ep->send_queue);
+	tx_entry = rxm_tx_entry_get(&rx_buf->conn->send_queue);
 	if (OFI_UNLIKELY(!tx_entry)) {
 		ret = -FI_EAGAIN;
 		goto err1;
@@ -512,7 +514,7 @@ static ssize_t rxm_lmt_send_ack(struct rxm_rx_buf *rx_buf)
 	}
 	return 0;
 err2:
-	rxm_tx_entry_release(&rx_buf->ep->send_queue, tx_entry);
+	rxm_tx_entry_release(&rx_buf->conn->send_queue, tx_entry);
 err1:
 	rxm_tx_buf_release(rx_buf->ep, tx_buf);
 	return ret;
@@ -626,7 +628,7 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 		assert(comp->flags & FI_SEND);
 		rx_buf = tx_entry->context;
 		rxm_tx_buf_release(rx_buf->ep, tx_entry->tx_buf);
-		rxm_tx_entry_release(&tx_entry->ep->send_queue, tx_entry);
+		rxm_tx_entry_release(&tx_entry->conn->send_queue, tx_entry);
 		return rxm_finish_send_lmt_ack(rx_buf);
 	default:
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "Invalid state!\n");

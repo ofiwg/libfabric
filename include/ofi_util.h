@@ -514,9 +514,10 @@ struct util_cmap_peer {
 	uint8_t addr[];
 };
 
-typedef struct util_cmap_handle* (*ofi_cmap_alloc_handle_func)(void);
+typedef struct util_cmap_handle*
+(*ofi_cmap_alloc_handle_func)(struct util_cmap *cmap);
 typedef void (*ofi_cmap_handle_func)(struct util_cmap_handle *handle);
-typedef int (*ofi_cmap_connect_func)(struct util_ep *cmap,
+typedef int (*ofi_cmap_connect_func)(struct util_ep *ep,
 				     struct util_cmap_handle *handle,
 				     const void *addr, size_t addrlen);
 typedef void *(*ofi_cmap_event_handler_func)(void *arg);
