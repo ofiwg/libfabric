@@ -51,20 +51,43 @@
 
 extern struct fi_ops_rma tcpx_rma_ops;
 
+
+static inline struct tcpx_xfer_entry *
+tcpx_alloc_recv_entry(struct tcpx_ep *tcpx_ep)
+{
+	struct tcpx_xfer_entry *recv_entry;
+	struct tcpx_cq *tcpx_cq;
+
+	tcpx_cq = container_of(tcpx_ep->util_ep.rx_cq, struct tcpx_cq,
+			       util_cq);
+
+	recv_entry = tcpx_xfer_entry_alloc(tcpx_cq, TCPX_OP_MSG_RECV);
+	if (recv_entry) {
+		recv_entry->ep = tcpx_ep;
+		recv_entry->done_len = 0;
+	}
+	return recv_entry;
+}
+
+static inline void tcpx_queue_recv(struct tcpx_ep *tcpx_ep,
+				   struct tcpx_xfer_entry *recv_entry)
+{
+	fastlock_acquire(&tcpx_ep->lock);
+	slist_insert_tail(&recv_entry->entry, &tcpx_ep->rx_queue);
+	fastlock_release(&tcpx_ep->lock);
+}
+
 static ssize_t tcpx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 			    uint64_t flags)
 {
 	struct tcpx_xfer_entry *recv_entry;
 	struct tcpx_ep *tcpx_ep;
-	struct tcpx_cq *tcpx_cq;
 
 	tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
-	tcpx_cq = container_of(tcpx_ep->util_ep.rx_cq, struct tcpx_cq,
-			       util_cq);
 
 	assert(msg->iov_count < TCPX_IOV_LIMIT);
 
-	recv_entry = tcpx_xfer_entry_alloc(tcpx_cq, TCPX_OP_MSG_RECV);
+	recv_entry = tcpx_alloc_recv_entry(tcpx_ep);
 	if (!recv_entry)
 		return -FI_EAGAIN;
 
@@ -72,47 +95,58 @@ static ssize_t tcpx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	memcpy(&recv_entry->msg_data.iov[0], &msg->msg_iov[0],
 	       msg->iov_count * sizeof(struct iovec));
 
-	recv_entry->ep = tcpx_ep;
 	recv_entry->flags = flags | FI_MSG | FI_RECV;
 	recv_entry->context = msg->context;
-	recv_entry->done_len = 0;
 
-	fastlock_acquire(&tcpx_ep->lock);
-	slist_insert_tail(&recv_entry->entry, &tcpx_ep->rx_queue);
-	fastlock_release(&tcpx_ep->lock);
+	tcpx_queue_recv(tcpx_ep, recv_entry);
 	return FI_SUCCESS;
 }
 
 static ssize_t tcpx_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 			 fi_addr_t src_addr, void *context)
 {
-	struct fi_msg msg;
-	struct iovec msg_iov;
+	struct tcpx_xfer_entry *recv_entry;
+	struct tcpx_ep *tcpx_ep;
 
-	msg_iov.iov_base = buf;
-	msg_iov.iov_len = len;
-	msg.msg_iov = &msg_iov;
-	msg.desc = &desc;
-	msg.iov_count = 1;
-	msg.addr = src_addr;
-	msg.context = context;
-	msg.data = 0;
+	tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
 
-	return tcpx_recvmsg(ep, &msg, 0);
+	recv_entry = tcpx_alloc_recv_entry(tcpx_ep);
+	if (!recv_entry)
+		return -FI_EAGAIN;
+
+	recv_entry->msg_data.iov_cnt = 1;
+	recv_entry->msg_data.iov[0].iov_base = buf;
+	recv_entry->msg_data.iov[0].iov_len = len;
+
+	recv_entry->flags = FI_MSG | FI_RECV;
+	recv_entry->context = context;
+
+	tcpx_queue_recv(tcpx_ep, recv_entry);
+	return FI_SUCCESS;
 }
 
 static ssize_t tcpx_recvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 			  size_t count, fi_addr_t src_addr, void *context)
 {
-	struct fi_msg msg;
+	struct tcpx_xfer_entry *recv_entry;
+	struct tcpx_ep *tcpx_ep;
 
-	msg.msg_iov = iov;
-	msg.desc = desc;
-	msg.iov_count = count;
-	msg.addr = src_addr;
-	msg.context = context;
-	msg.data = 0;
-	return tcpx_recvmsg(ep, &msg, 0);
+	tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
+
+	assert(count < TCPX_IOV_LIMIT);
+
+	recv_entry = tcpx_alloc_recv_entry(tcpx_ep);
+	if (!recv_entry)
+		return -FI_EAGAIN;
+
+	recv_entry->msg_data.iov_cnt = count;
+	memcpy(&recv_entry->msg_data.iov, iov, count * sizeof(*iov));
+
+	recv_entry->flags = FI_MSG | FI_RECV;
+	recv_entry->context = context;
+
+	tcpx_queue_recv(tcpx_ep, recv_entry);
+	return FI_SUCCESS;
 }
 
 static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
