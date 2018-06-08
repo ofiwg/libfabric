@@ -349,11 +349,13 @@ ssize_t rxm_cq_handle_large_data(struct rxm_rx_buf *rx_buf)
 	int ret;
 
 	if (!rx_buf->conn) {
+		assert(rx_buf->ep->srx_ctx);
 		rx_buf->conn = rxm_key2conn(rx_buf->ep,
 					    rx_buf->pkt.ctrl_hdr.conn_id);
 		if (OFI_UNLIKELY(!rx_buf->conn))
 			return -FI_EOTHER;
 	}
+	assert(rx_buf->conn);
 
 	FI_DBG(&rxm_prov, FI_LOG_CQ,
 	       "Got incoming recv with msg_id: 0x%" PRIx64 "\n",
@@ -443,8 +445,9 @@ static inline ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 	};
 
 	if (rx_buf->ep->rxm_info->caps & (FI_SOURCE | FI_DIRECTED_RECV)) {
-		rx_buf->conn =
-			rxm_key2conn(rx_buf->ep, rx_buf->pkt.ctrl_hdr.conn_id);
+		if (rx_buf->ep->srx_ctx)
+			rx_buf->conn =
+				rxm_key2conn(rx_buf->ep, rx_buf->pkt.ctrl_hdr.conn_id);
 		if (OFI_UNLIKELY(!rx_buf->conn))
 			return -FI_EOTHER;
 		match_attr.addr = rx_buf->conn->handle.fi_addr;
@@ -751,7 +754,8 @@ static void rxm_cq_read_write_error(struct rxm_ep *rxm_ep)
 
 static inline int rxm_ep_repost_buf(struct rxm_rx_buf *rx_buf)
 {
-	rx_buf->conn = NULL;
+	if (rx_buf->ep->srx_ctx)
+		rx_buf->conn = NULL;
 	rx_buf->hdr.state = RXM_RX;
 
 	if (fi_recv(rx_buf->hdr.msg_ep, &rx_buf->pkt, rx_buf->ep->eager_pkt_size,
@@ -776,6 +780,10 @@ int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep,
 
 		rx_buf->hdr.state = RXM_RX;
 		rx_buf->hdr.msg_ep = msg_ep;
+		if (!rxm_ep->srx_ctx)
+			rx_buf->conn = container_of(msg_ep->fid.context,
+						    struct rxm_conn,
+						    handle);
 		ret = rxm_ep_repost_buf(rx_buf);
 		if (ret) {
 			rxm_rx_buf_release(rxm_ep, rx_buf);
