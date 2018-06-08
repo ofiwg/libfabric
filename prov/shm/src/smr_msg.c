@@ -340,7 +340,7 @@ ssize_t smr_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 	msg_iov.iov_len = len;
 
 	return smr_generic_recvmsg(ep, &msg_iov, 1, src_addr, tag, ignore,
-				   context, FI_TAGGED | smr_ep_tx_flags(ep));
+				   context, FI_TAGGED | smr_ep_rx_flags(ep));
 }
 
 ssize_t smr_trecvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
@@ -352,7 +352,7 @@ ssize_t smr_trecvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 
 	return smr_generic_recvmsg(ep, iov, count, src_addr, tag, ignore,
-				   context, FI_TAGGED | smr_ep_tx_flags(ep));
+				   context, FI_TAGGED | smr_ep_rx_flags(ep));
 }
 
 ssize_t smr_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
