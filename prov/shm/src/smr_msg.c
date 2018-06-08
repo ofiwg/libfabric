@@ -57,10 +57,8 @@ static ssize_t smr_generic_recvmsg(struct smr_ep *ep, const struct iovec *iov,
 	entry = freestack_pop(ep->recv_fs);
 	memset(entry, 0, sizeof(*entry));
 
-	for (entry->iov_count = 0; entry->iov_count < iov_count;
-	     entry->iov_count++) {
-		entry->iov[entry->iov_count] = iov[entry->iov_count];
-	}
+	entry->iov_count = iov_count;
+	memcpy(&entry->iov, iov, sizeof(*iov) * iov_count);
 
 	entry->context = context;
 	entry->flags = flags;
