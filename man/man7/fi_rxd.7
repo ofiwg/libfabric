@@ -1,4 +1,4 @@
-.TH "fi_rxd" "7" "2018\-06\-01" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_rxd" "7" "2018\-06\-08" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_rxd \- The RxD (RDM over DGRAM) Utility Provider
@@ -39,12 +39,12 @@ tested.
 The \f[I]rxd\f[] provider checks for the following environment
 variables:
 .PP
-\f[I]FI_RXD_SPIN_COUNT\f[] : Number of times to read the core
+\f[I]FI_OFI_RXD_SPIN_COUNT\f[] : Number of times to read the core
 provider\[aq]s CQ for a segment completion before trying to progress
 sends.
 Default is 1000.
 .PP
-\f[I]FI_RXD_OOO_RDM\f[] : Toggles out\-of\-order reliability mode.
+\f[I]FI_OFI_RXD_OOO_RDM\f[] : Toggles out\-of\-order reliability mode.
 This indicates that the rxd provider can assume the core provider will
 not drop any packets, but might deliver packets out of order.
 As a result, resending is turned off and the receiver will reassemble
