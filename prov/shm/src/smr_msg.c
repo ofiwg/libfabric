@@ -38,6 +38,21 @@
 #include "smr.h"
 
 
+static inline struct smr_ep_entry *smr_get_recv_entry(struct smr_ep *ep)
+{
+	struct smr_ep_entry *entry;
+
+	if (freestack_isempty(ep->recv_fs))
+		return NULL;
+
+	entry = freestack_pop(ep->recv_fs);
+
+	entry->tag = 0; /* does this need to be set? */
+	entry->ignore = 0; /* does this need to be set? */
+	entry->err = 0;
+	return entry;
+}
+
 static ssize_t smr_generic_recvmsg(struct smr_ep *ep, const struct iovec *iov,
 				   size_t iov_count, fi_addr_t addr,
 				   void *context, uint64_t flags)
@@ -49,11 +64,11 @@ static ssize_t smr_generic_recvmsg(struct smr_ep *ep, const struct iovec *iov,
 	assert(!(flags & FI_MULTI_RECV) || iov_count == 1);
 
 	fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
-	if (freestack_isempty(ep->recv_fs)) {
+	entry = smr_get_recv_entry(ep);
+	if (!entry) {
 		ret = -FI_EAGAIN;
 		goto out;
 	}
-	entry = freestack_pop(ep->recv_fs);
 
 	entry->iov_count = iov_count;
 	memcpy(&entry->iov, iov, sizeof(*iov) * iov_count);
@@ -61,9 +76,6 @@ static ssize_t smr_generic_recvmsg(struct smr_ep *ep, const struct iovec *iov,
 	entry->context = context;
 	entry->flags = flags;
 	entry->addr = addr;
-	entry->tag = 0; /* does this need to be set? */
-	entry->ignore = 0; /* does this need to be set? */
-	entry->err = 0;
 
 	dlist_insert_tail(&entry->entry, &ep->recv_queue.list);
 out:
@@ -314,6 +326,18 @@ struct fi_ops_msg smr_msg_ops = {
 	.injectdata = smr_injectdata,
 };
 
+static inline struct smr_ep_entry *smr_get_trecv_entry(struct smr_ep *ep)
+{
+	struct smr_ep_entry *entry;
+
+	if (freestack_isempty(ep->recv_fs))
+		return NULL;
+
+	entry = freestack_pop(ep->recv_fs);
+	entry->err = 0;
+	return entry;
+}
+
 static ssize_t smr_generic_trecvmsg(struct smr_ep *ep, const struct iovec *iov,
 				    size_t iov_count, fi_addr_t addr, uint64_t tag,
 				    uint64_t ignore, void *context, uint64_t flags)
@@ -325,11 +349,11 @@ static ssize_t smr_generic_trecvmsg(struct smr_ep *ep, const struct iovec *iov,
 	assert(!(flags & FI_MULTI_RECV) || iov_count == 1);
 
 	fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
-	if (freestack_isempty(ep->recv_fs)) {
+	entry = smr_get_trecv_entry(ep);
+	if (!entry) {
 		ret = -FI_EAGAIN;
 		goto out;
 	}
-	entry = freestack_pop(ep->recv_fs);
 
 	entry->iov_count = iov_count;
 	memcpy(&entry->iov, iov, sizeof(*iov) * iov_count);
@@ -339,7 +363,6 @@ static ssize_t smr_generic_trecvmsg(struct smr_ep *ep, const struct iovec *iov,
 	entry->addr = addr;
 	entry->tag = tag;
 	entry->ignore = ignore;
-	entry->err = 0;
 
 	ret = smr_progress_unexp(ep, entry);
 	if (!ret || ret == -FI_EAGAIN)
