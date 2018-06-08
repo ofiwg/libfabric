@@ -859,6 +859,7 @@ rxm_ep_alloc_lmt_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	if (OFI_UNLIKELY(ret))
 		return ret;
 	tx_buf->pkt.hdr.op = op;
+	tx_buf->pkt.hdr.flags = ((op == ofi_op_tagged) ? FI_TAGGED : FI_MSG);
 	tx_buf->pkt.ctrl_hdr.msg_id = rxm_txe_fs_index(rxm_conn->send_queue.fs,
 						       (*tx_entry));
 	if (!rxm_ep->rxm_mr_local) {
