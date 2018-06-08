@@ -55,7 +55,6 @@ static ssize_t smr_generic_recvmsg(struct smr_ep *ep, const struct iovec *iov,
 		goto out;
 	}
 	entry = freestack_pop(ep->recv_fs);
-	memset(entry, 0, sizeof(*entry));
 
 	entry->iov_count = iov_count;
 	memcpy(&entry->iov, iov, sizeof(*iov) * iov_count);
@@ -65,6 +64,7 @@ static ssize_t smr_generic_recvmsg(struct smr_ep *ep, const struct iovec *iov,
 	entry->addr = addr;
 	entry->tag = tag;
 	entry->ignore = ignore;
+	entry->err = 0;
 
 	if (flags & FI_TAGGED) {
 		ret = smr_progress_unexp(ep, entry);
