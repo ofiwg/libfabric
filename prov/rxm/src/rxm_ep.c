@@ -982,28 +982,6 @@ rxm_ep_sar_tx_prepare_segment(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	return tx_buf;
 }
 
-static inline ssize_t
-rxm_ep_sar_tx_send_segment(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
-			   struct rxm_tx_buf *tx_buf, struct rxm_tx_entry *tx_entry)
-{
-	size_t pkt_size = rxm_pkt_size + tx_buf->pkt.ctrl_hdr.seg_size;
-	ssize_t ret = 0;
-
-	if (pkt_size > rxm_ep->msg_info->tx_attr->inject_size) {
-		ret = fi_send(rxm_conn->msg_ep, &tx_buf->pkt, pkt_size,
-			      tx_buf->hdr.desc, 0, tx_entry);
-		if (OFI_UNLIKELY(ret))
-			return ret;
-	} else {
-		ret = fi_inject(rxm_conn->msg_ep, &tx_buf->pkt, pkt_size, 0);
-		if (OFI_UNLIKELY(ret))
-			return ret;
-		if (!--tx_entry->segs_left)
-			return rxm_finish_send_nobuf(tx_entry);
-	}
-	return ret;
-}
-
 static inline size_t
 rxm_ep_sar_calc_seg_num(size_t data_len, size_t inject_size)
 {
@@ -1040,7 +1018,7 @@ rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	
 	while (total_len) {
 		struct rxm_tx_buf *tx_buf;
-		size_t seg_len = total_len / seg_num;
+		size_t seg_len = fi_get_aligned_sz(total_len / seg_num, 64);
 
 		tx_buf = rxm_ep_sar_tx_prepare_segment(rxm_ep, rxm_conn, data_len,
 						       seg_num - 1, seg_len, data,
@@ -1048,6 +1026,11 @@ rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 						       tx_entry);
 		if (OFI_UNLIKELY(!tx_buf)) {
 			tx_entry->msg_id = UINT64_MAX;
+			if (seg_num == tx_entry->segs_left) {
+				/* if YX buffer allocation for the first segment fails,
+				 * release TX entry and report to user */
+				rxm_tx_entry_release(&rxm_conn->send_queue, tx_entry);
+			}
 			while (!dlist_empty(&tx_entry->deferred_tx_buf_list)) {
 				dlist_pop_front(&tx_entry->deferred_tx_buf_list,
 						struct rxm_tx_buf, tx_buf, in_flight_entry);
@@ -1058,11 +1041,20 @@ rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 		dlist_init(&tx_buf->in_flight_entry);
 		if (!send_failed) {
-			ret = rxm_ep_sar_tx_send_segment(rxm_ep, rxm_conn, tx_buf, tx_entry);
+			ret = fi_send(rxm_conn->msg_ep, &tx_buf->pkt,
+				      rxm_pkt_size + tx_buf->pkt.ctrl_hdr.seg_size,
+				      tx_buf->hdr.desc, 0, tx_entry);
 			if (OFI_UNLIKELY(ret)) {
+				if (seg_num == tx_entry->segs_left) {
+					/* if the sending for the first segment fails,
+					 * release resources and report this to user */
+					rxm_tx_buf_release(tx_entry->ep, tx_buf);
+					rxm_tx_entry_release(&rxm_conn->send_queue, tx_entry);
+					return -FI_EAGAIN;
+				}
 				send_failed = 1;
 				dlist_insert_tail(&tx_buf->in_flight_entry,
-						  &tx_entry->deferred_tx_buf_list);
+						  &tx_entry->deferred_tx_buf_list);	
 			} else {
 				dlist_insert_tail(&tx_buf->in_flight_entry,
 						  &tx_entry->in_flight_tx_buf_list);

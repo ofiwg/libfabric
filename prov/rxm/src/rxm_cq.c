@@ -267,8 +267,21 @@ static inline int rxm_finish_sar_segment_send(struct rxm_tx_entry *tx_entry)
 
 	rxm_tx_buf_release(tx_entry->ep, tx_buf);
 	/* If `segs_left` == 0, all segments of the message have been fully sent */
-	if (!--tx_entry->segs_left)
+	if (!--tx_entry->segs_left) {
 		return rxm_finish_send_nobuf(tx_entry);
+	} else if (!dlist_empty(&tx_entry->deferred_tx_buf_list)) {
+		ssize_t ret;
+		tx_buf = container_of(tx_entry->deferred_tx_buf_list.next,
+				      struct rxm_tx_buf, in_flight_entry);
+		ret = fi_send(tx_entry->conn->msg_ep, &tx_buf->pkt,
+			      sizeof(tx_buf->pkt) + tx_buf->pkt.ctrl_hdr.seg_size,
+			      tx_buf->hdr.desc, 0, tx_entry);
+		if (!ret) {
+			dlist_remove(&tx_buf->in_flight_entry);
+			dlist_insert_tail(&tx_buf->in_flight_entry,
+					  &tx_entry->in_flight_tx_buf_list);
+		}
+	}
 	/* This branch takes true, when it's impossible to allocate TX buffer */
 	if (OFI_UNLIKELY((tx_entry->msg_id == UINT64_MAX) &&
 			 dlist_empty(&tx_entry->deferred_tx_buf_list))) {
