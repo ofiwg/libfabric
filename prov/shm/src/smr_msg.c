@@ -362,6 +362,19 @@ static inline struct smr_ep_entry *smr_get_trecv_entry(struct smr_ep *ep)
 	return entry;
 }
 
+static inline ssize_t
+smr_proccess_trecv_post(struct smr_ep *ep, struct smr_ep_entry *entry)
+{
+	ssize_t ret;
+
+	ret = smr_progress_unexp(ep, entry);
+	if (!ret || ret == -FI_EAGAIN)
+		return ret;
+
+	dlist_insert_tail(&entry->entry, &ep->trecv_queue.list);
+	return 0;
+}
+
 ssize_t smr_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 	fi_addr_t src_addr, uint64_t tag, uint64_t ignore, void *context)
 {
@@ -387,12 +400,7 @@ ssize_t smr_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 	entry->tag = tag;
 	entry->ignore = ignore;
 
-	ret = smr_progress_unexp(ep, entry);
-	if (!ret || ret == -FI_EAGAIN)
-		goto out;
-
-	dlist_insert_tail(&entry->entry, &ep->trecv_queue.list);
-	ret = 0;
+	ret = smr_proccess_trecv_post(ep, entry);
 out:
 	fastlock_release(&ep->util_ep.rx_cq->cq_lock);
 	return ret;
@@ -426,12 +434,7 @@ ssize_t smr_trecvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	entry->tag = tag;
 	entry->ignore = ignore;
 
-	ret = smr_progress_unexp(ep, entry);
-	if (!ret || ret == -FI_EAGAIN)
-		goto out;
-
-	dlist_insert_tail(&entry->entry, &ep->trecv_queue.list);
-	ret = 0;
+	ret = smr_proccess_trecv_post(ep, entry);
 out:
 	fastlock_release(&ep->util_ep.rx_cq->cq_lock);
 	return ret;
@@ -464,12 +467,7 @@ ssize_t smr_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 	entry->tag = msg->tag;
 	entry->ignore = msg->ignore;
 
-	ret = smr_progress_unexp(ep, entry);
-	if (!ret || ret == -FI_EAGAIN)
-		goto out;
-
-	dlist_insert_tail(&entry->entry, &ep->trecv_queue.list);
-	ret = 0;
+	ret = smr_proccess_trecv_post(ep, entry);
 out:
 	fastlock_release(&ep->util_ep.rx_cq->cq_lock);
 	return ret;
