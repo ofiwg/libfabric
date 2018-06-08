@@ -289,7 +289,7 @@ struct rxm_tx_entry {
 	/* Must stay at top */
 	union {
 		struct fi_context fi_context;
-		struct dlist_entry postponed_entry;
+		struct dlist_entry deferred_entry;
 	};
 
 	enum rxm_proto_state state;
@@ -411,7 +411,7 @@ struct rxm_ep {
 struct rxm_conn {
 	struct fid_ep *msg_ep;
 	struct rxm_send_queue send_queue;
-	struct dlist_entry postponed_tx_list;
+	struct dlist_entry deferred_tx_list;
 	struct dlist_entry posted_rx_list;
 	struct dlist_entry sar_rx_msg_list;
 	struct util_cmap_handle handle;
@@ -511,12 +511,12 @@ err:
 	return ret;
 }
 
-void rxm_ep_handle_postponed_tx_op(struct rxm_ep *rxm_ep,
+void rxm_ep_handle_deferred_tx_op(struct rxm_ep *rxm_ep,
+				  struct rxm_conn *rxm_conn,
+				  struct rxm_tx_entry *tx_entry);
+void rxm_ep_handle_deferred_rma_op(struct rxm_ep *rxm_ep,
 				   struct rxm_conn *rxm_conn,
 				   struct rxm_tx_entry *tx_entry);
-void rxm_ep_handle_postponed_rma_op(struct rxm_ep *rxm_ep,
-				    struct rxm_conn *rxm_conn,
-				    struct rxm_tx_entry *tx_entry);
 
 static inline void rxm_cntr_inc(struct util_cntr *cntr)
 {

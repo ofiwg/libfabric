@@ -1078,9 +1078,9 @@ rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	return 0;
 }
 
-void rxm_ep_handle_postponed_tx_op(struct rxm_ep *rxm_ep,
-				   struct rxm_conn *rxm_conn,
-				   struct rxm_tx_entry *tx_entry)
+void rxm_ep_handle_deferred_tx_op(struct rxm_ep *rxm_ep,
+				  struct rxm_conn *rxm_conn,
+				  struct rxm_tx_entry *tx_entry)
 {
 	ssize_t ret;
 	size_t tx_size = rxm_pkt_size + tx_entry->tx_buf->pkt.hdr.size;
@@ -1150,7 +1150,7 @@ rxm_ep_postpone_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		tx_entry->state = RXM_TX;
 	}
 
-	dlist_insert_tail(&tx_entry->postponed_entry, &rxm_conn->postponed_tx_list);
+	dlist_insert_tail(&tx_entry->deferred_entry, &rxm_conn->deferred_tx_list);
 
 	return FI_SUCCESS;
 }
@@ -1189,7 +1189,7 @@ cmap_err:
 inject_continue:
 	fastlock_release(&rxm_ep->util_ep.cmap->lock);
 
-	assert(dlist_empty(&rxm_conn->postponed_tx_list));
+	assert(dlist_empty(&rxm_conn->deferred_tx_list));
 
 	if (pkt_size <= rxm_ep->msg_info->tx_attr->inject_size) {
 		ret = rxm_ep_format_tx_res_lightweight(rxm_ep, rxm_conn, len,
@@ -1252,7 +1252,7 @@ cmap_err:
 send_continue:
 	fastlock_release(&rxm_ep->util_ep.cmap->lock);
 
-	assert(dlist_empty(&rxm_conn->postponed_tx_list));
+	assert(dlist_empty(&rxm_conn->deferred_tx_list));
 
 	if (data_len <= rxm_ep->rxm_info->tx_attr->inject_size) {
 		size_t total_len = rxm_pkt_size + data_len;
