@@ -431,7 +431,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 					}
 				}
 				if (ep->send_cntr)
-					psmx2_cntr_inc(ep->send_cntr);
+					psmx2_cntr_inc(ep->send_cntr, PSMX2_STATUS_ERROR(status));
 				PSMX2_FREE_COMPLETION(trx_ctxt, status);
 				break;
 
@@ -452,7 +452,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 					}
 				}
 				if (ep->send_cntr)
-					psmx2_cntr_inc(ep->send_cntr);
+					psmx2_cntr_inc(ep->send_cntr, PSMX2_STATUS_ERROR(status));
 				PSMX2_FREE_COMPLETION(trx_ctxt, status);
 				break;
 
@@ -483,7 +483,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 					}
 				}
 				if (ep->recv_cntr)
-					psmx2_cntr_inc(ep->recv_cntr);
+					psmx2_cntr_inc(ep->recv_cntr, PSMX2_STATUS_ERROR(status));
 				PSMX2_FREE_COMPLETION(trx_ctxt, status);
 				break;
 
@@ -514,7 +514,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 					}
 				}
 				if (ep->recv_cntr)
-					psmx2_cntr_inc(ep->recv_cntr);
+					psmx2_cntr_inc(ep->recv_cntr, PSMX2_STATUS_ERROR(status));
 				PSMX2_FREE_COMPLETION(trx_ctxt, status);
 				break;
 
@@ -547,7 +547,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 					}
 				}
 				if (ep->recv_cntr)
-					psmx2_cntr_inc(ep->recv_cntr);
+					psmx2_cntr_inc(ep->recv_cntr, PSMX2_STATUS_ERROR(status));
 				PSMX2_FREE_COMPLETION(trx_ctxt, status);
 				break;
 
@@ -574,7 +574,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 					}
 				}
 				if (ep->recv_cntr)
-					psmx2_cntr_inc(ep->recv_cntr);
+					psmx2_cntr_inc(ep->recv_cntr, PSMX2_STATUS_ERROR(status));
 				PSMX2_FREE_COMPLETION(trx_ctxt, status);
 				break;
 
@@ -598,7 +598,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 					}
 				}
 				if (ep->write_cntr)
-					psmx2_cntr_inc(ep->write_cntr);
+					psmx2_cntr_inc(ep->write_cntr, PSMX2_STATUS_ERROR(status));
 				PSMX2_FREE_COMPLETION(trx_ctxt, status);
 				break;
 
@@ -622,7 +622,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 					}
 				}
 				if (ep->write_cntr)
-					psmx2_cntr_inc(ep->write_cntr);
+					psmx2_cntr_inc(ep->write_cntr, PSMX2_STATUS_ERROR(status));
 				PSMX2_FREE_COMPLETION(trx_ctxt, status);
 				break;
 
@@ -658,7 +658,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 					}
 				}
 				if (ep->read_cntr)
-					psmx2_cntr_inc(ep->read_cntr);
+					psmx2_cntr_inc(ep->read_cntr, PSMX2_STATUS_ERROR(status));
 				PSMX2_FREE_COMPLETION(trx_ctxt, status);
 				break;
 
@@ -694,7 +694,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 					}
 				}
 				if (ep->read_cntr)
-					psmx2_cntr_inc(ep->read_cntr);
+					psmx2_cntr_inc(ep->read_cntr, PSMX2_STATUS_ERROR(status));
 				PSMX2_FREE_COMPLETION(trx_ctxt, status);
 				break;
 
@@ -729,7 +729,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 					}
 				}
 				if (ep->recv_cntr)
-					psmx2_cntr_inc(ep->recv_cntr);
+					psmx2_cntr_inc(ep->recv_cntr, PSMX2_STATUS_ERROR(status));
 
 				/* repost multi-recv buffer */
 				multi_recv_req->offset += PSMX2_STATUS_RCVLEN(status);
@@ -778,11 +778,11 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				}
 
 				if (am_req->ep->remote_write_cntr)
-					psmx2_cntr_inc(am_req->ep->remote_write_cntr);
+					psmx2_cntr_inc(am_req->ep->remote_write_cntr, 0);
 
 				mr = PSMX2_CTXT_USER(fi_context);
 				if (mr->cntr && mr->cntr != am_req->ep->remote_write_cntr)
-					psmx2_cntr_inc(mr->cntr);
+					psmx2_cntr_inc(mr->cntr, 0);
 
 				/* NOTE: am_req->tmpbuf is unused here */
 				psmx2_am_request_free(trx_ctxt, am_req);
@@ -792,7 +792,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 			case PSMX2_REMOTE_READ_CONTEXT:
 				am_req = container_of(fi_context, struct psmx2_am_request, fi_context);
 				if (am_req->ep->remote_read_cntr)
-					psmx2_cntr_inc(am_req->ep->remote_read_cntr);
+					psmx2_cntr_inc(am_req->ep->remote_read_cntr, 0);
 
 				/* NOTE: am_req->tmpbuf is unused here */
 				psmx2_am_request_free(trx_ctxt, am_req);
@@ -824,7 +824,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 					}
 				}
 				if (ep->send_cntr)
-					psmx2_cntr_inc(ep->send_cntr);
+					psmx2_cntr_inc(ep->send_cntr, PSMX2_STATUS_ERROR(status));
 				free(sendv_req);
 				PSMX2_FREE_COMPLETION(trx_ctxt, status);
 				break;
@@ -853,7 +853,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 					}
 				}
 				if (ep->send_cntr)
-					psmx2_cntr_inc(ep->send_cntr);
+					psmx2_cntr_inc(ep->send_cntr, PSMX2_STATUS_ERROR(status));
 				free(sendv_req);
 				PSMX2_FREE_COMPLETION(trx_ctxt, status);
 				break;
@@ -892,7 +892,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 					}
 				}
 				if (ep->recv_cntr)
-					psmx2_cntr_inc(ep->recv_cntr);
+					psmx2_cntr_inc(ep->recv_cntr, PSMX2_STATUS_ERROR(status));
 
 				if (sendv_rep->multi_recv) {
 					/* repost the multi-recv buffer */
