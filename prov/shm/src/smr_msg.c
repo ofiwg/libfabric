@@ -39,12 +39,11 @@
 
 
 static ssize_t smr_generic_recvmsg(struct smr_ep *ep, const struct iovec *iov,
-				   size_t iov_count, fi_addr_t addr, uint64_t tag,
-				   uint64_t ignore, void *context, uint64_t flags)
+				   size_t iov_count, fi_addr_t addr,
+				   void *context, uint64_t flags)
 {
-	struct smr_queue *recv_queue;
 	struct smr_ep_entry *entry;
-	ssize_t ret;
+	ssize_t ret = 0;
 
 	assert(iov_count <= SMR_IOV_LIMIT);
 	assert(!(flags & FI_MULTI_RECV) || iov_count == 1);
@@ -62,22 +61,11 @@ static ssize_t smr_generic_recvmsg(struct smr_ep *ep, const struct iovec *iov,
 	entry->context = context;
 	entry->flags = flags;
 	entry->addr = addr;
-	entry->tag = tag;
-	entry->ignore = ignore;
+	entry->tag = 0; /* does this need to be set? */
+	entry->ignore = 0; /* does this need to be set? */
 	entry->err = 0;
 
-	if (flags & FI_TAGGED) {
-		ret = smr_progress_unexp(ep, entry);
-		if (!ret || ret == -FI_EAGAIN)
-			goto out;
-		recv_queue = &ep->trecv_queue;
-	} else {
-		recv_queue = &ep->recv_queue;
-	}
-
-	dlist_insert_tail(&entry->entry, &recv_queue->list);
-
-	ret = 0;
+	dlist_insert_tail(&entry->entry, &ep->recv_queue.list);
 out:
 	fastlock_release(&ep->util_ep.rx_cq->cq_lock);
 	return ret;
@@ -91,7 +79,7 @@ ssize_t smr_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 
 	return smr_generic_recvmsg(ep, msg->msg_iov, msg->iov_count,
-				   msg->addr, 0, 0, msg->context, flags);
+				   msg->addr, msg->context, flags);
 }
 
 ssize_t smr_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
@@ -102,7 +90,7 @@ ssize_t smr_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 
 	return smr_generic_recvmsg(ep, iov, count, src_addr,
-				   0, 0, context, smr_ep_rx_flags(ep));
+				   context, smr_ep_rx_flags(ep));
 }
 
 ssize_t smr_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
@@ -116,7 +104,7 @@ ssize_t smr_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 	msg_iov.iov_base = (void *) buf;
 	msg_iov.iov_len = len;
 
-	return smr_generic_recvmsg(ep, &msg_iov, 1, src_addr, 0, 0, context,
+	return smr_generic_recvmsg(ep, &msg_iov, 1, src_addr, context,
 				   smr_ep_rx_flags(ep));
 }
 
@@ -326,6 +314,44 @@ struct fi_ops_msg smr_msg_ops = {
 	.injectdata = smr_injectdata,
 };
 
+static ssize_t smr_generic_trecvmsg(struct smr_ep *ep, const struct iovec *iov,
+				    size_t iov_count, fi_addr_t addr, uint64_t tag,
+				    uint64_t ignore, void *context, uint64_t flags)
+{
+	struct smr_ep_entry *entry;
+	ssize_t ret;
+
+	assert(iov_count <= SMR_IOV_LIMIT);
+	assert(!(flags & FI_MULTI_RECV) || iov_count == 1);
+
+	fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
+	if (freestack_isempty(ep->recv_fs)) {
+		ret = -FI_EAGAIN;
+		goto out;
+	}
+	entry = freestack_pop(ep->recv_fs);
+
+	entry->iov_count = iov_count;
+	memcpy(&entry->iov, iov, sizeof(*iov) * iov_count);
+
+	entry->context = context;
+	entry->flags = flags;
+	entry->addr = addr;
+	entry->tag = tag;
+	entry->ignore = ignore;
+	entry->err = 0;
+
+	ret = smr_progress_unexp(ep, entry);
+	if (!ret || ret == -FI_EAGAIN)
+		goto out;
+
+	dlist_insert_tail(&entry->entry, &ep->trecv_queue.list);
+	ret = 0;
+out:
+	fastlock_release(&ep->util_ep.rx_cq->cq_lock);
+	return ret;
+}
+
 ssize_t smr_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 	fi_addr_t src_addr, uint64_t tag, uint64_t ignore, void *context)
 {
@@ -337,8 +363,8 @@ ssize_t smr_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 	msg_iov.iov_base = (void *) buf;
 	msg_iov.iov_len = len;
 
-	return smr_generic_recvmsg(ep, &msg_iov, 1, src_addr, tag, ignore,
-				   context, FI_TAGGED | smr_ep_rx_flags(ep));
+	return smr_generic_trecvmsg(ep, &msg_iov, 1, src_addr, tag, ignore,
+				    context, FI_TAGGED | smr_ep_rx_flags(ep));
 }
 
 ssize_t smr_trecvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
@@ -349,8 +375,8 @@ ssize_t smr_trecvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 
-	return smr_generic_recvmsg(ep, iov, count, src_addr, tag, ignore,
-				   context, FI_TAGGED | smr_ep_rx_flags(ep));
+	return smr_generic_trecvmsg(ep, iov, count, src_addr, tag, ignore,
+				    context, FI_TAGGED | smr_ep_rx_flags(ep));
 }
 
 ssize_t smr_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
@@ -360,9 +386,9 @@ ssize_t smr_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 
-	return smr_generic_recvmsg(ep, msg->msg_iov, msg->iov_count, msg->addr,
-				   msg->tag, msg->ignore, msg->context,
-				   flags | FI_TAGGED);
+	return smr_generic_trecvmsg(ep, msg->msg_iov, msg->iov_count, msg->addr,
+				    msg->tag, msg->ignore, msg->context,
+				    flags | FI_TAGGED);
 }
 
 ssize_t smr_tsend(struct fid_ep *ep_fid, const void *buf, size_t len,
