@@ -102,6 +102,7 @@ enum poll_fd_type {
 	CONNECT_SOCK,
 	PASSIVE_SOCK,
 	ACCEPT_SOCK,
+	CONNREQ_HANDLE,
 };
 
 enum poll_fd_state {
@@ -134,6 +135,7 @@ struct poll_fd_mgr {
 
 struct tcpx_conn_handle {
 	struct fid		handle;
+	struct tcpx_pep		*pep;
 	SOCKET			conn_fd;
 };
 
