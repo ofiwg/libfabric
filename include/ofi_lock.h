@@ -42,6 +42,9 @@
 
 #include <ofi_osd.h>
 
+#if ATOMIC_SPINLOCK == 1
+#include <immintrin.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -50,8 +53,57 @@ extern "C" {
 
 int fi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout_ms);
 
+#if ATOMIC_SPINLOCK == 1
 
-#if PT_LOCK_SPIN == 1
+enum {
+	OFI_ATOMIC_SPINLOCK_UNLOCKED	= 0,
+	OFI_ATOMIC_SPINLOCK_LOCKED	= 1,
+};
+
+#define fastlock_t_ volatile int32_t
+
+static inline int ofi_atom_spin_init(fastlock_t_ *lock)
+{
+	*lock = OFI_ATOMIC_SPINLOCK_UNLOCKED;
+	return 0;
+}
+
+static inline int ofi_atom_spin_get_lock_val(fastlock_t_ *lock)
+{
+	return __atomic_exchange_n(lock, OFI_ATOMIC_SPINLOCK_LOCKED,
+				   __ATOMIC_ACQUIRE | __ATOMIC_HLE_ACQUIRE);		
+}
+
+static inline int ofi_atom_spin_try_lock(fastlock_t_ *lock)
+{
+	if (ofi_atom_spin_get_lock_val(lock)) {
+		_mm_pause();
+		return 1;
+	}
+	return 0;
+}
+
+static inline int ofi_atom_spin_acquire_lock(fastlock_t_ *lock)
+{
+	while (ofi_atom_spin_get_lock_val(lock))
+		_mm_pause();
+	return 0;
+}
+
+static inline int ofi_atom_spin_release_lock(fastlock_t_ *lock)
+{
+	__atomic_store_n(lock, OFI_ATOMIC_SPINLOCK_UNLOCKED,
+			__ATOMIC_RELEASE | __ATOMIC_HLE_RELEASE);
+	return 0;
+}
+
+#define fastlock_init_(lock) ofi_atom_spin_init(lock)
+#define fastlock_destroy_(lock)	ofi_atom_spin_init(lock)
+#define fastlock_acquire_(lock)	ofi_atom_spin_acquire_lock(lock)
+#define fastlock_tryacquire_(lock) ofi_atom_spin_try_lock(lock)
+#define fastlock_release_(lock) ofi_atom_spin_release_lock(lock)
+
+#elif PT_LOCK_SPIN == 1
 
 #define fastlock_t_ pthread_spinlock_t
 #define fastlock_init_(lock) pthread_spin_init(lock, PTHREAD_PROCESS_PRIVATE)
