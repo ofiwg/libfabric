@@ -563,3 +563,167 @@ str_term_cleanup:
 	ret = fi_close(&cxi_open_cq->fid);
 	cr_assert(ret == FI_SUCCESS);
 }
+
+Test(cq, cq_readerr_null_cq, .signal = SIGSEGV)
+{
+	struct fi_cq_err_entry err_entry;
+
+	/* Attempt to read an err with a CQ with a NULL cq pointer */
+	fi_cq_readerr(NULL, &err_entry, (uint64_t)0);
+}
+
+Test(cq, cq_readerr_null_buff)
+{
+	int ret;
+	struct fid_cq *cxi_open_cq = NULL;
+
+	/* Open a CQ */
+	ret = fi_cq_open(cxit_domain, NULL, &cxi_open_cq, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_cq_open with NULL attr");
+	cr_assert_not_null(cxi_open_cq);
+
+	/* Attempt to read an err with a CQ with a NULL buff pointer */
+	ret = fi_cq_readerr(cxi_open_cq, NULL, (uint64_t)0);
+	cr_assert_eq(ret, -FI_EINVAL, "fi_cq_open with NULL buff returned %d",
+		     ret);
+
+	ret = fi_close(&cxi_open_cq->fid);
+	cr_assert_eq(ret, FI_SUCCESS);
+}
+
+Test(cq, cq_readerr_no_errs)
+{
+	int ret;
+	struct fid_cq *cxi_open_cq = NULL;
+	struct fi_cq_err_entry err_entry;
+
+	/* Open a CQ */
+	ret = fi_cq_open(cxit_domain, NULL, &cxi_open_cq, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_cq_open with NULL attr");
+	cr_assert_not_null(cxi_open_cq);
+
+	/* Attempt to read an err with a CQ with a NULL buff pointer */
+	ret = fi_cq_readerr(cxi_open_cq, &err_entry, (uint64_t)0);
+	/* Expect no completions to be available */
+	cr_assert_eq(ret, -FI_EAGAIN, "fi_cq_readerr returned %d - %s", ret,
+		     fi_cq_strerror(cxi_open_cq, ret, NULL, NULL, 0));
+
+	ret = fi_close(&cxi_open_cq->fid);
+	cr_assert_eq(ret, FI_SUCCESS);
+}
+
+void err_entry_comp(struct fi_cq_err_entry *a,
+		   struct fi_cq_err_entry *b,
+		   size_t size)
+{
+	uint8_t *data_a, *data_b;
+
+	data_a = (uint8_t *)a;
+	data_b = (uint8_t *)b;
+
+	for (int i = 0; i < size; i++)
+		if (data_a[i] != data_b[i])
+			cr_expect_fail("Mismatch at offset %d. %02X - %02X",
+				       i, data_a[i], data_b[i]);
+}
+
+Test(cq, cq_readerr_err)
+{
+	int ret;
+	size_t avail;
+	struct fid_cq *cxi_open_cq = NULL;
+	struct fi_cq_err_entry err_entry, fake_entry;
+	struct cxi_cq *cxi_cq;
+	uint8_t *data_fake, *data_err;
+
+	/* initialize the entries with data */
+	data_fake = (uint8_t *)&fake_entry;
+	data_err = (uint8_t *)&err_entry;
+	for (int i = 0; i < sizeof(fake_entry); i++) {
+		data_fake[i] = (uint8_t)i;
+		data_err[i] = (uint8_t)0xa5;
+	}
+	fake_entry.err_data = err_entry.err_data = NULL;
+	fake_entry.err_data_size = err_entry.err_data_size = 0;
+
+	/* Open a CQ */
+	ret = fi_cq_open(cxit_domain, NULL, &cxi_open_cq, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_cq_open with NULL attr");
+	cr_assert_not_null(cxi_open_cq);
+
+	/* Add a fake error to the CQ's error ringbuffer */
+	cxi_cq = container_of(cxi_open_cq, struct cxi_cq, cq_fid);
+	fastlock_acquire(&cxi_cq->lock);
+	avail = ofi_rbavail(&cxi_cq->cqerr_rb);
+	cr_assert_geq(avail, sizeof(fake_entry),
+		      "Not enough space in error ring buffer. %zd", avail);
+	ofi_rbwrite(&cxi_cq->cqerr_rb, &fake_entry, sizeof(fake_entry));
+	ofi_rbcommit(&cxi_cq->cqerr_rb);
+	fastlock_release(&cxi_cq->lock);
+
+	/* Attempt to read an err with a CQ with a NULL buff pointer */
+	ret = fi_cq_readerr(cxi_open_cq, &err_entry, (uint64_t)0);
+	/* Expect 1 completion to be available */
+	cr_assert_eq(ret, 1, "fi_cq_readerr returned %d - %s", ret,
+		     fi_cq_strerror(cxi_open_cq, ret, NULL, NULL, 0));
+	/* Expect the data to match the fake entry */
+	err_entry_comp(&err_entry, &fake_entry, sizeof(fake_entry));
+
+	ret = fi_close(&cxi_open_cq->fid);
+	cr_assert_eq(ret, FI_SUCCESS);
+}
+
+Test(cq, cq_readerr_reperr)
+{
+	int ret;
+	struct fi_cq_err_entry err_entry = {0};
+	struct cxi_req req = {0};
+	size_t olen, err_data_size;
+	int err, prov_errno;
+	void *err_data;
+	struct cxi_cq *cxi_cq;
+	uint8_t err_buff[32] = {0};
+
+	/* initialize the input data */
+	req.flags = 0x12340987abcd5676;
+	req.context = 0xa5a5a5a5a5a5a5a5;
+	req.data_len = 0xabcdef0123456789;
+	req.data = 0xbadcfe1032547698;
+	req.tag = 0xefcdab0192837465;
+	olen = 0x4545121290907878;
+	err = -3;
+	prov_errno = -2;
+	err_data = (void *)err_buff;
+	err_data_size = ARRAY_SIZE(err_buff);
+
+	/* Open a CQ */
+	cxit_create_cqs();
+	cxi_cq = container_of(cxit_tx_cq, struct cxi_cq, cq_fid);
+
+	/* Add an error to the CQ's error ringbuffer */
+	ret = cxi_cq_report_error(cxi_cq, &req, olen, err, prov_errno,
+				  err_data, err_data_size);
+	cr_assert_eq(ret, 0, "cxi_cq_report_error() error %d", ret);
+
+	/* Attempt to read an err with a CQ with a NULL buff pointer */
+	ret = fi_cq_readerr(cxit_tx_cq, &err_entry, (uint64_t)0);
+	cr_assert_eq(ret, 1, "fi_cq_readerr returned %d - %s", ret,
+		     fi_cq_strerror(cxit_tx_cq, ret, NULL, NULL, 0));
+
+	/* Expect the data to match the fake entry */
+	cr_assert_eq(err_entry.err, err);
+	cr_assert_eq(err_entry.olen, olen);
+	cr_assert_eq(err_entry.len, req.data_len);
+	cr_assert_eq(err_entry.prov_errno, prov_errno);
+	cr_assert_eq(err_entry.flags, req.flags);
+	cr_assert_eq(err_entry.data, req.data);
+	cr_assert_eq(err_entry.tag, req.tag);
+	cr_assert_eq(err_entry.op_context, (void *)(uintptr_t)req.context);
+	cr_assert_eq(err_entry.err_data, err_data);
+	cr_assert_leq(err_entry.err_data_size, err_data_size,
+		      "Size mismatch. %zd, %zd",
+		      err_entry.err_data_size, err_data_size);
+
+	cxit_destroy_cqs();
+}
+
