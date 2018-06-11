@@ -468,3 +468,25 @@ ParameterizedTest(struct cq_size_attr_params *param, cq, cq_attr_size)
 	ret = fi_close(&cxi_open_cq->fid);
 	cr_assert(ret == FI_SUCCESS);
 }
+
+Test(cq, cq_open_null_domain, .signal = SIGSEGV)
+{
+	struct fid_cq *cxi_open_cq = NULL;
+
+	/*
+	 * Attempt to open a CQ with a NULL domain pointer
+	 * Expect a SIGSEGV since the fi_cq_open implementation attempts to
+	 * use the domain pointer before checking.
+	 */
+	fi_cq_open(NULL, NULL, &cxi_open_cq, NULL);
+}
+
+Test(cq, cq_open_null_cq)
+{
+	/* Attempt to open a CQ with a NULL cq pointer */
+	int ret;
+
+	ret = fi_cq_open(cxit_domain, NULL, NULL, NULL);
+	cr_assert(ret == -FI_EINVAL, "fi_cq_open with NULL cq");
+}
+
