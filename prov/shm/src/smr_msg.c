@@ -38,88 +38,110 @@
 #include "smr.h"
 
 
-static ssize_t smr_generic_recvmsg(struct smr_ep *ep, const struct iovec *iov,
-				   size_t iov_count, fi_addr_t addr, uint64_t tag,
-				   uint64_t ignore, void *context, uint64_t flags)
+static inline struct smr_ep_entry *smr_get_recv_entry(struct smr_ep *ep)
 {
-	struct smr_queue *recv_queue;
 	struct smr_ep_entry *entry;
-	ssize_t ret;
 
-	assert(iov_count <= SMR_IOV_LIMIT);
-	assert(!(flags & FI_MULTI_RECV) || iov_count == 1);
+	if (freestack_isempty(ep->recv_fs))
+		return NULL;
 
-	fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
-	if (freestack_isempty(ep->recv_fs)) {
-		ret = -FI_EAGAIN;
-		goto out;
-	}
 	entry = freestack_pop(ep->recv_fs);
-	memset(entry, 0, sizeof(*entry));
 
-	for (entry->iov_count = 0; entry->iov_count < iov_count;
-	     entry->iov_count++) {
-		entry->iov[entry->iov_count] = iov[entry->iov_count];
-	}
-
-	entry->context = context;
-	entry->flags = flags;
-	entry->addr = addr;
-	entry->tag = tag;
-	entry->ignore = ignore;
-
-	if (flags & FI_TAGGED) {
-		ret = smr_progress_unexp(ep, entry);
-		if (!ret || ret == -FI_EAGAIN)
-			goto out;
-		recv_queue = &ep->trecv_queue;
-	} else {
-		recv_queue = &ep->recv_queue;
-	}
-
-	dlist_insert_tail(&entry->entry, &recv_queue->list);
-
-	ret = 0;
-out:
-	fastlock_release(&ep->util_ep.rx_cq->cq_lock);
-	return ret;
+	entry->tag = 0; /* does this need to be set? */
+	entry->ignore = 0; /* does this need to be set? */
+	entry->err = 0;
+	return entry;
 }
 
 ssize_t smr_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 		    uint64_t flags)
 {
+	struct smr_ep_entry *entry;
 	struct smr_ep *ep;
+	ssize_t ret = 0;
+
+	assert(msg->iov_count <= SMR_IOV_LIMIT);
+	assert(!(flags & FI_MULTI_RECV) || msg->iov_count == 1);
 
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
+	fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
+	entry = smr_get_recv_entry(ep);
+	if (!entry) {
+		ret = -FI_EAGAIN;
+		goto out;
+	}
 
-	return smr_generic_recvmsg(ep, msg->msg_iov, msg->iov_count,
-				   msg->addr, 0, 0, msg->context, flags);
+	entry->iov_count = msg->iov_count;
+	memcpy(&entry->iov, msg->msg_iov, sizeof(*msg->msg_iov) * msg->iov_count);
+
+	entry->context = msg->context;
+	entry->flags = flags;
+	entry->addr = msg->addr;
+
+	dlist_insert_tail(&entry->entry, &ep->recv_queue.list);
+out:
+	fastlock_release(&ep->util_ep.rx_cq->cq_lock);
+	return ret;
 }
 
 ssize_t smr_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 		size_t count, fi_addr_t src_addr, void *context)
 {
+	struct smr_ep_entry *entry;
 	struct smr_ep *ep;
+	ssize_t ret = 0;
 
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
+	assert(count <= SMR_IOV_LIMIT);
+	assert(!(smr_ep_rx_flags(ep) & FI_MULTI_RECV) || count == 1);
 
-	return smr_generic_recvmsg(ep, iov, count, src_addr,
-				   0, 0, context, smr_ep_rx_flags(ep));
+	fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
+	entry = smr_get_recv_entry(ep);
+	if (!entry) {
+		ret = -FI_EAGAIN;
+		goto out;
+	}
+
+	entry->iov_count = count;
+	memcpy(&entry->iov, iov, sizeof(*iov) * count);
+
+	entry->context = context;
+	entry->flags = smr_ep_rx_flags(ep);
+	entry->addr = src_addr;
+
+	dlist_insert_tail(&entry->entry, &ep->recv_queue.list);
+out:
+	fastlock_release(&ep->util_ep.rx_cq->cq_lock);
+	return ret;
 }
 
 ssize_t smr_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 		fi_addr_t src_addr, void *context)
 {
+	struct smr_ep_entry *entry;
 	struct smr_ep *ep;
-	struct iovec msg_iov;
+	ssize_t ret = 0;
 
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
+	fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
+	entry = smr_get_recv_entry(ep);
+	if (!entry) {
+		ret = -FI_EAGAIN;
+		goto out;
+	}
 
-	msg_iov.iov_base = (void *) buf;
-	msg_iov.iov_len = len;
+	entry->iov_count = 1;
+	entry->iov[0].iov_base = buf;
+	entry->iov[0].iov_len = len;
 
-	return smr_generic_recvmsg(ep, &msg_iov, 1, src_addr, 0, 0, context,
-				   smr_ep_rx_flags(ep));
+	entry->context = context;
+	entry->flags = smr_ep_rx_flags(ep);
+	entry->addr = src_addr;
+
+	dlist_insert_tail(&entry->entry, &ep->recv_queue.list);
+out:
+	fastlock_release(&ep->util_ep.rx_cq->cq_lock);
+	return ret;
 }
 
 static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
@@ -328,43 +350,127 @@ struct fi_ops_msg smr_msg_ops = {
 	.injectdata = smr_injectdata,
 };
 
+static inline struct smr_ep_entry *smr_get_trecv_entry(struct smr_ep *ep)
+{
+	struct smr_ep_entry *entry;
+
+	if (freestack_isempty(ep->recv_fs))
+		return NULL;
+
+	entry = freestack_pop(ep->recv_fs);
+	entry->err = 0;
+	return entry;
+}
+
+static inline ssize_t
+smr_proccess_trecv_post(struct smr_ep *ep, struct smr_ep_entry *entry)
+{
+	ssize_t ret;
+
+	ret = smr_progress_unexp(ep, entry);
+	if (!ret || ret == -FI_EAGAIN)
+		return ret;
+
+	dlist_insert_tail(&entry->entry, &ep->trecv_queue.list);
+	return 0;
+}
+
 ssize_t smr_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 	fi_addr_t src_addr, uint64_t tag, uint64_t ignore, void *context)
 {
+	struct smr_ep_entry *entry;
 	struct smr_ep *ep;
-	struct iovec msg_iov;
+	ssize_t ret;
 
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
+	fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
+	entry = smr_get_trecv_entry(ep);
+	if (!entry) {
+		ret = -FI_EAGAIN;
+		goto out;
+	}
 
-	msg_iov.iov_base = (void *) buf;
-	msg_iov.iov_len = len;
+	entry->iov_count = 1;
+	entry->iov[0].iov_base = buf;
+	entry->iov[0].iov_len = len;
 
-	return smr_generic_recvmsg(ep, &msg_iov, 1, src_addr, tag, ignore,
-				   context, FI_TAGGED | smr_ep_tx_flags(ep));
+	entry->context = context;
+	entry->flags = smr_ep_rx_flags(ep);
+	entry->addr = src_addr;
+	entry->tag = tag;
+	entry->ignore = ignore;
+
+	ret = smr_proccess_trecv_post(ep, entry);
+out:
+	fastlock_release(&ep->util_ep.rx_cq->cq_lock);
+	return ret;
 }
 
 ssize_t smr_trecvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	size_t count, fi_addr_t src_addr, uint64_t tag, uint64_t ignore,
 	void *context)
 {
+	struct smr_ep_entry *entry;
 	struct smr_ep *ep;
+	ssize_t ret;
 
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
+	assert(count <= SMR_IOV_LIMIT);
+	assert(!(smr_ep_rx_flags(ep) & FI_MULTI_RECV) || count == 1);
 
-	return smr_generic_recvmsg(ep, iov, count, src_addr, tag, ignore,
-				   context, FI_TAGGED | smr_ep_tx_flags(ep));
+	fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
+	entry = smr_get_trecv_entry(ep);
+	if (!entry) {
+		ret = -FI_EAGAIN;
+		goto out;
+	}
+
+	entry->iov_count = count;
+	memcpy(&entry->iov, iov, sizeof(*iov) * count);
+
+	entry->context = context;
+	entry->flags = smr_ep_rx_flags(ep);
+	entry->addr = src_addr;
+	entry->tag = tag;
+	entry->ignore = ignore;
+
+	ret = smr_proccess_trecv_post(ep, entry);
+out:
+	fastlock_release(&ep->util_ep.rx_cq->cq_lock);
+	return ret;
 }
 
 ssize_t smr_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 	uint64_t flags)
 {
+	struct smr_ep_entry *entry;
 	struct smr_ep *ep;
+	ssize_t ret;
+
+	assert(msg->iov_count <= SMR_IOV_LIMIT);
+	assert(!(flags & FI_MULTI_RECV) || msg->iov_count == 1);
 
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
+	fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
+	entry = smr_get_trecv_entry(ep);
+	if (!entry) {
+		ret = -FI_EAGAIN;
+		goto out;
+	}
 
-	return smr_generic_recvmsg(ep, msg->msg_iov, msg->iov_count, msg->addr,
-				   msg->tag, msg->ignore, msg->context,
-				   flags | FI_TAGGED);
+	entry->iov_count = msg->iov_count;
+	memcpy(&entry->iov, msg->msg_iov, sizeof(*msg->msg_iov) * msg->iov_count);
+
+	entry->context = msg->context;
+	entry->flags = flags;
+	entry->addr = msg->addr;
+	entry->tag = msg->tag;
+	entry->ignore = msg->ignore;
+
+	ret = smr_proccess_trecv_post(ep, entry);
+out:
+	fastlock_release(&ep->util_ep.rx_cq->cq_lock);
+	return ret;
 }
 
 ssize_t smr_tsend(struct fid_ep *ep_fid, const void *buf, size_t len,
