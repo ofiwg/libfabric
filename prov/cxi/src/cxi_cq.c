@@ -582,6 +582,9 @@ int cxi_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	struct cxi_wait *wait;
 	int ret;
 
+	if (cq == NULL)
+		return -FI_EINVAL;
+
 	cxi_dom = container_of(domain, struct cxi_domain, dom_fid);
 	ret = cxi_cq_verify_attr(attr);
 	if (ret)
