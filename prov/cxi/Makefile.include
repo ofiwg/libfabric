@@ -28,7 +28,8 @@ nodist_prov_cxi_test_cxitest_SOURCES = \
 	prov/cxi/test/domain.c \
 	prov/cxi/test/ep.c \
 	prov/cxi/test/cq.c \
-	prov/cxi/test/av.c
+	prov/cxi/test/av.c \
+	prov/cxi/test/rma.c
 
 prov_cxi_test_cxitest_CPPFLAGS = $(AM_CPPFLAGS) $(cxi_CPPFLAGS) \
 	$(cxitest_CPPFLAGS)

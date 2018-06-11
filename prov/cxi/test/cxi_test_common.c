@@ -115,6 +115,17 @@ void cxit_destroy_cqs(void)
 	cxit_tx_cq = NULL;
 }
 
+void cxit_bind_cqs(void)
+{
+	int ret;
+
+	ret = fi_ep_bind(cxit_ep, &cxit_tx_cq->fid, FI_TRANSMIT);
+	cr_assert(!ret, "fi_ep_bind TX CQ");
+
+	ret = fi_ep_bind(cxit_ep, &cxit_rx_cq->fid, FI_RECV);
+	cr_assert(!ret, "fi_ep_bind RX CQ");
+}
+
 void cxit_create_av(void)
 {
 	int ret;
@@ -130,6 +141,14 @@ void cxit_destroy_av(void)
 	ret = fi_close(&cxit_av->fid);
 	cr_assert(ret == FI_SUCCESS, "fi_close AV");
 	cxit_av = NULL;
+}
+
+void cxit_bind_av(void)
+{
+	int ret;
+
+	ret = fi_ep_bind(cxit_ep, &cxit_av->fid, 0);
+	cr_assert(!ret, "fi_ep_bind AV");
 }
 
 static void cxit_init(void)
@@ -165,10 +184,12 @@ void cxit_teardown_getinfo(void)
 
 void cxit_setup_fabric(void)
 {
-	cxit_setup_getinfo();
+	if (!cxit_fi_hints) {
+		cxit_setup_getinfo();
 
-	/* Always select CXI */
-	cxit_fi_hints->fabric_attr->prov_name = strdup(cxi_prov_name);
+		/* Always select CXI */
+		cxit_fi_hints->fabric_attr->prov_name = strdup(cxi_prov_name);
+	}
 
 	cxit_create_fabric_info();
 }
@@ -201,5 +222,40 @@ void cxit_teardown_ep(void)
 {
 	cxit_destroy_domain();
 	cxit_teardown_domain();
+}
+
+void cxit_setup_rma(void)
+{
+	int ret;
+
+	/* Request required capabilities for RMA */
+	cxit_setup_getinfo();
+	cxit_fi_hints->fabric_attr->prov_name = strdup(cxi_prov_name);
+	cxit_fi_hints->caps = FI_WRITE;
+	cxit_tx_cq_attr.format = FI_CQ_FORMAT_TAGGED;
+	cxit_av_attr.type = FI_AV_TABLE;
+
+	cxit_setup_ep();
+
+	/* Set up RMA objects */
+	cxit_create_ep();
+	cxit_create_cqs();
+	cxit_bind_cqs();
+	cxit_create_av();
+	cxit_bind_av();
+
+	/* Insert local address into AV to prepare to send to self */
+	ret = fi_av_insert(cxit_av, cxit_fi->src_addr, 1, NULL, 0, NULL);
+	cr_assert(ret == 1);
+}
+
+void cxit_teardown_rma(void)
+{
+	/* Tear down RMA objects */
+	cxit_destroy_ep(); /* EP must be destroyed before bound objects */
+
+	cxit_destroy_av();
+	cxit_destroy_cqs();
+	cxit_teardown_ep();
 }
 

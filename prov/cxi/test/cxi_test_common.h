@@ -45,5 +45,7 @@ void cxit_teardown_ep(void);
 #define cxit_teardown_cq cxit_teardown_ep
 #define cxit_setup_av cxit_setup_ep
 #define cxit_teardown_av cxit_teardown_ep
+void cxit_setup_rma(void);
+void cxit_teardown_rma(void);
 
 #endif
