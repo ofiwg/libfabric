@@ -490,3 +490,76 @@ Test(cq, cq_open_null_cq)
 	cr_assert(ret == -FI_EINVAL, "fi_cq_open with NULL cq");
 }
 
+Test(cq, strerror_str_termination)
+{
+	const char *err_str;
+	char *test_str = NULL, *orig_str = NULL;
+	int err_num = -FI_EOVERRUN;
+	size_t orig_len = 0, test_len;
+	int ret;
+	struct fid_cq *cxi_open_cq = NULL;
+
+	/* Open a CQ with a NULL attribute object pointer */
+	ret = fi_cq_open(cxit_domain, NULL, &cxi_open_cq, NULL);
+	cr_assert(ret == FI_SUCCESS, "fi_cq_open with NULL attr");
+	cr_assert_not_null(cxi_open_cq);
+
+	/* Get an error string without a buffer */
+	err_str = fi_cq_strerror(cxi_open_cq, err_num, NULL, NULL, 0);
+	cr_assert_not_null(err_str, "Original error string must not be NULL");
+
+	orig_len = strlen(err_str);
+	cr_assert_gt(orig_len, 0,
+		     "Original error string must be greater than zero");
+
+	/* Make a copy of the original error string */
+	orig_str = malloc(orig_len + 1);
+	cr_assert_not_null(orig_str, "Unable to malloc a buffer");
+	strcpy(orig_str, err_str);
+
+	/* Get a buffer larger than the original str for boundary testing */
+	test_len = orig_len + 10;
+	test_str = malloc(test_len);
+	cr_expect_not_null(test_str, "Unable to malloc a test buffer");
+	if (!test_str)
+		goto str_term_cleanup;
+
+	/* Walk through the range of lengths before and after string end */
+	for (int i = 3; i > -4; i--) {
+		/* Initialize and terminate the buffer */
+		memset(test_str, 0x55, test_len);
+		test_str[test_len - 1] = '\0';
+
+		err_str = fi_cq_strerror(cxi_open_cq, err_num, NULL, test_str,
+					 orig_len + i);
+		cr_expect_eq(err_str, test_str,
+			     "Returned pointer does not match buffer. i %d Expected %p Got %p",
+			     i, test_str, err_str);
+
+		if (i > 0) {
+			/* Expect the whole string returned */
+			if (strcmp(test_str, orig_str)) {
+				cr_expect_fail(
+					"Strings do not match. i %d Len %zd '%s' != '%s'",
+					i, orig_len + i, test_str, orig_str);
+			}
+		} else {
+			/* Expect most of the string returned */
+			if (strncmp(test_str, orig_str, strlen(test_str))) {
+				cr_expect_fail(
+					"Strings do not match. i %d Len %zd '%s' != '%s'",
+					i, orig_len + i - 1, test_str,
+					orig_str);
+			}
+		}
+	}
+
+str_term_cleanup:
+	if (orig_str)
+		free(orig_str);
+	if (test_str)
+		free(test_str);
+
+	ret = fi_close(&cxi_open_cq->fid);
+	cr_assert(ret == FI_SUCCESS);
+}
