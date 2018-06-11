@@ -1,6 +1,8 @@
 /*
  * Copyright (c) 2015-2016 Intel Corporation. All rights reserved.
  * Copyright (c) 2018, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2018      Los Alamos National Security, LLC.
+ *                         All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -498,7 +500,8 @@ int ofi_check_mr_mode(const struct fi_provider *prov, uint32_t api_version,
 				goto out;
 		} else {
 			prov_mode = ofi_cap_mr_mode(user_info->caps, prov_mode);
-			if ((user_mode & prov_mode) != prov_mode)
+			if (user_mode &&
+				(user_mode & prov_mode) != prov_mode)
 				goto out;
 		}
 	}
@@ -1087,7 +1090,8 @@ static void fi_alter_domain_attr(struct fi_domain_attr *attr,
 		attr->mr_mode = (attr->mr_mode && attr->mr_mode != FI_MR_SCALABLE) ?
 				FI_MR_BASIC : FI_MR_SCALABLE;
 	} else {
-		if ((hints_mr_mode & attr->mr_mode) != attr->mr_mode) {
+		if (hints_mr_mode &&
+			(hints_mr_mode & attr->mr_mode) != attr->mr_mode) {
 			attr->mr_mode = ofi_cap_mr_mode(info_caps,
 						attr->mr_mode & hints_mr_mode);
 		}

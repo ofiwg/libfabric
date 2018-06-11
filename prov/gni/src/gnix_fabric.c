@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2014 Intel Corporation, Inc.  All rights reserved.
- * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
+ * Copyright (c) 2015-2018 Los Alamos National Security, LLC.
  *                         All rights reserved.
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  *
@@ -612,7 +612,9 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 				/* define the mode we return to the user
 				 * prefer basic until scalable
 				 * has more testing time */
-				if (mr_mode & FI_MR_BASIC)
+				if (mr_mode == FI_MR_UNSPEC)
+					mr_mode = OFI_MR_BASIC_MAP;
+				else if (mr_mode & FI_MR_BASIC)
 					mr_mode = OFI_MR_BASIC_MAP;
 				else if ((mr_mode & GNIX_MR_BASIC_REQ) ==
 							GNIX_MR_BASIC_REQ)
