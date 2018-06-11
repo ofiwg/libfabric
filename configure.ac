@@ -156,6 +156,25 @@ AS_IF([test x"$enable_picky" = x"yes" && test x"$GCC" = x"yes"],
              [CFLAGS="${picky_c_warn_flags} $CFLAGS"])
       ])
 
+AC_CHECK_HEADER([immintrin.h],
+    [AC_CHECK_DECL([_mm_pause],
+        [
+            AC_TRY_LINK([#include <immintrin.h>],
+                [
+                  int a;
+		  __atomic_exchange_n(&a, 1, __ATOMIC_ACQUIRE | __ATOMIC_HLE_ACQUIRE);
+                  _mm_pause();
+                  __atomic_store_n(&a, 0, __ATOMIC_RELEASE|__ATOMIC_HLE_RELEASE);],
+                [have_atom_spinlock=1],
+                [have_atom_spinlock=0])
+	],
+        [have_atom_spinlock=0],
+        [#include <immintrin.h>])],
+    [have_atom_spinlock=0])
+
+AC_DEFINE_UNQUOTED([ATOMIC_SPINLOCK], [$have_atom_spinlock],
+	[Define to 1 if GCC built-in atomic spinlock is available.])
+
 dnl Checks for libraries
 AC_CHECK_LIB(pthread, pthread_mutex_init, [],
     AC_MSG_ERROR([pthread_mutex_init() not found.  libfabric requires libpthread.]))
