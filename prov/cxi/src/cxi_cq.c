@@ -392,6 +392,9 @@ static ssize_t cxi_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 	size_t err_data_size = 0;
 	void *err_data = NULL;
 
+	if (cq == NULL || buf == NULL)
+		return -FI_EINVAL;
+
 	cxi_cq = container_of(cq, struct cxi_cq, cq_fid);
 	if (cxi_cq->domain->progress_mode == FI_PROGRESS_MANUAL)
 		cxi_cq_progress(cxi_cq);
