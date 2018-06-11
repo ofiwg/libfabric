@@ -110,6 +110,7 @@ static int poll_fds_add_item(struct poll_fd_mgr *poll_mgr,
 {
 	struct tcpx_ep *tcpx_ep;
 	struct tcpx_pep *tcpx_pep;
+	struct tcpx_conn_handle *handle;
 	int ret;
 
 	if (poll_mgr->nfds >= poll_mgr->max_nfds) {
@@ -137,6 +138,12 @@ static int poll_fds_add_item(struct poll_fd_mgr *poll_mgr,
 			return -FI_EINVAL;
 
 		poll_mgr->poll_fds[poll_mgr->nfds].fd = tcpx_pep->sock;
+		poll_mgr->poll_fds[poll_mgr->nfds].events = POLLIN;
+		break;
+	case CONNREQ_HANDLE:
+		handle = container_of(poll_info->fid, struct tcpx_conn_handle,
+				      handle);
+		poll_mgr->poll_fds[poll_mgr->nfds].fd = handle->conn_fd;
 		poll_mgr->poll_fds[poll_mgr->nfds].events = POLLIN;
 		break;
 	default:
@@ -372,11 +379,9 @@ static void handle_connreq(struct poll_fd_mgr *poll_mgr,
 			   struct poll_fd_info *poll_info)
 {
 	struct tcpx_conn_handle *handle;
+	struct poll_fd_info *fd_info;
 	struct tcpx_pep *pep;
-	struct fi_eq_cm_entry *cm_entry;
-	struct ofi_ctrl_hdr conn_req;
 	SOCKET sock;
-	int ret;
 
 	assert(poll_info->fid->fclass == FI_CLASS_PEP);
 	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "Received Connreq\n");
@@ -384,50 +389,88 @@ static void handle_connreq(struct poll_fd_mgr *poll_mgr,
 
 	sock = accept(pep->sock, NULL, 0);
 	if (sock < 0) {
-		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "accept error: %d\n",
-			ofi_sockerr());
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+			"accept error: %d\n", ofi_sockerr());
 		return;
 	}
-	ret = rx_cm_data(sock, &conn_req, ofi_ctrl_connreq, poll_info);
+
+	handle = calloc(1, sizeof(*handle));
+	if (!handle)
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+			"cannot allocate memory \n");
+		goto err1;
+
+	fd_info = calloc(1, sizeof(*fd_info));
+	if (!fd_info) {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+			"cannot allocate memory \n");
+		goto err2;
+	}
+
+	handle->conn_fd = sock;
+	handle->handle.fclass = FI_CLASS_CONNREQ;
+	handle->pep = pep;
+	fd_info->fid = &handle->handle;
+	fd_info->flags = POLL_MGR_FREE;
+	fd_info->type = CONNREQ_HANDLE;
+
+	fastlock_acquire(&poll_mgr->lock);
+	dlist_insert_tail(&fd_info->entry, &poll_mgr->list);
+	fd_signal_set(&poll_mgr->signal);
+	fastlock_release(&poll_mgr->lock);
+	return;
+err2:
+	free(handle);
+err1:
+	ofi_close_socket(sock);
+}
+
+static void handle_conn_handle(struct poll_fd_mgr *poll_mgr,
+			   struct poll_fd_info *poll_info)
+{
+	struct tcpx_conn_handle *handle;
+	struct fi_eq_cm_entry *cm_entry;
+	struct ofi_ctrl_hdr conn_req;
+	int ret;
+
+	assert(poll_info->fid->fclass == FI_CLASS_CONNREQ);
+	handle  = container_of(poll_info->fid,
+			       struct tcpx_conn_handle,
+			       handle);
+
+	ret = rx_cm_data(handle->conn_fd, &conn_req, ofi_ctrl_connreq, poll_info);
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "cm data recv failed \n");
 		goto err1;
 	}
 
-	handle = calloc(1, sizeof(*handle));
-	if (!handle)
-		goto err1;
-
 	cm_entry = calloc(1, sizeof(*cm_entry) + poll_info->cm_data_sz);
 	if (!cm_entry)
-		goto err2;
+		goto err1;
 
-	handle->conn_fd = sock;
-	cm_entry->fid = poll_info->fid;
-	cm_entry->info = fi_dupinfo(&pep->info);
+	cm_entry->fid = &handle->pep->util_pep.pep_fid.fid;
+	cm_entry->info = fi_dupinfo(&handle->pep->info);
 	if (!cm_entry->info)
-		goto err3;
+		goto err2;
 
 	cm_entry->info->handle = &handle->handle;
 	memcpy(cm_entry->data, poll_info->cm_data, poll_info->cm_data_sz);
 
-	ret = (int) fi_eq_write(&pep->util_pep.eq->eq_fid, FI_CONNREQ, cm_entry,
+	ret = (int) fi_eq_write(&handle->pep->util_pep.eq->eq_fid, FI_CONNREQ, cm_entry,
 				sizeof(*cm_entry) + poll_info->cm_data_sz, 0);
 	if (ret < 0) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
-		goto err4;
+		goto err3;
 	}
 	free(cm_entry);
-
 	return;
-err4:
-	fi_freeinfo(cm_entry->info);
 err3:
-	free(cm_entry);
+	fi_freeinfo(cm_entry->info);
 err2:
-	free(handle);
+	free(cm_entry);
 err1:
-	ofi_close_socket(sock);
+	ofi_close_socket(handle->conn_fd);
+	free(handle);
 }
 
 static void handle_accept_conn(struct poll_fd_mgr *poll_mgr,
@@ -491,6 +534,10 @@ static void handle_fd_events(struct poll_fd_mgr *poll_mgr)
 			break;
 		case ACCEPT_SOCK:
 			handle_accept_conn(poll_mgr, &poll_mgr->poll_info[i]);
+			poll_fds_swap_del_last(poll_mgr, i);
+			break;
+		case CONNREQ_HANDLE:
+			handle_conn_handle(poll_mgr, &poll_mgr->poll_info[i]);
 			poll_fds_swap_del_last(poll_mgr, i);
 			break;
 		default:
