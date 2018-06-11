@@ -428,8 +428,11 @@ static ssize_t cxi_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 static const char *cxi_cq_strerror(struct fid_cq *cq, int prov_errno,
 				   const void *err_data, char *buf, size_t len)
 {
-	if (buf && len)
-		return strncpy(buf, fi_strerror(-prov_errno), len);
+	if (buf && len) {
+		strncpy(buf, fi_strerror(-prov_errno), len);
+		buf[len-1] = '\0';
+		return buf;
+	}
 
 	return fi_strerror(-prov_errno);
 }
