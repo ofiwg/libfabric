@@ -867,7 +867,8 @@ static void sock_pe_do_atomic(void *cmp, void *dst, void *src,
 	if (op >= OFI_SWAP_OP_START) {
 		ofi_atomic_swap_handlers[op - OFI_SWAP_OP_START][datatype](dst,
 			src, cmp, tmp_result, cnt);
-		memcpy(cmp, tmp_result, ofi_datatype_size(datatype) * cnt);
+                if (cmp != NULL)
+			memcpy(cmp, tmp_result, ofi_datatype_size(datatype) * cnt);
 	} else if (fetch) {
 		ofi_atomic_readwrite_handlers[op][datatype](dst, src,
 			cmp /*results*/, cnt);
