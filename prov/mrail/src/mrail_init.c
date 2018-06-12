@@ -89,7 +89,16 @@ int mrail_get_core_info(uint32_t version, const char *node, const char *service,
 		core_hints->mode = MRAIL_PASSTHROUGH_MODES;
 		assert(core_hints->domain_attr);
 		core_hints->domain_attr->mr_mode = MRAIL_PASSTHROUGH_MR_MODES;
+	} else {
+		if (hints->tx_attr) {
+			if (hints->tx_attr->iov_limit)
+				core_hints->tx_attr->iov_limit =
+					hints->tx_attr->iov_limit + 1;
+			core_hints->tx_attr->op_flags &= ~FI_COMPLETION;
+		}
 	}
+
+	core_hints->mode |= FI_BUFFERED_RECV;
 
 	if (!core_hints->fabric_attr)
 		core_hints->fabric_attr = calloc(1, sizeof(*core_hints->fabric_attr));
@@ -209,6 +218,18 @@ static int mrail_getinfo(uint32_t version, const char *node, const char *service
 	fi->ep_attr->protocol_version 	= mrail_info.ep_attr->protocol_version;
 	fi->fabric_attr->prov_version	= FI_VERSION(MRAIL_MAJOR_VERSION,
 						     MRAIL_MINOR_VERSION);
+
+	/* Account for one iovec buffer used for mrail header */
+	assert(fi->tx_attr->iov_limit);
+	fi->tx_attr->iov_limit--;
+	if (fi->tx_attr->inject_size < sizeof(struct mrail_hdr))
+		fi->tx_attr->inject_size = 0;
+	else
+		fi->tx_attr->inject_size -= sizeof(struct mrail_hdr);
+
+	if (hints && hints->tx_attr && (hints->tx_attr->op_flags & FI_COMPLETION))
+		fi->tx_attr->op_flags |= FI_COMPLETION;
+
 	// TODO set src_addr to FI_ADDR_STRC address
 	fi->next = *info;
 	*info = fi;
