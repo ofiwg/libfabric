@@ -48,6 +48,9 @@ pipeline {
             }
         }
         stage('Test: Phase 1') {
+            environment {
+                LD_LIBRARY_PATH = "$TMP_INSTALL_PATH/lib:$LD_LIBRARY_PATH"
+            }
             failFast true
             parallel {
                 stage('Unit tests') {
@@ -56,9 +59,6 @@ pipeline {
                     }
                 }
                 stage('Smoke tests') {
-                    environment {
-                        LD_LIBRARY_PATH = "$TMP_INSTALL_PATH/lib:$LD_LIBRARY_PATH"
-                    }
                     steps {
                         echo 'checking for the presence of the verbs provider'
                         script {
@@ -72,9 +72,6 @@ pipeline {
                     }
                 }
                 stage('Fabtests') {
-                    environment {
-                        LD_LIBRARY_PATH = "$TMP_INSTALL_PATH/lib:$LD_LIBRARY_PATH"
-                    }
                     steps {
                         // ignore the return code for fabtests until we can establish a fingerprint
                         timeout (time: 20, unit: 'MINUTES') {
@@ -106,6 +103,9 @@ pipeline {
             }
         }
         stage("Test: Phase 2") {
+            environment {
+                LD_LIBRARY_PATH = "$TMP_INSTALL_PATH/lib:$LD_LIBRARY_PATH"
+            }
             failFast true
             parallel {
                 stage("System tests") {
@@ -118,6 +118,9 @@ pipeline {
                         MPIR_CVAR_OFI_USE_PROVIDER = 'verbs'
                     }
                     steps {
+                        echo "checking ldd"
+                        launch "ldd $OMB_BUILD_PATH/pt2pt/osu_latency", 1, 1
+
                         echo "checking potential hosts"
                         launch "hostname", 4, 1
 
