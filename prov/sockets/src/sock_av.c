@@ -73,7 +73,8 @@ int sock_av_get_addr_index(struct sock_av *av, struct sockaddr_in *addr)
 		if (!av_addr->valid)
 			continue;
 
-		 if (ofi_equals_sockaddr(addr, (struct sockaddr_in *)&av_addr->addr))
+		 if (ofi_equals_sockaddr((struct sockaddr *) addr,
+					 (struct sockaddr *) &av_addr->addr))
 			return i;
 	}
 	SOCK_LOG_DBG("failed to get index in AV\n");

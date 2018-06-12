@@ -1363,7 +1363,7 @@ char *sock_get_fabric_name(struct sockaddr_in *src_addr)
 		if (ifa->ifa_addr == NULL || !(ifa->ifa_flags & IFF_UP) ||
 		     (ifa->ifa_addr->sa_family != AF_INET))
 			continue;
-		if (ofi_equals_ipaddr((struct sockaddr_in *)ifa->ifa_addr, src_addr)) {
+		if (ofi_equals_ipaddr(ifa->ifa_addr, (struct sockaddr *) src_addr)) {
 			host_addr = (struct sockaddr_in *)ifa->ifa_addr;
 			net_addr = (struct sockaddr_in *)ifa->ifa_netmask;
 			/* set fabric name to the network_adress in the format of a.b.c.d/e */
@@ -1397,7 +1397,7 @@ char *sock_get_domain_name(struct sockaddr_in *src_addr)
 		if (ifa->ifa_addr == NULL || !(ifa->ifa_flags & IFF_UP) ||
 		     (ifa->ifa_addr->sa_family != AF_INET))
 			continue;
-		if (ofi_equals_ipaddr((struct sockaddr_in *)ifa->ifa_addr, src_addr)) {
+		if (ofi_equals_ipaddr(ifa->ifa_addr, (struct sockaddr *) src_addr)) {
 			domain_name = strdup(ifa->ifa_name);
 			goto out;
 		}
@@ -1833,7 +1833,8 @@ struct sock_conn *sock_ep_lookup_conn(struct sock_ep_attr *attr, fi_addr_t index
 		if (!attr->cmap.table[i].connected)
 			continue;
 
-		if (ofi_equals_sockaddr(&attr->cmap.table[i].addr, addr)) {
+		if (ofi_equals_sockaddr((struct sockaddr *) &attr->cmap.table[i].addr,
+					(struct sockaddr *) addr)) {
 			conn = &attr->cmap.table[i];
 			if (conn->av_index == FI_ADDR_NOTAVAIL)
 				conn->av_index = idx;
