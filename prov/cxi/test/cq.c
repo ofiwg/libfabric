@@ -727,3 +727,47 @@ Test(cq, cq_readerr_reperr)
 	cxit_destroy_cqs();
 }
 
+struct cq_progress_params {
+	enum fi_progress prog_type;
+};
+
+ParameterizedTestParameters(cq, cq_sreadfrom)
+{
+	size_t param_sz;
+
+	static struct cq_progress_params params[] = {
+		{.prog_type = FI_PROGRESS_AUTO},
+		{.prog_type = FI_PROGRESS_MANUAL},
+	};
+
+	param_sz = ARRAY_SIZE(params);
+	return cr_make_param_array(struct cq_progress_params, params,
+				   param_sz);
+}
+
+ParameterizedTest(struct cq_progress_params *param, cq, cq_sreadfrom)
+{
+	int ret;
+	struct fid_cq *cxi_open_cq = NULL;
+	struct cxi_cq *cxi_cq = NULL;
+	uint8_t buf[16] = {0};
+
+	/* Open a CQ with a NULL attribute object pointer */
+	ret = fi_cq_open(cxit_domain, NULL, &cxi_open_cq, NULL);
+	cr_assert_eq(ret, FI_SUCCESS);
+	cr_assert_not_null(cxi_open_cq);
+
+	/* Setup the progres mode */
+	cxi_cq = container_of(cxi_open_cq, struct cxi_cq, cq_fid);
+	cxi_cq->domain->progress_mode = param->prog_type;
+
+	ret = fi_cq_sreadfrom(cxi_open_cq, buf, sizeof(buf), NULL, NULL, 1);
+	cr_assert_eq(ret, -FI_EAGAIN, "Expecting timeout");
+
+	ofi_atomic_set32(&cxi_cq->signaled, 1);
+	ret = fi_cq_sreadfrom(cxi_open_cq, buf, sizeof(buf), NULL, NULL, 100);
+	cr_assert_eq(ret, -FI_ECANCELED, "Expecting signal to cancel");
+
+	ret = fi_close(&cxi_open_cq->fid);
+	cr_assert(ret == FI_SUCCESS);
+}
