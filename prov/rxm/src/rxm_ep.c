@@ -1499,9 +1499,7 @@ static int rxm_ep_msg_cq_open(struct rxm_ep *rxm_ep, enum fi_wait_obj wait_obj)
 
 	return 0;
 err:
-	ret = fi_close(&rxm_ep->msg_cq->fid);
-	if (ret)
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to close msg CQ\n");
+	fi_close(&rxm_ep->msg_cq->fid);
 	return ret;
 }
 
