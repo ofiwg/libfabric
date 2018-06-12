@@ -152,8 +152,10 @@ static inline void name ## _free(struct name *fs)		\
 #define smr_freestack_isempty(fs)	((fs)->next == SMR_FREESTACK_EMPTY)
 #define smr_freestack_push(fs, local_p)				\
 do {								\
-	void *p = (char **) fs->base_addr + ((char **) local_p - (char **) fs); \
-	*(void **) local_p = (fs)->next;				\
+	void *p = (char **) fs->base_addr +			\
+	    ((char **) freestack_get_next(local_p) -		\
+		(char **) fs);					\
+	*(void **) freestack_get_next(local_p) = (fs)->next;	\
 	(fs)->next = p;						\
 } while (0)
 #define smr_freestack_pop(fs) smr_freestack_pop_impl(fs, fs->next)
@@ -170,25 +172,29 @@ static inline void* smr_freestack_pop_impl(void *fs, void *next)
 	local = (char **) fs + ((char **) next -
 		(char **) freestack->base_addr);
 	next = *((void **) local);
-	return local;
+	return freestack_get_user_buf(local);
 }
 
 #define DECLARE_SMR_FREESTACK(entrytype, name)			\
+struct name ## _entry {						\
+	void		*next;					\
+	entrytype	buf;					\
+};								\
 struct name {							\
 	SMR_FREESTACK_HEADER					\
-	entrytype	buf[];					\
+	struct name ## _entry	entry[];			\
 };								\
 								\
 static inline void name ## _init(struct name *fs, size_t size)	\
 {								\
 	ssize_t i;						\
 	assert(size == roundup_power_of_two(size));		\
-	assert(sizeof(fs->buf[0]) >= sizeof(void *));		\
+	assert(sizeof(fs->entry[0].buf) >= sizeof(void *));	\
 	fs->size = size;					\
 	fs->next = SMR_FREESTACK_EMPTY;				\
 	fs->base_addr = fs;					\
 	for (i = size - 1; i >= 0; i--)				\
-		smr_freestack_push(fs, &fs->buf[i]);		\
+		smr_freestack_push(fs, &fs->entry[i].buf);	\
 }								\
 								\
 static inline struct name * name ## _create(size_t size)	\
@@ -204,7 +210,9 @@ static inline struct name * name ## _create(size_t size)	\
 static inline int name ## _index(struct name *fs,		\
 		entrytype *entry)				\
 {								\
-	return (int)(entry - fs->buf);				\
+	return (int)((struct name ## _entry *)			\
+			(freestack_get_next(entry))		\
+			- (struct name ## _entry *)fs->entry);	\
 }								\
 								\
 static inline void name ## _free(struct name *fs)		\
