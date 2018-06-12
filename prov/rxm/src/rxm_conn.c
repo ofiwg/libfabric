@@ -107,8 +107,8 @@ rxm_send_queue_init(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		return -FI_ENOMEM;
 
 	for (i = send_queue->fs->size - 1; i >= 0; i--) {
-		send_queue->fs->buf[i].conn = rxm_conn;
-		send_queue->fs->buf[i].ep = rxm_ep;
+		send_queue->fs->entry[i].buf.conn = rxm_conn;
+		send_queue->fs->entry[i].buf.ep = rxm_ep;
 	}
 
 	fastlock_init(&send_queue->lock);
@@ -122,7 +122,7 @@ static void rxm_send_queue_close(struct rxm_send_queue *send_queue)
 		ssize_t i;
 
 		for (i = send_queue->fs->size - 1; i >= 0; i--) {
-			tx_entry = &send_queue->fs->buf[i];
+			tx_entry = &send_queue->fs->entry[i].buf;
 			if (tx_entry->tx_buf) {
 				rxm_tx_buf_release(tx_entry->ep, tx_entry->tx_buf);
 				tx_entry->tx_buf = NULL;

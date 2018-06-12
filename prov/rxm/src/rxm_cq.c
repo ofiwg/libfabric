@@ -326,7 +326,7 @@ static int rxm_lmt_handle_ack(struct rxm_rx_buf *rx_buf)
 	FI_DBG(&rxm_prov, FI_LOG_CQ, "Got ACK for msg_id: 0x%" PRIx64 "\n",
 	       rx_buf->pkt.ctrl_hdr.msg_id);
 
-	tx_entry = &rxm_conn->send_queue.fs->buf[rx_buf->pkt.ctrl_hdr.msg_id];
+	tx_entry = &rxm_conn->send_queue.fs->entry[rx_buf->pkt.ctrl_hdr.msg_id].buf;
 
 	assert(tx_entry->tx_buf->pkt.ctrl_hdr.msg_id == rx_buf->pkt.ctrl_hdr.msg_id);
 

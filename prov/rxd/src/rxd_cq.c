@@ -313,7 +313,7 @@ static void rxd_handle_data(struct rxd_ep *ep, struct fi_cq_msg_entry *comp,
 	struct rxd_x_entry *rx_entry, tmp_entry;
 	uint32_t pkt_seg_no = pkt_entry->pkt->hdr.seg_no;
 
-	rx_entry = &ep->rx_fs->buf[pkt_entry->pkt->hdr.rx_id];
+	rx_entry = &ep->rx_fs->entry[pkt_entry->pkt->hdr.rx_id].buf;
 
 	if (!(rx_entry->state == RXD_CTS || rx_entry->state == RXD_ACK) ||
 	    rxd_check_pkt_ids(rx_entry, pkt_entry)) {
@@ -431,7 +431,7 @@ static void rxd_handle_cts(struct rxd_ep *ep, struct fi_cq_msg_entry *comp,
 	struct rxd_pkt_entry *pkt;
 	struct rxd_x_entry *tx_entry;
 
-	tx_entry = &ep->tx_fs->buf[cts_pkt->pkt->hdr.tx_id];
+	tx_entry = &ep->tx_fs->entry[cts_pkt->pkt->hdr.tx_id].buf;
 	if (tx_entry->state != RXD_RTS ||
 	    tx_entry->key != cts_pkt->pkt->hdr.key)
 		return;
@@ -469,7 +469,7 @@ static void rxd_handle_ack(struct rxd_ep *ep, struct fi_cq_msg_entry *comp,
 	struct util_cntr *cntr = ep->util_ep.tx_cntr;
 	struct rxd_x_entry *tx_entry;
 
-	tx_entry = &ep->tx_fs->buf[pkt_entry->pkt->hdr.tx_id];
+	tx_entry = &ep->tx_fs->entry[pkt_entry->pkt->hdr.tx_id].buf;
 	if (rxd_check_pkt_ids(tx_entry, pkt_entry) ||
 	    tx_entry->state != RXD_CTS)
 		return;

@@ -69,6 +69,9 @@ static inline void *mem_dup(const void *src, size_t size)
  */
 #define FREESTACK_EMPTY	NULL
 
+#define freestack_get_next(user_buf)	((char *)user_buf - sizeof(void *))
+#define freestack_get_user_buf(entry)	((char *)entry + sizeof(void *))
+
 #define FREESTACK_HEADER 					\
 	size_t		size;					\
 	void		*next;					\
@@ -76,8 +79,8 @@ static inline void *mem_dup(const void *src, size_t size)
 #define freestack_isempty(fs)	((fs)->next == FREESTACK_EMPTY)
 #define freestack_push(fs, p)					\
 do {								\
-	*(void **) p = (fs)->next;				\
-	(fs)->next = p;						\
+	*(void **) (freestack_get_next(p)) = (fs)->next;	\
+	(fs)->next = (freestack_get_next(p));			\
 } while (0)
 #define freestack_pop(fs) freestack_pop_impl(fs, (fs)->next)
 
@@ -88,40 +91,47 @@ static inline void* freestack_pop_impl(void *fs, void *fs_next)
 	} *freestack = fs;
 	assert(!freestack_isempty(freestack));
 	freestack->next = *((void **)fs_next);
-	return fs_next;
+	return freestack_get_user_buf(fs_next);
 }
 
 #define DECLARE_FREESTACK(entrytype, name)			\
+struct name ## _entry {						\
+	void		*next;					\
+	entrytype	buf;					\
+};								\
 struct name {							\
 	FREESTACK_HEADER					\
-	entrytype	buf[];					\
+	struct name ## _entry	entry[];			\
 };								\
 								\
 static inline void name ## _init(struct name *fs, size_t size)	\
 {								\
 	ssize_t i;						\
 	assert(size == roundup_power_of_two(size));		\
-	assert(sizeof(fs->buf[0]) >= sizeof(void *));		\
+	assert(sizeof(fs->entry[0].buf) >= sizeof(void *));	\
 	fs->size = size;					\
 	fs->next = FREESTACK_EMPTY;				\
 	for (i = size - 1; i >= 0; i--)				\
-		freestack_push(fs, &fs->buf[i]);		\
+		freestack_push(fs, &fs->entry[i].buf);		\
 }								\
 								\
 static inline struct name * name ## _create(size_t size)	\
 {								\
 	struct name *fs;					\
-	fs = calloc(1, sizeof(*fs) + sizeof(entrytype) *	\
-		    (roundup_power_of_two(size)));		\
+	fs = calloc(1, sizeof(*fs) +				\
+		       sizeof(struct name ## _entry) *		\
+		       (roundup_power_of_two(size)));		\
 	if (fs)							\
 		name ##_init(fs, roundup_power_of_two(size));	\
 	return fs;						\
 }								\
 								\
 static inline int name ## _index(struct name *fs,		\
-		entrytype *entry)				\
+				 entrytype *entry)		\
 {								\
-	return (int)(entry - fs->buf);				\
+	return (int)((struct name ## _entry *)			\
+			(freestack_get_next(entry))		\
+			- (struct name ## _entry *)fs->entry);	\
 }								\
 								\
 static inline void name ## _free(struct name *fs)		\
