@@ -412,6 +412,7 @@ struct rxm_conn {
 	 * handling of CONN_RECV in CMAP_CONNREQ_SENT for passive side */
 	struct fid_ep *saved_msg_ep;
 	struct dlist_entry saved_posted_rx_list;
+	struct dlist_entry tx_entry_for_release;
 };
 
 struct rxm_ep_wait_ref {

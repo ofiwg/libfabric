@@ -152,6 +152,7 @@ static void rxm_conn_free(struct util_cmap_handle *handle)
 {
 	struct rxm_ep *rxm_ep = container_of(handle->cmap->ep, struct rxm_ep, util_ep);
 	struct rxm_conn *rxm_conn = container_of(handle, struct rxm_conn, handle);
+	struct rxm_tx_entry *tx_entry;
 
 	/* This handles case when saved_msg_ep wasn't closed */
 	if (rxm_conn->saved_msg_ep) {
@@ -168,10 +169,18 @@ static void rxm_conn_free(struct util_cmap_handle *handle)
 		rxm_ep_cleanup_posted_rx_list(rxm_ep, &rxm_conn->posted_rx_list);
 		rxm_buf_pool_destroy(&rxm_conn->rx_buf_pool);
 	}
+
 	rxm_send_queue_close(&rxm_conn->send_queue);
 
 	if (!rxm_conn->msg_ep)
 		return;
+
+	while (!dlist_empty(&rxm_conn->tx_entry_for_release)) {
+		dlist_pop_front(&rxm_conn->tx_entry_for_release, struct rxm_tx_entry,
+				tx_entry, postponed_entry);
+		rxm_tx_buf_release(rxm_ep, tx_entry->tx_buf);
+		rxm_tx_entry_release(&rxm_conn->send_queue, tx_entry);
+	}
 	/* Assuming fi_close also shuts down the connection gracefully if the
 	 * endpoint is in connected state */
 	if (fi_close(&rxm_conn->msg_ep->fid))
@@ -186,6 +195,14 @@ static void rxm_conn_connected_handler(struct util_cmap_handle *handle)
 {
 	struct rxm_ep *rxm_ep = container_of(handle->cmap->ep, struct rxm_ep, util_ep);
 	struct rxm_conn *rxm_conn = container_of(handle, struct rxm_conn, handle);
+	struct rxm_tx_entry *tx_entry;
+
+	while (!dlist_empty(&rxm_conn->tx_entry_for_release)) {
+		dlist_pop_front(&rxm_conn->tx_entry_for_release, struct rxm_tx_entry,
+				tx_entry, postponed_entry);
+		rxm_tx_buf_release(rxm_ep, tx_entry->tx_buf);
+		rxm_tx_entry_release(&rxm_conn->send_queue, tx_entry);
+	}
 
 	if (!rxm_conn->saved_msg_ep)
 		return;
@@ -221,6 +238,7 @@ static struct util_cmap_handle *rxm_conn_alloc(struct util_cmap *cmap)
 	dlist_init(&rxm_conn->posted_rx_list);
 	dlist_init(&rxm_conn->saved_posted_rx_list);
 	dlist_init(&rxm_conn->postponed_tx_list);
+	dlist_init(&rxm_conn->tx_entry_for_release);
 	return &rxm_conn->handle;
 err2:
 	rxm_send_queue_close(&rxm_conn->send_queue);
