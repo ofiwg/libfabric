@@ -115,7 +115,7 @@ int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
 	info->tx_attr->caps		= rxm_info.tx_attr->caps;
 	info->tx_attr->mode		= info->mode;
 	info->tx_attr->msg_order 	= core_info->tx_attr->msg_order;
-	info->tx_attr->comp_order 	= core_info->tx_attr->comp_order;
+	info->tx_attr->comp_order 	= rxm_info.tx_attr->comp_order;
 	info->tx_attr->inject_size	= rxm_info.tx_attr->inject_size;
 	/* Export TX queue size same as that of MSG provider as we post TX
 	 * operations directly */
@@ -128,7 +128,7 @@ int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
 	info->rx_attr->caps		= rxm_info.rx_attr->caps;
 	info->rx_attr->mode		= info->mode;
 	info->rx_attr->msg_order 	= core_info->rx_attr->msg_order;
-	info->rx_attr->comp_order 	= core_info->rx_attr->comp_order;
+	info->rx_attr->comp_order 	= rxm_info.rx_attr->comp_order;
 	info->rx_attr->size		= core_info->rx_attr->size;
 	info->rx_attr->iov_limit 	= MIN(rxm_info.rx_attr->iov_limit,
 					      core_info->rx_attr->iov_limit);
