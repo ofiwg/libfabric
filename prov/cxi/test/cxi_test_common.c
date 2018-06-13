@@ -80,6 +80,7 @@ void cxit_create_ep(void)
 
 	ret = fi_endpoint(cxit_domain, cxit_fi, &cxit_ep, NULL);
 	cr_assert(ret == FI_SUCCESS, "fi_domain");
+	cr_assert_not_null(cxit_ep);
 }
 
 void cxit_destroy_ep(void)

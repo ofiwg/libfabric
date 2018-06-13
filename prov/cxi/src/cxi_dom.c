@@ -202,6 +202,9 @@ static int cxi_dom_ctrl(struct fid *fid, int command, void *arg)
 static int cxi_endpoint(struct fid_domain *domain, struct fi_info *info,
 			struct fid_ep **ep, void *context)
 {
+	if (!info || !ep)
+		return -FI_EINVAL;
+
 	switch (info->ep_attr->type) {
 	case FI_EP_RDM:
 		return cxi_rdm_ep(domain, info, ep, context);

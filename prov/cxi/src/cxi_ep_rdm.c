@@ -267,26 +267,11 @@ static int cxi_rdm_endpoint(struct fid_domain *domain, struct fi_info *info,
 {
 	int ret;
 
-	if (info) {
-		if (info->ep_attr) {
-			ret = cxi_rdm_verify_ep_attr(info->ep_attr,
-						     info->tx_attr,
-						     info->rx_attr);
-			if (ret)
-				return -FI_EINVAL;
-		}
-
-		if (info->tx_attr) {
-			ret = cxi_rdm_verify_tx_attr(info->tx_attr);
-			if (ret)
-				return -FI_EINVAL;
-		}
-
-		if (info->rx_attr) {
-			ret = cxi_rdm_verify_rx_attr(info->rx_attr);
-			if (ret)
-				return -FI_EINVAL;
-		}
+	if (info && info->ep_attr) {
+		if (cxi_rdm_verify_ep_attr(info->ep_attr,
+					   info->tx_attr,
+					   info->rx_attr))
+			return -FI_EINVAL;
 	}
 
 	ret = cxi_alloc_endpoint(domain, info, ep, context, fclass);
