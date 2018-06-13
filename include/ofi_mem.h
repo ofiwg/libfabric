@@ -72,6 +72,14 @@ static inline void *mem_dup(const void *src, size_t size)
 #define freestack_get_next(user_buf)	((char *)user_buf - sizeof(void *))
 #define freestack_get_user_buf(entry)	((char *)entry + sizeof(void *))
 
+#if ENABLE_DEBUG
+#define freestack_init_next(entry)	*((void **)entry) = NULL
+#define freestack_check_next(entry)	assert(*((void **)entry) == NULL)
+#else
+#define freestack_init_next(entry)
+#define freestack_check_next(entry)
+#endif
+
 #define FREESTACK_HEADER 					\
 	size_t		size;					\
 	void		*next;					\
@@ -79,6 +87,7 @@ static inline void *mem_dup(const void *src, size_t size)
 #define freestack_isempty(fs)	((fs)->next == FREESTACK_EMPTY)
 #define freestack_push(fs, p)					\
 do {								\
+	freestack_check_next(freestack_get_next(p));		\
 	*(void **) (freestack_get_next(p)) = (fs)->next;	\
 	(fs)->next = (freestack_get_next(p));			\
 } while (0)
@@ -91,6 +100,7 @@ static inline void* freestack_pop_impl(void *fs, void *fs_next)
 	} *freestack = fs;
 	assert(!freestack_isempty(freestack));
 	freestack->next = *((void **)fs_next);
+	freestack_init_next(fs_next);
 	return freestack_get_user_buf(fs_next);
 }
 
