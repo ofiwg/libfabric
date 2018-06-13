@@ -684,7 +684,7 @@ static int sock_node_matches_interface(struct slist *addr_list, const char *node
 		SOCK_LOG_DBG("getaddrinfo failed!\n");
 		return -FI_EINVAL;
 	}
-	addr = *(struct sockaddr_in *)rai->ai_addr;
+	memcpy(&addr, rai->ai_addr, sizeof(struct sockaddr_in));
 	freeaddrinfo(rai);
 
 	return sock_addr_matches_interface(addr_list, &addr);
