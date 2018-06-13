@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015-2018 Los Alamos National Security, LLC. All rights reserved.
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -128,9 +128,14 @@ static ptrdiff_t abs_value(ptrdiff_t x)
 	return x * ((x > 0) - (x < 0));
 }
 
+#ifndef __aarch64__
 /*
  * Open /proc/self/maps and count the number of times the hugetlbfs
  * string is present. Return value is the count;
+ *
+ * TODO: this approach doesn't work on Cray ARM systems.  Large
+ *       page regions don't show being backed by files in 
+ *       /var/lib/hugetlbfs.  Need to fix with something better.
  */
 static int verify_hugepages(void)
 {
@@ -162,6 +167,7 @@ static int verify_hugepages(void)
 
 	return ret;
 }
+#endif
 
 /*
  * Open an allocator with the given parameters and immediately close it. Verify
@@ -185,13 +191,17 @@ static void open_close_allocator(enum gnix_page_size page_size,
 		return;
 	}
 	cr_assert_eq(ret, FI_SUCCESS, "_gnix_mbox_allocator_create failed5.");
+#ifndef __aarch64__
 	cr_expect_eq(verify_hugepages(), 2 + ALLOCD_WITH_NIC,
 			 "memory not found in /proc/self/maps.");
+#endif
 
 	ret = _gnix_mbox_allocator_destroy(allocator);
 	cr_assert_eq(ret, FI_SUCCESS, "_gnix_mbox_allocator_destroy failed.");
+#ifndef __aarch64__
 	cr_expect_eq(verify_hugepages(), 1 + ALLOCD_WITH_NIC,
 			 "memory not released in /proc/self/maps.");
+#endif
 }
 
 
@@ -264,8 +274,10 @@ static inline void __alloc_mbox(void)
 	 *value is 4 because the provider has internally already opened
 	 * an mbox allocator and 2 rdma slabs at this point.
 	 */
+#ifndef __aarch64__
 	cr_expect_eq(verify_hugepages(), 2 + ALLOCD_WITH_NIC,
 		  "memory not found in /proc/self/maps.");
+#endif
 
 	ret = _gnix_mbox_alloc(allocator, &mail_box);
 	cr_expect_eq(ret, FI_SUCCESS, "_gnix_mbox_alloc failed.");
@@ -307,8 +319,11 @@ static inline void __alloc_mbox(void)
 	ret = _gnix_mbox_allocator_destroy(allocator);
 	cr_assert_eq(ret, FI_SUCCESS, "_gnix_mbox_allocator_destroy failed.");
 
+#ifndef __aarch64__
 	cr_expect_eq(verify_hugepages(), 1 + ALLOCD_WITH_NIC,
 		     "memory not released in /proc/self/maps.");
+#endif
+
 }
 
 Test(mbox_creation_basic, alloc_mbox)
@@ -338,8 +353,10 @@ static inline void __page_size_fail(void)
 	 *value is 3 because the provider has internally already opened
 	 * an mbox allocator and two other slabs at this point.
 	 */
+#ifndef __aarch64__
 	cr_expect_eq(verify_hugepages(), 1 + ALLOCD_WITH_NIC,
 		     "Huge page open, but shouldn't be");
+#endif
 
 	ret = _gnix_mbox_allocator_destroy(allocator);
 	cr_assert_eq(ret, -FI_EINVAL,
@@ -369,8 +386,10 @@ static inline void __mbox_size_fail(void)
 		     "Creating allocator with zero mbox size succeeded.");
 
 	cr_assert_eq(allocator, NULL);
+#ifndef __aarch64__
 	cr_expect_eq(verify_hugepages(), 1 + ALLOCD_WITH_NIC,
 		     "Huge page open, but shouldn't be");
+#endif
 
 	ret = _gnix_mbox_allocator_destroy(allocator);
 	cr_assert_eq(ret, -FI_EINVAL,
@@ -399,8 +418,10 @@ static inline void __mpmmap_size_fail(void)
 	cr_assert_eq(ret, -FI_EINVAL,
 		  "Creating allocator with zero mailboxes per mmap succeeded.");
 	cr_assert_eq(allocator, NULL);
+#ifndef __aarch64__
 	cr_expect_eq(verify_hugepages(), 1 + ALLOCD_WITH_NIC,
 		     "Huge page open, but shouldn't be");
+#endif
 
 	ret = _gnix_mbox_allocator_destroy(allocator);
 	cr_assert_eq(ret, -FI_EINVAL,
@@ -428,8 +449,10 @@ static inline void __null_allocator_fail(void)
 					  1000, 100, NULL);
 	cr_assert_eq(ret, -FI_EINVAL,
 		     "Creating allocator with null allocator succeeded.");
+#ifndef __aarch64__
 	cr_expect_eq(verify_hugepages(), 1 + ALLOCD_WITH_NIC,
 		     "Huge page open, but shouldn't be");
+#endif
 
 	ret = _gnix_mbox_allocator_destroy(allocator);
 	cr_assert_eq(ret, -FI_EINVAL,
@@ -461,8 +484,10 @@ static inline void __multi_allocation(void)
 	ret = _gnix_mbox_allocator_create(ep_priv->nic, NULL, GNIX_PAGE_4MB,
 					  mbox_size, array_size, &allocator);
 	cr_assert_eq(ret, FI_SUCCESS, "_gnix_mbox_allocator_create failed2.");
+#ifndef __aarch64__
 	cr_expect_eq(verify_hugepages(), 2 + ALLOCD_WITH_NIC,
 		     "memory not found in /proc/self/maps.");
+#endif
 
 	/*
 	 * Create an array of mailboxes of size array_size.
@@ -501,8 +526,10 @@ static inline void __multi_allocation(void)
 	ret = _gnix_mbox_allocator_destroy(allocator);
 	cr_assert_eq(ret, FI_SUCCESS, "_gnix_mbox_allocator_destroy failed.");
 
+#ifndef __aarch64__
 	cr_expect_eq(verify_hugepages(), 1 + ALLOCD_WITH_NIC,
 		     "memory not released in /proc/self/maps.");
+#endif
 }
 
 Test(mbox_creation_basic, multi_allocation)
@@ -527,8 +554,10 @@ static inline void __check_errors(void)
 	ret = _gnix_mbox_allocator_create(ep_priv->nic, NULL, GNIX_PAGE_4MB,
 					  1000, 12000, &allocator);
 	cr_assert_eq(ret, FI_SUCCESS, "_gnix_mbox_allocator_create failed3");
+#ifndef __aarch64__
 	cr_expect_eq(verify_hugepages(), 2 + ALLOCD_WITH_NIC,
 		     "memory not found in /proc/self/maps.");
+#endif
 
 	ret = _gnix_mbox_alloc(allocator, &mail_box);
 	cr_expect_eq(ret, FI_SUCCESS, "_gnix_mbox_alloc failed.");
@@ -565,8 +594,10 @@ static inline void __check_errors(void)
 	ret = _gnix_mbox_allocator_destroy(allocator);
 	cr_assert_eq(ret, FI_SUCCESS, "_gnix_mbox_allocator_destroy failed.");
 
+#ifndef __aarch64__
 	cr_expect_eq(verify_hugepages(), 1 + ALLOCD_WITH_NIC,
 		     "memory not released in /proc/self/maps.");
+#endif
 }
 
 Test(mbox_creation_basic, check_errors)
@@ -598,8 +629,10 @@ static inline void __two_slabs(void)
 	ret = _gnix_mbox_allocator_create(ep_priv->nic, NULL, GNIX_PAGE_4MB,
 					  mbox_size, mpmmap, &allocator);
 	cr_assert_eq(ret, FI_SUCCESS, "_gnix_mbox_allocator_create failed4.");
+#ifndef __aarch64__
 	cr_expect_eq(verify_hugepages(), 2 + ALLOCD_WITH_NIC,
 		     "memory not found in /proc/self/maps.");
+#endif
 
 	/*
 	 * Should use previously allocated slab
@@ -633,8 +666,10 @@ static inline void __two_slabs(void)
 	ret = _gnix_mbox_allocator_destroy(allocator);
 	cr_assert_eq(ret, FI_SUCCESS, "_gnix_mbox_allocator_destroy failed.");
 
+#ifndef __aarch64__
 	cr_expect_eq(verify_hugepages(), 1 + ALLOCD_WITH_NIC,
 		     "memory not released in /proc/self/maps.");
+#endif
 }
 
 Test(mbox_creation_basic, two_slabs)
