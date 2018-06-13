@@ -243,6 +243,7 @@ struct rxm_rx_buf {
 	struct rxm_ep *ep;
 	struct dlist_entry repost_entry;
 	struct rxm_conn *conn;
+	struct rxm_buf_pool *rx_buf_pool;
 	struct rxm_recv_entry *recv_entry;
 	struct rxm_unexp_msg unexp_msg;
 	uint64_t comp_flags;
@@ -404,6 +405,7 @@ struct rxm_conn {
 	struct fid_ep *msg_ep;
 	struct rxm_send_queue send_queue;
 	struct dlist_entry postponed_tx_list;
+	struct rxm_buf_pool rx_buf_pool;
 	struct dlist_entry posted_rx_list;
 	struct util_cmap_handle handle;
 	/* This is saved MSG EP fid, that hasn't been closed during
@@ -463,6 +465,9 @@ int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep,
 		       struct dlist_entry *posted_rx_list);
 void rxm_ep_cleanup_posted_rx_list(struct rxm_ep *rxm_ep,
 				   struct dlist_entry *posted_rx_list);
+void rxm_buf_pool_destroy(struct rxm_buf_pool *pool);
+int rxm_buf_pool_create(struct rxm_ep *rxm_ep, size_t chunk_count, size_t size,
+			struct rxm_buf_pool *pool, enum rxm_buf_pool_type type);
 
 static inline
 void rxm_ep_msg_mr_closev(struct fid_mr **mr, size_t count)
@@ -659,17 +664,16 @@ rxm_tx_buf_release(struct rxm_ep *rxm_ep, struct rxm_tx_buf *tx_buf)
 			(struct rxm_buf *)tx_buf);
 }
 
-static inline struct rxm_rx_buf *rxm_rx_buf_get(struct rxm_ep *rxm_ep)
+static inline
+struct rxm_rx_buf *rxm_rx_buf_get(struct rxm_buf_pool *rx_buf_pool)
 {
-	return (struct rxm_rx_buf *)rxm_buf_get(
-			&rxm_ep->buf_pools[RXM_BUF_POOL_RX]);
+	return (struct rxm_rx_buf *)rxm_buf_get(rx_buf_pool);
 }
 
 static inline void
-rxm_rx_buf_release(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_buf)
+rxm_rx_buf_release(struct rxm_rx_buf *rx_buf)
 {
-	rxm_buf_release(&rxm_ep->buf_pools[RXM_BUF_POOL_RX],
-			(struct rxm_buf *)rx_buf);
+	rxm_buf_release(rx_buf->rx_buf_pool, (struct rxm_buf *)rx_buf);
 }
 
 static inline struct rxm_rma_buf *rxm_rma_buf_get(struct rxm_ep *rxm_ep)

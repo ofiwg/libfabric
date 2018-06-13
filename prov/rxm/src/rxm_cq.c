@@ -770,23 +770,27 @@ int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep,
 		       struct dlist_entry *posted_rx_list)
 {
 	struct rxm_rx_buf *rx_buf;
+	struct rxm_conn *rxm_conn = NULL;
 	int ret;
 	size_t i;
 
 	for (i = 0; i < rxm_ep->msg_info->rx_attr->size; i++) {
-		rx_buf = rxm_rx_buf_get(rxm_ep);
+		if (!rxm_ep->srx_ctx) {
+			rxm_conn = container_of(msg_ep->fid.context,
+						struct rxm_conn, handle);
+			rx_buf = rxm_rx_buf_get(&rxm_conn->rx_buf_pool);
+		} else {
+			rx_buf = rxm_rx_buf_get(&rxm_ep->buf_pools[RXM_BUF_POOL_RX]);
+		}
 		if (OFI_UNLIKELY(!rx_buf))
 			return -FI_ENOMEM;
 
+		rx_buf->conn = rxm_conn;
 		rx_buf->hdr.state = RXM_RX;
 		rx_buf->hdr.msg_ep = msg_ep;
-		if (!rxm_ep->srx_ctx)
-			rx_buf->conn = container_of(msg_ep->fid.context,
-						    struct rxm_conn,
-						    handle);
 		ret = rxm_ep_repost_buf(rx_buf);
 		if (ret) {
-			rxm_rx_buf_release(rxm_ep, rx_buf);
+			rxm_rx_buf_release(rx_buf);
 			return ret;
 		}
 

@@ -145,6 +145,7 @@ static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 			rx_buf = (struct rxm_rx_buf *)((char *)addr + i * entry_sz);
 			rx_buf->ep = pool->rxm_ep;
 			rx_buf->hdr.desc = mr_desc;
+			rx_buf->rx_buf_pool = pool;
 		} else {
 			tx_buf = (struct rxm_tx_buf *)((char *)addr + i * entry_sz);
 			tx_buf->type = pool->type;
@@ -197,7 +198,7 @@ static inline void rxm_buf_close(void *pool_ctx, void *context)
 	}
 }
 
-static void rxm_buf_pool_destroy(struct rxm_buf_pool *pool)
+void rxm_buf_pool_destroy(struct rxm_buf_pool *pool)
 {
 	fastlock_destroy(&pool->lock);
 	util_buf_pool_destroy(pool->pool);
@@ -210,14 +211,12 @@ void rxm_ep_cleanup_posted_rx_list(struct rxm_ep *rxm_ep,
 
 	while (!dlist_empty(posted_rx_list)) {
 		dlist_pop_front(posted_rx_list, struct rxm_rx_buf, rx_buf, entry);
-		rxm_rx_buf_release(rxm_ep, rx_buf);
+		rxm_rx_buf_release(rx_buf);
 	}
 }
 
-static int rxm_buf_pool_create(struct rxm_ep *rxm_ep,
-			       size_t chunk_count, size_t size,
-			       struct rxm_buf_pool *pool,
-			       enum rxm_buf_pool_type type)
+int rxm_buf_pool_create(struct rxm_ep *rxm_ep, size_t chunk_count, size_t size,
+			struct rxm_buf_pool *pool, enum rxm_buf_pool_type type)
 {
 	int ret;
 
@@ -288,14 +287,15 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 	size_t i;
 	int ret;
 
-	ret = rxm_buf_pool_create(rxm_ep,
-				  rxm_ep->msg_info->rx_attr->size,
-				  rxm_ep->rxm_info->tx_attr->inject_size +
-				  sizeof(struct rxm_rx_buf),
-				  &rxm_ep->buf_pools[RXM_BUF_POOL_RX],
-				  RXM_BUF_POOL_RX);
-	if (ret)
-		return ret;
+	if (rxm_ep->srx_ctx) {
+		ret = rxm_buf_pool_create(rxm_ep, rxm_ep->msg_info->rx_attr->size,
+					  rxm_ep->rxm_info->tx_attr->inject_size +
+					  sizeof(struct rxm_rx_buf),
+					  &rxm_ep->buf_pools[RXM_BUF_POOL_RX],
+					  RXM_BUF_POOL_RX);
+		if (ret)
+			return ret;
+	}
 	dlist_init(&rxm_ep->posted_srx_list);
 	dlist_init(&rxm_ep->repost_ready_list);
 
@@ -323,7 +323,8 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 err:
 	while (--i >= RXM_BUF_POOL_TX_START)
 		rxm_buf_pool_destroy(&rxm_ep->buf_pools[i]);
-	rxm_buf_pool_destroy(&rxm_ep->buf_pools[RXM_BUF_POOL_RX]);
+	if (rxm_ep->srx_ctx)
+		rxm_buf_pool_destroy(&rxm_ep->buf_pools[RXM_BUF_POOL_RX]);
 	return ret;
 }
 
@@ -331,7 +332,10 @@ static void rxm_ep_txrx_pool_destroy(struct rxm_ep *rxm_ep)
 {
 	size_t i;
 
-	for (i = RXM_BUF_POOL_START; i < RXM_BUF_POOL_MAX; i++)
+	if (rxm_ep->srx_ctx)
+		rxm_buf_pool_destroy(&rxm_ep->buf_pools[RXM_BUF_POOL_RX]);
+
+	for (i = RXM_BUF_POOL_TX_START; i < RXM_BUF_POOL_MAX; i++)
 		rxm_buf_pool_destroy(&rxm_ep->buf_pools[i]);
 }
 
