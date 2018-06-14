@@ -1,6 +1,6 @@
 dnl
 dnl Copyright (c) 2015-2016 Cray Inc. All rights reserved.
-dnl Copyright (c) 2015-2017 Los Alamos National Security, LLC.
+dnl Copyright (c) 2015-2018 Los Alamos National Security, LLC.
 dnl                         All rights reserved.
 dnl
 dnl This software is available to you under a choice of one of two
@@ -197,6 +197,14 @@ dnl Note kdreg only supplies an include file, no library
                                               gnitest_CPPFLAGS="$CRAY_KDREG_CFLAGS $gnitest_CPPFLAGS"],
                                              [kdreg_happy=0])])])
 
+dnl
+dnl             double check that kdreg_pub.h is available
+dnl
+                AS_IF([test "$kdreg_happy" = "1"],
+                      [CPPFLAGS="$CPPFLAGS $gni_CPPFLAGS"
+                       AC_CHECK_HEADER([kdreg_pub.h],
+                                       [],
+                                       [kdreg_happy=0])])
                 AC_DEFINE_UNQUOTED([HAVE_KDREG],[$kdreg_happy], [Define to 1 if kdreg available])
 
         ])
