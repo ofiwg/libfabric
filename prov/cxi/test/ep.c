@@ -6,6 +6,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <inttypes.h>
 
 #include <criterion/criterion.h>
 #include <criterion/parameterized.h>
@@ -357,6 +358,358 @@ Test(ep, cancel_unhandled)
 	ret = fi_cancel(&cxit_ep->fid, NULL);
 	cr_assert_eq(ret, -FI_EINVAL);
 	cxit_ep->fid.fclass = FI_CLASS_EP;
+
+	cxit_destroy_ep();
+}
+
+Test(ep, control_unhandled_obj)
+{
+	int ret;
+
+	cxit_create_ep();
+
+	/* Emulate a different type of object type */
+	cxit_ep->fid.fclass = FI_CLASS_PEP;
+	ret = fi_control(&cxit_ep->fid, -1, NULL);
+	cr_assert_eq(ret, -FI_EINVAL);
+	cxit_ep->fid.fclass = FI_CLASS_EP;
+
+	cxit_destroy_ep();
+}
+
+Test(ep, control_unhandled_cmd)
+{
+	int ret;
+
+	cxit_create_ep();
+
+	ret = fi_control(&cxit_ep->fid, -1, NULL);
+	cr_assert_eq(ret, -FI_EINVAL);
+
+	cxit_destroy_ep();
+}
+
+Test(ep, control_null_fid_alias)
+{
+	int ret;
+	struct fi_alias alias = {0};
+
+	cxit_create_ep();
+
+	/* A null alias.fid causes -FI_EINVAL */
+	ret = fi_control(&cxit_ep->fid, FI_ALIAS, &alias);
+	cr_assert_eq(ret, -FI_EINVAL, "fi_control FI_ALIAS. %d", ret);
+
+	cxit_destroy_ep();
+}
+
+Test(ep, control_empty_alias)
+{
+	int ret;
+	struct fi_alias alias = {0};
+	struct fid *alias_fid;
+
+	cxit_create_ep();
+
+	/* Empty alias.flags causes -FI_EINVAL */
+	alias.fid = &alias_fid;
+	ret = fi_control(&cxit_ep->fid, FI_ALIAS, &alias);
+	cr_assert_eq(ret, -FI_EINVAL, "fi_control FI_ALIAS. %d", ret);
+
+	cxit_destroy_ep();
+}
+
+Test(ep, control_bad_flags_alias)
+{
+	int ret;
+	struct fi_alias alias = {0};
+
+	cxit_create_ep();
+
+	/* Both Tx and Rx flags causes -FI_EINVAL */
+	alias.flags = FI_TRANSMIT | FI_RECV;
+	ret = fi_control(&cxit_ep->fid, FI_ALIAS, &alias);
+	cr_assert_eq(ret, -FI_EINVAL, "fi_control FI_ALIAS. %d", ret);
+
+	cxit_destroy_ep();
+}
+
+Test(ep, control_tx_flags_alias)
+{
+	int ret;
+	struct fi_alias alias = {0};
+	struct fid *alias_fid = NULL;
+	struct cxi_ep *cxi_ep, *alias_ep;
+
+	cxit_create_ep();
+
+	cxi_ep = container_of(&cxit_ep->fid, struct cxi_ep, ep.fid);
+
+	alias.fid = &alias_fid;
+	alias.flags = FI_TRANSMIT;
+	ret = fi_control(&cxit_ep->fid, FI_ALIAS, &alias);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_control FI_ALIAS. %d", ret);
+	cr_assert_not_null(alias_fid);
+
+	/* verify alias vs cxit_ep */
+	alias_ep = container_of(alias_fid, struct cxi_ep, ep.fid);
+	cr_assert_eq(alias_ep->attr, cxi_ep->attr, "EP Attr");
+	cr_assert_eq(alias_ep->is_alias, 1, "EP is_alias");
+	cr_assert_eq(ofi_atomic_get32(&cxi_ep->attr->ref), 1, "EP refs 1");
+
+	/* close alias */
+	ret = fi_close(alias_fid);
+	cr_assert(ret == FI_SUCCESS, "fi_close endpoint");
+	alias_fid = NULL;
+	cr_assert_eq(ofi_atomic_get32(&cxi_ep->attr->ref), 0, "EP refs 0");
+
+	cxit_destroy_ep();
+}
+
+Test(ep, control_rx_flags_alias)
+{
+	int ret;
+	struct fi_alias alias = {0};
+	struct fid *alias_fid = NULL;
+	struct cxi_ep *cxi_ep, *alias_ep;
+
+	cxit_create_ep();
+
+	cxi_ep = container_of(&cxit_ep->fid, struct cxi_ep, ep.fid);
+
+	alias.fid = &alias_fid;
+	alias.flags = FI_RECV;
+	ret = fi_control(&cxit_ep->fid, FI_ALIAS, &alias);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_control FI_ALIAS. %d", ret);
+	cr_assert_not_null(alias_fid);
+
+	alias_ep = container_of(alias_fid, struct cxi_ep, ep.fid);
+	cr_assert_eq(alias_ep->attr, cxi_ep->attr, "EP Attr");
+	cr_assert_eq(alias_ep->is_alias, 1, "EP is_alias");
+	cr_assert_not_null(cxi_ep->attr, "EP attr NULL");
+	cr_assert_eq(ofi_atomic_get32(&cxi_ep->attr->ref), 1, "EP refs 1");
+
+	/* close alias */
+	ret = fi_close(alias_fid);
+	cr_assert(ret == FI_SUCCESS, "fi_close endpoint");
+	alias_fid = NULL;
+	cr_assert_eq(ofi_atomic_get32(&cxi_ep->attr->ref), 0, "EP refs 0");
+
+	cxit_destroy_ep();
+}
+
+Test(ep, control_getopsflag_both_tx_rx)
+{
+	int ret;
+	uint64_t flags = FI_TRANSMIT | FI_RECV;
+
+	cxit_create_ep();
+
+	ret = fi_control(&cxit_ep->fid, FI_GETOPSFLAG, (void *)&flags);
+	cr_assert_eq(ret, -FI_EINVAL, "fi_control FI_GETOPSFLAG TX/RX. %d",
+		     ret);
+
+	cxit_destroy_ep();
+}
+
+Test(ep, control_getopsflag_no_flags)
+{
+	int ret;
+	uint64_t flags = FI_TRANSMIT | FI_RECV;
+
+	cxit_create_ep();
+
+	ret = fi_control(&cxit_ep->fid, FI_GETOPSFLAG, (void *)&flags);
+	cr_assert_eq(ret, -FI_EINVAL, "fi_control FI_GETOPSFLAG 0. %d", ret);
+
+	cxit_destroy_ep();
+}
+
+Test(ep, control_getopsflag_tx)
+{
+	int ret;
+	uint64_t flags = FI_TRANSMIT;
+	struct cxi_ep *cxi_ep;
+
+	cxit_create_ep();
+
+	cxi_ep = container_of(&cxit_ep->fid, struct cxi_ep, ep.fid);
+
+	ret = fi_control(&cxit_ep->fid, FI_GETOPSFLAG, (void *)&flags);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_control FI_GETOPSFLAG TX. %d", ret);
+	cr_assert_eq(cxi_ep->tx_attr.op_flags, flags,
+		     "fi_control FI_GETOPSFLAG Flag mismatch. %" PRIx64 " != %"
+		     PRIx64 " ", cxi_ep->tx_attr.op_flags, flags);
+
+	cxit_destroy_ep();
+}
+
+Test(ep, control_getopsflag_rx)
+{
+	int ret;
+	uint64_t flags = FI_RECV;
+	struct cxi_ep *cxi_ep;
+
+	cxit_create_ep();
+
+	cxi_ep = container_of(&cxit_ep->fid, struct cxi_ep, ep.fid);
+
+	ret = fi_control(&cxit_ep->fid, FI_GETOPSFLAG, (void *)&flags);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_control FI_GETOPSFLAG RX. %d", ret);
+	cr_assert_eq(cxi_ep->rx_attr.op_flags, flags,
+		     "fi_control FI_GETOPSFLAG Flag mismatch. %" PRIx64 " != %"
+		     PRIx64 " ", cxi_ep->rx_attr.op_flags, flags);
+
+	cxit_destroy_ep();
+}
+
+Test(ep, control_setopsflag_both_tx_rx)
+{
+	int ret;
+	uint64_t flags = FI_TRANSMIT | FI_RECV;
+
+	cxit_create_ep();
+
+	ret = fi_control(&cxit_ep->fid, FI_SETOPSFLAG, (void *)&flags);
+	cr_assert_eq(ret, -FI_EINVAL, "fi_control FI_SETOPSFLAG TX/RX. %d",
+		     ret);
+
+	cxit_destroy_ep();
+}
+
+Test(ep, control_setopsflag_no_flags)
+{
+	int ret;
+	uint64_t flags = FI_TRANSMIT | FI_RECV;
+
+	cxit_create_ep();
+
+	ret = fi_control(&cxit_ep->fid, FI_SETOPSFLAG, (void *)&flags);
+	cr_assert_eq(ret, -FI_EINVAL, "fi_control FI_SETOPSFLAG 0. %d", ret);
+
+	cxit_destroy_ep();
+}
+
+Test(ep, control_setopsflag_tx)
+{
+	int ret;
+	uint64_t flags = (FI_TRANSMIT | FI_MSG | FI_TRIGGER |
+			  FI_DELIVERY_COMPLETE);
+	uint64_t tx_flags;
+	struct cxi_ep *cxi_ep;
+
+	cxit_create_ep();
+
+	cxi_ep = container_of(&cxit_ep->fid, struct cxi_ep, ep.fid);
+
+	ret = fi_control(&cxit_ep->fid, FI_SETOPSFLAG, (void *)&flags);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_control FI_SETOPSFLAG TX. %d", ret);
+	flags &= ~FI_TRANSMIT;
+	tx_flags = cxi_ep->tx_attr.op_flags;
+	cr_assert_eq(tx_flags, flags,
+		     "fi_control FI_SETOPSFLAG TX Flag mismatch. %" PRIx64
+		     " != %" PRIx64, tx_flags, flags);
+
+	cxit_destroy_ep();
+}
+
+Test(ep, control_setopsflag_tx_complete)
+{
+	int ret;
+	uint64_t flags = FI_TRANSMIT | FI_MSG | FI_TRIGGER | FI_AFFINITY;
+	uint64_t tx_flags;
+	struct cxi_ep *cxi_ep;
+
+	cxit_create_ep();
+
+	cxi_ep = container_of(&cxit_ep->fid, struct cxi_ep, ep.fid);
+
+	ret = fi_control(&cxit_ep->fid, FI_SETOPSFLAG, (void *)&flags);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_control FI_SETOPSFLAG TX. %d", ret);
+	flags &= ~FI_TRANSMIT;
+	flags |= FI_TRANSMIT_COMPLETE;
+	tx_flags = cxi_ep->tx_attr.op_flags;
+	cr_assert_eq(tx_flags, flags,
+		     "fi_control FI_SETOPSFLAG TXcomp Flag mismatch. %" PRIx64
+		     " != %" PRIx64, tx_flags, flags);
+
+	cxit_destroy_ep();
+}
+
+Test(ep, control_setopsflag_rx)
+{
+	int ret;
+	uint64_t flags = FI_RECV | FI_TAGGED | FI_NUMERICHOST | FI_EVENT;
+	uint64_t rx_flags;
+	struct cxi_ep *cxi_ep;
+
+	cxit_create_ep();
+
+	cxi_ep = container_of(&cxit_ep->fid, struct cxi_ep, ep.fid);
+
+	ret = fi_control(&cxit_ep->fid, FI_SETOPSFLAG, (void *)&flags);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_control FI_SETOPSFLAG RX. %d", ret);
+	flags &= ~FI_RECV;
+	rx_flags = cxi_ep->rx_attr.op_flags;
+	cr_assert_eq(rx_flags, flags,
+		     "fi_control FI_SETOPSFLAG RX Flag mismatch. %" PRIx64
+		     " != %" PRIx64, rx_flags, flags);
+
+	cxit_destroy_ep();
+}
+
+Test(ep, control_enable)
+{
+	int ret;
+	struct fi_alias alias = {0};
+	struct cxi_ep *cxi_ep;
+
+	cxit_create_ep();
+
+	cxi_ep = container_of(&cxit_ep->fid, struct cxi_ep, ep.fid);
+
+	ret = fi_control(&cxit_ep->fid, FI_ENABLE, &alias);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_control FI_ENABLE. %d", ret);
+	cr_assert_not_null(cxi_ep->attr, "EP attr NULL");
+	cr_assert_eq(cxi_ep->attr->is_enabled, 1, "EP not enabled");
+
+	cxit_destroy_ep();
+}
+
+struct ep_ctrl_null_params {
+	int command;
+	int retval;
+};
+
+ParameterizedTestParameters(ep, ctrl_null_arg)
+{
+	size_t param_sz;
+
+	static struct ep_ctrl_null_params ep_null_params[] = {
+		{.command = FI_EP_RDM,
+		 .retval = -FI_EINVAL},
+		{.command = FI_EP_UNSPEC,
+		 .retval = -FI_EINVAL},
+		{.command = FI_SETOPSFLAG,
+		 .retval = -FI_EINVAL},
+		{.command = FI_ENABLE,
+		 .retval = FI_SUCCESS},
+	};
+
+	param_sz = ARRAY_SIZE(ep_null_params);
+	return cr_make_param_array(struct ep_ctrl_null_params, ep_null_params,
+				   param_sz);
+}
+
+ParameterizedTest(struct ep_ctrl_null_params *param, ep, ctrl_null_arg)
+{
+	int ret;
+
+	cxit_create_ep();
+
+	ret = fi_control(&cxit_ep->fid, param->command, NULL);
+	cr_assert_eq(ret, param->retval, "fi_control type %d. %d != %d",
+		     param->command, ret, param->retval);
 
 	cxit_destroy_ep();
 }

@@ -300,7 +300,7 @@ int cxi_setopflags(struct fi_tx_attr *tx_attr, struct fi_rx_attr *rx_attr,
 		tx_attr->op_flags = flags;
 		tx_attr->op_flags &= ~FI_TRANSMIT;
 		if (!(flags & (FI_INJECT_COMPLETE | FI_TRANSMIT_COMPLETE |
-		     FI_DELIVERY_COMPLETE)))
+			       FI_DELIVERY_COMPLETE)))
 			tx_attr->op_flags |= FI_TRANSMIT_COMPLETE;
 	} else if (rx_attr && (flags & FI_RECV)) {
 		rx_attr->op_flags = flags;
@@ -725,7 +725,11 @@ static int cxi_ep_control(struct fid *fid, int command, void *arg)
 
 	switch (command) {
 	case FI_ALIAS:
+		if (!arg)
+			return -FI_EINVAL;
 		alias = (struct fi_alias *)arg;
+		if (!alias->fid)
+			return -FI_EINVAL;
 		new_ep = calloc(1, sizeof(*new_ep));
 		if (!new_ep)
 			return -FI_ENOMEM;
@@ -735,7 +739,7 @@ static int cxi_ep_control(struct fid *fid, int command, void *arg)
 		memcpy(&new_ep->rx_attr, &cxi_ep->rx_attr,
 		       sizeof(struct fi_rx_attr));
 		ret = cxi_setopflags(&new_ep->tx_attr, &new_ep->rx_attr,
-				       alias->flags);
+				     alias->flags);
 		if (ret) {
 			free(new_ep);
 			return -FI_EINVAL;
@@ -747,17 +751,20 @@ static int cxi_ep_control(struct fid *fid, int command, void *arg)
 		ofi_atomic_inc32(&new_ep->attr->ref);
 		break;
 	case FI_GETOPSFLAG:
+		if (!arg)
+			return -FI_EINVAL;
 		ret = cxi_getopflags(&cxi_ep->tx_attr, &cxi_ep->rx_attr,
 				     (uint64_t *) arg);
 		if (ret)
 			return -FI_EINVAL;
 		break;
 	case FI_SETOPSFLAG:
+		if (!arg)
+			return -FI_EINVAL;
 		ret = cxi_setopflags(&cxi_ep->tx_attr, &cxi_ep->rx_attr,
 				     *(uint64_t *) arg);
 		if (ret)
 			return -FI_EINVAL;
-		break;
 		break;
 	case FI_ENABLE:
 		ep_fid = container_of(fid, struct fid_ep, fid);
