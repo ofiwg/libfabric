@@ -30,6 +30,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <sys/socket.h>
 
 #include "fabtest.h"
 
@@ -375,6 +376,49 @@ static int ft_sync_test(int value)
 #define no_sync_needed(func,flag) (is_data_func(func) ||				\
 				(is_msg_func(func) && flag == FI_REMOTE_CQ_DATA))
 
+static int ft_sync_manual()
+{
+	int ret, value = 0, result = -FI_EOTHER;
+
+	if (listen_sock < 0) {
+		ret = send(sock, &value, sizeof(value), 0);
+		if (ret != sizeof(value))
+			return -FI_EOTHER;
+
+		do {
+			ret = recv(sock, &result, sizeof(result), MSG_DONTWAIT);
+			if (ret == sizeof(result))
+				break;
+
+			ret = ft_comp_rx(0);
+			if (ret)
+				return ret;
+		} while (1);
+	} else {
+		do {
+			ret = recv(sock, &result, sizeof(result), MSG_DONTWAIT);
+			if (ret == sizeof(result))
+				break;
+
+			ret = ft_comp_rx(0);
+			if (ret)
+				return ret;
+		} while (1);
+
+		ret = send(sock, &value, sizeof(value), 0);
+		if (ret != sizeof(value))
+			return -FI_EOTHER;
+	}
+	return 0;
+}
+
+static int ft_sync_progress(int value)
+{
+	if (test_info.progress == FI_PROGRESS_MANUAL)
+		return ft_sync_manual();
+	return ft_sock_sync(value);
+}
+
 static int ft_sync_msg_needed()
 {
 	if (!(ft_use_comp_cntr(test_info.comp_type) &&
@@ -559,6 +603,10 @@ static int ft_run_latency(void)
 			return ret;
 		}
 
+		ret = ft_sync_progress(0);
+		if (ret)
+			return ret;
+
 		show_perf("lat", ft_ctrl.size_array[i], ft_ctrl.xfer_iter, &start, &end, 2);
 	}
 
@@ -726,6 +774,10 @@ static int ft_run_bandwidth(void)
 			return ret;
 		}
 
+		ret = ft_sync_progress(0);
+		if (ret)
+			return ret;
+
 		show_perf("bw", ft_ctrl.size_array[i], recv_cnt, &start, &end, 1);
 	}
 
@@ -836,6 +888,7 @@ static int ft_unit(void)
 		if (ret)
 			return ret;
 
+		ft_comp_tx(FT_COMP_TO);
 		ret = ft_verify_bufs();
 		if (ret)
 			fail = -FI_EIO;

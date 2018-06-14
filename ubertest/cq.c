@@ -241,6 +241,7 @@ static int ft_comp_x(struct fid_cq *cq, struct ft_xcontrol *ft_x,
 	struct timespec s, e;
 	int poll_time = 0;
 	int ret, verify = (test_info.test_type == FT_TEST_UNIT && cq == rxcq);
+	size_t cur_credits = ft_x->credits;
 
 	switch(test_info.cq_wait_obj) {
 	case FI_WAIT_NONE:
@@ -255,7 +256,11 @@ static int ft_comp_x(struct fid_cq *cq, struct ft_xcontrol *ft_x,
 
 			clock_gettime(CLOCK_MONOTONIC, &e);
 			poll_time = get_elapsed(&s, &e, MILLI);
-		} while (ret == -FI_EAGAIN && poll_time < timeout);
+		} while (ret == -FI_EAGAIN && poll_time < timeout &&
+			 ft_x->credits == cur_credits);
+
+		if (ft_x->credits != cur_credits)
+			ret = 0;
 
 		break;
 	case FI_WAIT_UNSPEC:

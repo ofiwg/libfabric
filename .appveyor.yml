@@ -29,4 +29,5 @@ install:
 
 test_script:
   - set PATH=%CD%\x64\%CONFIGURATION%;%PATH%
+  - set FI_PROVIDER=sockets
   - scripts\runfabtests.cmd

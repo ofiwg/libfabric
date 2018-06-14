@@ -298,6 +298,12 @@ static struct key_t keys[] = {
 		.offset = offsetof(struct ft_set, mr_mode),
 		.val_type = VAL_NUM,
 		.val_size = sizeof(((struct ft_set *)0)->mr_mode) / FT_MAX_MR_MODES,
+	},
+	{
+		.str = "progress",
+		.offset = offsetof(struct ft_set, progress),
+		.val_type = VAL_NUM,
+		.val_size = sizeof(((struct ft_set *)0)->progress) / FT_MAX_PROGRESS,
 	}
 };
 
@@ -409,6 +415,11 @@ static int ft_parse_num(char *str, int len, struct key_t *key, void *buf)
 		TEST_ENUM_SET_N_RETURN(str, len, FI_MR_ALLOCATED, uint64_t, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FI_MR_PROV_KEY, uint64_t, buf);
 		FT_ERR("Unknown MR mode");
+	} else if (!strncmp(key->str, "progress", strlen("progress"))) {
+		TEST_ENUM_SET_N_RETURN(str, len, FI_PROGRESS_MANUAL, uint64_t, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_PROGRESS_AUTO, uint64_t, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_PROGRESS_UNSPEC, uint64_t, buf);
+		FT_ERR("Unknown progress mode");
 	} else if (!strncmp(key->str, "constant_caps", strlen("constant_caps"))) {
 		TEST_ENUM_SET_N_RETURN(str, len, FI_RMA, uint64_t, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FI_MSG, uint64_t, buf);
@@ -695,6 +706,7 @@ void fts_start(struct ft_series *series, int index)
 	series->cur_cntr_wait_obj = 0;
 	series->cur_mode = 0;
 	series->cur_class = 0;
+	series->cur_progress = 0;
 
 	series->test_index = 1;
 	if (index > 1) {
@@ -782,6 +794,10 @@ void fts_next(struct ft_series *series)
 		return;
 	series->cur_type = 0;
 
+	if (set->test_class[++series->cur_progress])
+		return;
+	series->cur_progress = 0;
+
 	series->cur_set++;
 }
 
@@ -809,6 +825,7 @@ void fts_cur_info(struct ft_series *series, struct ft_info *info)
 	info->datatype = set->datatype[series->cur_datatype];
 	info->test_flags = set->test_flags;
 	info->test_class = set->test_class[series->cur_class];
+	info->progress = set->progress[series->cur_progress];
 
 	if (info->test_class) {
 		info->caps = set->test_class[series->cur_class];

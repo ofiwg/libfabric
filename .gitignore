@@ -30,15 +30,10 @@ configure
 libtool
 fabtests.spec
 
-ported/libibverbs/fi_*
-ported/librdmacm/fi_*
-
-complex/fabtest
-complex/fi_ubertest
+ubertest/fabtest
+ubertest/fi_ubertest
 
 benchmarks/fi_*
-
-simple/fi_*
+functional/fi_*
 unit/fi_*
-streaming/fi_*
 pingpong/fi_*
