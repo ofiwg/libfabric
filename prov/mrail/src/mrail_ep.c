@@ -261,11 +261,30 @@ static struct fi_ops mrail_ep_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
+static int mrail_ep_setopt(fid_t fid, int level, int optname,
+		const void *optval, size_t optlen)
+{
+	struct mrail_ep *mrail_ep;
+	size_t i;
+	int ret = 0;
+
+	mrail_ep = container_of(fid, struct mrail_ep, util_ep.ep_fid.fid);
+
+	for (i = 0; i < mrail_ep->num_eps; i++) {
+		ret = fi_setopt(&mrail_ep->eps[i]->fid, level, optname, optval,
+				optlen);
+		if (ret)
+			return ret;
+	}
+
+	return ret;
+}
+
 static struct fi_ops_ep mrail_ops_ep = {
 	.size = sizeof(struct fi_ops_ep),
 	.cancel = fi_no_cancel,
 	.getopt = fi_no_getopt,
-	.setopt = fi_no_setopt,
+	.setopt = mrail_ep_setopt,
 	.tx_ctx = fi_no_tx_ctx,
 	.rx_ctx = fi_no_rx_ctx,
 	.rx_size_left = fi_no_rx_size_left,
