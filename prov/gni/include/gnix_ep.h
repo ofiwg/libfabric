@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
- * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
+ * Copyright (c) 2015-2018 Los Alamos National Security, LLC.
  *                         All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -389,6 +389,17 @@ int gnix_scalable_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags);
  * @return -FI_ENOSYS	if this operation is not supported
  */
 int gnix_pep_bind(fid_t fid, struct fid *bfid, uint64_t flags);
+
+/**
+ * Cancels a transaction posted to an endpoint, if possible.
+ *
+ * @param[in] fid	the endpoint
+ * @param[in] context	context of the transaction to be canceled
+ *
+ * @return FI_SUCCESS	upon successfully canceling transaction
+ * @return -FI_ENONT	no entry to cancel
+ */
+ssize_t gnix_cancel(fid_t fid, void *context);
 
 DIRECT_FN int gnix_ep_atomic_valid(struct fid_ep *ep,
 				   enum fi_datatype datatype,

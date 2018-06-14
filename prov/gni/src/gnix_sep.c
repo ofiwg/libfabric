@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2017 Los Alamos National Security, LLC.
+ * Copyright (c) 2016-2018 Los Alamos National Security, LLC.
  *                         All rights reserved.
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  *
@@ -1554,7 +1554,7 @@ static struct fi_ops gnix_sep_fi_ops = {
 
 static struct fi_ops_ep gnix_sep_ops = {
 	.size = sizeof(struct fi_ops_ep),
-	.cancel = fi_no_cancel,
+	.cancel = gnix_cancel,
 	.getopt = fi_no_getopt,
 	.setopt = fi_no_setopt,
 	.tx_ctx = gnix_sep_tx_ctx,
