@@ -333,3 +333,30 @@ Test(ep, ep_bind_unhandled)
 	cxit_destroy_ep();
 	cxit_destroy_av();
 }
+
+Test(ep, cancel_ep)
+{
+	int ret;
+
+	cxit_create_ep();
+
+	ret = fi_cancel(&cxit_ep->fid, NULL);
+	cr_assert_eq(ret, FI_SUCCESS);
+
+	cxit_destroy_ep();
+}
+
+Test(ep, cancel_unhandled)
+{
+	int ret;
+
+	cxit_create_ep();
+
+	/* Emulate a different type of object type */
+	cxit_ep->fid.fclass = FI_CLASS_PEP;
+	ret = fi_cancel(&cxit_ep->fid, NULL);
+	cr_assert_eq(ret, -FI_EINVAL);
+	cxit_ep->fid.fclass = FI_CLASS_EP;
+
+	cxit_destroy_ep();
+}
