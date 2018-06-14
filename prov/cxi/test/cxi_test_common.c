@@ -16,6 +16,7 @@ struct fi_info *cxit_fi;
 struct fid_fabric *cxit_fabric;
 struct fid_domain *cxit_domain;
 struct fid_ep *cxit_ep;
+struct fid_ep *cxit_sep;
 struct fi_cq_attr cxit_tx_cq_attr, cxit_rx_cq_attr;
 struct fid_cq *cxit_tx_cq, *cxit_rx_cq;
 struct fi_av_attr cxit_av_attr;
@@ -70,7 +71,7 @@ void cxit_destroy_domain(void)
 	int ret;
 
 	ret = fi_close(&cxit_domain->fid);
-	cr_assert(ret == FI_SUCCESS, "fi_close domain");
+	cr_assert(ret == FI_SUCCESS, "fi_close domain. %d", ret);
 	cxit_domain = NULL;
 }
 
@@ -90,6 +91,24 @@ void cxit_destroy_ep(void)
 	ret = fi_close(&cxit_ep->fid);
 	cr_assert(ret == FI_SUCCESS, "fi_close endpoint");
 	cxit_ep = NULL;
+}
+
+void cxit_create_sep(void)
+{
+	int ret;
+
+	ret = fi_scalable_ep(cxit_domain, cxit_fi, &cxit_sep, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_scalable_ep");
+	cr_assert_not_null(cxit_sep);
+}
+
+void cxit_destroy_sep(void)
+{
+	int ret;
+
+	ret = fi_close(&cxit_sep->fid);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_close scalable ep");
+	cxit_sep = NULL;
 }
 
 void cxit_create_cqs(void)
@@ -140,7 +159,7 @@ void cxit_destroy_av(void)
 	int ret;
 
 	ret = fi_close(&cxit_av->fid);
-	cr_assert(ret == FI_SUCCESS, "fi_close AV");
+	cr_assert(ret == FI_SUCCESS, "fi_close AV. %d", ret);
 	cxit_av = NULL;
 }
 

@@ -21,7 +21,12 @@
 extern struct fi_ops_mr cxi_dom_mr_ops;
 
 /* TODO define */
-struct fi_ops_mr cxi_dom_mr_ops = {0};
+struct fi_ops_mr cxi_dom_mr_ops = {
+	.size = sizeof(struct fi_ops_mr),
+	.reg = fi_no_mr_reg,
+	.regv = fi_no_mr_regv,
+	.regattr = fi_no_mr_regattr
+};
 
 const struct fi_domain_attr cxi_domain_attr = {
 	.name = NULL,

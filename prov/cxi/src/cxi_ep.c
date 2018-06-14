@@ -574,9 +574,6 @@ static int cxi_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		ep->attr->eq = eq;
 		break;
 
-	case FI_CLASS_MR:
-		return 0;
-
 	case FI_CLASS_CQ:
 		cq = container_of(bfid, struct cxi_cq, cq_fid.fid);
 		if (ep->attr->domain != cq->domain)
@@ -703,7 +700,7 @@ static int cxi_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		break;
 
 	default:
-		return -FI_ENOSYS;
+		return -FI_EINVAL;
 	}
 
 	return 0;
