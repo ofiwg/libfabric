@@ -245,6 +245,18 @@ static inline void ofi_addr_set_port(struct sockaddr *addr, uint16_t port)
 	}
 }
 
+static inline void * ofi_get_ipaddr(const struct sockaddr *addr)
+{
+	switch (addr->sa_family) {
+	case AF_INET:
+		return &ofi_sin_addr((const struct sockaddr_in *) addr);
+	case AF_INET6:
+		return &ofi_sin6_addr((const struct sockaddr_in6 *) addr);
+	default:
+		return NULL;
+	}
+}
+
 static inline int ofi_equals_ipaddr(const struct sockaddr *addr1,
 				    const struct sockaddr *addr2)
 {
