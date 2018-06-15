@@ -73,10 +73,9 @@ pipeline {
                 }
                 stage('Fabtests') {
                     steps {
-                        // ignore the return code for fabtests until we can establish a fingerprint
                         timeout (time: 20, unit: 'MINUTES') {
                             script {
-                                def command = '$FABTEST_PATH/bin/runfabtests.sh -p $FABTEST_PATH/bin -v -T 60 \'ofi_rxm;verbs\' 10.100.49.8 10.100.49.9 || true'
+                                def command = '$FABTEST_PATH/bin/runfabtests.sh -p $FABTEST_PATH/bin -v -T 60 \'ofi_rxm;verbs\' 10.100.49.8 10.100.49.9'
                                 launch "$command", 1, 1, 'wham-0-cn8'
                             }
                         }
