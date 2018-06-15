@@ -1,4 +1,4 @@
-.TH "fi_tagged" "3" "2017\-10\-20" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_tagged" "3" "2018\-06\-15" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_tagged \- Tagged data transfer operations
@@ -177,7 +177,7 @@ The tagged inject call is an optimized version of fi_tsend.
 The fi_tinject function behaves as if the FI_INJECT transfer flag were
 set, and FI_COMPLETION were not.
 That is, the data buffer is available for reuse immediately on returning
-from from fi_tinject, and no completion event will be generated for this
+from fi_tinject, and no completion event will be generated for this
 send.
 The completion event will be suppressed even if the endpoint has not
 been configured with FI_SELECTIVE_COMPLETION.
