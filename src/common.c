@@ -598,6 +598,36 @@ out:
 	return ((flags & FI_SOURCE) && service) ? 1 : 0;
 }
 
+
+size_t ofi_mask_addr(struct sockaddr *maskaddr, const struct sockaddr *srcaddr,
+		     const struct sockaddr *netmask)
+{
+	size_t i, size, len = 0;
+	uint8_t *ip, *mask, bits;
+
+	memcpy(maskaddr, srcaddr, ofi_sizeofaddr(srcaddr));
+	size = ofi_sizeofip(srcaddr);
+	ip = ofi_get_ipaddr(maskaddr);
+	mask = ofi_get_ipaddr(netmask);
+
+	if (!size || !ip || !mask)
+		return 0;
+
+	for (i = 0; i < size; i++) {
+		ip[i] &= mask[i];
+
+		if (mask[i] == 0xff) {
+			len += 8;
+		} else {
+			for (bits = mask[i]; bits; bits >>= 1) {
+				if (bits & 0x1)
+					len++;
+			}
+		}
+	}
+	return len;
+}
+
 void ofi_straddr_log_internal(const char *func, int line,
 			      const struct fi_provider *prov,
 			      enum fi_log_level level,

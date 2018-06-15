@@ -141,7 +141,19 @@ static inline size_t ofi_sizeofaddr(const struct sockaddr *addr)
 		return sizeof(struct sockaddr_in6);
 	default:
 		FI_WARN(&core_prov, FI_LOG_CORE, "Unknown address format");
-		assert(0);
+		return 0;
+	}
+}
+
+static inline size_t ofi_sizeofip(const struct sockaddr *addr)
+{
+	switch (addr->sa_family) {
+	case AF_INET:
+		return sizeof(struct in_addr);
+	case AF_INET6:
+		return sizeof(struct in6_addr);
+	default:
+		FI_WARN(&core_prov, FI_LOG_CORE, "Unknown address format");
 		return 0;
 	}
 }
@@ -284,6 +296,10 @@ static inline int ofi_equals_sockaddr(const struct sockaddr *addr1,
 
 int ofi_is_only_src_port_set(const char *node, const char *service,
 			     uint64_t flags, const struct fi_info *hints);
+
+size_t ofi_mask_addr(struct sockaddr *maskaddr, const struct sockaddr *srcaddr,
+		     const struct sockaddr *netmask);
+
 
 /*
  * Address logging
