@@ -877,6 +877,8 @@ fi_ibv_send_buf(struct fi_ibv_ep *ep, struct ibv_send_wr *wr,
 {
 	struct ibv_sge sge = fi_ibv_init_sge(buf, len, desc);
 
+	assert(wr->wr_id != VERBS_INJECT_FLAG);
+
 	wr->sg_list = &sge;
 	wr->num_sge = 1;
 
@@ -888,6 +890,8 @@ fi_ibv_send_buf_inline(struct fi_ibv_ep *ep, struct ibv_send_wr *wr,
 		       const void *buf, size_t len)
 {
 	struct ibv_sge sge = fi_ibv_init_sge_inline(buf, len);
+
+	assert(wr->wr_id == VERBS_INJECT_FLAG);
 
 	wr->sg_list = &sge;
 	wr->num_sge = 1;
@@ -1040,6 +1044,7 @@ static ssize_t fi_ibv_msg_ep_inject(struct fid_ep *ep_fid, const void *buf, size
 	struct fi_ibv_ep *ep =
 		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
+		.wr_id = VERBS_INJECT_FLAG,
 		.opcode = IBV_WR_SEND,
 		.send_flags = IBV_SEND_INLINE,
 	};
@@ -1053,6 +1058,7 @@ static ssize_t fi_ibv_msg_ep_injectdata(struct fid_ep *ep_fid, const void *buf, 
 	struct fi_ibv_ep *ep =
 		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
+		.wr_id = VERBS_INJECT_FLAG,
 		.opcode = IBV_WR_SEND_WITH_IMM,
 		.imm_data = htonl((uint32_t)data),
 		.send_flags = IBV_SEND_INLINE,
@@ -1432,6 +1438,7 @@ fi_ibv_msg_ep_rma_inject_write(struct fid_ep *ep_fid, const void *buf, size_t le
 	struct fi_ibv_ep *ep =
 		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
+		.wr_id = VERBS_INJECT_FLAG,
 		.opcode = IBV_WR_RDMA_WRITE,
 		.wr.rdma.remote_addr = addr,
 		.wr.rdma.rkey = (uint32_t)key,
@@ -1449,6 +1456,7 @@ fi_ibv_msg_ep_rma_inject_writedata(struct fid_ep *ep_fid, const void *buf, size_
 	struct fi_ibv_ep *ep =
 		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
+		.wr_id = VERBS_INJECT_FLAG,
 		.opcode = IBV_WR_RDMA_WRITE_WITH_IMM,
 		.imm_data = htonl((uint32_t)data),
 		.wr.rdma.remote_addr = addr,

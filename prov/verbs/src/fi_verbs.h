@@ -108,6 +108,8 @@
 #define VERBS_DEF_CQ_SIZE 1024
 #define VERBS_MR_IOV_LIMIT 1
 
+#define VERBS_INJECT_FLAG	((uint64_t)-1)
+
 #define FI_IBV_EP_TYPE(info)						\
 	((info && info->ep_attr) ? info->ep_attr->type : FI_EP_MSG)
 
@@ -588,20 +590,18 @@ static inline ssize_t fi_ibv_handle_post(ssize_t ret)
 static inline int
 fi_ibv_process_wc(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 {
-	int ret = 1;
-
 	/* Handle WR entry when user doesn't request the completion */
-	if (!wc->wr_id)
+	if (wc->wr_id == VERBS_INJECT_FLAG)
 		return 0;
 
 	if (OFI_UNLIKELY(wc->status == IBV_WC_WR_FLUSH_ERR)) {
-		/* Handle case where remote side destroys
+		/* Handle case when remote side destroys
 		 * the connection, but local side isn't aware
 		 * about that yet */
-		ret = 0;
+		return 0;
 	}
 
-	return ret;
+	return 1;
 }
 
 static inline int fi_ibv_wc_2_wce(struct fi_ibv_cq *cq,
