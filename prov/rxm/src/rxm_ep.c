@@ -145,6 +145,7 @@ static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 			rx_buf = (struct rxm_rx_buf *)((char *)addr + i * entry_sz);
 			rx_buf->ep = pool->rxm_ep;
 			rx_buf->hdr.desc = mr_desc;
+			rx_buf->rx_buf_pool = pool;
 		} else {
 			tx_buf = (struct rxm_tx_buf *)((char *)addr + i * entry_sz);
 			tx_buf->type = pool->type;
@@ -197,7 +198,7 @@ static inline void rxm_buf_close(void *pool_ctx, void *context)
 	}
 }
 
-static void rxm_buf_pool_destroy(struct rxm_buf_pool *pool)
+void rxm_buf_pool_destroy(struct rxm_buf_pool *pool)
 {
 	fastlock_destroy(&pool->lock);
 	util_buf_pool_destroy(pool->pool);
@@ -210,14 +211,12 @@ void rxm_ep_cleanup_posted_rx_list(struct rxm_ep *rxm_ep,
 
 	while (!dlist_empty(posted_rx_list)) {
 		dlist_pop_front(posted_rx_list, struct rxm_rx_buf, rx_buf, entry);
-		rxm_rx_buf_release(rxm_ep, rx_buf);
+		rxm_rx_buf_release(rx_buf);
 	}
 }
 
-static int rxm_buf_pool_create(struct rxm_ep *rxm_ep,
-			       size_t chunk_count, size_t size,
-			       struct rxm_buf_pool *pool,
-			       enum rxm_buf_pool_type type)
+int rxm_buf_pool_create(struct rxm_ep *rxm_ep, size_t chunk_count, size_t size,
+			struct rxm_buf_pool *pool, enum rxm_buf_pool_type type)
 {
 	int ret;
 
@@ -288,14 +287,15 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 	size_t i;
 	int ret;
 
-	ret = rxm_buf_pool_create(rxm_ep,
-				  rxm_ep->msg_info->rx_attr->size,
-				  rxm_ep->rxm_info->tx_attr->inject_size +
-				  sizeof(struct rxm_rx_buf),
-				  &rxm_ep->buf_pools[RXM_BUF_POOL_RX],
-				  RXM_BUF_POOL_RX);
-	if (ret)
-		return ret;
+	if (rxm_ep->srx_ctx) {
+		ret = rxm_buf_pool_create(rxm_ep, rxm_ep->msg_info->rx_attr->size,
+					  rxm_ep->rxm_info->tx_attr->inject_size +
+					  sizeof(struct rxm_rx_buf),
+					  &rxm_ep->buf_pools[RXM_BUF_POOL_RX],
+					  RXM_BUF_POOL_RX);
+		if (ret)
+			return ret;
+	}
 	dlist_init(&rxm_ep->posted_srx_list);
 	dlist_init(&rxm_ep->repost_ready_list);
 
@@ -323,7 +323,8 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 err:
 	while (--i >= RXM_BUF_POOL_TX_START)
 		rxm_buf_pool_destroy(&rxm_ep->buf_pools[i]);
-	rxm_buf_pool_destroy(&rxm_ep->buf_pools[RXM_BUF_POOL_RX]);
+	if (rxm_ep->srx_ctx)
+		rxm_buf_pool_destroy(&rxm_ep->buf_pools[RXM_BUF_POOL_RX]);
 	return ret;
 }
 
@@ -331,7 +332,10 @@ static void rxm_ep_txrx_pool_destroy(struct rxm_ep *rxm_ep)
 {
 	size_t i;
 
-	for (i = RXM_BUF_POOL_START; i < RXM_BUF_POOL_MAX; i++)
+	if (rxm_ep->srx_ctx)
+		rxm_buf_pool_destroy(&rxm_ep->buf_pools[RXM_BUF_POOL_RX]);
+
+	for (i = RXM_BUF_POOL_TX_START; i < RXM_BUF_POOL_MAX; i++)
 		rxm_buf_pool_destroy(&rxm_ep->buf_pools[i]);
 }
 
@@ -821,9 +825,12 @@ err:
 	return ret;
 }
 
+/* if the `release_res` is set to 0, caller must ensure release of
+ * the TX buffer and the TX entry */
 static inline ssize_t
 rxm_ep_normal_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
-		   struct rxm_tx_entry *tx_entry, size_t pkt_size)
+		   struct rxm_tx_entry *tx_entry, size_t pkt_size,
+		   int release_res)
 {
 	FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Posting send with length: %" PRIu64
 	       " tag: 0x%" PRIx64 "\n", tx_entry->tx_buf->pkt.hdr.size,
@@ -836,8 +843,10 @@ rxm_ep_normal_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		else
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 				"fi_send for MSG provider failed\n");
-		rxm_tx_buf_release(rxm_ep, tx_entry->tx_buf);
-		rxm_tx_entry_release(&rxm_conn->send_queue, tx_entry);
+		if (release_res) {
+			rxm_tx_buf_release(rxm_ep, tx_entry->tx_buf);
+			rxm_tx_entry_release(&rxm_conn->send_queue, tx_entry);
+		}
 	}
 	return ret;
 }
@@ -881,9 +890,12 @@ err:
 	return ret;
 }
 
+/* if the `release_res` is set to 0, caller must ensure release of
+ * the TX buffer and the TX entry */
 static inline ssize_t
 rxm_ep_lmt_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
-		   struct rxm_tx_entry *tx_entry, size_t pkt_size)
+		   struct rxm_tx_entry *tx_entry, size_t pkt_size,
+		   int release_res)
 {
 	ssize_t ret;
 
@@ -898,7 +910,7 @@ rxm_ep_lmt_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	} else {
 		tx_entry->state = RXM_LMT_TX;
 
-		ret = rxm_ep_normal_send(rxm_ep, rxm_conn, tx_entry, pkt_size);
+		ret = rxm_ep_normal_send(rxm_ep, rxm_conn, tx_entry, pkt_size, release_res);
 	}
 	if (OFI_UNLIKELY(ret))
 		goto err;
@@ -908,8 +920,11 @@ err:
 	       "Transmit for MSG provider failed\n");
 	if (!rxm_ep->rxm_mr_local)
 		rxm_ep_msg_mr_closev(tx_entry->mr, tx_entry->count);
-	rxm_tx_buf_release(rxm_ep, tx_entry->tx_buf);
-	rxm_tx_entry_release(&rxm_conn->send_queue, tx_entry);
+	/* Release TX entry and TX buffer if this is requested and fi_inject was used */
+	if (release_res && (pkt_size <= rxm_ep->msg_info->tx_attr->inject_size)) {
+		rxm_tx_buf_release(rxm_ep, tx_entry->tx_buf);
+		rxm_tx_entry_release(&rxm_conn->send_queue, tx_entry);
+	}
 	return ret;
 }
 
@@ -944,35 +959,23 @@ void rxm_ep_handle_postponed_tx_op(struct rxm_ep *rxm_ep,
 	       "Send deferred TX request (len - %zd) for %p conn\n",
 	       tx_entry->tx_buf->pkt.hdr.size, rxm_conn);
 
-	if ((tx_size <= rxm_ep->msg_info->tx_attr->inject_size) &&
-	    (tx_entry->flags & FI_INJECT) && !(tx_entry->flags & FI_COMPLETION))  {
-		(void) rxm_ep_inject_send(rxm_ep, rxm_conn,
-					  tx_entry->tx_buf, tx_size);
-		/* Release TX entry for futher reuse */
-		rxm_tx_entry_release(&rxm_conn->send_queue, tx_entry);
-	} else if (tx_entry->tx_buf->pkt.hdr.size >
+	if (tx_entry->tx_buf->pkt.hdr.size >
 			rxm_ep->rxm_info->tx_attr->inject_size) {
 		struct rxm_rma_iov *rma_iov =
 			(struct rxm_rma_iov *)&tx_entry->tx_buf->pkt.data;
 		ret = rxm_ep_lmt_tx_send(rxm_ep, rxm_conn, tx_entry,
 					 rxm_pkt_size + sizeof(*rma_iov) +
-					 sizeof(*rma_iov->iov) * tx_entry->count);
-		if (OFI_UNLIKELY(ret)) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
-				"Unable to perform deferred large send operation\n");
-			rxm_cq_write_error(rxm_ep->util_ep.tx_cq,
-					   rxm_ep->util_ep.tx_cntr,
-					   tx_entry->context, (int)ret);
-		}
+					 sizeof(*rma_iov->iov) * tx_entry->count, 0);
 	} else {
-		ret = rxm_ep_normal_send(rxm_ep, rxm_conn, tx_entry, tx_size);
-		if (OFI_UNLIKELY(ret)) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
-				"Unable to perform deferred send operation\n");
-			rxm_cq_write_error(rxm_ep->util_ep.tx_cq,
-					   rxm_ep->util_ep.tx_cntr,
-					   tx_entry->context, (int)ret);
-		}
+		ret = rxm_ep_normal_send(rxm_ep, rxm_conn, tx_entry, tx_size, 0);
+	}
+	if (OFI_UNLIKELY(ret)) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+			"Unable to perform deferred send operation\n");
+		rxm_cq_write_error(rxm_ep->util_ep.tx_cq, rxm_ep->util_ep.tx_cntr,
+				   tx_entry->context, (int)ret);
+		dlist_insert_tail(&tx_entry->postponed_entry,
+				  &rxm_conn->tx_entry_for_release);
 	}
 }
 
@@ -1066,7 +1069,7 @@ inject_continue:
 			return ret;
 		memcpy(tx_buf->pkt.data, buf, tx_buf->pkt.hdr.size);
 		tx_entry->state = RXM_TX;
-		return rxm_ep_normal_send(rxm_ep, rxm_conn, tx_entry, pkt_size);
+		return rxm_ep_normal_send(rxm_ep, rxm_conn, tx_entry, pkt_size, 1);
 	}
 }
 
@@ -1120,7 +1123,7 @@ send_continue:
 					      op, &tx_entry);
 		if (OFI_UNLIKELY(ret < 0))
 			return ret;			
-		return rxm_ep_lmt_tx_send(rxm_ep, rxm_conn, tx_entry, rxm_pkt_size + ret);
+		return rxm_ep_lmt_tx_send(rxm_ep, rxm_conn, tx_entry, rxm_pkt_size + ret, 1);
 	} else {
 		size_t total_len = rxm_pkt_size + data_len;
 
@@ -1142,7 +1145,7 @@ send_continue:
 			return ret;
 		}
 		tx_entry->state = RXM_TX;
-		return rxm_ep_normal_send(rxm_ep, rxm_conn, tx_entry, total_len);
+		return rxm_ep_normal_send(rxm_ep, rxm_conn, tx_entry, total_len, 1);
 	}
 }
 

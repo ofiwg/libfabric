@@ -152,6 +152,7 @@ static void rxm_conn_free(struct util_cmap_handle *handle)
 {
 	struct rxm_ep *rxm_ep = container_of(handle->cmap->ep, struct rxm_ep, util_ep);
 	struct rxm_conn *rxm_conn = container_of(handle, struct rxm_conn, handle);
+	struct rxm_tx_entry *tx_entry;
 
 	/* This handles case when saved_msg_ep wasn't closed */
 	if (rxm_conn->saved_msg_ep) {
@@ -159,18 +160,33 @@ static void rxm_conn_free(struct util_cmap_handle *handle)
 		if (fi_close(&rxm_conn->saved_msg_ep->fid))
 			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 				"Unable to close saved msg_ep\n");
+		else
+			FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
+			       "Closed saved msg_ep\n");
 	}
+
+	if (!rxm_ep->srx_ctx) {
+		rxm_ep_cleanup_posted_rx_list(rxm_ep, &rxm_conn->posted_rx_list);
+		rxm_buf_pool_destroy(&rxm_conn->rx_buf_pool);
+	}
+
+	rxm_send_queue_close(&rxm_conn->send_queue);
 
 	if (!rxm_conn->msg_ep)
 		return;
-	rxm_ep_cleanup_posted_rx_list(rxm_ep, &rxm_conn->posted_rx_list);
+
+	while (!dlist_empty(&rxm_conn->tx_entry_for_release)) {
+		dlist_pop_front(&rxm_conn->tx_entry_for_release, struct rxm_tx_entry,
+				tx_entry, postponed_entry);
+		rxm_tx_buf_release(rxm_ep, tx_entry->tx_buf);
+		rxm_tx_entry_release(&rxm_conn->send_queue, tx_entry);
+	}
 	/* Assuming fi_close also shuts down the connection gracefully if the
 	 * endpoint is in connected state */
 	if (fi_close(&rxm_conn->msg_ep->fid))
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to close msg_ep\n");
 	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Closed msg_ep\n");
 	rxm_conn->msg_ep = NULL;
-	rxm_send_queue_close(&rxm_conn->send_queue);
 
 	free(container_of(handle, struct rxm_conn, handle));
 }
@@ -179,6 +195,14 @@ static void rxm_conn_connected_handler(struct util_cmap_handle *handle)
 {
 	struct rxm_ep *rxm_ep = container_of(handle->cmap->ep, struct rxm_ep, util_ep);
 	struct rxm_conn *rxm_conn = container_of(handle, struct rxm_conn, handle);
+	struct rxm_tx_entry *tx_entry;
+
+	while (!dlist_empty(&rxm_conn->tx_entry_for_release)) {
+		dlist_pop_front(&rxm_conn->tx_entry_for_release, struct rxm_tx_entry,
+				tx_entry, postponed_entry);
+		rxm_tx_buf_release(rxm_ep, tx_entry->tx_buf);
+		rxm_tx_entry_release(&rxm_conn->send_queue, tx_entry);
+	}
 
 	if (!rxm_conn->saved_msg_ep)
 		return;
@@ -187,7 +211,8 @@ static void rxm_conn_connected_handler(struct util_cmap_handle *handle)
 	 * endpoint is in connected state */
 	if (fi_close(&rxm_conn->saved_msg_ep->fid))
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to close saved msg_ep\n");
-	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Closed saved msg_ep\n");
+	else
+		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Closed saved msg_ep\n");
 	rxm_conn->saved_msg_ep = NULL;
 }
 
@@ -200,14 +225,26 @@ static struct util_cmap_handle *rxm_conn_alloc(struct util_cmap *cmap)
 		return NULL;
 	ret = rxm_send_queue_init(rxm_ep, rxm_conn, &rxm_conn->send_queue,
 				  rxm_ep->rxm_info->tx_attr->size);
-	if (ret) {
-		free(rxm_conn);
-		return NULL;
+	if (ret)
+		goto err1;
+	if (!rxm_ep->srx_ctx) {
+		ret = rxm_buf_pool_create(rxm_ep, rxm_ep->msg_info->rx_attr->size,
+					  rxm_ep->rxm_info->tx_attr->inject_size +
+					  sizeof(struct rxm_rx_buf),
+					  &rxm_conn->rx_buf_pool, RXM_BUF_POOL_RX);
+		if (ret)
+			goto err2;
 	}
 	dlist_init(&rxm_conn->posted_rx_list);
 	dlist_init(&rxm_conn->saved_posted_rx_list);
 	dlist_init(&rxm_conn->postponed_tx_list);
+	dlist_init(&rxm_conn->tx_entry_for_release);
 	return &rxm_conn->handle;
+err2:
+	rxm_send_queue_close(&rxm_conn->send_queue);
+err1:
+	free(rxm_conn);
+	return NULL;
 }
 
 static inline int
