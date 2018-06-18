@@ -38,7 +38,7 @@ struct fi_tx_attr mrail_tx_attr = {
 	.comp_order 	= ~0x0ULL,
 	.inject_size 	= SIZE_MAX,
 	.size 		= SIZE_MAX,
-	.iov_limit 	= SIZE_MAX,
+	.iov_limit 	= MRAIL_IOV_LIMIT,
 	.rma_iov_limit 	= SIZE_MAX,
 };
 

@@ -51,7 +51,7 @@ static int rxm_match_recv_entry(struct dlist_entry *item, const void *arg)
 	struct rxm_recv_match_attr *attr = (struct rxm_recv_match_attr *) arg;
 	struct rxm_recv_entry *recv_entry =
 		container_of(item, struct rxm_recv_entry, entry);
-	return rxm_match_addr(recv_entry->addr, attr->addr);
+	return ofi_match_addr(recv_entry->addr, attr->addr);
 }
 
 static int rxm_match_recv_entry_tag(struct dlist_entry *item, const void *arg)
@@ -59,7 +59,7 @@ static int rxm_match_recv_entry_tag(struct dlist_entry *item, const void *arg)
 	struct rxm_recv_match_attr *attr = (struct rxm_recv_match_attr *)arg;
 	struct rxm_recv_entry *recv_entry =
 		container_of(item, struct rxm_recv_entry, entry);
-	return rxm_match_tag(recv_entry->tag, recv_entry->ignore, attr->tag);
+	return ofi_match_tag(recv_entry->tag, recv_entry->ignore, attr->tag);
 }
 
 static int rxm_match_recv_entry_tag_addr(struct dlist_entry *item, const void *arg)
@@ -67,8 +67,8 @@ static int rxm_match_recv_entry_tag_addr(struct dlist_entry *item, const void *a
 	struct rxm_recv_match_attr *attr = (struct rxm_recv_match_attr *)arg;
 	struct rxm_recv_entry *recv_entry =
 		container_of(item, struct rxm_recv_entry, entry);
-	return rxm_match_addr(recv_entry->addr, attr->addr) &&
-		rxm_match_tag(recv_entry->tag, recv_entry->ignore, attr->tag);
+	return ofi_match_addr(recv_entry->addr, attr->addr) &&
+		ofi_match_tag(recv_entry->tag, recv_entry->ignore, attr->tag);
 }
 
 static int rxm_match_recv_entry_context(struct dlist_entry *item, const void *context)
@@ -83,7 +83,7 @@ static int rxm_match_unexp_msg(struct dlist_entry *item, const void *arg)
 	struct rxm_recv_match_attr *attr = (struct rxm_recv_match_attr *)arg;
 	struct rxm_unexp_msg *unexp_msg =
 		container_of(item, struct rxm_unexp_msg, entry);
-	return rxm_match_addr(attr->addr, unexp_msg->addr);
+	return ofi_match_addr(attr->addr, unexp_msg->addr);
 }
 
 static int rxm_match_unexp_msg_tag(struct dlist_entry *item, const void *arg)
@@ -91,7 +91,7 @@ static int rxm_match_unexp_msg_tag(struct dlist_entry *item, const void *arg)
 	struct rxm_recv_match_attr *attr = (struct rxm_recv_match_attr *)arg;
 	struct rxm_unexp_msg *unexp_msg =
 		container_of(item, struct rxm_unexp_msg, entry);
-	return rxm_match_tag(attr->tag, attr->ignore, unexp_msg->tag);
+	return ofi_match_tag(attr->tag, attr->ignore, unexp_msg->tag);
 }
 
 static int rxm_match_unexp_msg_tag_addr(struct dlist_entry *item, const void *arg)
@@ -99,8 +99,8 @@ static int rxm_match_unexp_msg_tag_addr(struct dlist_entry *item, const void *ar
 	struct rxm_recv_match_attr *attr = (struct rxm_recv_match_attr *)arg;
 	struct rxm_unexp_msg *unexp_msg =
 		container_of(item, struct rxm_unexp_msg, entry);
-	return rxm_match_addr(attr->addr, unexp_msg->addr) &&
-		rxm_match_tag(attr->tag, attr->ignore, unexp_msg->tag);
+	return ofi_match_addr(attr->addr, unexp_msg->addr) &&
+		ofi_match_tag(attr->tag, attr->ignore, unexp_msg->tag);
 }
 
 static inline int

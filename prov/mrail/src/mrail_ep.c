@@ -30,6 +30,8 @@
  * SOFTWARE.
  */
 
+#include <ofi_iov.h>
+
 #include "mrail.h"
 
 #define MRAIL_DEFINE_GET_RAIL(txrx_rail)					\
@@ -39,89 +41,445 @@ static inline size_t mrail_get_ ## txrx_rail(struct mrail_ep *mrail_ep)		\
 }
 
 MRAIL_DEFINE_GET_RAIL(tx_rail)
-MRAIL_DEFINE_GET_RAIL(rx_rail)
+
+#define MRAIL_HDR_INITIALIZER(op_type, tag_val)		\
+{							\
+	.version 	= MRAIL_HDR_VERSION,		\
+	.op		= op_type,			\
+	.tag		= tag_val,			\
+}
+
+#define MRAIL_HDR_INITIALIZER_MSG MRAIL_HDR_INITIALIZER(ofi_op_msg, 0)
+
+#define MRAIL_HDR_INITIALIZER_TAGGED(tag) \
+	MRAIL_HDR_INITIALIZER(ofi_op_tagged, tag)
+
+#define mrail_util_ep(ep_fid) \
+	container_of(ep_fid, struct util_ep, ep_fid.fid)
+
+#define mrail_comp_flag(ep_fid) \
+	(mrail_util_ep(ep_fid)->tx_op_flags & FI_COMPLETION)
+
+#define mrail_inject_flags(ep_fid) \
+	((mrail_util_ep(ep_fid)->tx_op_flags & ~FI_COMPLETION) | FI_INJECT)
+
+static int mrail_match_recv_any(struct dlist_entry *item, const void *arg)
+{
+	OFI_UNUSED(item);
+	OFI_UNUSED(arg);
+	return 1;
+}
+
+static int mrail_match_recv_addr(struct dlist_entry *item, const void *arg)
+{
+	struct mrail_match_attr *match_attr = (struct mrail_match_attr *)arg;
+	struct mrail_recv *recv =
+		container_of(item, struct mrail_recv, entry);
+
+	return ofi_match_addr(recv->addr, match_attr->addr);
+}
+
+static int mrail_match_recv_tag(struct dlist_entry *item, const void *arg)
+{
+	struct mrail_match_attr *match_attr = (struct mrail_match_attr *)arg;
+	struct mrail_recv *recv =
+		container_of(item, struct mrail_recv, entry);
+
+	return ofi_match_tag(recv->tag, recv->ignore, match_attr->tag);
+}
+
+static int mrail_match_recv_addr_tag(struct dlist_entry *item, const void *arg)
+{
+	struct mrail_match_attr *match_attr = (struct mrail_match_attr *)arg;
+	struct mrail_recv *recv =
+		container_of(item, struct mrail_recv, entry);
+
+	return ofi_match_addr(recv->addr, match_attr->addr) &&
+		ofi_match_tag(recv->tag, recv->ignore, match_attr->tag);
+}
+
+static int mrail_match_unexp_any(struct dlist_entry *item, const void *arg)
+{
+	OFI_UNUSED(item);
+	OFI_UNUSED(arg);
+	return 1;
+}
+
+static int mrail_match_unexp_addr(struct dlist_entry *item, const void *arg)
+{
+	struct mrail_recv *recv = (struct mrail_recv *)arg;
+	struct mrail_unexp_msg_entry *unexp_msg_entry =
+		container_of(item, struct mrail_unexp_msg_entry, entry);
+
+	return ofi_match_addr(unexp_msg_entry->addr, recv->addr);
+}
+
+static int mrail_match_unexp_tag(struct dlist_entry *item, const void *arg)
+{
+	struct mrail_recv *recv = (struct mrail_recv *)arg;
+	struct mrail_unexp_msg_entry *unexp_msg_entry =
+		container_of(item, struct mrail_unexp_msg_entry, entry);
+
+	return ofi_match_tag(recv->tag, recv->ignore, unexp_msg_entry->tag);
+}
+
+static int mrail_match_unexp_addr_tag(struct dlist_entry *item, const void *arg)
+{
+	struct mrail_recv *recv = (struct mrail_recv *)arg;
+	struct mrail_unexp_msg_entry *unexp_msg_entry =
+		container_of(item, struct mrail_unexp_msg_entry, entry);
+
+	return ofi_match_addr(recv->addr, unexp_msg_entry->addr) &&
+		ofi_match_tag(recv->tag, recv->ignore, unexp_msg_entry->tag);
+}
+
+int mrail_reprocess_directed_recvs(struct mrail_recv_queue *recv_queue)
+{
+	// TODO
+	return -FI_ENOSYS;
+}
+
+struct mrail_recv *
+mrail_match_recv_handle_unexp(struct mrail_recv_queue *recv_queue, uint64_t tag,
+			      uint64_t addr, char *data, size_t len, void *context)
+{
+	struct mrail_recv *recv;
+	struct mrail_unexp_msg_entry *unexp_msg_entry;
+	struct mrail_match_attr match_attr = {
+		.tag	= tag,
+		.addr	= addr,
+	};
+
+	recv = container_of(dlist_remove_first_match(&recv_queue->recv_list,
+							   recv_queue->match_recv,
+							   &match_attr),
+				  struct mrail_recv, entry);
+	if (OFI_UNLIKELY(!recv)) {
+		unexp_msg_entry = recv_queue->get_unexp_msg_entry(recv_queue,
+								  context);
+		if (unexp_msg_entry) {
+			FI_WARN(recv_queue->prov, FI_LOG_CQ,
+				"Unable to get unexp_msg_entry!");
+			assert(0);
+			return NULL;
+		}
+
+		unexp_msg_entry->addr		= addr;
+		unexp_msg_entry->tag		= tag;
+		unexp_msg_entry->context	= context;
+		memcpy(unexp_msg_entry->data, data, len);
+
+		FI_DBG(recv_queue->prov, FI_LOG_CQ, "No matching recv found for"
+		       " incoming msg with addr: 0x%" PRIx64 " tag: 0x%" PRIx64
+		       "\n", unexp_msg_entry->addr, unexp_msg_entry->tag);
+
+		FI_DBG(recv_queue->prov, FI_LOG_CQ, "Enqueueing unexp_msg_entry to "
+		       "unexpected msg list\n");
+
+		dlist_insert_tail(&unexp_msg_entry->entry,
+				  &recv_queue->unexp_msg_list);
+		return NULL;
+	}
+	return recv;
+}
+
+static void mrail_recv_queue_init(struct fi_provider *prov,
+				  struct mrail_recv_queue *recv_queue,
+				  dlist_func_t match_recv,
+				  dlist_func_t match_unexp,
+				  mrail_get_unexp_msg_entry_func get_unexp_msg_entry)
+{
+	recv_queue->prov = prov;
+	dlist_init(&recv_queue->recv_list);
+	dlist_init(&recv_queue->unexp_msg_list);
+	recv_queue->match_recv = match_recv;
+	recv_queue->match_unexp = match_unexp;
+	recv_queue->get_unexp_msg_entry = get_unexp_msg_entry;
+}
+
+// TODO go for separate recv functions (recvmsg, recvv, etc) to be optimal
+static ssize_t
+mrail_recv_common(struct mrail_ep *mrail_ep, struct mrail_recv_queue *recv_queue,
+		  struct iovec *iov, size_t count, void *context,
+		  fi_addr_t src_addr, uint64_t tag, uint64_t ignore,
+		  uint64_t flags, uint64_t comp_flags)
+{
+	struct mrail_recv *recv;
+	struct mrail_unexp_msg_entry *unexp_msg_entry;
+
+	recv = mrail_pop_recv(mrail_ep);
+	if (!recv)
+		return -FI_ENOMEM;
+
+	recv->count 		= count;
+	recv->context 		= context;
+	recv->flags 		= flags;
+	recv->comp_flags 	= comp_flags | FI_RECV;
+	recv->addr	 	= src_addr;
+	recv->tag 		= tag;
+	recv->ignore 		= ignore;
+
+	memcpy(recv->iov, iov, sizeof(*iov) * count);
+
+	FI_DBG(&mrail_prov, FI_LOG_EP_DATA, "Posting recv of length: %zu "
+	       "src_addr: 0x%" PRIx64 " tag: 0x%" PRIx64 " ignore: 0x%" PRIx64
+	       "\n", ofi_total_iov_len(iov, count), recv->addr,
+	       recv->tag, recv->ignore);
+
+	fastlock_acquire(&mrail_ep->util_ep.lock);
+	unexp_msg_entry = container_of(dlist_remove_first_match(
+						&recv_queue->unexp_msg_list,
+						recv_queue->match_unexp,
+						recv),
+				       struct mrail_unexp_msg_entry,
+				       entry);
+	if (!unexp_msg_entry) {
+		dlist_insert_tail(&recv->entry, &recv_queue->recv_list);
+		fastlock_release(&mrail_ep->util_ep.lock);
+		return 0;
+	}
+	fastlock_release(&mrail_ep->util_ep.lock);
+
+	FI_DBG(recv_queue->prov, FI_LOG_EP_DATA, "Match for posted recv"
+	       " with addr: 0x%" PRIx64 ", tag: 0x%" PRIx64 " ignore: "
+	       "0x%" PRIx64 " found in unexpected msg queue\n",
+	       recv->addr, recv->tag, recv->ignore);
+
+	return mrail_cq_process_buf_recv((mrail_cq_entry_t *)unexp_msg_entry->data,
+					 recv);
+}
 
 static ssize_t mrail_recv(struct fid_ep *ep_fid, void *buf, size_t len,
 			  void *desc, fi_addr_t src_addr, void *context)
 {
 	struct mrail_ep *mrail_ep = container_of(ep_fid, struct mrail_ep,
 					     util_ep.ep_fid.fid);
-	uint32_t rail = mrail_get_rx_rail(mrail_ep);
-	ssize_t ret;
-
-	assert(!src_addr);
-
-	ret = fi_recv(mrail_ep->eps[rail], buf, len, desc, 0, context);
-	if (ret) {
-		FI_WARN(&mrail_prov, FI_LOG_EP_DATA,
-			"Unable to post recv on rail: %" PRIu32 "\n", rail);
-		return ret;
-	}
-	return 0;
+	struct iovec iov = {
+		.iov_base	= buf,
+		.iov_len	= len,
+	};
+	return mrail_recv_common(mrail_ep, &mrail_ep->recv_queue, &iov,
+				 1, context, src_addr, 0, 0,
+				 mrail_ep->util_ep.rx_op_flags, FI_MSG);
 }
 
-static ssize_t mrail_ep_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
-				uint64_t flags)
+static ssize_t mrail_trecv(struct fid_ep *ep_fid, void *buf, size_t len,
+			    void *desc, fi_addr_t src_addr, uint64_t tag,
+			    uint64_t ignore, void *context)
 {
 	struct mrail_ep *mrail_ep = container_of(ep_fid, struct mrail_ep,
 					     util_ep.ep_fid.fid);
-	struct fi_msg rail_msg = *msg;
-	uint32_t rail = mrail_get_tx_rail(mrail_ep);
+	struct iovec iov = {
+		.iov_base	= buf,
+		.iov_len	= len,
+	};
+	return mrail_recv_common(mrail_ep, &mrail_ep->trecv_queue, &iov,
+				 1, context, src_addr, tag, ignore,
+				 mrail_ep->util_ep.rx_op_flags, FI_TAGGED);
+}
+
+static void mrail_copy_iov_hdr(struct mrail_hdr *hdr, struct iovec *iov_dest,
+			     const struct iovec *iov_src, size_t count)
+{
+	iov_dest[0].iov_base = hdr;
+	iov_dest[0].iov_len = sizeof(*hdr);
+	memcpy(&iov_dest[1], iov_src, sizeof(*iov_src) * count);
+}
+
+static ssize_t
+mrail_send_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
+		  size_t count, size_t len, fi_addr_t dest_addr, uint64_t data,
+		  void *context, uint64_t flags)
+{
+	struct mrail_ep *mrail_ep = container_of(ep_fid, struct mrail_ep,
+						 util_ep.ep_fid.fid);
+	struct iovec *iov_dest = alloca(sizeof(*iov_dest) * (count + 1));
+	struct mrail_hdr hdr = MRAIL_HDR_INITIALIZER_MSG;
+	uint32_t i = mrail_get_tx_rail(mrail_ep);
+	struct fi_msg msg;
 	ssize_t ret;
 
-	rail_msg.addr = *(fi_addr_t *)ofi_av_get_addr(mrail_ep->util_ep.av,
-						      (int)msg->addr);
+	fi_addr_t *rail_fi_addr = ofi_av_get_addr(mrail_ep->util_ep.av,
+						  (int)dest_addr);
 
-	ret = fi_sendmsg(mrail_ep->eps[rail], &rail_msg, flags);
-	if (ret) {
+	mrail_copy_iov_hdr(&hdr, iov_dest, iov, count);
+
+	msg.msg_iov 	= iov_dest;
+	msg.desc    	= desc;
+	msg.iov_count	= count + 1;
+	msg.addr	= rail_fi_addr[i];
+	msg.context	= context;
+	msg.data	= data;
+
+	// TODO remove this once we support large messages
+	assert(len < mrail_ep->rails[i].info->tx_attr->inject_size);
+	flags |= FI_INJECT;
+
+	FI_DBG(&mrail_prov, FI_LOG_EP_DATA, "Posting send of length: %" PRIu64
+	       " dest_addr: 0x%" PRIx64 " on rail: %d\n", len, dest_addr, i);
+	ret = fi_sendmsg(mrail_ep->rails[i].ep, &msg, flags);
+	if (ret)
 		FI_WARN(&mrail_prov, FI_LOG_EP_DATA,
-			"Unable to post sendmsg on rail: %" PRIu32 "\n", rail);
-		return ret;
-	}
-	return 0;
+			"Unable to fi_sendmsg on rail: %" PRIu32 "\n", i);
+	return ret;
+}
+
+static ssize_t
+mrail_tsend_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
+		   size_t count, size_t len, fi_addr_t dest_addr, uint64_t tag,
+		   uint64_t data, void *context, uint64_t flags)
+{
+	struct mrail_ep *mrail_ep = container_of(ep_fid, struct mrail_ep,
+						 util_ep.ep_fid.fid);
+	struct iovec *iov_dest = alloca(sizeof(*iov_dest) * (count + 1));
+	struct mrail_hdr hdr = MRAIL_HDR_INITIALIZER_TAGGED(tag);
+	uint32_t i = mrail_get_tx_rail(mrail_ep);
+	struct fi_msg_tagged msg;
+	ssize_t ret;
+
+	fi_addr_t *rail_fi_addr = ofi_av_get_addr(mrail_ep->util_ep.av,
+						  (int)dest_addr);
+
+	mrail_copy_iov_hdr(&hdr, iov_dest, iov, count);
+
+	msg.msg_iov 	= iov_dest;
+	msg.desc    	= desc;
+	msg.iov_count	= count + 1;
+	msg.addr	= rail_fi_addr[i];
+	msg.context	= context;
+	msg.data	= data;
+	msg.tag		= tag;
+
+	assert(len < mrail_ep->rails[i].info->tx_attr->inject_size);
+	flags |= FI_INJECT;
+
+	FI_DBG(&mrail_prov, FI_LOG_EP_DATA, "Posting tsend of length: %" PRIu64
+	       " dest_addr: 0x%" PRIx64 " tag: 0x%" PRIx64 " on rail: %d\n",
+	       len, dest_addr, tag, i);
+	ret = fi_tsendmsg(mrail_ep->rails[i].ep, &msg, flags);
+	if (ret)
+		FI_WARN(&mrail_prov, FI_LOG_EP_DATA,
+			"Unable to fi_sendmsg on rail: %" PRIu32 "\n", i);
+	return ret;
+}
+
+static ssize_t mrail_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
+			     uint64_t flags)
+{
+	struct mrail_ep *mrail_ep = container_of(ep_fid, struct mrail_ep,
+						 util_ep.ep_fid.fid);
+	if (!(mrail_ep->util_ep.tx_op_flags & FI_SELECTIVE_COMPLETION))
+		flags |= FI_COMPLETION;
+	return mrail_send_common(ep_fid, msg->msg_iov, msg->desc, msg->iov_count,
+				 ofi_total_iov_len(msg->msg_iov, msg->iov_count),
+				 msg->addr, msg->data, msg->context, flags);
 }
 
 static ssize_t mrail_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 			  void *desc, fi_addr_t dest_addr, void *context)
 {
-	struct mrail_ep *mrail_ep = container_of(ep_fid, struct mrail_ep,
-					     util_ep.ep_fid.fid);
-	fi_addr_t *rail_fi_addr = ofi_av_get_addr(mrail_ep->util_ep.av,
-						  (int)dest_addr);
-	uint32_t rail = mrail_get_tx_rail(mrail_ep);
-	ssize_t ret;
-
-	assert(rail_fi_addr);
-
-	ret = fi_send(mrail_ep->eps[rail], buf, len, desc, rail_fi_addr[rail],
-		      context);
-	if (ret) {
-		FI_WARN(&mrail_prov, FI_LOG_EP_DATA,
-			"Unable to post send on rail: %" PRIu32 "\n", rail);
-		return ret;
-	}
-	return 0;
+	struct iovec iov = {
+		.iov_base 	= (void *)buf,
+		.iov_len 	= len,
+	};
+	return mrail_send_common(ep_fid, &iov, &desc, 1, len, dest_addr, 0,
+				 context, mrail_comp_flag(ep_fid));
 }
 
-static ssize_t mrail_ep_inject(struct fid_ep *ep_fid, const void *buf,
-			       size_t len, fi_addr_t dest_addr)
+static ssize_t mrail_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
+			    fi_addr_t dest_addr)
+{
+	struct iovec iov = {
+		.iov_base 	= (void *)buf,
+		.iov_len 	= len,
+	};
+	return mrail_send_common(ep_fid, &iov, NULL, 1, len, dest_addr, 0,
+				 NULL, mrail_inject_flags(ep_fid));
+}
+
+static ssize_t mrail_injectdata(struct fid_ep *ep_fid, const void *buf,
+				size_t len, uint64_t data, fi_addr_t dest_addr)
+{
+	struct iovec iov = {
+		.iov_base 	= (void *)buf,
+		.iov_len 	= len,
+	};
+	return mrail_send_common(ep_fid, &iov, NULL, 1, len, dest_addr, data,
+				 NULL, (mrail_inject_flags(ep_fid) |
+					FI_REMOTE_CQ_DATA));
+}
+
+static ssize_t
+mrail_tsendmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
+	       uint64_t flags)
 {
 	struct mrail_ep *mrail_ep = container_of(ep_fid, struct mrail_ep,
-					     util_ep.ep_fid.fid);
-	fi_addr_t *rail_fi_addr = ofi_av_get_addr(mrail_ep->util_ep.av,
-						  (int)dest_addr);
-	uint32_t rail = mrail_get_tx_rail(mrail_ep);
-	ssize_t ret;
+						 util_ep.ep_fid.fid);
+	if (!(mrail_ep->util_ep.tx_op_flags & FI_SELECTIVE_COMPLETION))
+		flags |= FI_COMPLETION;
+	return mrail_tsend_common(ep_fid, msg->msg_iov, msg->desc, msg->iov_count,
+				  ofi_total_iov_len(msg->msg_iov, msg->iov_count),
+				  msg->addr, msg->tag, msg->data, msg->context,
+				  flags);
+}
 
-	assert(rail_fi_addr);
+static ssize_t mrail_tsend(struct fid_ep *ep_fid, const void *buf, size_t len,
+			   void *desc, fi_addr_t dest_addr, uint64_t tag,
+			   void *context)
+{
+	struct iovec iov = {
+		.iov_base 	= (void *)buf,
+		.iov_len 	= len,
+	};
+	return mrail_tsend_common(ep_fid, &iov, &desc, 1, len, dest_addr, tag,
+				  0, context, mrail_comp_flag(ep_fid));
+}
 
-	ret = fi_inject(mrail_ep->eps[rail], buf, len, rail_fi_addr[rail]);
-	if (ret) {
-		FI_WARN(&mrail_prov, FI_LOG_EP_DATA,
-			"Unable to post send on rail: %" PRIu32 "\n", rail);
-		return ret;
-	}
-	return 0;
+static ssize_t mrail_tsenddata(struct fid_ep *ep_fid, const void *buf, size_t len,
+			       void *desc, uint64_t data, fi_addr_t dest_addr,
+			       uint64_t tag, void *context)
+{
+	struct iovec iov = {
+		.iov_base 	= (void *)buf,
+		.iov_len 	= len,
+	};
+	return mrail_tsend_common(ep_fid, &iov, &desc, 1, len, dest_addr, tag,
+				  data, context, (mrail_comp_flag(ep_fid) |
+						  FI_REMOTE_CQ_DATA));
+}
+
+static ssize_t mrail_tinject(struct fid_ep *ep_fid, const void *buf, size_t len,
+			     fi_addr_t dest_addr, uint64_t tag)
+{
+	struct iovec iov = {
+		.iov_base 	= (void *)buf,
+		.iov_len 	= len,
+	};
+	return mrail_tsend_common(ep_fid, &iov, NULL, 1, len, dest_addr, tag,
+				  0, NULL, mrail_inject_flags(ep_fid));
+}
+
+static ssize_t mrail_tinjectdata(struct fid_ep *ep_fid, const void *buf,
+				 size_t len, uint64_t data, fi_addr_t dest_addr,
+				 uint64_t tag)
+{
+	struct iovec iov = {
+		.iov_base 	= (void *)buf,
+		.iov_len 	= len,
+	};
+	return mrail_tsend_common(ep_fid, &iov, NULL, 1, len, dest_addr, tag,
+				  data, NULL, (mrail_inject_flags(ep_fid) |
+					       FI_REMOTE_CQ_DATA));
+}
+
+static struct mrail_unexp_msg_entry *
+mrail_get_unexp_msg_entry(struct mrail_recv_queue *recv_queue, void *context)
+{
+	// TODO use buf pool
+	// context would be mrail_ep from which u can get the buf pool
+	struct mrail_unexp_msg_entry *unexp_msg_entry =
+		malloc(sizeof(*unexp_msg_entry) + sizeof(mrail_cq_entry_t));
+	return unexp_msg_entry;
 }
 
 static int mrail_getname(fid_t fid, void *addr, size_t *addrlen)
@@ -139,8 +497,8 @@ static int mrail_getname(fid_t fid, void *addr, size_t *addrlen)
 
 	for (i = 0; i < mrail_ep->num_eps; i++) {
 		rail_addrlen = *addrlen - offset;
-		ret = fi_getname(&mrail_ep->eps[i]->fid, (char *)addr + offset,
-				 &rail_addrlen);
+		ret = fi_getname(&mrail_ep->rails[i].ep->fid,
+				 (char *)addr + offset, &rail_addrlen);
 		if (ret) {
 			FI_WARN(&mrail_prov, FI_LOG_EP_CTRL,
 				"Unable to get name for rail: %zd\n", i);
@@ -156,12 +514,16 @@ static int mrail_ep_close(fid_t fid)
 	struct mrail_ep *mrail_ep =
 		container_of(fid, struct mrail_ep, util_ep.ep_fid.fid);
 	int ret, retv = 0;
+	size_t i;
 
-	ret = mrail_close_fids((struct fid **)mrail_ep->eps,
-			       mrail_ep->num_eps);
-	if (ret)
-		retv = ret;
-	free(mrail_ep->eps);
+	mrail_recv_fs_free(mrail_ep->recv_fs);
+
+	for (i = 0; i < mrail_ep->num_eps; i++) {
+		ret = fi_close(&mrail_ep->rails[i].ep->fid);
+		if (ret)
+			retv = ret;
+	}
+	free(mrail_ep->rails);
 
 	ret = ofi_endpoint_close(&mrail_ep->util_ep);
 	if (ret)
@@ -188,7 +550,7 @@ static int mrail_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		if (ret)
 			return ret;
 		for (i = 0; i < mrail_ep->num_eps; i++) {
-			ret = fi_ep_bind(mrail_ep->eps[i],
+			ret = fi_ep_bind(mrail_ep->rails[i].ep,
 					 &mrail_av->avs[i]->fid, flags);
 			if (ret)
 				return ret;
@@ -203,7 +565,10 @@ static int mrail_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		if (ret)
 			return ret;
 		for (i = 0; i < mrail_ep->num_eps; i++) {
-			ret = fi_ep_bind(mrail_ep->eps[i],
+			if (flags & FI_TRANSMIT)
+				flags |= FI_SELECTIVE_COMPLETION;
+
+			ret = fi_ep_bind(mrail_ep->rails[i].ep,
 					 &mrail_cq->cqs[i]->fid, flags);
 			if (ret)
 				return ret;
@@ -242,7 +607,7 @@ static int mrail_ep_ctrl(struct fid *fid, int command, void *arg)
 		if (!mrail_ep->util_ep.av)
 			return -FI_ENOAV;
 		for (i = 0; i < mrail_ep->num_eps; i++) {
-			ret = fi_enable(mrail_ep->eps[i]);
+			ret = fi_enable(mrail_ep->rails[i].ep);
 			if (ret)
 				return ret;
 		}
@@ -271,8 +636,8 @@ static int mrail_ep_setopt(fid_t fid, int level, int optname,
 	mrail_ep = container_of(fid, struct mrail_ep, util_ep.ep_fid.fid);
 
 	for (i = 0; i < mrail_ep->num_eps; i++) {
-		ret = fi_setopt(&mrail_ep->eps[i]->fid, level, optname, optval,
-				optlen);
+		ret = fi_setopt(&mrail_ep->rails[i].ep->fid, level, optname,
+				optval, optlen);
 		if (ret)
 			return ret;
 	}
@@ -311,23 +676,23 @@ static struct fi_ops_msg mrail_ops_msg = {
 	.recvmsg = fi_no_msg_recvmsg,
 	.send = mrail_send,
 	.sendv = fi_no_msg_sendv,
-	.sendmsg = mrail_ep_sendmsg,
-	.inject = mrail_ep_inject,
+	.sendmsg = mrail_sendmsg,
+	.inject = mrail_inject,
 	.senddata = fi_no_msg_senddata,
-	.injectdata = fi_no_msg_injectdata,
+	.injectdata = mrail_injectdata,
 };
 
 struct fi_ops_tagged mrail_ops_tagged = {
 	.size = sizeof(struct fi_ops_tagged),
-	.recv = fi_no_tagged_recv,
+	.recv = mrail_trecv,
 	.recvv = fi_no_tagged_recvv,
 	.recvmsg = fi_no_tagged_recvmsg,
-	.send = fi_no_tagged_send,
+	.send = mrail_tsend,
 	.sendv = fi_no_tagged_sendv,
-	.sendmsg = fi_no_tagged_sendmsg,
-	.inject = fi_no_tagged_inject,
-	.senddata = fi_no_tagged_senddata,
-	.injectdata = fi_no_tagged_injectdata,
+	.sendmsg = mrail_tsendmsg,
+	.inject = mrail_tinject,
+	.senddata = mrail_tsenddata,
+	.injectdata = mrail_tinjectdata,
 };
 
 struct fi_ops_rma mrail_ops_rma = {
@@ -351,7 +716,7 @@ int mrail_ep_open(struct fid_domain *domain_fid, struct fi_info *info,
 			     util_domain.domain_fid);
 	struct mrail_ep *mrail_ep;
 	struct fi_info *fi;
-	size_t i;
+	size_t i, rxq_total_size;
 	int ret;
 
 	if (strcmp(mrail_domain->info->domain_attr->name,
@@ -379,20 +744,50 @@ int mrail_ep_open(struct fid_domain *domain_fid, struct fi_info *info,
 		return ret;
 	}
 
-	mrail_ep->eps = calloc(mrail_ep->num_eps, sizeof(*mrail_ep->eps));
-	if (!mrail_ep->eps) {
+	mrail_ep->rails = calloc(mrail_ep->num_eps, sizeof(*mrail_ep->rails));
+	if (!mrail_ep->rails) {
 		ret = -FI_ENOMEM;
 		goto err;
 	}
 
-	for (i = 0, fi = mrail_ep->info->next; fi; fi = fi->next, i++) {
+	for (i = 0, fi = mrail_ep->info->next, rxq_total_size = 0; fi;
+	     fi = fi->next, i++) {
+		fi->tx_attr->op_flags &= ~FI_COMPLETION;
 		ret = fi_endpoint(mrail_domain->domains[i], fi,
-				  &mrail_ep->eps[i], context);
+				  &mrail_ep->rails[i].ep, mrail_ep);
 		if (ret) {
 			FI_WARN(&mrail_prov, FI_LOG_EP_CTRL,
 				"Unable to open EP\n");
 			goto err;
 		}
+		mrail_ep->rails[i].info = fi;
+		rxq_total_size += fi->rx_attr->size;
+	}
+
+	mrail_ep->recv_fs = mrail_recv_fs_create(rxq_total_size);
+	if (!mrail_ep->recv_fs) {
+		ret = -FI_ENOMEM;
+		goto err;
+	}
+
+	if (mrail_ep->info->caps & FI_DIRECTED_RECV) {
+		mrail_recv_queue_init(&mrail_prov, &mrail_ep->recv_queue,
+				      mrail_match_recv_addr,
+				      mrail_match_unexp_addr,
+				      mrail_get_unexp_msg_entry);
+		mrail_recv_queue_init(&mrail_prov, &mrail_ep->trecv_queue,
+				      mrail_match_recv_addr_tag,
+				      mrail_match_unexp_addr_tag,
+				      mrail_get_unexp_msg_entry);
+	} else {
+		mrail_recv_queue_init(&mrail_prov, &mrail_ep->recv_queue,
+				      mrail_match_recv_any,
+				      mrail_match_unexp_any,
+				      mrail_get_unexp_msg_entry);
+		mrail_recv_queue_init(&mrail_prov, &mrail_ep->trecv_queue,
+				      mrail_match_recv_tag,
+				      mrail_match_unexp_tag,
+				      mrail_get_unexp_msg_entry);
 	}
 
 	ofi_atomic_initialize32(&mrail_ep->tx_rail, 0);

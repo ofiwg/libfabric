@@ -268,6 +268,21 @@ int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_pr
 int ofi_endpoint_close(struct util_ep *util_ep);
 
 /*
+ * Tag and address match
+ */
+
+static inline int ofi_match_addr(fi_addr_t recv_addr, fi_addr_t addr)
+{
+	return (recv_addr == FI_ADDR_UNSPEC) || (recv_addr == addr);
+}
+
+static inline int ofi_match_tag(uint64_t recv_tag, uint64_t recv_ignore,
+				uint64_t tag)
+{
+	return ((recv_tag | recv_ignore) == (tag | recv_ignore));
+}
+
+/*
  * Completion queue
  *
  * Utility provider derived CQs that require manual progress must
