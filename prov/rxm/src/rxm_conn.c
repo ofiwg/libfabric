@@ -205,8 +205,9 @@ static struct util_cmap_handle *rxm_conn_alloc(struct util_cmap *cmap)
 		return NULL;
 	}
 	dlist_init(&rxm_conn->posted_rx_list);
+	dlist_init(&rxm_conn->sar_rx_msg_list);
 	dlist_init(&rxm_conn->saved_posted_rx_list);
-	dlist_init(&rxm_conn->postponed_tx_list);
+	dlist_init(&rxm_conn->deferred_tx_list);
 	return &rxm_conn->handle;
 }
 
@@ -343,19 +344,19 @@ static void rxm_conn_handle_eq_err(struct rxm_ep *rxm_ep, ssize_t rd)
 	}
 }
 
-static void rxm_conn_handle_postponed_op(struct rxm_ep *rxm_ep,
-					 struct util_cmap_handle *handle)
+static void rxm_conn_handle_deferred_op(struct rxm_ep *rxm_ep,
+					struct util_cmap_handle *handle)
 {
 	struct rxm_tx_entry *tx_entry;
 	struct rxm_conn *rxm_conn = container_of(handle, struct rxm_conn, handle);
 
-	while (!dlist_empty(&rxm_conn->postponed_tx_list)) {
-		dlist_pop_front(&rxm_conn->postponed_tx_list, struct rxm_tx_entry,
-				tx_entry, postponed_entry);
+	while (!dlist_empty(&rxm_conn->deferred_tx_list)) {
+		dlist_pop_front(&rxm_conn->deferred_tx_list, struct rxm_tx_entry,
+				tx_entry, deferred_entry);
 		if (!(tx_entry->comp_flags & FI_RMA))
-			rxm_ep_handle_postponed_tx_op(rxm_ep, rxm_conn, tx_entry);
+			rxm_ep_handle_deferred_tx_op(rxm_ep, rxm_conn, tx_entry);
 		else
-			rxm_ep_handle_postponed_rma_op(rxm_ep, rxm_conn, tx_entry);
+			rxm_ep_handle_deferred_rma_op(rxm_ep, rxm_conn, tx_entry);
 	}
 }
 
@@ -409,7 +410,7 @@ static void *rxm_conn_event_handler(void *arg)
 						 entry->fid->context,
 						 ((rd - sizeof(*entry)) ?
 						  &cm_data->conn_id : NULL));
-			rxm_conn_handle_postponed_op(rxm_ep, entry->fid->context);
+			rxm_conn_handle_deferred_op(rxm_ep, entry->fid->context);
 			fastlock_release(&rxm_ep->util_ep.cmap->lock);
 			break;
 		case FI_SHUTDOWN:

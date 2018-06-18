@@ -178,9 +178,9 @@ err:
 	return ret;
 }
 
-void rxm_ep_handle_postponed_rma_op(struct rxm_ep *rxm_ep,
-				    struct rxm_conn *rxm_conn,
-				    struct rxm_tx_entry *tx_entry)
+void rxm_ep_handle_deferred_rma_op(struct rxm_ep *rxm_ep,
+				   struct rxm_conn *rxm_conn,
+				   struct rxm_tx_entry *tx_entry)
 {
 	ssize_t ret;
 
@@ -285,8 +285,7 @@ rxm_ep_postpone_rma(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	if (OFI_UNLIKELY(ret))
 		return ret;
 
-	dlist_insert_tail(&tx_entry->postponed_entry,
-			  &rxm_conn->postponed_tx_list);
+	dlist_insert_tail(&tx_entry->deferred_entry, &rxm_conn->deferred_tx_list);
 
 	return ret;
 }

@@ -74,6 +74,8 @@
 #define RXM_MR_PROV_KEY(info) ((info->domain_attr->mr_mode == FI_MR_BASIC) ||\
 			       info->domain_attr->mr_mode & FI_MR_PROV_KEY)
 
+#define RXM_SAR_LAST_SEGMENT	0
+
 #define RXM_LOG_STATE(subsystem, pkt, prev_state, next_state) 			\
 	FI_DBG(&rxm_prov, subsystem, "[LMT] msg_id: 0x%" PRIx64 " %s -> %s\n",	\
 	       pkt.ctrl_hdr.msg_id, rxm_proto_state_str[prev_state],		\
@@ -287,7 +289,7 @@ struct rxm_tx_entry {
 	/* Must stay at top */
 	union {
 		struct fi_context fi_context;
-		struct dlist_entry postponed_entry;
+		struct dlist_entry deferred_entry;
 	};
 
 	enum rxm_proto_state state;
@@ -313,7 +315,12 @@ struct rxm_tx_entry {
 		struct {
 			size_t segs_left;
 			uint64_t msg_id;
+			/* These lists for the TX buffers that are: */
+			/* - Has been successfully sent to the peer */
 			struct dlist_entry in_flight_tx_buf_list;
+			/* - Has been queued until it would be possbile
+			 *   to send it  */
+			struct dlist_entry deferred_tx_buf_list;
 			struct rxm_iov rxm_iov;
 			uint64_t iov_offset;
 		};
@@ -335,6 +342,7 @@ struct rxm_recv_entry {
 	void *multi_recv_buf;
 	/* Used for SAR protocol */
 	struct {
+		struct dlist_entry sar_entry;
 		size_t total_recv_len;
 		uint64_t msg_id;
 	};
@@ -403,8 +411,9 @@ struct rxm_ep {
 struct rxm_conn {
 	struct fid_ep *msg_ep;
 	struct rxm_send_queue send_queue;
-	struct dlist_entry postponed_tx_list;
+	struct dlist_entry deferred_tx_list;
 	struct dlist_entry posted_rx_list;
+	struct dlist_entry sar_rx_msg_list;
 	struct util_cmap_handle handle;
 	/* This is saved MSG EP fid, that hasn't been closed during
 	 * handling of CONN_RECV in CMAP_CONNREQ_SENT for passive side */
@@ -502,12 +511,12 @@ err:
 	return ret;
 }
 
-void rxm_ep_handle_postponed_tx_op(struct rxm_ep *rxm_ep,
+void rxm_ep_handle_deferred_tx_op(struct rxm_ep *rxm_ep,
+				  struct rxm_conn *rxm_conn,
+				  struct rxm_tx_entry *tx_entry);
+void rxm_ep_handle_deferred_rma_op(struct rxm_ep *rxm_ep,
 				   struct rxm_conn *rxm_conn,
 				   struct rxm_tx_entry *tx_entry);
-void rxm_ep_handle_postponed_rma_op(struct rxm_ep *rxm_ep,
-				    struct rxm_conn *rxm_conn,
-				    struct rxm_tx_entry *tx_entry);
 
 static inline void rxm_cntr_inc(struct util_cntr *cntr)
 {
@@ -572,7 +581,26 @@ rxm_process_recv_entry(struct rxm_recv_queue *recv_queue,
 		dlist_remove(&rx_buf->unexp_msg.entry);
 		rx_buf->recv_entry = recv_entry;
 		recv_queue->rxm_ep->res_fastlock_release(&recv_queue->lock);
-		return rxm_cq_handle_rx_buf(rx_buf);
+		if (rx_buf->pkt.ctrl_hdr.type != ofi_ctrl_seg_data) {
+			return rxm_cq_handle_rx_buf(rx_buf);
+		} else {
+			int last = (rx_buf->pkt.ctrl_hdr.seg_no == RXM_SAR_LAST_SEGMENT);
+			ssize_t ret = rxm_cq_handle_rx_buf(rx_buf);
+			recv_queue->rxm_ep->res_fastlock_acquire(&recv_queue->lock);
+			while (!ret && rx_buf && !last) {
+				rx_buf = rxm_check_unexp_msg_list(recv_queue, recv_entry->addr,
+								  recv_entry->tag, recv_entry->ignore);
+				if (rx_buf) {
+					assert(rx_buf->pkt.ctrl_hdr.type == ofi_ctrl_seg_data);
+					rx_buf->recv_entry = recv_entry;
+					dlist_remove(&rx_buf->unexp_msg.entry);
+					last = (rx_buf->pkt.ctrl_hdr.seg_no == RXM_SAR_LAST_SEGMENT);
+					ret = rxm_cq_handle_rx_buf(rx_buf);
+				}
+			}
+			recv_queue->rxm_ep->res_fastlock_release(&recv_queue->lock);
+			return ret;
+		}
 	}
 
 	RXM_DBG_ADDR_TAG(FI_LOG_EP_DATA, "Enqueuing recv", recv_entry->addr,
@@ -653,6 +681,7 @@ rxm_tx_buf_release(struct rxm_ep *rxm_ep, struct rxm_tx_buf *tx_buf)
 	       (tx_buf->type == RXM_BUF_POOL_TX_SAR));
 	assert((tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_data) ||
 	       (tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_large_data) ||
+	       (tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_seg_data) ||
 	       (tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_ack));
 	tx_buf->pkt.hdr.flags &= ~FI_REMOTE_CQ_DATA;
 	rxm_buf_release(&rxm_ep->buf_pools[tx_buf->type],
