@@ -141,7 +141,12 @@ static int validate_msg_ordering_bits(char *node, char *service, uint64_t flags,
 					fi->fabric_attr->name, fi->domain_attr->name,
 					fi->ep_attr->type);
 			if (hints->tx_attr->msg_order) {
-				if (!(fi->tx_attr->msg_order & hints->tx_attr->msg_order)) {
+				if ((fi->tx_attr->msg_order & hints->tx_attr->msg_order) !=
+				    hints->tx_attr->msg_order) {
+					FT_DEBUG("tx msg_order not matching - hints: %"
+						 PRIx64 " prov: %" PRIx64 "\n",
+						 hints->tx_attr->msg_order,
+						 fi->tx_attr->msg_order);
 					ret = -FI_EOTHER;
 					fi_freeinfo(*info);
 					goto failed_getinfo;
@@ -167,7 +172,12 @@ static int validate_msg_ordering_bits(char *node, char *service, uint64_t flags,
 					fi->fabric_attr->name, fi->domain_attr->name,
 					fi->ep_attr->type);
 			if (hints->rx_attr->msg_order) {
-				if (!(fi->rx_attr->msg_order & hints->rx_attr->msg_order)) {
+				if ((fi->rx_attr->msg_order & hints->rx_attr->msg_order) !=
+				    hints->rx_attr->msg_order) {
+					FT_DEBUG("rx msg_order not matching - hints: %"
+						 PRIx64 " prov: %" PRIx64 "\n",
+						 hints->rx_attr->msg_order,
+						 fi->rx_attr->msg_order);
 					ret = -FI_EOTHER;
 					fi_freeinfo(*info);
 					goto failed_getinfo;
