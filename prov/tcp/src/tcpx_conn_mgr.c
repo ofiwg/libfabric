@@ -395,10 +395,11 @@ static void handle_connreq(struct poll_fd_mgr *poll_mgr,
 	}
 
 	handle = calloc(1, sizeof(*handle));
-	if (!handle)
+	if (!handle) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"cannot allocate memory \n");
 		goto err1;
+	}
 
 	fd_info = calloc(1, sizeof(*fd_info));
 	if (!fd_info) {
