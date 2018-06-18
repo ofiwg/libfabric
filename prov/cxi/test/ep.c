@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <inttypes.h>
+#include <limits.h>
 
 #include <criterion/criterion.h>
 #include <criterion/parameterized.h>
@@ -856,4 +857,237 @@ ParameterizedTest(struct ep_setopt_args *param, ep, setopt_args)
 	}
 
 	cxit_destroy_ep();
+}
+
+Test(ep, rx_ctx_ep)
+{
+	int ret;
+
+	cxit_create_ep();
+
+	/* RX context doesn't work with anything but scalable eps */
+	ret = fi_rx_context(cxit_ep, 0, NULL, NULL, NULL);
+	cr_assert_eq(ret, -FI_EINVAL, "fi_rx_context bad ep. %d", ret);
+
+	cxit_destroy_ep();
+}
+
+Test(ep, rx_ctx_sep_idx)
+{
+	int ret;
+
+	cxit_create_sep();
+
+	/* Induce index out of range error */
+	ret = fi_rx_context(cxit_sep, INT_MAX, NULL, NULL, NULL);
+	cr_assert_eq(ret, -FI_EINVAL, "fi_rx_context bad idx. %d", ret);
+
+	cxit_destroy_sep();
+}
+
+Test(ep, rx_ctx_sep_null_rx)
+{
+	int ret;
+
+	cxit_create_sep();
+
+	/* Null rx_ep value error */
+	ret = fi_rx_context(cxit_sep, 0, NULL, NULL, NULL);
+	cr_assert_eq(ret, -FI_EINVAL, "fi_rx_context bad rx. %d", ret);
+
+	cxit_destroy_sep();
+}
+
+Test(ep, rx_ctx_sep)
+{
+	int ret;
+	struct cxi_ep *cxi_ep;
+	struct cxi_rx_ctx *rx_ctx;
+	struct fid_ep *rx_ep = NULL;
+	void *context = &ret;
+	struct fi_rx_attr *attr = NULL;
+
+	cxit_create_sep();
+
+	cxi_ep = container_of(cxit_sep, struct cxi_ep, ep.fid);
+
+	ret = fi_rx_context(cxit_sep, 0, attr, &rx_ep, context);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_rx_context bad rx. %d", ret);
+	cr_assert_not_null(rx_ep);
+
+	/* Validate RX Ctx */
+	rx_ctx = container_of(rx_ep, struct cxi_rx_ctx, ctx);
+	cr_assert_eq(rx_ctx->ep_attr, cxi_ep->attr);
+	cr_assert_eq(rx_ctx->domain, cxi_ep->attr->domain);
+	cr_assert_eq(rx_ctx->av, cxi_ep->attr->av);
+	cr_assert_eq(rx_ctx->min_multi_recv, cxi_ep->attr->min_multi_recv);
+	cr_assert_eq(ofi_atomic_get32(&cxi_ep->attr->num_rx_ctx), 1);
+	cr_assert_eq(rx_ctx->ctx.fid.fclass, FI_CLASS_RX_CTX);
+	cr_assert_eq(rx_ctx->ctx.fid.context, context);
+
+	ret = fi_close(&rx_ep->fid);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_close rx_ep. %d", ret);
+
+	cxit_destroy_sep();
+}
+
+Test(ep, tx_ctx_ep)
+{
+	int ret;
+
+	cxit_create_ep();
+
+	/* RX context doesn't work with anything but scalable eps */
+	ret = fi_tx_context(cxit_ep, 0, NULL, NULL, NULL);
+	cr_assert_eq(ret, -FI_EINVAL, "fi_tx_context bad ep. %d", ret);
+
+	cxit_destroy_ep();
+}
+
+Test(ep, tx_ctx_sep_idx)
+{
+	int ret;
+
+	cxit_create_sep();
+
+	/* Induce index out of range error */
+	ret = fi_tx_context(cxit_sep, INT_MAX, NULL, NULL, NULL);
+	cr_assert_eq(ret, -FI_EINVAL, "fi_tx_context bad idx. %d", ret);
+
+	cxit_destroy_sep();
+}
+
+Test(ep, tx_ctx_sep_null_tx)
+{
+	int ret;
+
+	cxit_create_sep();
+
+	/* Null tx_ep value error */
+	ret = fi_tx_context(cxit_sep, 0, NULL, NULL, NULL);
+	cr_assert_eq(ret, -FI_EINVAL, "fi_tx_context bad tx. %d", ret);
+
+	cxit_destroy_sep();
+}
+
+Test(ep, tx_ctx_sep)
+{
+	int ret;
+	struct cxi_ep *cxi_ep;
+	struct cxi_tx_ctx *tx_ctx;
+	struct fid_ep *tx_ep = NULL;
+	void *context = &ret;
+	struct fi_tx_attr *attr = NULL;
+
+	cxit_create_sep();
+
+	cxi_ep = container_of(cxit_sep, struct cxi_ep, ep.fid);
+
+	ret = fi_tx_context(cxit_sep, 0, attr, &tx_ep, context);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_tx_context bad tx. %d", ret);
+	cr_assert_not_null(tx_ep);
+
+	/* Validate RX Ctx */
+	tx_ctx = container_of(tx_ep, struct cxi_tx_ctx, fid.ctx);
+	cr_assert_eq(tx_ctx->ep_attr, cxi_ep->attr);
+	cr_assert_eq(tx_ctx->domain, cxi_ep->attr->domain);
+	cr_assert_eq(tx_ctx->av, cxi_ep->attr->av);
+	cr_assert_eq(ofi_atomic_get32(&cxi_ep->attr->num_tx_ctx), 1);
+	cr_assert_eq(tx_ctx->fid.ctx.fid.fclass, FI_CLASS_TX_CTX);
+	cr_assert_eq(tx_ctx->fclass, FI_CLASS_TX_CTX);
+	cr_assert_eq(tx_ctx->fid.ctx.fid.context, context);
+
+	ret = fi_close(&tx_ep->fid);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_close tx_ep. %d", ret);
+
+	cxit_destroy_sep();
+}
+
+Test(ep, stx_ctx_null_stx)
+{
+	int ret;
+	struct fi_tx_attr *attr = NULL;
+	void *context = NULL;
+
+	ret = fi_stx_context(cxit_domain, attr, NULL, context);
+	/* TODO Fix when fi_stx_context is implemented, should be -FI_EINVAL */
+	cr_assert_eq(ret, -FI_ENOSYS, "fi_stx_context null stx. %d", ret);
+}
+
+Test(ep, stx_ctx)
+{
+	int ret;
+	struct fi_tx_attr *attr = NULL;
+	struct fid_stx *stx;
+	void *context = &ret;
+	struct cxi_domain *dom;
+	struct cxi_tx_ctx *tx_ctx;
+	int refs;
+
+	dom = container_of(cxit_domain, struct cxi_domain, dom_fid);
+	refs = ofi_atomic_get32(&dom->ref);
+
+	ret = fi_stx_context(cxit_domain, attr, &stx, context);
+
+	/* TODO Fix when fi_stx_context is implemented, should be FI_SUCCESS */
+	cr_assert_eq(ret, -FI_ENOSYS, "fi_stx_context failed. %d", ret);
+	if (ret == -FI_ENOSYS)
+		return;
+
+	tx_ctx = container_of(stx, struct cxi_tx_ctx, fid.stx);
+
+	/* Validate stx */
+	cr_assert_eq(tx_ctx->domain, dom);
+	cr_assert_eq(ofi_atomic_inc32(&dom->ref), refs + 1);
+	cr_assert_eq(tx_ctx->fid.ctx.fid.fclass, FI_CLASS_TX_CTX);
+	cr_assert_eq(tx_ctx->fclass, FI_CLASS_TX_CTX);
+	cr_assert_eq(tx_ctx->fid.ctx.fid.context, context);
+
+	ret = fi_close(&stx->fid);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_close stx_ep. %d", ret);
+}
+
+Test(ep, srx_ctx_null_srx)
+{
+	int ret;
+	struct fi_rx_attr *attr = NULL;
+	void *context = NULL;
+
+	ret = fi_srx_context(cxit_domain, attr, NULL, context);
+	/* TODO Fix when fi_srx_context is implemented, should be -FI_EINVAL */
+	cr_assert_eq(ret, -FI_ENOSYS, "fi_srx_context null srx. %d", ret);
+}
+
+Test(ep, srx_ctx)
+{
+	int ret;
+	struct fi_rx_attr *attr = NULL;
+	struct fid_ep *srx;
+	void *context = &ret;
+	struct cxi_domain *dom;
+	struct cxi_rx_ctx *rx_ctx;
+	int refs;
+
+	dom = container_of(cxit_domain, struct cxi_domain, dom_fid);
+	refs = ofi_atomic_get32(&dom->ref);
+
+	ret = fi_srx_context(cxit_domain, attr, &srx, context);
+	/* TODO Fix when fi_srx_context is implemented, should be FI_SUCCESS */
+	cr_assert_eq(ret, -FI_ENOSYS, "fi_stx_context failed. %d", ret);
+	if (ret == -FI_ENOSYS)
+		return;
+
+	rx_ctx = container_of(srx, struct cxi_rx_ctx, ctx);
+
+	/* Validate stx */
+	cr_assert_eq(rx_ctx->domain, dom);
+	cr_assert_eq(ofi_atomic_inc32(&dom->ref), refs + 1);
+	cr_assert_eq(rx_ctx->ctx.fid.fclass, FI_CLASS_SRX_CTX);
+	cr_assert_eq(rx_ctx->ctx.fid.fclass, FI_CLASS_RX_CTX);
+	cr_assert_eq(rx_ctx->ctx.fid.context, context);
+	cr_assert_eq(rx_ctx->enabled, 1);
+	cr_assert_eq(rx_ctx->min_multi_recv, CXI_EP_MIN_MULTI_RECV);
+
+	ret = fi_close(&srx->fid);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_close srx_ep. %d", ret);
 }

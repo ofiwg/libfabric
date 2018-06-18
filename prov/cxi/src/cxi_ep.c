@@ -921,7 +921,8 @@ static int cxi_ep_tx_ctx(struct fid_ep *ep, int index, struct fi_tx_attr *attr,
 
 	cxi_ep = container_of(ep, struct cxi_ep, ep);
 	if (cxi_ep->attr->fclass != FI_CLASS_SEP ||
-		index >= (int)cxi_ep->attr->ep_attr.tx_ctx_cnt)
+	    index >= (int)cxi_ep->attr->ep_attr.tx_ctx_cnt ||
+	    !tx_ep)
 		return -FI_EINVAL;
 
 	if (attr) {
@@ -966,7 +967,8 @@ static int cxi_ep_rx_ctx(struct fid_ep *ep, int index, struct fi_rx_attr *attr,
 
 	cxi_ep = container_of(ep, struct cxi_ep, ep);
 	if (cxi_ep->attr->fclass != FI_CLASS_SEP ||
-		index >= (int)cxi_ep->attr->ep_attr.rx_ctx_cnt)
+	    index >= (int)cxi_ep->attr->ep_attr.rx_ctx_cnt ||
+	    !rx_ep)
 		return -FI_EINVAL;
 
 	if (attr) {
@@ -1039,7 +1041,8 @@ int cxi_stx_ctx(struct fid_domain *domain, struct fi_tx_attr *attr,
 	struct cxi_domain *dom;
 	struct cxi_tx_ctx *tx_ctx;
 
-	if (attr && cxi_verify_tx_attr(attr))
+	if ((attr && cxi_verify_tx_attr(attr)) ||
+	    !stx)
 		return -FI_EINVAL;
 
 	dom = container_of(domain, struct cxi_domain, dom_fid);
@@ -1088,7 +1091,8 @@ int cxi_srx_ctx(struct fid_domain *domain, struct fi_rx_attr *attr,
 	struct cxi_domain *dom;
 	struct cxi_rx_ctx *rx_ctx;
 
-	if (attr && cxi_verify_rx_attr(attr))
+	if ((attr && cxi_verify_rx_attr(attr)) ||
+	    !srx)
 		return -FI_EINVAL;
 
 	dom = container_of(domain, struct cxi_domain, dom_fid);
