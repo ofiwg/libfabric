@@ -713,3 +713,147 @@ ParameterizedTest(struct ep_ctrl_null_params *param, ep, ctrl_null_arg)
 
 	cxit_destroy_ep();
 }
+
+struct ep_getopt_args {
+	int level;
+	int optname;
+	size_t *optval;
+	size_t *optlen;
+	int retval;
+};
+
+static size_t optvalue;
+static size_t optlength;
+static struct ep_getopt_args ep_null_params[] = {
+	{.level = -1,
+	 .retval = -FI_ENOPROTOOPT},
+	{.level = FI_OPT_ENDPOINT,
+	 .optname = FI_OPT_CM_DATA_SIZE,
+	 .retval = -FI_ENOPROTOOPT},
+	{.level = FI_OPT_ENDPOINT,
+	 .optname = -1,
+	 .retval = -FI_ENOPROTOOPT},
+	{.level = FI_OPT_ENDPOINT,
+	 .optname = FI_OPT_MIN_MULTI_RECV,
+	 .optval = NULL,
+	 .optlen = NULL,
+	 .retval = -FI_EINVAL},
+	{.level = FI_OPT_ENDPOINT,
+	 .optname = FI_OPT_MIN_MULTI_RECV,
+	 .optval = &optvalue,
+	 .optlen = NULL,
+	 .retval = -FI_EINVAL},
+	{.level = FI_OPT_ENDPOINT,
+	 .optname = FI_OPT_MIN_MULTI_RECV,
+	 .optval = &optvalue,
+	 .optlen = &optlength,
+	 .retval = FI_SUCCESS},
+};
+
+ParameterizedTestParameters(ep, getopt_args)
+{
+	size_t param_sz;
+
+	param_sz = ARRAY_SIZE(ep_null_params);
+	return cr_make_param_array(struct ep_getopt_args, ep_null_params,
+				   param_sz);
+}
+
+ParameterizedTest(struct ep_getopt_args *param, ep, getopt_args)
+{
+	int ret;
+	struct cxi_ep *cxi_ep;
+
+	cxit_create_ep();
+
+	cxi_ep = container_of(&cxit_ep->fid, struct cxi_ep, ep.fid);
+
+	ret = fi_getopt(&cxit_ep->fid, param->level, param->optname,
+			(void *)param->optval, param->optlen);
+	cr_assert_eq(ret, param->retval,
+		     "fi_getopt lvl %d name %d val %p len %p. %d != %d",
+		     param->level, param->optname, param->optval,
+		     param->optlen, ret, param->retval);
+
+	if (ret == FI_SUCCESS) {
+		cr_assert_not_null(cxi_ep->attr);
+		cr_assert_eq(*param->optval, cxi_ep->attr->min_multi_recv,
+			     "fi_getopt val mismatch. %zd != %zd",
+			     *param->optval, cxi_ep->attr->min_multi_recv);
+		cr_assert_eq(*param->optlen, sizeof(size_t),
+			     "fi_getopt len mismatch. %zd != %zd",
+			     *param->optlen, sizeof(size_t));
+	}
+
+	cxit_destroy_ep();
+}
+
+struct ep_setopt_args {
+	int level;
+	int optname;
+	size_t optval;
+	size_t optlen;
+	int retval;
+};
+
+ParameterizedTestParameters(ep, setopt_args)
+{
+	size_t param_sz;
+
+	static struct ep_setopt_args ep_null_params[] = {
+		{.level = -1,
+		.retval = -FI_ENOPROTOOPT},
+		{.level = FI_OPT_ENDPOINT,
+		.optname = FI_OPT_CM_DATA_SIZE,
+		.retval = -FI_ENOPROTOOPT},
+		{.level = FI_OPT_ENDPOINT,
+		.optname = -1,
+		.retval = -FI_ENOPROTOOPT},
+		{.level = FI_OPT_ENDPOINT,
+		.optname = FI_OPT_MIN_MULTI_RECV,
+		.optval = 0,
+		.retval = -FI_EINVAL},
+		{.level = FI_OPT_ENDPOINT,
+		.optname = FI_OPT_MIN_MULTI_RECV,
+		.optval = 26,
+		.retval = FI_SUCCESS},
+		{.level = FI_OPT_ENDPOINT,
+		.optname = FI_OPT_MIN_MULTI_RECV,
+		.optval = 90001,
+		.retval = FI_SUCCESS},
+	};
+
+	param_sz = ARRAY_SIZE(ep_null_params);
+	return cr_make_param_array(struct ep_setopt_args, ep_null_params,
+				   param_sz);
+}
+
+ParameterizedTest(struct ep_setopt_args *param, ep, setopt_args)
+{
+	int ret;
+	struct cxi_ep *cxi_ep;
+	void *val = NULL;
+
+	if (param->optval != 0)
+		val = &param->optval;
+
+	cxit_create_ep();
+
+	cxi_ep = container_of(&cxit_ep->fid, struct cxi_ep, ep.fid);
+
+	ret = fi_setopt(&cxit_ep->fid, param->level, param->optname,
+			val, param->optlen);
+	cr_assert_eq(ret, param->retval,
+		     "fi_setopt lvl %d name %d val %zd. %d != %d",
+		     param->level, param->optname, param->optval,
+		     ret, param->retval);
+
+	if (ret == FI_SUCCESS) {
+		cr_assert_not_null(cxi_ep->attr);
+		cr_assert_eq(param->optval, cxi_ep->attr->min_multi_recv,
+			     "fi_setopt val mismatch. %zd != %zd",
+			     param->optval, cxi_ep->attr->min_multi_recv);
+	}
+
+	cxit_destroy_ep();
+}

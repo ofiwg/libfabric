@@ -865,6 +865,10 @@ static int cxi_ep_getopt(fid_t fid, int level, int optname,
 
 	switch (optname) {
 	case FI_OPT_MIN_MULTI_RECV:
+
+		if (!optval || !optlen)
+			return -FI_EINVAL;
+
 		*(size_t *)optval = cxi_ep->attr->min_multi_recv;
 		*optlen = sizeof(size_t);
 		break;
@@ -889,6 +893,9 @@ static int cxi_ep_setopt(fid_t fid, int level, int optname,
 
 	switch (optname) {
 	case FI_OPT_MIN_MULTI_RECV:
+
+		if (!optval)
+			return -FI_EINVAL;
 
 		cxi_ep->attr->min_multi_recv = *(size_t *)optval;
 		for (i = 0; i < cxi_ep->attr->ep_attr.rx_ctx_cnt; i++) {
