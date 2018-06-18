@@ -179,6 +179,8 @@ static int mrail_getinfo(uint32_t version, const char *node, const char *service
 			 struct fi_info **info)
 {
 	struct fi_info *fi;
+	size_t mr_key_size;
+	uint32_t num_rails;
 	int ret;
 
 	if (mrail_num_info >= MRAIL_MAX_INFO) {
@@ -191,6 +193,11 @@ static int mrail_getinfo(uint32_t version, const char *node, const char *service
 	ret = mrail_get_core_info(version, node, service, flags, hints, info);
 	if (ret)
 		return ret;
+
+	for (fi = *info, num_rails = 0; fi; fi = fi->next, ++num_rails)
+		;
+
+	mr_key_size = num_rails * sizeof(struct mrail_addr_key);
 
 	fi = fi_dupinfo(*info);
 	if (!fi) {
@@ -218,6 +225,7 @@ static int mrail_getinfo(uint32_t version, const char *node, const char *service
 	fi->ep_attr->protocol_version 	= mrail_info.ep_attr->protocol_version;
 	fi->fabric_attr->prov_version	= FI_VERSION(MRAIL_MAJOR_VERSION,
 						     MRAIL_MINOR_VERSION);
+	fi->domain_attr->mr_key_size 	= mr_key_size;
 
 	/* Account for one iovec buffer used for mrail header */
 	assert(fi->tx_attr->iov_limit);
