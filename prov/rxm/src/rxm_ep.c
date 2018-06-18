@@ -37,8 +37,6 @@
 
 #include "rxm.h"
 
-const size_t rxm_pkt_size = sizeof(struct rxm_pkt);
-
 static int rxm_match_noop(struct dlist_entry *item, const void *arg)
 {
 	OFI_UNUSED(item);
@@ -1045,7 +1043,8 @@ rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		dlist_init(&tx_buf->in_flight_entry);
 		if (!send_failed) {
 			ret = fi_send(rxm_conn->msg_ep, &tx_buf->pkt,
-				      rxm_pkt_size + tx_buf->pkt.ctrl_hdr.seg_size,
+				      sizeof(struct rxm_pkt) +
+				      tx_buf->pkt.ctrl_hdr.seg_size,
 				      tx_buf->hdr.desc, 0, tx_entry);
 			if (OFI_UNLIKELY(ret)) {
 				if (seg_num == tx_entry->segs_left) {
@@ -1078,7 +1077,7 @@ void rxm_ep_handle_deferred_tx_op(struct rxm_ep *rxm_ep,
 				  struct rxm_tx_entry *tx_entry)
 {
 	ssize_t ret;
-	size_t tx_size = rxm_pkt_size + tx_entry->tx_buf->pkt.hdr.size;
+	size_t tx_size = sizeof(struct rxm_pkt) + tx_entry->tx_buf->pkt.hdr.size;
 
 	tx_entry->tx_buf->pkt.ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
 	FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
@@ -1096,7 +1095,7 @@ void rxm_ep_handle_deferred_tx_op(struct rxm_ep *rxm_ep,
 		struct rxm_rma_iov *rma_iov =
 			(struct rxm_rma_iov *)&tx_entry->tx_buf->pkt.data;
 		ret = rxm_ep_lmt_tx_send(rxm_ep, rxm_conn, tx_entry,
-					 rxm_pkt_size + sizeof(*rma_iov) +
+					 sizeof(struct rxm_pkt) + sizeof(*rma_iov) +
 					 sizeof(*rma_iov->iov) * tx_entry->count);
 		if (OFI_UNLIKELY(ret)) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
@@ -1157,7 +1156,7 @@ rxm_ep_inject_common(struct rxm_ep *rxm_ep, const void *buf, size_t len,
 {
 	struct rxm_conn *rxm_conn;
 	struct rxm_tx_buf *tx_buf;
-	size_t pkt_size = rxm_pkt_size + len;
+	size_t pkt_size = sizeof(struct rxm_pkt) + len;
 	ssize_t ret;
 
 	assert(len <= rxm_ep->rxm_info->tx_attr->inject_size);
@@ -1250,7 +1249,7 @@ send_continue:
 	assert(dlist_empty(&rxm_conn->deferred_tx_list));
 
 	if (data_len <= rxm_ep->rxm_info->tx_attr->inject_size) {
-		size_t total_len = rxm_pkt_size + data_len;
+		size_t total_len = sizeof(struct rxm_pkt) + data_len;
 
 		ret = rxm_ep_format_tx_res_lightweight(rxm_ep, rxm_conn, data_len, data,
 						       flags, tag, &tx_buf, pool);
@@ -1285,7 +1284,7 @@ send_continue:
 			if (OFI_UNLIKELY(ret < 0))
 				return ret;
 			return rxm_ep_lmt_tx_send(rxm_ep, rxm_conn, tx_entry,
-						  rxm_pkt_size + ret);
+						  sizeof(struct rxm_pkt) + ret);
 		}
 	}
 }
