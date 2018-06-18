@@ -216,6 +216,7 @@ enum rxm_buf_pool_type {
 	RXM_BUF_POOL_START	= RXM_BUF_POOL_RX,
 	RXM_BUF_POOL_TX,
 	RXM_BUF_POOL_TX_START	= RXM_BUF_POOL_TX,
+	RXM_BUF_POOL_TX_INJECT,
 	RXM_BUF_POOL_TX_ACK,
 	RXM_BUF_POOL_TX_LMT,
 	RXM_BUF_POOL_TX_SAR,
@@ -663,6 +664,7 @@ static inline struct rxm_tx_buf *
 rxm_tx_buf_get(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
 {
 	assert((type == RXM_BUF_POOL_TX) ||
+	       (type == RXM_BUF_POOL_TX_INJECT) ||
 	       (type == RXM_BUF_POOL_TX_ACK) ||
 	       (type == RXM_BUF_POOL_TX_LMT) ||
 	       (type == RXM_BUF_POOL_TX_SAR));
@@ -673,6 +675,7 @@ static inline void
 rxm_tx_buf_release(struct rxm_ep *rxm_ep, struct rxm_tx_buf *tx_buf)
 {
 	assert((tx_buf->type == RXM_BUF_POOL_TX) ||
+	       (tx_buf->type == RXM_BUF_POOL_TX_INJECT) ||
 	       (tx_buf->type == RXM_BUF_POOL_TX_ACK) ||
 	       (tx_buf->type == RXM_BUF_POOL_TX_LMT) ||
 	       (tx_buf->type == RXM_BUF_POOL_TX_SAR));
