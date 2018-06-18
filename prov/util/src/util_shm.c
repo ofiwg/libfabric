@@ -64,7 +64,7 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	inject_pool_offset = resp_queue_offset + sizeof(struct smr_resp_queue) +
 			sizeof(struct smr_resp) * attr->tx_count;
 	peer_addr_offset = inject_pool_offset + sizeof(struct smr_inject_pool) +
-			sizeof(struct smr_inject_buf) * attr->rx_count;
+			sizeof(struct smr_inject_pool_entry) * attr->rx_count;
 	name_offset = peer_addr_offset + sizeof(struct smr_addr) * SMR_MAX_PEERS;
 	total_size = name_offset + strlen(attr->name) + 1;
 	total_size = roundup_power_of_two(total_size);
