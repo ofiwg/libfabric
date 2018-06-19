@@ -290,8 +290,7 @@ static void rxm_recv_queue_close(struct rxm_recv_queue *recv_queue)
 
 static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 {
-	size_t i;
-	int ret;
+	int ret, i;
 	size_t queue_sizes[RXM_BUF_POOL_MAX] = {
 		rxm_ep->msg_info->rx_attr->size,	/* RX */
 		rxm_ep->msg_info->tx_attr->size,	/* TX */
