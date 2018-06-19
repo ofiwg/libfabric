@@ -258,12 +258,9 @@ static inline int rxm_finish_send(struct rxm_tx_entry *tx_entry)
 	return rxm_finish_send_nobuf(tx_entry);
 }
 
-static inline int rxm_finish_sar_segment_send(struct rxm_tx_entry *tx_entry)
+static inline int rxm_finish_sar_segment_send(struct rxm_tx_buf *tx_buf)
 {
-	struct rxm_tx_buf *tx_buf;
-
-	dlist_pop_front(&tx_entry->in_flight_tx_buf_list, struct rxm_tx_buf,
-			tx_buf, in_flight_entry);
+	struct rxm_tx_entry *tx_entry = tx_buf->tx_entry;
 
 	rxm_tx_buf_release(tx_entry->ep, tx_buf);
 	/* If `segs_left` == 0, all segments of the message have been fully sent */
@@ -271,16 +268,14 @@ static inline int rxm_finish_sar_segment_send(struct rxm_tx_entry *tx_entry)
 		return rxm_finish_send_nobuf(tx_entry);
 	} else if (!dlist_empty(&tx_entry->deferred_tx_buf_list)) {
 		ssize_t ret;
+
 		tx_buf = container_of(tx_entry->deferred_tx_buf_list.next,
-				      struct rxm_tx_buf, in_flight_entry);
+				      struct rxm_tx_buf, hdr.entry);
 		ret = fi_send(tx_entry->conn->msg_ep, &tx_buf->pkt,
 			      sizeof(tx_buf->pkt) + tx_buf->pkt.ctrl_hdr.seg_size,
-			      tx_buf->hdr.desc, 0, tx_entry);
-		if (!ret) {
-			dlist_remove(&tx_buf->in_flight_entry);
-			dlist_insert_tail(&tx_buf->in_flight_entry,
-					  &tx_entry->in_flight_tx_buf_list);
-		}
+			      tx_buf->hdr.desc, 0, tx_buf);
+		if (!ret)
+			dlist_remove(&tx_buf->hdr.entry);
 	}
 	/* This branch takes true, when it's impossible to allocate TX buffer */
 	if (OFI_UNLIKELY((tx_entry->msg_id == UINT64_MAX) &&
@@ -373,16 +368,19 @@ ssize_t rxm_cq_handle_seg_data(struct rxm_rx_buf *rx_buf)
 					    rx_buf->pkt.ctrl_hdr.seg_size);
 	rx_buf->recv_entry->total_recv_len += done_len;
 	/* Check that this isn't last segment */
-	if ((rx_buf->pkt.ctrl_hdr.seg_no != RXM_SAR_LAST_SEGMENT) &&
+	if (((rx_buf->recv_entry->total_recv_len == done_len /* this is a first segment */) ||
+	     (rx_buf->recv_entry->segs_left != 1 /* this is neither a first nor a last segment */)) &&
 	/* and message isn't truncated */
 	    (done_len == rx_buf->pkt.ctrl_hdr.seg_size)) {
 		if (rx_buf->recv_entry->msg_id == UINT64_MAX) {
 			rx_buf->conn = rxm_key2conn(rx_buf->ep,
 						    rx_buf->pkt.ctrl_hdr.conn_id);
 			rx_buf->recv_entry->msg_id = rx_buf->pkt.ctrl_hdr.msg_id;
+			rx_buf->recv_entry->segs_left = rx_buf->pkt.ctrl_hdr.segs_cnt;
 			dlist_insert_tail(&rx_buf->recv_entry->sar_entry,
 					  &rx_buf->conn->sar_rx_msg_list);
 		}
+		rx_buf->recv_entry->segs_left--;
 		/* The RX buffer can be reposted for further re-use */
 		rx_buf->recv_entry = NULL;
 		rx_buf->ep->res_fastlock_acquire(&rx_buf->ep->util_ep.lock);
@@ -391,7 +389,7 @@ ssize_t rxm_cq_handle_seg_data(struct rxm_rx_buf *rx_buf)
 		rx_buf->ep->res_fastlock_release(&rx_buf->ep->util_ep.lock);
 		return FI_SUCCESS;
 	}
-
+	rx_buf->recv_entry->segs_left--;
 	dlist_remove(&rx_buf->recv_entry->sar_entry);
 	/* Mark rxm_recv_entry::msg_id as unknown for futher re-use */
 	rx_buf->recv_entry->msg_id = UINT64_MAX;
@@ -672,6 +670,7 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 {
 	struct rxm_rx_buf *rx_buf = comp->op_context;
 	struct rxm_tx_entry *tx_entry = comp->op_context;
+	struct rxm_tx_buf *tx_buf = comp->op_context;
 
 	/* Remote write events may not consume a posted recv so op context
 	 * and hence state would be NULL */
@@ -689,7 +688,7 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 		return rxm_finish_send(tx_entry);
 	case RXM_SAR_TX:
 		assert(comp->flags & FI_SEND);
-		return rxm_finish_sar_segment_send(tx_entry);
+		return rxm_finish_sar_segment_send(tx_buf);
 	case RXM_TX_RMA:
 		assert(comp->flags & (FI_WRITE | FI_READ));
 		if (tx_entry->ep->msg_mr_local && !tx_entry->ep->rxm_mr_local)

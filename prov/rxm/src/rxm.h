@@ -74,8 +74,6 @@
 #define RXM_MR_PROV_KEY(info) ((info->domain_attr->mr_mode == FI_MR_BASIC) ||\
 			       info->domain_attr->mr_mode & FI_MR_PROV_KEY)
 
-#define RXM_SAR_LAST_SEGMENT	0
-
 #define RXM_LOG_STATE(subsystem, pkt, prev_state, next_state) 			\
 	FI_DBG(&rxm_prov, subsystem, "[LMT] msg_id: 0x%" PRIx64 " %s -> %s\n",	\
 	       pkt.ctrl_hdr.msg_id, rxm_proto_state_str[prev_state],		\
@@ -267,7 +265,7 @@ struct rxm_tx_buf {
 	enum rxm_buf_pool_type type;
 
 	/* Used for SAR protocol */
-	struct dlist_entry in_flight_entry;
+	struct rxm_tx_entry *tx_entry;
 
 	/* Must stay at bottom */
 	struct rxm_pkt pkt;
@@ -315,11 +313,8 @@ struct rxm_tx_entry {
 		struct {
 			size_t segs_left;
 			uint64_t msg_id;
-			/* These lists for the TX buffers that are: */
-			/* - Has been successfully sent to the peer */
-			struct dlist_entry in_flight_tx_buf_list;
-			/* - Has been queued until it would be possbile
-			 *   to send it  */
+			/* The list for the TX buffers that have been 
+			 * queued until it would be possbile to send it  */
 			struct dlist_entry deferred_tx_buf_list;
 			struct rxm_iov rxm_iov;
 			uint64_t iov_offset;
@@ -344,6 +339,7 @@ struct rxm_recv_entry {
 	struct {
 		struct dlist_entry sar_entry;
 		size_t total_recv_len;
+		uint64_t segs_left;
 		uint64_t msg_id;
 	};
 };
@@ -573,17 +569,17 @@ rxm_process_recv_entry(struct rxm_recv_queue *recv_queue,
 		if (rx_buf->pkt.ctrl_hdr.type != ofi_ctrl_seg_data) {
 			return rxm_cq_handle_rx_buf(rx_buf);
 		} else {
-			int last = (rx_buf->pkt.ctrl_hdr.seg_no == RXM_SAR_LAST_SEGMENT);
+			int wait_last = (recv_entry->segs_left == 1);
 			ssize_t ret = rxm_cq_handle_rx_buf(rx_buf);
 			recv_queue->rxm_ep->res_fastlock_acquire(&recv_queue->lock);
-			while (!ret && rx_buf && !last) {
+			while (!ret && rx_buf && !wait_last) {
 				rx_buf = rxm_check_unexp_msg_list(recv_queue, recv_entry->addr,
 								  recv_entry->tag, recv_entry->ignore);
 				if (rx_buf) {
 					assert(rx_buf->pkt.ctrl_hdr.type == ofi_ctrl_seg_data);
 					rx_buf->recv_entry = recv_entry;
 					dlist_remove(&rx_buf->unexp_msg.entry);
-					last = (rx_buf->pkt.ctrl_hdr.seg_no == RXM_SAR_LAST_SEGMENT);
+					wait_last = (recv_entry->segs_left == 1);
 					ret = rxm_cq_handle_rx_buf(rx_buf);
 				}
 			}

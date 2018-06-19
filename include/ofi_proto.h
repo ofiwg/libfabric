@@ -90,8 +90,10 @@ enum {
  * rx_key: This is the receiver's identifier for a message (receive side
  *     equivalent of msg_id).  Key returned by the Rx side, that the
  *     Tx side includes in subsequent packets.  This field is used for
- *     rendezvous and segmentation and reassembly protocols.
+ *     rendezvous protocol.
  *     The rx_key may be formed similar to message_id.
+ * seg_num: This is the total number of segments that is sent by sender
+ *     in a segmentation and reassembly (SAR) protocol.
  */
 struct ofi_ctrl_hdr {
 	uint8_t			version;
@@ -103,6 +105,7 @@ struct ofi_ctrl_hdr {
 	union {
 		uint64_t	conn_data;
 		uint64_t	rx_key;
+		uint64_t	segs_cnt;
 	};
 };
 

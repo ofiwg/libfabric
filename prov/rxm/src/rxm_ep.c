@@ -171,6 +171,7 @@ static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 				break;
 			case RXM_BUF_POOL_TX_SAR:
 				tx_buf->pkt.ctrl_hdr.type = ofi_ctrl_seg_data;
+				tx_buf->hdr.state = RXM_SAR_TX;
 				break;
 			default:
 				assert(0);
@@ -978,6 +979,8 @@ rxm_ep_sar_tx_prepare_segment(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	tx_buf->pkt.ctrl_hdr.msg_id = tx_entry->msg_id;
 	tx_buf->pkt.ctrl_hdr.seg_no = seg_num;
 	tx_buf->pkt.ctrl_hdr.seg_size = seg_len;
+	tx_buf->pkt.ctrl_hdr.segs_cnt = tx_entry->segs_left;
+	tx_buf->tx_entry = tx_entry;
 
 	ofi_copy_from_iov(tx_buf->pkt.data, seg_len, tx_entry->rxm_iov.iov,
 			  tx_entry->rxm_iov.count, tx_entry->iov_offset);
@@ -987,7 +990,7 @@ rxm_ep_sar_tx_prepare_segment(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 }
 
 static inline size_t
-rxm_ep_sar_calc_seg_num(size_t data_len, size_t inject_size)
+rxm_ep_sar_calc_segs_cnt(size_t data_len, size_t inject_size)
 {
 	return (data_len / inject_size + ((data_len % inject_size) ? 1 : 0));
 }
@@ -1001,8 +1004,8 @@ rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	uint64_t comp_flags =
 		((op == ofi_op_tagged) ? FI_TAGGED : FI_MSG);
 	struct rxm_tx_entry *tx_entry;
-	size_t seg_num =
-		rxm_ep_sar_calc_seg_num(data_len, rxm_ep->rxm_info->tx_attr->inject_size);
+	size_t segs_cnt =
+		rxm_ep_sar_calc_segs_cnt(data_len, rxm_ep->rxm_info->tx_attr->inject_size);
 	size_t i, total_len = data_len;
 	ssize_t ret;
 	int send_failed = 0;
@@ -1010,47 +1013,45 @@ rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	ret = rxm_ep_alloc_tx_entry(rxm_conn, context, count, flags, &tx_entry);
 	if (OFI_UNLIKELY(ret))
 		return ret;
-	tx_entry->state = RXM_SAR_TX;
-	dlist_init(&tx_entry->in_flight_tx_buf_list);
+
 	dlist_init(&tx_entry->deferred_tx_buf_list);
 	tx_entry->iov_offset = 0;
 	for (i = 0; i < count; i++)
 		tx_entry->rxm_iov.iov[i] = iov[i];
 	tx_entry->rxm_iov.count = count;
-	tx_entry->segs_left = seg_num;
+	tx_entry->segs_left = segs_cnt;
 	tx_entry->msg_id = rxm_txe_fs_index(rxm_conn->send_queue.fs, tx_entry);
 	
 	while (total_len) {
 		struct rxm_tx_buf *tx_buf;
-		size_t seg_len = fi_get_aligned_sz(total_len / seg_num, 64);
+		size_t seg_len = fi_get_aligned_sz(total_len / segs_cnt, 64);
 
 		tx_buf = rxm_ep_sar_tx_prepare_segment(rxm_ep, rxm_conn, data_len,
-						       seg_num - 1, seg_len, data,
+						       segs_cnt - 1, seg_len, data,
 						       flags, tag, comp_flags, op,
 						       tx_entry);
 		if (OFI_UNLIKELY(!tx_buf)) {
 			tx_entry->msg_id = UINT64_MAX;
-			if (seg_num == tx_entry->segs_left) {
+			if (segs_cnt == tx_entry->segs_left) {
 				/* if YX buffer allocation for the first segment fails,
 				 * release TX entry and report to user */
 				rxm_tx_entry_release(&rxm_conn->send_queue, tx_entry);
 			}
 			while (!dlist_empty(&tx_entry->deferred_tx_buf_list)) {
 				dlist_pop_front(&tx_entry->deferred_tx_buf_list,
-						struct rxm_tx_buf, tx_buf, in_flight_entry);
+						struct rxm_tx_buf, tx_buf, hdr.entry);
 				rxm_tx_buf_release(tx_entry->ep, tx_buf);
 			}
 			return -FI_EAGAIN;
 		}
 
-		dlist_init(&tx_buf->in_flight_entry);
 		if (!send_failed) {
 			ret = fi_send(rxm_conn->msg_ep, &tx_buf->pkt,
 				      sizeof(struct rxm_pkt) +
 				      tx_buf->pkt.ctrl_hdr.seg_size,
-				      tx_buf->hdr.desc, 0, tx_entry);
+				      tx_buf->hdr.desc, 0, tx_buf);
 			if (OFI_UNLIKELY(ret)) {
-				if (seg_num == tx_entry->segs_left) {
+				if (segs_cnt == tx_entry->segs_left) {
 					/* if the sending for the first segment fails,
 					 * release resources and report this to user */
 					rxm_tx_buf_release(tx_entry->ep, tx_buf);
@@ -1058,17 +1059,14 @@ rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 					return -FI_EAGAIN;
 				}
 				send_failed = 1;
-				dlist_insert_tail(&tx_buf->in_flight_entry,
+				dlist_insert_tail(&tx_buf->hdr.entry,
 						  &tx_entry->deferred_tx_buf_list);	
-			} else {
-				dlist_insert_tail(&tx_buf->in_flight_entry,
-						  &tx_entry->in_flight_tx_buf_list);
 			}
 		} else {
-			dlist_insert_tail(&tx_buf->in_flight_entry,
+			dlist_insert_tail(&tx_buf->hdr.entry,
 					  &tx_entry->deferred_tx_buf_list);
 		}
-		seg_num--;
+		segs_cnt--;
 		total_len -= seg_len;
 	}
 
