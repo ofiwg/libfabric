@@ -289,81 +289,49 @@ static void rxm_recv_queue_close(struct rxm_recv_queue *recv_queue)
 
 static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 {
+	size_t i;
 	int ret;
+	size_t queue_sizes[RXM_BUF_POOL_MAX] = {
+		rxm_ep->msg_info->rx_attr->size,	/* RX */
+		rxm_ep->msg_info->tx_attr->size,	/* TX */
+		rxm_ep->msg_info->tx_attr->size,	/* TX INJECT */
+		rxm_ep->msg_info->tx_attr->size,	/* TX ACK */
+		rxm_ep->msg_info->tx_attr->size,	/* TX LMT */
+		rxm_ep->msg_info->tx_attr->size,	/* TX SAR */
+		rxm_ep->msg_info->tx_attr->size,	/* RMA */
+	};
+	size_t entry_sizes[RXM_BUF_POOL_MAX] = {
+		rxm_ep->rxm_info->tx_attr->inject_size +
+		sizeof(struct rxm_rx_buf),			/* RX */
+		rxm_ep->rxm_info->tx_attr->inject_size +
+		sizeof(struct rxm_tx_buf),			/* TX */
+		rxm_ep->msg_info->tx_attr->inject_size +
+		sizeof(struct rxm_tx_buf),			/* TX INJECT */
+		sizeof(struct rxm_tx_buf),			/* TX ACK */
+		sizeof(struct rxm_rma_iov) +
+		rxm_ep->rxm_info->tx_attr->iov_limit *
+		sizeof(struct ofi_rma_iov) +
+		sizeof(struct rxm_tx_buf),			/* TX LMT */
+		rxm_ep->rxm_info->tx_attr->inject_size +
+		sizeof(struct rxm_tx_buf),			/* TX SAR */
+		rxm_ep->rxm_info->tx_attr->inject_size +
+		sizeof(struct rxm_rma_buf),			/* RMA */
+	};
 
-	ret = rxm_buf_pool_create(rxm_ep,
-				  rxm_ep->msg_info->rx_attr->size,
-				  rxm_ep->rxm_info->tx_attr->inject_size +
-				  sizeof(struct rxm_rx_buf),
-				  &rxm_ep->buf_pools[RXM_BUF_POOL_RX],
-				  RXM_BUF_POOL_RX);
-	if (ret)
-		return ret;
 	dlist_init(&rxm_ep->posted_srx_list);
 	dlist_init(&rxm_ep->repost_ready_list);
 
-	ret = rxm_buf_pool_create(rxm_ep, rxm_ep->msg_info->tx_attr->size,
-				  rxm_ep->rxm_info->tx_attr->inject_size +
-				  sizeof(struct rxm_tx_buf),
-				  &rxm_ep->buf_pools[RXM_BUF_POOL_TX],
-				  RXM_BUF_POOL_TX);
-	if (ret)
-		goto err1;
-
-	ret = rxm_buf_pool_create(rxm_ep, rxm_ep->msg_info->tx_attr->size,
-				  rxm_ep->msg_info->tx_attr->inject_size +
-				  sizeof(struct rxm_tx_buf),
-				  &rxm_ep->buf_pools[RXM_BUF_POOL_TX_INJECT],
-				  RXM_BUF_POOL_TX_INJECT);
-	if (ret)
-		goto err2;
-
-	ret = rxm_buf_pool_create(rxm_ep, rxm_ep->msg_info->tx_attr->size,
-				  sizeof(struct rxm_tx_buf),
-				  &rxm_ep->buf_pools[RXM_BUF_POOL_TX_ACK],
-				  RXM_BUF_POOL_TX_ACK);
-	if (ret)
-		goto err3;
-
-	ret = rxm_buf_pool_create(rxm_ep, rxm_ep->msg_info->tx_attr->size,
-				  sizeof(struct rxm_rma_iov) +
-				  rxm_ep->rxm_info->tx_attr->iov_limit *
-				  sizeof(struct ofi_rma_iov) +
-				  sizeof(struct rxm_tx_buf),
-				  &rxm_ep->buf_pools[RXM_BUF_POOL_TX_LMT],
-				  RXM_BUF_POOL_TX_LMT);
-	if (ret)
-		goto err4;
-
-	ret = rxm_buf_pool_create(rxm_ep, rxm_ep->msg_info->tx_attr->size,
-				  rxm_ep->rxm_info->tx_attr->inject_size +
-				  sizeof(struct rxm_tx_buf),
-				  &rxm_ep->buf_pools[RXM_BUF_POOL_TX_SAR],
-				  RXM_BUF_POOL_TX_SAR);
-	if (ret)
-		goto err5;
-
-	ret = rxm_buf_pool_create(rxm_ep, rxm_ep->msg_info->tx_attr->size,
-				  rxm_ep->rxm_info->tx_attr->inject_size +
-				  sizeof(struct rxm_rma_buf),
-				  &rxm_ep->buf_pools[RXM_BUF_POOL_RMA],
-				  RXM_BUF_POOL_RMA);
-	if (ret)
-		goto err6;
+	for (i = 0; i < RXM_BUF_POOL_MAX; i++) {
+		ret = rxm_buf_pool_create(rxm_ep, queue_sizes[i], entry_sizes[i],
+					  &rxm_ep->buf_pools[i], i);
+		if (ret)
+			goto err;
+	}
 
 	return FI_SUCCESS;
-err6:
-	rxm_buf_pool_destroy(&rxm_ep->buf_pools[RXM_BUF_POOL_TX_SAR]);
-err5:
-	rxm_buf_pool_destroy(&rxm_ep->buf_pools[RXM_BUF_POOL_TX_LMT]);
-err4:
-	rxm_buf_pool_destroy(&rxm_ep->buf_pools[RXM_BUF_POOL_TX_ACK]);
-err3:
-	rxm_buf_pool_destroy(&rxm_ep->buf_pools[RXM_BUF_POOL_TX_INJECT]);
-err2:
-	rxm_buf_pool_destroy(&rxm_ep->buf_pools[RXM_BUF_POOL_TX]);
-err1:
-	rxm_buf_pool_destroy(&rxm_ep->buf_pools[RXM_BUF_POOL_RX]);
+err:
+	while (--i >= RXM_BUF_POOL_START)
+		rxm_buf_pool_destroy(&rxm_ep->buf_pools[i]);
 	return ret;
 }
 
