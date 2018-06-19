@@ -405,6 +405,17 @@ int gnix_scalable_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags);
  */
 int gnix_pep_bind(fid_t fid, struct fid *bfid, uint64_t flags);
 
+/**
+ * Cancels a transaction posted to an endpoint, if possible.
+ *
+ * @param[in] fid	the endpoint
+ * @param[in] context	context of the transaction to be canceled
+ *
+ * @return FI_SUCCESS	upon successfully canceling transaction
+ * @return -FI_ENONT	no entry to cancel
+ */
+ssize_t gnix_cancel(fid_t fid, void *context);
+
 DIRECT_FN int gnix_ep_atomic_valid(struct fid_ep *ep,
 				   enum fi_datatype datatype,
 				   enum fi_op op, size_t *count);

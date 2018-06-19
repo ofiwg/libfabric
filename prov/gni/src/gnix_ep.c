@@ -2888,6 +2888,8 @@ DIRECT_FN STATIC ssize_t gnix_ep_cancel(fid_t fid, void *context)
 ssize_t gnix_cancel(fid_t fid, void *context)
 {
 	ssize_t ret;
+	struct gnix_fid_ep *ep;
+	struct gnix_fid_trx *trx_ep;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
@@ -2896,10 +2898,14 @@ ssize_t gnix_cancel(fid_t fid, void *context)
 		ret = gnix_ep_cancel(fid, context);
 		break;
 
-	/* not supported yet */
 	case FI_CLASS_RX_CTX:
-	case FI_CLASS_SRX_CTX:
 	case FI_CLASS_TX_CTX:
+		trx_ep = container_of(fid, struct gnix_fid_trx, ep_fid);
+		ep = trx_ep->ep;
+		ret = gnix_ep_cancel(&ep->ep_fid.fid, context);
+		break;
+	/* not supported yet */
+	case FI_CLASS_SRX_CTX:
 	case FI_CLASS_STX_CTX:
 		return -FI_ENOENT;
 
