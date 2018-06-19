@@ -194,21 +194,6 @@ The *psm2* provider checks for the following environment variables:
 
   The default setting is 2.
 
-*FI_PSM2_LAZY_CONN*
-: Control when connections are established between PSM2 endpoints that OFI
-  endpoints are built on top of. When set to 0, connections are established
-  when addresses are inserted into the address vector. This is the eager
-  connection mode. When set to 1, connections are established when addresses
-  are used the first time in communication. This is the lazy connection mode.
-
-  Lazy connection mode may reduce the start-up time on large systems at the
-  expense of slightly higher data path overhead. For applications that use
-  multiple endpoints, lazy connection mode can be especially helpful with
-  the potential of greatly reduce the time to set up address vectors and to
-  close endpoints.
-
-  The default setting is 0.
-
 *FI_PSM2_DISCONNECT*
 : The provider has a mechanism to automatically send disconnection notifications
   to all connected peers before the local endpoint is closed. As the response,

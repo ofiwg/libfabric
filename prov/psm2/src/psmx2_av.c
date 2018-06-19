@@ -387,11 +387,9 @@ static int psmx2_av_connect_trx_ctxt(struct psmx2_fid_av *av,
 					mask[i] = 0;
 				 else
 					to_connect++;
-			} else if (psmx2_env.lazy_conn) {
+			} else {
 				epaddrs[i] = NULL;
 				mask[i] = 0;
-			} else {
-				to_connect++;
 			}
 		}
 	}
@@ -507,10 +505,8 @@ static int psmx2_av_connect_trx_ctxt(struct psmx2_fid_av *av,
 }
 
 int psmx2_av_add_trx_ctxt(struct psmx2_fid_av *av,
-			  struct psmx2_trx_ctxt *trx_ctxt,
-			  int connect_now)
+			  struct psmx2_trx_ctxt *trx_ctxt)
 {
-	psm2_error_t *errors;
 	int id = trx_ctxt->id;
 	int err = 0;
 
@@ -554,14 +550,6 @@ int psmx2_av_add_trx_ctxt(struct psmx2_fid_av *av,
 	}
 
 	av->tables[id].trx_ctxt = trx_ctxt;
-
-	if (connect_now) {
-		errors = calloc(av->count, sizeof(*errors));
-		if (errors) {
-			psmx2_av_connect_trx_ctxt(av, id, 0, av->last, errors);
-			free(errors);
-		}
-	}
 
 out:
 	av->domain->av_unlock_fn(&av->lock, 1);
@@ -626,25 +614,6 @@ STATIC int psmx2_av_insert(struct fid_av *av, const void *addr,
 		av_priv->peers[idx].sep_ctxt_epids = NULL;
 		if (av_priv->peers[idx].type == PSMX2_EP_SCALABLE)
 			sep_count++;
-	}
-
-	/*
-	 * try to establish connection when:
-	 *  (1) there are Tx/Rx context(s) bound to the AV; and
-	 *  (2) the connection is desired right now
-	 */
-	if (sep_count || !psmx2_env.lazy_conn) {
-		for (i = 0; i < av_priv->max_trx_ctxt; i++) {
-			if (!av_priv->tables[i].trx_ctxt)
-				continue;
-
-			error_count = psmx2_av_connect_trx_ctxt(av_priv, i,
-								av_priv->last,
-								count, errors);
-
-			if (error_count || psmx2_env.lazy_conn)
-				break;
-		}
 	}
 
 	if (fi_addr) {
@@ -929,7 +898,7 @@ int psmx2_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 {
 	struct psmx2_fid_domain *domain_priv;
 	struct psmx2_fid_av *av_priv;
-	int type;
+	int type = FI_AV_TABLE;
 	size_t count = 64;
 	uint64_t flags = 0;
 	int rx_ctx_bits = PSMX2_MAX_RX_CTX_BITS;
@@ -938,28 +907,15 @@ int psmx2_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	domain_priv = container_of(domain, struct psmx2_fid_domain,
 				   util_domain.domain_fid);
 
-	if (psmx2_env.lazy_conn || psmx2_env.max_trx_ctxt > 1)
-		type = FI_AV_TABLE;
-	else
-		type = FI_AV_MAP;
-
 	if (attr) {
 		switch (attr->type) {
 		case FI_AV_UNSPEC:
 			break;
 
 		case FI_AV_MAP:
-			if (psmx2_env.lazy_conn) {
-				FI_INFO(&psmx2_prov, FI_LOG_AV,
-					"Lazy connection is enabled, force FI_AV_TABLE\n");
-				break;
-			}
-			if (psmx2_env.max_trx_ctxt > 1) {
-				FI_INFO(&psmx2_prov, FI_LOG_AV,
-					"Multi-EP is enabled, force FI_AV_TABLE\n");
-				break;
-			}
-			/* fall through */
+			FI_INFO(&psmx2_prov, FI_LOG_AV,
+				"FI_AV_MAP asked, force FI_AV_TABLE\n");
+			break;
 		case FI_AV_TABLE:
 			type = attr->type;
 			break;

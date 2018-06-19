@@ -817,7 +817,6 @@ struct psmx2_env {
 	int num_devunits;
 	int inject_size;
 	int lock_level;
-	int lazy_conn;
 	int disconnect;
 #if (PSMX2_TAG_LAYOUT == PSMX2_TAG_LAYOUT_RUNTIME)
 	char *tag_layout;
@@ -1001,8 +1000,7 @@ int	psmx2_cq_poll_mq(struct psmx2_fid_cq *cq, struct psmx2_trx_ctxt *trx_ctxt,
 int	psmx2_epid_to_epaddr(struct psmx2_trx_ctxt *trx_ctxt,
 			     psm2_epid_t epid, psm2_epaddr_t *epaddr);
 
-int	psmx2_av_add_trx_ctxt(struct psmx2_fid_av *av, struct psmx2_trx_ctxt *trx_ctxt,
-			      int connect_now);
+int	psmx2_av_add_trx_ctxt(struct psmx2_fid_av *av, struct psmx2_trx_ctxt *trx_ctxt);
 
 psm2_epaddr_t psmx2_av_translate_sep(struct psmx2_fid_av *av,
 				     struct psmx2_trx_ctxt *trx_ctxt, fi_addr_t addr);
