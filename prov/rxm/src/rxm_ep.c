@@ -1146,26 +1146,14 @@ rxm_ep_inject_common(struct rxm_ep *rxm_ep, const void *buf, size_t len,
 	fastlock_acquire(&rxm_ep->util_ep.cmap->lock);
 	rxm_conn = rxm_acquire_conn(rxm_ep, dest_addr);
 	if (OFI_UNLIKELY(rxm_conn->handle.state != CMAP_CONNECTED)) {
-		struct iovec iov = {
-			.iov_base = (void *)buf,
-			.iov_len = len,
-		};
 		ret = rxm_ep_handle_unconnected(rxm_ep, &rxm_conn->handle, dest_addr);
 		if (!ret)
 			goto inject_continue;
-		else if (OFI_UNLIKELY(ret != -FI_EAGAIN))
-			goto cmap_err;
-		ret = rxm_ep_postpone_send(rxm_ep, rxm_conn, NULL, 1,
-					   &iov, NULL, len, data, flags,
-					   tag, op, comp_flags);
-cmap_err:
 		fastlock_release(&rxm_ep->util_ep.cmap->lock);
 		return ret;
 	}
 inject_continue:
 	fastlock_release(&rxm_ep->util_ep.cmap->lock);
-
-	assert(dlist_empty(&rxm_conn->deferred_tx_list));
 
 	if (pkt_size <= rxm_ep->msg_info->tx_attr->inject_size) {
 		ret = rxm_ep_format_tx_res_lightweight(
@@ -1217,19 +1205,11 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 		ret = rxm_ep_handle_unconnected(rxm_ep, &rxm_conn->handle, dest_addr);
 		if (!ret)
 			goto send_continue;
-		else if (OFI_UNLIKELY(ret != -FI_EAGAIN))
-			goto cmap_err;
-		ret = rxm_ep_postpone_send(rxm_ep, rxm_conn, context, count,
-					   iov, desc, data_len, data, flags,
-					   tag, op, comp_flags);
-cmap_err:
 		fastlock_release(&rxm_ep->util_ep.cmap->lock);
 		return ret;
 	}
 send_continue:
 	fastlock_release(&rxm_ep->util_ep.cmap->lock);
-
-	assert(dlist_empty(&rxm_conn->deferred_tx_list));
 
 	if (data_len <= rxm_ep->rxm_info->tx_attr->inject_size) {
 		size_t total_len = sizeof(struct rxm_pkt) + data_len;

@@ -285,10 +285,7 @@ struct rxm_rma_buf {
 
 struct rxm_tx_entry {
 	/* Must stay at top */
-	union {
-		struct fi_context fi_context;
-		struct dlist_entry deferred_entry;
-	};
+	struct fi_context fi_context;
 
 	enum rxm_proto_state state;
 
@@ -495,13 +492,6 @@ err:
 	rxm_ep_msg_mr_closev(mr, count);
 	return ret;
 }
-
-void rxm_ep_handle_deferred_tx_op(struct rxm_ep *rxm_ep,
-				  struct rxm_conn *rxm_conn,
-				  struct rxm_tx_entry *tx_entry);
-void rxm_ep_handle_deferred_rma_op(struct rxm_ep *rxm_ep,
-				   struct rxm_conn *rxm_conn,
-				   struct rxm_tx_entry *tx_entry);
 
 static inline void rxm_cntr_inc(struct util_cntr *cntr)
 {
