@@ -200,7 +200,33 @@ static struct fi_ops_cq mrail_cq_ops = {
 	.strerror = fi_no_cq_strerror,
 };
 
-static void mrail_cq_progress(struct util_cq *cq)
+static void mrail_handle_rma_completion(struct util_cq *cq,
+		struct fi_cq_tagged_entry *comp)
+{
+	int ret;
+	struct mrail_req *req;
+	struct mrail_subreq *subreq;
+
+	subreq = comp->op_context;
+	req = subreq->parent;
+
+	if (ofi_atomic_dec32(&req->expected_subcomps) == 0) {
+		ret = ofi_cq_write(cq, req->comp.op_context, req->comp.flags,
+				req->comp.len, req->comp.buf, req->comp.data,
+				req->comp.tag);
+		if (ret) {
+			FI_WARN(&mrail_prov, FI_LOG_CQ,
+				"Cannot write to util cq\n");
+			/* This should not happen unless totally out of memory,
+			 * in which case there is nothing we can do.  */
+			assert(0);
+		}
+
+		mrail_free_req(req->mrail_ep, req);
+	}
+}
+
+void mrail_poll_cq(struct util_cq *cq)
 {
 	struct mrail_cq *mrail_cq;
 	mrail_cq_entry_t comp;
@@ -215,7 +241,8 @@ static void mrail_cq_progress(struct util_cq *cq)
 			continue;
 		if (ret < 0) {
 			FI_WARN(&mrail_prov, FI_LOG_CQ,
-				"Unable to read rail completion\n");
+				"Unable to read rail completion: %s\n",
+				fi_strerror(-ret));
 			goto err;
 		}
 		// TODO handle variable length message
@@ -223,9 +250,10 @@ static void mrail_cq_progress(struct util_cq *cq)
 			ret = mrail_cq->process_comp(cq, &comp);
 			if (ret)
 				goto err;
+		} else if (comp.flags & (FI_READ | FI_WRITE)) {
+			mrail_handle_rma_completion(cq, &comp);
 		} else {
-			assert(comp.flags & (FI_SEND | FI_WRITE | FI_READ |
-					     FI_REMOTE_READ | FI_REMOTE_WRITE));
+			assert(comp.flags & (FI_SEND | FI_REMOTE_WRITE));
 			ret = ofi_cq_write(cq, comp.op_context, comp.flags,
 					   0, NULL, 0, 0);
 			if (ret) {
@@ -235,10 +263,20 @@ static void mrail_cq_progress(struct util_cq *cq)
 			}
 		}
 	}
+
 	return;
+
 err:
 	// TODO write error to cq
 	assert(0);
+}
+
+static void mrail_cq_progress(struct util_cq *cq)
+{
+	mrail_poll_cq(cq);
+
+	/* Progress the bound EPs */
+	ofi_cq_progress(cq);
 }
 
 int mrail_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,

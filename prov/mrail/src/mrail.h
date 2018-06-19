@@ -48,6 +48,8 @@
 
 #include <ofi.h>
 #include <ofi_util.h>
+#include <ofi_iov.h>
+#include <ofi_list.h>
 #include <ofi_proto.h>
 #include <ofi_prov.h>
 #include <ofi_enosys.h>
@@ -70,6 +72,8 @@ extern struct fi_fabric_attr mrail_fabric_attr;
 
 extern struct fi_info *mrail_info_vec[MRAIL_MAX_INFO];
 extern size_t mrail_num_info;
+
+extern struct fi_ops_rma mrail_ops_rma;
 
 struct mrail_match_attr {
 	fi_addr_t addr;
@@ -192,6 +196,12 @@ struct mrail_ep {
 	struct mrail_recv_fs	*recv_fs;
 	struct mrail_recv_queue recv_queue;
 	struct mrail_recv_queue trecv_queue;
+
+	struct util_buf_pool	*req_pool; 
+	struct slist		deferred_reqs;
+
+	ofi_fastlock_acquire_t	lock_acquire;
+	ofi_fastlock_release_t	lock_release;
 };
 
 struct mrail_addr_key {
@@ -226,19 +236,19 @@ static inline struct mrail_recv *
 mrail_pop_recv(struct mrail_ep *mrail_ep)
 {
 	struct mrail_recv *recv;
-	fastlock_acquire(&mrail_ep->util_ep.lock);
+	mrail_ep->lock_acquire(&mrail_ep->util_ep.lock);
 	recv = freestack_isempty(mrail_ep->recv_fs) ? NULL :
 		freestack_pop(mrail_ep->recv_fs);
-	fastlock_release(&mrail_ep->util_ep.lock);
+	mrail_ep->lock_release(&mrail_ep->util_ep.lock);
 	return recv;
 }
 
 static inline void
 mrail_push_recv(struct mrail_recv *recv)
 {
-	fastlock_acquire(&recv->ep->util_ep.lock);
+	recv->ep->lock_acquire(&recv->ep->util_ep.lock);
 	freestack_push(recv->ep->recv_fs, recv);
-	fastlock_release(&recv->ep->util_ep.lock);
+	recv->ep->lock_release(&recv->ep->util_ep.lock);
 }
 
 static inline struct fi_info *mrail_get_info_cached(char *name)
@@ -271,3 +281,55 @@ static inline int mrail_close_fids(struct fid **fids, size_t count)
 	}
 	return retv;
 }
+
+static inline size_t mrail_get_tx_rail(struct mrail_ep *mrail_ep)
+{
+	return (ofi_atomic_inc32(&mrail_ep->tx_rail) - 1) % mrail_ep->num_eps;
+}
+
+struct mrail_subreq {
+	struct fi_context context;
+	struct mrail_req *parent;
+	void *descs[MRAIL_IOV_LIMIT];
+	struct iovec iov[MRAIL_IOV_LIMIT];
+	struct fi_rma_iov rma_iov[MRAIL_IOV_LIMIT];
+	size_t iov_count;
+	size_t rma_iov_count;
+};
+
+struct mrail_req {
+	struct slist_entry entry;
+	uint64_t flags;
+	uint64_t data;
+	struct mrail_ep *mrail_ep;
+	fi_addr_t* remote_addrs;
+	struct fi_cq_tagged_entry comp;
+	ofi_atomic32_t expected_subcomps;
+	int op_type;
+	int pending_subreq;
+	struct mrail_subreq subreqs[];
+};
+
+static inline
+struct mrail_req *mrail_alloc_req(struct mrail_ep *mrail_ep)
+{
+	struct mrail_req *req;
+
+	mrail_ep->lock_acquire(&mrail_ep->util_ep.lock);
+	req = util_buf_alloc(mrail_ep->req_pool);
+	mrail_ep->lock_release(&mrail_ep->util_ep.lock);
+
+	return req;
+}
+
+static inline
+void mrail_free_req(struct mrail_ep *mrail_ep, struct mrail_req *req)
+{
+	mrail_ep->lock_acquire(&mrail_ep->util_ep.lock);
+	util_buf_release(mrail_ep->req_pool, req);
+	mrail_ep->lock_release(&mrail_ep->util_ep.lock);
+}
+
+void mrail_progress_deferred_reqs(struct mrail_ep *mrail_ep);
+
+void mrail_poll_cq(struct util_cq *cq);
