@@ -192,6 +192,20 @@ struct mrail_ep {
 	struct mrail_recv_queue trecv_queue;
 };
 
+struct mrail_addr_key {
+	uint64_t base_addr;
+	uint64_t key;
+};
+
+struct mrail_mr {
+	struct fid_mr mr_fid;
+	size_t num_mrs;
+	struct {
+		uint64_t base_addr;
+		struct fid_mr *mr;
+	} rails[];
+};
+
 int mrail_get_core_info(uint32_t version, const char *node, const char *service,
 			uint64_t flags, const struct fi_info *hints,
 			struct fi_info **core_info);

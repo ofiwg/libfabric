@@ -52,41 +52,174 @@ static int mrail_domain_close(fid_t fid)
 	return retv;
 }
 
-//static int mrail_mr_close(fid_t fid)
-//{
-//
-//	return -FI_ENOSYS;
-//}
+static int mrail_domain_map_raw(struct mrail_domain *mrail_domain,
+                                struct fi_mr_map_raw *map)
+{
+	struct mrail_addr_key *mr_map;
+
+	/* Copy the raw key and use a pointer as the new key. */
+
+	mr_map = calloc(1, map->key_size);
+	if (!mr_map) {
+		return -FI_ENOMEM;
+	}
+
+	memcpy(mr_map, map->raw_key, map->key_size);
+
+	*(map->key) = (uint64_t)mr_map;
+
+	return 0;
+}
+
+static int mrail_domain_unmap_key(struct mrail_addr_key **mr_map)
+{
+	assert(mr_map);
+	free(*mr_map);
+	return 0;
+}
+
+static int mrail_domain_control(struct fid *fid, int command, void *arg)
+{
+	struct mrail_domain *mrail_domain = container_of(fid,
+			struct mrail_domain, util_domain.domain_fid.fid);
+
+	switch(command) {
+	case FI_MAP_RAW_MR:
+		return mrail_domain_map_raw(mrail_domain, arg);
+	case FI_UNMAP_KEY:
+		return mrail_domain_unmap_key(arg);
+	}
+	return -FI_EINVAL;
+}
+
+static struct fi_ops mrail_domain_fi_ops = {
+	.size = sizeof(struct fi_ops),
+	.close = mrail_domain_close,
+	.bind = fi_no_bind,
+	.control = mrail_domain_control,
+	.ops_open = fi_no_ops_open,
+};
+
+static int mrail_mr_close(fid_t fid)
+{
+	uint32_t i;
+	struct mrail_mr *mrail_mr = container_of(fid, struct mrail_mr,
+			mr_fid.fid);
+
+	for (i = 0; i < mrail_mr->num_mrs; ++i) {
+		fi_close(&mrail_mr->rails[i].mr->fid);
+	}
+	return 0;
+}
+
+static int mrail_mr_raw_attr(struct mrail_mr *mrail_mr,
+                             struct fi_mr_raw_attr *attr)
+{
+	uint32_t num_rails;
+	uint32_t i;
+	struct mrail_addr_key *rail;
+	size_t required_key_size;
+
+	num_rails = mrail_mr->num_mrs;
+
+	required_key_size = num_rails * sizeof(struct mrail_addr_key);
+
+	if (*(attr->key_size) < required_key_size) {
+		*(attr->key_size) = required_key_size;
+		return -FI_ETOOSMALL;
+	}
+
+	/* The raw key is the concatenation of one "struct mrail_addr_key" per
+	 * rail. */
+	for (i = 0, rail = (struct mrail_addr_key*)attr->raw_key; i < num_rails;
+			++i, ++rail) {
+		rail->base_addr = mrail_mr->rails[i].base_addr;
+		rail->key	= fi_mr_key(mrail_mr->rails[i].mr);
+	}
+
+	*(attr->key_size) = required_key_size;
+	*(attr->base_addr) = 0;
+
+	return 0;
+}
+
+static int mrail_mr_control(struct fid *fid, int command, void *arg)
+{
+	struct mrail_mr *mrail_mr = container_of(fid, struct mrail_mr,
+			mr_fid.fid);
+
+	switch(command) {
+	case FI_GET_RAW_MR:
+		return mrail_mr_raw_attr(mrail_mr, arg);
+	}
+	return -FI_EINVAL;
+}
+
+static struct fi_ops mrail_mr_ops = {
+	.size = sizeof(struct fi_ops),
+	.close = mrail_mr_close,
+	.bind = fi_no_bind,
+	.control = mrail_mr_control,
+	.ops_open = fi_no_ops_open,
+};
 
 static int mrail_mr_reg(struct fid *domain_fid, const void *buf, size_t len,
 			 uint64_t access, uint64_t offset, uint64_t requested_key,
 			 uint64_t flags, struct fid_mr **mr, void *context)
 {
+	struct mrail_domain *mrail_domain = container_of(domain_fid,
+			struct mrail_domain, util_domain.domain_fid.fid);
+	size_t num_rails = mrail_domain->num_domains;
+	struct mrail_mr *mrail_mr;
+	struct fi_info *fi;
+	uint32_t rail;
+	int ret = 0;
 
-	return -FI_ENOSYS;
+	mrail_mr = calloc(1, sizeof(*mrail_mr) +
+			num_rails * sizeof(*mrail_mr->rails));
+	if (!mrail_mr) {
+		return -FI_ENOMEM;
+	}
+
+	for (rail = 0, fi = mrail_domain->info->next;
+			rail < mrail_domain->num_domains;
+			++rail, fi = fi->next) {
+		ret = fi_mr_reg(mrail_domain->domains[rail], buf, len, access,
+				offset, requested_key, flags,
+				&mrail_mr->rails[rail].mr, context);
+		if (ret) {
+			FI_WARN(&mrail_prov, FI_LOG_DOMAIN,
+				"Unable to register memory, rail %" PRIu32 "\n",
+				rail);
+			goto err1;
+		}
+		mrail_mr->rails[rail].base_addr =
+			(fi->domain_attr->mr_mode & FI_MR_VIRT_ADDR ?
+			 (uint64_t)buf : 0);
+	}
+
+	mrail_mr->mr_fid.fid.fclass = FI_CLASS_MR;
+	mrail_mr->mr_fid.fid.context = context;
+	mrail_mr->mr_fid.fid.ops = &mrail_mr_ops;
+	mrail_mr->mr_fid.mem_desc = mrail_mr;
+	mrail_mr->mr_fid.key = FI_KEY_NOTAVAIL;
+	mrail_mr->num_mrs = mrail_domain->num_domains;
+	*mr = &mrail_mr->mr_fid;
+
+	return 0;
+err1:
+	for (; rail != 0; --rail) {
+		fi_close(&mrail_mr->rails[rail].mr->fid);
+	}
+	free(mrail_mr);
+	return ret;
 }
-
-//static struct fi_ops mrail_mr_ops = {
-//	.size = sizeof(struct fi_ops),
-//	.close = mrail_mr_close,
-//	.bind = fi_no_bind,
-//	.control = fi_no_control,
-//	.ops_open = fi_no_ops_open,
-//};
 
 static struct fi_ops_mr mrail_domain_mr_ops = {
 	.size = sizeof(struct fi_ops_mr),
 	.reg = mrail_mr_reg,
 	.regv = fi_no_mr_regv,
 	.regattr = fi_no_mr_regattr,
-};
-
-static struct fi_ops mrail_domain_fi_ops = {
-	.size = sizeof(struct fi_ops),
-	.close = mrail_domain_close,
-	.bind = fi_no_bind,
-	.control = fi_no_control,
-	.ops_open = fi_no_ops_open,
 };
 
 static struct fi_ops_domain mrail_domain_ops = {
