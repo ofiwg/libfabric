@@ -35,28 +35,20 @@
 /*
  * SEP address query protocol:
  *
- * SEQ Query REQ:
- *	args[0].u32w0	cmd
+ * SEP Query REQ:
+ *	args[0].u32w0	cmd, version
  *	args[0].u32w1	id
- *	args[1].u64	req
- *	args[2].u64	av_idx
+ *	args[1].u64	peer
+ *	args[2].u64	status
  *
  * SEP Query REP:
- *	args[0].u32w0	cmd
+ *	args[0].u32w0	cmd, version
  *	args[0].u32w1	error
- *	args[1].u64	req
- *	args[2].u64	av_idx
+ *	args[1].u64	peer
+ *	args[2].u64	status
  *	args[3].u64	n
  *	data		epaddrs
  */
-
-struct psmx2_sep_query {
-	struct psmx2_fid_av	*av;
-	void 			*context;
-	psm2_error_t		*errors;
-	ofi_atomic32_t		error_count;
-	ofi_atomic32_t		pending;
-};
 
 static int psmx2_am_sep_match(struct dlist_entry *entry, const void *arg)
 {
@@ -75,15 +67,15 @@ int psmx2_am_sep_handler(psm2_am_token_t token, psm2_amarg_t *args,
 			 int nargs, void *src, uint32_t len, void *hctx)
 {
 	struct psmx2_fid_domain *domain;
-	psm2_amarg_t rep_args[8];
+	psm2_amarg_t rep_args[4];
 	int op_error = 0;
 	int err = 0;
-	int cmd;
+	int cmd, version;
 	int n, i, j;
 	uint8_t sep_id;
 	struct psmx2_fid_sep *sep;
-	struct psmx2_sep_query *req;
-	struct psmx2_fid_av *av;
+	struct psmx2_av_peer *peer;
+	ofi_atomic32_t *status;
 	psm2_epid_t *epids;
 	psm2_epid_t *buf = NULL;
 	int buflen;
@@ -91,6 +83,14 @@ int psmx2_am_sep_handler(psm2_am_token_t token, psm2_amarg_t *args,
 	struct psmx2_trx_ctxt *trx_ctxt = hctx;
 
 	cmd = PSMX2_AM_GET_OP(args[0].u32w0);
+	version = PSMX2_AM_GET_VER(args[0].u32w0);
+	if (version != PSMX2_AM_SEP_VERSION) {
+		FI_WARN(&psmx2_prov, FI_LOG_AV,
+			"AM SEP protocol version mismatch: request %d handler %d\n",
+			version, PSMX2_AM_SEP_VERSION);
+		return -FI_EINVAL;
+	}
+
 	domain = trx_ctxt->domain;
 
 	switch (cmd) {
@@ -110,7 +110,7 @@ int psmx2_am_sep_handler(psm2_am_token_t token, psm2_amarg_t *args,
 			if (n) {
 				buf = malloc(buflen);
 				if (!buf) {
-					op_error = -FI_ENOMEM;
+					op_error = PSM2_NO_MEMORY;
 					buflen = 0;
 					n = 0;
 				}
@@ -121,6 +121,7 @@ int psmx2_am_sep_handler(psm2_am_token_t token, psm2_amarg_t *args,
 		domain->sep_unlock_fn(&domain->sep_lock, 1);
 
 		rep_args[0].u32w0 = PSMX2_AM_REP_SEP_QUERY;
+		PSMX2_AM_SET_VER(rep_args[0].u32w0, PSMX2_AM_SEP_VERSION);
 		rep_args[0].u32w1 = op_error;
 		rep_args[1].u64 = args[1].u64;
 		rep_args[2].u64 = args[2].u64;
@@ -132,31 +133,28 @@ int psmx2_am_sep_handler(psm2_am_token_t token, psm2_amarg_t *args,
 
 	case PSMX2_AM_REP_SEP_QUERY:
 		op_error = args[0].u32w1;
-		req = (void *)(uintptr_t)args[1].u64;
-		av = req->av;
-		i = args[2].u64;
+		peer = (struct psmx2_av_peer *)(uintptr_t)args[1].u64;
+		status = (void *)(uintptr_t)args[2].u64;
 		if (op_error) {
-			ofi_atomic_inc32(&req->error_count);
-			req->errors[i] = op_error;
+			ofi_atomic_set32(status, psmx2_errno(op_error));
 		} else {
 			n = args[3].u64;
 			epids = malloc(n * sizeof(psm2_epid_t));
 			if (!epids) {
-				ofi_atomic_inc32(&req->error_count);
-				req->errors[i] = PSM2_NO_MEMORY;
+				ofi_atomic_set32(status, -FI_ENOMEM);
 			} else {
 				for (j=0; j<n; j++)
 					epids[j] = ((psm2_epid_t *)src)[j];
 				/*
 				 * the sender of the SEP query request should
 				 * have acquired the lock and is waiting for
-				 * the response. see psmx2_av_connect_trx_ctxt.
+				 * the response. see psmx2_av_query_sep().
 				 */
-				av->peers[i].sep_ctxt_cnt = n;
-				av->peers[i].sep_ctxt_epids = epids;
+				peer->sep_ctxt_cnt = n;
+				peer->sep_ctxt_epids = epids;
+				ofi_atomic_set32(status, 0);
 			}
 		}
-		ofi_atomic_dec32(&req->pending);
 		break;
 
 	default:
@@ -234,16 +232,15 @@ int psmx2_epid_to_epaddr(struct psmx2_trx_ctxt *trx_ctxt,
 
 	err = psm2_ep_connect(trx_ctxt->psm2_ep, 1, &epid, NULL, &errors,
 			      epaddr, psmx2_conn_timeout(1));
-	if (err != PSM2_OK) {
-		FI_WARN(&psmx2_prov, FI_LOG_AV,
-			"psm2_ep_connect retured error %s, remote epid=%lx.\n",
-			psm2_error_get_string(err), epid);
-		return psmx2_errno(err);
+	if (err == PSM2_OK || err == PSM2_EPID_ALREADY_CONNECTED) {
+		psmx2_set_epaddr_context(trx_ctxt, epid, *epaddr);
+		return 0;
 	}
 
-	psmx2_set_epaddr_context(trx_ctxt,epid,*epaddr);
-
-	return 0;
+	FI_WARN(&psmx2_prov, FI_LOG_AV,
+		"psm2_ep_connect retured error %s, remote epid=%lx.\n",
+		psm2_error_get_string(err), epid);
+	return psmx2_errno(err);
 }
 
 /*
@@ -326,182 +323,44 @@ static void psmx2_av_post_completion(struct psmx2_fid_av *av, void *context,
 /*
  * Must be called with av->lock held
  */
-static int psmx2_av_connect_trx_ctxt(struct psmx2_fid_av *av,
-				     int trx_ctxt_id,
-				     size_t av_idx_start,
-				     size_t count,
-				     psm2_error_t *errors)
+static int psmx2_av_query_sep(struct psmx2_fid_av *av,
+			      struct psmx2_trx_ctxt *trx_ctxt,
+			      size_t idx)
 {
-	struct psmx2_trx_ctxt *trx_ctxt;
-	struct psmx2_sep_query *req;
-	struct psmx2_av_peer *peers;
-	struct psmx2_epaddr_context *epaddr_context;
-	psm2_epconn_t epconn;
-	psm2_ep_t ep;
-	psm2_epid_t *epids;
-	psm2_epaddr_t *epaddrs;
-	psm2_epaddr_t **sepaddrs;
+	ofi_atomic32_t status; /* 1: pending, 0: succ, <0: error */
 	psm2_amarg_t args[3];
-	int *mask;
-	int error_count = 0;
-	int to_connect = 0;
-	int sep_count = 0;
-	int i;
+	int error;
 
-	trx_ctxt = av->tables[trx_ctxt_id].trx_ctxt;
-	ep = trx_ctxt->psm2_ep;
-	epids = av->epids + av_idx_start;
-	epaddrs = av->tables[trx_ctxt_id].epaddrs + av_idx_start;
-	sepaddrs = av->tables[trx_ctxt_id].sepaddrs + av_idx_start;
-	peers = av->peers + av_idx_start;
-
-	/* set up mask to avoid duplicated connection */
-
-	mask = calloc(count, sizeof(*mask));
-	if (!mask) {
-		for (i = 0; i < count; i++)
-			errors[i] = PSM2_NO_MEMORY;
-		error_count += count;
-		return error_count;
+	if (!av->tables[trx_ctxt->id].epaddrs[idx]) {
+		psmx2_epid_to_epaddr(trx_ctxt, av->epids[idx],
+				     &av->tables[trx_ctxt->id].epaddrs[idx]);
+		assert(av->tables[trx_ctxt->id].epaddrs[idx]);
 	}
 
-	for (i = 0; i < count; i++) {
-		errors[i] = PSM2_OK;
+	psmx2_am_init(trx_ctxt); /* check AM handler installation */
 
-		if (psm2_ep_epid_lookup2(ep, epids[i], &epconn) == PSM2_OK) {
-			epaddr_context = psm2_epaddr_getctxt(epconn.addr);
-			if (epaddr_context && epaddr_context->epid == epids[i])
-				epaddrs[i] = epconn.addr;
-			else
-				mask[i] = 1;
-		} else {
-			mask[i] = 1;
-		}
+	ofi_atomic_initialize32(&status, 1);
 
-		if (peers[i].type == PSMX2_EP_SCALABLE)
-			sep_count++;
+	args[0].u32w0 = PSMX2_AM_REQ_SEP_QUERY;
+	PSMX2_AM_SET_VER(args[0].u32w0, PSMX2_AM_SEP_VERSION);
+	args[0].u32w1 = av->peers[idx].sep_id;
+	args[1].u64 = (uint64_t)(uintptr_t)&av->peers[idx];
+	args[2].u64 = (uint64_t)(uintptr_t)&status;
+	psm2_am_request_short(av->tables[trx_ctxt->id].epaddrs[idx],
+			      PSMX2_AM_SEP_HANDLER, args, 3, NULL,
+			      0, 0, NULL, NULL);
 
-		if (mask[i]) {
-			if (peers[i].type == PSMX2_EP_SCALABLE) {
-				if (peers[i].sep_ctxt_epids)
-					mask[i] = 0;
-				 else
-					to_connect++;
-			} else {
-				epaddrs[i] = NULL;
-				mask[i] = 0;
-			}
-		}
-	}
+	/*
+	 * make sure AM is progressed promptly. don't call
+	 * psmx2_progress() which may call functions that
+	 * need to access the address vector.
+	 */
+	while (ofi_atomic_get32(&status) == 1)
+		psm2_poll(trx_ctxt->psm2_ep);
 
-	if (to_connect)
-		psm2_ep_connect(ep, count, epids, mask, errors, epaddrs,
-				psmx2_conn_timeout(count));
+	error = (int)(int32_t)ofi_atomic_get32(&status);
 
-	/* check the connection results */
-
-	for (i = 0; i < count; i++) {
-		if (!mask[i]) {
-			errors[i] = PSM2_OK;
-			continue;
-		}
-
-		if (errors[i] == PSM2_OK ||
-		    errors[i] == PSM2_EPID_ALREADY_CONNECTED) {
-			psmx2_set_epaddr_context(trx_ctxt, epids[i], epaddrs[i]);
-			errors[i] = PSM2_OK;
-		} else {
-			/* If duplicated addrs are passed to psm2_ep_connect(),
-			 * all but one will fail with error "Endpoint could not
-			 * be reached". This should be treated the same as
-			 * "Endpoint already connected".
-			 */
-			if (psm2_ep_epid_lookup2(ep, epids[i], &epconn) == PSM2_OK) {
-				epaddr_context = psm2_epaddr_getctxt(epconn.addr);
-				if (epaddr_context &&
-				    epaddr_context->epid == epids[i]) {
-					epaddrs[i] = epconn.addr;
-					errors[i] = PSM2_OK;
-					continue;
-				}
-			}
-
-			FI_WARN(&psmx2_prov, FI_LOG_AV,
-				"%d: psm2_ep_connect (%lx --> %lx): %s\n",
-				i, trx_ctxt->psm2_epid, epids[i],
-				psm2_error_get_string(errors[i]));
-			epaddrs[i] = NULL;
-			error_count++;
-		}
-	}
-
-	free(mask);
-
-	if (sep_count) {
-
-		/* query SEP information */
-
-		psmx2_am_init(trx_ctxt); /* check AM handler installation */
-
-		req = malloc(sizeof *req);
-		if (req) {
-			req->av = av;
-			req->errors = errors;
-			ofi_atomic_initialize32(&req->error_count, 0);
-			ofi_atomic_initialize32(&req->pending, 0);
-		}
-
-		for (i = 0; i < count; i++) {
-			if (peers[i].type != PSMX2_EP_SCALABLE ||
-			    peers[i].sep_ctxt_epids ||
-			    errors[i] != PSM2_OK)
-				continue;
-
-			if (!req) {
-				errors[i] = PSM2_NO_MEMORY;
-				error_count++;
-				continue;
-			}
-
-			ofi_atomic_inc32(&req->pending);
-			args[0].u32w0 = PSMX2_AM_REQ_SEP_QUERY;
-			args[0].u32w1 = peers[i].sep_id;
-			args[1].u64 = (uint64_t)(uintptr_t)req;
-			args[2].u64 = av_idx_start + i;
-			psm2_am_request_short(epaddrs[i], PSMX2_AM_SEP_HANDLER,
-					      args, 3, NULL, 0, 0, NULL, NULL);
-		}
-
-		/*
-		 * make it synchronous for now to:
-		 * (1) ensure the array "req->errors" is valid;
-		 * (2) simplify the logic of generating the final completion.
-		 */
-
-		if (req) {
-			/*
-			 * make sure AM is progressed promptly. don't call
-			 * psmx2_progress() which may call functions that
-			 * need to access the address vector.
-			 */
-			while (ofi_atomic_get32(&req->pending))
-				psm2_poll(trx_ctxt->psm2_ep);
-
-			error_count += ofi_atomic_get32(&req->error_count);
-			free(req);
-		}
-	}
-
-	/* alloate context specific epaddrs for SEP */
-
-	for (i = 0; i < count; i++) {
-		if (peers[i].type == PSMX2_EP_SCALABLE &&
-		    peers[i].sep_ctxt_epids && !sepaddrs[i])
-			sepaddrs[i] = calloc(peers[i].sep_ctxt_cnt,
-					     sizeof(*sepaddrs[i]));
-	}
-
-	return error_count;
+	return error;
 }
 
 int psmx2_av_add_trx_ctxt(struct psmx2_fid_av *av,
@@ -701,7 +560,6 @@ psm2_epaddr_t psmx2_av_translate_addr(struct psmx2_fid_av *av,
 				      fi_addr_t addr)
 {
 	psm2_epaddr_t epaddr;
-	psm2_error_t errors;
 	size_t idx = PSMX2_ADDR_IDX(addr);
 	int ctxt;
 	int err = 0;
@@ -710,8 +568,14 @@ psm2_epaddr_t psmx2_av_translate_addr(struct psmx2_fid_av *av,
 	assert(idx < av->last);
 
 	if (av->peers[idx].type == PSMX2_EP_SCALABLE) {
+		if (!av->peers[idx].sep_ctxt_epids) {
+			psmx2_av_query_sep(av, trx_ctxt, idx);
+			assert(av->peers[idx].sep_ctxt_epids);
+		}
+
 		if (!av->tables[trx_ctxt->id].sepaddrs[idx]) {
-			psmx2_av_connect_trx_ctxt(av, trx_ctxt->id, idx, 1, &errors);
+			av->tables[trx_ctxt->id].sepaddrs[idx] =
+				calloc(av->peers[idx].sep_ctxt_cnt, sizeof(psm2_epaddr_t));
 			assert(av->tables[trx_ctxt->id].sepaddrs[idx]);
 		}
 
@@ -726,12 +590,12 @@ psm2_epaddr_t psmx2_av_translate_addr(struct psmx2_fid_av *av,
 		}
 		epaddr = av->tables[trx_ctxt->id].sepaddrs[idx][ctxt];
 	} else {
-		if (!av->tables[trx_ctxt->id].epaddrs[addr]) {
-			err = psmx2_epid_to_epaddr(trx_ctxt, av->epids[addr],
-						   &av->tables[trx_ctxt->id].epaddrs[addr]);
+		if (!av->tables[trx_ctxt->id].epaddrs[idx]) {
+			err = psmx2_epid_to_epaddr(trx_ctxt, av->epids[idx],
+						   &av->tables[trx_ctxt->id].epaddrs[idx]);
 			assert(!err);
 		}
-		epaddr = av->tables[trx_ctxt->id].epaddrs[addr];
+		epaddr = av->tables[trx_ctxt->id].epaddrs[idx];
 	}
 
 #ifdef NDEBUG

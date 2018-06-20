@@ -83,7 +83,7 @@ extern "C" {
 
 extern struct fi_provider psmx2_prov;
 
-#define PSMX2_VERSION	(FI_VERSION(1, 6))
+#define PSMX2_VERSION	(FI_VERSION(1, 7))
 
 #define PSMX2_OP_FLAGS	(FI_INJECT | FI_MULTI_RECV | FI_COMPLETION | \
 			 FI_TRIGGER | FI_INJECT_COMPLETE | \
@@ -318,6 +318,15 @@ union psmx2_pi {
 #define PSMX2_CTXT_USER(fi_context)	((fi_context)->internal[2])
 #define PSMX2_CTXT_EP(fi_context)	((fi_context)->internal[3])
 
+/*
+ * Use per-protocol versioning to avoid unnecessary version checking. Only perform
+ * version checking when the current version is greater than zero.
+ */
+#define PSMX2_AM_RMA_VERSION		0
+#define PSMX2_AM_ATOMIC_VERSION		0
+#define PSMX2_AM_SEP_VERSION		1
+#define PSMX2_AM_TRX_CTXT_VERSION	0
+
 #define PSMX2_AM_RMA_HANDLER		0
 #define PSMX2_AM_ATOMIC_HANDLER		1
 #define PSMX2_AM_SEP_HANDLER		2
@@ -325,14 +334,18 @@ union psmx2_pi {
 
 #define PSMX2_AM_OP_MASK	0x000000FF
 #define PSMX2_AM_FLAG_MASK	0xFF000000
+#define PSMX2_AM_VER_MASK	0x00FF0000
+#define PSMX2_AM_VER_SHIFT	16
 #define PSMX2_AM_EOM		0x40000000
 #define PSMX2_AM_DATA		0x20000000
 #define PSMX2_AM_FORCE_ACK	0x10000000
 
-#define PSMX2_AM_SET_OP(u32w0,op)	do {u32w0 &= ~PSMX2_AM_OP_MASK; u32w0 |= op;} while (0)
-#define PSMX2_AM_SET_FLAG(u32w0,flag)	do {u32w0 &= ~PSMX2_AM_FLAG_MASK; u32w0 |= flag;} while (0)
-#define PSMX2_AM_GET_OP(u32w0)		(u32w0 & PSMX2_AM_OP_MASK)
-#define PSMX2_AM_GET_FLAG(u32w0)	(u32w0 & PSMX2_AM_FLAG_MASK)
+#define PSMX2_AM_SET_OP(u32w0,op)	do {(u32w0) &= ~PSMX2_AM_OP_MASK; (u32w0) |= (op);} while (0)
+#define PSMX2_AM_SET_FLAG(u32w0,flag)	do {(u32w0) &= ~PSMX2_AM_FLAG_MASK; (u32w0) |= (flag);} while (0)
+#define PSMX2_AM_SET_VER(u32w0,ver)	do {(u32w0) &= ~PSMX2_AM_VER_MASK; (u32w0) |= (ver << PSMX2_AM_VER_SHIFT);} while (0)
+#define PSMX2_AM_GET_OP(u32w0)		((u32w0) & PSMX2_AM_OP_MASK)
+#define PSMX2_AM_GET_FLAG(u32w0)	((u32w0) & PSMX2_AM_FLAG_MASK)
+#define PSMX2_AM_GET_VER(u32w0)		(((u32w0) & PSMX2_AM_VER_MASK) >> PSMX2_AM_VER_SHIFT)
 
 enum {
 	PSMX2_AM_REQ_WRITE = 1,
