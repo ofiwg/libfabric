@@ -623,10 +623,8 @@ STATIC int psmx2_av_insert(struct fid_av *av, const void *addr,
 				fi_addr[i] = FI_ADDR_NOTAVAIL;
 			else if (av_priv->peers[idx].type == PSMX2_EP_SCALABLE)
 				fi_addr[i] = idx | PSMX2_SEP_ADDR_FLAG;
-			else if (av_priv->type == FI_AV_TABLE)
-				fi_addr[i] = idx;
 			else
-				fi_addr[i] = PSMX2_EP_TO_ADDR(av_priv->tables[0].epaddrs[idx]);
+				fi_addr[i] = idx;
 		}
 	}
 
@@ -666,7 +664,6 @@ STATIC int psmx2_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 			   size_t *addrlen)
 {
 	struct psmx2_fid_av *av_priv;
-	struct psmx2_epaddr_context *context;
 	struct psmx2_ep_name name;
 	int idx;
 	int err = 0;
@@ -689,7 +686,7 @@ STATIC int psmx2_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 		name.type = PSMX2_EP_SCALABLE;
 		name.epid = av_priv->epids[idx];
 		name.sep_id = av_priv->peers[idx].sep_id;
-	} else if (av_priv->type == FI_AV_TABLE) {
+	} else {
 		idx = (int)(int64_t)fi_addr;
 		if (idx >= av_priv->last) {
 			err = -FI_EINVAL;
@@ -697,10 +694,6 @@ STATIC int psmx2_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 		}
 		name.type = PSMX2_EP_REGULAR;
 		name.epid = av_priv->epids[idx];
-	} else {
-		context = psm2_epaddr_getctxt(PSMX2_ADDR_TO_EP(fi_addr));
-		name.type = PSMX2_EP_REGULAR;
-		name.epid = context->epid;
 	}
 
 	if (av_priv->addr_format == FI_ADDR_STR) {
@@ -773,8 +766,7 @@ fi_addr_t psmx2_av_translate_source(struct psmx2_fid_av *av, fi_addr_t source)
 	for (i = av->last - 1; i >= 0 && !found; i--) {
 		if (av->peers[i].type == PSMX2_EP_REGULAR) {
 			if (av->epids[i] == epid) {
-				ret = (av->type == FI_AV_MAP) ?
-				      source : (fi_addr_t)i;
+				ret = (fi_addr_t)i;
 				found = 1;
 			}
 		} else {
@@ -898,7 +890,6 @@ int psmx2_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 {
 	struct psmx2_fid_domain *domain_priv;
 	struct psmx2_fid_av *av_priv;
-	int type = FI_AV_TABLE;
 	size_t count = 64;
 	uint64_t flags = 0;
 	int rx_ctx_bits = PSMX2_MAX_RX_CTX_BITS;
@@ -908,24 +899,6 @@ int psmx2_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 				   util_domain.domain_fid);
 
 	if (attr) {
-		switch (attr->type) {
-		case FI_AV_UNSPEC:
-			break;
-
-		case FI_AV_MAP:
-			FI_INFO(&psmx2_prov, FI_LOG_AV,
-				"FI_AV_MAP asked, force FI_AV_TABLE\n");
-			break;
-		case FI_AV_TABLE:
-			type = attr->type;
-			break;
-		default:
-			FI_INFO(&psmx2_prov, FI_LOG_AV,
-				"attr->type=%d, supported=%d %d\n",
-				attr->type, FI_AV_MAP, FI_AV_TABLE);
-			return -FI_EINVAL;
-		}
-
 		count = attr->count;
 		flags = attr->flags;
 
@@ -963,7 +936,6 @@ int psmx2_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	psmx2_domain_acquire(domain_priv);
 
 	av_priv->domain = domain_priv;
-	av_priv->type = type;
 	av_priv->addrlen = sizeof(psm2_epaddr_t);
 	av_priv->count = count;
 	av_priv->flags = flags;
@@ -978,10 +950,7 @@ int psmx2_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 
 	*av = &av_priv->av;
 	if (attr)
-		attr->type = type;
-
-	FI_INFO(&psmx2_prov, FI_LOG_AV,
-		"type = %s\n", fi_tostr(&type, FI_TYPE_AV_TYPE));
+		attr->type = FI_AV_TABLE;
 
 	return 0;
 }

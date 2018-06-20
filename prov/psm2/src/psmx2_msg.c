@@ -56,16 +56,15 @@ ssize_t psmx2_recv_generic(struct fid_ep *ep, void *buf, size_t len,
 
 	if ((ep_priv->caps & FI_DIRECTED_RECV) && src_addr != FI_ADDR_UNSPEC) {
 		av = ep_priv->av;
-		if (av && PSMX2_SEP_ADDR_TEST(src_addr)) {
+		assert(av);
+		if (PSMX2_SEP_ADDR_TEST(src_addr)) {
 			psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->rx, src_addr);
-		} else if (av && av->type == FI_AV_TABLE) {
+		} else {
 			idx = (size_t)src_addr;
 			if ((err = psmx2_av_check_table_idx(av, ep_priv->rx, idx)))
 				return err;
 
 			psm2_epaddr = av->tables[ep_priv->rx->id].epaddrs[idx];
-		} else {
-			psm2_epaddr = PSMX2_ADDR_TO_EP(src_addr);
 		}
 	} else {
 		psm2_epaddr = 0;
@@ -219,16 +218,15 @@ ssize_t psmx2_send_generic(struct fid_ep *ep, const void *buf, size_t len,
 						context, flags, data);
 
 	av = ep_priv->av;
-	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
+	assert(av);
+	if (PSMX2_SEP_ADDR_TEST(dest_addr)) {
 		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->tx, dest_addr);
-	} else if (av && av->type == FI_AV_TABLE) {
+	} else {
 		idx = (size_t)dest_addr;
 		if ((err = psmx2_av_check_table_idx(av, ep_priv->tx, idx)))
 			return err;
 
 		psm2_epaddr = av->tables[ep_priv->tx->id].epaddrs[idx];
-	} else  {
-		psm2_epaddr = PSMX2_ADDR_TO_EP(dest_addr);
 	}
 
 	PSMX2_SET_TAG(psm2_tag, 0, data, PSMX2_TYPE_MSG | PSMX2_IMM_BIT_SET(have_data));
@@ -375,9 +373,10 @@ ssize_t psmx2_sendv_generic(struct fid_ep *ep, const struct iovec *iov,
 	}
 
 	av = ep_priv->av;
-	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
+	assert(av);
+	if (PSMX2_SEP_ADDR_TEST(dest_addr)) {
 		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->tx, dest_addr);
-	} else if (av && av->type == FI_AV_TABLE) {
+	} else {
 		idx = (size_t)dest_addr;
 		if ((err = psmx2_av_check_table_idx(av, ep_priv->tx, idx))) {
 			free(req);
@@ -385,8 +384,6 @@ ssize_t psmx2_sendv_generic(struct fid_ep *ep, const struct iovec *iov,
 		}
 
 		psm2_epaddr = av->tables[ep_priv->tx->id].epaddrs[idx];
-	} else  {
-		psm2_epaddr = PSMX2_ADDR_TO_EP(dest_addr);
 	}
 
 	if (flags & FI_REMOTE_CQ_DATA)

@@ -648,17 +648,15 @@ ssize_t psmx2_read_generic(struct fid_ep *ep, void *buf, size_t len,
 	assert(buf);
 
 	av = ep_priv->av;
-	if (av && PSMX2_SEP_ADDR_TEST(src_addr)) {
+	assert(av);
+	if (PSMX2_SEP_ADDR_TEST(src_addr)) {
 		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->tx, src_addr);
-	} else if (av && av->type == FI_AV_TABLE) {
+	} else {
 		idx = src_addr;
 		if ((err = psmx2_av_check_table_idx(av, ep_priv->tx, idx)))
 			return err;
 
 		psm2_epaddr = av->tables[ep_priv->tx->id].epaddrs[idx];
-	} else {
-		assert(src_addr);
-		psm2_epaddr = PSMX2_ADDR_TO_EP(src_addr);
 	}
 
 	epaddr_context = psm2_epaddr_getctxt((void *)psm2_epaddr);
@@ -763,17 +761,15 @@ ssize_t psmx2_readv_generic(struct fid_ep *ep, const struct iovec *iov,
 						 addr, key, context, flags);
 
 	av = ep_priv->av;
-	if (av && PSMX2_SEP_ADDR_TEST(src_addr)) {
+	assert(av);
+	if (PSMX2_SEP_ADDR_TEST(src_addr)) {
 		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->tx, src_addr);
-	} else if (av && av->type == FI_AV_TABLE) {
+	} else {
 		idx = src_addr;
 		if ((err = psmx2_av_check_table_idx(av, ep_priv->tx, idx)))
 			return err;
 
 		psm2_epaddr = av->tables[ep_priv->tx->id].epaddrs[idx];
-	} else {
-		assert(src_addr);
-		psm2_epaddr = PSMX2_ADDR_TO_EP(src_addr);
 	}
 
 	epaddr_context = psm2_epaddr_getctxt((void *)psm2_epaddr);
@@ -972,17 +968,15 @@ ssize_t psmx2_write_generic(struct fid_ep *ep, const void *buf, size_t len,
 	assert(buf);
 
 	av = ep_priv->av;
-	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
+	assert(av);
+	if (PSMX2_SEP_ADDR_TEST(dest_addr)) {
 		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->tx, dest_addr);
-	} else if (av && av->type == FI_AV_TABLE) {
+	} else {
 		idx = dest_addr;
 		if ((err = psmx2_av_check_table_idx(av, ep_priv->tx, idx)))
 			return err;
 
 		psm2_epaddr = av->tables[ep_priv->tx->id].epaddrs[idx];
-	} else {
-		assert(dest_addr);
-		psm2_epaddr = PSMX2_ADDR_TO_EP(dest_addr);
 	}
 
 	epaddr_context = psm2_epaddr_getctxt((void *)psm2_epaddr);
@@ -1130,17 +1124,15 @@ ssize_t psmx2_writev_generic(struct fid_ep *ep, const struct iovec *iov,
 						  context, flags, data);
 
 	av = ep_priv->av;
-	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
+	assert(av);
+	if (PSMX2_SEP_ADDR_TEST(dest_addr)) {
 		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->tx, dest_addr);
-	} else if (av && av->type == FI_AV_TABLE) {
+	} else {
 		idx = dest_addr;
 		if ((err = psmx2_av_check_table_idx(av, ep_priv->tx, idx)))
 			return err;
 
 		psm2_epaddr = av->tables[ep_priv->tx->id].epaddrs[idx];
-	} else {
-		assert(dest_addr);
-		psm2_epaddr = PSMX2_ADDR_TO_EP(dest_addr);
 	}
 
 	epaddr_context = psm2_epaddr_getctxt((void *)psm2_epaddr);

@@ -54,16 +54,15 @@ static ssize_t psmx2_tagged_peek_generic(struct fid_ep *ep,
 
 	if ((ep_priv->caps & FI_DIRECTED_RECV) && src_addr != FI_ADDR_UNSPEC) {
 		av = ep_priv->av;
-		if (av && PSMX2_SEP_ADDR_TEST(src_addr)) {
+		assert(av);
+		if (PSMX2_SEP_ADDR_TEST(src_addr)) {
 			psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->rx, src_addr);
-		} else if (av && av->type == FI_AV_TABLE) {
+		} else {
 			idx = (size_t)src_addr;
 			if ((err = psmx2_av_check_table_idx(av, ep_priv->rx, idx)))
 				return err;
 
 			psm2_epaddr = av->tables[ep_priv->rx->id].epaddrs[idx];
-		} else {
-			psm2_epaddr = PSMX2_ADDR_TO_EP(src_addr);
 		}
 	} else {
 		psm2_epaddr = 0;
@@ -255,16 +254,15 @@ ssize_t psmx2_tagged_recv_generic(struct fid_ep *ep, void *buf,
 
 	if ((ep_priv->caps & FI_DIRECTED_RECV) && src_addr != FI_ADDR_UNSPEC) {
 		av = ep_priv->av;
-		if (av && PSMX2_SEP_ADDR_TEST(src_addr)) {
+		assert(av);
+		if (PSMX2_SEP_ADDR_TEST(src_addr)) {
 			psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->rx, src_addr);
-		} else if (av && av->type == FI_AV_TABLE) {
+		} else {
 			idx = (size_t)src_addr;
 			if ((err = psmx2_av_check_table_idx(av, ep_priv->rx, idx)))
 				return err;
 
 			psm2_epaddr = av->tables[ep_priv->rx->id].epaddrs[idx];
-		} else {
-			psm2_epaddr = PSMX2_ADDR_TO_EP(src_addr);
 		}
 	} else {
 		psm2_epaddr = 0;
@@ -302,7 +300,6 @@ psmx2_tagged_recv_specialized(struct fid_ep *ep, void *buf, size_t len,
 			      uint64_t tag, uint64_t ignore,
 			      void *context,
 			      int enable_completion,
-			      enum fi_av_type av_type,
 			      int directed_receive)
 {
 	struct psmx2_fid_ep *ep_priv;
@@ -334,23 +331,15 @@ psmx2_tagged_recv_specialized(struct fid_ep *ep, void *buf, size_t len,
 
 	if (directed_receive && src_addr != FI_ADDR_UNSPEC) {
 		av = ep_priv->av;
-		if (av_type == FI_AV_MAP) {
-			if (av && PSMX2_SEP_ADDR_TEST(src_addr)) {
-				psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->rx, src_addr);
-			} else {
-				psm2_epaddr = PSMX2_ADDR_TO_EP(src_addr);
-			}
-		} else { /* FI_AV_TABLE */
-			assert(av != NULL);
-			if (PSMX2_SEP_ADDR_TEST(src_addr)) {
-				psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->rx, src_addr);
-			} else {
-				idx = (size_t)src_addr;
-				if ((err = psmx2_av_check_table_idx(av, ep_priv->rx, idx)))
-					return err;
+		assert(av != NULL);
+		if (PSMX2_SEP_ADDR_TEST(src_addr)) {
+			psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->rx, src_addr);
+		} else {
+			idx = (size_t)src_addr;
+			if ((err = psmx2_av_check_table_idx(av, ep_priv->rx, idx)))
+				return err;
 
-				psm2_epaddr = av->tables[ep_priv->rx->id].epaddrs[idx];
-			}
+			psm2_epaddr = av->tables[ep_priv->rx->id].epaddrs[idx];
 		}
 	} else {
 		psm2_epaddr = 0;
@@ -381,95 +370,49 @@ psmx2_tagged_recv_specialized(struct fid_ep *ep, void *buf, size_t len,
 	return 0;
 }
 
-
-/* op_flags=0, FI_SELECTIVE_COMPLETION not set, FI_AV_MAP, FI_DIRECTED_RECEIVE not set */
+/* op_flags=0, FI_SELECTIVE_COMPLETION not set, FI_DIRECTED_RECEIVE not set */
 static ssize_t
-psmx2_tagged_recv_no_flag_av_map_undirected(struct fid_ep *ep, void *buf, size_t len,
-					    void *desc, fi_addr_t src_addr,
-					    uint64_t tag, uint64_t ignore,
-					    void *context)
+psmx2_tagged_recv_no_flag_undirected(struct fid_ep *ep, void *buf, size_t len,
+				     void *desc, fi_addr_t src_addr,
+				     uint64_t tag, uint64_t ignore,
+				     void *context)
 {
-	return psmx2_tagged_recv_specialized(ep, buf, len, desc,
-			src_addr, tag, ignore, context, 1, FI_AV_MAP, 0);
+	return psmx2_tagged_recv_specialized(ep, buf, len, desc, src_addr,
+					     tag, ignore, context, 1, 0);
 }
 
-/* op_flags=0, FI_SELECTIVE_COMPLETION not set, FI_AV_TABLE, FI_DIRECTED_RECEIVE not set */
+/* op_flags=0, FI_SELECTIVE_COMPLETION set, FI_DIRECTED_RECEIVE not set */
 static ssize_t
-psmx2_tagged_recv_no_flag_av_table_undirected(struct fid_ep *ep, void *buf, size_t len,
-					      void *desc, fi_addr_t src_addr,
-					      uint64_t tag, uint64_t ignore,
-					      void *context)
+psmx2_tagged_recv_no_event_undirected(struct fid_ep *ep, void *buf, size_t len,
+				      void *desc, fi_addr_t src_addr,
+				      uint64_t tag, uint64_t ignore,
+				      void *context)
 {
-	return psmx2_tagged_recv_specialized(ep, buf, len, desc,
-			src_addr, tag, ignore, context, 1, FI_AV_TABLE, 0);
+	return psmx2_tagged_recv_specialized(ep, buf, len, desc, src_addr,
+					     tag, ignore, context, 0, 0);
 }
 
-/* op_flags=0, FI_SELECTIVE_COMPLETION set, FI_AV_MAP, FI_DIRECTED_RECEIVE not set */
+/* op_flags=0, FI_SELECTIVE_COMPLETION not set, FI_DIRECTED_RECEIVE set */
 static ssize_t
-psmx2_tagged_recv_no_event_av_map_undirected(struct fid_ep *ep, void *buf, size_t len,
-					     void *desc, fi_addr_t src_addr,
-					     uint64_t tag, uint64_t ignore,
-					     void *context)
+psmx2_tagged_recv_no_flag_directed(struct fid_ep *ep, void *buf, size_t len,
+				   void *desc, fi_addr_t src_addr,
+				   uint64_t tag, uint64_t ignore,
+				   void *context)
 {
-	return psmx2_tagged_recv_specialized(ep, buf, len, desc,
-			src_addr, tag, ignore, context, 0, FI_AV_MAP, 0);
+	return psmx2_tagged_recv_specialized(ep, buf, len, desc, src_addr,
+					     tag, ignore, context, 1, 1);
 }
 
-/* op_flags=0, FI_SELECTIVE_COMPLETION set, FI_AV_TABLE, FI_DIRECTED_RECEIVE not set */
+/* op_flags=0, FI_SELECTIVE_COMPLETION set, FI_DIRECTED_RECEIVE set */
 static ssize_t
-psmx2_tagged_recv_no_event_av_table_undirected(struct fid_ep *ep, void *buf, size_t len,
-					       void *desc, fi_addr_t src_addr,
-					       uint64_t tag, uint64_t ignore,
-					       void *context)
+psmx2_tagged_recv_no_event_directed(struct fid_ep *ep, void *buf, size_t len,
+				    void *desc, fi_addr_t src_addr,
+				    uint64_t tag, uint64_t ignore,
+				    void *context)
 {
-	return psmx2_tagged_recv_specialized(ep, buf, len, desc,
-			src_addr, tag, ignore, context, 0, FI_AV_TABLE, 0);
+	return psmx2_tagged_recv_specialized(ep, buf, len, desc, src_addr,
+					     tag, ignore, context, 0, 1);
 }
-
-/* op_flags=0, FI_SELECTIVE_COMPLETION not set, FI_AV_MAP, FI_DIRECTED_RECEIVE set */
-static ssize_t
-psmx2_tagged_recv_no_flag_av_map_directed(struct fid_ep *ep, void *buf, size_t len,
-					  void *desc, fi_addr_t src_addr,
-					  uint64_t tag, uint64_t ignore,
-					  void *context)
-{
-	return psmx2_tagged_recv_specialized(ep, buf, len, desc,
-			src_addr, tag, ignore, context, 1, FI_AV_MAP, 1);
-}
-
-/* op_flags=0, FI_SELECTIVE_COMPLETION not set, FI_AV_TABLE, FI_DIRECTED_RECEIVE set */
-static ssize_t
-psmx2_tagged_recv_no_flag_av_table_directed(struct fid_ep *ep, void *buf, size_t len,
-					    void *desc, fi_addr_t src_addr,
-					    uint64_t tag, uint64_t ignore,
-					    void *context)
-{
-	return psmx2_tagged_recv_specialized(ep, buf, len, desc,
-			src_addr, tag, ignore, context, 1, FI_AV_TABLE, 1);
-}
-
-/* op_flags=0, FI_SELECTIVE_COMPLETION set, FI_AV_MAP, FI_DIRECTED_RECEIVE set */
-static ssize_t
-psmx2_tagged_recv_no_event_av_map_directed(struct fid_ep *ep, void *buf, size_t len,
-					   void *desc, fi_addr_t src_addr,
-					   uint64_t tag, uint64_t ignore,
-					   void *context)
-{
-	return psmx2_tagged_recv_specialized(ep, buf, len, desc,
-			src_addr, tag, ignore, context, 0, FI_AV_MAP, 1);
-}
-
-/* op_flags=0, FI_SELECTIVE_COMPLETION set, FI_AV_TABLE, FI_DIRECTED_RECEIVE set */
-static ssize_t
-psmx2_tagged_recv_no_event_av_table_directed(struct fid_ep *ep, void *buf, size_t len,
-					     void *desc, fi_addr_t src_addr,
-					     uint64_t tag, uint64_t ignore,
-					     void *context)
-{
-	return psmx2_tagged_recv_specialized(ep, buf, len, desc,
-			src_addr, tag, ignore, context, 0, FI_AV_TABLE, 1);
-}
-
 
 static ssize_t psmx2_tagged_recv(struct fid_ep *ep, void *buf, size_t len,
 				 void *desc, fi_addr_t src_addr, uint64_t tag,
@@ -533,16 +476,10 @@ psmx2_tagged_recvv##suffix(struct fid_ep *ep, const struct iovec *iov,	\
 }
 
 PSMX2_TAGGED_RECVV_FUNC()
-PSMX2_TAGGED_RECVV_FUNC(_no_flag_av_map_directed)
-PSMX2_TAGGED_RECVV_FUNC(_no_flag_av_table_directed)
-PSMX2_TAGGED_RECVV_FUNC(_no_event_av_map_directed)
-PSMX2_TAGGED_RECVV_FUNC(_no_event_av_table_directed)
-PSMX2_TAGGED_RECVV_FUNC(_no_flag_av_map_undirected)
-PSMX2_TAGGED_RECVV_FUNC(_no_flag_av_table_undirected)
-PSMX2_TAGGED_RECVV_FUNC(_no_event_av_map_undirected)
-PSMX2_TAGGED_RECVV_FUNC(_no_event_av_table_undirected)
-
-
+PSMX2_TAGGED_RECVV_FUNC(_no_flag_directed)
+PSMX2_TAGGED_RECVV_FUNC(_no_event_directed)
+PSMX2_TAGGED_RECVV_FUNC(_no_flag_undirected)
+PSMX2_TAGGED_RECVV_FUNC(_no_event_undirected)
 
 ssize_t psmx2_tagged_send_generic(struct fid_ep *ep,
 				  const void *buf, size_t len,
@@ -572,16 +509,15 @@ ssize_t psmx2_tagged_send_generic(struct fid_ep *ep,
 						 flags, data);
 
 	av = ep_priv->av;
-	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
+	assert(av);
+	if (PSMX2_SEP_ADDR_TEST(dest_addr)) {
 		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->tx, dest_addr);
-	} else  if (av && av->type == FI_AV_TABLE) {
+	} else {
 		idx = (size_t)dest_addr;
 		if ((err = psmx2_av_check_table_idx(av, ep_priv->tx, idx)))
 			return err;
 
 		psm2_epaddr = av->tables[ep_priv->tx->id].epaddrs[idx];
-	} else {
-		psm2_epaddr = PSMX2_ADDR_TO_EP(dest_addr);
 	}
 
 	PSMX2_SET_TAG(psm2_tag, tag, (uint32_t)data,
@@ -651,7 +587,6 @@ psmx2_tagged_send_specialized(struct fid_ep *ep, const void *buf,
 			      fi_addr_t dest_addr, uint64_t tag,
 			      void *context,
 			      int enable_completion,
-			      enum fi_av_type av_type,
 			      int has_data, uint64_t data)
 {
 	struct psmx2_fid_ep *ep_priv;
@@ -667,22 +602,16 @@ psmx2_tagged_send_specialized(struct fid_ep *ep, const void *buf,
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 	av = ep_priv->av;
+	assert(av);
 
-	if (av_type == FI_AV_MAP) {
-		if (av && PSMX2_SEP_ADDR_TEST(dest_addr))
-			psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->tx, dest_addr);
-		else
-			psm2_epaddr = PSMX2_ADDR_TO_EP(dest_addr);
-	} else { /* FI_AV_TABLE */
-		if (PSMX2_SEP_ADDR_TEST(dest_addr)) {
-			psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->tx, dest_addr);
-		} else {
-			idx = (size_t)dest_addr;
-			if ((err = psmx2_av_check_table_idx(av, ep_priv->tx, idx)))
-				return err;
+	if (PSMX2_SEP_ADDR_TEST(dest_addr)) {
+		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->tx, dest_addr);
+	} else {
+		idx = (size_t)dest_addr;
+		if ((err = psmx2_av_check_table_idx(av, ep_priv->tx, idx)))
+			return err;
 
-			psm2_epaddr = av->tables[ep_priv->tx->id].epaddrs[idx];
-		}
+		psm2_epaddr = av->tables[ep_priv->tx->id].epaddrs[idx];
 	}
 
 	if (has_data)
@@ -712,101 +641,51 @@ psmx2_tagged_send_specialized(struct fid_ep *ep, const void *buf,
 	return 0;
 }
 
-/* op_flags=0, FI_SELECTIVE_COMPLETION not set, FI_AV_MAP */
+/* op_flags=0, FI_SELECTIVE_COMPLETION not set */
 static ssize_t
-psmx2_tagged_send_no_flag_av_map(struct fid_ep *ep, const void *buf,
-				 size_t len, void *desc,
-				 fi_addr_t dest_addr, uint64_t tag,
-				 void *context)
-{
-	return psmx2_tagged_send_specialized(ep, buf, len, desc, dest_addr,
-					     tag, context, 1, FI_AV_MAP, 0, 0);
-}
-
-/* op_flags=0, FI_SELECTIVE_COMPLETION not set, FI_AV_TABLE */
-static ssize_t
-psmx2_tagged_send_no_flag_av_table(struct fid_ep *ep, const void *buf,
-				   size_t len, void *desc,
-				   fi_addr_t dest_addr, uint64_t tag,
-				   void *context)
+psmx2_tagged_send_no_flag(struct fid_ep *ep, const void *buf, size_t len,
+			  void *desc, fi_addr_t dest_addr, uint64_t tag,
+			  void *context)
 {
 	return psmx2_tagged_send_specialized(ep, buf, len, desc, dest_addr, tag,
-					     context, 1, FI_AV_TABLE, 0, 0);
+					     context, 1, 0, 0);
 }
 
-/* op_flags=0, FI_SELECTIVE_COMPLETION set, FI_AV_MAP */
+/* op_flags=0, FI_SELECTIVE_COMPLETION set */
 static ssize_t
-psmx2_tagged_send_no_event_av_map(struct fid_ep *ep, const void *buf,
-				  size_t len, void *desc,
-				  fi_addr_t dest_addr, uint64_t tag,
-				  void *context)
+psmx2_tagged_send_no_event(struct fid_ep *ep, const void *buf, size_t len,
+			   void *desc, fi_addr_t dest_addr, uint64_t tag,
+			   void *context)
 {
 	return psmx2_tagged_send_specialized(ep, buf, len, desc, dest_addr, tag,
-					     context, 0, FI_AV_MAP, 0, 0);
+					     context, 0, 0, 0);
 }
 
-/* op_flags=0, FI_SELECTIVE_COMPLETION set, FI_AV_TABLE */
+/* op_flags=0, FI_SELECTIVE_COMPLETION not set */
 static ssize_t
-psmx2_tagged_send_no_event_av_table(struct fid_ep *ep, const void *buf,
-				    size_t len, void *desc,
-				    fi_addr_t dest_addr, uint64_t tag,
-				    void *context)
+psmx2_tagged_senddata_no_flag(struct fid_ep *ep, const void *buf, size_t len,
+			      void *desc, uint64_t data, fi_addr_t dest_addr,
+			      uint64_t tag, void *context)
 {
 	return psmx2_tagged_send_specialized(ep, buf, len, desc, dest_addr, tag,
-					     context, 0, FI_AV_TABLE, 0, 0);
+					     context, 1, 1, data);
 }
 
-/* op_flags=0, FI_SELECTIVE_COMPLETION not set, FI_AV_MAP */
+/* op_flags=0, FI_SELECTIVE_COMPLETION set */
 static ssize_t
-psmx2_tagged_senddata_no_flag_av_map(struct fid_ep *ep, const void *buf,
-				     size_t len, void *desc, uint64_t data,
-				     fi_addr_t dest_addr, uint64_t tag,
-				     void *context)
+psmx2_tagged_senddata_no_event(struct fid_ep *ep, const void *buf, size_t len,
+			       void *desc, uint64_t data, fi_addr_t dest_addr,
+			       uint64_t tag, void *context)
 {
 	return psmx2_tagged_send_specialized(ep, buf, len, desc, dest_addr, tag,
-					     context, 1, FI_AV_MAP, 1, data);
+					     context, 0, 1, data);
 }
 
-/* op_flags=0, FI_SELECTIVE_COMPLETION not set, FI_AV_TABLE */
-static ssize_t
-psmx2_tagged_senddata_no_flag_av_table(struct fid_ep *ep, const void *buf,
-				       size_t len, void *desc, uint64_t data,
-				       fi_addr_t dest_addr, uint64_t tag,
-				       void *context)
-{
-	return psmx2_tagged_send_specialized(ep, buf, len, desc, dest_addr, tag,
-					     context, 1, FI_AV_TABLE, 1, data);
-}
-
-/* op_flags=0, FI_SELECTIVE_COMPLETION set, FI_AV_MAP */
-static ssize_t
-psmx2_tagged_senddata_no_event_av_map(struct fid_ep *ep, const void *buf,
-				      size_t len, void *desc, uint64_t data,
-				      fi_addr_t dest_addr, uint64_t tag,
-				      void *context)
-{
-	return psmx2_tagged_send_specialized(ep, buf, len, desc, dest_addr, tag,
-					     context, 0, FI_AV_MAP, 1, data);
-}
-
-/* op_flags=0, FI_SELECTIVE_COMPLETION set, FI_AV_TABLE */
-static ssize_t
-psmx2_tagged_senddata_no_event_av_table(struct fid_ep *ep, const void *buf,
-					size_t len, void *desc, uint64_t data,
-					fi_addr_t dest_addr, uint64_t tag,
-					void *context)
-{
-	return psmx2_tagged_send_specialized(ep, buf, len, desc, dest_addr, tag,
-					     context, 0, FI_AV_TABLE, 1, data);
-}
-
-/* op_flags=0, FI_AV_MAP */
 __attribute__((always_inline))
 static inline ssize_t
 psmx2_tagged_inject_specialized(struct fid_ep *ep, const void *buf,
 				size_t len, fi_addr_t dest_addr,
-				uint64_t tag, enum fi_av_type av_type,
-				int has_data, uint64_t data)
+				uint64_t tag, int has_data, uint64_t data)
 {
 	struct psmx2_fid_ep *ep_priv;
 	struct psmx2_fid_av *av;
@@ -823,22 +702,16 @@ psmx2_tagged_inject_specialized(struct fid_ep *ep, const void *buf,
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
 	av = ep_priv->av;
+	assert(av);
 
-	if (av_type == FI_AV_MAP) {
-		if (av && PSMX2_SEP_ADDR_TEST(dest_addr))
-			psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->tx, dest_addr);
-		else
-			psm2_epaddr = PSMX2_ADDR_TO_EP(dest_addr);
-	} else { /* FI_AV_TABLE */
-		if (PSMX2_SEP_ADDR_TEST(dest_addr)) {
-			psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->tx, dest_addr);
-		} else {
-			idx = (size_t)dest_addr;
-			if ((err = psmx2_av_check_table_idx(av, ep_priv->tx, idx)))
-				return err;
+	if (PSMX2_SEP_ADDR_TEST(dest_addr)) {
+		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->tx, dest_addr);
+	} else {
+		idx = (size_t)dest_addr;
+		if ((err = psmx2_av_check_table_idx(av, ep_priv->tx, idx)))
+			return err;
 
-			psm2_epaddr = av->tables[ep_priv->tx->id].epaddrs[idx];
-		}
+		psm2_epaddr = av->tables[ep_priv->tx->id].epaddrs[idx];
 	}
 
 	if (has_data)
@@ -858,44 +731,22 @@ psmx2_tagged_inject_specialized(struct fid_ep *ep, const void *buf,
 	return 0;
 }
 
-/* op_flags=0, FI_AV_MAP */
+/* op_flags=0 */
 static ssize_t
-psmx2_tagged_inject_no_flag_av_map(struct fid_ep *ep, const void *buf,
-				   size_t len, fi_addr_t dest_addr,
-				   uint64_t tag)
+psmx2_tagged_inject_no_flag(struct fid_ep *ep, const void *buf, size_t len,
+			    fi_addr_t dest_addr, uint64_t tag)
 {
 	return psmx2_tagged_inject_specialized(ep, buf, len, dest_addr, tag,
-					       FI_AV_MAP, 0, 0);
+					       0, 0);
 }
 
-/* op_flags=0, FI_AV_TABLE */
+/* op_flags=0 */
 static ssize_t
-psmx2_tagged_inject_no_flag_av_table(struct fid_ep *ep, const void *buf,
-				     size_t len, fi_addr_t dest_addr,
-				     uint64_t tag)
+psmx2_tagged_injectdata_no_flag(struct fid_ep *ep, const void *buf, size_t len,
+				uint64_t data, fi_addr_t dest_addr, uint64_t tag)
 {
 	return psmx2_tagged_inject_specialized(ep, buf, len, dest_addr, tag,
-					       FI_AV_TABLE, 0, 0);
-}
-
-/* op_flags=0, FI_AV_MAP */
-static ssize_t
-psmx2_tagged_injectdata_no_flag_av_map(struct fid_ep *ep, const void *buf,
-				       size_t len, uint64_t data,
-				       fi_addr_t dest_addr, uint64_t tag)
-{
-	return psmx2_tagged_inject_specialized(ep, buf, len, dest_addr, tag,
-					       FI_AV_MAP, 1, data);
-}
-
-/* op_flags=0, FI_AV_TABLE */
-static ssize_t
-psmx2_tagged_injectdata_no_flag_av_table(struct fid_ep *ep, const void *buf,
-					 size_t len, uint64_t data,
-					 fi_addr_t dest_addr, uint64_t tag)
-{
-	return psmx2_tagged_inject_specialized(ep, buf, len, dest_addr, tag,
-					       FI_AV_TABLE, 1, data);
+					       1, data);
 }
 
 ssize_t psmx2_tagged_sendv_generic(struct fid_ep *ep,
@@ -987,9 +838,10 @@ ssize_t psmx2_tagged_sendv_generic(struct fid_ep *ep,
 	}
 
 	av = ep_priv->av;
-	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
+	assert(av);
+	if (PSMX2_SEP_ADDR_TEST(dest_addr)) {
 		psm2_epaddr = psmx2_av_translate_sep(av, ep_priv->tx, dest_addr);
-	} else  if (av && av->type == FI_AV_TABLE) {
+	} else {
 		idx = (size_t)dest_addr;
 		if ((err = psmx2_av_check_table_idx(av, ep_priv->tx, idx))) {
 			free(req);
@@ -997,8 +849,6 @@ ssize_t psmx2_tagged_sendv_generic(struct fid_ep *ep,
 		}
 
 		psm2_epaddr = av->tables[ep_priv->tx->id].epaddrs[idx];
-	} else  {
-		psm2_epaddr = PSMX2_ADDR_TO_EP(dest_addr);
 	}
 
 	PSMX2_SET_TAG(psm2_tag, tag, (uint32_t)data,
@@ -1175,10 +1025,8 @@ psmx2_tagged_sendv##suffix(struct fid_ep *ep, const struct iovec *iov,	\
 }
 
 PSMX2_TAGGED_SENDV_FUNC()
-PSMX2_TAGGED_SENDV_FUNC(_no_flag_av_map)
-PSMX2_TAGGED_SENDV_FUNC(_no_flag_av_table)
-PSMX2_TAGGED_SENDV_FUNC(_no_event_av_map)
-PSMX2_TAGGED_SENDV_FUNC(_no_event_av_table)
+PSMX2_TAGGED_SENDV_FUNC(_no_flag)
+PSMX2_TAGGED_SENDV_FUNC(_no_event)
 
 static ssize_t psmx2_tagged_inject(struct fid_ep *ep,
 				   const void *buf, size_t len,
@@ -1224,20 +1072,12 @@ struct fi_ops_tagged psmx2_tagged_ops##suffix = {	\
 };
 
 PSMX2_TAGGED_OPS(,,,)
-PSMX2_TAGGED_OPS(_no_flag_av_map_directed, _no_flag_av_map, _no_flag_av_map_directed, _no_flag_av_map)
-PSMX2_TAGGED_OPS(_no_flag_av_table_directed, _no_flag_av_table, _no_flag_av_table_directed, _no_flag_av_table)
-PSMX2_TAGGED_OPS(_no_event_av_map_directed, _no_event_av_map, _no_event_av_map_directed, _no_flag_av_map)
-PSMX2_TAGGED_OPS(_no_event_av_table_directed, _no_event_av_table, _no_event_av_table_directed, _no_flag_av_table)
-PSMX2_TAGGED_OPS(_no_send_event_av_map_directed, _no_event_av_map, _no_flag_av_map_directed, _no_flag_av_map)
-PSMX2_TAGGED_OPS(_no_send_event_av_table_directed, _no_event_av_table, _no_flag_av_table_directed, _no_flag_av_table)
-PSMX2_TAGGED_OPS(_no_recv_event_av_map_directed, _no_flag_av_map, _no_event_av_map_directed, _no_flag_av_map)
-PSMX2_TAGGED_OPS(_no_recv_event_av_table_directed, _no_flag_av_table, _no_event_av_table_directed, _no_flag_av_table)
-PSMX2_TAGGED_OPS(_no_flag_av_map_undirected, _no_flag_av_map, _no_flag_av_map_undirected, _no_flag_av_map)
-PSMX2_TAGGED_OPS(_no_flag_av_table_undirected, _no_flag_av_table, _no_flag_av_table_undirected, _no_flag_av_table)
-PSMX2_TAGGED_OPS(_no_event_av_map_undirected, _no_event_av_map, _no_event_av_map_undirected, _no_flag_av_map)
-PSMX2_TAGGED_OPS(_no_event_av_table_undirected, _no_event_av_table, _no_event_av_table_undirected, _no_flag_av_table)
-PSMX2_TAGGED_OPS(_no_send_event_av_map_undirected, _no_event_av_map, _no_flag_av_map_undirected, _no_flag_av_map)
-PSMX2_TAGGED_OPS(_no_send_event_av_table_undirected, _no_event_av_table, _no_flag_av_table_undirected, _no_flag_av_table)
-PSMX2_TAGGED_OPS(_no_recv_event_av_map_undirected, _no_flag_av_map, _no_event_av_map_undirected, _no_flag_av_map)
-PSMX2_TAGGED_OPS(_no_recv_event_av_table_undirected, _no_flag_av_table, _no_event_av_table_undirected, _no_flag_av_table)
+PSMX2_TAGGED_OPS(_no_flag_directed, _no_flag, _no_flag_directed, _no_flag)
+PSMX2_TAGGED_OPS(_no_event_directed, _no_event, _no_event_directed, _no_flag)
+PSMX2_TAGGED_OPS(_no_send_event_directed, _no_event, _no_flag_directed, _no_flag)
+PSMX2_TAGGED_OPS(_no_recv_event_directed, _no_flag, _no_event_directed, _no_flag)
+PSMX2_TAGGED_OPS(_no_flag_undirected, _no_flag, _no_flag_undirected, _no_flag)
+PSMX2_TAGGED_OPS(_no_event_undirected, _no_event, _no_event_undirected, _no_flag)
+PSMX2_TAGGED_OPS(_no_send_event_undirected, _no_event, _no_flag_undirected, _no_flag)
+PSMX2_TAGGED_OPS(_no_recv_event_undirected, _no_flag, _no_event_undirected, _no_flag)
 
