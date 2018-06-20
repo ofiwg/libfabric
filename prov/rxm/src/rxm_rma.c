@@ -79,7 +79,7 @@ rxm_ep_rma_fill_msg(struct fi_msg_rma *msg_rma, struct iovec *iov,
 	msg_rma->data = orig_msg->data;
 }
 
-static inline void
+/*static inline void
 rxm_ep_rma_fill_msg_no_buf(struct rxm_rma_buf *rma_buf,
 			   struct rxm_tx_entry *tx_entry,
 			   const struct fi_msg_rma *orig_msg)
@@ -89,7 +89,7 @@ rxm_ep_rma_fill_msg_no_buf(struct rxm_rma_buf *rma_buf,
 	rxm_ep_rma_fill_msg(&rma_buf->msg, rma_buf->rxm_iov.iov,
 			    rma_buf->rxm_iov.count, rma_buf->rxm_iov.desc,
 			    &rma_buf->rxm_rma_iov, tx_entry, orig_msg);
-}
+}*/
 
 static inline void
 rxm_ep_rma_fill_msg_buf(struct rxm_rma_buf *rma_buf,
@@ -194,7 +194,7 @@ rxm_ep_format_rma_inject_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	return ret;
 }
 
-static inline ssize_t
+/*static inline ssize_t
 rxm_ep_format_rma_non_inject_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 				 size_t total_size, uint64_t flags, uint64_t comp_flags,
 				 const struct fi_msg_rma *orig_msg, struct rxm_rma_buf **rma_buf,
@@ -206,7 +206,7 @@ rxm_ep_format_rma_non_inject_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_con
 		return ret;
 
 	ret = rxm_ep_rma_reg_iov(rxm_ep, (*rma_buf)->rxm_iov.iov,
-				 /* addr of desc from rma_buf will be assign to itself */
+				 // addr of desc from rma_buf will be assign to itself
 				 orig_msg->desc,
 				 (*rma_buf)->rxm_iov.desc,
 				 orig_msg->iov_count,
@@ -221,7 +221,7 @@ err:
 	rxm_rma_buf_release(rxm_ep, (*tx_entry)->rma_buf);
 	rxm_tx_entry_release(&rxm_conn->send_queue, *tx_entry);
 	return ret;
-}
+}*/
 
 static ssize_t
 rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t flags,
