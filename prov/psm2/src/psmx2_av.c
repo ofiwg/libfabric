@@ -621,8 +621,6 @@ STATIC int psmx2_av_insert(struct fid_av *av, const void *addr,
 			idx = av_priv->last + i;
 			if (errors[i] != PSM2_OK)
 				fi_addr[i] = FI_ADDR_NOTAVAIL;
-			else if (av_priv->peers[idx].type == PSMX2_EP_SCALABLE)
-				fi_addr[i] = idx | PSMX2_SEP_ADDR_FLAG;
 			else
 				fi_addr[i] = idx;
 		}
@@ -665,7 +663,7 @@ STATIC int psmx2_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 {
 	struct psmx2_fid_av *av_priv;
 	struct psmx2_ep_name name;
-	int idx;
+	int idx = PSMX2_ADDR_IDX(fi_addr);
 	int err = 0;
 
 	assert(addr);
@@ -677,24 +675,14 @@ STATIC int psmx2_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 
 	av_priv->domain->av_lock_fn(&av_priv->lock, 1);
 
-	if (PSMX2_SEP_ADDR_TEST(fi_addr)) {
-		idx = PSMX2_SEP_ADDR_IDX(fi_addr);
-		if (idx >= av_priv->last) {
-			err = -FI_EINVAL;
-			goto out;
-		}
-		name.type = PSMX2_EP_SCALABLE;
-		name.epid = av_priv->epids[idx];
-		name.sep_id = av_priv->peers[idx].sep_id;
-	} else {
-		idx = (int)(int64_t)fi_addr;
-		if (idx >= av_priv->last) {
-			err = -FI_EINVAL;
-			goto out;
-		}
-		name.type = PSMX2_EP_REGULAR;
-		name.epid = av_priv->epids[idx];
+	if (idx >= av_priv->last) {
+		err = -FI_EINVAL;
+		goto out;
 	}
+
+	name.type = av_priv->peers[idx].type;
+	name.epid = av_priv->epids[idx];
+	name.sep_id = av_priv->peers[idx].sep_id;
 
 	if (av_priv->addr_format == FI_ADDR_STR) {
 		ofi_straddr(addr, addrlen, FI_ADDR_PSMX2, &name);
@@ -708,68 +696,47 @@ out:
 	return err;
 }
 
-static psm2_epaddr_t psmx2_av_translate_sep(struct psmx2_fid_av *av,
-					    struct psmx2_trx_ctxt *trx_ctxt,
-					    fi_addr_t addr)
-{
-	int idx = PSMX2_SEP_ADDR_IDX(addr);
-	int ctxt = PSMX2_SEP_ADDR_CTXT(addr, av->rx_ctx_bits);
-	psm2_epaddr_t epaddr;
-	psm2_error_t errors;
-	int err;
-
-	av->domain->av_lock_fn(&av->lock, 1);
-
-	assert(av->peers[idx].type == PSMX2_EP_SCALABLE);
-
-	if (!av->tables[trx_ctxt->id].sepaddrs[idx]) {
-		psmx2_av_connect_trx_ctxt(av, trx_ctxt->id, idx, 1, &errors);
-		assert(av->tables[trx_ctxt->id].sepaddrs[idx]);
-	}
-
-	assert(ctxt < av->peers[idx].sep_ctxt_cnt);
-
-	if (!av->tables[trx_ctxt->id].sepaddrs[idx][ctxt]) {
-		err = psmx2_epid_to_epaddr(trx_ctxt,
-					   av->peers[idx].sep_ctxt_epids[ctxt],
-					   &av->tables[trx_ctxt->id].sepaddrs[idx][ctxt]);
-
-		if (err)
-			FI_WARN(&psmx2_prov, FI_LOG_AV,
-				"fatal error: unable to translate epid %lx to epaddr.\n",
-				av->peers[idx].sep_ctxt_epids[ctxt]);
-	}
-
-	epaddr = av->tables[trx_ctxt->id].sepaddrs[idx][ctxt];
-
-	av->domain->av_unlock_fn(&av->lock, 1);
-	return epaddr;
-}
-
 psm2_epaddr_t psmx2_av_translate_addr(struct psmx2_fid_av *av,
 				      struct psmx2_trx_ctxt *trx_ctxt,
 				      fi_addr_t addr)
 {
-	psm2_epaddr_t epaddr = NULL;
+	psm2_epaddr_t epaddr;
+	psm2_error_t errors;
+	size_t idx = PSMX2_ADDR_IDX(addr);
+	int ctxt;
 	int err = 0;
 
-	if (PSMX2_SEP_ADDR_TEST(addr))
-		return psmx2_av_translate_sep(av, trx_ctxt, addr);
-
-	assert(addr < av->last);
-
 	av->domain->av_lock_fn(&av->lock, 1);
+	assert(idx < av->last);
 
-	if (!av->tables[trx_ctxt->id].epaddrs[addr]) {
-		err = psmx2_epid_to_epaddr(trx_ctxt, av->epids[addr],
-					   &av->tables[trx_ctxt->id].epaddrs[addr]);
-		if (err)
-			FI_WARN(&psmx2_prov, FI_LOG_AV,
-				"fatal error: unable to translate epid %lx to epaddr.\n",
-				av->epids[addr]);
+	if (av->peers[idx].type == PSMX2_EP_SCALABLE) {
+		if (!av->tables[trx_ctxt->id].sepaddrs[idx]) {
+			psmx2_av_connect_trx_ctxt(av, trx_ctxt->id, idx, 1, &errors);
+			assert(av->tables[trx_ctxt->id].sepaddrs[idx]);
+		}
+
+		ctxt = PSMX2_ADDR_CTXT(addr, av->rx_ctx_bits);
+		assert(ctxt < av->peers[idx].sep_ctxt_cnt);
+
+		if (!av->tables[trx_ctxt->id].sepaddrs[idx][ctxt]) {
+			err = psmx2_epid_to_epaddr(trx_ctxt,
+						   av->peers[idx].sep_ctxt_epids[ctxt],
+						   &av->tables[trx_ctxt->id].sepaddrs[idx][ctxt]);
+			assert(!err);
+		}
+		epaddr = av->tables[trx_ctxt->id].sepaddrs[idx][ctxt];
+	} else {
+		if (!av->tables[trx_ctxt->id].epaddrs[addr]) {
+			err = psmx2_epid_to_epaddr(trx_ctxt, av->epids[addr],
+						   &av->tables[trx_ctxt->id].epaddrs[addr]);
+			assert(!err);
+		}
+		epaddr = av->tables[trx_ctxt->id].epaddrs[addr];
 	}
-	epaddr = av->tables[trx_ctxt->id].epaddrs[addr];
 
+#ifdef NDEBUG
+	(void) err;
+#endif
 	av->domain->av_unlock_fn(&av->lock, 1);
 	return epaddr;
 }

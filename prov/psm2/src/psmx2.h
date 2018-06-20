@@ -275,15 +275,12 @@ static inline uint64_t psmx2_get_tag64(psm2_mq_tag_t *tag96)
 #define PSMX2_GET_FLAGS(tag96)	((tag96).tag[PSMX2_FLAGS_IDX] & PSMX2_FLAGS_MASK)
 #define PSMX2_GET_CQDATA(tag96)	((tag96).tag2 & PSMX2_DATA_MASK)
 
-#define PSMX2_MAX_RX_CTX_BITS		(12)
-#define PSMX2_SEP_ADDR_FLAG		(0x000E000000000000UL)
-#define PSMX2_SEP_ADDR_MASK		(0x000F000000000000UL)
-#define PSMX2_SEP_CTXT_MASK		(0xFFF0000000000000UL)
-#define PSMX2_SEP_IDX_MASK		(0x0000FFFFFFFFFFFFUL)
-#define PSMX2_SEP_ADDR_TEST(addr)	(((addr) & PSMX2_SEP_ADDR_MASK) == PSMX2_SEP_ADDR_FLAG)
-#define PSMX2_SEP_ADDR_CTXT(addr, ctxt_bits) \
-					(((addr) & PSMX2_SEP_CTXT_MASK) >> (64-(ctxt_bits)))
-#define PSMX2_SEP_ADDR_IDX(addr)	((addr) & PSMX2_SEP_IDX_MASK)
+#define PSMX2_MAX_RX_CTX_BITS	(12)
+#define PSMX2_ADDR_IDX_MASK	(0x000FFFFFFFFFFFFFUL)
+#define PSMX2_ADDR_CTXT_MASK	(0xFFF0000000000000UL)
+#define PSMX2_ADDR_IDX(addr)	((addr) & PSMX2_ADDR_IDX_MASK)
+#define PSMX2_ADDR_CTXT(addr, ctxt_bits) \
+				(((addr) & PSMX2_ADDR_CTXT_MASK) >> (64-(ctxt_bits)))
 
 /* Bits 60 .. 63 of the flag are provider specific */
 #define PSMX2_NO_COMPLETION	(1ULL << 60)
