@@ -1722,7 +1722,7 @@ STATIC ssize_t psmx2_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 
 	cq_priv = container_of(cq, struct psmx2_fid_cq, cq);
 
-	psmx2_lock(&cq_priv->lock, 2);
+	cq_priv->domain->cq_lock_fn(&cq_priv->lock, 2);
 	if (cq_priv->pending_error) {
 		api_version = cq_priv->domain->fabric->util_fabric.
 			      fabric_fid.api_version;
@@ -1735,7 +1735,7 @@ STATIC ssize_t psmx2_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 		psmx2_unlock(&cq_priv->lock, 2);
 		return 1;
 	}
-	psmx2_unlock(&cq_priv->lock, 2);
+	cq_priv->domain->cq_unlock_fn(&cq_priv->lock, 2);
 
 	return -FI_EAGAIN;
 }

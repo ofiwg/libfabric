@@ -708,45 +708,68 @@ out:
 	return err;
 }
 
-psm2_epaddr_t psmx2_av_translate_sep(struct psmx2_fid_av *av,
-				     struct psmx2_trx_ctxt *trx_ctxt,
-				     fi_addr_t addr)
+static psm2_epaddr_t psmx2_av_translate_sep(struct psmx2_fid_av *av,
+					    struct psmx2_trx_ctxt *trx_ctxt,
+					    fi_addr_t addr)
 {
 	int idx = PSMX2_SEP_ADDR_IDX(addr);
 	int ctxt = PSMX2_SEP_ADDR_CTXT(addr, av->rx_ctx_bits);
-	psm2_epaddr_t epaddr = NULL;
+	psm2_epaddr_t epaddr;
 	psm2_error_t errors;
 	int err;
 
 	av->domain->av_lock_fn(&av->lock, 1);
 
-	if (av->peers[idx].type != PSMX2_EP_SCALABLE ||
-	    ctxt >= av->peers[idx].sep_ctxt_cnt)
-		goto out;
+	assert(av->peers[idx].type == PSMX2_EP_SCALABLE);
 
-	/* this can be NULL when lazy connection is enabled */
 	if (!av->tables[trx_ctxt->id].sepaddrs[idx]) {
 		psmx2_av_connect_trx_ctxt(av, trx_ctxt->id, idx, 1, &errors);
 		assert(av->tables[trx_ctxt->id].sepaddrs[idx]);
 	}
 
+	assert(ctxt < av->peers[idx].sep_ctxt_cnt);
+
 	if (!av->tables[trx_ctxt->id].sepaddrs[idx][ctxt]) {
 		err = psmx2_epid_to_epaddr(trx_ctxt,
 					   av->peers[idx].sep_ctxt_epids[ctxt],
-					   &epaddr);
-		if (err) {
+					   &av->tables[trx_ctxt->id].sepaddrs[idx][ctxt]);
+
+		if (err)
 			FI_WARN(&psmx2_prov, FI_LOG_AV,
 				"fatal error: unable to translate epid %lx to epaddr.\n",
 				av->peers[idx].sep_ctxt_epids[ctxt]);
-			goto out;
-		}
-
-		av->tables[trx_ctxt->id].sepaddrs[idx][ctxt] = epaddr;
 	}
 
 	epaddr = av->tables[trx_ctxt->id].sepaddrs[idx][ctxt];
 
-out:
+	av->domain->av_unlock_fn(&av->lock, 1);
+	return epaddr;
+}
+
+psm2_epaddr_t psmx2_av_translate_addr(struct psmx2_fid_av *av,
+				      struct psmx2_trx_ctxt *trx_ctxt,
+				      fi_addr_t addr)
+{
+	psm2_epaddr_t epaddr = NULL;
+	int err = 0;
+
+	if (PSMX2_SEP_ADDR_TEST(addr))
+		return psmx2_av_translate_sep(av, trx_ctxt, addr);
+
+	assert(addr < av->last);
+
+	av->domain->av_lock_fn(&av->lock, 1);
+
+	if (!av->tables[trx_ctxt->id].epaddrs[addr]) {
+		err = psmx2_epid_to_epaddr(trx_ctxt, av->epids[addr],
+					   &av->tables[trx_ctxt->id].epaddrs[addr]);
+		if (err)
+			FI_WARN(&psmx2_prov, FI_LOG_AV,
+				"fatal error: unable to translate epid %lx to epaddr.\n",
+				av->epids[addr]);
+	}
+	epaddr = av->tables[trx_ctxt->id].epaddrs[addr];
+
 	av->domain->av_unlock_fn(&av->lock, 1);
 	return epaddr;
 }
@@ -794,7 +817,7 @@ void psmx2_av_remove_conn(struct psmx2_fid_av *av,
 
 	psm2_epaddr_to_epid(epaddr, &epid);
 
-	psmx2_lock(&av->lock, 1);
+	av->domain->av_lock_fn(&av->lock, 1);
 
 	for (i = 0; i < av->last; i++) {
 		if (av->peers[i].type == PSMX2_EP_REGULAR) {
@@ -811,7 +834,7 @@ void psmx2_av_remove_conn(struct psmx2_fid_av *av,
 		}
 	}
 
-	psmx2_unlock(&av->lock, 1);
+	av->domain->av_unlock_fn(&av->lock, 1);
 }
 
 DIRECT_FN

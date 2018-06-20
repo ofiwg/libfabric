@@ -993,40 +993,11 @@ int	psmx2_epid_to_epaddr(struct psmx2_trx_ctxt *trx_ctxt,
 
 int	psmx2_av_add_trx_ctxt(struct psmx2_fid_av *av, struct psmx2_trx_ctxt *trx_ctxt);
 
-psm2_epaddr_t psmx2_av_translate_sep(struct psmx2_fid_av *av,
-				     struct psmx2_trx_ctxt *trx_ctxt, fi_addr_t addr);
-
 void	psmx2_av_remove_conn(struct psmx2_fid_av *av, struct psmx2_trx_ctxt *trx_ctxt,
 			     psm2_epaddr_t epaddr);
 
-static inline int psmx2_av_check_table_idx(struct psmx2_fid_av *av,
-					   struct psmx2_trx_ctxt *trx_ctxt,
-					   size_t idx)
-{
-	int err = 0;
-
-	av->domain->av_lock_fn(&av->lock, 1);
-
-	if (OFI_UNLIKELY(idx >= av->last)) {
-		FI_WARN(&psmx2_prov, FI_LOG_AV,
-			"error: av index %ld out of range(max: %ld).\n", idx, av->last);
-		err = -FI_EINVAL;
-		goto out;
-	}
-
-	if (!av->tables[trx_ctxt->id].epaddrs[idx]) {
-		err = psmx2_epid_to_epaddr(trx_ctxt, av->epids[idx],
-					   &av->tables[trx_ctxt->id].epaddrs[idx]);
-		if (err)
-			FI_WARN(&psmx2_prov, FI_LOG_AV,
-				"fatal error: unable to translate epid %lx to epaddr.\n",
-				av->epids[idx]);
-	}
-
-out:
-	av->domain->av_unlock_fn(&av->lock, 1);
-	return err;
-}
+psm2_epaddr_t psmx2_av_translate_addr(struct psmx2_fid_av *av,
+				      struct psmx2_trx_ctxt *trx_ctxt, fi_addr_t addr);
 
 void	psmx2_am_global_init(void);
 void	psmx2_am_global_fini(void);
