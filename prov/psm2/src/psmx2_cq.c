@@ -246,7 +246,7 @@ static inline int psmx2_cq_any_complete(struct psmx2_fid_cq *poll_cq,
 	}
 
 	if (src_addr) {
-		fi_addr_t source = PSMX2_EP_TO_ADDR(PSMX2_STATUS_PEER(status));
+		psm2_epaddr_t source = PSMX2_STATUS_PEER(status);
 
 		if (event == event_in) {
 			src_addr[0] = psmx2_av_translate_source(av, source);
@@ -952,7 +952,7 @@ static inline int psmx2_cq_any_complete(struct psmx2_fid_cq *poll_cq,
 	}
 
 	if (is_recv) {
-		fi_addr_t source = PSMX2_EP_TO_ADDR(PSMX2_STATUS_PEER(status));
+		psm2_epaddr_t source = PSMX2_STATUS_PEER(status);
 
 		if (event == event_in) {
 			if (src_addr) {

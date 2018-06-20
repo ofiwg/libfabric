@@ -774,15 +774,13 @@ psm2_epaddr_t psmx2_av_translate_addr(struct psmx2_fid_av *av,
 	return epaddr;
 }
 
-fi_addr_t psmx2_av_translate_source(struct psmx2_fid_av *av, fi_addr_t source)
+fi_addr_t psmx2_av_translate_source(struct psmx2_fid_av *av, psm2_epaddr_t source)
 {
-	psm2_epaddr_t epaddr;
 	psm2_epid_t epid;
 	fi_addr_t ret = FI_ADDR_NOTAVAIL;
 	int i, j, found = 0;
 
-	epaddr = PSMX2_ADDR_TO_EP(source);
-	psm2_epaddr_to_epid(epaddr, &epid);
+	psm2_epaddr_to_epid(source, &epid);
 
 	av->domain->av_lock_fn(&av->lock, 1);
 

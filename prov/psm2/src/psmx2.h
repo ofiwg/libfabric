@@ -275,25 +275,6 @@ static inline uint64_t psmx2_get_tag64(psm2_mq_tag_t *tag96)
 #define PSMX2_GET_FLAGS(tag96)	((tag96).tag[PSMX2_FLAGS_IDX] & PSMX2_FLAGS_MASK)
 #define PSMX2_GET_CQDATA(tag96)	((tag96).tag2 & PSMX2_DATA_MASK)
 
-/*
- * Canonical virtual address on X86_64 only uses 48 bits and the higher 16 bits
- * are sign extensions. We can put some extra information into the 16 bits.
- *
- * Here is the layout:  AA-B-C-DDDDDDDDDDDD
- *
- * C == 0xE: scalable endpoint, AAB is context index, DDDDDDDDDDDD is the address
- * C != 0xE: regular endpoint, AA is 0, BCDDDDDDDDDDDD is epaddr
- */
-#define PSMX2_EP_MASK			(0x00FFFFFFFFFFFFFFUL)
-#define PSMX2_SIGN_MASK  		(0x0080000000000000UL)
-#define PSMX2_SIGN_EXT			(0xFF00000000000000UL)
-
-#define PSMX2_EP_TO_ADDR(ep)		((uint64_t)ep & PSMX2_EP_MASK)
-#define PSMX2_ADDR_TO_EP(addr)		((psm2_epaddr_t) \
-						((addr & PSMX2_SIGN_MASK) ? \
-						 (addr | PSMX2_SIGN_EXT) : \
-						 (addr & PSMX2_EP_MASK)))
-
 #define PSMX2_MAX_RX_CTX_BITS		(12)
 #define PSMX2_SEP_ADDR_FLAG		(0x000E000000000000UL)
 #define PSMX2_SEP_ADDR_MASK		(0x000F000000000000UL)
@@ -639,7 +620,7 @@ struct psmx2_cq_event {
 	} cqe;
 	int error;
 	int source_is_valid;
-	fi_addr_t source;
+	psm2_epaddr_t source;
 	struct psmx2_fid_av *source_av;
 	struct slist_entry list_entry;
 };
@@ -1068,24 +1049,21 @@ static inline void psmx2_cntr_inc(struct psmx2_fid_cntr *cntr, int error)
 		cntr->wait->signal(cntr->wait);
 }
 
-fi_addr_t psmx2_av_translate_source(struct psmx2_fid_av *av, fi_addr_t source);
+fi_addr_t psmx2_av_translate_source(struct psmx2_fid_av *av, psm2_epaddr_t source);
 
-static inline void psmx2_get_source_name(fi_addr_t source, struct psmx2_ep_name *name)
+static inline void psmx2_get_source_name(psm2_epaddr_t source, struct psmx2_ep_name *name)
 {
-	psm2_epaddr_t epaddr = PSMX2_ADDR_TO_EP(source);
-
 	memset(name, 0, sizeof(*name));
-	psm2_epaddr_to_epid(epaddr, &name->epid);
+	psm2_epaddr_to_epid(source, &name->epid);
 	name->type = PSMX2_EP_REGULAR;
 }
 
-static inline void psmx2_get_source_string_name(fi_addr_t source, char *name, size_t *len)
+static inline void psmx2_get_source_string_name(psm2_epaddr_t source, char *name, size_t *len)
 {
 	struct psmx2_ep_name ep_name;
-	psm2_epaddr_t epaddr = PSMX2_ADDR_TO_EP(source);
 
 	memset(&ep_name, 0, sizeof(ep_name));
-	psm2_epaddr_to_epid(epaddr, &ep_name.epid);
+	psm2_epaddr_to_epid(source, &ep_name.epid);
 	ep_name.type = PSMX2_EP_REGULAR;
 
 	ofi_straddr(name, len, FI_ADDR_PSMX2, &ep_name);

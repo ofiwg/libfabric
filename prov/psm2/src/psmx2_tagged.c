@@ -105,7 +105,7 @@ static ssize_t psmx2_tagged_peek_generic(struct fid_ep *ep,
 				return -FI_ENOMEM;
 
 			event->source_is_valid = 1;
-			event->source = PSMX2_EP_TO_ADDR(psm2_status.msg_peer);
+			event->source = psm2_status.msg_peer;
 			event->source_av = ep_priv->av;
 			psmx2_cq_enqueue_event(ep_priv->recv_cq, event);
 		}
@@ -197,7 +197,7 @@ ssize_t psmx2_tagged_recv_generic(struct fid_ep *ep, void *buf,
 					return -FI_ENOMEM;
 
 				event->source_is_valid = 1;
-				event->source = PSMX2_EP_TO_ADDR(psm2_status.msg_peer);
+				event->source = psm2_status.msg_peer;
 				event->source_av = ep_priv->av;
 				psmx2_cq_enqueue_event(ep_priv->recv_cq, event);
 			}
