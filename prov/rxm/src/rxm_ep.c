@@ -791,22 +791,8 @@ rxm_ep_format_tx_res_lightweight(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_con
 }
 
 static inline ssize_t
-rxm_ep_alloc_tx_entry(struct rxm_conn *rxm_conn, void *context, uint8_t count,
-		      uint64_t flags, struct rxm_tx_entry **tx_entry)
-{
-	*tx_entry = rxm_tx_entry_get(&rxm_conn->send_queue);
-	if (OFI_UNLIKELY(!*tx_entry))
-		return -FI_EAGAIN;
-
-	(*tx_entry)->count = count;
-	(*tx_entry)->context = context;
-	(*tx_entry)->flags = flags;
-
-	return FI_SUCCESS;
-}
-
-static inline ssize_t
-rxm_ep_format_tx_entry(struct rxm_conn *rxm_conn, void *context, uint8_t count, uint64_t flags,
+rxm_ep_format_tx_entry(struct rxm_conn *rxm_conn, void *context, uint8_t count,
+		       uint64_t flags, uint64_t comp_flags,
 		       struct rxm_tx_buf *tx_buf, struct rxm_tx_entry **tx_entry)
 {
 	*tx_entry = rxm_tx_entry_get(&rxm_conn->send_queue);
@@ -817,16 +803,15 @@ rxm_ep_format_tx_entry(struct rxm_conn *rxm_conn, void *context, uint8_t count, 
 	(*tx_entry)->context = context;
 	(*tx_entry)->flags = flags;
 	(*tx_entry)->tx_buf = tx_buf;
-	(*tx_entry)->comp_flags =
-		(tx_buf->pkt.hdr.flags & (FI_MSG | FI_TAGGED)) | FI_SEND;
+	(*tx_entry)->comp_flags = comp_flags | FI_SEND;
 
 	return FI_SUCCESS;
 }
 
 static inline ssize_t
-rxm_ep_format_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
-		     void *context, uint8_t count, size_t len, uint64_t data,
-		     uint64_t flags, uint64_t tag, struct rxm_tx_buf **tx_buf,
+rxm_ep_format_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void *context,
+		     uint8_t count, size_t len, uint64_t data, uint64_t flags,
+		     uint64_t comp_flags, uint64_t tag, struct rxm_tx_buf **tx_buf,
 		     struct rxm_tx_entry **tx_entry, struct rxm_buf_pool *pool)
 {
 	ssize_t ret;
@@ -837,7 +822,7 @@ rxm_ep_format_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		return ret;
 
 	ret = rxm_ep_format_tx_entry(rxm_conn, context, count, flags,
-				     *tx_buf, tx_entry);
+				     comp_flags, *tx_buf, tx_entry);
 	if (OFI_UNLIKELY(ret))
 		goto err;
 
@@ -869,18 +854,18 @@ rxm_ep_normal_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 }
 
 static inline ssize_t
-rxm_ep_alloc_lmt_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
-			void *context, uint8_t count, const struct iovec *iov,
-			void **desc, size_t data_len, uint64_t data, uint64_t flags,
-			uint64_t tag, uint8_t op, struct rxm_tx_entry **tx_entry)
+rxm_ep_alloc_lmt_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void *context,
+			uint8_t count, const struct iovec *iov, void **desc, size_t data_len,
+			uint64_t data, uint64_t flags, uint64_t comp_flags, uint64_t tag,
+			uint8_t op, struct rxm_tx_entry **tx_entry)
 {
 	struct rxm_tx_buf *tx_buf;
 	struct fid_mr **mr_iov;
 	ssize_t ret;
 
 	/* Use LMT buf pool instead of buf pool provided to the function */
-	ret = rxm_ep_format_tx_res(rxm_ep, rxm_conn, context, (uint8_t)count,
-				   data_len, data, flags, tag, &tx_buf, tx_entry,
+	ret = rxm_ep_format_tx_res(rxm_ep, rxm_conn, context, (uint8_t)count, data_len,
+				   data, flags, comp_flags, tag, &tx_buf, tx_entry,
 				   &rxm_ep->buf_pools[RXM_BUF_POOL_TX_LMT]);
 	if (OFI_UNLIKELY(ret))
 		return ret;
@@ -995,13 +980,11 @@ rxm_ep_sar_calc_segs_cnt(size_t data_len, size_t inject_size)
 }
 
 static inline ssize_t
-rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
-		   void *context, uint8_t count, const struct iovec *iov,
-		   size_t data_len, uint64_t data, uint64_t flags,
+rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void *context,
+		   uint8_t count, const struct iovec *iov, size_t data_len,
+		   uint64_t data, uint64_t flags, uint64_t comp_flags,
 		   uint64_t tag, uint8_t op)
 {
-	uint64_t comp_flags =
-		((op == ofi_op_tagged) ? FI_TAGGED : FI_MSG);
 	struct rxm_tx_entry *tx_entry;
 	size_t segs_cnt =
 		rxm_ep_sar_calc_segs_cnt(data_len, rxm_ep->rxm_info->tx_attr->inject_size);
@@ -1009,7 +992,8 @@ rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	ssize_t ret;
 	int send_failed = 0;
 
-	ret = rxm_ep_alloc_tx_entry(rxm_conn, context, count, flags, &tx_entry);
+	ret = rxm_ep_format_tx_entry(rxm_conn, context, count, flags,
+				     comp_flags, NULL, &tx_entry);
 	if (OFI_UNLIKELY(ret))
 		return ret;
 
@@ -1129,14 +1113,14 @@ rxm_ep_postpone_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	       "Buffer TX request (len - %zd) for %p conn\n", len, rxm_conn);
 
 	if (len > rxm_ep->rxm_info->tx_attr->inject_size) {
-		if (rxm_ep_alloc_lmt_tx_res(rxm_ep, rxm_conn, context,
-					    count, iov, desc, len, data,
-					    flags, tag, op, &tx_entry) < 0)
+		if (rxm_ep_alloc_lmt_tx_res(rxm_ep, rxm_conn, context, count,
+					    iov, desc, len, data, flags,
+					    comp_flags, tag, op, &tx_entry) < 0)
 			return -FI_EAGAIN;
 	} else {
 		ssize_t ret = rxm_ep_format_tx_res(rxm_ep, rxm_conn, context, count,
-						   len, data, flags, tag,
-						   &tx_buf, &tx_entry,
+						   len, data, flags, comp_flags,
+						   tag, &tx_buf, &tx_entry,
 						   &rxm_ep->buf_pools[RXM_BUF_POOL_TX]);
 		if (OFI_UNLIKELY(ret))
 			return ret;
@@ -1205,8 +1189,8 @@ inject_continue:
 		       "is too big for MSG provider (max inject size = %zd)\n",
 		       pkt_size, rxm_ep->msg_info->tx_attr->inject_size);
 		ret = rxm_ep_format_tx_res(rxm_ep, rxm_conn, NULL, 1,
-					   len, data, flags, tag,
-					   &tx_buf, &tx_entry,
+					   len, data, flags, comp_flags,
+					   tag, &tx_buf, &tx_entry,
 					   &rxm_ep->buf_pools[RXM_BUF_POOL_TX]);
 		if (OFI_UNLIKELY(ret))
 			return ret;
@@ -1272,7 +1256,7 @@ send_continue:
 
 		ret = rxm_ep_format_tx_res(rxm_ep, rxm_conn, context,
 					   (uint8_t)count, data_len, data, flags,
-					   tag, &tx_buf, &tx_entry,
+					   comp_flags, tag, &tx_buf, &tx_entry,
 					   &rxm_ep->buf_pools[RXM_BUF_POOL_TX]);
 		if (OFI_UNLIKELY(ret))
 			return ret;
@@ -1286,13 +1270,13 @@ send_continue:
 		assert(!(flags & FI_INJECT));
 		if (data_len <= rxm_ep->sar_limit) {
 			return rxm_ep_sar_tx_send(rxm_ep, rxm_conn, context, count, iov,
-						  data_len, data, flags, tag, op);
+						  data_len, data, flags, comp_flags, tag, op);
 		} else {
 			assert(data_len > rxm_ep->sar_limit);
 			ret = rxm_ep_alloc_lmt_tx_res(rxm_ep, rxm_conn, context,
 						      (uint8_t)count, iov, desc,
-						      data_len, data, flags, tag,
-						      op, &tx_entry);
+						      data_len, data, flags, comp_flags,
+						      tag, op, &tx_entry);
 			if (OFI_UNLIKELY(ret < 0))
 				return ret;
 			return rxm_ep_lmt_tx_send(rxm_ep, rxm_conn, tx_entry,
