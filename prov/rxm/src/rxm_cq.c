@@ -150,7 +150,7 @@ static int rxm_finish_buf_recv(struct rxm_rx_buf *rx_buf)
 	return ofi_cq_write(rx_buf->ep->util_ep.rx_cq, &rx_buf->recv_context,
 			    rx_buf->pkt.hdr.flags | FI_RECV |
 			    (rx_buf->pkt.hdr.flags & (FI_MSG | FI_TAGGED)),
-			    rx_buf->pkt.hdr.size, &rx_buf->pkt,
+			    rx_buf->pkt.hdr.size, rx_buf->pkt.data,
 			    rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
 }
 
