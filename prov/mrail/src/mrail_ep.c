@@ -143,21 +143,19 @@ struct mrail_recv *
 mrail_match_recv_handle_unexp(struct mrail_recv_queue *recv_queue, uint64_t tag,
 			      uint64_t addr, char *data, size_t len, void *context)
 {
-	struct mrail_recv *recv;
+	struct dlist_entry *entry;
 	struct mrail_unexp_msg_entry *unexp_msg_entry;
 	struct mrail_match_attr match_attr = {
 		.tag	= tag,
 		.addr	= addr,
 	};
 
-	recv = container_of(dlist_remove_first_match(&recv_queue->recv_list,
-							   recv_queue->match_recv,
-							   &match_attr),
-				  struct mrail_recv, entry);
-	if (OFI_UNLIKELY(!recv)) {
+	entry = dlist_remove_first_match(&recv_queue->recv_list,
+					 recv_queue->match_recv, &match_attr);
+	if (OFI_UNLIKELY(!entry)) {
 		unexp_msg_entry = recv_queue->get_unexp_msg_entry(recv_queue,
 								  context);
-		if (unexp_msg_entry) {
+		if (!unexp_msg_entry) {
 			FI_WARN(recv_queue->prov, FI_LOG_CQ,
 				"Unable to get unexp_msg_entry!");
 			assert(0);
@@ -180,7 +178,7 @@ mrail_match_recv_handle_unexp(struct mrail_recv_queue *recv_queue, uint64_t tag,
 				  &recv_queue->unexp_msg_list);
 		return NULL;
 	}
-	return recv;
+	return container_of(entry, struct mrail_recv, entry);
 }
 
 static void mrail_recv_queue_init(struct fi_provider *prov,
