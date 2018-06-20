@@ -207,6 +207,7 @@ static struct util_cmap_handle *rxm_conn_alloc(struct util_cmap *cmap)
 	dlist_init(&rxm_conn->posted_rx_list);
 	dlist_init(&rxm_conn->sar_rx_msg_list);
 	dlist_init(&rxm_conn->saved_posted_rx_list);
+	dlist_init(&rxm_conn->deferred_op_list);
 	return &rxm_conn->handle;
 }
 
@@ -343,6 +344,14 @@ static void rxm_conn_handle_eq_err(struct rxm_ep *rxm_ep, ssize_t rd)
 	}
 }
 
+static void rxm_conn_wake_up_wait_obj(struct rxm_ep *rxm_ep)
+{
+	if (rxm_ep->util_ep.tx_cq->wait)
+		util_cq_signal(rxm_ep->util_ep.tx_cq);
+	if (rxm_ep->util_ep.tx_cntr && rxm_ep->util_ep.tx_cntr->wait)
+		util_cntr_signal(rxm_ep->util_ep.tx_cntr);
+}
+
 static void *rxm_conn_event_handler(void *arg)
 {
 	struct fi_eq_cm_entry *entry;
@@ -393,6 +402,7 @@ static void *rxm_conn_event_handler(void *arg)
 						 entry->fid->context,
 						 ((rd - sizeof(*entry)) ?
 						  &cm_data->conn_id : NULL));
+			rxm_conn_wake_up_wait_obj(rxm_ep);
 			fastlock_release(&rxm_ep->util_ep.cmap->lock);
 			break;
 		case FI_SHUTDOWN:
