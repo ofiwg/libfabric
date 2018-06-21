@@ -865,7 +865,7 @@ rxm_ep_alloc_lmt_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void *
 	if (OFI_UNLIKELY(ret))
 		return ret;
 	tx_buf->pkt.hdr.op = op;
-	tx_buf->pkt.hdr.flags = ((op == ofi_op_tagged) ? FI_TAGGED : FI_MSG);
+	tx_buf->pkt.hdr.flags |= comp_flags;
 	tx_buf->pkt.ctrl_hdr.msg_id = rxm_txe_fs_index(rxm_conn->send_queue.fs,
 						       (*tx_entry));
 	if (!rxm_ep->rxm_mr_local) {
@@ -1120,7 +1120,7 @@ rxm_ep_postpone_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		if (OFI_UNLIKELY(ret))
 			return ret;
 		tx_buf->pkt.hdr.op = op;
-		tx_buf->pkt.hdr.flags = comp_flags;
+		tx_buf->pkt.hdr.flags |= comp_flags;
 		ofi_copy_from_iov(tx_buf->pkt.data, tx_buf->pkt.hdr.size,
 				  iov, count, 0);
 		tx_entry->state = RXM_TX;
@@ -1174,7 +1174,7 @@ inject_continue:
 		if (OFI_UNLIKELY(ret))
 	    		return ret;
 		tx_buf->pkt.hdr.op = op;
-		tx_buf->pkt.hdr.flags = comp_flags;
+		tx_buf->pkt.hdr.flags |= comp_flags;
 		memcpy(tx_buf->pkt.data, buf, tx_buf->pkt.hdr.size);
 		return rxm_ep_inject_send(rxm_ep, rxm_conn, tx_buf, pkt_size);
 	} else {
@@ -1190,7 +1190,7 @@ inject_continue:
 		if (OFI_UNLIKELY(ret))
 			return ret;
 		tx_buf->pkt.hdr.op = op;
-		tx_buf->pkt.hdr.flags = comp_flags;
+		tx_buf->pkt.hdr.flags |= comp_flags;
 		memcpy(tx_buf->pkt.data, buf, tx_buf->pkt.hdr.size);
 		tx_entry->state = RXM_TX;
 		return rxm_ep_normal_send(rxm_ep, rxm_conn, tx_entry, pkt_size);
@@ -1243,7 +1243,7 @@ send_continue:
 			if (OFI_UNLIKELY(ret))
 				return ret;
 			tx_buf->pkt.hdr.op = op;
-			tx_buf->pkt.hdr.flags = comp_flags;
+			tx_buf->pkt.hdr.flags |= comp_flags;
 			ofi_copy_from_iov(tx_buf->pkt.data, tx_buf->pkt.hdr.size,
 					  iov, count, 0);
 			return rxm_ep_inject_send(rxm_ep, rxm_conn, tx_buf, total_len);
@@ -1256,7 +1256,7 @@ send_continue:
 		if (OFI_UNLIKELY(ret))
 			return ret;
 		tx_buf->pkt.hdr.op = op;
-		tx_buf->pkt.hdr.flags = comp_flags;
+		tx_buf->pkt.hdr.flags |= comp_flags;
 		ofi_copy_from_iov(tx_buf->pkt.data, tx_buf->pkt.hdr.size,
 				  iov, count, 0);
 		tx_entry->state = RXM_TX;
