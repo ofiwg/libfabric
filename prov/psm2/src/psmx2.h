@@ -681,14 +681,18 @@ struct psmx2_fid_cntr {
 	fastlock_t		trigger_lock;
 };
 
-struct psmx2_av_peer {
+struct psmx2_av_addr {
+	psm2_epid_t		epid;
 	uint8_t			type;
 	uint8_t			sep_id;
-	int			sep_ctxt_cnt;
-	psm2_epid_t		*sep_ctxt_epids;
 };
 
-struct psmx2_av_table {
+struct psmx2_av_sep {
+	int			ctxt_cnt;
+	psm2_epid_t		*epids;
+};
+
+struct psmx2_av_conn {
 	struct psmx2_trx_ctxt	*trx_ctxt;
 	psm2_epaddr_t		*epaddrs;
 	psm2_epaddr_t		**sepaddrs;
@@ -706,9 +710,9 @@ struct psmx2_fid_av {
 	size_t			count;
 	size_t			last;
 	fastlock_t		lock;
-	psm2_epid_t		*epids;	 /* one entry per peer */
-	struct psmx2_av_peer	*peers;  /* one entry per peer */
-	struct psmx2_av_table	tables[];/* one entry per context */
+	struct psmx2_av_addr	*table;
+	struct psmx2_av_sep	*sep_info;
+	struct psmx2_av_conn	conn_info[];
 };
 
 struct psmx2_fid_ep {
