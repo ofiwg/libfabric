@@ -742,6 +742,18 @@ rxm_ ## type ## _entry_release(struct rxm_ ## queue_type ## _queue *queue,	\
 RXM_DEFINE_QUEUE_ENTRY(tx, send);
 RXM_DEFINE_QUEUE_ENTRY(recv, recv);
 
+static inline void
+rxm_fill_tx_entry(void *context, uint8_t count, uint64_t flags,
+		  uint64_t comp_flags, struct rxm_tx_buf *tx_buf,
+		  struct rxm_tx_entry *tx_entry)
+{
+	tx_entry->context = context;
+	tx_entry->count = count;
+	tx_entry->flags = flags;
+	tx_entry->tx_buf = tx_buf;
+	tx_entry->comp_flags = comp_flags | FI_SEND;
+}
+
 static inline int rxm_finish_send_nobuf(struct rxm_tx_entry *tx_entry)
 {
 	int ret;

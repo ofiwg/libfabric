@@ -799,13 +799,7 @@ rxm_ep_format_tx_entry(struct rxm_conn *rxm_conn, void *context, uint8_t count,
 	*tx_entry = rxm_tx_entry_get(&rxm_conn->send_queue);
 	if (OFI_UNLIKELY(!*tx_entry))
 		return -FI_EAGAIN;
-
-	(*tx_entry)->count = count;
-	(*tx_entry)->context = context;
-	(*tx_entry)->flags = flags;
-	(*tx_entry)->tx_buf = tx_buf;
-	(*tx_entry)->comp_flags = comp_flags | FI_SEND;
-
+	rxm_fill_tx_entry(context, count, flags, comp_flags, tx_buf, *tx_entry);
 	return FI_SUCCESS;
 }
 
