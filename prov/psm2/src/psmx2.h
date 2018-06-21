@@ -96,7 +96,7 @@ extern struct fi_provider psmx2_prov;
 
 #define PSMX2_SEC_CAPS	(FI_MULTI_RECV | FI_SOURCE | FI_RMA_EVENT | \
 			 FI_TRIGGER | FI_LOCAL_COMM | FI_REMOTE_COMM | \
-			 FI_SOURCE_ERR)
+			 FI_SOURCE_ERR | FI_SHARED_AV)
 
 #define PSMX2_CAPS	(PSMX2_PRI_CAPS | PSMX2_SEC_CAPS | FI_REMOTE_CQ_DATA)
 
@@ -681,6 +681,18 @@ struct psmx2_fid_cntr {
 	fastlock_t		trigger_lock;
 };
 
+#define PSMX2_AV_DEFAULT_SIZE	64
+
+#define PSMX2_AV_TABLE_SIZE(count, shared) \
+		(sizeof(struct psmx2_av_hdr) + \
+		 ((shared) ? (count) * sizeof(fi_addr_t) : 0) + \
+		 (count) * sizeof(struct psmx2_av_addr))
+
+struct psmx2_av_hdr {
+	uint64_t		size;
+	uint64_t		last;
+};
+
 struct psmx2_av_addr {
 	psm2_epid_t		epid;
 	uint8_t			type;
@@ -705,12 +717,15 @@ struct psmx2_fid_av {
 	int			addr_format;
 	int			rx_ctx_bits;
 	int			max_trx_ctxt;
+	int			shared;
 	uint64_t		flags;
 	size_t			addrlen;
 	size_t			count;
-	size_t			last;
 	fastlock_t		lock;
-	struct psmx2_av_addr	*table;
+	struct util_shm		shm;
+	struct psmx2_av_hdr	*hdr;	/* shared AV header */
+	fi_addr_t		*map;	/* shared AV address mapping */
+	struct psmx2_av_addr	*table;	/* shared AV address table */
 	struct psmx2_av_sep	*sep_info;
 	struct psmx2_av_conn	conn_info[];
 };

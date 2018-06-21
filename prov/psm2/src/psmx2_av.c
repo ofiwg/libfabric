@@ -250,22 +250,37 @@ static int psmx2_av_check_space(struct psmx2_fid_av *av, size_t count)
 {
 	psm2_epaddr_t *new_epaddrs;
 	psm2_epaddr_t **new_sepaddrs;
-	struct psmx2_av_addr *new_table;
+	struct psmx2_av_hdr *new_hdr;
 	struct psmx2_av_sep *new_sep_info;
 	size_t new_count;
+	size_t old_table_size, new_table_size;
 	int i;
 
 	new_count = av->count;
-	while (new_count < av->last + count)
-		new_count = new_count * 2 + 1;
+	while (new_count < av->hdr->last + count)
+		new_count = new_count * 2;
 
 	if ((new_count <= av->count) && av->table)
 		return 0;
 
-	new_table = realloc(av->table, new_count * sizeof(*new_table));
-	if (!new_table)
-		return -FI_ENOMEM;
-	av->table = new_table;
+	old_table_size = PSMX2_AV_TABLE_SIZE(av->count, av->shared);
+	new_table_size = PSMX2_AV_TABLE_SIZE(new_count, av->shared);
+	if (av->shared) {
+		new_hdr = mremap(av->hdr, old_table_size, new_table_size, 0);
+		if (new_hdr == MAP_FAILED)
+			return -FI_ENOMEM;
+		av->hdr = new_hdr;
+		av->map = (fi_addr_t *)(av->hdr + 1);
+		av->table = (struct psmx2_av_addr *)(av->map + new_count);
+		for (i = 0; i < new_count; i++)
+			av->map[i] = i;
+	} else {
+		new_hdr = realloc(av->hdr, new_table_size);
+		if (!new_hdr)
+			return -FI_ENOMEM;
+		av->hdr = new_hdr;
+		av->table = (struct psmx2_av_addr *)(av->hdr + 1);
+	}
 
 	new_sep_info = realloc(av->sep_info, new_count * sizeof(*new_sep_info));
 	if (!new_sep_info)
@@ -280,20 +295,20 @@ static int psmx2_av_check_space(struct psmx2_fid_av *av, size_t count)
 				      new_count * sizeof(*new_epaddrs));
 		if (!new_epaddrs)
 			return -FI_ENOMEM;
-		memset(new_epaddrs + av->last, 0,
-		       (new_count - av->last)  * sizeof(*new_epaddrs));
+		memset(new_epaddrs + av->hdr->last, 0,
+		       (new_count - av->hdr->last)  * sizeof(*new_epaddrs));
 		av->conn_info[i].epaddrs = new_epaddrs;
 
 		new_sepaddrs = realloc(av->conn_info[i].sepaddrs,
 				       new_count * sizeof(*new_sepaddrs));
 		if (!new_sepaddrs)
 			return -FI_ENOMEM;
-		memset(new_sepaddrs + av->last, 0,
-		       (new_count - av->last)  * sizeof(*new_sepaddrs));
+		memset(new_sepaddrs + av->hdr->last, 0,
+		       (new_count - av->hdr->last)  * sizeof(*new_sepaddrs));
 		av->conn_info[i].sepaddrs = new_sepaddrs;
 	}
 
-	av->count = new_count;
+	av->count = av->hdr->size = new_count;
 	return 0;
 }
 
@@ -439,6 +454,11 @@ STATIC int psmx2_av_insert(struct fid_av *av, const void *addr,
 		goto out;
 	}
 
+	if (av_priv->flags & FI_READ) {
+		ret = -FI_EINVAL;
+		goto out;
+	}
+
 	if (psmx2_av_check_space(av_priv, count)) {
 		ret = -FI_ENOMEM;
 		goto out;
@@ -452,7 +472,7 @@ STATIC int psmx2_av_insert(struct fid_av *av, const void *addr,
 
 	/* save the peer address information */
 	for (i = 0; i < count; i++) {
-		idx = av_priv->last + i;
+		idx = av_priv->hdr->last + i;
 		if (av_priv->addr_format == FI_ADDR_STR) {
 			ep_name = psmx2_string_to_ep_name(string_names[i]);
 			if (!ep_name) {
@@ -474,7 +494,7 @@ STATIC int psmx2_av_insert(struct fid_av *av, const void *addr,
 
 	if (fi_addr) {
 		for (i = 0; i < count; i++) {
-			idx = av_priv->last + i;
+			idx = av_priv->hdr->last + i;
 			if (errors[i] != PSM2_OK)
 				fi_addr[i] = FI_ADDR_NOTAVAIL;
 			else
@@ -482,7 +502,7 @@ STATIC int psmx2_av_insert(struct fid_av *av, const void *addr,
 		}
 	}
 
-	av_priv->last += count;
+	av_priv->hdr->last += count;
 
 	if (av_priv->flags & FI_EVENT) {
 		if (error_count) {
@@ -531,7 +551,7 @@ STATIC int psmx2_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 
 	av_priv->domain->av_lock_fn(&av_priv->lock, 1);
 
-	if (idx >= av_priv->last) {
+	if (idx >= av_priv->hdr->last) {
 		err = -FI_EINVAL;
 		goto out;
 	}
@@ -562,7 +582,7 @@ psm2_epaddr_t psmx2_av_translate_addr(struct psmx2_fid_av *av,
 	int err = 0;
 
 	av->domain->av_lock_fn(&av->lock, 1);
-	assert(idx < av->last);
+	assert(idx < av->hdr->last);
 
 	if (av->table[idx].type == PSMX2_EP_SCALABLE) {
 		if (!av->sep_info[idx].epids) {
@@ -612,7 +632,7 @@ fi_addr_t psmx2_av_translate_source(struct psmx2_fid_av *av, psm2_epaddr_t sourc
 
 	av->domain->av_lock_fn(&av->lock, 1);
 
-	for (i = av->last - 1; i >= 0 && !found; i--) {
+	for (i = av->hdr->last - 1; i >= 0 && !found; i--) {
 		if (av->table[i].type == PSMX2_EP_REGULAR) {
 			if (av->table[i].epid == epid) {
 				ret = (fi_addr_t)i;
@@ -645,7 +665,7 @@ void psmx2_av_remove_conn(struct psmx2_fid_av *av,
 
 	av->domain->av_lock_fn(&av->lock, 1);
 
-	for (i = 0; i < av->last; i++) {
+	for (i = 0; i < av->hdr->last; i++) {
 		if (av->table[i].type == PSMX2_EP_REGULAR) {
 			if (av->table[i].epid == epid &&
 			    av->conn_info[trx_ctxt->id].epaddrs[i] == epaddr)
@@ -674,6 +694,7 @@ static int psmx2_av_close(fid_t fid)
 {
 	struct psmx2_fid_av *av;
 	int i, j;
+	int err;
 
 	av = container_of(fid, struct psmx2_fid_av, av.fid);
 	psmx2_domain_release(av->domain);
@@ -683,12 +704,20 @@ static int psmx2_av_close(fid_t fid)
 			continue;
 		free(av->conn_info[i].epaddrs);
 		if (av->conn_info[i].sepaddrs) {
-			for (j = 0; j < av->last; j++)
+			for (j = 0; j < av->hdr->last; j++)
 				free(av->conn_info[i].sepaddrs[j]);
 		}
 		free(av->conn_info[i].sepaddrs);
 	}
-	free(av->table);
+	if (av->shared) {
+		err = ofi_shm_unmap(&av->shm);
+		if (err)
+			FI_INFO(&psmx2_prov, FI_LOG_AV,
+				"Failed to unmap shared AV: %s.\n",
+				strerror(ofi_syserr()));
+	} else {
+		free(av->hdr);
+	}
 	free(av);
 	return 0;
 }
@@ -738,29 +767,29 @@ int psmx2_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 {
 	struct psmx2_fid_domain *domain_priv;
 	struct psmx2_fid_av *av_priv;
-	size_t count = 64;
+	size_t count = PSMX2_AV_DEFAULT_SIZE;
 	uint64_t flags = 0;
+	int shared = 0;
 	int rx_ctx_bits = PSMX2_MAX_RX_CTX_BITS;
 	size_t conn_size;
+	size_t table_size;
+	int err;
+	int i;
 
 	domain_priv = container_of(domain, struct psmx2_fid_domain,
 				   util_domain.domain_fid);
 
 	if (attr) {
-		count = attr->count;
+		if (attr->count)
+			count = attr->count;
+
+		if (attr->name)
+			shared = 1;
+
 		flags = attr->flags;
-
-		if (flags & (FI_READ | FI_SYMMETRIC)) {
+		if (flags & FI_SYMMETRIC) {
 			FI_INFO(&psmx2_prov, FI_LOG_AV,
-				"attr->flags=%"PRIu64", supported=%llu\n",
-				attr->flags, FI_EVENT);
-			return -FI_ENOSYS;
-		}
-
-		if (attr->name) {
-			FI_INFO(&psmx2_prov, FI_LOG_AV,
-				"attr->name=%s, named AV is not supported\n",
-				attr->name);
+				"FI_SYMMETRIC flags is no supported\n");
 			return -FI_ENOSYS;
 		}
 
@@ -778,6 +807,50 @@ int psmx2_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	av_priv = (struct psmx2_fid_av *) calloc(1, sizeof(*av_priv) + conn_size);
 	if (!av_priv)
 		return -FI_ENOMEM;
+
+	av_priv->sep_info = calloc(count, sizeof(struct psmx2_av_sep));
+	if (!av_priv->sep_info) {
+		err = -FI_ENOMEM;
+		goto errout_free;
+	}
+
+	table_size = PSMX2_AV_TABLE_SIZE(count, shared);
+	if (attr && attr->name) {
+		err = ofi_shm_map(&av_priv->shm, attr->name, table_size,
+				  flags & FI_READ, (void**)&av_priv->hdr);
+		if (err || av_priv->hdr == MAP_FAILED) {
+			FI_WARN(&psmx2_prov, FI_LOG_AV,
+				"failed to map shared AV: %s\n", attr->name);
+			err = -FI_EINVAL;
+			goto errout_free;
+		}
+
+		if (flags & FI_READ) {
+			if (av_priv->hdr->size != count) {
+				FI_WARN(&psmx2_prov, FI_LOG_AV,
+					"AV size doesn't match: shared %ld, asking %ld\n",
+					av_priv->hdr->size, count);
+				err = -FI_EINVAL;
+				goto errout_free;
+			}
+		} else {
+			av_priv->hdr->size = count;
+			av_priv->hdr->last = 0;
+		}
+		av_priv->shared = 1;
+		av_priv->map = (fi_addr_t *)(av_priv->hdr + 1);
+		av_priv->table = (struct psmx2_av_addr *)(av_priv->map + count);
+		for (i = 0; i < count; i++)
+			av_priv->map[i] = i;
+	} else {
+		av_priv->hdr = calloc(1, table_size);
+		if (!av_priv->hdr) {
+			err = -FI_ENOMEM;
+			goto errout_free;
+		}
+		av_priv->hdr->size = count;
+		av_priv->table = (struct psmx2_av_addr *)(av_priv->hdr + 1);
+	}
 
 	fastlock_init(&av_priv->lock);
 
@@ -797,9 +870,17 @@ int psmx2_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	av_priv->av.ops = &psmx2_av_ops;
 
 	*av = &av_priv->av;
-	if (attr)
+	if (attr) {
 		attr->type = FI_AV_TABLE;
+		if (shared)
+			attr->map_addr = av_priv->map;
+	}
 
 	return 0;
+
+errout_free:
+	free(av_priv->sep_info);
+	free(av_priv);
+	return err;
 }
 
