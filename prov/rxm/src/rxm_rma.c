@@ -79,7 +79,7 @@ rxm_ep_rma_fill_msg(struct fi_msg_rma *msg_rma, struct iovec *iov,
 	msg_rma->data = orig_msg->data;
 }
 
-static inline void
+/*static inline void
 rxm_ep_rma_fill_msg_no_buf(struct rxm_rma_buf *rma_buf,
 			   struct rxm_tx_entry *tx_entry,
 			   const struct fi_msg_rma *orig_msg)
@@ -89,7 +89,7 @@ rxm_ep_rma_fill_msg_no_buf(struct rxm_rma_buf *rma_buf,
 	rxm_ep_rma_fill_msg(&rma_buf->msg, rma_buf->rxm_iov.iov,
 			    rma_buf->rxm_iov.count, rma_buf->rxm_iov.desc,
 			    &rma_buf->rxm_rma_iov, tx_entry, orig_msg);
-}
+}*/
 
 static inline void
 rxm_ep_rma_fill_msg_buf(struct rxm_rma_buf *rma_buf,
@@ -178,46 +178,6 @@ err:
 	return ret;
 }
 
-void rxm_ep_handle_deferred_rma_op(struct rxm_ep *rxm_ep,
-				   struct rxm_conn *rxm_conn,
-				   struct rxm_tx_entry *tx_entry)
-{
-	ssize_t ret;
-
-	FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
-	       "Perform deferred RMA operation (len - %zd) for %p conn\n",
-	       tx_entry->rma_buf->pkt.hdr.size, rxm_conn);
-
-	if (tx_entry->comp_flags & FI_WRITE) {
-		uint64_t flags = ((tx_entry->flags & FI_INJECT) ?
-				  ((tx_entry->flags & ~FI_INJECT) |
-				   FI_COMPLETION) : tx_entry->flags);
-		ret = fi_writemsg(rxm_conn->msg_ep,
-				  &tx_entry->rma_buf->msg,
-				  flags);
-		if (OFI_UNLIKELY(ret)) {
-			rxm_cq_write_error(rxm_ep->util_ep.tx_cq,
-					   rxm_ep->util_ep.wr_cntr,
-					   tx_entry->context, (int)ret);
-			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
-				"Unable to perform deferred RMA write operation\n");
-		}
-	} else if (tx_entry->comp_flags & FI_READ) {
-		ret = fi_readmsg(rxm_conn->msg_ep,
-				 &tx_entry->rma_buf->msg,
-				 tx_entry->flags);
-		if (OFI_UNLIKELY(ret)) {
-			rxm_cq_write_error(rxm_ep->util_ep.tx_cq,
-					   rxm_ep->util_ep.rd_cntr,
-					   tx_entry->context, (int)ret);
-			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
-				"Unable to perform deferred RMA read operation\n");
-		}
-	} else {
-		assert(0);
-	}
-}
-
 static inline ssize_t
 rxm_ep_format_rma_inject_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 			     size_t total_size, uint64_t flags, uint64_t comp_flags,
@@ -234,7 +194,7 @@ rxm_ep_format_rma_inject_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	return ret;
 }
 
-static inline ssize_t
+/*static inline ssize_t
 rxm_ep_format_rma_non_inject_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 				 size_t total_size, uint64_t flags, uint64_t comp_flags,
 				 const struct fi_msg_rma *orig_msg, struct rxm_rma_buf **rma_buf,
@@ -246,7 +206,7 @@ rxm_ep_format_rma_non_inject_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_con
 		return ret;
 
 	ret = rxm_ep_rma_reg_iov(rxm_ep, (*rma_buf)->rxm_iov.iov,
-				 /* addr of desc from rma_buf will be assign to itself */
+				 // addr of desc from rma_buf will be assign to itself
 				 orig_msg->desc,
 				 (*rma_buf)->rxm_iov.desc,
 				 orig_msg->iov_count,
@@ -261,34 +221,7 @@ err:
 	rxm_rma_buf_release(rxm_ep, (*tx_entry)->rma_buf);
 	rxm_tx_entry_release(&rxm_conn->send_queue, *tx_entry);
 	return ret;
-}
-
-static inline int
-rxm_ep_postpone_rma(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
-		    size_t total_size, uint64_t flags,
-		    uint64_t comp_flags, const struct fi_msg_rma *orig_msg)
-{
-	struct rxm_tx_entry *tx_entry;
-	struct rxm_rma_buf *rma_buf;
-	int ret;
-
-	if (flags & FI_INJECT) {
-		assert(comp_flags & FI_WRITE);
-		ret = rxm_ep_format_rma_inject_res(rxm_ep, rxm_conn, total_size,
-						   flags, comp_flags, orig_msg,
-						   &rma_buf, &tx_entry);
-	} else {
-		ret = rxm_ep_format_rma_non_inject_res(rxm_ep, rxm_conn, total_size,
-						       flags, comp_flags, orig_msg,
-						       &rma_buf, &tx_entry);
-	}
-	if (OFI_UNLIKELY(ret))
-		return ret;
-
-	dlist_insert_tail(&tx_entry->deferred_entry, &rxm_conn->deferred_tx_list);
-
-	return ret;
-}
+}*/
 
 static ssize_t
 rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t flags,
@@ -308,13 +241,6 @@ rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t 
 		ret = rxm_ep_handle_unconnected(rxm_ep, &rxm_conn->handle, msg->addr);
 		if (!ret)
 			goto rma_continue;
-		else if (OFI_UNLIKELY(ret != -FI_EAGAIN))
-			goto cmap_err;
-		ret = rxm_ep_postpone_rma(rxm_ep, rxm_conn,
-					  ofi_total_iov_len(msg->msg_iov,
-							    msg->iov_count),
-					  flags, comp_flags, msg);
-cmap_err:
 		fastlock_release(&rxm_ep->util_ep.cmap->lock);
 		return ret;
 	}
@@ -426,11 +352,6 @@ rxm_ep_rma_inject(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t 
 		ret = rxm_ep_handle_unconnected(rxm_ep, &rxm_conn->handle, msg->addr);
 		if (!ret)
 			goto rma_inject_continue;
-		else if (OFI_UNLIKELY(ret != -FI_EAGAIN))
-			goto cmap_err;
-		ret = rxm_ep_postpone_rma(rxm_ep, rxm_conn, total_size,
-					  flags, FI_WRITE, msg);
-cmap_err:
 		fastlock_release(&rxm_ep->util_ep.cmap->lock);
 		return ret;
 	}

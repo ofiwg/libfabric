@@ -396,6 +396,7 @@ struct rxm_ep {
 
 	struct dlist_entry	posted_srx_list;
 	struct dlist_entry	repost_ready_list;
+	struct dlist_entry	conn_deferred_list;
 
 	struct rxm_recv_queue	recv_queue;
 	struct rxm_recv_queue	trecv_queue;
@@ -406,8 +407,16 @@ struct rxm_ep {
 
 struct rxm_conn {
 	struct fid_ep *msg_ep;
+
+	/* Identifier to be posted into rxm_ep::conn_deferred_list.
+	 * This should notify CQ handling function to progress the
+	 * rxm_conn::deferred_op_list. When the deferred_op_list is
+	 * empty, this connection has to be removed from
+	 * rxm_ep::conn_deferred_list */
+	struct dlist_entry conn_deferred_entry;
+	struct dlist_entry deferred_op_list;
+
 	struct rxm_send_queue send_queue;
-	struct dlist_entry deferred_tx_list;
 	struct dlist_entry posted_rx_list;
 	struct dlist_entry sar_rx_msg_list;
 	struct util_cmap_handle handle;
@@ -495,13 +504,6 @@ err:
 	rxm_ep_msg_mr_closev(mr, count);
 	return ret;
 }
-
-void rxm_ep_handle_deferred_tx_op(struct rxm_ep *rxm_ep,
-				  struct rxm_conn *rxm_conn,
-				  struct rxm_tx_entry *tx_entry);
-void rxm_ep_handle_deferred_rma_op(struct rxm_ep *rxm_ep,
-				   struct rxm_conn *rxm_conn,
-				   struct rxm_tx_entry *tx_entry);
 
 static inline void rxm_cntr_inc(struct util_cntr *cntr)
 {
@@ -604,6 +606,8 @@ rxm_acquire_conn(struct rxm_ep *rxm_ep, fi_addr_t fi_addr)
 			    struct rxm_conn, handle);
 }
 
+void rxm_ep_progress_conn_deferred_list(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn);
+void rxm_ep_progress_deferred_list(struct rxm_ep *rxm_ep);
 
 /* Caller must hold `cmap::lock` */
 static inline int
@@ -613,6 +617,9 @@ rxm_ep_handle_unconnected(struct rxm_ep *rxm_ep, struct util_cmap_handle *handle
 	int ret;
 
 	if (handle->state == CMAP_CONNECTED_NOTIFY) {
+		rxm_ep_progress_conn_deferred_list(
+					rxm_ep, container_of(handle, struct rxm_conn,
+							     handle));
 		ofi_cmap_process_conn_notify(rxm_ep->util_ep.cmap, handle);
 		return 0;
 	}
@@ -624,6 +631,42 @@ rxm_ep_handle_unconnected(struct rxm_ep *rxm_ep, struct util_cmap_handle *handle
 		return ret;
 
 	return -FI_EAGAIN;
+}
+
+static inline ssize_t
+rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
+		   struct rxm_tx_buf *tx_buf, size_t pkt_size)
+{
+	FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Posting inject with length: %" PRIu64
+	       " tag: 0x%" PRIx64 "\n", tx_buf->pkt.hdr.size, tx_buf->pkt.hdr.tag);
+	ssize_t ret = fi_inject(rxm_conn->msg_ep, &tx_buf->pkt, pkt_size, 0);
+	if (OFI_UNLIKELY(ret)) {
+		FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
+		       "fi_inject for MSG provider failed\n");
+		rxm_cntr_incerr(rxm_ep->util_ep.tx_cntr);
+	} else {
+		rxm_cntr_inc(rxm_ep->util_ep.tx_cntr);
+	}
+	return ret;
+}
+
+static inline ssize_t
+rxm_ep_normal_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
+		   struct rxm_tx_entry *tx_entry, size_t pkt_size)
+{
+	FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Posting send with length: %" PRIu64
+	       " tag: 0x%" PRIx64 "\n", tx_entry->tx_buf->pkt.hdr.size,
+	       tx_entry->tx_buf->pkt.hdr.tag);
+	ssize_t ret = fi_send(rxm_conn->msg_ep, &tx_entry->tx_buf->pkt, pkt_size,
+			      tx_entry->tx_buf->hdr.desc, 0, tx_entry);
+	if (OFI_UNLIKELY(ret)) {
+		if (ret == -FI_EAGAIN)
+			rxm_ep_progress_multi(&rxm_ep->util_ep);
+		else
+			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+				"fi_send for MSG provider failed\n");
+	}
+	return ret;
 }
 
 static inline

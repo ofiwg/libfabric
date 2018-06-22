@@ -283,6 +283,53 @@ static inline int ofi_match_tag(uint64_t recv_tag, uint64_t recv_ignore,
 }
 
 /*
+ * Wait set
+ */
+struct util_wait;
+typedef void (*fi_wait_signal_func)(struct util_wait *wait);
+typedef int (*fi_wait_try_func)(struct util_wait *wait);
+
+struct util_wait {
+	struct fid_wait		wait_fid;
+	struct util_fabric	*fabric;
+	struct util_poll	*pollset;
+	ofi_atomic32_t		ref;
+	const struct fi_provider *prov;
+
+	enum fi_wait_obj	wait_obj;
+	fi_wait_signal_func	signal;
+	fi_wait_try_func	try;
+};
+
+int fi_wait_init(struct util_fabric *fabric, struct fi_wait_attr *attr,
+		 struct util_wait *wait);
+int fi_wait_cleanup(struct util_wait *wait);
+
+struct util_wait_fd {
+	struct util_wait	util_wait;
+	struct fd_signal	signal;
+	fi_epoll_t		epoll_fd;
+	struct dlist_entry	fd_list;
+	fastlock_t		lock;
+};
+
+typedef int (*ofi_wait_fd_try_func)(void *arg);
+
+struct ofi_wait_fd_entry {
+	struct dlist_entry	entry;
+	int 			fd;
+	ofi_wait_fd_try_func	try;
+	void			*arg;
+	ofi_atomic32_t		ref;
+};
+
+int ofi_wait_fd_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
+		struct fid_wait **waitset);
+int ofi_wait_fd_add(struct util_wait *wait, int fd, ofi_wait_fd_try_func try,
+		    void *arg, void *context);
+int ofi_wait_fd_del(struct util_wait *wait, int fd);
+
+/*
  * Completion queue
  *
  * Utility provider derived CQs that require manual progress must
@@ -342,6 +389,11 @@ ssize_t ofi_cq_sread(struct fid_cq *cq_fid, void *buf, size_t count,
 ssize_t ofi_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 		fi_addr_t *src_addr, const void *cond, int timeout);
 int ofi_cq_signal(struct fid_cq *cq_fid);
+static inline void util_cq_signal(struct util_cq *cq)
+{
+	assert(cq->wait);
+	cq->wait->signal(cq->wait);
+}
 static inline int
 ofi_cq_write(struct util_cq *cq, void *context, uint64_t flags, size_t len,
 	     void *buf, uint64_t data, uint64_t tag)
@@ -412,7 +464,11 @@ int ofi_cntr_init(const struct fi_provider *prov, struct fid_domain *domain,
 		  struct fi_cntr_attr *attr, struct util_cntr *cntr,
 		  ofi_cntr_progress_func progress, void *context);
 int ofi_cntr_cleanup(struct util_cntr *cntr);
-
+static inline void util_cntr_signal(struct util_cntr *cntr)
+{
+	assert(cntr->wait);
+	cntr->wait->signal(cntr->wait);
+}
 
 /*
  * AV / addressing
@@ -623,55 +679,6 @@ int fi_poll_create_(const struct fi_provider *prov, struct fid_domain *domain,
 		    struct fi_poll_attr *attr, struct fid_poll **pollset);
 int fi_poll_create(struct fid_domain *domain, struct fi_poll_attr *attr,
 		   struct fid_poll **pollset);
-
-
-/*
- * Wait set
- */
-struct util_wait;
-typedef void (*fi_wait_signal_func)(struct util_wait *wait);
-typedef int (*fi_wait_try_func)(struct util_wait *wait);
-
-struct util_wait {
-	struct fid_wait		wait_fid;
-	struct util_fabric	*fabric;
-	struct util_poll	*pollset;
-	ofi_atomic32_t		ref;
-	const struct fi_provider *prov;
-
-	enum fi_wait_obj	wait_obj;
-	fi_wait_signal_func	signal;
-	fi_wait_try_func	try;
-};
-
-int fi_wait_init(struct util_fabric *fabric, struct fi_wait_attr *attr,
-		 struct util_wait *wait);
-int fi_wait_cleanup(struct util_wait *wait);
-
-struct util_wait_fd {
-	struct util_wait	util_wait;
-	struct fd_signal	signal;
-	fi_epoll_t		epoll_fd;
-	struct dlist_entry	fd_list;
-	fastlock_t		lock;
-};
-
-typedef int (*ofi_wait_fd_try_func)(void *arg);
-
-struct ofi_wait_fd_entry {
-	struct dlist_entry	entry;
-	int 			fd;
-	ofi_wait_fd_try_func	try;
-	void			*arg;
-	ofi_atomic32_t		ref;
-};
-
-int ofi_wait_fd_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
-		struct fid_wait **waitset);
-int ofi_wait_fd_add(struct util_wait *wait, int fd, ofi_wait_fd_try_func try,
-		    void *arg, void *context);
-int ofi_wait_fd_del(struct util_wait *wait, int fd);
-
 
 /*
  * EQ

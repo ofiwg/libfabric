@@ -1011,6 +1011,9 @@ void rxm_ep_progress_one(struct util_ep *util_ep)
 			return;
 	}
 
+	if (OFI_UNLIKELY(!dlist_empty(&rxm_ep->conn_deferred_list)))
+		rxm_ep_progress_deferred_list(rxm_ep);
+
 	ret = fi_cq_read(rxm_ep->msg_cq, &comp, 1);
 	if (ret == -FI_EAGAIN || !ret)
 		return;
@@ -1045,6 +1048,9 @@ void rxm_ep_progress_multi(struct util_ep *util_ep)
 		if (ret > 0)
 			return;
 	}
+
+	if (OFI_UNLIKELY(!dlist_empty(&rxm_ep->conn_deferred_list)))
+		rxm_ep_progress_deferred_list(rxm_ep);
 
 	do {
 		ret = fi_cq_read(rxm_ep->msg_cq, &comp, 1);
