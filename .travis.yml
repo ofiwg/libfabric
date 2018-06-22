@@ -69,8 +69,8 @@ install:
     - make test
     - make distcheck
     - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then make rpm; fi
-    # Prepare build for fabtests (TODO: Disable TCP provider)
-    - ./configure $LIBFABRIC_CONFIGURE_ARGS --disable-tcp
+    # Prepare build for fabtests
+    - ./configure $LIBFABRIC_CONFIGURE_ARGS 
     - make -j2
     - make install
     - make test
@@ -84,4 +84,8 @@ script:
     - ./configure --prefix=$PREFIX --with-libfabric=$PREFIX
     - make -j2
     - make install
-    - make test
+    - ./scripts/runfabtests.sh -vvv -S -f ./test_configs/osx.exclude sockets
+    - ./scripts/runfabtests.sh -vvv -S -f ./test_configs/osx.exclude -R -f ./test_configs/udp/udp.exclude udp
+    - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
+         ./scripts/runfabtests.sh -vvv -S -f ./test_configs/osx.exclude -R -f ./test_configs/ofi_rxm/ofi_rxm.exclude "tcp;ofi_rxm";
+      fi
