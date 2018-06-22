@@ -292,12 +292,9 @@ ssize_t ofi_cq_sread(struct fid_cq *cq_fid, void *buf, size_t count,
 
 int ofi_cq_signal(struct fid_cq *cq_fid)
 {
-	struct util_cq *cq;
-
-	cq = container_of(cq_fid, struct util_cq, cq_fid);
-	assert(cq->wait);
+	struct util_cq *cq = container_of(cq_fid, struct util_cq, cq_fid);
 	ofi_atomic_set32(&cq->signaled, 1);
-	cq->wait->signal(cq->wait);
+	util_cq_signal(cq);
 	return 0;
 }
 
