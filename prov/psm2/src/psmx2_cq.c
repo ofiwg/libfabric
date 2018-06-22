@@ -984,6 +984,9 @@ STATIC ssize_t psmx2_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 
 	read_count = 0;
 	for (i = 0; i < count; i++) {
+		if (slist_empty(&cq_priv->event_queue))
+			break;
+
 		event = psmx2_cq_dequeue_event(cq_priv);
 		if (event) {
 			if (!event->error) {
