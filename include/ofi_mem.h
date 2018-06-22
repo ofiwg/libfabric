@@ -331,7 +331,7 @@ static inline void *util_buf_get_ex(struct util_buf_pool *pool, void **context)
 
 static inline void *util_buf_alloc(struct util_buf_pool *pool)
 {
-	if (!util_buf_avail(pool)) {
+	if (OFI_UNLIKELY(!util_buf_avail(pool))) {
 		if (util_buf_grow(pool))
 			return NULL;
 	}
