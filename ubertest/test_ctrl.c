@@ -373,9 +373,6 @@ static int ft_sync_test(int value)
 	return ft_sock_sync(value);
 }
 
-#define no_sync_needed(func,flag) (is_data_func(func) ||				\
-				(is_msg_func(func) && flag == FI_REMOTE_CQ_DATA))
-
 static int ft_sync_manual()
 {
 	int ret, value = 0, result = -FI_EOTHER;
@@ -419,14 +416,9 @@ static int ft_sync_progress(int value)
 	return ft_sock_sync(value);
 }
 
-static int ft_sync_msg_needed()
+static int ft_sync_msg_needed(void)
 {
-	if (!(ft_use_comp_cntr(test_info.comp_type) &&
-	    (test_info.test_class & (FI_RMA | FI_ATOMIC))) &&
-	    no_sync_needed(test_info.class_function, test_info.msg_flags))
-		return 0;
-
-	return ft_send_sync_msg();
+	return ft_check_rx_completion() ? 0 : ft_send_sync_msg();
 }
 
 static int ft_check_verify_cnt()
@@ -460,7 +452,7 @@ static int ft_pingpong_rma(void)
 			if (ret)
 				return ret;
 
-			if (!is_inject_func(test_info.class_function)) {
+			if (ft_check_tx_completion()) {
 				ret = ft_comp_tx(FT_COMP_TO);
 				if (ret)
 					return ret;
@@ -483,7 +475,7 @@ static int ft_pingpong_rma(void)
 			if (ret)
 				return ret;
 
-			if (!is_inject_func(test_info.class_function)) {
+			if (ft_check_tx_completion()) {
 				ret = ft_comp_tx(FT_COMP_TO);
 				if (ret)
 					return ret;
@@ -504,13 +496,17 @@ static int ft_pingpong(void)
 	if (test_info.test_class & (FI_RMA | FI_ATOMIC))
 		return ft_pingpong_rma();
 
-	// TODO: current flow will not handle manual progress mode
-	// it can get stuck with both sides receiving
 	if (listen_sock < 0) {
 		for (i = 0; i < ft_ctrl.xfer_iter; i++) {
 			ret = ft_send_msg();
 			if (ret)
 				return ret;
+
+			if (ft_check_tx_completion()) {
+				ret = ft_comp_tx(FT_COMP_TO);
+				if (ret)
+					return ret;
+			}
 
 			ret = ft_recv_msg();
 			if (ret)
@@ -525,6 +521,12 @@ static int ft_pingpong(void)
 			ret = ft_send_msg();
 			if (ret)
 				return ret;
+
+			if (ft_check_tx_completion()) {
+				ret = ft_comp_tx(FT_COMP_TO);
+				if (ret)
+					return ret;
+			}
 		}
 	}
 
@@ -639,14 +641,17 @@ static int ft_bw_rma(void)
 		ret = ft_sync_msg_needed();
 		if (ret)
 			return ret;
-	} else {
-		if (no_sync_needed(test_info.class_function, test_info.msg_flags) &&
-		    !(ft_use_comp_cntr(test_info.comp_type)))
-			i = ft_ctrl.xfer_iter;
-		else
-			i = 1;
 
-		ret = ft_recv_n_msg(i);
+		ret = ft_recv_msg();
+		if (ret)
+			return ret;
+	} else {
+		ret = ft_recv_n_msg(ft_check_rx_completion() ?
+				    ft_ctrl.xfer_iter : 1);
+		if (ret)
+			return ret;
+
+		ret = ft_send_sync_msg();
 		if (ret)
 			return ret;
 	}
@@ -667,15 +672,20 @@ static int ft_bw(void)
 				return ret;
 		}
 
+		ret = ft_sync_msg_needed();
+		if (ret)
+			return ret;
+
 		ret = ft_recv_msg();
 		if (ret)
 			return ret;
 	} else {
-		ret = ft_recv_n_msg(ft_ctrl.xfer_iter);
+		ret = ft_recv_n_msg(ft_check_rx_completion() ?
+				    ft_ctrl.xfer_iter : 1);
 		if (ret)
 			return ret;
 
-		ret = ft_send_msg();
+		ret = ft_send_sync_msg();
 		if (ret)
 			return ret;
 	}
@@ -884,11 +894,20 @@ static int ft_unit(void)
 		if (ret)
 			return ret;
 
+		if (ft_check_tx_completion()) {
+			ret = ft_comp_tx(FT_COMP_TO);
+			if (ret)
+				return ret;
+		}
+
+		ret = ft_sync_msg_needed();
+		if (ret)
+			return ret;
+
 		ret = ft_recv_msg();
 		if (ret)
 			return ret;
 
-		ft_comp_tx(FT_COMP_TO);
 		ret = ft_verify_bufs();
 		if (ret)
 			fail = -FI_EIO;

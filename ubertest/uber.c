@@ -172,18 +172,24 @@ static char *ft_wait_obj_str(enum fi_wait_obj enum_str)
 	}
 }
 
-static char *ft_comp_type_str(enum ft_comp_type comp_type)
+static void ft_print_comp_flag(uint64_t bind, uint64_t op)
 {
-	switch (comp_type) {
-	case FT_COMP_QUEUE:
-		return "comp_queue";
-	case FT_COMP_CNTR:
-		return "comp_cntr";
-	case FT_COMP_ALL:
-		return "comp_all";
-	default:
-		return "comp_unspec";
-	} 
+	printf("(bind-%s, op-%s)", (bind & FI_SELECTIVE_COMPLETION) ?
+		"FI_SELECTIVE_COMPLETION" : "NONE",
+		op ? fi_tostr(&op, FI_TYPE_OP_FLAGS) : "NONE");
+}
+
+static void ft_print_comp(struct ft_info *test)
+{
+	if (ft_use_comp_cq(test->comp_type)) {
+		printf("comp_queue -- tx ");
+		ft_print_comp_flag(test->tx_cq_bind_flags, test->tx_op_flags);
+		printf(", rx: ");
+		ft_print_comp_flag(test->rx_cq_bind_flags, test->rx_op_flags);
+		printf(", ");
+	}
+	if (ft_use_comp_cntr(test->comp_type))
+		printf("comp_cntr, ");
 } 
 
 static void ft_show_test_info(void)
@@ -202,8 +208,8 @@ static void ft_show_test_info(void)
 	printf(" %s,", fi_tostr(&test_info.av_type, FI_TYPE_AV_TYPE));
 	printf(" eq_%s,", ft_wait_obj_str(test_info.eq_wait_obj));
 	printf(" cq_%s,", ft_wait_obj_str(test_info.cq_wait_obj));
-	printf(" cntr_%s,", ft_wait_obj_str(test_info.cq_wait_obj));
-	printf(" %s,", ft_comp_type_str(test_info.comp_type));
+	printf(" cntr_%s, ", ft_wait_obj_str(test_info.cq_wait_obj));
+	ft_print_comp(&test_info);
 	printf(" %s,", fi_tostr(&test_info.progress, FI_TYPE_PROGRESS));
 	printf(" [%s],", fi_tostr(&test_info.mr_mode, FI_TYPE_MR_MODE));
 	printf(" [%s],", fi_tostr(&test_info.mode, FI_TYPE_MODE));

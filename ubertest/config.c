@@ -717,15 +717,18 @@ void fts_start(struct ft_series *series, int index)
 
 int fts_info_is_valid(void)
 {
-	if (test_info.msg_flags == FI_REMOTE_CQ_DATA) {
-		if (!is_data_func(test_info.class_function) &&
-		    test_info.class_function != FT_FUNC_SENDMSG &&
-		    test_info.class_function != FT_FUNC_WRITEMSG)
-			return 0;
-		if (ft_use_comp_cntr(test_info.comp_type))
-			return 0;
-	}
+	if (test_info.msg_flags && !is_msg_func(test_info.class_function))
+		return 0;
 
+	if (test_info.rx_cq_bind_flags & FI_SELECTIVE_COMPLETION &&
+	    !(test_info.rx_op_flags & FI_COMPLETION) &&
+	    !(test_info.msg_flags & FI_COMPLETION))
+		return 0;
+
+	if (test_info.test_class & (FI_MSG | FI_TAGGED) &&
+	    !ft_check_rx_completion(test_info) &&
+	    !ft_use_comp_cntr(test_info.comp_type))
+		return 0;
 	if (test_info.test_type == FT_TEST_UNIT &&
 	    test_info.ep_type == FI_EP_DGRAM)
 		return 0;
@@ -872,7 +875,11 @@ void fts_cur_info(struct ft_series *series, struct ft_info *info)
 
 	info->ep_type = set->ep_type[series->cur_ep];
 	info->av_type = set->av_type[series->cur_av];
-	info->comp_type = set->comp_type[series->cur_comp];
+	if (set->comp_type[0])
+		info->comp_type = set->comp_type[series->cur_comp];
+	else
+		info->comp_type = FT_COMP_QUEUE;
+
 	if (info->caps & (FT_CAP_RMA | FT_CAP_ATOMIC) &&
 		(ft_use_comp_cntr(info->comp_type)))
 		info->caps |= FI_RMA_EVENT;

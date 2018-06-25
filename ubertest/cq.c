@@ -68,28 +68,67 @@ int ft_use_comp_cq(enum ft_comp_type comp_type)
 	return 0;
 }
 
-static int ft_check_valid_comp(enum ft_comp_type comp_type)
+int ft_generates_rx_comp(void)
 {
-	if ((comp_type == FT_COMP_QUEUE) ||
-		(comp_type == FT_COMP_CNTR) ||
-		(comp_type == FT_COMP_ALL))
+	if (test_info.test_class & (FI_RMA | FI_ATOMIC)) {
+		if (is_data_func(test_info.class_function) ||
+		    (is_msg_func(test_info.class_function) &&
+		    test_info.msg_flags & FI_REMOTE_CQ_DATA))
+			return 1;
+		return 0;
+	}
+
+	if (!(test_info.rx_cq_bind_flags & FI_SELECTIVE_COMPLETION))
+		return 1;
+	if (test_info.rx_op_flags & FI_COMPLETION) {
+		if (is_msg_func(test_info.class_function) &&
+		    !(test_info.msg_flags & FI_COMPLETION))
+			return 0;
+		return 1;
+	}
+	if (is_msg_func(test_info.class_function) &&
+	    test_info.msg_flags & FI_COMPLETION)
+		return 1;
+	return 0;
+}
+
+int ft_generates_tx_comp(void)
+{
+	if (!(test_info.tx_cq_bind_flags & FI_SELECTIVE_COMPLETION)) {
+		if (is_inject_func(test_info.class_function))
+			return 0;
+		return 1;
+	}
+
+	if (test_info.tx_op_flags & FI_COMPLETION) {
+		if (is_msg_func(test_info.class_function) &&
+		    !(test_info.msg_flags & FI_COMPLETION))
+			return 0;
+		return 1;
+	}
+
+	if (test_info.msg_flags & FI_COMPLETION)
 		return 1;
 
 	return 0;
 }
 
-int ft_check_cq_completion(uint64_t cq_bind_flags, uint64_t op_flags,
-		enum ft_class_function class_function, uint64_t msg_flags)
+int ft_check_rx_completion(void)
 {
-	if (((cq_bind_flags & FI_SELECTIVE_COMPLETION) &&
-		!(op_flags & FI_COMPLETION) &&
-		!(is_msg_func(class_function))) ||
-		((cq_bind_flags & FI_SELECTIVE_COMPLETION) &&
-		is_msg_func(class_function) &&
-		!(msg_flags & FI_COMPLETION)))
-		return 0;
-	else
+	if (ft_use_comp_cntr(test_info.comp_type) ||
+	    ft_generates_rx_comp())
 		return 1;
+	else
+		return 0;
+}
+
+int ft_check_tx_completion(void)
+{
+	if (ft_use_comp_cntr(test_info.comp_type) ||
+	    ft_generates_tx_comp())
+		return 1;
+	else
+		return 0;
 }
 
 static int ft_open_cntrs(void)
@@ -203,7 +242,7 @@ int ft_bind_comp(struct fid_ep *ep)
 	}
 
 	if (ft_use_comp_cntr(test_info.comp_type)) {
-		flags = FI_RECV;
+		flags = FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE;
 		ret = fi_ep_bind(ep, &rxcntr->fid, flags);
 		if (ret) {
 			FT_PRINTERR("fi_ep_bind", ret);
@@ -310,27 +349,19 @@ int ft_comp_rx(int timeout)
 			return ret;
 	}
 	if (ft_use_comp_cq(test_info.comp_type)) {
-		if (ft_check_cq_completion(test_info.rx_cq_bind_flags,
-					test_info.rx_op_flags,
-					test_info.class_function,
-					test_info.msg_flags)) {
-			if (test_info.comp_type == FT_COMP_ALL)
-				ft_rx_ctrl.credits = cur_credits;
-			ret = ft_comp_x(rxcq, &ft_rx_ctrl, "rxcq", timeout);
-			if (ret)
-				return ret;
-		} else {
-			if (!ft_use_comp_cntr(test_info.comp_type))
-				ft_rx_ctrl.credits += comp_entry_cnt[ft_rx_ctrl.cq_format];
-		}
-	}
+		if (test_info.comp_type == FT_COMP_ALL)
+			ft_rx_ctrl.credits = cur_credits;
+		ret = ft_comp_x(rxcq, &ft_rx_ctrl, "rxcq", timeout);
+		if (ret)
+			return ret;
 
-	if (!ft_check_valid_comp(test_info.comp_type))
-		return -FI_ENOSYS;
+		if (ft_use_comp_cntr(test_info.comp_type))
+			ft_rx_ctrl.credits = cur_credits;
+	}
+	assert(ft_rx_ctrl.credits <= ft_rx_ctrl.max_credits);
 
 	return 0;
 }
-
 
 int ft_comp_tx(int timeout)
 {
@@ -342,24 +373,18 @@ int ft_comp_tx(int timeout)
 		if (ret)
 			return ret;
 	}
-	if (ft_use_comp_cq(test_info.comp_type)) {
-		if (ft_check_cq_completion(test_info.tx_cq_bind_flags,
-					test_info.tx_op_flags,
-					test_info.class_function,
-					test_info.msg_flags)) {
-			if (test_info.comp_type == FT_COMP_ALL)
-				ft_tx_ctrl.credits = cur_credits;
-			ret = ft_comp_x(txcq, &ft_tx_ctrl, "txcq", timeout);
-			if (ret)
-				return ret;
-		} else {
-			if (!ft_use_comp_cntr(test_info.comp_type))
-				ft_tx_ctrl.credits += comp_entry_cnt[ft_tx_ctrl.cq_format];
-		}
-	}
 
-	if (!ft_check_valid_comp(test_info.comp_type))
-		return -FI_ENOSYS;
+	if (ft_use_comp_cq(test_info.comp_type)) {
+		if (test_info.comp_type == FT_COMP_ALL)
+			ft_tx_ctrl.credits = cur_credits;
+		ret = ft_comp_x(txcq, &ft_tx_ctrl, "txcq", timeout);
+		if (ret)
+			return ret;
+
+		if (ft_use_comp_cntr(test_info.comp_type))
+			ft_tx_ctrl.credits = cur_credits;
+	}
+	assert(ft_tx_ctrl.credits <= ft_tx_ctrl.max_credits);
 
 	return 0;
 }
