@@ -147,11 +147,9 @@ static int rxm_finish_buf_recv(struct rxm_rx_buf *rx_buf)
 	FI_DBG(&rxm_prov, FI_LOG_CQ, "writing buffered recv completion: "
 	       "length: %" PRIu64 "\n", rx_buf->pkt.hdr.size);
 	rx_buf->recv_context.ep = &rx_buf->ep->util_ep.ep_fid;
-	return ofi_cq_write(rx_buf->ep->util_ep.rx_cq, &rx_buf->recv_context,
-			    rx_buf->pkt.hdr.flags | FI_RECV |
-			    (rx_buf->pkt.hdr.flags & (FI_MSG | FI_TAGGED)),
-			    rx_buf->pkt.hdr.size, rx_buf->pkt.data,
-			    rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
+	return rxm_cq_write_recv_comp(rx_buf,  &rx_buf->recv_context,
+				      (rx_buf->pkt.hdr.flags | FI_RECV),
+				      rx_buf->pkt.hdr.size, rx_buf->pkt.data);
 }
 
 static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
@@ -179,21 +177,14 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 			rxm_cntr_incerr(rx_buf->ep->util_ep.rx_cntr);
 	} else {
 		if (rx_buf->recv_entry->flags & FI_COMPLETION) {
-			FI_DBG(&rxm_prov, FI_LOG_CQ, "writing recv completion: "
-			       "length: %" PRIu64 ", tag: 0x%" PRIx64 "\n",
-			       rx_buf->pkt.hdr.size, rx_buf->pkt.hdr.tag);
-			ret = ofi_cq_write(rx_buf->ep->util_ep.rx_cq,
-					   rx_buf->recv_entry->context,
-					   rx_buf->recv_entry->comp_flags |
-					   rx_buf->pkt.hdr.flags,
-					   rx_buf->pkt.hdr.size,
-					   rx_buf->recv_entry->rxm_iov.iov[0].iov_base,
-					   rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
-			if (OFI_UNLIKELY(ret)) {
-				FI_WARN(&rxm_prov, FI_LOG_CQ,
-					"Unable to write recv completion\n");
+			ret = rxm_cq_write_recv_comp(
+					rx_buf, rx_buf->recv_entry->context,
+					(rx_buf->recv_entry->comp_flags |
+					 rx_buf->pkt.hdr.flags),
+					rx_buf->pkt.hdr.size,
+					rx_buf->recv_entry->rxm_iov.iov[0].iov_base);
+			if (ret)
 				return ret;
-			}
 		}
 		if (rx_buf->ep->util_ep.flags & OFI_CNTR_ENABLED)
 			rxm_cntr_inc(rx_buf->ep->util_ep.rx_cntr);
@@ -213,11 +204,11 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 			       "Buffer %p has been completely consumed. "
 			       "Reporting Multi-Recv completion\n",
 			       rx_buf->recv_entry->multi_recv_buf);
-			ret = ofi_cq_write(rx_buf->ep->util_ep.rx_cq,
-					   rx_buf->recv_entry->context,
-					   FI_MULTI_RECV, rx_buf->pkt.hdr.size,
-					   rx_buf->recv_entry->multi_recv_buf,
-					   rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
+			ret = rxm_cq_write_recv_comp(rx_buf,
+						     rx_buf->recv_entry->context,
+						     FI_MULTI_RECV,
+						     rx_buf->pkt.hdr.size,
+						     rx_buf->recv_entry->multi_recv_buf);
 			if (OFI_UNLIKELY(ret)) {
 				FI_WARN(&rxm_prov, FI_LOG_CQ,
 					"Unable to write FI_MULTI_RECV completion\n");
@@ -513,11 +504,6 @@ static inline ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 		if (OFI_UNLIKELY(!rx_buf->conn))
 			return -FI_EOTHER;
 		match_attr.addr = rx_buf->conn->handle.fi_addr;
-
-		if (rx_buf->ep->rxm_info->caps & FI_SOURCE)
-			rx_buf->ep->util_ep.rx_cq->src[
-				ofi_cirque_windex(rx_buf->ep->util_ep.rx_cq->cirq)] =
-					rx_buf->conn->handle.fi_addr;
 	}
 
 	if (rx_buf->ep->rxm_info->mode & FI_BUFFERED_RECV)
