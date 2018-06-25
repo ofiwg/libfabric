@@ -203,11 +203,35 @@ static int psmx2_domain_close(fid_t fid)
 	return 0;
 }
 
+DIRECT_FN
+STATIC int psmx2_domain_control(fid_t fid, int command, void *arg)
+{
+	struct fi_mr_map_raw *map;
+
+	switch (command) {
+	case FI_MAP_RAW_MR:
+		map = arg;
+		if (!map || !map->key || !map->raw_key)
+			return -FI_EINVAL;
+		*(uint64_t *)map->key = *(uint64_t *)map->raw_key;
+		break;
+
+	case FI_UNMAP_KEY:
+		/* Nothing to do here */
+		break;
+
+	default:
+		return -FI_ENOSYS;
+	}
+
+	return 0;
+}
+
 static struct fi_ops psmx2_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = psmx2_domain_close,
 	.bind = fi_no_bind,
-	.control = fi_no_control,
+	.control = psmx2_domain_control,
 	.ops_open = fi_no_ops_open,
 };
 
