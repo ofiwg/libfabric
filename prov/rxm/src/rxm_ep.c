@@ -921,6 +921,8 @@ rxm_ep_sar_tx_prepare_segment(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	tx_buf->pkt.ctrl_hdr.seg_no = seg_num;
 	tx_buf->pkt.ctrl_hdr.seg_size = seg_len;
 	tx_buf->pkt.ctrl_hdr.segs_cnt = tx_entry->segs_left;
+	tx_buf->pkt.hdr.flags |= comp_flags;
+
 	tx_buf->tx_entry = tx_entry;
 
 	ofi_copy_from_iov(tx_buf->pkt.data, seg_len, tx_entry->rxm_iov.iov,
@@ -1199,6 +1201,7 @@ rxm_ep_inject_common(struct rxm_ep *rxm_ep, const void *buf, size_t len,
 	ssize_t ret;
 
 	assert(len <= rxm_ep->rxm_info->tx_attr->inject_size);
+	assert(!(comp_flags & ~(FI_MSG | FI_TAGGED)));
 
 	fastlock_acquire(&rxm_ep->util_ep.cmap->lock);
 	rxm_conn = rxm_acquire_conn(rxm_ep, dest_addr);
@@ -1286,6 +1289,7 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 	ssize_t ret;
 
 	assert(count <= rxm_ep->rxm_info->tx_attr->iov_limit);
+	assert(!(comp_flags & ~(FI_MSG | FI_TAGGED)));
 
 	fastlock_acquire(&rxm_ep->util_ep.cmap->lock);
 	rxm_conn = rxm_acquire_conn(rxm_ep, dest_addr);
