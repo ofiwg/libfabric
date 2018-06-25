@@ -947,7 +947,7 @@ rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void *conte
 	struct rxm_tx_entry *tx_entry;
 	size_t segs_cnt =
 		rxm_ep_sar_calc_segs_cnt(data_len, rxm_ep->rxm_info->tx_attr->inject_size);
-	size_t i, total_len = data_len;
+	size_t i, total_len = data_len, seg_len;
 	ssize_t ret;
 	int send_failed = 0;
 
@@ -964,9 +964,13 @@ rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void *conte
 	tx_entry->segs_left = segs_cnt;
 	tx_entry->msg_id = rxm_txe_fs_index(rxm_conn->send_queue.fs, tx_entry);
 	
+	seg_len = fi_get_aligned_sz(total_len / segs_cnt, 64);
+
 	while (total_len) {
 		struct rxm_tx_buf *tx_buf;
-		size_t seg_len = fi_get_aligned_sz(total_len / segs_cnt, 64);
+
+		if (total_len < seg_len)
+			seg_len = total_len;
 
 		tx_buf = rxm_ep_sar_tx_prepare_segment(rxm_ep, rxm_conn, data_len,
 						       segs_cnt - 1, seg_len, data,
