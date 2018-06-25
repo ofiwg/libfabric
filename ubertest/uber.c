@@ -58,6 +58,7 @@ size_t recv_size, send_size;
 
 enum {
 	FT_SUCCESS,
+	FT_SKIP,
 	FT_ENODATA,
 	FT_ENOSYS,
 	FT_ERROR,
@@ -664,6 +665,7 @@ static int ft_fw_client(void)
 		if (!fts_info_is_valid()) {
 			printf("Skipping test %d (invalid):\n", test_info.test_index);
 			ft_show_test_info();
+			results[FT_SKIP]++;
 			continue;
 		}
 
@@ -700,6 +702,7 @@ static int ft_fw_client(void)
 static void ft_fw_show_results(void)
 {
 	printf("Success: %d\n", results[FT_SUCCESS]);
+	printf("Skipped: %d\n", results[FT_SKIP]);
 	printf("ENODATA: %d\n", results[FT_ENODATA]);
 	printf("ENOSYS : %d\n", results[FT_ENOSYS]);
 	printf("EIO    : %d\n", results[FT_EIO]);
