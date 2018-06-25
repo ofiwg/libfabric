@@ -198,19 +198,19 @@ static inline void dlist_splice_tail(struct dlist_entry *head,
  * Multi-threaded Double-linked list
  */
 struct dlist_ts {
-	struct dlist_entry	*head;
+	struct dlist_entry	head;
 	fastlock_t		lock;
 };
 
 static inline void dlist_ts_init(struct dlist_ts *list)
 {
 	fastlock_init(&list->lock);
-	dlist_init(list->head);
+	dlist_init(&list->head);
 }
 
 static inline int dlist_ts_empty(struct dlist_ts *list)
 {
-	return dlist_empty(list->head);
+	return dlist_empty(&list->head);
 }
 
 static inline void
@@ -226,11 +226,11 @@ static inline void
 dlist_ts_insert_before(struct dlist_ts *list, struct dlist_entry *item,
 		       struct dlist_entry *head)
 {
-	dlist_ts_insert_after(list, item, head);
+	dlist_ts_insert_after(list, item, head->prev);
 }
 
-#define dlist_ts_insert_head(list, item) dlist_ts_insert_after(list, item, (list)->head)
-#define dlist_ts_insert_tail(list, item) dlist_ts_insert_before(list, item, (list)->head)
+#define dlist_ts_insert_head(list, item) dlist_ts_insert_after(list, item, &(list)->head)
+#define dlist_ts_insert_tail(list, item) dlist_ts_insert_before(list, item, &(list)->head)
 
 static inline void
 dlist_ts_remove(struct dlist_ts *list, struct dlist_entry *item)
@@ -240,10 +240,15 @@ dlist_ts_remove(struct dlist_ts *list, struct dlist_entry *item)
 	fastlock_release(&list->lock);
 }
 
-#define dlist_ts_pop_front(list, head, type, container, member)		\
+#define dlist_ts_pop_front(list, type, container, member)		\
 	do {								\
 		fastlock_acquire(&(list)->lock);			\
-		dlist_pop_front(head, type, container, member);		\
+		if (dlist_ts_empty(list)) {				\
+			container = NULL;				\
+		} else {						\
+			dlist_pop_front(&(list)->head, type,		\
+					container, member);		\
+		}							\
 		fastlock_release(&(list)->lock);			\
 	} while (0)
 
@@ -254,25 +259,24 @@ dlist_ts_remove(struct dlist_ts *list, struct dlist_entry *item)
 #define dlist_ts_foreach(list, head, item)			\
 	{							\
 		fastlock_acquire(&(list)->lock);		\
-		for ((item) = (head)->next; (item) != (head);	\
-		     (item) = (item)->next)
+		dlist_foreach(list, head, item)
 
 #define dlist_ts_foreach_container(list, head, type, container, member)		\
 	{									\
 		fastlock_acquire(&(list)->lock);				\
-		dlist_ts_foreach_container(type, container, member)
+		dlist_foreach_container(type, container, member)
 
 #define dlist_ts_foreach_safe(list, head, item, tmp)				\
 	{									\
 		fastlock_acquire(&(list)->lock);				\
-		dlist_ts_foreach_safe(head, item, tmp)
+		dlist_foreach_safe(head, item, tmp)
 
 #define dlist_ts_foreach_container_safe(list, head, type, container,	\
 					member, tmp)			\
 	{								\
 		fastlock_acquire(&(list)->lock);			\
-		dlist_ts_foreach_container_safe(head, type, container,	\
-						member, tmp)
+		dlist_foreach_container_safe(head, type, container,	\
+					     member, tmp)
 
 static inline struct dlist_entry *
 dlist_ts_find_first_match(struct dlist_ts *list, struct dlist_entry *head,
