@@ -582,7 +582,9 @@ rxm_process_recv_entry(struct rxm_recv_queue *recv_queue,
 					rx_buf->recv_entry = recv_entry;
 					dlist_remove(&rx_buf->unexp_msg.entry);
 					wait_last = (recv_entry->segs_left == 1);
+					recv_queue->rxm_ep->res_fastlock_release(&recv_queue->lock);
 					ret = rxm_cq_handle_rx_buf(rx_buf);
+					recv_queue->rxm_ep->res_fastlock_acquire(&recv_queue->lock);
 				}
 			}
 			recv_queue->rxm_ep->res_fastlock_release(&recv_queue->lock);
