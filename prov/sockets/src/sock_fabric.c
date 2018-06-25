@@ -591,6 +591,14 @@ void sock_get_list_of_addr(struct slist *addr_list)
 }
 #endif
 
+static void sock_init_addrlist(void)
+{
+	fastlock_acquire(&sock_list_lock);
+	if (slist_empty(&sock_addr_list))
+		sock_get_list_of_addr(&sock_addr_list);
+	fastlock_release(&sock_list_lock);
+}
+
 int sock_node_getinfo(uint32_t version, const char *node, const char *service,
 		      uint64_t flags, const struct fi_info *hints, struct fi_info **info,
 		      struct fi_info **tail)
@@ -726,6 +734,7 @@ static int sock_getinfo(uint32_t version, const char *node, const char *service,
 		return ret;
 
 	ret = 1;
+	sock_init_addrlist();
 	if ((flags & FI_SOURCE) && node) {
 		ret = sock_node_matches_interface(&sock_addr_list, node);
 	} else if (hints && hints->src_addr) {
@@ -826,8 +835,6 @@ SOCKETS_INI
 	SOCK_EP_RDM_CAP |= OFI_RMA_PMEM;
 	SOCK_EP_MSG_SEC_CAP |= OFI_RMA_PMEM;
 	SOCK_EP_MSG_CAP |= OFI_RMA_PMEM;
-	/* Returns loopback address if no other interfaces are available */
-	sock_get_list_of_addr(&sock_addr_list);
 #if ENABLE_DEBUG
 	fi_param_define(&sock_prov, "dgram_drop_rate", FI_PARAM_INT,
 			"Drop every Nth dgram frame (debug only)");
