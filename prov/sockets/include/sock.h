@@ -962,7 +962,8 @@ struct sock_conn_req_handle {
 };
 
 struct sock_host_list_entry {
-	char hostname[HOST_NAME_MAX];
+	char ipstr[INET6_ADDRSTRLEN];
+	struct sockaddr_in ipaddr;
 	struct slist_entry entry;
 };
 

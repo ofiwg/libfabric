@@ -520,7 +520,8 @@ void sock_insert_loopback_addr(struct slist *addr_list)
 	addr_entry = calloc(1, sizeof(struct sock_host_list_entry));
 	if (!addr_entry)
 		return;
-	strncpy(addr_entry->hostname, "127.0.0.1", sizeof(addr_entry->hostname));
+	addr_entry->ipaddr.sin_addr.s_addr = INADDR_LOOPBACK;
+	strncpy(addr_entry->ipstr, "127.0.0.1", sizeof(addr_entry->ipstr));
 	slist_insert_tail(&addr_entry->entry, addr_list);
 }
 
@@ -563,11 +564,12 @@ void sock_get_list_of_addr(struct slist *addr_list)
 			addr_entry = calloc(1, sizeof(struct sock_host_list_entry));
 			if (!addr_entry)
 				continue;
-			ret = getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in),
-					  addr_entry->hostname, sizeof(addr_entry->hostname),
-					  NULL, 0, NI_NUMERICHOST);
-			if (ret) {
-				SOCK_LOG_DBG("getnameinfo failed: %d\n", ret);
+			memcpy(&addr_entry->ipaddr, ifa->ifa_addr,
+			       ofi_sizeofaddr(ifa->ifa_addr));
+			if (!inet_ntop(ifa->ifa_addr->sa_family, ifa->ifa_addr,
+					addr_entry->ipstr,
+					sizeof(addr_entry->ipstr))) {
+				SOCK_LOG_DBG("inet_ntop failed: %d\n", errno);
 				free(addr_entry);
 				continue;
 			}
@@ -593,6 +595,7 @@ void sock_get_list_of_addr(struct slist *addr_list)
 		iptbl = malloc(ips);
 		if (!iptbl)
 			return;
+
 		res = GetIpAddrTable(iptbl, &ips, 0);
 	}
 
@@ -606,9 +609,12 @@ void sock_get_list_of_addr(struct slist *addr_list)
 			if (!addr_entry)
 				break;
 
+			addr_entry->ipaddr.sin_family = AF_INET;
+			addr_entry->ipaddr.sin_addr.s_addr =
+						iptbl->table[i].dwAddr;
 			inet_ntop(AF_INET, &iptbl->table[i].dwAddr,
-				  addr_entry->hostname,
-				  sizeof(addr_entry->hostname));
+				  addr_entry->ipstr,
+				  sizeof(addr_entry->ipstr));
 			slist_insert_tail(&addr_entry->entry, addr_list);
 		}
 	}
@@ -699,7 +705,7 @@ static int sock_match_src_addr(struct slist_entry *entry, const void *src_addr)
 	struct sock_host_list_entry *host_entry;
 	host_entry = container_of(entry, struct sock_host_list_entry, entry);
 
-        return (strcmp(host_entry->hostname, (char *) src_addr) == 0);
+        return ofi_equals_ipaddr((struct sockaddr *) &host_entry->ipaddr, src_addr);
 }
 
 static int sock_addr_matches_interface(struct slist *addr_list, struct sockaddr_in *src_addr)
@@ -710,9 +716,7 @@ static int sock_addr_matches_interface(struct slist *addr_list, struct sockaddr_
 	if (ofi_is_loopback_addr((struct sockaddr *)src_addr))
 		return 1;
 
-	entry = slist_find_first_match(addr_list, sock_match_src_addr,
-					inet_ntoa(src_addr->sin_addr));
-
+	entry = slist_find_first_match(addr_list, sock_match_src_addr, src_addr);
 	return entry ? 1 : 0;
 }
 
@@ -792,7 +796,7 @@ static int sock_getinfo(uint32_t version, const char *node, const char *service,
 	(void) prev; /* Makes compiler happy */
 	slist_foreach(&sock_addr_list, entry, prev) {
 		host_entry = container_of(entry, struct sock_host_list_entry, entry);
-		node = host_entry->hostname;
+		node = host_entry->ipstr;
 		flags |= FI_SOURCE;
 		ret = sock_node_getinfo(version, node, service, flags, hints, info, &tail);
 		if (ret) {
