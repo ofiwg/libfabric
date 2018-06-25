@@ -332,7 +332,7 @@ mrail_tsend_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	struct iovec *iov_dest = alloca(sizeof(*iov_dest) * (count + 1));
 	struct mrail_hdr hdr = MRAIL_HDR_INITIALIZER_TAGGED(tag);
 	uint32_t i = mrail_get_tx_rail(mrail_ep);
-	struct fi_msg_tagged msg;
+	struct fi_msg msg;
 	ssize_t ret;
 
 	fi_addr_t *rail_fi_addr = ofi_av_get_addr(mrail_ep->util_ep.av,
@@ -346,7 +346,6 @@ mrail_tsend_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	msg.addr	= rail_fi_addr[i];
 	msg.context	= context;
 	msg.data	= data;
-	msg.tag		= tag;
 
 	assert(len < mrail_ep->rails[i].info->tx_attr->inject_size);
 	flags |= FI_INJECT;
@@ -354,7 +353,7 @@ mrail_tsend_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	FI_DBG(&mrail_prov, FI_LOG_EP_DATA, "Posting tsend of length: %" PRIu64
 	       " dest_addr: 0x%" PRIx64 " tag: 0x%" PRIx64 " on rail: %d\n",
 	       len, dest_addr, tag, i);
-	ret = fi_tsendmsg(mrail_ep->rails[i].ep, &msg, flags);
+	ret = fi_sendmsg(mrail_ep->rails[i].ep, &msg, flags);
 	if (ret)
 		FI_WARN(&mrail_prov, FI_LOG_EP_DATA,
 			"Unable to fi_sendmsg on rail: %" PRIu32 "\n", i);

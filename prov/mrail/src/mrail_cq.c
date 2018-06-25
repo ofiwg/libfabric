@@ -67,11 +67,11 @@ int mrail_cq_process_buf_recv(mrail_cq_entry_t *comp, struct mrail_recv *recv)
 		goto out;
 	}
 	FI_DBG(&mrail_prov, FI_LOG_CQ, "writing recv completion: length: %zu "
-	       "tag: 0x%" PRIx64 "\n", len, comp->tag);
+	       "tag: 0x%" PRIx64 "\n", len, mrail_pkt->hdr.tag);
 	ret = ofi_cq_write(mrail_ep->util_ep.rx_cq, recv->context,
 			   recv->comp_flags |
 			   (comp->flags & FI_REMOTE_CQ_DATA), len, NULL,
-			   comp->data, comp->tag);
+			   comp->data, mrail_pkt->hdr.tag);
 	if (ret) {
 		FI_WARN(&mrail_prov, FI_LOG_CQ, "Unable to write to util cq\n");
 		retv = ret;
@@ -92,11 +92,14 @@ static int mrail_cq_process_comp_buf_recv(struct util_cq *cq,
 					  mrail_cq_entry_t *comp)
 {
 	struct mrail_ep *mrail_ep = MRAIL_OP_CTX_EP(comp->op_context);
+	struct mrail_hdr *hdr = comp->buf;
 	struct mrail_recv *recv;
+
+	assert(hdr->version == MRAIL_HDR_VERSION);
 
 	// TODO match seq number
 	fastlock_acquire(&mrail_ep->util_ep.lock);
-	if (comp->flags & FI_MSG) {
+	if (hdr->op == ofi_op_msg) {
 		FI_DBG(&mrail_prov, FI_LOG_CQ, "Got MSG op\n");
 		// TODO pass the right address
 		recv = mrail_match_recv_handle_unexp(&mrail_ep->recv_queue, 0,
@@ -104,10 +107,10 @@ static int mrail_cq_process_comp_buf_recv(struct util_cq *cq,
 						     (char *)comp, sizeof(*comp),
 						     NULL);
 	} else {
-		assert(comp->flags & FI_TAGGED);
+		assert(hdr->op == ofi_op_tagged);
 		FI_DBG(&mrail_prov, FI_LOG_CQ, "Got TAGGED op\n");
 		recv = mrail_match_recv_handle_unexp(&mrail_ep->trecv_queue,
-						     comp->tag,	FI_ADDR_UNSPEC,
+						     hdr->tag, FI_ADDR_UNSPEC,
 						     (char *)comp, sizeof(*comp),
 						     NULL);
 	}
