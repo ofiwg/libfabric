@@ -177,7 +177,12 @@ struct smr_region {
 	struct smr_map	*map;
 
 	size_t		total_size;
-	size_t		cmd_cnt;
+	size_t		cmd_cnt; /* Doubles as a tracker for number of cmds AND
+				    number of inject buffers available for use,
+				    to ensure 1:1 ratio of cmds to inject bufs.
+				    Might not always be paired consistently with
+				    cmd alloc/free depending on protocol
+				    (Ex. unexpected messages, RMA requests) */
 
 	/* offsets from start of smr_region */
 	size_t		cmd_queue_offset;
