@@ -543,7 +543,6 @@ struct sock_ep_cm_entry {
 struct sock_conn_handle {
 	int sock;
 	int do_listen;
-	char service[NI_MAXSERV];
 };
 
 struct sock_ep_attr {

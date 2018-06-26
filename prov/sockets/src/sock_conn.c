@@ -406,94 +406,47 @@ err1:
 
 int sock_conn_listen(struct sock_ep_attr *ep_attr)
 {
-	struct addrinfo *s_res = NULL, *p;
-	struct addrinfo hints = { 0 };
-	int listen_fd = 0, ret;
+	int listen_fd, ret;
 	socklen_t addr_size;
 	union ofi_sock_ip addr;
 	struct sock_conn_handle *conn_handle = &ep_attr->conn_handle;
-	char service[NI_MAXSERV] = {0};
-	char *port;
-	char ipaddr[INET6_ADDRSTRLEN];
 
-	hints.ai_family = ep_attr->src_addr->sa.sa_family;
-	hints.ai_socktype = SOCK_STREAM;
-	hints.ai_flags = AI_PASSIVE;
+	listen_fd = ofi_socket(ep_attr->src_addr->sa.sa_family,
+				SOCK_STREAM, IPPROTO_TCP);
+	if (listen_fd == INVALID_SOCKET)
+		return -ofi_sockerr();
+
+	sock_set_sockopts(listen_fd, SOCK_OPTS_NONBLOCK);
 
 	addr = *ep_attr->src_addr;
-	if (getnameinfo(&ep_attr->src_addr->sa,
-			ofi_sizeofaddr(&ep_attr->src_addr->sa),
-			NULL, 0, conn_handle->service,
-			sizeof(conn_handle->service), NI_NUMERICSERV)) {
-		SOCK_LOG_ERROR("could not resolve src_addr\n");
-		return -FI_EINVAL;
-	}
-
-	if (ep_attr->ep_type == FI_EP_MSG) {
-		memset(conn_handle->service, 0, NI_MAXSERV);
-		port = NULL;
+	if (ep_attr->ep_type == FI_EP_MSG)
 		ofi_addr_set_port(&addr.sa, 0);
-	} else {
-		port = conn_handle->service;
-	}
 
-	inet_ntop(addr.sa.sa_family, ofi_get_ipaddr(&addr.sa),
-		  ipaddr, sizeof(ipaddr));
-	ret = getaddrinfo(ipaddr, port, &hints, &s_res);
+	ret = bind(listen_fd, &addr.sa, ofi_sizeofaddr(&addr.sa));
 	if (ret) {
-		SOCK_LOG_ERROR("no available AF_INET address, service %s, %s\n",
-			       conn_handle->service, gai_strerror(ret));
-		return -FI_EINVAL;
-	}
-
-	SOCK_LOG_DBG("Binding listener thread to port: %s\n", conn_handle->service);
-	for (p = s_res; p; p = p->ai_next) {
-		listen_fd = ofi_socket(p->ai_family, p->ai_socktype, p->ai_protocol);
-		if (listen_fd >= 0) {
-			sock_set_sockopts(listen_fd, SOCK_OPTS_NONBLOCK);
-
-			if (!bind(listen_fd, s_res->ai_addr, s_res->ai_addrlen))
-				break;
-			ofi_close_socket(listen_fd);
-			listen_fd = -1;
-		}
-	}
-	freeaddrinfo(s_res);
-
-	if (listen_fd < 0) {
-		SOCK_LOG_ERROR("failed to listen to port: %s\n",
-			       conn_handle->service);
+		SOCK_LOG_ERROR("failed to bind listener: %s\n",
+			       strerror(ofi_sockerr()));
+		ret = -ofi_sockerr();
 		goto err;
 	}
 
-	if (atoi(conn_handle->service) == 0) {
-		addr_size = sizeof(addr);
-		if (getsockname(listen_fd, &addr.sa, &addr_size))
-			goto err;
-		snprintf(conn_handle->service, sizeof(conn_handle->service), "%d",
-			 ofi_addr_get_port(&addr.sa));
-		SOCK_LOG_DBG("Bound to port: %s - %d\n",
-			     conn_handle->service, getpid());
-		ep_attr->msg_src_port = ofi_addr_get_port(&addr.sa);
+	addr_size = sizeof(addr);
+	ret = ofi_getsockname(listen_fd, &addr.sa, &addr_size);
+	if (ret) {
+		ret = -ofi_sockerr();
+		goto err;
 	}
 
-	if (ofi_is_any_addr(&ep_attr->src_addr->sa)) {
-		snprintf(service, sizeof service, "%s", conn_handle->service);
-		ret = sock_get_src_addr_from_hostname(ep_attr->src_addr,
-				service, ep_attr->src_addr->sa.sa_family);
-		if (ret)
-			goto err;
-	}
+	ep_attr->msg_src_port = ofi_addr_get_port(&addr.sa);
+	if (!ofi_addr_get_port(&ep_attr->src_addr->sa))
+		ofi_addr_set_port(&ep_attr->src_addr->sa, ep_attr->msg_src_port);
 
-	if (listen(listen_fd, sock_cm_def_map_sz)) {
+	ret = listen(listen_fd, sock_cm_def_map_sz);
+	if (ret) {
 		SOCK_LOG_ERROR("failed to listen socket: %s\n",
 			       strerror(ofi_sockerr()));
+		ret = -ofi_sockerr();
 		goto err;
-	}
-
-	if (ofi_addr_get_port(&ep_attr->src_addr->sa) == 0) {
-		ofi_addr_set_port(&ep_attr->src_addr->sa,
-				  htons(atoi(conn_handle->service)));
 	}
 
 	conn_handle->sock = listen_fd;
@@ -511,10 +464,13 @@ int sock_conn_listen(struct sock_ep_attr *ep_attr)
 
 	return 0;
 err:
-	if (listen_fd >= 0)
+	if (listen_fd != INVALID_SOCKET) {
 		ofi_close_socket(listen_fd);
+		conn_handle->sock = INVALID_SOCKET;
+		conn_handle->do_listen = 0;
+	}
 
-	return -FI_EINVAL;
+	return ret;
 }
 
 int sock_ep_connect(struct sock_ep_attr *ep_attr, fi_addr_t index,

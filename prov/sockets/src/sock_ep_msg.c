@@ -287,80 +287,47 @@ static int sock_pep_create_listener(struct sock_pep *pep)
 {
 	int ret;
 	socklen_t addr_size;
-	union ofi_sock_ip addr;
-	struct addrinfo *s_res = NULL, *p;
-	struct addrinfo hints;
-	char sa_ip[INET6_ADDRSTRLEN];
-	char sa_port[NI_MAXSERV];
 
-	pep->cm.do_listen = 1;
-	memset(&hints, 0, sizeof(hints));
-	hints.ai_family = pep->src_addr.sa.sa_family;
-	hints.ai_socktype = SOCK_STREAM;
-	hints.ai_flags = AI_PASSIVE;
+	pep->cm.sock = ofi_socket(pep->src_addr.sa.sa_family,
+				  SOCK_STREAM, IPPROTO_TCP);
+	if (pep->cm.sock == INVALID_SOCKET)
+		return -ofi_sockerr();
 
-	if (!inet_ntop(hints.ai_family, ofi_get_ipaddr(&pep->src_addr.sa),
-		       sa_ip, sizeof sa_ip))
-		return -FI_EINVAL;
+	sock_set_sockopts(pep->cm.sock, SOCK_OPTS_NONBLOCK);
 
-	sprintf(sa_port, "%d", ofi_addr_get_port(&pep->src_addr.sa));
-	sa_ip[INET6_ADDRSTRLEN - 1] = '\0';
-	sa_port[NI_MAXSERV - 1] = '\0';
-
-	ret = getaddrinfo(sa_ip, sa_port, &hints, &s_res);
+	ret = bind(pep->cm.sock, &pep->src_addr.sa,
+		   ofi_sizeofaddr(&pep->src_addr.sa));
 	if (ret) {
-		SOCK_LOG_ERROR("no available AF_INET address service:%s, %s\n",
-			       sa_port, gai_strerror(ret));
-		return -FI_EINVAL;
-	}
-
-	SOCK_LOG_DBG("binding pep listener to %s\n", sa_port);
-	for (p = s_res; p; p = p->ai_next) {
-		pep->cm.sock = ofi_socket(p->ai_family, p->ai_socktype,
-				     p->ai_protocol);
-		if (pep->cm.sock >= 0) {
-			sock_set_sockopts(pep->cm.sock, SOCK_OPTS_NONBLOCK);
-			if (!bind(pep->cm.sock, s_res->ai_addr, s_res->ai_addrlen))
-				break;
-			SOCK_LOG_ERROR("failed to bind listener: %s\n",
-				       strerror(ofi_sockerr()));
-			ofi_close_socket(pep->cm.sock);
-			pep->cm.sock = INVALID_SOCKET;
-		}
-	}
-
-	freeaddrinfo(s_res);
-	if (pep->cm.sock < 0) {
-		SOCK_LOG_ERROR("failed to create listener: %s\n",
+		SOCK_LOG_ERROR("failed to bind listener: %s\n",
 			       strerror(ofi_sockerr()));
-		return -FI_EIO;
+		ret = -ofi_sockerr();
+		goto err;
 	}
 
-	if (ofi_addr_get_port(&pep->src_addr.sa) == 0) {
-		addr_size = sizeof(addr);
-		if (getsockname(pep->cm.sock, &addr.sa, &addr_size))
-			return -FI_EINVAL;
-
-		ofi_addr_set_port(&pep->src_addr.sa, ofi_addr_get_port(&addr.sa));
-		sprintf(sa_port, "%d", ofi_addr_get_port(&addr.sa));
-	}
-
-	if (ofi_is_any_addr(&pep->src_addr.sa)) {
-		ret = sock_get_src_addr_from_hostname(&pep->src_addr,
-				sa_port, pep->src_addr.sa.sa_family);
-		if (ret)
-			return -FI_EINVAL;
+	addr_size = sizeof(pep->src_addr);
+	if (ofi_getsockname(pep->cm.sock, &pep->src_addr.sa, &addr_size) ==
+	    SOCKET_ERROR) {
+		ret = -ofi_sockerr();
+		goto err;
 	}
 
 	if (listen(pep->cm.sock, sock_cm_def_map_sz)) {
 		SOCK_LOG_ERROR("failed to listen socket: %s\n",
 			       strerror(ofi_sockerr()));
-		return -ofi_sockerr();
+		ret = -ofi_sockerr();
+		goto err;
 	}
 
+	pep->cm.do_listen = 1;
 	pep->name_set = 1;
-	SOCK_LOG_DBG("Listener thread bound to %s:%s\n", sa_ip, sa_port);
 	return 0;
+err:
+	if (pep->cm.sock) {
+		ofi_close_socket(pep->cm.sock);
+		pep->cm.sock = INVALID_SOCKET;
+	}
+
+	return ret;
 }
 
 static int sock_ep_cm_setname(fid_t fid, void *addr, size_t addrlen)
