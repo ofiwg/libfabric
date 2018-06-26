@@ -11,14 +11,14 @@
  *     without modification, are permitted provided that the following
  *     conditions are met:
  *
- *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer.
+ *	- Redistributions of source code must retain the above
+ *	  copyright notice, this list of conditions and the following
+ *	  disclaimer.
  *
- *      - Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials
- *        provided with the distribution.
+ *	- Redistributions in binary form must reproduce the above
+ *	  copyright notice, this list of conditions and the following
+ *	  disclaimer in the documentation and/or other materials
+ *	  provided with the distribution.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
  * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
@@ -39,6 +39,20 @@
 
 #define MRAIL_OP_CTX_EP(op_context)	\
 	((struct mrail_ep *)MRAIL_OP_CTX_RAIL_EP(op_context)->fid.context)
+
+
+int mrail_cq_write_recv_comp(struct mrail_ep *mrail_ep, struct mrail_hdr *hdr,
+			     mrail_cq_entry_t *comp, struct mrail_recv *recv)
+{
+	FI_DBG(&mrail_prov, FI_LOG_CQ, "writing recv completion: length: %zu "
+	       "tag: 0x%" PRIx64 "\n", comp->len - sizeof(struct mrail_pkt),
+	       hdr->tag);
+	return ofi_cq_write(mrail_ep->util_ep.rx_cq, recv->context,
+			   recv->comp_flags |
+			   (comp->flags & FI_REMOTE_CQ_DATA),
+			   comp->len - sizeof(struct mrail_pkt),
+			   NULL, comp->data, hdr->tag);
+}
 
 int mrail_cq_process_buf_recv(mrail_cq_entry_t *comp, struct mrail_recv *recv)
 {
@@ -66,16 +80,9 @@ int mrail_cq_process_buf_recv(mrail_cq_entry_t *comp, struct mrail_recv *recv)
 		}
 		goto out;
 	}
-	FI_DBG(&mrail_prov, FI_LOG_CQ, "writing recv completion: length: %zu "
-	       "tag: 0x%" PRIx64 "\n", len, mrail_pkt->hdr.tag);
-	ret = ofi_cq_write(mrail_ep->util_ep.rx_cq, recv->context,
-			   recv->comp_flags |
-			   (comp->flags & FI_REMOTE_CQ_DATA), len, NULL,
-			   comp->data, mrail_pkt->hdr.tag);
-	if (ret) {
-		FI_WARN(&mrail_prov, FI_LOG_CQ, "Unable to write to util cq\n");
+	ret = mrail_cq_write_recv_comp(mrail_ep, &mrail_pkt->hdr, comp, recv);
+	if (ret)
 		retv = ret;
-	}
 out:
 	ret = fi_recvmsg(MRAIL_OP_CTX_RAIL_EP(comp->op_context),
 			 &msg, FI_DISCARD);
