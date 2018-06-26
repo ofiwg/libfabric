@@ -350,3 +350,146 @@
 	],
 	test_flags: FT_FLAG_QUICKTEST
 },
+{
+	prov_name: sockets,
+	test_type: [
+		FT_TEST_LATENCY,
+		FT_TEST_BANDWIDTH,
+	],
+	class_function: [
+		FT_FUNC_SENDMSG,
+	],
+	ep_type: [
+		FI_EP_RDM,
+	],
+	av_type: [
+		FI_AV_TABLE,
+	],
+	comp_type: [
+		FT_COMP_QUEUE,
+		FT_COMP_CNTR,
+	],
+	mode: [
+		FT_MODE_ALL,
+	],
+	test_class: [
+		FT_CAP_MSG,
+		FT_CAP_TAGGED,
+	],
+	rx_cq_bind_flags: [
+		FI_SELECTIVE_COMPLETION,
+	],
+	rx_op_flags: [
+		FI_COMPLETION,
+	],
+	msg_flags: [
+		FI_COMPLETION,
+	],
+	test_flags: FT_FLAG_QUICKTEST
+},
+{
+	prov_name: sockets,
+	test_type: [
+		FT_TEST_LATENCY,
+		FT_TEST_BANDWIDTH,
+	],
+	class_function: [
+		FT_FUNC_SENDMSG,
+	],
+	ep_type: [
+		FI_EP_RDM,
+	],
+	av_type: [
+		FI_AV_TABLE,
+	],
+	comp_type: [
+		FT_COMP_QUEUE,
+		FT_COMP_CNTR,
+	],
+	mode: [
+		FT_MODE_ALL,
+	],
+	test_class: [
+		FT_CAP_MSG,
+		FT_CAP_TAGGED,
+	],
+	rx_cq_bind_flags: [
+		FI_SELECTIVE_COMPLETION,
+	],
+	msg_flags: [
+		FI_COMPLETION,
+	],
+	test_flags: FT_FLAG_QUICKTEST
+},
+{
+	prov_name: sockets,
+	test_type: [
+		FT_TEST_LATENCY,
+		FT_TEST_BANDWIDTH,
+	],
+	class_function: [
+		FT_FUNC_SEND,
+		FT_FUNC_SENDV,
+		FT_FUNC_SENDDATA,
+		FT_FUNC_INJECT,
+		FT_FUNC_INJECTDATA,
+	],
+	ep_type: [
+		FI_EP_RDM,
+	],
+	av_type: [
+		FI_AV_TABLE,
+	],
+	comp_type: [
+		FT_COMP_QUEUE,
+		FT_COMP_CNTR,
+	],
+	mode: [
+		FT_MODE_ALL,
+	],
+	test_class: [
+		FT_CAP_MSG,
+		FT_CAP_TAGGED,
+	],
+	rx_cq_bind_flags: [
+		FI_SELECTIVE_COMPLETION,
+	],
+	rx_op_flags: [
+		FI_COMPLETION,
+	],
+	test_flags: FT_FLAG_QUICKTEST
+},
+{
+	prov_name: sockets,
+	test_type: [
+		FT_TEST_LATENCY,
+		FT_TEST_BANDWIDTH,
+	],
+	class_function: [
+		FT_FUNC_SENDMSG,
+	],
+	ep_type: [
+		FI_EP_RDM,
+	],
+	av_type: [
+		FI_AV_TABLE,
+	],
+	comp_type: [
+		FT_COMP_QUEUE,
+		FT_COMP_CNTR,
+	],
+	mode: [
+		FT_MODE_ALL,
+	],
+	test_class: [
+		FT_CAP_MSG,
+		FT_CAP_TAGGED,
+	],
+	tx_cq_bind_flags: [
+		FI_SELECTIVE_COMPLETION,
+	],
+	msg_flags: [
+		FI_COMPLETION,
+	],
+	test_flags: FT_FLAG_QUICKTEST
+},
