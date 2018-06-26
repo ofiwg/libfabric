@@ -835,9 +835,9 @@ static int psmx2_sep_close(fid_t fid)
 			psmx2_ep_close_internal(sep->ctxts[i].ep);
 	}
 
-	psmx2_lock(&sep->domain->sep_lock, 1);
+	sep->domain->sep_lock_fn(&sep->domain->sep_lock, 1);
 	dlist_remove(&sep->entry);
-	psmx2_unlock(&sep->domain->sep_lock, 1);
+	sep->domain->sep_unlock_fn(&sep->domain->sep_lock, 1);
 
 	psmx2_domain_release(sep->domain);
 	free(sep);
@@ -1051,9 +1051,9 @@ int psmx2_sep_open(struct fid_domain *domain, struct fi_info *info,
 
 	sep_priv->id = ofi_atomic_inc32(&domain_priv->sep_cnt);
 
-	psmx2_lock(&domain_priv->sep_lock, 1);
+	domain_priv->sep_lock_fn(&domain_priv->sep_lock, 1);
 	dlist_insert_before(&sep_priv->entry, &domain_priv->sep_list);
-	psmx2_unlock(&domain_priv->sep_lock, 1);
+	domain_priv->sep_unlock_fn(&domain_priv->sep_lock, 1);
 
 	ep_name.epid = sep_priv->ctxts[0].trx_ctxt->psm2_epid;
 	ep_name.sep_id = sep_priv->id;

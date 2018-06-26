@@ -35,10 +35,10 @@
 void psmx2_cq_enqueue_event(struct psmx2_fid_cq *cq,
 			    struct psmx2_cq_event *event)
 {
-	psmx2_lock(&cq->lock, 2);
+	cq->domain->cq_lock_fn(&cq->lock, 2);
 	slist_insert_tail(&event->list_entry, &cq->event_queue);
 	cq->event_count++;
-	psmx2_unlock(&cq->lock, 2);
+	cq->domain->cq_unlock_fn(&cq->lock, 2);
 
 	if (cq->wait)
 		cq->wait->signal(cq->wait);
@@ -48,14 +48,14 @@ static struct psmx2_cq_event *psmx2_cq_dequeue_event(struct psmx2_fid_cq *cq)
 {
 	struct slist_entry *entry;
 
-	psmx2_lock(&cq->lock, 2);
+	cq->domain->cq_lock_fn(&cq->lock, 2);
 	if (slist_empty(&cq->event_queue)) {
-		psmx2_unlock(&cq->lock, 2);
+		cq->domain->cq_unlock_fn(&cq->lock, 2);
 		return NULL;
 	}
 	entry = slist_remove_head(&cq->event_queue);
 	cq->event_count--;
-	psmx2_unlock(&cq->lock, 2);
+	cq->domain->cq_unlock_fn(&cq->lock, 2);
 
 	return container_of(entry, struct psmx2_cq_event, list_entry);
 }
@@ -64,15 +64,15 @@ static struct psmx2_cq_event *psmx2_cq_alloc_event(struct psmx2_fid_cq *cq)
 {
 	struct psmx2_cq_event *event;
 
-	psmx2_lock(&cq->lock, 2);
+	cq->domain->cq_lock_fn(&cq->lock, 2);
 	if (!slist_empty(&cq->free_list)) {
 		event = container_of(slist_remove_head(&cq->free_list),
 				     struct psmx2_cq_event, list_entry);
-		psmx2_unlock(&cq->lock, 2);
+		cq->domain->cq_unlock_fn(&cq->lock, 2);
 		return event;
 	}
 
-	psmx2_unlock(&cq->lock, 2);
+	cq->domain->cq_unlock_fn(&cq->lock, 2);
 	event = calloc(1, sizeof(*event));
 	if (!event)
 		FI_WARN(&psmx2_prov, FI_LOG_CQ, "out of memory.\n");
@@ -85,9 +85,9 @@ static void psmx2_cq_free_event(struct psmx2_fid_cq *cq,
 {
 	memset(event, 0, sizeof(*event));
 
-	psmx2_lock(&cq->lock, 2);
+	cq->domain->cq_lock_fn(&cq->lock, 2);
 	slist_insert_tail(&event->list_entry, &cq->free_list);
-	psmx2_unlock(&cq->lock, 2);
+	cq->domain->cq_unlock_fn(&cq->lock, 2);
 }
 
 struct psmx2_cq_event *psmx2_cq_create_event(struct psmx2_fid_cq *cq,

@@ -37,9 +37,9 @@
 static inline void psmx2_am_enqueue_rma(struct psmx2_trx_ctxt *trx_ctxt,
 					struct psmx2_am_request *req)
 {
-	psmx2_lock(&trx_ctxt->rma_queue.lock, 2);
+	trx_ctxt->domain->rma_queue_lock_fn(&trx_ctxt->rma_queue.lock, 2);
 	slist_insert_tail(&req->list_entry, &trx_ctxt->rma_queue.list);
-	psmx2_unlock(&trx_ctxt->rma_queue.lock, 2);
+	trx_ctxt->domain->rma_queue_unlock_fn(&trx_ctxt->rma_queue.lock, 2);
 }
 #endif
 
