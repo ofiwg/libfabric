@@ -1297,7 +1297,7 @@ static int util_cmap_alloc_handle_peer(struct util_cmap *cmap, void *addr,
 	ofi_straddr_dbg(cmap->av->prov, FI_LOG_AV, "Allocated handle for addr",
 			addr);
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "handle: %p\n", *handle);
-	util_cmap_init_handle(*handle, cmap, state, FI_ADDR_UNSPEC, peer);
+	util_cmap_init_handle(*handle, cmap, state, FI_ADDR_NOTAVAIL, peer);
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "Adding handle to peer list\n");
 	peer->handle = *handle;
 	memcpy(peer->addr, addr, cmap->av->addrlen);
