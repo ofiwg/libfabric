@@ -34,13 +34,6 @@
 
 #include "mrail.h"
 
-#define MRAIL_OP_CTX_RAIL_EP(op_context)	\
-	(((struct fi_recv_context *)op_context)->ep)
-
-#define MRAIL_OP_CTX_EP(op_context)	\
-	((struct mrail_ep *)MRAIL_OP_CTX_RAIL_EP(op_context)->fid.context)
-
-
 int mrail_cq_write_recv_comp(struct mrail_ep *mrail_ep, struct mrail_hdr *hdr,
 			     mrail_cq_entry_t *comp, struct mrail_recv *recv)
 {
@@ -56,15 +49,39 @@ int mrail_cq_write_recv_comp(struct mrail_ep *mrail_ep, struct mrail_hdr *hdr,
 
 int mrail_cq_process_buf_recv(mrail_cq_entry_t *comp, struct mrail_recv *recv)
 {
+	struct fi_recv_context *recv_ctx = comp->op_context;
 	struct fi_msg msg = {
-		.context = comp->op_context,
+		.context = recv_ctx,
 	};
-	struct mrail_ep *mrail_ep = MRAIL_OP_CTX_EP(comp->op_context);
-	struct mrail_pkt *mrail_pkt = (struct mrail_pkt *)comp->buf;
-	size_t size, len = comp->len - sizeof(*mrail_pkt);
+	struct mrail_ep *mrail_ep;
+	struct mrail_pkt *mrail_pkt;
+	size_t size, len;
 	int ret, retv = 0;
 
-	size = ofi_copy_to_iov(recv->iov, recv->count, 0, mrail_pkt->data, len);
+	if (comp->flags & FI_MORE) {
+		msg.msg_iov	= recv->iov;
+		msg.iov_count	= recv->count;
+		msg.addr	= recv->addr;
+
+		recv_ctx->context = recv;
+
+		ret = fi_recvmsg(recv_ctx->ep, &msg, FI_CLAIM);
+		if (ret) {
+			FI_WARN(&mrail_prov, FI_LOG_CQ,
+				"Unable to claim buffered recv\n");
+			assert(0);
+			// TODO write cq error entry
+		}
+		return ret;
+	}
+
+	mrail_ep = recv_ctx->ep->fid.context;
+	mrail_pkt = (struct mrail_pkt *)comp->buf;
+
+	len = comp->len - sizeof(*mrail_pkt);
+
+	size = ofi_copy_to_iov(&recv->iov[1], recv->count - 1, 0,
+			       mrail_pkt->data, len);
 
 	if (size < len) {
 		FI_WARN(&mrail_prov, FI_LOG_CQ, "Message truncated recv buf "
@@ -84,24 +101,39 @@ int mrail_cq_process_buf_recv(mrail_cq_entry_t *comp, struct mrail_recv *recv)
 	if (ret)
 		retv = ret;
 out:
-	ret = fi_recvmsg(MRAIL_OP_CTX_RAIL_EP(comp->op_context),
-			 &msg, FI_DISCARD);
+	ret = fi_recvmsg(recv_ctx->ep, &msg, FI_DISCARD);
 	if (ret) {
 		FI_WARN(&mrail_prov, FI_LOG_CQ,
 			"Unable to discard buffered recv\n");
 		retv = ret;
 	}
-	mrail_push_recv(mrail_ep, recv);
+	mrail_push_recv(recv);
 	return retv;
 }
 
 static int mrail_cq_process_comp_buf_recv(struct util_cq *cq,
 					  mrail_cq_entry_t *comp)
 {
-	struct mrail_ep *mrail_ep = MRAIL_OP_CTX_EP(comp->op_context);
-	struct mrail_hdr *hdr = comp->buf;
+	struct fi_recv_context *recv_ctx;
+	struct mrail_ep *mrail_ep;
+	struct mrail_hdr *hdr;
 	struct mrail_recv *recv;
+	int ret;
 
+	if (comp->flags & FI_CLAIM) {
+		recv = comp->op_context;
+		assert(recv->hdr.version == MRAIL_HDR_VERSION);
+		ret =  mrail_cq_write_recv_comp(recv->ep, &recv->hdr, comp,
+						recv->context);
+		mrail_push_recv(recv);
+		return ret;
+	}
+
+	recv_ctx = comp->op_context;
+	mrail_ep = recv_ctx->ep->fid.context;
+	hdr = comp->buf;
+
+	// TODO make rxm send buffered recv amount of data for large message
 	assert(hdr->version == MRAIL_HDR_VERSION);
 
 	// TODO match seq number
