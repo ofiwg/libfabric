@@ -103,30 +103,25 @@ void psmx2_cntr_add_trigger(struct psmx2_fid_cntr *cntr,
 	psmx2_cntr_check_trigger(cntr);
 }
 
-#define PSMX2_CNTR_POLL_THRESHOLD 100
 DIRECT_FN
 STATIC uint64_t psmx2_cntr_read(struct fid_cntr *cntr)
 {
 	struct psmx2_fid_cntr *cntr_priv;
 	struct psmx2_poll_ctxt *poll_ctxt;
 	struct slist_entry *item, *prev;
-	static int poll_cnt = 0;
 
 	cntr_priv = container_of(cntr, struct psmx2_fid_cntr, cntr);
 
-	if (poll_cnt++ >= PSMX2_CNTR_POLL_THRESHOLD) {
-		if (cntr_priv->poll_all) {
-			psmx2_progress_all(cntr_priv->domain);
-		} else {
-			slist_foreach(&cntr_priv->poll_list, item, prev) {
-				poll_ctxt = container_of(item,
-							 struct psmx2_poll_ctxt,
-							 list_entry);
-				psmx2_progress(poll_ctxt->trx_ctxt);
-				(void) prev; /* suppress compiler warning */
-			}
+	if (cntr_priv->poll_all) {
+		psmx2_progress_all(cntr_priv->domain);
+	} else {
+		slist_foreach(&cntr_priv->poll_list, item, prev) {
+			poll_ctxt = container_of(item,
+						 struct psmx2_poll_ctxt,
+						 list_entry);
+			psmx2_progress(poll_ctxt->trx_ctxt);
+			(void) prev; /* suppress compiler warning */
 		}
-		poll_cnt = 0;
 	}
 
 	return ofi_atomic_get64(&cntr_priv->counter);
