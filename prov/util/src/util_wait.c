@@ -181,8 +181,8 @@ out:
 	return ret;
 }
 
-int ofi_wait_fd_add(struct util_wait *wait, int fd, ofi_wait_fd_try_func try,
-		    void *arg, void *context)
+int ofi_wait_fd_add(struct util_wait *wait, int fd, uint32_t events,
+		    ofi_wait_fd_try_func try, void *arg, void *context)
 {
 	struct ofi_wait_fd_entry *fd_entry;
 	struct dlist_entry *entry;
@@ -201,7 +201,7 @@ int ofi_wait_fd_add(struct util_wait *wait, int fd, ofi_wait_fd_try_func try,
 		goto out;
 	}
 
-	ret = fi_epoll_add(wait_fd->epoll_fd, fd, FI_EPOLL_IN, context);
+	ret = fi_epoll_add(wait_fd->epoll_fd, fd, events, context);
 	if (ret) {
 		FI_WARN(wait->prov, FI_LOG_FABRIC, "Unable to add fd to epoll\n");
 		goto out;

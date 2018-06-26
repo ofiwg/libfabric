@@ -445,8 +445,9 @@ int tcpx_cq_wait_ep_add(struct tcpx_ep *ep)
 		return FI_SUCCESS;
 
 	return ofi_wait_fd_add(ep->util_ep.rx_cq->wait,
-			       ep->conn_fd, tcpx_try_func,
-			       (void *)&ep->util_ep, NULL);
+			       ep->conn_fd, FI_EPOLL_IN,
+			       tcpx_try_func, (void *)&ep->util_ep,
+			       NULL);
 }
 
 void tcpx_cq_wait_ep_del(struct tcpx_ep *ep)
