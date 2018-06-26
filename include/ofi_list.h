@@ -422,6 +422,76 @@ slist_remove_first_match(struct slist *list, slist_func_t *match, const void *ar
 	return NULL;
 }
 
+static inline void slist_swap(struct slist *dst, struct slist *src)
+{
+	struct slist_entry *dst_head = dst->head;
+	struct slist_entry *dst_tail = dst->tail;
+
+	dst->head = src->head;
+	dst->tail = src->tail;
+
+	src->head = dst_head;
+	src->tail = dst_tail;
+}
+
+/* splices src list at the front of the dst list
+ *
+ * BEFORE:
+ * dst: HEAD->a->b->c->TAIL
+ * src: HEAD->d->e->TAIL
+ *
+ * AFTER:
+ * dst: HEAD->d->e->a->b->c->TAIL
+ * src: HEAD->TAIL (empty list)
+ */
+static inline struct slist *
+slist_splice_head(struct slist *dst, struct slist *src)
+{
+	if (slist_empty(src))
+		return dst;
+
+	if (slist_empty(dst)) {
+		slist_swap(dst, src);
+		return dst;
+	}
+
+	src->tail->next = dst->head;
+	dst->head = src->head;
+
+	slist_init(src);
+
+	return dst;
+}
+
+/* splices src list at the back of the dst list
+ *
+ * BEFORE:
+ * dst: HEAD->a->b->c->TAIL
+ * src: HEAD->d->e->TAIL
+ *
+ * AFTER:
+ * dst: HEAD->a->b->c->d->e->TAIL
+ * src: HEAD->TAIL (empty list)
+ */
+static inline struct slist *
+slist_splice_tail(struct slist *dst, struct slist *src)
+{
+	if (slist_empty(src))
+		return dst;
+
+	if (slist_empty(dst)) {
+		slist_swap(dst, src);
+		return dst;
+	}
+
+	dst->tail->next = src->head;
+	dst->tail = src->tail;
+
+	slist_init(src);
+
+	return dst;
+}
+
 /*
  * Double-linked list with blocking wait-until-avail support
  */
