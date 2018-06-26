@@ -921,6 +921,8 @@ rxm_ep_sar_tx_prepare_segment(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	tx_buf->pkt.ctrl_hdr.seg_no = seg_num;
 	tx_buf->pkt.ctrl_hdr.seg_size = seg_len;
 	tx_buf->pkt.ctrl_hdr.segs_cnt = tx_entry->segs_left;
+	tx_buf->pkt.hdr.flags |= comp_flags;
+
 	tx_buf->tx_entry = tx_entry;
 
 	ofi_copy_from_iov(tx_buf->pkt.data, seg_len, tx_entry->rxm_iov.iov,
@@ -945,7 +947,7 @@ rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void *conte
 	struct rxm_tx_entry *tx_entry;
 	size_t segs_cnt =
 		rxm_ep_sar_calc_segs_cnt(data_len, rxm_ep->rxm_info->tx_attr->inject_size);
-	size_t i, total_len = data_len;
+	size_t i, total_len = data_len, seg_len;
 	ssize_t ret;
 	int send_failed = 0;
 
@@ -962,9 +964,13 @@ rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void *conte
 	tx_entry->segs_left = segs_cnt;
 	tx_entry->msg_id = rxm_txe_fs_index(rxm_conn->send_queue.fs, tx_entry);
 	
+	seg_len = fi_get_aligned_sz(total_len / segs_cnt, 64);
+
 	while (total_len) {
 		struct rxm_tx_buf *tx_buf;
-		size_t seg_len = fi_get_aligned_sz(total_len / segs_cnt, 64);
+
+		if (total_len < seg_len)
+			seg_len = total_len;
 
 		tx_buf = rxm_ep_sar_tx_prepare_segment(rxm_ep, rxm_conn, data_len,
 						       segs_cnt - 1, seg_len, data,
@@ -1199,6 +1205,7 @@ rxm_ep_inject_common(struct rxm_ep *rxm_ep, const void *buf, size_t len,
 	ssize_t ret;
 
 	assert(len <= rxm_ep->rxm_info->tx_attr->inject_size);
+	assert(!(comp_flags & ~(FI_MSG | FI_TAGGED)));
 
 	fastlock_acquire(&rxm_ep->util_ep.cmap->lock);
 	rxm_conn = rxm_acquire_conn(rxm_ep, dest_addr);
@@ -1286,6 +1293,7 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 	ssize_t ret;
 
 	assert(count <= rxm_ep->rxm_info->tx_attr->iov_limit);
+	assert(!(comp_flags & ~(FI_MSG | FI_TAGGED)));
 
 	fastlock_acquire(&rxm_ep->util_ep.cmap->lock);
 	rxm_conn = rxm_acquire_conn(rxm_ep, dest_addr);
