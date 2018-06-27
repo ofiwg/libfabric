@@ -394,18 +394,16 @@ static inline void util_cq_signal(struct util_cq *cq)
 	assert(cq->wait);
 	cq->wait->signal(cq->wait);
 }
+
 static inline int
-ofi_cq_write(struct util_cq *cq, void *context, uint64_t flags, size_t len,
-	     void *buf, uint64_t data, uint64_t tag)
+ofi_cq_write_thread_unsafe(struct util_cq *cq, void *context, uint64_t flags,
+			   size_t len, void *buf, uint64_t data, uint64_t tag)
 {
 	struct fi_cq_tagged_entry *comp;
-	int ret = 0;
 
-	cq->cq_fastlock_acquire(&cq->cq_lock);
 	if (ofi_cirque_isfull(cq->cirq)) {
 		FI_DBG(cq->domain->prov, FI_LOG_CQ, "util_cq cirq is full!\n");
-		ret = -FI_EAGAIN;
-		goto out;
+		return -FI_EAGAIN;
 	}
 
 	comp = ofi_cirque_tail(cq->cirq);
@@ -416,10 +414,34 @@ ofi_cq_write(struct util_cq *cq, void *context, uint64_t flags, size_t len,
 	comp->data = data;
 	comp->tag = tag;
 	ofi_cirque_commit(cq->cirq);
-out:
+	return 0;
+}
+
+static inline int
+ofi_cq_write(struct util_cq *cq, void *context, uint64_t flags, size_t len,
+	     void *buf, uint64_t data, uint64_t tag)
+{
+	int ret;
+	cq->cq_fastlock_acquire(&cq->cq_lock);
+	ret = ofi_cq_write_thread_unsafe(cq, context, flags, len, buf, data, tag);
 	cq->cq_fastlock_release(&cq->cq_lock);
 	return ret;
 }
+
+static inline int
+ofi_cq_write_src(struct util_cq *cq, void *context, uint64_t flags, size_t len,
+		 void *buf, uint64_t data, uint64_t tag, fi_addr_t src)
+{
+	int ret;
+
+	cq->cq_fastlock_acquire(&cq->cq_lock);
+	ret = ofi_cq_write_thread_unsafe(cq, context, flags, len, buf, data, tag);
+	if (!ret)
+		cq->src[ofi_cirque_windex(cq->cirq)] = src;
+	cq->cq_fastlock_release(&cq->cq_lock);
+	return ret;
+}
+
 int ofi_cq_write_error(struct util_cq *cq,
 		       const struct fi_cq_err_entry *err_entry);
 int ofi_cq_write_error_peek(struct util_cq *cq, uint64_t tag, void *context);

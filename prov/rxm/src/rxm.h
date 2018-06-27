@@ -825,3 +825,18 @@ static inline int rxm_finish_send_nobuf(struct rxm_tx_entry *tx_entry)
 	rxm_tx_entry_release(&tx_entry->conn->send_queue, tx_entry);
 	return 0;
 }
+
+static inline int rxm_cq_write_recv_comp(struct rxm_rx_buf *rx_buf,
+					 void *context, uint64_t flags,
+					 size_t len, char *buf)
+{
+	if (rx_buf->ep->rxm_info->caps & FI_SOURCE)
+		return ofi_cq_write_src(rx_buf->ep->util_ep.rx_cq, context,
+					flags, len, buf, rx_buf->pkt.hdr.data,
+					rx_buf->pkt.hdr.tag,
+					rx_buf->conn->handle.fi_addr);
+	else
+		return ofi_cq_write(rx_buf->ep->util_ep.rx_cq, context,
+				    flags, len, buf, rx_buf->pkt.hdr.data,
+				    rx_buf->pkt.hdr.tag);
+}
