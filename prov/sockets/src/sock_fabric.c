@@ -419,6 +419,7 @@ int sock_get_src_addr(union ofi_sock_ip *dest_addr,
 		SOCK_LOG_DBG("getsockname failed\n");
 		ret = -ofi_sockerr();
 	}
+
 out:
 	ofi_close_socket(sock);
 	return ret;
@@ -485,6 +486,14 @@ static int sock_ep_getinfo(uint32_t version, const char *node,
 			src_addr = &sip;
 	}
 
+	if (dest_addr) {
+		ofi_straddr_log(&sock_prov, FI_LOG_INFO, FI_LOG_CORE,
+				"dest addr: ", dest_addr);
+	}
+	if (src_addr) {
+		ofi_straddr_log(&sock_prov, FI_LOG_INFO, FI_LOG_CORE,
+				"src addr: ", src_addr);
+	}
 	switch (ep_type) {
 	case FI_EP_MSG:
 		ret = sock_msg_fi_info(version, src_addr, dest_addr, hints, info);
@@ -519,6 +528,9 @@ static void sock_insert_loopback_addr(struct slist *addr_list)
 
 	addr_entry->ipaddr.sin.sin_family = AF_INET;
 	addr_entry->ipaddr.sin.sin_addr.s_addr = INADDR_LOOPBACK;
+	ofi_straddr_log(&sock_prov, FI_LOG_INFO, FI_LOG_CORE,
+			"available addr: ", &addr_entry->ipaddr);
+
 	strncpy(addr_entry->ipstr, "127.0.0.1", sizeof(addr_entry->ipstr));
 	slist_insert_tail(&addr_entry->entry, addr_list);
 
@@ -528,6 +540,9 @@ static void sock_insert_loopback_addr(struct slist *addr_list)
 
 	addr_entry->ipaddr.sin6.sin6_family = AF_INET6;
 	addr_entry->ipaddr.sin6.sin6_addr = in6addr_loopback;
+	ofi_straddr_log(&sock_prov, FI_LOG_INFO, FI_LOG_CORE,
+			"available addr: ", &addr_entry->ipaddr);
+
 	strncpy(addr_entry->ipstr, "::1", sizeof(addr_entry->ipstr));
 	slist_insert_tail(&addr_entry->entry, addr_list);
 }
@@ -577,6 +592,9 @@ void sock_get_list_of_addr(struct slist *addr_list)
 
 			memcpy(&addr_entry->ipaddr, ifa->ifa_addr,
 			       ofi_sizeofaddr(ifa->ifa_addr));
+			ofi_straddr_log(&sock_prov, FI_LOG_INFO, FI_LOG_CORE,
+					"available addr: ", ifa->ifa_addr);
+
 			if (!inet_ntop(ifa->ifa_addr->sa_family,
 					ofi_get_ipaddr(ifa->ifa_addr),
 					addr_entry->ipstr,

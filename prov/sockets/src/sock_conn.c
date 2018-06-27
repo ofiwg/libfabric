@@ -80,6 +80,9 @@ ssize_t sock_conn_send_src_addr(struct sock_ep_attr *ep_attr, struct sock_tx_ctx
 
 	sock_tx_ctx_write_op_send(tx_ctx, &tx_op, 0, (uintptr_t) NULL, 0, 0,
 				   ep_attr, conn);
+
+	ofi_straddr_dbg(&sock_prov, FI_LOG_EP_CTRL, "sending src addr: ",
+			ep_attr->src_addr);
 	sock_tx_ctx_write(tx_ctx, ep_attr->src_addr, sizeof(union ofi_sock_ip));
 	sock_tx_ctx_commit(tx_ctx);
 	conn->address_published = 1;
@@ -341,6 +344,9 @@ static void *sock_conn_listener_thread(void *arg)
 			conn_fd = accept(conn_handle->sock, &remote.sa,
 			                 &addr_size);
 			SOCK_LOG_DBG("CONN: accepted conn-req: %d\n", conn_fd);
+			ofi_straddr_dbg(&sock_prov, FI_LOG_EP_CTRL,
+					"accepted peer addr: ", &remote.sa);
+
 			if (conn_fd < 0) {
 				SOCK_LOG_ERROR("failed to accept: %s\n",
 				               strerror(ofi_sockerr()));
@@ -441,6 +447,8 @@ int sock_conn_listen(struct sock_ep_attr *ep_attr)
 	if (!ofi_addr_get_port(&ep_attr->src_addr->sa))
 		ofi_addr_set_port(&ep_attr->src_addr->sa, ep_attr->msg_src_port);
 
+	ofi_straddr_dbg(&sock_prov, FI_LOG_EP_CTRL, "listening at addr: ",
+			&addr.sa);
 	ret = listen(listen_fd, sock_cm_def_map_sz);
 	if (ret) {
 		SOCK_LOG_ERROR("failed to listen socket: %s\n",
@@ -518,6 +526,8 @@ do_connect:
 		return -FI_EOTHER;
 	}
 
+	ofi_straddr_dbg(&sock_prov, FI_LOG_EP_CTRL, "connecting to addr: ",
+			&addr.sa);
 	ret = connect(conn_fd, &addr.sa, ofi_sizeofaddr(&addr.sa));
 	if (ret < 0) {
 		if (OFI_SOCK_TRY_CONN_AGAIN(ofi_sockerr())) {
