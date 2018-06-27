@@ -114,25 +114,36 @@ struct name {							\
 	struct name ## _entry	entry[];			\
 };								\
 								\
-static inline void name ## _init(struct name *fs, size_t size)	\
+typedef void (*name ## _entry_init_func)(entrytype *buf,	\
+					 void *arg);		\
+								\
+static inline void						\
+name ## _init(struct name *fs, size_t size,			\
+	      name ## _entry_init_func init, void *arg)		\
 {								\
 	ssize_t i;						\
 	assert(size == roundup_power_of_two(size));		\
 	assert(sizeof(fs->entry[0].buf) >= sizeof(void *));	\
 	fs->size = size;					\
 	fs->next = FREESTACK_EMPTY;				\
-	for (i = size - 1; i >= 0; i--)				\
+	for (i = size - 1; i >= 0; i--) {			\
+		if (init)					\
+			init(&fs->entry[i].buf, arg);		\
 		freestack_push(fs, &fs->entry[i].buf);		\
+	}							\
 }								\
 								\
-static inline struct name * name ## _create(size_t size)	\
+static inline struct name *					\
+name ## _create(size_t size, name ## _entry_init_func init,	\
+		void *arg)					\
 {								\
 	struct name *fs;					\
 	fs = calloc(1, sizeof(*fs) +				\
 		       sizeof(struct name ## _entry) *		\
 		       (roundup_power_of_two(size)));		\
 	if (fs)							\
-		name ##_init(fs, roundup_power_of_two(size));	\
+		name ##_init(fs, roundup_power_of_two(size),	\
+			     init, arg);			\
 	return fs;						\
 }								\
 								\
