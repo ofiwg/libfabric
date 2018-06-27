@@ -75,8 +75,8 @@ pipeline {
                     steps {
                         timeout (time: 20, unit: 'MINUTES') {
                             script {
-                                def command = '$FABTEST_PATH/bin/runfabtests.sh -p $FABTEST_PATH/bin -v -T 60 \'ofi_rxm;verbs\' 10.100.49.8 10.100.49.9'
-                                launch "$command", 1, 1, 'wham-0-cn8'
+                                def command = '$FABTEST_PATH/bin/runfabtests.sh -p $FABTEST_PATH/bin -v -T 60 \'ofi_rxm;verbs\' 10.0.0.7 10.0.0.8'
+                                launch "$command", 1, 1, 'cn8'
                             }
                         }
                     }
