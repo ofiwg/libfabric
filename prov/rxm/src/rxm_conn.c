@@ -431,7 +431,7 @@ exit:
 }
 
 static int rxm_prepare_cm_data(struct fid_pep *pep, struct util_cmap_handle *handle,
-		struct rxm_cm_data *cm_data)
+			       struct rxm_cm_data *cm_data)
 {
 	size_t cm_data_size = 0;
 	size_t name_size = sizeof(cm_data->name);
@@ -449,7 +449,6 @@ static int rxm_prepare_cm_data(struct fid_pep *pep, struct util_cmap_handle *han
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "MSG EP CM data size too small\n");
 		return -FI_EOTHER;
 	}
-
 	ret = fi_getname(&pep->fid, &cm_data->name, &name_size);
 	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to get msg pep name\n");
