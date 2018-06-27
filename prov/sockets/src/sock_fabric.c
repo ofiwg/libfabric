@@ -581,8 +581,44 @@ void sock_get_list_of_addr(struct slist *addr_list)
 #elif defined HAVE_MIB_IPADDRTABLE
 void sock_get_list_of_addr(struct slist *addr_list)
 {
-	sock_get_ip_addr_table(addr_list);
+	struct sock_host_list_entry *addr_entry;
+	DWORD i;
+	MIB_IPADDRTABLE _iptbl;
+	MIB_IPADDRTABLE *iptbl = &_iptbl;
+	ULONG ips = 1;
+	ULONG res;
+
+	res = GetIpAddrTable(iptbl, &ips, 0);
+	if (res == ERROR_INSUFFICIENT_BUFFER) {
+		iptbl = malloc(ips);
+		if (!iptbl)
+			return;
+		res = GetIpAddrTable(iptbl, &ips, 0);
+	}
+
+	if (res != NO_ERROR)
+		goto out;
+
+	for (i = 0; i < iptbl->dwNumEntries; i++) {
+		if (iptbl->table[i].dwAddr &&
+		    (iptbl->table[i].dwAddr != ntohl(INADDR_LOOPBACK))) {
+			addr_entry = calloc(1, sizeof(*addr_entry));
+			if (!addr_entry)
+				break;
+
+			inet_ntop(AF_INET, &iptbl->table[i].dwAddr,
+				  addr_entry->hostname,
+				  sizeof(addr_entry->hostname));
+			slist_insert_tail(&addr_entry->entry, addr_list);
+		}
+	}
+
+	// Always add loopback address at the end
 	sock_insert_loopback_addr(addr_list);
+
+out:
+	if (iptbl != &_iptbl)
+		free(iptbl);
 }
 #else
 void sock_get_list_of_addr(struct slist *addr_list)
