@@ -825,7 +825,7 @@ int main(int argc, char **argv)
 			FT_PRINTERR("ft_fw_client", ret);
 		ft_sock_shutdown(sock);
 	} else {
-		ret = ft_sock_listen(service);
+		ret = ft_sock_listen(opts.src_addr, service);
 		if (ret)
 			goto out;
 
