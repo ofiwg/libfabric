@@ -45,7 +45,7 @@ struct fi_ops_fabric tcpx_fabric_ops = {
 	.size = sizeof(struct fi_ops_fabric),
 	.domain = tcpx_domain_open,
 	.passive_ep = tcpx_passive_ep,
-	.eq_open = ofi_eq_create,
+	.eq_open = tcpx_eq_create,
 	.wait_open = ofi_wait_fd_open,
 	.trywait = ofi_trywait
 };
@@ -86,15 +86,14 @@ int tcpx_create_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 
 	ret = ofi_fabric_init(&tcpx_prov, tcpx_info.fabric_attr, attr,
 			      &tcpx_fabric->util_fabric, context);
-	if (ret)
-		goto err;
+	if (ret) {
+		free(tcpx_fabric);
+		return ret;
+	}
 
 	*fabric = &tcpx_fabric->util_fabric.fabric_fid;
 	(*fabric)->fid.ops = &tcpx_fabric_fi_ops;
 	(*fabric)->ops = &tcpx_fabric_ops;
 
 	return 0;
-err:
-	free(tcpx_fabric);
-	return ret;
 }

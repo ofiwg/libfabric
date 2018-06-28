@@ -71,6 +71,8 @@
 #define TCPX_IOV_LIMIT		(4)
 #define TCPX_MAX_INJECT_SZ	(64)
 
+#define MAX_EPOLL_EVENTS 100
+
 extern struct fi_provider	tcpx_prov;
 extern struct util_prov		tcpx_util_prov;
 extern struct fi_info		tcpx_info;
@@ -89,10 +91,11 @@ enum tcpx_xfer_op_codes {
 };
 
 enum poll_fd_type {
-	CONNECT_SOCK,
-	PASSIVE_SOCK,
-	ACCEPT_SOCK,
-	CONNREQ_HANDLE,
+	SERVER_SOCK_ACCEPT,
+	CLIENT_SEND_CONNREQ,
+	SERVER_RECV_CONNREQ,
+	SERVER_SEND_CM_ACCEPT,
+	CLIENT_WAIT_FOR_CONNRESP,
 };
 
 enum poll_fd_state {
@@ -233,4 +236,7 @@ int tcpx_cq_wait_ep_add(struct tcpx_ep *ep);
 void tcpx_cq_wait_ep_del(struct tcpx_ep *ep);
 void process_tx_entry(struct tcpx_xfer_entry *tx_entry);
 void tcpx_conn_mgr_run(struct util_eq *eq);
+int tcpx_eq_wait_try_func(void *arg);
+int tcpx_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
+		   struct fid_eq **eq_fid, void *context);
 #endif //_TCP_H_

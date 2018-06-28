@@ -51,7 +51,6 @@
 
 extern struct fi_ops_rma tcpx_rma_ops;
 
-
 static inline struct tcpx_xfer_entry *
 tcpx_alloc_recv_entry(struct tcpx_ep *tcpx_ep)
 {
@@ -352,26 +351,34 @@ static int tcpx_ep_connect(struct fid_ep *ep, const void *addr,
 	ret = connect(tcpx_ep->conn_fd, (struct sockaddr *) addr,
 		      (socklen_t) ofi_sizeofaddr(addr));
 	if (ret && ofi_sockerr() != FI_EINPROGRESS) {
-		free(fd_info);
-		return -ofi_sockerr();
+		ret =  -ofi_sockerr();
+		goto err;
 	}
 
 	fd_info->fid = &tcpx_ep->util_ep.ep_fid.fid;
-	fd_info->type = CONNECT_SOCK;
-	fd_info->state = ESTABLISH_CONN;
+	fd_info->type = CLIENT_SEND_CONNREQ;
 
 	if (paramlen) {
 		fd_info->cm_data_sz = paramlen;
 		memcpy(fd_info->cm_data, param, paramlen);
 	}
 
+	ret = ofi_wait_fd_add(tcpx_ep->util_ep.eq->wait, tcpx_ep->conn_fd,
+			      FI_EPOLL_OUT, tcpx_eq_wait_try_func, NULL,fd_info);
+	if (ret)
+		goto err;
+
 	return 0;
+err:
+	free(fd_info);
+	return ret;
 }
 
 static int tcpx_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 {
 	struct tcpx_ep *tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
 	struct poll_fd_info *fd_info;
+	int ret;
 
 	if (tcpx_ep->conn_fd == INVALID_SOCKET)
 		return -FI_EINVAL;
@@ -384,11 +391,17 @@ static int tcpx_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 	}
 
 	fd_info->fid = &tcpx_ep->util_ep.ep_fid.fid;
-
-	fd_info->type = ACCEPT_SOCK;
+	fd_info->type = SERVER_SEND_CM_ACCEPT;
 	if (paramlen) {
 		fd_info->cm_data_sz = paramlen;
 		memcpy(fd_info->cm_data, param, paramlen);
+	}
+
+	ret = ofi_wait_fd_add(tcpx_ep->util_ep.eq->wait, tcpx_ep->conn_fd,
+			      FI_EPOLL_OUT, tcpx_eq_wait_try_func, NULL, fd_info);
+	if (ret) {
+		free(fd_info);
+		return ret;
 	}
 
 	return 0;
@@ -725,6 +738,8 @@ static int tcpx_pep_fi_close(struct fid *fid)
 	struct tcpx_pep *pep;
 
 	pep = container_of(fid, struct tcpx_pep, util_pep.pep_fid.fid);
+	if (pep->util_pep.eq)
+		ofi_wait_fd_del(pep->util_pep.eq->wait, pep->sock);
 
 	ofi_close_socket(pep->sock);
 	ofi_pep_close(&pep->util_pep);
@@ -813,7 +828,9 @@ static int tcpx_pep_listen(struct fid_pep *pep)
 		return -ofi_sockerr();
 	}
 
-	return 0;
+	return ofi_wait_fd_add(tcpx_pep->util_pep.eq->wait, tcpx_pep->sock,
+			       FI_EPOLL_IN, tcpx_eq_wait_try_func,
+			       NULL, &tcpx_pep->poll_info);
 }
 
 static int tcpx_pep_reject(struct fid_pep *pep, fid_t handle,
@@ -917,7 +934,7 @@ int tcpx_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 
 	_pep->info = *info;
 	_pep->poll_info.fid = &_pep->util_pep.pep_fid.fid;
-	_pep->poll_info.type = PASSIVE_SOCK;
+	_pep->poll_info.type = SERVER_SOCK_ACCEPT;
 	_pep->poll_info.flags = 0;
 	_pep->poll_info.cm_data_sz = 0;
 	dlist_init(&_pep->poll_info.entry);
