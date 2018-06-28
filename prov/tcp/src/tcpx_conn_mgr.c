@@ -279,7 +279,7 @@ static int tcpx_ep_msg_xfer_enable(struct tcpx_ep *ep)
 	if (ret)
 		goto err;
 
-	ret = tcpx_progress_ep_add(ep);
+	ret = tcpx_cq_wait_ep_add(ep);
 	if (ret)
 		goto err;
 

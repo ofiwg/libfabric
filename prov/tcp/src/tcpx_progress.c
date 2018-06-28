@@ -439,7 +439,7 @@ static int tcpx_try_func(void *util_ep)
 	return FI_SUCCESS;
 }
 
-int tcpx_progress_ep_add(struct tcpx_ep *ep)
+int tcpx_cq_wait_ep_add(struct tcpx_ep *ep)
 {
 	if (!ep->util_ep.rx_cq->wait)
 		return FI_SUCCESS;
@@ -449,7 +449,7 @@ int tcpx_progress_ep_add(struct tcpx_ep *ep)
 			       (void *)&ep->util_ep, NULL);
 }
 
-void tcpx_progress_ep_del(struct tcpx_ep *ep)
+void tcpx_cq_wait_ep_del(struct tcpx_ep *ep)
 {
 	fastlock_acquire(&ep->lock);
 	if (ep->cm_state == TCPX_EP_CONNECTING) {
