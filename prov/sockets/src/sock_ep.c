@@ -1575,7 +1575,7 @@ int sock_get_src_addr_from_hostname(union ofi_sock_ip *src_addr,
 	ai.ai_family = sa_family;
 	ai.ai_socktype = SOCK_STREAM;
 
-	ofi_getnodename(hostname, sizeof(hostname));
+	ofi_getnodename(sa_family, hostname, sizeof(hostname));
 	ret = getaddrinfo(hostname, service, &ai, &rai);
 	if (ret) {
 		SOCK_LOG_DBG("getaddrinfo failed!\n");
