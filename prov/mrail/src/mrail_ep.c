@@ -762,7 +762,7 @@ int mrail_ep_open(struct fid_domain *domain_fid, struct fi_info *info,
 		rxq_total_size += fi->rx_attr->size;
 	}
 
-	mrail_ep->recv_fs = mrail_recv_fs_create(rxq_total_size);
+	mrail_ep->recv_fs = mrail_recv_fs_create(rxq_total_size, NULL, NULL);
 	if (!mrail_ep->recv_fs) {
 		ret = -FI_ENOMEM;
 		goto err;

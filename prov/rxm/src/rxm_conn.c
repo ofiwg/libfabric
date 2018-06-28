@@ -94,22 +94,22 @@ err:
 	return ret;
 }
 
+static void rxm_txe_init(struct rxm_tx_entry *entry, void *arg)
+{
+	struct rxm_send_queue *send_queue = arg;
+	entry->conn 	= send_queue->rxm_conn;
+	entry->ep 	= send_queue->rxm_ep;
+}
+
 static int
 rxm_send_queue_init(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		    struct rxm_send_queue *send_queue, size_t size)
 {
-	ssize_t i;
-
 	send_queue->rxm_conn = rxm_conn;
 	send_queue->rxm_ep = rxm_ep;
-	send_queue->fs = rxm_txe_fs_create(size);
+	send_queue->fs = rxm_txe_fs_create(size, rxm_txe_init, send_queue);
 	if (!send_queue->fs)
 		return -FI_ENOMEM;
-
-	for (i = send_queue->fs->size - 1; i >= 0; i--) {
-		send_queue->fs->entry[i].buf.conn = rxm_conn;
-		send_queue->fs->entry[i].buf.ep = rxm_ep;
-	}
 
 	fastlock_init(&send_queue->lock);
 	return 0;

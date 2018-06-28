@@ -1215,10 +1215,10 @@ int rxd_ep_init_res(struct rxd_ep *ep, struct fi_info *fi_info)
 	if (ret)
 		goto err;
 
-	ep->tx_fs = rxd_tx_fs_create(ep->tx_size);
+	ep->tx_fs = rxd_tx_fs_create(ep->tx_size, NULL, NULL);
 	if (!ep->tx_fs)
 		goto err;
-	ep->rx_fs = rxd_rx_fs_create(ep->rx_size);
+	ep->rx_fs = rxd_rx_fs_create(ep->rx_size, NULL, NULL);
 	if (!ep->rx_fs)
 		goto err;
 

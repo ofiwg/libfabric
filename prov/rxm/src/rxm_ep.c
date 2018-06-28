@@ -231,23 +231,29 @@ static int rxm_buf_pool_create(struct rxm_ep *rxm_ep,
 	return 0;
 }
 
-static void rxm_recv_queue_entry_init(struct rxm_recv_queue *recv_queue,
-				      struct rxm_recv_entry *entry, uint64_t comp_flags)
+static void rxm_recv_entry_init(struct rxm_recv_entry *entry, void *arg)
 {
-	entry->comp_flags = comp_flags | FI_RECV;
-	entry->recv_queue = recv_queue;
-	entry->msg_id = UINT64_MAX;
-	entry->total_recv_len = 0;
+	struct rxm_recv_queue *recv_queue = arg;
+
+	assert(recv_queue->type != RXM_RECV_QUEUE_UNSPEC);
+
+	entry->recv_queue 	= recv_queue;
+	entry->msg_id 		= UINT64_MAX;
+	entry->total_recv_len 	= 0;
+	entry->comp_flags 	= FI_RECV;
+
+	if (recv_queue->type == RXM_RECV_QUEUE_MSG)
+		entry->comp_flags |= FI_MSG;
+	else
+		entry->comp_flags |= FI_TAGGED;
 }
 
 static int rxm_recv_queue_init(struct rxm_ep *rxm_ep,  struct rxm_recv_queue *recv_queue,
 			       size_t size, enum rxm_recv_queue_type type)
 {
-	ssize_t i;
-
 	recv_queue->rxm_ep = rxm_ep;
 	recv_queue->type = type;
-	recv_queue->fs = rxm_recv_fs_create(size);
+	recv_queue->fs = rxm_recv_fs_create(size, rxm_recv_entry_init, recv_queue);
 	if (!recv_queue->fs)
 		return -FI_ENOMEM;
 
@@ -261,9 +267,6 @@ static int rxm_recv_queue_init(struct rxm_ep *rxm_ep,  struct rxm_recv_queue *re
 			recv_queue->match_recv = rxm_match_noop;
 			recv_queue->match_unexp = rxm_match_noop;
 		}
-		for (i = recv_queue->fs->size - 1; i >= 0; i--)
-			rxm_recv_queue_entry_init(recv_queue, &recv_queue->fs->entry[i].buf, 
-						  FI_MSG);
 	} else {
 		if (rxm_ep->rxm_info->caps & FI_DIRECTED_RECV) {
 			recv_queue->match_recv = rxm_match_recv_entry_tag_addr;
@@ -272,9 +275,6 @@ static int rxm_recv_queue_init(struct rxm_ep *rxm_ep,  struct rxm_recv_queue *re
 			recv_queue->match_recv = rxm_match_recv_entry_tag;
 			recv_queue->match_unexp = rxm_match_unexp_msg_tag;
 		}
-		for (i = recv_queue->fs->size - 1; i >= 0; i--)
-			rxm_recv_queue_entry_init(recv_queue, &recv_queue->fs->entry[i].buf, 
-						  FI_TAGGED);
 	}
 	fastlock_init(&recv_queue->lock);
 	return 0;

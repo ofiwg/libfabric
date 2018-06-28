@@ -353,6 +353,7 @@ struct rxm_send_queue {
 };
 
 enum rxm_recv_queue_type {
+	RXM_RECV_QUEUE_UNSPEC,
 	RXM_RECV_QUEUE_MSG,
 	RXM_RECV_QUEUE_TAGGED,
 };

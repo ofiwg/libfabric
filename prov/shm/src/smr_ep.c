@@ -476,9 +476,9 @@ int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		goto err1;
 
-	ep->recv_fs = smr_recv_fs_create(info->rx_attr->size);
-	ep->unexp_fs = smr_unexp_fs_create(info->rx_attr->size);
-	ep->pend_fs = smr_pend_fs_create(info->tx_attr->size);
+	ep->recv_fs = smr_recv_fs_create(info->rx_attr->size, NULL, NULL);
+	ep->unexp_fs = smr_unexp_fs_create(info->rx_attr->size, NULL, NULL);
+	ep->pend_fs = smr_pend_fs_create(info->tx_attr->size, NULL, NULL);
 	smr_init_queue(&ep->recv_queue, smr_match_msg);
 	smr_init_queue(&ep->trecv_queue, smr_match_tagged);
 	smr_init_queue(&ep->unexp_queue, smr_match_unexp);
