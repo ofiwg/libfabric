@@ -77,12 +77,6 @@ extern struct fi_info		tcpx_info;
 struct tcpx_xfer_entry;
 struct tcpx_ep;
 
-enum tcpx_pep_state{
-	TCPX_PEP_CREATED,
-	TCPX_PEP_LISTENING,
-	TCPX_PEP_CLOSED,
-};
-
 enum tcpx_xfer_op_codes {
 	TCPX_OP_MSG_SEND,
 	TCPX_OP_MSG_RECV,
@@ -128,9 +122,6 @@ struct tcpx_pep {
 	struct fi_info		info;
 	SOCKET			sock;
 	struct poll_fd_info	poll_info;
-	/* protected by poll mgr lock
-	   as pep state transitions happen in poll mgr*/
-	enum tcpx_pep_state	state;
 };
 
 enum tcpx_cm_state {

@@ -922,7 +922,6 @@ int tcpx_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	_pep->poll_info.cm_data_sz = 0;
 	dlist_init(&_pep->poll_info.entry);
 	_pep->sock = INVALID_SOCKET;
-	_pep->state = TCPX_PEP_CREATED;
 
 	*pep = &_pep->util_pep.pep_fid;
 
