@@ -179,19 +179,7 @@ static inline int ofi_translate_addr_format(int family)
 	}
 }
 
-static inline int ofi_get_sa_family(uint32_t addr_format)
-{
-	switch (addr_format) {
-	case FI_SOCKADDR_IN:
-		return AF_INET;
-	case FI_SOCKADDR_IN6:
-		return AF_INET6;
-	case FI_SOCKADDR_IB:
-		return AF_IB;
-	default:
-		return 0;
-	}
-}
+uint16_t ofi_get_sa_family(const struct fi_info *info);
 
 static inline int ofi_ipv4_is_any_addr(struct sockaddr *sa)
 {

@@ -217,6 +217,29 @@ uint64_t fi_gettime_us(void)
 	return now.tv_sec * 1000000 + now.tv_usec;
 }
 
+uint16_t ofi_get_sa_family(const struct fi_info *info)
+{
+	if (!info)
+		return 0;
+
+	if (info->src_addr)
+		return ((struct sockaddr *) info->src_addr)->sa_family;
+
+	if (info->dest_addr)
+		return ((struct sockaddr *) info->dest_addr)->sa_family;
+
+	switch (info->addr_format) {
+	case FI_SOCKADDR_IN:
+		return AF_INET;
+	case FI_SOCKADDR_IN6:
+		return AF_INET6;
+	case FI_SOCKADDR_IB:
+		return AF_IB;
+	default:
+		return 0;
+	}
+}
+
 const char *ofi_straddr(char *buf, size_t *len,
 			uint32_t addr_format, const void *addr)
 {
