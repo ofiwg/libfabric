@@ -1314,8 +1314,10 @@ int sock_msg_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 				info->src_addrlen);
 		} else {
 			memset(&hints, 0, sizeof(hints));
-			hints.ai_family = AF_INET;
 			hints.ai_socktype = SOCK_STREAM;
+			hints.ai_family = ofi_get_sa_family(info);
+			if (!hints.ai_family)
+				hints.ai_family = AF_INET;
 
 			ret = getaddrinfo("localhost", NULL, &hints, &result);
 			if (ret) {

@@ -1515,7 +1515,7 @@ struct fi_info *sock_fi_info(uint32_t version, enum fi_ep_type ep_type,
 	} else {
 		sock_get_src_addr_from_hostname(info->src_addr, NULL,
 			dest_addr ? ((struct sockaddr *) dest_addr)->sa_family :
-			0);
+			ofi_get_sa_family(hints));
 	}
 
 	info->src_addrlen = ofi_sizeofaddr(info->src_addr);

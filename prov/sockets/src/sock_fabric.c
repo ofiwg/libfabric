@@ -451,6 +451,7 @@ static int sock_ep_getinfo(uint32_t version, const char *node,
 
 	memset(&ai, 0, sizeof(ai));
 	ai.ai_socktype = SOCK_STREAM;
+	ai.ai_family = ofi_get_sa_family(hints);
 	if (flags & FI_NUMERICHOST)
 		ai.ai_flags |= AI_NUMERICHOST;
 

@@ -222,12 +222,6 @@ uint16_t ofi_get_sa_family(const struct fi_info *info)
 	if (!info)
 		return 0;
 
-	if (info->src_addr)
-		return ((struct sockaddr *) info->src_addr)->sa_family;
-
-	if (info->dest_addr)
-		return ((struct sockaddr *) info->dest_addr)->sa_family;
-
 	switch (info->addr_format) {
 	case FI_SOCKADDR_IN:
 		return AF_INET;
@@ -235,6 +229,14 @@ uint16_t ofi_get_sa_family(const struct fi_info *info)
 		return AF_INET6;
 	case FI_SOCKADDR_IB:
 		return AF_IB;
+	case FI_SOCKADDR:
+	case FI_FORMAT_UNSPEC:
+		if (info->src_addr)
+			return ((struct sockaddr *) info->src_addr)->sa_family;
+
+		if (info->dest_addr)
+			return ((struct sockaddr *) info->dest_addr)->sa_family;
+		/* fall through */
 	default:
 		return 0;
 	}
