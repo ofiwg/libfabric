@@ -128,10 +128,11 @@ void ofi_getnodename(char *buf, int buflen)
 	if (!ret) {
 		for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
 			if (ifa->ifa_addr == NULL || !(ifa->ifa_flags & IFF_UP) ||
-			     (ifa->ifa_addr->sa_family != AF_INET))
+			    ((ifa->ifa_addr->sa_family != AF_INET) &&
+			     (ifa->ifa_addr->sa_family != AF_INET6)))
 				continue;
 
-			ret = getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in),
+			ret = getnameinfo(ifa->ifa_addr, ofi_sizeofaddr(ifa->ifa_addr),
 				  	  buf, buflen, NULL, 0, NI_NUMERICHOST);
 			buf[buflen - 1] = '\0';
 			if (ret == 0) {
