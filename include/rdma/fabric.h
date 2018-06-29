@@ -296,6 +296,7 @@ enum {
 	FI_PROTO_PSMX2,
 	FI_PROTO_SHM,
 	FI_PROTO_MRAIL,
+	FI_PROTO_RSTREAM,
 };
 
 /* Mode bits */
