@@ -258,8 +258,8 @@ void tcpx_xfer_entry_release(struct tcpx_cq *tcpx_cq,
 void tcpx_progress(struct util_ep *util_ep);
 void tcpx_ep_progress(struct tcpx_ep *ep);
 int tcpx_ep_shutdown_report(struct tcpx_ep *ep, fid_t fid);
-int tcpx_progress_ep_add(struct tcpx_ep *ep);
-void tcpx_progress_ep_del(struct tcpx_ep *ep);
+int tcpx_cq_wait_ep_add(struct tcpx_ep *ep);
+void tcpx_cq_wait_ep_del(struct tcpx_ep *ep);
 void process_tx_entry(struct tcpx_xfer_entry *tx_entry);
 
 #endif //_TCP_H_
