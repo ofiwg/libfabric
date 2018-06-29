@@ -323,4 +323,3 @@ dist-hook: fabtests.spec
 test:
 	./scripts/runfabtests.sh -vvv -S $(os_excludes)
 	./scripts/runfabtests.sh -vvv -S $(os_excludes) -R -f ./test_configs/udp/udp.exclude udp
-	./scripts/runfabtests.sh -vvv -S $(os_excludes) -R -f ./test_configs/tcp/tcp.exclude tcp
