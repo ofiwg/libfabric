@@ -174,7 +174,10 @@ static void rxd_ep_check_unexp_msg_list(struct rxd_ep *ep, struct dlist_entry *l
 
 		pkt_entry = container_of(match, struct rxd_pkt_entry, d_entry);
 
-		rxd_post_cts(ep, rx_entry, pkt_entry);
+		if (pkt_entry->pkt->hdr.flags & RXD_INLINE)
+			rxd_progress_inline(ep, pkt_entry, rx_entry);
+		else
+			rxd_post_cts(ep, rx_entry, pkt_entry);
 
 		rxd_release_rx_pkt(ep, pkt_entry);
 		rxd_ep_post_buf(ep);
@@ -538,8 +541,9 @@ static ssize_t rxd_ep_post_rts(struct rxd_ep *rxd_ep, struct rxd_x_entry *tx_ent
 
 	rxd_init_ctrl_pkt(rxd_ep, tx_entry, pkt_entry, RXD_RTS);
 	addrlen = RXD_NAME_LENGTH;
-	memset(pkt_entry->pkt->source, 0, RXD_NAME_LENGTH);
-	ret = fi_getname(&rxd_ep->dg_ep->fid, (void *) pkt_entry->pkt->source, &addrlen);
+	memset(pkt_entry->pkt->ctrl.source, 0, RXD_NAME_LENGTH);
+	ret = fi_getname(&rxd_ep->dg_ep->fid, (void *) pkt_entry->pkt->ctrl.source,
+			 &addrlen);
 	if (ret) {
 		rxd_release_tx_pkt(rxd_ep, pkt_entry);
 		return ret;
@@ -554,6 +558,17 @@ static ssize_t rxd_ep_post_rts(struct rxd_ep *rxd_ep, struct rxd_x_entry *tx_ent
 		pkt_entry->pkt->ctrl.op = ofi_op_tagged;
 	else
 		pkt_entry->pkt->ctrl.op = ofi_op_msg;
+
+	if (pkt_entry->pkt_size + tx_entry->cq_entry.len <=
+	    rxd_ep_domain(rxd_ep)->max_mtu_sz) {
+		tx_entry->flags |= RXD_INLINE;
+		pkt_entry->pkt->hdr.flags |= RXD_INLINE;
+		pkt_entry->pkt_size += ofi_copy_from_iov(
+				       &pkt_entry->pkt->ctrl.inline_data,
+				       tx_entry->cq_entry.len, tx_entry->iov,
+				       tx_entry->iov_count, 0);
+		tx_entry->state = RXD_CTS;
+	}
 
 	slist_insert_tail(&pkt_entry->s_entry, &tx_entry->pkt_list);
 

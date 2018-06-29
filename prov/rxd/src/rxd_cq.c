@@ -238,9 +238,11 @@ static void rxd_ep_recv_data(struct rxd_ep *ep, struct rxd_x_entry *rx_entry,
 static int rxd_check_pkt_ids(struct rxd_x_entry *rx_entry,
 			     struct rxd_pkt_entry *pkt_entry)
 {
-	if ((rx_entry->rx_id  ==
-	     pkt_entry->pkt->hdr.rx_id) &&
-	    (rx_entry->tx_id ==
+	if (!(rx_entry->flags & RXD_INLINE) &&
+	    rx_entry->rx_id != pkt_entry->pkt->hdr.rx_id)
+		return -FI_EALREADY;
+
+	if ((rx_entry->tx_id ==
 	     pkt_entry->pkt->hdr.tx_id) &&
 	    (rx_entry->key ==
 	     pkt_entry->pkt->hdr.key))
@@ -374,6 +376,42 @@ static int rxd_check_post_unexp(struct dlist_entry *list,
 	return -FI_ENOMSG;
 }
 
+void rxd_progress_inline(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry,
+			 struct rxd_x_entry *rx_entry)
+{
+	struct fi_cq_err_entry err_entry;
+	struct rxd_cq *rx_cq = rxd_ep_rx_cq(ep);
+	struct util_cntr *cntr = ep->util_ep.rx_cntr;
+	uint64_t recvd;
+
+	recvd = ofi_copy_to_iov(rx_entry->iov, rx_entry->iov_count, 0, 
+				&pkt_entry->pkt->ctrl.inline_data,
+				pkt_entry->pkt->ctrl.size);
+	rx_entry->next_seg_no++;	
+	rx_entry->key = pkt_entry->pkt->hdr.key;
+	rx_entry->tx_id = pkt_entry->pkt->hdr.tx_id;
+	rx_entry->peer = pkt_entry->peer;
+	rxd_ep_post_ack(ep, rx_entry);
+
+	/* Handle CQ comp */
+	if (recvd == pkt_entry->pkt->ctrl.size) {
+		rx_cq->write_fn(rx_cq, &rx_entry->cq_entry);
+		/* Handle cntr */
+		if (cntr)
+			cntr->cntr_fid.ops->add(&cntr->cntr_fid, 1);
+	} else {
+		memset(&err_entry, 0, sizeof(err_entry));
+		err_entry.op_context = rx_entry->cq_entry.op_context;
+		err_entry.flags = (FI_MSG | FI_RECV);
+		err_entry.len = recvd;
+		err_entry.err = FI_ETRUNC;
+		err_entry.prov_errno = 0;
+		rxd_cq_report_error(rx_cq, &err_entry);
+	}
+
+	rxd_rx_entry_free(ep, rx_entry);
+}
+
 static int rxd_handle_rts(struct rxd_ep *ep, struct fi_cq_msg_entry *comp,
 			  struct rxd_pkt_entry *pkt_entry)
 {
@@ -386,12 +424,12 @@ static int rxd_handle_rts(struct rxd_ep *ep, struct fi_cq_msg_entry *comp,
 	int ret;
 
 	rxd_av = rxd_ep_av(ep);
-	node = ofi_rbmap_find(&rxd_av->rbmap, pkt_entry->pkt->source);
+	node = ofi_rbmap_find(&rxd_av->rbmap, pkt_entry->pkt->ctrl.source);
 
 	if (node) {
 		dg_addr = (fi_addr_t) node->data;
 	} else {
-		ret = rxd_av_insert_dg_addr(rxd_av, (void *) pkt_entry->pkt->source,
+		ret = rxd_av_insert_dg_addr(rxd_av, (void *) pkt_entry->pkt->ctrl.source,
 					    &dg_addr, 0, NULL);
 		if (ret)
 			return ret;
@@ -418,9 +456,15 @@ static int rxd_handle_rts(struct rxd_ep *ep, struct fi_cq_msg_entry *comp,
 
 	rx_entry = container_of(match, struct rxd_x_entry, entry);
 
-	dlist_insert_tail(&rx_entry->entry, &ep->active_rx_list);
+	if (pkt_entry->pkt->hdr.flags & RXD_INLINE) {
+		fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
+		rxd_progress_inline(ep, pkt_entry, rx_entry);
+		fastlock_release(&ep->util_ep.rx_cq->cq_lock);
+	} else {
+		dlist_insert_tail(&rx_entry->entry, &ep->active_rx_list);
+		rxd_post_cts(ep, rx_entry, pkt_entry);
+	}
 
-	rxd_post_cts(ep, rx_entry, pkt_entry);
 	return 0;
 }
 
@@ -478,7 +522,7 @@ static void rxd_handle_ack(struct rxd_ep *ep, struct fi_cq_msg_entry *comp,
 	if (!slist_empty(&tx_entry->pkt_list))
 		return;
 
-	if (!(tx_entry->flags & RXD_INJECT)) {
+	if (!(tx_entry->flags & RXD_INJECT) && !(tx_entry->flags & RXD_INLINE)) {
 		rxd_tx_entry_progress(ep, tx_entry, 1);
 		if (!slist_empty(&tx_entry->pkt_list))
 			return;

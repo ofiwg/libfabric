@@ -82,6 +82,7 @@
 #define RXD_RETRY		(1 << 3)
 #define RXD_LAST		(1 << 4)
 #define RXD_CTRL		(1 << 5)
+#define RXD_INLINE		(1 << 6)
 
 struct rxd_env {
 	int spin_count;
@@ -223,6 +224,8 @@ struct rxd_ctrl_hdr {
 	uint64_t tag;
 	uint32_t op;
 	uint32_t seg_size;
+	uint8_t source[RXD_NAME_LENGTH];
+	void *inline_data;
 };
 
 struct rxd_pkt_hdr {
@@ -237,16 +240,13 @@ struct rxd_pkt_hdr {
 struct rxd_pkt {
 	struct rxd_pkt_hdr hdr;
 	union {
-		struct {
-			struct rxd_ctrl_hdr ctrl;
-			uint8_t source[];
-		};
+		struct rxd_ctrl_hdr ctrl;
 		void *data;
 	};
 };
 
-#define RXD_CTRL_PKT_SIZE (sizeof(struct rxd_ctrl_hdr) +		\
-			   sizeof(struct rxd_pkt_hdr) + RXD_NAME_LENGTH)
+#define RXD_CTRL_PKT_SIZE (sizeof(struct rxd_ctrl_hdr) +	\
+			   sizeof(struct rxd_pkt_hdr))
 
 struct rxd_pkt_entry {
 	struct dlist_entry d_entry;
@@ -334,7 +334,8 @@ void rxd_tx_entry_progress(struct rxd_ep *ep, struct rxd_x_entry *tx_entry,
 			   int try_send);
 void rxd_handle_send_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp);
 void rxd_handle_recv_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp);
-
+void rxd_progress_inline(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry,
+			 struct rxd_x_entry *rx_entry);
 
 /* CQ sub-functions */
 void rxd_cq_report_error(struct rxd_cq *cq, struct fi_cq_err_entry *err_entry);
