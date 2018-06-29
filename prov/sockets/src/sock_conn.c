@@ -432,6 +432,8 @@ int sock_conn_listen(struct sock_ep_attr *ep_attr)
 	if (ret) {
 		SOCK_LOG_ERROR("failed to bind listener: %s\n",
 			       strerror(ofi_sockerr()));
+		ofi_straddr_log(&sock_prov, FI_LOG_WARN, FI_LOG_EP_CTRL,
+				"bind failed to addr: ", &addr.sa);
 		ret = -ofi_sockerr();
 		goto err;
 	}
