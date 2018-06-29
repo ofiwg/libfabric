@@ -1319,7 +1319,15 @@ int sock_msg_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 			if (!hints.ai_family)
 				hints.ai_family = AF_INET;
 
-			ret = getaddrinfo("localhost", NULL, &hints, &result);
+			if (hints.ai_family == AF_INET) {
+				ret = getaddrinfo("127.0.0.1", NULL, &hints,
+						  &result);
+			} else if (hints.ai_family == AF_INET6) {
+				ret = getaddrinfo("::1", NULL, &hints, &result);
+			} else {
+				ret = getaddrinfo("localhost", NULL, &hints,
+						  &result);
+			}
 			if (ret) {
 				ret = -FI_EINVAL;
 				SOCK_LOG_DBG("getaddrinfo failed!\n");
