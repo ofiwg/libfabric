@@ -262,16 +262,41 @@ static void psmx2_update_hfi_info(void)
 	int i;
 	int nctxts = 0;
 	int nfreectxts = 0;
+	int hfi_unit = -1;
+	int multirail = 0;
+	char *s;
 
 	assert(psmx2_env.num_devunits <= PSMX2_MAX_UNITS);
 
+	s = getenv("HFI_UNIT");
+	if (s)
+		hfi_unit = atoi(s);
+
+	s = getenv("PSM2_MULTIRAIL");
+	if (s)
+		multirail = atoi(s);
+
 	psmx2_num_active_units = 0;
 	for (i = 0; i < psmx2_env.num_devunits; i++) {
-		if (!psmx2_unit_active(i))
+		if (!psmx2_unit_active(i)) {
+			FI_INFO(&psmx2_prov, FI_LOG_CORE,
+				"hfi %d skipped: inactive\n", i);
 			continue;
+		}
+
+		if (hfi_unit >=0 && i != hfi_unit) {
+			FI_INFO(&psmx2_prov, FI_LOG_CORE,
+				"hfi %d skipped: HFI_UNIT=%d\n",
+				i, hfi_unit);
+			continue;
+		}
+
 		nctxts += psmx2_read_sysfs_int(i, "nctxts");
 		nfreectxts += psmx2_read_sysfs_int(i, "nfreectxts");
 		psmx2_active_units[psmx2_num_active_units++] = i;
+
+		if (multirail)
+			break;
 	}
 
 	FI_INFO(&psmx2_prov, FI_LOG_CORE,
