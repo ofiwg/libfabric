@@ -327,7 +327,6 @@ err:
 	err_entry.context = cm_ctx->fid->context;
 	err_entry.err = -ret;
 
-	cm_ctx->state = CONNECT_DONE;
 	fi_eq_write(&ep->util_ep.eq->eq_fid, FI_NOTIFY,
 		    &err_entry, sizeof(err_entry), UTIL_FLAG_ERROR);
 }

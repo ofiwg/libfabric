@@ -98,16 +98,9 @@ enum tcpx_cm_event_type {
 	CLIENT_WAIT_FOR_CONNRESP,
 };
 
-enum poll_fd_state {
-	ESTABLISH_CONN,
-	RCV_RESP,
-	CONNECT_DONE,
-};
-
 struct tcpx_cm_context {
 	fid_t			fid;
 	enum tcpx_cm_event_type	type;
-	enum poll_fd_state	state;
 	size_t			cm_data_sz;
 	char			cm_data[TCPX_MAX_CM_DATA_SIZE];
 };
