@@ -620,10 +620,14 @@ rxm_ep_handle_unconnected(struct rxm_ep *rxm_ep, struct util_cmap_handle *handle
 	int ret;
 
 	if (handle->state == CMAP_CONNECTED_NOTIFY) {
-		rxm_ep_progress_conn_deferred_list(
-					rxm_ep, container_of(handle, struct rxm_conn,
-							     handle));
+		struct rxm_conn *rxm_conn = container_of(handle, struct rxm_conn,
+							 handle);
 		ofi_cmap_process_conn_notify(rxm_ep->util_ep.cmap, handle);
+		if (!dlist_empty(&rxm_conn->deferred_op_list)) {
+			rxm_ep_progress_conn_deferred_list(rxm_ep, rxm_conn);
+			if (dlist_empty(&rxm_conn->deferred_op_list))
+				dlist_remove(&rxm_conn->conn_deferred_entry);
+		}
 		return 0;
 	}
 	/* Since we handling unoonnected state and `cmap:lock`
