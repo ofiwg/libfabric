@@ -42,6 +42,7 @@
 #include <rdma/fi_rma.h>
 #include <rdma/fi_tagged.h>
 #include <shared.h>
+#include <assert.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -344,8 +345,10 @@ void ft_format_iov(struct iovec *iov, size_t cnt, char *buf, size_t len);
 void ft_format_iocs(struct iovec *iov, size_t *iov_count);
 void ft_next_iov_cnt(struct ft_xcontrol *ctrl, size_t max_iov_cnt);
 int ft_get_ctx(struct ft_xcontrol *ctrl, struct fi_context **ctx);
-int ft_check_cq_completion(uint64_t cq_bind_flags, uint64_t op_flags,
-		enum ft_class_function class_function, uint64_t msg_flags);
+int ft_generates_rx_comp();
+int ft_generates_tx_comp();
+int ft_check_rx_completion();
+int ft_check_tx_completion();
 
 int ft_send_sync_msg();
 int ft_recv_n_msg();
