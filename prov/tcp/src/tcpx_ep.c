@@ -335,14 +335,14 @@ static int tcpx_ep_connect(struct fid_ep *ep, const void *addr,
 			   const void *param, size_t paramlen)
 {
 	struct tcpx_ep *tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
-	struct poll_fd_info *fd_info;
+	struct tcpx_cm_context *cm_ctx;
 	int ret;
 
 	if (!addr || !tcpx_ep->conn_fd || paramlen > TCPX_MAX_CM_DATA_SIZE)
 		return -FI_EINVAL;
 
-	fd_info = calloc(1, sizeof(*fd_info));
-	if (!fd_info) {
+	cm_ctx = calloc(1, sizeof(*cm_ctx));
+	if (!cm_ctx) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"cannot allocate memory \n");
 		return -FI_ENOMEM;
@@ -355,52 +355,52 @@ static int tcpx_ep_connect(struct fid_ep *ep, const void *addr,
 		goto err;
 	}
 
-	fd_info->fid = &tcpx_ep->util_ep.ep_fid.fid;
-	fd_info->type = CLIENT_SEND_CONNREQ;
+	cm_ctx->fid = &tcpx_ep->util_ep.ep_fid.fid;
+	cm_ctx->type = CLIENT_SEND_CONNREQ;
 
 	if (paramlen) {
-		fd_info->cm_data_sz = paramlen;
-		memcpy(fd_info->cm_data, param, paramlen);
+		cm_ctx->cm_data_sz = paramlen;
+		memcpy(cm_ctx->cm_data, param, paramlen);
 	}
 
 	ret = ofi_wait_fd_add(tcpx_ep->util_ep.eq->wait, tcpx_ep->conn_fd,
-			      FI_EPOLL_OUT, tcpx_eq_wait_try_func, NULL,fd_info);
+			      FI_EPOLL_OUT, tcpx_eq_wait_try_func, NULL,cm_ctx);
 	if (ret)
 		goto err;
 
 	return 0;
 err:
-	free(fd_info);
+	free(cm_ctx);
 	return ret;
 }
 
 static int tcpx_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 {
 	struct tcpx_ep *tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
-	struct poll_fd_info *fd_info;
+	struct tcpx_cm_context *cm_ctx;
 	int ret;
 
 	if (tcpx_ep->conn_fd == INVALID_SOCKET)
 		return -FI_EINVAL;
 
-	fd_info = calloc(1, sizeof(*fd_info));
-	if (!fd_info) {
+	cm_ctx = calloc(1, sizeof(*cm_ctx));
+	if (!cm_ctx) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"cannot allocate memory \n");
 		return -FI_ENOMEM;
 	}
 
-	fd_info->fid = &tcpx_ep->util_ep.ep_fid.fid;
-	fd_info->type = SERVER_SEND_CM_ACCEPT;
+	cm_ctx->fid = &tcpx_ep->util_ep.ep_fid.fid;
+	cm_ctx->type = SERVER_SEND_CM_ACCEPT;
 	if (paramlen) {
-		fd_info->cm_data_sz = paramlen;
-		memcpy(fd_info->cm_data, param, paramlen);
+		cm_ctx->cm_data_sz = paramlen;
+		memcpy(cm_ctx->cm_data, param, paramlen);
 	}
 
 	ret = ofi_wait_fd_add(tcpx_ep->util_ep.eq->wait, tcpx_ep->conn_fd,
-			      FI_EPOLL_OUT, tcpx_eq_wait_try_func, NULL, fd_info);
+			      FI_EPOLL_OUT, tcpx_eq_wait_try_func, NULL, cm_ctx);
 	if (ret) {
-		free(fd_info);
+		free(cm_ctx);
 		return ret;
 	}
 
@@ -830,7 +830,7 @@ static int tcpx_pep_listen(struct fid_pep *pep)
 
 	return ofi_wait_fd_add(tcpx_pep->util_pep.eq->wait, tcpx_pep->sock,
 			       FI_EPOLL_IN, tcpx_eq_wait_try_func,
-			       NULL, &tcpx_pep->poll_info);
+			       NULL, &tcpx_pep->cm_ctx);
 }
 
 static int tcpx_pep_reject(struct fid_pep *pep, fid_t handle,
@@ -933,11 +933,9 @@ int tcpx_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 
 
 	_pep->info = *info;
-	_pep->poll_info.fid = &_pep->util_pep.pep_fid.fid;
-	_pep->poll_info.type = SERVER_SOCK_ACCEPT;
-	_pep->poll_info.flags = 0;
-	_pep->poll_info.cm_data_sz = 0;
-	dlist_init(&_pep->poll_info.entry);
+	_pep->cm_ctx.fid = &_pep->util_pep.pep_fid.fid;
+	_pep->cm_ctx.type = SERVER_SOCK_ACCEPT;
+	_pep->cm_ctx.cm_data_sz = 0;
 	_pep->sock = INVALID_SOCKET;
 
 	*pep = &_pep->util_pep.pep_fid;

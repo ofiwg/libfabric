@@ -39,7 +39,7 @@
 #include <ofi_util.h>
 
 static int rx_cm_data(SOCKET fd, struct ofi_ctrl_hdr *hdr,
-		      int type, struct poll_fd_info *poll_info)
+		      int type, struct tcpx_cm_context *cm_ctx)
 {
 	ssize_t ret;
 
@@ -54,20 +54,20 @@ static int rx_cm_data(SOCKET fd, struct ofi_ctrl_hdr *hdr,
 	if (hdr->version != OFI_CTRL_VERSION)
 		return -FI_ENOPROTOOPT;
 
-	poll_info->cm_data_sz = ntohs(hdr->seg_size);
-	if (poll_info->cm_data_sz) {
-		if (poll_info->cm_data_sz > TCPX_MAX_CM_DATA_SIZE)
+	cm_ctx->cm_data_sz = ntohs(hdr->seg_size);
+	if (cm_ctx->cm_data_sz) {
+		if (cm_ctx->cm_data_sz > TCPX_MAX_CM_DATA_SIZE)
 			return -FI_EINVAL;
 
-		ret = ofi_recv_socket(fd, poll_info->cm_data,
-				      poll_info->cm_data_sz, MSG_WAITALL);
-		if ((size_t) ret != poll_info->cm_data_sz)
+		ret = ofi_recv_socket(fd, cm_ctx->cm_data,
+				      cm_ctx->cm_data_sz, MSG_WAITALL);
+		if ((size_t) ret != cm_ctx->cm_data_sz)
 			return -FI_EIO;
 	}
 	return FI_SUCCESS;
 }
 
-static int tx_cm_data(SOCKET fd, uint8_t type, struct poll_fd_info *poll_info)
+static int tx_cm_data(SOCKET fd, uint8_t type, struct tcpx_cm_context *cm_ctx)
 {
 	struct ofi_ctrl_hdr hdr;
 	ssize_t ret;
@@ -75,16 +75,16 @@ static int tx_cm_data(SOCKET fd, uint8_t type, struct poll_fd_info *poll_info)
 	memset(&hdr, 0, sizeof(hdr));
 	hdr.version = OFI_CTRL_VERSION;
 	hdr.type = type;
-	hdr.seg_size = htons((uint16_t) poll_info->cm_data_sz);
+	hdr.seg_size = htons((uint16_t) cm_ctx->cm_data_sz);
 
 	ret = ofi_send_socket(fd, &hdr, sizeof(hdr), MSG_NOSIGNAL);
 	if (ret != sizeof(hdr))
 		return -FI_EIO;
 
-	if (poll_info->cm_data_sz) {
-		ret = ofi_send_socket(fd, poll_info->cm_data,
-				      poll_info->cm_data_sz, MSG_NOSIGNAL);
-		if ((size_t) ret != poll_info->cm_data_sz)
+	if (cm_ctx->cm_data_sz) {
+		ret = ofi_send_socket(fd, cm_ctx->cm_data,
+				      cm_ctx->cm_data_sz, MSG_NOSIGNAL);
+		if ((size_t) ret != cm_ctx->cm_data_sz)
 			return -FI_EIO;
 	}
 	return FI_SUCCESS;
@@ -114,7 +114,7 @@ err:
 	return ret;
 }
 
-static int proc_conn_resp(struct poll_fd_info *poll_info,
+static int proc_conn_resp(struct tcpx_cm_context *cm_ctx,
 			  struct tcpx_ep *ep)
 {
 	struct ofi_ctrl_hdr conn_resp;
@@ -122,23 +122,23 @@ static int proc_conn_resp(struct poll_fd_info *poll_info,
 	ssize_t len;
 	int ret = FI_SUCCESS;
 
-	ret = rx_cm_data(ep->conn_fd, &conn_resp, ofi_ctrl_connresp, poll_info);
+	ret = rx_cm_data(ep->conn_fd, &conn_resp, ofi_ctrl_connresp, cm_ctx);
 	if (ret)
 		return ret;
 
-	cm_entry = calloc(1, sizeof(*cm_entry) + poll_info->cm_data_sz);
+	cm_entry = calloc(1, sizeof(*cm_entry) + cm_ctx->cm_data_sz);
 	if (!cm_entry)
 		return -FI_ENOMEM;
 
-	cm_entry->fid = poll_info->fid;
-	memcpy(cm_entry->data, poll_info->cm_data, poll_info->cm_data_sz);
+	cm_entry->fid = cm_ctx->fid;
+	memcpy(cm_entry->data, cm_ctx->cm_data, cm_ctx->cm_data_sz);
 
 	ret = tcpx_ep_msg_xfer_enable(ep);
 	if (ret)
 		goto err;
 
 	len = fi_eq_write(&ep->util_ep.eq->eq_fid, FI_CONNECTED, cm_entry,
-			  sizeof(*cm_entry) + poll_info->cm_data_sz, 0);
+			  sizeof(*cm_entry) + cm_ctx->cm_data_sz, 0);
 	if (len < 0) {
 		ret = (int) len;
 		goto err;
@@ -154,14 +154,14 @@ int tcpx_eq_wait_try_func(void *arg)
 }
 
 static void client_wait_for_connresp(struct util_wait *wait,
-				     struct poll_fd_info *poll_info)
+				     struct tcpx_cm_context *cm_ctx)
 {
 	struct fi_eq_err_entry err_entry;
 	struct tcpx_ep *ep;
 	int ret;
 
-	assert(poll_info->fid->fclass == FI_CLASS_EP);
-	ep = container_of(poll_info->fid, struct tcpx_ep, util_ep.ep_fid.fid);
+	assert(cm_ctx->fid->fclass == FI_CLASS_EP);
+	ep = container_of(cm_ctx->fid, struct tcpx_ep, util_ep.ep_fid.fid);
 
 	ret = ofi_wait_fd_del(wait, ep->conn_fd);
 	if (ret) {
@@ -170,7 +170,7 @@ static void client_wait_for_connresp(struct util_wait *wait,
 		goto err;
 	}
 
-	ret = proc_conn_resp(poll_info, ep);
+	ret = proc_conn_resp(cm_ctx, ep);
 	if (ret)
 		goto err;
 
@@ -178,8 +178,8 @@ static void client_wait_for_connresp(struct util_wait *wait,
 	return;
 err:
 	memset(&err_entry, 0, sizeof err_entry);
-	err_entry.fid = poll_info->fid;
-	err_entry.context = poll_info->fid->context;
+	err_entry.fid = cm_ctx->fid;
+	err_entry.context = cm_ctx->fid->context;
 	err_entry.err = -ret;
 	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "fi_eq_write the conn refused %d\n", ret);
 	fi_eq_write(&ep->util_ep.eq->eq_fid, FI_NOTIFY,
@@ -187,21 +187,21 @@ err:
 }
 
 static void server_send_cm_accept(struct util_wait *wait,
-				  struct poll_fd_info *poll_info)
+				  struct tcpx_cm_context *cm_ctx)
 {
 	struct fi_eq_cm_entry cm_entry = {0};
 	struct fi_eq_err_entry err_entry;
 	struct tcpx_ep *ep;
 	int ret;
 
-	assert(poll_info->fid->fclass == FI_CLASS_EP);
-	ep = container_of(poll_info->fid, struct tcpx_ep, util_ep.ep_fid.fid);
+	assert(cm_ctx->fid->fclass == FI_CLASS_EP);
+	ep = container_of(cm_ctx->fid, struct tcpx_ep, util_ep.ep_fid.fid);
 
-	ret = tx_cm_data(ep->conn_fd, ofi_ctrl_connresp, poll_info);
+	ret = tx_cm_data(ep->conn_fd, ofi_ctrl_connresp, cm_ctx);
 	if (ret)
 		goto err;
 
-	cm_entry.fid =  poll_info->fid;
+	cm_entry.fid =  cm_ctx->fid;
 
 	ret = tcpx_ep_msg_xfer_enable(ep);
 	if (ret)
@@ -213,7 +213,7 @@ static void server_send_cm_accept(struct util_wait *wait,
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
 	}
 
-	free(poll_info);
+	free(cm_ctx);
 	ret = ofi_wait_fd_del(wait, ep->conn_fd);
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
@@ -225,8 +225,8 @@ static void server_send_cm_accept(struct util_wait *wait,
 	return;
 err:
 	memset(&err_entry, 0, sizeof err_entry);
-	err_entry.fid = poll_info->fid;
-	err_entry.context = poll_info->fid->context;
+	err_entry.fid = cm_ctx->fid;
+	err_entry.context = cm_ctx->fid->context;
 	err_entry.err = -ret;
 
 	fi_eq_write(&ep->util_ep.eq->eq_fid, FI_NOTIFY,
@@ -234,24 +234,24 @@ err:
 }
 
 static void server_recv_connreq(struct util_wait *wait,
-				struct poll_fd_info *poll_info)
+				struct tcpx_cm_context *cm_ctx)
 {
 	struct tcpx_conn_handle *handle;
 	struct fi_eq_cm_entry *cm_entry;
 	struct ofi_ctrl_hdr conn_req;
 	int ret;
 
-	assert(poll_info->fid->fclass == FI_CLASS_CONNREQ);
+	assert(cm_ctx->fid->fclass == FI_CLASS_CONNREQ);
 
-	handle  = container_of(poll_info->fid,
+	handle  = container_of(cm_ctx->fid,
 			       struct tcpx_conn_handle,
 			       handle);
 
-	ret = rx_cm_data(handle->conn_fd, &conn_req, ofi_ctrl_connreq, poll_info);
+	ret = rx_cm_data(handle->conn_fd, &conn_req, ofi_ctrl_connreq, cm_ctx);
 	if (ret)
 		goto err1;
 
-	cm_entry = calloc(1, sizeof(*cm_entry) + poll_info->cm_data_sz);
+	cm_entry = calloc(1, sizeof(*cm_entry) + cm_ctx->cm_data_sz);
 	if (!cm_entry)
 		goto err1;
 
@@ -261,16 +261,16 @@ static void server_recv_connreq(struct util_wait *wait,
 		goto err2;
 
 	cm_entry->info->handle = &handle->handle;
-	memcpy(cm_entry->data, poll_info->cm_data, poll_info->cm_data_sz);
+	memcpy(cm_entry->data, cm_ctx->cm_data, cm_ctx->cm_data_sz);
 
 	ret = (int) fi_eq_write(&handle->pep->util_pep.eq->eq_fid, FI_CONNREQ, cm_entry,
-				sizeof(*cm_entry) + poll_info->cm_data_sz, 0);
+				sizeof(*cm_entry) + cm_ctx->cm_data_sz, 0);
 	if (ret < 0) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
 		goto err3;
 	}
 	free(cm_entry);
-	free(poll_info);
+	free(cm_ctx);
 	ret = ofi_wait_fd_del(wait, handle->conn_fd);
 	if (ret)
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
@@ -286,7 +286,7 @@ err1:
 }
 
 static void client_send_connreq(struct util_wait *wait,
-				struct poll_fd_info *poll_info)
+				struct tcpx_cm_context *cm_ctx)
 {
 	struct tcpx_ep *ep;
 	struct fi_eq_err_entry err_entry;
@@ -294,9 +294,9 @@ static void client_send_connreq(struct util_wait *wait,
 	int status, ret = FI_SUCCESS;
 
 	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "client send connreq\n");
-	assert(poll_info->fid->fclass == FI_CLASS_EP);
+	assert(cm_ctx->fid->fclass == FI_CLASS_EP);
 
-	ep = container_of(poll_info->fid, struct tcpx_ep, util_ep.ep_fid.fid);
+	ep = container_of(cm_ctx->fid, struct tcpx_ep, util_ep.ep_fid.fid);
 
 	len = sizeof(status);
 	ret = getsockopt(ep->conn_fd, SOL_SOCKET, SO_ERROR, (char *) &status, &len);
@@ -306,7 +306,7 @@ static void client_send_connreq(struct util_wait *wait,
 		goto err;
 	}
 
-	ret = tx_cm_data(ep->conn_fd, ofi_ctrl_connreq, poll_info);
+	ret = tx_cm_data(ep->conn_fd, ofi_ctrl_connreq, cm_ctx);
 	if (ret)
 		goto err;
 
@@ -314,26 +314,26 @@ static void client_send_connreq(struct util_wait *wait,
 	if (ret)
 		goto err;
 
-	poll_info->type = CLIENT_WAIT_FOR_CONNRESP;
+	cm_ctx->type = CLIENT_WAIT_FOR_CONNRESP;
 	ret = ofi_wait_fd_add(wait, ep->conn_fd, FI_EPOLL_IN,
-			      tcpx_eq_wait_try_func, NULL, poll_info);
+			      tcpx_eq_wait_try_func, NULL, cm_ctx);
 	if (ret)
 		goto err;
 
 	return;
 err:
 	memset(&err_entry, 0, sizeof err_entry);
-	err_entry.fid = poll_info->fid;
-	err_entry.context = poll_info->fid->context;
+	err_entry.fid = cm_ctx->fid;
+	err_entry.context = cm_ctx->fid->context;
 	err_entry.err = -ret;
 
-	poll_info->state = CONNECT_DONE;
+	cm_ctx->state = CONNECT_DONE;
 	fi_eq_write(&ep->util_ep.eq->eq_fid, FI_NOTIFY,
 		    &err_entry, sizeof(err_entry), UTIL_FLAG_ERROR);
 }
 
 static void server_sock_accept(struct util_wait *wait,
-			       struct poll_fd_info *poll_info)
+			       struct tcpx_cm_context *cm_ctx)
 {
 	struct tcpx_conn_handle *handle;
 	struct tcpx_pep *pep;
@@ -341,8 +341,8 @@ static void server_sock_accept(struct util_wait *wait,
 	int ret;
 
 	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "Received Connreq\n");
-	assert(poll_info->fid->fclass == FI_CLASS_PEP);
-	pep = container_of(poll_info->fid, struct tcpx_pep,
+	assert(cm_ctx->fid->fclass == FI_CLASS_PEP);
+	pep = container_of(cm_ctx->fid, struct tcpx_pep,
 			   util_pep.pep_fid.fid);
 
 	sock = accept(pep->sock, NULL, 0);
@@ -359,49 +359,49 @@ static void server_sock_accept(struct util_wait *wait,
 		goto err1;
 	}
 
-	poll_info = calloc(1, sizeof(*poll_info));
-	if (!poll_info)
+	cm_ctx = calloc(1, sizeof(*cm_ctx));
+	if (!cm_ctx)
 		goto err2;
 
 	handle->conn_fd = sock;
 	handle->handle.fclass = FI_CLASS_CONNREQ;
 	handle->pep = pep;
-	poll_info->fid = &handle->handle;
-	poll_info->type = SERVER_RECV_CONNREQ;
+	cm_ctx->fid = &handle->handle;
+	cm_ctx->type = SERVER_RECV_CONNREQ;
 
 	ret = ofi_wait_fd_add(wait, sock, FI_EPOLL_IN,
 			      tcpx_eq_wait_try_func,
-			      NULL, (void *) poll_info);
+			      NULL, (void *) cm_ctx);
 	if (ret)
 		goto err3;
 
 	return;
 err3:
-	free(poll_info);
+	free(cm_ctx);
 err2:
 	free(handle);
 err1:
 	ofi_close_socket(sock);
 }
 
-static void process_poll_info(struct util_wait *wait,
-			      struct poll_fd_info *poll_info)
+static void process_cm_ctx(struct util_wait *wait,
+			      struct tcpx_cm_context *cm_ctx)
 {
-	switch (poll_info->type) {
+	switch (cm_ctx->type) {
 	case SERVER_SOCK_ACCEPT:
-		server_sock_accept(wait,poll_info);
+		server_sock_accept(wait,cm_ctx);
 		break;
 	case CLIENT_SEND_CONNREQ:
-		client_send_connreq(wait, poll_info);
+		client_send_connreq(wait, cm_ctx);
 		break;
 	case SERVER_RECV_CONNREQ:
-		server_recv_connreq(wait, poll_info);
+		server_recv_connreq(wait, cm_ctx);
 		break;
 	case SERVER_SEND_CM_ACCEPT:
-		server_send_cm_accept(wait, poll_info);
+		server_send_cm_accept(wait, cm_ctx);
 		break;
 	case CLIENT_WAIT_FOR_CONNRESP:
-		client_wait_for_connresp(wait, poll_info);
+		client_wait_for_connresp(wait, cm_ctx);
 		break;
 	default:
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
@@ -412,7 +412,7 @@ static void process_poll_info(struct util_wait *wait,
 void tcpx_conn_mgr_run(struct util_eq *eq)
 {
 	struct util_wait_fd *wait_fd;
-	void *ep_contexts[MAX_EPOLL_EVENTS];
+	void *wait_contexts[MAX_EPOLL_EVENTS];
 	int num_fds = 0, i;
 
 	assert(eq->wait != NULL);
@@ -420,7 +420,7 @@ void tcpx_conn_mgr_run(struct util_eq *eq)
 	wait_fd = container_of(eq->wait, struct util_wait_fd,
 			       util_wait);
 
-	num_fds = fi_epoll_wait(wait_fd->epoll_fd, ep_contexts,
+	num_fds = fi_epoll_wait(wait_fd->epoll_fd, wait_contexts,
 				MAX_EPOLL_EVENTS, 0);
 	if (num_fds < 0)
 		return;
