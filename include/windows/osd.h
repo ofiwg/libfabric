@@ -712,10 +712,10 @@ static inline ssize_t ofi_recv_socket(SOCKET fd, void *buf, size_t count,
 	return recv(fd, (char *)buf, (int)count, flags);
 }
 
-static inline ssize_t ofi_recvfrom_socket(SOCKET fd, const void *buf, size_t count, int flags,
-					  const struct sockaddr *to, socklen_t tolen)
+static inline ssize_t ofi_recvfrom_socket(SOCKET fd, void *buf, size_t count, int flags,
+					  struct sockaddr *from, socklen_t *fromlen)
 {
-	return sendto(fd, (const char*)buf, (int)count, flags, to, tolen);
+	return recvfrom(fd, (char*)buf, (int)count, flags, from, fromlen);
 }
 
 static inline ssize_t ofi_send_socket(SOCKET fd, const void *buf, size_t count,

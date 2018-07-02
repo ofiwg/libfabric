@@ -220,8 +220,6 @@ int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_pr
 
 int ofi_endpoint_close(struct util_ep *util_ep)
 {
-	fastlock_destroy(&util_ep->lock);
-
 	if (util_ep->tx_cq) {
 		fid_list_remove(&util_ep->tx_cq->ep_list,
 				&util_ep->tx_cq->ep_list_lock,
@@ -289,5 +287,6 @@ int ofi_endpoint_close(struct util_ep *util_ep)
 	if (util_ep->eq)
 		ofi_atomic_dec32(&util_ep->eq->ref);
 	ofi_atomic_dec32(&util_ep->domain->ref);
+	fastlock_destroy(&util_ep->lock);
 	return 0;
 }

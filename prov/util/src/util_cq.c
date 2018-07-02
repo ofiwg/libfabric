@@ -323,9 +323,6 @@ int ofi_cq_cleanup(struct util_cq *cq)
 	if (ofi_atomic_get32(&cq->ref))
 		return -FI_EBUSY;
 
-	fastlock_destroy(&cq->cq_lock);
-	fastlock_destroy(&cq->ep_list_lock);
-
 	while (!slist_empty(&cq->err_list)) {
 		entry = slist_remove_head(&cq->err_list);
 		err = container_of(entry, struct util_cq_err_entry, list_entry);
@@ -341,6 +338,8 @@ int ofi_cq_cleanup(struct util_cq *cq)
 
 	ofi_atomic_dec32(&cq->domain->ref);
 	util_comp_cirq_free(cq->cirq);
+	fastlock_destroy(&cq->cq_lock);
+	fastlock_destroy(&cq->ep_list_lock);
 	free(cq->src);
 	return 0;
 }
