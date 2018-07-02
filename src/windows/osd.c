@@ -500,16 +500,17 @@ void freeifaddrs(struct ifaddrs *ifa)
 	}
 }
 
-ssize_t ofi_writev_socket(SOCKET fd, const struct iovec *iovec, size_t iov_cnt)
+static ssize_t
+ofi_sendv_socket(SOCKET fd, const struct iovec *iovec, size_t iov_cnt, int flags)
 {
 	ssize_t size = 0;
 	int ret, i;
 
 	if (iov_cnt == 1)
-		return send(fd, iovec[0].iov_base, iovec[0].iov_len, 0);
+		return send(fd, iovec[0].iov_base, iovec[0].iov_len, flags);
 
 	for (i = 0; i < iov_cnt; i++) {
-		ret = send(fd, iovec[i].iov_base, iovec[i].iov_len, 0);
+		ret = send(fd, iovec[i].iov_base, iovec[i].iov_len, flags);
 		if (ret >= 0) {
 			size += ret;
 			if (ret != iovec[i].iov_len)
@@ -521,16 +522,17 @@ ssize_t ofi_writev_socket(SOCKET fd, const struct iovec *iovec, size_t iov_cnt)
 	return size;
 }
 
-ssize_t ofi_readv_socket(SOCKET fd, const struct iovec *iovec, size_t iov_cnt)
+static ssize_t
+ofi_recvv_socket(SOCKET fd, const struct iovec *iovec, size_t iov_cnt, int flags)
 {
 	ssize_t size = 0;
 	int ret, i;
 
 	if (iov_cnt == 1)
-		return recv(fd, iovec[0].iov_base, iovec[0].iov_len, 0);
+		return recv(fd, iovec[0].iov_base, iovec[0].iov_len, flags);
 
 	for (i = 0; i < iov_cnt; i++) {
-		ret = recv(fd, iovec[i].iov_base, iovec[i].iov_len, 0);
+		ret = recv(fd, iovec[i].iov_base, iovec[i].iov_len, flags);
 		if (ret >= 0) {
 			size += ret;
 			if (ret != iovec[i].iov_len)
@@ -540,4 +542,52 @@ ssize_t ofi_readv_socket(SOCKET fd, const struct iovec *iovec, size_t iov_cnt)
 		}
 	}
 	return size;
+}
+
+ssize_t ofi_writev_socket(SOCKET fd, const struct iovec *iovec, size_t iov_cnt)
+{
+	return ofi_sendv_socket(fd, iovec, iov_cnt, 0);
+}
+
+ssize_t ofi_readv_socket(SOCKET fd, const struct iovec *iovec, size_t iov_cnt)
+{
+	return ofi_recvv_socket(fd, iovec, iov_cnt, 0);
+}
+
+ssize_t ofi_sendmsg_tcp(SOCKET fd, const struct msghdr *msg, int flags)
+{
+	return ofi_sendv_socket(fd, msg->msg_iov, msg->msg_iovlen, flags);
+}
+
+ssize_t ofi_recvmsg_tcp(SOCKET fd, struct msghdr *msg, int flags)
+{
+	return ofi_recvv_socket(fd, msg->msg_iov, msg->msg_iovlen, flags);
+}
+
+/*
+ * We assume that the same WSARecvMsg pointer will work for all UDP sockets.
+ */
+ssize_t ofi_recvmsg_udp(SOCKET fd, struct msghdr *msg, int flags)
+{
+	static LPFN_WSARECVMSG WSARecvMsg = NULL;
+	GUID guid = WSAID_WSARECVMSG;
+	DWORD bytes;
+	int ret;
+
+	if (!WSARecvMsg) {
+		pthread_mutex_lock(&common_locks.ini_lock);
+		if (!WSARecvMsg) {
+			ret = WSAIoctl(fd, SIO_GET_EXTENSION_FUNCTION_POINTER, &guid,
+					sizeof(guid), &WSARecvMsg, sizeof(WSARecvMsg),
+					&bytes, NULL, NULL);
+		} else {
+			ret = 0;
+		}
+		pthread_mutex_unlock(&common_locks.ini_lock);
+		if (ret)
+			return ret;
+	}
+
+	ret = WSARecvMsg(fd, msg, &bytes, NULL, NULL);
+	return ret ? ret : bytes;
 }
