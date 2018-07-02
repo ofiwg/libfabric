@@ -319,11 +319,11 @@ static int util_wait_fd_close(struct fid *fid)
 		return ret;
 
 	assert(dlist_empty(&wait->fd_list));
-	fastlock_destroy(&wait->lock);
 
 	fi_epoll_del(wait->epoll_fd, wait->signal.fd[FI_READ_FD]);
 	fd_signal_free(&wait->signal);
 	fi_epoll_close(wait->epoll_fd);
+	fastlock_destroy(&wait->lock);
 	free(wait);
 	return 0;
 }
