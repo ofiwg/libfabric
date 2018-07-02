@@ -115,9 +115,11 @@ static int poll_fds_add_item(struct poll_fd_mgr *poll_mgr,
 
 	if (poll_mgr->nfds >= poll_mgr->max_nfds) {
 		ret = poll_fd_resize(poll_mgr, poll_mgr->max_nfds << 1);
-		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-			"memory allocation failed\n");
-		return ret;
+		if (ret) {
+			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+			        "memory allocation failed\n");
+			return ret;
+		}
 	}
 
 	poll_mgr->poll_info[poll_mgr->nfds] = *poll_info;
