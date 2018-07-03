@@ -454,6 +454,11 @@ struct rxm_ep {
 	ofi_fastlock_release_t	res_fastlock_release;
 };
 
+struct rxm_conn_close {
+	struct fid_ep *msg_ep;
+	struct dlist_entry posted_rx_list;
+};
+
 struct rxm_conn {
 	struct fid_ep *msg_ep;
 
@@ -468,9 +473,23 @@ struct rxm_conn {
 	struct rxm_send_queue send_queue;
 	struct dlist_entry sar_rx_msg_list;
 	struct util_cmap_handle handle;
+
 	/* This is saved MSG EP fid, that hasn't been closed during
 	 * handling of CONN_RECV in CMAP_CONNREQ_SENT for passive side */
 	struct fid_ep *saved_msg_ep;
+};
+
+struct rxm_cmap_cmd_data {
+	/* common stuff */
+	struct rxm_conn *rxm_conn;
+
+	/* cmd-specific stuff */
+	union {
+		struct {
+			struct fi_info *msg_info;
+			struct rxm_cm_data cm_data;
+		} connreq_cmd;
+	};
 };
 
 struct rxm_ep_wait_ref {

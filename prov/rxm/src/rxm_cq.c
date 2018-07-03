@@ -1039,8 +1039,9 @@ rxm_conn_handle_cmap_cmd_queue(struct rxm_ep *rxm_ep)
 {
 	ssize_t ret = 0;
 	struct util_cmap_cmd *cmd;
+	struct rxm_cmap_cmd_data *cmd_data;
 
-	while (!dlist_ts_empty(&rxm_ep->util_ep.cmap->cmd_queue)) {
+	while (!dlist_ts_empty(&rxm_ep->util_ep.cmap->cmd_queue) && !ret) {
 		dlist_ts_pop_front(&rxm_ep->util_ep.cmap->cmd_queue,
 				   struct util_cmap_cmd, cmd, entry);
 		if (!cmd)
@@ -1048,16 +1049,22 @@ rxm_conn_handle_cmap_cmd_queue(struct rxm_ep *rxm_ep)
 		rxm_ep->util_ep.cmap->cmd_read++;
 		switch (cmd->type) {
 		case UTIL_CMAP_CMD_AV_UPD:
-			free(cmd);
 			rxm_ep->util_ep.cmap->av_upd_cmd = NULL;
 			ret = rxm_cq_reprocess_recv_queues(rxm_ep);
 			if (ret > 0)
-				return -FI_EAGAIN;
+				ret = -FI_EAGAIN;
+			break;
+		case UTIL_CMAP_CMD_CONN_CLOSE:
+			cmd_data = (struct rxm_cmap_cmd_data *)cmd->data;
+			if (fi_close(&cmd_data->rxm_conn->saved_msg_ep->fid))
+				FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+					"Unable to close saved msg_ep\n");
+			cmd_data->rxm_conn->saved_msg_ep = NULL;
 			break;
 		default:
-			free(cmd);
 			break;
 		}
+		free(cmd);
 	}
 	return ret;
 }
