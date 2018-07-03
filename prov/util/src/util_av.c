@@ -1619,6 +1619,7 @@ void ofi_cmap_free(struct util_cmap *cmap)
 {
 	struct util_cmap_peer *peer;
 	struct dlist_entry *entry;
+	struct util_cmap_cmd *cmd;
 	size_t i;
 
 	fastlock_acquire(&cmap->lock);
@@ -1627,10 +1628,17 @@ void ofi_cmap_free(struct util_cmap *cmap)
 		if (cmap->handles_av[i])
 			util_cmap_del_handle(cmap->handles_av[i]);
 	}
-	while(!dlist_empty(&cmap->peer_list)) {
+	while (!dlist_empty(&cmap->peer_list)) {
 		entry = cmap->peer_list.next;
 		peer = container_of(entry, struct util_cmap_peer, entry);
 		util_cmap_del_handle(peer->handle);
+	}
+	while (!dlist_ts_empty(&cmap->cmd_queue)) {
+		dlist_ts_pop_front(&cmap->cmd_queue, struct util_cmap_cmd,
+				   cmd, entry);
+		if (!cmd)
+			continue;
+		free(cmd);
 	}
 	util_cmap_event_handler_close(cmap);
 	free(cmap->av_upd_cmd);

@@ -676,7 +676,6 @@ struct util_cmap {
 	struct dlist_entry peer_list;
 	struct util_cmap_attr attr;
 	pthread_t event_handler_thread;
-	int av_updated;
 	fastlock_t lock;
 
 	struct dlist_ts cmd_queue;

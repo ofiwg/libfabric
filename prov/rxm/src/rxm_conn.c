@@ -535,7 +535,18 @@ static int rxm_conn_signal(struct util_ep *util_ep, void *context,
 
 struct util_cmap *rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep)
 {
-	struct util_cmap_attr attr;
+	struct util_cmap_attr attr = {
+		.config = {
+			.use_cmd_queue	= 1,
+		},
+		.alloc			= rxm_conn_alloc,
+		.close 			= rxm_conn_close,
+		.free 			= rxm_conn_free,
+		.connect 		= rxm_conn_connect,
+		.connected_handler	= rxm_conn_connected_handler,
+		.event_handler		= rxm_conn_event_handler,
+		.signal			= rxm_conn_signal,
+	};
 	struct util_cmap *cmap = NULL;
 	void *name;
 	size_t len;
@@ -559,14 +570,7 @@ struct util_cmap *rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep)
 	}
 	ofi_straddr_dbg(&rxm_prov, FI_LOG_EP_CTRL, "local_name", name);
 
-	attr.name		= name;
-	attr.alloc 		= rxm_conn_alloc;
-	attr.close 		= rxm_conn_close;
-	attr.free 		= rxm_conn_free;
-	attr.connect 		= rxm_conn_connect;
-	attr.connected_handler	= rxm_conn_connected_handler;
-	attr.event_handler	= rxm_conn_event_handler;
-	attr.signal		= rxm_conn_signal;
+	attr.name = name;
 
 	cmap = ofi_cmap_alloc(&rxm_ep->util_ep, &attr);
 	if (!cmap)

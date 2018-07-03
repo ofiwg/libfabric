@@ -1000,16 +1000,10 @@ static int rxm_cq_reprocess_recv_queues(struct rxm_ep *rxm_ep)
 	int count = 0;
 
 	fastlock_acquire(&rxm_ep->util_ep.cmap->lock);
-
-	if (!rxm_ep->util_ep.cmap->av_updated)
-		goto unlock;
-
-	rxm_ep->util_ep.cmap->av_updated = 0;
-
 	count += rxm_cq_reprocess_directed_recvs(&rxm_ep->recv_queue);
 	count += rxm_cq_reprocess_directed_recvs(&rxm_ep->trecv_queue);
-unlock:
 	fastlock_release(&rxm_ep->util_ep.cmap->lock);
+
 	return count;
 }
 
@@ -1040,6 +1034,34 @@ static inline ssize_t rxm_ep_read_msg_cq(struct rxm_ep *rxm_ep)
 	return ret;
 }
 
+static inline ssize_t
+rxm_conn_handle_cmap_cmd_queue(struct rxm_ep *rxm_ep)
+{
+	ssize_t ret = 0;
+	struct util_cmap_cmd *cmd;
+
+	while (!dlist_ts_empty(&rxm_ep->util_ep.cmap->cmd_queue)) {
+		dlist_ts_pop_front(&rxm_ep->util_ep.cmap->cmd_queue,
+				   struct util_cmap_cmd, cmd, entry);
+		if (!cmd)
+			continue;
+		rxm_ep->util_ep.cmap->cmd_read++;
+		switch (cmd->type) {
+		case UTIL_CMAP_CMD_AV_UPD:
+			free(cmd);
+			rxm_ep->util_ep.cmap->av_upd_cmd = NULL;
+			ret = rxm_cq_reprocess_recv_queues(rxm_ep);
+			if (ret > 0)
+				return -FI_EAGAIN;
+			break;
+		default:
+			free(cmd);
+			break;
+		}
+	}
+	return ret;
+}
+
 void rxm_ep_progress_one(struct util_ep *util_ep)
 {
 	struct rxm_ep *rxm_ep =
@@ -1048,9 +1070,9 @@ void rxm_ep_progress_one(struct util_ep *util_ep)
 
 	rxm_cq_repost_rx_buffers(rxm_ep);
 
-	if (OFI_UNLIKELY(rxm_ep->util_ep.cmap->av_updated)) {
-		ret = rxm_cq_reprocess_recv_queues(rxm_ep);
-		if (ret > 0)
+	if (util_ep->cmap->cmd_read < util_ep->cmap->cmd_write) {	
+		ret = rxm_conn_handle_cmap_cmd_queue(rxm_ep);
+		if (ret)
 			return;
 	}
 
@@ -1069,9 +1091,9 @@ void rxm_ep_progress_multi(struct util_ep *util_ep)
 
 	rxm_cq_repost_rx_buffers(rxm_ep);
 
-	if (OFI_UNLIKELY(rxm_ep->util_ep.cmap->av_updated)) {
-		ret = rxm_cq_reprocess_recv_queues(rxm_ep);
-		if (ret > 0)
+	if (util_ep->cmap->cmd_read < util_ep->cmap->cmd_write) {	
+		ret = rxm_conn_handle_cmap_cmd_queue(rxm_ep);
+		if (ret)
 			return;
 	}
 
