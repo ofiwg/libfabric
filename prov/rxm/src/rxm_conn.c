@@ -261,6 +261,8 @@ rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 			.eager_size = rxm_ep->rxm_info->tx_attr->inject_size,
 		},
 	};
+	struct util_cmap_cmd *cmd;
+	struct rxm_cmap_cmd_data *cmd_data;
 	struct util_cmap_handle *handle;
 	int ret;
 
@@ -282,19 +284,24 @@ rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 
 	rxm_conn->handle.remote_key = remote_cm_data->conn_id;
 
-	ret = rxm_msg_ep_open(rxm_ep, msg_info, rxm_conn);
-	if (ret)
-		goto err2;
-
 	cm_data.conn_id = rxm_conn->handle.key;
 	cm_data.proto.eager_size = htonll(cm_data.proto.eager_size);
 
-	ret = fi_accept(rxm_conn->msg_ep, &cm_data, sizeof(cm_data));
-	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_FABRIC,
-				"Unable to accept incoming connection\n");
+
+	cmd = calloc(1, sizeof(struct util_cmap_cmd) +
+			sizeof(struct rxm_cmap_cmd_data));
+	if (!cmd)
 		goto err2;
-	}
+	cmd->type = UTIL_CMAP_CMD_CONNREQ_ACCEPT;
+	cmd_data = (struct rxm_cmap_cmd_data *)cmd->data;
+	cmd_data->rxm_conn = rxm_conn;
+	cmd_data->connreq_cmd.msg_info = msg_info;
+	cmd_data->connreq_cmd.cm_data = cm_data;
+
+	dlist_ts_insert_tail(&rxm_ep->util_ep.cmap->cmd_queue, &cmd->entry);
+	rxm_ep->util_ep.cmap->cmd_write++;
+	rxm_conn_wake_up_wait_obj(rxm_ep);
+
 	return ret;
 err2:
 	ofi_cmap_del_handle(&rxm_conn->handle);
@@ -304,6 +311,7 @@ err1:
 	if (fi_reject(rxm_ep->msg_pep, msg_info->handle, NULL, 0))
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 				"Unable to reject incoming connection\n");
+	fi_freeinfo(msg_info);
 	return ret;
 }
 
@@ -412,7 +420,6 @@ static void *rxm_conn_event_handler(void *arg)
 				goto exit;
 			}
 			rxm_msg_process_connreq(rxm_ep, entry->info, entry->data);
-			fi_freeinfo(entry->info);
 			break;
 		case FI_CONNECTED:
 			FI_DBG(&rxm_prov, FI_LOG_FABRIC,

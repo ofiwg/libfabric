@@ -1061,6 +1061,20 @@ rxm_conn_handle_cmap_cmd_queue(struct rxm_ep *rxm_ep)
 					"Unable to close saved msg_ep\n");
 			cmd_data->rxm_conn->saved_msg_ep = NULL;
 			break;
+		case UTIL_CMAP_CMD_CONNREQ_ACCEPT:
+			cmd_data = (struct rxm_cmap_cmd_data *)cmd->data;
+			assert(!cmd_data->rxm_conn->msg_ep);
+			ret = rxm_msg_ep_open(rxm_ep, cmd_data->connreq_cmd.msg_info,
+					      cmd_data->rxm_conn);
+			if (ret)
+				goto fn;
+			ret = fi_accept(cmd_data->rxm_conn->msg_ep,
+					&cmd_data->connreq_cmd.cm_data,
+					sizeof(cmd_data->connreq_cmd.cm_data));
+			assert(!ret);
+fn:
+			fi_freeinfo(cmd_data->connreq_cmd.msg_info);
+			break;
 		default:
 			break;
 		}
