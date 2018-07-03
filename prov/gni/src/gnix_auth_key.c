@@ -60,6 +60,8 @@ typedef enum gnix_global_auth_info_version {
 
 static char *gnix_default_ak_path = GNIX_DEFAULT_AK_PATH;
 
+uint8_t* gnix_default_auth_key = NULL;
+
 struct gnix_global_ptag_info {
 	gnix_bitmap_t prov;
 	gnix_bitmap_t user;
@@ -386,24 +388,20 @@ int _gnix_auth_key_insert(
 		return -FI_EINVAL;
 	}
 
-	if (auth_key_size == GNIX_PROV_DEFAULT_AUTH_KEYLEN)
-		key = 0;
-	else {
-		if (!auth_key) {
-			GNIX_INFO(FI_LOG_FABRIC, "auth key is null\n");
-			return -FI_EINVAL;
-		}
+	if (!auth_key) {
+		GNIX_INFO(FI_LOG_FABRIC, "auth key is null\n");
+		return -FI_EINVAL;
+	}
 
-		switch (gni_auth_key->type) {
-		case GNIX_AKT_RAW:
-			key = (gnix_ht_key_t) gni_auth_key->raw.protection_key;
-			break;
-		default:
-			GNIX_INFO(FI_LOG_FABRIC, "unrecognized auth key "
-				"type, type=%d\n",
-				gni_auth_key->type);
-			return -FI_EINVAL;
-		}
+	switch (gni_auth_key->type) {
+	case GNIX_AKT_RAW:
+		key = (gnix_ht_key_t) gni_auth_key->raw.protection_key;
+		break;
+	default:
+		GNIX_INFO(FI_LOG_FABRIC, "unrecognized auth key "
+			"type, type=%d\n",
+			gni_auth_key->type);
+		return -FI_EINVAL;
 	}
 
 	ret = _gnix_ht_insert(&__gnix_auth_key_ht, key, to_insert);
@@ -438,26 +436,19 @@ _gnix_auth_key_lookup(uint8_t *auth_key, size_t auth_key_size)
 	struct gnix_auth_key *ptr = NULL;
 	struct fi_gni_auth_key *gni_auth_key = NULL;
 
-	if (auth_key_size == GNIX_PROV_DEFAULT_AUTH_KEYLEN) {
-		key = 0;
-	} else {
-		if (!auth_key) {
-			GNIX_INFO(FI_LOG_FABRIC,
-				"null auth key provided, cannot find entry\n");
-			return NULL;
-		}
+	if (auth_key == NULL || auth_key_size == 0) {
+		auth_key = gnix_default_auth_key;
+	}
 
-		gni_auth_key = (struct fi_gni_auth_key *) auth_key;
-		switch (gni_auth_key->type) {
-		case GNIX_AKT_RAW:
-			key = (gnix_ht_key_t) gni_auth_key->raw.protection_key;
-			break;
-		default:
-			GNIX_INFO(FI_LOG_FABRIC, "unrecognized auth key type, "
-				"type=%d\n", gni_auth_key->type);
-			return NULL;
-		}
-
+	gni_auth_key = (struct fi_gni_auth_key *) auth_key;
+	switch (gni_auth_key->type) {
+	case GNIX_AKT_RAW:
+		key = (gnix_ht_key_t) gni_auth_key->raw.protection_key;
+		break;
+	default:
+		GNIX_INFO(FI_LOG_FABRIC, "unrecognized auth key type, "
+			"type=%d\n", gni_auth_key->type);
+		return NULL;
 	}
 
 	ptr = (struct gnix_auth_key *) _gnix_ht_lookup(
@@ -484,11 +475,18 @@ int _gnix_auth_key_subsys_init(void)
 	ret = _gnix_ht_init(&__gnix_auth_key_ht, &attr);
 	assert(ret == FI_SUCCESS);
 
+	struct fi_gni_auth_key *gni_auth_key = calloc(1, sizeof(*gni_auth_key));
+	gni_auth_key->type = GNIX_AKT_RAW;
+	gni_auth_key->raw.protection_key = 0;
+	gnix_default_auth_key = (uint8_t *) gni_auth_key;
+
 	return ret;
 }
 
 int _gnix_auth_key_subsys_fini(void)
 {
+	free(gnix_default_auth_key);
+
 	return FI_SUCCESS;
 }
 
@@ -503,10 +501,15 @@ struct gnix_auth_key *_gnix_auth_key_create(
 	uint8_t ptag;
 	uint32_t cookie;
 
-	if (auth_key_size == GNIX_PROV_DEFAULT_AUTH_KEYLEN) {
+	if (auth_key == NULL || auth_key_size == 0) {
+		auth_key = gnix_default_auth_key;
+	}
+
+	gni_auth_key = (struct fi_gni_auth_key *) auth_key;
+	if (auth_key == gnix_default_auth_key) {
 		gnixu_get_rdma_credentials(NULL, &ptag, &cookie);
+		gni_auth_key->raw.protection_key = cookie;
 	} else {
-		gni_auth_key = (struct fi_gni_auth_key *) auth_key;
 		switch (gni_auth_key->type) {
 		case GNIX_AKT_RAW:
 			cookie = gni_auth_key->raw.protection_key;

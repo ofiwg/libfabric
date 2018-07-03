@@ -166,8 +166,9 @@ struct fi_gni_auth_key {
 	};
 };
 
-#define GNIX_PROV_DEFAULT_AUTH_KEY NULL
-#define GNIX_PROV_DEFAULT_AUTH_KEYLEN 0
+extern uint8_t* gnix_default_auth_key;
+#define GNIX_PROV_DEFAULT_AUTH_KEY gnix_default_auth_key
+#define GNIX_PROV_DEFAULT_AUTH_KEYLEN sizeof(struct fi_gni_auth_key)
 
 #define FI_GNI_FAB_OPS_2 "fab ops 2"
 struct fi_gni_auth_key_ops_fab {
