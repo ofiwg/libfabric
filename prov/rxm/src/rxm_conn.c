@@ -165,18 +165,28 @@ static void rxm_conn_close(struct util_cmap_handle *handle)
 static void rxm_conn_free(struct util_cmap_handle *handle)
 {
 	struct rxm_conn *rxm_conn = container_of(handle, struct rxm_conn, handle);
+	struct rxm_ep *rxm_ep = container_of(handle->cmap->ep, struct rxm_ep, util_ep);
+	struct util_cmap_cmd *cmd;
+	struct rxm_cmap_cmd_data *cmd_data;
 
-	if (!rxm_conn->msg_ep)
-		return;
-	/* Assuming fi_close also shuts down the connection gracefully if the
-	 * endpoint is in connected state */
-	if (fi_close(&rxm_conn->msg_ep->fid))
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to close msg_ep\n");
-	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Closed msg_ep\n");
-	rxm_conn->msg_ep = NULL;
-	rxm_send_queue_close(&rxm_conn->send_queue);
+	if (!rxm_ep->util_ep.cmap->event_handler_closing) {
+		cmd = calloc(1, sizeof(struct util_cmap_cmd) +
+				sizeof(struct rxm_cmap_cmd_data));
+		if (!cmd)
+			goto conn_free;
+		cmd->type = UTIL_CMAP_CMD_CONN_FREE;
+		cmd_data = (struct rxm_cmap_cmd_data *)cmd->data;
+		cmd_data->rxm_conn = rxm_conn;
 
-	free(container_of(handle, struct rxm_conn, handle));
+		dlist_ts_insert_tail(&rxm_ep->util_ep.cmap->cmd_queue, &cmd->entry);
+		rxm_ep->util_ep.cmap->cmd_write++;
+		rxm_conn_wake_up_wait_obj(rxm_ep);
+	} else {
+conn_free:
+		rxm_conn_close_msg_ep(rxm_ep, rxm_conn);
+		rxm_send_queue_close(&rxm_conn->send_queue);
+		free(rxm_conn);
+	}
 }
 
 static void
@@ -188,17 +198,14 @@ rxm_conn_process_connected(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn)
 	cmd = calloc(1, sizeof(struct util_cmap_cmd) +
 			sizeof(struct rxm_cmap_cmd_data));
 	if (!cmd) {
-		assert(0);
 		if (!rxm_ep->srx_ctx) {
-			(void) rxm_ep_prepost_buf(rxm_ep, rxm_conn->msg_ep,
-						  &rxm_conn->posted_rx_list);
+			(void) rxm_ep_prepost_buf(rxm_ep, rxm_conn->msg_ep);
 		}
 		return;
 	}
 	cmd->type = UTIL_CMAP_CMD_CONNECTED;
 	cmd_data = (struct rxm_cmap_cmd_data *)cmd->data;
 	cmd_data->rxm_conn = rxm_conn;
-	cmd_data->close_cmd.close_data = rxm_conn->close_data;
 
 	dlist_ts_insert_tail(&rxm_ep->util_ep.cmap->cmd_queue, &cmd->entry);
 	rxm_ep->util_ep.cmap->cmd_write++;

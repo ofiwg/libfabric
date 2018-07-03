@@ -1624,6 +1624,7 @@ void ofi_cmap_free(struct util_cmap *cmap)
 
 	fastlock_acquire(&cmap->lock);
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "Closing cmap\n");
+	cmap->event_handler_closing = 1;
 	for (i = 0; i < cmap->av->count; i++) {
 		if (cmap->handles_av[i])
 			util_cmap_del_handle(cmap->handles_av[i]);
@@ -1678,6 +1679,8 @@ struct util_cmap *ofi_cmap_alloc(struct util_ep *ep,
 
 	dlist_ts_init(&cmap->cmd_queue);
 	cmap->cmd_write = cmap->cmd_read = 0;
+
+	cmap->event_handler_closing = 0;
 
 	if (pthread_create(&cmap->event_handler_thread, 0,
 			   cmap->attr.event_handler, ep)) {

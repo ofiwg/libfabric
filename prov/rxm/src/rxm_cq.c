@@ -1077,8 +1077,13 @@ fn:
 			break;
 		case UTIL_CMAP_CMD_CONNECTED:
 			cmd_data = (struct rxm_cmap_cmd_data *)cmd->data;
-			ret = rxm_ep_prepost_buf(rxm_ep, cmd_data->rxm_conn->msg_ep,
-						 &cmd_data->rxm_conn->posted_rx_list);
+			ret = rxm_ep_prepost_buf(rxm_ep, cmd_data->rxm_conn->msg_ep);
+			break;
+		case UTIL_CMAP_CMD_CONN_FREE:
+			cmd_data = (struct rxm_cmap_cmd_data *)cmd->data;
+			rxm_conn_close_msg_ep(rxm_ep, cmd_data->rxm_conn);
+			rxm_send_queue_close(&cmd_data->rxm_conn->send_queue);
+			free(cmd_data->rxm_conn);
 			break;
 		default:
 			break;
