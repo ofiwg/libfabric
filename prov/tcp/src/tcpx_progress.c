@@ -434,8 +434,16 @@ void tcpx_progress(struct util_ep *util_ep)
 
 static int tcpx_try_func(void *util_ep)
 {
-	/* nothing to do here. When endpoints
-	   have incoming data, cq drives progress*/
+
+	struct tcpx_ep *ep;
+	ep = container_of(util_ep, struct tcpx_ep, util_ep);
+
+	if (!slist_empty(&ep->tx_queue))
+		return -FI_EAGAIN;
+
+	if (!ep->cur_rx_entry)
+		return -FI_EAGAIN;
+
 	return FI_SUCCESS;
 }
 
