@@ -37,16 +37,17 @@
 #include <ofi_util.h>
 #include "rxm.h"
 
-static int rxm_msg_ep_open(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
-			   struct rxm_conn *rxm_conn, void *context)
+int rxm_msg_ep_open(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
+		    struct rxm_conn *rxm_conn)
 {
-	struct rxm_domain *rxm_domain;
 	struct fid_ep *msg_ep;
 	int ret;
+	struct rxm_domain *rxm_domain =
+		container_of(rxm_ep->util_ep.domain, struct rxm_domain,
+			     util_domain);
 
-	rxm_domain = container_of(rxm_ep->util_ep.domain, struct rxm_domain,
-			util_domain);
-	ret = fi_endpoint(rxm_domain->msg_domain, msg_info, &msg_ep, context);
+	ret = fi_endpoint(rxm_domain->msg_domain, msg_info, &msg_ep,
+			  &rxm_conn->handle);
 	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to create msg_ep\n");
 		return ret;
@@ -81,6 +82,7 @@ static int rxm_msg_ep_open(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 		goto err;
 	}
 
+	assert(!rxm_conn->msg_ep);
 	if (!rxm_ep->srx_ctx) {
 		ret = rxm_ep_prepost_buf(rxm_ep, msg_ep);
 		if (ret)
@@ -94,6 +96,27 @@ err:
 	return ret;
 }
 
+void rxm_conn_close_msg_ep(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn)
+{
+	if (!rxm_conn->msg_ep)
+		return;
+	rxm_ep_cleanup_posted_rx_list(rxm_ep, &rxm_conn->posted_rx_list);
+	/* Assuming fi_close also shuts down the connection gracefully if the
+	 * endpoint is in connected state */
+	if (fi_close(&rxm_conn->msg_ep->fid))
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to close msg_ep\n");
+	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Closed msg_ep\n");
+	rxm_conn->msg_ep = NULL;
+}
+
+static void rxm_conn_wake_up_wait_obj(struct rxm_ep *rxm_ep)
+{
+	if (rxm_ep->util_ep.tx_cq->wait)
+		util_cq_signal(rxm_ep->util_ep.tx_cq);
+	if (rxm_ep->util_ep.tx_cntr && rxm_ep->util_ep.tx_cntr->wait)
+		util_cntr_signal(rxm_ep->util_ep.tx_cntr);
+}
+
 static void rxm_txe_init(struct rxm_tx_entry *entry, void *arg)
 {
 	struct rxm_send_queue *send_queue = arg;
@@ -101,9 +124,8 @@ static void rxm_txe_init(struct rxm_tx_entry *entry, void *arg)
 	entry->ep 	= send_queue->rxm_ep;
 }
 
-static int
-rxm_send_queue_init(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
-		    struct rxm_send_queue *send_queue, size_t size)
+int rxm_send_queue_init(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
+			struct rxm_send_queue *send_queue, size_t size)
 {
 	send_queue->rxm_conn = rxm_conn;
 	send_queue->rxm_ep = rxm_ep;
@@ -115,7 +137,7 @@ rxm_send_queue_init(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	return 0;
 }
 
-static void rxm_send_queue_close(struct rxm_send_queue *send_queue)
+void rxm_send_queue_close(struct rxm_send_queue *send_queue)
 {
 	if (send_queue->fs) {
 		struct rxm_tx_entry *tx_entry;
@@ -277,7 +299,7 @@ rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 
 	rxm_conn->handle.remote_key = remote_cm_data->conn_id;
 
-	ret = rxm_msg_ep_open(rxm_ep, msg_info, rxm_conn, handle);
+	ret = rxm_msg_ep_open(rxm_ep, msg_info, rxm_conn);
 	if (ret)
 		goto err2;
 
@@ -332,14 +354,6 @@ static void rxm_conn_handle_eq_err(struct rxm_ep *rxm_ep, ssize_t rd)
 		ofi_cmap_process_reject(rxm_ep->util_ep.cmap,
 					err_entry.fid->context);
 	}
-}
-
-static void rxm_conn_wake_up_wait_obj(struct rxm_ep *rxm_ep)
-{
-	if (rxm_ep->util_ep.tx_cq->wait)
-		util_cq_signal(rxm_ep->util_ep.tx_cq);
-	if (rxm_ep->util_ep.tx_cntr && rxm_ep->util_ep.tx_cntr->wait)
-		util_cntr_signal(rxm_ep->util_ep.tx_cntr);
 }
 
 static void *rxm_conn_event_handler(void *arg)
@@ -473,7 +487,7 @@ rxm_conn_connect(struct util_ep *util_ep, struct util_cmap_handle *handle,
 	if (ret)
 		return ret;
 
-	ret = rxm_msg_ep_open(rxm_ep, msg_info, rxm_conn, &rxm_conn->handle);
+	ret = rxm_msg_ep_open(rxm_ep, msg_info, rxm_conn);
 	if (ret)
 		goto err1;
 

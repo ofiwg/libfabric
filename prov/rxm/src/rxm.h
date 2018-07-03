@@ -655,6 +655,13 @@ rxm_acquire_conn(struct rxm_ep *rxm_ep, fi_addr_t fi_addr)
 			    struct rxm_conn, handle);
 }
 
+void rxm_conn_close_msg_ep(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn);
+int rxm_msg_ep_open(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
+		    struct rxm_conn *rxm_conn);
+int rxm_send_queue_init(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
+			struct rxm_send_queue *send_queue, size_t size);
+void rxm_send_queue_close(struct rxm_send_queue *send_queue);
+
 void rxm_ep_progress_conn_deferred_list(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn);
 void rxm_ep_progress_deferred_list(struct rxm_ep *rxm_ep);
 
