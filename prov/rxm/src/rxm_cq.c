@@ -1075,6 +1075,11 @@ rxm_conn_handle_cmap_cmd_queue(struct rxm_ep *rxm_ep)
 fn:
 			fi_freeinfo(cmd_data->connreq_cmd.msg_info);
 			break;
+		case UTIL_CMAP_CMD_CONNECTED:
+			cmd_data = (struct rxm_cmap_cmd_data *)cmd->data;
+			ret = rxm_ep_prepost_buf(rxm_ep, cmd_data->rxm_conn->msg_ep,
+						 &cmd_data->rxm_conn->posted_rx_list);
+			break;
 		default:
 			break;
 		}
