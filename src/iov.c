@@ -101,3 +101,38 @@ int ofi_truncate_iov(struct iovec *iov, size_t *iov_count, size_t trim_size)
 	}
 	return -FI_ETRUNC;
 }
+
+/* Copy 'len' bytes worth of src iovec to dst */
+int ofi_copy_iov_desc(struct iovec *dst_iov, void **dst_desc, size_t *dst_count,
+		      struct iovec *src_iov, void **src_desc, size_t src_count,
+		      size_t *index, size_t *offset, size_t len)
+{
+	size_t i, j;
+
+	assert(*index < src_count);
+	assert(*offset <= src_iov[*index].iov_len);
+
+	for (i = 0, j = *index; j < src_count; i++, j++) {
+		dst_iov[i].iov_base = (uint8_t *)src_iov[j].iov_base + *offset;
+		if (src_desc)
+			dst_desc[i] = src_desc[j];
+
+		if (len <= src_iov[j].iov_len - *offset) {
+			dst_iov[i].iov_len = len;
+			*dst_count = i + 1;
+
+			if (len == src_iov[j].iov_len - *offset) {
+				*index = j + 1;
+				*offset = 0;
+			} else {
+				*index = j;
+				*offset += len;
+			}
+			return 0;
+		}
+		dst_iov[i].iov_len = src_iov[j].iov_len - *offset;
+		len -= dst_iov[i].iov_len;
+		*offset = 0;
+	}
+	return -FI_ETOOSMALL;
+}

@@ -142,4 +142,8 @@ void ofi_consume_iov(struct iovec *iovec, size_t *iovec_count, size_t offset);
 
 int ofi_truncate_iov(struct iovec *iov, size_t *iov_count, size_t trim_size);
 
+/* Copy 'len' bytes worth of src iovec to dst */
+int ofi_copy_iov_desc(struct iovec *dst_iov, void **dst_desc, size_t *dst_count,
+		      struct iovec *src_iov, void **src_desc, size_t src_count,
+		      size_t *index, size_t *offset, size_t len);
 #endif /* _OFI_IOV_H_ */
