@@ -232,5 +232,5 @@ int tcpx_ep_shutdown_report(struct tcpx_ep *ep, fid_t fid);
 int tcpx_cq_wait_ep_add(struct tcpx_ep *ep);
 void tcpx_cq_wait_ep_del(struct tcpx_ep *ep);
 void process_tx_entry(struct tcpx_xfer_entry *tx_entry);
-
+void tcpx_conn_mgr_run(struct util_eq *eq);
 #endif //_TCP_H_

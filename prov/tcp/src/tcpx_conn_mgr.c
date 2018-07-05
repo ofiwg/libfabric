@@ -113,3 +113,7 @@ err:
 	fastlock_release(&ep->lock);
 	return ret;
 }
+
+void tcpx_conn_mgr_run(struct util_eq *eq)
+{
+}
