@@ -139,16 +139,18 @@ static int rxm_match_rma_iov(struct rxm_recv_entry *recv_entry,
 
 static int rxm_finish_buf_recv(struct rxm_rx_buf *rx_buf)
 {
-	/* TODO set flags to FI_MORE and handle send/recv partial data */
-	if (OFI_UNLIKELY((rx_buf->ep->rxm_info->mode & FI_BUFFERED_RECV) &&
-	    rx_buf->pkt.hdr.size > rx_buf->ep->rxm_info->tx_attr->inject_size))
-		assert(0);
+	uint64_t flags = rx_buf->pkt.hdr.flags | FI_RECV;
+
+	assert(rx_buf->pkt.hdr.size <= rx_buf->ep->sar_limit);
+
+	if (rx_buf->pkt.hdr.size > rx_buf->ep->rxm_info->tx_attr->inject_size)
+		flags |= FI_MORE;
 
 	FI_DBG(&rxm_prov, FI_LOG_CQ, "writing buffered recv completion: "
 	       "length: %" PRIu64 "\n", rx_buf->pkt.hdr.size);
 	rx_buf->recv_context.ep = &rx_buf->ep->util_ep.ep_fid;
-	return rxm_cq_write_recv_comp(rx_buf,  &rx_buf->recv_context,
-				      (rx_buf->pkt.hdr.flags | FI_RECV),
+
+	return rxm_cq_write_recv_comp(rx_buf, &rx_buf->recv_context, flags,
 				      rx_buf->pkt.hdr.size, rx_buf->pkt.data);
 }
 

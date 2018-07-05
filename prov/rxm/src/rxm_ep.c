@@ -654,6 +654,7 @@ static ssize_t rxm_ep_recv_common_flags(struct rxm_ep *rxm_ep, const struct iove
 					struct rxm_recv_queue *recv_queue)
 {
 	struct rxm_recv_entry *recv_entry;
+	struct fi_recv_context *recv_ctx;
 	struct rxm_rx_buf *rx_buf;
 	ssize_t ret;
 
@@ -665,8 +666,10 @@ static ssize_t rxm_ep_recv_common_flags(struct rxm_ep *rxm_ep, const struct iove
 
 	if (rxm_ep->rxm_info->mode & FI_BUFFERED_RECV) {
 		assert(!(flags & FI_PEEK));
-		rx_buf = container_of((struct fi_recv_context *)context,
-				      struct rxm_rx_buf, recv_context);
+		recv_ctx = context;
+		context = recv_ctx->context;
+		rx_buf = container_of(recv_ctx, struct rxm_rx_buf, recv_context);
+
 		if (flags & FI_CLAIM) {
 			FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
 			       "Claiming buffered receive\n");
@@ -702,6 +705,10 @@ claim:
 				   recv_queue, &recv_entry);
 	if (OFI_UNLIKELY(ret))
 		return ret;
+
+	if (rxm_ep->rxm_info->mode & FI_BUFFERED_RECV)
+		recv_entry->comp_flags |= FI_CLAIM;
+
 	rx_buf->recv_entry = recv_entry;
 	return rxm_cq_handle_rx_buf(rx_buf);
 }

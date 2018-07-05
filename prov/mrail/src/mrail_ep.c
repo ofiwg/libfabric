@@ -181,6 +181,23 @@ mrail_match_recv_handle_unexp(struct mrail_recv_queue *recv_queue, uint64_t tag,
 	return container_of(entry, struct mrail_recv, entry);
 }
 
+static void mrail_init_recv(struct mrail_recv *recv, void *arg)
+{
+	recv->ep		= arg;
+	recv->iov[0].iov_base 	= &recv->hdr;
+	recv->iov[0].iov_len 	= sizeof(recv->hdr);
+	recv->comp_flags	= FI_RECV;
+}
+
+#define mrail_recv_assert(recv)						\
+({									\
+	assert(recv->ep == mrail_ep);					\
+	assert(recv->iov[0].iov_base == &recv->hdr);			\
+	assert(recv->iov[0].iov_len == sizeof(recv->hdr));		\
+	assert(recv->comp_flags & FI_RECV);				\
+	assert(recv->count <= mrail_ep->info->rx_attr->iov_limit + 1);	\
+})
+
 static void mrail_recv_queue_init(struct fi_provider *prov,
 				  struct mrail_recv_queue *recv_queue,
 				  dlist_func_t match_recv,
@@ -207,17 +224,17 @@ mrail_recv_common(struct mrail_ep *mrail_ep, struct mrail_recv_queue *recv_queue
 
 	recv = mrail_pop_recv(mrail_ep);
 	if (!recv)
-		return -FI_ENOMEM;
+		return -FI_EAGAIN;
 
-	recv->count 		= count;
+	recv->count 		= count + 1;
 	recv->context 		= context;
 	recv->flags 		= flags;
-	recv->comp_flags 	= comp_flags | FI_RECV;
+	recv->comp_flags 	|= comp_flags;
 	recv->addr	 	= src_addr;
 	recv->tag 		= tag;
 	recv->ignore 		= ignore;
 
-	memcpy(recv->iov, iov, sizeof(*iov) * count);
+	memcpy(&recv->iov[1], iov, sizeof(*iov) * count);
 
 	FI_DBG(&mrail_prov, FI_LOG_EP_DATA, "Posting recv of length: %zu "
 	       "src_addr: 0x%" PRIx64 " tag: 0x%" PRIx64 " ignore: 0x%" PRIx64
@@ -277,7 +294,7 @@ static ssize_t mrail_trecv(struct fid_ep *ep_fid, void *buf, size_t len,
 }
 
 static void mrail_copy_iov_hdr(struct mrail_hdr *hdr, struct iovec *iov_dest,
-			     const struct iovec *iov_src, size_t count)
+			       const struct iovec *iov_src, size_t count)
 {
 	iov_dest[0].iov_base = hdr;
 	iov_dest[0].iov_len = sizeof(*hdr);
@@ -309,9 +326,8 @@ mrail_send_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	msg.context	= context;
 	msg.data	= data;
 
-	// TODO remove this once we support large messages
-	assert(len < mrail_ep->rails[i].info->tx_attr->inject_size);
-	flags |= FI_INJECT;
+	if (len < mrail_ep->rails[i].info->tx_attr->inject_size)
+		flags |= FI_INJECT;
 
 	FI_DBG(&mrail_prov, FI_LOG_EP_DATA, "Posting send of length: %" PRIu64
 	       " dest_addr: 0x%" PRIx64 " on rail: %d\n", len, dest_addr, i);
@@ -332,7 +348,7 @@ mrail_tsend_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	struct iovec *iov_dest = alloca(sizeof(*iov_dest) * (count + 1));
 	struct mrail_hdr hdr = MRAIL_HDR_INITIALIZER_TAGGED(tag);
 	uint32_t i = mrail_get_tx_rail(mrail_ep);
-	struct fi_msg_tagged msg;
+	struct fi_msg msg;
 	ssize_t ret;
 
 	fi_addr_t *rail_fi_addr = ofi_av_get_addr(mrail_ep->util_ep.av,
@@ -346,15 +362,14 @@ mrail_tsend_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	msg.addr	= rail_fi_addr[i];
 	msg.context	= context;
 	msg.data	= data;
-	msg.tag		= tag;
 
-	assert(len < mrail_ep->rails[i].info->tx_attr->inject_size);
-	flags |= FI_INJECT;
+	if (len < mrail_ep->rails[i].info->tx_attr->inject_size)
+		flags |= FI_INJECT;
 
 	FI_DBG(&mrail_prov, FI_LOG_EP_DATA, "Posting tsend of length: %" PRIu64
 	       " dest_addr: 0x%" PRIx64 " tag: 0x%" PRIx64 " on rail: %d\n",
 	       len, dest_addr, tag, i);
-	ret = fi_tsendmsg(mrail_ep->rails[i].ep, &msg, flags);
+	ret = fi_sendmsg(mrail_ep->rails[i].ep, &msg, flags);
 	if (ret)
 		FI_WARN(&mrail_prov, FI_LOG_EP_DATA,
 			"Unable to fi_sendmsg on rail: %" PRIu32 "\n", i);
@@ -762,7 +777,8 @@ int mrail_ep_open(struct fid_domain *domain_fid, struct fi_info *info,
 		rxq_total_size += fi->rx_attr->size;
 	}
 
-	mrail_ep->recv_fs = mrail_recv_fs_create(rxq_total_size, NULL, NULL);
+	mrail_ep->recv_fs = mrail_recv_fs_create(rxq_total_size, mrail_init_recv,
+						 mrail_ep);
 	if (!mrail_ep->recv_fs) {
 		ret = -FI_ENOMEM;
 		goto err;

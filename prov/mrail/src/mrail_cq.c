@@ -11,14 +11,14 @@
  *     without modification, are permitted provided that the following
  *     conditions are met:
  *
- *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer.
+ *	- Redistributions of source code must retain the above
+ *	  copyright notice, this list of conditions and the following
+ *	  disclaimer.
  *
- *      - Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials
- *        provided with the distribution.
+ *	- Redistributions in binary form must reproduce the above
+ *	  copyright notice, this list of conditions and the following
+ *	  disclaimer in the documentation and/or other materials
+ *	  provided with the distribution.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
  * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
@@ -34,23 +34,54 @@
 
 #include "mrail.h"
 
-#define MRAIL_OP_CTX_RAIL_EP(op_context)	\
-	(((struct fi_recv_context *)op_context)->ep)
-
-#define MRAIL_OP_CTX_EP(op_context)	\
-	((struct mrail_ep *)MRAIL_OP_CTX_RAIL_EP(op_context)->fid.context)
+int mrail_cq_write_recv_comp(struct mrail_ep *mrail_ep, struct mrail_hdr *hdr,
+			     mrail_cq_entry_t *comp, struct mrail_recv *recv)
+{
+	FI_DBG(&mrail_prov, FI_LOG_CQ, "writing recv completion: length: %zu "
+	       "tag: 0x%" PRIx64 "\n", comp->len - sizeof(struct mrail_pkt),
+	       hdr->tag);
+	return ofi_cq_write(mrail_ep->util_ep.rx_cq, recv->context,
+			   recv->comp_flags |
+			   (comp->flags & FI_REMOTE_CQ_DATA),
+			   comp->len - sizeof(struct mrail_pkt),
+			   NULL, comp->data, hdr->tag);
+}
 
 int mrail_cq_process_buf_recv(mrail_cq_entry_t *comp, struct mrail_recv *recv)
 {
+	struct fi_recv_context *recv_ctx = comp->op_context;
 	struct fi_msg msg = {
-		.context = comp->op_context,
+		.context = recv_ctx,
 	};
-	struct mrail_ep *mrail_ep = MRAIL_OP_CTX_EP(comp->op_context);
-	struct mrail_pkt *mrail_pkt = (struct mrail_pkt *)comp->buf;
-	size_t size, len = comp->len - sizeof(*mrail_pkt);
+	struct mrail_ep *mrail_ep;
+	struct mrail_pkt *mrail_pkt;
+	size_t size, len;
 	int ret, retv = 0;
 
-	size = ofi_copy_to_iov(recv->iov, recv->count, 0, mrail_pkt->data, len);
+	if (comp->flags & FI_MORE) {
+		msg.msg_iov	= recv->iov;
+		msg.iov_count	= recv->count;
+		msg.addr	= recv->addr;
+
+		recv_ctx->context = recv;
+
+		ret = fi_recvmsg(recv_ctx->ep, &msg, FI_CLAIM);
+		if (ret) {
+			FI_WARN(&mrail_prov, FI_LOG_CQ,
+				"Unable to claim buffered recv\n");
+			assert(0);
+			// TODO write cq error entry
+		}
+		return ret;
+	}
+
+	mrail_ep = recv_ctx->ep->fid.context;
+	mrail_pkt = (struct mrail_pkt *)comp->buf;
+
+	len = comp->len - sizeof(*mrail_pkt);
+
+	size = ofi_copy_to_iov(&recv->iov[1], recv->count - 1, 0,
+			       mrail_pkt->data, len);
 
 	if (size < len) {
 		FI_WARN(&mrail_prov, FI_LOG_CQ, "Message truncated recv buf "
@@ -66,37 +97,48 @@ int mrail_cq_process_buf_recv(mrail_cq_entry_t *comp, struct mrail_recv *recv)
 		}
 		goto out;
 	}
-	FI_DBG(&mrail_prov, FI_LOG_CQ, "writing recv completion: length: %zu "
-	       "tag: 0x%" PRIx64 "\n", len, comp->tag);
-	ret = ofi_cq_write(mrail_ep->util_ep.rx_cq, recv->context,
-			   recv->comp_flags |
-			   (comp->flags & FI_REMOTE_CQ_DATA), len, NULL,
-			   comp->data, comp->tag);
-	if (ret) {
-		FI_WARN(&mrail_prov, FI_LOG_CQ, "Unable to write to util cq\n");
+	ret = mrail_cq_write_recv_comp(mrail_ep, &mrail_pkt->hdr, comp, recv);
+	if (ret)
 		retv = ret;
-	}
 out:
-	ret = fi_recvmsg(MRAIL_OP_CTX_RAIL_EP(comp->op_context),
-			 &msg, FI_DISCARD);
+	ret = fi_recvmsg(recv_ctx->ep, &msg, FI_DISCARD);
 	if (ret) {
 		FI_WARN(&mrail_prov, FI_LOG_CQ,
 			"Unable to discard buffered recv\n");
 		retv = ret;
 	}
-	mrail_push_recv(mrail_ep, recv);
+	mrail_push_recv(recv);
 	return retv;
 }
 
 static int mrail_cq_process_comp_buf_recv(struct util_cq *cq,
 					  mrail_cq_entry_t *comp)
 {
-	struct mrail_ep *mrail_ep = MRAIL_OP_CTX_EP(comp->op_context);
+	struct fi_recv_context *recv_ctx;
+	struct mrail_ep *mrail_ep;
+	struct mrail_hdr *hdr;
 	struct mrail_recv *recv;
+	int ret;
+
+	if (comp->flags & FI_CLAIM) {
+		recv = comp->op_context;
+		assert(recv->hdr.version == MRAIL_HDR_VERSION);
+		ret =  mrail_cq_write_recv_comp(recv->ep, &recv->hdr, comp,
+						recv->context);
+		mrail_push_recv(recv);
+		return ret;
+	}
+
+	recv_ctx = comp->op_context;
+	mrail_ep = recv_ctx->ep->fid.context;
+	hdr = comp->buf;
+
+	// TODO make rxm send buffered recv amount of data for large message
+	assert(hdr->version == MRAIL_HDR_VERSION);
 
 	// TODO match seq number
 	fastlock_acquire(&mrail_ep->util_ep.lock);
-	if (comp->flags & FI_MSG) {
+	if (hdr->op == ofi_op_msg) {
 		FI_DBG(&mrail_prov, FI_LOG_CQ, "Got MSG op\n");
 		// TODO pass the right address
 		recv = mrail_match_recv_handle_unexp(&mrail_ep->recv_queue, 0,
@@ -104,10 +146,10 @@ static int mrail_cq_process_comp_buf_recv(struct util_cq *cq,
 						     (char *)comp, sizeof(*comp),
 						     NULL);
 	} else {
-		assert(comp->flags & FI_TAGGED);
+		assert(hdr->op == ofi_op_tagged);
 		FI_DBG(&mrail_prov, FI_LOG_CQ, "Got TAGGED op\n");
 		recv = mrail_match_recv_handle_unexp(&mrail_ep->trecv_queue,
-						     comp->tag,	FI_ADDR_UNSPEC,
+						     hdr->tag, FI_ADDR_UNSPEC,
 						     (char *)comp, sizeof(*comp),
 						     NULL);
 	}

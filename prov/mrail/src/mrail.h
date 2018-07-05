@@ -134,6 +134,8 @@ struct mrail_recv {
 	void 			*context;
 	uint64_t 		flags;
 	uint64_t 		comp_flags;
+	struct mrail_hdr	hdr;
+	struct mrail_ep		*ep;
 	struct dlist_entry 	entry;
 	fi_addr_t 		addr;
 	uint64_t 		tag;
@@ -232,11 +234,11 @@ mrail_pop_recv(struct mrail_ep *mrail_ep)
 }
 
 static inline void
-mrail_push_recv(struct mrail_ep *mrail_ep, struct mrail_recv *recv)
+mrail_push_recv(struct mrail_recv *recv)
 {
-	fastlock_acquire(&mrail_ep->util_ep.lock);
-	freestack_push(mrail_ep->recv_fs, recv);
-	fastlock_release(&mrail_ep->util_ep.lock);
+	fastlock_acquire(&recv->ep->util_ep.lock);
+	freestack_push(recv->ep->recv_fs, recv);
+	fastlock_release(&recv->ep->util_ep.lock);
 }
 
 static inline struct fi_info *mrail_get_info_cached(char *name)

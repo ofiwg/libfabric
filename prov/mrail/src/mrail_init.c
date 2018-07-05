@@ -94,6 +94,9 @@ int mrail_get_core_info(uint32_t version, const char *node, const char *service,
 			if (hints->tx_attr->iov_limit)
 				core_hints->tx_attr->iov_limit =
 					hints->tx_attr->iov_limit + 1;
+			if (hints->rx_attr->iov_limit)
+				core_hints->rx_attr->iov_limit =
+					hints->rx_attr->iov_limit + 1;
 			core_hints->tx_attr->op_flags &= ~FI_COMPLETION;
 		}
 	}
@@ -230,6 +233,11 @@ static int mrail_getinfo(uint32_t version, const char *node, const char *service
 	/* Account for one iovec buffer used for mrail header */
 	assert(fi->tx_attr->iov_limit);
 	fi->tx_attr->iov_limit--;
+
+	/* Claiming messages larger than FI_OPT_BUFFERED_LIMIT would consume
+	 * a scatter/gather entry for mrail_hdr */
+	fi->rx_attr->iov_limit--;
+
 	if (fi->tx_attr->inject_size < sizeof(struct mrail_hdr))
 		fi->tx_attr->inject_size = 0;
 	else
