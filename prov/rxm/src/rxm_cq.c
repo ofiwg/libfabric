@@ -785,6 +785,7 @@ static void rxm_cq_write_error_all(struct rxm_ep *rxm_ep, int err)
 static void rxm_cq_read_write_error(struct rxm_ep *rxm_ep)
 {
 	struct rxm_tx_entry *tx_entry;
+	struct rxm_tx_buf *tx_buf;
 	struct rxm_rx_buf *rx_buf;
 	struct fi_cq_err_entry err_entry = {0};
 	struct util_cq *util_cq;
@@ -800,10 +801,16 @@ static void rxm_cq_read_write_error(struct rxm_ep *rxm_ep)
 		return;
 	}
 
+	tx_buf = (struct rxm_tx_buf *)err_entry.op_context;
+	tx_entry = (struct rxm_tx_entry *)err_entry.op_context;
+	rx_buf = (struct rxm_rx_buf *)err_entry.op_context;
+
 	switch (RXM_GET_PROTO_STATE(err_entry.op_context)) {
+	case RXM_SAR_TX:
+		tx_entry = tx_buf->tx_entry;
+		/* fall through */
 	case RXM_TX:
 	case RXM_LMT_TX:
-		tx_entry = (struct rxm_tx_entry *)err_entry.op_context;
 		util_cq = tx_entry->ep->util_ep.tx_cq;
 		if (tx_entry->ep->util_ep.flags & OFI_CNTR_ENABLED) {
 			if (tx_entry->comp_flags & FI_SEND)
@@ -815,13 +822,11 @@ static void rxm_cq_read_write_error(struct rxm_ep *rxm_ep)
 		}
 		break;
 	case RXM_LMT_ACK_SENT:
-		tx_entry = (struct rxm_tx_entry *)err_entry.op_context;
 		util_cq = tx_entry->ep->util_ep.rx_cq;
 		util_cntr = tx_entry->ep->util_ep.rx_cntr;
 		break;
 	case RXM_RX:
 	case RXM_LMT_READ:
-		rx_buf = (struct rxm_rx_buf *)err_entry.op_context;
 		util_cq = rx_buf->ep->util_ep.rx_cq;
 		util_cntr = rx_buf->ep->util_ep.rx_cntr;
 		break;
