@@ -293,7 +293,7 @@ static void udpx_ep_progress(struct util_ep *util_ep)
 	hdr.msg_iov = entry->iov;
 	hdr.msg_iovlen = entry->iov_count;
 
-	ret = recvmsg(ep->sock, &hdr, 0);
+	ret = ofi_recvmsg_udp(ep->sock, &hdr, 0);
 	if (ret >= 0) {
 		ep->rx_comp(ep, entry->context, 0, ret, NULL, &addr);
 		ofi_cirque_discard(ep->rxq);
@@ -453,7 +453,7 @@ static ssize_t udpx_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 		goto out;
 	}
 
-	ret = sendmsg(ep->sock, &hdr, 0);
+	ret = ofi_sendmsg_udp(ep->sock, &hdr, 0);
 	if (ret >= 0) {
 		ep->tx_comp(ep, msg->context);
 		ret = 0;

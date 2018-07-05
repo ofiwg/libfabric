@@ -18,6 +18,7 @@
 #include "config.h"
 
 #include <WinSock2.h>
+#include <Mswsock.h>
 #include <ws2tcpip.h>
 #include <windows.h>
 #include <io.h>
@@ -712,8 +713,9 @@ static inline ssize_t ofi_recv_socket(SOCKET fd, void *buf, size_t count,
 	return recv(fd, (char *)buf, (int)count, flags);
 }
 
-static inline ssize_t ofi_recvfrom_socket(SOCKET fd, void *buf, size_t count, int flags,
-					  struct sockaddr *from, socklen_t *fromlen)
+static inline ssize_t
+ofi_recvfrom_socket(SOCKET fd, void *buf, size_t count, int flags,
+		    struct sockaddr *from, socklen_t *fromlen)
 {
 	return recvfrom(fd, (char*)buf, (int)count, flags, from, fromlen);
 }
@@ -724,14 +726,29 @@ static inline ssize_t ofi_send_socket(SOCKET fd, const void *buf, size_t count,
 	return send(fd, (const char*)buf, (int)count, flags);
 }
 
-static inline ssize_t ofi_sendto_socket(SOCKET fd, const void *buf, size_t count, int flags,
-					const struct sockaddr *to, socklen_t tolen)
+static inline ssize_t
+ofi_sendto_socket(SOCKET fd, const void *buf, size_t count, int flags,
+		  const struct sockaddr *to, socklen_t tolen)
 {
 	return sendto(fd, (const char*)buf, (int)count, flags, to, tolen);
 }
 
 ssize_t ofi_writev_socket(SOCKET fd, const struct iovec *iovec, size_t iov_cnt);
 ssize_t ofi_readv_socket(SOCKET fd, const struct iovec *iovec, size_t iov_cnt);
+ssize_t ofi_sendmsg_tcp(SOCKET fd, const struct msghdr *msg, int flags);
+ssize_t ofi_recvmsg_tcp(SOCKET fd, struct msghdr *msg, int flags);
+
+static inline ssize_t
+ofi_sendmsg_udp(SOCKET fd, const struct msghdr *msg, int flags)
+{
+	DWORD bytes;
+	int ret;
+
+	ret = WSASendMsg(fd, msg, flags, &bytes, NULL, NULL);
+	return ret ? ret : bytes;
+}
+
+ssize_t ofi_recvmsg_udp(SOCKET fd, struct msghdr *msg, int flags);
 
 static inline int ofi_shutdown(SOCKET socket, int how)
 {

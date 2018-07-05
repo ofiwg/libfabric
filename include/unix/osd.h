@@ -159,6 +159,30 @@ static inline ssize_t ofi_readv_socket(SOCKET fd, struct iovec *iov, int iov_cnt
 	return readv(fd, iov, iov_cnt);
 }
 
+static inline ssize_t
+ofi_sendmsg_tcp(SOCKET fd, const struct msghdr *msg, int flags)
+{
+	return sendmsg(fd, msg, flags);
+}
+
+static inline ssize_t
+ofi_sendmsg_udp(SOCKET fd, const struct msghdr *msg, int flags)
+{
+	return sendmsg(fd, msg, flags);
+}
+
+static inline ssize_t
+ofi_recvmsg_tcp(SOCKET fd, struct msghdr *msg, int flags)
+{
+	return recvmsg(fd, msg, flags);
+}
+
+static inline ssize_t
+ofi_recvmsg_udp(SOCKET fd, struct msghdr *msg, int flags)
+{
+	return recvmsg(fd, msg, flags);
+}
+
 static inline int ofi_shutdown(SOCKET socket, int how)
 {
 	return shutdown(socket, how);
