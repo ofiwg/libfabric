@@ -215,38 +215,37 @@ DECLARE_FREESTACK(struct rxd_x_entry, rxd_rx_fs);
 #define rxd_ep_rx_flags(rxd_ep) ((rxd_ep)->util_ep.rx_op_flags)
 #define rxd_ep_tx_flags(rxd_ep) ((rxd_ep)->util_ep.tx_op_flags)
 
-struct rxd_ctrl_hdr {
-	uint32_t version;
-	uint16_t type;
-	uint16_t window;
-	uint64_t size;
-	uint64_t data;
-	uint64_t tag;
-	uint32_t op;
-	uint32_t seg_size;
-	uint8_t source[RXD_NAME_LENGTH];
-	void *inline_data;
-};
-
 struct rxd_pkt_hdr {
+	uint32_t version;
+	uint32_t flags;
 	uint32_t tx_id;
 	uint32_t rx_id;
 	uint32_t key;
 	uint32_t seg_no;
 	fi_addr_t peer;
-	uint64_t flags;
 };
 
-struct rxd_pkt {
+struct rxd_ctrl_hdr {
+	uint8_t type;
+	uint8_t window;
+	uint16_t seg_size;
+	uint32_t op;
+	uint64_t size;
+	uint64_t data;
+	uint64_t tag;
+	uint8_t source[RXD_NAME_LENGTH];
+};
+
+struct rxd_ctrl_pkt {
+	struct rxd_pkt_hdr pkt_hdr;
+	struct rxd_ctrl_hdr ctrl_hdr;
+	char data[];
+};
+
+struct rxd_data_pkt {
 	struct rxd_pkt_hdr hdr;
-	union {
-		struct rxd_ctrl_hdr ctrl;
-		void *data;
-	};
+	char data[];
 };
-
-#define RXD_CTRL_PKT_SIZE (sizeof(struct rxd_ctrl_hdr) +	\
-			   sizeof(struct rxd_pkt_hdr))
 
 struct rxd_pkt_entry {
 	struct dlist_entry d_entry;
@@ -255,17 +254,27 @@ struct rxd_pkt_entry {
 	struct fi_context context;
 	struct fid_mr *mr;
 	fi_addr_t peer;
-	struct rxd_pkt *pkt;
+	void *pkt;
 };
+
+static inline struct rxd_ctrl_pkt *rxd_get_ctrl_pkt(struct rxd_pkt_entry *pkt_entry)
+{
+	return (struct rxd_ctrl_pkt *) (pkt_entry->pkt);
+}
+
+static inline struct rxd_data_pkt *rxd_get_data_pkt(struct rxd_pkt_entry *pkt_entry)
+{
+	return (struct rxd_data_pkt *) (pkt_entry->pkt);
+}
 
 static inline int rxd_is_ctrl_pkt(struct rxd_pkt_entry *pkt_entry)
 {
-	return (pkt_entry->pkt->hdr.flags & RXD_CTRL);
+	return (rxd_get_ctrl_pkt(pkt_entry))->pkt_hdr.flags & RXD_CTRL;
 }
 
 static inline void rxd_set_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 {
-	pkt_entry->pkt = (struct rxd_pkt *) ((char *) pkt_entry +
+	pkt_entry->pkt = (void *) ((char *) pkt_entry +
 			  sizeof(*pkt_entry) + ep->prefix_size);
 }
 
