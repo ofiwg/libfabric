@@ -337,12 +337,7 @@ static int tcpx_ep_connect(struct fid_ep *ep, const void *addr,
 {
 	struct tcpx_ep *tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
 	struct poll_fd_info *fd_info;
-	struct util_fabric *util_fabric;
-	struct tcpx_fabric *tcpx_fabric;
 	int ret;
-
-	util_fabric = tcpx_ep->util_ep.domain->fabric;
-	tcpx_fabric = container_of(util_fabric, struct tcpx_fabric, util_fabric);
 
 	if (!addr || !tcpx_ep->conn_fd || paramlen > TCPX_MAX_CM_DATA_SIZE)
 		return -FI_EINVAL;
@@ -362,7 +357,6 @@ static int tcpx_ep_connect(struct fid_ep *ep, const void *addr,
 	}
 
 	fd_info->fid = &tcpx_ep->util_ep.ep_fid.fid;
-	fd_info->flags = POLL_MGR_FREE;
 	fd_info->type = CONNECT_SOCK;
 	fd_info->state = ESTABLISH_CONN;
 
@@ -371,10 +365,6 @@ static int tcpx_ep_connect(struct fid_ep *ep, const void *addr,
 		memcpy(fd_info->cm_data, param, paramlen);
 	}
 
-	fastlock_acquire(&tcpx_fabric->poll_mgr.lock);
-	dlist_insert_tail(&fd_info->entry, &tcpx_fabric->poll_mgr.list);
-	fd_signal_set(&tcpx_fabric->poll_mgr.signal);
-	fastlock_release(&tcpx_fabric->poll_mgr.lock);
 	return 0;
 }
 
@@ -382,11 +372,6 @@ static int tcpx_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 {
 	struct tcpx_ep *tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
 	struct poll_fd_info *fd_info;
-	struct util_fabric *util_fabric;
-	struct tcpx_fabric *tcpx_fabric;
-
-	util_fabric = tcpx_ep->util_ep.domain->fabric;
-	tcpx_fabric = container_of(util_fabric, struct tcpx_fabric, util_fabric);
 
 	if (tcpx_ep->conn_fd == INVALID_SOCKET)
 		return -FI_EINVAL;
@@ -399,17 +384,13 @@ static int tcpx_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 	}
 
 	fd_info->fid = &tcpx_ep->util_ep.ep_fid.fid;
-	fd_info->flags = POLL_MGR_FREE;
+
 	fd_info->type = ACCEPT_SOCK;
 	if (paramlen) {
 		fd_info->cm_data_sz = paramlen;
 		memcpy(fd_info->cm_data, param, paramlen);
 	}
 
-	fastlock_acquire(&tcpx_fabric->poll_mgr.lock);
-	dlist_insert_tail(&fd_info->entry, &tcpx_fabric->poll_mgr.list);
-	fd_signal_set(&tcpx_fabric->poll_mgr.signal);
-	fastlock_release(&tcpx_fabric->poll_mgr.lock);
 	return 0;
 }
 
@@ -742,32 +723,9 @@ err1:
 static int tcpx_pep_fi_close(struct fid *fid)
 {
 	struct tcpx_pep *pep;
-	struct tcpx_fabric *tcpx_fabric;
 
 	pep = container_of(fid, struct tcpx_pep, util_pep.pep_fid.fid);
 
-	tcpx_fabric = container_of(pep->util_pep.fabric, struct tcpx_fabric,
-				   util_fabric);
-
-
-	fastlock_acquire(&tcpx_fabric->poll_mgr.lock);
-	if (pep->state != TCPX_PEP_LISTENING) {
-		pep->state = TCPX_PEP_CLOSED;
-		fastlock_release(&tcpx_fabric->poll_mgr.lock);
-		goto out;
-	}
-
-	pep->poll_info.flags = POLL_MGR_DEL;
-	if (pep->poll_info.entry.next == pep->poll_info.entry.prev)
-		dlist_insert_tail(&pep->poll_info.entry,
-				  &tcpx_fabric->poll_mgr.list);
-	pep->state = TCPX_PEP_CLOSED;
-	fd_signal_set(&tcpx_fabric->poll_mgr.signal);
-	fastlock_release(&tcpx_fabric->poll_mgr.lock);
-
-	while (!(pep->poll_info.flags & POLL_MGR_ACK))
-		sleep(0);
-out:
 	ofi_close_socket(pep->sock);
 	ofi_pep_close(&pep->util_pep);
 	free(pep);
@@ -846,23 +804,14 @@ static int tcpx_pep_getname(fid_t fid, void *addr, size_t *addrlen)
 static int tcpx_pep_listen(struct fid_pep *pep)
 {
 	struct tcpx_pep *tcpx_pep;
-	struct tcpx_fabric *tcpx_fabric;
 
 	tcpx_pep = container_of(pep,struct tcpx_pep, util_pep.pep_fid);
-	tcpx_fabric = container_of(tcpx_pep->util_pep.fabric,
-				   struct tcpx_fabric, util_fabric);
 
 	if (listen(tcpx_pep->sock, SOMAXCONN)) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"socket listen failed\n");
 		return -ofi_sockerr();
 	}
-
-	fastlock_acquire(&tcpx_fabric->poll_mgr.lock);
-	tcpx_pep->state = TCPX_PEP_LISTENING;
-	dlist_insert_tail(&tcpx_pep->poll_info.entry, &tcpx_fabric->poll_mgr.list);
-	fd_signal_set(&tcpx_fabric->poll_mgr.signal);
-	fastlock_release(&tcpx_fabric->poll_mgr.lock);
 
 	return 0;
 }

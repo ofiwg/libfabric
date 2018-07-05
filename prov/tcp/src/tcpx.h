@@ -67,10 +67,6 @@
 
 #define TCPX_NO_COMPLETION	(1ULL << 63)
 
-#define POLL_MGR_FREE		(1 << 0)
-#define POLL_MGR_DEL		(1 << 1)
-#define POLL_MGR_ACK		(1 << 2)
-
 #define TCPX_MAX_CM_DATA_SIZE	(1<<8)
 #define TCPX_IOV_LIMIT		(4)
 #define TCPX_MAX_INJECT_SZ	(64)
@@ -119,18 +115,6 @@ struct poll_fd_info {
 	enum poll_fd_state	state;
 	size_t			cm_data_sz;
 	char			cm_data[TCPX_MAX_CM_DATA_SIZE];
-};
-
-struct poll_fd_mgr {
-	struct fd_signal	signal;
-	struct dlist_entry	list;
-	fastlock_t		lock;
-	int			run;
-
-	struct pollfd		*poll_fds;
-	struct poll_fd_info	*poll_info;
-	int			nfds;
-	int			max_nfds;
 };
 
 struct tcpx_conn_handle {
@@ -189,8 +173,6 @@ struct tcpx_ep {
 
 struct tcpx_fabric {
 	struct util_fabric	util_fabric;
-	struct poll_fd_mgr	poll_mgr;
-	pthread_t		conn_mgr_thread;
 };
 
 struct tcpx_msg_data {
@@ -245,8 +227,6 @@ void tcpx_cq_report_completion(struct util_cq *cq,
 			       struct tcpx_xfer_entry *xfer_entry,
 			       int err);
 
-int tcpx_conn_mgr_init(struct tcpx_fabric *tcpx_fabric);
-void tcpx_conn_mgr_close(struct tcpx_fabric *tcpx_fabric);
 int tcpx_recv_msg_data(struct tcpx_xfer_entry *recv_entry);
 int tcpx_send_msg(struct tcpx_xfer_entry *tx_entry);
 int tcpx_recv_hdr(SOCKET sock, struct tcpx_rx_detect *rx_detect);
