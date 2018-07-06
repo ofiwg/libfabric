@@ -1770,6 +1770,18 @@ static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		ret = ofi_ep_bind_av(&rxm_ep->util_ep, av);
 		if (ret)
 			return ret;
+
+		rxm_ep->util_ep.cmap = rxm_conn_cmap_alloc(rxm_ep);
+		if (!rxm_ep->util_ep.cmap)
+			return -FI_ENOMEM;
+
+		ret = fi_listen(rxm_ep->msg_pep);
+		if (ret) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+				"Unable to set msg PEP to listen state\n");
+			ofi_cmap_free(rxm_ep->util_ep.cmap);
+			return ret;
+		}
 		break;
 	case FI_CLASS_CQ:
 		cq = container_of(bfid, struct util_cq, cq_fid.fid);
@@ -1867,19 +1879,8 @@ static int rxm_ep_ctrl(struct fid *fid, int command, void *arg)
 	case FI_ENABLE:
 		if (!rxm_ep->util_ep.rx_cq || !rxm_ep->util_ep.tx_cq)
 			return -FI_ENOCQ;
-		if (!rxm_ep->util_ep.av)
+		if (!rxm_ep->util_ep.av || !rxm_ep->util_ep.cmap)
 			return -FI_EOPBADSTATE;
-
-		ret = fi_listen(rxm_ep->msg_pep);
-		if (ret) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-				"Unable to set msg PEP to listen state\n");
-			return ret;
-		}
-
-		rxm_ep->util_ep.cmap = rxm_conn_cmap_alloc(rxm_ep);
-		if (!rxm_ep->util_ep.cmap)
-			return -FI_ENOMEM;
 
 		if (rxm_ep->srx_ctx) {
 			ret = rxm_ep_prepost_buf(rxm_ep, rxm_ep->srx_ctx,
