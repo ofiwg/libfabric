@@ -1771,17 +1771,17 @@ static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		if (ret)
 			return ret;
 
-		rxm_ep->util_ep.cmap = rxm_conn_cmap_alloc(rxm_ep);
-		if (!rxm_ep->util_ep.cmap)
-			return -FI_ENOMEM;
-
 		ret = fi_listen(rxm_ep->msg_pep);
 		if (ret) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 				"Unable to set msg PEP to listen state\n");
-			ofi_cmap_free(rxm_ep->util_ep.cmap);
 			return ret;
 		}
+
+		rxm_ep->util_ep.cmap = rxm_conn_cmap_alloc(rxm_ep);
+		if (!rxm_ep->util_ep.cmap)
+			return -FI_ENOMEM;
+
 		break;
 	case FI_CLASS_CQ:
 		cq = container_of(bfid, struct util_cq, cq_fid.fid);
