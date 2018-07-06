@@ -153,7 +153,7 @@ int tcpx_eq_wait_try_func(void *arg)
 	return FI_SUCCESS;
 }
 
-static void client_wait_for_connresp(struct util_wait *wait,
+static void client_recv_connresp(struct util_wait *wait,
 				     struct tcpx_cm_context *cm_ctx)
 {
 	struct fi_eq_err_entry err_entry;
@@ -314,7 +314,7 @@ static void client_send_connreq(struct util_wait *wait,
 	if (ret)
 		goto err;
 
-	cm_ctx->type = CLIENT_WAIT_FOR_CONNRESP;
+	cm_ctx->type = CLIENT_RECV_CONNRESP;
 	ret = ofi_wait_fd_add(wait, ep->conn_fd, FI_EPOLL_IN,
 			      tcpx_eq_wait_try_func, NULL, cm_ctx);
 	if (ret)
@@ -399,8 +399,8 @@ static void process_cm_ctx(struct util_wait *wait,
 	case SERVER_SEND_CM_ACCEPT:
 		server_send_cm_accept(wait, cm_ctx);
 		break;
-	case CLIENT_WAIT_FOR_CONNRESP:
-		client_wait_for_connresp(wait, cm_ctx);
+	case CLIENT_RECV_CONNRESP:
+		client_recv_connresp(wait, cm_ctx);
 		break;
 	default:
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
