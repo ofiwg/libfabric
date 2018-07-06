@@ -40,10 +40,13 @@
 int tcpx_send_msg(struct tcpx_xfer_entry *tx_entry)
 {
 	ssize_t bytes_sent;
+	struct msghdr msg = {0};
 
-	bytes_sent = ofi_writev_socket(tx_entry->ep->conn_fd,
-				       tx_entry->msg_data.iov,
-				       tx_entry->msg_data.iov_cnt);
+	msg.msg_iov = tx_entry->msg_data.iov;
+	msg.msg_iovlen = tx_entry->msg_data.iov_cnt;
+
+	bytes_sent = ofi_sendmsg_tcp(tx_entry->ep->conn_fd,
+	                             &msg, MSG_NOSIGNAL);
 	if (bytes_sent < 0)
 		return -ofi_sockerr();
 
