@@ -516,6 +516,7 @@
     <ClCompile Include="prov\tcp\src\tcpx_rma.c" />
     <ClCompile Include="prov\tcp\src\tcpx_ep.c" />
     <ClCompile Include="prov\tcp\src\tcpx_fabric.c" />
+    <ClCompile Include="prov\tcp\src\tcpx_eq.c" />
     <ClCompile Include="prov\tcp\src\tcpx_init.c" />
     <ClCompile Include="prov\tcp\src\tcpx_progress.c" />
     <ClCompile Include="prov\udp\src\udpx_attr.c" />

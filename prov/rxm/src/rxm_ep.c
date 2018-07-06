@@ -1807,6 +1807,7 @@ static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 			dlist_insert_tail(&wait_ref->entry,
 					  &rxm_ep->msg_cq_fd_ref_list);
 			ret = ofi_wait_fd_add(cq->wait, rxm_ep->msg_cq_fd,
+					      FI_EPOLL_IN,
 					      rxm_ep_trywait, rxm_ep,
 					      &rxm_ep->util_ep.ep_fid.fid);
 			if (ret)
@@ -1846,6 +1847,7 @@ static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 			dlist_insert_tail(&wait_ref->entry,
 					  &rxm_ep->msg_cq_fd_ref_list);
 			ret = ofi_wait_fd_add(cntr->wait, rxm_ep->msg_cq_fd,
+					      FI_EPOLL_IN,
 					      rxm_ep_trywait, rxm_ep,
 					      &rxm_ep->util_ep.ep_fid.fid);
 			if (ret)

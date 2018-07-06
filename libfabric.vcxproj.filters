@@ -402,6 +402,9 @@
     <ClCompile Include="prov\tcp\src\tcpx_fabric.c">
       <Filter>Source Files\prov\tcp\src</Filter>
     </ClCompile>
+    <ClCompile Include="prov\tcp\src\tcpx_eq.c">
+      <Filter>Source Files\prov\tcp\src</Filter>
+    </ClCompile>
     <ClCompile Include="prov\tcp\src\tcpx_init.c">
       <Filter>Source Files\prov\tcp\src</Filter>
     </ClCompile>

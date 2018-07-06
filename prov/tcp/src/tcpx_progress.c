@@ -48,7 +48,7 @@ static void tcpx_report_error(struct tcpx_ep *tcpx_ep, int err)
 
 	err_entry.fid = &tcpx_ep->util_ep.ep_fid.fid;
 	err_entry.context = tcpx_ep->util_ep.ep_fid.fid.context;
-	err_entry.err = err;
+	err_entry.err = -err;
 
 	fi_eq_write(&tcpx_ep->util_ep.eq->eq_fid, FI_NOTIFY,
 		    &err_entry, sizeof(err_entry), UTIL_FLAG_ERROR);
@@ -445,8 +445,9 @@ int tcpx_cq_wait_ep_add(struct tcpx_ep *ep)
 		return FI_SUCCESS;
 
 	return ofi_wait_fd_add(ep->util_ep.rx_cq->wait,
-			       ep->conn_fd, tcpx_try_func,
-			       (void *)&ep->util_ep, NULL);
+			       ep->conn_fd, FI_EPOLL_IN,
+			       tcpx_try_func, (void *)&ep->util_ep,
+			       NULL);
 }
 
 void tcpx_cq_wait_ep_del(struct tcpx_ep *ep)

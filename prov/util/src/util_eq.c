@@ -318,4 +318,3 @@ int ofi_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
 	*eq_fid = &eq->eq_fid;
 	return 0;
 }
-

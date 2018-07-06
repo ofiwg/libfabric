@@ -51,7 +51,6 @@
 
 extern struct fi_ops_rma tcpx_rma_ops;
 
-
 static inline struct tcpx_xfer_entry *
 tcpx_alloc_recv_entry(struct tcpx_ep *tcpx_ep)
 {
@@ -336,19 +335,14 @@ static int tcpx_ep_connect(struct fid_ep *ep, const void *addr,
 			   const void *param, size_t paramlen)
 {
 	struct tcpx_ep *tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
-	struct poll_fd_info *fd_info;
-	struct util_fabric *util_fabric;
-	struct tcpx_fabric *tcpx_fabric;
+	struct tcpx_cm_context *cm_ctx;
 	int ret;
-
-	util_fabric = tcpx_ep->util_ep.domain->fabric;
-	tcpx_fabric = container_of(util_fabric, struct tcpx_fabric, util_fabric);
 
 	if (!addr || !tcpx_ep->conn_fd || paramlen > TCPX_MAX_CM_DATA_SIZE)
 		return -FI_EINVAL;
 
-	fd_info = calloc(1, sizeof(*fd_info));
-	if (!fd_info) {
+	cm_ctx = calloc(1, sizeof(*cm_ctx));
+	if (!cm_ctx) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"cannot allocate memory \n");
 		return -FI_ENOMEM;
@@ -357,59 +351,59 @@ static int tcpx_ep_connect(struct fid_ep *ep, const void *addr,
 	ret = connect(tcpx_ep->conn_fd, (struct sockaddr *) addr,
 		      (socklen_t) ofi_sizeofaddr(addr));
 	if (ret && ofi_sockerr() != FI_EINPROGRESS) {
-		free(fd_info);
-		return -ofi_sockerr();
+		ret =  -ofi_sockerr();
+		goto err;
 	}
 
-	fd_info->fid = &tcpx_ep->util_ep.ep_fid.fid;
-	fd_info->flags = POLL_MGR_FREE;
-	fd_info->type = CONNECT_SOCK;
-	fd_info->state = ESTABLISH_CONN;
+	cm_ctx->fid = &tcpx_ep->util_ep.ep_fid.fid;
+	cm_ctx->type = CLIENT_SEND_CONNREQ;
 
 	if (paramlen) {
-		fd_info->cm_data_sz = paramlen;
-		memcpy(fd_info->cm_data, param, paramlen);
+		cm_ctx->cm_data_sz = paramlen;
+		memcpy(cm_ctx->cm_data, param, paramlen);
 	}
 
-	fastlock_acquire(&tcpx_fabric->poll_mgr.lock);
-	dlist_insert_tail(&fd_info->entry, &tcpx_fabric->poll_mgr.list);
-	fd_signal_set(&tcpx_fabric->poll_mgr.signal);
-	fastlock_release(&tcpx_fabric->poll_mgr.lock);
+	ret = ofi_wait_fd_add(tcpx_ep->util_ep.eq->wait, tcpx_ep->conn_fd,
+			      FI_EPOLL_OUT, tcpx_eq_wait_try_func, NULL,cm_ctx);
+	if (ret)
+		goto err;
+
 	return 0;
+err:
+	free(cm_ctx);
+	return ret;
 }
 
 static int tcpx_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 {
 	struct tcpx_ep *tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
-	struct poll_fd_info *fd_info;
-	struct util_fabric *util_fabric;
-	struct tcpx_fabric *tcpx_fabric;
-
-	util_fabric = tcpx_ep->util_ep.domain->fabric;
-	tcpx_fabric = container_of(util_fabric, struct tcpx_fabric, util_fabric);
+	struct tcpx_cm_context *cm_ctx;
+	int ret;
 
 	if (tcpx_ep->conn_fd == INVALID_SOCKET)
 		return -FI_EINVAL;
 
-	fd_info = calloc(1, sizeof(*fd_info));
-	if (!fd_info) {
+	cm_ctx = calloc(1, sizeof(*cm_ctx));
+	if (!cm_ctx) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"cannot allocate memory \n");
 		return -FI_ENOMEM;
 	}
 
-	fd_info->fid = &tcpx_ep->util_ep.ep_fid.fid;
-	fd_info->flags = POLL_MGR_FREE;
-	fd_info->type = ACCEPT_SOCK;
+	cm_ctx->fid = &tcpx_ep->util_ep.ep_fid.fid;
+	cm_ctx->type = SERVER_SEND_CM_ACCEPT;
 	if (paramlen) {
-		fd_info->cm_data_sz = paramlen;
-		memcpy(fd_info->cm_data, param, paramlen);
+		cm_ctx->cm_data_sz = paramlen;
+		memcpy(cm_ctx->cm_data, param, paramlen);
 	}
 
-	fastlock_acquire(&tcpx_fabric->poll_mgr.lock);
-	dlist_insert_tail(&fd_info->entry, &tcpx_fabric->poll_mgr.list);
-	fd_signal_set(&tcpx_fabric->poll_mgr.signal);
-	fastlock_release(&tcpx_fabric->poll_mgr.lock);
+	ret = ofi_wait_fd_add(tcpx_ep->util_ep.eq->wait, tcpx_ep->conn_fd,
+			      FI_EPOLL_OUT, tcpx_eq_wait_try_func, NULL, cm_ctx);
+	if (ret) {
+		free(cm_ctx);
+		return ret;
+	}
+
 	return 0;
 }
 
@@ -742,32 +736,11 @@ err1:
 static int tcpx_pep_fi_close(struct fid *fid)
 {
 	struct tcpx_pep *pep;
-	struct tcpx_fabric *tcpx_fabric;
 
 	pep = container_of(fid, struct tcpx_pep, util_pep.pep_fid.fid);
+	if (pep->util_pep.eq)
+		ofi_wait_fd_del(pep->util_pep.eq->wait, pep->sock);
 
-	tcpx_fabric = container_of(pep->util_pep.fabric, struct tcpx_fabric,
-				   util_fabric);
-
-
-	fastlock_acquire(&tcpx_fabric->poll_mgr.lock);
-	if (pep->state != TCPX_PEP_LISTENING) {
-		pep->state = TCPX_PEP_CLOSED;
-		fastlock_release(&tcpx_fabric->poll_mgr.lock);
-		goto out;
-	}
-
-	pep->poll_info.flags = POLL_MGR_DEL;
-	if (pep->poll_info.entry.next == pep->poll_info.entry.prev)
-		dlist_insert_tail(&pep->poll_info.entry,
-				  &tcpx_fabric->poll_mgr.list);
-	pep->state = TCPX_PEP_CLOSED;
-	fd_signal_set(&tcpx_fabric->poll_mgr.signal);
-	fastlock_release(&tcpx_fabric->poll_mgr.lock);
-
-	while (!(pep->poll_info.flags & POLL_MGR_ACK))
-		sleep(0);
-out:
 	ofi_close_socket(pep->sock);
 	ofi_pep_close(&pep->util_pep);
 	free(pep);
@@ -846,11 +819,8 @@ static int tcpx_pep_getname(fid_t fid, void *addr, size_t *addrlen)
 static int tcpx_pep_listen(struct fid_pep *pep)
 {
 	struct tcpx_pep *tcpx_pep;
-	struct tcpx_fabric *tcpx_fabric;
 
 	tcpx_pep = container_of(pep,struct tcpx_pep, util_pep.pep_fid);
-	tcpx_fabric = container_of(tcpx_pep->util_pep.fabric,
-				   struct tcpx_fabric, util_fabric);
 
 	if (listen(tcpx_pep->sock, SOMAXCONN)) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
@@ -858,13 +828,9 @@ static int tcpx_pep_listen(struct fid_pep *pep)
 		return -ofi_sockerr();
 	}
 
-	fastlock_acquire(&tcpx_fabric->poll_mgr.lock);
-	tcpx_pep->state = TCPX_PEP_LISTENING;
-	dlist_insert_tail(&tcpx_pep->poll_info.entry, &tcpx_fabric->poll_mgr.list);
-	fd_signal_set(&tcpx_fabric->poll_mgr.signal);
-	fastlock_release(&tcpx_fabric->poll_mgr.lock);
-
-	return 0;
+	return ofi_wait_fd_add(tcpx_pep->util_pep.eq->wait, tcpx_pep->sock,
+			       FI_EPOLL_IN, tcpx_eq_wait_try_func,
+			       NULL, &tcpx_pep->cm_ctx);
 }
 
 static int tcpx_pep_reject(struct fid_pep *pep, fid_t handle,
@@ -967,13 +933,10 @@ int tcpx_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 
 
 	_pep->info = *info;
-	_pep->poll_info.fid = &_pep->util_pep.pep_fid.fid;
-	_pep->poll_info.type = PASSIVE_SOCK;
-	_pep->poll_info.flags = 0;
-	_pep->poll_info.cm_data_sz = 0;
-	dlist_init(&_pep->poll_info.entry);
+	_pep->cm_ctx.fid = &_pep->util_pep.pep_fid.fid;
+	_pep->cm_ctx.type = SERVER_SOCK_ACCEPT;
+	_pep->cm_ctx.cm_data_sz = 0;
 	_pep->sock = INVALID_SOCKET;
-	_pep->state = TCPX_PEP_CREATED;
 
 	*pep = &_pep->util_pep.pep_fid;
 

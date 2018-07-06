@@ -67,25 +67,17 @@
 
 #define TCPX_NO_COMPLETION	(1ULL << 63)
 
-#define POLL_MGR_FREE		(1 << 0)
-#define POLL_MGR_DEL		(1 << 1)
-#define POLL_MGR_ACK		(1 << 2)
-
 #define TCPX_MAX_CM_DATA_SIZE	(1<<8)
 #define TCPX_IOV_LIMIT		(4)
 #define TCPX_MAX_INJECT_SZ	(64)
+
+#define MAX_EPOLL_EVENTS 100
 
 extern struct fi_provider	tcpx_prov;
 extern struct util_prov		tcpx_util_prov;
 extern struct fi_info		tcpx_info;
 struct tcpx_xfer_entry;
 struct tcpx_ep;
-
-enum tcpx_pep_state{
-	TCPX_PEP_CREATED,
-	TCPX_PEP_LISTENING,
-	TCPX_PEP_CLOSED,
-};
 
 enum tcpx_xfer_op_codes {
 	TCPX_OP_MSG_SEND,
@@ -98,39 +90,19 @@ enum tcpx_xfer_op_codes {
 	TCPX_OP_CODE_MAX,
 };
 
-enum poll_fd_type {
-	CONNECT_SOCK,
-	PASSIVE_SOCK,
-	ACCEPT_SOCK,
-	CONNREQ_HANDLE,
+enum tcpx_cm_event_type {
+	SERVER_SOCK_ACCEPT,
+	CLIENT_SEND_CONNREQ,
+	SERVER_RECV_CONNREQ,
+	SERVER_SEND_CM_ACCEPT,
+	CLIENT_WAIT_FOR_CONNRESP,
 };
 
-enum poll_fd_state {
-	ESTABLISH_CONN,
-	RCV_RESP,
-	CONNECT_DONE,
-};
-
-struct poll_fd_info {
+struct tcpx_cm_context {
 	fid_t			fid;
-	struct dlist_entry	entry;
-	int			flags;
-	enum poll_fd_type	type;
-	enum poll_fd_state	state;
+	enum tcpx_cm_event_type	type;
 	size_t			cm_data_sz;
 	char			cm_data[TCPX_MAX_CM_DATA_SIZE];
-};
-
-struct poll_fd_mgr {
-	struct fd_signal	signal;
-	struct dlist_entry	list;
-	fastlock_t		lock;
-	int			run;
-
-	struct pollfd		*poll_fds;
-	struct poll_fd_info	*poll_info;
-	int			nfds;
-	int			max_nfds;
 };
 
 struct tcpx_conn_handle {
@@ -143,10 +115,7 @@ struct tcpx_pep {
 	struct util_pep 	util_pep;
 	struct fi_info		info;
 	SOCKET			sock;
-	struct poll_fd_info	poll_info;
-	/* protected by poll mgr lock
-	   as pep state transitions happen in poll mgr*/
-	enum tcpx_pep_state	state;
+	struct tcpx_cm_context	cm_ctx;
 };
 
 enum tcpx_cm_state {
@@ -189,8 +158,6 @@ struct tcpx_ep {
 
 struct tcpx_fabric {
 	struct util_fabric	util_fabric;
-	struct poll_fd_mgr	poll_mgr;
-	pthread_t		conn_mgr_thread;
 };
 
 struct tcpx_msg_data {
@@ -245,8 +212,6 @@ void tcpx_cq_report_completion(struct util_cq *cq,
 			       struct tcpx_xfer_entry *xfer_entry,
 			       int err);
 
-int tcpx_conn_mgr_init(struct tcpx_fabric *tcpx_fabric);
-void tcpx_conn_mgr_close(struct tcpx_fabric *tcpx_fabric);
 int tcpx_recv_msg_data(struct tcpx_xfer_entry *recv_entry);
 int tcpx_send_msg(struct tcpx_xfer_entry *tx_entry);
 int tcpx_recv_hdr(SOCKET sock, struct tcpx_rx_detect *rx_detect);
@@ -261,5 +226,8 @@ int tcpx_ep_shutdown_report(struct tcpx_ep *ep, fid_t fid);
 int tcpx_cq_wait_ep_add(struct tcpx_ep *ep);
 void tcpx_cq_wait_ep_del(struct tcpx_ep *ep);
 void process_tx_entry(struct tcpx_xfer_entry *tx_entry);
-
+void tcpx_conn_mgr_run(struct util_eq *eq);
+int tcpx_eq_wait_try_func(void *arg);
+int tcpx_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
+		   struct fid_eq **eq_fid, void *context);
 #endif //_TCP_H_
