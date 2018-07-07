@@ -64,7 +64,10 @@
 #define RXM_CTRL_VERSION	3
 
 #define RXM_BUF_SIZE	16384
+
 #define RXM_SAR_LIMIT	262144
+#define RXM_SAR_DIVIDER	1024
+
 #define RXM_IOV_LIMIT 4
 
 #define RXM_MR_MODES	(OFI_MR_BASIC_MAP | FI_MR_LOCAL)
@@ -185,6 +188,27 @@ struct rxm_pkt {
 	struct ofi_op_hdr hdr;
 	char data[];
 };
+
+union rxm_sar_ctrl_data {
+	enum rxm_sar_seg_type {
+		RXM_SAR_SEG_FIRST	= 1,
+		RXM_SAR_SEG_MIDDLE	= 2,
+		RXM_SAR_SEG_LAST	= 3,	
+	} seg_type : 2;
+	uint64_t align;
+};
+
+static inline enum rxm_sar_seg_type
+rxm_sar_get_seg_type(struct ofi_ctrl_hdr *ctrl_hdr)
+{
+	return ((union rxm_sar_ctrl_data *)&(ctrl_hdr->ctrl_data))->seg_type;
+}
+
+static inline void
+rxm_sar_set_seg_type(struct ofi_ctrl_hdr *ctrl_hdr, enum rxm_sar_seg_type seg_type)
+{
+    ((union rxm_sar_ctrl_data *)&(ctrl_hdr->ctrl_data))->seg_type = seg_type;
+}
 
 struct rxm_recv_match_attr {
 	fi_addr_t addr;
@@ -339,7 +363,6 @@ struct rxm_recv_entry {
 	struct {
 		struct dlist_entry sar_entry;
 		size_t total_recv_len;
-		uint64_t segs_left;
 		uint64_t msg_id;
 	};
 };
@@ -572,17 +595,20 @@ rxm_process_recv_entry(struct rxm_recv_queue *recv_queue,
 		if (rx_buf->pkt.ctrl_hdr.type != ofi_ctrl_seg_data) {
 			return rxm_cq_handle_rx_buf(rx_buf);
 		} else {
-			int wait_last = (recv_entry->segs_left == 1);
+			enum rxm_sar_seg_type last =
+				(rxm_sar_get_seg_type(&rx_buf->pkt.ctrl_hdr)
+								== RXM_SAR_SEG_LAST);
 			ssize_t ret = rxm_cq_handle_rx_buf(rx_buf);
 			recv_queue->rxm_ep->res_fastlock_acquire(&recv_queue->lock);
-			while (!ret && rx_buf && !wait_last) {
+			while (!ret && rx_buf && !last) {
 				rx_buf = rxm_check_unexp_msg_list(recv_queue, recv_entry->addr,
 								  recv_entry->tag, recv_entry->ignore);
 				if (rx_buf) {
 					assert(rx_buf->pkt.ctrl_hdr.type == ofi_ctrl_seg_data);
 					rx_buf->recv_entry = recv_entry;
 					dlist_remove(&rx_buf->unexp_msg.entry);
-					wait_last = (recv_entry->segs_left == 1);
+					last = (rxm_sar_get_seg_type(&rx_buf->pkt.ctrl_hdr)
+									== RXM_SAR_SEG_LAST);
 					recv_queue->rxm_ep->res_fastlock_release(&recv_queue->lock);
 					ret = rxm_cq_handle_rx_buf(rx_buf);
 					recv_queue->rxm_ep->res_fastlock_acquire(&recv_queue->lock);
