@@ -216,6 +216,9 @@ static void rxd_complete_rx(struct rxd_ep *ep, struct rxd_x_entry *rx_entry)
 	struct rxd_cq *rx_cq = rxd_ep_rx_cq(ep);
 	struct util_cntr *cntr = ep->util_ep.rx_cntr;
 
+	if (rx_entry->cq_entry.flags & FI_RMA || rx_entry->flags & RXD_NO_COMPLETION)
+		goto out;
+
 	/* Handle CQ comp */
 	if (rx_entry->bytes_done == rx_entry->cq_entry.len) {
 		rx_cq->write_fn(rx_cq, &rx_entry->cq_entry);
@@ -225,13 +228,14 @@ static void rxd_complete_rx(struct rxd_ep *ep, struct rxd_x_entry *rx_entry)
 	} else {
 		memset(&err_entry, 0, sizeof(err_entry));
 		err_entry.op_context = rx_entry->cq_entry.op_context;
-		err_entry.flags = (FI_MSG | FI_RECV);
+		err_entry.flags = rx_entry->cq_entry.flags;
 		err_entry.len = rx_entry->bytes_done;
 		err_entry.err = FI_ETRUNC;
 		err_entry.prov_errno = 0;
 		rxd_cq_report_error(rx_cq, &err_entry);
 	}
 
+out:
 	ep->peers[rx_entry->peer].rx_msg_id = rx_entry->msg_id;
 	rxd_rx_entry_free(ep, rx_entry);
 }
@@ -333,14 +337,14 @@ static void rxd_transfer_pending(struct rxd_ep *ep, int peer)
 		dlist_pop_front(&ep->peers[peer].pending,
 					struct rxd_pkt_entry, pkt_entry, d_entry); 
 		dlist_insert_tail(&pkt_entry->d_entry, &ep->peers[peer].unacked);
-		if (rxd_pkt_type(pkt_entry) == RXD_DATA) {
-			data = (struct rxd_data_pkt *) (pkt_entry->pkt);
-			tx_entry = &ep->tx_fs->entry[data->pkt_hdr.tx_id].buf;
-			data->pkt_hdr.rx_id = tx_entry->rx_id;
-		} else {
+		if (rxd_pkt_type(pkt_entry) <=  RXD_ATOMIC_COMPARE) {
 			op = (struct rxd_op_pkt *) (pkt_entry->pkt);
 			if (op->size > rxd_ep_domain(ep)->max_inline_sz)
 				ep->peers[peer].blocking = 1;
+		} else {
+			data = (struct rxd_data_pkt *) (pkt_entry->pkt);
+			tx_entry = &ep->tx_fs->entry[data->pkt_hdr.tx_id].buf;
+			data->pkt_hdr.rx_id = tx_entry->rx_id;
 		}
 
 		rxd_ep_retry_pkt(ep, pkt_entry);
@@ -368,12 +372,12 @@ static void rxd_update_peer(struct rxd_ep *ep, fi_addr_t peer, fi_addr_t dg_addr
 
 	dlist_foreach_container(&ep->peers[peer].pending, struct rxd_pkt_entry,
 				pkt_entry, d_entry) {
-		if (rxd_pkt_type(pkt_entry) == RXD_DATA) {
-			data = (struct rxd_data_pkt *) (pkt_entry->pkt);
-			data->pkt_hdr.peer = dg_addr;
-		} else {
+		if (rxd_pkt_type(pkt_entry) <=  RXD_ATOMIC_COMPARE) {
 			op = (struct rxd_op_pkt *) (pkt_entry->pkt);
 			op->pkt_hdr.peer = dg_addr;
+		} else {
+			data = (struct rxd_data_pkt *) (pkt_entry->pkt);
+			data->pkt_hdr.peer = dg_addr;
 		}
 	}
 	rxd_transfer_pending(ep, peer);
@@ -598,6 +602,29 @@ void rxd_progress_op(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry,
 	dlist_insert_tail(&rx_entry->entry, &ep->peers[pkt->pkt_hdr.peer].rx_list);
 }
 
+static struct rxd_x_entry *rxd_rma_rx_entry_init(struct rxd_ep *ep,
+			struct rxd_op_pkt *pkt)
+{
+	struct util_domain *util_domain = &rxd_ep_domain(ep)->util_domain;
+	struct iovec iov[RXD_IOV_LIMIT];
+	int i, ret;
+
+	for (i = 0; i < pkt->iov_count; i++) {
+		ret = ofi_mr_verify(&util_domain->mr_map, pkt->rma[i].len,
+				(uintptr_t *)(&pkt->rma[i].addr), pkt->rma[i].key,
+				ofi_rx_mr_reg_flags(pkt->base_hdr.type, 0));
+		iov[i].iov_base = (void *) pkt->rma[i].addr;
+		iov[i].iov_len = pkt->rma[i].len;
+		if (ret) {
+			FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "could not verify MR\n");
+			return NULL; 
+		}
+	}
+
+	return rxd_rx_entry_init(ep, iov, pkt->iov_count, 0, 0, NULL, pkt->pkt_hdr.peer,
+				 pkt->base_hdr.type, 0);
+}
+
 static void rxd_handle_op(struct rxd_ep *ep, struct fi_cq_msg_entry *comp,
 			  struct rxd_pkt_entry *pkt_entry)
 {
@@ -624,7 +651,8 @@ static void rxd_handle_op(struct rxd_ep *ep, struct fi_cq_msg_entry *comp,
 		goto release;
 	}
 
-	rx_entry = rxd_match_rx(ep, pkt_entry);
+	rx_entry = rxd_pkt_type(pkt_entry) <= RXD_TAGGED ?
+		   rxd_match_rx(ep, pkt_entry) : rxd_rma_rx_entry_init(ep, pkt);
 	if (!rx_entry) {
 		rxd_remove_rx_pkt(ep, pkt_entry);
 		return;
@@ -673,7 +701,7 @@ static void rxd_handle_ack(struct rxd_ep *ep, struct fi_cq_msg_entry *comp,
 		if (hdr->seq_no >= ack->pkt_hdr.seq_no)
 			break;
 
-		if (rxd_pkt_type(pkt_entry) != RXD_DATA) {
+		if (rxd_pkt_type(pkt_entry) <= RXD_ATOMIC_COMPARE) {
 			tx_entry = &ep->tx_fs->entry[hdr->tx_id].buf;
 			if (tx_entry->num_segs > 1) {
 				tx_entry->rx_id = ack->pkt_hdr.rx_id;
@@ -729,7 +757,8 @@ void rxd_handle_recv_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp)
 	case RXD_ACK:
 		rxd_handle_ack(ep, comp, pkt_entry);
 		break;
-	case RXD_DATA:
+	case RXD_MSG_DATA:
+	case RXD_RMA_DATA:
 		rxd_handle_data(ep, comp, pkt_entry);
 		break;
 	default:

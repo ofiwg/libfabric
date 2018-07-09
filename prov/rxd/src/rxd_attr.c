@@ -32,7 +32,9 @@
 
 #include "rxd.h"
 
-#define RXD_EP_CAPS (FI_MSG | FI_TAGGED | FI_SEND | FI_RECV | FI_SOURCE | FI_DIRECTED_RECV)
+#define RXD_EP_CAPS (FI_MSG | FI_TAGGED | FI_RMA | FI_SEND | FI_RECV |		\
+		     FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE |	\
+		     FI_SOURCE | FI_DIRECTED_RECV)
 
 struct fi_tx_attr rxd_tx_attr = {
 	.caps = RXD_EP_CAPS,

@@ -45,6 +45,10 @@ static uint32_t rxd_flags(uint64_t fi_flags)
 	if (fi_flags & FI_INJECT)
 		rxd_flags |= RXD_INJECT;
 
+	if (!(fi_flags & (FI_COMPLETION | FI_INJECT_COMPLETE |
+	    FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)))
+		rxd_flags |= RXD_NO_COMPLETION;
+
 	return rxd_flags;
 }
 
@@ -192,7 +196,7 @@ static void rxd_ep_check_unexp_msg_list(struct rxd_ep *ep, struct dlist_entry *l
 	rxd_release_repost_rx(ep, pkt_entry);
 }
 
-static struct rxd_x_entry *rxd_rx_entry_init(struct rxd_ep *ep,
+struct rxd_x_entry *rxd_rx_entry_init(struct rxd_ep *ep,
 			const struct iovec *iov, size_t iov_count, uint64_t tag,
 			uint64_t ignore, void *context, fi_addr_t addr,
 			uint32_t op, uint64_t flags)
@@ -221,15 +225,16 @@ static struct rxd_x_entry *rxd_rx_entry_init(struct rxd_ep *ep,
 	rx_entry->cq_entry.op_context = context;
 	rx_entry->cq_entry.len = ofi_total_iov_len(iov, iov_count);
 	rx_entry->cq_entry.buf = iov[0].iov_base;
-	rx_entry->cq_entry.flags = (FI_RECV | FI_MSG);
 	rx_entry->cq_entry.tag = tag;
-	if (op == ofi_op_tagged) {
-		rx_entry->cq_entry.flags |= FI_TAGGED;
+
+	rx_entry->cq_entry.flags = ofi_rx_cq_flags(op);
+	if (rx_entry->cq_entry.flags & FI_TAGGED)
 		dlist_insert_tail(&rx_entry->entry, &ep->rx_tag_list);
-	} else {
+	else if (rx_entry->cq_entry.flags & FI_RECV)
 		dlist_insert_tail(&rx_entry->entry, &ep->rx_list);
-	}
-	
+	else
+		dlist_init(&rx_entry->entry);
+
 	return rx_entry;
 }
 
@@ -381,7 +386,8 @@ static void rxd_init_data_pkt(struct rxd_ep *ep,
 	seg_size = MIN(rxd_ep_domain(ep)->max_seg_sz, seg_size);
 
 	data_pkt->base_hdr.version = RXD_PROTOCOL_VERSION;
-	data_pkt->base_hdr.type = RXD_DATA;
+	data_pkt->base_hdr.type = tx_entry->cq_entry.flags & FI_RMA ?
+				  RXD_RMA_DATA : RXD_MSG_DATA;
 
 	data_pkt->pkt_hdr.rx_id = tx_entry->rx_id;
 	data_pkt->pkt_hdr.seg_no = tx_entry->next_seg_no++;
@@ -435,11 +441,8 @@ struct rxd_x_entry *rxd_tx_entry_init(struct rxd_ep *ep, const struct iovec *iov
 	tx_entry->cq_entry.op_context = context;
 	tx_entry->cq_entry.len = ofi_total_iov_len(iov, iov_count);
 	tx_entry->cq_entry.buf = iov[0].iov_base;
-	tx_entry->cq_entry.flags = (FI_TRANSMIT | FI_MSG);
-	if (op == ofi_op_tagged) {
-		tx_entry->cq_entry.flags |= FI_TAGGED;
-		tx_entry->cq_entry.tag = tag;
-	}
+	tx_entry->cq_entry.flags = ofi_tx_cq_flags(op);
+	tx_entry->cq_entry.tag = tag;
 
 	if (tx_entry->cq_entry.len <= rxd_domain->max_inline_sz) {
 		tx_entry->num_segs = 1;
@@ -544,7 +547,8 @@ static ssize_t rxd_ep_send_rts(struct rxd_ep *rxd_ep, int dg_addr)
 	return rxd_ep_retry_pkt(rxd_ep, pkt_entry);
 }
 
-static int rxd_ep_send_op(struct rxd_ep *rxd_ep, struct rxd_x_entry *tx_entry)
+static int rxd_ep_send_op(struct rxd_ep *rxd_ep, struct rxd_x_entry *tx_entry,
+			  const struct fi_rma_iov *rma_iov, size_t rma_count)
 {
 	struct rxd_pkt_entry *pkt_entry;
 	struct rxd_domain *rxd_domain = rxd_ep_domain(rxd_ep);
@@ -579,6 +583,11 @@ static int rxd_ep_send_op(struct rxd_ep *rxd_ep, struct rxd_x_entry *tx_entry)
 						 tx_entry->iov_count, 0);
 
 	pkt_entry->pkt_size = tx_entry->bytes_done + sizeof(*op) + rxd_ep->prefix_size;
+
+	if (tx_entry->cq_entry.flags & FI_RMA) {
+		memcpy(op->rma, rma_iov, sizeof(*rma_iov) * rma_count);
+		op->iov_count = rma_count;
+	}
 
 	if (dlist_empty(&rxd_ep->peers[tx_entry->peer].pending) &&
 	    rxd_ep->peers[tx_entry->peer].unacked_cnt < rxd_env.max_unacked &&
@@ -663,7 +672,7 @@ static ssize_t rxd_ep_generic_inject(struct rxd_ep *rxd_ep, const struct iovec *
 		FI_DELIVERY_COMPLETE)))
 		tx_entry->flags |= RXD_NO_COMPLETION;
 
-	ret = rxd_ep_send_op(rxd_ep, tx_entry);
+	ret = rxd_ep_send_op(rxd_ep, tx_entry, NULL, 0);
 	if (ret) {
 		rxd_tx_entry_free(rxd_ep, tx_entry);
 		goto out;
@@ -707,7 +716,7 @@ static ssize_t rxd_ep_generic_sendmsg(struct rxd_ep *rxd_ep, const struct iovec 
 	if (!tx_entry)
 		goto out;
 
-	ret = rxd_ep_send_op(rxd_ep, tx_entry);
+	ret = rxd_ep_send_op(rxd_ep, tx_entry, NULL, 0);
 	if (ret)
 		rxd_tx_entry_free(rxd_ep, tx_entry);
 
@@ -950,6 +959,247 @@ static struct fi_ops_tagged rxd_ops_tagged = {
 	.inject = rxd_ep_tinject,
 	.senddata = rxd_ep_tsenddata,
 	.injectdata = rxd_ep_tinjectdata,
+};
+
+ssize_t rxd_read(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
+	fi_addr_t src_addr, uint64_t addr, uint64_t key, void *context)
+{
+	return -FI_EINVAL;
+}
+
+ssize_t rxd_readv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
+	size_t count, fi_addr_t src_addr, uint64_t addr, uint64_t key,
+	void *context)
+{
+	return -FI_EINVAL;
+}
+
+ssize_t rxd_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
+	uint64_t flags)
+{
+	return -FI_EINVAL;
+}
+
+ssize_t rxd_generic_write_inject(struct rxd_ep *rxd_ep, const struct iovec *iov,
+	size_t iov_count, const struct fi_rma_iov *rma_iov, size_t rma_count,
+	fi_addr_t addr, void *context, uint32_t op, uint64_t data,
+	uint64_t flags)
+{
+	struct rxd_x_entry *tx_entry;
+	fi_addr_t dg_addr;
+	ssize_t ret = -FI_EAGAIN;
+
+	assert(iov_count <= RXD_IOV_LIMIT && rma_count <= RXD_IOV_LIMIT);
+	assert(ofi_total_iov_len(iov, iov_count) <= RXD_INJECT_SIZE);
+
+	dg_addr = rxd_av_dg_addr(rxd_ep_av(rxd_ep), addr);
+
+	fastlock_acquire(&rxd_ep->util_ep.lock);
+	fastlock_acquire(&rxd_ep->util_ep.tx_cq->cq_lock);
+
+	if (ofi_cirque_isfull(rxd_ep->util_ep.tx_cq->cirq)) {
+		ret = -FI_EAGAIN;
+		goto out;
+	}
+
+	if (rxd_ep->peers[dg_addr].peer_addr == FI_ADDR_UNSPEC &&
+	    dlist_empty(&rxd_ep->peers[dg_addr].unacked))
+		rxd_ep_send_rts(rxd_ep, dg_addr);
+
+	tx_entry = rxd_tx_entry_init(rxd_ep, iov, iov_count, data, 0, context,
+				     dg_addr, op, flags | FI_INJECT);
+	if (!tx_entry)
+		goto out;
+
+	ret = rxd_ep_send_op(rxd_ep, tx_entry, rma_iov, rma_count);
+	if (ret)
+		rxd_tx_entry_free(rxd_ep, tx_entry);
+
+	ret = rxd_ep_post_data_pkts(rxd_ep, tx_entry);
+	if (ret == -FI_ENOMEM) {
+		rxd_tx_entry_free(rxd_ep, tx_entry);
+		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL,
+			"error sending data - unknown recv behavior\n");
+	} else {
+		ret = 0;
+	}
+
+out:
+	fastlock_release(&rxd_ep->util_ep.tx_cq->cq_lock);
+	fastlock_release(&rxd_ep->util_ep.lock);
+	return ret;
+}
+
+ssize_t rxd_generic_write(struct rxd_ep *rxd_ep, const struct iovec *iov,
+	size_t iov_count, const struct fi_rma_iov *rma_iov, size_t rma_count,
+	void **desc, fi_addr_t addr, void *context, uint32_t op, uint64_t data,
+	uint64_t flags)
+{
+	struct rxd_x_entry *tx_entry;
+	fi_addr_t dg_addr;
+	ssize_t ret = -FI_EAGAIN;
+
+	if (flags & FI_INJECT)
+		return rxd_generic_write_inject(rxd_ep, iov, iov_count, rma_iov,
+						rma_count, addr, context, op,
+						data, flags);
+
+	assert(iov_count <= RXD_IOV_LIMIT && rma_count <= RXD_IOV_LIMIT);
+
+	dg_addr = rxd_av_dg_addr(rxd_ep_av(rxd_ep), addr);
+
+	fastlock_acquire(&rxd_ep->util_ep.lock);
+	fastlock_acquire(&rxd_ep->util_ep.tx_cq->cq_lock);
+
+	if (ofi_cirque_isfull(rxd_ep->util_ep.tx_cq->cirq)) {
+		ret = -FI_EAGAIN;
+		goto out;
+	}
+
+	if (rxd_ep->peers[dg_addr].peer_addr == FI_ADDR_UNSPEC &&
+	    dlist_empty(&rxd_ep->peers[dg_addr].unacked))
+		rxd_ep_send_rts(rxd_ep, dg_addr);
+
+	tx_entry = rxd_tx_entry_init(rxd_ep, iov, iov_count, data, 0, context,
+				     dg_addr, op, flags);
+	if (!tx_entry)
+		goto out;
+
+	ret = rxd_ep_send_op(rxd_ep, tx_entry, rma_iov, rma_count);
+	if (ret)
+		rxd_tx_entry_free(rxd_ep, tx_entry);
+
+out:
+	fastlock_release(&rxd_ep->util_ep.tx_cq->cq_lock);
+	fastlock_release(&rxd_ep->util_ep.lock);
+	return ret;
+}
+
+ssize_t rxd_write(struct fid_ep *ep_fid, const void *buf, size_t len, void *desc,
+	fi_addr_t dest_addr, uint64_t addr, uint64_t key, void *context)
+{
+	struct rxd_ep *ep;
+	struct iovec msg_iov;
+	struct fi_rma_iov rma_iov;
+
+	ep = container_of(ep_fid, struct rxd_ep, util_ep.ep_fid.fid);
+
+	msg_iov.iov_base = (void *) buf;
+	msg_iov.iov_len = len;
+	rma_iov.addr = addr;
+	rma_iov.len = len;
+	rma_iov.key = key;
+
+	return rxd_generic_write(ep, &msg_iov, 1, &rma_iov, 1, &desc, 
+				 dest_addr, context, ofi_op_write, 0,
+				 rxd_ep_tx_flags(ep));
+}
+
+ssize_t rxd_writev(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
+		size_t count, fi_addr_t dest_addr, uint64_t addr, uint64_t key,
+		void *context)
+{
+	struct rxd_ep *ep;
+	struct fi_rma_iov rma_iov;
+
+	ep = container_of(ep_fid, struct rxd_ep, util_ep.ep_fid.fid);
+
+	rma_iov.addr = addr;
+	rma_iov.len  = ofi_total_iov_len(iov, count);
+	rma_iov.key = key;
+
+	return rxd_generic_write(ep, iov, count, &rma_iov, 1, desc,
+				 dest_addr, context, ofi_op_write, 0,
+				 rxd_ep_tx_flags(ep));
+}
+
+
+ssize_t rxd_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
+	uint64_t flags)
+{
+	struct rxd_ep *ep;
+
+	ep = container_of(ep_fid, struct rxd_ep, util_ep.ep_fid.fid);
+
+	return rxd_generic_write(ep, msg->msg_iov, msg->iov_count,
+				 msg->rma_iov, msg->rma_iov_count,
+				 msg->desc, msg->addr, msg->context,
+				 ofi_op_write, msg->data, flags);
+}
+
+ssize_t rxd_writedata(struct fid_ep *ep_fid, const void *buf, size_t len,
+		      void *desc, uint64_t data, fi_addr_t dest_addr,
+		      uint64_t addr, uint64_t key, void *context)
+{
+	struct rxd_ep *ep;
+	struct iovec iov;
+	struct fi_rma_iov rma_iov;
+
+	ep = container_of(ep_fid, struct rxd_ep, util_ep.ep_fid.fid);
+
+	iov.iov_base = (void *) buf;
+	iov.iov_len = len;
+	rma_iov.addr = addr;
+	rma_iov.len  = len;
+	rma_iov.key = key;
+
+	return rxd_generic_write(ep, &iov, 1, &rma_iov, 1, &desc,
+				 dest_addr, context, ofi_op_write, data,
+				 FI_REMOTE_CQ_DATA);
+}
+
+ssize_t rxd_rma_inject(struct fid_ep *ep_fid, const void *buf,
+	size_t len, fi_addr_t dest_addr, uint64_t addr, uint64_t key)
+{
+	struct rxd_ep *rxd_ep;
+	struct iovec iov;
+	struct fi_rma_iov rma_iov;
+
+	rxd_ep = container_of(ep_fid, struct rxd_ep, util_ep.ep_fid.fid);
+
+	iov.iov_base = (void *) buf;
+	iov.iov_len = len;
+	rma_iov.addr = addr;
+	rma_iov.len = len;
+	rma_iov.key = key;
+
+	return rxd_generic_write_inject(rxd_ep, &iov, 1, &rma_iov, 1,
+					dest_addr, NULL, ofi_op_write, 0, 0);
+}
+
+ssize_t rxd_inject_writedata(struct fid_ep *ep_fid, const void *buf, size_t len,
+			     uint64_t data, fi_addr_t dest_addr, uint64_t addr,
+			     uint64_t key)
+{
+	struct rxd_ep *rxd_ep;
+	struct iovec iov;
+	struct fi_rma_iov rma_iov;
+
+	rxd_ep = container_of(ep_fid, struct rxd_ep, util_ep.ep_fid.fid);
+
+	iov.iov_base = (void *) buf;
+	iov.iov_len = len;
+	rma_iov.addr = addr;
+	rma_iov.len = len;
+	rma_iov.key = key;
+
+	return rxd_generic_write_inject(rxd_ep, &iov, 1, &rma_iov, 1,
+					dest_addr, NULL, ofi_op_write,
+					data, FI_REMOTE_CQ_DATA);
+}
+
+static struct fi_ops_rma rxd_ops_rma = {
+	.size = sizeof(struct fi_ops_rma),
+	.read = rxd_read,
+	.readv = rxd_readv,
+	.readmsg = rxd_readmsg,
+	.write = rxd_write,
+	.writev = rxd_writev,
+	.writemsg = rxd_writemsg,
+	.inject = rxd_rma_inject,
+	.writedata = rxd_writedata,
+	.injectdata = rxd_inject_writedata,
+
 };
 
 static void rxd_ep_free_res(struct rxd_ep *ep)
@@ -1276,10 +1526,11 @@ int rxd_ep_init_res(struct rxd_ep *ep, struct fi_info *fi_info)
 	if (ret)
 		goto err;
 
-	ep->tx_fs = rxd_x_fs_create(ep->tx_size, NULL, NULL);
+	//doubling sizes to handle incoming RMA operations (not included in tx and rx size)
+	ep->tx_fs = rxd_x_fs_create(ep->tx_size * 2, NULL, NULL);
 	if (!ep->tx_fs)
 		goto err;
-	ep->rx_fs = rxd_x_fs_create(ep->rx_size, NULL, NULL);
+	ep->rx_fs = rxd_x_fs_create(ep->rx_size * 2, NULL, NULL);
 	if (!ep->rx_fs)
 		goto err;
 
@@ -1390,6 +1641,7 @@ int rxd_endpoint(struct fid_domain *domain, struct fi_info *info,
 	rxd_ep->util_ep.ep_fid.ops = &rxd_ops_ep;
 	rxd_ep->util_ep.ep_fid.msg = &rxd_ops_msg;
 	rxd_ep->util_ep.ep_fid.tagged = &rxd_ops_tagged;
+	rxd_ep->util_ep.ep_fid.rma = &rxd_ops_rma;
 
 	*ep = &rxd_ep->util_ep.ep_fid;
 	return 0;

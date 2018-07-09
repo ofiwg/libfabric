@@ -131,6 +131,7 @@ struct rxd_peer {
 	uint8_t blocking;
 	struct dlist_entry tx_list;
 	struct dlist_entry rx_list;
+	struct dlist_entry rma_rx_list;
 	struct dlist_entry unacked;
 	struct dlist_entry pending;
 	struct dlist_entry buf_ops;
@@ -242,7 +243,8 @@ enum rxd_msg_type {
 	RXD_RTS,
 	RXD_CTS,
 	RXD_ACK,
-	RXD_DATA,
+	RXD_MSG_DATA,
+	RXD_RMA_DATA,
 	RXD_NO_OP,
 };
 
@@ -284,7 +286,14 @@ struct rxd_op_pkt {
 	struct rxd_pkt_hdr	pkt_hdr;
 
 	uint64_t		num_segs;
-	uint64_t		tag;
+	union {
+		uint64_t		tag;
+		struct {
+			uint64_t		iov_count;
+			struct ofi_rma_iov	rma[RXD_IOV_LIMIT];
+		};
+	};
+
 	uint64_t		cq_data;
 	uint64_t		size;
 
@@ -377,6 +386,10 @@ int rxd_ep_retry_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry);
 ssize_t rxd_ep_post_data_pkts(struct rxd_ep *ep, struct rxd_x_entry *tx_entry);
 
 /* Tx/Rx entry sub-functions */
+struct rxd_x_entry *rxd_rx_entry_init(struct rxd_ep *ep,
+			const struct iovec *iov, size_t iov_count, uint64_t tag,
+			uint64_t ignore, void *context, fi_addr_t addr,
+			uint32_t op, uint64_t flags);
 void rxd_tx_entry_free(struct rxd_ep *ep, struct rxd_x_entry *tx_entry);
 void rxd_rx_entry_free(struct rxd_ep *ep, struct rxd_x_entry *rx_entry);
 void rxd_set_timeout(struct rxd_pkt_entry *pkt_entry);
