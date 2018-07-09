@@ -278,6 +278,17 @@ static ssize_t mrail_recv(struct fid_ep *ep_fid, void *buf, size_t len,
 				 mrail_ep->util_ep.rx_op_flags, FI_MSG);
 }
 
+static ssize_t mrail_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
+		uint64_t flags)
+{
+	struct mrail_ep *mrail_ep = container_of(ep_fid, struct mrail_ep,
+					     util_ep.ep_fid.fid);
+
+	return mrail_recv_common(mrail_ep, &mrail_ep->recv_queue,
+				 (struct iovec *)msg->msg_iov, msg->iov_count,
+				 msg->context, msg->addr, 0, 0, flags, FI_MSG);
+}
+
 static ssize_t mrail_trecv(struct fid_ep *ep_fid, void *buf, size_t len,
 			    void *desc, fi_addr_t src_addr, uint64_t tag,
 			    uint64_t ignore, void *context)
@@ -686,7 +697,7 @@ static struct fi_ops_msg mrail_ops_msg = {
 	.size = sizeof(struct fi_ops_msg),
 	.recv = mrail_recv,
 	.recvv = fi_no_msg_recvv,
-	.recvmsg = fi_no_msg_recvmsg,
+	.recvmsg = mrail_recvmsg,
 	.send = mrail_send,
 	.sendv = fi_no_msg_sendv,
 	.sendmsg = mrail_sendmsg,
