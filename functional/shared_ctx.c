@@ -90,7 +90,13 @@ static int get_dupinfo(void)
 	hints_dup->src_addrlen = 0;
 	hints_dup->dest_addrlen = 0;
 
-	ret = fi_getinfo(FT_FIVERSION, NULL, 0, 0, hints_dup, &fi_dup);
+	if (opts.dst_addr) {
+		ret = fi_getinfo(FT_FIVERSION, opts.dst_addr, NULL, 0,
+				 hints_dup, &fi_dup);
+	} else {
+		ret = fi_getinfo(FT_FIVERSION, opts.src_addr, NULL, FI_SOURCE,
+				 hints_dup, &fi_dup);
+	}
 	if (ret)
 		FT_PRINTERR("fi_getinfo", ret);
 	fi_freeinfo(hints_dup);
