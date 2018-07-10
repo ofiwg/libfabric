@@ -136,3 +136,37 @@ int ofi_copy_iov_desc(struct iovec *dst_iov, void **dst_desc, size_t *dst_count,
 	}
 	return -FI_ETOOSMALL;
 }
+
+/* Copy 'len' bytes worth of src fi_rma_iov to dst */
+int ofi_copy_rma_iov(struct fi_rma_iov *dst_iov, size_t *dst_count,
+		struct fi_rma_iov *src_iov, size_t src_count,
+		size_t *index, size_t *offset, size_t len)
+{
+	size_t i, j;
+
+	assert(*index < src_count);
+	assert(*offset <= src_iov[*index].len);
+
+	for (i = 0, j = *index; j < src_count; i++, j++) {
+		dst_iov[i].addr	= src_iov[j].addr + *offset;
+		dst_iov[i].key	= src_iov[j].key;
+
+		if (len <= src_iov[j].len - *offset) {
+			dst_iov[i].len = len;
+			*dst_count = i + 1;
+
+			if (len == src_iov[j].len - *offset) {
+				*index = j + 1;
+				*offset = 0;
+			} else {
+				*index = j;
+				*offset += len;
+			}
+			return 0;
+		}
+		dst_iov[i].len = src_iov[j].len - *offset;
+		len -= dst_iov[i].len;
+		*offset = 0;
+	}
+	return -FI_ETOOSMALL;
+}
