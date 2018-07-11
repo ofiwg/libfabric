@@ -177,7 +177,7 @@ void rxd_cq_report_error(struct rxd_cq *cq, struct fi_cq_err_entry *err_entry)
 	}
 
 	entry->err_entry = *err_entry;
-	slist_insert_tail(&entry->list_entry, &cq->util_cq.err_list);
+	slist_insert_tail(&entry->list_entry, &cq->util_cq.oflow_err_list);
 	cq_entry.flags = UTIL_FLAG_ERROR;
 	cq->write_fn(cq, &cq_entry);
 }

@@ -98,7 +98,7 @@ int fi_ibv_dgram_cq_cntr_report_error(struct util_cq *util_cq,
 		util_cntr->cntr_fid.ops->adderr(&util_cntr->cntr_fid, 1);
 
 	fastlock_acquire(&util_cq->cq_lock);
-	slist_insert_tail(&err->list_entry, &util_cq->err_list);
+	slist_insert_tail(&err->list_entry, &util_cq->oflow_err_list);
 
 	/* Signal that there is err entry */
 	comp = ofi_cirque_tail(util_cq->cirq);

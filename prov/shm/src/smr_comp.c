@@ -52,7 +52,7 @@ int smr_tx_comp(struct smr_ep *ep, void *context, uint64_t flags, uint64_t err)
 		entry->err_entry.err = err;
 		entry->err_entry.prov_errno = -err;
 		slist_insert_tail(&entry->list_entry,
-				  &ep->util_ep.tx_cq->err_list);
+				  &ep->util_ep.tx_cq->oflow_err_list);
 		comp->flags = UTIL_FLAG_ERROR;
 	} else {
 		comp->op_context = context;
@@ -94,7 +94,7 @@ int smr_rx_comp(struct smr_ep *ep, void *context, uint64_t flags, size_t len,
 		entry->err_entry.err = err;
 		entry->err_entry.prov_errno = -err;
 		slist_insert_tail(&entry->list_entry,
-				  &ep->util_ep.rx_cq->err_list);
+				  &ep->util_ep.rx_cq->oflow_err_list);
 		comp->flags = UTIL_FLAG_ERROR;
 	} else {
 		comp->op_context = context;
