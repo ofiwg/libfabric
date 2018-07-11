@@ -233,10 +233,7 @@ int smr_rx_comp_signal(struct smr_ep *ep, void *context, uint64_t flags,
 int smr_rx_src_comp_signal(struct smr_ep *ep, void *context, uint64_t flags,
 			   size_t len, void *buf, void *addr, uint64_t tag,
 			   uint64_t data, uint64_t err);
-
-uint64_t smr_tx_comp_flags(uint32_t op);
-uint64_t smr_rx_comp_flags(uint32_t op, uint16_t op_flags);
-uint64_t smr_mr_reg_flags(uint32_t op, uint16_t atomic_op);
+uint64_t smr_rx_cq_flags(uint32_t op, uint16_t op_flags);
 
 void smr_ep_progress(struct util_ep *util_ep);
 int smr_progress_unexp(struct smr_ep *ep, struct smr_ep_entry *entry);
