@@ -260,15 +260,17 @@ static inline int rxm_finish_sar_segment_send(struct rxm_tx_buf *tx_buf)
 	if (!--tx_entry->segs_left) {
 		return rxm_finish_send_nobuf(tx_entry);
 	} else if (!dlist_empty(&tx_entry->deferred_tx_buf_list)) {
-		ssize_t ret;
+		ssize_t ret = 0;
 
-		tx_buf = container_of(tx_entry->deferred_tx_buf_list.next,
-				      struct rxm_tx_buf, hdr.entry);
-		ret = fi_send(tx_entry->conn->msg_ep, &tx_buf->pkt,
-			      sizeof(tx_buf->pkt) + tx_buf->pkt.ctrl_hdr.seg_size,
-			      tx_buf->hdr.desc, 0, tx_buf);
-		if (!ret)
-			dlist_remove(&tx_buf->hdr.entry);
+		while (!dlist_empty(&tx_entry->deferred_tx_buf_list) && !ret) {
+			tx_buf = container_of(tx_entry->deferred_tx_buf_list.next,
+					      struct rxm_tx_buf, hdr.entry);
+			ret = fi_send(tx_entry->conn->msg_ep, &tx_buf->pkt,
+				      sizeof(tx_buf->pkt) + tx_buf->pkt.ctrl_hdr.seg_size,
+				      tx_buf->hdr.desc, 0, tx_buf);
+			if (!ret)
+				dlist_remove(&tx_buf->hdr.entry);
+		}
 	}
 	/* This branch takes true, when it's impossible to allocate TX buffer */
 	if (OFI_UNLIKELY((tx_entry->msg_id == UINT64_MAX) &&
@@ -356,24 +358,21 @@ ssize_t rxm_cq_handle_seg_data(struct rxm_rx_buf *rx_buf)
 {
 	uint64_t done_len = ofi_copy_to_iov(rx_buf->recv_entry->rxm_iov.iov,
 					    rx_buf->recv_entry->rxm_iov.count,
-					    rx_buf->recv_entry->total_recv_len,
+					    rx_buf->pkt.hdr.size,
 					    rx_buf->pkt.data,
 					    rx_buf->pkt.ctrl_hdr.seg_size);
 	rx_buf->recv_entry->total_recv_len += done_len;
 	/* Check that this isn't last segment */
-	if (((rx_buf->recv_entry->total_recv_len == done_len /* this is a first segment */) ||
-	     (rx_buf->recv_entry->segs_left != 1 /* this is neither a first nor a last segment */)) &&
+	if (rxm_sar_get_seg_type(&rx_buf->pkt.ctrl_hdr) != RXM_SAR_SEG_LAST &&
 	/* and message isn't truncated */
 	    (done_len == rx_buf->pkt.ctrl_hdr.seg_size)) {
 		if (rx_buf->recv_entry->msg_id == UINT64_MAX) {
 			rx_buf->conn = rxm_key2conn(rx_buf->ep,
 						    rx_buf->pkt.ctrl_hdr.conn_id);
 			rx_buf->recv_entry->msg_id = rx_buf->pkt.ctrl_hdr.msg_id;
-			rx_buf->recv_entry->segs_left = rx_buf->pkt.ctrl_hdr.segs_cnt;
 			dlist_insert_tail(&rx_buf->recv_entry->sar_entry,
 					  &rx_buf->conn->sar_rx_msg_list);
 		}
-		rx_buf->recv_entry->segs_left--;
 		/* The RX buffer can be reposted for further re-use */
 		rx_buf->recv_entry = NULL;
 		rx_buf->ep->res_fastlock_acquire(&rx_buf->ep->util_ep.lock);
@@ -382,10 +381,15 @@ ssize_t rxm_cq_handle_seg_data(struct rxm_rx_buf *rx_buf)
 		rx_buf->ep->res_fastlock_release(&rx_buf->ep->util_ep.lock);
 		return FI_SUCCESS;
 	}
-	rx_buf->recv_entry->segs_left--;
 	dlist_remove(&rx_buf->recv_entry->sar_entry);
 	/* Mark rxm_recv_entry::msg_id as unknown for futher re-use */
 	rx_buf->recv_entry->msg_id = UINT64_MAX;
+
+	/* The hdr::size contains offset (bytes) that should be applied when
+	 * performing copying segment data to the destination buffer.
+	 * The total size of messages = last segment size + offset from hdr::size */
+	rx_buf->pkt.hdr.size += done_len;
+
 	done_len = rx_buf->recv_entry->total_recv_len;
 	rx_buf->recv_entry->total_recv_len = 0;
 	return rxm_finish_recv(rx_buf, done_len);
