@@ -49,7 +49,7 @@ int ofi_cq_write_error(struct util_cq *cq,
 
 	entry->err_entry = *err_entry;
 	cq->cq_fastlock_acquire(&cq->cq_lock);
-	slist_insert_tail(&entry->list_entry, &cq->err_list);
+	slist_insert_tail(&entry->list_entry, &cq->oflow_err_list);
 	comp = ofi_cirque_tail(cq->cirq);
 	comp->flags = UTIL_FLAG_ERROR;
 	ofi_cirque_commit(cq->cirq);
@@ -232,7 +232,7 @@ ssize_t ofi_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *buf,
 	}
 
 	ofi_cirque_discard(cq->cirq);
-	entry = slist_remove_head(&cq->err_list);
+	entry = slist_remove_head(&cq->oflow_err_list);
 	err = container_of(entry, struct util_cq_err_entry, list_entry);
 	if ((FI_VERSION_GE(api_version, FI_VERSION(1, 5))) && buf->err_data_size) {
 		err_data_size = MIN(buf->err_data_size, err->err_entry.err_data_size);
@@ -323,8 +323,8 @@ int ofi_cq_cleanup(struct util_cq *cq)
 	if (ofi_atomic_get32(&cq->ref))
 		return -FI_EBUSY;
 
-	while (!slist_empty(&cq->err_list)) {
-		entry = slist_remove_head(&cq->err_list);
+	while (!slist_empty(&cq->oflow_err_list)) {
+		entry = slist_remove_head(&cq->oflow_err_list);
 		err = container_of(entry, struct util_cq_err_entry, list_entry);
 		free(err);
 	}
@@ -388,7 +388,7 @@ static int fi_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
 		cq->cq_fastlock_acquire = ofi_fastlock_acquire;
 		cq->cq_fastlock_release = ofi_fastlock_release;
 	}
-	slist_init(&cq->err_list);
+	slist_init(&cq->oflow_err_list);
 	cq->read_entry = read_entry;
 
 	cq->cq_fid.fid.fclass = FI_CLASS_CQ;
