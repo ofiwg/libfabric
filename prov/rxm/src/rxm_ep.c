@@ -782,9 +782,7 @@ rxm_ep_format_tx_res_lightweight(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_con
 
 	assert((((*tx_buf)->pkt.ctrl_hdr.type == ofi_ctrl_data) &&
 		 (len <= rxm_ep->rxm_info->tx_attr->inject_size)) ||
-	       ((len > rxm_ep->rxm_info->tx_attr->inject_size) &&
-		(len <= rxm_ep->sar_limit) &&
-		((*tx_buf)->pkt.ctrl_hdr.type == ofi_ctrl_seg_data)) ||
+	       (((*tx_buf)->pkt.ctrl_hdr.type == ofi_ctrl_seg_data)) ||
 	       ((*tx_buf)->pkt.ctrl_hdr.type == ofi_ctrl_large_data));
 
 	(*tx_buf)->pkt.ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
@@ -910,7 +908,7 @@ err:
 
 static inline struct rxm_tx_buf *
 rxm_ep_sar_tx_prepare_segment(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
-			      size_t total_len, size_t seg_len, uint64_t data,
+			      size_t offset, size_t seg_len, uint64_t data,
 			      uint64_t flags, uint64_t tag, uint64_t comp_flags,
 			      uint8_t op, enum rxm_sar_seg_type seg_type,
 			      struct rxm_tx_entry *tx_entry)
@@ -918,7 +916,7 @@ rxm_ep_sar_tx_prepare_segment(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	struct rxm_tx_buf *tx_buf;
 	ssize_t ret;
 
-	ret = rxm_ep_format_tx_res_lightweight(rxm_ep, rxm_conn, total_len, data,
+	ret = rxm_ep_format_tx_res_lightweight(rxm_ep, rxm_conn, offset, data,
 					       flags, tag, &tx_buf,
 					       &rxm_ep->buf_pools[RXM_BUF_POOL_TX_SAR]);
 	if (OFI_UNLIKELY(ret))
@@ -984,7 +982,8 @@ rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void *conte
 			seg_type = RXM_SAR_SEG_LAST;
 		}
 
-		tx_buf = rxm_ep_sar_tx_prepare_segment(rxm_ep, rxm_conn, data_len,
+		tx_buf = rxm_ep_sar_tx_prepare_segment(rxm_ep, rxm_conn,
+						       data_len - total_len, /* offset */
 						       seg_len, data, flags, tag,
 						       comp_flags, op, seg_type,
 						       tx_entry);

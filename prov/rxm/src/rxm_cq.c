@@ -358,7 +358,7 @@ ssize_t rxm_cq_handle_seg_data(struct rxm_rx_buf *rx_buf)
 {
 	uint64_t done_len = ofi_copy_to_iov(rx_buf->recv_entry->rxm_iov.iov,
 					    rx_buf->recv_entry->rxm_iov.count,
-					    rx_buf->recv_entry->total_recv_len,
+					    rx_buf->pkt.hdr.size,
 					    rx_buf->pkt.data,
 					    rx_buf->pkt.ctrl_hdr.seg_size);
 	rx_buf->recv_entry->total_recv_len += done_len;
@@ -384,6 +384,12 @@ ssize_t rxm_cq_handle_seg_data(struct rxm_rx_buf *rx_buf)
 	dlist_remove(&rx_buf->recv_entry->sar_entry);
 	/* Mark rxm_recv_entry::msg_id as unknown for futher re-use */
 	rx_buf->recv_entry->msg_id = UINT64_MAX;
+
+	/* The hdr::size contains offset (bytes) that should be applied when
+	 * performing copying segment data to the destination buffer.
+	 * The total size of messages = last segment size + offset from hdr::size */
+	rx_buf->pkt.hdr.size += done_len;
+
 	done_len = rx_buf->recv_entry->total_recv_len;
 	rx_buf->recv_entry->total_recv_len = 0;
 	return rxm_finish_recv(rx_buf, done_len);
