@@ -342,14 +342,9 @@ int ofi_wait_fd_del(struct util_wait *wait, int fd);
 
 typedef void (*fi_cq_read_func)(void **dst, void *src);
 
-struct util_cq_err_entry {
-	struct fi_cq_err_entry	err_entry;
-	struct slist_entry	list_entry;
-};
-
-struct util_cq_oflow_entry {
+struct util_cq_oflow_err_entry {
 	struct fi_cq_tagged_entry	*parent_comp;
-	struct fi_cq_tagged_entry	comp;
+	struct fi_cq_err_entry		comp;
 	fi_addr_t			src;
 	struct slist_entry		list_entry;
 };
@@ -425,6 +420,8 @@ ofi_cq_write_thread_unsafe(struct util_cq *cq, void *context, uint64_t flags,
 			   size_t len, void *buf, uint64_t data, uint64_t tag)
 {
 	if (OFI_UNLIKELY(ofi_cirque_isfull(cq->cirq))) {
+		FI_DBG(cq->domain->prov, FI_LOG_CQ,
+		       "util_cq cirq is full!\n");
 		return ofi_cq_write_overflow(cq, context, flags, len,
 					     buf, data, tag, 0);
 	}
@@ -449,6 +446,8 @@ ofi_cq_write_src(struct util_cq *cq, void *context, uint64_t flags, size_t len,
 {
 	cq->cq_fastlock_acquire(&cq->cq_lock);
 	if (OFI_UNLIKELY(ofi_cirque_isfull(cq->cirq))) {
+		FI_DBG(cq->domain->prov, FI_LOG_CQ,
+		       "util_cq cirq is full!\n");
 		return ofi_cq_write_overflow(cq, context, flags, len,
 					     buf, data, tag, 0);
 	}

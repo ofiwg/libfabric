@@ -169,14 +169,14 @@ void rxd_rx_entry_free(struct rxd_ep *ep, struct rxd_x_entry *rx_entry)
 void rxd_cq_report_error(struct rxd_cq *cq, struct fi_cq_err_entry *err_entry)
 {
 	struct fi_cq_tagged_entry cq_entry = {0};
-	struct util_cq_err_entry *entry = calloc(1, sizeof(*entry));
+	struct util_cq_oflow_err_entry *entry = calloc(1, sizeof(*entry));
 	if (!entry) {
 		FI_WARN(&rxd_prov, FI_LOG_CQ,
 			"out of memory, cannot report CQ error\n");
 		return;
 	}
 
-	entry->err_entry = *err_entry;
+	entry->comp = *err_entry;
 	slist_insert_tail(&entry->list_entry, &cq->util_cq.oflow_err_list);
 	cq_entry.flags = UTIL_FLAG_ERROR;
 	cq->write_fn(cq, &cq_entry);
