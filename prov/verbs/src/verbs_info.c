@@ -464,7 +464,7 @@ err1:
 	return ret;
 }
 
-static size_t fi_ibv_mtu_type_to_len(enum ibv_mtu mtu_type)
+static int fi_ibv_mtu_type_to_len(enum ibv_mtu mtu_type)
 {
 	switch (mtu_type) {
 	case IBV_MTU_256:
@@ -478,8 +478,7 @@ static size_t fi_ibv_mtu_type_to_len(enum ibv_mtu mtu_type)
 	case IBV_MTU_4096:
 		return 4096;
 	default:
-		assert(0);
-		return 0;
+		return -FI_EINVAL;
 	}
 }
 
@@ -550,10 +549,19 @@ static int fi_ibv_get_device_attrs(struct ibv_context *ctx,
 			   port_num);
 	}
 
-	max_sup_size = (info->ep_attr->type == FI_EP_DGRAM) ?
-			MIN(fi_ibv_mtu_type_to_len(port_attr.active_mtu),
-			    port_attr.max_msg_sz) :
-			port_attr.max_msg_sz;
+	if (info->ep_attr->type == FI_EP_DGRAM) {
+		ret = fi_ibv_mtu_type_to_len(port_attr.active_mtu);
+		if (ret < 0) {
+			VERBS_WARN(FI_LOG_FABRIC, "Device %s (port: %d) reports"
+				   " an unrecognized MTU (%d) \n",
+				   ibv_get_device_name(ctx->device), port_num,
+				   port_attr.active_mtu);
+			return ret;
+		}
+		max_sup_size = MIN(ret, port_attr.max_msg_sz);
+	} else {
+		max_sup_size = port_attr.max_msg_sz;
+	}
 
 	info->ep_attr->max_msg_size 		= max_sup_size;
 	info->ep_attr->max_order_raw_size 	= max_sup_size;
