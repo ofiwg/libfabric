@@ -175,6 +175,7 @@ static void client_recv_connresp(struct util_wait *wait,
 		goto err;
 
 	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "Received Accept from server\n");
+	free(cm_ctx);
 	return;
 err:
 	memset(&err_entry, 0, sizeof err_entry);
@@ -182,6 +183,8 @@ err:
 	err_entry.context = cm_ctx->fid->context;
 	err_entry.err = -ret;
 	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "fi_eq_write the conn refused %d\n", ret);
+
+	free(cm_ctx);
 	fi_eq_write(&ep->util_ep.eq->eq_fid, FI_NOTIFY,
 		    &err_entry, sizeof(err_entry), UTIL_FLAG_ERROR);
 }
@@ -202,18 +205,12 @@ static void server_send_cm_accept(struct util_wait *wait,
 		goto err;
 
 	cm_entry.fid =  cm_ctx->fid;
-
-	ret = tcpx_ep_msg_xfer_enable(ep);
-	if (ret)
-		goto err;
-
 	ret = (int) fi_eq_write(&ep->util_ep.eq->eq_fid, FI_CONNECTED,
 				&cm_entry, sizeof(cm_entry), 0);
 	if (ret < 0) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
 	}
 
-	free(cm_ctx);
 	ret = ofi_wait_fd_del(wait, ep->conn_fd);
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
@@ -221,7 +218,12 @@ static void server_send_cm_accept(struct util_wait *wait,
 		goto err;
 	}
 
+	ret = tcpx_ep_msg_xfer_enable(ep);
+	if (ret)
+		goto err;
+
 	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "Connection Accept Successful\n");
+	free(cm_ctx);
 	return;
 err:
 	memset(&err_entry, 0, sizeof err_entry);
@@ -229,6 +231,7 @@ err:
 	err_entry.context = cm_ctx->fid->context;
 	err_entry.err = -ret;
 
+	free(cm_ctx);
 	fi_eq_write(&ep->util_ep.eq->eq_fid, FI_NOTIFY,
 		    &err_entry, sizeof(err_entry), UTIL_FLAG_ERROR);
 }
@@ -269,19 +272,21 @@ static void server_recv_connreq(struct util_wait *wait,
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
 		goto err3;
 	}
-	free(cm_entry);
-	free(cm_ctx);
 	ret = ofi_wait_fd_del(wait, handle->conn_fd);
 	if (ret)
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"fd deletion from ofi_wait failed\n");
+	free(cm_entry);
+	free(cm_ctx);
 	return;
 err3:
 	fi_freeinfo(cm_entry->info);
 err2:
 	free(cm_entry);
 err1:
+	ofi_wait_fd_del(wait, handle->conn_fd);
 	ofi_close_socket(handle->conn_fd);
+	free(cm_ctx);
 	free(handle);
 }
 
@@ -327,6 +332,7 @@ err:
 	err_entry.context = cm_ctx->fid->context;
 	err_entry.err = -ret;
 
+	free(cm_ctx);
 	fi_eq_write(&ep->util_ep.eq->eq_fid, FI_NOTIFY,
 		    &err_entry, sizeof(err_entry), UTIL_FLAG_ERROR);
 }
