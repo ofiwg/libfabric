@@ -64,7 +64,8 @@
 
 #include "rbtree.h"
 
-#define UTIL_FLAG_ERROR	(1ULL << 60)
+#define UTIL_FLAG_ERROR		(1ULL << 60)
+#define UTIL_FLAG_OVERFLOW	(1ULL << 61)
 	
 #define OFI_CNTR_ENABLED	(1ULL << 61)
 
@@ -338,13 +339,14 @@ int ofi_wait_fd_del(struct util_wait *wait, int fd);
  * entries on the CQ.  This allows poll sets to drive progress
  * without introducing private interfaces to the CQ.
  */
-#define FI_DEFAULT_CQ_SIZE	1024
 
 typedef void (*fi_cq_read_func)(void **dst, void *src);
 
-struct util_cq_err_entry {
-	struct fi_cq_err_entry	err_entry;
-	struct slist_entry	list_entry;
+struct util_cq_oflow_err_entry {
+	struct fi_cq_tagged_entry	*parent_comp;
+	struct fi_cq_err_entry		comp;
+	fi_addr_t			src;
+	struct slist_entry		list_entry;
 };
 
 OFI_DECLARE_CIRQUE(struct fi_cq_tagged_entry, util_comp_cirq);
@@ -365,7 +367,7 @@ struct util_cq {
 	struct util_comp_cirq	*cirq;
 	fi_addr_t		*src;
 
-	struct slist		err_list;
+	struct slist		oflow_err_list;
 	fi_cq_read_func		read_entry;
 	int			internal_wait;
 	ofi_atomic32_t		signaled;
@@ -389,24 +391,21 @@ ssize_t ofi_cq_sread(struct fid_cq *cq_fid, void *buf, size_t count,
 ssize_t ofi_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 		fi_addr_t *src_addr, const void *cond, int timeout);
 int ofi_cq_signal(struct fid_cq *cq_fid);
+
+int ofi_cq_write_overflow(struct util_cq *cq, void *context, uint64_t flags, size_t len,
+			  void *buf, uint64_t data, uint64_t tag, fi_addr_t src);
+
 static inline void util_cq_signal(struct util_cq *cq)
 {
 	assert(cq->wait);
 	cq->wait->signal(cq->wait);
 }
 
-static inline int
-ofi_cq_write_thread_unsafe(struct util_cq *cq, void *context, uint64_t flags,
-			   size_t len, void *buf, uint64_t data, uint64_t tag)
+static inline void
+ofi_cq_write_comp_entry(struct util_cq *cq, void *context, uint64_t flags,
+			size_t len, void *buf, uint64_t data, uint64_t tag)
 {
-	struct fi_cq_tagged_entry *comp;
-
-	if (ofi_cirque_isfull(cq->cirq)) {
-		FI_DBG(cq->domain->prov, FI_LOG_CQ, "util_cq cirq is full!\n");
-		return -FI_EAGAIN;
-	}
-
-	comp = ofi_cirque_tail(cq->cirq);
+	struct fi_cq_tagged_entry *comp = ofi_cirque_tail(cq->cirq);
 	comp->op_context = context;
 	comp->flags = flags;
 	comp->len = len;
@@ -414,6 +413,19 @@ ofi_cq_write_thread_unsafe(struct util_cq *cq, void *context, uint64_t flags,
 	comp->data = data;
 	comp->tag = tag;
 	ofi_cirque_commit(cq->cirq);
+}
+
+static inline int
+ofi_cq_write_thread_unsafe(struct util_cq *cq, void *context, uint64_t flags,
+			   size_t len, void *buf, uint64_t data, uint64_t tag)
+{
+	if (OFI_UNLIKELY(ofi_cirque_isfull(cq->cirq))) {
+		FI_DBG(cq->domain->prov, FI_LOG_CQ,
+		       "util_cq cirq is full!\n");
+		return ofi_cq_write_overflow(cq, context, flags, len,
+					     buf, data, tag, 0);
+	}
+	ofi_cq_write_comp_entry(cq, context, flags, len, buf, data, tag);
 	return 0;
 }
 
@@ -432,14 +444,17 @@ static inline int
 ofi_cq_write_src(struct util_cq *cq, void *context, uint64_t flags, size_t len,
 		 void *buf, uint64_t data, uint64_t tag, fi_addr_t src)
 {
-	int ret;
-
 	cq->cq_fastlock_acquire(&cq->cq_lock);
-	ret = ofi_cq_write_thread_unsafe(cq, context, flags, len, buf, data, tag);
-	if (!ret)
-		cq->src[ofi_cirque_windex(cq->cirq)] = src;
+	if (OFI_UNLIKELY(ofi_cirque_isfull(cq->cirq))) {
+		FI_DBG(cq->domain->prov, FI_LOG_CQ,
+		       "util_cq cirq is full!\n");
+		return ofi_cq_write_overflow(cq, context, flags, len,
+					     buf, data, tag, 0);
+	}
+	ofi_cq_write_comp_entry(cq, context, flags, len, buf, data, tag);
+	cq->src[ofi_cirque_windex(cq->cirq)] = src;
 	cq->cq_fastlock_release(&cq->cq_lock);
-	return ret;
+	return 0;
 }
 
 int ofi_cq_write_error(struct util_cq *cq,

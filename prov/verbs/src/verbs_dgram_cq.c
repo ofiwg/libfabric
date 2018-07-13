@@ -83,7 +83,7 @@ int fi_ibv_dgram_cq_cntr_report_error(struct util_cq *util_cq,
 	struct fi_cq_tagged_entry *comp;
 	struct fi_ibv_dgram_wr_entry *wr_entry =
 		(struct fi_ibv_dgram_wr_entry *)(uintptr_t)wc->wr_id;
-	struct util_cq_err_entry *err = calloc(1, sizeof(*err));
+	struct util_cq_oflow_err_entry *err = calloc(1, sizeof(*err));
 	if (!err) {
 		VERBS_WARN(FI_LOG_CQ, "Unable to allocate "
 				      "util_cq_err_entry\n");
@@ -92,13 +92,13 @@ int fi_ibv_dgram_cq_cntr_report_error(struct util_cq *util_cq,
 
 	err_entry.op_context = wr_entry->hdr.context;
 	err_entry.flags = wr_entry->hdr.flags;
-	err->err_entry = err_entry;
+	err->comp = err_entry;
 
 	if (util_cntr)
 		util_cntr->cntr_fid.ops->adderr(&util_cntr->cntr_fid, 1);
 
 	fastlock_acquire(&util_cq->cq_lock);
-	slist_insert_tail(&err->list_entry, &util_cq->err_list);
+	slist_insert_tail(&err->list_entry, &util_cq->oflow_err_list);
 
 	/* Signal that there is err entry */
 	comp = ofi_cirque_tail(util_cq->cirq);
