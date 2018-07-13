@@ -154,7 +154,7 @@ int tcpx_eq_wait_try_func(void *arg)
 }
 
 static void client_recv_connresp(struct util_wait *wait,
-				     struct tcpx_cm_context *cm_ctx)
+				 struct tcpx_cm_context *cm_ctx)
 {
 	struct fi_eq_err_entry err_entry;
 	struct tcpx_ep *ep;
@@ -390,7 +390,7 @@ err1:
 }
 
 static void process_cm_ctx(struct util_wait *wait,
-			      struct tcpx_cm_context *cm_ctx)
+			   struct tcpx_cm_context *cm_ctx)
 {
 	switch (cm_ctx->type) {
 	case SERVER_SOCK_ACCEPT:
@@ -437,7 +437,7 @@ void tcpx_conn_mgr_run(struct util_eq *eq)
 			continue;
 
 		process_cm_ctx(eq->wait,
-				 (struct tcpx_cm_context *)
-				 wait_contexts[i]);
+			       (struct tcpx_cm_context *)
+			       wait_contexts[i]);
 	}
 }
