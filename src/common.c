@@ -203,18 +203,18 @@ int ofi_check_rx_mode(const struct fi_info *info, uint64_t flags)
 
 uint64_t fi_gettime_ms(void)
 {
-	struct timeval now;
+	struct timespec now;
 
-	gettimeofday(&now, NULL);
-	return now.tv_sec * 1000 + now.tv_usec / 1000;
+	clock_gettime(CLOCK_MONOTONIC_COARSE, &now);
+	return now.tv_sec * 1000 + now.tv_nsec / 1000000;
 }
 
 uint64_t fi_gettime_us(void)
 {
-	struct timeval now;
+	struct timespec now;
 
-	gettimeofday(&now, NULL);
-	return now.tv_sec * 1000000 + now.tv_usec;
+	clock_gettime(CLOCK_MONOTONIC, &now);
+	return now.tv_sec * 1000000 + now.tv_nsec / 1000;
 }
 
 const char *ofi_straddr(char *buf, size_t *len,
