@@ -258,6 +258,7 @@ struct util_buf_attr {
 	util_buf_region_alloc_hndlr 	alloc_hndlr;
 	util_buf_region_free_hndlr 	free_hndlr;
 	void 				*ctx;
+	uint8_t				track_used;
 };
 
 struct util_buf_pool {

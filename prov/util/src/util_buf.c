@@ -134,6 +134,7 @@ int util_buf_pool_create_ex(struct util_buf_pool **buf_pool,
 		.alloc_hndlr	= alloc_hndlr,
 		.free_hndlr	= free_hndlr,
 		.ctx		= pool_ctx,
+		.track_used	= 1,
 	};
 	return util_buf_pool_create_attr(&attr, buf_pool);
 }
@@ -170,7 +171,8 @@ void util_buf_pool_destroy(struct util_buf_pool *pool)
 		entry = slist_remove_head(&pool->region_list);
 		buf_region = container_of(entry, struct util_buf_region, entry);
 #if ENABLE_DEBUG
-		assert(buf_region->num_used == 0);
+		if (pool->attr.track_used)
+			assert(buf_region->num_used == 0);
 #endif
 		if (pool->attr.free_hndlr)
 			pool->attr.free_hndlr(pool->attr.ctx, buf_region->context);
