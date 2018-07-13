@@ -156,7 +156,7 @@ static int rxd_match_unexp(struct dlist_entry *item, const void *arg)
 
 	return rxd_match_addr(rx_entry->peer, pkt_entry->peer) &&
 	       rxd_match_tag(rx_entry->cq_entry.tag, rx_entry->ignore,
-			     pkt_entry->pkt->ctrl.tag);
+			     rxd_get_ctrl_pkt(pkt_entry)->ctrl_hdr.tag);
 }
 
 static void rxd_ep_check_unexp_msg_list(struct rxd_ep *ep, struct dlist_entry *list,
@@ -174,7 +174,10 @@ static void rxd_ep_check_unexp_msg_list(struct rxd_ep *ep, struct dlist_entry *l
 
 		pkt_entry = container_of(match, struct rxd_pkt_entry, d_entry);
 
-		rxd_post_cts(ep, rx_entry, pkt_entry);
+		if (rxd_get_ctrl_pkt(pkt_entry)->pkt_hdr.flags & RXD_INLINE)
+			rxd_progress_inline(ep, pkt_entry, rx_entry);
+		else
+			rxd_post_cts(ep, rx_entry, pkt_entry);
 
 		rxd_release_rx_pkt(ep, pkt_entry);
 		rxd_ep_post_buf(ep);
@@ -372,28 +375,31 @@ static void rxd_init_data_pkt(struct rxd_ep *ep,
 			      struct rxd_x_entry *tx_entry,
 			      struct rxd_pkt_entry *pkt_entry)
 {
+	struct rxd_data_pkt *data_pkt;
 	uint32_t seg_size;
 
 	seg_size = tx_entry->cq_entry.len - tx_entry->bytes_done;
 	seg_size = MIN(tx_entry->seg_size, seg_size);
 
 	rxd_set_pkt(ep, pkt_entry);
-	pkt_entry->pkt->hdr.rx_id = tx_entry->rx_id;
-	pkt_entry->pkt->hdr.seg_no = tx_entry->next_seg_no++;
-	pkt_entry->pkt->hdr.tx_id = tx_entry->tx_id;
-	pkt_entry->pkt->hdr.key = tx_entry->key;
-	pkt_entry->pkt->hdr.peer = tx_entry->peer_x_addr;
+	data_pkt = rxd_get_data_pkt(pkt_entry);
 
-	pkt_entry->pkt_size = ofi_copy_from_iov(&pkt_entry->pkt->data, seg_size,
+	data_pkt->hdr.rx_id = tx_entry->rx_id;
+	data_pkt->hdr.seg_no = tx_entry->next_seg_no++;
+	data_pkt->hdr.tx_id = tx_entry->tx_id;
+	data_pkt->hdr.key = tx_entry->key;
+	data_pkt->hdr.peer = tx_entry->peer_x_addr;
+
+	pkt_entry->pkt_size = ofi_copy_from_iov(data_pkt->data, seg_size,
 						tx_entry->iov,
 						tx_entry->iov_count,
 						tx_entry->bytes_done);
 
 	tx_entry->bytes_done += pkt_entry->pkt_size;
 	if (tx_entry->bytes_done == tx_entry->cq_entry.len)
-		pkt_entry->pkt->hdr.flags = RXD_LAST;
+		data_pkt->hdr.flags = RXD_LAST;
 	else
-		pkt_entry->pkt->hdr.flags = 0;
+		data_pkt->hdr.flags = 0;
 
 	pkt_entry->pkt_size += sizeof(struct rxd_pkt_hdr) + ep->prefix_size;
 }
@@ -401,17 +407,21 @@ static void rxd_init_data_pkt(struct rxd_ep *ep,
 void rxd_init_ctrl_pkt(struct rxd_ep *ep, struct rxd_x_entry *x_entry,
 		       struct rxd_pkt_entry *pkt_entry, uint32_t type)
 {
+	struct rxd_ctrl_pkt *ctrl_pkt;
+
 	x_entry->retry_cnt = 0;
 	rxd_set_pkt(ep, pkt_entry);
-	pkt_entry->pkt->hdr.flags = x_entry->flags | RXD_CTRL;
-	pkt_entry->pkt->hdr.tx_id = x_entry->tx_id;
-	pkt_entry->pkt->hdr.rx_id = x_entry->rx_id;
-	pkt_entry->pkt->hdr.key = x_entry->key;
-	pkt_entry->pkt->hdr.peer = x_entry->peer;
-	pkt_entry->pkt->ctrl.type = type;
-	pkt_entry->pkt->ctrl.window = x_entry->window;
-	pkt_entry->pkt->ctrl.version = RXD_PROTOCOL_VERSION;
-	pkt_entry->pkt_size = RXD_CTRL_PKT_SIZE + ep->prefix_size;
+	ctrl_pkt = rxd_get_ctrl_pkt(pkt_entry);
+
+	ctrl_pkt->pkt_hdr.version = RXD_PROTOCOL_VERSION;
+	ctrl_pkt->pkt_hdr.flags = x_entry->flags | RXD_CTRL;
+	ctrl_pkt->pkt_hdr.tx_id = x_entry->tx_id;
+	ctrl_pkt->pkt_hdr.rx_id = x_entry->rx_id;
+	ctrl_pkt->pkt_hdr.key = x_entry->key;
+	ctrl_pkt->pkt_hdr.peer = x_entry->peer;
+	ctrl_pkt->ctrl_hdr.type = type;
+	ctrl_pkt->ctrl_hdr.window = x_entry->window;
+	pkt_entry->pkt_size = sizeof(struct rxd_ctrl_pkt) + ep->prefix_size;
 }
 
 struct rxd_x_entry *rxd_tx_entry_init(struct rxd_ep *ep, const struct iovec *iov,
@@ -498,7 +508,7 @@ void rxd_ep_free_acked_pkts(struct rxd_ep *ep, struct rxd_x_entry *x_entry,
 		pkt_entry = container_of(x_entry->pkt_list.head,
 				   struct rxd_pkt_entry, s_entry);
 		if (!rxd_is_ctrl_pkt(pkt_entry) &&
-		    pkt_entry->pkt->hdr.seg_no > last_acked)
+		    rxd_get_data_pkt(pkt_entry)->hdr.seg_no > last_acked)
 			break;
 		slist_remove_head(&x_entry->pkt_list);
 		rxd_release_tx_pkt(ep, pkt_entry);
@@ -529,6 +539,7 @@ void rxd_tx_entry_progress(struct rxd_ep *ep, struct rxd_x_entry *tx_entry,
 static ssize_t rxd_ep_post_rts(struct rxd_ep *rxd_ep, struct rxd_x_entry *tx_entry)
 {
 	struct rxd_pkt_entry *pkt_entry;
+	struct rxd_ctrl_pkt *rts_pkt;
 	ssize_t ret;
 	size_t addrlen;
 
@@ -537,23 +548,36 @@ static ssize_t rxd_ep_post_rts(struct rxd_ep *rxd_ep, struct rxd_x_entry *tx_ent
 		return -FI_ENOMEM;
 
 	rxd_init_ctrl_pkt(rxd_ep, tx_entry, pkt_entry, RXD_RTS);
+	rts_pkt = rxd_get_ctrl_pkt(pkt_entry);
 	addrlen = RXD_NAME_LENGTH;
-	memset(pkt_entry->pkt->source, 0, RXD_NAME_LENGTH);
-	ret = fi_getname(&rxd_ep->dg_ep->fid, (void *) pkt_entry->pkt->source, &addrlen);
+	memset(rts_pkt->ctrl_hdr.source, 0, RXD_NAME_LENGTH);
+	ret = fi_getname(&rxd_ep->dg_ep->fid, (void *) rts_pkt->ctrl_hdr.source,
+			 &addrlen);
 	if (ret) {
 		rxd_release_tx_pkt(rxd_ep, pkt_entry);
 		return ret;
 	}
 
-	pkt_entry->pkt->ctrl.size = tx_entry->cq_entry.len;
-	pkt_entry->pkt->ctrl.data = tx_entry->cq_entry.data;
-	pkt_entry->pkt->ctrl.tag = tx_entry->cq_entry.tag;
-	pkt_entry->pkt->ctrl.seg_size = tx_entry->seg_size;
+	rts_pkt->ctrl_hdr.size = tx_entry->cq_entry.len;
+	rts_pkt->ctrl_hdr.data = tx_entry->cq_entry.data;
+	rts_pkt->ctrl_hdr.tag = tx_entry->cq_entry.tag;
+	rts_pkt->ctrl_hdr.seg_size = tx_entry->seg_size;
 
 	if (tx_entry->cq_entry.flags & FI_TAGGED)
-		pkt_entry->pkt->ctrl.op = ofi_op_tagged;
+		rts_pkt->ctrl_hdr.op = ofi_op_tagged;
 	else
-		pkt_entry->pkt->ctrl.op = ofi_op_msg;
+		rts_pkt->ctrl_hdr.op = ofi_op_msg;
+
+	if (pkt_entry->pkt_size + tx_entry->cq_entry.len <=
+	    rxd_ep_domain(rxd_ep)->max_mtu_sz) {
+		tx_entry->flags |= RXD_INLINE;
+		rts_pkt->pkt_hdr.flags |= RXD_INLINE;
+		pkt_entry->pkt_size += ofi_copy_from_iov(
+				       rts_pkt->data,
+				       tx_entry->cq_entry.len, tx_entry->iov,
+				       tx_entry->iov_count, 0);
+		tx_entry->state = RXD_CTS;
+	}
 
 	slist_insert_tail(&pkt_entry->s_entry, &tx_entry->pkt_list);
 
@@ -566,6 +590,7 @@ static ssize_t rxd_ep_post_rts(struct rxd_ep *rxd_ep, struct rxd_x_entry *tx_ent
 ssize_t rxd_ep_post_ack(struct rxd_ep *rxd_ep, struct rxd_x_entry *rx_entry)
 {
 	struct rxd_pkt_entry *pkt_entry;
+	struct rxd_ctrl_pkt *ack_pkt;
 	int ret;
 
 	pkt_entry = rxd_get_tx_pkt(rxd_ep);
@@ -573,9 +598,10 @@ ssize_t rxd_ep_post_ack(struct rxd_ep *rxd_ep, struct rxd_x_entry *rx_entry)
 		return -FI_ENOMEM;
 
 	rxd_init_ctrl_pkt(rxd_ep, rx_entry, pkt_entry, RXD_ACK);
-	pkt_entry->pkt->hdr.seg_no = rx_entry->next_seg_no;
+	ack_pkt = rxd_get_ctrl_pkt(pkt_entry);
+	ack_pkt->pkt_hdr.seg_no = rx_entry->next_seg_no;
 
-	pkt_entry->pkt->ctrl.window = rx_entry->window;
+	ack_pkt->ctrl_hdr.window = rx_entry->window;
 
 	ret = rxd_ep_retry_pkt(rxd_ep, pkt_entry, rx_entry);
 
@@ -1160,7 +1186,7 @@ static void rxd_ep_progress(struct util_ep *util_ep)
 		     pkt_item = pkt_item->next) {
 			pkt_entry = container_of(pkt_item, struct rxd_pkt_entry,
 						 s_entry);
-			pkt_entry->pkt->hdr.flags |= RXD_RETRY;
+			rxd_get_ctrl_pkt(pkt_entry)->pkt_hdr.flags |= RXD_RETRY;
 			ret = rxd_ep_retry_pkt(ep, pkt_entry, tx_entry);
 			if (ret || rxd_is_ctrl_pkt(pkt_entry))
 				break;

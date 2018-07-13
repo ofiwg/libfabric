@@ -41,8 +41,9 @@ static int rxd_tree_compare(struct ofi_rbmap *map, void *key, void *data)
 	size_t len = RXD_NAME_LENGTH;
 	int ret;
 
+	memset(addr, 0, len);
 	av = container_of(map, struct rxd_av, rbmap);
-	ret = fi_av_lookup(&av->util_av.av_fid, (fi_addr_t) data, addr, &len);
+	ret = fi_av_lookup(av->dg_av, (fi_addr_t) data, addr, &len);
 	if (ret)
 		return -1;
 
@@ -143,14 +144,16 @@ int rxd_av_insert_dg_addr(struct rxd_av *av, const void *addr,
 	ret = fi_av_insert(av->dg_av, addr, 1, dg_fiaddr,
 			     flags, context);
 	if (ret != 1)
-		return ret;
+		return -errno;
 
 	ret = ofi_rbmap_insert(&av->rbmap, (void *) addr, (void *) (*dg_fiaddr));
 
-	if (ret)
+	if (ret && ret != -FI_EALREADY) {
 		fi_av_remove(av->dg_av, dg_fiaddr, 1, flags);
+		return ret;
+	}
 
-	return ret;
+	return 0;
 }
 
 static int rxd_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
