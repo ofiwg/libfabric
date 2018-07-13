@@ -859,8 +859,7 @@ static inline int rxm_ep_repost_buf(struct rxm_rx_buf *rx_buf)
 	return FI_SUCCESS;
 }
 
-int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep,
-		       struct dlist_entry *posted_rx_list)
+int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep)
 {
 	struct rxm_rx_buf *rx_buf;
 	int ret;
@@ -882,8 +881,6 @@ int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep,
 			rxm_rx_buf_release(rxm_ep, rx_buf);
 			return ret;
 		}
-
-		dlist_insert_tail(&rx_buf->entry, posted_rx_list);
 	}
 	return 0;
 }

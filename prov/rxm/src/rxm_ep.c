@@ -202,28 +202,26 @@ static void rxm_buf_pool_destroy(struct rxm_buf_pool *pool)
 	util_buf_pool_destroy(pool->pool);
 }
 
-void rxm_ep_cleanup_posted_rx_list(struct rxm_ep *rxm_ep,
-				   struct dlist_entry *posted_rx_list)
-{
-	struct rxm_rx_buf *rx_buf;
-
-	while (!dlist_empty(posted_rx_list)) {
-		dlist_pop_front(posted_rx_list, struct rxm_rx_buf, rx_buf, entry);
-		rxm_rx_buf_release(rxm_ep, rx_buf);
-	}
-}
-
 static int rxm_buf_pool_create(struct rxm_ep *rxm_ep,
 			       size_t chunk_count, size_t size,
 			       struct rxm_buf_pool *pool,
 			       enum rxm_buf_pool_type type)
 {
+	struct util_buf_attr attr = {
+		.size		= size,
+		.alignment	= 16,
+		.max_cnt	= 0,
+		.chunk_cnt	= chunk_count,
+		.alloc_hndlr	= rxm_buf_reg,
+		.free_hndlr	= rxm_buf_close,
+		.ctx		= pool,
+		.track_used	= 0,
+	};
 	int ret;
 
 	pool->rxm_ep = rxm_ep;
 	pool->type = type;
-	ret = util_buf_pool_create_ex(&pool->pool, size, 16, 0, chunk_count,
-				      rxm_buf_reg, rxm_buf_close, pool);
+	ret = util_buf_pool_create_attr(&attr, &pool->pool);
 	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to create buf pool\n");
 		return -FI_ENOMEM;
@@ -320,7 +318,6 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 		sizeof(struct rxm_rma_buf),			/* RMA */
 	};
 
-	dlist_init(&rxm_ep->posted_srx_list);
 	dlist_init(&rxm_ep->repost_ready_list);
 	dlist_init(&rxm_ep->conn_deferred_list);
 
@@ -423,7 +420,6 @@ static void rxm_ep_txrx_res_close(struct rxm_ep *rxm_ep)
 {
 	rxm_ep_txrx_queue_close(rxm_ep);
 
-	rxm_ep_cleanup_posted_rx_list(rxm_ep, &rxm_ep->posted_srx_list);
 	rxm_ep_txrx_pool_destroy(rxm_ep);
 }
 
@@ -1897,8 +1893,7 @@ static int rxm_ep_ctrl(struct fid *fid, int command, void *arg)
 			return -FI_EOPBADSTATE;
 
 		if (rxm_ep->srx_ctx) {
-			ret = rxm_ep_prepost_buf(rxm_ep, rxm_ep->srx_ctx,
-						 &rxm_ep->posted_srx_list);
+			ret = rxm_ep_prepost_buf(rxm_ep, rxm_ep->srx_ctx);
 			if (ret) {
 				ofi_cmap_free(rxm_ep->util_ep.cmap);
 				FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
