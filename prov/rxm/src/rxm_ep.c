@@ -143,7 +143,7 @@ static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 
 	mr_desc = (*context != NULL) ? fi_mr_desc((struct fid_mr *)*context) : NULL;
 
-	for (i = 0; i < pool->pool->chunk_cnt; i++) {
+	for (i = 0; i < pool->pool->attr.chunk_cnt; i++) {
 		if (pool->type == RXM_BUF_POOL_RX) {
 			rx_buf = (struct rxm_rx_buf *)((char *)addr + i * entry_sz);
 			rx_buf->ep = pool->rxm_ep;

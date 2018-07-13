@@ -170,7 +170,7 @@ static int tcpx_buf_pool_init(void *pool_ctx, void *addr,
 	struct tcpx_xfer_entry *xfer_entry;
 	int i;
 
-	for (i = 0; i < pool->pool->chunk_cnt; i++) {
+	for (i = 0; i < pool->pool->attr.chunk_cnt; i++) {
 		xfer_entry = (struct tcpx_xfer_entry *)
 			((char *)addr + i * pool->pool->entry_sz);
 
