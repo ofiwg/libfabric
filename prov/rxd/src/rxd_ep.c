@@ -100,7 +100,7 @@ static ssize_t rxd_ep_cancel(fid_t fid, void *context)
 	struct rxd_ep *ep;
 	struct dlist_entry *entry;
 	struct rxd_x_entry *rx_entry;
-	struct fi_cq_err_entry err_entry = {0};
+	struct fi_cq_err_entry err_entry;
 
 	ep = container_of(fid, struct rxd_ep, util_ep.ep_fid.fid);
 	fastlock_acquire(&ep->util_ep.lock);
@@ -111,6 +111,8 @@ static ssize_t rxd_ep_cancel(fid_t fid, void *context)
 		goto out;
 
 	rx_entry = container_of(entry, struct rxd_x_entry, entry);
+
+	memset(&err_entry, 0, sizeof (struct fi_cq_err_entry));
 
 	rxd_rx_entry_free(ep, rx_entry);
 	err_entry.op_context = rx_entry->cq_entry.op_context;
@@ -207,7 +209,7 @@ static struct rxd_x_entry *rxd_rx_entry_init(struct rxd_ep *ep,
 
 	memcpy(rx_entry->iov, iov, sizeof(*rx_entry->iov) * iov_count);
 
-	memset(&rx_entry->cq_entry, 0, sizeof(rx_entry->cq_entry));
+	rx_entry->cq_entry.data = 0;
 	rx_entry->cq_entry.op_context = context;
 	rx_entry->cq_entry.len = ofi_total_iov_len(iov, iov_count);
 	rx_entry->cq_entry.buf = iov[0].iov_base;
@@ -443,7 +445,7 @@ struct rxd_x_entry *rxd_tx_entry_init(struct rxd_ep *ep, const struct iovec *iov
 	memcpy(&tx_entry->iov[0], iov,
 	       sizeof(*iov) * iov_count);
 
-	memset(&tx_entry->cq_entry, 0, sizeof(tx_entry->cq_entry));
+	tx_entry->cq_entry.data = 0;
 	if (flags & FI_REMOTE_CQ_DATA)
 		tx_entry->cq_entry.data = data;
 	tx_entry->cq_entry.op_context = context;
@@ -538,7 +540,6 @@ static ssize_t rxd_ep_post_rts(struct rxd_ep *rxd_ep, struct rxd_x_entry *tx_ent
 
 	rxd_init_ctrl_pkt(rxd_ep, tx_entry, pkt_entry, RXD_RTS);
 	addrlen = RXD_NAME_LENGTH;
-	memset(pkt_entry->pkt->source, 0, RXD_NAME_LENGTH);
 	ret = fi_getname(&rxd_ep->dg_ep->fid, (void *) pkt_entry->pkt->source, &addrlen);
 	if (ret) {
 		rxd_release_tx_pkt(rxd_ep, pkt_entry);
@@ -1105,7 +1106,7 @@ static void rxd_ep_progress(struct util_ep *util_ep)
 {
 	struct dlist_entry *tx_item;
 	struct slist_entry *pkt_item;
-	struct fi_cq_err_entry err_entry = {0};
+	struct fi_cq_err_entry err_entry;
 	struct rxd_x_entry *tx_entry;
 	struct fi_cq_msg_entry cq_entry;
 	struct rxd_pkt_entry *pkt_entry;
@@ -1144,6 +1145,7 @@ static void rxd_ep_progress(struct util_ep *util_ep)
 			continue;
 
 		if (tx_entry->retry_cnt > RXD_MAX_PKT_RETRY) {
+			memset(&err_entry, 0, sizeof(struct fi_cq_err_entry));
 			rxd_tx_entry_free(ep, tx_entry);
 			err_entry.op_context = tx_entry->cq_entry.op_context;
 			err_entry.flags = (FI_MSG | FI_SEND);
