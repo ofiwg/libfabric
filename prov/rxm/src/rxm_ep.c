@@ -1036,6 +1036,9 @@ static inline ssize_t
 rxm_ep_inject_deferred_tx(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 			  struct rxm_tx_entry *tx_entry)
 {
+	assert(rxm_conn->handle.remote_key);
+	tx_entry->tx_buf->pkt.ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
+
 	ssize_t ret = rxm_ep_inject_send(rxm_ep, rxm_conn, tx_entry->tx_buf,
 					 tx_entry->tx_buf->pkt.hdr.size +
 					 sizeof(struct rxm_pkt));
@@ -1060,6 +1063,9 @@ rxm_ep_send_deferred_tx(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	rxm_fill_tx_entry(def_tx_entry->context, def_tx_entry->count,
 			  def_tx_entry->flags, def_tx_entry->comp_flags,
 			  def_tx_entry->tx_buf, tx_entry);
+
+	assert(rxm_conn->handle.remote_key);
+	tx_entry->tx_buf->pkt.ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
 
 	ret = rxm_ep_normal_send(rxm_ep, rxm_conn, tx_entry,
 				 tx_entry->tx_buf->pkt.hdr.size +
