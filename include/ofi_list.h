@@ -104,15 +104,28 @@ static inline void dlist_remove_init(struct dlist_entry *item)
 #define dlist_foreach(head, item) 						\
 	for ((item) = (head)->next; (item) != (head); (item) = (item)->next)
 
+#define dlist_foreach_reverse(head, item) 					\
+	for ((item) = (head)->prev; (item) != (head); (item) = (item)->prev
+
 #define dlist_foreach_container(head, type, container, member)			\
 	for ((container) = container_of((head)->next, type, member);		\
 	     &((container)->member) != (head);					\
 	     (container) = container_of((container)->member.next,		\
 					type, member))
 
+#define dlist_foreach_container_reverse(head, type, container, member)		\
+	for ((container) = container_of((head)->prev, type, member);		\
+	     &((container)->member) != (head);					\
+	     (container) = container_of((container)->member.prev,		\
+					type, member))
+
 #define dlist_foreach_safe(head, item, tmp)					\
 	for ((item) = (head)->next, (tmp) = (item)->next; (item) != (head);	\
              (item) = (tmp), (tmp) = (item)->next)
+
+#define dlist_foreach_reverse_safe(head, item, tmp)				\
+	for ((item) = (head)->prev, (tmp) = (item)->prev; (item) != (head);	\
+             (item) = (tmp), (tmp) = (item)->prev)
 
 #define dlist_foreach_container_safe(head, type, container, member, tmp)	\
 	for ((container) = container_of((head)->next, type, member),		\
@@ -120,6 +133,13 @@ static inline void dlist_remove_init(struct dlist_entry *item)
 	     &((container)->member) != (head);					\
 	     (container) = container_of((tmp), type, member),			\
 	     (tmp) = (container)->member.next)
+
+#define dlist_foreach_container_reverse_safe(head, type, container, member, tmp)\
+	for ((container) = container_of((head)->prev, type, member),		\
+	     (tmp) = (container)->member.prev;					\
+	     &((container)->member) != (head);					\
+	     (container) = container_of((tmp), type, member),			\
+	     (tmp) = (container)->member.prev)
 
 typedef int dlist_func_t(struct dlist_entry *item, const void *arg);
 
@@ -261,21 +281,43 @@ dlist_ts_remove(struct dlist_ts *list, struct dlist_entry *item)
 		fastlock_acquire(&(list)->lock);		\
 		dlist_foreach(list, head, item)
 
+#define dlist_ts_foreach_reverse(list, head, item)		\
+	{							\
+		fastlock_acquire(&(list)->lock);		\
+		dlist_foreach_reverse(list, head, item)
+
 #define dlist_ts_foreach_container(list, head, type, container, member)		\
 	{									\
 		fastlock_acquire(&(list)->lock);				\
 		dlist_foreach_container(type, container, member)
+
+#define dlist_ts_foreach_container_reverse(list, head, type, container, member)\
+	{									\
+		fastlock_acquire(&(list)->lock);				\
+		dlist_foreach_container_reverse(type, container, member)
 
 #define dlist_ts_foreach_safe(list, head, item, tmp)				\
 	{									\
 		fastlock_acquire(&(list)->lock);				\
 		dlist_foreach_safe(head, item, tmp)
 
+#define dlist_ts_foreach_reverse_safe(list, head, item, tmp)			\
+	{									\
+		fastlock_acquire(&(list)->lock);				\
+		dlist_foreach_reverse_safe(head, item, tmp)
+
 #define dlist_ts_foreach_container_safe(list, head, type, container,	\
 					member, tmp)			\
 	{								\
 		fastlock_acquire(&(list)->lock);			\
 		dlist_foreach_container_safe(head, type, container,	\
+					     member, tmp)
+
+#define dlist_ts_foreach_container_reverse_safe(list, head, type, container,\
+					member, tmp)				\
+	{									\
+		fastlock_acquire(&(list)->lock);				\
+		dlist_foreach_container_reverse_safe(head, type, container,	\
 					     member, tmp)
 
 static inline struct dlist_entry *
