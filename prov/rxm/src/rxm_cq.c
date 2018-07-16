@@ -170,6 +170,19 @@ static int rxm_match_rma_iov(struct rxm_recv_entry *recv_entry,
 	return FI_SUCCESS;
 }
 
+static inline void rxm_enqueue_repost_ready_list(struct rxm_rx_buf *rx_buf)
+{
+	if (!rx_buf->repost) {
+		dlist_remove(&rx_buf->entry);
+		rxm_rx_buf_release(rx_buf->ep, rx_buf);
+	} else {
+		fastlock_acquire(&rx_buf->ep->util_ep.lock);
+		dlist_insert_tail(&rx_buf->repost_entry,
+				  &rx_buf->ep->repost_ready_list);
+		fastlock_release(&rx_buf->ep->util_ep.lock);
+	}
+}
+
 static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 {
 	int ret;
@@ -213,9 +226,7 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 			rxm_cntr_inc(rx_buf->ep->util_ep.rx_cntr);
 	}
 
-	fastlock_acquire(&rx_buf->ep->util_ep.lock);
-	dlist_insert_tail(&rx_buf->repost_entry, &rx_buf->ep->repost_ready_list);
-	fastlock_release(&rx_buf->ep->util_ep.lock);
+	rxm_enqueue_repost_ready_list(rx_buf);
 
 	if (rx_buf->recv_entry->flags & FI_MULTI_RECV) {
 		struct rxm_iov rxm_iov;
@@ -334,11 +345,7 @@ static int rxm_lmt_tx_finish(struct rxm_tx_entry *tx_entry)
 	if (ret)
 		return ret;
 
-	fastlock_acquire(&tx_entry->ep->util_ep.lock);
-	dlist_insert_tail(&tx_entry->rx_buf->repost_entry,
-			  &tx_entry->ep->repost_ready_list);
-	fastlock_release(&tx_entry->ep->util_ep.lock);
-
+	rxm_enqueue_repost_ready_list(tx_entry->rx_buf);
 	return ret;
 }
 
@@ -420,6 +427,8 @@ static ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 	struct rxm_recv_match_attr match_attr;
 	struct dlist_entry *entry;
 	struct util_cq *util_cq;
+	struct fid_ep *msg_ep;
+	struct rxm_ep *rxm_ep;
 
 	util_cq = rx_buf->ep->util_ep.rx_cq;
 
@@ -463,9 +472,28 @@ static ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 		       "queue\n");
 		rx_buf->unexp_msg.addr = match_attr.addr;
 		rx_buf->unexp_msg.tag = match_attr.tag;
+		rx_buf->repost = 0;
+
+		msg_ep = rx_buf->hdr.msg_ep;
+		rxm_ep = rx_buf->ep;
+
 		dlist_insert_tail(&rx_buf->unexp_msg.entry,
 				  &rx_buf->recv_queue->unexp_msg_list);
 		fastlock_release(&rx_buf->recv_queue->lock);
+
+		rx_buf = rxm_rx_buf_get(rxm_ep);
+		if (!rx_buf)
+			return -FI_ENOMEM;
+
+		rx_buf->hdr.state = RXM_RX;
+		rx_buf->hdr.msg_ep = msg_ep;
+		rx_buf->repost = 1;
+
+		fastlock_acquire(&rx_buf->ep->util_ep.lock);
+		dlist_insert_tail(&rx_buf->entry, &rxm_ep->post_rx_list);
+		dlist_insert_tail(&rx_buf->repost_entry,
+				  &rx_buf->ep->repost_ready_list);
+		fastlock_release(&rx_buf->ep->util_ep.lock);
 		return 0;
 	}
 	fastlock_release(&rx_buf->recv_queue->lock);
@@ -727,6 +755,8 @@ int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep)
 
 		rx_buf->hdr.state = RXM_RX;
 		rx_buf->hdr.msg_ep = msg_ep;
+		rx_buf->repost = 1;
+
 		ret = rxm_ep_repost_buf(rx_buf);
 		if (ret) {
 			rxm_rx_buf_release(rxm_ep, rx_buf);
@@ -804,10 +834,7 @@ static int rxm_cq_reprocess_directed_recvs(struct rxm_recv_queue *recv_queue)
 			if (rx_buf->ep->util_ep.flags & OFI_CNTR_ENABLED)
 				rxm_cntr_incerr(rx_buf->ep->util_ep.rx_cntr);
 
-			fastlock_acquire(&rx_buf->ep->util_ep.lock);
-			dlist_insert_tail(&rx_buf->repost_entry,
-					  &rx_buf->ep->repost_ready_list);
-			fastlock_release(&rx_buf->ep->util_ep.lock);
+			rxm_enqueue_repost_ready_list(rx_buf);
 
 			if (!(rx_buf->recv_entry->flags & FI_MULTI_RECV))
 				rxm_recv_entry_release(recv_queue,
