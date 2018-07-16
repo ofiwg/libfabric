@@ -614,7 +614,7 @@ static int ft_init_oob(void)
 
 	op = 1;
 	err = setsockopt(oob_sock, IPPROTO_TCP, TCP_NODELAY,
-			 &op, sizeof(op));
+			 (void *) &op, sizeof(op));
 	if (err)
 		perror("setsockopt"); /* non-fatal error */
 
@@ -2825,7 +2825,8 @@ int ft_sock_listen(char *node, char *service)
 	}
 
 	val = 1;
-	ret = setsockopt(listen_sock, SOL_SOCKET, SO_REUSEADDR, &val, sizeof val);
+	ret = setsockopt(listen_sock, SOL_SOCKET, SO_REUSEADDR,
+			 (void *) &val, sizeof val);
 	if (ret) {
 		perror("setsockopt SO_REUSEADDR");
 		goto out;
