@@ -63,7 +63,6 @@ static int rx_shared_ctx = 1;
 static int ep_cnt = 4;
 static struct fid_ep **ep_array, *srx_ctx;
 static struct fid_stx *stx_ctx;
-static char *local_addr, *remote_addr;
 static size_t addrlen = 0;
 static fi_addr_t *addr_array;
 
@@ -90,7 +89,13 @@ static int get_dupinfo(void)
 	hints_dup->src_addrlen = 0;
 	hints_dup->dest_addrlen = 0;
 
-	ret = fi_getinfo(FT_FIVERSION, NULL, 0, 0, hints_dup, &fi_dup);
+	if (opts.dst_addr) {
+		ret = fi_getinfo(FT_FIVERSION, opts.dst_addr, NULL, 0,
+				 hints_dup, &fi_dup);
+	} else {
+		ret = fi_getinfo(FT_FIVERSION, opts.src_addr, NULL, FI_SOURCE,
+				 hints_dup, &fi_dup);
+	}
 	if (ret)
 		FT_PRINTERR("fi_getinfo", ret);
 	fi_freeinfo(hints_dup);
@@ -249,106 +254,71 @@ static int init_av(void)
 	int ret;
 	int i;
 
-	/* Get local address blob. Find the addrlen first. We set addrlen
-	 * as 0 and fi_getname will return the actual addrlen. */
-	addrlen = 0;
-	ret = fi_getname(&ep_array[0]->fid, local_addr, &addrlen);
-	if (ret != -FI_ETOOSMALL) {
-		FT_PRINTERR("fi_getname", ret);
-		return ret;
+	if (opts.dst_addr) {
+		ret = ft_av_insert(av, fi->dest_addr, 1, &addr_array[0], 0, NULL);
+		if (ret)
+			return ret;
 	}
 
-	local_addr = malloc(addrlen * ep_cnt);
-	remote_addr = malloc(addrlen * ep_cnt);
-
-	/* Get local addresses for all EPs */
 	for (i = 0; i < ep_cnt; i++) {
-		ret = fi_getname(&ep_array[i]->fid, local_addr + addrlen * i, &addrlen);
+		addrlen = tx_size;
+		ret = fi_getname(&ep_array[i]->fid, tx_buf + ft_tx_prefix_size(),
+				 &addrlen);
 		if (ret) {
 			FT_PRINTERR("fi_getname", ret);
 			return ret;
 		}
+
+		if (opts.dst_addr) {
+			ret = ft_tx(ep_array[0], addr_array[0], addrlen, &tx_ctx);
+			if (ret)
+				return ret;
+
+			if (rx_shared_ctx)
+				ret = ft_rx(srx_ctx, rx_size);
+			else
+				ret = ft_rx(ep_array[0], rx_size);
+			if (ret)
+				return ret;
+
+			/* Skip the first address since we already have it in AV */
+			if (i) {
+				ret = ft_av_insert(av, rx_buf + ft_rx_prefix_size(), 1,
+						   &addr_array[i], 0, NULL);
+				if (ret)
+					return ret;
+			}
+		} else {
+			if (rx_shared_ctx)
+				ret = ft_rx(srx_ctx, rx_size);
+			else
+				ret = ft_rx(ep_array[0], rx_size);
+			if (ret)
+				return ret;
+
+			ret = ft_av_insert(av, rx_buf + ft_rx_prefix_size(), 1,
+					   &addr_array[i], 0, NULL);
+			if (ret)
+				return ret;
+
+			ret = ft_tx(ep_array[0], addr_array[0], addrlen, &tx_ctx);
+			if (ret)
+				return ret;
+
+		}
 	}
 
+	/* ACK */
 	if (opts.dst_addr) {
-		memcpy(remote_addr, fi->dest_addr, addrlen);
-
-		ret = ft_av_insert(av, remote_addr, 1, &addr_array[0], 0, NULL);
-		if (ret)
-			return ret;
-
-		/* Send local EP addresses to one of the remote endpoints */
-		memcpy(tx_buf + ft_tx_prefix_size(), &addrlen, sizeof(size_t));
-		memcpy(tx_buf + ft_tx_prefix_size() + sizeof(size_t),
-				local_addr, addrlen * ep_cnt);
-		ret = ft_tx(ep_array[0], addr_array[0],
-				sizeof(size_t) + addrlen * ep_cnt, &tx_ctx);
-		if (ret)
-			return ret;
-
-		/* Get remote EP addresses */
-		if (rx_shared_ctx)
-			ret = ft_rx(srx_ctx, rx_size);
-		else
-			ret = ft_rx(ep_array[0], rx_size);
-		if (ret)
-			return ret;
-
-		memcpy(&addrlen, rx_buf + ft_rx_prefix_size(), sizeof(size_t));
-		memcpy(remote_addr, rx_buf + ft_rx_prefix_size() + sizeof(size_t),
-				addrlen * ep_cnt);
-
-		/* Insert remote addresses into AV
-		 * Skip the first address since we already have it in AV */
-		ret = ft_av_insert(av, remote_addr + addrlen, ep_cnt - 1,
-				addr_array + 1, 0, NULL);
-		if (ret)
-			return ret;
-
-		/* Send ACK */
 		ret = ft_tx(ep_array[0], addr_array[0], 1, &tx_ctx);
-		if (ret)
-			return ret;
-
 	} else {
-		/* Get remote EP addresses */
 		if (rx_shared_ctx)
 			ret = ft_rx(srx_ctx, rx_size);
 		else
 			ret = ft_rx(ep_array[0], rx_size);
-		if (ret)
-			return ret;
-
-		memcpy(&addrlen, rx_buf + ft_rx_prefix_size(), sizeof(size_t));
-		memcpy(remote_addr, rx_buf + ft_rx_prefix_size() + sizeof(size_t),
-				addrlen * ep_cnt);
-
-		/* Insert remote addresses into AV */
-		ret = ft_av_insert(av, remote_addr, ep_cnt, addr_array, 0, NULL);
-		if (ret)
-			return ret;
-
-		/* Send local EP addresses to one of the remote endpoints */
-		memcpy(tx_buf + ft_tx_prefix_size(), &addrlen, sizeof(size_t));
-		memcpy(tx_buf + ft_tx_prefix_size() + sizeof(size_t),
-				local_addr, addrlen * ep_cnt);
-		ret = ft_tx(ep_array[0], addr_array[0],
-				sizeof(size_t) + addrlen * ep_cnt, &tx_ctx);
-		if (ret)
-			return ret;
-
-		/* Receive ACK from client */
-		if (rx_shared_ctx)
-			ret = ft_rx(srx_ctx, rx_size);
-		else
-			ret = ft_rx(ep_array[0], rx_size);
-		if (ret)
-			return ret;
 	}
 
-	free(local_addr);
-	free(remote_addr);
-	return 0;
+	return ret;
 }
 
 static int init_fabric(void)

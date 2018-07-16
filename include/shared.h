@@ -207,7 +207,7 @@ void ft_fill_buf(void *buf, int size);
 int ft_check_buf(void *buf, int size);
 int ft_check_opts(uint64_t flags);
 uint64_t ft_init_cq_data(struct fi_info *info);
-int ft_sock_listen(char *service);
+int ft_sock_listen(char *node, char *service);
 int ft_sock_connect(char *node, char *service);
 int ft_sock_accept();
 int ft_sock_send(int fd, void *msg, size_t len);

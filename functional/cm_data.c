@@ -394,7 +394,7 @@ static int run(void)
 		if (ret)
 			goto err2;
 	} else {
-		ret = ft_sock_listen(sock_service);
+		ret = ft_sock_listen(opts.src_addr, sock_service);
 		if (ret)
 			goto err2;
 		ret = ft_sock_accept();

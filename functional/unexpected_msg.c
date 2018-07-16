@@ -233,7 +233,7 @@ static int run_test(void)
 		if (ret)
 			return ret;
 	} else {
-		ret = ft_sock_listen(sock_sync_port);
+		ret = ft_sock_listen(opts.src_addr, sock_sync_port);
 		if (ret)
 			return ret;
 		ret = ft_sock_accept();

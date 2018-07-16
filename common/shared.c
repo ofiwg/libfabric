@@ -576,7 +576,7 @@ static int ft_init_oob(void)
 		opts.oob_port = default_oob_port;
 
 	if (!opts.dst_addr) {
-		ret = ft_sock_listen(opts.oob_port);
+		ret = ft_sock_listen(opts.src_addr, opts.oob_port);
 		if (ret)
 			return ret;
 
@@ -614,7 +614,7 @@ static int ft_init_oob(void)
 
 	op = 1;
 	err = setsockopt(oob_sock, IPPROTO_TCP, TCP_NODELAY,
-			 &op, sizeof(op));
+			 (void *) &op, sizeof(op));
 	if (err)
 		perror("setsockopt"); /* non-fatal error */
 
@@ -2803,16 +2803,15 @@ int ft_send_recv_greeting(struct fid_ep *ep)
 	return opts.dst_addr ? ft_send_greeting(ep) : ft_recv_greeting(ep);
 }
 
-int ft_sock_listen(char *service)
+int ft_sock_listen(char *node, char *service)
 {
 	struct addrinfo *ai, hints;
 	int val, ret;
 
 	memset(&hints, 0, sizeof hints);
 	hints.ai_flags = AI_PASSIVE;
-	hints.ai_family = AF_INET;
 
-	ret = getaddrinfo(NULL, service, &hints, &ai);
+	ret = getaddrinfo(node, service, &hints, &ai);
 	if (ret) {
 		fprintf(stderr, "getaddrinfo() %s\n", gai_strerror(ret));
 		return ret;
@@ -2826,7 +2825,8 @@ int ft_sock_listen(char *service)
 	}
 
 	val = 1;
-	ret = setsockopt(listen_sock, SOL_SOCKET, SO_REUSEADDR, &val, sizeof val);
+	ret = setsockopt(listen_sock, SOL_SOCKET, SO_REUSEADDR,
+			 (void *) &val, sizeof val);
 	if (ret) {
 		perror("setsockopt SO_REUSEADDR");
 		goto out;
