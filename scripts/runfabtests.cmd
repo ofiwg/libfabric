@@ -4,8 +4,8 @@ setlocal EnableDelayedExpansion
 set PATH=%~dp0;%PATH%
 
 
-set S_INTERFACE=localhost
-set C_INTERFACE=localhost
+set S_INTERFACE=127.0.0.1
+set C_INTERFACE=127.0.0.1
 
 set TEST_FAIL_TIMEOUT=90
 
