@@ -270,6 +270,9 @@ struct rxm_rx_buf {
 	struct rxm_unexp_msg unexp_msg;
 	uint64_t comp_flags;
 	struct fi_recv_context recv_context;
+	// TODO remove this and modify unexp msg handling path to not repost
+	// rx_buf
+	uint8_t repost;
 
 	/* Used for large messages */
 	struct rxm_iov match_iov[RXM_IOV_LIMIT];
