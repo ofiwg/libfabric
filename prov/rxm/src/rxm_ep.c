@@ -908,6 +908,13 @@ err:
 	return ret;
 }
 
+static inline size_t
+rxm_ep_sar_estimate_segments_num(struct rxm_ep *rxm_ep, size_t data_len)
+{
+	/* This is rough estimation of the number of the segments to be sent */
+	return (data_len / rxm_ep->rxm_info->tx_attr->inject_size);
+}
+
 static inline struct rxm_tx_buf *
 rxm_ep_sar_tx_prepare_segment(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 			      size_t total_len, size_t seg_len, size_t seg_no,
@@ -1373,11 +1380,14 @@ send_continue:
 		return ret;
 	} else {
 		assert(!(flags & FI_INJECT));
-		if (data_len <= rxm_ep->sar_limit) {
+		if ((data_len <= rxm_ep->sar_limit) &&
+		    /* Roughly estimate whether all SAR segments can be sent w/o
+		     * retransmission due to lack of space in the TX queue */
+		    (rxm_ep_sar_estimate_segments_num(rxm_ep, data_len) <=
+						rxm_ep->rxm_info->tx_attr->size)) {
 			return rxm_ep_sar_tx_send(rxm_ep, rxm_conn, context, count, iov,
 						  data_len, data, flags, comp_flags, tag, op);
 		} else {
-			assert(data_len > rxm_ep->sar_limit);
 			ret = rxm_ep_alloc_lmt_tx_res(rxm_ep, rxm_conn, context,
 						      (uint8_t)count, iov, desc,
 						      data_len, data, flags, comp_flags,
