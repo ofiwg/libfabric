@@ -69,8 +69,8 @@ install:
     - make test
     - make distcheck
     - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then make rpm; fi
-    # Prepare build for fabtests (TODO: Disable TCP provider)
-    - ./configure $LIBFABRIC_CONFIGURE_ARGS --disable-tcp
+    # Prepare build for fabtests
+    - ./configure $LIBFABRIC_CONFIGURE_ARGS
     - make -j2
     - make install
     - make test
