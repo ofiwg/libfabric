@@ -82,7 +82,7 @@ static int rxm_msg_ep_open(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 	}
 
 	if (!rxm_ep->srx_ctx) {
-		ret = rxm_ep_prepost_buf(rxm_ep, msg_ep, &rxm_conn->posted_rx_list);
+		ret = rxm_ep_prepost_buf(rxm_ep, msg_ep);
 		if (ret)
 			goto err;
 	}
@@ -139,9 +139,6 @@ static void rxm_conn_close(struct util_cmap_handle *handle)
 
 	if (!rxm_conn->msg_ep)
 		return;
-	/* Save the preposted RX list for further cleanup */
-	dlist_splice_tail(&rxm_conn->saved_posted_rx_list,
-			  &rxm_conn->posted_rx_list);
 	rxm_conn->saved_msg_ep = rxm_conn->msg_ep;
 	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
 	       "Saved MSG EP fid for further deletion in main thread\n");
@@ -150,12 +147,10 @@ static void rxm_conn_close(struct util_cmap_handle *handle)
 
 static void rxm_conn_free(struct util_cmap_handle *handle)
 {
-	struct rxm_ep *rxm_ep = container_of(handle->cmap->ep, struct rxm_ep, util_ep);
 	struct rxm_conn *rxm_conn = container_of(handle, struct rxm_conn, handle);
 
 	/* This handles case when saved_msg_ep wasn't closed */
 	if (rxm_conn->saved_msg_ep) {
-		rxm_ep_cleanup_posted_rx_list(rxm_ep, &rxm_conn->saved_posted_rx_list);
 		if (fi_close(&rxm_conn->saved_msg_ep->fid))
 			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 				"Unable to close saved msg_ep\n");
@@ -163,7 +158,6 @@ static void rxm_conn_free(struct util_cmap_handle *handle)
 
 	if (!rxm_conn->msg_ep)
 		return;
-	rxm_ep_cleanup_posted_rx_list(rxm_ep, &rxm_conn->posted_rx_list);
 	/* Assuming fi_close also shuts down the connection gracefully if the
 	 * endpoint is in connected state */
 	if (fi_close(&rxm_conn->msg_ep->fid))
@@ -177,12 +171,10 @@ static void rxm_conn_free(struct util_cmap_handle *handle)
 
 static void rxm_conn_connected_handler(struct util_cmap_handle *handle)
 {
-	struct rxm_ep *rxm_ep = container_of(handle->cmap->ep, struct rxm_ep, util_ep);
 	struct rxm_conn *rxm_conn = container_of(handle, struct rxm_conn, handle);
 
 	if (!rxm_conn->saved_msg_ep)
 		return;
-	rxm_ep_cleanup_posted_rx_list(rxm_ep, &rxm_conn->saved_posted_rx_list);
 	/* Assuming fi_close also shuts down the connection gracefully if the
 	 * endpoint is in connected state */
 	if (fi_close(&rxm_conn->saved_msg_ep->fid))
@@ -204,9 +196,7 @@ static struct util_cmap_handle *rxm_conn_alloc(struct util_cmap *cmap)
 		free(rxm_conn);
 		return NULL;
 	}
-	dlist_init(&rxm_conn->posted_rx_list);
 	dlist_init(&rxm_conn->sar_rx_msg_list);
-	dlist_init(&rxm_conn->saved_posted_rx_list);
 	dlist_init(&rxm_conn->deferred_op_list);
 	return &rxm_conn->handle;
 }

@@ -250,18 +250,23 @@ typedef int (*util_buf_region_alloc_hndlr) (void *pool_ctx, void *addr, size_t l
 					    void **context);
 typedef void (*util_buf_region_free_hndlr) (void *pool_ctx, void *context);
 
+struct util_buf_attr {
+	size_t 				size;
+	size_t 				alignment;
+	size_t	 			max_cnt;
+	size_t 				chunk_cnt;
+	util_buf_region_alloc_hndlr 	alloc_hndlr;
+	util_buf_region_free_hndlr 	free_hndlr;
+	void 				*ctx;
+	uint8_t				track_used;
+};
+
 struct util_buf_pool {
-	size_t data_sz;
-	size_t entry_sz;
-	size_t max_cnt;
-	size_t chunk_cnt;
-	size_t alignment;
-	size_t num_allocated;
-	struct slist buf_list;
-	struct slist region_list;
-	util_buf_region_alloc_hndlr alloc_hndlr;
-	util_buf_region_free_hndlr free_hndlr;
-	void *ctx;
+	size_t 			entry_sz;
+	size_t 			num_allocated;
+	struct slist		buf_list;
+	struct slist		region_list;
+	struct util_buf_attr	attr;
 };
 
 struct util_buf_region {
@@ -281,6 +286,9 @@ union util_buf {
 	struct slist_entry entry;
 	uint8_t data[0];
 };
+
+int util_buf_pool_create_attr(struct util_buf_attr *attr,
+			      struct util_buf_pool **buf_pool);
 
 /* create buffer pool with alloc/free handlers */
 int util_buf_pool_create_ex(struct util_buf_pool **pool,
@@ -334,7 +342,7 @@ static inline void *util_buf_get_ex(struct util_buf_pool *pool, void **context)
 	struct util_buf_footer *buf_ftr;
 
 	buf = util_buf_get(pool);
-	buf_ftr = (struct util_buf_footer *) ((char *) buf + pool->data_sz);
+	buf_ftr = (struct util_buf_footer *) ((char *) buf + pool->attr.size);
 	assert(context);
 	*context = buf_ftr->region->context;
 	return buf;
@@ -358,7 +366,7 @@ static inline void *util_buf_alloc_ex(struct util_buf_pool *pool, void **context
 	if (OFI_UNLIKELY(!buf))
 		return NULL;
 
-	buf_ftr = (struct util_buf_footer *) ((char *) buf + pool->data_sz);
+	buf_ftr = (struct util_buf_footer *) ((char *) buf + pool->attr.size);
 	assert(context);
 	*context = buf_ftr->region->context;
 	return buf;
@@ -373,7 +381,7 @@ static inline int util_buf_use_ftr(struct util_buf_pool *pool)
 #else
 static inline int util_buf_use_ftr(struct util_buf_pool *pool)
 {
-	return (pool->alloc_hndlr || pool->free_hndlr) ? 1 : 0;
+	return (pool->attr.alloc_hndlr || pool->attr.free_hndlr) ? 1 : 0;
 }
 #endif
 
@@ -381,7 +389,7 @@ static inline void *util_buf_get_ctx(struct util_buf_pool *pool, void *buf)
 {
 	struct util_buf_footer *buf_ftr;
 	assert(util_buf_use_ftr(pool));
-	buf_ftr = (struct util_buf_footer *) ((char *) buf + pool->data_sz);
+	buf_ftr = (struct util_buf_footer *) ((char *) buf + pool->attr.size);
 	return buf_ftr->region->context;
 }
 

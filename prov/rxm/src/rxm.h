@@ -262,7 +262,6 @@ struct rxm_buf {
 struct rxm_rx_buf {
 	/* Must stay at top */
 	struct rxm_buf hdr;
-	struct dlist_entry entry;
 
 	struct rxm_ep *ep;
 	struct dlist_entry repost_entry;
@@ -271,6 +270,9 @@ struct rxm_rx_buf {
 	struct rxm_unexp_msg unexp_msg;
 	uint64_t comp_flags;
 	struct fi_recv_context recv_context;
+	// TODO remove this and modify unexp msg handling path to not repost
+	// rx_buf
+	uint8_t repost;
 
 	/* Used for large messages */
 	struct rxm_iov match_iov[RXM_IOV_LIMIT];
@@ -418,7 +420,6 @@ struct rxm_ep {
 
 	struct rxm_buf_pool	buf_pools[RXM_BUF_POOL_MAX];
 
-	struct dlist_entry	posted_srx_list;
 	struct dlist_entry	repost_ready_list;
 	struct dlist_entry	conn_deferred_list;
 
@@ -441,13 +442,11 @@ struct rxm_conn {
 	struct dlist_entry deferred_op_list;
 
 	struct rxm_send_queue send_queue;
-	struct dlist_entry posted_rx_list;
 	struct dlist_entry sar_rx_msg_list;
 	struct util_cmap_handle handle;
 	/* This is saved MSG EP fid, that hasn't been closed during
 	 * handling of CONN_RECV in CMAP_CONNREQ_SENT for passive side */
 	struct fid_ep *saved_msg_ep;
-	struct dlist_entry saved_posted_rx_list;
 };
 
 struct rxm_ep_wait_ref {
@@ -486,10 +485,7 @@ void rxm_cq_write_error(struct util_cq *cq, struct util_cntr *cntr,
 void rxm_ep_progress_one(struct util_ep *util_ep);
 void rxm_ep_progress_multi(struct util_ep *util_ep);
 
-int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep,
-		       struct dlist_entry *posted_rx_list);
-void rxm_ep_cleanup_posted_rx_list(struct rxm_ep *rxm_ep,
-				   struct dlist_entry *posted_rx_list);
+int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep);
 
 static inline
 void rxm_ep_msg_mr_closev(struct fid_mr **mr, size_t count)
