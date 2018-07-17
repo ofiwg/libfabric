@@ -307,8 +307,7 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 		rxm_ep->rxm_info->tx_attr->inject_size +
 		sizeof(struct rxm_tx_buf),			/* TX */
 		rxm_ep->msg_info->tx_attr->inject_size +
-		sizeof(struct rxm_tx_buf) -
-		sizeof(struct rxm_pkt),				/* TX INJECT */
+		sizeof(struct rxm_tx_buf),			/* TX INJECT */
 		sizeof(struct rxm_tx_buf),			/* TX ACK */
 		sizeof(struct rxm_rma_iov) +
 		rxm_ep->rxm_info->tx_attr->iov_limit *
