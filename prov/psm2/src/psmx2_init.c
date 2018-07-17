@@ -186,6 +186,7 @@ static int psmx2_init_lib(void)
 {
 	int major, minor;
 	int ret = 0, err;
+	glob_t glob_buf;
 
 	if (psmx2_lib_initialized)
 		return 0;
@@ -194,6 +195,24 @@ static int psmx2_init_lib(void)
 
 	if (psmx2_lib_initialized)
 		goto out;
+
+	/*
+	* psm2_init() may wait for 15 seconds before return
+	* when /dev/hfi[0-9]_0 is not present. Check the existence of any hfi
+	* device interface first to avoid this delay. Note that the devices
+	* don't necessarily appear consecutively so we need to check all
+	* possible device names before returning "no device found" error.
+	* This also means if "/dev/hfi[0-9]_0" doesn't exist but other devices
+	* exist, we are still going to see the delay; but that's a rare case.
+	*/
+	if ((glob("/dev/hfi[0-9]_[0-9]", 0, NULL, &glob_buf) != 0) &&
+		(glob("/dev/hfi[0-9]_[0-9][0-9]", GLOB_APPEND, NULL, &glob_buf) != 0)) {
+		FI_INFO(&psmx2_prov, FI_LOG_CORE,
+			"no hfi device is found.\n");
+		ret = -FI_ENODEV;
+		goto out;
+	}
+	globfree(&glob_buf);
 
 	/* turn on multi-ep feature, but don't overwrite existing setting */
 	setenv("PSM2_MULTI_EP", "1", 0);
@@ -228,6 +247,7 @@ out:
 	return ret;
 }
 
+#if !HAVE_PSM2_INFO_QUERY
 #define PSMX2_SYSFS_PATH "/sys/class/infiniband/hfi1"
 static int psmx2_read_sysfs_int(int unit, char *entry)
 {
@@ -250,6 +270,7 @@ static int psmx2_unit_active(int unit)
 {
 	return (4 == psmx2_read_sysfs_int(unit, "ports/1/state"));
 }
+#endif
 
 #define PSMX2_MAX_UNITS	4
 static int psmx2_active_units[PSMX2_MAX_UNITS];
@@ -264,6 +285,13 @@ static void psmx2_update_hfi_info(void)
 	int multirail = 0;
 	char *s;
 
+#if HAVE_PSM2_INFO_QUERY
+	int unit_active;
+	int ret;
+	int tmp_cnt;
+	psm2_info_query_arg_t args[1];
+#endif
+
 	assert(psmx2_env.num_devunits <= PSMX2_MAX_UNITS);
 
 	s = getenv("HFI_UNIT");
@@ -276,6 +304,50 @@ static void psmx2_update_hfi_info(void)
 
 	psmx2_num_active_units = 0;
 	for (i = 0; i < psmx2_env.num_devunits; i++) {
+#if HAVE_PSM2_INFO_QUERY
+		args[0].unit = i;
+		ret = psm2_info_query(PSM2_INFO_QUERY_UNIT_STATUS, &unit_active, 1, args);
+		if (ret != PSM2_OK) {
+			FI_WARN(&psmx2_prov, FI_LOG_CORE,
+				"Failed to check active state of HFI unit %d\n",
+				i);
+			continue;
+		}
+
+		if (!unit_active) {
+			FI_WARN(&psmx2_prov, FI_LOG_CORE,
+				"HFI unit %d STATE = INACTIVE\n",
+				i);
+			continue;
+		}
+
+		if (hfi_unit >=0 && i != hfi_unit) {
+			FI_INFO(&psmx2_prov, FI_LOG_CORE,
+				"hfi %d skipped: HFI_UNIT=%d\n",
+				i, hfi_unit);
+			continue;
+		}
+
+		if (PSM2_OK != psm2_info_query(PSM2_INFO_QUERY_NUM_FREE_CONTEXTS,
+						&tmp_cnt, 1, args) || (tmp_cnt < 0))
+		{
+			FI_WARN(&psmx2_prov, FI_LOG_CORE,
+				"Failed to read number of free contexts from HFI unit %d\n",
+				i);
+			continue;
+		}
+		nfreectxts += tmp_cnt;
+
+		if (PSM2_OK != psm2_info_query(PSM2_INFO_QUERY_NUM_CONTEXTS,
+						&tmp_cnt, 1, args) || (tmp_cnt < 0))
+		{
+			FI_WARN(&psmx2_prov, FI_LOG_CORE,
+				"Failed to read number of contexts from HFI unit %d\n",
+				i);
+			continue;
+		}
+		nctxts += tmp_cnt;
+#else
 		if (!psmx2_unit_active(i)) {
 			FI_INFO(&psmx2_prov, FI_LOG_CORE,
 				"hfi %d skipped: inactive\n", i);
@@ -291,6 +363,7 @@ static void psmx2_update_hfi_info(void)
 
 		nctxts += psmx2_read_sysfs_int(i, "nctxts");
 		nfreectxts += psmx2_read_sysfs_int(i, "nfreectxts");
+#endif
 		psmx2_active_units[psmx2_num_active_units++] = i;
 
 		if (multirail)
@@ -333,7 +406,6 @@ static int psmx2_getinfo(uint32_t api_version, const char *node,
 	size_t len;
 	void *addr;
 	uint32_t fmt;
-	glob_t glob_buf;
 	uint32_t cnt = 0;
 
 	FI_INFO(&psmx2_prov, FI_LOG_CORE,"\n");
@@ -344,24 +416,12 @@ static int psmx2_getinfo(uint32_t api_version, const char *node,
 	if (psmx2_init_lib())
 		goto err_out;
 
-	/*
-	 * psm2_ep_num_devunits() may wait for 15 seconds before return
-	 * when /dev/hfi1_0 is not present. Check the existence of any hfi1
-	 * device interface first to avoid this delay. Note that the devices
-	 * don't necessarily appear consecutively so we need to check all
-	 * possible device names before returning "no device found" error.
-	 * This also means if "/dev/hfi1_0" doesn't exist but other devices
-	 * exist, we are still going to see the delay; but that's a rare case.
-	 */
-	if ((glob("/dev/hfi1_[0-9]", 0, NULL, &glob_buf) != 0) &&
-	    (glob("/dev/hfi1_[0-9][0-9]", GLOB_APPEND, NULL, &glob_buf) != 0)) {
-		FI_INFO(&psmx2_prov, FI_LOG_CORE,
-			"no hfi1 device is found.\n");
-		goto err_out;
-	}
-	globfree(&glob_buf);
-
-	if (psm2_ep_num_devunits(&cnt) || !cnt) {
+#if HAVE_PSM2_INFO_QUERY
+	if (psm2_info_query(PSM2_INFO_QUERY_NUM_UNITS, &cnt, 0, NULL) || !cnt)
+#else
+	if (psm2_ep_num_devunits(&cnt) || !cnt)
+#endif
+	{
 		FI_INFO(&psmx2_prov, FI_LOG_CORE,
 			"no PSM2 device is found.\n");
 		goto err_out;

@@ -20,6 +20,7 @@ AC_DEFUN([FI_PSM2_CONFIGURE],[
 	 have_psm2_am_register_handlers_2=1
 	 have_psm2_mq_fp_msg=1
 	 have_psm2_mq_req_user=1
+	 have_psm2_info_query=1
 	 AS_IF([test x"$enable_psm2" != x"no"],
 	       [AS_IF([test x$have_psm2_src = x0],
 		      [
@@ -27,12 +28,26 @@ AC_DEFUN([FI_PSM2_CONFIGURE],[
 			FI_CHECK_PACKAGE([psm2],
 					 [psm2.h],
 					 [psm2],
-					 [psm2_mq_ipeek_dequeue_multi],
+					 [psm2_info_query],
 					 [],
 					 [$psm2_PREFIX],
 					 [$psm2_LIBDIR],
 					 [psm2_happy=1],
 					 [psm2_happy=0])
+			AS_IF([test x$psm2_happy = x0],
+			      [
+				$as_echo "$as_me: recheck psm2 without psm2_info_query."
+				have_psm2_info_query=0
+				FI_CHECK_PACKAGE([psm2],
+						 [psm2.h],
+						 [psm2],
+						 [psm2_mq_ipeek_dequeue_multi],
+						 [],
+						 [$psm2_PREFIX],
+						 [$psm2_LIBDIR],
+						 [psm2_happy=1],
+						 [psm2_happy=0])
+			      ])
 			AS_IF([test x$psm2_happy = x0],
 			      [
 				$as_echo "$as_me: recheck psm2 without psm2_mq_ipeek_dequeue_multi."
@@ -143,6 +158,9 @@ AC_DEFUN([FI_PSM2_CONFIGURE],[
 	 AC_DEFINE_UNQUOTED([HAVE_PSM2_MQ_REQ_USER],
 			    $have_psm2_mq_req_user,
 			    [psm2_mq_ipeek_dequeue_multi function is present])
+	 AC_DEFINE_UNQUOTED([HAVE_PSM2_INFO_QUERY],
+			    $have_psm2_info_query,
+			    [psm2_info_query function is present])
 ])
 
 AC_ARG_WITH([psm2-src],
