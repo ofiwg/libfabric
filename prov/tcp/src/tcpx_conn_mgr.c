@@ -153,8 +153,8 @@ int tcpx_eq_wait_try_func(void *arg)
 	return FI_SUCCESS;
 }
 
-static void client_wait_for_connresp(struct util_wait *wait,
-				     struct tcpx_cm_context *cm_ctx)
+static void client_recv_connresp(struct util_wait *wait,
+				 struct tcpx_cm_context *cm_ctx)
 {
 	struct fi_eq_err_entry err_entry;
 	struct tcpx_ep *ep;
@@ -175,6 +175,7 @@ static void client_wait_for_connresp(struct util_wait *wait,
 		goto err;
 
 	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "Received Accept from server\n");
+	free(cm_ctx);
 	return;
 err:
 	memset(&err_entry, 0, sizeof err_entry);
@@ -182,6 +183,8 @@ err:
 	err_entry.context = cm_ctx->fid->context;
 	err_entry.err = -ret;
 	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "fi_eq_write the conn refused %d\n", ret);
+
+	free(cm_ctx);
 	fi_eq_write(&ep->util_ep.eq->eq_fid, FI_NOTIFY,
 		    &err_entry, sizeof(err_entry), UTIL_FLAG_ERROR);
 }
@@ -202,18 +205,12 @@ static void server_send_cm_accept(struct util_wait *wait,
 		goto err;
 
 	cm_entry.fid =  cm_ctx->fid;
-
-	ret = tcpx_ep_msg_xfer_enable(ep);
-	if (ret)
-		goto err;
-
 	ret = (int) fi_eq_write(&ep->util_ep.eq->eq_fid, FI_CONNECTED,
 				&cm_entry, sizeof(cm_entry), 0);
 	if (ret < 0) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
 	}
 
-	free(cm_ctx);
 	ret = ofi_wait_fd_del(wait, ep->conn_fd);
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
@@ -221,7 +218,12 @@ static void server_send_cm_accept(struct util_wait *wait,
 		goto err;
 	}
 
+	ret = tcpx_ep_msg_xfer_enable(ep);
+	if (ret)
+		goto err;
+
 	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "Connection Accept Successful\n");
+	free(cm_ctx);
 	return;
 err:
 	memset(&err_entry, 0, sizeof err_entry);
@@ -229,6 +231,7 @@ err:
 	err_entry.context = cm_ctx->fid->context;
 	err_entry.err = -ret;
 
+	free(cm_ctx);
 	fi_eq_write(&ep->util_ep.eq->eq_fid, FI_NOTIFY,
 		    &err_entry, sizeof(err_entry), UTIL_FLAG_ERROR);
 }
@@ -269,19 +272,21 @@ static void server_recv_connreq(struct util_wait *wait,
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
 		goto err3;
 	}
-	free(cm_entry);
-	free(cm_ctx);
 	ret = ofi_wait_fd_del(wait, handle->conn_fd);
 	if (ret)
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"fd deletion from ofi_wait failed\n");
+	free(cm_entry);
+	free(cm_ctx);
 	return;
 err3:
 	fi_freeinfo(cm_entry->info);
 err2:
 	free(cm_entry);
 err1:
+	ofi_wait_fd_del(wait, handle->conn_fd);
 	ofi_close_socket(handle->conn_fd);
+	free(cm_ctx);
 	free(handle);
 }
 
@@ -314,7 +319,7 @@ static void client_send_connreq(struct util_wait *wait,
 	if (ret)
 		goto err;
 
-	cm_ctx->type = CLIENT_WAIT_FOR_CONNRESP;
+	cm_ctx->type = CLIENT_RECV_CONNRESP;
 	ret = ofi_wait_fd_add(wait, ep->conn_fd, FI_EPOLL_IN,
 			      tcpx_eq_wait_try_func, NULL, cm_ctx);
 	if (ret)
@@ -327,6 +332,7 @@ err:
 	err_entry.context = cm_ctx->fid->context;
 	err_entry.err = -ret;
 
+	free(cm_ctx);
 	fi_eq_write(&ep->util_ep.eq->eq_fid, FI_NOTIFY,
 		    &err_entry, sizeof(err_entry), UTIL_FLAG_ERROR);
 }
@@ -384,7 +390,7 @@ err1:
 }
 
 static void process_cm_ctx(struct util_wait *wait,
-			      struct tcpx_cm_context *cm_ctx)
+			   struct tcpx_cm_context *cm_ctx)
 {
 	switch (cm_ctx->type) {
 	case SERVER_SOCK_ACCEPT:
@@ -399,8 +405,8 @@ static void process_cm_ctx(struct util_wait *wait,
 	case SERVER_SEND_CM_ACCEPT:
 		server_send_cm_accept(wait, cm_ctx);
 		break;
-	case CLIENT_WAIT_FOR_CONNRESP:
-		client_wait_for_connresp(wait, cm_ctx);
+	case CLIENT_RECV_CONNRESP:
+		client_recv_connresp(wait, cm_ctx);
 		break;
 	default:
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
@@ -431,7 +437,7 @@ void tcpx_conn_mgr_run(struct util_eq *eq)
 			continue;
 
 		process_cm_ctx(eq->wait,
-				 (struct tcpx_cm_context *)
-				 wait_contexts[i]);
+			       (struct tcpx_cm_context *)
+			       wait_contexts[i]);
 	}
 }

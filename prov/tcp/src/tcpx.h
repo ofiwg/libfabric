@@ -95,7 +95,7 @@ enum tcpx_cm_event_type {
 	CLIENT_SEND_CONNREQ,
 	SERVER_RECV_CONNREQ,
 	SERVER_SEND_CM_ACCEPT,
-	CLIENT_WAIT_FOR_CONNRESP,
+	CLIENT_RECV_CONNRESP,
 };
 
 struct tcpx_cm_context {
