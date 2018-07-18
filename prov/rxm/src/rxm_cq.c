@@ -169,29 +169,40 @@ static void rxm_enqueue_rx_buf_for_repost_check(struct rxm_rx_buf *rx_buf)
 		rxm_rx_buf_release(rx_buf->ep, rx_buf);
 }
 
+static int rxm_cq_write_error_trunc(struct rxm_rx_buf *rx_buf, size_t done_len)
+{
+	int ret;
+
+	if (rx_buf->ep->util_ep.flags & OFI_CNTR_ENABLED)
+		rxm_cntr_incerr(rx_buf->ep->util_ep.rx_cntr);
+
+	FI_WARN(&rxm_prov, FI_LOG_CQ, "Message truncated: "
+		"recv buf length: %zu message length: %" PRIu64 "\n",
+		done_len, rx_buf->pkt.hdr.size);
+	ret = ofi_cq_write_error_trunc(rx_buf->ep->util_ep.rx_cq,
+				       rx_buf->recv_entry->context,
+				       rx_buf->recv_entry->comp_flags |
+				       rx_buf->pkt.hdr.flags,
+				       rx_buf->pkt.hdr.size,
+				       rx_buf->recv_entry->rxm_iov.iov[0].iov_base,
+				       rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag,
+				       rx_buf->pkt.hdr.size - done_len);
+	if (OFI_UNLIKELY(ret)) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ,
+			"Unable to write recv error CQ\n");
+		return ret;
+	}
+	return 0;
+}
+
 static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 {
 	int ret;
 
 	if (OFI_UNLIKELY(done_len < rx_buf->pkt.hdr.size)) {
-		FI_WARN(&rxm_prov, FI_LOG_CQ, "Message truncated: "
-			"recv buf length: %zu message length: %" PRIu64 "\n",
-			done_len, rx_buf->pkt.hdr.size);
-		ret = ofi_cq_write_error_trunc(rx_buf->ep->util_ep.rx_cq,
-					       rx_buf->recv_entry->context,
-					       rx_buf->recv_entry->comp_flags |
-					       rx_buf->pkt.hdr.flags,
-					       rx_buf->pkt.hdr.size,
-					       rx_buf->recv_entry->rxm_iov.iov[0].iov_base,
-					       rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag,
-					       rx_buf->pkt.hdr.size - done_len);
-		if (OFI_UNLIKELY(ret)) {
-			FI_WARN(&rxm_prov, FI_LOG_CQ,
-				"Unable to write recv error CQ\n");
+		ret = rxm_cq_write_error_trunc(rx_buf, done_len);
+		if (ret)
 			return ret;
-		}
-		if (rx_buf->ep->util_ep.flags & OFI_CNTR_ENABLED)
-			rxm_cntr_incerr(rx_buf->ep->util_ep.rx_cntr);
 	} else {
 		if (rx_buf->recv_entry->flags & FI_COMPLETION) {
 			ret = rxm_cq_write_recv_comp(
