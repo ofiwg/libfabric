@@ -190,11 +190,14 @@ struct rxm_pkt {
 };
 
 union rxm_sar_ctrl_data {
-	enum rxm_sar_seg_type {
-		RXM_SAR_SEG_FIRST	= 1,
-		RXM_SAR_SEG_MIDDLE	= 2,
-		RXM_SAR_SEG_LAST	= 3,	
-	} seg_type : 2;
+	struct {
+		enum rxm_sar_seg_type {
+			RXM_SAR_SEG_FIRST	= 1,
+			RXM_SAR_SEG_MIDDLE	= 2,
+			RXM_SAR_SEG_LAST	= 3,	
+		} seg_type : 2;
+		uint32_t offset;
+	};
 	uint64_t align;
 };
 
@@ -207,7 +210,19 @@ rxm_sar_get_seg_type(struct ofi_ctrl_hdr *ctrl_hdr)
 static inline void
 rxm_sar_set_seg_type(struct ofi_ctrl_hdr *ctrl_hdr, enum rxm_sar_seg_type seg_type)
 {
-    ((union rxm_sar_ctrl_data *)&(ctrl_hdr->ctrl_data))->seg_type = seg_type;
+	((union rxm_sar_ctrl_data *)&(ctrl_hdr->ctrl_data))->seg_type = seg_type;
+}
+
+static inline uint32_t
+rxm_sar_get_offset(struct ofi_ctrl_hdr *ctrl_hdr)
+{
+	return ((union rxm_sar_ctrl_data *)&(ctrl_hdr->ctrl_data))->offset;
+}
+
+static inline void
+rxm_sar_set_offset(struct ofi_ctrl_hdr *ctrl_hdr, uint32_t offset)
+{
+	((union rxm_sar_ctrl_data *)&(ctrl_hdr->ctrl_data))->offset = offset;
 }
 
 struct rxm_recv_match_attr {
@@ -365,7 +380,12 @@ struct rxm_recv_entry {
 	struct {
 		struct dlist_entry sar_entry;
 		size_t total_recv_len;
+		size_t segs_rcvd;
 		uint64_t msg_id;
+		/* This is used when a message with the `RXM_SAR_SEG_LAST`
+		 * flag is receved, but not all messages has been received
+		 * yet */
+		size_t last_seg_no;
 	};
 };
 DECLARE_FREESTACK(struct rxm_recv_entry, rxm_recv_fs);
@@ -416,7 +436,11 @@ struct rxm_ep {
 	int			msg_mr_local;
 	int			rxm_mr_local;
 	size_t			min_multi_recv_size;
+
 	size_t			sar_limit;
+	/* This defines maximum index of a segment for
+	 * which segment length mast be calculated. */
+	uint32_t		sar_max_calc_seg_no;
 
 	struct rxm_buf_pool	buf_pools[RXM_BUF_POOL_MAX];
 

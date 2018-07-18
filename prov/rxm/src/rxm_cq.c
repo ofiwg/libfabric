@@ -368,12 +368,15 @@ ssize_t rxm_cq_handle_seg_data(struct rxm_rx_buf *rx_buf)
 {
 	uint64_t done_len = ofi_copy_to_iov(rx_buf->recv_entry->rxm_iov.iov,
 					    rx_buf->recv_entry->rxm_iov.count,
-					    rx_buf->pkt.hdr.size,
+					    rxm_sar_get_offset(&rx_buf->pkt.ctrl_hdr),
 					    rx_buf->pkt.data,
 					    rx_buf->pkt.ctrl_hdr.seg_size);
 	rx_buf->recv_entry->total_recv_len += done_len;
+	rx_buf->recv_entry->segs_rcvd++;
 	/* Check that this isn't last segment */
-	if (rxm_sar_get_seg_type(&rx_buf->pkt.ctrl_hdr) != RXM_SAR_SEG_LAST &&
+	if (((rxm_sar_get_seg_type(&rx_buf->pkt.ctrl_hdr) != RXM_SAR_SEG_LAST) &&
+	     (!rx_buf->recv_entry->last_seg_no ||
+	      (rx_buf->recv_entry->last_seg_no != rx_buf->pkt.ctrl_hdr.seg_no))) &&
 	/* and message isn't truncated */
 	    (done_len == rx_buf->pkt.ctrl_hdr.seg_size)) {
 		if (rx_buf->recv_entry->msg_id == UINT64_MAX) {
@@ -387,18 +390,20 @@ ssize_t rxm_cq_handle_seg_data(struct rxm_rx_buf *rx_buf)
 		rx_buf->recv_entry = NULL;
 		rxm_enqueue_rx_buf_for_repost_check(rx_buf);
 		return FI_SUCCESS;
+	} else if ((rxm_sar_get_seg_type(&rx_buf->pkt.ctrl_hdr) == RXM_SAR_SEG_LAST) &&
+		   (rx_buf->recv_entry->segs_rcvd != (rx_buf->pkt.ctrl_hdr.seg_no + 1))) {
+		/* Handle case when the segment with the `RXM_SAR_SEG_LAST` flag
+		 * is received, but not all segments were received yet. We should
+		 * wait untill all segments will be received. */
+		rx_buf->recv_entry->last_seg_no = rx_buf->pkt.ctrl_hdr.seg_no;
 	}
 	dlist_remove(&rx_buf->recv_entry->sar_entry);
 	/* Mark rxm_recv_entry::msg_id as unknown for futher re-use */
 	rx_buf->recv_entry->msg_id = UINT64_MAX;
-
-	/* The hdr::size contains offset (bytes) that should be applied when
-	 * performing copying segment data to the destination buffer.
-	 * The total size of messages = last segment size + offset from hdr::size */
-	rx_buf->pkt.hdr.size += done_len;
-
 	done_len = rx_buf->recv_entry->total_recv_len;
 	rx_buf->recv_entry->total_recv_len = 0;
+	rx_buf->recv_entry->segs_rcvd = 0;
+	rx_buf->recv_entry->last_seg_no = 0;
 	return rxm_finish_recv(rx_buf, done_len);
 }
 
