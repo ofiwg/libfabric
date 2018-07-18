@@ -1712,6 +1712,7 @@ static int rxm_ep_close(struct fid *fid)
 		retv = ret;
 
 	ofi_endpoint_close(&rxm_ep->util_ep);
+	fi_freeinfo(rxm_ep->rxm_info);
 	free(rxm_ep);
 	return retv;
 }
