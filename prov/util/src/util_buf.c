@@ -148,6 +148,7 @@ void *util_buf_get(struct util_buf_pool *pool)
 	entry = slist_remove_head(&pool->buf_list);
 	buf_ftr = (struct util_buf_footer *) ((char *) entry + pool->attr.size);
 	buf_ftr->region->num_used++;
+	assert(buf_ftr->region->num_used);
 	return entry;
 }
 
@@ -157,6 +158,7 @@ void util_buf_release(struct util_buf_pool *pool, void *buf)
 	struct util_buf_footer *buf_ftr;
 
 	buf_ftr = (struct util_buf_footer *) ((char *) buf + pool->attr.size);
+	assert(buf_ftr->region->num_used);
 	buf_ftr->region->num_used--;
 	slist_insert_head(&util_buf->entry, &pool->buf_list);
 }
