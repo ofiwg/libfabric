@@ -15,17 +15,17 @@ AC_DEFUN([FI_CXI_CONFIGURE],[
 	# Determine if we can support the CXI provider
 	have_cxi=false
 	cxi_CPPFLAGS=
+	cxi_LDFLAGS=
 	have_criterion=false
 	cxitest_CPPFLAGS=
 	cxitest_LDFLAGS=
 	cxitest_LIBS=
 
-	AC_ARG_WITH([cxi], [AS_HELP_STRING([--with-cxi],
-		[Install directory for CXI header files.])])
-	AS_IF([test "$with_cxi" != ""],
-		[cxi_CPPFLAGS="-I$with_cxi/include"
-		have_cxi=true],
-		[have_cxi=true])
+	AS_IF([test x"$enable_cxi" != x"no"],
+		[FI_PKG_CHECK_MODULES([CXI], [libcxi],
+			[cxi_CPPFLAGS=$CXI_CFLAGS
+			cxi_LDFLAGS=$CXI_LIBS
+			have_cxi=true])])
 
 	AC_ARG_WITH([criterion], [AS_HELP_STRING([--with-criterion],
 		[Location for criterion unit testing framework.])])
@@ -39,6 +39,7 @@ AC_DEFUN([FI_CXI_CONFIGURE],[
 	AM_CONDITIONAL([HAVE_CRITERION], [test "x$have_criterion" = "xtrue"])
 
 	AC_SUBST(cxi_CPPFLAGS)
+	AC_SUBST(cxi_LDFLAGS)
 	AC_SUBST(cxitest_CPPFLAGS)
 	AC_SUBST(cxitest_LDFLAGS)
 	AC_SUBST(cxitest_LIBS)
