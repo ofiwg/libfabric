@@ -1368,7 +1368,17 @@ int ofi_cmap_update(struct util_cmap *cmap, const void *addr, fi_addr_t fi_addr)
 		goto out;
 	}
 	util_cmap_move_handle(handle, fi_addr);
-	cmap->av_updated = 1;
+	if (cmap->attr.config.use_cmd_queue &&
+	    /* ensure that CMAP notifies only once */
+	    !cmap->av_upd_cmd ) {
+		cmap->av_upd_cmd =
+			calloc(1, sizeof(*cmap->av_upd_cmd));
+		if (!cmap->av_upd_cmd)
+			goto out;
+		cmap->av_upd_cmd->type = UTIL_CMAP_CMD_AV_UPD;
+		dlist_ts_insert_tail(&cmap->cmd_queue, &cmap->av_upd_cmd->entry);
+		cmap->cmd_write++;
+	}
 out:
 	fastlock_release(&cmap->lock);
 	return ret;
@@ -1609,20 +1619,30 @@ void ofi_cmap_free(struct util_cmap *cmap)
 {
 	struct util_cmap_peer *peer;
 	struct dlist_entry *entry;
+	struct util_cmap_cmd *cmd;
 	size_t i;
 
 	fastlock_acquire(&cmap->lock);
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "Closing cmap\n");
+	cmap->event_handler_closing = 1;
 	for (i = 0; i < cmap->av->count; i++) {
 		if (cmap->handles_av[i])
 			util_cmap_del_handle(cmap->handles_av[i]);
 	}
-	while(!dlist_empty(&cmap->peer_list)) {
+	while (!dlist_empty(&cmap->peer_list)) {
 		entry = cmap->peer_list.next;
 		peer = container_of(entry, struct util_cmap_peer, entry);
 		util_cmap_del_handle(peer->handle);
 	}
+	while (!dlist_ts_empty(&cmap->cmd_queue)) {
+		dlist_ts_pop_front(&cmap->cmd_queue, struct util_cmap_cmd,
+				   cmd, entry);
+		if (!cmd)
+			continue;
+		free(cmd);
+	}
 	util_cmap_event_handler_close(cmap);
+	free(cmap->av_upd_cmd);
 	free(cmap->handles_av);
 	free(cmap->attr.name);
 	fastlock_release(&cmap->lock);
@@ -1656,6 +1676,11 @@ struct util_cmap *ofi_cmap_alloc(struct util_ep *ep,
 
 	dlist_init(&cmap->peer_list);
 	fastlock_init(&cmap->lock);
+
+	dlist_ts_init(&cmap->cmd_queue);
+	cmap->cmd_write = cmap->cmd_read = 0;
+
+	cmap->event_handler_closing = 0;
 
 	if (pthread_create(&cmap->event_handler_thread, 0,
 			   cmap->attr.event_handler, ep)) {

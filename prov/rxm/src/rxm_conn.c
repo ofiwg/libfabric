@@ -37,16 +37,17 @@
 #include <ofi_util.h>
 #include "rxm.h"
 
-static int rxm_msg_ep_open(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
-			   struct rxm_conn *rxm_conn, void *context)
+int rxm_msg_ep_open(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
+		    struct rxm_conn *rxm_conn)
 {
-	struct rxm_domain *rxm_domain;
 	struct fid_ep *msg_ep;
 	int ret;
+	struct rxm_domain *rxm_domain =
+		container_of(rxm_ep->util_ep.domain, struct rxm_domain,
+			     util_domain);
 
-	rxm_domain = container_of(rxm_ep->util_ep.domain, struct rxm_domain,
-			util_domain);
-	ret = fi_endpoint(rxm_domain->msg_domain, msg_info, &msg_ep, context);
+	ret = fi_endpoint(rxm_domain->msg_domain, msg_info, &msg_ep,
+			  &rxm_conn->handle);
 	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to create msg_ep\n");
 		return ret;
@@ -81,17 +82,33 @@ static int rxm_msg_ep_open(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 		goto err;
 	}
 
-	if (!rxm_ep->srx_ctx) {
-		ret = rxm_ep_prepost_buf(rxm_ep, msg_ep);
-		if (ret)
-			goto err;
-	}
+	assert(!rxm_conn->msg_ep);
 
 	rxm_conn->msg_ep = msg_ep;
 	return 0;
 err:
 	fi_close(&msg_ep->fid);
 	return ret;
+}
+
+void rxm_conn_close_msg_ep(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn)
+{
+	if (!rxm_conn->msg_ep)
+		return;
+	/* Assuming fi_close also shuts down the connection gracefully if the
+	 * endpoint is in connected state */
+	if (fi_close(&rxm_conn->msg_ep->fid))
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to close msg_ep\n");
+	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Closed msg_ep\n");
+	rxm_conn->msg_ep = NULL;
+}
+
+static void rxm_conn_wake_up_wait_obj(struct rxm_ep *rxm_ep)
+{
+	if (rxm_ep->util_ep.tx_cq->wait)
+		util_cq_signal(rxm_ep->util_ep.tx_cq);
+	if (rxm_ep->util_ep.tx_cntr && rxm_ep->util_ep.tx_cntr->wait)
+		util_cntr_signal(rxm_ep->util_ep.tx_cntr);
 }
 
 static void rxm_txe_init(struct rxm_tx_entry *entry, void *arg)
@@ -101,9 +118,8 @@ static void rxm_txe_init(struct rxm_tx_entry *entry, void *arg)
 	entry->ep 	= send_queue->rxm_ep;
 }
 
-static int
-rxm_send_queue_init(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
-		    struct rxm_send_queue *send_queue, size_t size)
+int rxm_send_queue_init(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
+			struct rxm_send_queue *send_queue, size_t size)
 {
 	send_queue->rxm_conn = rxm_conn;
 	send_queue->rxm_ep = rxm_ep;
@@ -115,7 +131,7 @@ rxm_send_queue_init(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	return 0;
 }
 
-static void rxm_send_queue_close(struct rxm_send_queue *send_queue)
+void rxm_send_queue_close(struct rxm_send_queue *send_queue)
 {
 	if (send_queue->fs) {
 		struct rxm_tx_entry *tx_entry;
@@ -143,44 +159,61 @@ static void rxm_conn_close(struct util_cmap_handle *handle)
 	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
 	       "Saved MSG EP fid for further deletion in main thread\n");
 	rxm_conn->msg_ep = NULL;
+	/* Now we ready to create new MSG EP */
 }
 
 static void rxm_conn_free(struct util_cmap_handle *handle)
 {
 	struct rxm_conn *rxm_conn = container_of(handle, struct rxm_conn, handle);
+	struct rxm_ep *rxm_ep = container_of(handle->cmap->ep, struct rxm_ep, util_ep);
+	struct util_cmap_cmd *cmd;
+	struct rxm_cmap_cmd_data *cmd_data;
 
-	/* This handles case when saved_msg_ep wasn't closed */
-	if (rxm_conn->saved_msg_ep) {
-		if (fi_close(&rxm_conn->saved_msg_ep->fid))
-			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-				"Unable to close saved msg_ep\n");
+	if (!rxm_ep->util_ep.cmap->event_handler_closing) {
+		cmd = calloc(1, sizeof(struct util_cmap_cmd) +
+				sizeof(struct rxm_cmap_cmd_data));
+		if (!cmd)
+			goto conn_free;
+		cmd->type = UTIL_CMAP_CMD_CONN_FREE;
+		cmd_data = (struct rxm_cmap_cmd_data *)cmd->data;
+		cmd_data->rxm_conn = rxm_conn;
+
+		dlist_ts_insert_tail(&rxm_ep->util_ep.cmap->cmd_queue, &cmd->entry);
+		rxm_ep->util_ep.cmap->cmd_write++;
+		rxm_conn_wake_up_wait_obj(rxm_ep);
+	} else {
+conn_free:
+		rxm_conn_close_msg_ep(rxm_ep, rxm_conn);
+		rxm_send_queue_close(&rxm_conn->send_queue);
+		free(rxm_conn);
 	}
+}
 
-	if (!rxm_conn->msg_ep)
+static void
+rxm_conn_process_connected(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn)
+{
+	struct util_cmap_cmd *cmd;
+	struct rxm_cmap_cmd_data *cmd_data;
+
+	cmd = calloc(1, sizeof(struct util_cmap_cmd) +
+			sizeof(struct rxm_cmap_cmd_data));
+	if (!cmd) {
+		if (!rxm_ep->srx_ctx) {
+			(void) rxm_ep_prepost_buf(rxm_ep, rxm_conn->msg_ep);
+		}
 		return;
-	/* Assuming fi_close also shuts down the connection gracefully if the
-	 * endpoint is in connected state */
-	if (fi_close(&rxm_conn->msg_ep->fid))
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to close msg_ep\n");
-	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Closed msg_ep\n");
-	rxm_conn->msg_ep = NULL;
-	rxm_send_queue_close(&rxm_conn->send_queue);
+	}
+	cmd->type = UTIL_CMAP_CMD_CONNECTED;
+	cmd_data = (struct rxm_cmap_cmd_data *)cmd->data;
+	cmd_data->rxm_conn = rxm_conn;
 
-	free(container_of(handle, struct rxm_conn, handle));
+	dlist_ts_insert_tail(&rxm_ep->util_ep.cmap->cmd_queue, &cmd->entry);
+	rxm_ep->util_ep.cmap->cmd_write++;
+	rxm_conn_wake_up_wait_obj(rxm_ep);
 }
 
 static void rxm_conn_connected_handler(struct util_cmap_handle *handle)
 {
-	struct rxm_conn *rxm_conn = container_of(handle, struct rxm_conn, handle);
-
-	if (!rxm_conn->saved_msg_ep)
-		return;
-	/* Assuming fi_close also shuts down the connection gracefully if the
-	 * endpoint is in connected state */
-	if (fi_close(&rxm_conn->saved_msg_ep->fid))
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to close saved msg_ep\n");
-	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Closed saved msg_ep\n");
-	rxm_conn->saved_msg_ep = NULL;
 }
 
 static struct util_cmap_handle *rxm_conn_alloc(struct util_cmap *cmap)
@@ -256,6 +289,8 @@ rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 			.eager_size = rxm_ep->rxm_info->tx_attr->inject_size,
 		},
 	};
+	struct util_cmap_cmd *cmd;
+	struct rxm_cmap_cmd_data *cmd_data;
 	struct util_cmap_handle *handle;
 	int ret;
 
@@ -277,19 +312,24 @@ rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 
 	rxm_conn->handle.remote_key = remote_cm_data->conn_id;
 
-	ret = rxm_msg_ep_open(rxm_ep, msg_info, rxm_conn, handle);
-	if (ret)
-		goto err2;
-
 	cm_data.conn_id = rxm_conn->handle.key;
 	cm_data.proto.eager_size = htonll(cm_data.proto.eager_size);
 
-	ret = fi_accept(rxm_conn->msg_ep, &cm_data, sizeof(cm_data));
-	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_FABRIC,
-				"Unable to accept incoming connection\n");
+
+	cmd = calloc(1, sizeof(struct util_cmap_cmd) +
+			sizeof(struct rxm_cmap_cmd_data));
+	if (!cmd)
 		goto err2;
-	}
+	cmd->type = UTIL_CMAP_CMD_CONNREQ_ACCEPT;
+	cmd_data = (struct rxm_cmap_cmd_data *)cmd->data;
+	cmd_data->rxm_conn = rxm_conn;
+	cmd_data->connreq_cmd.msg_info = msg_info;
+	cmd_data->connreq_cmd.cm_data = cm_data;
+
+	dlist_ts_insert_tail(&rxm_ep->util_ep.cmap->cmd_queue, &cmd->entry);
+	rxm_ep->util_ep.cmap->cmd_write++;
+	rxm_conn_wake_up_wait_obj(rxm_ep);
+
 	return ret;
 err2:
 	ofi_cmap_del_handle(&rxm_conn->handle);
@@ -299,6 +339,7 @@ err1:
 	if (fi_reject(rxm_ep->msg_pep, msg_info->handle, NULL, 0))
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 				"Unable to reject incoming connection\n");
+	fi_freeinfo(msg_info);
 	return ret;
 }
 
@@ -318,6 +359,39 @@ static int rxm_conn_handle_notify(struct fi_eq_entry *eq_entry)
 	}
 }
 
+static void rxm_conn_handle_close(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn)
+{
+	struct util_cmap_cmd *cmd;
+	struct rxm_cmap_cmd_data *cmd_data;
+
+	cmd = calloc(1, sizeof(struct util_cmap_cmd) +
+			sizeof(struct rxm_cmap_cmd_data));
+	if (!cmd) {
+		rxm_conn_close_msg_ep(rxm_ep, rxm_conn);
+		return;
+	}
+	cmd->type = UTIL_CMAP_CMD_CONN_CLOSE;
+	cmd_data = (struct rxm_cmap_cmd_data *)cmd->data;
+	cmd_data->rxm_conn = rxm_conn;
+
+	dlist_ts_insert_tail(&rxm_ep->util_ep.cmap->cmd_queue, &cmd->entry);
+	rxm_ep->util_ep.cmap->cmd_write++;
+	rxm_conn_wake_up_wait_obj(rxm_ep);
+}
+
+static void rxm_conn_handle_conn_refused(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn)
+{
+	if (rxm_conn->saved_msg_ep) {
+		FI_DBG(&rxm_prov, FI_LOG_FABRIC,
+		       "Enqueue CONN_CLOSE req to CMD queue\n");
+		assert(rxm_conn->handle.state != CMAP_CONNREQ_SENT);
+		rxm_conn_handle_close(rxm_ep, rxm_conn);
+	}
+	FI_DBG(&rxm_prov, FI_LOG_FABRIC, "Connection refused\n");
+	ofi_cmap_process_reject(rxm_ep->util_ep.cmap,
+				&rxm_conn->handle);
+}
+
 static void rxm_conn_handle_eq_err(struct rxm_ep *rxm_ep, ssize_t rd)
 {
 	struct fi_eq_err_entry err_entry = {0};
@@ -328,18 +402,11 @@ static void rxm_conn_handle_eq_err(struct rxm_ep *rxm_ep, ssize_t rd)
 	}
 	OFI_EQ_READERR(&rxm_prov, FI_LOG_FABRIC, rxm_ep->msg_eq, rd, err_entry);
 	if (err_entry.err == ECONNREFUSED) {
-		FI_DBG(&rxm_prov, FI_LOG_FABRIC, "Connection refused\n");
-		ofi_cmap_process_reject(rxm_ep->util_ep.cmap,
-					err_entry.fid->context);
+		struct rxm_conn *rxm_conn =
+			container_of(err_entry.fid->context,
+				     struct rxm_conn, handle);
+		rxm_conn_handle_conn_refused(rxm_ep, rxm_conn);
 	}
-}
-
-static void rxm_conn_wake_up_wait_obj(struct rxm_ep *rxm_ep)
-{
-	if (rxm_ep->util_ep.tx_cq->wait)
-		util_cq_signal(rxm_ep->util_ep.tx_cq);
-	if (rxm_ep->util_ep.tx_cntr && rxm_ep->util_ep.tx_cntr->wait)
-		util_cntr_signal(rxm_ep->util_ep.tx_cntr);
 }
 
 static void *rxm_conn_event_handler(void *arg)
@@ -381,7 +448,6 @@ static void *rxm_conn_event_handler(void *arg)
 				goto exit;
 			}
 			rxm_msg_process_connreq(rxm_ep, entry->info, entry->data);
-			fi_freeinfo(entry->info);
 			break;
 		case FI_CONNECTED:
 			FI_DBG(&rxm_prov, FI_LOG_FABRIC,
@@ -392,6 +458,9 @@ static void *rxm_conn_event_handler(void *arg)
 						 entry->fid->context,
 						 ((rd - sizeof(*entry)) ?
 						  &cm_data->conn_id : NULL));
+			rxm_conn_process_connected(
+				rxm_ep, container_of(entry->fid->context,
+						     struct rxm_conn, handle));
 			rxm_conn_wake_up_wait_obj(rxm_ep);
 			fastlock_release(&rxm_ep->util_ep.cmap->lock);
 			break;
@@ -473,7 +542,7 @@ rxm_conn_connect(struct util_ep *util_ep, struct util_cmap_handle *handle,
 	if (ret)
 		return ret;
 
-	ret = rxm_msg_ep_open(rxm_ep, msg_info, rxm_conn, &rxm_conn->handle);
+	ret = rxm_msg_ep_open(rxm_ep, msg_info, rxm_conn);
 	if (ret)
 		goto err1;
 
@@ -521,7 +590,18 @@ static int rxm_conn_signal(struct util_ep *util_ep, void *context,
 
 struct util_cmap *rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep)
 {
-	struct util_cmap_attr attr;
+	struct util_cmap_attr attr = {
+		.config = {
+			.use_cmd_queue	= 1,
+		},
+		.alloc			= rxm_conn_alloc,
+		.close 			= rxm_conn_close,
+		.free 			= rxm_conn_free,
+		.connect 		= rxm_conn_connect,
+		.connected_handler	= rxm_conn_connected_handler,
+		.event_handler		= rxm_conn_event_handler,
+		.signal			= rxm_conn_signal,
+	};
 	struct util_cmap *cmap = NULL;
 	void *name;
 	size_t len;
@@ -545,14 +625,7 @@ struct util_cmap *rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep)
 	}
 	ofi_straddr_dbg(&rxm_prov, FI_LOG_EP_CTRL, "local_name", name);
 
-	attr.name		= name;
-	attr.alloc 		= rxm_conn_alloc;
-	attr.close 		= rxm_conn_close;
-	attr.free 		= rxm_conn_free;
-	attr.connect 		= rxm_conn_connect;
-	attr.connected_handler	= rxm_conn_connected_handler;
-	attr.event_handler	= rxm_conn_event_handler;
-	attr.signal		= rxm_conn_signal;
+	attr.name = name;
 
 	cmap = ofi_cmap_alloc(&rxm_ep->util_ep, &attr);
 	if (!cmap)

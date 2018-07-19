@@ -634,6 +634,9 @@ typedef int (*ofi_cmap_signal_func)(struct util_ep *ep, void *context,
 
 struct util_cmap_attr {
 	void 				*name;
+	struct {
+		int use_cmd_queue : 1;
+	} config;
 	ofi_cmap_alloc_handle_func 	alloc;
 	ofi_cmap_handle_func 		close;
 	ofi_cmap_handle_func 		free;
@@ -641,6 +644,20 @@ struct util_cmap_attr {
 	ofi_cmap_handle_func		connected_handler;
 	ofi_cmap_event_handler_func	event_handler;
 	ofi_cmap_signal_func		signal;
+};
+
+enum util_cmap_cmd_type {
+	UTIL_CMAP_CMD_AV_UPD,
+	UTIL_CMAP_CMD_CONNREQ_ACCEPT,
+	UTIL_CMAP_CMD_CONNECTED,
+	UTIL_CMAP_CMD_CONN_CLOSE,
+	UTIL_CMAP_CMD_CONN_FREE,
+};
+
+struct util_cmap_cmd {
+	struct dlist_entry entry;
+	enum util_cmap_cmd_type type;
+	char data[];
 };
 
 struct util_cmap {
@@ -658,9 +675,16 @@ struct util_cmap {
 
 	struct dlist_entry peer_list;
 	struct util_cmap_attr attr;
+	int event_handler_closing;
 	pthread_t event_handler_thread;
-	int av_updated;
 	fastlock_t lock;
+
+	struct dlist_ts cmd_queue;
+	/* This ensures that this command posted once to the CMD queue
+	 * until it is read (when it is read, it has to be zeroed) */
+	struct util_cmap_cmd *av_upd_cmd;
+	size_t cmd_write;
+	size_t cmd_read;
 };
 
 struct util_cmap_handle *ofi_cmap_key2handle(struct util_cmap *cmap, uint64_t key);

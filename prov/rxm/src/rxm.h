@@ -454,6 +454,11 @@ struct rxm_ep {
 	ofi_fastlock_release_t	res_fastlock_release;
 };
 
+struct rxm_conn_close {
+	struct fid_ep *msg_ep;
+	struct dlist_entry posted_rx_list;
+};
+
 struct rxm_conn {
 	struct fid_ep *msg_ep;
 
@@ -468,9 +473,23 @@ struct rxm_conn {
 	struct rxm_send_queue send_queue;
 	struct dlist_entry sar_rx_msg_list;
 	struct util_cmap_handle handle;
+
 	/* This is saved MSG EP fid, that hasn't been closed during
 	 * handling of CONN_RECV in CMAP_CONNREQ_SENT for passive side */
 	struct fid_ep *saved_msg_ep;
+};
+
+struct rxm_cmap_cmd_data {
+	/* common stuff */
+	struct rxm_conn *rxm_conn;
+
+	/* cmd-specific stuff */
+	union {
+		struct {
+			struct fi_info *msg_info;
+			struct rxm_cm_data cm_data;
+		} connreq_cmd;
+	};
 };
 
 struct rxm_ep_wait_ref {
@@ -654,6 +673,13 @@ rxm_acquire_conn(struct rxm_ep *rxm_ep, fi_addr_t fi_addr)
 						    fi_addr),
 			    struct rxm_conn, handle);
 }
+
+void rxm_conn_close_msg_ep(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn);
+int rxm_msg_ep_open(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
+		    struct rxm_conn *rxm_conn);
+int rxm_send_queue_init(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
+			struct rxm_send_queue *send_queue, size_t size);
+void rxm_send_queue_close(struct rxm_send_queue *send_queue);
 
 void rxm_ep_progress_conn_deferred_list(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn);
 void rxm_ep_progress_deferred_list(struct rxm_ep *rxm_ep);
