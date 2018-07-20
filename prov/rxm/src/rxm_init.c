@@ -116,7 +116,8 @@ int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
 	info->tx_attr->mode		= info->mode;
 	info->tx_attr->msg_order 	= core_info->tx_attr->msg_order;
 	info->tx_attr->comp_order 	= rxm_info.tx_attr->comp_order;
-	info->tx_attr->inject_size	= rxm_info.tx_attr->inject_size;
+	info->tx_attr->inject_size	= core_info->tx_attr->inject_size
+					  - sizeof(struct rxm_pkt);
 	/* Export TX queue size same as that of MSG provider as we post TX
 	 * operations directly */
 	info->tx_attr->size 		= core_info->tx_attr->size;
@@ -150,20 +151,6 @@ int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
 
 static int rxm_init_info(void)
 {
-	int param;
-
-	if (!fi_param_get_int(&rxm_prov, "buffer_size", &param)) {
-		if (param > sizeof(struct rxm_pkt)) {
-			rxm_info.tx_attr->inject_size = param;
-		} else {
-			FI_WARN(&rxm_prov, FI_LOG_CORE,
-				"Requested buffer size too small\n");
-			return -FI_EINVAL;
-		}
-	} else {
-		rxm_info.tx_attr->inject_size = RXM_BUF_SIZE;
-	}
-	rxm_info.tx_attr->inject_size -= sizeof(struct rxm_pkt);
 	rxm_util_prov.info = &rxm_info;
 	return 0;
 }
