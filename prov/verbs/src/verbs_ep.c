@@ -100,6 +100,15 @@ err:
 	return NULL;
 }
 
+static void fi_ibv_init_wrs(struct fi_ibv_ep *ep)
+{
+	ep->inject_wr.wr_id = VERBS_INJECT_FLAG;
+	ep->inject_wr.opcode = IBV_WR_SEND;
+	ep->inject_wr.send_flags = IBV_SEND_INLINE;
+	ep->inject_wr.sg_list = &ep->sge;
+	ep->inject_wr.num_sge = 1;
+}
+
 static void fi_ibv_free_ep(struct fi_ibv_ep *ep)
 {
 	fi_freeinfo(ep->info);
@@ -604,6 +613,7 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	if (!ep)
 		return -FI_ENOMEM;
 
+	fi_ibv_init_wrs(ep);
 	ret = ofi_endpoint_init(domain, &fi_ibv_util_prov, info, &ep->util_ep, context,
 				fi_ibv_util_ep_progress_noop);
 	if (ret)
@@ -641,7 +651,10 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 		}
 
 		ep->id->context = &ep->util_ep.ep_fid.fid;
-		ep->util_ep.ep_fid.msg = &fi_ibv_msg_ep_msg_ops;
+		if (dom->util_domain.threading == FI_THREAD_SAFE)
+			ep->util_ep.ep_fid.msg = &fi_ibv_msg_ep_msg_ops_ts;
+		else
+			ep->util_ep.ep_fid.msg = &fi_ibv_msg_ep_msg_ops;
 		ep->util_ep.ep_fid.cm = &fi_ibv_msg_ep_cm_ops;
 		ep->util_ep.ep_fid.rma = &fi_ibv_msg_ep_rma_ops;
 		ep->util_ep.ep_fid.atomic = &fi_ibv_msg_ep_atomic_ops;

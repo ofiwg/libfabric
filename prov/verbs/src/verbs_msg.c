@@ -182,6 +182,33 @@ static ssize_t fi_ibv_msg_ep_injectdata(struct fid_ep *ep_fid, const void *buf, 
 	return fi_ibv_send_buf_inline(ep, &wr, buf, len);
 }
 
+static ssize_t
+fi_ibv_msg_inject_fast(struct fid_ep *ep_fid, const void *buf, size_t len,
+		       fi_addr_t dest_addr)
+{
+	struct fi_ibv_ep *ep;
+
+	ep = container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
+
+	ep->sge.addr = (uintptr_t) buf;
+	ep->sge.length = (uint32_t) len;
+
+	return fi_ibv_send_poll_cq_if_needed(ep, &ep->inject_wr);
+}
+
+
+struct fi_ops_msg fi_ibv_msg_ep_msg_ops_ts = {
+	.size = sizeof(struct fi_ops_msg),
+	.recv = fi_ibv_msg_ep_recv,
+	.recvv = fi_ibv_msg_ep_recvv,
+	.recvmsg = fi_ibv_msg_ep_recvmsg,
+	.send = fi_ibv_msg_ep_send,
+	.sendv = fi_ibv_msg_ep_sendv,
+	.sendmsg = fi_ibv_msg_ep_sendmsg,
+	.inject = fi_ibv_msg_ep_inject,
+	.senddata = fi_ibv_msg_ep_senddata,
+	.injectdata = fi_ibv_msg_ep_injectdata,
+};
 
 struct fi_ops_msg fi_ibv_msg_ep_msg_ops = {
 	.size = sizeof(struct fi_ops_msg),
@@ -191,7 +218,7 @@ struct fi_ops_msg fi_ibv_msg_ep_msg_ops = {
 	.send = fi_ibv_msg_ep_send,
 	.sendv = fi_ibv_msg_ep_sendv,
 	.sendmsg = fi_ibv_msg_ep_sendmsg,
-	.inject = fi_ibv_msg_ep_inject,
+	.inject = fi_ibv_msg_inject_fast,
 	.senddata = fi_ibv_msg_ep_senddata,
 	.injectdata = fi_ibv_msg_ep_injectdata,
 };

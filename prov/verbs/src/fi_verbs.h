@@ -488,6 +488,9 @@ struct fi_ibv_ep {
 	struct fi_info		*info;
 	/* TODO: it would be removed */
 	struct fi_ibv_dgram_buf_pool	grh_pool;
+
+	struct ibv_send_wr	inject_wr;
+	struct ibv_sge		sge;
 };
 
 int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
@@ -513,6 +516,7 @@ int fi_ibv_dgram_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 
 struct fi_ops_atomic fi_ibv_msg_ep_atomic_ops;
 struct fi_ops_cm fi_ibv_msg_ep_cm_ops;
+struct fi_ops_msg fi_ibv_msg_ep_msg_ops_ts;
 struct fi_ops_msg fi_ibv_msg_ep_msg_ops;
 struct fi_ops_rma fi_ibv_msg_ep_rma_ops;
 struct fi_ops_msg fi_ibv_msg_srq_ep_msg_ops;
