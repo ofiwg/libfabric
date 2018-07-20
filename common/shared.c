@@ -1834,14 +1834,31 @@ ssize_t ft_rx(struct fid_ep *ep, size_t size)
 	return ret;
 }
 
-static inline int ft_tag_is_valid(struct fid_cq * cq, struct fi_cq_err_entry *comp,
-				  uint64_t tag)
+/*
+ * Received messages match tagged buffers in order, but the completions can be
+ * reported out of order.  A tag is valid if it's within the current window.
+ */
+static inline int
+ft_tag_is_valid(struct fid_cq * cq, struct fi_cq_err_entry *comp, uint64_t tag)
 {
-	if ((hints->caps & FI_TAGGED) && (cq == rxcq) && (comp->tag != tag)) {
-		FT_ERR("Tag mismatch!. Expected: %"PRIu64", actual: %"PRIu64, tag, comp->tag);
-		return 0;
+	int valid = 1;
+
+	if ((hints->caps & FI_TAGGED) && (cq == rxcq)) {
+		if (opts.options & FT_OPT_BW) {
+			/* valid: (tag - window) < comp->tag < (tag + window) */
+			valid = (tag < comp->tag + opts.window_size) &&
+				(comp->tag < tag + opts.window_size);
+		} else {
+			valid = (comp->tag == tag);
+		}
+
+		if (!valid) {
+			FT_ERR("Tag mismatch!. Expected: %"PRIu64", actual: %"
+				PRIu64, tag, comp->tag);
+		}
 	}
-	return 1;
+
+	return valid;
 }
 /*
  * fi_cq_err_entry can be cast to any CQ entry format.
