@@ -290,9 +290,8 @@ struct rxm_rx_buf {
 	uint8_t repost;
 
 	/* Used for large messages */
-	struct rxm_iov match_iov[RXM_IOV_LIMIT];
 	struct rxm_rma_iov *rma_iov;
-	size_t index;
+	size_t rma_iov_index;
 	struct fid_mr *mr[RXM_IOV_LIMIT];
 
 	/* Must stay at bottom */

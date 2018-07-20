@@ -1625,6 +1625,7 @@ void ofi_cmap_free(struct util_cmap *cmap)
 	util_cmap_event_handler_close(cmap);
 	free(cmap->handles_av);
 	free(cmap->attr.name);
+	ofi_idx_reset(&cmap->handles_idx);
 	fastlock_release(&cmap->lock);
 	fastlock_destroy(&cmap->lock);
 	free(cmap);

@@ -35,6 +35,7 @@
 #include <inttypes.h>
 
 #include "ofi.h"
+#include "ofi_iov.h"
 
 #include "rxm.h"
 
@@ -98,45 +99,6 @@ static int rxm_match_iov(const struct iovec *iov, void **desc,
 	return FI_SUCCESS;
 }
 
-static int rxm_match_rma_iov(struct rxm_recv_entry *recv_entry,
-			     struct rxm_rma_iov *rma_iov,
-			     struct rxm_iov *match_iov)
-{
-	uint64_t offset = 0;
-	uint8_t i, j;
-	uint8_t count;
-	int ret;
-
-	assert(rma_iov->count <= RXM_IOV_LIMIT);
-
-	for (i = 0, j = 0; i < rma_iov->count; ) {
-		ret = rxm_match_iov(&recv_entry->rxm_iov.iov[j],
-				    &recv_entry->rxm_iov.desc[j],
-				    recv_entry->rxm_iov.count - j, offset,
-				    rma_iov->iov[i].len, &match_iov[i]);
-		if (ret)
-			return ret;
-
-		count = match_iov[i].count;
-
-		j += count - 1;
-		offset = (((count - 1) == 0) ? offset : 0) +
-			match_iov[i].iov[count - 1].iov_len;
-		i++;
-
-		if (j >= recv_entry->rxm_iov.count)
-			break;
-	}
-
-	if (i < rma_iov->count) {
-		FI_WARN(&rxm_prov, FI_LOG_CQ, "posted recv_entry size < "
-			"rndv rma read size!\n");
-		return -FI_ETOOSMALL;
-	}
-
-	return FI_SUCCESS;
-}
-
 static int rxm_finish_buf_recv(struct rxm_rx_buf *rx_buf)
 {
 	uint64_t flags = rx_buf->pkt.hdr.flags | FI_RECV;
@@ -169,29 +131,40 @@ static void rxm_enqueue_rx_buf_for_repost_check(struct rxm_rx_buf *rx_buf)
 		rxm_rx_buf_release(rx_buf->ep, rx_buf);
 }
 
+static int rxm_cq_write_error_trunc(struct rxm_rx_buf *rx_buf, size_t done_len)
+{
+	int ret;
+
+	if (rx_buf->ep->util_ep.flags & OFI_CNTR_ENABLED)
+		rxm_cntr_incerr(rx_buf->ep->util_ep.rx_cntr);
+
+	FI_WARN(&rxm_prov, FI_LOG_CQ, "Message truncated: "
+		"recv buf length: %zu message length: %" PRIu64 "\n",
+		done_len, rx_buf->pkt.hdr.size);
+	ret = ofi_cq_write_error_trunc(rx_buf->ep->util_ep.rx_cq,
+				       rx_buf->recv_entry->context,
+				       rx_buf->recv_entry->comp_flags |
+				       rx_buf->pkt.hdr.flags,
+				       rx_buf->pkt.hdr.size,
+				       rx_buf->recv_entry->rxm_iov.iov[0].iov_base,
+				       rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag,
+				       rx_buf->pkt.hdr.size - done_len);
+	if (OFI_UNLIKELY(ret)) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ,
+			"Unable to write recv error CQ\n");
+		return ret;
+	}
+	return 0;
+}
+
 static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 {
 	int ret;
 
 	if (OFI_UNLIKELY(done_len < rx_buf->pkt.hdr.size)) {
-		FI_WARN(&rxm_prov, FI_LOG_CQ, "Message truncated: "
-			"recv buf length: %zu message length: %" PRIu64 "\n",
-			done_len, rx_buf->pkt.hdr.size);
-		ret = ofi_cq_write_error_trunc(rx_buf->ep->util_ep.rx_cq,
-					       rx_buf->recv_entry->context,
-					       rx_buf->recv_entry->comp_flags |
-					       rx_buf->pkt.hdr.flags,
-					       rx_buf->pkt.hdr.size,
-					       rx_buf->recv_entry->rxm_iov.iov[0].iov_base,
-					       rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag,
-					       rx_buf->pkt.hdr.size - done_len);
-		if (OFI_UNLIKELY(ret)) {
-			FI_WARN(&rxm_prov, FI_LOG_CQ,
-				"Unable to write recv error CQ\n");
+		ret = rxm_cq_write_error_trunc(rx_buf, done_len);
+		if (ret)
 			return ret;
-		}
-		if (rx_buf->ep->util_ep.flags & OFI_CNTR_ENABLED)
-			rxm_cntr_incerr(rx_buf->ep->util_ep.rx_cntr);
 	} else {
 		if (rx_buf->recv_entry->flags & FI_COMPLETION) {
 			ret = rxm_cq_write_recv_comp(
@@ -305,20 +278,6 @@ static inline int rxm_finish_send_lmt_ack(struct rxm_rx_buf *rx_buf)
 	return rxm_finish_recv(rx_buf, rx_buf->recv_entry->total_len);
 }
 
-static ssize_t rxm_lmt_rma_read(struct rxm_rx_buf *rx_buf)
-{
-	struct rxm_iov *match_iov = &rx_buf->match_iov[rx_buf->index];
-	struct ofi_rma_iov *rma_iov = &rx_buf->rma_iov->iov[rx_buf->index];
-	ssize_t ret;
-
-	ret = fi_readv(rx_buf->conn->msg_ep, match_iov->iov, match_iov->desc,
-		       match_iov->count, 0, rma_iov->addr, rma_iov->key, rx_buf);
-	if (ret)
-		return ret;
-	rx_buf->index++;
-	return FI_SUCCESS;
-}
-
 static int rxm_lmt_tx_finish(struct rxm_tx_entry *tx_entry)
 {
 	int ret;
@@ -410,8 +369,10 @@ ssize_t rxm_cq_handle_seg_data(struct rxm_rx_buf *rx_buf)
 static inline
 ssize_t rxm_cq_handle_large_data(struct rxm_rx_buf *rx_buf)
 {
-	size_t i;
-	int ret;
+	size_t i, index = 0, offset = 0, count;
+	struct iovec iov[RXM_IOV_LIMIT];
+	void *desc[RXM_IOV_LIMIT];
+	int ret = 0;
 
 	if (!rx_buf->conn) {
 		assert(rx_buf->ep->srx_ctx);
@@ -427,7 +388,7 @@ ssize_t rxm_cq_handle_large_data(struct rxm_rx_buf *rx_buf)
 	       rx_buf->pkt.ctrl_hdr.msg_id);
 
 	rx_buf->rma_iov = (struct rxm_rma_iov *)rx_buf->pkt.data;
-	rx_buf->index = 0;
+	rx_buf->rma_iov_index = 0;
 
 	if (!rx_buf->ep->rxm_mr_local) {
 		ret = rxm_ep_msg_mr_regv(rx_buf->ep,
@@ -446,12 +407,35 @@ ssize_t rxm_cq_handle_large_data(struct rxm_rx_buf *rx_buf)
 				fi_mr_desc(rx_buf->recv_entry->rxm_iov.desc[i]);
 	}
 
-	/* Ignore the case when the posted recv buffer is not large enough,
-	 * FI_TRUNC error will be generated to user at the end */
-	rxm_match_rma_iov(rx_buf->recv_entry, rx_buf->rma_iov, rx_buf->match_iov);
+	assert(rx_buf->rma_iov->count && (rx_buf->rma_iov->count <= RXM_IOV_LIMIT));
+
 	RXM_LOG_STATE_RX(FI_LOG_CQ, rx_buf, RXM_LMT_READ);
 	rx_buf->hdr.state = RXM_LMT_READ;
-	return rxm_lmt_rma_read(rx_buf);	
+
+	for (i = 0; i < rx_buf->rma_iov->count; i++) {
+		ret = ofi_copy_iov_desc(&iov[0], &desc[0], &count,
+					&rx_buf->recv_entry->rxm_iov.iov[0],
+					&rx_buf->recv_entry->rxm_iov.desc[0],
+					rx_buf->recv_entry->rxm_iov.count,
+					&index, &offset, rx_buf->rma_iov->iov[i].len);
+		if (ret) {
+			assert(ret == -FI_ETOOSMALL);
+			return rxm_cq_write_error_trunc(
+				rx_buf,
+				ofi_total_iov_len(rx_buf->recv_entry->rxm_iov.iov,
+						  rx_buf->recv_entry->rxm_iov.count));
+		}
+		ret = fi_readv(rx_buf->conn->msg_ep, iov, desc, count, 0,
+			       rx_buf->rma_iov->iov[i].addr,
+			       rx_buf->rma_iov->iov[i].key, rx_buf);
+		if (ret) {
+			rxm_cq_write_error(rx_buf->ep->util_ep.rx_cq,
+					   rx_buf->ep->util_ep.rx_cntr,
+					   rx_buf->recv_entry->context, ret);
+			break;
+		}
+	}
+	return ret;
 }
 
 static inline
@@ -739,8 +723,8 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 		return rxm_lmt_tx_finish(tx_entry);
 	case RXM_LMT_READ:
 		assert(comp->flags & FI_READ);
-		if (rx_buf->index < rx_buf->rma_iov->count)
-			return rxm_lmt_rma_read(rx_buf);
+		if (++rx_buf->rma_iov_index < rx_buf->rma_iov->count)
+			return 0;
 		else if (sizeof(rx_buf->pkt) > rxm_ep->msg_info->tx_attr->inject_size)
 			return rxm_lmt_send_ack(rx_buf);
 		else
