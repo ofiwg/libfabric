@@ -51,7 +51,6 @@ pipeline {
             environment {
                 LD_LIBRARY_PATH = "$TMP_INSTALL_PATH/lib:$LD_LIBRARY_PATH"
             }
-            failFast true
             parallel {
                 stage('Unit tests') {
                     steps {
@@ -66,9 +65,42 @@ pipeline {
                         }
                     }
                 }
-                stage('Functional tests') {
+                stage('SFT tests') {
+                    environment {
+                        SFT_BIN = "${ROOT_BUILD_PATH + '/libfabric-sft/stable/bin'}"
+                        SFT_ADD_ARGS = '--dbg-cq-retry 1 --dbg-cq-delay 5'
+                        SFT_MAX_JOB_TIME = '3'
+                        SFT_NUM_JOBS = '4'
+                        SFT_PARTITION = 'mellanox'
+                        SFT_PROVIDER = 'verbs;ofi_rxm'
+                        SFT_TEST_CMDS = 'sft_test_commands'
+                        SFT_TEST_RESULTS = 'sft_test_results.xml'
+                        SFT_TEST_RESULTS_CI = 'sft_ci_results.yaml'
+                        SFT_TEST_RESULTS_BASE_DIR = "${ROOT_BUILD_PATH}" + "/sft_test_results/"
+                        SFT_TEST_RESULTS_DIR = ""
+                    }
                     steps {
-                        echo 'placeholder'
+                        echo 'SFT tests'
+                        script {
+                            def cur_date_time = new Date().format('yyyy_MM_dd_HH_mm_ss')
+                            SFT_TEST_RESULTS_SUBDIR = "BUILD_" + env.BUILD_ID + "_DATE_" + "${cur_date_time}"
+                            SFT_TEST_RESULTS_DIR = "${SFT_TEST_RESULTS_BASE_DIR}" + "${SFT_TEST_RESULTS_SUBDIR}"
+                        }
+                        sh "rm -f ${SFT_BIN}/core*"
+                        sh "rm -rf ${SFT_TEST_RESULTS_DIR}"
+                        sh "mkdir -p ${SFT_TEST_RESULTS_DIR}"
+                        sh "cd ${SFT_BIN};./ci-all.sh --provider '${SFT_PROVIDER}' --partition ${SFT_PARTITION} -L ${SFT_TEST_RESULTS_DIR} --num-jobs ${SFT_NUM_JOBS} --max-job-time ${SFT_MAX_JOB_TIME} --output-cmds ${SFT_TEST_RESULTS_DIR}/${SFT_TEST_CMDS} --results-file ${SFT_TEST_RESULTS_DIR}/${SFT_TEST_RESULTS_CI} --additional-args '${SFT_ADD_ARGS}'"
+                    }
+                    post {
+                        always {
+                            sh "${SFT_BIN}/sft_parse_test_results.pm -d ${SFT_TEST_RESULTS_DIR} -o ${SFT_TEST_RESULTS}"
+                            sh "gzip -r ${SFT_TEST_RESULTS_DIR}"
+                            sh "gunzip ${SFT_TEST_RESULTS_DIR}/${SFT_TEST_RESULTS}"
+                            sh "cp -r ${SFT_TEST_RESULTS_DIR} ."
+                            archiveArtifacts artifacts: "${SFT_TEST_RESULTS_SUBDIR}/*"
+                            junit results: "${SFT_TEST_RESULTS_SUBDIR}/${SFT_TEST_RESULTS}", healthScaleFactor: 0.0
+                            sh "rm -rf ${SFT_TEST_RESULTS_DIR}"
+                        }
                     }
                 }
                 stage('Fabtests') {
