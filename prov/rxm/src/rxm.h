@@ -909,3 +909,18 @@ static inline int rxm_cq_write_recv_comp(struct rxm_rx_buf *rx_buf,
 				    flags, len, buf, rx_buf->pkt.hdr.data,
 				    rx_buf->pkt.hdr.tag);
 }
+
+static inline void rxm_enqueue_rx_buf_for_repost(struct rxm_rx_buf *rx_buf)
+{
+	rx_buf->ep->res_fastlock_acquire(&rx_buf->ep->util_ep.lock);
+	dlist_insert_tail(&rx_buf->repost_entry, &rx_buf->ep->repost_ready_list);
+	rx_buf->ep->res_fastlock_release(&rx_buf->ep->util_ep.lock);
+}
+
+static inline void rxm_enqueue_rx_buf_for_repost_check(struct rxm_rx_buf *rx_buf)
+{
+	if (rx_buf->repost)
+		rxm_enqueue_rx_buf_for_repost(rx_buf);
+	else
+		rxm_rx_buf_release(rx_buf->ep, rx_buf);
+}

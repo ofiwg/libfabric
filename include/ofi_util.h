@@ -641,6 +641,7 @@ struct util_cmap_attr {
 	ofi_cmap_handle_func		connected_handler;
 	ofi_cmap_event_handler_func	event_handler;
 	ofi_cmap_signal_func		signal;
+	ofi_cmap_handle_func		av_updated_handler;
 };
 
 struct util_cmap {
@@ -659,7 +660,6 @@ struct util_cmap {
 	struct dlist_entry peer_list;
 	struct util_cmap_attr attr;
 	pthread_t event_handler_thread;
-	int av_updated;
 	fastlock_t lock;
 };
 
