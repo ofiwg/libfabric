@@ -116,21 +116,6 @@ static int rxm_finish_buf_recv(struct rxm_rx_buf *rx_buf)
 				      rx_buf->pkt.hdr.size, rx_buf->pkt.data);
 }
 
-static void rxm_enqueue_rx_buf_for_repost(struct rxm_rx_buf *rx_buf)
-{
-	rx_buf->ep->res_fastlock_acquire(&rx_buf->ep->util_ep.lock);
-	dlist_insert_tail(&rx_buf->repost_entry, &rx_buf->ep->repost_ready_list);
-	rx_buf->ep->res_fastlock_release(&rx_buf->ep->util_ep.lock);
-}
-
-static void rxm_enqueue_rx_buf_for_repost_check(struct rxm_rx_buf *rx_buf)
-{
-	if (rx_buf->repost)
-		rxm_enqueue_rx_buf_for_repost(rx_buf);
-	else
-		rxm_rx_buf_release(rx_buf->ep, rx_buf);
-}
-
 static int rxm_cq_write_error_trunc(struct rxm_rx_buf *rx_buf, size_t done_len)
 {
 	int ret;
@@ -913,92 +898,6 @@ static inline void rxm_cq_repost_rx_buffers(struct rxm_ep *rxm_ep)
 	rxm_ep->res_fastlock_release(&rxm_ep->util_ep.lock);
 }
 
-static int rxm_cq_reprocess_directed_recvs(struct rxm_recv_queue *recv_queue)
-{
-	struct rxm_rx_buf *rx_buf;
-	struct dlist_entry *entry, *tmp_entry;
-	struct rxm_recv_match_attr match_attr;
-	struct dlist_entry rx_buf_list;
-	struct fi_cq_err_entry err_entry = {0};
-	int ret, count = 0;
-
-	dlist_init(&rx_buf_list);
-
-	recv_queue->rxm_ep->res_fastlock_acquire(&recv_queue->lock);
-
-	dlist_foreach_container_safe(&recv_queue->unexp_msg_list,
-				     struct rxm_rx_buf, rx_buf,
-				     unexp_msg.entry, tmp_entry) {
-		if (rx_buf->unexp_msg.addr == rx_buf->conn->handle.fi_addr)
-			continue;
-
-		assert(rx_buf->unexp_msg.addr == FI_ADDR_NOTAVAIL);
-
-		match_attr.addr = rx_buf->unexp_msg.addr =
-			rx_buf->conn->handle.fi_addr;
-		match_attr.tag = rx_buf->unexp_msg.tag;
-
-		entry = dlist_remove_first_match(&recv_queue->recv_list,
-						 recv_queue->match_recv,
-						 &match_attr);
-		if (!entry)
-			continue;
-
-		dlist_remove(&rx_buf->unexp_msg.entry);
-		rx_buf->recv_entry = container_of(entry, struct rxm_recv_entry,
-						  entry);
-		dlist_insert_tail(&rx_buf->unexp_msg.entry, &rx_buf_list);
-	}
-	recv_queue->rxm_ep->res_fastlock_release(&recv_queue->lock);
-
-	while (!dlist_empty(&rx_buf_list)) {
-		dlist_pop_front(&rx_buf_list, struct rxm_rx_buf,
-				rx_buf, unexp_msg.entry);
-		ret = rxm_cq_handle_rx_buf(rx_buf);
-		if (ret) {
-			err_entry.op_context = rx_buf;
-			err_entry.flags = rx_buf->recv_entry->comp_flags;
-			err_entry.len = rx_buf->pkt.hdr.size;
-			err_entry.data = rx_buf->pkt.hdr.data;
-			err_entry.tag = rx_buf->pkt.hdr.tag;
-			err_entry.err = ret;
-			err_entry.prov_errno = ret;
-			ofi_cq_write_error(recv_queue->rxm_ep->util_ep.rx_cq,
-					   &err_entry);
-			if (rx_buf->ep->util_ep.flags & OFI_CNTR_ENABLED)
-				rxm_cntr_incerr(rx_buf->ep->util_ep.rx_cntr);
-
-			rxm_enqueue_rx_buf_for_repost_check(rx_buf);
-
-			if (!(rx_buf->recv_entry->flags & FI_MULTI_RECV))
-				rxm_recv_entry_release(recv_queue,
-						       rx_buf->recv_entry);
-		}
-		count++;
-	}
-	return count;
-}
-
-static int rxm_cq_reprocess_recv_queues(struct rxm_ep *rxm_ep)
-{
-	int count = 0;
-
-	if (rxm_ep->rxm_info->caps & FI_DIRECTED_RECV) {
-		fastlock_acquire(&rxm_ep->util_ep.cmap->lock);
-
-		if (!rxm_ep->util_ep.cmap->av_updated)
-			goto unlock;
-
-		rxm_ep->util_ep.cmap->av_updated = 0;
-
-		count += rxm_cq_reprocess_directed_recvs(&rxm_ep->recv_queue);
-		count += rxm_cq_reprocess_directed_recvs(&rxm_ep->trecv_queue);
-unlock:
-		fastlock_release(&rxm_ep->util_ep.cmap->lock);
-	}
-	return count;
-}
-
 static inline ssize_t rxm_ep_read_msg_cq(struct rxm_ep *rxm_ep)
 {	
 	struct fi_cq_data_entry comp;
@@ -1030,15 +929,8 @@ void rxm_ep_progress_one(struct util_ep *util_ep)
 {
 	struct rxm_ep *rxm_ep =
 		container_of(util_ep, struct rxm_ep, util_ep);
-	ssize_t ret;
 
 	rxm_cq_repost_rx_buffers(rxm_ep);
-
-	if (OFI_UNLIKELY(rxm_ep->util_ep.cmap->av_updated)) {
-		ret = rxm_cq_reprocess_recv_queues(rxm_ep);
-		if (ret > 0)
-			return;
-	}
 
 	(void) rxm_ep_read_msg_cq(rxm_ep);
 
@@ -1054,12 +946,6 @@ void rxm_ep_progress_multi(struct util_ep *util_ep)
 	size_t comp_read = 0;
 
 	rxm_cq_repost_rx_buffers(rxm_ep);
-
-	if (OFI_UNLIKELY(rxm_ep->util_ep.cmap->av_updated)) {
-		ret = rxm_cq_reprocess_recv_queues(rxm_ep);
-		if (ret > 0)
-			return;
-	}
 
 	do {
 		ret = rxm_ep_read_msg_cq(rxm_ep);
