@@ -164,13 +164,12 @@ try_again:
 		retry = 1;
 		break;
 	case GNI_RC_TIMEOUT:
-		retry = 1;
-		break;
 	case GNI_RC_NOT_DONE:
+        /* Invalid state indicates call interrupted by signal using various tools */
+	case GNI_RC_INVALID_STATE:
 		retry = 1;
 		break;
 	case GNI_RC_INVALID_PARAM:
-	case GNI_RC_INVALID_STATE:
 	case GNI_RC_ERROR_RESOURCE:
 	case GNI_RC_ERROR_NOMEM:
 		retry = 0;
