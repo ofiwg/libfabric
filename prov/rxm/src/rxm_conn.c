@@ -183,6 +183,89 @@ static void rxm_conn_connected_handler(struct util_cmap_handle *handle)
 	rxm_conn->saved_msg_ep = NULL;
 }
 
+static int rxm_conn_reprocess_directed_recvs(struct rxm_recv_queue *recv_queue)
+{
+	struct rxm_rx_buf *rx_buf;
+	struct dlist_entry *entry, *tmp_entry;
+	struct rxm_recv_match_attr match_attr;
+	struct dlist_entry rx_buf_list;
+	struct fi_cq_err_entry err_entry = {0};
+	int ret, count = 0;
+
+	dlist_init(&rx_buf_list);
+
+	fastlock_acquire(&recv_queue->rxm_ep->util_ep.cmap->lock);
+	recv_queue->rxm_ep->res_fastlock_acquire(&recv_queue->lock);
+
+	dlist_foreach_container_safe(&recv_queue->unexp_msg_list,
+				     struct rxm_rx_buf, rx_buf,
+				     unexp_msg.entry, tmp_entry) {
+		if (rx_buf->unexp_msg.addr == rx_buf->conn->handle.fi_addr)
+			continue;
+
+		assert(rx_buf->unexp_msg.addr == FI_ADDR_NOTAVAIL);
+
+		match_attr.addr = rx_buf->unexp_msg.addr =
+			rx_buf->conn->handle.fi_addr;
+		match_attr.tag = rx_buf->unexp_msg.tag;
+
+		entry = dlist_remove_first_match(&recv_queue->recv_list,
+						 recv_queue->match_recv,
+						 &match_attr);
+		if (!entry)
+			continue;
+
+		dlist_remove(&rx_buf->unexp_msg.entry);
+		rx_buf->recv_entry = container_of(entry, struct rxm_recv_entry,
+						  entry);
+		dlist_insert_tail(&rx_buf->unexp_msg.entry, &rx_buf_list);
+	}
+	recv_queue->rxm_ep->res_fastlock_release(&recv_queue->lock);
+	fastlock_release(&recv_queue->rxm_ep->util_ep.cmap->lock);
+
+	while (!dlist_empty(&rx_buf_list)) {
+		dlist_pop_front(&rx_buf_list, struct rxm_rx_buf,
+				rx_buf, unexp_msg.entry);
+		ret = rxm_cq_handle_rx_buf(rx_buf);
+		if (ret) {
+			err_entry.op_context = rx_buf;
+			err_entry.flags = rx_buf->recv_entry->comp_flags;
+			err_entry.len = rx_buf->pkt.hdr.size;
+			err_entry.data = rx_buf->pkt.hdr.data;
+			err_entry.tag = rx_buf->pkt.hdr.tag;
+			err_entry.err = ret;
+			err_entry.prov_errno = ret;
+			ofi_cq_write_error(recv_queue->rxm_ep->util_ep.rx_cq,
+					   &err_entry);
+			if (rx_buf->ep->util_ep.flags & OFI_CNTR_ENABLED)
+				rxm_cntr_incerr(rx_buf->ep->util_ep.rx_cntr);
+
+			rxm_enqueue_rx_buf_for_repost_check(rx_buf);
+
+			if (!(rx_buf->recv_entry->flags & FI_MULTI_RECV))
+				rxm_recv_entry_release(recv_queue,
+						       rx_buf->recv_entry);
+		}
+		count++;
+	}
+	return count;
+}
+
+static void
+rxm_conn_av_updated_handler(struct util_cmap_handle *handle)
+{
+	struct rxm_ep *rxm_ep = container_of(handle->cmap->ep, struct rxm_ep, util_ep);
+	int count = 0;
+
+	if (rxm_ep->rxm_info->caps & FI_DIRECTED_RECV) {
+		count += rxm_conn_reprocess_directed_recvs(&rxm_ep->recv_queue);
+		count += rxm_conn_reprocess_directed_recvs(&rxm_ep->trecv_queue);
+
+		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
+		       "Reprocessed directed recvs - %d\n", count);
+	}
+}
+
 static struct util_cmap_handle *rxm_conn_alloc(struct util_cmap *cmap)
 {
 	int ret;
@@ -553,6 +636,7 @@ struct util_cmap *rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep)
 	attr.connected_handler	= rxm_conn_connected_handler;
 	attr.event_handler	= rxm_conn_event_handler;
 	attr.signal		= rxm_conn_signal;
+	attr.av_updated_handler	= rxm_conn_av_updated_handler;
 
 	cmap = ofi_cmap_alloc(&rxm_ep->util_ep, &attr);
 	if (!cmap)
