@@ -20,12 +20,11 @@
 #define CXI_LOG_DBG(...) _CXI_LOG_DBG(FI_LOG_EP_CTRL, __VA_ARGS__)
 #define CXI_LOG_ERROR(...) _CXI_LOG_ERROR(FI_LOG_EP_CTRL, __VA_ARGS__)
 
-extern struct fi_ops_rma cxi_ep_rma;
+extern struct fi_ops_rma cxix_ep_rma;
 extern struct fi_ops_msg cxi_ep_msg_ops;
 extern struct fi_ops_tagged cxi_ep_tagged;
 extern struct fi_ops_atomic cxi_ep_atomic;
 
-struct fi_ops_rma cxi_ep_rma = {0};
 struct fi_ops_msg cxi_ep_msg_ops = {0};
 struct fi_ops_tagged cxi_ep_tagged = {0};
 struct fi_ops_atomic cxi_ep_atomic = {0};
@@ -962,7 +961,7 @@ static int cxi_ep_tx_ctx(struct fid_ep *ep, int index, struct fi_tx_attr *attr,
 	tx_ctx->fid.ctx.ops = &cxi_ctx_ep_ops;
 	tx_ctx->fid.ctx.msg = &cxi_ep_msg_ops;
 	tx_ctx->fid.ctx.tagged = &cxi_ep_tagged;
-	tx_ctx->fid.ctx.rma = &cxi_ep_rma;
+	tx_ctx->fid.ctx.rma = &cxix_ep_rma;
 	tx_ctx->fid.ctx.atomic = &cxi_ep_atomic;
 
 	*tx_ep = &tx_ctx->fid.ctx;
@@ -1326,7 +1325,7 @@ int cxi_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 		cxi_ep->ep.ops = &cxi_ep_ops;
 		cxi_ep->ep.msg = &cxi_ep_msg_ops;
-		cxi_ep->ep.rma = &cxi_ep_rma;
+		cxi_ep->ep.rma = &cxix_ep_rma;
 		cxi_ep->ep.tagged = &cxi_ep_tagged;
 		cxi_ep->ep.atomic = &cxi_ep_atomic;
 		break;

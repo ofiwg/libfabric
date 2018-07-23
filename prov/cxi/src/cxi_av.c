@@ -325,6 +325,22 @@ static int cxi_av_insertsvc(struct fid_av *avfid, const char *node,
 	return ret;
 }
 
+/* Fast, internal look up function. */
+int _cxi_av_lookup(struct cxi_av *av, fi_addr_t fi_addr, struct cxi_addr *addr)
+{
+	struct cxi_addr *av_addr;
+	uint64_t index = ((uint64_t)fi_addr & av->mask);
+
+	av_addr = &av->table[index];
+	if (!CXI_ADDR_AV_ENTRY_VALID(av_addr)) {
+		CXI_LOG_ERROR("requested address is invalid");
+		return -FI_EINVAL;
+	}
+
+	*addr = *av_addr;
+	return FI_SUCCESS;
+}
+
 /**
  * Look up an address in the AV table.
  *
@@ -343,7 +359,8 @@ static int cxi_av_lookup(struct fid_av *avfid, fi_addr_t fi_addr, void *addr,
 {
 	uint64_t index;
 	struct cxi_av *av;
-	struct cxi_addr *av_addr;
+	struct cxi_addr av_addr;
+	int ret;
 
 	_CHECKNULL(avfid && addr && addrlen, return -FI_EINVAL,
 		"fid=%p, addr=%p, addrlen=%p\n",
@@ -356,13 +373,13 @@ static int cxi_av_lookup(struct fid_av *avfid, fi_addr_t fi_addr, void *addr,
 		return -FI_EINVAL;
 	}
 
-	av_addr = &av->table[index];
-	if (!CXI_ADDR_AV_ENTRY_VALID(av_addr)) {
-		CXI_LOG_ERROR("requested address is invalid");
-		return -FI_EINVAL;
+	ret = _cxi_av_lookup(av, fi_addr, &av_addr);
+	if (ret != FI_SUCCESS) {
+		CXI_LOG_ERROR("Failed to look up FI addr: %lu", fi_addr);
+		return ret;
 	}
 
-	memcpy(addr, av_addr, MIN(*addrlen, av->addrlen));
+	memcpy(addr, &av_addr, MIN(*addrlen, av->addrlen));
 	*addrlen = av->addrlen;
 
 	return 0;

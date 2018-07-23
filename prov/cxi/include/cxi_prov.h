@@ -154,6 +154,9 @@ struct cxi_addr {
 #define CXI_ADDR_AV_ENTRY_CLR_VALID(addr) \
 		((addr)->flags &= ~CXI_ADDR_FLAG_AV_ENTRY_VALID)
 
+#define CXIX_ADDR_MR_IDX(pid_granule, key) \
+		((pid_granule) / 2 + (key))
+
 struct cxix_if_domain {
 	struct dlist_entry entry;
 	struct cxix_if *dev_if;
@@ -228,18 +231,20 @@ struct cxi_eq {
 };
 
 struct cxi_req {
-	uint8_t type;
+	/* Control info */
+	struct cxi_cq *cq;
 	int req_id;
 
-	uint64_t flags;
+	/* CQ event fields */
 	uint64_t context;
-	uint64_t addr;
+	uint64_t flags;
+	uint64_t data_len;
+	uint64_t buf;
 	uint64_t data;
 	uint64_t tag;
-	uint64_t buf;
-	uint64_t data_len;
+	fi_addr_t addr;
 
-	struct cxi_cq *cq;
+	struct cxi_iova local_md;
 };
 
 struct cxi_cq;
@@ -490,6 +495,7 @@ int cxi_fab_check_list(struct cxi_fabric *fabric);
 void cxi_fab_remove_from_list(struct cxi_fabric *fabric);
 struct cxi_fabric *cxi_fab_list_head(void);
 
+int _cxi_av_lookup(struct cxi_av *av, fi_addr_t fi_addr, struct cxi_addr *addr);
 int cxi_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		struct fid_av **av, void *context);
 
