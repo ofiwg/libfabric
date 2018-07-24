@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2013-2018 Intel Corporation, Inc.  All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -488,6 +488,9 @@ struct fi_ibv_ep {
 	struct fi_info		*info;
 	/* TODO: it would be removed */
 	struct fi_ibv_dgram_buf_pool	grh_pool;
+
+	struct ibv_send_wr	inject_wr;
+	struct ibv_sge		sge;
 };
 
 int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
@@ -513,6 +516,7 @@ int fi_ibv_dgram_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 
 struct fi_ops_atomic fi_ibv_msg_ep_atomic_ops;
 struct fi_ops_cm fi_ibv_msg_ep_cm_ops;
+struct fi_ops_msg fi_ibv_msg_ep_msg_ops_ts;
 struct fi_ops_msg fi_ibv_msg_ep_msg_ops;
 struct fi_ops_rma fi_ibv_msg_ep_rma_ops;
 struct fi_ops_msg fi_ibv_msg_srq_ep_msg_ops;
@@ -669,5 +673,115 @@ static inline int fi_ibv_wc_2_wce(struct fi_ibv_cq *cq,
 #define fi_ibv_send_msg(ep, wr, msg, flags)			\
 	fi_ibv_send_iov_flags(ep, wr, msg->msg_iov, msg->desc,	\
 			msg->iov_count,	flags)
+
+
+static inline int fi_ibv_poll_reap_unsig_cq(struct fi_ibv_ep *ep)
+{
+	struct fi_ibv_wce *wce;
+	struct ibv_wc wc[10];
+	int ret, i;
+	struct fi_ibv_cq *cq =
+		container_of(ep->util_ep.tx_cq, struct fi_ibv_cq, util_cq);
+
+	cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
+	/* TODO: retrieve WCs as much as possible in a single
+	 * ibv_poll_cq call */
+	while (1) {
+		ret = ibv_poll_cq(cq->cq, 10, wc);
+		if (ret <= 0) {
+			cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
+			return ret;
+		}
+
+		for (i = 0; i < ret; i++) {
+			if (!fi_ibv_process_wc(cq, &wc[i]))
+				continue;
+			if (OFI_LIKELY(!fi_ibv_wc_2_wce(cq, &wc[i], &wce)))
+				slist_insert_tail(&wce->entry, &cq->wcq);
+		}
+	}
+
+	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
+	return FI_SUCCESS;
+}
+
+static inline ssize_t
+fi_ibv_send_poll_cq_if_needed(struct fi_ibv_ep *ep, struct ibv_send_wr *wr)
+{
+	int ret;
+	struct ibv_send_wr *bad_wr;
+
+	ret = fi_ibv_handle_post(ibv_post_send(ep->id->qp, wr, &bad_wr));
+	if (OFI_UNLIKELY(ret == -FI_EAGAIN)) {
+		ret = fi_ibv_poll_reap_unsig_cq(ep);
+		if (OFI_UNLIKELY(ret))
+			return -FI_EAGAIN;
+		/* Try again and return control to a caller */
+		ret = fi_ibv_handle_post(ibv_post_send(ep->id->qp, wr, &bad_wr));
+	}
+	return ret;
+}
+
+/* WR must be filled out by now except for context */
+static inline ssize_t
+fi_ibv_send(struct fi_ibv_ep *ep, struct ibv_send_wr *wr)
+{
+	if (wr->send_flags & IBV_SEND_SIGNALED) {
+		struct ibv_send_wr *bad_wr;
+
+		return fi_ibv_handle_post(ibv_post_send(ep->id->qp, wr, &bad_wr));
+	} else {
+		return fi_ibv_send_poll_cq_if_needed(ep, wr);
+	}
+}
+
+static inline ssize_t
+fi_ibv_send_buf(struct fi_ibv_ep *ep, struct ibv_send_wr *wr,
+		const void *buf, size_t len, void *desc)
+{
+	struct ibv_sge sge = fi_ibv_init_sge(buf, len, desc);
+
+	assert(wr->wr_id != VERBS_INJECT_FLAG);
+
+	wr->sg_list = &sge;
+	wr->num_sge = 1;
+
+	return fi_ibv_send(ep, wr);
+}
+
+static inline ssize_t
+fi_ibv_send_buf_inline(struct fi_ibv_ep *ep, struct ibv_send_wr *wr,
+		       const void *buf, size_t len)
+{
+	struct ibv_sge sge = fi_ibv_init_sge_inline(buf, len);
+
+	assert(wr->wr_id == VERBS_INJECT_FLAG);
+
+	wr->sg_list = &sge;
+	wr->num_sge = 1;
+
+	return fi_ibv_send_poll_cq_if_needed(ep, wr);
+}
+
+static inline ssize_t
+fi_ibv_send_iov_flags(struct fi_ibv_ep *ep, struct ibv_send_wr *wr,
+		      const struct iovec *iov, void **desc, int count,
+		      uint64_t flags)
+{
+	size_t len = 0;
+
+	if (!desc)
+		fi_ibv_set_sge_iov_inline(wr->sg_list, iov, count, len);
+	else
+		fi_ibv_set_sge_iov_count_len(wr->sg_list, iov, count, desc, len);
+
+	wr->num_sge = count;
+	wr->send_flags = VERBS_INJECT_FLAGS(ep, len, flags) | VERBS_COMP_FLAGS(ep, flags);
+
+	if (flags & FI_FENCE)
+		wr->send_flags |= IBV_SEND_FENCE;
+
+	return fi_ibv_send(ep, wr);
+}
 
 #endif /* FI_VERBS_H */

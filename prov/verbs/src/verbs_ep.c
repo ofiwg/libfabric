@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2013-2018 Intel Corporation, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -98,6 +98,15 @@ static struct fi_ibv_ep *fi_ibv_alloc_ep(struct fi_info *info)
 err:
 	free(ep);
 	return NULL;
+}
+
+static void fi_ibv_init_wrs(struct fi_ibv_ep *ep)
+{
+	ep->inject_wr.wr_id = VERBS_INJECT_FLAG;
+	ep->inject_wr.opcode = IBV_WR_SEND;
+	ep->inject_wr.send_flags = IBV_SEND_INLINE;
+	ep->inject_wr.sg_list = &ep->sge;
+	ep->inject_wr.num_sge = 1;
 }
 
 static void fi_ibv_free_ep(struct fi_ibv_ep *ep)
@@ -604,6 +613,7 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	if (!ep)
 		return -FI_ENOMEM;
 
+	fi_ibv_init_wrs(ep);
 	ret = ofi_endpoint_init(domain, &fi_ibv_util_prov, info, &ep->util_ep, context,
 				fi_ibv_util_ep_progress_noop);
 	if (ret)
@@ -641,7 +651,10 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 		}
 
 		ep->id->context = &ep->util_ep.ep_fid.fid;
-		ep->util_ep.ep_fid.msg = &fi_ibv_msg_ep_msg_ops;
+		if (dom->util_domain.threading == FI_THREAD_SAFE)
+			ep->util_ep.ep_fid.msg = &fi_ibv_msg_ep_msg_ops_ts;
+		else
+			ep->util_ep.ep_fid.msg = &fi_ibv_msg_ep_msg_ops;
 		ep->util_ep.ep_fid.cm = &fi_ibv_msg_ep_cm_ops;
 		ep->util_ep.ep_fid.rma = &fi_ibv_msg_ep_rma_ops;
 		ep->util_ep.ep_fid.atomic = &fi_ibv_msg_ep_atomic_ops;
@@ -810,288 +823,6 @@ err1:
 	free(_pep);
 	return ret;
 }
-
-static inline int fi_ibv_poll_reap_unsig_cq(struct fi_ibv_ep *ep)
-{
-	struct fi_ibv_wce *wce;
-	struct ibv_wc wc[10];
-	int ret, i;
-	struct fi_ibv_cq *cq =
-		container_of(ep->util_ep.tx_cq, struct fi_ibv_cq, util_cq);
-
-	cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
-	/* TODO: retrieve WCs as much as possbile in a single
-	 * ibv_poll_cq call */
-	while (1) {
-		ret = ibv_poll_cq(cq->cq, 10, wc);
-		if (ret <= 0) {
-			cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
-			return ret;
-		}
-
-		for (i = 0; i < ret; i++) {
-			if (!fi_ibv_process_wc(cq, &wc[i]))
-				continue;
-			if (OFI_LIKELY(!fi_ibv_wc_2_wce(cq, &wc[i], &wce)))
-				slist_insert_tail(&wce->entry, &cq->wcq);
-		}
-	}
-
-	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
-	return FI_SUCCESS;
-}
-
-static inline ssize_t
-fi_ibv_send_poll_cq_if_needed(struct fi_ibv_ep *ep, struct ibv_send_wr *wr)
-{
-	int ret;
-	struct ibv_send_wr *bad_wr;
-
-	ret = fi_ibv_handle_post(ibv_post_send(ep->id->qp, wr, &bad_wr));
-	if (OFI_UNLIKELY(ret == -FI_EAGAIN)) {
-		ret = fi_ibv_poll_reap_unsig_cq(ep);
-		if (OFI_UNLIKELY(ret))
-			return -FI_EAGAIN;
-		/* Try again and return control to a caller */
-		ret = fi_ibv_handle_post(ibv_post_send(ep->id->qp, wr, &bad_wr));
-	}
-	return ret;
-}
-
-/* WR must be filled out by now except for context */
-static inline ssize_t
-fi_ibv_send(struct fi_ibv_ep *ep, struct ibv_send_wr *wr)
-{
-	if (wr->send_flags & IBV_SEND_SIGNALED) {
-		struct ibv_send_wr *bad_wr;
-
-		return fi_ibv_handle_post(ibv_post_send(ep->id->qp, wr, &bad_wr));
-	} else {
-		return fi_ibv_send_poll_cq_if_needed(ep, wr);
-	}
-}
-
-static inline ssize_t
-fi_ibv_send_buf(struct fi_ibv_ep *ep, struct ibv_send_wr *wr,
-		const void *buf, size_t len, void *desc)
-{
-	struct ibv_sge sge = fi_ibv_init_sge(buf, len, desc);
-
-	assert(wr->wr_id != VERBS_INJECT_FLAG);
-
-	wr->sg_list = &sge;
-	wr->num_sge = 1;
-
-	return fi_ibv_send(ep, wr);
-}
-
-static inline ssize_t
-fi_ibv_send_buf_inline(struct fi_ibv_ep *ep, struct ibv_send_wr *wr,
-		       const void *buf, size_t len)
-{
-	struct ibv_sge sge = fi_ibv_init_sge_inline(buf, len);
-
-	assert(wr->wr_id == VERBS_INJECT_FLAG);
-
-	wr->sg_list = &sge;
-	wr->num_sge = 1;
-
-	return fi_ibv_send_poll_cq_if_needed(ep, wr);
-}
-
-static inline ssize_t
-fi_ibv_send_iov_flags(struct fi_ibv_ep *ep, struct ibv_send_wr *wr,
-		      const struct iovec *iov, void **desc, int count,
-		      uint64_t flags)
-{
-	size_t len = 0;
-
-	if (!desc)
-		fi_ibv_set_sge_iov_inline(wr->sg_list, iov, count, len);
-	else
-		fi_ibv_set_sge_iov_count_len(wr->sg_list, iov, count, desc, len);
-
-	wr->num_sge = count;
-	wr->send_flags = VERBS_INJECT_FLAGS(ep, len, flags) | VERBS_COMP_FLAGS(ep, flags);
-
-	if (flags & FI_FENCE)
-		wr->send_flags |= IBV_SEND_FENCE;
-
-	return fi_ibv_send(ep, wr);
-}
-
-static inline ssize_t
-fi_ibv_msg_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
-{
-	struct fi_ibv_ep *ep =
-		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
-	struct ibv_recv_wr wr = {
-		.wr_id = (uintptr_t)msg->context,
-		.num_sge = msg->iov_count,
-		.next = NULL,
-	};
-	struct ibv_recv_wr *bad_wr;
-
-	assert(ep->util_ep.rx_cq);
-
-	fi_ibv_set_sge_iov(wr.sg_list, msg->msg_iov, msg->iov_count, msg->desc);
-
-	return fi_ibv_handle_post(ibv_post_recv(ep->id->qp, &wr, &bad_wr));
-}
-
-static ssize_t
-fi_ibv_msg_ep_recv(struct fid_ep *ep_fid, void *buf, size_t len,
-		void *desc, fi_addr_t src_addr, void *context)
-{
-	struct fi_ibv_ep *ep =
-		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
-	struct ibv_sge sge = fi_ibv_init_sge(buf, len, desc);
-	struct ibv_recv_wr wr = {
-		.wr_id = (uintptr_t)context,
-		.num_sge = 1,
-		.sg_list = &sge,
-		.next = NULL,
-	};
-	struct ibv_recv_wr *bad_wr;
-
-	assert(ep->util_ep.rx_cq);
-
-	return fi_ibv_handle_post(ibv_post_recv(ep->id->qp, &wr, &bad_wr));
-}
-
-static ssize_t
-fi_ibv_msg_ep_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
-                 size_t count, fi_addr_t src_addr, void *context)
-{
-	struct fi_msg msg = {
-		.msg_iov = iov,
-		.desc = desc,
-		.iov_count = count,
-		.addr = src_addr,
-		.context = context,
-	};
-
-	return fi_ibv_msg_ep_recvmsg(ep_fid, &msg, 0);
-}
-
-static ssize_t
-fi_ibv_msg_ep_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
-{
-	struct fi_ibv_ep *ep =
-		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
-	struct ibv_send_wr wr = {
-		.wr_id = (uintptr_t)msg->context,
-	};
-
-	if (flags & FI_REMOTE_CQ_DATA) {
-		wr.opcode = IBV_WR_SEND_WITH_IMM;
-		wr.imm_data = htonl((uint32_t)msg->data);
-	} else {
-		wr.opcode = IBV_WR_SEND;
-	}
-
-	return fi_ibv_send_msg(ep, &wr, msg, flags);
-}
-
-static ssize_t
-fi_ibv_msg_ep_send(struct fid_ep *ep_fid, const void *buf, size_t len,
-		void *desc, fi_addr_t dest_addr, void *context)
-{
-	struct fi_ibv_ep *ep =
-		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
-	struct ibv_send_wr wr = {
-		.wr_id = (uintptr_t)context,
-		.opcode = IBV_WR_SEND,
-		.send_flags = VERBS_INJECT(ep, len) | VERBS_COMP(ep),
-	};
-
-	return fi_ibv_send_buf(ep, &wr, buf, len, desc);
-}
-
-static ssize_t
-fi_ibv_msg_ep_senddata(struct fid_ep *ep_fid, const void *buf, size_t len,
-		       void *desc, uint64_t data, fi_addr_t dest_addr, void *context)
-{
-	struct fi_ibv_ep *ep =
-		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
-	struct ibv_send_wr wr = {
-		.wr_id = (uintptr_t)context,
-		.opcode = IBV_WR_SEND_WITH_IMM,
-		.imm_data = htonl((uint32_t)data),
-		.send_flags = VERBS_INJECT(ep, len) | VERBS_COMP(ep),
-	};
-
-	return fi_ibv_send_buf(ep, &wr, buf, len, desc);
-}
-
-static ssize_t
-fi_ibv_msg_ep_sendv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
-		    size_t count, fi_addr_t dest_addr, void *context)
-{
-	struct fi_ibv_ep *ep =
-		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
-	struct ibv_send_wr wr = {
-		.wr_id = (uintptr_t)context,
-		.opcode = IBV_WR_SEND,
-	};
-
-	return fi_ibv_send_iov(ep, &wr, iov, desc, count);
-}
-
-static ssize_t fi_ibv_msg_ep_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
-		fi_addr_t dest_addr)
-{
-	struct fi_ibv_ep *ep =
-		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
-	struct ibv_send_wr wr = {
-		.wr_id = VERBS_INJECT_FLAG,
-		.opcode = IBV_WR_SEND,
-		.send_flags = IBV_SEND_INLINE,
-	};
-
-	return fi_ibv_send_buf_inline(ep, &wr, buf, len);
-}
-
-static ssize_t fi_ibv_msg_ep_injectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
-		    uint64_t data, fi_addr_t dest_addr)
-{
-	struct fi_ibv_ep *ep =
-		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
-	struct ibv_send_wr wr = {
-		.wr_id = VERBS_INJECT_FLAG,
-		.opcode = IBV_WR_SEND_WITH_IMM,
-		.imm_data = htonl((uint32_t)data),
-		.send_flags = IBV_SEND_INLINE,
-	};
-
-	return fi_ibv_send_buf_inline(ep, &wr, buf, len);
-}
-
-struct fi_ops_msg fi_ibv_msg_ep_msg_ops = {
-	.size = sizeof(struct fi_ops_msg),
-	.recv = fi_ibv_msg_ep_recv,
-	.recvv = fi_ibv_msg_ep_recvv,
-	.recvmsg = fi_ibv_msg_ep_recvmsg,
-	.send = fi_ibv_msg_ep_send,
-	.sendv = fi_ibv_msg_ep_sendv,
-	.sendmsg = fi_ibv_msg_ep_sendmsg,
-	.inject = fi_ibv_msg_ep_inject,
-	.senddata = fi_ibv_msg_ep_senddata,
-	.injectdata = fi_ibv_msg_ep_injectdata,
-};
-
-struct fi_ops_msg fi_ibv_msg_srq_ep_msg_ops = {
-	.size = sizeof(struct fi_ops_msg),
-	.recv = fi_no_msg_recv,
-	.recvv = fi_no_msg_recvv,
-	.recvmsg = fi_no_msg_recvmsg,
-	.send = fi_ibv_msg_ep_send,
-	.sendv = fi_ibv_msg_ep_sendv,
-	.sendmsg = fi_ibv_msg_ep_sendmsg,
-	.inject = fi_ibv_msg_ep_inject,
-	.senddata = fi_ibv_msg_ep_senddata,
-	.injectdata = fi_ibv_msg_ep_injectdata,
-};
 
 static struct fi_ops_ep fi_ibv_srq_ep_base_ops = {
 	.size = sizeof(struct fi_ops_ep),
