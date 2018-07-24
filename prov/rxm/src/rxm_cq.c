@@ -105,7 +105,7 @@ static int rxm_finish_buf_recv(struct rxm_rx_buf *rx_buf)
 
 	assert(rx_buf->pkt.hdr.size <= rx_buf->ep->sar_limit);
 
-	if (rx_buf->pkt.hdr.size > rx_buf->ep->rxm_info->tx_attr->inject_size)
+	if (rx_buf->pkt.hdr.size > rx_buf->ep->eager_size)
 		flags |= FI_MORE;
 
 	FI_DBG(&rxm_prov, FI_LOG_CQ, "writing buffered recv completion: "

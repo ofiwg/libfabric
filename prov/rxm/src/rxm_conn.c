@@ -336,7 +336,7 @@ rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 			.ctrl_version = RXM_CTRL_VERSION,
 			.op_version = RXM_OP_VERSION,
 			.endianness = ofi_detect_endianness(),
-			.eager_size = rxm_ep->rxm_info->tx_attr->inject_size,
+			.eager_size = rxm_ep->eager_size,
 		},
 	};
 	struct util_cmap_handle *handle;
@@ -540,7 +540,7 @@ rxm_conn_connect(struct util_ep *util_ep, struct util_cmap_handle *handle,
 			.ctrl_version = RXM_CTRL_VERSION,
 			.op_version = RXM_OP_VERSION,
 			.endianness = ofi_detect_endianness(),
-			.eager_size = rxm_ep->rxm_info->tx_attr->inject_size,
+			.eager_size = rxm_ep->eager_size,
 		},
 	};
 
