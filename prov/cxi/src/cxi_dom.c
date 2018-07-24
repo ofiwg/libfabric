@@ -18,15 +18,7 @@
 #define CXI_LOG_DBG(...) _CXI_LOG_DBG(FI_LOG_DOMAIN, __VA_ARGS__)
 #define CXI_LOG_ERROR(...) _CXI_LOG_ERROR(FI_LOG_DOMAIN, __VA_ARGS__)
 
-extern struct fi_ops_mr cxi_dom_mr_ops;
-
-/* TODO define */
-struct fi_ops_mr cxi_dom_mr_ops = {
-	.size = sizeof(struct fi_ops_mr),
-	.reg = fi_no_mr_reg,
-	.regv = fi_no_mr_regv,
-	.regattr = fi_no_mr_regattr
-};
+extern struct fi_ops_mr cxix_dom_mr_ops;
 
 const struct fi_domain_attr cxi_domain_attr = {
 	.name = NULL,
@@ -322,7 +314,7 @@ int cxi_domain(struct fid_fabric *fabric, struct fi_info *info,
 	cxi_domain->dom_fid.fid.context = context;
 	cxi_domain->dom_fid.fid.ops = &cxi_dom_fi_ops;
 	cxi_domain->dom_fid.ops = &cxi_dom_ops;
-	cxi_domain->dom_fid.mr = &cxi_dom_mr_ops;
+	cxi_domain->dom_fid.mr = &cxix_dom_mr_ops;
 
 	if (!info->domain_attr ||
 	    info->domain_attr->data_progress == FI_PROGRESS_UNSPEC)

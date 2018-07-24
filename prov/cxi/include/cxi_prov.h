@@ -422,6 +422,15 @@ struct cxi_ep {
 	int is_alias;
 };
 
+struct cxix_mr {
+	struct fid_mr mr_fid;
+	struct cxi_domain *domain;
+	uint64_t key;
+	uint64_t flags;
+	struct cxi_cntr *cntr;
+	struct cxi_cq *cq;
+};
+
 struct cxi_av_table_hdr {
 	uint64_t size;
 	uint64_t stored;
