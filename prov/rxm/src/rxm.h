@@ -685,6 +685,23 @@ rxm_ep_handle_unconnected(struct rxm_ep *rxm_ep, struct util_cmap_handle *handle
 	return -FI_EAGAIN;
 }
 
+static inline int
+rxm_acquire_conn_connect(struct rxm_ep *rxm_ep, fi_addr_t fi_addr,
+			 struct rxm_conn **rxm_conn)
+{
+	*rxm_conn = rxm_acquire_conn(rxm_ep, fi_addr);
+	if (OFI_UNLIKELY(!*rxm_conn || (*rxm_conn)->handle.state != CMAP_CONNECTED)) {
+		int ret;
+		if (!*rxm_conn)
+			return -FI_ENOTCONN;
+		fastlock_acquire(&rxm_ep->util_ep.cmap->lock);
+		ret = rxm_ep_handle_unconnected(rxm_ep, &(*rxm_conn)->handle, fi_addr);
+		fastlock_release(&rxm_ep->util_ep.cmap->lock);
+		return ret;
+	}
+	return 0;
+}
+
 static inline ssize_t
 rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		   struct rxm_tx_buf *tx_buf, size_t pkt_size)
