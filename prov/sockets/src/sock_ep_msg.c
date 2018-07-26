@@ -656,7 +656,7 @@ static int sock_ep_cm_connect(struct fid_ep *ep, const void *addr,
 		if (!_ep->attr->dest_addr)
 			return -FI_ENOMEM;
 	}
-	memcpy(_ep->attr->dest_addr, addr, sizeof(*_ep->attr->dest_addr));
+	memcpy(_ep->attr->dest_addr, addr, ofi_sizeofaddr(addr));
 
 	req = calloc(1, sizeof(*req));
 	if (!req)
@@ -672,8 +672,9 @@ static int sock_ep_cm_connect(struct fid_ep *ep, const void *addr,
 	req->hdr.port = htons(_ep->attr->msg_src_port);
 	req->hdr.cm_data_sz = htons(paramlen);
 	req->caps = _ep->attr->info.caps;
-	memcpy(&req->src_addr, _ep->attr->src_addr, sizeof(req->src_addr));
-	memcpy(&handle->dest_addr, addr, sizeof(handle->dest_addr));
+	memcpy(&req->src_addr, _ep->attr->src_addr,
+	       ofi_sizeofaddr(&_ep->attr->src_addr->sa));
+	memcpy(&handle->dest_addr, addr, ofi_sizeofaddr(addr));
 
 	cm_head = &_ep->attr->domain->cm_head;
 	_ep->attr->info.handle = (void*) handle;
@@ -694,8 +695,8 @@ static int sock_ep_cm_connect(struct fid_ep *ep, const void *addr,
 	ofi_straddr_dbg(&sock_prov, FI_LOG_EP_CTRL, "Connecting to address",
 			&handle->dest_addr);
 	sock_set_sockopts(sock_fd, SOCK_OPTS_KEEPALIVE);
-	ret = connect(sock_fd, (struct sockaddr *)&handle->dest_addr,
-		      sizeof(handle->dest_addr));
+	ret = connect(sock_fd, &handle->dest_addr.sa,
+		      ofi_sizeofaddr(&handle->dest_addr.sa));
 	if (ret < 0) {
 		SOCK_LOG_ERROR("connect failed : %s\n",
 			       strerror(ofi_sockerr()));
