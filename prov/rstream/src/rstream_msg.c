@@ -10,37 +10,44 @@ static uint32_t rstream_cq_data_get_len(uint64_t cq_data)
 	return (cq_data & RSTREAM_MR_LEN_MASK);
 }
 
-static void rstream_cq_data_set(uint64_t* cq_data, struct rstream_cq_data cqdata)
+static uint64_t rstream_cq_data_set(struct rstream_cq_data cq_data)
 {
-	uint64_t bcredits = cqdata.num_completions;
-	assert(cqdata.num_completions < RSTREAM_CREDITS_MAX);
-	assert(cqdata.total_len < RSTREAM_MR_MAX);
+	uint64_t bcredits = cq_data.num_completions;
+
+	assert(cq_data.num_completions < RSTREAM_CREDITS_MAX);
+	assert(cq_data.total_len < RSTREAM_MR_MAX);
+
 	bcredits = bcredits << RSTREAM_CREDIT_OFFSET;
-	*cq_data = *cq_data | bcredits;
-	*cq_data = *cq_data | cqdata.total_len;
+	return bcredits | cq_data.total_len;
 }
 
 static uint16_t rstream_cq_data_get_credits(uint64_t cq_data)
 {
 	uint64_t credits = cq_data & RSTREAM_CREDIT_MASK;
+
 	credits = (credits >> RSTREAM_CREDIT_OFFSET);
 	assert(credits < RSTREAM_CREDITS_MAX);
+
 	return credits;
 }
 
 static uint64_t rstream_cq_data_set_msg_len(uint64_t cq_data, uint32_t msg_len)
 {
 	uint64_t bmsg_len = msg_len;
+
 	assert(msg_len < RSTREAM_IWARP_IMM_MSG_LEN);
 	bmsg_len = bmsg_len << RSTREAM_IWARP_IMM_MR_OFFSET;
+
 	return cq_data | bmsg_len;
 }
 
 static uint32_t rstream_cq_data_get_msg_len(uint64_t cq_data)
 {
 	uint64_t msg_len = cq_data & RSTREAM_IWARP_IMM_MR_MASK;
+
 	msg_len = (msg_len >> RSTREAM_IWARP_IMM_MR_OFFSET);
 	assert(msg_len < RSTREAM_IWARP_IMM_MSG_LEN);
+
 	return msg_len;
 }
 
@@ -52,8 +59,10 @@ static char *rstream_get_next_recv_buffer(struct rstream_ep *ep)
 	const uint32_t full_size = RSTREAM_IWARP_DATA_SIZE *
 		ep->qp_win.max_rx_credits;
 	char *buffer = base_ptr + *offset;
+
 	assert((void *)buffer < ep->local_mr.rx.data_start);
 	*offset = (*offset + RSTREAM_IWARP_DATA_SIZE) % full_size;
+
 	return buffer;
 }
 
@@ -61,10 +70,13 @@ static char *rstream_get_next_recv_buffer(struct rstream_ep *ep)
 static struct fi_context *rstream_get_rx_ctx(struct rstream_ep *ep)
 {
 	struct fi_context *ctx;
+
 	if (ep->rx_ctx_index == ep->qp_win.max_rx_credits)
 		return NULL;
+
 	ctx = &ep->rx_ctxs[ep->rx_ctx_index];
 	ep->rx_ctx_index = ep->rx_ctx_index + 1;
+
 	return ctx;
 }
 
@@ -72,11 +84,14 @@ static struct fi_context *rstream_get_tx_ctx(struct rstream_ep *ep)
 {
 	struct rstream_tx_ctx *ctx = &ep->tx_ctx;
 	struct fi_context *rtn_ctx;
+
 	if (ctx->num_in_use == ep->qp_win.max_tx_credits)
 		return NULL;
+
 	rtn_ctx = &ctx->tx_ctxs[ctx->free_index];
 	ctx->num_in_use = ctx->num_in_use + 1;
 	ctx->free_index = (ctx->free_index + 1) % ep->qp_win.max_tx_credits;
+
 	return rtn_ctx;
 }
 
@@ -84,11 +99,14 @@ static int rstream_return_tx_ctx(struct fi_context *ctx_ptr,
 	struct rstream_ep *ep)
 {
 	struct rstream_tx_ctx *ctx = &ep->tx_ctx;
+
 	if (!ctx->num_in_use)
 		return 0;
+
 	assert(ctx_ptr == &ctx->tx_ctxs[ctx->front]);
 	ctx->front = (ctx->front + 1) % ep->qp_win.max_tx_credits;
 	ctx->num_in_use = ctx->num_in_use - 1;
+
 	return 1;
 }
 
@@ -109,26 +127,25 @@ static ssize_t rstream_print_cq_error(struct fid_cq *cq)
 		ret = FI_ENOMSG;
 		return ret;
 	}
+
 	errmsg = fi_cq_strerror(cq, cq_entry.prov_errno,
 		cq_entry.err_data, NULL, 0);
 	fprintf(stderr, "CQ error msg: %s\n", errmsg);
+
 	return ret;
 }
 
 static void rstream_update_tx_credits(struct rstream_ep *ep,
 	uint16_t num_completions)
 {
-	if (!num_completions)
-		return;
-	if ((ep->qp_win.ctrl_credits + num_completions) <= RSTREAM_MAX_CTRL_TX)
-		ep->qp_win.ctrl_credits += num_completions;
-	else {
-		num_completions = num_completions - (RSTREAM_MAX_CTRL_TX -
-			ep->qp_win.ctrl_credits);
-		ep->qp_win.ctrl_credits = RSTREAM_MAX_CTRL_TX;
-		ep->qp_win.tx_credits += num_completions;
-		assert(ep->qp_win.tx_credits <= ep->qp_win.max_tx_credits);
-	}
+	assert(num_completions == 1);
+
+	if(ep->qp_win.ctrl_credits < RSTREAM_MAX_CTRL_TX)
+		ep->qp_win.ctrl_credits++;
+	else
+		ep->qp_win.tx_credits++;
+
+	assert(ep->qp_win.tx_credits <= ep->qp_win.max_tx_credits);
 }
 
 static int timer_completed(struct rstream_timer *timer) {
@@ -145,7 +162,7 @@ static int timer_completed(struct rstream_timer *timer) {
 static ssize_t rstream_check_for_tx_comp(struct rstream_ep *ep)
 {
 	struct fi_cq_data_entry my_data;
-	const int num_of_comp = 1;
+	int num_of_comp = 1;
 	ssize_t ret;
 	ssize_t found_completion = 0;
 	struct rstream_timer timer = {.poll_time = 0};
@@ -205,10 +222,11 @@ static uint32_t rstream_calc_contig_len(struct rstream_mr_seg *mr)
 	if (!mr->avail_size) {
 		assert(mr->start_offset == mr->end_offset);
 		return 0;
-	} else if (mr->start_offset < mr->end_offset)
+	} else if (mr->start_offset < mr->end_offset) {
 		return (mr->end_offset - mr->start_offset);
-	else
+	} else {
 		return (mr->size - mr->start_offset);
+	}
 }
 
 static uint32_t rstream_alloc_contig_len_available(struct rstream_mr_seg *mr,
@@ -216,8 +234,10 @@ static uint32_t rstream_alloc_contig_len_available(struct rstream_mr_seg *mr,
 {
 	uint32_t len_available = rstream_calc_contig_len(mr);
 	uint32_t len;
+
 	*data_addr = (char *)mr->data_start;
 	assert(len_available <= mr->avail_size);
+
 	if (!len_available)
 		return 0;
 
@@ -226,6 +246,7 @@ static uint32_t rstream_alloc_contig_len_available(struct rstream_mr_seg *mr,
 	assert(mr->avail_size >= len);
 	mr->avail_size = mr->avail_size - len;
 	mr->start_offset = (mr->start_offset + len) % mr->size;
+
 	return len;
 }
 
@@ -239,6 +260,7 @@ static void rstream_free_contig_len(struct rstream_mr_seg *mr, uint32_t len)
 static ssize_t rstream_send_ctrl_msg(struct rstream_ep *ep, uint64_t cq_data)
 {
 	ssize_t ret = 0;
+	struct fi_msg msg;
 
 	if (!ep->qp_win.ctrl_credits || !ep->qp_win.target_rx_credits) {
 		ret = rstream_check_for_tx_comp(ep);
@@ -257,9 +279,12 @@ static ssize_t rstream_send_ctrl_msg(struct rstream_ep *ep, uint64_t cq_data)
 		if (ret != 0)
 			return ret;
 	} else {
-		const struct fi_msg msg =
-			{.msg_iov = NULL, .desc = NULL, .iov_count = 0,
-				.context = rstream_get_tx_ctx(ep), .data = cq_data};
+		msg.msg_iov = NULL;
+		msg.desc = NULL;
+		msg.iov_count = 0;
+		msg.context = rstream_get_tx_ctx(ep);
+		msg.data = cq_data;
+
 		ret = fi_sendmsg(ep->ep_fd, &msg, FI_REMOTE_CQ_DATA);
 		if (ret != 0)
 			return ret;
@@ -271,6 +296,7 @@ static ssize_t rstream_send_ctrl_msg(struct rstream_ep *ep, uint64_t cq_data)
 			rstream_check_for_tx_comp(ep);
 		}
 	}
+
 	assert(ep->qp_win.target_rx_credits > 0);
 	ep->qp_win.target_rx_credits--;
 
@@ -281,8 +307,9 @@ static ssize_t rstream_send_ctrl_msg(struct rstream_ep *ep, uint64_t cq_data)
 static ssize_t rstream_update_target(struct rstream_ep *ep,
 	uint16_t num_completions, uint32_t len)
 {
-	uint64_t cq_data = 0;
+	uint64_t cq_data;
 	ssize_t ret = 0;
+
 	ep->cq_data.num_completions =
 		ep->cq_data.num_completions + num_completions;
 	ep->cq_data.total_len = ep->cq_data.total_len + len;
@@ -290,7 +317,7 @@ static ssize_t rstream_update_target(struct rstream_ep *ep,
 	if ((ep->cq_data.num_completions >= ep->qp_win.max_rx_credits / 2) ||
 		(ep->cq_data.total_len >= ep->local_mr.rx.size / 2)) {
 
-		rstream_cq_data_set(&cq_data, ep->cq_data);
+		cq_data = rstream_cq_data_set(ep->cq_data);
 
 		ret = rstream_send_ctrl_msg(ep, cq_data);
 		if (ret == 0) {
@@ -302,6 +329,7 @@ static ssize_t rstream_update_target(struct rstream_ep *ep,
 			ep->cq_data.total_len = 0;
 		}
 	}
+
 	return ret;
 }
 
@@ -325,25 +353,33 @@ ssize_t rstream_process_rx_cq_data(struct rstream_ep *ep,
 	} else {
 		rstream_free_contig_len(&ep->local_mr.rx, cq_entry->len);
 	}
+
 	ep->qp_win.rx_credits++;
 	assert(ep->qp_win.rx_credits <= ep->qp_win.max_rx_credits);
+
 	return rstream_post_cq_data_recv(ep, cq_entry);
+}
+
+static void format_iwarp_cq_data(struct rstream_ep *ep,
+	struct fi_cq_data_entry *cq_entry)
+{
+	uint64_t cq_data;
+	uint32_t msg_len_recv = 0;
+
+	cq_entry->buf = rstream_get_next_recv_buffer(ep);
+	cq_data = *((uint64_t *)cq_entry->buf);
+	msg_len_recv = rstream_cq_data_get_msg_len(cq_data);
+	cq_entry->data = (msg_len_recv) ? 0 : cq_data;
+	cq_entry->len = msg_len_recv;
 }
 
 static enum rstream_msg_type rstream_cqe_msg_type(struct rstream_ep *ep,
 	struct fi_cq_data_entry *cq_entry)
 {
 	enum rstream_msg_type type = RSTREAM_REG_MSG;
-	uint32_t msg_len_recv = 0;
-	uint64_t cq_data;
 
-	if (RSTREAM_USING_IWARP) {
-		cq_entry->buf = rstream_get_next_recv_buffer(ep);
-		cq_data = *((uint64_t *)cq_entry->buf);
-		msg_len_recv = rstream_cq_data_get_msg_len(cq_data);
-		cq_entry->data = (msg_len_recv) ? 0 : cq_data;
-		cq_entry->len = msg_len_recv;
-	}
+	if (RSTREAM_USING_IWARP)
+		format_iwarp_cq_data(ep, cq_entry);
 
 	if (cq_entry->data)
 		type = RSTREAM_CTRL_MSG;
@@ -386,32 +422,29 @@ ssize_t rstream_process_cq_rx(struct rstream_ep *ep, enum rstream_msg_type type)
 		return -FI_EAGAIN;
 }
 
-static uint32_t min(uint32_t a, uint32_t b, uint32_t c) {
-	if (a < b) {
-		if (c < a)
-			return c;
-		else
-			return a;
-	} else {
-		if (b < c)
-			return b;
-		else
-			return c;
-	}
+static uint32_t get_send_addrs_and_len(struct rstream_ep *ep, char **tx_addr,
+	char **dest_addr, uint32_t requested_len)
+{
+	uint32_t available_len = 0;
+
+	requested_len = MIN(MIN(requested_len,
+		rstream_calc_contig_len(&ep->local_mr.tx)),
+		rstream_calc_contig_len(&ep->remote_data.mr));
+	if (requested_len == 0)
+		return available_len;
+
+	available_len = rstream_alloc_contig_len_available(&ep->local_mr.tx,
+		tx_addr, requested_len);
+	available_len = rstream_alloc_contig_len_available(&ep->remote_data.mr,
+		dest_addr, requested_len);
+
+	return available_len;
 }
 
-static void get_send_addrs_and_len(struct rstream_ep *ep, char **tx_addr,
-	char **dest_addr, uint32_t *len) {
-	*len = min(*len, rstream_calc_contig_len(&ep->local_mr.tx),
-	rstream_calc_contig_len(&ep->remote_data.mr));
-	if (*len == 0)
-		return;
-	*len = rstream_alloc_contig_len_available(&ep->local_mr.tx, tx_addr, *len);
-	*len = rstream_alloc_contig_len_available(&ep->remote_data.mr, dest_addr, *len);
-}
-
-static ssize_t retry_send_resources(struct rstream_ep *ep) {
+static ssize_t retry_send_resources(struct rstream_ep *ep)
+{
 	ssize_t ret;
+
 	if (rstream_tx_mr_full(ep) || rstream_target_mr_full(ep) ||
 		rstream_target_rx_full(ep)) {
 		ret = rstream_process_cq_rx(ep, RSTREAM_CTRL_MSG);
@@ -454,7 +487,8 @@ static ssize_t rstream_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 			}
 		}
 
-		get_send_addrs_and_len(ep, &tx_addr, &remote_addr, &curr_avail_len);
+		curr_avail_len = get_send_addrs_and_len(ep, &tx_addr,
+			&remote_addr, curr_avail_len);
 		if (curr_avail_len == 0)
 			break;
 
@@ -559,6 +593,7 @@ static ssize_t rstream_check_for_rx_comp(struct rstream_ep *ep,
 		}
 	}
 	assert(ret == -FI_EAGAIN || ret == max_num);
+
 	return ret;
 }
 
@@ -569,9 +604,11 @@ static uint32_t rstream_copy_out_chunk(struct rstream_ep *ep, void *buf,
 	uint32_t current_chunk =
 		rstream_alloc_contig_len_available(&ep->local_mr.rx, &rx_data_ptr,
 			len_left);
+
 	if (current_chunk) {
 		memcpy(buf, rx_data_ptr, current_chunk);
 	}
+
 	return current_chunk;
 }
 
@@ -582,6 +619,7 @@ static ssize_t rstream_recv(struct fid_ep *ep_fid, void *buf, size_t len,
 		util_ep.ep_fid);
 	uint32_t copy_out_len = 0;
 	ssize_t ret;
+
 	copy_out_len = rstream_copy_out_chunk(ep, buf, len);
 
 	if ((len - copy_out_len)) {

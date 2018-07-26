@@ -81,5 +81,6 @@ err1:
 	free(rstream_fabric);
 	if (info)
 		fi_freeinfo(info);
+
 	return ret;
 }

@@ -79,6 +79,7 @@ static int rstream_reg_mrs(struct fid_domain *domain,
 	lmr->tx.avail_size = lmr->tx.size;
 	lmr->rx.data_start = (char *)lmr->tx.data_start +
 		lmr->tx.size + rx_meta_data_offset;
+
 	return ret;
 }
 
@@ -146,6 +147,7 @@ err1:
 		free(rstream_ep->local_mr.base_addr);
 	if(rstream_ep->local_mr.mr)
 		fi_close(&rstream_ep->local_mr.mr->fid);
+
 	return ret;
 }
 
@@ -306,6 +308,7 @@ static int rstream_pep_ctrl(struct fid *fid, int command, void *arg)
 	default:
 		return -FI_ENOSYS;
 	}
+
 	return ret;
 }
 
@@ -321,6 +324,7 @@ static int rstream_pep_close(fid_t fid)
 
 	ofi_pep_close(&rstream_pep->util_pep);
 	free(rstream_pep);
+
 	return ret;
 }
 
@@ -367,8 +371,12 @@ err1:
 void rstream_process_cm_event(struct rstream_ep *ep, void *cm_data)
 {
 	assert(ep && cm_data);
+
+	int i;
 	struct rstream_cm_data *rcv_data = (struct rstream_cm_data *)cm_data;
+
 	assert(rcv_data->version == RSTREAM_RSOCKETV2);
+
 	ep->qp_win.target_rx_credits = ntohs(rcv_data->max_rx_credits);
 	ep->qp_win.max_target_rx_credits = ep->qp_win.target_rx_credits;
 	ep->remote_data.rkey = ntohll(rcv_data->rkey);
@@ -376,7 +384,6 @@ void rstream_process_cm_event(struct rstream_ep *ep, void *cm_data)
 	ep->remote_data.mr.size = ntohl(rcv_data->rmr_size);
 	ep->remote_data.mr.avail_size = ep->remote_data.mr.size;
 
-	int i;
 	for(i = 0; i < ep->qp_win.max_rx_credits; i++) {
 		rstream_post_cq_data_recv(ep, NULL);
 	}

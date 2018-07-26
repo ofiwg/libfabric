@@ -55,6 +55,7 @@ static ssize_t rstream_sread(struct fid_eq *eq, uint32_t *event,
 			ret = -FI_ENODATA;
 		}
 	}
+
 	rstream_eq->prev_cm_state = *event;
 
 	return len;
@@ -122,6 +123,7 @@ static int compare_mr_keys(void *key1, void *key2)
 {
 	uint64_t k1 = *((uint64_t *) key1);
 	uint64_t k2 = *((uint64_t *) key2);
+
 	return (k1 < k2) ? -1 : (k1 > k2);
 }
 
@@ -158,5 +160,6 @@ int rstream_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	return ret;
 err1:
 	free(rstream_eq);
+
 	return ret;
 }

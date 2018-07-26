@@ -4,6 +4,7 @@ static void rstream_format_data(struct rstream_cm_data *cm,
 	const struct rstream_ep *ep)
 {
 	assert(cm && ep->local_mr.rx.data_start);
+
 	cm->version = RSTREAM_RSOCKETV2;
 	cm->max_rx_credits = htons(ep->qp_win.max_rx_credits);
 	cm->base_addr = htonll((uintptr_t)ep->local_mr.rx.data_start);
@@ -14,14 +15,16 @@ static void rstream_format_data(struct rstream_cm_data *cm,
 static int rstream_setname(fid_t fid, void *addr, size_t addrlen)
 {
 	fid_t rstream_fid;
+	struct rstream_pep *rstream_pep;
+	struct rstream_ep *rstream_ep;
 
 	if (fid->fclass == FI_CLASS_PEP) {
-		struct rstream_pep *rstream_pep = container_of(fid,
-			struct rstream_pep, util_pep.pep_fid);
+		rstream_pep = container_of(fid, struct rstream_pep,
+			util_pep.pep_fid);
 		rstream_fid = &rstream_pep->pep_fd->fid;
 	} else if (fid->fclass == FI_CLASS_EP) {
-		struct rstream_ep *rstream_ep = container_of(fid,
-			struct rstream_ep, util_ep.ep_fid);
+		rstream_ep = container_of(fid, struct rstream_ep,
+			util_ep.ep_fid);
 		rstream_fid = &rstream_ep->ep_fd->fid;
 	} else {
 		return -FI_ENOSYS;
