@@ -59,8 +59,9 @@ extern "C" {
 #define OFI_MR_BASIC_MAP (FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_VIRT_ADDR)
 
 /* exit codes must be 0-255 */
-static inline int ft_exit_code(int ret)
+static inline int ft_exit_code(int ret, int free_ret)
 {
+	ret = ret ? ret : free_ret;
 	int absret = ret < 0 ? -ret : ret;
 	return absret > 255 ? EXIT_FAILURE : absret;
 }
@@ -288,27 +289,13 @@ size_t datatype_to_size(enum fi_datatype datatype);
 						 entry.err_data, \
 						 buf, len))	 \
 
-#define FT_CLOSE_FID(fd)						\
-	do {								\
-		int ret;						\
-		if ((fd)) {						\
-			ret = fi_close(&(fd)->fid);			\
-			if (ret)					\
-				FT_ERR("fi_close: %s(%d) fid %d",	\
-					fi_strerror(-ret), 		\
-					ret,				\
-					(int) (fd)->fid.fclass);	\
-			fd = NULL;					\
-		}							\
-	} while (0)
-
 #define FT_CLOSEV_FID(fd, cnt)			\
 	do {					\
 		int i;				\
 		if (!(fd))			\
 			break;			\
 		for (i = 0; i < (cnt); i++) {	\
-			FT_CLOSE_FID((fd)[i]);	\
+			ft_close_fid((fd)[i]);	\
 		}				\
 	} while (0)
 
@@ -353,7 +340,8 @@ int ft_init_av_dst_addr(struct fid_av *av_ptr, struct fid_ep *ep_ptr,
 int ft_init_av_addr(struct fid_av *av, struct fid_ep *ep,
 		fi_addr_t *addr);
 int ft_exchange_keys(struct fi_rma_iov *peer_iov);
-void ft_free_res();
+int ft_close_fid();
+int ft_free_res();
 void init_test(struct ft_opts *opts, char *test_name, size_t test_name_len);
 
 static inline void ft_start(void)

@@ -299,5 +299,5 @@ int main(int argc, char **argv)
 			i);
 	}
 
-	return ft_exit_code(exit_code);
+	return ft_exit_code(exit_code, 0);
 }

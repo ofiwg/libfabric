@@ -175,9 +175,10 @@ out:
 	return ret;
 }
 
-static void free_res(void)
+static int free_res(void)
 {
-	FT_CLOSE_FID(mr_multi_recv);
+	int ret;
+	ret = ft_close_fid(mr_multi_recv);
 	if (tx_buf) {
 		free(tx_buf);
 		tx_buf = NULL;
@@ -186,6 +187,7 @@ static void free_res(void)
 		free(rx_buf);
 		rx_buf = NULL;
 	}
+	return ret;
 }
 
 static int alloc_ep_res(struct fi_info *fi)
@@ -324,7 +326,7 @@ out:
 
 int main(int argc, char **argv)
 {
-	int op, ret;
+	int op, ret, free_ret;
 
 	opts = INIT_OPTS;
 	opts.options |= FT_OPT_SIZE;
@@ -363,7 +365,8 @@ int main(int argc, char **argv)
 
 	ret = run();
 
-	free_res();
-	ft_free_res();
-	return ft_exit_code(ret);
+	free_ret = free_res();
+	if (!free_ret)
+		free_ret = ft_free_res();
+	return ft_exit_code(ret, free_ret);
 }

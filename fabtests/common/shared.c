@@ -1247,33 +1247,80 @@ int ft_exchange_keys(struct fi_rma_iov *peer_iov)
 	return ret;
 }
 
-static void ft_close_fids(void)
+int ft_close_fid(struct fid *fid)
 {
-	if (mr != &no_mr)
-		FT_CLOSE_FID(mr);
-	FT_CLOSE_FID(mc);
-	FT_CLOSE_FID(alias_ep);
-	FT_CLOSE_FID(ep);
-	FT_CLOSE_FID(pep);
-	FT_CLOSE_FID(pollset);
-	if (opts.options & FT_OPT_CQ_SHARED) {
-		FT_CLOSE_FID(txcq);
-	} else {
-		FT_CLOSE_FID(rxcq);
-		FT_CLOSE_FID(txcq);
+	int ret = 0;
+	if (fid) {
+		ret = fi_close(fid);
+		if (ret)
+			FT_ERR("fi_close: %s(%d) fid %d", fi_strerror(-ret), ret, (int) fid->fclass);
+		fid = NULL;
 	}
-	FT_CLOSE_FID(rxcntr);
-	FT_CLOSE_FID(txcntr);
-	FT_CLOSE_FID(av);
-	FT_CLOSE_FID(eq);
-	FT_CLOSE_FID(domain);
-	FT_CLOSE_FID(waitset);
-	FT_CLOSE_FID(fabric);
+	return ret;
 }
 
-void ft_free_res(void)
+
+static int ft_close_fids(void)
 {
-	ft_close_fids();
+	int ret;
+	if (mr != &no_mr) {
+		ret = ft_close_fid(&mr->fid);
+		if (ret)
+			return ret;
+	}
+	ret = ft_close_fid(&mc->fid);
+	if (ret)
+		return ret;
+	ret = ft_close_fid(&alias_ep->fid);
+	if (ret)
+		return ret;
+	ret = ft_close_fid(&ep->fid);
+	if (ret)
+		return ret;
+	ret = ft_close_fid(&pep->fid);
+	if (ret)
+		return ret;
+	ret = ft_close_fid(&pollset->fid);
+	if (ret)
+		return ret;
+	if (opts.options & FT_OPT_CQ_SHARED) {
+		ret = ft_close_fid(&txcq->fid);
+		if (ret)
+			return ret;
+	} else {
+		ret = ft_close_fid(&rxcq->fid);
+		if (ret)
+			return ret;
+		ret = ft_close_fid(&txcq->fid);
+		if (ret)
+			return ret;
+	}
+	ret = ft_close_fid(&rxcntr->fid);
+	if (ret)
+		return ret;
+	ret = ft_close_fid(&txcntr->fid);
+	if (ret)
+		return ret;
+	ret = ft_close_fid(&av->fid);
+	if (ret)
+		return ret;
+	ret = ft_close_fid(&eq->fid);
+	if (ret)
+		return ret;
+	ret = ft_close_fid(&domain->fid);
+	if (ret)
+		return ret;
+	ret = ft_close_fid(&waitset->fid);
+	if (ret)
+		return ret;
+	ret = ft_close_fid(&fabric->fid);
+	return ret;
+}
+
+int ft_free_res(void)
+{
+	int ret;
+	ret = ft_close_fids();
 
 	free(tx_ctx_arr);
 	free(rx_ctx_arr);
@@ -1297,6 +1344,7 @@ void ft_free_res(void)
 		fi_freeinfo(hints);
 		hints = NULL;
 	}
+	return ret;
 }
 
 static int dupaddr(void **dst_addr, size_t *dst_addrlen,

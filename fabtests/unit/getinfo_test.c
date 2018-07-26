@@ -700,6 +700,7 @@ int main(int argc, char **argv)
 {
 	int failed;
 	int op;
+	int ret;
 	size_t len;
 	const char *util_name;
 
@@ -800,6 +801,9 @@ int main(int argc, char **argv)
 		printf("\nSummary: all tests passed\n");
 	}
 
-	ft_free_res();
+	ret = ft_free_res();
+	if (ret)
+		return EXIT_FAILURE;
+
 	return (failed > 0) ? EXIT_FAILURE : EXIT_SUCCESS;
 }

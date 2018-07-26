@@ -91,14 +91,20 @@ static int alloc_bufs(void)
 	return 0;
 }
 
-static void free_bufs(void)
+static int free_bufs(void)
 {
-	FT_CLOSE_FID(tx_mr);
-	FT_CLOSE_FID(rx_mr);
+	int ret;
+	ret = ft_close_fid(tx_mr);
+	if (ret)
+		return ret;
+	ret = ft_close_fid(rx_mr);
+	if (ret)
+		return ret;
 	free(tx_bufs);
 	free(rx_bufs);
 	free(tx_ctxs);
 	free(rx_ctxs);
+	return 0;
 }
 
 static char *get_tx_buf(int index)
@@ -210,7 +216,7 @@ static int run_test_loop(void)
 
 static int run_test(void)
 {
-	int ret;
+	int ret, free_ret;
 	int retries = 100;
 
 	if (hints->ep_attr->type == FI_EP_MSG)
@@ -243,7 +249,8 @@ static int run_test(void)
 
 	alloc_bufs();
 	ret = run_test_loop();
-	free_bufs();
+	free_ret = free_bufs();
+	ret = ret ? ret : free_ret;
 
 	return ret;
 }
@@ -252,6 +259,7 @@ int main(int argc, char **argv)
 {
 	int op;
 	int ret;
+	int free_ret;
 
 	opts = INIT_OPTS;
 
@@ -311,7 +319,7 @@ int main(int argc, char **argv)
 
 	ret = run_test();
 
-	ft_free_res();
+	free_ret = ft_free_res();
 	ft_sock_shutdown(sock);
-	return ft_exit_code(ret);
+	return ft_exit_code(ret, free_ret);
 }

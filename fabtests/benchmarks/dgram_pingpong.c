@@ -82,7 +82,7 @@ static int run(void)
 int main(int argc, char **argv)
 {
 	int ret, op;
-
+	int free_ret;
 	opts = INIT_OPTS;
 
 	timeout = 5;
@@ -124,7 +124,6 @@ int main(int argc, char **argv)
 	hints->domain_attr->threading = FI_THREAD_DOMAIN;
 
 	ret = run();
-
-	ft_free_res();
-	return ft_exit_code(ret);
+	free_ret = ft_free_res();
+	return ft_exit_code(ret, free_ret);
 }

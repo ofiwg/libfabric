@@ -216,13 +216,28 @@ static int server_accept(size_t paramlen)
 	if (ret)
 		goto err;
 
-	FT_CLOSE_FID(ep);
-	FT_CLOSE_FID(rxcq);
-	FT_CLOSE_FID(txcq);
-	FT_CLOSE_FID(rxcntr);
-	FT_CLOSE_FID(txcntr);
-	FT_CLOSE_FID(av);
-	FT_CLOSE_FID(domain);
+
+	ret = ft_close_fid(ep);
+	if (ret)
+		return ret;
+	ret = ft_close_fid(rxcq);
+	if (ret)
+		return ret;
+	ret = ft_close_fid(txcq);
+	if (ret)
+		return ret;
+	ret = ft_close_fid(rxcntr);
+	if (ret)
+		return ret;
+	ret = ft_close_fid(txcntr);
+	if (ret)
+		return ret;
+	ret = ft_close_fid(av);
+	if (ret)
+		return ret;
+	ret = ft_close_fid(domain);
+	if (ret)
+		return ret;
 
 	return 0;
 
@@ -255,7 +270,9 @@ static int client_open_new_ep()
 	size_t opt_size;
 	int ret;
 
-	FT_CLOSE_FID(ep);
+	ret = ft_close_fid(ep);
+	if (ret)
+		return ret;
 
 	ret = fi_endpoint(domain, fi, &ep, NULL);
 	if (ret) {
@@ -443,7 +460,7 @@ err2:
 
 int main(int argc, char **argv)
 {
-	int op, ret;
+	int op, ret, free_ret;
 
 	opts = INIT_OPTS;
 	opts.options |= FT_OPT_SIZE;
@@ -480,6 +497,6 @@ int main(int argc, char **argv)
 
 	ret = run();
 
-	ft_free_res();
-	return ft_exit_code(ret);
+	free_ret = ft_free_res();
+	return ft_exit_code(ret, free_ret);
 }

@@ -238,5 +238,5 @@ int main(int argc, char **argv)
 		goto out;
 
 out:
-	return ft_exit_code(ret);
+	return ft_exit_code(ret, 0);
 }

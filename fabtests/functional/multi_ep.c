@@ -83,13 +83,15 @@ static int alloc_multi_ep_res()
 	return 0;
 }
 
-static void free_ep_res()
+static int free_ep_res()
 {
-	int i;
+	int i, ret = 0;
 
-	for (i = 0; i < num_eps; i++)
-		FT_CLOSE_FID(eps[i]);
-
+	for (i = 0; i < num_eps; i++) {
+		ret = ft_close_fid(eps[i]);
+		if (ret)
+			return ret;
+	}
 	free(data_bufs);
 	free(send_bufs);
 	free(recv_bufs);
@@ -97,6 +99,7 @@ static void free_ep_res()
 	free(recv_ctx);
 	free(remote_addr);
 	free(eps);
+	return 0;
 }
 
 static int do_transfers(void)
@@ -274,6 +277,7 @@ int main(int argc, char **argv)
 {
 	int op;
 	int ret = 0;
+	int free_ret;
 
 	opts = INIT_OPTS;
 	opts.transfer_size = 256;
@@ -313,7 +317,8 @@ int main(int argc, char **argv)
 
 	ret = run_test();
 
-	free_ep_res();
-	ft_free_res();
-	return ft_exit_code(ret);
+	free_ret = free_ep_res();
+	if (!free_ret)
+		free_ret = ft_free_res();
+	return ft_exit_code(ret, free_ret);
 }

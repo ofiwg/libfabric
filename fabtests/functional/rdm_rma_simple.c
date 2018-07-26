@@ -90,7 +90,7 @@ static int run_test(void)
 
 int main(int argc, char **argv)
 {
-	int op, ret;
+	int op, ret, free_ret;
 
 	opts = INIT_OPTS;
 	opts.options = FT_OPT_SIZE | FT_OPT_RX_CNTR | FT_OPT_TX_CNTR;
@@ -122,6 +122,6 @@ int main(int argc, char **argv)
 
 	ret = run_test();
 
-	ft_free_res();
-	return ft_exit_code(ret);
+	free_ret = ft_free_res();
+	return ft_exit_code(ret, free_ret);
 }

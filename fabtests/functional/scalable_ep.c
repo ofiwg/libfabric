@@ -350,7 +350,7 @@ static int run(void)
 
 int main(int argc, char **argv)
 {
-	int ret, op;
+	int ret, op, free_ret;
 
 	opts = INIT_OPTS;
 	opts.options = FT_OPT_SIZE;
@@ -383,7 +383,10 @@ int main(int argc, char **argv)
 
 	free_res();
 	/* Closes the scalable ep that was allocated in the test */
-	FT_CLOSE_FID(sep);
-	ft_free_res();
-	return ft_exit_code(ret);
+	free_ret = ft_close_fid(&sep->fid);
+	if (free_ret)
+		return free_ret;
+
+	free_ret = ft_free_res();
+	return ft_exit_code(ret, free_ret);
 }

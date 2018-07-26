@@ -109,6 +109,7 @@ eq_write_read_self()
 	int testret;
 	int ret;
 	int i;
+	int free_ret;
 
 	testret = FAIL;
 
@@ -172,7 +173,8 @@ eq_write_read_self()
 	testret = PASS;
 
 fail:
-	FT_CLOSE_FID(eq);
+	free_ret = ft_close_fid(&eq->fid);
+	ret = ret ? ret : free_ret;
 	return TEST_RET_VAL(ret, testret);
 }
 
@@ -187,6 +189,7 @@ eq_size_verify()
 	int testret;
 	int ret;
 	int i;
+	int free_ret;
 
 	testret = FAIL;
 
@@ -210,7 +213,8 @@ eq_size_verify()
 	testret = PASS;
 
 fail:
-	FT_CLOSE_FID(eq);
+	free_ret = ft_close_fid(&eq->fid);
+	ret = ret ? ret : free_ret;
 	return TEST_RET_VAL(ret, testret);
 }
 
@@ -229,6 +233,7 @@ eq_wait_fd_poll()
 	struct fid *fids[1];
 	int testret;
 	int ret;
+	int free_ret;
 
 	testret = FAIL;
 
@@ -285,7 +290,8 @@ eq_wait_fd_poll()
 
 	testret = PASS;
 fail:
-	FT_CLOSE_FID(eq);
+	free_ret = ft_close_fid(&eq->fid);
+	ret = ret ? ret : free_ret;
 	return TEST_RET_VAL(ret, testret);
 }
 
@@ -367,6 +373,7 @@ static int eq_wait_read_peek(void)
 {
 	int testret;
 	int ret;
+	int free_ret;
 
 	testret = FAIL;
 
@@ -391,7 +398,8 @@ static int eq_wait_read_peek(void)
 
 	testret = PASS;
 fail:
-	FT_CLOSE_FID(eq);
+	free_ret = ft_close_fid(&eq->fid);
+	ret = ret ? ret : free_ret;
 	return TEST_RET_VAL(ret, testret);
 }
 
@@ -402,6 +410,7 @@ static int eq_wait_sread_peek(void)
 {
 	int testret;
 	int ret;
+	int free_ret;
 
 	testret = FAIL;
 
@@ -439,7 +448,8 @@ static int eq_wait_sread_peek(void)
 
 	testret = PASS;
 fail:
-	FT_CLOSE_FID(eq);
+	free_ret = ft_close_fid(&eq->fid);
+	ret = ret ? ret : free_ret;
 	return TEST_RET_VAL(ret, testret);
 }
 
@@ -456,6 +466,7 @@ eq_wait_fd_sread()
 	int64_t elapsed;
 	int testret;
 	int ret;
+	int free_ret;
 
 	testret = FAIL;
 
@@ -528,7 +539,8 @@ eq_wait_fd_sread()
 
 	testret = PASS;
 fail:
-	FT_CLOSE_FID(eq);
+	free_ret = ft_close_fid(&eq->fid);
+	ret = ret ? ret : free_ret;
 	return TEST_RET_VAL(ret, testret);
 }
 
@@ -567,7 +579,6 @@ eq_readerr_ret_eagain()
 				fi_eq_strerror(eq, err_entry.prov_errno, err_entry.err_data, NULL, 0));
 
 fail:
-	FT_CLOSE_FID(eq);
 	return TEST_RET_VAL(ret, testret);
 }
 
@@ -590,7 +601,7 @@ static void usage(void)
 
 int main(int argc, char **argv)
 {
-	int op, ret;
+	int op, ret, free_ret;
 	int failed;
 
 	hints = fi_allocinfo();
@@ -638,7 +649,8 @@ int main(int argc, char **argv)
 		printf("Summary: all tests passed\n");
 	}
 
+
 err:
-	ft_free_res();
-	return ret ? ft_exit_code(ret) : (failed > 0) ? EXIT_FAILURE : EXIT_SUCCESS;
+	free_ret = ft_free_res();
+	return ret ? ft_exit_code(ret, free_ret) : (failed > 0) ? EXIT_FAILURE : EXIT_SUCCESS;
 }

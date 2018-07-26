@@ -189,7 +189,7 @@ static int run(void)
 
 int main(int argc, char **argv)
 {
-	int op, ret;
+	int op, ret, free_ret;
 
 	opts = INIT_OPTS;
 	opts.options |= FT_OPT_SIZE;
@@ -223,9 +223,9 @@ int main(int argc, char **argv)
 
 	ret = run();
 
-	ft_free_res();
+	free_ret = ft_free_res();
 	close(epfd);
-	return ft_exit_code(ret);
+	return ft_exit_code(ret, free_ret);
 }
 
 #else
@@ -234,6 +234,6 @@ int main(int argc, char **argv)
 
 int main(int argc, char **argv)
 {
-	return ft_exit_code(FI_ENODATA);
+	return ft_exit_code(FI_ENODATA, 0);
 }
 #endif

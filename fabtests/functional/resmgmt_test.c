@@ -180,6 +180,7 @@ int main(int argc, char **argv)
 {
 	int op;
 	int ret = 0;
+	int free_ret;
 
 	opts = INIT_OPTS;
 	opts.tx_cq_size = max_opts;
@@ -267,6 +268,6 @@ int main(int argc, char **argv)
 
 	ret = run_test();
 
-	ft_free_res();
-	return ft_exit_code(ret);
+	free_ret = ft_free_res();
+	return ft_exit_code(ret, free_ret);
 }

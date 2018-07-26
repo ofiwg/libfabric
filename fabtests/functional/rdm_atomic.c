@@ -352,10 +352,15 @@ static int run_test(void)
 	return run_all_ops ? run_ops() : run_op();
 }
 
-static void free_res(void)
+static int free_res(void)
 {
-	FT_CLOSE_FID(mr_result);
-	FT_CLOSE_FID(mr_compare);
+	int ret;
+	ret = ft_close_fid(mr_result);
+	if (ret)
+		return ret;
+	ret = ft_close_fid(mr_compare);
+	if (ret)
+		return ret;
 	if (result) {
 		free(result);
 		result = NULL;
@@ -364,6 +369,7 @@ static void free_res(void)
 		free(compare);
 		compare = NULL;
 	}
+	return 0;
 }
 
 static uint64_t get_mr_key()
@@ -486,7 +492,7 @@ out:
 
 int main(int argc, char **argv)
 {
-	int op, ret;
+	int op, ret, free_ret;
 
 	opts = INIT_OPTS;
 
@@ -541,7 +547,8 @@ int main(int argc, char **argv)
 
 	ret = run();
 
-	free_res();
-	ft_free_res();
-	return ft_exit_code(ret);
+	free_ret = free_res();
+	if (!free_ret)
+		free_ret = ft_free_res();
+	return ft_exit_code(ret, free_ret);
 }

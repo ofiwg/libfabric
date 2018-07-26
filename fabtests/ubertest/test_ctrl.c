@@ -965,19 +965,35 @@ static int ft_run_unit(void)
 	return fail;
 }
 
-void ft_cleanup(void)
+int ft_cleanup(void)
 {
-	FT_CLOSE_FID(ft_rx_ctrl.mr);
-	FT_CLOSE_FID(ft_tx_ctrl.mr);
-	FT_CLOSE_FID(ft_mr_ctrl.mr);
-	FT_CLOSE_FID(ft_atom_ctrl.res_mr);
-	FT_CLOSE_FID(ft_atom_ctrl.comp_mr);
-	ft_free_res();
+	int ret;
+	ret = ft_close_fid(ft_rx_ctrl.mr);
+	if (ret)
+		return ret;
+	ret = ft_close_fid(ft_tx_ctrl.mr);
+	if (ret)
+		return ret;
+	ret = ft_close_fid(ft_mr_ctrl.mr);
+	if (ret)
+		return ret;
+	ret = ft_close_fid(ft_atom_ctrl.res_mr);
+	if (ret)
+		return ret;
+	ret = ft_close_fid(ft_atom_ctrl.comp_mr);
+	if (ret)
+		return ret;
+	if (ret)
+		return ret;
+	ret = ft_free_res();
+	if (ret)
+		return ret;
 	ft_cleanup_xcontrol(&ft_rx_ctrl);
 	ft_cleanup_xcontrol(&ft_tx_ctrl);
 	ft_cleanup_mr_control(&ft_mr_ctrl);
 	ft_cleanup_atomic_control(&ft_atom_ctrl);
 	memset(&ft_ctrl, 0, sizeof ft_ctrl);
+	return 0;
 }
 
 static int ft_exchange_mr_addr_key(void)
@@ -1080,7 +1096,7 @@ cleanup:
 
 int ft_run_test()
 {
-	int ret;
+	int ret, free_ret;
 
 	switch (test_info.test_type) {
 	case FT_TEST_UNIT:
@@ -1104,7 +1120,8 @@ int ft_run_test()
 	}
 
 	ft_sync_test(0);
-	ft_cleanup();
+	free_ret = ft_cleanup();
+	ret = ret ? ret : free_ret;
 
 	return ret ? ret : -ft_ctrl.error;
 }

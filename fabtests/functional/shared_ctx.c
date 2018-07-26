@@ -592,7 +592,7 @@ static int run(void)
 
 int main(int argc, char **argv)
 {
-	int op, ret;
+	int op, ret, free_ret = 0;
 	int option_index = 0;
 
 	struct option long_options[] = {
@@ -653,13 +653,19 @@ int main(int argc, char **argv)
 	ret = run();
 
 	FT_CLOSEV_FID(ep_array, ep_cnt);
-	if (rx_shared_ctx)
-		FT_CLOSE_FID(srx_ctx);
-	if (tx_shared_ctx)
-		FT_CLOSE_FID(stx_ctx);
-	ft_free_res();
+	if (rx_shared_ctx) {
+		free_ret = ft_close_fid(srx_ctx);
+		if (free_ret)
+			return free_ret;
+	}
+	if (tx_shared_ctx) {
+		free_ret = ft_close_fid(stx_ctx);
+		if (free_ret)
+			return free_ret;
+	}
+	free_ret = ft_free_res();
 	free(addr_array);
 	free(ep_array);
 	fi_freeinfo(fi_dup);
-	return ft_exit_code(ret);
+	return ft_exit_code(ret, free_ret);
 }

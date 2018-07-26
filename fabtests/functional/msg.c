@@ -59,7 +59,7 @@ static int run(void)
 
 int main(int argc, char **argv)
 {
-	int op, ret;
+	int op, ret, free_ret;
 
 	opts = INIT_OPTS;
 	opts.options |= FT_OPT_SIZE;
@@ -90,6 +90,6 @@ int main(int argc, char **argv)
 
 	ret = run();
 
-	ft_free_res();
-	return ft_exit_code(ret);
+	free_ret = ft_free_res();
+	return ft_exit_code(ret, free_ret);
 }

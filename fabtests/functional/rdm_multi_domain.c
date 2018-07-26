@@ -255,23 +255,38 @@ static int init_domain_res()
 	return 0;
 }
 
-static void free_domain_res()
+static int free_domain_res()
 {
-	int dom_idx;
+	int dom_idx, ret = 0;
 
 	for (dom_idx = 0; dom_idx < domain_cnt; dom_idx++) {
-		FT_CLOSE_FID(domain_res_array[dom_idx].ep);
-		FT_CLOSE_FID(domain_res_array[dom_idx].av);
-		FT_CLOSE_FID(domain_res_array[dom_idx].mr);
-		FT_CLOSE_FID(domain_res_array[dom_idx].tx_cntr);
-		FT_CLOSE_FID(domain_res_array[dom_idx].rx_cntr);
-		FT_CLOSE_FID(domain_res_array[dom_idx].tx_cq);
-		FT_CLOSE_FID(domain_res_array[dom_idx].dom);
+		ret = ft_close_fid(domain_res_array[dom_idx].ep);
+		if (ret)
+			return ret;
+		ret = ft_close_fid(domain_res_array[dom_idx].av);
+		if (ret)
+			return ret;
+		ret = ft_close_fid(domain_res_array[dom_idx].mr);
+		if (ret)
+			return ret;
+		ret = ft_close_fid(domain_res_array[dom_idx].tx_cntr);
+		if (ret)
+			return ret;
+		ret = ft_close_fid(domain_res_array[dom_idx].rx_cntr);
+		if (ret)
+			return ret;
+		ret = ft_close_fid(domain_res_array[dom_idx].tx_cq);
+		if (ret)
+			return ret;
+		ret = ft_close_fid(domain_res_array[dom_idx].dom);
+		if (ret)
+			return ret;
 		free(domain_res_array[dom_idx].rma_ctx);
 	}
 	free(peer_addrs);
 	free(mr_buf_array);
 	free(domain_res_array);
+	return 0;
 }
 
 static int write_data(void *buffer, size_t size, int dom_idx,
@@ -391,7 +406,7 @@ static int run_test(void)
 
 int main(int argc, char **argv)
 {
-	int op, ret;
+	int op, ret, free_ret = 0;
 
 	domain_cnt = 2;
 	opts = INIT_OPTS;
@@ -433,9 +448,14 @@ int main(int argc, char **argv)
 
 	ret = run_test();
 
-	if (domain_res_array)
-		free_domain_res();
-	ft_free_res();
+	if (domain_res_array) {
+		free_ret = free_domain_res();
+		if (free_ret)
+			goto out;
+	}
 
-	return ft_exit_code(ret);
+out:
+	if (!free_ret)
+		free_ret = ft_free_res();
+	return ft_exit_code(ret, free_ret);
 }

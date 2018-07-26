@@ -192,7 +192,7 @@ cq_signal()
 
 	testret = PASS;
 fail2:
-	FT_CLOSE_FID(cq);
+	return ft_close_fid(cq);
 fail1:
 	cq = NULL;
 	return TEST_RET_VAL(ret, testret);
@@ -213,7 +213,7 @@ static void usage(void)
 
 int main(int argc, char **argv)
 {
-	int op, ret;
+	int op, ret, free_ret;
 	int failed;
 
 	hints = fi_allocinfo();
@@ -256,6 +256,6 @@ int main(int argc, char **argv)
 	}
 
 err:
-	ft_free_res();
-	return ret ? ft_exit_code(ret) : (failed > 0) ? EXIT_FAILURE : EXIT_SUCCESS;
+	free_ret = ft_free_res();
+	return ret ? ft_exit_code(ret, free_ret) : (failed > 0) ? EXIT_FAILURE : EXIT_SUCCESS;
 }

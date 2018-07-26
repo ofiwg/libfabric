@@ -565,17 +565,23 @@ static int alloc_mr_res()
 	return 0;
 }
 
-static void free_mr_res()
+static int free_mr_res()
 {
-	FT_CLOSE_FID(mr_result);
-	FT_CLOSE_FID(mr_compare);
+	int ret;
+	ret = ft_close_fid(mr_result);
+	if (ret)
+		return ret;
+	ret = ft_close_fid(mr_compare);
+	if (ret)
+		return ret;
 	free(result_buf);
 	free(compare_buf);
+	return 0;
 }
 
 int main(int argc, char **argv)
 {
-	int op, ret;
+	int op, ret, free_ret;
 
 	opts = INIT_OPTS;
 	opts.options = FT_OPT_SIZE | FT_OPT_RX_CNTR | FT_OPT_TX_CNTR;
@@ -661,12 +667,14 @@ int main(int argc, char **argv)
 	if (ret)
 		return ret;
 
-	free_mr_res();
+	ret = free_mr_res();
+	if (ret)
+		return ret;
 
 	ret = fi_close(&test_cntr->fid);
 	if (ret)
 		FT_PRINTERR("fi_cntr_close", ret);
 
-	ft_free_res();
-	return ft_exit_code(ret);
+	free_ret = ft_free_res();
+	return ft_exit_code(ret, free_ret);
 }
