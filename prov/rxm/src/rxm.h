@@ -623,6 +623,10 @@ rxm_process_recv_entry(struct rxm_recv_queue *recv_queue,
 				rx_buf = rxm_check_unexp_msg_list(recv_queue, recv_entry->addr,
 								  recv_entry->tag, recv_entry->ignore);
 				if (rx_buf) {
+					/* Handle unordered completions from MSG provider */
+					if ((rx_buf->pkt.ctrl_hdr.msg_id != recv_entry->msg_id) ||
+					    (rx_buf->pkt.ctrl_hdr.type != ofi_ctrl_seg_data))
+						break;
 					assert(rx_buf->pkt.ctrl_hdr.type == ofi_ctrl_seg_data);
 					rx_buf->recv_entry = recv_entry;
 					dlist_remove(&rx_buf->unexp_msg.entry);
