@@ -488,6 +488,10 @@ static ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 		rx_buf->hdr.state = RXM_RX;
 		rx_buf->hdr.msg_ep = msg_ep;
 		rx_buf->repost = 1;
+		if (!rxm_ep->srx_ctx)
+			rx_buf->conn = container_of(msg_ep->fid.context,
+						    struct rxm_conn,
+						    handle);
 
 		fastlock_acquire(&rx_buf->ep->util_ep.lock);
 		dlist_insert_tail(&rx_buf->entry, &rxm_ep->post_rx_list);
