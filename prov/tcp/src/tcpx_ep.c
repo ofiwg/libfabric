@@ -688,12 +688,7 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 				goto err3;
 		}
 	} else {
-		if (info->src_addr)
-			af = ((const struct sockaddr *) info->src_addr)->sa_family;
-		else if (info->dest_addr)
-			af = ((const struct sockaddr *) info->dest_addr)->sa_family;
-		else
-			af = ofi_get_sa_family(info->addr_format);
+		af = ofi_get_sa_family(info);
 
 		ep->conn_fd = ofi_socket(af, SOCK_STREAM, 0);
 		if (ep->conn_fd == INVALID_SOCKET) {

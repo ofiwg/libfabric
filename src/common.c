@@ -217,6 +217,31 @@ uint64_t fi_gettime_us(void)
 	return now.tv_sec * 1000000 + now.tv_usec;
 }
 
+uint16_t ofi_get_sa_family(const struct fi_info *info)
+{
+	if (!info)
+		return 0;
+
+	switch (info->addr_format) {
+	case FI_SOCKADDR_IN:
+		return AF_INET;
+	case FI_SOCKADDR_IN6:
+		return AF_INET6;
+	case FI_SOCKADDR_IB:
+		return AF_IB;
+	case FI_SOCKADDR:
+	case FI_FORMAT_UNSPEC:
+		if (info->src_addr)
+			return ((struct sockaddr *) info->src_addr)->sa_family;
+
+		if (info->dest_addr)
+			return ((struct sockaddr *) info->dest_addr)->sa_family;
+		/* fall through */
+	default:
+		return 0;
+	}
+}
+
 const char *ofi_straddr(char *buf, size_t *len,
 			uint32_t addr_format, const void *addr)
 {
@@ -596,6 +621,36 @@ int ofi_is_only_src_port_set(const char *node, const char *service,
 	}
 out:
 	return ((flags & FI_SOURCE) && service) ? 1 : 0;
+}
+
+
+size_t ofi_mask_addr(struct sockaddr *maskaddr, const struct sockaddr *srcaddr,
+		     const struct sockaddr *netmask)
+{
+	size_t i, size, len = 0;
+	uint8_t *ip, *mask, bits;
+
+	memcpy(maskaddr, srcaddr, ofi_sizeofaddr(srcaddr));
+	size = ofi_sizeofip(srcaddr);
+	ip = ofi_get_ipaddr(maskaddr);
+	mask = ofi_get_ipaddr(netmask);
+
+	if (!size || !ip || !mask)
+		return 0;
+
+	for (i = 0; i < size; i++) {
+		ip[i] &= mask[i];
+
+		if (mask[i] == 0xff) {
+			len += 8;
+		} else {
+			for (bits = mask[i]; bits; bits >>= 1) {
+				if (bits & 0x1)
+					len++;
+			}
+		}
+	}
+	return len;
 }
 
 void ofi_straddr_log_internal(const char *func, int line,

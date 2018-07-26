@@ -42,8 +42,7 @@
 #include "ofi_osd.h"
 #include "ofi_file.h"
 #include "ofi_list.h"
-
-#include "prov/sockets/include/sock.h"
+#include "ofi_util.h"
 
 #include "rdma/providers/fi_log.h"
 
@@ -384,48 +383,6 @@ fn_complete:
 fn_nomem:
 	sent = -1;
 	goto fn_complete;
-}
-
-/* enumerate existing addresses */
-/* in case if GetIpAddrTable is not enough, try to use
-   GetAdaptersInfo or GetAdaptersAddresses */
-void sock_get_ip_addr_table(struct slist *addr_list)
-{
-	DWORD i;
-	MIB_IPADDRTABLE _iptbl;
-	MIB_IPADDRTABLE *iptbl = &_iptbl;
-	ULONG ips = 1;
-	ULONG res = GetIpAddrTable(iptbl, &ips, 0);
-	if (res == ERROR_INSUFFICIENT_BUFFER) {
-		iptbl = malloc(ips);
-		if (!iptbl)
-			goto failed_no_mem;
-		res = GetIpAddrTable(iptbl, &ips, 0);
-		if (res != NO_ERROR)
-			goto failed_get_addr;
-	}
-	else if (res != NO_ERROR) {
-		goto failed;
-	}
-
-	for (i = 0; i < iptbl->dwNumEntries; i++) {
-		if (iptbl->table[i].dwAddr && iptbl->table[i].dwAddr != ntohl(INADDR_LOOPBACK)) {
-			struct sock_host_list_entry *addr_entry;
-			addr_entry = calloc(1, sizeof(struct sock_host_list_entry));
-			inet_ntop(AF_INET, &iptbl->table[i].dwAddr, addr_entry->hostname, sizeof(addr_entry->hostname));
-			slist_insert_tail(&addr_entry->entry, addr_list);
-		}
-	}
-
-	if (iptbl != &_iptbl)
-		free(iptbl);
-	return;
-
-failed_get_addr:
-	free(iptbl);
-failed_no_mem:
-failed:
-	return;
 }
 
 int getifaddrs(struct ifaddrs **ifap)

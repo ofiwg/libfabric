@@ -104,7 +104,7 @@ out:
 
 }
 
-void ofi_getnodename(char *buf, int buflen)
+void ofi_getnodename(uint16_t sa_family, char *buf, int buflen)
 {
 	int ret;
 	struct addrinfo ai, *rai = NULL;
@@ -115,7 +115,7 @@ void ofi_getnodename(char *buf, int buflen)
 	buf[buflen - 1] = '\0';
 	if (ret == 0) {
 		memset(&ai, 0, sizeof(ai));
-		ai.ai_family = AF_INET;
+		ai.ai_family = sa_family  ? sa_family : AF_INET;
 		ret = getaddrinfo(buf, NULL, &ai, &rai);
 		if (!ret) {
 			freeaddrinfo(rai);
@@ -127,11 +127,18 @@ void ofi_getnodename(char *buf, int buflen)
 	ret = ofi_getifaddrs(&ifaddrs);
 	if (!ret) {
 		for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
-			if (ifa->ifa_addr == NULL || !(ifa->ifa_flags & IFF_UP) ||
-			     (ifa->ifa_addr->sa_family != AF_INET))
+			if (ifa->ifa_addr == NULL || !(ifa->ifa_flags & IFF_UP))
 				continue;
 
-			ret = getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in),
+			if (sa_family) {
+				if (ifa->ifa_addr->sa_family != sa_family)
+					continue;
+			} else if ((ifa->ifa_addr->sa_family != AF_INET) &&
+				   (ifa->ifa_addr->sa_family != AF_INET6)) {
+				continue;
+			}
+
+			ret = getnameinfo(ifa->ifa_addr, ofi_sizeofaddr(ifa->ifa_addr),
 				  	  buf, buflen, NULL, 0, NI_NUMERICHOST);
 			buf[buflen - 1] = '\0';
 			if (ret == 0) {
@@ -142,7 +149,7 @@ void ofi_getnodename(char *buf, int buflen)
 		freeifaddrs(ifaddrs);
 	}
 #endif
-	/* no reasonable address found, try loopback */
+	/* no reasonable address found, use ipv4 loopback */
 	strncpy(buf, "127.0.0.1", buflen);
 	buf[buflen - 1] = '\0';
 }

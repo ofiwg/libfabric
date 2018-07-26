@@ -660,22 +660,30 @@ static int udpx_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 static void udpx_bind_src_addr(struct udpx_ep *ep)
 {
 	int ret;
-	struct addrinfo ai, *rai = NULL;
+	struct addrinfo ai, *rai = NULL, *cur_ai;
 	char hostname[HOST_NAME_MAX];
 
 	memset(&ai, 0, sizeof(ai));
-	ai.ai_family = AF_INET;
 	ai.ai_socktype = SOCK_DGRAM;
 
-	ofi_getnodename(hostname, sizeof(hostname));
-	ret = getaddrinfo(hostname, NULL, &ai, &rai);
+	ret = gethostname(hostname, sizeof(hostname));
+	ret = getaddrinfo(ret ? "127.0.0.1" : hostname, NULL, &ai, &rai);
 	if (ret) {
 		FI_WARN(&udpx_prov, FI_LOG_EP_CTRL,
 			"getaddrinfo failed\n");
 		return;
 	}
 
-	ret = udpx_setname(&ep->util_ep.ep_fid.fid, rai->ai_addr, rai->ai_addrlen);
+	for (cur_ai = rai; cur_ai && cur_ai->ai_family != AF_INET;
+	     cur_ai = cur_ai->ai_next)
+		;
+
+	if (cur_ai) {
+		ret = udpx_setname(&ep->util_ep.ep_fid.fid, cur_ai->ai_addr,
+				   cur_ai->ai_addrlen);
+	} else {
+		ret = -FI_EADDRNOTAVAIL;
+	}
 	if (ret) {
 		FI_WARN(&udpx_prov, FI_LOG_EP_CTRL, "failed to set addr\n");
 	}
