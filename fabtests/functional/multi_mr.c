@@ -78,10 +78,10 @@ static int free_mr_res()
 		return 0;
 
 	for (i = 0; i < mr_count; i++) {
-		ret = ft_close_fid(mr_res_array[i].mr);
+		ret = ft_close_fid(&mr_res_array[i].mr->fid);
 		if (ret)
 			return ret;
-		ret = ft_close_fid(mr_res_array[i].rcntr);
+		ret = ft_close_fid(&mr_res_array[i].rcntr->fid);
 		if (ret)
 			return ret;
 	}

@@ -192,7 +192,7 @@ cq_signal()
 
 	testret = PASS;
 fail2:
-	return ft_close_fid(cq);
+	return ft_close_fid(&cq->fid);
 fail1:
 	cq = NULL;
 	return TEST_RET_VAL(ret, testret);

@@ -1351,7 +1351,11 @@ int ft_close_fid(struct fid *fid)
 		ret = fi_close(fid);
 		if (ret)
 			FT_ERR("fi_close: %s(%d) fid %d", fi_strerror(-ret), ret, (int) fid->fclass);
+<<<<<<< HEAD
 		fid = NULL;
+=======
+		// fid = NULL;
+>>>>>>> Change macro FT_CLOSE_FID to function
 	}
 	return ret;
 }

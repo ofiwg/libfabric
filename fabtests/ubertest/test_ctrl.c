@@ -968,19 +968,19 @@ static int ft_run_unit(void)
 int ft_cleanup(void)
 {
 	int ret;
-	ret = ft_close_fid(ft_rx_ctrl.mr);
+	ret = ft_close_fid(&ft_rx_ctrl.mr->fid);
 	if (ret)
 		return ret;
-	ret = ft_close_fid(ft_tx_ctrl.mr);
+	ret = ft_close_fid(&ft_tx_ctrl.mr->fid);
 	if (ret)
 		return ret;
-	ret = ft_close_fid(ft_mr_ctrl.mr);
+	ret = ft_close_fid(&ft_mr_ctrl.mr->fid);
 	if (ret)
 		return ret;
-	ret = ft_close_fid(ft_atom_ctrl.res_mr);
+	ret = ft_close_fid(&ft_atom_ctrl.res_mr->fid);
 	if (ret)
 		return ret;
-	ret = ft_close_fid(ft_atom_ctrl.comp_mr);
+	ret = ft_close_fid(&ft_atom_ctrl.comp_mr->fid);
 	if (ret)
 		return ret;
 	if (ret)

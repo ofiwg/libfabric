@@ -322,7 +322,11 @@ av_good_sync()
 
 	testret = PASS;
 fail:
+<<<<<<< HEAD
 	free_ret = ft_close_fid(av);
+=======
+	free_ret = ft_close_fid(&av->fid);
+>>>>>>> Change macro FT_CLOSE_FID to function
 	ret = ret ? ret : free_ret;
 	return TEST_RET_VAL(ret, testret);
 }
@@ -380,7 +384,11 @@ av_bad_sync()
 
 	testret = PASS;
 fail:
+<<<<<<< HEAD
 	free_ret = ft_close_fid(av);
+=======
+	free_ret = ft_close_fid(&av->fid);
+>>>>>>> Change macro FT_CLOSE_FID to function
 	ret = ret ? ret : free_ret;
 	return TEST_RET_VAL(ret, testret);
 }
@@ -453,7 +461,11 @@ av_goodbad_vector_sync()
 
 	testret = PASS;
 fail:
+<<<<<<< HEAD
 	free_ret = ft_close_fid(av);
+=======
+	free_ret = ft_close_fid(&av->fid);
+>>>>>>> Change macro FT_CLOSE_FID to function
 	ret = ret ? ret : free_ret;
 	return TEST_RET_VAL(ret, testret);
 }
@@ -529,7 +541,11 @@ av_good_vector_async()
 
 	testret = PASS;
 fail:
+<<<<<<< HEAD
 	free_ret = ft_close_fid(av);
+=======
+	free_ret = ft_close_fid(&av->fid);
+>>>>>>> Change macro FT_CLOSE_FID to function
 	ret = ret ? ret : free_ret;
 	return TEST_RET_VAL(ret, testret);
 }
@@ -583,7 +599,11 @@ av_zero_async()
 
 	testret = PASS;
 fail:
+<<<<<<< HEAD
 	free_ret = ft_close_fid(av);
+=======
+	free_ret = ft_close_fid(&av->fid);
+>>>>>>> Change macro FT_CLOSE_FID to function
 	ret = ret ? ret : free_ret;
 	return TEST_RET_VAL(ret, testret);
 }
@@ -693,7 +713,11 @@ av_good_2vector_async()
 
 	testret = PASS;
 fail:
+<<<<<<< HEAD
 	free_ret = ft_close_fid(av);
+=======
+	free_ret = ft_close_fid(&av->fid);
+>>>>>>> Change macro FT_CLOSE_FID to function
 	ret = ret ? ret : free_ret;
 	return TEST_RET_VAL(ret, testret);
 }
@@ -793,7 +817,7 @@ av_goodbad_vector_async()
 
 	testret = PASS;
 fail:
-	free_ret = ft_close_fid(av);
+	free_ret = ft_close_fid(&av->fid);
 	ret = ret ? ret : free_ret;
 	return TEST_RET_VAL(ret, testret);
 }

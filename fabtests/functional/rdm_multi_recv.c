@@ -178,7 +178,7 @@ out:
 static int free_res(void)
 {
 	int ret;
-	ret = ft_close_fid(mr_multi_recv);
+	ret = ft_close_fid(&mr_multi_recv->fid);
 	if (tx_buf) {
 		free(tx_buf);
 		tx_buf = NULL;

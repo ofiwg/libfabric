@@ -568,10 +568,10 @@ static int alloc_mr_res()
 static int free_mr_res()
 {
 	int ret;
-	ret = ft_close_fid(mr_result);
+	ret = ft_close_fid(&mr_result->fid);
 	if (ret)
 		return ret;
-	ret = ft_close_fid(mr_compare);
+	ret = ft_close_fid(&mr_compare->fid);
 	if (ret)
 		return ret;
 	free(result_buf);

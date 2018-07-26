@@ -216,26 +216,25 @@ static int server_accept(size_t paramlen)
 	if (ret)
 		goto err;
 
-
-	ret = ft_close_fid(ep);
+	ret = ft_close_fid(&ep->fid);
 	if (ret)
 		return ret;
-	ret = ft_close_fid(rxcq);
+	ret = ft_close_fid(&rxcq->fid);
 	if (ret)
 		return ret;
-	ret = ft_close_fid(txcq);
+	ret = ft_close_fid(&txcq->fid);
 	if (ret)
 		return ret;
-	ret = ft_close_fid(rxcntr);
+	ret = ft_close_fid(&rxcntr->fid);
 	if (ret)
 		return ret;
-	ret = ft_close_fid(txcntr);
+	ret = ft_close_fid(&txcntr->fid);
 	if (ret)
 		return ret;
-	ret = ft_close_fid(av);
+	ret = ft_close_fid(&av->fid);
 	if (ret)
 		return ret;
-	ret = ft_close_fid(domain);
+	ret = ft_close_fid(&domain->fid);
 	if (ret)
 		return ret;
 
@@ -270,7 +269,7 @@ static int client_open_new_ep()
 	size_t opt_size;
 	int ret;
 
-	ret = ft_close_fid(ep);
+	ret = ft_close_fid(&ep->fid);
 	if (ret)
 		return ret;
 

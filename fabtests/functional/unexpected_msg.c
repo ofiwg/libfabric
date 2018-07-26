@@ -94,10 +94,10 @@ static int alloc_bufs(void)
 static int free_bufs(void)
 {
 	int ret;
-	ret = ft_close_fid(tx_mr);
+	ret = ft_close_fid(&tx_mr->fid);
 	if (ret)
 		return ret;
-	ret = ft_close_fid(rx_mr);
+	ret = ft_close_fid(&rx_mr->fid);
 	if (ret)
 		return ret;
 	free(tx_bufs);

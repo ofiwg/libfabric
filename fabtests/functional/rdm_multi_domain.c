@@ -260,25 +260,25 @@ static int free_domain_res()
 	int dom_idx, ret = 0;
 
 	for (dom_idx = 0; dom_idx < domain_cnt; dom_idx++) {
-		ret = ft_close_fid(domain_res_array[dom_idx].ep);
+		ret = ft_close_fid(&domain_res_array[dom_idx].ep->fid);
 		if (ret)
 			return ret;
-		ret = ft_close_fid(domain_res_array[dom_idx].av);
+		ret = ft_close_fid(&domain_res_array[dom_idx].av->fid);
 		if (ret)
 			return ret;
-		ret = ft_close_fid(domain_res_array[dom_idx].mr);
+		ret = ft_close_fid(&domain_res_array[dom_idx].mr->fid);
 		if (ret)
 			return ret;
-		ret = ft_close_fid(domain_res_array[dom_idx].tx_cntr);
+		ret = ft_close_fid(&domain_res_array[dom_idx].tx_cntr->fid);
 		if (ret)
 			return ret;
-		ret = ft_close_fid(domain_res_array[dom_idx].rx_cntr);
+		ret = ft_close_fid(&domain_res_array[dom_idx].rx_cntr->fid);
 		if (ret)
 			return ret;
-		ret = ft_close_fid(domain_res_array[dom_idx].tx_cq);
+		ret = ft_close_fid(&domain_res_array[dom_idx].tx_cq->fid);
 		if (ret)
 			return ret;
-		ret = ft_close_fid(domain_res_array[dom_idx].dom);
+		ret = ft_close_fid(&domain_res_array[dom_idx].dom->fid);
 		if (ret)
 			return ret;
 		free(domain_res_array[dom_idx].rma_ctx);

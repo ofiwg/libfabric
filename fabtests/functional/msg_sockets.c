@@ -263,7 +263,7 @@ static int client_connect(void)
 
 	/* Close the passive endpoint that we "stole" the source address
 	 * from */
-	ret = ft_close_fid(pep);
+	ret = ft_close_fid(&pep->fid);
 	if (ret)
 		return ret;
 

@@ -88,7 +88,7 @@ static int free_ep_res()
 	int i, ret = 0;
 
 	for (i = 0; i < num_eps; i++) {
-		ret = ft_close_fid(eps[i]);
+		ret = ft_close_fid(&eps[i]->fid);
 		if (ret)
 			return ret;
 	}
