@@ -5,25 +5,25 @@
 static ssize_t rstream_check_for_rx_comp(struct rstream_ep *ep,
 	struct fi_cq_data_entry *completion_entry);
 
-static uint32_t rstream_cq_data_get_len(uint64_t cq_data)
+static uint32_t rstream_cq_data_get_len(uint32_t cq_data)
 {
 	return (cq_data & RSTREAM_MR_LEN_MASK);
 }
 
-static uint64_t rstream_cq_data_set(struct rstream_cq_data cq_data)
+static uint32_t rstream_cq_data_set(struct rstream_cq_data cq_data)
 {
-	uint64_t bcredits = cq_data.num_completions;
+	uint32_t credits = cq_data.num_completions;
 
 	assert(cq_data.num_completions < RSTREAM_CREDITS_MAX);
 	assert(cq_data.total_len < RSTREAM_MR_MAX);
 
-	bcredits = bcredits << RSTREAM_CREDIT_OFFSET;
-	return bcredits | cq_data.total_len;
+	credits = credits << RSTREAM_CREDIT_OFFSET;
+	return credits | cq_data.total_len;
 }
 
-static uint16_t rstream_cq_data_get_credits(uint64_t cq_data)
+static uint16_t rstream_cq_data_get_credits(uint32_t cq_data)
 {
-	uint64_t credits = cq_data & RSTREAM_CREDIT_MASK;
+	uint32_t credits = cq_data & RSTREAM_CREDIT_MASK;
 
 	credits = (credits >> RSTREAM_CREDIT_OFFSET);
 	assert(credits < RSTREAM_CREDITS_MAX);
@@ -31,21 +31,24 @@ static uint16_t rstream_cq_data_get_credits(uint64_t cq_data)
 	return credits;
 }
 
-static uint64_t rstream_cq_data_set_msg_len(uint64_t cq_data, uint32_t msg_len)
-{
-	uint64_t bmsg_len = msg_len;
-
-	assert(msg_len < RSTREAM_IWARP_IMM_MSG_LEN);
-	bmsg_len = bmsg_len << RSTREAM_IWARP_IMM_MR_OFFSET;
-
-	return cq_data | bmsg_len;
+static uint32_t rstream_iwarp_cq_data_is_msg(uint32_t cq_data) {
+	return cq_data & RSTREAM_IWARP_MSG_BIT;
 }
 
-static uint32_t rstream_cq_data_get_msg_len(uint64_t cq_data)
-{
-	uint64_t msg_len = cq_data & RSTREAM_IWARP_IMM_MR_MASK;
 
-	msg_len = (msg_len >> RSTREAM_IWARP_IMM_MR_OFFSET);
+static uint32_t rstream_iwarp_cq_data_set_msg_len(uint32_t msg_len)
+{
+	assert(msg_len < RSTREAM_IWARP_IMM_MSG_LEN);
+
+	uint32_t cq_data = msg_len;
+
+	return cq_data | RSTREAM_IWARP_MSG_BIT;
+}
+
+static uint32_t rstream_iwarp_cq_data_get_msg_len(uint32_t cq_data)
+{
+	uint32_t msg_len = cq_data & RSTREAM_IWARP_MSG_BIT_MASK;
+
 	assert(msg_len < RSTREAM_IWARP_IMM_MSG_LEN);
 
 	return msg_len;
@@ -257,7 +260,7 @@ static void rstream_free_contig_len(struct rstream_mr_seg *mr, uint32_t len)
 	mr->end_offset = (mr->end_offset + len) % mr->size;
 }
 
-static ssize_t rstream_send_ctrl_msg(struct rstream_ep *ep, uint64_t cq_data)
+static ssize_t rstream_send_ctrl_msg(struct rstream_ep *ep, uint32_t cq_data)
 {
 	ssize_t ret = 0;
 	struct fi_msg msg;
@@ -307,7 +310,7 @@ static ssize_t rstream_send_ctrl_msg(struct rstream_ep *ep, uint64_t cq_data)
 static ssize_t rstream_update_target(struct rstream_ep *ep,
 	uint16_t num_completions, uint32_t len)
 {
-	uint64_t cq_data;
+	uint32_t cq_data;
 	ssize_t ret = 0;
 
 	ep->cq_data.num_completions =
@@ -363,14 +366,18 @@ ssize_t rstream_process_rx_cq_data(struct rstream_ep *ep,
 static void format_iwarp_cq_data(struct rstream_ep *ep,
 	struct fi_cq_data_entry *cq_entry)
 {
-	uint64_t cq_data;
-	uint32_t msg_len_recv = 0;
+	uint32_t cq_data;
 
 	cq_entry->buf = rstream_get_next_recv_buffer(ep);
-	cq_data = *((uint64_t *)cq_entry->buf);
-	msg_len_recv = rstream_cq_data_get_msg_len(cq_data);
-	cq_entry->data = (msg_len_recv) ? 0 : cq_data;
-	cq_entry->len = msg_len_recv;
+	cq_data = *((uint32_t *)cq_entry->buf);
+
+	if(rstream_iwarp_cq_data_is_msg(cq_data)) {
+		cq_entry->data = 0;
+		cq_entry->len = rstream_iwarp_cq_data_get_msg_len(cq_data);
+	} else {
+		cq_entry->data = cq_data;
+		cq_entry->len = 0;
+	}
 }
 
 static enum rstream_msg_type rstream_cqe_msg_type(struct rstream_ep *ep,
@@ -469,7 +476,7 @@ static ssize_t rstream_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 {
 	struct rstream_ep *ep = container_of(ep_fid, struct rstream_ep,
 		util_ep.ep_fid);
-	uint64_t cq_data = 0;
+	uint32_t cq_data = 0;
 	ssize_t ret;
 	char *tx_addr = NULL;
 	char *remote_addr = NULL;
@@ -500,7 +507,7 @@ static ssize_t rstream_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 				ep->local_mr.ldesc, 0, (uint64_t)remote_addr,
 				ep->remote_data.rkey, rstream_get_tx_ctx(ep));
 			ret = rstream_send_ctrl_msg(ep,
-				rstream_cq_data_set_msg_len(cq_data, curr_avail_len));
+				rstream_iwarp_cq_data_set_msg_len(curr_avail_len));
 		} else {
 			ret = fi_writedata(ep->ep_fd, tx_addr, curr_avail_len,
 				ep->local_mr.ldesc, cq_data, 0, (uint64_t)remote_addr,

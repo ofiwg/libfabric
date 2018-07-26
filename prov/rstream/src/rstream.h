@@ -35,10 +35,11 @@
 
 /*iWARP, have to also track msg len [msglen, target_credits, target_mr_len]*/
 #define RSTREAM_USING_IWARP (rstream_info.ep_attr->protocol == FI_PROTO_IWARP)
-#define RSTREAM_IWARP_DATA_SIZE sizeof(uint64_t)
-#define RSTREAM_IWARP_IMM_MR_OFFSET (RSTREAM_CREDIT_OFFSET + RSTREAM_CREDIT_BITS)
+#define RSTREAM_IWARP_DATA_SIZE sizeof(uint32_t)
+
+#define RSTREAM_IWARP_MSG_BIT (1ULL << 31)
+#define RSTREAM_IWARP_MSG_BIT_MASK (RSTREAM_IWARP_MSG_BIT - 1)
 #define RSTREAM_IWARP_IMM_MSG_LEN (1ULL << RSTREAM_MAX_MR_BITS) /* max transmission size */
-#define RSTREAM_IWARP_IMM_MR_MASK (RSTREAM_IWARP_IMM_MSG_LEN - 1) << RSTREAM_IWARP_IMM_MR_OFFSET
 
 extern struct fi_info rstream_info;
 extern struct fi_provider rstream_prov;
