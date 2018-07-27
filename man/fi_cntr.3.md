@@ -258,8 +258,15 @@ counter values (e.g. fi_cntr_set or fi_cntr_add) may not be immediately
 visible to counter read operations (i.e. fi_cntr_read or fi_cntr_readerr).
 A small, but undefined, delay may occur between the counter changing and
 the reported value being updated.  However, a final updated value will
-eventually be reflected in the read counter value, with the order of the
-updates maintained.
+eventually be reflected in the read counter value.
+
+Additionally, applications should ensure that the value of a counter is
+stable and not subject to change prior to calling fi_cntr_set
+or fi_cntr_seterr.  Otherwise, the resulting value of the counter after
+fi_cntr_set / fi_cntr_seterr is undefined, as updates to the counter may
+be lost.  A counter value is considered stable if all previous
+updates using fi_cntr_set / fi_cntr_seterr and results of related operations
+are reflected in the observed value of the counter.
 
 # SEE ALSO
 

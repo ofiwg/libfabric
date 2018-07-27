@@ -353,23 +353,26 @@ be the same as the count parameter.
 
 Returned source addressing data is converted from the native address
 used by the underlying fabric into an fi_addr_t, which may be used in
-transmit operations.  Typically, returning fi_addr_t requires that
-the source address be inserted into the address vector associated with the
-receiving endpoint.  For endpoints allocated using the FI_SOURCE_ERR
-capability, if the source address has not been inserted into the
-address vector, fi_cq_readfrom will return -FI_EAVAIL.  The
-completion will then be reported through fi_cq_readerr with error
-code -FI_EADDRNOTAVAIL.  See fi_cq_readerr for details.
+transmit operations.  Under most circumstances, returning fi_addr_t
+requires that the source address already have been inserted into the
+address vector associated with the receiving endpoint.  This is true for
+address vectors of type FI_AV_TABLE.  In select providers when FI_AV_MAP is
+used, source addresses may be converted algorithmically into a
+usable fi_addr_t, even though the source address has not been inserted
+into the address vector.  This is permitted by the API, as it allows
+the provider to avoid address look-up as part of receive message processing.
+In no case do providers insert addresses into an AV separate from an
+application calling fi_av_insert or similar call.
+
+For endpoints allocated using the FI_SOURCE_ERR capability, if the
+source address cannot be converted into a valid fi_addr_t value,
+fi_cq_readfrom will return -FI_EAVAIL, even if the data were received
+successfully.  The completion will then be reported through fi_cq_readerr
+with error code -FI_EADDRNOTAVAIL.  See fi_cq_readerr for details.
 
 If FI_SOURCE is specified without FI_SOURCE_ERR, source addresses
-which cannot be mapped to a local fi_addr_t will be reported as
-FI_ADDR_NOTAVAIL.  The behavior is dependent on the type of address
-vector in use.  For AVs of type FI_AV_MAP, source addresses may be
-mapped directly to an fi_addr_t value, even if the source address
-were not inserted into the AV.  This allows the provider to optimize
-the reporting of the source fi_addr_t without the overhead of
-verifying whether the address is in the AV.  If full address
-validation is necessary, FI_SOURCE_ERR must be used.
+which cannot be mapped to a usable fi_addr_t will be reported as
+FI_ADDR_NOTAVAIL.
 
 ## fi_cq_sread / fi_cq_sreadfrom
 
@@ -419,7 +422,7 @@ Notable completion error codes are given below.
 
 *FI_EADDRNOTAVAIL*
 : This error code is used by CQs configured with FI_SOURCE_ERR to report
-  completions for which a matching fi_addr_t source address could not
+  completions for which a usable fi_addr_t source address could not
   be found.  An error code of FI_EADDRNOTAVAIL indicates that the data
   transfer was successfully received and processed, with the
   fi_cq_err_entry fields containing information about the completion.
