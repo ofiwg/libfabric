@@ -427,8 +427,28 @@ struct cxix_mr {
 	struct cxi_domain *domain;
 	uint64_t key;
 	uint64_t flags;
+	struct fi_mr_attr attr;
 	struct cxi_cntr *cntr;
 	struct cxi_cq *cq;
+
+	/*
+	 * A standard MR is implemented as a single persistent, non-matching
+	 * list entry (LE) on the PtlTE mapped to the logical endpoint
+	 * addressed with the four-tuple:
+	 *
+	 *    ( if_dom->dev_if->if_nic, if_dom->pid, vni, pid_idx )
+	 */
+	struct cxix_if_domain *if_dom;
+	uint32_t vni;
+	uint32_t pid_off;
+
+	struct cxil_pte *pte;
+	unsigned int pte_hw_id;
+	struct cxil_pte_map *pte_map;
+
+	void *buf;
+	uint64_t len;
+	struct cxi_iova md;
 };
 
 struct cxi_av_table_hdr {
