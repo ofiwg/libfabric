@@ -485,6 +485,10 @@ rxm_cq_match_rx_buf(struct rxm_rx_buf *rx_buf,
 		rx_buf->hdr.state = RXM_RX;
 		rx_buf->hdr.msg_ep = msg_ep;
 		rx_buf->repost = 1;
+		if (!rxm_ep->srx_ctx)
+			rx_buf->conn = container_of(msg_ep->fid.context,
+						    struct rxm_conn,
+						    handle);
 
 		rxm_enqueue_rx_buf_for_repost(rx_buf);
 		return 0;
