@@ -34,14 +34,6 @@
 
 #include "mrail.h"
 
-#define MRAIL_DEFINE_GET_RAIL(txrx_rail)					\
-static inline size_t mrail_get_ ## txrx_rail(struct mrail_ep *mrail_ep)		\
-{										\
-	return (ofi_atomic_inc32(&mrail_ep->txrx_rail) - 1) % mrail_ep->num_eps;\
-}
-
-MRAIL_DEFINE_GET_RAIL(tx_rail)
-
 #define MRAIL_HDR_INITIALIZER(op_type, tag_val)		\
 {							\
 	.version 	= MRAIL_HDR_VERSION,		\
@@ -540,6 +532,7 @@ static int mrail_ep_close(fid_t fid)
 	int ret, retv = 0;
 	size_t i;
 
+	util_buf_pool_destroy(mrail_ep->req_pool);
 	mrail_recv_fs_free(mrail_ep->recv_fs);
 
 	for (i = 0; i < mrail_ep->num_eps; i++) {
@@ -719,18 +712,12 @@ struct fi_ops_tagged mrail_ops_tagged = {
 	.injectdata = mrail_tinjectdata,
 };
 
-struct fi_ops_rma mrail_ops_rma = {
-	.size = sizeof (struct fi_ops_rma),
-	.read = fi_no_rma_read,
-	.readv = fi_no_rma_readv,
-	.readmsg = fi_no_rma_readmsg,
-	.write = fi_no_rma_write,
-	.writev = fi_no_rma_writev,
-	.writemsg = fi_no_rma_writemsg,
-	.inject = fi_no_rma_inject,
-	.writedata = fi_no_rma_writedata,
-	.injectdata = fi_no_rma_injectdata,
-};
+void mrail_ep_progress(struct util_ep *ep)
+{
+	struct mrail_ep *mrail_ep;
+	mrail_ep = container_of(ep, struct mrail_ep, util_ep);
+	mrail_progress_deferred_reqs(mrail_ep);
+}
 
 int mrail_ep_open(struct fid_domain *domain_fid, struct fi_info *info,
 		  struct fid_ep **ep_fid, void *context)
@@ -741,6 +728,7 @@ int mrail_ep_open(struct fid_domain *domain_fid, struct fi_info *info,
 	struct mrail_ep *mrail_ep;
 	struct fi_info *fi;
 	size_t i, rxq_total_size;
+	size_t buf_size;
 	int ret;
 
 	if (strcmp(mrail_domain->info->domain_attr->name,
@@ -762,10 +750,9 @@ int mrail_ep_open(struct fid_domain *domain_fid, struct fi_info *info,
 	mrail_ep->num_eps = mrail_domain->num_domains;
 
 	ret = ofi_endpoint_init(domain_fid, &mrail_util_prov, info, &mrail_ep->util_ep,
-				context, NULL);
+				context, &mrail_ep_progress);
 	if (ret) {
-		free(mrail_ep);
-		return ret;
+		goto free_ep;
 	}
 
 	mrail_ep->rails = calloc(mrail_ep->num_eps, sizeof(*mrail_ep->rails));
@@ -795,6 +782,18 @@ int mrail_ep_open(struct fid_domain *domain_fid, struct fi_info *info,
 		goto err;
 	}
 
+	buf_size = sizeof(struct mrail_req) +
+		(mrail_ep->num_eps * sizeof(struct mrail_subreq));
+
+	ret = util_buf_pool_create(&mrail_ep->req_pool, buf_size,
+			sizeof(void *), 0, 64);
+	if (ret) {
+		ret = -FI_ENOMEM;
+		goto err;
+	}
+
+	slist_init(&mrail_ep->deferred_reqs);
+
 	if (mrail_ep->info->caps & FI_DIRECTED_RECV) {
 		mrail_recv_queue_init(&mrail_prov, &mrail_ep->recv_queue,
 				      mrail_match_recv_addr,
@@ -818,6 +817,14 @@ int mrail_ep_open(struct fid_domain *domain_fid, struct fi_info *info,
 	ofi_atomic_initialize32(&mrail_ep->tx_rail, 0);
 	ofi_atomic_initialize32(&mrail_ep->rx_rail, 0);
 
+	if (mrail_domain->util_domain.threading != FI_THREAD_SAFE) {
+		mrail_ep->lock_acquire = ofi_fastlock_acquire_noop;
+		mrail_ep->lock_release = ofi_fastlock_release_noop;
+	} else {
+		mrail_ep->lock_acquire = ofi_fastlock_acquire;
+		mrail_ep->lock_release = ofi_fastlock_release;
+	}
+
 	*ep_fid = &mrail_ep->util_ep.ep_fid;
 	(*ep_fid)->fid.ops = &mrail_ep_fi_ops;
 	(*ep_fid)->ops = &mrail_ops_ep;
@@ -829,5 +836,7 @@ int mrail_ep_open(struct fid_domain *domain_fid, struct fi_info *info,
 	return 0;
 err:
 	mrail_ep_close(&mrail_ep->util_ep.ep_fid.fid);
+free_ep:
+	free(mrail_ep);
 	return ret;
 }
