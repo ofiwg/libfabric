@@ -177,7 +177,7 @@ static void cxit_init(void)
 	int ret;
 
 	/* Force provider init */
-	ret = fi_getinfo(FI_VERSION(-1, -1),
+	ret = fi_getinfo(FI_VERSION(-1U, -1U),
 			 NULL, NULL, 0, NULL,
 			 NULL);
 	cr_assert(ret == -FI_ENOSYS);
@@ -255,6 +255,9 @@ void cxit_setup_rma(void)
 	cxit_tx_cq_attr.format = FI_CQ_FORMAT_TAGGED;
 	cxit_av_attr.type = FI_AV_TABLE;
 
+	cxit_fi_hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
+	cxit_fi_hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
+
 	cxit_setup_ep();
 
 	/* Set up RMA objects */
@@ -267,6 +270,9 @@ void cxit_setup_rma(void)
 	/* Insert local address into AV to prepare to send to self */
 	ret = fi_av_insert(cxit_av, cxit_fi->src_addr, 1, NULL, 0, NULL);
 	cr_assert(ret == 1);
+
+	ret = fi_enable(cxit_ep);
+	cr_assert(ret == FI_SUCCESS);
 }
 
 void cxit_teardown_rma(void)
