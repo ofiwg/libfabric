@@ -102,11 +102,11 @@ err:
 
 static void fi_ibv_init_wrs(struct fi_ibv_ep *ep)
 {
-	ep->inject_wr.wr_id = VERBS_INJECT_FLAG;
-	ep->inject_wr.opcode = IBV_WR_SEND;
-	ep->inject_wr.send_flags = IBV_SEND_INLINE;
-	ep->inject_wr.sg_list = &ep->sge;
-	ep->inject_wr.num_sge = 1;
+	ep->msg_wr.wr_id = VERBS_INJECT_FLAG;
+	ep->msg_wr.opcode = IBV_WR_SEND;
+	ep->msg_wr.send_flags = IBV_SEND_INLINE;
+	ep->msg_wr.sg_list = &ep->sge;
+	ep->msg_wr.num_sge = 1;
 }
 
 static void fi_ibv_free_ep(struct fi_ibv_ep *ep)

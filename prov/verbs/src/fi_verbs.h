@@ -489,7 +489,7 @@ struct fi_ibv_ep {
 	/* TODO: it would be removed */
 	struct fi_ibv_dgram_buf_pool	grh_pool;
 
-	struct ibv_send_wr	inject_wr;
+	struct ibv_send_wr	msg_wr;
 	struct ibv_sge		sge;
 };
 
