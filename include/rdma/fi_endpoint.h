@@ -61,6 +61,10 @@ enum {
 	FI_OPT_MIN_MULTI_RECV,		/* size_t */
 	FI_OPT_CM_DATA_SIZE,		/* size_t */
 	FI_OPT_BUFFERED_LIMIT,		/* size_t */
+	FI_OPT_SEND_BUF_SIZE,
+	FI_OPT_RECV_BUF_SIZE,
+	FI_OPT_TX_SIZE,
+	FI_OPT_RX_SIZE,
 };
 
 struct fi_ops_ep {

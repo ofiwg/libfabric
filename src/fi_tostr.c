@@ -256,6 +256,7 @@ static void fi_tostr_protocol(char *buf, uint32_t protocol)
 	CASEENUMSTR(FI_PROTO_MLX);
 	CASEENUMSTR(FI_PROTO_NETWORKDIRECT);
 	CASEENUMSTR(FI_PROTO_SHM);
+	CASEENUMSTR(FI_PROTO_RSTREAM);
 	default:
 		if (protocol & FI_PROV_SPECIFIC)
 			strcatf(buf, "Provider specific");
