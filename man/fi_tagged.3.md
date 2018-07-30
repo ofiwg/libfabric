@@ -268,6 +268,11 @@ and/or fi_tsendmsg.
   generated until the operation has been successfully transmitted and
   is no longer being tracked by the provider.
 
+*FI_MATCH_COMPLETE*
+: Applies to fi_tsendmsg.  Indicates that a completion should be generated
+  only after the message has either been matched with a tagged
+  buffer or was discarded by the target application.
+
 *FI_FENCE*
 : Applies to transmits.  Indicates that the requested operation, also
   known as the fenced operation, and any operation posted after the
