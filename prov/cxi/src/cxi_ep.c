@@ -788,15 +788,29 @@ struct fi_ops cxi_ep_fi_ops = {
 int cxi_ep_enable(struct fid_ep *ep)
 {
 	size_t i;
+	int ret;
 	struct cxi_ep *cxi_ep;
 	struct cxi_tx_ctx *tx_ctx;
 	struct cxi_rx_ctx *rx_ctx;
 
 	cxi_ep = container_of(ep, struct cxi_ep, ep);
+
+	ret = cxix_domain_enable(cxi_ep->attr->domain);
+	if (ret != FI_SUCCESS) {
+		CXI_LOG_DBG("cxix_domain_enable returned: %d\n", ret);
+		return ret;
+	}
+
 	for (i = 0; i < cxi_ep->attr->ep_attr.tx_ctx_cnt; i++) {
 		tx_ctx = cxi_ep->attr->tx_array[i];
 		if (tx_ctx) {
-			tx_ctx->enabled = 1;
+			ret = cxix_tx_ctx_enable(tx_ctx);
+			if (ret != FI_SUCCESS) {
+				CXI_LOG_DBG("cxix_tx_ctx_enable returned: %d\n",
+					    ret);
+				return ret;
+			}
+
 			if (tx_ctx->use_shared) {
 				if (tx_ctx->stx_ctx) {
 					tx_ctx->stx_ctx->enabled = 1;

@@ -229,6 +229,7 @@ struct cxi_eq {
 
 struct cxi_req {
 	uint8_t type;
+	int req_id;
 
 	uint64_t flags;
 	uint64_t context;
@@ -237,6 +238,8 @@ struct cxi_req {
 	uint64_t tag;
 	uint64_t buf;
 	uint64_t data_len;
+
+	struct cxi_cq *cq;
 };
 
 struct cxi_cq;
@@ -273,6 +276,12 @@ struct cxi_cq {
 	struct dlist_entry tx_list;
 
 	cxi_cq_report_fn report_completion;
+
+	int enabled;
+	struct cxi_evtq *evtq;
+	fastlock_t req_lock;
+	struct util_buf_pool *req_pool;
+	struct indexer req_table;
 };
 
 struct cxi_cntr {
@@ -346,7 +355,6 @@ struct cxi_tx_ctx {
 	uint8_t progress;
 
 	int use_shared;
-	uint64_t addr;
 	struct cxi_comp comp;
 	struct cxi_tx_ctx *stx_ctx;
 
@@ -359,6 +367,8 @@ struct cxi_tx_ctx {
 	fastlock_t lock;
 
 	struct fi_tx_attr attr;
+
+	struct cxi_cmdq *tx_cmdq;
 };
 
 struct cxi_ep_attr {
@@ -374,14 +384,17 @@ struct cxi_ep_attr {
 	struct cxi_av *av;
 	struct cxi_domain *domain;
 
+	/* TX/RX context pointers for standard EPs. */
 	struct cxi_rx_ctx *rx_ctx;
 	struct cxi_tx_ctx *tx_ctx;
 
+	/* TX/RX contexts.  Standard EPs have 1 of each.  SEPs have many. */
 	struct cxi_rx_ctx **rx_array;
 	struct cxi_tx_ctx **tx_array;
 	ofi_atomic32_t num_rx_ctx;
 	ofi_atomic32_t num_tx_ctx;
 
+	/* List of contexts associated with the EP.  Necessary? */
 	struct dlist_entry rx_ctx_entry;
 	struct dlist_entry tx_ctx_entry;
 
@@ -480,9 +493,6 @@ struct cxi_fabric *cxi_fab_list_head(void);
 int cxi_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		struct fid_av **av, void *context);
 
-int cxi_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
-		struct fid_cq **cq, void *context);
-
 struct fi_info *cxi_fi_info(uint32_t version, enum fi_ep_type ep_type,
 			    const struct fi_info *hints, void *src_addr,
 			    void *dest_addr);
@@ -522,16 +532,20 @@ struct cxi_rx_ctx *cxi_rx_ctx_alloc(const struct fi_rx_attr *attr,
 				    void *context, int use_shared);
 void cxi_rx_ctx_free(struct cxi_rx_ctx *rx_ctx);
 
+int cxix_tx_ctx_enable(struct cxi_tx_ctx *txc);
 struct cxi_tx_ctx *cxi_tx_ctx_alloc(const struct fi_tx_attr *attr,
 				    void *context, int use_shared);
 struct cxi_tx_ctx *cxi_stx_ctx_alloc(const struct fi_tx_attr *attr, void *context);
 void cxi_tx_ctx_free(struct cxi_tx_ctx *tx_ctx);
 
+struct cxi_req *cxix_cq_req_alloc(struct cxi_cq *cq, int remap);
+void cxix_cq_req_free(struct cxi_req *req);
 void cxi_cq_add_tx_ctx(struct cxi_cq *cq, struct cxi_tx_ctx *tx_ctx);
 void cxi_cq_remove_tx_ctx(struct cxi_cq *cq, struct cxi_tx_ctx *tx_ctx);
 void cxi_cq_add_rx_ctx(struct cxi_cq *cq, struct cxi_rx_ctx *rx_ctx);
 void cxi_cq_remove_rx_ctx(struct cxi_cq *cq, struct cxi_rx_ctx *rx_ctx);
 int cxi_cq_progress(struct cxi_cq *cq);
+int cxix_cq_enable(struct cxi_cq *cxi_cq);
 int cxi_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		struct fid_cq **cq, void *context);
 int cxi_cq_report_error(struct cxi_cq *cq, struct cxi_req *req,

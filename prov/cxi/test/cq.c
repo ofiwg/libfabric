@@ -32,7 +32,6 @@ static void req_populate(struct cxi_req *req, fi_addr_t *addr)
 	*addr = 0xabcd0;
 	req->flags = FI_SEND;
 	req->context = 0xabcd2;
-	req->addr = 0xabcd3;
 	req->data = 0xabcd4;
 	req->tag = 0xabcd5;
 	req->buf = 0xabcd6;

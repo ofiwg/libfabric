@@ -43,6 +43,56 @@ void cxi_rx_ctx_free(struct cxi_rx_ctx *rx_ctx)
 	free(rx_ctx);
 }
 
+int cxix_tx_ctx_enable(struct cxi_tx_ctx *txc)
+{
+	int ret = FI_SUCCESS;
+
+	fastlock_acquire(&txc->lock);
+
+	if (txc->enabled)
+		goto unlock;
+
+	if (txc->comp.send_cq) {
+		ret = cxix_cq_enable(txc->comp.send_cq);
+		if (ret != FI_SUCCESS) {
+			CXI_LOG_DBG("cxix_cq_enable returned: %d\n", ret);
+			goto unlock;
+		}
+	}
+
+	ret = cxil_alloc_cmdq(txc->domain->dev_if->if_lni, 64, 1,
+			      &txc->tx_cmdq);
+	if (ret != FI_SUCCESS) {
+		CXI_LOG_DBG("Unable to allocate TX CMDQ, ret: %d\n", ret);
+		ret = -FI_EDOMAIN;
+		goto unlock;
+	}
+
+	txc->enabled = 1;
+	fastlock_release(&txc->lock);
+
+	return FI_SUCCESS;
+
+unlock:
+	fastlock_release(&txc->lock);
+
+	return ret;
+}
+
+static void cxix_tx_ctx_disable(struct cxi_tx_ctx *txc)
+{
+	fastlock_acquire(&txc->lock);
+
+	if (!txc->enabled)
+		goto unlock;
+
+	cxil_destroy_cmdq(txc->tx_cmdq);
+
+	txc->enabled = 0;
+unlock:
+	fastlock_release(&txc->lock);
+}
+
 static struct cxi_tx_ctx *cxi_tx_context_alloc(const struct fi_tx_attr *attr,
 					       void *context, int use_shared,
 					       size_t fclass)
@@ -83,7 +133,6 @@ err:
 	return NULL;
 }
 
-
 struct cxi_tx_ctx *cxi_tx_ctx_alloc(const struct fi_tx_attr *attr,
 				    void *context, int use_shared)
 {
@@ -98,6 +147,7 @@ struct cxi_tx_ctx *cxi_stx_ctx_alloc(const struct fi_tx_attr *attr,
 
 void cxi_tx_ctx_free(struct cxi_tx_ctx *tx_ctx)
 {
+	cxix_tx_ctx_disable(tx_ctx);
 	fastlock_destroy(&tx_ctx->lock);
 	free(tx_ctx);
 }

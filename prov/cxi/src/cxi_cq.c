@@ -25,6 +25,66 @@
 #define CXI_LOG_DBG(...) _CXI_LOG_DBG(FI_LOG_CQ, __VA_ARGS__)
 #define CXI_LOG_ERROR(...) _CXI_LOG_ERROR(FI_LOG_CQ, __VA_ARGS__)
 
+static struct cxi_req *cxix_cq_req_find(struct cxi_cq *cq, int id)
+{
+	return ofi_idx_at(&cq->req_table, id);
+}
+
+struct cxi_req *cxix_cq_req_alloc(struct cxi_cq *cq, int remap)
+{
+	struct cxi_req *req;
+
+	fastlock_acquire(&cq->req_lock);
+
+	req = (struct cxi_req *)util_buf_alloc(cq->req_pool);
+	if (!req) {
+		CXI_LOG_ERROR("Failed to allocate request\n");
+		goto out;
+	}
+
+	if (remap) {
+		req->req_id = ofi_idx_insert(&cq->req_table, req);
+
+		/* Target command buffer IDs are 16 bits wide. */
+		if (req->req_id < 0 || req->req_id >= (1 << 16)) {
+			CXI_LOG_ERROR("Failed to map request: %d\n",
+				      req->req_id);
+			util_buf_release(cq->req_pool, req);
+			req = NULL;
+			goto out;
+		}
+	} else {
+		req->req_id = -1;
+	}
+
+	req->cq = cq;
+
+out:
+	fastlock_release(&cq->req_lock);
+
+	return req;
+}
+
+void cxix_cq_req_free(struct cxi_req *req)
+{
+	struct cxi_req *table_req;
+	struct cxi_cq *cq = req->cq;
+
+	fastlock_acquire(&cq->req_lock);
+
+	if (req->req_id >= 0) {
+		table_req = (struct cxi_req *)
+				ofi_idx_remove(&req->cq->req_table,
+					       req->req_id);
+		if (table_req != req)
+			CXI_LOG_ERROR("Failed to free request\n");
+	}
+
+	util_buf_release(req->cq->req_pool, req);
+
+	fastlock_release(&cq->req_lock);
+}
+
 void cxi_cq_add_tx_ctx(struct cxi_cq *cq, struct cxi_tx_ctx *tx_ctx)
 {
 	struct dlist_entry *entry;
@@ -440,6 +500,65 @@ static const char *cxi_cq_strerror(struct fid_cq *cq, int prov_errno,
 	return fi_strerror(-prov_errno);
 }
 
+int cxix_cq_enable(struct cxi_cq *cxi_cq)
+{
+	struct cxi_eq_alloc_opts evtq_opts;
+	int ret = FI_SUCCESS;
+
+	fastlock_acquire(&cxi_cq->lock);
+
+	if (cxi_cq->enabled)
+		goto unlock;
+
+	evtq_opts.count = 1024;
+	evtq_opts.reserved_fc = 1;
+
+	ret = cxil_alloc_evtq(cxi_cq->domain->dev_if->if_lni, &evtq_opts,
+			      &cxi_cq->evtq);
+	if (ret != FI_SUCCESS) {
+		CXI_LOG_DBG("Unable to allocate EVTQ, ret: %d\n", ret);
+		ret = -FI_EDOMAIN;
+		goto unlock;
+	}
+
+	ret = util_buf_pool_create(&cxi_cq->req_pool, sizeof(struct cxi_req),
+				   8, 0, 64);
+	if (ret) {
+		ret = -FI_ENOMEM;
+		goto free_evtq;
+	}
+
+	memset(&cxi_cq->req_table, 0, sizeof(cxi_cq->req_table));
+
+	cxi_cq->enabled = 1;
+	fastlock_release(&cxi_cq->lock);
+
+	return FI_SUCCESS;
+
+free_evtq:
+	cxil_destroy_evtq(cxi_cq->evtq);
+unlock:
+	fastlock_release(&cxi_cq->lock);
+
+	return ret;
+}
+
+static void cxix_cq_disable(struct cxi_cq *cxi_cq)
+{
+	fastlock_acquire(&cxi_cq->lock);
+
+	if (!cxi_cq->enabled)
+		goto unlock;
+
+	util_buf_pool_destroy(cxi_cq->req_pool);
+
+	cxil_destroy_evtq(cxi_cq->evtq);
+
+	cxi_cq->enabled = 0;
+unlock:
+	fastlock_release(&cxi_cq->lock);
+}
+
 static int cxi_cq_close(struct fid *fid)
 {
 	struct cxi_cq *cq;
@@ -447,6 +566,8 @@ static int cxi_cq_close(struct fid *fid)
 	cq = container_of(fid, struct cxi_cq, cq_fid.fid);
 	if (ofi_atomic_get32(&cq->ref))
 		return -FI_EBUSY;
+
+	cxix_cq_disable(cq);
 
 	if (cq->signal && cq->attr.wait_obj == FI_WAIT_MUTEX_COND)
 		cxi_wait_close(&cq->waitset->fid);
@@ -457,6 +578,7 @@ static int cxi_cq_close(struct fid *fid)
 
 	fastlock_destroy(&cq->lock);
 	fastlock_destroy(&cq->list_lock);
+	fastlock_destroy(&cq->req_lock);
 	ofi_atomic_dec32(&cq->domain->ref);
 
 	free(cq);
@@ -685,6 +807,7 @@ int cxi_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	*cq = &cxi_cq->cq_fid;
 	ofi_atomic_inc32(&cxi_dom->ref);
 	fastlock_init(&cxi_cq->list_lock);
+	fastlock_init(&cxi_cq->req_lock);
 
 	return 0;
 
