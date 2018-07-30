@@ -488,6 +488,10 @@ static ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 		rx_buf->hdr.state = RXM_RX;
 		rx_buf->hdr.msg_ep = msg_ep;
 		rx_buf->repost = 1;
+		if (!rxm_ep->srx_ctx)
+			rx_buf->conn = container_of(msg_ep->fid.context,
+						    struct rxm_conn,
+						    handle);
 
 		fastlock_acquire(&rx_buf->ep->util_ep.lock);
 		dlist_insert_tail(&rx_buf->entry, &rxm_ep->post_rx_list);
@@ -790,6 +794,7 @@ static int rxm_cq_reprocess_directed_recvs(struct rxm_recv_queue *recv_queue)
 
 	dlist_init(&rx_buf_list);
 
+	fastlock_acquire(&recv_queue->rxm_ep->util_ep.cmap->lock);
 	fastlock_acquire(&recv_queue->lock);
 
 	dlist_foreach_container_safe(&recv_queue->unexp_msg_list,
@@ -816,6 +821,7 @@ static int rxm_cq_reprocess_directed_recvs(struct rxm_recv_queue *recv_queue)
 		dlist_insert_tail(&rx_buf->unexp_msg.entry, &rx_buf_list);
 	}
 	fastlock_release(&recv_queue->lock);
+	fastlock_release(&recv_queue->rxm_ep->util_ep.cmap->lock);
 
 	while (!dlist_empty(&rx_buf_list)) {
 		dlist_pop_front(&rx_buf_list, struct rxm_rx_buf,
@@ -851,15 +857,16 @@ static int rxm_cq_reprocess_recv_queues(struct rxm_ep *rxm_ep)
 
 	fastlock_acquire(&rxm_ep->util_ep.cmap->lock);
 
-	if (!rxm_ep->util_ep.cmap->av_updated)
-		goto unlock;
+	if (!rxm_ep->util_ep.cmap->av_updated) {
+		fastlock_release(&rxm_ep->util_ep.cmap->lock);
+		return 0;
+	}
 
 	rxm_ep->util_ep.cmap->av_updated = 0;
+	fastlock_release(&rxm_ep->util_ep.cmap->lock);
 
 	count += rxm_cq_reprocess_directed_recvs(&rxm_ep->recv_queue);
 	count += rxm_cq_reprocess_directed_recvs(&rxm_ep->trecv_queue);
-unlock:
-	fastlock_release(&rxm_ep->util_ep.cmap->lock);
 	return count;
 }
 
