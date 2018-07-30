@@ -155,6 +155,44 @@ int cxi_verify_domain_attr(uint32_t version, const struct fi_info *info)
 	return 0;
 }
 
+int cxix_domain_enable(struct cxi_domain *dom)
+{
+	int ret;
+
+	fastlock_acquire(&dom->lock);
+
+	ret = cxix_get_if(dom->nic_addr, &dom->dev_if);
+	if (ret != FI_SUCCESS) {
+		CXI_LOG_DBG("Unable to get IF\n");
+		ret = -FI_EDOMAIN;
+		goto unlock;
+	}
+
+	dom->enabled = 1;
+	fastlock_release(&dom->lock);
+
+	return FI_SUCCESS;
+
+unlock:
+	fastlock_release(&dom->lock);
+
+	return ret;
+}
+
+static void cxix_domain_disable(struct cxi_domain *dom)
+{
+	fastlock_acquire(&dom->lock);
+
+	if (!dom->enabled)
+		goto unlock;
+
+	cxix_put_if(dom->dev_if);
+
+	dom->enabled = 0;
+unlock:
+	fastlock_release(&dom->lock);
+}
+
 static int cxi_dom_close(struct fid *fid)
 {
 	struct cxi_domain *dom;
@@ -163,9 +201,10 @@ static int cxi_dom_close(struct fid *fid)
 	if (ofi_atomic_get32(&dom->ref))
 		return -FI_EBUSY;
 
-	fastlock_destroy(&dom->lock);
-	ofi_mr_map_close(&dom->mr_map);
+	cxix_domain_disable(dom);
+
 	cxi_dom_remove_from_list(dom);
+	fastlock_destroy(&dom->lock);
 	free(dom);
 
 	return 0;
@@ -255,6 +294,7 @@ int cxi_domain(struct fid_fabric *fabric, struct fi_info *info,
 {
 	struct cxi_domain *cxi_domain;
 	struct cxi_fabric *fab;
+	struct cxi_addr *src_addr;
 	int ret;
 
 	fab = container_of(fabric, struct cxi_fabric, fab_fid);
@@ -271,12 +311,12 @@ int cxi_domain(struct fid_fabric *fabric, struct fi_info *info,
 	fastlock_init(&cxi_domain->lock);
 	ofi_atomic_initialize32(&cxi_domain->ref, 0);
 
-	if (info) {
-		cxi_domain->info = *info;
-	} else {
-		CXI_LOG_ERROR("invalid fi_info\n");
-		goto err1;
+	if (!info || !info->src_addr) {
+		CXI_LOG_ERROR("Invalid fi_info\n");
+		goto unlock;
 	}
+
+	cxi_domain->info = *info;
 
 	cxi_domain->dom_fid.fid.fclass = FI_CLASS_DOMAIN;
 	cxi_domain->dom_fid.fid.context = context;
@@ -291,6 +331,13 @@ int cxi_domain(struct fid_fabric *fabric, struct fi_info *info,
 		cxi_domain->progress_mode = info->domain_attr->data_progress;
 
 	cxi_domain->fab = fab;
+
+	src_addr = (struct cxi_addr *)info->src_addr;
+	cxi_domain->nic_addr = src_addr->nic;
+	cxi_domain->vni = 0; /* TODO set appropriately */
+	cxi_domain->pid = src_addr->domain;
+	cxi_domain->pid_granule = CXIX_PID_GRANULE_DEF;
+
 	*dom = &cxi_domain->dom_fid;
 
 	if (info->domain_attr)
@@ -298,16 +345,10 @@ int cxi_domain(struct fid_fabric *fabric, struct fi_info *info,
 	else
 		cxi_domain->attr = cxi_domain_attr;
 
-	ret = ofi_mr_map_init(&cxi_prov, cxi_domain->attr.mr_mode,
-			      &cxi_domain->mr_map);
-	if (ret)
-		goto err2;
-
 	cxi_dom_add_to_list(cxi_domain);
 	return 0;
 
-err2:
-err1:
+unlock:
 	fastlock_destroy(&cxi_domain->lock);
 	free(cxi_domain);
 	return -FI_EINVAL;

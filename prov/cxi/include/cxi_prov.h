@@ -201,9 +201,15 @@ struct cxi_domain {
 	struct cxi_eq		*mr_eq;
 
 	enum fi_progress	progress_mode;
-	struct ofi_mr_map	mr_map;
 	struct dlist_entry	dom_list_entry;
 	struct fi_domain_attr	attr;
+
+	uint32_t		nic_addr;
+	uint32_t		vni;
+	uint32_t		pid;
+	uint32_t		pid_granule;
+	int			enabled;
+	struct cxix_if		*dev_if;
 };
 
 struct cxi_eq {
@@ -453,6 +459,7 @@ void cxix_if_fini(void);
 int cxi_parse_addr(const char *node, const char *service,
 		   struct cxi_addr *addr);
 
+int cxix_domain_enable(struct cxi_domain *dom);
 int cxi_domain(struct fid_fabric *fabric, struct fi_info *info,
 	       struct fid_domain **dom, void *context);
 
