@@ -662,15 +662,14 @@ Test(ep, control_setopsflag_rx)
 Test(ep, control_enable)
 {
 	int ret;
-	struct fi_alias alias = {0};
 	struct cxi_ep *cxi_ep;
 
 	cxit_create_ep();
 
 	cxi_ep = container_of(&cxit_ep->fid, struct cxi_ep, ep.fid);
 
-	ret = fi_control(&cxit_ep->fid, FI_ENABLE, &alias);
-	cr_assert_eq(ret, FI_SUCCESS, "fi_control FI_ENABLE. %d", ret);
+	ret = fi_enable(cxit_ep);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_enable. %d", ret);
 	cr_assert_not_null(cxi_ep->attr, "EP attr NULL");
 	cr_assert_eq(cxi_ep->attr->is_enabled, 1, "EP not enabled");
 

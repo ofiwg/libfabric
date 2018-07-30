@@ -4,9 +4,16 @@
 
 if HAVE_CXI
 
-AM_CPPFLAGS += -I$(top_srcdir)/prov/cxi/include -I$(top_srcdir)/prov/cxi
+AM_CPPFLAGS += \
+	-I$(top_srcdir)/prov/cxi/include \
+	-I$(top_srcdir)/prov/cxi \
+	-I$(srcdir)/../cxi-driver/include \
+	-I$(srcdir)/../nic-emu \
+	-I$(srcdir)/../cassini-headers/src/csrdef/ \
+	-D__user=
 
 _cxi_files = \
+	prov/cxi/src/cxix_if.c \
 	prov/cxi/src/cxi_fabric.c \
 	prov/cxi/src/cxi_dom.c \
 	prov/cxi/src/cxi_ep.c \

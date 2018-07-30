@@ -53,20 +53,20 @@ Test(getinfo, prov_name)
 				  cxi_prov_name));
 		infos++;
 	} while ((cxit_fi = cxit_fi->next));
-	cr_assert(infos == (cxit_n_ifs * cxi_num_vpids));
+	cr_assert(infos == (cxit_n_ifs * cxix_num_pids));
 }
 
 /* Test fabric selection with domain name */
 Test(getinfo, dom_name)
 {
 	int infos = 0;
-	struct cxi_if_list_entry *if_entry;
+	struct cxix_if *if_entry;
 	struct slist_entry *entry, *prev;
 	char *fab_name;
 
 	(void) prev; /* Makes compiler happy */
-	slist_foreach(&cxi_if_list, entry, prev) {
-		if_entry = container_of(entry, struct cxi_if_list_entry, entry);
+	slist_foreach(&cxix_if_list, entry, prev) {
+		if_entry = container_of(entry, struct cxix_if, entry);
 		infos = 0;
 
 		cxit_fi_hints->domain_attr->name =
@@ -101,12 +101,12 @@ Test(getinfo, dom_name)
 Test(getinfo, fab_name)
 {
 	int infos = 0;
-	struct cxi_if_list_entry *if_entry;
+	struct cxix_if *if_entry;
 	struct slist_entry *entry, *prev;
 
 	(void) prev; /* Makes compiler happy */
-	slist_foreach(&cxi_if_list, entry, prev) {
-		if_entry = container_of(entry, struct cxi_if_list_entry, entry);
+	slist_foreach(&cxix_if_list, entry, prev) {
+		if_entry = container_of(entry, struct cxix_if, entry);
 		infos = 0;
 
 		cxit_fi_hints->fabric_attr->name =
@@ -138,15 +138,15 @@ Test(getinfo, src_node)
 {
 	int ret, infos = 0;
 	struct cxi_addr *addr;
-	struct cxi_if_list_entry *if_entry;
+	struct cxix_if *if_entry;
 	struct slist_entry *entry, *prev;
 	char *fab_name, *dom_name;
 
 	cxit_fi_hints->fabric_attr->prov_name = strdup(cxi_prov_name);
 
 	(void) prev; /* Makes compiler happy */
-	slist_foreach(&cxi_if_list, entry, prev) {
-		if_entry = container_of(entry, struct cxi_if_list_entry, entry);
+	slist_foreach(&cxix_if_list, entry, prev) {
+		if_entry = container_of(entry, struct cxix_if, entry);
 		infos = 0;
 
 		ret = asprintf(&cxit_node, "0x%x", if_entry->if_nic);
@@ -195,7 +195,7 @@ Test(getinfo, src_node_service)
 {
 	int ret, infos = 0;
 	struct cxi_addr *addr;
-	struct cxi_if_list_entry *if_entry;
+	struct cxix_if *if_entry;
 	struct slist_entry *entry, *prev;
 	int dom, port;
 	char *fab_name, *dom_name;
@@ -203,8 +203,8 @@ Test(getinfo, src_node_service)
 	cxit_fi_hints->fabric_attr->prov_name = strdup(cxi_prov_name);
 
 	(void) prev; /* Makes compiler happy */
-	slist_foreach(&cxi_if_list, entry, prev) {
-		if_entry = container_of(entry, struct cxi_if_list_entry, entry);
+	slist_foreach(&cxix_if_list, entry, prev) {
+		if_entry = container_of(entry, struct cxix_if, entry);
 		infos = 0;
 
 		ret = asprintf(&cxit_node, "0x%x", if_entry->if_nic);
@@ -259,7 +259,7 @@ Test(getinfo, dest_node)
 {
 	int ret, infos = 0;
 	struct cxi_addr *addr;
-	struct cxi_if_list_entry *if_entry;
+	struct cxix_if *if_entry;
 	char *fab_name, *dom_name;
 	int nic_id = 130;
 
@@ -278,8 +278,7 @@ Test(getinfo, dest_node)
 	 * will match the first interface found.  Additional, node is
 	 * used to create a dest addr.
 	 */
-	if_entry = container_of((cxi_if_list.head), struct cxi_if_list_entry,
-				entry);
+	if_entry = container_of((cxix_if_list.head), struct cxix_if, entry);
 
 	/* Make sure we have only 1 FI */
 	do {
@@ -325,7 +324,7 @@ Test(getinfo, dest_node_service)
 {
 	int ret, infos = 0;
 	struct cxi_addr *addr;
-	struct cxi_if_list_entry *if_entry;
+	struct cxix_if *if_entry;
 	char *fab_name, *dom_name;
 	int nic_id = 130, dom_id = 5, port_id = 6;
 
@@ -346,8 +345,7 @@ Test(getinfo, dest_node_service)
 	 * will match the first interface found.  Additionally, node
 	 * and service are used to create a dest addr.
 	 */
-	if_entry = container_of((cxi_if_list.head), struct cxi_if_list_entry,
-				entry);
+	if_entry = container_of((cxix_if_list.head), struct cxix_if, entry);
 
 	/* Make sure we have only 1 FI */
 	do {
@@ -393,7 +391,7 @@ Test(getinfo, service)
 {
 	int ret, infos = 0;
 	struct cxi_addr *addr;
-	struct cxi_if_list_entry *if_entry;
+	struct cxix_if *if_entry;
 	struct slist_entry *entry, *prev;
 	int dom, port;
 	char *fab_name, *dom_name;
@@ -416,9 +414,9 @@ Test(getinfo, service)
 				  cxi_prov_name));
 
 		(void) prev; /* Makes compiler happy */
-		slist_foreach(&cxi_if_list, entry, prev) {
+		slist_foreach(&cxix_if_list, entry, prev) {
 			if_entry = container_of(entry,
-					struct cxi_if_list_entry, entry);
+					struct cxix_if, entry);
 
 			cr_assert(cxit_fi->src_addr);
 			addr = (struct cxi_addr *)cxit_fi->src_addr;

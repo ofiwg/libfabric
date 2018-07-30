@@ -43,33 +43,15 @@ const struct fi_fabric_attr cxi_fabric_attr = {
 static struct dlist_entry cxi_fab_list;
 static struct dlist_entry cxi_dom_list;
 static fastlock_t cxi_list_lock;
-struct slist cxi_if_list;
-int cxi_num_vpids;
 static int read_default_params;
-
-struct cxi_if_list_entry *cxi_if_lookup(struct cxi_addr *src_addr)
-{
-	struct slist_entry *entry, *prev;
-	struct cxi_if_list_entry *if_entry;
-
-	(void) prev; /* Makes compiler happy */
-	slist_foreach(&cxi_if_list, entry, prev) {
-		if_entry = container_of(entry, struct cxi_if_list_entry, entry);
-		if (if_entry->if_nic == src_addr->nic) {
-			return if_entry;
-		}
-	}
-
-	return NULL;
-}
 
 char *cxi_get_fabric_name(struct cxi_addr *src_addr)
 {
-	struct cxi_if_list_entry *if_entry;
+	struct cxix_if *if_entry;
 	char *fab_name;
 	int ret;
 
-	if_entry = cxi_if_lookup(src_addr);
+	if_entry = cxix_if_lookup(src_addr->nic);
 	if (!if_entry)
 		return NULL;
 
@@ -82,11 +64,11 @@ char *cxi_get_fabric_name(struct cxi_addr *src_addr)
 
 char *cxi_get_domain_name(struct cxi_addr *src_addr)
 {
-	struct cxi_if_list_entry *if_entry;
+	struct cxix_if *if_entry;
 	char *dom_name;
 	int ret;
 
-	if_entry = cxi_if_lookup(src_addr);
+	if_entry = cxix_if_lookup(src_addr->nic);
 	if (!if_entry)
 		return NULL;
 
@@ -364,7 +346,7 @@ static int cxi_fabric(struct fi_fabric_attr *attr,
 {
 	struct cxi_fabric *fab;
 
-	if (slist_empty(&cxi_if_list)) {
+	if (slist_empty(&cxix_if_list)) {
 		CXI_LOG_ERROR("Device not found\n");
 		return -FI_ENODATA;
 	}
@@ -392,13 +374,12 @@ static int cxi_fabric(struct fi_fabric_attr *attr,
 
 int cxi_get_src_addr(struct cxi_addr *dest_addr, struct cxi_addr *src_addr)
 {
-	struct cxi_if_list_entry *if_entry;
+	struct cxix_if *if_entry;
 
 	/* TODO how to select an address on matching network? */
 
 	/* Just say the first IF matches */
-	if_entry = container_of((cxi_if_list.head), struct cxi_if_list_entry,
-				entry);
+	if_entry = container_of((cxix_if_list.head), struct cxix_if, entry);
 	src_addr->nic = if_entry->if_nic;
 
 	return 0;
@@ -608,9 +589,9 @@ err_no_free:
 static int cxi_match_src_addr_if(struct slist_entry *entry,
 				const void *src_addr)
 {
-	struct cxi_if_list_entry *if_entry;
+	struct cxix_if *if_entry;
 
-	if_entry = container_of(entry, struct cxi_if_list_entry, entry);
+	if_entry = container_of(entry, struct cxix_if, entry);
 
 	return if_entry->if_nic == ((struct cxi_addr *)src_addr)->nic;
 }
@@ -641,56 +622,16 @@ static int cxi_node_matches_interface(struct slist *if_list, const char *node)
 	return cxi_addr_matches_interface(if_list, &addr);
 }
 
-#define CXI_FAKE_NICS 1
-#define NUM_CXI_FAKE_NICS 4
-static struct cxi_if_list_entry cxi_fake_nics[] = {
-	{ .if_nic = 0xabcd0, .if_idx = 0, .if_fabric = 2 },
-	{ .if_nic = 0xabcd1, .if_idx = 1, .if_fabric = 2 },
-	{ .if_nic = 0xabcd2, .if_idx = 2, .if_fabric = 3 },
-	{ .if_nic = 0xabcd3, .if_idx = 3, .if_fabric = 3 }
-};
-
-void cxi_get_list_of_if(struct slist *if_list)
-{
-	struct cxi_if_list_entry *if_entry;
-
-	/* TODO populate list with all NICs, how do we poll local NICs? */
-
-#if CXI_FAKE_NICS
-	/* Make up some NICs for now */
-	for (int i = 0; i < NUM_CXI_FAKE_NICS; i++) {
-		if_entry = calloc(1, sizeof(struct cxi_if_list_entry));
-		if_entry->if_nic = cxi_fake_nics[i].if_nic;
-		if_entry->if_idx = cxi_fake_nics[i].if_idx;
-		if_entry->if_fabric = cxi_fake_nics[i].if_fabric;
-		slist_insert_tail(&if_entry->entry, if_list);
-	}
-#endif
-}
-
-static void cxi_free_if_list(struct slist *if_list)
-{
-	struct slist_entry *entry;
-	struct cxi_if_list_entry *if_entry;
-
-	while (!slist_empty(if_list)) {
-		entry = slist_remove_head(if_list);
-		if_entry = container_of(entry, struct cxi_if_list_entry,
-					   entry);
-		free(if_entry);
-	}
-}
-
 static int cxi_getinfo(uint32_t version, const char *node, const char *service,
 		       uint64_t flags, const struct fi_info *hints,
 		       struct fi_info **info)
 {
 	int ret = 0;
 	struct slist_entry *entry, *prev;
-	struct cxi_if_list_entry *if_entry;
+	struct cxix_if *if_entry;
 	struct fi_info *tail;
 
-	if (slist_empty(&cxi_if_list)) {
+	if (slist_empty(&cxix_if_list)) {
 		CXI_LOG_ERROR("Device not found\n");
 		return -FI_ENODATA;
 	}
@@ -710,9 +651,9 @@ static int cxi_getinfo(uint32_t version, const char *node, const char *service,
 
 	ret = 1;
 	if ((flags & FI_SOURCE) && node) {
-		ret = cxi_node_matches_interface(&cxi_if_list, node);
+		ret = cxi_node_matches_interface(&cxix_if_list, node);
 	} else if (hints && hints->src_addr) {
-		ret = cxi_addr_matches_interface(&cxi_if_list,
+		ret = cxi_addr_matches_interface(&cxix_if_list,
 				(struct cxi_addr *)hints->src_addr);
 	}
 	if (!ret) {
@@ -728,11 +669,11 @@ static int cxi_getinfo(uint32_t version, const char *node, const char *service,
 					 hints, info, &tail);
 
 	(void) prev; /* Makes compiler happy */
-	slist_foreach(&cxi_if_list, entry, prev) {
+	slist_foreach(&cxix_if_list, entry, prev) {
 		char *local_node, *local_service;
 		int i;
 
-		if_entry = container_of(entry, struct cxi_if_list_entry, entry);
+		if_entry = container_of(entry, struct cxix_if, entry);
 		ret = asprintf(&local_node, "0x%x", if_entry->if_nic);
 		if (ret == -1) {
 			CXI_LOG_ERROR("asprintf failed: %s\n",
@@ -745,7 +686,7 @@ static int cxi_getinfo(uint32_t version, const char *node, const char *service,
 			ret = cxi_node_getinfo(version, local_node, service,
 					       flags, hints, info, &tail);
 		} else {
-			for (i = 0; i < cxi_num_vpids; i++) {
+			for (i = 0; i < cxix_num_pids; i++) {
 				ret = asprintf(&local_service, "%d:0", i);
 				if (ret == -1) {
 					CXI_LOG_ERROR("asprintf failed: %s\n",
@@ -775,7 +716,8 @@ static int cxi_getinfo(uint32_t version, const char *node, const char *service,
 
 static void fi_cxi_fini(void)
 {
-	cxi_free_if_list(&cxi_if_list);
+	cxix_if_fini();
+
 	fastlock_destroy(&cxi_list_lock);
 }
 
@@ -793,11 +735,8 @@ CXI_INI
 	fastlock_init(&cxi_list_lock);
 	dlist_init(&cxi_fab_list);
 	dlist_init(&cxi_dom_list);
-	slist_init(&cxi_if_list);
 
-	cxi_get_list_of_if(&cxi_if_list);
-
-	cxi_num_vpids = CXI_NUM_VPIDS_DEF;
+	cxix_if_init();
 
 	return &cxi_prov;
 }

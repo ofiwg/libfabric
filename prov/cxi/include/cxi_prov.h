@@ -37,6 +37,8 @@
 #include <ofi_osd.h>
 #include <ofi_util.h>
 
+#include "libcxi/libcxi.h"
+
 #define CXI_EP_MAX_MSG_SZ (1<<23)
 #define CXI_EP_MAX_INJECT_SZ ((1<<8) - 1)
 #define CXI_EP_MAX_BUFF_RECV (1<<26)
@@ -112,7 +114,8 @@ extern uint64_t CXI_EP_RDM_CAP;
 
 #define CXI_WIRE_PROTO_VERSION (1)
 
-#define CXI_NUM_VPIDS_DEF 128
+#define CXIX_NUM_PIDS_DEF 128
+#define CXIX_PID_GRANULE_DEF 1024
 
 extern const char cxi_fab_fmt[];
 extern const char cxi_dom_fmt[];
@@ -121,8 +124,8 @@ extern struct fi_provider cxi_prov;
 extern int cxi_av_def_sz;
 extern int cxi_cq_def_sz;
 extern int cxi_eq_def_sz;
-extern struct slist cxi_if_list;
-extern int cxi_num_vpids;
+extern struct slist cxix_if_list;
+extern int cxix_num_pids;
 
 extern struct fi_provider cxi_prov;
 
@@ -151,11 +154,32 @@ struct cxi_addr {
 #define CXI_ADDR_AV_ENTRY_CLR_VALID(addr) \
 		((addr)->flags &= ~CXI_ADDR_FLAG_AV_ENTRY_VALID)
 
-struct cxi_if_list_entry {
+struct cxix_if_domain {
+	struct dlist_entry entry;
+	struct cxix_if *dev_if;
+	struct cxil_domain *if_dom;
+	uint32_t vni;
+	uint32_t pid;
+	uint32_t pid_granule;
+	struct index_map lep_map; /* Cassini Logical EP Map */
+	ofi_atomic32_t ref;
+	fastlock_t lock;
+};
+
+struct cxix_if {
+	struct slist_entry entry;
 	uint32_t if_nic;
 	uint32_t if_idx;
 	uint32_t if_fabric;
-	struct slist_entry entry;
+	struct cxil_dev *if_dev;
+	struct cxil_lni *if_lni;
+	struct cxi_cp cps[16];
+	int n_cps;
+	struct dlist_entry if_doms;
+	ofi_atomic32_t ref;
+	struct cxi_cmdq *mr_cmdq;
+	struct cxi_evtq *mr_evtq;
+	fastlock_t lock;
 };
 
 struct cxi_fabric {
@@ -414,6 +438,17 @@ struct cxi_wait {
 		} mutex_cond;
 	} wobj;
 };
+
+struct cxix_if *cxix_if_lookup(uint32_t nic_addr);
+int cxix_get_if(uint32_t nic_addr, struct cxix_if **dev_if);
+void cxix_put_if(struct cxix_if *dev_if);
+int cxix_get_if_domain(struct cxix_if *dev_if, uint32_t vni, uint32_t pid,
+		       uint32_t pid_granule, struct cxix_if_domain **if_dom);
+void cxix_put_if_domain(struct cxix_if_domain *if_dom);
+int cxix_if_domain_lep_alloc(struct cxix_if_domain *if_dom, uint64_t lep_idx);
+int cxix_if_domain_lep_free(struct cxix_if_domain *if_dom, uint64_t lep_idx);
+void cxix_if_init(void);
+void cxix_if_fini(void);
 
 int cxi_parse_addr(const char *node, const char *service,
 		   struct cxi_addr *addr);

@@ -183,7 +183,7 @@ static void cxit_init(void)
 	cr_assert(ret == -FI_ENOSYS);
 
 	(void) prev; /* Makes compiler happy */
-	slist_foreach(&cxi_if_list, entry, prev) {
+	slist_foreach(&cxix_if_list, entry, prev) {
 		cxit_n_ifs++;
 	}
 }
