@@ -73,6 +73,7 @@ install:
 script:
     - git clone https://github.com/ofiwg/fabtests.git
     - cd fabtests
+    - git checkout -b v1.6.x origin/v1.6.x
     - ./autogen.sh
     - ./configure --prefix=$PREFIX --with-libfabric=$PREFIX
     - make -j2
