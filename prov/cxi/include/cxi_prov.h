@@ -245,6 +245,7 @@ struct cxi_req {
 	fi_addr_t addr;
 
 	struct cxi_iova local_md;
+	void (*cb)(struct cxi_req *, const union c_event *);
 };
 
 struct cxi_cq;
@@ -550,7 +551,7 @@ void cxi_cq_add_tx_ctx(struct cxi_cq *cq, struct cxi_tx_ctx *tx_ctx);
 void cxi_cq_remove_tx_ctx(struct cxi_cq *cq, struct cxi_tx_ctx *tx_ctx);
 void cxi_cq_add_rx_ctx(struct cxi_cq *cq, struct cxi_rx_ctx *rx_ctx);
 void cxi_cq_remove_rx_ctx(struct cxi_cq *cq, struct cxi_rx_ctx *rx_ctx);
-int cxi_cq_progress(struct cxi_cq *cq);
+void cxi_cq_progress(struct cxi_cq *cq);
 int cxix_cq_enable(struct cxi_cq *cxi_cq);
 int cxi_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		struct fid_cq **cq, void *context);

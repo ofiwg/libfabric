@@ -138,9 +138,33 @@ void cxi_cq_remove_rx_ctx(struct cxi_cq *cq, struct cxi_rx_ctx *rx_ctx)
 	fastlock_release(&cq->list_lock);
 }
 
-int cxi_cq_progress(struct cxi_cq *cq)
+static struct cxi_req *cxix_cq_event_req(const union c_event *event)
 {
-	return 0;
+	switch (event->event_type) {
+	case C_EVENT_ACK:
+		return (struct cxi_req *)event->init_short.user_ptr;
+	}
+
+	CXI_LOG_ERROR("Invalid event type: %d\n", event->event_type);
+	return NULL;
+}
+
+/* Caller must hold the cq->lock. */
+void cxi_cq_progress(struct cxi_cq *cq)
+{
+	const union c_event *event;
+	struct cxi_req *req;
+
+	if (!cq->enabled)
+		return;
+
+	while ((event = cxi_eq_get_event(cq->evtq))) {
+		req = cxix_cq_event_req(event);
+		if (req)
+			req->cb(req, event);
+
+		cxi_eq_ack_events(cq->evtq);
+	}
 }
 
 static ssize_t cxi_cq_entry_size(struct cxi_cq *cxi_cq)
@@ -173,13 +197,13 @@ static ssize_t cxi_cq_entry_size(struct cxi_cq *cxi_cq)
 	return size;
 }
 
+/* Caller must hold the cq->lock.  This is true for all EQE callbacks. */
 static ssize_t _cxi_cq_write(struct cxi_cq *cq, fi_addr_t addr,
 			     const void *buf, size_t len)
 {
 	ssize_t ret;
 	struct cxi_cq_overflow_entry_t *overflow_entry;
 
-	fastlock_acquire(&cq->lock);
 	if (ofi_rbfdavail(&cq->cq_rbfd) < len) {
 		CXI_LOG_ERROR("Not enough space in CQ\n");
 		overflow_entry = calloc(1, sizeof(*overflow_entry) + len);
@@ -211,7 +235,6 @@ static ssize_t _cxi_cq_write(struct cxi_cq *cq, fi_addr_t addr,
 	if (cq->signal)
 		cxi_wait_signal(cq->waitset);
 out:
-	fastlock_release(&cq->lock);
 	return ret;
 }
 
@@ -367,8 +390,10 @@ static ssize_t cxi_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 
 	if (cxi_cq->domain->progress_mode == FI_PROGRESS_MANUAL) {
 		while (1) {
-			cxi_cq_progress(cxi_cq);
 			fastlock_acquire(&cxi_cq->lock);
+
+			cxi_cq_progress(cxi_cq);
+
 			avail = ofi_rbfdused(&cxi_cq->cq_rbfd);
 			if (avail) {
 				ret = cxi_cq_rbuf_read(cxi_cq, buf,
@@ -434,7 +459,7 @@ static ssize_t cxi_cq_sread(struct fid_cq *cq, void *buf, size_t len,
 static ssize_t cxi_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 			       fi_addr_t *src_addr)
 {
-	return cxi_cq_sreadfrom(cq, buf, count, src_addr, NULL, 0);
+	return cxi_cq_sreadfrom(cq, buf, count, src_addr, NULL, -1);
 }
 
 static ssize_t cxi_cq_read(struct fid_cq *cq, void *buf, size_t count)
@@ -456,10 +481,12 @@ static ssize_t cxi_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 		return -FI_EINVAL;
 
 	cxi_cq = container_of(cq, struct cxi_cq, cq_fid);
+
+	fastlock_acquire(&cxi_cq->lock);
+
 	if (cxi_cq->domain->progress_mode == FI_PROGRESS_MANUAL)
 		cxi_cq_progress(cxi_cq);
 
-	fastlock_acquire(&cxi_cq->lock);
 	if (ofi_rbused(&cxi_cq->cqerr_rb) >= sizeof(struct fi_cq_err_entry)) {
 		api_version = cxi_cq->domain->fab->fab_fid.api_version;
 		ofi_rbread(&cxi_cq->cqerr_rb, &entry, sizeof(entry));

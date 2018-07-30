@@ -24,6 +24,32 @@
 #define CXIX_LOG_DBG(...) _CXI_LOG_DBG(FI_LOG_EP_DATA, __VA_ARGS__)
 #define CXIX_LOG_ERROR(...) _CXI_LOG_ERROR(FI_LOG_EP_DATA, __VA_ARGS__)
 
+static void cxix_rma_cb(struct cxi_req *req, const union c_event *event)
+{
+	int ret;
+	int event_rc;
+
+	ret = cxil_unmap(req->cq->domain->dev_if->if_lni, &req->local_md);
+	if (ret != FI_SUCCESS)
+		CXIX_LOG_ERROR("Failed to free MD: %d\n", ret);
+
+	event_rc = event->init_short.return_code;
+	if (event_rc == C_RC_OK) {
+		ret = req->cq->report_completion(req->cq, FI_ADDR_UNSPEC, req);
+		if (ret != req->cq->cq_entry_size)
+			CXIX_LOG_ERROR("Failed to report completion: %d\n",
+				       ret);
+	} else {
+		ret = cxi_cq_report_error(req->cq, req, 0, FI_EIO, event_rc,
+					  NULL, 0);
+		if (ret != FI_SUCCESS)
+			CXIX_LOG_ERROR("Failed to report error: %d\n",
+				       ret);
+	}
+
+	cxix_cq_req_free(req);
+}
+
 static ssize_t cxix_rma_write(struct fid_ep *ep, const void *buf,
 			      size_t len, void *desc, fi_addr_t dest_addr,
 			      uint64_t addr, uint64_t key, void *context)
@@ -96,6 +122,7 @@ static ssize_t cxix_rma_write(struct fid_ep *ep, const void *buf,
 	req->tag = 0;
 
 	req->local_md = write_md;
+	req->cb = cxix_rma_cb;
 
 	/* Build Put command descriptor */
 	pid_granule = dom->pid_granule;
