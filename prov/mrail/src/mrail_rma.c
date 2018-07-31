@@ -135,27 +135,33 @@ static ssize_t mrail_post_req(struct mrail_req *req)
 	return ret;
 }
 
-static struct mrail_req *mrail_dequeue_deferred_req(struct mrail_ep *mrail_ep)
+static inline
+struct mrail_req *mrail_dequeue_deferred_req(struct mrail_ep *mrail_ep)
 {
-	struct slist_entry *e;
+	struct mrail_req *req;
 
-	e = slist_remove_head(&mrail_ep->deferred_reqs);
-	if (!e) {
-		return NULL;
-	}
-	return container_of(e, struct mrail_req, entry);
+	mrail_ep->lock_acquire(&mrail_ep->util_ep.lock);
+	slist_remove_head_container(&mrail_ep->deferred_reqs, struct mrail_req,
+			req, entry);
+	mrail_ep->lock_release(&mrail_ep->util_ep.lock);
+
+	return req;
 }
 
 static inline void mrail_requeue_deferred_req(struct mrail_ep *mrail_ep,
 		struct mrail_req *req)
 {
+	mrail_ep->lock_acquire(&mrail_ep->util_ep.lock);
 	slist_insert_head(&req->entry, &mrail_ep->deferred_reqs);
+	mrail_ep->lock_release(&mrail_ep->util_ep.lock);
 }
 
 static inline void mrail_queue_deferred_req(struct mrail_ep *mrail_ep,
 		struct mrail_req *req)
 {
+	mrail_ep->lock_acquire(&mrail_ep->util_ep.lock);
 	slist_insert_tail(&req->entry, &mrail_ep->deferred_reqs);
+	mrail_ep->lock_release(&mrail_ep->util_ep.lock);
 }
 
 void mrail_progress_deferred_reqs(struct mrail_ep *mrail_ep)

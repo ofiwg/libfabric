@@ -422,6 +422,17 @@ static inline struct slist_entry *slist_remove_head(struct slist *list)
 			(prev) = (item), (item) = (item)->next)
 
 
+#define slist_remove_head_container(list, type, container, member)	\
+	do {								\
+		if (slist_empty(list)) {				\
+			container = NULL;				\
+		} else {						\
+			container = container_of((list)->head, type,    \
+					member);			\
+			slist_remove_head(list);			\
+		}							\
+	} while (0)
+
 typedef int slist_func_t(struct slist_entry *item, const void *arg);
 
 static inline struct slist_entry *
