@@ -368,6 +368,7 @@ static int tcpx_ep_connect(struct fid_ep *ep, const void *addr,
 	if (ret)
 		goto err;
 
+	tcpx_ep->util_ep.eq->wait->signal(tcpx_ep->util_ep.eq->wait);
 	return 0;
 err:
 	free(cm_ctx);
@@ -403,7 +404,7 @@ static int tcpx_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 		free(cm_ctx);
 		return ret;
 	}
-
+	tcpx_ep->util_ep.eq->wait->signal(tcpx_ep->util_ep.eq->wait);
 	return 0;
 }
 
@@ -814,6 +815,7 @@ static int tcpx_pep_getname(fid_t fid, void *addr, size_t *addrlen)
 static int tcpx_pep_listen(struct fid_pep *pep)
 {
 	struct tcpx_pep *tcpx_pep;
+	int ret;
 
 	tcpx_pep = container_of(pep,struct tcpx_pep, util_pep.pep_fid);
 
@@ -823,9 +825,12 @@ static int tcpx_pep_listen(struct fid_pep *pep)
 		return -ofi_sockerr();
 	}
 
-	return ofi_wait_fd_add(tcpx_pep->util_pep.eq->wait, tcpx_pep->sock,
-			       FI_EPOLL_IN, tcpx_eq_wait_try_func,
-			       NULL, &tcpx_pep->cm_ctx);
+	ret = ofi_wait_fd_add(tcpx_pep->util_pep.eq->wait, tcpx_pep->sock,
+			      FI_EPOLL_IN, tcpx_eq_wait_try_func,
+			      NULL, &tcpx_pep->cm_ctx);
+
+	tcpx_pep->util_pep.eq->wait->signal(tcpx_pep->util_pep.eq->wait);
+	return ret;
 }
 
 static int tcpx_pep_reject(struct fid_pep *pep, fid_t handle,
