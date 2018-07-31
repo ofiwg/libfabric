@@ -124,7 +124,7 @@ static void util_monitor_read_events(struct ofi_mem_monitor *monitor)
 		}
 
 		FI_DBG(&core_prov, FI_LOG_MR,
-		       "found event, context=%p, addr=%p, len=%"PRIu64" nq=%p\n",
+		       "found event, context=%p, addr=%p, len=%zu nq=%p\n",
 		       subscription, subscription->addr,
 		       subscription->len, subscription->nq);
 

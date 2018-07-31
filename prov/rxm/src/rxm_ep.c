@@ -946,7 +946,7 @@ void rxm_ep_handle_postponed_tx_op(struct rxm_ep *rxm_ep,
 
 	tx_entry->tx_buf->pkt.ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
 	FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
-	       "Send deffered TX request (len - %zd) for %p conn\n",
+	       "Send deffered TX request (len - %"PRIu64") for %p conn\n",
 	       tx_entry->tx_buf->pkt.hdr.size, rxm_conn);
 
 	if ((tx_size <= rxm_ep->msg_info->tx_attr->inject_size) &&

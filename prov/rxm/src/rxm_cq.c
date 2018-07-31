@@ -255,7 +255,7 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 
 		FI_DBG(&rxm_prov, FI_LOG_CQ,
 		       "Repost Multi-Recv entry: "
-		       "consumed len = %zu, remain len = %zu\n",
+		       "consumed len = %"PRIu64", remain len = %zu\n",
 		       rx_buf->pkt.hdr.size,
 		       rx_buf->recv_entry->total_len);
 
