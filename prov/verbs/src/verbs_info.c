@@ -1124,7 +1124,7 @@ static int fi_ibv_set_default_attr(struct fi_info *info, size_t *attr,
 				   size_t default_attr, char *attr_str)
 {
 	if (default_attr > *attr) {
-		VERBS_WARN(FI_LOG_FABRIC, "Ignoring provider default value "
+		VERBS_INFO(FI_LOG_FABRIC, "Ignoring provider default value "
 			   "for %s as it is greater than the value supported "
 			   "by domain: %s\n", attr_str, info->domain_attr->name);
 	} else {
