@@ -842,7 +842,7 @@ struct fi_ops_cntr perf_cntr_ops = {
 };
 
 
-int hook_perf_create(struct hook_fabric **fabric)
+int hook_perf_create(struct hook_fabric **fabric, struct fi_provider *prov)
 {
 	struct perf_fabric *fab;
 	int ret;
@@ -851,13 +851,13 @@ int hook_perf_create(struct hook_fabric **fabric)
 	if (!fab)
 		return -FI_ENOMEM;
 
-	ret = ofi_perfset_create(&core_prov, &fab->perf_set, perf_size,
+	ret = ofi_perfset_create(prov, &fab->perf_set, perf_size,
 				 perf_domain, perf_cntr, perf_flags);
 	if (ret) {
 		free(fab);
 		return ret;
 	}
-
+	fab->fabric_hook.prov = prov;
 	*fabric = &fab->fabric_hook;
 	return 0;
 }

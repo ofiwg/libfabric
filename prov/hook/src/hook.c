@@ -186,21 +186,22 @@ static struct fi_ops_fabric hook_fabric_ops = {
 };
 
 static int hook_fabric(struct fid_fabric *hfabric, struct fid_fabric **fabric,
-			enum hook_class hclass)
+			enum hook_class hclass, struct fi_provider *prov)
 {
 	struct hook_fabric *fab;
 	int ret = 0;
 
 	switch (hclass) {
 	case HOOK_NOOP:
-		FI_TRACE(&core_prov, FI_LOG_FABRIC, "Installing noop hook\n");
+		FI_TRACE(prov, FI_LOG_FABRIC, "Installing noop hook\n");
 		fab = calloc(1, sizeof *fab);
 		if (!fab)
 			return -FI_ENOMEM;
+		fab->prov = prov;
 		break;
 	case HOOK_PERF:
-		FI_TRACE(&core_prov, FI_LOG_FABRIC, "Installing perf hook\n");
-		ret = hook_perf_create(&fab);
+		FI_TRACE(prov, FI_LOG_FABRIC, "Installing perf hook\n");
+		ret = hook_perf_create(&fab, prov);
 		break;
 	default:
 		FI_WARN(&core_prov, FI_LOG_FABRIC, "Invalid hook specified\n");
@@ -223,7 +224,8 @@ static int hook_fabric(struct fid_fabric *hfabric, struct fid_fabric **fabric,
 	return 0;
 }
 
-void ofi_hook_install(struct fid_fabric *hfabric, struct fid_fabric **fabric)
+void ofi_hook_install(struct fid_fabric *hfabric, struct fid_fabric **fabric,
+		      struct fi_provider *prov)
 {
 	int hooks, hclass, ret;
 
@@ -235,7 +237,7 @@ void ofi_hook_install(struct fid_fabric *hfabric, struct fid_fabric **fabric)
 	     hooks >>= 1, hclass++) {
 		if (hooks & 0x1) {
 			ret = hook_fabric(hfabric, fabric,
-					  (enum hook_class) hclass);
+					  (enum hook_class) hclass, prov);
 			if (ret)
 				return;
 			hfabric = *fabric;

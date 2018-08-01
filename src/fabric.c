@@ -896,7 +896,7 @@ int DEFAULT_SYMVER_PRE(fi_fabric)(struct fi_fabric_attr *attr,
 		FI_INFO(&core_prov, FI_LOG_CORE, "Opened fabric: %s\n",
 			attr->name);
 
-		ofi_hook_install(*fabric, fabric);
+		ofi_hook_install(*fabric, fabric, prov->provider);
 	}
 
 	return ret;

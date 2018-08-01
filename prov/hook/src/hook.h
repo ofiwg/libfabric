@@ -65,9 +65,10 @@ struct fid_wait *hook_to_hwait(const struct fid_wait *wait);
 
 
 struct hook_fabric {
-	struct fid_fabric fabric;
-	struct fid_fabric *hfabric;
-	enum hook_class   hclass;
+	struct fid_fabric	fabric;
+	struct fid_fabric	*hfabric;
+	enum hook_class		hclass;
+	struct fi_provider	*prov;
 };
 
 
