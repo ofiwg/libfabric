@@ -134,14 +134,15 @@ void ofi_perfset_log(struct ofi_perfset *set, const char *names[])
 {
 	size_t i;
 
-	FI_TRACE(set->prov, FI_LOG_CORE, "PERF: %s\n", ofi_perf_name());
-	FI_TRACE(set->prov, FI_LOG_CORE, "Name\tAvg\tEvents\n");
+	FI_TRACE(set->prov, FI_LOG_CORE, "\n");
+	FI_TRACE(set->prov, FI_LOG_CORE, "\tPERF: %s\n", ofi_perf_name());
+	FI_TRACE(set->prov, FI_LOG_CORE, "\t%-20s%-10s%s\n", "Name", "Avg", "Events");
 
 	for (i = 0; i < set->size; i++) {
 		if (!set->data[i].events)
 			continue;
 
-		FI_TRACE(set->prov, FI_LOG_CORE, "%s\t%g\t%" PRIu64 "\n",
+		FI_TRACE(set->prov, FI_LOG_CORE, "\t%-20s%-10g%" PRIu64 "\n",
 			names && names[i] ? names[i] : "unknown",
 			(double) set->data[i].sum / set->data[i].events,
 			set->data[i].events);
