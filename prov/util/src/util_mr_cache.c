@@ -65,7 +65,7 @@ static int util_mr_find_overlap(void *a, void *b)
 static void util_mr_free_entry(struct ofi_mr_cache *cache,
 			       struct ofi_mr_entry *entry)
 {
-	FI_DBG(cache->domain->prov, FI_LOG_MR, "free %p (len: %" PRIu64 ")\n",
+	FI_DBG(cache->domain->prov, FI_LOG_MR, "free %p (len: %zu)\n",
 	       entry->iov.iov_base, entry->iov.iov_len);
 
 	assert(!entry->cached);
@@ -121,7 +121,7 @@ bool ofi_mr_cache_flush(struct ofi_mr_cache *cache)
 	dlist_pop_front(&cache->lru_list, struct ofi_mr_entry,
 			entry, lru_entry);
 	dlist_init(&entry->lru_entry);
-	FI_DBG(cache->domain->prov, FI_LOG_MR, "flush %p (len: %" PRIu64 ")\n",
+	FI_DBG(cache->domain->prov, FI_LOG_MR, "flush %p (len: %zu)\n",
 	       entry->iov.iov_base, entry->iov.iov_len);
 
 	util_mr_uncache_entry(cache, entry);
@@ -131,7 +131,7 @@ bool ofi_mr_cache_flush(struct ofi_mr_cache *cache)
 
 void ofi_mr_cache_delete(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 {
-	FI_DBG(cache->domain->prov, FI_LOG_MR, "delete %p (len: %" PRIu64 ")\n",
+	FI_DBG(cache->domain->prov, FI_LOG_MR, "delete %p (len: %zu)\n",
 	       entry->iov.iov_base, entry->iov.iov_len);
 	cache->delete_cnt++;
 
@@ -152,7 +152,7 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct iovec *iov,
 {
 	int ret;
 
-	FI_DBG(cache->domain->prov, FI_LOG_MR, "create %p (len: %" PRIu64 ")\n",
+	FI_DBG(cache->domain->prov, FI_LOG_MR, "create %p (len: %zu)\n",
 	       iov->iov_base, iov->iov_len);
 
 	util_mr_cache_process_events(cache);
@@ -208,7 +208,7 @@ util_mr_cache_merge(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
 			    (void **) &old_entry);
 
 		FI_DBG(cache->domain->prov, FI_LOG_MR,
-		       "merging %p (len: %" PRIu64 ") with %p (len: %" PRIu64 ")\n",
+		       "merging %p (len: %zu) with %p (len: %zu)\n",
 		       iov.iov_base, iov.iov_len,
 		       old_entry->iov.iov_base, old_entry->iov.iov_len);
 
@@ -216,7 +216,7 @@ util_mr_cache_merge(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
 			MAX(ofi_iov_end(&iov), ofi_iov_end(old_iov))) -
 			((uintptr_t) MIN(iov.iov_base, old_iov->iov_base));
 		iov.iov_base = MIN(iov.iov_base, old_iov->iov_base);
-		FI_DBG(cache->domain->prov, FI_LOG_MR, "merged %p (len: %" PRIu64 ")\n",
+		FI_DBG(cache->domain->prov, FI_LOG_MR, "merged %p (len: %zu)\n",
 		       iov.iov_base, iov.iov_len);
 
 		rbtErase(cache->mr_tree, iter);
@@ -246,7 +246,7 @@ int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *att
 	util_mr_cache_process_events(cache);
 
 	assert(attr->iov_count == 1);
-	FI_DBG(cache->domain->prov, FI_LOG_MR, "search %p (len: %" PRIu64 ")\n",
+	FI_DBG(cache->domain->prov, FI_LOG_MR, "search %p (len: %zu)\n",
 	       attr->mr_iov->iov_base, attr->mr_iov->iov_len);
 	cache->search_cnt++;
 
