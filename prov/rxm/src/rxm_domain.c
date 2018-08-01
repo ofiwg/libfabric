@@ -127,34 +127,19 @@ static struct fi_ops rxm_mr_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-static int rxm_mr_reg(struct fid *domain_fid, const void *buf, size_t len,
-	   uint64_t access, uint64_t offset, uint64_t requested_key,
-	   uint64_t flags, struct fid_mr **mr, void *context)
+static uint64_t
+rxm_mr_get_msg_access(struct rxm_domain *rxm_domain, uint64_t access)
 {
-	struct rxm_domain *rxm_domain;
-	struct rxm_mr *rxm_mr;
-	int ret;
-
-	rxm_domain = container_of(domain_fid, struct rxm_domain,
-			util_domain.domain_fid.fid);
-
-	rxm_mr = calloc(1, sizeof(*rxm_mr));
-	if (!rxm_mr)
-		return -FI_ENOMEM;
-
 	/* Additional flags to use RMA read for large message transfers */
 	access |= FI_READ | FI_REMOTE_READ;
 
 	if (rxm_domain->mr_local)
 		access |= FI_WRITE;
+	return access;
+}
 
-	ret = fi_mr_reg(rxm_domain->msg_domain, buf, len, access, offset, requested_key,
-			flags, &rxm_mr->msg_mr, context);
-	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_DOMAIN, "Unable to register MSG MR\n");
-		goto err;
-	}
-
+static void rxm_mr_init(struct rxm_mr *rxm_mr, void *context)
+{
 	rxm_mr->mr_fid.fid.fclass = FI_CLASS_MR;
 	rxm_mr->mr_fid.fid.context = context;
 	rxm_mr->mr_fid.fid.ops = &rxm_mr_ops;
@@ -163,19 +148,88 @@ static int rxm_mr_reg(struct fid *domain_fid, const void *buf, size_t len,
 	 * The key would be used in large message transfer protocol and RMA. */
 	rxm_mr->mr_fid.mem_desc = rxm_mr->msg_mr;
 	rxm_mr->mr_fid.key = fi_mr_key(rxm_mr->msg_mr);
-	*mr = &rxm_mr->mr_fid;
+}
 
+static int rxm_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
+			  uint64_t flags, struct fid_mr **mr)
+{
+	struct rxm_domain *rxm_domain;
+	struct fi_mr_attr msg_attr = *attr;
+	struct rxm_mr *rxm_mr;
+	int ret;
+
+	rxm_domain = container_of(fid, struct rxm_domain,
+				  util_domain.domain_fid.fid);
+
+	rxm_mr = calloc(1, sizeof(*rxm_mr));
+	if (!rxm_mr)
+		return -FI_ENOMEM;
+
+	msg_attr.access = rxm_mr_get_msg_access(rxm_domain, attr->access);
+
+	ret = fi_mr_regattr(rxm_domain->msg_domain, &msg_attr,
+			    flags, &rxm_mr->msg_mr);
+	if (ret) {
+		FI_WARN(&rxm_prov, FI_LOG_DOMAIN, "Unable to register MSG MR\n");
+		goto err;
+	}
+	rxm_mr_init(rxm_mr, attr->context);
+	*mr = &rxm_mr->mr_fid;
+	return 0;
+err:
+	free(rxm_mr);
+	return ret;
+
+}
+
+static int rxm_mr_regv(struct fid *fid, const struct iovec *iov, size_t count,
+		       uint64_t access, uint64_t offset, uint64_t requested_key,
+		       uint64_t flags, struct fid_mr **mr, void *context)
+{
+	struct rxm_domain *rxm_domain;
+	struct rxm_mr *rxm_mr;
+	int ret;
+
+	rxm_domain = container_of(fid, struct rxm_domain,
+				  util_domain.domain_fid.fid);
+
+	rxm_mr = calloc(1, sizeof(*rxm_mr));
+	if (!rxm_mr)
+		return -FI_ENOMEM;
+
+	access = rxm_mr_get_msg_access(rxm_domain, access);
+
+	ret = fi_mr_regv(rxm_domain->msg_domain, iov, count, access, offset,
+			 requested_key, flags, &rxm_mr->msg_mr, context);
+	if (ret) {
+		FI_WARN(&rxm_prov, FI_LOG_DOMAIN, "Unable to register MSG MR\n");
+		goto err;
+	}
+	rxm_mr_init(rxm_mr, context);
+	*mr = &rxm_mr->mr_fid;
 	return 0;
 err:
 	free(rxm_mr);
 	return ret;
 }
 
+static int rxm_mr_reg(struct fid *fid, const void *buf, size_t len,
+		      uint64_t access, uint64_t offset, uint64_t requested_key,
+		      uint64_t flags, struct fid_mr **mr, void *context)
+{
+	struct iovec iov;
+
+	iov.iov_base = (void *) buf;
+	iov.iov_len = len;
+	return rxm_mr_regv(fid, &iov, 1, access, offset, requested_key,
+			   flags, mr, context);
+}
+
 static struct fi_ops_mr rxm_domain_mr_ops = {
 	.size = sizeof(struct fi_ops_mr),
 	.reg = rxm_mr_reg,
-	.regv = fi_no_mr_regv,
-	.regattr = fi_no_mr_regattr,
+	.regv = rxm_mr_regv,
+	.regattr = rxm_mr_regattr,
 };
 
 int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
