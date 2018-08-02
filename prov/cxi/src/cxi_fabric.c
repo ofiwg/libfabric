@@ -627,7 +627,7 @@ static int cxi_getinfo(uint32_t version, const char *node, const char *service,
 		       struct fi_info **info)
 {
 	int ret = 0;
-	struct slist_entry *entry, *prev;
+	struct slist_entry *entry, *prev __attribute__ ((unused));
 	struct cxix_if *if_entry;
 	struct fi_info *tail;
 
@@ -668,7 +668,6 @@ static int cxi_getinfo(uint32_t version, const char *node, const char *service,
 		return cxi_node_getinfo(version, node, service, flags,
 					 hints, info, &tail);
 
-	(void) prev; /* Makes compiler happy */
 	slist_foreach(&cxix_if_list, entry, prev) {
 		char *local_node, *local_service;
 		int i;
