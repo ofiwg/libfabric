@@ -792,6 +792,8 @@ int cxi_ep_enable(struct fid_ep *ep)
 	struct cxi_tx_ctx *tx_ctx;
 	struct cxi_rx_ctx *rx_ctx;
 
+	/* TODO fix locking and check for AV and source CQs */
+
 	cxi_ep = container_of(ep, struct cxi_ep, ep);
 
 	ret = cxix_domain_enable(cxi_ep->attr->domain);

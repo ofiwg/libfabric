@@ -60,6 +60,7 @@ int cxix_tx_ctx_enable(struct cxi_tx_ctx *txc)
 		}
 	}
 
+	/* TODO set CMDQ size with TX attrs */
 	ret = cxil_alloc_cmdq(txc->domain->dev_if->if_lni, 64, 1,
 			      &txc->tx_cmdq);
 	if (ret != FI_SUCCESS) {

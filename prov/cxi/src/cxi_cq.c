@@ -158,6 +158,7 @@ void cxi_cq_progress(struct cxi_cq *cq)
 	if (!cq->enabled)
 		return;
 
+	/* TODO Limit the maximum number of events processed */
 	while ((event = cxi_eq_get_event(cq->evtq))) {
 		req = cxix_cq_event_req(event);
 		if (req)
@@ -537,6 +538,7 @@ int cxix_cq_enable(struct cxi_cq *cxi_cq)
 	if (cxi_cq->enabled)
 		goto unlock;
 
+	/* TODO set EVTQ size with CQ attrs */
 	evtq_opts.count = 1024;
 	evtq_opts.reserved_fc = 1;
 
@@ -548,6 +550,7 @@ int cxix_cq_enable(struct cxi_cq *cxi_cq)
 		goto unlock;
 	}
 
+	/* TODO set buffer pool size with CQ attrs */
 	ret = util_buf_pool_create(&cxi_cq->req_pool, sizeof(struct cxi_req),
 				   8, 0, 64);
 	if (ret) {
