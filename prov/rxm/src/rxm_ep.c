@@ -1229,21 +1229,15 @@ rxm_ep_inject_common(struct rxm_ep *rxm_ep, const void *buf, size_t len,
 	assert(len <= rxm_ep->rxm_info->tx_attr->inject_size);
 	assert(!(comp_flags & ~(FI_MSG | FI_TAGGED)));
 
-	fastlock_acquire(&rxm_ep->util_ep.cmap->lock);
-	rxm_conn = rxm_acquire_conn(rxm_ep, dest_addr);
-	if (OFI_UNLIKELY(rxm_conn->handle.state != CMAP_CONNECTED)) {
-		ret = rxm_ep_handle_unconnected(rxm_ep, &rxm_conn->handle, dest_addr);
-		fastlock_release(&rxm_ep->util_ep.cmap->lock);
-		if (!ret)
-			goto inject_continue;
-		else if (OFI_UNLIKELY(ret != -FI_EAGAIN))
+	ret = rxm_acquire_conn_connect(rxm_ep, dest_addr, &rxm_conn);
+	if (OFI_UNLIKELY(ret)) {
+		if (ret == -FI_EAGAIN) {
+			tx_buf = NULL;
+			goto defer;
+		} else {
 			return ret;
-		tx_buf = NULL;
-		goto defer;
+		}
 	}
-	fastlock_release(&rxm_ep->util_ep.cmap->lock);
-
-inject_continue:
 	if (OFI_UNLIKELY(!dlist_empty(&rxm_conn->deferred_op_list))) {
 		rxm_ep_progress_multi(&rxm_ep->util_ep);
 		if (!dlist_empty(&rxm_conn->deferred_op_list)) {
@@ -1317,25 +1311,18 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 	assert(count <= rxm_ep->rxm_info->tx_attr->iov_limit);
 	assert(!(comp_flags & ~(FI_MSG | FI_TAGGED)));
 
-	fastlock_acquire(&rxm_ep->util_ep.cmap->lock);
-	rxm_conn = rxm_acquire_conn(rxm_ep, dest_addr);
-	if (OFI_UNLIKELY(rxm_conn->handle.state != CMAP_CONNECTED)) {
-		ret = rxm_ep_handle_unconnected(rxm_ep, &rxm_conn->handle, dest_addr);
-		fastlock_release(&rxm_ep->util_ep.cmap->lock);
-		if (!ret)
-			goto send_continue;
-		else if (OFI_UNLIKELY(ret != -FI_EAGAIN))
-			return ret;
-
-		if (data_len <= rxm_ep->rxm_info->tx_attr->inject_size) {
+	ret = rxm_acquire_conn_connect(rxm_ep, dest_addr, &rxm_conn);
+	if (OFI_UNLIKELY(ret)) {
+		if (ret == -FI_EAGAIN) {
 			tx_buf = NULL;
-			goto defer_inject;
+			if (data_len <= rxm_ep->rxm_info->tx_attr->inject_size)
+				goto defer_inject;
+			else
+				return -FI_EAGAIN;
+		} else {
+			return ret;
 		}
-		return ret;
 	}
-	fastlock_release(&rxm_ep->util_ep.cmap->lock);
-
-send_continue:
 	if (OFI_UNLIKELY(!dlist_empty(&rxm_conn->deferred_op_list))) {
 		rxm_ep_progress_multi(&rxm_ep->util_ep);
 		if (!dlist_empty(&rxm_conn->deferred_op_list)) {

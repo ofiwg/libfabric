@@ -235,17 +235,9 @@ rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t 
 
 	assert(msg->rma_iov_count <= rxm_ep->rxm_info->tx_attr->rma_iov_limit);
 
-	fastlock_acquire(&rxm_ep->util_ep.cmap->lock);
-	rxm_conn = rxm_acquire_conn(rxm_ep, msg->addr);
-	if (OFI_UNLIKELY(rxm_conn->handle.state != CMAP_CONNECTED)) {
-		ret = rxm_ep_handle_unconnected(rxm_ep, &rxm_conn->handle, msg->addr);
-		if (!ret)
-			goto rma_continue;
-		fastlock_release(&rxm_ep->util_ep.cmap->lock);
+	ret = rxm_acquire_conn_connect(rxm_ep, msg->addr, &rxm_conn);
+	if (OFI_UNLIKELY(ret))
 		return ret;
-	}
-rma_continue:
-	fastlock_release(&rxm_ep->util_ep.cmap->lock);
 
 	ret = rxm_ep_format_rma_res_lightweight(rxm_ep, rxm_conn, flags,
 						comp_flags, msg, &tx_entry);
@@ -345,21 +337,11 @@ rxm_ep_rma_inject(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t 
 	ssize_t ret;
 
 	assert(msg->rma_iov_count <= rxm_ep->rxm_info->tx_attr->rma_iov_limit);
+	assert(total_size <= rxm_ep->rxm_info->tx_attr->inject_size);
 
-	fastlock_acquire(&rxm_ep->util_ep.cmap->lock);
-	rxm_conn = rxm_acquire_conn(rxm_ep, msg->addr);
-	if (OFI_UNLIKELY(rxm_conn->handle.state != CMAP_CONNECTED)) {
-		ret = rxm_ep_handle_unconnected(rxm_ep, &rxm_conn->handle, msg->addr);
-		if (!ret)
-			goto rma_inject_continue;
-		fastlock_release(&rxm_ep->util_ep.cmap->lock);
+	ret = rxm_acquire_conn_connect(rxm_ep, msg->addr, &rxm_conn);
+	if (OFI_UNLIKELY(ret))
 		return ret;
-	}
-rma_inject_continue:
-	fastlock_release(&rxm_ep->util_ep.cmap->lock);
-
-	if (OFI_UNLIKELY(total_size > rxm_ep->rxm_info->tx_attr->inject_size))
-		return -FI_EMSGSIZE;
 
 	/* Use fi_inject_write instead of fi_writemsg since the latter generates
 	 * completion by default */
