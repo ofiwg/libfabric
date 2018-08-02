@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2018 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2018 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -33,9 +34,9 @@
 #include "mrail.h"
 
 static char **mrail_addr_strv = NULL;
-/* Not thread safe */
 struct fi_info *mrail_info_vec[MRAIL_MAX_INFO] = {0};
 size_t mrail_num_info = 0;
+fastlock_t mrail_info_vec_lock;
 
 static inline char **mrail_split_addr_strc(const char *addr_strc)
 {
@@ -65,6 +66,156 @@ static int mrail_parse_env_vars(void)
 	if (!mrail_addr_strv)
 		return -FI_ENOMEM;
 	return 0;
+}
+
+int mrail_clear_cache()
+{
+	size_t i;
+	// mrail_info_vec only caches the latest getinfo
+	for (i = 0; mrail_info_vec[i]; i++)
+		fi_freeinfo(mrail_info_vec[i]);
+	memset(mrail_info_vec, 0, sizeof(mrail_info_vec));
+	mrail_num_info = 0;
+	return 0;
+}
+
+int mrail_populate_info_attr(struct fi_info *info, const struct fi_info *hints)
+{
+	size_t mr_key_size;
+	uint32_t num_rails;
+	for (num_rails = 0; mrail_addr_strv[num_rails]; ++num_rails)
+		;
+
+	mr_key_size = num_rails * sizeof(struct mrail_addr_key);
+
+	free(info->fabric_attr->name);
+	free(info->domain_attr->name);
+
+	info->fabric_attr->name = NULL;
+	info->domain_attr->name = NULL;
+
+	info->fabric_attr->name = strdup(mrail_info.fabric_attr->name);
+	if (!info->fabric_attr->name) {
+		return -FI_ENOMEM;
+	}
+	info->domain_attr->name = strdup(mrail_info.domain_attr->name);
+	if (!info->domain_attr->name) {
+		return -FI_ENOMEM;
+	}
+	info->ep_attr->protocol		= mrail_info.ep_attr->protocol;
+	info->ep_attr->protocol_version	= mrail_info.ep_attr->protocol_version;
+	info->fabric_attr->prov_version	= FI_VERSION(MRAIL_MAJOR_VERSION,
+						     MRAIL_MINOR_VERSION);
+	info->domain_attr->mr_key_size	= mr_key_size;
+	info->domain_attr->mr_mode	|= FI_MR_RAW;
+
+	/* Account for one iovec buffer used for mrail header */
+	assert(info->tx_attr->iov_limit);
+	info->tx_attr->iov_limit--;
+
+	/* Claiming messages larger than FI_OPT_BUFFERED_LIMIT would consume
+	 * a scatter/gather entry for mrail_hdr
+	 */
+	info->rx_attr->iov_limit--;
+
+	if (info->tx_attr->inject_size < sizeof(struct mrail_hdr))
+		info->tx_attr->inject_size = 0;
+	else
+		info->tx_attr->inject_size -= sizeof(struct mrail_hdr);
+
+	if (hints && hints->tx_attr && (hints->tx_attr->op_flags & FI_COMPLETION))
+		info->tx_attr->op_flags |= FI_COMPLETION;
+
+	// TODO set src_addr to FI_ADDR_STRC address
+
+	return 0;
+}
+
+// Populates mrail info vec with given list
+// mrail_info_vec:
+//	[0]: mrail_hdr_prov0 -> info_rail0 -> info_rail1 -> ... // sockets
+//	[1]: mrail_hdr_prov1 -> info_rail0 -> info_rail1 -> ... // tcp
+//      ...
+int mrail_populate_info_vec(struct fi_info *core_info, const struct fi_info *hints)
+{
+	struct fi_info *tmp_info = NULL;
+	int ret = 0;
+	size_t i;
+
+	fastlock_acquire(&mrail_info_vec_lock);
+
+	if (mrail_info_vec[0]){
+		FI_WARN(&mrail_prov, FI_LOG_CORE, "Overwriting mrail_info_vec cache\n"
+                        "Do not use previously givien info structs\n");
+		mrail_clear_cache();
+	}
+	while (core_info) {
+		tmp_info = core_info;
+		for (i = 0; i < mrail_num_info; i++) {
+			if (!strcmp(core_info->fabric_attr->prov_name,
+			    mrail_info_vec[i]->fabric_attr->prov_name)) {
+				tmp_info = mrail_info_vec[i];
+				while (tmp_info->next)
+					tmp_info = tmp_info->next;
+				tmp_info->next = core_info;
+				tmp_info = tmp_info->next;
+				core_info = core_info->next;
+				tmp_info->next = NULL;
+				break;
+			}
+		}
+		if (!mrail_info_vec[i]) {
+			assert(mrail_num_info < MRAIL_MAX_INFO);
+			mrail_info_vec[i] = core_info;
+			core_info = core_info->next;
+			mrail_info_vec[i]->next = NULL;
+			mrail_num_info++;
+		}
+	}
+
+	for (i = 0; i < mrail_num_info; i++) {
+		tmp_info = fi_dupinfo(mrail_info_vec[i]);
+		ret = mrail_populate_info_attr(tmp_info, hints);
+		if (ret){
+			fi_freeinfo(tmp_info);
+			goto out;
+		}
+		tmp_info->next = mrail_info_vec[i];
+		mrail_info_vec[i] = tmp_info;
+	}
+
+out:
+	fastlock_release(&mrail_info_vec_lock);
+	return ret;
+}
+
+// Returns duplicated header elements for the info vec
+// mrail_info_hdr_prov0 -> mrail_info_hdr_prov1 -> ...
+int mrail_get_prov_list(struct fi_info **info)
+{
+	struct fi_info *tail = NULL;
+	size_t i;
+	int ret = 0;
+
+	fastlock_acquire(&mrail_info_vec_lock);
+
+	for (i = 0; i < mrail_num_info; i++) {
+		if (i == 0) {
+			tail = fi_dupinfo(mrail_info_vec[i]);
+			*info = tail;
+		} else {
+			tail->next = fi_dupinfo(mrail_info_vec[i]);
+			tail = tail->next;
+		}
+		if (!tail) {
+			fi_freeinfo(*info);
+			ret = -FI_ENOMEM;
+			goto out;
+		}
+	}
+out:
+	fastlock_release(&mrail_info_vec_lock);
+	return ret;
 }
 
 int mrail_get_core_info(uint32_t version, const char *node, const char *service,
@@ -134,20 +285,16 @@ int mrail_get_core_info(uint32_t version, const char *node, const char *service,
 		       "--- End fi_getinfo for rail: %zd ---\n", i);
 		if (ret)
 			goto err;
-
-		if (!fi)
+		if (!fi) {
 			*core_info = info;
-		else
+			fi = info;
+		} else {
+			while (fi->next)
+				fi = fi->next;
 			fi->next = info;
-		fi = info;
-
-		/* We only want the first fi_info entry per rail */
-		if (info->next) {
-			fi_freeinfo(info->next);
-			info->next = NULL;
 		}
-
 	}
+
 	goto out;
 err:
 	if (fi)
@@ -157,110 +304,31 @@ out:
 	return ret;
 }
 
-static struct fi_info *mrail_dupinfo(const struct fi_info *info)
-{
-	struct fi_info *dup, *fi, *head = NULL;
-
-	while (info) {
-		if (!(dup = fi_dupinfo(info)))
-			goto err;
-		if (!head)
-			head = fi = dup;
-		else
-			fi->next = dup;
-		fi = dup;
-		info = info->next;
-	}
-	return head;
-err:
-	fi_freeinfo(head);
-	return NULL;
-}
-
 static int mrail_getinfo(uint32_t version, const char *node, const char *service,
 			 uint64_t flags, const struct fi_info *hints,
 			 struct fi_info **info)
 {
-	struct fi_info *fi;
-	size_t mr_key_size;
-	uint32_t num_rails;
+	struct fi_info *core_info;
 	int ret;
 
-	if (mrail_num_info >= MRAIL_MAX_INFO) {
-		FI_WARN(&mrail_prov, FI_LOG_CORE,
-			"Max mrail_num_info reached\n");
-		assert(0);
-		return -FI_ENODATA;
-	}
-
-	ret = mrail_get_core_info(version, node, service, flags, hints, info);
+	ret = mrail_get_core_info(version, node, service, flags, hints, &core_info);
 	if (ret)
-		return ret;
+		goto err;
 
-	for (fi = *info, num_rails = 0; fi; fi = fi->next, ++num_rails)
-		;
+	ret = mrail_populate_info_vec(core_info, hints);
+	if (ret)
+		goto err;
 
-	mr_key_size = num_rails * sizeof(struct mrail_addr_key);
+	ret = mrail_get_prov_list(&core_info);
+	if (ret)
+		goto err;
 
-	fi = fi_dupinfo(*info);
-	if (!fi) {
-		ret = -FI_ENOMEM;
-		goto err1;
-	}
-
-	free(fi->fabric_attr->name);
-	free(fi->domain_attr->name);
-
-	fi->fabric_attr->name = NULL;
-	fi->domain_attr->name = NULL;
-
-	fi->fabric_attr->name = strdup(mrail_info.fabric_attr->name);
-	if (!fi->fabric_attr->name) {
-		ret = -FI_ENOMEM;
-		goto err2;
-	}
-	fi->domain_attr->name = strdup(mrail_info.domain_attr->name);
-	if (!fi->domain_attr->name) {
-		ret = -FI_ENOMEM;
-		goto err2;
-	}
-	fi->ep_attr->protocol 		= mrail_info.ep_attr->protocol;
-	fi->ep_attr->protocol_version 	= mrail_info.ep_attr->protocol_version;
-	fi->fabric_attr->prov_version	= FI_VERSION(MRAIL_MAJOR_VERSION,
-						     MRAIL_MINOR_VERSION);
-	fi->domain_attr->mr_key_size 	= mr_key_size;
-	fi->domain_attr->mr_mode        |= FI_MR_RAW;
-
-	/* Account for one iovec buffer used for mrail header */
-	assert(fi->tx_attr->iov_limit);
-	fi->tx_attr->iov_limit--;
-
-	/* Claiming messages larger than FI_OPT_BUFFERED_LIMIT would consume
-	 * a scatter/gather entry for mrail_hdr */
-	fi->rx_attr->iov_limit--;
-
-	if (fi->tx_attr->inject_size < sizeof(struct mrail_hdr))
-		fi->tx_attr->inject_size = 0;
-	else
-		fi->tx_attr->inject_size -= sizeof(struct mrail_hdr);
-
-	if (hints && hints->tx_attr && (hints->tx_attr->op_flags & FI_COMPLETION))
-		fi->tx_attr->op_flags |= FI_COMPLETION;
-
-	// TODO set src_addr to FI_ADDR_STRC address
-	fi->next = *info;
-	*info = fi;
-
-	mrail_info_vec[mrail_num_info] = mrail_dupinfo(*info);
-	if (!mrail_info_vec[mrail_num_info])
-		goto err2;
-
-	mrail_num_info++;
+	*info = core_info;
 
 	return 0;
-err2:
-	fi_freeinfo(fi);
-err1:
+
+err:
+	fi_freeinfo(core_info);
 	fi_freeinfo(*info);
 	return ret;
 }
@@ -270,6 +338,7 @@ static void mrail_fini(void)
 	size_t i;
 	for (i = 0; i < mrail_num_info; i++)
 		fi_freeinfo(mrail_info_vec[i]);
+	fastlock_destroy(&mrail_info_vec_lock);
 }
 
 struct fi_provider mrail_prov = {
@@ -289,6 +358,7 @@ struct util_prov mrail_util_prov = {
 
 MRAIL_INI
 {
+	fastlock_init(&mrail_info_vec_lock);
 	mrail_parse_env_vars();
 	return &mrail_prov;
 }

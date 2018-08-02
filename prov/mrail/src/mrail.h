@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2018 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2018 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -71,6 +72,7 @@ extern struct util_prov mrail_util_prov;
 extern struct fi_fabric_attr mrail_fabric_attr;
 
 extern struct fi_info *mrail_info_vec[MRAIL_MAX_INFO];
+extern fastlock_t mrail_info_vec_lock;
 extern size_t mrail_num_info;
 
 extern struct fi_ops_rma mrail_ops_rma;
@@ -251,20 +253,60 @@ mrail_push_recv(struct mrail_recv *recv)
 	recv->ep->lock_release(&recv->ep->util_ep.lock);
 }
 
-static inline struct fi_info *mrail_get_info_cached(char *name)
+static struct fi_info *mrail_dupinfo(const struct fi_info *info)
 {
-	struct fi_info *info;
+	struct fi_info *dup, *fi, *head = NULL;
+
+	while (info) {
+		if (!(dup = fi_dupinfo(info)))
+			goto err;
+		if (!head)
+			head = fi = dup;
+		else
+			fi->next = dup;
+		fi = dup;
+		info = info->next;
+	}
+	return head;
+err:
+	fi_freeinfo(head);
+	return NULL;
+}
+
+// Returns an info list of rails for a provider
+static inline int mrail_get_info_cached(char *fabric_name,
+					char *prov_name,
+					struct fi_info **info)
+{
+	struct fi_info *tmp_info;
 	size_t i;
+	int ret = 0;
+	char *tmp_prov_name = malloc(sizeof(char) * FI_NAME_MAX);
+	strcpy(tmp_prov_name, prov_name);
+	ofi_rm_substr_delim(tmp_prov_name, mrail_prov.name, ';');
+
+	fastlock_acquire(&mrail_info_vec_lock);
 
 	for (i = 0; i < mrail_num_info; i++) {
-		info = mrail_info_vec[i];
-		if (!strcmp(info->fabric_attr->name, name))
-			return info;
+		tmp_info = mrail_info_vec[i];
+		if (!strcmp(tmp_info->fabric_attr->name, fabric_name) &&
+		    !strcmp(tmp_info->fabric_attr->prov_name, tmp_prov_name)) {
+			FI_DBG(&mrail_prov, FI_LOG_CORE,
+			       "The selected prov name is %s. The selected fabric is %s.\n",
+			       tmp_info->fabric_attr->prov_name, tmp_info->fabric_attr->name);
+			*info = mrail_dupinfo(tmp_info);
+			if (!*info)
+				ret = -FI_ENOMEM;
+			goto out;
+		}
 	}
 
 	FI_WARN(&mrail_prov, FI_LOG_CORE, "Unable to find matching "
 		"fi_info in mrail_info_vec for given fabric name\n");
-	return NULL;
+	ret = -FI_ENODATA;
+out:
+	fastlock_release(&mrail_info_vec_lock);
+	return ret;
 }
 
 static inline int mrail_close_fids(struct fid **fids, size_t count)

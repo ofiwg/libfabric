@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2018 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2018 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -73,7 +74,7 @@ static struct fi_ops_fabric mrail_fabric_ops = {
 int mrail_fabric_open(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 		      void *context)
 {
-	struct fi_info *fi;
+	struct fi_info *fi, *info;
 	struct mrail_fabric *mrail_fabric;
 	size_t i;
 	int ret;
@@ -82,7 +83,14 @@ int mrail_fabric_open(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 	if (!mrail_fabric)
 		return -FI_ENOMEM;
 
-	mrail_fabric->info = mrail_get_info_cached(attr->name);
+	ret = mrail_get_info_cached(attr->name, attr->prov_name, &info);
+	if (ret)
+		return ret;
+
+	// We don't want to use a list to open the fabric
+	info->next = NULL;
+
+	mrail_fabric->info = info;
 	if (!mrail_fabric->info) {
 		free(mrail_fabric);
 		return -FI_EINVAL;
