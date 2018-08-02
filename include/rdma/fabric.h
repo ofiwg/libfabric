@@ -157,6 +157,7 @@ typedef struct fid *fid_t;
 #define FI_DELIVERY_COMPLETE	(1ULL << 28)
 #define FI_AFFINITY		(1ULL << 29)
 #define FI_COMMIT_COMPLETE	(1ULL << 30)
+#define FI_MATCH_COMPLETE	(1ULL << 31)
 
 #define FI_VARIABLE_MSG		(1ULL << 48)
 #define FI_RMA_PMEM		(1ULL << 49)
