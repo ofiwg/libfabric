@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
  *                         All rights reserved.
- * Copyright (c) 2015,2017 Cray Inc.  All rights reserved.
+ * Copyright (c) 2015,2017-2018 Cray Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -557,6 +557,11 @@ static int __fill_mbox(struct gnix_mbox_alloc_handle *handle,
 		ret = -FI_EINVAL;
 		goto err_invalid;
 	}
+
+	/* On some systems, the page may not be zero'd from first use.
+		Memset it here */
+	memset((void *) ((uint64_t) out->base + out->offset),
+		0x0, handle->mbox_size);
 
 	ret = _gnix_test_and_set_bit(slab->used, position);
 	if (ret != 0) {
