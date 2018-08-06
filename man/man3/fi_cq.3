@@ -1,4 +1,4 @@
-.TH "fi_cq" "3" "2018\-07\-27" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_cq" "3" "2018\-08\-06" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_cq \- Completion queue operations
@@ -611,6 +611,132 @@ This flag is set on completions associated with receive operations that
 claim buffered receive data.
 Note that this flag only applies to endpoints configured with the
 FI_BUFFERED_RECV mode bit.
+.SH COMPLETION EVENT SEMANTICS
+.PP
+Libfabric defines several completion \[aq]levels\[aq], identified using
+operational flags.
+Each flag indicates the soonest that a completion event may be generated
+by a provider, and the assumptions that an application may make upon
+processing a completion.
+The operational flags are defined below, along with an example of how a
+provider might implement the semantic.
+Note that only meeting the semantic is required of the provider and not
+the implementation.
+Providers may implement stronger completion semantics than necessary for
+a given operation, but only the behavior defined by the completion level
+is guaranteed.
+.PP
+To help understand the conceptual differences in completion levels,
+consider mailing a letter.
+Placing the letter into the local mailbox for pick\-up is similar to
+\[aq]inject complete\[aq].
+Having the letter picked up and dropped off at the destination mailbox
+is equivalent to \[aq]transmit complete\[aq].
+The \[aq]delivery complete\[aq] semantic is a stronger guarantee, with a
+person at the destination signing for the letter.
+However, the person who signed for the letter is not necessarily the
+intended recipient.
+The \[aq]match complete\[aq] option is similar to delivery complete, but
+requires the intended recipient to sign for the letter.
+.PP
+The \[aq]commit complete\[aq] level has different semantics than the
+previously mentioned levels.
+Commit complete would be closer to the the letter arriving at the
+destination and being placed into a fire proof safe.
+.PP
+The operational flags for the described completion levels are defined
+below.
+.PP
+\f[I]FI_INJECT_COMPLETE\f[] : Indicates that a completion should be
+generated when the source buffer(s) may be reused.
+A completion guarantees that the buffers will not be read from again and
+the application may reclaim them.
+No other guarantees are made with respect to the state of the operation.
+.PP
+Example: A provider may generate this completion event after copying the
+source buffer into a network buffer, either in host memory or on the
+NIC.
+An inject completion does not indicate that the data has been
+transmitted onto the network, and a local error could occur after the
+completion event has been generated that could prevent it from being
+transmitted.
+.PP
+Inject complete allows for the fastest completion reporting (and, hence,
+buffer reuse), but provides the weakest guarantees against network
+errors.
+.PP
+Note: This flag is used to control when a completion entry is inserted
+into a completion queue.
+It does not apply to operations that do not generate a completion queue
+entry, such as the fi_inject operation, and is not subject to the
+inject_size message limit restriction.
+.PP
+\f[I]FI_TRANSMIT_COMPLETE\f[] : Indicates that a completion should be
+generated when the transmit operation has completed relative to the
+local provider.
+The exact behavior is dependent on the endpoint type.
+.PP
+For reliable endpoints:
+.PP
+Indicates that a completion should be generated when the operation has
+been delivered to the peer endpoint.
+A completion guarantees that the operation is no longer dependent on the
+fabric or local resources.
+The state of the operation at the peer endpoint is not defined.
+.PP
+Example: A provider may generate a transmit complete event upon
+receiving an ack from the peer endpoint.
+The state of the message at the peer is unknown and may be buffered in
+the target NIC at the time the ack has been generated.
+.PP
+For unreliable endpoints:
+.PP
+Indicates that a completion should be generated when the operation has
+been delivered to the fabric.
+A completion guarantees that the operation is no longer dependent on
+local resources.
+The state of the operation within the fabric is not defined.
+.PP
+\f[I]FI_DELIVERY_COMPLETE\f[] : Indicates that a completion should not
+be generated until an operation has been processed by the destination
+endpoint(s).
+A completion guarantees that the result of the operation is available;
+however, additional steps may need to be taken at the destination to
+retrieve the results.
+For example, an application may need to provide a receive buffers in
+order to retrieve messages that were buffered by the provider.
+.PP
+Delivery complete indicates that the message has been processed by the
+peer.
+If an application buffer was ready to receive the results of the message
+when it arrived, then delivery complete indicates that the data was
+placed into the application\[aq]s buffer.
+.PP
+This completion mode applies only to reliable endpoints.
+For operations that return data to the initiator, such as RMA read or
+atomic\-fetch, the source endpoint is also considered a destination
+endpoint.
+This is the default completion mode for such operations.
+.PP
+\f[I]FI_MATCH_COMPLETE\f[] : Indicates that a completion should be
+generated only after the operation has been matched with an application
+specified buffer.
+Operations using this completion semantic are dependent on the
+application at the target claiming the message or results.
+As a result, match complete may involve additional provider level
+acknowledgements or lengthy delays.
+However, this completion model enables peer applications to synchronize
+their execution.
+.PP
+\f[I]FI_COMMIT_COMPLETE\f[] : Indicates that a completion should not be
+generated (locally or at the peer) until the result of an operation have
+been made persistent.
+A completion guarantees that the result is both available and durable,
+in the case of power failure.
+.PP
+This completion mode applies only to operations that target persistent
+memory regions over reliable endpoints.
+This completion mode is experimental.
 .SH NOTES
 .PP
 A completion queue must be bound to at least one enabled endpoint before

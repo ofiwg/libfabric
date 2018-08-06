@@ -1,4 +1,4 @@
-.TH "fi_tagged" "3" "2018\-06\-15" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_tagged" "3" "2018\-08\-06" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_tagged \- Tagged data transfer operations
@@ -256,6 +256,11 @@ buffer(s) may be reused.
 Indicates that a completion should not be generated until the operation
 has been successfully transmitted and is no longer being tracked by the
 provider.
+.PP
+\f[I]FI_MATCH_COMPLETE\f[] : Applies to fi_tsendmsg.
+Indicates that a completion should be generated only after the message
+has either been matched with a tagged buffer or was discarded by the
+target application.
 .PP
 \f[I]FI_FENCE\f[] : Applies to transmits.
 Indicates that the requested operation, also known as the fenced
