@@ -226,7 +226,9 @@ void tcpx_ep_progress(struct tcpx_ep *ep);
 int tcpx_ep_shutdown_report(struct tcpx_ep *ep, fid_t fid);
 int tcpx_cq_wait_ep_add(struct tcpx_ep *ep);
 void tcpx_cq_wait_ep_del(struct tcpx_ep *ep);
-void process_tx_entry(struct tcpx_xfer_entry *tx_entry);
+void tcpx_tx_queue_insert(struct tcpx_ep *tcpx_ep,
+			  struct tcpx_xfer_entry *tx_entry);
+
 void tcpx_conn_mgr_run(struct util_eq *eq);
 int tcpx_eq_wait_try_func(void *arg);
 int tcpx_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,

@@ -216,7 +216,7 @@ static void tcpx_prepare_rx_remote_read_resp(struct tcpx_xfer_entry *resp_entry)
 	resp_entry->context = NULL;
 	resp_entry->done_len = 0;
 
-	slist_insert_tail(&resp_entry->entry, &resp_entry->ep->tx_queue);
+	tcpx_tx_queue_insert(resp_entry->ep, resp_entry);
 }
 
 static int tcpx_validate_rx_rma_data(struct tcpx_xfer_entry *rx_entry,
@@ -488,4 +488,21 @@ void tcpx_cq_wait_ep_del(struct tcpx_ep *ep)
 	}
 out:
 	fastlock_release(&ep->lock);
+}
+
+void tcpx_tx_queue_insert(struct tcpx_ep *tcpx_ep,
+			  struct tcpx_xfer_entry *tx_entry)
+{
+	int empty;
+	struct util_wait *wait = tcpx_ep->util_ep.tx_cq->wait;
+
+	empty = slist_empty(&tcpx_ep->tx_queue);
+	slist_insert_tail(&tx_entry->entry, &tcpx_ep->tx_queue);
+
+	if (empty) {
+		process_tx_entry(tx_entry);
+
+		if (!slist_empty(&tcpx_ep->tx_queue) && wait)
+			wait->signal(wait);
+	}
 }
