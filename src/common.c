@@ -674,8 +674,35 @@ void ofi_straddr_log_internal(const char *func, int line,
 
 int fi_epoll_create(struct fi_epoll **ep)
 {
+	int ret;
+
 	*ep = calloc(1, sizeof(struct fi_epoll));
-	return *ep ? 0 : -FI_ENOMEM;
+	if (!*ep)
+		return -FI_ENOMEM;
+
+	(*ep)->size = 64;
+	(*ep)->fds = calloc((*ep)->size, sizeof(*(*ep)->fds) +
+			    sizeof(*(*ep)->context));
+	if (!(*ep)->fds) {
+		ret = -FI_ENOMEM;
+		goto err1;
+	}
+	(*ep)->context = (void *)((*ep)->fds + (*ep)->size);
+
+	ret = fd_signal_init(&(*ep)->signal);
+	if (ret)
+		goto err2;
+
+	(*ep)->fds[(*ep)->nfds].fd = (*ep)->signal.fd[FI_READ_FD];
+	(*ep)->fds[(*ep)->nfds].events = FI_EPOLL_IN;
+	(*ep)->context[(*ep)->nfds++] = NULL;
+
+	return FI_SUCCESS;
+err2:
+	free((*ep)->fds);
+err1:
+	free(*ep);
+	return ret;
 }
 
 int fi_epoll_add(struct fi_epoll *ep, int fd, uint32_t events, void *context)
@@ -702,7 +729,23 @@ int fi_epoll_add(struct fi_epoll *ep, int fd, uint32_t events, void *context)
 	ep->fds[ep->nfds].fd = fd;
 	ep->fds[ep->nfds].events = events;
 	ep->context[ep->nfds++] = context;
+	fd_signal_set(&ep->signal);
 	return 0;
+}
+
+int fi_epoll_mod(struct fi_epoll *ep, int fd, uint32_t events, void *context)
+{
+	int i;
+
+	for (i = 0; i < ep->nfds; i++) {
+		if (ep->fds[i].fd == fd) {
+			ep->fds[i].events = events;
+			ep->context[i] = context;
+			fd_signal_set(&ep->signal);
+			return 0;
+		}
+  	}
+	return -FI_EINVAL;
 }
 
 int fi_epoll_del(struct fi_epoll *ep, int fd)
@@ -713,7 +756,8 @@ int fi_epoll_del(struct fi_epoll *ep, int fd)
 		if (ep->fds[i].fd == fd) {
 			ep->fds[i].fd = ep->fds[ep->nfds - 1].fd;
 			ep->context[i] = ep->context[--ep->nfds];
-      			return 0;
+			fd_signal_set(&ep->signal);
+			return 0;
 		}
   	}
 	return -FI_EINVAL;
@@ -724,31 +768,43 @@ int fi_epoll_wait(struct fi_epoll *ep, void **contexts, int max_contexts,
 {
 	int i, ret;
 	int found = 0;
+	uint64_t start = (timeout >= 0) ? fi_gettime_ms() : 0;
 
-	ret = poll(ep->fds, ep->nfds, timeout);
-	if (ret == SOCKET_ERROR)
-		return -ofi_sockerr();
-	else if (ret == 0)
-		return 0;
+	do {
+		ret = poll(ep->fds, ep->nfds, timeout);
+		if (ret == SOCKET_ERROR)
+			return -ofi_sockerr();
+		else if (ret == 0)
+			return 0;
 
-	for (i = ep->index; i < ep->nfds && found < max_contexts; i++) {
-		if (ep->fds[i].revents) {
-			contexts[found++] = ep->context[i];
-			ep->index = i;
+		if (ep->fds[0].revents)
+			fd_signal_reset(&ep->signal);
+
+		for (i = ep->index; i < ep->nfds && found < max_contexts; i++) {
+			if (ep->fds[i].revents && i) {
+				contexts[found++] = ep->context[i];
+				ep->index = i;
+			}
 		}
-	}
-	for (i = 0; i < ep->index && found < max_contexts; i++) {
-		if (ep->fds[i].revents) {
-			contexts[found++] = ep->context[i];
-			ep->index = i;
+		for (i = 0; i < ep->index && found < max_contexts; i++) {
+			if (ep->fds[i].revents && i) {
+				contexts[found++] = ep->context[i];
+				ep->index = i;
+			}
 		}
-	}
+
+		if (timeout > 0)
+			timeout -= (int) (fi_gettime_ms() - start);
+
+	} while (timeout > 0 && !found);
+
 	return found;
 }
 
 void fi_epoll_close(struct fi_epoll *ep)
 {
 	if (ep) {
+		fd_signal_free(&ep->signal);
 		free(ep->fds);
 		free(ep);
 	}

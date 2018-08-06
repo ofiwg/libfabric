@@ -140,6 +140,15 @@ static inline int fi_epoll_add(int ep, int fd, uint32_t events, void *context)
 	return 0;
 }
 
+static inline int fi_epoll_mod(int ep, int fd, uint32_t events, void *context)
+{
+	struct epoll_event event;
+
+	event.data.ptr = context;
+	event.events = events;
+	return epoll_ctl(ep, EPOLL_CTL_MOD, fd, &event) ? -ofi_syserr() : 0;
+}
+
 static inline int fi_epoll_del(int ep, int fd)
 {
 	return epoll_ctl(ep, EPOLL_CTL_DEL, fd, NULL) ? -ofi_syserr() : 0;
@@ -178,10 +187,12 @@ typedef struct fi_epoll {
 	struct pollfd	*fds;
 	void		**context;
 	int		index;
+	struct fd_signal signal;
 } *fi_epoll_t;
 
 int fi_epoll_create(struct fi_epoll **ep);
 int fi_epoll_add(struct fi_epoll *ep, int fd, uint32_t events, void *context);
+int fi_epoll_mod(struct fi_epoll *ep, int fd, uint32_t events, void *context);
 int fi_epoll_del(struct fi_epoll *ep, int fd);
 int fi_epoll_wait(struct fi_epoll *ep, void **contexts, int max_contexts,
                   int timeout);
