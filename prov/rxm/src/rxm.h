@@ -702,6 +702,8 @@ rxm_acquire_conn_connect(struct rxm_ep *rxm_ep, fi_addr_t fi_addr,
 	return 0;
 }
 
+/* note: this function shouldn't call progress on EAGAIN to avoid recursive
+ * call from fi_cq_read -> ... rxm_ep_inject_deferred_tx  */
 static inline ssize_t
 rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		   struct rxm_tx_buf *tx_buf, size_t pkt_size)
@@ -719,6 +721,8 @@ rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	return ret;
 }
 
+/* note: this function shouldn't call progress on EAGAIN to avoid recursive
+ * call from fi_cq_read -> ... rxm_ep_send_deferred_tx */
 static inline ssize_t
 rxm_ep_normal_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		   struct rxm_tx_entry *tx_entry, size_t pkt_size)
@@ -728,13 +732,9 @@ rxm_ep_normal_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	       tx_entry->tx_buf->pkt.hdr.tag);
 	ssize_t ret = fi_send(rxm_conn->msg_ep, &tx_entry->tx_buf->pkt, pkt_size,
 			      tx_entry->tx_buf->hdr.desc, 0, tx_entry);
-	if (OFI_UNLIKELY(ret)) {
-		if (ret == -FI_EAGAIN)
-			rxm_ep_progress_multi(&rxm_ep->util_ep);
-		else
-			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
-				"fi_send for MSG provider failed\n");
-	}
+	if (OFI_UNLIKELY(ret))
+		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+			"fi_send for MSG provider failed\n");
 	return ret;
 }
 

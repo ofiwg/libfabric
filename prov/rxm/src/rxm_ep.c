@@ -1254,8 +1254,11 @@ rxm_ep_inject_common(struct rxm_ep *rxm_ep, const void *buf, size_t len,
 		if (OFI_UNLIKELY(ret))
 	    		return ret;
 		ret = rxm_ep_inject_send(rxm_ep, rxm_conn, tx_buf, pkt_size);
-		if (OFI_UNLIKELY(ret))
+		if (OFI_UNLIKELY(ret)) {
+			if (ret == -FI_EAGAIN)
+				rxm_ep_progress_multi(&rxm_ep->util_ep);
 			goto defer;
+		}
 		/* release allocated buffer for further reuse */
 		rxm_tx_buf_release(rxm_ep, tx_buf);
 		return ret;
@@ -1276,6 +1279,8 @@ rxm_ep_inject_common(struct rxm_ep *rxm_ep, const void *buf, size_t len,
 		tx_entry->state = RXM_TX;
 		ret = rxm_ep_normal_send(rxm_ep, rxm_conn, tx_entry, pkt_size);
 		if (OFI_UNLIKELY(ret)) {
+			if (ret == -FI_EAGAIN)
+				rxm_ep_progress_multi(&rxm_ep->util_ep);
 			rxm_tx_entry_release(&rxm_conn->send_queue, tx_entry);
 			goto defer;
 		}
@@ -1346,8 +1351,11 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 			if (OFI_UNLIKELY(ret))
 	    			return ret;
 			ret = rxm_ep_inject_send(rxm_ep, rxm_conn, tx_buf, total_len);
-			if (OFI_UNLIKELY(ret))
+			if (OFI_UNLIKELY(ret)) {
+				if (ret == -FI_EAGAIN)
+					rxm_ep_progress_multi(&rxm_ep->util_ep);
 				goto defer_inject;
+			}
 			/* release allocated buffer for further reuse */
 			rxm_tx_buf_release(rxm_ep, tx_buf); 
 			return ret;
@@ -1363,6 +1371,8 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 		tx_entry->state = RXM_TX;
 		ret = rxm_ep_normal_send(rxm_ep, rxm_conn, tx_entry, total_len);
 		if (OFI_UNLIKELY(ret)) {
+			if (ret == -FI_EAGAIN)
+				rxm_ep_progress_multi(&rxm_ep->util_ep);
 			rxm_tx_entry_release(&rxm_conn->send_queue, tx_entry);
 			goto defer_inject;
 		}
