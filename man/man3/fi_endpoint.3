@@ -1,4 +1,4 @@
-.TH "fi_endpoint" "3" "2018\-05\-22" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_endpoint" "3" "2018\-08\-06" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_endpoint \- Fabric endpoint operations
@@ -1405,57 +1405,22 @@ See the fi_ep_bind section above for more detail.
 .PP
 \f[I]FI_INJECT_COMPLETE\f[] : Indicates that a completion should be
 generated when the source buffer(s) may be reused.
-A completion guarantees that the buffers will not be read from again and
-the application may reclaim them.
-No other guarantees are made with respect to the state of the operation.
-.PP
-Note: This flag is used to control when a completion entry is inserted
-into a completion queue.
-It does not apply to operations that do not generate a completion queue
-entry, such as the fi_inject operation, and is not subject to the
-inject_size message limit restriction.
+See \f[C]fi_cq\f[](3) for additional details on completion semantics.
 .PP
 \f[I]FI_TRANSMIT_COMPLETE\f[] : Indicates that a completion should be
 generated when the transmit operation has completed relative to the
 local provider.
-The exact behavior is dependent on the endpoint type.
+See \f[C]fi_cq\f[](3) for additional details on completion semantics.
 .PP
-For reliable endpoints:
-.PP
-Indicates that a completion should be generated when the operation has
-been delivered to the peer endpoint.
-A completion guarantees that the operation is no longer dependent on the
-fabric or local resources.
-The state of the operation at the peer endpoint is not defined.
-.PP
-For unreliable endpoints:
-.PP
-Indicates that a completion should be generated when the operation has
-been delivered to the fabric.
-A completion guarantees that the operation is no longer dependent on
-local resources.
-The state of the operation within the fabric is not defined.
-.PP
-\f[I]FI_DELIVERY_COMPLETE\f[] : Indicates that a completion should not
-be generated until an operation has been processed by the destination
+\f[I]FI_DELIVERY_COMPLETE\f[] : Indicates that a completion should be
+generated when the operation has been processed by the destination
 endpoint(s).
-A completion guarantees that the result of the operation is available.
-.PP
-This completion mode applies only to reliable endpoints.
-For operations that return data to the initiator, such as RMA read or
-atomic\-fetch, the source endpoint is also considered a destination
-endpoint.
-This is the default completion mode for such operations.
+See \f[C]fi_cq\f[](3) for additional details on completion semantics.
 .PP
 \f[I]FI_COMMIT_COMPLETE\f[] : Indicates that a completion should not be
 generated (locally or at the peer) until the result of an operation have
 been made persistent.
-A completion guarantees that the result is both available and durable,
-in the case of power failure.
-.PP
-This completion mode applies only to operations that target persistent
-memory regions over reliable endpoints.
-This completion mode is experimental.
+See \f[C]fi_cq\f[](3) for additional details on completion semantics.
 .PP
 \f[I]FI_MULTICAST\f[] : Indicates that data transfers will target
 multicast addresses by default.
@@ -1523,7 +1488,7 @@ necessary event queue.
 requested operation.
 .SH SEE ALSO
 .PP
-\f[C]fi_getinfo\f[](3), \f[C]fi_domain\f[](3), \f[C]fi_msg\f[](3),
-\f[C]fi_tagged\f[](3), \f[C]fi_rma\f[](3)
+\f[C]fi_getinfo\f[](3), \f[C]fi_domain\f[](3), \f[C]fi_cq\f[](3)
+\f[C]fi_msg\f[](3), \f[C]fi_tagged\f[](3), \f[C]fi_rma\f[](3)
 .SH AUTHORS
 OpenFabrics.
