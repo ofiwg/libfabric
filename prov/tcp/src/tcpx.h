@@ -154,6 +154,7 @@ struct tcpx_ep {
 	/* lock for protecting tx/rx queues,rma list,cm_state*/
 	fastlock_t		lock;
 	tcpx_ep_progress_func_t progress_func;
+	bool			send_ready_monitor;
 };
 
 struct tcpx_fabric {
