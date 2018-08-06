@@ -1332,54 +1332,24 @@ value of transmit or receive context attributes of an endpoint.
 
 *FI_INJECT_COMPLETE*
 : Indicates that a completion should be generated when the
-  source buffer(s) may be reused.  A completion guarantees that
-  the buffers will not be read from again and the application may
-  reclaim them.  No other guarantees are made with respect to the
-  state of the operation.
-
-  Note: This flag is used to control when a completion entry is inserted
-  into a completion queue.  It does not apply to operations that do not
-  generate a completion queue entry, such as the fi_inject operation, and
-  is not subject to the inject_size message limit restriction.
+  source buffer(s) may be reused.  See [`fi_cq`(3)](fi_cq.3.html) for
+  additional details on completion semantics.
 
 *FI_TRANSMIT_COMPLETE*
 : Indicates that a completion should be generated when the transmit
-  operation has completed relative to the local provider.  The exact
-  behavior is dependent on the endpoint type.
-
-  For reliable endpoints:
-
-  Indicates that a completion should be generated when the operation has
-  been delivered to the peer endpoint.  A completion guarantees that the
-  operation is no longer dependent on the fabric or local resources.  The
-  state of the operation at the peer endpoint is not defined.
-
-  For unreliable endpoints:
-
-  Indicates that a completion should be generated when the operation has
-  been delivered to the fabric.  A completion guarantees that the
-  operation is no longer dependent on local resources.  The state of the
-  operation within the fabric is not defined.
+  operation has completed relative to the local provider.  See
+  [`fi_cq`(3)](fi_cq.3.html) for additional details on completion semantics.
 
 *FI_DELIVERY_COMPLETE*
-: Indicates that a completion should not be generated until an operation
-  has been processed by the destination endpoint(s).  A completion
-  guarantees that the result of the operation is available.
-
-  This completion mode applies only to reliable endpoints.  For operations
-  that return data to the initiator, such as RMA read or atomic-fetch,
-  the source endpoint is also considered a destination endpoint.  This is the
-  default completion mode for such operations.
+: Indicates that a completion should be generated when the operation has been
+  processed by the destination endpoint(s).  See [`fi_cq`(3)](fi_cq.3.html)
+  for additional details on completion semantics.
 
 *FI_COMMIT_COMPLETE*
 : Indicates that a completion should not be generated (locally or at the
   peer) until the result of an operation have been made persistent.
-  A completion guarantees that the result is both available and durable,
-  in the case of power failure.
-
-  This completion mode applies only to operations that target persistent
-  memory regions over reliable endpoints.  This completion mode is
-  experimental.
+  See [`fi_cq`(3)](fi_cq.3.html) for additional details on completion
+  semantics.
 
 *FI_MULTICAST*
 : Indicates that data transfers will target multicast addresses by default.
@@ -1448,6 +1418,7 @@ Fabric errno values are defined in `rdma/fi_errno.h`.
 
 [`fi_getinfo`(3)](fi_getinfo.3.html),
 [`fi_domain`(3)](fi_domain.3.html),
+[`fi_cq`(3)](fi_cq.3.html)
 [`fi_msg`(3)](fi_msg.3.html),
 [`fi_tagged`(3)](fi_tagged.3.html),
 [`fi_rma`(3)](fi_rma.3.html)
