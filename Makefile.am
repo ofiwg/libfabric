@@ -71,7 +71,8 @@ nobase_dist_config_DATA = \
         test_configs/udp/lat_bw.test \
         test_configs/udp/quick.test \
         test_configs/udp/functional.test \
-	test_configs/udp/udp.exclude \
+        test_configs/udp/udp.exclude \
+        test_configs/tcp/tcp.exclude \
         test_configs/verbs/all.test \
         test_configs/verbs/quick.test \
 	test_configs/verbs/verbs.exclude \
