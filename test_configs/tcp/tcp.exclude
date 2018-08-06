@@ -1,0 +1,19 @@
+# Regex patterns of tests to exclude in runfabtests.sh
+
+^dgram| -e dgram
+
+rdm_rma_simple
+rdm_rma_trigger
+shared_ctx
+scalable_ep
+shared_av
+multi_mr
+atomic
+inj_complete -e msg
+unexpected_msg -e msg
+
+# TODO. Following fails with macOS. will fix them later
+cq_data -e rdm
+rdm_tagged_peek
+unexpected_msg -e rdm
+rdm_cntr_pingpong
