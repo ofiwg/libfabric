@@ -541,7 +541,7 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq)
 	evtq_opts.count = 1024;
 	evtq_opts.reserved_fc = 1;
 
-	ret = cxil_alloc_evtq(cxi_cq->domain->dev_if->if_lni, &evtq_opts,
+	ret = cxil_alloc_evtq(cxi_cq->domain->dev_if->if_lni, &evtq_opts, NULL,
 			      &cxi_cq->evtq);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Unable to allocate EVTQ, ret: %d\n", ret);

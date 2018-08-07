@@ -61,7 +61,7 @@ static ssize_t cxip_rma_write(struct fid_ep *ep, const void *buf, size_t len,
 	struct cxip_req *req;
 	union c_cmdu cmd = {};
 	struct cxip_addr caddr;
-	uint32_t dfa;
+	union c_fab_addr dfa;
 	uint32_t idx_ext;
 	uint32_t pid_granule;
 	uint32_t pid_idx;
