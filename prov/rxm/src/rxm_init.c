@@ -240,8 +240,10 @@ static int rxm_getinfo(uint32_t version, const char *node, const char *service,
 		return ret;
 
 	if (port_save) {
-		for (cur = *info; cur; cur = cur->next)
+		for (cur = *info; cur; cur = cur->next) {
+			assert(cur->src_addr);
 			ofi_addr_set_port(cur->src_addr, port_save);
+		}
 	}
 
 	rxm_alter_info(hints, *info);
