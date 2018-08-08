@@ -1460,18 +1460,13 @@ int ofi_cmap_process_connreq(struct util_cmap *cmap, void *addr,
 			     struct util_cmap_handle **handle_ret)
 {
 	struct util_cmap_handle *handle;
-	int ret = 0, index;
+	int ret = 0, index, cmp;
 
 	ofi_straddr_dbg(cmap->av->prov, FI_LOG_EP_CTRL,
 			"Processing connreq for addr", addr);
 
-	if (!ofi_addr_cmp(cmap->av->prov, addr, cmap->attr.name)) {
-		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
-			"Endpoint connects to itself. Not checking AV table\n");
-		index = -1;
-	} else {
-		index = ip_av_get_index(cmap->av, addr);
-	}
+	index = ip_av_get_index(cmap->av, addr);
+
 	fastlock_acquire(&cmap->lock);
 	if (index < 0)
 		handle = util_cmap_get_handle_peer(cmap, addr);
@@ -1504,21 +1499,32 @@ int ofi_cmap_process_connreq(struct util_cmap *cmap, void *addr,
 		ofi_straddr_dbg(cmap->av->prov, FI_LOG_EP_CTRL, "remote_name",
 				addr);
 
-		if (ofi_addr_cmp(cmap->av->prov, addr, cmap->attr.name) < 0) {
+		cmp = ofi_addr_cmp(cmap->av->prov, addr, cmap->attr.name);
+
+		if (cmp < 0) {
 			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 				"Remote name lower than local name.\n");
 			ret = -FI_EALREADY;
-		} else {
+			break;
+		} else if (cmp > 0) {
 			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 				"Re-using handle: %p to accept remote "
 				"connection\n", handle);
 			/* Re-use handle. If it receives FI_REJECT the handle
 			 * would not be deleted in this state */
 			handle->cmap->attr.close(handle);
-			handle->state = CMAP_CONNREQ_RECV;
-			*handle_ret = handle;
+		} else {
+			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
+				"Endpoint connects to itself\n");
+			ret = util_cmap_alloc_handle_peer(cmap, addr,
+							  CMAP_CONNREQ_RECV,
+							  &handle);
+			if (ret)
+				goto unlock;
+			assert(index >= 0 && index != FI_ADDR_NOTAVAIL);
+			handle->fi_addr = index;
 		}
-		break;
+		/* Fall through */
 	case CMAP_IDLE:
 		handle->state = CMAP_CONNREQ_RECV;
 		/* Fall through */
