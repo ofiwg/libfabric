@@ -9,7 +9,7 @@
 
 #include <criterion/criterion.h>
 
-#include "cxi_prov.h"
+#include "cxip.h"
 
 struct fi_info *cxit_fi_hints;
 struct fi_info *cxit_fi;

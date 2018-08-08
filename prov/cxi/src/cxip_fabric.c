@@ -17,7 +17,7 @@
 #include "ofi_prov.h"
 #include "ofi_osd.h"
 
-#include "cxi_prov.h"
+#include "cxip.h"
 
 #define CXI_LOG_DBG(...) _CXI_LOG_DBG(FI_LOG_FABRIC, __VA_ARGS__)
 #define CXI_LOG_ERROR(...) _CXI_LOG_ERROR(FI_LOG_FABRIC, __VA_ARGS__)

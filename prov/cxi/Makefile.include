@@ -13,26 +13,26 @@ AM_CPPFLAGS += \
 	-D__user=
 
 _cxi_files = \
-	prov/cxi/src/cxix_if.c \
-	prov/cxi/src/cxi_fabric.c \
-	prov/cxi/src/cxi_dom.c \
-	prov/cxi/src/cxi_ep.c \
-	prov/cxi/src/cxi_ep_rdm.c \
-	prov/cxi/src/cxi_ctx.c \
-	prov/cxi/src/cxi_av.c \
-	prov/cxi/src/cxi_cq.c \
-	prov/cxi/src/cxi_cntr.c \
-	prov/cxi/src/cxi_wait.c \
-	prov/cxi/src/cxix_rma.c \
-	prov/cxi/src/cxix_mr.c
+	prov/cxi/src/cxip_if.c \
+	prov/cxi/src/cxip_fabric.c \
+	prov/cxi/src/cxip_dom.c \
+	prov/cxi/src/cxip_ep.c \
+	prov/cxi/src/cxip_ep_rdm.c \
+	prov/cxi/src/cxip_ctx.c \
+	prov/cxi/src/cxip_av.c \
+	prov/cxi/src/cxip_cq.c \
+	prov/cxi/src/cxip_cntr.c \
+	prov/cxi/src/cxip_wait.c \
+	prov/cxi/src/cxip_rma.c \
+	prov/cxi/src/cxip_mr.c
 
 _cxi_headers = \
-	prov/cxi/include/cxi_prov.h
+	prov/cxi/include/cxip.h
 
 if HAVE_CRITERION
 bin_PROGRAMS += prov/cxi/test/cxitest
 nodist_prov_cxi_test_cxitest_SOURCES = \
-	prov/cxi/test/cxi_test_common.c \
+	prov/cxi/test/cxip_test_common.c \
 	prov/cxi/test/fabric.c \
 	prov/cxi/test/domain.c \
 	prov/cxi/test/ep.c \

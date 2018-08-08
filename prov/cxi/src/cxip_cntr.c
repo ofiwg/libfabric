@@ -12,7 +12,7 @@
 #include <string.h>
 #include <sys/types.h>
 
-#include "cxi_prov.h"
+#include "cxip.h"
 
 #include <ofi_util.h>
 

@@ -20,7 +20,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 
-#include "cxi_prov.h"
+#include "cxip.h"
 
 #include "ofi_osd.h"
 #include "ofi_util.h"

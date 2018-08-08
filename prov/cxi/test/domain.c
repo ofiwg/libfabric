@@ -9,8 +9,8 @@
 
 #include <criterion/criterion.h>
 
-#include "cxi_prov.h"
-#include "cxi_test_common.h"
+#include "cxip.h"
+#include "cxip_test_common.h"
 
 TestSuite(domain, .init = cxit_setup_domain, .fini = cxit_teardown_domain);
 

@@ -9,8 +9,8 @@
 
 #include <criterion/criterion.h>
 
-#include "cxi_prov.h"
-#include "cxi_test_common.h"
+#include "cxip.h"
+#include "cxip_test_common.h"
 
 static char *get_dom_name(int if_idx, int dom_id)
 {

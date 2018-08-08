@@ -12,8 +12,8 @@
 #include <criterion/criterion.h>
 #include <criterion/parameterized.h>
 
-#include "cxi_prov.h"
-#include "cxi_test_common.h"
+#include "cxip.h"
+#include "cxip_test_common.h"
 
 TestSuite(ep, .init = cxit_setup_ep, .fini = cxit_teardown_ep);
 

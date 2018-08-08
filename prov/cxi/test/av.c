@@ -9,8 +9,8 @@
 
 #include <criterion/criterion.h>
 
-#include "cxi_prov.h"
-#include "cxi_test_common.h"
+#include "cxip.h"
+#include "cxip_test_common.h"
 
 static struct cxi_addr *test_addrs;
 fi_addr_t *test_fi_addrs;

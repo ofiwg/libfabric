@@ -9,8 +9,8 @@
 
 #include <criterion/criterion.h>
 
-#include "cxi_prov.h"
-#include "cxi_test_common.h"
+#include "cxip.h"
+#include "cxip_test_common.h"
 
 TestSuite(rma, .init = cxit_setup_rma, .fini = cxit_teardown_rma);
 
