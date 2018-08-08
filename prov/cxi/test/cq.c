@@ -27,7 +27,7 @@ Test(cq, simple)
 	cxit_destroy_cqs();
 }
 
-static void req_populate(struct cxi_req *req, fi_addr_t *addr)
+static void req_populate(struct cxip_req *req, fi_addr_t *addr)
 {
 	*addr = 0xabcd0;
 	req->flags = FI_SEND;
@@ -41,14 +41,14 @@ static void req_populate(struct cxi_req *req, fi_addr_t *addr)
 Test(cq, read_fmt_context)
 {
 	int ret;
-	struct cxi_cq *cxi_cq;
-	struct cxi_req req;
+	struct cxip_cq *cxi_cq;
+	struct cxip_req req;
 	struct fi_cq_entry entry;
 	fi_addr_t req_addr;
 
 	cxit_tx_cq_attr.format = FI_CQ_FORMAT_CONTEXT;
 	cxit_create_cqs();
-	cxi_cq = container_of(cxit_tx_cq, struct cxi_cq, cq_fid);
+	cxi_cq = container_of(cxit_tx_cq, struct cxip_cq, cq_fid);
 
 	req_populate(&req, &req_addr);
 
@@ -63,14 +63,14 @@ Test(cq, read_fmt_context)
 Test(cq, read_fmt_msg)
 {
 	int ret;
-	struct cxi_cq *cxi_cq;
-	struct cxi_req req;
+	struct cxip_cq *cxi_cq;
+	struct cxip_req req;
 	struct fi_cq_msg_entry entry;
 	fi_addr_t req_addr;
 
 	cxit_tx_cq_attr.format = FI_CQ_FORMAT_MSG;
 	cxit_create_cqs();
-	cxi_cq = container_of(cxit_tx_cq, struct cxi_cq, cq_fid);
+	cxi_cq = container_of(cxit_tx_cq, struct cxip_cq, cq_fid);
 
 	req_populate(&req, &req_addr);
 
@@ -88,14 +88,14 @@ Test(cq, read_fmt_msg)
 Test(cq, read_fmt_data)
 {
 	int ret;
-	struct cxi_cq *cxi_cq;
-	struct cxi_req req;
+	struct cxip_cq *cxi_cq;
+	struct cxip_req req;
 	struct fi_cq_data_entry entry;
 	fi_addr_t req_addr;
 
 	cxit_tx_cq_attr.format = FI_CQ_FORMAT_DATA;
 	cxit_create_cqs();
-	cxi_cq = container_of(cxit_tx_cq, struct cxi_cq, cq_fid);
+	cxi_cq = container_of(cxit_tx_cq, struct cxip_cq, cq_fid);
 
 	req_populate(&req, &req_addr);
 
@@ -115,14 +115,14 @@ Test(cq, read_fmt_data)
 Test(cq, read_fmt_tagged)
 {
 	int ret;
-	struct cxi_cq *cxi_cq;
-	struct cxi_req req;
+	struct cxip_cq *cxi_cq;
+	struct cxip_req req;
 	struct fi_cq_tagged_entry entry;
 	fi_addr_t req_addr;
 
 	cxit_tx_cq_attr.format = FI_CQ_FORMAT_TAGGED;
 	cxit_create_cqs();
-	cxi_cq = container_of(cxit_tx_cq, struct cxi_cq, cq_fid);
+	cxi_cq = container_of(cxit_tx_cq, struct cxip_cq, cq_fid);
 
 	req_populate(&req, &req_addr);
 
@@ -143,14 +143,14 @@ Test(cq, read_fmt_tagged)
 Test(cq, readfrom_fmt_context)
 {
 	int ret;
-	struct cxi_cq *cxi_cq;
-	struct cxi_req req;
+	struct cxip_cq *cxi_cq;
+	struct cxip_req req;
 	struct fi_cq_entry entry;
 	fi_addr_t addr = 0, req_addr;
 
 	cxit_tx_cq_attr.format = FI_CQ_FORMAT_CONTEXT;
 	cxit_create_cqs();
-	cxi_cq = container_of(cxit_tx_cq, struct cxi_cq, cq_fid);
+	cxi_cq = container_of(cxit_tx_cq, struct cxip_cq, cq_fid);
 
 	req_populate(&req, &req_addr);
 
@@ -167,14 +167,14 @@ Test(cq, readfrom_fmt_context)
 Test(cq, readfrom_fmt_msg)
 {
 	int ret;
-	struct cxi_cq *cxi_cq;
-	struct cxi_req req;
+	struct cxip_cq *cxi_cq;
+	struct cxip_req req;
 	struct fi_cq_msg_entry entry;
 	fi_addr_t addr = 0, req_addr;
 
 	cxit_tx_cq_attr.format = FI_CQ_FORMAT_MSG;
 	cxit_create_cqs();
-	cxi_cq = container_of(cxit_tx_cq, struct cxi_cq, cq_fid);
+	cxi_cq = container_of(cxit_tx_cq, struct cxip_cq, cq_fid);
 
 	req_populate(&req, &req_addr);
 
@@ -193,14 +193,14 @@ Test(cq, readfrom_fmt_msg)
 Test(cq, readfrom_fmt_data)
 {
 	int ret;
-	struct cxi_cq *cxi_cq;
-	struct cxi_req req;
+	struct cxip_cq *cxi_cq;
+	struct cxip_req req;
 	struct fi_cq_data_entry entry;
 	fi_addr_t addr = 0, req_addr;
 
 	cxit_tx_cq_attr.format = FI_CQ_FORMAT_DATA;
 	cxit_create_cqs();
-	cxi_cq = container_of(cxit_tx_cq, struct cxi_cq, cq_fid);
+	cxi_cq = container_of(cxit_tx_cq, struct cxip_cq, cq_fid);
 
 	req_populate(&req, &req_addr);
 
@@ -221,14 +221,14 @@ Test(cq, readfrom_fmt_data)
 Test(cq, readfrom_fmt_tagged)
 {
 	int ret;
-	struct cxi_cq *cxi_cq;
-	struct cxi_req req;
+	struct cxip_cq *cxi_cq;
+	struct cxip_req req;
 	struct fi_cq_tagged_entry entry;
 	fi_addr_t addr = 0, req_addr;
 
 	cxit_tx_cq_attr.format = FI_CQ_FORMAT_TAGGED;
 	cxit_create_cqs();
-	cxi_cq = container_of(cxit_tx_cq, struct cxi_cq, cq_fid);
+	cxi_cq = container_of(cxit_tx_cq, struct cxip_cq, cq_fid);
 
 	req_populate(&req, &req_addr);
 
@@ -251,7 +251,7 @@ Test(cq, cq_open_null_attr)
 {
 	int ret;
 	struct fid_cq *cxi_open_cq = NULL;
-	struct cxi_cq *cxi_cq = NULL;
+	struct cxip_cq *cxi_cq = NULL;
 
 	/* Open a CQ with a NULL attribute object pointer */
 	ret = fi_cq_open(cxit_domain, NULL, &cxi_open_cq, NULL);
@@ -259,8 +259,8 @@ Test(cq, cq_open_null_attr)
 	cr_assert_not_null(cxi_open_cq);
 
 	/* Validate that the default attributes were set */
-	cxi_cq = container_of(cxi_open_cq, struct cxi_cq, cq_fid);
-	cr_assert_eq(cxi_cq->attr.size, CXI_CQ_DEF_SZ);
+	cxi_cq = container_of(cxi_open_cq, struct cxip_cq, cq_fid);
+	cr_assert_eq(cxi_cq->attr.size, CXIP_CQ_DEF_SZ);
 	cr_assert_eq(cxi_cq->attr.flags, 0);
 	cr_assert_eq(cxi_cq->attr.format, FI_CQ_FORMAT_CONTEXT);
 	cr_assert_eq(cxi_cq->attr.wait_obj, FI_WAIT_FD);
@@ -314,7 +314,7 @@ ParameterizedTest(struct cq_format_attr_params *param, cq, cq_attr_format)
 	int ret;
 	struct fid_cq *cxi_open_cq = NULL;
 	struct fi_cq_attr cxit_cq_attr = {0};
-	struct cxi_cq *cxi_cq = NULL;
+	struct cxip_cq *cxi_cq = NULL;
 
 	cxit_cq_attr.format = param->in_format;
 	cxit_cq_attr.wait_obj = FI_WAIT_NONE; /* default */
@@ -336,7 +336,7 @@ ParameterizedTest(struct cq_format_attr_params *param, cq, cq_attr_format)
 	cr_assert_not_null(cxi_open_cq,
 			   "fi_cq_open() cxi_open_cq is NULL with format %d",
 			   cxit_cq_attr.format);
-	cxi_cq = container_of(cxi_open_cq, struct cxi_cq, cq_fid);
+	cxi_cq = container_of(cxi_open_cq, struct cxip_cq, cq_fid);
 	cr_assert_eq(cxi_cq->attr.format, param->out_format);
 
 	ret = fi_close(&cxi_open_cq->fid);
@@ -384,7 +384,7 @@ ParameterizedTest(struct cq_wait_attr_params *param, cq, cq_attr_wait)
 	int ret;
 	struct fid_cq *cxi_open_cq = NULL;
 	struct fi_cq_attr cxit_cq_attr = {0};
-	struct cxi_cq *cxi_cq = NULL;
+	struct cxip_cq *cxi_cq = NULL;
 
 	cxit_cq_attr.wait_obj = param->in_wo;
 	cxit_cq_attr.format = FI_CQ_FORMAT_UNSPEC; /* default */
@@ -404,7 +404,7 @@ ParameterizedTest(struct cq_wait_attr_params *param, cq, cq_attr_wait)
 
 	/* Validate that the wait_obj attribute */
 	cr_assert_not_null(cxi_open_cq);
-	cxi_cq = container_of(cxi_open_cq, struct cxi_cq, cq_fid);
+	cxi_cq = container_of(cxi_open_cq, struct cxip_cq, cq_fid);
 	cr_assert_eq(cxi_cq->attr.wait_obj, param->out_wo);
 
 	ret = fi_close(&cxi_open_cq->fid);
@@ -422,7 +422,7 @@ ParameterizedTestParameters(cq, cq_attr_size)
 
 	static struct cq_size_attr_params params[] = {
 		{.in_sz = 0,
-		 .out_sz = CXI_CQ_DEF_SZ},
+		 .out_sz = CXIP_CQ_DEF_SZ},
 		{.in_sz = 1 << 9,
 		 .out_sz = 1 << 9},
 		{.in_sz = 1 << 6,
@@ -439,7 +439,7 @@ ParameterizedTest(struct cq_size_attr_params *param, cq, cq_attr_size)
 	int ret;
 	struct fid_cq *cxi_open_cq = NULL;
 	struct fi_cq_attr cxit_cq_attr = {0};
-	struct cxi_cq *cxi_cq = NULL;
+	struct cxip_cq *cxi_cq = NULL;
 
 	cxit_cq_attr.format = FI_CQ_FORMAT_UNSPEC; /* default */
 	cxit_cq_attr.wait_obj = FI_WAIT_NONE; /* default */
@@ -454,7 +454,7 @@ ParameterizedTest(struct cq_size_attr_params *param, cq, cq_attr_size)
 	cr_assert_not_null(cxi_open_cq);
 
 	/* Validate that the size attribute */
-	cxi_cq = container_of(cxi_open_cq, struct cxi_cq, cq_fid);
+	cxi_cq = container_of(cxi_open_cq, struct cxip_cq, cq_fid);
 	cr_assert_eq(cxi_cq->attr.size, param->out_sz);
 	cr_assert_eq(cxi_cq->cq_rbfd.rb.size,
 		     param->out_sz * cxi_cq->cq_entry_size);
@@ -632,7 +632,7 @@ Test(cq, cq_readerr_err)
 	size_t avail;
 	struct fid_cq *cxi_open_cq = NULL;
 	struct fi_cq_err_entry err_entry, fake_entry;
-	struct cxi_cq *cxi_cq;
+	struct cxip_cq *cxi_cq;
 	uint8_t *data_fake, *data_err;
 
 	/* initialize the entries with data */
@@ -651,7 +651,7 @@ Test(cq, cq_readerr_err)
 	cr_assert_not_null(cxi_open_cq);
 
 	/* Add a fake error to the CQ's error ringbuffer */
-	cxi_cq = container_of(cxi_open_cq, struct cxi_cq, cq_fid);
+	cxi_cq = container_of(cxi_open_cq, struct cxip_cq, cq_fid);
 	fastlock_acquire(&cxi_cq->lock);
 	avail = ofi_rbavail(&cxi_cq->cqerr_rb);
 	cr_assert_geq(avail, sizeof(fake_entry),
@@ -676,11 +676,11 @@ Test(cq, cq_readerr_reperr)
 {
 	int ret;
 	struct fi_cq_err_entry err_entry = {0};
-	struct cxi_req req = {0};
+	struct cxip_req req = {0};
 	size_t olen, err_data_size;
 	int err, prov_errno;
 	void *err_data;
-	struct cxi_cq *cxi_cq;
+	struct cxip_cq *cxi_cq;
 	uint8_t err_buff[32] = {0};
 
 	/* initialize the input data */
@@ -697,12 +697,12 @@ Test(cq, cq_readerr_reperr)
 
 	/* Open a CQ */
 	cxit_create_cqs();
-	cxi_cq = container_of(cxit_tx_cq, struct cxi_cq, cq_fid);
+	cxi_cq = container_of(cxit_tx_cq, struct cxip_cq, cq_fid);
 
 	/* Add an error to the CQ's error ringbuffer */
-	ret = cxi_cq_report_error(cxi_cq, &req, olen, err, prov_errno,
+	ret = cxip_cq_report_error(cxi_cq, &req, olen, err, prov_errno,
 				  err_data, err_data_size);
-	cr_assert_eq(ret, 0, "cxi_cq_report_error() error %d", ret);
+	cr_assert_eq(ret, 0, "cxip_cq_report_error() error %d", ret);
 
 	/* Attempt to read an err with a CQ with a NULL buff pointer */
 	ret = fi_cq_readerr(cxit_tx_cq, &err_entry, (uint64_t)0);
@@ -748,7 +748,7 @@ ParameterizedTest(struct cq_progress_params *param, cq, cq_sreadfrom)
 {
 	int ret;
 	struct fid_cq *cxi_open_cq = NULL;
-	struct cxi_cq *cxi_cq = NULL;
+	struct cxip_cq *cxi_cq = NULL;
 	uint8_t buf[16] = {0};
 
 	/* Open a CQ with a NULL attribute object pointer */
@@ -757,7 +757,7 @@ ParameterizedTest(struct cq_progress_params *param, cq, cq_sreadfrom)
 	cr_assert_not_null(cxi_open_cq);
 
 	/* Setup the progres mode */
-	cxi_cq = container_of(cxi_open_cq, struct cxi_cq, cq_fid);
+	cxi_cq = container_of(cxi_open_cq, struct cxip_cq, cq_fid);
 	cxi_cq->domain->progress_mode = param->prog_type;
 
 	ret = fi_cq_sreadfrom(cxi_open_cq, buf, sizeof(buf), NULL, NULL, 1);

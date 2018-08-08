@@ -4,8 +4,8 @@
  * Copyright (c) 2018 Cray Inc. All rights reserved.
  */
 
-#ifndef _CXI_TEST_COMMON_H_
-#define _CXI_TEST_COMMON_H_
+#ifndef _CXIP_TEST_COMMON_H_
+#define _CXIP_TEST_COMMON_H_
 
 extern struct fi_info *cxit_fi_hints;
 extern struct fi_info *cxit_fi;

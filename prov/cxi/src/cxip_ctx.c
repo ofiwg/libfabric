@@ -12,13 +12,13 @@
 
 #include "cxip.h"
 
-#define CXI_LOG_DBG(...) _CXI_LOG_DBG(FI_LOG_EP_CTRL, __VA_ARGS__)
-#define CXI_LOG_ERROR(...) _CXI_LOG_ERROR(FI_LOG_EP_CTRL, __VA_ARGS__)
+#define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_EP_CTRL, __VA_ARGS__)
+#define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_EP_CTRL, __VA_ARGS__)
 
-struct cxi_rx_ctx *cxi_rx_ctx_alloc(const struct fi_rx_attr *attr,
-				    void *context, int use_shared)
+struct cxip_rx_ctx *cxip_rx_ctx_alloc(const struct fi_rx_attr *attr,
+				      void *context, int use_shared)
 {
-	struct cxi_rx_ctx *rx_ctx;
+	struct cxip_rx_ctx *rx_ctx;
 
 	rx_ctx = calloc(1, sizeof(*rx_ctx));
 	if (!rx_ctx)
@@ -37,13 +37,13 @@ struct cxi_rx_ctx *cxi_rx_ctx_alloc(const struct fi_rx_attr *attr,
 	return rx_ctx;
 }
 
-void cxi_rx_ctx_free(struct cxi_rx_ctx *rx_ctx)
+void cxip_rx_ctx_free(struct cxip_rx_ctx *rx_ctx)
 {
 	fastlock_destroy(&rx_ctx->lock);
 	free(rx_ctx);
 }
 
-int cxix_tx_ctx_enable(struct cxi_tx_ctx *txc)
+int cxip_tx_ctx_enable(struct cxip_tx_ctx *txc)
 {
 	int ret = FI_SUCCESS;
 
@@ -53,9 +53,9 @@ int cxix_tx_ctx_enable(struct cxi_tx_ctx *txc)
 		goto unlock;
 
 	if (txc->comp.send_cq) {
-		ret = cxix_cq_enable(txc->comp.send_cq);
+		ret = cxip_cq_enable(txc->comp.send_cq);
 		if (ret != FI_SUCCESS) {
-			CXI_LOG_DBG("cxix_cq_enable returned: %d\n", ret);
+			CXIP_LOG_DBG("cxip_cq_enable returned: %d\n", ret);
 			goto unlock;
 		}
 	}
@@ -64,7 +64,7 @@ int cxix_tx_ctx_enable(struct cxi_tx_ctx *txc)
 	ret = cxil_alloc_cmdq(txc->domain->dev_if->if_lni, 64, 1,
 			      &txc->tx_cmdq);
 	if (ret != FI_SUCCESS) {
-		CXI_LOG_DBG("Unable to allocate TX CMDQ, ret: %d\n", ret);
+		CXIP_LOG_DBG("Unable to allocate TX CMDQ, ret: %d\n", ret);
 		ret = -FI_EDOMAIN;
 		goto unlock;
 	}
@@ -80,7 +80,7 @@ unlock:
 	return ret;
 }
 
-static void cxix_tx_ctx_disable(struct cxi_tx_ctx *txc)
+static void cxip_tx_ctx_disable(struct cxip_tx_ctx *txc)
 {
 	fastlock_acquire(&txc->lock);
 
@@ -94,11 +94,11 @@ unlock:
 	fastlock_release(&txc->lock);
 }
 
-static struct cxi_tx_ctx *cxi_tx_context_alloc(const struct fi_tx_attr *attr,
-					       void *context, int use_shared,
-					       size_t fclass)
+static struct cxip_tx_ctx *cxip_tx_context_alloc(const struct fi_tx_attr *attr,
+						 void *context, int use_shared,
+						 size_t fclass)
 {
-	struct cxi_tx_ctx *tx_ctx;
+	struct cxip_tx_ctx *tx_ctx;
 
 	tx_ctx = calloc(sizeof(*tx_ctx), 1);
 	if (!tx_ctx)
@@ -134,21 +134,22 @@ err:
 	return NULL;
 }
 
-struct cxi_tx_ctx *cxi_tx_ctx_alloc(const struct fi_tx_attr *attr,
-				    void *context, int use_shared)
+struct cxip_tx_ctx *cxip_tx_ctx_alloc(const struct fi_tx_attr *attr,
+				      void *context, int use_shared)
 {
-	return cxi_tx_context_alloc(attr, context, use_shared, FI_CLASS_TX_CTX);
+	return cxip_tx_context_alloc(attr, context, use_shared,
+				     FI_CLASS_TX_CTX);
 }
 
-struct cxi_tx_ctx *cxi_stx_ctx_alloc(const struct fi_tx_attr *attr,
-					void *context)
+struct cxip_tx_ctx *cxip_stx_ctx_alloc(const struct fi_tx_attr *attr,
+				       void *context)
 {
-	return cxi_tx_context_alloc(attr, context, 0, FI_CLASS_STX_CTX);
+	return cxip_tx_context_alloc(attr, context, 0, FI_CLASS_STX_CTX);
 }
 
-void cxi_tx_ctx_free(struct cxi_tx_ctx *tx_ctx)
+void cxip_tx_ctx_free(struct cxip_tx_ctx *tx_ctx)
 {
-	cxix_tx_ctx_disable(tx_ctx);
+	cxip_tx_ctx_disable(tx_ctx);
 	fastlock_destroy(&tx_ctx->lock);
 	free(tx_ctx);
 }

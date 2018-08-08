@@ -173,7 +173,7 @@ void cxit_bind_av(void)
 
 static void cxit_init(void)
 {
-	struct slist_entry *entry, *prev;
+	struct slist_entry *entry, *prev __attribute__ ((unused));
 	int ret;
 
 	/* Force provider init */
@@ -182,8 +182,7 @@ static void cxit_init(void)
 			 NULL);
 	cr_assert(ret == -FI_ENOSYS);
 
-	(void) prev; /* Makes compiler happy */
-	slist_foreach(&cxix_if_list, entry, prev) {
+	slist_foreach(&cxip_if_list, entry, prev) {
 		cxit_n_ifs++;
 	}
 }
@@ -208,7 +207,7 @@ void cxit_setup_fabric(void)
 		cxit_setup_getinfo();
 
 		/* Always select CXI */
-		cxit_fi_hints->fabric_attr->prov_name = strdup(cxi_prov_name);
+		cxit_fi_hints->fabric_attr->prov_name = strdup(cxip_prov_name);
 	}
 
 	cxit_create_fabric_info();
@@ -250,7 +249,7 @@ void cxit_setup_rma(void)
 
 	/* Request required capabilities for RMA */
 	cxit_setup_getinfo();
-	cxit_fi_hints->fabric_attr->prov_name = strdup(cxi_prov_name);
+	cxit_fi_hints->fabric_attr->prov_name = strdup(cxip_prov_name);
 	cxit_fi_hints->caps = FI_WRITE;
 	cxit_tx_cq_attr.format = FI_CQ_FORMAT_TAGGED;
 	cxit_av_attr.type = FI_AV_TABLE;

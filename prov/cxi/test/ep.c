@@ -79,7 +79,7 @@ ParameterizedTestParameters(ep, fi_ep_types)
 ParameterizedTest(struct ep_test_params *param, ep, fi_ep_types)
 {
 	int ret;
-	struct cxi_ep *cep;
+	struct cxip_ep *cep;
 
 	cxit_fi->ep_attr->type = param->type;
 	cxit_ep = NULL;
@@ -94,7 +94,7 @@ ParameterizedTest(struct ep_test_params *param, ep, fi_ep_types)
 	cr_assert_not_null(cxit_ep);
 	cr_expect_eq(cxit_ep->fid.fclass, FI_CLASS_EP);
 	cr_expect_eq(cxit_ep->fid.context, param->context);
-	cep = container_of(cxit_ep, struct cxi_ep, ep);
+	cep = container_of(cxit_ep, struct cxip_ep, ep);
 	cr_expect_not_null(cep->attr);
 
 	cxit_destroy_ep();
@@ -112,7 +112,7 @@ ParameterizedTestParameters(ep, fi_sep_types)
 ParameterizedTest(struct ep_test_params *param, ep, fi_sep_types)
 {
 	int ret;
-	struct cxi_ep *cep;
+	struct cxip_ep *cep;
 
 	cxit_fi->ep_attr->type = param->type;
 	cxit_ep = NULL;
@@ -127,7 +127,7 @@ ParameterizedTest(struct ep_test_params *param, ep, fi_sep_types)
 	cr_assert_not_null(cxit_ep);
 	cr_expect_eq(cxit_ep->fid.fclass, FI_CLASS_SEP);
 	cr_expect_eq(cxit_ep->fid.context, param->context);
-	cep = container_of(cxit_ep, struct cxi_ep, ep);
+	cep = container_of(cxit_ep, struct cxip_ep, ep);
 	cr_expect_not_null(cep->attr);
 
 	cxit_destroy_ep();
@@ -187,16 +187,16 @@ Test(ep, ep_bind_invalid_fclass)
 
 Test(ep, ep_bind_av)
 {
-	struct cxi_ep *ep;
-	struct cxi_av *av;
+	struct cxip_ep *ep;
+	struct cxip_av *av;
 
 	cxit_create_ep();
 	cxit_create_av();
 
 	cxit_bind_av();
 
-	av = container_of(cxit_av, struct cxi_av, av_fid.fid);
-	ep = container_of(cxit_ep, struct cxi_ep, ep.fid);
+	av = container_of(cxit_av, struct cxip_av, av_fid.fid);
+	ep = container_of(cxit_ep, struct cxip_ep, ep.fid);
 
 	cr_assert_not_null(ep->attr);
 	cr_assert_eq(ep->attr->av, av);
@@ -239,10 +239,10 @@ Test(ep, ep_bind_mr)
 
 Test(ep, ep_bind_cq)
 {
-	struct cxi_ep *ep;
-	struct cxi_cq *rx_cq, *tx_cq;
-	struct cxi_tx_ctx *tx_ctx = NULL;
-	struct cxi_rx_ctx *rx_ctx = NULL;
+	struct cxip_ep *ep;
+	struct cxip_cq *rx_cq, *tx_cq;
+	struct cxip_tx_ctx *tx_ctx = NULL;
+	struct cxip_rx_ctx *rx_ctx = NULL;
 
 	cxit_create_ep();
 	cxit_create_cqs();
@@ -251,9 +251,9 @@ Test(ep, ep_bind_cq)
 
 	cxit_bind_cqs();
 
-	rx_cq = container_of(cxit_rx_cq, struct cxi_cq, cq_fid.fid);
-	tx_cq = container_of(cxit_tx_cq, struct cxi_cq, cq_fid.fid);
-	ep = container_of(cxit_ep, struct cxi_ep, ep.fid);
+	rx_cq = container_of(cxit_rx_cq, struct cxip_cq, cq_fid.fid);
+	tx_cq = container_of(cxit_tx_cq, struct cxip_cq, cq_fid.fid);
+	ep = container_of(cxit_ep, struct cxip_ep, ep.fid);
 
 	cr_assert_not_null(ep->attr);
 
@@ -440,11 +440,11 @@ Test(ep, control_tx_flags_alias)
 	int ret;
 	struct fi_alias alias = {0};
 	struct fid *alias_fid = NULL;
-	struct cxi_ep *cxi_ep, *alias_ep;
+	struct cxip_ep *cxi_ep, *alias_ep;
 
 	cxit_create_ep();
 
-	cxi_ep = container_of(&cxit_ep->fid, struct cxi_ep, ep.fid);
+	cxi_ep = container_of(&cxit_ep->fid, struct cxip_ep, ep.fid);
 
 	alias.fid = &alias_fid;
 	alias.flags = FI_TRANSMIT;
@@ -453,7 +453,7 @@ Test(ep, control_tx_flags_alias)
 	cr_assert_not_null(alias_fid);
 
 	/* verify alias vs cxit_ep */
-	alias_ep = container_of(alias_fid, struct cxi_ep, ep.fid);
+	alias_ep = container_of(alias_fid, struct cxip_ep, ep.fid);
 	cr_assert_eq(alias_ep->attr, cxi_ep->attr, "EP Attr");
 	cr_assert_eq(alias_ep->is_alias, 1, "EP is_alias");
 	cr_assert_eq(ofi_atomic_get32(&cxi_ep->attr->ref), 1, "EP refs 1");
@@ -472,11 +472,11 @@ Test(ep, control_rx_flags_alias)
 	int ret;
 	struct fi_alias alias = {0};
 	struct fid *alias_fid = NULL;
-	struct cxi_ep *cxi_ep, *alias_ep;
+	struct cxip_ep *cxi_ep, *alias_ep;
 
 	cxit_create_ep();
 
-	cxi_ep = container_of(&cxit_ep->fid, struct cxi_ep, ep.fid);
+	cxi_ep = container_of(&cxit_ep->fid, struct cxip_ep, ep.fid);
 
 	alias.fid = &alias_fid;
 	alias.flags = FI_RECV;
@@ -484,7 +484,7 @@ Test(ep, control_rx_flags_alias)
 	cr_assert_eq(ret, FI_SUCCESS, "fi_control FI_ALIAS. %d", ret);
 	cr_assert_not_null(alias_fid);
 
-	alias_ep = container_of(alias_fid, struct cxi_ep, ep.fid);
+	alias_ep = container_of(alias_fid, struct cxip_ep, ep.fid);
 	cr_assert_eq(alias_ep->attr, cxi_ep->attr, "EP Attr");
 	cr_assert_eq(alias_ep->is_alias, 1, "EP is_alias");
 	cr_assert_not_null(cxi_ep->attr, "EP attr NULL");
@@ -530,11 +530,11 @@ Test(ep, control_getopsflag_tx)
 {
 	int ret;
 	uint64_t flags = FI_TRANSMIT;
-	struct cxi_ep *cxi_ep;
+	struct cxip_ep *cxi_ep;
 
 	cxit_create_ep();
 
-	cxi_ep = container_of(&cxit_ep->fid, struct cxi_ep, ep.fid);
+	cxi_ep = container_of(&cxit_ep->fid, struct cxip_ep, ep.fid);
 
 	ret = fi_control(&cxit_ep->fid, FI_GETOPSFLAG, (void *)&flags);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_control FI_GETOPSFLAG TX. %d", ret);
@@ -549,11 +549,11 @@ Test(ep, control_getopsflag_rx)
 {
 	int ret;
 	uint64_t flags = FI_RECV;
-	struct cxi_ep *cxi_ep;
+	struct cxip_ep *cxi_ep;
 
 	cxit_create_ep();
 
-	cxi_ep = container_of(&cxit_ep->fid, struct cxi_ep, ep.fid);
+	cxi_ep = container_of(&cxit_ep->fid, struct cxip_ep, ep.fid);
 
 	ret = fi_control(&cxit_ep->fid, FI_GETOPSFLAG, (void *)&flags);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_control FI_GETOPSFLAG RX. %d", ret);
@@ -597,11 +597,11 @@ Test(ep, control_setopsflag_tx)
 	uint64_t flags = (FI_TRANSMIT | FI_MSG | FI_TRIGGER |
 			  FI_DELIVERY_COMPLETE);
 	uint64_t tx_flags;
-	struct cxi_ep *cxi_ep;
+	struct cxip_ep *cxi_ep;
 
 	cxit_create_ep();
 
-	cxi_ep = container_of(&cxit_ep->fid, struct cxi_ep, ep.fid);
+	cxi_ep = container_of(&cxit_ep->fid, struct cxip_ep, ep.fid);
 
 	ret = fi_control(&cxit_ep->fid, FI_SETOPSFLAG, (void *)&flags);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_control FI_SETOPSFLAG TX. %d", ret);
@@ -619,11 +619,11 @@ Test(ep, control_setopsflag_tx_complete)
 	int ret;
 	uint64_t flags = FI_TRANSMIT | FI_MSG | FI_TRIGGER | FI_AFFINITY;
 	uint64_t tx_flags;
-	struct cxi_ep *cxi_ep;
+	struct cxip_ep *cxi_ep;
 
 	cxit_create_ep();
 
-	cxi_ep = container_of(&cxit_ep->fid, struct cxi_ep, ep.fid);
+	cxi_ep = container_of(&cxit_ep->fid, struct cxip_ep, ep.fid);
 
 	ret = fi_control(&cxit_ep->fid, FI_SETOPSFLAG, (void *)&flags);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_control FI_SETOPSFLAG TX. %d", ret);
@@ -642,11 +642,11 @@ Test(ep, control_setopsflag_rx)
 	int ret;
 	uint64_t flags = FI_RECV | FI_TAGGED | FI_NUMERICHOST | FI_EVENT;
 	uint64_t rx_flags;
-	struct cxi_ep *cxi_ep;
+	struct cxip_ep *cxi_ep;
 
 	cxit_create_ep();
 
-	cxi_ep = container_of(&cxit_ep->fid, struct cxi_ep, ep.fid);
+	cxi_ep = container_of(&cxit_ep->fid, struct cxip_ep, ep.fid);
 
 	ret = fi_control(&cxit_ep->fid, FI_SETOPSFLAG, (void *)&flags);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_control FI_SETOPSFLAG RX. %d", ret);
@@ -662,11 +662,11 @@ Test(ep, control_setopsflag_rx)
 Test(ep, control_enable)
 {
 	int ret;
-	struct cxi_ep *cxi_ep;
+	struct cxip_ep *cxi_ep;
 
 	cxit_create_ep();
 
-	cxi_ep = container_of(&cxit_ep->fid, struct cxi_ep, ep.fid);
+	cxi_ep = container_of(&cxit_ep->fid, struct cxip_ep, ep.fid);
 
 	ret = fi_enable(cxit_ep);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_enable. %d", ret);
@@ -762,11 +762,11 @@ ParameterizedTestParameters(ep, getopt_args)
 ParameterizedTest(struct ep_getopt_args *param, ep, getopt_args)
 {
 	int ret;
-	struct cxi_ep *cxi_ep;
+	struct cxip_ep *cxi_ep;
 
 	cxit_create_ep();
 
-	cxi_ep = container_of(&cxit_ep->fid, struct cxi_ep, ep.fid);
+	cxi_ep = container_of(&cxit_ep->fid, struct cxip_ep, ep.fid);
 
 	ret = fi_getopt(&cxit_ep->fid, param->level, param->optname,
 			(void *)param->optval, param->optlen);
@@ -831,7 +831,7 @@ ParameterizedTestParameters(ep, setopt_args)
 ParameterizedTest(struct ep_setopt_args *param, ep, setopt_args)
 {
 	int ret;
-	struct cxi_ep *cxi_ep;
+	struct cxip_ep *cxi_ep;
 	void *val = NULL;
 
 	if (param->optval != 0)
@@ -839,7 +839,7 @@ ParameterizedTest(struct ep_setopt_args *param, ep, setopt_args)
 
 	cxit_create_ep();
 
-	cxi_ep = container_of(&cxit_ep->fid, struct cxi_ep, ep.fid);
+	cxi_ep = container_of(&cxit_ep->fid, struct cxip_ep, ep.fid);
 
 	ret = fi_setopt(&cxit_ep->fid, param->level, param->optname,
 			val, param->optlen);
@@ -900,22 +900,22 @@ Test(ep, rx_ctx_sep_null_rx)
 Test(ep, rx_ctx_sep)
 {
 	int ret;
-	struct cxi_ep *cxi_ep;
-	struct cxi_rx_ctx *rx_ctx;
+	struct cxip_ep *cxi_ep;
+	struct cxip_rx_ctx *rx_ctx;
 	struct fid_ep *rx_ep = NULL;
 	void *context = &ret;
 	struct fi_rx_attr *attr = NULL;
 
 	cxit_create_sep();
 
-	cxi_ep = container_of(cxit_sep, struct cxi_ep, ep.fid);
+	cxi_ep = container_of(cxit_sep, struct cxip_ep, ep.fid);
 
 	ret = fi_rx_context(cxit_sep, 0, attr, &rx_ep, context);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_rx_context bad rx. %d", ret);
 	cr_assert_not_null(rx_ep);
 
 	/* Validate RX Ctx */
-	rx_ctx = container_of(rx_ep, struct cxi_rx_ctx, ctx);
+	rx_ctx = container_of(rx_ep, struct cxip_rx_ctx, ctx);
 	cr_assert_eq(rx_ctx->ep_attr, cxi_ep->attr);
 	cr_assert_eq(rx_ctx->domain, cxi_ep->attr->domain);
 	cr_assert_eq(rx_ctx->av, cxi_ep->attr->av);
@@ -972,22 +972,22 @@ Test(ep, tx_ctx_sep_null_tx)
 Test(ep, tx_ctx_sep)
 {
 	int ret;
-	struct cxi_ep *cxi_ep;
-	struct cxi_tx_ctx *tx_ctx;
+	struct cxip_ep *cxi_ep;
+	struct cxip_tx_ctx *tx_ctx;
 	struct fid_ep *tx_ep = NULL;
 	void *context = &ret;
 	struct fi_tx_attr *attr = NULL;
 
 	cxit_create_sep();
 
-	cxi_ep = container_of(cxit_sep, struct cxi_ep, ep.fid);
+	cxi_ep = container_of(cxit_sep, struct cxip_ep, ep.fid);
 
 	ret = fi_tx_context(cxit_sep, 0, attr, &tx_ep, context);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_tx_context bad tx. %d", ret);
 	cr_assert_not_null(tx_ep);
 
 	/* Validate RX Ctx */
-	tx_ctx = container_of(tx_ep, struct cxi_tx_ctx, fid.ctx);
+	tx_ctx = container_of(tx_ep, struct cxip_tx_ctx, fid.ctx);
 	cr_assert_eq(tx_ctx->ep_attr, cxi_ep->attr);
 	cr_assert_eq(tx_ctx->domain, cxi_ep->attr->domain);
 	cr_assert_eq(tx_ctx->av, cxi_ep->attr->av);
@@ -1019,11 +1019,11 @@ Test(ep, stx_ctx)
 	struct fi_tx_attr *attr = NULL;
 	struct fid_stx *stx;
 	void *context = &ret;
-	struct cxi_domain *dom;
-	struct cxi_tx_ctx *tx_ctx;
+	struct cxip_domain *dom;
+	struct cxip_tx_ctx *tx_ctx;
 	int refs;
 
-	dom = container_of(cxit_domain, struct cxi_domain, dom_fid);
+	dom = container_of(cxit_domain, struct cxip_domain, dom_fid);
 	refs = ofi_atomic_get32(&dom->ref);
 
 	ret = fi_stx_context(cxit_domain, attr, &stx, context);
@@ -1033,7 +1033,7 @@ Test(ep, stx_ctx)
 	if (ret == -FI_ENOSYS)
 		return;
 
-	tx_ctx = container_of(stx, struct cxi_tx_ctx, fid.stx);
+	tx_ctx = container_of(stx, struct cxip_tx_ctx, fid.stx);
 
 	/* Validate stx */
 	cr_assert_eq(tx_ctx->domain, dom);
@@ -1063,11 +1063,11 @@ Test(ep, srx_ctx)
 	struct fi_rx_attr *attr = NULL;
 	struct fid_ep *srx;
 	void *context = &ret;
-	struct cxi_domain *dom;
-	struct cxi_rx_ctx *rx_ctx;
+	struct cxip_domain *dom;
+	struct cxip_rx_ctx *rx_ctx;
 	int refs;
 
-	dom = container_of(cxit_domain, struct cxi_domain, dom_fid);
+	dom = container_of(cxit_domain, struct cxip_domain, dom_fid);
 	refs = ofi_atomic_get32(&dom->ref);
 
 	ret = fi_srx_context(cxit_domain, attr, &srx, context);
@@ -1076,7 +1076,7 @@ Test(ep, srx_ctx)
 	if (ret == -FI_ENOSYS)
 		return;
 
-	rx_ctx = container_of(srx, struct cxi_rx_ctx, ctx);
+	rx_ctx = container_of(srx, struct cxip_rx_ctx, ctx);
 
 	/* Validate stx */
 	cr_assert_eq(rx_ctx->domain, dom);
@@ -1085,7 +1085,7 @@ Test(ep, srx_ctx)
 	cr_assert_eq(rx_ctx->ctx.fid.fclass, FI_CLASS_RX_CTX);
 	cr_assert_eq(rx_ctx->ctx.fid.context, context);
 	cr_assert_eq(rx_ctx->enabled, 1);
-	cr_assert_eq(rx_ctx->min_multi_recv, CXI_EP_MIN_MULTI_RECV);
+	cr_assert_eq(rx_ctx->min_multi_recv, CXIP_EP_MIN_MULTI_RECV);
 
 	ret = fi_close(&srx->fid);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_close srx_ep. %d", ret);

@@ -12,7 +12,7 @@
 #include "cxip.h"
 #include "cxip_test_common.h"
 
-static struct cxi_addr *test_addrs;
+static struct cxip_addr *test_addrs;
 fi_addr_t *test_fi_addrs;
 #define AV_COUNT 1024
 int naddrs = AV_COUNT * 10;
@@ -25,7 +25,7 @@ test_addrs_init(void)
 {
 	int i;
 
-	test_addrs = malloc(naddrs * sizeof(struct cxi_addr));
+	test_addrs = malloc(naddrs * sizeof(struct cxip_addr));
 	cr_assert(test_addrs != NULL);
 
 	test_fi_addrs = calloc(naddrs, sizeof(fi_addr_t));
@@ -49,16 +49,16 @@ test_addrs_fini(void)
 
 /* This creates an AV with 'count' objects, and peeks at internals to ensure
  * that the structure is sound. If 'count' is 0, this should default to
- * cxi_av_dev_sz.
+ * cxip_av_dev_sz.
  */
 static void
 test_create(size_t count)
 {
-	struct cxi_av *av;
+	struct cxip_av *av;
 	size_t expect;
 	int i;
 
-	expect = (count) ? count : cxi_av_def_sz;
+	expect = (count) ? count : cxip_av_def_sz;
 	cxit_av_attr.count = count;
 	cxit_create_av();
 
@@ -70,7 +70,7 @@ test_create(size_t count)
 		"cxit_av=%p", cxit_av);
 
 	/* Check the table memory   */
-	av = container_of(&cxit_av->fid, struct cxi_av, av_fid.fid);
+	av = container_of(&cxit_av->fid, struct cxip_av, av_fid.fid);
 	cr_assert(av->table_hdr != NULL,
 		"av->table_hdr=%p", av->table_hdr);
 	cr_assert(av->table != NULL,
@@ -107,7 +107,7 @@ static void
 __test_insert(int count, int iters)
 {
 	int j, i, ret;
-	struct cxi_addr addr;
+	struct cxip_addr addr;
 	size_t addrlen;
 
 	/* Can't test addresses we haven't set up   */
@@ -133,7 +133,7 @@ __test_insert(int count, int iters)
 
 		/* Lookup addresses   */
 		for (i = 0; i < count; i++) {
-			addrlen = sizeof(struct cxi_addr);
+			addrlen = sizeof(struct cxip_addr);
 			ret = fi_av_lookup(cxit_av, test_fi_addrs[i], &addr,
 				&addrlen);
 			/* Should succeed   */
@@ -166,7 +166,7 @@ __test_insert(int count, int iters)
 			j, i, ret);
 
 		/* Make sure that lookup fails   */
-		addrlen = sizeof(struct cxi_addr);
+		addrlen = sizeof(struct cxip_addr);
 		ret = fi_av_lookup(cxit_av, test_fi_addrs[i], &addr, &addrlen);
 		cr_assert(ret == -FI_EINVAL,
 			"fi_av_lookup() mid iter=%d, idx=%d, ret=%d\n",
@@ -182,7 +182,7 @@ __test_insert(int count, int iters)
 			"fi_av_insert() mid iter=%d, idx=%d, index=%ld\n",
 			j, i, test_fi_addrs[i]);
 
-		addrlen = sizeof(struct cxi_addr);
+		addrlen = sizeof(struct cxip_addr);
 		ret = fi_av_lookup(cxit_av, test_fi_addrs[i], &addr,
 			&addrlen);
 		cr_assert(ret == FI_SUCCESS,
@@ -312,7 +312,7 @@ Test(av, av_open_invalid)
 		ret);
 	cxit_av_attr.flags = 0;
 
-	cxit_av_attr.rx_ctx_bits = CXI_EP_MAX_CTX_BITS + 1;
+	cxit_av_attr.rx_ctx_bits = CXIP_EP_MAX_CTX_BITS + 1;
 	ret = fi_av_open(cxit_domain, &cxit_av_attr, &cxit_av, NULL);
 	cr_assert(ret == -FI_EINVAL, "fi_av_open AV too many bits = %d", ret);
 	cxit_av_attr.rx_ctx_bits = 0;
@@ -596,15 +596,18 @@ Test(av, straddr)
 	cxit_create_av();
 
 	tmp_buf = fi_av_straddr(cxit_av, &addr, buf, &len);
-	cr_assert(len == 33); /* "fi_addr_cxi://0x0000000000000000\0" */
-	cr_assert(tmp_buf == buf);
+	/* "fi_addr_cxi://0x0000000000000000\0" */
+	cr_assert_eq(len, 33, "fi_av_straddr() len failure: %ld", len);
+	cr_assert_null(tmp_buf, "fi_av_straddr() buffer not null %p", tmp_buf);
 
 	buf = malloc(len);
 	cr_assert(buf != NULL);
 
 	tmp_buf = fi_av_straddr(cxit_av, &addr, buf, &len);
-	cr_assert(len == 33);
-	cr_assert(tmp_buf == buf);
+	cr_assert_eq(len, 33, "fi_av_straddr() len failure: %ld", len);
+	cr_assert_not_null(tmp_buf, "fi_av_straddr() buffer is null");
+	cr_assert_str_eq(tmp_buf, buf,
+		"fi_av_straddr() buffer failure: '%s' != '%s'", tmp_buf, buf);
 
 	free(buf);
 

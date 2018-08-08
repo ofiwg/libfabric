@@ -14,21 +14,21 @@
 
 #include "cxip.h"
 
-#define CXI_LOG_DBG(...) _CXI_LOG_DBG(FI_LOG_CORE, __VA_ARGS__)
-#define CXI_LOG_ERROR(...) _CXI_LOG_ERROR(FI_LOG_CORE, __VA_ARGS__)
+#define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_CORE, __VA_ARGS__)
+#define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_CORE, __VA_ARGS__)
 
 enum {
 	WAIT_READ_FD = 0,
 	WAIT_WRITE_FD,
 };
 
-int cxi_wait_get_obj(struct fid_wait *fid, void *arg)
+int cxip_wait_get_obj(struct fid_wait *fid, void *arg)
 {
 	struct fi_mutex_cond mut_cond;
-	struct cxi_wait *wait;
+	struct cxip_wait *wait;
 
-	wait = container_of(fid, struct cxi_wait, wait_fid.fid);
-	if (cxi_dom_check_manual_progress(wait->fab))
+	wait = container_of(fid, struct cxip_wait, wait_fid.fid);
+	if (cxip_dom_check_manual_progress(wait->fab))
 		return -FI_ENOSYS;
 
 	switch (wait->type) {
@@ -38,18 +38,18 @@ int cxi_wait_get_obj(struct fid_wait *fid, void *arg)
 
 	case FI_WAIT_MUTEX_COND:
 		mut_cond.mutex = &wait->wobj.mutex_cond.mutex;
-		mut_cond.cond  = &wait->wobj.mutex_cond.cond;
+		mut_cond.cond = &wait->wobj.mutex_cond.cond;
 		memcpy(arg, &mut_cond, sizeof(mut_cond));
 		break;
 	default:
-		CXI_LOG_ERROR("Invalid wait obj type\n");
+		CXIP_LOG_ERROR("Invalid wait obj type\n");
 		return -FI_EINVAL;
 	}
 
 	return 0;
 }
 
-static int cxi_wait_init(struct cxi_wait *wait, enum fi_wait_obj type)
+static int cxip_wait_init(struct cxip_wait *wait, enum fi_wait_obj type)
 {
 	int ret;
 
@@ -62,8 +62,8 @@ static int cxi_wait_init(struct cxi_wait *wait, enum fi_wait_obj type)
 
 		ret = fi_fd_nonblock(wait->wobj.fd[WAIT_READ_FD]);
 		if (ret) {
-			CXI_LOG_ERROR("fi_fd_nonblock failed, errno: %d\n",
-				      ret);
+			CXIP_LOG_ERROR("fi_fd_nonblock failed, errno: %d\n",
+				       ret);
 			ofi_close_socket(wait->wobj.fd[WAIT_READ_FD]);
 			ofi_close_socket(wait->wobj.fd[WAIT_WRITE_FD]);
 			return ret;
@@ -76,50 +76,50 @@ static int cxi_wait_init(struct cxi_wait *wait, enum fi_wait_obj type)
 		break;
 
 	default:
-		CXI_LOG_ERROR("Invalid wait object type\n");
+		CXIP_LOG_ERROR("Invalid wait object type\n");
 		return -FI_EINVAL;
 	}
 	return 0;
 }
 
-static int cxi_wait_wait(struct fid_wait *wait_fid, int timeout)
+static int cxip_wait_wait(struct fid_wait *wait_fid, int timeout)
 {
-	struct cxi_cq *cq;
-	struct cxi_cntr *cntr;
-	struct cxi_wait *wait;
+	struct cxip_cq *cq;
+	struct cxip_cntr *cntr;
+	struct cxip_wait *wait;
 	uint64_t start_ms = 0, end_ms = 0;
 	struct dlist_entry *p, *head;
-	struct cxi_fid_list *list_item;
+	struct cxip_fid_list *list_item;
 	int err = 0;
 	ssize_t ret;
 	char c;
 
-	wait = container_of(wait_fid, struct cxi_wait, wait_fid);
+	wait = container_of(wait_fid, struct cxip_wait, wait_fid);
 	if (timeout > 0)
 		start_ms = fi_gettime_ms();
 
 	head = &wait->fid_list;
 	for (p = head->next; p != head; p = p->next) {
-		list_item = container_of(p, struct cxi_fid_list, entry);
+		list_item = container_of(p, struct cxip_fid_list, entry);
 		switch (list_item->fid->fclass) {
 		case FI_CLASS_CQ:
-			cq = container_of(list_item->fid,
-					  struct cxi_cq, cq_fid);
-			cxi_cq_progress(cq);
+			cq = container_of(list_item->fid, struct cxip_cq,
+					  cq_fid);
+			cxip_cq_progress(cq);
 			if (ofi_rbused(&cq->cqerr_rb))
 				return 1;
 			break;
 
 		case FI_CLASS_CNTR:
-			cntr = container_of(list_item->fid,
-					    struct cxi_cntr, cntr_fid);
-			cxi_cntr_progress(cntr);
+			cntr = container_of(list_item->fid, struct cxip_cntr,
+					    cntr_fid);
+			cxip_cntr_progress(cntr);
 			break;
 		}
 	}
 	if (timeout > 0) {
 		end_ms = fi_gettime_ms();
-		timeout -=  (int) (end_ms - start_ms);
+		timeout -= (int)(end_ms - start_ms);
 		timeout = timeout < 0 ? 0 : timeout;
 	}
 
@@ -130,9 +130,11 @@ static int cxi_wait_wait(struct fid_wait *wait_fid, int timeout)
 			err = -FI_ETIMEDOUT;
 		} else {
 			while (err > 0) {
-				ret = ofi_read_socket(wait->wobj.fd[WAIT_READ_FD], &c, 1);
+				ret = ofi_read_socket(
+					wait->wobj.fd[WAIT_READ_FD], &c, 1);
 				if (ret != 1) {
-					CXI_LOG_ERROR("failed to read wait_fd\n");
+					CXIP_LOG_ERROR(
+						"failed to read wait_fd\n");
 					err = 0;
 					break;
 				} else
@@ -147,50 +149,50 @@ static int cxi_wait_wait(struct fid_wait *wait_fid, int timeout)
 		break;
 
 	default:
-		CXI_LOG_ERROR("Invalid wait object type\n");
+		CXIP_LOG_ERROR("Invalid wait object type\n");
 		return -FI_EINVAL;
 	}
 	return err;
 }
 
-void cxi_wait_signal(struct fid_wait *wait_fid)
+void cxip_wait_signal(struct fid_wait *wait_fid)
 {
-	struct cxi_wait *wait;
+	struct cxip_wait *wait;
 	static char c = 'a';
 	ssize_t ret;
 
-	wait = container_of(wait_fid, struct cxi_wait, wait_fid);
+	wait = container_of(wait_fid, struct cxip_wait, wait_fid);
 
 	switch (wait->type) {
 	case FI_WAIT_FD:
 		ret = ofi_write_socket(wait->wobj.fd[WAIT_WRITE_FD], &c, 1);
 		if (ret != 1)
-			CXI_LOG_ERROR("failed to signal\n");
+			CXIP_LOG_ERROR("failed to signal\n");
 		break;
 
 	case FI_WAIT_MUTEX_COND:
 		pthread_cond_signal(&wait->wobj.mutex_cond.cond);
 		break;
 	default:
-		CXI_LOG_ERROR("Invalid wait object type\n");
+		CXIP_LOG_ERROR("Invalid wait object type\n");
 		return;
 	}
 }
 
-static struct fi_ops_wait cxi_wait_ops = {
+static struct fi_ops_wait cxip_wait_ops = {
 	.size = sizeof(struct fi_ops_wait),
-	.wait = cxi_wait_wait,
+	.wait = cxip_wait_wait,
 };
 
-static int cxi_wait_control(struct fid *fid, int command, void *arg)
+static int cxip_wait_control(struct fid *fid, int command, void *arg)
 {
-	struct cxi_wait *wait;
+	struct cxip_wait *wait;
 	int ret = 0;
 
-	wait = container_of(fid, struct cxi_wait, wait_fid.fid);
+	wait = container_of(fid, struct cxip_wait, wait_fid.fid);
 	switch (command) {
 	case FI_GETWAIT:
-		ret = cxi_wait_get_obj(&wait->wait_fid, arg);
+		ret = cxip_wait_get_obj(&wait->wait_fid, arg);
 		break;
 	default:
 		ret = -FI_EINVAL;
@@ -199,17 +201,17 @@ static int cxi_wait_control(struct fid *fid, int command, void *arg)
 	return ret;
 }
 
-int cxi_wait_close(fid_t fid)
+int cxip_wait_close(fid_t fid)
 {
-	struct cxi_fid_list *list_item;
+	struct cxip_fid_list *list_item;
 	struct dlist_entry *p, *head;
-	struct cxi_wait *wait;
+	struct cxip_wait *wait;
 
-	wait = container_of(fid, struct cxi_wait, wait_fid.fid);
+	wait = container_of(fid, struct cxip_wait, wait_fid.fid);
 	head = &wait->fid_list;
 
 	for (p = head->next; p != head;) {
-		list_item = container_of(p, struct cxi_fid_list, entry);
+		list_item = container_of(p, struct cxip_fid_list, entry);
 		p = p->next;
 		free(list_item);
 	}
@@ -224,15 +226,15 @@ int cxi_wait_close(fid_t fid)
 	return 0;
 }
 
-static struct fi_ops cxi_wait_fi_ops = {
+static struct fi_ops cxip_wait_fi_ops = {
 	.size = sizeof(struct fi_ops),
-	.close = cxi_wait_close,
+	.close = cxip_wait_close,
 	.bind = fi_no_bind,
-	.control = cxi_wait_control,
+	.control = cxip_wait_control,
 	.ops_open = fi_no_ops_open,
 };
 
-static int cxi_verify_wait_attr(struct fi_wait_attr *attr)
+static int cxip_verify_wait_attr(struct fi_wait_attr *attr)
 {
 	switch (attr->wait_obj) {
 	case FI_WAIT_UNSPEC:
@@ -241,7 +243,7 @@ static int cxi_verify_wait_attr(struct fi_wait_attr *attr)
 		break;
 
 	default:
-		CXI_LOG_ERROR("Invalid wait object type\n");
+		CXIP_LOG_ERROR("Invalid wait object type\n");
 		return -FI_EINVAL;
 	}
 	if (attr->flags)
@@ -249,18 +251,18 @@ static int cxi_verify_wait_attr(struct fi_wait_attr *attr)
 	return 0;
 }
 
-int cxi_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
-		  struct fid_wait **waitset)
+int cxip_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
+		   struct fid_wait **waitset)
 {
 	int err;
-	struct cxi_wait *wait;
-	struct cxi_fabric *fab;
+	struct cxip_wait *wait;
+	struct cxip_fabric *fab;
 	enum fi_wait_obj wait_obj_type;
 
-	if (attr && cxi_verify_wait_attr(attr))
+	if (attr && cxip_verify_wait_attr(attr))
 		return -FI_EINVAL;
 
-	fab = container_of(fabric, struct cxi_fabric, fab_fid);
+	fab = container_of(fabric, struct cxip_fabric, fab_fid);
 	if (!attr || attr->wait_obj == FI_WAIT_UNSPEC)
 		wait_obj_type = FI_WAIT_FD;
 	else
@@ -270,7 +272,7 @@ int cxi_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 	if (!wait)
 		return -FI_ENOMEM;
 
-	err = cxi_wait_init(wait, wait_obj_type);
+	err = cxip_wait_init(wait, wait_obj_type);
 	if (err) {
 		free(wait);
 		return err;
@@ -278,8 +280,8 @@ int cxi_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 
 	wait->wait_fid.fid.fclass = FI_CLASS_WAIT;
 	wait->wait_fid.fid.context = 0;
-	wait->wait_fid.fid.ops = &cxi_wait_fi_ops;
-	wait->wait_fid.ops = &cxi_wait_ops;
+	wait->wait_fid.fid.ops = &cxip_wait_fi_ops;
+	wait->wait_fid.ops = &cxip_wait_ops;
 	wait->fab = fab;
 	wait->type = wait_obj_type;
 	ofi_atomic_inc32(&fab->ref);
@@ -288,4 +290,3 @@ int cxi_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 	*waitset = &wait->wait_fid;
 	return 0;
 }
-
