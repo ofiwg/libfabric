@@ -367,7 +367,7 @@ Buffered receives of tagged messages will include the message tag as part
 of the CQ entry, if available.
 
 The handling of buffered receives follows all message ordering
-restrictions assigned to and endpoint.  For example, completions
+restrictions assigned to an endpoint.  For example, completions
 may indicate the order in which received messages arrived at the
 receiver based on the endpoint attributes.
 

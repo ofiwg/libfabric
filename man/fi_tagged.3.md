@@ -343,6 +343,48 @@ The following flags may be used with fi_trecvmsg.
 
   If this flag is set, the input buffer(s) and length parameters are ignored.
 
+# Buffered Tagged Receives
+
+See [`fi_msg`(3)](fi_msg.3.html) for an introduction to buffered receives.
+The handling of buffered receives differs between fi_msg operations and
+fi_tagged.  Although the provider is responsible for allocating and
+managing network buffers, the application is responsible for identifying
+the tags that will be used to match incoming messages.  The provider
+handles matching incoming receives to the application specified tags.
+
+When FI_BUFFERED_RECV is enabled, the application posts the tags that
+will be used for matching purposes.  Tags are posted using fi_trecv,
+fi_trecvv, and fi_trecvmsg; however, parameters related
+to the input buffers are ignored (e.g. buf, len, iov, desc).  When
+a provider receives a message for which there is a matching tag,
+it will write an entry to the completion queue associated with the
+receiving endpoint.
+
+For discussion purposes, the completion queue is assumed to be configured
+for FI_CQ_FORMAT_TAGGED.  The op_context field will point to a struct
+fi_recv_contex.
+
+{% highlight c %}
+struct fi_recv_context {
+	struct fid_ep *ep;
+	void *context;
+};
+{% endhighlight %}
+
+The 'ep' field will be NULL.  The 'context' field will match the
+application context specified when posting the tag.  Other fields are
+set as defined in [`fi_msg`(3)](fi_msg.3.html).
+
+After being notified that a buffered receive has arrived,
+applications must either claim or discard the message as described in
+[`fi_msg`(3)](fi_msg.3.html).
+
+# Variable Length Tagged Messages
+
+Variable length messages are defined in [`fi_msg`(3)](fi_msg.3.html).
+The requirements for handling variable length tagged messages is identical
+to those defined above for buffered tagged receives.
+
 # RETURN VALUE
 
 The tagged send and receive calls return 0 on success.  On error, a
