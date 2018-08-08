@@ -489,7 +489,8 @@ struct fi_ibv_ep {
 	/* TODO: it would be removed */
 	struct fi_ibv_dgram_buf_pool	grh_pool;
 
-	struct ibv_send_wr	inject_wr;
+	struct ibv_send_wr	rma_wr;
+	struct ibv_send_wr	msg_wr;
 	struct ibv_sge		sge;
 };
 
@@ -518,6 +519,7 @@ struct fi_ops_atomic fi_ibv_msg_ep_atomic_ops;
 struct fi_ops_cm fi_ibv_msg_ep_cm_ops;
 struct fi_ops_msg fi_ibv_msg_ep_msg_ops_ts;
 struct fi_ops_msg fi_ibv_msg_ep_msg_ops;
+struct fi_ops_rma fi_ibv_msg_ep_rma_ops_ts;
 struct fi_ops_rma fi_ibv_msg_ep_rma_ops;
 struct fi_ops_msg fi_ibv_msg_srq_ep_msg_ops;
 

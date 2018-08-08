@@ -193,7 +193,7 @@ fi_ibv_msg_inject_fast(struct fid_ep *ep_fid, const void *buf, size_t len,
 	ep->sge.addr = (uintptr_t) buf;
 	ep->sge.length = (uint32_t) len;
 
-	return fi_ibv_send_poll_cq_if_needed(ep, &ep->inject_wr);
+	return fi_ibv_send_poll_cq_if_needed(ep, &ep->msg_wr);
 }
 
 
