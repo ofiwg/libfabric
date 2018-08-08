@@ -1397,6 +1397,25 @@ fn2:
 	return ret;
 }
 
+static void fi_ibv_remove_nosrc_info(struct fi_info **info)
+{
+	struct fi_info **fi = info, *next;
+	while (*fi && ((*fi)->ep_attr->type == FI_EP_MSG)) {
+		if (!(*fi)->src_addr) {
+			VERBS_INFO(FI_LOG_FABRIC, "Not reporting fi_info "
+				   "corresponding to domain: %s as it has no IP"
+				   "address configured\n",
+				   (*fi)->domain_attr->name);
+			next = (*fi)->next;
+			(*fi)->next = NULL;
+			fi_freeinfo(*fi);
+			*fi = next;
+		} else {
+			fi = &(*fi)->next;
+		}
+	}
+}
+
 static int fi_ibv_handle_sock_addr(const char *node, const char *service,
 				   uint64_t flags, const struct fi_info *hints,
 				   struct fi_info **info)
@@ -1417,6 +1436,7 @@ static int fi_ibv_handle_sock_addr(const char *node, const char *service,
 	}
 
 	ret = fi_ibv_fill_addr(rai, info, id);
+	fi_ibv_remove_nosrc_info(info);
 fn:
 	fi_ibv_destroy_ep(rai, &id);
 	return ret;
@@ -1450,6 +1470,10 @@ static int fi_ibv_get_match_infos(uint32_t version, const char *node,
 	if (ret_sock_addr)
 		VERBS_INFO(FI_LOG_CORE, "Handling of the socket address fails - %d\n",
 			   ret_sock_addr);
+
+	if (!*info)
+		return -FI_ENODATA;
+
 	ret_ib_ud_addr = fi_ibv_handle_ib_ud_addr(node, service, flags, info);
 	if (ret_ib_ud_addr)
 		VERBS_INFO(FI_LOG_CORE, "Handling of the IB ID address fails - %d\n",
