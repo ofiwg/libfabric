@@ -328,18 +328,28 @@ The following flags may be used with fi_trecvmsg.
   set is used to retrieve a previously claimed message.
 
   In order to use the FI_CLAIM flag, an application must supply a struct
-  fi_context structure as the context for the receive operation.  The same
+  fi_context structure as the context for the receive operation, or a
+  struct fi_recv_context in the case of buffered receives.  The same
   fi_context structure used for an FI_PEEK + FI_CLAIM operation must be used
   by the paired FI_CLAIM request.
 
+  This flag also applies to endpoints configured for FI_BUFFERED_RECV or
+  FI_VARIABLE_MSG.  When set, it is used to retrieve a tagged message that
+  was buffered by the provider.  See Buffered Tagged Receives section for
+  details.
+
 *FI_DISCARD*
-: This flag must be used in conjunction with either FI_PEEK or FI_CLAIM.
+: This flag may be used in conjunction with either FI_PEEK or FI_CLAIM.
   If this flag is used in conjunction with FI_PEEK, it indicates if the
   peek request completes successfully -- indicating that a matching message
   was located -- the message is discarded by the provider, as the data is not
   needed by the application.  This flag may also be used in conjunction with
-  FI_CLAIM in order to retrieve and discard a message previously claimed
+  FI_CLAIM in order to discard a message previously claimed
   using an FI_PEEK + FI_CLAIM request.
+
+  This flag also applies to endpoints configured for FI_BUFFERED_RECV or
+  FI_VARIABLE_MSG.  When set, it indicates that the provider should free
+  a buffered messages.  See Buffered Tagged Receives section for details.
 
   If this flag is set, the input buffer(s) and length parameters are ignored.
 

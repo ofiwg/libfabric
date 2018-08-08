@@ -220,11 +220,23 @@ fi_sendmsg.
   request.  See fi_getinfo for additional details on
   FI_REMOTE_CQ_DATA.
 
+*FI_CLAIM*
+: Applies to posted receive operations for endpoints configured
+  for FI_BUFFERED_RECV or FI_VARIABLE_MSG.  This flag is used to
+  retrieve a message that was buffered by the provider.  See the
+  Buffered Receives section for details.
+
 *FI_COMPLETION*
 : Indicates that a completion entry should be generated for the
   specified operation.  The endpoint must be bound to a completion
   queue with FI_SELECTIVE_COMPLETION that corresponds to the
   specified operation, or this flag is ignored.
+
+*FI_DISCARD*
+: Applies to posted receive operations for endpoints configured
+  for FI_BUFFERED_RECV or FI_VARIABLE_MSG.  This flag is used to
+  free a message that was buffered by the provider.  See the
+  Buffered Receives section for details.
 
 *FI_MORE*
 : Indicates that the user has additional requests that will
