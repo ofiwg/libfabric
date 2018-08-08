@@ -642,6 +642,7 @@ static ssize_t psmx_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 
 	cq_priv = container_of(cq, struct psmx_fid_cq, cq);
 
+	fastlock_acquire(&cq_priv->lock);
 	if (cq_priv->pending_error) {
 		api_version = cq_priv->domain->fabric->util_fabric.
 			      fabric_fid.api_version;
@@ -651,8 +652,10 @@ static ssize_t psmx_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 		memcpy(buf, &cq_priv->pending_error->cqe, size);
 		free(cq_priv->pending_error);
 		cq_priv->pending_error = NULL;
+		fastlock_release(&cq_priv->lock);
 		return 1;
 	}
+	fastlock_release(&cq_priv->lock);
 
 	return -FI_EAGAIN;
 }
