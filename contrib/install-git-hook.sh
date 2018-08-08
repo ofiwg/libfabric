@@ -10,7 +10,7 @@ fi
 
 cat > "${BASE_REPO_DIR}/.git/hooks/pre-commit" << EOL
 #!/usr/bin/env bash
-exec git diff --cached | ./contrib/checkpatch.pl --no-tree --no-signoff
+exec git diff --cached | ./contrib/checkpatch.pl --no-tree --no-signoff --ignore=AVOID_EXTERNS,FILE_PATH_CHANGES,SSCANF_TO_KSTRTO
 EOL
 chmod +x "${BASE_REPO_DIR}/.git/hooks/pre-commit"
 
