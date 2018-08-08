@@ -200,12 +200,7 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	tx_entry->flags = flags | FI_MSG | FI_SEND;
 
 	fastlock_acquire(&tcpx_ep->lock);
-	if (slist_empty(&tcpx_ep->tx_queue)) {
-		slist_insert_tail(&tx_entry->entry, &tcpx_ep->tx_queue);
-		process_tx_entry(tx_entry);
-	} else {
-		slist_insert_tail(&tx_entry->entry, &tcpx_ep->tx_queue);
-	}
+	tcpx_tx_queue_insert(tcpx_ep, tx_entry);
 	fastlock_release(&tcpx_ep->lock);
 	return FI_SUCCESS;
 }
