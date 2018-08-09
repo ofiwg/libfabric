@@ -103,6 +103,7 @@ do {									\
 extern struct fi_provider rxm_prov;
 extern struct util_prov rxm_util_prov;
 extern struct fi_ops_rma rxm_ops_rma;
+extern int rxm_defer_requests;
 
 struct rxm_fabric {
 	struct util_fabric util_fabric;
