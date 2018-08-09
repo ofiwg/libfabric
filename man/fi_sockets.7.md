@@ -60,6 +60,9 @@ The sockets provider checks for the following environment variables -
 *FI_SOCKETS_PE_WAITTIME*
 : An integer value that specifies how many milliseconds to spin while waiting for progress in *FI_PROGRESS_AUTO* mode.
 
+*FI_SOCKETS_CONN_TIMEOUT*
+: An integer value that specifies how many milliseconds to wait for one connection establishment.
+
 *FI_SOCKETS_MAX_CONN_RETRY*
 : An integer value that specifies the number of socket connection retries before reporting as failure.
 

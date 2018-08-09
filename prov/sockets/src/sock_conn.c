@@ -536,7 +536,7 @@ do_connect:
 			poll_fd.fd = conn_fd;
 			poll_fd.events = POLLOUT;
 
-			ret = poll(&poll_fd, 1, 15 * 1000);
+			ret = poll(&poll_fd, 1, sock_conn_timeout);
 			if (ret < 0) {
 				SOCK_LOG_DBG("poll failed\n");
 				goto retry;
@@ -569,7 +569,6 @@ do_connect:
 
 retry:
 	do_retry--;
-	sleep(10);
 	if (!do_retry)
 		goto err;
 
