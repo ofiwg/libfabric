@@ -38,6 +38,8 @@
 #include <ofi_prov.h>
 #include "rxm.h"
 
+int rxm_defer_requests = 0;
+
 char *rxm_proto_state_str[] = {
 	RXM_PROTO_STATES(OFI_STR)
 };
@@ -293,6 +295,12 @@ RXM_INI
 			"Defines the maximum number of MSG provider CQ entries "
 			"(default: 1) that would be read per progress "
 			"(RxM CQ read).");
+
+	fi_param_define(&rxm_prov, "defer_requests", FI_PARAM_BOOL,
+			"Defer requests when connection is not established "
+			"(default: false)\n");
+
+	fi_param_get_bool(&rxm_prov, "defer_requests", &rxm_defer_requests);
 
 	if (rxm_init_info()) {
 		FI_WARN(&rxm_prov, FI_LOG_CORE, "Unable to initialize rxm_info\n");

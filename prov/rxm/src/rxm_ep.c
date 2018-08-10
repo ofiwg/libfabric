@@ -1029,7 +1029,7 @@ rxm_ep_inject_common(struct rxm_ep *rxm_ep, const void *buf, size_t len,
 		};
 		ret = ofi_cmap_handle_connect(rxm_ep->util_ep.cmap,
 					      dest_addr, handle);
-		if (OFI_UNLIKELY(ret != -FI_EAGAIN))
+		if (ret && (!rxm_defer_requests || OFI_UNLIKELY(ret != -FI_EAGAIN)))
 			goto cmap_err;
 		rxm_conn = container_of(handle, struct rxm_conn, handle);
 		ret = rxm_ep_postpone_send(rxm_ep, rxm_conn, NULL, 1,
@@ -1091,7 +1091,7 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 	} else if (OFI_UNLIKELY(handle->state != CMAP_CONNECTED)) {
 		ret = ofi_cmap_handle_connect(rxm_ep->util_ep.cmap,
 					      dest_addr, handle);
-		if (OFI_UNLIKELY(ret != -FI_EAGAIN))
+		if (ret && (!rxm_defer_requests || OFI_UNLIKELY(ret != -FI_EAGAIN)))
 			goto cmap_err;
 		rxm_conn = container_of(handle, struct rxm_conn, handle);
 		ret = rxm_ep_postpone_send(
