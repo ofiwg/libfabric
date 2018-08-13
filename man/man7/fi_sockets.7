@@ -1,4 +1,4 @@
-.TH "fi_sockets" "7" "2018\-03\-16" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_sockets" "7" "2018\-08\-13" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_sockets \- The Sockets Fabric Provider
@@ -53,6 +53,9 @@ The sockets provider checks for the following environment variables \-
 \f[I]FI_SOCKETS_PE_WAITTIME\f[] : An integer value that specifies how
 many milliseconds to spin while waiting for progress in
 \f[I]FI_PROGRESS_AUTO\f[] mode.
+.PP
+\f[I]FI_SOCKETS_CONN_TIMEOUT\f[] : An integer value that specifies how
+many milliseconds to wait for one connection establishment.
 .PP
 \f[I]FI_SOCKETS_MAX_CONN_RETRY\f[] : An integer value that specifies the
 number of socket connection retries before reporting as failure.
