@@ -115,8 +115,12 @@ void cxit_create_cqs(void)
 {
 	int ret;
 
+	cxit_tx_cq_attr.format = FI_CQ_FORMAT_TAGGED;
+
 	ret = fi_cq_open(cxit_domain, &cxit_tx_cq_attr, &cxit_tx_cq, NULL);
 	cr_assert(ret == FI_SUCCESS, "fi_cq_open (TX)");
+
+	cxit_rx_cq_attr.format = FI_CQ_FORMAT_TAGGED;
 
 	ret = fi_cq_open(cxit_domain, &cxit_rx_cq_attr, &cxit_rx_cq, NULL);
 	cr_assert(ret == FI_SUCCESS, "fi_cq_open (RX)");
