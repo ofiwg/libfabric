@@ -104,6 +104,7 @@
 #define SOCK_EP_MAX_RETRY (5)
 #define SOCK_EP_MAX_CM_DATA_SZ (256)
 #define SOCK_CM_DEF_BACKLOG (128)
+#define SOCK_CM_DEF_TIMEOUT (15000)
 #define SOCK_CM_DEF_RETRY (5)
 #define SOCK_CM_CONN_IN_PROGRESS ((struct sock_conn *)(0x1L))
 

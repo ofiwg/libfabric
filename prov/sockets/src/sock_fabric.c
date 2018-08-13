@@ -60,6 +60,7 @@ int sock_pe_waittime = SOCK_PE_WAITTIME;
 const char sock_fab_name[] = "IP";
 const char sock_dom_name[] = "sockets";
 const char sock_prov_name[] = "sockets";
+int sock_conn_timeout = SOCK_CM_DEF_TIMEOUT;
 int sock_conn_retry = SOCK_CM_DEF_RETRY;
 int sock_cm_def_map_sz = SOCK_CMAP_DEF_SZ;
 int sock_av_def_sz = SOCK_AV_DEF_SZ;
@@ -350,6 +351,7 @@ static void sock_read_default_params()
 {
 	if (!read_default_params) {
 		fi_param_get_int(&sock_prov, "pe_waittime", &sock_pe_waittime);
+		fi_param_get_int(&sock_prov, "conn_timeout", &sock_conn_timeout);
 		fi_param_get_int(&sock_prov, "max_conn_retry", &sock_conn_retry);
 		fi_param_get_int(&sock_prov, "def_conn_map_sz", &sock_cm_def_map_sz);
 		fi_param_get_int(&sock_prov, "def_av_sz", &sock_av_def_sz);
@@ -869,6 +871,9 @@ SOCKETS_INI
 
 	fi_param_define(&sock_prov, "pe_waittime", FI_PARAM_INT,
 			"How many milliseconds to spin while waiting for progress");
+
+	fi_param_define(&sock_prov, "conn_timeout", FI_PARAM_INT,
+			"How many milliseconds to wait for one connection establishment");
 
 	fi_param_define(&sock_prov, "max_conn_retry", FI_PARAM_INT,
 			"Number of connection retries before reporting as failure");
