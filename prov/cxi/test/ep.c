@@ -686,9 +686,7 @@ ParameterizedTestParameters(ep, ctrl_null_arg)
 	size_t param_sz;
 
 	static struct ep_ctrl_null_params ep_null_params[] = {
-		{.command = FI_EP_RDM,
-		 .retval = -FI_EINVAL},
-		{.command = FI_EP_UNSPEC,
+		{.command = -1,
 		 .retval = -FI_EINVAL},
 		{.command = FI_SETOPSFLAG,
 		 .retval = -FI_EINVAL},

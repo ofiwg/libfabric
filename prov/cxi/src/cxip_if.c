@@ -20,7 +20,6 @@
 #define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_DOMAIN, __VA_ARGS__)
 
 struct slist cxip_if_list;
-int cxip_num_pids;
 
 struct cxip_if *cxip_if_lookup(uint32_t nic_addr)
 {
@@ -37,16 +36,14 @@ struct cxip_if *cxip_if_lookup(uint32_t nic_addr)
 }
 
 static struct cxip_if_domain *cxip_if_domain_lookup(struct cxip_if *dev_if,
-						    uint32_t vni, uint32_t pid,
-						    uint32_t pid_granule)
+						    uint32_t vni, uint32_t pid)
 {
 	struct dlist_entry *entry;
 	struct cxip_if_domain *dom;
 
 	dlist_foreach(&dev_if->if_doms, entry) {
 		dom = container_of(entry, struct cxip_if_domain, entry);
-		if (dom->vni == vni && dom->pid == pid &&
-		    dom->pid_granule == pid_granule)
+		if (dom->vni == vni && dom->pid == pid)
 			return dom;
 	}
 
@@ -198,20 +195,16 @@ void cxip_put_if(struct cxip_if *dev_if)
  * three-tuple:
  *
  *    ( dev_if->if_nic, vni, pid )
- *
- * The IF Domain pid_granule value represents the address space size.  All IF
- * Domains created on a node (among all processes on the node) with matching
- * NIC and VNI values must use a matching pid_granule value.
  */
 int cxip_get_if_domain(struct cxip_if *dev_if, uint32_t vni, uint32_t pid,
-		       uint32_t pid_granule, struct cxip_if_domain **if_dom)
+		       struct cxip_if_domain **if_dom)
 {
 	struct cxip_if_domain *dom;
 	int ret;
 
 	fastlock_acquire(&dev_if->lock);
 
-	dom = cxip_if_domain_lookup(dev_if, vni, pid, pid_granule);
+	dom = cxip_if_domain_lookup(dev_if, vni, pid);
 	if (!dom) {
 		dom = malloc(sizeof(*dom));
 		if (!dom) {
@@ -220,8 +213,7 @@ int cxip_get_if_domain(struct cxip_if *dev_if, uint32_t vni, uint32_t pid,
 			goto unlock;
 		}
 
-		ret = cxil_alloc_domain(dev_if->if_lni, vni, pid, pid_granule,
-					&dom->if_dom);
+		ret = cxil_alloc_domain(dev_if->if_lni, vni, pid, &dom->if_dom);
 		if (ret) {
 			CXIP_LOG_DBG("cxil_alloc_domain returned: %d\n", ret);
 			goto free_dom;
@@ -231,19 +223,17 @@ int cxip_get_if_domain(struct cxip_if *dev_if, uint32_t vni, uint32_t pid,
 		dom->dev_if = dev_if;
 		dom->vni = vni;
 		dom->pid = pid;
-		dom->pid_granule = pid_granule;
 		memset(&dom->lep_map, 0, sizeof(dom->lep_map));
 		ofi_atomic_initialize32(&dom->ref, 0);
 		fastlock_init(&dom->lock);
 
 		CXIP_LOG_DBG(
-			"Allocated IF Domain, NIC: %u VNI: %u PID: %u PG: %u\n",
-			dev_if->if_nic, vni, pid, pid_granule);
+			"Allocated IF Domain, NIC: %u VNI: %u PID: %u\n",
+			dev_if->if_nic, vni, pid);
 	} else {
 		CXIP_LOG_DBG(
-			"Using IF Domain, NIC: %u VNI: %u PID: %u PG: %u ref: %u\n",
-			dev_if->if_nic, vni, pid, pid_granule,
-			ofi_atomic_get32(&dom->ref));
+			"Using IF Domain, NIC: %u VNI: %u PID: %u ref: %u\n",
+			dev_if->if_nic, vni, pid, ofi_atomic_get32(&dom->ref));
 	}
 
 	ofi_atomic_inc32(&dom->ref);
@@ -272,9 +262,8 @@ void cxip_put_if_domain(struct cxip_if_domain *if_dom)
 
 	if (!ofi_atomic_dec32(&if_dom->ref)) {
 		CXIP_LOG_DBG(
-			"Released IF Domain, NIC: %u VNI: %u PID: %u PG: %u\n",
-			if_dom->dev_if->if_nic, if_dom->vni, if_dom->pid,
-			if_dom->pid_granule);
+			"Released IF Domain, NIC: %u VNI: %u PID: %u\n",
+			if_dom->dev_if->if_nic, if_dom->vni, if_dom->pid);
 
 		fastlock_destroy(&if_dom->lock);
 
@@ -363,6 +352,7 @@ static void cxip_query_if_list(struct slist *if_list)
 	if_entry = calloc(1, sizeof(struct cxip_if));
 	if_entry->if_nic = info->nic_addr;
 	if_entry->if_idx = info->dev_id;
+	if_entry->if_pid_granule = info->pid_granule;
 	if_entry->if_fabric = 0; /* TODO Find real network ID */
 	ofi_atomic_initialize32(&if_entry->ref, 0);
 	dlist_init(&if_entry->if_doms);
@@ -391,8 +381,6 @@ static void cxip_free_if_list(struct slist *if_list)
  */
 void cxip_if_init(void)
 {
-	cxip_num_pids = CXIP_NUM_PIDS_DEF;
-
 	cxip_query_if_list(&cxip_if_list);
 }
 

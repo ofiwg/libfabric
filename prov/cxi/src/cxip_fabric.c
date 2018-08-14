@@ -23,7 +23,7 @@
 #define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_FABRIC, __VA_ARGS__)
 
 const char cxip_fab_fmt[] = "cxi/%d"; /* Provder/Net Name */
-const char cxip_dom_fmt[] = "cxi%d:%d"; /* IF/Dom Name */
+const char cxip_dom_fmt[] = "cxi%d"; /* IF Index Name */
 const char cxip_prov_name[] = "CXI"; /* Provider Name */
 
 int cxip_av_def_sz = CXIP_AV_DEF_SZ;
@@ -72,8 +72,7 @@ char *cxip_get_domain_name(struct cxip_addr *src_addr)
 	if (!if_entry)
 		return NULL;
 
-	ret = asprintf(&dom_name, cxip_dom_fmt, if_entry->if_idx,
-		       src_addr->domain);
+	ret = asprintf(&dom_name, cxip_dom_fmt, if_entry->if_idx);
 	if (ret == -1)
 		return NULL;
 
@@ -421,16 +420,18 @@ static int cxip_parse_node(const char *node, uint32_t *nic)
 	return -FI_ENODATA;
 }
 
-static int cxip_parse_service(const char *service, uint32_t *domain,
-			      uint32_t *port)
+static int cxip_parse_service(const char *service, uint32_t *port)
 {
-	uint32_t scan_domain, scan_port;
+	uint32_t scan_port;
 
-	if (!service)
+	if (!service) {
+		/* TODO let driver auto assign port */
+		/* *port = CXIP_ADDR_PORT_AUTO; */
+		*port = 0;
 		return FI_SUCCESS;
+	}
 
-	if (sscanf(service, "%d:%d", &scan_domain, &scan_port) == 2) {
-		*domain = scan_domain;
+	if (sscanf(service, "%d", &scan_port) == 1) {
 		*port = scan_port;
 		return FI_SUCCESS;
 	}
@@ -441,19 +442,19 @@ static int cxip_parse_service(const char *service, uint32_t *domain,
 int cxip_parse_addr(const char *node, const char *service,
 		    struct cxip_addr *addr)
 {
-	uint32_t nic = 0, domain = 0, port = 0;
+	uint32_t nic = 0;
+	uint32_t port = 0;
 	int ret;
 
 	ret = cxip_parse_node(node, &nic);
 	if (ret)
 		return ret;
 
-	ret = cxip_parse_service(service, &domain, &port);
+	ret = cxip_parse_service(service, &port);
 	if (ret)
 		return ret;
 
 	addr->nic = nic;
-	addr->domain = domain;
 	addr->port = port;
 
 	return FI_SUCCESS;
@@ -464,8 +465,10 @@ static int cxip_ep_getinfo(uint32_t version, const char *node,
 			   const struct fi_info *hints, enum fi_ep_type ep_type,
 			   struct fi_info **info)
 {
-	struct cxip_addr saddr = CXIP_ADDR_INIT, daddr = CXIP_ADDR_INIT,
-			 *src_addr = NULL, *dest_addr = NULL;
+	struct cxip_addr saddr = {};
+	struct cxip_addr daddr = {};
+	struct cxip_addr *src_addr = NULL;
+	struct cxip_addr *dest_addr = NULL;
 	int ret;
 
 	if (flags & FI_SOURCE) {
@@ -501,11 +504,11 @@ static int cxip_ep_getinfo(uint32_t version, const char *node,
 	CXIP_LOG_DBG("node: %s service: %s\n", node, service);
 
 	if (src_addr)
-		CXIP_LOG_DBG("src_addr: 0x%x:%u:%u\n", src_addr->nic,
-			     src_addr->domain, src_addr->port);
+		CXIP_LOG_DBG("src_addr: 0x%x:%d\n", src_addr->nic,
+			     src_addr->port);
 	if (dest_addr)
-		CXIP_LOG_DBG("dest_addr: 0x%x:%u:%u\n", dest_addr->nic,
-			     dest_addr->domain, dest_addr->port);
+		CXIP_LOG_DBG("dest_addr: 0x%x:%d\n", dest_addr->nic,
+			      dest_addr->port);
 
 	switch (ep_type) {
 	case FI_EP_RDM:
@@ -665,8 +668,7 @@ static int cxip_getinfo(uint32_t version, const char *node, const char *service,
 					 info, &tail);
 
 	slist_foreach(&cxip_if_list, entry, prev) {
-		char *local_node, *local_service;
-		int i;
+		char *local_node;
 
 		if_entry = container_of(entry, struct cxip_if, entry);
 		ret = asprintf(&local_node, "0x%x", if_entry->if_nic);
@@ -681,21 +683,12 @@ static int cxip_getinfo(uint32_t version, const char *node, const char *service,
 			ret = cxip_node_getinfo(version, local_node, service,
 						flags, hints, info, &tail);
 		} else {
-			for (i = 0; i < cxip_num_pids; i++) {
-				ret = asprintf(&local_service, "%d:0", i);
-				if (ret == -1) {
-					CXIP_LOG_ERROR("asprintf failed: %s\n",
-						       strerror(ofi_syserr()));
-					local_service = NULL;
-				}
-				ret = cxip_node_getinfo(version, local_node,
-							local_service, flags,
-							hints, info, &tail);
-				free(local_service);
+			ret = cxip_node_getinfo(version, local_node,
+						NULL, flags,
+						hints, info, &tail);
 
-				if (ret && ret != -FI_ENODATA)
-					return ret;
-			}
+			if (ret && ret != -FI_ENODATA)
+				return ret;
 		}
 		free(local_node);
 

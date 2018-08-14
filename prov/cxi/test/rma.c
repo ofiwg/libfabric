@@ -39,6 +39,11 @@ Test(rma, simple_write, .timeout = 3, .disabled = false)
 			key_val, FI_REMOTE_WRITE, &win_mr, NULL);
 	cr_assert(ret == FI_SUCCESS);
 
+	ret = fi_mr_bind(win_mr, &cxit_ep->fid, 0);
+	cr_assert(ret == FI_SUCCESS);
+
+	ret = fi_mr_enable(win_mr);
+
 	/* Send 8 bytes from send buffer data to RMA window 0 at FI address 0
 	 * (self)
 	 */

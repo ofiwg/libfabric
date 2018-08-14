@@ -117,9 +117,6 @@ extern uint64_t CXIP_EP_RDM_CAP;
 
 #define CXIP_WIRE_PROTO_VERSION (1)
 
-#define CXIP_NUM_PIDS_DEF 128
-#define CXIP_PID_GRANULE_DEF 1024
-
 extern const char cxip_fab_fmt[];
 extern const char cxip_dom_fmt[];
 extern const char cxip_prov_name[];
@@ -128,34 +125,41 @@ extern int cxip_av_def_sz;
 extern int cxip_cq_def_sz;
 extern int cxip_eq_def_sz;
 extern struct slist cxip_if_list;
-extern int cxip_num_pids;
 
 extern struct fi_provider cxip_prov;
 
+/*
+ * The CXI Provider Address format.
+ *
+ * A Cassini NIC Address and PID identify a libfabric Endpoint.  While Cassini
+ * borrows the name 'PID' from Portals, we use the term 'Port' here since the
+ * 1-1 mapping of PID to process does not exist.  The maximum PID value in
+ * Cassini is 12 bits.  Practically, 9-10 bits will be used.  Therefore, we
+ * could steal bits from the Port field if necessary.
+ *
+ * Port -1 is reserved.  When used, the library auto-assigns a free PID value
+ * when network resources are allocated.  Libfabric clients can achieve this by
+ * not specifying a 'service' in a call to fi_getinfo() or by specifying the
+ * reserved value -1.
+ *
+ * TODO: If NIC Address must be non-zero, the valid bit can be removed.
+ * TODO: Is 18 bits enough for NIC Address?
+ */
 struct cxip_addr {
 	union {
 		struct {
-			uint64_t port	: 20;
-			uint64_t domain	: 20;
-			uint64_t nic	: 20;
-			uint64_t flags	: 4;
+			uint32_t port		: 13;
+			uint32_t nic		: 18;
+			uint32_t valid		: 1;
 		};
-		uint64_t qw;
+		uint32_t raw;
 	};
 };
+#define CXIP_ADDR_PORT_AUTO 0x1fff
 
 #ifndef ARRAY_SIZE
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 #endif
-
-#define CXIP_ADDR_INIT {{{0} } }
-#define CXIP_ADDR_FLAG_AV_ENTRY_VALID (1)
-#define CXIP_ADDR_AV_ENTRY_VALID(addr) \
-	((addr)->flags & CXIP_ADDR_FLAG_AV_ENTRY_VALID)
-#define CXIP_ADDR_AV_ENTRY_SET_VALID(addr) \
-	((addr)->flags |= CXIP_ADDR_FLAG_AV_ENTRY_VALID)
-#define CXIP_ADDR_AV_ENTRY_CLR_VALID(addr) \
-	((addr)->flags &= ~CXIP_ADDR_FLAG_AV_ENTRY_VALID)
 
 #define CXIP_ADDR_MR_IDX(pid_granule, key) ((pid_granule) / 2 + (key))
 
@@ -165,7 +169,6 @@ struct cxip_if_domain {
 	struct cxil_domain *if_dom;
 	uint32_t vni;
 	uint32_t pid;
-	uint32_t pid_granule;
 	struct index_map lep_map; /* Cassini Logical EP Map */
 	ofi_atomic32_t ref;
 	fastlock_t lock;
@@ -177,6 +180,7 @@ struct cxip_if {
 	uint32_t if_idx;
 	uint32_t if_fabric;
 	struct cxil_dev *if_dev;
+	uint32_t if_pid_granule;
 	struct cxil_lni *if_lni;
 	struct cxi_cp cps[16];
 	int n_cps;
@@ -210,9 +214,6 @@ struct cxip_domain {
 	struct fi_domain_attr	attr;
 
 	uint32_t		nic_addr;
-	uint32_t		vni;
-	uint32_t		pid;
-	uint32_t		pid_granule;
 	int			enabled;
 	struct cxip_if		*dev_if;
 };
@@ -410,10 +411,13 @@ struct cxip_ep_attr {
 	struct fi_ep_attr ep_attr;
 
 	enum fi_ep_type ep_type;
-	struct cxip_addr *src_addr;
 
 	int is_enabled;
 	fastlock_t lock;
+
+	struct cxip_addr *src_addr;
+	uint32_t vni;
+	struct cxip_if_domain *if_dom;
 };
 
 struct cxip_ep {
@@ -427,11 +431,13 @@ struct cxip_ep {
 struct cxip_mr {
 	struct fid_mr mr_fid;
 	struct cxip_domain *domain;
+	struct cxip_ep *ep;
 	uint64_t key;
 	uint64_t flags;
 	struct fi_mr_attr attr;
 	struct cxip_cntr *cntr;
 	struct cxip_cq *cq;
+	fastlock_t lock;
 
 	/*
 	 * A standard MR is implemented as a single persistent, non-matching
@@ -440,10 +446,9 @@ struct cxip_mr {
 	 *
 	 *    ( if_dom->dev_if->if_nic, if_dom->pid, vni, pid_idx )
 	 */
-	struct cxip_if_domain *if_dom;
-	uint32_t vni;
 	uint32_t pid_off;
 
+	int enabled;
 	struct cxil_pte *pte;
 	unsigned int pte_hw_id;
 	struct cxil_pte_map *pte_map;
@@ -499,7 +504,7 @@ struct cxip_if *cxip_if_lookup(uint32_t nic_addr);
 int cxip_get_if(uint32_t nic_addr, struct cxip_if **dev_if);
 void cxip_put_if(struct cxip_if *dev_if);
 int cxip_get_if_domain(struct cxip_if *dev_if, uint32_t vni, uint32_t pid,
-		       uint32_t pid_granule, struct cxip_if_domain **if_dom);
+		       struct cxip_if_domain **if_dom);
 void cxip_put_if_domain(struct cxip_if_domain *if_dom);
 int cxip_if_domain_lep_alloc(struct cxip_if_domain *if_dom, uint64_t lep_idx);
 int cxip_if_domain_lep_free(struct cxip_if_domain *if_dom, uint64_t lep_idx);
@@ -543,8 +548,6 @@ int cxip_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 		struct fid_ep **ep, void *context);
 int cxip_rdm_sep(struct fid_domain *domain, struct fi_info *info,
 		 struct fid_ep **sep, void *context);
-int cxip_ep_enable(struct fid_ep *ep);
-int cxip_ep_disable(struct fid_ep *ep);
 
 int cxip_verify_info(uint32_t version, const struct fi_info *hints);
 int cxip_verify_fabric_attr(const struct fi_fabric_attr *attr);

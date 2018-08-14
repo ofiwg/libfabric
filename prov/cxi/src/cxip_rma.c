@@ -123,9 +123,9 @@ static ssize_t cxip_rma_write(struct fid_ep *ep, const void *buf, size_t len,
 	req->cb = cxip_rma_cb;
 
 	/* Build Put command descriptor */
-	pid_granule = dom->pid_granule;
+	pid_granule = dom->dev_if->if_pid_granule;
 	pid_idx = CXIP_ADDR_MR_IDX(pid_granule, key);
-	cxi_build_dfa(caddr.nic, caddr.domain, pid_granule, pid_idx, &dfa,
+	cxi_build_dfa(caddr.nic, caddr.port, pid_granule, pid_idx, &dfa,
 		      &idx_ext);
 
 	cmd.full_dma.command.cmd_type = C_CMD_TYPE_DMA;

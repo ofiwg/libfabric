@@ -190,7 +190,7 @@ static int cxip_av_get_next_index(struct cxip_av *av)
 	 */
 	while (av->table_hdr->stored < av->table_hdr->size) {
 		index = av->table_hdr->stored++;
-		if (!CXIP_ADDR_AV_ENTRY_VALID(&(av->table[index])))
+		if (!av->table[index].valid)
 			return index;
 	}
 
@@ -247,15 +247,14 @@ static int cxip_check_table_in(struct cxip_av *av, struct cxip_addr *addr,
 		if (av->idx_arr)
 			av->idx_arr[index] = index;
 
-		CXIP_LOG_DBG("inserted 0x%x:%u:%u\n", av_addr->nic,
-			     av_addr->domain, av_addr->port);
+		CXIP_LOG_DBG("inserted 0x%x:%u\n", av_addr->nic, av_addr->port);
 
 		/* If caller wants it, return the index */
 		if (fi_addr)
 			fi_addr[i] = (fi_addr_t)index;
 
 		/* Prevent overwrite */
-		CXIP_ADDR_AV_ENTRY_SET_VALID(av_addr);
+		av_addr->valid = 1;
 		ret++;
 	}
 
@@ -329,7 +328,7 @@ int _cxip_av_lookup(struct cxip_av *av, fi_addr_t fi_addr,
 	uint64_t index = ((uint64_t)fi_addr & av->mask);
 
 	av_addr = &av->table[index];
-	if (!CXIP_ADDR_AV_ENTRY_VALID(av_addr)) {
+	if (!av_addr->valid) {
 		CXIP_LOG_ERROR("requested address is invalid");
 		return -FI_EINVAL;
 	}
@@ -415,7 +414,7 @@ static int cxip_av_remove(struct fid_av *avfid, fi_addr_t *fi_addr,
 
 		/* Clobber the FSA */
 		av_addr = &av->table[index];
-		CXIP_ADDR_AV_ENTRY_CLR_VALID(av_addr);
+		av_addr->valid = 0;
 
 		/* If keeping an index, clobber that, too */
 		if (av->idx_arr)

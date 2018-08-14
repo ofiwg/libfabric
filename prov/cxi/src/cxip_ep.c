@@ -473,9 +473,86 @@ struct fi_ops_ep cxip_ctx_ep_ops = {
 	.tx_size_left = fi_no_tx_size_left,
 };
 
+static int cxip_ep_enable(struct fid_ep *ep)
+{
+	size_t i;
+	int ret;
+	struct cxip_ep *cxi_ep;
+	struct cxip_domain *cxi_dom;
+	struct cxip_tx_ctx *tx_ctx;
+	struct cxip_rx_ctx *rx_ctx;
+
+	/* TODO fix locking and check for AV and source CQs */
+
+	cxi_ep = container_of(ep, struct cxip_ep, ep);
+	cxi_dom = cxi_ep->attr->domain;
+
+	ret = cxip_domain_enable(cxi_dom);
+	if (ret != FI_SUCCESS) {
+		CXIP_LOG_DBG("cxip_domain_enable returned: %d\n", ret);
+		return ret;
+	}
+
+	ret = cxip_get_if_domain(cxi_dom->dev_if,
+				 cxi_ep->attr->vni,
+				 cxi_ep->attr->src_addr->port,
+				 &cxi_ep->attr->if_dom);
+	if (ret != FI_SUCCESS) {
+		CXIP_LOG_DBG("Failed to get IF Domain: %d\n", ret);
+		return ret;
+	}
+
+	for (i = 0; i < cxi_ep->attr->ep_attr.tx_ctx_cnt; i++) {
+		tx_ctx = cxi_ep->attr->tx_array[i];
+		if (tx_ctx) {
+			ret = cxip_tx_ctx_enable(tx_ctx);
+			if (ret != FI_SUCCESS) {
+				CXIP_LOG_DBG("cxip_tx_ctx_enable returned: %d\n",
+					     ret);
+				return ret;
+			}
+
+			if (tx_ctx->use_shared) {
+				if (tx_ctx->stx_ctx) {
+					tx_ctx->stx_ctx->enabled = 1;
+				}
+			}
+		}
+	}
+
+	for (i = 0; i < cxi_ep->attr->ep_attr.rx_ctx_cnt; i++) {
+		rx_ctx = cxi_ep->attr->rx_array[i];
+		if (rx_ctx) {
+			rx_ctx->enabled = 1;
+			if (rx_ctx->use_shared) {
+				if (rx_ctx->srx_ctx) {
+					rx_ctx->srx_ctx->enabled = 1;
+				}
+			}
+		}
+	}
+
+	cxi_ep->attr->is_enabled = 1;
+
+	return 0;
+}
+
+static int cxip_ep_disable(struct cxip_ep *cxi_ep)
+{
+	if (!cxi_ep->attr->is_enabled)
+		return FI_SUCCESS;
+
+	cxip_put_if_domain(cxi_ep->attr->if_dom);
+
+	cxi_ep->attr->is_enabled = 0;
+
+	return 0;
+}
+
 static int cxip_ep_close(struct fid *fid)
 {
 	struct cxip_ep *cxi_ep;
+	int ret;
 
 	switch (fid->fclass) {
 	case FI_CLASS_EP:
@@ -526,6 +603,10 @@ static int cxip_ep_close(struct fid *fid)
 		cxip_rx_ctx_close(cxi_ep->attr->rx_array[0]);
 		cxip_rx_ctx_free(cxi_ep->attr->rx_array[0]);
 	}
+
+	ret = cxip_ep_disable(cxi_ep);
+	if (ret != FI_SUCCESS)
+		CXIP_LOG_DBG("Failed to disable EP: %d\n", ret);
 
 	free(cxi_ep->attr->tx_array);
 	free(cxi_ep->attr->rx_array);
@@ -782,91 +863,6 @@ struct fi_ops cxip_ep_fi_ops = {
 	.control = cxip_ep_control,
 	.ops_open = fi_no_ops_open,
 };
-
-int cxip_ep_enable(struct fid_ep *ep)
-{
-	size_t i;
-	int ret;
-	struct cxip_ep *cxi_ep;
-	struct cxip_tx_ctx *tx_ctx;
-	struct cxip_rx_ctx *rx_ctx;
-
-	/* TODO fix locking and check for AV and source CQs */
-
-	cxi_ep = container_of(ep, struct cxip_ep, ep);
-
-	ret = cxip_domain_enable(cxi_ep->attr->domain);
-	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("cxip_domain_enable returned: %d\n", ret);
-		return ret;
-	}
-
-	for (i = 0; i < cxi_ep->attr->ep_attr.tx_ctx_cnt; i++) {
-		tx_ctx = cxi_ep->attr->tx_array[i];
-		if (tx_ctx) {
-			ret = cxip_tx_ctx_enable(tx_ctx);
-			if (ret != FI_SUCCESS) {
-				CXIP_LOG_DBG(
-					"cxip_tx_ctx_enable returned: %d\n",
-					ret);
-				return ret;
-			}
-
-			if (tx_ctx->use_shared) {
-				if (tx_ctx->stx_ctx) {
-					tx_ctx->stx_ctx->enabled = 1;
-				}
-			}
-		}
-	}
-
-	for (i = 0; i < cxi_ep->attr->ep_attr.rx_ctx_cnt; i++) {
-		rx_ctx = cxi_ep->attr->rx_array[i];
-		if (rx_ctx) {
-			rx_ctx->enabled = 1;
-			if (rx_ctx->use_shared) {
-				if (rx_ctx->srx_ctx) {
-					rx_ctx->srx_ctx->enabled = 1;
-				}
-			}
-		}
-	}
-
-	cxi_ep->attr->is_enabled = 1;
-
-	return 0;
-}
-
-int cxip_ep_disable(struct fid_ep *ep)
-{
-	size_t i;
-	struct cxip_ep *cxi_ep;
-
-	cxi_ep = container_of(ep, struct cxip_ep, ep);
-
-	if (cxi_ep->attr->tx_ctx &&
-	    cxi_ep->attr->tx_ctx->fid.ctx.fid.fclass == FI_CLASS_TX_CTX) {
-		cxi_ep->attr->tx_ctx->enabled = 0;
-	}
-
-	if (cxi_ep->attr->rx_ctx &&
-	    cxi_ep->attr->rx_ctx->ctx.fid.fclass == FI_CLASS_RX_CTX) {
-		cxi_ep->attr->rx_ctx->enabled = 0;
-	}
-
-	for (i = 0; i < cxi_ep->attr->ep_attr.tx_ctx_cnt; i++) {
-		if (cxi_ep->attr->tx_array[i])
-			cxi_ep->attr->tx_array[i]->enabled = 0;
-	}
-
-	for (i = 0; i < cxi_ep->attr->ep_attr.rx_ctx_cnt; i++) {
-		if (cxi_ep->attr->rx_array[i])
-			cxi_ep->attr->rx_array[i]->enabled = 0;
-	}
-	cxi_ep->attr->is_enabled = 0;
-
-	return 0;
-}
 
 static int cxip_ep_getopt(fid_t fid, int level, int optname, void *optval,
 			  size_t *optlen)

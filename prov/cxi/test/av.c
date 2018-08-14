@@ -33,8 +33,7 @@ test_addrs_init(void)
 
 	for (i = 0; i < naddrs; i++) {
 		test_addrs[i].nic = i;
-		test_addrs[i].domain = i + 1;
-		test_addrs[i].port = i + 2;
+		test_addrs[i].port = i + 1;
 	}
 }
 
@@ -145,9 +144,6 @@ __test_insert(int count, int iters)
 				"fi_av_lookup() iter=%d, count=%d, i=%d, index=%ld, nic=%d, exp=%d",
 				j, count, i, test_fi_addrs[i], addr.nic,
 				test_addrs[i].nic);
-			cr_assert(addr.domain == test_addrs[i].domain,
-				"fi_av_lookup() iter=%d, idx=%d, domain=%d",
-				j, i, addr.domain);
 			cr_assert(addr.port == test_addrs[i].port,
 				"fi_av_lookup() iter=%d, idx=%d, port=%d",
 				j, i, addr.port);
@@ -192,9 +188,6 @@ __test_insert(int count, int iters)
 			"fi_av_lookup() mid iter=%d, count=%d, i=%d, index=%ld, nic=%d, exp=%d",
 			j, count, i, test_fi_addrs[i], addr.nic,
 			test_addrs[i].nic);
-		cr_assert(addr.domain == test_addrs[i].domain,
-			"fi_av_lookup() mid iter=%d, idx=%d, domain=%d",
-			j, i, addr.domain);
 		cr_assert(addr.port == test_addrs[i].port,
 			"fi_av_lookup() mid iter=%d, idx=%d, port=%d",
 			j, i, addr.port);

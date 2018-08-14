@@ -12,12 +12,12 @@
 #include "cxip.h"
 #include "cxip_test_common.h"
 
-static char *get_dom_name(int if_idx, int dom_id)
+static char *get_dom_name(int if_idx)
 {
 	char *dom;
 	int ret;
 
-	ret = asprintf(&dom, cxip_dom_fmt, if_idx, dom_id);
+	ret = asprintf(&dom, cxip_dom_fmt, if_idx);
 	cr_assert(ret > 0);
 
 	return dom;
@@ -53,7 +53,7 @@ Test(getinfo, prov_name)
 				  cxip_prov_name));
 		infos++;
 	} while ((cxit_fi = cxit_fi->next));
-	cr_assert(infos == (cxit_n_ifs * cxip_num_pids));
+	cr_assert(infos == cxit_n_ifs);
 }
 
 /* Test fabric selection with domain name */
@@ -69,7 +69,7 @@ Test(getinfo, dom_name)
 		infos = 0;
 
 		cxit_fi_hints->domain_attr->name =
-				get_dom_name(if_entry->if_idx, 0);
+				get_dom_name(if_entry->if_idx);
 
 		cxit_create_fabric_info();
 		cr_assert(cxit_fi != NULL);
@@ -162,15 +162,13 @@ Test(getinfo, src_node)
 			cr_assert(cxit_fi->src_addr);
 			addr = (struct cxip_addr *)cxit_fi->src_addr;
 			cr_assert(addr->nic == if_entry->if_nic);
-			cr_assert(addr->domain == 0);
-			cr_assert(addr->port == 0);
 
 			fab_name = get_fab_name(if_entry->if_fabric);
 			cr_assert(!strcmp(cxit_fi->fabric_attr->name,
 					  fab_name));
 			free(fab_name);
 
-			dom_name = get_dom_name(if_entry->if_idx, 0);
+			dom_name = get_dom_name(if_entry->if_idx);
 			cr_assert(!strcmp(cxit_fi->domain_attr->name,
 					  dom_name));
 			free(dom_name);
@@ -194,7 +192,7 @@ Test(getinfo, src_node_service)
 	struct cxip_addr *addr;
 	struct cxip_if *if_entry;
 	struct slist_entry *entry, *prev __attribute__ ((unused));
-	int dom, port;
+	int port;
 	char *fab_name, *dom_name;
 
 	cxit_fi_hints->fabric_attr->prov_name = strdup(cxip_prov_name);
@@ -206,9 +204,8 @@ Test(getinfo, src_node_service)
 		ret = asprintf(&cxit_node, "0x%x", if_entry->if_nic);
 		cr_assert(ret > 0);
 
-		dom = if_entry->if_idx+4;
 		port = if_entry->if_idx+5;
-		ret = asprintf(&cxit_service, "%d:%d", dom, port);
+		ret = asprintf(&cxit_service, "%d", port);
 		cr_assert(ret > 0);
 
 		cxit_flags = FI_SOURCE;
@@ -224,7 +221,6 @@ Test(getinfo, src_node_service)
 			cr_assert(cxit_fi->src_addr);
 			addr = (struct cxip_addr *)cxit_fi->src_addr;
 			cr_assert(addr->nic == if_entry->if_nic);
-			cr_assert(addr->domain == dom);
 			cr_assert(addr->port == port);
 
 			fab_name = get_fab_name(if_entry->if_fabric);
@@ -232,7 +228,7 @@ Test(getinfo, src_node_service)
 					  fab_name));
 			free(fab_name);
 
-			dom_name = get_dom_name(if_entry->if_idx, dom);
+			dom_name = get_dom_name(if_entry->if_idx);
 			cr_assert(!strcmp(cxit_fi->domain_attr->name,
 					  dom_name));
 			free(dom_name);
@@ -284,7 +280,6 @@ Test(getinfo, dest_node)
 		cr_assert(cxit_fi->src_addr);
 		addr = (struct cxip_addr *)cxit_fi->src_addr;
 		cr_assert(addr->nic == if_entry->if_nic);
-		cr_assert(addr->domain == 0);
 		cr_assert(addr->port == 0);
 
 		fab_name = get_fab_name(if_entry->if_fabric);
@@ -292,7 +287,7 @@ Test(getinfo, dest_node)
 				  fab_name));
 		free(fab_name);
 
-		dom_name = get_dom_name(if_entry->if_idx, 0);
+		dom_name = get_dom_name(if_entry->if_idx);
 		cr_assert(!strcmp(cxit_fi->domain_attr->name,
 				  dom_name));
 		free(dom_name);
@@ -303,8 +298,6 @@ Test(getinfo, dest_node)
 		cr_assert(cxit_fi->dest_addr);
 		addr = (struct cxip_addr *)cxit_fi->dest_addr;
 		cr_assert(addr->nic == nic_id);
-		cr_assert(addr->domain == 0);
-		cr_assert(addr->port == 0);
 
 		infos++;
 	} while ((cxit_fi = cxit_fi->next));
@@ -322,7 +315,7 @@ Test(getinfo, dest_node_service)
 	struct cxip_addr *addr;
 	struct cxip_if *if_entry;
 	char *fab_name, *dom_name;
-	int nic_id = 130, dom_id = 5, port_id = 6;
+	int nic_id = 130, port_id = 6;
 
 	cxit_fi_hints->fabric_attr->prov_name = strdup(cxip_prov_name);
 
@@ -331,7 +324,7 @@ Test(getinfo, dest_node_service)
 	ret = asprintf(&cxit_node, "0x%x", nic_id);
 	cr_assert(ret > 0);
 
-	ret = asprintf(&cxit_service, "%d:%d", dom_id, port_id);
+	ret = asprintf(&cxit_service, "%d", port_id);
 	cr_assert(ret > 0);
 
 	cxit_create_fabric_info();
@@ -351,7 +344,6 @@ Test(getinfo, dest_node_service)
 		cr_assert(cxit_fi->src_addr);
 		addr = (struct cxip_addr *)cxit_fi->src_addr;
 		cr_assert(addr->nic == if_entry->if_nic);
-		cr_assert(addr->domain == 0);
 		cr_assert(addr->port == 0);
 
 		fab_name = get_fab_name(if_entry->if_fabric);
@@ -359,7 +351,7 @@ Test(getinfo, dest_node_service)
 				  fab_name));
 		free(fab_name);
 
-		dom_name = get_dom_name(if_entry->if_idx, 0);
+		dom_name = get_dom_name(if_entry->if_idx);
 		cr_assert(!strcmp(cxit_fi->domain_attr->name,
 				  dom_name));
 		free(dom_name);
@@ -370,7 +362,6 @@ Test(getinfo, dest_node_service)
 		cr_assert(cxit_fi->dest_addr);
 		addr = (struct cxip_addr *)cxit_fi->dest_addr;
 		cr_assert(addr->nic == nic_id);
-		cr_assert(addr->domain == dom_id);
 		cr_assert(addr->port == port_id);
 
 		infos++;
@@ -389,14 +380,13 @@ Test(getinfo, service)
 	struct cxip_addr *addr;
 	struct cxip_if *if_entry;
 	struct slist_entry *entry, *prev __attribute__ ((unused));
-	int dom, port;
+	int port;
 	char *fab_name, *dom_name;
 
 	cxit_fi_hints->fabric_attr->prov_name = strdup(cxip_prov_name);
 
-	dom = 6;
 	port = 7;
-	ret = asprintf(&cxit_service, "%d:%d", dom, port);
+	ret = asprintf(&cxit_service, "%d", port);
 	cr_assert(ret > 0);
 
 	cxit_flags = FI_SOURCE;
@@ -419,7 +409,6 @@ Test(getinfo, service)
 				continue;
 
 			cr_assert(addr->nic == if_entry->if_nic);
-			cr_assert(addr->domain == dom);
 			cr_assert(addr->port == port);
 
 			fab_name = get_fab_name(if_entry->if_fabric);
@@ -427,7 +416,7 @@ Test(getinfo, service)
 					  fab_name));
 			free(fab_name);
 
-			dom_name = get_dom_name(if_entry->if_idx, dom);
+			dom_name = get_dom_name(if_entry->if_idx);
 			cr_assert(!strcmp(cxit_fi->domain_attr->name,
 					  dom_name));
 			free(dom_name);

@@ -19,6 +19,7 @@
 
 #define MR_LINK_EVENT_ID 0x1e21
 
+/* Caller must hold mr->lock */
 int cxip_mr_enable(struct cxip_mr *mr)
 {
 	int ret;
@@ -27,21 +28,8 @@ int cxip_mr_enable(struct cxip_mr *mr)
 	uint32_t buffer_id = MR_LINK_EVENT_ID;
 	struct cxi_pt_alloc_opts opts = {};
 
-	/* Enable the Domain used by the MR */
-	ret = cxip_domain_enable(mr->domain);
-	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("Failed to enable Domain: %d\n", ret);
-		return ret;
-	}
-
-	/* Get the IF Domain where the MR will exist */
-	ret = cxip_get_if_domain(mr->domain->dev_if, mr->domain->vni,
-				 mr->domain->pid, mr->domain->pid_granule,
-				 &mr->if_dom);
-	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("Failed to get IF Domain: %d\n", ret);
-		return ret;
-	}
+	if (mr->enabled)
+		return FI_SUCCESS;
 
 	/* Allocate a PTE */
 	ret = cxil_alloc_pte(mr->domain->dev_if->if_lni,
@@ -49,14 +37,14 @@ int cxip_mr_enable(struct cxip_mr *mr)
 			     &mr->pte_hw_id);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to allocate PTE: %d\n", ret);
-		ret = -FI_ENOSPC;
-		goto put_if_dom;
+		return -FI_ENOSPC;
 	}
 
 	/* Reserve the logical endpoint (LEP) where the MR will be mapped */
-	mr->pid_off = CXIP_ADDR_MR_IDX(mr->domain->pid_granule, mr->key);
+	mr->pid_off = CXIP_ADDR_MR_IDX(mr->domain->dev_if->if_pid_granule,
+				       mr->key);
 
-	ret = cxip_if_domain_lep_alloc(mr->if_dom, mr->pid_off);
+	ret = cxip_if_domain_lep_alloc(mr->ep->attr->if_dom, mr->pid_off);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Failed to reserve LEP (%d): %d\n", mr->pid_off,
 			     ret);
@@ -64,8 +52,8 @@ int cxip_mr_enable(struct cxip_mr *mr)
 	}
 
 	/* Map the PTE to the LEP */
-	ret = cxil_map_pte(mr->pte, mr->if_dom->if_dom, mr->pid_off, 0,
-			   &mr->pte_map);
+	ret = cxil_map_pte(mr->pte, mr->ep->attr->if_dom->if_dom, mr->pid_off,
+			   0, &mr->pte_map);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to allocate PTE: %d\n", ret);
 		ret = -FI_EADDRINUSE;
@@ -163,6 +151,8 @@ int cxip_mr_enable(struct cxip_mr *mr)
 
 	fastlock_release(&mr->domain->dev_if->lock);
 
+	mr->enabled = 1;
+
 	return FI_SUCCESS;
 
 unmap_buf:
@@ -173,21 +163,23 @@ unmap_buf:
 unmap_pte:
 	cxil_unmap_pte(mr->pte_map);
 free_lep:
-	cxip_if_domain_lep_free(mr->if_dom, mr->pid_off);
+	cxip_if_domain_lep_free(mr->ep->attr->if_dom, mr->pid_off);
 free_pte:
 	cxil_destroy_pte(mr->pte);
-put_if_dom:
-	cxip_put_if_domain(mr->if_dom);
 
 	return ret;
 }
 
+/* Caller must hold mr->lock */
 int cxip_mr_disable(struct cxip_mr *mr)
 {
 	int ret;
 	union c_cmdu cmd = {};
 	const union c_event *event;
 	uint32_t buffer_id = MR_LINK_EVENT_ID;
+
+	if (!mr->enabled)
+		return FI_SUCCESS;
 
 	/* Use the device CMDQ and EQ to unlink the LE.  This serializes
 	 * enable/disable of all MRs in the process.  We need to revisit.
@@ -235,7 +227,7 @@ unlock:
 	if (ret)
 		CXIP_LOG_ERROR("Failed to unmap PTE: %d\n", ret);
 
-	ret = cxip_if_domain_lep_free(mr->if_dom, mr->pid_off);
+	ret = cxip_if_domain_lep_free(mr->ep->attr->if_dom, mr->pid_off);
 	if (ret)
 		CXIP_LOG_ERROR("Failed to free LEP: %d\n", ret);
 
@@ -243,7 +235,7 @@ unlock:
 	if (ret)
 		CXIP_LOG_ERROR("Failed to free PTE: %d\n", ret);
 
-	cxip_put_if_domain(mr->if_dom);
+	mr->enabled = 0;
 
 	return FI_SUCCESS;
 }
@@ -251,34 +243,50 @@ unlock:
 static int cxip_mr_close(struct fid *fid)
 {
 	struct cxip_mr *mr;
-	struct cxip_domain *dom;
 	int ret;
 
+	if (!fid)
+		return -FI_EINVAL;
+
 	mr = container_of(fid, struct cxip_mr, mr_fid.fid);
-	dom = mr->domain;
+
+	fastlock_acquire(&mr->lock);
 
 	ret = cxip_mr_disable(mr);
 	if (ret != FI_SUCCESS)
 		CXIP_LOG_DBG("Failed to disable MR: %d\n", ret);
 
-	ofi_atomic_dec32(&dom->ref);
+	if (mr->ep)
+		ofi_atomic_dec32(&mr->ep->attr->ref);
+
+	ofi_atomic_dec32(&mr->domain->ref);
+
+	fastlock_release(&mr->lock);
+
 	free(mr);
 
-	return 0;
+	return FI_SUCCESS;
 }
 
 static int cxip_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
+	struct cxip_mr *mr;
 	struct cxip_cntr *cntr;
 	struct cxip_cq *cq;
-	struct cxip_mr *mr;
+	struct cxip_ep *ep;
+	int ret = FI_SUCCESS;
 
 	mr = container_of(fid, struct cxip_mr, mr_fid.fid);
+
+	fastlock_acquire(&mr->lock);
+
 	switch (bfid->fclass) {
 	case FI_CLASS_CQ:
 		cq = container_of(bfid, struct cxip_cq, cq_fid.fid);
-		if (mr->domain != cq->domain)
-			return -FI_EINVAL;
+		if (mr->domain != cq->domain) {
+			ret = -FI_EINVAL;
+			break;
+		}
 
 		if (flags & FI_REMOTE_WRITE)
 			mr->cq = cq;
@@ -286,24 +294,80 @@ static int cxip_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 	case FI_CLASS_CNTR:
 		cntr = container_of(bfid, struct cxip_cntr, cntr_fid.fid);
-		if (mr->domain != cntr->domain)
-			return -FI_EINVAL;
+		if (mr->domain != cntr->domain) {
+			ret = -FI_EINVAL;
+			break;
+		}
 
 		if (flags & FI_REMOTE_WRITE)
 			mr->cntr = cntr;
 		break;
 
+	case FI_CLASS_EP:
+	case FI_CLASS_SEP:
+		ep = container_of(bfid, struct cxip_ep, ep.fid);
+
+		/* -An MR may only be bound once.
+		 * -The EP and MR must be part of the same FI Domain.
+		 * -An EP must be enabled before being bound.
+		 */
+		if (mr->ep ||
+		    mr->domain != ep->attr->domain ||
+		    !ep->attr->is_enabled) {
+			ret = -FI_EINVAL;
+			break;
+		}
+
+		mr->ep = ep;
+		ofi_atomic_inc32(&ep->attr->ref);
+		break;
+
 	default:
-		return -FI_EINVAL;
+		ret = -FI_EINVAL;
 	}
-	return 0;
+
+	fastlock_release(&mr->lock);
+
+	return ret;
+}
+
+static int cxip_mr_control(struct fid *fid, int command, void *arg)
+{
+	struct cxip_mr *mr;
+	int ret;
+
+	mr = container_of(fid, struct cxip_mr, mr_fid.fid);
+
+	fastlock_acquire(&mr->lock);
+
+	switch (command) {
+	case FI_ENABLE:
+		/* An MR must be bound to an EP before being enabled. */
+		if (!mr->ep) {
+			ret = -FI_EINVAL;
+			break;
+		}
+
+		ret = cxip_mr_enable(mr);
+		if (ret != FI_SUCCESS)
+			CXIP_LOG_DBG("Failed to enable MR: %d\n", ret);
+
+		break;
+
+	default:
+		ret = -FI_EINVAL;
+	}
+
+	fastlock_release(&mr->lock);
+
+	return ret;
 }
 
 static struct fi_ops cxip_mr_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = cxip_mr_close,
 	.bind = cxip_mr_bind,
-	.control = fi_no_control,
+	.control = cxip_mr_control,
 	.ops_open = fi_no_ops_open,
 };
 
@@ -313,7 +377,6 @@ static int cxip_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	//struct fi_eq_entry eq_entry;
 	struct cxip_domain *dom;
 	struct cxip_mr *_mr;
-	int ret = 0;
 
 	if (fid->fclass != FI_CLASS_DOMAIN || !attr || attr->iov_count <= 0)
 		return -FI_EINVAL;
@@ -327,6 +390,8 @@ static int cxip_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	_mr = calloc(1, sizeof(*_mr));
 	if (!_mr)
 		return -FI_ENOMEM;
+
+	fastlock_init(&_mr->lock);
 
 	_mr->mr_fid.fid.fclass = FI_CLASS_MR;
 	_mr->mr_fid.fid.context = attr->context;
@@ -345,12 +410,6 @@ static int cxip_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 
 	ofi_atomic_inc32(&dom->ref);
 
-	ret = cxip_mr_enable(_mr);
-	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("Failed to enable MR: %d\n", ret);
-		goto free_mr;
-	}
-
 /* TODO EQs */
 #if 0
 	if (dom->mr_eq) {
@@ -365,12 +424,6 @@ static int cxip_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	*mr = &_mr->mr_fid;
 
 	return 0;
-
-free_mr:
-	ofi_atomic_dec32(&dom->ref);
-	free(_mr);
-
-	return ret;
 }
 
 static int cxip_regv(struct fid *fid, const struct iovec *iov, size_t count,

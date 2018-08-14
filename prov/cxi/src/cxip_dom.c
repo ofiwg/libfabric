@@ -326,9 +326,6 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 
 	src_addr = (struct cxip_addr *)info->src_addr;
 	cxi_domain->nic_addr = src_addr->nic;
-	cxi_domain->vni = 0; /* TODO set appropriately */
-	cxi_domain->pid = src_addr->domain;
-	cxi_domain->pid_granule = CXIP_PID_GRANULE_DEF;
 
 	*dom = &cxi_domain->dom_fid;
 

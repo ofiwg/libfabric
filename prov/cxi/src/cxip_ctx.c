@@ -82,12 +82,16 @@ unlock:
 
 static void cxip_tx_ctx_disable(struct cxip_tx_ctx *txc)
 {
+	int ret;
+
 	fastlock_acquire(&txc->lock);
 
 	if (!txc->enabled)
 		goto unlock;
 
-	cxil_destroy_cmdq(txc->tx_cmdq);
+	ret = cxil_destroy_cmdq(txc->tx_cmdq);
+	if (ret)
+		CXIP_LOG_ERROR("Unable to destroy TX CMDQ, ret: %d\n", ret);
 
 	txc->enabled = 0;
 unlock:
