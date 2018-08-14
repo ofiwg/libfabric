@@ -318,7 +318,6 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 	};
 
 	dlist_init(&rxm_ep->repost_ready_list);
-	dlist_init(&rxm_ep->conn_deferred_list);
 
 	for (i = 0; i < RXM_BUF_POOL_MAX; i++) {
 		ret = rxm_buf_pool_create(rxm_ep, queue_sizes[i], entry_sizes[i],
@@ -1035,90 +1034,6 @@ rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void *conte
 	return 0;
 }
 
-static inline ssize_t
-rxm_ep_inject_deferred_tx(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
-			  struct rxm_tx_entry *tx_entry)
-{
-	assert(rxm_conn->handle.remote_key);
-	tx_entry->tx_buf->pkt.ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
-
-	ssize_t ret = rxm_ep_inject_send(rxm_ep, rxm_conn, tx_entry->tx_buf,
-					 tx_entry->tx_buf->pkt.hdr.size +
-					 sizeof(struct rxm_pkt));
-	if (OFI_UNLIKELY(!ret)) {
-		dlist_remove(&tx_entry->deferred_entry);
-		rxm_tx_buf_release(rxm_ep, tx_entry->tx_buf);
-		free(tx_entry);
-	}
-	return ret;
-}
-
-static inline ssize_t
-rxm_ep_send_deferred_tx(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
-			struct rxm_tx_entry *def_tx_entry)
-{
-	ssize_t ret;
-	struct rxm_tx_entry *tx_entry = rxm_tx_entry_get(&rxm_conn->send_queue);
-	if (OFI_UNLIKELY(!tx_entry))
-		return -FI_EAGAIN;
-
-	tx_entry->state = def_tx_entry->state;
-	rxm_fill_tx_entry(def_tx_entry->context, def_tx_entry->count,
-			  def_tx_entry->flags, def_tx_entry->comp_flags,
-			  def_tx_entry->tx_buf, tx_entry);
-
-	assert(rxm_conn->handle.remote_key);
-	tx_entry->tx_buf->pkt.ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
-
-	ret = rxm_ep_normal_send(rxm_ep, rxm_conn, tx_entry,
-				 tx_entry->tx_buf->pkt.hdr.size +
-				 sizeof(struct rxm_pkt));
-	if (!ret) {
-		dlist_remove(&def_tx_entry->deferred_entry);
-		free(def_tx_entry);
-	} else {
-		rxm_tx_entry_release(&rxm_conn->send_queue, tx_entry);
-	}
-	return ret;
-}
-
-void rxm_ep_progress_conn_deferred_list(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn)
-{
-	ssize_t ret = 0;
-
-	while (!dlist_empty(&rxm_conn->deferred_op_list) && !ret) {
-		struct rxm_tx_entry *tx_entry =
-			container_of(rxm_conn->deferred_op_list.next,
-				     struct rxm_tx_entry, deferred_entry);
-		if ((tx_entry->flags & FI_INJECT) &&
-		    !(tx_entry->flags & FI_COMPLETION) &&
-		    ((tx_entry->tx_buf->pkt.hdr.size + sizeof(struct rxm_pkt)) <=
-					rxm_ep->msg_info->tx_attr->inject_size)) {
-			ret = rxm_ep_inject_deferred_tx(rxm_ep, rxm_conn, tx_entry);
-		} else {
-			ret = rxm_ep_send_deferred_tx(rxm_ep, rxm_conn, tx_entry);
-		}
-	}
-}
-
-void rxm_ep_progress_deferred_list(struct rxm_ep *rxm_ep)
-{
-	struct rxm_conn *rxm_conn;
-	struct dlist_entry *tmp;
-
-	dlist_foreach_container_safe(&rxm_ep->conn_deferred_list,
-				     struct rxm_conn, rxm_conn,
-				     conn_deferred_entry, tmp) {
-		if (OFI_UNLIKELY((rxm_conn->handle.state != CMAP_CONNECTED) &&
-				 (rxm_conn->handle.state != CMAP_CONNECTED_NOTIFY)))
-			continue;
-		rxm_ep_progress_conn_deferred_list(rxm_ep, rxm_conn);
-
-		if (dlist_empty(&rxm_conn->deferred_op_list))
-			dlist_remove(&rxm_conn->conn_deferred_entry);
-	}
-}
-
 static inline void
 rxm_ep_fill_tx_inject_buf(struct rxm_ep *rxm_ep, const void *buf, size_t len,
 			  uint8_t op, uint64_t comp_flags, struct rxm_tx_buf *tx_buf)
@@ -1171,52 +1086,6 @@ rxm_ep_format_tx_inject_iov(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 }
 
 static inline ssize_t
-rxm_ep_prepare_deferred_tx(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, size_t len,
-			   const struct iovec *iov, size_t count, void *context,
-			   uint64_t data, uint64_t flags, uint64_t tag, uint8_t op,
-			   uint64_t comp_flags, struct rxm_tx_buf **tx_buf)
-{
-	struct rxm_buf_pool *tx_pool;
-	int ret;
-
-	tx_pool = ((flags & FI_INJECT) && !(flags & FI_COMPLETION) &&
-		   (len + sizeof(struct rxm_pkt) <=
-			rxm_ep->msg_info->tx_attr->inject_size)) ?
-		  &rxm_ep->buf_pools[RXM_BUF_POOL_TX_INJECT] :
-		  &rxm_ep->buf_pools[RXM_BUF_POOL_TX];
-
-	ret = rxm_ep_format_tx_inject_iov(
-			rxm_ep, rxm_conn, len, iov, count, data, flags,
-			tag, op, comp_flags, tx_pool, tx_buf);
-	if (OFI_UNLIKELY(ret))
-		return ret;
-	return 0;
-}
-
-static ssize_t
-rxm_ep_defer_tx_inject(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
-		       void *context, size_t count, uint64_t flags,
-		       uint64_t comp_flags, struct rxm_tx_buf *tx_buf)
-{
-	struct rxm_tx_entry *tx_entry = calloc(1, sizeof(*tx_entry));
-	if (OFI_UNLIKELY(!tx_entry))
-		return -FI_EAGAIN;
-
-	tx_entry->state = RXM_TX;
-	rxm_fill_tx_entry(context, count, flags, comp_flags, tx_buf, tx_entry);
-
-	rxm_ep->util_ep.tx_cq->cq_fastlock_acquire(&rxm_ep->util_ep.tx_cq->cq_lock);
-	if (dlist_empty(&rxm_conn->deferred_op_list)) {
-		dlist_insert_tail(&rxm_conn->conn_deferred_entry,
-				  &rxm_ep->conn_deferred_list);
-	}
-	dlist_insert_tail(&tx_entry->deferred_entry, &rxm_conn->deferred_op_list);
-	rxm_ep->util_ep.tx_cq->cq_fastlock_release(&rxm_ep->util_ep.tx_cq->cq_lock);
-
-	return 0;
-}
-
-static inline ssize_t
 rxm_ep_inject_common(struct rxm_ep *rxm_ep, const void *buf, size_t len,
 		     fi_addr_t dest_addr, uint64_t data, uint64_t flags,
 		     uint64_t tag, uint8_t op, uint64_t comp_flags)
@@ -1230,21 +1099,8 @@ rxm_ep_inject_common(struct rxm_ep *rxm_ep, const void *buf, size_t len,
 	assert(!(comp_flags & ~(FI_MSG | FI_TAGGED)));
 
 	ret = rxm_acquire_conn_connect(rxm_ep, dest_addr, &rxm_conn);
-	if (OFI_UNLIKELY(ret)) {
-		if (ret == -FI_EAGAIN) {
-			tx_buf = NULL;
-			goto defer;
-		} else {
-			return ret;
-		}
-	}
-	if (OFI_UNLIKELY(!dlist_empty(&rxm_conn->deferred_op_list))) {
-		rxm_ep_progress_multi(&rxm_ep->util_ep);
-		if (!dlist_empty(&rxm_conn->deferred_op_list)) {
-			tx_buf = NULL;
-			goto defer;
-		}
-	}
+	if (OFI_UNLIKELY(ret))
+		return ret;
 
 	if (pkt_size <= rxm_ep->msg_info->tx_attr->inject_size) {
 		ret = rxm_ep_format_tx_inject_buf(
@@ -1257,7 +1113,6 @@ rxm_ep_inject_common(struct rxm_ep *rxm_ep, const void *buf, size_t len,
 		if (OFI_UNLIKELY(ret)) {
 			if (ret == -FI_EAGAIN)
 				rxm_ep_progress_multi(&rxm_ep->util_ep);
-			goto defer;
 		}
 		/* release allocated buffer for further reuse */
 		rxm_tx_buf_release(rxm_ep, tx_buf);
@@ -1274,7 +1129,7 @@ rxm_ep_inject_common(struct rxm_ep *rxm_ep, const void *buf, size_t len,
 					   tag, &tx_buf, &tx_entry,
 					   &rxm_ep->buf_pools[RXM_BUF_POOL_TX]);
 		if (OFI_UNLIKELY(ret))
-			goto defer;
+			return ret;
 		rxm_ep_fill_tx_inject_buf(rxm_ep, buf, len, op, comp_flags, tx_buf);
 		tx_entry->state = RXM_TX;
 		ret = rxm_ep_normal_send(rxm_ep, rxm_conn, tx_entry, pkt_size);
@@ -1282,23 +1137,9 @@ rxm_ep_inject_common(struct rxm_ep *rxm_ep, const void *buf, size_t len,
 			if (ret == -FI_EAGAIN)
 				rxm_ep_progress_multi(&rxm_ep->util_ep);
 			rxm_tx_entry_release(&rxm_conn->send_queue, tx_entry);
-			goto defer;
 		}
 		return ret;
 	}
-
-defer:
-	if (!tx_buf) {
-		struct iovec iov = {
-			.iov_base = (void *)buf,
-			.iov_len = len
-		};
-		ret = rxm_ep_prepare_deferred_tx(
-			rxm_ep, rxm_conn, len, (const struct iovec *)&iov,
-			1, NULL, data, flags, tag, op, comp_flags, &tx_buf);
-	}
-	return rxm_ep_defer_tx_inject(rxm_ep, rxm_conn, NULL, 1,
-				      flags, comp_flags, tx_buf);
 }
 
 // TODO handle all flags
@@ -1317,27 +1158,8 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 	assert(!(comp_flags & ~(FI_MSG | FI_TAGGED)));
 
 	ret = rxm_acquire_conn_connect(rxm_ep, dest_addr, &rxm_conn);
-	if (OFI_UNLIKELY(ret)) {
-		if (ret == -FI_EAGAIN) {
-			tx_buf = NULL;
-			if (data_len <= rxm_ep->rxm_info->tx_attr->inject_size)
-				goto defer_inject;
-			else
-				return -FI_EAGAIN;
-		} else {
-			return ret;
-		}
-	}
-	if (OFI_UNLIKELY(!dlist_empty(&rxm_conn->deferred_op_list))) {
-		rxm_ep_progress_multi(&rxm_ep->util_ep);
-		if (!dlist_empty(&rxm_conn->deferred_op_list)) {
-			tx_buf = NULL;
-			if (data_len <= rxm_ep->rxm_info->tx_attr->inject_size)
-				goto defer_inject;
-			else
-				return -FI_EAGAIN;
-		}
-	}
+	if (OFI_UNLIKELY(ret))
+		return ret;
 
 	if (data_len <= rxm_ep->rxm_info->tx_attr->inject_size) {
 		size_t total_len = sizeof(struct rxm_pkt) + data_len;
@@ -1354,7 +1176,6 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 			if (OFI_UNLIKELY(ret)) {
 				if (ret == -FI_EAGAIN)
 					rxm_ep_progress_multi(&rxm_ep->util_ep);
-				goto defer_inject;
 			}
 			/* release allocated buffer for further reuse */
 			rxm_tx_buf_release(rxm_ep, tx_buf); 
@@ -1374,7 +1195,6 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 			if (ret == -FI_EAGAIN)
 				rxm_ep_progress_multi(&rxm_ep->util_ep);
 			rxm_tx_entry_release(&rxm_conn->send_queue, tx_entry);
-			goto defer_inject;
 		}
 		return ret;
 	} else {
@@ -1397,17 +1217,6 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 						  sizeof(struct rxm_pkt) + ret);
 		}
 	}
-
-defer_inject:
-	if (!tx_buf) {
-		ret = rxm_ep_prepare_deferred_tx(
-			rxm_ep, rxm_conn, data_len, iov, count, context,
-			data, flags, tag, op, comp_flags, &tx_buf);
-		if (OFI_UNLIKELY(ret))
-			return -FI_EAGAIN;
-	}
-	return rxm_ep_defer_tx_inject(rxm_ep, rxm_conn, context, count,
-				      flags, comp_flags, tx_buf);
 }
 
 static ssize_t rxm_ep_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,

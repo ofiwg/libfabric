@@ -937,9 +937,6 @@ void rxm_ep_progress_one(struct util_ep *util_ep)
 	rxm_cq_repost_rx_buffers(rxm_ep);
 
 	(void) rxm_ep_read_msg_cq(rxm_ep);
-
-	if (OFI_UNLIKELY(!dlist_empty(&rxm_ep->conn_deferred_list)))
-		rxm_ep_progress_deferred_list(rxm_ep);
 }
 
 void rxm_ep_progress_multi(struct util_ep *util_ep)
@@ -953,9 +950,6 @@ void rxm_ep_progress_multi(struct util_ep *util_ep)
 
 	do {
 		ret = rxm_ep_read_msg_cq(rxm_ep);
-
-		if (OFI_UNLIKELY(!dlist_empty(&rxm_ep->conn_deferred_list)))
-			rxm_ep_progress_deferred_list(rxm_ep);
 	} while ((++comp_read < rxm_ep->comp_per_progress) && (ret > 0));
 }
 

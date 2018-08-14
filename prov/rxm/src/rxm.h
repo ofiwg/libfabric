@@ -325,10 +325,7 @@ struct rxm_rma_buf {
 
 struct rxm_tx_entry {
 	/* Must stay at top */
-	union {
-		struct fi_context fi_context;
-		struct dlist_entry deferred_entry;
-	};
+	struct fi_context fi_context;
 
 	enum rxm_proto_state state;
 
@@ -444,7 +441,6 @@ struct rxm_ep {
 	struct rxm_buf_pool	buf_pools[RXM_BUF_POOL_MAX];
 
 	struct dlist_entry	repost_ready_list;
-	struct dlist_entry	conn_deferred_list;
 
 	struct rxm_recv_queue	recv_queue;
 	struct rxm_recv_queue	trecv_queue;
@@ -455,15 +451,6 @@ struct rxm_ep {
 
 struct rxm_conn {
 	struct fid_ep *msg_ep;
-
-	/* Identifier to be posted into rxm_ep::conn_deferred_list.
-	 * This should notify CQ handling function to progress the
-	 * rxm_conn::deferred_op_list. When the deferred_op_list is
-	 * empty, this connection has to be removed from
-	 * rxm_ep::conn_deferred_list */
-	struct dlist_entry conn_deferred_entry;
-	struct dlist_entry deferred_op_list;
-
 	struct rxm_send_queue send_queue;
 	struct dlist_entry sar_rx_msg_list;
 	struct util_cmap_handle handle;
@@ -658,9 +645,6 @@ rxm_acquire_conn(struct rxm_ep *rxm_ep, fi_addr_t fi_addr)
 			    struct rxm_conn, handle);
 }
 
-void rxm_ep_progress_conn_deferred_list(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn);
-void rxm_ep_progress_deferred_list(struct rxm_ep *rxm_ep);
-
 /* Caller must hold `cmap::lock` */
 static inline int
 rxm_ep_handle_unconnected(struct rxm_ep *rxm_ep, struct util_cmap_handle *handle,
@@ -669,14 +653,7 @@ rxm_ep_handle_unconnected(struct rxm_ep *rxm_ep, struct util_cmap_handle *handle
 	int ret;
 
 	if (handle->state == CMAP_CONNECTED_NOTIFY) {
-		struct rxm_conn *rxm_conn = container_of(handle, struct rxm_conn,
-							 handle);
 		ofi_cmap_process_conn_notify(rxm_ep->util_ep.cmap, handle);
-		if (!dlist_empty(&rxm_conn->deferred_op_list)) {
-			rxm_ep_progress_conn_deferred_list(rxm_ep, rxm_conn);
-			if (dlist_empty(&rxm_conn->deferred_op_list))
-				dlist_remove(&rxm_conn->conn_deferred_entry);
-		}
 		return 0;
 	}
 	/* Since we handling unoonnected state and `cmap:lock`
@@ -706,8 +683,6 @@ rxm_acquire_conn_connect(struct rxm_ep *rxm_ep, fi_addr_t fi_addr,
 	return 0;
 }
 
-/* note: this function shouldn't call progress on EAGAIN to avoid recursive
- * call from fi_cq_read -> ... rxm_ep_inject_deferred_tx  */
 static inline ssize_t
 rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		   struct rxm_tx_buf *tx_buf, size_t pkt_size)
@@ -725,8 +700,6 @@ rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	return ret;
 }
 
-/* note: this function shouldn't call progress on EAGAIN to avoid recursive
- * call from fi_cq_read -> ... rxm_ep_send_deferred_tx */
 static inline ssize_t
 rxm_ep_normal_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		   struct rxm_tx_entry *tx_entry, size_t pkt_size)
