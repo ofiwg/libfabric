@@ -442,6 +442,7 @@ struct rxm_ep {
 
 	struct dlist_entry	repost_ready_list;
 
+	struct rxm_send_queue	*send_queue;
 	struct rxm_recv_queue	recv_queue;
 	struct rxm_recv_queue	trecv_queue;
 
@@ -451,7 +452,7 @@ struct rxm_ep {
 
 struct rxm_conn {
 	struct fid_ep *msg_ep;
-	struct rxm_send_queue send_queue;
+	struct rxm_send_queue *send_queue;
 	struct dlist_entry sar_rx_msg_list;
 	struct util_cmap_handle handle;
 	/* This is saved MSG EP fid, that hasn't been closed during
@@ -496,6 +497,8 @@ void rxm_ep_progress_one(struct util_ep *util_ep);
 void rxm_ep_progress_multi(struct util_ep *util_ep);
 
 int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep);
+int rxm_send_queue_init(struct rxm_ep *rxm_ep, struct rxm_send_queue **send_queue, size_t size);
+void rxm_send_queue_close(struct rxm_send_queue *send_queue);
 
 static inline
 void rxm_ep_msg_mr_closev(struct fid_mr **mr, size_t count)
@@ -851,10 +854,11 @@ RXM_DEFINE_QUEUE_ENTRY(tx, send);
 RXM_DEFINE_QUEUE_ENTRY(recv, recv);
 
 static inline void
-rxm_fill_tx_entry(void *context, uint8_t count, uint64_t flags,
+rxm_fill_tx_entry(struct rxm_conn *rxm_conn, void *context, uint8_t count, uint64_t flags,
 		  uint64_t comp_flags, struct rxm_tx_buf *tx_buf,
 		  struct rxm_tx_entry *tx_entry)
 {
+	tx_entry->conn = rxm_conn;
 	tx_entry->context = context;
 	tx_entry->count = count;
 	tx_entry->flags = flags;
@@ -885,7 +889,7 @@ static inline int rxm_finish_send_nobuf(struct rxm_tx_entry *tx_entry)
 		else
 			rxm_cntr_inc(tx_entry->ep->util_ep.rd_cntr);
 	}
-	rxm_tx_entry_release(&tx_entry->conn->send_queue, tx_entry);
+	rxm_tx_entry_release(tx_entry->conn->send_queue, tx_entry);
 	return 0;
 }
 

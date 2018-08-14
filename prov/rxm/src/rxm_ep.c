@@ -230,6 +230,45 @@ static int rxm_buf_pool_create(struct rxm_ep *rxm_ep,
 	return 0;
 }
 
+static void rxm_txe_init(struct rxm_tx_entry *entry, void *arg)
+{
+	struct rxm_send_queue *send_queue = arg;
+	entry->ep 	= send_queue->rxm_ep;
+}
+
+int rxm_send_queue_init(struct rxm_ep *rxm_ep, struct rxm_send_queue **send_queue, size_t size)
+{
+	*send_queue = calloc(1, sizeof(**send_queue));
+	if (!send_queue)
+		return -FI_ENOMEM;
+	(*send_queue)->rxm_ep = rxm_ep;
+	(*send_queue)->fs = rxm_txe_fs_create(size, rxm_txe_init, *send_queue);
+	if (!(*send_queue)->fs) {
+		free(*send_queue);
+		return -FI_ENOMEM;
+	}
+	fastlock_init(&(*send_queue)->lock);
+	return 0;
+}
+
+void rxm_send_queue_close(struct rxm_send_queue *send_queue)
+{
+	if (send_queue->fs) {
+		struct rxm_tx_entry *tx_entry;
+		ssize_t i;
+
+		for (i = send_queue->fs->size - 1; i >= 0; i--) {
+			tx_entry = &send_queue->fs->entry[i].buf;
+			if (tx_entry->tx_buf) {
+				rxm_tx_buf_release(tx_entry->ep, tx_entry->tx_buf);
+				tx_entry->tx_buf = NULL;
+			}
+		}
+		rxm_txe_fs_free(send_queue->fs);
+	}
+	fastlock_destroy(&send_queue->lock);
+}
+
 static void rxm_recv_entry_init(struct rxm_recv_entry *entry, void *arg)
 {
 	struct rxm_recv_queue *recv_queue = arg;
@@ -343,13 +382,20 @@ static void rxm_ep_txrx_pool_destroy(struct rxm_ep *rxm_ep)
 
 static int rxm_ep_txrx_queue_init(struct rxm_ep *rxm_ep)
 {
-	int ret;
+	int ret, param = 1;
+
+	if (!fi_param_get_bool(&rxm_prov, "use_fair_tx_queues", &param) && !param) {
+		ret = rxm_send_queue_init(rxm_ep, &rxm_ep->send_queue,
+					  rxm_ep->rxm_info->tx_attr->size);
+		if (ret)
+			return ret;
+	}
 
 	ret = rxm_recv_queue_init(rxm_ep, &rxm_ep->recv_queue,
 				  rxm_ep->rxm_info->rx_attr->size,
 				  RXM_RECV_QUEUE_MSG);
 	if (ret)
-		return ret;
+		goto err_recv;
 
 	ret = rxm_recv_queue_init(rxm_ep, &rxm_ep->trecv_queue,
 				  rxm_ep->rxm_info->rx_attr->size,
@@ -360,11 +406,15 @@ static int rxm_ep_txrx_queue_init(struct rxm_ep *rxm_ep)
 	return FI_SUCCESS;
 err_recv_tag:
 	rxm_recv_queue_close(&rxm_ep->recv_queue);
+err_recv:
+	rxm_send_queue_close(rxm_ep->send_queue);
 	return ret;
 }
 
 static void rxm_ep_txrx_queue_close(struct rxm_ep *rxm_ep)
 {
+	if (rxm_ep->send_queue)
+		rxm_send_queue_close(rxm_ep->send_queue);
 	rxm_recv_queue_close(&rxm_ep->trecv_queue);
 	rxm_recv_queue_close(&rxm_ep->recv_queue);
 }
@@ -800,10 +850,11 @@ rxm_ep_format_tx_entry(struct rxm_conn *rxm_conn, void *context, uint8_t count,
 		       uint64_t flags, uint64_t comp_flags,
 		       struct rxm_tx_buf *tx_buf, struct rxm_tx_entry **tx_entry)
 {
-	*tx_entry = rxm_tx_entry_get(&rxm_conn->send_queue);
+	*tx_entry = rxm_tx_entry_get(rxm_conn->send_queue);
 	if (OFI_UNLIKELY(!*tx_entry))
 		return -FI_EAGAIN;
-	rxm_fill_tx_entry(context, count, flags, comp_flags, tx_buf, *tx_entry);
+	rxm_fill_tx_entry(rxm_conn, context, count, flags,
+			  comp_flags, tx_buf, *tx_entry);
 	return FI_SUCCESS;
 }
 
@@ -850,7 +901,7 @@ rxm_ep_alloc_lmt_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void *
 		return ret;
 	tx_buf->pkt.hdr.op = op;
 	tx_buf->pkt.hdr.flags |= comp_flags;
-	tx_buf->pkt.ctrl_hdr.msg_id = rxm_txe_fs_index(rxm_conn->send_queue.fs,
+	tx_buf->pkt.ctrl_hdr.msg_id = rxm_txe_fs_index(rxm_conn->send_queue->fs,
 						       (*tx_entry));
 	if (!rxm_ep->rxm_mr_local) {
 		ret = rxm_ep_msg_mr_regv(rxm_ep, iov, (*tx_entry)->count,
@@ -866,7 +917,7 @@ rxm_ep_alloc_lmt_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void *
 	return rxm_rma_iov_init(rxm_ep, &(*tx_entry)->tx_buf->pkt.data, iov,
 				count, mr_iov);
 err:
-	rxm_tx_entry_release(&rxm_conn->send_queue, (*tx_entry));
+	rxm_tx_entry_release(rxm_conn->send_queue, (*tx_entry));
 	rxm_tx_buf_release(rxm_ep, tx_buf);
 	return ret;
 }
@@ -899,7 +950,7 @@ err:
 	if (!rxm_ep->rxm_mr_local)
 		rxm_ep_msg_mr_closev(tx_entry->mr, tx_entry->count);
 	rxm_tx_buf_release(rxm_ep, tx_entry->tx_buf);
-	rxm_tx_entry_release(&rxm_conn->send_queue, tx_entry);
+	rxm_tx_entry_release(rxm_conn->send_queue, tx_entry);
 	return ret;
 }
 
@@ -969,7 +1020,7 @@ rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void *conte
 		tx_entry->rxm_iov.iov[i] = iov[i];
 
 	tx_entry->rxm_iov.count = count;
-	tx_entry->msg_id = rxm_txe_fs_index(rxm_conn->send_queue.fs, tx_entry);
+	tx_entry->msg_id = rxm_txe_fs_index(rxm_conn->send_queue->fs, tx_entry);
 	tx_entry->segs_left = 0;
 
 	while (total_len) {
@@ -994,7 +1045,7 @@ rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void *conte
 			if (seg_type == RXM_SAR_SEG_FIRST) {
 				/* if TX buffer allocation for the first segment fails,
 				 * release TX entry and report to user */
-				rxm_tx_entry_release(&rxm_conn->send_queue, tx_entry);
+				rxm_tx_entry_release(rxm_conn->send_queue, tx_entry);
 			}
 			while (!dlist_empty(&tx_entry->deferred_tx_buf_list)) {
 				dlist_pop_front(&tx_entry->deferred_tx_buf_list,
@@ -1014,7 +1065,7 @@ rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void *conte
 					/* if the sending for the first segment fails,
 					 * release resources and report this to user */
 					rxm_tx_buf_release(tx_entry->ep, tx_buf);
-					rxm_tx_entry_release(&rxm_conn->send_queue, tx_entry);
+					rxm_tx_entry_release(rxm_conn->send_queue, tx_entry);
 					return -FI_EAGAIN;
 				}
 				send_failed = 1;
@@ -1136,7 +1187,7 @@ rxm_ep_inject_common(struct rxm_ep *rxm_ep, const void *buf, size_t len,
 		if (OFI_UNLIKELY(ret)) {
 			if (ret == -FI_EAGAIN)
 				rxm_ep_progress_multi(&rxm_ep->util_ep);
-			rxm_tx_entry_release(&rxm_conn->send_queue, tx_entry);
+			rxm_tx_entry_release(rxm_conn->send_queue, tx_entry);
 		}
 		return ret;
 	}
@@ -1194,7 +1245,7 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 		if (OFI_UNLIKELY(ret)) {
 			if (ret == -FI_EAGAIN)
 				rxm_ep_progress_multi(&rxm_ep->util_ep);
-			rxm_tx_entry_release(&rxm_conn->send_queue, tx_entry);
+			rxm_tx_entry_release(rxm_conn->send_queue, tx_entry);
 		}
 		return ret;
 	} else {
