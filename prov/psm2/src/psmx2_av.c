@@ -835,6 +835,35 @@ fi_addr_t psmx2_av_translate_source(struct psmx2_fid_av *av, fi_addr_t source)
 	return ret;
 }
 
+void psmx2_av_remove_conn(struct psmx2_fid_av *av,
+			  struct psmx2_trx_ctxt *trx_ctxt,
+			  psm2_epaddr_t epaddr)
+{
+	psm2_epid_t epid;
+	int i, j;
+
+	psm2_epaddr_to_epid(epaddr, &epid);
+
+	psmx2_lock(&av->lock, 1);
+
+	for (i = 0; i < av->last; i++) {
+		if (av->peers[i].type == PSMX2_EP_REGULAR) {
+			if (av->epids[i] == epid &&
+			    av->tables[trx_ctxt->id].epaddrs[i] == epaddr)
+				av->tables[trx_ctxt->id].epaddrs[i] = NULL;
+		} else {
+			for (j=0; j<av->peers[i].sep_ctxt_cnt; j++) {
+				if (av->peers[i].sep_ctxt_epids[j] == epid &&
+				    av->tables[trx_ctxt->id].sepaddrs[i] &&
+				    av->tables[trx_ctxt->id].sepaddrs[i][j] == epaddr)
+					    av->tables[trx_ctxt->id].sepaddrs[i][j] = NULL;
+			}
+		}
+	}
+
+	psmx2_unlock(&av->lock, 1);
+}
+
 DIRECT_FN
 STATIC const char *psmx2_av_straddr(struct fid_av *av, const void *addr,
 				    char *buf, size_t *len)
