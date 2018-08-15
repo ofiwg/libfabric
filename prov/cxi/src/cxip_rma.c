@@ -134,9 +134,10 @@ static ssize_t cxip_rma_write(struct fid_ep *ep, const void *buf, size_t len,
 	cmd.full_dma.index_ext = idx_ext;
 	cmd.full_dma.lac = write_md.lac;
 	cmd.full_dma.event_send_disable = 1;
+	cmd.full_dma.restricted = 1;
 	cmd.full_dma.dfa = dfa;
 	cmd.full_dma.remote_offset = addr;
-	cmd.full_dma.local_addr = write_md.iova + ((uint64_t)buf - write_md.va);
+	cmd.full_dma.local_addr = CXI_VA_TO_IOVA(&write_md, buf);
 	cmd.full_dma.request_len = len;
 	cmd.full_dma.eq = txc->comp.send_cq->evtq->eqn;
 	cmd.full_dma.user_ptr = (uint64_t)req;
