@@ -100,6 +100,8 @@ int psmx2_am_trx_ctxt_handler(psm2_am_token_t token, psm2_amarg_t *args,
 			dlist_remove_first_match(&trx_ctxt->peer_list,
 						 psmx2_peer_match, epaddr);
 			psmx2_unlock(&trx_ctxt->peer_lock, 2);
+			if (trx_ctxt->ep && trx_ctxt->ep->av)
+				psmx2_av_remove_conn(trx_ctxt->ep->av, trx_ctxt, epaddr);
 			disconn->ep = trx_ctxt->psm2_ep;
 			disconn->epaddr = epaddr;
 			pthread_create(&disconnect_thread, NULL,
