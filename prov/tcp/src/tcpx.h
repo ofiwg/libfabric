@@ -141,11 +141,14 @@ struct tcpx_rx_detect {
 
 typedef void (*tcpx_ep_progress_func_t)(struct tcpx_ep *ep);
 
+typedef int (*tcpx_rx_process_fn_t)(struct tcpx_xfer_entry *rx_entry);
+
 struct tcpx_ep {
 	struct util_ep		util_ep;
 	SOCKET			conn_fd;
 	struct tcpx_rx_detect	rx_detect;
 	struct tcpx_xfer_entry	*cur_rx_entry;
+	tcpx_rx_process_fn_t 	cur_rx_proc_fn;
 	struct dlist_entry	ep_entry;
 	struct slist		rx_queue;
 	struct slist		tx_queue;
