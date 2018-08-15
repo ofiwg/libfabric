@@ -250,7 +250,7 @@ void cxit_setup_rma(void)
 	/* Request required capabilities for RMA */
 	cxit_setup_getinfo();
 	cxit_fi_hints->fabric_attr->prov_name = strdup(cxip_prov_name);
-	cxit_fi_hints->caps = FI_WRITE;
+	cxit_fi_hints->caps = FI_WRITE | FI_READ;
 	cxit_tx_cq_attr.format = FI_CQ_FORMAT_TAGGED;
 	cxit_av_attr.type = FI_AV_TABLE;
 

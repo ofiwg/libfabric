@@ -142,6 +142,7 @@ static struct cxip_req *cxip_cq_event_req(const union c_event *event)
 {
 	switch (event->event_type) {
 	case C_EVENT_ACK:
+	case C_EVENT_REPLY:
 		return (struct cxip_req *)event->init_short.user_ptr;
 	}
 

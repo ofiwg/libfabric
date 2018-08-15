@@ -170,9 +170,129 @@ unmap:
 	return ret;
 }
 
+static ssize_t cxip_rma_read(struct fid_ep *ep, void *buf, size_t len,
+			     void *desc, fi_addr_t src_addr, uint64_t addr,
+			     uint64_t key, void *context)
+{
+	struct cxip_tx_ctx *txc;
+	struct cxip_domain *dom;
+	int ret;
+	struct cxi_iova read_md;
+	struct cxip_addr caddr;
+	struct cxip_req *req;
+	union c_cmdu cmd = {};
+	union c_fab_addr dfa;
+	uint32_t idx_ext;
+	uint32_t pid_granule;
+	uint32_t pid_idx;
+
+	if (!ep || !buf)
+		return -FI_EINVAL;
+
+	/* The input FID could be a standard endpoint (containing a TX
+	 * context), or a TX context itself.
+	 */
+	switch (ep->fid.fclass) {
+	case FI_CLASS_EP: {
+		struct cxip_ep *cxi_ep;
+
+		cxi_ep = container_of(ep, struct cxip_ep, ep);
+		txc = cxi_ep->attr->tx_ctx;
+		break;
+	}
+	case FI_CLASS_TX_CTX:
+		txc = container_of(ep, struct cxip_tx_ctx, fid.ctx);
+		break;
+	default:
+		CXIP_LOG_ERROR("Invalid EP type: %zd\n", ep->fid.fclass);
+		return -FI_EINVAL;
+	}
+
+	dom = txc->domain;
+
+	/* Look up target CXI address */
+	ret = _cxip_av_lookup(txc->av, src_addr, &caddr);
+	if (ret != FI_SUCCESS) {
+		CXIP_LOG_DBG("Failed to look up src FI addr: %d\n", ret);
+		return ret;
+	}
+
+	/* Map local buffer so it is writeable */
+	ret = cxil_map(dom->dev_if->if_lni, (void *)buf, len,
+		       CXI_MAP_PIN | CXI_MAP_NTA | CXI_MAP_WRITE, &read_md);
+	if (ret) {
+		CXIP_LOG_DBG("Failed to map read buffer: %d\n", ret);
+		return ret;
+	}
+
+	/* Populate request */
+	req = cxip_cq_req_alloc(txc->comp.send_cq, 0);
+	if (!req) {
+		CXIP_LOG_DBG("Failed to allocate request\n");
+		ret = -FI_ENOMEM;
+		goto unmap_read;
+	}
+
+	req->context = (uint64_t)context;
+	req->flags = FI_RMA | FI_READ;
+	req->data_len = 0;
+	req->buf = 0;
+	req->data = 0;
+	req->tag = 0;
+	req->local_md = read_md;
+	req->cb = cxip_rma_cb;
+
+	/* Build Get command descriptor */
+	pid_granule = dom->dev_if->if_pid_granule;
+	pid_idx = CXIP_ADDR_MR_IDX(pid_granule, key);
+	cxi_build_dfa(caddr.nic, caddr.port, pid_granule, pid_idx, &dfa,
+		      &idx_ext);
+
+	cmd.full_dma.command.cmd_type = C_CMD_TYPE_DMA;
+	cmd.full_dma.command.opcode = C_CMD_GET;
+	cmd.full_dma.index_ext = idx_ext;
+	cmd.full_dma.lac = read_md.lac;
+	cmd.full_dma.event_send_disable = 1;
+	cmd.full_dma.restricted = 1;
+	cmd.full_dma.dfa = dfa;
+	cmd.full_dma.remote_offset = addr;
+	cmd.full_dma.local_addr = CXI_VA_TO_IOVA(&read_md, buf);
+	cmd.full_dma.eq = txc->comp.send_cq->evtq->eqn;
+	cmd.full_dma.user_ptr = (uint64_t)req;
+	cmd.full_dma.request_len = len;
+
+	fastlock_acquire(&txc->lock);
+
+	/* Issue Get command */
+	ret = cxi_cq_emit_dma(txc->tx_cmdq, &cmd.full_dma);
+	if (ret) {
+		CXIP_LOG_DBG("Failed to issue read DMA command: %d\n", ret);
+
+		/* Return error according to Domain Resource Management */
+		ret = -FI_EAGAIN;
+		goto unlock_read;
+	}
+
+	cxi_cq_ring(txc->tx_cmdq);
+
+	/* TODO take reference on EP or context for the outstanding request */
+	fastlock_release(&txc->lock);
+
+	return FI_SUCCESS;
+
+unlock_read:
+	fastlock_release(&txc->lock);
+	cxip_cq_req_free(req);
+
+unmap_read:
+	cxil_unmap(dom->dev_if->if_lni, &read_md);
+
+	return ret;
+}
+
 struct fi_ops_rma cxip_ep_rma = {
 	.size = sizeof(struct fi_ops_rma),
-	.read = fi_no_rma_read,
+	.read = cxip_rma_read,
 	.readv = fi_no_rma_readv,
 	.readmsg = fi_no_rma_readmsg,
 	.write = cxip_rma_write,
