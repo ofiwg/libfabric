@@ -120,9 +120,9 @@ int cxip_mr_enable(struct cxip_mr *mr)
 	cmd.target.length      = mr->len;
 	cmd.target.match_bits  = 0;
 
-	if (mr->flags & FI_REMOTE_WRITE)
+	if (mr->attr.access & FI_REMOTE_WRITE)
 		cmd.target.op_put = 1;
-	if (mr->flags & FI_REMOTE_READ)
+	if (mr->attr.access & FI_REMOTE_READ)
 		cmd.target.op_get = 1;
 
 	ret = cxi_cq_emit_target(mr->domain->dev_if->mr_cmdq, &cmd);
