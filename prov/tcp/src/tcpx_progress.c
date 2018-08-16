@@ -444,11 +444,11 @@ static int tcpx_try_func(void *util_ep)
 			       struct util_wait_fd, util_wait);
 
 	fastlock_acquire(&ep->lock);
-	if (slist_empty(&ep->tx_queue) && !ep->send_ready_monitor) {
+	if (!slist_empty(&ep->tx_queue) && !ep->send_ready_monitor) {
 		ep->send_ready_monitor = true;
 		events = FI_EPOLL_IN | FI_EPOLL_OUT;
 		goto epoll_mod;
-	} else if (!slist_empty(&ep->tx_queue) && ep->send_ready_monitor) {
+	} else if (slist_empty(&ep->tx_queue) && ep->send_ready_monitor) {
 		ep->send_ready_monitor = false;
 		events = FI_EPOLL_IN;
 		goto epoll_mod;
