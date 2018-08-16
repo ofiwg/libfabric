@@ -79,18 +79,6 @@ rxm_ep_rma_fill_msg(struct fi_msg_rma *msg_rma, struct iovec *iov,
 	msg_rma->data = orig_msg->data;
 }
 
-/*static inline void
-rxm_ep_rma_fill_msg_no_buf(struct rxm_rma_buf *rma_buf,
-			   struct rxm_tx_entry *tx_entry,
-			   const struct fi_msg_rma *orig_msg)
-{
-	rma_buf->rxm_iov.count = (uint8_t)orig_msg->iov_count;
-
-	rxm_ep_rma_fill_msg(&rma_buf->msg, rma_buf->rxm_iov.iov,
-			    rma_buf->rxm_iov.count, rma_buf->rxm_iov.desc,
-			    &rma_buf->rxm_rma_iov, tx_entry, orig_msg);
-}*/
-
 static inline void
 rxm_ep_rma_fill_msg_buf(struct rxm_rma_buf *rma_buf,
 			struct rxm_tx_entry *tx_entry,
@@ -112,7 +100,7 @@ rxm_ep_format_rma_res_lightweight(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_co
 				  uint64_t comp_flags, const struct fi_msg_rma *orig_msg,
 				  struct rxm_tx_entry **tx_entry)
 {
-	*tx_entry = rxm_tx_entry_get(&rxm_conn->send_queue);
+	*tx_entry = rxm_tx_entry_get(rxm_conn->send_queue);
 	if (OFI_UNLIKELY(!*tx_entry)) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ,
 			"Unable to allocate TX entry for RMA!\n");
@@ -120,6 +108,7 @@ rxm_ep_format_rma_res_lightweight(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_co
 		return -FI_EAGAIN;
 	}
 
+	(*tx_entry)->conn = rxm_conn;
 	(*tx_entry)->state = RXM_TX_NOBUF;
 	(*tx_entry)->context = orig_msg->context;
 	(*tx_entry)->flags = flags;
@@ -174,7 +163,7 @@ rxm_ep_format_rma_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	return FI_SUCCESS;
 err:
 	FI_WARN(&rxm_prov, FI_LOG_CQ, "Unable to allocate RMA resources!\n");
-	rxm_tx_entry_release(&rxm_conn->send_queue, *tx_entry);
+	rxm_tx_entry_release(rxm_conn->send_queue, *tx_entry);
 	return ret;
 }
 
@@ -193,35 +182,6 @@ rxm_ep_format_rma_inject_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 	return ret;
 }
-
-/*static inline ssize_t
-rxm_ep_format_rma_non_inject_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
-				 size_t total_size, uint64_t flags, uint64_t comp_flags,
-				 const struct fi_msg_rma *orig_msg, struct rxm_rma_buf **rma_buf,
-				 struct rxm_tx_entry **tx_entry)
-{
-	ssize_t ret = rxm_ep_format_rma_res(rxm_ep, rxm_conn, total_size, flags,
-					    comp_flags, orig_msg, rma_buf, tx_entry);
-	if (OFI_UNLIKELY(ret))
-		return ret;
-
-	ret = rxm_ep_rma_reg_iov(rxm_ep, (*rma_buf)->rxm_iov.iov,
-				 // addr of desc from rma_buf will be assign to itself
-				 orig_msg->desc,
-				 (*rma_buf)->rxm_iov.desc,
-				 orig_msg->iov_count,
-				 comp_flags & (FI_WRITE | FI_READ), *tx_entry);
-	if (OFI_UNLIKELY(ret))
-		goto err;
-
-	rxm_ep_rma_fill_msg_no_buf(*rma_buf, *tx_entry, orig_msg);
-
-	return ret;
-err:
-	rxm_rma_buf_release(rxm_ep, (*tx_entry)->rma_buf);
-	rxm_tx_entry_release(&rxm_conn->send_queue, *tx_entry);
-	return ret;
-}*/
 
 static ssize_t
 rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t flags,
@@ -260,7 +220,7 @@ rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t 
 	if ((rxm_ep->msg_mr_local) && (!rxm_ep->rxm_mr_local))
 		rxm_ep_msg_mr_closev(tx_entry->mr, tx_entry->count);
 err:
-	rxm_tx_entry_release(&rxm_conn->send_queue, tx_entry);
+	rxm_tx_entry_release(rxm_conn->send_queue, tx_entry);
 	return ret;
 }
 
@@ -375,7 +335,7 @@ rxm_ep_rma_inject(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t 
 	return 0;
 err:
 	rxm_rma_buf_release(rxm_ep, tx_entry->rma_buf);
-	rxm_tx_entry_release(&rxm_conn->send_queue, tx_entry);
+	rxm_tx_entry_release(rxm_conn->send_queue, tx_entry);
 	return ret;
 }
 
