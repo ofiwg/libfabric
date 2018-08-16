@@ -588,9 +588,10 @@ static ssize_t rxm_lmt_send_ack(struct rxm_rx_buf *rx_buf)
 	RXM_LOG_STATE(FI_LOG_CQ, rx_buf->pkt, RXM_LMT_READ, RXM_LMT_ACK_SENT);
 	rx_buf->hdr.state = RXM_LMT_ACK_SENT;
 
-	tx_entry->state 	= rx_buf->hdr.state;
-	tx_entry->context 	= rx_buf;
-	tx_entry->tx_buf 	= tx_buf;
+	tx_entry->conn = rx_buf->conn;
+	tx_entry->state = rx_buf->hdr.state;
+	tx_entry->context = rx_buf;
+	tx_entry->tx_buf = tx_buf;
 
 	tx_buf->pkt.ctrl_hdr.conn_id 	= rx_buf->conn->handle.remote_key;
 	tx_buf->pkt.ctrl_hdr.msg_id 	= rx_buf->pkt.ctrl_hdr.msg_id;
