@@ -267,6 +267,7 @@ void rxm_send_queue_close(struct rxm_send_queue *send_queue)
 		rxm_txe_fs_free(send_queue->fs);
 	}
 	fastlock_destroy(&send_queue->lock);
+	free(send_queue);
 }
 
 static void rxm_recv_entry_init(struct rxm_recv_entry *entry, void *arg)
