@@ -98,19 +98,19 @@ static ssize_t mlx_tagged_recvmsg(
 	*t_entry = (req->completion.tagged);
 
 	if (req->type == MLX_FI_REQ_UNEXPECTED_ERR) {
-		struct util_cq_err_entry* err;
+		struct util_cq_oflow_err_entry* err;
 		req->completion.error.olen -= req->completion.tagged.len;
 		t_entry->flags |= UTIL_FLAG_ERROR;
 
-		err = calloc(1, sizeof(struct util_cq_err_entry));
+		err = calloc(1, sizeof(struct util_cq_oflow_err_entry));
 		if (!err) {
 			FI_WARN(&mlx_prov, FI_LOG_CQ,
 				"out of memory, cannot report CQ error\n");
 			fastlock_release(&cq->cq_lock);
 			return -FI_ENOMEM;
 		}
-		err->err_entry = (req->completion.error);
-		slist_insert_tail(&err->list_entry, &cq->err_list);
+		err->comp = (req->completion.error);
+		slist_insert_tail(&err->list_entry, &cq->oflow_err_list);
 	}
 
 	ofi_cirque_commit(cq->cirq);

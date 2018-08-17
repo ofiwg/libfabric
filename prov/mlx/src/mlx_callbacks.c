@@ -45,7 +45,7 @@ void mlx_send_callback(void *request,
 	struct util_cq *cq;
 	struct mlx_request *mlx_req = request;
 	struct fi_cq_tagged_entry *t_entry;
-	struct util_cq_err_entry *err;
+	struct util_cq_oflow_err_entry *err;
 
 	cq = mlx_req->cq;
 
@@ -62,18 +62,18 @@ void mlx_send_callback(void *request,
 
 	if (status != UCS_OK){
 		t_entry->flags |= UTIL_FLAG_ERROR;
-		err = calloc(1, sizeof(struct util_cq_err_entry));
+		err = calloc(1, sizeof(struct util_cq_oflow_err_entry));
 		if (!err) {
 			FI_WARN(&mlx_prov, FI_LOG_CQ,
 				"out of memory, cannot report CQ error\n");
 			goto fn;
 		}
 
-		err->err_entry = (mlx_req->completion.error);
-		err->err_entry.prov_errno = (int)status;
-		err->err_entry.err = MLX_TRANSLATE_ERRCODE(status);
-		err->err_entry.olen = 0;
-		slist_insert_tail(&err->list_entry, &cq->err_list);
+		err->comp = (mlx_req->completion.error);
+		err->comp.prov_errno = (int)status;
+		err->comp.err = MLX_TRANSLATE_ERRCODE(status);
+		err->comp.olen = 0;
+		slist_insert_tail(&err->list_entry, &cq->oflow_err_list);
 	}
 fn:
 	mlx_req->type = MLX_FI_REQ_UNINITIALIZED;
@@ -133,10 +133,10 @@ void mlx_recv_callback(void *request,
 		*t_entry = (mlx_req->completion.tagged);
 
 		if (status != UCS_OK) {
-			struct util_cq_err_entry* err;
+			struct util_cq_oflow_err_entry *err;
 			t_entry->flags |= UTIL_FLAG_ERROR;
 
-			err = calloc(1, sizeof(struct util_cq_err_entry));
+			err = calloc(1, sizeof(struct util_cq_oflow_err_entry));
 			if (!err) {
 				FI_WARN(&mlx_prov, FI_LOG_CQ,
 					"out of memory, cannot report CQ error\n");
@@ -144,8 +144,8 @@ void mlx_recv_callback(void *request,
 				goto fn;
 			}
 
-			err->err_entry = (mlx_req->completion.error);
-			slist_insert_tail(&err->list_entry, &cq->err_list);
+			err->comp = (mlx_req->completion.error);
+			slist_insert_tail(&err->list_entry, &cq->oflow_err_list);
 		}
 
 		if (cq->src){
