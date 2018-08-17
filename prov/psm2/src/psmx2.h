@@ -938,6 +938,9 @@ int	psmx2_av_add_trx_ctxt(struct psmx2_fid_av *av, struct psmx2_trx_ctxt *trx_ct
 psm2_epaddr_t psmx2_av_translate_sep(struct psmx2_fid_av *av,
 				     struct psmx2_trx_ctxt *trx_ctxt, fi_addr_t addr);
 
+void	psmx2_av_remove_conn(struct psmx2_fid_av *av, struct psmx2_trx_ctxt *trx_ctxt,
+			     psm2_epaddr_t epaddr);
+
 static inline int psmx2_av_check_table_idx(struct psmx2_fid_av *av,
 					   struct psmx2_trx_ctxt *trx_ctxt,
 					   size_t idx)
