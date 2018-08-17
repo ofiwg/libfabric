@@ -92,7 +92,7 @@ void process_tx_entry(struct tcpx_xfer_entry *tx_entry)
 					&tx_entry->ep->util_ep.ep_fid.fid);
 done:
 	tcpx_cq_report_completion(tx_entry->ep->util_ep.tx_cq,
-				  tx_entry, ret);
+				  tx_entry, -ret);
 	slist_remove_head(&tx_entry->ep->tx_queue);
 	tcpx_cq = container_of(tx_entry->ep->util_ep.tx_cq,
 			       struct tcpx_cq, util_cq);
@@ -118,7 +118,7 @@ static void process_rx_entry(struct tcpx_xfer_entry *rx_entry)
 					&rx_entry->ep->util_ep.ep_fid.fid);
 done:
 	tcpx_cq_report_completion(rx_entry->ep->util_ep.rx_cq,
-				  rx_entry, ret);
+				  rx_entry, -ret);
 	slist_remove_head(&rx_entry->ep->rx_queue);
 	tcpx_cq = container_of(rx_entry->ep->util_ep.rx_cq,
 			       struct tcpx_cq, util_cq);
@@ -144,7 +144,7 @@ static void process_rx_remote_write_entry(struct tcpx_xfer_entry *rx_entry)
 					&rx_entry->ep->util_ep.ep_fid.fid);
 done:
 	tcpx_cq_report_completion(rx_entry->ep->util_ep.rx_cq,
-				  rx_entry, ret);
+				  rx_entry, -ret);
 	tcpx_cq = container_of(rx_entry->ep->util_ep.rx_cq,
 			       struct tcpx_cq, util_cq);
 	tcpx_xfer_entry_release(tcpx_cq, rx_entry);
@@ -170,7 +170,7 @@ static void process_rx_read_entry(struct tcpx_xfer_entry *rx_entry)
 					&rx_entry->ep->util_ep.ep_fid.fid);
 done:
 	tcpx_cq_report_completion(rx_entry->ep->util_ep.tx_cq,
-				  rx_entry, ret);
+				  rx_entry, -ret);
 	slist_remove_head(&rx_entry->ep->rma_read_queue);
 	tcpx_cq = container_of(rx_entry->ep->util_ep.tx_cq,
 			       struct tcpx_cq, util_cq);
@@ -278,7 +278,7 @@ static int tcpx_get_rx_entry(struct tcpx_rx_detect *rx_detect,
 			FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,
 				"posted rx buffer size is not big enough\n");
 			tcpx_cq_report_completion(rx_entry->ep->util_ep.rx_cq,
-						  rx_entry, ret);
+						  rx_entry, -ret);
 			slist_remove_head(&rx_entry->ep->rx_queue);
 			tcpx_xfer_entry_release(tcpx_cq, rx_entry);
 			return ret;
