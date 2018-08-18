@@ -658,9 +658,9 @@ static int rxm_handle_remote_write(struct rxm_ep *rxm_ep,
 static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 				  struct fi_cq_data_entry *comp)
 {
-	struct rxm_rx_buf *rx_buf = comp->op_context;
-	struct rxm_tx_entry *tx_entry = comp->op_context;
-	struct rxm_tx_buf *tx_buf = comp->op_context;
+	struct rxm_rx_buf *rx_buf;
+	struct rxm_tx_entry *tx_entry;
+	struct rxm_tx_buf *tx_buf;
 
 	/* Remote write events may not consume a posted recv so op context
 	 * and hence state would be NULL */
@@ -669,23 +669,28 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 
 	switch (RXM_GET_PROTO_STATE(comp->op_context)) {
 	case RXM_TX_NOBUF:
+		tx_entry = comp->op_context;
 		assert(comp->flags & (FI_SEND | FI_WRITE | FI_READ));
 		if (tx_entry->ep->msg_mr_local && !tx_entry->ep->rxm_mr_local)
 			rxm_ep_msg_mr_closev(tx_entry->mr, tx_entry->count);
 		return rxm_finish_send_nobuf(tx_entry);
 	case RXM_TX:
+		tx_entry = comp->op_context;
 		assert(comp->flags & FI_SEND);
 		return rxm_finish_send(tx_entry);
 	case RXM_SAR_TX:
+		tx_buf = comp->op_context;
 		assert(comp->flags & FI_SEND);
 		return rxm_finish_sar_segment_send(tx_buf);
 	case RXM_TX_RMA:
+		tx_entry = comp->op_context;
 		assert(comp->flags & (FI_WRITE | FI_READ));
 		if (tx_entry->ep->msg_mr_local && !tx_entry->ep->rxm_mr_local)
 			rxm_ep_msg_mr_closev(tx_entry->mr, tx_entry->count);
 		rxm_rma_buf_release(rxm_ep, tx_entry->rma_buf);
 		return rxm_finish_send_nobuf(tx_entry);
 	case RXM_RX:
+		rx_buf = comp->op_context;
 		assert(!(comp->flags & FI_REMOTE_READ));
 		assert((rx_buf->pkt.hdr.version == OFI_OP_VERSION) &&
 		       (rx_buf->pkt.ctrl_hdr.version == RXM_CTRL_VERSION));
@@ -704,14 +709,17 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 			return -FI_EINVAL;
 		}
 	case RXM_LMT_TX:
+		tx_entry = comp->op_context;
 		assert(comp->flags & FI_SEND);
 		RXM_LOG_STATE_TX(FI_LOG_CQ, tx_entry, RXM_LMT_ACK_WAIT);
 		RXM_SET_PROTO_STATE(comp, RXM_LMT_ACK_WAIT);
 		return 0;
 	case RXM_LMT_ACK_RECVD:
+		tx_entry = comp->op_context;
 		assert(comp->flags & FI_SEND);
 		return rxm_lmt_tx_finish(tx_entry);
 	case RXM_LMT_READ:
+		rx_buf = comp->op_context;
 		assert(comp->flags & FI_READ);
 		if (++rx_buf->rma_iov_index < rx_buf->rma_iov->count)
 			return 0;
@@ -720,8 +728,9 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 		else
 			return rxm_lmt_send_ack_fast(rx_buf);
 	case RXM_LMT_ACK_SENT:
-		assert(comp->flags & FI_SEND);
+		tx_entry = comp->op_context;
 		rx_buf = tx_entry->context;
+		assert(comp->flags & FI_SEND);
 		rxm_tx_buf_release(rx_buf->ep, tx_entry->tx_buf);
 		rxm_tx_entry_release(tx_entry->conn->send_queue, tx_entry);
 		return rxm_finish_send_lmt_ack(rx_buf);
