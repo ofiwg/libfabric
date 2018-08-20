@@ -409,14 +409,16 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			psmx_atomic_do_write(addr, src, datatype, op, count);
 
 			target_ep = mr->domain->atomics_ep;
-			cntr = target_ep->remote_write_cntr;
-			mr_cntr = mr->cntr;
+			if (target_ep->caps & FI_RMA_EVENT) {
+				cntr = target_ep->remote_write_cntr;
+				mr_cntr = mr->cntr;
 
-			if (cntr)
-				psmx_cntr_inc(cntr);
+				if (cntr)
+					psmx_cntr_inc(cntr);
 
-			if (mr_cntr && mr_cntr != cntr)
-				psmx_cntr_inc(mr_cntr);
+				if (mr_cntr && mr_cntr != cntr)
+					psmx_cntr_inc(mr_cntr);
+			}
 		}
 
 		rep_args[0].u32w0 = PSMX_AM_REP_ATOMIC_WRITE;
@@ -454,18 +456,20 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 				op_error = -FI_ENOMEM;
 
 			target_ep = mr->domain->atomics_ep;
-			if (op == FI_ATOMIC_READ) {
-				cntr = target_ep->remote_read_cntr;
-			} else {
-				cntr = target_ep->remote_write_cntr;
-				mr_cntr = mr->cntr;
+			if (target_ep->caps & FI_RMA_EVENT) {
+				if (op == FI_ATOMIC_READ) {
+					cntr = target_ep->remote_read_cntr;
+				} else {
+					cntr = target_ep->remote_write_cntr;
+					mr_cntr = mr->cntr;
+				}
+
+				if (cntr)
+					psmx_cntr_inc(cntr);
+
+				if (mr_cntr && mr_cntr != cntr)
+					psmx_cntr_inc(mr_cntr);
 			}
-
-			if (cntr)
-				psmx_cntr_inc(cntr);
-
-			if (mr_cntr && mr_cntr != cntr)
-				psmx_cntr_inc(mr_cntr);
 		} else {
 			tmp_buf = NULL;
 		}
@@ -502,14 +506,16 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 				op_error = -FI_ENOMEM;
 
 			target_ep = mr->domain->atomics_ep;
-			cntr = target_ep->remote_write_cntr;
-			mr_cntr = mr->cntr;
+			if (target_ep->caps & FI_RMA_EVENT) {
+				cntr = target_ep->remote_write_cntr;
+				mr_cntr = mr->cntr;
 
-			if (cntr)
-				psmx_cntr_inc(cntr);
+				if (cntr)
+					psmx_cntr_inc(cntr);
 
-			if (mr_cntr && mr_cntr != cntr)
-				psmx_cntr_inc(mr_cntr);
+				if (mr_cntr && mr_cntr != cntr)
+					psmx_cntr_inc(mr_cntr);
+			}
 		} else {
 			tmp_buf = NULL;
 		}
@@ -679,18 +685,20 @@ static int psmx_atomic_self(int am_cmd,
 	}
 
 	target_ep = mr->domain->atomics_ep;
-	if (op == FI_ATOMIC_READ) {
-		cntr = target_ep->remote_read_cntr;
-	} else {
-		cntr = target_ep->remote_write_cntr;
-		mr_cntr = mr->cntr;
+	if (target_ep->caps & FI_RMA_EVENT) {
+		if (op == FI_ATOMIC_READ) {
+			cntr = target_ep->remote_read_cntr;
+		} else {
+			cntr = target_ep->remote_write_cntr;
+			mr_cntr = mr->cntr;
+		}
+
+		if (cntr)
+			psmx_cntr_inc(cntr);
+
+		if (mr_cntr && mr_cntr != cntr)
+			psmx_cntr_inc(mr_cntr);
 	}
-
-	if (cntr)
-		psmx_cntr_inc(cntr);
-
-	if (mr_cntr && mr_cntr != cntr)
-		psmx_cntr_inc(mr_cntr);
 
 gen_local_event:
 	no_event = ((flags & PSMX_NO_COMPLETION) ||

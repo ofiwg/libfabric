@@ -476,11 +476,13 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 					}
 				  }
 
-				  if (mr->domain->rma_ep->remote_write_cntr)
-					psmx_cntr_inc(mr->domain->rma_ep->remote_write_cntr);
+				  if (mr->domain->rma_ep->caps & FI_RMA_EVENT) {
+					  if (mr->domain->rma_ep->remote_write_cntr)
+						psmx_cntr_inc(mr->domain->rma_ep->remote_write_cntr);
 
-				  if (mr->cntr && mr->cntr != mr->domain->rma_ep->remote_write_cntr)
-					psmx_cntr_inc(mr->cntr);
+					  if (mr->cntr && mr->cntr != mr->domain->rma_ep->remote_write_cntr)
+						psmx_cntr_inc(mr->cntr);
+				  }
 
 				  if (read_more)
 					continue;
@@ -493,8 +495,10 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 				  struct fi_context *fi_context = psm_status.context;
 				  struct psmx_fid_mr *mr;
 				  mr = PSMX_CTXT_USER(fi_context);
-				  if (mr->domain->rma_ep->remote_read_cntr)
-					psmx_cntr_inc(mr->domain->rma_ep->remote_read_cntr);
+				  if (mr->domain->rma_ep->caps & FI_RMA_EVENT) {
+					  if (mr->domain->rma_ep->remote_read_cntr)
+						psmx_cntr_inc(mr->domain->rma_ep->remote_read_cntr);
+				  }
 
 				  continue;
 				}

@@ -154,11 +154,13 @@ int psmx2_am_rma_handler(psm2_am_token_t token, psm2_amarg_t *args,
 						err = -FI_ENOMEM;
 				}
 
-				if (rx->ep->remote_write_cntr)
-					psmx2_cntr_inc(rx->ep->remote_write_cntr, 0);
+				if (rx->ep->caps & FI_RMA_EVENT) {
+					if (rx->ep->remote_write_cntr)
+						psmx2_cntr_inc(rx->ep->remote_write_cntr, 0);
 
-				if (mr->cntr && mr->cntr != rx->ep->remote_write_cntr)
-					psmx2_cntr_inc(mr->cntr, 0);
+					if (mr->cntr && mr->cntr != rx->ep->remote_write_cntr)
+						psmx2_cntr_inc(mr->cntr, 0);
+				}
 			}
 		}
 		if (eom || op_error) {
@@ -238,8 +240,10 @@ int psmx2_am_rma_handler(psm2_am_token_t token, psm2_amarg_t *args,
 				NULL, NULL );
 
 		if (eom && !op_error) {
-			if (rx->ep->remote_read_cntr)
-				psmx2_cntr_inc(rx->ep->remote_read_cntr, 0);
+			if (rx->ep->caps & FI_RMA_EVENT) {
+				if (rx->ep->remote_read_cntr)
+					psmx2_cntr_inc(rx->ep->remote_read_cntr, 0);
+			}
 		}
 		break;
 
@@ -475,11 +479,13 @@ static ssize_t psmx2_rma_self(int am_cmd,
 				err = -FI_ENOMEM;
 		}
 
-		if (cntr)
-			psmx2_cntr_inc(cntr, 0);
+		if (ep->caps & FI_RMA_EVENT) {
+			if (cntr)
+				psmx2_cntr_inc(cntr, 0);
 
-		if (mr_cntr)
-			psmx2_cntr_inc(mr_cntr, 0);
+			if (mr_cntr)
+				psmx2_cntr_inc(mr_cntr, 0);
+		}
 	}
 
 	no_event = (flags & PSMX2_NO_COMPLETION) ||
