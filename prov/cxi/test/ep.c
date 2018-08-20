@@ -659,21 +659,49 @@ Test(ep, control_setopsflag_rx)
 	cxit_destroy_ep();
 }
 
-Test(ep, control_enable)
+Test(ep, control_enable_nocq)
 {
 	int ret;
-	struct cxip_ep *cxi_ep;
 
 	cxit_create_ep();
 
-	cxi_ep = container_of(&cxit_ep->fid, struct cxip_ep, ep.fid);
+	ret = fi_enable(cxit_ep);
+	cr_assert_eq(ret, -FI_ENOCQ, "fi_enable. %d", ret);
+
+	cxit_destroy_ep();
+}
+
+Test(ep, control_enable_noav)
+{
+	int ret;
+
+	cxit_create_ep();
+	cxit_create_cqs();
+	cxit_bind_cqs();
+
+	ret = fi_enable(cxit_ep);
+	cr_assert_eq(ret, -FI_EINVAL, "fi_enable. %d", ret);
+
+	cxit_destroy_ep();
+	cxit_destroy_cqs();
+}
+
+Test(ep, control_enable)
+{
+	int ret;
+
+	cxit_create_ep();
+	cxit_create_cqs();
+	cxit_bind_cqs();
+	cxit_create_av();
+	cxit_bind_av();
 
 	ret = fi_enable(cxit_ep);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_enable. %d", ret);
-	cr_assert_not_null(cxi_ep->attr, "EP attr NULL");
-	cr_assert_eq(cxi_ep->attr->is_enabled, 1, "EP not enabled");
 
 	cxit_destroy_ep();
+	cxit_destroy_av();
+	cxit_destroy_cqs();
 }
 
 struct ep_ctrl_null_params {
@@ -691,7 +719,7 @@ ParameterizedTestParameters(ep, ctrl_null_arg)
 		{.command = FI_SETOPSFLAG,
 		 .retval = -FI_EINVAL},
 		{.command = FI_ENABLE,
-		 .retval = FI_SUCCESS},
+		 .retval = -FI_ENOCQ},
 	};
 
 	param_sz = ARRAY_SIZE(ep_null_params);

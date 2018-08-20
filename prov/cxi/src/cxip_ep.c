@@ -475,17 +475,24 @@ struct fi_ops_ep cxip_ctx_ep_ops = {
 
 static int cxip_ep_enable(struct fid_ep *ep)
 {
-	size_t i;
 	int ret;
 	struct cxip_ep *cxi_ep;
 	struct cxip_domain *cxi_dom;
 	struct cxip_tx_ctx *tx_ctx;
 	struct cxip_rx_ctx *rx_ctx;
 
-	/* TODO fix locking and check for AV and source CQs */
+	/* TODO add EP locking */
 
 	cxi_ep = container_of(ep, struct cxip_ep, ep);
 	cxi_dom = cxi_ep->attr->domain;
+	tx_ctx = cxi_ep->attr->tx_ctx;
+	rx_ctx = cxi_ep->attr->rx_ctx;
+
+	if (!(tx_ctx->comp.send_cq && rx_ctx->comp.recv_cq))
+		return -FI_ENOCQ;
+
+	if (!cxi_ep->attr->av)
+		return -FI_EINVAL;
 
 	ret = cxip_domain_enable(cxi_dom);
 	if (ret != FI_SUCCESS) {
@@ -502,33 +509,12 @@ static int cxip_ep_enable(struct fid_ep *ep)
 		return ret;
 	}
 
-	for (i = 0; i < cxi_ep->attr->ep_attr.tx_ctx_cnt; i++) {
-		tx_ctx = cxi_ep->attr->tx_array[i];
-		if (tx_ctx) {
-			ret = cxip_tx_ctx_enable(tx_ctx);
-			if (ret != FI_SUCCESS) {
-				CXIP_LOG_DBG("cxip_tx_ctx_enable returned: %d\n",
-					     ret);
-				return ret;
-			}
-
-			if (tx_ctx->use_shared) {
-				if (tx_ctx->stx_ctx) {
-					tx_ctx->stx_ctx->enabled = 1;
-				}
-			}
-		}
-	}
-
-	for (i = 0; i < cxi_ep->attr->ep_attr.rx_ctx_cnt; i++) {
-		rx_ctx = cxi_ep->attr->rx_array[i];
-		if (rx_ctx) {
-			rx_ctx->enabled = 1;
-			if (rx_ctx->use_shared) {
-				if (rx_ctx->srx_ctx) {
-					rx_ctx->srx_ctx->enabled = 1;
-				}
-			}
+	if (tx_ctx) {
+		ret = cxip_tx_ctx_enable(tx_ctx);
+		if (ret != FI_SUCCESS) {
+			CXIP_LOG_DBG("cxip_tx_ctx_enable returned: %d\n",
+				     ret);
+			return ret;
 		}
 	}
 
