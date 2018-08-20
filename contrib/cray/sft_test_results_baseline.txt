@@ -1,0 +1,113 @@
+# Expected test values can be: 'PASS', 'FAIL', SKIP' or 'INTERMITTENT'
+#    PASS: means that the test should pass
+#          if the test result is PASS, then Jenkins will report this test as PASSED
+#          if the test result is FAIL, then Jenkins will report this test as FAILED
+#    FAIL: means that the test currently fails, probably due to incorrect behavior of a feature
+#          if the test result is PASS, then Jenkins will report this test as PASSED
+#          if the test result is FAIL, then Jenkins will report this test as SKIPPED
+#    SKIP: means that the test should be skipped, due to an unimplemented feature
+#          if the test result is PASS, then Jenkins will report this test as PASSED
+#          if the test result is FAIL, then Jenkins will report this test as SKIPPED
+#    INTERMITTENT: means that the test should pass but it fails infrequently
+#          if the test result is PASS, then Jenkins will report this test as PASSED
+#          if the test result is FAIL, then Jenkins will report this test as SKIPPED
+
+MESSAGE_All-to-All_FI_INJECT=PASS
+MESSAGE_All-to-All_FI_INJECTDATA=PASS
+MESSAGE_All-to-All_FI_SEND=PASS
+MESSAGE_All-to-All_FI_SENDDATA=PASS
+MESSAGE_All-to-All_FI_SENDMSG=PASS
+MESSAGE_All-to-All_FI_SENDV=PASS
+MESSAGE_All-to-One_FI_INJECT=PASS
+MESSAGE_All-to-One_FI_INJECTDATA=PASS
+MESSAGE_All-to-One_FI_SEND=PASS
+MESSAGE_All-to-One_FI_SENDDATA=PASS
+MESSAGE_All-to-One_FI_SENDMSG=PASS
+MESSAGE_All-to-One_FI_SENDV=PASS
+MESSAGE_One-to-All_FI_INJECT=PASS
+MESSAGE_One-to-All_FI_INJECTDATA=PASS
+MESSAGE_One-to-All_FI_SEND=PASS
+MESSAGE_One-to-All_FI_SENDDATA=PASS
+MESSAGE_One-to-All_FI_SENDMSG=PASS
+MESSAGE_One-to-All_FI_SENDV=PASS
+MESSAGE_Round-Robin_FI_INJECT=PASS
+MESSAGE_Round-Robin_FI_INJECTDATA=PASS
+MESSAGE_Round-Robin_FI_SEND=PASS
+MESSAGE_Round-Robin_FI_SENDDATA=PASS
+MESSAGE_Round-Robin_FI_SENDDATA_TRIGGER=SKIP
+MESSAGE_Round-Robin_FI_SENDMSG=PASS
+MESSAGE_Round-Robin_FI_SENDMSG_TRIGGER=SKIP
+MESSAGE_Round-Robin_FI_SENDV=PASS
+MESSAGE_Round-Robin_FI_SENDV_TRIGGER=SKIP
+MESSAGE_Round-Robin_FI_SEND_TRIGGER=SKIP
+RMA_All-to-All_FI_INJECT_WRITE=PASS
+RMA_All-to-All_FI_INJECT_WRITEDATA=PASS
+RMA_All-to-All_FI_READ=FAIL
+RMA_All-to-All_FI_READMSG=FAIL
+RMA_All-to-All_FI_READV=FAIL
+RMA_All-to-All_FI_WRITE=PASS
+RMA_All-to-All_FI_WRITEDATA=PASS
+RMA_All-to-All_FI_WRITEMSG=PASS
+RMA_All-to-All_FI_WRITEV=PASS
+RMA_All-to-One_FI_INJECT_WRITE=PASS
+RMA_All-to-One_FI_INJECT_WRITEDATA=PASS
+RMA_All-to-One_FI_READ=FAIL
+RMA_All-to-One_FI_READMSG=FAIL
+RMA_All-to-One_FI_READV=FAIL
+RMA_All-to-One_FI_WRITE=PASS
+RMA_All-to-One_FI_WRITEDATA=PASS
+RMA_All-to-One_FI_WRITEMSG=PASS
+RMA_All-to-One_FI_WRITEV=PASS
+RMA_One-to-All_FI_INJECT_WRITE=PASS
+RMA_One-to-All_FI_INJECT_WRITEDATA=PASS
+RMA_One-to-All_FI_READ=FAIL
+RMA_One-to-All_FI_READMSG=FAIL
+RMA_One-to-All_FI_READV=FAIL
+RMA_One-to-All_FI_WRITE=PASS
+RMA_One-to-All_FI_WRITEDATA=PASS
+RMA_One-to-All_FI_WRITEMSG=PASS
+RMA_One-to-All_FI_WRITEV=PASS
+RMA_Round-Robin_FI_INJECT_WRITE=PASS
+RMA_Round-Robin_FI_INJECT_WRITEDATA=PASS
+RMA_Round-Robin_FI_READ=FAIL
+RMA_Round-Robin_FI_READMSG=FAIL
+RMA_Round-Robin_FI_READMSG_TRIGGER=SKIP
+RMA_Round-Robin_FI_READV=FAIL
+RMA_Round-Robin_FI_READV_TRIGGER=SKIP
+RMA_Round-Robin_FI_READ_TRIGGER=SKIP
+RMA_Round-Robin_FI_WRITE=PASS
+RMA_Round-Robin_FI_WRITEDATA=PASS
+RMA_Round-Robin_FI_WRITEDATA_TRIGGER=SKIP
+RMA_Round-Robin_FI_WRITEMSG=PASS
+RMA_Round-Robin_FI_WRITEMSG_TRIGGER=SKIP
+RMA_Round-Robin_FI_WRITEV=PASS
+RMA_Round-Robin_FI_WRITEV_TRIGGER=SKIP
+RMA_Round-Robin_FI_WRITE_TRIGGER=SKIP
+TAGGED_All-to-All_FI_TINJECT=PASS
+TAGGED_All-to-All_FI_TINJECTDATA=PASS
+TAGGED_All-to-All_FI_TSEND=PASS
+TAGGED_All-to-All_FI_TSENDDATA=PASS
+TAGGED_All-to-All_FI_TSENDMSG=PASS
+TAGGED_All-to-All_FI_TSENDV=PASS
+TAGGED_All-to-One_FI_TINJECT=PASS
+TAGGED_All-to-One_FI_TINJECTDATA=PASS
+TAGGED_All-to-One_FI_TSEND=PASS
+TAGGED_All-to-One_FI_TSENDDATA=PASS
+TAGGED_All-to-One_FI_TSENDMSG=PASS
+TAGGED_All-to-One_FI_TSENDV=PASS
+TAGGED_One-to-All_FI_TINJECT=PASS
+TAGGED_One-to-All_FI_TINJECTDATA=PASS
+TAGGED_One-to-All_FI_TSEND=PASS
+TAGGED_One-to-All_FI_TSENDDATA=PASS
+TAGGED_One-to-All_FI_TSENDMSG=PASS
+TAGGED_One-to-All_FI_TSENDV=PASS
+TAGGED_Round-Robin_FI_TINJECT=PASS
+TAGGED_Round-Robin_FI_TINJECTDATA=PASS
+TAGGED_Round-Robin_FI_TSEND=PASS
+TAGGED_Round-Robin_FI_TSENDDATA=PASS
+TAGGED_Round-Robin_FI_TSENDDATA_TRIGGER=SKIP
+TAGGED_Round-Robin_FI_TSENDMSG=PASS
+TAGGED_Round-Robin_FI_TSENDMSG_TRIGGER=SKIP
+TAGGED_Round-Robin_FI_TSENDV=PASS
+TAGGED_Round-Robin_FI_TSENDV_TRIGGER=SKIP
+TAGGED_Round-Robin_FI_TSEND_TRIGGER=SKIP
