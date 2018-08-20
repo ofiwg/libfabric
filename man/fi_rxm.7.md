@@ -97,6 +97,36 @@ The ofi_rxm provider checks for the following environment variables.
 : Defines the maximum number of MSG provider CQ entries (default: 1) that would
   be read per progress (RxM CQ read).
 
+*FI_OFI_RXM_TX_SIZE*
+: Defines default TX context size (default: 1024)
+
+*FI_OFI_RXM_RX_SIZE*
+: Defines default RX context size (default: 1024)
+
+*FI_OFI_RXM_MSG_TX_SIZE*
+: Defines FI_EP_MSG TX size that would be requested (default: 128).
+
+*FI_OFI_RXM_MSG_RX_SIZE*
+: Defines FI_EP_MSG RX size that would be requested (default: 128).
+
+*FI_UNIVERSE_SIZE*
+: Defines the expected number of ranks / peers an endpoint would communicate
+with (default: 256).
+
+# Tuning
+
+## Bandwidth
+
+To optimize for bandwidth, ensure you use higher values than default for
+FI_OFI_RXM_TX_SIZE, FI_OFI_RXM_RX_SIZE, FI_OFI_RXM_MSG_TX_SIZE, FI_OFI_RXM_MSG_RX_SIZE
+subject to memory limits of the system and the tx and rx sizes supported by the
+MSG provider.
+
+## Memory
+
+To conserve memory, ensure FI_UNIVERSE_SIZE set to what is required. Similarly
+check that FI_OFI_RXM_TX_SIZE, FI_OFI_RXM_RX_SIZE, FI_OFI_RXM_MSG_TX_SIZE and
+FI_OFI_RXM_MSG_RX_SIZE env variables are set to only required values.
 
 # SEE ALSO
 
