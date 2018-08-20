@@ -291,7 +291,7 @@ ssize_t fi_ibv_poll_cq(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 	if (ret <= 0)
 		return ret;
 
-	return fi_ibv_process_wc(cq, wc);
+	return fi_ibv_process_wc_poll_new(cq, wc);
 }
 
 static ssize_t fi_ibv_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
@@ -325,7 +325,18 @@ static ssize_t fi_ibv_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 			break;
 
 		/* Insert error entry into wcq */
-		if (wc.status) {
+		if (OFI_UNLIKELY(wc.status)) {
+			if (wc.status == IBV_WC_WR_FLUSH_ERR) {
+				/* Handle case when remote side destroys
+				 * the connection, but local side isn't aware
+				 * about that yet */
+				VERBS_DBG(FI_LOG_CQ,
+					  "Ignoring WC with status "
+					  "IBV_WC_WR_FLUSH_ERR(%d)\n",
+					  wc.status);
+				i--;
+				continue;
+			}
 			wce = util_buf_alloc(cq->wce_pool);
 			if (!wce) {
 				cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);

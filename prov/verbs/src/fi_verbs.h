@@ -593,20 +593,28 @@ static inline ssize_t fi_ibv_handle_post(ssize_t ret)
 	return ret;
 }
 
+/* Returns 0 if it processes WR entry for which user
+ * doesn't request the completion */
 static inline int
 fi_ibv_process_wc(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 {
-	/* Handle WR entry when user doesn't request the completion */
-	if (wc->wr_id == VERBS_INJECT_FLAG)
-		return 0;
+	return (wc->wr_id == VERBS_INJECT_FLAG) ? 0 : 1;
+}
 
-	if (OFI_UNLIKELY(wc->status == IBV_WC_WR_FLUSH_ERR)) {
-		/* Handle case when remote side destroys
-		 * the connection, but local side isn't aware
-		 * about that yet */
-		return 0;
+/* Returns 0 and tries read new completions if it processes
+ * WR entry for which user doesn't request the completion */
+static inline int
+fi_ibv_process_wc_poll_new(struct fi_ibv_cq *cq, struct ibv_wc *wc)
+{
+	if (wc->wr_id == VERBS_INJECT_FLAG) {
+		int ret;
+
+		while ((ret = ibv_poll_cq(cq->cq, 1, wc)) > 0) {
+			if (wc->wr_id != VERBS_INJECT_FLAG)
+				return 1;
+		}
+		return ret;
 	}
-
 	return 1;
 }
 
@@ -696,7 +704,8 @@ static inline int fi_ibv_poll_reap_unsig_cq(struct fi_ibv_ep *ep)
 		}
 
 		for (i = 0; i < ret; i++) {
-			if (!fi_ibv_process_wc(cq, &wc[i]))
+			if (!fi_ibv_process_wc(cq, &wc[i]) ||
+			    OFI_UNLIKELY(wc[i].status == IBV_WC_WR_FLUSH_ERR))
 				continue;
 			if (OFI_LIKELY(!fi_ibv_wc_2_wce(cq, &wc[i], &wce)))
 				slist_insert_tail(&wce->entry, &cq->wcq);
