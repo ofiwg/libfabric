@@ -152,7 +152,11 @@ static int psmx_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			return -FI_EBUSY;
 		if (mr->domain != cntr->domain)
 			return -FI_EINVAL;
-		mr->cntr = cntr;
+		if (flags) {
+			if (flags != FI_REMOTE_WRITE)
+				return -FI_EINVAL;
+			mr->cntr = cntr;
+		}
 		break;
 
 	default:
