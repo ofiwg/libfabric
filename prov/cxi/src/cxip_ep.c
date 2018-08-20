@@ -22,11 +22,8 @@
 
 extern struct fi_ops_rma cxip_ep_rma;
 extern struct fi_ops_msg cxip_ep_msg_ops;
-extern struct fi_ops_tagged cxip_ep_tagged;
+extern struct fi_ops_tagged cxip_ep_tagged_ops;
 extern struct fi_ops_atomic cxip_ep_atomic;
-
-struct fi_ops_msg cxip_ep_msg_ops = { 0 };
-struct fi_ops_tagged cxip_ep_tagged = { 0 };
 struct fi_ops_atomic cxip_ep_atomic = { 0 };
 
 extern struct fi_ops_ep cxip_ep_ops;
@@ -518,6 +515,15 @@ static int cxip_ep_enable(struct fid_ep *ep)
 		}
 	}
 
+	if (rx_ctx) {
+		ret = cxip_rx_ctx_enable(rx_ctx);
+		if (ret != FI_SUCCESS) {
+			CXIP_LOG_DBG("cxip_rx_ctx_enable returned: %d\n",
+				     ret);
+			return ret;
+		}
+	}
+
 	cxi_ep->attr->is_enabled = 1;
 
 	return 0;
@@ -944,7 +950,7 @@ static int cxip_ep_tx_ctx(struct fid_ep *ep, int index, struct fi_tx_attr *attr,
 	tx_ctx->fid.ctx.fid.ops = &cxip_ctx_ops;
 	tx_ctx->fid.ctx.ops = &cxip_ctx_ep_ops;
 	tx_ctx->fid.ctx.msg = &cxip_ep_msg_ops;
-	tx_ctx->fid.ctx.tagged = &cxip_ep_tagged;
+	tx_ctx->fid.ctx.tagged = &cxip_ep_tagged_ops;
 	tx_ctx->fid.ctx.rma = &cxip_ep_rma;
 	tx_ctx->fid.ctx.atomic = &cxip_ep_atomic;
 
@@ -990,7 +996,7 @@ static int cxip_ep_rx_ctx(struct fid_ep *ep, int index, struct fi_rx_attr *attr,
 	rx_ctx->ctx.fid.ops = &cxip_ctx_ops;
 	rx_ctx->ctx.ops = &cxip_ctx_ep_ops;
 	rx_ctx->ctx.msg = &cxip_ep_msg_ops;
-	rx_ctx->ctx.tagged = &cxip_ep_tagged;
+	rx_ctx->ctx.tagged = &cxip_ep_tagged_ops;
 
 	rx_ctx->min_multi_recv = cxi_ep->attr->min_multi_recv;
 	*rx_ep = &rx_ctx->ctx;
@@ -1101,7 +1107,7 @@ int cxip_srx_ctx(struct fid_domain *domain, struct fi_rx_attr *attr,
 	rx_ctx->ctx.fid.ops = &cxip_ctx_ops;
 	rx_ctx->ctx.ops = &cxip_ctx_ep_ops;
 	rx_ctx->ctx.msg = &cxip_ep_msg_ops;
-	rx_ctx->ctx.tagged = &cxip_ep_tagged;
+	rx_ctx->ctx.tagged = &cxip_ep_tagged_ops;
 	rx_ctx->enabled = 1;
 
 	/* default config */
@@ -1307,7 +1313,7 @@ int cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 		cxi_ep->ep.ops = &cxip_ep_ops;
 		cxi_ep->ep.msg = &cxip_ep_msg_ops;
 		cxi_ep->ep.rma = &cxip_ep_rma;
-		cxi_ep->ep.tagged = &cxip_ep_tagged;
+		cxi_ep->ep.tagged = &cxip_ep_tagged_ops;
 		cxi_ep->ep.atomic = &cxip_ep_atomic;
 		break;
 

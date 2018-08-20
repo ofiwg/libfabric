@@ -25,8 +25,7 @@
 #define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_CQ, __VA_ARGS__)
 #define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_CQ, __VA_ARGS__)
 
-__attribute__((unused)) static struct cxip_req *
-	cxip_cq_req_find(struct cxip_cq *cq, int id)
+static struct cxip_req *cxip_cq_req_find(struct cxip_cq *cq, int id)
 {
 	return ofi_idx_at(&cq->req_table, id);
 }
@@ -138,12 +137,27 @@ void cxip_cq_remove_rx_ctx(struct cxip_cq *cq, struct cxip_rx_ctx *rx_ctx)
 	fastlock_release(&cq->list_lock);
 }
 
-static struct cxip_req *cxip_cq_event_req(const union c_event *event)
+static struct cxip_req *cxip_cq_event_req(struct cxip_cq *cq,
+					  const union c_event *event)
 {
+	struct cxip_req *req;
+
 	switch (event->hdr.event_type) {
 	case C_EVENT_ACK:
 	case C_EVENT_REPLY:
 		return (struct cxip_req *)event->init_short.user_ptr;
+	case C_EVENT_LINK:
+	case C_EVENT_UNLINK:
+	case C_EVENT_PUT:
+		req = cxip_cq_req_find(cq, event->tgt_long.buffer_id);
+		if (!req) {
+			CXIP_LOG_ERROR("Invalid buffer_id: %d (type: %d)\n",
+				       event->tgt_long.buffer_id,
+				       event->hdr.event_type);
+			return NULL;
+		}
+
+		return req;
 	}
 
 	CXIP_LOG_ERROR("Invalid event type: %d\n", event->hdr.event_type);
@@ -161,7 +175,7 @@ void cxip_cq_progress(struct cxip_cq *cq)
 
 	/* TODO Limit the maximum number of events processed */
 	while ((event = cxi_eq_get_event(cq->evtq))) {
-		req = cxip_cq_event_req(event);
+		req = cxip_cq_event_req(cq, event);
 		if (req)
 			req->cb(req, event);
 	}

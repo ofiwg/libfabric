@@ -164,6 +164,7 @@ struct cxip_addr {
 #endif
 
 #define CXIP_ADDR_MR_IDX(pid_granule, key) ((pid_granule) / 2 + (key))
+#define CXIP_ADDR_RX_IDX(pid_granule, rx_id) (rx_id)
 
 struct cxip_if_domain {
 	struct dlist_entry entry;
@@ -251,6 +252,9 @@ struct cxip_req {
 
 	struct cxi_iova local_md;
 	void (*cb)(struct cxip_req *req, const union c_event *evt);
+	int rc;
+	int rlength;
+	int mlength;
 };
 
 struct cxip_cq;
@@ -352,6 +356,12 @@ struct cxip_rx_ctx {
 	fastlock_t lock;
 
 	struct fi_rx_attr attr;
+
+	uint32_t pid_off;
+	struct cxil_pte *pte;
+	unsigned int pte_hw_id;
+	struct cxil_pte_map *pte_map;
+	struct cxi_cmdq *rx_cmdq;
 };
 
 struct cxip_tx_ctx {
@@ -574,6 +584,7 @@ struct cxip_rx_ctx *cxip_rx_ctx_alloc(const struct fi_rx_attr *attr,
 				      void *context, int use_shared);
 void cxip_rx_ctx_free(struct cxip_rx_ctx *rx_ctx);
 
+int cxip_rx_ctx_enable(struct cxip_rx_ctx *rxc);
 int cxip_tx_ctx_enable(struct cxip_tx_ctx *txc);
 struct cxip_tx_ctx *cxip_tx_ctx_alloc(const struct fi_tx_attr *attr,
 				      void *context, int use_shared);
