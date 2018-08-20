@@ -112,6 +112,7 @@ extern struct fi_ops_rma rxm_ops_rma;
 
 extern size_t rxm_msg_tx_size;
 extern size_t rxm_msg_rx_size;
+extern size_t rxm_def_univ_size;
 
 struct rxm_fabric {
 	struct util_fabric util_fabric;
