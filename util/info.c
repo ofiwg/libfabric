@@ -219,6 +219,8 @@ static const char *param_type(enum fi_param_type type)
 		return "String";
 	case FI_PARAM_INT:
 		return "Integer";
+	case FI_PARAM_SIZE_T:
+		return "size_t";
 	case FI_PARAM_BOOL:
 		return "Boolean (0/1, on/off, true/false, yes/no)";
 	default:
