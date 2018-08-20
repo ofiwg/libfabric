@@ -2,9 +2,6 @@
 #include<math.h>
 #include<sys/time.h>
 
-static ssize_t rstream_check_for_rx_comp(struct rstream_ep *ep,
-	struct fi_cq_data_entry *completion_entry);
-
 static uint32_t rstream_cq_data_get_len(uint32_t cq_data)
 {
 	return (cq_data & RSTREAM_MR_LEN_MASK);
@@ -151,7 +148,8 @@ static void rstream_update_tx_credits(struct rstream_ep *ep,
 	assert(ep->qp_win.tx_credits <= ep->qp_win.max_tx_credits);
 }
 
-static int timer_completed(struct rstream_timer *timer) {
+static int rstream_timer_completed(struct rstream_timer *timer)
+{
 	if(!timer->poll_time)
 		gettimeofday(&timer->start, NULL);
 
@@ -185,8 +183,8 @@ static ssize_t rstream_check_for_tx_comp(struct rstream_ep *ep)
 			rstream_update_tx_credits(ep, num_of_comp);
 			found_completion = found_completion + 1;
 		}
-	} while((ret == -FI_EAGAIN && !found_completion && !timer_completed(&timer))
-		|| ret > 0);
+	} while((ret == -FI_EAGAIN && !found_completion &&
+		!rstream_timer_completed(&timer)) || ret > 0);
 
 	if (found_completion)
 		return found_completion;
@@ -216,8 +214,7 @@ static int rstream_target_rx_full(struct rstream_ep *ep)
 
 static int rstream_can_send(struct rstream_ep *ep)
 {
-	return !(rstream_target_rx_full(ep) || rstream_tx_full(ep) ||
-		rstream_tx_mr_full(ep) || rstream_target_mr_full(ep));
+	return (rstream_can_send_tx(ep) && rstream_can_send_rx(ep));
 }
 
 static uint32_t rstream_calc_contig_len(struct rstream_mr_seg *mr)
@@ -265,7 +262,7 @@ static ssize_t rstream_send_ctrl_msg(struct rstream_ep *ep, uint32_t cq_data)
 	ssize_t ret = 0;
 	struct fi_msg msg;
 
-	if (!ep->qp_win.ctrl_credits || !ep->qp_win.target_rx_credits) {
+	if (!ep->qp_win.ctrl_credits || rstream_target_rx_full(ep)) {
 		ret = rstream_check_for_tx_comp(ep);
 		if(ret < 0 && ret != -FI_EAGAIN)
 			return ret;
@@ -394,6 +391,25 @@ static enum rstream_msg_type rstream_cqe_msg_type(struct rstream_ep *ep,
 	return type;
 }
 
+static ssize_t rstream_check_for_rx_comp(struct rstream_ep *ep,
+	struct fi_cq_data_entry *completion_entry)
+{
+	const int max_num = 1;
+	ssize_t ret;
+
+	ret = fi_cq_read(ep->recv_cq, completion_entry, max_num);
+	if (ret < 0 && ret != -FI_EAGAIN) {
+		if (ret == -FI_EAVAIL) {
+			ret = rstream_print_cq_error(ep->send_cq);
+			fprintf(stderr, "error from %s:%d\n", __FILE__, __LINE__);
+			return ret;
+		}
+	}
+	assert(ret == -FI_EAGAIN || ret == max_num);
+
+	return ret;
+}
+
 ssize_t rstream_process_cq_rx(struct rstream_ep *ep, enum rstream_msg_type type)
 {
 	struct fi_cq_data_entry cq_entry;
@@ -416,8 +432,8 @@ ssize_t rstream_process_cq_rx(struct rstream_ep *ep, enum rstream_msg_type type)
 		} else if(ret != -FI_EAGAIN) {
 			return ret;
 		}
-	} while((ret == -FI_EAGAIN && !timer_completed(&timer) && !found_msg_type)
-		|| (found_msg_type && ret > 0));
+	} while((ret == -FI_EAGAIN && !rstream_timer_completed(&timer) &&
+		!found_msg_type) || (found_msg_type && ret > 0));
 
 	ret = rstream_update_target(ep, total_completions, 0);
 	if(ret)
@@ -448,21 +464,41 @@ static uint32_t get_send_addrs_and_len(struct rstream_ep *ep, char **tx_addr,
 	return available_len;
 }
 
+int rstream_can_send_tx(struct rstream_ep *ep)
+{
+	return !rstream_tx_full(ep);
+}
+
+int rstream_can_send_rx(struct rstream_ep *ep)
+{
+	return !(rstream_tx_mr_full(ep) || rstream_target_mr_full(ep) ||
+		rstream_target_rx_full(ep));
+}
+
+/* can't recv if you can't send a ctrl message -- only way to force user
+ * to progress ctrl msg, but...Continue to receive any queued data even
+ * if the remote side has disconnected (TODO) */
+int rstream_can_recv_tx(struct rstream_ep *ep)
+{
+	return (ep->qp_win.ctrl_credits > 0);
+}
+
+int rstream_can_recv_rx(struct rstream_ep *ep)
+{
+	return (ep->local_mr.rx.avail_size && !rstream_target_rx_full(ep));
+}
+
 static ssize_t retry_send_resources(struct rstream_ep *ep)
 {
 	ssize_t ret;
 
-	if (rstream_tx_mr_full(ep) || rstream_target_mr_full(ep) ||
-		rstream_target_rx_full(ep)) {
+	if (!rstream_can_send_rx(ep)) {
 		ret = rstream_process_cq_rx(ep, RSTREAM_CTRL_MSG);
 		if (ret < 0)
 			return ret;
-		else if (rstream_tx_mr_full(ep) || rstream_target_mr_full(ep) ||
-			rstream_target_rx_full(ep))
-			return -FI_EAGAIN;
 	}
 
-	if (rstream_tx_full(ep)) {
+	if (!rstream_can_send_tx(ep)) {
 		ret = rstream_check_for_tx_comp(ep);
 		if (ret < 0)
 			return ret;
@@ -539,7 +575,19 @@ static ssize_t rstream_sendv(struct fid_ep *ep_fid, const struct iovec *iov,
 static ssize_t rstream_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	uint64_t flags)
 {
-	return -FI_ENOSYS;
+	int ret;
+	struct rstream_ep *ep = container_of(ep_fid, struct rstream_ep,
+		util_ep.ep_fid);
+
+	if (flags == FI_PEEK) {
+		if (!rstream_can_send(ep)) {
+			ret = retry_send_resources(ep);
+			return ret;
+		}
+		return 0;
+	} else {
+		return -FI_ENOSYS;
+	}
 }
 
 /* either posting everything at once or reposting after cq completion */
@@ -582,25 +630,6 @@ ssize_t rstream_post_cq_data_recv(struct rstream_ep *ep,
 		return ret;
 
 	ep->qp_win.rx_credits--;
-	return ret;
-}
-
-static ssize_t rstream_check_for_rx_comp(struct rstream_ep *ep,
-	struct fi_cq_data_entry *completion_entry)
-{
-	const int max_num = 1;
-	ssize_t ret;
-
-	ret = fi_cq_read(ep->recv_cq, completion_entry, max_num);
-	if (ret < 0 && ret != -FI_EAGAIN) {
-		if (ret == -FI_EAVAIL) {
-			ret = rstream_print_cq_error(ep->send_cq);
-			fprintf(stderr, "error from %s:%d\n", __FILE__, __LINE__);
-			return ret;
-		}
-	}
-	assert(ret == -FI_EAGAIN || ret == max_num);
-
 	return ret;
 }
 
@@ -657,7 +686,25 @@ static ssize_t rstream_recvv(struct fid_ep *ep_fid, const struct iovec *iov,
 static ssize_t rstream_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	uint64_t flags)
 {
-	return -FI_ENOSYS;
+	int ret;
+	struct rstream_ep *ep = container_of(ep_fid, struct rstream_ep,
+		util_ep.ep_fid);
+
+	if (flags == FI_PEEK) {
+		if (!rstream_can_recv_rx(ep)) {
+			ret = rstream_process_cq_rx(ep, RSTREAM_REG_MSG);
+			if (ret < 0)
+				return ret;
+		}
+		if (!rstream_can_recv_tx(ep)) {
+			ret = rstream_check_for_tx_comp(ep);
+			if (ret < 0)
+				return ret;
+		}
+		return 0;
+	} else {
+		return -FI_ENOSYS;
+	}
 }
 
 struct fi_ops_msg rstream_ops_msg = {

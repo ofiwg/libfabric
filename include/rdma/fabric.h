@@ -570,6 +570,8 @@ enum {
 	FI_SETOPSFLAG,		/* uint64_t flags */
 	FI_ALIAS,		/* struct fi_alias * */
 	FI_GETWAIT,		/* void * wait object */
+	FI_TX_GETWAIT,		/* void * wait tx object */
+	FI_RX_GETWAIT,		/* void * wait rx object */
 	FI_ENABLE,		/* NULL */
 	FI_BACKLOG,		/* integer * */
 	FI_GET_RAW_MR,		/* fi_mr_raw_attr */
