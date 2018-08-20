@@ -41,6 +41,7 @@
 int rxm_defer_requests = 0;
 size_t rxm_msg_tx_size		= 128;
 size_t rxm_msg_rx_size		= 128;
+size_t rxm_def_univ_size	= 256;
 
 char *rxm_proto_state_str[] = {
 	RXM_PROTO_STATES(OFI_STR)
@@ -325,6 +326,7 @@ RXM_INI
 	fi_param_get_size_t(&rxm_prov, "rx_size", &rxm_info.rx_attr->size);
 	fi_param_get_size_t(&rxm_prov, "msg_tx_size", &rxm_msg_tx_size);
 	fi_param_get_size_t(&rxm_prov, "msg_rx_size", &rxm_msg_rx_size);
+	fi_param_get_size_t(NULL, "universe_size", &rxm_def_univ_size);
 
 	if (rxm_init_info()) {
 		FI_WARN(&rxm_prov, FI_LOG_CORE, "Unable to initialize rxm_info\n");
