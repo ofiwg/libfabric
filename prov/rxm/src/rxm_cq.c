@@ -983,7 +983,7 @@ static struct fi_ops rxm_cq_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = rxm_cq_close,
 	.bind = fi_no_bind,
-	.control = fi_no_control,
+	.control = ofi_cq_control,
 	.ops_open = fi_no_ops_open,
 };
 
