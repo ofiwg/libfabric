@@ -110,6 +110,10 @@ extern struct fi_provider rxm_prov;
 extern struct util_prov rxm_util_prov;
 extern struct fi_ops_rma rxm_ops_rma;
 
+extern size_t rxm_msg_tx_size;
+extern size_t rxm_msg_rx_size;
+extern size_t rxm_def_univ_size;
+
 struct rxm_fabric {
 	struct util_fabric util_fabric;
 	struct fid_fabric *msg_fabric;

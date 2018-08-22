@@ -38,6 +38,10 @@
 #include <ofi_prov.h>
 #include "rxm.h"
 
+size_t rxm_msg_tx_size		= 128;
+size_t rxm_msg_rx_size		= 128;
+size_t rxm_def_univ_size	= 256;
+
 char *rxm_proto_state_str[] = {
 	RXM_PROTO_STATES(OFI_STR)
 };
@@ -103,6 +107,9 @@ int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 	}
 	core_info->ep_attr->type = FI_EP_MSG;
 
+	core_info->tx_attr->size = rxm_msg_tx_size;
+	core_info->rx_attr->size = rxm_msg_rx_size;
+
 	return 0;
 }
 
@@ -117,9 +124,7 @@ int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
 	info->tx_attr->msg_order 	= core_info->tx_attr->msg_order;
 	info->tx_attr->comp_order 	= rxm_info.tx_attr->comp_order;
 	info->tx_attr->inject_size	= rxm_info.tx_attr->inject_size;
-	/* Export TX queue size same as that of MSG provider as we post TX
-	 * operations directly */
-	info->tx_attr->size 		= core_info->tx_attr->size;
+	info->tx_attr->size 		= rxm_info.tx_attr->size;
 	info->tx_attr->iov_limit 	= MIN(rxm_info.tx_attr->iov_limit,
 					      core_info->tx_attr->iov_limit);
 	info->tx_attr->rma_iov_limit	= MIN(rxm_info.tx_attr->rma_iov_limit,
@@ -129,7 +134,7 @@ int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
 	info->rx_attr->mode		= info->mode;
 	info->rx_attr->msg_order 	= core_info->rx_attr->msg_order;
 	info->rx_attr->comp_order 	= rxm_info.rx_attr->comp_order;
-	info->rx_attr->size		= core_info->rx_attr->size;
+	info->rx_attr->size 		= rxm_info.rx_attr->size;
 	info->rx_attr->iov_limit 	= MIN(rxm_info.rx_attr->iov_limit,
 					      core_info->rx_attr->iov_limit);
 
@@ -296,6 +301,28 @@ RXM_INI
 	fi_param_define(&rxm_prov, "use_fair_tx_queues", FI_PARAM_BOOL,
 			"The environment variable controls whether RxM should use "
 			"TX queue per connection or shared TX queue (default: 0).");
+
+	fi_param_define(&rxm_prov, "tx_size", FI_PARAM_SIZE_T,
+			"Defines default tx context size (default: 1024).");
+
+	fi_param_define(&rxm_prov, "rx_size", FI_PARAM_SIZE_T,
+			"Defines default rx context size (default: 1024).");
+
+	fi_param_define(&rxm_prov, "msg_tx_size", FI_PARAM_SIZE_T,
+			"Defines FI_EP_MSG tx size that would be requested "
+			"(default: 128). Setting this to 0 would get default "
+			"value defined by the MSG provider.");
+
+	fi_param_define(&rxm_prov, "msg_rx_size", FI_PARAM_SIZE_T,
+			"Defines FI_EP_MSG rx size that would be requested "
+			"(default: 128). Setting this to 0 would get default "
+			"value defined by the MSG provider.");
+
+	fi_param_get_size_t(&rxm_prov, "tx_size", &rxm_info.tx_attr->size);
+	fi_param_get_size_t(&rxm_prov, "rx_size", &rxm_info.rx_attr->size);
+	fi_param_get_size_t(&rxm_prov, "msg_tx_size", &rxm_msg_tx_size);
+	fi_param_get_size_t(&rxm_prov, "msg_rx_size", &rxm_msg_rx_size);
+	fi_param_get_size_t(NULL, "universe_size", &rxm_def_univ_size);
 
 	if (rxm_init_info()) {
 		FI_WARN(&rxm_prov, FI_LOG_CORE, "Unable to initialize rxm_info\n");
