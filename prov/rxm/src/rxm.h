@@ -438,7 +438,10 @@ struct rxm_ep {
 	 * which segment length mast be calculated. */
 	uint32_t		sar_max_calc_seg_no;
 
-	struct rxm_buf_pool	buf_pools[RXM_BUF_POOL_MAX];
+	/* This is used only in non-FI_THREAD_SAFE case */
+	struct rxm_tx_buf	*inject_tx_buf;
+
+	struct rxm_buf_pool	*buf_pools;
 
 	struct dlist_entry	repost_ready_list;
 
@@ -694,6 +697,8 @@ rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	       " tag: 0x%" PRIx64 "\n", tx_buf->pkt.hdr.size, tx_buf->pkt.hdr.tag);
 	ssize_t ret = fi_inject(rxm_conn->msg_ep, &tx_buf->pkt, pkt_size, 0);
 	if (OFI_UNLIKELY(ret)) {
+		if (ret == -FI_EAGAIN)
+			rxm_ep_progress_multi(&rxm_ep->util_ep);
 		FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
 		       "fi_inject for MSG provider failed\n");
 		rxm_cntr_incerr(rxm_ep->util_ep.tx_cntr);
