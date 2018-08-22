@@ -164,9 +164,8 @@ void cxip_cq_progress(struct cxip_cq *cq)
 		req = cxip_cq_event_req(event);
 		if (req)
 			req->cb(req, event);
-
-		cxi_eq_ack_events(cq->evtq);
 	}
+	cxi_eq_ack_events(cq->evtq);
 }
 
 static ssize_t cxip_cq_entry_size(struct cxip_cq *cxi_cq)
