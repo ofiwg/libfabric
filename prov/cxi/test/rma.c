@@ -12,38 +12,58 @@
 #include "cxip.h"
 #include "cxip_test_common.h"
 
+struct mem_region {
+	uint8_t *mem;
+	struct fid_mr *mr;
+};
+
+static void mr_create(size_t len, uint64_t access, uint8_t seed, uint64_t key,
+		      struct mem_region *mr)
+{
+	int ret;
+
+	cr_assert_not_null(mr);
+
+	mr->mem = calloc(1, len);
+	cr_assert_not_null(mr->mem, "Error allocating memory window");
+
+	for (size_t i = 0; i < len; i++)
+		mr->mem[i] = i + seed;
+
+	ret = fi_mr_reg(cxit_domain, mr->mem, len, access, 0, key, 0, &mr->mr,
+			NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_reg failed %d", ret);
+
+	ret = fi_mr_bind(mr->mr, &cxit_ep->fid, 0);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_bind failed %d", ret);
+
+	ret = fi_mr_enable(mr->mr);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_enable failed %d", ret);
+}
+
+static void mr_destroy(struct mem_region *mr)
+{
+	fi_close(&mr->mr->fid);
+	free(mr->mem);
+}
+
 TestSuite(rma, .init = cxit_setup_rma, .fini = cxit_teardown_rma);
 
-/* Test basic RMA write */
+/* Test fi_write simple case */
 Test(rma, simple_write, .timeout = 3, .disabled = false)
 {
-	int i, ret;
-	uint8_t *rma_win,  /* Target buffer for RMA */
-		*send_buf; /* RMA send buffer */
+	int ret;
+	uint8_t *send_buf;
 	int win_len = 0x1000;
 	int send_len = 8;
-	struct fid_mr *win_mr;
-	int key_val = 0;
+	struct mem_region mem_window;
+	int key_val = 0x1f;
 	struct fi_cq_tagged_entry cqe;
 
-	rma_win = calloc(win_len, 1);
-	cr_assert(rma_win);
+	send_buf = calloc(1, win_len);
+	cr_assert_not_null(send_buf, "send_buf alloc failed");
 
-	send_buf = malloc(win_len);
-	cr_assert(send_buf);
-
-	for (i = 0; i < win_len; i++)
-		send_buf[i] = i + 0xa0;
-
-	ret = fi_mr_reg(cxit_domain, rma_win, win_len, FI_REMOTE_WRITE, 0,
-			key_val, 0, &win_mr, NULL);
-	cr_assert(ret == FI_SUCCESS);
-
-	ret = fi_mr_bind(win_mr, &cxit_ep->fid, 0);
-	cr_assert(ret == FI_SUCCESS);
-
-	ret = fi_mr_enable(win_mr);
-	cr_assert(ret == FI_SUCCESS);
+	mr_create(win_len, FI_REMOTE_WRITE, 0xa0, key_val, &mem_window);
 
 	/* Send 8 bytes from send buffer data to RMA window 0 at FI address 0
 	 * (self)
@@ -59,60 +79,155 @@ Test(rma, simple_write, .timeout = 3, .disabled = false)
 
 	/* Validate event fields */
 	cr_assert(cqe.op_context == NULL, "CQE Context mismatch");
-	cr_assert(cqe.flags == (FI_RMA | FI_WRITE), "CQE flags mismatch");
+	cr_assert(cqe.flags == (FI_RMA | FI_WRITE), "CQE flags mismatch (%lx)",
+		  cqe.flags);
 	cr_assert(cqe.len == 0, "Invalid CQE length");
 	cr_assert(cqe.buf == 0, "Invalid CQE address");
 	cr_assert(cqe.data == 0, "Invalid CQE data");
 	cr_assert(cqe.tag == 0, "Invalid CQE tag");
 
 	/* Validate sent data */
-	for (i = 0; i < send_len; i++) {
-		cr_log_info("rma_win[%d]=%u  send_buf[%d]=%u\n",
-			    i, rma_win[i], i, send_buf[i]);
+	for (int i = 0; i < send_len; i++)
+		cr_assert_eq(mem_window.mem[i], send_buf[i],
+			     "data mismatch, element: (%d) %02x != %02x\n", i,
+			     mem_window.mem[i], send_buf[i]);
 
-		cr_assert(rma_win[i] == send_buf[i],
-			  "data mismatch, element: %d\n", i);
-	}
-
-	fi_close(&win_mr->fid);
+	mr_destroy(&mem_window);
 	free(send_buf);
-	free(rma_win);
 }
 
-/* Test basic RMA read */
-Test(rma, simple_read, .timeout = 10, .disabled = false)
+/* Test fi_writev simple case */
+Test(rma, simple_writev, .timeout = 3, .disabled = false)
 {
-	int i, ret;
-	uint8_t *src_buf, /* Source buffer */
-		*rcv_buf; /* Receive buffer */
-	int src_len = 0x1000;
-	int rcv_len = 8;
-	struct fid_mr *win_mr;
+	int ret;
+	uint8_t *send_buf;
+	int win_len = 0x1000;
+	int send_len = 8;
+	struct mem_region mem_window;
+	int key_val = 0x1f;
+	struct fi_cq_tagged_entry cqe;
+	struct iovec iov[1];
+
+	send_buf = calloc(1, win_len);
+	cr_assert_not_null(send_buf, "send_buf alloc failed");
+
+	mr_create(win_len, FI_REMOTE_WRITE, 0x44, key_val, &mem_window);
+
+	iov[0].iov_base = send_buf;
+	iov[0].iov_len = send_len;
+
+	/* Send 8 bytes from send buffer data to RMA window 0 at FI address 0
+	 * (self)
+	 */
+	ret = fi_writev(cxit_ep, iov, NULL, 1, 0, 0, key_val, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_writev failed %d", ret);
+
+	/* Wait for async event indicating data has been sent */
+	do {
+		ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	} while (ret == -FI_EAGAIN);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+
+	/* Validate event fields */
+	cr_assert(cqe.op_context == NULL, "CQE Context mismatch");
+	cr_assert(cqe.flags == (FI_RMA | FI_WRITE), "CQE flags mismatch (%lx)",
+		  cqe.flags);
+	cr_assert(cqe.len == 0, "Invalid CQE length");
+	cr_assert(cqe.buf == 0, "Invalid CQE address");
+	cr_assert(cqe.data == 0, "Invalid CQE data");
+	cr_assert(cqe.tag == 0, "Invalid CQE tag");
+
+	/* Validate sent data */
+	for (int i = 0; i < send_len; i++)
+		cr_assert_eq(mem_window.mem[i], send_buf[i],
+			     "data mismatch, element: (%d) %02x != %02x\n", i,
+			     mem_window.mem[i], send_buf[i]);
+
+	mr_destroy(&mem_window);
+	free(send_buf);
+}
+
+/* Test fi_writemsg simple case */
+Test(rma, simple_writemsg, .timeout = 3, .disabled = false)
+{
+	int ret;
+	uint8_t *send_buf;
+	int win_len = 0x1000;
+	int send_len = 8;
+	struct mem_region mem_window;
+	int key_val = 0x1f;
+	struct fi_cq_tagged_entry cqe;
+	struct fi_msg_rma msg = {};
+	struct iovec iov[1];
+	struct fi_rma_iov rma[1];
+	uint64_t flags = 0;
+
+	send_buf = calloc(1, win_len);
+	cr_assert_not_null(send_buf, "send_buf alloc failed");
+
+	mr_create(win_len, FI_REMOTE_WRITE, 0x44, key_val, &mem_window);
+
+	iov[0].iov_base = send_buf;
+	iov[0].iov_len = send_len;
+
+	rma[0].addr = 0;
+	rma[0].len = send_len;
+	rma[0].key = key_val;
+
+	msg.msg_iov = iov;
+	msg.iov_count = 1;
+	msg.rma_iov = rma;
+	msg.rma_iov_count = 1;
+
+	/* Send 8 bytes from send buffer data to RMA window 0 at FI address 0
+	 * (self)
+	 */
+	ret = fi_writemsg(cxit_ep, &msg, flags);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_writemsg failed %d", ret);
+
+	/* Wait for async event indicating data has been sent */
+	do {
+		ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	} while (ret == -FI_EAGAIN);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+
+	/* Validate event fields */
+	cr_assert(cqe.op_context == NULL, "CQE Context mismatch");
+	cr_assert(cqe.flags == (FI_RMA | FI_WRITE), "CQE flags mismatch (%lx)",
+		  cqe.flags);
+	cr_assert(cqe.len == 0, "Invalid CQE length");
+	cr_assert(cqe.buf == 0, "Invalid CQE address");
+	cr_assert(cqe.data == 0, "Invalid CQE data");
+	cr_assert(cqe.tag == 0, "Invalid CQE tag");
+
+	/* Validate sent data */
+	for (int i = 0; i < send_len; i++)
+		cr_assert_eq(mem_window.mem[i], send_buf[i],
+			     "data mismatch, element: (%d) %02x != %02x\n", i,
+			     mem_window.mem[i], send_buf[i]);
+
+	mr_destroy(&mem_window);
+	free(send_buf);
+}
+
+/* Test fi_read simple case */
+Test(rma, simple_read, .timeout = 3, .disabled = false)
+{
+	int ret;
+	uint8_t *local;
+	int remote_len = 0x1000;
+	int local_len = 8;
 	int key_val = 0xa;
 	struct fi_cq_tagged_entry cqe;
+	struct mem_region remote;
 
-	src_buf = calloc(1, src_len);
-	cr_assert_not_null(src_buf, "Source buffer alloc failed");
+	local = calloc(1, local_len);
+	cr_assert_not_null(local, "local alloc failed");
 
-	rcv_buf = calloc(1, rcv_len);
-	cr_assert_not_null(rcv_buf, "Receive buffer alloc failed");
-
-	for (i = 0; i < src_len; i++)
-		src_buf[i] = i + 0xc0;
-
-	ret = fi_mr_reg(cxit_domain, src_buf, src_len, FI_REMOTE_READ, 0,
-			key_val, 0, &win_mr, NULL);
-	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_reg() failed (%d)", ret);
-
-	ret = fi_mr_bind(win_mr, &cxit_ep->fid, 0);
-	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_bind() failed (%d)", ret);
-
-	ret = fi_mr_enable(win_mr);
-	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_enable() failed (%d)", ret);
+	mr_create(remote_len, FI_REMOTE_READ, 0xc0, key_val, &remote);
 
 	/* Get 8 bytes from the source buffer to the receive buffer */
-	ret = fi_read(cxit_ep, rcv_buf, rcv_len, NULL, (fi_addr_t)0,
-		      (uint64_t)0, key_val, NULL);
+	ret = fi_read(cxit_ep, local, local_len, NULL, 0, 0, key_val, NULL);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_read() failed (%d)", ret);
 
 	/* Wait for async event indicating data has been sent */
@@ -131,17 +246,199 @@ Test(rma, simple_read, .timeout = 10, .disabled = false)
 	cr_assert_eq(cqe.tag, 0UL, "Invalid CQE tag (%lx)", cqe.tag);
 
 	/* Validate sent data */
-	for (i = 0; i < rcv_len; i++) {
-		cr_log_info("src_buf[%d]=%u  rcv_buf[%d]=%u\n",
-			    i, src_buf[i], i, rcv_buf[i]);
+	for (int i = 0; i < local_len; i++)
+		cr_expect_eq(local[i], remote.mem[i],
+			     "data mismatch, element: (%d) %02x != %02x\n", i,
+			     local[i], remote.mem[i]);
 
-		cr_expect_eq(src_buf[i], rcv_buf[i],
-			  "data mismatch, element: %d\n", i);
-	}
+	mr_destroy(&remote);
+	free(local);
+}
 
-	ret = fi_close(&win_mr->fid);
-	cr_assert_eq(ret, FI_SUCCESS, "fi_cq_read() failed (%d)", ret);
+/* Test fi_readv simple case */
+Test(rma, simple_readv, .timeout = 3, .disabled = false)
+{
+	int ret;
+	uint8_t *local;
+	int remote_len = 0x1000;
+	int local_len = 8;
+	int key_val = 0x2a;
+	struct fi_cq_tagged_entry cqe;
+	struct mem_region remote;
+	struct iovec iov[1];
 
-	free(rcv_buf);
-	free(src_buf);
+	local = calloc(1, local_len);
+	cr_assert_not_null(local, "local alloc failed");
+
+	mr_create(remote_len, FI_REMOTE_READ, 0x3c, key_val, &remote);
+
+	iov[0].iov_base = local;
+	iov[0].iov_len = local_len;
+
+	/* Get 8 bytes from the source buffer to the receive buffer */
+	ret = fi_readv(cxit_ep, iov, NULL, 1, 0, 0, key_val, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_readv() failed (%d)", ret);
+
+	/* Wait for async event indicating data has been sent */
+	do {
+		ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	} while (ret == -FI_EAGAIN);
+	cr_assert_eq(ret, 1, "fi_cq_read() failed (%d)", ret);
+
+	/* Validate event fields */
+	cr_assert_null(cqe.op_context, "CQE Context mismatch");
+	cr_assert_eq(cqe.flags, (FI_RMA | FI_READ), "CQE flags mismatch (%lx)",
+		     cqe.flags);
+	cr_assert_eq(cqe.len, 0UL, "Invalid CQE length (%lx)", cqe.len);
+	cr_assert_null(cqe.buf, "Invalid CQE address (%p)", cqe.buf);
+	cr_assert_eq(cqe.data, 0UL, "Invalid CQE data (%lx)", cqe.data);
+	cr_assert_eq(cqe.tag, 0UL, "Invalid CQE tag (%lx)", cqe.tag);
+
+	/* Validate sent data */
+	for (int i = 0; i < local_len; i++)
+		cr_expect_eq(local[i], remote.mem[i],
+			     "data mismatch, element: (%d) %02x != %02x\n", i,
+			     local[i], remote.mem[i]);
+
+	mr_destroy(&remote);
+	free(local);
+}
+
+/* Test fi_readmsg simple case */
+Test(rma, simple_readmsg, .timeout = 3, .disabled = false)
+{
+	int ret;
+	uint8_t *local;
+	int remote_len = 0x1000;
+	int local_len = 8;
+	int key_val = 0x2a;
+	struct fi_cq_tagged_entry cqe;
+	struct mem_region remote;
+	struct fi_msg_rma msg = {};
+	struct iovec iov[1];
+	struct fi_rma_iov rma[1];
+	uint64_t flags = 0;
+
+	local = calloc(1, local_len);
+	cr_assert_not_null(local, "local alloc failed");
+
+	mr_create(remote_len, FI_REMOTE_READ, 0xd9, key_val, &remote);
+
+	iov[0].iov_base = local;
+	iov[0].iov_len = local_len;
+
+	rma[0].addr = 0;
+	rma[0].len = local_len;
+	rma[0].key = key_val;
+
+	msg.msg_iov = iov;
+	msg.iov_count = 1;
+	msg.rma_iov = rma;
+	msg.rma_iov_count = 1;
+
+	/* Get 8 bytes from the source buffer to the receive buffer */
+	ret = fi_readmsg(cxit_ep, &msg, flags);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_readv() failed (%d)", ret);
+
+	/* Wait for async event indicating data has been sent */
+	do {
+		ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	} while (ret == -FI_EAGAIN);
+	cr_assert_eq(ret, 1, "fi_cq_read() failed (%d)", ret);
+
+	/* Validate event fields */
+	cr_assert_null(cqe.op_context, "CQE Context mismatch");
+	cr_assert_eq(cqe.flags, (FI_RMA | FI_READ), "CQE flags mismatch (%lx)",
+		     cqe.flags);
+	cr_assert_eq(cqe.len, 0UL, "Invalid CQE length (%lx)", cqe.len);
+	cr_assert_null(cqe.buf, "Invalid CQE address (%p)", cqe.buf);
+	cr_assert_eq(cqe.data, 0UL, "Invalid CQE data (%lx)", cqe.data);
+	cr_assert_eq(cqe.tag, 0UL, "Invalid CQE tag (%lx)", cqe.tag);
+
+	/* Validate sent data */
+	for (int i = 0; i < local_len; i++)
+		cr_expect_eq(local[i], remote.mem[i],
+			     "data mismatch, element: (%d) %02x != %02x\n", i,
+			     local[i], remote.mem[i]);
+
+	mr_destroy(&remote);
+	free(local);
+}
+
+/* Test fi_readmsg failure cases */
+Test(rma, readmsg_failures, .disabled = false)
+{
+	int ret;
+	struct fi_msg_rma msg = {
+		.iov_count = CXIP_RMA_MAX_IOV,
+	};
+	uint64_t flags = 0;
+
+	/* Invalid msg value */
+	ret = fi_readmsg(cxit_ep, NULL, flags);
+	cr_assert_eq(ret, -FI_EINVAL, "NULL msg return %d", ret);
+
+	msg.iov_count = CXIP_RMA_MAX_IOV + 1; /* Invalid iov_count value */
+	ret = fi_readmsg(cxit_ep, &msg, flags);
+	cr_assert_eq(ret, -FI_EINVAL, "Invalid iov_count return %d", ret);
+
+	msg.iov_count = CXIP_RMA_MAX_IOV;
+	flags = FI_DIRECTED_RECV; /* Invalid flag value */
+	ret = fi_readmsg(cxit_ep, &msg, flags);
+	cr_assert_eq(ret, -FI_EBADFLAGS, "NULL msg unexpected return %d", ret);
+
+	flags = FI_COMPLETION; /* Unsupported flag value */
+	ret = fi_readmsg(cxit_ep, &msg, flags);
+	cr_assert_eq(ret, -FI_EINVAL, "NULL msg unexpected return %d", ret);
+}
+
+/* Test fi_writemsg failure cases */
+Test(rma, writemsg_failures, .disabled = false)
+{
+	int ret;
+	struct fi_msg_rma msg = {
+		.iov_count = CXIP_RMA_MAX_IOV,
+	};
+	uint64_t flags = 0;
+
+	/* Invalid msg value */
+	ret = fi_writemsg(cxit_ep, NULL, flags);
+	cr_assert_eq(ret, -FI_EINVAL, "NULL msg return %d", ret);
+
+	msg.iov_count = CXIP_RMA_MAX_IOV + 1; /* Invalid iov_count value */
+	ret = fi_writemsg(cxit_ep, &msg, flags);
+	cr_assert_eq(ret, -FI_EINVAL, "Invalid iov_count return %d", ret);
+
+	msg.iov_count = CXIP_RMA_MAX_IOV;
+	flags = FI_DIRECTED_RECV; /* Invalid flag value */
+	ret = fi_writemsg(cxit_ep, &msg, flags);
+	cr_assert_eq(ret, -FI_EBADFLAGS, "Invalid flag return %d", ret);
+
+	flags = FI_COMPLETION; /* Unsupported flag value */
+	ret = fi_writemsg(cxit_ep, &msg, flags);
+	cr_assert_eq(ret, -FI_EINVAL, "Unsupported flag return %d", ret);
+}
+
+/* Test fi_readv failure cases */
+Test(rma, readv_failures, .disabled = false)
+{
+	int ret;
+	struct iovec iov = {};
+
+	 /* Invalid count value */
+	ret = fi_readv(cxit_ep, &iov, NULL, CXIP_RMA_MAX_IOV + 1, 0, 0, 0,
+		       NULL);
+	cr_assert_eq(ret, -FI_EINVAL, "Invalid count return %d", ret);
+}
+
+/* Test fi_writev failure cases */
+Test(rma, writev_failures, .disabled = false)
+{
+	int ret;
+	struct iovec iov = {};
+
+	 /* Invalid count value */
+	ret = fi_writev(cxit_ep, &iov, NULL, CXIP_RMA_MAX_IOV + 1, 0, 0, 0,
+			NULL);
+	cr_assert_eq(ret, -FI_EINVAL, "Invalid count return %d", ret);
 }
