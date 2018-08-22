@@ -47,7 +47,7 @@ struct fi_tx_attr rxm_tx_attr = {
 	.caps = RXM_EP_CAPS,
 	.msg_order = ~0x0ULL,
 	.comp_order = FI_ORDER_NONE,
-	.size = SIZE_MAX,
+	.size = 1024,
 	.iov_limit = RXM_IOV_LIMIT,
 	.rma_iov_limit = RXM_IOV_LIMIT,
 };
@@ -56,7 +56,7 @@ struct fi_rx_attr rxm_rx_attr = {
 	.caps = RXM_EP_CAPS | FI_MULTI_RECV,
 	.msg_order = ~0x0ULL,
 	.comp_order = FI_ORDER_NONE,
-	.size = SIZE_MAX,
+	.size = 1024,
 	.iov_limit= RXM_IOV_LIMIT,
 };
 
