@@ -417,6 +417,11 @@ struct rxm_buf_pool {
 	fastlock_t lock;
 };
 
+struct rxm_msg_ep_entry {
+	struct dlist_entry list_entry;
+	struct fid_ep *msg_ep;
+};
+
 struct rxm_ep {
 	struct util_ep 		util_ep;
 	struct fi_info 		*rxm_info;
@@ -448,6 +453,8 @@ struct rxm_ep {
 	struct rxm_send_queue	*send_queue;
 	struct rxm_recv_queue	recv_queue;
 	struct rxm_recv_queue	trecv_queue;
+
+	struct dlist_entry	close_ready_msg_eps;
 
 	ofi_fastlock_acquire_t	res_fastlock_acquire;
 	ofi_fastlock_release_t	res_fastlock_release;
@@ -494,6 +501,8 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 			  struct fid_ep **ep, void *context);
 
 struct util_cmap *rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep);
+void rxm_conn_save_msg_ep(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn);
+void rxm_conn_close_saved_msg_ep(struct rxm_msg_ep_entry *entry);
 void rxm_cq_write_error(struct util_cq *cq, struct util_cntr *cntr,
 			void *op_context, int err);
 void rxm_ep_progress_one(struct util_ep *util_ep);
