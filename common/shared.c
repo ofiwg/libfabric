@@ -1518,8 +1518,6 @@ static int ft_inject_progress(uint64_t total)
 				return ret;					\
 			}							\
 										\
-			if (fi->domain_attr->data_progress == FI_PROGRESS_AUTO)	\
-				continue;					\
 			timeout_save = timeout;					\
 			timeout = 0;						\
 			rc = comp_fn(seq);					\
