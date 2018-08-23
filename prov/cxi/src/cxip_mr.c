@@ -94,7 +94,7 @@ int cxip_mr_enable(struct cxip_mr *mr)
 	while (!(event = cxi_eq_get_event(mr->domain->dev_if->mr_evtq)))
 		sched_yield();
 
-	if (event->event_type != C_EVENT_STATE_CHANGE ||
+	if (event->hdr.event_type != C_EVENT_STATE_CHANGE ||
 	    event->tgt_long.return_code != C_RC_OK ||
 	    event->tgt_long.initiator.state_change.ptlte_state !=
 		    C_PTLTE_ENABLED ||
@@ -138,7 +138,7 @@ int cxip_mr_enable(struct cxip_mr *mr)
 	while (!(event = cxi_eq_get_event(mr->domain->dev_if->mr_evtq)))
 		sched_yield();
 
-	if (event->event_type != C_EVENT_LINK ||
+	if (event->hdr.event_type != C_EVENT_LINK ||
 	    event->tgt_long.return_code != C_RC_OK ||
 	    event->tgt_long.buffer_id != buffer_id) {
 		/* This is a device malfunction */
@@ -207,7 +207,7 @@ int cxip_mr_disable(struct cxip_mr *mr)
 	while (!(event = cxi_eq_get_event(mr->domain->dev_if->mr_evtq)))
 		sched_yield();
 
-	if (event->event_type != C_EVENT_UNLINK ||
+	if (event->hdr.event_type != C_EVENT_UNLINK ||
 	    event->tgt_long.return_code != C_RC_OK ||
 	    event->tgt_long.buffer_id != buffer_id) {
 		/* This is a device malfunction */

@@ -140,13 +140,13 @@ void cxip_cq_remove_rx_ctx(struct cxip_cq *cq, struct cxip_rx_ctx *rx_ctx)
 
 static struct cxip_req *cxip_cq_event_req(const union c_event *event)
 {
-	switch (event->event_type) {
+	switch (event->hdr.event_type) {
 	case C_EVENT_ACK:
 	case C_EVENT_REPLY:
 		return (struct cxip_req *)event->init_short.user_ptr;
 	}
 
-	CXIP_LOG_ERROR("Invalid event type: %d\n", event->event_type);
+	CXIP_LOG_ERROR("Invalid event type: %d\n", event->hdr.event_type);
 	return NULL;
 }
 
