@@ -159,6 +159,9 @@ int cxip_rx_ctx_enable(struct cxip_rx_ctx *rxc)
 
 	fastlock_release(&rxc->lock);
 
+	/* Allocate pool of overflow buffers */
+	cxip_rxc_oflow_replenish(rxc);
+
 	return FI_SUCCESS;
 
 free_cmdq:
@@ -211,6 +214,18 @@ struct cxip_rx_ctx *cxip_rx_ctx_alloc(const struct fi_rx_attr *attr,
 	rx_ctx->num_left = attr->size;
 	rx_ctx->attr = *attr;
 	rx_ctx->use_shared = use_shared;
+
+	ofi_atomic_initialize32(&rx_ctx->oflow_buf_cnt, 0);
+	dlist_init(&rx_ctx->oflow_bufs);
+	dlist_init(&rx_ctx->ux_sends);
+	dlist_init(&rx_ctx->ux_recvs);
+
+	/* TODO make configurable */
+	rx_ctx->eager_threshold = 1024;
+	rx_ctx->oflow_bufs_max = 3;
+	rx_ctx->oflow_msgs_max = 2 * 1024;
+	rx_ctx->oflow_buf_size = rx_ctx->oflow_msgs_max *
+			rx_ctx->eager_threshold;
 
 	return rx_ctx;
 }

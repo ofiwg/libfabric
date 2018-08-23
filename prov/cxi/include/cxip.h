@@ -242,10 +242,12 @@ struct cxip_eq {
 
 struct cxip_req {
 	/* Control info */
+	struct dlist_entry list;
 	struct cxip_cq *cq;
 	int req_id;
+	void (*cb)(struct cxip_req *req, const union c_event *evt);
 
-	/* CQ event fields */
+	/* CQ event fields, set according to fi_cq.3 */
 	uint64_t context;
 	uint64_t flags;
 	uint64_t data_len;
@@ -254,11 +256,19 @@ struct cxip_req {
 	uint64_t tag;
 	fi_addr_t addr;
 
+	/* Other state */
 	struct cxi_iova local_md;
-	void (*cb)(struct cxip_req *req, const union c_event *evt);
+
+	/* Recv only */
+	struct cxip_rx_ctx *rxc;
+	void *local_buf;
 	int rc;
 	int rlength;
 	int mlength;
+	uint64_t start;
+
+	/* oflow event only */
+	struct cxip_oflow_buf *oflow_buf;
 };
 
 struct cxip_cq;
@@ -335,6 +345,22 @@ struct cxip_comp {
 	struct cxip_eq *eq;
 };
 
+struct cxip_ux_send {
+	struct dlist_entry list;
+	struct cxip_oflow_buf *oflow_buf;
+	uint64_t start;
+	uint64_t length;
+};
+
+struct cxip_oflow_buf {
+	struct dlist_entry list;
+	struct cxip_rx_ctx *rxc;
+	void *buf;
+	struct cxi_iova md;
+	ofi_atomic32_t ref;
+	int exhausted;
+};
+
 struct cxip_rx_ctx {
 	struct fid_ep ctx;
 
@@ -363,9 +389,19 @@ struct cxip_rx_ctx {
 
 	uint32_t pid_off;
 	struct cxil_pte *pte;
-	unsigned int pte_hw_id;
 	struct cxil_pte_map *pte_map;
 	struct cxi_cmdq *rx_cmdq;
+
+	int eager_threshold;
+
+	/* Unexpected message handling */
+	ofi_atomic32_t oflow_buf_cnt;
+	int oflow_bufs_max;
+	int oflow_msgs_max;
+	int oflow_buf_size;
+	struct dlist_entry oflow_bufs; /* Overflow buffers */
+	struct dlist_entry ux_sends; /* Sends matched in overflow list */
+	struct dlist_entry ux_recvs; /* Recvs matched in overflow list */
 };
 
 struct cxip_tx_ctx {
@@ -588,6 +624,7 @@ struct cxip_rx_ctx *cxip_rx_ctx_alloc(const struct fi_rx_attr *attr,
 				      void *context, int use_shared);
 void cxip_rx_ctx_free(struct cxip_rx_ctx *rx_ctx);
 
+void cxip_rxc_oflow_replenish(struct cxip_rx_ctx *rxc);
 int cxip_rx_ctx_enable(struct cxip_rx_ctx *rxc);
 int cxip_tx_ctx_enable(struct cxip_tx_ctx *txc);
 struct cxip_tx_ctx *cxip_tx_ctx_alloc(const struct fi_tx_attr *attr,
