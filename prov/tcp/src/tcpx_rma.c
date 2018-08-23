@@ -108,7 +108,7 @@ static ssize_t tcpx_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 
 	fastlock_acquire(&tcpx_ep->lock);
 	slist_insert_tail(&recv_entry->entry, &tcpx_ep->rma_read_queue);
-	slist_insert_tail(&send_entry->entry, &tcpx_ep->tx_queue);
+	tcpx_tx_queue_insert(tcpx_ep, send_entry);
 	fastlock_release(&tcpx_ep->lock);
 	return FI_SUCCESS;
 }
