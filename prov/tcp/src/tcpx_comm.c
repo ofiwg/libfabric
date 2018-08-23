@@ -48,7 +48,7 @@ int tcpx_send_msg(struct tcpx_xfer_entry *tx_entry)
 	bytes_sent = ofi_sendmsg_tcp(tx_entry->ep->conn_fd,
 	                             &msg, MSG_NOSIGNAL);
 	if (bytes_sent < 0)
-		return -ofi_sockerr();
+		return ofi_sockerr() == EPIPE ? -FI_ENOTCONN : -ofi_sockerr();
 
 	tx_entry->done_len += bytes_sent;
 	if (tx_entry->done_len < ntohll(tx_entry->msg_hdr.hdr.size)) {
