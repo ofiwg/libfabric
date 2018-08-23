@@ -106,7 +106,8 @@ static ssize_t cxip_trecv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 
 	/* Map local buffer */
 	ret = cxil_map(dom->dev_if->if_lni, (void *)buf, len,
-		       CXI_MAP_PIN | CXI_MAP_NTA | CXI_MAP_WRITE, &recv_md);
+		       CXI_MAP_PIN | CXI_MAP_NTA |
+		       CXI_MAP_WRITE | CXI_MAP_NOCACHE, &recv_md);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to map recv buffer: %d\n", ret);
 		return ret;
@@ -247,7 +248,8 @@ static ssize_t cxip_tsend(struct fid_ep *ep, const void *buf, size_t len,
 
 	/* Map local buffer */
 	ret = cxil_map(dom->dev_if->if_lni, (void *)buf, len,
-		       CXI_MAP_PIN | CXI_MAP_NTA | CXI_MAP_READ, &send_md);
+		       CXI_MAP_PIN | CXI_MAP_NTA |
+		       CXI_MAP_READ | CXI_MAP_NOCACHE, &send_md);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to map send buffer: %d\n", ret);
 		return ret;

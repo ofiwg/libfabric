@@ -25,7 +25,8 @@ _cxi_files = \
 	prov/cxi/src/cxip_wait.c \
 	prov/cxi/src/cxip_rma.c \
 	prov/cxi/src/cxip_mr.c \
-	prov/cxi/src/cxip_msg.c
+	prov/cxi/src/cxip_msg.c \
+	prov/cxi/src/cxip_atomic.c
 
 _cxi_headers = \
 	prov/cxi/include/cxip.h
@@ -40,7 +41,8 @@ nodist_prov_cxi_test_cxitest_SOURCES = \
 	prov/cxi/test/cq.c \
 	prov/cxi/test/av.c \
 	prov/cxi/test/rma.c \
-	prov/cxi/test/tagged.c
+	prov/cxi/test/tagged.c \
+	prov/cxi/test/atomic.c
 
 prov_cxi_test_cxitest_CPPFLAGS = $(AM_CPPFLAGS) $(cxi_CPPFLAGS) \
 	$(cxitest_CPPFLAGS)

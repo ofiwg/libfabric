@@ -24,8 +24,6 @@ extern struct fi_ops_rma cxip_ep_rma;
 extern struct fi_ops_msg cxip_ep_msg_ops;
 extern struct fi_ops_tagged cxip_ep_tagged_ops;
 extern struct fi_ops_atomic cxip_ep_atomic;
-struct fi_ops_atomic cxip_ep_atomic = { 0 };
-
 extern struct fi_ops_ep cxip_ep_ops;
 extern struct fi_ops cxip_ep_fi_ops;
 extern struct fi_ops_ep cxip_ctx_ep_ops;

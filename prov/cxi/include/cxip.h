@@ -76,6 +76,7 @@
 #define CXIP_EP_MAX_CM_DATA_SZ (256)
 
 #define CXIP_RMA_MAX_IOV (1)
+#define CXIP_AMO_MAX_IOV (1)
 
 #define CXIP_EP_RDM_PRI_CAP \
 	(FI_MSG | FI_RMA | FI_TAGGED | FI_ATOMICS | FI_NAMED_RX_CTX | \

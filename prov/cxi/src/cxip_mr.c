@@ -61,7 +61,9 @@ int cxip_mr_enable(struct cxip_mr *mr)
 
 	/* Map the window buffer into IO address space */
 	ret = cxil_map(mr->domain->dev_if->if_lni, mr->buf, mr->len,
-		       CXI_MAP_PIN | CXI_MAP_NTA | CXI_MAP_READ | CXI_MAP_WRITE,
+		       CXI_MAP_PIN | CXI_MAP_NTA |
+		       CXI_MAP_READ | CXI_MAP_WRITE |
+		       CXI_MAP_NOCACHE,
 		       &mr->md);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to IO map MR buffer: %d\n", ret);

@@ -24,6 +24,7 @@ Test(tagged, ping, .timeout = 3)
 	int send_len = 64;
 	struct fi_cq_tagged_entry tx_cqe,
 				  rx_cqe;
+	int err = 0;
 
 	recv_buf = calloc(recv_len, 1);
 	cr_assert(recv_buf);
@@ -75,9 +76,11 @@ Test(tagged, ping, .timeout = 3)
 
 	/* Validate sent data */
 	for (i = 0; i < send_len; i++) {
-		cr_assert(recv_buf[i] == send_buf[i],
-			  "data mismatch, element: %d\n", i);
+		cr_expect_eq(recv_buf[i], send_buf[i],
+			  "data mismatch, element[%d], exp=%d saw=%d, err=%d\n",
+			  i, send_buf[i], recv_buf[i], err++);
 	}
+	cr_assert_eq(err, 0, "Data errors seen\n");
 
 	free(send_buf);
 	free(recv_buf);
