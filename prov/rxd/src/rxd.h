@@ -171,8 +171,8 @@ struct rxd_ep {
 	struct util_buf_pool *rx_pkt_pool;
 	struct slist rx_pkt_list;
 
-	struct rxd_tx_fs *tx_fs;
-	struct rxd_rx_fs *rx_fs;
+	struct rxd_x_fs *tx_fs;
+	struct rxd_x_fs *rx_fs;
 
 	struct dlist_entry unexp_list;
 	struct dlist_entry unexp_tag_list;
@@ -224,8 +224,7 @@ struct rxd_x_entry {
 
 	struct dlist_entry entry;
 };
-DECLARE_FREESTACK(struct rxd_x_entry, rxd_tx_fs);
-DECLARE_FREESTACK(struct rxd_x_entry, rxd_rx_fs);
+DECLARE_FREESTACK(struct rxd_x_entry, rxd_x_fs);
 
 #define rxd_ep_rx_flags(rxd_ep) ((rxd_ep)->util_ep.rx_op_flags)
 #define rxd_ep_tx_flags(rxd_ep) ((rxd_ep)->util_ep.tx_op_flags)

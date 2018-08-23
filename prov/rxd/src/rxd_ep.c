@@ -205,7 +205,7 @@ static struct rxd_x_entry *rxd_rx_entry_init(struct rxd_ep *ep,
 
 	rx_entry = freestack_pop(ep->rx_fs);
 
-	rx_entry->rx_id = rxd_rx_fs_index(ep->rx_fs, rx_entry);
+	rx_entry->rx_id = rxd_x_fs_index(ep->rx_fs, rx_entry);
 	rx_entry->peer = addr;
 	rx_entry->flags = rxd_flags(flags);
 	rx_entry->bytes_done = 0;
@@ -418,7 +418,7 @@ struct rxd_x_entry *rxd_tx_entry_init(struct rxd_ep *ep, const struct iovec *iov
 
 	tx_entry = freestack_pop(ep->tx_fs);
 
-	tx_entry->tx_id = rxd_tx_fs_index(ep->tx_fs, tx_entry);
+	tx_entry->tx_id = rxd_x_fs_index(ep->tx_fs, tx_entry);
 	tx_entry->rx_id = ~0;
 	tx_entry->msg_id = rxd_set_next_no(&ep->peers[addr].tx_msg_id);
 
@@ -958,10 +958,10 @@ static void rxd_ep_free_res(struct rxd_ep *ep)
 {
 
 	if (ep->tx_fs)
-		rxd_tx_fs_free(ep->tx_fs);
+		rxd_x_fs_free(ep->tx_fs);
 
 	if (ep->rx_fs)
-		rxd_rx_fs_free(ep->rx_fs);
+		rxd_x_fs_free(ep->rx_fs);
 
 	util_buf_pool_destroy(ep->tx_pkt_pool);
 	util_buf_pool_destroy(ep->rx_pkt_pool);
@@ -1315,10 +1315,10 @@ int rxd_ep_init_res(struct rxd_ep *ep, struct fi_info *fi_info)
 	if (ret)
 		goto err;
 
-	ep->tx_fs = rxd_tx_fs_create(ep->tx_size, NULL, NULL);
+	ep->tx_fs = rxd_x_fs_create(ep->tx_size, NULL, NULL);
 	if (!ep->tx_fs)
 		goto err;
-	ep->rx_fs = rxd_rx_fs_create(ep->rx_size, NULL, NULL);
+	ep->rx_fs = rxd_x_fs_create(ep->rx_size, NULL, NULL);
 	if (!ep->rx_fs)
 		goto err;
 
@@ -1338,10 +1338,10 @@ err:
 		util_buf_pool_destroy(ep->rx_pkt_pool);
 
 	if (ep->tx_fs)
-		rxd_tx_fs_free(ep->tx_fs);
+		rxd_x_fs_free(ep->tx_fs);
 
 	if (ep->rx_fs)
-		rxd_rx_fs_free(ep->rx_fs);
+		rxd_x_fs_free(ep->rx_fs);
 
 	return -FI_ENOMEM;
 }
