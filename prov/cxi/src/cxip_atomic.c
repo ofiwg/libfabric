@@ -26,6 +26,24 @@
 #define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_EP_DATA, __VA_ARGS__)
 #define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_EP_DATA, __VA_ARGS__)
 
+/**
+ * Request variants:
+ *   CXIP_RQ_AMO
+ *      Passes one argument (operand1), and applies that to a remote memory
+ *      address content.
+ *
+ *   CXIP_RQ_AMO_FETCH
+ *      Passes two arguments (operand1, resultptr), applies operand1 to a remote
+ *      memory address content, and returns the prior content of the remote
+ *      memory in resultptr.
+ *
+ *   CXIP_RQ_AMO_SWAP
+ *      Passes three arguments (operand1, compare, resultptr). If remote memory
+ *      address content satisfies the comparison operation with compare,
+ *      replaces the remote memory content with operand1, and returns the prior
+ *      content of the remote memory in resultptr.
+ *
+ */
 enum cxip_amo_req_type {
 	CXIP_RQ_AMO,
 	CXIP_RQ_AMO_FETCH,
@@ -33,7 +51,10 @@ enum cxip_amo_req_type {
 	CXIP_RQ_AMO_LAST
 };
 
-static int _cxip_amo_type_code[FI_DATATYPE_LAST] = {
+/**
+ * Data type codes for all of the supported fi_datatype values.
+ */
+static enum c_atomic_type _cxip_amo_type_code[FI_DATATYPE_LAST] = {
 	[FI_INT8]	  = C_AMO_TYPE_INT8_T,
 	[FI_UINT8]	  = C_AMO_TYPE_UINT8_T,
 	[FI_INT16]	  = C_AMO_TYPE_INT16_T,
@@ -46,35 +67,37 @@ static int _cxip_amo_type_code[FI_DATATYPE_LAST] = {
 	[FI_DOUBLE]	  = C_AMO_TYPE_DOUBLE_T,
 	[FI_FLOAT_COMPLEX]	  = C_AMO_TYPE_FLOAT_COMPLEX_T,
 	[FI_DOUBLE_COMPLEX]	  = C_AMO_TYPE_DOUBLE_COMPLEX_T,
-	[FI_LONG_DOUBLE]	  = -1,
-	[FI_LONG_DOUBLE_COMPLEX]  = -1,
 };
-//C_AMO_TYPE_UINT128_T
+//TODO: C_AMO_TYPE_UINT128_T
 
-static int _cxip_amo_op_code[FI_ATOMIC_OP_LAST] = {
+/**
+ * AMO operation codes for all of the fi_op values.
+ */
+static enum c_atomic_op _cxip_amo_op_code[FI_ATOMIC_OP_LAST] = {
 	[FI_MIN]	  = C_AMO_OP_MIN,
 	[FI_MAX]	  = C_AMO_OP_MAX,
 	[FI_SUM]	  = C_AMO_OP_SUM,
-	[FI_PROD]	  = -1,
 	[FI_LOR]	  = C_AMO_OP_LOR,
 	[FI_LAND]	  = C_AMO_OP_LAND,
 	[FI_BOR]	  = C_AMO_OP_BOR,
 	[FI_BAND]	  = C_AMO_OP_BAND,
 	[FI_LXOR]	  = C_AMO_OP_LXOR,
 	[FI_BXOR]	  = C_AMO_OP_BXOR,
-	[FI_ATOMIC_READ]  = -1,
-	[FI_ATOMIC_WRITE] = -1,
+	[FI_ATOMIC_READ]  = C_AMO_OP_SUM,       /* special handling */
+	[FI_ATOMIC_WRITE] = C_AMO_OP_SWAP,      /* special handling */
 	[FI_CSWAP]	  = C_AMO_OP_CSWAP,
 	[FI_CSWAP_NE]	  = C_AMO_OP_CSWAP,
 	[FI_CSWAP_LE]	  = C_AMO_OP_CSWAP,
 	[FI_CSWAP_LT]	  = C_AMO_OP_CSWAP,
 	[FI_CSWAP_GE]	  = C_AMO_OP_CSWAP,
 	[FI_CSWAP_GT]	  = C_AMO_OP_CSWAP,
-	[FI_MSWAP]	  = C_AMO_OP_AXOR,
+	[FI_MSWAP]	  = C_AMO_OP_AXOR,      /* special handling */
 };
-//C_AMO_OP_SWAP
 
-static int _cxip_amo_swpcode[FI_ATOMIC_OP_LAST] = {
+/**
+ * AMO swap operation codes for the CSWAP comparison conditions.
+ */
+static enum c_cswap_op _cxip_amo_swpcode[FI_ATOMIC_OP_LAST] = {
 	[FI_CSWAP]	  = C_AMO_OP_CSWAP_EQ,
 	[FI_CSWAP_NE]	  = C_AMO_OP_CSWAP_NE,
 	[FI_CSWAP_LE]	  = C_AMO_OP_CSWAP_LE,
@@ -83,49 +106,63 @@ static int _cxip_amo_swpcode[FI_ATOMIC_OP_LAST] = {
 	[FI_CSWAP_GT]	  = C_AMO_OP_CSWAP_GT,
 };
 
-static int _cxip_amo_valid[CXIP_RQ_AMO_LAST]
-			  [FI_ATOMIC_OP_LAST]
-			  [FI_DATATYPE_LAST] = {
-	/*
-	 * Basic AMO types:
-	 * FI_MIN, FI_MAX, FI_SUM, FI_PROD, FI_LOR, FI_LAND,  FI_BOR,  FI_BAND,
-	 *       FI_LXOR, FI_BXOR, and FI_ATOMIC_WRITE.
-	 */
+/**
+ * Multi-dimensional array defining supported/unsupported operations. Bits
+ * correspond to the 14 possible fi_datatype values. The OP_VALID() macro will
+ * return a 1 if the (request,op,dt) triple is supported by Cassini.
+ */
+static uint16_t _cxip_amo_valid[CXIP_RQ_AMO_LAST][FI_ATOMIC_OP_LAST] = {
+
 	[CXIP_RQ_AMO] = {
-	[FI_MIN]	  = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-	[FI_MAX]	  = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-	[FI_SUM]	  = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 },
-	[FI_BOR]	  = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-	[FI_BAND]         = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-	[FI_BXOR]         = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-	[FI_ATOMIC_WRITE] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+		[FI_MIN]	  = 0x03ff,
+		[FI_MAX]	  = 0x03ff,
+		[FI_SUM]	  = 0x0fff,
+		[FI_BOR]	  = 0x00ff,
+		[FI_BAND]         = 0x00ff,
+		[FI_BXOR]         = 0x00ff,
+		[FI_ATOMIC_WRITE] = 0x0fff,
 	},
+
 	[CXIP_RQ_AMO_FETCH] = {
-	[FI_MIN]	  = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-	[FI_MAX]	  = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-	[FI_SUM]	  = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 },
-	[FI_BOR]	  = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-	[FI_BAND]         = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-	[FI_BXOR]         = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-	[FI_ATOMIC_READ]  = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-	[FI_ATOMIC_WRITE] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+		[FI_MIN]	  = 0x03ff,
+		[FI_MAX]	  = 0x03ff,
+		[FI_SUM]	  = 0x0fff,
+		[FI_BOR]	  = 0x00ff,
+		[FI_BAND]         = 0x00ff,
+		[FI_BXOR]         = 0x00ff,
+		[FI_ATOMIC_READ]  = 0x0fff,
+		[FI_ATOMIC_WRITE] = 0x0fff,
 	},
+
 	[CXIP_RQ_AMO_SWAP] = {
-	[FI_CSWAP]        = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-	[FI_MSWAP]        = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-	[FI_CSWAP_NE]     = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 },
-	[FI_CSWAP_LE]     = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-	[FI_CSWAP_LT]     = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-	[FI_CSWAP_GE]     = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-	[FI_CSWAP_GT]     = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+		[FI_CSWAP]        = 0x0fff,
+		[FI_CSWAP_NE]     = 0x0fff,
+		[FI_CSWAP_LE]     = 0x03ff,
+		[FI_CSWAP_LT]     = 0x03ff,
+		[FI_CSWAP_GE]     = 0x03ff,
+		[FI_CSWAP_GT]     = 0x03ff,
+		[FI_MSWAP]        = 0x00ff,
 	},
 };
+#define	OP_VALID(rq, op, dt)	(_cxip_amo_valid[rq][op] & (1 << dt))
 
-// TODO: should this be static?
-int cxip_atomic_opcode(enum cxip_amo_req_type req_type,
-		       enum fi_datatype dt, enum fi_op op,
-		       enum c_atomic_op *cop, enum c_atomic_type *cdt,
-		       enum c_cswap_op *copswp, int *cdtlen)
+/**
+ * Supply opcodes for a request, and determine if the operation is supported.
+ *
+ * @param req_type basic, fetch, or swap
+ * @param dt data type for operation
+ * @param op operation
+ * @param cop Cassini code for operation
+ * @param cdt Cassini code for data type
+ * @param copswp Cassini code for cswap operation
+ * @param cdtlen Length of datatype in bytes
+ *
+ * @return int 0 on success, -FI_EOPNOTSUPP if operation is not supported
+ */
+static int _cxip_atomic_opcode(enum cxip_amo_req_type req_type,
+			       enum fi_datatype dt, enum fi_op op,
+			       enum c_atomic_op *cop, enum c_atomic_type *cdt,
+			       enum c_cswap_op *copswp, int *cdtlen)
 {
 	int opcode;
 	int dtcode;
@@ -134,7 +171,7 @@ int cxip_atomic_opcode(enum cxip_amo_req_type req_type,
 	    op < 0 || op >= FI_ATOMIC_OP_LAST)
 		return -FI_EINVAL;
 
-	if (!_cxip_amo_valid[req_type][op][dt])
+	if (!OP_VALID(req_type, op, dt))
 		return -FI_EOPNOTSUPP;
 
 	opcode = _cxip_amo_op_code[op];
@@ -154,6 +191,20 @@ int cxip_atomic_opcode(enum cxip_amo_req_type req_type,
 	return 0;
 }
 
+/**
+ * Implementation of the provider *_atomic_valid() functions.
+ *
+ * The returned count is the maximum number of atomic objects on which a single
+ * atomic call can operate. For Cassini, this is 1.
+ *
+ * @param ep endpoint
+ * @param req_type request type
+ * @param datatype datatype
+ * @param op operation
+ * @param count returns count of operations supported
+ *
+ * @return int 0 on success, -FI_EOPNOTSUPP if operation not supported
+ */
 static inline int _cxip_ep_valid(struct fid_ep *ep,
 				 enum cxip_amo_req_type req_type,
 				 enum fi_datatype datatype,
@@ -167,8 +218,8 @@ static inline int _cxip_ep_valid(struct fid_ep *ep,
 		return -FI_EINVAL;
 
 	/* Check for a valid opcode */
-	ret = cxip_atomic_opcode(req_type, datatype, op,
-				 NULL, NULL, NULL, NULL);
+	ret = _cxip_atomic_opcode(req_type, datatype, op,
+				  NULL, NULL, NULL, NULL);
 	if (ret < 0)
 		return ret;
 
@@ -181,7 +232,13 @@ static inline int _cxip_ep_valid(struct fid_ep *ep,
 	return 0;
 }
 
-static void cxip_amo_cb(struct cxip_req *req, const union c_event *event)
+/**
+ * Callback for non-fetching AMO operations.
+ *
+ * @param req AMO request structure
+ * @param event resulting event
+ */
+static void _cxip_amo_cb(struct cxip_req *req, const union c_event *event)
 {
 	int ret;
 	int event_rc;
@@ -202,26 +259,51 @@ static void cxip_amo_cb(struct cxip_req *req, const union c_event *event)
 	cxip_cq_req_free(req);
 }
 
-static void cxip_amo_cbf(struct cxip_req *req, const union c_event *event)
+/**
+ * Callback for fetching and swap AMO operations.
+ *
+ * @param req AMO request structure
+ * @param event resulting event
+ */
+static void _cxip_famo_cb(struct cxip_req *req, const union c_event *event)
 {
 	int ret;
+
+	/* Free the local_result buffer, if allocated (free is NULL-safe) */
+	free((void *)req->buf);
+	req->buf = 0;
 
 	ret = cxil_unmap(req->cq->domain->dev_if->if_lni,
 			 &req->local_md);
 	if (ret != FI_SUCCESS)
 		CXIP_LOG_ERROR("Failed to free MD: %d\n", ret);
 
-	cxip_amo_cb(req, event);
+	_cxip_amo_cb(req, event);
 }
 
-
-static int __cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
-			  const struct fi_msg_atomic *msg,
-			  const struct fi_ioc *comparev, void **comparedesc,
-			  size_t compare_count,
-			  const struct fi_ioc *resultv, void **resultdesc,
-			  size_t result_count,
-			  uint64_t flags)
+/**
+ * Core implementation of all of the atomic operations.
+ *
+ * @param req_type basic, fetch, or swap
+ * @param ep endpoint
+ * @param msg atomic operation message
+ * @param comparev compare value vector
+ * @param comparedesc compare vector descriptors
+ * @param compare_count compare vector count
+ * @param resultv result pointer vector
+ * @param resultdesc result vector descriptors
+ * @param result_count result vector count
+ * @param flags operation flags
+ *
+ * @return int FI_SUCCESS on success, negative value on failure
+ */
+static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
+			 const struct fi_msg_atomic *msg,
+			 const struct fi_ioc *comparev, void **comparedesc,
+			 size_t compare_count,
+			 const struct fi_ioc *resultv, void **resultdesc,
+			 size_t result_count,
+			 uint64_t flags)
 {
 	struct cxip_tx_ctx *txc;
 	struct cxip_if *dev_if;
@@ -239,10 +321,13 @@ static int __cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 	uint32_t pid_idx;
 	uint32_t result_lac = 0;
 	uint64_t result_iova = 0;
+	uint64_t report_flags = 0;
+	void *local_result = NULL;
 	void *compare = NULL;
 	void *result = NULL;
 	void *oper1 = NULL;
-	bool fetch = false;
+	uint64_t local_oper1[2] = {};
+	uint64_t local_compare = -1;
 	uint64_t off = 0;
 	uint64_t key = 0;
 	int len;
@@ -278,7 +363,6 @@ static int __cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 		    !resultv[0].addr)
 			return -FI_EINVAL;
 		result = resultv[0].addr;
-		fetch = true;
 		/* FALLTHRU */
 	case CXIP_RQ_AMO:
 		if (msg->iov_count != CXIP_AMO_MAX_IOV || !msg->msg_iov ||
@@ -299,23 +383,70 @@ static int __cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 		return -FI_EINVAL;
 	}
 
-	/* Convert FI to CXI codes */
-	ret = cxip_atomic_opcode(req_type, msg->datatype, msg->op,
-				 &opcode, &dtcode, &swpcode, &len);
+	/* Convert FI to CXI codes, fail if operation not supported */
+	ret = _cxip_atomic_opcode(req_type, msg->datatype, msg->op,
+				  &opcode, &dtcode, &swpcode, &len);
 	if (ret < 0)
 		return ret;
+
+	/* Cassini doesn't supply AMO WRITE.
+	 *
+	 * We implement a fetching AMO WRITE with C_AMO_OP_SWAP, which does
+	 * exactly what we want and works for all data types.
+	 *
+	 * For the non-fetching AMO WRITE, we use C_AMO_OP_AXOR when we can,
+	 * which is for any data size short of 128 bits. C_AMO_OP_AXOR does not
+	 * support 128-bit quantities, so for larger data types, we use
+	 * unconditional swap with a throwaway buffer.
+	 */
+	if (msg->op == FI_ATOMIC_WRITE && !result) {
+		if (len > sizeof(uint64_t)) {
+			local_result = calloc(1, len);
+			if (!local_result) {
+				CXIP_LOG_ERROR("Failed local result alloc\n");
+				return -FI_ENOMEM;
+			}
+			result = local_result;
+		} else {
+			opcode = C_AMO_OP_AXOR;
+			compare = &local_compare;
+		}
+	}
+
+	/* Cassini doesn't supply AMO READ. We implement it with a fetching AMO
+	 * SUM, with the operand forced to zero. There is no non-fetching
+	 * version of READ, so we don't need to worry about creating a local
+	 * buffer. The AMO SUM works for all data types.
+	 */
+	if (msg->op == FI_ATOMIC_READ) {
+		oper1 = local_oper1;
+		report_flags |= FI_READ;
+	} else {
+		report_flags |= FI_WRITE;
+	}
+
+	/* Cassini supplies a masked XOR, libfabric wants a masked SWAP as
+	 * defined by portals. These are equivalent if the data operand is
+	 * bitwise inverted.
+	 * TODO - verify this
+	 */
+	if (msg->op == FI_MSWAP) {
+		memcpy(local_oper1, oper1, len);
+		local_oper1[0] = ~local_oper1[0];
+		if (len > sizeof(uint64_t))
+			local_oper1[1] = ~local_oper1[1];
+		oper1 = local_oper1;
+	}
 
 	/* The input FID could be a standard endpoint (containing a TX
 	 * context), or a TX context itself.
 	 */
 	switch (ep->fid.fclass) {
-	case FI_CLASS_EP: {
 		struct cxip_ep *cxi_ep;
-
+	case FI_CLASS_EP:
 		cxi_ep = container_of(ep, struct cxip_ep, ep);
 		txc = cxi_ep->attr->tx_ctx;
 		break;
-	}
 	case FI_CLASS_TX_CTX:
 		txc = container_of(ep, struct cxip_tx_ctx, fid.ctx);
 		break;
@@ -357,14 +488,15 @@ static int __cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 		goto unmap_amo;
 	}
 
+	/* Values set here are passed back to the user through the CQ */
 	req->context = (uint64_t)msg->context;
-	req->flags = FI_ATOMIC | FI_WRITE | FI_READ;
+	req->flags = FI_ATOMIC | report_flags;
 	req->data_len = 0;
-	req->buf = 0;
+	req->buf = (uint64_t)local_result;
 	req->data = 0;
 	req->tag = 0;
 	req->local_md = result_md;
-	req->cb = (result) ? cxip_amo_cbf : cxip_amo_cb;
+	req->cb = (result) ? _cxip_famo_cb : _cxip_amo_cb;
 
 	/* Build AMO command descriptor */
 	pid_granule = dev_if->if_pid_granule;
@@ -385,6 +517,7 @@ static int __cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 	cmd.idc_amo.atomic_type = dtcode;
 	cmd.idc_amo.cswap_op = swpcode;
 	cmd.idc_amo.local_addr = result_iova;
+	/* Note: 16-byte value will overflow into op1_word2 */
 	memcpy(&cmd.idc_amo.op1_word1, oper1, len);
 	if (compare)
 		memcpy(&cmd.idc_amo.op2_word1, compare, len);
@@ -402,7 +535,7 @@ static int __cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 	}
 
 	/* Issue IDC AMO command */
-	ret = cxi_cq_emit_idc_amo(txc->tx_cmdq, &cmd.idc_amo, fetch);
+	ret = cxi_cq_emit_idc_amo(txc->tx_cmdq, &cmd.idc_amo, result != NULL);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to issue IDC AMO command: %d\n", ret);
 
@@ -435,7 +568,7 @@ static ssize_t cxip_ep_atomic_write(struct fid_ep *ep, const void *buf,
 				    uint64_t key, enum fi_datatype datatype,
 				    enum fi_op op, void *context)
 {
-	uint64_t flags = 0;
+	uint64_t flags = FI_COMPLETION;
 
 	struct fi_ioc oper1 = {
 		.addr = (void *)buf,
@@ -458,10 +591,10 @@ static ssize_t cxip_ep_atomic_write(struct fid_ep *ep, const void *buf,
 		.context = context
 	};
 
-	return __cxip_idc_amo(CXIP_RQ_AMO, ep, &msg,
-			      NULL, NULL, 0,
-			      NULL, NULL, 0,
-			      flags);
+	return _cxip_idc_amo(CXIP_RQ_AMO, ep, &msg,
+			     NULL, NULL, 0,
+			     NULL, NULL, 0,
+			     flags);
 }
 
 static ssize_t cxip_ep_atomic_writev(struct fid_ep *ep,
@@ -471,7 +604,7 @@ static ssize_t cxip_ep_atomic_writev(struct fid_ep *ep,
 				     enum fi_datatype datatype, enum fi_op op,
 				     void *context)
 {
-	uint64_t flags = 0;
+	uint64_t flags = FI_COMPLETION;
 
 	struct fi_rma_ioc rma = {
 		.addr = addr,
@@ -490,20 +623,20 @@ static ssize_t cxip_ep_atomic_writev(struct fid_ep *ep,
 		.context = context
 	};
 
-	return __cxip_idc_amo(CXIP_RQ_AMO, ep, &msg,
-			      NULL, NULL, 0,
-			      NULL, NULL, 0,
-			      flags);
+	return _cxip_idc_amo(CXIP_RQ_AMO, ep, &msg,
+			     NULL, NULL, 0,
+			     NULL, NULL, 0,
+			     flags);
 }
 
 static ssize_t cxip_ep_atomic_writemsg(struct fid_ep *ep,
 				       const struct fi_msg_atomic *msg,
 				       uint64_t flags)
 {
-	return __cxip_idc_amo(CXIP_RQ_AMO, ep, msg,
-			      NULL, NULL, 0,
-			      NULL, NULL, 0,
-			      flags);
+	return _cxip_idc_amo(CXIP_RQ_AMO, ep, msg,
+			     NULL, NULL, 0,
+			     NULL, NULL, 0,
+			     flags);
 }
 
 static ssize_t cxip_ep_atomic_inject(struct fid_ep *ep, const void *buf,
@@ -511,8 +644,33 @@ static ssize_t cxip_ep_atomic_inject(struct fid_ep *ep, const void *buf,
 				     uint64_t addr, uint64_t key,
 				     enum fi_datatype datatype, enum fi_op op)
 {
-	printf("ATOMIC WRITEINJECT\n"); fflush(stdout);
-	return -FI_EOPNOTSUPP;
+	uint64_t flags = FI_INJECT;
+
+	struct fi_ioc oper1 = {
+		.addr = (void *)buf,
+		.count = count
+	};
+	struct fi_rma_ioc rma = {
+		.addr = addr,
+		.count = 1,
+		.key = key
+	};
+	struct fi_msg_atomic msg = {
+		.msg_iov = &oper1,
+		.desc = NULL,
+		.iov_count = 1,
+		.addr = dest_addr,
+		.rma_iov = &rma,
+		.rma_iov_count = 1,
+		.datatype = datatype,
+		.op = op,
+		.context = NULL
+	};
+
+	return _cxip_idc_amo(CXIP_RQ_AMO, ep, &msg,
+			     NULL, NULL, 0,
+			     NULL, NULL, 0,
+			     flags);
 }
 
 static ssize_t cxip_ep_atomic_readwrite(struct fid_ep *ep, const void *buf,
@@ -522,7 +680,7 @@ static ssize_t cxip_ep_atomic_readwrite(struct fid_ep *ep, const void *buf,
 					enum fi_datatype datatype,
 					enum fi_op op, void *context)
 {
-	uint64_t flags = 0;
+	uint64_t flags = FI_COMPLETION;
 
 	struct fi_ioc oper1 = {
 		.addr = (void *)buf,
@@ -549,10 +707,10 @@ static ssize_t cxip_ep_atomic_readwrite(struct fid_ep *ep, const void *buf,
 		.context = context
 	};
 
-	return __cxip_idc_amo(CXIP_RQ_AMO_FETCH, ep, &msg,
-			      NULL, NULL, 0,
-			      &resultv, &result_desc, 1,
-			      flags);
+	return _cxip_idc_amo(CXIP_RQ_AMO_FETCH, ep, &msg,
+			     NULL, NULL, 0,
+			     &resultv, &result_desc, 1,
+			     flags);
 }
 
 static ssize_t cxip_ep_atomic_readwritev(struct fid_ep *ep,
@@ -566,7 +724,7 @@ static ssize_t cxip_ep_atomic_readwritev(struct fid_ep *ep,
 					 enum fi_datatype datatype,
 					 enum fi_op op, void *context)
 {
-	uint64_t flags = 0;
+	uint64_t flags = FI_COMPLETION;
 
 	struct fi_rma_ioc rma = {
 		.addr = addr,
@@ -585,10 +743,10 @@ static ssize_t cxip_ep_atomic_readwritev(struct fid_ep *ep,
 		.context = context
 	};
 
-	return __cxip_idc_amo(CXIP_RQ_AMO_FETCH, ep, &msg,
-			      NULL, NULL, 0,
-			      resultv, result_desc, result_count,
-			      flags);
+	return _cxip_idc_amo(CXIP_RQ_AMO_FETCH, ep, &msg,
+			     NULL, NULL, 0,
+			     resultv, result_desc, result_count,
+			     flags);
 }
 
 static ssize_t cxip_ep_atomic_readwritemsg(struct fid_ep *ep,
@@ -597,10 +755,10 @@ static ssize_t cxip_ep_atomic_readwritemsg(struct fid_ep *ep,
 					   void **result_desc,
 					   size_t result_count, uint64_t flags)
 {
-	return __cxip_idc_amo(CXIP_RQ_AMO_FETCH, ep, msg,
-			      NULL, NULL, 0,
-			      resultv, result_desc, result_count,
-			      flags);
+	return _cxip_idc_amo(CXIP_RQ_AMO_FETCH, ep, msg,
+			     NULL, NULL, 0,
+			     resultv, result_desc, result_count,
+			     flags);
 }
 
 static ssize_t cxip_ep_atomic_compwrite(struct fid_ep *ep, const void *buf,
@@ -611,7 +769,7 @@ static ssize_t cxip_ep_atomic_compwrite(struct fid_ep *ep, const void *buf,
 					uint64_t key, enum fi_datatype datatype,
 					enum fi_op op, void *context)
 {
-	uint64_t flags = 0;
+	uint64_t flags = FI_COMPLETION;
 
 	struct fi_ioc oper1 = {
 		.addr = (void *)buf,
@@ -642,10 +800,10 @@ static ssize_t cxip_ep_atomic_compwrite(struct fid_ep *ep, const void *buf,
 		.context = context
 	};
 
-	return __cxip_idc_amo(CXIP_RQ_AMO_SWAP, ep, &msg,
-			      &comparev, &result_desc, 1,
-			      &resultv, &result_desc, 1,
-			      flags);
+	return _cxip_idc_amo(CXIP_RQ_AMO_SWAP, ep, &msg,
+			     &comparev, &result_desc, 1,
+			     &resultv, &result_desc, 1,
+			     flags);
 }
 
 static ssize_t cxip_ep_atomic_compwritev(struct fid_ep *ep,
@@ -662,7 +820,7 @@ static ssize_t cxip_ep_atomic_compwritev(struct fid_ep *ep,
 					 enum fi_datatype datatype,
 					 enum fi_op op, void *context)
 {
-	uint64_t flags = 0;
+	uint64_t flags = FI_COMPLETION;
 
 	struct fi_rma_ioc rma = {
 		.addr = addr,
@@ -681,10 +839,10 @@ static ssize_t cxip_ep_atomic_compwritev(struct fid_ep *ep,
 		.context = context
 	};
 
-	return __cxip_idc_amo(CXIP_RQ_AMO_SWAP, ep, &msg,
-			      comparev, compare_desc, compare_count,
-			      resultv, result_desc, result_count,
-			      flags);
+	return _cxip_idc_amo(CXIP_RQ_AMO_SWAP, ep, &msg,
+			     comparev, compare_desc, compare_count,
+			     resultv, result_desc, result_count,
+			     flags);
 }
 
 static ssize_t
@@ -694,10 +852,10 @@ cxip_ep_atomic_compwritemsg(struct fid_ep *ep, const struct fi_msg_atomic *msg,
 			    void **result_desc, size_t result_count,
 			    uint64_t flags)
 {
-	return __cxip_idc_amo(CXIP_RQ_AMO_SWAP, ep, msg,
-			      comparev, compare_desc, compare_count,
-			      resultv, result_desc, result_count,
-			      flags);
+	return _cxip_idc_amo(CXIP_RQ_AMO_SWAP, ep, msg,
+			     comparev, compare_desc, compare_count,
+			     resultv, result_desc, result_count,
+			     flags);
 }
 
 static int cxip_ep_atomic_valid(struct fid_ep *ep,
@@ -717,8 +875,8 @@ static int cxip_ep_fetch_atomic_valid(struct fid_ep *ep,
 
 static int cxip_ep_comp_atomic_valid(struct fid_ep *ep,
 
-				    enum fi_datatype datatype,
-				    enum fi_op op, size_t *count)
+				     enum fi_datatype datatype,
+				     enum fi_op op, size_t *count)
 {
 	return _cxip_ep_valid(ep, CXIP_RQ_AMO_SWAP, datatype, op, count);
 }

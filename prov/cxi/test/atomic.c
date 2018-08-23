@@ -127,7 +127,7 @@ Test(atomic, simple_fetch, .timeout = 10)
 	_mr_create(win_len, FI_REMOTE_WRITE | FI_REMOTE_READ, key_val, &mr);
 	rma_win = (uint64_t *)mr.mem;
 
-	result = calloc(win_len, 1);
+	result = calloc(1, win_len);
 	cr_assert_not_null(result);
 
 	cr_assert_eq(*rma_win, expected, "Result = %ld, expected = %ld",
@@ -205,7 +205,7 @@ Test(atomic, simple_swap, .timeout = 10)
 	_mr_create(win_len, FI_REMOTE_WRITE | FI_REMOTE_READ, key_val, &mr);
 	rma_win = (uint64_t *)mr.mem;
 
-	result = calloc(win_len, 1);
+	result = calloc(1, win_len);
 	cr_assert_not_null(result);
 
 	cr_assert_eq(*rma_win, exp_remote, "Result = %ld, expected = %ld",
