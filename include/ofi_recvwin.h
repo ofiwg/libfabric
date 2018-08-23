@@ -79,8 +79,9 @@ ofi_recvwin_queue_msg(struct name *recvq, entrytype * msg, uint64_t id)	\
 	int write_idx;							\
 									\
 	assert(ofi_recvwin_is_allowed(recvq, id));			\
-	write_idx = ofi_cirque_rindex(recvq->pending)			\
-		    + (id - recvq->exp_msg_id);				\
+	write_idx = (ofi_cirque_rindex(recvq->pending)			\
+		    + (id - recvq->exp_msg_id))				\
+		    & recvq->pending->size_mask;			\
 	recvq->pending->buf[write_idx] = *msg;				\
 	ofi_cirque_commit(recvq->pending);				\
 	return 0;							\
