@@ -21,6 +21,13 @@
 
 #include "cxip.h"
 
+/* Cassini supports ONLY 1-element vectors, and this code presumes that the
+ * value is 1.
+ */
+_Static_assert(CXIP_AMO_MAX_IOV == 1, "Unexpected max IOV #");
+
+/* Cassini supports ONLY 1-element packed IOVs.
+ */
 #define CXIP_AMO_MAX_PACKED_IOV (1)
 
 #define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_EP_DATA, __VA_ARGS__)
@@ -83,15 +90,15 @@ static enum c_atomic_op _cxip_amo_op_code[FI_ATOMIC_OP_LAST] = {
 	[FI_BAND]	  = C_AMO_OP_BAND,
 	[FI_LXOR]	  = C_AMO_OP_LXOR,
 	[FI_BXOR]	  = C_AMO_OP_BXOR,
-	[FI_ATOMIC_READ]  = C_AMO_OP_SUM,       /* special handling */
-	[FI_ATOMIC_WRITE] = C_AMO_OP_SWAP,      /* special handling */
+	[FI_ATOMIC_READ]  = C_AMO_OP_SUM,	/* special handling */
+	[FI_ATOMIC_WRITE] = C_AMO_OP_SWAP,	/* special handling */
 	[FI_CSWAP]	  = C_AMO_OP_CSWAP,
 	[FI_CSWAP_NE]	  = C_AMO_OP_CSWAP,
 	[FI_CSWAP_LE]	  = C_AMO_OP_CSWAP,
 	[FI_CSWAP_LT]	  = C_AMO_OP_CSWAP,
 	[FI_CSWAP_GE]	  = C_AMO_OP_CSWAP,
 	[FI_CSWAP_GT]	  = C_AMO_OP_CSWAP,
-	[FI_MSWAP]	  = C_AMO_OP_AXOR,      /* special handling */
+	[FI_MSWAP]	  = C_AMO_OP_AXOR,	/* special handling */
 };
 
 /**
@@ -117,9 +124,12 @@ static uint16_t _cxip_amo_valid[CXIP_RQ_AMO_LAST][FI_ATOMIC_OP_LAST] = {
 		[FI_MIN]	  = 0x03ff,
 		[FI_MAX]	  = 0x03ff,
 		[FI_SUM]	  = 0x0fff,
+		[FI_LOR]	  = 0x00ff,
+		[FI_LAND]	  = 0x00ff,
+		[FI_LXOR]	  = 0x00ff,
 		[FI_BOR]	  = 0x00ff,
-		[FI_BAND]         = 0x00ff,
-		[FI_BXOR]         = 0x00ff,
+		[FI_BAND]	  = 0x00ff,
+		[FI_BXOR]	  = 0x00ff,
 		[FI_ATOMIC_WRITE] = 0x0fff,
 	},
 
@@ -127,21 +137,24 @@ static uint16_t _cxip_amo_valid[CXIP_RQ_AMO_LAST][FI_ATOMIC_OP_LAST] = {
 		[FI_MIN]	  = 0x03ff,
 		[FI_MAX]	  = 0x03ff,
 		[FI_SUM]	  = 0x0fff,
+		[FI_LOR]	  = 0x00ff,
+		[FI_LAND]	  = 0x00ff,
+		[FI_LXOR]	  = 0x00ff,
 		[FI_BOR]	  = 0x00ff,
-		[FI_BAND]         = 0x00ff,
-		[FI_BXOR]         = 0x00ff,
-		[FI_ATOMIC_READ]  = 0x0fff,
+		[FI_BAND]	  = 0x00ff,
+		[FI_BXOR]	  = 0x00ff,
 		[FI_ATOMIC_WRITE] = 0x0fff,
+		[FI_ATOMIC_READ]  = 0x0fff,
 	},
 
 	[CXIP_RQ_AMO_SWAP] = {
-		[FI_CSWAP]        = 0x0fff,
-		[FI_CSWAP_NE]     = 0x0fff,
-		[FI_CSWAP_LE]     = 0x03ff,
-		[FI_CSWAP_LT]     = 0x03ff,
-		[FI_CSWAP_GE]     = 0x03ff,
-		[FI_CSWAP_GT]     = 0x03ff,
-		[FI_MSWAP]        = 0x00ff,
+		[FI_CSWAP]	  = 0x0fff,
+		[FI_CSWAP_NE]	  = 0x0fff,
+		[FI_CSWAP_LE]	  = 0x03ff,
+		[FI_CSWAP_LT]	  = 0x03ff,
+		[FI_CSWAP_GE]	  = 0x03ff,
+		[FI_CSWAP_GT]	  = 0x03ff,
+		[FI_MSWAP]	  = 0x00ff,
 	},
 };
 #define	OP_VALID(rq, op, dt)	(_cxip_amo_valid[rq][op] & (1 << dt))
@@ -282,6 +295,36 @@ static void _cxip_famo_cb(struct cxip_req *req, const union c_event *event)
 }
 
 /**
+ * Return true if vector specification is valid.
+ *
+ * @param vn vector element count
+ * @param v vector pointer
+ *
+ * @return bool true if vector is valid, false otherwise
+ */
+static inline bool _vector_valid(size_t vn, const struct fi_ioc *v)
+{
+	return (vn == CXIP_AMO_MAX_IOV && v &&
+		v[0].count == CXIP_AMO_MAX_PACKED_IOV &&
+		v[0].addr);
+}
+
+/**
+ * Return true if RMA vector specification is valid. Note that the address is
+ * treated as an offset into an RMA MR window, so a value of zero is valid.
+ *
+ * @param vn vector element count
+ * @param v vector pointer
+ *
+ * @return bool true if RMA vector is valid, false otherwise
+ */
+static inline bool _rma_vector_valid(size_t vn, const struct fi_rma_ioc *v)
+{
+	return (vn == CXIP_AMO_MAX_IOV && v &&
+		v[0].count == CXIP_AMO_MAX_PACKED_IOV);
+}
+
+/**
  * Core implementation of all of the atomic operations.
  *
  * @param req_type basic, fetch, or swap
@@ -326,8 +369,8 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 	void *compare = NULL;
 	void *result = NULL;
 	void *oper1 = NULL;
-	uint64_t local_oper1[2] = {};
-	uint64_t local_compare = -1;
+	uint64_t local_oper1[2];
+	uint64_t local_compare[2];
 	uint64_t off = 0;
 	uint64_t key = 0;
 	int len;
@@ -350,30 +393,23 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 	switch (req_type) {
 	case CXIP_RQ_AMO_SWAP:
 		/* Must have a valid compare address */
-		if (compare_count != CXIP_AMO_MAX_IOV || !comparev ||
-		    comparev[0].count != CXIP_AMO_MAX_PACKED_IOV ||
-		    !comparev[0].addr)
+		if (!_vector_valid(compare_count, comparev))
 			return -FI_EINVAL;
 		compare = comparev[0].addr;
 		/* FALLTHRU */
 	case CXIP_RQ_AMO_FETCH:
 		/* Must have a valid result address */
-		if (result_count != CXIP_AMO_MAX_IOV || !resultv ||
-		    resultv[0].count != CXIP_AMO_MAX_PACKED_IOV ||
-		    !resultv[0].addr)
+		if (!_vector_valid(result_count, resultv))
 			return -FI_EINVAL;
 		result = resultv[0].addr;
 		/* FALLTHRU */
 	case CXIP_RQ_AMO:
-		if (msg->iov_count != CXIP_AMO_MAX_IOV || !msg->msg_iov ||
-		    msg->msg_iov[0].count != CXIP_AMO_MAX_PACKED_IOV ||
-		    !msg->msg_iov[0].addr)
+		if (!_vector_valid(msg->iov_count, msg->msg_iov))
 			return -FI_EINVAL;
 		/* The supplied RMA address is actually an offset into a
 		 * registered MR. A value of 0 is valid.
 		 */
-		if (msg->rma_iov_count != CXIP_AMO_MAX_IOV || !msg->rma_iov ||
-		    msg->msg_iov[0].count != CXIP_AMO_MAX_PACKED_IOV)
+		if (!_rma_vector_valid(msg->rma_iov_count, msg->rma_iov))
 			return -FI_EINVAL;
 		oper1 = msg->msg_iov[0].addr;
 		off = msg->rma_iov[0].addr;
@@ -394,22 +430,44 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 	 * We implement a fetching AMO WRITE with C_AMO_OP_SWAP, which does
 	 * exactly what we want and works for all data types.
 	 *
-	 * For the non-fetching AMO WRITE, we use C_AMO_OP_AXOR when we can,
-	 * which is for any data size short of 128 bits. C_AMO_OP_AXOR does not
-	 * support 128-bit quantities, so for larger data types, we use
-	 * unconditional swap with a throwaway buffer.
+	 * For the non-fetching AMO WRITE, we use C_AMO_OP_AXOR when we can.
+	 * Otherwise, we use C_AMO_OP_SWAP with a throwaway buffer.
 	 */
 	if (msg->op == FI_ATOMIC_WRITE && !result) {
-		if (len > sizeof(uint64_t)) {
+		/* AXOR for float, double, and float complex are not supported
+		 * by Cassini, but since we are only trying to write the value
+		 * unchanged, we can pretend these are arbitrary bit patterns in
+		 * UINT32 or UINT64, and take advantage of AXOR.
+		 */
+		switch (dtcode) {
+		case C_AMO_TYPE_FLOAT_T:
+			dtcode = C_AMO_TYPE_UINT32_T;
+			break;
+		case C_AMO_TYPE_FLOAT_COMPLEX_T:
+		case C_AMO_TYPE_DOUBLE_T:
+			dtcode = C_AMO_TYPE_UINT64_T;
+			break;
+		default:
+			break;
+		}
+
+		switch (dtcode) {
+		case C_AMO_TYPE_DOUBLE_COMPLEX_T:
+		case C_AMO_TYPE_UINT128_T:
+			/* 128-bit quantities must be SWAPPED */
 			local_result = calloc(1, len);
 			if (!local_result) {
 				CXIP_LOG_ERROR("Failed local result alloc\n");
 				return -FI_ENOMEM;
 			}
 			result = local_result;
-		} else {
+			break;
+		default:
+			/* Anything else can use AXOR with a zero mask */
 			opcode = C_AMO_OP_AXOR;
-			compare = &local_compare;
+			memset(local_compare, 0, len);
+			compare = local_compare;
+			break;
 		}
 	}
 
@@ -419,22 +477,33 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 	 * buffer. The AMO SUM works for all data types.
 	 */
 	if (msg->op == FI_ATOMIC_READ) {
+		memset(local_oper1, 0, len);
 		oper1 = local_oper1;
 		report_flags |= FI_READ;
 	} else {
 		report_flags |= FI_WRITE;
 	}
 
-	/* Cassini supplies a masked XOR, libfabric wants a masked SWAP as
-	 * defined by portals. These are equivalent if the data operand is
-	 * bitwise inverted.
-	 * TODO - verify this
+	/* Cassini doesn't supply AMO MSWAP. It instead supplies AMO AXOR.
+	 *
+	 * AXOR  = (*addr & ~mask) ^ data
+	 * MSWAP = (*addr & ~mask) | (data & mask)
+	 * data  = oper1
+	 * mask  = compare
+	 *
+	 * However,
+	 *
+	 * (*addr & ~mask) | (data & mask) == (*addr & ~mask) ^ (data & mask)
+	 *
+	 * since no bit can be 1 on both sides, due to the masking.
 	 */
 	if (msg->op == FI_MSWAP) {
+		uint64_t *mask = compare;
+
 		memcpy(local_oper1, oper1, len);
-		local_oper1[0] = ~local_oper1[0];
+		local_oper1[0] &= mask[0];
 		if (len > sizeof(uint64_t))
-			local_oper1[1] = ~local_oper1[1];
+			local_oper1[1] &= mask[1];
 		oper1 = local_oper1;
 	}
 
