@@ -716,6 +716,7 @@ static inline int fi_ibv_poll_reap_unsig_cq(struct fi_ibv_ep *ep)
 	return FI_SUCCESS;
 }
 
+/* WR must be filled out by now except for context */
 static inline ssize_t
 fi_ibv_send_poll_cq_if_needed(struct fi_ibv_ep *ep, struct ibv_send_wr *wr)
 {
@@ -733,19 +734,6 @@ fi_ibv_send_poll_cq_if_needed(struct fi_ibv_ep *ep, struct ibv_send_wr *wr)
 	return ret;
 }
 
-/* WR must be filled out by now except for context */
-static inline ssize_t
-fi_ibv_send(struct fi_ibv_ep *ep, struct ibv_send_wr *wr)
-{
-	if (wr->send_flags & IBV_SEND_SIGNALED) {
-		struct ibv_send_wr *bad_wr;
-
-		return fi_ibv_handle_post(ibv_post_send(ep->id->qp, wr, &bad_wr));
-	} else {
-		return fi_ibv_send_poll_cq_if_needed(ep, wr);
-	}
-}
-
 static inline ssize_t
 fi_ibv_send_buf(struct fi_ibv_ep *ep, struct ibv_send_wr *wr,
 		const void *buf, size_t len, void *desc)
@@ -757,7 +745,7 @@ fi_ibv_send_buf(struct fi_ibv_ep *ep, struct ibv_send_wr *wr,
 	wr->sg_list = &sge;
 	wr->num_sge = 1;
 
-	return fi_ibv_send(ep, wr);
+	return fi_ibv_send_poll_cq_if_needed(ep, wr);
 }
 
 static inline ssize_t
@@ -792,7 +780,7 @@ fi_ibv_send_iov_flags(struct fi_ibv_ep *ep, struct ibv_send_wr *wr,
 	if (flags & FI_FENCE)
 		wr->send_flags |= IBV_SEND_FENCE;
 
-	return fi_ibv_send(ep, wr);
+	return fi_ibv_send_poll_cq_if_needed(ep, wr);
 }
 
 #endif /* FI_VERBS_H */

@@ -138,7 +138,7 @@ fi_ibv_msg_ep_rma_readv(struct fid_ep *ep_fid, const struct iovec *iov, void **d
 
 	fi_ibv_set_sge_iov(wr.sg_list, iov, count, desc);
 
-	return fi_ibv_send(ep, &wr);
+	return fi_ibv_send_poll_cq_if_needed(ep, &wr);
 }
 
 static ssize_t
@@ -158,7 +158,7 @@ fi_ibv_msg_ep_rma_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 
 	fi_ibv_set_sge_iov(wr.sg_list, msg->msg_iov, msg->iov_count, msg->desc);
 
-	return fi_ibv_send(ep, &wr);
+	return fi_ibv_send_poll_cq_if_needed(ep, &wr);
 }
 
 static ssize_t
