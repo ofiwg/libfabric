@@ -777,12 +777,14 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 					}
 				}
 
-				if (am_req->ep->remote_write_cntr)
-					psmx2_cntr_inc(am_req->ep->remote_write_cntr, 0);
+				if (am_req->ep->caps & FI_RMA_EVENT) {
+					if (am_req->ep->remote_write_cntr)
+						psmx2_cntr_inc(am_req->ep->remote_write_cntr, 0);
 
-				mr = PSMX2_CTXT_USER(fi_context);
-				if (mr->cntr && mr->cntr != am_req->ep->remote_write_cntr)
-					psmx2_cntr_inc(mr->cntr, 0);
+					mr = PSMX2_CTXT_USER(fi_context);
+					if (mr->cntr && mr->cntr != am_req->ep->remote_write_cntr)
+						psmx2_cntr_inc(mr->cntr, 0);
+				}
 
 				/* NOTE: am_req->tmpbuf is unused here */
 				psmx2_am_request_free(trx_ctxt, am_req);
@@ -791,8 +793,10 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 
 			case PSMX2_REMOTE_READ_CONTEXT:
 				am_req = container_of(fi_context, struct psmx2_am_request, fi_context);
-				if (am_req->ep->remote_read_cntr)
-					psmx2_cntr_inc(am_req->ep->remote_read_cntr, 0);
+				if (am_req->ep->caps & FI_RMA_EVENT) {
+					if (am_req->ep->remote_read_cntr)
+						psmx2_cntr_inc(am_req->ep->remote_read_cntr, 0);
+				}
 
 				/* NOTE: am_req->tmpbuf is unused here */
 				psmx2_am_request_free(trx_ctxt, am_req);
@@ -1043,6 +1047,7 @@ static ssize_t psmx2_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 
 	cq_priv = container_of(cq, struct psmx2_fid_cq, cq);
 
+	psmx2_lock(&cq_priv->lock, 2);
 	if (cq_priv->pending_error) {
 		api_version = cq_priv->domain->fabric->util_fabric.
 			      fabric_fid.api_version;
@@ -1052,8 +1057,10 @@ static ssize_t psmx2_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 		memcpy(buf, &cq_priv->pending_error->cqe, size);
 		free(cq_priv->pending_error);
 		cq_priv->pending_error = NULL;
+		psmx2_unlock(&cq_priv->lock, 2);
 		return 1;
 	}
+	psmx2_unlock(&cq_priv->lock, 2);
 
 	return -FI_EAGAIN;
 }

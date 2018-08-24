@@ -476,11 +476,13 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 					}
 				  }
 
-				  if (mr->domain->rma_ep->remote_write_cntr)
-					psmx_cntr_inc(mr->domain->rma_ep->remote_write_cntr);
+				  if (mr->domain->rma_ep->caps & FI_RMA_EVENT) {
+					  if (mr->domain->rma_ep->remote_write_cntr)
+						psmx_cntr_inc(mr->domain->rma_ep->remote_write_cntr);
 
-				  if (mr->cntr && mr->cntr != mr->domain->rma_ep->remote_write_cntr)
-					psmx_cntr_inc(mr->cntr);
+					  if (mr->cntr && mr->cntr != mr->domain->rma_ep->remote_write_cntr)
+						psmx_cntr_inc(mr->cntr);
+				  }
 
 				  if (read_more)
 					continue;
@@ -493,8 +495,10 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 				  struct fi_context *fi_context = psm_status.context;
 				  struct psmx_fid_mr *mr;
 				  mr = PSMX_CTXT_USER(fi_context);
-				  if (mr->domain->rma_ep->remote_read_cntr)
-					psmx_cntr_inc(mr->domain->rma_ep->remote_read_cntr);
+				  if (mr->domain->rma_ep->caps & FI_RMA_EVENT) {
+					  if (mr->domain->rma_ep->remote_read_cntr)
+						psmx_cntr_inc(mr->domain->rma_ep->remote_read_cntr);
+				  }
 
 				  continue;
 				}
@@ -642,6 +646,7 @@ static ssize_t psmx_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 
 	cq_priv = container_of(cq, struct psmx_fid_cq, cq);
 
+	fastlock_acquire(&cq_priv->lock);
 	if (cq_priv->pending_error) {
 		api_version = cq_priv->domain->fabric->util_fabric.
 			      fabric_fid.api_version;
@@ -651,8 +656,10 @@ static ssize_t psmx_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 		memcpy(buf, &cq_priv->pending_error->cqe, size);
 		free(cq_priv->pending_error);
 		cq_priv->pending_error = NULL;
+		fastlock_release(&cq_priv->lock);
 		return 1;
 	}
+	fastlock_release(&cq_priv->lock);
 
 	return -FI_EAGAIN;
 }
