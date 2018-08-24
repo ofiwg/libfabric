@@ -483,11 +483,25 @@ static int tcpx_ep_getname(fid_t fid, void *addr, size_t *addrlen)
 	return (addrlen_in < *addrlen)? -FI_ETOOSMALL: FI_SUCCESS;
 }
 
+static int tcpx_ep_getpeer(struct fid_ep *ep, void *addr, size_t *addrlen)
+{
+	struct tcpx_ep *tcpx_ep;
+	size_t addrlen_in = *addrlen;
+	int ret;
+
+	tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
+	ret = ofi_getpeername(tcpx_ep->conn_fd, addr, (socklen_t *)addrlen);
+	if (ret)
+		return -ofi_sockerr();
+
+	return (addrlen_in < *addrlen)? -FI_ETOOSMALL: FI_SUCCESS;
+}
+
 static struct fi_ops_cm tcpx_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
 	.setname = fi_no_setname,
 	.getname = tcpx_ep_getname,
-	.getpeer = fi_no_getpeer,
+	.getpeer = tcpx_ep_getpeer,
 	.connect = tcpx_ep_connect,
 	.listen = fi_no_listen,
 	.accept = tcpx_ep_accept,
