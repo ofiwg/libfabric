@@ -131,6 +131,23 @@ int ofi_getsockname(SOCKET fd, struct sockaddr *addr, socklen_t *len)
 	return FI_SUCCESS;
 }
 
+int ofi_getpeername(SOCKET fd, struct sockaddr *addr, socklen_t *len)
+{
+	struct sockaddr_storage sock_addr;
+	socklen_t sock_addr_len = sizeof(sock_addr);
+	int ret;
+
+	ret = getpeername(fd, (struct sockaddr *) &sock_addr, &sock_addr_len);
+	if (ret)
+		return ret;
+
+	if (addr)
+		memcpy(addr, &sock_addr, MIN(*len, sock_addr_len));
+	*len = sock_addr_len;
+
+	return FI_SUCCESS;
+}
+
 int fi_read_file(const char *dir, const char *file, char *buf, size_t size)
 {
 	char *path = 0;
