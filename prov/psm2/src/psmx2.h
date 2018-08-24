@@ -109,7 +109,7 @@ extern struct fi_provider psmx2_prov;
 #define PSMX2_DOM_CAPS	(FI_LOCAL_COMM | FI_REMOTE_COMM)
 
 #define PSMX2_ALL_TRX_CTXT	((void *)-1)
-#define PSMX2_MAX_MSG_SIZE	((0x1ULL << 32) - 1)
+#define PSMX2_MAX_MSG_SIZE	((0x1ULL << 32) - 8192) /* 8k allocated for all psm2 library headers */
 #define PSMX2_RMA_ORDER_SIZE	(4096)
 #define PSMX2_MSG_ORDER		(FI_ORDER_SAS | FI_ORDER_RAR | FI_ORDER_RAW | \
 				 FI_ORDER_WAR | FI_ORDER_WAW)

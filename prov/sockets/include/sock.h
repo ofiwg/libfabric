@@ -64,7 +64,7 @@
 #ifndef _SOCK_H_
 #define _SOCK_H_
 
-#define SOCK_EP_MAX_MSG_SZ (1<<23)
+#define SOCK_EP_MAX_MSG_SZ (SIZE_MAX - 4096) /* 4k allocated for all sockets headers */
 #define SOCK_EP_MAX_INJECT_SZ ((1<<8) - 1)
 #define SOCK_EP_MAX_BUFF_RECV (1<<26)
 #define SOCK_EP_MAX_ORDER_RAW_SZ SOCK_EP_MAX_MSG_SZ
