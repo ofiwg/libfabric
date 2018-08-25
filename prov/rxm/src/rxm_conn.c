@@ -256,7 +256,7 @@ static struct util_cmap_handle *rxm_conn_alloc(struct util_cmap *cmap)
 	if (OFI_UNLIKELY(!rxm_conn))
 		return NULL;
 	ret = rxm_conn_send_queue_init(rxm_ep, rxm_conn,
-				       rxm_ep->rxm_info->tx_attr->size);
+				       rxm_ep->msg_info->tx_attr->size);
 	if (ret) {
 		free(rxm_conn);
 		return NULL;
