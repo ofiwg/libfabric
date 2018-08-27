@@ -66,7 +66,6 @@
 #define RXM_BUF_SIZE	16384
 
 #define RXM_SAR_LIMIT	262144
-#define RXM_SAR_DIVIDER	1024
 
 #define RXM_IOV_LIMIT 4
 
@@ -378,7 +377,7 @@ struct rxm_recv_entry {
 	void *multi_recv_buf;
 	/* Used for SAR protocol */
 	struct {
-		struct dlist_entry sar_entry;
+		struct dlist_entry entry;
 		size_t total_recv_len;
 		size_t segs_rcvd;
 		uint64_t msg_id;
@@ -386,7 +385,7 @@ struct rxm_recv_entry {
 		 * flag is receved, but not all messages has been received
 		 * yet */
 		size_t last_seg_no;
-	};
+	} sar;
 };
 DECLARE_FREESTACK(struct rxm_recv_entry, rxm_recv_fs);
 
@@ -437,10 +436,9 @@ struct rxm_ep {
 	int			rxm_mr_local;
 	size_t			min_multi_recv_size;
 
-	size_t			sar_limit;
-	/* This defines maximum index of a segment for
-	 * which segment length mast be calculated. */
-	uint32_t		sar_max_calc_seg_no;
+	struct {
+		size_t		limit;
+	} sar;
 
 	/* This is used only in non-FI_THREAD_SAFE case */
 	struct rxm_tx_buf	*inject_tx_buf;
@@ -644,7 +642,7 @@ rxm_process_recv_entry(struct rxm_recv_queue *recv_queue,
 								  recv_entry->tag, recv_entry->ignore);
 				if (rx_buf) {
 					/* Handle unordered completions from MSG provider */
-					if ((rx_buf->pkt.ctrl_hdr.msg_id != recv_entry->msg_id) ||
+					if ((rx_buf->pkt.ctrl_hdr.msg_id != recv_entry->sar.msg_id) ||
 					    (rx_buf->pkt.ctrl_hdr.type != ofi_ctrl_seg_data))
 						break;
 					assert(rx_buf->pkt.ctrl_hdr.type == ofi_ctrl_seg_data);

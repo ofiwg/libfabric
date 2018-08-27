@@ -103,7 +103,7 @@ static int rxm_finish_buf_recv(struct rxm_rx_buf *rx_buf)
 {
 	uint64_t flags = rx_buf->pkt.hdr.flags | FI_RECV;
 
-	assert(rx_buf->pkt.hdr.size <= rx_buf->ep->sar_limit);
+	assert(rx_buf->pkt.hdr.size <= rx_buf->ep->sar.limit);
 
 	if (rx_buf->pkt.hdr.size > rx_buf->ep->rxm_info->tx_attr->inject_size)
 		flags |= FI_MORE;
@@ -315,19 +315,19 @@ ssize_t rxm_cq_handle_seg_data(struct rxm_rx_buf *rx_buf)
 					    rxm_sar_get_offset(&rx_buf->pkt.ctrl_hdr),
 					    rx_buf->pkt.data,
 					    rx_buf->pkt.ctrl_hdr.seg_size);
-	rx_buf->recv_entry->total_recv_len += done_len;
-	rx_buf->recv_entry->segs_rcvd++;
+	rx_buf->recv_entry->sar.total_recv_len += done_len;
+	rx_buf->recv_entry->sar.segs_rcvd++;
 	/* Check that this isn't last segment */
 	if (((rxm_sar_get_seg_type(&rx_buf->pkt.ctrl_hdr) != RXM_SAR_SEG_LAST) &&
-	     (!rx_buf->recv_entry->last_seg_no ||
-	      (rx_buf->recv_entry->last_seg_no != rx_buf->pkt.ctrl_hdr.seg_no))) &&
+	     (!rx_buf->recv_entry->sar.last_seg_no ||
+	      (rx_buf->recv_entry->sar.last_seg_no != rx_buf->pkt.ctrl_hdr.seg_no))) &&
 	/* and message isn't truncated */
 	    (done_len == rx_buf->pkt.ctrl_hdr.seg_size)) {
-		if (rx_buf->recv_entry->msg_id == UINT64_MAX) {
+		if (rx_buf->recv_entry->sar.msg_id == UINT64_MAX) {
 			rx_buf->conn = rxm_key2conn(rx_buf->ep,
 						    rx_buf->pkt.ctrl_hdr.conn_id);
-			rx_buf->recv_entry->msg_id = rx_buf->pkt.ctrl_hdr.msg_id;
-			dlist_insert_tail(&rx_buf->recv_entry->sar_entry,
+			rx_buf->recv_entry->sar.msg_id = rx_buf->pkt.ctrl_hdr.msg_id;
+			dlist_insert_tail(&rx_buf->recv_entry->sar.entry,
 					  &rx_buf->conn->sar_rx_msg_list);
 		}
 		/* The RX buffer can be reposted for further re-use */
@@ -335,19 +335,19 @@ ssize_t rxm_cq_handle_seg_data(struct rxm_rx_buf *rx_buf)
 		rxm_enqueue_rx_buf_for_repost_check(rx_buf);
 		return FI_SUCCESS;
 	} else if ((rxm_sar_get_seg_type(&rx_buf->pkt.ctrl_hdr) == RXM_SAR_SEG_LAST) &&
-		   (rx_buf->recv_entry->segs_rcvd != (rx_buf->pkt.ctrl_hdr.seg_no + 1))) {
+		   (rx_buf->recv_entry->sar.segs_rcvd != (rx_buf->pkt.ctrl_hdr.seg_no + 1))) {
 		/* Handle case when the segment with the `RXM_SAR_SEG_LAST` flag
 		 * is received, but not all segments were received yet. We should
 		 * wait untill all segments will be received. */
-		rx_buf->recv_entry->last_seg_no = rx_buf->pkt.ctrl_hdr.seg_no;
+		rx_buf->recv_entry->sar.last_seg_no = rx_buf->pkt.ctrl_hdr.seg_no;
 	}
-	dlist_remove(&rx_buf->recv_entry->sar_entry);
+	dlist_remove(&rx_buf->recv_entry->sar.entry);
 	/* Mark rxm_recv_entry::msg_id as unknown for futher re-use */
-	rx_buf->recv_entry->msg_id = UINT64_MAX;
-	done_len = rx_buf->recv_entry->total_recv_len;
-	rx_buf->recv_entry->total_recv_len = 0;
-	rx_buf->recv_entry->segs_rcvd = 0;
-	rx_buf->recv_entry->last_seg_no = 0;
+	rx_buf->recv_entry->sar.msg_id = UINT64_MAX;
+	done_len = rx_buf->recv_entry->sar.total_recv_len;
+	rx_buf->recv_entry->sar.total_recv_len = 0;
+	rx_buf->recv_entry->sar.segs_rcvd = 0;
+	rx_buf->recv_entry->sar.last_seg_no = 0;
 	return rxm_finish_recv(rx_buf, done_len);
 }
 
@@ -539,8 +539,8 @@ static int rxm_sar_match_msg_id(struct dlist_entry *item, const void *arg)
 {
 	uint64_t msg_id = *((uint64_t *)arg);
 	struct rxm_recv_entry *recv_entry =
-		container_of(item, struct rxm_recv_entry, sar_entry);
-	return (msg_id == recv_entry->msg_id);
+		container_of(item, struct rxm_recv_entry, sar.entry);
+	return (msg_id == recv_entry->sar.msg_id);
 }
 
 static inline
@@ -561,7 +561,7 @@ ssize_t rxm_sar_handle_segment(struct rxm_rx_buf *rx_buf)
 	if (!sar_entry)
 		return rxm_handle_recv_comp(rx_buf);
 	rx_buf->recv_entry =
-		container_of(sar_entry, struct rxm_recv_entry, sar_entry);
+		container_of(sar_entry, struct rxm_recv_entry, sar.entry);
 	return rxm_cq_handle_seg_data(rx_buf);
 }
 

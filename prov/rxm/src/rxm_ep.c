@@ -279,10 +279,10 @@ static void rxm_recv_entry_init(struct rxm_recv_entry *entry, void *arg)
 
 	assert(recv_queue->type != RXM_RECV_QUEUE_UNSPEC);
 
-	entry->recv_queue 	= recv_queue;
-	entry->msg_id 		= UINT64_MAX;
-	entry->total_recv_len 	= 0;
-	entry->comp_flags 	= FI_RECV;
+	entry->recv_queue = recv_queue;
+	entry->sar.msg_id = UINT64_MAX;
+	entry->sar.total_recv_len = 0;
+	entry->comp_flags = FI_RECV;
 
 	if (recv_queue->type == RXM_RECV_QUEUE_MSG)
 		entry->comp_flags |= FI_MSG;
@@ -925,10 +925,10 @@ err:
 }
 
 static inline size_t
-rxm_ep_sar_estimate_segments_num(struct rxm_ep *rxm_ep, size_t data_len)
+rxm_ep_sar_calc_segs_cnt(struct rxm_ep *rxm_ep, size_t data_len)
 {
-	/* This is rough estimation of the number of the segments to be sent */
-	return (data_len / rxm_ep->rxm_info->tx_attr->inject_size);
+	return (data_len + rxm_ep->rxm_info->tx_attr->inject_size - 1) /
+	       rxm_ep->rxm_info->tx_attr->inject_size;
 }
 
 static inline struct rxm_tx_buf *
@@ -968,16 +968,62 @@ rxm_ep_sar_tx_prepare_segment(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 }
 
 static inline ssize_t
+rxm_ep_sar_tx_prepare_and_send_segment(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
+				       size_t data_len, size_t *remain_len, size_t seg_len,
+				       size_t seg_no, size_t offset, uint64_t data,
+				       uint64_t flags, uint64_t tag, uint64_t comp_flags,
+				       uint8_t op, enum rxm_sar_seg_type seg_type,
+				       struct rxm_tx_entry *tx_entry)
+{
+	struct rxm_tx_buf *tx_buf;
+	ssize_t ret;
+
+	tx_buf = rxm_ep_sar_tx_prepare_segment(rxm_ep, rxm_conn, data_len,
+					       seg_len, seg_no, offset, data,
+					       flags, tag, comp_flags, op,
+					       seg_type, tx_entry);
+	if (OFI_UNLIKELY(!tx_buf)) {
+		tx_entry->msg_id = UINT64_MAX;
+		if (seg_type == RXM_SAR_SEG_FIRST) {
+			/* if TX buffer allocation for the first segment fails,
+			 * release TX entry and report to user */
+			rxm_tx_entry_release(rxm_conn->send_queue, tx_entry);
+		}
+		while (!dlist_empty(&tx_entry->deferred_tx_buf_list)) {
+			dlist_pop_front(&tx_entry->deferred_tx_buf_list,
+					struct rxm_tx_buf, tx_buf, hdr.entry);
+			rxm_tx_buf_release(tx_entry->ep, tx_buf);
+		}
+		return -FI_EAGAIN;
+	}
+
+	ret = fi_send(rxm_conn->msg_ep, &tx_buf->pkt,
+		      sizeof(struct rxm_pkt) + tx_buf->pkt.ctrl_hdr.seg_size,
+		      tx_buf->hdr.desc, 0, tx_buf);
+	if (OFI_UNLIKELY(ret)) {
+		if (seg_type == RXM_SAR_SEG_FIRST) {
+			/* if the sending for the first segment fails,
+			 * release resources and report this to user */
+			rxm_tx_buf_release(tx_entry->ep, tx_buf);
+			rxm_tx_entry_release(rxm_conn->send_queue, tx_entry);
+			return -FI_EAGAIN;
+		}
+		dlist_insert_tail(&tx_buf->hdr.entry,
+				  &tx_entry->deferred_tx_buf_list);	
+	}
+	*remain_len -= seg_len;
+	return FI_SUCCESS;
+}
+
+static inline ssize_t
 rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void *context,
 		   uint8_t count, const struct iovec *iov, size_t data_len,
-		   uint64_t data, uint64_t flags, uint64_t comp_flags,
-		   uint64_t tag, uint8_t op)
+		   size_t segs_cnt, uint64_t data, uint64_t flags,
+		   uint64_t comp_flags, uint64_t tag, uint8_t op)
 {
 	struct rxm_tx_entry *tx_entry;
-	size_t i, total_len = data_len, seg_len;
+	size_t i, remain_len = data_len;
 	ssize_t ret;
-	int send_failed = 0;
-	enum rxm_sar_seg_type seg_type = RXM_SAR_SEG_FIRST;
 
 	ret = rxm_ep_format_tx_entry(rxm_conn, context, count, flags,
 				     comp_flags, NULL, &tx_entry);
@@ -991,66 +1037,40 @@ rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void *conte
 
 	tx_entry->rxm_iov.count = count;
 	tx_entry->msg_id = rxm_txe_fs_index(rxm_conn->send_queue->fs, tx_entry);
-	tx_entry->segs_left = 0;
+	tx_entry->segs_left = segs_cnt;
+	tx_entry->state = RXM_SAR_TX;
 
-	while (total_len) {
-		struct rxm_tx_buf *tx_buf;
+	assert(tx_entry->segs_left >= 2);
 
-		seg_len = (tx_entry->segs_left <= rxm_ep->sar_max_calc_seg_no) ?
-			   RXM_SAR_DIVIDER << tx_entry->segs_left :
-			   rxm_ep->rxm_info->tx_attr->inject_size;
+	ret = rxm_ep_sar_tx_prepare_and_send_segment(
+				rxm_ep, rxm_conn, data_len, &remain_len,
+				rxm_ep->rxm_info->tx_attr->inject_size,
+				0, data_len - remain_len,
+				data, flags, tag, comp_flags, op,
+				RXM_SAR_SEG_FIRST, tx_entry);
+	if (OFI_UNLIKELY(ret))
+		return ret;
 
-		if (seg_len >= total_len) {
-			seg_len = total_len;
-			seg_type = RXM_SAR_SEG_LAST;
-		}
-
-		tx_buf = rxm_ep_sar_tx_prepare_segment(rxm_ep, rxm_conn, data_len,
-						       seg_len, tx_entry->segs_left,
-						       data_len - total_len, /* offset */
-						       data, flags, tag, comp_flags,
-						       op, seg_type, tx_entry);
-		if (OFI_UNLIKELY(!tx_buf)) {
-			tx_entry->msg_id = UINT64_MAX;
-			if (seg_type == RXM_SAR_SEG_FIRST) {
-				/* if TX buffer allocation for the first segment fails,
-				 * release TX entry and report to user */
-				rxm_tx_entry_release(rxm_conn->send_queue, tx_entry);
-			}
-			while (!dlist_empty(&tx_entry->deferred_tx_buf_list)) {
-				dlist_pop_front(&tx_entry->deferred_tx_buf_list,
-						struct rxm_tx_buf, tx_buf, hdr.entry);
-				rxm_tx_buf_release(tx_entry->ep, tx_buf);
-			}
-			return -FI_EAGAIN;
-		}
-
-		if (!send_failed) {
-			ret = fi_send(rxm_conn->msg_ep, &tx_buf->pkt,
-				      sizeof(struct rxm_pkt) +
-				      tx_buf->pkt.ctrl_hdr.seg_size,
-				      tx_buf->hdr.desc, 0, tx_buf);
-			if (OFI_UNLIKELY(ret)) {
-				if (seg_type == RXM_SAR_SEG_FIRST) {
-					/* if the sending for the first segment fails,
-					 * release resources and report this to user */
-					rxm_tx_buf_release(tx_entry->ep, tx_buf);
-					rxm_tx_entry_release(rxm_conn->send_queue, tx_entry);
-					return -FI_EAGAIN;
-				}
-				send_failed = 1;
-				dlist_insert_tail(&tx_buf->hdr.entry,
-						  &tx_entry->deferred_tx_buf_list);	
-			}
-		} else {
-			dlist_insert_tail(&tx_buf->hdr.entry,
-					  &tx_entry->deferred_tx_buf_list);
-		}
-
-		tx_entry->segs_left++;
-		total_len -= seg_len;
-		seg_type = RXM_SAR_SEG_MIDDLE;
+	for (i = 1; i < tx_entry->segs_left - 1; i++) {	
+		ret = rxm_ep_sar_tx_prepare_and_send_segment(
+					rxm_ep, rxm_conn, data_len, &remain_len,
+					rxm_ep->rxm_info->tx_attr->inject_size, i,
+					data_len - remain_len, data, flags, tag,
+					comp_flags, op, RXM_SAR_SEG_MIDDLE, tx_entry);
+		if (OFI_UNLIKELY(ret))
+			return ret;
 	}
+
+	
+	ret = rxm_ep_sar_tx_prepare_and_send_segment(
+				rxm_ep, rxm_conn, data_len, &remain_len, remain_len,
+				tx_entry->segs_left - 1, data_len - remain_len,
+				data, flags, tag, comp_flags, op,
+				RXM_SAR_SEG_LAST, tx_entry);
+	if (OFI_UNLIKELY(ret))
+		return ret;
+
+	assert(!remain_len);
 
 	return 0;
 }
@@ -1321,23 +1341,19 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 		return ret;
 	} else {
 		assert(!(flags & FI_INJECT));
-		if ((data_len <= rxm_ep->sar_limit) &&
-		    /* Roughly estimate whether all SAR segments can be sent w/o
-		     * retransmission due to lack of space in the TX queue */
-		    (rxm_ep_sar_estimate_segments_num(rxm_ep, data_len) <=
-						rxm_ep->msg_info->tx_attr->size)) {
+		if (data_len <= rxm_ep->sar.limit) {
+			size_t segs_cnt = rxm_ep_sar_calc_segs_cnt(rxm_ep, data_len);
 			return rxm_ep_sar_tx_send(rxm_ep, rxm_conn, context, count, iov,
-						  data_len, data, flags, comp_flags, tag, op);
-		} else {
-			ret = rxm_ep_alloc_lmt_tx_res(rxm_ep, rxm_conn, context,
-						      (uint8_t)count, iov, desc,
-						      data_len, data, flags, comp_flags,
-						      tag, op, &tx_entry);
-			if (OFI_UNLIKELY(ret < 0))
-				return ret;
-			return rxm_ep_lmt_tx_send(rxm_ep, rxm_conn, tx_entry,
-						  sizeof(struct rxm_pkt) + ret);
+						  data_len, segs_cnt, data, flags,
+						  comp_flags, tag, op);
 		}
+		ret = rxm_ep_alloc_lmt_tx_res(rxm_ep, rxm_conn, context, (uint8_t)count,
+					      iov, desc, data_len, data, flags, comp_flags,
+					      tag, op, &tx_entry);
+		if (OFI_UNLIKELY(ret < 0))
+			return ret;
+		return rxm_ep_lmt_tx_send(rxm_ep, rxm_conn, tx_entry,
+					  sizeof(struct rxm_pkt) + ret); 
 	}
 }
 
@@ -2022,10 +2038,31 @@ err1:
 	return ret;
 }
 
+static void rxm_ep_sar_init(struct rxm_ep *rxm_ep)
+{
+	size_t param;
+
+	if (!fi_param_get_size_t(&rxm_prov, "sar_limit", &param)) {
+		if (param < rxm_info.tx_attr->inject_size) {
+			FI_WARN(&rxm_prov, FI_LOG_CORE,
+				"Requested SAR limit (%zd) less than inject size (%zd). "
+				"SAR protocol won't be used. Messages of size <= (>) inject "
+				"size would would be transmitted via eager (rendezvous) "
+				"protocol.\n", param, rxm_info.tx_attr->inject_size);
+		} else {
+			rxm_ep->sar.limit = param;
+		}
+	} else {
+		size_t segs_cnt_limit = rxm_ep->msg_info->tx_attr->size;
+		rxm_ep->sar.limit = segs_cnt_limit * rxm_info.tx_attr->inject_size;
+		if (rxm_ep->sar.limit > RXM_SAR_LIMIT)
+			rxm_ep->sar.limit = RXM_SAR_LIMIT;
+	}
+}
+
 static int rxm_ep_txrx_res_open(struct rxm_ep *rxm_ep)
 {
 	int ret;
-	size_t param;
 
 	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
 	       "MSG provider mr_mode & FI_MR_LOCAL: %d\n",
@@ -2063,21 +2100,7 @@ static int rxm_ep_txrx_res_open(struct rxm_ep *rxm_ep)
 	if (ret)
 		goto err;
 
-	if (!fi_param_get_size_t(&rxm_prov, "sar_limit", &param)) {
-		if (param < rxm_info.tx_attr->inject_size)
-			FI_WARN(&rxm_prov, FI_LOG_CORE,
-				"Requested SAR limit (%zd) less than inject size (%zd). "
-				"SAR protocol won't be used. Messages of size <= (>) inject "
-				"size would would be transmitted via eager (rendezvous) "
-				"protocol.\n", param, rxm_info.tx_attr->inject_size);
-		else
-			rxm_ep->sar_limit = param;
-	} else {
-		rxm_ep->sar_limit = RXM_SAR_LIMIT;
-	}
-	while ((RXM_SAR_DIVIDER << (rxm_ep->sar_max_calc_seg_no + 1)) <
-	       rxm_ep->rxm_info->tx_attr->inject_size)
-		rxm_ep->sar_max_calc_seg_no++;
+	rxm_ep_sar_init(rxm_ep);
 
 	return FI_SUCCESS;
 err:
