@@ -77,10 +77,11 @@
 #define RXD_MAX_PKT_RETRY	50
 
 #define RXD_REMOTE_CQ_DATA	(1 << 0)
-#define RXD_NO_COMPLETION	(1 << 1)
-#define RXD_INJECT		(1 << 2)
-#define RXD_RETRY		(1 << 3)
-#define RXD_LAST		(1 << 4)
+#define RXD_NO_TX_COMP		(1 << 1)
+#define RXD_NO_RX_COMP		(1 << 2)
+#define RXD_INJECT		(1 << 3)
+#define RXD_RETRY		(1 << 4)
+#define RXD_LAST		(1 << 5)
 
 struct rxd_env {
 	int spin_count;
@@ -227,8 +228,20 @@ struct rxd_x_entry {
 };
 DECLARE_FREESTACK(struct rxd_x_entry, rxd_x_fs);
 
-#define rxd_ep_rx_flags(rxd_ep) ((rxd_ep)->util_ep.rx_op_flags)
-#define rxd_ep_tx_flags(rxd_ep) ((rxd_ep)->util_ep.tx_op_flags)
+static inline uint32_t rxd_flags(uint64_t fi_flags)
+{
+	uint32_t rxd_flags = 0;
+
+	if (fi_flags & FI_REMOTE_CQ_DATA)
+		rxd_flags |= RXD_REMOTE_CQ_DATA;
+	if (fi_flags & FI_INJECT)
+		rxd_flags |= RXD_INJECT;
+
+	return rxd_flags;
+}
+
+#define rxd_ep_rx_flags(rxd_ep) (rxd_flags((rxd_ep)->util_ep.rx_op_flags))
+#define rxd_ep_tx_flags(rxd_ep) (rxd_flags((rxd_ep)->util_ep.tx_op_flags))
 
 
 enum rxd_msg_type {
@@ -383,12 +396,14 @@ void rxd_release_rx_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt);
 void rxd_release_tx_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt);
 int rxd_ep_retry_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry);
 ssize_t rxd_ep_post_data_pkts(struct rxd_ep *ep, struct rxd_x_entry *tx_entry);
+void rxd_insert_unacked(struct rxd_ep *ep, fi_addr_t peer,
+			struct rxd_pkt_entry *pkt_entry);
 
 /* Tx/Rx entry sub-functions */
 struct rxd_x_entry *rxd_rx_entry_init(struct rxd_ep *ep,
 			const struct iovec *iov, size_t iov_count, uint64_t tag,
 			uint64_t ignore, void *context, fi_addr_t addr,
-			uint32_t op, uint64_t flags);
+			uint32_t op, uint32_t flags);
 void rxd_tx_entry_free(struct rxd_ep *ep, struct rxd_x_entry *tx_entry);
 void rxd_rx_entry_free(struct rxd_ep *ep, struct rxd_x_entry *rx_entry);
 void rxd_set_timeout(struct rxd_pkt_entry *pkt_entry);
