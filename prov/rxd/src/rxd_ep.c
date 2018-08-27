@@ -1052,42 +1052,6 @@ static int rxd_ep_close(struct fid *fid)
 	return 0;
 }
 
-static int rxd_ep_bind_cq(struct rxd_ep *ep, struct rxd_cq *cq, uint64_t flags)
-{
-	int ret;
-
-	if (flags & ~(FI_TRANSMIT | FI_RECV)) {
-		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "unsupported flags\n");
-		return -FI_EBADFLAGS;
-	}
-
-	if (((flags & FI_TRANSMIT) && rxd_ep_tx_cq(ep)) ||
-	    ((flags & FI_RECV) && rxd_ep_rx_cq(ep))) {
-		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "duplicate CQ binding\n");
-		return -FI_EINVAL;
-	}
-
-	ret = fid_list_insert(&cq->util_cq.ep_list,
-			      &cq->util_cq.ep_list_lock,
-			      &ep->util_ep.ep_fid.fid);
-	if (ret)
-		return ret;
-
-	if (flags & FI_TRANSMIT) {
-		ep->util_ep.tx_cq = &cq->util_cq;
-		ofi_atomic_inc32(&cq->util_cq.ref);
-		/* TODO: wait handling */
-	}
-
-	if (flags & FI_RECV) {
-		ep->util_ep.rx_cq = &cq->util_cq;
-		ofi_atomic_inc32(&cq->util_cq.ref);
-		/* TODO: wait handling */
-	}
-
-	return 0;
-}
-
 static int rxd_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 {
 	struct rxd_ep *ep;
@@ -1107,13 +1071,14 @@ static int rxd_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 			return ret;
 		break;
 	case FI_CLASS_CQ:
-		ret = rxd_ep_bind_cq(ep, container_of(bfid, struct rxd_cq,
-						       util_cq.cq_fid.fid), flags);
+		ret = ofi_ep_bind_cq(&ep->util_ep, container_of(bfid,
+				     struct util_cq, cq_fid.fid), flags);
 		break;
 	case FI_CLASS_EQ:
 		break;
 	case FI_CLASS_CNTR:
-		return ofi_ep_bind(&ep->util_ep, bfid, flags);
+		return ofi_ep_bind_cntr(&ep->util_ep, container_of(bfid,
+					struct util_cntr, cntr_fid.fid), flags);
 	default:
 		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL,
 			"invalid fid class\n");
