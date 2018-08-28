@@ -221,8 +221,10 @@ int cxip_verify_fabric_attr(const struct fi_fabric_attr *attr)
 
 	if (attr->prov_version) {
 		if (attr->prov_version !=
-		    FI_VERSION(CXIP_MAJOR_VERSION, CXIP_MINOR_VERSION))
+		    FI_VERSION(CXIP_MAJOR_VERSION, CXIP_MINOR_VERSION)) {
+			CXIP_LOG_DBG("Provider version unsupported\n");
 			return -FI_ENODATA;
+		}
 	}
 
 	return 0;
@@ -248,6 +250,7 @@ int cxip_verify_info(uint32_t version, const struct fi_info *hints)
 					      hints->rx_attr);
 		break;
 	default:
+		CXIP_LOG_DBG("Unsupported endpoint type\n");
 		ret = -FI_ENODATA;
 	}
 	if (ret)
@@ -385,12 +388,16 @@ static int cxip_fi_checkinfo(const struct fi_info *info,
 			     const struct fi_info *hints)
 {
 	if (hints && hints->domain_attr && hints->domain_attr->name &&
-	    strcmp(info->domain_attr->name, hints->domain_attr->name))
+	    strcmp(info->domain_attr->name, hints->domain_attr->name)) {
+		CXIP_LOG_DBG("Domain name mismatch\n");
 		return -FI_ENODATA;
+	}
 
 	if (hints && hints->fabric_attr && hints->fabric_attr->name &&
-	    strcmp(info->fabric_attr->name, hints->fabric_attr->name))
+	    strcmp(info->fabric_attr->name, hints->fabric_attr->name)) {
+		CXIP_LOG_DBG("Fabric name mismatch\n");
 		return -FI_ENODATA;
+	}
 
 	return 0;
 }
@@ -472,13 +479,17 @@ static int cxip_ep_getinfo(uint32_t version, const char *node,
 	int ret;
 
 	if (flags & FI_SOURCE) {
-		if (!node && !service)
+		if (!node && !service) {
+			CXIP_LOG_DBG("FI_SOURCE without node and service!\n");
 			return -FI_ENODATA;
+		}
 
 		src_addr = &saddr;
 		ret = cxip_parse_addr(node, service, src_addr);
-		if (ret)
+		if (ret) {
+			CXIP_LOG_DBG("Unable to parse src_addr!\n");
 			return ret;
+		}
 
 		if (hints && hints->dest_addr)
 			dest_addr = hints->dest_addr;
@@ -486,8 +497,10 @@ static int cxip_ep_getinfo(uint32_t version, const char *node,
 		if (node || service) {
 			dest_addr = &daddr;
 			ret = cxip_parse_addr(node, service, dest_addr);
-			if (ret)
+			if (ret) {
+				CXIP_LOG_DBG("Unable to parse dest_addr!\n");
 				return ret;
+			}
 		} else if (hints) {
 			dest_addr = hints->dest_addr;
 		}
@@ -516,6 +529,7 @@ static int cxip_ep_getinfo(uint32_t version, const char *node,
 				       info);
 		break;
 	default:
+		CXIP_LOG_DBG("Invalid ep type %d\n", ep_type);
 		ret = -FI_ENODATA;
 		break;
 	}
@@ -637,13 +651,17 @@ static int cxip_getinfo(uint32_t version, const char *node, const char *service,
 	}
 
 	if (!(flags & FI_SOURCE) && hints && hints->src_addr &&
-	    (hints->src_addrlen != sizeof(struct cxip_addr)))
+	    (hints->src_addrlen != sizeof(struct cxip_addr))) {
+		CXIP_LOG_ERROR("Invalid Src Address length\n");
 		return -FI_ENODATA;
+	}
 
 	if (((!node && !service) || (flags & FI_SOURCE)) && hints &&
 	    hints->dest_addr &&
-	    (hints->dest_addrlen != sizeof(struct cxip_addr)))
+	    (hints->dest_addrlen != sizeof(struct cxip_addr))) {
+		CXIP_LOG_ERROR("Invalid parameter set\n");
 		return -FI_ENODATA;
+	}
 
 	ret = cxip_verify_info(version, hints);
 	if (ret)

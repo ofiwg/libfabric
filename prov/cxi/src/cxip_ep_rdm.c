@@ -77,12 +77,12 @@ static int cxip_rdm_verify_rx_attr(const struct fi_rx_attr *attr)
 	}
 
 	if ((attr->msg_order | CXIP_EP_MSG_ORDER) != CXIP_EP_MSG_ORDER) {
-		CXIP_LOG_DBG("Unsuported rx message order\n");
+		CXIP_LOG_DBG("Unsupported rx message order\n");
 		return -FI_ENODATA;
 	}
 
 	if ((attr->comp_order | CXIP_EP_COMP_ORDER) != CXIP_EP_COMP_ORDER) {
-		CXIP_LOG_DBG("Unsuported rx completion order\n");
+		CXIP_LOG_DBG("Unsupported rx completion order\n");
 		return -FI_ENODATA;
 	}
 
@@ -195,12 +195,16 @@ int cxip_rdm_verify_ep_attr(const struct fi_ep_attr *ep_attr,
 		}
 
 		if ((ep_attr->tx_ctx_cnt > CXIP_EP_MAX_TX_CNT) &&
-		    ep_attr->tx_ctx_cnt != FI_SHARED_CONTEXT)
+		    ep_attr->tx_ctx_cnt != FI_SHARED_CONTEXT) {
+			CXIP_LOG_DBG("TX CTX count too large\n");
 			return -FI_ENODATA;
+		}
 
 		if ((ep_attr->rx_ctx_cnt > CXIP_EP_MAX_RX_CNT) &&
-		    ep_attr->rx_ctx_cnt != FI_SHARED_CONTEXT)
+		    ep_attr->rx_ctx_cnt != FI_SHARED_CONTEXT) {
+			CXIP_LOG_DBG("RX CTX count too large\n");
 			return -FI_ENODATA;
+		}
 	}
 
 	ret = cxip_rdm_verify_tx_attr(tx_attr);

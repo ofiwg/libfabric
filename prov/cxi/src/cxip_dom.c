@@ -116,35 +116,55 @@ int cxip_verify_domain_attr(uint32_t version, const struct fi_info *info)
 		return -FI_ENODATA;
 	}
 
-	if (attr->mr_key_size > cxip_domain_attr.mr_key_size)
+	if (attr->mr_key_size > cxip_domain_attr.mr_key_size) {
+		CXIP_LOG_DBG("MR key size not supported!\n");
 		return -FI_ENODATA;
+	}
 
-	if (attr->cq_data_size > cxip_domain_attr.cq_data_size)
+	if (attr->cq_data_size > cxip_domain_attr.cq_data_size) {
+		CXIP_LOG_DBG("CQ data size not supported!\n");
 		return -FI_ENODATA;
+	}
 
-	if (attr->cq_cnt > cxip_domain_attr.cq_cnt)
+	if (attr->cq_cnt > cxip_domain_attr.cq_cnt) {
+		CXIP_LOG_DBG("CQ count not supported!\n");
 		return -FI_ENODATA;
+	}
 
-	if (attr->ep_cnt > cxip_domain_attr.ep_cnt)
+	if (attr->ep_cnt > cxip_domain_attr.ep_cnt) {
+		CXIP_LOG_DBG("Endpoint count not supported!\n");
 		return -FI_ENODATA;
+	}
 
-	if (attr->max_ep_tx_ctx > cxip_domain_attr.max_ep_tx_ctx)
+	if (attr->max_ep_tx_ctx > cxip_domain_attr.max_ep_tx_ctx) {
+		CXIP_LOG_DBG("Max EP TX CTX not supported!\n");
 		return -FI_ENODATA;
+	}
 
-	if (attr->max_ep_rx_ctx > cxip_domain_attr.max_ep_rx_ctx)
+	if (attr->max_ep_rx_ctx > cxip_domain_attr.max_ep_rx_ctx) {
+		CXIP_LOG_DBG("Max EP RX CTX not supported!\n");
 		return -FI_ENODATA;
+	}
 
-	if (attr->cntr_cnt > cxip_domain_attr.cntr_cnt)
+	if (attr->cntr_cnt > cxip_domain_attr.cntr_cnt) {
+		CXIP_LOG_DBG("Counter count not supported!\n");
 		return -FI_ENODATA;
+	}
 
-	if (attr->mr_iov_limit > cxip_domain_attr.mr_iov_limit)
+	if (attr->mr_iov_limit > cxip_domain_attr.mr_iov_limit) {
+		CXIP_LOG_DBG("MR IOV limit not supported!\n");
 		return -FI_ENODATA;
+	}
 
-	if (attr->max_err_data > cxip_domain_attr.max_err_data)
+	if (attr->max_err_data > cxip_domain_attr.max_err_data) {
+		CXIP_LOG_DBG("MR error data not supported!\n");
 		return -FI_ENODATA;
+	}
 
-	if (attr->mr_cnt > cxip_domain_attr.mr_cnt)
+	if (attr->mr_cnt > cxip_domain_attr.mr_cnt) {
+		CXIP_LOG_DBG("MR count not supported!\n");
 		return -FI_ENODATA;
+	}
 
 	return 0;
 }
