@@ -359,6 +359,7 @@ struct cxip_oflow_buf {
 	struct cxi_iova md;
 	ofi_atomic32_t ref;
 	int exhausted;
+	int buffer_id;
 };
 
 struct cxip_rx_ctx {
@@ -625,6 +626,7 @@ struct cxip_rx_ctx *cxip_rx_ctx_alloc(const struct fi_rx_attr *attr,
 void cxip_rx_ctx_free(struct cxip_rx_ctx *rx_ctx);
 
 void cxip_rxc_oflow_replenish(struct cxip_rx_ctx *rxc);
+void cxip_rxc_oflow_cleanup(struct cxip_rx_ctx *rxc);
 int cxip_rx_ctx_enable(struct cxip_rx_ctx *rxc);
 int cxip_tx_ctx_enable(struct cxip_tx_ctx *txc);
 struct cxip_tx_ctx *cxip_tx_ctx_alloc(const struct fi_tx_attr *attr,

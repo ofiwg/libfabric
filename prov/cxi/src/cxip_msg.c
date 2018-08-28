@@ -91,6 +91,15 @@ static void report_recv_completion(struct cxip_req *req)
 	}
 }
 
+static void oflow_buf_free(struct cxip_oflow_buf *oflow_buf)
+{
+	struct cxip_if *dev_if = oflow_buf->rxc->domain->dev_if;
+
+	cxil_unmap(dev_if->if_lni, &oflow_buf->md);
+	free(oflow_buf->buf);
+	free(oflow_buf);
+}
+
 static void oflow_buf_get(struct cxip_oflow_buf *oflow_buf)
 {
 	ofi_atomic_inc32(&oflow_buf->ref);
@@ -98,12 +107,8 @@ static void oflow_buf_get(struct cxip_oflow_buf *oflow_buf)
 
 static void oflow_buf_put(struct cxip_oflow_buf *oflow_buf)
 {
-	struct cxip_if *dev_if = oflow_buf->rxc->domain->dev_if;
-
 	if (!ofi_atomic_dec32(&oflow_buf->ref)) {
-		cxil_unmap(dev_if->if_lni, &oflow_buf->md);
-		free(oflow_buf->buf);
-		free(oflow_buf);
+		oflow_buf_free(oflow_buf);
 	}
 }
 
@@ -163,9 +168,15 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 	}
 
 	if (event->hdr.event_type == C_EVENT_UNLINK) {
-		/* TODO Determine if this LE was Unlinked explicitly or
+		ofi_atomic_dec32(&oflow_buf->rxc->oflow_buf_cnt);
+
+		/* Check if this LE was Unlinked explicitly or
 		 * automatically unlinked due to buffer exhaustion.
 		 */
+		if (!event->tgt_long.auto_unlinked) {
+			cxip_cq_req_free(req);
+			return;
+		}
 
 		/* Mark the overflow buffer exhausted.  One more Put event is
 		 * expected.  When the event for the Put which exhausted
@@ -174,7 +185,6 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 		oflow_buf->exhausted = 1;
 
 		/* Refill overflow buffers */
-		ofi_atomic_dec32(&oflow_buf->rxc->oflow_buf_cnt);
 		cxip_rxc_oflow_replenish(oflow_buf->rxc);
 		return;
 	}
@@ -256,7 +266,7 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 }
 
 /* Append a new overflow buffer to an RX Context. */
-static int oflow_append(struct cxip_rx_ctx *rxc)
+static int oflow_buf_add(struct cxip_rx_ctx *rxc)
 {
 	struct cxip_domain *dom;
 	int ret;
@@ -343,6 +353,7 @@ static int oflow_append(struct cxip_rx_ctx *rxc)
 	oflow_buf->rxc = rxc;
 	ofi_atomic_initialize32(&oflow_buf->ref, 1);
 	oflow_buf->exhausted = 0;
+	oflow_buf->buffer_id = req->req_id;
 
 	ofi_atomic_inc32(&rxc->oflow_buf_cnt);
 
@@ -370,12 +381,72 @@ void cxip_rxc_oflow_replenish(struct cxip_rx_ctx *rxc)
 	int ret;
 
 	while (ofi_atomic_get32(&rxc->oflow_buf_cnt) < rxc->oflow_bufs_max) {
-		ret = oflow_append(rxc);
+		ret = oflow_buf_add(rxc);
 		if (ret != FI_SUCCESS) {
 			CXIP_LOG_ERROR("Failed to append oflow buffer: %d\n",
 				       ret);
 			break;
 		}
+	}
+}
+
+/* Free RX Context overflow buffers.
+ *
+ * The RXC must be disabled with no outstanding posted receives.  Adding new
+ * posted receives that could match the overflow buffers while cleanup is in
+ * progress will cause issues.  Also, with the RXC lock held, processing
+ * messages on the context may cause a deadlock.
+ *
+ * Caller must hold rxc->lock.
+ */
+void cxip_rxc_oflow_cleanup(struct cxip_rx_ctx *rxc)
+{
+	int ret;
+	union c_cmdu cmd = {};
+	struct cxip_oflow_buf *oflow_buf;
+	struct cxip_ux_send *ux_send;
+	struct dlist_entry *itmp;
+	struct dlist_entry *otmp;
+
+	cmd.command.opcode = C_CMD_TGT_UNLINK;
+	cmd.target.ptl_list = C_PTL_LIST_OVERFLOW;
+	cmd.target.ptlte_index  = rxc->pte->ptn;
+
+	/* Manually unlink each overflow buffer */
+	dlist_foreach_container(&rxc->oflow_bufs, struct cxip_oflow_buf,
+				oflow_buf, list) {
+		cmd.target.buffer_id = oflow_buf->buffer_id;
+
+		ret = cxi_cq_emit_target(rxc->rx_cmdq, &cmd);
+		if (ret) {
+			/* TODO handle insufficient CMDQ space */
+			CXIP_LOG_ERROR("Failed to enqueue command: %d\n", ret);
+		}
+	}
+
+	cxi_cq_ring(rxc->rx_cmdq);
+
+	/* Wait for all overflow buffers to be unlinked */
+	do {
+		sched_yield();
+		cxip_cq_progress(rxc->comp.recv_cq);
+	} while (ofi_atomic_get32(&rxc->oflow_buf_cnt));
+
+	/* Clean up overflow buffers */
+	dlist_foreach_container_safe(&rxc->oflow_bufs, struct cxip_oflow_buf,
+				     oflow_buf, list, otmp) {
+
+		dlist_foreach_container_safe(&rxc->ux_sends,
+					     struct cxip_ux_send, ux_send,
+					     list, itmp) {
+			if (ux_send->oflow_buf == oflow_buf) {
+				dlist_remove(&ux_send->list);
+				free(ux_send);
+			}
+		}
+
+		dlist_remove(&oflow_buf->list);
+		oflow_buf_free(oflow_buf);
 	}
 }
 

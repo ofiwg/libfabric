@@ -183,6 +183,9 @@ static void cxip_rx_ctx_disable(struct cxip_rx_ctx *rxc)
 	if (!rxc->enabled)
 		goto unlock;
 
+	/* Free pool of overflow buffers */
+	cxip_rxc_oflow_cleanup(rxc);
+
 	ret = cxip_rx_ctx_recv_fini(rxc);
 	if (ret)
 		CXIP_LOG_ERROR("cxip_rx_ctx_recv_fini returned: %d\n", ret);
