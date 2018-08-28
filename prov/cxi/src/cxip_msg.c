@@ -334,5 +334,15 @@ struct fi_ops_tagged cxip_ep_tagged_ops = {
 	.injectdata = fi_no_tagged_injectdata,
 };
 
-struct fi_ops_msg cxip_ep_msg_ops = { 0 };
-
+struct fi_ops_msg cxip_ep_msg_ops = {
+	.size = sizeof(struct fi_ops_msg),
+	.recv = fi_no_msg_recv,
+	.recvv = fi_no_msg_recvv,
+	.recvmsg = fi_no_msg_recvmsg,
+	.send = fi_no_msg_send,
+	.sendv = fi_no_msg_sendv,
+	.sendmsg = fi_no_msg_sendmsg,
+	.inject = fi_no_msg_inject,
+	.senddata = fi_no_msg_senddata,
+	.injectdata = fi_no_msg_injectdata,
+};
