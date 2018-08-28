@@ -33,8 +33,7 @@ int cxip_mr_enable(struct cxip_mr *mr)
 
 	/* Allocate a PTE */
 	ret = cxil_alloc_pte(mr->domain->dev_if->if_lni,
-			     mr->domain->dev_if->mr_evtq, &opts, &mr->pte,
-			     &mr->pte_hw_id);
+			     mr->domain->dev_if->mr_evtq, &opts, &mr->pte);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to allocate PTE: %d\n", ret);
 		return -FI_ENOSPC;
@@ -78,7 +77,7 @@ int cxip_mr_enable(struct cxip_mr *mr)
 
 	/* Enable the PTE */
 	cmd.command.opcode = C_CMD_TGT_SETSTATE;
-	cmd.set_state.ptlte_index = mr->pte_hw_id;
+	cmd.set_state.ptlte_index = mr->pte->ptn;
 	cmd.set_state.ptlte_state = C_PTLTE_ENABLED;
 
 	ret = cxi_cq_emit_target(mr->domain->dev_if->mr_cmdq, &cmd);
@@ -98,7 +97,7 @@ int cxip_mr_enable(struct cxip_mr *mr)
 	    event->tgt_long.return_code != C_RC_OK ||
 	    event->tgt_long.initiator.state_change.ptlte_state !=
 		    C_PTLTE_ENABLED ||
-	    event->tgt_long.ptlte_index != mr->pte_hw_id) {
+	    event->tgt_long.ptlte_index != mr->pte->ptn) {
 		/* This is a device malfunction */
 		CXIP_LOG_ERROR("Invalid Enable EQE\n");
 		ret = -FI_EIO;
@@ -111,7 +110,7 @@ int cxip_mr_enable(struct cxip_mr *mr)
 	memset(&cmd, 0, sizeof(cmd));
 	cmd.command.opcode     = C_CMD_TGT_APPEND;
 	cmd.target.ptl_list    = C_PTL_LIST_PRIORITY;
-	cmd.target.ptlte_index = mr->pte_hw_id;
+	cmd.target.ptlte_index = mr->pte->ptn;
 	cmd.target.no_truncate = 0;
 	cmd.target.unexpected_hdr_disable = 0;
 	cmd.target.buffer_id   = buffer_id;
@@ -189,7 +188,7 @@ int cxip_mr_disable(struct cxip_mr *mr)
 	/* Unlink persistent LE */
 	cmd.command.opcode = C_CMD_TGT_UNLINK;
 	cmd.target.ptl_list = C_PTL_LIST_PRIORITY;
-	cmd.target.ptlte_index = mr->pte_hw_id;
+	cmd.target.ptlte_index = mr->pte->ptn;
 	cmd.target.buffer_id = buffer_id;
 
 	ret = cxi_cq_emit_target(mr->domain->dev_if->mr_cmdq, &cmd);

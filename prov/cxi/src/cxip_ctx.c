@@ -25,8 +25,7 @@ static int cxip_rx_ctx_recv_init(struct cxip_rx_ctx *rxc)
 
 	/* Allocate a PTE */
 	ret = cxil_alloc_pte(rxc->domain->dev_if->if_lni,
-			     rxc->comp.recv_cq->evtq, &opts, &rxc->pte,
-			     &rxc->pte_hw_id);
+			     rxc->comp.recv_cq->evtq, &opts, &rxc->pte);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to allocate PTE: %d\n", ret);
 		return -FI_ENOSPC;
@@ -54,7 +53,7 @@ static int cxip_rx_ctx_recv_init(struct cxip_rx_ctx *rxc)
 
 	/* Enable the PTE */
 	cmd.command.opcode = C_CMD_TGT_SETSTATE;
-	cmd.set_state.ptlte_index = rxc->pte_hw_id;
+	cmd.set_state.ptlte_index = rxc->pte->ptn;
 	cmd.set_state.ptlte_state = C_PTLTE_ENABLED;
 
 	ret = cxi_cq_emit_target(rxc->rx_cmdq, &cmd);
@@ -74,7 +73,7 @@ static int cxip_rx_ctx_recv_init(struct cxip_rx_ctx *rxc)
 	    event->tgt_long.return_code != C_RC_OK ||
 	    event->tgt_long.initiator.state_change.ptlte_state !=
 		    C_PTLTE_ENABLED ||
-	    event->tgt_long.ptlte_index != rxc->pte_hw_id) {
+	    event->tgt_long.ptlte_index != rxc->pte->ptn) {
 		/* This is a device malfunction */
 		CXIP_LOG_ERROR("Invalid Enable EQE\n");
 		ret = -FI_EIO;
