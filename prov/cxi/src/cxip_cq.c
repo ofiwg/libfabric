@@ -170,6 +170,7 @@ void cxip_cq_progress(struct cxip_cq *cq)
 {
 	const union c_event *event;
 	struct cxip_req *req;
+	int events = 0;
 
 	if (!cq->enabled)
 		return;
@@ -179,8 +180,12 @@ void cxip_cq_progress(struct cxip_cq *cq)
 		req = cxip_cq_event_req(cq, event);
 		if (req)
 			req->cb(req, event);
+
+		events++;
 	}
-	cxi_eq_ack_events(cq->evtq);
+
+	if (events)
+		cxi_eq_ack_events(cq->evtq);
 }
 
 static ssize_t cxip_cq_entry_size(struct cxip_cq *cxi_cq)
