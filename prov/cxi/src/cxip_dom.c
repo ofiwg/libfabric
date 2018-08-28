@@ -41,6 +41,8 @@ const struct fi_domain_attr cxip_domain_attr = {
 	.mr_iov_limit = CXIP_EP_MAX_IOV_LIMIT,
 	.max_err_data = CXIP_MAX_ERR_CQ_EQ_DATA_SZ,
 	.mr_cnt = CXIP_DOMAIN_MR_CNT,
+	.caps = CXIP_DOMAIN_CAPS_FLAGS,
+	.mode = 0,
 };
 
 int cxip_verify_domain_attr(uint32_t version, const struct fi_info *info)
