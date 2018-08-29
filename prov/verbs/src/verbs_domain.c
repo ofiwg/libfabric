@@ -71,6 +71,8 @@ static int fi_ibv_domain_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			assert(0);
 			return -FI_EINVAL;
 		}
+		break;
+
 	default:
 		return -EINVAL;
 	}
