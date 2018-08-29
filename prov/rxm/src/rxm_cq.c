@@ -376,10 +376,11 @@ ssize_t rxm_cq_handle_large_data(struct rxm_rx_buf *rx_buf)
 	rx_buf->rma_iov_index = 0;
 
 	if (!rx_buf->ep->rxm_mr_local) {
-		ret = rxm_ep_msg_mr_regv(rx_buf->ep,
-					 rx_buf->recv_entry->rxm_iov.iov,
-					 rx_buf->recv_entry->rxm_iov.count,
-					 FI_READ, rx_buf->mr);
+		ret = rxm_ep_msg_mr_regv_lim(rx_buf->ep,
+					     rx_buf->recv_entry->rxm_iov.iov,
+					     rx_buf->recv_entry->rxm_iov.count,
+					     rx_buf->pkt.hdr.size,
+					     FI_READ, rx_buf->mr);
 		if (OFI_UNLIKELY(ret))
 			return ret;
 
