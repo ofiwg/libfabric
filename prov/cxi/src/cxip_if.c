@@ -108,7 +108,6 @@ int cxip_get_if(uint32_t nic_addr, struct cxip_if **dev_if)
 		}
 
 		evtq_opts.count = 1024;
-		evtq_opts.reserved_fc = 1;
 
 		ret = cxil_alloc_evtq(if_entry->if_lni, &evtq_opts, NULL,
 				      &if_entry->mr_evtq);
