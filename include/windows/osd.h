@@ -40,6 +40,8 @@
 extern "C" {
 #endif
 
+#define OFI_MAX_SOCKET_BUF_SIZE	INT_MAX
+
 /*
  * The following defines redefine the Windows Socket
  * errors as BSD errors.
