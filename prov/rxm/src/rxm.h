@@ -507,8 +507,7 @@ int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep);
 int rxm_send_queue_init(struct rxm_ep *rxm_ep, struct rxm_send_queue **send_queue, size_t size);
 void rxm_send_queue_close(struct rxm_send_queue *send_queue);
 
-static inline
-void rxm_ep_msg_mr_closev(struct fid_mr **mr, size_t count)
+static inline void rxm_ep_msg_mr_closev(struct fid_mr **mr, size_t count)
 {
 	int ret;
 	size_t i;
@@ -519,25 +518,49 @@ void rxm_ep_msg_mr_closev(struct fid_mr **mr, size_t count)
 			if (ret)
 				FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 					"Unable to close msg mr: %zu\n", i);
+			mr[i] = NULL;
 		}
 	}
 }
 
-static inline
-int rxm_ep_msg_mr_regv(struct rxm_ep *rxm_ep, const struct iovec *iov,
-		       size_t count, uint64_t access, struct fid_mr **mr)
+static inline int
+rxm_ep_msg_mr_regv(struct rxm_ep *rxm_ep, const struct iovec *iov, size_t count,
+		   uint64_t access, struct fid_mr **mr)
 {
 	int ret;
 	size_t i;
 	struct rxm_domain *rxm_domain =
 		container_of(rxm_ep->util_ep.domain, struct rxm_domain, util_domain);
-
-	// TODO do fi_mr_regv if provider supports it
+ 
 	for (i = 0; i < count; i++) {
 		ret = fi_mr_reg(rxm_domain->msg_domain, iov[i].iov_base,
 				iov[i].iov_len, access, 0, 0, 0, &mr[i], NULL);
 		if (ret)
 			goto err;
+	}
+	return 0;
+err:
+	rxm_ep_msg_mr_closev(mr, count);
+	return ret;
+}
+
+static inline int
+rxm_ep_msg_mr_regv_lim(struct rxm_ep *rxm_ep, const struct iovec *iov, size_t count,
+		       size_t total_reg_len, uint64_t access, struct fid_mr **mr)
+{
+	int ret;
+	size_t i;
+	struct rxm_domain *rxm_domain =
+		container_of(rxm_ep->util_ep.domain, struct rxm_domain, util_domain);
+ 
+	for (i = 0; i < count && total_reg_len; i++) {
+		size_t len = iov[i].iov_len <= total_reg_len ?
+			     iov[i].iov_len : total_reg_len;
+		ret = fi_mr_reg(rxm_domain->msg_domain, iov[i].iov_base,
+				len, access, 0, 0, 0, &mr[i], NULL);
+		if (ret)
+			goto err;
+		total_reg_len -= len;
 	}
 	return 0;
 err:
