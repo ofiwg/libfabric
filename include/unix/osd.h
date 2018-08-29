@@ -79,6 +79,8 @@
 #define OFI_SOCK_TRY_CONN_AGAIN(err)	\
 	((err) == EINPROGRESS)
 
+#define OFI_MAX_SOCKET_BUF_SIZE	SIZE_MAX
+
 struct util_shm
 {
 	int		shared_fd;
