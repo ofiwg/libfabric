@@ -336,7 +336,7 @@ static void rxd_transfer_pending(struct rxd_ep *ep, int peer)
 	struct rxd_data_pkt *data;
 	struct rxd_op_pkt *op;
 
-	while (ep->peers[peer].free_unacked &&
+	while (ep->peers[peer].unacked_cnt < RXD_MAX_UNACKED &&
 	       !dlist_empty(&ep->peers[peer].pending) &&
 	       !ep->peers[peer].blocking) {
 		dlist_pop_front(&ep->peers[peer].pending,
@@ -353,8 +353,8 @@ static void rxd_transfer_pending(struct rxd_ep *ep, int peer)
 		}
 
 		rxd_ep_retry_pkt(ep, pkt_entry);
-		ep->peers[peer].free_pending++;
-		ep->peers[peer].free_unacked--;
+		ep->peers[peer].pending_cnt--;
+		ep->peers[peer].unacked_cnt++;
 	}
 }
 
@@ -676,7 +676,7 @@ static void rxd_handle_ack(struct rxd_ep *ep, struct fi_cq_msg_entry *comp,
 	struct rxd_pkt_hdr *hdr;
 
 	for (; !dlist_empty(&ep->peers[peer].unacked);
-	     ep->peers[peer].free_unacked++) {
+	     ep->peers[peer].unacked_cnt--) {
 		pkt_entry = container_of((&ep->peers[peer].unacked)->next,
 					struct rxd_pkt_entry, d_entry);
 		hdr = rxd_get_pkt_hdr(pkt_entry);
@@ -713,8 +713,8 @@ static void rxd_handle_ack(struct rxd_ep *ep, struct fi_cq_msg_entry *comp,
 
 	dlist_foreach_container(&ep->peers[ack->pkt_hdr.peer].tx_list,
 				struct rxd_x_entry, tx_entry, entry) {
-		if (ep->peers[ack->pkt_hdr.peer].free_unacked &&
-		    ep->peers[ack->pkt_hdr.peer].free_pending <= 0) {
+		if (ep->peers[ack->pkt_hdr.peer].unacked_cnt < RXD_MAX_UNACKED &&
+		    ep->peers[ack->pkt_hdr.peer].pending_cnt >= RXD_MAX_PENDING) {
 			break;
 		}
 		rxd_ep_post_data_pkts(ep, tx_entry);

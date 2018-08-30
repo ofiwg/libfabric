@@ -122,8 +122,8 @@ struct rxd_peer {
 	uint16_t rx_window;//constant at MAX_UNACKED for now
 	uint16_t tx_window;//unused for now, will be used for slow start
 
-	uint16_t free_unacked;
-	int free_pending;
+	uint16_t unacked_cnt;
+	int pending_cnt;
 
 	uint32_t curr_rx_id;
 	uint32_t curr_tx_id;
