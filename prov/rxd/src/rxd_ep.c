@@ -57,8 +57,8 @@ struct rxd_pkt_entry *rxd_get_tx_pkt(struct rxd_ep *ep)
 		    util_buf_alloc_ex(ep->tx_pkt_pool, &mr) :
 		    util_buf_alloc(ep->tx_pkt_pool);
 
-	memset(pkt_entry, 0, sizeof(*pkt_entry));
 	pkt_entry->mr = (struct fid_mr *) mr;
+	pkt_entry->retry_cnt = 0;
 	rxd_set_pkt(ep, pkt_entry);
 
 	return pkt_entry;
@@ -73,7 +73,6 @@ static struct rxd_pkt_entry *rxd_get_rx_pkt(struct rxd_ep *ep)
 		    util_buf_alloc_ex(ep->rx_pkt_pool, &mr) :
 		    util_buf_alloc(ep->rx_pkt_pool);
 
-	memset(pkt_entry, 0, sizeof(*pkt_entry));
 	pkt_entry->mr = (struct fid_mr *) mr;
 	pkt_entry->retry_cnt = 0;
 
@@ -106,7 +105,7 @@ static ssize_t rxd_ep_cancel(fid_t fid, void *context)
 	struct rxd_ep *ep;
 	struct dlist_entry *entry;
 	struct rxd_x_entry *rx_entry;
-	struct fi_cq_err_entry err_entry = {0};
+	struct fi_cq_err_entry err_entry;
 
 	ep = container_of(fid, struct rxd_ep, util_ep.ep_fid.fid);
 	fastlock_acquire(&ep->util_ep.lock);
@@ -117,6 +116,8 @@ static ssize_t rxd_ep_cancel(fid_t fid, void *context)
 		goto out;
 
 	rx_entry = container_of(entry, struct rxd_x_entry, entry);
+
+	memset(&err_entry, 0, sizeof(struct fi_cq_err_entry));
 
 	rxd_rx_entry_free(ep, rx_entry);
 	err_entry.op_context = rx_entry->cq_entry.op_context;
@@ -213,22 +214,19 @@ static struct rxd_x_entry *rxd_rx_entry_init(struct rxd_ep *ep,
 	rx_entry->window = RXD_MAX_UNACKED;
 	rx_entry->iov_count = iov_count;
 	rx_entry->op = op;
+	rx_entry->ignore = ignore;
 
 	memcpy(rx_entry->iov, iov, sizeof(*rx_entry->iov) * iov_count);
 
-	memset(&rx_entry->cq_entry, 0, sizeof(rx_entry->cq_entry));
 	rx_entry->cq_entry.op_context = context;
 	rx_entry->cq_entry.len = ofi_total_iov_len(iov, iov_count);
 	rx_entry->cq_entry.buf = iov[0].iov_base;
 	rx_entry->cq_entry.flags = (FI_RECV | FI_MSG);
+	rx_entry->cq_entry.tag = tag;
 	if (op == ofi_op_tagged) {
 		rx_entry->cq_entry.flags |= FI_TAGGED;
-		rx_entry->cq_entry.tag = tag;
-		rx_entry->ignore = ignore;
 		dlist_insert_tail(&rx_entry->entry, &ep->rx_tag_list);
 	} else {
-		rx_entry->cq_entry.tag = 0;
-		rx_entry->ignore = ~0;
 		dlist_insert_tail(&rx_entry->entry, &ep->rx_list);
 	}
 	
@@ -284,7 +282,7 @@ static ssize_t rxd_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	ep = container_of(ep_fid, struct rxd_ep, util_ep.ep_fid.fid);
 
 	return rxd_ep_generic_recvmsg(ep, msg->msg_iov, msg->iov_count,
-				      msg->addr, 0, 0, msg->context, ofi_op_msg, flags);
+				      msg->addr, 0, ~0, msg->context, ofi_op_msg, flags);
 }
 
 static ssize_t rxd_ep_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
@@ -298,7 +296,7 @@ static ssize_t rxd_ep_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *d
 	msg_iov.iov_base = buf;
 	msg_iov.iov_len = len;
 
-	return rxd_ep_generic_recvmsg(ep, &msg_iov, 1, src_addr, 0, 0, context,
+	return rxd_ep_generic_recvmsg(ep, &msg_iov, 1, src_addr, 0, ~0, context,
 				      ofi_op_msg, rxd_ep_rx_flags(ep));
 }
 
@@ -310,7 +308,7 @@ static ssize_t rxd_ep_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void
 	ep = container_of(ep_fid, struct rxd_ep, util_ep.ep_fid.fid);
 
 	return rxd_ep_generic_recvmsg(ep, iov, count, src_addr,
-				      0, 0, context, ofi_op_msg, rxd_ep_rx_flags(ep));
+				      0, ~0, context, ofi_op_msg, rxd_ep_rx_flags(ep));
 }
 
 static inline void *rxd_mr_desc(struct fid_mr *mr, struct rxd_ep *ep)
@@ -432,7 +430,6 @@ struct rxd_x_entry *rxd_tx_entry_init(struct rxd_ep *ep, const struct iovec *iov
 	memcpy(&tx_entry->iov[0], iov,
 	       sizeof(*iov) * iov_count);
 
-	memset(&tx_entry->cq_entry, 0, sizeof(tx_entry->cq_entry));
 	if (flags & FI_REMOTE_CQ_DATA)
 		tx_entry->cq_entry.data = data;
 	tx_entry->cq_entry.op_context = context;
@@ -532,7 +529,6 @@ static ssize_t rxd_ep_post_rts(struct rxd_ep *rxd_ep, int dg_addr)
 	rts_pkt->dg_addr = dg_addr;
 
 	addrlen = RXD_NAME_LENGTH;
-	memset(rts_pkt->source, 0, RXD_NAME_LENGTH);
 	ret = fi_getname(&rxd_ep->dg_ep->fid, (void *) rts_pkt->source,
 			 &addrlen);
 	if (ret) {
@@ -1211,7 +1207,7 @@ static void rxd_ep_remove_msg_pkts(struct rxd_peer *peer, uint32_t msg_id)
 static void rxd_ep_progress(struct util_ep *util_ep)
 {
 	struct rxd_peer *peer;
-	struct fi_cq_err_entry err_entry = {0};
+	struct fi_cq_err_entry err_entry;
 	struct rxd_x_entry *tx_entry;
 	struct fi_cq_msg_entry cq_entry;
 	struct rxd_pkt_entry *pkt_entry;
@@ -1249,6 +1245,7 @@ static void rxd_ep_progress(struct util_ep *util_ep)
 			if (rxd_pkt_type(pkt_entry) != RXD_RTS) {
 				hdr = rxd_get_pkt_hdr(pkt_entry);
 				if (pkt_entry->retry_cnt > RXD_MAX_PKT_RETRY) {
+					memset(&err_entry, 0, sizeof(struct fi_cq_err_entry));
 					rxd_ep_remove_msg_pkts(peer, hdr->msg_id);
 					tx_entry = &ep->tx_fs->entry[hdr->tx_id].buf;
 					rxd_tx_entry_free(ep, tx_entry);
