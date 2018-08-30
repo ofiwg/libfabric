@@ -243,6 +243,7 @@ enum rxd_msg_type {
 	RXD_CTS,
 	RXD_ACK,
 	RXD_DATA,
+	RXD_NO_OP,
 };
 
 struct rxd_base_hdr {
@@ -319,17 +320,6 @@ static inline int rxd_pkt_type(struct rxd_pkt_entry *pkt_entry)
 static inline struct rxd_pkt_hdr *rxd_get_pkt_hdr(struct rxd_pkt_entry *pkt_entry)
 {
 	return &((struct rxd_ack_pkt *) (pkt_entry->pkt))->pkt_hdr;
-}
-
-static inline uint32_t rxd_get_next_no(uint32_t x)
-{
-	return (++x != ~0) ? x : ++x;
-}
-
-static inline uint32_t rxd_set_next_no(uint32_t *x)
-{
-	(*x) = rxd_get_next_no(*x);
-	return (*x);
 }
 
 static inline void rxd_set_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)

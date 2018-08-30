@@ -212,6 +212,7 @@ static struct rxd_x_entry *rxd_rx_entry_init(struct rxd_ep *ep,
 	rx_entry->next_seg_no = 0;
 	rx_entry->window = RXD_MAX_UNACKED;
 	rx_entry->iov_count = iov_count;
+	rx_entry->op = op;
 
 	memcpy(rx_entry->iov, iov, sizeof(*rx_entry->iov) * iov_count);
 
@@ -389,7 +390,7 @@ static void rxd_init_data_pkt(struct rxd_ep *ep,
 	data_pkt->pkt_hdr.tx_id = tx_entry->tx_id;
 	data_pkt->pkt_hdr.msg_id = tx_entry->msg_id;
 	data_pkt->pkt_hdr.peer = ep->peers[tx_entry->peer].peer_addr;
-	data_pkt->pkt_hdr.seq_no = rxd_set_next_no(&ep->peers[tx_entry->peer].tx_seq_no);
+	data_pkt->pkt_hdr.seq_no = ep->peers[tx_entry->peer].tx_seq_no++;
 
 	pkt_entry->pkt_size = ofi_copy_from_iov(data_pkt->msg, seg_size,
 						tx_entry->iov,
@@ -419,8 +420,8 @@ struct rxd_x_entry *rxd_tx_entry_init(struct rxd_ep *ep, const struct iovec *iov
 	tx_entry = freestack_pop(ep->tx_fs);
 
 	tx_entry->tx_id = rxd_x_fs_index(ep->tx_fs, tx_entry);
-	tx_entry->rx_id = ~0;
-	tx_entry->msg_id = rxd_set_next_no(&ep->peers[addr].tx_msg_id);
+	tx_entry->rx_id = 0;
+	tx_entry->msg_id = ep->peers[addr].tx_msg_id++;
 
 	tx_entry->op = op;
 	tx_entry->peer = addr;
@@ -459,7 +460,7 @@ struct rxd_x_entry *rxd_tx_entry_init(struct rxd_ep *ep, const struct iovec *iov
 
 void rxd_tx_entry_free(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
 {
-	tx_entry->msg_id = ~0;
+	tx_entry->op = RXD_NO_OP;
 	dlist_remove(&tx_entry->entry);
 	freestack_push(ep->tx_fs, tx_entry);
 }
@@ -572,7 +573,7 @@ static int rxd_ep_post_op(struct rxd_ep *rxd_ep, struct rxd_x_entry *tx_entry)
 	op->pkt_hdr.tx_id = tx_entry->tx_id;
 	op->pkt_hdr.peer = rxd_ep->peers[tx_entry->peer].peer_addr;
 	op->pkt_hdr.msg_id = tx_entry->msg_id;
-	op->pkt_hdr.seq_no = rxd_set_next_no(&rxd_ep->peers[tx_entry->peer].tx_seq_no);
+	op->pkt_hdr.seq_no = rxd_ep->peers[tx_entry->peer].tx_seq_no++;
 	tx_entry->start_seq = op->pkt_hdr.seq_no;
 
 	tx_entry->bytes_done = ofi_copy_from_iov(op->msg, rxd_domain->max_inline_sz,
@@ -1349,11 +1350,11 @@ err:
 static void rxd_init_peer(struct rxd_ep *ep, uint64_t dg_addr)
 {
 	ep->peers[dg_addr].peer_addr = FI_ADDR_UNSPEC;
-	ep->peers[dg_addr].tx_seq_no = ~0;
-	ep->peers[dg_addr].rx_seq_no = ~0;
-	ep->peers[dg_addr].last_ack_seq_no = ~0;
-	ep->peers[dg_addr].tx_msg_id = ~0;
-	ep->peers[dg_addr].rx_msg_id = ~0;
+	ep->peers[dg_addr].tx_seq_no = 0;
+	ep->peers[dg_addr].rx_seq_no = 0;
+	ep->peers[dg_addr].last_ack_seq_no = 0;
+	ep->peers[dg_addr].tx_msg_id = 0;
+	ep->peers[dg_addr].rx_msg_id = 0;
 	ep->peers[dg_addr].rx_window = RXD_MAX_UNACKED;
 	ep->peers[dg_addr].blocking = 0;
 	ep->peers[dg_addr].free_unacked = RXD_MAX_UNACKED;
