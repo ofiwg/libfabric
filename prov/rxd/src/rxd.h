@@ -85,7 +85,7 @@
 
 struct rxd_env {
 	int spin_count;
-	int ooo_rdm;
+	int retry;
 	int max_peers;
 };
 
@@ -371,7 +371,7 @@ fi_addr_t rxd_av_fi_addr(struct rxd_av *av, fi_addr_t dg_fiaddr);
 /* Pkt resource functions */
 int rxd_ep_post_buf(struct rxd_ep *ep);
 void rxd_release_repost_rx(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry);
-void rxd_ep_post_ack(struct rxd_ep *rxd_ep, fi_addr_t peer);
+void rxd_ep_send_ack(struct rxd_ep *rxd_ep, fi_addr_t peer);
 struct rxd_pkt_entry *rxd_get_tx_pkt(struct rxd_ep *ep);
 void rxd_release_rx_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt);
 void rxd_release_tx_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt);

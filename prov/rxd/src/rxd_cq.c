@@ -243,7 +243,7 @@ static void rxd_complete_rx(struct rxd_ep *ep, struct rxd_x_entry *rx_entry)
 	rxd_rx_entry_free(ep, rx_entry);
 }
 
-static int rxd_op_order(struct dlist_entry *item, const void *arg)
+static int rxd_comp_pkt_msg_id(struct dlist_entry *item, const void *arg)
 {
 	struct rxd_op_pkt *list_op = (struct rxd_op_pkt *)
 				     ((container_of(item,
@@ -255,7 +255,7 @@ static int rxd_op_order(struct dlist_entry *item, const void *arg)
 	return (new_op->pkt_hdr.msg_id > list_op->pkt_hdr.msg_id) ? 1 : 0;
 }
 
-static int rxd_cq_order(struct dlist_entry *item, const void *arg)
+static int rxd_comp_rx_msg_id(struct dlist_entry *item, const void *arg)
 {
 	struct rxd_x_entry *list_rx = container_of(item, struct rxd_x_entry, entry);
 	struct rxd_x_entry *new_rx = container_of((struct dlist_entry *) arg,
@@ -295,27 +295,27 @@ static void rxd_ep_recv_data(struct rxd_ep *ep, struct rxd_x_entry *rx_entry,
 	if (rx_entry->next_seg_no < rx_entry->num_segs) {
 		if (!(ep->peers[pkt->pkt_hdr.peer].rx_seq_no %
 		    ep->peers[pkt->pkt_hdr.peer].rx_window))
-			rxd_ep_post_ack(ep, pkt->pkt_hdr.peer);
+			rxd_ep_send_ack(ep, pkt->pkt_hdr.peer);
 		return;
 	}
-	rxd_ep_post_ack(ep, pkt->pkt_hdr.peer);
+	rxd_ep_send_ack(ep, pkt->pkt_hdr.peer);
 
-	if (rxd_env.ooo_rdm && rx_entry->msg_id !=
+	if (!rxd_env.retry && rx_entry->msg_id !=
 	    ep->peers[pkt->pkt_hdr.peer].rx_msg_id + 1) {
 		dlist_insert_order(&ep->peers[pkt->pkt_hdr.peer].buf_cq,
-				   &rxd_cq_order, &rx_entry->entry);
+				   &rxd_comp_rx_msg_id, &rx_entry->entry);
 		return;
 	}
 
 	fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
 
 	rxd_complete_rx(ep, rx_entry);
-	if (rxd_env.ooo_rdm)
+	if (!rxd_env.retry)
 		rxd_progress_buf_cq(ep, pkt->pkt_hdr.peer);
 
 	fastlock_release(&ep->util_ep.rx_cq->cq_lock);
 
-	rxd_ep_post_ack(ep, pkt->pkt_hdr.peer);
+	rxd_ep_send_ack(ep, pkt->pkt_hdr.peer);
 }
 
 static int rxd_check_pkt_ids(struct rxd_x_entry *rx_entry,
@@ -388,7 +388,7 @@ static void rxd_update_peer(struct rxd_ep *ep, fi_addr_t peer, fi_addr_t dg_addr
 	rxd_transfer_pending(ep, peer);
 }
 
-static int rxd_post_cts(struct rxd_ep *rxd_ep, struct rxd_rts_pkt *rts_pkt,
+static int rxd_send_cts(struct rxd_ep *rxd_ep, struct rxd_rts_pkt *rts_pkt,
 			fi_addr_t peer)
 {
 	struct rxd_pkt_entry *pkt_entry;
@@ -449,16 +449,16 @@ static void rxd_handle_data(struct rxd_ep *ep, struct fi_cq_msg_entry *comp,
 	if (rxd_check_pkt_ids(rx_entry, rxd_get_pkt_hdr(pkt_entry)) ||
 	    rx_entry->op == RXD_NO_OP) {
 	    	if (pkt->pkt_hdr.flags & RXD_LAST)
-			rxd_ep_post_ack(ep, pkt->pkt_hdr.peer);
+			rxd_ep_send_ack(ep, pkt->pkt_hdr.peer);
 		return;
 	}
 
 	if (pkt->pkt_hdr.seq_no == ep->peers[pkt->pkt_hdr.peer].rx_seq_no ||
-	    rxd_env.ooo_rdm)
+	    !rxd_env.retry)
 		rxd_ep_recv_data(ep, rx_entry, pkt, comp->len);
 	else if (ep->peers[pkt->pkt_hdr.peer].last_ack_seq_no !=
 		 ep->peers[pkt->pkt_hdr.peer].rx_seq_no) {
-		rxd_ep_post_ack(ep, pkt->pkt_hdr.peer);
+		rxd_ep_send_ack(ep, pkt->pkt_hdr.peer);
 	}
 }
 
@@ -485,7 +485,7 @@ static void rxd_check_post_unexp(struct rxd_ep *ep, struct dlist_entry *list,
 	struct rxd_op_pkt *unexp_pkt;
 	struct rxd_op_pkt *pkt = (struct rxd_op_pkt *) (pkt_entry->pkt);
 
-	if (rxd_env.ooo_rdm)
+	if (!rxd_env.retry)
 		goto insert;
 
 	dlist_foreach_container(list, struct rxd_pkt_entry, unexp, d_entry) {
@@ -524,7 +524,7 @@ static void rxd_handle_rts(struct rxd_ep *ep, struct fi_cq_msg_entry *comp,
 		dlist_insert_tail(&ep->peers[dg_addr].entry, &ep->active_peers);
 	}
 
-	if (rxd_post_cts(ep, pkt, dg_addr)) {
+	if (rxd_send_cts(ep, pkt, dg_addr)) {
 		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL,
 			"error posting CTS\n");
 	}
@@ -595,7 +595,7 @@ void rxd_progress_op(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry,
 
 	if (pkt->num_segs == 1) {
 		rxd_complete_rx(ep, rx_entry);
-		if (rxd_env.ooo_rdm)
+		if (!rxd_env.retry)
 			rxd_progress_buf_cq(ep, pkt->pkt_hdr.peer);
 		return;
 	}
@@ -620,10 +620,10 @@ static void rxd_handle_op(struct rxd_ep *ep, struct fi_cq_msg_entry *comp,
 	}
 
 	if (pkt->pkt_hdr.seq_no != ep->peers[pkt->pkt_hdr.peer].rx_seq_no) {
-		if (rxd_env.ooo_rdm) {
+		if (!rxd_env.retry) {
 			rxd_remove_rx_pkt(ep, pkt_entry);
 			dlist_insert_order(&ep->peers[pkt->pkt_hdr.peer].buf_ops,
-					   &rxd_op_order, &pkt_entry->d_entry);
+					   &rxd_comp_pkt_msg_id, &pkt_entry->d_entry);
 			return;
 		}
 
@@ -642,13 +642,13 @@ static void rxd_handle_op(struct rxd_ep *ep, struct fi_cq_msg_entry *comp,
 	fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
 	rxd_progress_op(ep, pkt_entry, rx_entry);
 
-	if (rxd_env.ooo_rdm && !dlist_empty(&ep->peers[pkt->pkt_hdr.peer].buf_ops))
+	if (!rxd_env.retry && !dlist_empty(&ep->peers[pkt->pkt_hdr.peer].buf_ops))
 		rxd_progress_buf_ops(ep, pkt->pkt_hdr.peer);
 
 	fastlock_release(&ep->util_ep.rx_cq->cq_lock);
 
 ack:
-	rxd_ep_post_ack(ep, pkt->pkt_hdr.peer);
+	rxd_ep_send_ack(ep, pkt->pkt_hdr.peer);
 release:
 	rxd_remove_rx_pkt(ep, pkt_entry);
 	rxd_release_repost_rx(ep, pkt_entry);
