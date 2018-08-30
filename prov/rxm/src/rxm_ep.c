@@ -1259,7 +1259,22 @@ rxm_ep_send_inject(struct rxm_ep *rxm_ep, const struct iovec *iov, size_t count,
 		/* release allocated buffer for further reuse */
 		rxm_tx_buf_release(rxm_ep, tx_buf);
 	}
-	return ret;
+	if (ret)
+		return ret;
+
+	if (flags & FI_COMPLETION) {
+		ret = ofi_cq_write(rxm_ep->util_ep.tx_cq, context, comp_flags,
+				   0, NULL, 0, 0);
+		if (OFI_UNLIKELY(ret)) {
+			FI_WARN(&rxm_prov, FI_LOG_CQ,
+				"Unable to report completion\n");
+			return ret;
+		}
+		rxm_cq_log_comp(comp_flags);
+	}
+	if (rxm_ep->util_ep.flags & OFI_CNTR_ENABLED)
+		rxm_cntr_inc(rxm_ep->util_ep.tx_cntr);
+	return FI_SUCCESS;
 }
 
 static ssize_t
@@ -1283,8 +1298,7 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 	if (data_len <= rxm_ep->rxm_info->tx_attr->inject_size) {
 		size_t total_len = sizeof(struct rxm_pkt) + data_len;
 
-		if ((flags & FI_INJECT) && !(flags & FI_COMPLETION) &&
-		    (total_len <= rxm_ep->msg_info->tx_attr->inject_size))
+		if (total_len <= rxm_ep->msg_info->tx_attr->inject_size)
 			return rxm_ep_send_inject(rxm_ep, iov, count, rxm_conn,
 						  context, data, flags, tag, op,
 						  comp_flags, data_len,
