@@ -336,27 +336,35 @@ int cxip_if_domain_lep_free(struct cxip_if_domain *if_dom, uint64_t lep_idx)
 static void cxip_query_if_list(struct slist *if_list)
 {
 	struct cxip_if *if_entry;
-	struct cxil_devinfo *info;
+	struct cxil_device_list *dev_list;
 	int ret;
 
 	slist_init(&cxip_if_list);
 
-	/* TODO Query all interfaces */
-	ret = cxil_query_devinfo(0, &info);
+	ret = cxil_get_device_list(&dev_list);
 	if (ret) {
-		CXIP_LOG_DBG("No IFs found\n");
+		CXIP_LOG_DBG("cxil_get_device_list failed\n");
 		return;
 	}
 
+	if (dev_list->count == 0) {
+		CXIP_LOG_DBG("No IFs found\n");
+		cxil_free_device_list(dev_list);
+		return;
+	}
+
+	/* Pick first device */
 	if_entry = calloc(1, sizeof(struct cxip_if));
-	if_entry->if_nic = info->nic_addr;
-	if_entry->if_idx = info->dev_id;
-	if_entry->if_pid_granule = info->pid_granule;
+	if_entry->if_nic = dev_list->info[0].nic_addr;
+	if_entry->if_idx = dev_list->info[0].dev_id;
+	if_entry->if_pid_granule = dev_list->info[0].pid_granule;
 	if_entry->if_fabric = 0; /* TODO Find real network ID */
 	ofi_atomic_initialize32(&if_entry->ref, 0);
 	dlist_init(&if_entry->if_doms);
 	fastlock_init(&if_entry->lock);
 	slist_insert_tail(&if_entry->entry, if_list);
+
+	cxil_free_device_list(dev_list);
 }
 
 /*
