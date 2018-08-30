@@ -469,8 +469,7 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 		/* Map local buffer */
 		ret = cxil_map(dev_if->if_lni, result, len,
 			       CXI_MAP_PIN | CXI_MAP_NTA |
-			       CXI_MAP_READ | CXI_MAP_WRITE |
-			       CXI_MAP_NOCACHE,
+			       CXI_MAP_READ | CXI_MAP_WRITE,
 			       &result_md);
 		if (ret) {
 			CXIP_LOG_DBG("Failed to map result buffer: %d\n", ret);
