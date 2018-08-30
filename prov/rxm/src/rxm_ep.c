@@ -1232,7 +1232,36 @@ rxm_ep_inject_common(struct rxm_ep *rxm_ep, const void *buf, size_t len,
 	}
 }
 
-// TODO handle all flags
+static ssize_t
+rxm_ep_send_inject(struct rxm_ep *rxm_ep, const struct iovec *iov, size_t count,
+		   struct rxm_conn *rxm_conn, void *context, uint64_t data,
+		   uint64_t flags, uint64_t tag, uint8_t op, uint64_t comp_flags,
+		   size_t data_len, size_t total_len)
+{
+	struct rxm_tx_buf *tx_buf;
+	int ret;
+
+	if (rxm_ep->util_ep.domain->threading != FI_THREAD_SAFE) {
+		rxm_ep->inject_tx_buf->pkt.hdr.size = data_len;
+		rxm_ep->inject_tx_buf->pkt.hdr.tag = tag;
+		rxm_ep_fill_tx_inject_iov(iov, count, op, comp_flags,
+					  rxm_ep->inject_tx_buf);
+		ret = rxm_ep_inject_send(rxm_ep, rxm_conn,
+					 rxm_ep->inject_tx_buf, total_len);
+		rxm_ep->inject_tx_buf->pkt.hdr.flags = 0;
+	} else {
+		ret = rxm_ep_format_tx_inject_iov(rxm_ep, rxm_conn, data_len,
+						  iov, count, data, flags, tag,
+						  op, comp_flags, &tx_buf);
+		if (OFI_UNLIKELY(ret))
+			return ret;
+		ret = rxm_ep_inject_send(rxm_ep, rxm_conn, tx_buf, total_len);
+		/* release allocated buffer for further reuse */
+		rxm_tx_buf_release(rxm_ep, tx_buf);
+	}
+	return ret;
+}
+
 static ssize_t
 rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 		   size_t count, fi_addr_t dest_addr, void *context, uint64_t data,
@@ -1255,17 +1284,11 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 		size_t total_len = sizeof(struct rxm_pkt) + data_len;
 
 		if ((flags & FI_INJECT) && !(flags & FI_COMPLETION) &&
-		    (total_len <= rxm_ep->msg_info->tx_attr->inject_size)) {
-			ret = rxm_ep_format_tx_inject_iov(rxm_ep, rxm_conn, data_len,
-							  iov, count, data, flags, tag,
-							  op, comp_flags, &tx_buf);
-			if (OFI_UNLIKELY(ret))
-	    			return ret;
-			ret = rxm_ep_inject_send(rxm_ep, rxm_conn, tx_buf, total_len);
-			/* release allocated buffer for further reuse */
-			rxm_tx_buf_release(rxm_ep, tx_buf); 
-			return ret;
-		}
+		    (total_len <= rxm_ep->msg_info->tx_attr->inject_size))
+			return rxm_ep_send_inject(rxm_ep, iov, count, rxm_conn,
+						  context, data, flags, tag, op,
+						  comp_flags, data_len,
+						  total_len);
 
 		ret = rxm_ep_format_tx_res(rxm_ep, rxm_conn, context,
 					   (uint8_t)count, data_len, data, flags,
