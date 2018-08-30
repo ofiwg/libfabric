@@ -298,8 +298,6 @@ struct rxd_data_pkt {
 	char			msg[];
 };
 
-#define RXD_DATA_HDR_SIZE (sizeof(struct rxd_base_hdr) + sizeof(struct rxd_pkt_hdr))
-
 struct rxd_pkt_entry {
 	struct dlist_entry d_entry;
 	struct slist_entry s_entry;//TODO - keep both or make separate tx/rx pkt structs
