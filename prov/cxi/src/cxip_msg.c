@@ -206,6 +206,11 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 
 		/* TODO make fast allocator for ux_sends */
 		ux_send = malloc(sizeof(struct cxip_ux_send));
+		if (!ux_send) {
+			CXIP_LOG_ERROR("Failed to malloc ux_send\n");
+			abort();
+		}
+
 		ux_send->oflow_buf = oflow_buf;
 		ux_send->start = event->tgt_long.start;
 		ux_send->length = event->tgt_long.mlength;
