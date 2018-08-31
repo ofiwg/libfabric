@@ -41,6 +41,10 @@
 extern "C" {
 #endif
 
+struct fi_ctrl_args {
+	void *args;
+	int *num_args;
+};
 
 struct fi_msg {
 	const struct iovec	*msg_iov;

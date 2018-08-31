@@ -125,6 +125,8 @@ struct rstream_ep {
 	struct rstream_rmr_data remote_data;
 	struct fid_cq *recv_cq;
 	struct fid_cq *send_cq;
+	int rcqfd;
+	int scqfd;
 	struct rstream_window qp_win;
 	struct fi_context *rx_ctxs;
 	uint32_t rx_ctx_index;
@@ -154,6 +156,11 @@ struct rstream_timer {
 
 extern ssize_t rstream_post_cq_data_recv(struct rstream_ep *ep,
 	const struct fi_cq_data_entry *cq_entry);
+
+extern int rstream_can_send_tx(struct rstream_ep *ep);
+extern int rstream_can_send_rx(struct rstream_ep *ep);
+extern int rstream_can_recv_tx(struct rstream_ep *ep);
+extern int rstream_can_recv_rx(struct rstream_ep *ep);
 
 extern int rstream_info_to_rstream(uint32_t version, const struct fi_info *core_info,
 	struct fi_info *info);

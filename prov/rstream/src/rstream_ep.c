@@ -110,6 +110,14 @@ static int rstream_cq_init(struct fid_domain *domain, struct rstream_ep *rep)
 	if (ret)
 		return ret;
 
+	ret = fi_control(&rep->send_cq->fid, FI_GETWAIT, &rep->scqfd);
+	if (ret)
+		return ret;
+
+	ret = fi_control(&rep->recv_cq->fid, FI_GETWAIT, &rep->rcqfd);
+	if (ret)
+		return ret;
+
 	rep->qp_win.tx_credits =
 		rep->qp_win.max_tx_credits - RSTREAM_MAX_CTRL_TX;
 	rep->qp_win.rx_credits = rep->qp_win.max_rx_credits;
@@ -120,8 +128,11 @@ static int rstream_cq_init(struct fid_domain *domain, struct rstream_ep *rep)
 static int rstream_ep_ctrl(struct fid *fid, int command, void *arg)
 {
 	struct rstream_ep *rstream_ep;
-	int ret;
+	int ret = 0;
 	rstream_ep = container_of(fid, struct rstream_ep, util_ep.ep_fid.fid);
+	int num_args = 0;
+	struct fi_ctrl_args *ctrl_args;
+	int *fd_arr;
 
 	switch (command) {
 	case FI_ENABLE:
@@ -134,18 +145,47 @@ static int rstream_ep_ctrl(struct fid *fid, int command, void *arg)
 			goto err1;
 		ret = fi_enable(rstream_ep->ep_fd);
 		break;
-	case FI_GETWAIT: /* need to have one cq->fd */
-		ret = fi_control(&rstream_ep->send_cq->fid, FI_GETWAIT, arg);
+	case FI_GETWAIT:
+	case FI_TX_GETWAIT:
+	case FI_RX_GETWAIT:
+		ctrl_args = (struct fi_ctrl_args *) arg;
+		fd_arr = (int *) ctrl_args->args;
+
+		if ((*ctrl_args->num_args) < 2)
+			return -FI_EINVAL;
+
+		if (((command == FI_GETWAIT || command == FI_TX_GETWAIT)
+			&& !rstream_can_send_tx(rstream_ep)) ||
+			((command == FI_GETWAIT || command == FI_RX_GETWAIT) &&
+			!rstream_can_recv_tx(rstream_ep))) {
+			fd_arr[num_args] = rstream_ep->scqfd;
+			num_args++;
+		}
+
+		if (((command == FI_GETWAIT || command == FI_TX_GETWAIT)
+			&& !rstream_can_send_rx(rstream_ep)) ||
+			((command == FI_GETWAIT || command == FI_RX_GETWAIT) &&
+			!rstream_can_recv_rx(rstream_ep))) {
+			fd_arr[num_args] = rstream_ep->rcqfd;
+			num_args++;
+		}
+
+		if (!num_args)
+			return -FI_EAGAIN;
+
+		(*ctrl_args->num_args) = num_args;
+
 		break;
 	default:
 		return -FI_ENOSYS;
 	}
+
 	return ret;
 
 err1:
-	if(rstream_ep->local_mr.base_addr)
+	if (rstream_ep->local_mr.base_addr)
 		free(rstream_ep->local_mr.base_addr);
-	if(rstream_ep->local_mr.mr)
+	if (rstream_ep->local_mr.mr)
 		fi_close(&rstream_ep->local_mr.mr->fid);
 
 	return ret;
