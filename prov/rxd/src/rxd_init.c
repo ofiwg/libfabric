@@ -39,6 +39,7 @@ struct rxd_env rxd_env = {
 	.spin_count	= 1000,
 	.retry		= 1,
 	.max_peers	= 1024,
+	.max_unacked	= 128,
 };
 
 static void rxd_init_env(void)
@@ -46,6 +47,7 @@ static void rxd_init_env(void)
 	fi_param_get_int(&rxd_prov, "spin_count", &rxd_env.spin_count);
 	fi_param_get_bool(&rxd_prov, "retry", &rxd_env.retry);
 	fi_param_get_int(&rxd_prov, "max_peers", &rxd_env.max_peers);
+	fi_param_get_int(&rxd_prov, "max_unacked", &rxd_env.max_unacked);
 }
 
 int rxd_info_to_core(uint32_t version, const struct fi_info *rxd_info,
@@ -100,6 +102,8 @@ RXD_INI
 			"Toggle packet retrying (default: yes)");
 	fi_param_define(&rxd_prov, "max_peers", FI_PARAM_INT,
 			"Maximum number of peers to track (default: 1024)");
+	fi_param_define(&rxd_prov, "max_unacked", FI_PARAM_INT,
+			"Maximum number of packets to send at once (default: 128)");
 
 	rxd_init_env();
 

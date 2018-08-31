@@ -327,7 +327,7 @@ static void rxd_transfer_pending(struct rxd_ep *ep, int peer)
 	struct rxd_data_pkt *data;
 	struct rxd_op_pkt *op;
 
-	while (ep->peers[peer].unacked_cnt < RXD_MAX_UNACKED &&
+	while (ep->peers[peer].unacked_cnt < rxd_env.max_unacked &&
 	       !dlist_empty(&ep->peers[peer].pending) &&
 	       !ep->peers[peer].blocking) {
 		dlist_pop_front(&ep->peers[peer].pending,

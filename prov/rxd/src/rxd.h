@@ -73,7 +73,6 @@
 #define RXD_BUF_POOL_ALIGNMENT	16
 #define RXD_TX_POOL_CHUNK_CNT	1024
 #define RXD_RX_POOL_CHUNK_CNT	1024
-#define RXD_MAX_UNACKED		128
 #define RXD_MAX_PENDING		128
 #define RXD_MAX_PKT_RETRY	50
 
@@ -87,6 +86,7 @@ struct rxd_env {
 	int spin_count;
 	int retry;
 	int max_peers;
+	int max_unacked;
 };
 
 extern struct rxd_env rxd_env;
