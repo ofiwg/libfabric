@@ -31,6 +31,7 @@ Makefile
 Makefile.in
 aclocal.m4
 autom4te.cache
+config/*
 config.h
 config.h.in
 config.h.in~
@@ -63,3 +64,12 @@ util/fi_pingpong
 prov/*/*.spec
 
 .vs
+fabtests.spec
+
+ubertest/fabtest
+ubertest/fi_ubertest
+
+benchmarks/fi_*
+functional/fi_*
+unit/fi_*
+pingpong/fi_*

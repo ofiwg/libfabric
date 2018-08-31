@@ -26,7 +26,6 @@ after_build:
   - cd ..
 
 before_test:
-  - git clone https://github.com/ofiwg/fabtests
   - cd fabtests
   - msbuild fabtests.sln
 

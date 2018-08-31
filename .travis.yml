@@ -78,7 +78,6 @@ install:
     - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then make rpm; fi
 
 script:
-    - git clone https://github.com/ofiwg/fabtests.git
     - cd fabtests
     - ./autogen.sh
     - ./configure --prefix=$PREFIX --with-libfabric=$PREFIX
