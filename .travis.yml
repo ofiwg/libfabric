@@ -21,6 +21,12 @@ addons:
     ssh_known_hosts:
         - www.openfabrics.org
         - git.kernel.org
+    coverity_scan:
+	project:
+	    name: "ofiwg/libfabric"
+	    description: OpenFabrics Interfaces libfabric
+	    build_command_prepend: ./configure
+	    build_command: make -j2
 
 env:
     global:
@@ -30,9 +36,13 @@ env:
         - LDFLAGS=-L$PREFIX/lib
         - LD_LIBRARY_PATH=$PREFIX/lib
         - LIBFABRIC_CONFIGURE_ARGS="--prefix=$PREFIX --enable-sockets"
+	# The next declaration is the encrypted COVERITY_SCAN_TOKEN, created
+	#   via the "travis encrypt" command using the project repo's public key
+	- secure: "HZ9ic/6oxK6S+mgqm0mAeb3HAbJsO+SLOpkmL6V6LSfxxWLfHKn/KcnHk0DwLZ6gQiqnX81J0sCI/IqDAFbZm/La/onvOC1sxHvn62mJJraqlrfsCIJggJFbfpfDrwHNesu0FiYdBWXVGCl843sYABGWPXKTpuPmu2aYJfb5HiA="
 
-# Brew update GNU Autotools so that autogen can succeed
 before_install:
+    - echo -n | openssl s_client -connect https://scan.coverity.com:443 | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' | sudo tee -a /etc/ssl/certs/ca-
+    # Brew update GNU Autotools so that autogen can succeed
     - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update;
         brew upgrade automake || true; brew upgrade libtool || true;
       fi
