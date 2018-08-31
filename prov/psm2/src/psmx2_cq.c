@@ -866,6 +866,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 					psmx2_cntr_inc(ep->send_cntr, PSMX2_STATUS_ERROR(status));
 				free(sendv_req);
 				PSMX2_FREE_COMPLETION(trx_ctxt, status);
+				PSMX2_STATUS_INIT(status);
 				break;
 
 			case PSMX2_IOV_RECV_CONTEXT:
