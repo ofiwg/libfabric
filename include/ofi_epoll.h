@@ -111,6 +111,20 @@ static inline void fi_epoll_close(int ep)
 #define FI_EPOLL_IN  POLLIN
 #define FI_EPOLL_OUT POLLOUT
 
+enum fi_epoll_ctl {
+	EPOLL_CTL_ADD,
+	EPOLL_CTL_DEL,
+	EPOLL_CTL_MOD,
+};
+
+struct fi_epoll_work_item {
+	int		fd;
+	uint32_t	events;
+	void		*context;
+	enum fi_epoll_ctl type;
+	struct slist_entry entry;
+};
+
 typedef struct fi_epoll {
 	int		size;
 	int		nfds;
@@ -118,6 +132,8 @@ typedef struct fi_epoll {
 	void		**context;
 	int		index;
 	struct fd_signal signal;
+	struct slist	work_item_list;
+	fastlock_t	lock;
 } *fi_epoll_t;
 
 int fi_epoll_create(struct fi_epoll **ep);
