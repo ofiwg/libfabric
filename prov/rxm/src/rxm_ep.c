@@ -984,16 +984,12 @@ rxm_ep_sar_tx_prepare_and_send_segment(struct rxm_ep *rxm_ep, struct rxm_conn *r
 					       seg_type, tx_entry);
 	if (OFI_UNLIKELY(!tx_buf)) {
 		tx_entry->msg_id = UINT64_MAX;
-		if (seg_type == RXM_SAR_SEG_FIRST) {
-			/* if TX buffer allocation for the first segment fails,
-			 * release TX entry and report to user */
-			rxm_tx_entry_release(rxm_conn->send_queue, tx_entry);
-		}
 		while (!dlist_empty(&tx_entry->deferred_tx_buf_list)) {
 			dlist_pop_front(&tx_entry->deferred_tx_buf_list,
 					struct rxm_tx_buf, tx_buf, hdr.entry);
 			rxm_tx_buf_release(tx_entry->ep, tx_buf);
 		}
+		rxm_tx_entry_release(rxm_conn->send_queue, tx_entry);
 		return -FI_EAGAIN;
 	}
 
