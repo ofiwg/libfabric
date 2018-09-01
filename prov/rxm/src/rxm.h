@@ -740,14 +740,9 @@ rxm_ep_normal_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		   struct rxm_tx_entry *tx_entry, size_t pkt_size)
 {
 	FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Posting send with length: %" PRIu64
-	       " tag: 0x%" PRIx64 "\n", tx_entry->tx_buf->pkt.hdr.size,
-	       tx_entry->tx_buf->pkt.hdr.tag);
-	ssize_t ret = fi_send(rxm_conn->msg_ep, &tx_entry->tx_buf->pkt, pkt_size,
-			      tx_entry->tx_buf->hdr.desc, 0, tx_entry);
-	if (OFI_UNLIKELY(ret))
-		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
-			"fi_send for MSG provider failed\n");
-	return ret;
+	       " tag: 0x%" PRIx64 "\n", pkt_size, tx_entry->tx_buf->pkt.hdr.tag);
+	return fi_send(rxm_conn->msg_ep, &tx_entry->tx_buf->pkt, pkt_size,
+		       tx_entry->tx_buf->hdr.desc, 0, tx_entry);
 }
 
 static inline
