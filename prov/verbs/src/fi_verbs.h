@@ -723,13 +723,17 @@ fi_ibv_send_poll_cq_if_needed(struct fi_ibv_ep *ep, struct ibv_send_wr *wr)
 	int ret;
 	struct ibv_send_wr *bad_wr;
 
-	ret = fi_ibv_handle_post(ibv_post_send(ep->id->qp, wr, &bad_wr));
-	if (OFI_UNLIKELY(ret == -FI_EAGAIN)) {
-		ret = fi_ibv_poll_reap_unsig_cq(ep);
-		if (OFI_UNLIKELY(ret))
-			return -FI_EAGAIN;
-		/* Try again and return control to a caller */
-		ret = fi_ibv_handle_post(ibv_post_send(ep->id->qp, wr, &bad_wr));
+	ret = ibv_post_send(ep->id->qp, wr, &bad_wr);
+	if (OFI_UNLIKELY(ret)) {
+		ret = fi_ibv_handle_post(ret);
+		if (OFI_LIKELY(ret == -FI_EAGAIN)) {
+			ret = fi_ibv_poll_reap_unsig_cq(ep);
+			if (OFI_UNLIKELY(ret))
+				return -FI_EAGAIN;
+			/* Try again and return control to a caller */
+			ret = fi_ibv_handle_post(ibv_post_send(ep->id->qp, wr,
+							       &bad_wr));
+		}
 	}
 	return ret;
 }
