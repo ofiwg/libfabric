@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
- * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
+ * Copyright (c) 2015-2018 Los Alamos National Security, LLC.
  *                         All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -172,6 +172,14 @@ typedef ssize_t (*trecvmsg_func_t)(struct fid_ep *ep,
  * @param[in] ep	pointer to a EP
  */
 int  _gnix_ep_int_tx_pool_grow(struct gnix_fid_ep *ep);
+
+/**
+ * Internal function for initializing tx buffer pool
+ *
+ * @param[in] ep	pointer to a EP
+ */
+int _gnix_ep_int_tx_pool_init(struct gnix_fid_ep *ep);
+
 
 /*
  * inline functions
@@ -350,11 +358,18 @@ int _gnix_ep_alloc(struct fid_domain *domain, struct fi_info *info,
 int _gnix_ep_init_vc(struct gnix_fid_ep *ep_priv);
 
 /**
- * Internal function for enabling an ep
+ * Internal function for enabling ep tx resources
  *
  * @param[in] ep_priv	 pointer to a previously allocated EP
  */
-int _gnix_ep_enable(struct gnix_fid_ep *ep_priv);
+int _gnix_ep_tx_enable(struct gnix_fid_ep *ep_priv);
+
+/**
+ * Internal function for enabling ep rx resources
+ *
+ * @param[in] ep_priv	 pointer to a previously allocated EP
+ */
+int _gnix_ep_rx_enable(struct gnix_fid_ep *ep_priv);
 
 /*******************************************************************************
  * API Functions

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2017 Los Alamos National Security, LLC.
+ * Copyright (c) 2016-2018 Los Alamos National Security, LLC.
  *                         All rights reserved.
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  *
@@ -186,6 +186,7 @@ static int gnix_sep_tx_ctx(struct fid_ep *sep, int index,
 	tx_priv->ep_fid.tagged = &gnix_sep_tagged_ops;
 	tx_priv->ep_fid.atomic = &gnix_sep_atomic_ops;
 	tx_priv->ep_fid.cm = &gnix_sep_rxtx_cm_ops;
+	tx_priv->index = index;
 
 	/* if an EP already allocated for this index, use it */
 	if (sep_priv->ep_table[index] != NULL) {
@@ -314,6 +315,7 @@ static int gnix_sep_rx_ctx(struct fid_ep *sep, int index,
 	rx_priv->ep_fid.tagged = &gnix_sep_tagged_ops;
 	rx_priv->ep_fid.atomic = &gnix_sep_atomic_ops;
 	rx_priv->ep_fid.cm = &gnix_sep_rxtx_cm_ops;
+	rx_priv->index = index;
 
 	/* if an EP already allocated for this index, use it */
 	if (sep_priv->ep_table[index] != NULL) {
@@ -449,6 +451,7 @@ static int gnix_sep_control(fid_t fid, int command, void *arg)
 {
 	int ret = FI_SUCCESS;
 	struct gnix_fid_ep *ep;
+	struct gnix_fid_sep *sep;
 	struct gnix_fid_trx *trx_priv;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
@@ -461,6 +464,7 @@ static int gnix_sep_control(fid_t fid, int command, void *arg)
 	case FI_CLASS_RX_CTX:
 		trx_priv = container_of(fid, struct gnix_fid_trx, ep_fid);
 		ep = trx_priv->ep;
+		sep = trx_priv->sep;
 		break;
 	default:
 		return -FI_EINVAL;
@@ -477,31 +481,59 @@ static int gnix_sep_control(fid_t fid, int command, void *arg)
 				ret = -FI_EOPBADSTATE;
 				goto err;
 			}
-			ret = _gnix_vc_cm_init(ep->cm_nic);
-			if (ret != FI_SUCCESS) {
-				GNIX_WARN(FI_LOG_EP_CTRL,
-				     "_gnix_vc_cm_nic_init call returned %d\n",
-					ret);
-				goto err;
-			}
-			ret = _gnix_cm_nic_enable(ep->cm_nic);
-			if (ret != FI_SUCCESS) {
-				GNIX_WARN(FI_LOG_EP_CTRL,
-				     "_gnix_cm_nic_enable call returned %d\n",
-					ret);
-				goto err;
+
+			if (sep->enabled[trx_priv->index] == false) {
+				ret = _gnix_vc_cm_init(ep->cm_nic);
+				if (ret != FI_SUCCESS) {
+					GNIX_WARN(FI_LOG_EP_CTRL,
+					     "_gnix_vc_cm_nic_init call returned %d\n",
+						ret);
+					goto err;
+				}
+
+				ret = _gnix_cm_nic_enable(ep->cm_nic);
+				if (ret != FI_SUCCESS) {
+					GNIX_WARN(FI_LOG_EP_CTRL,
+					     "_gnix_cm_nic_enable call returned %d\n",
+						ret);
+					goto err;
+				}
+
+				ret = _gnix_ep_int_tx_pool_init(ep);
+				if (ret != FI_SUCCESS) {
+					GNIX_WARN(FI_LOG_EP_CTRL,
+					     "_gnix_ep_int_tx_pool_init call returned %d\n",
+						ret);
+					goto err;
+				}
+
+				sep->enabled[trx_priv->index] = true;
 			}
 
 			/*
 			 * enable the EP
 			 */
-			ret = _gnix_ep_enable(ep);
-			if (ret != FI_SUCCESS) {
-				GNIX_WARN(FI_LOG_EP_CTRL,
-				     "_gnix_ep_enable call returned %d\n",
-					ret);
-				goto err;
+
+			if (fid->fclass == FI_CLASS_TX_CTX) {
+				ret = _gnix_ep_tx_enable(ep);
+				if (ret != FI_SUCCESS) {
+					GNIX_WARN(FI_LOG_EP_CTRL,
+					     "_gnix_ep_tx_enable call returned %d\n",
+						ret);
+					goto err;
+				}
 			}
+
+			if (fid->fclass == FI_CLASS_RX_CTX) {
+				ret = _gnix_ep_rx_enable(ep);
+				if (ret != FI_SUCCESS) {
+					GNIX_WARN(FI_LOG_EP_CTRL,
+					     "_gnix_ep_rx_enable call returned %d\n",
+						ret);
+					goto err;
+				}
+			}
+
 		}
 
 		break;
@@ -564,6 +596,9 @@ static void __sep_destruct(void *obj)
 		free(sep->tx_ep_table);
 	if (sep->rx_ep_table)
 		free(sep->rx_ep_table);
+	if (sep->enabled)
+		free(sep->enabled);
+
 	fi_freeinfo(sep->info);
 	free(sep);
 }
@@ -686,6 +721,14 @@ int gnix_sep_open(struct fid_domain *domain, struct fi_info *info,
 
 	sep_priv->rx_ep_table = calloc(n_ids, sizeof(struct gnix_fid_ep *));
 	if (sep_priv->rx_ep_table == NULL) {
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			    "call returned NULL\n");
+		ret = -FI_ENOMEM;
+		goto err;
+	}
+
+	sep_priv->enabled = calloc(n_ids, sizeof(bool));
+	if (sep_priv->enabled == NULL) {
 		GNIX_WARN(FI_LOG_EP_CTRL,
 			    "call returned NULL\n");
 		ret = -FI_ENOMEM;

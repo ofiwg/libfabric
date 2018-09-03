@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015-2017 Cray Inc.  All rights reserved.
- * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
+ * Copyright (c) 2015-2018 Los Alamos National Security, LLC.
  *                         All rights reserved.
  * Copyright (c) 2015-2016 Cisco Systems, Inc.  All rights reserved.
  *
@@ -606,6 +606,7 @@ struct gnix_fid_ep {
  *                      this sep
  * @var rx_ep_table     array of pointers to rx contexts instantiated using
  *                      this sep
+ * @var enabled         array of bool to track enabling of embedded eps
  * @var cm_nic          gnix cm nic associated with this SEP.
  * @var av              address vector bound to this SEP
  * @var my_name         ep name for this endpoint
@@ -623,6 +624,7 @@ struct gnix_fid_sep {
 	struct fid_ep **ep_table;
 	struct fid_ep **tx_ep_table;
 	struct fid_ep **rx_ep_table;
+	bool *enabled;
 	struct gnix_cm_nic *cm_nic;
 	struct gnix_fid_av *av;
 	struct gnix_ep_name my_name;
@@ -647,6 +649,7 @@ struct gnix_fid_trx {
 	struct gnix_fid_sep *sep;
 	uint64_t op_flags;
 	uint64_t caps;
+	int index;
 	struct gnix_reference ref_cnt;
 };
 
