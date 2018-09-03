@@ -205,13 +205,13 @@ fi_ibv_rma_write_fast(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	ep = container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 
-	ep->rma_wr.wr.rdma.remote_addr = addr;
-	ep->rma_wr.wr.rdma.rkey = (uint32_t) key;
+	ep->wrs->rma_wr.wr.rdma.remote_addr = addr;
+	ep->wrs->rma_wr.wr.rdma.rkey = (uint32_t) key;
 
-	ep->sge.addr = (uintptr_t) buf;
-	ep->sge.length = (uint32_t) len;
+	ep->wrs->sge.addr = (uintptr_t) buf;
+	ep->wrs->sge.length = (uint32_t) len;
 
-	return fi_ibv_send_poll_cq_if_needed(ep, &ep->rma_wr);
+	return fi_ibv_send_poll_cq_if_needed(ep, &ep->wrs->rma_wr);
 }
 
 static ssize_t

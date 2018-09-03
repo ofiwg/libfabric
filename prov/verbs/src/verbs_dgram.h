@@ -154,24 +154,29 @@ fi_ibv_dgram_pool_destroy(struct fi_ibv_dgram_buf_pool *pool)
 	}
 
 	util_buf_pool_destroy(pool->pool);
+
+	free(pool);
 }
 
 static inline int
 fi_ibv_dgram_pool_create(struct fi_ibv_dgram_pool_attr *attr,
-			 struct fi_ibv_dgram_buf_pool *pool)
+			 struct fi_ibv_dgram_buf_pool **pool)
 {
-	int ret = util_buf_pool_create_ex(&pool->pool, attr->size,
-					  16, 0, attr->count,
-					  attr->alloc_hndlr,
-					  attr->free_hndlr,
-					  attr->pool_ctx);
+	int ret;
+
+	*pool = calloc(1, sizeof(**pool));
+	if (!*pool)
+		return -FI_ENOMEM;
+	ret = util_buf_pool_create_ex(&(*pool)->pool, attr->size, 16, 0,
+				      attr->count, attr->alloc_hndlr,
+				      attr->free_hndlr, attr->pool_ctx);
 	if (ret) {
 		VERBS_WARN(FI_LOG_EP_DATA,
 			   "Unable to create buf pool\n");
 		return ret;
 	}
-	pool->cancel_hndlr = attr->cancel_hndlr;
-	dlist_init(&pool->buf_list);
+	(*pool)->cancel_hndlr = attr->cancel_hndlr;
+	dlist_init(&(*pool)->buf_list);
 
 	return FI_SUCCESS;
 }

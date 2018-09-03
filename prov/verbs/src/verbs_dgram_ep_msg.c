@@ -62,7 +62,7 @@ fi_ibv_dgram_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	assert(ep && ep->util_ep.rx_cq);
 
 	wr_entry = (struct fi_ibv_dgram_wr_entry *)
-		fi_ibv_dgram_wr_entry_get(&ep->grh_pool);
+		fi_ibv_dgram_wr_entry_get(ep->grh_pool);
 	if (OFI_UNLIKELY(!wr_entry))
 		return -FI_ENOMEM;
 
@@ -87,7 +87,7 @@ fi_ibv_dgram_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	fi_ibv_dgram_recv_setup(wr_entry, &wr);
 
 	return fi_ibv_dgram_handle_post(ibv_post_recv(ep->ibv_qp, &wr, &bad_wr),
-					wr_entry, &ep->grh_pool);
+					wr_entry, ep->grh_pool);
 }
 
 static inline ssize_t
@@ -159,7 +159,7 @@ fi_ibv_dgram_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	assert(ep && ep->util_ep.tx_cq);
 
 	wr_entry = (struct fi_ibv_dgram_wr_entry *)
-		fi_ibv_dgram_wr_entry_get(&ep->grh_pool);
+		fi_ibv_dgram_wr_entry_get(ep->grh_pool);
 	if (OFI_UNLIKELY(!wr_entry))
 		return -FI_ENOMEM;
 
@@ -204,7 +204,7 @@ fi_ibv_dgram_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	av_entry = fi_ibv_dgram_av_lookup_av_entry(av, (int)msg->addr);
 	if (OFI_UNLIKELY(!av_entry)) {
 		fi_ibv_dgram_wr_entry_release(
-			&ep->grh_pool,
+			ep->grh_pool,
 			(struct fi_ibv_dgram_wr_entry_hdr *)wr_entry);
 		return -FI_ENOENT;
 	}
@@ -216,7 +216,7 @@ fi_ibv_dgram_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	fi_ibv_dgram_send_setup(wr_entry, &wr, total_len);
 
 	return fi_ibv_dgram_handle_post(ibv_post_send(ep->ibv_qp, &wr, &bad_wr),
-					wr_entry, &ep->grh_pool);
+					wr_entry, ep->grh_pool);
 }
 
 static inline ssize_t
