@@ -233,6 +233,28 @@ fi_ibv_msg_ep_rma_inject_writedata(struct fid_ep *ep_fid, const void *buf, size_
 	return fi_ibv_send_buf_inline(ep, &wr, buf, len);
 }
 
+static ssize_t
+fi_ibv_msg_ep_rma_inject_writedata_fast(struct fid_ep *ep_fid, const void *buf, size_t len,
+					uint64_t data, fi_addr_t dest_addr, uint64_t addr,
+					uint64_t key)
+{
+	ssize_t ret;
+	struct fi_ibv_ep *ep =
+		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
+	ep->wrs->rma_wr.wr.rdma.remote_addr = addr;
+	ep->wrs->rma_wr.wr.rdma.rkey = (uint32_t) key;
+
+	ep->wrs->rma_wr.imm_data = htonl((uint32_t) data);
+	ep->wrs->rma_wr.opcode = IBV_WR_RDMA_WRITE_WITH_IMM;
+
+	ep->wrs->sge.addr = (uintptr_t) buf;
+	ep->wrs->sge.length = (uint32_t) len;
+
+	ret = fi_ibv_send_poll_cq_if_needed(ep, &ep->wrs->rma_wr);
+	ep->wrs->rma_wr.opcode = IBV_WR_RDMA_WRITE;
+	return ret;
+}
+
 struct fi_ops_rma fi_ibv_msg_ep_rma_ops_ts = {
 	.size = sizeof(struct fi_ops_rma),
 	.read = fi_ibv_msg_ep_rma_read,
@@ -256,5 +278,5 @@ struct fi_ops_rma fi_ibv_msg_ep_rma_ops = {
 	.writemsg = fi_ibv_msg_ep_rma_writemsg,
 	.inject = fi_ibv_rma_write_fast,
 	.writedata = fi_ibv_msg_ep_rma_writedata,
-	.injectdata = fi_ibv_msg_ep_rma_inject_writedata,
+	.injectdata = fi_ibv_msg_ep_rma_inject_writedata_fast,
 };
