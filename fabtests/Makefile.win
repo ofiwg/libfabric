@@ -30,10 +30,10 @@ CFLAGS = $(CFLAGS) /O2 /MT
 basedeps = common\shared.c common\jsmn.c common\windows\getopt.c \
 	common\windows\osd.c
 
-includes = /Iinclude /Iinclude\windows /I..\libfabric\include /FIft_osd.h \
+includes = /Iinclude /Iinclude\windows /I..\include /FIft_osd.h \
 	/Iinclude\windows\getopt
 defines = /DGETOPT_STATIC
-libs = ..\libfabric\$(arch)\$(config)\libfabric.lib Ws2_32.lib
+libs = ..\$(arch)\$(config)\libfabric.lib Ws2_32.lib
 
 CFLAGS = $(CFLAGS) $(includes) $(defines)
 
