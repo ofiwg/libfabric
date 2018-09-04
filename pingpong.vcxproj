@@ -30,8 +30,8 @@
     <ProjectGuid>{DBBD5F92-1E78-40ED-8D64-F958D0EF12B2}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>pingpong</RootNamespace>
-    <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
   </PropertyGroup>
+  <Import Project="$(SolutionDir)\Libfabric.Build.Default.props" />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug-v140|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>

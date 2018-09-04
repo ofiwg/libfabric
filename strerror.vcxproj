@@ -30,8 +30,8 @@
     <ProjectGuid>{C835FB00-8E80-4D4A-9791-4B7D6D37168A}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>strerror</RootNamespace>
-    <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
   </PropertyGroup>
+  <Import Project="$(SolutionDir)\Libfabric.Build.Default.props" />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug-v140|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
