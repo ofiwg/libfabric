@@ -33,7 +33,6 @@
 #include "config.h"
 
 #include "fi_verbs.h"
-#include "verbs_dgram.h"
 
 #define VERBS_CM_DATA_SIZE 56
 #define VERBS_RESOLVE_TIMEOUT 2000	// ms
@@ -150,13 +149,13 @@ static int fi_ibv_ep_close(fid_t fid)
 				   struct fi_ibv_fabric, util_fabric.fabric_fid.fid);
 		ofi_ns_del_local_name(&fab->name_server,
 				      &ep->service, &ep->ep_name);
-		fi_ibv_dgram_pool_destroy(ep->grh_pool);
 		ret = ibv_destroy_qp(ep->ibv_qp);
 		if (ret) {
 			VERBS_WARN(FI_LOG_EP_CTRL,
 				   "Unable to destroy QP (errno = %d)\n", errno);
 			return -errno;
 		}
+		fi_ibv_cleanup_cq(ep);
 		break;
 	default:
 		VERBS_INFO(FI_LOG_DOMAIN, "Unknown EP type\n");
@@ -179,10 +178,7 @@ static int fi_ibv_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct fi_ibv_ep *ep;
 	struct util_cq *cq;
-	struct fi_ibv_cq *ibv_cq;
 	struct fi_ibv_dgram_av *av;
-	struct fi_ibv_dgram_eq *eq;
-	struct fi_ibv_dgram_cntr *cntr;
 	int ret;
 
 	ep = container_of(fid, struct fi_ibv_ep, util_ep.ep_fid.fid);
@@ -215,39 +211,15 @@ static int fi_ibv_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	case FI_EP_DGRAM:
 		switch (bfid->fclass) {
 		case FI_CLASS_CQ:
-			ibv_cq = container_of(bfid, struct fi_ibv_cq, util_cq.cq_fid.fid);
-			if (!ibv_cq)
-				return -FI_EINVAL;
-			if (flags & (FI_RECV | FI_TRANSMIT))
-				ep->util_ep.progress =
-					fi_ibv_dgram_send_recv_cq_progress;
-			else if (flags & FI_RECV)
-				ep->util_ep.progress = (ep->util_ep.tx_cq) ?
-					fi_ibv_dgram_send_recv_cq_progress :
-					fi_ibv_dgram_recv_cq_progress;
-			else if (flags & FI_TRANSMIT)
-				ep->util_ep.progress = (ep->util_ep.rx_cq) ?
-					fi_ibv_dgram_send_recv_cq_progress :
-					fi_ibv_dgram_send_cq_progress;
-			return ofi_ep_bind_cq(&ep->util_ep, &ibv_cq->util_cq, flags);
-		case FI_CLASS_EQ:
-			eq = container_of(bfid, struct fi_ibv_dgram_eq,
-					  util_eq.eq_fid.fid);
-			if (!eq)
-				return -FI_EINVAL;
-			return ofi_ep_bind_eq(&ep->util_ep, &eq->util_eq);
+			cq = container_of(bfid, struct util_cq, cq_fid.fid);
+			ret = ofi_ep_bind_cq(&ep->util_ep, cq, flags);
+			if (ret)
+				return ret;
+			break;
 		case FI_CLASS_AV:
 			av = container_of(bfid, struct fi_ibv_dgram_av,
 					  util_av.av_fid.fid);
-			if (!av)
-				return -FI_EINVAL;
 			return ofi_ep_bind_av(&ep->util_ep, &av->util_av);
-		case FI_CLASS_CNTR:
-			cntr = container_of(bfid, struct fi_ibv_dgram_cntr,
-					    util_cntr.cntr_fid.fid);
-			if (!cntr)
-				return -FI_EINVAL;
-			return ofi_ep_bind_cntr(&ep->util_ep, &cntr->util_cntr, flags);
 		default:
 			return -FI_EINVAL;
 		}
@@ -451,9 +423,11 @@ static int fi_ibv_ep_enable(struct fid_ep *ep_fid)
 				   fi_strerror(-ret), -ret);
 			return ret;
 		}
+		ep->ibv_qp = ep->id->qp;
 		break;
 	case FI_EP_DGRAM:
 		assert(domain);
+		attr.sq_sig_all = 1;
 		ret = fi_ibv_create_dgram_ep(domain, ep, &attr);
 		if (ret) {
 			VERBS_WARN(FI_LOG_EP_CTRL, "Unable to create dgram EP: %s (%d)\n",
@@ -591,7 +565,6 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	struct fi_ibv_connreq *connreq;
 	struct fi_ibv_pep *pep;
 	struct fi_info *fi;
-	struct fi_ibv_dgram_pool_attr pool_attr;
 	int ret;
 
 	dom = container_of(domain, struct fi_ibv_domain,
@@ -636,6 +609,12 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		goto err1;
 
+	if (dom->util_domain.threading != FI_THREAD_SAFE) {
+		ret = fi_ibv_alloc_wrs(ep);
+		if (ret)
+			goto err2;
+	}
+
 	switch (info->ep_attr->type) {
 	case FI_EP_MSG:
 		if (dom->util_domain.threading == FI_THREAD_SAFE) {
@@ -643,10 +622,7 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 			ep->util_ep.ep_fid.rma = &fi_ibv_msg_ep_rma_ops_ts;
 		} else {
 			ep->util_ep.ep_fid.msg = &fi_ibv_msg_ep_msg_ops;
-			ep->util_ep.ep_fid.rma = &fi_ibv_msg_ep_rma_ops;
-			ret = fi_ibv_alloc_wrs(ep);
-			if (ret)
-				goto err2;
+			ep->util_ep.ep_fid.rma = &fi_ibv_msg_ep_rma_ops;		
 		}
 		ep->util_ep.ep_fid.cm = &fi_ibv_msg_ep_cm_ops;
 		ep->util_ep.ep_fid.atomic = &fi_ibv_msg_ep_atomic_ops;
@@ -658,9 +634,11 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 		} else if (info->handle->fclass == FI_CLASS_CONNREQ) {
 			connreq = container_of(info->handle, struct fi_ibv_connreq, handle);
 			ep->id = connreq->id;
+			ep->ibv_qp = ep->id->qp;
 		} else if (info->handle->fclass == FI_CLASS_PEP) {
 			pep = container_of(info->handle, struct fi_ibv_pep, pep_fid.fid);
 			ep->id = pep->id;
+			ep->ibv_qp = ep->id->qp;
 			pep->id = NULL;
 
 			if (rdma_resolve_addr(ep->id, info->src_addr, info->dest_addr,
@@ -682,22 +660,15 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 		ep->id->context = &ep->util_ep.ep_fid.fid;
 		break;
 	case FI_EP_DGRAM:
-		pool_attr = (struct fi_ibv_dgram_pool_attr) {
-			.count		= MIN(info->rx_attr->size, info->tx_attr->size),
-			.size		= VERBS_DGRAM_WR_ENTRY_SIZE,
-			.pool_ctx	= domain,
-			.cancel_hndlr	= fi_ibv_dgram_pool_wr_entry_cancel,
-			.alloc_hndlr	= fi_ibv_dgram_mr_buf_reg,
-			.free_hndlr	= fi_ibv_dgram_mr_buf_close,
-		};
-		ret = fi_ibv_dgram_pool_create(&pool_attr, &ep->grh_pool);
-		if (ret)
-			goto err2;
 		ep->service = (info->src_addr) ?
 			(((struct ofi_ib_ud_ep_name *)info->src_addr)->service) :
 			(((getpid() & 0x7FFF) << 16) + ((uintptr_t)ep & 0xFFFF));
 
-		ep->util_ep.ep_fid.msg = &fi_ibv_dgram_msg_ops;
+		if (dom->util_domain.threading == FI_THREAD_SAFE) {
+			ep->util_ep.ep_fid.msg = &fi_ibv_dgram_msg_ops_ts;
+		} else {
+			ep->util_ep.ep_fid.msg = &fi_ibv_dgram_msg_ops;
+		}
 		ep->util_ep.ep_fid.cm = &fi_ibv_dgram_cm_ops;
 		break;
 	default:
@@ -713,6 +684,7 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 
 	return FI_SUCCESS;
 err3:
+	ep->ibv_qp = NULL;
 	rdma_destroy_ep(ep->id);
 err2:
 	ofi_endpoint_close(&ep->util_ep);

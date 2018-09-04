@@ -33,7 +33,6 @@
 #include "config.h"
 
 #include "ep_rdm/verbs_rdm.h"
-#include "verbs_dgram.h"
 
 #include "fi_verbs.h"
 #include <malloc.h>
@@ -45,7 +44,6 @@ static int fi_ibv_domain_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct fi_ibv_domain *domain;
 	struct fi_ibv_eq *eq;
-	struct fi_ibv_dgram_eq *dgram_eq;
 
 	domain = container_of(fid, struct fi_ibv_domain,
 			      util_domain.domain_fid.fid);
@@ -60,12 +58,7 @@ static int fi_ibv_domain_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			domain->eq_flags = flags;
 			break;
 		case FI_EP_DGRAM:
-			dgram_eq = container_of(bfid, struct fi_ibv_dgram_eq,
-						util_eq.eq_fid);
-			if (!dgram_eq)
-				return -FI_EINVAL;
-			return ofi_domain_bind_eq(&domain->util_domain,
-						  &dgram_eq->util_eq);
+			return -FI_EINVAL;
 		default:
 			/* Shouldn't go here */
 			assert(0);
@@ -391,10 +384,9 @@ static struct fi_ops_domain fi_ibv_rdm_domain_ops = {
 static struct fi_ops_domain fi_ibv_dgram_domain_ops = {
 	.size = sizeof(struct fi_ops_domain),
 	.av_open = fi_ibv_dgram_av_open,
-	.cq_open = fi_ibv_dgram_cq_open,
+	.cq_open = fi_ibv_cq_open,
 	.endpoint = fi_ibv_open_ep,
 	.scalable_ep = fi_no_scalable_ep,
-	.cntr_open = fi_ibv_dgram_cntr_open,
 	.poll_open = fi_no_poll_open,
 	.stx_ctx = fi_no_stx_context,
 	.srx_ctx = fi_no_srx_context,

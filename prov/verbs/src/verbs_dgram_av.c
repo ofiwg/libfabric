@@ -30,17 +30,7 @@
  * SOFTWARE.
  */
 
-#include "verbs_dgram.h"
-
-const size_t fi_ibv_dgram_av_entry_size = sizeof(struct fi_ibv_dgram_av_entry);
-
-/* TODO: find more deterministic hash function */
-static inline int
-fi_ibv_dgram_av_slot(struct util_av *av, const struct ofi_ib_ud_ep_name *ep_name)
-{
-	return (ep_name->gid.global.subnet_prefix + ep_name->lid + ep_name->qpn)
-		% av->hash.slots;
-}
+#include "fi_verbs.h"
 
 static inline int fi_ibv_dgram_av_is_addr_valid(struct fi_ibv_dgram_av *av,
 						const void *addr)
@@ -49,8 +39,8 @@ static inline int fi_ibv_dgram_av_is_addr_valid(struct fi_ibv_dgram_av *av,
 	return (check_name->lid > 0);
 }
 
-static inline
-int fi_ibv_dgram_verify_av_insert(struct util_av *av, uint64_t flags)
+static inline int
+fi_ibv_dgram_verify_av_flags(struct util_av *av, uint64_t flags)
 {
 	if ((av->flags & FI_EVENT) && !av->eq) {
 		VERBS_WARN(FI_LOG_AV, "No EQ bound to AV\n");
@@ -65,74 +55,58 @@ int fi_ibv_dgram_verify_av_insert(struct util_av *av, uint64_t flags)
 	return FI_SUCCESS;
 }
 
-static int fi_ibv_dgram_av_insert_addr(struct fi_ibv_dgram_av *av,
-				       const void *addr,
-				       fi_addr_t *fi_addr,
-				       void *context)
+static int
+fi_ibv_dgram_av_insert_addr(struct fi_ibv_dgram_av *av, const void *addr,
+			    fi_addr_t *fi_addr, void *context)
 {
-	int ret, index = -1;
-	struct fi_ibv_domain *domain;
-	struct ofi_ib_ud_ep_name *ep_name;
-	struct ibv_ah *ah;
+	int ret;
+	struct fi_ibv_dgram_av_entry *av_entry;
+	struct fi_ibv_domain *domain =
+		container_of(av->util_av.domain, struct fi_ibv_domain, util_domain);
 
-	domain = container_of(&av->util_av.domain->domain_fid,
-			      struct fi_ibv_domain,
-			      util_domain.domain_fid);
-	if (!domain) {
-		ret = -FI_EINVAL;
-		goto fn1;
-	}
-
-	if (fi_ibv_dgram_av_is_addr_valid(av, addr)) {
-		struct fi_ibv_dgram_av_entry av_entry;
-		struct ibv_ah_attr ah_attr = {
-			.is_global     = 0,
-			.dlid          = ((struct ofi_ib_ud_ep_name *)addr)->lid,
-			.sl            = ((struct ofi_ib_ud_ep_name *)addr)->sl,
-			.src_path_bits = 0,
-			.port_num      = 1,
-		};
-		ep_name = calloc(1, sizeof(*ep_name));
-		if (OFI_UNLIKELY(!ep_name)) {
-			ret = -FI_ENOMEM;
-			goto fn1;
-		}
-		memcpy(ep_name, addr, sizeof(*ep_name));
-		if (ep_name->gid.global.interface_id) {
-			ah_attr.is_global = 1;
-			ah_attr.grh.hop_limit = 64;
-			ah_attr.grh.dgid = ep_name->gid;
-			ah_attr.grh.sgid_index = 0;
-		}
-		ah = ibv_create_ah(domain->pd, &ah_attr);
-		if (!ah) {
-			ret = -errno;
-			VERBS_WARN(FI_LOG_AV, "Unable to create "
-				   "Address Handle, errno - %d\n", errno);
-			goto fn2;
-		}
-
-		av_entry.ah = ah;
-		av_entry.addr = ep_name;
-
-		ret = ofi_av_insert_addr(&av->util_av, &av_entry,
-					 fi_ibv_dgram_av_slot(&av->util_av, ep_name),
-					 &index);
-		if (ret)
-			goto fn3;
-		if (fi_addr)
-			*fi_addr = index;
-	} else {
+	if (OFI_UNLIKELY(!fi_ibv_dgram_av_is_addr_valid(av, addr))) {
 		ret = -FI_EADDRNOTAVAIL;
 		VERBS_WARN(FI_LOG_AV, "Invalid address\n");
 		goto fn1;
 	}
 
-	return ret;
-fn3:
-	ibv_destroy_ah(ah);
+	struct ibv_ah_attr ah_attr = {
+		.is_global = 0,
+		.dlid = ((struct ofi_ib_ud_ep_name *)addr)->lid,
+		.sl = ((struct ofi_ib_ud_ep_name *)addr)->sl,
+		.src_path_bits = 0,
+		.port_num = 1,
+	};
+
+	if (((struct ofi_ib_ud_ep_name *)addr)->gid.global.interface_id) {
+		ah_attr.is_global = 1;
+		ah_attr.grh.hop_limit = 64;
+		ah_attr.grh.dgid = ((struct ofi_ib_ud_ep_name *)addr)->gid;
+		ah_attr.grh.sgid_index = 0;
+	}
+
+	av_entry = calloc(1, sizeof(*av_entry));
+	if (OFI_UNLIKELY(!av_entry)) {
+		ret = -FI_ENOMEM;
+		VERBS_WARN(FI_LOG_AV, "Unable to allocate memory for AV entry\n");
+		goto fn1;
+	}
+
+	av_entry->ah = ibv_create_ah(domain->pd, &ah_attr);
+	if (OFI_UNLIKELY(!av_entry->ah)) {
+		ret = -errno;
+		VERBS_WARN(FI_LOG_AV,
+			   "Unable to create Address Handle, errno - %d\n", errno);
+		goto fn2;
+	}
+	av_entry->addr = *(struct ofi_ib_ud_ep_name *)addr;
+	dlist_insert_tail(&av_entry->list_entry, &av->av_entry_list);
+
+	if (fi_addr)
+		*fi_addr = (fi_addr_t)(uintptr_t)av_entry;
+	return 0;
 fn2:
-	free(ep_name);
+	free(av_entry);
 fn1:
 	if (fi_addr)
 		*fi_addr = FI_ADDR_NOTAVAIL;
@@ -143,18 +117,12 @@ static int fi_ibv_dgram_av_insert(struct fid_av *av_fid, const void *addr,
 				  size_t count, fi_addr_t *fi_addr,
 				  uint64_t flags, void *context)
 {
-	struct fi_ibv_dgram_av *av;
 	int ret, success_cnt = 0;
 	size_t i;
+	struct fi_ibv_dgram_av *av =
+		 container_of(av_fid, struct fi_ibv_dgram_av, util_av.av_fid);
 
-	assert(av_fid->fid.fclass == FI_CLASS_AV);
-	if (av_fid->fid.fclass != FI_CLASS_AV)
-		return -FI_EINVAL;
-
-	av = container_of(av_fid, struct fi_ibv_dgram_av, util_av.av_fid);
-	if (!av)
-		return -FI_EINVAL;
-	ret = fi_ibv_dgram_verify_av_insert(&av->util_av, flags);
+	ret = fi_ibv_dgram_verify_av_flags(&av->util_av, flags);
 	if (ret)
 		return ret;
 
@@ -165,62 +133,40 @@ static int fi_ibv_dgram_av_insert(struct fid_av *av_fid, const void *addr,
 				fi_addr ? &fi_addr[i] : NULL, context);
 		if (!ret)
 			success_cnt++;
-		else if (av->util_av.eq)
-			ofi_av_write_event(&av->util_av, i, -ret, context);
 	}
 
-	VERBS_DBG(FI_LOG_AV, "%"PRIu64" addresses successful\n", count);
-	if (av->util_av.eq) {
-		ofi_av_write_event(&av->util_av, success_cnt, 0, context);
-		ret = 0;
-	} else {
-		ret = success_cnt;
-	}
-	return ret;
+	VERBS_DBG(FI_LOG_AV,
+		  "%"PRIu64" addresses were inserted successfully\n", count);
+	return success_cnt;
+}
+
+static inline void
+fi_ibv_dgram_av_remove_addr(struct fi_ibv_dgram_av_entry *av_entry)
+{
+	int ret = ibv_destroy_ah(av_entry->ah);
+	if (ret)
+		VERBS_WARN(FI_LOG_AV,
+			   "AH Destroying failed with status - %d\n",
+			   ret);
+	dlist_remove(&av_entry->list_entry);
+	free(av_entry);
 }
 
 static int fi_ibv_dgram_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 				  size_t count, uint64_t flags)
 {
-	struct fi_ibv_dgram_av *av;
-	int ret, slot, i, index;
+	int i, ret;
+	struct fi_ibv_dgram_av *av =
+		container_of(av_fid, struct fi_ibv_dgram_av, util_av.av_fid);
 
-	assert(av_fid->fid.fclass == FI_CLASS_AV);
-	if (av_fid->fid.fclass != FI_CLASS_AV)
-		return -FI_EINVAL;
-
-	av = container_of(av_fid, struct fi_ibv_dgram_av, util_av.av_fid);
-	if (!av)
-		return -FI_EINVAL;
-	ret = fi_ibv_dgram_verify_av_insert(&av->util_av, flags);
+	ret = fi_ibv_dgram_verify_av_flags(&av->util_av, flags);
 	if (ret)
 		return ret;
 
 	for (i = count - 1; i >= 0; i--) {
-		struct fi_ibv_dgram_av_entry *av_entry;
-		struct ofi_ib_ud_ep_name *ep_name;
-
-		index = (int)fi_addr[i];
-		av_entry = ofi_av_get_addr(&av->util_av, index);
-		if (!av_entry) {
-			VERBS_WARN(FI_LOG_AV, "Unable to find address\n");
-			return -FI_ENOENT;
-		}
-		ret = ibv_destroy_ah(av_entry->ah);
-		if (ret)
-			VERBS_WARN(FI_LOG_AV,
-				   "AH Destroying of fi_addr %d failed "
-				   "with status - %d\n", index, ret);
-		ep_name = av_entry->addr;
-		slot = fi_ibv_dgram_av_slot(&av->util_av, av_entry->addr);
-		fastlock_acquire(&av->util_av.lock);
-		ret = ofi_av_remove_addr(&av->util_av, slot, index);
-		fastlock_release(&av->util_av.lock);
-		if (ret)
-			VERBS_WARN(FI_LOG_AV,
-				   "Removal of fi_addr %d failed\n",
-				   index);
-		free(ep_name);
+		struct fi_ibv_dgram_av_entry *av_entry =
+			(struct fi_ibv_dgram_av_entry *)fi_addr[i];
+		fi_ibv_dgram_av_remove_addr(av_entry);
 	}
 	return FI_SUCCESS;
 }
@@ -229,52 +175,40 @@ static inline
 int fi_ibv_dgram_av_lookup(struct fid_av *av_fid, fi_addr_t fi_addr,
 			   void *addr, size_t *addrlen)
 {
-	struct fi_ibv_dgram_av *av;
 	struct fi_ibv_dgram_av_entry *av_entry;
 
-	assert(av_fid->fid.fclass == FI_CLASS_AV);
-	if (av_fid->fid.fclass != FI_CLASS_AV)
-		return -FI_EINVAL;
-
-	av = container_of(av_fid, struct fi_ibv_dgram_av, util_av.av_fid);
-	if (!av)
-		return -FI_EINVAL;
-
-	av_entry = fi_ibv_dgram_av_lookup_av_entry(av, (int)fi_addr);
+	av_entry = fi_ibv_dgram_av_lookup_av_entry(fi_addr);
 	if (!av_entry)
 		return -FI_ENOENT;
 
-	memcpy(addr, av_entry->addr, MIN(*addrlen, av->util_av.addrlen));
-	*addrlen = av->util_av.addrlen;
+	memcpy(addr, &av_entry->addr, MIN(*addrlen, sizeof(av_entry->addr)));
+	*addrlen = sizeof(av_entry->addr);
 	return FI_SUCCESS;
 }
 
-static inline
-const char *fi_ibv_dgram_av_straddr(struct fid_av *av, const void *addr,
-				    char *buf, size_t *len)
+static inline const char *
+fi_ibv_dgram_av_straddr(struct fid_av *av, const void *addr, char *buf, size_t *len)
 {
 	return ofi_straddr(buf, len, FI_ADDR_IB_UD, addr);
 }
 
 static int fi_ibv_dgram_av_close(struct fid *av_fid)
 {
-	int ret;
-	struct fi_ibv_dgram_av *av;
-
-	assert(av_fid->fclass == FI_CLASS_AV);
-	if (av_fid->fclass != FI_CLASS_AV)
-		return -FI_EINVAL;
-
-	av = container_of(av_fid, struct fi_ibv_dgram_av, util_av.av_fid.fid);
-	if (!av)
-		return -FI_EINVAL;
-
-	ret = ofi_av_close(&av->util_av);
+	struct fi_ibv_dgram_av_entry *av_entry;
+	struct fi_ibv_dgram_av *av =
+		container_of(av_fid, struct fi_ibv_dgram_av, util_av.av_fid.fid);
+	int ret = ofi_av_close_lightweight(&av->util_av);
 	if (ret)
 		return ret;
 
-	free(av);
+	while (!dlist_empty(&av->av_entry_list)) {
+		av_entry = container_of(av->av_entry_list.next,
+					struct fi_ibv_dgram_av_entry,
+					list_entry);
+		fi_ibv_dgram_av_remove_addr(av_entry);
+	}
 
+	free(av);
 	return FI_SUCCESS;
 }
 
@@ -299,46 +233,31 @@ static struct fi_ops_av fi_ibv_dgram_av_ops = {
 int fi_ibv_dgram_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 			 struct fid_av **av_fid, void *context)
 {
-	struct fi_ibv_domain *domain;
+	struct fi_ibv_domain *domain =
+		container_of(domain_fid, struct fi_ibv_domain,
+			     util_domain.domain_fid);
 	struct fi_ibv_dgram_av *av;
 	int ret;
-
-	if (!attr || domain_fid->fid.fclass != FI_CLASS_DOMAIN)
-		return -FI_EINVAL;
 
 	av = calloc(1, sizeof(*av));
 	if (!av)
 		return -FI_ENOMEM;
 
-	domain = container_of(domain_fid, struct fi_ibv_domain,
-			      util_domain.domain_fid);
-	if (!domain) {
-		ret = -FI_EINVAL;
-		goto err1;
-	}
-
-	assert(domain->ep_type == FI_EP_DGRAM);
-	
-	struct util_av_attr util_attr = {
-		.overhead = attr->count >> 1,
-		.flags = OFI_AV_HASH,
-		.addrlen = sizeof(struct fi_ibv_dgram_av_entry),
-	};
-
 	if (attr->type == FI_AV_UNSPEC)
 		attr->type = FI_AV_MAP;
 
-	ret = ofi_av_init(&domain->util_domain, attr, &util_attr,
-			  &av->util_av, context);
+	ret = ofi_av_init_lightweight(&domain->util_domain, attr,
+				      &av->util_av, context);
 	if (ret)
-		goto err1;
+		goto err_av_init;
+	dlist_init(&av->av_entry_list);
 
+	av->util_av.av_fid.fid.ops = &fi_ibv_dgram_fi_ops;
+	av->util_av.av_fid.ops = &fi_ibv_dgram_av_ops;
 	*av_fid = &av->util_av.av_fid;
-	(*av_fid)->fid.ops = &fi_ibv_dgram_fi_ops;
-	(*av_fid)->ops = &fi_ibv_dgram_av_ops;
 
 	return FI_SUCCESS;
-err1:
+err_av_init:
 	free(av);
 	return ret;
 }

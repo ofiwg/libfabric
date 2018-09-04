@@ -54,6 +54,8 @@
 
 #define VERBS_RDM_MODE (FI_CONTEXT)
 
+#define VERBS_DGRAM_MODE (FI_MSG_PREFIX)
+
 #define VERBS_TX_OP_FLAGS (FI_INJECT | FI_COMPLETION | FI_TRANSMIT_COMPLETE)
 #define VERBS_TX_OP_FLAGS_IWARP (FI_INJECT | FI_COMPLETION)
 #define VERBS_TX_OP_FLAGS_IWARP_RDM (VERBS_TX_OP_FLAGS)
@@ -112,6 +114,13 @@ const struct fi_rx_attr verbs_rx_attr = {
 	.total_buffered_recv	= 0,
 };
 
+const struct fi_rx_attr verbs_dgram_rx_attr = {
+	.mode			= VERBS_DGRAM_MODE | VERBS_RX_MODE,
+	.msg_order		= VERBS_MSG_ORDER,
+	.comp_order		= FI_ORDER_STRICT | FI_ORDER_DATA,
+	.total_buffered_recv	= 0,
+};
+
 const struct fi_rx_attr verbs_rdm_rx_attr = {
 	.mode			= VERBS_RDM_MODE | VERBS_RX_MODE,
 	.op_flags		= VERBS_RX_RDM_OP_FLAGS,
@@ -122,6 +131,15 @@ const struct fi_rx_attr verbs_rdm_rx_attr = {
 
 const struct fi_tx_attr verbs_tx_attr = {
 	.mode			= 0,
+	.op_flags		= VERBS_TX_OP_FLAGS,
+	.msg_order		= VERBS_MSG_ORDER,
+	.comp_order		= FI_ORDER_STRICT,
+	.inject_size		= 0,
+	.rma_iov_limit		= 1,
+};
+
+const struct fi_tx_attr verbs_dgram_tx_attr = {
+	.mode			= VERBS_DGRAM_MODE,
 	.op_flags		= VERBS_TX_OP_FLAGS,
 	.msg_order		= VERBS_MSG_ORDER,
 	.comp_order		= FI_ORDER_STRICT,
@@ -614,28 +632,39 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 	if (!(fi = fi_allocinfo()))
 		return -FI_ENOMEM;
 
-	fi->caps		= ep_dom->caps;
-	fi->handle		= NULL;
-	if (ep_dom->type == FI_EP_RDM) {
-		fi->mode	= VERBS_RDM_MODE;
-		*(fi->tx_attr)	= verbs_rdm_tx_attr;
-		*(fi->rx_attr)	= verbs_rdm_rx_attr;
-	} else {
-		*(fi->tx_attr)	= verbs_tx_attr;
-		*(fi->rx_attr)	= verbs_rx_attr;
-	}
+	fi->caps = ep_dom->caps;
+	fi->handle = NULL;
+	*(fi->ep_attr) = verbs_ep_attr;
+	*(fi->domain_attr) = verbs_domain_attr;
 
-	*(fi->ep_attr)		= verbs_ep_attr;
-	*(fi->domain_attr)	= verbs_domain_attr;
-
-	if (ep_dom->type == FI_EP_RDM)
+	switch (ep_dom->type) {
+	case FI_EP_RDM:
+		fi->mode = VERBS_RDM_MODE;
+		*(fi->tx_attr) = verbs_rdm_tx_attr;
+		*(fi->rx_attr) = verbs_rdm_rx_attr;
 		fi->domain_attr->mr_mode &= ~FI_MR_LOCAL;
+		break;
+	case FI_EP_MSG:
+		*(fi->tx_attr) = verbs_tx_attr;
+		*(fi->rx_attr) = verbs_rx_attr;
+		break;
+	case FI_EP_DGRAM:
+		fi->mode = VERBS_DGRAM_MODE;
+		*(fi->tx_attr) = verbs_dgram_tx_attr;
+		*(fi->rx_attr) = verbs_dgram_rx_attr;
+		fi->ep_attr->msg_prefix_size = VERBS_DGRAM_MSG_PREFIX_SIZE;
+		break;
+	default:
+		assert(0);
+		return -FI_EINVAL;
+	}
+		
 
-	*(fi->fabric_attr)	= verbs_fabric_attr;
+	*(fi->fabric_attr) = verbs_fabric_attr;
 
-	fi->ep_attr->type	= ep_dom->type;
-	fi->tx_attr->caps	= ep_dom->caps;
-	fi->rx_attr->caps	= ep_dom->caps;
+	fi->ep_attr->type = ep_dom->type;
+	fi->tx_attr->caps = ep_dom->caps;
+	fi->rx_attr->caps = ep_dom->caps;
 
 	ret = fi_ibv_get_device_attrs(ctx, fi);
 	if (ret)
