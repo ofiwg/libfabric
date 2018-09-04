@@ -5,6 +5,34 @@ This file contains the main features as well as overviews of specific
 bug fixes (and other actions) for each version of Libfabric since
 version 1.0.
 
+v1.5.4rc1, Tue Sept 4, 2018
+===========================
+
+## Core
+
+-- Fix potential deadlock in name server
+-- Fix race condition handling connections closing
+-- Fix return code from fi_trywait
+-- Fix premature return from fi_cq_sread/from
+-- Validate fi_rx_attr::mode bits
+-- Fix FI_MR_LOCAL mode checks
+
+## RXM
+
+-- Fix incorrect matching of directed receives
+
+## Sockets
+
+-- Fix memory corruption handling buffered received messages
+
+## usNIC
+
+-- Fix CLang compiler warnings accessing packed structures
+
+## Verbs
+
+-- Support different CQ formats for RDM EPs
+
 v1.5.3, Wed Dec 20, 2017
 ========================
 

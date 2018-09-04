@@ -159,7 +159,7 @@
 #define PACKAGE_URL ""
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "1.2.0"
+#define PACKAGE_VERSION "1.5.4"
 
 /* Define to 1 if pthread_spin_init is available. */
 /* #undef PT_LOCK_SPIN */
