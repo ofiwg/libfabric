@@ -1665,6 +1665,7 @@ static int rxm_ep_close(struct fid *fid)
 		container_of(fid, struct rxm_ep, util_ep.ep_fid.fid);
 	struct rxm_ep_wait_ref *wait_ref;
 	struct dlist_entry *tmp_list_entry;
+	struct rxm_msg_ep_entry *entry;
 
 	dlist_foreach_container_safe(&rxm_ep->msg_cq_fd_ref_list,
 				     struct rxm_ep_wait_ref,
@@ -1680,6 +1681,12 @@ static int rxm_ep_close(struct fid *fid)
 
 	if (rxm_ep->util_ep.cmap)
 		ofi_cmap_free(rxm_ep->util_ep.cmap);
+
+	dlist_foreach_container_safe(&rxm_ep->close_ready_msg_eps,
+				     struct rxm_msg_ep_entry, entry,
+				     list_entry, tmp_list_entry) {
+		rxm_conn_close_saved_msg_ep(entry);
+	}
 
 	ret = rxm_listener_close(rxm_ep);
 	if (ret)
@@ -2139,6 +2146,8 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 	ret = rxm_ep_msg_res_open(rxm_ep);
 	if (ret)
 		goto err2;
+
+	dlist_init(&rxm_ep->close_ready_msg_eps);
 
 	rxm_ep->msg_mr_local = ofi_mr_local(rxm_ep->msg_info);
 	rxm_ep->rxm_mr_local = ofi_mr_local(rxm_ep->rxm_info);
