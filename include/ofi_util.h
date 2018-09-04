@@ -61,12 +61,13 @@
 #include <ofi_enosys.h>
 #include <ofi_osd.h>
 #include <ofi_indexer.h>
+#include <ofi_epoll.h>
 
 #include "rbtree.h"
 
 #define UTIL_FLAG_ERROR		(1ULL << 60)
 #define UTIL_FLAG_OVERFLOW	(1ULL << 61)
-	
+
 #define OFI_CNTR_ENABLED	(1ULL << 61)
 
 #define OFI_Q_STRERROR(prov, log, q, q_str, entry, strerror)			\
