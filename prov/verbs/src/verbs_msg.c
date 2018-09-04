@@ -186,16 +186,32 @@ static ssize_t
 fi_ibv_msg_inject_fast(struct fid_ep *ep_fid, const void *buf, size_t len,
 		       fi_addr_t dest_addr)
 {
-	struct fi_ibv_ep *ep;
+	struct fi_ibv_ep *ep =
+		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 
-	ep = container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
+	ep->wrs->sge.addr = (uintptr_t) buf;
+	ep->wrs->sge.length = (uint32_t) len;
 
-	ep->sge.addr = (uintptr_t) buf;
-	ep->sge.length = (uint32_t) len;
-
-	return fi_ibv_send_poll_cq_if_needed(ep, &ep->msg_wr);
+	return fi_ibv_send_poll_cq_if_needed(ep, &ep->wrs->msg_wr);
 }
 
+static ssize_t fi_ibv_msg_ep_injectdata_fast(struct fid_ep *ep_fid, const void *buf, size_t len,
+					     uint64_t data, fi_addr_t dest_addr)
+{
+	ssize_t ret;
+	struct fi_ibv_ep *ep =
+		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
+
+	ep->wrs->msg_wr.imm_data = htonl((uint32_t)data);
+	ep->wrs->msg_wr.opcode = IBV_WR_SEND_WITH_IMM;
+
+	ep->wrs->sge.addr = (uintptr_t) buf;
+	ep->wrs->sge.length = (uint32_t) len;
+
+	ret = fi_ibv_send_poll_cq_if_needed(ep, &ep->wrs->msg_wr);
+	ep->wrs->msg_wr.opcode = IBV_WR_SEND;
+	return ret;
+}
 
 struct fi_ops_msg fi_ibv_msg_ep_msg_ops_ts = {
 	.size = sizeof(struct fi_ops_msg),
@@ -220,7 +236,7 @@ struct fi_ops_msg fi_ibv_msg_ep_msg_ops = {
 	.sendmsg = fi_ibv_msg_ep_sendmsg,
 	.inject = fi_ibv_msg_inject_fast,
 	.senddata = fi_ibv_msg_ep_senddata,
-	.injectdata = fi_ibv_msg_ep_injectdata,
+	.injectdata = fi_ibv_msg_ep_injectdata_fast,
 };
 
 struct fi_ops_msg fi_ibv_msg_srq_ep_msg_ops = {

@@ -61,7 +61,7 @@ int fi_ibv_dgram_cq_cntr_comp(struct util_cq *util_cq,
 		comp->data = ntohl(wc->imm_data);
 	ofi_cirque_commit(util_cq->cirq);
 	fi_ibv_dgram_wr_entry_release(
-		&wr_entry->hdr.ep->grh_pool,
+		wr_entry->hdr.ep->grh_pool,
 		(struct fi_ibv_dgram_wr_entry_hdr *)wr_entry
 	);
 out:
@@ -109,7 +109,7 @@ int fi_ibv_dgram_cq_cntr_report_error(struct util_cq *util_cq,
 
 out:
 	fi_ibv_dgram_wr_entry_release(
-		&wr_entry->hdr.ep->grh_pool,
+		wr_entry->hdr.ep->grh_pool,
 		(struct fi_ibv_dgram_wr_entry_hdr *)wr_entry
 	);
 
@@ -152,7 +152,7 @@ int fi_ibv_dgram_tx_cq_no_action(struct util_cq *util_cq,
 		(struct fi_ibv_dgram_wr_entry *)(uintptr_t)wc->wr_id;
 
 	fi_ibv_dgram_wr_entry_release(
-		&wr_entry->hdr.ep->grh_pool,
+		wr_entry->hdr.ep->grh_pool,
 		(struct fi_ibv_dgram_wr_entry_hdr *)wr_entry
 	);
 
@@ -167,7 +167,7 @@ int fi_ibv_dgram_rx_cq_no_action(struct util_cq *util_cq,
 		(struct fi_ibv_dgram_wr_entry *)(uintptr_t)wc->wr_id;
 
 	fi_ibv_dgram_wr_entry_release(
-		&wr_entry->hdr.ep->grh_pool,
+		wr_entry->hdr.ep->grh_pool,
 		(struct fi_ibv_dgram_wr_entry_hdr *)wr_entry
 	);
 

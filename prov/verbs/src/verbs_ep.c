@@ -82,6 +82,32 @@ static struct fi_ops_ep fi_ibv_ep_base_ops = {
 	.tx_size_left = fi_no_tx_size_left,
 };
 
+static int fi_ibv_alloc_wrs(struct fi_ibv_ep *ep)
+{
+	ep->wrs = calloc(1, sizeof(*ep->wrs));
+	if (!ep->wrs)
+		return -FI_ENOMEM;
+
+	ep->wrs->msg_wr.wr_id = VERBS_INJECT_FLAG;
+	ep->wrs->msg_wr.opcode = IBV_WR_SEND;
+	ep->wrs->msg_wr.send_flags = IBV_SEND_INLINE;
+	ep->wrs->msg_wr.sg_list = &ep->wrs->sge;
+	ep->wrs->msg_wr.num_sge = 1;
+
+	ep->wrs->rma_wr.wr_id = VERBS_INJECT_FLAG;
+	ep->wrs->rma_wr.opcode = IBV_WR_RDMA_WRITE;
+	ep->wrs->rma_wr.send_flags = IBV_SEND_INLINE;
+	ep->wrs->rma_wr.sg_list = &ep->wrs->sge;
+	ep->wrs->rma_wr.num_sge = 1;
+
+	return FI_SUCCESS;
+}
+
+static void fi_ibv_free_wrs(struct fi_ibv_ep *ep)
+{
+	free(ep->wrs);
+}
+
 static struct fi_ibv_ep *fi_ibv_alloc_ep(struct fi_info *info)
 {
 	struct fi_ibv_ep *ep;
@@ -100,23 +126,9 @@ err:
 	return NULL;
 }
 
-static void fi_ibv_init_wrs(struct fi_ibv_ep *ep)
-{
-	ep->msg_wr.wr_id = VERBS_INJECT_FLAG;
-	ep->msg_wr.opcode = IBV_WR_SEND;
-	ep->msg_wr.send_flags = IBV_SEND_INLINE;
-	ep->msg_wr.sg_list = &ep->sge;
-	ep->msg_wr.num_sge = 1;
-
-	ep->rma_wr.wr_id = VERBS_INJECT_FLAG;
-	ep->rma_wr.opcode = IBV_WR_RDMA_WRITE;
-	ep->rma_wr.send_flags = IBV_SEND_INLINE;
-	ep->rma_wr.sg_list = &ep->sge;
-	ep->rma_wr.num_sge = 1;
-}
-
 static void fi_ibv_free_ep(struct fi_ibv_ep *ep)
 {
+	fi_ibv_free_wrs(ep);
 	fi_freeinfo(ep->info);
 	free(ep);
 }
@@ -138,7 +150,7 @@ static int fi_ibv_ep_close(fid_t fid)
 				   struct fi_ibv_fabric, util_fabric.fabric_fid.fid);
 		ofi_ns_del_local_name(&fab->name_server,
 				      &ep->service, &ep->ep_name);
-		fi_ibv_dgram_pool_destroy(&ep->grh_pool);
+		fi_ibv_dgram_pool_destroy(ep->grh_pool);
 		ret = ibv_destroy_qp(ep->ibv_qp);
 		if (ret) {
 			VERBS_WARN(FI_LOG_EP_CTRL,
@@ -619,7 +631,6 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	if (!ep)
 		return -FI_ENOMEM;
 
-	fi_ibv_init_wrs(ep);
 	ret = ofi_endpoint_init(domain, &fi_ibv_util_prov, info, &ep->util_ep, context,
 				fi_ibv_util_ep_progress_noop);
 	if (ret)
@@ -627,10 +638,23 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 
 	switch (info->ep_attr->type) {
 	case FI_EP_MSG:
+		if (dom->util_domain.threading == FI_THREAD_SAFE) {
+			ep->util_ep.ep_fid.msg = &fi_ibv_msg_ep_msg_ops_ts;
+			ep->util_ep.ep_fid.rma = &fi_ibv_msg_ep_rma_ops_ts;
+		} else {
+			ep->util_ep.ep_fid.msg = &fi_ibv_msg_ep_msg_ops;
+			ep->util_ep.ep_fid.rma = &fi_ibv_msg_ep_rma_ops;
+			ret = fi_ibv_alloc_wrs(ep);
+			if (ret)
+				goto err2;
+		}
+		ep->util_ep.ep_fid.cm = &fi_ibv_msg_ep_cm_ops;
+		ep->util_ep.ep_fid.atomic = &fi_ibv_msg_ep_atomic_ops;
+
 		if (!info->handle) {
 			ret = fi_ibv_create_ep(NULL, NULL, 0, info, NULL, &ep->id);
 			if (ret)
-			goto err2;
+				goto err2;
 		} else if (info->handle->fclass == FI_CLASS_CONNREQ) {
 			connreq = container_of(info->handle, struct fi_ibv_connreq, handle);
 			ep->id = connreq->id;
@@ -655,17 +679,7 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 			ret = -FI_ENOSYS;
 			goto err2;
 		}
-
 		ep->id->context = &ep->util_ep.ep_fid.fid;
-		if (dom->util_domain.threading == FI_THREAD_SAFE) {
-			ep->util_ep.ep_fid.msg = &fi_ibv_msg_ep_msg_ops_ts;
-			ep->util_ep.ep_fid.rma = &fi_ibv_msg_ep_rma_ops_ts;
-		} else {
-			ep->util_ep.ep_fid.msg = &fi_ibv_msg_ep_msg_ops;
-			ep->util_ep.ep_fid.rma = &fi_ibv_msg_ep_rma_ops;
-		}
-		ep->util_ep.ep_fid.cm = &fi_ibv_msg_ep_cm_ops;
-		ep->util_ep.ep_fid.atomic = &fi_ibv_msg_ep_atomic_ops;
 		break;
 	case FI_EP_DGRAM:
 		pool_attr = (struct fi_ibv_dgram_pool_attr) {

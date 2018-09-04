@@ -487,11 +487,13 @@ struct fi_ibv_ep {
 	struct fi_ibv_srq_ep	*srq_ep;
 	struct fi_info		*info;
 	/* TODO: it would be removed */
-	struct fi_ibv_dgram_buf_pool	grh_pool;
+	struct fi_ibv_dgram_buf_pool	*grh_pool;
 
-	struct ibv_send_wr	rma_wr;
-	struct ibv_send_wr	msg_wr;
-	struct ibv_sge		sge;
+	struct {
+		struct ibv_send_wr	rma_wr;
+		struct ibv_send_wr	msg_wr;
+		struct ibv_sge		sge;	
+	} *wrs;
 };
 
 int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
