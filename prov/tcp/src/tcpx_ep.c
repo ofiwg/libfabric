@@ -210,6 +210,11 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		tx_entry->msg_hdr.hdr.data = htonll(msg->data);
 	}
 
+	if (flags & (FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)) {
+		tx_entry->msg_hdr.hdr.flags |= OFI_DELIVERY_COMPLETE;
+		tx_entry->flags |= TCPX_NO_COMPLETION;
+	}
+
 	tx_entry->msg_hdr.hdr.flags = htonl(tx_entry->msg_hdr.hdr.flags);
 	tx_entry->ep = tcpx_ep;
 	tx_entry->context = msg->context;
@@ -624,6 +629,16 @@ static void tcpx_ep_tx_rx_queues_release(struct tcpx_ep *ep)
 				       struct tcpx_cq, util_cq);
 		tcpx_xfer_entry_release(tcpx_cq, xfer_entry);
 	}
+
+	while (!slist_empty(&ep->tx_rsp_pend_queue)) {
+		entry = ep->tx_rsp_pend_queue.head;
+		xfer_entry = container_of(entry, struct tcpx_xfer_entry, entry);
+		slist_remove_head(&ep->tx_rsp_pend_queue);
+		tcpx_cq = container_of(xfer_entry->ep->util_ep.tx_cq,
+				       struct tcpx_cq, util_cq);
+		tcpx_xfer_entry_release(tcpx_cq, xfer_entry);
+	}
+
 	fastlock_release(&ep->lock);
 }
 
@@ -804,6 +819,7 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 	slist_init(&ep->rx_queue);
 	slist_init(&ep->tx_queue);
 	slist_init(&ep->rma_read_queue);
+	slist_init(&ep->tx_rsp_pend_queue);
 
 	*ep_fid = &ep->util_ep.ep_fid;
 	(*ep_fid)->fid.ops = &tcpx_ep_fi_ops;

@@ -179,6 +179,7 @@ static int tcpx_buf_pool_init(void *pool_ctx, void *addr,
 		switch (pool->op_type) {
 		case TCPX_OP_MSG_RECV:
 		case TCPX_OP_MSG_SEND:
+		case TCPX_OP_MSG_RESP:
 			xfer_entry->msg_hdr.hdr.op = ofi_op_msg;
 			break;
 		case TCPX_OP_WRITE:

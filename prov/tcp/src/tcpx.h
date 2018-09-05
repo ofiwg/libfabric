@@ -82,6 +82,7 @@ struct tcpx_ep;
 enum tcpx_xfer_op_codes {
 	TCPX_OP_MSG_SEND,
 	TCPX_OP_MSG_RECV,
+	TCPX_OP_MSG_RESP,
 	TCPX_OP_WRITE,
 	TCPX_OP_REMOTE_WRITE,
 	TCPX_OP_READ_REQ,
@@ -152,6 +153,7 @@ struct tcpx_ep {
 	struct dlist_entry	ep_entry;
 	struct slist		rx_queue;
 	struct slist		tx_queue;
+	struct slist		tx_rsp_pend_queue;
 	struct slist		rma_read_queue;
 	enum tcpx_cm_state	cm_state;
 	/* lock for protecting tx/rx queues,rma list,cm_state*/
