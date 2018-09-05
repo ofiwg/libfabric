@@ -258,8 +258,8 @@ static inline void ofi_addr_set_port(struct sockaddr *addr, uint16_t port)
 	}
 }
 
-int ofi_is_only_src_port_set(const char *node, const char *service,
-			     uint64_t flags, const struct fi_info *hints);
+int ofi_is_wildcard_listen_addr(const char *node, const char *service,
+				uint64_t flags, const struct fi_info *hints);
 
 /*
  * Address logging

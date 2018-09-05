@@ -1215,7 +1215,7 @@ static int fi_ibv_get_matching_info(uint32_t version,
 				    const struct fi_info *hints,
 				    struct fi_info **info,
 				    const struct fi_info *verbs_info,
-				    uint8_t only_srcport_set)
+				    uint8_t passive)
 {
 	const struct fi_info *check_info = verbs_info;
 	struct fi_info *fi, *tail;
@@ -1234,7 +1234,7 @@ static int fi_ibv_get_matching_info(uint32_t version,
 				continue;
 		}
 
-		if ((check_info->ep_attr->type == FI_EP_MSG) && only_srcport_set) {
+		if ((check_info->ep_attr->type == FI_EP_MSG) && passive) {
 			if (got_passive_info)
 				continue;
 
@@ -1453,8 +1453,8 @@ static int fi_ibv_get_match_infos(uint32_t version, const char *node,
 
 	// TODO check for AF_IB addr
 	ret = fi_ibv_get_matching_info(version, hints, info, *raw_info,
-				       ofi_is_only_src_port_set(node, service,
-								flags, hints));
+				       ofi_is_wildcard_listen_addr(node, service,
+								   flags, hints));
 	if (ret)
 		return ret;
 
