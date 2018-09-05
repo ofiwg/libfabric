@@ -23,10 +23,8 @@ before_build:
 
 after_build:
   - set PATH=%CD%\x64\%CONFIGURATION%;%PATH%
-  - cd ..
 
 before_test:
-  - git clone https://github.com/ofiwg/fabtests
   - cd fabtests
   - msbuild fabtests.sln
 

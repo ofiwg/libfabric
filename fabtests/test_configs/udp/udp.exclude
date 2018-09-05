@@ -1,0 +1,16 @@
+# Regex patterns of tests to exclude in runfabtests.sh
+
+^msg
+-e msg
+rdm
+poll
+av_test.*
+eq_test
+mr_test
+cm_data
+cq_data
+cntr_test
+scalable_ep
+shared_ctx
+unexpected_msg
+inj_complete
