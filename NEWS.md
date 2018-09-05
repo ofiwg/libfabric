@@ -5,6 +5,19 @@ This file contains the main features as well as overviews of specific
 bug fixes (and other actions) for each version of Libfabric since
 version 1.0.
 
+v1.6.2rc1, Wed Sep 5, 2018
+==========================
+
+## Core
+## GNI
+## PSM
+## PSM2
+## RXM
+## SHM
+## Sockets
+## usNIC
+## Verbs
+
 v1.6.1, Wed May 8, 2018
 ===========================
 
