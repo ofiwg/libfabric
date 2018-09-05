@@ -468,6 +468,21 @@ int ofi_cq_cleanup(struct util_cq *cq)
 	return 0;
 }
 
+int ofi_cq_control(struct fid *fid, int command, void *arg)
+{
+	struct util_cq *cq = container_of(fid, struct util_cq, cq_fid.fid);
+
+	switch (command) {
+	case FI_GETWAIT:
+		if (!cq->wait)
+			return -FI_ENODATA;
+		return fi_control(&cq->wait->wait_fid.fid, FI_GETWAIT, arg);
+	default:
+		FI_INFO(cq->wait->prov, FI_LOG_CQ, "Unsupported command\n");
+		return -FI_ENOSYS;
+	}
+}
+
 static int util_cq_close(struct fid *fid)
 {
 	struct util_cq *cq;
@@ -486,7 +501,7 @@ static struct fi_ops util_cq_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = util_cq_close,
 	.bind = fi_no_bind,
-	.control = fi_no_control,
+	.control = ofi_cq_control,
 	.ops_open = fi_no_ops_open,
 };
 
