@@ -528,7 +528,13 @@ int ofi_av_bind(struct fid *av_fid, struct fid *eq_fid, uint64_t flags)
 	return 0;
 }
 
-int ofi_av_close(struct util_av *av)
+static void util_av_close(struct util_av *av)
+{
+	/* TODO: unmap data? */
+	free(av->data);
+}
+
+int ofi_av_close_lightweight(struct util_av *av)
 {
 	if (ofi_atomic_get32(&av->ref)) {
 		FI_WARN(av->prov, FI_LOG_AV, "AV is busy\n");
@@ -540,8 +546,16 @@ int ofi_av_close(struct util_av *av)
 
 	ofi_atomic_dec32(&av->domain->ref);
 	fastlock_destroy(&av->lock);
-	/* TODO: unmap data? */
-	free(av->data);
+
+	return 0;
+}
+
+int ofi_av_close(struct util_av *av)
+{
+	int ret = ofi_av_close_lightweight(av);
+	if (ret)
+		return ret;
+	util_av_close(av);
 	return 0;
 }
 
@@ -564,11 +578,31 @@ static void util_av_hash_init(struct util_av_hash *hash)
 	hash->table[hash->total_count - 1].next = UTIL_NO_ENTRY;
 }
 
+static int util_verify_av_util_attr(struct util_domain *domain,
+				    const struct util_av_attr *util_attr)
+{
+	if (util_attr->flags & ~(OFI_AV_HASH)) {
+		FI_WARN(domain->prov, FI_LOG_AV, "invalid internal flags\n");
+		return -FI_EINVAL;
+	}
+
+	if (util_attr->addrlen < sizeof(int)) {
+		FI_WARN(domain->prov, FI_LOG_AV, "unsupported address size\n");
+		return -FI_ENOSYS;
+	}
+
+	return 0;
+}
+
 static int util_av_init(struct util_av *av, const struct fi_av_attr *attr,
 			const struct util_av_attr *util_attr)
 {
 	int *entry, i, ret = 0;
 	size_t max_count;
+
+	ret = util_verify_av_util_attr(av->domain, util_attr);
+	if (ret)
+		return ret;
 
 	if (attr->count) {
 		max_count = attr->count;
@@ -577,8 +611,6 @@ static int util_av_init(struct util_av *av, const struct fi_av_attr *attr,
 			max_count = UTIL_DEFAULT_AV_SIZE;
 	}
 
-	ofi_atomic_initialize32(&av->ref, 0);
-	fastlock_init(&av->lock);
 	av->count = max_count ? max_count : UTIL_DEFAULT_AV_SIZE;
 	av->count = roundup_power_of_two(av->count);
 	av->addrlen = util_attr->addrlen;
@@ -620,8 +652,7 @@ static int util_av_init(struct util_av *av, const struct fi_av_attr *attr,
 }
 
 static int util_verify_av_attr(struct util_domain *domain,
-			       const struct fi_av_attr *attr,
-			       const struct util_av_attr *util_attr)
+			       const struct fi_av_attr *attr)
 {
 	switch (attr->type) {
 	case FI_AV_MAP:
@@ -647,34 +678,21 @@ static int util_verify_av_attr(struct util_domain *domain,
 		return -FI_EINVAL;
 	}
 
-	if (util_attr->flags & ~(OFI_AV_HASH)) {
-		FI_WARN(domain->prov, FI_LOG_AV, "invalid internal flags\n");
-		return -FI_EINVAL;
-	}
-
-	if (util_attr->addrlen < sizeof(int)) {
-		FI_WARN(domain->prov, FI_LOG_AV, "unsupported address size\n");
-		return -FI_ENOSYS;
-	}
-
 	return 0;
 }
 
-int ofi_av_init(struct util_domain *domain, const struct fi_av_attr *attr,
-	       const struct util_av_attr *util_attr,
-	       struct util_av *av, void *context)
+int ofi_av_init_lightweight(struct util_domain *domain, const struct fi_av_attr *attr,
+			    struct util_av *av, void *context)
 {
 	int ret;
 
-	ret = util_verify_av_attr(domain, attr, util_attr);
+	ret = util_verify_av_attr(domain, attr);
 	if (ret)
 		return ret;
 
 	av->prov = domain->prov;
-	ret = util_av_init(av, attr, util_attr);
-	if (ret)
-		return ret;
-
+	ofi_atomic_initialize32(&av->ref, 0);
+	fastlock_init(&av->lock);
 	av->av_fid.fid.fclass = FI_CLASS_AV;
 	/*
 	 * ops set by provider
@@ -686,6 +704,20 @@ int ofi_av_init(struct util_domain *domain, const struct fi_av_attr *attr,
 	dlist_init(&av->ep_list);
 	ofi_atomic_inc32(&domain->ref);
 	return 0;
+}
+
+int ofi_av_init(struct util_domain *domain, const struct fi_av_attr *attr,
+		const struct util_av_attr *util_attr,
+		struct util_av *av, void *context)
+{
+	int ret = ofi_av_init_lightweight(domain, attr, av, context);
+	if (ret)
+		return ret;
+
+	ret = util_av_init(av, attr, util_attr);
+	if (ret)
+		return ret;
+	return ret;
 }
 
 
