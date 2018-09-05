@@ -12,6 +12,9 @@
 #          if the test result is PASS, then Jenkins will report this test as PASSED
 #          if the test result is FAIL, then Jenkins will report this test as SKIPPED
 
+# The Test Case section contains the list of test cases and their expected results.
+
+# Test Case Results
 MESSAGE_All-to-All_FI_INJECT=PASS
 MESSAGE_All-to-All_FI_INJECTDATA=PASS
 MESSAGE_All-to-All_FI_SEND=PASS
@@ -111,3 +114,10 @@ TAGGED_Round-Robin_FI_TSENDMSG_TRIGGER=SKIP
 TAGGED_Round-Robin_FI_TSENDV=PASS
 TAGGED_Round-Robin_FI_TSENDV_TRIGGER=SKIP
 TAGGED_Round-Robin_FI_TSEND_TRIGGER=SKIP
+
+# The Error Messages section will contain error message that could happen intermittently.
+# However, a test should not encounter errors during libfabric initialization
+# because the test could not execute.
+# If a test encounters one of these error messages, then Jenkins will report this test as SKIPPED
+
+# Intermittent Error Messages
