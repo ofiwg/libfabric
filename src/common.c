@@ -49,6 +49,9 @@
 #include <inttypes.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
 
 #include <ofi_signal.h>
 #include <rdma/providers/fi_prov.h>
@@ -595,11 +598,42 @@ int ofi_addr_cmp(const struct fi_provider *prov, const struct sockaddr *sa1,
 	}
 }
 
-int ofi_is_only_src_port_set(const char *node, const char *service,
-			     uint64_t flags, const struct fi_info *hints)
+static int ofi_is_any_addr_port(struct sockaddr *addr)
 {
-	if (node)
+	switch (ofi_sa_family(addr)) {
+	case AF_INET:
+		return (ofi_ipv4_is_any_addr(addr) &&
+			ofi_sin_port(addr));
+	case AF_INET6:
+		return (ofi_ipv6_is_any_addr(addr) &&
+			ofi_sin6_port(addr));
+	default:
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Unknown address format\n");
 		return 0;
+	}
+}
+
+int ofi_is_wildcard_listen_addr(const char *node, const char *service,
+				uint64_t flags, const struct fi_info *hints)
+{
+	struct addrinfo *res = NULL;
+	int ret;
+
+	if (node) {
+		ret = getaddrinfo(node, service, NULL, &res);
+		if (ret) {
+			FI_WARN(&core_prov, FI_LOG_CORE,
+				"getaddrinfo failed!\n");
+			return 0;
+		}
+		if (ofi_is_any_addr_port(res->ai_addr)) {
+			freeaddrinfo(res);
+			goto out;
+		}
+		freeaddrinfo(res);
+		return 0;
+	}
 
 	if (hints) {
 		if (hints->dest_addr)
@@ -608,22 +642,11 @@ int ofi_is_only_src_port_set(const char *node, const char *service,
 		if (!hints->src_addr)
 			goto out;
 
-		switch (ofi_sa_family(hints->src_addr)) {
-		case AF_INET:
-			return (ofi_ipv4_is_any_addr(hints->src_addr) &&
-				ofi_sin_port(hints->src_addr));
-		case AF_INET6:
-			return (ofi_ipv6_is_any_addr(hints->src_addr) &&
-				ofi_sin6_port(hints->src_addr));
-		default:
-			FI_WARN(&core_prov, FI_LOG_CORE, "Unknown address format\n");
-			return 0;
-		}
+		return ofi_is_any_addr_port(hints->src_addr);
 	}
 out:
 	return ((flags & FI_SOURCE) && service) ? 1 : 0;
 }
-
 
 size_t ofi_mask_addr(struct sockaddr *maskaddr, const struct sockaddr *srcaddr,
 		     const struct sockaddr *netmask)
