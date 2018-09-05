@@ -232,7 +232,9 @@ int rxd_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		goto err2;
 
 	rxd_domain->max_mtu_sz = MIN(dg_info->ep_attr->max_msg_size, RXD_MAX_MTU_SIZE);
-	rxd_domain->max_seg_sz = rxd_domain->max_mtu_sz - sizeof(struct rxd_pkt_hdr) -
+	rxd_domain->max_inline_sz = rxd_domain->max_mtu_sz - sizeof(struct rxd_op_pkt) -
+				    dg_info->ep_attr->msg_prefix_size;
+	rxd_domain->max_seg_sz = rxd_domain->max_mtu_sz - sizeof(struct rxd_data_pkt) -
 				 dg_info->ep_attr->msg_prefix_size;
 	rxd_domain->mr_mode = dg_info->domain_attr->mr_mode;
 

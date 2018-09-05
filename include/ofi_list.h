@@ -170,6 +170,18 @@ dlist_remove_first_match(struct dlist_entry *head, dlist_func_t *match,
 	return item;
 }
 
+static inline void dlist_insert_order(struct dlist_entry *head, dlist_func_t *order,
+				      struct dlist_entry *entry)
+{
+	struct dlist_entry *item;
+
+	item = dlist_find_first_match(head, order, entry);
+	if (item)
+		dlist_insert_before(entry, item);
+	else
+		dlist_insert_tail(entry, head);
+}
+
 /* splices list at the front of the list 'head'
  *
  * BEFORE:
