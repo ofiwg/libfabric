@@ -553,7 +553,10 @@ struct util_av_attr {
 int ofi_av_init(struct util_domain *domain,
 	       const struct fi_av_attr *attr, const struct util_av_attr *util_attr,
 	       struct util_av *av, void *context);
+int ofi_av_init_lightweight(struct util_domain *domain, const struct fi_av_attr *attr,
+			    struct util_av *av, void *context);
 int ofi_av_close(struct util_av *av);
+int ofi_av_close_lightweight(struct util_av *av);
 
 int ofi_av_insert_addr(struct util_av *av, const void *addr, int slot, int *index);
 int ofi_av_remove_addr(struct util_av *av, int slot, int index);
