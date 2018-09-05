@@ -235,7 +235,6 @@ enum rxd_msg_type {
 	RXD_MSG			= ofi_op_msg,
 	RXD_TAGGED		= ofi_op_tagged,
 	RXD_READ_REQ		= ofi_op_read_req,
-	RXD_READ		= ofi_op_read_rsp,
 	RXD_WRITE		= ofi_op_write,
 	RXD_ATOMIC		= ofi_op_atomic,
 	RXD_ATOMIC_FETCH	= ofi_op_atomic_fetch,
@@ -243,8 +242,8 @@ enum rxd_msg_type {
 	RXD_RTS,
 	RXD_CTS,
 	RXD_ACK,
-	RXD_MSG_DATA,
-	RXD_RMA_DATA,
+	RXD_DATA,
+	RXD_DATA_READ,
 	RXD_NO_OP,
 };
 
