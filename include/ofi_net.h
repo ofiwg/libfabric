@@ -289,8 +289,8 @@ static inline int ofi_equals_sockaddr(const struct sockaddr *addr1,
 		ofi_equals_ipaddr(addr1, addr2);
 }
 
-int ofi_is_only_src_port_set(const char *node, const char *service,
-			     uint64_t flags, const struct fi_info *hints);
+int ofi_is_wildcard_listen_addr(const char *node, const char *service,
+				uint64_t flags, const struct fi_info *hints);
 
 size_t ofi_mask_addr(struct sockaddr *maskaddr, const struct sockaddr *srcaddr,
 		     const struct sockaddr *netmask);

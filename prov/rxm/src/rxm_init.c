@@ -222,7 +222,7 @@ static int rxm_getinfo(uint32_t version, const char *node, const char *service,
 	int ret;
 
 	/* Avoid getting wild card address from MSG provider */
-	if (ofi_is_only_src_port_set(node, service, flags, hints)) {
+	if (ofi_is_wildcard_listen_addr(node, service, flags, hints)) {
 		if (service) {
 			ret = getaddrinfo(NULL, service, NULL, &ai);
 			if (ret) {
