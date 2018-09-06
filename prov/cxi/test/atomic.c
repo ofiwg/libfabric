@@ -581,9 +581,14 @@ Test(atomic, simple_swap, .timeout = 10)
 /**
  * Compare a seen value with an expected value, with 'len' valid bytes. This
  * checks the seen buffer all the way to MAX_TEST_SIZE, and looks for a
- * predefined value (0x00) in every byte, to ensure that there is no overflow.
+ * predefined value in every byte, to ensure that there is no overflow.
  * The seen buffer will always be either the rma or the loc buffer, which have
  * 64 bytes of space in them.
+ *
+ * Summation of real and complex types is trickier. Every decimal constant is
+ * internally represented by a binary approximation, and summation can
+ * accumulate errors. With only a single sum with two arguments, the error could
+ * be +1 or -1 in the LSBit.
  *
  * @param saw 'seen' buffer
  * @param exp 'expected' value
@@ -591,13 +596,48 @@ Test(atomic, simple_swap, .timeout = 10)
  *
  * @return bool true if successful, false if comparison fails
  */
-static bool _compare(void *saw, void *exp, int len)
+static bool _compare(void *saw, void *exp, int len,
+		     enum fi_op op, enum fi_datatype dt)
 {
 	uint8_t *bval = saw;
 	uint8_t *bexp = exp;
+	uint64_t uval = 0;
+	uint64_t uexp = 0;
 	int i;
 
-	for (i = MAX_TEST_SIZE-1; i >= 0; i--) {
+	/* Test MS pad bits */
+	for (i = MAX_TEST_SIZE-1; i >= len; i--) {
+		if (bval[i] != bexp[i])
+			return false;
+	}
+	if (op == FI_SUM) {
+		switch (dt) {
+		case FI_FLOAT:
+		case FI_DOUBLE:
+			/* Copy to UINT64, adjust diff (-1,1) to (0,2) */
+			memcpy(&uval, bval, len);
+			memcpy(&uexp, bexp, len);
+			if ((uval - uexp) + 1 > 2)
+				return false;
+			return true;
+		case FI_FLOAT_COMPLEX:
+		case FI_DOUBLE_COMPLEX:
+			/* Do real and imag parts separately */
+			memcpy(&uval, bval, len/2);
+			memcpy(&uexp, bexp, len/2);
+			if (uval - uexp + 1 > 2)
+				return false;
+			memcpy(&uval, bval+len/2, len/2);
+			memcpy(&uexp, bexp+len/2, len/2);
+			if (uval - uexp + 1 > 2)
+				return false;
+			return true;
+		default:
+			break;
+		}
+	}
+	/* Test LS value bits */
+	for (i = len-1; i >= 0; i--) {
 		if (bval[i] != bexp[i])
 			return false;
 	}
@@ -719,14 +759,14 @@ static void _test_amo(int index, enum fi_datatype dt, enum fi_op op, int err,
 	_await_completion(&cqe);
 
 	/* We expect the RMA effect to be as predicted */
-	cr_expect(_compare(rma, rma_exp, len),
+	cr_expect(_compare(rma, rma_exp, len, op, dt),
 		  "rma #%d:%s\n", index,
 		  _errmsg(op, dt, rma, rma_exp, len, msgbuf,
 			  sizeof(msgbuf)));
 
 	/* We expect the local result to be as predicted, if there is one */
 	if (loc && loc_init) {
-		cr_expect(_compare(loc, loc_exp, len),
+		cr_expect(_compare(loc, loc_exp, len, op, dt),
 			  "loc #%d:%s\n", index,
 			  _errmsg(op, dt, loc, loc_exp, len, msgbuf,
 				  sizeof(msgbuf)));
@@ -787,7 +827,7 @@ static struct test_int_parms int_parms[] = {
 		0xe8f9eafbecfdeeff },
 	{ _AMO|_FAMO, 101, FI_ATOMIC_WRITE, 0, 0,
 		0x1234123412341234,
-		0x0000000000000000,
+		0xabcdabcdabcdabcd,
 		0x1234123412341234 },
 	{ _FAMO, 111, FI_ATOMIC_READ, 0, 0,
 		0x1010101010101010,
@@ -878,37 +918,37 @@ struct test_flt_parms {
 };
 
 static struct test_flt_parms flt_parms[] = {
-	{ _AMO|_FAMO, 11, FI_MIN,  0, 0.0, 12.3, 12.0, 12.0 },
-	{ _AMO|_FAMO, 12, FI_MIN,  0, 0.0, 12.0, 12.3, 12.0 },
-	{ _AMO|_FAMO, 21, FI_MAX,  0, 0.0, 12.3, 12.0, 12.3 },
-	{ _AMO|_FAMO, 22, FI_MAX,  0, 0.0, 12.0, 12.3, 12.3 },
-	{ _AMO|_FAMO, 31, FI_SUM,  0, 0.0,  0.1,  0.0,  0.1 },
-	{ _AMO|_FAMO, 32, FI_SUM,  0, 0.0,  0.1,  1.0,  1.1 },
+	{ _AMO|_FAMO, 11, FI_MIN,  0, 0.0f, 12.3f, 12.0f, 12.0f },
+	{ _AMO|_FAMO, 12, FI_MIN,  0, 0.0f, 12.0f, 12.3f, 12.0f },
+	{ _AMO|_FAMO, 21, FI_MAX,  0, 0.0f, 12.3f, 12.0f, 12.3f },
+	{ _AMO|_FAMO, 22, FI_MAX,  0, 0.0f, 12.0f, 12.3f, 12.3f },
+	{ _AMO|_FAMO, 31, FI_SUM,  0, 0.0f,  1.1f,  1.2f, (1.1f + 1.2f) },
+	{ _AMO|_FAMO, 32, FI_SUM,  0, 0.0f,  0.4f,  1.7f, (0.4f + 1.7f) },
 	{ _AMO|_FAMO, 41, FI_LOR,  1 },
 	{ _AMO|_FAMO, 51, FI_LAND, 1 },
 	{ _AMO|_FAMO, 61, FI_LXOR, 1 },
 	{ _AMO|_FAMO, 71, FI_BOR,  1 },
 	{ _AMO|_FAMO, 81, FI_BAND, 1 },
 	{ _AMO|_FAMO, 91, FI_BXOR, 1 },
-	{ _AMO|_FAMO, 101, FI_ATOMIC_WRITE, 0, 0.0, 10.2, 0.0, 10.2 },
-	{ _FAMO, 111, FI_ATOMIC_READ, 0, 0.0, 1.1, 10.2, 10.2 },
+	{ _AMO|_FAMO, 101, FI_ATOMIC_WRITE, 0, 0.0f, 10.2f, 96.6f, 10.2f },
+	{ _FAMO, 111, FI_ATOMIC_READ, 0, 0.0f, 1.1f, 10.2f, 10.2f },
 	{ _AMO,  112, FI_ATOMIC_READ, 1 },
-	{ _CAMO, 121, FI_CSWAP,     0, 12.0, 12.3, 10.0, 10.0 },
-	{ _CAMO, 122, FI_CSWAP,     0, 10.0, 12.3, 10.0, 12.3 },
-	{ _CAMO, 131, FI_CSWAP_NE,  0, 12.0, 12.3, 10.0, 12.3 },
-	{ _CAMO, 132, FI_CSWAP_NE,  0, 10.0, 12.3, 10.0, 10.0 },
-	{ _CAMO, 141, FI_CSWAP_LE,  0, 10.1, 12.3, 10.0, 10.0 },
-	{ _CAMO, 142, FI_CSWAP_LE,  0, 10.0, 12.3, 10.0, 12.3 },
-	{ _CAMO, 143, FI_CSWAP_LE,  0,  9.9, 12.3, 10.0, 12.3 },
-	{ _CAMO, 151, FI_CSWAP_LT,  0, 10.1, 12.3, 10.0, 10.0 },
-	{ _CAMO, 152, FI_CSWAP_LT,  0, 10.0, 12.3, 10.0, 10.0 },
-	{ _CAMO, 153, FI_CSWAP_LT,  0,  9.9, 12.3, 10.0, 12.3 },
-	{ _CAMO, 161, FI_CSWAP_GE,  0, 10.1, 12.3, 10.0, 12.3 },
-	{ _CAMO, 162, FI_CSWAP_GE,  0, 10.0, 12.3, 10.0, 12.3 },
-	{ _CAMO, 163, FI_CSWAP_GE,  0,  9.9, 12.3, 10.0, 10.0 },
-	{ _CAMO, 171, FI_CSWAP_GT,  0, 10.1, 12.3, 10.0, 12.3 },
-	{ _CAMO, 172, FI_CSWAP_GT,  0, 10.0, 12.3, 10.0, 10.0 },
-	{ _CAMO, 173, FI_CSWAP_GT,  0,  9.9, 12.3, 10.0, 10.0 },
+	{ _CAMO, 121, FI_CSWAP,     0, 12.0f, 12.3f, 10.0f, 10.0f },
+	{ _CAMO, 122, FI_CSWAP,     0, 10.0f, 12.3f, 10.0f, 12.3f },
+	{ _CAMO, 131, FI_CSWAP_NE,  0, 12.0f, 12.3f, 10.0f, 12.3f },
+	{ _CAMO, 132, FI_CSWAP_NE,  0, 10.0f, 12.3f, 10.0f, 10.0f },
+	{ _CAMO, 141, FI_CSWAP_LE,  0, 10.1f, 12.3f, 10.0f, 10.0f },
+	{ _CAMO, 142, FI_CSWAP_LE,  0, 10.0f, 12.3f, 10.0f, 12.3f },
+	{ _CAMO, 143, FI_CSWAP_LE,  0,  9.9f, 12.3f, 10.0f, 12.3f },
+	{ _CAMO, 151, FI_CSWAP_LT,  0, 10.1f, 12.3f, 10.0f, 10.0f },
+	{ _CAMO, 152, FI_CSWAP_LT,  0, 10.0f, 12.3f, 10.0f, 10.0f },
+	{ _CAMO, 153, FI_CSWAP_LT,  0,  9.9f, 12.3f, 10.0f, 12.3f },
+	{ _CAMO, 161, FI_CSWAP_GE,  0, 10.1f, 12.3f, 10.0f, 12.3f },
+	{ _CAMO, 162, FI_CSWAP_GE,  0, 10.0f, 12.3f, 10.0f, 12.3f },
+	{ _CAMO, 163, FI_CSWAP_GE,  0,  9.9f, 12.3f, 10.0f, 10.0f },
+	{ _CAMO, 171, FI_CSWAP_GT,  0, 10.1f, 12.3f, 10.0f, 12.3f },
+	{ _CAMO, 172, FI_CSWAP_GT,  0, 10.0f, 12.3f, 10.0f, 10.0f },
+	{ _CAMO, 173, FI_CSWAP_GT,  0,  9.9f, 12.3f, 10.0f, 10.0f },
 	{ _CAMO, 181, FI_MSWAP,     1 },
 };
 
@@ -970,15 +1010,15 @@ static struct test_dbl_parms dbl_parms[] = {
 	{ _AMO|_FAMO, 12, FI_MIN,  0, 0.0, 12.0, 12.3, 12.0 },
 	{ _AMO|_FAMO, 21, FI_MAX,  0, 0.0, 12.3, 12.0, 12.3 },
 	{ _AMO|_FAMO, 22, FI_MAX,  0, 0.0, 12.0, 12.3, 12.3 },
-	{ _AMO|_FAMO, 31, FI_SUM,  0, 0.0,  0.1,  0.0,  0.1 },
-	{ _AMO|_FAMO, 32, FI_SUM,  0, 0.0,  0.1,  1.0,  1.1 },
+	{ _AMO|_FAMO, 31, FI_SUM,  0, 0.0,  1.1,  1.2, (1.1 + 1.2) },
+	{ _AMO|_FAMO, 32, FI_SUM,  0, 0.0,  0.4,  1.7, (0.4 + 1.7) },
 	{ _AMO|_FAMO, 41, FI_LOR,  1 },
 	{ _AMO|_FAMO, 51, FI_LAND, 1 },
 	{ _AMO|_FAMO, 61, FI_LXOR, 1 },
 	{ _AMO|_FAMO, 71, FI_BOR,  1 },
 	{ _AMO|_FAMO, 81, FI_BAND, 1 },
 	{ _AMO|_FAMO, 91, FI_BXOR, 1 },
-	{ _AMO|_FAMO, 101, FI_ATOMIC_WRITE, 0, 0.0, 10.2, 0.0, 10.2 },
+	{ _AMO|_FAMO, 101, FI_ATOMIC_WRITE, 0, 0.0, 10.2, 123.4, 10.2 },
 	{ _FAMO, 111, FI_ATOMIC_READ, 0, 0.0, 1.1, 10.2, 10.2 },
 	{ _AMO,  112, FI_ATOMIC_READ, 1 },
 	{ _CAMO, 121, FI_CSWAP,     0, 12.0, 12.3, 10.0, 10.0 },
@@ -1058,8 +1098,12 @@ struct test_cplx_parms {
 static struct test_cplx_parms cplx_parms[] = {
 	{ _AMO|_FAMO, 11, FI_MIN,  1 },
 	{ _AMO|_FAMO, 21, FI_MAX,  1 },
+	{ _AMO|_FAMO, 31, FI_SUM,  0, 0.0,  1.1,  1.2, (1.1 + 1.2) },
+	{ _AMO|_FAMO, 32, FI_SUM,  0, 0.0,  0.4,  1.7, (0.4 + 1.7) },
 	{ _AMO|_FAMO, 31, FI_SUM,  0,
-		0.0, 0.1+I*1.1, 0.0+I*1.1, 0.1+I*2.2 },
+		0.0f, 1.1f+I*0.4f, 1.2f+I*1.7f, (1.1f+I*0.4f + 1.2f+I*1.7f) },
+	{ _AMO|_FAMO, 32, FI_SUM,  0,
+		0.0f, 1.1f+I*1.7f, 1.2f+I*0.4f, (1.1f+I*1.7f + 1.2f+I*0.4f) },
 	{ _AMO|_FAMO, 41, FI_LOR,  1 },
 	{ _AMO|_FAMO, 51, FI_LAND, 1 },
 	{ _AMO|_FAMO, 61, FI_LXOR, 1 },
@@ -1067,18 +1111,18 @@ static struct test_cplx_parms cplx_parms[] = {
 	{ _AMO|_FAMO, 81, FI_BAND, 1 },
 	{ _AMO|_FAMO, 91, FI_BXOR, 1 },
 	{ _AMO|_FAMO, 101, FI_ATOMIC_WRITE, 0,
-		0.0, 10.2+I*1.1, 0.3+I*2.2, 10.2+I*1.1 },
+		0.0f, 10.2f+I*1.1f, 0.3f+I*2.2f, 10.2f+I*1.1f },
 	{ _FAMO, 111, FI_ATOMIC_READ, 0,
-		0.0, 1.1+I*1.1, 10.2+I*1.1, 10.2+I*1.1 },
+		0.0f, 1.1f+I*1.1f, 10.2f+I*1.1f, 10.2f+I*1.1f },
 	{ _AMO,  112, FI_ATOMIC_READ, 1 },
 	{ _CAMO, 121, FI_CSWAP,     0,
-		12.0+I*1.1, 12.3+I*1.1, 10.0+I*1.1, 10.0+I*1.1 },
+		12.0f+I*1.1f, 12.3f+I*1.1f, 10.0f+I*1.1f, 10.0f+I*1.1f },
 	{ _CAMO, 122, FI_CSWAP,     0,
-		10.0+I*1.1, 12.3+I*1.1, 10.0+I*1.1, 12.3+I*1.1 },
+		10.0f+I*1.1f, 12.3f+I*1.1f, 10.0f+I*1.1f, 12.3f+I*1.1f },
 	{ _CAMO, 131, FI_CSWAP_NE,  0,
-		12.0+I*1.1, 12.3+I*1.1, 10.0+I*1.1, 12.3+I*1.1 },
+		12.0f+I*1.1f, 12.3f+I*1.1f, 10.0f+I*1.1f, 12.3f+I*1.1f },
 	{ _CAMO, 132, FI_CSWAP_NE,  0,
-		10.0+I*1.1, 12.3+I*1.1, 10.0+I*1.1, 10.0+I*1.1 },
+		10.0f+I*1.1f, 12.3f+I*1.1f, 10.0f+I*1.1f, 10.0f+I*1.1f },
 	{ _CAMO, 141, FI_CSWAP_LE,  1 },
 	{ _CAMO, 151, FI_CSWAP_LT,  1 },
 	{ _CAMO, 161, FI_CSWAP_GE,  1 },
@@ -1092,9 +1136,7 @@ ParameterizedTestParameters(atomic, test_cplx)
 				   ARRAY_SIZE(cplx_parms));
 }
 
-/* TODO: nic-emu does not yet support float complex   */
-ParameterizedTest(struct test_cplx_parms *p, atomic, test_cplx,
-		  .disabled = true)
+ParameterizedTest(struct test_cplx_parms *p, atomic, test_cplx)
 {
 	struct mem_region mr;
 	enum fi_datatype dt = FI_FLOAT_COMPLEX;
@@ -1148,7 +1190,9 @@ static struct test_dcplx_parms dcplx_parms[] = {
 	{ _AMO|_FAMO, 11, FI_MIN,  1 },
 	{ _AMO|_FAMO, 21, FI_MAX,  1 },
 	{ _AMO|_FAMO, 31, FI_SUM,  0,
-		0.0, 0.1+I*1.1, 0.0+I*1.1, 0.1+I*2.2 },
+		0.0, 1.1+I*0.4, 1.2+I*1.7, (1.1+I*0.4 + 1.2+I*1.7) },
+	{ _AMO|_FAMO, 32, FI_SUM,  0,
+		0.0, 1.1+I*1.7, 1.2+I*0.4, (1.1+I*1.7 + 1.2+I*0.4) },
 	{ _AMO|_FAMO, 41, FI_LOR,  1 },
 	{ _AMO|_FAMO, 51, FI_LAND, 1 },
 	{ _AMO|_FAMO, 61, FI_LXOR, 1 },
@@ -1181,9 +1225,7 @@ ParameterizedTestParameters(atomic, test_dcplx)
 				   ARRAY_SIZE(dcplx_parms));
 }
 
-/* TODO: nic-emu does not yet support double complex   */
-ParameterizedTest(struct test_dcplx_parms *p, atomic, test_dcplx,
-		  .disabled = true)
+ParameterizedTest(struct test_dcplx_parms *p, atomic, test_dcplx)
 {
 	struct mem_region mr;
 	enum fi_datatype dt = FI_DOUBLE_COMPLEX;

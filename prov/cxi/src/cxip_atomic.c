@@ -297,6 +297,11 @@ static void _cxip_famo_cb(struct cxip_req *req, const union c_event *event)
 /**
  * Return true if vector specification is valid.
  *
+ * vn must be > 0 and <= 1 (CXIP_AMO_MAX_IOV). Formally, we could do this test,
+ * but formally we would have to loop (once) over the vectors, and test each
+ * count for being > 0 and <= 1 (CXIP_AMO_MAX_PACKED_IOV). Instead, we just test
+ * to ensure that each is 1.
+ *
  * @param vn vector element count
  * @param v vector pointer
  *
@@ -463,9 +468,9 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 			result = local_result;
 			break;
 		default:
-			/* Anything else can use AXOR with a zero mask */
+			/* Anything else can use AXOR with a set mask */
 			opcode = C_AMO_OP_AXOR;
-			memset(local_compare, 0, len);
+			memset(local_compare, -1, len);
 			compare = local_compare;
 			break;
 		}
