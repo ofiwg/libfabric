@@ -182,17 +182,17 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct iovec *iov,
 	    (cache->cached_size > cache->max_cached_size)) {
 		(*entry)->cached = 0;
 	} else {
-		ret = ofi_monitor_subscribe(&cache->nq, iov->iov_base, iov->iov_len,
-					    &(*entry)->subscription);
-		if (ret)
-			goto err;
-		(*entry)->subscribed = 1;
-
 		if (rbtInsert(cache->mr_tree, &(*entry)->iov, *entry)) {
 			ret = -FI_ENOMEM;
 			goto err;
 		}
 		(*entry)->cached = 1;
+
+		ret = ofi_monitor_subscribe(&cache->nq, iov->iov_base, iov->iov_len,
+					    &(*entry)->subscription);
+		if (ret)
+			goto err;
+		(*entry)->subscribed = 1;
 	}
 
 	return 0;
@@ -226,17 +226,18 @@ util_mr_cache_merge(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
 		FI_DBG(cache->domain->prov, FI_LOG_MR, "merged %p (len: %" PRIu64 ")\n",
 		       iov.iov_base, iov.iov_len);
 
+		if (old_entry->subscribed) {
+			/* old entry will be removed as soon as `use_cnt == 0`.
+			 * unsubscribe from the entry */
+			ofi_monitor_unsubscribe(&old_entry->subscription);
+			old_entry->subscribed = 0;
+		}
 		rbtErase(cache->mr_tree, iter);
 		old_entry->cached = 0;
 
 		if (old_entry->use_cnt == 0) {
 			dlist_remove_init(&old_entry->lru_entry);
 			util_mr_free_entry(cache, old_entry); 
-		} else if (old_entry->subscribed) {
-			/* old entry will be removed as soon as `use_cnt == 0`.
-			 * unsubscribe from the entry */
-			ofi_monitor_unsubscribe(&old_entry->subscription);
-			old_entry->subscribed = 0;
 		}
 
 	} while ((iter = rbtFind(cache->mr_tree, &iov)));
