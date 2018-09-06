@@ -194,6 +194,32 @@ struct ofi_mr_entry {
 	uint8_t				data[];
 };
 
+struct ofi_mr_storage;
+
+typedef void (*ofi_mr_destroy_t)(struct ofi_mr_storage *storage);
+typedef struct ofi_mr_entry *(*ofi_mr_find_t)(struct ofi_mr_storage *storage,
+					      const struct iovec *key);
+typedef int (*ofi_mr_insert_t)(struct ofi_mr_storage *storage,
+			       struct iovec *key,
+			       struct ofi_mr_entry *entry);
+typedef int (*ofi_mr_erase_t)(struct ofi_mr_storage *storage,
+			      struct ofi_mr_entry *entry);
+
+enum ofi_mr_storage_type {
+	OFI_MR_STORAGE_DEFAULT = 0,
+	OFI_MR_STORAGE_RBT,
+	OFI_MR_STORAGE_USER,
+};
+
+struct ofi_mr_storage {
+	enum ofi_mr_storage_type type;
+	void *storage;
+	ofi_mr_destroy_t destroy;
+	ofi_mr_find_t find;
+	ofi_mr_insert_t insert;
+	ofi_mr_erase_t erase;
+};
+
 struct ofi_mr_cache {
 	struct util_domain		*domain;
 	struct ofi_notification_queue	nq;
@@ -201,6 +227,8 @@ struct ofi_mr_cache {
 	size_t				max_cached_size;
 	int				merge_regions;
 	size_t				entry_data_size;
+
+	struct ofi_mr_storage		mr_storage;
 
 	RbtHandle			mr_tree;
 	struct dlist_entry		lru_list;
