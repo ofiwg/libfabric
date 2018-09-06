@@ -15,11 +15,7 @@ static int rstream_ep_close(fid_t fid)
 	if (ret)
 		return ret;
 
-	ret = fi_close(&rstream_ep->recv_cq->fid);
-	if (ret)
-		return ret;
-
-	ret = fi_close(&rstream_ep->send_cq->fid);
+	ret = fi_close(&rstream_ep->cq->fid);
 	if (ret)
 		return ret;
 
@@ -91,22 +87,13 @@ static int rstream_cq_init(struct fid_domain *domain, struct rstream_ep *rep)
 	memset(&attr, 0, sizeof(attr));
 	attr.format = FI_CQ_FORMAT_DATA;
 	attr.wait_obj = FI_WAIT_FD;
-	attr.size = rep->qp_win.max_rx_credits;
+	attr.size = rep->qp_win.max_rx_credits + rep->qp_win.max_tx_credits;
 
-	ret = fi_cq_open(domain, &attr, &rep->recv_cq, NULL);
+	ret = fi_cq_open(domain, &attr, &rep->cq, NULL);
 	if (ret)
 		return ret;
 
-	ret = fi_ep_bind(rep->ep_fd, &rep->recv_cq->fid, FI_RECV);
-	if (ret)
-		return ret;
-
-	attr.size = rep->qp_win.max_tx_credits;
-	ret = fi_cq_open(domain, &attr, &rep->send_cq, NULL);
-	if (ret)
-		return ret;
-
-	ret = fi_ep_bind(rep->ep_fd, &rep->send_cq->fid, FI_TRANSMIT);
+	ret = fi_ep_bind(rep->ep_fd, &rep->cq->fid, FI_TRANSMIT | FI_RECV);
 	if (ret)
 		return ret;
 
@@ -120,7 +107,7 @@ static int rstream_cq_init(struct fid_domain *domain, struct rstream_ep *rep)
 static int rstream_ep_ctrl(struct fid *fid, int command, void *arg)
 {
 	struct rstream_ep *rstream_ep;
-	int ret;
+	int ret = 0;
 	rstream_ep = container_of(fid, struct rstream_ep, util_ep.ep_fid.fid);
 
 	switch (command) {
@@ -134,18 +121,21 @@ static int rstream_ep_ctrl(struct fid *fid, int command, void *arg)
 			goto err1;
 		ret = fi_enable(rstream_ep->ep_fd);
 		break;
-	case FI_GETWAIT: /* need to have one cq->fd */
-		ret = fi_control(&rstream_ep->send_cq->fid, FI_GETWAIT, arg);
+	case FI_GETWAIT:
+		ret = fi_control(&rstream_ep->cq->fid, FI_GETWAIT, arg);
+		if (ret)
+			return ret;
 		break;
 	default:
 		return -FI_ENOSYS;
 	}
+
 	return ret;
 
 err1:
-	if(rstream_ep->local_mr.base_addr)
+	if (rstream_ep->local_mr.base_addr)
 		free(rstream_ep->local_mr.base_addr);
-	if(rstream_ep->local_mr.mr)
+	if (rstream_ep->local_mr.mr)
 		fi_close(&rstream_ep->local_mr.mr->fid);
 
 	return ret;

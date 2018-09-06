@@ -60,7 +60,9 @@ struct rstream_domain {
 
 enum rstream_msg_type {
 	RSTREAM_CTRL_MSG,
-	RSTREAM_REG_MSG
+	RSTREAM_RX_MSG_COMP,
+	RSTREAM_TX_MSG_COMP,
+	RSTREAM_MSG_UNKNOWN
 };
 
 struct rstream_mr_seg {
@@ -123,13 +125,12 @@ struct rstream_ep {
 	struct fid_domain *msg_domain;
 	struct rstream_lmr_data local_mr;
 	struct rstream_rmr_data remote_data;
-	struct fid_cq *recv_cq;
-	struct fid_cq *send_cq;
+	struct fid_cq *cq;
 	struct rstream_window qp_win;
 	struct fi_context *rx_ctxs;
 	uint32_t rx_ctx_index;
 	struct rstream_tx_ctx tx_ctx;
-	struct rstream_cq_data cq_data;
+	struct rstream_cq_data rx_cq_data;
 };
 
 struct rstream_pep {

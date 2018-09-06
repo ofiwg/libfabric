@@ -24,6 +24,31 @@ static int rstream_control(struct fid *fid, int command, void *arg)
 	return -FI_ENOSYS;
 }
 
+int rstream_trywait(struct fid_fabric *fabric, struct fid **fids, int count)
+{
+	int ret;
+	struct rstream_ep *rstream_ep;
+	struct rstream_fabric *rstream_fabric;
+	int num_fids = 1;
+	struct fid *rstream_fids[num_fids];
+
+	if (count != num_fids)
+		return -FI_ENOSYS;
+
+	if (fids[0]->fclass == FI_CLASS_EP) {
+		rstream_ep = container_of(fids[0], struct rstream_ep,
+			util_ep.ep_fid.fid);
+		rstream_fabric = container_of(fabric, struct rstream_fabric,
+			util_fabric.fabric_fid);
+		rstream_fids[0] = &rstream_ep->cq->fid;
+		ret = fi_trywait(rstream_fabric->msg_fabric, rstream_fids,
+			num_fids);
+		return ret;
+	}
+
+	return -FI_EINVAL;
+}
+
 static struct fi_ops rstream_fabric_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = rstream_fabric_close,
@@ -38,7 +63,7 @@ static struct fi_ops_fabric rstream_fabric_ops = {
 	.passive_ep = rstream_passive_ep,
 	.eq_open = rstream_eq_open,
 	.wait_open = fi_no_wait_open,
-	.trywait = ofi_trywait
+	.trywait = rstream_trywait
 };
 
 int rstream_fabric_open(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
