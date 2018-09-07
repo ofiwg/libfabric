@@ -1483,8 +1483,8 @@ static int pp_init_ep(struct ct_pingpong *ct)
 		return ret;
 	}
 
-	ret = pp_post_rx(ct, ct->ep, MAX(ct->rx_size, PP_MAX_CTRL_MSG),
-			 ct->rx_ctx_ptr);
+	ret = pp_post_rx(ct, ct->ep, MAX(ct->rx_size, PP_MAX_CTRL_MSG) +
+			 ct->msg_prefix_size, ct->rx_ctx_ptr);
 	if (ret)
 		return ret;
 
