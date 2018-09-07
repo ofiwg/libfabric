@@ -1,5 +1,4 @@
 /*
- * Copyright (c) 2015 Los Alamos Nat. Security, LLC. All rights reserved.
  * Copyright (c) 2018 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -31,45 +30,37 @@
  * SOFTWARE.
  */
 
-#ifndef _LINUX_OSD_H_
-#define _LINUX_OSD_H_
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif /* _GNU_SOURCE */
 
-/*#define _GNU_SOURCE*/
+#include <stdio.h>
+#include <stdlib.h>
+#include <errno.h>
 
-#include <byteswap.h>
-#include <endian.h>
-#include <sys/mman.h>
-#include <string.h>
-#include <assert.h>
+#include "ofi.h"
+#include "ofi_osd.h"
 
-#include "unix/osd.h"
-#include "rdma/fi_errno.h"
-
-static inline int ofi_shm_remap(struct util_shm *shm,
-				size_t newsize, void **mapped)
+ssize_t ofi_get_hugepage_size(void)
 {
-	shm->ptr = mremap(shm->ptr, shm->size, newsize, 0);
-	shm->size = newsize;
-	*mapped = shm->ptr;
-	return shm->ptr == MAP_FAILED ? -FI_EINVAL : FI_SUCCESS;
-}
+	FILE *fd;
+	char *line = NULL;
+	size_t len = 0;
+	ssize_t val = -1;
 
-ssize_t ofi_get_hugepage_size(void);
-
-static inline int ofi_alloc_hugepage_buf(void **memptr, size_t size)
-{
-	*memptr = mmap(NULL, size, PROT_READ | PROT_WRITE,
-		       MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
-
-	if (*memptr == MAP_FAILED)
+	fd = fopen("/proc/meminfo", "r");
+	if (!fd)
 		return -errno;
 
-	return FI_SUCCESS;
-}
+	while (getline(&line, &len, fd) != -1)
+		if (sscanf(line, "Hugepagesize: %lu kB", &val) == 1)
+			break;
 
-static inline int ofi_free_hugepage_buf(void *memptr, size_t size)
-{
-	return munmap(memptr, size);
-}
+	free(line);
+	fclose(fd);
 
-#endif /* _LINUX_OSD_H_ */
+	if (val == -1)
+		return -FI_ENOENT;
+
+	return val * 1024;
+}

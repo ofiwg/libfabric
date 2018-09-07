@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2016 Intel Corporation. All rights reserved.
+ * Copyright (c) 2018 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -55,6 +56,7 @@ int util_buf_grow(struct util_buf_pool *pool)
 	size_t i;
 	union util_buf *util_buf;
 	struct util_buf_region *buf_region;
+	ssize_t hp_size;
 
 	if (pool->attr.max_cnt && pool->num_allocated >= pool->attr.max_cnt) {
 		return -1;
@@ -64,15 +66,41 @@ int util_buf_grow(struct util_buf_pool *pool)
 	if (!buf_region)
 		return -1;
 
-	ret = ofi_memalign((void **)&buf_region->mem_region, pool->attr.alignment,
-			     pool->attr.chunk_cnt * pool->entry_sz);
-	if (ret)
-		goto err;
+	if (pool->attr.is_mmap_region) {
+		hp_size = ofi_get_hugepage_size();
+		if (hp_size < 0)
+			goto err;
+
+		buf_region->size = fi_get_aligned_sz(pool->attr.chunk_cnt *
+						     pool->entry_sz, hp_size);
+
+		ret = ofi_alloc_hugepage_buf((void **)&buf_region->mem_region,
+					     buf_region->size);
+		if (ret) {
+			FI_DBG(&core_prov, FI_LOG_CORE,
+			       "Huge page allocation failed: %s\n",
+			       fi_strerror(-ret));
+
+			if (pool->num_allocated > 0)
+				goto err;
+
+			pool->attr.is_mmap_region = 0;
+		}
+	}
+
+	if (!pool->attr.is_mmap_region) {
+		buf_region->size = pool->attr.chunk_cnt * pool->entry_sz;
+
+		ret = ofi_memalign((void **)&buf_region->mem_region,
+				   pool->attr.alignment, buf_region->size);
+		if (ret)
+			goto err;
+	}
 
 	if (pool->attr.alloc_hndlr) {
 		ret = pool->attr.alloc_hndlr(pool->attr.ctx,
 					     buf_region->mem_region,
-					     pool->attr.chunk_cnt * pool->entry_sz,
+					     buf_region->size,
 					     &buf_region->context);
 		if (ret)
 			goto err;
@@ -105,6 +133,7 @@ int util_buf_pool_create_attr(struct util_buf_attr *attr,
 			      struct util_buf_pool **buf_pool)
 {
 	size_t entry_sz;
+	ssize_t hp_size;
 
 	(*buf_pool) = calloc(1, sizeof(**buf_pool));
 	if (!*buf_pool)
@@ -115,6 +144,13 @@ int util_buf_pool_create_attr(struct util_buf_attr *attr,
 	entry_sz = util_buf_use_ftr(*buf_pool) ?
 		(attr->size + sizeof(struct util_buf_footer)) : attr->size;
 	(*buf_pool)->entry_sz = fi_get_aligned_sz(entry_sz, attr->alignment);
+
+	hp_size = ofi_get_hugepage_size();
+
+	if ((*buf_pool)->attr.chunk_cnt * (*buf_pool)->entry_sz < hp_size)
+		(*buf_pool)->attr.is_mmap_region = 0;
+	else
+		(*buf_pool)->attr.is_mmap_region = 1;
 
 	slist_init(&(*buf_pool)->buf_list);
 	slist_init(&(*buf_pool)->region_list);
@@ -176,6 +212,7 @@ void util_buf_pool_destroy(struct util_buf_pool *pool)
 {
 	struct slist_entry *entry;
 	struct util_buf_region *buf_region;
+	int ret;
 
 	while (!slist_empty(&pool->region_list)) {
 		entry = slist_remove_head(&pool->region_list);
@@ -186,7 +223,19 @@ void util_buf_pool_destroy(struct util_buf_pool *pool)
 #endif
 		if (pool->attr.free_hndlr)
 			pool->attr.free_hndlr(pool->attr.ctx, buf_region->context);
-		ofi_freealign(buf_region->mem_region);
+		if (pool->attr.is_mmap_region) {
+			ret = ofi_free_hugepage_buf(buf_region->mem_region,
+						    buf_region->size);
+			if (ret) {
+				FI_DBG(&core_prov, FI_LOG_CORE,
+				       "Huge page free failed: %s\n",
+				       fi_strerror(-ret));
+				assert(0);
+			}
+		} else {
+			ofi_freealign(buf_region->mem_region);
+		}
+
 		free(buf_region);
 	}
 	free(pool);

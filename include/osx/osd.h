@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2015 Los Alamos Nat. Security, LLC. All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2018 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -65,6 +66,21 @@ extern "C" {
 static inline int ofi_shm_remap(struct util_shm *shm, size_t newsize, void **mapped)
 {
 	return -1;
+}
+
+static inline ssize_t ofi_get_hugepage_size(void)
+{
+	return -FI_ENOSYS;
+}
+
+static inline int ofi_alloc_hugepage_buf(void **memptr, size_t size)
+{
+	return -FI_ENOSYS;
+}
+
+static inline int ofi_free_hugepage_buf(void *memptr, size_t size)
+{
+	return -FI_ENOSYS;
 }
 
 #ifdef __cplusplus
