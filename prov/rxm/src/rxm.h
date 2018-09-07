@@ -707,9 +707,9 @@ rxm_acquire_conn_connect(struct rxm_ep *rxm_ep, fi_addr_t fi_addr,
 		int ret;
 		if (!*rxm_conn)
 			return -FI_ENOTCONN;
-		fastlock_acquire(&rxm_ep->util_ep.cmap->lock);
+		rxm_ep->util_ep.cmap->acquire(&rxm_ep->util_ep.cmap->lock);
 		ret = rxm_ep_handle_unconnected(rxm_ep, &(*rxm_conn)->handle, fi_addr);
-		fastlock_release(&rxm_ep->util_ep.cmap->lock);
+		rxm_ep->util_ep.cmap->release(&rxm_ep->util_ep.cmap->lock);
 		return ret;
 	}
 	return 0;

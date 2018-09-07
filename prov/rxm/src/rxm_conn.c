@@ -176,7 +176,7 @@ static int rxm_conn_reprocess_directed_recvs(struct rxm_recv_queue *recv_queue)
 
 	dlist_init(&rx_buf_list);
 
-	fastlock_acquire(&recv_queue->rxm_ep->util_ep.cmap->lock);
+	recv_queue->rxm_ep->util_ep.cmap->acquire(&recv_queue->rxm_ep->util_ep.cmap->lock);
 	recv_queue->rxm_ep->res_fastlock_acquire(&recv_queue->lock);
 
 	dlist_foreach_container_safe(&recv_queue->unexp_msg_list,
@@ -203,7 +203,7 @@ static int rxm_conn_reprocess_directed_recvs(struct rxm_recv_queue *recv_queue)
 		dlist_insert_tail(&rx_buf->unexp_msg.entry, &rx_buf_list);
 	}
 	recv_queue->rxm_ep->res_fastlock_release(&recv_queue->lock);
-	fastlock_release(&recv_queue->rxm_ep->util_ep.cmap->lock);
+	recv_queue->rxm_ep->util_ep.cmap->release(&recv_queue->rxm_ep->util_ep.cmap->lock);
 
 	while (!dlist_empty(&rx_buf_list)) {
 		dlist_pop_front(&rx_buf_list, struct rxm_rx_buf,
@@ -610,6 +610,7 @@ struct util_cmap *rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep)
 	ofi_straddr_dbg(&rxm_prov, FI_LOG_EP_CTRL, "local_name", name);
 
 	attr.name		= name;
+	attr.serial_access	= 0;
 	attr.alloc 		= rxm_conn_alloc;
 	attr.close 		= rxm_conn_close;
 	attr.free 		= rxm_conn_free;

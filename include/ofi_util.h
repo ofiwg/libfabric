@@ -640,6 +640,8 @@ typedef int (*ofi_cmap_signal_func)(struct util_ep *ep, void *context,
 
 struct util_cmap_attr {
 	void 				*name;
+	/* user guarantee for serializing access to cmap objects */
+	uint8_t				serial_access;
 	ofi_cmap_alloc_handle_func 	alloc;
 	ofi_cmap_handle_func 		close;
 	ofi_cmap_handle_func 		free;
@@ -651,22 +653,24 @@ struct util_cmap_attr {
 };
 
 struct util_cmap {
-	struct util_ep *ep;
-	struct util_av *av;
+	struct util_ep		*ep;
+	struct util_av		*av;
 
 	/* cmap handles that correspond to addresses in AV */
 	struct util_cmap_handle **handles_av;
 
 	/* Store all cmap handles (inclusive of handles_av) in an indexer.
 	 * This allows reverse lookup of the handle using the index. */
-	struct indexer handles_idx;
+	struct indexer		handles_idx;
 
-	struct ofi_key_idx key_idx;
+	struct ofi_key_idx	key_idx;
 
-	struct dlist_entry peer_list;
-	struct util_cmap_attr attr;
-	pthread_t event_handler_thread;
-	fastlock_t lock;
+	struct dlist_entry	peer_list;
+	struct util_cmap_attr	attr;
+	pthread_t		event_handler_thread;
+	ofi_fastlock_acquire_t	acquire;
+	ofi_fastlock_release_t	release;
+	fastlock_t		lock;
 };
 
 struct util_cmap_handle *ofi_cmap_key2handle(struct util_cmap *cmap, uint64_t key);
