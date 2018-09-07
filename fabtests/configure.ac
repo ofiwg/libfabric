@@ -48,6 +48,15 @@ AC_ARG_ENABLE([debug],
 	 dbg=1],
 	[dbg=0])
 
+AC_ARG_ENABLE([hpcs],
+	[AS_HELP_STRING([--enable-hpcs],
+			[Enable building hpcs - default NO])],
+	[CC="$MPICC"
+	 hpcs=1],
+	[hpcs=0])
+
+AM_CONDITIONAL([HPCS], [test $hpcs -eq 1])
+
 AC_DEFINE_UNQUOTED([ENABLE_DEBUG], [$dbg],
 	[defined to 1 if configured with --enable-debug])
 
@@ -122,4 +131,16 @@ AC_DEFINE_UNQUOTED([HAVE_EPOLL], [$have_epoll],
 		   [Defined to 1 if Linux epoll is available])
 
 AC_CONFIG_FILES([Makefile fabtests.spec])
+
+dnl HPCS depends on MPI, so we use AX_MPI to help with configuring MPI compiler.
+dnl AX_MPI is usually part of the autoconf-archive package, but we should not
+dnl assume it's universally installed.
+ifdef(AX_MPI,
+	[AS_IF([test $hpcs -eq 1], [
+		AX_MPI([AC_CONFIG_FILES([hpcs/Makefile hpcs/src/harness/Makefile])],
+			[ AC_MSG_ERROR([No suitable MPI provided, set MPICC])])]) ],
+	[AS_IF([test $hpcs -eq 1], [
+		AS_IF([test -n "$MPICC"], [
+			AC_CONFIG_FILES([hpcs/Makefile hpcs/src/harness/Makefile])],[ AC_MSG_ERROR([No suitable MPI provided, set MPICC])] )])])
+
 AC_OUTPUT

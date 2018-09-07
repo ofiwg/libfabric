@@ -98,6 +98,10 @@ libfabtests_la_SOURCES = \
 	include/unix/osd.h \
 	include/ft_osd.h
 
+if HPCS
+SUBDIRS = . hpcs
+endif
+
 benchmarks_srcs = \
 	benchmarks/benchmark_shared.h \
 	benchmarks/benchmark_shared.c
