@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015-2016 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2018 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -272,6 +273,7 @@ struct util_buf_attr {
 	util_buf_region_init_func 	init;
 	void 				*ctx;
 	uint8_t				track_used;
+	uint8_t				is_mmap_region;
 };
 
 struct util_buf_pool {
@@ -285,6 +287,7 @@ struct util_buf_pool {
 struct util_buf_region {
 	struct slist_entry entry;
 	char *mem_region;
+	size_t size;
 	void *context;
 #if ENABLE_DEBUG
 	size_t num_used;
