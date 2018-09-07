@@ -311,21 +311,21 @@ mrail_send_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 {
 	struct mrail_ep *mrail_ep = container_of(ep_fid, struct mrail_ep,
 						 util_ep.ep_fid.fid);
+	struct mrail_peer_addr *peer_addr;
 	struct iovec *iov_dest = alloca(sizeof(*iov_dest) * (count + 1));
 	struct mrail_hdr hdr = MRAIL_HDR_INITIALIZER_MSG;
 	uint32_t i = mrail_get_tx_rail(mrail_ep);
 	struct fi_msg msg;
 	ssize_t ret;
 
-	fi_addr_t *rail_fi_addr = ofi_av_get_addr(mrail_ep->util_ep.av,
-						  (int)dest_addr);
+	peer_addr = ofi_av_get_addr(mrail_ep->util_ep.av, (int) dest_addr);
 
 	mrail_copy_iov_hdr(&hdr, iov_dest, iov, count);
 
 	msg.msg_iov 	= iov_dest;
 	msg.desc    	= desc;
 	msg.iov_count	= count + 1;
-	msg.addr	= rail_fi_addr[i];
+	msg.addr	= peer_addr->addr[i];
 	msg.context	= context;
 	msg.data	= data;
 
@@ -348,21 +348,21 @@ mrail_tsend_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 {
 	struct mrail_ep *mrail_ep = container_of(ep_fid, struct mrail_ep,
 						 util_ep.ep_fid.fid);
+	struct mrail_peer_addr *peer_addr;
 	struct iovec *iov_dest = alloca(sizeof(*iov_dest) * (count + 1));
 	struct mrail_hdr hdr = MRAIL_HDR_INITIALIZER_TAGGED(tag);
 	uint32_t i = mrail_get_tx_rail(mrail_ep);
 	struct fi_msg msg;
 	ssize_t ret;
 
-	fi_addr_t *rail_fi_addr = ofi_av_get_addr(mrail_ep->util_ep.av,
-						  (int)dest_addr);
+	peer_addr = ofi_av_get_addr(mrail_ep->util_ep.av, (int) dest_addr);
 
 	mrail_copy_iov_hdr(&hdr, iov_dest, iov, count);
 
 	msg.msg_iov 	= iov_dest;
 	msg.desc    	= desc;
 	msg.iov_count	= count + 1;
-	msg.addr	= rail_fi_addr[i];
+	msg.addr	= peer_addr->addr[i];
 	msg.context	= context;
 	msg.data	= data;
 

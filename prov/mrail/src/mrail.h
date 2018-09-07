@@ -173,6 +173,12 @@ struct mrail_av {
 	ofi_atomic32_t index;
 };
 
+struct mrail_peer_addr {
+	uint32_t seq_no;
+	/* array of addresses, 1 per rail */
+	fi_addr_t addr[];
+};
+
 typedef int (*mrail_cq_process_comp_func_t)(struct util_cq *cq,
 					    mrail_cq_entry_t *comp);
 struct mrail_cq {
@@ -302,7 +308,7 @@ struct mrail_req {
 	uint64_t flags;
 	uint64_t data;
 	struct mrail_ep *mrail_ep;
-	fi_addr_t* remote_addrs;
+	struct mrail_peer_addr *peer_addr;
 	struct fi_cq_tagged_entry comp;
 	ofi_atomic32_t expected_subcomps;
 	int op_type;
