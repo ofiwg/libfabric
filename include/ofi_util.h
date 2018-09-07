@@ -634,7 +634,7 @@ typedef void (*ofi_cmap_handle_func)(struct util_cmap_handle *handle);
 typedef int (*ofi_cmap_connect_func)(struct util_ep *ep,
 				     struct util_cmap_handle *handle,
 				     const void *addr, size_t addrlen);
-typedef void *(*ofi_cmap_event_handler_func)(void *arg);
+typedef void *(*ofi_cmap_thread_func)(void *arg);
 typedef int (*ofi_cmap_signal_func)(struct util_ep *ep, void *context,
 				    enum ofi_cmap_signal signal);
 
@@ -647,7 +647,7 @@ struct util_cmap_attr {
 	ofi_cmap_handle_func 		free;
 	ofi_cmap_connect_func 		connect;
 	ofi_cmap_handle_func		connected_handler;
-	ofi_cmap_event_handler_func	event_handler;
+	ofi_cmap_thread_func		cm_thread_func;
 	ofi_cmap_signal_func		signal;
 	ofi_cmap_handle_func		av_updated_handler;
 };
@@ -667,7 +667,7 @@ struct util_cmap {
 
 	struct dlist_entry	peer_list;
 	struct util_cmap_attr	attr;
-	pthread_t		event_handler_thread;
+	pthread_t		cm_thread;
 	ofi_fastlock_acquire_t	acquire;
 	ofi_fastlock_release_t	release;
 	fastlock_t		lock;

@@ -406,7 +406,7 @@ static void rxm_conn_wake_up_wait_obj(struct rxm_ep *rxm_ep)
 		util_cntr_signal(rxm_ep->util_ep.tx_cntr);
 }
 
-static void *rxm_conn_event_handler(void *arg)
+static void *rxm_conn_progress(void *arg)
 {
 	struct fi_eq_cm_entry *entry;
 	size_t datalen = sizeof(struct rxm_cm_data);
@@ -616,7 +616,7 @@ struct util_cmap *rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep)
 	attr.free 		= rxm_conn_free;
 	attr.connect 		= rxm_conn_connect;
 	attr.connected_handler	= rxm_conn_connected_handler;
-	attr.event_handler	= rxm_conn_event_handler;
+	attr.cm_thread_func	= rxm_conn_progress;
 	attr.signal		= rxm_conn_signal;
 	attr.av_updated_handler	= rxm_conn_av_updated_handler;
 

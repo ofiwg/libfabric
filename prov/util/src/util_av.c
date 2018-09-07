@@ -1282,14 +1282,14 @@ static int util_cmap_del_handle(struct util_cmap_handle *handle)
 	util_cmap_clear_key(handle);
 
 	handle->state = CMAP_SHUTDOWN;
-	/* Signal event handler thread to delete the handle. This is required
-	 * so that the event handler thread handles any pending events for this
+	/* Signal CM thread to delete the handle. This is required
+	 * so that the CM thread handles any pending events for this
 	 * ep correctly. Handle would be freed finally after processing the
 	 * events */
 	ret = cmap->attr.signal(cmap->ep, handle, OFI_CMAP_FREE);
 	if (ret) {
 		FI_WARN(cmap->av->prov, FI_LOG_FABRIC,
-			"Unable to signal event handler thread\n");
+			"Unable to signal CM thread\n");
 		return ret;
 	}
 	return 0;
@@ -1630,23 +1630,23 @@ unlock:
 	return ret;
 }
 
-static int util_cmap_event_handler_close(struct util_cmap *cmap)
+static int util_cmap_cm_thread_close(struct util_cmap *cmap)
 {
 	int ret;
 
 	ret = cmap->attr.signal(cmap->ep, NULL, OFI_CMAP_EXIT);
 	if (ret) {
 		FI_WARN(cmap->av->prov, FI_LOG_FABRIC,
-			"Unable to signal event handler thread\n");
+			"Unable to signal CM thread\n");
 		return ret;
 	}
-	/* Release lock so that event handler thread could process shutdown events */
+	/* Release lock so that CM thread could process shutdown events */
 	cmap->release(&cmap->lock);
-	ret = pthread_join(cmap->event_handler_thread, NULL);
+	ret = pthread_join(cmap->cm_thread, NULL);
 	cmap->acquire(&cmap->lock);
 	if (ret) {
 		FI_WARN(cmap->av->prov, FI_LOG_FABRIC,
-			"Unable to join event handler thread\n");
+			"Unable to join CM thread\n");
 		return ret;
 	}
 	return 0;
@@ -1669,7 +1669,7 @@ void ofi_cmap_free(struct util_cmap *cmap)
 		peer = container_of(entry, struct util_cmap_peer, entry);
 		util_cmap_del_handle(peer->handle);
 	}
-	util_cmap_event_handler_close(cmap);
+	util_cmap_cm_thread_close(cmap);
 	free(cmap->handles_av);
 	free(cmap->attr.name);
 	ofi_idx_reset(&cmap->handles_idx);
@@ -1705,10 +1705,10 @@ struct util_cmap *ofi_cmap_alloc(struct util_ep *ep,
 
 	dlist_init(&cmap->peer_list);
 
-	if (pthread_create(&cmap->event_handler_thread, 0,
-			   cmap->attr.event_handler, ep)) {
+	if (pthread_create(&cmap->cm_thread, 0,
+			   cmap->attr.cm_thread_func, ep)) {
 		FI_WARN(ep->av->prov, FI_LOG_FABRIC,
-			"Unable to create msg_cm_listener_thread\n");
+			"Unable to create cmap thread\n");
 		goto err3;
 	}
 
