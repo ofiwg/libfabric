@@ -320,6 +320,11 @@ mrail_send_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 
 	peer_addr = ofi_av_get_addr(mrail_ep->util_ep.av, (int) dest_addr);
 
+	mrail_ep->lock_acquire(&mrail_ep->util_ep.lock);
+
+	hdr.seq = peer_addr->seq_no++;
+	FI_DBG(&mrail_prov, FI_LOG_EP_DATA, "sending seq=%d\n", hdr.seq);
+	hdr.seq = htonl(hdr.seq);
 	mrail_copy_iov_hdr(&hdr, iov_dest, iov, count);
 
 	msg.msg_iov 	= iov_dest;
@@ -335,9 +340,13 @@ mrail_send_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	FI_DBG(&mrail_prov, FI_LOG_EP_DATA, "Posting send of length: %" PRIu64
 	       " dest_addr: 0x%" PRIx64 " on rail: %d\n", len, dest_addr, i);
 	ret = fi_sendmsg(mrail_ep->rails[i].ep, &msg, flags);
-	if (ret)
+	if (ret) {
 		FI_WARN(&mrail_prov, FI_LOG_EP_DATA,
 			"Unable to fi_sendmsg on rail: %" PRIu32 "\n", i);
+		peer_addr->seq_no--;
+	}
+
+	mrail_ep->lock_release(&mrail_ep->util_ep.lock);
 	return ret;
 }
 
@@ -357,6 +366,11 @@ mrail_tsend_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 
 	peer_addr = ofi_av_get_addr(mrail_ep->util_ep.av, (int) dest_addr);
 
+	mrail_ep->lock_acquire(&mrail_ep->util_ep.lock);
+
+	hdr.seq = peer_addr->seq_no++;
+	FI_DBG(&mrail_prov, FI_LOG_EP_DATA, "sending seq=%d\n", hdr.seq);
+	hdr.seq = htonl(hdr.seq);
 	mrail_copy_iov_hdr(&hdr, iov_dest, iov, count);
 
 	msg.msg_iov 	= iov_dest;
@@ -373,9 +387,13 @@ mrail_tsend_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	       " dest_addr: 0x%" PRIx64 " tag: 0x%" PRIx64 " on rail: %d\n",
 	       len, dest_addr, tag, i);
 	ret = fi_sendmsg(mrail_ep->rails[i].ep, &msg, flags);
-	if (ret)
+	if (ret) {
 		FI_WARN(&mrail_prov, FI_LOG_EP_DATA,
 			"Unable to fi_sendmsg on rail: %" PRIu32 "\n", i);
+		peer_addr->seq_no--;
+	}
+
+	mrail_ep->lock_release(&mrail_ep->util_ep.lock);
 	return ret;
 }
 

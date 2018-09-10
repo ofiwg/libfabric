@@ -137,6 +137,7 @@ static int mrail_cq_process_comp_buf_recv(struct util_cq *cq,
 	assert(hdr->version == MRAIL_HDR_VERSION);
 
 	// TODO match seq number
+	FI_DBG(&mrail_prov, FI_LOG_CQ, "received seq=%d\n", ntohl(hdr->seq));
 	fastlock_acquire(&mrail_ep->util_ep.lock);
 	if (hdr->op == ofi_op_msg) {
 		FI_DBG(&mrail_prov, FI_LOG_CQ, "Got MSG op\n");
