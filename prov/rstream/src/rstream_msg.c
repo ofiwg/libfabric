@@ -82,10 +82,10 @@ static struct fi_context *rstream_get_rx_ctx(struct rstream_ep *ep)
 	return ctx;
 }
 
-static struct fi_context *rstream_get_tx_ctx(struct rstream_ep *ep)
+static struct fi_context *rstream_get_tx_ctx(struct rstream_ep *ep, int len)
 {
 	struct rstream_tx_ctx *ctx = &ep->tx_ctx;
-	struct fi_context *rtn_ctx;
+	struct rstream_ctx_data *rtn_ctx;
 
 	if (ctx->num_in_use == ep->qp_win.max_tx_credits)
 		return NULL;
@@ -93,8 +93,9 @@ static struct fi_context *rstream_get_tx_ctx(struct rstream_ep *ep)
 	rtn_ctx = &ctx->tx_ctxs[ctx->free_index];
 	ctx->num_in_use = ctx->num_in_use + 1;
 	ctx->free_index = (ctx->free_index + 1) % ep->qp_win.max_tx_credits;
+	rtn_ctx->len = len;
 
-	return rtn_ctx;
+	return &rtn_ctx->ctx;
 }
 
 static int rstream_return_tx_ctx(struct fi_context *ctx_ptr,
@@ -105,11 +106,12 @@ static int rstream_return_tx_ctx(struct fi_context *ctx_ptr,
 	if (!ctx->num_in_use)
 		return 0;
 
-	assert(ctx_ptr == &ctx->tx_ctxs[ctx->front]);
+	struct rstream_ctx_data *ctx_data = (struct rstream_ctx_data *)ctx_ptr;
+	assert(ctx_data == &ctx->tx_ctxs[ctx->front]);
 	ctx->front = (ctx->front + 1) % ep->qp_win.max_tx_credits;
 	ctx->num_in_use = ctx->num_in_use - 1;
 
-	return 1;
+	return ctx_data->len;
 }
 
 static ssize_t rstream_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
@@ -253,7 +255,7 @@ static ssize_t rstream_send_ctrl_msg(struct rstream_ep *ep, uint32_t cq_data)
 		msg.msg_iov = NULL;
 		msg.desc = NULL;
 		msg.iov_count = 0;
-		msg.context = rstream_get_tx_ctx(ep);
+		msg.context = rstream_get_tx_ctx(ep, 0);
 		msg.data = cq_data;
 
 		ret = fi_sendmsg(ep->ep_fd, &msg, FI_REMOTE_CQ_DATA);
@@ -316,7 +318,6 @@ ssize_t rstream_process_rx_cq_data(struct rstream_ep *ep,
 		ep->qp_win.target_rx_credits += recvd_credits;
 		assert(ep->qp_win.target_rx_credits <=
 			ep->qp_win.max_target_rx_credits);
-		rstream_free_contig_len(&ep->local_mr.tx, recvd_len);
 		rstream_free_contig_len(&ep->remote_data.mr, recvd_len);
 		FI_DBG(&rstream_prov, FI_LOG_EP_CTRL,
 			"recvd: ctrl msg %u = completions %u = len \n",
@@ -397,6 +398,7 @@ ssize_t rstream_process_cq(struct rstream_ep *ep, enum rstream_msg_type type)
 	uint16_t rx_completions = 0;
 	struct rstream_timer timer = {.poll_time = 0};
 	enum rstream_msg_type comp_type;
+	int len;
 
 
 	do {
@@ -417,8 +419,9 @@ ssize_t rstream_process_cq(struct rstream_ep *ep, enum rstream_msg_type type)
 				}
 				rx_completions++;
 			} else if (comp_type == RSTREAM_TX_MSG_COMP) {
-				rstream_return_tx_ctx(cq_entry.op_context, ep);
+				len = rstream_return_tx_ctx(cq_entry.op_context, ep);
 				rstream_update_tx_credits(ep, ret);
+				rstream_free_contig_len(&ep->local_mr.tx, len);
 			} else {
 				return -FI_ENOMSG;
 			}
@@ -511,13 +514,15 @@ static ssize_t rstream_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 		if (RSTREAM_USING_IWARP) {
 			ret = fi_write(ep->ep_fd, tx_addr, curr_avail_len,
 				ep->local_mr.ldesc, 0, (uint64_t)remote_addr,
-				ep->remote_data.rkey, rstream_get_tx_ctx(ep));
+				ep->remote_data.rkey, rstream_get_tx_ctx(ep,
+				curr_avail_len));
 			ret = rstream_send_ctrl_msg(ep,
 				rstream_iwarp_cq_data_set_msg_len(curr_avail_len));
 		} else {
 			ret = fi_writedata(ep->ep_fd, tx_addr, curr_avail_len,
 				ep->local_mr.ldesc, cq_data, 0, (uint64_t)remote_addr,
-				ep->remote_data.rkey, rstream_get_tx_ctx(ep));
+				ep->remote_data.rkey, rstream_get_tx_ctx(ep,
+				curr_avail_len));
 		}
 		if (ret != 0) {
 			FI_DBG(&rstream_prov, FI_LOG_EP_DATA,

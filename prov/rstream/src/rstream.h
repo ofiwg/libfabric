@@ -97,8 +97,13 @@ struct rstream_cm_data {
 	uint8_t reserved;
 };
 
+struct rstream_ctx_data {
+	struct fi_context ctx;
+	size_t len;
+};
+
 struct rstream_tx_ctx {
-	struct fi_context *tx_ctxs;
+	struct rstream_ctx_data *tx_ctxs;
 	uint32_t num_in_use;
 	uint32_t free_index;
 	uint32_t front;

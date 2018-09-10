@@ -237,13 +237,13 @@ int rstream_ep_open(struct fid_domain *domain, struct fi_info *info,
 	rstream_ep->qp_win.ctrl_credits = RSTREAM_MAX_CTRL_TX;
 	rstream_ep->qp_win.max_rx_credits = rstream_info.rx_attr->size;
 
-	rstream_ep->tx_ctx.tx_ctxs = (struct fi_context *)
-		calloc(1, sizeof(struct fi_context) *
-		rstream_ep->qp_win.max_tx_credits);
+	rstream_ep->tx_ctx.tx_ctxs = (struct rstream_ctx_data *)
+		calloc(rstream_ep->qp_win.max_tx_credits,
+		sizeof(*rstream_ep->tx_ctx.tx_ctxs));
 	assert(rstream_ep->tx_ctx.tx_ctxs);
 	rstream_ep->rx_ctxs = (struct fi_context *)
-		calloc(1, sizeof(struct fi_context) *
-		rstream_ep->qp_win.max_rx_credits);
+		calloc(rstream_ep->qp_win.max_rx_credits,
+		sizeof(*rstream_ep->rx_ctxs));
 	assert(rstream_ep->rx_ctxs);
 
 	*ep_fid = &rstream_ep->util_ep.ep_fid;
