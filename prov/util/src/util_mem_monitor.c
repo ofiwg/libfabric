@@ -106,7 +106,8 @@ void ofi_monitor_unsubscribe(struct ofi_subscription *subscription)
 					       subscription->len,
 					       subscription);
 	fastlock_acquire(&subscription->nq->lock);
-	dlist_init(&subscription->entry);
+	if (!dlist_empty(&subscription->entry))
+		dlist_remove_init(&subscription->entry);
 	subscription->nq->refcnt--;
 	fastlock_release(&subscription->nq->lock);
 }
