@@ -138,6 +138,7 @@ int mrail_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 {
 	struct mrail_av *mrail_av;
 	struct mrail_domain *mrail_domain;
+	struct fi_av_attr rail_attr;
 	struct util_av_attr util_attr;
 	struct fi_info *fi;
 	size_t i;
@@ -180,9 +181,11 @@ int mrail_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		goto err;
 	}
 
+	rail_attr = *attr;
+	rail_attr.type = FI_AV_TABLE;
 	for (i = 0, fi = mrail_domain->info->next; i < mrail_av->num_avs;
 	     i++, fi = fi->next) {
-		ret = fi_av_open(mrail_domain->domains[i], attr,
+		ret = fi_av_open(mrail_domain->domains[i], &rail_attr,
 				 &mrail_av->avs[i], context);
 		if (ret)
 			goto err;
