@@ -11,7 +11,29 @@ v1.6.2rc1, Wed Sep 5, 2018
 ## Core
 ## GNI
 ## PSM
+
+- Enforce FI_RMA_EVENT checking when updating counters
+- Fix race condition in fi_cq_readerr()
+- Always try to make progress when fi_cntr_read is called
+
 ## PSM2
+
+- Revert "Avoid long delay in psm2_ep_close"
+- Fix memory corruption related to sendv
+- Performance tweak for bi-directional send/recv on KNL
+- Fix CPU detection
+- Enforce FI_RMA_EVENT checking when updating counters
+- Remove stale info from address vector when disconnecting
+- Fix race condition in fi_cq_readerr()
+- Adjust reported context numbers for special cases
+- Always try to make progress when fi_cntr_read is called
+- Support control functions related to MR mode
+- Unblock fi_cntr_wait on errors
+- Properly update error counters
+- Fix irregular performance drop for aggregated RMA operations
+- Reset Tx/Rx context counter when fabric is initialized
+- Fix incorrect completion event for iov send
+
 ## RXM
 ## SHM
 ## Sockets
@@ -25,6 +47,16 @@ v1.6.1, Wed May 8, 2018
 
 -- Fix compile issues with older compilers
 -- Check that all debug compiler flags are supported by compiler
+
+## PSM2
+
+- Fix occasional assertion failure in psm2_ep_close
+- Avoid long delay in psm2_ep_close
+- Fix potential duplication of iov send completion
+- Replace some parameter checking with assertions
+- Check iov limit in sendmsg
+- Avoid adding FI_TRIGGER caps automatically
+- Avoid unnecessary calls to psmx2_am_progress()
 
 ## RXM
 
