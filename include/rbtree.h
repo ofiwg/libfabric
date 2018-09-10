@@ -95,5 +95,12 @@ RbtIterator rbtFindLeftmost(RbtHandle h, void *key,
 RbtIterator rbtFind(RbtHandle h, void *key);
 // returns iterator associated with key
 
+void rbtTraversal(RbtHandle h, RbtIterator it, void *handler_arg,
+          void(*handler)(void *arg, RbtIterator it));
+// tree traversal that visits (applies handler()) each node in the tree data
+//   strucutre exactly once.
+
+void *rbtRoot(RbtHandle h);
+// returns the root of the tree
 
 #endif /* RBTREE_H_ */
