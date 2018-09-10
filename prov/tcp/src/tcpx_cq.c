@@ -86,9 +86,9 @@ struct tcpx_xfer_entry *tcpx_xfer_entry_alloc(struct tcpx_cq *tcpx_cq,
 void tcpx_xfer_entry_release(struct tcpx_cq *tcpx_cq,
 			     struct tcpx_xfer_entry *xfer_entry)
 {
-	if (xfer_entry->ep->cur_rx_entry == xfer_entry)
+	if (xfer_entry->ep->cur_rx_entry == xfer_entry) {
 		xfer_entry->ep->cur_rx_entry = NULL;
-
+	}
 	tcpx_cq->util_cq.cq_fastlock_acquire(&tcpx_cq->util_cq.cq_lock);
 	util_buf_release(tcpx_cq->buf_pools[xfer_entry->msg_hdr.hdr.op_data].pool,
 			 xfer_entry);
@@ -179,6 +179,7 @@ static int tcpx_buf_pool_init(void *pool_ctx, void *addr,
 		switch (pool->op_type) {
 		case TCPX_OP_MSG_RECV:
 		case TCPX_OP_MSG_SEND:
+		case TCPX_OP_MSG_RESP:
 			xfer_entry->msg_hdr.hdr.op = ofi_op_msg;
 			break;
 		case TCPX_OP_WRITE:
