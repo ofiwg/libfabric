@@ -180,10 +180,10 @@ static int process_rx_entry(struct tcpx_xfer_entry *rx_entry)
 done:
 	if (ntohl(rx_entry->msg_hdr.hdr.flags) & OFI_DELIVERY_COMPLETE) {
 
-	    if (tcpx_prepare_rx_entry_resp(rx_entry))
-		    rx_entry->ep->cur_rx_proc_fn = tcpx_prepare_rx_entry_resp;
+		if (tcpx_prepare_rx_entry_resp(rx_entry))
+			rx_entry->ep->cur_rx_proc_fn = tcpx_prepare_rx_entry_resp;
 
-	    return FI_SUCCESS;
+		return FI_SUCCESS;
 	}
 
 	tcpx_cq_report_completion(rx_entry->ep->util_ep.rx_cq,
@@ -193,6 +193,39 @@ done:
 	tcpx_cq = container_of(rx_entry->ep->util_ep.rx_cq,
 			       struct tcpx_cq, util_cq);
 	tcpx_xfer_entry_release(tcpx_cq, rx_entry);
+	return FI_SUCCESS;
+}
+
+static int prepare_rx_remote_write_resp(struct tcpx_xfer_entry *rx_entry)
+{
+	struct tcpx_cq *tcpx_rx_cq, *tcpx_tx_cq;
+	struct tcpx_xfer_entry *resp_entry;
+
+	tcpx_tx_cq = container_of(rx_entry->ep->util_ep.tx_cq,
+			       struct tcpx_cq, util_cq);
+
+	resp_entry = tcpx_xfer_entry_alloc(tcpx_tx_cq, TCPX_OP_MSG_RESP);
+	if (!resp_entry)
+		return -FI_EAGAIN;
+
+	resp_entry->msg_data.iov[0].iov_base = (void *) &resp_entry->msg_hdr;
+	resp_entry->msg_data.iov[0].iov_len = sizeof(resp_entry->msg_hdr);
+	resp_entry->msg_data.iov_cnt = 1;
+
+	resp_entry->msg_hdr.hdr.op = ofi_op_msg;
+	resp_entry->msg_hdr.hdr.size = htonll(sizeof(resp_entry->msg_hdr));
+
+	resp_entry->flags |= TCPX_NO_COMPLETION;
+	resp_entry->context = NULL;
+	resp_entry->done_len = 0;
+	resp_entry->ep = rx_entry->ep;
+	tcpx_tx_queue_insert(resp_entry->ep, resp_entry);
+
+	tcpx_cq_report_completion(rx_entry->ep->util_ep.rx_cq,
+				  rx_entry, 0);
+	tcpx_rx_cq = container_of(rx_entry->ep->util_ep.rx_cq,
+			       struct tcpx_cq, util_cq);
+	tcpx_xfer_entry_release(tcpx_rx_cq, rx_entry);
 	return FI_SUCCESS;
 }
 
@@ -214,9 +247,13 @@ static int process_rx_remote_write_entry(struct tcpx_xfer_entry *rx_entry)
 		tcpx_ep_shutdown_report(rx_entry->ep,
 					&rx_entry->ep->util_ep.ep_fid.fid);
 done:
+	if (ntohl(rx_entry->msg_hdr.hdr.flags) & OFI_DELIVERY_COMPLETE) {
+		if (prepare_rx_remote_write_resp(rx_entry))
+			rx_entry->ep->cur_rx_proc_fn = prepare_rx_remote_write_resp;
+		return FI_SUCCESS;
+	}
 	tcpx_cq_report_completion(rx_entry->ep->util_ep.rx_cq,
 				  rx_entry, -ret);
-
 	tcpx_cq = container_of(rx_entry->ep->util_ep.rx_cq,
 			       struct tcpx_cq, util_cq);
 	tcpx_xfer_entry_release(tcpx_cq, rx_entry);
