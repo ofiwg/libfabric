@@ -129,11 +129,7 @@ void fi_ibv_mem_notifier_free_hook(void *ptr, const void *caller)
 	if (!entry)
 		goto out;
 	VERBS_DBG(FI_LOG_MR, "Catch free hook for %p, entry - %p\n", ptr, entry);
-
-	if (!dlist_empty(&entry->entry))
-		dlist_remove_init(&entry->entry);
-	dlist_insert_tail(&entry->entry,
-			  &fi_ibv_mem_notifier->event_list);
+	ofi_monitor_add_event_to_nq(entry->subscription);
 out:
 	FI_IBV_MEMORY_HOOK_END(fi_ibv_mem_notifier)
 }
@@ -155,11 +151,7 @@ void *fi_ibv_mem_notifier_realloc_hook(void *ptr, size_t size, const void *calle
 	if (!entry)
 		goto out;
 	VERBS_DBG(FI_LOG_MR, "Catch realloc hook for %p, entry - %p\n", ptr, entry);
-
-	if (!dlist_empty(&entry->entry))
-		dlist_remove_init(&entry->entry);
-	dlist_insert_tail(&entry->entry,
-			  &fi_ibv_mem_notifier->event_list);
+	ofi_monitor_add_event_to_nq(entry->subscription);
 out:
 	FI_IBV_MEMORY_HOOK_END(fi_ibv_mem_notifier)
 	return ret_ptr;
@@ -213,8 +205,6 @@ static struct fi_ibv_mem_notifier *fi_ibv_mem_notifier_init(void)
 	if (pthread_mutex_init(&fi_ibv_mem_notifier->lock, &mutex_attr))
 		goto err2;
 	pthread_mutexattr_destroy(&mutex_attr);
-
-	dlist_init(&fi_ibv_mem_notifier->event_list);
 
 	pthread_mutex_lock(&fi_ibv_mem_notifier->lock);
 	fi_ibv_mem_notifier->prev_free_hook = ofi_get_mem_free_hook();
@@ -474,7 +464,6 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 		_domain->notifier = fi_ibv_mem_notifier_init();
 		_domain->monitor.subscribe = fi_ibv_monitor_subscribe;
 		_domain->monitor.unsubscribe = fi_ibv_monitor_unsubscribe;
-		_domain->monitor.get_event = fi_ibv_monitor_get_event;
 		ofi_monitor_init(&_domain->monitor);
 
 		_domain->cache.max_cached_cnt = fi_ibv_gl_data.mr_max_cached_cnt;

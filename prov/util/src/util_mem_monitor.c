@@ -112,36 +112,9 @@ void ofi_monitor_unsubscribe(struct ofi_subscription *subscription)
 	fastlock_release(&subscription->nq->lock);
 }
 
-static void util_monitor_read_events(struct ofi_mem_monitor *monitor)
-{
-	struct ofi_subscription *subscription;
-
-	do {
-		subscription = monitor->get_event(monitor);
-		if (!subscription) {
-			FI_DBG(&core_prov, FI_LOG_MR,
-			       "no more events to be read\n");
-			break;
-		}
-
-		FI_DBG(&core_prov, FI_LOG_MR,
-		       "found event, context=%p, addr=%p, len=%zu nq=%p\n",
-		       subscription, subscription->addr,
-		       subscription->len, subscription->nq);
-
-		fastlock_acquire(&subscription->nq->lock);
-		if (dlist_empty(&subscription->entry))
-			dlist_insert_tail(&subscription->entry,
-					   &subscription->nq->list);
-		fastlock_release(&subscription->nq->lock);
-	} while (1);
-}
-
 struct ofi_subscription *ofi_monitor_get_event(struct ofi_notification_queue *nq)
 {
 	struct ofi_subscription *subscription;
-
-	util_monitor_read_events(nq->monitor);
 
 	fastlock_acquire(&nq->lock);
 	if (!dlist_empty(&nq->list)) {
