@@ -330,7 +330,7 @@ mrail_send_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	msg.msg_iov 	= iov_dest;
 	msg.desc    	= desc;
 	msg.iov_count	= count + 1;
-	msg.addr	= peer_addr->addr[i];
+	msg.addr	= dest_addr;
 	msg.context	= context;
 	msg.data	= data;
 
@@ -376,7 +376,7 @@ mrail_tsend_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	msg.msg_iov 	= iov_dest;
 	msg.desc    	= desc;
 	msg.iov_count	= count + 1;
-	msg.addr	= peer_addr->addr[i];
+	msg.addr	= dest_addr;
 	msg.context	= context;
 	msg.data	= data;
 

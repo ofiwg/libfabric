@@ -79,7 +79,7 @@ static ssize_t mrail_post_subreq(uint32_t rail,
 	msg.msg_iov		= rail_iov;
 	msg.desc		= rail_descs;
 	msg.iov_count		= subreq->iov_count;
-	msg.addr		= req->peer_addr->addr[rail];
+	msg.addr		= req->peer_addr->addr;
 	msg.rma_iov		= rail_rma_iov;
 	msg.rma_iov_count	= subreq->rma_iov_count;
 	msg.context		= &subreq->context;
@@ -387,18 +387,15 @@ static ssize_t mrail_ep_inject_write(struct fid_ep *ep_fid, const void *buf,
 {
 	struct mrail_ep *mrail_ep;
 	struct mrail_addr_key *mr_map;
-	struct mrail_peer_addr *peer_addr;
 	uint32_t rail;
 	ssize_t ret;
 
 	mrail_ep = container_of(ep_fid, struct mrail_ep, util_ep.ep_fid.fid);
 	mr_map = (struct mrail_addr_key *) key;
-	peer_addr = ofi_av_get_addr(mrail_ep->util_ep.av, (int) dest_addr);
-	assert(peer_addr);
 
 	rail = mrail_get_tx_rail(mrail_ep);
 	ret = fi_inject_write(mrail_ep->rails[rail].ep, buf, len,
-			      peer_addr->addr[rail], addr, mr_map[rail].key);
+			      dest_addr, addr, mr_map[rail].key);
 	if (ret) {
 		FI_WARN(&mrail_prov, FI_LOG_EP_DATA,
 			"Unable to post inject write on rail: %" PRIu32 "\n",

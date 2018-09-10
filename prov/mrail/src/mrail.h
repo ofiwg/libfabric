@@ -173,9 +173,8 @@ struct mrail_av {
 };
 
 struct mrail_peer_addr {
-	uint32_t seq_no;
-	/* array of addresses, 1 per rail */
-	fi_addr_t addr[];
+	fi_addr_t	addr;
+	uint32_t	seq_no;
 };
 
 typedef int (*mrail_cq_process_comp_func_t)(struct util_cq *cq,

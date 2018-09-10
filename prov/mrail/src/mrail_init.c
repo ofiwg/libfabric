@@ -201,8 +201,10 @@ static void mrail_adjust_info(struct fi_info *info, const struct fi_info *hints)
 			info->domain_attr->av_type = hints->domain_attr->av_type;
 	}
 
-	if (hints->tx_attr && (hints->tx_attr->op_flags & FI_COMPLETION))
-		fi->tx_attr->op_flags |= FI_COMPLETION;
+	if (hints->tx_attr) {
+		if (hints->tx_attr->op_flags & FI_COMPLETION)
+			info->tx_attr->op_flags |= FI_COMPLETION;
+	}
 }
 
 static int mrail_getinfo(uint32_t version, const char *node, const char *service,
