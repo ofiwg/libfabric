@@ -428,7 +428,6 @@ struct rxm_ep {
 	struct fid_eq 		*msg_eq;
 	struct fid_cq 		*msg_cq;
 	int			msg_cq_fd;
-	struct dlist_entry	msg_cq_fd_ref_list;
 	struct fid_ep 		*srx_ctx;
 	size_t 			comp_per_progress;
 	size_t 			eager_pkt_size;
@@ -466,11 +465,6 @@ struct rxm_conn {
 	/* This is saved MSG EP fid, that hasn't been closed during
 	 * handling of CONN_RECV in CMAP_CONNREQ_SENT for passive side */
 	struct fid_ep *saved_msg_ep;
-};
-
-struct rxm_ep_wait_ref {
-	struct util_wait	*wait;
-	struct dlist_entry	entry;
 };
 
 extern struct fi_provider rxm_prov;
