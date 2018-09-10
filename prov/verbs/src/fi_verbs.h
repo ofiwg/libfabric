@@ -430,7 +430,6 @@ struct fi_ibv_mem_ptr_entry {
 struct fi_ibv_mem_notifier {
 	struct fi_ibv_mem_ptr_entry	*mem_ptrs_hash;
 	struct util_buf_pool		*mem_ptrs_ent_pool;
-	struct dlist_entry		event_list;
 	ofi_mem_free_hook		prev_free_hook;
 	ofi_mem_realloc_hook		prev_realloc_hook;
 	int				ref_cnt;

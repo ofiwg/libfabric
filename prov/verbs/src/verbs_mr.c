@@ -432,32 +432,6 @@ void fi_ibv_monitor_unsubscribe(struct ofi_mem_monitor *notifier, void *addr,
 	pthread_mutex_unlock(&domain->notifier->lock);
 }
 
-struct ofi_subscription *
-fi_ibv_monitor_get_event(struct ofi_mem_monitor *notifier)
-{
-	struct fi_ibv_domain *domain =
-		container_of(notifier, struct fi_ibv_domain, monitor);
-	struct fi_ibv_mem_ptr_entry *entry;
-
-	pthread_mutex_lock(&domain->notifier->lock);
-	if (!dlist_empty(&domain->notifier->event_list)) {
-		dlist_pop_front(&domain->notifier->event_list,
-				struct fi_ibv_mem_ptr_entry,
-				entry, entry);
-		VERBS_DBG(FI_LOG_MR,
-			  "Retrieve %p (entry %p) from event list\n",
-			  entry->addr, entry);
-		/* needed to protect against double insertions */
-		dlist_init(&entry->entry);
-
-		pthread_mutex_unlock(&domain->notifier->lock);
-		return entry->subscription;
-	} else {
-		pthread_mutex_unlock(&domain->notifier->lock);
-		return NULL;
-	}
-}
-
 int fi_ibv_mr_cache_entry_reg(struct ofi_mr_cache *cache,
 			      struct ofi_mr_entry *entry)
 {
