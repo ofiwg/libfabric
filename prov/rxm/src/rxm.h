@@ -457,10 +457,12 @@ struct rxm_ep {
 };
 
 struct rxm_conn {
+	/* This should stay at the top */
+	struct util_cmap_handle handle;
+
 	struct fid_ep *msg_ep;
 	struct rxm_send_queue *send_queue;
 	struct dlist_entry sar_rx_msg_list;
-	struct util_cmap_handle handle;
 	/* This is saved MSG EP fid, that hasn't been closed during
 	 * handling of CONN_RECV in CMAP_CONNREQ_SENT for passive side */
 	struct fid_ep *saved_msg_ep;
@@ -672,9 +674,8 @@ rxm_process_recv_entry(struct rxm_recv_queue *recv_queue,
 static inline struct rxm_conn *
 rxm_acquire_conn(struct rxm_ep *rxm_ep, fi_addr_t fi_addr)
 {
-	return container_of(ofi_cmap_acquire_handle(rxm_ep->util_ep.cmap,
-						    fi_addr),
-			    struct rxm_conn, handle);
+	return (struct rxm_conn *)ofi_cmap_acquire_handle(rxm_ep->util_ep.cmap,
+							  fi_addr);
 }
 
 /* Caller must hold `cmap::lock` */
