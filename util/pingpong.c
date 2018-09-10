@@ -1214,12 +1214,10 @@ static ssize_t pp_post_rx(struct ct_pingpong *ct, struct fid_ep *ep,
 {
 	if (!(ct->fi->caps & FI_TAGGED))
 		PP_POST(fi_recv, pp_get_rx_comp, ct->rx_seq, "receive", ep,
-			ct->rx_buf, MAX(size, PP_MAX_CTRL_MSG + ct->msg_prefix_size),
-			fi_mr_desc(ct->mr), 0, ctx);
+			ct->rx_buf, size, fi_mr_desc(ct->mr), 0, ctx);
 	else
 		PP_POST(fi_trecv, pp_get_rx_comp, ct->rx_seq, "t-receive", ep,
-			ct->rx_buf, MAX(size, PP_MAX_CTRL_MSG + ct->msg_prefix_size),
-			fi_mr_desc(ct->mr), 0, TAG, 0, ctx);
+			ct->rx_buf, size, fi_mr_desc(ct->mr), 0, TAG, 0, ctx);
 	return 0;
 }
 
@@ -1244,8 +1242,8 @@ static ssize_t pp_rx(struct ct_pingpong *ct, struct fid_ep *ep, size_t size)
 	 * before message size is updated. The recvs posted are always for the
 	 * next incoming message.
 	 */
-	ret = pp_post_rx(ct, ct->ep, ct->rx_size + ct->msg_prefix_size,
-			 ct->rx_ctx_ptr);
+	ret = pp_post_rx(ct, ct->ep, MAX(ct->rx_size , PP_MAX_CTRL_MSG) +
+			 ct->msg_prefix_size, ct->rx_ctx_ptr);
 	if (!ret)
 		ct->cnt_ack_msg++;
 
@@ -1483,8 +1481,8 @@ static int pp_init_ep(struct ct_pingpong *ct)
 		return ret;
 	}
 
-	ret = pp_post_rx(ct, ct->ep, MAX(ct->rx_size, PP_MAX_CTRL_MSG),
-			 ct->rx_ctx_ptr);
+	ret = pp_post_rx(ct, ct->ep, MAX(ct->rx_size, PP_MAX_CTRL_MSG) +
+			 ct->msg_prefix_size, ct->rx_ctx_ptr);
 	if (ret)
 		return ret;
 
