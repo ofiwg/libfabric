@@ -34,11 +34,14 @@
 
 #define RXD_EP_CAPS (FI_MSG | FI_TAGGED | FI_RMA | FI_ATOMIC | FI_SEND | FI_RECV | \
 		     FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE |	\
-		     FI_SOURCE | FI_DIRECTED_RECV | FI_MULTI_RECV)
+		     FI_SOURCE | FI_DIRECTED_RECV | FI_MULTI_RECV | FI_RMA_EVENT)
+
+#define RXD_DOMAIN_CAPS (FI_LOCAL_COMM | FI_REMOTE_COMM)
 
 struct fi_tx_attr rxd_tx_attr = {
 	.caps = RXD_EP_CAPS,
 	.comp_order = FI_ORDER_STRICT,
+	.msg_order = FI_ORDER_SAS,
 	.inject_size = RXD_MAX_MTU_SIZE - sizeof(struct rxd_base_hdr),
 	.size = (1ULL << RXD_MAX_TX_BITS),
 	.iov_limit = RXD_IOV_LIMIT,
@@ -48,6 +51,7 @@ struct fi_tx_attr rxd_tx_attr = {
 struct fi_rx_attr rxd_rx_attr = {
 	.caps = RXD_EP_CAPS,
 	.comp_order = FI_ORDER_STRICT,
+	.msg_order = FI_ORDER_SAS,
 	.total_buffered_recv = 0,
 	.size = (1ULL << RXD_MAX_RX_BITS),
 	.iov_limit = RXD_IOV_LIMIT
@@ -63,6 +67,7 @@ struct fi_ep_attr rxd_ep_attr = {
 };
 
 struct fi_domain_attr rxd_domain_attr = {
+	.caps = RXD_DOMAIN_CAPS,
 	.threading = FI_THREAD_SAFE,
 	.control_progress = FI_PROGRESS_MANUAL,
 	.data_progress = FI_PROGRESS_MANUAL,
