@@ -110,6 +110,8 @@
 
 #define VERBS_INJECT_FLAG	((uint64_t)-1)
 
+#define VERBS_DGRAM_MSG_PREFIX_SIZE	(40)
+
 #define FI_IBV_EP_TYPE(info)						\
 	((info && info->ep_attr) ? info->ep_attr->type : FI_EP_MSG)
 
@@ -460,25 +462,12 @@ struct fi_ibv_srq_ep {
 int fi_ibv_srq_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 		       struct fid_ep **rx_ep, void *context);
 
-
-/* Verbs-DGRAM Pool functionality */
-struct fi_ibv_dgram_buf_pool;
-
-typedef void(*fi_ibv_dgram_pool_entry_cancel_hndlr) (struct fi_ibv_dgram_buf_pool *);
-
-struct fi_ibv_dgram_buf_pool {
-	struct util_buf_pool	*pool;
-	struct dlist_entry	buf_list;
-
-	fi_ibv_dgram_pool_entry_cancel_hndlr cancel_hndlr;
-};
-
 struct fi_ibv_ep {
 	struct util_ep		util_ep;
+	struct ibv_qp		*ibv_qp;
 	union {
 		struct rdma_cm_id	*id;
 		struct {
-			struct ibv_qp			*ibv_qp;
 			struct ofi_ib_ud_ep_name	ep_name;
 			int				service;
 		};
@@ -486,8 +475,6 @@ struct fi_ibv_ep {
 	struct fi_ibv_eq	*eq;
 	struct fi_ibv_srq_ep	*srq_ep;
 	struct fi_info		*info;
-	/* TODO: it would be removed */
-	struct fi_ibv_dgram_buf_pool	*grh_pool;
 
 	struct {
 		struct ibv_send_wr	rma_wr;
@@ -509,11 +496,7 @@ void fi_ibv_destroy_ep(struct rdma_addrinfo *rai, struct rdma_cm_id **id);
 int fi_rbv_rdm_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 			struct fid_cntr **cntr, void *context);
 int fi_ibv_rdm_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
-			struct fid_av **av_fid, void *context);
-int fi_ibv_dgram_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
-			 struct fid_cq **cq_fid, void *context);
-int fi_ibv_dgram_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
-			   struct fid_cntr **cntr_fid, void *context);
+		       struct fid_av **av_fid, void *context);
 int fi_ibv_dgram_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 			 struct fid_av **av_fid, void *context);
 
@@ -572,6 +555,26 @@ int fi_ibv_set_rnr_timer(struct ibv_qp *qp);
 void fi_ibv_cleanup_cq(struct fi_ibv_ep *cur_ep);
 int fi_ibv_find_max_inline(struct ibv_pd *pd, struct ibv_context *context,
                            enum ibv_qp_type qp_type);
+
+struct fi_ibv_dgram_av {
+	struct util_av util_av;
+	struct dlist_entry av_entry_list;
+};
+
+struct fi_ibv_dgram_av_entry {
+	struct dlist_entry list_entry;
+	struct ofi_ib_ud_ep_name addr;
+	struct ibv_ah *ah;
+};
+
+extern struct fi_ops_msg fi_ibv_dgram_msg_ops;
+extern struct fi_ops_msg fi_ibv_dgram_msg_ops_ts;
+
+static inline struct fi_ibv_dgram_av_entry*
+fi_ibv_dgram_av_lookup_av_entry(fi_addr_t fi_addr)
+{
+	return (struct fi_ibv_dgram_av_entry *)fi_addr;
+}
 
 /* NOTE:
  * When ibv_post_send/recv returns '-1' it means the following:
@@ -678,13 +681,13 @@ static inline int fi_ibv_wc_2_wce(struct fi_ibv_cq *cq,
 	}							\
 })
 
-#define fi_ibv_send_iov(ep, wr, iov, desc, count)	\
-	fi_ibv_send_iov_flags(ep, wr, iov, desc, count,	\
-			ep->info->tx_attr->op_flags)
+#define fi_ibv_send_iov(ep, wr, iov, desc, count)		\
+	fi_ibv_send_iov_flags(ep, wr, iov, desc, count,		\
+			      (ep)->info->tx_attr->op_flags)
 
-#define fi_ibv_send_msg(ep, wr, msg, flags)			\
-	fi_ibv_send_iov_flags(ep, wr, msg->msg_iov, msg->desc,	\
-			msg->iov_count,	flags)
+#define fi_ibv_send_msg(ep, wr, msg, flags)				\
+	fi_ibv_send_iov_flags(ep, wr, (msg)->msg_iov, (msg)->desc,	\
+			      (msg)->iov_count, flags)
 
 
 static inline int fi_ibv_poll_reap_unsig_cq(struct fi_ibv_ep *ep)
@@ -725,7 +728,7 @@ fi_ibv_send_poll_cq_if_needed(struct fi_ibv_ep *ep, struct ibv_send_wr *wr)
 	int ret;
 	struct ibv_send_wr *bad_wr;
 
-	ret = ibv_post_send(ep->id->qp, wr, &bad_wr);
+	ret = ibv_post_send(ep->ibv_qp, wr, &bad_wr);
 	if (OFI_UNLIKELY(ret)) {
 		ret = fi_ibv_handle_post(ret);
 		if (OFI_LIKELY(ret == -FI_EAGAIN)) {
@@ -733,7 +736,7 @@ fi_ibv_send_poll_cq_if_needed(struct fi_ibv_ep *ep, struct ibv_send_wr *wr)
 			if (OFI_UNLIKELY(ret))
 				return -FI_EAGAIN;
 			/* Try again and return control to a caller */
-			ret = fi_ibv_handle_post(ibv_post_send(ep->id->qp, wr,
+			ret = fi_ibv_handle_post(ibv_post_send(ep->ibv_qp, wr,
 							       &bad_wr));
 		}
 	}
@@ -787,6 +790,95 @@ fi_ibv_send_iov_flags(struct fi_ibv_ep *ep, struct ibv_send_wr *wr,
 		wr->send_flags |= IBV_SEND_FENCE;
 
 	return fi_ibv_send_poll_cq_if_needed(ep, wr);
+}
+
+static inline const void *
+fi_ibv_dgram_moderate_user_buf(const void *user_buf, size_t offset)
+{
+	return (const void *)((const char *)user_buf + offset);
+}
+
+static inline size_t
+fi_ibv_dgram_moderate_user_buf_len(size_t user_buf_len, size_t offset)
+{
+	return user_buf_len - offset;
+}
+
+static inline int
+fi_ibv_dgram_moderate_user_iov(const struct iovec *user_iov, void **desc,
+			       int count, size_t offset, struct iovec *new_iov,
+			       void **new_desc)
+{
+	int i, new_count = 0;
+
+	for (i = 0; i < count; i++) {
+		if (offset > user_iov[i].iov_len) {
+			offset -= user_iov[i].iov_len;
+			continue;
+		}
+		new_iov[new_count].iov_base = (char *)user_iov[i].iov_base + offset;
+		new_iov[new_count].iov_len = user_iov[i].iov_len - offset;
+		if (desc)
+			new_desc[new_count] = desc[i];
+		new_count++;
+
+		offset = 0;
+	}
+
+	return new_count;
+}
+
+static inline ssize_t
+fi_ibv_dgram_send_buf(struct fi_ibv_ep *ep, struct ibv_send_wr *wr,
+		      const void *buf, size_t len, void *desc)
+{
+	return fi_ibv_send_buf(
+			ep, wr, fi_ibv_dgram_moderate_user_buf(
+					buf, ep->info->ep_attr->msg_prefix_size),
+			fi_ibv_dgram_moderate_user_buf_len(
+					len, ep->info->ep_attr->msg_prefix_size),
+			desc);
+}
+
+static inline ssize_t
+fi_ibv_dgram_send_buf_inline(struct fi_ibv_ep *ep, struct ibv_send_wr *wr,
+			     const void *buf, size_t len)
+{
+	return fi_ibv_send_buf_inline(
+			ep, wr, fi_ibv_dgram_moderate_user_buf(
+					buf, ep->info->ep_attr->msg_prefix_size),
+			fi_ibv_dgram_moderate_user_buf_len(
+				len, ep->info->ep_attr->msg_prefix_size));
+}
+
+static inline ssize_t
+fi_ibv_dgram_send_iov(struct fi_ibv_ep *ep, struct ibv_send_wr *wr,
+		      const struct iovec *iov, void **desc, int count)
+{
+	struct iovec *new_iov = alloca(sizeof(*new_iov) * count);
+	void **new_desc = alloca(sizeof(*new_desc) * count);
+
+	count = fi_ibv_dgram_moderate_user_iov(iov, desc, count,
+					       ep->info->ep_attr->msg_prefix_size,
+					       new_iov, new_desc);
+	return fi_ibv_send_iov(ep, wr, new_iov, new_desc, count);
+}
+
+static inline ssize_t
+fi_ibv_dgram_send_msg(struct fi_ibv_ep *ep, struct ibv_send_wr *wr,
+		      const struct fi_msg *msg, uint64_t flags)
+{
+	struct fi_msg new_msg = *msg;
+	struct iovec *new_iov = alloca(sizeof(*new_iov) * msg->iov_count);
+	void **new_desc = alloca(sizeof(*new_desc) * msg->iov_count);
+
+	new_msg.iov_count = fi_ibv_dgram_moderate_user_iov(
+				msg->msg_iov, msg->desc, msg->iov_count,
+				ep->info->ep_attr->msg_prefix_size,
+				new_iov, new_desc);
+	new_msg.msg_iov = new_iov;
+	new_msg.desc = new_desc;
+	return fi_ibv_send_msg(ep, wr, &new_msg, flags);
 }
 
 #endif /* FI_VERBS_H */

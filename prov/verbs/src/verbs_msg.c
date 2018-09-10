@@ -51,7 +51,7 @@ fi_ibv_msg_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t 
 
 	fi_ibv_set_sge_iov(wr.sg_list, msg->msg_iov, msg->iov_count, msg->desc);
 
-	return fi_ibv_handle_post(ibv_post_recv(ep->id->qp, &wr, &bad_wr));
+	return fi_ibv_handle_post(ibv_post_recv(ep->ibv_qp, &wr, &bad_wr));
 }
 
 static ssize_t
@@ -71,7 +71,7 @@ fi_ibv_msg_ep_recv(struct fid_ep *ep_fid, void *buf, size_t len,
 
 	assert(ep->util_ep.rx_cq);
 
-	return fi_ibv_handle_post(ibv_post_recv(ep->id->qp, &wr, &bad_wr));
+	return fi_ibv_handle_post(ibv_post_recv(ep->ibv_qp, &wr, &bad_wr));
 }
 
 static ssize_t

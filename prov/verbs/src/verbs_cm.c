@@ -85,6 +85,7 @@ static int fi_ibv_msg_ep_setname(fid_t ep_fid, void *addr, size_t addrlen)
 		rdma_destroy_ep(ep->id);
 
 	ep->id = id;
+	ep->ibv_qp = ep->id->qp;
 	free(save_addr);
 
 	return 0;
