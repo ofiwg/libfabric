@@ -35,7 +35,8 @@
 #include "mrail.h"
 
 int mrail_cq_write_recv_comp(struct mrail_ep *mrail_ep, struct mrail_hdr *hdr,
-			     mrail_cq_entry_t *comp, struct mrail_recv *recv)
+			     struct fi_cq_tagged_entry *comp,
+			     struct mrail_recv *recv)
 {
 	FI_DBG(&mrail_prov, FI_LOG_CQ, "writing recv completion: length: %zu "
 	       "tag: 0x%" PRIx64 "\n", comp->len - sizeof(struct mrail_pkt),
@@ -47,7 +48,8 @@ int mrail_cq_write_recv_comp(struct mrail_ep *mrail_ep, struct mrail_hdr *hdr,
 			   NULL, comp->data, hdr->tag);
 }
 
-int mrail_cq_process_buf_recv(mrail_cq_entry_t *comp, struct mrail_recv *recv)
+int mrail_cq_process_buf_recv(struct fi_cq_tagged_entry *comp,
+			      struct mrail_recv *recv)
 {
 	struct fi_recv_context *recv_ctx = comp->op_context;
 	struct fi_msg msg = {
@@ -112,7 +114,7 @@ out:
 }
 
 static int mrail_cq_process_comp_buf_recv(struct util_cq *cq,
-					  mrail_cq_entry_t *comp)
+					  struct fi_cq_tagged_entry *comp)
 {
 	struct fi_recv_context *recv_ctx;
 	struct mrail_ep *mrail_ep;
@@ -230,7 +232,7 @@ static void mrail_handle_rma_completion(struct util_cq *cq,
 void mrail_poll_cq(struct util_cq *cq)
 {
 	struct mrail_cq *mrail_cq;
-	mrail_cq_entry_t comp;
+	struct fi_cq_tagged_entry comp;
 	size_t i;
 	int ret;
 

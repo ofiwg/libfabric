@@ -252,8 +252,8 @@ mrail_recv_common(struct mrail_ep *mrail_ep, struct mrail_recv_queue *recv_queue
 	       "0x%" PRIx64 " found in unexpected msg queue\n",
 	       recv->addr, recv->tag, recv->ignore);
 
-	return mrail_cq_process_buf_recv((mrail_cq_entry_t *)unexp_msg_entry->data,
-					 recv);
+	return mrail_cq_process_buf_recv((struct fi_cq_tagged_entry *)
+					 unexp_msg_entry->data, recv);
 }
 
 static ssize_t mrail_recv(struct fid_ep *ep_fid, void *buf, size_t len,
@@ -512,7 +512,7 @@ mrail_get_unexp_msg_entry(struct mrail_recv_queue *recv_queue, void *context)
 	// TODO use buf pool
 	// context would be mrail_ep from which u can get the buf pool
 	struct mrail_unexp_msg_entry *unexp_msg_entry =
-		malloc(sizeof(*unexp_msg_entry) + sizeof(mrail_cq_entry_t));
+		malloc(sizeof(*unexp_msg_entry) + sizeof(struct fi_cq_tagged_entry));
 	return unexp_msg_entry;
 }
 

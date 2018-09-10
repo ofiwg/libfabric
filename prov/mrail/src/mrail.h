@@ -63,7 +63,6 @@
 #define MRAIL_PASSTHROUGH_MR_MODES	(FI_MR_LOCAL | OFI_MR_BASIC_MAP)
 
 #define MRAIL_RAIL_CQ_FORMAT	FI_CQ_FORMAT_TAGGED
-typedef struct fi_cq_tagged_entry mrail_cq_entry_t;
 
 extern struct fi_info mrail_info;
 extern struct fi_provider mrail_prov;
@@ -147,7 +146,7 @@ struct mrail_recv {
 };
 DECLARE_FREESTACK(struct mrail_recv, mrail_recv_fs);
 
-int mrail_cq_process_buf_recv(mrail_cq_entry_t *comp,
+int mrail_cq_process_buf_recv(struct fi_cq_tagged_entry *comp,
 			      struct mrail_recv *recv);
 
 struct mrail_fabric {
@@ -180,7 +179,7 @@ struct mrail_peer_addr {
 };
 
 typedef int (*mrail_cq_process_comp_func_t)(struct util_cq *cq,
-					    mrail_cq_entry_t *comp);
+					    struct fi_cq_tagged_entry *comp);
 struct mrail_cq {
 	struct util_cq 			util_cq;
 	struct fid_cq 			**cqs;
