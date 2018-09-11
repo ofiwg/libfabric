@@ -78,13 +78,13 @@ int ofi_monitor_subscribe(struct ofi_notification_queue *nq,
 	dlist_init(&subscription->entry);
 
 	subscription->nq = nq;
-	subscription->addr = addr;
-	subscription->len = len;
+	subscription->iov.iov_base = addr;
+	subscription->iov.iov_len = len;
 	fastlock_acquire(&nq->lock);
 	nq->refcnt++;
 	fastlock_release(&nq->lock);
 
-	ret = nq->monitor->subscribe(nq->monitor, addr, len, subscription);
+	ret = nq->monitor->subscribe(nq->monitor, subscription);
 	if (OFI_UNLIKELY(ret)) {
 		FI_WARN(&core_prov, FI_LOG_MR,
 			"Failed (ret = %d) to monitor addr=%p len=%zu",
@@ -100,10 +100,8 @@ void ofi_monitor_unsubscribe(struct ofi_subscription *subscription)
 {
 	FI_DBG(&core_prov, FI_LOG_MR,
 	       "unsubscribing addr=%p len=%zu subscription=%p\n",
-	       subscription->addr, subscription->len, subscription);
+	       subscription->iov.iov_base, subscription->iov.iov_len, subscription);
 	subscription->nq->monitor->unsubscribe(subscription->nq->monitor,
-					       subscription->addr,
-					       subscription->len,
 					       subscription);
 	fastlock_acquire(&subscription->nq->lock);
 	if (!dlist_empty(&subscription->entry))
