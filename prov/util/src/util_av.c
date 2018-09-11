@@ -1670,10 +1670,15 @@ void ofi_cmap_free(struct util_cmap *cmap)
 		util_cmap_del_handle(peer->handle);
 	}
 	util_cmap_cm_thread_close(cmap);
+	cmap->release(&cmap->lock);
+
+	/* cleanup function would be used in manual progress mode */
+	if (cmap->attr.cleanup) {
+		cmap->attr.cleanup(cmap->ep);
+	}
 	free(cmap->handles_av);
 	free(cmap->attr.name);
 	ofi_idx_reset(&cmap->handles_idx);
-	cmap->release(&cmap->lock);
 	if (!cmap->attr.serial_access)
 		fastlock_destroy(&cmap->lock);
 	free(cmap);

@@ -637,6 +637,7 @@ typedef int (*ofi_cmap_connect_func)(struct util_ep *ep,
 typedef void *(*ofi_cmap_thread_func)(void *arg);
 typedef int (*ofi_cmap_signal_func)(struct util_ep *ep, void *context,
 				    enum ofi_cmap_signal signal);
+typedef int (*ofi_cmap_cleanup_func)(void *arg);
 
 struct util_cmap_attr {
 	void 				*name;
@@ -648,6 +649,7 @@ struct util_cmap_attr {
 	ofi_cmap_connect_func 		connect;
 	ofi_cmap_handle_func		connected_handler;
 	ofi_cmap_thread_func		cm_thread_func;
+	ofi_cmap_cleanup_func		cleanup;
 	ofi_cmap_signal_func		signal;
 	ofi_cmap_handle_func		av_updated_handler;
 };
