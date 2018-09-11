@@ -163,6 +163,9 @@ struct fi_provider tcpx_prov = {
 
 TCP_INI
 {
+#if HAVE_TCP_DL
+	ofi_pmem_init();
+#endif
 	fi_param_define(&tcpx_prov, "iface", FI_PARAM_STRING,
 			"Specify interface name");
 

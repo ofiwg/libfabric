@@ -131,6 +131,7 @@ enum {
 #define OFI_REMOTE_CQ_DATA	(1 << 0)
 #define OFI_TRANSMIT_COMPLETE	(1 << 1)
 #define OFI_DELIVERY_COMPLETE	(1 << 2)
+#define OFI_COMMIT_COMPLETE	(1 << 3)
 
 /*
  * Common command header
