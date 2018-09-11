@@ -721,6 +721,7 @@ static int cxip_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		ep->attr->av = av;
 		ofi_atomic_inc32(&av->ref);
 
+		// TODO: These two cases appear to be redundant, as they are set below
 		if (ep->attr->tx_ctx &&
 		    ep->attr->tx_ctx->fid.ctx.fid.fclass == FI_CLASS_TX_CTX) {
 			ep->attr->tx_ctx->av = av;
@@ -730,6 +731,7 @@ static int cxip_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		    ep->attr->rx_ctx->ctx.fid.fclass == FI_CLASS_RX_CTX)
 			ep->attr->rx_ctx->av = av;
 
+		// TODO: These two cases should suffice to set all of these
 		for (i = 0; i < ep->attr->ep_attr.tx_ctx_cnt; i++) {
 			if (ep->attr->tx_array[i])
 				ep->attr->tx_array[i]->av = av;

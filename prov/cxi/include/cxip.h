@@ -134,14 +134,13 @@ extern struct slist cxip_if_list;
 
 extern struct fi_provider cxip_prov;
 
-/*
+/**
  * The CXI Provider Address format.
  *
  * A Cassini NIC Address and PID identify a libfabric Endpoint.  While Cassini
  * borrows the name 'PID' from Portals, we use the term 'Port' here since the
- * 1-1 mapping of PID to process does not exist.  The maximum PID value in
- * Cassini is 12 bits.  Practically, 9-10 bits will be used.  Therefore, we
- * could steal bits from the Port field if necessary.
+ * 1-1 mapping of PID to process does not exist. The maximum PID value in
+ * Cassini is 12 bits.  We use only 9 bits.
  *
  * Port -1 is reserved.  When used, the library auto-assigns a free PID value
  * when network resources are allocated.  Libfabric clients can achieve this by
@@ -150,6 +149,8 @@ extern struct fi_provider cxip_prov;
  *
  * TODO: If NIC Address must be non-zero, the valid bit can be removed.
  * TODO: Is 18 bits enough for NIC Address?
+ * TODO: rename 'port' -> 'pid' (== granule index)
+ * TODO: change 'pid' size to 9 bits, 'nic' to 22
  */
 struct cxip_addr {
 	union {
@@ -167,74 +168,158 @@ struct cxip_addr {
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 #endif
 
+// TODO: change CXIP_ADDR_MR_IDX() to ((key) + MAX SEP RX contexts)
 #define CXIP_ADDR_MR_IDX(pid_granule, key) ((pid_granule) / 2 + (key))
 #define CXIP_ADDR_RX_IDX(pid_granule, rx_id) (rx_id)
 
+// TODO: comments are not yet complete, and may not be entirely correct
+//       complete documentation and review thoroughly
+
+/**
+ * Local Interface Domain
+ *
+ * Support structure.
+ *
+ * Create/lookup in cxip_get_if_domain(), during EP creation.
+ *
+ * These are associated with the local Cassini chip referenced in the parent
+ * dev_if. There must be one for every 'pid' that is active for communicating
+ * with other devices on the network.
+ *
+ * This structure wraps a libcxi domain, or Cassini "granule" (of 256 soft
+ * endpoints) for the local CXI chip.
+ *
+ * The vni value specifies a Cassini VNI, as supplied by the privileged WLM that
+ * started the job/service that has activated this 'pid'.
+ *
+ * The pid value specifies the libcxi domain, or VNI granule, and is supplied
+ * by the application. Each pid has its own set of RX and MR resources for
+ * receiving data.
+ *
+ * Every EP will use one of these for the RX context.
+ *
+ * TODO: Add struct cxip_pte.
+ *
+ * TODO: may be able to remove lep_map, since we are using cxip_pte_alloc()
+ *       Driver should reject bad indices when we allocate the pte structure
+ *       so the index_map should not be necessary. We must add
+ */
 struct cxip_if_domain {
-	struct dlist_entry entry;
-	struct cxip_if *dev_if;
-	struct cxil_domain *if_dom;
-	uint32_t vni;
-	uint32_t pid;
-	struct index_map lep_map; /* Cassini Logical EP Map */
+	struct dlist_entry entry;	// attach to cxip_if->if_doms
+	struct cxip_if *dev_if;		// local Cassini device
+	struct cxil_domain *if_dom;	// cxil domain
+					// TODO: rename cxil_dom
+	uint32_t vni;			// vni value (namespace)
+	uint32_t pid;			// pid value (granule number)
+	struct index_map lep_map;	// Cassini Logical EP Map
 	ofi_atomic32_t ref;
 	fastlock_t lock;
 };
 
+/**
+ * Local Interface
+ *
+ * Support structure.
+ *
+ * Created by cxip_get_if().
+ *
+ * There will be one of these for every local Cassini device on the node,
+ * typically 1 to 4 interfaces.
+ *
+ * This implements a single, dedicated Cassini cmdq for creating memory regions
+ * and attaching them to Cassini PTEs.
+ *
+ * Statically initialized at library initialization, based on information from
+ * the libcxi layer.
+ */
 struct cxip_if {
-	struct slist_entry entry;
-	uint32_t if_nic;
-	uint32_t if_idx;
-	uint32_t if_fabric;
-	struct cxil_dev *if_dev;
-	uint32_t if_pid_granule;
-	struct cxil_lni *if_lni;
-	struct cxi_cp cps[16];
+	struct slist_entry entry;	// attach to global cxip_if_list
+	uint32_t if_nic;		// cxil NIC identifier
+	uint32_t if_idx;		// cxil NIC index
+	uint32_t if_fabric;		// cxil NIC fabric address
+	struct cxil_dev *if_dev;	// cxil NIC DEV structure
+	uint32_t if_pid_granule;	// cxil NIC granule size
+	struct cxil_lni *if_lni;	// cxil NIC LNI structure
+	struct cxi_cp cps[16];		// Cassini communication profiles
 	int n_cps;
-	struct dlist_entry if_doms;
-	struct dlist_entry ptes;
+	struct dlist_entry if_doms;	// if_domain list
+	struct dlist_entry ptes;	// PTE list
 	ofi_atomic32_t ref;
-	struct cxi_cmdq *mr_cmdq;
-	struct cxi_evtq *mr_evtq;
+	struct cxi_cmdq *mr_cmdq;	// used for all MR activation
+	struct cxi_evtq *mr_evtq;	// used for async completion
 	fastlock_t lock;
 };
 
+/**
+ * Portal Table Entry
+ *
+ * Support structure.
+ *
+ * Created in cxip_pte_alloc().
+ *
+ * When the PTE object is created, the user specifies the desired pid_idx to
+ * use, which implicitly defines the function of this PTE. It is an error to
+ * attempt to multiply allocate the same pid_idx.
+ */
 struct cxip_pte {
-	struct dlist_entry entry;
-	struct cxip_if_domain *if_dom;
-	uint64_t lep_idx;
-	struct cxil_pte *pte;
-	struct cxil_pte_map *pte_map;
-	enum c_ptlte_state state;
+	struct dlist_entry entry;	// attaches to cxip_if->ptes
+					// TODO: rename pte_entry
+	struct cxip_if_domain *if_dom;	// parent domain
+	uint64_t lep_idx;		// pid_idx
+					// TODO: rename pid_idx
+	struct cxil_pte *pte;		// cxil PTE object
+	struct cxil_pte_map *pte_map;	// cxil PTE mapped object
+	enum c_ptlte_state state;	// Cassini PTE state
 };
 
+/**
+ * Fabric object
+ *
+ * libfabric if_fabric implementation.
+ *
+ * Created in cxip_fabric().
+ *
+ * This is an anchor for all remote EPs on this fabric, and allows domains to
+ * find common services.
+ *
+ */
 struct cxip_fabric {
-	struct fid_fabric	fab_fid;
-	ofi_atomic32_t		ref;
-	struct dlist_entry	service_list;
-	struct dlist_entry	fab_list_entry;
-	fastlock_t		lock;
+	struct fid_fabric fab_fid;
+	ofi_atomic32_t ref;
+	struct dlist_entry service_list;	// contains services (TODO)
+	struct dlist_entry fab_list_entry;	// attaches to cxip_fab_list
+	fastlock_t lock;
 };
 
+/**
+ * Domain object
+ *
+ * libfabric if_domain implementation.
+ *
+ * Created in cxip_domain().
+ */
 struct cxip_domain {
-	struct fid_domain	dom_fid;
-	struct fi_info		info;
-	struct cxip_fabric	*fab;
-	fastlock_t		lock;
-	ofi_atomic32_t		ref;
+	struct fid_domain dom_fid;
+	struct fi_info info;		// copy of user-supplied domain info
+	struct cxip_fabric *fab;	// parent cxip_fabric
+	fastlock_t lock;
+	ofi_atomic32_t ref;
 
-	struct cxip_eq		*eq;
-	struct cxip_eq		*mr_eq;
+	struct cxip_eq *eq;		// linked during cxip_dom_bind()
+	struct cxip_eq *mr_eq;		// == eq || == NULL
 
-	enum fi_progress	progress_mode;
-	struct dlist_entry	dom_list_entry;
-	struct fi_domain_attr	attr;
+	enum fi_progress progress_mode;
+	struct dlist_entry dom_list_entry;
+					// attaches to global cxip_dom_list
+	struct fi_domain_attr attr;	// copy of user or default domain attr
 
-	uint32_t		nic_addr;
-	int			enabled;
-	struct cxip_if		*dev_if;
+	uint32_t nic_addr;		// dev address of source NIC
+	int enabled;			// set when domain is enabled
+	struct cxip_if *dev_if;		// looked when domain is enabled
 };
 
+// Apparently not yet in use (??)
+// No reference count (?)
 struct cxip_eq {
 	struct fid_eq eq;
 	struct fi_eq_attr attr;
@@ -250,42 +335,67 @@ struct cxip_eq {
 	int wait_fd;
 };
 
+/**
+ * RMA request
+ *
+ * Support structures, accumulated in a union.
+ */
 struct cxip_req_rma {
-	struct cxi_iova local_md;
+	struct cxi_iova local_md;	// RMA target buffer
 };
 
 struct cxip_req_amo {
-	struct cxi_iova local_md;
-	void *result_buf;
+	struct cxi_iova local_md;	// RMA target buffer
+	void *result_buf;		// local buffer for fetch
 };
 
 struct cxip_req_recv {
-	struct cxip_rx_ctx *rxc;
-	void *recv_buf;
-	struct cxi_iova recv_md;
-	int rc;
-	int rlength;
-	int mlength;
-	uint64_t start;
+	struct cxip_rx_ctx *rxc;	// receive context
+	void *recv_buf;			// local receive buffer
+	struct cxi_iova recv_md;	// local receive MD
+	int rc;				// result code
+	int rlength;			// receive length
+	int mlength;			// message length
+	uint64_t start;			// starting receive offset
 };
 
 struct cxip_req_send {
-	struct cxi_iova send_md;
+	struct cxi_iova send_md;	// message target buffer
 };
 
 struct cxip_req_oflow {
-	struct cxip_rx_ctx *rxc;
+	struct cxip_rx_ctx *rxc;	// ??
 	struct cxip_oflow_buf *oflow_buf;
+					// ??
 };
 
+/**
+ * Async Request
+ *
+ * Support structure.
+ *
+ * Created in cxip_cq_req_alloc().
+ *
+ * This implements an async-request/callback mechanism. It uses the libfabric
+ * utility pool, which provides a pool of reusable memory objects that supports
+ * a fast lookup through the req_id index value, and can be bound to a CQ.
+ *
+ * The request is allocated and bound to the CQ, and then the command is issued.
+ * When the completion queue signals completion, this request is found, and the
+ * callback function is called.
+ */
 struct cxip_req {
 	/* Control info */
-	struct dlist_entry list;
-	struct cxip_cq *cq;
-	int req_id;
+	struct dlist_entry list;	// attaches to utility pool
+	struct cxip_cq *cq;		// request CQ
+	int req_id;			// fast lookup in index table
 	void (*cb)(struct cxip_req *req, const union c_event *evt);
+					// completion event callback
 
-	/* CQ event fields, set according to fi_cq.3 */
+	/* CQ event fields, set according to fi_cq.3
+	 *   - set by provider
+	 *   - returned to user in completion event
+	 */
 	uint64_t context;
 	uint64_t flags;
 	uint64_t data_len;
@@ -294,6 +404,7 @@ struct cxip_req {
 	uint64_t tag;
 	fi_addr_t addr;
 
+	/* Request parameters */
 	union {
 		struct cxip_req_rma rma;
 		struct cxip_req_amo amo;
@@ -303,28 +414,42 @@ struct cxip_req {
 	};
 };
 
+/**
+ * cxip_cq completion report callback typedef
+ */
 struct cxip_cq;
 typedef int (*cxip_cq_report_fn)(struct cxip_cq *cq, fi_addr_t addr,
 				 struct cxip_req *req);
 
+/**
+ * cxip_cq completion event overflow list if ring buffer fills.
+ */
 struct cxip_cq_overflow_entry_t {
-	size_t len;
-	fi_addr_t addr;
-	struct dlist_entry entry;
-	char cq_entry[0];
+	size_t len;			// data length
+	fi_addr_t addr;			// data address
+	struct dlist_entry entry;	// attaches to cxip_cq
+	char cq_entry[0];		// data
 };
 
+/**
+ * Completion Queue
+ *
+ * libfabric fi_cq implementation.
+ *
+ * Created in cxip_cq_open().
+ */
 struct cxip_cq {
 	struct fid_cq cq_fid;
-	struct cxip_domain *domain;
-	ssize_t cq_entry_size;
+	struct cxip_domain *domain;	// parent domain
+	ssize_t cq_entry_size;		// size of CQ entry (depends on type)
 	ofi_atomic32_t ref;
-	struct fi_cq_attr attr;
+	struct fi_cq_attr attr;		// copy of user or default attributes
 
+	/* Ring buffer */
 	struct ofi_ringbuf addr_rb;
 	struct ofi_ringbuffd cq_rbfd;
 	struct ofi_ringbuf cqerr_rb;
-	struct dlist_entry overflow_list;
+	struct dlist_entry overflow_list; // slower: used when ring overfills
 	fastlock_t lock;
 	fastlock_t list_lock;
 
@@ -332,37 +457,52 @@ struct cxip_cq {
 	int signal;
 	ofi_atomic32_t signaled;
 
-	struct dlist_entry ep_list;
-	struct dlist_entry rx_list;
-	struct dlist_entry tx_list;
+	struct dlist_entry ep_list;	// contains endpoints (not used yet)
+	struct dlist_entry rx_list;	// contains rx contexts
+	struct dlist_entry tx_list;	// contains tx contexts
 
 	cxip_cq_report_fn report_completion;
+					// callback function
 
 	int enabled;
-	struct cxi_evtq *evtq;
+	struct cxi_evtq *evtq;		// set when enabled
 	fastlock_t req_lock;
-	struct util_buf_pool *req_pool;
-	struct indexer req_table;
+	struct util_buf_pool *req_pool;	// utility pool for cxip_req
+	struct indexer req_table;	// fast lookup index table for cxip_req
 };
 
+/**
+ * Completion Counter
+ *
+ * libfabric if_cntr implementation.
+ *
+ * Created in cxip_cntr_open().
+ */
 struct cxip_cntr {
-	struct fid_cntr		cntr_fid;
-	struct cxip_domain	*domain;
-	ofi_atomic32_t		ref;
-	struct fi_cntr_attr	attr;
+	struct fid_cntr cntr_fid;
+	struct cxip_domain *domain;	// parent domain
+	ofi_atomic32_t ref;
+	struct fi_cntr_attr attr;	// copy of user or default attributes
 
-	struct fid_wait		*waitset;
-	int			signal;
+	struct fid_wait *waitset;
+	int signal;
 
-	struct dlist_entry	rx_list;
-	struct dlist_entry	tx_list;
-	fastlock_t		list_lock;
+	struct dlist_entry rx_list;	// contains rx contexts
+	struct dlist_entry tx_list;	// contains tx contexts
+	fastlock_t list_lock;
 };
 
+/**
+ * TX/RX Completion
+ *
+ * Support structure.
+ *
+ * Initialized when binding TX/RX to EP.
+ */
 struct cxip_comp {
-	uint8_t send_cq_event;
-	uint8_t recv_cq_event;
-	char reserved[2];
+	uint8_t send_cq_event;		// TODO: remove, unused
+	uint8_t recv_cq_event;		// TODO: remove, unused
+	char reserved[2];		// TODO: remove?
 
 	struct cxip_cq *send_cq;
 	struct cxip_cq *recv_cq;
@@ -377,6 +517,11 @@ struct cxip_comp {
 	struct cxip_eq *eq;
 };
 
+/**
+ * Unexpected-Send buffer
+ *
+ * Support structure.
+ */
 struct cxip_ux_send {
 	struct dlist_entry list;
 	struct cxip_oflow_buf *oflow_buf;
@@ -384,6 +529,11 @@ struct cxip_ux_send {
 	uint64_t length;
 };
 
+/**
+ * Overflow buffer
+ *
+ * Support structure.
+ */
 struct cxip_oflow_buf {
 	struct dlist_entry list;
 	struct cxip_rx_ctx *rxc;
@@ -394,13 +544,20 @@ struct cxip_oflow_buf {
 	int buffer_id;
 };
 
+/**
+ * Receive Context
+ *
+ * Support structure.
+ *
+ * Created in cxip_rx_ctx_alloc(), during EP creation.
+ */
 struct cxip_rx_ctx {
 	struct fid_ep ctx;
 
-	uint16_t rx_id;
+	uint16_t rx_id;			// EP index
 	int enabled;
-	int progress;
-	int recv_cq_event;
+	int progress;			// TODO: remove, unused
+	int recv_cq_event;		// TODO: remove, unused
 	int use_shared;
 
 	size_t num_left;
@@ -412,10 +569,10 @@ struct cxip_rx_ctx {
 
 	struct cxip_ep_attr *ep_attr;
 	struct cxip_av *av;
-	struct cxip_domain *domain;
+	struct cxip_domain *domain;	// parent domain
 
-	struct dlist_entry cq_entry;
-	struct dlist_entry ep_list;
+	struct dlist_entry cq_entry;	// attaches to CQ RX list
+	struct dlist_entry ep_list;	// contains EPs using shared context
 	fastlock_t lock;
 
 	struct fi_rx_attr attr;
@@ -430,39 +587,62 @@ struct cxip_rx_ctx {
 	int oflow_bufs_max;
 	int oflow_msgs_max;
 	int oflow_buf_size;
-	struct dlist_entry oflow_bufs; /* Overflow buffers */
-	struct dlist_entry ux_sends; /* Sends matched in overflow list */
-	struct dlist_entry ux_recvs; /* Recvs matched in overflow list */
+	struct dlist_entry oflow_bufs;	// Overflow buffers
+	struct dlist_entry ux_sends;	// Sends matched in overflow list
+	struct dlist_entry ux_recvs;	// Recvs matched in overflow list
 };
 
+/**
+ * Transmit Context
+ *
+ * Support structure.
+ *
+ * Created by cxip_tx_ctx_alloc(), during EP creation.
+ *
+ */
 struct cxip_tx_ctx {
 	union {
-		struct fid_ep ctx;
-		struct fid_stx stx;
+		struct fid_ep ctx;	// standard endpoint
+		struct fid_stx stx;	// scalable endpoint
 	} fid;
 	size_t fclass;
 
-	uint16_t tx_id;
+	uint16_t tx_id;			// SEP index
 	uint8_t enabled;
-	uint8_t progress;
+	uint8_t progress;		// TODO: remove, unused
 
 	int use_shared;
 	struct cxip_comp comp;
-	struct cxip_tx_ctx *stx_ctx;
+	struct cxip_tx_ctx *stx_ctx;	// shared context (?)
 
-	struct cxip_ep_attr *ep_attr;
-	struct cxip_av *av;
-	struct cxip_domain *domain;
+	struct cxip_ep_attr *ep_attr;	// parent EP attributes
+	struct cxip_av *av;		// same AV as EP->av
+	struct cxip_domain *domain;	// parent domain
 
-	struct dlist_entry cq_entry;
-	struct dlist_entry ep_list;
+	struct dlist_entry cq_entry;	// attaches to CQ TX list
+	struct dlist_entry ep_list;	// contains EPs using shared context
 	fastlock_t lock;
 
-	struct fi_tx_attr attr;
+	struct fi_tx_attr attr;		// attributes
 
-	struct cxi_cmdq *tx_cmdq;
+	struct cxi_cmdq *tx_cmdq;	// added during cxip_tx_ctx_enable()
 };
 
+/**
+ * Endpoint Internals
+ *
+ * Support structure, libfabric fi_endpoint implementation.
+ *
+ * Created in cxip_alloc_endpoint().
+ *
+ * This is the bulk of the endpoint object. It has been This has been separated
+ * from cxip_ep to support aliasing, to support different TX/RX attributes for a
+ * single TX or RX object. TX/RX objects are tied to Cassini PTEs, and the
+ * number of bits available to represent separate contexts is limited, so we
+ * want to reuse these when the only difference is the attributes.
+ *
+ * TODO: rename this cxip_ep_rsrc.
+ */
 struct cxip_ep_attr {
 	size_t fclass;
 
@@ -472,21 +652,21 @@ struct cxip_ep_attr {
 	size_t min_multi_recv;
 
 	ofi_atomic32_t ref;
-	struct cxip_eq *eq;
-	struct cxip_av *av;
-	struct cxip_domain *domain;
+	struct cxip_eq *eq;		// EQ for async EP add/rem/etc
+	struct cxip_av *av;		// target AV (network address vector)
+	struct cxip_domain *domain;	// parent domain
 
 	/* TX/RX context pointers for standard EPs. */
-	struct cxip_rx_ctx *rx_ctx;
-	struct cxip_tx_ctx *tx_ctx;
+	struct cxip_rx_ctx *rx_ctx;	// rx_array[0] || NULL
+	struct cxip_tx_ctx *tx_ctx;	// tx_array[0] || NULL
 
 	/* TX/RX contexts.  Standard EPs have 1 of each.  SEPs have many. */
-	struct cxip_rx_ctx **rx_array;
-	struct cxip_tx_ctx **tx_array;
-	ofi_atomic32_t num_rx_ctx;
-	ofi_atomic32_t num_tx_ctx;
+	struct cxip_rx_ctx **rx_array;	// rx contexts
+	struct cxip_tx_ctx **tx_array;	// tx contexts
+	ofi_atomic32_t num_rx_ctx;	// num rx contexts (>= 1)
+	ofi_atomic32_t num_tx_ctx;	// num tx contexts (>= 1)
 
-	/* List of contexts associated with the EP.  Necessary? */
+	/* List of shared contexts associated with the EP.  Necessary? */
 	struct dlist_entry rx_ctx_entry;
 	struct dlist_entry tx_ctx_entry;
 
@@ -498,11 +678,21 @@ struct cxip_ep_attr {
 	int is_enabled;
 	fastlock_t lock;
 
-	struct cxip_addr *src_addr;
+	struct cxip_addr *src_addr;	// address of this NIC
 	uint32_t vni;
 	struct cxip_if_domain *if_dom;
 };
 
+/**
+ * Endpoint
+ *
+ * libfabric fi_endpoint implementation.
+ *
+ * Created in cxip_alloc_endpoint().
+ *
+ * This contains TX and RX attributes, and can share the cxip_ep_attr structure
+ * among multiple EPs, to conserve Cassini resources.
+ */
 struct cxip_ep {
 	struct fid_ep ep;
 	struct fi_tx_attr tx_attr;
@@ -511,23 +701,31 @@ struct cxip_ep {
 	int is_alias;
 };
 
+/**
+ * Memory Region
+ *
+ * libfabric fi_mr implementation.
+ *
+ * Created in cxip_regattr().
+ *
+ */
 struct cxip_mr {
 	struct fid_mr mr_fid;
-	struct cxip_domain *domain;
-	struct cxip_ep *ep;
-	uint64_t key;
-	uint64_t flags;
-	struct fi_mr_attr attr;
-	struct cxip_cntr *cntr;
-	struct cxip_cq *cq;
+	struct cxip_domain *domain;	// parent domain
+	struct cxip_ep *ep;		// endpoint for remote memory
+	uint64_t key;			// memory key
+	uint64_t flags;			// special flags
+	struct fi_mr_attr attr;		// attributes
+	struct cxip_cntr *cntr;		// if bound to cntr
+	struct cxip_cq *cq;		// if bound to cq
 	fastlock_t lock;
 
 	/*
 	 * A standard MR is implemented as a single persistent, non-matching
-	 * list entry (LE) on the PtlTE mapped to the logical endpoint
+	 * list entry (LE) on the PTE mapped to the logical endpoint
 	 * addressed with the four-tuple:
 	 *
-	 *    ( if_dom->dev_if->if_nic, if_dom->pid, vni, pid_idx )
+	 *    ( if_dom->dev_if->if_nic, if_dom->pid, vni, pid_idx ) (pic_off?)
 	 */
 	uint32_t pid_off;
 
@@ -536,39 +734,66 @@ struct cxip_mr {
 	unsigned int pte_hw_id;
 	struct cxil_pte_map *pte_map;
 
-	void *buf;
-	uint64_t len;
-	struct cxi_iova md;
+	void *buf;			// memory buffer VA
+	uint64_t len;			// memory length
+	struct cxi_iova md;		// memory buffer IOVA
 };
 
+/**
+ * Address Vector header
+ *
+ * Support structure.
+ */
 struct cxip_av_table_hdr {
 	uint64_t size;
 	uint64_t stored;
 };
 
+/**
+ * Address Vector
+ *
+ * libfabric fi_av implementation.
+ *
+ * Created in cxip_av_open().
+ */
 struct cxip_av {
 	struct fid_av av_fid;
-	struct cxip_domain *domain;
+	struct cxip_domain *domain;	// parent domain
 	ofi_atomic32_t ref;
-	struct fi_av_attr attr;
-	uint64_t mask;
-	int rx_ctx_bits;
-	socklen_t addrlen;
-	struct cxip_eq *eq;
+	struct fi_av_attr attr;		// copy of user attributes
+	uint64_t mask;			// mask of rx_ctx_bits LSBits set
+	int rx_ctx_bits;		// relevant address bits
+	socklen_t addrlen;		// size of struct cxip_addr
+	struct cxip_eq *eq;		// event queue
 	struct cxip_av_table_hdr *table_hdr;
-	struct cxip_addr *table;
-	uint64_t *idx_arr;
-	struct util_shm shm;
-	int shared;
-	struct dlist_entry ep_list;
+					// mapped AV table
+	struct cxip_addr *table;	// address data in table_hdr memory
+	uint64_t *idx_arr;		// valid only for shared AVs
+	struct util_shm shm;		// OFI shared memory structure
+	int shared;			// set if shared
+	struct dlist_entry ep_list;	// contains EP fid objects
 	fastlock_t list_lock;
 };
 
+/**
+ * CNTR/CQ wait object file list element
+ *
+ * Support structure.
+ *
+ * Created in cxip_cntr_open(), cxip_cq_open().
+ */
 struct cxip_fid_list {
 	struct dlist_entry entry;
 	struct fid *fid;
 };
 
+/**
+ * Wait object
+ *
+ * Support structure.
+ *
+ * Created in cxip_wait_get_obj().
+ */
 struct cxip_wait {
 	struct fid_wait wait_fid;
 	struct cxip_fabric *fab;

@@ -72,6 +72,8 @@ int cxip_mr_enable(struct cxip_mr *mr)
 	/* Use the device CMDQ and EQ to enable the PTE and append an LE.
 	 * This serializes creation of all MRs in the process.  We need to
 	 * revisit.
+	 *
+	 * TODO: revisit this, deserialize MR enabling
 	 */
 	fastlock_acquire(&mr->domain->dev_if->lock);
 
