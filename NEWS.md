@@ -13,10 +13,33 @@ v1.6.2rc1, Wed Sep 5, 2018
 ## PSM
 ## PSM2
 ## RXM
+
+- Use FI_UNIVERSE_SIZE when defining MSG provider CQ size
+- Make TX, RX queue sizes independent of MSG provider
+- Make deferred requests opt-in
+- Fill missing rxm_conn in rx_buf when shared context is not used
+- Fix an issue where MSG endpoint recv queue got empty resulting
+  in a hang
+- Set FI_ORDER_NONE for tx and rx completion ordering
+- Serialize access to repost_ready_list
+- Reprocess unexpected messages on av update
+- Fix a bug in matching directed receives
+- Fix desc field when postponing RMA ops
+- Fix incorrect reporting of mem_tag format
+- Don't include FI_DIRECTED_RECV, FI_SOURCE caps if they're not needed
+- Fix matching for RMA I/O vectors
+
 ## SHM
 ## Sockets
 ## usNIC
 ## Verbs
+
+- Detect string format of wildcard address in node argument
+- Don't report unusable fi_info (no source IP address)
+- Don't assert when a verbs device exposes unsupported MTU types
+- Report correct rma_iov_limit
+- Add new variable - FI_VERBS_MR_CACHE_MERGE_REGIONS
+- eq->err.err must return a positive error code
 
 v1.6.1, Wed May 8, 2018
 ===========================
