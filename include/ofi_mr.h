@@ -101,10 +101,10 @@ struct ofi_notification_queue;
 struct ofi_mem_monitor {
 	ofi_atomic32_t			refcnt;
 
-	int (*subscribe)(struct ofi_mem_monitor *notifier, void *addr,
-			 size_t len, struct ofi_subscription *subscription);
-	void (*unsubscribe)(struct ofi_mem_monitor *notifier, void *addr,
-			    size_t len, struct ofi_subscription *subscription);
+	int (*subscribe)(struct ofi_mem_monitor *notifier,
+			 struct ofi_subscription *subscription);
+	void (*unsubscribe)(struct ofi_mem_monitor *notifier,
+			    struct ofi_subscription *subscription);
 };
 
 struct ofi_notification_queue {
@@ -117,8 +117,7 @@ struct ofi_notification_queue {
 struct ofi_subscription {
 	struct ofi_notification_queue	*nq;
 	struct dlist_entry		entry;
-	void				*addr;
-	size_t				len;
+	struct iovec			iov;
 };
 
 void ofi_monitor_init(struct ofi_mem_monitor *monitor);
@@ -137,8 +136,8 @@ ofi_monitor_add_event_to_nq(struct ofi_subscription *subscription)
 {
 	FI_DBG(&core_prov, FI_LOG_MR,
 	       "Add event to NQ, context=%p, addr=%p, len=%"PRIu64" nq=%p\n",
-	       subscription, subscription->addr,
-	       subscription->len, subscription->nq);
+	       subscription, subscription->iov.iov_base,
+	       subscription->iov.iov_len, subscription->nq);
 	fastlock_acquire(&subscription->nq->lock);
 	if (dlist_empty(&subscription->entry))
 		dlist_insert_tail(&subscription->entry,
