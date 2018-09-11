@@ -113,5 +113,9 @@ static inline int fd_signal_poll(struct fd_signal *signal, int timeout)
 	return (ret == 0) ? -FI_ETIMEDOUT : 0;
 }
 
+static inline int fd_signal_get(struct fd_signal *signal)
+{
+	return signal->fd[FI_READ_FD];
+}
 
 #endif /* _OFI_SIGNAL_H_ */
