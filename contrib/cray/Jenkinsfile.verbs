@@ -173,7 +173,7 @@ pipeline {
                 }
                 stage("Application tests") {
                     environment {
-                        MPIR_CVAR_OFI_USE_PROVIDER = 'verbs'
+                        MPIR_CVAR_OFI_USE_PROVIDER = 'verbs;ofi_rxm'
                     }
                     steps {
                         echo "checking ldd"
@@ -258,5 +258,6 @@ pipeline {
         FABTEST_PATH = "${ROOT_BUILD_PATH + '/fabtests/stable'}"
         LIBFABRIC_BUILD_PATH = "${ROOT_BUILD_PATH + '/libfabric'}"
         OMB_BUILD_PATH = "${ROOT_BUILD_PATH + '/osu-micro-benchmarks/5.4.2/libexec/osu-micro-benchmarks/mpi'}"
+	MPICH_PATH = "${ROOT_BUILD_PATH + '/mpich/3.3b3'}"
     }
  }
