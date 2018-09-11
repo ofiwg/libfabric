@@ -354,3 +354,37 @@ See the `fi_shm(7)` man page for more details.
 - The shared memory provider only works on Linux platforms and makes use of
   kernel support for 'cross-memory attach' (CMA) data copies for large
   transfers.
+
+## WINDOWS Instructions
+
+Even though windows isn't fully supported yet it is possible to compile and link your library.
+
+- 1. first you need the NetDirect provider:
+  Network Direct SDK/DDK may be obtained as a nuget package (preferred) from:
+
+  https://www.nuget.org/packages/NetworkDirect
+
+  or downloaded from:
+
+  https://www.microsoft.com/en-us/download/details.aspx?id=36043
+  on page press Download button and select NetworkDirect_DDK.zip.
+
+  Extract header files from downloaded
+  NetworkDirect_DDK.zip:`\NetDirect\include\` file into `<libfabricroot>\prov\netdir\NetDirect\`,
+  or add path to NetDirect headers into VS include paths
+
+- 2. compiling:
+  libfabric has 6 Visual Studio solution configurations:
+
+      1-2: Debug/Release ICC (restricted support for Intel Compiler XE 15.0 only)
+      3-4: Debug/Release v140 (VS 2015 tool set)
+      5-6: Debug/Release v141 (VS 2017 tool set)
+
+  make sure you choose the correct target fitting your compiler.
+  By default the library will be compiled to `<libfabricroot>\x64\<yourconfigchoice>`
+
+- 3. linking your library
+  - right click your project and select properties.
+  - choose C/C++ > General and add `<libfabricroot>\include` to "Additional include Directories"
+  - choose Linker > Input and add `<libfabricroot>\x64\<yourconfigchoice>\libfabric.lib` to "Additional Dependencies"
+  - depending on what you are building you may also need to copy `libfabric.dll` into the targetfolder of your own project.
