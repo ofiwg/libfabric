@@ -229,8 +229,6 @@ struct ofi_mr_cache {
 	size_t				entry_data_size;
 
 	struct ofi_mr_storage		mr_storage;
-
-	RbtHandle			mr_tree;
 	struct dlist_entry		lru_list;
 
 	size_t				cached_cnt;
