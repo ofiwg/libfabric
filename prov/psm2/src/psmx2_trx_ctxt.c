@@ -124,10 +124,6 @@ void psmx2_trx_ctxt_disconnect_peers(struct psmx2_trx_ctxt *trx_ctxt)
 	struct psmx2_epaddr_context *peer;
 	struct dlist_entry peer_list;
 	psm2_amarg_t arg;
-	psm2_epaddr_t *epaddrs;
-	psm2_error_t *errors;
-	int peer_count = 0;
-	int i = 0;
 
 	arg.u32w0 = PSMX2_AM_REQ_TRX_CTXT_DISCONNECT;
 
@@ -137,36 +133,17 @@ void psmx2_trx_ctxt_disconnect_peers(struct psmx2_trx_ctxt *trx_ctxt)
 	dlist_foreach_safe(&trx_ctxt->peer_list, item, tmp) {
 		dlist_remove(item);
 		dlist_insert_before(item, &peer_list);
-		peer_count++;
 	}
 	psmx2_unlock(&trx_ctxt->peer_lock, 2);
 
-	if (!peer_count)
-		return;
-
-	epaddrs = malloc(peer_count * sizeof(*epaddrs));
-	errors = malloc(peer_count * sizeof(*errors));
-
 	dlist_foreach_safe(&peer_list, item, tmp) {
 		peer = container_of(item, struct psmx2_epaddr_context, entry);
-		if (epaddrs)
-			epaddrs[i++] = peer->epaddr;
-		if (psmx2_env.disconnect) {
-			FI_INFO(&psmx2_prov, FI_LOG_CORE, "epaddr: %p\n", peer->epaddr);
-			psm2_am_request_short(peer->epaddr, PSMX2_AM_TRX_CTXT_HANDLER,
-					      &arg, 1, NULL, 0, 0, NULL, NULL);
-		}
+		FI_INFO(&psmx2_prov, FI_LOG_CORE, "epaddr: %p\n", peer->epaddr);
+		psm2_am_request_short(peer->epaddr, PSMX2_AM_TRX_CTXT_HANDLER,
+				      &arg, 1, NULL, 0, 0, NULL, NULL);
 		psm2_epaddr_setctxt(peer->epaddr, NULL);
 		free(peer);
 	}
-
-	/* disconnect locally to avoid long delay inside psm2_ep_close() */
-	if (epaddrs && errors)
-		psm2_ep_disconnect2(trx_ctxt->psm2_ep, peer_count, epaddrs, NULL,
-				    errors, PSM2_EP_DISCONNECT_FORCE, 0);
-
-	free(errors);
-	free(epaddrs);
 }
 
 static const char *psmx2_usage_flags_to_string(int usage_flags)
@@ -203,7 +180,8 @@ void psmx2_trx_ctxt_free(struct psmx2_trx_ctxt *trx_ctxt, int usage_flags)
 	dlist_remove(&trx_ctxt->entry);
 	psmx2_unlock(&trx_ctxt->domain->trx_ctxt_lock, 1);
 
-	psmx2_trx_ctxt_disconnect_peers(trx_ctxt);
+	if (psmx2_env.disconnect)
+		psmx2_trx_ctxt_disconnect_peers(trx_ctxt);
 
 	if (trx_ctxt->am_initialized)
 		psmx2_am_fini(trx_ctxt);
