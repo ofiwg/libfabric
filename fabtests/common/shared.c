@@ -1471,39 +1471,28 @@ void init_test(struct ft_opts *opts, char *test_name, size_t test_name_len)
 		opts->iterations = size_to_count(opts->transfer_size);
 }
 
-static int ft_inject_progress(uint64_t total)
+static int ft_progress(struct fid_cq *cq, uint64_t total, uint64_t *cq_cntr)
 {
 	struct fi_cq_err_entry comp;
 	int ret;
 
-	if (opts.options & FT_OPT_TX_CQ) {
-		if (opts.comp_method == FT_COMP_SREAD)
-			ret = fi_cq_sread(txcq, &comp, 1, NULL, 0);
-		else
-			ret = fi_cq_read(txcq, &comp, 1);
-		/* Even though we're progressing inject we may get a completion from
-		 * a previous non-inject operation */
-		if (ret > 0)
-			tx_cq_cntr++;
-	} else if (txcntr) {
-		return fi_cntr_wait(txcntr, total, 0);
-	} else {
-		return -FI_ENOCQ;
-	}
+	ret = fi_cq_read(cq, &comp, 1);
+	if (ret > 0)
+		(*cq_cntr)++;
 
 	if (ret >= 0 || ret == -FI_EAGAIN)
 		return 0;
 
 	if (ret == -FI_EAVAIL) {
-		ret = ft_cq_readerr(txcq);
-		tx_cq_cntr++;
+		ret = ft_cq_readerr(cq);
+		(*cq_cntr)++;
 	} else {
-		FT_PRINTERR("fi_cntr_wait / fi_cq_read/sread", ret);
+		FT_PRINTERR("fi_cq_read/sread", ret);
 	}
 	return ret;
 }
 
-#define FT_POST(post_fn, comp_fn, seq, op_str, ...)				\
+#define FT_POST(post_fn, progress_fn, cq, seq, cq_cntr, op_str, ...)		\
 	do {									\
 		int timeout_save;						\
 		int ret, rc;							\
@@ -1520,7 +1509,7 @@ static int ft_inject_progress(uint64_t total)
 										\
 			timeout_save = timeout;					\
 			timeout = 0;						\
-			rc = comp_fn(seq);					\
+			rc = progress_fn(cq, seq, cq_cntr);			\
 			if (rc && rc != -FI_EAGAIN) {				\
 				FT_ERR("Failed to get " op_str " completion");	\
 				return rc;					\
@@ -1538,22 +1527,24 @@ ssize_t ft_post_tx_buf(struct fid_ep *ep, fi_addr_t fi_addr, size_t size,
 	if (hints->caps & FI_TAGGED) {
 		op_tag = op_tag ? op_tag : tx_seq;
 		if (data != NO_CQ_DATA) {
-			FT_POST(fi_tsenddata, ft_get_tx_comp, tx_seq, "transmit", ep,
-				op_buf, size, op_mr_desc,
-				data, fi_addr, op_tag, ctx);
+			FT_POST(fi_tsenddata, ft_progress, txcq, tx_seq,
+				&tx_cq_cntr, "transmit", ep, op_buf, size,
+				op_mr_desc, data, fi_addr, op_tag, ctx);
 		} else {
-			FT_POST(fi_tsend, ft_get_tx_comp, tx_seq, "transmit", ep,
-				op_buf, size, op_mr_desc,
-				fi_addr, op_tag, ctx);
+			FT_POST(fi_tsend, ft_progress, txcq, tx_seq,
+				&tx_cq_cntr, "transmit", ep, op_buf, size,
+				op_mr_desc, fi_addr, op_tag, ctx);
 		}
 	} else {
 		if (data != NO_CQ_DATA) {
-			FT_POST(fi_senddata, ft_get_tx_comp, tx_seq, "transmit", ep,
-				op_buf,	size, op_mr_desc, data, fi_addr, ctx);
+			FT_POST(fi_senddata, ft_progress, txcq, tx_seq,
+				&tx_cq_cntr, "transmit", ep, op_buf, size,
+				op_mr_desc, data, fi_addr, ctx);
 
 		} else {
-			FT_POST(fi_send, ft_get_tx_comp, tx_seq, "transmit", ep,
-				op_buf,	size, op_mr_desc, fi_addr, ctx);
+			FT_POST(fi_send, ft_progress, txcq, tx_seq,
+				&tx_cq_cntr, "transmit", ep, op_buf, size,
+				op_mr_desc, fi_addr, ctx);
 		}
 	}
 	return 0;
@@ -1584,13 +1575,13 @@ ssize_t ft_tx(struct fid_ep *ep, fi_addr_t fi_addr, size_t size, struct fi_conte
 ssize_t ft_post_inject(struct fid_ep *ep, fi_addr_t fi_addr, size_t size)
 {
 	if (hints->caps & FI_TAGGED) {
-		FT_POST(fi_tinject, ft_inject_progress, tx_seq, "inject",
-				ep, tx_buf, size + ft_tx_prefix_size(),
-				fi_addr, tx_seq);
+		FT_POST(fi_tinject, ft_progress, txcq, tx_seq, &tx_cq_cntr,
+			"inject", ep, tx_buf, size + ft_tx_prefix_size(),
+			fi_addr, tx_seq);
 	} else {
-		FT_POST(fi_inject, ft_inject_progress, tx_seq, "inject",
-				ep, tx_buf, size + ft_tx_prefix_size(),
-				fi_addr);
+		FT_POST(fi_inject, ft_progress, txcq, tx_seq, &tx_cq_cntr,
+			"inject", ep, tx_buf, size + ft_tx_prefix_size(),
+			fi_addr);
 	}
 
 	tx_cq_cntr++;
@@ -1616,19 +1607,20 @@ ssize_t ft_post_rma(enum ft_rma_opcodes op, struct fid_ep *ep, size_t size,
 {
 	switch (op) {
 	case FT_RMA_WRITE:
-		FT_POST(fi_write, ft_get_tx_comp, tx_seq, "fi_write", ep, tx_buf,
-			opts.transfer_size, mr_desc, remote_fi_addr, remote->addr,
-			remote->key, context);
+		FT_POST(fi_write, ft_progress, txcq, tx_seq, &tx_cq_cntr,
+			"fi_write", ep, tx_buf, opts.transfer_size, mr_desc,
+			remote_fi_addr, remote->addr, remote->key, context);
 		break;
 	case FT_RMA_WRITEDATA:
-		FT_POST(fi_writedata, ft_get_tx_comp, tx_seq, "fi_writedata", ep,
-			tx_buf, opts.transfer_size, mr_desc, remote_cq_data, remote_fi_addr,
-			remote->addr, remote->key, context);
+		FT_POST(fi_writedata, ft_progress, txcq, tx_seq, &tx_cq_cntr,
+			"fi_writedata", ep, tx_buf, opts.transfer_size, mr_desc,
+			remote_cq_data, remote_fi_addr,	remote->addr,
+			remote->key, context);
 		break;
 	case FT_RMA_READ:
-		FT_POST(fi_read, ft_get_tx_comp, tx_seq, "fi_read", ep, rx_buf,
-			opts.transfer_size, mr_desc, remote_fi_addr, remote->addr,
-			remote->key, context);
+		FT_POST(fi_read, ft_progress, txcq, tx_seq, &tx_cq_cntr,
+			"fi_read", ep, rx_buf, opts.transfer_size, mr_desc,
+			remote_fi_addr, remote->addr,remote->key, context);
 		break;
 	default:
 		FT_ERR("Unknown RMA op type\n");
@@ -1673,15 +1665,15 @@ ssize_t ft_post_rma_inject(enum ft_rma_opcodes op, struct fid_ep *ep, size_t siz
 {
 	switch (op) {
 	case FT_RMA_WRITE:
-		FT_POST(fi_inject_write, ft_inject_progress, tx_seq, "fi_inject_write",
-				ep, tx_buf, opts.transfer_size, remote_fi_addr,
-				remote->addr, remote->key);
+		FT_POST(fi_inject_write, ft_progress, txcq, tx_seq, &tx_cq_cntr,
+			"fi_inject_write", ep, tx_buf, opts.transfer_size, 
+			remote_fi_addr, remote->addr, remote->key);
 		break;
 	case FT_RMA_WRITEDATA:
-		FT_POST(fi_inject_writedata, ft_inject_progress, tx_seq,
-				"fi_inject_writedata", ep, tx_buf, opts.transfer_size,
-				remote_cq_data, remote_fi_addr, remote->addr,
-				remote->key);
+		FT_POST(fi_inject_writedata, ft_progress, txcq, tx_seq,
+			&tx_cq_cntr, "fi_inject_writedata", ep, tx_buf,
+			opts.transfer_size, remote_cq_data, remote_fi_addr,
+			remote->addr, remote->key);
 		break;
 	default:
 		FT_ERR("Unknown RMA inject op type\n");
@@ -1709,21 +1701,22 @@ ssize_t ft_post_atomic(enum ft_atomic_opcodes opcode, struct fid_ep *ep,
 
 	switch (opcode) {
 	case FT_ATOMIC_BASE:
-		FT_POST(fi_atomic, ft_get_tx_comp, tx_seq, "fi_atomic", ep,
-			buf, count, mr_desc, remote_fi_addr, remote->addr,
-			remote->key, datatype, atomic_op, context);
+		FT_POST(fi_atomic, ft_progress, txcq, tx_seq, &tx_cq_cntr,
+			"fi_atomic", ep, buf, count, mr_desc, remote_fi_addr,
+			remote->addr, remote->key, datatype, atomic_op, context);
 		break;
 	case FT_ATOMIC_FETCH:
-		FT_POST(fi_fetch_atomic, ft_get_tx_comp, tx_seq,
+		FT_POST(fi_fetch_atomic, ft_progress, txcq, tx_seq, &tx_cq_cntr,
 			"fi_fetch_atomic", ep, buf, count, mr_desc, result,
 			result_desc, remote_fi_addr, remote->addr, remote->key,
 			datatype, atomic_op, context);
 		break;
 	case FT_ATOMIC_COMPARE:
-		FT_POST(fi_compare_atomic, ft_get_tx_comp, tx_seq,
-			"fi_compare_atomic", ep, buf, count, mr_desc, compare,
-			compare_desc, result, result_desc, remote_fi_addr,
-			remote->addr, remote->key, datatype, atomic_op, context);
+		FT_POST(fi_compare_atomic, ft_progress, txcq, tx_seq,
+			&tx_cq_cntr, "fi_compare_atomic", ep, buf, count,
+			mr_desc, compare, compare_desc, result, result_desc,
+			remote_fi_addr, remote->addr, remote->key, datatype,
+			atomic_op, context);
 		break;
 	default:
 		FT_ERR("Unknown atomic opcode\n");
@@ -1795,11 +1788,12 @@ ssize_t ft_post_rx_buf(struct fid_ep *ep, size_t size, struct fi_context* ctx,
 	size = MAX(size, FT_MAX_CTRL_MSG) + ft_rx_prefix_size();
 	if (hints->caps & FI_TAGGED) {
 		op_tag = op_tag ? op_tag : rx_seq;
-		FT_POST(fi_trecv, ft_get_rx_comp, rx_seq, "receive", ep,
-			op_buf, size, op_mr_desc, 0, op_tag, 0, ctx);
+		FT_POST(fi_trecv, ft_progress, rxcq, rx_seq, &rx_cq_cntr,
+			"receive", ep, op_buf, size, op_mr_desc, 0, op_tag,
+			0, ctx);
 	} else {
-		FT_POST(fi_recv, ft_get_rx_comp, rx_seq, "receive", ep,
-			op_buf,	size, op_mr_desc, 0, ctx);
+		FT_POST(fi_recv, ft_progress, rxcq, rx_seq, &rx_cq_cntr,
+			"receive", ep, op_buf, size, op_mr_desc, 0, ctx);
 	}
 	return 0;
 }
