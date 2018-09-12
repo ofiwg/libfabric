@@ -1254,7 +1254,7 @@ static void rxd_ep_free_res(struct rxd_ep *ep)
 static void rxd_close_peer(struct rxd_ep *ep, struct rxd_peer *peer)
 {
 	struct rxd_pkt_entry *pkt_entry;
-	struct rxd_x_entry *tx_entry;
+	struct rxd_x_entry *x_entry;
 
 	while (!dlist_empty(&peer->unacked)) {
 		dlist_pop_front(&peer->unacked, struct rxd_pkt_entry,
@@ -1272,8 +1272,14 @@ static void rxd_close_peer(struct rxd_ep *ep, struct rxd_peer *peer)
 
 	while(!dlist_empty(&peer->tx_list)) {
 		dlist_pop_front(&peer->tx_list, struct rxd_x_entry,
-				tx_entry, entry);
-		rxd_tx_entry_free(ep, tx_entry);
+				x_entry, entry);
+		rxd_tx_entry_free(ep, x_entry);
+	}
+
+	while(!dlist_empty(&peer->rx_list)) {
+		dlist_pop_front(&peer->rx_list, struct rxd_x_entry,
+				x_entry, entry);
+		rxd_tx_entry_free(ep, x_entry);
 	}
 }
 

@@ -497,22 +497,6 @@ static void rxd_handle_data(struct rxd_ep *ep, struct fi_cq_msg_entry *comp,
 	}
 }
 
-static struct rxd_x_entry *rxd_check_active(struct rxd_ep *ep, struct rxd_op_pkt *pkt)
-{
-	struct rxd_x_entry *rx_entry;
-
-	//TODO - improve this search
-	dlist_foreach_container(&ep->peers[pkt->pkt_hdr.peer].rx_list,
-				struct rxd_x_entry, rx_entry, entry) {
-		if (rx_entry->tx_id == pkt->pkt_hdr.tx_id &&
-		    rx_entry->msg_id == pkt->pkt_hdr.msg_id &&
-		    rx_entry->peer == pkt->pkt_hdr.peer)
-			return rx_entry;
-	}
-
-	return NULL;
-}
-
 static void rxd_check_post_unexp(struct rxd_ep *ep, struct dlist_entry *list,
 				 struct rxd_pkt_entry *pkt_entry)
 {
@@ -721,12 +705,6 @@ static void rxd_handle_op(struct rxd_ep *ep, struct fi_cq_msg_entry *comp,
 {
 	struct rxd_x_entry *rx_entry;
 	struct rxd_op_pkt *pkt = (struct rxd_op_pkt *) (pkt_entry->pkt);
-
-	if (pkt->pkt_hdr.flags & RXD_RETRY) {
-		rx_entry = rxd_check_active(ep, pkt);
-		if (rx_entry)
-			goto ack;
-	}
 
 	if (pkt->pkt_hdr.seq_no != ep->peers[pkt->pkt_hdr.peer].rx_seq_no) {
 		if (!rxd_env.retry) {
