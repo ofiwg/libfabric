@@ -385,17 +385,25 @@ struct rxm_recv_entry {
 	size_t total_len;
 	struct rxm_recv_queue *recv_queue;
 	void *multi_recv_buf;
-	/* Used for SAR protocol */
-	struct {
-		struct dlist_entry entry;
-		size_t total_recv_len;
-		size_t segs_rcvd;
-		uint64_t msg_id;
-		/* This is used when a message with the `RXM_SAR_SEG_LAST`
-		 * flag is receved, but not all messages has been received
-		 * yet */
-		size_t last_seg_no;
-	} sar;
+
+	union {
+		/* Used for SAR protocol */
+		struct {
+			struct dlist_entry entry;
+			size_t total_recv_len;
+			size_t segs_rcvd;
+			uint64_t msg_id;
+			/* This is used when a message with the `RXM_SAR_SEG_LAST`
+			 * flag is receved, but not all messages has been received
+			 * yet */
+			size_t last_seg_no;
+		} sar;
+		/* Used for Rendezvous protocol */
+		struct {
+			/* This is used to send LMT ACK */
+			struct rxm_tx_buf *tx_buf;
+		} rndv;
+	};
 };
 DECLARE_FREESTACK(struct rxm_recv_entry, rxm_recv_fs);
 

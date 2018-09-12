@@ -1428,19 +1428,20 @@ rxm_ep_conn_progress_deferred_queue(struct rxm_ep *rxm_ep,
 					struct rxm_tx_entry, deferred_tx_entry);
 		switch (tx_entry->state) {
 		case RXM_LMT_ACK_DEFERRED:	/* RNDV (LMT TX ack) */
-			tx_entry->state = RXM_LMT_ACK_SENT;
-			ret = rxm_ep_normal_send(rxm_ep, rxm_conn, tx_entry,
-						 tx_entry->deferred_pkt_size);
+			ret = fi_send(tx_entry->rx_buf->conn->msg_ep,
+				      &tx_entry->rx_buf->recv_entry->rndv.tx_buf->pkt,
+				      tx_entry->deferred_pkt_size,
+				      tx_entry->rx_buf->recv_entry->rndv.tx_buf->hdr.desc,
+				      0, tx_entry->rx_buf);
 			if (OFI_UNLIKELY(ret)) {
-				if (OFI_LIKELY(ret == -FI_EAGAIN)) {
-					tx_entry->state = RXM_LMT_ACK_DEFERRED;
+				if (OFI_LIKELY(ret == -FI_EAGAIN))
 					break;
-				}
 				rxm_cq_write_error(tx_entry->ep->util_ep.rx_cq,
 						   tx_entry->ep->util_ep.rx_cntr,
 						   tx_entry->context, ret);
 			}
 			rxm_ep_dequeue_deferred_tx_queue(tx_entry);
+			free(tx_entry);
 			break;
 		case RXM_LMT_READ:
 			ret = fi_readv(tx_entry->conn->msg_ep,

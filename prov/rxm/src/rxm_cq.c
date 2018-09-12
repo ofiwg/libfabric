@@ -604,52 +604,56 @@ ssize_t rxm_sar_handle_segment(struct rxm_rx_buf *rx_buf)
 static ssize_t rxm_lmt_send_ack(struct rxm_rx_buf *rx_buf)
 {
 	struct rxm_tx_entry *tx_entry;
-	struct rxm_tx_buf *tx_buf;
 	ssize_t ret;
 
 	assert(rx_buf->conn);
 
-	tx_buf = rxm_tx_buf_get(rx_buf->ep, RXM_BUF_POOL_TX_ACK);
-	if (OFI_UNLIKELY(!tx_buf)) {
-		FI_WARN(&rxm_prov, FI_LOG_CQ, "TX queue full!\n");
+	rx_buf->recv_entry->rndv.tx_buf =
+		rxm_tx_buf_get(rx_buf->ep, RXM_BUF_POOL_TX_ACK);
+	if (OFI_UNLIKELY(!rx_buf->recv_entry->rndv.tx_buf)) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ,
+			"Unable to allocate TX buffer\n");
 		return -FI_EAGAIN;
 	}
-	assert(tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_ack);
-
-	tx_entry = rxm_tx_entry_get(rx_buf->conn->send_queue);
-	if (OFI_UNLIKELY(!tx_entry)) {
-		ret = -FI_EAGAIN;
-		goto err1;
-	}
+	assert(rx_buf->recv_entry->rndv.tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_ack);
 
 	RXM_LOG_STATE(FI_LOG_CQ, rx_buf->pkt, RXM_LMT_READ, RXM_LMT_ACK_SENT);
 	rx_buf->hdr.state = RXM_LMT_ACK_SENT;
 
-	tx_entry->conn = rx_buf->conn;
-	tx_entry->state = rx_buf->hdr.state;
-	tx_entry->context = rx_buf;
-	tx_entry->tx_buf = tx_buf;
+	rx_buf->recv_entry->rndv.tx_buf->pkt.ctrl_hdr.conn_id =
+		rx_buf->conn->handle.remote_key;
+	rx_buf->recv_entry->rndv.tx_buf->pkt.ctrl_hdr.msg_id =
+		rx_buf->pkt.ctrl_hdr.msg_id;
 
-	tx_buf->pkt.ctrl_hdr.conn_id 	= rx_buf->conn->handle.remote_key;
-	tx_buf->pkt.ctrl_hdr.msg_id 	= rx_buf->pkt.ctrl_hdr.msg_id;
-
-	ret = fi_send(rx_buf->conn->msg_ep, &tx_buf->pkt, sizeof(tx_buf->pkt),
-		      tx_buf->hdr.desc, 0, tx_entry);
+	ret = fi_send(rx_buf->conn->msg_ep, &rx_buf->recv_entry->rndv.tx_buf->pkt,
+		      sizeof(rx_buf->recv_entry->rndv.tx_buf->pkt),
+		      rx_buf->recv_entry->rndv.tx_buf->hdr.desc, 0, rx_buf);
 	if (OFI_UNLIKELY(ret)) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "Unable to send ACK\n");
 		if (OFI_LIKELY(ret == -FI_EAGAIN)) {
+			tx_entry = calloc(1, sizeof(*tx_entry));
+			if (OFI_UNLIKELY(!tx_entry)) {
+				FI_WARN(&rxm_prov, FI_LOG_CQ,
+					"Unable to allocate TX entry for deferred ACK\n");
+				ret = -FI_EAGAIN;
+				goto err;
+			}
+			tx_entry->rx_buf = rx_buf;
+			tx_entry->conn = rx_buf->conn;
+			tx_entry->ep = rx_buf->ep;
+			tx_entry->context = rx_buf->recv_entry->context;
 			tx_entry->state = RXM_LMT_ACK_DEFERRED;
-			tx_entry->deferred_pkt_size = sizeof(tx_buf->pkt);
+			dlist_init(&tx_entry->deferred_tx_entry);
+			tx_entry->deferred_pkt_size =
+				sizeof(rx_buf->recv_entry->rndv.tx_buf->pkt);
 			rxm_ep_enqueue_deferred_tx_queue(tx_entry);
 			return 0;
 		}
-		goto err2;
+		goto err;
 	}
 	return 0;
-err2:
-	rxm_tx_entry_release(rx_buf->conn->send_queue, tx_entry);
-err1:
-	rxm_tx_buf_release(rx_buf->ep, tx_buf);
+err:
+	rxm_tx_buf_release(rx_buf->ep, rx_buf->recv_entry->rndv.tx_buf);
 	return ret;
 }
 
@@ -777,11 +781,9 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 		else
 			return rxm_lmt_send_ack_fast(rx_buf);
 	case RXM_LMT_ACK_SENT:
-		tx_entry = comp->op_context;
-		rx_buf = tx_entry->context;
+		rx_buf = comp->op_context;
 		assert(comp->flags & FI_SEND);
-		rxm_tx_buf_release(rx_buf->ep, tx_entry->tx_buf);
-		rxm_tx_entry_release(tx_entry->conn->send_queue, tx_entry);
+		rxm_tx_buf_release(rx_buf->ep, rx_buf->recv_entry->rndv.tx_buf);
 		return rxm_finish_send_lmt_ack(rx_buf);
 	default:
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "Invalid state!\n");
@@ -798,7 +800,6 @@ void rxm_cq_write_error(struct util_cq *cq, struct util_cntr *cntr,
 	err_entry.prov_errno = err;
 	err_entry.err = err;
 
-	assert(0);
 	if (cntr)
 		rxm_cntr_incerr(cntr);
 	if (ofi_cq_write_error(cq, &err_entry)) {
@@ -811,8 +812,6 @@ static void rxm_cq_write_error_all(struct rxm_ep *rxm_ep, int err)
 {
 	struct fi_cq_err_entry err_entry = {0};
 	ssize_t ret = 0;
-
-	assert(0);
 
 	err_entry.prov_errno = err;
 	err_entry.err = err;
