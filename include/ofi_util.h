@@ -198,6 +198,7 @@ struct util_domain {
 	enum fi_av_type		av_type;
 	struct ofi_mr_map	mr_map;
 	enum fi_threading	threading;
+	enum fi_progress	data_progress;
 };
 
 int ofi_domain_init(struct fid_fabric *fabric_fid, const struct fi_info *info,
@@ -633,39 +634,45 @@ typedef void (*ofi_cmap_handle_func)(struct util_cmap_handle *handle);
 typedef int (*ofi_cmap_connect_func)(struct util_ep *ep,
 				     struct util_cmap_handle *handle,
 				     const void *addr, size_t addrlen);
-typedef void *(*ofi_cmap_event_handler_func)(void *arg);
+typedef void *(*ofi_cmap_thread_func)(void *arg);
 typedef int (*ofi_cmap_signal_func)(struct util_ep *ep, void *context,
 				    enum ofi_cmap_signal signal);
+typedef int (*ofi_cmap_cleanup_func)(void *arg);
 
 struct util_cmap_attr {
 	void 				*name;
+	/* user guarantee for serializing access to cmap objects */
+	uint8_t				serial_access;
 	ofi_cmap_alloc_handle_func 	alloc;
 	ofi_cmap_handle_func 		close;
 	ofi_cmap_handle_func 		free;
 	ofi_cmap_connect_func 		connect;
 	ofi_cmap_handle_func		connected_handler;
-	ofi_cmap_event_handler_func	event_handler;
+	ofi_cmap_thread_func		cm_thread_func;
+	ofi_cmap_cleanup_func		cleanup;
 	ofi_cmap_signal_func		signal;
 	ofi_cmap_handle_func		av_updated_handler;
 };
 
 struct util_cmap {
-	struct util_ep *ep;
-	struct util_av *av;
+	struct util_ep		*ep;
+	struct util_av		*av;
 
 	/* cmap handles that correspond to addresses in AV */
 	struct util_cmap_handle **handles_av;
 
 	/* Store all cmap handles (inclusive of handles_av) in an indexer.
 	 * This allows reverse lookup of the handle using the index. */
-	struct indexer handles_idx;
+	struct indexer		handles_idx;
 
-	struct ofi_key_idx key_idx;
+	struct ofi_key_idx	key_idx;
 
-	struct dlist_entry peer_list;
-	struct util_cmap_attr attr;
-	pthread_t event_handler_thread;
-	fastlock_t lock;
+	struct dlist_entry	peer_list;
+	struct util_cmap_attr	attr;
+	pthread_t		cm_thread;
+	ofi_fastlock_acquire_t	acquire;
+	ofi_fastlock_release_t	release;
+	fastlock_t		lock;
 };
 
 struct util_cmap_handle *ofi_cmap_key2handle(struct util_cmap *cmap, uint64_t key);

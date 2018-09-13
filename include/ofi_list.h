@@ -558,6 +558,69 @@ slist_splice_tail(struct slist *dst, struct slist *src)
 }
 
 /*
+ * Singly-linked list with blocking wait-until-avail support
+ */
+
+struct slistfd {
+	struct slist 		list;
+	struct fd_signal	signal;
+};
+
+static inline int slistfd_init(struct slistfd *list)
+{
+	slist_init(&list->list);
+	return fd_signal_init(&list->signal);
+}
+
+static inline void slistfd_free(struct slistfd *list)
+{
+	fd_signal_free(&list->signal);
+}
+
+static inline int slistfd_empty(struct slistfd *list)
+{
+	return slist_empty(&list->list);
+}
+
+static inline void
+slistfd_insert_head(struct slist_entry *item, struct slistfd *list)
+{
+	slist_insert_head(item, &list->list);
+	fd_signal_set(&list->signal);
+}
+
+static inline void
+slistfd_insert_tail(struct slist_entry *item, struct slistfd *list)
+{
+	slist_insert_tail(item, &list->list);
+	fd_signal_set(&list->signal);
+}
+
+static inline struct slist_entry *slistfd_remove_head(struct slistfd *list)
+{
+	struct slist_entry *entry = slist_remove_head(&list->list);
+	if (entry)
+		fd_signal_reset(&list->signal);
+	return entry;
+}
+
+static inline int slistfd_wait_avail(struct slistfd *list, int timeout)
+{
+	int ret;
+
+	if (!slistfd_empty(list))
+		return 1;
+
+	ret = fd_signal_poll(&list->signal, timeout);
+	return ret ? ret : !slistfd_empty(list);
+}
+
+static inline int slistfd_get_fd(struct slistfd *list)
+{
+	return fd_signal_get(&list->signal);
+}
+
+/*
  * Double-linked list with blocking wait-until-avail support
  */
 

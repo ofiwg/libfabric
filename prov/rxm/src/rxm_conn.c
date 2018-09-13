@@ -176,7 +176,7 @@ static int rxm_conn_reprocess_directed_recvs(struct rxm_recv_queue *recv_queue)
 
 	dlist_init(&rx_buf_list);
 
-	fastlock_acquire(&recv_queue->rxm_ep->util_ep.cmap->lock);
+	recv_queue->rxm_ep->util_ep.cmap->acquire(&recv_queue->rxm_ep->util_ep.cmap->lock);
 	recv_queue->rxm_ep->res_fastlock_acquire(&recv_queue->lock);
 
 	dlist_foreach_container_safe(&recv_queue->unexp_msg_list,
@@ -203,7 +203,7 @@ static int rxm_conn_reprocess_directed_recvs(struct rxm_recv_queue *recv_queue)
 		dlist_insert_tail(&rx_buf->unexp_msg.entry, &rx_buf_list);
 	}
 	recv_queue->rxm_ep->res_fastlock_release(&recv_queue->lock);
-	fastlock_release(&recv_queue->rxm_ep->util_ep.cmap->lock);
+	recv_queue->rxm_ep->util_ep.cmap->release(&recv_queue->rxm_ep->util_ep.cmap->lock);
 
 	while (!dlist_empty(&rx_buf_list)) {
 		dlist_pop_front(&rx_buf_list, struct rxm_rx_buf,
@@ -368,33 +368,13 @@ err1:
 
 static int rxm_conn_handle_notify(struct fi_eq_entry *eq_entry)
 {
-	switch((enum ofi_cmap_signal)eq_entry->data) {
-	case OFI_CMAP_FREE:
-		FI_DBG(&rxm_prov, FI_LOG_FABRIC, "Freeing handle\n");
+	if ((enum ofi_cmap_signal)eq_entry->data == OFI_CMAP_FREE) {
 		rxm_conn_free((struct util_cmap_handle *)eq_entry->context);
 		return 0;
-	case OFI_CMAP_EXIT:
-		FI_TRACE(&rxm_prov, FI_LOG_FABRIC, "Closing event handler\n");
-		return 1;
-	default:
+	} else {
 		FI_WARN(&rxm_prov, FI_LOG_FABRIC, "Unknown cmap signal\n");
-		return 1;
-	}
-}
-
-static void rxm_conn_handle_eq_err(struct rxm_ep *rxm_ep, ssize_t rd)
-{
-	struct fi_eq_err_entry err_entry = {0};
-
-	if (rd != -FI_EAVAIL) {
-		FI_WARN(&rxm_prov, FI_LOG_FABRIC, "Unable to fi_eq_sread\n");
-		return;
-	}
-	OFI_EQ_READERR(&rxm_prov, FI_LOG_FABRIC, rxm_ep->msg_eq, rd, err_entry);
-	if (err_entry.err == ECONNREFUSED) {
-		FI_DBG(&rxm_prov, FI_LOG_FABRIC, "Connection refused\n");
-		ofi_cmap_process_reject(rxm_ep->util_ep.cmap,
-					err_entry.fid->context);
+		assert(0);
+		return -FI_EOTHER;
 	}
 }
 
@@ -406,72 +386,192 @@ static void rxm_conn_wake_up_wait_obj(struct rxm_ep *rxm_ep)
 		util_cntr_signal(rxm_ep->util_ep.tx_cntr);
 }
 
-static void *rxm_conn_event_handler(void *arg)
+static int
+rxm_conn_handle_event(struct rxm_ep *rxm_ep, ssize_t rd, uint32_t event,
+		      struct fi_eq_cm_entry *entry, void *context)
 {
-	struct fi_eq_cm_entry *entry;
-	size_t datalen = sizeof(struct rxm_cm_data);
-	size_t len = sizeof(*entry) + datalen;
-	struct rxm_ep *rxm_ep = container_of(arg, struct rxm_ep, util_ep);
 	struct rxm_cm_data *cm_data;
+
+	if (rd == -FI_ECONNREFUSED) {
+		ofi_cmap_process_reject(rxm_ep->util_ep.cmap, context);
+		return 0;
+	}
+
+	switch(event) {
+	case FI_NOTIFY:
+		if (rxm_conn_handle_notify((struct fi_eq_entry *)entry))
+			goto err;
+		break;
+	case FI_CONNREQ:
+		FI_DBG(&rxm_prov, FI_LOG_FABRIC, "Got new connection\n");
+		if ((size_t)rd != RXM_CM_ENTRY_SZ) {
+			FI_WARN(&rxm_prov, FI_LOG_FABRIC,
+				"Received size (%zd) not matching "
+				"expected (%zu)\n", rd, RXM_CM_ENTRY_SZ);
+			goto err;
+		}
+		rxm_msg_process_connreq(rxm_ep, entry->info, entry->data);
+		fi_freeinfo(entry->info);
+		break;
+	case FI_CONNECTED:
+		FI_DBG(&rxm_prov, FI_LOG_FABRIC,
+		       "Connection successful\n");
+		rxm_ep->util_ep.cmap->acquire(&rxm_ep->util_ep.cmap->lock);
+		cm_data = (void *)entry->data;
+		ofi_cmap_process_connect(rxm_ep->util_ep.cmap,
+					 entry->fid->context,
+					 ((rd - sizeof(*entry)) ?
+					  &cm_data->conn_id : NULL));
+		rxm_conn_wake_up_wait_obj(rxm_ep);
+		rxm_ep->util_ep.cmap->release(&rxm_ep->util_ep.cmap->lock);
+		break;
+	case FI_SHUTDOWN:
+		FI_DBG(&rxm_prov, FI_LOG_FABRIC,
+		       "Received connection shutdown\n");
+		ofi_cmap_process_shutdown(rxm_ep->util_ep.cmap,
+					  entry->fid->context);
+		break;
+	default:
+		FI_WARN(&rxm_prov, FI_LOG_FABRIC,
+			"Unknown event: %u\n", event);
+		goto err;
+	}
+	return 0;
+err:
+	return -FI_EOTHER;
+}
+
+int rxm_conn_process_eq_events(struct rxm_ep *rxm_ep)
+{
+	struct rxm_msg_eq_entry *entry;
+	struct slist_entry *slist_entry;
+	int ret;
+
+	fastlock_acquire(&rxm_ep->msg_eq_entry_list_lock);
+	while (!slistfd_empty(&rxm_ep->msg_eq_entry_list)) {
+		slist_entry = slistfd_remove_head(&rxm_ep->msg_eq_entry_list);
+		entry = container_of(slist_entry, struct rxm_msg_eq_entry,
+				     slist_entry);
+
+		fastlock_release(&rxm_ep->msg_eq_entry_list_lock);
+
+		ret = rxm_conn_handle_event(rxm_ep, entry->rd, entry->event,
+					    &entry->cm_entry, entry->context);
+		free(entry);
+		fastlock_acquire(&rxm_ep->msg_eq_entry_list_lock);
+		if (ret)
+			break;
+	}
+	fastlock_release(&rxm_ep->msg_eq_entry_list_lock);
+	return ret;
+}
+
+static ssize_t rxm_eq_sread(struct rxm_ep *rxm_ep, uint32_t *event,
+				 struct fi_eq_cm_entry* entry, size_t len,
+				 void **context)
+{
+	struct fi_eq_err_entry err_entry = {0};
+	ssize_t rd;
+	int once = 1;
+
+	do {
+		rd = fi_eq_sread(rxm_ep->msg_eq, event, entry, len, -1, 0);
+		if (rd >= 0)
+			return rd;
+		if (rd == -FI_EINTR && once) {
+			FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Ignoring EINTR\n");
+			once = 0;
+		}
+	} while (rd == -FI_EINTR);
+
+	if (rd != -FI_EAVAIL) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+			"Unable to fi_eq_sread: %zu\n", rd);
+		return rd;
+	}
+
+	OFI_EQ_READERR(&rxm_prov, FI_LOG_EP_CTRL, rxm_ep->msg_eq, rd, err_entry);
+
+	if (err_entry.err == ECONNREFUSED) {
+		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Connection refused\n");
+		*context = err_entry.fid->context;
+		return -FI_ECONNREFUSED;
+	} else {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unknown error: %d\n",
+			err_entry.err);
+		return rd;
+	}
+}
+
+static void *rxm_conn_eq_read(void *arg)
+{
+	struct rxm_ep *rxm_ep = arg;
+	struct rxm_msg_eq_entry *entry;
+
+	while (1) {
+		entry = calloc(1, RXM_MSG_EQ_ENTRY_SZ);
+		if (!entry) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+				"Unable to allocate memory!\n");
+			return NULL;
+		}
+
+		entry->rd = rxm_eq_sread(rxm_ep, &entry->event, &entry->cm_entry,
+					 RXM_CM_ENTRY_SZ, &entry->context);
+		if (entry->rd < 0 && entry->rd != -FI_ECONNREFUSED)
+			goto exit;
+
+		if (entry->event == FI_NOTIFY &&
+		    (enum ofi_cmap_signal)((struct fi_eq_entry *)
+					   &entry->cm_entry)->data == OFI_CMAP_EXIT) {
+			FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Closing CM thread\n");
+			goto exit;
+		}
+
+		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
+		       "Enqueing event: %d\n", entry->event);
+		fastlock_acquire(&rxm_ep->msg_eq_entry_list_lock);
+		slistfd_insert_tail(&entry->slist_entry,
+				    &rxm_ep->msg_eq_entry_list);
+		fastlock_release(&rxm_ep->msg_eq_entry_list_lock);
+	}
+exit:
+	free(entry);
+	return NULL;
+}
+
+static void *rxm_conn_progress(void *arg)
+{
+	struct rxm_ep *rxm_ep = container_of(arg, struct rxm_ep, util_ep);
+	struct fi_eq_cm_entry *entry;
+	void *context;
 	uint32_t event;
 	ssize_t rd;
+	int ret;
 
-	entry = calloc(1, len);
+	entry = calloc(1, RXM_CM_ENTRY_SZ);
 	if (!entry) {
-		FI_WARN(&rxm_prov, FI_LOG_FABRIC, "Unable to allocate memory!\n");
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+			"Unable to allocate memory!\n");
 		return NULL;
 	}
 
-	FI_DBG(&rxm_prov, FI_LOG_FABRIC, "Starting conn event handler\n");
+	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Starting conn event handler\n");
 	while (1) {
-		rd = fi_eq_sread(rxm_ep->msg_eq, &event, entry, len, -1, 0);
-		/* We would receive more bytes than sizeof *entry during CONNREQ */
-		if (rd < 0) {
-			rxm_conn_handle_eq_err(rxm_ep, rd);
-			continue;
-		}
+		rd = rxm_eq_sread(rxm_ep, &event, entry,
+				  RXM_CM_ENTRY_SZ, &context);
+		if (rd < 0 && rd != -FI_ECONNREFUSED)
+			return NULL;
 
-		switch(event) {
-		case FI_NOTIFY:
-			if (rxm_conn_handle_notify((struct fi_eq_entry *)entry))
-				goto exit;
-			break;
-		case FI_CONNREQ:
-			FI_DBG(&rxm_prov, FI_LOG_FABRIC, "Got new connection\n");
-			if ((size_t)rd != len) {
-				FI_WARN(&rxm_prov, FI_LOG_FABRIC,
-					"Received size (%zd) not matching "
-					"expected (%zu)\n", rd, len);
-				goto exit;
-			}
-			rxm_msg_process_connreq(rxm_ep, entry->info, entry->data);
-			fi_freeinfo(entry->info);
-			break;
-		case FI_CONNECTED:
-			FI_DBG(&rxm_prov, FI_LOG_FABRIC,
-			       "Connection successful\n");
-			fastlock_acquire(&rxm_ep->util_ep.cmap->lock);
-			cm_data = (void *)entry->data;
-			ofi_cmap_process_connect(rxm_ep->util_ep.cmap,
-						 entry->fid->context,
-						 ((rd - sizeof(*entry)) ?
-						  &cm_data->conn_id : NULL));
-			rxm_conn_wake_up_wait_obj(rxm_ep);
-			fastlock_release(&rxm_ep->util_ep.cmap->lock);
-			break;
-		case FI_SHUTDOWN:
-			FI_DBG(&rxm_prov, FI_LOG_FABRIC,
-			       "Received connection shutdown\n");
-			ofi_cmap_process_shutdown(rxm_ep->util_ep.cmap,
-						  entry->fid->context);
-			break;
-		default:
-			FI_WARN(&rxm_prov, FI_LOG_FABRIC,
-				"Unknown event: %u\n", event);
-			goto exit;
+		if (event == FI_NOTIFY &&
+		    (enum ofi_cmap_signal)((struct fi_eq_entry *)entry)->data == OFI_CMAP_EXIT) {
+			FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Closing CM thread\n");
+			return NULL;
 		}
+		ret = rxm_conn_handle_event(rxm_ep, rd, event, entry, context);
+		if (ret)
+			break;
 	}
-exit:
 	free(entry);
 	return NULL;
 }
@@ -583,6 +683,12 @@ static int rxm_conn_signal(struct util_ep *util_ep, void *context,
 	return 0;
 }
 
+static int rxm_conn_cleanup(void *arg)
+{
+	return rxm_conn_process_eq_events(container_of(arg, struct rxm_ep,
+						       util_ep));
+}
+
 struct util_cmap *rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep)
 {
 	struct util_cmap_attr attr;
@@ -610,12 +716,26 @@ struct util_cmap *rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep)
 	ofi_straddr_dbg(&rxm_prov, FI_LOG_EP_CTRL, "local_name", name);
 
 	attr.name		= name;
+
+	if (rxm_ep->util_ep.domain->threading == FI_THREAD_DOMAIN &&
+	    rxm_ep->util_ep.domain->data_progress == FI_PROGRESS_MANUAL)
+		attr.serial_access = 1;
+	else
+		attr.serial_access = 0;
+
 	attr.alloc 		= rxm_conn_alloc;
 	attr.close 		= rxm_conn_close;
 	attr.free 		= rxm_conn_free;
 	attr.connect 		= rxm_conn_connect;
 	attr.connected_handler	= rxm_conn_connected_handler;
-	attr.event_handler	= rxm_conn_event_handler;
+
+	if (rxm_ep->util_ep.domain->data_progress == FI_PROGRESS_AUTO) {
+		attr.cm_thread_func = rxm_conn_progress;
+	} else {
+		attr.cm_thread_func = rxm_conn_eq_read;
+		attr.cleanup = rxm_conn_cleanup;
+	}
+
 	attr.signal		= rxm_conn_signal;
 	attr.av_updated_handler	= rxm_conn_av_updated_handler;
 

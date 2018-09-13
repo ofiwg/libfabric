@@ -213,6 +213,7 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq, struct rdma_cm_event *cma_event
 	}
 
 	entry->fid = fid;
+	/* rdmacm has no way to track how much data is sent by peer */
 	datalen = MIN(len - sizeof(*entry), cma_event->param.conn.private_data_len);
 	if (datalen)
 		memcpy(entry->data, cma_event->param.conn.private_data, datalen);

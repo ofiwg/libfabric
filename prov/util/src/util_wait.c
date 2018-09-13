@@ -311,6 +311,7 @@ static int util_wait_fd_control(struct fid *fid, int command, void *arg)
 static int util_wait_fd_close(struct fid *fid)
 {
 	struct util_wait_fd *wait;
+	struct ofi_wait_fd_entry *fd_entry;
 	int ret;
 
 	wait = container_of(fid, struct util_wait_fd, util_wait.wait_fid.fid);
@@ -318,7 +319,14 @@ static int util_wait_fd_close(struct fid *fid)
 	if (ret)
 		return ret;
 
-	assert(dlist_empty(&wait->fd_list));
+	fastlock_acquire(&wait->lock);
+	while (!dlist_empty(&wait->fd_list)) {
+		dlist_pop_front(&wait->fd_list, struct ofi_wait_fd_entry,
+				fd_entry, entry);
+		fi_epoll_del(wait->epoll_fd, fd_entry->fd);
+		free(fd_entry);
+	}
+	fastlock_release(&wait->lock);
 
 	fi_epoll_del(wait->epoll_fd, wait->signal.fd[FI_READ_FD]);
 	fd_signal_free(&wait->signal);

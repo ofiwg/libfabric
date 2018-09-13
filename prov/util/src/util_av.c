@@ -1227,7 +1227,7 @@ struct util_cmap_handle *ofi_cmap_key2handle(struct util_cmap *cmap, uint64_t ke
 {
 	struct util_cmap_handle *handle;
 
-	fastlock_acquire(&cmap->lock);
+	cmap->acquire(&cmap->lock);
 	if (!(handle = ofi_idx_lookup(&cmap->handles_idx,
 				      ofi_key2idx(&cmap->key_idx, key)))) {
 		FI_WARN(cmap->av->prov, FI_LOG_AV, "Invalid key!\n");
@@ -1238,7 +1238,7 @@ struct util_cmap_handle *ofi_cmap_key2handle(struct util_cmap *cmap, uint64_t ke
 			handle = NULL;
 		}
 	}
-	fastlock_release(&cmap->lock);
+	cmap->release(&cmap->lock);
 	return handle;
 }
 
@@ -1282,14 +1282,14 @@ static int util_cmap_del_handle(struct util_cmap_handle *handle)
 	util_cmap_clear_key(handle);
 
 	handle->state = CMAP_SHUTDOWN;
-	/* Signal event handler thread to delete the handle. This is required
-	 * so that the event handler thread handles any pending events for this
+	/* Signal CM thread to delete the handle. This is required
+	 * so that the CM thread handles any pending events for this
 	 * ep correctly. Handle would be freed finally after processing the
 	 * events */
 	ret = cmap->attr.signal(cmap->ep, handle, OFI_CMAP_FREE);
 	if (ret) {
 		FI_WARN(cmap->av->prov, FI_LOG_FABRIC,
-			"Unable to signal event handler thread\n");
+			"Unable to signal CM thread\n");
 		return ret;
 	}
 	return 0;
@@ -1298,9 +1298,9 @@ static int util_cmap_del_handle(struct util_cmap_handle *handle)
 void ofi_cmap_del_handle(struct util_cmap_handle *handle)
 {
 	struct util_cmap *cmap = handle->cmap;
-	fastlock_acquire(&cmap->lock);
+	cmap->acquire(&cmap->lock);
 	util_cmap_del_handle(handle);
-	fastlock_release(&cmap->lock);
+	cmap->release(&cmap->lock);
 }
 
 /* Caller must hold cmap->lock */
@@ -1366,7 +1366,7 @@ static int ofi_cmap_move_handle_to_peer_list(struct util_cmap *cmap, int index)
 	struct util_cmap_handle *handle = cmap->handles_av[index];
 	int ret = 0;
 
-	fastlock_acquire(&cmap->lock);
+	cmap->acquire(&cmap->lock);
 	if (!handle)
 		goto unlock;
 
@@ -1380,7 +1380,7 @@ static int ofi_cmap_move_handle_to_peer_list(struct util_cmap *cmap, int index)
 	       cmap->av->addrlen);
 	dlist_insert_tail(&handle->peer->entry, &cmap->peer_list);
 unlock:
-	fastlock_release(&cmap->lock);
+	cmap->release(&cmap->lock);
 	return ret;
 }
 
@@ -1400,15 +1400,15 @@ int ofi_cmap_update(struct util_cmap *cmap, const void *addr, fi_addr_t fi_addr)
 	struct util_cmap_handle *handle;
 	int ret = 0;
 
-	fastlock_acquire(&cmap->lock);
+	cmap->acquire(&cmap->lock);
 	handle = util_cmap_get_handle_peer(cmap, addr);
 	if (!handle) {
 		ret = util_cmap_alloc_handle(cmap, fi_addr, CMAP_IDLE, &handle);
-		fastlock_release(&cmap->lock);
+		cmap->release(&cmap->lock);
 		return ret;
 	}
 	util_cmap_move_handle(handle, fi_addr);
-	fastlock_release(&cmap->lock);
+	cmap->release(&cmap->lock);
 
 	if (cmap->attr.av_updated_handler)
 		cmap->attr.av_updated_handler(handle);
@@ -1422,7 +1422,7 @@ void ofi_cmap_process_shutdown(struct util_cmap *cmap,
 {
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 		"Processing shutdown for handle: %p\n", handle);
-	fastlock_acquire(&cmap->lock);
+	cmap->acquire(&cmap->lock);
 	if (handle->state > CMAP_SHUTDOWN) {
 		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL,
 			"Invalid handle on shutdown event\n");
@@ -1432,7 +1432,7 @@ void ofi_cmap_process_shutdown(struct util_cmap *cmap,
 	} else {
 		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "Got local shutdown\n");
 	}
-	fastlock_release(&cmap->lock);
+	cmap->release(&cmap->lock);
 }
 
 /* Caller must hold cmap->lock */
@@ -1462,7 +1462,7 @@ void ofi_cmap_process_reject(struct util_cmap *cmap,
 {
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 		"Processing reject for handle: %p\n", handle);
-	fastlock_acquire(&cmap->lock);
+	cmap->acquire(&cmap->lock);
 	switch (handle->state) {
 	case CMAP_CONNREQ_RECV:
 	case CMAP_CONNECTED:
@@ -1485,7 +1485,7 @@ void ofi_cmap_process_reject(struct util_cmap *cmap,
 			"%d when receiving connection reject\n", handle->state);
 		assert(0);
 	}
-	fastlock_release(&cmap->lock);
+	cmap->release(&cmap->lock);
 }
 
 int ofi_cmap_process_connreq(struct util_cmap *cmap, void *addr,
@@ -1499,7 +1499,7 @@ int ofi_cmap_process_connreq(struct util_cmap *cmap, void *addr,
 
 	index = ip_av_get_index(cmap->av, addr);
 
-	fastlock_acquire(&cmap->lock);
+	cmap->acquire(&cmap->lock);
 	if (index < 0)
 		handle = util_cmap_get_handle_peer(cmap, addr);
 	else
@@ -1570,7 +1570,7 @@ int ofi_cmap_process_connreq(struct util_cmap *cmap, void *addr,
 		ret = -FI_EOPBADSTATE;
 	}
 unlock:
-	fastlock_release(&cmap->lock);
+	cmap->release(&cmap->lock);
 	return ret;
 }
 
@@ -1617,7 +1617,7 @@ int ofi_cmap_get_handle(struct util_cmap *cmap, fi_addr_t fi_addr,
 {
 	int ret;
 
-	fastlock_acquire(&cmap->lock);
+	cmap->acquire(&cmap->lock);
 	*handle_ret = ofi_cmap_acquire_handle(cmap, fi_addr);
 	if (OFI_UNLIKELY(!*handle_ret)) {
 		ret = -FI_EAGAIN;
@@ -1626,27 +1626,27 @@ int ofi_cmap_get_handle(struct util_cmap *cmap, fi_addr_t fi_addr,
 	
 	ret = ofi_cmap_handle_connect(cmap, fi_addr, *handle_ret);
 unlock:
-	fastlock_release(&cmap->lock);
+	cmap->release(&cmap->lock);
 	return ret;
 }
 
-static int util_cmap_event_handler_close(struct util_cmap *cmap)
+static int util_cmap_cm_thread_close(struct util_cmap *cmap)
 {
 	int ret;
 
 	ret = cmap->attr.signal(cmap->ep, NULL, OFI_CMAP_EXIT);
 	if (ret) {
 		FI_WARN(cmap->av->prov, FI_LOG_FABRIC,
-			"Unable to signal event handler thread\n");
+			"Unable to signal CM thread\n");
 		return ret;
 	}
-	/* Release lock so that event handler thread could process shutdown events */
-	fastlock_release(&cmap->lock);
-	ret = pthread_join(cmap->event_handler_thread, NULL);
-	fastlock_acquire(&cmap->lock);
+	/* Release lock so that CM thread could process shutdown events */
+	cmap->release(&cmap->lock);
+	ret = pthread_join(cmap->cm_thread, NULL);
+	cmap->acquire(&cmap->lock);
 	if (ret) {
 		FI_WARN(cmap->av->prov, FI_LOG_FABRIC,
-			"Unable to join event handler thread\n");
+			"Unable to join CM thread\n");
 		return ret;
 	}
 	return 0;
@@ -1658,7 +1658,7 @@ void ofi_cmap_free(struct util_cmap *cmap)
 	struct dlist_entry *entry;
 	size_t i;
 
-	fastlock_acquire(&cmap->lock);
+	cmap->acquire(&cmap->lock);
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "Closing cmap\n");
 	for (i = 0; i < cmap->av->count; i++) {
 		if (cmap->handles_av[i])
@@ -1669,12 +1669,18 @@ void ofi_cmap_free(struct util_cmap *cmap)
 		peer = container_of(entry, struct util_cmap_peer, entry);
 		util_cmap_del_handle(peer->handle);
 	}
-	util_cmap_event_handler_close(cmap);
+	util_cmap_cm_thread_close(cmap);
+	cmap->release(&cmap->lock);
+
+	/* cleanup function would be used in manual progress mode */
+	if (cmap->attr.cleanup) {
+		cmap->attr.cleanup(cmap->ep);
+	}
 	free(cmap->handles_av);
 	free(cmap->attr.name);
 	ofi_idx_reset(&cmap->handles_idx);
-	fastlock_release(&cmap->lock);
-	fastlock_destroy(&cmap->lock);
+	if (!cmap->attr.serial_access)
+		fastlock_destroy(&cmap->lock);
 	free(cmap);
 }
 
@@ -1703,17 +1709,24 @@ struct util_cmap *ofi_cmap_alloc(struct util_ep *ep,
 	ofi_key_idx_init(&cmap->key_idx, UTIL_CMAP_IDX_BITS);
 
 	dlist_init(&cmap->peer_list);
-	fastlock_init(&cmap->lock);
 
-	if (pthread_create(&cmap->event_handler_thread, 0,
-			   cmap->attr.event_handler, ep)) {
+	if (pthread_create(&cmap->cm_thread, 0,
+			   cmap->attr.cm_thread_func, ep)) {
 		FI_WARN(ep->av->prov, FI_LOG_FABRIC,
-			"Unable to create msg_cm_listener_thread\n");
+			"Unable to create cmap thread\n");
 		goto err3;
+	}
+
+	if (cmap->attr.serial_access) {
+		cmap->acquire = ofi_fastlock_acquire_noop;
+		cmap->release = ofi_fastlock_release_noop;
+	} else {
+		fastlock_init(&cmap->lock);
+		cmap->acquire = ofi_fastlock_acquire;
+		cmap->release = ofi_fastlock_release;
 	}
 	return cmap;
 err3:
-	fastlock_destroy(&cmap->lock);
 	free(cmap->attr.name);
 err2:
 	free(cmap->handles_av);
