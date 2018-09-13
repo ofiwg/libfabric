@@ -79,7 +79,7 @@ static ssize_t mrail_post_subreq(uint32_t rail,
 	msg.msg_iov		= rail_iov;
 	msg.desc		= rail_descs;
 	msg.iov_count		= subreq->iov_count;
-	msg.addr		= req->peer_addr->addr;
+	msg.addr		= req->peer_info->addr;
 	msg.rma_iov		= rail_rma_iov;
 	msg.rma_iov_count	= subreq->rma_iov_count;
 	msg.context		= &subreq->context;
@@ -140,10 +140,10 @@ struct mrail_req *mrail_dequeue_deferred_req(struct mrail_ep *mrail_ep)
 {
 	struct mrail_req *req;
 
-	mrail_ep->lock_acquire(&mrail_ep->util_ep.lock);
+	ofi_ep_lock_acquire(&mrail_ep->util_ep);
 	slist_remove_head_container(&mrail_ep->deferred_reqs, struct mrail_req,
 			req, entry);
-	mrail_ep->lock_release(&mrail_ep->util_ep.lock);
+	ofi_ep_lock_release(&mrail_ep->util_ep);
 
 	return req;
 }
@@ -151,17 +151,17 @@ struct mrail_req *mrail_dequeue_deferred_req(struct mrail_ep *mrail_ep)
 static inline void mrail_requeue_deferred_req(struct mrail_ep *mrail_ep,
 		struct mrail_req *req)
 {
-	mrail_ep->lock_acquire(&mrail_ep->util_ep.lock);
+	ofi_ep_lock_acquire(&mrail_ep->util_ep);
 	slist_insert_head(&req->entry, &mrail_ep->deferred_reqs);
-	mrail_ep->lock_release(&mrail_ep->util_ep.lock);
+	ofi_ep_lock_release(&mrail_ep->util_ep);
 }
 
 static inline void mrail_queue_deferred_req(struct mrail_ep *mrail_ep,
 		struct mrail_req *req)
 {
-	mrail_ep->lock_acquire(&mrail_ep->util_ep.lock);
+	ofi_ep_lock_acquire(&mrail_ep->util_ep);
 	slist_insert_tail(&req->entry, &mrail_ep->deferred_reqs);
-	mrail_ep->lock_release(&mrail_ep->util_ep.lock);
+	ofi_ep_lock_release(&mrail_ep->util_ep);
 }
 
 void mrail_progress_deferred_reqs(struct mrail_ep *mrail_ep)
@@ -265,7 +265,7 @@ static ssize_t mrail_init_rma_req(struct mrail_ep *mrail_ep,
 	req->flags		= flags;
 	req->data		= msg->data;
 	req->mrail_ep		= mrail_ep;
-	req->peer_addr		= ofi_av_get_addr(mrail_ep->util_ep.av,
+	req->peer_info		= ofi_av_get_addr(mrail_ep->util_ep.av,
 						 (int) msg->addr);
 	req->comp.op_context	= msg->context;
 	req->comp.flags		= flags;

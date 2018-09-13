@@ -102,6 +102,7 @@ int mrail_get_core_info(uint32_t version, const char *node, const char *service,
 	}
 
 	core_hints->mode |= FI_BUFFERED_RECV;
+	core_hints->caps |= FI_SOURCE;
 
 	if (!core_hints->fabric_attr) {
 		core_hints->fabric_attr = calloc(1, sizeof(*core_hints->fabric_attr));

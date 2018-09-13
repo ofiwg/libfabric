@@ -63,7 +63,7 @@ static int mrail_av_insert(struct fid_av *av_fid, const void *addr, size_t count
 {
 	struct mrail_domain *mrail_domain;
 	struct mrail_av *mrail_av;
-	struct mrail_peer_addr *peer_addr;
+	struct mrail_peer_info *peer_info;
 	size_t i, j, offset, num_inserted = 0;
 	int ret, index;
 
@@ -79,9 +79,10 @@ static int mrail_av_insert(struct fid_av *av_fid, const void *addr, size_t count
 	 *         ADDR2: ADDR1_RAIL2:ADDR2_RAIL2
 	*/
 
-	peer_addr = calloc(1, mrail_av->util_av.addrlen);
-	if (!peer_addr)
+	peer_info = calloc(1, mrail_av->util_av.addrlen);
+	if (!peer_info)
 		return -FI_ENOMEM;
+	slist_init(&peer_info->ooo_recv_queue);
 
 	for (i = 0; i < count; i++) {
 		offset = i * mrail_domain->addrlen;
@@ -92,28 +93,28 @@ static int mrail_av_insert(struct fid_av *av_fid, const void *addr, size_t count
 					   (char *)addr + offset, 1,
 					   NULL, flags, NULL);
 			if (ret != 1) {
-				free(peer_addr);
+				free(peer_info);
 				return ret;
 			}
 			offset += mrail_av->rail_addrlen[j];
 		}
-		ret = ofi_av_insert_addr(&mrail_av->util_av, peer_addr,
+		ret = ofi_av_insert_addr(&mrail_av->util_av, peer_info,
 					 ofi_atomic_get32(&mrail_av->index),
 					 &index);
 		if (fi_addr) {
 			if (ret) {
 				FI_WARN(&mrail_prov, FI_LOG_AV, \
 					"Unable to get rail fi_addr\n");
-				peer_addr->addr = FI_ADDR_NOTAVAIL;
+				peer_info->addr = FI_ADDR_NOTAVAIL;
 			} else {
-				peer_addr->addr = (uint64_t) index;
+				peer_info->addr = (uint64_t) index;
 				num_inserted++;
 			}
-			fi_addr[i] = peer_addr->addr;
+			fi_addr[i] = peer_info->addr;
 		}
 	}
 
-	free(peer_addr);
+	free(peer_info);
 	return num_inserted;
 }
 
@@ -154,7 +155,7 @@ int mrail_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 
 	mrail_av->num_avs = mrail_domain->num_domains;
 
-	util_attr.addrlen = sizeof(struct mrail_peer_addr);
+	util_attr.addrlen = sizeof(struct mrail_peer_info);
 	/* We just need a table to store the mapping */
 	util_attr.overhead = 0;
 	util_attr.flags = 0;
