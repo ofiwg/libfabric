@@ -737,11 +737,13 @@ rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	       " tag: 0x%" PRIx64 "\n", pkt_size, tx_pkt->hdr.tag);
 	ssize_t ret = fi_inject(rxm_conn->msg_ep, tx_pkt, pkt_size, 0);
 	if (OFI_UNLIKELY(ret)) {
-		if (ret == -FI_EAGAIN)
-			rxm_ep_progress_multi(&rxm_ep->util_ep);
 		FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
 		       "fi_inject for MSG provider failed\n");
-		rxm_cntr_incerr(rxm_ep->util_ep.tx_cntr);
+		if (OFI_LIKELY(ret == -FI_EAGAIN)) {
+			rxm_ep_progress_multi(&rxm_ep->util_ep);
+		} else {
+			rxm_cntr_incerr(rxm_ep->util_ep.tx_cntr);
+		}
 	} else {
 		rxm_cntr_inc(rxm_ep->util_ep.tx_cntr);
 	}
