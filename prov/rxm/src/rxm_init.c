@@ -182,6 +182,7 @@ static void rxm_alter_info(const struct fi_info *hints, struct fi_info *info)
 		 * may affect performance in fast-path */
 		if (!hints) {
 			cur->caps &= ~(FI_DIRECTED_RECV | FI_SOURCE);
+			cur->domain_attr->data_progress = FI_PROGRESS_MANUAL;
 		} else {
 			if (!(hints->caps & FI_DIRECTED_RECV))
 				cur->caps &= ~FI_DIRECTED_RECV;
@@ -197,6 +198,10 @@ static void rxm_alter_info(const struct fi_info *hints, struct fi_info *info)
 				cur->rx_attr->mode &= ~FI_LOCAL_MR;
 				cur->domain_attr->mr_mode &= ~FI_MR_LOCAL;
 			}
+
+			if (!hints->domain_attr ||
+			    hints->domain_attr->data_progress != FI_PROGRESS_AUTO)
+				cur->domain_attr->data_progress = FI_PROGRESS_MANUAL;
 
 			if (hints->ep_attr && hints->ep_attr->mem_tag_format &&
 			    (info->caps & FI_TAGGED)) {

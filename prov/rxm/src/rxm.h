@@ -420,12 +420,29 @@ struct rxm_buf_pool {
 	fastlock_t lock;
 };
 
+struct rxm_msg_eq_entry {
+	struct slist_entry	slist_entry;
+	ssize_t			rd;
+	uint32_t		event;
+	/* Used for connection refusal */
+	void			*context;
+	/* must stay at the bottom */
+	struct fi_eq_cm_entry	cm_entry;
+};
+
+#define RXM_MSG_EQ_ENTRY_SZ (sizeof(struct rxm_msg_eq_entry) + \
+			     sizeof(struct rxm_cm_data))
+#define RXM_CM_ENTRY_SZ (sizeof(struct fi_eq_cm_entry) + \
+			 sizeof(struct rxm_cm_data))
+
 struct rxm_ep {
 	struct util_ep 		util_ep;
 	struct fi_info 		*rxm_info;
 	struct fi_info 		*msg_info;
 	struct fid_pep 		*msg_pep;
 	struct fid_eq 		*msg_eq;
+	struct slistfd		msg_eq_entry_list;
+	fastlock_t		msg_eq_entry_list_lock;
 	struct fid_cq 		*msg_cq;
 	int			msg_cq_fd;
 	struct fid_ep 		*srx_ctx;
@@ -501,6 +518,8 @@ void rxm_ep_progress_multi(struct util_ep *util_ep);
 int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep);
 int rxm_send_queue_init(struct rxm_ep *rxm_ep, struct rxm_send_queue **send_queue, size_t size);
 void rxm_send_queue_close(struct rxm_send_queue *send_queue);
+
+int rxm_conn_process_eq_events(struct rxm_ep *rxm_ep);
 
 static inline void rxm_ep_msg_mr_closev(struct fid_mr **mr, size_t count)
 {

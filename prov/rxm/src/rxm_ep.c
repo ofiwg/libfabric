@@ -1736,6 +1736,19 @@ err:
 	return ret;
 }
 
+static int rxm_ep_eq_entry_list_trywait(void *arg)
+{
+	struct rxm_ep *rxm_ep = (struct rxm_ep *)arg;
+
+	fastlock_acquire(&rxm_ep->msg_eq_entry_list_lock);
+	if (!slistfd_empty(&rxm_ep->msg_eq_entry_list)) {
+		fastlock_release(&rxm_ep->msg_eq_entry_list_lock);
+		return -FI_EAGAIN;
+	}
+	fastlock_release(&rxm_ep->msg_eq_entry_list_lock);
+	return 0;
+}
+
 static int rxm_ep_trywait(void *arg)
 {
 	struct rxm_fabric *rxm_fabric;
@@ -1745,6 +1758,29 @@ static int rxm_ep_trywait(void *arg)
 	rxm_fabric = container_of(rxm_ep->util_ep.domain->fabric,
 				  struct rxm_fabric, util_fabric);
 	return fi_trywait(rxm_fabric->msg_fabric, fids, 1);
+}
+
+static int rxm_ep_wait_fd_add(struct rxm_ep *rxm_ep, struct util_wait *wait)
+{
+	int ret;
+
+	ret = ofi_wait_fd_add(wait, rxm_ep->msg_cq_fd, FI_EPOLL_IN,
+			      rxm_ep_trywait, rxm_ep,
+			      &rxm_ep->util_ep.ep_fid.fid);
+	if (ret)
+		return ret;
+
+	if (rxm_ep->util_ep.domain->data_progress == FI_PROGRESS_MANUAL) {
+		ret = ofi_wait_fd_add(
+				wait, slistfd_get_fd(&rxm_ep->msg_eq_entry_list),
+				FI_EPOLL_IN, rxm_ep_eq_entry_list_trywait,
+				rxm_ep, &rxm_ep->util_ep.ep_fid.fid);
+		if (ret) {
+			ofi_wait_fd_del(wait, rxm_ep->msg_cq_fd);
+			return ret;
+		}
+	}
+	return 0;
 }
 
 static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
@@ -1790,10 +1826,7 @@ static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		}
 
 		if (cq->wait) {
-			ret = ofi_wait_fd_add(cq->wait, rxm_ep->msg_cq_fd,
-					      FI_EPOLL_IN,
-					      rxm_ep_trywait, rxm_ep,
-					      &rxm_ep->util_ep.ep_fid.fid);
+			ret = rxm_ep_wait_fd_add(rxm_ep, cq->wait);
 			if (ret)
 				goto err;
 		}
@@ -1822,10 +1855,7 @@ static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		}
 
 		if (cntr->wait) {
-			ret = ofi_wait_fd_add(cntr->wait, rxm_ep->msg_cq_fd,
-					      FI_EPOLL_IN,
-					      rxm_ep_trywait, rxm_ep,
-					      &rxm_ep->util_ep.ep_fid.fid);
+			ret = rxm_ep_wait_fd_add(rxm_ep, cntr->wait);
 			if (ret)
 				goto err;
 		}
@@ -2138,6 +2168,9 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 	ret = rxm_ep_txrx_res_open(rxm_ep);
 	if (ret)
 		goto err3;
+
+	slistfd_init(&rxm_ep->msg_eq_entry_list);
+	fastlock_init(&rxm_ep->msg_eq_entry_list_lock);
 
 	*ep_fid = &rxm_ep->util_ep.ep_fid;
 	(*ep_fid)->fid.ops = &rxm_ep_fi_ops;
