@@ -10,12 +10,12 @@ v1.5.4rc1, Tue Sept 4, 2018
 
 ## Core
 
--- Fix potential deadlock in name server
--- Fix race condition handling connections closing
--- Fix return code from fi_trywait
--- Fix premature return from fi_cq_sread/from
--- Validate fi_rx_attr::mode bits
--- Fix FI_MR_LOCAL mode checks
+- Fix potential deadlock in name server
+- Fix race condition handling connections closing
+- Fix return code from fi_trywait
+- Fix premature return from fi_cq_sread/from
+- Validate fi_rx_attr::mode bits
+- Fix FI_MR_LOCAL mode checks
 
 ## PSM2
 
@@ -23,84 +23,84 @@ v1.5.4rc1, Tue Sept 4, 2018
 
 ## RXM
 
--- Fix incorrect matching of directed receives
+- Fix incorrect matching of directed receives
 
 ## Sockets
 
--- Fix memory corruption handling buffered received messages
+- Fix memory corruption handling buffered received messages
 
 ## usNIC
 
--- Fix CLang compiler warnings accessing packed structures
+- Fix CLang compiler warnings accessing packed structures
 
 ## Verbs
 
--- Support different CQ formats for RDM EPs
+- Support different CQ formats for RDM EPs
 
 v1.5.3, Wed Dec 20, 2017
 ========================
 
 ## Core
 
--- Handle malloc failures
--- Ensure global lock is initialized on Windows
--- Fix spelling and formatting errors in man pages
+- Handle malloc failures
+- Ensure global lock is initialized on Windows
+- Fix spelling and formatting errors in man pages
 
 ## GNI
 
--- Fix segfault when using FI_MULTI_RECV
--- Fix rcache issue handling overlapping memory regions
+- Fix segfault when using FI_MULTI_RECV
+- Fix rcache issue handling overlapping memory regions
 
 ## NetDir
 
--- Fix fi_getname
--- Remove FI_LOCAL_MR mode bit, being reported erronously
--- Avoid crashing in fi_join
+- Fix fi_getname
+- Remove FI_LOCAL_MR mode bit, being reported erronously
+- Avoid crashing in fi_join
 
 ## PSM
 
--- Fix print format mismatches
--- Remove 15 second startup delay when no hardware is installed
--- Preserve FI_MR_SCALABLE mode bit for backwards compatability
+- Fix print format mismatches
+- Remove 15 second startup delay when no hardware is installed
+- Preserve FI_MR_SCALABLE mode bit for backwards compatability
 
 ## PSM2
 
--- Fix print format mismatches
--- Allow all to all communication between scalable endpoints
--- Preserve FI_MR_SCALABLE mode bit for backwards compatability
--- Fix reference counting issue with opened domains
--- Fix segfault for RMA/atomic operations to local scalable endpoints
--- Fix resource counting related issues for Tx/Rx contexts
--- Allow completion suppression when fi_context is non-NULL
--- Use correct queue for triggered operations with scalable endpoints
+- Fix print format mismatches
+- Allow all to all communication between scalable endpoints
+- Preserve FI_MR_SCALABLE mode bit for backwards compatability
+- Fix reference counting issue with opened domains
+- Fix segfault for RMA/atomic operations to local scalable endpoints
+- Fix resource counting related issues for Tx/Rx contexts
+- Allow completion suppression when fi_context is non-NULL
+- Use correct queue for triggered operations with scalable endpoints
 - Critical path optimization for send and recv
 - Fix multi-receive issues when paired with iov send
 
 ## RXM
 
--- Fix out of bounds access to receive IOVs
--- Serialize access to connection map
--- Fix CQ error handling
--- Fix issue being unable to associate an fi_addr with a connection
--- Fix bug matching unexpected tagged messages
--- Indicate that FI_RMA is supported
--- Return correct r/w ordering size limits
+- Fix out of bounds access to receive IOVs
+- Serialize access to connection map
+- Fix CQ error handling
+- Fix issue being unable to associate an fi_addr with a connection
+- Fix bug matching unexpected tagged messages
+- Indicate that FI_RMA is supported
+- Return correct r/w ordering size limits
 
 ## Sockets
 
--- Fix check for invalid connection handle
--- Fix crash in fi_av_remove
+- Fix check for invalid connection handle
+- Fix crash in fi_av_remove
 
 ## Util
 
--- Fix number of bits used for connection index
+- Fix number of bits used for connection index
 
 ## Verbs
 
--- Fix incorrect CQ entry data for MSG endpoints
--- Properly check for errors from getifaddrs
--- Retry getifaddr on failure because of busy netlink sockets
--- Ack CM events on error paths
+- Fix incorrect CQ entry data for MSG endpoints
+- Properly check for errors from getifaddrs
+- Retry getifaddr on failure because of busy netlink sockets
+- Ack CM events on error paths
 
 v1.5.2, Wed Nov 8, 2017
 =======================
@@ -111,22 +111,22 @@ v1.5.2, Wed Nov 8, 2017
 
 ## RXM
 
--- Remove dependency on shared receive contexts
--- Switch to automatic data progress
--- Fix removing addresses from AV
+- Remove dependency on shared receive contexts
+- Switch to automatic data progress
+- Fix removing addresses from AV
 
 ## Sockets
 
--- Fix incorrect reporting of counter attributes
+- Fix incorrect reporting of counter attributes
 
 ## Verbs
 
--- Fix reporting attributes based on device limits
--- Fix incorrect CQ size reported for iWarp NICs
--- Update man page with known issues for specific NICs
--- Fix FI_RX_CQ_DATA mode check
--- Disable on-demand paging by default (can cause data corruption)
--- Disable loopback (localhost) addressing (causing failures in MPI)
+- Fix reporting attributes based on device limits
+- Fix incorrect CQ size reported for iWarp NICs
+- Update man page with known issues for specific NICs
+- Fix FI_RX_CQ_DATA mode check
+- Disable on-demand paging by default (can cause data corruption)
+- Disable loopback (localhost) addressing (causing failures in MPI)
 
 v1.5.1, Wed Oct 4, 2017
 =======================
