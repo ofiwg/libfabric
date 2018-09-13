@@ -70,8 +70,7 @@ pipeline {
                     steps {
                         timeout (time: 20, unit: 'MINUTES') {
                             script {
-                                def command = '$FABTEST_PATH/bin/runfabtests.sh -p $FABTEST_PATH/bin -v -T 60 \'ofi_rxm;verbs\' 10.0.0.7 10.0.0.8'
-                                launch "$command", 1, 1, 'cn8'
+                                launch 'contrib/cray/fabtest_wrapper.sh', 2, 1
                             }
                         }
                     }
