@@ -17,6 +17,10 @@ v1.5.4rc1, Tue Sept 4, 2018
 -- Validate fi_rx_attr::mode bits
 -- Fix FI_MR_LOCAL mode checks
 
+## PSM2
+
+- Fix fi_cq_signal
+
 ## RXM
 
 -- Fix incorrect matching of directed receives
@@ -69,6 +73,8 @@ v1.5.3, Wed Dec 20, 2017
 -- Fix resource counting related issues for Tx/Rx contexts
 -- Allow completion suppression when fi_context is non-NULL
 -- Use correct queue for triggered operations with scalable endpoints
+- Critical path optimization for send and recv
+- Fix multi-receive issues when paired with iov send
 
 ## RXM
 
