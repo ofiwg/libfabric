@@ -217,6 +217,16 @@ static ssize_t tcpx_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg
 		send_entry->msg_hdr.hdr.data = htonll(msg->data);
 	}
 
+	if (flags & (FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)) {
+		send_entry->flags |= TCPX_NO_COMPLETION;
+		send_entry->msg_hdr.hdr.flags |= OFI_DELIVERY_COMPLETE;
+	}
+
+	if (flags & FI_COMMIT_COMPLETE) {
+		send_entry->flags |= TCPX_NO_COMPLETION;
+		send_entry->msg_hdr.hdr.flags |= OFI_COMMIT_COMPLETE;
+	}
+
 	send_entry->msg_hdr.hdr.flags = htonl(send_entry->msg_hdr.hdr.flags);
 	send_entry->ep = tcpx_ep;
 	send_entry->context = msg->context;

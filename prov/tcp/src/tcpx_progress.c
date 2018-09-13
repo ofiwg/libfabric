@@ -114,7 +114,7 @@ done:
 	slist_remove_head(&tx_entry->ep->tx_queue);
 
 	if (ntohl(tx_entry->msg_hdr.hdr.flags) &
-	    OFI_DELIVERY_COMPLETE) {
+	    (OFI_DELIVERY_COMPLETE | OFI_COMMIT_COMPLETE)) {
 		tx_entry->flags &= ~TCPX_NO_COMPLETION;
 		slist_insert_tail(&tx_entry->entry,
 				  &tx_entry->ep->tx_rsp_pend_queue);
@@ -180,10 +180,10 @@ static int process_rx_entry(struct tcpx_xfer_entry *rx_entry)
 done:
 	if (ntohl(rx_entry->msg_hdr.hdr.flags) & OFI_DELIVERY_COMPLETE) {
 
-	    if (tcpx_prepare_rx_entry_resp(rx_entry))
-		    rx_entry->ep->cur_rx_proc_fn = tcpx_prepare_rx_entry_resp;
+		if (tcpx_prepare_rx_entry_resp(rx_entry))
+			rx_entry->ep->cur_rx_proc_fn = tcpx_prepare_rx_entry_resp;
 
-	    return FI_SUCCESS;
+		return FI_SUCCESS;
 	}
 
 	tcpx_cq_report_completion(rx_entry->ep->util_ep.rx_cq,
@@ -196,9 +196,57 @@ done:
 	return FI_SUCCESS;
 }
 
+static int tcpx_prepare_rx_write_resp(struct tcpx_xfer_entry *rx_entry)
+{
+	struct tcpx_cq *tcpx_rx_cq, *tcpx_tx_cq;
+	struct tcpx_xfer_entry *resp_entry;
+
+	tcpx_tx_cq = container_of(rx_entry->ep->util_ep.tx_cq,
+			       struct tcpx_cq, util_cq);
+
+	resp_entry = tcpx_xfer_entry_alloc(tcpx_tx_cq, TCPX_OP_MSG_RESP);
+	if (!resp_entry)
+		return -FI_EAGAIN;
+
+	resp_entry->msg_data.iov[0].iov_base = (void *) &resp_entry->msg_hdr;
+	resp_entry->msg_data.iov[0].iov_len = sizeof(resp_entry->msg_hdr);
+	resp_entry->msg_data.iov_cnt = 1;
+
+	resp_entry->msg_hdr.hdr.op = ofi_op_msg;
+	resp_entry->msg_hdr.hdr.size = htonll(sizeof(resp_entry->msg_hdr));
+
+	resp_entry->flags |= TCPX_NO_COMPLETION;
+	resp_entry->context = NULL;
+	resp_entry->done_len = 0;
+	resp_entry->ep = rx_entry->ep;
+	tcpx_tx_queue_insert(resp_entry->ep, resp_entry);
+
+	tcpx_cq_report_completion(rx_entry->ep->util_ep.rx_cq,
+				  rx_entry, 0);
+	tcpx_rx_cq = container_of(rx_entry->ep->util_ep.rx_cq,
+			       struct tcpx_cq, util_cq);
+	tcpx_xfer_entry_release(tcpx_rx_cq, rx_entry);
+	return FI_SUCCESS;
+}
+
+static void tcpx_pmem_commit(struct tcpx_xfer_entry *rx_entry)
+{
+	int i;
+
+	if (!ofi_pmem_commit)
+		return ;
+
+	for (i = 0; i < rx_entry->msg_hdr.rma_iov_cnt; i++) {
+		(*ofi_pmem_commit)((const void *) (uintptr_t)
+				   rx_entry->msg_hdr.rma_iov[i].addr,
+				   rx_entry->msg_hdr.rma_iov[i].len);
+	}
+}
+
 static int process_rx_remote_write_entry(struct tcpx_xfer_entry *rx_entry)
 {
 	struct tcpx_cq *tcpx_cq;
+	uint32_t flags;
 	int ret;
 
 	ret = tcpx_recv_msg_data(rx_entry);
@@ -214,9 +262,20 @@ static int process_rx_remote_write_entry(struct tcpx_xfer_entry *rx_entry)
 		tcpx_ep_shutdown_report(rx_entry->ep,
 					&rx_entry->ep->util_ep.ep_fid.fid);
 done:
+	flags = ntohl(rx_entry->msg_hdr.hdr.flags) &
+		(OFI_DELIVERY_COMPLETE | OFI_COMMIT_COMPLETE);
+
+	if (flags) {
+		if (flags & OFI_COMMIT_COMPLETE)
+			tcpx_pmem_commit(rx_entry);
+
+		if (tcpx_prepare_rx_write_resp(rx_entry))
+			rx_entry->ep->cur_rx_proc_fn = tcpx_prepare_rx_write_resp;
+
+		return FI_SUCCESS;
+	}
 	tcpx_cq_report_completion(rx_entry->ep->util_ep.rx_cq,
 				  rx_entry, -ret);
-
 	tcpx_cq = container_of(rx_entry->ep->util_ep.rx_cq,
 			       struct tcpx_cq, util_cq);
 	tcpx_xfer_entry_release(tcpx_cq, rx_entry);
