@@ -420,17 +420,8 @@ struct fi_ibv_mr_internal_ops {
 	fi_ibv_mr_dereg_cb	internal_mr_dereg;
 };
 
-struct fi_ibv_mem_ptr_entry {
-	struct dlist_entry	entry;
-	void			*addr;
-	struct ofi_subscription *subscription;
-	UT_hash_handle		hh;
-};
-
 struct fi_ibv_mem_notifier {
-	struct fi_ibv_mem_ptr_entry	*mem_ptrs_hash;
-	struct util_buf_pool		*mem_ptrs_ent_pool;
-	struct dlist_entry		event_list;
+	RbtHandle			subscr_storage;
 	ofi_mem_free_hook		prev_free_hook;
 	ofi_mem_realloc_hook		prev_realloc_hook;
 	int				ref_cnt;
@@ -448,10 +439,10 @@ int fi_ibv_mr_cache_entry_reg(struct ofi_mr_cache *cache,
 			      struct ofi_mr_entry *entry);
 void fi_ibv_mr_cache_entry_dereg(struct ofi_mr_cache *cache,
 				 struct ofi_mr_entry *entry);
-int fi_ibv_monitor_subscribe(struct ofi_mem_monitor *notifier, void *addr,
-			     size_t len, struct ofi_subscription *subscription);
-void fi_ibv_monitor_unsubscribe(struct ofi_mem_monitor *notifier, void *addr,
-				size_t len, struct ofi_subscription *subscription);
+int fi_ibv_monitor_subscribe(struct ofi_mem_monitor *notifier,
+			     struct ofi_subscription *subscription);
+void fi_ibv_monitor_unsubscribe(struct ofi_mem_monitor *notifier,
+				struct ofi_subscription *subscription);
 struct ofi_subscription *fi_ibv_monitor_get_event(struct ofi_mem_monitor *notifier);
 
 struct fi_ibv_srq_ep {

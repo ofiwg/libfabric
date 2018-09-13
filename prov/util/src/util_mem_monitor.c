@@ -78,13 +78,13 @@ int ofi_monitor_subscribe(struct ofi_notification_queue *nq,
 	dlist_init(&subscription->entry);
 
 	subscription->nq = nq;
-	subscription->addr = addr;
-	subscription->len = len;
+	subscription->iov.iov_base = addr;
+	subscription->iov.iov_len = len;
 	fastlock_acquire(&nq->lock);
 	nq->refcnt++;
 	fastlock_release(&nq->lock);
 
-	ret = nq->monitor->subscribe(nq->monitor, addr, len, subscription);
+	ret = nq->monitor->subscribe(nq->monitor, subscription);
 	if (OFI_UNLIKELY(ret)) {
 		FI_WARN(&core_prov, FI_LOG_MR,
 			"Failed (ret = %d) to monitor addr=%p len=%zu",
@@ -100,10 +100,8 @@ void ofi_monitor_unsubscribe(struct ofi_subscription *subscription)
 {
 	FI_DBG(&core_prov, FI_LOG_MR,
 	       "unsubscribing addr=%p len=%zu subscription=%p\n",
-	       subscription->addr, subscription->len, subscription);
+	       subscription->iov.iov_base, subscription->iov.iov_len, subscription);
 	subscription->nq->monitor->unsubscribe(subscription->nq->monitor,
-					       subscription->addr,
-					       subscription->len,
 					       subscription);
 	fastlock_acquire(&subscription->nq->lock);
 	if (!dlist_empty(&subscription->entry))
@@ -112,36 +110,9 @@ void ofi_monitor_unsubscribe(struct ofi_subscription *subscription)
 	fastlock_release(&subscription->nq->lock);
 }
 
-static void util_monitor_read_events(struct ofi_mem_monitor *monitor)
-{
-	struct ofi_subscription *subscription;
-
-	do {
-		subscription = monitor->get_event(monitor);
-		if (!subscription) {
-			FI_DBG(&core_prov, FI_LOG_MR,
-			       "no more events to be read\n");
-			break;
-		}
-
-		FI_DBG(&core_prov, FI_LOG_MR,
-		       "found event, context=%p, addr=%p, len=%"PRIu64" nq=%p\n",
-		       subscription, subscription->addr,
-		       subscription->len, subscription->nq);
-
-		fastlock_acquire(&subscription->nq->lock);
-		if (dlist_empty(&subscription->entry))
-			dlist_insert_tail(&subscription->entry,
-					   &subscription->nq->list);
-		fastlock_release(&subscription->nq->lock);
-	} while (1);
-}
-
 struct ofi_subscription *ofi_monitor_get_event(struct ofi_notification_queue *nq)
 {
 	struct ofi_subscription *subscription;
-
-	util_monitor_read_events(nq->monitor);
 
 	fastlock_acquire(&nq->lock);
 	if (!dlist_empty(&nq->list)) {
