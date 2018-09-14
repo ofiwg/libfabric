@@ -608,7 +608,8 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 	}
 
 	/* Issue IDC AMO command */
-	ret = cxi_cq_emit_idc_amo(txc->tx_cmdq, &cmd.idc_amo, result != NULL);
+	ret = cxi_cq_emit_idc_amo(txc->tx_cmdq, &cmd.idc_amo, len,
+				  result != NULL);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to issue IDC AMO command: %d\n", ret);
 
