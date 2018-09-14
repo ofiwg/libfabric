@@ -307,18 +307,31 @@ rxm_ep_rma_inject(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t 
 	 * completion by default */
 	if ((total_size <= rxm_ep->msg_info->tx_attr->inject_size) &&
 	    !(flags & FI_COMPLETION)) {
-		if (flags & FI_REMOTE_CQ_DATA)
-			return fi_inject_writedata(rxm_conn->msg_ep,
-						   msg->msg_iov->iov_base,
-						   msg->msg_iov->iov_len, msg->data,
-						   msg->addr, msg->rma_iov->addr,
-						   msg->rma_iov->key);
-		else
-			return fi_inject_write(rxm_conn->msg_ep,
-					       msg->msg_iov->iov_base,
-					       msg->msg_iov->iov_len, msg->addr,
-					       msg->rma_iov->addr,
-					       msg->rma_iov->key);
+		if (flags & FI_REMOTE_CQ_DATA) {
+			ret = fi_inject_writedata(rxm_conn->msg_ep,
+						  msg->msg_iov->iov_base,
+						  msg->msg_iov->iov_len, msg->data,
+						  msg->addr, msg->rma_iov->addr,
+						  msg->rma_iov->key);
+		} else {
+			ret = fi_inject_write(rxm_conn->msg_ep,
+					      msg->msg_iov->iov_base,
+					      msg->msg_iov->iov_len, msg->addr,
+					      msg->rma_iov->addr,
+					      msg->rma_iov->key);
+		}
+		if (OFI_UNLIKELY(ret)) {
+			FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
+				"fi_inject_write* for MSG provider failed\n");
+			if (OFI_LIKELY(ret == -FI_EAGAIN)) {
+				rxm_ep_progress_multi(&rxm_ep->util_ep);
+			} else {
+				rxm_cntr_incerr(rxm_ep->util_ep.wr_cntr);
+			}
+		} else {
+			rxm_cntr_inc(rxm_ep->util_ep.wr_cntr);
+		}
+		return ret;
 	}
 
 	ret = rxm_ep_format_rma_inject_res(rxm_ep, rxm_conn, total_size, flags, FI_WRITE,
