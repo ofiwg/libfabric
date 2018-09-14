@@ -331,6 +331,7 @@ ssize_t rxm_cq_handle_seg_data(struct rxm_rx_buf *rx_buf)
 		 * is received, but not all segments were received yet. We should
 		 * wait untill all segments will be received. */
 		rx_buf->recv_entry->sar.last_seg_no = rx_buf->pkt.ctrl_hdr.seg_no;
+		return FI_SUCCESS;
 	}
 	dlist_remove(&rx_buf->recv_entry->sar.entry);
 	/* Mark rxm_recv_entry::msg_id as unknown for futher re-use */
