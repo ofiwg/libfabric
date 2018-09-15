@@ -926,13 +926,8 @@ rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		   struct rxm_tx_buf *tx_buf, size_t pkt_size)
 {
 	ssize_t ret = fi_inject(rxm_conn->msg_ep, &tx_buf->pkt, pkt_size, 0);
-	if (OFI_UNLIKELY(ret)) {
-		FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
-		       "fi_inject for MSG provider failed\n");
-		rxm_cntr_incerr(rxm_ep->util_ep.tx_cntr);
-	} else {
+	if (OFI_LIKELY(!ret))
 		rxm_cntr_inc(rxm_ep->util_ep.tx_cntr);
-	}
 	/* release allocated buffer for further reuse */
 	rxm_tx_buf_release(rxm_ep, tx_buf);
 	return ret;
