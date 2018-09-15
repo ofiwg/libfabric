@@ -1,3 +1,4 @@
+
 /*
  * Copyright (c) 2016 Intel Corporation, Inc.  All rights reserved.
  *
@@ -65,7 +66,10 @@
 
 #define RXM_BUF_SIZE	16384
 
-#define RXM_SAR_LIMIT	262144
+#define RXM_SAR_LIMIT	0
+#define RXM_SAR_TX_ERROR	UINT64_MAX
+#define RXM_SAR_RX_INIT		UINT64_MAX
+
 
 #define RXM_IOV_LIMIT 4
 
@@ -167,17 +171,18 @@ struct rxm_rma_iov {
  */
 
 /* RXM protocol states / tx/rx context */
-#define RXM_PROTO_STATES(FUNC)	\
-	FUNC(RXM_TX_NOBUF),	\
-	FUNC(RXM_TX),		\
-	FUNC(RXM_TX_RMA),	\
-	FUNC(RXM_RX),		\
-	FUNC(RXM_SAR_TX),	\
-	FUNC(RXM_LMT_TX),	\
-	FUNC(RXM_LMT_ACK_WAIT),	\
-	FUNC(RXM_LMT_READ),	\
-	FUNC(RXM_LMT_ACK_SENT), \
-	FUNC(RXM_LMT_ACK_RECVD),\
+#define RXM_PROTO_STATES(FUNC)		\
+	FUNC(RXM_TX_NOBUF),		\
+	FUNC(RXM_TX),			\
+	FUNC(RXM_TX_RMA),		\
+	FUNC(RXM_RX),			\
+	FUNC(RXM_SAR_TX),		\
+	FUNC(RXM_LMT_TX),		\
+	FUNC(RXM_LMT_ACK_WAIT),		\
+	FUNC(RXM_LMT_READ),		\
+	FUNC(RXM_LMT_ACK_SENT),		\
+	FUNC(RXM_LMT_ACK_DEFERRED),	\
+	FUNC(RXM_LMT_ACK_RECVD),	\
 	FUNC(RXM_LMT_FINISH),
 
 enum rxm_proto_state {
@@ -338,6 +343,10 @@ struct rxm_tx_entry {
 	void *context;
 	uint64_t flags;
 	uint64_t comp_flags;
+
+	struct dlist_entry deferred_tx_entry;
+	size_t deferred_pkt_size;
+
 	union {
 		struct rxm_tx_buf *tx_buf;
 		struct rxm_rma_buf *rma_buf;
@@ -352,6 +361,7 @@ struct rxm_tx_entry {
 		/* Used for SAR protocol */
 		struct {
 			size_t segs_left;
+			size_t fail_segs_cnt;
 			uint64_t msg_id;
 			/* The list for the TX buffers that have been 
 			 * queued until it would be possbile to send it  */
@@ -375,17 +385,25 @@ struct rxm_recv_entry {
 	size_t total_len;
 	struct rxm_recv_queue *recv_queue;
 	void *multi_recv_buf;
-	/* Used for SAR protocol */
-	struct {
-		struct dlist_entry entry;
-		size_t total_recv_len;
-		size_t segs_rcvd;
-		uint64_t msg_id;
-		/* This is used when a message with the `RXM_SAR_SEG_LAST`
-		 * flag is receved, but not all messages has been received
-		 * yet */
-		size_t last_seg_no;
-	} sar;
+
+	union {
+		/* Used for SAR protocol */
+		struct {
+			struct dlist_entry entry;
+			size_t total_recv_len;
+			size_t segs_rcvd;
+			uint64_t msg_id;
+			/* This is used when a message with the `RXM_SAR_SEG_LAST`
+			 * flag is receved, but not all messages has been received
+			 * yet */
+			size_t last_seg_no;
+		} sar;
+		/* Used for Rendezvous protocol */
+		struct {
+			/* This is used to send LMT ACK */
+			struct rxm_tx_buf *tx_buf;
+		} rndv;
+	};
 };
 DECLARE_FREESTACK(struct rxm_recv_entry, rxm_recv_fs);
 
@@ -463,6 +481,7 @@ struct rxm_ep {
 	struct rxm_buf_pool	*buf_pools;
 
 	struct dlist_entry	repost_ready_list;
+	struct dlist_entry	deferred_tx_conn_queue;
 
 	struct rxm_send_queue	*send_queue;
 	struct rxm_recv_queue	recv_queue;
@@ -477,6 +496,9 @@ struct rxm_conn {
 	struct util_cmap_handle handle;
 
 	struct fid_ep *msg_ep;
+
+	struct dlist_entry deferred_conn_entry;
+	struct dlist_entry deferred_tx_queue;
 	struct rxm_send_queue *send_queue;
 	struct dlist_entry sar_rx_msg_list;
 	/* This is saved MSG EP fid, that hasn't been closed during
@@ -518,6 +540,26 @@ void rxm_ep_progress_multi(struct util_ep *util_ep);
 int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep);
 int rxm_send_queue_init(struct rxm_ep *rxm_ep, struct rxm_send_queue **send_queue, size_t size);
 void rxm_send_queue_close(struct rxm_send_queue *send_queue);
+void rxm_ep_progress_deferred_queues(struct rxm_ep *rxm_ep);
+void rxm_ep_sar_handle_send_segment_failure(struct rxm_tx_entry *tx_entry, ssize_t ret);
+
+static inline void
+rxm_ep_enqueue_deferred_tx_queue(struct rxm_tx_entry *tx_entry)
+{
+	if (dlist_empty(&tx_entry->conn->deferred_tx_queue))
+		dlist_insert_tail(&tx_entry->conn->deferred_conn_entry,
+				  &tx_entry->ep->deferred_tx_conn_queue);
+	dlist_insert_tail(&tx_entry->deferred_tx_entry,
+			  &tx_entry->conn->deferred_tx_queue);
+}
+
+static inline void
+rxm_ep_dequeue_deferred_tx_queue(struct rxm_tx_entry *tx_entry)
+{
+	dlist_remove_init(&tx_entry->deferred_tx_entry);
+	if (dlist_empty(&tx_entry->conn->deferred_tx_queue))
+		dlist_remove(&tx_entry->conn->deferred_conn_entry);
+}
 
 int rxm_conn_process_eq_events(struct rxm_ep *rxm_ep);
 
@@ -758,6 +800,34 @@ rxm_ep_normal_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	       " tag: 0x%" PRIx64 "\n", pkt_size, tx_entry->tx_buf->pkt.hdr.tag);
 	return fi_send(rxm_conn->msg_ep, &tx_entry->tx_buf->pkt, pkt_size,
 		       tx_entry->tx_buf->hdr.desc, 0, tx_entry);
+}
+
+/* Returns FI_SUCCESS if the SAR deferred TX queue is empty,
+ * otherwise, it returns -FI_EAGAIN or error from MSG provider */
+static inline ssize_t
+rxm_ep_progress_sar_deferred_tx_queue(struct rxm_tx_entry *tx_entry)
+{
+	ssize_t ret = 0;
+	struct rxm_tx_buf *tx_buf;
+
+	while (!dlist_empty(&tx_entry->deferred_tx_buf_list)) {
+		tx_buf = container_of(tx_entry->deferred_tx_buf_list.next,
+				      struct rxm_tx_buf, hdr.entry);
+		ret = fi_send(tx_entry->conn->msg_ep, &tx_buf->pkt,
+			      sizeof(tx_buf->pkt) + tx_buf->pkt.ctrl_hdr.seg_size,
+			      tx_buf->hdr.desc, 0, tx_buf);
+		if (OFI_UNLIKELY(ret)) {
+			if (OFI_UNLIKELY(ret != -FI_EAGAIN))
+				rxm_ep_sar_handle_send_segment_failure(tx_entry, ret);
+			return ret;
+		}
+		dlist_remove(&tx_buf->hdr.entry);
+	}
+	if (dlist_empty(&tx_entry->deferred_tx_buf_list)) {
+		rxm_ep_dequeue_deferred_tx_queue(tx_entry);
+		return 0;
+	}
+	return ret;
 }
 
 static inline
