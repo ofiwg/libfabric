@@ -771,37 +771,6 @@ rxm_acquire_conn_connect(struct rxm_ep *rxm_ep, fi_addr_t fi_addr,
 	return 0;
 }
 
-static inline ssize_t
-rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
-		   struct rxm_pkt *tx_pkt, size_t pkt_size)
-{
-	FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Posting inject with length: %" PRIu64
-	       " tag: 0x%" PRIx64 "\n", pkt_size, tx_pkt->hdr.tag);
-	ssize_t ret = fi_inject(rxm_conn->msg_ep, tx_pkt, pkt_size, 0);
-	if (OFI_UNLIKELY(ret)) {
-		FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
-		       "fi_inject for MSG provider failed\n");
-		if (OFI_LIKELY(ret == -FI_EAGAIN)) {
-			rxm_ep_progress_multi(&rxm_ep->util_ep);
-		} else {
-			rxm_cntr_incerr(rxm_ep->util_ep.tx_cntr);
-		}
-	} else {
-		rxm_cntr_inc(rxm_ep->util_ep.tx_cntr);
-	}
-	return ret;
-}
-
-static inline ssize_t
-rxm_ep_normal_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
-		   struct rxm_tx_entry *tx_entry, size_t pkt_size)
-{
-	FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Posting send with length: %" PRIu64
-	       " tag: 0x%" PRIx64 "\n", pkt_size, tx_entry->tx_buf->pkt.hdr.tag);
-	return fi_send(rxm_conn->msg_ep, &tx_entry->tx_buf->pkt, pkt_size,
-		       tx_entry->tx_buf->hdr.desc, 0, tx_entry);
-}
-
 /* Returns FI_SUCCESS if the SAR deferred TX queue is empty,
  * otherwise, it returns -FI_EAGAIN or error from MSG provider */
 static inline ssize_t
