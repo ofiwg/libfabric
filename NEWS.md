@@ -10,6 +10,10 @@ v1.6.2rc1, Wed Sep 5, 2018
 
 ## Core
 ## GNI
+- Fix problems with Scalable Endpoint creation
+- Fix interoperability problem with HPC toolkit
+- Improve configuration check for kdreg
+
 ## PSM
 
 - Enforce FI_RMA_EVENT checking when updating counters
