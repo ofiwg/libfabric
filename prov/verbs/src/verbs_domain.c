@@ -33,7 +33,6 @@
 #include "config.h"
 
 #include "ofi_iov.h"
-#include "ep_rdm/verbs_rdm.h"
 
 #include "fi_verbs.h"
 #include <malloc.h>
@@ -53,7 +52,6 @@ static int fi_ibv_domain_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	case FI_CLASS_EQ:
 		switch (domain->ep_type) {
 		case FI_EP_MSG:
-		case FI_EP_RDM:
 			eq = container_of(bfid, struct fi_ibv_eq, eq_fid);
 			domain->eq = eq;
 			domain->eq_flags = flags;
@@ -72,41 +70,6 @@ static int fi_ibv_domain_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	}
 
 	return 0;
-}
-
-static void fi_ibv_rdm_cm_set_thread_affinity(void)
-{
-	if (fi_ibv_gl_data.rdm.cm_thread_affinity == NULL)
-		return;
-
-	if (ofi_set_thread_affinity(fi_ibv_gl_data.rdm.cm_thread_affinity) == -FI_ENOSYS)
-		VERBS_WARN(FI_LOG_DOMAIN,
-			   "FI_VERBS_RDM_CM_THREAD_AFFINITY is not supported on OS X\n");
-}
-
-static void *fi_ibv_rdm_cm_progress_thread(void *dom)
-{
-	struct fi_ibv_domain *domain =
-		(struct fi_ibv_domain *)dom;
-	struct slist_entry *item, *prev;
-
-	fi_ibv_rdm_cm_set_thread_affinity();
-
-	while (domain->rdm_cm->fi_ibv_rdm_tagged_cm_progress_running) {
-		struct fi_ibv_rdm_ep *ep = NULL;
-		slist_foreach(&domain->ep_list, item, prev) {
-			(void) prev;
-			ep = container_of(item, struct fi_ibv_rdm_ep,
-					  list_entry);
-			if (fi_ibv_rdm_cm_progress(ep)) {
-				VERBS_INFO(FI_LOG_EP_DATA,
-					   "fi_ibv_rdm_cm_progress error\n");
-				abort();
-			}
-		}
-		usleep(domain->rdm_cm->cm_progress_timeout);
-	}
-	return NULL;
 }
 
 void fi_ibv_mem_notifier_handle_hook(void *arg, RbtIterator iter)
@@ -273,37 +236,13 @@ err1:
 
 static int fi_ibv_domain_close(fid_t fid)
 {
-	struct fi_ibv_domain *domain;
-	struct fi_ibv_fabric *fab;
-	struct fi_ibv_rdm_av_entry *av_entry = NULL;
-	struct slist_entry *item;
-	void *status = NULL;
 	int ret;
-
-	domain = container_of(fid, struct fi_ibv_domain,
-			      util_domain.domain_fid.fid);
+	struct fi_ibv_fabric *fab;
+	struct fi_ibv_domain *domain =
+		container_of(fid, struct fi_ibv_domain,
+			     util_domain.domain_fid.fid);
 
 	switch (domain->ep_type) {
-	case FI_EP_RDM:
-		domain->rdm_cm->fi_ibv_rdm_tagged_cm_progress_running = 0;
-		pthread_join(domain->rdm_cm->cm_progress_thread, &status);
-		pthread_mutex_destroy(&domain->rdm_cm->cm_lock);
-
-		for (item = slist_remove_head(
-				&domain->rdm_cm->av_removed_entry_head);
-	     	     item;
-	     	     item = slist_remove_head(
-				&domain->rdm_cm->av_removed_entry_head)) {
-			av_entry = container_of(item,
-						struct fi_ibv_rdm_av_entry,
-						removed_next);
-			fi_ibv_rdm_overall_conn_cleanup(av_entry);
-			ofi_freealign(av_entry);
-		}
-		rdma_destroy_ep(domain->rdm_cm->listener);
-		rdma_destroy_event_channel(domain->rdm_cm->ec);
-		free(domain->rdm_cm);
-		break;
 	case FI_EP_DGRAM:
 		fab = container_of(&domain->util_domain.fabric->fabric_fid,
 				   struct fi_ibv_fabric,
@@ -362,10 +301,6 @@ static int fi_ibv_open_device_by_name(struct fi_ibv_domain *domain, const char *
 		case FI_EP_MSG:
 			ret = strcmp(name, rdma_name);
 			break;
-		case FI_EP_RDM:
-			ret = strncmp(name, rdma_name,
-				      strlen(name) - strlen(verbs_rdm_domain.suffix));
-			break;
 		case FI_EP_DGRAM:
 			ret = strncmp(name, rdma_name,
 				      strlen(name) - strlen(verbs_dgram_domain.suffix));
@@ -407,19 +342,6 @@ static struct fi_ops_domain fi_ibv_msg_domain_ops = {
 	.query_atomic = fi_ibv_query_atomic,
 };
 
-static struct fi_ops_domain fi_ibv_rdm_domain_ops = {
-	.size = sizeof(struct fi_ops_domain),
-	.av_open = fi_ibv_rdm_av_open,
-	.cq_open = fi_ibv_rdm_cq_open,
-	.endpoint = fi_ibv_rdm_open_ep,
-	.scalable_ep = fi_no_scalable_ep,
-	.cntr_open = fi_rbv_rdm_cntr_open,
-	.poll_open = fi_no_poll_open,
-	.stx_ctx = fi_no_stx_context,
-	.srx_ctx = fi_no_srx_context,
-	.query_atomic = fi_ibv_query_atomic,
-};
-
 static struct fi_ops_domain fi_ibv_dgram_domain_ops = {
 	.size = sizeof(struct fi_ops_domain),
 	.av_open = fi_ibv_dgram_av_open,
@@ -457,17 +379,12 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	      struct fid_domain **domain, void *context)
 {
 	struct fi_ibv_domain *_domain;
-	struct fi_ibv_fabric *fab;
-	const struct fi_info *fi;
-	void *status = NULL;
-	pthread_mutexattr_t mutex_attr;
 	int ret;
-
-	fab = container_of(fabric, struct fi_ibv_fabric,
-			   util_fabric.fabric_fid);
-
-	fi = fi_ibv_get_verbs_info(fi_ibv_util_prov.info,
-				   info->domain_attr->name);
+	struct fi_ibv_fabric *fab =
+		 container_of(fabric, struct fi_ibv_fabric,
+			      util_fabric.fabric_fid);
+	const struct fi_info *fi = fi_ibv_get_verbs_info(fi_ibv_util_prov.info,
+							 info->domain_attr->name);
 	if (!fi)
 		return -FI_EINVAL;
 
@@ -530,57 +447,6 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	}
 
 	switch (_domain->ep_type) {
-	case FI_EP_RDM:
-		_domain->rdm_cm = calloc(1, sizeof(*_domain->rdm_cm));
-		if (!_domain->rdm_cm) {
-			ret = -FI_ENOMEM;
-			goto err5;
-		}
-		_domain->rdm_cm->cm_progress_timeout =
-			fi_ibv_gl_data.rdm.thread_timeout;
-		slist_init(&_domain->rdm_cm->av_removed_entry_head);
-
-		pthread_mutexattr_init(&mutex_attr);
-		pthread_mutexattr_settype(&mutex_attr, PTHREAD_MUTEX_RECURSIVE);
-		pthread_mutex_init(&_domain->rdm_cm->cm_lock, &mutex_attr);
-		pthread_mutexattr_destroy(&mutex_attr);
-		_domain->rdm_cm->fi_ibv_rdm_tagged_cm_progress_running = 1;
-		ret = pthread_create(&_domain->rdm_cm->cm_progress_thread,
-				     NULL, &fi_ibv_rdm_cm_progress_thread,
-				     (void *)_domain);
-		if (ret) {
-			VERBS_INFO(FI_LOG_DOMAIN,
-				   "Failed to launch CM progress thread, "
-				   "err :%d\n", ret);
-			ret = -FI_EOTHER;
-			goto err6;
-		}
-		_domain->util_domain.domain_fid.ops = &fi_ibv_rdm_domain_ops;
-
-		_domain->rdm_cm->ec = rdma_create_event_channel();
-		if (!_domain->rdm_cm->ec) {
-			VERBS_INFO(FI_LOG_DOMAIN,
-				   "Failed to create listener event channel: %s\n",
-				   strerror(errno));
-			ret = -FI_EOTHER;
-			goto err7;
-		}
-
-		if (fi_fd_nonblock(_domain->rdm_cm->ec->fd) != 0) {
-			VERBS_INFO_ERRNO(FI_LOG_DOMAIN, "fcntl", errno);
-			ret = -FI_EOTHER;
-			goto err8;
-		}
-
-		if (rdma_create_id(_domain->rdm_cm->ec,
-				   &_domain->rdm_cm->listener, NULL, RDMA_PS_TCP)) {
-			VERBS_INFO(FI_LOG_DOMAIN, "Failed to create cm listener: %s\n",
-				   strerror(errno));
-			ret = -FI_EOTHER;
-			goto err8;
-		}
-		_domain->rdm_cm->is_bound = 0;
-		break;
 	case FI_EP_DGRAM:
 		if (fi_ibv_gl_data.dgram.use_name_server) {
 			/* Even if it's invoked not for the first time
@@ -606,23 +472,11 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 		VERBS_INFO(FI_LOG_DOMAIN, "Ivalid EP type is provided, "
 			   "EP type :%d\n", _domain->ep_type);
 		ret = -FI_EINVAL;
-		goto err5;
+		goto err3;
 	}
 
 	*domain = &_domain->util_domain.domain_fid;
 	return FI_SUCCESS;
-/* Only verbs/RDM should be able to go through err[5-7] */
-err8:
-	rdma_destroy_event_channel(_domain->rdm_cm->ec);
-err7:
-	_domain->rdm_cm->fi_ibv_rdm_tagged_cm_progress_running = 0;
-	pthread_join(_domain->rdm_cm->cm_progress_thread, &status);
-err6:
-	pthread_mutex_destroy(&_domain->rdm_cm->cm_lock);
-	free(_domain->rdm_cm);
-err5:
-	if (fi_ibv_gl_data.mr_cache_enable)
-		ofi_mr_cache_cleanup(&_domain->cache);
 err4:
 	if (fi_ibv_gl_data.mr_cache_enable)
 		ofi_monitor_cleanup(&_domain->monitor);

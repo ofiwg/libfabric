@@ -36,7 +36,6 @@
 #include <net/if.h>
 
 #include "fi_verbs.h"
-#include "ep_rdm/verbs_rdm.h"
 
 
 #define VERBS_IB_PREFIX "IB-0x"
@@ -47,24 +46,14 @@
 #define VERBS_MSG_CAPS (FI_MSG | FI_RMA | FI_ATOMICS | FI_READ | FI_WRITE |	\
 			FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE |	\
 			VERBS_DOMAIN_CAPS)
-#define VERBS_RDM_CAPS (FI_MSG | FI_RMA | FI_TAGGED | FI_READ | FI_WRITE |	\
-			FI_RECV | FI_MULTI_RECV | FI_SEND | FI_REMOTE_READ |	\
-			FI_REMOTE_WRITE | VERBS_DOMAIN_CAPS)
 #define VERBS_DGRAM_CAPS (FI_MSG | FI_RECV | FI_SEND | VERBS_DOMAIN_CAPS)
-
-#define VERBS_RDM_MODE (FI_CONTEXT)
 
 #define VERBS_DGRAM_MODE (FI_MSG_PREFIX)
 
 #define VERBS_TX_OP_FLAGS (FI_INJECT | FI_COMPLETION | FI_TRANSMIT_COMPLETE)
 #define VERBS_TX_OP_FLAGS_IWARP (FI_INJECT | FI_COMPLETION)
-#define VERBS_TX_OP_FLAGS_IWARP_RDM (VERBS_TX_OP_FLAGS)
-
-#define VERBS_TX_RDM_MODE VERBS_RDM_MODE
 
 #define VERBS_RX_MODE (FI_RX_CQ_DATA)
-
-#define VERBS_RX_RDM_OP_FLAGS (FI_COMPLETION)
 
 #define VERBS_MSG_ORDER (FI_ORDER_RAR | FI_ORDER_RAW | FI_ORDER_RAS | \
 		FI_ORDER_WAW | FI_ORDER_WAS | FI_ORDER_SAW | FI_ORDER_SAS )
@@ -121,14 +110,6 @@ const struct fi_rx_attr verbs_dgram_rx_attr = {
 	.total_buffered_recv	= 0,
 };
 
-const struct fi_rx_attr verbs_rdm_rx_attr = {
-	.mode			= VERBS_RDM_MODE | VERBS_RX_MODE,
-	.op_flags		= VERBS_RX_RDM_OP_FLAGS,
-	.msg_order		= VERBS_MSG_ORDER,
-	.total_buffered_recv	= 0,
-	.iov_limit		= 1
-};
-
 const struct fi_tx_attr verbs_tx_attr = {
 	.mode			= 0,
 	.op_flags		= VERBS_TX_OP_FLAGS,
@@ -147,36 +128,16 @@ const struct fi_tx_attr verbs_dgram_tx_attr = {
 	.rma_iov_limit		= 1,
 };
 
-const struct fi_tx_attr verbs_rdm_tx_attr = {
-	.mode			= VERBS_TX_RDM_MODE,
-	.op_flags		= VERBS_TX_OP_FLAGS,
-	.msg_order		= VERBS_MSG_ORDER,
-	.inject_size		= FI_IBV_RDM_DFLT_BUFFERED_SIZE,
-	.rma_iov_limit		= 1,
-};
-
 const struct verbs_ep_domain verbs_msg_domain = {
 	.suffix			= "",
 	.type			= FI_EP_MSG,
 	.caps			= VERBS_MSG_CAPS,
 };
 
-const struct verbs_ep_domain verbs_rdm_domain = {
-	.suffix			= "-rdm",
-	.type			= FI_EP_RDM,
-	.caps			= VERBS_RDM_CAPS,
-};
-
 const struct verbs_ep_domain verbs_dgram_domain = {
 	.suffix			= "-dgram",
 	.type			= FI_EP_DGRAM,
 	.caps			= VERBS_DGRAM_CAPS,
-};
-
-struct fi_ibv_rdm_sysaddr
-{
-	struct sockaddr_in addr;
-	int is_found;
 };
 
 int fi_ibv_check_ep_attr(const struct fi_info *hints,
@@ -197,8 +158,6 @@ int fi_ibv_check_ep_attr(const struct fi_info *hints,
 	case FI_PROTO_RDMA_CM_IB_RC:
 	case FI_PROTO_IWARP:
 	case FI_PROTO_IB_UD:
-	case FI_PROTO_IB_RDM:
-	case FI_PROTO_IWARP_RDM:
 		break;
 	default:
 		VERBS_INFO(FI_LOG_CORE,
@@ -528,9 +487,6 @@ static int fi_ibv_get_device_attrs(struct ibv_context *ctx,
 						      device_attr.max_qp);
 	info->domain_attr->max_ep_srx_ctx	= device_attr.max_srq;
 	info->domain_attr->mr_cnt		= device_attr.max_mr;
-	if (info->ep_attr->type == FI_EP_RDM)
-		info->domain_attr->cntr_cnt	= device_attr.max_qp * 4;
-
 	info->tx_attr->size 			= device_attr.max_qp_wr;
 	info->tx_attr->iov_limit 		= device_attr.max_sge;
 
@@ -638,12 +594,6 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 	*(fi->domain_attr) = verbs_domain_attr;
 
 	switch (ep_dom->type) {
-	case FI_EP_RDM:
-		fi->mode = VERBS_RDM_MODE;
-		*(fi->tx_attr) = verbs_rdm_tx_attr;
-		*(fi->rx_attr) = verbs_rdm_rx_attr;
-		fi->domain_attr->mr_mode &= ~FI_MR_LOCAL;
-		break;
 	case FI_EP_MSG:
 		*(fi->tx_attr) = verbs_tx_attr;
 		*(fi->rx_attr) = verbs_rx_attr;
@@ -670,14 +620,6 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 	if (ret)
 		goto err;
 
-	if (ep_dom->type == FI_EP_RDM) {
-		fi->tx_attr->iov_limit = 1;
-		fi->tx_attr->rma_iov_limit = 1;
-		fi->tx_attr->inject_size = fi_ibv_gl_data.rdm.buffer_size;
-
-		fi->rx_attr->iov_limit = 1;
-	}
-
 	switch (ctx->device->transport_type) {
 	case IBV_TRANSPORT_IB:
 		if(ibv_query_gid(ctx, 1, 0, &gid)) {
@@ -700,9 +642,6 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 		case FI_EP_MSG:
 			fi->ep_attr->protocol = FI_PROTO_RDMA_CM_IB_RC;
 			break;
-		case FI_EP_RDM:
-			fi->ep_attr->protocol = FI_PROTO_IB_RDM;
-			break;
 		case FI_EP_DGRAM:
 			fi->ep_attr->protocol = FI_PROTO_IB_UD;
 			break;
@@ -718,14 +657,8 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 			ret = -FI_ENOMEM;
 			goto err;
 		}
-
-		if (ep_dom->type == FI_EP_MSG) {
-			fi->ep_attr->protocol = FI_PROTO_IWARP;
-			fi->tx_attr->op_flags = VERBS_TX_OP_FLAGS_IWARP;
-		} else {
-			fi->ep_attr->protocol = FI_PROTO_IWARP_RDM;
-			fi->tx_attr->op_flags = VERBS_TX_OP_FLAGS_IWARP_RDM;
-		}
+		fi->ep_attr->protocol = FI_PROTO_IWARP;
+		fi->tx_attr->op_flags = VERBS_TX_OP_FLAGS_IWARP;
 
 		/* TODO Some iWarp HW may support immediate data as per RFC 7306
 		 * (RDMA Protocol Extensions). Update this to figure out if the
@@ -1126,13 +1059,6 @@ int fi_ibv_init_info(const struct fi_info **all_infos)
 			tail = fi;
 
 			ret = fi_ibv_alloc_info(ctx_list[i], &fi,
-						&verbs_rdm_domain);
-			if (!ret) {
-				tail->next = fi;
-				tail = fi;
-			}
-
-			ret = fi_ibv_alloc_info(ctx_list[i], &fi,
 						&verbs_dgram_domain);
 			if (!ret) {
 				tail->next = fi;
@@ -1179,34 +1105,26 @@ static int fi_ibv_set_default_info(struct fi_info *info)
 				      "rx context size");
 	if (ret)
 		return ret;
+	ret = fi_ibv_set_default_attr(info, &info->tx_attr->iov_limit,
+				      fi_ibv_gl_data.def_tx_iov_limit,
+				      "tx iov_limit");
+	if (ret)
+		return ret;
 
-	/* Don't set defaults for verb/RDM as
-	 * it supports an iov limit of just 1 */
-	if (info->ep_attr->type != FI_EP_RDM) {
-		ret = fi_ibv_set_default_attr(
-			info, &info->tx_attr->iov_limit,
-			fi_ibv_gl_data.def_tx_iov_limit,
-			"tx iov_limit");
-		if (ret)
-			return ret;
+	ret = fi_ibv_set_default_attr(info, &info->rx_attr->iov_limit,
+				      fi_ibv_gl_data.def_rx_iov_limit,
+				      "rx iov_limit");
+	if (ret)
+		return ret;
 
-		ret = fi_ibv_set_default_attr(
-			info, &info->rx_attr->iov_limit,
-			fi_ibv_gl_data.def_rx_iov_limit,
-			"rx iov_limit");
-		if (ret)
-			return ret;
-
-		if (info->ep_attr->type != FI_EP_DGRAM) {
-			/* For verbs iov limit is same for
-			 * both regular messages and RMA */
-			ret = fi_ibv_set_default_attr(
-				info, &info->tx_attr->rma_iov_limit,
-				fi_ibv_gl_data.def_tx_iov_limit,
+	if (info->ep_attr->type == FI_EP_MSG) {
+		/* For verbs iov limit is same for
+		 * both regular messages and RMA */
+		ret = fi_ibv_set_default_attr(info, &info->tx_attr->rma_iov_limit,
+					      fi_ibv_gl_data.def_tx_iov_limit,
 				"tx rma_iov_limit");
-			if (ret)
-				return ret;
-		}
+		if (ret)
+			return ret;
 	}
 	return 0;
 }

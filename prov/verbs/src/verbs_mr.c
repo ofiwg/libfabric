@@ -32,7 +32,6 @@
 
 #include <ofi_util.h>
 #include "fi_verbs.h"
-#include "verbs_rdm.h"
 
 #define FI_IBV_DEFINE_MR_REG_OPS(type)							\
 											\
@@ -180,13 +179,6 @@ fi_ibv_mr_ofi2ibv_access(uint64_t ofi_access, struct fi_ibv_domain *domain)
 {
 	int ibv_access = 0;
 
-	/* Enable local write access by default for FI_EP_RDM which hides local
-	 * registration requirements. This allows to avoid buffering or double
-	 * registration */
-	if (!(domain->info->caps & FI_LOCAL_MR) &&
-	    !(domain->info->domain_attr->mr_mode & FI_MR_LOCAL))
-		ibv_access |= IBV_ACCESS_LOCAL_WRITE;
-
 	/* Local read access to an MR is enabled by default in verbs */
 	if (ofi_access & FI_RECV)
 		ibv_access |= IBV_ACCESS_LOCAL_WRITE;
@@ -258,38 +250,6 @@ int fi_ibv_mr_internal_dereg(struct fi_ibv_mem_desc *md)
 {
 	int ret = fi_ibv_mr_dereg_ibv_mr(md->mr);
 	md->mr = NULL;
-	return ret;
-}
-
-int fi_ibv_rdm_alloc_and_reg(struct fi_ibv_rdm_ep *ep,
-			     void **buf, size_t size,
-			     struct fi_ibv_mem_desc *md)
-{
-	if (!*buf) {
-		if (ofi_memalign((void **)buf,
-				 FI_IBV_BUF_ALIGNMENT, size))
-			return -FI_ENOMEM;
-	}
-
-	memset(*buf, 0, size);
-	return fi_ibv_mr_internal_reg(ep->domain, *buf, size,
-				      FI_WRITE | FI_REMOTE_WRITE, md);
-}
-
-ssize_t fi_ibv_rdm_dereg_and_free(struct fi_ibv_mem_desc *md,
-				  char **buff)
-{
-	ssize_t ret = FI_SUCCESS;
-	ret = fi_ibv_mr_internal_dereg(md);
-	if (ret)
-		VERBS_WARN(FI_LOG_AV,
-			   "Unable to deregister MR, ret = %"PRId64"\n", ret);
-
-	if (buff && *buff) {
-		ofi_freealign(*buff);
-		*buff = NULL;
-	}
-
 	return ret;
 }
 
