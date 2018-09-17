@@ -541,6 +541,7 @@ int fi_ibv_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	size_t size;
 	int ret;
 	struct fi_cq_attr tmp_attr = *attr;
+	struct ibv_device_attr device_attr;
 
 	cq = calloc(1, sizeof(*cq));
 	if (!cq)
@@ -592,12 +593,29 @@ int fi_ibv_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	}
 
 	size = attr->size ? attr->size : VERBS_DEF_CQ_SIZE;
+	ret = ibv_query_device(domain->verbs, &device_attr);
+	if (OFI_UNLIKELY(ret)) {
+		VERBS_INFO_ERRNO(FI_LOG_FABRIC,
+				 "ibv_query_device", errno);
+	} else {
+		if (size > device_attr.max_cqe) {
+			VERBS_WARN(FI_LOG_CQ,
+				   "Ignoring CQ size requested by user - "
+				   "%"PRIu64", because maximum supported CQ "
+				   "size by device - %d\n",
+				   size, device_attr.max_cqe);
+			size = device_attr.max_cqe;
+		}
+	}
+	VERBS_INFO(FI_LOG_CQ, "Used CQ size - %"PRIu64"\n", size);
 
 	cq->cq = ibv_create_cq(domain->verbs, size, cq, cq->channel,
 			       attr->signaling_vector);
 	if (!cq->cq) {
 		ret = -errno;
-		VERBS_WARN(FI_LOG_CQ, "Unable to create verbs CQ\n");
+		VERBS_WARN(FI_LOG_CQ,
+			   "Unable to create verbs CQ (size - %"PRIu64")\n",
+			   size);
 		goto err4;
 	}
 
