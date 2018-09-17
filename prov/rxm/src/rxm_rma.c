@@ -469,17 +469,20 @@ cmap_err:
 	if ((total_size <= rxm_ep->msg_info->tx_attr->inject_size) &&
 	    !(flags & FI_COMPLETION)) {
 		if (flags & FI_REMOTE_CQ_DATA)
-			return fi_inject_writedata(rxm_conn->msg_ep,
-						   msg->msg_iov->iov_base,
-						   msg->msg_iov->iov_len, msg->data,
-						   msg->addr, msg->rma_iov->addr,
-						   msg->rma_iov->key);
+			ret = fi_inject_writedata(rxm_conn->msg_ep,
+						  msg->msg_iov->iov_base,
+						  msg->msg_iov->iov_len, msg->data,
+						  msg->addr, msg->rma_iov->addr,
+						  msg->rma_iov->key);
 		else
-			return fi_inject_write(rxm_conn->msg_ep,
-					       msg->msg_iov->iov_base,
-					       msg->msg_iov->iov_len, msg->addr,
-					       msg->rma_iov->addr,
-					       msg->rma_iov->key);
+			ret = fi_inject_write(rxm_conn->msg_ep,
+					      msg->msg_iov->iov_base,
+					      msg->msg_iov->iov_len, msg->addr,
+					      msg->rma_iov->addr,
+					      msg->rma_iov->key);
+		if (OFI_LIKELY(!ret))
+			rxm_cntr_inc(rxm_ep->util_ep.wr_cntr);
+		return ret;
 	}
 
 	ret = rxm_ep_format_rma_inject_res(rxm_ep, total_size, flags, FI_WRITE,
