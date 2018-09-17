@@ -791,6 +791,35 @@ static ssize_t rxm_rma_iov_init(struct rxm_ep *rxm_ep, void *buf,
 }
 
 static inline ssize_t
+rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
+		   struct rxm_pkt *tx_pkt, size_t pkt_size)
+{
+	FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Posting inject with length: %" PRIu64
+	       " tag: 0x%" PRIx64 "\n", pkt_size, tx_pkt->hdr.tag);
+	ssize_t ret = fi_inject(rxm_conn->msg_ep, tx_pkt, pkt_size, 0);
+	if (OFI_LIKELY(!ret)) {
+		rxm_cntr_inc(rxm_ep->util_ep.tx_cntr);
+	} else {
+		FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
+		       "fi_inject for MSG provider failed with ret - %" PRIu64"\n",
+		       ret);
+		if (OFI_LIKELY(ret == -FI_EAGAIN))
+			rxm_ep_progress_multi(&rxm_ep->util_ep);
+	}
+	return ret;
+}
+
+static inline ssize_t
+rxm_ep_normal_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
+		   struct rxm_tx_entry *tx_entry, size_t pkt_size)
+{
+	FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Posting send with length: %" PRIu64
+	       " tag: 0x%" PRIx64 "\n", pkt_size, tx_entry->tx_buf->pkt.hdr.tag);
+	return fi_send(rxm_conn->msg_ep, &tx_entry->tx_buf->pkt, pkt_size,
+		       tx_entry->tx_buf->hdr.desc, 0, tx_entry);
+}
+
+static inline ssize_t
 rxm_ep_format_tx_res_lightweight(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 				 size_t len, uint64_t data, uint64_t flags, uint64_t tag,
 				 struct rxm_tx_buf **tx_buf, struct rxm_buf_pool *pool)
