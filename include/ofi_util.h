@@ -70,31 +70,30 @@
 
 #define OFI_CNTR_ENABLED	(1ULL << 61)
 
-#define OFI_Q_STRERROR(prov, log, q, q_str, entry, strerror)			\
-	FI_WARN(prov, log, "fi_" q_str "_readerr: err: %d, prov_err: %s (%d)\n",\
-			entry.err,						\
-			strerror(q, entry.prov_errno, entry.err_data, NULL, 0), \
-			entry.prov_errno)
+#define OFI_Q_STRERROR(prov, log, q, q_str, entry, strerror)					\
+	FI_WARN(prov, log, "fi_" q_str "_readerr: err: %d, prov_err: %s (%d)\n",		\
+		(entry).err,strerror((q), (entry).prov_errno, (entry).err_data, NULL, 0),	\
+		(entry).prov_errno)
 
 #define OFI_Q_READERR(prov, log, q, q_str, readerr, strerror, ret, err_entry)	\
 	do {									\
-		ret = readerr(q, &err_entry, 0);				\
-		if (ret != sizeof(err_entry)) {					\
+		(ret) = readerr((q), &(err_entry), 0);				\
+		if ((ret) != sizeof(err_entry)) {				\
 			FI_WARN(prov, log,					\
-					"Unable to fi_" q_str "_readerr\n");	\
+				"Unable to fi_" q_str "_readerr\n");		\
 		} else {							\
 			OFI_Q_STRERROR(prov, log, q, q_str,			\
-					err_entry, strerror);			\
+				       err_entry, strerror);			\
 		}								\
 	} while (0)
 
 #define OFI_CQ_READERR(prov, log, cq, ret, err_entry)		\
 	OFI_Q_READERR(prov, log, cq, "cq", fi_cq_readerr,	\
-			fi_cq_strerror, ret, err_entry)
+		      fi_cq_strerror, ret, err_entry)
 
 #define OFI_EQ_READERR(prov, log, eq, ret, err_entry)		\
 	OFI_Q_READERR(prov, log, eq, "eq", fi_eq_readerr, 	\
-			fi_eq_strerror, ret, err_entry)
+		      fi_eq_strerror, ret, err_entry)
 
 #define FI_INFO_FIELD(provider, prov_attr, user_attr, prov_str, user_str, type)	\
 	do {										\
