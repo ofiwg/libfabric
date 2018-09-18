@@ -52,31 +52,10 @@ static ssize_t
 fi_ibv_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *entry,
 		  uint64_t flags)
 {
-	struct fi_ibv_eq *_eq;
-	uint32_t api_version;
-	void *err_data = NULL;
-	size_t err_data_size = 0;
-
-	_eq = container_of(eq, struct fi_ibv_eq, eq_fid.fid);
-	if (!_eq->err.err)
-		return 0;
-
-	api_version = _eq->fab->util_fabric.fabric_fid.api_version;
-
-	if ((FI_VERSION_GE(api_version, FI_VERSION(1, 5)))
-		&& entry->err_data && entry->err_data_size) {
-		err_data_size = MIN(entry->err_data_size, _eq->err.err_data_size);
-		err_data = _eq->err.err_data;
-	}
-
-	*entry = _eq->err;
-	if (err_data) {
-		memcpy(entry->err_data, err_data, err_data_size);
-		entry->err_data_size = err_data_size;
-	}
-
-	_eq->err.err = 0;
-	_eq->err.prov_errno = 0;
+	struct fi_ibv_eq *_eq =
+		container_of(eq, struct fi_ibv_eq, eq_fid.fid);
+	ofi_eq_handle_err_entry(_eq->fab->util_fabric.fabric_fid.api_version,
+				&_eq->err, entry);
 	return sizeof(*entry);
 }
 
@@ -156,15 +135,15 @@ err1:
 
 static ssize_t
 fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq, struct rdma_cm_event *cma_event,
-	uint32_t *event, struct fi_eq_cm_entry *entry, size_t len)
+			   uint32_t *event, struct fi_eq_cm_entry *entry, size_t len)
 {
-	struct fi_ibv_pep *pep;
-	fid_t fid;
-	size_t datalen;
+	const struct fi_ibv_cm_data_hdr *cm_hdr;
+	size_t datalen = 0;
 	int ret;
+	fid_t fid = cma_event->id->context;
+	struct fi_ibv_pep *pep =
+		container_of(fid, struct fi_ibv_pep, pep_fid);
 
-	fid = cma_event->id->context;
-	pep = container_of(fid, struct fi_ibv_pep, pep_fid);
 	switch (cma_event->event) {
 	case RDMA_CM_EVENT_CONNECT_REQUEST:
 		*event = FI_CONNREQ;
@@ -201,6 +180,20 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq, struct rdma_cm_event *cma_event
 	case RDMA_CM_EVENT_REJECTED:
 		eq->err.err = ECONNREFUSED;
 		eq->err.prov_errno = -cma_event->status;
+		if (eq->err.err_data) {
+			free(eq->err.err_data);
+			eq->err.err_data = NULL;
+			eq->err.err_data_size = 0;
+		}
+		if (cma_event->param.conn.private_data_len) {
+			cm_hdr = cma_event->param.conn.private_data;
+			eq->err.err_data = calloc(1, cm_hdr->size);
+			if (OFI_LIKELY(eq->err.err_data != NULL)) {
+				memcpy(eq->err.err_data, cm_hdr->data,
+				       cm_hdr->size);
+				eq->err.err_data_size = cm_hdr->size;
+			}
+		}
 		goto err;
 	case RDMA_CM_EVENT_DEVICE_REMOVAL:
 		eq->err.err = ENODEV;
@@ -213,10 +206,13 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq, struct rdma_cm_event *cma_event
 	}
 
 	entry->fid = fid;
-	/* rdmacm has no way to track how much data is sent by peer */
-	datalen = MIN(len - sizeof(*entry), cma_event->param.conn.private_data_len);
-	if (datalen)
-		memcpy(entry->data, cma_event->param.conn.private_data, datalen);
+	if (cma_event->param.conn.private_data_len) {
+		cm_hdr = cma_event->param.conn.private_data;
+		/* rdmacm has no way to track how much data is sent by peer */
+		datalen = MIN(len - sizeof(*entry), cm_hdr->size);
+		if (datalen)
+			memcpy(entry->data, cm_hdr->data, datalen);
+	}
 	return sizeof(*entry) + datalen;
 err:
 	eq->err.fid = fid;
