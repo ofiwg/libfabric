@@ -34,7 +34,6 @@
 
 #include "fi_verbs.h"
 
-#define VERBS_CM_DATA_SIZE 56
 #define VERBS_RESOLVE_TIMEOUT 2000	// ms
 
 static int fi_ibv_ep_getopt(fid_t fid, int level, int optname,
