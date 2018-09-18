@@ -70,7 +70,6 @@
 #define RXM_SAR_TX_ERROR	UINT64_MAX
 #define RXM_SAR_RX_INIT		UINT64_MAX
 
-
 #define RXM_IOV_LIMIT 4
 
 #define RXM_MR_MODES	(OFI_MR_BASIC_MAP | FI_MR_LOCAL)
@@ -444,6 +443,7 @@ struct rxm_msg_eq_entry {
 	uint32_t		event;
 	/* Used for connection refusal */
 	void			*context;
+	struct fi_eq_err_entry	err_entry;
 	/* must stay at the bottom */
 	struct fi_eq_cm_entry	cm_entry;
 };
