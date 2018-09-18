@@ -953,7 +953,7 @@ static int tcpx_pep_reject(struct fid_pep *pep, fid_t handle,
 	memset(&hdr, 0, sizeof(hdr));
 	hdr.version = OFI_CTRL_VERSION;
 	hdr.type = ofi_ctrl_nack;
-	hdr.seg_size = paramlen;
+	hdr.seg_size = htons((uint16_t) paramlen);
 
 	ofi_send_socket(tcpx_handle->conn_fd, &hdr,
 			sizeof(hdr), 0);
