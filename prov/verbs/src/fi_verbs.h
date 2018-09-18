@@ -259,42 +259,8 @@ struct fi_ibv_eq {
 int fi_ibv_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		   struct fid_eq **eq, void *context);
 
-struct fi_ibv_rdm_ep;
-
-typedef struct fi_ibv_rdm_conn *
-	(*fi_ibv_rdm_addr_to_conn_func)
-	(struct fi_ibv_rdm_ep *ep, fi_addr_t addr);
-
-typedef fi_addr_t
-	(*fi_ibv_rdm_conn_to_addr_func)
-	(struct fi_ibv_rdm_ep *ep, struct fi_ibv_rdm_conn *conn);
-
-typedef struct fi_ibv_rdm_av_entry *
-	(*fi_ibv_rdm_addr_to_av_entry_func)
-	(struct fi_ibv_rdm_ep *ep, fi_addr_t addr);
-
-typedef fi_addr_t
-	(*fi_ibv_rdm_av_entry_to_addr_func)
-	(struct fi_ibv_rdm_ep *ep, struct fi_ibv_rdm_av_entry *av_entry);
-
-struct fi_ibv_av {
-	struct fid_av		av_fid;
-	struct fi_ibv_domain	*domain;
-	struct fi_ibv_rdm_ep	*ep;
-	struct fi_ibv_eq	*eq;
-	size_t			count;
-	size_t			used;
-	uint64_t		flags;
-	enum fi_av_type		type;
-	fi_ibv_rdm_addr_to_conn_func addr_to_conn;
-	fi_ibv_rdm_conn_to_addr_func conn_to_addr;
-	fi_ibv_rdm_addr_to_av_entry_func addr_to_av_entry;
-	fi_ibv_rdm_av_entry_to_addr_func av_entry_to_addr;
-};
-
 int fi_ibv_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		   struct fid_av **av, void *context);
-struct fi_ops_av *fi_ibv_rdm_set_av_ops(void);
 
 struct fi_ibv_pep {
 	struct fid_pep		pep_fid;
@@ -307,9 +273,9 @@ struct fi_ibv_pep {
 };
 
 struct fi_ops_cm *fi_ibv_pep_ops_cm(struct fi_ibv_pep *pep);
-struct fi_ibv_rdm_cm;
 
 struct fi_ibv_mem_desc;
+struct fi_ibv_domain;
 typedef int(*fi_ibv_mr_reg_cb)(struct fi_ibv_domain *domain, void *buf,
 			       size_t len, uint64_t access,
 			       struct fi_ibv_mem_desc *md);
@@ -321,16 +287,10 @@ struct fi_ibv_domain {
 	struct util_domain		util_domain;
 	struct ibv_context		*verbs;
 	struct ibv_pd			*pd;
-	/*
-	 * TODO: Currently, only 1 rdm EP can be created per rdm domain!
-	 *	 CM logic should be separated from EP,
-	 *	 excluding naming/addressing
-	 */
+
 	enum fi_ep_type			ep_type;
-	struct fi_ibv_rdm_cm		*rdm_cm;
-	struct slist			ep_list;
 	struct fi_info			*info;
-	/* This EQ is utilized by verbs/RDM and verbs/DGRAM */
+	/* The EQ is utilized by verbs/MSG */
 	struct fi_ibv_eq		*eq;
 	uint64_t			eq_flags;
 
@@ -367,23 +327,6 @@ struct fi_ibv_cq {
 	struct util_buf_pool	*wce_pool;
 };
 
-struct fi_ibv_rdm_request;
-typedef void (*fi_ibv_rdm_cq_read_entry)(struct fi_ibv_rdm_request *cq_entry,
-					 int index, void *buf);
-
-struct fi_ibv_rdm_cq {
-	struct fid_cq			cq_fid;
-	struct fi_ibv_domain		*domain;
-	struct fi_ibv_rdm_ep		*ep;
-	struct dlist_entry		request_cq;
-	struct dlist_entry		request_errcq;
-	uint64_t			flags;
-	size_t				entry_size;
-	fi_ibv_rdm_cq_read_entry	read_entry;
-	int				read_bunch_size;
-	enum fi_cq_wait_cond		wait_cond;
-};
-
 int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		   struct fid_cq **cq, void *context);
 
@@ -395,12 +338,6 @@ struct fi_ibv_mem_desc {
 	/* this field is used only by MR cache operations */
 	struct ofi_mr_entry	*entry;
 };
-
-int fi_ibv_rdm_alloc_and_reg(struct fi_ibv_rdm_ep *ep,
-			     void **buf, size_t size,
-			     struct fi_ibv_mem_desc *md);
-ssize_t fi_ibv_rdm_dereg_and_free(struct fi_ibv_mem_desc *md,
-				  char **buff);
 
 static inline uint64_t
 fi_ibv_mr_internal_rkey(struct fi_ibv_mem_desc *md)
@@ -478,16 +415,10 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 		   struct fid_ep **ep, void *context);
 int fi_ibv_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 		      struct fid_pep **pep, void *context);
-int fi_ibv_rdm_open_ep(struct fid_domain *domain, struct fi_info *info,
-			struct fid_ep **ep, void *context);
 int fi_ibv_create_ep(const char *node, const char *service,
 		     uint64_t flags, const struct fi_info *hints,
 		     struct rdma_addrinfo **rai, struct rdma_cm_id **id);
 void fi_ibv_destroy_ep(struct rdma_addrinfo *rai, struct rdma_cm_id **id);
-int fi_rbv_rdm_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
-			struct fid_cntr **cntr, void *context);
-int fi_ibv_rdm_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
-		       struct fid_av **av_fid, void *context);
 int fi_ibv_dgram_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 			 struct fid_av **av_fid, void *context);
 
@@ -517,15 +448,12 @@ int fi_ibv_fi_to_rai(const struct fi_info *fi, uint64_t flags,
 		     struct rdma_addrinfo *rai);
 int fi_ibv_get_rdma_rai(const char *node, const char *service, uint64_t flags,
 			const struct fi_info *hints, struct rdma_addrinfo **rai);
-int fi_ibv_rdm_cm_bind_ep(struct fi_ibv_rdm_cm *cm, struct fi_ibv_rdm_ep *ep);
-
 struct verbs_ep_domain {
 	char			*suffix;
 	enum fi_ep_type		type;
 	uint64_t		caps;
 };
 
-extern const struct verbs_ep_domain verbs_rdm_domain;
 extern const struct verbs_ep_domain verbs_dgram_domain;
 
 int fi_ibv_check_ep_attr(const struct fi_info *hints,

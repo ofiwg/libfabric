@@ -552,12 +552,6 @@ int fi_ibv_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 			  fi_ibv_util_cq_progress_noop, context);
 	if (ret)
 		goto err1;
-	/*
-	 * RDM and DGRAM CQ functionalities are moved to correspond
-	 * separated functions
-	 */
-	assert(domain->ep_type == FI_EP_MSG ||
-	       domain->ep_type == FI_EP_DGRAM);
 
 	switch (attr->wait_obj) {
 	case FI_WAIT_UNSPEC:
