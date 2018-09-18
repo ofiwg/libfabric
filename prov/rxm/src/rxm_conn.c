@@ -336,6 +336,7 @@ rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 	};
 	struct util_cmap_handle *handle;
 	int ret;
+	enum util_cmap_reject_flag cm_reject_flag = CMAP_REJECT_GENUINE;
 
 	remote_cm_data->proto.eager_size = ntohll(remote_cm_data->proto.eager_size);
 
@@ -347,7 +348,8 @@ rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 	}
 
 	ret = ofi_cmap_process_connreq(rxm_ep->util_ep.cmap,
-				       &remote_cm_data->name, &handle);
+				       &remote_cm_data->name,
+				       &handle, &cm_reject_flag);
 	if (ret)
 		goto err1;
 
@@ -365,7 +367,7 @@ rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 	ret = fi_accept(rxm_conn->msg_ep, &cm_data, sizeof(cm_data));
 	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_FABRIC,
-				"Unable to accept incoming connection\n");
+			"Unable to accept incoming connection\n");
 		goto err2;
 	}
 	return ret;
@@ -373,10 +375,12 @@ err2:
 	ofi_cmap_del_handle(&rxm_conn->handle);
 err1:
 	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
-		"Rejecting incoming connection request\n");
-	if (fi_reject(rxm_ep->msg_pep, msg_info->handle, NULL, 0))
+	       "Rejecting incoming connection request (reject flag - %d)\n",
+	       cm_reject_flag);
+	if (fi_reject(rxm_ep->msg_pep, msg_info->handle,
+		      &cm_reject_flag, sizeof(cm_reject_flag)))
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-				"Unable to reject incoming connection\n");
+			"Unable to reject incoming connection\n");
 	return ret;
 }
 
@@ -402,12 +406,31 @@ static void rxm_conn_wake_up_wait_obj(struct rxm_ep *rxm_ep)
 
 static int
 rxm_conn_handle_event(struct rxm_ep *rxm_ep, ssize_t rd, uint32_t event,
-		      struct fi_eq_cm_entry *entry, void *context)
+		      struct fi_eq_cm_entry *entry, struct fi_eq_err_entry *err_entry)
 {
 	struct rxm_cm_data *cm_data;
 
 	if (rd == -FI_ECONNREFUSED) {
-		ofi_cmap_process_reject(rxm_ep->util_ep.cmap, context);
+		enum util_cmap_reject_flag cm_reject_flag;
+
+		if (OFI_LIKELY(err_entry->err_data_size >=
+				sizeof(enum util_cmap_reject_flag))) {
+			assert(err_entry->err_data);
+			cm_reject_flag = *((enum util_cmap_reject_flag *)
+							err_entry->err_data);
+		} else {
+			FI_WARN(&rxm_prov, FI_LOG_FABRIC,
+				"Error -FI_ECONNREFUSED was provided without error data\n");
+			cm_reject_flag = CMAP_REJECT_GENUINE;
+		}
+
+		FI_DBG(&rxm_prov, FI_LOG_FABRIC,
+		       "Received reject (reject flag - %d)\n",
+		       cm_reject_flag);
+		assert((cm_reject_flag == CMAP_REJECT_GENUINE) ||
+		       (cm_reject_flag == CMAP_REJECT_SIMULT_CONN));
+		ofi_cmap_process_reject(rxm_ep->util_ep.cmap, err_entry->fid->context,
+					cm_reject_flag);
 		return 0;
 	}
 
@@ -470,7 +493,7 @@ int rxm_conn_process_eq_events(struct rxm_ep *rxm_ep)
 		fastlock_release(&rxm_ep->msg_eq_entry_list_lock);
 
 		ret = rxm_conn_handle_event(rxm_ep, entry->rd, entry->event,
-					    &entry->cm_entry, entry->context);
+					    &entry->cm_entry, &entry->err_entry);
 		free(entry);
 		fastlock_acquire(&rxm_ep->msg_eq_entry_list_lock);
 		if (ret)
@@ -481,10 +504,9 @@ int rxm_conn_process_eq_events(struct rxm_ep *rxm_ep)
 }
 
 static ssize_t rxm_eq_sread(struct rxm_ep *rxm_ep, uint32_t *event,
-				 struct fi_eq_cm_entry* entry, size_t len,
-				 void **context)
+			    struct fi_eq_cm_entry* entry, size_t len,
+			    struct fi_eq_err_entry *err_entry)
 {
-	struct fi_eq_err_entry err_entry = {0};
 	ssize_t rd;
 	int once = 1;
 
@@ -504,15 +526,14 @@ static ssize_t rxm_eq_sread(struct rxm_ep *rxm_ep, uint32_t *event,
 		return rd;
 	}
 
-	OFI_EQ_READERR(&rxm_prov, FI_LOG_EP_CTRL, rxm_ep->msg_eq, rd, err_entry);
+	OFI_EQ_READERR(&rxm_prov, FI_LOG_EP_CTRL, rxm_ep->msg_eq, rd, *err_entry);
 
-	if (err_entry.err == ECONNREFUSED) {
+	if (err_entry->err == ECONNREFUSED) {
 		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Connection refused\n");
-		*context = err_entry.fid->context;
 		return -FI_ECONNREFUSED;
 	} else {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unknown error: %d\n",
-			err_entry.err);
+			err_entry->err);
 		return rd;
 	}
 }
@@ -531,7 +552,7 @@ static void *rxm_conn_eq_read(void *arg)
 		}
 
 		entry->rd = rxm_eq_sread(rxm_ep, &entry->event, &entry->cm_entry,
-					 RXM_CM_ENTRY_SZ, &entry->context);
+					 RXM_CM_ENTRY_SZ, &entry->err_entry);
 		if (entry->rd < 0 && entry->rd != -FI_ECONNREFUSED)
 			goto exit;
 
@@ -557,8 +578,8 @@ exit:
 static void *rxm_conn_progress(void *arg)
 {
 	struct rxm_ep *rxm_ep = container_of(arg, struct rxm_ep, util_ep);
+	struct fi_eq_err_entry err_entry = { 0 };
 	struct fi_eq_cm_entry *entry;
-	void *context;
 	uint32_t event;
 	ssize_t rd;
 	int ret;
@@ -572,20 +593,22 @@ static void *rxm_conn_progress(void *arg)
 
 	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Starting conn event handler\n");
 	while (1) {
+		err_entry = (const struct fi_eq_err_entry){ 0 };
 		rd = rxm_eq_sread(rxm_ep, &event, entry,
-				  RXM_CM_ENTRY_SZ, &context);
+				  RXM_CM_ENTRY_SZ, &err_entry);
 		if (rd < 0 && rd != -FI_ECONNREFUSED)
-			return NULL;
+			goto exit;
 
 		if (event == FI_NOTIFY &&
 		    (enum ofi_cmap_signal)((struct fi_eq_entry *)entry)->data == OFI_CMAP_EXIT) {
 			FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Closing CM thread\n");
-			return NULL;
+			goto exit;
 		}
-		ret = rxm_conn_handle_event(rxm_ep, rd, event, entry, context);
+		ret = rxm_conn_handle_event(rxm_ep, rd, event, entry, &err_entry);
 		if (ret)
 			break;
 	}
+exit:
 	free(entry);
 	return NULL;
 }
