@@ -34,6 +34,7 @@
 
 #include <ifaddrs.h>
 #include <net/if.h>
+#include <stdint.h>
 
 #include "fi_verbs.h"
 
@@ -83,8 +84,9 @@ const struct fi_domain_attr verbs_domain_attr = {
 	.max_ep_tx_ctx		= 1,
 	.max_ep_rx_ctx		= 1,
 	.mr_iov_limit		= VERBS_MR_IOV_LIMIT,
-	/* max_err_data is size of ibv_wc::vendor_err for CQ, 0 - for EQ */
-	.max_err_data		= sizeof_field(struct ibv_wc, vendor_err),
+	/* max_err_data is size of ibv_wc::vendor_err for CQ, UINT8_MAX - for EQ */
+	.max_err_data		= MAX(sizeof_field(struct ibv_wc, vendor_err),
+				      UINT8_MAX),
 };
 
 const struct fi_ep_attr verbs_ep_attr = {
