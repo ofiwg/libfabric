@@ -215,6 +215,13 @@ int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_pr
 	if (util_domain->eq)
 		ofi_ep_bind_eq(ep, util_domain->eq);
 	fastlock_init(&ep->lock);
+	if (ep->domain->threading != FI_THREAD_SAFE) {
+		ep->lock_acquire = ofi_fastlock_acquire_noop;
+		ep->lock_release = ofi_fastlock_release_noop;
+	} else {
+		ep->lock_acquire = ofi_fastlock_acquire;
+		ep->lock_release = ofi_fastlock_release;
+	}
 	return 0;
 }
 

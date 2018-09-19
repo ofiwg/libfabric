@@ -256,6 +256,8 @@ struct util_ep {
 	ofi_ep_progress_func	progress;
 	struct util_cmap	*cmap;
 	fastlock_t		lock;
+	ofi_fastlock_acquire_t	lock_acquire;
+	ofi_fastlock_release_t	lock_release;
 };
 
 int ofi_ep_bind_av(struct util_ep *util_ep, struct util_av *av);
@@ -268,6 +270,16 @@ int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_pr
 		      ofi_ep_progress_func progress);
 
 int ofi_endpoint_close(struct util_ep *util_ep);
+
+static inline void ofi_ep_lock_acquire(struct util_ep *ep)
+{
+	ep->lock_acquire(&ep->lock);
+}
+
+static inline void ofi_ep_lock_release(struct util_ep *ep)
+{
+	ep->lock_release(&ep->lock);
+}
 
 /*
  * Tag and address match
