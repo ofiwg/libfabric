@@ -50,9 +50,9 @@ AS_IF([test x"$with_build_id" = x"no"], [with_build_id=""])
 AC_DEFINE_UNQUOTED([BUILD_ID],["$with_build_id"],
                    [adds build_id to version if it was defined])
 
-# Fix autoconf's habit of setting CFLAGS="-g -O2" by default while still
+# Override autoconf default CFLAG settings (e.g. "-g -O2") while still
 # allowing the user to explicitly set CFLAGS=""
-: ${CFLAGS="-fvisibility=hidden -O2 -DNDEBUG ${base_c_warn_flags}"}
+: ${CFLAGS="-fvisibility=hidden ${base_c_warn_flags}"}
 
 # AM_PROG_AS would set CFLAGS="-g -O2" by default if not set already so it
 # should not be called earlier
@@ -95,30 +95,22 @@ AC_ARG_ENABLE([debug],
 
 AS_IF([test x"$enable_debug" != x"no"],
       [dbg=1
-       CFLAGS_save=
-       # Remove -DNDEBUG flag if set
-       for flag in $CFLAGS; do
-           if test "$flag" != "-DNDEBUG"; then
-               CFLAGS_save="$CFLAGS_save $flag"
-           fi
-       done
        # See if all the flags in $debug_c_other_flags work
        good_flags=
        for flag in $debug_c_other_flags; do
            AC_MSG_CHECKING([to see if compiler supports $flag])
-           CFLAGS="$flag $CFLAGS_save"
+           CFLAGS="$flag $CFLAGS"
            AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[]], [[int i = 3;]])],
 	                     [AC_MSG_RESULT([yes])
 			      good_flags="$flag $good_flags"],
 			     [AC_MSG_RESULT([no])])
        done
        debug_c_other_flags=$good_flags
-       CFLAGS=$CFLAGS_save
        unset good_flags
-       unset CFLAGS_save
 
        CFLAGS="-g -O0 ${base_c_warn_flags} ${debug_c_warn_flags} ${debug_c_other_flags} $CFLAGS"],
-      [dbg=0])
+      [dbg=0
+       CFLAGS="-O2 -DNDEBUG $CFLAGS"])
 
 AC_DEFINE_UNQUOTED([ENABLE_DEBUG],[$dbg],
                    [defined to 1 if libfabric was configured with --enable-debug, 0 otherwise])
