@@ -759,6 +759,12 @@ int ofi_eq_create(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 void ofi_eq_handle_err_entry(uint32_t api_version,
 			     struct fi_eq_err_entry *err_entry,
 			     struct fi_eq_err_entry *user_err_entry);
+ssize_t ofi_eq_read(struct fid_eq *eq_fid, uint32_t *event,
+		    void *buf, size_t len, uint64_t flags);
+ssize_t ofi_eq_write(struct fid_eq *eq_fid, uint32_t event,
+		     const void *buf, size_t len, uint64_t flags);
+const char *ofi_eq_strerror(struct fid_eq *eq_fid, int prov_errno,
+			    const void *err_data, char *buf, size_t len);
 
 /*
 

@@ -63,8 +63,8 @@ void ofi_eq_handle_err_entry(uint32_t api_version,
 	err_entry->prov_errno = 0;
 }
 
-static ssize_t util_eq_read(struct fid_eq *eq_fid, uint32_t *event,
-			    void *buf, size_t len, uint64_t flags)
+ssize_t ofi_eq_read(struct fid_eq *eq_fid, uint32_t *event,
+		    void *buf, size_t len, uint64_t flags)
 {
 	struct util_eq *eq;
 	struct util_event *entry;
@@ -123,16 +123,16 @@ out:
 	return ret;
 }
 
-static ssize_t util_eq_readerr(struct fid_eq *eq_fid, struct fi_eq_err_entry *buf,
-			       uint64_t flags)
+static ssize_t ofi_eq_readerr(struct fid_eq *eq_fid, struct fi_eq_err_entry *buf,
+			      uint64_t flags)
 {
 
-	return util_eq_read(eq_fid, NULL, buf, sizeof(*buf),
+	return ofi_eq_read(eq_fid, NULL, buf, sizeof(*buf),
 			    flags | UTIL_FLAG_ERROR);
 }
 
-static ssize_t util_eq_write(struct fid_eq *eq_fid, uint32_t event,
-			     const void *buf, size_t len, uint64_t flags)
+ssize_t ofi_eq_write(struct fid_eq *eq_fid, uint32_t event,
+		     const void *buf, size_t len, uint64_t flags)
 {
 	struct util_eq *eq;
 	struct util_event *entry;
@@ -157,8 +157,8 @@ static ssize_t util_eq_write(struct fid_eq *eq_fid, uint32_t event,
 	return len;
 }
 
-static ssize_t util_eq_sread(struct fid_eq *eq_fid, uint32_t *event, void *buf,
-			     size_t len, int timeout, uint64_t flags)
+static ssize_t ofi_eq_sread(struct fid_eq *eq_fid, uint32_t *event, void *buf,
+			    size_t len, int timeout, uint64_t flags)
 {
 	struct util_eq *eq;
 
@@ -172,8 +172,8 @@ static ssize_t util_eq_sread(struct fid_eq *eq_fid, uint32_t *event, void *buf,
 	return fi_eq_read(eq_fid, event, buf, len, flags);
 }
 
-static const char *util_eq_strerror(struct fid_eq *eq_fid, int prov_errno,
-				    const void *err_data, char *buf, size_t len)
+const char *ofi_eq_strerror(struct fid_eq *eq_fid, int prov_errno,
+			    const void *err_data, char *buf, size_t len)
 {
 	return (buf && len) ? strncpy(buf, strerror(prov_errno), len) :
 			      fi_strerror(prov_errno);
@@ -229,11 +229,11 @@ static int util_eq_close(struct fid *fid)
 
 static struct fi_ops_eq util_eq_ops = {
 	.size = sizeof(struct fi_ops_eq),
-	.read = util_eq_read,
-	.readerr = util_eq_readerr,
-	.sread = util_eq_sread,
-	.write = util_eq_write,
-	.strerror = util_eq_strerror,
+	.read = ofi_eq_read,
+	.readerr = ofi_eq_readerr,
+	.sread = ofi_eq_sread,
+	.write = ofi_eq_write,
+	.strerror = ofi_eq_strerror,
 };
 
 static struct fi_ops util_eq_fi_ops = {
