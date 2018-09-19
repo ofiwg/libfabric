@@ -192,10 +192,20 @@ struct cxip_if {
 	struct cxi_cp cps[16];
 	int n_cps;
 	struct dlist_entry if_doms;
+	struct dlist_entry ptes;
 	ofi_atomic32_t ref;
 	struct cxi_cmdq *mr_cmdq;
 	struct cxi_evtq *mr_evtq;
 	fastlock_t lock;
+};
+
+struct cxip_pte {
+	struct dlist_entry entry;
+	struct cxip_if_domain *if_dom;
+	uint64_t lep_idx;
+	struct cxil_pte *pte;
+	struct cxil_pte_map *pte_map;
+	enum c_ptlte_state state;
 };
 
 struct cxip_fabric {
@@ -388,9 +398,7 @@ struct cxip_rx_ctx {
 
 	struct fi_rx_attr attr;
 
-	uint32_t pid_off;
-	struct cxil_pte *pte;
-	struct cxil_pte_map *pte_map;
+	struct cxip_pte *rx_pte;
 	struct cxi_cmdq *rx_cmdq;
 
 	int eager_threshold;
@@ -563,6 +571,13 @@ int cxip_if_domain_lep_alloc(struct cxip_if_domain *if_dom, uint64_t lep_idx);
 int cxip_if_domain_lep_free(struct cxip_if_domain *if_dom, uint64_t lep_idx);
 void cxip_if_init(void);
 void cxip_if_fini(void);
+
+int cxip_pte_alloc(struct cxip_if_domain *if_dom, struct cxi_evtq *evtq,
+		   uint64_t lep_idx, struct cxi_pt_alloc_opts *opts,
+		   struct cxip_pte **pte);
+void cxip_pte_free(struct cxip_pte *pte);
+int cxip_pte_state_change(struct cxip_if *dev_if, uint32_t pte_num,
+			  enum c_ptlte_state new_state);
 
 int cxip_parse_addr(const char *node, const char *service,
 		    struct cxip_addr *addr);

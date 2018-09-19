@@ -330,6 +330,112 @@ int cxip_if_domain_lep_free(struct cxip_if_domain *if_dom, uint64_t lep_idx)
 	return FI_SUCCESS;
 }
 
+int cxip_pte_alloc(struct cxip_if_domain *if_dom, struct cxi_evtq *evtq,
+		   uint64_t lep_idx, struct cxi_pt_alloc_opts *opts,
+		   struct cxip_pte **pte)
+{
+	struct cxip_pte *new_pte;
+	int ret;
+
+	new_pte = malloc(sizeof(*new_pte));
+	if (!new_pte) {
+		CXIP_LOG_ERROR("Unable to allocate PTE structure\n");
+		return -FI_ENOMEM;
+	}
+
+	/* Allocate a PTE */
+	ret = cxil_alloc_pte(if_dom->dev_if->if_lni, evtq, opts, &new_pte->pte);
+	if (ret) {
+		CXIP_LOG_DBG("Failed to allocate PTE: %d\n", ret);
+		ret = -FI_ENOSPC;
+		goto free_mem;
+	}
+
+	/* Reserve LEP where PTE will be mapped */
+	ret = cxip_if_domain_lep_alloc(if_dom, lep_idx);
+	if (ret != FI_SUCCESS) {
+		CXIP_LOG_DBG("Failed to reserve LEP (%lu): %d\n", lep_idx, ret);
+		goto free_pte;
+	}
+
+	/* Map the PTE to the LEP */
+	ret = cxil_map_pte(new_pte->pte, if_dom->if_dom, lep_idx, 0,
+			   &new_pte->pte_map);
+	if (ret) {
+		CXIP_LOG_DBG("Failed to map PTE: %d\n", ret);
+		ret = -FI_EADDRINUSE;
+		goto free_lep;
+	}
+
+	fastlock_acquire(&if_dom->dev_if->lock);
+	dlist_insert_tail(&new_pte->entry, &if_dom->dev_if->ptes);
+	fastlock_release(&if_dom->dev_if->lock);
+
+	new_pte->if_dom = if_dom;
+	new_pte->lep_idx = lep_idx;
+	new_pte->state = C_PTLTE_DISABLED;
+
+	*pte = new_pte;
+
+	return FI_SUCCESS;
+
+free_lep:
+	ret = cxip_if_domain_lep_free(if_dom, lep_idx);
+	if (ret)
+		CXIP_LOG_ERROR("cxip_if_domain_lep_free returned: %d\n", ret);
+free_pte:
+	ret = cxil_destroy_pte(new_pte->pte);
+	if (ret)
+		CXIP_LOG_ERROR("cxil_destroy_pte returned: %d\n", ret);
+free_mem:
+	free(new_pte);
+
+	return ret;
+}
+
+void cxip_pte_free(struct cxip_pte *pte)
+{
+	int ret;
+
+	fastlock_acquire(&pte->if_dom->dev_if->lock);
+	dlist_remove(&pte->entry);
+	fastlock_release(&pte->if_dom->dev_if->lock);
+
+	ret = cxil_unmap_pte(pte->pte_map);
+	if (ret)
+		CXIP_LOG_ERROR("Failed to unmap PTE: %d\n", ret);
+
+	ret = cxip_if_domain_lep_free(pte->if_dom, pte->lep_idx);
+	if (ret)
+		CXIP_LOG_ERROR("Failed to free LEP: %d\n", ret);
+
+	ret = cxil_destroy_pte(pte->pte);
+	if (ret)
+		CXIP_LOG_ERROR("Failed to free PTE: %d\n", ret);
+
+	free(pte);
+}
+
+int cxip_pte_state_change(struct cxip_if *dev_if, uint32_t pte_num,
+			  enum c_ptlte_state new_state)
+{
+	struct cxip_pte *pte;
+
+	fastlock_acquire(&dev_if->lock);
+
+	dlist_foreach_container(&dev_if->ptes, struct cxip_pte, pte, entry) {
+		if (pte->pte->ptn == pte_num) {
+			pte->state = new_state;
+			fastlock_release(&dev_if->lock);
+			return FI_SUCCESS;
+		}
+	}
+
+	fastlock_release(&dev_if->lock);
+
+	return -FI_EINVAL;
+}
+
 /*
  * cxip_query_if_list() - Populate static IF data during initialization.
  */
@@ -361,6 +467,7 @@ static void cxip_query_if_list(struct slist *if_list)
 	if_entry->if_fabric = 0; /* TODO Find real network ID */
 	ofi_atomic_initialize32(&if_entry->ref, 0);
 	dlist_init(&if_entry->if_doms);
+	dlist_init(&if_entry->ptes);
 	fastlock_init(&if_entry->lock);
 	slist_insert_tail(&if_entry->entry, if_list);
 

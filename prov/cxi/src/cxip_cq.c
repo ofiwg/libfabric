@@ -141,6 +141,8 @@ static struct cxip_req *cxip_cq_event_req(struct cxip_cq *cq,
 					  const union c_event *event)
 {
 	struct cxip_req *req;
+	uint32_t pte_num;
+	enum c_ptlte_state pte_state;
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_ACK:
@@ -159,6 +161,13 @@ static struct cxip_req *cxip_cq_event_req(struct cxip_cq *cq,
 		}
 
 		return req;
+	case C_EVENT_STATE_CHANGE:
+		pte_num = event->tgt_long.ptlte_index;
+		pte_state = event->tgt_long.initiator.state_change.ptlte_state;
+
+		cxip_pte_state_change(cq->domain->dev_if, pte_num, pte_state);
+
+		return NULL;
 	}
 
 	CXIP_LOG_ERROR("Invalid event type: %d\n", event->hdr.event_type);

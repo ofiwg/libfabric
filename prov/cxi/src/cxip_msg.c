@@ -321,7 +321,7 @@ static int oflow_buf_add(struct cxip_rx_ctx *rxc)
 	/* Build Append command descriptor */
 	cmd.command.opcode      = C_CMD_TGT_APPEND;
 	cmd.target.ptl_list     = C_PTL_LIST_OVERFLOW;
-	cmd.target.ptlte_index  = rxc->pte->ptn;
+	cmd.target.ptlte_index  = rxc->rx_pte->pte->ptn;
 	cmd.target.op_put       = 1;
 	cmd.target.buffer_id    = req->req_id;
 	cmd.target.lac          = oflow_buf->md.lac;
@@ -415,7 +415,7 @@ void cxip_rxc_oflow_cleanup(struct cxip_rx_ctx *rxc)
 
 	cmd.command.opcode = C_CMD_TGT_UNLINK;
 	cmd.target.ptl_list = C_PTL_LIST_OVERFLOW;
-	cmd.target.ptlte_index  = rxc->pte->ptn;
+	cmd.target.ptlte_index  = rxc->rx_pte->pte->ptn;
 
 	/* Manually unlink each overflow buffer */
 	dlist_foreach_container(&rxc->oflow_bufs, struct cxip_oflow_buf,
@@ -650,7 +650,7 @@ static ssize_t cxip_trecv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	/* Build Append command descriptor */
 	cmd.command.opcode     = C_CMD_TGT_APPEND;
 	cmd.target.ptl_list    = C_PTL_LIST_PRIORITY;
-	cmd.target.ptlte_index = rxc->pte->ptn;
+	cmd.target.ptlte_index = rxc->rx_pte->pte->ptn;
 	cmd.target.op_put      = 1;
 	cmd.target.buffer_id   = req->req_id;
 	cmd.target.lac         = recv_md.lac;

@@ -20,84 +20,43 @@ static int cxip_rx_ctx_recv_init(struct cxip_rx_ctx *rxc)
 {
 	int ret;
 	union c_cmdu cmd = {};
-	const union c_event *event;
 	struct cxi_pt_alloc_opts opts = {};
+	uint64_t pid_off;
 
-	/* Allocate a PTE */
-	ret = cxil_alloc_pte(rxc->domain->dev_if->if_lni,
-			     rxc->comp.recv_cq->evtq, &opts, &rxc->pte);
-	if (ret) {
-		CXIP_LOG_DBG("Failed to allocate PTE: %d\n", ret);
-		return -FI_ENOSPC;
-	}
+	/* Select the LEP where the queue will be mapped */
+	pid_off = CXIP_ADDR_RX_IDX(rxc->domain->dev_if->if_pid_granule, 0);
 
-	/* Reserve the logical endpoint (LEP) where the queue will be mapped */
-	rxc->pid_off = CXIP_ADDR_RX_IDX(rxc->domain->dev_if->if_pid_granule,
-					0);
-
-	ret = cxip_if_domain_lep_alloc(rxc->ep_attr->if_dom, rxc->pid_off);
+	ret = cxip_pte_alloc(rxc->ep_attr->if_dom, rxc->comp.recv_cq->evtq,
+			     pid_off, &opts, &rxc->rx_pte);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("Failed to reserve LEP (%d): %d\n", rxc->pid_off,
-			     ret);
-		goto free_pte;
-	}
-
-	/* Map the PTE to the LEP */
-	ret = cxil_map_pte(rxc->pte, rxc->ep_attr->if_dom->if_dom,
-			   rxc->pid_off, 0, &rxc->pte_map);
-	if (ret) {
-		CXIP_LOG_DBG("Failed to allocate PTE: %d\n", ret);
-		ret = -FI_EADDRINUSE;
-		goto free_lep;
+		CXIP_LOG_DBG("Failed to allocate RX PTE: %d\n", ret);
+		return ret;
 	}
 
 	/* Enable the PTE */
 	cmd.command.opcode = C_CMD_TGT_SETSTATE;
-	cmd.set_state.ptlte_index = rxc->pte->ptn;
+	cmd.set_state.ptlte_index = rxc->rx_pte->pte->ptn;
 	cmd.set_state.ptlte_state = C_PTLTE_ENABLED;
 
 	ret = cxi_cq_emit_target(rxc->rx_cmdq, &cmd);
 	if (ret) {
 		/* This is a bug, we have exclusive access to this CMDQ. */
 		CXIP_LOG_ERROR("Failed to enqueue command: %d\n", ret);
-		goto unmap_pte;
+		goto free_pte;
 	}
 
 	cxi_cq_ring(rxc->rx_cmdq);
 
-	/* Wait for Enable event */
-	while (!(event = cxi_eq_get_event(rxc->comp.recv_cq->evtq)))
+	/* Wait for PTE state change */
+	do {
 		sched_yield();
-
-	if (event->hdr.event_type != C_EVENT_STATE_CHANGE ||
-	    event->tgt_long.return_code != C_RC_OK ||
-	    event->tgt_long.initiator.state_change.ptlte_state !=
-		    C_PTLTE_ENABLED ||
-	    event->tgt_long.ptlte_index != rxc->pte->ptn) {
-		/* This is a device malfunction */
-		CXIP_LOG_ERROR("Invalid Enable EQE\n");
-		ret = -FI_EIO;
-		goto unmap_pte;
-	}
-
-	cxi_eq_ack_events(rxc->comp.recv_cq->evtq);
+		cxip_cq_progress(rxc->comp.recv_cq);
+	} while (rxc->rx_pte->state != C_PTLTE_ENABLED);
 
 	return FI_SUCCESS;
 
-unmap_pte:
-	cxi_eq_ack_events(rxc->comp.recv_cq->evtq);
-
-	ret = cxil_unmap_pte(rxc->pte_map);
-	if (ret)
-		CXIP_LOG_ERROR("cxil_unmap_pte returned: %d\n", ret);
-free_lep:
-	ret = cxip_if_domain_lep_free(rxc->ep_attr->if_dom, rxc->pid_off);
-	if (ret)
-		CXIP_LOG_ERROR("cxip_if_domain_lep_free returned: %d\n", ret);
 free_pte:
-	ret = cxil_destroy_pte(rxc->pte);
-	if (ret)
-		CXIP_LOG_ERROR("cxil_destroy_pte returned: %d\n", ret);
+	cxip_pte_free(rxc->rx_pte);
 
 	return ret;
 }
@@ -105,19 +64,7 @@ free_pte:
 /* Caller must hold rxc->lock */
 static int cxip_rx_ctx_recv_fini(struct cxip_rx_ctx *rxc)
 {
-	int ret;
-
-	ret = cxil_unmap_pte(rxc->pte_map);
-	if (ret)
-		CXIP_LOG_ERROR("Failed to unmap PTE: %d\n", ret);
-
-	ret = cxip_if_domain_lep_free(rxc->ep_attr->if_dom, rxc->pid_off);
-	if (ret)
-		CXIP_LOG_ERROR("Failed to free LEP: %d\n", ret);
-
-	ret = cxil_destroy_pte(rxc->pte);
-	if (ret)
-		CXIP_LOG_ERROR("Failed to free PTE: %d\n", ret);
+	cxip_pte_free(rxc->rx_pte);
 
 	return FI_SUCCESS;
 }
