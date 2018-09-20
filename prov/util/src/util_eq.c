@@ -68,6 +68,7 @@ static ssize_t util_eq_read(struct fid_eq *eq_fid, uint32_t *event,
 {
 	struct util_eq *eq;
 	struct util_event *entry;
+	void *user_err_data = NULL;
 	ssize_t ret;
 
 	eq = container_of(eq_fid, struct util_eq, eq_fid);
@@ -91,7 +92,12 @@ static ssize_t util_eq_read(struct fid_eq *eq_fid, uint32_t *event,
 		*event = entry->event;
 	if (buf) {
 		if (flags & UTIL_FLAG_ERROR) {
+			if (eq->saved_err_data) {
+				free(eq->saved_err_data);
+				eq->saved_err_data = NULL;
+			}
 			assert((size_t)entry->size == sizeof(struct fi_eq_err_entry));
+			user_err_data = ((struct fi_eq_err_entry *)buf)->err_data;
 			ofi_eq_handle_err_entry(eq->fabric->fabric_fid.api_version,
 						(struct fi_eq_err_entry *)entry->data,
 						(struct fi_eq_err_entry *)buf);
@@ -105,6 +111,10 @@ static ssize_t util_eq_read(struct fid_eq *eq_fid, uint32_t *event,
 	}
 
 	if (!(flags & FI_PEEK)) {
+		if ((flags & UTIL_FLAG_ERROR) && !user_err_data &&
+		    ((struct fi_eq_err_entry *)buf)->err_data) {
+			eq->saved_err_data = ((struct fi_eq_err_entry *)buf)->err_data;
+		}
 		slist_remove_head(&eq->list);
 		free(entry);
 	}

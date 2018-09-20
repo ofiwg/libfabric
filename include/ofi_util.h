@@ -741,6 +741,9 @@ struct util_eq {
 	const struct fi_provider *prov;
 
 	struct slist		list;
+	/* This contains error data that are read by user and need to
+	 * be freed in subsequent fi_eq_readerr call against the EQ */
+	void			*saved_err_data;
 	int			internal_wait;
 };
 
