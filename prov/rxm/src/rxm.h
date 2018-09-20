@@ -137,11 +137,11 @@ struct rxm_ep_wire_proto {
 	uint8_t	ctrl_version;
 	uint8_t	op_version;
 	uint8_t endianness;
-	uint8_t padding[6];
 	uint64_t eager_size;
 };
 
 struct rxm_cm_data {
+	uint32_t prov_version;
 	struct sockaddr name;
 	uint64_t conn_id;
 	struct rxm_ep_wire_proto proto;

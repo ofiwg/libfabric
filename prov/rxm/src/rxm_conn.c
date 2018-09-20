@@ -272,6 +272,16 @@ static inline int
 rxm_conn_verify_cm_data(struct rxm_cm_data *remote_cm_data,
 			struct rxm_cm_data *local_cm_data)
 {
+	if (remote_cm_data->prov_version != local_cm_data->prov_version) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+			"provider version of two peers (%d.%d vs %d.%d)"
+			"are mismatched\n",
+			FI_MAJOR(remote_cm_data->prov_version),
+			FI_MINOR(remote_cm_data->prov_version),
+			FI_MAJOR(local_cm_data->prov_version),
+			FI_MINOR(local_cm_data->prov_version));
+		goto err;
+	}
 	if (remote_cm_data->proto.endianness != local_cm_data->proto.endianness) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 			"endianness of two peers (%"PRIu8" vs %"PRIu8")"
@@ -316,6 +326,7 @@ rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 	struct rxm_conn *rxm_conn;
 	struct rxm_cm_data *remote_cm_data = data;
 	struct rxm_cm_data cm_data = {
+		.prov_version = rxm_ep->rxm_info->fabric_attr->prov_version,
 		.proto = {
 			.ctrl_version = RXM_CTRL_VERSION,
 			.op_version = RXM_OP_VERSION,
@@ -328,7 +339,7 @@ rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 
 	remote_cm_data->proto.eager_size = ntohll(remote_cm_data->proto.eager_size);
 
-	if (rxm_conn_verify_cm_data(remote_cm_data, &cm_data)) {
+	if (OFI_UNLIKELY(rxm_conn_verify_cm_data(remote_cm_data, &cm_data))) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 			"CM data mismatch was detected\n");
 		ret = -FI_EINVAL;
@@ -620,6 +631,7 @@ rxm_conn_connect(struct util_ep *util_ep, struct util_cmap_handle *handle,
 	struct rxm_conn *rxm_conn =
 		container_of(handle, struct rxm_conn, handle);
 	struct rxm_cm_data cm_data = {
+		.prov_version = rxm_ep->rxm_info->fabric_attr->prov_version,
 		.proto = {
 			.ctrl_version = RXM_CTRL_VERSION,
 			.op_version = RXM_OP_VERSION,
