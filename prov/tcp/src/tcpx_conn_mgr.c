@@ -38,6 +38,40 @@
 #include <sys/types.h>
 #include <ofi_util.h>
 
+static void discard_cm_data(SOCKET fd, size_t discard_sz)
+{
+	char tmp_buf;
+	ssize_t ret = 0;
+	size_t i;
+
+	for (i = 0; ((i < discard_sz) && (ret > 0)); i++) {
+		ret = ofi_recv_socket(fd, &tmp_buf, 1,
+				      MSG_WAITALL);
+	}
+}
+
+static int read_cm_data(SOCKET fd, struct tcpx_cm_context *cm_ctx,
+			struct ofi_ctrl_hdr *hdr)
+{
+	cm_ctx->cm_data_sz = ntohs(hdr->seg_size);
+	if (cm_ctx->cm_data_sz) {
+		size_t data_sz = MIN(cm_ctx->cm_data_sz,
+				     TCPX_MAX_CM_DATA_SIZE);
+		ssize_t ret = ofi_recv_socket(fd, cm_ctx->cm_data,
+					      data_sz, MSG_WAITALL);
+		if ((size_t) ret != data_sz)
+			return -FI_EIO;
+		cm_ctx->cm_data_sz = data_sz;
+
+		if (OFI_UNLIKELY(cm_ctx->cm_data_sz >
+					TCPX_MAX_CM_DATA_SIZE)) {
+			discard_cm_data(fd, cm_ctx->cm_data_sz -
+					TCPX_MAX_CM_DATA_SIZE);
+		}
+	}
+	return FI_SUCCESS;
+}
+
 static int rx_cm_data(SOCKET fd, struct ofi_ctrl_hdr *hdr,
 		      int type, struct tcpx_cm_context *cm_ctx)
 {
@@ -48,23 +82,14 @@ static int rx_cm_data(SOCKET fd, struct ofi_ctrl_hdr *hdr,
 	if (ret != sizeof(*hdr))
 		return -FI_EIO;
 
-	if (hdr->type != type)
-		return -FI_ECONNREFUSED;
-
 	if (hdr->version != OFI_CTRL_VERSION)
 		return -FI_ENOPROTOOPT;
 
-	cm_ctx->cm_data_sz = ntohs(hdr->seg_size);
-	if (cm_ctx->cm_data_sz) {
-		if (cm_ctx->cm_data_sz > TCPX_MAX_CM_DATA_SIZE)
-			return -FI_EINVAL;
-
-		ret = ofi_recv_socket(fd, cm_ctx->cm_data,
-				      cm_ctx->cm_data_sz, MSG_WAITALL);
-		if ((size_t) ret != cm_ctx->cm_data_sz)
-			return -FI_EIO;
+	ret = read_cm_data(fd, cm_ctx, hdr);
+	if (hdr->type != type) {
+		ret = -FI_ECONNREFUSED;
 	}
-	return FI_SUCCESS;
+	return ret;
 }
 
 static int tx_cm_data(SOCKET fd, uint8_t type, struct tcpx_cm_context *cm_ctx)
@@ -156,9 +181,9 @@ int tcpx_eq_wait_try_func(void *arg)
 static void client_recv_connresp(struct util_wait *wait,
 				 struct tcpx_cm_context *cm_ctx)
 {
-	struct fi_eq_err_entry err_entry;
+	struct fi_eq_err_entry err_entry = { 0 };
 	struct tcpx_ep *ep;
-	int ret;
+	ssize_t ret;
 
 	assert(cm_ctx->fid->fclass == FI_CLASS_EP);
 	ep = container_of(cm_ctx->fid, struct tcpx_ep, util_ep.ep_fid.fid);
@@ -178,15 +203,26 @@ static void client_recv_connresp(struct util_wait *wait,
 	free(cm_ctx);
 	return;
 err:
-	memset(&err_entry, 0, sizeof err_entry);
 	err_entry.fid = cm_ctx->fid;
 	err_entry.context = cm_ctx->fid->context;
 	err_entry.err = -ret;
-	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "fi_eq_write the conn refused %d\n", ret);
-
+	if (cm_ctx->cm_data_sz) {
+		err_entry.err_data = calloc(1, cm_ctx->cm_data_sz);
+		if (OFI_LIKELY(err_entry.err_data != NULL)) {
+			memcpy(err_entry.err_data, cm_ctx->cm_data,
+			       cm_ctx->cm_data_sz);
+			err_entry.err_data_size = cm_ctx->cm_data_sz;
+		}
+	}
+	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL,
+	       "fi_eq_write the conn refused %"PRId64"\n", ret);
 	free(cm_ctx);
-	fi_eq_write(&ep->util_ep.eq->eq_fid, FI_NOTIFY,
-		    &err_entry, sizeof(err_entry), UTIL_FLAG_ERROR);
+	/* `err_entry.err_data` must live until it is passed to user */
+	ret = fi_eq_write(&ep->util_ep.eq->eq_fid, FI_NOTIFY,
+			  &err_entry, sizeof(err_entry), UTIL_FLAG_ERROR);
+	if (OFI_UNLIKELY(ret < 0)) {
+		free(err_entry.err_data);
+	}
 }
 
 static void server_send_cm_accept(struct util_wait *wait,
