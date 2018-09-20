@@ -734,6 +734,7 @@ struct util_cmap *rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep)
 
 	if (rxm_ep->util_ep.domain->data_progress == FI_PROGRESS_AUTO) {
 		attr.cm_thread_func = rxm_conn_progress;
+		attr.cleanup = NULL;
 	} else {
 		attr.cm_thread_func = rxm_conn_eq_read;
 		attr.cleanup = rxm_conn_cleanup;
