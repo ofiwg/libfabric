@@ -53,6 +53,7 @@
 #include <ofi_list.h>
 #include <ofi_util.h>
 #include <ofi_tree.h>
+#include <ofi_atomic.h>
 #include "rxd_proto.h"
 
 #ifndef _RXD_H_
@@ -63,7 +64,6 @@
 #define RXD_PROTOCOL_VERSION 	(1)
 #define RXD_FI_VERSION 		FI_VERSION(1,6)
 
-#define RXD_INJECT_SIZE		4096
 #define RXD_MAX_MTU_SIZE	4096
 
 #define RXD_MAX_TX_BITS 	10
@@ -97,7 +97,7 @@ extern struct util_prov rxd_util_prov;
 extern struct fi_ops_msg rxd_ops_msg;
 extern struct fi_ops_tagged rxd_ops_tagged;
 extern struct fi_ops_rma rxd_ops_rma;
-
+extern struct fi_ops_atomic rxd_ops_atomic;
 
 struct rxd_fabric {
 	struct util_fabric util_fabric;
@@ -223,7 +223,10 @@ struct rxd_x_entry {
 	uint32_t flags;
 	uint64_t ignore;
 	uint8_t iov_count;
+	uint8_t res_count;
+
 	struct iovec iov[RXD_IOV_LIMIT];
+	struct iovec res_iov[RXD_IOV_LIMIT];
 
 	struct fi_cq_tagged_entry cq_entry;
 
@@ -307,6 +310,8 @@ int rxd_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		struct fid_cq **cq_fid, void *context);
 int rxd_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		  struct fid_cntr **cntr_fid, void *context);
+int rxd_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
+		     enum fi_op op, struct fi_atomic_attr *attr, uint64_t flags);
 
 /* AV sub-functions */
 int rxd_av_insert_dg_addr(struct rxd_av *av, const void *addr,
@@ -328,11 +333,16 @@ void rxd_insert_unacked(struct rxd_ep *ep, fi_addr_t peer,
 			struct rxd_pkt_entry *pkt_entry);
 ssize_t rxd_ep_send_rts(struct rxd_ep *rxd_ep, int dg_addr);
 int rxd_ep_send_op(struct rxd_ep *rxd_ep, struct rxd_x_entry *tx_entry,
-		   const struct fi_rma_iov *rma_iov, size_t rma_count);
+		   const struct fi_rma_iov *rma_iov, size_t rma_count,
+		   const struct iovec *comp_iov, size_t comp_count,
+		   enum fi_datatype datatype, enum fi_op atomic_op);
+void rxd_init_data_pkt(struct rxd_ep *ep, struct rxd_x_entry *tx_entry,
+		       struct rxd_pkt_entry *pkt_entry);
 
 /* Tx/Rx entry sub-functions */
 struct rxd_x_entry *rxd_tx_entry_init(struct rxd_ep *ep, const struct iovec *iov,
-				      size_t iov_count, uint64_t data, uint64_t tag,
+				      size_t iov_count, const struct iovec *res_iov,
+				      size_t res_count, uint64_t data, uint64_t tag,
 				      void *context, fi_addr_t addr, uint32_t op,
 				      uint32_t flags);
 struct rxd_x_entry *rxd_rx_entry_init(struct rxd_ep *ep,

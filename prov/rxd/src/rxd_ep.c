@@ -242,9 +242,8 @@ void rxd_set_timeout(struct rxd_pkt_entry *pkt_entry)
 			      MIN(1 << (++pkt_entry->retry_cnt), 4000);
 }
 
-static void rxd_init_data_pkt(struct rxd_ep *ep,
-			      struct rxd_x_entry *tx_entry,
-			      struct rxd_pkt_entry *pkt_entry)
+void rxd_init_data_pkt(struct rxd_ep *ep, struct rxd_x_entry *tx_entry,
+		       struct rxd_pkt_entry *pkt_entry)
 {
 	struct rxd_data_pkt *data_pkt = (struct rxd_data_pkt *) (pkt_entry->pkt);
 	uint32_t seg_size;
@@ -275,7 +274,8 @@ static void rxd_init_data_pkt(struct rxd_ep *ep,
 }
 
 struct rxd_x_entry *rxd_tx_entry_init(struct rxd_ep *ep, const struct iovec *iov,
-				      size_t iov_count, uint64_t data, uint64_t tag,
+				      size_t iov_count, const struct iovec *res_iov,
+				      size_t res_count, uint64_t data, uint64_t tag,
 				      void *context, fi_addr_t addr, uint32_t op,
 				      uint32_t flags)
 {
@@ -299,8 +299,11 @@ struct rxd_x_entry *rxd_tx_entry_init(struct rxd_ep *ep, const struct iovec *iov
 	tx_entry->bytes_done = 0;
 	tx_entry->next_seg_no = 0;
 	tx_entry->iov_count = iov_count;
-	memcpy(&tx_entry->iov[0], iov,
-	       sizeof(*iov) * iov_count);
+	memcpy(&tx_entry->iov[0], iov, sizeof(*iov) * iov_count);
+	if (res_count) {
+		tx_entry->res_count = res_count;
+		memcpy(&tx_entry->res_iov[0], res_iov, sizeof(*res_iov) * res_count);
+	}
 
 	if (flags & RXD_REMOTE_CQ_DATA)
 		tx_entry->cq_entry.data = data;
@@ -311,7 +314,8 @@ struct rxd_x_entry *rxd_tx_entry_init(struct rxd_ep *ep, const struct iovec *iov
 	tx_entry->cq_entry.flags = ofi_tx_cq_flags(op);
 	tx_entry->cq_entry.tag = tag;
 
-	if (tx_entry->cq_entry.len <= rxd_domain->max_inline_sz) {
+	if (tx_entry->cq_entry.len <= rxd_domain->max_inline_sz ||
+	    tx_entry->cq_entry.flags & FI_ATOMIC) {
 		tx_entry->num_segs = 1;
 	} else if (tx_entry->cq_entry.flags & FI_READ) {
 		tx_entry->num_segs = ofi_div_ceil(tx_entry->cq_entry.len,
@@ -322,7 +326,8 @@ struct rxd_x_entry *rxd_tx_entry_init(struct rxd_ep *ep, const struct iovec *iov
 						  rxd_domain->max_seg_sz) + 1;
 	}
 
-	if (tx_entry->cq_entry.flags & FI_READ &&
+	if ((tx_entry->op == RXD_READ_REQ || tx_entry->op == RXD_ATOMIC_FETCH ||
+	     tx_entry->op == RXD_ATOMIC_COMPARE) &&
 	    ep->peers[tx_entry->peer].unacked_cnt < rxd_env.max_unacked &&
 	    ep->peers[tx_entry->peer].peer_addr != FI_ADDR_UNSPEC &&
 	    !ep->peers[tx_entry->peer].blocking)
@@ -432,11 +437,14 @@ ssize_t rxd_ep_send_rts(struct rxd_ep *rxd_ep, int dg_addr)
 }
 
 int rxd_ep_send_op(struct rxd_ep *rxd_ep, struct rxd_x_entry *tx_entry,
-		   const struct fi_rma_iov *rma_iov, size_t rma_count)
+		   const struct fi_rma_iov *rma_iov, size_t rma_count,
+		   const struct iovec *comp_iov, size_t comp_count,
+		   enum fi_datatype datatype, enum fi_op atomic_op)
 {
 	struct rxd_pkt_entry *pkt_entry;
 	struct rxd_domain *rxd_domain = rxd_ep_domain(rxd_ep);
 	struct rxd_op_pkt *op;
+	size_t len;
 	int ret = 0;
 
 	pkt_entry = rxd_get_tx_pkt(rxd_ep);
@@ -464,13 +472,26 @@ int rxd_ep_send_op(struct rxd_ep *rxd_ep, struct rxd_x_entry *tx_entry,
 							 rxd_domain->max_inline_sz,
 							 tx_entry->iov,
 							 tx_entry->iov_count, 0);
+		if (tx_entry->op == RXD_ATOMIC_COMPARE) {
+			len = ofi_copy_from_iov(op->msg + tx_entry->cq_entry.len,
+						tx_entry->cq_entry.len,
+						comp_iov, comp_count, 0);
+			if (len != tx_entry->cq_entry.len) {
+				FI_WARN(&rxd_prov, FI_LOG_EP_CTRL,
+					"compare data length mismatch\n");
+			}
+		}
 	}
 
 	pkt_entry->pkt_size = tx_entry->bytes_done + sizeof(*op) + rxd_ep->prefix_size;
 
-	if (tx_entry->cq_entry.flags & FI_RMA) {
+	if (rma_count) {
 		memcpy(op->rma, rma_iov, sizeof(*rma_iov) * rma_count);
 		op->iov_count = rma_count;
+		if (tx_entry->cq_entry.flags & FI_ATOMIC) {
+			op->datatype = datatype;
+			op->atomic_op = atomic_op;
+		}
 	}
 
 	if (rxd_ep->peers[tx_entry->peer].unacked_cnt < rxd_env.max_unacked &&
@@ -488,7 +509,8 @@ int rxd_ep_send_op(struct rxd_ep *rxd_ep, struct rxd_x_entry *tx_entry,
 		tx_entry->op_pkt = pkt_entry;
 	}
 
-	if (tx_entry->op != RXD_READ_REQ && !(tx_entry->flags & RXD_INJECT))
+	if (tx_entry->op != RXD_READ_REQ && !(tx_entry->cq_entry.flags & FI_ATOMIC) &&
+	    !(tx_entry->flags & RXD_INJECT))
 		ret = rxd_ep_post_data_pkts(rxd_ep, tx_entry);
 
 	return ret == -FI_ENOMEM ? ret : 0;
@@ -518,7 +540,7 @@ void rxd_ep_send_ack(struct rxd_ep *rxd_ep, fi_addr_t peer)
 	ack->pkt_hdr.tx_id = rxd_ep->peers[peer].curr_tx_id;
 	ack->pkt_hdr.rx_id = rxd_ep->peers[peer].curr_rx_id;
 	rxd_ep->peers[peer].last_tx_ack = ack->pkt_hdr.seq_no;
-	
+
 	ret = rxd_ep_retry_pkt(rxd_ep, pkt_entry);
 	if (ret)
 		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "Unable to send ack\n");
@@ -807,9 +829,8 @@ static void rxd_ep_progress(struct util_ep *util_ep)
 			if (ret)
 				break;
 		}
-		if (dlist_empty(&peer->unacked)) {
+		if (dlist_empty(&peer->unacked))
 			rxd_progress_tx_list(ep, peer);
-		}
 	}
 
 out:
@@ -977,6 +998,7 @@ int rxd_endpoint(struct fid_domain *domain, struct fi_info *info,
 	rxd_ep->util_ep.ep_fid.msg = &rxd_ops_msg;
 	rxd_ep->util_ep.ep_fid.tagged = &rxd_ops_tagged;
 	rxd_ep->util_ep.ep_fid.rma = &rxd_ops_rma;
+	rxd_ep->util_ep.ep_fid.atomic = &rxd_ops_atomic;
 
 	*ep = &rxd_ep->util_ep.ep_fid;
 	return 0;
