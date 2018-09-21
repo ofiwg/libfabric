@@ -348,36 +348,6 @@ static int rxd_matching_ids(struct rxd_x_entry *rx_entry,
 	       (rx_entry->msg_id == pkt_hdr->msg_id);
 }
 
-static int rxd_transfer_pending(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
-{
-	struct rxd_pkt_entry *pkt_entry;
-	struct rxd_data_pkt *data;
-
-	if (ep->peers[tx_entry->peer].blocking)
-		return 0;
-
-	while (ep->peers[tx_entry->peer].unacked_cnt < rxd_env.max_unacked &&
-	       !dlist_empty(&ep->peers[tx_entry->peer].pending)) {
-		pkt_entry = container_of((&ep->peers[tx_entry->peer].pending)->next,
-					 struct rxd_pkt_entry, d_entry);
-		data = (struct rxd_data_pkt *) (pkt_entry->pkt);
-		if (data->pkt_hdr.msg_id != tx_entry->msg_id)
-			return 0;
-
-		data->pkt_hdr.rx_id = tx_entry->rx_id;
-		data->pkt_hdr.seq_no = tx_entry->start_seq +
-				       data->pkt_hdr.seg_no;
-		data->pkt_hdr.peer = ep->peers[tx_entry->peer].peer_addr;
-		if (data->base_hdr.type != RXD_DATA_READ)
-			data->pkt_hdr.seq_no++;
-
-		ep->peers[tx_entry->peer].pending_cnt--;
-		rxd_insert_unacked(ep, tx_entry->peer, pkt_entry);
-	}
-
-	return ep->peers[tx_entry->peer].unacked_cnt < rxd_env.max_unacked;
-}
-
 static int rxd_verify_active(struct rxd_ep *ep, fi_addr_t addr, fi_addr_t peer_addr)
 {
 	if (ep->peers[addr].peer_addr == peer_addr)
@@ -444,20 +414,14 @@ void rxd_progress_tx_list(struct rxd_ep *ep, struct rxd_peer *peer)
 			continue;
 		}
 
-		if (tx_entry->flags & RXD_INJECT) {
-			if (!rxd_transfer_pending(ep, tx_entry))
-				break;
-		} else if (!rxd_ep_post_data_pkts(ep, tx_entry)) {
+		if (!rxd_ep_post_data_pkts(ep, tx_entry))
 			break;
-		}
 	}
 }
 
 static void rxd_update_peer(struct rxd_ep *ep, fi_addr_t peer, fi_addr_t dg_addr)
 {
 	struct rxd_pkt_entry *pkt_entry;
-	struct rxd_data_pkt *data;
-	struct rxd_op_pkt *op;
 
 	if (rxd_verify_active(ep, peer, dg_addr))
 		return;
@@ -473,16 +437,6 @@ static void rxd_update_peer(struct rxd_ep *ep, fi_addr_t peer, fi_addr_t dg_addr
 		}
 	}
 
-	dlist_foreach_container(&ep->peers[peer].pending, struct rxd_pkt_entry,
-				pkt_entry, d_entry) {
-		if (rxd_pkt_type(pkt_entry) <=  RXD_ATOMIC_COMPARE) {
-			op = (struct rxd_op_pkt *) (pkt_entry->pkt);
-			op->pkt_hdr.peer = dg_addr;
-		} else {
-			data = (struct rxd_data_pkt *) (pkt_entry->pkt);
-			data->pkt_hdr.peer = dg_addr;
-		}
-	}
 	rxd_progress_tx_list(ep, &ep->peers[peer]);
 }
 

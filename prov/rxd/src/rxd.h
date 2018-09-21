@@ -125,7 +125,6 @@ struct rxd_peer {
 	uint16_t tx_window;//unused for now, will be used for slow start
 
 	uint16_t unacked_cnt;
-	int pending_cnt;
 
 	uint32_t curr_rx_id;
 	uint32_t curr_tx_id;
@@ -135,7 +134,6 @@ struct rxd_peer {
 	struct dlist_entry rx_list;
 	struct dlist_entry rma_rx_list;
 	struct dlist_entry unacked;
-	struct dlist_entry pending;
 	struct dlist_entry buf_ops;
 	struct dlist_entry buf_cq;
 };
