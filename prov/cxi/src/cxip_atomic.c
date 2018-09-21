@@ -608,8 +608,7 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 	}
 
 	/* Issue IDC AMO command */
-	ret = cxi_cq_emit_idc_amo(txc->tx_cmdq, &cmd.idc_amo, len,
-				  result != NULL);
+	ret = cxi_cq_emit_idc_amo(txc->tx_cmdq, &cmd.idc_amo, result != NULL);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to issue IDC AMO command: %d\n", ret);
 
@@ -971,4 +970,3 @@ struct fi_ops_atomic cxip_ep_atomic = {
 	.readwritevalid = cxip_ep_fetch_atomic_valid,
 	.compwritevalid = cxip_ep_comp_atomic_valid,
 };
-
