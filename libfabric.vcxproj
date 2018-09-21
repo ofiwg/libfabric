@@ -285,6 +285,10 @@
     <ClCompile Include="prov\rxd\src\rxd_cq.c" />
     <ClCompile Include="prov\rxd\src\rxd_domain.c" />
     <ClCompile Include="prov\rxd\src\rxd_ep.c" />
+    <ClCompile Include="prov\rxd\src\rxd_msg.c" />
+    <ClCompile Include="prov\rxd\src\rxd_tagged.c" />
+    <ClCompile Include="prov\rxd\src\rxd_rma.c" />
+    <ClCompile Include="prov\rxd\src\rxd_atomic.c" />
     <ClCompile Include="prov\rxd\src\rxd_fabric.c" />
     <ClCompile Include="prov\rxd\src\rxd_init.c">
       <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug-v140|x64'">
@@ -634,6 +638,7 @@
     <ClInclude Include="prov\netdir\src\netdir_unexp.h" />
     <ClInclude Include="prov\netdir\src\netdir_util.h" />
     <ClInclude Include="prov\rxd\src\rxd.h" />
+    <ClInclude Include="prov\rxd\src\rxd_proto.h" />
     <ClInclude Include="prov\rxm\src\rxm.h" />
     <ClInclude Include="prov\netdir\src\netdir.h" />
     <ClInclude Include="prov\netdir\src\netdir_iface.h" />

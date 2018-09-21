@@ -11,6 +11,7 @@ _rxd_files = \
 	prov/rxd/src/rxd_msg.c		\
 	prov/rxd/src/rxd_tagged.c	\
 	prov/rxd/src/rxd_rma.c		\
+	prov/rxd/src/rxd_atomic.c	\
 	prov/rxd/src/rxd.h		\
 	prov/rxd/src/rxd_proto.h
 
