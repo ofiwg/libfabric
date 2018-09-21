@@ -1438,29 +1438,31 @@ struct fi_ops_cm rxd_ep_cm = {
 };
 
 static void rxd_remove_from_list(struct rxd_ep *ep, struct dlist_entry *list,
-				 uint32_t msg_id)
+				 uint32_t tx_id)
 {
 	struct dlist_entry *entry = list->next;
 	struct rxd_pkt_entry *pkt_entry;
 	struct rxd_pkt_hdr *hdr;
+	int removed = -1; 
 
 	while (entry) {
 		pkt_entry = container_of(entry, struct rxd_pkt_entry, d_entry);
 		entry = entry->next;
 		hdr = rxd_get_pkt_hdr(pkt_entry);
-		if (hdr->msg_id > msg_id)
+		if (hdr->tx_id != tx_id && removed == tx_id)
 			break;
-		if (hdr->msg_id == msg_id) {
+		if (hdr->tx_id == tx_id) {
 			dlist_remove(&pkt_entry->d_entry);
 			rxd_release_tx_pkt(ep, pkt_entry);
+			removed = tx_id;
 		}
 	}
 }
 
 static void rxd_ep_remove_msg_pkts(struct rxd_ep *ep, struct rxd_peer *peer,
-				   uint32_t msg_id)
+				   uint32_t tx_id)
 {
-	rxd_remove_from_list(ep, &peer->unacked, msg_id);
+	rxd_remove_from_list(ep, &peer->unacked, tx_id);
 }
 
 static void rxd_ep_progress(struct util_ep *util_ep)
@@ -1505,7 +1507,7 @@ static void rxd_ep_progress(struct util_ep *util_ep)
 				hdr = rxd_get_pkt_hdr(pkt_entry);
 				if (pkt_entry->retry_cnt > RXD_MAX_PKT_RETRY) {
 					memset(&err_entry, 0, sizeof(struct fi_cq_err_entry));
-					rxd_ep_remove_msg_pkts(ep, peer, hdr->msg_id);
+					rxd_ep_remove_msg_pkts(ep, peer, hdr->tx_id);
 					tx_entry = &ep->tx_fs->entry[hdr->tx_id].buf;
 					rxd_tx_entry_free(ep, tx_entry);
 					err_entry.op_context = tx_entry->cq_entry.op_context;
