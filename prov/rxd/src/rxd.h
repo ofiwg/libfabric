@@ -117,7 +117,8 @@ struct rxd_peer {
 	fi_addr_t peer_addr;
 	uint32_t tx_seq_no;
 	uint32_t rx_seq_no;
-	uint32_t last_ack_seq_no;
+	uint32_t last_rx_ack;
+	uint32_t last_tx_ack;
 	uint32_t tx_msg_id;
 	uint32_t rx_msg_id;
 	uint16_t rx_window;//constant at MAX_UNACKED for now
@@ -167,6 +168,7 @@ struct rxd_ep {
 	size_t tx_size;
 	size_t prefix_size;
 	uint32_t posted_bufs;
+	uint32_t rx_list_size;
 	int do_local_mr;
 
 	struct util_buf_pool *tx_pkt_pool;
@@ -224,6 +226,7 @@ struct rxd_x_entry {
 
 	struct fi_cq_tagged_entry cq_entry;
 
+	struct rxd_pkt_entry *op_pkt;
 	struct dlist_entry entry;
 };
 DECLARE_FREESTACK(struct rxd_x_entry, rxd_x_fs);
@@ -415,6 +418,7 @@ void rxd_handle_send_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp);
 void rxd_handle_recv_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp);
 void rxd_progress_op(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry,
 		     struct rxd_x_entry *rx_entry);
+void rxd_progress_tx_list(struct rxd_ep *ep, struct rxd_peer *peer);
 
 /* CQ sub-functions */
 void rxd_cq_report_error(struct rxd_cq *cq, struct fi_cq_err_entry *err_entry);
