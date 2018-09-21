@@ -1633,7 +1633,7 @@ ssize_t psmx2_atomic_compwritev_generic(struct fid_ep *ep,
 	int am_flags = PSM2_AM_FLAG_ASYNC;
 	int chunk_size;
 	size_t idx;
-	size_t len, compare_len, result_len, iov_size;
+	size_t len, iov_size;
 	uint8_t *buf, *compare, *result;
 	void *desc0, *compare_desc0, *result_desc0;
 	int err;
@@ -1671,11 +1671,9 @@ ssize_t psmx2_atomic_compwritev_generic(struct fid_ep *ep,
 		result_count--;
 
 	len = psmx2_ioc_size(iov, count, datatype);
-	compare_len = psmx2_ioc_size(comparev, compare_count, datatype);
-	result_len = psmx2_ioc_size(resultv, result_count, datatype);
 
-	assert(compare_len >= len);
-	assert(result_len >= len);
+	assert(psmx2_ioc_size(comparev, compare_count, datatype) >= len);
+	assert(psmx2_ioc_size(resultv, result_count, datatype) >= len);
 
 	av = ep_priv->av;
 	if (av && PSMX2_SEP_ADDR_TEST(dest_addr)) {
