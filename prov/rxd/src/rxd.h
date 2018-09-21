@@ -53,6 +53,7 @@
 #include <ofi_list.h>
 #include <ofi_util.h>
 #include <ofi_tree.h>
+#include "rxd_proto.h"
 
 #ifndef _RXD_H_
 #define _RXD_H_
@@ -62,8 +63,6 @@
 #define RXD_PROTOCOL_VERSION 	(1)
 #define RXD_FI_VERSION 		FI_VERSION(1,6)
 
-#define RXD_IOV_LIMIT		4
-#define RXD_NAME_LENGTH		64
 #define RXD_INJECT_SIZE		4096
 #define RXD_MAX_MTU_SIZE	4096
 
@@ -95,6 +94,10 @@ extern struct fi_provider rxd_prov;
 extern struct fi_info rxd_info;
 extern struct fi_fabric_attr rxd_fabric_attr;
 extern struct util_prov rxd_util_prov;
+extern struct fi_ops_msg rxd_ops_msg;
+extern struct fi_ops_tagged rxd_ops_tagged;
+extern struct fi_ops_rma rxd_ops_rma;
+
 
 struct rxd_fabric {
 	struct util_fabric util_fabric;
@@ -244,82 +247,6 @@ static inline uint32_t rxd_flags(uint64_t fi_flags)
 #define rxd_ep_rx_flags(rxd_ep) (rxd_flags((rxd_ep)->util_ep.rx_op_flags))
 #define rxd_ep_tx_flags(rxd_ep) (rxd_flags((rxd_ep)->util_ep.tx_op_flags))
 
-
-enum rxd_msg_type {
-	RXD_MSG			= ofi_op_msg,
-	RXD_TAGGED		= ofi_op_tagged,
-	RXD_READ_REQ		= ofi_op_read_req,
-	RXD_WRITE		= ofi_op_write,
-	RXD_ATOMIC		= ofi_op_atomic,
-	RXD_ATOMIC_FETCH	= ofi_op_atomic_fetch,
-	RXD_ATOMIC_COMPARE	= ofi_op_atomic_compare,
-	RXD_RTS,
-	RXD_CTS,
-	RXD_ACK,
-	RXD_DATA,
-	RXD_DATA_READ,
-	RXD_NO_OP,
-};
-
-struct rxd_base_hdr {
-	uint32_t version;
-	uint32_t type;
-};
-
-struct rxd_pkt_hdr {
-	uint32_t	flags;
-	uint32_t	tx_id;
-	uint32_t	rx_id;
-	uint32_t	msg_id;
-	uint32_t	seg_no;
-	uint32_t	seq_no;
-	fi_addr_t	peer;
-};
-
-struct rxd_rts_pkt {
-	struct rxd_base_hdr	base_hdr;
-	uint64_t		dg_addr;
-	uint8_t			source[RXD_NAME_LENGTH];
-};
-
-struct rxd_cts_pkt {
-	struct	rxd_base_hdr	base_hdr;
-	uint64_t		dg_addr;
-	uint64_t		peer_addr;
-};
-
-struct rxd_ack_pkt {
-	struct rxd_base_hdr	base_hdr;
-	struct rxd_pkt_hdr	pkt_hdr;
-	//TODO fill in more fields? Selective ack?
-};
-
-struct rxd_op_pkt {
-	struct rxd_base_hdr	base_hdr;
-	struct rxd_pkt_hdr	pkt_hdr;
-
-	uint64_t		num_segs;
-	union {
-		uint64_t		tag;
-		struct {
-			uint64_t		iov_count;
-			struct ofi_rma_iov	rma[RXD_IOV_LIMIT];
-		};
-	};
-
-	uint64_t		cq_data;
-	uint64_t		size;
-
-	char			msg[];
-}; 
-
-struct rxd_data_pkt {
-	struct rxd_base_hdr	base_hdr;
-	struct rxd_pkt_hdr	pkt_hdr;
-
-	char			msg[];
-};
-
 struct rxd_pkt_entry {
 	struct dlist_entry d_entry;
 	struct slist_entry s_entry;//TODO - keep both or make separate tx/rx pkt structs
@@ -399,8 +326,15 @@ int rxd_ep_retry_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry);
 ssize_t rxd_ep_post_data_pkts(struct rxd_ep *ep, struct rxd_x_entry *tx_entry);
 void rxd_insert_unacked(struct rxd_ep *ep, fi_addr_t peer,
 			struct rxd_pkt_entry *pkt_entry);
+ssize_t rxd_ep_send_rts(struct rxd_ep *rxd_ep, int dg_addr);
+int rxd_ep_send_op(struct rxd_ep *rxd_ep, struct rxd_x_entry *tx_entry,
+		   const struct fi_rma_iov *rma_iov, size_t rma_count);
 
 /* Tx/Rx entry sub-functions */
+struct rxd_x_entry *rxd_tx_entry_init(struct rxd_ep *ep, const struct iovec *iov,
+				      size_t iov_count, uint64_t data, uint64_t tag,
+				      void *context, fi_addr_t addr, uint32_t op,
+				      uint32_t flags);
 struct rxd_x_entry *rxd_rx_entry_init(struct rxd_ep *ep,
 			const struct iovec *iov, size_t iov_count, uint64_t tag,
 			uint64_t ignore, void *context, fi_addr_t addr,
@@ -408,6 +342,19 @@ struct rxd_x_entry *rxd_rx_entry_init(struct rxd_ep *ep,
 void rxd_tx_entry_free(struct rxd_ep *ep, struct rxd_x_entry *tx_entry);
 void rxd_rx_entry_free(struct rxd_ep *ep, struct rxd_x_entry *rx_entry);
 void rxd_set_timeout(struct rxd_pkt_entry *pkt_entry);
+
+/* Generic message functions */
+ssize_t rxd_ep_generic_recvmsg(struct rxd_ep *rxd_ep, const struct iovec *iov,
+			       size_t iov_count, fi_addr_t addr, uint64_t tag,
+			       uint64_t ignore, void *context, uint32_t op,
+			       uint32_t rxd_flags);
+ssize_t rxd_ep_generic_sendmsg(struct rxd_ep *rxd_ep, const struct iovec *iov,
+			       size_t iov_count, fi_addr_t addr, uint64_t tag,
+			       uint64_t data, void *context, uint32_t op,
+			       uint32_t rxd_flags);
+ssize_t rxd_ep_generic_inject(struct rxd_ep *rxd_ep, const struct iovec *iov,
+			      size_t iov_count, fi_addr_t addr, uint64_t tag,
+			      uint64_t data, uint32_t op, uint32_t rxd_flags);
 
 /* Progress functions */
 void rxd_tx_entry_progress(struct rxd_ep *ep, struct rxd_x_entry *tx_entry,
