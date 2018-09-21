@@ -41,11 +41,7 @@
 
 static struct rxm_conn *rxm_key2conn(struct rxm_ep *rxm_ep, uint64_t key)
 {
-	struct util_cmap_handle *handle;
-	handle = ofi_cmap_key2handle(rxm_ep->util_ep.cmap, key);
-	if (!handle)
-		return NULL;
-	return container_of(handle, struct rxm_conn, handle);
+	return (struct rxm_conn *)ofi_cmap_key2handle(rxm_ep->util_ep.cmap, key);
 }
 
 static const char *rxm_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
