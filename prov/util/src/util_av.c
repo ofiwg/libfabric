@@ -765,7 +765,7 @@ int ip_av_get_index(struct util_av *av, const void *addr)
 void ofi_av_write_event(struct util_av *av, uint64_t data,
 			int err, void *context)
 {
-	struct fi_eq_err_entry entry;
+	struct fi_eq_err_entry entry = { 0 };
 	size_t size;
 	ssize_t ret;
 	uint64_t flags;
