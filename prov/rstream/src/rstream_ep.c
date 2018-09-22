@@ -243,7 +243,6 @@ int rstream_ep_open(struct fid_domain *domain, struct fi_info *info,
 		rstream_tx_ctx_fs_create(rstream_ep->qp_win.max_tx_credits,
 			NULL, NULL);
 
-	assert(rstream_ep->tx_ctxs);
 	rstream_ep->rx_ctxs = (struct fi_context *)
 		calloc(rstream_ep->qp_win.max_rx_credits,
 		sizeof(*rstream_ep->rx_ctxs));
