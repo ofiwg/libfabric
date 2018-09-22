@@ -102,6 +102,8 @@ struct rstream_ctx_data {
 	size_t len;
 };
 
+DECLARE_FREESTACK(struct rstream_ctx_data, rstream_tx_ctx_fs);
+
 struct rstream_tx_ctx {
 	struct rstream_ctx_data *tx_ctxs;
 	uint32_t num_in_use;
@@ -134,7 +136,7 @@ struct rstream_ep {
 	struct rstream_window qp_win;
 	struct fi_context *rx_ctxs;
 	uint32_t rx_ctx_index;
-	struct rstream_tx_ctx tx_ctx;
+	struct rstream_tx_ctx_fs *tx_ctxs;
 	struct rstream_cq_data rx_cq_data;
 };
 

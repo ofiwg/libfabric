@@ -84,34 +84,27 @@ static struct fi_context *rstream_get_rx_ctx(struct rstream_ep *ep)
 
 static struct fi_context *rstream_get_tx_ctx(struct rstream_ep *ep, int len)
 {
-	struct rstream_tx_ctx *ctx = &ep->tx_ctx;
-	struct rstream_ctx_data *rtn_ctx;
+	struct rstream_tx_ctx_fs *fs = ep->tx_ctxs;
+	struct rstream_ctx_data *rtn_ctx = freestack_pop(fs);
 
-	if (ctx->num_in_use == ep->qp_win.max_tx_credits)
+	if (!rtn_ctx)
 		return NULL;
 
-	rtn_ctx = &ctx->tx_ctxs[ctx->free_index];
-	ctx->num_in_use = ctx->num_in_use + 1;
-	ctx->free_index = (ctx->free_index + 1) % ep->qp_win.max_tx_credits;
 	rtn_ctx->len = len;
-
 	return &rtn_ctx->ctx;
 }
 
 static int rstream_return_tx_ctx(struct fi_context *ctx_ptr,
 	struct rstream_ep *ep)
 {
-	struct rstream_tx_ctx *ctx = &ep->tx_ctx;
-
-	if (!ctx->num_in_use)
-		return 0;
+	int len;
+	struct rstream_tx_ctx_fs *fs = ep->tx_ctxs;
 
 	struct rstream_ctx_data *ctx_data = (struct rstream_ctx_data *)ctx_ptr;
-	assert(ctx_data == &ctx->tx_ctxs[ctx->front]);
-	ctx->front = (ctx->front + 1) % ep->qp_win.max_tx_credits;
-	ctx->num_in_use = ctx->num_in_use - 1;
+	len = ctx_data->len;
+	freestack_push(fs, ctx_data);
 
-	return ctx_data->len;
+	return len;
 }
 
 static ssize_t rstream_inject(struct fid_ep *ep_fid, const void *buf, size_t len,

@@ -20,7 +20,9 @@ static int rstream_ep_close(fid_t fid)
 		return ret;
 
 	ofi_endpoint_close(&rstream_ep->util_ep);
-	free(rstream_ep->tx_ctx.tx_ctxs);
+
+	rstream_tx_ctx_fs_free(rstream_ep->tx_ctxs);
+
 	free(rstream_ep->rx_ctxs);
 	free(rstream_ep);
 	return 0;
@@ -237,10 +239,11 @@ int rstream_ep_open(struct fid_domain *domain, struct fi_info *info,
 	rstream_ep->qp_win.ctrl_credits = RSTREAM_MAX_CTRL_TX;
 	rstream_ep->qp_win.max_rx_credits = rstream_info.rx_attr->size;
 
-	rstream_ep->tx_ctx.tx_ctxs = (struct rstream_ctx_data *)
-		calloc(rstream_ep->qp_win.max_tx_credits,
-		sizeof(*rstream_ep->tx_ctx.tx_ctxs));
-	assert(rstream_ep->tx_ctx.tx_ctxs);
+	rstream_ep->tx_ctxs =
+		rstream_tx_ctx_fs_create(rstream_ep->qp_win.max_tx_credits,
+			NULL, NULL);
+
+	assert(rstream_ep->tx_ctxs);
 	rstream_ep->rx_ctxs = (struct fi_context *)
 		calloc(rstream_ep->qp_win.max_rx_credits,
 		sizeof(*rstream_ep->rx_ctxs));
