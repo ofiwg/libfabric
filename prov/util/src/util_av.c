@@ -1458,7 +1458,8 @@ void ofi_cmap_process_connect(struct util_cmap *cmap,
 }
 
 void ofi_cmap_process_reject(struct util_cmap *cmap,
-			     struct util_cmap_handle *handle)
+			     struct util_cmap_handle *handle,
+			     enum util_cmap_reject_flag cm_reject_flag)
 {
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 		"Processing reject for handle: %p\n", handle);
@@ -1472,9 +1473,11 @@ void ofi_cmap_process_reject(struct util_cmap *cmap,
 			"Connection handle is being re-used. Ignoring reject\n");
 		break;
 	case CMAP_CONNREQ_SENT:
-		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
-			"Deleting connection handle\n");
-		util_cmap_del_handle(handle);
+		if (cm_reject_flag == CMAP_REJECT_GENUINE) {
+			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
+			       "Deleting connection handle\n");
+			util_cmap_del_handle(handle);
+		}
 		break;
 	case CMAP_SHUTDOWN:
 		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
@@ -1489,10 +1492,14 @@ void ofi_cmap_process_reject(struct util_cmap *cmap,
 }
 
 int ofi_cmap_process_connreq(struct util_cmap *cmap, void *addr,
-			     struct util_cmap_handle **handle_ret)
+			     struct util_cmap_handle **handle_ret,
+			     enum util_cmap_reject_flag *cm_reject_flag)
 {
 	struct util_cmap_handle *handle;
 	int ret = 0, index, cmp;
+
+	/* Reset flag to initial state */
+	*cm_reject_flag = CMAP_REJECT_GENUINE;
 
 	ofi_straddr_dbg(cmap->av->prov, FI_LOG_EP_CTRL,
 			"Processing connreq for addr", addr);
@@ -1536,6 +1543,7 @@ int ofi_cmap_process_connreq(struct util_cmap *cmap, void *addr,
 		if (cmp < 0) {
 			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 				"Remote name lower than local name.\n");
+			*cm_reject_flag = CMAP_REJECT_SIMULT_CONN;
 			ret = -FI_EALREADY;
 			break;
 		} else if (cmp > 0) {

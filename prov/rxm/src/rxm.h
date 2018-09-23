@@ -70,7 +70,6 @@
 #define RXM_SAR_TX_ERROR	UINT64_MAX
 #define RXM_SAR_RX_INIT		UINT64_MAX
 
-
 #define RXM_IOV_LIMIT 4
 
 #define RXM_MR_MODES	(OFI_MR_BASIC_MAP | FI_MR_LOCAL)
@@ -137,11 +136,11 @@ struct rxm_ep_wire_proto {
 	uint8_t	ctrl_version;
 	uint8_t	op_version;
 	uint8_t endianness;
-	uint8_t padding[6];
 	uint64_t eager_size;
 };
 
 struct rxm_cm_data {
+	uint32_t prov_version;
 	struct sockaddr name;
 	uint64_t conn_id;
 	struct rxm_ep_wire_proto proto;
@@ -443,7 +442,7 @@ struct rxm_msg_eq_entry {
 	ssize_t			rd;
 	uint32_t		event;
 	/* Used for connection refusal */
-	void			*context;
+	struct fi_eq_err_entry	err_entry;
 	/* must stay at the bottom */
 	struct fi_eq_cm_entry	cm_entry;
 };
