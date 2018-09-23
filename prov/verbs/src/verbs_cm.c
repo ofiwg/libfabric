@@ -114,15 +114,40 @@ static int fi_ibv_msg_ep_getpeer(struct fid_ep *ep, void *addr, size_t *addrlen)
 	return fi_ibv_copy_addr(addr, addrlen, sa);
 }
 
+static inline void
+fi_ibv_msg_ep_prepare_cm_data(const void *param, size_t param_size,
+			      struct fi_ibv_cm_data_hdr *cm_hdr)
+{
+	cm_hdr->size = (uint8_t)param_size;
+	memcpy(cm_hdr->data, param, cm_hdr->size);
+}
+
+static inline void
+fi_ibv_ep_prepare_rdma_cm_param(struct rdma_conn_param *conn_param,
+				struct fi_ibv_cm_data_hdr *cm_hdr,
+				size_t cm_hdr_data_size)
+{
+	conn_param->private_data = cm_hdr;
+	conn_param->private_data_len = (uint8_t)cm_hdr_data_size;
+	conn_param->responder_resources = RDMA_MAX_RESP_RES;
+	conn_param->initiator_depth = RDMA_MAX_INIT_DEPTH;
+	conn_param->flow_control = 1;
+	conn_param->rnr_retry_count = 7;
+}
+
 static int
 fi_ibv_msg_ep_connect(struct fid_ep *ep, const void *addr,
-		   const void *param, size_t paramlen)
+		      const void *param, size_t paramlen)
 {
-	struct rdma_conn_param conn_param;
+	struct rdma_conn_param conn_param = { 0 };
 	struct sockaddr *src_addr, *dst_addr;
 	int ret;
+	struct fi_ibv_cm_data_hdr *cm_hdr;
 	struct fi_ibv_ep *_ep =
-		container_of(ep, struct fi_ibv_ep, util_ep.ep_fid);	
+		container_of(ep, struct fi_ibv_ep, util_ep.ep_fid);
+
+	if (OFI_UNLIKELY(paramlen > VERBS_CM_DATA_SIZE))
+		return -FI_EINVAL;
 
 	if (!_ep->id->qp) {
 		ret = ep->fid.ops->control(&ep->fid, FI_ENABLE, NULL);
@@ -130,14 +155,11 @@ fi_ibv_msg_ep_connect(struct fid_ep *ep, const void *addr,
 			return ret;
 	}
 
-	memset(&conn_param, 0, sizeof conn_param);
-	conn_param.private_data = param;
-	conn_param.private_data_len = paramlen;
-	conn_param.responder_resources = RDMA_MAX_RESP_RES;
-	conn_param.initiator_depth = RDMA_MAX_INIT_DEPTH;
-	conn_param.flow_control = 1;
+	cm_hdr = alloca(sizeof(*cm_hdr) + paramlen);
+	fi_ibv_msg_ep_prepare_cm_data(param, paramlen, cm_hdr);
+	fi_ibv_ep_prepare_rdma_cm_param(&conn_param, cm_hdr,
+					sizeof(*cm_hdr) + paramlen);
 	conn_param.retry_count = 15;
-	conn_param.rnr_retry_count = 7;
 
 	if (_ep->srq_ep)
 		conn_param.srq = 1;
@@ -165,21 +187,23 @@ fi_ibv_msg_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 	struct rdma_conn_param conn_param;
 	struct fi_ibv_connreq *connreq;
 	int ret;
+	struct fi_ibv_cm_data_hdr *cm_hdr;
 	struct fi_ibv_ep *_ep =
 		container_of(ep, struct fi_ibv_ep, util_ep.ep_fid);
+
+	if (OFI_UNLIKELY(paramlen > VERBS_CM_DATA_SIZE))
+		return -FI_EINVAL;
+
 	if (!_ep->id->qp) {
 		ret = ep->fid.ops->control(&ep->fid, FI_ENABLE, NULL);
 		if (ret)
 			return ret;
 	}
 
-	memset(&conn_param, 0, sizeof conn_param);
-	conn_param.private_data = param;
-	conn_param.private_data_len = paramlen;
-	conn_param.responder_resources = RDMA_MAX_RESP_RES;
-	conn_param.initiator_depth = RDMA_MAX_INIT_DEPTH;
-	conn_param.flow_control = 1;
-	conn_param.rnr_retry_count = 7;
+	cm_hdr = alloca(sizeof(*cm_hdr) + paramlen);
+	fi_ibv_msg_ep_prepare_cm_data(param, paramlen, cm_hdr);
+	fi_ibv_ep_prepare_rdma_cm_param(&conn_param, cm_hdr,
+					sizeof(*cm_hdr) + paramlen);
 
 	if (_ep->srq_ep)
 		conn_param.srq = 1;
@@ -196,13 +220,21 @@ fi_ibv_msg_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 
 static int
 fi_ibv_msg_ep_reject(struct fid_pep *pep, fid_t handle,
-		  const void *param, size_t paramlen)
+		     const void *param, size_t paramlen)
 {
-	struct fi_ibv_connreq *connreq;
+	struct fi_ibv_connreq *connreq =
+		container_of(handle, struct fi_ibv_connreq, handle);
+	struct fi_ibv_cm_data_hdr *cm_hdr;
 	int ret;
 
-	connreq = container_of(handle, struct fi_ibv_connreq, handle);
-	ret = rdma_reject(connreq->id, param, (uint8_t) paramlen) ? -errno : 0;
+	if (OFI_UNLIKELY(paramlen > VERBS_CM_DATA_SIZE))
+		return -FI_EINVAL;
+
+	cm_hdr = alloca(sizeof(*cm_hdr) + paramlen);
+	fi_ibv_msg_ep_prepare_cm_data(param, paramlen, cm_hdr);
+
+	ret = rdma_reject(connreq->id, cm_hdr,
+			  (uint8_t)(sizeof(*cm_hdr) + paramlen)) ? -errno : 0;
 	free(connreq);
 	return ret;
 }

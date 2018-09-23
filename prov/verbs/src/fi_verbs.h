@@ -110,6 +110,8 @@
 
 #define VERBS_INJECT_FLAG	((uint64_t)-1)
 
+#define VERBS_CM_DATA_SIZE	(56 - sizeof(struct fi_ibv_cm_data_hdr))
+
 #define VERBS_DGRAM_MSG_PREFIX_SIZE	(40)
 
 #define FI_IBV_EP_TYPE(info)						\
@@ -433,6 +435,11 @@ struct fi_ops_msg fi_ibv_msg_srq_ep_msg_ops;
 struct fi_ibv_connreq {
 	struct fid		handle;
 	struct rdma_cm_id	*id;
+};
+
+struct fi_ibv_cm_data_hdr {
+	uint8_t	size;
+	char	data[];
 };
 
 int fi_ibv_sockaddr_len(struct sockaddr *addr);

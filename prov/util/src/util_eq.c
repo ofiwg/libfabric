@@ -36,12 +36,39 @@
 #include <ofi_enosys.h>
 #include <ofi_util.h>
 
+void ofi_eq_handle_err_entry(uint32_t api_version,
+			     struct fi_eq_err_entry *err_entry,
+			     struct fi_eq_err_entry *user_err_entry)
+{
+	if ((FI_VERSION_GE(api_version, FI_VERSION(1, 5)))
+	    && user_err_entry->err_data && user_err_entry->err_data_size) {
+		void *err_data = user_err_entry->err_data;
+		size_t err_data_size = MIN(err_entry->err_data_size,
+					   user_err_entry->err_data_size);
+
+		memcpy(err_data, err_entry->err_data, err_data_size);
+
+		*user_err_entry = *err_entry;
+		user_err_entry->err_data = err_data;
+		user_err_entry->err_data_size = err_data_size;
+
+		free(err_entry->err_data);
+		err_entry->err_data = NULL;
+		err_entry->err_data_size = 0;
+	} else {
+		*user_err_entry = *err_entry;
+	}
+
+	err_entry->err = 0;
+	err_entry->prov_errno = 0;
+}
 
 static ssize_t util_eq_read(struct fid_eq *eq_fid, uint32_t *event,
 			    void *buf, size_t len, uint64_t flags)
 {
 	struct util_eq *eq;
 	struct util_event *entry;
+	void *user_err_data = NULL;
 	ssize_t ret;
 
 	eq = container_of(eq_fid, struct util_eq, eq_fid);
@@ -64,13 +91,30 @@ static ssize_t util_eq_read(struct fid_eq *eq_fid, uint32_t *event,
 	if (event)
 		*event = entry->event;
 	if (buf) {
-		ret = MIN(len, (size_t)entry->size);
-		memcpy(buf, entry->data, ret);
+		if (flags & UTIL_FLAG_ERROR) {
+			if (eq->saved_err_data) {
+				free(eq->saved_err_data);
+				eq->saved_err_data = NULL;
+			}
+			assert((size_t)entry->size == sizeof(struct fi_eq_err_entry));
+			user_err_data = ((struct fi_eq_err_entry *)buf)->err_data;
+			ofi_eq_handle_err_entry(eq->fabric->fabric_fid.api_version,
+						(struct fi_eq_err_entry *)entry->data,
+						(struct fi_eq_err_entry *)buf);
+			ret = (ssize_t)entry->size;
+		} else {
+			ret = MIN(len, (size_t)entry->size);
+			memcpy(buf, entry->data, ret);
+		}
 	}  else {
 		ret = 0;
 	}
 
 	if (!(flags & FI_PEEK)) {
+		if ((flags & UTIL_FLAG_ERROR) && !user_err_data &&
+		    ((struct fi_eq_err_entry *)buf)->err_data) {
+			eq->saved_err_data = ((struct fi_eq_err_entry *)buf)->err_data;
+		}
 		slist_remove_head(&eq->list);
 		free(entry);
 	}
@@ -94,7 +138,7 @@ static ssize_t util_eq_write(struct fid_eq *eq_fid, uint32_t event,
 	struct util_event *entry;
 
 	eq = container_of(eq_fid, struct util_eq, eq_fid);
-	entry = malloc(sizeof(*entry) + len);
+	entry = calloc(1, sizeof(*entry) + len);
 	if (!entry)
 		return -FI_ENOMEM;
 

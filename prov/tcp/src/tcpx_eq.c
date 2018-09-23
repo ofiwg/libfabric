@@ -68,9 +68,17 @@ static ssize_t tcpx_eq_read(struct fid_eq *eq_fid, uint32_t *event,
 	if (event)
 		*event = entry->event;
 	if (buf) {
-		ret = MIN(len, (size_t)entry->size);
-		memcpy(buf, entry->data, ret);
-	}  else {
+		if (flags & UTIL_FLAG_ERROR) {
+			assert((size_t)entry->size == sizeof(struct fi_eq_err_entry));
+			ofi_eq_handle_err_entry(eq->fabric->fabric_fid.api_version,
+						(struct fi_eq_err_entry *)entry->data,
+						(struct fi_eq_err_entry *)buf);
+			ret = (ssize_t)entry->size;
+		} else {
+			ret = MIN(len, (size_t)entry->size);
+			memcpy(buf, entry->data, ret);
+		}
+	} else {
 		ret = 0;
 	}
 

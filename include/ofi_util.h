@@ -740,6 +740,9 @@ struct util_eq {
 	const struct fi_provider *prov;
 
 	struct slist		list;
+	/* This contains error data that are read by user and need to
+	 * be freed in subsequent fi_eq_readerr call against the EQ */
+	void			*saved_err_data;
 	int			internal_wait;
 };
 
@@ -753,6 +756,9 @@ struct util_event {
 
 int ofi_eq_create(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		 struct fid_eq **eq_fid, void *context);
+void ofi_eq_handle_err_entry(uint32_t api_version,
+			     struct fi_eq_err_entry *err_entry,
+			     struct fi_eq_err_entry *user_err_entry);
 
 /*
 
