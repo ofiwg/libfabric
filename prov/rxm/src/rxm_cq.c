@@ -99,8 +99,6 @@ static int rxm_finish_buf_recv(struct rxm_rx_buf *rx_buf)
 {
 	uint64_t flags = rx_buf->pkt.hdr.flags | FI_RECV;
 
-	assert(rx_buf->pkt.hdr.size <= rx_buf->ep->sar.limit);
-
 	if (rx_buf->pkt.hdr.size > rx_buf->ep->rxm_info->tx_attr->inject_size)
 		flags |= FI_MORE;
 
