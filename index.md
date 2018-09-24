@@ -48,6 +48,7 @@ A set of man pages have been carefully written to specify the libfabric API.
 
 * [Man pages for v1.6.1](v1.6.1/man/)
   * Older: [Man pages for v1.6.0](v1.6.0/man/)
+  * Older: [Man pages for v1.5.4](v1.5.4/man/)
   * Older: [Man pages for v1.5.3](v1.5.3/man/)
   * Older: [Man pages for v1.5.2](v1.5.2/man/)
   * Older: [Man pages for v1.5.1](v1.5.1/man/)
