@@ -5,10 +5,13 @@ This file contains the main features as well as overviews of specific
 bug fixes (and other actions) for each version of Libfabric since
 version 1.0.
 
-v1.6.2rc2, Mon Sep 24, 2018
-==========================
+v1.6.2, Fri Sep 28, 2018
+========================
 
 ## Core
+
+- Cleanup of debug messages
+
 ## GNI
 - Fix problems with Scalable Endpoint creation
 - Fix interoperability problem with HPC toolkit
@@ -40,6 +43,8 @@ v1.6.2rc2, Mon Sep 24, 2018
 
 ## RXM
 
+- Fix incorrect increments of error counters for small messages
+- Increment write completion counter for small transfers
 - Use FI_UNIVERSE_SIZE when defining MSG provider CQ size
 - Make TX, RX queue sizes independent of MSG provider
 - Make deferred requests opt-in
@@ -55,9 +60,10 @@ v1.6.2rc2, Mon Sep 24, 2018
 - Don't include FI_DIRECTED_RECV, FI_SOURCE caps if they're not needed
 - Fix matching for RMA I/O vectors
 
-## SHM
 ## Sockets
-## usNIC
+
+- Increase maximum messages size as MPICH bug work-around
+
 ## Verbs
 
 - Detect string format of wildcard address in node argument
