@@ -44,12 +44,12 @@ check_directory $ROOT_BUILD_PATH
 check_directory $FABTEST_PATH
 check_directory $OMB_BUILD_PATH
 check_directory $MPICH_PATH
-check_directory $ROOT_BUILD_PATH/libfabric-sft/stable
+check_directory $SFT_INSTALL_PATH
 
 # check prerequisite installed software packages
 find_executable srun
 check_executable $FABTEST_PATH/bin/runfabtests.sh
 check_executable $OMB_BUILD_PATH/pt2pt/osu_bw
-check_executable $ROOT_BUILD_PATH/libfabric-sft/stable/bin/ci-all.sh
+check_executable $SFT_INSTALL_PATH/bin/ci-all.sh
 
 exit 0
