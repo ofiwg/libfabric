@@ -481,6 +481,37 @@ FI_DESTRUCTOR(fi_fini(void))
 	ofi_osd_fini();
 }
 
+/* The provider must free any prov_attr data prior to calling this
+ * routine.
+ */
+int ofi_nic_close(struct fid *fid)
+{
+	struct fid_nic *nic = (struct fid_nic *) fid;
+
+	assert(fid && fid->fclass == FI_CLASS_NIC);
+
+	if (nic->device_attr) {
+		free(nic->device_attr->name);
+		free(nic->device_attr->device_id);
+		free(nic->device_attr->device_version);
+		free(nic->device_attr->vendor_id);
+		free(nic->device_attr->driver);
+		free(nic->device_attr->firmware);
+		free(nic->device_attr);
+	}
+
+	free(nic->bus_attr);
+
+	if (nic->link_attr) {
+		free(nic->link_attr->address);
+		free(nic->link_attr->network_type);
+		free(nic->link_attr);
+	}
+
+	free(nic);
+	return 0;
+}
+
 __attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 void DEFAULT_SYMVER_PRE(fi_freeinfo)(struct fi_info *info)
 {
