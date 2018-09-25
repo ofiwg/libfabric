@@ -35,7 +35,8 @@
 #include "mrail.h"
 
 int mrail_cq_write_recv_comp(struct mrail_ep *mrail_ep, struct mrail_hdr *hdr,
-			     mrail_cq_entry_t *comp, struct mrail_recv *recv)
+			     struct fi_cq_tagged_entry *comp,
+			     struct mrail_recv *recv)
 {
 	FI_DBG(&mrail_prov, FI_LOG_CQ, "writing recv completion: length: %zu "
 	       "tag: 0x%" PRIx64 "\n", comp->len - sizeof(struct mrail_pkt),
@@ -47,7 +48,8 @@ int mrail_cq_write_recv_comp(struct mrail_ep *mrail_ep, struct mrail_hdr *hdr,
 			   NULL, comp->data, hdr->tag);
 }
 
-int mrail_cq_process_buf_recv(mrail_cq_entry_t *comp, struct mrail_recv *recv)
+int mrail_cq_process_buf_recv(struct fi_cq_tagged_entry *comp,
+			      struct mrail_recv *recv)
 {
 	struct fi_recv_context *recv_ctx = comp->op_context;
 	struct fi_msg msg = {
@@ -111,33 +113,13 @@ out:
 	return retv;
 }
 
-static int mrail_cq_process_comp_buf_recv(struct util_cq *cq,
-					  mrail_cq_entry_t *comp)
+/* Should only be called while holding the EP's lock */
+static struct mrail_recv *mrail_match_recv(struct mrail_ep *mrail_ep,
+					   struct fi_cq_tagged_entry *comp)
 {
-	struct fi_recv_context *recv_ctx;
-	struct mrail_ep *mrail_ep;
-	struct mrail_hdr *hdr;
+	struct mrail_hdr *hdr = comp->buf;
 	struct mrail_recv *recv;
-	int ret;
 
-	if (comp->flags & FI_CLAIM) {
-		recv = comp->op_context;
-		assert(recv->hdr.version == MRAIL_HDR_VERSION);
-		ret =  mrail_cq_write_recv_comp(recv->ep, &recv->hdr, comp,
-						recv->context);
-		mrail_push_recv(recv);
-		return ret;
-	}
-
-	recv_ctx = comp->op_context;
-	mrail_ep = recv_ctx->ep->fid.context;
-	hdr = comp->buf;
-
-	// TODO make rxm send buffered recv amount of data for large message
-	assert(hdr->version == MRAIL_HDR_VERSION);
-
-	// TODO match seq number
-	fastlock_acquire(&mrail_ep->util_ep.lock);
 	if (hdr->op == ofi_op_msg) {
 		FI_DBG(&mrail_prov, FI_LOG_CQ, "Got MSG op\n");
 		// TODO pass the right address
@@ -153,11 +135,159 @@ static int mrail_cq_process_comp_buf_recv(struct util_cq *cq,
 						     (char *)comp, sizeof(*comp),
 						     NULL);
 	}
-	fastlock_release(&mrail_ep->util_ep.lock);
-	if (OFI_UNLIKELY(!recv))
-		return 0;
 
-	return mrail_cq_process_buf_recv(comp, recv);
+	return recv;
+}
+
+static
+struct mrail_ooo_recv *mrail_get_next_recv(struct mrail_peer_info *peer_info)
+{
+	struct slist *queue = &peer_info->ooo_recv_queue;
+	struct mrail_ooo_recv *ooo_recv;
+
+	if (!slist_empty(queue)) {
+		ooo_recv = container_of(queue->head, struct mrail_ooo_recv,
+				entry);
+		if (ooo_recv->seq_no == peer_info->expected_seq_no) {
+			slist_remove_head(queue);
+			peer_info->expected_seq_no++;
+			return ooo_recv;
+		}
+	}
+	return NULL;
+}
+
+static int mrail_process_ooo_recvs(struct mrail_ep *mrail_ep,
+				   struct mrail_peer_info *peer_info)
+{
+	struct mrail_ooo_recv *ooo_recv;
+	struct mrail_recv *recv;
+	int ret;
+
+	ofi_ep_lock_acquire(&mrail_ep->util_ep);
+	ooo_recv = mrail_get_next_recv(peer_info);
+	while (ooo_recv) {
+		FI_DBG(&mrail_prov, FI_LOG_CQ, "found ooo_recv seq=%d\n",
+				ooo_recv->seq_no);
+		recv = mrail_match_recv(mrail_ep, &ooo_recv->comp);
+		ofi_ep_lock_release(&mrail_ep->util_ep);
+
+		if (recv) {
+			ret = mrail_cq_process_buf_recv(&ooo_recv->comp, recv);
+			if (ret)
+				return ret;
+		}
+
+		ofi_ep_lock_acquire(&mrail_ep->util_ep);
+		util_buf_release(mrail_ep->ooo_recv_pool, ooo_recv);
+		ooo_recv = mrail_get_next_recv(peer_info);
+	}
+	ofi_ep_lock_release(&mrail_ep->util_ep);
+	return 0;
+}
+
+static int mrail_ooo_recv_before(struct slist_entry *item, const void *arg)
+{
+	struct mrail_ooo_recv *ooo_recv;
+	struct mrail_ooo_recv *new_recv;
+
+	/* Check whether the given item's follower has a higher seq_no. */
+
+	if (!item->next) {
+		/* item is the last element in the list */
+		return 0;
+	}
+
+	ooo_recv = container_of(item->next, struct mrail_ooo_recv, entry);
+	new_recv = container_of((struct slist_entry *)arg,
+			struct mrail_ooo_recv, entry);
+
+	return (new_recv->seq_no < ooo_recv->seq_no);
+}
+
+/* Should only be called while holding the EP's lock */
+static void mrail_save_ooo_recv(struct mrail_ep *mrail_ep,
+				struct mrail_peer_info *peer_info,
+				uint32_t seq_no,
+				struct fi_cq_tagged_entry *comp)
+{
+	struct slist *queue = &peer_info->ooo_recv_queue;
+	struct mrail_ooo_recv *ooo_recv;
+
+	ooo_recv = util_buf_alloc(mrail_ep->ooo_recv_pool);
+	if (!ooo_recv) {
+		FI_WARN(&mrail_prov, FI_LOG_CQ, "Cannot allocate ooo_recv\n");
+		assert(0);
+	}
+	ooo_recv->seq_no = seq_no;
+	memcpy(&ooo_recv->comp, comp, sizeof(*comp));
+
+	slist_insert_order(queue, mrail_ooo_recv_before, &ooo_recv->entry);
+
+	FI_DBG(&mrail_prov, FI_LOG_CQ, "saved ooo_recv seq=%d\n", seq_no);
+}
+
+static int mrail_handle_recv_completion(struct fi_cq_tagged_entry *comp,
+					fi_addr_t src_addr)
+{
+	struct fi_recv_context *recv_ctx;
+	struct mrail_peer_info *peer_info;
+	struct mrail_ep *mrail_ep;
+	struct mrail_recv *recv;
+	struct mrail_hdr *hdr;
+	uint32_t seq_no;
+	int ret;
+
+	if (comp->flags & FI_CLAIM) {
+		/* This message has already been processed and claimed.
+		 * See mrail_cq_process_buf_recv().
+		 */
+		recv = comp->op_context;
+		assert(recv->hdr.version == MRAIL_HDR_VERSION);
+		ret =  mrail_cq_write_recv_comp(recv->ep, &recv->hdr, comp,
+						recv->context);
+		mrail_push_recv(recv);
+		goto exit;
+	}
+
+	recv_ctx = comp->op_context;
+	mrail_ep = recv_ctx->ep->fid.context;
+	hdr = comp->buf;
+
+	// TODO make rxm send buffered recv amount of data for large message
+	assert(hdr->version == MRAIL_HDR_VERSION);
+
+	seq_no = ntohl(hdr->seq);
+	peer_info = ofi_av_get_addr(mrail_ep->util_ep.av, (int) src_addr);
+	FI_DBG(&mrail_prov, FI_LOG_CQ,
+			"ep=%p peer=%d received seq=%d, expected=%d\n",
+			mrail_ep, (int)peer_info->addr, seq_no,
+			peer_info->expected_seq_no);
+	ofi_ep_lock_acquire(&mrail_ep->util_ep);
+	if (seq_no == peer_info->expected_seq_no) {
+		/* This message was received in order */
+		peer_info->expected_seq_no++;
+		recv = mrail_match_recv(mrail_ep, comp);
+		ofi_ep_lock_release(&mrail_ep->util_ep);
+
+		if (recv) {
+			ret = mrail_cq_process_buf_recv(comp, recv);
+			if (ret)
+				goto exit;
+		}
+
+		/* Process any next-in-order message that had already arrived */
+		ret = mrail_process_ooo_recvs(mrail_ep, peer_info);
+	} else {
+		/* This message was received early.
+		 * Save it into the out-of-order recv queue.
+		 */
+		mrail_save_ooo_recv(mrail_ep, peer_info, seq_no, comp);
+		ofi_ep_lock_release(&mrail_ep->util_ep);
+		ret = 0;
+	}
+exit:
+	return ret;
 }
 
 static int mrail_cq_close(fid_t fid)
@@ -229,14 +359,15 @@ static void mrail_handle_rma_completion(struct util_cq *cq,
 void mrail_poll_cq(struct util_cq *cq)
 {
 	struct mrail_cq *mrail_cq;
-	mrail_cq_entry_t comp;
+	struct fi_cq_tagged_entry comp;
+	fi_addr_t src_addr;
 	size_t i;
 	int ret;
 
 	mrail_cq = container_of(cq, struct mrail_cq, util_cq);
 
 	for (i = 0; i < mrail_cq->num_cqs; i++) {
-		ret = fi_cq_read(mrail_cq->cqs[i], &comp, 1);
+		ret = fi_cq_readfrom(mrail_cq->cqs[i], &comp, 1, &src_addr);
 		if (ret == -FI_EAGAIN || !ret)
 			continue;
 		if (ret < 0) {
@@ -247,7 +378,7 @@ void mrail_poll_cq(struct util_cq *cq)
 		}
 		// TODO handle variable length message
 		if (comp.flags & FI_RECV) {
-			ret = mrail_cq->process_comp(cq, &comp);
+			ret = mrail_cq->process_comp(&comp, src_addr);
 			if (ret)
 				goto err;
 		} else if (comp.flags & (FI_READ | FI_WRITE)) {
@@ -324,7 +455,7 @@ int mrail_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	}
 
 	// TODO add regular process comp when FI_BUFFERED_RECV not set
-	mrail_cq->process_comp = mrail_cq_process_comp_buf_recv;
+	mrail_cq->process_comp = mrail_handle_recv_completion;
 
 	*cq_fid = &mrail_cq->util_cq.cq_fid;
 	(*cq_fid)->fid.ops = &mrail_cq_fi_ops;

@@ -460,6 +460,30 @@ slist_find_first_match(const struct slist *list, slist_func_t *match,
 	return NULL;
 }
 
+static inline void slist_insert_order(struct slist *list, slist_func_t *order,
+				      struct slist_entry *entry)
+{
+	struct slist_entry *prev;
+
+	if (slist_empty(list)) {
+		slist_insert_head(entry, list);
+		return;
+	}
+
+	/* Note: the order function should return the entry that precedes the
+	 * new one.
+	 * e.g. when inserting 3 into (1, 2, 4), the order function should
+	 * 	return 2.
+	 */
+	prev = slist_find_first_match(list, order, entry);
+	if (prev) {
+		entry->next = prev->next;
+		prev->next = entry;
+	} else {
+		slist_insert_tail(entry, list);
+	}
+}
+
 static inline void slist_remove(struct slist *list,
 		struct slist_entry *item, struct slist_entry *prev)
 {

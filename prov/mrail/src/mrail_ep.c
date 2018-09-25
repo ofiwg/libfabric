@@ -233,7 +233,7 @@ mrail_recv_common(struct mrail_ep *mrail_ep, struct mrail_recv_queue *recv_queue
 	       "\n", ofi_total_iov_len(iov, count), recv->addr,
 	       recv->tag, recv->ignore);
 
-	fastlock_acquire(&mrail_ep->util_ep.lock);
+	ofi_ep_lock_acquire(&mrail_ep->util_ep);
 	unexp_msg_entry = container_of(dlist_remove_first_match(
 						&recv_queue->unexp_msg_list,
 						recv_queue->match_unexp,
@@ -242,18 +242,18 @@ mrail_recv_common(struct mrail_ep *mrail_ep, struct mrail_recv_queue *recv_queue
 				       entry);
 	if (!unexp_msg_entry) {
 		dlist_insert_tail(&recv->entry, &recv_queue->recv_list);
-		fastlock_release(&mrail_ep->util_ep.lock);
+		ofi_ep_lock_release(&mrail_ep->util_ep);
 		return 0;
 	}
-	fastlock_release(&mrail_ep->util_ep.lock);
+	ofi_ep_lock_release(&mrail_ep->util_ep);
 
 	FI_DBG(recv_queue->prov, FI_LOG_EP_DATA, "Match for posted recv"
 	       " with addr: 0x%" PRIx64 ", tag: 0x%" PRIx64 " ignore: "
 	       "0x%" PRIx64 " found in unexpected msg queue\n",
 	       recv->addr, recv->tag, recv->ignore);
 
-	return mrail_cq_process_buf_recv((mrail_cq_entry_t *)unexp_msg_entry->data,
-					 recv);
+	return mrail_cq_process_buf_recv((struct fi_cq_tagged_entry *)
+					 unexp_msg_entry->data, recv);
 }
 
 static ssize_t mrail_recv(struct fid_ep *ep_fid, void *buf, size_t len,
@@ -311,21 +311,26 @@ mrail_send_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 {
 	struct mrail_ep *mrail_ep = container_of(ep_fid, struct mrail_ep,
 						 util_ep.ep_fid.fid);
+	struct mrail_peer_info *peer_info;
 	struct iovec *iov_dest = alloca(sizeof(*iov_dest) * (count + 1));
 	struct mrail_hdr hdr = MRAIL_HDR_INITIALIZER_MSG;
 	uint32_t i = mrail_get_tx_rail(mrail_ep);
 	struct fi_msg msg;
 	ssize_t ret;
 
-	fi_addr_t *rail_fi_addr = ofi_av_get_addr(mrail_ep->util_ep.av,
-						  (int)dest_addr);
+	peer_info = ofi_av_get_addr(mrail_ep->util_ep.av, (int) dest_addr);
 
+	ofi_ep_lock_acquire(&mrail_ep->util_ep);
+
+	hdr.seq = peer_info->seq_no++;
+	FI_DBG(&mrail_prov, FI_LOG_EP_DATA, "sending seq=%d\n", hdr.seq);
+	hdr.seq = htonl(hdr.seq);
 	mrail_copy_iov_hdr(&hdr, iov_dest, iov, count);
 
 	msg.msg_iov 	= iov_dest;
 	msg.desc    	= desc;
 	msg.iov_count	= count + 1;
-	msg.addr	= rail_fi_addr[i];
+	msg.addr	= dest_addr;
 	msg.context	= context;
 	msg.data	= data;
 
@@ -335,9 +340,13 @@ mrail_send_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	FI_DBG(&mrail_prov, FI_LOG_EP_DATA, "Posting send of length: %" PRIu64
 	       " dest_addr: 0x%" PRIx64 " on rail: %d\n", len, dest_addr, i);
 	ret = fi_sendmsg(mrail_ep->rails[i].ep, &msg, flags);
-	if (ret)
+	if (ret) {
 		FI_WARN(&mrail_prov, FI_LOG_EP_DATA,
 			"Unable to fi_sendmsg on rail: %" PRIu32 "\n", i);
+		peer_info->seq_no--;
+	}
+
+	ofi_ep_lock_release(&mrail_ep->util_ep);
 	return ret;
 }
 
@@ -348,21 +357,26 @@ mrail_tsend_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 {
 	struct mrail_ep *mrail_ep = container_of(ep_fid, struct mrail_ep,
 						 util_ep.ep_fid.fid);
+	struct mrail_peer_info *peer_info;
 	struct iovec *iov_dest = alloca(sizeof(*iov_dest) * (count + 1));
 	struct mrail_hdr hdr = MRAIL_HDR_INITIALIZER_TAGGED(tag);
 	uint32_t i = mrail_get_tx_rail(mrail_ep);
 	struct fi_msg msg;
 	ssize_t ret;
 
-	fi_addr_t *rail_fi_addr = ofi_av_get_addr(mrail_ep->util_ep.av,
-						  (int)dest_addr);
+	peer_info = ofi_av_get_addr(mrail_ep->util_ep.av, (int) dest_addr);
 
+	ofi_ep_lock_acquire(&mrail_ep->util_ep);
+
+	hdr.seq = peer_info->seq_no++;
+	FI_DBG(&mrail_prov, FI_LOG_EP_DATA, "sending seq=%d\n", hdr.seq);
+	hdr.seq = htonl(hdr.seq);
 	mrail_copy_iov_hdr(&hdr, iov_dest, iov, count);
 
 	msg.msg_iov 	= iov_dest;
 	msg.desc    	= desc;
 	msg.iov_count	= count + 1;
-	msg.addr	= rail_fi_addr[i];
+	msg.addr	= dest_addr;
 	msg.context	= context;
 	msg.data	= data;
 
@@ -373,9 +387,13 @@ mrail_tsend_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	       " dest_addr: 0x%" PRIx64 " tag: 0x%" PRIx64 " on rail: %d\n",
 	       len, dest_addr, tag, i);
 	ret = fi_sendmsg(mrail_ep->rails[i].ep, &msg, flags);
-	if (ret)
+	if (ret) {
 		FI_WARN(&mrail_prov, FI_LOG_EP_DATA,
 			"Unable to fi_sendmsg on rail: %" PRIu32 "\n", i);
+		peer_info->seq_no--;
+	}
+
+	ofi_ep_lock_release(&mrail_ep->util_ep);
 	return ret;
 }
 
@@ -494,7 +512,7 @@ mrail_get_unexp_msg_entry(struct mrail_recv_queue *recv_queue, void *context)
 	// TODO use buf pool
 	// context would be mrail_ep from which u can get the buf pool
 	struct mrail_unexp_msg_entry *unexp_msg_entry =
-		malloc(sizeof(*unexp_msg_entry) + sizeof(mrail_cq_entry_t));
+		malloc(sizeof(*unexp_msg_entry) + sizeof(struct fi_cq_tagged_entry));
 	return unexp_msg_entry;
 }
 
@@ -533,6 +551,7 @@ static int mrail_ep_close(fid_t fid)
 	size_t i;
 
 	util_buf_pool_destroy(mrail_ep->req_pool);
+	util_buf_pool_destroy(mrail_ep->ooo_recv_pool);
 	mrail_recv_fs_free(mrail_ep->recv_fs);
 
 	for (i = 0; i < mrail_ep->num_eps; i++) {
@@ -782,6 +801,13 @@ int mrail_ep_open(struct fid_domain *domain_fid, struct fi_info *info,
 		goto err;
 	}
 
+	ret = util_buf_pool_create(&mrail_ep->ooo_recv_pool,
+			sizeof(struct mrail_ooo_recv), sizeof(void *), 0, 64);
+	if (!mrail_ep->ooo_recv_pool) {
+		ret = -FI_ENOMEM;
+		goto err;
+	}
+
 	buf_size = sizeof(struct mrail_req) +
 		(mrail_ep->num_eps * sizeof(struct mrail_subreq));
 
@@ -816,14 +842,6 @@ int mrail_ep_open(struct fid_domain *domain_fid, struct fi_info *info,
 
 	ofi_atomic_initialize32(&mrail_ep->tx_rail, 0);
 	ofi_atomic_initialize32(&mrail_ep->rx_rail, 0);
-
-	if (mrail_domain->util_domain.threading != FI_THREAD_SAFE) {
-		mrail_ep->lock_acquire = ofi_fastlock_acquire_noop;
-		mrail_ep->lock_release = ofi_fastlock_release_noop;
-	} else {
-		mrail_ep->lock_acquire = ofi_fastlock_acquire;
-		mrail_ep->lock_release = ofi_fastlock_release;
-	}
 
 	*ep_fid = &mrail_ep->util_ep.ep_fid;
 	(*ep_fid)->fid.ops = &mrail_ep_fi_ops;

@@ -63,7 +63,7 @@ static int mrail_av_insert(struct fid_av *av_fid, const void *addr, size_t count
 {
 	struct mrail_domain *mrail_domain;
 	struct mrail_av *mrail_av;
-	fi_addr_t *rail_fi_addr;
+	struct mrail_peer_info *peer_info;
 	size_t i, j, offset, num_inserted = 0;
 	int ret, index;
 
@@ -79,9 +79,10 @@ static int mrail_av_insert(struct fid_av *av_fid, const void *addr, size_t count
 	 *         ADDR2: ADDR1_RAIL2:ADDR2_RAIL2
 	*/
 
-	rail_fi_addr = calloc(mrail_av->num_avs, sizeof(*rail_fi_addr));
-	if (!rail_fi_addr)
+	peer_info = calloc(1, mrail_av->util_av.addrlen);
+	if (!peer_info)
 		return -FI_ENOMEM;
+	slist_init(&peer_info->ooo_recv_queue);
 
 	for (i = 0; i < count; i++) {
 		offset = i * mrail_domain->addrlen;
@@ -90,28 +91,30 @@ static int mrail_av_insert(struct fid_av *av_fid, const void *addr, size_t count
 					"addr", addr);
 			ret = fi_av_insert(mrail_av->avs[j],
 					   (char *)addr + offset, 1,
-					   &rail_fi_addr[j], flags, NULL);
+					   NULL, flags, NULL);
 			if (ret != 1) {
-				free(rail_fi_addr);
+				free(peer_info);
 				return ret;
 			}
 			offset += mrail_av->rail_addrlen[j];
 		}
-		ret = ofi_av_insert_addr(&mrail_av->util_av, rail_fi_addr,
-					 ofi_atomic_get32(&mrail_av->index), &index);
+		ret = ofi_av_insert_addr(&mrail_av->util_av, peer_info,
+					 ofi_atomic_get32(&mrail_av->index),
+					 &index);
 		if (fi_addr) {
 			if (ret) {
 				FI_WARN(&mrail_prov, FI_LOG_AV, \
 					"Unable to get rail fi_addr\n");
-				fi_addr[i] = FI_ADDR_NOTAVAIL;
+				peer_info->addr = FI_ADDR_NOTAVAIL;
 			} else {
-				fi_addr[i] = index;
+				peer_info->addr = (uint64_t) index;
 				num_inserted++;
 			}
+			fi_addr[i] = peer_info->addr;
 		}
 	}
 
-	free(rail_fi_addr);
+	free(peer_info);
 	return num_inserted;
 }
 
@@ -138,6 +141,7 @@ int mrail_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 {
 	struct mrail_av *mrail_av;
 	struct mrail_domain *mrail_domain;
+	struct fi_av_attr rail_attr;
 	struct util_av_attr util_attr;
 	struct fi_info *fi;
 	size_t i;
@@ -151,8 +155,8 @@ int mrail_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 
 	mrail_av->num_avs = mrail_domain->num_domains;
 
-	util_attr.addrlen = mrail_av->num_avs * sizeof(fi_addr_t);
-	/* We just need a table to stor the mapping */
+	util_attr.addrlen = sizeof(struct mrail_peer_info);
+	/* We just need a table to store the mapping */
 	util_attr.overhead = 0;
 	util_attr.flags = 0;
 
@@ -179,9 +183,11 @@ int mrail_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		goto err;
 	}
 
+	rail_attr = *attr;
+	rail_attr.type = FI_AV_TABLE;
 	for (i = 0, fi = mrail_domain->info->next; i < mrail_av->num_avs;
 	     i++, fi = fi->next) {
-		ret = fi_av_open(mrail_domain->domains[i], attr,
+		ret = fi_av_open(mrail_domain->domains[i], &rail_attr,
 				 &mrail_av->avs[i], context);
 		if (ret)
 			goto err;

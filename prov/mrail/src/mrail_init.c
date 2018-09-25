@@ -102,9 +102,24 @@ int mrail_get_core_info(uint32_t version, const char *node, const char *service,
 	}
 
 	core_hints->mode |= FI_BUFFERED_RECV;
+	core_hints->caps |= FI_SOURCE;
 
-	if (!core_hints->fabric_attr)
+	if (!core_hints->fabric_attr) {
 		core_hints->fabric_attr = calloc(1, sizeof(*core_hints->fabric_attr));
+		if (!core_hints->fabric_attr) {
+			ret = -FI_ENOMEM;
+			goto out;
+		}
+	}
+
+	if (!core_hints->domain_attr) {
+		core_hints->domain_attr = calloc(1, sizeof(*core_hints->domain_attr));
+		if (!core_hints->domain_attr) {
+			ret = -FI_ENOMEM;
+			goto out;
+		}
+	}
+	core_hints->domain_attr->av_type = FI_AV_TABLE;
 
 	ret = ofi_exclude_prov_name(&core_hints->fabric_attr->prov_name,
 				    mrail_prov.name);
@@ -177,6 +192,22 @@ err:
 	return NULL;
 }
 
+static void mrail_adjust_info(struct fi_info *info, const struct fi_info *hints)
+{
+	if (!hints)
+		return;
+
+	if (hints->domain_attr) {
+		if (hints->domain_attr->av_type)
+			info->domain_attr->av_type = hints->domain_attr->av_type;
+	}
+
+	if (hints->tx_attr) {
+		if (hints->tx_attr->op_flags & FI_COMPLETION)
+			info->tx_attr->op_flags |= FI_COMPLETION;
+	}
+}
+
 static int mrail_getinfo(uint32_t version, const char *node, const char *service,
 			 uint64_t flags, const struct fi_info *hints,
 			 struct fi_info **info)
@@ -244,8 +275,7 @@ static int mrail_getinfo(uint32_t version, const char *node, const char *service
 	else
 		fi->tx_attr->inject_size -= sizeof(struct mrail_hdr);
 
-	if (hints && hints->tx_attr && (hints->tx_attr->op_flags & FI_COMPLETION))
-		fi->tx_attr->op_flags |= FI_COMPLETION;
+	mrail_adjust_info(fi, hints);
 
 	// TODO set src_addr to FI_ADDR_STRC address
 	fi->next = *info;
