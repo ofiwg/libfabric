@@ -30,13 +30,9 @@ pipeline {
                 script {
                     GIT_SHORT_COMMIT = sh(returnStdout: true, script: "git log -n 1 --pretty=format:'%h'").trim()
                 }
-                echo "checking for prerequisite test software"
 
-                echo " -- checking for presence of fabtests"
-                sh 'test -e $FABTEST_PATH/bin/runfabtests.sh'
-
-                echo " -- checking for the presence of OMB"
-                sh 'test -e $OMB_BUILD_PATH/pt2pt/osu_bw'
+                // verify requirements
+                sh 'contrib/cray/verify_requirements.sh'
             }
         }
         stage('Build') {
