@@ -430,7 +430,7 @@ struct fi_bus_attr {
 	enum fi_bus_type	bus_type;
 	union {
 		struct fi_pci_attr	pci;
-	};
+	} attr;
 };
 
 enum fi_link_state {

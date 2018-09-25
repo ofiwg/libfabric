@@ -49,7 +49,7 @@ struct fi_bus_attr {
 	enum fi_bus_type       bus_type;
 	union {
 		struct fi_pci_attr pci;
-	};
+	} attr;
 };
 
 struct fi_link_attr {
@@ -96,19 +96,19 @@ the system.
 : Indicates the type of system bus where the NIC is located.  Valid values
   are FI_BUS_PCI or FI_BUS_UNKNOWN.
 
-*pci.domain_id*
+*attr.pci.domain_id*
 : The domain where the PCI bus is located.  Valid only if bus_type is
   FI_BUS_PCI.
 
-*pci.bus_id*
+*attr.pci.bus_id*
 : The PCI bus identifier where the device is located.  Valid only if
   bus_type is FI_BUS_PCI.
 
-*pci.device_id*
+*attr.pci.device_id*
 : The identifier on the PCI bus where the device is located.  Valid only
   if bus_type is FI_BUS_PCI.
 
-*pci.function_id*
+*attr.pci.function_id*
 : The function on the device being referenced.  Valid only if bus_type is
   FI_BUS_PCI.
 
