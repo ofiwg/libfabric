@@ -15,8 +15,8 @@ pipeline {
 
         // Build options
         disableConcurrentBuilds()
-        skipStagesAfterUnstable()
         timestamps()
+        skipStagesAfterUnstable()
     }
     agent {
         node {
@@ -26,16 +26,16 @@ pipeline {
     stages {
         stage('Prepare') {
             steps {
-                echo "creating git short hash"
+                // creating git short hash
                 script {
                     GIT_SHORT_COMMIT = sh(returnStdout: true, script: "git log -n 1 --pretty=format:'%h'").trim()
                 }
-                echo "checking for prerequisite test software"
+                // checking for prerequisite test software
 
-                echo " -- checking for presence of fabtests"
+                // checking for presence of fabtests
                 sh 'test -e $FABTEST_PATH/bin/runfabtests.sh'
 
-                echo " -- checking for the presence of OMB"
+                // checking for the presence of OMB
                 sh 'test -e $OMB_BUILD_PATH/pt2pt/osu_bw'
             }
         }
@@ -51,7 +51,6 @@ pipeline {
             environment {
                 LD_LIBRARY_PATH = "$TMP_INSTALL_PATH/lib:$LD_LIBRARY_PATH"
             }
-            failFast true
             parallel {
                 stage('Unit tests') {
                     steps {
@@ -60,7 +59,7 @@ pipeline {
                 }
                 stage('Smoke tests') {
                     steps {
-                        echo 'checking for the presence of the verbs provider'
+                        // checking for the presence of the verbs provider
                         script {
                             launch '$TMP_INSTALL_PATH/bin/fi_info -p \'ofi_rxm;verbs\'', 1, 1
                         }
@@ -68,7 +67,7 @@ pipeline {
                 }
                 stage('Fabtests') {
                     steps {
-                        timeout (time: 20, unit: 'MINUTES') {
+                        timeout (time: 5, unit: 'MINUTES') {
                             script {
                                 launch 'contrib/cray/fabtest_wrapper.sh', 2, 1
                             }
@@ -81,87 +80,111 @@ pipeline {
             environment {
                 LD_LIBRARY_PATH = "$TMP_INSTALL_PATH/lib:$LD_LIBRARY_PATH"
                 SFT_BIN = "${ROOT_BUILD_PATH + '/libfabric-sft/stable/bin'}"
-                SFT_ADD_ARGS = "--additional-args '--dbg-cq-retry 1 --dbg-cq-delay 5'"
-//                SFT_ADD_ARGS = " "
+                SFT_ADD_ARGS = "--additional-args ' '"
                 SFT_MAX_JOB_TIME = '3'
-                SFT_NUM_JOBS = '4'
-//                SFT_PARTITION = '--partition mellanox'
-                SFT_PARTITION = ' '
+                SFT_NUM_JOBS = '8'
                 SFT_PROVIDER = 'verbs;ofi_rxm'
-                SFT_BASELINE_DIR = "contrib/cray/"
+                SFT_BASELINE_DIR = "contrib/cray"
                 SFT_BASELINE_RESULTS_FILE = 'sft_test_results_baseline.txt'
                 SFT_PREVIOUS_BASELINE_RESULTS = 'sft_test_results_baseline.txt'
                 SFT_TEST_CMDS = 'sft_test_commands'
                 SFT_TEST_RESULTS = 'sft_test_results.xml'
                 SFT_TEST_RESULTS_EXPECTED = 'expected_'
                 SFT_TEST_RESULTS_PREFIX = 'BUILD_'
-//                SFT_TEST_RESULTS_PREVIOUS = 'previous_'
                 SFT_TEST_RESULTS_CI = 'sft_ci_results.yaml'
                 SFT_TEST_RESULTS_BASE_DIR = "${ROOT_BUILD_PATH}" + "/sft_test_results/"
                 SFT_TEST_RESULTS_DIR = ""
             }
             steps {
-                echo 'SFT tests'
                 script {
                     def cur_date_time = new Date().format('yyyy_MM_dd_HH_mm_ss')
                     SFT_TEST_RESULTS_SUBDIR = "${SFT_TEST_RESULTS_PREFIX}" + env.BUILD_ID + "_DATE_" + "${cur_date_time}"
                     SFT_TEST_RESULTS_DIR = "${SFT_TEST_RESULTS_BASE_DIR}" + "${SFT_TEST_RESULTS_SUBDIR}"
                 }
-                sh "rm -f ${SFT_BIN}/core*"
-                sh "rm -rf ${SFT_TEST_RESULTS_DIR}"
-                sh "mkdir -p ${SFT_TEST_RESULTS_DIR}"
-                sh "cd ${SFT_BIN};./ci-all.sh --provider '${SFT_PROVIDER}' ${SFT_PARTITION} -L ${SFT_TEST_RESULTS_DIR} --num-jobs ${SFT_NUM_JOBS} --max-job-time ${SFT_MAX_JOB_TIME} --output-cmds ${SFT_TEST_RESULTS_DIR}/${SFT_TEST_CMDS} --results-file ${SFT_TEST_RESULTS_DIR}/${SFT_TEST_RESULTS_CI} ${SFT_ADD_ARGS}"
+                // Simple clean-up from any prior run
+                sh """
+                    rm -f ${SFT_BIN}/core*
+                    rm -rf ${SFT_TEST_RESULTS_DIR}
+                    mkdir -p ${SFT_TEST_RESULTS_DIR}
+                """
+
+                // run the test
+                script {
+                    try {
+                        dir ("${SFT_BIN}") {
+                            timeout(time: 8, unit: 'MINUTES') {
+                                sh """
+                                    ./ci-all.sh \\
+                                        --provider '${SFT_PROVIDER}' \\
+                                        -L ${SFT_TEST_RESULTS_DIR} \\
+                                        --num-jobs ${SFT_NUM_JOBS} \\
+                                        --max-job-time ${SFT_MAX_JOB_TIME} \\
+                                        --output-cmds ${SFT_TEST_RESULTS_DIR}/${SFT_TEST_CMDS} \\
+                                        --results-file ${SFT_TEST_RESULTS_DIR}/${SFT_TEST_RESULTS_CI} \\
+                                        ${SFT_ADD_ARGS}
+                                """
+                            }
+                        }
+                    } catch (exc) {
+                        echo 'failed test, ignore result for now'
+                    }
+                }
             }
             post {
-                always {
-//                    script {
-//                        try {
-//                            copyArtifacts(projectName: "${env.JOB_NAME}", selector: lastSuccessful(), filter: "${SFT_TEST_RESULTS_PREFIX}*/${SFT_BASELINE_RESULTS_FILE}");
-//                            sh "cp  ./${SFT_TEST_RESULTS_PREFIX}*/${SFT_BASELINE_RESULTS_FILE} ${SFT_TEST_RESULTS_DIR}/${SFT_TEST_RESULTS_PREVIOUS}${SFT_BASELINE_RESULTS_FILE}"
-//                        }
-//                        catch (Exception e) {
-//                            echo 'No rpms to archive'
-//                        }
-//                    }
-                    sh "cp  ./${SFT_BASELINE_DIR}/${SFT_BASELINE_RESULTS_FILE} ${SFT_TEST_RESULTS_DIR}/${SFT_TEST_RESULTS_EXPECTED}${SFT_BASELINE_RESULTS_FILE}"
-                    sh "${SFT_BIN}/sft_parse_test_results.pm -b ${SFT_TEST_RESULTS_EXPECTED}${SFT_BASELINE_RESULTS_FILE} -d ${SFT_TEST_RESULTS_DIR} -o ${SFT_TEST_RESULTS} -r ${SFT_BASELINE_RESULTS_FILE}"
-                    sh "gzip -r ${SFT_TEST_RESULTS_DIR}"
-                    sh "gunzip ${SFT_TEST_RESULTS_DIR}/${SFT_TEST_RESULTS}"
-                    sh "gunzip ${SFT_TEST_RESULTS_DIR}/${SFT_BASELINE_RESULTS_FILE}"
-                    sh "gunzip ${SFT_TEST_RESULTS_DIR}/${SFT_TEST_RESULTS_EXPECTED}${SFT_BASELINE_RESULTS_FILE}"
-//                    sh "gunzip ${SFT_TEST_RESULTS_DIR}/${SFT_TEST_RESULTS_PREVIOUS}${SFT_BASELINE_RESULTS_FILE}"
-                    sh "cp -r ${SFT_TEST_RESULTS_DIR} ."
+                success {
+                    sh """
+                        cp  ./${SFT_BASELINE_DIR}/${SFT_BASELINE_RESULTS_FILE} ${SFT_TEST_RESULTS_DIR}/${SFT_TEST_RESULTS_EXPECTED}${SFT_BASELINE_RESULTS_FILE}
+                        ${SFT_BIN}/sft_parse_test_results.pm -b ${SFT_TEST_RESULTS_EXPECTED}${SFT_BASELINE_RESULTS_FILE} -d ${SFT_TEST_RESULTS_DIR} -o ${SFT_TEST_RESULTS} -r ${SFT_BASELINE_RESULTS_FILE}
+                        gzip -r ${SFT_TEST_RESULTS_DIR}
+                        gunzip ${SFT_TEST_RESULTS_DIR}/${SFT_TEST_RESULTS}
+                        gunzip ${SFT_TEST_RESULTS_DIR}/${SFT_BASELINE_RESULTS_FILE}
+                        gunzip ${SFT_TEST_RESULTS_DIR}/${SFT_TEST_RESULTS_EXPECTED}${SFT_BASELINE_RESULTS_FILE}
+                        cp -r ${SFT_TEST_RESULTS_DIR} .
+                    """
+                    // archive the results
                     archiveArtifacts artifacts: "${SFT_TEST_RESULTS_SUBDIR}/*"
-		    // skip validation of SFT for now until intermittent errors are fixed
+
+                    // skip validation of SFT for now until intermittent errors are fixed
                     step ([$class: 'XUnitBuilder',
                             thresholds: [
                                 [$class: 'FailedThreshold', unstableThreshold: '1000000']],
                             tools: [[$class: 'JUnitType', pattern: "${SFT_TEST_RESULTS_SUBDIR}/${SFT_TEST_RESULTS}"]]])
-                    sh "rm -rf ${SFT_TEST_RESULTS_DIR}"
+
+                    // remove result directory after parsing
+                    sh "rm -rf ${SFT_TEST_RESULTS_DIR} || true"
                 }
             }
         }
-        stage("Deploy: Install") {
-            steps {
-                sh "make clean"
-                sh "./configure --prefix=$ROOT_BUILD_PATH/libfabric/$GIT_SHORT_COMMIT"
-                sh "make -j 12"
-                sh "make install"
-            }
-        }
-        stage("Deploy: latest") {
+        stage("Deploy: Stage 1") {
             when {
-                expression { env.BRANCH_NAME == 'master' }
+                expression { currentBuild.result == 'SUCCESS' }
             }
-            steps {
-                script {
-                    publish env.LIBFABRIC_BUILD_PATH, "latest", "$GIT_SHORT_COMMIT"
+            failFast true
+            parallel {
+                stage("Deploy: Install") {
+                    steps {
+                        sh "make clean"
+                        sh "./configure --prefix=$ROOT_BUILD_PATH/libfabric/$GIT_SHORT_COMMIT"
+                        sh "make -j 12"
+                        sh "make install"
+                    }
+                }
+                stage("Deploy: latest") {
+                    when {
+                        expression { env.BRANCH_NAME == 'master' }
+                    }
+                    steps {
+                        script {
+                            publish env.LIBFABRIC_BUILD_PATH, "latest", "$GIT_SHORT_COMMIT"
+                        }
+                    }
                 }
             }
         }
         stage("Test: Phase 2") {
             environment {
                 LD_LIBRARY_PATH = "$TMP_INSTALL_PATH/lib:$LD_LIBRARY_PATH"
+                MPIR_CVAR_OFI_USE_PROVIDER = 'verbs;ofi_rxm'
             }
             failFast true
             parallel {
@@ -170,65 +193,87 @@ pipeline {
                         echo 'placeholder'
                     }
                 }
-                stage("Application tests") {
-                    environment {
-                        MPIR_CVAR_OFI_USE_PROVIDER = 'verbs;ofi_rxm'
+                stage("MPI: osu_latency") {
+                    steps {
+                        timeout(time: 5, unit: 'MINUTES') {
+                            launch "$OMB_BUILD_PATH/pt2pt/osu_latency", 2, 1
+                        }
+                    }
+                }
+                stage("MPI: osu_bw") {
+                    steps {
+                        timeout(time: 5, unit: 'MINUTES') {
+                            launch "$OMB_BUILD_PATH/pt2pt/osu_bw", 2, 1
+                        }
+                    }
+                }
+                stage("MPI: osu_allreduce") {
+                    steps {
+                        timeout(time: 5, unit: 'MINUTES') {
+                            launch "$OMB_BUILD_PATH/collective/osu_allreduce -f", 160, 40
+                        }
+                    }
+                }
+                stage("MPI: osu_bcast") {
+                    steps {
+                        timeout(time: 5, unit: 'MINUTES') {
+                            launch "$OMB_BUILD_PATH/collective/osu_bcast -f", 160, 40
+                        }
+                    }
+                }
+                stage("MPI: osu_alltoall") {
+                    steps {
+                        timeout(time: 5, unit: 'MINUTES') {
+                            launch "$OMB_BUILD_PATH/collective/osu_alltoall -f", 80, 40
+                        }
+                    }
+                }
+            }
+        }
+        stage("Deploy: Stage 2") {
+            when {
+                allOf {
+                    expression { currentBuild.result == 'SUCCESS' } ;
+                    anyOf {
+                        expression { env.BRANCH_NAME == 'master' } ;
+                        buildingTag()
+                    }
+                }
+            }
+            failFast true
+            parallel {
+                stage("Create stable link") {
+                    when {
+                        expression { env.BRANCH_NAME == 'master' }
                     }
                     steps {
-                        echo "checking ldd"
-                        launch "ldd $OMB_BUILD_PATH/pt2pt/osu_latency", 1, 1
-
-                        echo "checking potential hosts"
-                        launch "hostname", 4, 1
-
-                        echo "running 2 process, 2 node latency test"
-                        launch "$OMB_BUILD_PATH/pt2pt/osu_latency", 2, 1
-
-                        echo "running 2 process, 2 node bandwidth test"
-                        launch "$OMB_BUILD_PATH/pt2pt/osu_bw", 2, 1
-
-                        echo "running 160 processes, 4 node Allreduce test"
-                        launch "$OMB_BUILD_PATH/collective/osu_allreduce -f", 160, 40
-
-                        echo "running 160 processes, 4 node Broadcast test"
-                        launch "$OMB_BUILD_PATH/collective/osu_bcast -f", 160, 40
-
-                        echo "running 80 processes, 4 node Alltoall test"
-                        launch "$OMB_BUILD_PATH/collective/osu_alltoall -f", 80, 40
+                        script {
+                            publish env.LIBFABRIC_BUILD_PATH, "stable", "$GIT_SHORT_COMMIT"
+                        }
                     }
                 }
-            }
-        }
-        stage("Deploy: Stable") {
-            when {
-                expression { env.BRANCH_NAME == 'master' }
-            }
-            steps {
-                script {
-                    publish env.LIBFABRIC_BUILD_PATH, "stable", "$GIT_SHORT_COMMIT"
+                stage("Create tagged link") {
+                    when {
+                        buildingTag()
+                    }
+                    steps {
+                        script {
+                            publish env.LIBFABRIC_BUILD_PATH, "$BRANCH_NAME", "$GIT_SHORT_COMMIT"
+                        }
+                    }
                 }
-            }
-        }
-        stage("Deploy: Tags") {
-            when {
-                buildingTag()
-            }
-            steps {
-                script {
-                    publish env.LIBFABRIC_BUILD_PATH, "$BRANCH_NAME", "$GIT_SHORT_COMMIT"
+                stage("Create RPMs") {
+                    steps {
+                        sh 'make dist-bzip2'
+                        sh '$WORKSPACE/contrib/buildrpm/buildrpmLibfabric.sh -i verbs -i sockets -osmv $(ls libfabric-*.tar.bz2)'
+                    }
+                    post {
+                        success {
+                            stash name: 'rpms', includes: 'rpmbuild/RPMS/**/*'
+                            stash name: 'sources',  includes: 'rpmbuild/SOURCES/*'
+                        }
+                    }
                 }
-            }
-        }
-        stage("Deploy: RPMs") {
-            when {
-                anyOf { expression { env.BRANCH_NAME == 'master' } ; buildingTag() }
-            }
-            steps {
-                sh 'make dist-bzip2'
-                sh '$WORKSPACE/contrib/buildrpm/buildrpmLibfabric.sh -i verbs -i sockets -osmv $(ls libfabric-*.tar.bz2)'
-                sh 'ls rpmbuild/RPMS/**/* rpmbuild/SOURCES/*'
-                stash name: 'rpms', includes: 'rpmbuild/RPMS/**/*'
-                stash name: 'sources',  includes: 'rpmbuild/SOURCES/*'
             }
         }
     }
@@ -244,9 +289,6 @@ pipeline {
                 catch (Exception e) {
                     echo 'No rpms to archive'
                 }
-                finally {
-                    echo "Tests passed"
-                }
             }
         }
     }
@@ -257,6 +299,6 @@ pipeline {
         FABTEST_PATH = "${ROOT_BUILD_PATH + '/fabtests/stable'}"
         LIBFABRIC_BUILD_PATH = "${ROOT_BUILD_PATH + '/libfabric'}"
         OMB_BUILD_PATH = "${ROOT_BUILD_PATH + '/osu-micro-benchmarks/5.4.2/libexec/osu-micro-benchmarks/mpi'}"
-	MPICH_PATH = "${ROOT_BUILD_PATH + '/mpich/3.3b3'}"
+        MPICH_PATH = "${ROOT_BUILD_PATH + '/mpich/3.3b3'}"
     }
- }
+}
