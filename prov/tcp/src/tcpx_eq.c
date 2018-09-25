@@ -39,8 +39,6 @@ static ssize_t tcpx_eq_read(struct fid_eq *eq_fid, uint32_t *event,
 			    void *buf, size_t len, uint64_t flags)
 {
 	struct util_eq *eq;
-	struct util_event *entry;
-	ssize_t ret;
 
 	eq = container_of(eq_fid, struct util_eq, eq_fid);
 
@@ -48,50 +46,14 @@ static ssize_t tcpx_eq_read(struct fid_eq *eq_fid, uint32_t *event,
 	if (slist_empty(&eq->list)) {
 		fastlock_release(&eq->lock);
 		tcpx_conn_mgr_run(eq);
-		fastlock_acquire(&eq->lock);
-		if (slist_empty(&eq->list)) {
-			ret = -FI_EAGAIN;
-			FI_DBG(&tcpx_prov, FI_LOG_EQ, "eq empty\n");
-			goto out;
-		}
-	}
-
-	entry = container_of(eq->list.head, struct util_event, entry);
-	if (entry->err && !(flags & UTIL_FLAG_ERROR)) {
-		ret = -FI_EAVAIL;
-		goto out;
-	} else if (!entry->err && (flags & UTIL_FLAG_ERROR)) {
-		ret = -FI_EAGAIN;
-		goto out;
-	}
-
-	if (event)
-		*event = entry->event;
-	if (buf) {
-		if (flags & UTIL_FLAG_ERROR) {
-			assert((size_t)entry->size == sizeof(struct fi_eq_err_entry));
-			ofi_eq_handle_err_entry(eq->fabric->fabric_fid.api_version,
-						(struct fi_eq_err_entry *)entry->data,
-						(struct fi_eq_err_entry *)buf);
-			ret = (ssize_t)entry->size;
-		} else {
-			ret = MIN(len, (size_t)entry->size);
-			memcpy(buf, entry->data, ret);
-		}
 	} else {
-		ret = 0;
+		fastlock_release(&eq->lock);
 	}
-
-	if (!(flags & FI_PEEK)) {
-		slist_remove_head(&eq->list);
-		free(entry);
-	}
-out:
-	fastlock_release(&eq->lock);
-	return ret;
+	return ofi_eq_read(eq_fid, event, buf, len, flags);
 }
 
-static ssize_t tcpx_eq_readerr(struct fid_eq *eq_fid, struct fi_eq_err_entry *buf,
+static ssize_t tcpx_eq_readerr(struct fid_eq *eq_fid,
+			       struct fi_eq_err_entry *buf,
 			       uint64_t flags)
 {
 	return tcpx_eq_read(eq_fid, NULL, buf, sizeof(*buf),
@@ -99,7 +61,7 @@ static ssize_t tcpx_eq_readerr(struct fid_eq *eq_fid, struct fi_eq_err_entry *bu
 }
 
 static ssize_t tcpx_eq_sread(struct fid_eq *eq_fid, uint32_t *event, void *buf,
-			     size_t len, int timeout, uint64_t flags)
+			    size_t len, int timeout, uint64_t flags)
 {
 	struct util_eq *eq;
 
@@ -110,8 +72,17 @@ static ssize_t tcpx_eq_sread(struct fid_eq *eq_fid, uint32_t *event, void *buf,
 	}
 
 	fi_wait(&eq->wait->wait_fid, timeout);
-	return fi_eq_read(eq_fid, event, buf, len, flags);
+	return tcpx_eq_read(eq_fid, event, buf, len, flags);
 }
+
+static struct fi_ops_eq tcpx_eq_ops = {
+	.size = sizeof(struct fi_ops_eq),
+	.read = tcpx_eq_read,
+	.readerr = tcpx_eq_readerr,
+	.sread = tcpx_eq_sread,
+	.write = ofi_eq_write,
+	.strerror = ofi_eq_strerror,
+};
 
 int tcpx_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
 		   struct fid_eq **eq_fid, void *context)
@@ -129,10 +100,7 @@ int tcpx_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
 	}
 
 	eq = container_of(*eq_fid, struct util_eq, eq_fid);
-
-	eq->eq_fid.ops->read	= tcpx_eq_read;
-	eq->eq_fid.ops->readerr	= tcpx_eq_readerr;
-	eq->eq_fid.ops->sread	= tcpx_eq_sread;
+	eq->eq_fid.ops	= &tcpx_eq_ops;
 
 	if (!eq->wait) {
 		memset(&wait_attr, 0, sizeof wait_attr);
