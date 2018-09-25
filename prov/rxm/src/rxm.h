@@ -151,6 +151,9 @@ struct rxm_rndv_hdr {
 	uint8_t count;
 };
 
+#define rxm_pkt_rndv_data(rxm_pkt) \
+	((rxm_pkt)->data + sizeof(struct rxm_rndv_hdr))
+
 /*
  * Macros to generate enums and associated string values
  * e.g.

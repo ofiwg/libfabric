@@ -98,16 +98,22 @@ static int rxm_match_iov(const struct iovec *iov, void **desc,
 static int rxm_finish_buf_recv(struct rxm_rx_buf *rx_buf)
 {
 	uint64_t flags = rx_buf->pkt.hdr.flags | FI_RECV;
+	char *data;
 
-	if (rx_buf->pkt.hdr.size > rx_buf->ep->rxm_info->tx_attr->inject_size)
+	if (rx_buf->pkt.ctrl_hdr.type != ofi_ctrl_data)
 		flags |= FI_MORE;
+
+	if (rx_buf->pkt.ctrl_hdr.type == ofi_ctrl_large_data)
+		data = rxm_pkt_rndv_data(&rx_buf->pkt);
+	else
+		data = rx_buf->pkt.data;
 
 	FI_DBG(&rxm_prov, FI_LOG_CQ, "writing buffered recv completion: "
 	       "length: %" PRIu64 "\n", rx_buf->pkt.hdr.size);
 	rx_buf->recv_context.ep = &rx_buf->ep->util_ep.ep_fid;
 
 	return rxm_cq_write_recv_comp(rx_buf, &rx_buf->recv_context, flags,
-				      rx_buf->pkt.hdr.size, rx_buf->pkt.data);
+				      rx_buf->pkt.hdr.size, data);
 }
 
 static int rxm_cq_write_error_trunc(struct rxm_rx_buf *rx_buf, size_t done_len)

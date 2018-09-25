@@ -351,7 +351,7 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 		rxm_ep->msg_info->tx_attr->inject_size +
 		sizeof(struct rxm_tx_buf),			/* TX INJECT */
 		sizeof(struct rxm_tx_buf),			/* TX ACK */
-		sizeof(struct rxm_rndv_hdr) +
+		sizeof(struct rxm_rndv_hdr) + rxm_ep->buffered_min +
 		sizeof(struct rxm_tx_buf),			/* TX LMT */
 		rxm_ep->rxm_info->tx_attr->inject_size +
 		sizeof(struct rxm_tx_buf),			/* TX SAR */
@@ -824,9 +824,9 @@ static ssize_t rxm_ep_recvv(struct fid_ep *ep_fid, const struct iovec *iov,
 				  &rxm_ep->recv_queue);
 }
 
-static ssize_t rxm_rndv_hdr_init(struct rxm_ep *rxm_ep, void *buf,
-				const struct iovec *iov, size_t count,
-				struct fid_mr **mr)
+static void rxm_rndv_hdr_init(struct rxm_ep *rxm_ep, void *buf,
+			      const struct iovec *iov, size_t count,
+			      struct fid_mr **mr)
 {
 	struct rxm_rndv_hdr *rndv_hdr = (struct rxm_rndv_hdr *)buf;
 	size_t i;
@@ -838,7 +838,6 @@ static ssize_t rxm_rndv_hdr_init(struct rxm_ep *rxm_ep, void *buf,
 		rndv_hdr->iov[i].key = fi_mr_key(mr[i]);
 	}
 	rndv_hdr->count = (uint8_t)count;
-	return sizeof(*rndv_hdr);
 }
 
 static inline ssize_t
@@ -968,8 +967,17 @@ rxm_ep_alloc_lmt_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void *
 		mr_iov = (struct fid_mr **)desc;
 	}
 
-	return rxm_rndv_hdr_init(rxm_ep, &(*tx_entry)->tx_buf->pkt.data, iov,
-				count, mr_iov);
+	rxm_rndv_hdr_init(rxm_ep, &(*tx_entry)->tx_buf->pkt.data, iov,
+			  (*tx_entry)->count, mr_iov);
+
+	ret = sizeof(struct rxm_pkt) + sizeof(struct rxm_rndv_hdr);
+
+	if (rxm_ep->rxm_info->mode & FI_BUFFERED_RECV) {
+		ofi_copy_from_iov(rxm_pkt_rndv_data(&tx_buf->pkt),
+				  rxm_ep->buffered_min, iov, count, 0);
+		ret += rxm_ep->buffered_min;
+	}
+	return ret;
 err:
 	rxm_tx_entry_release(rxm_conn->send_queue, (*tx_entry));
 	rxm_tx_buf_release(rxm_ep, tx_buf);
@@ -1492,8 +1500,7 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 					      tag, op, &tx_entry);
 		if (OFI_UNLIKELY(ret < 0))
 			return ret;
-		return rxm_ep_lmt_tx_send(rxm_ep, rxm_conn, tx_entry,
-					  sizeof(struct rxm_pkt) + ret); 
+		return rxm_ep_lmt_tx_send(rxm_ep, rxm_conn, tx_entry, ret);
 	}
 }
 
