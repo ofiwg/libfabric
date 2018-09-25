@@ -146,9 +146,9 @@ struct rxm_cm_data {
 	struct rxm_ep_wire_proto proto;
 };
 
-struct rxm_rma_iov {
+struct rxm_rndv_hdr {
+	struct ofi_rma_iov iov[RXM_IOV_LIMIT];
 	uint8_t count;
-	struct ofi_rma_iov iov[];
 };
 
 /*
@@ -297,8 +297,8 @@ struct rxm_rx_buf {
 	uint8_t repost;
 
 	/* Used for large messages */
-	struct rxm_rma_iov *rma_iov;
-	size_t rma_iov_index;
+	struct rxm_rndv_hdr *rndv_hdr;
+	size_t rndv_rma_index;
 	struct fid_mr *mr[RXM_IOV_LIMIT];
 
 	/* Must stay at bottom */

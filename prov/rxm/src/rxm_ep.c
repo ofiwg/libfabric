@@ -351,9 +351,7 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 		rxm_ep->msg_info->tx_attr->inject_size +
 		sizeof(struct rxm_tx_buf),			/* TX INJECT */
 		sizeof(struct rxm_tx_buf),			/* TX ACK */
-		sizeof(struct rxm_rma_iov) +
-		rxm_ep->rxm_info->tx_attr->iov_limit *
-		sizeof(struct ofi_rma_iov) +
+		sizeof(struct rxm_rndv_hdr) +
 		sizeof(struct rxm_tx_buf),			/* TX LMT */
 		rxm_ep->rxm_info->tx_attr->inject_size +
 		sizeof(struct rxm_tx_buf),			/* TX SAR */
@@ -773,21 +771,21 @@ static ssize_t rxm_ep_recvv(struct fid_ep *ep_fid, const struct iovec *iov,
 				  &rxm_ep->recv_queue);
 }
 
-static ssize_t rxm_rma_iov_init(struct rxm_ep *rxm_ep, void *buf,
+static ssize_t rxm_rndv_hdr_init(struct rxm_ep *rxm_ep, void *buf,
 				const struct iovec *iov, size_t count,
 				struct fid_mr **mr)
 {
-	struct rxm_rma_iov *rma_iov = (struct rxm_rma_iov *)buf;
+	struct rxm_rndv_hdr *rndv_hdr = (struct rxm_rndv_hdr *)buf;
 	size_t i;
 
 	for (i = 0; i < count; i++) {
-		rma_iov->iov[i].addr = RXM_MR_VIRT_ADDR(rxm_ep->msg_info) ?
+		rndv_hdr->iov[i].addr = RXM_MR_VIRT_ADDR(rxm_ep->msg_info) ?
 			(uintptr_t)iov[i].iov_base : 0;
-		rma_iov->iov[i].len = (uint64_t)iov[i].iov_len;
-		rma_iov->iov[i].key = fi_mr_key(mr[i]);
+		rndv_hdr->iov[i].len = (uint64_t)iov[i].iov_len;
+		rndv_hdr->iov[i].key = fi_mr_key(mr[i]);
 	}
-	rma_iov->count = (uint8_t)count;
-	return sizeof(*rma_iov) + sizeof(*rma_iov->iov) * count;
+	rndv_hdr->count = (uint8_t)count;
+	return sizeof(*rndv_hdr);
 }
 
 static inline ssize_t
@@ -917,7 +915,7 @@ rxm_ep_alloc_lmt_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void *
 		mr_iov = (struct fid_mr **)desc;
 	}
 
-	return rxm_rma_iov_init(rxm_ep, &(*tx_entry)->tx_buf->pkt.data, iov,
+	return rxm_rndv_hdr_init(rxm_ep, &(*tx_entry)->tx_buf->pkt.data, iov,
 				count, mr_iov);
 err:
 	rxm_tx_entry_release(rxm_conn->send_queue, (*tx_entry));
