@@ -367,6 +367,16 @@ struct fi_ibv_mem_notifier {
 	pthread_mutex_t			lock;
 };
 
+struct fi_ibv_subscr_entry {
+	struct dlist_entry	entry;
+	struct ofi_subscription	*subscription;
+};
+
+struct fi_ibv_monitor_entry {
+	struct dlist_entry	subscription_list;
+	struct iovec		iov;
+};
+
 void fi_ibv_mem_notifier_free_hook(void *ptr, const void *caller);
 void *fi_ibv_mem_notifier_realloc_hook(void *ptr, size_t size, const void *caller);
 

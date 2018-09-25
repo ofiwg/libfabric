@@ -75,14 +75,18 @@ static int fi_ibv_domain_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 void fi_ibv_mem_notifier_handle_hook(void *arg, RbtIterator iter)
 {
 	struct iovec *key;
-	struct ofi_subscription *subscription;
+	struct fi_ibv_subscr_entry *subscr_entry;
+	struct fi_ibv_monitor_entry *entry;
 
 	rbtKeyValue(fi_ibv_mem_notifier->subscr_storage, iter,
-		    (void *)&key, (void *)&subscription);
+		    (void *)&key, (void *)&entry);
+	dlist_foreach_container(&entry->subscription_list, struct fi_ibv_subscr_entry,
+				subscr_entry, entry) {
+		ofi_monitor_add_event_to_nq(subscr_entry->subscription);
+	}
 
 	VERBS_DBG(FI_LOG_MR, "Write event for region %p:%lu\n",
 		  key->iov_base, key->iov_len);
-	ofi_monitor_add_event_to_nq(subscription);
 }
 
 static inline void

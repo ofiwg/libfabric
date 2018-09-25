@@ -341,16 +341,54 @@ int fi_ibv_monitor_subscribe(struct ofi_mem_monitor *notifier,
 {
 	struct fi_ibv_domain *domain =
 		container_of(notifier, struct fi_ibv_domain, monitor);
-	int ret;
+	int ret = FI_SUCCESS;
+	RbtStatus rbt_ret;
+	RbtIterator iter;
+	struct iovec *key;
+	struct fi_ibv_subscr_entry *subscr_entry;
+	struct fi_ibv_monitor_entry *entry =
+		calloc(1, sizeof(*entry));
+	if (OFI_UNLIKELY(!entry))
+		return -FI_ENOMEM;
 
 	pthread_mutex_lock(&domain->notifier->lock);
 	ofi_set_mem_free_hook(domain->notifier->prev_free_hook);
 	ofi_set_mem_realloc_hook(domain->notifier->prev_realloc_hook);
 
-	ret = (rbtInsert(domain->notifier->subscr_storage,
-		         (void *)&subscription->iov,
-			 (void *)subscription) != RBT_STATUS_OK) ?
-	       -FI_EAVAIL : FI_SUCCESS;
+	entry->iov = subscription->iov;
+	dlist_init(&entry->subscription_list);
+
+	rbt_ret = rbtInsert(domain->notifier->subscr_storage,
+			    (void *)&entry->iov, (void *)entry);
+	switch (rbt_ret) {
+	case RBT_STATUS_DUPLICATE_KEY:
+		free(entry);
+		iter = rbtFind(domain->notifier->subscr_storage,
+			       (void *)&subscription->iov);
+		assert(iter);
+		rbtKeyValue(domain->notifier->subscr_storage, iter,
+			    (void *)&key, (void *)&entry);
+		/* fall through */
+	case RBT_STATUS_OK:
+		subscr_entry = calloc(1, sizeof(*subscr_entry));
+		if (OFI_LIKELY(subscr_entry != NULL)) {
+			subscr_entry->subscription = subscription;
+			dlist_insert_tail(&subscr_entry->entry, &entry->subscription_list);
+			break;
+		}
+		/* Do not free monitor entry in case of diplicate key */
+		if (rbt_ret == RBT_STATUS_OK) {
+			iter = rbtFind(domain->notifier->subscr_storage,
+				       (void *)&subscription->iov);
+			assert(iter);
+			rbtErase(domain->notifier->subscr_storage, iter);
+			free(entry);
+		}
+		/* fall through */
+	default:
+		ret = -FI_EAVAIL;
+		break;
+	}
 
 	ofi_set_mem_free_hook(fi_ibv_mem_notifier_free_hook);
 	ofi_set_mem_realloc_hook(fi_ibv_mem_notifier_realloc_hook);
@@ -364,6 +402,9 @@ void fi_ibv_monitor_unsubscribe(struct ofi_mem_monitor *notifier,
 	struct fi_ibv_domain *domain =
 		container_of(notifier, struct fi_ibv_domain, monitor);
 	RbtIterator iter;
+	struct fi_ibv_subscr_entry *subscr_entry;
+	struct fi_ibv_monitor_entry *entry;
+	struct iovec *key;
 
 	pthread_mutex_lock(&domain->notifier->lock);
 	ofi_set_mem_free_hook(domain->notifier->prev_free_hook);
@@ -372,7 +413,21 @@ void fi_ibv_monitor_unsubscribe(struct ofi_mem_monitor *notifier,
 	iter = rbtFind(domain->notifier->subscr_storage,
 		       (void *)&subscription->iov);
 	assert(iter);
-	rbtErase(domain->notifier->subscr_storage, iter);
+	rbtKeyValue(domain->notifier->subscr_storage, iter,
+		    (void *)&key, (void *)&entry);
+	dlist_foreach_container(&entry->subscription_list, struct fi_ibv_subscr_entry,
+				subscr_entry, entry) {
+		if (subscr_entry->subscription == subscription) {
+			dlist_remove(&subscr_entry->entry);
+			free(subscr_entry);
+			break;
+		}
+	}
+
+	if (dlist_empty(&entry->subscription_list)) {
+		rbtErase(domain->notifier->subscr_storage, iter);
+		free(entry);
+	}
 
 	ofi_set_mem_realloc_hook(fi_ibv_mem_notifier_realloc_hook);
 	ofi_set_mem_free_hook(fi_ibv_mem_notifier_free_hook);
