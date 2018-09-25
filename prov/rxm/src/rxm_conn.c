@@ -117,34 +117,93 @@ rxm_conn_send_queue_close(struct rxm_conn *rxm_conn)
 
 static void rxm_conn_close(struct util_cmap_handle *handle)
 {
-	struct rxm_conn *rxm_conn = container_of(handle, struct rxm_conn, handle);
+	struct rxm_conn *rxm_conn =
+		container_of(handle, struct rxm_conn, handle);
 
 	if (!rxm_conn->msg_ep)
 		return;
+
+	if (handle->cmap->attr.serial_access) {
+		if (fi_close(&rxm_conn->msg_ep->fid)) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+				"Unable to close msg_ep\n");
+		} else {
+			FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
+			       "Closed msg_ep\n");
+		}
+	} else {
+		rxm_conn->saved_msg_ep = rxm_conn->msg_ep;
+		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
+		       "Saved MSG EP fid for further deletion in main thread\n");
+	}
+	rxm_conn->msg_ep = NULL;
+}
+
+static void rxm_conn_save(struct util_cmap_handle *handle)
+{
+	struct rxm_conn *rxm_conn =
+		container_of(handle, struct rxm_conn, handle);
+
+	if (!rxm_conn->msg_ep)
+		return;
+
 	rxm_conn->saved_msg_ep = rxm_conn->msg_ep;
 	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
-	       "Saved MSG EP fid for further deletion in main thread\n");
+	       "Saved MSG EP fid for further deletion\n");
 	rxm_conn->msg_ep = NULL;
+}
+
+static void rxm_conn_close_saved(struct util_cmap_handle *handle)
+{
+	struct rxm_conn *rxm_conn =
+		container_of(handle, struct rxm_conn, handle);
+
+	if (!rxm_conn->saved_msg_ep)
+		return;
+
+	/* If user doesn't guarantee for serializing access to cmap
+	 * objects, postpone the closing of the saved MSG EP for
+	 * further deletion in main thread  */
+	if (handle->cmap->attr.serial_access) {
+		if (fi_close(&rxm_conn->saved_msg_ep->fid)) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+				"Unable to close saved msg_ep\n");
+		} else {
+			FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
+			       "Closed saved msg_ep\n");
+		}
+		rxm_conn->saved_msg_ep = NULL;
+	}
 }
 
 static void rxm_conn_free(struct util_cmap_handle *handle)
 {
-	struct rxm_conn *rxm_conn = container_of(handle, struct rxm_conn, handle);
+	struct rxm_conn *rxm_conn =
+		container_of(handle, struct rxm_conn, handle);
 
 	/* This handles case when saved_msg_ep wasn't closed */
 	if (rxm_conn->saved_msg_ep) {
-		if (fi_close(&rxm_conn->saved_msg_ep->fid))
+		if (fi_close(&rxm_conn->saved_msg_ep->fid)) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 				"Unable to close saved msg_ep\n");
+		} else {
+			FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
+			       "Closed saved msg_ep\n");
+		}
+		rxm_conn->saved_msg_ep = NULL;
 	}
 
 	if (!rxm_conn->msg_ep)
 		return;
 	/* Assuming fi_close also shuts down the connection gracefully if the
 	 * endpoint is in connected state */
-	if (fi_close(&rxm_conn->msg_ep->fid))
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to close msg_ep\n");
-	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Closed msg_ep\n");
+	if (fi_close(&rxm_conn->msg_ep->fid)) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+			"Unable to close msg_ep\n");
+	} else {
+		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
+		       "Closed msg_ep\n");
+	}
 	rxm_conn->msg_ep = NULL;
 	rxm_conn_send_queue_close(rxm_conn);
 
@@ -736,6 +795,8 @@ struct util_cmap *rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep)
 
 	attr.alloc 		= rxm_conn_alloc;
 	attr.close 		= rxm_conn_close;
+	attr.save_conn 		= rxm_conn_save;
+	attr.close_saved_conn 	= rxm_conn_close_saved;
 	attr.free 		= rxm_conn_free;
 	attr.connect 		= rxm_conn_connect;
 	attr.connected_handler	= rxm_conn_connected_handler;

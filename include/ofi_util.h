@@ -649,6 +649,8 @@ struct util_cmap_attr {
 	uint8_t				serial_access;
 	ofi_cmap_alloc_handle_func 	alloc;
 	ofi_cmap_handle_func 		close;
+	ofi_cmap_handle_func 		save_conn;
+	ofi_cmap_handle_func 		close_saved_conn;
 	ofi_cmap_handle_func 		free;
 	ofi_cmap_connect_func 		connect;
 	ofi_cmap_handle_func		connected_handler;

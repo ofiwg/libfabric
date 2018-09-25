@@ -1470,13 +1470,18 @@ void ofi_cmap_process_reject(struct util_cmap *cmap,
 	case CMAP_CONNECTED_NOTIFY:
 		/* Handle is being re-used for incoming connection request */
 		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
-			"Connection handle is being re-used. Ignoring reject\n");
+			"Connection handle is being re-used. Close saved connection\n");
+		handle->cmap->attr.close_saved_conn(handle);
 		break;
 	case CMAP_CONNREQ_SENT:
 		if (cm_reject_flag == CMAP_REJECT_GENUINE) {
 			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 			       "Deleting connection handle\n");
 			util_cmap_del_handle(handle);
+		} else {
+			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
+			       "Connection handle is being re-used. Close the connection\n");
+			handle->cmap->attr.close(handle);
 		}
 		break;
 	case CMAP_SHUTDOWN:
@@ -1552,7 +1557,8 @@ int ofi_cmap_process_connreq(struct util_cmap *cmap, void *addr,
 				"connection\n", handle);
 			/* Re-use handle. If it receives FI_REJECT the handle
 			 * would not be deleted in this state */
-			handle->cmap->attr.close(handle);
+			//handle->cmap->attr.close(handle);
+			handle->cmap->attr.save_conn(handle);
 		} else {
 			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 				"Endpoint connects to itself\n");
