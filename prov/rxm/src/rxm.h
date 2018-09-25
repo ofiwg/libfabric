@@ -469,6 +469,8 @@ struct rxm_ep {
 	int			msg_mr_local;
 	int			rxm_mr_local;
 	size_t			min_multi_recv_size;
+	size_t			buffered_min;
+	size_t			buffered_limit;
 
 	struct {
 		size_t		limit;
