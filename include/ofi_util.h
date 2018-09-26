@@ -620,6 +620,11 @@ enum util_cmap_state {
 	CMAP_SHUTDOWN,
 };
 
+enum util_cmap_reject_flag {
+	CMAP_REJECT_GENUINE,
+	CMAP_REJECT_SIMULT_CONN,
+};
+
 struct util_cmap_handle {
 	struct util_cmap *cmap;
 	enum util_cmap_state state;
@@ -656,6 +661,8 @@ struct util_cmap_attr {
 	uint8_t				serial_access;
 	ofi_cmap_alloc_handle_func 	alloc;
 	ofi_cmap_handle_func 		close;
+	ofi_cmap_handle_func 		save_conn;
+	ofi_cmap_handle_func 		close_saved_conn;
 	ofi_cmap_handle_func 		free;
 	ofi_cmap_connect_func 		connect;
 	ofi_cmap_handle_func		connected_handler;
@@ -697,9 +704,11 @@ void ofi_cmap_process_connect(struct util_cmap *cmap,
 			      struct util_cmap_handle *handle,
 			      uint64_t *remote_key);
 void ofi_cmap_process_reject(struct util_cmap *cmap,
-			     struct util_cmap_handle *handle);
+			     struct util_cmap_handle *handle,
+			     enum util_cmap_reject_flag cm_reject_flag);
 int ofi_cmap_process_connreq(struct util_cmap *cmap, void *addr,
-			     struct util_cmap_handle **handle);
+			     struct util_cmap_handle **handle_ret,
+			     enum util_cmap_reject_flag *cm_reject_flag);
 void ofi_cmap_process_shutdown(struct util_cmap *cmap,
 			       struct util_cmap_handle *handle);
 void ofi_cmap_del_handle(struct util_cmap_handle *handle);

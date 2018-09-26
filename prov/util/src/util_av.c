@@ -1458,7 +1458,8 @@ void ofi_cmap_process_connect(struct util_cmap *cmap,
 }
 
 void ofi_cmap_process_reject(struct util_cmap *cmap,
-			     struct util_cmap_handle *handle)
+			     struct util_cmap_handle *handle,
+			     enum util_cmap_reject_flag cm_reject_flag)
 {
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 		"Processing reject for handle: %p\n", handle);
@@ -1469,12 +1470,19 @@ void ofi_cmap_process_reject(struct util_cmap *cmap,
 	case CMAP_CONNECTED_NOTIFY:
 		/* Handle is being re-used for incoming connection request */
 		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
-			"Connection handle is being re-used. Ignoring reject\n");
+			"Connection handle is being re-used. Close saved connection\n");
+		handle->cmap->attr.close_saved_conn(handle);
 		break;
 	case CMAP_CONNREQ_SENT:
-		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
-			"Deleting connection handle\n");
-		util_cmap_del_handle(handle);
+		if (cm_reject_flag == CMAP_REJECT_GENUINE) {
+			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
+			       "Deleting connection handle\n");
+			util_cmap_del_handle(handle);
+		} else {
+			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
+			       "Connection handle is being re-used. Close the connection\n");
+			handle->cmap->attr.close(handle);
+		}
 		break;
 	case CMAP_SHUTDOWN:
 		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
@@ -1489,10 +1497,14 @@ void ofi_cmap_process_reject(struct util_cmap *cmap,
 }
 
 int ofi_cmap_process_connreq(struct util_cmap *cmap, void *addr,
-			     struct util_cmap_handle **handle_ret)
+			     struct util_cmap_handle **handle_ret,
+			     enum util_cmap_reject_flag *cm_reject_flag)
 {
 	struct util_cmap_handle *handle;
 	int ret = 0, index, cmp;
+
+	/* Reset flag to initial state */
+	*cm_reject_flag = CMAP_REJECT_GENUINE;
 
 	ofi_straddr_dbg(cmap->av->prov, FI_LOG_EP_CTRL,
 			"Processing connreq for addr", addr);
@@ -1536,6 +1548,7 @@ int ofi_cmap_process_connreq(struct util_cmap *cmap, void *addr,
 		if (cmp < 0) {
 			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 				"Remote name lower than local name.\n");
+			*cm_reject_flag = CMAP_REJECT_SIMULT_CONN;
 			ret = -FI_EALREADY;
 			break;
 		} else if (cmp > 0) {
@@ -1544,7 +1557,8 @@ int ofi_cmap_process_connreq(struct util_cmap *cmap, void *addr,
 				"connection\n", handle);
 			/* Re-use handle. If it receives FI_REJECT the handle
 			 * would not be deleted in this state */
-			handle->cmap->attr.close(handle);
+			//handle->cmap->attr.close(handle);
+			handle->cmap->attr.save_conn(handle);
 		} else {
 			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 				"Endpoint connects to itself\n");
