@@ -129,7 +129,8 @@ static struct mrail_recv *mrail_match_recv(struct mrail_ep *mrail_ep,
 						     NULL);
 	} else {
 		assert(hdr->op == ofi_op_tagged);
-		FI_DBG(&mrail_prov, FI_LOG_CQ, "Got TAGGED op\n");
+		FI_DBG(&mrail_prov, FI_LOG_CQ, "Got TAGGED op with tag: 0x%"
+		       PRIx64 "\n", hdr->tag);
 		recv = mrail_match_recv_handle_unexp(&mrail_ep->trecv_queue,
 						     hdr->tag, FI_ADDR_UNSPEC,
 						     (char *)comp, sizeof(*comp),
@@ -359,6 +360,7 @@ static void mrail_handle_rma_completion(struct util_cq *cq,
 void mrail_poll_cq(struct util_cq *cq)
 {
 	struct mrail_cq *mrail_cq;
+	struct mrail_tx_buf *tx_buf;
 	struct fi_cq_tagged_entry comp;
 	fi_addr_t src_addr;
 	size_t i;
@@ -385,6 +387,12 @@ void mrail_poll_cq(struct util_cq *cq)
 			mrail_handle_rma_completion(cq, &comp);
 		} else {
 			assert(comp.flags & (FI_SEND | FI_REMOTE_WRITE));
+
+			tx_buf = comp.op_context;
+			ofi_ep_lock_acquire(&tx_buf->ep->util_ep);
+			util_buf_release(tx_buf->ep->tx_buf_pool, tx_buf);
+			ofi_ep_lock_release(&tx_buf->ep->util_ep);
+
 			ret = ofi_cq_write(cq, comp.op_context, comp.flags,
 					   0, NULL, 0, 0);
 			if (ret) {

@@ -116,6 +116,14 @@ struct mrail_hdr {
 	uint64_t 	tag;
 };
 
+struct mrail_tx_buf {
+	/* context should stay at top and would get overwritten on
+	 * util buf release */
+	void			*context;
+	struct mrail_ep		*ep;
+	struct mrail_hdr	hdr;
+};
+
 struct mrail_pkt {
 	struct mrail_hdr	hdr;
 	char 			data[];
@@ -211,6 +219,7 @@ struct mrail_ep {
 
 	struct util_buf_pool	*req_pool;
 	struct util_buf_pool 	*ooo_recv_pool;
+	struct util_buf_pool 	*tx_buf_pool;
 	struct slist		deferred_reqs;
 };
 
