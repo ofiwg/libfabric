@@ -1365,8 +1365,8 @@ rxm_ep_send_inject(struct rxm_ep *rxm_ep, const struct iovec *iov, size_t count,
 		return ret;
 
 	if (flags & FI_COMPLETION) {
-		ret = ofi_cq_write(rxm_ep->util_ep.tx_cq, context, comp_flags,
-				   0, NULL, 0, 0);
+		ret = ofi_cq_write(rxm_ep->util_ep.tx_cq, context,
+				   comp_flags | FI_SEND, 0, NULL, 0, 0);
 		if (OFI_UNLIKELY(ret)) {
 			FI_WARN(&rxm_prov, FI_LOG_CQ,
 				"Unable to report completion\n");
