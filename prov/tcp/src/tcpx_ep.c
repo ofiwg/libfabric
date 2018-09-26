@@ -156,7 +156,7 @@ static ssize_t tcpx_recvv(struct fid_ep *ep, const struct iovec *iov, void **des
 		return -FI_EAGAIN;
 
 	recv_entry->msg_data.iov_cnt = count;
-	memcpy(&recv_entry->msg_data.iov, iov, count * sizeof(*iov));
+	memcpy(recv_entry->msg_data.iov, iov, count * sizeof(*iov));
 
 	recv_entry->flags = FI_MSG | FI_RECV;
 	recv_entry->context = context;
@@ -248,6 +248,7 @@ static ssize_t tcpx_send(struct fid_ep *ep, const void *buf, size_t len, void *d
 	tx_entry->context = context;
 	tx_entry->flags = FI_MSG | FI_SEND;
 
+	tx_entry->msg_hdr.hdr.flags = 0;
 	fastlock_acquire(&tcpx_ep->lock);
 	tcpx_tx_queue_insert(tcpx_ep, tx_entry);
 	fastlock_release(&tcpx_ep->lock);
@@ -276,6 +277,7 @@ static ssize_t tcpx_sendv(struct fid_ep *ep, const struct iovec *iov, void **des
 	memcpy(&tx_entry->msg_data.iov[1], &iov[0],
 	       count * sizeof(struct iovec));
 
+	tx_entry->msg_hdr.hdr.flags = 0;
 	tx_entry->context = context;
 	tx_entry->flags = FI_MSG | FI_SEND;
 
@@ -307,6 +309,7 @@ static ssize_t tcpx_inject(struct fid_ep *ep, const void *buf, size_t len,
 	tx_entry->msg_data.iov[1].iov_len = len;
 	tx_entry->msg_data.iov_cnt = 2;
 
+	tx_entry->msg_hdr.hdr.flags = 0;
 	tx_entry->flags = FI_MSG | FI_SEND | TCPX_NO_COMPLETION;
 
 	fastlock_acquire(&tcpx_ep->lock);
@@ -368,7 +371,7 @@ static ssize_t tcpx_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 	tx_entry->msg_data.iov[1].iov_len = len;
 	tx_entry->msg_data.iov_cnt = 2;
 
-	tx_entry->msg_hdr.hdr.flags |= htonl(OFI_REMOTE_CQ_DATA);
+	tx_entry->msg_hdr.hdr.flags = htonl(OFI_REMOTE_CQ_DATA);
 	tx_entry->msg_hdr.hdr.data = htonll(data);
 	tx_entry->flags = FI_MSG | FI_SEND | TCPX_NO_COMPLETION;
 
