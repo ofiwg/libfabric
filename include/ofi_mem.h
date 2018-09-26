@@ -249,6 +249,7 @@ struct util_buf_pool;
 typedef int (*util_buf_region_alloc_hndlr) (void *pool_ctx, void *addr, size_t len,
 					    void **context);
 typedef void (*util_buf_region_free_hndlr) (void *pool_ctx, void *context);
+typedef void (*util_buf_region_init_func) (void *pool_ctx, void *buf);
 
 struct util_buf_attr {
 	size_t 				size;
@@ -257,6 +258,7 @@ struct util_buf_attr {
 	size_t 				chunk_cnt;
 	util_buf_region_alloc_hndlr 	alloc_hndlr;
 	util_buf_region_free_hndlr 	free_hndlr;
+	util_buf_region_init_func 	init;
 	void 				*ctx;
 	uint8_t				track_used;
 };
