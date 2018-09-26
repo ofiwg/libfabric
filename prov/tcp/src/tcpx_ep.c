@@ -156,7 +156,7 @@ static ssize_t tcpx_recvv(struct fid_ep *ep, const struct iovec *iov, void **des
 		return -FI_EAGAIN;
 
 	recv_entry->msg_data.iov_cnt = count;
-	memcpy(&recv_entry->msg_data.iov, iov, count * sizeof(*iov));
+	memcpy(recv_entry->msg_data.iov, iov, count * sizeof(*iov));
 
 	recv_entry->flags = FI_MSG | FI_RECV;
 	recv_entry->context = context;
