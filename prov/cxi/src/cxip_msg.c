@@ -26,7 +26,7 @@
 static struct cxip_ux_send *
 match_ux_send(struct cxip_rx_ctx *rxc, const union c_event *event)
 {
-	struct cxip_ux_send *entry;
+	struct cxip_ux_send *ux_send;
 
 	/* Look for a previously received unexpected Put event with matching
 	 * start pointer.
@@ -34,11 +34,11 @@ match_ux_send(struct cxip_rx_ctx *rxc, const union c_event *event)
 	 * TODO this assumes all overflow buffers use the same AC so all start
 	 * pointers are unique.
 	 */
-	dlist_foreach_container(&rxc->ux_sends, struct cxip_ux_send, entry,
+	dlist_foreach_container(&rxc->ux_sends, struct cxip_ux_send, ux_send,
 				list) {
-		if (entry->start == event->tgt_long.start) {
-			dlist_remove(&entry->list);
-			return entry;
+		if (ux_send->start == event->tgt_long.start) {
+			dlist_remove(&ux_send->list);
+			return ux_send;
 		}
 	}
 
@@ -49,7 +49,7 @@ match_ux_send(struct cxip_rx_ctx *rxc, const union c_event *event)
 static struct cxip_req *
 match_ux_recv(struct cxip_rx_ctx *rxc, const union c_event *event)
 {
-	struct cxip_req *entry;
+	struct cxip_req *req;
 
 	/* Look for a previously completed request which was matched to an
 	 * overflow buffer that has a matching start pointer.
@@ -57,10 +57,10 @@ match_ux_recv(struct cxip_rx_ctx *rxc, const union c_event *event)
 	 * TODO this assumes all overflow buffers use the same AC so all start
 	 * pointers are unique.
 	 */
-	dlist_foreach_container(&rxc->ux_recvs, struct cxip_req, entry, list) {
-		if (entry->start == event->tgt_long.start) {
-			dlist_remove(&entry->list);
-			return entry;
+	dlist_foreach_container(&rxc->ux_recvs, struct cxip_req, req, list) {
+		if (req->recv.start == event->tgt_long.start) {
+			dlist_remove(&req->list);
+			return req;
 		}
 	}
 
@@ -73,9 +73,9 @@ static void report_recv_completion(struct cxip_req *req)
 	int truncated;
 	int err;
 
-	truncated = req->rlength - req->mlength;
-	if (req->rc == C_RC_OK && !truncated) {
-		req->data_len = req->mlength;
+	truncated = req->recv.rlength - req->recv.mlength;
+	if (req->recv.rc == C_RC_OK && !truncated) {
+		req->data_len = req->recv.mlength;
 
 		ret = req->cq->report_completion(req->cq, FI_ADDR_UNSPEC, req);
 		if (ret != req->cq->cq_entry_size)
@@ -85,7 +85,7 @@ static void report_recv_completion(struct cxip_req *req)
 		err = truncated ? FI_EMSGSIZE : FI_EIO;
 
 		ret = cxip_cq_report_error(req->cq, req, truncated, err,
-					   req->rc, NULL, 0);
+					   req->recv.rc, NULL, 0);
 		if (ret != FI_SUCCESS)
 			CXIP_LOG_ERROR("Failed to report error: %d\n", ret);
 	}
@@ -149,12 +149,13 @@ static void oflow_buf_put(struct cxip_oflow_buf *oflow_buf)
  */
 static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 {
+	struct cxip_rx_ctx *rxc = req->oflow.rxc;
 	struct cxip_req *ux_recv;
 	struct cxip_ux_send *ux_send;
 	struct cxip_oflow_buf *oflow_buf;
 	void *oflow_va;
 
-	oflow_buf = req->oflow_buf;
+	oflow_buf = req->oflow.oflow_buf;
 
 	CXIP_LOG_DBG("got event: %d\n", event->hdr.event_type);
 
@@ -168,7 +169,7 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 	}
 
 	if (event->hdr.event_type == C_EVENT_UNLINK) {
-		ofi_atomic_dec32(&oflow_buf->rxc->oflow_buf_cnt);
+		ofi_atomic_dec32(&rxc->oflow_buf_cnt);
 
 		/* Check if this LE was Unlinked explicitly or
 		 * automatically unlinked due to buffer exhaustion.
@@ -185,7 +186,7 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 		oflow_buf->exhausted = 1;
 
 		/* Refill overflow buffers */
-		cxip_rxc_oflow_replenish(oflow_buf->rxc);
+		cxip_rxc_oflow_replenish(rxc);
 		return;
 	}
 
@@ -195,10 +196,10 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 		return;
 	}
 
-	fastlock_acquire(&oflow_buf->rxc->lock);
+	fastlock_acquire(&rxc->lock);
 
 	/* Check for a previously received PUT_OVERFLOW event */
-	ux_recv = match_ux_recv(oflow_buf->rxc, event);
+	ux_recv = match_ux_recv(rxc, event);
 	if (!ux_recv) {
 		/* A PUT_OVERFLOW event is pending.  Store a record of this
 		 * unexepected Put event for lookup when the event arrives.
@@ -223,30 +224,32 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 		oflow_buf_get(oflow_buf);
 
 		dlist_insert_tail(&ux_send->list,
-				  &oflow_buf->rxc->ux_sends);
+				  &rxc->ux_sends);
 
-		fastlock_release(&oflow_buf->rxc->lock);
+		fastlock_release(&rxc->lock);
 	} else {
 		/* A matching PUT_OVERFLOW event arrived earlier.  Data is
 		 * waiting in the overflow buffer.
 		 */
 
-		fastlock_release(&oflow_buf->rxc->lock);
+		fastlock_release(&rxc->lock);
 
-		CXIP_LOG_DBG("Matched ux_recv, data: 0x%lx\n", ux_recv->start);
+		CXIP_LOG_DBG("Matched ux_recv, data: 0x%lx\n",
+			     ux_recv->recv.start);
 
 		/* Copy data from the overflow buffer */
 		oflow_va = (void *)CXI_IOVA_TO_VA(&oflow_buf->md,
-						  ux_recv->start);
+						  ux_recv->recv.start);
 
-		if (event->tgt_long.mlength > req->rlength) {
-			req->mlength = req->rlength;
-			req->rlength = event->tgt_long.mlength;
+		if (event->tgt_long.mlength > req->recv.rlength) {
+			req->recv.mlength = req->recv.rlength;
+			req->recv.rlength = event->tgt_long.mlength;
 		} else {
-			req->rlength = req->mlength = event->tgt_long.mlength;
+			req->recv.rlength = req->recv.mlength =
+					event->tgt_long.mlength;
 		}
 
-		memcpy(ux_recv->local_buf, oflow_va, ux_recv->mlength);
+		memcpy(ux_recv->recv.recv_buf, oflow_va, ux_recv->recv.mlength);
 
 		report_recv_completion(ux_recv);
 
@@ -314,9 +317,9 @@ static int oflow_buf_add(struct cxip_rx_ctx *rxc)
 		goto unmap;
 	}
 
-	req->rxc = rxc;
 	req->cb = cxip_oflow_cb;
-	req->oflow_buf = oflow_buf;
+	req->oflow.rxc = rxc;
+	req->oflow.oflow_buf = oflow_buf;
 
 	/* Build Append command descriptor */
 	cmd.command.opcode      = C_CMD_TGT_APPEND;
@@ -485,6 +488,7 @@ void cxip_rxc_oflow_cleanup(struct cxip_rx_ctx *rxc)
 static void cxip_trecv_cb(struct cxip_req *req, const union c_event *event)
 {
 	int ret;
+	struct cxip_rx_ctx *rxc = req->recv.rxc;
 	struct cxip_ux_send *ux_send;
 	struct cxip_oflow_buf *oflow_buf;
 	void *oflow_va;
@@ -499,20 +503,20 @@ static void cxip_trecv_cb(struct cxip_req *req, const union c_event *event)
 	if (event->hdr.event_type == C_EVENT_UNLINK)
 		return;
 
-	req->rc = event->tgt_long.return_code;
+	req->recv.rc = event->tgt_long.return_code;
 	req->tag = event->tgt_long.match_bits;
 
-	ret = cxil_unmap(req->cq->domain->dev_if->if_lni, &req->local_md);
+	ret = cxil_unmap(req->cq->domain->dev_if->if_lni, &req->recv.recv_md);
 	if (ret != FI_SUCCESS)
 		CXIP_LOG_ERROR("Failed to free MD: %d\n", ret);
 
 	if (event->hdr.event_type == C_EVENT_PUT_OVERFLOW) {
 		/* We matched an unexpected header */
 
-		fastlock_acquire(&req->rxc->lock);
+		fastlock_acquire(&rxc->lock);
 
 		/* Check for a previously received unexpected Put event */
-		ux_send = match_ux_send(req->rxc, event);
+		ux_send = match_ux_send(rxc, event);
 		if (!ux_send) {
 			/* An unexpected Put event is pending.  Link this
 			 * request to the pending list for lookup when the
@@ -522,19 +526,19 @@ static void cxip_trecv_cb(struct cxip_req *req, const union c_event *event)
 			/* Store start address to use for matching against
 			 * future events.
 			 */
-			req->start = event->tgt_long.start;
+			req->recv.start = event->tgt_long.start;
 
-			dlist_insert_tail(&req->list, &req->rxc->ux_recvs);
+			dlist_insert_tail(&req->list, &rxc->ux_recvs);
 
 			CXIP_LOG_DBG("Queued recv req, data: 0x%lx\n",
-				     req->start);
+				     req->recv.start);
 
-			fastlock_release(&req->rxc->lock);
+			fastlock_release(&rxc->lock);
 
 			return;
 		}
 
-		fastlock_release(&req->rxc->lock);
+		fastlock_release(&rxc->lock);
 
 		CXIP_LOG_DBG("Matched ux_send, data: 0x%lx\n", ux_send->start);
 
@@ -547,14 +551,14 @@ static void cxip_trecv_cb(struct cxip_req *req, const union c_event *event)
 		oflow_va = (void *)CXI_IOVA_TO_VA(&oflow_buf->md,
 						  event->tgt_long.start);
 
-		if (ux_send->length > req->rlength) {
-			req->mlength = req->rlength;
-			req->rlength = ux_send->length;
+		if (ux_send->length > req->recv.rlength) {
+			req->recv.mlength = req->recv.rlength;
+			req->recv.rlength = ux_send->length;
 		} else {
-			req->rlength = req->mlength = ux_send->length;
+			req->recv.rlength = req->recv.mlength = ux_send->length;
 		}
 
-		memcpy(req->local_buf, oflow_va, req->mlength);
+		memcpy(req->recv.recv_buf, oflow_va, req->recv.mlength);
 
 		/* Drop reference to the overflow buffer.  It will be freed
 		 * once all user data is copied out.
@@ -572,8 +576,8 @@ static void cxip_trecv_cb(struct cxip_req *req, const union c_event *event)
 
 		CXIP_LOG_DBG("Matched in HW\n");
 
-		req->rlength = event->tgt_long.rlength;
-		req->mlength = event->tgt_long.mlength;
+		req->recv.rlength = event->tgt_long.rlength;
+		req->recv.mlength = event->tgt_long.mlength;
 	}
 
 	report_recv_completion(req);
@@ -640,12 +644,12 @@ static ssize_t cxip_trecv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	req->flags = FI_TAGGED | FI_RECV;
 	req->buf = 0;
 	req->data = 0;
-
-	req->rxc = rxc;
-	req->local_buf = buf;
-	req->local_md = recv_md;
-	req->rlength = len;
 	req->cb = cxip_trecv_cb;
+
+	req->recv.rxc = rxc;
+	req->recv.recv_buf = buf;
+	req->recv.recv_md = recv_md;
+	req->recv.rlength = len;
 
 	/* Build Append command descriptor */
 	cmd.command.opcode     = C_CMD_TGT_APPEND;
@@ -693,7 +697,7 @@ static void cxip_tsend_cb(struct cxip_req *req, const union c_event *event)
 	int ret;
 	int event_rc;
 
-	ret = cxil_unmap(req->cq->domain->dev_if->if_lni, &req->local_md);
+	ret = cxil_unmap(req->cq->domain->dev_if->if_lni, &req->send.send_md);
 	if (ret != FI_SUCCESS)
 		CXIP_LOG_ERROR("Failed to free MD: %d\n", ret);
 
@@ -783,8 +787,8 @@ static ssize_t cxip_tsend(struct fid_ep *ep, const void *buf, size_t len,
 	req->data = 0;
 	req->tag = 0;
 
-	req->local_md = send_md;
 	req->cb = cxip_tsend_cb;
+	req->send.send_md = send_md;
 
 	/* Build Put command descriptor */
 	pid_granule = dom->dev_if->if_pid_granule;

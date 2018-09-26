@@ -250,6 +250,34 @@ struct cxip_eq {
 	int wait_fd;
 };
 
+struct cxip_req_rma {
+	struct cxi_iova local_md;
+};
+
+struct cxip_req_amo {
+	struct cxi_iova local_md;
+	void *result_buf;
+};
+
+struct cxip_req_recv {
+	struct cxip_rx_ctx *rxc;
+	void *recv_buf;
+	struct cxi_iova recv_md;
+	int rc;
+	int rlength;
+	int mlength;
+	uint64_t start;
+};
+
+struct cxip_req_send {
+	struct cxi_iova send_md;
+};
+
+struct cxip_req_oflow {
+	struct cxip_rx_ctx *rxc;
+	struct cxip_oflow_buf *oflow_buf;
+};
+
 struct cxip_req {
 	/* Control info */
 	struct dlist_entry list;
@@ -266,19 +294,13 @@ struct cxip_req {
 	uint64_t tag;
 	fi_addr_t addr;
 
-	/* Other state */
-	struct cxi_iova local_md;
-
-	/* Recv only */
-	struct cxip_rx_ctx *rxc;
-	void *local_buf;
-	int rc;
-	int rlength;
-	int mlength;
-	uint64_t start;
-
-	/* oflow event only */
-	struct cxip_oflow_buf *oflow_buf;
+	union {
+		struct cxip_req_rma rma;
+		struct cxip_req_amo amo;
+		struct cxip_req_oflow oflow;
+		struct cxip_req_recv recv;
+		struct cxip_req_send send;
+	};
 };
 
 struct cxip_cq;

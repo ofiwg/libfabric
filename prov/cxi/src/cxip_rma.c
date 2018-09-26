@@ -34,7 +34,7 @@ static void cxip_rma_cb(struct cxip_req *req, const union c_event *event)
 	int ret;
 	int event_rc;
 
-	ret = cxil_unmap(req->cq->domain->dev_if->if_lni, &req->local_md);
+	ret = cxil_unmap(req->cq->domain->dev_if->if_lni, &req->rma.local_md);
 	if (ret != FI_SUCCESS)
 		CXIP_LOG_ERROR("Failed to free MD: %d\n", ret);
 
@@ -126,9 +126,9 @@ static ssize_t _cxip_rma_op(enum cxip_rma_op op, struct fid_ep *ep,
 	req->buf = 0;
 	req->data = 0;
 	req->tag = 0;
-	req->local_md = mem_desc;
 	req->cb = cxip_rma_cb;
 	req->flags = FI_RMA | (op == CXIP_RMA_READ ? FI_READ : FI_WRITE);
+	req->rma.local_md = mem_desc;
 
 	/* Generate the destination fabric address */
 	pid_granule = dom->dev_if->if_pid_granule;

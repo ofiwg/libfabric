@@ -282,12 +282,11 @@ static void _cxip_famo_cb(struct cxip_req *req, const union c_event *event)
 {
 	int ret;
 
-	/* Free the local_result buffer, if allocated (free is NULL-safe) */
-	free((void *)req->buf);
-	req->buf = 0;
+	/* Free the temporary result buffer, if allocated (free is NULL-safe) */
+	free(req->amo.result_buf);
 
 	ret = cxil_unmap(req->cq->domain->dev_if->if_lni,
-			 &req->local_md);
+			 &req->amo.local_md);
 	if (ret != FI_SUCCESS)
 		CXIP_LOG_ERROR("Failed to free MD: %d\n", ret);
 
@@ -565,11 +564,12 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 	req->context = (uint64_t)msg->context;
 	req->flags = FI_ATOMIC | report_flags;
 	req->data_len = 0;
-	req->buf = (uint64_t)local_result;
+	req->buf = 0;
 	req->data = 0;
 	req->tag = 0;
-	req->local_md = result_md;
 	req->cb = (result) ? _cxip_famo_cb : _cxip_amo_cb;
+	req->amo.local_md = result_md;
+	req->amo.result_buf = local_result;
 
 	/* Build AMO command descriptor */
 	pid_granule = dev_if->if_pid_granule;
