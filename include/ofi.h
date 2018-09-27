@@ -121,6 +121,7 @@ int ofi_apply_filter(struct fi_filter *filter, const char *name);
 
 int ofi_nic_close(struct fid *fid);
 struct fid_nic *ofi_nic_dup(const struct fid_nic *nic);
+int ofi_nic_tostr(const struct fid *fid_nic, char *buf, size_t len);
 
 void fi_log_init(void);
 void fi_log_fini(void);
