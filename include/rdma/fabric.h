@@ -483,7 +483,8 @@ struct fi_ops {
 	int	(*bind)(struct fid *fid, struct fid *bfid, uint64_t flags);
 	int	(*control)(struct fid *fid, int command, void *arg);
 	int	(*ops_open)(struct fid *fid, const char *name,
-			uint64_t flags, void **ops, void *context);
+			    uint64_t flags, void **ops, void *context);
+	int	(*tostr)(const struct fid *fid, char *buf, size_t len);
 };
 
 /* All fabric interface descriptors must start with this structure */
@@ -626,7 +627,7 @@ enum fi_type {
 	FI_TYPE_CQ_EVENT_FLAGS,
 	FI_TYPE_MR_MODE,
 	FI_TYPE_OP_TYPE,
-	FI_TYPE_DEVICE_ATTR,
+	FI_TYPE_FID,
 };
 
 char *fi_tostr(const void *data, enum fi_type datatype);

@@ -141,6 +141,9 @@ datatype or field value.
 *FI_TYPE_OP_TYPE*
 : enum fi_op_type
 
+*FI_TYPE_FID*
+: struct fid *
+
 fi_tostr() will return a pointer to an internal libfabric buffer that
 should not be modified, and will be overwritten the next time
 fi_tostr() is invoked.  fi_tostr() is not thread safe.

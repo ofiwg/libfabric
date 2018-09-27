@@ -96,6 +96,14 @@ static void strcatf(char *dest, const char *fmt, ...)
 	va_end (arglist);
 }
 
+static void fi_tostr_fid(char *buf, const struct fid *fid)
+{
+	if (!fid || !FI_CHECK_OP(fid->ops, struct fi_ops, tostr))
+		strcatf(buf, "%p\n", fid);
+	else
+		fid->ops->tostr(fid, buf, FI_BUFSIZ - strnlen(buf, FI_BUFSIZ));
+}
+
 static void fi_tostr_opflags(char *buf, uint64_t flags)
 {
 	IFFLAGSTR(flags, FI_MULTICAST);
@@ -552,7 +560,8 @@ static void fi_tostr_info(char *buf, const struct fi_info *info)
 	strcatf(buf, "%sdest_addr: ", TAB);
 	fi_tostr_addr(buf, info->addr_format, info->dest_addr);
 	strcatf(buf, "\n");
-	strcatf(buf, "%shandle: %s\n", TAB, info->handle);
+	strcatf(buf, "%shandle: ", TAB);
+	fi_tostr_fid(buf, info->handle);
 
 	fi_tostr_tx_attr(buf, info->tx_attr, TAB);
 	fi_tostr_rx_attr(buf, info->rx_attr, TAB);
@@ -744,6 +753,9 @@ char *DEFAULT_SYMVER_PRE(fi_tostr)(const void *data, enum fi_type datatype)
 		break;
 	case FI_TYPE_OP_TYPE:
 		fi_tostr_op_type(buf, *enumval);
+		break;
+	case FI_TYPE_FID:
+		fi_tostr_fid(buf, data);
 		break;
 	default:
 		strcatf(buf, "Unknown type");
