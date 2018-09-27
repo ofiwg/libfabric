@@ -529,6 +529,7 @@ struct fi_ops default_nic_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = ofi_nic_close,
 	.control = ofi_nic_control,
+	.tostr = ofi_nic_tostr,
 };
 
 static int ofi_dup_dev_attr(const struct fi_device_attr *attr,
