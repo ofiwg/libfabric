@@ -121,6 +121,7 @@ struct mrail_tx_buf {
 	 * util buf release */
 	void			*context;
 	struct mrail_ep		*ep;
+	uint64_t		flags;
 	struct mrail_hdr	hdr;
 };
 

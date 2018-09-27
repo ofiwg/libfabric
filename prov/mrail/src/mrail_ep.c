@@ -306,7 +306,7 @@ static void mrail_copy_iov_hdr(struct mrail_hdr *hdr, struct iovec *iov_dest,
 
 static struct mrail_tx_buf *mrail_get_tx_buf(struct mrail_ep *mrail_ep,
 					     void *context, uint32_t seq,
-					     uint8_t op)
+					     uint8_t op, uint64_t flags)
 {
 	struct mrail_tx_buf *tx_buf = util_buf_alloc(mrail_ep->tx_buf_pool);
 	if (OFI_UNLIKELY(!tx_buf))
@@ -316,6 +316,7 @@ static struct mrail_tx_buf *mrail_get_tx_buf(struct mrail_ep *mrail_ep,
 	assert(tx_buf->hdr.version == MRAIL_HDR_VERSION);
 
 	tx_buf->context		= context;
+	tx_buf->flags		= flags;
 	tx_buf->hdr.op		= op;
 	tx_buf->hdr.seq		= htonl(seq);
 	return tx_buf;
@@ -340,7 +341,7 @@ mrail_send_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	ofi_ep_lock_acquire(&mrail_ep->util_ep);
 
 	tx_buf = mrail_get_tx_buf(mrail_ep, context, peer_info->seq_no++,
-				  ofi_op_msg);
+				  ofi_op_msg, flags);
 	if (OFI_UNLIKELY(!tx_buf)) {
 		ret = -FI_ENOMEM;
 		goto err1;
@@ -396,7 +397,7 @@ mrail_tsend_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	ofi_ep_lock_acquire(&mrail_ep->util_ep);
 
 	tx_buf = mrail_get_tx_buf(mrail_ep, context, peer_info->seq_no++,
-				  ofi_op_tagged);
+				  ofi_op_tagged, flags);
 	if (OFI_UNLIKELY(!tx_buf)) {
 		ret = -FI_ENOMEM;
 		goto err1;
@@ -437,13 +438,10 @@ err1:
 static ssize_t mrail_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 			     uint64_t flags)
 {
-	struct mrail_ep *mrail_ep = container_of(ep_fid, struct mrail_ep,
-						 util_ep.ep_fid.fid);
-	if (!(mrail_ep->util_ep.tx_op_flags & FI_SELECTIVE_COMPLETION))
-		flags |= FI_COMPLETION;
 	return mrail_send_common(ep_fid, msg->msg_iov, msg->desc, msg->iov_count,
 				 ofi_total_iov_len(msg->msg_iov, msg->iov_count),
-				 msg->addr, msg->data, msg->context, flags);
+				 msg->addr, msg->data, msg->context,
+				 flags | mrail_comp_flag(ep_fid));
 }
 
 static ssize_t mrail_send(struct fid_ep *ep_fid, const void *buf, size_t len,
@@ -484,14 +482,10 @@ static ssize_t
 mrail_tsendmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 	       uint64_t flags)
 {
-	struct mrail_ep *mrail_ep = container_of(ep_fid, struct mrail_ep,
-						 util_ep.ep_fid.fid);
-	if (!(mrail_ep->util_ep.tx_op_flags & FI_SELECTIVE_COMPLETION))
-		flags |= FI_COMPLETION;
 	return mrail_tsend_common(ep_fid, msg->msg_iov, msg->desc, msg->iov_count,
 				  ofi_total_iov_len(msg->msg_iov, msg->iov_count),
 				  msg->addr, msg->tag, msg->data, msg->context,
-				  flags);
+				  flags | mrail_comp_flag(ep_fid));
 }
 
 static ssize_t mrail_tsend(struct fid_ep *ep_fid, const void *buf, size_t len,
@@ -708,9 +702,6 @@ static int mrail_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		if (ret)
 			return ret;
 		for (i = 0; i < mrail_ep->num_eps; i++) {
-			if (flags & FI_TRANSMIT)
-				flags |= FI_SELECTIVE_COMPLETION;
-
 			ret = fi_ep_bind(mrail_ep->rails[i].ep,
 					 &mrail_cq->cqs[i]->fid, flags);
 			if (ret)

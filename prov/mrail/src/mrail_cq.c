@@ -376,36 +376,42 @@ void mrail_poll_cq(struct util_cq *cq)
 			FI_WARN(&mrail_prov, FI_LOG_CQ,
 				"Unable to read rail completion: %s\n",
 				fi_strerror(-ret));
-			goto err;
+			goto err1;
 		}
 		// TODO handle variable length message
 		if (comp.flags & FI_RECV) {
 			ret = mrail_cq->process_comp(&comp, src_addr);
 			if (ret)
-				goto err;
+				goto err1;
 		} else if (comp.flags & (FI_READ | FI_WRITE)) {
 			mrail_handle_rma_completion(cq, &comp);
 		} else {
 			assert(comp.flags & (FI_SEND | FI_REMOTE_WRITE));
 
 			tx_buf = comp.op_context;
+
+			if (tx_buf->flags & FI_COMPLETION) {
+				ret = ofi_cq_write(cq, comp.op_context,
+						   comp.flags, 0, NULL, 0, 0);
+				if (ret) {
+					FI_WARN(&mrail_prov, FI_LOG_CQ,
+						"Unable to write to util cq\n");
+					goto err2;
+				}
+			}
 			ofi_ep_lock_acquire(&tx_buf->ep->util_ep);
 			util_buf_release(tx_buf->ep->tx_buf_pool, tx_buf);
 			ofi_ep_lock_release(&tx_buf->ep->util_ep);
-
-			ret = ofi_cq_write(cq, comp.op_context, comp.flags,
-					   0, NULL, 0, 0);
-			if (ret) {
-				FI_WARN(&mrail_prov, FI_LOG_CQ,
-					"Unable to write to util cq\n");
-				goto err;
-			}
 		}
 	}
 
 	return;
 
-err:
+err2:
+	ofi_ep_lock_acquire(&tx_buf->ep->util_ep);
+	util_buf_release(tx_buf->ep->tx_buf_pool, tx_buf);
+	ofi_ep_lock_release(&tx_buf->ep->util_ep);
+err1:
 	// TODO write error to cq
 	assert(0);
 }
