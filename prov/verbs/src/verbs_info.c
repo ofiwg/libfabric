@@ -637,7 +637,7 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 			goto err;
 		}
 
-		snprintf(fi->fabric_attr->name, name_len, VERBS_IB_PREFIX "%" PRIu64,
+		snprintf(fi->fabric_attr->name, name_len, VERBS_IB_PREFIX "%" PRIx64,
 			 be64toh(gid.global.subnet_prefix));
 
 		switch (ep_dom->type) {
