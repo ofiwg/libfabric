@@ -738,7 +738,7 @@ static int mrail_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 static int mrail_ep_ctrl(struct fid *fid, int command, void *arg)
 {
 	struct mrail_ep *mrail_ep;
-	size_t i;
+	size_t i, buf_recv_min = sizeof(struct mrail_hdr);
 	int ret;
 
 	mrail_ep = container_of(fid, struct mrail_ep, util_ep.ep_fid.fid);
@@ -750,6 +750,12 @@ static int mrail_ep_ctrl(struct fid *fid, int command, void *arg)
 		if (!mrail_ep->util_ep.av)
 			return -FI_ENOAV;
 		for (i = 0; i < mrail_ep->num_eps; i++) {
+			ret = fi_setopt(&mrail_ep->rails[i].ep->fid,
+					FI_OPT_ENDPOINT, FI_OPT_BUFFERED_MIN,
+					&buf_recv_min, sizeof(buf_recv_min));
+			if (ret)
+				return ret;
+
 			ret = fi_enable(mrail_ep->rails[i].ep);
 			if (ret)
 				return ret;
