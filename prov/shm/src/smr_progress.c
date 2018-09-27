@@ -95,7 +95,7 @@ static void smr_progress_resp(struct smr_ep *ep)
 				break;
 
 		ret = ep->tx_comp(ep, (void *) (uintptr_t) pending->msg.hdr.msg_id,
-				  smr_tx_comp_flags(pending->msg.hdr.op),
+				  ofi_tx_cq_flags(pending->msg.hdr.op),
 				  -(resp->status));
 		if (ret) {
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
@@ -381,7 +381,7 @@ static int smr_progress_cmd_msg(struct smr_ep *ep, struct smr_cmd *cmd)
 			"unidentified operation type\n");
 		err = -FI_EINVAL;
 	}
-	ret = ep->rx_comp(ep, entry->context, smr_rx_comp_flags(cmd->msg.hdr.op,
+	ret = ep->rx_comp(ep, entry->context, smr_rx_cq_flags(cmd->msg.hdr.op,
 			  cmd->msg.hdr.op_flags), total_len,
 			  entry->iov[0].iov_base, &addr, cmd->msg.hdr.tag,
 			  cmd->msg.hdr.data, err);
@@ -430,7 +430,7 @@ static int smr_progress_cmd_rma(struct smr_ep *ep, struct smr_cmd *cmd)
 				rma_cmd->rma.rma_iov[iov_count].len,
 				(uintptr_t *) &(rma_cmd->rma.rma_iov[iov_count].addr),
 				rma_cmd->rma.rma_iov[iov_count].key,
-				smr_mr_reg_flags(cmd->msg.hdr.op, 0));
+				ofi_rx_mr_reg_flags(cmd->msg.hdr.op, 0));
 		if (ret)
 			break;
 
@@ -459,7 +459,7 @@ static int smr_progress_cmd_rma(struct smr_ep *ep, struct smr_cmd *cmd)
 	}
 	if (cmd->msg.hdr.op_flags & SMR_REMOTE_CQ_DATA) {
 		ret = ep->rx_comp(ep, (void *) cmd->msg.hdr.msg_id,
-				  smr_rx_comp_flags(cmd->msg.hdr.op,
+				  smr_rx_cq_flags(cmd->msg.hdr.op,
 				  cmd->msg.hdr.op_flags), total_len,
 				  NULL, &cmd->msg.hdr.addr, 0,
 				  cmd->msg.hdr.data, err);
@@ -496,7 +496,7 @@ static int smr_progress_cmd_atomic(struct smr_ep *ep, struct smr_cmd *cmd)
 				ofi_datatype_size(cmd->msg.hdr.datatype),
 				(uintptr_t *) &(rma_cmd->rma.rma_ioc[ioc_count].addr),
 				rma_cmd->rma.rma_ioc[ioc_count].key,
-				smr_mr_reg_flags(cmd->msg.hdr.op,
+				ofi_rx_mr_reg_flags(cmd->msg.hdr.op,
 				cmd->msg.hdr.atomic_op));
 		if (ret)
 			break;
@@ -643,7 +643,7 @@ int smr_progress_unexp(struct smr_ep *ep, struct smr_ep_entry *entry)
 		entry->err = FI_EINVAL;
 	}
 	ret = ep->rx_comp(ep, entry->context,
-			  smr_rx_comp_flags(unexp_msg->cmd.msg.hdr.op,
+			  smr_rx_cq_flags(unexp_msg->cmd.msg.hdr.op,
 			  unexp_msg->cmd.msg.hdr.op_flags), total_len,
 			  entry->iov[0].iov_base, &entry->addr, entry->tag,
 			  unexp_msg->cmd.msg. hdr.data, entry->err);

@@ -59,6 +59,9 @@ The *rxd* provider checks for the following environment variables:
 *FI_OFI_RXD_MAX_PEERS*
 : Maximum number of peers the provider should prepare to track. Default: 1024
 
+*FI_OFI_RXD_MAX_UNACKED*
+: Maximum number of packets (per peer) to send at a time. Default: 128
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),

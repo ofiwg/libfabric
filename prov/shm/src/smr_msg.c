@@ -200,7 +200,7 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 		ofi_cirque_commit(smr_resp_queue(ep->region));
 		goto commit;
 	}
-	ret = ep->tx_comp(ep, context, smr_tx_comp_flags(op), 0);
+	ret = ep->tx_comp(ep, context, ofi_tx_cq_flags(op), 0);
 	if (ret) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"unable to process tx completion\n");

@@ -39,6 +39,7 @@ struct rxd_env rxd_env = {
 	.spin_count	= 1000,
 	.retry		= 1,
 	.max_peers	= 1024,
+	.max_unacked	= 128,
 };
 
 static void rxd_init_env(void)
@@ -46,6 +47,7 @@ static void rxd_init_env(void)
 	fi_param_get_int(&rxd_prov, "spin_count", &rxd_env.spin_count);
 	fi_param_get_bool(&rxd_prov, "retry", &rxd_env.retry);
 	fi_param_get_int(&rxd_prov, "max_peers", &rxd_env.max_peers);
+	fi_param_get_int(&rxd_prov, "max_unacked", &rxd_env.max_unacked);
 }
 
 int rxd_info_to_core(uint32_t version, const struct fi_info *rxd_info,
@@ -64,6 +66,9 @@ int rxd_info_to_rxd(uint32_t version, const struct fi_info *core_info,
 	info->mode = rxd_info.mode;
 
 	*info->tx_attr = *rxd_info.tx_attr;
+	info->tx_attr->inject_size = MIN(core_info->ep_attr->max_msg_size,
+			RXD_MAX_MTU_SIZE) - sizeof(struct rxd_op_pkt) -
+			core_info->ep_attr->msg_prefix_size;
 	*info->rx_attr = *rxd_info.rx_attr;
 	*info->ep_attr = *rxd_info.ep_attr;
 	*info->domain_attr = *rxd_info.domain_attr;
@@ -100,6 +105,8 @@ RXD_INI
 			"Toggle packet retrying (default: yes)");
 	fi_param_define(&rxd_prov, "max_peers", FI_PARAM_INT,
 			"Maximum number of peers to track (default: 1024)");
+	fi_param_define(&rxd_prov, "max_unacked", FI_PARAM_INT,
+			"Maximum number of packets to send at once (default: 128)");
 
 	rxd_init_env();
 

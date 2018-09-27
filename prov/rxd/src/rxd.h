@@ -73,20 +73,21 @@
 #define RXD_BUF_POOL_ALIGNMENT	16
 #define RXD_TX_POOL_CHUNK_CNT	1024
 #define RXD_RX_POOL_CHUNK_CNT	1024
-#define RXD_MAX_UNACKED		128
 #define RXD_MAX_PENDING		128
 #define RXD_MAX_PKT_RETRY	50
 
 #define RXD_REMOTE_CQ_DATA	(1 << 0)
-#define RXD_NO_COMPLETION	(1 << 1)
-#define RXD_INJECT		(1 << 2)
-#define RXD_RETRY		(1 << 3)
-#define RXD_LAST		(1 << 4)
+#define RXD_NO_TX_COMP		(1 << 1)
+#define RXD_NO_RX_COMP		(1 << 2)
+#define RXD_INJECT		(1 << 3)
+#define RXD_RETRY		(1 << 4)
+#define RXD_LAST		(1 << 5)
 
 struct rxd_env {
 	int spin_count;
 	int retry;
 	int max_peers;
+	int max_unacked;
 };
 
 extern struct rxd_env rxd_env;
@@ -116,14 +117,14 @@ struct rxd_peer {
 	fi_addr_t peer_addr;
 	uint32_t tx_seq_no;
 	uint32_t rx_seq_no;
-	uint32_t last_ack_seq_no;
+	uint32_t last_rx_ack;
+	uint32_t last_tx_ack;
 	uint32_t tx_msg_id;
 	uint32_t rx_msg_id;
 	uint16_t rx_window;//constant at MAX_UNACKED for now
 	uint16_t tx_window;//unused for now, will be used for slow start
 
 	uint16_t unacked_cnt;
-	int pending_cnt;
 
 	uint32_t curr_rx_id;
 	uint32_t curr_tx_id;
@@ -131,8 +132,8 @@ struct rxd_peer {
 	uint8_t blocking;
 	struct dlist_entry tx_list;
 	struct dlist_entry rx_list;
+	struct dlist_entry rma_rx_list;
 	struct dlist_entry unacked;
-	struct dlist_entry pending;
 	struct dlist_entry buf_ops;
 	struct dlist_entry buf_cq;
 };
@@ -165,6 +166,7 @@ struct rxd_ep {
 	size_t tx_size;
 	size_t prefix_size;
 	uint32_t posted_bufs;
+	uint32_t rx_list_size;
 	int do_local_mr;
 
 	struct util_buf_pool *tx_pkt_pool;
@@ -222,19 +224,31 @@ struct rxd_x_entry {
 
 	struct fi_cq_tagged_entry cq_entry;
 
+	struct rxd_pkt_entry *op_pkt;
 	struct dlist_entry entry;
 };
 DECLARE_FREESTACK(struct rxd_x_entry, rxd_x_fs);
 
-#define rxd_ep_rx_flags(rxd_ep) ((rxd_ep)->util_ep.rx_op_flags)
-#define rxd_ep_tx_flags(rxd_ep) ((rxd_ep)->util_ep.tx_op_flags)
+static inline uint32_t rxd_flags(uint64_t fi_flags)
+{
+	uint32_t rxd_flags = 0;
+
+	if (fi_flags & FI_REMOTE_CQ_DATA)
+		rxd_flags |= RXD_REMOTE_CQ_DATA;
+	if (fi_flags & FI_INJECT)
+		rxd_flags |= RXD_INJECT;
+
+	return rxd_flags;
+}
+
+#define rxd_ep_rx_flags(rxd_ep) (rxd_flags((rxd_ep)->util_ep.rx_op_flags))
+#define rxd_ep_tx_flags(rxd_ep) (rxd_flags((rxd_ep)->util_ep.tx_op_flags))
 
 
 enum rxd_msg_type {
 	RXD_MSG			= ofi_op_msg,
 	RXD_TAGGED		= ofi_op_tagged,
 	RXD_READ_REQ		= ofi_op_read_req,
-	RXD_READ		= ofi_op_read_rsp,
 	RXD_WRITE		= ofi_op_write,
 	RXD_ATOMIC		= ofi_op_atomic,
 	RXD_ATOMIC_FETCH	= ofi_op_atomic_fetch,
@@ -243,6 +257,7 @@ enum rxd_msg_type {
 	RXD_CTS,
 	RXD_ACK,
 	RXD_DATA,
+	RXD_DATA_READ,
 	RXD_NO_OP,
 };
 
@@ -284,7 +299,14 @@ struct rxd_op_pkt {
 	struct rxd_pkt_hdr	pkt_hdr;
 
 	uint64_t		num_segs;
-	uint64_t		tag;
+	union {
+		uint64_t		tag;
+		struct {
+			uint64_t		iov_count;
+			struct ofi_rma_iov	rma[RXD_IOV_LIMIT];
+		};
+	};
+
 	uint64_t		cq_data;
 	uint64_t		size;
 
@@ -375,8 +397,14 @@ void rxd_release_rx_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt);
 void rxd_release_tx_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt);
 int rxd_ep_retry_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry);
 ssize_t rxd_ep_post_data_pkts(struct rxd_ep *ep, struct rxd_x_entry *tx_entry);
+void rxd_insert_unacked(struct rxd_ep *ep, fi_addr_t peer,
+			struct rxd_pkt_entry *pkt_entry);
 
 /* Tx/Rx entry sub-functions */
+struct rxd_x_entry *rxd_rx_entry_init(struct rxd_ep *ep,
+			const struct iovec *iov, size_t iov_count, uint64_t tag,
+			uint64_t ignore, void *context, fi_addr_t addr,
+			uint32_t op, uint32_t flags);
 void rxd_tx_entry_free(struct rxd_ep *ep, struct rxd_x_entry *tx_entry);
 void rxd_rx_entry_free(struct rxd_ep *ep, struct rxd_x_entry *rx_entry);
 void rxd_set_timeout(struct rxd_pkt_entry *pkt_entry);
@@ -388,6 +416,7 @@ void rxd_handle_send_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp);
 void rxd_handle_recv_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp);
 void rxd_progress_op(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry,
 		     struct rxd_x_entry *rx_entry);
+void rxd_progress_tx_list(struct rxd_ep *ep, struct rxd_peer *peer);
 
 /* CQ sub-functions */
 void rxd_cq_report_error(struct rxd_cq *cq, struct fi_cq_err_entry *err_entry);
