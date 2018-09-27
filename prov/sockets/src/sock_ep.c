@@ -1371,6 +1371,7 @@ static char *sock_get_fabric_name(struct sockaddr *src_addr)
 			}
 			snprintf(netbuf + strlen(netbuf), sizeof(netbuf) - strlen(netbuf),
 				 "%s%d", "/", prefix_len);
+			netbuf[sizeof(netbuf)-1] = '\0';
 			fabric_name = strdup(netbuf);
 			goto out;
 		}
