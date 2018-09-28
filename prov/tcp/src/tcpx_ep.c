@@ -212,7 +212,7 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 
 	if (flags & (FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)) {
 		tx_entry->msg_hdr.hdr.flags |= OFI_DELIVERY_COMPLETE;
-		tx_entry->flags |= TCPX_NO_COMPLETION;
+		flags |= TCPX_NO_COMPLETION;
 	}
 
 	tx_entry->msg_hdr.hdr.flags = htonl(tx_entry->msg_hdr.hdr.flags);
