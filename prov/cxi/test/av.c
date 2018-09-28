@@ -33,7 +33,7 @@ test_addrs_init(void)
 
 	for (i = 0; i < naddrs; i++) {
 		test_addrs[i].nic = i;
-		test_addrs[i].port = i + 1;
+		test_addrs[i].pid = i + 1;
 	}
 }
 
@@ -144,9 +144,9 @@ __test_insert(int count, int iters)
 				"fi_av_lookup() iter=%d, count=%d, i=%d, index=%ld, nic=%d, exp=%d",
 				j, count, i, test_fi_addrs[i], addr.nic,
 				test_addrs[i].nic);
-			cr_assert(addr.port == test_addrs[i].port,
-				"fi_av_lookup() iter=%d, idx=%d, port=%d",
-				j, i, addr.port);
+			cr_assert(addr.pid == test_addrs[i].pid,
+				"fi_av_lookup() iter=%d, idx=%d, pid=%d",
+				j, i, addr.pid);
 		}
 
 		/* Spot-check. If we remove an arbitrary entry, and then insert
@@ -188,9 +188,9 @@ __test_insert(int count, int iters)
 			"fi_av_lookup() mid iter=%d, count=%d, i=%d, index=%ld, nic=%d, exp=%d",
 			j, count, i, test_fi_addrs[i], addr.nic,
 			test_addrs[i].nic);
-		cr_assert(addr.port == test_addrs[i].port,
-			"fi_av_lookup() mid iter=%d, idx=%d, port=%d",
-			j, i, addr.port);
+		cr_assert(addr.pid == test_addrs[i].pid,
+			"fi_av_lookup() mid iter=%d, idx=%d, pid=%d",
+			j, i, addr.pid);
 
 		/* Remove all of the entries   */
 		for (i = 0; i < count; i++) {

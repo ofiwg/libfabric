@@ -497,7 +497,7 @@ static int cxip_ep_enable(struct fid_ep *ep)
 
 	ret = cxip_get_if_domain(cxi_dom->dev_if,
 				 cxi_ep->attr->vni,
-				 cxi_ep->attr->src_addr->port,
+				 cxi_ep->attr->src_addr->pid,
 				 &cxi_ep->attr->if_dom);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Failed to get IF Domain: %d\n", ret);

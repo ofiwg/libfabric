@@ -133,7 +133,7 @@ static ssize_t _cxip_rma_op(enum cxip_rma_op op, struct fid_ep *ep,
 	/* Generate the destination fabric address */
 	pid_granule = dom->dev_if->if_pid_granule;
 	pid_idx = CXIP_ADDR_MR_IDX(pid_granule, rma[0].key);
-	cxi_build_dfa(caddr.nic, caddr.port, pid_granule, pid_idx, &dfa,
+	cxi_build_dfa(caddr.nic, caddr.pid, pid_granule, pid_idx, &dfa,
 		      &idx_ext);
 
 	/* Populate command descriptor */

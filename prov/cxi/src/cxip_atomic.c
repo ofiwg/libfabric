@@ -574,7 +574,7 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 	/* Build AMO command descriptor */
 	pid_granule = dev_if->if_pid_granule;
 	pid_idx = CXIP_ADDR_MR_IDX(pid_granule, key);
-	cxi_build_dfa(caddr.nic, caddr.port, pid_granule, pid_idx, &dfa,
+	cxi_build_dfa(caddr.nic, caddr.pid, pid_granule, pid_idx, &dfa,
 		      &idx_ext);
 
 	state.c_state.write_lac = result_lac;

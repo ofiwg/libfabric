@@ -153,7 +153,7 @@ Process ID").
 Each EP has 256 different pid_idx values that it can use to communicate with on
 the remote Cassini chip, and each of these is mapped to a libfabric provider
 Portal Table Entry (PTE), which is mapped to a libcxi PTE, which is mapped to a
-Cassini hardware PTE. This is a "receive port" on the target device.
+Cassini hardware PTE. This is a "receive portal" on the target device.
 
 All EP initiator operations specify (or imply) a pid_idx value, which targets
 exactly one of these PTEs on the remote Cassini device.

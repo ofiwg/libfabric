@@ -247,7 +247,7 @@ static int cxip_check_table_in(struct cxip_av *av, struct cxip_addr *addr,
 		if (av->idx_arr)
 			av->idx_arr[index] = index;
 
-		CXIP_LOG_DBG("inserted 0x%x:%u\n", av_addr->nic, av_addr->port);
+		CXIP_LOG_DBG("inserted 0x%x:%u\n", av_addr->nic, av_addr->pid);
 
 		/* If caller wants it, return the index */
 		if (fi_addr)

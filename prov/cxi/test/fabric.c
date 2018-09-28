@@ -192,7 +192,7 @@ Test(getinfo, src_node_service)
 	struct cxip_addr *addr;
 	struct cxip_if *if_entry;
 	struct slist_entry *entry, *prev __attribute__ ((unused));
-	int port;
+	int pid;
 	char *fab_name, *dom_name;
 
 	cxit_fi_hints->fabric_attr->prov_name = strdup(cxip_prov_name);
@@ -204,8 +204,8 @@ Test(getinfo, src_node_service)
 		ret = asprintf(&cxit_node, "0x%x", if_entry->if_nic);
 		cr_assert(ret > 0);
 
-		port = if_entry->if_idx+5;
-		ret = asprintf(&cxit_service, "%d", port);
+		pid = if_entry->if_idx+5;
+		ret = asprintf(&cxit_service, "%d", pid);
 		cr_assert(ret > 0);
 
 		cxit_flags = FI_SOURCE;
@@ -221,7 +221,7 @@ Test(getinfo, src_node_service)
 			cr_assert(cxit_fi->src_addr);
 			addr = (struct cxip_addr *)cxit_fi->src_addr;
 			cr_assert(addr->nic == if_entry->if_nic);
-			cr_assert(addr->port == port);
+			cr_assert(addr->pid == pid);
 
 			fab_name = get_fab_name(if_entry->if_fabric);
 			cr_assert(!strcmp(cxit_fi->fabric_attr->name,
@@ -280,7 +280,7 @@ Test(getinfo, dest_node)
 		cr_assert(cxit_fi->src_addr);
 		addr = (struct cxip_addr *)cxit_fi->src_addr;
 		cr_assert(addr->nic == if_entry->if_nic);
-		cr_assert(addr->port == 0);
+		cr_assert(addr->pid == 0);
 
 		fab_name = get_fab_name(if_entry->if_fabric);
 		cr_assert(!strcmp(cxit_fi->fabric_attr->name,
@@ -315,7 +315,7 @@ Test(getinfo, dest_node_service)
 	struct cxip_addr *addr;
 	struct cxip_if *if_entry;
 	char *fab_name, *dom_name;
-	int nic_id = 130, port_id = 6;
+	int nic_id = 130, pid_id = 6;
 
 	cxit_fi_hints->fabric_attr->prov_name = strdup(cxip_prov_name);
 
@@ -324,7 +324,7 @@ Test(getinfo, dest_node_service)
 	ret = asprintf(&cxit_node, "0x%x", nic_id);
 	cr_assert(ret > 0);
 
-	ret = asprintf(&cxit_service, "%d", port_id);
+	ret = asprintf(&cxit_service, "%d", pid_id);
 	cr_assert(ret > 0);
 
 	cxit_create_fabric_info();
@@ -344,7 +344,7 @@ Test(getinfo, dest_node_service)
 		cr_assert(cxit_fi->src_addr);
 		addr = (struct cxip_addr *)cxit_fi->src_addr;
 		cr_assert(addr->nic == if_entry->if_nic);
-		cr_assert(addr->port == 0);
+		cr_assert(addr->pid == 0);
 
 		fab_name = get_fab_name(if_entry->if_fabric);
 		cr_assert(!strcmp(cxit_fi->fabric_attr->name,
@@ -362,7 +362,7 @@ Test(getinfo, dest_node_service)
 		cr_assert(cxit_fi->dest_addr);
 		addr = (struct cxip_addr *)cxit_fi->dest_addr;
 		cr_assert(addr->nic == nic_id);
-		cr_assert(addr->port == port_id);
+		cr_assert(addr->pid == pid_id);
 
 		infos++;
 	} while ((cxit_fi = cxit_fi->next));
@@ -380,13 +380,13 @@ Test(getinfo, service)
 	struct cxip_addr *addr;
 	struct cxip_if *if_entry;
 	struct slist_entry *entry, *prev __attribute__ ((unused));
-	int port;
+	int pid;
 	char *fab_name, *dom_name;
 
 	cxit_fi_hints->fabric_attr->prov_name = strdup(cxip_prov_name);
 
-	port = 7;
-	ret = asprintf(&cxit_service, "%d", port);
+	pid = 7;
+	ret = asprintf(&cxit_service, "%d", pid);
 	cr_assert(ret > 0);
 
 	cxit_flags = FI_SOURCE;
@@ -409,7 +409,7 @@ Test(getinfo, service)
 				continue;
 
 			cr_assert(addr->nic == if_entry->if_nic);
-			cr_assert(addr->port == port);
+			cr_assert(addr->pid == pid);
 
 			fab_name = get_fab_name(if_entry->if_fabric);
 			cr_assert(!strcmp(cxit_fi->fabric_attr->name,

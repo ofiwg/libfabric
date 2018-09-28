@@ -137,32 +137,29 @@ extern struct fi_provider cxip_prov;
 /**
  * The CXI Provider Address format.
  *
- * A Cassini NIC Address and PID identify a libfabric Endpoint.  While Cassini
- * borrows the name 'PID' from Portals, we use the term 'Port' here since the
- * 1-1 mapping of PID to process does not exist. The maximum PID value in
- * Cassini is 12 bits.  We use only 9 bits.
+ * A Cassini NIC Address and PID identify a libfabric Endpoint.  Cassini borrows
+ * the name 'PID' from Portals. The maximum PID value in Cassini is 12 bits. We
+ * allow/use only 9 bits.
  *
- * Port -1 is reserved.  When used, the library auto-assigns a free PID value
+ * Pid -1 is reserved.  When used, the library auto-assigns a free PID value
  * when network resources are allocated.  Libfabric clients can achieve this by
  * not specifying a 'service' in a call to fi_getinfo() or by specifying the
- * reserved value -1.
+ * reserved value -1 (== 2^9 - 1 == 511 == 0x1ff).
  *
  * TODO: If NIC Address must be non-zero, the valid bit can be removed.
  * TODO: Is 18 bits enough for NIC Address?
- * TODO: rename 'port' -> 'pid' (== granule index)
- * TODO: change 'pid' size to 9 bits, 'nic' to 22
  */
 struct cxip_addr {
 	union {
 		struct {
-			uint32_t port		: 13;
-			uint32_t nic		: 18;
+			uint32_t pid		: 9;
+			uint32_t nic		: 22;
 			uint32_t valid		: 1;
 		};
 		uint32_t raw;
 	};
 };
-#define CXIP_ADDR_PORT_AUTO 0x1fff
+#define CXIP_ADDR_PID_AUTO 0x1ff
 
 #ifndef ARRAY_SIZE
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))

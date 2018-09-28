@@ -427,19 +427,19 @@ static int cxip_parse_node(const char *node, uint32_t *nic)
 	return -FI_ENODATA;
 }
 
-static int cxip_parse_service(const char *service, uint32_t *port)
+static int cxip_parse_service(const char *service, uint32_t *pid)
 {
-	uint32_t scan_port;
+	uint32_t scan_pid;
 
 	if (!service) {
-		/* TODO let driver auto assign port */
-		/* *port = CXIP_ADDR_PORT_AUTO; */
-		*port = 0;
+		/* TODO let driver auto assign pid */
+		/* *pid = CXIP_ADDR_PID_AUTO; */
+		*pid = 0;
 		return FI_SUCCESS;
 	}
 
-	if (sscanf(service, "%d", &scan_port) == 1) {
-		*port = scan_port;
+	if (sscanf(service, "%d", &scan_pid) == 1) {
+		*pid = scan_pid;
 		return FI_SUCCESS;
 	}
 
@@ -450,19 +450,19 @@ int cxip_parse_addr(const char *node, const char *service,
 		    struct cxip_addr *addr)
 {
 	uint32_t nic = 0;
-	uint32_t port = 0;
+	uint32_t pid = 0;
 	int ret;
 
 	ret = cxip_parse_node(node, &nic);
 	if (ret)
 		return ret;
 
-	ret = cxip_parse_service(service, &port);
+	ret = cxip_parse_service(service, &pid);
 	if (ret)
 		return ret;
 
 	addr->nic = nic;
-	addr->port = port;
+	addr->pid = pid;
 
 	return FI_SUCCESS;
 }
@@ -518,10 +518,10 @@ static int cxip_ep_getinfo(uint32_t version, const char *node,
 
 	if (src_addr)
 		CXIP_LOG_DBG("src_addr: 0x%x:%d\n", src_addr->nic,
-			     src_addr->port);
+			     src_addr->pid);
 	if (dest_addr)
 		CXIP_LOG_DBG("dest_addr: 0x%x:%d\n", dest_addr->nic,
-			      dest_addr->port);
+			      dest_addr->pid);
 
 	switch (ep_type) {
 	case FI_EP_RDM:
