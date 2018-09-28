@@ -831,6 +831,11 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 	(*ep_fid)->msg = &tcpx_msg_ops;
 	(*ep_fid)->rma = &tcpx_rma_ops;
 
+	ep->get_rx_entry[ofi_op_msg] = tcpx_get_rx_entry_op_msg;
+	ep->get_rx_entry[ofi_op_tagged] = tcpx_get_rx_entry_op_invalid;
+	ep->get_rx_entry[ofi_op_read_req] = tcpx_get_rx_entry_op_read_req;
+	ep->get_rx_entry[ofi_op_read_rsp] = tcpx_get_rx_entry_op_read_rsp;
+	ep->get_rx_entry[ofi_op_write] =tcpx_get_rx_entry_op_write;
 	return 0;
 err3:
 	ofi_close_socket(ep->conn_fd);

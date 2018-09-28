@@ -143,6 +143,7 @@ struct tcpx_rx_detect {
 typedef void (*tcpx_ep_progress_func_t)(struct tcpx_ep *ep);
 
 typedef int (*tcpx_rx_process_fn_t)(struct tcpx_xfer_entry *rx_entry);
+typedef int (*tcpx_get_rx_func_t)(struct tcpx_ep *ep);
 
 struct tcpx_ep {
 	struct util_ep		util_ep;
@@ -159,6 +160,7 @@ struct tcpx_ep {
 	/* lock for protecting tx/rx queues,rma list,cm_state*/
 	fastlock_t		lock;
 	tcpx_ep_progress_func_t progress_func;
+	tcpx_get_rx_func_t	get_rx_entry[ofi_op_write + 1];
 	bool			send_ready_monitor;
 };
 
@@ -238,4 +240,11 @@ void tcpx_conn_mgr_run(struct util_eq *eq);
 int tcpx_eq_wait_try_func(void *arg);
 int tcpx_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
 		   struct fid_eq **eq_fid, void *context);
+
+int tcpx_get_rx_entry_op_invalid(struct tcpx_ep *tcpx_ep);
+int tcpx_get_rx_entry_op_msg(struct tcpx_ep *tcpx_ep);
+int tcpx_get_rx_entry_op_read_req(struct tcpx_ep *tcpx_ep);
+int tcpx_get_rx_entry_op_write(struct tcpx_ep *tcpx_ep);
+int tcpx_get_rx_entry_op_read_rsp(struct tcpx_ep *tcpx_ep);
+
 #endif //_TCP_H_
