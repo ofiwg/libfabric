@@ -283,19 +283,23 @@ void cxip_put_if_domain(struct cxip_if_domain *if_dom)
  *
  * A logical endpoint is an address where a PtlTE may be bound.  PtlTEs are
  * used to implement RX interactions for the various OFI protocols.
+ *
+ * The full LEP address is specified by the (dev, vni, pid, pid_idx) vector. The
+ * (dev, vni, pid) is implied by the libfabric domain. The pid_idx completes the
+ * specification.
  */
-int cxip_if_domain_lep_alloc(struct cxip_if_domain *if_dom, uint64_t lep_idx)
+int cxip_if_domain_lep_alloc(struct cxip_if_domain *if_dom, uint64_t pid_idx)
 {
 	int ret;
 	void *lep;
 
 	fastlock_acquire(&if_dom->lock);
 
-	lep = ofi_idm_lookup(&if_dom->lep_map, lep_idx);
+	lep = ofi_idm_lookup(&if_dom->lep_map, pid_idx);
 	if (!lep) {
 		/* TODO The IDM is used as a bitmap. */
-		ret = ofi_idm_set(&if_dom->lep_map, lep_idx, (void *)1);
-		if (ret != lep_idx) {
+		ret = ofi_idm_set(&if_dom->lep_map, pid_idx, (void *)1);
+		if (ret != pid_idx) {
 			fastlock_release(&if_dom->lock);
 			return -errno;
 		}
@@ -309,21 +313,21 @@ int cxip_if_domain_lep_alloc(struct cxip_if_domain *if_dom, uint64_t lep_idx)
 /*
  * cxip_if_domain_lep_free() - Free a logical endpoint from the IF Domain.
  */
-int cxip_if_domain_lep_free(struct cxip_if_domain *if_dom, uint64_t lep_idx)
+int cxip_if_domain_lep_free(struct cxip_if_domain *if_dom, uint64_t pid_idx)
 {
 	void *lep;
 
 	fastlock_acquire(&if_dom->lock);
 
-	lep = ofi_idm_lookup(&if_dom->lep_map, lep_idx);
+	lep = ofi_idm_lookup(&if_dom->lep_map, pid_idx);
 	if (!lep) {
-		CXIP_LOG_ERROR("Attempt to free unallocated lep_idx: %lu\n",
-			       lep_idx);
+		CXIP_LOG_ERROR("Attempt to free unallocated pid_idx: %lu\n",
+			       pid_idx);
 		fastlock_release(&if_dom->lock);
 		return -FI_EINVAL;
 	}
 
-	ofi_idm_clear(&if_dom->lep_map, lep_idx);
+	ofi_idm_clear(&if_dom->lep_map, pid_idx);
 
 	fastlock_release(&if_dom->lock);
 
@@ -331,7 +335,7 @@ int cxip_if_domain_lep_free(struct cxip_if_domain *if_dom, uint64_t lep_idx)
 }
 
 int cxip_pte_alloc(struct cxip_if_domain *if_dom, struct cxi_evtq *evtq,
-		   uint64_t lep_idx, struct cxi_pt_alloc_opts *opts,
+		   uint64_t pid_idx, struct cxi_pt_alloc_opts *opts,
 		   struct cxip_pte **pte)
 {
 	struct cxip_pte *new_pte;
@@ -352,14 +356,14 @@ int cxip_pte_alloc(struct cxip_if_domain *if_dom, struct cxi_evtq *evtq,
 	}
 
 	/* Reserve LEP where PTE will be mapped */
-	ret = cxip_if_domain_lep_alloc(if_dom, lep_idx);
+	ret = cxip_if_domain_lep_alloc(if_dom, pid_idx);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("Failed to reserve LEP (%lu): %d\n", lep_idx, ret);
+		CXIP_LOG_DBG("Failed to reserve LEP (%lu): %d\n", pid_idx, ret);
 		goto free_pte;
 	}
 
 	/* Map the PTE to the LEP */
-	ret = cxil_map_pte(new_pte->pte, if_dom->if_dom, lep_idx, 0,
+	ret = cxil_map_pte(new_pte->pte, if_dom->if_dom, pid_idx, 0,
 			   &new_pte->pte_map);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to map PTE: %d\n", ret);
@@ -372,7 +376,7 @@ int cxip_pte_alloc(struct cxip_if_domain *if_dom, struct cxi_evtq *evtq,
 	fastlock_release(&if_dom->dev_if->lock);
 
 	new_pte->if_dom = if_dom;
-	new_pte->lep_idx = lep_idx;
+	new_pte->pid_idx = pid_idx;
 	new_pte->state = C_PTLTE_DISABLED;
 
 	*pte = new_pte;
@@ -380,7 +384,7 @@ int cxip_pte_alloc(struct cxip_if_domain *if_dom, struct cxi_evtq *evtq,
 	return FI_SUCCESS;
 
 free_lep:
-	ret = cxip_if_domain_lep_free(if_dom, lep_idx);
+	ret = cxip_if_domain_lep_free(if_dom, pid_idx);
 	if (ret)
 		CXIP_LOG_ERROR("cxip_if_domain_lep_free returned: %d\n", ret);
 free_pte:
@@ -405,7 +409,7 @@ void cxip_pte_free(struct cxip_pte *pte)
 	if (ret)
 		CXIP_LOG_ERROR("Failed to unmap PTE: %d\n", ret);
 
-	ret = cxip_if_domain_lep_free(pte->if_dom, pte->lep_idx);
+	ret = cxip_if_domain_lep_free(pte->if_dom, pte->pid_idx);
 	if (ret)
 		CXIP_LOG_ERROR("Failed to free LEP: %d\n", ret);
 

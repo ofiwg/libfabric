@@ -207,12 +207,6 @@ struct cxip_addr {
  * receiving data.
  *
  * Every EP will use one of these for the RX context.
- *
- * TODO: Add struct cxip_pte.
- *
- * TODO: may be able to remove lep_map, since we are using cxip_pte_alloc()
- *       Driver should reject bad indices when we allocate the pte structure
- *       so the index_map should not be necessary. We must add
  */
 struct cxip_if_domain {
 	struct dlist_entry entry;	// attach to cxip_if->if_doms
@@ -275,8 +269,7 @@ struct cxip_pte {
 	struct dlist_entry entry;	// attaches to cxip_if->ptes
 					// TODO: rename pte_entry
 	struct cxip_if_domain *if_dom;	// parent domain
-	uint64_t lep_idx;		// pid_idx
-					// TODO: rename pid_idx
+	uint64_t pid_idx;
 	struct cxil_pte *pte;		// cxil PTE object
 	struct cxil_pte_map *pte_map;	// cxil PTE mapped object
 	enum c_ptlte_state state;	// Cassini PTE state
@@ -735,9 +728,9 @@ struct cxip_mr {
 	 * list entry (LE) on the PTE mapped to the logical endpoint
 	 * addressed with the four-tuple:
 	 *
-	 *    ( if_dom->dev_if->if_nic, if_dom->pid, vni, pid_idx ) (pic_off?)
+	 *    ( if_dom->dev_if->if_nic, if_dom->pid, vni, pid_idx )
 	 */
-	uint32_t pid_off;
+	uint32_t pid_idx;
 
 	int enabled;
 	struct cxil_pte *pte;
@@ -824,13 +817,13 @@ void cxip_put_if(struct cxip_if *dev_if);
 int cxip_get_if_domain(struct cxip_if *dev_if, uint32_t vni, uint32_t pid,
 		       struct cxip_if_domain **if_dom);
 void cxip_put_if_domain(struct cxip_if_domain *if_dom);
-int cxip_if_domain_lep_alloc(struct cxip_if_domain *if_dom, uint64_t lep_idx);
-int cxip_if_domain_lep_free(struct cxip_if_domain *if_dom, uint64_t lep_idx);
+int cxip_if_domain_lep_alloc(struct cxip_if_domain *if_dom, uint64_t pid_idx);
+int cxip_if_domain_lep_free(struct cxip_if_domain *if_dom, uint64_t pid_idx);
 void cxip_if_init(void);
 void cxip_if_fini(void);
 
 int cxip_pte_alloc(struct cxip_if_domain *if_dom, struct cxi_evtq *evtq,
-		   uint64_t lep_idx, struct cxi_pt_alloc_opts *opts,
+		   uint64_t pid_idx, struct cxi_pt_alloc_opts *opts,
 		   struct cxip_pte **pte);
 void cxip_pte_free(struct cxip_pte *pte);
 int cxip_pte_state_change(struct cxip_if *dev_if, uint32_t pte_num,

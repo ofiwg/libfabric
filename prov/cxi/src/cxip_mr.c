@@ -40,18 +40,18 @@ int cxip_mr_enable(struct cxip_mr *mr)
 	}
 
 	/* Reserve the logical endpoint (LEP) where the MR will be mapped */
-	mr->pid_off = CXIP_ADDR_MR_IDX(mr->domain->dev_if->if_pid_granule,
+	mr->pid_idx = CXIP_ADDR_MR_IDX(mr->domain->dev_if->if_pid_granule,
 				       mr->key);
 
-	ret = cxip_if_domain_lep_alloc(mr->ep->attr->if_dom, mr->pid_off);
+	ret = cxip_if_domain_lep_alloc(mr->ep->attr->if_dom, mr->pid_idx);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("Failed to reserve LEP (%d): %d\n", mr->pid_off,
+		CXIP_LOG_DBG("Failed to reserve LEP (%d): %d\n", mr->pid_idx,
 			     ret);
 		goto free_pte;
 	}
 
 	/* Map the PTE to the LEP */
-	ret = cxil_map_pte(mr->pte, mr->ep->attr->if_dom->if_dom, mr->pid_off,
+	ret = cxil_map_pte(mr->pte, mr->ep->attr->if_dom->if_dom, mr->pid_idx,
 			   0, &mr->pte_map);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to allocate PTE: %d\n", ret);
@@ -164,7 +164,7 @@ unmap_buf:
 unmap_pte:
 	cxil_unmap_pte(mr->pte_map);
 free_lep:
-	cxip_if_domain_lep_free(mr->ep->attr->if_dom, mr->pid_off);
+	cxip_if_domain_lep_free(mr->ep->attr->if_dom, mr->pid_idx);
 free_pte:
 	cxil_destroy_pte(mr->pte);
 
@@ -228,7 +228,7 @@ unlock:
 	if (ret)
 		CXIP_LOG_ERROR("Failed to unmap PTE: %d\n", ret);
 
-	ret = cxip_if_domain_lep_free(mr->ep->attr->if_dom, mr->pid_off);
+	ret = cxip_if_domain_lep_free(mr->ep->attr->if_dom, mr->pid_idx);
 	if (ret)
 		CXIP_LOG_ERROR("Failed to free LEP: %d\n", ret);
 

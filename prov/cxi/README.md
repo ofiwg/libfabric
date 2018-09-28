@@ -12,13 +12,12 @@ the various file-like operations. All direct libfabric calls supply the fid of
 the corresponding libfabric object to the provider implementation.
 
 The provider object structure that represents a libfabric object generally
-contains the libfabric file identifier as one of its structure fields, and it
-acquires the object pointer from the file identifier using the container_of()
-function, specifying the provider object type and the name of the file
-identifier field within the object. Note that this makes acquiring the object
-context dependent: you can apply container_of() to any file identifier for any
-type of object, but picking the wrong object type for the file identifier will
-give you a garbage object.
+contains the fabric identifier as one of its structure fields, and it acquires
+the object pointer from the file identifier using the container_of() function,
+specifying the provider object type and the name of the file identifier field
+within the object. Note that this makes acquiring the object context dependent:
+you can apply container_of() to any pointer for any type of object, but picking
+the wrong object type for the wrong pointer will give you a garbage object.
 
 cxip_X functions and objects belong to the Cassini libfabric provider. Many of
 them are libfabric-only: they implement libfabric provider infrastructure
@@ -109,16 +108,22 @@ Sharing:
 - RX can be shared among multiple EPs
 
 
-Portals Tables
-==============
+Portals Tables Implementation Overview
+======================================
+
+The Cassini hardware is based upon a hardware implementation of the Portals 4
+specification. This overview summarizes this implementation, which drives the
+architecture of the libfabric provider.
 
 Each Cassini hardware device is address by a "Dev" (device) value. The Dev
 address allows the Cassini device to be addressed on the network.
 
-Each Cassini device supports multiple distinct namespaces of soft endpoints, and
-each endpoint within a namespace is referenced by a distinct 17-bit value. Each
-active soft endpoint is represented by a Cassini hardware Portal Table Entry
-(PTE).
+Each Cassini device supports multiple distinct namespaces of soft endpoints (or
+"logical endpoints", LEPs), and each endpoint within a namespace is referenced
+by a distinct 17-bit value. Each active logical endpoint is represented by a
+Cassini hardware Portal Table Entry (PTE). Note that a 17-bit index allows for
+2^17 == 128k distinct LEPs, but Cassini only supports on the order of 2000
+hardware PTEs. So the namespace will be only sparsely populated by active LEPs.
 
 The namespace is identified by a VNI value. The VNI is supplied as a parameter
 from outside libfabric, typically by the Workload Manager (WLM), and the kernel
@@ -130,19 +135,18 @@ other resources used by different jobs and services under the WLM.
 
 Each VNI namespace is broken into "granules" by the implementation-specific
 "granule size." Cassini supports a small set of power-of-two granule sizes. This
-implementation uses 8 bits, or 256 entries as the granule size, leaving 9 bits
-available to specify the index for the 512 granules within the full 17-bit index
-space. The 9-bit granule index is call the Process Identifier (pid). The 8-bit
-index within the granule is called the Process Identifier Index (pid_idx).
+provider implementation uses 8 bits, or 256 entries as the granule size, leaving
+9 bits available to specify the index for the 512 granules within the full
+17-bit index space. The 9-bit granule index is call the Process Identifier
+(pid). The 8-bit index within the granule is called the Process Identifier Index
+(pid_idx).
 
 The (dev, vni, pid) triple identifies a single "granule" in a particular VNI
 namespace for a specific Cassini Chip, and this "granule" is called a libcxi
-Domain. A single libcxi Domain is mapped to a single libfabric Endpoint (EP).
-Thus:
+Domain (different from a libfabric Domain). A single libcxi Domain is mapped to
+a single libfabric Endpoint (EP). Thus:
 
 * libfabric EP <=> libcxi Domain <=> Cassini VNI granule
-
-NOTE: A libcxi Domain has nothing to do with a libfabric domain.
 
 An application -- a WLM job or service -- can thus have up to 512 distinct
 libfabric EPs that all communicate with the same remote Cassini chip. The use of
@@ -152,8 +156,9 @@ Process ID").
 
 Each EP has 256 different pid_idx values that it can use to communicate with on
 the remote Cassini chip, and each of these is mapped to a libfabric provider
-Portal Table Entry (PTE), which is mapped to a libcxi PTE, which is mapped to a
-Cassini hardware PTE. This is a "receive portal" on the target device.
+Portal Table Entry (PTE) on the remote node, which is mapped to a libcxi PTE,
+which is mapped to a Cassini hardware PTE. This is a "receive portal" on the
+target device.
 
 All EP initiator operations specify (or imply) a pid_idx value, which targets
 exactly one of these PTEs on the remote Cassini device.
