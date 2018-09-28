@@ -188,8 +188,6 @@ done:
 
 	tcpx_cq_report_completion(rx_entry->ep->util_ep.rx_cq,
 				  rx_entry, -ret);
-
-	slist_remove_head(&rx_entry->ep->rx_queue);
 	tcpx_cq = container_of(rx_entry->ep->util_ep.rx_cq,
 			       struct tcpx_cq, util_cq);
 	tcpx_xfer_entry_release(tcpx_cq, rx_entry);
@@ -412,7 +410,7 @@ int tcpx_get_rx_entry_op_msg(struct tcpx_ep *tcpx_ep)
 	if (slist_empty(&tcpx_ep->rx_queue))
 		return -FI_EAGAIN;
 
-	entry = tcpx_ep->rx_queue.head;
+	entry = slist_remove_head(&tcpx_ep->rx_queue);
 	rx_entry = container_of(entry, struct tcpx_xfer_entry,
 				entry);
 
@@ -433,7 +431,6 @@ int tcpx_get_rx_entry_op_msg(struct tcpx_ep *tcpx_ep)
 			"posted rx buffer size is not big enough\n");
 		tcpx_cq_report_completion(rx_entry->ep->util_ep.rx_cq,
 					  rx_entry, -ret);
-		slist_remove_head(&tcpx_ep->rx_queue);
 		tcpx_xfer_entry_release(tcpx_cq, rx_entry);
 		return ret;
 	}
