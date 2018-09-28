@@ -680,10 +680,18 @@ static int tcpx_ep_ctrl(struct fid *fid, int command, void *arg)
 }
 static int tcpx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
-	struct util_ep *util_ep;
+	struct tcpx_ep *tcpx_ep;
+	struct tcpx_rx_ctx *rx_ctx;
 
-	util_ep = container_of(fid, struct util_ep, ep_fid.fid);
-	return ofi_ep_bind(util_ep, bfid, flags);
+	tcpx_ep = container_of(fid, struct tcpx_ep, util_ep.ep_fid.fid);
+
+	if (bfid->fclass == FI_CLASS_SRX_CTX) {
+		rx_ctx = container_of(bfid, struct tcpx_rx_ctx, rx_fid.fid);
+		tcpx_ep->srx_ctx = rx_ctx;
+		return FI_SUCCESS;
+	}
+
+	return ofi_ep_bind(&tcpx_ep->util_ep, bfid, flags);
 }
 
 static struct fi_ops tcpx_ep_fi_ops = {
