@@ -387,6 +387,9 @@
     <ClCompile Include="prov\tcp\src\tcpx_conn_mgr.c">
       <Filter>Source Files\prov\tcp\src</Filter>
     </ClCompile>
+    <ClCompile Include="prov\tcp\src\tcpx_shared_ctx.c">
+      <Filter>Source Files\prov\tcp\src</Filter>
+    </ClCompile>
     <ClCompile Include="prov\tcp\src\tcpx_cq.c">
       <Filter>Source Files\prov\tcp\src</Filter>
     </ClCompile>

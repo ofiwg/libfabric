@@ -34,7 +34,71 @@
 #include <string.h>
 
 #include "tcpx.h"
+extern struct fi_ops_msg tcpx_srx_msg_ops;
 
+static int tcpx_srx_ctx_close(struct fid *fid)
+{
+	struct tcpx_rx_ctx *srx_ctx;
+	struct slist_entry *entry;
+	struct tcpx_xfer_entry *xfer_entry;
+
+	srx_ctx = container_of(fid, struct tcpx_rx_ctx,
+			       rx_fid.fid);
+
+	while (!slist_empty(&srx_ctx->rx_queue)) {
+		entry = slist_remove_head(&srx_ctx->rx_queue);
+		xfer_entry = container_of(entry, struct tcpx_xfer_entry, entry);
+		util_buf_release(srx_ctx->buf_pool, xfer_entry);
+	}
+
+	fastlock_destroy(&srx_ctx->lock);
+	free(srx_ctx);
+	return FI_SUCCESS;
+}
+
+static struct fi_ops fi_ops_srx_ctx = {
+	.size = sizeof(struct fi_ops),
+	.close = tcpx_srx_ctx_close,
+	.bind = fi_no_bind,
+	.control = fi_no_control,
+	.ops_open = fi_no_ops_open,
+};
+
+static int tcpx_srx_ctx(struct fid_domain *domain, struct fi_rx_attr *attr,
+		 struct fid_ep **rx_ep, void *context)
+{
+	struct tcpx_rx_ctx *srx_ctx;
+	int ret = FI_SUCCESS;
+
+	srx_ctx = calloc(1, sizeof(*srx_ctx));
+	if (!srx_ctx)
+		return -FI_ENOMEM;
+
+	srx_ctx->rx_fid.fid.fclass = FI_CLASS_SRX_CTX;
+	srx_ctx->rx_fid.fid.context = context;
+	srx_ctx->rx_fid.fid.ops = &fi_ops_srx_ctx;
+
+	srx_ctx->rx_fid.msg = &tcpx_srx_msg_ops;
+	slist_init(&srx_ctx->rx_queue);
+
+	ret = fastlock_init(&srx_ctx->lock);
+	if (ret)
+		goto err1;
+
+	ret = util_buf_pool_create(&srx_ctx->buf_pool,
+				   sizeof(struct tcpx_xfer_entry),
+				   16, 0, 1024);
+	if (ret)
+		goto err2;
+
+	*rx_ep = &srx_ctx->rx_fid;
+	return FI_SUCCESS;
+err2:
+	fastlock_destroy(&srx_ctx->lock);
+err1:
+	free(srx_ctx);
+	return ret;
+}
 
 static struct fi_ops_domain tcpx_domain_ops = {
 	.size = sizeof(struct fi_ops_domain),
@@ -45,7 +109,7 @@ static struct fi_ops_domain tcpx_domain_ops = {
 	.cntr_open = fi_no_cntr_open,
 	.poll_open = fi_poll_create,
 	.stx_ctx = fi_no_stx_context,
-	.srx_ctx = fi_no_srx_context,
+	.srx_ctx = tcpx_srx_ctx,
 	.query_atomic = fi_no_query_atomic,
 };
 

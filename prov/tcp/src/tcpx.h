@@ -140,9 +140,15 @@ struct tcpx_rx_detect {
 	uint64_t		done_len;
 };
 
-typedef void (*tcpx_ep_progress_func_t)(struct tcpx_ep *ep);
+struct tcpx_rx_ctx {
+	struct fid_ep		rx_fid;
+	struct slist		rx_queue;
+	struct util_buf_pool	*buf_pool;
+	fastlock_t		lock;
+};
 
 typedef int (*tcpx_rx_process_fn_t)(struct tcpx_xfer_entry *rx_entry);
+typedef void (*tcpx_ep_progress_func_t)(struct tcpx_ep *ep);
 typedef int (*tcpx_get_rx_func_t)(struct tcpx_ep *ep);
 
 struct tcpx_ep {
@@ -156,6 +162,7 @@ struct tcpx_ep {
 	struct slist		tx_queue;
 	struct slist		tx_rsp_pend_queue;
 	struct slist		rma_read_queue;
+	struct tcpx_rx_ctx	*srx_ctx;
 	enum tcpx_cm_state	cm_state;
 	/* lock for protecting tx/rx queues,rma list,cm_state*/
 	fastlock_t		lock;
@@ -228,6 +235,7 @@ struct tcpx_xfer_entry *tcpx_xfer_entry_alloc(struct tcpx_cq *cq,
 					      enum tcpx_xfer_op_codes type);
 void tcpx_xfer_entry_release(struct tcpx_cq *tcpx_cq,
 			     struct tcpx_xfer_entry *xfer_entry);
+
 void tcpx_progress(struct util_ep *util_ep);
 void tcpx_ep_progress(struct tcpx_ep *ep);
 int tcpx_ep_shutdown_report(struct tcpx_ep *ep, fid_t fid);
