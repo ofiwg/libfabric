@@ -103,11 +103,7 @@ _psm2_nodist_files = \
 	prov/psm2/src/psm2/ptl_ips/ips_recvq.h \
 	prov/psm2/src/psm2/ptl_ips/ips_scb.c \
 	prov/psm2/src/psm2/ptl_ips/ips_scb.h \
-	prov/psm2/src/psm2/ptl_ips/ips_spio.c \
-	prov/psm2/src/psm2/ptl_ips/ips_spio.h \
 	prov/psm2/src/psm2/ptl_ips/ips_stats.h \
-	prov/psm2/src/psm2/ptl_ips/ips_subcontext.c \
-	prov/psm2/src/psm2/ptl_ips/ips_subcontext.h \
 	prov/psm2/src/psm2/ptl_ips/ips_tid.c \
 	prov/psm2/src/psm2/ptl_ips/ips_tid.h \
 	prov/psm2/src/psm2/ptl_ips/ips_tidcache.c \
@@ -167,6 +163,29 @@ _psm2_cppflags = \
 	-I$(top_srcdir)/prov/psm2/src/psm2/ptl_am \
 	-I$(top_srcdir)/prov/psm2/src/psm2/ptl_self \
 	-DNVALGRIND
+
+if HAVE_PSM2_HAL
+_psm2_nodist_files += \
+	prov/psm2/src/psm2/psm2_hal.c \
+	prov/psm2/src/psm2/psm2_hal.h \
+	prov/psm2/src/psm2/psm_config.h \
+	prov/psm2/src/psm2/psm_hal_gen1/psm_hal_gen1.c \
+	prov/psm2/src/psm2/psm_hal_gen1/psm_hal_gen1.h \
+	prov/psm2/src/psm2/psm_hal_gen1/psm_hal_gen1_spio.h \
+	prov/psm2/src/psm2/psm_hal_gen1/psm_hal_inline_d.h \
+	prov/psm2/src/psm2/psm_hal_gen1/psm_hal_inline_i.h \
+	prov/psm2/src/psm2/ptl_am/am_config.h \
+	prov/psm2/src/psm2/ptl_ips/ips_config.h
+
+_psm2_cppflags += \
+	-I$(top_srcdir)/prov/psm2/src/psm2/psm_hal_gen1
+else !HAVE_PSM2_HAL
+_psm2_nodist_files += \
+	prov/psm2/src/psm2/ptl_ips/ips_spio.c \
+	prov/psm2/src/psm2/ptl_ips/ips_spio.h \
+	prov/psm2/src/psm2/ptl_ips/ips_subcontext.c \
+	prov/psm2/src/psm2/ptl_ips/ips_subcontext.h
+endif !HAVE_PSM2_HAL
 
 endif HAVE_PSM2_SRC
 
