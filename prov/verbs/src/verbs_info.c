@@ -637,7 +637,7 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 			goto err;
 		}
 
-		snprintf(fi->fabric_attr->name, name_len, VERBS_IB_PREFIX "%" PRIu64,
+		snprintf(fi->fabric_attr->name, name_len, VERBS_IB_PREFIX "%" PRIx64,
 			 be64toh(gid.global.subnet_prefix));
 
 		switch (ep_dom->type) {
@@ -674,7 +674,7 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 	}
 
 	name_len = strlen(ctx->device->name) + strlen(ep_dom->suffix);
-	fi->domain_attr->name = malloc(name_len + 1);
+	fi->domain_attr->name = calloc(1, name_len + 2);
 	if (!fi->domain_attr->name) {
 		ret = -FI_ENOMEM;
 		goto err;
@@ -682,7 +682,6 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 
 	snprintf(fi->domain_attr->name, name_len + 1, "%s%s",
 		 ctx->device->name, ep_dom->suffix);
-	fi->domain_attr->name[name_len] = '\0';
 
 	*info = fi;
 	return 0;
