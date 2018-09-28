@@ -77,6 +77,21 @@ static ssize_t _cxip_rma_op(enum cxip_rma_op op, struct fid_ep *ep,
 	if (!iov || !rma)
 		return -FI_EINVAL;
 
+	/* Technically (rma_count > 0 && rma_count <= MAX), where MAX == 1. If
+	 * vectors are ever supported, this entire function must be modified,
+	 * since rma[0] is hardcoded throughout.
+	 */
+	if (rma_count != 1) {
+		CXIP_LOG_DBG("rma_count = %ld, must be 1\n", rma_count);
+		return -FI_ENOSYS;
+	}
+
+	if (rma[0].key >= CXIP_ADDR_MR_IDX_CNT) {
+		CXIP_LOG_DBG("rma key = %lu, must be < %d\n", rma[0].key,
+			     CXIP_ADDR_MR_IDX_CNT);
+		return -FI_EINVAL;
+	}
+
 	/* The input FID could be a standard endpoint (containing a TX
 	 * context), or a TX context itself.
 	 */

@@ -144,29 +144,42 @@ extern struct fi_provider cxip_prov;
  * Pid -1 is reserved.  When used, the library auto-assigns a free PID value
  * when network resources are allocated.  Libfabric clients can achieve this by
  * not specifying a 'service' in a call to fi_getinfo() or by specifying the
- * reserved value -1 (== 2^9 - 1 == 511 == 0x1ff).
+ * reserved value -1.
  *
  * TODO: If NIC Address must be non-zero, the valid bit can be removed.
- * TODO: Is 18 bits enough for NIC Address?
+ * TODO: Is 22 bits enough for NIC Address?
  */
+#define	CXIP_ADDR_VNI_BITS	17
+#define CXIP_ADDR_PID_BITS	9
+#define	CXIP_ADDR_IDX_BITS	(CXIP_ADDR_VNI_BITS - CXIP_ADDR_PID_BITS)
+#define	CXIP_ADDR_PID_AUTO	((2^CXIP_ADDR_PID_BITS) - 1)
+#define	CXIP_ADDR_NIC_BITS	(32 - 1 - CXIP_ADDR_PID_BITS)
+
 struct cxip_addr {
 	union {
 		struct {
-			uint32_t pid		: 9;
-			uint32_t nic		: 22;
-			uint32_t valid		: 1;
+			uint32_t pid	: CXIP_ADDR_PID_BITS;
+			uint32_t nic	: CXIP_ADDR_NIC_BITS;
+			uint32_t valid	: 1;
 		};
 		uint32_t raw;
 	};
 };
-#define CXIP_ADDR_PID_AUTO 0x1ff
 
 #ifndef ARRAY_SIZE
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 #endif
 
-// TODO: change CXIP_ADDR_MR_IDX() to ((key) + MAX SEP RX contexts)
-#define CXIP_ADDR_MR_IDX(pid_granule, key) ((pid_granule) / 2 + (key))
+/* 256 slots total (2^(17-9) == 2^8)
+ *  16 RX slots
+ * 239 MR slots
+ *   1 Rendesvous Send slot
+ */
+#define	CXIP_ADDR_IDX_CNT	(2^CXIP_ADDR_IDX_BITS)
+#define	CXIP_ADDR_RX_IDX_CNT	16
+#define	CXIP_ADDR_MR_IDX_CNT	(CXIP_ADDR_IDX_CNT - CXIP_ADDR_RX_IDX_CNT - 1)
+
+#define CXIP_ADDR_MR_IDX(pid_granule, key) (CXIP_ADDR_RX_IDX_CNT + (key))
 #define CXIP_ADDR_RX_IDX(pid_granule, rx_id) (rx_id)
 
 // TODO: comments are not yet complete, and may not be entirely correct

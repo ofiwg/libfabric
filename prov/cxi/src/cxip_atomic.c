@@ -423,6 +423,10 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 		return -FI_EINVAL;
 	}
 
+	/* Do not allow an invalid memory key */
+	if (key >= CXIP_ADDR_MR_IDX_CNT)
+		return -FI_EINVAL;
+
 	/* Convert FI to CXI codes, fail if operation not supported */
 	ret = _cxip_atomic_opcode(req_type, msg->datatype, msg->op,
 				  &opcode, &dtcode, &swpcode, &len);
