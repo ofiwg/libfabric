@@ -194,6 +194,44 @@ done:
 	return FI_SUCCESS;
 }
 
+static int process_srx_entry(struct tcpx_xfer_entry *rx_entry)
+{
+	int ret;
+
+	ret = tcpx_recv_msg_data(rx_entry);
+	if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
+		return ret;
+
+	if (ret) {
+		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,
+			"msg recv Failed ret = %d\n", ret);
+
+		tcpx_ep_shutdown_report(rx_entry->ep,
+					&rx_entry->ep->util_ep.ep_fid.fid);
+	}
+
+	if ((ntohl(rx_entry->msg_hdr.hdr.flags) &
+	     OFI_DELIVERY_COMPLETE) && !ret) {
+		if (tcpx_prepare_rx_entry_resp(rx_entry))
+			rx_entry->ep->cur_rx_proc_fn = tcpx_prepare_rx_entry_resp;
+
+		return FI_SUCCESS;
+	}
+
+	tcpx_cq_report_completion(rx_entry->ep->util_ep.rx_cq,
+				  rx_entry, -ret);
+
+	/* release the shared entry */
+	if (rx_entry->ep->cur_rx_entry == rx_entry) {
+		rx_entry->ep->cur_rx_entry = NULL;
+	}
+
+	fastlock_acquire(&rx_entry->ep->srx_ctx->lock);
+	util_buf_release(rx_entry->ep->srx_ctx->buf_pool, rx_entry);
+	fastlock_release(&rx_entry->ep->srx_ctx->lock);
+	return FI_SUCCESS;
+}
+
 static int tcpx_prepare_rx_write_resp(struct tcpx_xfer_entry *rx_entry)
 {
 	struct tcpx_cq *tcpx_rx_cq, *tcpx_tx_cq;
@@ -407,10 +445,24 @@ int tcpx_get_rx_entry_op_msg(struct tcpx_ep *tcpx_ep)
 		return -FI_EAGAIN;
 	}
 
-	if (slist_empty(&tcpx_ep->rx_queue))
-		return -FI_EAGAIN;
+	if (tcpx_ep->srx_ctx){
+		tcpx_ep->cur_rx_proc_fn = process_srx_entry;
+		fastlock_acquire(&tcpx_ep->srx_ctx->lock);
+		if (slist_empty(&tcpx_ep->srx_ctx->rx_queue)) {
+			fastlock_release(&tcpx_ep->srx_ctx->lock);
+			return -FI_EAGAIN;
+		}
 
-	entry = slist_remove_head(&tcpx_ep->rx_queue);
+		entry = slist_remove_head(&tcpx_ep->srx_ctx->rx_queue);
+		fastlock_release(&tcpx_ep->srx_ctx->lock);
+	} else {
+		if (slist_empty(&tcpx_ep->rx_queue))
+			return -FI_EAGAIN;
+
+		tcpx_ep->cur_rx_proc_fn = process_rx_entry;
+		entry = slist_remove_head(&tcpx_ep->rx_queue);
+	}
+
 	rx_entry = container_of(entry, struct tcpx_xfer_entry,
 				entry);
 
@@ -437,7 +489,6 @@ int tcpx_get_rx_entry_op_msg(struct tcpx_ep *tcpx_ep)
 
 	rx_detect->done_len = 0;
 	tcpx_ep->cur_rx_entry = rx_entry;
-	tcpx_ep->cur_rx_proc_fn = process_rx_entry;
 	return FI_SUCCESS;
 }
 
