@@ -610,8 +610,7 @@ rxm_ep_msg_mr_regv_lim(struct rxm_ep *rxm_ep, const struct iovec *iov, size_t co
 		container_of(rxm_ep->util_ep.domain, struct rxm_domain, util_domain);
  
 	for (i = 0; i < count && total_reg_len; i++) {
-		size_t len = iov[i].iov_len <= total_reg_len ?
-			     iov[i].iov_len : total_reg_len;
+		size_t len = MIN(iov[i].iov_len, total_reg_len);
 		ret = fi_mr_reg(rxm_domain->msg_domain, iov[i].iov_base,
 				len, access, 0, 0, 0, &mr[i], NULL);
 		if (ret)
