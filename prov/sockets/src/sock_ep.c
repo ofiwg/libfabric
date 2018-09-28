@@ -1353,10 +1353,25 @@ static char *sock_get_fabric_name(struct sockaddr *src_addr)
 			prefix_len = ofi_mask_addr(&net_in_addr.sa,
 					ifa->ifa_addr, ifa->ifa_netmask);
 
-			inet_ntop(net_in_addr.sa.sa_family, &net_in_addr.sa,
-				  netbuf, sizeof(netbuf));
+			switch (net_in_addr.sa.sa_family) {
+			case AF_INET:
+				inet_ntop(AF_INET,
+					&((struct sockaddr_in *)&net_in_addr)->sin_addr,
+					netbuf, sizeof(netbuf));
+				break;
+			case AF_INET6:
+				inet_ntop(AF_INET6,
+					&((struct sockaddr_in6 *)&net_in_addr)->sin6_addr,
+					netbuf, sizeof(netbuf));
+				break;
+			default:
+				snprintf(netbuf, sizeof(netbuf), "%s", "<unknown>");
+				netbuf[sizeof(netbuf)-1] = '\0';
+				break;
+			}
 			snprintf(netbuf + strlen(netbuf), sizeof(netbuf) - strlen(netbuf),
 				 "%s%d", "/", prefix_len);
+			netbuf[sizeof(netbuf)-1] = '\0';
 			fabric_name = strdup(netbuf);
 			goto out;
 		}
