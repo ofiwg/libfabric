@@ -18,6 +18,7 @@ AC_DEFUN([FI_PSM2_CONFIGURE],[
 	 AC_DEFINE_UNQUOTED([HAVE_PSM2_SRC], $have_psm2_src, [PSM2 source is built-in])
 	 psm2_happy=0
 	 have_psm2_am_register_handlers_2=1
+	 have_psm2_hal=0
 	 AS_IF([test x"$enable_psm2" != x"no"],
 	       [AS_IF([test x$have_psm2_src = x0],
 		      [
@@ -84,6 +85,17 @@ AC_DEFUN([FI_PSM2_CONFIGURE],[
 						cp -srf $with_psm2_src/* $srcdir/prov/psm2/src/psm2/
 						ln -sf ../include/rbtree.h $srcdir/prov/psm2/src/psm2/ptl_ips/
 						ln -sf ../include/rbtree.h $srcdir/prov/psm2/src/psm2/ptl_am/
+						AS_IF([test -f $with_psm2_src/psm2_hal.c],
+						      [
+							$as_echo "#define PSMI_HAL_INST_CNT 1" >$srcdir/prov/psm2/src/psm2/psm2_hal_inlines_d.h
+							$as_echo "#define PSMI_HAL_INLINE inline" >>$srcdir/prov/psm2/src/psm2/psm2_hal_inlines_d.h
+							$as_echo "#include \"psm_hal_gen1/psm_hal_inline_d.h\"" >>$srcdir/prov/psm2/src/psm2/psm2_hal_inlines_d.h
+							$as_echo "#include \"psm_hal_gen1/psm_hal_inline_i.h\"" >$srcdir/prov/psm2/src/psm2/psm2_hal_inlines_i.h
+							AS_IF([test $cc_basename = icc],
+							      [psm2_CPPFLAGS="-march=core-avx2"],
+							      [psm2_CPPFLAGS="-mavx2"])
+							have_psm2_hal=1
+						      ])
 					   ],
 					   [
 						$as_echo "$as_me: PSM2 source under <$with_psm2_src> is too old."
@@ -100,6 +112,8 @@ AC_DEFUN([FI_PSM2_CONFIGURE],[
 	 AC_DEFINE_UNQUOTED([HAVE_PSM2_AM_REGISTER_HANDLERS_2],
 			    $have_psm2_am_register_handlers_2,
 			    [psm2_am_register_handlers_2 function is present])
+	AM_CONDITIONAL([HAVE_PSM2_HAL],[test x$have_psm2_hal = x1])
+	AC_SUBST([HAVE_PSM2_HAL])
 ])
 
 AC_ARG_WITH([psm2-src],
