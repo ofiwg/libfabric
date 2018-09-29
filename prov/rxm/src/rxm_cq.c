@@ -139,6 +139,7 @@ static int rxm_cq_write_error_trunc(struct rxm_rx_buf *rx_buf, size_t done_len)
 static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 {
 	int ret;
+	struct rxm_recv_entry *recv_entry = rx_buf->recv_entry;
 
 	if (OFI_UNLIKELY(done_len < rx_buf->pkt.hdr.size)) {
 		ret = rxm_cq_write_error_trunc(rx_buf, done_len);
@@ -159,52 +160,50 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 			rxm_cntr_inc(rx_buf->ep->util_ep.rx_cntr);
 	}
 
-	rxm_enqueue_rx_buf_for_repost_check(rx_buf);
-
 	if (rx_buf->recv_entry->flags & FI_MULTI_RECV) {
 		struct rxm_iov rxm_iov;
+		size_t recv_size = rx_buf->pkt.hdr.size;
+		struct rxm_ep *rxm_ep = rx_buf->ep;
 
-		rx_buf->recv_entry->total_len -= rx_buf->pkt.hdr.size;
+		rxm_enqueue_rx_buf_for_repost_check(rx_buf);
 
-		if (rx_buf->recv_entry->total_len <= rx_buf->ep->min_multi_recv_size) {
+		recv_entry->total_len -= recv_size;
+
+		if (recv_entry->total_len <= rxm_ep->min_multi_recv_size) {
 			FI_DBG(&rxm_prov, FI_LOG_CQ,
 			       "Buffer %p has been completely consumed. "
 			       "Reporting Multi-Recv completion\n",
-			       rx_buf->recv_entry->multi_recv_buf);
-			ret = rxm_cq_write_recv_comp(rx_buf,
-						     rx_buf->recv_entry->context,
-						     FI_MULTI_RECV,
-						     rx_buf->pkt.hdr.size,
-						     rx_buf->recv_entry->multi_recv_buf);
+			       recv_entry->multi_recv.buf);
+			ret = rxm_cq_write_multi_recv_comp(rxm_ep, recv_entry);
 			if (OFI_UNLIKELY(ret)) {
 				FI_WARN(&rxm_prov, FI_LOG_CQ,
 					"Unable to write FI_MULTI_RECV completion\n");
 				return ret;
 			}
 			/* Since buffer is elapsed, release recv_entry */
-			rxm_recv_entry_release(rx_buf->recv_entry->recv_queue,
-					       rx_buf->recv_entry);
+			rxm_recv_entry_release(recv_entry->recv_queue,
+					       recv_entry);
 			return ret;
 		}
 
 		FI_DBG(&rxm_prov, FI_LOG_CQ,
 		       "Repost Multi-Recv entry: "
 		       "consumed len = %zu, remain len = %zu\n",
-		       rx_buf->pkt.hdr.size,
-		       rx_buf->recv_entry->total_len);
+		       recv_size, recv_entry->total_len);
 
-		rxm_iov = rx_buf->recv_entry->rxm_iov;
-		ret = rxm_match_iov(rxm_iov.iov, rxm_iov.desc, rxm_iov.count,	/* prev iovecs */
-				    rx_buf->pkt.hdr.size,			/* offset */
-				    rx_buf->recv_entry->total_len,		/* match_len */
-				    &rx_buf->recv_entry->rxm_iov);		/* match_iov */
+		rxm_iov = recv_entry->rxm_iov;
+		ret = rxm_match_iov(/* prev iovecs */
+				    rxm_iov.iov, rxm_iov.desc, rxm_iov.count,
+				    recv_size,			/* offset */
+				    recv_entry->total_len,	/* match_len */
+				    &recv_entry->rxm_iov);	/* match_iov */
 		if (OFI_UNLIKELY(ret))
 			return ret;
 
-		return rxm_process_recv_entry(&rx_buf->ep->recv_queue, rx_buf->recv_entry);
+		return rxm_process_recv_entry(recv_entry->recv_queue, recv_entry);
 	} else {
-		rxm_recv_entry_release(rx_buf->recv_entry->recv_queue,
-				       rx_buf->recv_entry);
+		rxm_enqueue_rx_buf_for_repost_check(rx_buf);
+		rxm_recv_entry_release(recv_entry->recv_queue, recv_entry);
 	}
 
 	return FI_SUCCESS;
