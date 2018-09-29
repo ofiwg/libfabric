@@ -325,7 +325,7 @@ rxm_ep_rma_inject(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t 
 		} else {
 			FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
 			       "fi_inject_write* for MSG provider failed with ret - %"
-			       PRIu64"\n", ret);
+			       PRId64"\n", ret);
 			if (OFI_LIKELY(ret == -FI_EAGAIN))
 				rxm_ep_progress_multi(&rxm_ep->util_ep);
 		}

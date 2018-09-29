@@ -803,7 +803,7 @@ rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		rxm_cntr_inc(rxm_ep->util_ep.tx_cntr);
 	} else {
 		FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
-		       "fi_inject for MSG provider failed with ret - %" PRIu64"\n",
+		       "fi_inject for MSG provider failed with ret - %" PRId64"\n",
 		       ret);
 		if (OFI_LIKELY(ret == -FI_EAGAIN))
 			rxm_ep_progress_multi(&rxm_ep->util_ep);
