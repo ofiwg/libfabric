@@ -120,7 +120,7 @@ fi_ibv_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
 	}
 
 	util_buf_release(cq->wce_pool, wce);
-	return sizeof(*entry);
+	return 1;
 err:
 	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
 	return -FI_EAGAIN;
