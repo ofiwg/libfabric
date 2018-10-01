@@ -83,6 +83,8 @@ extern "C" {
 
 #define ofi_div_ceil(a, b) ((a + b - 1) / b)
 
+#define OFI_MAGIC_64 (0x0F1C0DE0F1C0DE64)
+
 
 /*
  * CPU specific features

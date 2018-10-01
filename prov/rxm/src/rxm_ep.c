@@ -351,9 +351,7 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 		rxm_ep->msg_info->tx_attr->inject_size +
 		sizeof(struct rxm_tx_buf),			/* TX INJECT */
 		sizeof(struct rxm_tx_buf),			/* TX ACK */
-		sizeof(struct rxm_rma_iov) +
-		rxm_ep->rxm_info->tx_attr->iov_limit *
-		sizeof(struct ofi_rma_iov) +
+		sizeof(struct rxm_rndv_hdr) + rxm_ep->buffered_min +
 		sizeof(struct rxm_tx_buf),			/* TX LMT */
 		rxm_ep->rxm_info->tx_attr->inject_size +
 		sizeof(struct rxm_tx_buf),			/* TX SAR */
@@ -439,7 +437,8 @@ static void rxm_ep_txrx_queue_close(struct rxm_ep *rxm_ep)
 static void rxm_ep_txrx_res_close(struct rxm_ep *rxm_ep)
 {
 	rxm_ep_txrx_queue_close(rxm_ep);
-	rxm_ep_txrx_pool_destroy(rxm_ep);
+	if (rxm_ep->buf_pools)
+		rxm_ep_txrx_pool_destroy(rxm_ep);
 	if (rxm_ep->util_ep.domain->threading != FI_THREAD_SAFE) {
 		free(rxm_ep->inject_tx_pkt);
 		rxm_ep->inject_tx_pkt = NULL;
@@ -519,19 +518,34 @@ static ssize_t rxm_ep_cancel(fid_t fid_ep, void *context)
 	return 0;
 }
 
-// TODO add support for FI_OPT_BUFFERED_LIMIT
 static int rxm_ep_getopt(fid_t fid, int level, int optname, void *optval,
 			 size_t *optlen)
 {
 	struct rxm_ep *rxm_ep =
 		container_of(fid, struct rxm_ep, util_ep.ep_fid);
 
-	if ((level != FI_OPT_ENDPOINT) || (optname != FI_OPT_MIN_MULTI_RECV))
+	if (level != FI_OPT_ENDPOINT)
 		return -FI_ENOPROTOOPT;
 
-	*(size_t *)optval = rxm_ep->min_multi_recv_size;
-	*optlen = sizeof(size_t);
-
+	switch (optname) {
+	case FI_OPT_MIN_MULTI_RECV:
+		assert(sizeof(rxm_ep->min_multi_recv_size) == sizeof(size_t));
+		*(size_t *)optval = rxm_ep->min_multi_recv_size;
+		*optlen = sizeof(size_t);
+		break;
+	case FI_OPT_BUFFERED_MIN:
+		assert(sizeof(rxm_ep->buffered_min) == sizeof(size_t));
+		*(size_t *)optval = rxm_ep->buffered_min;
+		*optlen = sizeof(size_t);
+		break;
+	case FI_OPT_BUFFERED_LIMIT:
+		assert(sizeof(rxm_ep->buffered_limit) == sizeof(size_t));
+		*(size_t *)optval = rxm_ep->buffered_limit;
+		*optlen = sizeof(size_t);
+		break;
+	default:
+		return -FI_ENOPROTOOPT;
+	}
 	return FI_SUCCESS;
 }
 
@@ -540,13 +554,50 @@ static int rxm_ep_setopt(fid_t fid, int level, int optname,
 {
 	struct rxm_ep *rxm_ep =
 		container_of(fid, struct rxm_ep, util_ep.ep_fid);
+	int ret = FI_SUCCESS;
 
-	if ((level != FI_OPT_ENDPOINT) || (optname != FI_OPT_MIN_MULTI_RECV))
+	if (level != FI_OPT_ENDPOINT)
 		return -FI_ENOPROTOOPT;
 
-	rxm_ep->min_multi_recv_size = *(size_t *)optval;
-
-	return FI_SUCCESS;
+	switch (optname) {
+	case FI_OPT_MIN_MULTI_RECV:
+		rxm_ep->min_multi_recv_size = *(size_t *)optval;
+		break;
+	case FI_OPT_BUFFERED_MIN:
+		if (rxm_ep->buf_pools) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+				"Endpoint already enabled. Can't set opt now!\n");
+			ret = -FI_EOPBADSTATE;
+		} else if (*(size_t *)optval > rxm_ep->buffered_limit) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+			"Invalid value for FI_OPT_BUFFERED_MIN: %zu "
+			"( > FI_OPT_BUFFERED_LIMIT: %zu)\n",
+			*(size_t *)optval, rxm_ep->buffered_limit);
+			ret = -FI_EINVAL;
+		} else {
+			rxm_ep->buffered_min = *(size_t *)optval;
+		}
+		break;
+	case FI_OPT_BUFFERED_LIMIT:
+		if (rxm_ep->buf_pools) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+				"Endpoint already enabled. Can't set opt now!\n");
+			ret = -FI_EOPBADSTATE;
+		/* We do not check for maximum as we allow sizes up to SIZE_MAX */
+		} else if (*(size_t *)optval < rxm_ep->buffered_min) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+			"Invalid value for FI_OPT_BUFFERED_LIMIT: %zu"
+			" ( < FI_OPT_BUFFERED_MIN: %zu)\n",
+			*(size_t *)optval, rxm_ep->buffered_min);
+			ret = -FI_EINVAL;
+		} else {
+			rxm_ep->buffered_limit = *(size_t *)optval;
+		}
+		break;
+	default:
+		ret = -FI_ENOPROTOOPT;
+	}
+	return ret;
 }
 
 static struct fi_ops_ep rxm_ops_ep = {
@@ -773,21 +824,20 @@ static ssize_t rxm_ep_recvv(struct fid_ep *ep_fid, const struct iovec *iov,
 				  &rxm_ep->recv_queue);
 }
 
-static ssize_t rxm_rma_iov_init(struct rxm_ep *rxm_ep, void *buf,
-				const struct iovec *iov, size_t count,
-				struct fid_mr **mr)
+static void rxm_rndv_hdr_init(struct rxm_ep *rxm_ep, void *buf,
+			      const struct iovec *iov, size_t count,
+			      struct fid_mr **mr)
 {
-	struct rxm_rma_iov *rma_iov = (struct rxm_rma_iov *)buf;
+	struct rxm_rndv_hdr *rndv_hdr = (struct rxm_rndv_hdr *)buf;
 	size_t i;
 
 	for (i = 0; i < count; i++) {
-		rma_iov->iov[i].addr = RXM_MR_VIRT_ADDR(rxm_ep->msg_info) ?
+		rndv_hdr->iov[i].addr = RXM_MR_VIRT_ADDR(rxm_ep->msg_info) ?
 			(uintptr_t)iov[i].iov_base : 0;
-		rma_iov->iov[i].len = (uint64_t)iov[i].iov_len;
-		rma_iov->iov[i].key = fi_mr_key(mr[i]);
+		rndv_hdr->iov[i].len = (uint64_t)iov[i].iov_len;
+		rndv_hdr->iov[i].key = fi_mr_key(mr[i]);
 	}
-	rma_iov->count = (uint8_t)count;
-	return sizeof(*rma_iov) + sizeof(*rma_iov->iov) * count;
+	rndv_hdr->count = (uint8_t)count;
 }
 
 static inline ssize_t
@@ -917,8 +967,17 @@ rxm_ep_alloc_lmt_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void *
 		mr_iov = (struct fid_mr **)desc;
 	}
 
-	return rxm_rma_iov_init(rxm_ep, &(*tx_entry)->tx_buf->pkt.data, iov,
-				count, mr_iov);
+	rxm_rndv_hdr_init(rxm_ep, &(*tx_entry)->tx_buf->pkt.data, iov,
+			  (*tx_entry)->count, mr_iov);
+
+	ret = sizeof(struct rxm_pkt) + sizeof(struct rxm_rndv_hdr);
+
+	if (rxm_ep->rxm_info->mode & FI_BUFFERED_RECV) {
+		ofi_copy_from_iov(rxm_pkt_rndv_data(&tx_buf->pkt),
+				  rxm_ep->buffered_min, iov, count, 0);
+		ret += rxm_ep->buffered_min;
+	}
+	return ret;
 err:
 	rxm_tx_entry_release(rxm_conn->send_queue, (*tx_entry));
 	rxm_tx_buf_release(rxm_ep, tx_buf);
@@ -1441,8 +1500,7 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 					      tag, op, &tx_entry);
 		if (OFI_UNLIKELY(ret < 0))
 			return ret;
-		return rxm_ep_lmt_tx_send(rxm_ep, rxm_conn, tx_entry,
-					  sizeof(struct rxm_pkt) + ret); 
+		return rxm_ep_lmt_tx_send(rxm_ep, rxm_conn, tx_entry, ret);
 	}
 }
 
@@ -2052,13 +2110,20 @@ static int rxm_ep_ctrl(struct fid *fid, int command, void *arg)
 		if (!rxm_ep->util_ep.av || !rxm_ep->util_ep.cmap)
 			return -FI_EOPBADSTATE;
 
+		/* At the time of enabling endpoint, FI_OPT_BUFFERED_MIN,
+		 * FI_OPT_BUFFERED_LIMIT should have been frozen so we can
+		 * create the rendezvous protocol message pool with the right
+		 * size */
+		ret = rxm_ep_txrx_pool_create(rxm_ep);
+		if (ret)
+			return ret;
+
 		if (rxm_ep->srx_ctx) {
 			ret = rxm_ep_prepost_buf(rxm_ep, rxm_ep->srx_ctx);
 			if (ret) {
-				ofi_cmap_free(rxm_ep->util_ep.cmap);
 				FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 					"Unable to prepost recv bufs\n");
-				return ret;
+				goto err;
 			}
 		}
 		break;
@@ -2066,6 +2131,9 @@ static int rxm_ep_ctrl(struct fid *fid, int command, void *arg)
 		return -FI_ENOSYS;
 	}
 	return 0;
+err:
+	rxm_ep_txrx_pool_destroy(rxm_ep);
+	return ret;
 }
 
 static struct fi_ops rxm_ep_fi_ops = {
@@ -2269,19 +2337,13 @@ static int rxm_ep_txrx_res_open(struct rxm_ep *rxm_ep)
 
 	dlist_init(&rxm_ep->deferred_tx_conn_queue);
 
-	ret = rxm_ep_txrx_pool_create(rxm_ep);
-	if (ret)
-		goto err1;
-
 	ret = rxm_ep_txrx_queue_init(rxm_ep);
 	if (ret)
-		goto err2;
+		goto err1;
 
 	rxm_ep_sar_init(rxm_ep);
 
 	return FI_SUCCESS;
-err2:
-	rxm_ep_txrx_pool_destroy(rxm_ep);
 err1:
 	if (rxm_ep->util_ep.domain->threading != FI_THREAD_SAFE) {
 		free(rxm_ep->inject_tx_pkt);
@@ -2330,6 +2392,16 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 	rxm_ep->rxm_mr_local = ofi_mr_local(rxm_ep->rxm_info);
 
 	rxm_ep->min_multi_recv_size = rxm_ep->rxm_info->tx_attr->inject_size;
+
+	if (rxm_ep->msg_info->tx_attr->inject_size >
+	    (sizeof(struct rxm_pkt) + sizeof(struct rxm_rndv_hdr)))
+		rxm_ep->buffered_min = (rxm_ep->msg_info->tx_attr->inject_size -
+					(sizeof(struct rxm_pkt) +
+					 sizeof(struct rxm_rndv_hdr)));
+	else
+		assert(!rxm_ep->buffered_min);
+
+	rxm_ep->buffered_limit = rxm_ep->rxm_info->tx_attr->inject_size;
 
 	ret = rxm_ep_txrx_res_open(rxm_ep);
 	if (ret)

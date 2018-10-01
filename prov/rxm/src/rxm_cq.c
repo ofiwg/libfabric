@@ -98,16 +98,22 @@ static int rxm_match_iov(const struct iovec *iov, void **desc,
 static int rxm_finish_buf_recv(struct rxm_rx_buf *rx_buf)
 {
 	uint64_t flags = rx_buf->pkt.hdr.flags | FI_RECV;
+	char *data;
 
-	if (rx_buf->pkt.hdr.size > rx_buf->ep->rxm_info->tx_attr->inject_size)
+	if (rx_buf->pkt.ctrl_hdr.type != ofi_ctrl_data)
 		flags |= FI_MORE;
+
+	if (rx_buf->pkt.ctrl_hdr.type == ofi_ctrl_large_data)
+		data = rxm_pkt_rndv_data(&rx_buf->pkt);
+	else
+		data = rx_buf->pkt.data;
 
 	FI_DBG(&rxm_prov, FI_LOG_CQ, "writing buffered recv completion: "
 	       "length: %" PRIu64 "\n", rx_buf->pkt.hdr.size);
 	rx_buf->recv_context.ep = &rx_buf->ep->util_ep.ep_fid;
 
 	return rxm_cq_write_recv_comp(rx_buf, &rx_buf->recv_context, flags,
-				      rx_buf->pkt.hdr.size, rx_buf->pkt.data);
+				      rx_buf->pkt.hdr.size, data);
 }
 
 static int rxm_cq_write_error_trunc(struct rxm_rx_buf *rx_buf, size_t done_len)
@@ -359,9 +365,9 @@ rxm_cq_lmt_read_prepare_deferred(struct rxm_tx_entry **tx_entry, size_t index,
 		return -FI_ENOMEM;
 	}
 	(*tx_entry)->rma_buf->rxm_rma_iov.iov[0].addr =
-		(*tx_entry)->rx_buf->rma_iov->iov[index].addr;
+		(*tx_entry)->rx_buf->rndv_hdr->iov[index].addr;
 	(*tx_entry)->rma_buf->rxm_rma_iov.iov[0].key =
-		(*tx_entry)->rx_buf->rma_iov->iov[index].key;
+		(*tx_entry)->rx_buf->rndv_hdr->iov[index].key;
 	for (i = 0; i < count; i++) {
 		(*tx_entry)->rma_buf->rxm_iov.iov[i] = iov[i];
 		(*tx_entry)->rma_buf->rxm_iov.desc[i] = desc[i];
@@ -393,8 +399,8 @@ ssize_t rxm_cq_handle_large_data(struct rxm_rx_buf *rx_buf)
 	       "Got incoming recv with msg_id: 0x%" PRIx64 "\n",
 	       rx_buf->pkt.ctrl_hdr.msg_id);
 
-	rx_buf->rma_iov = (struct rxm_rma_iov *)rx_buf->pkt.data;
-	rx_buf->rma_iov_index = 0;
+	rx_buf->rndv_hdr = (struct rxm_rndv_hdr *)rx_buf->pkt.data;
+	rx_buf->rndv_rma_index = 0;
 
 	if (!rx_buf->ep->rxm_mr_local) {
 		total_recv_len = MIN(rx_buf->recv_entry->total_len,
@@ -419,14 +425,16 @@ ssize_t rxm_cq_handle_large_data(struct rxm_rx_buf *rx_buf)
 				     rx_buf->pkt.hdr.size);
 	}
 
-	assert(rx_buf->rma_iov->count && (rx_buf->rma_iov->count <= RXM_IOV_LIMIT));
+	assert(rx_buf->rndv_hdr->count &&
+	       (rx_buf->rndv_hdr->count <= RXM_IOV_LIMIT));
 
 	RXM_LOG_STATE_RX(FI_LOG_CQ, rx_buf, RXM_LMT_READ);
 	rx_buf->hdr.state = RXM_LMT_READ;
 
-	for (i = 0; i < rx_buf->rma_iov->count; i++) {
-		size_t copy_len = MIN(rx_buf->rma_iov->iov[i].len,
+	for (i = 0; i < rx_buf->rndv_hdr->count; i++) {
+		size_t copy_len = MIN(rx_buf->rndv_hdr->iov[i].len,
 				      total_recv_len);
+
 		ret = ofi_copy_iov_desc(&iov[0], &desc[0], &count,
 					&rx_buf->recv_entry->rxm_iov.iov[0],
 					&rx_buf->recv_entry->rxm_iov.desc[0],
@@ -439,8 +447,8 @@ ssize_t rxm_cq_handle_large_data(struct rxm_rx_buf *rx_buf)
 		}
 		total_recv_len -= copy_len;
 		ret = fi_readv(rx_buf->conn->msg_ep, iov, desc, count, 0,
-			       rx_buf->rma_iov->iov[i].addr,
-			       rx_buf->rma_iov->iov[i].key, rx_buf);
+			       rx_buf->rndv_hdr->iov[i].addr,
+			       rx_buf->rndv_hdr->iov[i].key, rx_buf);
 		if (OFI_UNLIKELY(ret)) {
 			if (OFI_LIKELY(ret == -FI_EAGAIN)) {
 				ret = rxm_cq_lmt_read_prepare_deferred(
@@ -776,7 +784,7 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 	case RXM_LMT_READ:
 		rx_buf = comp->op_context;
 		assert(comp->flags & FI_READ);
-		if (++rx_buf->rma_iov_index < rx_buf->rma_iov->count)
+		if (++rx_buf->rndv_rma_index < rx_buf->rndv_hdr->count)
 			return 0;
 		else if (sizeof(rx_buf->pkt) > rxm_ep->msg_info->tx_attr->inject_size)
 			return rxm_lmt_send_ack(rx_buf);

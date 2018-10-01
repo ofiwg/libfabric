@@ -146,10 +146,13 @@ struct rxm_cm_data {
 	struct rxm_ep_wire_proto proto;
 };
 
-struct rxm_rma_iov {
+struct rxm_rndv_hdr {
+	struct ofi_rma_iov iov[RXM_IOV_LIMIT];
 	uint8_t count;
-	struct ofi_rma_iov iov[];
 };
+
+#define rxm_pkt_rndv_data(rxm_pkt) \
+	((rxm_pkt)->data + sizeof(struct rxm_rndv_hdr))
 
 /*
  * Macros to generate enums and associated string values
@@ -297,8 +300,8 @@ struct rxm_rx_buf {
 	uint8_t repost;
 
 	/* Used for large messages */
-	struct rxm_rma_iov *rma_iov;
-	size_t rma_iov_index;
+	struct rxm_rndv_hdr *rndv_hdr;
+	size_t rndv_rma_index;
 	struct fid_mr *mr[RXM_IOV_LIMIT];
 
 	/* Must stay at bottom */
@@ -469,6 +472,8 @@ struct rxm_ep {
 	int			msg_mr_local;
 	int			rxm_mr_local;
 	size_t			min_multi_recv_size;
+	size_t			buffered_min;
+	size_t			buffered_limit;
 
 	struct {
 		size_t		limit;

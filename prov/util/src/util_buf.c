@@ -81,6 +81,14 @@ int util_buf_grow(struct util_buf_pool *pool)
 	for (i = 0; i < pool->attr.chunk_cnt; i++) {
 		util_buf = (union util_buf *)
 			(buf_region->mem_region + i * pool->entry_sz);
+
+		if (pool->attr.init) {
+#if ENABLE_DEBUG
+			util_buf->entry.next = (void *)OFI_MAGIC_64;
+#endif
+			pool->attr.init(pool->attr.ctx, util_buf);
+			assert(util_buf->entry.next == (void *)OFI_MAGIC_64);
+		}
 		util_buf_set_region(util_buf, buf_region, pool);
 		slist_insert_tail(&util_buf->entry, &pool->buf_list);
 	}

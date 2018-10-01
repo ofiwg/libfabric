@@ -335,12 +335,13 @@ managed buffer where the start of the received message is located, and
 'len' will be set to the total size of the message.
 
 The maximum sized message that a provider can buffer is limited by
-an FI_OPT_BUFFERED_LIMIT.  This threshold can be obtained and may be adjusted
+an FI_OPT_BUFFERED_LIMIT. This threshold can be obtained and may be adjusted
 by the application using the fi_getopt and fi_setopt calls, respectively.
-Any adjustments must be made prior to enabling the endpoint. The
-CQ entry 'buf' will point to a buffer that is the _minimum_ of 'len' and
-the FI_OPT_BUFFERED_LIMIT value.  If the sent message is larger than the
-buffered limit, the CQ entry 'flags' will have the FI_MORE bit set.
+Any adjustments must be made prior to enabling the endpoint. The CQ entry 'buf'
+will point to a buffer of received data. If the sent message is larger than the
+buffered amount, the CQ entry 'flags' will have the FI_MORE bit set. When the
+FI_MORE bit is set, 'buf' will reference at least FI_OPT_BUFFERED_MIN bytes
+of data (see fi_endpoint.3 for more info).
 
 After being notified that a buffered receive has arrived,
 applications must either claim or discard the message.  Typically,

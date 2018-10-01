@@ -129,7 +129,8 @@ static struct mrail_recv *mrail_match_recv(struct mrail_ep *mrail_ep,
 						     NULL);
 	} else {
 		assert(hdr->op == ofi_op_tagged);
-		FI_DBG(&mrail_prov, FI_LOG_CQ, "Got TAGGED op\n");
+		FI_DBG(&mrail_prov, FI_LOG_CQ, "Got TAGGED op with tag: 0x%"
+		       PRIx64 "\n", hdr->tag);
 		recv = mrail_match_recv_handle_unexp(&mrail_ep->trecv_queue,
 						     hdr->tag, FI_ADDR_UNSPEC,
 						     (char *)comp, sizeof(*comp),
@@ -191,17 +192,8 @@ static int mrail_ooo_recv_before(struct slist_entry *item, const void *arg)
 	struct mrail_ooo_recv *ooo_recv;
 	struct mrail_ooo_recv *new_recv;
 
-	/* Check whether the given item's follower has a higher seq_no. */
-
-	if (!item->next) {
-		/* item is the last element in the list */
-		return 0;
-	}
-
-	ooo_recv = container_of(item->next, struct mrail_ooo_recv, entry);
-	new_recv = container_of((struct slist_entry *)arg,
-			struct mrail_ooo_recv, entry);
-
+	ooo_recv = container_of(item, struct mrail_ooo_recv, entry);
+	new_recv = container_of(arg, struct mrail_ooo_recv, entry);
 	return (new_recv->seq_no < ooo_recv->seq_no);
 }
 
@@ -222,7 +214,8 @@ static void mrail_save_ooo_recv(struct mrail_ep *mrail_ep,
 	ooo_recv->seq_no = seq_no;
 	memcpy(&ooo_recv->comp, comp, sizeof(*comp));
 
-	slist_insert_order(queue, mrail_ooo_recv_before, &ooo_recv->entry);
+	slist_insert_before_first_match(queue, mrail_ooo_recv_before,
+					&ooo_recv->entry);
 
 	FI_DBG(&mrail_prov, FI_LOG_CQ, "saved ooo_recv seq=%d\n", seq_no);
 }
@@ -359,6 +352,7 @@ static void mrail_handle_rma_completion(struct util_cq *cq,
 void mrail_poll_cq(struct util_cq *cq)
 {
 	struct mrail_cq *mrail_cq;
+	struct mrail_tx_buf *tx_buf;
 	struct fi_cq_tagged_entry comp;
 	fi_addr_t src_addr;
 	size_t i;
@@ -374,30 +368,42 @@ void mrail_poll_cq(struct util_cq *cq)
 			FI_WARN(&mrail_prov, FI_LOG_CQ,
 				"Unable to read rail completion: %s\n",
 				fi_strerror(-ret));
-			goto err;
+			goto err1;
 		}
 		// TODO handle variable length message
 		if (comp.flags & FI_RECV) {
 			ret = mrail_cq->process_comp(&comp, src_addr);
 			if (ret)
-				goto err;
+				goto err1;
 		} else if (comp.flags & (FI_READ | FI_WRITE)) {
 			mrail_handle_rma_completion(cq, &comp);
 		} else {
 			assert(comp.flags & (FI_SEND | FI_REMOTE_WRITE));
-			ret = ofi_cq_write(cq, comp.op_context, comp.flags,
-					   0, NULL, 0, 0);
-			if (ret) {
-				FI_WARN(&mrail_prov, FI_LOG_CQ,
-					"Unable to write to util cq\n");
-				goto err;
+
+			tx_buf = comp.op_context;
+
+			if (tx_buf->flags & FI_COMPLETION) {
+				ret = ofi_cq_write(cq, comp.op_context,
+						   comp.flags, 0, NULL, 0, 0);
+				if (ret) {
+					FI_WARN(&mrail_prov, FI_LOG_CQ,
+						"Unable to write to util cq\n");
+					goto err2;
+				}
 			}
+			ofi_ep_lock_acquire(&tx_buf->ep->util_ep);
+			util_buf_release(tx_buf->ep->tx_buf_pool, tx_buf);
+			ofi_ep_lock_release(&tx_buf->ep->util_ep);
 		}
 	}
 
 	return;
 
-err:
+err2:
+	ofi_ep_lock_acquire(&tx_buf->ep->util_ep);
+	util_buf_release(tx_buf->ep->tx_buf_pool, tx_buf);
+	ofi_ep_lock_release(&tx_buf->ep->util_ep);
+err1:
 	// TODO write error to cq
 	assert(0);
 }
