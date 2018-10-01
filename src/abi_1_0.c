@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 Intel Corporation. All rights reserved.
+ * Copyright (c) 2016-2018 Intel Corporation. All rights reserved.
  * Copyright (c) 2017, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -105,6 +105,23 @@ struct fi_info_1_0 {
 	struct fi_fabric_attr_1_0	*fabric_attr;
 };
 
+struct fi_info_1_1 {
+	struct fi_info			*next;
+	uint64_t			caps;
+	uint64_t			mode;
+	uint32_t			addr_format;
+	size_t				src_addrlen;
+	size_t				dest_addrlen;
+	void				*src_addr;
+	void				*dest_addr;
+	fid_t				handle;
+	struct fi_tx_attr		*tx_attr;
+	struct fi_rx_attr		*rx_attr;
+	struct fi_ep_attr_1_0		*ep_attr;
+	struct fi_domain_attr_1_0	*domain_attr;
+	struct fi_fabric_attr_1_0	*fabric_attr;
+};
+
 #define ofi_dup_attr(dst, src)				\
 	do {						\
 		dst = calloc(1, sizeof(*dst));		\
@@ -113,13 +130,15 @@ struct fi_info_1_0 {
 	} while (0);
 
 
+/*
+ * ABI 1.0
+ */
 __attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 void fi_freeinfo_1_0(struct fi_info_1_0 *info)
 {
 	fi_freeinfo((struct fi_info *) info);
 }
 COMPAT_SYMVER(fi_freeinfo_1_0, fi_freeinfo, FABRIC_1.0);
-
 
 __attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 struct fi_info_1_0 *fi_dupinfo_1_0(const struct fi_info_1_0 *info)
@@ -244,3 +263,56 @@ int fi_fabric_1_0(struct fi_fabric_attr_1_0 *attr_1_0,
 	return fi_fabric(&attr, fabric, context);
 }
 COMPAT_SYMVER(fi_fabric_1_0, fi_fabric, FABRIC_1.0);
+
+
+/*
+ * ABI 1.1
+ */
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+void fi_freeinfo_1_1(struct fi_info_1_1 *info)
+{
+	fi_freeinfo((struct fi_info *) info);
+}
+COMPAT_SYMVER(fi_freeinfo_1_1, fi_freeinfo, FABRIC_1.1);
+
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+struct fi_info_1_1 *fi_dupinfo_1_1(const struct fi_info_1_1 *info)
+{
+	struct fi_info *dup, *base;
+
+	if (!info)
+		return (struct fi_info_1_1 *) ofi_allocinfo_internal();
+
+	ofi_dup_attr(base, info);
+	if (base == NULL)
+		return NULL;
+
+	dup = fi_dupinfo(base);
+
+	free(base);
+	return (struct fi_info_1_1 *) dup;
+}
+COMPAT_SYMVER(fi_dupinfo_1_1, fi_dupinfo, FABRIC_1.1);
+
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+int fi_getinfo_1_1(uint32_t version, const char *node, const char *service,
+		   uint64_t flags, const struct fi_info_1_1 *hints_1_1,
+		   struct fi_info_1_1 **info)
+{
+	struct fi_info *hints;
+	int ret;
+
+	if (hints_1_1) {
+		hints = (struct fi_info *) fi_dupinfo_1_1(hints_1_1);
+		if (!hints)
+			return -FI_ENOMEM;
+	} else {
+		hints = NULL;
+	}
+	ret = fi_getinfo(version, node, service, flags, hints,
+			 (struct fi_info **) info);
+	fi_freeinfo(hints);
+
+	return ret;
+}
+COMPAT_SYMVER(fi_getinfo_1_1, fi_getinfo, FABRIC_1.1);
