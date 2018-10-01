@@ -76,6 +76,10 @@
 	case SYM: { ofi_strcatf(buf, #SYM); break; }
 #define IFFLAGSTR(flags, SYM) \
 	do { if (flags & SYM) ofi_strcatf(buf, #SYM ", "); } while(0)
+#define CASEENUMSTRN(SYM, N) \
+	case SYM: { ofi_strncatf(buf, N, #SYM); break; }
+#define IFFLAGSTRN(flags, SYM, N) \
+	do { if (flags & SYM) ofi_strncatf(buf, N, #SYM ", "); } while(0)
 
 static void ofi_remove_comma(char *buffer)
 {
@@ -86,15 +90,18 @@ static void ofi_remove_comma(char *buffer)
 		buffer[sz-2] = '\0';
 }
 
-static void ofi_strcatf(char *dest, const char *fmt, ...)
+static void ofi_strncatf(char *dest, size_t n, const char *fmt, ...)
 {
-	size_t len = strnlen(dest,OFI_BUFSIZ);
+	size_t len = strnlen(dest, n);
 	va_list arglist;
 
-	va_start (arglist, fmt);
-	vsnprintf(&dest[len], OFI_BUFSIZ - 1 - len, fmt, arglist);
-	va_end (arglist);
+	va_start(arglist, fmt);
+	vsnprintf(&dest[len], n - 1 - len, fmt, arglist);
+	va_end(arglist);
 }
+
+#define ofi_strcatf(dest, ...) \
+	ofi_strncatf(dest, OFI_BUFSIZ, __VA_ARGS__)
 
 static void ofi_tostr_fid(char *buf, const struct fid *fid)
 {
