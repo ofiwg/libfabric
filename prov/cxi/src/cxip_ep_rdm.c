@@ -284,7 +284,7 @@ static int cxip_rdm_endpoint(struct fid_domain *domain, struct fi_info *info,
 		return ret;
 
 	if (!info || !info->ep_attr)
-		(*ep)->attr->ep_attr = cxip_rdm_ep_attr;
+		(*ep)->ep_obj->ep_attr = cxip_rdm_ep_attr;
 
 	if (!info || !info->tx_attr)
 		(*ep)->tx_attr = cxip_rdm_tx_attr;

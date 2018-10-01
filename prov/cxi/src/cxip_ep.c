@@ -91,7 +91,7 @@ static int cxip_ctx_close(struct fid *fid)
 	switch (fid->fclass) {
 	case FI_CLASS_TX_CTX:
 		tx_ctx = container_of(fid, struct cxip_tx_ctx, fid.ctx.fid);
-		ofi_atomic_dec32(&tx_ctx->ep_attr->num_tx_ctx);
+		ofi_atomic_dec32(&tx_ctx->ep_obj->num_tx_ctx);
 		ofi_atomic_dec32(&tx_ctx->domain->ref);
 		cxip_tx_ctx_close(tx_ctx);
 		cxip_tx_ctx_free(tx_ctx);
@@ -99,7 +99,7 @@ static int cxip_ctx_close(struct fid *fid)
 
 	case FI_CLASS_RX_CTX:
 		rx_ctx = container_of(fid, struct cxip_rx_ctx, ctx.fid);
-		ofi_atomic_dec32(&rx_ctx->ep_attr->num_rx_ctx);
+		ofi_atomic_dec32(&rx_ctx->ep_obj->num_rx_ctx);
 		ofi_atomic_dec32(&rx_ctx->domain->ref);
 		cxip_rx_ctx_close(rx_ctx);
 		cxip_rx_ctx_free(rx_ctx);
@@ -437,7 +437,7 @@ static ssize_t cxip_ep_cancel(fid_t fid, void *context)
 	switch (fid->fclass) {
 	case FI_CLASS_EP:
 		cxi_ep = container_of(fid, struct cxip_ep, ep.fid);
-		rx_ctx = cxi_ep->attr->rx_ctx;
+		rx_ctx = cxi_ep->ep_obj->rx_ctx;
 		break;
 
 	case FI_CLASS_RX_CTX:
@@ -479,14 +479,14 @@ static int cxip_ep_enable(struct fid_ep *ep)
 	/* TODO add EP locking */
 
 	cxi_ep = container_of(ep, struct cxip_ep, ep);
-	cxi_dom = cxi_ep->attr->domain;
-	tx_ctx = cxi_ep->attr->tx_ctx;
-	rx_ctx = cxi_ep->attr->rx_ctx;
+	cxi_dom = cxi_ep->ep_obj->domain;
+	tx_ctx = cxi_ep->ep_obj->tx_ctx;
+	rx_ctx = cxi_ep->ep_obj->rx_ctx;
 
 	if (!(tx_ctx->comp.send_cq && rx_ctx->comp.recv_cq))
 		return -FI_ENOCQ;
 
-	if (!cxi_ep->attr->av)
+	if (!cxi_ep->ep_obj->av)
 		return -FI_EINVAL;
 
 	ret = cxip_domain_enable(cxi_dom);
@@ -496,9 +496,9 @@ static int cxip_ep_enable(struct fid_ep *ep)
 	}
 
 	ret = cxip_get_if_domain(cxi_dom->dev_if,
-				 cxi_ep->attr->vni,
-				 cxi_ep->attr->src_addr->pid,
-				 &cxi_ep->attr->if_dom);
+				 cxi_ep->ep_obj->vni,
+				 cxi_ep->ep_obj->src_addr->pid,
+				 &cxi_ep->ep_obj->if_dom);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Failed to get IF Domain: %d\n", ret);
 		return ret;
@@ -522,19 +522,19 @@ static int cxip_ep_enable(struct fid_ep *ep)
 		}
 	}
 
-	cxi_ep->attr->is_enabled = 1;
+	cxi_ep->ep_obj->is_enabled = 1;
 
 	return 0;
 }
 
 static int cxip_ep_disable(struct cxip_ep *cxi_ep)
 {
-	if (!cxi_ep->attr->is_enabled)
+	if (!cxi_ep->ep_obj->is_enabled)
 		return FI_SUCCESS;
 
-	cxip_put_if_domain(cxi_ep->attr->if_dom);
+	cxip_put_if_domain(cxi_ep->ep_obj->if_dom);
 
-	cxi_ep->attr->is_enabled = 0;
+	cxi_ep->ep_obj->is_enabled = 0;
 
 	return 0;
 }
@@ -555,58 +555,59 @@ static int cxip_ep_close(struct fid *fid)
 	}
 
 	if (cxi_ep->is_alias) {
-		ofi_atomic_dec32(&cxi_ep->attr->ref);
+		ofi_atomic_dec32(&cxi_ep->ep_obj->ref);
 		return 0;
 	}
-	if (ofi_atomic_get32(&cxi_ep->attr->ref) ||
-	    ofi_atomic_get32(&cxi_ep->attr->num_rx_ctx) ||
-	    ofi_atomic_get32(&cxi_ep->attr->num_tx_ctx))
+	if (ofi_atomic_get32(&cxi_ep->ep_obj->ref) ||
+	    ofi_atomic_get32(&cxi_ep->ep_obj->num_rx_ctx) ||
+	    ofi_atomic_get32(&cxi_ep->ep_obj->num_tx_ctx))
 		return -FI_EBUSY;
 
-	if (cxi_ep->attr->av) {
-		ofi_atomic_dec32(&cxi_ep->attr->av->ref);
+	if (cxi_ep->ep_obj->av) {
+		ofi_atomic_dec32(&cxi_ep->ep_obj->av->ref);
 
-		fastlock_acquire(&cxi_ep->attr->av->list_lock);
-		fid_list_remove(&cxi_ep->attr->av->ep_list, &cxi_ep->attr->lock,
+		fastlock_acquire(&cxi_ep->ep_obj->av->list_lock);
+		fid_list_remove(&cxi_ep->ep_obj->av->ep_list,
+				&cxi_ep->ep_obj->lock,
 				&cxi_ep->ep.fid);
-		fastlock_release(&cxi_ep->attr->av->list_lock);
+		fastlock_release(&cxi_ep->ep_obj->av->list_lock);
 	}
 
-	if (cxi_ep->attr->tx_shared) {
-		fastlock_acquire(&cxi_ep->attr->tx_ctx->lock);
-		dlist_remove(&cxi_ep->attr->tx_ctx_entry);
-		fastlock_release(&cxi_ep->attr->tx_ctx->lock);
+	if (cxi_ep->ep_obj->tx_shared) {
+		fastlock_acquire(&cxi_ep->ep_obj->tx_ctx->lock);
+		dlist_remove(&cxi_ep->ep_obj->tx_ctx_entry);
+		fastlock_release(&cxi_ep->ep_obj->tx_ctx->lock);
 	}
 
-	if (cxi_ep->attr->rx_shared) {
-		fastlock_acquire(&cxi_ep->attr->rx_ctx->lock);
-		dlist_remove(&cxi_ep->attr->rx_ctx_entry);
-		fastlock_release(&cxi_ep->attr->rx_ctx->lock);
+	if (cxi_ep->ep_obj->rx_shared) {
+		fastlock_acquire(&cxi_ep->ep_obj->rx_ctx->lock);
+		dlist_remove(&cxi_ep->ep_obj->rx_ctx_entry);
+		fastlock_release(&cxi_ep->ep_obj->rx_ctx->lock);
 	}
 
-	if (cxi_ep->attr->fclass != FI_CLASS_SEP) {
-		cxip_tx_ctx_close(cxi_ep->attr->tx_array[0]);
-		cxip_tx_ctx_free(cxi_ep->attr->tx_array[0]);
+	if (cxi_ep->ep_obj->fclass != FI_CLASS_SEP) {
+		cxip_tx_ctx_close(cxi_ep->ep_obj->tx_array[0]);
+		cxip_tx_ctx_free(cxi_ep->ep_obj->tx_array[0]);
 	}
 
-	if (cxi_ep->attr->fclass != FI_CLASS_SEP) {
-		cxip_rx_ctx_close(cxi_ep->attr->rx_array[0]);
-		cxip_rx_ctx_free(cxi_ep->attr->rx_array[0]);
+	if (cxi_ep->ep_obj->fclass != FI_CLASS_SEP) {
+		cxip_rx_ctx_close(cxi_ep->ep_obj->rx_array[0]);
+		cxip_rx_ctx_free(cxi_ep->ep_obj->rx_array[0]);
 	}
 
 	ret = cxip_ep_disable(cxi_ep);
 	if (ret != FI_SUCCESS)
 		CXIP_LOG_DBG("Failed to disable EP: %d\n", ret);
 
-	free(cxi_ep->attr->tx_array);
-	free(cxi_ep->attr->rx_array);
+	free(cxi_ep->ep_obj->tx_array);
+	free(cxi_ep->ep_obj->rx_array);
 
-	if (cxi_ep->attr->src_addr)
-		free(cxi_ep->attr->src_addr);
+	if (cxi_ep->ep_obj->src_addr)
+		free(cxi_ep->ep_obj->src_addr);
 
-	ofi_atomic_dec32(&cxi_ep->attr->domain->ref);
-	fastlock_destroy(&cxi_ep->attr->lock);
-	free(cxi_ep->attr);
+	ofi_atomic_dec32(&cxi_ep->ep_obj->domain->ref);
+	fastlock_destroy(&cxi_ep->ep_obj->lock);
+	free(cxi_ep->ep_obj);
 	free(cxi_ep);
 
 	return 0;
@@ -641,17 +642,17 @@ static int cxip_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	switch (bfid->fclass) {
 	case FI_CLASS_EQ:
 		eq = container_of(bfid, struct cxip_eq, eq.fid);
-		ep->attr->eq = eq;
+		ep->ep_obj->eq = eq;
 		break;
 
 	case FI_CLASS_CQ:
 		cq = container_of(bfid, struct cxip_cq, cq_fid.fid);
-		if (ep->attr->domain != cq->domain)
+		if (ep->ep_obj->domain != cq->domain)
 			return -FI_EINVAL;
 
 		if (flags & FI_SEND) {
-			for (i = 0; i < ep->attr->ep_attr.tx_ctx_cnt; i++) {
-				tx_ctx = ep->attr->tx_array[i];
+			for (i = 0; i < ep->ep_obj->ep_attr.tx_ctx_cnt; i++) {
+				tx_ctx = ep->ep_obj->tx_array[i];
 
 				if (!tx_ctx)
 					continue;
@@ -664,8 +665,8 @@ static int cxip_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		}
 
 		if (flags & FI_RECV) {
-			for (i = 0; i < ep->attr->ep_attr.rx_ctx_cnt; i++) {
-				rx_ctx = ep->attr->rx_array[i];
+			for (i = 0; i < ep->ep_obj->ep_attr.rx_ctx_cnt; i++) {
+				rx_ctx = ep->ep_obj->rx_array[i];
 
 				if (!rx_ctx)
 					continue;
@@ -680,12 +681,12 @@ static int cxip_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 	case FI_CLASS_CNTR:
 		cntr = container_of(bfid, struct cxip_cntr, cntr_fid.fid);
-		if (ep->attr->domain != cntr->domain)
+		if (ep->ep_obj->domain != cntr->domain)
 			return -FI_EINVAL;
 
 		if (flags & FI_SEND || flags & FI_WRITE || flags & FI_READ) {
-			for (i = 0; i < ep->attr->ep_attr.tx_ctx_cnt; i++) {
-				tx_ctx = ep->attr->tx_array[i];
+			for (i = 0; i < ep->ep_obj->ep_attr.tx_ctx_cnt; i++) {
+				tx_ctx = ep->ep_obj->tx_array[i];
 
 				if (!tx_ctx)
 					continue;
@@ -699,8 +700,8 @@ static int cxip_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 		if (flags & FI_RECV || flags & FI_REMOTE_READ ||
 		    flags & FI_REMOTE_WRITE) {
-			for (i = 0; i < ep->attr->ep_attr.rx_ctx_cnt; i++) {
-				rx_ctx = ep->attr->rx_array[i];
+			for (i = 0; i < ep->ep_obj->ep_attr.rx_ctx_cnt; i++) {
+				rx_ctx = ep->ep_obj->rx_array[i];
 
 				if (!rx_ctx)
 					continue;
@@ -715,34 +716,34 @@ static int cxip_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 	case FI_CLASS_AV:
 		av = container_of(bfid, struct cxip_av, av_fid.fid);
-		if (ep->attr->domain != av->domain)
+		if (ep->ep_obj->domain != av->domain)
 			return -FI_EINVAL;
 
-		ep->attr->av = av;
+		ep->ep_obj->av = av;
 		ofi_atomic_inc32(&av->ref);
 
 		// TODO: These two cases appear to be redundant, as they are set below
-		if (ep->attr->tx_ctx &&
-		    ep->attr->tx_ctx->fid.ctx.fid.fclass == FI_CLASS_TX_CTX) {
-			ep->attr->tx_ctx->av = av;
+		if (ep->ep_obj->tx_ctx &&
+		    ep->ep_obj->tx_ctx->fid.ctx.fid.fclass == FI_CLASS_TX_CTX) {
+			ep->ep_obj->tx_ctx->av = av;
 		}
 
-		if (ep->attr->rx_ctx &&
-		    ep->attr->rx_ctx->ctx.fid.fclass == FI_CLASS_RX_CTX)
-			ep->attr->rx_ctx->av = av;
+		if (ep->ep_obj->rx_ctx &&
+		    ep->ep_obj->rx_ctx->ctx.fid.fclass == FI_CLASS_RX_CTX)
+			ep->ep_obj->rx_ctx->av = av;
 
 		// TODO: These two cases should suffice to set all of these
-		for (i = 0; i < ep->attr->ep_attr.tx_ctx_cnt; i++) {
-			if (ep->attr->tx_array[i])
-				ep->attr->tx_array[i]->av = av;
+		for (i = 0; i < ep->ep_obj->ep_attr.tx_ctx_cnt; i++) {
+			if (ep->ep_obj->tx_array[i])
+				ep->ep_obj->tx_array[i]->av = av;
 		}
 
-		for (i = 0; i < ep->attr->ep_attr.rx_ctx_cnt; i++) {
-			if (ep->attr->rx_array[i])
-				ep->attr->rx_array[i]->av = av;
+		for (i = 0; i < ep->ep_obj->ep_attr.rx_ctx_cnt; i++) {
+			if (ep->ep_obj->rx_array[i])
+				ep->ep_obj->rx_array[i]->av = av;
 		}
 		fastlock_acquire(&av->list_lock);
-		ret = fid_list_insert(&av->ep_list, &ep->attr->lock,
+		ret = fid_list_insert(&av->ep_list, &ep->ep_obj->lock,
 				      &ep->ep.fid);
 		fastlock_release(&av->list_lock);
 		if (ret) {
@@ -754,21 +755,21 @@ static int cxip_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	case FI_CLASS_STX_CTX:
 		tx_ctx = container_of(bfid, struct cxip_tx_ctx, fid.stx.fid);
 		fastlock_acquire(&tx_ctx->lock);
-		dlist_insert_tail(&ep->attr->tx_ctx_entry, &tx_ctx->ep_list);
+		dlist_insert_tail(&ep->ep_obj->tx_ctx_entry, &tx_ctx->ep_list);
 		fastlock_release(&tx_ctx->lock);
 
-		ep->attr->tx_ctx->use_shared = 1;
-		ep->attr->tx_ctx->stx_ctx = tx_ctx;
+		ep->ep_obj->tx_ctx->use_shared = 1;
+		ep->ep_obj->tx_ctx->stx_ctx = tx_ctx;
 		break;
 
 	case FI_CLASS_SRX_CTX:
 		rx_ctx = container_of(bfid, struct cxip_rx_ctx, ctx);
 		fastlock_acquire(&rx_ctx->lock);
-		dlist_insert_tail(&ep->attr->rx_ctx_entry, &rx_ctx->ep_list);
+		dlist_insert_tail(&ep->ep_obj->rx_ctx_entry, &rx_ctx->ep_list);
 		fastlock_release(&rx_ctx->lock);
 
-		ep->attr->rx_ctx->use_shared = 1;
-		ep->attr->rx_ctx->srx_ctx = rx_ctx;
+		ep->ep_obj->rx_ctx->use_shared = 1;
+		ep->ep_obj->rx_ctx->srx_ctx = rx_ctx;
 		break;
 
 	default:
@@ -816,11 +817,11 @@ static int cxip_ep_control(struct fid *fid, int command, void *arg)
 			free(new_ep);
 			return -FI_EINVAL;
 		}
-		new_ep->attr = cxi_ep->attr;
+		new_ep->ep_obj = cxi_ep->ep_obj;
 		new_ep->is_alias = 1;
 		memcpy(&new_ep->ep, &cxi_ep->ep, sizeof(struct fid_ep));
 		*alias->fid = &new_ep->ep.fid;
-		ofi_atomic_inc32(&new_ep->attr->ref);
+		ofi_atomic_inc32(&new_ep->ep_obj->ref);
 		break;
 	case FI_GETOPSFLAG:
 		if (!arg)
@@ -872,7 +873,7 @@ static int cxip_ep_getopt(fid_t fid, int level, int optname, void *optval,
 		if (!optval || !optlen)
 			return -FI_EINVAL;
 
-		*(size_t *)optval = cxi_ep->attr->min_multi_recv;
+		*(size_t *)optval = cxi_ep->ep_obj->min_multi_recv;
 		*optlen = sizeof(size_t);
 		break;
 
@@ -900,11 +901,11 @@ static int cxip_ep_setopt(fid_t fid, int level, int optname, const void *optval,
 		if (!optval)
 			return -FI_EINVAL;
 
-		cxi_ep->attr->min_multi_recv = *(size_t *)optval;
-		for (i = 0; i < cxi_ep->attr->ep_attr.rx_ctx_cnt; i++) {
-			if (cxi_ep->attr->rx_array[i] != NULL) {
-				cxi_ep->attr->rx_array[i]->min_multi_recv =
-					cxi_ep->attr->min_multi_recv;
+		cxi_ep->ep_obj->min_multi_recv = *(size_t *)optval;
+		for (i = 0; i < cxi_ep->ep_obj->ep_attr.rx_ctx_cnt; i++) {
+			if (cxi_ep->ep_obj->rx_array[i] != NULL) {
+				cxi_ep->ep_obj->rx_array[i]->min_multi_recv =
+					cxi_ep->ep_obj->min_multi_recv;
 			}
 		}
 		break;
@@ -923,15 +924,15 @@ static int cxip_ep_tx_ctx(struct fid_ep *ep, int index, struct fi_tx_attr *attr,
 	struct cxip_tx_ctx *tx_ctx;
 
 	cxi_ep = container_of(ep, struct cxip_ep, ep);
-	if (cxi_ep->attr->fclass != FI_CLASS_SEP ||
-	    index >= (int)cxi_ep->attr->ep_attr.tx_ctx_cnt || !tx_ep)
+	if (cxi_ep->ep_obj->fclass != FI_CLASS_SEP ||
+	    index >= (int)cxi_ep->ep_obj->ep_attr.tx_ctx_cnt || !tx_ep)
 		return -FI_EINVAL;
 
 	if (attr) {
-		if (ofi_check_tx_attr(&cxip_prov, cxi_ep->attr->info.tx_attr,
+		if (ofi_check_tx_attr(&cxip_prov, cxi_ep->ep_obj->info.tx_attr,
 				      attr, 0) ||
 		    ofi_check_attr_subset(&cxip_prov,
-					  cxi_ep->attr->info.tx_attr->caps,
+					  cxi_ep->ep_obj->info.tx_attr->caps,
 					  attr->caps))
 			return -FI_ENODATA;
 		tx_ctx = cxip_tx_ctx_alloc(attr, context, 0);
@@ -942,10 +943,10 @@ static int cxip_ep_tx_ctx(struct fid_ep *ep, int index, struct fi_tx_attr *attr,
 		return -FI_ENOMEM;
 
 	tx_ctx->tx_id = index;
-	tx_ctx->ep_attr = cxi_ep->attr;
-	tx_ctx->domain = cxi_ep->attr->domain;
-	tx_ctx->av = cxi_ep->attr->av;
-	dlist_insert_tail(&cxi_ep->attr->tx_ctx_entry, &tx_ctx->ep_list);
+	tx_ctx->ep_obj = cxi_ep->ep_obj;
+	tx_ctx->domain = cxi_ep->ep_obj->domain;
+	tx_ctx->av = cxi_ep->ep_obj->av;
+	dlist_insert_tail(&cxi_ep->ep_obj->tx_ctx_entry, &tx_ctx->ep_list);
 
 	tx_ctx->fid.ctx.fid.ops = &cxip_ctx_ops;
 	tx_ctx->fid.ctx.ops = &cxip_ctx_ep_ops;
@@ -955,9 +956,9 @@ static int cxip_ep_tx_ctx(struct fid_ep *ep, int index, struct fi_tx_attr *attr,
 	tx_ctx->fid.ctx.atomic = &cxip_ep_atomic;
 
 	*tx_ep = &tx_ctx->fid.ctx;
-	cxi_ep->attr->tx_array[index] = tx_ctx;
-	ofi_atomic_inc32(&cxi_ep->attr->num_tx_ctx);
-	ofi_atomic_inc32(&cxi_ep->attr->domain->ref);
+	cxi_ep->ep_obj->tx_array[index] = tx_ctx;
+	ofi_atomic_inc32(&cxi_ep->ep_obj->num_tx_ctx);
+	ofi_atomic_inc32(&cxi_ep->ep_obj->domain->ref);
 
 	return 0;
 }
@@ -969,15 +970,15 @@ static int cxip_ep_rx_ctx(struct fid_ep *ep, int index, struct fi_rx_attr *attr,
 	struct cxip_rx_ctx *rx_ctx;
 
 	cxi_ep = container_of(ep, struct cxip_ep, ep);
-	if (cxi_ep->attr->fclass != FI_CLASS_SEP ||
-	    index >= (int)cxi_ep->attr->ep_attr.rx_ctx_cnt || !rx_ep)
+	if (cxi_ep->ep_obj->fclass != FI_CLASS_SEP ||
+	    index >= (int)cxi_ep->ep_obj->ep_attr.rx_ctx_cnt || !rx_ep)
 		return -FI_EINVAL;
 
 	if (attr) {
-		if (ofi_check_rx_attr(&cxip_prov, &cxi_ep->attr->info, attr,
+		if (ofi_check_rx_attr(&cxip_prov, &cxi_ep->ep_obj->info, attr,
 				      0) ||
 		    ofi_check_attr_subset(&cxip_prov,
-					  cxi_ep->attr->info.rx_attr->caps,
+					  cxi_ep->ep_obj->info.rx_attr->caps,
 					  attr->caps))
 			return -FI_ENODATA;
 		rx_ctx = cxip_rx_ctx_alloc(attr, context, 0);
@@ -988,21 +989,21 @@ static int cxip_ep_rx_ctx(struct fid_ep *ep, int index, struct fi_rx_attr *attr,
 		return -FI_ENOMEM;
 
 	rx_ctx->rx_id = index;
-	rx_ctx->ep_attr = cxi_ep->attr;
-	rx_ctx->domain = cxi_ep->attr->domain;
-	rx_ctx->av = cxi_ep->attr->av;
-	dlist_insert_tail(&cxi_ep->attr->rx_ctx_entry, &rx_ctx->ep_list);
+	rx_ctx->ep_obj = cxi_ep->ep_obj;
+	rx_ctx->domain = cxi_ep->ep_obj->domain;
+	rx_ctx->av = cxi_ep->ep_obj->av;
+	dlist_insert_tail(&cxi_ep->ep_obj->rx_ctx_entry, &rx_ctx->ep_list);
 
 	rx_ctx->ctx.fid.ops = &cxip_ctx_ops;
 	rx_ctx->ctx.ops = &cxip_ctx_ep_ops;
 	rx_ctx->ctx.msg = &cxip_ep_msg_ops;
 	rx_ctx->ctx.tagged = &cxip_ep_tagged_ops;
 
-	rx_ctx->min_multi_recv = cxi_ep->attr->min_multi_recv;
+	rx_ctx->min_multi_recv = cxi_ep->ep_obj->min_multi_recv;
 	*rx_ep = &rx_ctx->ctx;
-	cxi_ep->attr->rx_array[index] = rx_ctx;
-	ofi_atomic_inc32(&cxi_ep->attr->num_rx_ctx);
-	ofi_atomic_inc32(&cxi_ep->attr->domain->ref);
+	cxi_ep->ep_obj->rx_array[index] = rx_ctx;
+	ofi_atomic_inc32(&cxi_ep->ep_obj->num_rx_ctx);
+	ofi_atomic_inc32(&cxi_ep->ep_obj->domain->ref);
 
 	return 0;
 }
@@ -1271,13 +1272,13 @@ err:
 
 static int cxip_ep_assign_src_addr(struct cxip_ep *cxi_ep, struct fi_info *info)
 {
-	cxi_ep->attr->src_addr = calloc(1, sizeof(struct cxip_addr));
-	if (!cxi_ep->attr->src_addr)
+	cxi_ep->ep_obj->src_addr = calloc(1, sizeof(struct cxip_addr));
+	if (!cxi_ep->ep_obj->src_addr)
 		return -FI_ENOMEM;
 
 	if (info)
 		return cxip_get_src_addr(info->dest_addr,
-					 cxi_ep->attr->src_addr);
+					 cxi_ep->ep_obj->src_addr);
 
 	return -FI_EINVAL;
 }
@@ -1330,34 +1331,34 @@ int cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 		goto err;
 	}
 
-	cxi_ep->attr = calloc(1, sizeof(struct cxip_ep_attr));
-	if (!cxi_ep->attr) {
+	cxi_ep->ep_obj = calloc(1, sizeof(struct cxip_ep_obj));
+	if (!cxi_ep->ep_obj) {
 		ret = -FI_ENOMEM;
 		goto err;
 	}
-	cxi_ep->attr->fclass = fclass;
+	cxi_ep->ep_obj->fclass = fclass;
 	*ep = cxi_ep;
 
 	if (info) {
-		cxi_ep->attr->info.caps = info->caps;
-		cxi_ep->attr->info.addr_format = FI_ADDR_CXI;
+		cxi_ep->ep_obj->info.caps = info->caps;
+		cxi_ep->ep_obj->info.addr_format = FI_ADDR_CXI;
 
 		if (info->ep_attr) {
-			cxi_ep->attr->ep_type = info->ep_attr->type;
-			cxi_ep->attr->ep_attr.tx_ctx_cnt =
+			cxi_ep->ep_obj->ep_type = info->ep_attr->type;
+			cxi_ep->ep_obj->ep_attr.tx_ctx_cnt =
 				info->ep_attr->tx_ctx_cnt;
-			cxi_ep->attr->ep_attr.rx_ctx_cnt =
+			cxi_ep->ep_obj->ep_attr.rx_ctx_cnt =
 				info->ep_attr->rx_ctx_cnt;
 		}
 
 		if (info->src_addr) {
-			cxi_ep->attr->src_addr =
+			cxi_ep->ep_obj->src_addr =
 				calloc(1, sizeof(struct cxip_addr));
-			if (!cxi_ep->attr->src_addr) {
+			if (!cxi_ep->ep_obj->src_addr) {
 				ret = -FI_ENOMEM;
 				goto err;
 			}
-			memcpy(cxi_ep->attr->src_addr, info->src_addr,
+			memcpy(cxi_ep->ep_obj->src_addr, info->src_addr,
 			       sizeof(struct cxip_addr));
 		}
 
@@ -1375,83 +1376,84 @@ int cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 		if (info->rx_attr)
 			cxi_ep->rx_attr = *info->rx_attr;
-		cxi_ep->attr->info.handle = info->handle;
+		cxi_ep->ep_obj->info.handle = info->handle;
 	}
 
-	if (!cxi_ep->attr->src_addr && cxip_ep_assign_src_addr(cxi_ep, info)) {
+	if (!cxi_ep->ep_obj->src_addr &&
+	    cxip_ep_assign_src_addr(cxi_ep, info)) {
 		CXIP_LOG_ERROR("failed to get src_address\n");
 		ret = -FI_EINVAL;
 		goto err;
 	}
 
-	ofi_atomic_initialize32(&cxi_ep->attr->ref, 0);
-	ofi_atomic_initialize32(&cxi_ep->attr->num_tx_ctx, 0);
-	ofi_atomic_initialize32(&cxi_ep->attr->num_rx_ctx, 0);
-	fastlock_init(&cxi_ep->attr->lock);
+	ofi_atomic_initialize32(&cxi_ep->ep_obj->ref, 0);
+	ofi_atomic_initialize32(&cxi_ep->ep_obj->num_tx_ctx, 0);
+	ofi_atomic_initialize32(&cxi_ep->ep_obj->num_rx_ctx, 0);
+	fastlock_init(&cxi_ep->ep_obj->lock);
 
-	if (cxi_ep->attr->ep_attr.tx_ctx_cnt == FI_SHARED_CONTEXT)
-		cxi_ep->attr->tx_shared = 1;
-	if (cxi_ep->attr->ep_attr.rx_ctx_cnt == FI_SHARED_CONTEXT)
-		cxi_ep->attr->rx_shared = 1;
+	if (cxi_ep->ep_obj->ep_attr.tx_ctx_cnt == FI_SHARED_CONTEXT)
+		cxi_ep->ep_obj->tx_shared = 1;
+	if (cxi_ep->ep_obj->ep_attr.rx_ctx_cnt == FI_SHARED_CONTEXT)
+		cxi_ep->ep_obj->rx_shared = 1;
 
-	if (cxi_ep->attr->fclass != FI_CLASS_SEP) {
-		cxi_ep->attr->ep_attr.tx_ctx_cnt = 1;
-		cxi_ep->attr->ep_attr.rx_ctx_cnt = 1;
+	if (cxi_ep->ep_obj->fclass != FI_CLASS_SEP) {
+		cxi_ep->ep_obj->ep_attr.tx_ctx_cnt = 1;
+		cxi_ep->ep_obj->ep_attr.rx_ctx_cnt = 1;
 	}
 
-	cxi_ep->attr->tx_array = calloc(cxi_ep->attr->ep_attr.tx_ctx_cnt,
+	cxi_ep->ep_obj->tx_array = calloc(cxi_ep->ep_obj->ep_attr.tx_ctx_cnt,
 					sizeof(struct cxip_tx_ctx *));
-	if (!cxi_ep->attr->tx_array) {
+	if (!cxi_ep->ep_obj->tx_array) {
 		ret = -FI_ENOMEM;
 		goto err;
 	}
 
-	cxi_ep->attr->rx_array = calloc(cxi_ep->attr->ep_attr.rx_ctx_cnt,
+	cxi_ep->ep_obj->rx_array = calloc(cxi_ep->ep_obj->ep_attr.rx_ctx_cnt,
 					sizeof(struct cxip_rx_ctx *));
-	if (!cxi_ep->attr->rx_array) {
+	if (!cxi_ep->ep_obj->rx_array) {
 		ret = -FI_ENOMEM;
 		goto err;
 	}
 
-	if (cxi_ep->attr->fclass != FI_CLASS_SEP) {
+	if (cxi_ep->ep_obj->fclass != FI_CLASS_SEP) {
 		/* default tx ctx */
 		tx_ctx = cxip_tx_ctx_alloc(&cxi_ep->tx_attr, context,
-					   cxi_ep->attr->tx_shared);
+					   cxi_ep->ep_obj->tx_shared);
 		if (!tx_ctx) {
 			ret = -FI_ENOMEM;
 			goto err;
 		}
-		tx_ctx->ep_attr = cxi_ep->attr;
+		tx_ctx->ep_obj = cxi_ep->ep_obj;
 		tx_ctx->domain = cxi_dom;
 		tx_ctx->tx_id = 0;
-		dlist_insert_tail(&cxi_ep->attr->tx_ctx_entry,
+		dlist_insert_tail(&cxi_ep->ep_obj->tx_ctx_entry,
 				  &tx_ctx->ep_list);
-		cxi_ep->attr->tx_array[0] = tx_ctx;
-		cxi_ep->attr->tx_ctx = tx_ctx;
+		cxi_ep->ep_obj->tx_array[0] = tx_ctx;
+		cxi_ep->ep_obj->tx_ctx = tx_ctx;
 
 		/* default rx_ctx */
 		rx_ctx = cxip_rx_ctx_alloc(&cxi_ep->rx_attr, context,
-					   cxi_ep->attr->rx_shared);
+					   cxi_ep->ep_obj->rx_shared);
 		if (!rx_ctx) {
 			ret = -FI_ENOMEM;
 			goto err;
 		}
-		rx_ctx->ep_attr = cxi_ep->attr;
+		rx_ctx->ep_obj = cxi_ep->ep_obj;
 		rx_ctx->domain = cxi_dom;
 		rx_ctx->rx_id = 0;
-		dlist_insert_tail(&cxi_ep->attr->rx_ctx_entry,
+		dlist_insert_tail(&cxi_ep->ep_obj->rx_ctx_entry,
 				  &rx_ctx->ep_list);
-		cxi_ep->attr->rx_array[0] = rx_ctx;
-		cxi_ep->attr->rx_ctx = rx_ctx;
+		cxi_ep->ep_obj->rx_array[0] = rx_ctx;
+		cxi_ep->ep_obj->rx_ctx = rx_ctx;
 	}
 
 	/* default config */
-	cxi_ep->attr->min_multi_recv = CXIP_EP_MIN_MULTI_RECV;
+	cxi_ep->ep_obj->min_multi_recv = CXIP_EP_MIN_MULTI_RECV;
 
 	if (info)
-		memcpy(&cxi_ep->attr->info, info, sizeof(struct fi_info));
+		memcpy(&cxi_ep->ep_obj->info, info, sizeof(struct fi_info));
 
-	cxi_ep->attr->domain = cxi_dom;
+	cxi_ep->ep_obj->domain = cxi_dom;
 
 	ofi_atomic_inc32(&cxi_dom->ref);
 	return 0;
@@ -1461,14 +1463,14 @@ err:
 		cxip_rx_ctx_free(rx_ctx);
 	if (tx_ctx)
 		cxip_tx_ctx_free(tx_ctx);
-	if (cxi_ep->attr) {
-		if (cxi_ep->attr->rx_array)
-			free(cxi_ep->attr->rx_array);
-		if (cxi_ep->attr->tx_array)
-			free(cxi_ep->attr->tx_array);
-		if (cxi_ep->attr->src_addr)
-			free(cxi_ep->attr->src_addr);
-		free(cxi_ep->attr);
+	if (cxi_ep->ep_obj) {
+		if (cxi_ep->ep_obj->rx_array)
+			free(cxi_ep->ep_obj->rx_array);
+		if (cxi_ep->ep_obj->tx_array)
+			free(cxi_ep->ep_obj->tx_array);
+		if (cxi_ep->ep_obj->src_addr)
+			free(cxi_ep->ep_obj->src_addr);
+		free(cxi_ep->ep_obj);
 	}
 	if (cxi_ep)
 		free(cxi_ep);

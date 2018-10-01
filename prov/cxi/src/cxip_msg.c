@@ -607,7 +607,7 @@ static ssize_t cxip_trecv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	switch (ep->fid.fclass) {
 	case FI_CLASS_EP:
 		cxi_ep = container_of(ep, struct cxip_ep, ep);
-		rxc = cxi_ep->attr->rx_ctx;
+		rxc = cxi_ep->ep_obj->rx_ctx;
 		break;
 
 	case FI_CLASS_RX_CTX:
@@ -743,7 +743,7 @@ static ssize_t cxip_tsend(struct fid_ep *ep, const void *buf, size_t len,
 	switch (ep->fid.fclass) {
 	case FI_CLASS_EP:
 		cxi_ep = container_of(ep, struct cxip_ep, ep);
-		txc = cxi_ep->attr->tx_ctx;
+		txc = cxi_ep->ep_obj->tx_ctx;
 		break;
 
 	case FI_CLASS_TX_CTX:

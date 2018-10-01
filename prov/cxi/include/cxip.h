@@ -568,7 +568,7 @@ struct cxip_rx_ctx {
 	struct cxip_comp comp;
 	struct cxip_rx_ctx *srx_ctx;
 
-	struct cxip_ep_attr *ep_attr;
+	struct cxip_ep_obj *ep_obj;	// parent EP object
 	struct cxip_av *av;
 	struct cxip_domain *domain;	// parent domain
 
@@ -616,7 +616,7 @@ struct cxip_tx_ctx {
 	struct cxip_comp comp;
 	struct cxip_tx_ctx *stx_ctx;	// shared context (?)
 
-	struct cxip_ep_attr *ep_attr;	// parent EP attributes
+	struct cxip_ep_obj *ep_obj;	// parent EP object
 	struct cxip_av *av;		// same AV as EP->av
 	struct cxip_domain *domain;	// parent domain
 
@@ -636,15 +636,13 @@ struct cxip_tx_ctx {
  *
  * Created in cxip_alloc_endpoint().
  *
- * This is the bulk of the endpoint object. It has been This has been separated
- * from cxip_ep to support aliasing, to support different TX/RX attributes for a
- * single TX or RX object. TX/RX objects are tied to Cassini PTEs, and the
- * number of bits available to represent separate contexts is limited, so we
- * want to reuse these when the only difference is the attributes.
- *
- * TODO: rename this cxip_ep_rsrc.
+ * This is the meat of the endpoint object. It has been separated from cxip_ep
+ * to support aliasing, to allow different TX/RX attributes for a single TX or
+ * RX object. TX/RX objects are tied to Cassini PTEs, and the number of bits
+ * available to represent separate contexts is limited, so we want to reuse
+ * these when the only difference is the attributes.
  */
-struct cxip_ep_attr {
+struct cxip_ep_obj {
 	size_t fclass;
 
 	int tx_shared;
@@ -698,7 +696,7 @@ struct cxip_ep {
 	struct fid_ep ep;
 	struct fi_tx_attr tx_attr;
 	struct fi_rx_attr rx_attr;
-	struct cxip_ep_attr *attr;
+	struct cxip_ep_obj *ep_obj;
 	int is_alias;
 };
 

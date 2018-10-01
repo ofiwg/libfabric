@@ -43,7 +43,7 @@ int cxip_mr_enable(struct cxip_mr *mr)
 	mr->pid_idx = CXIP_ADDR_MR_IDX(mr->domain->dev_if->if_pid_granule,
 				       mr->key);
 
-	ret = cxip_if_domain_lep_alloc(mr->ep->attr->if_dom, mr->pid_idx);
+	ret = cxip_if_domain_lep_alloc(mr->ep->ep_obj->if_dom, mr->pid_idx);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Failed to reserve LEP (%d): %d\n", mr->pid_idx,
 			     ret);
@@ -51,7 +51,7 @@ int cxip_mr_enable(struct cxip_mr *mr)
 	}
 
 	/* Map the PTE to the LEP */
-	ret = cxil_map_pte(mr->pte, mr->ep->attr->if_dom->cxil_if_dom,
+	ret = cxil_map_pte(mr->pte, mr->ep->ep_obj->if_dom->cxil_if_dom,
 			   mr->pid_idx, 0, &mr->pte_map);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to allocate PTE: %d\n", ret);
@@ -164,7 +164,7 @@ unmap_buf:
 unmap_pte:
 	cxil_unmap_pte(mr->pte_map);
 free_lep:
-	cxip_if_domain_lep_free(mr->ep->attr->if_dom, mr->pid_idx);
+	cxip_if_domain_lep_free(mr->ep->ep_obj->if_dom, mr->pid_idx);
 free_pte:
 	cxil_destroy_pte(mr->pte);
 
@@ -228,7 +228,7 @@ unlock:
 	if (ret)
 		CXIP_LOG_ERROR("Failed to unmap PTE: %d\n", ret);
 
-	ret = cxip_if_domain_lep_free(mr->ep->attr->if_dom, mr->pid_idx);
+	ret = cxip_if_domain_lep_free(mr->ep->ep_obj->if_dom, mr->pid_idx);
 	if (ret)
 		CXIP_LOG_ERROR("Failed to free LEP: %d\n", ret);
 
@@ -258,7 +258,7 @@ static int cxip_mr_close(struct fid *fid)
 		CXIP_LOG_DBG("Failed to disable MR: %d\n", ret);
 
 	if (mr->ep)
-		ofi_atomic_dec32(&mr->ep->attr->ref);
+		ofi_atomic_dec32(&mr->ep->ep_obj->ref);
 
 	ofi_atomic_dec32(&mr->domain->ref);
 
@@ -313,14 +313,14 @@ static int cxip_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		 * -An EP must be enabled before being bound.
 		 */
 		if (mr->ep ||
-		    mr->domain != ep->attr->domain ||
-		    !ep->attr->is_enabled) {
+		    mr->domain != ep->ep_obj->domain ||
+		    !ep->ep_obj->is_enabled) {
 			ret = -FI_EINVAL;
 			break;
 		}
 
 		mr->ep = ep;
-		ofi_atomic_inc32(&ep->attr->ref);
+		ofi_atomic_inc32(&ep->ep_obj->ref);
 		break;
 
 	default:

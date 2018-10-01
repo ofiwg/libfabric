@@ -26,7 +26,7 @@ static int cxip_rx_ctx_recv_init(struct cxip_rx_ctx *rxc)
 	/* Select the LEP where the queue will be mapped */
 	pid_idx = CXIP_ADDR_RX_IDX(rxc->domain->dev_if->if_pid_granule, 0);
 
-	ret = cxip_pte_alloc(rxc->ep_attr->if_dom, rxc->comp.recv_cq->evtq,
+	ret = cxip_pte_alloc(rxc->ep_obj->if_dom, rxc->comp.recv_cq->evtq,
 			     pid_idx, &opts, &rxc->rx_pte);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Failed to allocate RX PTE: %d\n", ret);
