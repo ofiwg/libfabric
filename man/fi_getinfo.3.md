@@ -183,19 +183,15 @@ struct fi_info {
   that any returned address is only usable locally.
 
 *handle - provider context handle*
-: The use of this field is operation specific.  On input to fi_getinfo,
-  if hints->handle is NULL, the handle of any returned fi_info structures will
-  reference a struct fid_nic  (see [`fi_nic`(3)](fi_nic.3.html)), if a physical
-  or virtual network-interface card is associated with the fi_info.  If a NIC
-  is not directly associated with an fi_info, the returned handle will be NULL.
-  See the NIC attribute section for details.  If hints->handle is set to struct
+: The use of this field is operation specific. If hints->handle is set to struct
   fid_pep, the hints->handle will be copied to info->handle on output from
   fi_getinfo.  Other values of hints->handle will be handled in a provider
   specific manner.  The fi_info::handle field is also used by fi_endpoint()
   and fi_reject() calls when processing connection requests or to inherit
   another endpoint's attributes.  See [`fi_eq`(3)](fi_eq.3.html),
   [`fi_reject`(3)](fi_reject.3.html), and
-  [`fi_endpoint`(3)](fi_endpoint.3.html).
+  [`fi_endpoint`(3)](fi_endpoint.3.html).  The info->handle field will be
+  ignored by fi_dupinfo and fi_freeinfo.
 
 *tx_attr - transmit context attributes*
 : Optionally supplied transmit context attributes.  Transmit context
