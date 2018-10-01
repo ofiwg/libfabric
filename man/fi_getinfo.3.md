@@ -133,6 +133,7 @@ struct fi_info {
 	struct fi_ep_attr     *ep_attr;
 	struct fi_domain_attr *domain_attr;
 	struct fi_fabric_attr *fabric_attr;
+	struct fid_nic        *nic;
 };
 ```
 
@@ -231,6 +232,13 @@ struct fi_info {
   hints, requested values of struct fi_fabric_attr should be set.  On
   output, the actual fabric attributes that can be provided will be
   returned.  See [`fi_fabric`(3)](fi_fabric.3.html) for details.
+
+*nic - network interface details*
+: Optional attributes related to the hardware NIC associated with
+  the specified fabric, domain, and endpoint data.  This field is
+  only valid for providers where the corresponding attributes are
+  closely associated with a hardware NIC.  See [`fi_nic`(3)]
+  (fi_nic.3.html) for details.
 
 # CAPABILITIES
 
