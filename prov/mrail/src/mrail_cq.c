@@ -192,17 +192,8 @@ static int mrail_ooo_recv_before(struct slist_entry *item, const void *arg)
 	struct mrail_ooo_recv *ooo_recv;
 	struct mrail_ooo_recv *new_recv;
 
-	/* Check whether the given item's follower has a higher seq_no. */
-
-	if (!item->next) {
-		/* item is the last element in the list */
-		return 0;
-	}
-
-	ooo_recv = container_of(item->next, struct mrail_ooo_recv, entry);
-	new_recv = container_of((struct slist_entry *)arg,
-			struct mrail_ooo_recv, entry);
-
+	ooo_recv = container_of(item, struct mrail_ooo_recv, entry);
+	new_recv = container_of(arg, struct mrail_ooo_recv, entry);
 	return (new_recv->seq_no < ooo_recv->seq_no);
 }
 
@@ -223,7 +214,8 @@ static void mrail_save_ooo_recv(struct mrail_ep *mrail_ep,
 	ooo_recv->seq_no = seq_no;
 	memcpy(&ooo_recv->comp, comp, sizeof(*comp));
 
-	slist_insert_order(queue, mrail_ooo_recv_before, &ooo_recv->entry);
+	slist_insert_before_first_match(queue, mrail_ooo_recv_before,
+					&ooo_recv->entry);
 
 	FI_DBG(&mrail_prov, FI_LOG_CQ, "saved ooo_recv seq=%d\n", seq_no);
 }
