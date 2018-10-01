@@ -121,6 +121,8 @@ struct mrail_tx_buf {
 	 * util buf release */
 	void			*context;
 	struct mrail_ep		*ep;
+	/* flags would be used for both operation flags (FI_COMPLETION)
+	 * and completion flags (FI_MSG, FI_TAGGED, etc) */
 	uint64_t		flags;
 	struct mrail_hdr	hdr;
 };
