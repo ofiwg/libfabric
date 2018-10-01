@@ -6,6 +6,7 @@ _tcp_files = \
 	prov/tcp/src/tcpx_domain.c	\
 	prov/tcp/src/tcpx_rma.c		\
 	prov/tcp/src/tcpx_ep.c		\
+	prov/tcp/src/tcpx_shared_ctx.c	\
 	prov/tcp/src/tcpx_cq.c		\
 	prov/tcp/src/tcpx_eq.c		\
 	prov/tcp/src/tcpx_init.c	\

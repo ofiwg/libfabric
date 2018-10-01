@@ -680,10 +680,18 @@ static int tcpx_ep_ctrl(struct fid *fid, int command, void *arg)
 }
 static int tcpx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
-	struct util_ep *util_ep;
+	struct tcpx_ep *tcpx_ep;
+	struct tcpx_rx_ctx *rx_ctx;
 
-	util_ep = container_of(fid, struct util_ep, ep_fid.fid);
-	return ofi_ep_bind(util_ep, bfid, flags);
+	tcpx_ep = container_of(fid, struct tcpx_ep, util_ep.ep_fid.fid);
+
+	if (bfid->fclass == FI_CLASS_SRX_CTX) {
+		rx_ctx = container_of(bfid, struct tcpx_rx_ctx, rx_fid.fid);
+		tcpx_ep->srx_ctx = rx_ctx;
+		return FI_SUCCESS;
+	}
+
+	return ofi_ep_bind(&tcpx_ep->util_ep, bfid, flags);
 }
 
 static struct fi_ops tcpx_ep_fi_ops = {
@@ -831,6 +839,11 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 	(*ep_fid)->msg = &tcpx_msg_ops;
 	(*ep_fid)->rma = &tcpx_rma_ops;
 
+	ep->get_rx_entry[ofi_op_msg] = tcpx_get_rx_entry_op_msg;
+	ep->get_rx_entry[ofi_op_tagged] = tcpx_get_rx_entry_op_invalid;
+	ep->get_rx_entry[ofi_op_read_req] = tcpx_get_rx_entry_op_read_req;
+	ep->get_rx_entry[ofi_op_read_rsp] = tcpx_get_rx_entry_op_read_rsp;
+	ep->get_rx_entry[ofi_op_write] =tcpx_get_rx_entry_op_write;
 	return 0;
 err3:
 	ofi_close_socket(ep->conn_fd);

@@ -83,6 +83,7 @@ static struct fi_domain_attr tcpx_domain_attr = {
 	.ep_cnt = 8192,
 	.tx_ctx_cnt = 8192,
 	.rx_ctx_cnt = 8192,
+	.max_ep_srx_ctx = 128,
 	.max_ep_tx_ctx = 1,
 	.max_ep_rx_ctx = 1
 };
