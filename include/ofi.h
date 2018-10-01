@@ -117,6 +117,9 @@ void ofi_create_filter(struct fi_filter *filter, const char *env_name);
 void ofi_free_filter(struct fi_filter *filter);
 int ofi_apply_filter(struct fi_filter *filter, const char *name);
 
+int ofi_nic_close(struct fid *fid);
+struct fid_nic *ofi_nic_dup(const struct fid_nic *nic);
+
 void fi_log_init(void);
 void fi_log_fini(void);
 void fi_param_init(void);

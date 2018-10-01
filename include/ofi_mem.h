@@ -63,6 +63,17 @@ static inline void *mem_dup(const void *src, size_t size)
 	return dest;
 }
 
+static inline int ofi_str_dup(const char *src, char **dst)
+{
+	if (src) {
+		*dst = strdup(src);
+		if (!*dst)
+			return -FI_ENOMEM;
+	} else {
+		*dst = NULL;
+	}
+	return 0;
+}
 
 /*
  * Buffer pool (free stack) template
