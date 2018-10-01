@@ -373,7 +373,7 @@ rxm_cq_lmt_read_prepare_deferred(struct rxm_tx_entry **tx_entry, size_t index,
 static inline
 ssize_t rxm_cq_handle_large_data(struct rxm_rx_buf *rx_buf)
 {
-	size_t i, index = 0, offset = 0, count;
+	size_t i, index = 0, offset = 0, count, total_recv_len;
 	struct iovec iov[RXM_IOV_LIMIT];
 	void *desc[RXM_IOV_LIMIT];
 	int ret = 0;
@@ -397,10 +397,12 @@ ssize_t rxm_cq_handle_large_data(struct rxm_rx_buf *rx_buf)
 	rx_buf->rma_iov_index = 0;
 
 	if (!rx_buf->ep->rxm_mr_local) {
+		total_recv_len = MIN(rx_buf->recv_entry->total_len,
+				     rx_buf->pkt.hdr.size);
 		ret = rxm_ep_msg_mr_regv_lim(rx_buf->ep,
 					     rx_buf->recv_entry->rxm_iov.iov,
 					     rx_buf->recv_entry->rxm_iov.count,
-					     rx_buf->pkt.hdr.size,
+					     total_recv_len,
 					     FI_READ, rx_buf->mr);
 		if (OFI_UNLIKELY(ret))
 			return ret;
@@ -409,9 +411,12 @@ ssize_t rxm_cq_handle_large_data(struct rxm_rx_buf *rx_buf)
 			rx_buf->recv_entry->rxm_iov.desc[i] =
 						fi_mr_desc(rx_buf->mr[i]);
 	} else {
-		for (i = 0; i < rx_buf->recv_entry->rxm_iov.count; i++)
+		for (i = 0; i < rx_buf->recv_entry->rxm_iov.count; i++) {
 			rx_buf->recv_entry->rxm_iov.desc[i] =
 				fi_mr_desc(rx_buf->recv_entry->rxm_iov.desc[i]);
+		}
+		total_recv_len = MIN(rx_buf->recv_entry->total_len,
+				     rx_buf->pkt.hdr.size);
 	}
 
 	assert(rx_buf->rma_iov->count && (rx_buf->rma_iov->count <= RXM_IOV_LIMIT));
@@ -420,18 +425,19 @@ ssize_t rxm_cq_handle_large_data(struct rxm_rx_buf *rx_buf)
 	rx_buf->hdr.state = RXM_LMT_READ;
 
 	for (i = 0; i < rx_buf->rma_iov->count; i++) {
+		size_t copy_len = MIN(rx_buf->rma_iov->iov[i].len,
+				      total_recv_len);
 		ret = ofi_copy_iov_desc(&iov[0], &desc[0], &count,
 					&rx_buf->recv_entry->rxm_iov.iov[0],
 					&rx_buf->recv_entry->rxm_iov.desc[0],
 					rx_buf->recv_entry->rxm_iov.count,
-					&index, &offset, rx_buf->rma_iov->iov[i].len);
+					&index, &offset, copy_len);
 		if (ret) {
 			assert(ret == -FI_ETOOSMALL);
 			return rxm_cq_write_error_trunc(
-				rx_buf,
-				ofi_total_iov_len(rx_buf->recv_entry->rxm_iov.iov,
-						  rx_buf->recv_entry->rxm_iov.count));
+				rx_buf, rx_buf->recv_entry->total_len);
 		}
+		total_recv_len -= copy_len;
 		ret = fi_readv(rx_buf->conn->msg_ep, iov, desc, count, 0,
 			       rx_buf->rma_iov->iov[i].addr,
 			       rx_buf->rma_iov->iov[i].key, rx_buf);
@@ -452,6 +458,7 @@ readv_err:
 			break;
 		}
 	}
+	assert(!total_recv_len);
 	return ret;
 }
 
