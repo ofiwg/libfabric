@@ -27,7 +27,7 @@ struct cxip_if *cxip_if_lookup(uint32_t nic_addr)
 	struct cxip_if *if_entry;
 
 	slist_foreach(&cxip_if_list, entry, prev) {
-		if_entry = container_of(entry, struct cxip_if, entry);
+		if_entry = container_of(entry, struct cxip_if, if_entry);
 		if (if_entry->if_nic == nic_addr)
 			return if_entry;
 	}
@@ -42,7 +42,7 @@ static struct cxip_if_domain *cxip_if_domain_lookup(struct cxip_if *dev_if,
 	struct cxip_if_domain *dom;
 
 	dlist_foreach(&dev_if->if_doms, entry) {
-		dom = container_of(entry, struct cxip_if_domain, entry);
+		dom = container_of(entry, struct cxip_if_domain, if_dom_entry);
 		if (dom->vni == vni && dom->pid == pid)
 			return dom;
 	}
@@ -212,13 +212,14 @@ int cxip_get_if_domain(struct cxip_if *dev_if, uint32_t vni, uint32_t pid,
 			goto unlock;
 		}
 
-		ret = cxil_alloc_domain(dev_if->if_lni, vni, pid, &dom->if_dom);
+		ret = cxil_alloc_domain(dev_if->if_lni, vni, pid,
+					&dom->cxil_if_dom);
 		if (ret) {
 			CXIP_LOG_DBG("cxil_alloc_domain returned: %d\n", ret);
 			goto free_dom;
 		}
 
-		dlist_insert_tail(&dom->entry, &dev_if->if_doms);
+		dlist_insert_tail(&dom->if_dom_entry, &dev_if->if_doms);
 		dom->dev_if = dev_if;
 		dom->vni = vni;
 		dom->pid = pid;
@@ -266,9 +267,9 @@ void cxip_put_if_domain(struct cxip_if_domain *if_dom)
 
 		fastlock_destroy(&if_dom->lock);
 
-		dlist_remove(&if_dom->entry);
+		dlist_remove(&if_dom->if_dom_entry);
 
-		ret = cxil_destroy_domain(if_dom->if_dom);
+		ret = cxil_destroy_domain(if_dom->cxil_if_dom);
 		if (ret)
 			CXIP_LOG_ERROR("Failed to destroy domain: %d\n", ret);
 
@@ -363,7 +364,7 @@ int cxip_pte_alloc(struct cxip_if_domain *if_dom, struct cxi_evtq *evtq,
 	}
 
 	/* Map the PTE to the LEP */
-	ret = cxil_map_pte(new_pte->pte, if_dom->if_dom, pid_idx, 0,
+	ret = cxil_map_pte(new_pte->pte, if_dom->cxil_if_dom, pid_idx, 0,
 			   &new_pte->pte_map);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to map PTE: %d\n", ret);
@@ -372,7 +373,7 @@ int cxip_pte_alloc(struct cxip_if_domain *if_dom, struct cxi_evtq *evtq,
 	}
 
 	fastlock_acquire(&if_dom->dev_if->lock);
-	dlist_insert_tail(&new_pte->entry, &if_dom->dev_if->ptes);
+	dlist_insert_tail(&new_pte->pte_entry, &if_dom->dev_if->ptes);
 	fastlock_release(&if_dom->dev_if->lock);
 
 	new_pte->if_dom = if_dom;
@@ -402,7 +403,7 @@ void cxip_pte_free(struct cxip_pte *pte)
 	int ret;
 
 	fastlock_acquire(&pte->if_dom->dev_if->lock);
-	dlist_remove(&pte->entry);
+	dlist_remove(&pte->pte_entry);
 	fastlock_release(&pte->if_dom->dev_if->lock);
 
 	ret = cxil_unmap_pte(pte->pte_map);
@@ -427,7 +428,8 @@ int cxip_pte_state_change(struct cxip_if *dev_if, uint32_t pte_num,
 
 	fastlock_acquire(&dev_if->lock);
 
-	dlist_foreach_container(&dev_if->ptes, struct cxip_pte, pte, entry) {
+	dlist_foreach_container(&dev_if->ptes,
+				struct cxip_pte, pte, pte_entry) {
 		if (pte->pte->ptn == pte_num) {
 			pte->state = new_state;
 			fastlock_release(&dev_if->lock);
@@ -473,7 +475,7 @@ static void cxip_query_if_list(struct slist *if_list)
 	dlist_init(&if_entry->if_doms);
 	dlist_init(&if_entry->ptes);
 	fastlock_init(&if_entry->lock);
-	slist_insert_tail(&if_entry->entry, if_list);
+	slist_insert_tail(&if_entry->if_entry, if_list);
 
 	cxil_free_device_list(dev_list);
 }
@@ -488,7 +490,7 @@ static void cxip_free_if_list(struct slist *if_list)
 
 	while (!slist_empty(if_list)) {
 		entry = slist_remove_head(if_list);
-		if_entry = container_of(entry, struct cxip_if, entry);
+		if_entry = container_of(entry, struct cxip_if, if_entry);
 		fastlock_destroy(&if_entry->lock);
 		free(if_entry);
 	}

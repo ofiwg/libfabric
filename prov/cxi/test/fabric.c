@@ -65,7 +65,7 @@ Test(getinfo, dom_name)
 	char *fab_name;
 
 	slist_foreach(&cxip_if_list, entry, prev) {
-		if_entry = container_of(entry, struct cxip_if, entry);
+		if_entry = container_of(entry, struct cxip_if, if_entry);
 		infos = 0;
 
 		cxit_fi_hints->domain_attr->name =
@@ -104,7 +104,7 @@ Test(getinfo, fab_name)
 	struct slist_entry *entry, *prev __attribute__ ((unused));
 
 	slist_foreach(&cxip_if_list, entry, prev) {
-		if_entry = container_of(entry, struct cxip_if, entry);
+		if_entry = container_of(entry, struct cxip_if, if_entry);
 		infos = 0;
 
 		cxit_fi_hints->fabric_attr->name =
@@ -143,7 +143,7 @@ Test(getinfo, src_node)
 	cxit_fi_hints->fabric_attr->prov_name = strdup(cxip_prov_name);
 
 	slist_foreach(&cxip_if_list, entry, prev) {
-		if_entry = container_of(entry, struct cxip_if, entry);
+		if_entry = container_of(entry, struct cxip_if, if_entry);
 		infos = 0;
 
 		ret = asprintf(&cxit_node, "0x%x", if_entry->if_nic);
@@ -198,7 +198,7 @@ Test(getinfo, src_node_service)
 	cxit_fi_hints->fabric_attr->prov_name = strdup(cxip_prov_name);
 
 	slist_foreach(&cxip_if_list, entry, prev) {
-		if_entry = container_of(entry, struct cxip_if, entry);
+		if_entry = container_of(entry, struct cxip_if, if_entry);
 		infos = 0;
 
 		ret = asprintf(&cxit_node, "0x%x", if_entry->if_nic);
@@ -270,7 +270,7 @@ Test(getinfo, dest_node)
 	 * will match the first interface found.  Additional, node is
 	 * used to create a dest addr.
 	 */
-	if_entry = container_of((cxip_if_list.head), struct cxip_if, entry);
+	if_entry = container_of((cxip_if_list.head), struct cxip_if, if_entry);
 
 	/* Make sure we have only 1 FI */
 	do {
@@ -334,7 +334,7 @@ Test(getinfo, dest_node_service)
 	 * will match the first interface found.  Additionally, node
 	 * and service are used to create a dest addr.
 	 */
-	if_entry = container_of((cxip_if_list.head), struct cxip_if, entry);
+	if_entry = container_of((cxip_if_list.head), struct cxip_if, if_entry);
 
 	/* Make sure we have only 1 FI */
 	do {
@@ -401,7 +401,7 @@ Test(getinfo, service)
 
 		slist_foreach(&cxip_if_list, entry, prev) {
 			if_entry = container_of(entry,
-					struct cxip_if, entry);
+					struct cxip_if, if_entry);
 
 			cr_assert(cxit_fi->src_addr);
 			addr = (struct cxip_addr *)cxit_fi->src_addr;

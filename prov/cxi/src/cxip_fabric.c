@@ -378,7 +378,7 @@ int cxip_get_src_addr(struct cxip_addr *dest_addr, struct cxip_addr *src_addr)
 	/* TODO how to select an address on matching network? */
 
 	/* Just say the first IF matches */
-	if_entry = container_of((cxip_if_list.head), struct cxip_if, entry);
+	if_entry = container_of((cxip_if_list.head), struct cxip_if, if_entry);
 	src_addr->nic = if_entry->if_nic;
 
 	return 0;
@@ -605,7 +605,7 @@ static int cxip_match_src_addr_if(struct slist_entry *entry,
 {
 	struct cxip_if *if_entry;
 
-	if_entry = container_of(entry, struct cxip_if, entry);
+	if_entry = container_of(entry, struct cxip_if, if_entry);
 
 	return if_entry->if_nic == ((struct cxip_addr *)src_addr)->nic;
 }
@@ -688,7 +688,7 @@ static int cxip_getinfo(uint32_t version, const char *node, const char *service,
 	slist_foreach(&cxip_if_list, entry, prev) {
 		char *local_node;
 
-		if_entry = container_of(entry, struct cxip_if, entry);
+		if_entry = container_of(entry, struct cxip_if, if_entry);
 		ret = asprintf(&local_node, "0x%x", if_entry->if_nic);
 		if (ret == -1) {
 			CXIP_LOG_ERROR("asprintf failed: %s\n",

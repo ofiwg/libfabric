@@ -51,8 +51,8 @@ int cxip_mr_enable(struct cxip_mr *mr)
 	}
 
 	/* Map the PTE to the LEP */
-	ret = cxil_map_pte(mr->pte, mr->ep->attr->if_dom->if_dom, mr->pid_idx,
-			   0, &mr->pte_map);
+	ret = cxil_map_pte(mr->pte, mr->ep->attr->if_dom->cxil_if_dom,
+			   mr->pid_idx, 0, &mr->pte_map);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to allocate PTE: %d\n", ret);
 		ret = -FI_EADDRINUSE;

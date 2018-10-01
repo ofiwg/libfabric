@@ -209,13 +209,12 @@ struct cxip_addr {
  * Every EP will use one of these for the RX context.
  */
 struct cxip_if_domain {
-	struct dlist_entry entry;	// attach to cxip_if->if_doms
+	struct dlist_entry if_dom_entry; // attach to cxip_if->if_doms
 	struct cxip_if *dev_if;		// local Cassini device
-	struct cxil_domain *if_dom;	// cxil domain
-					// TODO: rename cxil_dom
+	struct cxil_domain *cxil_if_dom; // cxil domain (dev, vni, pid)
 	uint32_t vni;			// vni value (namespace)
-	uint32_t pid;			// pid value (granule number)
-	struct index_map lep_map;	// Cassini Logical EP Map
+	uint32_t pid;			// pid value (granule index)
+	struct index_map lep_map;	// Cassini Logical EP bitmap
 	ofi_atomic32_t ref;
 	fastlock_t lock;
 };
@@ -237,7 +236,7 @@ struct cxip_if_domain {
  * the libcxi layer.
  */
 struct cxip_if {
-	struct slist_entry entry;	// attach to global cxip_if_list
+	struct slist_entry if_entry;	// attach to global cxip_if_list
 	uint32_t if_nic;		// cxil NIC identifier
 	uint32_t if_idx;		// cxil NIC index
 	uint32_t if_fabric;		// cxil NIC fabric address
@@ -266,8 +265,7 @@ struct cxip_if {
  * attempt to multiply allocate the same pid_idx.
  */
 struct cxip_pte {
-	struct dlist_entry entry;	// attaches to cxip_if->ptes
-					// TODO: rename pte_entry
+	struct dlist_entry pte_entry;	// attaches to cxip_if->ptes
 	struct cxip_if_domain *if_dom;	// parent domain
 	uint64_t pid_idx;
 	struct cxil_pte *pte;		// cxil PTE object
