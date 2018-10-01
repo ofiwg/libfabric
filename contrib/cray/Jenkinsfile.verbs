@@ -97,7 +97,7 @@ pipeline {
                         SFT_BIN = "${SFT_INSTALL_PATH + '/bin'}"
                         SFT_ADD_ARGS = "--additional-args ' '"
                         SFT_MAX_JOB_TIME = '3'
-                        SFT_NUM_JOBS = '8'
+                        SFT_NUM_JOBS = '4'
                         SFT_PROVIDER = 'verbs;ofi_rxm'
                         SFT_BASELINE_DIR = "contrib/cray"
                         SFT_BASELINE_RESULTS_FILE = 'sft_test_results_baseline.txt'
@@ -127,7 +127,7 @@ pipeline {
                         script {
                             try {
                                 dir ("${SFT_BIN}") {
-                                    timeout(time: 8, unit: 'MINUTES') {
+                                    timeout(time: 15, unit: 'MINUTES') {
                                         sh """
                                             ./ci-all.sh \\
                                                 --provider '${SFT_PROVIDER}' \\
@@ -175,38 +175,233 @@ pipeline {
                         echo 'placeholder'
                     }
                 }
-                stage("MPI: osu_latency") {
+                stage("MPI pt2pt: OSU latency") {
                     steps {
-                        timeout(time: 5, unit: 'MINUTES') {
+                        timeout (time: 5, unit: 'MINUTES') {
                             launch "$OMB_BUILD_PATH/pt2pt/osu_latency", 2, 1
                         }
                     }
                 }
-                stage("MPI: osu_bw") {
+                stage("MPI pt2pt: OSU bandwidth") {
                     steps {
-                        timeout(time: 5, unit: 'MINUTES') {
+                        timeout (time: 5, unit: 'MINUTES') {
                             launch "$OMB_BUILD_PATH/pt2pt/osu_bw", 2, 1
                         }
                     }
                 }
-                stage("MPI: osu_allreduce") {
+                stage("MPI pt2pt: OSU mbw_mr") {
                     steps {
-                        timeout(time: 5, unit: 'MINUTES') {
-                            launch "$OMB_BUILD_PATH/collective/osu_allreduce -f", 160, 40
+                        timeout (time: 5, unit: 'MINUTES') {
+                            launch "$OMB_BUILD_PATH/pt2pt/osu_mbw_mr", 8, 4
                         }
                     }
                 }
-                stage("MPI: osu_bcast") {
+                stage("MPI one-sided: OSU get latency") {
                     steps {
-                        timeout(time: 5, unit: 'MINUTES') {
-                            launch "$OMB_BUILD_PATH/collective/osu_bcast -f", 160, 40
+                        timeout (time: 5, unit: 'MINUTES') {
+                            launch "$OMB_BUILD_PATH/one-sided/osu_get_latency", 2, 1
                         }
                     }
                 }
-                stage("MPI: osu_alltoall") {
+                stage("MPI one-sided: OSU get bandwidth") {
                     steps {
-                        timeout(time: 5, unit: 'MINUTES') {
-                            launch "$OMB_BUILD_PATH/collective/osu_alltoall -f", 80, 40
+                        timeout (time: 5, unit: 'MINUTES') {
+                            launch "$OMB_BUILD_PATH/one-sided/osu_get_bw", 2, 1
+                        }
+                    }
+                }
+                stage("MPI one-sided: OSU put latency") {
+                    steps {
+                        timeout (time: 5, unit: 'MINUTES') {
+                            launch "$OMB_BUILD_PATH/one-sided/osu_put_latency", 2, 1
+                        }
+                    }
+                }
+                stage("MPI one-sided: OSU put bt") {
+                    steps {
+                        timeout (time: 5, unit: 'MINUTES') {
+                            launch "$OMB_BUILD_PATH/one-sided/osu_put_bw", 2, 1
+                        }
+                    }
+                }
+                stage("MPI one-sided: OSU put bibw") {
+                    steps {
+                        timeout (time: 5, unit: 'MINUTES') {
+                            launch "$OMB_BUILD_PATH/one-sided/osu_put_bibw", 2, 1
+                        }
+                    }
+                }
+                stage("MPI collective: OSU allreduce") {
+                    steps {
+                        timeout (time: 5, unit: 'MINUTES') {
+                            launch "$OMB_BUILD_PATH/collective/osu_allreduce -f", 40, 10
+                        }
+                    }
+                }
+                stage("MPI collective: OSU allgather") {
+                    steps {
+                        timeout (time: 5, unit: 'MINUTES') {
+                            launch "$OMB_BUILD_PATH/collective/osu_allgather -f", 40, 10
+                        }
+                    }
+                }
+                stage("MPI collective: OSU allgatherv") {
+                    steps {
+                        timeout (time: 5, unit: 'MINUTES') {
+                            launch "$OMB_BUILD_PATH/collective/osu_allgatherv -f", 40, 10
+                        }
+                    }
+                }
+                stage("MPI collective: OSU alltoall") {
+                    steps {
+                        timeout (time: 5, unit: 'MINUTES') {
+                            launch "$OMB_BUILD_PATH/collective/osu_alltoall -f", 20, 5
+                        }
+                    }
+                }
+                stage("MPI collective: OSU alltoallv") {
+                    steps {
+                        timeout (time: 5, unit: 'MINUTES') {
+                            launch "$OMB_BUILD_PATH/collective/osu_alltoallv -f", 20, 5
+                        }
+                    }
+                }
+                stage("MPI collective: OSU barrier") {
+                    steps {
+                        timeout (time: 5, unit: 'MINUTES') {
+                            launch "$OMB_BUILD_PATH/collective/osu_barrier -f", 40, 10
+                        }
+                    }
+                }
+                stage("MPI collective: OSU broadcast") {
+                    steps {
+                        timeout (time: 5, unit: 'MINUTES') {
+                            launch "$OMB_BUILD_PATH/collective/osu_bcast -f", 40, 10
+                        }
+                    }
+                }
+                stage("MPI collective: OSU gather") {
+                    steps {
+                        timeout (time: 5, unit: 'MINUTES') {
+                            launch "$OMB_BUILD_PATH/collective/osu_gather -f", 40, 10
+                        }
+                    }
+                }
+                stage("MPI collective: OSU gatherv") {
+                    when {
+                        expression { env.TEST_GATHER == 'true' }
+                    }
+                    steps {
+                        timeout (time: 5, unit: 'MINUTES') {
+                            launch "$OMB_BUILD_PATH/collective/osu_gatherv -f", 40, 10
+                        }
+                    }
+                }
+                stage("MPI collective: OSU iallgather") {
+                    steps {
+                        timeout (time: 5, unit: 'MINUTES') {
+                            launch "$OMB_BUILD_PATH/collective/osu_iallgather -f", 40, 10
+                        }
+                    }
+                }
+                stage("MPI collective: OSU iallgatherv") {
+                    steps {
+                        timeout (time: 5, unit: 'MINUTES') {
+                            launch "$OMB_BUILD_PATH/collective/osu_iallgatherv -f", 40, 10
+                        }
+                    }
+                }
+                stage("MPI collective: OSU ialltoall") {
+                    steps {
+                        timeout (time: 5, unit: 'MINUTES') {
+                            launch "$OMB_BUILD_PATH/collective/osu_ialltoall -f", 20, 5
+                        }
+                    }
+                }
+                stage("MPI collective: OSU ialltoallv") {
+                    steps {
+                        timeout (time: 5, unit: 'MINUTES') {
+                            launch "$OMB_BUILD_PATH/collective/osu_ialltoallv -f", 20, 5
+                        }
+                    }
+                }
+                stage("MPI collective: OSU ialltoallw") {
+                    steps {
+                        timeout (time: 5, unit: 'MINUTES') {
+                            launch "$OMB_BUILD_PATH/collective/osu_ialltoallw -f", 20, 5
+                        }
+                    }
+                }
+                stage("MPI collective: OSU ibarrier") {
+                    steps {
+                        timeout (time: 5, unit: 'MINUTES') {
+                            launch "$OMB_BUILD_PATH/collective/osu_ibarrier -f", 40, 10
+                        }
+                    }
+                }
+                stage("MPI collective: OSU ibcast") {
+                    steps {
+                        timeout (time: 5, unit: 'MINUTES') {
+                            launch "$OMB_BUILD_PATH/collective/osu_ibcast -f", 40, 10
+                        }
+                    }
+                }
+                stage("MPI collective: OSU igather") {
+                    steps {
+                        timeout (time: 5, unit: 'MINUTES') {
+                            launch "$OMB_BUILD_PATH/collective/osu_igather -f", 40, 10
+                        }
+                    }
+                }
+                stage("MPI collective: OSU igatherv") {
+                    when {
+                        expression { env.TEST_GATHER == 'true' }
+                    }
+                    steps {
+                        timeout (time: 5, unit: 'MINUTES') {
+                            launch "$OMB_BUILD_PATH/collective/osu_igatherv -f", 40, 10
+                        }
+                    }
+                }
+                stage("MPI collective: OSU iscatter") {
+                    steps {
+                        timeout (time: 5, unit: 'MINUTES') {
+                            launch "$OMB_BUILD_PATH/collective/osu_iscatter -f", 40, 10
+                        }
+                    }
+                }
+                stage("MPI collective: OSU iscatterv") {
+                    steps {
+                        timeout (time: 5, unit: 'MINUTES') {
+                            launch "$OMB_BUILD_PATH/collective/osu_iscatterv -f", 40, 10
+                        }
+                    }
+                }
+                stage("MPI collective: OSU reduce") {
+                    steps {
+                        timeout (time: 5, unit: 'MINUTES') {
+                            launch "$OMB_BUILD_PATH/collective/osu_reduce -f", 40, 10
+                        }
+                    }
+                }
+                stage("MPI collective: OSU reduce_scatter") {
+                    steps {
+                        timeout (time: 5, unit: 'MINUTES') {
+                            launch "$OMB_BUILD_PATH/collective/osu_reduce_scatter -f", 40, 10
+                        }
+                    }
+                }
+                stage("MPI collective: OSU scatter") {
+                    steps {
+                        timeout (time: 5, unit: 'MINUTES') {
+                            launch "$OMB_BUILD_PATH/collective/osu_scatter -f", 40, 10
+                        }
+                    }
+                }
+                stage("MPI collective: OSU Scatterv") {
+                    steps {
+                        timeout (time: 5, unit: 'MINUTES') {
+                            launch "$OMB_BUILD_PATH/collective/osu_scatterv -f", 40, 10
                         }
                     }
                 }
@@ -306,5 +501,6 @@ pipeline {
         OMB_BUILD_PATH = "${ROOT_BUILD_PATH + '/osu-micro-benchmarks/5.4.2/libexec/osu-micro-benchmarks/mpi'}"
         MPICH_PATH = "${ROOT_BUILD_PATH + '/mpich/3.3b3'}"
         SFT_INSTALL_PATH = "${ROOT_BUILD_PATH + '/libfabric-sft/stable'}"
+        TEST_GATHER = "false"
     }
 }
