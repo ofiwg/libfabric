@@ -18,7 +18,6 @@ AC_DEFUN([FI_PSM2_CONFIGURE],[
 	 AC_DEFINE_UNQUOTED([HAVE_PSM2_SRC], $have_psm2_src, [PSM2 source is built-in])
 	 psm2_happy=0
 	 have_psm2_am_register_handlers_2=1
-	 have_psm2_hal=0
 	 AS_IF([test x"$enable_psm2" != x"no"],
 	       [AS_IF([test x$have_psm2_src = x0],
 		      [
@@ -39,7 +38,7 @@ AC_DEFUN([FI_PSM2_CONFIGURE],[
 				FI_CHECK_PACKAGE([psm2],
 						 [psm2.h],
 						 [psm2],
-						 [psm2_ep_epid_lookup2],
+						 [psm2_ep_disconnect2],
 						 [],
 						 [$psm2_PREFIX],
 						 [$psm2_LIBDIR],
@@ -49,8 +48,11 @@ AC_DEFUN([FI_PSM2_CONFIGURE],[
 		      ],
 		      [
 			dnl build with PSM2 source code included
-			psm2_CPPFLAGS="-msse4.2"
 			psm2_happy=1
+			have_psm2_mq_req_user=1
+			AS_IF([test $cc_basename = icc],
+			      [psm2_CPPFLAGS="-march=core-avx2"],
+			      [psm2_CPPFLAGS="-mavx2"])
 			AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
 						[[#include <rdma/hfi/hfi1_user.h>]],
 						[[
@@ -77,43 +79,34 @@ AC_DEFUN([FI_PSM2_CONFIGURE],[
 							psm2_happy=0
 						])])
 			AS_IF([test x$psm2_happy = x1],
-			      AS_IF([test -f $with_psm2_src/libpsm2.spec.in],
-				    [AS_IF([grep -q psm2_am_register_handlers_2 $with_psm2_src/psm2_am.h],
-					   [
-						$as_echo "$as_me: creating links for PSM2 source code."
-						mkdir -p $srcdir/prov/psm2/src/psm2
-						cp -srf $with_psm2_src/* $srcdir/prov/psm2/src/psm2/
-						ln -sf ../include/rbtree.h $srcdir/prov/psm2/src/psm2/ptl_ips/
-						ln -sf ../include/rbtree.h $srcdir/prov/psm2/src/psm2/ptl_am/
-						AS_IF([test -f $with_psm2_src/psm2_hal.c],
-						      [
-							$as_echo "#define PSMI_HAL_INST_CNT 1" >$srcdir/prov/psm2/src/psm2/psm2_hal_inlines_d.h
-							$as_echo "#define PSMI_HAL_INLINE inline" >>$srcdir/prov/psm2/src/psm2/psm2_hal_inlines_d.h
-							$as_echo "#include \"psm_hal_gen1/psm_hal_inline_d.h\"" >>$srcdir/prov/psm2/src/psm2/psm2_hal_inlines_d.h
-							$as_echo "#include \"psm_hal_gen1/psm_hal_inline_i.h\"" >$srcdir/prov/psm2/src/psm2/psm2_hal_inlines_i.h
-							AS_IF([test $cc_basename = icc],
-							      [psm2_CPPFLAGS="-march=core-avx2"],
-							      [psm2_CPPFLAGS="-mavx2"])
-							have_psm2_hal=1
-						      ])
-					   ],
-					   [
-						$as_echo "$as_me: PSM2 source under <$with_psm2_src> is too old."
-						psm2_happy=0
-					   ])
-				   ],
-				   [
-					$as_echo "$as_me: no PSM2 source under <$with_psm2_src>."
+			      [AS_IF([test -f $with_psm2_src/psm_hal_gen1/opa_common_gen1.h],
+				     [
+					$as_echo "$as_me: creating links for PSM2 source code."
+					mkdir -p $srcdir/prov/psm2/src/psm2
+					cp -srf $with_psm2_src/* $srcdir/prov/psm2/src/psm2/
+					ln -sf ../include/rbtree.h $srcdir/prov/psm2/src/psm2/ptl_ips/
+					ln -sf ../include/rbtree.h $srcdir/prov/psm2/src/psm2/ptl_am/
+
+					hal_decl_file=$srcdir/prov/psm2/src/psm2/psm2_hal_inlines_d.h
+					hal_impl_file=$srcdir/prov/psm2/src/psm2/psm2_hal_inlines_i.h
+					$as_echo "#define PSMI_HAL_INST_CNT 1" >$hal_decl_file
+					$as_echo "#define PSMI_HAL_INLINE inline" >>$hal_decl_file
+					$as_echo "#define PSMI_HAL_CAT_INL_SYM(KERNEL) hfp_gen1_##KERNEL" >>$hal_decl_file
+					$as_echo "#include \"psm2_hal_inline_t.h\"" >>$hal_decl_file
+					$as_echo "#include \"psm_hal_gen1/psm_hal_inline_i.h\"" >$hal_impl_file
+				     ],
+				     [
+					$as_echo "$as_me: PSM2 source under <$with_psm2_src> is missing or too old."
+					$as_echo "$as_me: Please get the latest source from https://github.com/intel/opa-psm2."
 					psm2_happy=0
-				   ]))
+				     ])
+			      ])
 		      ])
 	       ])
 	 AS_IF([test $psm2_happy -eq 1], [$1], [$2])
 	 AC_DEFINE_UNQUOTED([HAVE_PSM2_AM_REGISTER_HANDLERS_2],
 			    $have_psm2_am_register_handlers_2,
 			    [psm2_am_register_handlers_2 function is present])
-	AM_CONDITIONAL([HAVE_PSM2_HAL],[test x$have_psm2_hal = x1])
-	AC_SUBST([HAVE_PSM2_HAL])
 ])
 
 AC_ARG_WITH([psm2-src],

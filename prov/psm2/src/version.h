@@ -61,16 +61,18 @@
 #define PSMX2_USE_REQ_CONTEXT	1
 #endif
 
+#define PSMX2_MQ_REQ_USER(s)	((struct psm2_mq_req_user *)(s))
+
 #define PSMX2_STATUS_TYPE	struct psm2_mq_req
 #define PSMX2_STATUS_DECL(s)	struct psm2_mq_req *s
 #define PSMX2_STATUS_INIT(s)
 #define PSMX2_STATUS_SAVE(s,t)	do { t = s; } while (0)
-#define PSMX2_STATUS_ERROR(s)	((s)->error_code)
-#define PSMX2_STATUS_TAG(s)	((s)->tag)
-#define PSMX2_STATUS_RCVLEN(s)	((s)->recv_msglen)
-#define PSMX2_STATUS_SNDLEN(s)	((s)->send_msglen)
-#define PSMX2_STATUS_PEER(s)	((s)->peer)
-#define PSMX2_STATUS_CONTEXT(s)	((s)->context)
+#define PSMX2_STATUS_ERROR(s)	(PSMX2_MQ_REQ_USER(s)->error_code)
+#define PSMX2_STATUS_TAG(s)	(PSMX2_MQ_REQ_USER(s)->tag)
+#define PSMX2_STATUS_RCVLEN(s)	(PSMX2_MQ_REQ_USER(s)->recv_msglen)
+#define PSMX2_STATUS_SNDLEN(s)	(PSMX2_MQ_REQ_USER(s)->send_msglen)
+#define PSMX2_STATUS_PEER(s)	(PSMX2_MQ_REQ_USER(s)->peer)
+#define PSMX2_STATUS_CONTEXT(s)	(PSMX2_MQ_REQ_USER(s)->context)
 
 #define PSMX2_POLL_COMPLETION(trx_ctxt, status, err) \
 	do { \
@@ -86,6 +88,8 @@
 #undef PSMX2_USE_REQ_CONTEXT
 #endif
 #define PSMX2_USE_REQ_CONTEXT	0
+
+#define PSMX2_MQ_REQ_USER(s)	(s)
 
 #define PSMX2_STATUS_TYPE	psm2_mq_status2_t
 #define PSMX2_STATUS_DECL(s)	psm2_mq_status2_t s##_priv, *s
@@ -194,7 +198,7 @@ psm2_error_t psm2_am_register_handlers_2(
 
 #define PSMX2_REQ_GET_OP_CONTEXT(req, ctx) \
 	do { \
-		(ctx) = (req)->context = (req)->user_reserved; \
+		(ctx) = PSMX2_MQ_REQ_USER(req)->context = PSMX2_MQ_REQ_USER(req)->user_reserved; \
 	} while (0)
 
 #else /* !PSMX2_USE_REQ_CONTEXT */
