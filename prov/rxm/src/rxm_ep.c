@@ -685,7 +685,6 @@ rxm_ep_format_rx_res(struct rxm_ep *rxm_ep, const struct iovec *iov,
 	(*recv_entry)->flags 		= flags;
 	(*recv_entry)->ignore 		= ignore;
 	(*recv_entry)->tag		= tag;
-	(*recv_entry)->multi_recv_buf	= iov[0].iov_base;
 
 	for (i = 0; i < count; i++) {
 		(*recv_entry)->rxm_iov.iov[i].iov_base = iov[i].iov_base;
@@ -694,6 +693,9 @@ rxm_ep_format_rx_res(struct rxm_ep *rxm_ep, const struct iovec *iov,
 		if (desc)
 			(*recv_entry)->rxm_iov.desc[i] = desc[i];
 	}
+
+	(*recv_entry)->multi_recv.len	= (*recv_entry)->total_len;
+	(*recv_entry)->multi_recv.buf	= iov[0].iov_base;
 
 	return FI_SUCCESS;
 }
@@ -851,7 +853,7 @@ rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		rxm_cntr_inc(rxm_ep->util_ep.tx_cntr);
 	} else {
 		FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
-		       "fi_inject for MSG provider failed with ret - %" PRIu64"\n",
+		       "fi_inject for MSG provider failed with ret - %" PRId64"\n",
 		       ret);
 		if (OFI_LIKELY(ret == -FI_EAGAIN))
 			rxm_ep_progress_multi(&rxm_ep->util_ep);
