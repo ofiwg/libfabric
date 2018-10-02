@@ -313,10 +313,66 @@ ubertest_fi_ubertest_SOURCES = \
 	ubertest/test_ctrl.c
 ubertest_fi_ubertest_LDADD = libfabtests.la
 
-man_MANS = man/fabtests.7
+real_man_pages = \
+	 man/man7/fabtests.7
+
+dummy_man_pages = \
+	man/man1/fi_av_xfer.1 \
+	man/man1/fi_cm_data.1 \
+	man/man1/fi_cq_data.1 \
+	man/man1/fi_dgram.1 \
+	man/man1/fi_dgram_waitset.1 \
+	man/man1/fi_inj_complete.1 \
+	man/man1/fi_mcast.1 \
+	man/man1/fi_msg.1 \
+	man/man1/fi_msg_epoll.1 \
+	man/man1/fi_msg_sockets.1 \
+	man/man1/fi_multi_ep.1 \
+	man/man1/fi_multi_mr.1 \
+	man/man1/fi_poll.1 \
+	man/man1/fi_rdm.1 \
+	man/man1/fi_rdm_atomic.1 \
+	man/man1/fi_rdm_deferred_wq.1 \
+	man/man1/fi_rdm_multi_domain.1 \
+	man/man1/fi_rdm_multi_recv.1 \
+	man/man1/fi_rdm_rma_simple.1 \
+	man/man1/fi_rdm_rma_trigger.1 \
+	man/man1/fi_rdm_shared_av.1 \
+	man/man1/fi_rdm_tagged_peek.1 \
+	man/man1/fi_recv_cancel.1 \
+	man/man1/fi_resmgmt_test.1 \
+	man/man1/fi_scalable_ep.1 \
+	man/man1/fi_shared_ctx.1 \
+	man/man1/fi_unexpected_msg.1 \
+	man/man1/fi_dgram_pingpong.1 \
+	man/man1/fi_msg_bw.1 \
+	man/man1/fi_msg_pingpong.1 \
+	man/man1/fi_rdm_cntr_pingpong.1 \
+	man/man1/fi_rdm_pingpong.1 \
+	man/man1/fi_rdm_tagged_bw.1 \
+	man/man1/fi_rdm_tagged_pingpong.1 \
+	man/man1/fi_rma_bw.1 \
+	man/man1/fi_av_test.1 \
+	man/man1/fi_cntr_test.1 \
+	man/man1/fi_cq_test.1 \
+	man/man1/fi_dom_test.1 \
+	man/man1/fi_eq_test.1 \
+	man/man1/fi_getinfo_test.1 \
+	man/man1/fi_mr_test.1 \
+	man/man1/fi_resource_freeing.1 \
+	man/man1/fi_ubertest.1
+
+nroff:
+	@for file in $(real_man_pages); do \
+            source=`echo $$file | sed -e 's@/man[0-9]@@'`; \
+            perl $(top_srcdir)/config/md2nroff.pl --source=$(top_srcdir)/$$source.md; \
+        done
+
+
+man_MANS = $(real_man_pages) $(dummy_man_pages)
 
 EXTRA_DIST = \
-	fabtests.spec.in $(man_MANS)
+	fabtests.spec.in $(real_man_pages) $(dummy_man_pages)
 
 dist-hook: fabtests.spec
 	cp fabtests.spec $(distdir)
