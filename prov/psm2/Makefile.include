@@ -28,126 +28,69 @@ _psm2_files += \
 
 _psm2_nodist_files = \
 	prov/psm2/src/psm2/psm_am.c \
-	prov/psm2/src/psm2/psm2_am.h \
-	prov/psm2/src/psm2/psm_am_internal.h \
 	prov/psm2/src/psm2/psm.c \
-	prov/psm2/src/psm2/psm2.h \
 	prov/psm2/src/psm2/psm_context.c \
-	prov/psm2/src/psm2/psm_context.h \
 	prov/psm2/src/psm2/psm_diags.c \
 	prov/psm2/src/psm2/psm_ep.c \
-	prov/psm2/src/psm2/psm_ep.h \
 	prov/psm2/src/psm2/psm_ep_connect.c \
 	prov/psm2/src/psm2/psm_error.c \
-	prov/psm2/src/psm2/psm_error.h \
-	prov/psm2/src/psm2/psm_help.h \
-	prov/psm2/src/psm2/psm_lock.h \
-	prov/psm2/src/psm2/psm_log.h \
 	prov/psm2/src/psm2/psm_memcpy.c \
 	prov/psm2/src/psm2/psm_mock.c \
 	prov/psm2/src/psm2/psm_mpool.c \
-	prov/psm2/src/psm2/psm_mpool.h \
 	prov/psm2/src/psm2/psm_mq.c \
-	prov/psm2/src/psm2/psm2_mq.h \
-	prov/psm2/src/psm2/psm_mq_internal.h \
 	prov/psm2/src/psm2/psm_mq_recv.c \
 	prov/psm2/src/psm2/psm_mq_utils.c \
 	prov/psm2/src/psm2/psm_perf.c \
-	prov/psm2/src/psm2/psm_perf.h \
 	prov/psm2/src/psm2/psm_stats.c \
-	prov/psm2/src/psm2/psm_stats.h \
 	prov/psm2/src/psm2/psm_sysbuf.c \
-	prov/psm2/src/psm2/psm_sysbuf.h \
 	prov/psm2/src/psm2/psm_timer.c \
-	prov/psm2/src/psm2/psm_timer.h \
-	prov/psm2/src/psm2/psm_user.h \
 	prov/psm2/src/psm2/psm_utils.c \
-	prov/psm2/src/psm2/psm_utils.h \
-	prov/psm2/src/psm2/ptl.h \
 	prov/psm2/src/psm2/psmi_wrappers.c \
-	prov/psm2/src/psm2/psmi_wrappers.h \
+	prov/psm2/src/psm2/psm2_hal.c \
 	prov/psm2/src/psm2/ptl_am/am_cuda_memhandle_cache.c \
-	prov/psm2/src/psm2/ptl_am/am_cuda_memhandle_cache.h \
 	prov/psm2/src/psm2/ptl_am/am_reqrep.c \
 	prov/psm2/src/psm2/ptl_am/am_reqrep_shmem.c \
 	prov/psm2/src/psm2/ptl_am/cmarwu.c \
-	prov/psm2/src/psm2/ptl_am/cmarw.h \
-	prov/psm2/src/psm2/ptl_am/psm_am_internal.h \
 	prov/psm2/src/psm2/ptl_am/ptl.c \
-	prov/psm2/src/psm2/ptl_am/ptl_fwd.h \
 	prov/psm2/src/psm2/ptl_ips/ips_crc32.c \
 	prov/psm2/src/psm2/ptl_ips/ips_epstate.c \
-	prov/psm2/src/psm2/ptl_ips/ips_epstate.h \
-	prov/psm2/src/psm2/ptl_ips/ipserror.c \
-	prov/psm2/src/psm2/ptl_ips/ipserror.h \
-	prov/psm2/src/psm2/ptl_ips/ips_expected_proto.h \
 	prov/psm2/src/psm2/ptl_ips/ips_opp_path_rec.c \
 	prov/psm2/src/psm2/ptl_ips/ips_path_rec.c \
-	prov/psm2/src/psm2/ptl_ips/ips_path_rec.h \
 	prov/psm2/src/psm2/ptl_ips/ips_proto.c \
-	prov/psm2/src/psm2/ptl_ips/ips_proto.h \
 	prov/psm2/src/psm2/ptl_ips/ips_proto_am.c \
-	prov/psm2/src/psm2/ptl_ips/ips_proto_am.h \
 	prov/psm2/src/psm2/ptl_ips/ips_proto_connect.c \
 	prov/psm2/src/psm2/ptl_ips/ips_proto_dump.c \
 	prov/psm2/src/psm2/ptl_ips/ips_proto_expected.c \
-	prov/psm2/src/psm2/ptl_ips/ips_proto_header.h \
-	prov/psm2/src/psm2/ptl_ips/ips_proto_help.h \
-	prov/psm2/src/psm2/ptl_ips/ips_proto_internal.h \
 	prov/psm2/src/psm2/ptl_ips/ips_proto_mq.c \
-	prov/psm2/src/psm2/ptl_ips/ips_proto_params.h \
 	prov/psm2/src/psm2/ptl_ips/ips_proto_recv.c \
 	prov/psm2/src/psm2/ptl_ips/ips_recvhdrq.c \
-	prov/psm2/src/psm2/ptl_ips/ips_recvhdrq.h \
 	prov/psm2/src/psm2/ptl_ips/ips_recvq.c \
-	prov/psm2/src/psm2/ptl_ips/ips_recvq.h \
 	prov/psm2/src/psm2/ptl_ips/ips_scb.c \
-	prov/psm2/src/psm2/ptl_ips/ips_scb.h \
-	prov/psm2/src/psm2/ptl_ips/ips_stats.h \
 	prov/psm2/src/psm2/ptl_ips/ips_tid.c \
-	prov/psm2/src/psm2/ptl_ips/ips_tid.h \
 	prov/psm2/src/psm2/ptl_ips/ips_tidcache.c \
-	prov/psm2/src/psm2/ptl_ips/ips_tidcache.h \
 	prov/psm2/src/psm2/ptl_ips/ips_tidflow.c \
-	prov/psm2/src/psm2/ptl_ips/ips_tidflow.h \
 	prov/psm2/src/psm2/ptl_ips/ips_writehdrq.c \
-	prov/psm2/src/psm2/ptl_ips/ips_writehdrq.h \
 	prov/psm2/src/psm2/ptl_ips/ptl.c \
-	prov/psm2/src/psm2/ptl_ips/ptl_fwd.h \
-	prov/psm2/src/psm2/ptl_ips/ptl_ips.h \
 	prov/psm2/src/psm2/ptl_ips/ptl_rcvthread.c \
 	prov/psm2/src/psm2/ptl_self/ptl.c \
-	prov/psm2/src/psm2/ptl_self/ptl_fwd.h \
 	prov/psm2/src/psm2/libuuid/psm_uuid.c \
-	prov/psm2/src/psm2/libuuid/psm_uuid.h \
 	prov/psm2/src/psm2/libuuid/parse.c \
 	prov/psm2/src/psm2/libuuid/pack.c \
 	prov/psm2/src/psm2/libuuid/unpack.c \
 	prov/psm2/src/psm2/libuuid/unparse.c \
 	prov/psm2/src/psm2/opa/opa_debug.c \
 	prov/psm2/src/psm2/opa/opa_dwordcpy-@psm2_ARCH@.c \
-	prov/psm2/src/psm2/opa/opa_i2cflash.c \
-	prov/psm2/src/psm2/opa/opa_proto.c \
 	prov/psm2/src/psm2/opa/opa_service.c \
 	prov/psm2/src/psm2/opa/opa_sysfs.c \
 	prov/psm2/src/psm2/opa/opa_syslog.c \
 	prov/psm2/src/psm2/opa/opa_time.c \
 	prov/psm2/src/psm2/opa/opa_utils.c \
-	prov/psm2/src/psm2/include/hfi1_deprecated.h \
-	prov/psm2/src/psm2/include/opa_byteorder.h \
-	prov/psm2/src/psm2/include/opa_common.h \
-	prov/psm2/src/psm2/include/opa_debug.h \
-	prov/psm2/src/psm2/include/opa_intf.h \
-	prov/psm2/src/psm2/include/opa_queue.h \
-	prov/psm2/src/psm2/include/opa_revision.h \
-	prov/psm2/src/psm2/include/opa_service.h \
-	prov/psm2/src/psm2/include/opa_udebug.h \
-	prov/psm2/src/psm2/include/opa_user.h \
-	prov/psm2/src/psm2/include/psm2_mock_testing.h \
-	prov/psm2/src/psm2/include/rbtree.h \
-	prov/psm2/src/psm2/include/linux-@psm2_ARCH@/bit_ops.h \
-	prov/psm2/src/psm2/include/linux-@psm2_ARCH@/sysdep.h \
-	prov/psm2/src/psm2/mpspawn/mpspawn_stats.h
+	prov/psm2/src/psm2/psm_hal_gen1/psm_hal_gen1.c \
+	prov/psm2/src/psm2/psm_hal_gen1/opa_i2cflash_gen1.c \
+	prov/psm2/src/psm2/psm_hal_gen1/opa_proto_gen1.c \
+	prov/psm2/src/psm2/psm_hal_gen1/opa_service_gen1.c \
+	prov/psm2/src/psm2/psm_hal_gen1/opa_utils_gen1.c \
+	prov/psm2/src/psm2/psm_hal_gen1/psm_gdrcpy.c
 
 if HAVE_PSM2_X86_64
 _psm2_nodist_files += \
@@ -162,30 +105,9 @@ _psm2_cppflags = \
 	-I$(top_srcdir)/prov/psm2/src/psm2/ptl_ips \
 	-I$(top_srcdir)/prov/psm2/src/psm2/ptl_am \
 	-I$(top_srcdir)/prov/psm2/src/psm2/ptl_self \
+	-I$(top_srcdir)/prov/psm2/src/psm2/psm_hal_gen1 \
 	-DNVALGRIND
 
-if HAVE_PSM2_HAL
-_psm2_nodist_files += \
-	prov/psm2/src/psm2/psm2_hal.c \
-	prov/psm2/src/psm2/psm2_hal.h \
-	prov/psm2/src/psm2/psm_config.h \
-	prov/psm2/src/psm2/psm_hal_gen1/psm_hal_gen1.c \
-	prov/psm2/src/psm2/psm_hal_gen1/psm_hal_gen1.h \
-	prov/psm2/src/psm2/psm_hal_gen1/psm_hal_gen1_spio.h \
-	prov/psm2/src/psm2/psm_hal_gen1/psm_hal_inline_d.h \
-	prov/psm2/src/psm2/psm_hal_gen1/psm_hal_inline_i.h \
-	prov/psm2/src/psm2/ptl_am/am_config.h \
-	prov/psm2/src/psm2/ptl_ips/ips_config.h
-
-_psm2_cppflags += \
-	-I$(top_srcdir)/prov/psm2/src/psm2/psm_hal_gen1
-else !HAVE_PSM2_HAL
-_psm2_nodist_files += \
-	prov/psm2/src/psm2/ptl_ips/ips_spio.c \
-	prov/psm2/src/psm2/ptl_ips/ips_spio.h \
-	prov/psm2/src/psm2/ptl_ips/ips_subcontext.c \
-	prov/psm2/src/psm2/ptl_ips/ips_subcontext.h
-endif !HAVE_PSM2_HAL
 
 endif HAVE_PSM2_SRC
 
