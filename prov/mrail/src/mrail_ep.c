@@ -296,6 +296,21 @@ static ssize_t mrail_trecv(struct fid_ep *ep_fid, void *buf, size_t len,
 				 mrail_ep->util_ep.rx_op_flags, FI_TAGGED);
 }
 
+static ssize_t mrail_trecvmsg(struct fid_ep *ep_fid,
+				const struct fi_msg_tagged *msg,
+				uint64_t flags)
+{
+	struct mrail_ep *mrail_ep = container_of(ep_fid, struct mrail_ep,
+					     util_ep.ep_fid.fid);
+
+	return mrail_recv_common(mrail_ep, &mrail_ep->trecv_queue,
+				 (struct iovec *)msg->msg_iov, msg->iov_count,
+				 msg->context, msg->addr, msg->tag,
+				 msg->ignore,
+				 (mrail_ep->util_ep.rx_op_flags | flags),
+				 FI_TAGGED);
+}
+
 static void mrail_copy_iov_hdr(struct mrail_hdr *hdr, struct iovec *iov_dest,
 			       const struct iovec *iov_src, size_t count)
 {
@@ -826,7 +841,7 @@ struct fi_ops_tagged mrail_ops_tagged = {
 	.size = sizeof(struct fi_ops_tagged),
 	.recv = mrail_trecv,
 	.recvv = fi_no_tagged_recvv,
-	.recvmsg = fi_no_tagged_recvmsg,
+	.recvmsg = mrail_trecvmsg,
 	.send = mrail_tsend,
 	.sendv = fi_no_tagged_sendv,
 	.sendmsg = mrail_tsendmsg,
