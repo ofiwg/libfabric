@@ -38,9 +38,11 @@ int mrail_cq_write_recv_comp(struct mrail_ep *mrail_ep, struct mrail_hdr *hdr,
 			     struct fi_cq_tagged_entry *comp,
 			     struct mrail_recv *recv)
 {
-	FI_DBG(&mrail_prov, FI_LOG_CQ, "writing recv completion: length: %zu "
+	FI_DBG(&mrail_prov, FI_LOG_CQ, "finish recv: length: %zu "
 	       "tag: 0x%" PRIx64 "\n", comp->len - sizeof(struct mrail_pkt),
 	       hdr->tag);
+	if (!(recv->flags & FI_COMPLETION))
+		return 0;
 	return ofi_cq_write(mrail_ep->util_ep.rx_cq, recv->context,
 			   recv->comp_flags |
 			   (comp->flags & FI_REMOTE_CQ_DATA),
@@ -238,7 +240,7 @@ static int mrail_handle_recv_completion(struct fi_cq_tagged_entry *comp,
 		recv = comp->op_context;
 		assert(recv->hdr.version == MRAIL_HDR_VERSION);
 		ret =  mrail_cq_write_recv_comp(recv->ep, &recv->hdr, comp,
-						recv->context);
+						recv);
 		mrail_push_recv(recv);
 		goto exit;
 	}
