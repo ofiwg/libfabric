@@ -117,26 +117,25 @@ out:
 
 /* Should only be called while holding the EP's lock */
 static struct mrail_recv *mrail_match_recv(struct mrail_ep *mrail_ep,
-					   struct fi_cq_tagged_entry *comp)
+					   struct fi_cq_tagged_entry *comp,
+					   int src_addr)
 {
 	struct mrail_hdr *hdr = comp->buf;
 	struct mrail_recv *recv;
 
 	if (hdr->op == ofi_op_msg) {
 		FI_DBG(&mrail_prov, FI_LOG_CQ, "Got MSG op\n");
-		// TODO pass the right address
 		recv = mrail_match_recv_handle_unexp(&mrail_ep->recv_queue, 0,
-						     FI_ADDR_UNSPEC,
-						     (char *)comp, sizeof(*comp),
-						     NULL);
+						     src_addr, (char *)comp,
+						     sizeof(*comp), NULL);
 	} else {
 		assert(hdr->op == ofi_op_tagged);
 		FI_DBG(&mrail_prov, FI_LOG_CQ, "Got TAGGED op with tag: 0x%"
 		       PRIx64 "\n", hdr->tag);
 		recv = mrail_match_recv_handle_unexp(&mrail_ep->trecv_queue,
-						     hdr->tag, FI_ADDR_UNSPEC,
-						     (char *)comp, sizeof(*comp),
-						     NULL);
+						     hdr->tag, src_addr,
+						     (char *)comp,
+						     sizeof(*comp), NULL);
 	}
 
 	return recv;
@@ -172,7 +171,10 @@ static int mrail_process_ooo_recvs(struct mrail_ep *mrail_ep,
 	while (ooo_recv) {
 		FI_DBG(&mrail_prov, FI_LOG_CQ, "found ooo_recv seq=%d\n",
 				ooo_recv->seq_no);
-		recv = mrail_match_recv(mrail_ep, &ooo_recv->comp);
+		/* Requesting FI_AV_TABLE from the underlying provider allows
+		 * us to use peer_info->addr as an int here. */
+		recv = mrail_match_recv(mrail_ep, &ooo_recv->comp,
+				(int) peer_info->addr);
 		ofi_ep_lock_release(&mrail_ep->util_ep);
 
 		if (recv) {
@@ -262,7 +264,9 @@ static int mrail_handle_recv_completion(struct fi_cq_tagged_entry *comp,
 	if (seq_no == peer_info->expected_seq_no) {
 		/* This message was received in order */
 		peer_info->expected_seq_no++;
-		recv = mrail_match_recv(mrail_ep, comp);
+		/* Requesting FI_AV_TABLE from the underlying provider allows
+		 * us to use src_addr as an int here. */
+		recv = mrail_match_recv(mrail_ep, comp, (int) src_addr);
 		ofi_ep_lock_release(&mrail_ep->util_ep);
 
 		if (recv) {
