@@ -1310,6 +1310,7 @@ rxm_ep_inject_common_data_fast(struct rxm_ep *rxm_ep, const void *buf, size_t le
 		inject_pkt->hdr.tag = tag;
 		inject_pkt->hdr.flags |= FI_REMOTE_CQ_DATA;
 		inject_pkt->hdr.data = data;
+		inject_pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
 		memcpy(inject_pkt->data, buf, len);
 		ret = rxm_ep_inject_send(rxm_ep, rxm_conn, inject_pkt, pkt_size);
 		inject_pkt->hdr.flags &= ~FI_REMOTE_CQ_DATA;
@@ -1344,6 +1345,7 @@ rxm_ep_inject_common_fast(struct rxm_ep *rxm_ep, const void *buf, size_t len,
 	if (pkt_size <= rxm_ep->msg_info->tx_attr->inject_size) {
 		inject_pkt->hdr.size = len;
 		inject_pkt->hdr.tag = tag;
+		inject_pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
 		memcpy(inject_pkt->data, buf, len);
 		return rxm_ep_inject_send(rxm_ep, rxm_conn, inject_pkt, pkt_size);
 	} else {
@@ -1407,6 +1409,7 @@ rxm_ep_send_inject(struct rxm_ep *rxm_ep, const struct iovec *iov, size_t count,
 			inject_pkt->hdr.flags |= FI_REMOTE_CQ_DATA;
 			inject_pkt->hdr.data = data;
 		}
+		inject_pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
 		ofi_copy_from_iov(inject_pkt->data, inject_pkt->hdr.size,
 				  iov, count, 0);
 		ret = rxm_ep_inject_send(rxm_ep, rxm_conn,
