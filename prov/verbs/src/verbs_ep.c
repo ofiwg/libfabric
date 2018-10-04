@@ -412,7 +412,9 @@ static int fi_ibv_ep_enable(struct fid_ep *ep_fid)
 		}
 
 		attr.qp_type = IBV_QPT_RC;
-		attr.sq_sig_all = 1;
+		if ((ep->util_ep.tx_op_flags & FI_COMPLETION) && (ep->util_ep.tx_op_flags & FI_TRANSMIT)) {
+			attr.sq_sig_all = 1;
+		}
 		attr.qp_context = ep;
 
 		ret = rdma_create_qp(ep->id, pd, &attr);
@@ -426,7 +428,9 @@ static int fi_ibv_ep_enable(struct fid_ep *ep_fid)
 		break;
 	case FI_EP_DGRAM:
 		assert(domain);
-		attr.sq_sig_all = 1;
+		if ((ep->util_ep.tx_op_flags & FI_COMPLETION) && (ep->util_ep.tx_op_flags & FI_TRANSMIT)) {
+			attr.sq_sig_all = 1;
+		}
 		ret = fi_ibv_create_dgram_ep(domain, ep, &attr);
 		if (ret) {
 			VERBS_WARN(FI_LOG_EP_CTRL, "Unable to create dgram EP: %s (%d)\n",
