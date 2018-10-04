@@ -116,31 +116,37 @@ int ofi_ep_bind_cntr(struct util_ep *ep, struct util_cntr *cntr, uint64_t flags)
 
 	if (flags & FI_TRANSMIT) {
 		ep->tx_cntr = cntr;
+		ep->tx_cntr_inc = ofi_cntr_inc;
 		ofi_atomic_inc32(&cntr->ref);
 	}
 
 	if (flags & FI_RECV) {
 		ep->rx_cntr = cntr;
+		ep->rx_cntr_inc = ofi_cntr_inc;
 		ofi_atomic_inc32(&cntr->ref);
 	}
 
 	if (flags & FI_READ) {
 		ep->rd_cntr = cntr;
+		ep->rd_cntr_inc = ofi_cntr_inc;
 		ofi_atomic_inc32(&cntr->ref);
 	}
 
 	if (flags & FI_WRITE) {
 		ep->wr_cntr = cntr;
+		ep->wr_cntr_inc = ofi_cntr_inc;
 		ofi_atomic_inc32(&cntr->ref);
 	}
 
 	if (flags & FI_REMOTE_READ) {
 		ep->rem_rd_cntr = cntr;
+		ep->rem_rd_cntr_inc = ofi_cntr_inc;
 		ofi_atomic_inc32(&cntr->ref);
 	}
 
 	if (flags & FI_REMOTE_WRITE) {
 		ep->rem_wr_cntr = cntr;
+		ep->rem_wr_cntr_inc = ofi_cntr_inc;
 		ofi_atomic_inc32(&cntr->ref);
 	}
 
@@ -210,6 +216,12 @@ int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_pr
 		((info->tx_attr->op_flags &
 		  ~(FI_COMPLETION | FI_INJECT_COMPLETE |
 		    FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)) | FI_INJECT);
+	ep->tx_cntr_inc 	= ofi_cntr_inc_noop;
+	ep->rx_cntr_inc 	= ofi_cntr_inc_noop;
+	ep->rd_cntr_inc 	= ofi_cntr_inc_noop;
+	ep->wr_cntr_inc 	= ofi_cntr_inc_noop;
+	ep->rem_rd_cntr_inc 	= ofi_cntr_inc_noop;
+	ep->rem_wr_cntr_inc 	= ofi_cntr_inc_noop;
 	ep->type = info->ep_attr->type;
 	ofi_atomic_inc32(&util_domain->ref);
 	if (util_domain->eq)
