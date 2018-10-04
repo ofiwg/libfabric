@@ -31,7 +31,6 @@ bin_PROGRAMS = \
 	functional/fi_recv_cancel \
 	functional/fi_unexpected_msg \
 	functional/fi_inj_complete \
-	functional/fi_resource_freeing \
 	functional/fi_resmgmt_test \
 	functional/fi_rdm_atomic \
 	functional/fi_rdm_multi_recv \
@@ -50,6 +49,7 @@ bin_PROGRAMS = \
 	unit/fi_av_test \
 	unit/fi_dom_test \
 	unit/fi_getinfo_test \
+	unit/fi_resource_freeing \
 	ubertest/fi_ubertest
 
 dist_bin_SCRIPTS = \
@@ -206,10 +206,6 @@ functional_fi_inj_complete_SOURCES = \
 	functional/inj_complete.c
 functional_fi_inj_complete_LDADD = libfabtests.la
 
-functional_fi_resource_freeing_SOURCES = \
-	functional/resource_freeing.c
-functional_fi_resource_freeing_LDADD = libfabtests.la
-
 functional_fi_resmgmt_test_SOURCES = \
 	functional/resmgmt_test.c
 functional_fi_resmgmt_test_LDADD = libfabtests.la
@@ -297,6 +293,10 @@ unit_fi_getinfo_test_SOURCES = \
 	unit/getinfo_test.c \
 	$(unit_srcs)
 unit_fi_getinfo_test_LDADD = libfabtests.la
+
+unit_fi_resource_freeing_SOURCES = \
+	unit/resource_freeing.c
+unit_fi_resource_freeing_LDADD = libfabtests.la
 
 ubertest_fi_ubertest_SOURCES = \
 	ubertest/fabtest.h \
