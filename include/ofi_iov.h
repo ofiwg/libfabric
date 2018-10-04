@@ -99,6 +99,28 @@ ofi_copy_from_iov(void *buf, uint64_t bufsize,
 	}
 }
 
+static inline void ofi_ioc_to_iov(const struct fi_ioc *ioc, struct iovec *iov,
+				  size_t count, size_t size)
+{
+	int i;
+	for (i = 0; i < count; i++) {
+		iov[i].iov_base = ioc[i].addr;
+		iov[i].iov_len = ioc[i].count * size;
+	}
+}
+
+static inline void ofi_rma_ioc_to_iov(const struct fi_rma_ioc *ioc,
+				      struct fi_rma_iov *iov,
+				      size_t count, size_t size)
+{
+	int i;
+	for (i = 0; i < count; i++) {
+		iov[i].addr = ioc[i].addr;
+		iov[i].len = ioc[i].count * size;
+		iov[i].key = ioc[i].key;
+	}
+}
+
 static inline void *
 ofi_iov_end(const struct iovec *iov)
 {

@@ -8,7 +8,12 @@ _rxd_files = \
 	prov/rxd/src/rxd_cq.c		\
 	prov/rxd/src/rxd_cntr.c		\
 	prov/rxd/src/rxd_ep.c		\
-	prov/rxd/src/rxd.h
+	prov/rxd/src/rxd_msg.c		\
+	prov/rxd/src/rxd_tagged.c	\
+	prov/rxd/src/rxd_rma.c		\
+	prov/rxd/src/rxd_atomic.c	\
+	prov/rxd/src/rxd.h		\
+	prov/rxd/src/rxd_proto.h
 
 if HAVE_RXD_DL
 pkglib_LTLIBRARIES += librxd-fi.la

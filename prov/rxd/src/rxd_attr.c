@@ -32,14 +32,14 @@
 
 #include "rxd.h"
 
-#define RXD_EP_CAPS (FI_MSG | FI_TAGGED | FI_RMA | FI_SEND | FI_RECV |		\
+#define RXD_EP_CAPS (FI_MSG | FI_TAGGED | FI_RMA | FI_ATOMIC | FI_SEND | FI_RECV | \
 		     FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE |	\
 		     FI_SOURCE | FI_DIRECTED_RECV)
 
 struct fi_tx_attr rxd_tx_attr = {
 	.caps = RXD_EP_CAPS,
 	.comp_order = FI_ORDER_STRICT,
-	.inject_size = RXD_INJECT_SIZE,
+	.inject_size = RXD_MAX_MTU_SIZE - sizeof(struct rxd_op_pkt),
 	.size = (1ULL << RXD_MAX_TX_BITS),
 	.iov_limit = RXD_IOV_LIMIT,
 	.rma_iov_limit = 0,

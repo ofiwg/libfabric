@@ -58,7 +58,7 @@ static const int integ_alphabet_length = (sizeof(integ_alphabet)/sizeof(*integ_a
 		int i;							\
 		TYPE *d = (dst);					\
 		for (i = 0; i < cnt; i++) {				\
-			d[i] = (TYPE) (integ_alphabet[alph_index]);	\
+			d[i] = (TYPE) (integ_alphabet[alph_index++]);	\
 			if (alph_index >= integ_alphabet_length)	\
 				alph_index = 0;				\
 		}							\

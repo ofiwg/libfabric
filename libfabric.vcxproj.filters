@@ -282,6 +282,18 @@
     <ClCompile Include="prov\rxd\src\rxd_ep.c">
       <Filter>Source Files\prov\rxd\src</Filter>
     </ClCompile>
+    <ClCompile Include="prov\rxd\src\rxd_msg.c">
+      <Filter>Source Files\prov\rxd\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\rxd\src\rxd_tagged.c">
+      <Filter>Source Files\prov\rxd\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\rxd\src\rxd_rma.c">
+      <Filter>Source Files\prov\rxd\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\rxd\src\rxd_atomic.c">
+      <Filter>Source Files\prov\rxd\src</Filter>
+    </ClCompile>
     <ClCompile Include="prov\rxd\src\rxd_fabric.c">
       <Filter>Source Files\prov\rxd\src</Filter>
     </ClCompile>
@@ -606,6 +618,9 @@
       <Filter>Source Files\prov\udp\include</Filter>
     </ClInclude>
     <ClInclude Include="prov\rxd\src\rxd.h">
+      <Filter>Source Files\prov\rxd\include</Filter>
+    </ClInclude>
+    <ClInclude Include="prov\rxd\src\rxd_proto.h">
       <Filter>Source Files\prov\rxd\include</Filter>
     </ClInclude>
     <ClInclude Include="prov\rxm\src\rxm.h">
