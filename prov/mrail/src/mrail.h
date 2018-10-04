@@ -355,3 +355,10 @@ void mrail_free_req(struct mrail_ep *mrail_ep, struct mrail_req *req)
 void mrail_progress_deferred_reqs(struct mrail_ep *mrail_ep);
 
 void mrail_poll_cq(struct util_cq *cq);
+
+static inline void mrail_cntr_incerr(struct util_cntr *cntr)
+{
+       if (cntr) {
+               cntr->cntr_fid.ops->adderr(&cntr->cntr_fid, 1);
+       }
+}

@@ -382,6 +382,8 @@ mrail_send_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 		FI_WARN(&mrail_prov, FI_LOG_EP_DATA,
 			"Unable to fi_sendmsg on rail: %" PRIu32 "\n", i);
 		goto err2;
+	} else if (!(flags & FI_COMPLETION)) {
+		ofi_ep_tx_cntr_inc(&mrail_ep->util_ep);
 	}
 	ofi_ep_lock_release(&mrail_ep->util_ep);
 	return ret;
@@ -439,6 +441,8 @@ mrail_tsend_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 		FI_WARN(&mrail_prov, FI_LOG_EP_DATA,
 			"Unable to fi_sendmsg on rail: %" PRIu32 "\n", i);
 		goto err2;
+	} else if (!(flags & FI_COMPLETION)) {
+		ofi_ep_tx_cntr_inc(&mrail_ep->util_ep);
 	}
 	ofi_ep_lock_release(&mrail_ep->util_ep);
 	return ret;
