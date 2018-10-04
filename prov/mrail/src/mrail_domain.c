@@ -222,13 +222,36 @@ static struct fi_ops_mr mrail_domain_mr_ops = {
 	.regattr = fi_no_mr_regattr,
 };
 
+int mrail_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
+		struct fid_cntr **cntr_fid, void *context)
+{
+	int ret;
+	struct util_cntr *cntr;
+
+	cntr = calloc(1, sizeof(*cntr));
+	if (!cntr)
+		return -FI_ENOMEM;
+
+	ret = ofi_cntr_init(&mrail_prov, domain, attr, cntr,
+			&ofi_cntr_progress, context);
+	if (ret)
+		goto error;
+
+	*cntr_fid = &cntr->cntr_fid;
+	return FI_SUCCESS;
+
+error:
+	free(cntr);
+	return ret;
+}
+
 static struct fi_ops_domain mrail_domain_ops = {
 	.size = sizeof(struct fi_ops_domain),
 	.av_open = mrail_av_open,
 	.cq_open = mrail_cq_open,
 	.endpoint = mrail_ep_open,
 	.scalable_ep = fi_no_scalable_ep,
-	.cntr_open = fi_no_cntr_open,
+	.cntr_open = mrail_cntr_open,
 	.poll_open = fi_no_poll_open,
 	.stx_ctx = fi_no_stx_context,
 	.srx_ctx = fi_no_srx_context,
