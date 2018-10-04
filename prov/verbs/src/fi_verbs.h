@@ -96,11 +96,11 @@
 		len <= ep->info->tx_attr->inject_size) ? IBV_SEND_INLINE : 0)
 #define VERBS_INJECT(ep, len) VERBS_INJECT_FLAGS(ep, len, ep->info->tx_attr->op_flags)
 
-#define VERBS_SELECTIVE_COMP(ep) (ep->ep_flags & FI_SELECTIVE_COMPLETION)
-#define VERBS_COMP_FLAGS(ep, flags) ((ep->util_ep.tx_op_flags | flags) &	\
-				     FI_COMPLETION ?				\
-				     IBV_SEND_SIGNALED : 0)
-#define VERBS_COMP(ep) VERBS_COMP_FLAGS(ep, ep->info->tx_attr->op_flags)
+#define VERBS_COMP_FLAGS(ep, flags, context)		\
+	((ep->util_ep.tx_op_flags | flags) &		\
+	 FI_COMPLETION ? context : VERBS_NO_COMP_FLAG)
+#define VERBS_COMP(ep, context)						\
+	VERBS_COMP_FLAGS(ep, ep->info->tx_attr->op_flags, context)
 
 #define VERBS_WCE_CNT 1024
 #define VERBS_WRE_CNT 1024
@@ -108,7 +108,7 @@
 #define VERBS_DEF_CQ_SIZE 1024
 #define VERBS_MR_IOV_LIMIT 1
 
-#define VERBS_INJECT_FLAG	((uint64_t)-1)
+#define VERBS_NO_COMP_FLAG	((uint64_t)-1)
 
 #define VERBS_CM_DATA_SIZE	(56 - sizeof(struct fi_ibv_cm_data_hdr))
 
@@ -539,7 +539,7 @@ static inline ssize_t fi_ibv_handle_post(ssize_t ret)
 static inline int
 fi_ibv_process_wc(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 {
-	return (wc->wr_id == VERBS_INJECT_FLAG) ? 0 : 1;
+	return (wc->wr_id == VERBS_NO_COMP_FLAG) ? 0 : 1;
 }
 
 /* Returns 0 and tries read new completions if it processes
@@ -547,11 +547,11 @@ fi_ibv_process_wc(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 static inline int
 fi_ibv_process_wc_poll_new(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 {
-	if (wc->wr_id == VERBS_INJECT_FLAG) {
+	if (wc->wr_id == VERBS_NO_COMP_FLAG) {
 		int ret;
 
 		while ((ret = ibv_poll_cq(cq->cq, 1, wc)) > 0) {
-			if (wc->wr_id != VERBS_INJECT_FLAG)
+			if (wc->wr_id != VERBS_NO_COMP_FLAG)
 				return 1;
 		}
 		return ret;
@@ -685,7 +685,7 @@ fi_ibv_send_buf(struct fi_ibv_ep *ep, struct ibv_send_wr *wr,
 {
 	struct ibv_sge sge = fi_ibv_init_sge(buf, len, desc);
 
-	assert(wr->wr_id != VERBS_INJECT_FLAG);
+	assert(wr->wr_id != VERBS_NO_COMP_FLAG);
 
 	wr->sg_list = &sge;
 	wr->num_sge = 1;
@@ -699,7 +699,7 @@ fi_ibv_send_buf_inline(struct fi_ibv_ep *ep, struct ibv_send_wr *wr,
 {
 	struct ibv_sge sge = fi_ibv_init_sge_inline(buf, len);
 
-	assert(wr->wr_id == VERBS_INJECT_FLAG);
+	assert(wr->wr_id == VERBS_NO_COMP_FLAG);
 
 	wr->sg_list = &sge;
 	wr->num_sge = 1;
@@ -720,7 +720,8 @@ fi_ibv_send_iov_flags(struct fi_ibv_ep *ep, struct ibv_send_wr *wr,
 		fi_ibv_set_sge_iov_count_len(wr->sg_list, iov, count, desc, len);
 
 	wr->num_sge = count;
-	wr->send_flags = VERBS_INJECT_FLAGS(ep, len, flags) | VERBS_COMP_FLAGS(ep, flags);
+	wr->send_flags = VERBS_INJECT_FLAGS(ep, len, flags);
+	wr->wr_id = VERBS_COMP_FLAGS(ep, flags, wr->wr_id);
 
 	if (flags & FI_FENCE)
 		wr->send_flags |= IBV_SEND_FENCE;

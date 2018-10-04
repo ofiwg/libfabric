@@ -86,13 +86,13 @@ static int fi_ibv_alloc_wrs(struct fi_ibv_ep *ep)
 	if (!ep->wrs)
 		return -FI_ENOMEM;
 
-	ep->wrs->msg_wr.wr_id = VERBS_INJECT_FLAG;
+	ep->wrs->msg_wr.wr_id = VERBS_NO_COMP_FLAG;
 	ep->wrs->msg_wr.opcode = IBV_WR_SEND;
 	ep->wrs->msg_wr.send_flags = IBV_SEND_INLINE;
 	ep->wrs->msg_wr.sg_list = &ep->wrs->sge;
 	ep->wrs->msg_wr.num_sge = 1;
 
-	ep->wrs->rma_wr.wr_id = VERBS_INJECT_FLAG;
+	ep->wrs->rma_wr.wr_id = VERBS_NO_COMP_FLAG;
 	ep->wrs->rma_wr.opcode = IBV_WR_RDMA_WRITE;
 	ep->wrs->rma_wr.send_flags = IBV_SEND_INLINE;
 	ep->wrs->rma_wr.sg_list = &ep->wrs->sge;
@@ -1109,12 +1109,12 @@ fi_ibv_msg_ep_atomic_write(struct fid_ep *ep_fid, const void *buf, size_t count,
 	struct fi_ibv_ep *ep =
 		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
-		.wr_id = (uintptr_t)context,
+		.wr_id = VERBS_COMP(ep, (uintptr_t)context),
 		.opcode = IBV_WR_RDMA_WRITE,
 		.wr.rdma.remote_addr = addr,
 		.wr.rdma.rkey = (uint32_t)(uintptr_t)key,
 		.send_flags = VERBS_INJECT(ep, sizeof(uint64_t)) |
-			      VERBS_COMP(ep) | IBV_SEND_FENCE,
+			      IBV_SEND_FENCE,
 	};
 	size_t count_copy;
 	int ret;
@@ -1154,11 +1154,11 @@ fi_ibv_msg_ep_atomic_writemsg(struct fid_ep *ep_fid,
 	struct fi_ibv_ep *ep =
 		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
-		.wr_id = (uintptr_t)msg->context,
+		.wr_id = VERBS_COMP_FLAGS(ep, flags, (uintptr_t)msg->context),
 		.wr.rdma.remote_addr = msg->rma_iov->addr,
 		.wr.rdma.rkey = (uint32_t)(uintptr_t)msg->rma_iov->key,
 		.send_flags = VERBS_INJECT_FLAGS(ep, sizeof(uint64_t), flags) |
-			      VERBS_COMP_FLAGS(ep, flags) | IBV_SEND_FENCE,
+			      IBV_SEND_FENCE,
 	};
 	size_t count_copy;
 	int ret;
@@ -1184,7 +1184,7 @@ fi_ibv_msg_ep_atomic_writemsg(struct fid_ep *ep_fid,
 	}
 
 	return fi_ibv_send_buf(ep, &wr, msg->msg_iov->addr, sizeof(uint64_t),
-			msg->desc[0]);
+			       msg->desc[0]);
 }
 
 static ssize_t
@@ -1197,8 +1197,8 @@ fi_ibv_msg_ep_atomic_readwrite(struct fid_ep *ep_fid, const void *buf, size_t co
 	struct fi_ibv_ep *ep =
 		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
-		.wr_id = (uintptr_t)context,
-		.send_flags = VERBS_COMP(ep) | IBV_SEND_FENCE,
+		.wr_id = VERBS_COMP(ep, (uintptr_t)context),
+		.send_flags = IBV_SEND_FENCE,
 	};
 	size_t count_copy;
 	int ret;
@@ -1258,8 +1258,8 @@ fi_ibv_msg_ep_atomic_readwritemsg(struct fid_ep *ep_fid,
 	struct fi_ibv_ep *ep =
 		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
-		.wr_id = (uintptr_t)msg->context,
-		.send_flags = VERBS_COMP_FLAGS(ep, flags) | IBV_SEND_FENCE,
+		.wr_id = VERBS_COMP_FLAGS(ep, flags, (uintptr_t)msg->context),
+		.send_flags = IBV_SEND_FENCE,
 	};
 	size_t count_copy;
 	int ret;
@@ -1310,13 +1310,13 @@ fi_ibv_msg_ep_atomic_compwrite(struct fid_ep *ep_fid, const void *buf, size_t co
 	struct fi_ibv_ep *ep =
 		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
-		.wr_id = (uintptr_t)context,
+		.wr_id = VERBS_COMP(ep, (uintptr_t)context),
 		.opcode = IBV_WR_ATOMIC_CMP_AND_SWP,
 		.wr.atomic.remote_addr = addr,
 		.wr.atomic.compare_add = (uintptr_t)compare,
 		.wr.atomic.swap = (uintptr_t)buf,
 		.wr.atomic.rkey = (uint32_t)(uintptr_t)key,
-		.send_flags = VERBS_COMP(ep) | IBV_SEND_FENCE,
+		.send_flags = IBV_SEND_FENCE,
 	};
 	size_t count_copy;
 	int ret;
@@ -1365,13 +1365,13 @@ fi_ibv_msg_ep_atomic_compwritemsg(struct fid_ep *ep_fid,
 	struct fi_ibv_ep *ep =
 		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
-		.wr_id = (uintptr_t)msg->context,
+		.wr_id = VERBS_COMP_FLAGS(ep, flags, (uintptr_t)msg->context),
 		.opcode = IBV_WR_ATOMIC_CMP_AND_SWP,
 		.wr.atomic.remote_addr = msg->rma_iov->addr,
 		.wr.atomic.compare_add = (uintptr_t)comparev->addr,
 		.wr.atomic.swap = (uintptr_t)msg->addr,
 		.wr.atomic.rkey = (uint32_t)(uintptr_t)msg->rma_iov->key,
-		.send_flags = VERBS_COMP_FLAGS(ep, flags) | IBV_SEND_FENCE,
+		.send_flags = IBV_SEND_FENCE,
 	};
 	size_t count_copy;
 	int ret;
