@@ -385,7 +385,11 @@ STATIC int psmx2_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		err = psmx2_domain_enable_ep(ep->domain, ep);
 		if (err)
 			return err;
+#if HAVE_PSM2_MQ_FP_MSG
+		if (ep->caps & FI_TRIGGER)
+#else
 		if (ep->caps & (FI_RMA | FI_TRIGGER))
+#endif
 			stx->tx->am_progress = 1;
 		ofi_atomic_inc32(&stx->ref);
 		break;
@@ -611,8 +615,11 @@ int psmx2_ep_open_internal(struct psmx2_fid_domain *domain_priv,
 	psmx2_ep_optimize_ops(ep_priv);
 
 	PSMX2_EP_INIT_OP_CONTEXT(ep_priv);
-
+#if HAVE_PSM2_MQ_FP_MSG
+	if ((ep_cap & FI_TRIGGER) && trx_ctxt)
+#else
 	if ((ep_cap & (FI_RMA | FI_TRIGGER)) && trx_ctxt)
+#endif
 		trx_ctxt->am_progress = 1;
 
 	*ep_out = ep_priv;
