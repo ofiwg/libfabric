@@ -389,8 +389,10 @@ void mrail_poll_cq(struct util_cq *cq)
 			tx_buf = comp.op_context;
 
 			if (tx_buf->flags & FI_COMPLETION) {
-				ret = ofi_cq_write(cq, comp.op_context,
-						   comp.flags, 0, NULL, 0, 0);
+				ret = ofi_cq_write(cq, tx_buf->context,
+						   (tx_buf->flags &
+						    (FI_TAGGED | FI_MSG)) |
+						   FI_SEND, 0, NULL, 0, 0);
 				if (ret) {
 					FI_WARN(&mrail_prov, FI_LOG_CQ,
 						"Unable to write to util cq\n");

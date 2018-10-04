@@ -356,7 +356,7 @@ mrail_send_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	ofi_ep_lock_acquire(&mrail_ep->util_ep);
 
 	tx_buf = mrail_get_tx_buf(mrail_ep, context, peer_info->seq_no++,
-				  ofi_op_msg, flags);
+				  ofi_op_msg, flags | FI_MSG);
 	if (OFI_UNLIKELY(!tx_buf)) {
 		ret = -FI_ENOMEM;
 		goto err1;
@@ -412,7 +412,7 @@ mrail_tsend_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	ofi_ep_lock_acquire(&mrail_ep->util_ep);
 
 	tx_buf = mrail_get_tx_buf(mrail_ep, context, peer_info->seq_no++,
-				  ofi_op_tagged, flags);
+				  ofi_op_tagged, flags | FI_TAGGED);
 	if (OFI_UNLIKELY(!tx_buf)) {
 		ret = -FI_ENOMEM;
 		goto err1;
