@@ -119,16 +119,6 @@ static void smr_format_inject_atomic(struct smr_cmd *cmd, fi_addr_t peer_id,
 	}
 }
 
-static void smr_ioc_to_iov(const struct fi_ioc *ioc, struct iovec *iov,
-			   size_t count, size_t size)
-{
-	int i;
-	for (i = 0; i < count; i++) {
-		iov[i].iov_base = ioc[i].addr;
-		iov[i].iov_len = ioc[i].count * size;
-	}
-}
-
 static int smr_fetch_result(struct smr_ep *ep, struct smr_region *peer_smr,
 			    struct iovec *iov, size_t iov_count,
 			    const struct fi_rma_ioc *rma_ioc, size_t rma_count,
@@ -235,13 +225,13 @@ static ssize_t smr_generic_atomic(struct fid_ep *ep_fid,
 	switch (op) {
 	case ofi_op_atomic_compare:
 		assert(compare_ioc);
-		smr_ioc_to_iov(compare_ioc, compare_iov, compare_count,
+		ofi_ioc_to_iov(compare_ioc, compare_iov, compare_count,
 			       ofi_datatype_size(datatype));
 		total_len *= 2;
 		/* fall through */
 	case ofi_op_atomic_fetch:
 		assert(result_ioc);
-		smr_ioc_to_iov(result_ioc, result_iov, result_count,
+		ofi_ioc_to_iov(result_ioc, result_iov, result_count,
 			       ofi_datatype_size(datatype));
 		if (!domain->fast_rma)
 			flags |= SMR_RMA_REQ;
@@ -249,7 +239,7 @@ static ssize_t smr_generic_atomic(struct fid_ep *ep_fid,
 	case ofi_op_atomic:
 		if (atomic_op != FI_ATOMIC_READ) {
 			assert(ioc);
-			smr_ioc_to_iov(ioc, iov, count, ofi_datatype_size(datatype));
+			ofi_ioc_to_iov(ioc, iov, count, ofi_datatype_size(datatype));
 		} else {
 			count = 0;
 		}

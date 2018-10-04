@@ -37,27 +37,6 @@
 #include "ofi_iov.h"
 #include "rxd.h"
 
-static void rxd_ioc_to_iov(const struct fi_ioc *ioc, struct iovec *iov,
-			   size_t count, size_t size)
-{
-	int i;
-	for (i = 0; i < count; i++) {
-		iov[i].iov_base = ioc[i].addr;
-		iov[i].iov_len = ioc[i].count * size;
-	}
-}
-
-static void rxd_rma_ioc_to_iov(const struct fi_rma_ioc *ioc, struct fi_rma_iov *iov,
-			       size_t count, size_t size)
-{
-	int i;
-	for (i = 0; i < count; i++) {
-		iov[i].addr = ioc[i].addr;
-		iov[i].len = ioc[i].count * size;
-		iov[i].key = ioc[i].key;
-	}
-}
-
 static ssize_t rxd_generic_atomic(struct rxd_ep *rxd_ep,
 			const struct fi_ioc *ioc, void **desc, size_t count,
 			const struct fi_ioc *compare_ioc, void **compare_desc,
@@ -77,15 +56,15 @@ static ssize_t rxd_generic_atomic(struct rxd_ep *rxd_ep,
 	assert(count <= RXD_IOV_LIMIT);
 	assert(rma_count <= RXD_IOV_LIMIT);
 
-	rxd_ioc_to_iov(ioc, iov, count, ofi_datatype_size(datatype));
+	ofi_ioc_to_iov(ioc, iov, count, ofi_datatype_size(datatype));
 
 	assert(ofi_total_iov_len(iov, count) <= (op == RXD_ATOMIC_COMPARE) ?
 	       rxd_ep_domain(rxd_ep)->max_inline_sz / 2 :
 	       rxd_ep_domain(rxd_ep)->max_inline_sz);
 
-	rxd_ioc_to_iov(result_ioc, res_iov, result_count, ofi_datatype_size(datatype));
-	rxd_ioc_to_iov(compare_ioc, comp_iov, compare_count, ofi_datatype_size(datatype));
-	rxd_rma_ioc_to_iov(rma_ioc, rma_iov, rma_count, ofi_datatype_size(datatype));
+	ofi_ioc_to_iov(result_ioc, res_iov, result_count, ofi_datatype_size(datatype));
+	ofi_ioc_to_iov(compare_ioc, comp_iov, compare_count, ofi_datatype_size(datatype));
+	ofi_rma_ioc_to_iov(rma_ioc, rma_iov, rma_count, ofi_datatype_size(datatype));
 
 	dg_addr = rxd_av_dg_addr(rxd_ep_av(rxd_ep), addr);
 
