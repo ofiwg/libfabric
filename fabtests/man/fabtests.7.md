@@ -11,69 +11,215 @@ Fabtests
 
 # SYNOPSIS
 
-Fabtests is a set of examples for fabric providers that demonstrates various features of libfabric- high-performance fabric software library.
+Fabtests is a set of examples for fabric providers that demonstrates
+various features of libfabric- high-performance fabric software library.
 
 # OVERVIEW
 
-Libfabric defines sets of interface that fabric providers can support. The purpose of Fabtests examples is to demonstrate some of the major features. The goal is to familiarize users with different functionalities libfabric offers and how to use them. Although these tests report performance numbers, they are designed to test functionality and not performance.
+Libfabric defines sets of interface that fabric providers can support.
+The purpose of Fabtests examples is to demonstrate some of the major features.
+The goal is to familiarize users with different functionalities libfabric
+offers and how to use them.  Although most tests report performance numbers,
+they are designed to test functionality and not performance.  The exception
+are the benchmarks and ubertest.
 
-The tests are divided into the following six categories. Except the unit tests all of them are client-server tests.
+The tests are divided into the following categories. Except the unit tests
+all of them are client-server tests.  Not all providers will support each test.
 
-## Simple
+The test names try to indicate the type of functionality each test is
+verifying.  Although some tests work with any endpoint type, many are
+restricted to verifying a single endpoint type.  These tests typically
+include the endpoint type as part of the test name, such as dgram, msg, or
+rdm.
 
-These tests are a mix of very basic functionality tests that show major features of libfabric.
+# Functional
 
-	fi_cq_data: A client-server example that tranfers CQ data
-	fi_dgram: A basic DGRAM client-server example
-	fi_dgram_waitset: A basic DGRAM client-server example that uses waitset
-	fi_msg: A basic MSG client-server example
-	fi_msg_epoll: A basic MSG client-server example that uses epoll
-	fi_msg_sockets: Verifies transitioning a passive endpoint into an active one as required by sockets-over-RDMA implementations
-	fi_poll: A basic RDM client-server example that uses poll
-	fi_rdm: A basic RDM client-server example
-	fi_rdm_rma_simple: A simple RDM client-server RMA example
-	fi_rdm_rma_trigger: A simple RDM client-server example that uses triggered RMA
-	fi_rdm_shared_av: A simple RDM client-server example where av is shared between two child processes
-	fi_rdm_tagged_peek: An RDM client-server example that uses tagged FI_PEEK
-	fi_shared_ctx: A client-server example that uses shared context
-	fi_scalable_ep: A RDM client-server example with scalable endpoints
-	fi_cm_data: A MSG client-server example that uses CM data
+These tests are a mix of very basic functionality tests that show major
+features of libfabric.
 
-## Benchmarks
+*fi_av_xfer*
+: Tests communication for unconnected endpoints, as addresses
+  are inserted and removed from the local address vector.
 
-The client and the server exchange messages in a ping-pong manner for various messages sizes and report latency numbers.
+*fi_cm_data*
+: Verifies exchanging CM data as part of connecting endpoints.
 
-	fi_msg_pingpong: A ping-pong client-server example using MSG endpoints
-	fi_msg_bw: A bandwidth test for MSG endpoints
-	fi_rma_bw: A bandwidth test using RMA operations
-	fi_rdm_pingpong: A ping-pong client-server example using RDM endpoints
-	fi_rdm_cntr_pingpong: A RDM ping pong client-server using counters
-	fi_rdm_tagged_pingpong: A ping-pong client-server example using tagged messages
-	fi_rdm_tagged_bw: A bandwidth test for RDM endpoints with tagged messages
-	fi_dgram_pingpong: A ping-pong client-server example using DGRAM endpoints
+*fi_cq_data*
+: Tranfers messages with CQ data.
 
-## Streaming
+*fi_dgram*
+: A basic datagram endpoint example.
 
-These are one way streaming data tests.
+*fi_dgram_waitset*
+: Transfers datagrams using waitsets for completion notifcation.
 
-	fi_msg_stream: A basic streaming client-server example using MSG endpoints
-	fi_msg_rma: A streaming client-server example using RMA operations between MSG endpoints
-	fi_rdm_rma: A streaming client-server example using RMA operations
-	fi_rdm_atomic: A RDM streaming client-server using atomic operations
-	fi_rdm_multi_recv: A RDM streaming client-server example using multi recv buffer
+*fi_inj_complete*
+: Sends messages using the FI_INJECT_COMPLETE operation flag.
 
-## Unit
-	 fi_eq_test: Unit tests for event queue
-	 fi_cq_test: Unit tests for completion queue
-	 fi_dom_test: Unit tests for domain
-	 fi_av_test: Unit tests for address vector
-	 fi_size_left_test: Unit tests to query the lower bound of rx/tx entries
+*fi_mcast*
+: A simple multicast test.
 
-## Complex / Ubertest
+*fi_msg*
+: A basic message endpoint example.
 
-These are comprehensive latency and bandwidth tests that can handle a variety of test configurations. Example test configurations are at /test_configs.
+*fi_msg_epoll*
+: Transfers messages with completion queues configured to use file
+  descriptors as wait objetcts.  The file descriptors are retrieved
+  by the program and used directly with the Linux epoll API.
 
-	fi_ubertest: This single test binary takes as input a test configuration file to run different tests
+*fi_msg_sockets*
+: Verifies that the address assigned to a passive endpoint can be
+  transitioned to an active endpoint.  This is required applications
+  that need socket API semantics over RDMA implementations (e.g. rsockets).
+
+*fi_multi_ep*
+: Performs data transfers over multiple endpoints in parallel.
+
+*fi_multi_mr*
+: Issues RMA write operations to multiple memory regions, using
+  completion counters of inbound writes as the notification
+  mechanism.
+
+*fi_poll*
+: Exchanges data over RDM endpoints using poll sets to drive
+  completion notifications.
+
+*fi_rdm*
+: A basic RDM endpoint example.
+
+*fi_rdm_atomic*
+: Test and verifies atomic operations over an RDM endpoint.
+
+*fi_rdm_deferred_wq*
+: Test triggered operations and deferred work queue support.
+
+*fi_rdm_multi_domain*
+: Performs data transfers over multiple endpoints, with each
+  endpoint belonging to a different opened domain.
+
+*fi_rdm_multi_recv*
+: Transfers multiple messages over an RDM endpoint that are received
+  into a single buffer, posted using the FI_MULTI_RECV flag.
+
+*fi_rdm_rma_simple*
+: A simple RMA write example over an RDM endpoint.
+
+*fi_rdm_rma_trigger*
+: A basic example of queuing an RMA write operation that is initiated
+  upon the firing of a triggering completion. Works with RDM endpoints.
+
+*fi_rdm_shared_av*
+: Spawns child processes to verify basic functionality of using a shared
+  address vector with RDM endpoints.
+
+*fi_rdm_tagged_peek*
+: Basic test of using the FI_PEEK operation flag with tagged messages.
+  Works with RDM endpoints.
+
+*fi_recv_cancel*
+: Tests canceling posted receives for tagged messages.
+
+*fi_resmgmt_test*
+: Tests the resource management enabled feature.  This verifies that the
+  provider prevents applications from overruning local and remote command
+  queues and completion queues.  This corresponds to setting the domain
+  attribute resource_mgmt to FI_RM_ENABLED.
+
+*fi_scalable_ep*
+: Performs data transfers over scalable endpoints, endpoints associated
+  with multiple transmit and receive contexts.
+
+*fi_shared_ctx*
+: Performs data transfers between multiple endpoints, where the endpoints
+  share transmit and/or receive contexts.
+
+*fi_unexpected_msg*
+: Tests the send and receive handling of unexpected tagged messages.
+
+# Benchmarks
+
+The client and the server exchange messages in either a ping-pong manner,
+for pingpong named tests, or transfer messages one-way, for bw named tests.
+These tests can transfer various messages sizes, with controls over which
+features are used by the test, and report performance numbers.  The tests
+are structured based on the benchmarks provided by OSU MPI.  They are not
+guaranteed to provide the best latency or bandwidth performance numbers a
+given provider or system may achieve.
+
+*fi_dgram_pingpong*
+: Latency test for datagram endpoints
+
+*fi_msg_bw*
+: Message transfer bandwidth test for connected (MSG) endpoints.
+
+*fi_msg_pingpong*
+: Message transfer latency test for connected (MSG) endpoints.
+
+*fi_rdm_cntr_pingpong*
+: Message transfer latency test for reliable-datagram (RDM) endpoints
+  that uses counters as the completion mechanism.
+
+*fi_rdm_pingpong*
+: Message transfer latency test for reliable-datagram (RDM) endpoints.
+
+*fi_rdm_tagged_bw*
+: Tagged message bandwidth test for reliable-datagram (RDM) endpoints.
+
+*fi_rdm_tagged_pingpong*
+: Tagged message latency test for reliable-datagram (RDM) endpoints.
+
+*fi_rma_bw*
+: An RMA read and write bandwidth test for reliable (MSG and RDM) endpoints.
+
+# Unit
+
+These are simple one-sided unit tests that validate basic behavior of the API.
+Because these are single system tests that do not perform data transfers their
+testing scope is limited.
+
+*fi_av_test*
+: Verify address vector interfaces.
+
+*fi_cntr_test*
+: Tests counter creation and destruction.
+
+*fi_cq_test*
+: Tests completion queue creation and destruction.
+
+*fi_dom_test*
+: Tests domain creation and destruction.
+
+*fi_eq_test*
+: Tests event queue creation, destruction, and capabilities.
+
+*fi_getinfo_test*
+: Tests provider response to fi_getinfo calls with varying hints.
+
+*fi_mr_test*
+: Tests memory registration.
+
+*fi_resource_freeing*
+: Allocates and closes fabric resources to check for proper cleanup.
+
+# Ubertest
+
+This is a comprehensive latency, bandwidth, and functionality test that can
+handle a variety of test configurations.  The test is able to run a large
+number of tests by iterating over a large number of test variables.  As a
+result, a full ubertest run can take a significant amount of time.  Because
+ubertest iterates over input variables, it relies on a test configuration
+file for control, rather than extensive command line options that are used
+by other fabtests.  A configuration file must be constructured for each
+provider.  Example test configurations are at /test_configs.
+
+*fi_ubertest*
+: This test takes a configure file as input.  The file contains a list of
+  variables and their values to iterate over.  The test will run a set of
+  latency, bandwidth, and functionality tests over a given provider.  It
+  will perform one execution for every possible combination of all variables.
+  For example, if there are 8 test variables, with 6 having 2 possible
+  values and 2 having 3 possible values, ubertest will execute 576 total
+  iterations of each test.
 
 # HOW TO RUN TESTS
 
@@ -86,46 +232,85 @@ These are comprehensive latency and bandwidth tests that can handle a variety of
 	fi_<testname> [OPTIONS]		start server
 	fi_<testname> <host>		connect to server
 
-# OPTIONS
+# COMMAND LINE OPTIONS
 
-The common options for most of the tests are listed below. Individual tests may have additional options.
-
-*-p <provider_name>*
-: The name of the underlying fabric provider e.g. sockets, verbs, psm etc. If the provider name is not provided, the test will pick one from the list of the available providers it finds by fi_getinfo call.
-
-*-d <domain>*
-: The name of the the specific domain to be used.
-
-*-B <src_port>*
-: The non-default source port number of the endpoint.
-
-*-P <dest_port>*
-: The non-default destination port number of the endpoint.
-
-*-s <src_addr>*
-: The source address.
-
-*-b[=<oob_port>]
-: Enables out-of-band address exchange and synchronization over the optionally specified port.
-
-
-*-I <iter>*
-: Number of iterations of the test will run.
-
-*-S <msg_size>*
-: The specific size of the message in bytes the test will use or 'all' to run all the default sizes.
-
-*-o <op_type>*
-: The operation to be performed in the test. For atomic examples, the operation includes min, max, read, write, cswap, xor, band etc. and 'all' (all performs all the atomic operations supported by the specified provider). For RMA examples, selected operations are read, write, and writedata.
-
-*-m*
-: Enables machine readable output.
-
-*-i*
-: Prints hints structure and exits.
+Tests share command line options where appropriate.  The following
+command line options are available for one or more test.  To see which
+options apply for a given test, you can use the '-h' help option to see
+the list available for that test.
 
 *-h*
 : Displays help output for the test.
+
+*-f <fabric>*
+: Restrict test to the specified fabric name.
+
+*-d <domain>*
+: Restrict test to the specified domain name.
+
+*-p <provider>*
+: Restrict test to the specified provider name.
+
+*-e <ep_type>*
+: Use the specified endpoint type for the test.  Valid options are msg,
+  dgram, and rdm.  The default endpoint type is rdm.
+
+*-a <address vector name>*
+: The name of a shared address vector.  This option only applies to tests
+  that support shared address vectors.
+
+*-B <src_port>*
+: Specifies the port number of the local endpoint, overriding the default.
+
+*-P <dst_port>*
+: Specifies the port number of the peer endpoint, overriding the default.
+
+*-s <address>*
+: Specifies the address of the local endpoint.
+
+*-b[=oob_port]*
+: Enables out-of-band (via sockets) address exchange and test
+  synchronization.  A port for the out-of-band connection may be specified
+  as part of this option to override the default.
+
+*-I <number>*
+: Number of data transfer iterations.
+
+*-w <number>*
+: Number of warm-up data transfer iterations.
+
+*-S <size>*
+: Data transfer size or 'all' for a full range of sizes.  By default a
+  select number of sizes will be tested.
+
+*-l*
+: If specified, the starting address of transmit and receive buffers will
+  be aligned along a page boundary.
+
+*-m*
+: Use machine readable output.  This is useful for post-processing the test
+  output with scripts.
+
+*-t <comp_type>*
+: Specify the type of completion mechanism to use.  Valid values are queue
+  and counter.  The default is to use completion queues.
+
+*-c <comp_method>*
+: Indicate the type of processing to use checking for completed operations.
+  Valid values are spin, sread, and fd.  The default is to busy wait (spin)
+  until the desired operation has completed.  The sread option indicates that
+  the application will invoke a blocking read call in libfabric, such as
+  fi_cq_sread.  Fd indicates that the application will retrieve the native
+  operating system wait object (file descriptor) and use either poll() or
+  select() to block until the fd has been signaled, prior to checking for
+  completions.
+
+*-o <rma_op>*
+: For RMA based tests, specify the type of RMA operation to perform.  Valid
+  values are read, write, and writedata.  Write operations are the default.
+
+*-M <mcast_addr>*
+: For multicast tests, specifies the address of the multicast group to join.
 
 # USAGE EXAMPLES
 
@@ -159,13 +344,15 @@ This will run "fi_ubertest" with
 	- configurations defined in /usr/share/fabtests/test_configs/sockets/quick.test
 	- server node as 192.168.0.123
 
-The config files are provided in /test_configs for sockets, verbs, udp and usnic providers and distributed with fabtests installation.
+The config files are provided in /test_configs for sockets, verbs, udp,
+and usnic providers and distributed with fabtests installation.
 
 For more usage options: fi_ubertest -h
 
 ## Run the whole fabtests suite
 
-A runscript scripts/runfabtests.sh is provided that runs all the tests in fabtests and reports the number of pass/fail/notrun.
+A runscript scripts/runfabtests.sh is provided that runs all the tests
+in fabtests and reports the number of pass/fail/notrun.
 
 	Usage: runfabtests.sh [OPTIONS] [provider] [host] [client]
 
@@ -175,7 +362,8 @@ By default if none of the options are provided, it runs all the tests using
 	- 127.0.0.1 as both server and client address
 	- for small number of optiond and iterations
 
-Various options can be used to choose provider, subset tests to run, level of verbosity etc.
+Various options can be used to choose provider, subset tests to run,
+level of verbosity etc.
 
 	runfabtests.sh -vvv -t all psm 192.168.0.123 192.168.0.124
 
