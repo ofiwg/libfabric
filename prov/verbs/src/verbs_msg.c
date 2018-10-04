@@ -115,9 +115,9 @@ fi_ibv_msg_ep_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 	struct fi_ibv_ep *ep =
 		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
-		.wr_id = (uintptr_t)context,
+		.wr_id = VERBS_COMP(ep, (uintptr_t)context),
 		.opcode = IBV_WR_SEND,
-		.send_flags = VERBS_INJECT(ep, len) | VERBS_COMP(ep),
+		.send_flags = VERBS_INJECT(ep, len),
 	};
 
 	return fi_ibv_send_buf(ep, &wr, buf, len, desc);
@@ -130,10 +130,10 @@ fi_ibv_msg_ep_senddata(struct fid_ep *ep_fid, const void *buf, size_t len,
 	struct fi_ibv_ep *ep =
 		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
-		.wr_id = (uintptr_t)context,
+		.wr_id = VERBS_COMP(ep, (uintptr_t)context),
 		.opcode = IBV_WR_SEND_WITH_IMM,
 		.imm_data = htonl((uint32_t)data),
-		.send_flags = VERBS_INJECT(ep, len) | VERBS_COMP(ep),
+		.send_flags = VERBS_INJECT(ep, len),
 	};
 
 	return fi_ibv_send_buf(ep, &wr, buf, len, desc);
@@ -159,7 +159,7 @@ static ssize_t fi_ibv_msg_ep_inject(struct fid_ep *ep_fid, const void *buf, size
 	struct fi_ibv_ep *ep =
 		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
-		.wr_id = VERBS_INJECT_FLAG,
+		.wr_id = VERBS_NO_COMP_FLAG,
 		.opcode = IBV_WR_SEND,
 		.send_flags = IBV_SEND_INLINE,
 	};
@@ -173,7 +173,7 @@ static ssize_t fi_ibv_msg_ep_injectdata(struct fid_ep *ep_fid, const void *buf, 
 	struct fi_ibv_ep *ep =
 		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
-		.wr_id = VERBS_INJECT_FLAG,
+		.wr_id = VERBS_NO_COMP_FLAG,
 		.opcode = IBV_WR_SEND_WITH_IMM,
 		.imm_data = htonl((uint32_t)data),
 		.send_flags = IBV_SEND_INLINE,
