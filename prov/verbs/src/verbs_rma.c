@@ -35,15 +35,13 @@
 #include "fi_verbs.h"
 
 
-#define VERBS_COMP_READ_FLAGS(ep, flags)			\
+#define VERBS_COMP_READ_FLAGS(ep, flags, context)		\
 	((ep->util_ep.tx_op_flags | flags) &			\
 	 (FI_COMPLETION | FI_TRANSMIT_COMPLETE |		\
-	  FI_DELIVERY_COMPLETE) ? IBV_SEND_SIGNALED : 0)
+	  FI_DELIVERY_COMPLETE) ? context : VERBS_NO_COMP_FLAG)
 
-#define VERBS_COMP_READ(ep)					\
-	((ep->util_ep.tx_op_flags) &				\
-	 (FI_COMPLETION | FI_TRANSMIT_COMPLETE |		\
-	  FI_DELIVERY_COMPLETE) ? IBV_SEND_SIGNALED : 0)
+#define VERBS_COMP_READ(ep, context)		\
+	VERBS_COMP_READ_FLAGS(ep, 0, context)
 
 static ssize_t
 fi_ibv_msg_ep_rma_write(struct fid_ep *ep_fid, const void *buf, size_t len,
@@ -53,11 +51,11 @@ fi_ibv_msg_ep_rma_write(struct fid_ep *ep_fid, const void *buf, size_t len,
 	struct fi_ibv_ep *ep =
 		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
-		.wr_id = (uintptr_t)context,
+		.wr_id = VERBS_COMP(ep, (uintptr_t)context),
 		.opcode = IBV_WR_RDMA_WRITE,
 		.wr.rdma.remote_addr = addr,
 		.wr.rdma.rkey = (uint32_t)key,
-		.send_flags = VERBS_INJECT(ep, len) | VERBS_COMP(ep),
+		.send_flags = VERBS_INJECT(ep, len),
 	};
 
 	return fi_ibv_send_buf(ep, &wr, buf, len, desc);
@@ -110,11 +108,10 @@ fi_ibv_msg_ep_rma_read(struct fid_ep *ep_fid, void *buf, size_t len,
 	struct fi_ibv_ep *ep =
 		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
-		.wr_id = (uintptr_t)context,
+		.wr_id = VERBS_COMP_READ(ep, (uintptr_t)context),
 		.opcode = IBV_WR_RDMA_READ,
 		.wr.rdma.remote_addr = addr,
 		.wr.rdma.rkey = (uint32_t)key,
-		.send_flags = VERBS_COMP_READ(ep),
 	};
 
 	return fi_ibv_send_buf(ep, &wr, buf, len, desc);
@@ -128,11 +125,10 @@ fi_ibv_msg_ep_rma_readv(struct fid_ep *ep_fid, const struct iovec *iov, void **d
 	struct fi_ibv_ep *ep =
 		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
-		.wr_id = (uintptr_t)context,
+		.wr_id = VERBS_COMP_READ(ep, (uintptr_t)context),
 		.opcode = IBV_WR_RDMA_READ,
 		.wr.rdma.remote_addr = addr,
 		.wr.rdma.rkey = (uint32_t)key,
-		.send_flags = VERBS_COMP_READ(ep),
 		.num_sge = count,
 	};
 
@@ -148,11 +144,10 @@ fi_ibv_msg_ep_rma_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 	struct fi_ibv_ep *ep =
 		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
-		.wr_id = (uintptr_t)msg->context,
+		.wr_id = VERBS_COMP_READ_FLAGS(ep, flags, (uintptr_t)msg->context),
 		.opcode = IBV_WR_RDMA_READ,
 		.wr.rdma.remote_addr = msg->rma_iov->addr,
 		.wr.rdma.rkey = (uint32_t)msg->rma_iov->key,
-		.send_flags = VERBS_COMP_READ_FLAGS(ep, flags),
 		.num_sge = msg->iov_count,
 	};
 
@@ -169,12 +164,12 @@ fi_ibv_msg_ep_rma_writedata(struct fid_ep *ep_fid, const void *buf, size_t len,
 	struct fi_ibv_ep *ep =
 		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
-		.wr_id = (uintptr_t)context,
+		.wr_id = VERBS_COMP(ep, (uintptr_t)context),
 		.opcode = IBV_WR_RDMA_WRITE_WITH_IMM,
 		.imm_data = htonl((uint32_t)data),
 		.wr.rdma.remote_addr = addr,
 		.wr.rdma.rkey = (uint32_t)key,
-		.send_flags = VERBS_INJECT(ep, len) | VERBS_COMP(ep),
+		.send_flags = VERBS_INJECT(ep, len),
 	};
 
 	return fi_ibv_send_buf(ep, &wr, buf, len, desc);
@@ -187,7 +182,7 @@ fi_ibv_msg_ep_rma_inject_write(struct fid_ep *ep_fid, const void *buf, size_t le
 	struct fi_ibv_ep *ep =
 		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
-		.wr_id = VERBS_INJECT_FLAG,
+		.wr_id = VERBS_NO_COMP_FLAG,
 		.opcode = IBV_WR_RDMA_WRITE,
 		.wr.rdma.remote_addr = addr,
 		.wr.rdma.rkey = (uint32_t)key,
@@ -222,7 +217,7 @@ fi_ibv_msg_ep_rma_inject_writedata(struct fid_ep *ep_fid, const void *buf, size_
 	struct fi_ibv_ep *ep =
 		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	struct ibv_send_wr wr = {
-		.wr_id = VERBS_INJECT_FLAG,
+		.wr_id = VERBS_NO_COMP_FLAG,
 		.opcode = IBV_WR_RDMA_WRITE_WITH_IMM,
 		.imm_data = htonl((uint32_t)data),
 		.wr.rdma.remote_addr = addr,

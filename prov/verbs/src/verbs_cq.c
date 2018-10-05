@@ -243,12 +243,12 @@ static inline int fi_ibv_poll_outstanding_cq(struct fi_ibv_ep *ep,
 		return ret;
 
 	/* Handle WR entry when user doesn't request the completion */
-	if (wc.wr_id == VERBS_INJECT_FLAG) {
+	if (wc.wr_id == VERBS_NO_COMP_FLAG) {
 		/* To ensure the new iteration */
 		return 1;
 	}
 
-	if (wc.status != IBV_WC_WR_FLUSH_ERR) {
+	if (OFI_LIKELY(wc.status != IBV_WC_WR_FLUSH_ERR)) {
 		ret = fi_ibv_wc_2_wce(cq, &wc, &wce);
 		if (OFI_UNLIKELY(ret)) {
 			ret = -FI_EAGAIN;
