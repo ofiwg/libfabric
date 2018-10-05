@@ -39,11 +39,6 @@
 
 #include "rxm.h"
 
-static struct rxm_conn *rxm_key2conn(struct rxm_ep *rxm_ep, uint64_t key)
-{
-	return (struct rxm_conn *)ofi_cmap_key2handle(rxm_ep->util_ep.cmap, key);
-}
-
 static const char *rxm_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
 		const void *err_data, char *buf, size_t len)
 {
@@ -314,8 +309,11 @@ ssize_t rxm_cq_handle_seg_data(struct rxm_rx_buf *rx_buf)
 	/* and message isn't truncated */
 	    (done_len == rx_buf->pkt.ctrl_hdr.seg_size)) {
 		if (rx_buf->recv_entry->sar.msg_id == RXM_SAR_RX_INIT) {
-			rx_buf->conn = rxm_key2conn(rx_buf->ep,
-						    rx_buf->pkt.ctrl_hdr.conn_id);
+			if (!rx_buf->conn) {
+				rx_buf->conn = rxm_key2conn(rx_buf->ep,
+							    rx_buf->pkt.ctrl_hdr.conn_id);
+			}
+			rx_buf->recv_entry->sar.conn = rx_buf->conn;
 			rx_buf->recv_entry->sar.msg_id = rx_buf->pkt.ctrl_hdr.msg_id;
 			dlist_insert_tail(&rx_buf->recv_entry->sar.entry,
 					  &rx_buf->conn->sar_rx_msg_list);

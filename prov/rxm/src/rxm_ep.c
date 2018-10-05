@@ -1089,7 +1089,7 @@ rxm_ep_sar_tx_prepare_and_send_segment(struct rxm_ep *rxm_ep, struct rxm_conn *r
 			rxm_ep_dequeue_deferred_tx_queue(tx_entry);
 		/* TX entry will be released in the rxm_finish_sar_segment_send() */
 		tx_entry->msg_id = RXM_SAR_TX_ERROR;
-		/* Updates TX entry's `fail_egs_cnt` field to the value that's should
+		/* Updates TX entry's `fail_segs_cnt` field to the value that's should
 		 * be used by `rxm_finish_sar_segment_send()` to finish SAR operation.
 		 * This value indicates how many segments can't be sent and we should
 		 * awaiting of completions for all segments have to be end up */

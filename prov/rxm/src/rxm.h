@@ -66,7 +66,7 @@
 
 #define RXM_BUF_SIZE	16384
 
-#define RXM_SAR_LIMIT	0
+#define RXM_SAR_LIMIT	131072
 #define RXM_SAR_TX_ERROR	UINT64_MAX
 #define RXM_SAR_RX_INIT		UINT64_MAX
 
@@ -397,6 +397,7 @@ struct rxm_recv_entry {
 			struct dlist_entry entry;
 			size_t total_recv_len;
 			size_t segs_rcvd;
+			struct rxm_conn *conn;
 			uint64_t msg_id;
 			/* This is used when a message with the `RXM_SAR_SEG_LAST`
 			 * flag is receved, but not all messages has been received
@@ -551,6 +552,11 @@ void rxm_send_queue_close(struct rxm_send_queue *send_queue);
 void rxm_ep_progress_deferred_queues(struct rxm_ep *rxm_ep);
 void rxm_ep_sar_handle_send_segment_failure(struct rxm_tx_entry *tx_entry, ssize_t ret);
 
+static inline struct rxm_conn *rxm_key2conn(struct rxm_ep *rxm_ep, uint64_t key)
+{
+	return (struct rxm_conn *)ofi_cmap_key2handle(rxm_ep->util_ep.cmap, key);
+}
+
 static inline void
 rxm_ep_enqueue_deferred_tx_queue(struct rxm_tx_entry *tx_entry)
 {
@@ -701,28 +707,47 @@ rxm_process_recv_entry(struct rxm_recv_queue *recv_queue,
 		if (rx_buf->pkt.ctrl_hdr.type != ofi_ctrl_seg_data) {
 			return rxm_cq_handle_rx_buf(rx_buf);
 		} else {
+			struct dlist_entry *entry;
 			enum rxm_sar_seg_type last =
 				(rxm_sar_get_seg_type(&rx_buf->pkt.ctrl_hdr)
 								== RXM_SAR_SEG_LAST);
 			ssize_t ret = rxm_cq_handle_rx_buf(rx_buf);
+			struct rxm_recv_match_attr match_attr;
+
+			if (ret || last)
+				return ret;
+
+			match_attr.addr = recv_entry->addr;
+			match_attr.tag = recv_entry->tag;
+			match_attr.ignore = recv_entry->ignore;
+
 			recv_queue->rxm_ep->res_fastlock_acquire(&recv_queue->lock);
-			while (!ret && rx_buf && !last) {
-				rx_buf = rxm_check_unexp_msg_list(recv_queue, recv_entry->addr,
-								  recv_entry->tag, recv_entry->ignore);
-				if (rx_buf) {
-					/* Handle unordered completions from MSG provider */
-					if ((rx_buf->pkt.ctrl_hdr.msg_id != recv_entry->sar.msg_id) ||
-					    (rx_buf->pkt.ctrl_hdr.type != ofi_ctrl_seg_data))
-						break;
-					assert(rx_buf->pkt.ctrl_hdr.type == ofi_ctrl_seg_data);
-					rx_buf->recv_entry = recv_entry;
-					dlist_remove(&rx_buf->unexp_msg.entry);
-					last = (rxm_sar_get_seg_type(&rx_buf->pkt.ctrl_hdr)
-									== RXM_SAR_SEG_LAST);
-					recv_queue->rxm_ep->res_fastlock_release(&recv_queue->lock);
-					ret = rxm_cq_handle_rx_buf(rx_buf);
-					recv_queue->rxm_ep->res_fastlock_acquire(&recv_queue->lock);
+			dlist_foreach_container_safe(&recv_queue->unexp_msg_list,
+						     struct rxm_rx_buf, rx_buf,
+						     unexp_msg.entry, entry) {
+				if (!recv_queue->match_unexp(&rx_buf->unexp_msg.entry,
+							     &match_attr))
+					continue;
+				/* Handle unordered completions from MSG provider */
+				if ((rx_buf->pkt.ctrl_hdr.msg_id != recv_entry->sar.msg_id) ||
+				    ((rx_buf->pkt.ctrl_hdr.type != ofi_ctrl_seg_data)))
+					continue;
+
+				if (!rx_buf->conn) {
+					rx_buf->conn = rxm_key2conn(rx_buf->ep,
+								    rx_buf->pkt.ctrl_hdr.conn_id);
 				}
+				if (recv_entry->sar.conn != rx_buf->conn)
+					continue;
+				rx_buf->recv_entry = recv_entry;
+				dlist_remove(&rx_buf->unexp_msg.entry);
+				last = (rxm_sar_get_seg_type(&rx_buf->pkt.ctrl_hdr)
+								== RXM_SAR_SEG_LAST);
+				recv_queue->rxm_ep->res_fastlock_release(&recv_queue->lock);
+				ret = rxm_cq_handle_rx_buf(rx_buf);
+				recv_queue->rxm_ep->res_fastlock_acquire(&recv_queue->lock);
+				if (ret || last)
+					break;
 			}
 			recv_queue->rxm_ep->res_fastlock_release(&recv_queue->lock);
 			return ret;
