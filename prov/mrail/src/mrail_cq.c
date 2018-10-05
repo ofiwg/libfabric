@@ -41,6 +41,7 @@ int mrail_cq_write_recv_comp(struct mrail_ep *mrail_ep, struct mrail_hdr *hdr,
 	FI_DBG(&mrail_prov, FI_LOG_CQ, "finish recv: length: %zu "
 	       "tag: 0x%" PRIx64 "\n", comp->len - sizeof(struct mrail_pkt),
 	       hdr->tag);
+	ofi_ep_rx_cntr_inc(&mrail_ep->util_ep);
 	if (!(recv->flags & FI_COMPLETION))
 		return 0;
 	return ofi_cq_write(mrail_ep->util_ep.rx_cq, recv->context,
@@ -99,6 +100,7 @@ int mrail_cq_process_buf_recv(struct fi_cq_tagged_entry *comp,
 				"Unable to write truncation error to util cq\n");
 			retv = ret;
 		}
+		mrail_cntr_incerr(mrail_ep->util_ep.rx_cntr);
 		goto out;
 	}
 	ret = mrail_cq_write_recv_comp(mrail_ep, &mrail_pkt->hdr, comp, recv);
@@ -351,6 +353,11 @@ static void mrail_handle_rma_completion(struct util_cq *cq,
 			assert(0);
 		}
 
+		if (comp->flags & FI_WRITE)
+			ofi_ep_wr_cntr_inc(&req->mrail_ep->util_ep);
+		else
+			ofi_ep_rd_cntr_inc(&req->mrail_ep->util_ep);
+
 		mrail_free_req(req->mrail_ep, req);
 	}
 }
@@ -383,10 +390,10 @@ void mrail_poll_cq(struct util_cq *cq)
 				goto err1;
 		} else if (comp.flags & (FI_READ | FI_WRITE)) {
 			mrail_handle_rma_completion(cq, &comp);
-		} else {
-			assert(comp.flags & (FI_SEND | FI_REMOTE_WRITE));
-
+		} else if (comp.flags & FI_SEND) {
 			tx_buf = comp.op_context;
+
+			ofi_ep_tx_cntr_inc(&tx_buf->ep->util_ep);
 
 			if (tx_buf->flags & FI_COMPLETION) {
 				ret = ofi_cq_write(cq, tx_buf->context,
@@ -402,6 +409,15 @@ void mrail_poll_cq(struct util_cq *cq)
 			ofi_ep_lock_acquire(&tx_buf->ep->util_ep);
 			util_buf_release(tx_buf->ep->tx_buf_pool, tx_buf);
 			ofi_ep_lock_release(&tx_buf->ep->util_ep);
+		} else {
+			/* We currently cannot support FI_REMOTE_READ and
+			 * FI_REMOTE_WRITE because RMA operations are split
+			 * across all rails. We would need to introduce some
+			 * sort of protocol to keep track of remotely-initiated
+			 * RMA operations. */
+			assert(comp.flags & (FI_REMOTE_READ | FI_REMOTE_WRITE));
+			FI_WARN(&mrail_prov, FI_LOG_CQ,
+				"Unsupported completion flag\n");
 		}
 	}
 

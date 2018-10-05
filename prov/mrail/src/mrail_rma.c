@@ -400,9 +400,11 @@ static ssize_t mrail_ep_inject_write(struct fid_ep *ep_fid, const void *buf,
 		FI_WARN(&mrail_prov, FI_LOG_EP_DATA,
 			"Unable to post inject write on rail: %" PRIu32 "\n",
 			rail);
+		return ret;
 	}
+	ofi_ep_wr_cntr_inc(&mrail_ep->util_ep);
 
-	return ret;
+	return 0;
 }
 
 struct fi_ops_rma mrail_ops_rma = {

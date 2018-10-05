@@ -243,8 +243,10 @@ int ofi_pep_close(struct util_pep *pep);
  * Endpoint
  */
 
+struct util_cntr;
 struct util_ep;
 typedef void (*ofi_ep_progress_func)(struct util_ep *util_ep);
+typedef void (*ofi_cntr_inc_func)(struct util_cntr *util_cntr);
 
 struct util_ep {
 	struct fid_ep		ep_fid;
@@ -267,6 +269,13 @@ struct util_ep {
 	struct util_cntr	*wr_cntr;     /* write         */
 	struct util_cntr	*rem_rd_cntr; /* remote read   */
 	struct util_cntr	*rem_wr_cntr; /* remote write  */
+
+	ofi_cntr_inc_func	tx_cntr_inc;
+	ofi_cntr_inc_func	rx_cntr_inc;
+	ofi_cntr_inc_func	rd_cntr_inc;
+	ofi_cntr_inc_func	wr_cntr_inc;
+	ofi_cntr_inc_func	rem_rd_cntr_inc;
+	ofi_cntr_inc_func	rem_wr_cntr_inc;
 
 	enum fi_ep_type		type;
 	uint64_t		caps;
@@ -298,6 +307,37 @@ static inline void ofi_ep_lock_release(struct util_ep *ep)
 {
 	ep->lock_release(&ep->lock);
 }
+
+static inline void ofi_ep_tx_cntr_inc(struct util_ep *ep)
+{
+	ep->tx_cntr_inc(ep->tx_cntr);
+}
+
+static inline void ofi_ep_rx_cntr_inc(struct util_ep *ep)
+{
+	ep->rx_cntr_inc(ep->rx_cntr);
+}
+
+static inline void ofi_ep_rd_cntr_inc(struct util_ep *ep)
+{
+	ep->rd_cntr_inc(ep->rd_cntr);
+}
+
+static inline void ofi_ep_wr_cntr_inc(struct util_ep *ep)
+{
+	ep->wr_cntr_inc(ep->wr_cntr);
+}
+
+static inline void ofi_ep_rem_rd_cntr_inc(struct util_ep *ep)
+{
+	ep->rem_rd_cntr_inc(ep->rem_rd_cntr);
+}
+
+static inline void ofi_ep_rem_wr_cntr_inc(struct util_ep *ep)
+{
+	ep->rem_wr_cntr_inc(ep->rem_wr_cntr);
+}
+
 
 /*
  * Tag and address match
@@ -536,7 +576,6 @@ static inline uint64_t ofi_tx_cq_flags(uint32_t op)
 /*
  * Counter
  */
-struct util_cntr;
 typedef void (*ofi_cntr_progress_func)(struct util_cntr *cntr);
 
 struct util_cntr {
@@ -567,6 +606,16 @@ static inline void util_cntr_signal(struct util_cntr *cntr)
 {
 	assert(cntr->wait);
 	cntr->wait->signal(cntr->wait);
+}
+
+static inline void ofi_cntr_inc_noop(struct util_cntr *cntr)
+{
+	OFI_UNUSED(cntr);
+}
+
+static inline void ofi_cntr_inc(struct util_cntr *cntr)
+{
+	cntr->cntr_fid.ops->add(&cntr->cntr_fid, 1);
 }
 
 /*
