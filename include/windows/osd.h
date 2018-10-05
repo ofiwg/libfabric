@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2016 Intel Corporation.  All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
+ * Copyright (c) 2018 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
  * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
@@ -836,6 +837,21 @@ static inline int ofi_sysconf(int name)
 }
 
 int ofi_shm_unmap(struct util_shm *shm);
+
+static inline ssize_t ofi_get_hugepage_size(void)
+{
+	return -FI_ENOSYS;
+}
+
+static inline int ofi_alloc_hugepage_buf(void **memptr, size_t size)
+{
+	return -FI_ENOSYS;
+}
+
+static inline int ofi_free_hugepage_buf(void *memptr, size_t size)
+{
+	return -FI_ENOSYS;
+}
 
 static inline int ofi_is_loopback_addr(struct sockaddr *addr) {
 	return (addr->sa_family == AF_INET &&

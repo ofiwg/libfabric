@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2016 Intel Corp, Inc. All rights reserved.
+ * Copyright (c) 2018 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -49,6 +50,21 @@ typedef cpuset_t cpu_set_t;
 static inline int ofi_shm_remap(struct util_shm *shm, size_t newsize, void **mapped)
 {
 	return -1;
+}
+
+static inline ssize_t ofi_get_hugepage_size(void)
+{
+	return -FI_ENOSYS;
+}
+
+static inline int ofi_alloc_hugepage_buf(void **memptr, size_t size)
+{
+	return -FI_ENOSYS;
+}
+
+static inline int ofi_free_hugepage_buf(void *memptr, size_t size)
+{
+	return -FI_ENOSYS;
 }
 
 #endif /* _FREEBSD_OSD_H_ */

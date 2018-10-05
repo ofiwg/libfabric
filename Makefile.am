@@ -1,6 +1,7 @@
 #
 # Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
 # Copyright (c) 2017-2018 Intel Corporation, Inc. All right reserved.
+# Copyright (c) 2018 Amazon.com, Inc. or its affiliates. All rights reserved.
 #
 # Makefile.am for libfabric
 
@@ -81,6 +82,7 @@ endif
 
 if LINUX
 common_srcs += src/unix/osd.c
+common_srcs += src/linux/osd.c
 if HAVE_LINUX_PERF_RDPMC
 common_srcs += src/linux/rdpmc.c
 endif
