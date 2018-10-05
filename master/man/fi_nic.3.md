@@ -49,7 +49,7 @@ struct fi_bus_attr {
 	enum fi_bus_type       bus_type;
 	union {
 		struct fi_pci_attr pci;
-	};
+	} attr;
 };
 
 struct fi_link_attr {
@@ -96,19 +96,19 @@ the system.
 : Indicates the type of system bus where the NIC is located.  Valid values
   are FI_BUS_PCI or FI_BUS_UNKNOWN.
 
-*pci.domain_id*
+*attr.pci.domain_id*
 : The domain where the PCI bus is located.  Valid only if bus_type is
   FI_BUS_PCI.
 
-*pci.bus_id*
+*attr.pci.bus_id*
 : The PCI bus identifier where the device is located.  Valid only if
   bus_type is FI_BUS_PCI.
 
-*pci.device_id*
+*attr.pci.device_id*
 : The identifier on the PCI bus where the device is located.  Valid only
   if bus_type is FI_BUS_PCI.
 
-*pci.function_id*
+*attr.pci.function_id*
 : The function on the device being referenced.  Valid only if bus_type is
   FI_BUS_PCI.
 
@@ -141,9 +141,11 @@ into the fabric.
 Provider attributes reference provider specific details of the device.
 These attributes are both provider and device specific.  The attributes
 can be interpretted by [`fi_tostr`(3)](fi_tostr.3.html).  Applications
-may also use the other attribute fields to determine an appropriate
-structure to cast the attributes to.  The format and definition of this
-field is outside the scope of libfabric.
+may also use the other attribute fields, such as related fi_fabric_attr:
+prov_name field, to determine an appropriate structure to cast the
+attributes.  The format and definition of this field is outside the
+scope of the libfabric core framework, but may be available as part
+of a provider specific header file included with libfabric package.
 
 # NOTES
 

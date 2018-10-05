@@ -25,6 +25,7 @@ You have been warned.
   * [fi_provider(7)](fi_provider.7.html)
   * [fi_psm(7)](fi_psm.7.html)
   * [fi_psm2(7)](fi_psm2.7.html)
+  * [fi_rstream(7)](fi_rstream.7.html)
   * [fi_rxd(7)](fi_rxd.7.html)
   * [fi_rxm(7)](fi_rxm.7.html)
   * [fi_shm(7)](fi_shm.7.html)

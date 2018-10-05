@@ -220,11 +220,23 @@ fi_sendmsg.
   request.  See fi_getinfo for additional details on
   FI_REMOTE_CQ_DATA.
 
+*FI_CLAIM*
+: Applies to posted receive operations for endpoints configured
+  for FI_BUFFERED_RECV or FI_VARIABLE_MSG.  This flag is used to
+  retrieve a message that was buffered by the provider.  See the
+  Buffered Receives section for details.
+
 *FI_COMPLETION*
 : Indicates that a completion entry should be generated for the
   specified operation.  The endpoint must be bound to a completion
   queue with FI_SELECTIVE_COMPLETION that corresponds to the
   specified operation, or this flag is ignored.
+
+*FI_DISCARD*
+: Applies to posted receive operations for endpoints configured
+  for FI_BUFFERED_RECV or FI_VARIABLE_MSG.  This flag is used to
+  free a message that was buffered by the provider.  See the
+  Buffered Receives section for details.
 
 *FI_MORE*
 : Indicates that the user has additional requests that will
@@ -323,12 +335,13 @@ managed buffer where the start of the received message is located, and
 'len' will be set to the total size of the message.
 
 The maximum sized message that a provider can buffer is limited by
-an FI_OPT_BUFFERED_LIMIT.  This threshold can be obtained and may be adjusted
+an FI_OPT_BUFFERED_LIMIT. This threshold can be obtained and may be adjusted
 by the application using the fi_getopt and fi_setopt calls, respectively.
-Any adjustments must be made prior to enabling the endpoint. The
-CQ entry 'buf' will point to a buffer that is the _minimum_ of 'len' and
-the FI_OPT_BUFFERED_LIMIT value.  If the sent message is larger than the
-buffered limit, the CQ entry 'flags' will have the FI_MORE bit set.
+Any adjustments must be made prior to enabling the endpoint. The CQ entry 'buf'
+will point to a buffer of received data. If the sent message is larger than the
+buffered amount, the CQ entry 'flags' will have the FI_MORE bit set. When the
+FI_MORE bit is set, 'buf' will reference at least FI_OPT_BUFFERED_MIN bytes
+of data (see fi_endpoint.3 for more info).
 
 After being notified that a buffered receive has arrived,
 applications must either claim or discard the message.  Typically,
@@ -367,7 +380,7 @@ Buffered receives of tagged messages will include the message tag as part
 of the CQ entry, if available.
 
 The handling of buffered receives follows all message ordering
-restrictions assigned to and endpoint.  For example, completions
+restrictions assigned to an endpoint.  For example, completions
 may indicate the order in which received messages arrived at the
 receiver based on the endpoint attributes.
 

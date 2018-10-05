@@ -531,6 +531,17 @@ The following option levels and option names and parameters are defined.
   configured to use the same threshold value, and the threshold must be
   set prior to enabling the endpoint.
 
+- *FI_OPT_BUFFERED_MIN - size_t*
+: Defines the minimum size of a buffered message that will be reported.
+  Applications would set this to a size that's big enough to decide whether
+  to discard or claim a buffered receive or when to claim a buffered receive
+  on getting a buffered receive completion. The value is typically used by a
+  provider when sending a rendezvous protocol request where it would send
+  atleast FI_OPT_BUFFERED_MIN bytes of application data along with it. A smaller
+  sized renedezvous protocol message usually results in better latency for the
+  overall transfer of a large message.
+
+
 ## fi_rx_size_left (DEPRECATED)
 
 This function has been deprecated and will be removed in a future version
