@@ -337,18 +337,19 @@ if ($old_head ne $new_head) {
     my $pr_num = $json->{'number'};
     verbose("Created PR #$pr_num\n");
 
-    # Wait for the required DCO CI to complete on the git hash for the
-    # latest commit.
+    # Wait for the required DCO check to complete on the git hash for
+    # the latest commit.
     $outfile = "github-ci-status-check.json";
 
     $cmd = $cmd_base;
     $cmd .= "-o $outfile ";
-    $cmd .= "https://api.github.com/repos/$gh_org/$gh_repo/commits/$new_head/statuses";
+    $cmd .= "-H 'Accept: application/vnd.github.antiope-preview+json' ";
+    $cmd .= "https://api.github.com/repos/$gh_org/$gh_repo/commits/$new_head/check-runs";
 
     my $count = 0;
     my $max_count = 30;
     my $happy = 0;
-    verbose("Waiting for DCO CI to complete\n");
+    verbose("Waiting for DCO check to complete\n");
 
     # Only wait for $max_count iterations
     while (!$happy && $count < $max_count) {
@@ -356,20 +357,26 @@ if ($old_head ne $new_head) {
         sleep(1);
 
         unlink($outfile);
-        doit(0, $cmd, "github-check-ci-status");
+        doit(0, $cmd, "github-check-run-status");
         my $json = read_json_file($outfile, 1);
 
-        if ($json and $#{$json} >= 0) {
+        if ($json and $#{$json->{"check_runs"}} >= 0) {
             # If we got any statuses back, check them to see if we can
             # find a successful DCO signoff.  That would indicate that
-            # the required CI test run.
-            foreach my $j (@$json) {
-                if ($j->{"context"} eq "DCO") {
+            # the required check test ran.
+            foreach my $j (@{$json->{"check_runs"}}) {
+                if ($j->{"name"} eq "DCO") {
                     verbose("Found DCO status on SHA $new_head\n");
-                    if ($j->{"state"} eq "success") {
-                        verbose("DCO is happy!\n");
-                        $happy = 1;
-                        last;
+                    if ($j->{"status"} eq "completed") {
+                        if ($j->{"conclusion"} eq "success") {
+                            verbose("DCO is happy!\n");
+                            $happy = 1;
+                            last;
+                        } else {
+                            verbose("DCO is not happy -- how did that happen?\n");
+                            $happy = 0;
+                            last;
+                        }
                     }
                 }
             }
