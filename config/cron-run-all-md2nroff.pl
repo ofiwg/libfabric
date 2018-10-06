@@ -148,21 +148,38 @@ if (defined($pages_branch_arg)) {
 }
 
 #####################################################################
+# Look for all markdown man pages
+#####################################################################
 
-# Find all the *.\d.md files in the source repo
-verbose("*** Finding markdown man pages...\n");
+# Find all libfabric *.\d.md files
+verbose("*** Finding libfabric markdown man pages...\n");
 opendir(DIR, "source/man");
-my @markdown_files = grep { /\.\d\.md$/ && -f "source/man/$_" } readdir(DIR);
+my @libfabric_markdown_files =
+    map { "source/man/" . $_ }
+    grep { /\.\d\.md$/ && -f "source/man/$_" } readdir(DIR);
 closedir(DIR);
-verbose("Found: @markdown_files\n");
+verbose("Found: @libfabric_markdown_files\n");
 
+# Find all fabtests *.\d.md files
+verbose("*** Finding fabtests markdown man pages...\n");
+opendir(DIR, "source/fabtests/man");
+my @fabtests_markdown_files =
+    map { "source/fabtests/man/" . $_ }
+    grep { /\.\d\.md$/ && -f "source/fabtests/man/$_" } readdir(DIR);
+closedir(DIR);
+verbose("Found: @fabtests_markdown_files\n");
+
+#####################################################################
+# Publish any changes to man pages to the gh-pages branch
+# (only libfabric -- not fabtests)
 #####################################################################
 
 # Copy each of the markdown files to the pages branch checkout
 if (defined($pages_branch_arg)) {
     chdir("pages/master");
-    foreach my $file (@markdown_files) {
-        doit(0, "cp ../../source/man/$file man/$file", "loop-cp");
+    foreach my $file (@libfabric_markdown_files) {
+        my $base = basename($file);
+        doit(0, "cp $tmpdir/$file man/$base", "loop-cp");
 
         # Is there a new man page?  If so, we need to "git add" it.
         my $out = `git status --porcelain man/$file`;
@@ -190,11 +207,12 @@ if (defined($pages_branch_arg)) {
     push(@headings, { section=>3, title=>"API documentation" });
     foreach my $h (@headings) {
         print OUT "\n* $h->{title}\n";
-        foreach my $file (sort(@markdown_files)) {
-            if ($file =~ /\.$h->{section}\.md$/) {
-                $file =~ m/^(.+)\.$h->{section}\.md$/;
-                my $base = $1;
-                print OUT "  * [$base($h->{section})]($base.$h->{section}.html)\n";
+        foreach my $file (sort(@libfabric_markdown_files)) {
+            my $base = basename($file);
+            if ($base =~ /\.$h->{section}\.md$/) {
+                $base =~ m/^(.+)\.$h->{section}\.md$/;
+                my $shortname = $1;
+                print OUT "  * [$shortname($h->{section})]($shortname.$h->{section}.html)\n";
             }
         }
     }
@@ -210,12 +228,17 @@ if (defined($pages_branch_arg)) {
 }
 
 #####################################################################
+# Look for changes to .md files and generate nroff files on master
+#####################################################################
+
+my @markdown_files = (@libfabric_markdown_files,
+                      @fabtests_markdown_files);
 
 # Now process each of the Markdown files in the source repo and
 # generate new nroff man pages.
-chdir("$tmpdir/source/man");
+chdir("$tmpdir");
 foreach my $file (@markdown_files) {
-    doit(0, "../config/md2nroff.pl --source $file", "loop2-md2nroff");
+    doit(0, "$tmpdir/source/config/md2nroff.pl --source $file", "loop2-md2nroff");
 
     # Did we generate a new man page?  If so, we need to "git add" it.
     my $man_file = basename($file);
@@ -232,6 +255,8 @@ foreach my $file (@markdown_files) {
         if ($out =~ /^\?\?/);
 }
 
+#####################################################################
+
 # Similar to above: commit the newly-generated nroff pages and push
 # them back upstream.  If nothing changed, these will be no-ops.  Note
 # that there are mandatory CI checks on master, which means we can't
@@ -241,6 +266,7 @@ foreach my $file (@markdown_files) {
 
 # Try to delete the old pr branch first (it's ok to fail -- i.e., if
 # it wasn't there).
+chdir("$tmpdir/source");
 my $pr_branch_name = "pr/update-nroff-generated-man-pages";
 doit(1, "git branch -D $pr_branch_name");
 doit(0, "git checkout -b $pr_branch_name");
@@ -271,7 +297,7 @@ if ($old_head ne $new_head) {
     close(GIT);
 
     # Create a new pull request
-    my $cmd_base = "curl ";
+    my $cmd_base = "curl --silent ";
     $cmd_base .= "-H 'Content-Type: application/json' ";
     $cmd_base .= "-H 'Authorization: token $pat' ";
     $cmd_base .= "-H 'User-Agent: OFIWG-bot' ";
@@ -311,18 +337,19 @@ if ($old_head ne $new_head) {
     my $pr_num = $json->{'number'};
     verbose("Created PR #$pr_num\n");
 
-    # Wait for the required DCO CI to complete on the git hash for the
-    # latest commit.
+    # Wait for the required DCO check to complete on the git hash for
+    # the latest commit.
     $outfile = "github-ci-status-check.json";
 
     $cmd = $cmd_base;
     $cmd .= "-o $outfile ";
-    $cmd .= "https://api.github.com/repos/$gh_org/$gh_repo/commits/$new_head/statuses";
+    $cmd .= "-H 'Accept: application/vnd.github.antiope-preview+json' ";
+    $cmd .= "https://api.github.com/repos/$gh_org/$gh_repo/commits/$new_head/check-runs";
 
     my $count = 0;
     my $max_count = 30;
     my $happy = 0;
-    verbose("Waiting for DCO CI to complete\n");
+    verbose("Waiting for DCO check to complete\n");
 
     # Only wait for $max_count iterations
     while (!$happy && $count < $max_count) {
@@ -330,20 +357,26 @@ if ($old_head ne $new_head) {
         sleep(1);
 
         unlink($outfile);
-        doit(0, $cmd, "github-check-ci-status");
+        doit(0, $cmd, "github-check-run-status");
         my $json = read_json_file($outfile, 1);
 
-        if ($json and $#{$json} >= 0) {
+        if ($json and $#{$json->{"check_runs"}} >= 0) {
             # If we got any statuses back, check them to see if we can
             # find a successful DCO signoff.  That would indicate that
-            # the required CI test run.
-            foreach my $j (@$json) {
-                if ($j->{"context"} eq "DCO") {
+            # the required check test ran.
+            foreach my $j (@{$json->{"check_runs"}}) {
+                if ($j->{"name"} eq "DCO") {
                     verbose("Found DCO status on SHA $new_head\n");
-                    if ($j->{"state"} eq "success") {
-                        verbose("DCO is happy!\n");
-                        $happy = 1;
-                        last;
+                    if ($j->{"status"} eq "completed") {
+                        if ($j->{"conclusion"} eq "success") {
+                            verbose("DCO is happy!\n");
+                            $happy = 1;
+                            last;
+                        } else {
+                            verbose("DCO is not happy -- how did that happen?\n");
+                            $happy = 0;
+                            last;
+                        }
                     }
                 }
             }

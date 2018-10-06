@@ -18,7 +18,7 @@ my $verbose_arg = 0;
 my $debug_arg = 0;
 my $logfile_dir_arg;
 my $configure_args = "";
-my $make_args = "-j 32";
+my $make_args = "-j8";
 my $help_arg = 0;
 
 &Getopt::Long::Configure("bundling");
@@ -37,6 +37,8 @@ $ok = 0
     if (!defined($filename_arg));
 $ok = 0
     if (!defined($coverity_token_arg));
+$ok = 0
+    if (($debug_arg || $verbose_arg) && !defined($logfile_dir_arg));
 if (!$ok || $help_arg) {
     print "Usage: $0 --filename=FILENAME --coverity-token=TOKEN [--dry-run] [--verbose] [--help]\n";
     exit($ok);
@@ -94,9 +96,20 @@ verbose "*** Working in $dir\n";
 
 # Get the coverity tool, put it in our path
 
+my $new_tool = "$ENV{HOME}/coverity-tool-new.tgz";
+my $old_tool = "$ENV{HOME}/coverity-tool.tgz";
+
 verbose "*** Downloading coverity tool\n";
-doit(0, "wget $coverity_tool_url --post-data \"token=$coverity_token_arg\&project=$project_arg\" -O coverity_tool.tgz");
-doit(0, "tar xf coverity_tool.tgz");
+doit(1, "curl --silent $coverity_tool_url --request POST --data \"token=$coverity_token_arg\&project=$project_arg\" -o $new_tool -z $old_tool");
+# With the -z option, curl will download the coverity tool only if it
+# is newer than what we already have.  If there's no newer file to
+# download, it'll just exit(0) (which is a LOT faster, because the
+# coverity tool is giant and it takes a long time to download).
+doit(1, "mv $new_tool $old_tool")
+    if (-f $new_tool);
+
+verbose "*** Extracting coverity tool\n";
+doit(0, "tar xf $old_tool");
 opendir(my $dh, ".") ||
     die "Can't opendir .";
 my @files = grep { /^cov/ && -d "./$_" } readdir($dh);
