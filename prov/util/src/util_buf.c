@@ -39,15 +39,13 @@
 #include <ofi.h>
 #include <ofi_osd.h>
 
-static inline void util_buf_set_region(union util_buf *buf,
-				       struct util_buf_region *region,
-				       struct util_buf_pool *pool)
+static inline void util_buf_set_ftr(union util_buf *buf,
+				    struct util_buf_footer *ftr,
+				    struct util_buf_pool *pool)
 {
-	struct util_buf_footer *buf_ftr;
-	if (util_buf_use_ftr(pool)) {
-		buf_ftr = (struct util_buf_footer *) ((char *) buf + pool->attr.size);
-		buf_ftr->region = region;
-	}
+	struct util_buf_footer *buf_ftr =
+		(struct util_buf_footer *) ((char *) buf + pool->attr.size);
+	*buf_ftr = *ftr;
 }
 
 int util_buf_grow(struct util_buf_pool *pool)
@@ -57,6 +55,7 @@ int util_buf_grow(struct util_buf_pool *pool)
 	union util_buf *util_buf;
 	struct util_buf_region *buf_region;
 	ssize_t hp_size;
+	struct util_buf_footer buf_ftr;
 
 	if (pool->attr.max_cnt && pool->num_allocated >= pool->attr.max_cnt) {
 		return -1;
@@ -69,7 +68,7 @@ int util_buf_grow(struct util_buf_pool *pool)
 	if (pool->attr.is_mmap_region) {
 		hp_size = ofi_get_hugepage_size();
 		if (hp_size < 0)
-			goto err;
+			goto err1;
 
 		buf_region->size = fi_get_aligned_sz(pool->attr.chunk_cnt *
 						     pool->entry_sz, hp_size);
@@ -82,7 +81,7 @@ int util_buf_grow(struct util_buf_pool *pool)
 			       fi_strerror(-ret));
 
 			if (pool->num_allocated > 0)
-				goto err;
+				goto err1;
 
 			pool->attr.is_mmap_region = 0;
 		}
@@ -94,7 +93,7 @@ int util_buf_grow(struct util_buf_pool *pool)
 		ret = ofi_memalign((void **)&buf_region->mem_region,
 				   pool->attr.alignment, buf_region->size);
 		if (ret)
-			goto err;
+			goto err1;
 	}
 
 	if (pool->attr.alloc_hndlr) {
@@ -103,13 +102,28 @@ int util_buf_grow(struct util_buf_pool *pool)
 					     buf_region->size,
 					     &buf_region->context);
 		if (ret)
-			goto err;
+			goto err2;
 	}
+
+	if (util_buf_use_ftr(pool) &&
+	    !(pool->regions_cnt % UTIL_BUF_POOL_REGION_CHUNK_CNT)) {
+		struct util_buf_region **new_table =
+				realloc(pool->regions_table,
+					(pool->regions_cnt +
+					 UTIL_BUF_POOL_REGION_CHUNK_CNT) *
+					sizeof(*pool->regions_table));
+		if (!new_table)
+			goto err3;
+		pool->regions_table = new_table;
+		pool->regions_table[pool->regions_cnt] = buf_region;
+		pool->regions_cnt++;
+	}
+
+	buf_ftr.region = buf_region;
 
 	for (i = 0; i < pool->attr.chunk_cnt; i++) {
 		util_buf = (union util_buf *)
 			(buf_region->mem_region + i * pool->entry_sz);
-
 		if (pool->attr.init) {
 #if ENABLE_DEBUG
 			util_buf->entry.next = (void *)OFI_MAGIC_64;
@@ -117,14 +131,24 @@ int util_buf_grow(struct util_buf_pool *pool)
 			pool->attr.init(pool->attr.ctx, util_buf);
 			assert(util_buf->entry.next == (void *)OFI_MAGIC_64);
 		}
-		util_buf_set_region(util_buf, buf_region, pool);
+
+		if (util_buf_use_ftr(pool)) {
+			buf_ftr.index = pool->num_allocated + i;
+			util_buf_set_ftr(util_buf, &buf_ftr, pool);
+		}
+
 		slist_insert_tail(&util_buf->entry, &pool->buf_list);
 	}
 
 	slist_insert_tail(&buf_region->entry, &pool->region_list);
 	pool->num_allocated += pool->attr.chunk_cnt;
 	return 0;
-err:
+err3:
+	if (pool->attr.free_hndlr)
+	    pool->attr.free_hndlr(pool->attr.ctx, buf_region->context);
+err2:
+	ofi_freealign(buf_region->mem_region);
+err1:
 	free(buf_region);
 	return -1;
 }
@@ -160,7 +184,6 @@ int util_buf_pool_create_attr(struct util_buf_attr *attr,
 		return -FI_ENOMEM;
 	}
 	return FI_SUCCESS;
-
 }
 
 int util_buf_pool_create_ex(struct util_buf_pool **buf_pool,
@@ -178,6 +201,11 @@ int util_buf_pool_create_ex(struct util_buf_pool **buf_pool,
 		.alloc_hndlr	= alloc_hndlr,
 		.free_hndlr	= free_hndlr,
 		.ctx		= pool_ctx,
+#if ENABLE_DEBUG
+		.use_ftr	= 1,
+#else
+		.use_ftr	= 0,
+#endif
 		.track_used	= 1,
 	};
 	return util_buf_pool_create_attr(&attr, buf_pool);
@@ -205,6 +233,28 @@ void util_buf_release(struct util_buf_pool *pool, void *buf)
 	assert(buf_ftr->region->num_used);
 	buf_ftr->region->num_used--;
 	slist_insert_head(&util_buf->entry, &pool->buf_list);
+}
+
+size_t util_get_buf_index(struct util_buf_pool *pool, void *buf)
+{
+	assert(util_buf_use_ftr(pool));
+ 	struct util_buf_footer *buf_ftr =
+		(struct util_buf_footer *) ((char *) buf + pool->attr.size);
+	assert(buf_ftr->region->num_used);
+	return buf_ftr->index;
+}
+void *util_buf_get_by_index(struct util_buf_pool *pool, size_t index)
+{
+	assert(util_buf_use_ftr(pool));
+ 	struct util_buf_region *buf_region =
+		pool->regions_table[(size_t)(index / pool->attr.chunk_cnt)];
+	char *mem_region = buf_region->mem_region;
+	union util_buf *buf = (union util_buf *)(mem_region +
+		(index % pool->attr.chunk_cnt) * pool->entry_sz);
+	struct util_buf_footer *buf_ftr =
+		(struct util_buf_footer *)((char *)buf + pool->attr.size);
+ 	assert(buf_ftr->region->num_used);
+ 	return buf;
 }
 #endif
 

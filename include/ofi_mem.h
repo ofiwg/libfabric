@@ -257,6 +257,9 @@ static inline void name ## _free(struct name *fs)		\
 /*
  * Buffer Pool
  */
+
+#define UTIL_BUF_POOL_REGION_CHUNK_CNT	16
+
 struct util_buf_pool;
 typedef int (*util_buf_region_alloc_hndlr) (void *pool_ctx, void *addr, size_t len,
 					    void **context);
@@ -274,6 +277,7 @@ struct util_buf_attr {
 	void 				*ctx;
 	uint8_t				track_used;
 	uint8_t				is_mmap_region;
+	uint8_t				use_ftr;
 };
 
 struct util_buf_pool {
@@ -281,6 +285,8 @@ struct util_buf_pool {
 	size_t 			num_allocated;
 	struct slist		buf_list;
 	struct slist		region_list;
+	struct util_buf_region	**regions_table;
+	size_t			regions_cnt;
 	struct util_buf_attr	attr;
 };
 
@@ -296,6 +302,7 @@ struct util_buf_region {
 
 struct util_buf_footer {
 	struct util_buf_region *region;
+	size_t index;
 };
 
 union util_buf {
@@ -307,7 +314,7 @@ int util_buf_pool_create_attr(struct util_buf_attr *attr,
 			      struct util_buf_pool **buf_pool);
 
 /* create buffer pool with alloc/free handlers */
-int util_buf_pool_create_ex(struct util_buf_pool **pool,
+int util_buf_pool_create_ex(struct util_buf_pool **buf_pool,
 			    size_t size, size_t alignment,
 			    size_t max_cnt, size_t chunk_cnt,
 			    util_buf_region_alloc_hndlr alloc_hndlr,
@@ -335,6 +342,8 @@ int util_buf_grow(struct util_buf_pool *pool);
 
 void *util_buf_get(struct util_buf_pool *pool);
 void util_buf_release(struct util_buf_pool *pool, void *buf);
+size_t util_get_buf_index(struct util_buf_pool *pool, void *buf);
+void *util_buf_get_by_index(struct util_buf_pool *pool, size_t index);
 
 #else
 
@@ -350,6 +359,18 @@ static inline void util_buf_release(struct util_buf_pool *pool, void *buf)
 	union util_buf *util_buf = buf;
 	slist_insert_head(&util_buf->entry, &pool->buf_list);
 }
+
+static inline size_t util_get_buf_index(struct util_buf_pool *pool, void *buf)
+{
+	return ((struct util_buf_footer *)((char *)buf + pool->attr.size))->index;
+}
+static inline void *util_buf_get_by_index(struct util_buf_pool *pool, size_t index)
+{
+	return (union util_buf *)(pool->regions_table[
+		(size_t)(index / pool->attr.chunk_cnt)]->mem_region +
+		(index % pool->attr.chunk_cnt) * pool->entry_sz);
+}
+
 #endif
 
 static inline void *util_buf_get_ex(struct util_buf_pool *pool, void **context)
@@ -397,7 +418,9 @@ static inline int util_buf_use_ftr(struct util_buf_pool *pool)
 #else
 static inline int util_buf_use_ftr(struct util_buf_pool *pool)
 {
-	return (pool->attr.alloc_hndlr || pool->attr.free_hndlr) ? 1 : 0;
+	return (pool->attr.alloc_hndlr ||
+		pool->attr.free_hndlr ||
+		pool->attr.use_ftr) ? 1 : 0;
 }
 #endif
 
