@@ -35,7 +35,6 @@ use File::Basename;
 use Getopt::Long;
 
 my $libfabric_dir_arg;
-my $fabtests_dir_arg;
 my $download_dir_arg;
 my $libfabric_coverity_token_arg;
 my $fabtests_coverity_token_arg;
@@ -45,7 +44,6 @@ my $verbose_arg;
 my $debug_arg;
 
 my $ok = Getopt::Long::GetOptions("libfabric-source-dir=s" => \$libfabric_dir_arg,
-                                  "fabtests-source-dir=s" => \$fabtests_dir_arg,
                                   "download-dir=s" => \$download_dir_arg,
                                   "libfabric-coverity-token=s" => \$libfabric_coverity_token_arg,
                                   "fabtests-coverity-token=s" => \$fabtests_coverity_token_arg,
@@ -56,14 +54,13 @@ my $ok = Getopt::Long::GetOptions("libfabric-source-dir=s" => \$libfabric_dir_ar
                                   );
 
 if ($help_arg || !$ok) {
-    print "$0 --libfabric-source-dir libfabric_git_tree --fabtests-source-dir fabtests_git_tree --download-dir download_tree\n";
+    print "$0 --libfabric-source-dir libfabric_git_tree --download-dir download_tree\n";
     exit($ok);
 }
 
 # Sanity checks
-die "Must specify --libfabric-source-dir, --fabtests-source-dir, --download-dir, and --logfile-dir"
+die "Must specify --libfabric-source-dir, --download-dir, and --logfile-dir"
     if (!defined($libfabric_dir_arg) || $libfabric_dir_arg eq "" ||
-        !defined($fabtests_dir_arg) || $fabtests_dir_arg eq "" ||
         !defined($download_dir_arg) || $download_dir_arg eq "" ||
         !defined($logfile_dir_arg) || $logfile_dir_arg eq "");
 die "$libfabric_dir_arg is not a valid directory"
@@ -140,7 +137,6 @@ sub get_git_version {
 
 sub make_tarball {
     my $base_name = shift;
-    my $source_dir = shift;
     my $version = shift;
     my $installdir = shift;
 
@@ -251,14 +247,13 @@ verbose("*** Building libfabric...\n");
 chdir($libfabric_dir_arg);
 git_cleanup();
 my $libfabric_version = get_git_version();
-my $rebuilt_libfabric = make_tarball("libfabric", $libfabric_dir_arg,
-    $libfabric_version, $installdir);
+my $rebuilt_libfabric = make_tarball("libfabric",
+				     $libfabric_version, $installdir);
 
 verbose("\n\n*** Building fabtests...\n");
-chdir($fabtests_dir_arg);
-git_cleanup();
+chdir('fabtests');
 my $fabtests_version = get_git_version();
-my $rebuilt_fabtests = make_tarball("fabtests", $fabtests_dir_arg,
+my $rebuilt_fabtests = make_tarball("fabtests",
                                     $fabtests_version, $installdir);
 
 if ($rebuilt_libfabric || $rebuilt_fabtests) {
