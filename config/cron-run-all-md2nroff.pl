@@ -271,7 +271,7 @@ if ($old_head ne $new_head) {
     close(GIT);
 
     # Create a new pull request
-    my $cmd_base = "curl ";
+    my $cmd_base = "curl --silent ";
     $cmd_base .= "-H 'Content-Type: application/json' ";
     $cmd_base .= "-H 'Authorization: token $pat' ";
     $cmd_base .= "-H 'User-Agent: OFIWG-bot' ";
