@@ -239,20 +239,6 @@ my @markdown_files = (@libfabric_markdown_files,
 chdir("$tmpdir");
 foreach my $file (@markdown_files) {
     doit(0, "$tmpdir/source/config/md2nroff.pl --source $file", "loop2-md2nroff");
-
-    # Did we generate a new man page?  If so, we need to "git add" it.
-    my $man_file = basename($file);
-
-    $man_file =~ m/\.(\d)\.md$/;
-    my $section = $1;
-
-    $man_file =~ s/\.md$//;
-
-    my $full_filename = "man$section/$man_file";
-
-    my $out = `git status --porcelain $full_filename`;
-    doit(0, "git add $full_filename", "loop2-git-add")
-        if ($out =~ /^\?\?/);
 }
 
 #####################################################################
