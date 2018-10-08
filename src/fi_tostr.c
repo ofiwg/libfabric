@@ -103,10 +103,10 @@ static void ofi_strncatf(char *dest, size_t n, const char *fmt, ...)
 #define ofi_strcatf(dest, ...) \
 	ofi_strncatf(dest, OFI_BUFSIZ, __VA_ARGS__)
 
-static void ofi_tostr_fid(char *buf, const struct fid *fid)
+static void ofi_tostr_fid(const char *label, char *buf, const struct fid *fid)
 {
 	if (!fid || !FI_CHECK_OP(fid->ops, struct fi_ops, tostr))
-		ofi_strcatf(buf, "%p\n", fid);
+		ofi_strcatf(buf, "%s%p\n", label, fid);
 	else
 		fid->ops->tostr(fid, buf, OFI_BUFSIZ - strnlen(buf, OFI_BUFSIZ));
 }
@@ -671,14 +671,14 @@ static void ofi_tostr_info(char *buf, const struct fi_info *info)
 	ofi_strcatf(buf, "%sdest_addr: ", TAB);
 	ofi_tostr_addr(buf, info->addr_format, info->dest_addr);
 	ofi_strcatf(buf, "\n");
-	ofi_strcatf(buf, "%shandle: ", TAB);
-	ofi_tostr_fid(buf, info->handle);
+	ofi_tostr_fid(TAB "handle: ", buf, info->handle);
 
 	ofi_tostr_tx_attr(buf, info->tx_attr, TAB);
 	ofi_tostr_rx_attr(buf, info->rx_attr, TAB);
 	ofi_tostr_ep_attr(buf, info->ep_attr, TAB);
 	ofi_tostr_domain_attr(buf, info->domain_attr, TAB);
 	ofi_tostr_fabric_attr(buf, info->fabric_attr, TAB);
+	ofi_tostr_fid(TAB "nic_fid: ", buf, &info->nic->fid);
 }
 
 static void ofi_tostr_atomic_type(char *buf, enum fi_datatype type)
@@ -866,7 +866,7 @@ char *DEFAULT_SYMVER_PRE(fi_tostr)(const void *data, enum fi_type datatype)
 		ofi_tostr_op_type(buf, *enumval);
 		break;
 	case FI_TYPE_FID:
-		ofi_tostr_fid(buf, data);
+		ofi_tostr_fid("fid: ", buf, data);
 		break;
 	default:
 		ofi_strcatf(buf, "Unknown type");
