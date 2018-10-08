@@ -52,6 +52,7 @@
 enum hook_class {
 	HOOK_NOOP,
 	HOOK_PERF,
+	MAX_HOOKS
 };
 
 /*

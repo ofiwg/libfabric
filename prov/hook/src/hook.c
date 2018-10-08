@@ -38,7 +38,8 @@
 #include "hook_perf.h"
 
 
-static uint32_t hooks_enabled;
+static uint8_t hooks_enabled[MAX_HOOKS];
+static uint8_t num_hooks_enabled;
 
 
 struct fid *hook_to_hfid(const struct fid *fid)
@@ -227,27 +228,27 @@ static int hook_fabric(struct fid_fabric *hfabric, struct fid_fabric **fabric,
 void ofi_hook_install(struct fid_fabric *hfabric, struct fid_fabric **fabric,
 		      struct fi_provider *prov)
 {
-	int hooks, hclass, ret;
+	int hook, ret;
 
 	*fabric = hfabric;
-	if (!hooks_enabled)
+	if (!num_hooks_enabled)
 		return;
 
-	for (hooks = hooks_enabled, hclass = 0; hooks;
-	     hooks >>= 1, hclass++) {
-		if (hooks & 0x1) {
-			ret = hook_fabric(hfabric, fabric,
-					  (enum hook_class) hclass, prov);
-			if (ret)
-				return;
-			hfabric = *fabric;
-		}
+	for (hook = 0; hook < num_hooks_enabled; hook++) {
+		ret = hook_fabric(hfabric, fabric,
+				  hooks_enabled[hook], prov);
+		if (ret)
+			return;
+		hfabric = *fabric;
 	}
 }
 
 void ofi_hook_init(void)
 {
 	char *param_val = NULL;
+	char **strv;
+	int i;
+	size_t cnt;
 
 	fi_param_define(NULL, "hook", FI_PARAM_STRING,
 			"Intercept calls to underlying provider and apply "
@@ -255,16 +256,32 @@ void ofi_hook_init(void)
 			"perf (gather performance data)");
 	fi_param_get_str(NULL, "hook", &param_val);
 
-	hooks_enabled = 0;
+	num_hooks_enabled = 0;
 	if (!param_val)
 		return;
 
-	if (!strcasecmp(param_val, "noop")) {
-		FI_INFO(&core_prov, FI_LOG_CORE, "Noop hook requested\n");
-		hooks_enabled |= (1 << HOOK_NOOP);
+	strv = ofi_split_and_alloc(param_val, ";", &cnt);
+	if (!strv)
+		return;
+
+	if (cnt > MAX_HOOKS) {
+		FI_WARN(&core_prov, FI_LOG_FABRIC, "Requested more hooks than "
+			"known, only processing %d\n", MAX_HOOKS);
+		cnt = MAX_HOOKS;
 	}
-	if (!strcasecmp(param_val, "perf")) {
-		FI_INFO(&core_prov, FI_LOG_CORE, "Perf hook requested\n");
-		hooks_enabled |= (1 << HOOK_PERF);
+
+	for (i = 0; i< cnt; i++) {
+		if (!strcmp(strv[i], "noop")) {
+			FI_INFO(&core_prov, FI_LOG_CORE, "Noop hook requested\n");
+			hooks_enabled[num_hooks_enabled] = HOOK_NOOP;
+			num_hooks_enabled++;
+
+		} else if (!strcmp(strv[i], "perf")) {
+			FI_INFO(&core_prov, FI_LOG_CORE, "Perf hook requested\n");
+			hooks_enabled[num_hooks_enabled] = HOOK_PERF;
+			num_hooks_enabled++;
+		}
 	}
+
+	ofi_free_string_array(strv);
 }
