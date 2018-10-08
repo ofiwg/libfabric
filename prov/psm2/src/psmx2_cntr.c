@@ -42,7 +42,7 @@ void psmx2_cntr_check_trigger(struct psmx2_fid_cntr *cntr)
 	if (!cntr->trigger)
 		return;
 
-	psmx2_lock(&cntr->trigger_lock, 2);
+	cntr->domain->trigger_lock_fn(&cntr->trigger_lock, 2);
 
 	trigger = cntr->trigger;
 	while (trigger) {
@@ -65,10 +65,10 @@ void psmx2_cntr_check_trigger(struct psmx2_fid_cntr *cntr)
 		}
 
 		if (trx_ctxt->am_initialized) {
-			psmx2_lock(&trx_ctxt->trigger_queue.lock, 2);
+			cntr->domain->trigger_queue_lock_fn(&trx_ctxt->trigger_queue.lock, 2);
 			slist_insert_tail(&trigger->list_entry,
 					  &trx_ctxt->trigger_queue.list);
-			psmx2_unlock(&trx_ctxt->trigger_queue.lock, 2);
+			cntr->domain->trigger_queue_unlock_fn(&trx_ctxt->trigger_queue.lock, 2);
 		} else {
 			psmx2_process_trigger(trx_ctxt, trigger);
 		}
@@ -76,7 +76,7 @@ void psmx2_cntr_check_trigger(struct psmx2_fid_cntr *cntr)
 		trigger = cntr->trigger;
 	}
 
-	psmx2_unlock(&cntr->trigger_lock, 2);
+	cntr->domain->trigger_unlock_fn(&cntr->trigger_lock, 2);
 }
 
 void psmx2_cntr_add_trigger(struct psmx2_fid_cntr *cntr,
@@ -84,7 +84,7 @@ void psmx2_cntr_add_trigger(struct psmx2_fid_cntr *cntr,
 {
 	struct psmx2_trigger *p, *q;
 
-	psmx2_lock(&cntr->trigger_lock, 2);
+	cntr->domain->trigger_lock_fn(&cntr->trigger_lock, 2);
 
 	q = NULL;
 	p = cntr->trigger;
@@ -98,7 +98,7 @@ void psmx2_cntr_add_trigger(struct psmx2_fid_cntr *cntr,
 		cntr->trigger = trigger;
 	trigger->next = p;
 
-	psmx2_unlock(&cntr->trigger_lock, 2);
+	cntr->domain->trigger_unlock_fn(&cntr->trigger_lock, 2);
 
 	psmx2_cntr_check_trigger(cntr);
 }

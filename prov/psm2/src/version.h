@@ -109,14 +109,14 @@
  */
 #define PSMX2_POLL_COMPLETION(trx_ctxt, status, err) \
 	do { \
-		if (psmx2_trylock(&(trx_ctxt)->poll_lock, 2)) { \
+		if (trx_ctxt->domain->poll_trylock_fn(&(trx_ctxt)->poll_lock, 2)) { \
 			(err) = PSM2_MQ_NO_COMPLETIONS; \
 		} else { \
 			psm2_mq_req_t psm2_req; \
 			(err) = psm2_mq_ipeek((trx_ctxt)->psm2_mq, &psm2_req, NULL); \
 			if ((err) == PSM2_OK) \
 				psm2_mq_test2(&psm2_req, (status)); \
-			psmx2_unlock(&(trx_ctxt)->poll_lock, 2); \
+			trx_ctxt->domain->poll_unlock_fn(&(trx_ctxt)->poll_lock, 2); \
 		} \
 	} while(0)
 
@@ -243,15 +243,15 @@ struct psmx2_context {
 #define PSMX2_EP_GET_OP_CONTEXT(ep, ctx) \
 	do { \
 		struct psmx2_context *context; \
-		psmx2_lock(&(ep)->context_lock, 2); \
+		ep->domain->context_lock_fn(&(ep)->context_lock, 2); \
 		if (!slist_empty(&(ep)->free_context_list)) { \
 			context = container_of(slist_remove_head(&(ep)->free_context_list), \
 					       struct psmx2_context, list_entry); \
-			psmx2_unlock(&(ep)->context_lock, 2); \
+			ep->domain->context_unlock_fn(&(ep)->context_lock, 2); \
 			(ctx) = &context->fi_context; \
 			break; \
 		} \
-		psmx2_unlock(&(ep)->context_lock, 2); \
+		ep->domain->context_unlock_fn(&(ep)->context_lock, 2); \
 		context = malloc(sizeof(*context)); \
 		if (!context) { \
 			FI_WARN(&psmx2_prov, FI_LOG_EP_DATA, "out of memory.\n"); \
@@ -265,9 +265,9 @@ struct psmx2_context {
 		struct psmx2_context *context; \
 		context = container_of((ctx), struct psmx2_context, fi_context); \
 		context->list_entry.next = NULL; \
-		psmx2_lock(&(ep)->context_lock, 2); \
+		ep->domain->context_lock_fn(&(ep)->context_lock, 2); \
 		slist_insert_tail(&context->list_entry, &(ep)->free_context_list); \
-		psmx2_unlock(&(ep)->context_lock, 2); \
+		ep->domain->context_unlock_fn(&(ep)->context_lock, 2); \
 	} while (0)
 
 #endif /* PSMX2_USE_REQ_CONTEXT */

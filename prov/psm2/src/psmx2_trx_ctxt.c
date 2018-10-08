@@ -96,10 +96,10 @@ int psmx2_am_trx_ctxt_handler(psm2_am_token_t token, psm2_amarg_t *args,
 		 */
 		disconn = malloc(sizeof(*disconn));
 		if (disconn) {
-			psmx2_lock(&trx_ctxt->peer_lock, 2);
+			trx_ctxt->domain->peer_lock_fn(&trx_ctxt->peer_lock, 2);
 			dlist_remove_first_match(&trx_ctxt->peer_list,
 						 psmx2_peer_match, epaddr);
-			psmx2_unlock(&trx_ctxt->peer_lock, 2);
+			trx_ctxt->domain->peer_unlock_fn(&trx_ctxt->peer_lock, 2);
 			if (trx_ctxt->ep && trx_ctxt->ep->av)
 				psmx2_av_remove_conn(trx_ctxt->ep->av, trx_ctxt, epaddr);
 			disconn->ep = trx_ctxt->psm2_ep;
@@ -129,12 +129,12 @@ void psmx2_trx_ctxt_disconnect_peers(struct psmx2_trx_ctxt *trx_ctxt)
 
 	/* use local peer_list to avoid entering AM handler while holding the lock */
 	dlist_init(&peer_list);
-	psmx2_lock(&trx_ctxt->peer_lock, 2);
+	trx_ctxt->domain->peer_lock_fn(&trx_ctxt->peer_lock, 2);
 	dlist_foreach_safe(&trx_ctxt->peer_list, item, tmp) {
 		dlist_remove(item);
 		dlist_insert_before(item, &peer_list);
 	}
-	psmx2_unlock(&trx_ctxt->peer_lock, 2);
+	trx_ctxt->domain->peer_unlock_fn(&trx_ctxt->peer_lock, 2);
 
 	dlist_foreach_safe(&peer_list, item, tmp) {
 		peer = container_of(item, struct psmx2_epaddr_context, entry);
@@ -176,9 +176,9 @@ void psmx2_trx_ctxt_free(struct psmx2_trx_ctxt *trx_ctxt, int usage_flags)
 	FI_INFO(&psmx2_prov, FI_LOG_CORE, "epid: %016lx (%s)\n",
 		trx_ctxt->psm2_epid, psmx2_usage_flags_to_string(old_flags));
 
-	psmx2_lock(&trx_ctxt->domain->trx_ctxt_lock, 1);
+	trx_ctxt->domain->trx_ctxt_lock_fn(&trx_ctxt->domain->trx_ctxt_lock, 1);
 	dlist_remove(&trx_ctxt->entry);
-	psmx2_unlock(&trx_ctxt->domain->trx_ctxt_lock, 1);
+	trx_ctxt->domain->trx_ctxt_unlock_fn(&trx_ctxt->domain->trx_ctxt_lock, 1);
 
 	if (psmx2_env.disconnect)
 		psmx2_trx_ctxt_disconnect_peers(trx_ctxt);
@@ -231,12 +231,12 @@ struct psmx2_trx_ctxt *psmx2_trx_ctxt_alloc(struct psmx2_fid_domain *domain,
 
 	/* Check existing allocations first if only Tx or Rx is needed */
 	if (compatible_flags) {
-		psmx2_lock(&domain->trx_ctxt_lock, 1);
+		domain->trx_ctxt_lock_fn(&domain->trx_ctxt_lock, 1);
 		dlist_foreach(&domain->trx_ctxt_list, item) {
 			trx_ctxt = container_of(item, struct psmx2_trx_ctxt, entry);
 			if (compatible_flags == trx_ctxt->usage_flags) {
 				trx_ctxt->usage_flags |= asked_flags;
-				psmx2_unlock(&domain->trx_ctxt_lock, 1);
+				domain->trx_ctxt_unlock_fn(&domain->trx_ctxt_lock, 1);
 				FI_INFO(&psmx2_prov, FI_LOG_CORE,
 					"use existing context. epid: %016lx "
 					"(%s -> tx+rx).\n", trx_ctxt->psm2_epid,
@@ -244,7 +244,7 @@ struct psmx2_trx_ctxt *psmx2_trx_ctxt_alloc(struct psmx2_fid_domain *domain,
 				return trx_ctxt;
 			}
 		}
-		psmx2_unlock(&domain->trx_ctxt_lock, 1);
+		domain->trx_ctxt_unlock_fn(&domain->trx_ctxt_lock, 1);
 	}
 
 	if (psmx2_trx_ctxt_cnt >= psmx2_env.max_trx_ctxt) {
@@ -337,9 +337,9 @@ struct psmx2_trx_ctxt *psmx2_trx_ctxt_alloc(struct psmx2_fid_domain *domain,
 	trx_ctxt->domain = domain;
 	trx_ctxt->usage_flags = asked_flags;
 
-	psmx2_lock(&domain->trx_ctxt_lock, 1);
+	domain->trx_ctxt_lock_fn(&domain->trx_ctxt_lock, 1);
 	dlist_insert_before(&trx_ctxt->entry, &domain->trx_ctxt_list);
-	psmx2_unlock(&domain->trx_ctxt_lock, 1);
+	domain->trx_ctxt_unlock_fn(&domain->trx_ctxt_lock, 1);
 
 	return trx_ctxt;
 
