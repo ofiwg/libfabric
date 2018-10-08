@@ -11,18 +11,36 @@ fi_rxm \- The RxM (RDM over MSG) Utility Provider
 
 # OVERVIEW
 
-The RxM provider (ofi_rxm) is an utility provider that supports RDM
-endpoint emulated over MSG endpoint of a core provider.
+The RxM provider (ofi_rxm) is an utility provider that supports FI_EP_RDM type
+endpoint emulated over FI_EP_MSG type endpoint(s) of an underlying core provider.
+FI_EP_RDM endpoints have a reliable unconnected messaging interface and RxM
+emulates this by hiding the connection management of underlying FI_EP_MSG
+endpoints from the user. Additionally, RxM can hide memory registration
+requirement from a core provider like verbs if the apps don't support it.
 
 # REQUIREMENTS
+
+## Requirements for core provider
 
 RxM provider requires the core provider to support the following features:
 
   * MSG endpoints (FI_EP_MSG)
 
-  * RMA read/write (FI_RMA)
+  * RMA read/write (FI_RMA) - Used for implementing rendezvous protocol for
+    large messages.
 
-  * FI_OPT_CM_DATA_SIZE of at least 24 bytes
+  * FI_OPT_CM_DATA_SIZE of at least 48 bytes
+
+## Requirements for applications
+
+Since RxM emulates RDM endpoints by hiding connection management and connections
+are established only on-demand (when app tries to send data), the first several
+data transfer calls would return EAGAIN. Applications should be aware of this and
+retry until the operation succeeds.
+
+If an application has chosen manual progress for data progress, it should also
+read the CQ so that the connection establishment progresses. Not doing so would
+result in a stall. See also the ERRORS section in fi_msg(3).
 
 # SUPPORTED FEATURES
 
@@ -35,7 +53,8 @@ The RxM provider currently supports *FI_MSG*, *FI_TAGGED* and *FI_RMA* capabilit
 : The following data transfer interface is supported: *FI_MSG*, *FI_TAGGED*, *FI_RMA*.
 
 *Progress*
-: The RxM provider supports *FI_PROGRESS_AUTO*.
+: The RxM provider supports both *FI_PROGRESS_MANUAL* and *FI_PROGRESS_AUTO*.
+  The former is more optimal.
 
 *Addressing Formats*
 : FI_SOCKADDR, FI_SOCKADDR_IN
@@ -77,11 +96,15 @@ RxM provider does not support the following features:
 
   * Triggered operations
 
-## Auto progress
+## Progress limitations
 
 When sending large messages, an app doing an sread or waiting on the CQ file descriptor
 may not get a completion when reading the CQ after being woken up from the wait.
-The app has to do sread or wait on the file descriptor again.
+The app has to do sread or wait on the file descriptor again. This is needed
+because RxM uses a rendezvous protocol for large message sends. An app would get
+woken up from waiting on CQ fd when rendezvous protocol request completes but it
+would have to wait again to get an ACK from the receiver indicating completion of
+large message transfer by remote RMA read.
 
 # RUNTIME PARAMETERS
 
@@ -101,6 +124,14 @@ The ofi_rxm provider checks for the following environment variables.
 : Set this environment variable to control the RxM SAR (Segmentation And Reassembly)
   protocol. Messages of size greater than this (default: 256 Kb) would be transmitted
   via rendezvous protocol.
+
+*FI_OFI_RXM_USE_SRX*
+: Set this to 1 to use shared receive context from MSG provider. This reduces
+  overall memory usage but there may be a slight increase in latency (default: 0).
+
+*FI_OFI_RXM_USE_FAIR_TX_QUEUES*
+: Set this to 1 to use common TX queue instead of per connection / MSG endpoint.
+  (default: 0).
 
 *FI_OFI_RXM_TX_SIZE*
 : Defines default TX context size (default: 1024)
