@@ -33,6 +33,7 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <stdio.h>
+#include <string.h>
 #include <ofi.h>
 #include "hook.h"
 #include "hook_perf.h"
@@ -259,11 +260,11 @@ void ofi_hook_init(void)
 	if (!param_val)
 		return;
 
-	if (!strcasecmp(param_val, "noop")) {
+	if (strcasestr(param_val, "noop")) {
 		FI_INFO(&core_prov, FI_LOG_CORE, "Noop hook requested\n");
 		hooks_enabled |= (1 << HOOK_NOOP);
 	}
-	if (!strcasecmp(param_val, "perf")) {
+	if (strcasestr(param_val, "perf")) {
 		FI_INFO(&core_prov, FI_LOG_CORE, "Perf hook requested\n");
 		hooks_enabled |= (1 << HOOK_PERF);
 	}
