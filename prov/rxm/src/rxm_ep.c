@@ -1061,6 +1061,36 @@ rxm_ep_sar_tx_prepare_segment(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	return tx_buf;
 }
 
+static void
+rxm_ep_sar_tx_clenup(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
+		     struct rxm_tx_entry *tx_entry, size_t total_segs_cnt,
+		     size_t seg_no)
+{
+	struct rxm_tx_buf *tx_buf;
+
+	/* Cleanup allocated resources */
+	/* TODO: handle multi-threaded case */
+	while (!dlist_empty(&tx_entry->deferred_tx_buf_list)) {
+		dlist_pop_front(&tx_entry->deferred_tx_buf_list,
+				struct rxm_tx_buf, tx_buf, hdr.entry);
+		rxm_tx_buf_release(tx_entry->ep, tx_buf);
+	}
+	if (!dlist_empty(&tx_entry->deferred_tx_entry))
+		rxm_ep_dequeue_deferred_tx_queue(tx_entry);
+	/* TX entry will be released in the rxm_finish_sar_segment_send() */
+	tx_entry->msg_id = RXM_SAR_TX_ERROR;
+	/* Updates TX entry's `fail_segs_cnt` field to the value that's should
+	 * be used by `rxm_finish_sar_segment_send()` to finish SAR operation.
+	 * This value indicates how many segments can't be sent and we should
+	 * awaiting of completions for all segments have to be end up */
+	tx_entry->fail_segs_cnt = total_segs_cnt - seg_no;
+	if (!(tx_entry->segs_left - tx_entry->fail_segs_cnt)) {
+		/* If we don't have outgoing SAR segemnts,
+		 * release TX entry here */
+		rxm_tx_entry_release(rxm_conn->send_queue, tx_entry);
+	}
+}
+
 static inline ssize_t
 rxm_ep_sar_tx_prepare_and_send_segment(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 				       size_t data_len, size_t *remain_len, size_t seg_len,
@@ -1078,27 +1108,8 @@ rxm_ep_sar_tx_prepare_and_send_segment(struct rxm_ep *rxm_ep, struct rxm_conn *r
 					       flags, tag, comp_flags, op,
 					       seg_type, tx_entry);
 	if (OFI_UNLIKELY(!tx_buf)) {
-		/* Cleanup allocated resources */
-		/* TODO: handle multi-threaded case */
-		while (!dlist_empty(&tx_entry->deferred_tx_buf_list)) {
-			dlist_pop_front(&tx_entry->deferred_tx_buf_list,
-					struct rxm_tx_buf, tx_buf, hdr.entry);
-			rxm_tx_buf_release(tx_entry->ep, tx_buf);
-		}
-		if (!dlist_empty(&tx_entry->deferred_tx_entry))
-			rxm_ep_dequeue_deferred_tx_queue(tx_entry);
-		/* TX entry will be released in the rxm_finish_sar_segment_send() */
-		tx_entry->msg_id = RXM_SAR_TX_ERROR;
-		/* Updates TX entry's `fail_segs_cnt` field to the value that's should
-		 * be used by `rxm_finish_sar_segment_send()` to finish SAR operation.
-		 * This value indicates how many segments can't be sent and we should
-		 * awaiting of completions for all segments have to be end up */
-		tx_entry->fail_segs_cnt = total_segs_cnt - seg_no;
-		if (!(tx_entry->segs_left - tx_entry->fail_segs_cnt)) {
-			/* If we don't have outgoing SAR segemnts,
-			 * release TX entry here */
-			rxm_tx_entry_release(rxm_conn->send_queue, tx_entry);
-		}
+		rxm_ep_sar_tx_clenup(rxm_ep, rxm_conn, tx_entry,
+				     total_segs_cnt, seg_no);
 		return -FI_EAGAIN;
 	}
 
@@ -1113,6 +1124,11 @@ rxm_ep_sar_tx_prepare_and_send_segment(struct rxm_ep *rxm_ep, struct rxm_conn *r
 		      sizeof(struct rxm_pkt) + tx_buf->pkt.ctrl_hdr.seg_size,
 		      tx_buf->hdr.desc, 0, tx_buf);
 	if (OFI_UNLIKELY(ret)) {
+		if (OFI_UNLIKELY(ret != -FI_EAGAIN)) {
+			rxm_ep_sar_tx_clenup(rxm_ep, rxm_conn, tx_entry,
+				     total_segs_cnt, seg_no);
+			return ret;
+		}
 		if (seg_type == RXM_SAR_SEG_FIRST) {
 			/* if the sending for the first segment fails,
 			 * release resources and report this to user */

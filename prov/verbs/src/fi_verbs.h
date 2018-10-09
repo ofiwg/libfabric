@@ -517,9 +517,10 @@ fi_ibv_dgram_av_lookup_av_entry(fi_addr_t fi_addr)
  * Deal with non-compliant libibverbs drivers which set errno
  * instead of directly returning the error value
  */
-static inline ssize_t fi_ibv_handle_post(ssize_t ret)
+static inline ssize_t fi_ibv_handle_post(int ret)
 {
 	switch (ret) {
+		case -ENOMEM:
 		case ENOMEM:
 			ret = -FI_EAGAIN;
 			break;
@@ -528,7 +529,7 @@ static inline ssize_t fi_ibv_handle_post(ssize_t ret)
 						  -errno;
 			break;
 		default:
-			ret = -ret;
+			ret = -abs(ret);
 			break;
 	}
 	return ret;
