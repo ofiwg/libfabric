@@ -35,5 +35,5 @@ if [[ $# -eq 0 ]] ; then
     exit 1
 fi
 
-$@ | tee $OUTFILE
-exit $?
+$@ 2>&1 | tee $OUTFILE
+exit ${PIPESTATUS[0]}
