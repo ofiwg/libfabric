@@ -36,8 +36,6 @@
 #include <shared.h>
 #include "benchmark_shared.h"
 
-static struct fi_rma_iov remote;
-
 static int run(void)
 {
 	int i, ret;

@@ -36,7 +36,7 @@
 
 #include <shared.h>
 
-struct fi_rma_iov local, remote;
+struct fi_rma_iov local;
 
 struct fi_context fi_ctx_write;
 struct fi_context fi_ctx_read;

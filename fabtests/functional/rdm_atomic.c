@@ -39,7 +39,6 @@
 static enum fi_op op_type = FI_MIN;
 static void *result;
 static void *compare;
-struct fi_rma_iov remote;
 
 static struct fid_mr *mr_result;
 static struct fid_mr *mr_compare;

@@ -37,8 +37,6 @@
 
 #include <shared.h>
 
-struct fi_rma_iov remote;
-
 struct fi_triggered_context triggered_ctx;
 
 static char *welcome_text1 = "Hello1 from Client!";

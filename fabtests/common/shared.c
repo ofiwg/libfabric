@@ -109,6 +109,8 @@ struct fi_cntr_attr cntr_attr = {
 	.wait_obj = FI_WAIT_NONE
 };
 
+struct fi_rma_iov remote;
+
 struct ft_opts opts;
 
 struct test_size_param test_size[] = {
@@ -2528,6 +2530,14 @@ int ft_finalize_ep(struct fid_ep *ep)
 
 int ft_finalize(void)
 {
+	int ret;
+
+	if (fi->domain_attr->mr_mode & FI_MR_RAW) {
+		ret = fi_mr_unmap_key(domain, remote.key);
+		if (ret)
+			return ret;
+	}
+
 	return ft_finalize_ep(ep);
 }
 
