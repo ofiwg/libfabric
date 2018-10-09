@@ -521,10 +521,10 @@ ofi_cq_write_src(struct util_cq *cq, void *context, uint64_t flags, size_t len,
 		FI_DBG(cq->domain->prov, FI_LOG_CQ,
 		       "util_cq cirq is full!\n");
 		return ofi_cq_write_overflow(cq, context, flags, len,
-					     buf, data, tag, 0);
+					     buf, data, tag, src);
 	}
-	ofi_cq_write_comp_entry(cq, context, flags, len, buf, data, tag);
 	cq->src[ofi_cirque_windex(cq->cirq)] = src;
+	ofi_cq_write_comp_entry(cq, context, flags, len, buf, data, tag);
 	cq->cq_fastlock_release(&cq->cq_lock);
 	return 0;
 }
