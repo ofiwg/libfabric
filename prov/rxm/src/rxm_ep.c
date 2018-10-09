@@ -1780,7 +1780,8 @@ static int rxm_ep_msg_res_open(struct util_domain *util_domain,
 	}
 	return 0;
 err2:
-	fi_close(&rxm_ep->srx_ctx->fid);
+	if (rxm_ep->srx_ctx)
+		fi_close(&rxm_ep->srx_ctx->fid);
 err1:
 	fi_freeinfo(rxm_ep->msg_info);
 	return ret;
