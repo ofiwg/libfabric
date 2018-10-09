@@ -189,6 +189,7 @@ static ssize_t tcpx_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg
 	send_entry->msg_hdr.hdr.op = ofi_op_write;
 	send_entry->msg_hdr.hdr.op_data = TCPX_OP_WRITE;
 	send_entry->msg_hdr.hdr.size = htonll(data_len + sizeof(send_entry->msg_hdr));
+	send_entry->msg_hdr.hdr.flags = 0;
 
 	memcpy(send_entry->msg_hdr.rma_iov, msg->rma_iov,
 	       msg->rma_iov_count * sizeof(msg->rma_iov[0]));

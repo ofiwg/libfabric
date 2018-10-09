@@ -185,6 +185,7 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	data_len = ofi_total_iov_len(msg->msg_iov, msg->iov_count);
 	assert(!(flags & FI_INJECT) || (data_len <= TCPX_MAX_INJECT_SZ));
 	tx_entry->msg_hdr.hdr.size = htonll(data_len + sizeof(tx_entry->msg_hdr));
+	tx_entry->msg_hdr.hdr.flags = 0;
 
 	tx_entry->msg_data.iov[0].iov_base = (void *) &tx_entry->msg_hdr;
 	tx_entry->msg_data.iov[0].iov_len = sizeof(tx_entry->msg_hdr);
