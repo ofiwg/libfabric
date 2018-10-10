@@ -624,26 +624,37 @@ exit:
 static void *rxm_conn_progress(void *arg)
 {
 	struct rxm_ep *rxm_ep = container_of(arg, struct rxm_ep, util_ep);
-	struct rxm_msg_eq_entry entry;
+	struct rxm_msg_eq_entry *entry;
 	int ret;
 
-	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Starting conn event handler\n");
-	while (1) {
-		memset(&entry, 0, sizeof(entry));
-		entry.rd = rxm_eq_sread(rxm_ep, RXM_CM_ENTRY_SZ, &entry);
-		if (entry.rd < 0 && entry.rd != -FI_ECONNREFUSED)
-			return NULL;
-
-		if (entry.event == FI_NOTIFY &&
-		    (enum ofi_cmap_signal)((struct fi_eq_entry *)
-					   &entry.cm_entry)->data == OFI_CMAP_EXIT) {
-			FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Closing CM thread\n");
-			return NULL;
-		}
-		ret = rxm_conn_handle_event(rxm_ep, &entry);
-		if (ret)
-			return NULL;
+	entry = calloc(1, RXM_MSG_EQ_ENTRY_SZ);
+	if (!entry) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+			"Unable to allocate memory!\n");
+		return NULL;
 	}
+	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Starting conn event handler\n");
+
+	while (1) {
+		entry->rd = rxm_eq_sread(rxm_ep, RXM_CM_ENTRY_SZ, entry);
+		if (entry->rd < 0 && entry->rd != -FI_ECONNREFUSED)
+			goto exit;
+
+		if (entry->event == FI_NOTIFY &&
+		    (enum ofi_cmap_signal)((struct fi_eq_entry *)
+					   &entry->cm_entry)->data == OFI_CMAP_EXIT) {
+			FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
+			       "Closing CM thread\n");
+			goto exit;
+		}
+		ret = rxm_conn_handle_event(rxm_ep, entry);
+		if (ret)
+			goto exit;
+		memset(entry, 0, RXM_MSG_EQ_ENTRY_SZ);
+	}
+exit:
+	free(entry);
+	return NULL;
 }
 
 static int rxm_prepare_cm_data(struct fid_pep *pep, struct util_cmap_handle *handle,
