@@ -111,7 +111,8 @@ static ssize_t tcpx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	memcpy(&recv_entry->msg_data.iov[0], &msg->msg_iov[0],
 	       msg->iov_count * sizeof(struct iovec));
 
-	recv_entry->flags = flags | FI_MSG | FI_RECV;
+	recv_entry->flags = ((tcpx_ep->util_ep.rx_op_flags & FI_COMPLETION) |
+			     flags | FI_MSG | FI_RECV);
 	recv_entry->context = msg->context;
 
 	tcpx_queue_recv(tcpx_ep, recv_entry);
@@ -134,7 +135,8 @@ static ssize_t tcpx_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	recv_entry->msg_data.iov[0].iov_base = buf;
 	recv_entry->msg_data.iov[0].iov_len = len;
 
-	recv_entry->flags = FI_MSG | FI_RECV;
+	recv_entry->flags = ((tcpx_ep->util_ep.rx_op_flags & FI_COMPLETION) |
+			     FI_MSG | FI_RECV);
 	recv_entry->context = context;
 
 	tcpx_queue_recv(tcpx_ep, recv_entry);
@@ -158,7 +160,8 @@ static ssize_t tcpx_recvv(struct fid_ep *ep, const struct iovec *iov, void **des
 	recv_entry->msg_data.iov_cnt = count;
 	memcpy(recv_entry->msg_data.iov, iov, count * sizeof(*iov));
 
-	recv_entry->flags = FI_MSG | FI_RECV;
+	recv_entry->flags = ((tcpx_ep->util_ep.rx_op_flags & FI_COMPLETION) |
+			     FI_MSG | FI_RECV);
 	recv_entry->context = context;
 
 	tcpx_queue_recv(tcpx_ep, recv_entry);
@@ -206,6 +209,9 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 
 	}
 
+	tx_entry->flags = ((tcpx_ep->util_ep.tx_op_flags & FI_COMPLETION) |
+			    flags | FI_MSG | FI_SEND);
+
 	if (flags & FI_REMOTE_CQ_DATA) {
 		tx_entry->msg_hdr.hdr.flags |= OFI_REMOTE_CQ_DATA;
 		tx_entry->msg_hdr.hdr.data = htonll(msg->data);
@@ -213,14 +219,13 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 
 	if (flags & (FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)) {
 		tx_entry->msg_hdr.hdr.flags |= OFI_DELIVERY_COMPLETE;
-		flags |= TCPX_NO_COMPLETION;
+		tx_entry->flags &= ~FI_COMPLETION;
 	}
 
 	tx_entry->msg_hdr.hdr.flags = htonl(tx_entry->msg_hdr.hdr.flags);
 	tx_entry->ep = tcpx_ep;
 	tx_entry->context = msg->context;
 	tx_entry->done_len = 0;
-	tx_entry->flags = flags | FI_MSG | FI_SEND;
 
 	fastlock_acquire(&tcpx_ep->lock);
 	tcpx_tx_queue_insert(tcpx_ep, tx_entry);
@@ -247,7 +252,8 @@ static ssize_t tcpx_send(struct fid_ep *ep, const void *buf, size_t len, void *d
 	tx_entry->msg_data.iov[1].iov_len = len;
 	tx_entry->msg_data.iov_cnt = 2;
 	tx_entry->context = context;
-	tx_entry->flags = FI_MSG | FI_SEND;
+	tx_entry->flags = ((tcpx_ep->util_ep.tx_op_flags & FI_COMPLETION) |
+			   FI_MSG | FI_SEND);
 
 	tx_entry->msg_hdr.hdr.flags = 0;
 	fastlock_acquire(&tcpx_ep->lock);
@@ -280,7 +286,8 @@ static ssize_t tcpx_sendv(struct fid_ep *ep, const struct iovec *iov, void **des
 
 	tx_entry->msg_hdr.hdr.flags = 0;
 	tx_entry->context = context;
-	tx_entry->flags = FI_MSG | FI_SEND;
+	tx_entry->flags = ((tcpx_ep->util_ep.tx_op_flags & FI_COMPLETION) |
+			   FI_MSG | FI_SEND);
 
 	fastlock_acquire(&tcpx_ep->lock);
 	tcpx_tx_queue_insert(tcpx_ep, tx_entry);
@@ -311,7 +318,7 @@ static ssize_t tcpx_inject(struct fid_ep *ep, const void *buf, size_t len,
 	tx_entry->msg_data.iov_cnt = 2;
 
 	tx_entry->msg_hdr.hdr.flags = 0;
-	tx_entry->flags = FI_MSG | FI_SEND | TCPX_NO_COMPLETION;
+	tx_entry->flags = FI_MSG | FI_SEND;
 
 	fastlock_acquire(&tcpx_ep->lock);
 	tcpx_tx_queue_insert(tcpx_ep, tx_entry);
@@ -342,7 +349,8 @@ static ssize_t tcpx_senddata(struct fid_ep *ep, const void *buf, size_t len, voi
 	tx_entry->msg_hdr.hdr.data = htonll(data);
 
 	tx_entry->context = context;
-	tx_entry->flags = FI_MSG | FI_SEND;
+	tx_entry->flags = ((tcpx_ep->util_ep.tx_op_flags & FI_COMPLETION) |
+			   FI_MSG | FI_SEND);
 
 	fastlock_acquire(&tcpx_ep->lock);
 	tcpx_tx_queue_insert(tcpx_ep, tx_entry);
@@ -374,7 +382,7 @@ static ssize_t tcpx_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 
 	tx_entry->msg_hdr.hdr.flags = htonl(OFI_REMOTE_CQ_DATA);
 	tx_entry->msg_hdr.hdr.data = htonll(data);
-	tx_entry->flags = FI_MSG | FI_SEND | TCPX_NO_COMPLETION;
+	tx_entry->flags = FI_MSG | FI_SEND ;
 
 	fastlock_acquire(&tcpx_ep->lock);
 	tcpx_tx_queue_insert(tcpx_ep, tx_entry);

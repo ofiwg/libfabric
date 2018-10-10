@@ -65,8 +65,6 @@
 #define TCPX_MAJOR_VERSION 0
 #define TCPX_MINOR_VERSION 1
 
-#define TCPX_NO_COMPLETION	(1ULL << 63)
-
 #define TCPX_MAX_CM_DATA_SIZE	(1<<8)
 #define TCPX_IOV_LIMIT		(4)
 #define TCPX_MAX_INJECT_SZ	(64)

@@ -101,7 +101,7 @@ void tcpx_cq_report_completion(struct util_cq *cq,
 {
 	struct fi_cq_err_entry err_entry;
 
-	if (xfer_entry->flags & TCPX_NO_COMPLETION)
+	if (!(xfer_entry->flags & FI_COMPLETION))
 		return;
 
 	if (err) {
@@ -190,13 +190,11 @@ static int tcpx_buf_pool_init(void *pool_ctx, void *addr,
 			xfer_entry->msg_hdr.hdr.op = ofi_op_read_req;
 			xfer_entry->msg_hdr.hdr.size =
 				htonll(sizeof(xfer_entry->msg_hdr));
-			xfer_entry->flags = TCPX_NO_COMPLETION;
 			break;
 		case TCPX_OP_READ_RSP:
 			xfer_entry->msg_hdr.hdr.op = ofi_op_read_rsp;
 			break;
 		case TCPX_OP_REMOTE_READ:
-			xfer_entry->flags = TCPX_NO_COMPLETION;
 			break;
 		default:
 			assert(0);

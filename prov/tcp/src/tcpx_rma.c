@@ -62,6 +62,7 @@ static void tcpx_rma_read_send_entry_fill(struct tcpx_xfer_entry *send_entry,
 	send_entry->msg_data.iov_cnt = 1;
 	send_entry->ep = tcpx_ep;
 	send_entry->done_len = 0;
+	send_entry->flags = 0;
 }
 
 static void tcpx_rma_read_recv_entry_fill(struct tcpx_xfer_entry *recv_entry,
@@ -76,7 +77,8 @@ static void tcpx_rma_read_recv_entry_fill(struct tcpx_xfer_entry *recv_entry,
 	recv_entry->ep = tcpx_ep;
 	recv_entry->context = msg->context;
 	recv_entry->done_len = 0;
-	recv_entry->flags = flags | FI_RMA | FI_READ;
+	recv_entry->flags = ((tcpx_ep->util_ep.tx_op_flags & FI_COMPLETION) |
+			     flags | FI_RMA | FI_READ);
 }
 
 static ssize_t tcpx_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
@@ -218,13 +220,16 @@ static ssize_t tcpx_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg
 		send_entry->msg_hdr.hdr.data = htonll(msg->data);
 	}
 
+	send_entry->flags = ((tcpx_ep->util_ep.tx_op_flags & FI_COMPLETION) |
+			     flags | FI_RMA | FI_WRITE);
+
 	if (flags & (FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)) {
-		flags |= TCPX_NO_COMPLETION;
+		send_entry->flags &= ~FI_COMPLETION;
 		send_entry->msg_hdr.hdr.flags |= OFI_DELIVERY_COMPLETE;
 	}
 
 	if (flags & FI_COMMIT_COMPLETE) {
-		flags |= TCPX_NO_COMPLETION;
+		send_entry->flags &= ~FI_COMPLETION;
 		send_entry->msg_hdr.hdr.flags |= OFI_COMMIT_COMPLETE;
 	}
 
@@ -232,7 +237,6 @@ static ssize_t tcpx_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg
 	send_entry->ep = tcpx_ep;
 	send_entry->context = msg->context;
 	send_entry->done_len = 0;
-	send_entry->flags = flags | FI_RMA | FI_WRITE;
 
 	fastlock_acquire(&tcpx_ep->lock);
 	tcpx_tx_queue_insert(tcpx_ep, send_entry);
@@ -317,57 +321,69 @@ static ssize_t tcpx_rma_writedata(struct fid_ep *ep, const void *buf, size_t len
 	return tcpx_rma_writemsg(ep, &msg, FI_REMOTE_CQ_DATA);
 }
 
+static ssize_t tcpx_rma_inject_common(struct fid_ep *ep, const void *buf,
+				      size_t len, uint64_t data,
+				      fi_addr_t dest_addr, uint64_t addr,
+				      uint64_t key, uint64_t flags)
+{
+	struct tcpx_ep *tcpx_ep;
+	struct tcpx_cq *tcpx_cq;
+	struct tcpx_xfer_entry *send_entry;
+
+	tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
+	tcpx_cq = container_of(tcpx_ep->util_ep.tx_cq, struct tcpx_cq,
+			       util_cq);
+
+	send_entry = tcpx_xfer_entry_alloc(tcpx_cq, TCPX_OP_WRITE);
+	if (!send_entry)
+		return -FI_EAGAIN;
+
+	assert(len <= TCPX_MAX_INJECT_SZ);
+	send_entry->msg_hdr.hdr.size = htonll(len + sizeof(send_entry->msg_hdr));
+	send_entry->msg_hdr.hdr.flags = 0;
+
+	send_entry->msg_hdr.rma_iov[0].addr = addr;
+	send_entry->msg_hdr.rma_iov[0].key = key;
+	send_entry->msg_hdr.rma_iov[0].len = len;
+	send_entry->msg_hdr.rma_iov_cnt = 1;
+
+	send_entry->msg_data.iov[0].iov_base = (void *) &send_entry->msg_hdr;
+	send_entry->msg_data.iov[0].iov_len = sizeof(send_entry->msg_hdr);
+
+	memcpy(send_entry->msg_data.inject, (uint8_t *)buf, len);
+	send_entry->msg_data.iov[1].iov_base = (void *)send_entry->msg_data.inject;
+	send_entry->msg_data.iov[1].iov_len = len;
+
+	send_entry->msg_data.iov_cnt = 2;
+
+	if (flags & FI_REMOTE_CQ_DATA) {
+		send_entry->msg_hdr.hdr.flags |= OFI_REMOTE_CQ_DATA;
+		send_entry->msg_hdr.hdr.data = htonll(data);
+	}
+
+	send_entry->msg_hdr.hdr.flags = htonl(send_entry->msg_hdr.hdr.flags);
+	send_entry->ep = tcpx_ep;
+	send_entry->done_len = 0;
+
+	fastlock_acquire(&tcpx_ep->lock);
+	tcpx_tx_queue_insert(tcpx_ep, send_entry);
+	fastlock_release(&tcpx_ep->lock);
+	return FI_SUCCESS;
+}
+
 static ssize_t tcpx_rma_inject(struct fid_ep *ep, const void *buf, size_t len,
 			       fi_addr_t dest_addr, uint64_t addr, uint64_t key)
 {
-	struct iovec msg_iov = {
-		.iov_base = (void *)buf,
-		.iov_len = len,
-	};
-	struct fi_rma_iov rma_iov = {
-		.addr = addr,
-		.key = key,
-		.len = len,
-	};
-	struct fi_msg_rma msg = {
-		.iov_count = 1,
-		.rma_iov_count = 1,
-		.rma_iov = &rma_iov,
-		.msg_iov = &msg_iov,
-		.desc = NULL,
-		.addr = dest_addr,
-		.context = NULL,
-		.data = 0,
-	};
-
-	return tcpx_rma_writemsg(ep, &msg, FI_INJECT | TCPX_NO_COMPLETION);
+	return tcpx_rma_inject_common(ep, buf, len, dest_addr,
+				      0, addr, key, FI_INJECT);
 }
 
 static ssize_t tcpx_rma_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 				   uint64_t data, fi_addr_t dest_addr, uint64_t addr, uint64_t key)
 {
-	struct iovec msg_iov = {
-		.iov_base = (void *)buf,
-		.iov_len = len,
-	};
-	struct fi_rma_iov rma_iov = {
-		.addr = addr,
-		.key = key,
-		.len = len,
-	};
-	struct fi_msg_rma msg = {
-		.iov_count = 1,
-		.rma_iov_count = 1,
-		.rma_iov = &rma_iov,
-		.msg_iov = &msg_iov,
-		.desc = NULL,
-		.addr = dest_addr,
-		.context = NULL,
-		.data = data,
-	};
-
-	return tcpx_rma_writemsg(ep, &msg, FI_INJECT | FI_REMOTE_CQ_DATA |
-				 TCPX_NO_COMPLETION );
+	return tcpx_rma_inject_common(ep, buf, len, dest_addr,
+				      data, addr, key,
+				      FI_INJECT | FI_REMOTE_CQ_DATA);
 }
 
 struct fi_ops_rma tcpx_rma_ops = {
