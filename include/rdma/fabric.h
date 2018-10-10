@@ -111,6 +111,7 @@ struct fid_ep;
 struct fid_pep;
 struct fid_stx;
 struct fid_mr;
+struct fid_nic;
 
 typedef struct fid *fid_t;
 
@@ -402,6 +403,7 @@ struct fi_info {
 	struct fi_ep_attr	*ep_attr;
 	struct fi_domain_attr	*domain_attr;
 	struct fi_fabric_attr	*fabric_attr;
+	struct fid_nic		*nic;
 };
 
 struct fi_device_attr {

@@ -514,12 +514,13 @@ int ofi_nic_close(struct fid *fid)
 
 int ofi_nic_control(struct fid *fid, int command, void *arg)
 {
-	struct fid_nic **nic = (struct fid_nic **) arg;
+	struct fid_nic *nic = container_of(fid, struct fid_nic, fid);
+	struct fid_nic **dup = (struct fid_nic **) arg;
 
 	switch(command) {
 	case FI_DUP:
-		*nic = ofi_nic_dup(*nic);
-		return *nic ? FI_SUCCESS : -FI_ENOMEM;
+		*dup = ofi_nic_dup(nic);
+		return *dup ? FI_SUCCESS : -FI_ENOMEM;
 	default:
 		return -FI_ENOSYS;
 	}
@@ -529,6 +530,7 @@ struct fi_ops default_nic_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = ofi_nic_close,
 	.control = ofi_nic_control,
+	.tostr = ofi_nic_tostr,
 };
 
 static int ofi_dup_dev_attr(const struct fi_device_attr *attr,
@@ -653,6 +655,10 @@ void DEFAULT_SYMVER_PRE(fi_freeinfo)(struct fi_info *info)
 			free(info->fabric_attr->name);
 			free(info->fabric_attr->prov_name);
 			free(info->fabric_attr);
+		}
+		if (info->nic &&
+		    FI_CHECK_OP(info->nic->fid.ops, struct fi_ops, close)) {
+			fi_close(&info->nic->fid);
 		}
 		free(info);
 	}
@@ -914,6 +920,7 @@ __attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 struct fi_info *DEFAULT_SYMVER_PRE(fi_dupinfo)(const struct fi_info *info)
 {
 	struct fi_info *dup;
+	int ret;
 
 	if (!info)
 		return ofi_allocinfo_internal();
@@ -1001,6 +1008,13 @@ struct fi_info *DEFAULT_SYMVER_PRE(fi_dupinfo)(const struct fi_info *info)
 				goto fail;
 		}
 	}
+
+	if (info->nic) {
+		ret = fi_control(&info->nic->fid, FI_DUP, &dup->nic);
+		if (ret && ret != -FI_ENOSYS)
+			goto fail;
+	}
+
 	return dup;
 
 fail:
@@ -1048,7 +1062,7 @@ int DEFAULT_SYMVER_PRE(fi_fabric)(struct fi_fabric_attr *attr,
 
 	return ret;
 }
-CURRENT_SYMVER(fi_fabric_, fi_fabric);
+DEFAULT_SYMVER(fi_fabric_, fi_fabric, FABRIC_1.1);
 
 __attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 uint32_t DEFAULT_SYMVER_PRE(fi_version)(void)

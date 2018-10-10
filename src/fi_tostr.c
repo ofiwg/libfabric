@@ -76,6 +76,10 @@
 	case SYM: { ofi_strcatf(buf, #SYM); break; }
 #define IFFLAGSTR(flags, SYM) \
 	do { if (flags & SYM) ofi_strcatf(buf, #SYM ", "); } while(0)
+#define CASEENUMSTRN(SYM, N) \
+	case SYM: { ofi_strncatf(buf, N, #SYM); break; }
+#define IFFLAGSTRN(flags, SYM, N) \
+	do { if (flags & SYM) ofi_strncatf(buf, N, #SYM ", "); } while(0)
 
 static void ofi_remove_comma(char *buffer)
 {
@@ -86,20 +90,23 @@ static void ofi_remove_comma(char *buffer)
 		buffer[sz-2] = '\0';
 }
 
-static void ofi_strcatf(char *dest, const char *fmt, ...)
+static void ofi_strncatf(char *dest, size_t n, const char *fmt, ...)
 {
-	size_t len = strnlen(dest,OFI_BUFSIZ);
+	size_t len = strnlen(dest, n);
 	va_list arglist;
 
-	va_start (arglist, fmt);
-	vsnprintf(&dest[len], OFI_BUFSIZ - 1 - len, fmt, arglist);
-	va_end (arglist);
+	va_start(arglist, fmt);
+	vsnprintf(&dest[len], n - 1 - len, fmt, arglist);
+	va_end(arglist);
 }
 
-static void ofi_tostr_fid(char *buf, const struct fid *fid)
+#define ofi_strcatf(dest, ...) \
+	ofi_strncatf(dest, OFI_BUFSIZ, __VA_ARGS__)
+
+static void ofi_tostr_fid(const char *label, char *buf, const struct fid *fid)
 {
 	if (!fid || !FI_CHECK_OP(fid->ops, struct fi_ops, tostr))
-		ofi_strcatf(buf, "%p\n", fid);
+		ofi_strcatf(buf, "%s%p\n", label, fid);
 	else
 		fid->ops->tostr(fid, buf, OFI_BUFSIZ - strnlen(buf, OFI_BUFSIZ));
 }
@@ -537,6 +544,110 @@ static void ofi_tostr_fabric_attr(char *buf, const struct fi_fabric_attr *attr,
 		FI_MAJOR(attr->api_version), FI_MINOR(attr->api_version));
 }
 
+static void ofi_tostr_device_attr(char *buf, size_t len,
+				  const struct fi_device_attr *attr)
+{
+	const char *prefix = TAB TAB;
+
+	ofi_strncatf(buf, len, "%sfi_device_attr:\n", prefix);
+
+	prefix = TAB TAB TAB;
+	ofi_strncatf(buf, len, "%sname: %s\n", prefix, attr->name);
+	ofi_strncatf(buf, len, "%sdevice_id: %s\n", prefix, attr->device_id);
+	ofi_strncatf(buf, len, "%sdevice_version: %s\n", prefix,
+		     attr->device_version);
+	ofi_strncatf(buf, len, "%svendor_id: %s\n", prefix, attr->vendor_id);
+	ofi_strncatf(buf, len, "%sdriver: %s\n", prefix, attr->driver);
+	ofi_strncatf(buf, len, "%sfirmware: %s\n", prefix, attr->firmware);
+}
+
+static void ofi_tostr_pci_attr(char *buf, size_t len,
+			       const struct fi_pci_attr *attr)
+{
+	const char *prefix = TAB TAB TAB;
+
+	ofi_strncatf(buf, len, "%sfi_pci_attr:\n", prefix);
+
+	prefix = TAB TAB TAB TAB;
+	ofi_strncatf(buf, len, "%sdomain_id: %u\n", prefix, attr->domain_id);
+	ofi_strncatf(buf, len, "%sbus_id: %u\n", prefix, attr->bus_id);
+	ofi_strncatf(buf, len, "%sdevice_id: %u\n", prefix, attr->device_id);
+	ofi_strncatf(buf, len, "%sfunction_id: %u\n", prefix, attr->function_id);
+}
+
+static void ofi_tostr_bus_type(char *buf, size_t len, int type)
+{
+	switch (type) {
+	CASEENUMSTRN(FI_BUS_UNKNOWN, len);
+	CASEENUMSTRN(FI_BUS_PCI, len);
+	default:
+		ofi_strncatf(buf, len, "Unknown");
+		break;
+	}
+}
+
+static void ofi_tostr_bus_attr(char *buf, size_t len,
+			       const struct fi_bus_attr *attr)
+{
+	const char *prefix = TAB TAB;
+
+	ofi_strncatf(buf, len, "%sfi_bus_attr:\n", prefix);
+
+	prefix = TAB TAB TAB;
+	ofi_strncatf(buf, len, "%sfi_bus_type: ", prefix);
+	ofi_tostr_bus_type(buf, len, attr->bus_type);
+	ofi_strncatf(buf, len, "\n");
+
+	switch (attr->bus_type) {
+	case FI_BUS_PCI:
+		ofi_tostr_pci_attr(buf, len, &attr->attr.pci);
+		break;
+	default:
+		break;
+	}
+}
+
+static void ofi_tostr_link_state(char *buf, size_t len, int state)
+{
+	switch (state) {
+	CASEENUMSTRN(FI_LINK_UNKNOWN, len);
+	CASEENUMSTRN(FI_LINK_DOWN, len);
+	CASEENUMSTRN(FI_LINK_UP, len);
+	default:
+		ofi_strncatf(buf, len, "Unknown");
+		break;
+	}
+}
+
+static void ofi_tostr_link_attr(char *buf, size_t len,
+				const struct fi_link_attr *attr)
+{
+	const char *prefix = TAB TAB;
+	ofi_strncatf(buf, len, "%sfi_link_attr:\n", prefix);
+
+	prefix = TAB TAB TAB;
+	ofi_strncatf(buf, len, "%saddress: %s\n", prefix, attr->address);
+	ofi_strncatf(buf, len, "%smtu: %zu\n", prefix, attr->mtu);
+	ofi_strncatf(buf, len, "%sspeed: %zu\n", prefix, attr->speed);
+	ofi_strncatf(buf, len, "%sstate: ", prefix);
+	ofi_tostr_link_state(buf, len, attr->state);
+	ofi_strncatf(buf, len, "\n%snetwork_type: %s\n", prefix,
+		     attr->network_type);
+}
+
+int ofi_nic_tostr(const struct fid *fid_nic, char *buf, size_t len)
+{
+	const struct fid_nic *nic = (const struct fid_nic*) fid_nic;
+
+	assert(fid_nic->fclass == FI_CLASS_NIC);
+	ofi_strncatf(buf, len, "%sfid_nic:\n", TAB);
+
+	ofi_tostr_device_attr(buf, len, nic->device_attr);
+	ofi_tostr_bus_attr(buf, len, nic->bus_attr);
+	ofi_tostr_link_attr(buf, len, nic->link_attr);
+	return 0;
+}
+
 static void ofi_tostr_info(char *buf, const struct fi_info *info)
 {
 	ofi_strcatf(buf, "fi_info:\n");
@@ -560,14 +671,14 @@ static void ofi_tostr_info(char *buf, const struct fi_info *info)
 	ofi_strcatf(buf, "%sdest_addr: ", TAB);
 	ofi_tostr_addr(buf, info->addr_format, info->dest_addr);
 	ofi_strcatf(buf, "\n");
-	ofi_strcatf(buf, "%shandle: ", TAB);
-	ofi_tostr_fid(buf, info->handle);
+	ofi_tostr_fid(TAB "handle: ", buf, info->handle);
 
 	ofi_tostr_tx_attr(buf, info->tx_attr, TAB);
 	ofi_tostr_rx_attr(buf, info->rx_attr, TAB);
 	ofi_tostr_ep_attr(buf, info->ep_attr, TAB);
 	ofi_tostr_domain_attr(buf, info->domain_attr, TAB);
 	ofi_tostr_fabric_attr(buf, info->fabric_attr, TAB);
+	ofi_tostr_fid(TAB "nic_fid: ", buf, &info->nic->fid);
 }
 
 static void ofi_tostr_atomic_type(char *buf, enum fi_datatype type)
@@ -755,7 +866,7 @@ char *DEFAULT_SYMVER_PRE(fi_tostr)(const void *data, enum fi_type datatype)
 		ofi_tostr_op_type(buf, *enumval);
 		break;
 	case FI_TYPE_FID:
-		ofi_tostr_fid(buf, data);
+		ofi_tostr_fid("fid: ", buf, data);
 		break;
 	default:
 		ofi_strcatf(buf, "Unknown type");
