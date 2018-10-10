@@ -74,11 +74,26 @@ static int ofi_find_name(char **names, const char *name)
 	return -1;
 }
 
-static int ofi_is_util_prov(const struct fi_provider *provider)
+static enum ofi_prov_type ofi_prov_type(const struct fi_provider *provider)
 {
 	const struct fi_prov_context *ctx;
 	ctx = (const struct fi_prov_context *) &provider->context;
-	return ctx->is_util_prov;
+	return ctx->type;
+}
+
+static int ofi_is_util_prov(const struct fi_provider *provider)
+{
+	return ofi_prov_type(provider) == OFI_PROV_UTIL;
+}
+
+static int ofi_is_core_prov(const struct fi_provider *provider)
+{
+	return ofi_prov_type(provider) == OFI_PROV_CORE;
+}
+
+static int ofi_is_hook_prov(const struct fi_provider *provider)
+{
+	return ofi_prov_type(provider) == OFI_PROV_HOOK;
 }
 
 int ofi_apply_filter(struct fi_filter *filter, const char *name)
@@ -92,14 +107,15 @@ int ofi_apply_filter(struct fi_filter *filter, const char *name)
 	return 0;
 }
 
-/*
- * Utility providers may be disabled, but do not need to be explicitly
- * enabled.  This allows them to always be available when only a core
- * provider is enabled.
- */
 static int ofi_getinfo_filter(const struct fi_provider *provider)
 {
-	if (!prov_filter.negated && ofi_is_util_prov(provider))
+	/* Positive filters only apply to core providers.  They must be
+	 * explicitly enabled by the filter.  Other providers (i.e. utility)
+	 * are automatically enabled in this case, so that they can work
+	 * over any enabled core filter.  Negative filters may be used
+	 * to disable any provider.
+	 */
+	if (!prov_filter.negated && !ofi_is_core_prov(provider))
 		return 0;
 
 	return ofi_apply_filter(&prov_filter, provider->name);
@@ -182,6 +198,17 @@ static void ofi_ordered_provs_init(void)
 		ofi_create_prov_entry(ordered_prov_names[i]);
 }
 
+static void ofi_set_prov_type(struct fi_prov_context *ctx,
+			      struct fi_provider *provider)
+{
+	if (!provider->getinfo)
+		ctx->type = OFI_PROV_HOOK;
+	else if (ofi_has_util_prefix(provider->name))
+		ctx->type = OFI_PROV_UTIL;
+	else
+		ctx->type = OFI_PROV_CORE;
+}
+
 static int ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 {
 	struct fi_prov_context *ctx;
@@ -199,7 +226,7 @@ static int ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 	       "registering provider: %s (%d.%d)\n", provider->name,
 	       FI_MAJOR(provider->version), FI_MINOR(provider->version));
 
-	if (!provider->getinfo || !provider->fabric) {
+	if (!provider->fabric) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"provider missing mandatory entry points\n");
 		ret = -FI_EINVAL;
@@ -223,7 +250,7 @@ static int ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 	}
 
 	ctx = (struct fi_prov_context *) &provider->context;
-	ctx->is_util_prov = ofi_has_util_prefix(provider->name);
+	ofi_set_prov_type(ctx, provider);
 
 	if (ofi_getinfo_filter(provider)) {
 		FI_INFO(&core_prov, FI_LOG_CORE,
@@ -722,7 +749,7 @@ static void ofi_set_prov_attr(struct fi_fabric_attr *attr,
 		attr->prov_name = ofi_strdup_append(core_name, prov->name);
 		free(core_name);
 	} else {
-		assert(!ofi_is_util_prov(prov));
+		assert(ofi_is_core_prov(prov));
 		attr->prov_name = strdup(prov->name);
 	}
 	attr->prov_version = prov->version;
@@ -765,9 +792,9 @@ static int ofi_layering_ok(const struct fi_provider *provider,
 
 	if (flags & OFI_CORE_PROV_ONLY) {
 		assert((count == 1) || (count == 0));
-		if (ofi_is_util_prov(provider)) {
+		if (!ofi_is_core_prov(provider)) {
 			FI_INFO(&core_prov, FI_LOG_CORE,
-				"Need core provider, skipping util %s\n",
+				"Need core provider, skipping %s\n",
 				provider->name);
 			return 0;
 		}
@@ -782,7 +809,7 @@ static int ofi_layering_ok(const struct fi_provider *provider,
 	if (!count)
 		return 1;
 
-	/* To maintain backward compatibility with the previous behaviour of
+	/* To maintain backward compatibility with the previous behavior of
 	 * ofi_layering_ok we need to check if the # of providers is two or
 	 * fewer. In such a case, we have to be agnostic to the ordering of
 	 * core and utility providers */
@@ -842,7 +869,7 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 
 	*info = tail = NULL;
 	for (prov = prov_head; prov; prov = prov->next) {
-		if (!prov->provider)
+		if (!prov->provider || !prov->provider->getinfo)
 			continue;
 
 		if (!ofi_layering_ok(prov->provider, prov_vec, count, flags))

@@ -101,10 +101,16 @@ enum {
 int ofi_cpu_supports(unsigned func, unsigned reg, unsigned bit);
 
 
-/* Restrict to size of struct fi_context */
+enum ofi_prov_type {
+	OFI_PROV_CORE,
+	OFI_PROV_UTIL,
+	OFI_PROV_HOOK,
+};
+
+/* Restrict to size of struct fi_provider::context (struct fi_context) */
 struct fi_prov_context {
+	enum ofi_prov_type type;
 	int disable_logging;
-	int is_util_prov;
 };
 
 struct fi_filter {
