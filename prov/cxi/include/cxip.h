@@ -56,7 +56,7 @@
 #define CXIP_EP_RX_SZ (256)
 #define CXIP_EP_MIN_MULTI_RECV (64)
 #define CXIP_EP_MAX_ATOMIC_SZ (4096)
-#define CXIP_EP_MAX_CTX_BITS (16)
+#define CXIP_EP_MAX_CTX_BITS (4)
 #define CXIP_EP_MSG_PREFIX_SZ (0)
 #define CXIP_DOMAIN_MR_CNT (65535)
 #define CXIP_DOMAIN_CAPS_FLAGS (FI_LOCAL_COMM | FI_REMOTE_COMM)
@@ -175,11 +175,10 @@ struct cxip_addr {
  * 239 MR slots
  *   1 Rendesvous Send slot
  */
-#define	CXIP_ADDR_IDX_CNT	(2^CXIP_ADDR_IDX_BITS)
-#define	CXIP_ADDR_RX_IDX_CNT	16
-#define	CXIP_ADDR_MR_IDX_CNT	(CXIP_ADDR_IDX_CNT - CXIP_ADDR_RX_IDX_CNT - 1)
+#define	CXIP_EP_MAX_IDX_CNT	(2^CXIP_ADDR_IDX_BITS)
+#define	CXIP_EP_MAX_MR_CNT	(CXIP_EP_MAX_IDX_CNT - CXIP_EP_MAX_RX_CNT - 1)
 
-#define CXIP_ADDR_MR_IDX(pid_granule, key) (CXIP_ADDR_RX_IDX_CNT + (key))
+#define CXIP_ADDR_MR_IDX(pid_granule, key) (CXIP_EP_MAX_RX_CNT + (key))
 #define CXIP_ADDR_RX_IDX(pid_granule, rx_id) (rx_id)
 
 // TODO: comments are not yet complete, and may not be entirely correct
@@ -555,7 +554,7 @@ struct cxip_oflow_buf {
 struct cxip_rx_ctx {
 	struct fid_ep ctx;
 
-	uint16_t rx_id;			// EP index
+	uint16_t rx_id;			// SEP index
 	int enabled;
 	int progress;			// TODO: remove, unused
 	int recv_cq_event;		// TODO: remove, unused
@@ -647,7 +646,7 @@ struct cxip_ep_obj {
 
 	int tx_shared;
 	int rx_shared;
-	size_t buffered_len;
+	size_t buffered_len;		// TODO: remove (unused)
 	size_t min_multi_recv;
 
 	ofi_atomic32_t ref;
@@ -669,10 +668,10 @@ struct cxip_ep_obj {
 	struct dlist_entry rx_ctx_entry;
 	struct dlist_entry tx_ctx_entry;
 
-	struct fi_info info;
+	struct fi_info info;		// TODO: remove (unused)
 	struct fi_ep_attr ep_attr;
 
-	enum fi_ep_type ep_type;
+	enum fi_ep_type ep_type;	// TODO: remove (unused)
 
 	int is_enabled;
 	fastlock_t lock;
@@ -760,8 +759,8 @@ struct cxip_av {
 	struct cxip_domain *domain;	// parent domain
 	ofi_atomic32_t ref;
 	struct fi_av_attr attr;		// copy of user attributes
-	uint64_t mask;			// mask of rx_ctx_bits LSBits set
-	int rx_ctx_bits;		// relevant address bits
+	uint64_t mask;			// mask with rx_ctx_bits MSbits clear
+	int rx_ctx_bits;		// address bits needed for SEP RXs
 	socklen_t addrlen;		// size of struct cxip_addr
 	struct cxip_eq *eq;		// event queue
 	struct cxip_av_table_hdr *table_hdr;

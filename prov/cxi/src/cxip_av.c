@@ -624,8 +624,7 @@ int cxip_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 
 	av->rx_ctx_bits = av->attr.rx_ctx_bits;
 	av->mask = av->attr.rx_ctx_bits ?
-			   ((uint64_t)1 << (64 - av->attr.rx_ctx_bits)) - 1 :
-			   ~0;
+		((uint64_t)1 << (64 - av->attr.rx_ctx_bits)) - 1 : ~0;
 
 	dlist_init(&av->ep_list);
 	fastlock_init(&av->list_lock);

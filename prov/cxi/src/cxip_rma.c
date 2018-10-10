@@ -86,9 +86,9 @@ static ssize_t _cxip_rma_op(enum cxip_rma_op op, struct fid_ep *ep,
 		return -FI_ENOSYS;
 	}
 
-	if (rma[0].key >= CXIP_ADDR_MR_IDX_CNT) {
+	if (rma[0].key >= CXIP_EP_MAX_MR_CNT) {
 		CXIP_LOG_DBG("rma key = %lu, must be < %d\n", rma[0].key,
-			     CXIP_ADDR_MR_IDX_CNT);
+			     CXIP_EP_MAX_MR_CNT);
 		return -FI_EINVAL;
 	}
 

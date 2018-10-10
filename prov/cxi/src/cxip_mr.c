@@ -382,7 +382,7 @@ static int cxip_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	if (fid->fclass != FI_CLASS_DOMAIN || !attr || attr->iov_count <= 0)
 		return -FI_EINVAL;
 
-	if (attr->requested_key >= CXIP_ADDR_MR_IDX_CNT)
+	if (attr->requested_key >= CXIP_EP_MAX_MR_CNT)
 		return -FI_EINVAL;
 
 	/* Only support length 1 IOVs for now */
