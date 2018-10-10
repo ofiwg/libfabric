@@ -352,7 +352,8 @@ int rxm_cmap_process_connreq(struct rxm_cmap *cmap, void *addr,
 			     enum rxm_cmap_reject_flag *cm_reject_flag)
 {
 	struct rxm_cmap_handle *handle;
-	int ret = 0, index, cmp;
+	int ret = 0, cmp;
+	fi_addr_t fi_addr = ofi_ip_av_get_fi_addr(cmap->av, addr);
 
 	/* Reset flag to initial state */
 	*cm_reject_flag = RXM_CMAP_REJECT_GENUINE;
@@ -360,23 +361,21 @@ int rxm_cmap_process_connreq(struct rxm_cmap *cmap, void *addr,
 	ofi_straddr_dbg(cmap->av->prov, FI_LOG_EP_CTRL,
 			"Processing connreq for addr", addr);
 
-	index = ip_av_get_index(cmap->av, addr);
-
 	cmap->acquire(&cmap->lock);
-	if (index < 0)
+	if (fi_addr == FI_ADDR_NOTAVAIL)
 		handle = rxm_cmap_get_handle_peer(cmap, addr);
 	else
-		handle = rxm_cmap_acquire_handle(cmap, (fi_addr_t)index);
+		handle = rxm_cmap_acquire_handle(cmap, fi_addr);
 
 	if (!handle) {
-		if (index < 0)
+		if (fi_addr == FI_ADDR_NOTAVAIL)
 			ret = rxm_cmap_alloc_handle_peer(cmap, addr,
-							  RXM_CMAP_CONNREQ_RECV,
-							  &handle);
+							 RXM_CMAP_CONNREQ_RECV,
+							 &handle);
 		else
-			ret = rxm_cmap_alloc_handle(cmap, (fi_addr_t)index,
-						     RXM_CMAP_CONNREQ_RECV,
-						     &handle);
+			ret = rxm_cmap_alloc_handle(cmap, fi_addr,
+						    RXM_CMAP_CONNREQ_RECV,
+						    &handle);
 		if (ret)
 			goto unlock;
 	}
@@ -417,8 +416,8 @@ int rxm_cmap_process_connreq(struct rxm_cmap *cmap, void *addr,
 							  &handle);
 			if (ret)
 				goto unlock;
-			assert(index >= 0 && index != FI_ADDR_NOTAVAIL);
-			handle->fi_addr = index;
+			assert(fi_addr != FI_ADDR_NOTAVAIL);
+			handle->fi_addr = fi_addr;
 		}
 		/* Fall through */
 	case RXM_CMAP_IDLE:

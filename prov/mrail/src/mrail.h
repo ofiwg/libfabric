@@ -180,7 +180,6 @@ struct mrail_av {
 	struct fid_av **avs;
 	size_t *rail_addrlen;
 	size_t num_avs;
-	ofi_atomic32_t index;
 };
 
 struct mrail_peer_info {

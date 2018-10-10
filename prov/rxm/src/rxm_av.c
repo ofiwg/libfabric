@@ -180,7 +180,7 @@ int rxm_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 {
 	int ret;
 
-	ret = ip_av_create_flags(domain_fid, attr, av, context, OFI_AV_HASH);
+	ret = ofi_ip_av_create(domain_fid, attr, av, context);
 	if (ret)
 		return ret;
 
