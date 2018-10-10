@@ -115,7 +115,7 @@ done:
 
 	if (ntohl(tx_entry->msg_hdr.hdr.flags) &
 	    (OFI_DELIVERY_COMPLETE | OFI_COMMIT_COMPLETE)) {
-		tx_entry->flags &= ~TCPX_NO_COMPLETION;
+		tx_entry->flags |= FI_COMPLETION;
 		slist_insert_tail(&tx_entry->entry,
 				  &tx_entry->ep->tx_rsp_pend_queue);
 		return;
@@ -145,7 +145,7 @@ static int tcpx_prepare_rx_entry_resp(struct tcpx_xfer_entry *rx_entry)
 	resp_entry->msg_hdr.hdr.op = ofi_op_msg;
 	resp_entry->msg_hdr.hdr.size = htonll(sizeof(resp_entry->msg_hdr));
 
-	resp_entry->flags |= TCPX_NO_COMPLETION;
+	resp_entry->flags = 0;
 	resp_entry->context = NULL;
 	resp_entry->done_len = 0;
 	resp_entry->ep = rx_entry->ep;
@@ -251,7 +251,7 @@ static int tcpx_prepare_rx_write_resp(struct tcpx_xfer_entry *rx_entry)
 	resp_entry->msg_hdr.hdr.op = ofi_op_msg;
 	resp_entry->msg_hdr.hdr.size = htonll(sizeof(resp_entry->msg_hdr));
 
-	resp_entry->flags |= TCPX_NO_COMPLETION;
+	resp_entry->flags &= ~FI_COMPLETION;
 	resp_entry->context = NULL;
 	resp_entry->done_len = 0;
 	resp_entry->ep = rx_entry->ep;
@@ -380,7 +380,7 @@ static int tcpx_prepare_rx_remote_read_resp(struct tcpx_xfer_entry *resp_entry)
 	resp_entry->msg_hdr.hdr.size =
 		htonll(resp_entry->msg_hdr.hdr.size);
 
-	resp_entry->flags |= TCPX_NO_COMPLETION;
+	resp_entry->flags &= ~FI_COMPLETION;
 	resp_entry->context = NULL;
 	resp_entry->done_len = 0;
 
@@ -455,6 +455,7 @@ int tcpx_get_rx_entry_op_msg(struct tcpx_ep *tcpx_ep)
 
 		entry = slist_remove_head(&tcpx_ep->srx_ctx->rx_queue);
 		fastlock_release(&tcpx_ep->srx_ctx->lock);
+
 	} else {
 		if (slist_empty(&tcpx_ep->rx_queue))
 			return -FI_EAGAIN;
@@ -470,6 +471,8 @@ int tcpx_get_rx_entry_op_msg(struct tcpx_ep *tcpx_ep)
 	rx_entry->ep = tcpx_ep;
 	rx_entry->msg_hdr.hdr.op_data = TCPX_OP_MSG_RECV;
 	rx_entry->done_len = sizeof(rx_detect->hdr);
+	if (tcpx_ep->srx_ctx)
+		rx_entry->flags |= tcpx_ep->util_ep.rx_op_flags & FI_COMPLETION;
 
 	if (ntohl(rx_detect->hdr.hdr.flags) & OFI_REMOTE_CQ_DATA)
 		rx_entry->flags |= FI_REMOTE_CQ_DATA;
@@ -537,12 +540,10 @@ int tcpx_get_rx_entry_op_write(struct tcpx_ep *tcpx_ep)
 	if (!rx_entry)
 		return -FI_EAGAIN;
 
-	if (ntohl(tcpx_ep->rx_detect.hdr.hdr.flags) & OFI_REMOTE_CQ_DATA) {
-		rx_entry->flags |= (FI_REMOTE_CQ_DATA | FI_REMOTE_WRITE);
-
-	} else {
-		rx_entry->flags = TCPX_NO_COMPLETION;
-	}
+	rx_entry->flags = 0;
+	if (ntohl(tcpx_ep->rx_detect.hdr.hdr.flags) & OFI_REMOTE_CQ_DATA)
+		rx_entry->flags = (FI_COMPLETION |
+				   FI_REMOTE_CQ_DATA | FI_REMOTE_WRITE);
 
 	rx_entry->msg_hdr = tcpx_ep->rx_detect.hdr;
 	rx_entry->msg_hdr.hdr.op_data = TCPX_OP_REMOTE_WRITE;
