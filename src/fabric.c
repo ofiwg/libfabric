@@ -134,6 +134,38 @@ static struct ofi_prov *ofi_getprov(const char *prov_name, size_t len)
 	return NULL;
 }
 
+struct fi_provider *ofi_get_hook(const char *name)
+{
+	struct ofi_prov *prov;
+	struct fi_provider *provider = NULL;
+	char *try_name = NULL;
+	int ret;
+
+	prov = ofi_getprov(name, strlen(name));
+	if (!prov) {
+		ret = asprintf(&try_name, "ofi_%s_hook", name);
+		if (ret > 0)
+			prov = ofi_getprov(try_name, ret);
+		else
+			try_name = NULL;
+	}
+
+	if (prov) {
+		if (ofi_is_hook_prov(prov->provider)) {
+			provider = prov->provider;
+		} else {
+			FI_WARN(&core_prov, FI_LOG_CORE,
+				"Specified provider is not a hook: %s\n", name);
+		}
+	} else {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"No hook found for: %s\n", name);
+	}
+
+	free(try_name);
+	return provider;
+}
+
 static void cleanup_provider(struct fi_provider *provider, void *dlhandle)
 {
 	OFI_UNUSED(dlhandle);
@@ -183,15 +215,23 @@ static struct ofi_prov *ofi_create_prov_entry(const char *prov_name)
  */
 static void ofi_ordered_provs_init(void)
 {
-	char *ordered_prov_names[] =
-			{"psm2", "psm", "usnic", "mlx", "gni",
-			 "bgq", "netdir", "ofi_rxm", "ofi_rxd", "verbs",
-			/* Initialize the socket(s) provider last.  This will result in
-			 * it being the least preferred provider. */
+	char *ordered_prov_names[] = {
+		"psm2", "psm", "usnic", "mlx", "gni",
+		"bgq", "netdir", "ofi_rxm", "ofi_rxd", "verbs",
+		/* Initialize the socket based providers last of the
+		 * standard providers.  This will result in them being
+		 * the least preferred providers.
+		 */
 
-			/* Before you add ANYTHING here, read the comment above!!! */
-			"UDP", "sockets", "tcp" /* NOTHING GOES HERE! */};
-			/* Seriously, read it! */
+		/* Before you add ANYTHING here, read the comment above!!! */
+		"UDP", "sockets", "tcp", /* NOTHING GOES HERE! */
+		/* Seriously, read it! */
+
+		/* These are hooking providers only.  Their order
+		 * doesn't matter
+		 */
+		"ofi_perf_hook", "ofi_noop_hook",
+	};
 	int num_provs = sizeof(ordered_prov_names)/sizeof(ordered_prov_names[0]), i;
 
 	for (i = 0; i < num_provs; i++)
@@ -480,6 +520,9 @@ libdl_done:
 	ofi_register_provider(UDP_INIT, NULL);
 	ofi_register_provider(SOCKETS_INIT, NULL);
 	ofi_register_provider(TCP_INIT, NULL);
+
+	ofi_register_provider(PERF_HOOK_INIT, NULL);
+	ofi_register_provider(NOOP_HOOK_INIT, NULL);
 
 	ofi_init = 1;
 
