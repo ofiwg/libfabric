@@ -189,6 +189,8 @@ extern struct fi_eq_attr eq_attr;
 extern struct fi_cq_attr cq_attr;
 extern struct fi_cntr_attr cntr_attr;
 
+extern struct fi_rma_iov remote;
+
 extern char test_name[50];
 extern struct timespec start, end;
 extern struct ft_opts opts;

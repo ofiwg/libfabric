@@ -109,6 +109,8 @@ struct fi_cntr_attr cntr_attr = {
 	.wait_obj = FI_WAIT_NONE
 };
 
+struct fi_rma_iov remote;
+
 struct ft_opts opts;
 
 struct test_size_param test_size[] = {
@@ -1197,10 +1199,104 @@ int ft_init_av_addr(struct fid_av *av_ptr, struct fid_ep *ep_ptr,
 	return 0;
 }
 
+int ft_exchange_raw_keys(struct fi_rma_iov *peer_iov)
+{
+	struct fi_rma_iov *rma_iov;
+	size_t key_size;
+	size_t len;
+	uint64_t addr;
+	int ret;
+
+	/* Get key size */
+	key_size = 0;
+	ret = fi_mr_raw_attr(mr, &addr, NULL, &key_size, 0);
+	if (ret != -FI_ETOOSMALL) {
+		return ret;
+	}
+
+	len = sizeof(*rma_iov) + key_size - sizeof(rma_iov->key);
+	/* TODO: make sure this fits in tx_buf and rx_buf */
+
+	if (opts.dst_addr) {
+		rma_iov = (struct fi_rma_iov *) (tx_buf + ft_tx_prefix_size());
+		if ((fi->domain_attr->mr_mode == FI_MR_BASIC) ||
+		    (fi->domain_attr->mr_mode & FI_MR_VIRT_ADDR)) {
+			rma_iov->addr = (uintptr_t) rx_buf + ft_rx_prefix_size();
+		} else {
+			rma_iov->addr = 0;
+		}
+
+		/* Get raw attributes */
+		ret = fi_mr_raw_attr(mr, &addr, (uint8_t *) &rma_iov->key,
+				&key_size, 0);
+		if (ret)
+			return ret;
+
+               ret = ft_tx(ep, remote_fi_addr, len, &tx_ctx);
+		if (ret)
+			return ret;
+
+		ret = ft_get_rx_comp(rx_seq);
+		if (ret)
+			return ret;
+
+		rma_iov = (struct fi_rma_iov *) (rx_buf + ft_rx_prefix_size());
+		peer_iov->addr 	= rma_iov->addr;
+		peer_iov->len 	= rma_iov->len;
+		/* Map remote mr raw locally */
+		ret = fi_mr_map_raw(domain, rma_iov->addr,
+				(uint8_t *) &rma_iov->key, key_size,
+				&peer_iov->key, 0);
+		if (ret)
+			return ret;
+
+		ret = ft_post_rx(ep, rx_size, &rx_ctx);
+	} else {
+		ret = ft_get_rx_comp(rx_seq);
+		if (ret)
+			return ret;
+
+		rma_iov = (struct fi_rma_iov *) (rx_buf + ft_rx_prefix_size());
+		peer_iov->addr 	= rma_iov->addr;
+		peer_iov->len 	= rma_iov->len;
+		/* Map remote mr raw locally */
+		ret = fi_mr_map_raw(domain, rma_iov->addr,
+				(uint8_t *) &rma_iov->key, key_size,
+				&peer_iov->key, 0);
+		if (ret)
+			return ret;
+
+		ret = ft_post_rx(ep, rx_size, &rx_ctx);
+		if (ret)
+			return ret;
+
+		rma_iov = (struct fi_rma_iov *) (tx_buf + ft_tx_prefix_size());
+		if ((fi->domain_attr->mr_mode == FI_MR_BASIC) ||
+		    (fi->domain_attr->mr_mode & FI_MR_VIRT_ADDR)) {
+			rma_iov->addr = (uintptr_t) rx_buf + ft_rx_prefix_size();
+		} else {
+			rma_iov->addr = 0;
+		}
+
+		/* Get raw attributes */
+		ret = fi_mr_raw_attr(mr, &addr, (uint8_t *) &rma_iov->key,
+				&key_size, 0);
+		if (ret)
+			return ret;
+
+		ret = ft_tx(ep, remote_fi_addr, len, &tx_ctx);
+	}
+
+	return ret;
+}
+
 int ft_exchange_keys(struct fi_rma_iov *peer_iov)
 {
 	struct fi_rma_iov *rma_iov;
 	int ret;
+
+	if (fi->domain_attr->mr_mode & FI_MR_RAW)
+		return ft_exchange_raw_keys(peer_iov);
 
 	if (opts.dst_addr) {
 		rma_iov = (struct fi_rma_iov *) (tx_buf + ft_tx_prefix_size());
@@ -2386,6 +2482,14 @@ int ft_finalize_ep(struct fid_ep *ep)
 
 int ft_finalize(void)
 {
+	int ret;
+
+	if (fi->domain_attr->mr_mode & FI_MR_RAW) {
+		ret = fi_mr_unmap_key(domain, remote.key);
+		if (ret)
+			return ret;
+	}
+
 	return ft_finalize_ep(ep);
 }
 
