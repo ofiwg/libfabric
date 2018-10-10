@@ -843,8 +843,6 @@ rxm_ep_normal_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		else
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 				"fi_send for MSG provider failed\n");
-		rxm_tx_buf_release(rxm_ep, tx_entry->tx_buf);
-		rxm_tx_entry_release(&rxm_ep->send_queue, tx_entry);
 	}
 	return ret;
 }
@@ -938,6 +936,7 @@ void rxm_ep_handle_postponed_tx_op(struct rxm_ep *rxm_ep,
 				   struct rxm_tx_entry *tx_entry)
 {
 	size_t tx_size = rxm_pkt_size + tx_entry->tx_buf->pkt.hdr.size;
+	int ret;
 
 	tx_entry->tx_buf->pkt.ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
 	FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
@@ -958,7 +957,11 @@ void rxm_ep_handle_postponed_tx_op(struct rxm_ep *rxm_ep,
 					  rxm_pkt_size + sizeof(*rma_iov) +
 					  sizeof(*rma_iov->iov) * tx_entry->count);
 	} else {
-		(void) rxm_ep_normal_send(rxm_ep, rxm_conn, tx_entry, tx_size);
+		ret = rxm_ep_normal_send(rxm_ep, rxm_conn, tx_entry, tx_size);
+		if (ret) {
+			rxm_tx_buf_release(rxm_ep, tx_entry->tx_buf);
+			rxm_tx_entry_release(&rxm_ep->send_queue, tx_entry);
+		}
 	}
 }
 
@@ -1058,7 +1061,12 @@ cmap_err:
 			return ret;
 		memcpy(tx_buf->pkt.data, buf, tx_buf->pkt.hdr.size);
 		tx_entry->state = RXM_TX;
-		return rxm_ep_normal_send(rxm_ep, rxm_conn, tx_entry, pkt_size);
+		ret = rxm_ep_normal_send(rxm_ep, rxm_conn, tx_entry, pkt_size);
+		if (OFI_UNLIKELY(ret)) {
+			rxm_tx_buf_release(rxm_ep, tx_entry->tx_buf);
+			rxm_tx_entry_release(&rxm_ep->send_queue, tx_entry);
+		}
+		return ret;
 	}
 }
 
@@ -1139,7 +1147,12 @@ cmap_err:
 			return ret;
 		}
 		tx_entry->state = RXM_TX;
-		return rxm_ep_normal_send(rxm_ep, rxm_conn, tx_entry, total_len);
+		ret = rxm_ep_normal_send(rxm_ep, rxm_conn, tx_entry, total_len);
+		if (OFI_UNLIKELY(ret)) {
+			rxm_tx_buf_release(rxm_ep, tx_entry->tx_buf);
+			rxm_tx_entry_release(&rxm_ep->send_queue, tx_entry);
+		}
+		return ret;
 	}
 }
 
@@ -1780,7 +1793,8 @@ static int rxm_ep_msg_res_open(struct util_domain *util_domain,
 	}
 	return 0;
 err2:
-	fi_close(&rxm_ep->srx_ctx->fid);
+	if (rxm_ep->srx_ctx)
+		fi_close(&rxm_ep->srx_ctx->fid);
 err1:
 	fi_freeinfo(rxm_ep->msg_info);
 	return ret;
