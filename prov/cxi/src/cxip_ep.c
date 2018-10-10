@@ -31,6 +31,10 @@ extern struct fi_ops_ep cxip_ctx_ep_ops;
 extern const struct fi_domain_attr cxip_domain_attr;
 extern const struct fi_fabric_attr cxip_fabric_attr;
 
+/**
+ * Default attributes for shared TX contexts.
+ *
+ */
 const struct fi_tx_attr cxip_stx_attr = {
 	.caps = CXIP_EP_RDM_CAP_BASE,
 	.mode = CXIP_MODE,
@@ -42,6 +46,10 @@ const struct fi_tx_attr cxip_stx_attr = {
 	.rma_iov_limit = CXIP_EP_MAX_IOV_LIMIT,
 };
 
+/**
+ * Default attributes for shared RX contexts.
+ *
+ */
 const struct fi_rx_attr cxip_srx_attr = {
 	.caps = CXIP_EP_RDM_CAP_BASE,
 	.mode = CXIP_MODE,
@@ -53,6 +61,13 @@ const struct fi_rx_attr cxip_srx_attr = {
 	.iov_limit = CXIP_EP_MAX_IOV_LIMIT,
 };
 
+/**
+ * Close TX context.
+ *
+ * Support TX/RX context fi_close().
+ *
+ * @param tx_ctx : TX context to close
+ */
 static void cxip_tx_ctx_close(struct cxip_tx_ctx *tx_ctx)
 {
 	if (tx_ctx->comp.send_cq)
@@ -68,6 +83,13 @@ static void cxip_tx_ctx_close(struct cxip_tx_ctx *tx_ctx)
 		cxip_cntr_remove_tx_ctx(tx_ctx->comp.write_cntr, tx_ctx);
 }
 
+/**
+ * Close RX context.
+ *
+ * Support TX/RX context fi_close().
+ *
+ * @param rx_ctx : RX context to close
+ */
 static void cxip_rx_ctx_close(struct cxip_rx_ctx *rx_ctx)
 {
 	if (rx_ctx->comp.recv_cq)
@@ -83,6 +105,17 @@ static void cxip_rx_ctx_close(struct cxip_rx_ctx *rx_ctx)
 		cxip_cntr_remove_rx_ctx(rx_ctx->comp.rem_write_cntr, rx_ctx);
 }
 
+/**
+ * Close EP TX/RX context.
+ *
+ * Provider fi_close() implementation for TX/RX contexts.
+ *
+ * This can be used on Scalable EP or Shared contexts.
+ *
+ * @param fid : TX/RX context fid
+ *
+ * @return int : 0 on success, -errno on failure
+ */
 static int cxip_ctx_close(struct fid *fid)
 {
 	struct cxip_tx_ctx *tx_ctx;
@@ -125,6 +158,17 @@ static int cxip_ctx_close(struct fid *fid)
 	return 0;
 }
 
+/**
+ * Bind TX/RX context to CQ.
+ *
+ * Support TX/RX context bind().
+ *
+ * @param fid : TX/RX context fid
+ * @param bfid : CQ fid
+ * @param flags : options
+ *
+ * @return int : 0 on success, -errno on failure
+ */
 static int cxip_ctx_bind_cq(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct cxip_cq *cxi_cq;
@@ -167,6 +211,17 @@ static int cxip_ctx_bind_cq(struct fid *fid, struct fid *bfid, uint64_t flags)
 	return 0;
 }
 
+/**
+ * Bind a TX/RX context to a CNTR.
+ *
+ * Support TX/RX context bind().
+ *
+ * @param fid : TX/RX context fid
+ * @param bfid : CNTR fid
+ * @param flags : options
+ *
+ * @return int : 0 on success, -errno on failure
+ */
 static int cxip_ctx_bind_cntr(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct cxip_cntr *cntr;
@@ -224,6 +279,19 @@ static int cxip_ctx_bind_cntr(struct fid *fid, struct fid *bfid, uint64_t flags)
 	return 0;
 }
 
+/**
+ * Bind TX/RX context to CQ or CNTR.
+ *
+ * Provider bind() implementation for TX/RX contexts.
+ *
+ * This can be used only on Scalable EP contexts.
+ *
+ * @param fid : TX/RX context fid
+ * @param bfid : CQ or CNTR fid
+ * @param flags : options
+ *
+ * @return int : 0 on success, -errno on failure
+ */
 static int cxip_ctx_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	switch (bfid->fclass) {
@@ -242,6 +310,15 @@ static int cxip_ctx_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	}
 }
 
+/**
+ * Enable a TX/RX context.
+ *
+ * Support TX/RX control(FI_ENABLE).
+ *
+ * @param ep
+ : *
+ * @return int : 0 on success, -errno on failure
+ */
 static int cxip_ctx_enable(struct fid_ep *ep)
 {
 	struct cxip_tx_ctx *tx_ctx;
@@ -266,6 +343,17 @@ static int cxip_ctx_enable(struct fid_ep *ep)
 	return -FI_EINVAL;
 }
 
+/**
+ * Get TX/RX option flags.
+ *
+ * Support TX/RX context control(FI_GETOPSFLAG).
+ *
+ * @param tx_attr : TX attributes, or NULL
+ * @param rx_attr : RX attributes, or NULL
+ * @param flags : storage for returned flags
+ *
+ * @return int : 0 on success, -errno on failure
+ */
 int cxip_getopflags(struct fi_tx_attr *tx_attr, struct fi_rx_attr *rx_attr,
 		    uint64_t *flags)
 {
@@ -284,6 +372,17 @@ int cxip_getopflags(struct fi_tx_attr *tx_attr, struct fi_rx_attr *rx_attr,
 	return 0;
 }
 
+/**
+ * Set TX/RX option flags.
+ *
+ * Support TX/RX control(FI_SETOPSFLAG).
+ *
+ * @param tx_attr : TX attributes, or NULL
+ * @param rx_attr : RX attributes, or NULL
+ * @param flags : flags to set
+ *
+ * @return int : 0 on success, -errno on failure
+ */
 int cxip_setopflags(struct fi_tx_attr *tx_attr, struct fi_rx_attr *rx_attr,
 		    uint64_t flags)
 {
@@ -307,6 +406,17 @@ int cxip_setopflags(struct fi_tx_attr *tx_attr, struct fi_rx_attr *rx_attr,
 	return 0;
 }
 
+/**
+ * Control TX/RX context.
+ *
+ * Provider control() implementation for TX/RX contexts.
+ *
+ * @param fid : TX/RX context fid
+ * @param command : control operation code
+ * @param arg : optional argument
+ *
+ * @return int : 0 on success, -errno on failure
+ */
 static int cxip_ctx_control(struct fid *fid, int command, void *arg)
 {
 	struct fid_ep *ep;
@@ -379,6 +489,21 @@ static struct fi_ops cxip_ctx_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
+/*=======================================*/
+
+/**
+ * Get TX/RX context options
+ *
+ * Provider getopt() implementation for TX/RX contexts
+ *
+ * @param fid : TX/RX context fid
+ * @param level : option level (must be FI_OPT_ENDPOINT)
+ * @param optname : option name
+ * @param optval : returned option
+ * @param optlen : returned length
+ *
+ * @return int : 0 on success, -errno on failure
+ */
 static int cxip_ctx_getopt(fid_t fid, int level, int optname, void *optval,
 			   size_t *optlen)
 {
@@ -403,6 +528,19 @@ static int cxip_ctx_getopt(fid_t fid, int level, int optname, void *optval,
 	return 0;
 }
 
+/**
+ * Set TX/RX options
+ *
+ * Provider setopt() implementation for TX/RX contexts
+ *
+ * @param fid : TX/RX context fid
+ * @param level : option level (must be FI_OPT_ENDPOINT)
+ * @param optname : option name
+ * @param optval : option value to set
+ * @param optlen : option length
+ *
+ * @return int : 0 on success, -errno on failure
+ */
 static int cxip_ctx_setopt(fid_t fid, int level, int optname,
 			   const void *optval, size_t optlen)
 {
@@ -415,6 +553,7 @@ static int cxip_ctx_setopt(fid_t fid, int level, int optname,
 
 	switch (optname) {
 	case FI_OPT_MIN_MULTI_RECV:
+		// TODO check length?
 		rx_ctx->min_multi_recv = *(size_t *)optval;
 		break;
 	default:
@@ -424,11 +563,36 @@ static int cxip_ctx_setopt(fid_t fid, int level, int optname,
 	return 0;
 }
 
+/**
+ * Cancel RX operation
+ *
+ * Support TX/RX context cancel().
+ *
+ * Searches the RX queue for a pending operation async operations with the
+ * specified 'context' flag, and cancels it if still pending.
+ *
+ * Async operations with no 'context' cannot be cancelled.
+ *
+ * @param rx_ctx : RX context to search
+ * @param context : user context pointer to search for
+ *
+ * @return ssize_t : ??, -errno on failure
+ */
 static ssize_t cxip_rx_ctx_cancel(struct cxip_rx_ctx *rx_ctx, void *context)
 {
 	return FI_SUCCESS;
 }
 
+/**
+ * Cancel TX/RX operation
+ *
+ * Provider cancel() implementation for TX/RX contexts
+ *
+ * @param fid : EP, TX ctx, or RX ctx fid
+ * @param context : user-specified context
+ *
+ * @return ssize_t : ??, -errno on failure
+ */
 static ssize_t cxip_ep_cancel(fid_t fid, void *context)
 {
 	struct cxip_rx_ctx *rx_ctx = NULL;
@@ -468,6 +632,23 @@ struct fi_ops_ep cxip_ctx_ep_ops = {
 	.tx_size_left = fi_no_tx_size_left,
 };
 
+/*=======================================*/
+
+/**
+ * Enable the EP.
+ *
+ * Support EP fi_control(FI_ENABLE).
+ *
+ * Enabling a Standard EP will also enable the TX and RX contexts.
+ *
+ * Enabling a Scalable EP will only enable the EP. It is expected that the TX/RX
+ * contexts will be explicitly enabled using fi_control(FI_ENABLE) on each
+ * context, typically before enabling the SEP.
+ *
+ * @param fid : EP/SEP fid
+ *
+ * @return int : 0 on success, -errno on failure
+ */
 static int cxip_ep_enable(struct fid_ep *ep)
 {
 	int ret;
@@ -539,6 +720,15 @@ static int cxip_ep_disable(struct cxip_ep *cxi_ep)
 	return 0;
 }
 
+/**
+ * Close (destroy) the EP.
+ *
+ * Provider fi_close() implementation for EP.
+ *
+ * @param fid : EP fid
+ *
+ * @return int : 0 on success, -errno on failure
+ */
 static int cxip_ep_close(struct fid *fid)
 {
 	struct cxip_ep *cxi_ep;
@@ -613,6 +803,20 @@ static int cxip_ep_close(struct fid *fid)
 	return 0;
 }
 
+/**
+ * Bind an EP.
+ *
+ * Provider fi_bind() implementation for EP.
+ *
+ * For Scalable EP binding a CQ or CNTR, all of the TX/RX contexts will be bound
+ * to the specified CQ or CNTR.
+ *
+ * @param fid : EP fid
+ * @param bfid : fid of object to bind EP to
+ * @param flags : options
+ *
+ * @return int : 0 on success, -errno on failure
+ */
 static int cxip_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	int ret;
@@ -630,8 +834,8 @@ static int cxip_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		return ret;
 
 	switch (fid->fclass) {
-	case FI_CLASS_EP:
-	case FI_CLASS_SEP:
+	case FI_CLASS_EP:	/* Standard EP */
+	case FI_CLASS_SEP:	/* Scalable EP */
 		ep = container_of(fid, struct cxip_ep, ep.fid);
 		break;
 
@@ -650,6 +854,7 @@ static int cxip_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		if (ep->ep_obj->domain != cq->domain)
 			return -FI_EINVAL;
 
+		// TODO: prevent re-binding
 		if (flags & FI_SEND) {
 			for (i = 0; i < ep->ep_obj->ep_attr.tx_ctx_cnt; i++) {
 				tx_ctx = ep->ep_obj->tx_array[i];
@@ -664,6 +869,7 @@ static int cxip_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			}
 		}
 
+		// TODO: prevent re-binding
 		if (flags & FI_RECV) {
 			for (i = 0; i < ep->ep_obj->ep_attr.rx_ctx_cnt; i++) {
 				rx_ctx = ep->ep_obj->rx_array[i];
@@ -684,6 +890,7 @@ static int cxip_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		if (ep->ep_obj->domain != cntr->domain)
 			return -FI_EINVAL;
 
+		// TODO: prevent re-binding
 		if (flags & FI_SEND || flags & FI_WRITE || flags & FI_READ) {
 			for (i = 0; i < ep->ep_obj->ep_attr.tx_ctx_cnt; i++) {
 				tx_ctx = ep->ep_obj->tx_array[i];
@@ -698,6 +905,7 @@ static int cxip_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			}
 		}
 
+		// TODO: prevent re-binding
 		if (flags & FI_RECV || flags & FI_REMOTE_READ ||
 		    flags & FI_REMOTE_WRITE) {
 			for (i = 0; i < ep->ep_obj->ep_attr.rx_ctx_cnt; i++) {
@@ -752,7 +960,7 @@ static int cxip_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		}
 		break;
 
-	case FI_CLASS_STX_CTX:
+	case FI_CLASS_STX_CTX:	/* shared TX context */
 		tx_ctx = container_of(bfid, struct cxip_tx_ctx, fid.stx.fid);
 		fastlock_acquire(&tx_ctx->lock);
 		dlist_insert_tail(&ep->ep_obj->tx_ctx_entry, &tx_ctx->ep_list);
@@ -762,7 +970,7 @@ static int cxip_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		ep->ep_obj->tx_ctx->stx_ctx = tx_ctx;
 		break;
 
-	case FI_CLASS_SRX_CTX:
+	case FI_CLASS_SRX_CTX:	/* shared RX context */
 		rx_ctx = container_of(bfid, struct cxip_rx_ctx, ctx);
 		fastlock_acquire(&rx_ctx->lock);
 		dlist_insert_tail(&ep->ep_obj->rx_ctx_entry, &rx_ctx->ep_list);
@@ -779,6 +987,17 @@ static int cxip_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	return 0;
 }
 
+/**
+ * Control EP.
+ *
+ * Provider control() implementation for EP
+ *
+ * @param fid : EP fid
+ * @param command : control operation
+ * @param arg : control argument
+ *
+ * @return int : 0 on success, -errno on failure
+ */
 static int cxip_ep_control(struct fid *fid, int command, void *arg)
 {
 	int ret;
@@ -857,6 +1076,21 @@ struct fi_ops cxip_ep_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
+/*=======================================*/
+
+/**
+ * Get EP options
+ *
+ * Provider getopt() implementation for EPs
+ *
+ * @param fid : EP fid
+ * @param level : option level (must be FI_OPT_ENDPOINT)
+ * @param optname : option name
+ * @param optval : returned option
+ * @param optlen : returned length
+ *
+ * @return int : 0 on success, -errno on failure
+ */
 static int cxip_ep_getopt(fid_t fid, int level, int optname, void *optval,
 			  size_t *optlen)
 {
@@ -884,6 +1118,19 @@ static int cxip_ep_getopt(fid_t fid, int level, int optname, void *optval,
 	return 0;
 }
 
+/**
+ * Set EP options
+ *
+ * Provider setopt() implementation for EP
+ *
+ * @param fid : EP fid
+ * @param level : option level (must be FI_OPT_ENDPOINT)
+ * @param optname : option name
+ * @param optval : option value to set
+ * @param optlen : option length
+ *
+ * @return int : 0 on success, -errno on failure
+ */
 static int cxip_ep_setopt(fid_t fid, int level, int optname, const void *optval,
 			  size_t optlen)
 {
@@ -917,6 +1164,27 @@ static int cxip_ep_setopt(fid_t fid, int level, int optname, const void *optval,
 	return 0;
 }
 
+/**
+ * Create SEP TX context.
+ *
+ * Provider fi_tx_context() implementation.
+ *
+ * The index value must be less than the SEP tx_ctx_cnt value.
+ *
+ * Attributes default to the SEP TX attributes if attr is NULL.
+ *
+ * Note that this returns a struct fid_ep*, implying that this object is an
+ * endpoint, rather than a TX context. It is not actually an endpoint, and the
+ * functions it supports differ from an EP or SEP.
+ *
+ * @param ep : SEP fid
+ * @param index : SEP TX index
+ * @param attr : override attributes for TX context
+ * @param tx_ep : return value of TX context
+ * @param context : user-specified opaque context
+ *
+ * @return int : 0 on success, -errno on failure
+ */
 static int cxip_ep_tx_ctx(struct fid_ep *ep, int index, struct fi_tx_attr *attr,
 			  struct fid_ep **tx_ep, void *context)
 {
@@ -963,6 +1231,27 @@ static int cxip_ep_tx_ctx(struct fid_ep *ep, int index, struct fi_tx_attr *attr,
 	return 0;
 }
 
+/**
+ * Create SEP RX context.
+ *
+ * Provider fi_rx_context() implementation.
+ *
+ * The index value must be less than the SEP rx_ctx_cnt value.
+ *
+ * Attributes default to the SEP RX attributes if attr is NULL.
+ *
+ * Note that this returns a struct fid_ep*, implying that this object is an
+ * endpoint, rather than an RX context. It is not actually an endpoint, and the
+ * functions it supports differ from an EP or SEP.
+ *
+ * @param ep : SEP fid
+ * @param index : SEP RX index
+ * @param attr : override attributes for RX context
+ * @param tx_ep : return value of RX context
+ * @param context : user-specified opaque context
+ *
+ * @return int : 0 on success, -errno on failure
+ */
 static int cxip_ep_rx_ctx(struct fid_ep *ep, int index, struct fi_rx_attr *attr,
 			  struct fid_ep **rx_ep, void *context)
 {
@@ -1019,6 +1308,9 @@ struct fi_ops_ep cxip_ep_ops = {
 	.tx_size_left = fi_no_tx_size_left,
 };
 
+/*=======================================*/
+
+/* shared contexts */
 static int cxip_verify_tx_attr(const struct fi_tx_attr *attr)
 {
 	if (!attr)
@@ -1039,6 +1331,7 @@ static int cxip_verify_tx_attr(const struct fi_tx_attr *attr)
 	return 0;
 }
 
+/* shared contexts */
 int cxip_stx_ctx(struct fid_domain *domain, struct fi_tx_attr *attr,
 		 struct fid_stx **stx, void *context)
 {
@@ -1065,6 +1358,7 @@ int cxip_stx_ctx(struct fid_domain *domain, struct fi_tx_attr *attr,
 	return 0;
 }
 
+/* shared contexts */
 static int cxip_verify_rx_attr(const struct fi_rx_attr *attr)
 {
 	if (!attr)
@@ -1088,6 +1382,7 @@ static int cxip_verify_rx_attr(const struct fi_rx_attr *attr)
 	return 0;
 }
 
+/* shared contexts */
 int cxip_srx_ctx(struct fid_domain *domain, struct fi_rx_attr *attr,
 		 struct fid_ep **srx, void *context)
 {
@@ -1119,6 +1414,15 @@ int cxip_srx_ctx(struct fid_domain *domain, struct fi_rx_attr *attr,
 	return 0;
 }
 
+/**
+ * Set fabric info.
+ *
+ * Support fi_info().
+ *
+ * @param src_addr : source address
+ * @param hint_attr : hints (can be NULL)
+ * @param attr : attributes to fill out
+ */
 static void cxip_set_fabric_attr(void *src_addr,
 				 const struct fi_fabric_attr *hint_attr,
 				 struct fi_fabric_attr *attr)
@@ -1137,6 +1441,15 @@ static void cxip_set_fabric_attr(void *src_addr,
 	attr->prov_name = NULL;
 }
 
+/**
+ * Set domain info.
+ *
+ * Support fi_info().
+ *
+ * @param src_addr : source address
+ * @param hint_attr : optional hints
+ * @param attr : attributes to fill out
+ */
 static void cxip_set_domain_attr(uint32_t api_version, void *src_addr,
 				 const struct fi_domain_attr *hint_attr,
 				 struct fi_domain_attr *attr)
@@ -1206,6 +1519,19 @@ out:
 	attr->name = cxip_get_domain_name(src_addr);
 }
 
+/**
+ * Create fi_info structure for fi_info().
+ *
+ * Support fi_info().
+ *
+ * @param version : version requested
+ * @param ep_type : endpoint type requested
+ * @param hints : optional hints
+ * @param src_addr : optional source address
+ * @param dest_addr : optional destination address
+ *
+ * @return struct fi_info* : allocated fi_info structure
+ */
 struct fi_info *cxip_fi_info(uint32_t version, enum fi_ep_type ep_type,
 			     const struct fi_info *hints, void *src_addr,
 			     void *dest_addr)
@@ -1283,6 +1609,29 @@ static int cxip_ep_assign_src_addr(struct cxip_ep *cxi_ep, struct fi_info *info)
 	return -FI_EINVAL;
 }
 
+/**
+ * Allocate endpoint.
+ *
+ * Support function for:
+ * - cxip_rdm_ep()  : implements fi_endpoint()
+ * - cxip_rdm_sep() : implements fi_scalable_ep()
+ *
+ * The Standard EP (FI_CLASS_EP) automatically creates one TX context and one RX
+ * context.
+ *
+ * The Scalable EP (FI_CLASS_SEP) creates space for the TX and RX contexts as
+ * specified by the respective counts in the info structure, but does not create
+ * the contexts. They must be explicitly be created by calling fi_tx_context()
+ * or fi_rx_context().
+ *
+ * @param domain : target domain fid
+ * @param info : fabric endpoint hints from fi_getinfo()
+ * @param ep : return allocated endpoint
+ * @param context : user-defined context
+ * @param fclass : FI_CLASS_EP or FI_CLASS_SEP
+ *
+ * @return int : 0 on success, -errno on failure
+ */
 int cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 			struct cxip_ep **ep, void *context, size_t fclass)
 {

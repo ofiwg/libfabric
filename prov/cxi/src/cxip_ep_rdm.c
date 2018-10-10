@@ -283,6 +283,13 @@ static int cxip_rdm_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		return ret;
 
+	// TODO: WTF?
+	/* The info argument is required for EPs, but not SEPs. SEPs add TX/RX
+	 * contexts after SEP creation, and they can have different attributes.
+	 * So we specify the attributes for the EP to be the maximum attributes
+	 * we support, so that TX/RX context attributes will always be a subset
+	 * of the SEP attributes.
+	 */
 	if (!info || !info->ep_attr)
 		(*ep)->ep_obj->ep_attr = cxip_rdm_ep_attr;
 
