@@ -60,18 +60,18 @@ enum rxd_msg_type {
 };
 
 struct rxd_base_hdr {
-	uint32_t version;
-	uint32_t type;
-};
-
-struct rxd_pkt_hdr {
-	uint32_t	flags;
+	uint8_t		version;
+	uint8_t		type;
+	uint16_t	flags;
 	uint32_t	tx_id;
-	uint32_t	rx_id;
 	uint32_t	msg_id;
-	uint32_t	seg_no;
 	uint32_t	seq_no;
 	fi_addr_t	peer;
+};
+
+struct rxd_ext_hdr {
+	uint32_t	rx_id;
+	uint32_t	seg_no;
 };
 
 struct rxd_rts_pkt {
@@ -88,36 +88,51 @@ struct rxd_cts_pkt {
 
 struct rxd_ack_pkt {
 	struct rxd_base_hdr	base_hdr;
-	struct rxd_pkt_hdr	pkt_hdr;
+	struct rxd_ext_hdr	ext_hdr;
 	//TODO fill in more fields? Selective ack?
 };
 
-//TODO split this into separate packet types to not waste space
-struct rxd_op_pkt {
-	struct rxd_base_hdr	base_hdr;
-	struct rxd_pkt_hdr	pkt_hdr;
-
-	uint64_t		num_segs;
-	union {
-		uint64_t		tag;
-		struct {
-			uint64_t		iov_count;
-			struct ofi_rma_iov	rma[RXD_IOV_LIMIT];
-
-			uint32_t		datatype;
-			uint32_t		atomic_op;
-		};
-	};
-
+struct rxd_op_hdr {
 	uint64_t		cq_data;
 	uint64_t		size;
+	uint64_t		num_segs;
+	union {
+		uint64_t	tag;
+		uint64_t	iov_count;
+	};
+};
+
+struct rxd_msg_pkt {
+	struct rxd_base_hdr	base_hdr;
+	struct rxd_op_hdr	op_hdr;
 
 	char			msg[];
-}; 
+};
+
+struct rxd_rma_pkt {
+	struct rxd_base_hdr	base_hdr;
+	struct rxd_op_hdr	op_hdr;
+
+	struct ofi_rma_iov	rma[RXD_IOV_LIMIT];
+
+	char			msg[];
+};
+
+struct rxd_atom_pkt {
+	struct rxd_base_hdr	base_hdr;
+	struct rxd_op_hdr	op_hdr;
+
+	uint32_t		datatype;
+	uint32_t		atomic_op;
+
+	struct ofi_rma_iov	rma[RXD_IOV_LIMIT];
+
+	char			msg[];
+};
 
 struct rxd_data_pkt {
 	struct rxd_base_hdr	base_hdr;
-	struct rxd_pkt_hdr	pkt_hdr;
+	struct rxd_ext_hdr	ext_hdr;
 
 	char			msg[];
 };

@@ -109,7 +109,9 @@ struct rxd_domain {
 	struct fid_domain *dg_domain;
 
 	ssize_t max_mtu_sz;
-	ssize_t max_inline_sz;
+	ssize_t max_inline_msg;
+	ssize_t max_inline_rma;
+	ssize_t max_inline_atom;
 	ssize_t max_seg_sz;
 	int mr_mode;
 	struct ofi_mr_map mr_map;//TODO use util_domain mr_map instead
@@ -267,9 +269,27 @@ static inline int rxd_pkt_type(struct rxd_pkt_entry *pkt_entry)
 	return ((struct rxd_base_hdr *) (pkt_entry->pkt))->type;
 }
 
-static inline struct rxd_pkt_hdr *rxd_get_pkt_hdr(struct rxd_pkt_entry *pkt_entry)
+static inline struct rxd_base_hdr *rxd_get_base_hdr(struct rxd_pkt_entry *pkt_entry)
 {
-	return &((struct rxd_ack_pkt *) (pkt_entry->pkt))->pkt_hdr;
+	return &((struct rxd_ack_pkt *) (pkt_entry->pkt))->base_hdr;
+}
+
+static inline uint32_t rxd_set_pkt_seq(struct rxd_peer *peer,
+				       struct rxd_pkt_entry *pkt_entry)
+{
+	rxd_get_base_hdr(pkt_entry)->seq_no = peer->tx_seq_no++;
+
+	return rxd_get_base_hdr(pkt_entry)->seq_no;
+}
+
+static inline struct rxd_ext_hdr *rxd_get_ext_hdr(struct rxd_pkt_entry *pkt_entry)
+{
+	return &((struct rxd_ack_pkt *) (pkt_entry->pkt))->ext_hdr;
+}
+
+static inline struct rxd_op_hdr *rxd_get_op_hdr(struct rxd_pkt_entry *pkt_entry)
+{
+	return &((struct rxd_msg_pkt *) (pkt_entry->pkt))->op_hdr;
 }
 
 static inline void rxd_set_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)

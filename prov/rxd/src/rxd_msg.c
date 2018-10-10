@@ -40,14 +40,14 @@ static int rxd_match_unexp(struct dlist_entry *item, const void *arg)
 {
 	struct rxd_x_entry *rx_entry = (struct rxd_x_entry *) arg;
 	struct rxd_pkt_entry *pkt_entry;
-	struct rxd_op_pkt *op;
+	struct rxd_msg_pkt *op;
 
 	pkt_entry = container_of(item, struct rxd_pkt_entry, d_entry);
-	op = (struct rxd_op_pkt *) (pkt_entry->pkt);
+	op = (struct rxd_msg_pkt *) (pkt_entry->pkt);
 
-	return rxd_match_addr(rx_entry->peer, op->pkt_hdr.peer) &&
+	return rxd_match_addr(rx_entry->peer, op->base_hdr.peer) &&
 	       rxd_match_tag(rx_entry->cq_entry.tag, rx_entry->ignore,
-	       op->tag);
+	       op->op_hdr.tag);
 }
 
 static void rxd_ep_check_unexp_msg_list(struct rxd_ep *ep, struct dlist_entry *list,
@@ -55,7 +55,7 @@ static void rxd_ep_check_unexp_msg_list(struct rxd_ep *ep, struct dlist_entry *l
 {
 	struct dlist_entry *match;
 	struct rxd_pkt_entry *pkt_entry;
-	struct rxd_op_pkt *op;
+	struct rxd_msg_pkt *op;
 
 	match = dlist_remove_first_match(list, &rxd_match_unexp,
 					 (void *) rx_entry);
@@ -66,11 +66,11 @@ static void rxd_ep_check_unexp_msg_list(struct rxd_ep *ep, struct dlist_entry *l
 	dlist_remove(&rx_entry->entry);
 
 	pkt_entry = container_of(match, struct rxd_pkt_entry, d_entry);
-	op = (struct rxd_op_pkt *) (pkt_entry->pkt);
-	dlist_insert_tail(&rx_entry->entry, &ep->peers[op->pkt_hdr.peer].rx_list);
+	op = (struct rxd_msg_pkt *) (pkt_entry->pkt);
+	dlist_insert_tail(&rx_entry->entry, &ep->peers[op->base_hdr.peer].rx_list);
 
 	rxd_progress_op(ep, pkt_entry, rx_entry);
-	rxd_ep_send_ack(ep, op->pkt_hdr.peer);
+	rxd_ep_send_ack(ep, op->base_hdr.peer);
 	rxd_release_repost_rx(ep, pkt_entry);
 }
 
@@ -165,7 +165,7 @@ ssize_t rxd_ep_generic_inject(struct rxd_ep *rxd_ep, const struct iovec *iov,
 
 	assert(iov_count <= RXD_IOV_LIMIT);
 	assert(ofi_total_iov_len(iov, iov_count) <=
-	       rxd_ep_domain(rxd_ep)->max_inline_sz);
+	       rxd_ep_domain(rxd_ep)->max_inline_msg);
 
 	dg_addr = rxd_av_dg_addr(rxd_ep_av(rxd_ep), addr);
 
