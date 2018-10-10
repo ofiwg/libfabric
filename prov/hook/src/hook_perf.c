@@ -32,6 +32,7 @@
 
 #include "hook_perf.h"
 #include "ofi_perf.h"
+#include "ofi_prov.h"
 
 
 const char *perf_counters_str[] = {
@@ -842,31 +843,50 @@ struct fi_ops_cntr perf_cntr_ops = {
 };
 
 
-int hook_perf_create(struct hook_fabric **fabric, struct fi_provider *prov)
-{
-	struct perf_fabric *fab;
-	int ret;
-
-	fab = calloc(1, sizeof *fab);
-	if (!fab)
-		return -FI_ENOMEM;
-
-	ret = ofi_perfset_create(prov, &fab->perf_set, perf_size,
-				 perf_domain, perf_cntr, perf_flags);
-	if (ret) {
-		free(fab);
-		return ret;
-	}
-	fab->fabric_hook.prov = prov;
-	*fabric = &fab->fabric_hook;
-	return 0;
-}
-
-void hook_perf_destroy(struct hook_fabric *fabric)
+void perf_hook_destroy(struct hook_fabric *fabric)
 {
 	struct perf_fabric *fab;
 
 	fab = container_of(fabric, struct perf_fabric, fabric_hook);
 	ofi_perfset_log(&fab->perf_set, perf_counters_str);
 	ofi_perfset_close(&fab->perf_set);
+}
+
+static int perf_hook_fabric(struct fi_fabric_attr *attr,
+			    struct fid_fabric **fabric, void *context)
+{
+	struct fi_provider *hprov = context;
+	struct perf_fabric *fab;
+	int ret;
+
+	FI_TRACE(hprov, FI_LOG_FABRIC, "Installing perf hook\n");
+	fab = calloc(1, sizeof *fab);
+	if (!fab)
+		return -FI_ENOMEM;
+
+	ret = ofi_perfset_create(hprov, &fab->perf_set, perf_size,
+				 perf_domain, perf_cntr, perf_flags);
+	if (ret) {
+		free(fab);
+		return ret;
+	}
+
+	hook_fabric_init(&fab->fabric_hook, HOOK_PERF, attr->fabric, hprov);
+	*fabric = &fab->fabric_hook.fabric;
+	return 0;
+}
+
+struct fi_provider perf_hook_prov = {
+	.version = FI_VERSION(1,0),
+	/* We're a pass-through provider, so the fi_version is always the latest */
+	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+	.name = "ofi_perf_hook",
+	.getinfo = NULL,
+	.fabric = perf_hook_fabric,
+	.cleanup = NULL,
+};
+
+PERF_HOOK_INI
+{
+	return &perf_hook_prov;
 }

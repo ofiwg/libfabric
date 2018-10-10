@@ -129,12 +129,15 @@ int ofi_nic_close(struct fid *fid);
 struct fid_nic *ofi_nic_dup(const struct fid_nic *nic);
 int ofi_nic_tostr(const struct fid *fid_nic, char *buf, size_t len);
 
+struct fi_provider *ofi_get_hook(const char *name);
+
 void fi_log_init(void);
 void fi_log_fini(void);
 void fi_param_init(void);
 void fi_param_fini(void);
 void fi_param_undefine(const struct fi_provider *provider);
 void ofi_hook_init(void);
+void ofi_hook_fini(void);
 void ofi_hook_install(struct fid_fabric *hfabric, struct fid_fabric **fabric,
 		      struct fi_provider *prov);
 

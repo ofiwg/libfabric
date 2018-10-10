@@ -44,6 +44,8 @@
 #include <rdma/fi_rma.h>
 #include <rdma/fi_tagged.h>
 
+#include <rdma/providers/fi_prov.h>
+
 
 /*
  * Hooks are installed from top down.
@@ -54,6 +56,7 @@ enum ofi_hook_class {
 	HOOK_PERF,
 	MAX_HOOKS
 };
+
 
 /*
  * Define hook structs so we can cast from fid to parent using simple cast.
@@ -71,6 +74,9 @@ struct hook_fabric {
 	enum ofi_hook_class	hclass;
 	struct fi_provider	*prov;
 };
+
+void hook_fabric_init(struct hook_fabric *fabric, enum ofi_hook_class hclass,
+		      struct fid_fabric *hfabric, struct fi_provider *hprov);
 
 
 struct hook_domain {
