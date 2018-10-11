@@ -161,32 +161,10 @@ struct rxm_cmap_peer {
 	uint8_t addr[];
 };
 
-typedef struct rxm_cmap_handle*
-(*rxm_cmap_alloc_handle_func)(struct rxm_cmap *cmap);
-typedef void (*rxm_cmap_handle_func)(struct rxm_cmap_handle *handle);
-typedef int (*rxm_cmap_connect_func)(struct util_ep *ep,
-				     struct rxm_cmap_handle *handle,
-				     const void *addr, size_t addrlen);
-typedef void *(*rxm_cmap_thread_func)(void *arg);
-typedef int (*rxm_cmap_signal_func)(struct util_ep *ep, void *context,
-				    enum rxm_cmap_signal signal);
-typedef int (*rxm_cmap_cleanup_func)(void *arg);
-
 struct rxm_cmap_attr {
 	void 				*name;
 	/* user guarantee for serializing access to cmap objects */
 	uint8_t				serial_access;
-	rxm_cmap_alloc_handle_func 	alloc;
-	rxm_cmap_handle_func 		close;
-	rxm_cmap_handle_func 		save_conn;
-	rxm_cmap_handle_func 		close_saved_conn;
-	rxm_cmap_handle_func 		free;
-	rxm_cmap_connect_func 		connect;
-	rxm_cmap_handle_func		connected_handler;
-	rxm_cmap_thread_func		cm_thread_func;
-	rxm_cmap_cleanup_func		cleanup;
-	rxm_cmap_signal_func		signal;
-	rxm_cmap_handle_func		av_updated_handler;
 };
 
 struct rxm_cmap {
