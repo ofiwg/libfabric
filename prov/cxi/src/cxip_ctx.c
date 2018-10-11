@@ -72,6 +72,7 @@ static int cxip_rx_ctx_recv_fini(struct cxip_rx_ctx *rxc)
 int cxip_rx_ctx_enable(struct cxip_rx_ctx *rxc)
 {
 	int ret = FI_SUCCESS;
+	struct cxi_cq_alloc_opts opts;
 
 	fastlock_acquire(&rxc->lock);
 
@@ -87,7 +88,10 @@ int cxip_rx_ctx_enable(struct cxip_rx_ctx *rxc)
 	}
 
 	/* TODO set CMDQ size with RX attrs */
-	ret = cxil_alloc_cmdq(rxc->domain->dev_if->if_lni, 64, 0,
+	memset(&opts, 0, sizeof(opts));
+	opts.count = 64;
+	opts.is_transmit = 0;
+	ret = cxil_alloc_cmdq(rxc->domain->dev_if->if_lni, NULL, &opts,
 			      &rxc->rx_cmdq);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Unable to allocate RX CMDQ, ret: %d\n", ret);
@@ -190,6 +194,7 @@ void cxip_rx_ctx_free(struct cxip_rx_ctx *rx_ctx)
 int cxip_tx_ctx_enable(struct cxip_tx_ctx *txc)
 {
 	int ret = FI_SUCCESS;
+	struct cxi_cq_alloc_opts opts;
 
 	fastlock_acquire(&txc->lock);
 
@@ -205,7 +210,10 @@ int cxip_tx_ctx_enable(struct cxip_tx_ctx *txc)
 	}
 
 	/* TODO set CMDQ size with TX attrs */
-	ret = cxil_alloc_cmdq(txc->domain->dev_if->if_lni, 64, 1,
+	memset(&opts, 0, sizeof(opts));
+	opts.count = 64;
+	opts.is_transmit = 1;
+	ret = cxil_alloc_cmdq(txc->domain->dev_if->if_lni, NULL, &opts,
 			      &txc->tx_cmdq);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Unable to allocate TX CMDQ, ret: %d\n", ret);

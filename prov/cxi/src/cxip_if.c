@@ -61,6 +61,7 @@ int cxip_get_if(uint32_t nic_addr, struct cxip_if **dev_if)
 	struct cxip_if *if_entry;
 	int ret;
 	struct cxi_eq_alloc_opts evtq_opts;
+	struct cxi_cq_alloc_opts cq_opts;
 
 	/* The IF list device info is static, no need to lock */
 	if_entry = cxip_if_lookup(nic_addr);
@@ -98,7 +99,10 @@ int cxip_get_if(uint32_t nic_addr, struct cxip_if **dev_if)
 		/* TODO Temporary allocation of CMDQ and EQ specifically for MR
 		 * allocation.
 		 */
-		ret = cxil_alloc_cmdq(if_entry->if_lni, 64, 0,
+		memset(&cq_opts, 0, sizeof(cq_opts));
+		cq_opts.count = 64;
+		cq_opts.is_transmit = 0;
+		ret = cxil_alloc_cmdq(if_entry->if_lni, NULL, &cq_opts,
 				      &if_entry->mr_cmdq);
 		if (ret != FI_SUCCESS) {
 			CXIP_LOG_DBG("Unable to allocate MR CMDQ, ret: %d\n",
