@@ -518,19 +518,31 @@ size field indicates the size in bytes of the atomic datatype.
 
 ## Completions
 
-Completed atomic operations are reported to the user through one or
-more event collectors associated with the endpoint.  Users provide
-context which are associated with each operation, and is returned to
-the user as part of the event completion.  See fi_cq for completion
-event details.
+Completed atomic operations are reported to the initiator of the
+request through an associated completion queue or counter.
+Any user provided context specified with the request will be
+returned as part of any completion event written to a CQ.
+See fi_cq for completion event details.
 
-Updates to the target buffer of an atomic operation are visible to
-processes running on the target system either after a completion has
-been generated, or after the completion of an operation initiated
-after the atomic call with a fencing operation occurring in between.
-For example, the target process may be notified by the initiator
-sending a message after the atomic call completes, or sending a fenced
-message immediately after initiating the atomic operation.
+Any results returned to the initiator as part of an atomic operation
+will be available prior to a completion event being generated.  This
+will be true even if the requested completion semantic provides a weaker
+guarantee.  That is, atomic fetch operations have FI_DELIVERY_COMPLETE
+semantics.  Completions generated for other types of atomic operations
+indicate that it is safe to re-use the source data buffers.
+
+Any updates to data at the target of an atomic operation will be
+visible to processes running on the target node prior to one of
+the following occurring.  If the atomic operation generates a
+completion event or updates a completion counter at the target
+endpoint, the results will be available prior to the completion
+notification.  After processing a completion for the atomic, if
+the initiator submits a transfer between the same endpoints that
+generates a completion at the target, the results will be available
+prior to the subsequent transfer's event.  Or, if a fenced data
+transfer from the initiator follows the atomic request, the results
+will be available prior to a completion at the target for the
+fenced transfer.
 
 # FLAGS
 
@@ -554,13 +566,15 @@ with atomic message calls.
   its access to the fabric hardware.
 
 *FI_INJECT*
-: Indicates that the outbound non-const data buffers (buf and compare
-  parameters) should be returned to user immediately after the call
-  returns, even if the operation is handled asynchronously.  This may
-  require that the underlying provider implementation copy the data
-  into a local buffer and transfer out of that buffer.  The use of
-  output result buffers are not affected by this flag. This flag can only
-  be used with messages smaller than inject_size.
+: Indicates that the control of constant data buffers should be returned to
+  the user immediately after the call returns, even if the operation
+  is handled asynchronously.  This may require that the underlying
+  provider implementation copy the data into a local buffer and
+  transfer out of that buffer.  Constant data buffers refers to any
+  data buffer or iovec used by the atomic APIs that are marked as
+  'const'.  Non-constant or output buffers are unaffected by this flag
+  and may be accessed by the provider at anytime until the operation has
+  completed. This flag can only be used with messages smaller than inject_size.
 
 *FI_FENCE*
 : Applies to transmits.  Indicates that the requested operation, also
@@ -621,6 +635,14 @@ The number of array elements to operate on is specified through a count
 parameter.  This must be between 1 and the maximum returned through the
 relevant valid operation, inclusive.  The requested operation and data
 type must also be valid for the given provider.
+
+The ordering of atomic operations carried as part of different request
+messages is subject to the message and data ordering definitions assigned
+to the transmitting and receiving endpoints.  Both message and data ordering
+are required if the results of two atomic operations to the same memory
+buffers are to reflect the second operation acting on the results of the
+first.  See [`fi_endpoint`(3)](fi_endpoint.3.html) for further details
+and message size restrictions.
 
 # SEE ALSO
 
