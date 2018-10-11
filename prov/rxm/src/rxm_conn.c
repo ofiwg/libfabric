@@ -37,6 +37,22 @@
 #include <ofi_util.h>
 #include "rxm.h"
 
+static struct rxm_cmap_handle *rxm_conn_alloc(struct rxm_cmap *cmap);
+static void rxm_conn_connected_handler(struct rxm_cmap_handle *handle);
+static void rxm_conn_close_saved(struct rxm_cmap_handle *handle);
+static void rxm_conn_close(struct rxm_cmap_handle *handle);
+static void rxm_conn_save(struct rxm_cmap_handle *handle);
+static int
+rxm_conn_connect(struct util_ep *util_ep, struct rxm_cmap_handle *handle,
+		 const void *addr, size_t addrlen);
+static int rxm_conn_signal(struct util_ep *util_ep, void *context,
+			   enum rxm_cmap_signal signal);
+static void
+rxm_conn_av_updated_handler(struct rxm_cmap_handle *handle);
+static void *rxm_conn_progress(void *arg);
+static void *rxm_conn_eq_read(void *arg);
+
+
 /*
  * Connection map
  */
@@ -122,7 +138,7 @@ static int rxm_cmap_del_handle(struct rxm_cmap_handle *handle)
 	 * so that the CM thread handles any pending events for this
 	 * ep correctly. Handle would be freed finally after processing the
 	 * events */
-	ret = cmap->attr.signal(cmap->ep, handle, RXM_CMAP_FREE);
+	ret = rxm_conn_signal(cmap->ep, handle, RXM_CMAP_FREE);
 	if (ret) {
 		FI_WARN(cmap->av->prov, FI_LOG_FABRIC,
 			"Unable to signal CM thread\n");
@@ -144,7 +160,7 @@ int rxm_cmap_alloc_handle(struct rxm_cmap *cmap, fi_addr_t fi_addr,
 			   enum rxm_cmap_state state,
 			   struct rxm_cmap_handle **handle)
 {
-	*handle = cmap->attr.alloc(cmap);
+	*handle = rxm_conn_alloc(cmap);
 	if (OFI_UNLIKELY(!*handle))
 		return -FI_ENOMEM;
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "Allocated handle: %p for "
@@ -164,7 +180,7 @@ static int rxm_cmap_alloc_handle_peer(struct rxm_cmap *cmap, void *addr,
 	peer = calloc(1, sizeof(*peer) + cmap->av->addrlen);
 	if (!peer)
 		return -FI_ENOMEM;
-	*handle = cmap->attr.alloc(cmap);
+	*handle = rxm_conn_alloc(cmap);
 	if (!*handle) {
 		free(peer);
 		return -FI_ENOMEM;
@@ -246,8 +262,7 @@ int rxm_cmap_update(struct rxm_cmap *cmap, const void *addr, fi_addr_t fi_addr)
 	rxm_cmap_move_handle(handle, fi_addr);
 	cmap->release(&cmap->lock);
 
-	if (cmap->attr.av_updated_handler)
-		cmap->attr.av_updated_handler(handle);
+	rxm_conn_av_updated_handler(handle);
 	return 0;
 }
 
@@ -278,7 +293,7 @@ void rxm_cmap_process_conn_notify(struct rxm_cmap *cmap,
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 	       "Processing connection notification for handle: %p.\n", handle);
 	handle->state = RXM_CMAP_CONNECTED;
-	cmap->attr.connected_handler(handle);
+	rxm_conn_connected_handler(handle);
 }
 
 /* Caller must hold cmap->lock */
@@ -307,7 +322,7 @@ void rxm_cmap_process_reject(struct rxm_cmap *cmap,
 		/* Handle is being re-used for incoming connection request */
 		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 			"Connection handle is being re-used. Close saved connection\n");
-		handle->cmap->attr.close_saved_conn(handle);
+		rxm_conn_close_saved(handle);
 		break;
 	case RXM_CMAP_CONNREQ_SENT:
 		if (cm_reject_flag == RXM_CMAP_REJECT_GENUINE) {
@@ -317,7 +332,7 @@ void rxm_cmap_process_reject(struct rxm_cmap *cmap,
 		} else {
 			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 			       "Connection handle is being re-used. Close the connection\n");
-			handle->cmap->attr.close(handle);
+			rxm_conn_close(handle);
 		}
 		break;
 	case RXM_CMAP_SHUTDOWN:
@@ -393,8 +408,7 @@ int rxm_cmap_process_connreq(struct rxm_cmap *cmap, void *addr,
 				"connection\n", handle);
 			/* Re-use handle. If it receives FI_REJECT the handle
 			 * would not be deleted in this state */
-			//handle->cmap->attr.close(handle);
-			handle->cmap->attr.save_conn(handle);
+			rxm_conn_save(handle);
 		} else {
 			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 				"Endpoint connects to itself\n");
@@ -436,9 +450,9 @@ int rxm_cmap_handle_connect(struct rxm_cmap *cmap, fi_addr_t fi_addr,
 
 	switch (handle->state) {
 	case RXM_CMAP_IDLE:
-		ret = cmap->attr.connect(cmap->ep, handle,
-					 ofi_av_get_addr(cmap->av, fi_addr),
-					 cmap->av->addrlen);
+		ret = rxm_conn_connect(cmap->ep, handle,
+				       ofi_av_get_addr(cmap->av, fi_addr),
+				       cmap->av->addrlen);
 		if (ret) {
 			rxm_cmap_del_handle(handle);
 			return ret;
@@ -484,7 +498,7 @@ static int rxm_cmap_cm_thread_close(struct rxm_cmap *cmap)
 {
 	int ret;
 
-	ret = cmap->attr.signal(cmap->ep, NULL, RXM_CMAP_EXIT);
+	ret = rxm_conn_signal(cmap->ep, NULL, RXM_CMAP_EXIT);
 	if (ret) {
 		FI_WARN(cmap->av->prov, FI_LOG_FABRIC,
 			"Unable to signal CM thread\n");
@@ -501,6 +515,13 @@ static int rxm_cmap_cm_thread_close(struct rxm_cmap *cmap)
 	}
 	return 0;
 }
+
+static int rxm_conn_cleanup(void *arg)
+{
+	return rxm_conn_process_eq_events(container_of(arg, struct rxm_ep,
+						       util_ep));
+}
+
 
 void rxm_cmap_free(struct rxm_cmap *cmap)
 {
@@ -523,9 +544,9 @@ void rxm_cmap_free(struct rxm_cmap *cmap)
 	cmap->release(&cmap->lock);
 
 	/* cleanup function would be used in manual progress mode */
-	if (cmap->attr.cleanup) {
-		cmap->attr.cleanup(cmap->ep);
-	}
+	if (cmap->ep->domain->data_progress != FI_PROGRESS_AUTO)
+		rxm_conn_cleanup(cmap->ep);
+
 	free(cmap->handles_av);
 	free(cmap->attr.name);
 	ofi_idx_reset(&cmap->handles_idx);
@@ -560,11 +581,20 @@ struct rxm_cmap *rxm_cmap_alloc(struct util_ep *ep,
 
 	dlist_init(&cmap->peer_list);
 
-	if (pthread_create(&cmap->cm_thread, 0,
-			   cmap->attr.cm_thread_func, ep)) {
-		FI_WARN(ep->av->prov, FI_LOG_FABRIC,
-			"Unable to create cmap thread\n");
-		goto err3;
+	if (ep->domain->data_progress == FI_PROGRESS_AUTO) {
+		if (pthread_create(&cmap->cm_thread, 0,
+				   rxm_conn_progress, ep)) {
+			FI_WARN(ep->av->prov, FI_LOG_FABRIC,
+				"Unable to create cmap thread\n");
+			goto err3;
+		}
+	} else {
+		if (pthread_create(&cmap->cm_thread, 0,
+				   rxm_conn_eq_read, ep)) {
+			FI_WARN(ep->av->prov, FI_LOG_FABRIC,
+				"Unable to create cmap thread\n");
+			goto err3;
+		}
 	}
 
 	if (cmap->attr.serial_access) {
@@ -1310,12 +1340,6 @@ static int rxm_conn_signal(struct util_ep *util_ep, void *context,
 	return 0;
 }
 
-static int rxm_conn_cleanup(void *arg)
-{
-	return rxm_conn_process_eq_events(container_of(arg, struct rxm_ep,
-						       util_ep));
-}
-
 struct rxm_cmap *rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep)
 {
 	struct rxm_cmap_attr attr;
@@ -1349,25 +1373,6 @@ struct rxm_cmap *rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep)
 		attr.serial_access = 1;
 	else
 		attr.serial_access = 0;
-
-	attr.alloc 		= rxm_conn_alloc;
-	attr.close 		= rxm_conn_close;
-	attr.save_conn 		= rxm_conn_save;
-	attr.close_saved_conn 	= rxm_conn_close_saved;
-	attr.free 		= rxm_conn_free;
-	attr.connect 		= rxm_conn_connect;
-	attr.connected_handler	= rxm_conn_connected_handler;
-
-	if (rxm_ep->util_ep.domain->data_progress == FI_PROGRESS_AUTO) {
-		attr.cm_thread_func = rxm_conn_progress;
-		attr.cleanup = NULL;
-	} else {
-		attr.cm_thread_func = rxm_conn_eq_read;
-		attr.cleanup = rxm_conn_cleanup;
-	}
-
-	attr.signal		= rxm_conn_signal;
-	attr.av_updated_handler	= rxm_conn_av_updated_handler;
 
 	cmap = rxm_cmap_alloc(&rxm_ep->util_ep, &attr);
 	if (!cmap)
