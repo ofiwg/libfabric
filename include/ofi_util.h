@@ -281,7 +281,6 @@ struct util_ep {
 	uint64_t		caps;
 	uint64_t		flags;
 	ofi_ep_progress_func	progress;
-	struct util_cmap	*cmap;
 	fastlock_t		lock;
 	ofi_fastlock_acquire_t	lock_acquire;
 	ofi_fastlock_release_t	lock_release;
@@ -693,141 +692,21 @@ int ofi_get_src_addr(uint32_t addr_format,
 void ofi_getnodename(uint16_t sa_family, char *buf, int buflen);
 int ofi_av_get_index(struct util_av *av, const void *addr);
 
-/*
- * Connection Map
- */
-
-// TODO explore replacing this with a simple connection hash map that is common
-// for both AV and RX only connections.
-
-#define UTIL_CMAP_IDX_BITS OFI_IDX_INDEX_BITS
-
-enum ofi_cmap_signal {
-	OFI_CMAP_FREE,
-	OFI_CMAP_EXIT,
-};
-
-enum util_cmap_state {
-	CMAP_IDLE,
-	CMAP_CONNREQ_SENT,
-	CMAP_CONNREQ_RECV,
-	CMAP_ACCEPT,
-	CMAP_CONNECTED_NOTIFY,
-	CMAP_CONNECTED,
-	CMAP_SHUTDOWN,
-};
-
-enum util_cmap_reject_flag {
-	CMAP_REJECT_GENUINE,
-	CMAP_REJECT_SIMULT_CONN,
-};
-
-struct util_cmap_handle {
-	struct util_cmap *cmap;
-	enum util_cmap_state state;
-	/* Unique identifier for a connection. Can be exchanged with a peer
-	 * during connection setup and can later be used in a message header
-	 * to identify the source of the message (Used for FI_SOURCE, RNDV
-	 * protocol, etc.) */
-	uint64_t key;
-	uint64_t remote_key;
-	fi_addr_t fi_addr;
-	struct util_cmap_peer *peer;
-};
-
-struct util_cmap_peer {
-	struct util_cmap_handle *handle;
-	struct dlist_entry entry;
-	uint8_t addr[];
-};
-
-typedef struct util_cmap_handle*
-(*ofi_cmap_alloc_handle_func)(struct util_cmap *cmap);
-typedef void (*ofi_cmap_handle_func)(struct util_cmap_handle *handle);
-typedef int (*ofi_cmap_connect_func)(struct util_ep *ep,
-				     struct util_cmap_handle *handle,
-				     const void *addr, size_t addrlen);
-typedef void *(*ofi_cmap_thread_func)(void *arg);
-typedef int (*ofi_cmap_signal_func)(struct util_ep *ep, void *context,
-				    enum ofi_cmap_signal signal);
-typedef int (*ofi_cmap_cleanup_func)(void *arg);
-
-struct util_cmap_attr {
-	void 				*name;
-	/* user guarantee for serializing access to cmap objects */
-	uint8_t				serial_access;
-	ofi_cmap_alloc_handle_func 	alloc;
-	ofi_cmap_handle_func 		close;
-	ofi_cmap_handle_func 		save_conn;
-	ofi_cmap_handle_func 		close_saved_conn;
-	ofi_cmap_handle_func 		free;
-	ofi_cmap_connect_func 		connect;
-	ofi_cmap_handle_func		connected_handler;
-	ofi_cmap_thread_func		cm_thread_func;
-	ofi_cmap_cleanup_func		cleanup;
-	ofi_cmap_signal_func		signal;
-	ofi_cmap_handle_func		av_updated_handler;
-};
-
-struct util_cmap {
-	struct util_ep		*ep;
-	struct util_av		*av;
-
-	/* cmap handles that correspond to addresses in AV */
-	struct util_cmap_handle **handles_av;
-
-	/* Store all cmap handles (inclusive of handles_av) in an indexer.
-	 * This allows reverse lookup of the handle using the index. */
-	struct indexer		handles_idx;
-
-	struct ofi_key_idx	key_idx;
-
-	struct dlist_entry	peer_list;
-	struct util_cmap_attr	attr;
-	pthread_t		cm_thread;
-	ofi_fastlock_acquire_t	acquire;
-	ofi_fastlock_release_t	release;
-	fastlock_t		lock;
-};
-
-struct util_cmap_handle *ofi_cmap_key2handle(struct util_cmap *cmap, uint64_t key);
-int ofi_cmap_get_handle(struct util_cmap *cmap, fi_addr_t fi_addr,
-			struct util_cmap_handle **handle);
-int ofi_cmap_update(struct util_cmap *cmap, const void *addr, fi_addr_t fi_addr);
-
-void ofi_cmap_process_conn_notify(struct util_cmap *cmap,
-				  struct util_cmap_handle *handle);
-void ofi_cmap_process_connect(struct util_cmap *cmap,
-			      struct util_cmap_handle *handle,
-			      uint64_t *remote_key);
-void ofi_cmap_process_reject(struct util_cmap *cmap,
-			     struct util_cmap_handle *handle,
-			     enum util_cmap_reject_flag cm_reject_flag);
-int ofi_cmap_process_connreq(struct util_cmap *cmap, void *addr,
-			     struct util_cmap_handle **handle_ret,
-			     enum util_cmap_reject_flag *cm_reject_flag);
-void ofi_cmap_process_shutdown(struct util_cmap *cmap,
-			       struct util_cmap_handle *handle);
-void ofi_cmap_del_handle(struct util_cmap_handle *handle);
-void ofi_cmap_free(struct util_cmap *cmap);
-struct util_cmap *ofi_cmap_alloc(struct util_ep *ep,
-				 struct util_cmap_attr *attr);
-extern struct util_cmap_handle *
-util_cmap_get_handle(struct util_cmap *cmap, fi_addr_t fi_addr);
-extern int
-util_cmap_alloc_handle(struct util_cmap *cmap, fi_addr_t fi_addr,
-		       enum util_cmap_state state,
-		       struct util_cmap_handle **handle);
-int ofi_cmap_handle_connect(struct util_cmap *cmap, fi_addr_t fi_addr,
-			    struct util_cmap_handle *handle);
-/* Caller must hold cmap->lock */
-static inline struct util_cmap_handle *
-ofi_cmap_acquire_handle(struct util_cmap *cmap, fi_addr_t fi_addr)
-
-{
-	assert(fi_addr <= cmap->av->count);
-	return cmap->handles_av[fi_addr];
-}
+int ofi_verify_av_insert(struct util_av *av, uint64_t flags);
+int ofi_ip_av_insertv(struct util_av *av, const void *addr, size_t addrlen,
+		      size_t count, fi_addr_t *fi_addr, void *context);
+/* Caller should free *addr */
+int ofi_ip_av_sym_getaddr(struct util_av *av, const char *node,
+			  size_t nodecnt, const char *service,
+			  size_t svccnt, void **addr, size_t *addrlen);
+int ofi_ip_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
+		     fi_addr_t *fi_addr, uint64_t flags, void *context);
+int ofi_ip_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
+		     size_t count, uint64_t flags);
+int ofi_ip_av_lookup(struct fid_av *av_fid, fi_addr_t fi_addr,
+		     void *addr, size_t *addrlen);
+const char *
+ofi_ip_av_straddr(struct fid_av *av, const void *addr, char *buf, size_t *len);
 
 /*
  * Poll set

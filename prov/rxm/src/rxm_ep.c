@@ -1909,8 +1909,8 @@ static int rxm_ep_close(struct fid *fid)
 	struct rxm_ep *rxm_ep =
 		container_of(fid, struct rxm_ep, util_ep.ep_fid.fid);
 
-	if (rxm_ep->util_ep.cmap)
-		ofi_cmap_free(rxm_ep->util_ep.cmap);
+	if (rxm_ep->cmap)
+		rxm_cmap_free(rxm_ep->cmap);
 
 	ret = rxm_listener_close(rxm_ep);
 	if (ret)
@@ -2049,8 +2049,8 @@ static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 			return ret;
 		}
 
-		rxm_ep->util_ep.cmap = rxm_conn_cmap_alloc(rxm_ep);
-		if (!rxm_ep->util_ep.cmap)
+		rxm_ep->cmap = rxm_conn_cmap_alloc(rxm_ep);
+		if (!rxm_ep->cmap)
 			return -FI_ENOMEM;
 
 		break;
@@ -2128,7 +2128,7 @@ static int rxm_ep_ctrl(struct fid *fid, int command, void *arg)
 	case FI_ENABLE:
 		if (!rxm_ep->util_ep.rx_cq || !rxm_ep->util_ep.tx_cq)
 			return -FI_ENOCQ;
-		if (!rxm_ep->util_ep.av || !rxm_ep->util_ep.cmap)
+		if (!rxm_ep->util_ep.av || !rxm_ep->cmap)
 			return -FI_EOPBADSTATE;
 
 		/* At the time of enabling endpoint, FI_OPT_BUFFERED_MIN,
@@ -2142,6 +2142,7 @@ static int rxm_ep_ctrl(struct fid *fid, int command, void *arg)
 		if (rxm_ep->srx_ctx) {
 			ret = rxm_ep_prepost_buf(rxm_ep, rxm_ep->srx_ctx);
 			if (ret) {
+				rxm_cmap_free(rxm_ep->cmap);
 				FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 					"Unable to prepost recv bufs\n");
 				goto err;

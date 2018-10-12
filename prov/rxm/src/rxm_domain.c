@@ -60,15 +60,9 @@ free:
 	return ret;
 }
 
-int rxm_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
-		  struct fid_av **av, void *context)
-{
-	return ip_av_create_flags(domain_fid, attr, av, context, OFI_AV_HASH);
-}
-
 static struct fi_ops_domain rxm_domain_ops = {
 	.size = sizeof(struct fi_ops_domain),
-	.av_open = rxm_av_create,
+	.av_open = rxm_av_open,
 	.cq_open = rxm_cq_open,
 	.endpoint = rxm_endpoint,
 	.scalable_ep = fi_no_scalable_ep,

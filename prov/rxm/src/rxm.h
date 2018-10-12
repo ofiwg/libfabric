@@ -116,6 +116,115 @@ extern size_t rxm_msg_tx_size;
 extern size_t rxm_msg_rx_size;
 extern size_t rxm_def_univ_size;
 
+/*
+ * Connection Map
+ */
+
+#define RXM_CMAP_IDX_BITS OFI_IDX_INDEX_BITS
+
+enum rxm_cmap_signal {
+	RXM_CMAP_FREE,
+	RXM_CMAP_EXIT,
+};
+
+enum rxm_cmap_state {
+	RXM_CMAP_IDLE,
+	RXM_CMAP_CONNREQ_SENT,
+	RXM_CMAP_CONNREQ_RECV,
+	RXM_CMAP_ACCEPT,
+	RXM_CMAP_CONNECTED_NOTIFY,
+	RXM_CMAP_CONNECTED,
+	RXM_CMAP_SHUTDOWN,
+};
+
+enum rxm_cmap_reject_flag {
+	RXM_CMAP_REJECT_GENUINE,
+	RXM_CMAP_REJECT_SIMULT_CONN,
+};
+
+struct rxm_cmap_handle {
+	struct rxm_cmap *cmap;
+	enum rxm_cmap_state state;
+	/* Unique identifier for a connection. Can be exchanged with a peer
+	 * during connection setup and can later be used in a message header
+	 * to identify the source of the message (Used for FI_SOURCE, RNDV
+	 * protocol, etc.) */
+	uint64_t key;
+	uint64_t remote_key;
+	fi_addr_t fi_addr;
+	struct rxm_cmap_peer *peer;
+};
+
+struct rxm_cmap_peer {
+	struct rxm_cmap_handle *handle;
+	struct dlist_entry entry;
+	uint8_t addr[];
+};
+
+struct rxm_cmap_attr {
+	void 				*name;
+	/* user guarantee for serializing access to cmap objects */
+	uint8_t				serial_access;
+};
+
+struct rxm_cmap {
+	struct util_ep		*ep;
+	struct util_av		*av;
+
+	/* cmap handles that correspond to addresses in AV */
+	struct rxm_cmap_handle **handles_av;
+
+	/* Store all cmap handles (inclusive of handles_av) in an indexer.
+	 * This allows reverse lookup of the handle using the index. */
+	struct indexer		handles_idx;
+
+	struct ofi_key_idx	key_idx;
+
+	struct dlist_entry	peer_list;
+	struct rxm_cmap_attr	attr;
+	pthread_t		cm_thread;
+	ofi_fastlock_acquire_t	acquire;
+	ofi_fastlock_release_t	release;
+	fastlock_t		lock;
+};
+
+struct rxm_cmap_handle *rxm_cmap_key2handle(struct rxm_cmap *cmap, uint64_t key);
+int rxm_cmap_get_handle(struct rxm_cmap *cmap, fi_addr_t fi_addr,
+			struct rxm_cmap_handle **handle);
+int rxm_cmap_update(struct rxm_cmap *cmap, const void *addr, fi_addr_t fi_addr);
+
+void rxm_cmap_process_conn_notify(struct rxm_cmap *cmap,
+				  struct rxm_cmap_handle *handle);
+void rxm_cmap_process_connect(struct rxm_cmap *cmap,
+			      struct rxm_cmap_handle *handle,
+			      uint64_t *remote_key);
+void rxm_cmap_process_reject(struct rxm_cmap *cmap,
+			     struct rxm_cmap_handle *handle,
+			     enum rxm_cmap_reject_flag cm_reject_flag);
+int rxm_cmap_process_connreq(struct rxm_cmap *cmap, void *addr,
+			     struct rxm_cmap_handle **handle_ret,
+			     enum rxm_cmap_reject_flag *cm_reject_flag);
+void rxm_cmap_process_shutdown(struct rxm_cmap *cmap,
+			       struct rxm_cmap_handle *handle);
+void rxm_cmap_del_handle_ts(struct rxm_cmap_handle *handle);
+void rxm_cmap_free(struct rxm_cmap *cmap);
+struct rxm_cmap *rxm_cmap_alloc(struct util_ep *ep,
+				 struct rxm_cmap_attr *attr);
+int rxm_cmap_alloc_handle(struct rxm_cmap *cmap, fi_addr_t fi_addr,
+			  enum rxm_cmap_state state,
+			  struct rxm_cmap_handle **handle);
+int rxm_cmap_handle_connect(struct rxm_cmap *cmap, fi_addr_t fi_addr,
+			    struct rxm_cmap_handle *handle);
+/* Caller must hold cmap->lock */
+int rxm_cmap_move_handle_to_peer_list(struct rxm_cmap *cmap, int index);
+
+static inline struct rxm_cmap_handle *
+rxm_cmap_acquire_handle(struct rxm_cmap *cmap, fi_addr_t fi_addr)
+{
+	assert(fi_addr <= cmap->av->count);
+	return cmap->handles_av[fi_addr];
+}
+
 struct rxm_fabric {
 	struct util_fabric util_fabric;
 	struct fid_fabric *msg_fabric;
@@ -126,6 +235,9 @@ struct rxm_domain {
 	struct fid_domain *msg_domain;
 	uint8_t mr_local;
 };
+
+int rxm_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
+		struct fid_av **av, void *context);
 
 struct rxm_mr {
 	struct fid_mr mr_fid;
@@ -464,6 +576,7 @@ struct rxm_ep {
 	struct util_ep 		util_ep;
 	struct fi_info 		*rxm_info;
 	struct fi_info 		*msg_info;
+	struct rxm_cmap		*cmap;
 	struct fid_pep 		*msg_pep;
 	struct fid_eq 		*msg_eq;
 	struct slistfd		msg_eq_entry_list;
@@ -502,7 +615,7 @@ struct rxm_ep {
 
 struct rxm_conn {
 	/* This should stay at the top */
-	struct util_cmap_handle handle;
+	struct rxm_cmap_handle handle;
 
 	struct fid_ep *msg_ep;
 
@@ -511,7 +624,7 @@ struct rxm_conn {
 	struct rxm_send_queue *send_queue;
 	struct dlist_entry sar_rx_msg_list;
 	/* This is saved MSG EP fid, that hasn't been closed during
-	 * handling of CONN_RECV in CMAP_CONNREQ_SENT for passive side */
+	 * handling of CONN_RECV in RXM_CMAP_CONNREQ_SENT for passive side */
 	struct fid_ep *saved_msg_ep;
 };
 
@@ -540,7 +653,7 @@ ssize_t rxm_cq_handle_rx_buf(struct rxm_rx_buf *rx_buf);
 int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 			  struct fid_ep **ep, void *context);
 
-struct util_cmap *rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep);
+struct rxm_cmap *rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep);
 void rxm_cq_write_error(struct util_cq *cq, struct util_cntr *cntr,
 			void *op_context, int err);
 void rxm_ep_progress_one(struct util_ep *util_ep);
@@ -554,7 +667,7 @@ void rxm_ep_sar_handle_send_segment_failure(struct rxm_tx_entry *tx_entry, ssize
 
 static inline struct rxm_conn *rxm_key2conn(struct rxm_ep *rxm_ep, uint64_t key)
 {
-	return (struct rxm_conn *)ofi_cmap_key2handle(rxm_ep->util_ep.cmap, key);
+	return (struct rxm_conn *)rxm_cmap_key2handle(rxm_ep->cmap, key);
 }
 
 static inline void
@@ -765,24 +878,24 @@ rxm_process_recv_entry(struct rxm_recv_queue *recv_queue,
 static inline struct rxm_conn *
 rxm_acquire_conn(struct rxm_ep *rxm_ep, fi_addr_t fi_addr)
 {
-	return (struct rxm_conn *)ofi_cmap_acquire_handle(rxm_ep->util_ep.cmap,
+	return (struct rxm_conn *)rxm_cmap_acquire_handle(rxm_ep->cmap,
 							  fi_addr);
 }
 
 /* Caller must hold `cmap::lock` */
 static inline int
-rxm_ep_handle_unconnected(struct rxm_ep *rxm_ep, struct util_cmap_handle *handle,
+rxm_ep_handle_unconnected(struct rxm_ep *rxm_ep, struct rxm_cmap_handle *handle,
 			  fi_addr_t dest_addr)
 {
 	int ret;
 
-	if (handle->state == CMAP_CONNECTED_NOTIFY) {
-		ofi_cmap_process_conn_notify(rxm_ep->util_ep.cmap, handle);
+	if (handle->state == RXM_CMAP_CONNECTED_NOTIFY) {
+		rxm_cmap_process_conn_notify(rxm_ep->cmap, handle);
 		return 0;
 	}
 	/* Since we handling unoonnected state and `cmap:lock`
 	 * is on hold, it shouldn't return 0 */
-	ret = ofi_cmap_handle_connect(rxm_ep->util_ep.cmap,
+	ret = rxm_cmap_handle_connect(rxm_ep->cmap,
 				      dest_addr, handle);
 	if (OFI_UNLIKELY(ret != -FI_EAGAIN))
 		return ret;
@@ -795,13 +908,13 @@ rxm_acquire_conn_connect(struct rxm_ep *rxm_ep, fi_addr_t fi_addr,
 			 struct rxm_conn **rxm_conn)
 {
 	*rxm_conn = rxm_acquire_conn(rxm_ep, fi_addr);
-	if (OFI_UNLIKELY(!*rxm_conn || (*rxm_conn)->handle.state != CMAP_CONNECTED)) {
+	if (OFI_UNLIKELY(!*rxm_conn || (*rxm_conn)->handle.state != RXM_CMAP_CONNECTED)) {
 		int ret;
 		if (!*rxm_conn)
 			return -FI_ENOTCONN;
-		rxm_ep->util_ep.cmap->acquire(&rxm_ep->util_ep.cmap->lock);
+		rxm_ep->cmap->acquire(&rxm_ep->cmap->lock);
 		ret = rxm_ep_handle_unconnected(rxm_ep, &(*rxm_conn)->handle, fi_addr);
-		rxm_ep->util_ep.cmap->release(&rxm_ep->util_ep.cmap->lock);
+		rxm_ep->cmap->release(&rxm_ep->cmap->lock);
 		return ret;
 	}
 	return 0;
