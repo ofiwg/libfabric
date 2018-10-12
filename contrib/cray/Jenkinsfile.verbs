@@ -30,10 +30,10 @@ pipeline {
                 script {
                     GIT_SHORT_COMMIT = sh(returnStdout: true, script: "git log -n 1 --pretty=format:'%h'").trim()
                     if (env.BRANCH_NAME == 'master' || buildingTag()) {
-                        LIBFABRIC_INSTALL_PATH = "$ROOT_BUILD_PATH/libfabric/$GIT_SHORT_COMMIT"
+                        LIBFABRIC_INSTALL = "$ROOT_BUILD_PATH/libfabric/$GIT_SHORT_COMMIT"
                     } else {
                         // use a temporary directory within the workspace
-                        LIBFABRIC_INSTALL_PATH = pwd tmp: true
+                        LIBFABRIC_INSTALL = pwd tmp: true
                     }
                 }
 
@@ -55,7 +55,7 @@ pipeline {
                 stage("Build and install libfabric") {
                     steps {
                         sh './autogen.sh'
-                        sh "./configure --prefix=$LIBFABRIC_INSTALL_PATH"
+                        sh "./configure --prefix=$LIBFABRIC_INSTALL"
                         sh "make -j 12"
                         sh "make install"
                     }
@@ -74,8 +74,9 @@ pipeline {
         }
         stage('Test') {
             environment {
-                LD_LIBRARY_PATH = "$LIBFABRIC_INSTALL_PATH/lib:$LD_LIBRARY_PATH"
+                LD_LIBRARY_PATH = "$LIBFABRIC_INSTALL/lib:$LD_LIBRARY_PATH"
                 MPIR_CVAR_OFI_USE_PROVIDER = 'verbs;ofi_rxm'
+                LIBFABRIC_INSTALL_PATH = "$LIBFABRIC_INSTALL"
             }
             options {
                 timeout (time: 10, unit: 'MINUTES')
@@ -323,7 +324,6 @@ pipeline {
     }
     environment {
         GIT_SHORT_COMMIT = "$GIT_COMMIT"
-        LIBFABRIC_INSTALL_PATH = ""
         ROOT_BUILD_PATH = "/scratch/jenkins/builds"
         FABTEST_PATH = "${ROOT_BUILD_PATH + '/fabtests/stable'}"
         LIBFABRIC_BUILD_PATH = "${ROOT_BUILD_PATH + '/libfabric'}"
