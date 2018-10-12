@@ -193,6 +193,8 @@ err:
 
 static void mrail_adjust_info(struct fi_info *info, const struct fi_info *hints)
 {
+	info->mode &= ~FI_BUFFERED_RECV;
+
 	if (!hints)
 		return;
 
