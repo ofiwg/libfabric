@@ -219,11 +219,19 @@ static void ft_show_test_info(void)
 static int ft_check_info(struct fi_info *hints, struct fi_info *info)
 {
 	if (info->mode & ~hints->mode) {
-		fprintf(stderr, "fi_getinfo unsupported mode returned\n");
+		fprintf(stderr, "fi_getinfo unsupported mode returned:\n");
+		fprintf(stderr, "hints mode: %s\n",
+			fi_tostr(&hints->mode, FI_TYPE_MODE));
+		fprintf(stderr, "info mode: %s\n",
+			fi_tostr(&info->mode, FI_TYPE_MODE));
 		return -FI_EINVAL;
 	}
 	if (hints->caps != (hints->caps & info->caps)) {
-		fprintf(stderr, "fi_getinfo missing caps\n");
+		fprintf(stderr, "fi_getinfo missing caps:\n");
+		fprintf(stderr, "hints caps: %s\n",
+			fi_tostr(&hints->caps, FI_TYPE_CAPS));
+		fprintf(stderr, "info caps: %s\n",
+			fi_tostr(&info->caps, FI_TYPE_CAPS));
 		return -FI_EINVAL;
 	}
 
