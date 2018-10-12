@@ -40,8 +40,6 @@
 #ifdef VALGRIND_MAKE_MEM_DEFINED
 #undef VALGRIND_MAKE_MEM_DEFINED
 #endif
-#define PSM_IS_TEST /* keep plain malloc/realloc/calloc/memalign/free/strdup */
-#include "psm2/psm_mq_internal.h"
 #else
 #include <psm2.h>
 #include <psm2_mq.h>
@@ -55,34 +53,22 @@
 #define PSMX2_DEFAULT_UUID	"00FF00FF-0000-0000-0000-00FF00FF00FF"
 #define PROVIDER_INI		PSM2_INI
 
-#if HAVE_PSM2_SRC
+#if HAVE_PSM2_MQ_REQ_USER
 
 #ifndef PSMX2_USE_REQ_CONTEXT
 #define PSMX2_USE_REQ_CONTEXT	1
 #endif
 
 #define PSMX2_MQ_REQ_USER(s)	((struct psm2_mq_req_user *)(s))
+#define PSMX2_STATUS_TYPE	struct psm2_mq_req_user
+#define PSMX2_STATUS_ERROR(s)	((s)->error_code)
+#define PSMX2_STATUS_TAG(s)	((s)->tag)
+#define PSMX2_STATUS_RCVLEN(s)	((s)->recv_msglen)
+#define PSMX2_STATUS_SNDLEN(s)	((s)->send_msglen)
+#define PSMX2_STATUS_PEER(s)	((s)->peer)
+#define PSMX2_STATUS_CONTEXT(s)	((s)->context)
 
-#define PSMX2_STATUS_TYPE	struct psm2_mq_req
-#define PSMX2_STATUS_DECL(s)	struct psm2_mq_req *s
-#define PSMX2_STATUS_INIT(s)
-#define PSMX2_STATUS_SAVE(s,t)	do { t = s; } while (0)
-#define PSMX2_STATUS_ERROR(s)	(PSMX2_MQ_REQ_USER(s)->error_code)
-#define PSMX2_STATUS_TAG(s)	(PSMX2_MQ_REQ_USER(s)->tag)
-#define PSMX2_STATUS_RCVLEN(s)	(PSMX2_MQ_REQ_USER(s)->recv_msglen)
-#define PSMX2_STATUS_SNDLEN(s)	(PSMX2_MQ_REQ_USER(s)->send_msglen)
-#define PSMX2_STATUS_PEER(s)	(PSMX2_MQ_REQ_USER(s)->peer)
-#define PSMX2_STATUS_CONTEXT(s)	(PSMX2_MQ_REQ_USER(s)->context)
-
-#define PSMX2_POLL_COMPLETION(trx_ctxt, status, err) \
-	do { \
-		(err) = psm2_mq_ipeek_dequeue((trx_ctxt)->psm2_mq, &(status)); \
-	} while (0)
-
-#define PSMX2_FREE_COMPLETION(trx_ctxt, status) \
-	psm2_mq_req_free((trx_ctxt)->psm2_mq, status)
-
-#else /* !HAVE_PSM2_SRC */
+#else /* !HAVE_PSM2_MQ_REQ_USER */
 
 #ifdef PSMX2_USE_REQ_CONTEXT
 #undef PSMX2_USE_REQ_CONTEXT
@@ -122,8 +108,7 @@
 
 #define PSMX2_FREE_COMPLETION(trx_ctxt, status)
 
-#endif /* HAVE_PSM2_SRC */
-
+#endif
 /*
  * Provide backward compatibility for older PSM2 libraries that lack the
  * psm2_am_register_handlers_2 function.
@@ -170,7 +155,7 @@ psm2_error_t psm2_am_register_handlers_2(
 #endif /* !HAVE_PSM2_AM_REGISTER_HANDLERS_2 */
 
 /*
- * Use reserved space within psm2_mq_req for fi_context instead of
+ * Use reserved space within psm2_mq_req_user for fi_context instead of
  * allocating from a internal queue.
  *
  * Only work when compiled with PSM2 source. Can be turned off by
