@@ -120,6 +120,7 @@ src_libfabric_la_SOURCES =			\
 	include/ofi_atom.h			\
 	include/ofi_enosys.h			\
 	include/ofi_file.h			\
+	include/ofi_hook.h			\
 	include/ofi_indexer.h			\
 	include/ofi_iov.h			\
 	include/ofi_list.h			\
@@ -142,7 +143,6 @@ src_libfabric_la_SOURCES =			\
 	include/rbtree.h			\
 	include/uthash.h			\
 	include/ofi_prov.h			\
-	prov/hook/src/hook.h			\
 	include/rdma/providers/fi_log.h		\
 	include/rdma/providers/fi_prov.h	\
 	src/fabric.c				\

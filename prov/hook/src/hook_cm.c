@@ -30,7 +30,7 @@
  * SOFTWARE.
  */
 
-#include "hook.h"
+#include "ofi_hook.h"
 
 
 static int hook_setname(fid_t fid, void *addr, size_t addrlen)
