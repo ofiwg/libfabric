@@ -207,6 +207,58 @@ static void mrail_adjust_info(struct fi_info *info, const struct fi_info *hints)
 	}
 }
 
+static struct fi_info *mrail_get_prefix_info(struct fi_info *core_info)
+{
+	struct fi_info *fi;
+	uint32_t num_rails;
+
+	for (fi = core_info, num_rails = 0; fi; fi = fi->next, ++num_rails)
+		;
+
+	fi = fi_dupinfo(core_info);
+	if (!fi)
+		return NULL;
+
+	free(fi->fabric_attr->name);
+	free(fi->domain_attr->name);
+
+	fi->fabric_attr->name = NULL;
+	fi->domain_attr->name = NULL;
+
+	fi->fabric_attr->name = strdup(mrail_info.fabric_attr->name);
+	if (!fi->fabric_attr->name)
+		goto err;
+
+	fi->domain_attr->name = strdup(mrail_info.domain_attr->name);
+	if (!fi->domain_attr->name)
+		goto err;
+
+	fi->ep_attr->protocol		= mrail_info.ep_attr->protocol;
+	fi->ep_attr->protocol_version	= mrail_info.ep_attr->protocol_version;
+	fi->fabric_attr->prov_version	= FI_VERSION(MRAIL_MAJOR_VERSION,
+						     MRAIL_MINOR_VERSION);
+	fi->domain_attr->mr_key_size	= (num_rails *
+					   sizeof(struct mrail_addr_key));
+	fi->domain_attr->mr_mode	|= FI_MR_RAW;
+
+	/* Account for one iovec buffer used for mrail header */
+	assert(fi->tx_attr->iov_limit);
+	fi->tx_attr->iov_limit--;
+
+	/* Claiming messages larger than FI_OPT_BUFFERED_LIMIT would consume
+	 * a scatter/gather entry for mrail_hdr */
+	fi->rx_attr->iov_limit--;
+
+	if (fi->tx_attr->inject_size < sizeof(struct mrail_hdr))
+		fi->tx_attr->inject_size = 0;
+	else
+		fi->tx_attr->inject_size -= sizeof(struct mrail_hdr);
+	return fi;
+err:
+	fi_freeinfo(fi);
+	return NULL;
+}
+
 static int mrail_check_modes(const struct fi_info *hints)
 {
 	if (!hints)
@@ -234,8 +286,6 @@ static int mrail_getinfo(uint32_t version, const char *node, const char *service
 			 struct fi_info **info)
 {
 	struct fi_info *fi;
-	size_t mr_key_size;
-	uint32_t num_rails;
 	int ret;
 
 	if (mrail_num_info >= MRAIL_MAX_INFO) {
@@ -253,53 +303,11 @@ static int mrail_getinfo(uint32_t version, const char *node, const char *service
 	if (ret)
 		return ret;
 
-
-	for (fi = *info, num_rails = 0; fi; fi = fi->next, ++num_rails)
-		;
-
-	mr_key_size = num_rails * sizeof(struct mrail_addr_key);
-
-	fi = fi_dupinfo(*info);
+	fi = mrail_get_prefix_info(*info);
 	if (!fi) {
 		ret = -FI_ENOMEM;
 		goto err1;
 	}
-
-	free(fi->fabric_attr->name);
-	free(fi->domain_attr->name);
-
-	fi->fabric_attr->name = NULL;
-	fi->domain_attr->name = NULL;
-
-	fi->fabric_attr->name = strdup(mrail_info.fabric_attr->name);
-	if (!fi->fabric_attr->name) {
-		ret = -FI_ENOMEM;
-		goto err2;
-	}
-	fi->domain_attr->name = strdup(mrail_info.domain_attr->name);
-	if (!fi->domain_attr->name) {
-		ret = -FI_ENOMEM;
-		goto err2;
-	}
-	fi->ep_attr->protocol		= mrail_info.ep_attr->protocol;
-	fi->ep_attr->protocol_version	= mrail_info.ep_attr->protocol_version;
-	fi->fabric_attr->prov_version	= FI_VERSION(MRAIL_MAJOR_VERSION,
-						     MRAIL_MINOR_VERSION);
-	fi->domain_attr->mr_key_size	= mr_key_size;
-	fi->domain_attr->mr_mode	|= FI_MR_RAW;
-
-	/* Account for one iovec buffer used for mrail header */
-	assert(fi->tx_attr->iov_limit);
-	fi->tx_attr->iov_limit--;
-
-	/* Claiming messages larger than FI_OPT_BUFFERED_LIMIT would consume
-	 * a scatter/gather entry for mrail_hdr */
-	fi->rx_attr->iov_limit--;
-
-	if (fi->tx_attr->inject_size < sizeof(struct mrail_hdr))
-		fi->tx_attr->inject_size = 0;
-	else
-		fi->tx_attr->inject_size -= sizeof(struct mrail_hdr);
 
 	mrail_adjust_info(fi, hints);
 
