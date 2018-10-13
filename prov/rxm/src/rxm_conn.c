@@ -1343,12 +1343,9 @@ struct rxm_cmap *rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep)
 {
 	struct rxm_cmap_attr attr;
 	struct rxm_cmap *cmap = NULL;
-	void *name;
-	size_t len;
 	int ret;
-
-	len = rxm_ep->msg_info->src_addrlen;
-	name = calloc(1, len);
+	size_t len = rxm_ep->util_ep.av->addrlen;
+	void *name = calloc(1, len);
 	if (!name) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 			"Unable to allocate memory for EP name\n");
