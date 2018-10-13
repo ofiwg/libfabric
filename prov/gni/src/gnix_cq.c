@@ -351,6 +351,9 @@ ssize_t _gnix_cq_add_error(struct gnix_fid_cq *cq, void *op_context,
 
 	_gnix_queue_enqueue(cq->errors, &event->item);
 
+	if (cq->wait)
+		_gnix_signal_wait_obj(cq->wait);
+
 err:
 	COND_RELEASE(cq->requires_lock, &cq->lock);
 
