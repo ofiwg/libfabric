@@ -105,16 +105,17 @@ int util_buf_grow(struct util_buf_pool *pool)
 			goto err2;
 	}
 
-	if (util_buf_use_ftr(pool) &&
-	    !(pool->regions_cnt % UTIL_BUF_POOL_REGION_CHUNK_CNT)) {
-		struct util_buf_region **new_table =
+	if (util_buf_use_ftr(pool)) {
+		if (!(pool->regions_cnt % UTIL_BUF_POOL_REGION_CHUNK_CNT)) {
+			struct util_buf_region **new_table =
 				realloc(pool->regions_table,
 					(pool->regions_cnt +
 					 UTIL_BUF_POOL_REGION_CHUNK_CNT) *
 					sizeof(*pool->regions_table));
-		if (!new_table)
-			goto err3;
-		pool->regions_table = new_table;
+			if (!new_table)
+				goto err3;
+			pool->regions_table = new_table;
+		}
 		pool->regions_table[pool->regions_cnt] = buf_region;
 		pool->regions_cnt++;
 	}
