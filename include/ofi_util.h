@@ -651,6 +651,9 @@ struct util_av_attr {
 	int	flags;
 };
 
+typedef int (*ofi_av_apply_func)(struct util_av *av, void *addr,
+				 fi_addr_t fi_addr, void *arg);
+
 int ofi_av_init(struct util_domain *domain,
 	       const struct fi_av_attr *attr, const struct util_av_attr *util_attr,
 	       struct util_av *av, void *context);
@@ -662,6 +665,7 @@ int ofi_av_close_lightweight(struct util_av *av);
 int ofi_av_insert_addr(struct util_av *av, const void *addr, fi_addr_t *fi_addr);
 int ofi_av_remove_addr(struct util_av *av, fi_addr_t fi_addr);
 fi_addr_t ofi_av_lookup_fi_addr(struct util_av *av, const void *addr);
+int ofi_av_elements_iter(struct util_av *av, ofi_av_apply_func apply, void *arg);
 int ofi_av_bind(struct fid *av_fid, struct fid *eq_fid, uint64_t flags);
 void ofi_av_write_event(struct util_av *av, uint64_t data,
 			int err, void *context);

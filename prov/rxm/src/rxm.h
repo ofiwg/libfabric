@@ -189,6 +189,8 @@ struct rxm_cmap {
 	fastlock_t		lock;
 };
 
+struct rxm_ep;
+
 struct rxm_cmap_handle *rxm_cmap_key2handle(struct rxm_cmap *cmap, uint64_t key);
 int rxm_cmap_get_handle(struct rxm_cmap *cmap, fi_addr_t fi_addr,
 			struct rxm_cmap_handle **handle);
@@ -209,8 +211,7 @@ void rxm_cmap_process_shutdown(struct rxm_cmap *cmap,
 			       struct rxm_cmap_handle *handle);
 void rxm_cmap_del_handle_ts(struct rxm_cmap_handle *handle);
 void rxm_cmap_free(struct rxm_cmap *cmap);
-struct rxm_cmap *rxm_cmap_alloc(struct util_ep *ep,
-				 struct rxm_cmap_attr *attr);
+int rxm_cmap_alloc(struct rxm_ep *rxm_ep, struct rxm_cmap_attr *attr);
 int rxm_cmap_handle_connect(struct rxm_cmap *cmap, fi_addr_t fi_addr,
 			    struct rxm_cmap_handle *handle);
 /* Caller must hold cmap->lock */
@@ -651,7 +652,7 @@ ssize_t rxm_cq_handle_rx_buf(struct rxm_rx_buf *rx_buf);
 int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 			  struct fid_ep **ep, void *context);
 
-struct rxm_cmap *rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep);
+int rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep);
 void rxm_cq_write_error(struct util_cq *cq, struct util_cntr *cntr,
 			void *op_context, int err);
 void rxm_ep_progress_one(struct util_ep *util_ep);
