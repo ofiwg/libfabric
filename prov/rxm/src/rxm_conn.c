@@ -430,7 +430,7 @@ void rxm_cmap_process_reject(struct rxm_cmap *cmap,
 		if (cm_reject_flag == RXM_CMAP_REJECT_GENUINE) {
 			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 			       "Deleting connection handle\n");
-			rxm_cmap_del_handle_ts(handle);
+			rxm_cmap_del_handle(handle);
 		} else {
 			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 			       "Connection handle is being re-used. Close the connection\n");
