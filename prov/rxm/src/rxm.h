@@ -173,6 +173,7 @@ struct rxm_cmap {
 
 	/* cmap handles that correspond to addresses in AV */
 	struct rxm_cmap_handle **handles_av;
+	size_t			num_allocated;
 
 	/* Store all cmap handles (inclusive of handles_av) in an indexer.
 	 * This allows reverse lookup of the handle using the index. */
@@ -210,9 +211,6 @@ void rxm_cmap_del_handle_ts(struct rxm_cmap_handle *handle);
 void rxm_cmap_free(struct rxm_cmap *cmap);
 struct rxm_cmap *rxm_cmap_alloc(struct util_ep *ep,
 				 struct rxm_cmap_attr *attr);
-int rxm_cmap_alloc_handle(struct rxm_cmap *cmap, fi_addr_t fi_addr,
-			  enum rxm_cmap_state state,
-			  struct rxm_cmap_handle **handle);
 int rxm_cmap_handle_connect(struct rxm_cmap *cmap, fi_addr_t fi_addr,
 			    struct rxm_cmap_handle *handle);
 /* Caller must hold cmap->lock */
@@ -221,7 +219,7 @@ int rxm_cmap_move_handle_to_peer_list(struct rxm_cmap *cmap, int index);
 static inline struct rxm_cmap_handle *
 rxm_cmap_acquire_handle(struct rxm_cmap *cmap, fi_addr_t fi_addr)
 {
-	assert(fi_addr <= cmap->av->count);
+	assert(fi_addr <= cmap->num_allocated);
 	return cmap->handles_av[fi_addr];
 }
 
