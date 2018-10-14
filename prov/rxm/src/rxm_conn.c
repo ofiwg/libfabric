@@ -147,6 +147,57 @@ static int rxm_cmap_del_handle(struct rxm_cmap_handle *handle)
 	return 0;
 }
 
+static inline int
+rxm_cmap_check_and_realloc_handles_table(struct rxm_cmap *cmap,
+					 fi_addr_t fi_addr)
+{
+	int ret = FI_SUCCESS;
+
+	if (OFI_LIKELY(fi_addr < cmap->num_allocated))
+		return ret;
+
+	while (fi_addr >= cmap->num_allocated) {
+		struct rxm_cmap_handle **handles_av_new =
+				realloc(cmap->handles_av,
+					(cmap->av->count +
+					 cmap->num_allocated) *
+					sizeof(*cmap->handles_av));
+		if (OFI_LIKELY(*handles_av_new != NULL)) {
+			cmap->handles_av = handles_av_new;
+ 			memset(&cmap->handles_av[cmap->num_allocated],
+			       0, sizeof(*cmap->handles_av) *
+				  cmap->av->count);
+			cmap->num_allocated += cmap->av->count;
+		} else {
+			ret = -FI_ENOMEM;
+			break;
+		}
+	}
+	return ret;
+}
+
+static int rxm_conn_send_queue_init(struct rxm_ep *rxm_ep,
+				    struct rxm_conn *rxm_conn,
+				    size_t size)
+{
+	if (!rxm_ep->send_queue) {
+		return rxm_send_queue_init(rxm_ep, &rxm_conn->send_queue, size);
+	} else {
+		rxm_conn->send_queue = rxm_ep->send_queue;
+	}
+	return 0;
+}
+
+static void
+rxm_conn_send_queue_close(struct rxm_conn *rxm_conn)
+{
+	if (!rxm_conn->send_queue->rxm_ep->send_queue) {
+		rxm_send_queue_close(rxm_conn->send_queue);
+	} else {
+		rxm_conn->send_queue = NULL;
+	}
+}
+
 void rxm_cmap_del_handle_ts(struct rxm_cmap_handle *handle)
 {
 	struct rxm_cmap *cmap = handle->cmap;
@@ -155,16 +206,58 @@ void rxm_cmap_del_handle_ts(struct rxm_cmap_handle *handle)
 	cmap->release(&cmap->lock);
 }
 
-/* Caller must hold cmap->lock */
-int rxm_cmap_alloc_handle(struct rxm_cmap *cmap, fi_addr_t fi_addr,
-			   enum rxm_cmap_state state,
-			   struct rxm_cmap_handle **handle)
+static void rxm_conn_free(struct rxm_cmap_handle *handle)
 {
+	struct rxm_conn *rxm_conn =
+		container_of(handle, struct rxm_conn, handle);
+
+	/* This handles case when saved_msg_ep wasn't closed */
+	if (rxm_conn->saved_msg_ep) {
+		if (fi_close(&rxm_conn->saved_msg_ep->fid)) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+				"Unable to close saved msg_ep\n");
+		} else {
+			FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
+			       "Closed saved msg_ep\n");
+		}
+		rxm_conn->saved_msg_ep = NULL;
+	}
+
+	if (!rxm_conn->msg_ep)
+		return;
+	/* Assuming fi_close also shuts down the connection gracefully if the
+	 * endpoint is in connected state */
+	if (fi_close(&rxm_conn->msg_ep->fid)) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+			"Unable to close msg_ep\n");
+	} else {
+		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
+		       "Closed msg_ep\n");
+	}
+	rxm_conn->msg_ep = NULL;
+	rxm_conn_send_queue_close(rxm_conn);
+
+	free(container_of(handle, struct rxm_conn, handle));
+}
+
+/* Caller must hold cmap->lock */
+static int rxm_cmap_alloc_handle(struct rxm_cmap *cmap, fi_addr_t fi_addr,
+				 enum rxm_cmap_state state,
+				 struct rxm_cmap_handle **handle)
+{
+	int ret;
+
 	*handle = rxm_conn_alloc(cmap);
 	if (OFI_UNLIKELY(!*handle))
 		return -FI_ENOMEM;
-	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "Allocated handle: %p for "
-	       "fi_addr: %" PRIu64 "\n", *handle, fi_addr);
+	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
+	       "Allocated handle: %p for fi_addr: %" PRIu64 "\n",
+	       *handle, fi_addr);
+	ret = rxm_cmap_check_and_realloc_handles_table(cmap, fi_addr);
+	if (OFI_UNLIKELY(ret)) {
+		rxm_conn_free(*handle);
+		return ret;
+	}
 	rxm_cmap_init_handle(*handle, cmap, state, fi_addr, NULL);
 	cmap->handles_av[fi_addr] = *handle;
 	return 0;
@@ -207,8 +300,8 @@ rxm_cmap_get_handle_peer(struct rxm_cmap *cmap, const void *addr)
 				       addr);
 	if (!entry)
 		return NULL;
-	ofi_straddr_dbg(cmap->av->prov, FI_LOG_AV, "handle found in peer list"
-			" for addr", addr);
+	ofi_straddr_dbg(cmap->av->prov, FI_LOG_AV,
+			"handle found in peer list for addr", addr);
 	peer = container_of(entry, struct rxm_cmap_peer, entry);
 	return peer->handle;
 }
@@ -237,30 +330,39 @@ unlock:
 }
 
 /* Caller must hold cmap->lock */
-static void rxm_cmap_move_handle(struct rxm_cmap_handle *handle,
-				  fi_addr_t fi_addr)
+static int rxm_cmap_move_handle(struct rxm_cmap_handle *handle,
+				fi_addr_t fi_addr)
 {
+	int ret;
+
 	dlist_remove(&handle->peer->entry);
 	free(handle->peer);
 	handle->peer = NULL;
 	handle->fi_addr = fi_addr;
+	ret = rxm_cmap_check_and_realloc_handles_table(handle->cmap, fi_addr);
+	if (OFI_UNLIKELY(ret))
+		return ret;
 	handle->cmap->handles_av[fi_addr] = handle;
+	return 0;
 }
 
 int rxm_cmap_update(struct rxm_cmap *cmap, const void *addr, fi_addr_t fi_addr)
 {
 	struct rxm_cmap_handle *handle;
-	int ret = 0;
+	int ret;
 
 	cmap->acquire(&cmap->lock);
 	handle = rxm_cmap_get_handle_peer(cmap, addr);
 	if (!handle) {
-		ret = rxm_cmap_alloc_handle(cmap, fi_addr, RXM_CMAP_IDLE, &handle);
+		ret = rxm_cmap_alloc_handle(cmap, fi_addr,
+					    RXM_CMAP_IDLE, &handle);
 		cmap->release(&cmap->lock);
 		return ret;
 	}
-	rxm_cmap_move_handle(handle, fi_addr);
+	ret = rxm_cmap_move_handle(handle, fi_addr);
 	cmap->release(&cmap->lock);
+	if (ret)
+		return ret;
 
 	rxm_conn_av_updated_handler(handle);
 	return 0;
@@ -530,7 +632,7 @@ void rxm_cmap_free(struct rxm_cmap *cmap)
 
 	cmap->acquire(&cmap->lock);
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "Closing cmap\n");
-	for (i = 0; i < cmap->av->count; i++) {
+	for (i = 0; i < cmap->num_allocated; i++) {
 		if (cmap->handles_av[i])
 			rxm_cmap_del_handle(cmap->handles_av[i]);
 	}
@@ -569,6 +671,7 @@ struct rxm_cmap *rxm_cmap_alloc(struct util_ep *ep,
 	cmap->handles_av = calloc(cmap->av->count, sizeof(*cmap->handles_av));
 	if (!cmap->handles_av)
 		goto err1;
+	cmap->num_allocated = ep->av->count;
 
 	cmap->attr = *attr;
 	cmap->attr.name = mem_dup(attr->name, ep->av->addrlen);
@@ -669,27 +772,6 @@ err:
 	return ret;
 }
 
-static int
-rxm_conn_send_queue_init(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, size_t size)
-{
-	if (!rxm_ep->send_queue) {
-		return rxm_send_queue_init(rxm_ep, &rxm_conn->send_queue, size);
-	} else {
-		rxm_conn->send_queue = rxm_ep->send_queue;
-	}
-	return 0;
-}
-
-static void
-rxm_conn_send_queue_close(struct rxm_conn *rxm_conn)
-{
-	if (!rxm_conn->send_queue->rxm_ep->send_queue) {
-		rxm_send_queue_close(rxm_conn->send_queue);
-	} else {
-		rxm_conn->send_queue = NULL;
-	}
-}
-
 static void rxm_conn_close(struct rxm_cmap_handle *handle)
 {
 	struct rxm_conn *rxm_conn =
@@ -749,40 +831,6 @@ static void rxm_conn_close_saved(struct rxm_cmap_handle *handle)
 		}
 		rxm_conn->saved_msg_ep = NULL;
 	}
-}
-
-static void rxm_conn_free(struct rxm_cmap_handle *handle)
-{
-	struct rxm_conn *rxm_conn =
-		container_of(handle, struct rxm_conn, handle);
-
-	/* This handles case when saved_msg_ep wasn't closed */
-	if (rxm_conn->saved_msg_ep) {
-		if (fi_close(&rxm_conn->saved_msg_ep->fid)) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-				"Unable to close saved msg_ep\n");
-		} else {
-			FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
-			       "Closed saved msg_ep\n");
-		}
-		rxm_conn->saved_msg_ep = NULL;
-	}
-
-	if (!rxm_conn->msg_ep)
-		return;
-	/* Assuming fi_close also shuts down the connection gracefully if the
-	 * endpoint is in connected state */
-	if (fi_close(&rxm_conn->msg_ep->fid)) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-			"Unable to close msg_ep\n");
-	} else {
-		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
-		       "Closed msg_ep\n");
-	}
-	rxm_conn->msg_ep = NULL;
-	rxm_conn_send_queue_close(rxm_conn);
-
-	free(container_of(handle, struct rxm_conn, handle));
 }
 
 static void rxm_conn_connected_handler(struct rxm_cmap_handle *handle)
