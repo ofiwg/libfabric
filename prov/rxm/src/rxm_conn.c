@@ -656,48 +656,50 @@ void rxm_cmap_free(struct rxm_cmap *cmap)
 	free(cmap);
 }
 
-struct rxm_cmap *rxm_cmap_alloc(struct util_ep *ep,
-				 struct rxm_cmap_attr *attr)
+static int
+rxm_cmap_update_addr(struct util_av *av, void *addr,
+		     fi_addr_t fi_addr, void *arg)
+{
+	return rxm_cmap_update((struct rxm_cmap *)arg, addr, fi_addr);
+}
+
+int rxm_cmap_bind_to_av(struct rxm_cmap *cmap, struct util_av *av)
+{
+	cmap->av = av;
+	return ofi_av_elements_iter(av, rxm_cmap_update_addr, (void *)cmap);
+}
+
+int rxm_cmap_alloc(struct rxm_ep *rxm_ep, struct rxm_cmap_attr *attr)
 {
 	struct rxm_cmap *cmap;
+	struct util_ep *ep = &rxm_ep->util_ep;
+	int ret;
 
 	cmap = calloc(1, sizeof *cmap);
 	if (!cmap)
-		return NULL;
+		return -FI_ENOMEM;
 
 	cmap->ep = ep;
 	cmap->av = ep->av;
 
 	cmap->handles_av = calloc(cmap->av->count, sizeof(*cmap->handles_av));
-	if (!cmap->handles_av)
+	if (!cmap->handles_av) {
+		ret = -FI_ENOMEM;
 		goto err1;
+	}
 	cmap->num_allocated = ep->av->count;
 
 	cmap->attr = *attr;
 	cmap->attr.name = mem_dup(attr->name, ep->av->addrlen);
-	if (!cmap->attr.name)
+	if (!cmap->attr.name) {
+		ret = -FI_ENOMEM;
 		goto err2;
+	}
 
 	memset(&cmap->handles_idx, 0, sizeof(cmap->handles_idx));
 	ofi_key_idx_init(&cmap->key_idx, RXM_CMAP_IDX_BITS);
 
 	dlist_init(&cmap->peer_list);
-
-	if (ep->domain->data_progress == FI_PROGRESS_AUTO) {
-		if (pthread_create(&cmap->cm_thread, 0,
-				   rxm_conn_progress, ep)) {
-			FI_WARN(ep->av->prov, FI_LOG_FABRIC,
-				"Unable to create cmap thread\n");
-			goto err3;
-		}
-	} else {
-		if (pthread_create(&cmap->cm_thread, 0,
-				   rxm_conn_eq_read, ep)) {
-			FI_WARN(ep->av->prov, FI_LOG_FABRIC,
-				"Unable to create cmap thread\n");
-			goto err3;
-		}
-	}
 
 	if (cmap->attr.serial_access) {
 		cmap->acquire = ofi_fastlock_acquire_noop;
@@ -707,15 +709,45 @@ struct rxm_cmap *rxm_cmap_alloc(struct util_ep *ep,
 		cmap->acquire = ofi_fastlock_acquire;
 		cmap->release = ofi_fastlock_release;
 	}
-	return cmap;
+
+	rxm_ep->cmap = cmap;
+
+	if (ep->domain->data_progress == FI_PROGRESS_AUTO) {
+		if (pthread_create(&cmap->cm_thread, 0,
+				   rxm_conn_progress, ep)) {
+			FI_WARN(ep->av->prov, FI_LOG_FABRIC,
+				"Unable to create cmap thread\n");
+			ret = -ofi_syserr();
+			goto err3;
+		}
+	} else {
+		if (pthread_create(&cmap->cm_thread, 0,
+				   rxm_conn_eq_read, ep)) {
+			FI_WARN(ep->av->prov, FI_LOG_FABRIC,
+				"Unable to create cmap thread\n");
+			ret = -ofi_syserr();
+			goto err3;
+		}
+	}
+
+	assert(ep->av);
+	ret = rxm_cmap_bind_to_av(cmap, ep->av);
+	if (ret)
+		goto err4;
+
+	return FI_SUCCESS;
+err4:
+	rxm_cmap_cm_thread_close(cmap);
 err3:
 	free(cmap->attr.name);
 err2:
 	free(cmap->handles_av);
 err1:
-	free(cmap);
-	return NULL;
-}static int rxm_msg_ep_open(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
+	rxm_ep->cmap = NULL;
+	return ret;
+}
+
+static int rxm_msg_ep_open(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 			   struct rxm_conn *rxm_conn, void *context)
 {
 	struct rxm_domain *rxm_domain;
@@ -1387,17 +1419,16 @@ static int rxm_conn_signal(struct util_ep *util_ep, void *context,
 	return 0;
 }
 
-struct rxm_cmap *rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep)
+int rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep)
 {
 	struct rxm_cmap_attr attr;
-	struct rxm_cmap *cmap = NULL;
 	int ret;
 	size_t len = rxm_ep->util_ep.av->addrlen;
 	void *name = calloc(1, len);
 	if (!name) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 			"Unable to allocate memory for EP name\n");
-		return NULL;
+		return -FI_ENOMEM;
 	}
 
 	/* Passive endpoint should already have fi_setname or fi_listen
@@ -1418,11 +1449,11 @@ struct rxm_cmap *rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep)
 	else
 		attr.serial_access = 0;
 
-	cmap = rxm_cmap_alloc(&rxm_ep->util_ep, &attr);
-	if (!cmap)
+	ret = rxm_cmap_alloc(rxm_ep, &attr);
+	if (ret)
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 			"Unable to allocate CMAP\n");
 fn:
 	free(name);
-	return cmap;
+	return ret;
 }

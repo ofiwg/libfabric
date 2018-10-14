@@ -277,6 +277,21 @@ int ofi_av_insert_addr(struct util_av *av, const void *addr, fi_addr_t *fi_addr)
 	return 0;
 }
 
+int ofi_av_elements_iter(struct util_av *av, ofi_av_apply_func apply, void *arg)
+{
+	struct util_av_entry *av_entry = NULL, *av_entry_tmp = NULL;
+	int ret;
+
+	HASH_ITER(hh, av->hash, av_entry, av_entry_tmp) {
+		ret = apply(av, av_entry->addr,
+			    util_get_buf_index(av->av_entry_pool, av_entry),
+			    arg);
+		if (OFI_UNLIKELY(ret))
+			return ret;
+	}
+	return 0;
+}
+
 /*
  * Must hold AV lock
  */
