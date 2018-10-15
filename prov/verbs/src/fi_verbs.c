@@ -64,6 +64,13 @@ struct fi_ibv_gl_data fi_ibv_gl_data = {
 		.use_name_server	= 1,
 		.name_server_port	= 5678,
 	},
+
+	.msg			= {
+		/* Disabled by default. Use XRC transport for message
+		 * endpoint only if it is explicitly requested */
+		.prefer_xrc		= 0,
+		.xrcd_filename		= "/tmp/verbs_xrcd",
+	},
 };
 
 struct fi_ibv_dev_preset {
@@ -311,7 +318,7 @@ int fi_ibv_set_rnr_timer(struct ibv_qp *qp)
 }
 
 int fi_ibv_find_max_inline(struct ibv_pd *pd, struct ibv_context *context,
-                           enum ibv_qp_type qp_type)
+			   enum ibv_qp_type qp_type)
 {
 	struct ibv_qp_init_attr qp_attr;
 	struct ibv_qp *qp = NULL;
@@ -332,12 +339,14 @@ int fi_ibv_find_max_inline(struct ibv_pd *pd, struct ibv_context *context,
 
 	memset(&qp_attr, 0, sizeof(qp_attr));
 	qp_attr.send_cq = cq;
-	qp_attr.recv_cq = cq;
 	qp_attr.qp_type = qp_type;
 	qp_attr.cap.max_send_wr = 1;
-	qp_attr.cap.max_recv_wr = 1;
 	qp_attr.cap.max_send_sge = 1;
-	qp_attr.cap.max_recv_sge = 1;
+	if (!fi_ibv_is_xrc_send_qp(qp_type)) {
+		qp_attr.recv_cq = cq;
+		qp_attr.cap.max_recv_wr = 1;
+		qp_attr.cap.max_recv_sge = 1;
+	}
 	qp_attr.sq_sig_all = 1;
 
 	do {
@@ -535,6 +544,22 @@ static int fi_ibv_read_params(void)
 				  &fi_ibv_gl_data.use_odp)) {
 		VERBS_WARN(FI_LOG_CORE,
 			   "Invalid value of use_odp\n");
+		return -FI_EINVAL;
+	}
+
+	if (fi_ibv_get_param_bool("prefer_xrc", "Order XRC transport fi_infos"
+				  "ahead of RC. Default orders RC first.",
+				  &fi_ibv_gl_data.msg.prefer_xrc)) {
+		VERBS_WARN(FI_LOG_CORE,
+			   "Invalid value of prefer_xrc\n");
+		return -FI_EINVAL;
+	}
+
+	if (fi_ibv_get_param_str("xrcd_filename", "A file to "
+				 "associate with the XRC domain.",
+				 &fi_ibv_gl_data.msg.xrcd_filename)) {
+		VERBS_WARN(FI_LOG_CORE,
+			   "Invalid value of xrcd_filename\n");
 		return -FI_EINVAL;
 	}
 	if (fi_ibv_get_param_int("cqread_bunch_size", "The number of entries to "

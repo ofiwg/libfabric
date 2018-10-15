@@ -481,9 +481,25 @@ static int fi_ibv_cq_close(fid_t fid)
 	int ret;
 	struct fi_ibv_cq *cq =
 		container_of(fid, struct fi_ibv_cq, util_cq.cq_fid);
+	struct fi_ibv_srq_ep *srq_ep;
+	struct dlist_entry *srq_ep_temp;
 
 	if (ofi_atomic_get32(&cq->nevents))
 		ibv_ack_cq_events(cq->cq, ofi_atomic_get32(&cq->nevents));
+
+	/* Since an RX CQ and SRX context can be destroyed in any order,
+	 * and the XRC SRQ references the RX CQ, we must destroy any
+	 * XRC SRQ using this CQ before destroying the CQ. */
+	fastlock_acquire(&cq->xrc.srq_list_lock);
+	dlist_foreach_container_safe(&cq->xrc.srq_list, struct fi_ibv_srq_ep,
+				     srq_ep, xrc.srq_entry, srq_ep_temp) {
+		ret = fi_ibv_xrc_close_srq(srq_ep);
+		if (ret) {
+			fastlock_release(&cq->xrc.srq_list_lock);
+			return -ret;
+		}
+	}
+	fastlock_release(&cq->xrc.srq_list_lock);
 
 	cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
 	while (!slist_empty(&cq->wcq)) {
@@ -513,6 +529,7 @@ static int fi_ibv_cq_close(fid_t fid)
 	if (cq->channel)
 		ibv_destroy_comp_channel(cq->channel);
 
+	fastlock_destroy(&cq->xrc.srq_list_lock);
 	free(cq);
 	return 0;
 }
@@ -638,6 +655,8 @@ int fi_ibv_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	}
 
 	slist_init(&cq->wcq);
+	dlist_init(&cq->xrc.srq_list);
+	fastlock_init(&cq->xrc.srq_list_lock);
 
 	cq->trywait = fi_ibv_cq_trywait;
 	ofi_atomic_initialize32(&cq->nevents, 0);

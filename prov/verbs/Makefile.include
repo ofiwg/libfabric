@@ -1,17 +1,19 @@
 if HAVE_VERBS
-_verbs_files =					\
-	prov/verbs/src/fi_verbs.h		\
-	prov/verbs/src/fi_verbs.c		\
-	prov/verbs/src/verbs_cm.c		\
-	prov/verbs/src/verbs_cq.c		\
-	prov/verbs/src/verbs_domain.c		\
-	prov/verbs/src/verbs_mr.c		\
-	prov/verbs/src/verbs_eq.c		\
-	prov/verbs/src/verbs_info.c		\
-	prov/verbs/src/verbs_ep.c		\
-	prov/verbs/src/verbs_msg.c		\
-	prov/verbs/src/verbs_rma.c		\
-	prov/verbs/src/verbs_dgram_ep_msg.c	\
+_verbs_files =							\
+	prov/verbs/src/fi_verbs.h				\
+	prov/verbs/src/fi_verbs.c				\
+	prov/verbs/src/verbs_cm.c				\
+	prov/verbs/src/verbs_cm_xrc.c				\
+	prov/verbs/src/verbs_cq.c				\
+	prov/verbs/src/verbs_domain.c				\
+	prov/verbs/src/verbs_domain_xrc.c			\
+	prov/verbs/src/verbs_mr.c				\
+	prov/verbs/src/verbs_eq.c				\
+	prov/verbs/src/verbs_info.c				\
+	prov/verbs/src/verbs_ep.c				\
+	prov/verbs/src/verbs_msg.c				\
+	prov/verbs/src/verbs_rma.c				\
+	prov/verbs/src/verbs_dgram_ep_msg.c			\
 	prov/verbs/src/verbs_dgram_av.c
 
 if HAVE_VERBS_DL
