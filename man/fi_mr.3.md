@@ -447,6 +447,7 @@ struct fi_mr_attr {
 	const struct iovec *mr_iov;
 	size_t             iov_count;
 	uint64_t           access;
+	uint64_t           offset;
 	uint64_t           requested_key;
 	void               *context;
 	size_t             auth_key_size;
@@ -493,6 +494,10 @@ bitwise OR of the following flags:
 *FI_REMOTE_WRITE*
 : The memory buffer may be used as the target buffer of an RMA write
   or atomic operation.
+
+## offset
+
+The offset field is reserved for future use and must be 0.
 
 ## requested_key
 
