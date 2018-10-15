@@ -87,7 +87,7 @@ static struct fi_ops_ep hook_ep_ops = {
 };
 
 
-static void hook_setup_ep(enum hook_class hclass, struct fid_ep *ep,
+static void hook_setup_ep(enum ofi_hook_class hclass, struct fid_ep *ep,
 			  int fclass, void *context)
 {
 	ep->fid.fclass = fclass;
