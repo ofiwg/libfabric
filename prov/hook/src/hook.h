@@ -49,7 +49,7 @@
  * Hooks are installed from top down.
  * Values must start at 0 and increment by one.
  */
-enum hook_class {
+enum ofi_hook_class {
 	HOOK_NOOP,
 	HOOK_PERF,
 	MAX_HOOKS
@@ -68,7 +68,7 @@ struct fid_wait *hook_to_hwait(const struct fid_wait *wait);
 struct hook_fabric {
 	struct fid_fabric	fabric;
 	struct fid_fabric	*hfabric;
-	enum hook_class		hclass;
+	enum ofi_hook_class	hclass;
 	struct fi_provider	*prov;
 };
 

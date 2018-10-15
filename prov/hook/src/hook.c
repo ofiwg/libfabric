@@ -187,7 +187,7 @@ static struct fi_ops_fabric hook_fabric_ops = {
 };
 
 static int hook_fabric(struct fid_fabric *hfabric, struct fid_fabric **fabric,
-			enum hook_class hclass, struct fi_provider *prov)
+			enum ofi_hook_class hclass, struct fi_provider *prov)
 {
 	struct hook_fabric *fab;
 	int ret = 0;
