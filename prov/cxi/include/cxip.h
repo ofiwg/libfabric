@@ -123,6 +123,33 @@ extern uint64_t CXIP_EP_RDM_CAP;
 
 #define CXIP_WIRE_PROTO_VERSION (1)
 
+#ifndef CXIP_EAGER_THRESHOLD
+#define CXIP_EAGER_THRESHOLD (2048)
+#endif
+
+#ifndef CXIP_MAX_OFLOW_BUFS
+#define CXIP_MAX_OFLOW_BUFS (3)
+#endif
+
+#ifndef CXIP_MAX_OFLOW_MSGS
+#define CXIP_MAX_OFLOW_MSGS (1024)
+#endif
+
+#define CXIP_RDVS_PROT_SHIFT (63)
+#define CXIP_RDVS_PROT_MASK (1ULL << CXIP_RDVS_PROT_SHIFT)
+#define CXIP_RDVS_PROT_BIT (1ULL << (CXIP_RDVS_PROT_SHIFT))
+#define CXIP_RDVS_ID_SHIFT (56)
+#define CXIP_RDVS_ID_MASK (0x7fULL << CXIP_RDVS_ID_SHIFT)
+#define CXIP_RDVS_MASK (CXIP_RDVS_ID_MASK | CXIP_RDVS_PROT_MASK)
+#define CXIP_RDVS_ID(id) (CXIP_RDVS_ID_MASK & \
+			  (((uint64_t)id) << CXIP_RDVS_ID_SHIFT))
+#define CXIP_RDVS_GET_ID(match) ((CXIP_RDVS_ID_MASK & match) >> \
+				 CXIP_RDVS_ID_SHIFT)
+
+#define CXIP_MAKE_INIT(pid, nic_addr) (((pid) << 24) | (nic_addr))
+#define CXIP_GET_INIT_PID(init) ((init) >> 24)
+#define CXIP_GET_INIT_NID(init) ((init) & ((1 << 24) - 1))
+
 extern const char cxip_fab_fmt[];
 extern const char cxip_dom_fmt[];
 extern const char cxip_prov_name[];
@@ -181,6 +208,7 @@ struct cxip_addr {
 
 #define CXIP_MR_TO_IDX(key) (CXIP_PID_RXC_CNT + (key))
 #define CXIP_RXC_TO_IDX(rx_id) (rx_id)
+#define CXIP_RDVS_IDX(pid_granule) ((pid_granule) - 1)
 
 #define	CXIP_AV_ADDR_IDX(av, fi_addr)	((uint64_t)fi_addr & av->mask)
 #define	CXIP_AV_ADDR_RXC(av, fi_addr)	((uint64_t)fi_addr >> \
@@ -363,13 +391,19 @@ struct cxip_req_recv {
 	void *recv_buf;			// local receive buffer
 	struct cxi_iova recv_md;	// local receive MD
 	int rc;				// result code
-	int rlength;			// receive length
-	int mlength;			// message length
+	uint32_t rlength;		// receive length
+	uint32_t mlength;		// message length
 	uint64_t start;			// starting receive offset
 };
 
 struct cxip_req_send {
 	struct cxi_iova send_md;	// message target buffer
+	struct cxip_tx_ctx *txc;
+	size_t length;			// request length
+	int rdvs_id;			// SW RDVS ID for long messages
+	enum c_return_code event_failure;// SW RDVS Failure status on prev event
+	int complete_on_unlink;		// SW RDVS state for expected messages
+	union c_cmdu cmd;	// Rendezvous cmd to send after LE is linked
 };
 
 struct cxip_req_oflow {
@@ -536,6 +570,13 @@ struct cxip_ux_send {
 	struct cxip_oflow_buf *oflow_buf;
 	uint64_t start;
 	uint64_t length;
+	uint64_t match_bits;
+	uint32_t initiator;
+};
+
+enum oflow_buf_type {
+	EAGER_OFLOW_BUF = 1,
+	LONG_RDVS_OFLOW_BUF,
 };
 
 /**
@@ -545,6 +586,7 @@ struct cxip_ux_send {
  */
 struct cxip_oflow_buf {
 	struct dlist_entry list;
+	enum oflow_buf_type type;
 	struct cxip_rx_ctx *rxc;
 	void *buf;
 	struct cxi_iova md;
@@ -586,6 +628,7 @@ struct cxip_rx_ctx {
 
 	struct cxip_pte *rx_pte;
 	struct cxi_cmdq *rx_cmdq;
+	struct cxi_cmdq *tx_cmdq;	// Xmit cmdq for SW Rendezvous
 
 	int eager_threshold;
 
@@ -597,6 +640,13 @@ struct cxip_rx_ctx {
 	struct dlist_entry oflow_bufs;	// Overflow buffers
 	struct dlist_entry ux_sends;	// Sends matched in overflow list
 	struct dlist_entry ux_recvs;	// Recvs matched in overflow list
+	struct cxip_oflow_buf ux_rdvs_buf; // Long UX Rendezvous buffer
+};
+
+#define CXIP_RDVS_BM_LEN (8)
+
+struct cxip_rdvs_ids {
+	uint16_t bitmap[CXIP_RDVS_BM_LEN];
 };
 
 /**
@@ -632,6 +682,12 @@ struct cxip_tx_ctx {
 	struct fi_tx_attr attr;		// attributes
 
 	struct cxi_cmdq *tx_cmdq;	// added during cxip_tx_ctx_enable()
+
+	/* Software Rendezvous related structures */
+	struct cxip_pte *rdvs_pte;	// PTE for SW Rendezvous commands
+	int eager_threshold;		// Threshold for eager IOs
+	struct cxi_cmdq *rx_cmdq;	// Target cmdq for Rendezvous buffers
+	struct cxip_rdvs_ids rdvs_ids;	// Set of Rendezvous IDs to be used
 };
 
 /**
@@ -888,8 +944,13 @@ struct cxip_rx_ctx *cxip_rx_ctx_alloc(const struct fi_rx_attr *attr,
 				      void *context, int use_shared);
 void cxip_rx_ctx_free(struct cxip_rx_ctx *rx_ctx);
 
-void cxip_rxc_oflow_replenish(struct cxip_rx_ctx *rxc);
+int cxip_tx_ctx_alloc_rdvs_id(struct cxip_tx_ctx *txc);
+int cxip_tx_ctx_free_rdvs_id(struct cxip_tx_ctx *txc, int tag);
+
+int cxip_rxc_oflow_replenish(struct cxip_rx_ctx *rxc);
 void cxip_rxc_oflow_cleanup(struct cxip_rx_ctx *rxc);
+int cxip_sw_rdvs_ux_buf_add(struct cxip_rx_ctx *rxc);
+void cxip_rxc_sw_rdvs_ux_cleanup(struct cxip_rx_ctx *rxc);
 int cxip_rx_ctx_enable(struct cxip_rx_ctx *rxc);
 int cxip_tx_ctx_enable(struct cxip_tx_ctx *txc);
 struct cxip_tx_ctx *cxip_tx_ctx_alloc(const struct fi_tx_attr *attr,

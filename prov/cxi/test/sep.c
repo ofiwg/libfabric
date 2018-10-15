@@ -25,8 +25,8 @@ Test(sep, simple)
 	cxit_destroy_sep();
 }
 
-/* Test invalid (NULL argument) syntax */
-Test(sep, null_args)
+/* Test invalid syntax */
+Test(sep, invalid_args)
 {
 	struct fi_info info = *cxit_fi;
 	int ret;
@@ -45,6 +45,11 @@ Test(sep, null_args)
 	ret = fi_scalable_ep(cxit_domain, &info, &cxit_ep, NULL);
 	cr_assert_eq(ret, -FI_EINVAL);
 
+	/* Currently don't support scalable endpoints doing tagged sends */
+	info = *cxit_fi;
+	info.caps |= (FI_TAGGED | FI_SEND);
+	ret = fi_scalable_ep(cxit_domain, &info, &cxit_ep, NULL);
+	cr_assert_eq(ret, -FI_EINVAL);
 }
 
 /**
@@ -90,6 +95,7 @@ ParameterizedTest(struct sep_test_params *param, sep, fi_sep_types)
 	struct cxip_ep *cep;
 
 	cxit_fi->ep_attr->type = param->type;
+	cxit_fi->caps &= ~(FI_TAGGED | FI_SEND);
 	cxit_ep = NULL;
 	ret = fi_scalable_ep(cxit_domain, cxit_fi, &cxit_ep, param->context);
 	cr_assert_eq(ret, param->retval,

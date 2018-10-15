@@ -150,6 +150,7 @@ static struct cxip_req *cxip_cq_event_req(struct cxip_cq *cq,
 		return (struct cxip_req *)event->init_short.user_ptr;
 	case C_EVENT_LINK:
 	case C_EVENT_UNLINK:
+	case C_EVENT_GET:
 	case C_EVENT_PUT:
 	case C_EVENT_PUT_OVERFLOW:
 		req = cxip_cq_req_find(cq, event->tgt_long.buffer_id);

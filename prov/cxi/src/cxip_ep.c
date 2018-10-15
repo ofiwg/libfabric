@@ -1798,6 +1798,14 @@ int cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 		goto err;
 	}
 
+	if (fclass == FI_CLASS_SEP && hints &&
+	    (hints->caps & (FI_TAGGED | FI_SEND)) == (FI_TAGGED | FI_SEND)) {
+		CXIP_LOG_ERROR(
+			"Scalable EPs do not support (FI_TAGGED | FI_SEND) capabilities\n");
+		ret = -FI_EINVAL;
+		goto err;
+	}
+
 	nic = cxi_dom->nic_addr;
 	if (hints->src_addr) {
 		struct cxip_addr *src = hints->src_addr;

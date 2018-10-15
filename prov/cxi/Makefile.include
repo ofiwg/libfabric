@@ -46,9 +46,9 @@ nodist_prov_cxi_test_cxitest_SOURCES = \
 	prov/cxi/test/atomic.c
 
 prov_cxi_test_cxitest_CPPFLAGS = $(AM_CPPFLAGS) $(cxi_CPPFLAGS) \
-	$(cxitest_CPPFLAGS)
+	$(cxitest_CPPFLAGS) $(PTHREAD_CFLAGS)
 prov_cxi_test_cxitest_LDFLAGS = $(cxitest_LDFLAGS) -static
-prov_cxi_test_cxitest_LDADD =  $(cxitest_LIBS) $(linkback)
+prov_cxi_test_cxitest_LDADD =  $(cxitest_LIBS) $(linkback) $(PTHREAD_LIBS)
 
 TESTS += prov/cxi/test/cxitest
 endif HAVE_CRITERION
@@ -69,4 +69,3 @@ src_libfabric_la_LDFLAGS += $(cxi_LDFLAGS)
 endif !HAVE_CXI_DL
 
 endif HAVE_CXI
-

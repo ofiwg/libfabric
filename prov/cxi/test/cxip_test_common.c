@@ -252,6 +252,11 @@ void cxit_create_sep(void)
 {
 	int ret;
 
+	/* Scalabled EPs do not support TAGGED|SEND capabilities at the same \
+	 * time. Disable TAGGED capability if SEND is requested
+	 */
+	if (cxit_fi->caps & FI_SEND)
+		cxit_fi->caps &= ~FI_TAGGED;
 	ret = fi_scalable_ep(cxit_domain, cxit_fi, &cxit_sep, NULL);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_scalable_ep");
 	cr_assert_not_null(cxit_sep);
@@ -410,7 +415,8 @@ void cxit_setup_rma(void)
 	/* Request required capabilities for RMA */
 	cxit_setup_getinfo();
 	cxit_fi_hints->fabric_attr->prov_name = strdup(cxip_prov_name);
-	cxit_fi_hints->caps = FI_WRITE | FI_READ;
+	cxit_fi_hints->caps = (FI_WRITE | FI_READ | FI_TAGGED | FI_SEND |
+			       FI_RECV);
 	cxit_tx_cq_attr.format = FI_CQ_FORMAT_TAGGED;
 	cxit_av_attr.type = FI_AV_TABLE;
 
