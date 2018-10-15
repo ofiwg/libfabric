@@ -11,14 +11,14 @@
  *     without modification, are permitted provided that the following
  *     conditions are met:
  *
- *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer.
+ *	- Redistributions of source code must retain the above
+ *	  copyright notice, this list of conditions and the following
+ *	  disclaimer.
  *
- *      - Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials
- *        provided with the distribution.
+ *	- Redistributions in binary form must reproduce the above
+ *	  copyright notice, this list of conditions and the following
+ *	  disclaimer in the documentation and/or other materials
+ *	  provided with the distribution.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
  * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
@@ -86,9 +86,9 @@ int mrail_get_core_info(uint32_t version, const char *node, const char *service,
 		return -FI_ENOMEM;
 
 	if (!hints) {
-		core_hints->mode = MRAIL_PASSTHROUGH_MODES;
+		core_hints->mode = MRAIL_PASSTHRU_MODES;
 		assert(core_hints->domain_attr);
-		core_hints->domain_attr->mr_mode = MRAIL_PASSTHROUGH_MR_MODES;
+		core_hints->domain_attr->mr_mode = MRAIL_PASSTHRU_MR_MODES;
 	} else {
 		if (hints->tx_attr) {
 			if (hints->tx_attr->iov_limit)
@@ -142,8 +142,7 @@ int mrail_get_core_info(uint32_t version, const char *node, const char *service,
 		FI_DBG(&mrail_prov, FI_LOG_CORE,
 		       "--- Begin fi_getinfo for rail: %zd ---\n", i);
 
-		ret = fi_getinfo(version, node, service, flags,
-				 core_hints, &info);
+		ret = fi_getinfo(version, NULL, NULL, 0, core_hints, &info);
 
 		FI_DBG(&mrail_prov, FI_LOG_CORE,
 		       "--- End fi_getinfo for rail: %zd ---\n", i);
@@ -194,6 +193,8 @@ err:
 
 static void mrail_adjust_info(struct fi_info *info, const struct fi_info *hints)
 {
+	info->mode &= ~FI_BUFFERED_RECV;
+
 	if (!hints)
 		return;
 
@@ -208,36 +209,17 @@ static void mrail_adjust_info(struct fi_info *info, const struct fi_info *hints)
 	}
 }
 
-static int mrail_getinfo(uint32_t version, const char *node, const char *service,
-			 uint64_t flags, const struct fi_info *hints,
-			 struct fi_info **info)
+static struct fi_info *mrail_get_prefix_info(struct fi_info *core_info)
 {
 	struct fi_info *fi;
-	size_t mr_key_size;
 	uint32_t num_rails;
-	int ret;
 
-	if (mrail_num_info >= MRAIL_MAX_INFO) {
-		FI_WARN(&mrail_prov, FI_LOG_CORE,
-			"Max mrail_num_info reached\n");
-		assert(0);
-		return -FI_ENODATA;
-	}
-
-	ret = mrail_get_core_info(version, node, service, flags, hints, info);
-	if (ret)
-		return ret;
-
-	for (fi = *info, num_rails = 0; fi; fi = fi->next, ++num_rails)
+	for (fi = core_info, num_rails = 0; fi; fi = fi->next, ++num_rails)
 		;
 
-	mr_key_size = num_rails * sizeof(struct mrail_addr_key);
-
-	fi = fi_dupinfo(*info);
-	if (!fi) {
-		ret = -FI_ENOMEM;
-		goto err1;
-	}
+	fi = fi_dupinfo(core_info);
+	if (!fi)
+		return NULL;
 
 	free(fi->fabric_attr->name);
 	free(fi->domain_attr->name);
@@ -246,21 +228,20 @@ static int mrail_getinfo(uint32_t version, const char *node, const char *service
 	fi->domain_attr->name = NULL;
 
 	fi->fabric_attr->name = strdup(mrail_info.fabric_attr->name);
-	if (!fi->fabric_attr->name) {
-		ret = -FI_ENOMEM;
-		goto err2;
-	}
+	if (!fi->fabric_attr->name)
+		goto err;
+
 	fi->domain_attr->name = strdup(mrail_info.domain_attr->name);
-	if (!fi->domain_attr->name) {
-		ret = -FI_ENOMEM;
-		goto err2;
-	}
-	fi->ep_attr->protocol 		= mrail_info.ep_attr->protocol;
-	fi->ep_attr->protocol_version 	= mrail_info.ep_attr->protocol_version;
+	if (!fi->domain_attr->name)
+		goto err;
+
+	fi->ep_attr->protocol		= mrail_info.ep_attr->protocol;
+	fi->ep_attr->protocol_version	= mrail_info.ep_attr->protocol_version;
 	fi->fabric_attr->prov_version	= FI_VERSION(MRAIL_MAJOR_VERSION,
 						     MRAIL_MINOR_VERSION);
-	fi->domain_attr->mr_key_size 	= mr_key_size;
-	fi->domain_attr->mr_mode        |= FI_MR_RAW;
+	fi->domain_attr->mr_key_size	= (num_rails *
+					   sizeof(struct mrail_addr_key));
+	fi->domain_attr->mr_mode	|= FI_MR_RAW;
 
 	/* Account for one iovec buffer used for mrail header */
 	assert(fi->tx_attr->iov_limit);
@@ -274,6 +255,61 @@ static int mrail_getinfo(uint32_t version, const char *node, const char *service
 		fi->tx_attr->inject_size = 0;
 	else
 		fi->tx_attr->inject_size -= sizeof(struct mrail_hdr);
+	return fi;
+err:
+	fi_freeinfo(fi);
+	return NULL;
+}
+
+static int mrail_check_modes(const struct fi_info *hints)
+{
+	if (!hints)
+		return 0;
+
+	if (hints->mode & ~MRAIL_PASSTHRU_MODES) {
+		FI_INFO(&mrail_prov, FI_LOG_CORE,
+			"Unable to pass through given modes: %s\n",
+			fi_tostr(&hints->mode, FI_TYPE_MODE));
+		return -FI_ENODATA;
+	}
+
+	if (hints->domain_attr &&
+	    (hints->domain_attr->mr_mode & ~MRAIL_PASSTHRU_MR_MODES)) {
+		FI_INFO(&mrail_prov, FI_LOG_CORE,
+			"Unable to pass through given MR modes: %s\n",
+			fi_tostr(&hints->domain_attr->mr_mode, FI_TYPE_MR_MODE));
+		return -FI_ENODATA;
+	}
+	return 0;
+}
+
+static int mrail_getinfo(uint32_t version, const char *node, const char *service,
+			 uint64_t flags, const struct fi_info *hints,
+			 struct fi_info **info)
+{
+	struct fi_info *fi;
+	int ret;
+
+	if (mrail_num_info >= MRAIL_MAX_INFO) {
+		FI_WARN(&mrail_prov, FI_LOG_CORE,
+			"Max mrail_num_info reached\n");
+		assert(0);
+		return -FI_ENODATA;
+	}
+
+	ret = mrail_check_modes(hints);
+	if (ret)
+		return ret;
+
+	ret = mrail_get_core_info(version, node, service, flags, hints, info);
+	if (ret)
+		return ret;
+
+	fi = mrail_get_prefix_info(*info);
+	if (!fi) {
+		ret = -FI_ENOMEM;
+		goto err1;
+	}
 
 	mrail_adjust_info(fi, hints);
 
