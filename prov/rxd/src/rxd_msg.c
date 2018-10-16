@@ -40,14 +40,19 @@ static int rxd_match_unexp(struct dlist_entry *item, const void *arg)
 {
 	struct rxd_x_entry *rx_entry = (struct rxd_x_entry *) arg;
 	struct rxd_pkt_entry *pkt_entry;
-	struct rxd_op_pkt *op;
+	struct rxd_base_hdr *hdr;
 
 	pkt_entry = container_of(item, struct rxd_pkt_entry, d_entry);
-	op = (struct rxd_op_pkt *) (pkt_entry->pkt);
+	hdr = rxd_get_base_hdr(pkt_entry);
 
-	return rxd_match_addr(rx_entry->peer, op->pkt_hdr.peer) &&
-	       rxd_match_tag(rx_entry->cq_entry.tag, rx_entry->ignore,
-	       op->tag);
+	if (!rxd_match_addr(rx_entry->peer, hdr->peer))
+		return 0;
+
+	if (hdr->type != RXD_TAGGED)
+		return 1;
+
+	return rxd_match_tag(rx_entry->cq_entry.tag, rx_entry->ignore,
+			     rxd_get_tag_hdr(pkt_entry)->tag);
 }
 
 static void rxd_ep_check_unexp_msg_list(struct rxd_ep *ep, struct dlist_entry *list,
@@ -55,10 +60,16 @@ static void rxd_ep_check_unexp_msg_list(struct rxd_ep *ep, struct dlist_entry *l
 {
 	struct dlist_entry *match;
 	struct rxd_pkt_entry *pkt_entry;
-	struct rxd_op_pkt *op;
+	struct rxd_base_hdr *base_hdr;
+	struct rxd_sar_hdr *sar_hdr = NULL;
+	struct rxd_tag_hdr *tag_hdr = NULL;
+	struct rxd_data_hdr *data_hdr = NULL;
+	struct rxd_atom_hdr *atom_hdr = NULL;
+	struct rxd_rma_hdr *rma_hdr = NULL;
+	void *msg = NULL;
+	size_t msg_size;
 
-	match = dlist_remove_first_match(list, &rxd_match_unexp,
-					 (void *) rx_entry);
+	match = dlist_remove_first_match(list, &rxd_match_unexp, (void *) rx_entry);
 	if (!match)
 		return;
 
@@ -66,11 +77,18 @@ static void rxd_ep_check_unexp_msg_list(struct rxd_ep *ep, struct dlist_entry *l
 	dlist_remove(&rx_entry->entry);
 
 	pkt_entry = container_of(match, struct rxd_pkt_entry, d_entry);
-	op = (struct rxd_op_pkt *) (pkt_entry->pkt);
-	dlist_insert_tail(&rx_entry->entry, &ep->peers[op->pkt_hdr.peer].rx_list);
+	base_hdr = rxd_get_base_hdr(pkt_entry);
 
-	rxd_progress_op(ep, pkt_entry, rx_entry);
-	rxd_ep_send_ack(ep, op->pkt_hdr.peer);
+	rxd_unpack_hdrs(pkt_entry->pkt_size, base_hdr, &sar_hdr, &tag_hdr,
+			&data_hdr, &rma_hdr, &atom_hdr, &msg, &msg_size);
+
+	rx_entry->cq_entry.len = MIN(rx_entry->cq_entry.len,
+		sar_hdr ? sar_hdr->size : msg_size);
+	dlist_insert_tail(&rx_entry->entry, &ep->peers[base_hdr->peer].rx_list);
+
+	rxd_progress_op(ep, rx_entry, pkt_entry, base_hdr, sar_hdr, tag_hdr, data_hdr,
+			rma_hdr, atom_hdr, &msg, msg_size);
+	rxd_ep_send_ack(ep, base_hdr->peer);
 	rxd_release_repost_rx(ep, pkt_entry);
 }
 
@@ -165,7 +183,7 @@ ssize_t rxd_ep_generic_inject(struct rxd_ep *rxd_ep, const struct iovec *iov,
 
 	assert(iov_count <= RXD_IOV_LIMIT);
 	assert(ofi_total_iov_len(iov, iov_count) <=
-	       rxd_ep_domain(rxd_ep)->max_inline_sz);
+	       rxd_ep_domain(rxd_ep)->max_inline_msg);
 
 	dg_addr = rxd_av_dg_addr(rxd_ep_av(rxd_ep), addr);
 
@@ -179,8 +197,8 @@ ssize_t rxd_ep_generic_inject(struct rxd_ep *rxd_ep, const struct iovec *iov,
 	    dlist_empty(&rxd_ep->peers[dg_addr].unacked))
 		rxd_ep_send_rts(rxd_ep, dg_addr);
 
-	tx_entry = rxd_tx_entry_init(rxd_ep, iov, iov_count, NULL, 0, data, tag, NULL,
-				     dg_addr, op, rxd_flags | RXD_INJECT);
+	tx_entry = rxd_tx_entry_init(rxd_ep, iov, iov_count, NULL, 0, 0, data,
+				     tag, NULL, dg_addr, op, rxd_flags | RXD_INJECT);
 	if (!tx_entry)
 		goto out;
 
@@ -221,8 +239,8 @@ ssize_t rxd_ep_generic_sendmsg(struct rxd_ep *rxd_ep, const struct iovec *iov,
 	    dlist_empty(&rxd_ep->peers[dg_addr].unacked))
 		rxd_ep_send_rts(rxd_ep, dg_addr);
 
-	tx_entry = rxd_tx_entry_init(rxd_ep, iov, iov_count, NULL, 0, data, tag, context,
-				     dg_addr, op, rxd_flags);
+	tx_entry = rxd_tx_entry_init(rxd_ep, iov, iov_count, NULL, 0, 0,
+				     data, tag, context, dg_addr, op, rxd_flags);
 	if (!tx_entry)
 		goto out;
 
