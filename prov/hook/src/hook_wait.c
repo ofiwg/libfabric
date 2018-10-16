@@ -31,7 +31,7 @@
  */
 
 #include <stdlib.h>
-#include "hook.h"
+#include "ofi_hook.h"
 
 
 static int hook_do_poll(struct fid_poll *pollset, void **context, int count)

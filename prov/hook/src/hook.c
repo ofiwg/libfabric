@@ -35,7 +35,7 @@
 #include <stdio.h>
 #include <ofi.h>
 
-#include "hook.h"
+#include "ofi_hook.h"
 #include "hook_perf.h"
 #include "ofi_prov.h"
 
