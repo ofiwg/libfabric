@@ -341,6 +341,80 @@ static int validate_modebits(uint32_t version, const struct fi_info *hints,
 	return FI_SUCCESS;
 }
 
+static int usdf_alloc_fid_nic(struct fi_info *fi,
+			struct usd_device_attrs *dap)
+{
+	int ret;
+	struct fid_nic *nic = NULL;
+	struct fi_device_attr *da = NULL;
+	struct fi_link_attr *la = NULL;
+
+	nic = ofi_nic_dup(NULL);
+	if (!nic)
+		goto nomem;
+
+	da = nic->device_attr;
+	da->name = strdup(dap->uda_devname);
+	if (!da->name)
+		goto nomem;
+	ret = asprintf(&da->device_id, "%s (%s)",
+		usd_devid_to_pid(dap->uda_vendor_id,
+				dap->uda_device_id),
+		usd_devid_to_nicname(dap->uda_vendor_id,
+				dap->uda_device_id));
+	if (ret < 0)
+		goto nomem;
+	ret = asprintf(&da->device_version, "0x%x", dap->uda_vendor_part_id);
+	if (ret < 0)
+		goto nomem;
+	ret = asprintf(&da->vendor_id, "0x%x", dap->uda_vendor_id);
+	if (ret < 0)
+		goto nomem;
+	da->driver = strdup("usnic_verbs");
+	if (!da->driver)
+		goto nomem;
+	da->firmware = strdup(dap->uda_firmware);
+	if (!da->firmware)
+		goto nomem;
+
+	// usnic does not currently expose PCI bus information, so we
+	// set the bus type to unknown.
+	nic->bus_attr->bus_type = FI_BUS_UNKNOWN;
+
+	la = nic->link_attr;
+
+	socklen_t size = INET_ADDRSTRLEN;
+	la->address = calloc(1, size);
+	if (!la->address)
+		goto nomem;
+	inet_ntop(AF_INET, &dap->uda_ipaddr_be, la->address, size);
+	la->mtu = dap->uda_mtu;
+	la->speed = dap->uda_bandwidth;
+	switch (dap->uda_link_state) {
+	case USD_LINK_UP:
+		la->state = FI_LINK_UP;
+		break;
+	case USD_LINK_DOWN:
+		la->state = FI_LINK_DOWN;
+		break;
+	default:
+		la->state = FI_LINK_UNKNOWN;
+		break;
+	}
+	la->network_type = strdup("Ethernet");
+	if (!la->network_type)
+		goto nomem;
+
+	fi->nic = nic;
+
+	return FI_SUCCESS;
+
+nomem:
+	if (nic)
+		fi_close(&nic->fid);
+	return -FI_ENOMEM;
+}
+
 static int usdf_fill_info_dgram(
 	uint32_t version,
 	const struct fi_info *hints,
@@ -416,6 +490,10 @@ static int usdf_fill_info_dgram(
 		goto fail;
 
 	ret = usdf_dgram_fill_rx_attr(version, hints, fi, dap);
+	if (ret)
+		goto fail;
+
+	ret = usdf_alloc_fid_nic(fi, dap);
 	if (ret)
 		goto fail;
 
@@ -508,6 +586,10 @@ static int usdf_fill_info_msg(
 	if (ret)
 		goto fail;
 
+	ret = usdf_alloc_fid_nic(fi, dap);
+	if (ret)
+		goto fail;
+
 	/* add to tail of list */
 	if (*fi_first == NULL) {
 		*fi_first = fi;
@@ -592,6 +674,10 @@ static int usdf_fill_info_rdm(
 		goto fail;
 
 	ret = usdf_rdm_fill_rx_attr(version, hints, fi);
+	if (ret)
+		goto fail;
+
+	ret = usdf_alloc_fid_nic(fi, dap);
 	if (ret)
 		goto fail;
 
