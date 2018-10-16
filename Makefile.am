@@ -143,7 +143,6 @@ src_libfabric_la_SOURCES =			\
 	include/uthash.h			\
 	include/ofi_prov.h			\
 	prov/hook/src/hook.h			\
-	prov/hook/src/hook_perf.h		\
 	include/rdma/providers/fi_log.h		\
 	include/rdma/providers/fi_prov.h	\
 	src/fabric.c				\
@@ -160,7 +159,6 @@ src_libfabric_la_SOURCES =			\
 	prov/hook/src/hook_domain.c		\
 	prov/hook/src/hook_ep.c			\
 	prov/hook/src/hook_eq.c			\
-	prov/hook/src/hook_perf.c		\
 	prov/hook/src/hook_wait.c		\
 	prov/hook/src/hook_xfer.c		\
 	$(common_srcs)
@@ -386,6 +384,7 @@ include prov/mlx/Makefile.include
 include prov/shm/Makefile.include
 include prov/tcp/Makefile.include
 include prov/rstream/Makefile.include
+include prov/hook/perf/Makefile.include
 
 man_MANS = $(real_man_pages) $(prov_install_man_pages) $(dummy_man_pages)
 

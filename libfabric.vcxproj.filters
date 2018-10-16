@@ -103,6 +103,12 @@
     <Filter Include="Source Files\prov\hook\src">
       <UniqueIdentifier>{b4689956-b61f-4c5b-b827-9af0797ea087}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\prov\hook\perf">
+      <UniqueIdentifier>{06bbf944-2165-474f-a574-2e61ec0bec25}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\prov\hook\perf\src">
+      <UniqueIdentifier>{be316a01-6bff-4203-b070-ffaa66bb398e}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\common.c">
@@ -456,14 +462,14 @@
     <ClCompile Include="prov\hook\src\hook_eq.c">
       <Filter>Source Files\prov\hook\src</Filter>
     </ClCompile>
-    <ClCompile Include="prov\hook\src\hook_perf.c">
-      <Filter>Source Files\prov\hook\src</Filter>
-    </ClCompile>
     <ClCompile Include="prov\hook\src\hook_wait.c">
       <Filter>Source Files\prov\hook\src</Filter>
     </ClCompile>
     <ClCompile Include="prov\hook\src\hook_xfer.c">
       <Filter>Source Files\prov\hook\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\hook\perf\src\hook_perf.c">
+      <Filter>Source Files\prov\hook\perf\src</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -687,9 +693,6 @@
       <Filter>Header Files\windows</Filter>
     </ClInclude>
     <ClInclude Include="prov\hook\src\hook.h">
-      <Filter>Source Files\prov\hook\src</Filter>
-    </ClInclude>
-    <ClInclude Include="prov\hook\src\hook_perf.h">
       <Filter>Source Files\prov\hook\src</Filter>
     </ClInclude>
   </ItemGroup>
