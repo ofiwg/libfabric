@@ -187,9 +187,6 @@ static ssize_t tcpx_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg
 
 	assert(!(flags & FI_INJECT) || (data_len <= TCPX_MAX_INJECT_SZ));
 
-	send_entry->msg_hdr.hdr.version = OFI_CTRL_VERSION;
-	send_entry->msg_hdr.hdr.op = ofi_op_write;
-	send_entry->msg_hdr.hdr.op_data = TCPX_OP_WRITE;
 	send_entry->msg_hdr.hdr.size = htonll(data_len + sizeof(send_entry->msg_hdr));
 	send_entry->msg_hdr.hdr.flags = 0;
 
