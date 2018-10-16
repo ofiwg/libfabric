@@ -32,7 +32,7 @@
 
 #include <stdlib.h>
 #include <ofi_enosys.h>
-#include "hook.h"
+#include "ofi_hook.h"
 #include "hook_perf.h"
 
 

@@ -30,7 +30,7 @@
  * SOFTWARE.
  */
 
-#include "hook.h"
+#include "ofi_hook.h"
 
 
 static ssize_t

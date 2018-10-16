@@ -33,7 +33,7 @@
 #ifndef _HOOK_PERF_H_
 #define _HOOK_PERF_H_
 
-#include "hook.h"
+#include "ofi_hook.h"
 #include "ofi.h"
 #include "ofi_perf.h"
 
