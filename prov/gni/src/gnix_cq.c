@@ -458,7 +458,7 @@ static ssize_t __gnix_cq_readfrom(struct fid_cq *cq, void *buf,
 		assert(event->the_entry);
 		memcpy(buf, event->the_entry, cq_priv->entry_size);
 		if (src_addr)
-			memcpy(src_addr, &event->src_addr, sizeof(fi_addr_t));
+			memcpy(&src_addr[read_count], &event->src_addr, sizeof(fi_addr_t));
 
 		_gnix_queue_enqueue_free(cq_priv->events, &event->item);
 
