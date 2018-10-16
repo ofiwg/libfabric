@@ -44,16 +44,19 @@
 #include <rdma/fi_rma.h>
 #include <rdma/fi_tagged.h>
 
+#include <rdma/providers/fi_prov.h>
+
 
 /*
  * Hooks are installed from top down.
  * Values must start at 0 and increment by one.
  */
-enum hook_class {
+enum ofi_hook_class {
 	HOOK_NOOP,
 	HOOK_PERF,
 	MAX_HOOKS
 };
+
 
 /*
  * Define hook structs so we can cast from fid to parent using simple cast.
@@ -68,9 +71,12 @@ struct fid_wait *hook_to_hwait(const struct fid_wait *wait);
 struct hook_fabric {
 	struct fid_fabric	fabric;
 	struct fid_fabric	*hfabric;
-	enum hook_class		hclass;
+	enum ofi_hook_class	hclass;
 	struct fi_provider	*prov;
 };
+
+void hook_fabric_init(struct hook_fabric *fabric, enum ofi_hook_class hclass,
+		      struct fid_fabric *hfabric, struct fi_provider *hprov);
 
 
 struct hook_domain {

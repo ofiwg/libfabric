@@ -19,9 +19,16 @@ selected calls or debugging information.
 # SUPPORTED FEATURES
 
 Hooking support is enabled through the FI_HOOK environment variable.  To
-enable hooking, FI_HOOK must be set to one of the following values:
+enable hooking, FI_HOOK must be set to the name of one or more of the
+available hooking providers.  When multiple hooks are specified, the
+names must be separated by a semi-colon.  To obtain a list of hooking
+providers available on the current system, one can use the fi_info
+utility with the '--env' command line option.  Hooking providers are
+usually identified by 'hook' appearing in the provider name.
 
-*perf*
+Known hooking providers include the following:
+
+*ofi_perf_hook*
 : This hooks 'fast path' data operation calls.  Performance data is
   captured on call entrance and exit, in order to provide an average of
   how long each call takes to complete.  See the PERFORMANCE HOOKS section
