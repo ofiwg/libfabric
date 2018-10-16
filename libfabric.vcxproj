@@ -125,7 +125,7 @@
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_WINSOCKAPI_=;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;_WINDOWS;_USRDLL;LIBFABRIC_EXPORTS;HAVE_CONFIG_H;ENABLE_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\perf\include</AdditionalIncludeDirectories>
       <CompileAs>CompileAsC</CompileAs>
       <DisableSpecificWarnings>4127;4200;4204;4221;4115;4201;4100</DisableSpecificWarnings>
       <C99Support>true</C99Support>
@@ -148,7 +148,7 @@
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_WINSOCKAPI_=;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;_WINDOWS;_USRDLL;LIBFABRIC_EXPORTS;HAVE_CONFIG_H;ENABLE_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\perf\include;</AdditionalIncludeDirectories>
       <CompileAs>CompileAsC</CompileAs>
       <DisableSpecificWarnings>4127;4200;4204;4221;4115;4201;4100</DisableSpecificWarnings>
       <C99Support>true</C99Support>
@@ -171,7 +171,7 @@
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_WINSOCKAPI_=;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;_WINDOWS;_USRDLL;LIBFABRIC_EXPORTS;HAVE_CONFIG_H;ENABLE_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\perf\include</AdditionalIncludeDirectories>
       <CompileAs>CompileAsC</CompileAs>
       <DisableSpecificWarnings>4127;4200;94;4204;4221;869</DisableSpecificWarnings>
       <C99Support>true</C99Support>
@@ -195,7 +195,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WIN32;_WINSOCKAPI_=;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;_WINDOWS;_USRDLL;LIBFABRIC_EXPORTS;HAVE_CONFIG_H;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\perf\include</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4127;4200;4204;4221;4115;4201;4100</DisableSpecificWarnings>
       <C99Support>true</C99Support>
       <ShowIncludes>false</ShowIncludes>
@@ -220,7 +220,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WIN32;_WINSOCKAPI_=;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;_WINDOWS;_USRDLL;LIBFABRIC_EXPORTS;HAVE_CONFIG_H;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\perf\include;</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4127;4200;4204;4221;4115;4201;4100</DisableSpecificWarnings>
       <C99Support>true</C99Support>
       <ShowIncludes>false</ShowIncludes>
@@ -245,7 +245,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WIN32;_WINSOCKAPI_=;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;_WINDOWS;_USRDLL;LIBFABRIC_EXPORTS;HAVE_CONFIG_H;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)prov\hook\perf\include;;$(ProjectDir)prov\hook\src</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4127;4200;94;4204;4221;869</DisableSpecificWarnings>
       <C99Support>true</C99Support>
       <ShowIncludes>false</ShowIncludes>
@@ -262,6 +262,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="prov\hook\perf\src\hook_perf.c" />
     <ClCompile Include="prov\hook\src\hook.c" />
     <ClCompile Include="prov\hook\src\hook_av.c" />
     <ClCompile Include="prov\hook\src\hook_cm.c" />
@@ -270,7 +271,6 @@
     <ClCompile Include="prov\hook\src\hook_domain.c" />
     <ClCompile Include="prov\hook\src\hook_ep.c" />
     <ClCompile Include="prov\hook\src\hook_eq.c" />
-    <ClCompile Include="prov\hook\src\hook_perf.c" />
     <ClCompile Include="prov\hook\src\hook_wait.c" />
     <ClCompile Include="prov\hook\src\hook_xfer.c" />
     <ClCompile Include="prov\netdir\src\netdir_cntr.c" />
@@ -632,7 +632,6 @@
     <ClInclude Include="include\windows\sys\wait.h" />
     <ClInclude Include="include\windows\unistd.h" />
     <ClInclude Include="prov\hook\src\hook.h" />
-    <ClInclude Include="prov\hook\src\hook_perf.h" />
     <ClInclude Include="prov\netdir\src\netdir_buf.h" />
     <ClInclude Include="prov\netdir\src\netdir_cq.h" />
     <ClInclude Include="prov\netdir\src\netdir_queue.h" />
