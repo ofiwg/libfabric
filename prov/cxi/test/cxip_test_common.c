@@ -9,7 +9,7 @@
 
 #include <criterion/criterion.h>
 
-#include "cxip.h"
+#include "cxip_test_common.h"
 
 struct fi_info *cxit_fi_hints;
 struct fi_info *cxit_fi;
@@ -454,4 +454,17 @@ void cxit_teardown_rma(void)
 	cxit_destroy_cqs();
 	cxit_teardown_ep();
 }
+
+/* Everyone needs to wait sometime */
+int cxit_await_completion(struct fid_cq *cq, struct fi_cq_tagged_entry *cqe)
+{
+	int ret;
+
+	do {
+		ret = fi_cq_read(cq, cqe, 1);
+	} while (ret == -FI_EAGAIN);
+
+	return ret;
+}
+
 

@@ -7,6 +7,8 @@
 #ifndef _CXIP_TEST_COMMON_H_
 #define _CXIP_TEST_COMMON_H_
 
+#include "cxip.h"
+
 extern struct fi_info *cxit_fi_hints;
 extern struct fi_info *cxit_fi;
 extern struct fid_fabric *cxit_fabric;
@@ -62,5 +64,6 @@ void cxit_setup_rma(void);
 #define cxit_setup_tagged cxit_setup_rma
 void cxit_teardown_rma(void);
 #define cxit_teardown_tagged cxit_teardown_rma
+int cxit_await_completion(struct fid_cq *cq, struct fi_cq_tagged_entry *cqe);
 
 #endif

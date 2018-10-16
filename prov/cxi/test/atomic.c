@@ -57,17 +57,6 @@ static void _cxit_destroy_mr(struct mem_region *mr)
 	free(mr->mem);
 }
 
-/* Everyone needs to wait sometime */
-static void _await_completion(struct fi_cq_tagged_entry *cqe)
-{
-	int ret;
-
-	do {
-		ret = fi_cq_read(cxit_tx_cq, cqe, 1);
-	} while (ret == -FI_EAGAIN);
-	cr_assert(ret == 1);
-}
-
 /* Test failures associated with bad call parameters.
  */
 TestSuite(atomic_invalid, .init = cxit_setup_rma, .fini = cxit_teardown_rma,
@@ -404,7 +393,8 @@ Test(atomic, simple_amo, .timeout = 10)
 			0, 0, RMA_WIN_KEY,
 			FI_UINT64, FI_SUM, NULL);
 	cr_assert(ret == FI_SUCCESS, "Return code  = %d", ret);
-	_await_completion(&cqe);
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
 	cr_assert_eq(*rma, exp_remote,
 		     "Result = %ld, expected = %ld",
 		     *rma, exp_remote);
@@ -415,7 +405,8 @@ Test(atomic, simple_amo, .timeout = 10)
 			0, 0, RMA_WIN_KEY,
 			FI_UINT64, FI_SUM, NULL);
 	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
-	_await_completion(&cqe);
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
 	cr_assert_eq(*rma, exp_remote,
 		     "Result = %ld, expected = %ld",
 		     *rma, exp_remote);
@@ -426,7 +417,8 @@ Test(atomic, simple_amo, .timeout = 10)
 			0, 0, RMA_WIN_KEY,
 			FI_UINT64, FI_SUM, NULL);
 	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
-	_await_completion(&cqe);
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
 	cr_assert_eq(*rma, exp_remote,
 		     "Result = %ld, expected = %ld",
 		     *rma, exp_remote);
@@ -462,7 +454,8 @@ Test(atomic, simple_fetch, .timeout = 10)
 			      0, 0, RMA_WIN_KEY,
 			      FI_UINT64, FI_SUM, NULL);
 	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
-	_await_completion(&cqe);
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
 	cr_assert_eq(*rma, exp_remote,
 		     "Add Result = %ld, expected = %ld",
 		     *rma, exp_remote);
@@ -479,7 +472,8 @@ Test(atomic, simple_fetch, .timeout = 10)
 			      0, 0, RMA_WIN_KEY,
 			      FI_UINT64, FI_SUM, NULL);
 	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
-	_await_completion(&cqe);
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
 	cr_assert_eq(*rma, exp_remote,
 		     "Add Result = %ld, expected = %ld",
 		     *rma, exp_remote);
@@ -496,7 +490,8 @@ Test(atomic, simple_fetch, .timeout = 10)
 			      0, 0, RMA_WIN_KEY,
 			      FI_UINT64, FI_SUM, NULL);
 	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
-	_await_completion(&cqe);
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
 	cr_assert_eq(*rma, exp_remote,
 		     "Add Result = %ld, expected = %ld",
 		     *rma, exp_remote);
@@ -541,7 +536,8 @@ Test(atomic, simple_swap, .timeout = 10)
 				0, 0, RMA_WIN_KEY,
 				FI_UINT64, FI_CSWAP_NE, NULL);
 	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
-	_await_completion(&cqe);
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
 	cr_assert_eq(*rma, exp_remote,
 		     "Add Result = %ld, expected = %ld",
 		     *rma, exp_remote);
@@ -562,7 +558,8 @@ Test(atomic, simple_swap, .timeout = 10)
 				0, 0, RMA_WIN_KEY,
 				FI_UINT64, FI_CSWAP_NE, NULL);
 	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
-	_await_completion(&cqe);
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
 	cr_assert_eq(*rma, exp_remote,
 		     "Add Result = %ld, expected = %ld",
 		     *rma, exp_remote);
@@ -756,7 +753,8 @@ static void _test_amo(int index, enum fi_datatype dt, enum fi_op op, int err,
 		     "rtn #%d:%d:%d saw=%d exp=%d\n",
 		     index, op, dt, ret, err);
 
-	_await_completion(&cqe);
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
 
 	/* We expect the RMA effect to be as predicted */
 	cr_expect(_compare(rma, rma_exp, len, op, dt),

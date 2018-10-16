@@ -377,6 +377,9 @@ static int _ep_enable(struct cxip_ep_obj *ep_obj,
 {
 	int ret;
 
+	if (ep_obj->is_enabled)
+		return FI_SUCCESS;
+
 	/* Make sure this is ready to enable */
 	if (tx_ctx && !tx_ctx->comp.send_cq) {
 		CXIP_LOG_DBG("enable TX context without CQ\n");
@@ -395,7 +398,8 @@ static int _ep_enable(struct cxip_ep_obj *ep_obj,
 
 	/* First call allocates CXIL resources on the interface associated with
 	 * this domain, and takes a reference count. Subsequent calls simply
-	 * take a reference count on the interface.
+	 * take a reference count on the interface. This is associated with
+	 * creating the EP, but is deferred until it is enabled.
 	 */
 	ret = cxip_domain_enable(ep_obj->domain);
 	if (ret != FI_SUCCESS) {
@@ -405,7 +409,7 @@ static int _ep_enable(struct cxip_ep_obj *ep_obj,
 
 	/* First call allocates CXIL resources for this interface, VNI, and PID,
 	 * and takes a reference count. Subsequent calls simply take a reference
-	 * count.
+	 * count. This is associated with enabling the EP.
 	 */
 	ret = cxip_get_if_domain(ep_obj->domain->dev_if,
 				 ep_obj->vni,
@@ -418,6 +422,8 @@ static int _ep_enable(struct cxip_ep_obj *ep_obj,
 
 	CXIP_LOG_DBG("EP assigned PID: %u\n", ep_obj->if_dom->pid);
 	ep_obj->src_addr.pid = ep_obj->if_dom->pid;
+
+	ep_obj->is_enabled = 1;
 
 	return FI_SUCCESS;
 }
@@ -846,11 +852,16 @@ static int cxip_ep_enable(struct fid_ep *ep)
 			return ret;
 	}
 
-	cxi_ep->ep_obj->is_enabled = 1;
-
 	return 0;
 }
 
+/**
+ * Disable the EP/SEP if not disabled already.
+ *
+ * This simply drops a reference on the if_domain.
+ *
+ * @param cxi_ep : EP/SEP
+ */
 static void cxip_ep_disable(struct cxip_ep *cxi_ep)
 {
 	if (cxi_ep->ep_obj->is_enabled) {

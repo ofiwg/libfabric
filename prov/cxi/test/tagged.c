@@ -48,9 +48,7 @@ Test(tagged, ping, .timeout = 3)
 	cr_assert_eq(ret, FI_SUCCESS, "fi_tsend failed %d", ret);
 
 	/* Wait for async event indicating data has been received */
-	do {
-		ret = fi_cq_read(cxit_rx_cq, &rx_cqe, 1);
-	} while (ret == -FI_EAGAIN);
+	ret = cxit_await_completion(cxit_rx_cq, &rx_cqe);
 	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
 
 	/* Validate RX event fields */
@@ -63,9 +61,7 @@ Test(tagged, ping, .timeout = 3)
 	cr_assert(rx_cqe.tag == 0, "Invalid RX CQE tag");
 
 	/* Wait for async event indicating data has been sent */
-	do {
-		ret = fi_cq_read(cxit_tx_cq, &tx_cqe, 1);
-	} while (ret == -FI_EAGAIN);
+	ret = cxit_await_completion(cxit_tx_cq, &tx_cqe);
 	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
 
 	/* Validate TX event fields */
@@ -123,9 +119,7 @@ Test(tagged, ux_ping, .timeout = 3)
 	cr_assert(ret == FI_SUCCESS);
 
 	/* Wait for async event indicating data has been received */
-	do {
-		ret = fi_cq_read(cxit_rx_cq, &rx_cqe, 1);
-	} while (ret == -FI_EAGAIN);
+	ret = cxit_await_completion(cxit_rx_cq, &rx_cqe);
 	cr_assert(ret == 1);
 
 	/* Validate RX event fields */
@@ -138,9 +132,7 @@ Test(tagged, ux_ping, .timeout = 3)
 	cr_assert(rx_cqe.tag == 0, "Invalid RX CQE tag");
 
 	/* Wait for async event indicating data has been sent */
-	do {
-		ret = fi_cq_read(cxit_tx_cq, &tx_cqe, 1);
-	} while (ret == -FI_EAGAIN);
+	ret = cxit_await_completion(cxit_tx_cq, &tx_cqe);
 	cr_assert(ret == 1);
 
 	/* Validate TX event fields */

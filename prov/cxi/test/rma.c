@@ -72,10 +72,8 @@ Test(rma, simple_write)
 	cr_assert(ret == FI_SUCCESS);
 
 	/* Wait for async event indicating data has been sent */
-	do {
-		ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
-	} while (ret == -FI_EAGAIN);
-	cr_assert(ret == 1);
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
 
 	/* Validate event fields */
 	cr_assert(cqe.op_context == NULL, "CQE Context mismatch");
@@ -123,9 +121,7 @@ Test(rma, simple_writev)
 	cr_assert_eq(ret, FI_SUCCESS, "fi_writev failed %d", ret);
 
 	/* Wait for async event indicating data has been sent */
-	do {
-		ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
-	} while (ret == -FI_EAGAIN);
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
 	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
 
 	/* Validate event fields */
@@ -186,9 +182,7 @@ Test(rma, simple_writemsg)
 	cr_assert_eq(ret, FI_SUCCESS, "fi_writemsg failed %d", ret);
 
 	/* Wait for async event indicating data has been sent */
-	do {
-		ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
-	} while (ret == -FI_EAGAIN);
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
 	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
 
 	/* Validate event fields */
@@ -231,9 +225,7 @@ Test(rma, simple_read)
 	cr_assert_eq(ret, FI_SUCCESS, "fi_read() failed (%d)", ret);
 
 	/* Wait for async event indicating data has been sent */
-	do {
-		ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
-	} while (ret == -FI_EAGAIN);
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
 	cr_assert_eq(ret, 1, "fi_cq_read() failed (%d)", ret);
 
 	/* Validate event fields */
@@ -280,9 +272,7 @@ Test(rma, simple_readv)
 	cr_assert_eq(ret, FI_SUCCESS, "fi_readv() failed (%d)", ret);
 
 	/* Wait for async event indicating data has been sent */
-	do {
-		ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
-	} while (ret == -FI_EAGAIN);
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
 	cr_assert_eq(ret, 1, "fi_cq_read() failed (%d)", ret);
 
 	/* Validate event fields */
@@ -341,9 +331,7 @@ Test(rma, simple_readmsg)
 	cr_assert_eq(ret, FI_SUCCESS, "fi_readv() failed (%d)", ret);
 
 	/* Wait for async event indicating data has been sent */
-	do {
-		ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
-	} while (ret == -FI_EAGAIN);
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
 	cr_assert_eq(ret, 1, "fi_cq_read() failed (%d)", ret);
 
 	/* Validate event fields */
