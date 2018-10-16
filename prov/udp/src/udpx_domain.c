@@ -38,7 +38,7 @@
 
 static struct fi_ops_domain udpx_domain_ops = {
 	.size = sizeof(struct fi_ops_domain),
-	.av_open = ip_av_create,
+	.av_open = ofi_ip_av_create,
 	.cq_open = udpx_cq_open,
 	.endpoint = udpx_endpoint,
 	.scalable_ep = fi_no_scalable_ep,

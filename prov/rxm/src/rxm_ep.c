@@ -2049,9 +2049,9 @@ static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 			return ret;
 		}
 
-		rxm_ep->cmap = rxm_conn_cmap_alloc(rxm_ep);
-		if (!rxm_ep->cmap)
-			return -FI_ENOMEM;
+		ret = rxm_conn_cmap_alloc(rxm_ep);
+		if (ret)
+			return ret;
 
 		break;
 	case FI_CLASS_CQ:

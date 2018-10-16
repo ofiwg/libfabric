@@ -102,7 +102,7 @@ err1:
 
 static struct fi_ops_domain tcpx_domain_ops = {
 	.size = sizeof(struct fi_ops_domain),
-	.av_open = ip_av_create,
+	.av_open = ofi_ip_av_create,
 	.cq_open = tcpx_cq_open,
 	.endpoint = tcpx_endpoint,
 	.scalable_ep = fi_no_scalable_ep,

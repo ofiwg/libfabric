@@ -349,8 +349,7 @@ int rxd_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		return -FI_ENOMEM;
 
 	util_attr.addrlen = sizeof(fi_addr_t);
-	util_attr.overhead = attr->count;
-	util_attr.flags = OFI_AV_HASH;
+	util_attr.flags = 0;
 	attr->type = FI_AV_TABLE;
 
 	ret = ofi_av_init(&domain->util_domain, attr, &util_attr,

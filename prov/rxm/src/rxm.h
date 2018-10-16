@@ -173,6 +173,7 @@ struct rxm_cmap {
 
 	/* cmap handles that correspond to addresses in AV */
 	struct rxm_cmap_handle **handles_av;
+	size_t			num_allocated;
 
 	/* Store all cmap handles (inclusive of handles_av) in an indexer.
 	 * This allows reverse lookup of the handle using the index. */
@@ -187,6 +188,8 @@ struct rxm_cmap {
 	ofi_fastlock_release_t	release;
 	fastlock_t		lock;
 };
+
+struct rxm_ep;
 
 struct rxm_cmap_handle *rxm_cmap_key2handle(struct rxm_cmap *cmap, uint64_t key);
 int rxm_cmap_get_handle(struct rxm_cmap *cmap, fi_addr_t fi_addr,
@@ -208,11 +211,7 @@ void rxm_cmap_process_shutdown(struct rxm_cmap *cmap,
 			       struct rxm_cmap_handle *handle);
 void rxm_cmap_del_handle_ts(struct rxm_cmap_handle *handle);
 void rxm_cmap_free(struct rxm_cmap *cmap);
-struct rxm_cmap *rxm_cmap_alloc(struct util_ep *ep,
-				 struct rxm_cmap_attr *attr);
-int rxm_cmap_alloc_handle(struct rxm_cmap *cmap, fi_addr_t fi_addr,
-			  enum rxm_cmap_state state,
-			  struct rxm_cmap_handle **handle);
+int rxm_cmap_alloc(struct rxm_ep *rxm_ep, struct rxm_cmap_attr *attr);
 int rxm_cmap_handle_connect(struct rxm_cmap *cmap, fi_addr_t fi_addr,
 			    struct rxm_cmap_handle *handle);
 /* Caller must hold cmap->lock */
@@ -221,7 +220,7 @@ int rxm_cmap_move_handle_to_peer_list(struct rxm_cmap *cmap, int index);
 static inline struct rxm_cmap_handle *
 rxm_cmap_acquire_handle(struct rxm_cmap *cmap, fi_addr_t fi_addr)
 {
-	assert(fi_addr <= cmap->av->count);
+	assert(fi_addr <= cmap->num_allocated);
 	return cmap->handles_av[fi_addr];
 }
 
@@ -653,7 +652,7 @@ ssize_t rxm_cq_handle_rx_buf(struct rxm_rx_buf *rx_buf);
 int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 			  struct fid_ep **ep, void *context);
 
-struct rxm_cmap *rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep);
+int rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep);
 void rxm_cq_write_error(struct util_cq *cq, struct util_cntr *cntr,
 			void *op_context, int err);
 void rxm_ep_progress_one(struct util_ep *util_ep);

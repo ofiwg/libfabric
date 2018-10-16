@@ -65,7 +65,8 @@ static int mrail_av_insert(struct fid_av *av_fid, const void *addr, size_t count
 	struct mrail_av *mrail_av;
 	struct mrail_peer_info *peer_info;
 	size_t i, j, offset, num_inserted = 0;
-	int ret, index;
+	fi_addr_t index;
+	int ret;
 
 	mrail_av = container_of(av_fid, struct mrail_av, util_av.av_fid);
 	mrail_domain = container_of(mrail_av->util_av.domain, struct mrail_domain,
@@ -99,7 +100,6 @@ static int mrail_av_insert(struct fid_av *av_fid, const void *addr, size_t count
 			offset += mrail_av->rail_addrlen[j];
 		}
 		ret = ofi_av_insert_addr(&mrail_av->util_av, peer_info,
-					 ofi_atomic_get32(&mrail_av->index),
 					 &index);
 		if (fi_addr) {
 			if (ret) {
@@ -107,7 +107,7 @@ static int mrail_av_insert(struct fid_av *av_fid, const void *addr, size_t count
 					"Unable to get rail fi_addr\n");
 				peer_info->addr = FI_ADDR_NOTAVAIL;
 			} else {
-				peer_info->addr = (uint64_t) index;
+				peer_info->addr = index;
 				num_inserted++;
 			}
 			fi_addr[i] = peer_info->addr;
@@ -157,7 +157,6 @@ int mrail_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 
 	util_attr.addrlen = sizeof(struct mrail_peer_info);
 	/* We just need a table to store the mapping */
-	util_attr.overhead = 0;
 	util_attr.flags = 0;
 
 	if (attr->type == FI_AV_UNSPEC)
@@ -193,8 +192,6 @@ int mrail_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 			goto err;
 		mrail_av->rail_addrlen[i] = fi->src_addrlen;
 	}
-
-	ofi_atomic_initialize32(&mrail_av->index, 0);
 
 	mrail_av->util_av.av_fid.fid.ops = &mrail_av_fi_ops;
 	mrail_av->util_av.av_fid.ops = &mrail_av_ops;

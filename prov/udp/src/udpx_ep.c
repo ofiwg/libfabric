@@ -252,7 +252,7 @@ static void udpx_rx_src_comp(struct udpx_ep *ep, void *context, uint64_t flags,
 			     size_t len, void *buf, void *addr)
 {
 	ep->util_ep.rx_cq->src[ofi_cirque_windex(ep->util_ep.rx_cq->cirq)] =
-			ip_av_get_index(ep->util_ep.av, addr);
+			ofi_ip_av_get_fi_addr(ep->util_ep.av, addr);
 	udpx_rx_comp(ep, context, flags, len, buf, addr);
 }
 
@@ -374,8 +374,9 @@ out:
 static const void *
 udpx_dest_addr(struct udpx_ep *ep, fi_addr_t addr, uint64_t flags)
 {
-	return (flags & FI_MULTICAST) ? (const void *) (uintptr_t) addr :
-					ip_av_get_addr(ep->util_ep.av, (int)addr);
+	return (flags & FI_MULTICAST) ?
+	       (const void *) (uintptr_t) addr :
+	       ofi_ip_av_get_addr(ep->util_ep.av, (int)addr);
 }
 
 static size_t
@@ -416,7 +417,7 @@ static ssize_t udpx_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 	struct udpx_ep *ep;
 
 	ep = container_of(ep_fid, struct udpx_ep, util_ep.ep_fid.fid);
-	return udpx_sendto(ep, buf, len, ip_av_get_addr(ep->util_ep.av, (int)dest_addr),
+	return udpx_sendto(ep, buf, len, ofi_ip_av_get_addr(ep->util_ep.av, (int)dest_addr),
 			   ep->util_ep.av->addrlen, context);
 }
 
@@ -501,7 +502,7 @@ static ssize_t udpx_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	ep = container_of(ep_fid, struct udpx_ep, util_ep.ep_fid.fid);
 	ret = ofi_sendto_socket(ep->sock, buf, len, 0,
-				ip_av_get_addr(ep->util_ep.av, (int)dest_addr),
+				ofi_ip_av_get_addr(ep->util_ep.av, (int)dest_addr),
 				(socklen_t)ep->util_ep.av->addrlen);
 	return ret == (ssize_t)len ? 0 : -errno;
 }

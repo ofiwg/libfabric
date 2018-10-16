@@ -72,7 +72,7 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 
 	for (i = 0; i < count; i++) {
 		ep_name = smr_no_prefix((const char *) smr_names[i].name);
-		ret = ofi_av_insert_addr(util_av, ep_name, 0, &index);
+		ret = ofi_av_insert_addr(util_av, ep_name, (fi_addr_t *)&index);
 		if (ret) {
 			if (util_av->eq)
 				ofi_av_write_event(util_av, i, -ret, context);
@@ -119,7 +119,7 @@ static int smr_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr, size_t count
 
 	fastlock_acquire(&util_av->lock);
 	for (i = 0; i < count; i++) {
-		ret = ofi_av_remove_addr(util_av, 0, fi_addr[i]);
+		ret = ofi_av_remove_addr(util_av, fi_addr[i]);
 		if (ret) {
 			FI_WARN(&smr_prov, FI_LOG_AV,
 				"Unable to remove address from AV\n");
@@ -212,7 +212,6 @@ int smr_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		return -FI_ENOMEM;
 
 	util_attr.addrlen = sizeof(int);
-	util_attr.overhead = 0;
 	util_attr.flags = 0;
 	if (attr->count > SMR_MAX_PEERS) {
 		ret = -FI_ENOSYS;

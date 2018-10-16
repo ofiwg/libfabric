@@ -65,6 +65,7 @@
 #include <ofi_proto.h>
 
 #include "rbtree.h"
+#include "uthash.h"
 
 #define UTIL_FLAG_ERROR		(1ULL << 60)
 #define UTIL_FLAG_OVERFLOW	(1ULL << 61)
@@ -620,17 +621,11 @@ static inline void ofi_cntr_inc(struct util_cntr *cntr)
 /*
  * AV / addressing
  */
-struct util_av_hash_entry {
-	int			index;
-	ofi_atomic32_t		use_cnt;
-	int			next;
-};
 
-struct util_av_hash {
-	struct util_av_hash_entry *table;
-	int			free_list;
-	int			slots;
-	int			total_count;
+struct util_av_entry {
+	ofi_atomic32_t	use_cnt;
+	UT_hash_handle	hh;
+	char		addr[0];
 };
 
 struct util_av {
@@ -641,23 +636,23 @@ struct util_av {
 	fastlock_t		lock;
 	const struct fi_provider *prov;
 
+	struct util_av_entry	*hash;
+	struct util_buf_pool	*av_entry_pool;
+
 	void			*context;
 	uint64_t		flags;
 	size_t			count;
 	size_t			addrlen;
-	ssize_t			free_list;
-	struct util_av_hash	hash;
-	void			*data;
 	struct dlist_entry	ep_list;
 };
 
-#define OFI_AV_HASH	(1 << 0)
-
 struct util_av_attr {
-	size_t			addrlen;
-	size_t			overhead;
-	int			flags;
+	size_t	addrlen;
+	int	flags;
 };
+
+typedef int (*ofi_av_apply_func)(struct util_av *av, void *addr,
+				 fi_addr_t fi_addr, void *arg);
 
 int ofi_av_init(struct util_domain *domain,
 	       const struct fi_av_attr *attr, const struct util_av_attr *util_attr,
@@ -667,21 +662,22 @@ int ofi_av_init_lightweight(struct util_domain *domain, const struct fi_av_attr 
 int ofi_av_close(struct util_av *av);
 int ofi_av_close_lightweight(struct util_av *av);
 
-int ofi_av_insert_addr(struct util_av *av, const void *addr, int slot, int *index);
-int ofi_av_remove_addr(struct util_av *av, int slot, int index);
-int ofi_av_lookup_index(struct util_av *av, const void *addr, int slot);
+int ofi_av_insert_addr(struct util_av *av, const void *addr, fi_addr_t *fi_addr);
+int ofi_av_remove_addr(struct util_av *av, fi_addr_t fi_addr);
+fi_addr_t ofi_av_lookup_fi_addr(struct util_av *av, const void *addr);
+int ofi_av_elements_iter(struct util_av *av, ofi_av_apply_func apply, void *arg);
 int ofi_av_bind(struct fid *av_fid, struct fid *eq_fid, uint64_t flags);
 void ofi_av_write_event(struct util_av *av, uint64_t data,
 			int err, void *context);
 
-int ip_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
-		 struct fid_av **av, void *context);
-int ip_av_create_flags(struct fid_domain *domain_fid, struct fi_av_attr *attr,
-		       struct fid_av **av, void *context, int flags);
+int ofi_ip_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
+		     struct fid_av **av, void *context);
+int ofi_ip_av_create_flags(struct fid_domain *domain_fid, struct fi_av_attr *attr,
+			   struct fid_av **av, void *context, int flags);
 
-void *ofi_av_get_addr(struct util_av *av, int index);
-#define ip_av_get_addr ofi_av_get_addr
-int ip_av_get_index(struct util_av *av, const void *addr);
+void *ofi_av_get_addr(struct util_av *av, fi_addr_t fi_addr);
+#define ofi_ip_av_get_addr ofi_av_get_addr
+fi_addr_t ofi_ip_av_get_fi_addr(struct util_av *av, const void *addr);
 
 int ofi_get_addr(uint32_t addr_format, uint64_t flags,
 		 const char *node, const char *service,
