@@ -101,7 +101,10 @@ static int rstream_reject(struct fid_pep *pep, fid_t handle,
 
 static int rstream_shutdown(struct fid_ep *ep, uint64_t flags)
 {
-	return -FI_ENOSYS;
+	struct rstream_ep *rstream_ep =
+		container_of(ep, struct rstream_ep, util_ep.ep_fid);
+
+	return fi_shutdown(rstream_ep->ep_fd, flags);
 }
 
 struct fi_ops_cm rstream_ops_pep_cm = {
