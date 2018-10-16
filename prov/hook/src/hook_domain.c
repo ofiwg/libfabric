@@ -32,7 +32,7 @@
 
 #include <stdlib.h>
 #include <sys/uio.h>
-#include "hook.h"
+#include "ofi_hook.h"
 
 
 static int hook_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
