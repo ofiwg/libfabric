@@ -31,7 +31,7 @@
  */
 
 #include <stdlib.h>
-#include "hook.h"
+#include "ofi_hook.h"
 
 
 static int hook_eq_std_event(uint32_t event)
