@@ -67,7 +67,7 @@ int rxd_info_to_rxd(uint32_t version, const struct fi_info *core_info,
 
 	*info->tx_attr = *rxd_info.tx_attr;
 	info->tx_attr->inject_size = MIN(core_info->ep_attr->max_msg_size,
-			RXD_MAX_MTU_SIZE) - sizeof(struct rxd_op_pkt) -
+			RXD_MAX_MTU_SIZE) - sizeof(struct rxd_base_hdr) -
 			core_info->ep_attr->msg_prefix_size;
 	*info->rx_attr = *rxd_info.rx_attr;
 	*info->ep_attr = *rxd_info.ep_attr;
