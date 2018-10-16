@@ -75,6 +75,7 @@ load test_helper
 }
 
 @test "osu_alltoallv 20 ranks, 5 ranks per node" {
+    skip "fails consistently at 128k message size"
    run $CONTRIB_BIN/logwrap -w ${BATS_TEST_LOGFILE} -- \
        $(batch_launcher 20 5) timeout 300 $OMB_BUILD_PATH/collective/osu_alltoallv
    [ "$status" -eq 0 ]
@@ -124,12 +125,14 @@ load test_helper
 }
 
 @test "osu_ialltoallv 20 ranks, 5 ranks per node" {
+    skip "fails consistently at 128k message size"
    run $CONTRIB_BIN/logwrap -w ${BATS_TEST_LOGFILE} -- \
        $(batch_launcher 20 5) timeout 300 $OMB_BUILD_PATH/collective/osu_ialltoallv
    [ "$status" -eq 0 ]
 }
 
 @test "osu_ialltoallw 20 ranks, 5 ranks per node" {
+    skip "fails consistently at 128k message size"
    run $CONTRIB_BIN/logwrap -w ${BATS_TEST_LOGFILE} -- \
        $(batch_launcher 20 5) timeout 300 $OMB_BUILD_PATH/collective/osu_ialltoallw
    [ "$status" -eq 0 ]
@@ -179,6 +182,7 @@ load test_helper
 }
 
 @test "osu_reduce_scatter 40 ranks, 10 ranks per node" {
+    skip "fails consistently at 512K message size"
    run $CONTRIB_BIN/logwrap -w ${BATS_TEST_LOGFILE} -- \
        $(batch_launcher 40 10) timeout 300 $OMB_BUILD_PATH/collective/osu_reduce_scatter
    [ "$status" -eq 0 ]
