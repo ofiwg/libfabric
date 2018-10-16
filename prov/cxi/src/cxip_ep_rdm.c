@@ -221,16 +221,30 @@ int cxip_rdm_verify_ep_attr(const struct fi_ep_attr *ep_attr,
 int cxip_rdm_fi_info(uint32_t version, void *src_addr, void *dest_addr,
 		     const struct fi_info *hints, struct fi_info **info)
 {
+	/* This creates info structure.
+	 * - sets mode to CXIP_MODE
+	 * - sets addr_format to FI_ADDR_CXI
+	 * - sets handle according to hints
+	 * - sets src_addr to argument, or default
+	 * - sets dest_addr to argument, or NULL
+	 * - sets ep_attr->type to FI_EP_RDM
+	 * - initializes domain with hints
+	 * - initializes fabric with hints
+	 *
+	 * Everything else gets overridden by the code that follows.
+	 */
 	*info = cxip_fi_info(version, FI_EP_RDM, hints, src_addr, dest_addr);
 	if (!*info)
 		return -FI_ENOMEM;
 
+	/* overrides with fixed constants */
 	*(*info)->tx_attr = cxip_rdm_tx_attr;
-	(*info)->tx_attr->size = cxip_rdm_tx_attr.size;
+	(*info)->tx_attr->size = cxip_rdm_tx_attr.size;	// TODO: redundant
 	*(*info)->rx_attr = cxip_rdm_rx_attr;
-	(*info)->rx_attr->size = cxip_rdm_rx_attr.size;
+	(*info)->rx_attr->size = cxip_rdm_rx_attr.size;	// TODO: redundant
 	*(*info)->ep_attr = cxip_rdm_ep_attr;
 
+	/* only certain hints are used */
 	if (hints && hints->ep_attr) {
 		if (hints->ep_attr->rx_ctx_cnt)
 			(*info)->ep_attr->rx_ctx_cnt =
@@ -254,8 +268,11 @@ int cxip_rdm_fi_info(uint32_t version, void *src_addr, void *dest_addr,
 				CXIP_EP_RDM_SEC_CAP | hints->tx_attr->caps;
 	}
 
+	/* apply TX/RX caps to all caps */
 	(*info)->caps = CXIP_EP_RDM_CAP | (*info)->rx_attr->caps |
 			(*info)->tx_attr->caps;
+
+	/* apply caps hints to TX/RX and all caps */
 	if (hints && hints->caps) {
 		(*info)->caps = CXIP_EP_RDM_SEC_CAP | hints->caps;
 		(*info)->rx_attr->caps =

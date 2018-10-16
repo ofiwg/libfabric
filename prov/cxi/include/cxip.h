@@ -132,8 +132,6 @@ extern int cxip_cq_def_sz;
 extern int cxip_eq_def_sz;
 extern struct slist cxip_if_list;
 
-extern struct fi_provider cxip_prov;
-
 /**
  * The CXI Provider Address format.
  *
@@ -152,7 +150,7 @@ extern struct fi_provider cxip_prov;
 #define	CXIP_ADDR_VNI_BITS	17
 #define CXIP_ADDR_PID_BITS	9
 #define	CXIP_ADDR_IDX_BITS	(CXIP_ADDR_VNI_BITS - CXIP_ADDR_PID_BITS)
-#define	CXIP_ADDR_PID_AUTO	((2^CXIP_ADDR_PID_BITS) - 1)
+#define	CXIP_ADDR_PID_AUTO	((1 << CXIP_ADDR_PID_BITS) - 1)
 #define	CXIP_ADDR_NIC_BITS	(32 - 1 - CXIP_ADDR_PID_BITS)
 
 struct cxip_addr {
@@ -175,11 +173,15 @@ struct cxip_addr {
  * 239 MR slots
  *   1 Rendesvous Send slot
  */
-#define	CXIP_EP_MAX_IDX_CNT	(2^CXIP_ADDR_IDX_BITS)
+#define	CXIP_EP_MAX_IDX_CNT	(1 << CXIP_ADDR_IDX_BITS)
 #define	CXIP_EP_MAX_MR_CNT	(CXIP_EP_MAX_IDX_CNT - CXIP_EP_MAX_RX_CNT - 1)
 
-#define CXIP_ADDR_MR_IDX(pid_granule, key) (CXIP_EP_MAX_RX_CNT + (key))
-#define CXIP_ADDR_RX_IDX(pid_granule, rx_id) (rx_id)
+#define CXIP_MR_TO_IDX(key)	(CXIP_EP_MAX_RX_CNT + (key))
+#define CXIP_RXC_TO_IDX(rx_id)	(rx_id)
+
+#define	CXIP_AV_ADDR_IDX(av, fi_addr)	((uint64_t)fi_addr & av->mask)
+#define	CXIP_AV_ADDR_RXC(av, fi_addr)	((uint64_t)fi_addr >> \
+						(64 - av->rx_ctx_bits))
 
 // TODO: comments are not yet complete, and may not be entirely correct
 //       complete documentation and review thoroughly
@@ -500,9 +502,9 @@ struct cxip_cntr {
  * Initialized when binding TX/RX to EP.
  */
 struct cxip_comp {
-	uint8_t send_cq_event;		// TODO: remove, unused
-	uint8_t recv_cq_event;		// TODO: remove, unused
-	char reserved[2];		// TODO: remove?
+	uint8_t send_cq_event;
+	uint8_t recv_cq_event;
+	char reserved[2];
 
 	struct cxip_cq *send_cq;
 	struct cxip_cq *recv_cq;
@@ -556,19 +558,17 @@ struct cxip_rx_ctx {
 
 	uint16_t rx_id;			// SEP index
 	int enabled;
-	int progress;			// TODO: remove, unused
-	int recv_cq_event;		// TODO: remove, unused
+	int progress;			// unused
+	int recv_cq_event;		// unused
 	int use_shared;
 
-	size_t num_left;
-	size_t buffered_len;
+	size_t num_left;		// unused (?) (set, never referenced)
 	size_t min_multi_recv;
 	uint64_t addr;
 	struct cxip_comp comp;
 	struct cxip_rx_ctx *srx_ctx;
 
 	struct cxip_ep_obj *ep_obj;	// parent EP object
-	struct cxip_av *av;
 	struct cxip_domain *domain;	// parent domain
 
 	struct dlist_entry cq_entry;	// attaches to CQ RX list
@@ -609,14 +609,13 @@ struct cxip_tx_ctx {
 
 	uint16_t tx_id;			// SEP index
 	uint8_t enabled;
-	uint8_t progress;		// TODO: remove, unused
+	uint8_t progress;		// unused
 
 	int use_shared;
 	struct cxip_comp comp;
 	struct cxip_tx_ctx *stx_ctx;	// shared context (?)
 
 	struct cxip_ep_obj *ep_obj;	// parent EP object
-	struct cxip_av *av;		// same AV as EP->av
 	struct cxip_domain *domain;	// parent domain
 
 	struct dlist_entry cq_entry;	// attaches to CQ TX list
@@ -646,7 +645,6 @@ struct cxip_ep_obj {
 
 	int tx_shared;
 	int rx_shared;
-	size_t buffered_len;		// TODO: remove (unused)
 	size_t min_multi_recv;
 
 	ofi_atomic32_t ref;
@@ -668,16 +666,14 @@ struct cxip_ep_obj {
 	struct dlist_entry rx_ctx_entry;
 	struct dlist_entry tx_ctx_entry;
 
-	struct fi_info info;		// TODO: remove (unused)
+	struct fi_info info;		// TODO: use this properly
 	struct fi_ep_attr ep_attr;
-
-	enum fi_ep_type ep_type;	// TODO: remove (unused)
 
 	int is_enabled;
 	fastlock_t lock;
 
-	struct cxip_addr *src_addr;	// address of this NIC
-	uint32_t vni;
+	struct cxip_addr src_addr;	// address of this NIC
+	uint32_t vni;			// VNI all EP addressing
 	struct cxip_if_domain *if_dom;
 };
 

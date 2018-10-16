@@ -733,6 +733,7 @@ static ssize_t cxip_tsend(struct fid_ep *ep, const void *buf, size_t len,
 	uint32_t idx_ext;
 	uint32_t pid_granule;
 	uint32_t pid_idx;
+	uint64_t rx_id;
 
 	if (!ep || !buf)
 		return -FI_EINVAL;
@@ -758,7 +759,7 @@ static ssize_t cxip_tsend(struct fid_ep *ep, const void *buf, size_t len,
 	dom = txc->domain;
 
 	/* Look up target CXI address */
-	ret = _cxip_av_lookup(txc->av, dest_addr, &caddr);
+	ret = _cxip_av_lookup(txc->ep_obj->av, dest_addr, &caddr);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Failed to look up FI addr: %d\n", ret);
 		return ret;
@@ -791,9 +792,9 @@ static ssize_t cxip_tsend(struct fid_ep *ep, const void *buf, size_t len,
 	req->send.send_md = send_md;
 
 	/* Build Put command descriptor */
+	rx_id = CXIP_AV_ADDR_RXC(txc->ep_obj->av, dest_addr);
 	pid_granule = dom->dev_if->if_pid_granule;
-	// TODO: change 0 to index derived from FSA dest_addr
-	pid_idx = CXIP_ADDR_RX_IDX(pid_granule, 0);
+	pid_idx = CXIP_RXC_TO_IDX(rx_id);
 	cxi_build_dfa(caddr.nic, caddr.pid, pid_granule, pid_idx, &dfa,
 		      &idx_ext);
 

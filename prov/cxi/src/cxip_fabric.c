@@ -264,6 +264,12 @@ int cxip_verify_info(uint32_t version, const struct fi_info *hints)
 	switch (hints->addr_format) {
 	case FI_FORMAT_UNSPEC:
 	case FI_ADDR_CXI:
+		if (hints->src_addr &&
+		    hints->src_addrlen != sizeof(struct cxip_addr))
+			return -FI_EINVAL;
+		if (hints->dest_addr &&
+		    hints->dest_addrlen != sizeof(struct cxip_addr))
+			return -FI_EINVAL;
 		break;
 	default:
 		CXIP_LOG_DBG("Unsupported address format\n");

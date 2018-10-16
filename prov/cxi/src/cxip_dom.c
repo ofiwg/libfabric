@@ -260,7 +260,7 @@ static int cxip_dom_ctrl(struct fid *fid, int command, void *arg)
 static int cxip_endpoint(struct fid_domain *domain, struct fi_info *info,
 			 struct fid_ep **ep, void *context)
 {
-	if (!info || !ep)
+	if (!ep || !info || !info->ep_attr)
 		return -FI_EINVAL;
 
 	switch (info->ep_attr->type) {
@@ -274,6 +274,9 @@ static int cxip_endpoint(struct fid_domain *domain, struct fi_info *info,
 static int cxip_scalable_ep(struct fid_domain *domain, struct fi_info *info,
 			    struct fid_ep **sep, void *context)
 {
+	if (!sep || !info || !info->ep_attr)
+		return -FI_EINVAL;
+
 	switch (info->ep_attr->type) {
 	case FI_EP_RDM:
 		return cxip_rdm_sep(domain, info, sep, context);

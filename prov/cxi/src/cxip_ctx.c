@@ -24,7 +24,7 @@ static int cxip_rx_ctx_recv_init(struct cxip_rx_ctx *rxc)
 	uint64_t pid_idx;
 
 	/* Select the LEP where the queue will be mapped */
-	pid_idx = CXIP_ADDR_RX_IDX(rxc->domain->dev_if->if_pid_granule, 0);
+	pid_idx = CXIP_RXC_TO_IDX(rxc->rx_id);
 
 	ret = cxip_pte_alloc(rxc->ep_obj->if_dom, rxc->comp.recv_cq->evtq,
 			     pid_idx, &opts, &rxc->rx_pte);
@@ -72,6 +72,7 @@ static int cxip_rx_ctx_recv_fini(struct cxip_rx_ctx *rxc)
 int cxip_rx_ctx_enable(struct cxip_rx_ctx *rxc)
 {
 	int ret = FI_SUCCESS;
+	int tmp;
 	struct cxi_cq_alloc_opts opts;
 
 	fastlock_acquire(&rxc->lock);
@@ -116,9 +117,9 @@ int cxip_rx_ctx_enable(struct cxip_rx_ctx *rxc)
 	return FI_SUCCESS;
 
 free_cmdq:
-	ret = cxil_destroy_cmdq(rxc->rx_cmdq);
-	if (ret)
-		CXIP_LOG_ERROR("Unable to destroy RX CMDQ, ret: %d\n", ret);
+	tmp = cxil_destroy_cmdq(rxc->rx_cmdq);
+	if (tmp)
+		CXIP_LOG_ERROR("Unable to destroy RX CMDQ, ret: %d\n", tmp);
 unlock:
 	fastlock_release(&rxc->lock);
 

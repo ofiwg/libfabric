@@ -59,7 +59,7 @@ static struct cxip_if_domain *cxip_if_domain_lookup(struct cxip_if *dev_if,
 int cxip_get_if(uint32_t nic_addr, struct cxip_if **dev_if)
 {
 	struct cxip_if *if_entry;
-	int ret;
+	int ret, tmp;
 	struct cxi_eq_alloc_opts evtq_opts;
 	struct cxi_cq_alloc_opts cq_opts;
 
@@ -138,13 +138,13 @@ int cxip_get_if(uint32_t nic_addr, struct cxip_if **dev_if)
 	return FI_SUCCESS;
 
 free_mr_cmdq:
-	ret = cxil_destroy_cmdq(if_entry->mr_cmdq);
-	if (ret)
-		CXIP_LOG_ERROR("Failed to destroy CMDQ: %d\n", ret);
+	tmp = cxil_destroy_cmdq(if_entry->mr_cmdq);
+	if (tmp)
+		CXIP_LOG_ERROR("Failed to destroy CMDQ: %d\n", tmp);
 free_lni:
-	ret = cxil_destroy_lni(if_entry->if_lni);
-	if (ret)
-		CXIP_LOG_ERROR("Failed to destroy LNI: %d\n", ret);
+	tmp = cxil_destroy_lni(if_entry->if_lni);
+	if (tmp)
+		CXIP_LOG_ERROR("Failed to destroy LNI: %d\n", tmp);
 	if_entry->if_lni = NULL;
 close_dev:
 	cxil_close_device(if_entry->if_dev);
@@ -344,7 +344,7 @@ int cxip_pte_alloc(struct cxip_if_domain *if_dom, struct cxi_evtq *evtq,
 		   struct cxip_pte **pte)
 {
 	struct cxip_pte *new_pte;
-	int ret;
+	int ret, tmp;
 
 	new_pte = malloc(sizeof(*new_pte));
 	if (!new_pte) {
@@ -389,13 +389,13 @@ int cxip_pte_alloc(struct cxip_if_domain *if_dom, struct cxi_evtq *evtq,
 	return FI_SUCCESS;
 
 free_lep:
-	ret = cxip_if_domain_lep_free(if_dom, pid_idx);
-	if (ret)
-		CXIP_LOG_ERROR("cxip_if_domain_lep_free returned: %d\n", ret);
+	tmp = cxip_if_domain_lep_free(if_dom, pid_idx);
+	if (tmp)
+		CXIP_LOG_ERROR("cxip_if_domain_lep_free returned: %d\n", tmp);
 free_pte:
-	ret = cxil_destroy_pte(new_pte->pte);
-	if (ret)
-		CXIP_LOG_ERROR("cxil_destroy_pte returned: %d\n", ret);
+	tmp = cxil_destroy_pte(new_pte->pte);
+	if (tmp)
+		CXIP_LOG_ERROR("cxil_destroy_pte returned: %d\n", tmp);
 free_mem:
 	free(new_pte);
 

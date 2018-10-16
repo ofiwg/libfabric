@@ -325,7 +325,7 @@ int _cxip_av_lookup(struct cxip_av *av, fi_addr_t fi_addr,
 		    struct cxip_addr *addr)
 {
 	struct cxip_addr *av_addr;
-	uint64_t index = ((uint64_t)fi_addr & av->mask);
+	uint64_t index = CXIP_AV_ADDR_IDX(av, fi_addr);
 
 	av_addr = &av->table[index];
 	if (!av_addr->valid) {

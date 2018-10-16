@@ -49,7 +49,7 @@ struct ep_test_params {
 	int retval;
 };
 
-static struct ep_test_params ep_sep_params[] = {
+static struct ep_test_params ep_ep_params[] = {
 	{.type = FI_EP_RDM,
 		.retval = FI_SUCCESS},
 	{.type = FI_EP_UNSPEC,
@@ -71,8 +71,8 @@ ParameterizedTestParameters(ep, fi_ep_types)
 {
 	size_t param_sz;
 
-	param_sz = ARRAY_SIZE(ep_sep_params);
-	return cr_make_param_array(struct ep_test_params, ep_sep_params,
+	param_sz = ARRAY_SIZE(ep_ep_params);
+	return cr_make_param_array(struct ep_test_params, ep_ep_params,
 				   param_sz);
 }
 
@@ -93,39 +93,6 @@ ParameterizedTest(struct ep_test_params *param, ep, fi_ep_types)
 
 	cr_assert_not_null(cxit_ep);
 	cr_expect_eq(cxit_ep->fid.fclass, FI_CLASS_EP);
-	cr_expect_eq(cxit_ep->fid.context, param->context);
-	cep = container_of(cxit_ep, struct cxip_ep, ep);
-	cr_expect_not_null(cep->ep_obj);
-
-	cxit_destroy_ep();
-}
-
-ParameterizedTestParameters(ep, fi_sep_types)
-{
-	size_t param_sz;
-
-	param_sz = ARRAY_SIZE(ep_sep_params);
-	return cr_make_param_array(struct ep_test_params, ep_sep_params,
-				   param_sz);
-}
-
-ParameterizedTest(struct ep_test_params *param, ep, fi_sep_types)
-{
-	int ret;
-	struct cxip_ep *cep;
-
-	cxit_fi->ep_attr->type = param->type;
-	cxit_ep = NULL;
-	ret = fi_scalable_ep(cxit_domain, cxit_fi, &cxit_ep, param->context);
-	cr_assert_eq(ret, param->retval,
-		     "fi_endpoint() error for type %d. %d != %d",
-		     param->type, ret, param->retval);
-
-	if (ret != FI_SUCCESS)
-		return;
-
-	cr_assert_not_null(cxit_ep);
-	cr_expect_eq(cxit_ep->fid.fclass, FI_CLASS_SEP);
 	cr_expect_eq(cxit_ep->fid.context, param->context);
 	cep = container_of(cxit_ep, struct cxip_ep, ep);
 	cr_expect_not_null(cep->ep_obj);
@@ -154,18 +121,6 @@ Test(ep, ep_bind_null_bind_obj)
 	cr_assert_eq(ret, -FI_EINVAL);
 
 	cxit_destroy_ep();
-}
-
-Test(ep, sep_bind_null_bind_obj)
-{
-	int ret;
-
-	cxit_create_sep();
-
-	ret = fi_scalable_ep_bind(cxit_sep, NULL, 0);
-	cr_assert_eq(ret, -FI_EINVAL);
-
-	cxit_destroy_sep();
 }
 
 Test(ep, ep_bind_invalid_fclass)
@@ -343,7 +298,10 @@ Test(ep, cancel_ep)
 	cxit_create_ep();
 
 	ret = fi_cancel(&cxit_ep->fid, NULL);
-	cr_assert_eq(ret, FI_SUCCESS);
+	cr_assert_eq(ret, -FI_EINVAL);
+
+	ret = fi_cancel(&cxit_ep->fid, (void *)1);
+	cr_assert_eq(ret, -FI_ENOENT);
 
 	cxit_destroy_ep();
 }
@@ -680,7 +638,7 @@ Test(ep, control_enable_noav)
 	cxit_bind_cqs();
 
 	ret = fi_enable(cxit_ep);
-	cr_assert_eq(ret, -FI_EINVAL, "fi_enable. %d", ret);
+	cr_assert_eq(ret, -FI_ENOAV, "fi_enable. %d", ret);
 
 	cxit_destroy_ep();
 	cxit_destroy_cqs();
@@ -897,65 +855,6 @@ Test(ep, rx_ctx_ep)
 	cxit_destroy_ep();
 }
 
-Test(ep, rx_ctx_sep_idx)
-{
-	int ret;
-
-	cxit_create_sep();
-
-	/* Induce index out of range error */
-	ret = fi_rx_context(cxit_sep, INT_MAX, NULL, NULL, NULL);
-	cr_assert_eq(ret, -FI_EINVAL, "fi_rx_context bad idx. %d", ret);
-
-	cxit_destroy_sep();
-}
-
-Test(ep, rx_ctx_sep_null_rx)
-{
-	int ret;
-
-	cxit_create_sep();
-
-	/* Null rx_ep value error */
-	ret = fi_rx_context(cxit_sep, 0, NULL, NULL, NULL);
-	cr_assert_eq(ret, -FI_EINVAL, "fi_rx_context bad rx. %d", ret);
-
-	cxit_destroy_sep();
-}
-
-Test(ep, rx_ctx_sep)
-{
-	int ret;
-	struct cxip_ep *cxi_ep;
-	struct cxip_rx_ctx *rx_ctx;
-	struct fid_ep *rx_ep = NULL;
-	void *context = &ret;
-	struct fi_rx_attr *attr = NULL;
-
-	cxit_create_sep();
-
-	cxi_ep = container_of(cxit_sep, struct cxip_ep, ep.fid);
-
-	ret = fi_rx_context(cxit_sep, 0, attr, &rx_ep, context);
-	cr_assert_eq(ret, FI_SUCCESS, "fi_rx_context bad rx. %d", ret);
-	cr_assert_not_null(rx_ep);
-
-	/* Validate RX Ctx */
-	rx_ctx = container_of(rx_ep, struct cxip_rx_ctx, ctx);
-	cr_assert_eq(rx_ctx->ep_obj, cxi_ep->ep_obj);
-	cr_assert_eq(rx_ctx->domain, cxi_ep->ep_obj->domain);
-	cr_assert_eq(rx_ctx->av, cxi_ep->ep_obj->av);
-	cr_assert_eq(rx_ctx->min_multi_recv, cxi_ep->ep_obj->min_multi_recv);
-	cr_assert_eq(ofi_atomic_get32(&cxi_ep->ep_obj->num_rx_ctx), 1);
-	cr_assert_eq(rx_ctx->ctx.fid.fclass, FI_CLASS_RX_CTX);
-	cr_assert_eq(rx_ctx->ctx.fid.context, context);
-
-	ret = fi_close(&rx_ep->fid);
-	cr_assert_eq(ret, FI_SUCCESS, "fi_close rx_ep. %d", ret);
-
-	cxit_destroy_sep();
-}
-
 Test(ep, tx_ctx_ep)
 {
 	int ret;
@@ -967,65 +866,6 @@ Test(ep, tx_ctx_ep)
 	cr_assert_eq(ret, -FI_EINVAL, "fi_tx_context bad ep. %d", ret);
 
 	cxit_destroy_ep();
-}
-
-Test(ep, tx_ctx_sep_idx)
-{
-	int ret;
-
-	cxit_create_sep();
-
-	/* Induce index out of range error */
-	ret = fi_tx_context(cxit_sep, INT_MAX, NULL, NULL, NULL);
-	cr_assert_eq(ret, -FI_EINVAL, "fi_tx_context bad idx. %d", ret);
-
-	cxit_destroy_sep();
-}
-
-Test(ep, tx_ctx_sep_null_tx)
-{
-	int ret;
-
-	cxit_create_sep();
-
-	/* Null tx_ep value error */
-	ret = fi_tx_context(cxit_sep, 0, NULL, NULL, NULL);
-	cr_assert_eq(ret, -FI_EINVAL, "fi_tx_context bad tx. %d", ret);
-
-	cxit_destroy_sep();
-}
-
-Test(ep, tx_ctx_sep)
-{
-	int ret;
-	struct cxip_ep *cxi_ep;
-	struct cxip_tx_ctx *tx_ctx;
-	struct fid_ep *tx_ep = NULL;
-	void *context = &ret;
-	struct fi_tx_attr *attr = NULL;
-
-	cxit_create_sep();
-
-	cxi_ep = container_of(cxit_sep, struct cxip_ep, ep.fid);
-
-	ret = fi_tx_context(cxit_sep, 0, attr, &tx_ep, context);
-	cr_assert_eq(ret, FI_SUCCESS, "fi_tx_context bad tx. %d", ret);
-	cr_assert_not_null(tx_ep);
-
-	/* Validate RX Ctx */
-	tx_ctx = container_of(tx_ep, struct cxip_tx_ctx, fid.ctx);
-	cr_assert_eq(tx_ctx->ep_obj, cxi_ep->ep_obj);
-	cr_assert_eq(tx_ctx->domain, cxi_ep->ep_obj->domain);
-	cr_assert_eq(tx_ctx->av, cxi_ep->ep_obj->av);
-	cr_assert_eq(ofi_atomic_get32(&cxi_ep->ep_obj->num_tx_ctx), 1);
-	cr_assert_eq(tx_ctx->fid.ctx.fid.fclass, FI_CLASS_TX_CTX);
-	cr_assert_eq(tx_ctx->fclass, FI_CLASS_TX_CTX);
-	cr_assert_eq(tx_ctx->fid.ctx.fid.context, context);
-
-	ret = fi_close(&tx_ep->fid);
-	cr_assert_eq(ret, FI_SUCCESS, "fi_close tx_ep. %d", ret);
-
-	cxit_destroy_sep();
 }
 
 Test(ep, stx_ctx_null_stx)

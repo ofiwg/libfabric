@@ -535,7 +535,7 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 	dev_if = txc->domain->dev_if;
 
 	/* Look up target CXI address */
-	ret = _cxip_av_lookup(txc->av, msg->addr, &caddr);
+	ret = _cxip_av_lookup(txc->ep_obj->av, msg->addr, &caddr);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Failed to look up dst FI addr: %d\n", ret);
 		return ret;
@@ -577,7 +577,7 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 
 	/* Build AMO command descriptor */
 	pid_granule = dev_if->if_pid_granule;
-	pid_idx = CXIP_ADDR_MR_IDX(pid_granule, key);
+	pid_idx = CXIP_MR_TO_IDX(key);
 	cxi_build_dfa(caddr.nic, caddr.pid, pid_granule, pid_idx, &dfa,
 		      &idx_ext);
 

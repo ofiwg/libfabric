@@ -21,6 +21,13 @@ extern char *cxit_node, *cxit_service;
 extern uint64_t cxit_flags;
 extern int cxit_n_ifs;
 
+void cxit_dump_tx_attr(struct fi_tx_attr *tx_attr);
+void cxit_dump_rx_attr(struct fi_rx_attr *rx_attr);
+void cxit_dump_ep_attr(struct fi_ep_attr *ep_attr);
+void cxit_dump_domain_attr(struct fi_domain_attr *dom_attr);
+void cxit_dump_fabric_attr(struct fi_fabric_attr *fab_attr);
+void cxit_dump_attr(struct fi_info *info);
+
 void cxit_create_fabric_info(void);
 void cxit_destroy_fabric_info(void);
 void cxit_create_fabric(void);

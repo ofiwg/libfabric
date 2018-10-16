@@ -40,8 +40,7 @@ int cxip_mr_enable(struct cxip_mr *mr)
 	}
 
 	/* Reserve the logical endpoint (LEP) where the MR will be mapped */
-	mr->pid_idx = CXIP_ADDR_MR_IDX(mr->domain->dev_if->if_pid_granule,
-				       mr->key);
+	mr->pid_idx = CXIP_MR_TO_IDX(mr->key);
 
 	ret = cxip_if_domain_lep_alloc(mr->ep->ep_obj->if_dom, mr->pid_idx);
 	if (ret != FI_SUCCESS) {
