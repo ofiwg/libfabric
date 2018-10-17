@@ -225,7 +225,7 @@ int main(int argc, char **argv)
 
 	hints->mode = ~0;
 	hints->domain_attr->mode = ~0;
-	hints->domain_attr->mr_mode = ~(FI_MR_BASIC | FI_MR_SCALABLE);
+	hints->domain_attr->mr_mode = FI_MR_LOCAL | OFI_MR_BASIC_MAP;
 
 	hints->caps |= FI_MSG | FI_RMA;
 
