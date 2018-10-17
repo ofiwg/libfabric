@@ -289,5 +289,6 @@ void util_buf_pool_destroy(struct util_buf_pool *pool)
 
 		free(buf_region);
 	}
+	free(pool->regions_table);
 	free(pool);
 }
