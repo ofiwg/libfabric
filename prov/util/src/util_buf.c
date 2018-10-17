@@ -180,10 +180,6 @@ int util_buf_pool_create_attr(struct util_buf_attr *attr,
 	slist_init(&(*buf_pool)->buf_list);
 	slist_init(&(*buf_pool)->region_list);
 
-	if (util_buf_grow(*buf_pool)) {
-		free(*buf_pool);
-		return -FI_ENOMEM;
-	}
 	return FI_SUCCESS;
 }
 
