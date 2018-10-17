@@ -334,7 +334,7 @@ static int oflow_buf_add(struct cxip_rx_ctx *rxc)
 	cmd.target.ignore_bits  = (-1ULL); /* Match everything */
 	cmd.target.manage_local = 1;
 	cmd.target.no_truncate  = 1;
-	cmd.target.min_free     = rxc->eager_threshold;
+	cmd.target.min_free     = rxc->eager_threshold >> dom->dev_if->if_dev->info.min_free_shift;
 
 	fastlock_acquire(&rxc->lock);
 
