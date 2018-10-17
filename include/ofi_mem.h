@@ -349,21 +349,19 @@ void *util_buf_get_by_index(struct util_buf_pool *pool, size_t index);
 
 static inline void *util_buf_get(struct util_buf_pool *pool)
 {
-	struct slist_entry *entry;
-	entry = slist_remove_head(&pool->buf_list);
-	return entry;
+	return slist_remove_head(&pool->buf_list);
 }
 
 static inline void util_buf_release(struct util_buf_pool *pool, void *buf)
 {
-	union util_buf *util_buf = buf;
-	slist_insert_head(&util_buf->entry, &pool->buf_list);
+	slist_insert_head(&((union util_buf * )buf)->entry, &pool->buf_list);
 }
 
 static inline size_t util_get_buf_index(struct util_buf_pool *pool, void *buf)
 {
 	return ((struct util_buf_footer *)((char *)buf + pool->attr.size))->index;
 }
+
 static inline void *util_buf_get_by_index(struct util_buf_pool *pool, size_t index)
 {
 	return (union util_buf *)(pool->regions_table[
