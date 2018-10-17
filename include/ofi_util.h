@@ -133,6 +133,9 @@
 	FI_INFO_STRING(provider, prov->name, user->name, "Supported",	\
 		       "Requested")
 
+#define ofi_after_eq(a,b)	((long)((a) - (b)) >= 0)
+#define ofi_before(a,b)		((long)((a) - (b)) < 0)
+
 enum {
 	UTIL_TX_SHARED_CTX = 1 << 0,
 	UTIL_RX_SHARED_CTX = 1 << 1,
