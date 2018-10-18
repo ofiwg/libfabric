@@ -593,7 +593,14 @@ static void tcpx_process_rx_msg(struct tcpx_ep *ep)
 	int ret;
 
 	if (!ep->cur_rx_entry) {
-		ret = tcpx_recv_hdr(ep->conn_fd, &ep->rx_detect);
+		if (ep->stage_buf.len == ep->stage_buf.off) {
+			ret = tcpx_read_to_buffer(ep->conn_fd, &ep->stage_buf);
+			if (ret && !OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
+				goto err1;
+		}
+
+		ret = tcpx_recv_hdr(ep->conn_fd, &ep->stage_buf,
+				    &ep->rx_detect);
 		if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
 			return;
 
