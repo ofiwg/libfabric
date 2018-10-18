@@ -154,7 +154,8 @@ struct rxd_sar_hdr {
 	uint64_t		size;
 	uint64_t		num_segs;
 	uint32_t		tx_id;
-	uint32_t		resv;
+	uint8_t			iov_count;
+	uint8_t			resv[3];
 };
 
 struct rxd_tag_hdr {
@@ -166,8 +167,7 @@ struct rxd_data_hdr {
 };
 
 struct rxd_rma_hdr {
-	uint64_t		iov_count;
-	struct ofi_rma_iov	rma[];	
+	struct ofi_rma_iov	rma[RXD_IOV_LIMIT];
 };
 
 struct rxd_atom_hdr {
