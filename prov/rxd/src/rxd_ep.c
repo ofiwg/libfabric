@@ -312,9 +312,11 @@ struct rxd_x_entry *rxd_tx_entry_init(struct rxd_ep *ep, const struct iovec *iov
 	tx_entry->cq_entry.tag = tag;
 
 	max_inline = rxd_domain->max_inline_msg;
-	if (tx_entry->cq_entry.flags & FI_RMA)
-		max_inline -= sizeof_field(struct rxd_rma_hdr, iov_count) + 
-			      (rma_count * sizeof(struct ofi_rma_iov));
+	if (tx_entry->cq_entry.flags & FI_RMA) {
+		max_inline -= sizeof(struct ofi_rma_iov) * rma_count;
+		if (rma_count > 1)
+			max_inline -= sizeof(struct rxd_sar_hdr);
+	}
 
 	if (tx_entry->flags & RXD_TAG_HDR)
 		max_inline -= sizeof(tx_entry->cq_entry.tag);
@@ -332,7 +334,9 @@ struct rxd_x_entry *rxd_tx_entry_init(struct rxd_ep *ep, const struct iovec *iov
 		tx_entry->num_segs = ofi_div_ceil(tx_entry->cq_entry.len - max_inline,
 						  rxd_domain->max_seg_sz) + 1;
 
-	if (!(tx_entry->cq_entry.flags & FI_READ) && tx_entry->num_segs == 1)
+
+	if (!(tx_entry->cq_entry.flags & FI_READ) && tx_entry->num_segs == 1 &&
+	    rma_count <= 1)
 		tx_entry->flags |= RXD_INLINE;
 
 	if ((tx_entry->op == RXD_READ_REQ || tx_entry->op == RXD_ATOMIC_FETCH ||
@@ -458,13 +462,15 @@ static void rxd_init_base_hdr(struct rxd_ep *rxd_ep, void **ptr,
 	*ptr = (char *) (*ptr) + sizeof(*hdr);
 }
 
-static void rxd_init_sar_hdr(void **ptr, struct rxd_x_entry *tx_entry)
+static void rxd_init_sar_hdr(void **ptr, struct rxd_x_entry *tx_entry,
+			     size_t iov_count)
 {
 	struct rxd_sar_hdr *hdr = (struct rxd_sar_hdr *) *ptr;
 
 	hdr->size = tx_entry->cq_entry.len;
 	hdr->num_segs = tx_entry->num_segs;
 	hdr->tx_id = tx_entry->tx_id;
+	hdr->iov_count = iov_count;
 
 	*ptr = (char *) (*ptr) + sizeof(*hdr);
 }
@@ -493,9 +499,8 @@ static void rxd_init_rma_hdr(void **ptr, const struct fi_rma_iov *rma_iov,
 	struct rxd_rma_hdr *hdr = (struct rxd_rma_hdr *) *ptr;
 
 	memcpy(hdr->rma, rma_iov, sizeof(*rma_iov) * rma_count);
-	hdr->iov_count = rma_count;
 
-	*ptr = (char *) (*ptr) + sizeof(*hdr) + (sizeof(*rma_iov) * rma_count);
+	*ptr = (char *) (*ptr) + (sizeof(*rma_iov) * rma_count);
 }
 
 static void rxd_init_atom_hdr(void **ptr, enum fi_datatype datatype,
@@ -540,8 +545,8 @@ int rxd_ep_send_op(struct rxd_ep *rxd_ep, struct rxd_x_entry *tx_entry,
 	ptr = (void *) base_hdr;
 	rxd_init_base_hdr(rxd_ep, &ptr, tx_entry);
 
-	if (tx_entry->num_segs > 1 || tx_entry->cq_entry.flags & FI_READ)
-		rxd_init_sar_hdr(&ptr, tx_entry); 
+	if (!(tx_entry->flags & RXD_INLINE))
+		rxd_init_sar_hdr(&ptr, tx_entry, rma_count); 
 	if (tx_entry->flags & RXD_TAG_HDR)
 		rxd_init_tag_hdr(&ptr, tx_entry);
 	if (tx_entry->flags & RXD_REMOTE_CQ_DATA)

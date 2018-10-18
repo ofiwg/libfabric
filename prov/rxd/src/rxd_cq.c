@@ -609,12 +609,12 @@ static struct rxd_x_entry *rxd_rma_read_entry_init(struct rxd_ep *ep,
 	tx_entry->next_seg_no = 0;
 	tx_entry->num_segs = ofi_div_ceil(sar_hdr->size, rxd_domain->max_seg_sz);
 
- 	ret = rxd_verify_iov(ep, rma_hdr->rma, rma_hdr->iov_count,
+ 	ret = rxd_verify_iov(ep, rma_hdr->rma, sar_hdr->iov_count,
 			     base_hdr->type, tx_entry->iov);
 	if (ret)
 		return NULL;
 
-	tx_entry->iov_count = rma_hdr->iov_count;
+	tx_entry->iov_count = sar_hdr->iov_count;
 	tx_entry->cq_entry.flags = FI_RMA | FI_READ;
 	tx_entry->cq_entry.len = sar_hdr->size;
 
@@ -629,19 +629,20 @@ static struct rxd_x_entry *rxd_rma_read_entry_init(struct rxd_ep *ep,
 }
 
 static struct rxd_x_entry *rxd_rma_rx_entry_init(struct rxd_ep *ep,
-			struct rxd_base_hdr *base_hdr,
+			struct rxd_base_hdr *base_hdr, struct rxd_sar_hdr *sar_hdr,
 			struct rxd_rma_hdr *rma_hdr)
 {
 	struct rxd_x_entry *rx_entry;
 	struct iovec iov[RXD_IOV_LIMIT];
-	int ret;
+	int ret, iov_count;
 
-	ret = rxd_verify_iov(ep, rma_hdr->rma, rma_hdr->iov_count,
+	iov_count = sar_hdr ? sar_hdr->iov_count : 1;
+	ret = rxd_verify_iov(ep, rma_hdr->rma, iov_count,
 			     base_hdr->type, iov);
 	if (ret)
 		return NULL;
 
-	rx_entry = rxd_rx_entry_init(ep, iov, rma_hdr->iov_count, 0, 0, NULL,
+	rx_entry = rxd_rx_entry_init(ep, iov, iov_count, 0, 0, NULL,
 				     base_hdr->peer, base_hdr->type,
 				     base_hdr->flags);
 	rx_entry->start_seq = base_hdr->seq_no;
@@ -681,12 +682,12 @@ static struct rxd_x_entry *rxd_rx_atomic_fetch(struct rxd_ep *ep,
 	tx_entry->next_seg_no = 0;
 	tx_entry->num_segs = 1;
 
- 	ret = rxd_verify_iov(ep, rma_hdr->rma, rma_hdr->iov_count,
+	tx_entry->iov_count = sar_hdr ? sar_hdr->iov_count : 1;
+ 	ret = rxd_verify_iov(ep, rma_hdr->rma, tx_entry->iov_count,
 			     base_hdr->type, tx_entry->iov);
 	if (ret)
 		return NULL;
 
-	tx_entry->iov_count = rma_hdr->iov_count;
 	tx_entry->cq_entry.flags = FI_READ | FI_ATOMIC;
 	tx_entry->cq_entry.len = sar_hdr->size;
 
@@ -709,9 +710,11 @@ void rxd_unpack_hdrs(size_t pkt_size, struct rxd_base_hdr *base_hdr,
 		     struct rxd_atom_hdr **atom_hdr, void **msg, size_t *msg_size)
 {
 	char *ptr = (char *) base_hdr + sizeof(*base_hdr);
+	uint8_t rma_count = 1;
 
 	if (!(base_hdr->flags & RXD_INLINE)) {
 		*sar_hdr = (struct rxd_sar_hdr *) ptr;
+		rma_count = (*sar_hdr)->iov_count;
 		ptr += sizeof(**sar_hdr);
 	} else {
 		*sar_hdr = NULL;
@@ -733,8 +736,7 @@ void rxd_unpack_hdrs(size_t pkt_size, struct rxd_base_hdr *base_hdr,
 
 	if (base_hdr->type >= RXD_READ_REQ && base_hdr->type <= RXD_ATOMIC_COMPARE) {
 		*rma_hdr = (struct rxd_rma_hdr *) ptr;
-		ptr += sizeof(**rma_hdr) + (sizeof(*(*rma_hdr)->rma) *
-		       (*rma_hdr)->iov_count);
+		ptr += (sizeof(*(*rma_hdr)->rma) * rma_count);
 
 		if (base_hdr->type >= RXD_ATOMIC) {
 			*atom_hdr = (struct rxd_atom_hdr *) ptr;
@@ -775,7 +777,7 @@ static struct rxd_x_entry *rxd_unpack_init_rx(struct rxd_ep *ep,
 	case RXD_ATOMIC_COMPARE:
 		return rxd_rx_atomic_fetch(ep, base_hdr, *sar_hdr, *rma_hdr, *atom_hdr);
 	default:
-		return rxd_rma_rx_entry_init(ep, base_hdr, *rma_hdr);
+		return rxd_rma_rx_entry_init(ep, base_hdr, *sar_hdr, *rma_hdr);
 	}
 }
 
@@ -800,18 +802,20 @@ void rxd_progress_op_msg(struct rxd_ep *ep, struct rxd_x_entry *rx_entry,
 }
 
 void rxd_progress_atom_op(struct rxd_ep *ep, struct rxd_x_entry *rx_entry,
-			  struct rxd_base_hdr *base_hdr, struct rxd_rma_hdr *rma_hdr,
-			  struct rxd_atom_hdr *atom_hdr, void **msg, size_t msg_size)
+			  struct rxd_base_hdr *base_hdr, struct rxd_sar_hdr *sar_hdr,
+			  struct rxd_rma_hdr *rma_hdr, struct rxd_atom_hdr *atom_hdr,
+			  void **msg, size_t msg_size)
 {
 	char *src, *cmp;
 	size_t len;
-	int i;
+	int i, iov_count;
 
 	src = (char *) (*msg);
 	cmp = base_hdr->type == RXD_ATOMIC_COMPARE ? (char *) (*msg) +
 		(msg_size / 2) : NULL;
 
-	for (i = len = 0; i < rma_hdr->iov_count; i++) {
+	iov_count = sar_hdr ? sar_hdr->iov_count : 1;
+	for (i = len = 0; i < iov_count; i++) {
 		rxd_do_atomic(&src[len], rx_entry->iov[i].iov_base,
 			      cmp ? &cmp[len] : NULL, atom_hdr->datatype,
 			      atom_hdr->atomic_op, rx_entry->iov[i].iov_len /
@@ -834,8 +838,8 @@ void rxd_progress_op(struct rxd_ep *ep, struct rxd_x_entry *rx_entry,
 		     void **msg, size_t size)
 {
 	if (atom_hdr)
-		rxd_progress_atom_op(ep, rx_entry, base_hdr, rma_hdr, atom_hdr,
-				     msg, size);
+		rxd_progress_atom_op(ep, rx_entry, base_hdr, sar_hdr,
+				     rma_hdr, atom_hdr, msg, size);
 	else
 		rxd_progress_op_msg(ep, rx_entry, msg, size);
 
