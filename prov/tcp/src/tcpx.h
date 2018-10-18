@@ -70,7 +70,7 @@
 #define TCPX_MAX_INJECT_SZ	(64)
 
 #define MAX_EPOLL_EVENTS	100
-#define STAGE_BUF_SIZE		4096
+#define STAGE_BUF_SIZE		512
 
 extern struct fi_provider	tcpx_prov;
 extern struct util_prov		tcpx_util_prov;
