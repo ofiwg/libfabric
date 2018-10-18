@@ -37,6 +37,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <sys/types.h>
+#include <sys/uio.h>
 
 #ifdef __GNUC__
 #define FI_DEPRECATED_FUNC __attribute__((deprecated))
