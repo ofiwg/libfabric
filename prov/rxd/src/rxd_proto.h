@@ -43,7 +43,7 @@
 #define RXD_IOV_LIMIT		4
 #define RXD_NAME_LENGTH		64
 
-enum rxd_msg_type {
+enum rxd_pkt_type {
 	RXD_MSG			= ofi_op_msg,
 	RXD_TAGGED		= ofi_op_tagged,
 	RXD_READ_REQ		= ofi_op_read_req,
@@ -59,67 +59,120 @@ enum rxd_msg_type {
 	RXD_NO_OP,
 };
 
+/* Base header: all packets must start with base_hdr
+ * 	- version: RXD version the app is using
+ * 	- type: type of message (see above definitions)
+ * 	- flags: any neccesary flags including hdr flags indicating which headers
+ * 		 are included in the packet
+ * 	- peer: RX side peer address (exchanged during RTS-CTS process)
+ * 	- seq_no: sequence number (per peer)
+ */
 struct rxd_base_hdr {
-	uint32_t version;
-	uint32_t type;
+	uint8_t		version;
+	uint8_t		type;
+	uint16_t	flags;
+	uint32_t	peer;
+	uint64_t	seq_no;
 };
 
-struct rxd_pkt_hdr {
-	uint32_t	flags;
+/*
+ * Extended header: used for large transfers and ACKs
+ * 	- tx_id/rx_id:
+ * 		- for large messages: the tx/rx index for the messages
+ * 		- for ACKs: the tx/rx index which the ACK corresponds to
+ */
+struct rxd_ext_hdr {
 	uint32_t	tx_id;
 	uint32_t	rx_id;
-	uint32_t	msg_id;
-	uint32_t	seg_no;
-	uint32_t	seq_no;
-	fi_addr_t	peer;
+	uint64_t	seg_no;
 };
 
+/*
+ * Ready to send: initialize peer communication and exchange addressing info
+ * 	- dg_addr: local address for peer
+ * 	- source: name of transmitting endpoint for peer to add to AV
+ */
 struct rxd_rts_pkt {
 	struct rxd_base_hdr	base_hdr;
 	uint64_t		dg_addr;
 	uint8_t			source[RXD_NAME_LENGTH];
 };
 
+/*
+ * Clear to send: response to RTS request
+ * 	- dg_addr: peer address packet is responding to
+ * 	- peer_addr: local address for peer
+ */
 struct rxd_cts_pkt {
 	struct	rxd_base_hdr	base_hdr;
 	uint64_t		dg_addr;
 	uint64_t		peer_addr;
 };
 
+/*
+ * ACK: to signal received packets and send tx/rx id info
+ */
 struct rxd_ack_pkt {
 	struct rxd_base_hdr	base_hdr;
-	struct rxd_pkt_hdr	pkt_hdr;
+	struct rxd_ext_hdr	ext_hdr;
 	//TODO fill in more fields? Selective ack?
 };
 
-//TODO split this into separate packet types to not waste space
-struct rxd_op_pkt {
-	struct rxd_base_hdr	base_hdr;
-	struct rxd_pkt_hdr	pkt_hdr;
-
-	uint64_t		num_segs;
-	union {
-		uint64_t		tag;
-		struct {
-			uint64_t		iov_count;
-			struct ofi_rma_iov	rma[RXD_IOV_LIMIT];
-
-			uint32_t		datatype;
-			uint32_t		atomic_op;
-		};
-	};
-
-	uint64_t		cq_data;
-	uint64_t		size;
-
-	char			msg[];
-}; 
-
+/*
+ * Data: send larger block of data using known tx/rx ids for matching
+ */
 struct rxd_data_pkt {
 	struct rxd_base_hdr	base_hdr;
-	struct rxd_pkt_hdr	pkt_hdr;
+	struct rxd_ext_hdr	ext_hdr;
 
 	char			msg[];
+};
+
+/*
+ * The below five headers are used for op pkts and can be used in combination.
+ * The presence of each header is determined by either op type or flags (in base_hr).
+ * The op header order is as follows:
+ * base_hdr (present for all packets)
+ *
+ * sar_hdr: for all messages requiring more than one packet
+ * 	- lack of the sar_hdr is signaled by base_hdr->flags & RXD_INLINE
+ * tag_hdr: for all tagged messages
+ * 	- signaled by base_hdr->flags & RXD_TAG_HDR
+ * data_hdr: for messages carrying remote CQ data
+ * 	- signaled by base_hdr->flags & RXD_REMOTE_CQ_DATA
+ * rma_hdr: for FI_RMA and FI_ATOMIC operations
+ * 	- signaled by base_hdr->type = RXD_READ_REQ, RXD_WRITE, RXD_ATOMIC,
+ * 	  RXD_ATOMIC_FETCH, and RXD_ATOMIC_COMPARE
+ * atom_hdr: for FI_ATOMIC operations
+ * 	- signaled by base_hdr->type = RXD_ATOMIC, RXD_ATOMIC_FETCH,
+ * 	  RXD_ATOMIC_COMPARE
+ * 
+ * Any data in the packet following these headers is part of the incoming packet message
+ */
+
+struct rxd_sar_hdr {
+	uint64_t		size;
+	uint64_t		num_segs;
+	uint32_t		tx_id;
+	uint8_t			iov_count;
+	uint8_t			resv[3];
+};
+
+struct rxd_tag_hdr {
+	uint64_t	tag;
+};
+
+struct rxd_data_hdr {
+	uint64_t	cq_data;
+};
+
+struct rxd_rma_hdr {
+	struct ofi_rma_iov	rma[RXD_IOV_LIMIT];
+};
+
+struct rxd_atom_hdr {
+	uint32_t	datatype;
+	uint32_t	atomic_op;
 };
 
 #endif

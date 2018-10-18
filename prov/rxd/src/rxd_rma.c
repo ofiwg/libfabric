@@ -47,7 +47,7 @@ static ssize_t rxd_generic_write_inject(struct rxd_ep *rxd_ep,
 	ssize_t ret = -FI_EAGAIN;
 
 	assert(iov_count <= RXD_IOV_LIMIT && rma_count <= RXD_IOV_LIMIT);
-	assert(ofi_total_iov_len(iov, iov_count) <= rxd_ep_domain(rxd_ep)->max_inline_sz);
+	assert(ofi_total_iov_len(iov, iov_count) <= rxd_ep_domain(rxd_ep)->max_inline_rma);
 
 	dg_addr = rxd_av_dg_addr(rxd_ep_av(rxd_ep), addr);
 
@@ -63,8 +63,8 @@ static ssize_t rxd_generic_write_inject(struct rxd_ep *rxd_ep,
 	    dlist_empty(&rxd_ep->peers[dg_addr].unacked))
 		rxd_ep_send_rts(rxd_ep, dg_addr);
 
-	tx_entry = rxd_tx_entry_init(rxd_ep, iov, iov_count, NULL, 0, data, 0, context,
-				     dg_addr, op, rxd_flags);
+	tx_entry = rxd_tx_entry_init(rxd_ep, iov, iov_count, NULL, 0, rma_count, data,
+				     0, context, dg_addr, op, rxd_flags);
 	if (!tx_entry)
 		goto out;
 
@@ -113,8 +113,8 @@ ssize_t rxd_generic_rma(struct rxd_ep *rxd_ep, const struct iovec *iov,
 	    dlist_empty(&rxd_ep->peers[dg_addr].unacked))
 		rxd_ep_send_rts(rxd_ep, dg_addr);
 
-	tx_entry = rxd_tx_entry_init(rxd_ep, iov, iov_count, NULL, 0, data, 0, context,
-				     dg_addr, op, rxd_flags);
+	tx_entry = rxd_tx_entry_init(rxd_ep, iov, iov_count, NULL, 0, rma_count,
+				     data, 0, context, dg_addr, op, rxd_flags);
 	if (!tx_entry)
 		goto out;
 

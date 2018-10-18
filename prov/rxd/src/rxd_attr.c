@@ -39,7 +39,7 @@
 struct fi_tx_attr rxd_tx_attr = {
 	.caps = RXD_EP_CAPS,
 	.comp_order = FI_ORDER_STRICT,
-	.inject_size = RXD_MAX_MTU_SIZE - sizeof(struct rxd_op_pkt),
+	.inject_size = RXD_MAX_MTU_SIZE - sizeof(struct rxd_base_hdr),
 	.size = (1ULL << RXD_MAX_TX_BITS),
 	.iov_limit = RXD_IOV_LIMIT,
 	.rma_iov_limit = 0,
@@ -68,7 +68,7 @@ struct fi_domain_attr rxd_domain_attr = {
 	.data_progress = FI_PROGRESS_MANUAL,
 	.resource_mgmt = FI_RM_ENABLED,
 	.av_type = FI_AV_UNSPEC,
-	.cq_data_size = sizeof_field(struct rxd_op_pkt, cq_data),
+	.cq_data_size = sizeof_field(struct rxd_data_hdr, cq_data),
 	.mr_key_size = sizeof(uint64_t),
 	.cq_cnt = 128,
 	.ep_cnt = 128,
