@@ -377,11 +377,9 @@ static int cxip_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	//struct fi_eq_entry eq_entry;
 	struct cxip_domain *dom;
 	struct cxip_mr *_mr;
+	uint32_t pid_granule;
 
 	if (fid->fclass != FI_CLASS_DOMAIN || !attr || attr->iov_count <= 0)
-		return -FI_EINVAL;
-
-	if (attr->requested_key >= CXIP_EP_MAX_MR_CNT)
 		return -FI_EINVAL;
 
 	/* Only support length 1 IOVs for now */
@@ -389,6 +387,10 @@ static int cxip_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		return -FI_ENOSYS;
 
 	dom = container_of(fid, struct cxip_domain, dom_fid.fid);
+	pid_granule = dom->dev_if->if_pid_granule;
+
+	if (attr->requested_key >= CXIP_PID_MR_CNT(pid_granule))
+		return -FI_EINVAL;
 
 	_mr = calloc(1, sizeof(*_mr));
 	if (!_mr)

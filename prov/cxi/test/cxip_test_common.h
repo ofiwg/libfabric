@@ -12,6 +12,7 @@ extern struct fi_info *cxit_fi;
 extern struct fid_fabric *cxit_fabric;
 extern struct fid_domain *cxit_domain;
 extern struct fid_ep *cxit_ep;
+extern struct cxip_addr cxit_ep_addr;
 extern struct fid_ep *cxit_sep;
 extern struct fi_cq_attr cxit_tx_cq_attr, cxit_rx_cq_attr;
 extern struct fid_cq *cxit_tx_cq, *cxit_rx_cq;

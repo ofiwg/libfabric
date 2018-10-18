@@ -47,10 +47,10 @@ static void mr_destroy(struct mem_region *mr)
 	free(mr->mem);
 }
 
-TestSuite(rma, .init = cxit_setup_rma, .fini = cxit_teardown_rma);
+TestSuite(rma, .init = cxit_setup_rma, .fini = cxit_teardown_rma, .timeout = 3);
 
 /* Test fi_write simple case */
-Test(rma, simple_write, .timeout = 3, .disabled = false)
+Test(rma, simple_write)
 {
 	int ret;
 	uint8_t *send_buf;
@@ -97,7 +97,7 @@ Test(rma, simple_write, .timeout = 3, .disabled = false)
 }
 
 /* Test fi_writev simple case */
-Test(rma, simple_writev, .timeout = 3, .disabled = false)
+Test(rma, simple_writev)
 {
 	int ret;
 	uint8_t *send_buf;
@@ -148,7 +148,7 @@ Test(rma, simple_writev, .timeout = 3, .disabled = false)
 }
 
 /* Test fi_writemsg simple case */
-Test(rma, simple_writemsg, .timeout = 3, .disabled = false)
+Test(rma, simple_writemsg)
 {
 	int ret;
 	uint8_t *send_buf;
@@ -211,7 +211,7 @@ Test(rma, simple_writemsg, .timeout = 3, .disabled = false)
 }
 
 /* Test fi_read simple case */
-Test(rma, simple_read, .timeout = 3, .disabled = false)
+Test(rma, simple_read)
 {
 	int ret;
 	uint8_t *local;
@@ -256,7 +256,7 @@ Test(rma, simple_read, .timeout = 3, .disabled = false)
 }
 
 /* Test fi_readv simple case */
-Test(rma, simple_readv, .timeout = 3, .disabled = false)
+Test(rma, simple_readv)
 {
 	int ret;
 	uint8_t *local;
@@ -305,7 +305,7 @@ Test(rma, simple_readv, .timeout = 3, .disabled = false)
 }
 
 /* Test fi_readmsg simple case */
-Test(rma, simple_readmsg, .timeout = 3, .disabled = false)
+Test(rma, simple_readmsg)
 {
 	int ret;
 	uint8_t *local;
@@ -366,7 +366,7 @@ Test(rma, simple_readmsg, .timeout = 3, .disabled = false)
 }
 
 /* Test fi_readmsg failure cases */
-Test(rma, readmsg_failures, .disabled = false)
+Test(rma, readmsg_failures)
 {
 	int ret;
 	struct fi_msg_rma msg = {
@@ -393,7 +393,7 @@ Test(rma, readmsg_failures, .disabled = false)
 }
 
 /* Test fi_writemsg failure cases */
-Test(rma, writemsg_failures, .disabled = false)
+Test(rma, writemsg_failures)
 {
 	int ret;
 	struct fi_msg_rma msg = {
@@ -420,7 +420,7 @@ Test(rma, writemsg_failures, .disabled = false)
 }
 
 /* Test fi_readv failure cases */
-Test(rma, readv_failures, .disabled = false)
+Test(rma, readv_failures)
 {
 	int ret;
 	struct iovec iov = {};
@@ -432,7 +432,7 @@ Test(rma, readv_failures, .disabled = false)
 }
 
 /* Test fi_writev failure cases */
-Test(rma, writev_failures, .disabled = false)
+Test(rma, writev_failures)
 {
 	int ret;
 	struct iovec iov = {};

@@ -16,6 +16,7 @@ struct fi_info *cxit_fi;
 struct fid_fabric *cxit_fabric;
 struct fid_domain *cxit_domain;
 struct fid_ep *cxit_ep;
+struct cxip_addr cxit_ep_addr;
 struct fid_ep *cxit_sep;
 struct fi_cq_attr cxit_tx_cq_attr, cxit_rx_cq_attr;
 struct fid_cq *cxit_tx_cq, *cxit_rx_cq;
@@ -404,6 +405,7 @@ void cxit_teardown_ep(void)
 void cxit_setup_rma(void)
 {
 	int ret;
+	size_t addrlen = sizeof(cxit_ep_addr);
 
 	/* Request required capabilities for RMA */
 	cxit_setup_getinfo();
@@ -424,12 +426,17 @@ void cxit_setup_rma(void)
 	cxit_create_av();
 	cxit_bind_av();
 
-	/* Insert local address into AV to prepare to send to self */
-	ret = fi_av_insert(cxit_av, cxit_fi->src_addr, 1, NULL, 0, NULL);
-	cr_assert(ret == 1);
-
 	ret = fi_enable(cxit_ep);
 	cr_assert(ret == FI_SUCCESS);
+
+	/* Find assigned Endpoint address. Address is assigned during enable. */
+	ret = fi_getname(&cxit_ep->fid, &cxit_ep_addr, &addrlen);
+	cr_assert(ret == FI_SUCCESS);
+	cr_assert(addrlen == sizeof(cxit_ep_addr));
+
+	/* Insert local address into AV to prepare to send to self */
+	ret = fi_av_insert(cxit_av, (void *)&cxit_ep_addr, 1, NULL, 0, NULL);
+	cr_assert(ret == 1);
 }
 
 void cxit_teardown_rma(void)

@@ -290,9 +290,9 @@ int num_rx_ctx = 2;
 void cxit_setup_sep_msg(void)
 {
 	struct cxip_av *av;
-	fi_addr_t dest_addr;
 	int ret;
 	int i, j;
+	size_t addrlen = sizeof(cxit_ep_addr);
 
 	/* Request required capabilities for RMA */
 	cxit_setup_getinfo();
@@ -320,9 +320,6 @@ void cxit_setup_sep_msg(void)
 	ret = fi_ep_bind(cxit_sep, &cxit_av->fid, 0);
 	cr_assert_eq(ret, FI_SUCCESS, "bad retval = %d\n", ret);
 
-	ret = fi_av_insert(cxit_av, cxit_fi->src_addr, 1, &dest_addr, 0, NULL);
-	cr_assert_eq(ret, 1, "bad retval = %d\n", ret);
-
 	/* Create TX contexts */
 	for (i = 0; i < num_tx_ctx; i++) {
 		ret = fi_tx_context(cxit_sep, i, NULL, &tx_ep[i],
@@ -346,7 +343,8 @@ void cxit_setup_sep_msg(void)
 		for (j = 0; j < i-1; j++)
 			cr_assert_neq(rx_ep[j], rx_ep[i]);
 
-		rx_addr[i] = fi_rx_addr(dest_addr, i, av->rx_ctx_bits);
+		/* We will later map the SEP addr to FI addr 0 */
+		rx_addr[i] = fi_rx_addr(0, i, av->rx_ctx_bits);
 	}
 
 	/* Create CQ objects, one per TX and RX */
@@ -382,6 +380,16 @@ void cxit_setup_sep_msg(void)
 	/* Enable the SEP */
 	ret = fi_enable(cxit_sep);
 	cr_assert(ret == FI_SUCCESS);
+
+	/* Find assigned Endpoint address. Address is assigned during enable. */
+	ret = fi_getname(&cxit_sep->fid, &cxit_ep_addr, &addrlen);
+	cr_assert(ret == FI_SUCCESS);
+	cr_assert(addrlen == sizeof(cxit_ep_addr));
+
+	/* Insert local address into AV to prepare to send to self */
+	ret = fi_av_insert(cxit_av, (void *)&cxit_ep_addr, 1, NULL, 0,
+			   NULL);
+	cr_assert(ret == 1);
 
 	/* Enable the contexts */
 	for (i = 0; i < num_tx_ctx; i++) {

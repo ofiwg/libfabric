@@ -225,19 +225,20 @@ int cxip_get_if_domain(struct cxip_if *dev_if, uint32_t vni, uint32_t pid,
 
 		dlist_insert_tail(&dom->if_dom_entry, &dev_if->if_doms);
 		dom->dev_if = dev_if;
-		dom->vni = vni;
-		dom->pid = pid;
+		dom->vni = dom->cxil_if_dom->vni;
+		dom->pid = dom->cxil_if_dom->pid;
 		memset(&dom->lep_map, 0, sizeof(dom->lep_map));
 		ofi_atomic_initialize32(&dom->ref, 0);
 		fastlock_init(&dom->lock);
 
 		CXIP_LOG_DBG(
 			"Allocated IF Domain, NIC: %u VNI: %u PID: %u\n",
-			dev_if->if_nic, vni, pid);
+			dev_if->if_nic, dom->vni, dom->pid);
 	} else {
 		CXIP_LOG_DBG(
 			"Using IF Domain, NIC: %u VNI: %u PID: %u ref: %u\n",
-			dev_if->if_nic, vni, pid, ofi_atomic_get32(&dom->ref));
+			dev_if->if_nic, dom->vni, dom->pid,
+			ofi_atomic_get32(&dom->ref));
 	}
 
 	ofi_atomic_inc32(&dom->ref);

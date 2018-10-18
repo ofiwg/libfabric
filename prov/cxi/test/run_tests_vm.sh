@@ -7,4 +7,4 @@ cd $(dirname $0)
 #
 # Tests must be run with -j1 to prevent processes from racing to allocate CXI
 # resources.
-./cxitest -j1 --verbose --tap=cxitest.tap
+./cxitest --verbose --tap=cxitest.tap

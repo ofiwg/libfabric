@@ -135,53 +135,60 @@ extern struct slist cxip_if_list;
 /**
  * The CXI Provider Address format.
  *
- * A Cassini NIC Address and PID identify a libfabric Endpoint.  Cassini borrows
- * the name 'PID' from Portals. The maximum PID value in Cassini is 12 bits. We
- * allow/use only 9 bits.
+ * A Cassini NIC Address and PID identify a libfabric Endpoint.  Cassini
+ * borrows the name 'PID' from Portals. In CXI, a process can allocate several
+ * PID values. The maximum PID value on Cassini is 9 bits.
  *
- * Pid -1 is reserved.  When used, the library auto-assigns a free PID value
- * when network resources are allocated.  Libfabric clients can achieve this by
- * not specifying a 'service' in a call to fi_getinfo() or by specifying the
- * reserved value -1.
+ * The PID value C_PID_ANY is reserved. When used, the library auto-assigns
+ * a free PID value. A PID value is assigned when network resources are
+ * allocated. Libfabric clients can achieve this by not specifying a 'service'
+ * in a call to fi_getinfo() or by not setting src_addr in the fi_info
+ * structure used to allocate an Endpoint.
  *
  * TODO: If NIC Address must be non-zero, the valid bit can be removed.
- * TODO: Is 22 bits enough for NIC Address?
  */
-#define	CXIP_ADDR_VNI_BITS	17
 #define CXIP_ADDR_PID_BITS	9
-#define	CXIP_ADDR_IDX_BITS	(CXIP_ADDR_VNI_BITS - CXIP_ADDR_PID_BITS)
-#define	CXIP_ADDR_PID_AUTO	((1 << CXIP_ADDR_PID_BITS) - 1)
-#define	CXIP_ADDR_NIC_BITS	(32 - 1 - CXIP_ADDR_PID_BITS)
+#define CXIP_ADDR_NIC_BITS	20
 
 struct cxip_addr {
 	union {
 		struct {
-			uint32_t pid	: CXIP_ADDR_PID_BITS;
-			uint32_t nic	: CXIP_ADDR_NIC_BITS;
-			uint32_t valid	: 1;
+			uint32_t pid		: CXIP_ADDR_PID_BITS;
+			uint32_t nic		: CXIP_ADDR_NIC_BITS;
+			uint32_t valid		: 1;
 		};
 		uint32_t raw;
 	};
 };
 
-#ifndef ARRAY_SIZE
-#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
-#endif
-
-/* 256 slots total (2^(17-9) == 2^8)
- *  16 RX slots
- * 239 MR slots
- *   1 Rendesvous Send slot
+/* A PID contains "pid_granule" logical endpoints. The PID granule is set per
+ * device and can be found in libCXI devinfo. These endpoints are partitioned
+ * by the provider for the following use:
+ *
+ * 0-MAX_RXC       RX context queues
+ * MAX_RXC-(MAX-1) MR key values
+ * MAX             Rendezvous read queue
+ *
+ * The default pid_granule is 256. The default maximum RXC count is 16.
+ * Therefore, the mapping is usually:
+ *
+ * 0-15   RX context queues 0-15
+ * 16-254 MR keys 0-238
+ * 255    Rendezvous read queue
  */
-#define	CXIP_EP_MAX_IDX_CNT	(1 << CXIP_ADDR_IDX_BITS)
-#define	CXIP_EP_MAX_MR_CNT	(CXIP_EP_MAX_IDX_CNT - CXIP_EP_MAX_RX_CNT - 1)
+#define CXIP_PID_RXC_CNT CXIP_EP_MAX_RX_CNT
+#define CXIP_PID_MR_CNT(pid_granule) ((pid_granule) - CXIP_PID_RXC_CNT - 1)
 
-#define CXIP_MR_TO_IDX(key)	(CXIP_EP_MAX_RX_CNT + (key))
-#define CXIP_RXC_TO_IDX(rx_id)	(rx_id)
+#define CXIP_MR_TO_IDX(key) (CXIP_PID_RXC_CNT + (key))
+#define CXIP_RXC_TO_IDX(rx_id) (rx_id)
 
 #define	CXIP_AV_ADDR_IDX(av, fi_addr)	((uint64_t)fi_addr & av->mask)
 #define	CXIP_AV_ADDR_RXC(av, fi_addr)	((uint64_t)fi_addr >> \
 						(64 - av->rx_ctx_bits))
+
+#ifndef ARRAY_SIZE
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+#endif
 
 // TODO: comments are not yet complete, and may not be entirely correct
 //       complete documentation and review thoroughly

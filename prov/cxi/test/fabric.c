@@ -280,7 +280,7 @@ Test(getinfo, dest_node)
 		cr_assert(cxit_fi->src_addr);
 		addr = (struct cxip_addr *)cxit_fi->src_addr;
 		cr_assert(addr->nic == if_entry->if_nic);
-		cr_assert(addr->pid == 0);
+		cr_assert(addr->pid == C_PID_ANY);
 
 		fab_name = get_fab_name(if_entry->if_fabric);
 		cr_assert(!strcmp(cxit_fi->fabric_attr->name,
@@ -344,7 +344,7 @@ Test(getinfo, dest_node_service)
 		cr_assert(cxit_fi->src_addr);
 		addr = (struct cxip_addr *)cxit_fi->src_addr;
 		cr_assert(addr->nic == if_entry->if_nic);
-		cr_assert(addr->pid == 0);
+		cr_assert(addr->pid == C_PID_ANY);
 
 		fab_name = get_fab_name(if_entry->if_fabric);
 		cr_assert(!strcmp(cxit_fi->fabric_attr->name,

@@ -386,6 +386,7 @@ int cxip_get_src_addr(struct cxip_addr *dest_addr, struct cxip_addr *src_addr)
 	/* Just say the first IF matches */
 	if_entry = container_of((cxip_if_list.head), struct cxip_if, if_entry);
 	src_addr->nic = if_entry->if_nic;
+	src_addr->pid = C_PID_ANY;
 
 	return 0;
 }
@@ -437,13 +438,6 @@ static int cxip_parse_service(const char *service, uint32_t *pid)
 {
 	uint32_t scan_pid;
 
-	if (!service) {
-		/* TODO let driver auto assign pid */
-		/* *pid = CXIP_ADDR_PID_AUTO; */
-		*pid = 0;
-		return FI_SUCCESS;
-	}
-
 	if (sscanf(service, "%d", &scan_pid) == 1) {
 		*pid = scan_pid;
 		return FI_SUCCESS;
@@ -456,16 +450,18 @@ int cxip_parse_addr(const char *node, const char *service,
 		    struct cxip_addr *addr)
 {
 	uint32_t nic = 0;
-	uint32_t pid = 0;
+	uint32_t pid = C_PID_ANY;
 	int ret;
 
 	ret = cxip_parse_node(node, &nic);
 	if (ret)
 		return ret;
 
-	ret = cxip_parse_service(service, &pid);
-	if (ret)
-		return ret;
+	if (service) {
+		ret = cxip_parse_service(service, &pid);
+		if (ret)
+			return ret;
+	}
 
 	addr->nic = nic;
 	addr->pid = pid;

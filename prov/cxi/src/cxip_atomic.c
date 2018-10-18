@@ -423,10 +423,6 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 		return -FI_EINVAL;
 	}
 
-	/* Do not allow an invalid memory key */
-	if (key >= CXIP_EP_MAX_MR_CNT)
-		return -FI_EINVAL;
-
 	/* Convert FI to CXI codes, fail if operation not supported */
 	ret = _cxip_atomic_opcode(req_type, msg->datatype, msg->op,
 				  &opcode, &dtcode, &swpcode, &len);
@@ -533,6 +529,11 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 	}
 
 	dev_if = txc->domain->dev_if;
+	pid_granule = dev_if->if_pid_granule;
+
+	/* Do not allow an invalid memory key */
+	if (key >= CXIP_PID_MR_CNT(pid_granule))
+		return -FI_EINVAL;
 
 	/* Look up target CXI address */
 	ret = _cxip_av_lookup(txc->ep_obj->av, msg->addr, &caddr);
@@ -576,7 +577,6 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 	req->amo.result_buf = local_result;
 
 	/* Build AMO command descriptor */
-	pid_granule = dev_if->if_pid_granule;
 	pid_idx = CXIP_MR_TO_IDX(key);
 	cxi_build_dfa(caddr.nic, caddr.pid, pid_granule, pid_idx, &dfa,
 		      &idx_ext);

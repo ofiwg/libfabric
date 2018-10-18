@@ -86,12 +86,6 @@ static ssize_t _cxip_rma_op(enum cxip_rma_op op, struct fid_ep *ep,
 		return -FI_ENOSYS;
 	}
 
-	if (rma[0].key >= CXIP_EP_MAX_MR_CNT) {
-		CXIP_LOG_DBG("rma key = %lu, must be < %d\n", rma[0].key,
-			     CXIP_EP_MAX_MR_CNT);
-		return -FI_EINVAL;
-	}
-
 	/* The input FID could be a standard endpoint (containing a TX
 	 * context), or a TX context itself.
 	 */
@@ -111,6 +105,13 @@ static ssize_t _cxip_rma_op(enum cxip_rma_op op, struct fid_ep *ep,
 	}
 
 	dom = txc->domain;
+	pid_granule = dom->dev_if->if_pid_granule;
+
+	if (rma[0].key >= CXIP_PID_MR_CNT(pid_granule)) {
+		CXIP_LOG_DBG("rma key = %lu, must be < %d\n", rma[0].key,
+			     CXIP_PID_MR_CNT(pid_granule));
+		return -FI_EINVAL;
+	}
 
 	/* Look up target CXI address */
 	ret = _cxip_av_lookup(txc->ep_obj->av, addr, &caddr);
@@ -146,7 +147,6 @@ static ssize_t _cxip_rma_op(enum cxip_rma_op op, struct fid_ep *ep,
 	req->rma.local_md = mem_desc;
 
 	/* Generate the destination fabric address */
-	pid_granule = dom->dev_if->if_pid_granule;
 	pid_idx = CXIP_MR_TO_IDX(rma[0].key);
 	cxi_build_dfa(caddr.nic, caddr.pid, pid_granule, pid_idx, &dfa,
 		      &idx_ext);

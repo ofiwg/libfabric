@@ -24,6 +24,8 @@ extern struct fi_ops_rma cxip_ep_rma;
 extern struct fi_ops_msg cxip_ep_msg_ops;
 extern struct fi_ops_tagged cxip_ep_tagged_ops;
 extern struct fi_ops_atomic cxip_ep_atomic;
+
+extern struct fi_ops_cm cxip_ep_cm_ops;
 extern struct fi_ops_ep cxip_ep_ops;
 extern struct fi_ops cxip_ep_fi_ops;
 extern struct fi_ops_ep cxip_ctx_ep_ops;
@@ -59,6 +61,48 @@ const struct fi_rx_attr cxip_srx_attr = {
 	.total_buffered_recv = 0,
 	.size = CXIP_EP_MAX_MSG_SZ,
 	.iov_limit = CXIP_EP_MAX_IOV_LIMIT,
+};
+
+static int cxip_ep_cm_getname(fid_t fid, void *addr, size_t *addrlen)
+{
+	struct cxip_ep *cxip_ep;
+	size_t len;
+
+	len = MIN(*addrlen, sizeof(struct cxip_addr));
+
+	switch (fid->fclass) {
+	case FI_CLASS_EP:
+	case FI_CLASS_SEP:
+		cxip_ep = container_of(fid, struct cxip_ep, ep.fid);
+		if (!cxip_ep->ep_obj->is_enabled)
+			return -FI_EOPBADSTATE;
+
+		CXIP_LOG_DBG("NIC: 0x%x PID: %u\n",
+			     cxip_ep->ep_obj->src_addr.nic,
+			     cxip_ep->ep_obj->src_addr.pid);
+
+		memcpy(addr, &cxip_ep->ep_obj->src_addr, len);
+		break;
+	default:
+		CXIP_LOG_ERROR("Invalid argument\n");
+		return -FI_EINVAL;
+	}
+
+	*addrlen = sizeof(struct cxip_addr);
+	return (len == sizeof(struct cxip_addr)) ? FI_SUCCESS : -FI_ETOOSMALL;
+}
+
+struct fi_ops_cm cxip_ep_cm_ops = {
+	.size = sizeof(struct fi_ops_cm),
+	.setname = fi_no_setname,
+	.getname = cxip_ep_cm_getname,
+	.getpeer = fi_no_getpeer,
+	.connect = fi_no_connect,
+	.listen = fi_no_listen,
+	.accept = fi_no_accept,
+	.reject = fi_no_reject,
+	.shutdown = fi_no_shutdown,
+	.join = fi_no_join,
 };
 
 /**
@@ -371,6 +415,9 @@ static int _ep_enable(struct cxip_ep_obj *ep_obj,
 		CXIP_LOG_DBG("Failed to get IF Domain: %d\n", ret);
 		return ret;
 	}
+
+	CXIP_LOG_DBG("EP assigned PID: %u\n", ep_obj->if_dom->pid);
+	ep_obj->src_addr.pid = ep_obj->if_dom->pid;
 
 	return FI_SUCCESS;
 }
@@ -1805,6 +1852,7 @@ int cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 	case FI_CLASS_EP:
 		/* standard EP */
 		cxi_ep->ep.ops = &cxip_ep_ops;
+		cxi_ep->ep.cm = &cxip_ep_cm_ops;
 		cxi_ep->ep.msg = &cxip_ep_msg_ops;
 		cxi_ep->ep.rma = &cxip_ep_rma;
 		cxi_ep->ep.tagged = &cxip_ep_tagged_ops;
@@ -1814,6 +1862,7 @@ int cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 	case FI_CLASS_SEP:
 		/* scalable EP */
 		cxi_ep->ep.ops = &cxip_ep_ops;
+		cxi_ep->ep.cm = &cxip_ep_cm_ops;
 		/* msg, rma, tagged, atomic must use TX context */
 		break;
 
