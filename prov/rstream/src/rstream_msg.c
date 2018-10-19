@@ -137,7 +137,7 @@ static void rstream_update_tx_credits(struct rstream_ep *ep,
 {
 	assert(num_completions == 1);
 
-	if(ep->qp_win.ctrl_credits < RSTREAM_MAX_CTRL_TX)
+	if(ep->qp_win.ctrl_credits < RSTREAM_MAX_CTRL)
 		ep->qp_win.ctrl_credits++;
 	else
 		ep->qp_win.tx_credits++;
@@ -174,13 +174,7 @@ static int rstream_tx_full(struct rstream_ep *ep)
 
 static int rstream_target_rx_full(struct rstream_ep *ep)
 {
-	return (ep->qp_win.target_rx_credits == 0);
-}
-
-static int rstream_can_send(struct rstream_ep *ep)
-{
-	return (!rstream_tx_full(ep) && !(rstream_tx_mr_full(ep) ||
-		rstream_target_mr_full(ep) || rstream_target_rx_full(ep)));
+	return ((ep->qp_win.target_rx_credits - RSTREAM_MAX_CTRL) == 0);
 }
 
 static uint32_t rstream_calc_contig_len(struct rstream_mr_seg *mr)
@@ -228,22 +222,15 @@ static ssize_t rstream_send_ctrl_msg(struct rstream_ep *ep, uint32_t cq_data)
 	ssize_t ret = 0;
 	struct fi_msg msg;
 
-	if (!ep->qp_win.ctrl_credits || rstream_target_rx_full(ep)) {
-		ret = rstream_process_cq(ep, RSTREAM_TX_MSG_COMP);
-		if(ret < 0 && ret != -FI_EAGAIN)
-			return ret;
-
-		if (ret == -FI_EAGAIN || rstream_target_rx_full(ep)){
-			FI_DBG(&rstream_prov, FI_LOG_EP_CTRL,
-				"ctrl msg exhaustion \n");
-		   return -FI_EAGAIN;
-		}
+	if (!ep->qp_win.ctrl_credits || (ep->qp_win.target_rx_credits == 0)) {
+		ret = -FI_EAGAIN;
+		goto out;
 	}
 
 	if (RSTREAM_USING_IWARP) {
 		ret = fi_inject(ep->ep_fd, &cq_data, RSTREAM_IWARP_DATA_SIZE, 0);
 		if (ret != 0)
-			return ret;
+			goto out;
 	} else {
 		msg.msg_iov = NULL;
 		msg.desc = NULL;
@@ -253,19 +240,18 @@ static ssize_t rstream_send_ctrl_msg(struct rstream_ep *ep, uint32_t cq_data)
 
 		ret = fi_sendmsg(ep->ep_fd, &msg, FI_REMOTE_CQ_DATA);
 		if (ret != 0)
-			return ret;
+			goto out;
 
-		if (ep->qp_win.tx_credits > 0) {
+		if (ep->qp_win.tx_credits > 0)
 			ep->qp_win.tx_credits--;
-		} else {
+		else
 			ep->qp_win.ctrl_credits--;
-			rstream_process_cq(ep, RSTREAM_TX_MSG_COMP);
-		}
 	}
 
 	assert(ep->qp_win.target_rx_credits > 0);
 	ep->qp_win.target_rx_credits--;
 
+out:
 	return ret;
 }
 
@@ -308,9 +294,11 @@ ssize_t rstream_process_rx_cq_data(struct rstream_ep *ep,
 	if (cq_entry->data != 0) {
 		recvd_credits = rstream_cq_data_get_credits(cq_entry->data);
 		recvd_len = rstream_cq_data_get_len(cq_entry->data);
+
 		ep->qp_win.target_rx_credits += recvd_credits;
 		assert(ep->qp_win.target_rx_credits <=
 			ep->qp_win.max_target_rx_credits);
+
 		rstream_free_contig_len(&ep->remote_data.mr, recvd_len);
 		FI_DBG(&rstream_prov, FI_LOG_EP_CTRL,
 			"recvd: ctrl msg %u = completions %u = len \n",
@@ -318,9 +306,6 @@ ssize_t rstream_process_rx_cq_data(struct rstream_ep *ep,
 	} else {
 		rstream_free_contig_len(&ep->local_mr.rx, cq_entry->len);
 	}
-
-	ep->qp_win.rx_credits++;
-	assert(ep->qp_win.rx_credits <= ep->qp_win.max_rx_credits);
 
 	return rstream_post_cq_data_recv(ep, cq_entry);
 }
@@ -393,7 +378,7 @@ ssize_t rstream_process_cq(struct rstream_ep *ep, enum rstream_msg_type type)
 	enum rstream_msg_type comp_type;
 	int len;
 
-
+	fastlock_acquire(&ep->cq_lock);
 	do {
 		ret = rstream_check_cq(ep, &cq_entry);
 		if (ret == 1) {
@@ -408,7 +393,8 @@ ssize_t rstream_process_cq(struct rstream_ep *ep, enum rstream_msg_type type)
 				if (data_ret) {
 					fprintf(stderr, "error from %s:%d\n",
 						__FILE__, __LINE__);
-					return data_ret;
+					ret = data_ret;
+					goto out;
 				}
 				rx_completions++;
 			} else if (comp_type == RSTREAM_TX_MSG_COMP) {
@@ -416,15 +402,17 @@ ssize_t rstream_process_cq(struct rstream_ep *ep, enum rstream_msg_type type)
 				rstream_update_tx_credits(ep, ret);
 				rstream_free_contig_len(&ep->local_mr.tx, len);
 			} else {
-				return -FI_ENOMSG;
+				ret = -FI_ENOMSG;
+				goto out;
 			}
 		} else if (ret != -FI_EAGAIN) {
-			return ret;
+			goto out;
 		}
 	} while ((ret == -FI_EAGAIN && !rstream_timer_completed(&timer) &&
 		!found_msg_type) || (found_msg_type && ret > 0));
 
 	ret = rstream_update_target(ep, rx_completions, 0);
+	fastlock_release(&ep->cq_lock);
 	if (ret)
 		return ret;
 
@@ -432,6 +420,9 @@ ssize_t rstream_process_cq(struct rstream_ep *ep, enum rstream_msg_type type)
 		return found_msg_type;
 	else
 		return -FI_EAGAIN;
+out:
+	fastlock_release(&ep->cq_lock);
+	return ret;
 }
 
 static uint32_t get_send_addrs_and_len(struct rstream_ep *ep, char **tx_addr,
@@ -453,7 +444,7 @@ static uint32_t get_send_addrs_and_len(struct rstream_ep *ep, char **tx_addr,
 	return available_len;
 }
 
-static ssize_t retry_send_resources(struct rstream_ep *ep)
+static ssize_t rstream_can_send(struct rstream_ep *ep)
 {
 	ssize_t ret;
 
@@ -484,15 +475,17 @@ static ssize_t rstream_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 	char *remote_addr = NULL;
 	size_t sent_len = 0;
 	uint32_t curr_avail_len = len;
+	void *ctx;
 
+	fastlock_acquire(&ep->send_lock);
 	do {
-		if (!rstream_can_send(ep)) {
-			ret = retry_send_resources(ep);
-			if (ret < 0) {
-				if(ret < 0 && ret != -FI_EAGAIN)
-					return ret;
-				else
-					return ((sent_len) ? sent_len : ret);
+		ret = rstream_can_send(ep);
+		if (ret < 0) {
+			if (ret < 0 && ret != -FI_EAGAIN) {
+				goto err;
+			} else {
+				fastlock_release(&ep->send_lock);
+				return ((sent_len) ? sent_len : ret);
 			}
 		}
 
@@ -503,24 +496,23 @@ static ssize_t rstream_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 		memcpy(tx_addr, ((char *)buf + sent_len), curr_avail_len);
 		sent_len = sent_len + curr_avail_len;
+		ctx = rstream_get_tx_ctx(ep, curr_avail_len);
 
 		if (RSTREAM_USING_IWARP) {
 			ret = fi_write(ep->ep_fd, tx_addr, curr_avail_len,
 				ep->local_mr.ldesc, 0, (uint64_t)remote_addr,
-				ep->remote_data.rkey, rstream_get_tx_ctx(ep,
-				curr_avail_len));
+				ep->remote_data.rkey, ctx);
 			ret = rstream_send_ctrl_msg(ep,
 				rstream_iwarp_cq_data_set_msg_len(curr_avail_len));
 		} else {
 			ret = fi_writedata(ep->ep_fd, tx_addr, curr_avail_len,
 				ep->local_mr.ldesc, cq_data, 0, (uint64_t)remote_addr,
-				ep->remote_data.rkey, rstream_get_tx_ctx(ep,
-				curr_avail_len));
+				ep->remote_data.rkey, ctx);
 		}
 		if (ret != 0) {
 			FI_DBG(&rstream_prov, FI_LOG_EP_DATA,
 				"error: fi_write failed: %zd", ret);
-			return ret;
+			goto err;
 		}
 		curr_avail_len = len - sent_len;
 
@@ -531,7 +523,12 @@ static ssize_t rstream_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	} while(curr_avail_len); /* circle buffer rollover requires two loops */
 
+	fastlock_release(&ep->send_lock);
 	return sent_len;
+
+err:
+	fastlock_release(&ep->send_lock);
+	return ret;
 }
 
 static ssize_t rstream_sendv(struct fid_ep *ep_fid, const struct iovec *iov,
@@ -548,11 +545,10 @@ static ssize_t rstream_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 		util_ep.ep_fid);
 
 	if (flags == FI_PEEK) {
-		if (!rstream_can_send(ep)) {
-			ret = retry_send_resources(ep);
-			return ret;
-		}
-		return 0;
+		fastlock_acquire(&ep->send_lock);
+		ret = rstream_can_send(ep);
+		fastlock_release(&ep->send_lock);
+		return ret;
 	} else {
 		return -FI_ENOSYS;
 	}
@@ -567,9 +563,6 @@ ssize_t rstream_post_cq_data_recv(struct rstream_ep *ep,
 	struct iovec imsg;
 	void *buffer;
 	ssize_t ret;
-
-	if (!(ep->qp_win.rx_credits > 0))
-		return -FI_EAGAIN;
 
 	if (!cq_entry || !cq_entry->op_context)
 		context = rstream_get_rx_ctx(ep);
@@ -597,7 +590,6 @@ ssize_t rstream_post_cq_data_recv(struct rstream_ep *ep,
 	if (ret != 0)
 		return ret;
 
-	ep->qp_win.rx_credits--;
 	return ret;
 }
 
@@ -624,23 +616,32 @@ static ssize_t rstream_recv(struct fid_ep *ep_fid, void *buf, size_t len,
 	uint32_t copy_out_len = 0;
 	ssize_t ret;
 
+	fastlock_acquire(&ep->recv_lock);
+
 	copy_out_len = rstream_copy_out_chunk(ep, buf, len);
 
 	if ((len - copy_out_len)) {
 		ret = rstream_process_cq(ep, RSTREAM_RX_MSG_COMP);
-		if(ret < 0 && ret != -FI_EAGAIN)
+		if(ret < 0 && ret != -FI_EAGAIN) {
+			fastlock_release(&ep->recv_lock);
 			return ret;
+		}
 
 		copy_out_len = copy_out_len + rstream_copy_out_chunk(ep,
 			((char *)buf + copy_out_len), (len - copy_out_len));
 	}
 
+	fastlock_acquire(&ep->send_lock);
 	ret = rstream_update_target(ep, 0, copy_out_len);
-	if(ret < 0 && ret != -FI_EAGAIN)
+	fastlock_release(&ep->send_lock);
+	fastlock_release(&ep->recv_lock);
+	if(ret < 0 && ret != -FI_EAGAIN) {
 		return ret;
+	}
 
-	if (copy_out_len)
+	if (copy_out_len) {
 		return copy_out_len;
+	}
 
 	return -FI_EAGAIN;
 }
@@ -662,16 +663,32 @@ static ssize_t rstream_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 		util_ep.ep_fid);
 
 	if (flags == FI_PEEK) {
-		if (!ep->local_mr.rx.avail_size || rstream_target_rx_full(ep)) {
+		fastlock_acquire(&ep->recv_lock);
+		if (!ep->local_mr.rx.avail_size) {
 			ret = rstream_process_cq(ep, RSTREAM_RX_MSG_COMP);
-			if (ret < 0)
+			if (ret < 0) {
+				fastlock_release(&ep->recv_lock);
 				return ret;
+			}
 		}
+		fastlock_release(&ep->recv_lock);
+
+		fastlock_acquire(&ep->send_lock);
+		if (rstream_target_rx_full(ep)) {
+			ret = rstream_process_cq(ep, RSTREAM_RX_MSG_COMP);
+			if (ret < 0) {
+				fastlock_release(&ep->send_lock);
+				return ret;
+			}
+		}
+
 		if (!ep->qp_win.ctrl_credits) {
 			ret = rstream_process_cq(ep, RSTREAM_TX_MSG_COMP);
-			if (ret < 0)
-				return ret;
+			fastlock_release(&ep->send_lock);
+			return ret;
 		}
+
+		fastlock_release(&ep->send_lock);
 		return 0;
 	} else {
 		return -FI_ENOSYS;

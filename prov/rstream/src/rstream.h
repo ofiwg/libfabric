@@ -18,7 +18,7 @@
 
 #define RSTREAM_CAPS (FI_MSG | FI_SEND | FI_RECV | FI_LOCAL_COMM | FI_REMOTE_COMM)
 #define RSTREAM_DEFAULT_QP_SIZE 384
-#define RSTREAM_MAX_CTRL_TX 2
+#define RSTREAM_MAX_CTRL 2
 #define RSTREAM_MR_BITS 15
 #define RSTREAM_DEFAULT_MR_SEG_SIZE (1 << RSTREAM_MR_BITS)
 
@@ -118,7 +118,6 @@ struct rstream_window {
 	uint16_t max_target_rx_credits;
 	uint16_t target_rx_credits;
 	uint16_t max_rx_credits;
-	uint16_t rx_credits;
 };
 
 struct rstream_cq_data {
@@ -138,6 +137,10 @@ struct rstream_ep {
 	uint32_t rx_ctx_index;
 	struct rstream_tx_ctx_fs *tx_ctxs;
 	struct rstream_cq_data rx_cq_data;
+	fastlock_t send_lock;
+	fastlock_t recv_lock;
+	/* must take send/recv lock before cq_lock */
+	fastlock_t cq_lock;
 };
 
 struct rstream_pep {

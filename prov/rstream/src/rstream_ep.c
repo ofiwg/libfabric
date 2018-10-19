@@ -23,6 +23,9 @@ static int rstream_ep_close(fid_t fid)
 
 	rstream_tx_ctx_fs_free(rstream_ep->tx_ctxs);
 
+	fastlock_destroy(&rstream_ep->send_lock);
+	fastlock_destroy(&rstream_ep->recv_lock);
+	fastlock_destroy(&rstream_ep->cq_lock);
 	free(rstream_ep->rx_ctxs);
 	free(rstream_ep);
 	return 0;
@@ -100,8 +103,7 @@ static int rstream_cq_init(struct fid_domain *domain, struct rstream_ep *rep)
 		return ret;
 
 	rep->qp_win.tx_credits =
-		rep->qp_win.max_tx_credits - RSTREAM_MAX_CTRL_TX;
-	rep->qp_win.rx_credits = rep->qp_win.max_rx_credits;
+		rep->qp_win.max_tx_credits - RSTREAM_MAX_CTRL;
 
 	return ret;
 }
@@ -236,7 +238,7 @@ int rstream_ep_open(struct fid_domain *domain, struct fi_info *info,
 	rstream_ep->local_mr.rx.size = RSTREAM_DEFAULT_MR_SEG_SIZE;
 
 	rstream_ep->qp_win.max_tx_credits = rstream_info.tx_attr->size;
-	rstream_ep->qp_win.ctrl_credits = RSTREAM_MAX_CTRL_TX;
+	rstream_ep->qp_win.ctrl_credits = RSTREAM_MAX_CTRL;
 	rstream_ep->qp_win.max_rx_credits = rstream_info.rx_attr->size;
 
 	rstream_ep->tx_ctxs =
@@ -254,7 +256,9 @@ int rstream_ep_open(struct fid_domain *domain, struct fi_info *info,
 	(*ep_fid)->ops = &rstream_ops_ep;
 	(*ep_fid)->cm = &rstream_ops_cm;
 	(*ep_fid)->msg = &rstream_ops_msg;
-
+	fastlock_init(&rstream_ep->send_lock);
+	fastlock_init(&rstream_ep->recv_lock);
+	fastlock_init(&rstream_ep->cq_lock);
 	return 0;
 
 err1:
