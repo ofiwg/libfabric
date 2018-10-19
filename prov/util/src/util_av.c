@@ -406,7 +406,6 @@ static int util_av_init(struct util_av *av, const struct fi_av_attr *attr,
 		/* Don't use track of buffer, because user can close
 		 * the AV without prior deletion of addresses */
 		.track_used	= 0,
-		.use_ftr	= 1,
 	};
 
 	/* TODO: Handle FI_READ */
