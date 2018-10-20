@@ -277,7 +277,6 @@ struct util_buf_attr {
 	void 				*ctx;
 	uint8_t				track_used;
 	uint8_t				is_mmap_region;
-	uint8_t				use_ftr;
 };
 
 struct util_buf_pool {
@@ -295,19 +294,15 @@ struct util_buf_region {
 	char *mem_region;
 	size_t size;
 	void *context;
-#if ENABLE_DEBUG
+#ifndef NDEBUG
 	size_t num_used;
 #endif
 };
 
 struct util_buf_footer {
+	struct slist_entry entry;
 	struct util_buf_region *region;
 	size_t index;
-};
-
-union util_buf {
-	struct slist_entry entry;
-	uint8_t data[0];
 };
 
 int util_buf_pool_create_attr(struct util_buf_attr *attr,
@@ -338,48 +333,60 @@ static inline int util_buf_avail(struct util_buf_pool *pool)
 
 int util_buf_grow(struct util_buf_pool *pool);
 
-#if ENABLE_DEBUG
+static inline struct util_buf_footer *
+util_buf_get_ftr(struct util_buf_pool *pool, void *buf)
+{
+	return (struct util_buf_footer *) ((char *) buf + pool->attr.size);
+}
 
-void *util_buf_get(struct util_buf_pool *pool);
-void util_buf_release(struct util_buf_pool *pool, void *buf);
-size_t util_get_buf_index(struct util_buf_pool *pool, void *buf);
-void *util_buf_get_by_index(struct util_buf_pool *pool, size_t index);
-
-#else
+static inline void *util_buf_get_data(struct util_buf_pool *pool,
+			       struct util_buf_footer *buf_ftr)
+{
+	return ((char *) buf_ftr - pool->attr.size);
+}
 
 static inline void *util_buf_get(struct util_buf_pool *pool)
 {
-	return slist_remove_head(&pool->buf_list);
+	struct util_buf_footer *buf_ftr;
+
+	slist_remove_head_container(&pool->buf_list, struct util_buf_footer,
+				    buf_ftr, entry);
+	assert(++buf_ftr->region->num_used);
+	return util_buf_get_data(pool, buf_ftr);
 }
 
 static inline void util_buf_release(struct util_buf_pool *pool, void *buf)
 {
-	slist_insert_head(&((union util_buf * )buf)->entry, &pool->buf_list);
+	assert(util_buf_get_ftr(pool, buf)->region->num_used--);
+	slist_insert_head(&util_buf_get_ftr(pool, buf)->entry, &pool->buf_list);
 }
 
 static inline size_t util_get_buf_index(struct util_buf_pool *pool, void *buf)
 {
-	return ((struct util_buf_footer *)((char *)buf + pool->attr.size))->index;
+	assert(util_buf_get_ftr(pool, buf)->region->num_used);
+	return util_buf_get_ftr(pool, buf)->index;
 }
 
 static inline void *util_buf_get_by_index(struct util_buf_pool *pool, size_t index)
 {
-	return (union util_buf *)(pool->regions_table[
-		(size_t)(index / pool->attr.chunk_cnt)]->mem_region +
-		(index % pool->attr.chunk_cnt) * pool->entry_sz);
+	void *buf;
+	buf = pool->regions_table[(size_t)(index / pool->attr.chunk_cnt)]->
+		mem_region + (index % pool->attr.chunk_cnt) * pool->entry_sz;
+	assert(util_buf_get_ftr(pool, buf)->region->num_used);
+	return buf;
 }
 
-#endif
+static inline void *util_buf_get_ctx(struct util_buf_pool *pool, void *buf)
+{
+	return util_buf_get_ftr(pool, buf)->region->context;
+}
 
 static inline void *util_buf_get_ex(struct util_buf_pool *pool, void **context)
 {
-	union util_buf *buf;
-	struct util_buf_footer *buf_ftr;
+	void *buf;
 
 	buf = util_buf_get(pool);
-	buf_ftr = (struct util_buf_footer *) ((char *) buf + pool->attr.size);
-	assert(context);
-	*context = buf_ftr->region->context;
+	*context = util_buf_get_ctx(pool, buf);
 	return buf;
 }
 
@@ -394,41 +401,17 @@ static inline void *util_buf_alloc(struct util_buf_pool *pool)
 
 static inline void *util_buf_alloc_ex(struct util_buf_pool *pool, void **context)
 {
-	union util_buf *buf;
-	struct util_buf_footer *buf_ftr;
+	void *buf;
 
 	buf = util_buf_alloc(pool);
 	if (OFI_UNLIKELY(!buf))
 		return NULL;
 
-	buf_ftr = (struct util_buf_footer *) ((char *) buf + pool->attr.size);
 	assert(context);
-	*context = buf_ftr->region->context;
+	*context = util_buf_get_ctx(pool, buf);
 	return buf;
 }
 
-#if ENABLE_DEBUG
-static inline int util_buf_use_ftr(struct util_buf_pool *pool)
-{
-	OFI_UNUSED(pool);
-	return 1;
-}
-#else
-static inline int util_buf_use_ftr(struct util_buf_pool *pool)
-{
-	return (pool->attr.alloc_hndlr ||
-		pool->attr.free_hndlr ||
-		pool->attr.use_ftr) ? 1 : 0;
-}
-#endif
-
-static inline void *util_buf_get_ctx(struct util_buf_pool *pool, void *buf)
-{
-	struct util_buf_footer *buf_ftr;
-	assert(util_buf_use_ftr(pool));
-	buf_ftr = (struct util_buf_footer *) ((char *) buf + pool->attr.size);
-	return buf_ftr->region->context;
-}
 
 void util_buf_pool_destroy(struct util_buf_pool *pool);
 

@@ -40,6 +40,8 @@
 #include <sys/types.h>
 #include <stdlib.h>
 
+#include <rdma/fabric.h>
+
 #include <ofi_signal.h>
 #include <ofi_lock.h>
 
