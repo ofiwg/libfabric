@@ -41,7 +41,6 @@ check_environment MPICH_PATH
 
 # check directories
 check_directory $ROOT_BUILD_PATH
-check_directory $FABTEST_PATH
 check_directory $OMB_BUILD_PATH
 check_directory $MPICH_PATH
 check_directory $SFT_INSTALL_PATH
@@ -50,8 +49,6 @@ check_directory $BATS_INSTALL_PATH
 ##### check prerequisite installed software packages
 # SLURM     https://slurm.schedmd.com/
 find_executable srun
-# Fabtests  https://github.com/ofiwg/libfabric
-check_executable $FABTEST_PATH/bin/runfabtests.sh
 # OMB       http://mvapich.cse.ohio-state.edu/benchmarks/
 check_executable $OMB_BUILD_PATH/pt2pt/osu_bw
 # Cray Proprietary

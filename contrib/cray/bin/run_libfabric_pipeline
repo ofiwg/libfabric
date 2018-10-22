@@ -35,7 +35,7 @@ Usage: $(basename $SOURCE) [-dhv]
 
 function set_sections_to_run {
     BUILD=false
-    TEST=false 
+    TEST=false
     UNITTEST=false
     SMOKETEST=false
     FABTEST=false
@@ -135,7 +135,7 @@ function section_start {
     echo \
 "
 ##############################################################################
-Start of \"$1\"                                                                           
+Start of \"$1\"
 ##############################################################################
 "
 }
@@ -158,13 +158,14 @@ if [[ ! -d $WORKSPACE ]] ; then
     mkdir -p $WORKSPACE
 fi
 
-pushd $DIR/../../../
+SOURCE_DIR=$DIR/../../..
+pushd $SOURCE_DIR
 
 # Start Pipeline variables
 export GIT_SHORT_COMMIT="$GIT_COMMIT"
 export LIBFABRIC_INSTALL_PATH=""
 export ROOT_BUILD_PATH="/scratch/jenkins/builds"
-export FABTEST_PATH="${ROOT_BUILD_PATH}/fabtests/stable"
+export FABTEST_PATH="${WORKSPACE}/fabtests"
 export LIBFABRIC_BUILD_PATH="${ROOT_BUILD_PATH}/libfabric"
 export OMB_BUILD_PATH="${ROOT_BUILD_PATH}/osu-micro-benchmarks/5.4.2/libexec/osu-micro-benchmarks/mpi"
 export MPICH_PATH="${ROOT_BUILD_PATH}/mpich/3.3b3"
@@ -181,8 +182,8 @@ contrib/cray/bin/setup.sh
 # End Prologue
 
 if [[ -z $LIBFABRIC ]] ; then
-    LIBFABRIC_INSTALL_PATH="${WORKSPACE}/builds/${GIT_SHORT_COMMIT}"
-else   
+    LIBFABRIC_INSTALL_PATH="${WORKSPACE}/builds/libfabric/${GIT_SHORT_COMMIT}"
+else
     LIBFABRIC_INSTALL_PATH="$LIBFABRIC"
 fi
 echo using installed libfabric @ ${LIBFABRIC_INSTALL_PATH}
@@ -230,7 +231,21 @@ fi
 if $FABTEST ; then
 section_start 'fabtests'
 ## Start Fabtests
-srun -n 2 --ntasks-per-node=1 contrib/cray/bin/fabtest_wrapper.sh -p ${FABTEST_PATH}/bin -v -T 60 | tee fabtests.log
+if [[ ! -f $FABTEST_PATH/compile-target || "$(cat $FABTEST_PATH/compile-target)" != "$LIBFABRIC_INSTALL_PATH" ]] ; then
+    pushd $SOURCE_DIR/fabtests
+    ./autogen.sh
+    ./configure --with-libfabric=$LIBFABRIC_INSTALL_PATH --prefix=$FABTEST_PATH
+    make -j12
+    make -j12 install
+    echo $LIBFABRIC_INSTALL_PATH > $FABTEST_PATH/compile-target
+    popd
+fi
+
+if [[ ! -f $FABTEST_PATH/bin/runfabtests.sh ]] ; then
+    echo run the build step to install a version of fabtests for the current build
+else
+    srun -n 2 --ntasks-per-node=1 contrib/cray/bin/fabtest_wrapper.sh -p ${FABTEST_PATH}/bin -v -T 60 | tee fabtests.log
+fi
 ## End Fabtests
 section_end 'fabtests'
 fi
