@@ -29,12 +29,7 @@ pipeline {
                 // creating git short hash
                 script {
                     GIT_SHORT_COMMIT = sh(returnStdout: true, script: "git log -n 1 --pretty=format:'%h'").trim()
-                    if (env.BRANCH_NAME == 'master' || buildingTag()) {
-                        LIBFABRIC_INSTALL = "$ROOT_BUILD_PATH/libfabric/$GIT_SHORT_COMMIT"
-                    } else {
-                        // use a temporary directory within the workspace
-                        LIBFABRIC_INSTALL = pwd tmp: true
-                    }
+                    LIBFABRIC_INSTALL = pwd tmp: true
                 }
 
                 dir ('contrib/cray/bin') {
@@ -50,26 +45,11 @@ pipeline {
             options {
                 timeout (time: 5, unit: 'MINUTES')
             }
-            failFast true
-            parallel {
-                stage("Build and install libfabric") {
-                    steps {
-                        sh './autogen.sh'
-                        sh "./configure --prefix=$LIBFABRIC_INSTALL"
-                        sh "make -j 12"
-                        sh "make install"
-                    }
-                }
-                stage("Create latest symlink") {
-                    when {
-                        expression { env.BRANCH_NAME == 'master' }
-                    }
-                    steps {
-                        script {
-                            publish env.LIBFABRIC_BUILD_PATH, "latest", "$GIT_SHORT_COMMIT"
-                        }
-                    }
-                }
+            steps {
+                sh './autogen.sh'
+                sh "./configure --prefix=$LIBFABRIC_INSTALL"
+                sh "make -j 12"
+                sh "make install"
             }
         }
         stage('Test') {
@@ -109,7 +89,14 @@ pipeline {
                 }
                 stage('Functional Tests') {
                     steps {
+                        dir ("fabtests") {
+                            sh './autogen.sh'
+                            sh "./configure --with-libfabric=$LIBFABRIC_INSTALL --prefix=$FABTEST_PATH"
+                            sh "make -j12"
+                            sh "make -j12 install"
+                        }
                         tee ('fabtests.log') {
+                            sh 'srun -n 2 --ntasks-per-node 1 ldd contrib/cray/bin/fabtest_wrapper.sh'
                             sh 'srun -n 2 --ntasks-per-node=1 contrib/cray/bin/fabtest_wrapper.sh -p ${FABTEST_PATH}/bin -v -T 60'
                         }
                     }
@@ -233,7 +220,27 @@ pipeline {
                     }
                 }
             }
-         }
+        }
+        stage("Install Libfabric Build") {
+            when {
+                allOf {
+                    expression { currentBuild.result == 'SUCCESS' } ;
+                    anyOf {
+                        expression { env.BRANCH_NAME == 'master' } ;
+                        buildingTag() ;
+                    }
+                }
+            }
+            environment {
+                LIBFABRIC_INSTALL_PATH="${LIBFABRIC_BUILD_PATH + '/' + GIT_SHORT_COMMIT}"
+            }
+            steps {
+                sh './autogen.sh'
+                sh "./configure --prefix=$LIBFABRIC_INSTALL_PATH"
+                sh "make -j 12"
+                sh "make install"
+            }
+        }
         stage("Deploy") {
             when {
                 allOf {
@@ -247,15 +254,19 @@ pipeline {
             options {
                 timeout (time: 5, unit: 'MINUTES')
             }
+            environment {
+                TAG_DIRECTORY = "${LIBFABRIC_BUILD_PATH + '/tags'}"
+            }
             failFast true
             parallel {
-                stage("Create stable link") {
+                stage("Create nightly link") {
                     when {
                         expression { env.BRANCH_NAME == 'master' }
                     }
                     steps {
-                        script {
-                            publish env.LIBFABRIC_BUILD_PATH, "stable", "$GIT_SHORT_COMMIT"
+                        dir (env.TAG_DIRECTORY) {
+                            sh "rm -f nightly || true"
+                            sh "ln -s ../$GIT_SHORT_COMMIT nightly"
                         }
                     }
                 }
@@ -264,8 +275,9 @@ pipeline {
                         buildingTag()
                     }
                     steps {
-                        script {
-                            publish env.LIBFABRIC_BUILD_PATH, "$BRANCH_NAME", "$GIT_SHORT_COMMIT"
+                        dir (env.TAG_DIRECTORY) {
+                            sh "rm -f $BRANCH_NAME || true"
+                            sh "ln -s ../$GIT_SHORT_COMMIT $BRANCH_NAME"
                         }
                     }
                 }
@@ -323,9 +335,8 @@ pipeline {
         }
     }
     environment {
-        GIT_SHORT_COMMIT = "$GIT_COMMIT"
         ROOT_BUILD_PATH = "/scratch/jenkins/builds"
-        FABTEST_PATH = "${ROOT_BUILD_PATH + '/fabtests/stable'}"
+        FABTEST_PATH = "${WORKSPACE + '/installs/fabtests'}"
         LIBFABRIC_BUILD_PATH = "${ROOT_BUILD_PATH + '/libfabric'}"
         OMB_BUILD_PATH = "${ROOT_BUILD_PATH + '/osu-micro-benchmarks/5.4.2/libexec/osu-micro-benchmarks/mpi'}"
         MPICH_PATH = "${ROOT_BUILD_PATH + '/mpich/3.3b3'}"
