@@ -151,7 +151,9 @@ static int send_recv()
 				printf("Send counter poll-event\n");
 				tx_cntr_val = fi_cntr_read(txcntr);
 				if (tx_cntr_val > tx_seq) {
-					printf("Invalid tx counter event\n");
+					FT_ERR("Invalid tx counter event\n");
+					FT_ERR("expected: %" PRIu64 ", found: "
+					       "%d\n", tx_seq, tx_cntr_val);
 					return -1;
 				}
 				continue;
@@ -159,12 +161,14 @@ static int send_recv()
 				printf("Recv counter poll-event\n");
 				rx_cntr_val = fi_cntr_read(rxcntr);
 				if (rx_cntr_val > rx_seq) {
-					printf("Invalid rx counter event\n");
+					FT_ERR("Invalid rx counter event\n");
+					FT_ERR("expected: %" PRIu64 ", found: "
+					       "%d\n", rx_seq, rx_cntr_val);
 					return -1;
 				}
 				continue;
 			} else {
-				printf("Unknown completion received\n");
+				FT_ERR("Unknown completion received\n");
 				return -1;
 			}
 
