@@ -213,6 +213,7 @@ int util_buf_pool_create_ex(struct util_buf_pool **buf_pool,
 		.free_hndlr	= free_hndlr,
 		.ctx		= pool_ctx,
 		.track_used	= 1,
+		.indexing	= 0,
 	};
 	return util_buf_pool_create_attr(&attr, buf_pool);
 }
