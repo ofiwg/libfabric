@@ -265,7 +265,7 @@ int ofi_av_insert_addr(struct util_av *av, const void *addr, fi_addr_t *fi_addr)
 		ofi_atomic_inc32(&entry->use_cnt);
 		return 0;
 	} else {
-		entry = util_buf_alloc(av->av_entry_pool);
+		entry = util_buf_indexed_alloc(av->av_entry_pool);
 		if (!entry)
 			return -FI_ENOMEM;
 		if (fi_addr)
@@ -306,7 +306,7 @@ int ofi_av_remove_addr(struct util_av *av, fi_addr_t fi_addr)
 		return FI_SUCCESS;
 
 	HASH_DELETE(hh, av->hash, av_entry);
-	util_buf_release(av->av_entry_pool, av_entry);
+	util_buf_indexed_release(av->av_entry_pool, av_entry);
 	return 0;
 }
 
