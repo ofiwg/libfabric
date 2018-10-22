@@ -127,7 +127,6 @@ int util_buf_grow(struct util_buf_pool *pool)
 		slist_insert_tail(&buf_ftr->entry, &pool->buf_list);
 	}
 
-	slist_insert_tail(&buf_region->entry, &pool->region_list);
 	pool->num_allocated += pool->attr.chunk_cnt;
 	return 0;
 err3:
@@ -163,7 +162,6 @@ int util_buf_pool_create_attr(struct util_buf_attr *attr,
 		(*buf_pool)->attr.is_mmap_region = 1;
 
 	slist_init(&(*buf_pool)->buf_list);
-	slist_init(&(*buf_pool)->region_list);
 
 	return FI_SUCCESS;
 }
@@ -190,13 +188,12 @@ int util_buf_pool_create_ex(struct util_buf_pool **buf_pool,
 
 void util_buf_pool_destroy(struct util_buf_pool *pool)
 {
-	struct slist_entry *entry;
 	struct util_buf_region *buf_region;
 	int ret;
+	size_t i;
 
-	while (!slist_empty(&pool->region_list)) {
-		entry = slist_remove_head(&pool->region_list);
-		buf_region = container_of(entry, struct util_buf_region, entry);
+	for (i = 0; i < pool->regions_cnt; i++) {
+		buf_region = pool->regions_table[i];
 #if ENABLE_DEBUG
 		if (pool->attr.track_used)
 			assert(buf_region->num_used == 0);

@@ -283,7 +283,6 @@ struct util_buf_pool {
 	size_t 			entry_sz;
 	size_t 			num_allocated;
 	struct slist		buf_list;
-	struct slist		region_list;
 	struct util_buf_region	**regions_table;
 	size_t			regions_cnt;
 	struct util_buf_attr	attr;
