@@ -1454,8 +1454,6 @@ rxm_ep_send_inject(struct rxm_ep *rxm_ep, const struct iovec *iov, size_t count,
 		}
 		rxm_cq_log_comp(comp_flags);
 	}
-	if (rxm_ep->util_ep.flags & OFI_CNTR_ENABLED)
-		rxm_cntr_inc(rxm_ep->util_ep.tx_cntr);
 	return FI_SUCCESS;
 }
 
