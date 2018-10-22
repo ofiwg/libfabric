@@ -321,7 +321,7 @@ rxm_ep_rma_inject(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t 
 					      msg->rma_iov->key);
 		}
 		if (OFI_LIKELY(!ret)) {
-			rxm_cntr_inc(rxm_ep->util_ep.wr_cntr);
+			ofi_ep_wr_cntr_inc(&rxm_ep->util_ep);
 		} else {
 			FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
 			       "fi_inject_write* for MSG provider failed with ret - %"
