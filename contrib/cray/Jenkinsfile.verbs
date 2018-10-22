@@ -89,7 +89,14 @@ pipeline {
                 }
                 stage('Functional Tests') {
                     steps {
+                        dir ("fabtests") {
+                            sh './autogen.sh'
+                            sh "./configure --with-libfabric=$LIBFABRIC_INSTALL --prefix=$FABTEST_PATH"
+                            sh "make -j12"
+                            sh "make -j12 install"
+                        }
                         tee ('fabtests.log') {
+                            sh 'srun -n 2 --ntasks-per-node 1 ldd contrib/cray/bin/fabtest_wrapper.sh'
                             sh 'srun -n 2 --ntasks-per-node=1 contrib/cray/bin/fabtest_wrapper.sh -p ${FABTEST_PATH}/bin -v -T 60'
                         }
                     }
@@ -329,7 +336,7 @@ pipeline {
     }
     environment {
         ROOT_BUILD_PATH = "/scratch/jenkins/builds"
-        FABTEST_PATH = "${ROOT_BUILD_PATH + '/fabtests/stable'}"
+        FABTEST_PATH = "${WORKSPACE + '/installs/fabtests'}"
         LIBFABRIC_BUILD_PATH = "${ROOT_BUILD_PATH + '/libfabric'}"
         OMB_BUILD_PATH = "${ROOT_BUILD_PATH + '/osu-micro-benchmarks/5.4.2/libexec/osu-micro-benchmarks/mpi'}"
         MPICH_PATH = "${ROOT_BUILD_PATH + '/mpich/3.3b3'}"
