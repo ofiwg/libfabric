@@ -880,14 +880,8 @@ static void rxm_cq_read_write_error(struct rxm_ep *rxm_ep)
 	case RXM_TX:
 	case RXM_LMT_TX:
 		util_cq = tx_entry->ep->util_ep.tx_cq;
-		if (tx_entry->ep->util_ep.flags & OFI_CNTR_ENABLED) {
-			if (tx_entry->comp_flags & FI_SEND)
-				util_cntr = tx_entry->ep->util_ep.tx_cntr;
-			else if (tx_entry->comp_flags & FI_WRITE)
-				util_cntr = tx_entry->ep->util_ep.wr_cntr;
-			else
-				util_cntr = tx_entry->ep->util_ep.rd_cntr;
-		}
+		if (tx_entry->ep->util_ep.flags & OFI_CNTR_ENABLED)
+			util_cntr = tx_entry->ep->util_ep.tx_cntr;
 		break;
 	case RXM_LMT_ACK_SENT:
 		util_cq = tx_entry->ep->util_ep.rx_cq;
