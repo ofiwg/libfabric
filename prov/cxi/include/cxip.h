@@ -164,7 +164,7 @@ extern struct slist cxip_if_list;
  *
  * A Cassini NIC Address and PID identify a libfabric Endpoint.  Cassini
  * borrows the name 'PID' from Portals. In CXI, a process can allocate several
- * PID values. The maximum PID value on Cassini is 9 bits.
+ * PID values.
  *
  * The PID value C_PID_ANY is reserved. When used, the library auto-assigns
  * a free PID value. A PID value is assigned when network resources are
@@ -174,14 +174,11 @@ extern struct slist cxip_if_list;
  *
  * TODO: If NIC Address must be non-zero, the valid bit can be removed.
  */
-#define CXIP_ADDR_PID_BITS	9
-#define CXIP_ADDR_NIC_BITS	20
-
 struct cxip_addr {
 	union {
 		struct {
-			uint32_t pid		: CXIP_ADDR_PID_BITS;
-			uint32_t nic		: CXIP_ADDR_NIC_BITS;
+			uint32_t pid		: C_DFA_PID_BITS_MAX;
+			uint32_t nic		: C_DFA_NIC_BITS;
 			uint32_t valid		: 1;
 		};
 		uint32_t raw;
