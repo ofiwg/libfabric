@@ -20,11 +20,19 @@ static int rx_ctx_recv_init(struct cxip_rx_ctx *rxc)
 {
 	int ret;
 	union c_cmdu cmd = {};
-	struct cxi_pt_alloc_opts opts = {.is_matching = 1,};
+	struct cxi_pt_alloc_opts opts = { .is_matching = 1 };
 	uint64_t pid_idx;
 
 	/* Select the LEP where the queue will be mapped */
 	pid_idx = CXIP_RXC_TO_IDX(rxc->rx_id);
+
+	/* If applications AVs are symmetric, use logical FI addresses for
+	 * matching. Otherwise, physical addresses will be used.
+	 */
+	if (rxc->ep_obj->av->attr.flags & FI_SYMMETRIC) {
+		CXIP_LOG_DBG("Using logical PTE matching\n");
+		opts.use_logical = 1;
+	}
 
 	ret = cxip_pte_alloc(rxc->ep_obj->if_dom, rxc->comp.recv_cq->evtq,
 			     pid_idx, &opts, &rxc->rx_pte);
@@ -275,6 +283,11 @@ static int tx_ctx_recv_init(struct cxip_tx_ctx *txc)
 
 	/* initialize the rendezvous ID structure */
 	memset(&txc->rdvs_ids, 0, sizeof(txc->rdvs_ids));
+
+	if (txc->ep_obj->av->attr.flags & FI_SYMMETRIC) {
+		CXIP_LOG_DBG("Using logical PTE matching\n");
+		opts.use_logical = 1;
+	}
 
 	/* Reserve the Rendezvous Send PTE */
 	pid_idx = CXIP_RDVS_IDX(txc->domain->dev_if->if_pid_granule);

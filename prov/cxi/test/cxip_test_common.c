@@ -355,8 +355,13 @@ void cxit_setup_getinfo(void)
 {
 	cxit_init();
 
-	cxit_fi_hints = fi_allocinfo();
-	cr_assert(cxit_fi_hints, "fi_allocinfo");
+	if (!cxit_fi_hints) {
+		cxit_fi_hints = fi_allocinfo();
+		cr_assert(cxit_fi_hints, "fi_allocinfo");
+
+		/* Always select CXI */
+		cxit_fi_hints->fabric_attr->prov_name = strdup(cxip_prov_name);
+	}
 }
 
 void cxit_teardown_getinfo(void)
@@ -367,13 +372,7 @@ void cxit_teardown_getinfo(void)
 
 void cxit_setup_fabric(void)
 {
-	if (!cxit_fi_hints) {
-		cxit_setup_getinfo();
-
-		/* Always select CXI */
-		cxit_fi_hints->fabric_attr->prov_name = strdup(cxip_prov_name);
-	}
-
+	cxit_setup_getinfo();
 	cxit_create_fabric_info();
 }
 
@@ -412,11 +411,8 @@ void cxit_setup_rma(void)
 	int ret;
 	size_t addrlen = sizeof(cxit_ep_addr);
 
-	/* Request required capabilities for RMA */
 	cxit_setup_getinfo();
-	cxit_fi_hints->fabric_attr->prov_name = strdup(cxip_prov_name);
-	cxit_fi_hints->caps = (FI_WRITE | FI_READ | FI_TAGGED | FI_SEND |
-			       FI_RECV);
+
 	cxit_tx_cq_attr.format = FI_CQ_FORMAT_TAGGED;
 	cxit_av_attr.type = FI_AV_TABLE;
 

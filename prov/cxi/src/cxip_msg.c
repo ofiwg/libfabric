@@ -27,10 +27,10 @@
 static int issue_append_le(struct cxil_pte *pte, const void *buf, size_t len,
 			   struct cxi_iova *md, enum c_ptl_list list,
 			   uint32_t buffer_id, uint64_t match_bits,
-			   uint64_t ignore_bits, uint64_t min_free,
-			   bool event_success_disable, bool use_once,
-			   bool manage_local, bool no_truncate, bool op_put,
-			   bool op_get, struct cxi_cmdq *cmdq)
+			   uint64_t ignore_bits, uint32_t match_id,
+			   uint64_t min_free, bool event_success_disable,
+			   bool use_once, bool manage_local, bool no_truncate,
+			   bool op_put, bool op_get, struct cxi_cmdq *cmdq)
 {
 	union c_cmdu cmd = {};
 	int rc;
@@ -51,8 +51,8 @@ static int issue_append_le(struct cxil_pte *pte, const void *buf, size_t len,
 	cmd.target.use_once     = use_once ? 1 : 0;
 	cmd.target.match_bits   = match_bits;
 	cmd.target.ignore_bits  = ignore_bits;
+	cmd.target.match_id     = match_id;
 	cmd.target.min_free     = min_free;
-	cmd.target.match_id     = -1;
 
 	rc = cxi_cq_emit_target(cmdq, &cmd);
 	if (rc) {
@@ -148,7 +148,8 @@ static void report_recv_completion(struct cxip_req *req)
 	if (req->recv.rc == C_RC_OK && !truncated) {
 		req->data_len = req->recv.mlength;
 
-		ret = req->cq->report_completion(req->cq, FI_ADDR_UNSPEC, req);
+		ret = req->cq->report_completion(req->cq, req->recv.src_addr,
+						 req);
 		if (ret != req->cq->cq_entry_size)
 			CXIP_LOG_ERROR("Failed to report completion: %d\n",
 				       ret);
@@ -190,14 +191,19 @@ static int sw_rdvs_issue_get(struct cxip_req *req, struct cxip_ux_send *ux_send)
 	uint32_t pid_granule, pid_idx, idx_ext;
 	union c_cmdu cmd = {};
 	int ret;
+	struct cxip_rx_ctx *rxc = req->recv.rxc;
+	uint32_t pid_bits = rxc->domain->dev_if->if_dev->info.pid_bits;
+	uint32_t nic;
+	uint32_t pid;
+
+	nic = CXI_MATCH_ID_EP(pid_bits, ux_send->initiator);
+	pid = CXI_MATCH_ID_PID(pid_bits, ux_send->initiator);
 
 	req->recv.rlength = req->recv.mlength = ux_send->length;
 
-	pid_granule = req->recv.rxc->domain->dev_if->if_pid_granule;
+	pid_granule = rxc->domain->dev_if->if_pid_granule;
 	pid_idx = CXIP_RDVS_IDX(pid_granule);
-	cxi_build_dfa(CXIP_GET_INIT_NID(ux_send->initiator),
-		      CXIP_GET_INIT_PID(ux_send->initiator), pid_granule,
-		      pid_idx, &dfa, &idx_ext);
+	cxi_build_dfa(nic, pid, pid_granule, pid_idx, &dfa, &idx_ext);
 
 	cmd.full_dma.command.cmd_type = C_CMD_TYPE_DMA;
 	cmd.full_dma.command.opcode = C_CMD_GET;
@@ -207,18 +213,18 @@ static int sw_rdvs_issue_get(struct cxip_req *req, struct cxip_ux_send *ux_send)
 	cmd.full_dma.dfa = dfa;
 	cmd.full_dma.local_addr = CXI_VA_TO_IOVA(&req->recv.recv_md,
 						 req->recv.recv_buf);
-	cmd.full_dma.eq = req->recv.rxc->comp.recv_cq->evtq->eqn;
+	cmd.full_dma.eq = rxc->comp.recv_cq->evtq->eqn;
 	cmd.full_dma.request_len = ux_send->length;
 	cmd.full_dma.match_bits = ux_send->match_bits;
-	cmd.full_dma.initiator =
-		CXIP_MAKE_INIT(req->recv.rxc->ep_obj->src_addr.pid,
-			       req->recv.rxc->ep_obj->src_addr.nic);
+	cmd.full_dma.initiator = CXI_MATCH_ID(pid_bits,
+					      rxc->ep_obj->src_addr.pid,
+					      rxc->ep_obj->src_addr.nic);
 	cmd.full_dma.user_ptr = (uint64_t)req;
 
-	fastlock_acquire(&req->recv.rxc->lock);
+	fastlock_acquire(&rxc->lock);
 
 	/* Issue Rendezvous Get command */
-	ret = cxi_cq_emit_dma(req->recv.rxc->tx_cmdq, &cmd.full_dma);
+	ret = cxi_cq_emit_dma(rxc->tx_cmdq, &cmd.full_dma);
 	if (ret) {
 		CXIP_LOG_ERROR("SW RDVS RX: Failed to send GET command: %d\n",
 			       ret);
@@ -226,13 +232,12 @@ static int sw_rdvs_issue_get(struct cxip_req *req, struct cxip_ux_send *ux_send)
 		ret = cxip_cq_report_error(req->cq, req, 0, FI_EIO, ret, NULL,
 					   0);
 		if (ret != FI_SUCCESS)
-			CXIP_LOG_ERROR(
-				"SW RDVS RX: Failed to report error: %d\n",
-				ret);
+			CXIP_LOG_ERROR("SW RDVS RX: Failed to report error: %d\n",
+				       ret);
 	}
 
-	cxi_cq_ring(req->recv.rxc->tx_cmdq);
-	fastlock_release(&req->recv.rxc->lock);
+	cxi_cq_ring(rxc->tx_cmdq);
+	fastlock_release(&rxc->lock);
 
 	return ret;
 }
@@ -493,8 +498,8 @@ static int oflow_buf_add(struct cxip_rx_ctx *rxc)
 	ret = issue_append_le(rxc->rx_pte->pte, oflow_buf->buf,
 			      rxc->oflow_buf_size, &oflow_buf->md,
 			      C_PTL_LIST_OVERFLOW, req->req_id, 0,
-			      ~CXIP_RDVS_PROT_MASK, min_free, false, false,
-			      true, true, true, false, rxc->rx_cmdq);
+			      ~CXIP_RDVS_PROT_MASK, -1, min_free, false,
+			      false, true, true, true, false, rxc->rx_cmdq);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
 		goto oflow_unlock;
@@ -652,7 +657,7 @@ int cxip_sw_rdvs_ux_buf_add(struct cxip_rx_ctx *rxc)
 
 	ret = issue_append_le(rxc->rx_pte->pte, ux_buf, 1, &md, // TODO len 1?
 			      C_PTL_LIST_OVERFLOW, req->req_id,
-			      CXIP_RDVS_PROT_BIT, ~CXIP_RDVS_PROT_MASK, 0,
+			      CXIP_RDVS_PROT_BIT, ~CXIP_RDVS_PROT_MASK, -1, 0,
 			      false, false, true, false, true, false,
 			      rxc->rx_cmdq);
 	if (ret) {
@@ -723,6 +728,34 @@ void cxip_rxc_sw_rdvs_ux_cleanup(struct cxip_rx_ctx *rxc)
 	}
 }
 
+/* Return the FI address of the initiator of the send operation. */
+static fi_addr_t _rxc_event_src_addr(struct cxip_rx_ctx *rxc,
+				     const union c_event *event)
+{
+	/* If the FI_SOURCE capability is enabled, convert the initiator's
+	 * address to an FI address to be reported in a CQ event. If
+	 * application AVs are symmetric, the match_id in the EQ event is
+	 * logical and translation is not needed.  Otherwise, translate the
+	 * physical address in the EQ event to logical FI address.
+	 */
+	if (rxc->attr.caps & FI_SOURCE) {
+		uint32_t pid_bits = rxc->domain->dev_if->if_dev->info.pid_bits;
+		uint32_t process = event->tgt_long.initiator.initiator.process;
+		uint32_t nic;
+		uint32_t pid;
+
+		if (rxc->ep_obj->av->attr.flags & FI_SYMMETRIC)
+			return CXI_MATCH_ID_EP(pid_bits, process);
+
+		nic = CXI_MATCH_ID_EP(pid_bits, process);
+		pid = CXI_MATCH_ID_PID(pid_bits, process);
+
+		return _cxip_av_reverse_lookup(rxc->ep_obj->av, nic, pid);
+	}
+
+	return FI_ADDR_NOTAVAIL;
+}
+
 /* Process a posted receive buffer event.
  *
  * We can expect Link, Unlink, Put and Put_Overflow and Reply events from a
@@ -791,6 +824,7 @@ static void cxip_trecv_cb(struct cxip_req *req, const union c_event *event)
 			 * future events.
 			 */
 			req->recv.start = event->tgt_long.start;
+			req->recv.src_addr = _rxc_event_src_addr(rxc, event);
 
 			dlist_insert_tail(&req->list, &rxc->ux_recvs);
 
@@ -807,6 +841,7 @@ static void cxip_trecv_cb(struct cxip_req *req, const union c_event *event)
 		oflow_buf = ux_send->oflow_buf;
 
 		req->recv.rc = event->tgt_long.return_code;
+		req->recv.src_addr = _rxc_event_src_addr(rxc, event);
 
 		/* A matching, unexpected Put event arrived earlier.  Data is
 		 * waiting in the overflow buffer.
@@ -866,6 +901,7 @@ static void cxip_trecv_cb(struct cxip_req *req, const union c_event *event)
 		req->recv.rc = event->tgt_long.return_code;
 		req->recv.rlength = event->tgt_long.rlength;
 		req->recv.mlength = event->tgt_long.mlength;
+		req->recv.src_addr = _rxc_event_src_addr(rxc, event);
 
 		if (req->recv.rlength == req->recv.mlength) {
 			/* An eager or expected long message was received
@@ -926,6 +962,9 @@ static ssize_t cxip_trecv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	int ret;
 	struct cxi_iova recv_md;
 	struct cxip_req *req;
+	struct cxip_addr caddr;
+	uint32_t match_id;
+	uint32_t pid_bits;
 
 	if (!ep || !buf || (tag & CXIP_RDVS_MASK) != 0 ||
 	    (ignore & CXIP_RDVS_MASK) != 0)
@@ -950,6 +989,32 @@ static ssize_t cxip_trecv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	}
 
 	dom = rxc->domain;
+
+	/* If FI_DIRECTED_RECV and a src_addr is specified, encode the address
+	 * in the LE for matching. If application AVs are symmetric, use
+	 * logical FI address for matching. Otherwise, use physical address.
+	 */
+	pid_bits = dom->dev_if->if_dev->info.pid_bits;
+	if (rxc->attr.caps & FI_DIRECTED_RECV &&
+	    src_addr != FI_ADDR_UNSPEC) {
+		if (rxc->ep_obj->av->attr.flags & FI_SYMMETRIC) {
+			/* TODO switch to C_PID_ANY */
+			match_id = CXI_MATCH_ID(pid_bits, 0x1ff, src_addr);
+		} else {
+			ret = _cxip_av_lookup(rxc->ep_obj->av, src_addr,
+					      &caddr);
+			if (ret != FI_SUCCESS) {
+				CXIP_LOG_DBG("Failed to look up FI addr: %d\n",
+					     ret);
+				return -FI_EINVAL;
+			}
+
+			match_id = CXI_MATCH_ID(pid_bits, caddr.pid, caddr.nic);
+		}
+	} else {
+		/* TODO switch to C_PID_ANY */
+		match_id = CXI_MATCH_ID(pid_bits, 0x1ff, C_NID_ANY);
+	}
 
 	/* Map local buffer */
 	ret = cxil_map(dom->dev_if->if_lni, (void *)buf, len,
@@ -988,8 +1053,8 @@ static ssize_t cxip_trecv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 
 	/* Issue Append command */
 	ret = issue_append_le(rxc->rx_pte->pte, buf, len, &recv_md,
-			      C_PTL_LIST_PRIORITY, req->req_id, tag, ignore, 0,
-			      false, true, false, false, true,
+			      C_PTL_LIST_PRIORITY, req->req_id, tag, ignore,
+			      match_id, 0, false, true, false, false, true,
 			      (len > rxc->eager_threshold) ? true : false,
 			      rxc->rx_cmdq);
 	if (ret) {
@@ -1248,7 +1313,7 @@ static int start_rendezvous_xaction(struct cxip_tx_ctx *txc, union c_cmdu *cmd,
 			txc->domain->dev_if->if_dev->info.min_free_shift);
 	ret = issue_append_le(txc->rdvs_pte->pte, buf, req->send.length,
 			      &req->send.send_md, C_PTL_LIST_PRIORITY,
-			      req->req_id, cmd->full_dma.match_bits, 0,
+			      req->req_id, cmd->full_dma.match_bits, -1, 0,
 			      min_free, false, true, false, true, false, true,
 			      txc->rx_cmdq);
 	if (ret) {
@@ -1289,6 +1354,20 @@ static void cxip_tsend_eager_cb(struct cxip_req *req,
 	cxip_cq_req_free(req);
 }
 
+static fi_addr_t _txc_fi_addr(struct cxip_tx_ctx *txc)
+{
+	if (txc->ep_obj->fi_addr == FI_ADDR_NOTAVAIL) {
+		txc->ep_obj->fi_addr =
+				_cxip_av_reverse_lookup(
+						txc->ep_obj->av,
+						txc->ep_obj->src_addr.nic,
+						txc->ep_obj->src_addr.pid);
+		CXIP_LOG_DBG("Found EP FI Addr: %lu\n", txc->ep_obj->fi_addr);
+	}
+
+	return txc->ep_obj->fi_addr;
+}
+
 static ssize_t cxip_tsend(struct fid_ep *ep, const void *buf, size_t len,
 			  void *desc, fi_addr_t dest_addr, uint64_t tag,
 			  void *context)
@@ -1307,6 +1386,8 @@ static ssize_t cxip_tsend(struct fid_ep *ep, const void *buf, size_t len,
 	uint32_t pid_idx;
 	uint64_t rx_id;
 	int remap;
+	uint32_t match_id;
+	uint32_t pid_bits;
 
 	if (!ep || !buf || (tag & CXIP_RDVS_MASK) != 0)
 		return -FI_EINVAL;
@@ -1376,6 +1457,19 @@ static ssize_t cxip_tsend(struct fid_ep *ep, const void *buf, size_t len,
 	cxi_build_dfa(caddr.nic, caddr.pid, pid_granule, pid_idx, &dfa,
 		      &idx_ext);
 
+	/* Encode the local EP address in the command for matching. If
+	 * application AVs are symmetric, use my logical FI address for
+	 * matching. Otherwise, use physical address.
+	 */
+	pid_bits = dom->dev_if->if_dev->info.pid_bits;
+	if (txc->ep_obj->av->attr.flags & FI_SYMMETRIC) {
+		match_id = CXI_MATCH_ID(pid_bits, txc->ep_obj->src_addr.pid,
+					_txc_fi_addr(txc));
+	} else {
+		match_id = CXI_MATCH_ID(pid_bits, txc->ep_obj->src_addr.pid,
+					txc->ep_obj->src_addr.nic);
+	}
+
 	cmd.full_dma.command.cmd_type = C_CMD_TYPE_DMA;
 	cmd.full_dma.command.opcode = C_CMD_PUT;
 	cmd.full_dma.index_ext = idx_ext;
@@ -1389,8 +1483,7 @@ static ssize_t cxip_tsend(struct fid_ep *ep, const void *buf, size_t len,
 	cmd.full_dma.eq = txc->comp.send_cq->evtq->eqn;
 	cmd.full_dma.user_ptr = (uint64_t)req;
 	cmd.full_dma.match_bits = tag;
-	cmd.full_dma.initiator = CXIP_MAKE_INIT(txc->ep_obj->src_addr.pid,
-						txc->ep_obj->src_addr.nic);
+	cmd.full_dma.initiator = match_id;
 
 	if (len > txc->eager_threshold) {
 		ret = start_rendezvous_xaction(txc, &cmd, buf);

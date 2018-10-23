@@ -1866,6 +1866,7 @@ int cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 	cxi_ep->ep_obj->src_addr.nic = nic;
 	cxi_ep->ep_obj->src_addr.pid = pid;
 	cxi_ep->ep_obj->src_addr.valid = 1;
+	cxi_ep->ep_obj->fi_addr = FI_ADDR_NOTAVAIL;
 
 	switch (fclass) {
 	case FI_CLASS_EP:

@@ -320,6 +320,24 @@ static int cxip_av_insertsvc(struct fid_av *avfid, const char *node,
 	return ret;
 }
 
+fi_addr_t _cxip_av_reverse_lookup(struct cxip_av *av, uint32_t nic,
+				  uint32_t pid)
+{
+	int i;
+	struct cxip_addr *av_addr;
+
+	for (i = 0; i < av->table_hdr->size; i++) {
+		av_addr = &av->table[i];
+		if (av_addr->valid &&
+		    av_addr->nic == nic &&
+		    av_addr->pid == pid) {
+			return i;
+		}
+	}
+
+	return FI_ADDR_NOTAVAIL;
+}
+
 /* Fast, internal look up function. */
 int _cxip_av_lookup(struct cxip_av *av, fi_addr_t fi_addr,
 		    struct cxip_addr *addr)

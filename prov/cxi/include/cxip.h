@@ -82,7 +82,7 @@
 #define CXIP_EP_RDM_PRI_CAP \
 	(FI_RMA | FI_ATOMICS | FI_TAGGED | FI_RECV | FI_SEND | \
 	 FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE | \
-	 /* TODO FI_MSG | FI_NAMED_RX_CTX | FI_DIRECTED_RECV */ 0 \
+	 FI_DIRECTED_RECV | /* TODO FI_MSG | FI_NAMED_RX_CTX */ 0 \
 	)
 
 #define CXIP_EP_RDM_SEC_CAP_BASE \
@@ -391,6 +391,7 @@ struct cxip_req_recv {
 	uint32_t rlength;		// receive length
 	uint32_t mlength;		// message length
 	uint64_t start;			// starting receive offset
+	fi_addr_t src_addr;		// receive source address
 };
 
 struct cxip_req_send {
@@ -733,6 +734,7 @@ struct cxip_ep_obj {
 	fastlock_t lock;
 
 	struct cxip_addr src_addr;	// address of this NIC
+	fi_addr_t fi_addr;		// AV address of this EP
 	uint32_t vni;			// VNI all EP addressing
 	struct cxip_if_domain *if_dom;
 };
@@ -901,6 +903,8 @@ int cxip_fab_check_list(struct cxip_fabric *fabric);
 void cxip_fab_remove_from_list(struct cxip_fabric *fabric);
 struct cxip_fabric *cxip_fab_list_head(void);
 
+fi_addr_t _cxip_av_reverse_lookup(struct cxip_av *av, uint32_t nic,
+				  uint32_t pid);
 int _cxip_av_lookup(struct cxip_av *av, fi_addr_t fi_addr,
 		    struct cxip_addr *addr);
 int cxip_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
