@@ -96,7 +96,6 @@ pipeline {
                             sh "make -j12 install"
                         }
                         tee ('fabtests.log') {
-                            sh 'srun -n 2 --ntasks-per-node 1 ldd contrib/cray/bin/fabtest_wrapper.sh'
                             sh 'srun -n 2 --ntasks-per-node=1 contrib/cray/bin/fabtest_wrapper.sh -p ${FABTEST_PATH}/bin -v -T 60'
                         }
                     }
