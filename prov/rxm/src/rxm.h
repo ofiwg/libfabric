@@ -364,7 +364,7 @@ struct rxm_iov {
 	uint8_t count;
 };
 
-struct rxm_rma_iov_storage {
+struct rxm_rma_iov {
 	struct fi_rma_iov iov[RXM_IOV_LIMIT];
 	uint8_t count;
 };
@@ -438,7 +438,7 @@ struct rxm_rma_buf {
 
 	struct fi_msg_rma msg;
 	struct rxm_iov rxm_iov;
-	struct rxm_rma_iov_storage rxm_rma_iov;
+	struct rxm_rma_iov rxm_rma_iov;
 
 	/* Must stay at bottom */
 	struct rxm_pkt pkt;

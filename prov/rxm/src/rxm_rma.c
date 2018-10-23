@@ -64,10 +64,8 @@ rxm_ep_rma_reg_iov(struct rxm_ep *rxm_ep, const struct iovec *msg_iov,
 
 static inline void
 rxm_ep_rma_fill_msg(struct fi_msg_rma *msg_rma, struct iovec *iov,
-		    size_t iov_count, void **desc,
-		    struct rxm_rma_iov_storage *rma_iov,
-		    struct rxm_tx_entry *tx_entry,
-		    const struct fi_msg_rma *orig_msg)
+		    size_t iov_count, void **desc, struct rxm_rma_iov *rma_iov,
+		    struct rxm_tx_entry *tx_entry, const struct fi_msg_rma *orig_msg)
 {
 	msg_rma->msg_iov = iov;
 	msg_rma->desc = desc;
@@ -96,9 +94,9 @@ rxm_ep_rma_fill_msg_buf(struct rxm_rma_buf *rma_buf,
 }
 
 static inline ssize_t
-rxm_ep_format_rma_res_lightweight(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, uint64_t flags,
-				  uint64_t comp_flags, const struct fi_msg_rma *orig_msg,
-				  struct rxm_tx_entry **tx_entry)
+rxm_ep_form_rma_entry(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, uint64_t flags,
+		      uint64_t comp_flags, const struct fi_msg_rma *orig_msg,
+		      struct rxm_tx_entry **tx_entry)
 {
 	*tx_entry = rxm_tx_entry_get(rxm_conn->send_queue);
 	if (OFI_UNLIKELY(!*tx_entry)) {
@@ -119,9 +117,9 @@ rxm_ep_format_rma_res_lightweight(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_co
 }
 
 static inline ssize_t
-rxm_ep_format_rma_buf(struct rxm_ep *rxm_ep, size_t total_size,
-		      const struct fi_msg_rma *orig_msg,
-		      struct rxm_rma_buf **rma_buf, struct rxm_tx_entry *tx_entry)
+rxm_ep_form_rma_buf(struct rxm_ep *rxm_ep, size_t total_size,
+		    const struct fi_msg_rma *orig_msg,
+		    struct rxm_rma_buf **rma_buf, struct rxm_tx_entry *tx_entry)
 {
 	size_t i;
 
@@ -143,20 +141,20 @@ rxm_ep_format_rma_buf(struct rxm_ep *rxm_ep, size_t total_size,
 }
 
 static inline ssize_t
-rxm_ep_format_rma_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
-		      size_t total_size, uint64_t flags,
-		      uint64_t comp_flags, const struct fi_msg_rma *orig_msg,
-		      struct rxm_rma_buf **rma_buf, struct rxm_tx_entry **tx_entry)
+rxm_ep_form_rma_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
+		    size_t total_size, uint64_t flags,
+		    uint64_t comp_flags, const struct fi_msg_rma *orig_msg,
+		    struct rxm_rma_buf **rma_buf, struct rxm_tx_entry **tx_entry)
 {
 	ssize_t ret;
 
-	ret = rxm_ep_format_rma_res_lightweight(rxm_ep, rxm_conn, flags,
-						comp_flags, orig_msg, tx_entry);
+	ret = rxm_ep_form_rma_entry(rxm_ep, rxm_conn, flags,
+				    comp_flags, orig_msg, tx_entry);
 	if (OFI_UNLIKELY(ret))
 		return ret;
 
-	ret = rxm_ep_format_rma_buf(rxm_ep, total_size, orig_msg,
-				    rma_buf, *tx_entry);
+	ret = rxm_ep_form_rma_buf(rxm_ep, total_size, orig_msg,
+				  rma_buf, *tx_entry);
 	if (OFI_UNLIKELY(ret))
 		goto err;
 
@@ -168,13 +166,13 @@ err:
 }
 
 static inline ssize_t
-rxm_ep_format_rma_inject_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
-			     size_t total_size, uint64_t flags, uint64_t comp_flags,
-			     const struct fi_msg_rma *orig_msg, struct rxm_rma_buf **rma_buf,
-			     struct rxm_tx_entry **tx_entry)
+rxm_ep_form_rma_inject_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
+			   size_t total_size, uint64_t flags, uint64_t comp_flags,
+			   const struct fi_msg_rma *orig_msg, struct rxm_rma_buf **rma_buf,
+			   struct rxm_tx_entry **tx_entry)
 {
-	ssize_t ret = rxm_ep_format_rma_res(rxm_ep, rxm_conn, total_size, flags,
-					    comp_flags, orig_msg, rma_buf, tx_entry);
+	ssize_t ret = rxm_ep_form_rma_res(rxm_ep, rxm_conn, total_size, flags,
+					  comp_flags, orig_msg, rma_buf, tx_entry);
 	if (OFI_UNLIKELY(ret))
 		return ret;
 
@@ -199,8 +197,8 @@ rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t 
 	if (OFI_UNLIKELY(ret))
 		return ret;
 
-	ret = rxm_ep_format_rma_res_lightweight(rxm_ep, rxm_conn, flags,
-						comp_flags, msg, &tx_entry);
+	ret = rxm_ep_form_rma_entry(rxm_ep, rxm_conn, flags,
+				    comp_flags, msg, &tx_entry);
 	if (OFI_UNLIKELY(ret))
 		return -FI_EAGAIN;
 
@@ -297,8 +295,8 @@ rxm_ep_rma_emulate_inject_msg(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, 
 
 	assert(msg->rma_iov_count <= rxm_ep->rxm_info->tx_attr->rma_iov_limit);
 
-	ret = rxm_ep_format_rma_inject_res(rxm_ep, rxm_conn, total_size, flags,
-					   FI_WRITE, msg, &rma_buf, &tx_entry);
+	ret = rxm_ep_form_rma_inject_res(rxm_ep, rxm_conn, total_size, flags,
+					 FI_WRITE, msg, &rma_buf, &tx_entry);
 	if (OFI_UNLIKELY(ret))
 		return ret;
 	flags = (flags & ~FI_INJECT) | FI_COMPLETION;
