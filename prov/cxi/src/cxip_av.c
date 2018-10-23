@@ -347,7 +347,7 @@ int _cxip_av_lookup(struct cxip_av *av, fi_addr_t fi_addr,
 
 	av_addr = &av->table[index];
 	if (!av_addr->valid) {
-		CXIP_LOG_ERROR("requested address is invalid");
+		CXIP_LOG_ERROR("requested address is invalid\n");
 		return -FI_EINVAL;
 	}
 
