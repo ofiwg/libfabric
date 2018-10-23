@@ -151,7 +151,7 @@ struct fi_provider *ofi_get_hook(const char *name)
 	}
 
 	if (prov) {
-		if (ofi_is_hook_prov(prov->provider)) {
+		if (prov->provider && ofi_is_hook_prov(prov->provider)) {
 			provider = prov->provider;
 		} else {
 			FI_WARN(&core_prov, FI_LOG_CORE,
