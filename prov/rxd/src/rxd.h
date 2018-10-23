@@ -271,7 +271,7 @@ static inline struct rxd_base_hdr *rxd_get_base_hdr(struct rxd_pkt_entry *pkt_en
 	return &((struct rxd_ack_pkt *) (pkt_entry->pkt))->base_hdr;
 }
 
-static inline uint32_t rxd_set_pkt_seq(struct rxd_peer *peer,
+static inline uint64_t rxd_set_pkt_seq(struct rxd_peer *peer,
 				       struct rxd_pkt_entry *pkt_entry)
 {
 	rxd_get_base_hdr(pkt_entry)->seq_no = peer->tx_seq_no++;

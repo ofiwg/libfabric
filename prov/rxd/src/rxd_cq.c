@@ -375,8 +375,8 @@ void rxd_progress_tx_list(struct rxd_ep *ep, struct rxd_peer *peer)
 		}
 
 		if (tx_entry->bytes_done == tx_entry->cq_entry.len) {
-			if (tx_entry->start_seq + (tx_entry->num_segs - 1) < 
-		    	    peer->last_rx_ack) {
+			if (ofi_before(tx_entry->start_seq + (tx_entry->num_segs - 1),
+			    peer->last_rx_ack)) {
 				fastlock_acquire(&ep->util_ep.tx_cq->cq_lock);
 				rxd_complete_tx(ep, tx_entry);
 				fastlock_release(&ep->util_ep.tx_cq->cq_lock);
@@ -978,7 +978,7 @@ static void rxd_handle_ack(struct rxd_ep *ep, struct rxd_pkt_entry *ack_entry)
 		pkt_entry = container_of((&ep->peers[peer].unacked)->next,
 					struct rxd_pkt_entry, d_entry);
 		hdr = rxd_get_base_hdr(pkt_entry);
-		if (hdr->seq_no >= ack->base_hdr.seq_no)
+		if (ofi_after_eq(hdr->seq_no, ack->base_hdr.seq_no))
 			break;
 
 		if (rxd_pkt_type(pkt_entry) <= RXD_ATOMIC_COMPARE &&
