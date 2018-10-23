@@ -183,7 +183,7 @@ rxm_ep_format_rma_inject_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	return ret;
 }
 
-static ssize_t
+static inline ssize_t
 rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t flags,
 		  rxm_rma_msg_fn rma_msg, uint64_t comp_flags)
 {
@@ -224,8 +224,8 @@ err:
 	return ret;
 }
 
-static ssize_t rxm_ep_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
-			      uint64_t flags)
+static inline ssize_t
+rxm_ep_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg, uint64_t flags)
 {
 	struct rxm_ep *rxm_ep =
 		container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
@@ -287,7 +287,7 @@ static ssize_t rxm_ep_read(struct fid_ep *ep_fid, void *buf, size_t len,
 	return rxm_ep_readmsg(ep_fid, &msg, rxm_ep_tx_flags(rxm_ep));
 }
 
-static ssize_t
+static inline ssize_t
 rxm_ep_rma_inject(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t flags)
 {
 	struct rxm_tx_entry *tx_entry;
@@ -350,8 +350,8 @@ err:
 	return ret;
 }
 
-static ssize_t rxm_ep_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
-			       uint64_t flags)
+static inline ssize_t
+rxm_ep_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg, uint64_t flags)
 {
 	struct rxm_ep *rxm_ep =
 		container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
