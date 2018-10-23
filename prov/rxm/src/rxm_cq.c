@@ -157,8 +157,7 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 			if (ret)
 				return ret;
 		}
-		if (rx_buf->ep->util_ep.flags & OFI_CNTR_ENABLED)
-			rxm_cntr_inc(rx_buf->ep->util_ep.rx_cntr);
+		ofi_ep_rx_cntr_inc(&rx_buf->ep->util_ep);
 	}
 
 	if (rx_buf->recv_entry->flags & FI_MULTI_RECV) {
@@ -709,7 +708,7 @@ static int rxm_handle_remote_write(struct rxm_ep *rxm_ep,
 				"Unable to write remote write completion\n");
 		return ret;
 	}
-	rxm_cntr_inc(rxm_ep->util_ep.rem_wr_cntr);
+	ofi_ep_rem_wr_cntr_inc(&rxm_ep->util_ep);
 	if (comp->op_context)
 		rxm_enqueue_rx_buf_for_repost_check(comp->op_context);
 	return 0;

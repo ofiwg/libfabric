@@ -850,7 +850,7 @@ rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	       " tag: 0x%" PRIx64 "\n", pkt_size, tx_pkt->hdr.tag);
 	ssize_t ret = fi_inject(rxm_conn->msg_ep, tx_pkt, pkt_size, 0);
 	if (OFI_LIKELY(!ret)) {
-		rxm_cntr_inc(rxm_ep->util_ep.tx_cntr);
+		ofi_ep_tx_cntr_inc(&rxm_ep->util_ep);
 	} else {
 		FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
 		       "fi_inject for MSG provider failed with ret - %" PRId64"\n",
@@ -1454,8 +1454,6 @@ rxm_ep_send_inject(struct rxm_ep *rxm_ep, const struct iovec *iov, size_t count,
 		}
 		rxm_cq_log_comp(comp_flags);
 	}
-	if (rxm_ep->util_ep.flags & OFI_CNTR_ENABLED)
-		rxm_cntr_inc(rxm_ep->util_ep.tx_cntr);
 	return FI_SUCCESS;
 }
 
