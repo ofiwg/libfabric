@@ -325,6 +325,56 @@ fail:
 	return TEST_RET_VAL(ret, testret);
 }
 
+static int
+av_null_fi_addr()
+{
+	int testret;
+	int ret;
+	struct fid_av *av;
+	struct fi_av_attr attr;
+	uint8_t addrbuf[4096];
+	int buflen;
+
+	testret = FAIL;
+
+	if (av_type != FI_AV_TABLE) {
+		ret = 0;
+		testret = SKIPPED;
+		sprintf(err_buf, "test not valid for AV type FI_AV_MAP");
+		goto out1;
+	}
+
+	memset(&attr, 0, sizeof(attr));
+	attr.type = av_type;
+	attr.count = 32;
+
+	av = NULL;
+	ret = fi_av_open(domain, &attr, &av, NULL);
+	if (ret != 0) {
+		sprintf(err_buf, "fi_av_open(%s) = %d, %s",
+				fi_tostr(&av_type, FI_TYPE_AV_TYPE),
+				ret, fi_strerror(-ret));
+		goto out1;
+	}
+
+	buflen = sizeof(addrbuf);
+	ret = av_create_address_list(good_address, 0, 1, addrbuf, 0, buflen);
+	if (ret < 0) {
+		goto out2;		// av_create_address_list filled err_buf
+	}
+
+	ret = fi_av_insert(av, addrbuf, 1, NULL, 0, NULL);
+	if (ret != 1) {
+		sprintf(err_buf, "fi_av_insert ret=%d, %s", ret, fi_strerror(-ret));
+		goto out2;
+	}
+	testret = PASS;
+out2:
+	FT_CLOSE_FID(av);
+out1:
+	return TEST_RET_VAL(ret, testret);
+}
+
 /*
  * Tests:
  * - synchronous resolution of bad address
@@ -787,6 +837,7 @@ fail:
 struct test_entry test_array_good[] = {
 	TEST_ENTRY(av_open_close, "Test open and close AVs of varying sizes"),
 	TEST_ENTRY(av_good_sync, "Test sync AV insert with good address"),
+	TEST_ENTRY(av_null_fi_addr, "Test AV insert without specifying fi_addr"),
 	TEST_ENTRY(av_good_vector_async,
 			"Test async AV insert with vector of good addresses"),
 	TEST_ENTRY(av_zero_async, "Test async insert AV insert of zero addresses"),
