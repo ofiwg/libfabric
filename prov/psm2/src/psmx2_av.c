@@ -35,28 +35,20 @@
 /*
  * SEP address query protocol:
  *
- * SEQ Query REQ:
- *	args[0].u32w0	cmd
+ * SEP Query REQ:
+ *	args[0].u32w0	cmd, version
  *	args[0].u32w1	id
- *	args[1].u64	req
- *	args[2].u64	av_idx
+ *	args[1].u64	sep_info
+ *	args[2].u64	status
  *
  * SEP Query REP:
- *	args[0].u32w0	cmd
+ *	args[0].u32w0	cmd, version
  *	args[0].u32w1	error
- *	args[1].u64	req
- *	args[2].u64	av_idx
+ *	args[1].u64	sep_info
+ *	args[2].u64	status
  *	args[3].u64	n
- *	data		epaddrs
+ *	data		epids
  */
-
-struct psmx2_sep_query {
-	struct psmx2_fid_av	*av;
-	void 			*context;
-	psm2_error_t		*errors;
-	ofi_atomic32_t		error_count;
-	ofi_atomic32_t		pending;
-};
 
 static int psmx2_am_sep_match(struct dlist_entry *entry, const void *arg)
 {
@@ -75,15 +67,15 @@ int psmx2_am_sep_handler(psm2_am_token_t token, psm2_amarg_t *args,
 			 int nargs, void *src, uint32_t len, void *hctx)
 {
 	struct psmx2_fid_domain *domain;
-	psm2_amarg_t rep_args[8];
+	psm2_amarg_t rep_args[4];
 	int op_error = 0;
 	int err = 0;
-	int cmd;
+	int cmd, version;
 	int n, i, j;
 	uint8_t sep_id;
 	struct psmx2_fid_sep *sep;
-	struct psmx2_sep_query *req;
-	struct psmx2_fid_av *av;
+	struct psmx2_av_sep *sep_info;
+	ofi_atomic32_t *status;
 	psm2_epid_t *epids;
 	psm2_epid_t *buf = NULL;
 	int buflen;
@@ -91,6 +83,14 @@ int psmx2_am_sep_handler(psm2_am_token_t token, psm2_amarg_t *args,
 	struct psmx2_trx_ctxt *trx_ctxt = hctx;
 
 	cmd = PSMX2_AM_GET_OP(args[0].u32w0);
+	version = PSMX2_AM_GET_VER(args[0].u32w0);
+	if (version != PSMX2_AM_SEP_VERSION) {
+		FI_WARN(&psmx2_prov, FI_LOG_AV,
+			"AM SEP protocol version mismatch: request %d handler %d\n",
+			version, PSMX2_AM_SEP_VERSION);
+		return -FI_EINVAL;
+	}
+
 	domain = trx_ctxt->domain;
 
 	switch (cmd) {
@@ -110,7 +110,7 @@ int psmx2_am_sep_handler(psm2_am_token_t token, psm2_amarg_t *args,
 			if (n) {
 				buf = malloc(buflen);
 				if (!buf) {
-					op_error = -FI_ENOMEM;
+					op_error = PSM2_NO_MEMORY;
 					buflen = 0;
 					n = 0;
 				}
@@ -121,6 +121,7 @@ int psmx2_am_sep_handler(psm2_am_token_t token, psm2_amarg_t *args,
 		domain->sep_unlock_fn(&domain->sep_lock, 1);
 
 		rep_args[0].u32w0 = PSMX2_AM_REP_SEP_QUERY;
+		PSMX2_AM_SET_VER(rep_args[0].u32w0, PSMX2_AM_SEP_VERSION);
 		rep_args[0].u32w1 = op_error;
 		rep_args[1].u64 = args[1].u64;
 		rep_args[2].u64 = args[2].u64;
@@ -132,31 +133,28 @@ int psmx2_am_sep_handler(psm2_am_token_t token, psm2_amarg_t *args,
 
 	case PSMX2_AM_REP_SEP_QUERY:
 		op_error = args[0].u32w1;
-		req = (void *)(uintptr_t)args[1].u64;
-		av = req->av;
-		i = args[2].u64;
+		sep_info = (struct psmx2_av_sep *)(uintptr_t)args[1].u64;
+		status = (void *)(uintptr_t)args[2].u64;
 		if (op_error) {
-			ofi_atomic_inc32(&req->error_count);
-			req->errors[i] = op_error;
+			ofi_atomic_set32(status, psmx2_errno(op_error));
 		} else {
 			n = args[3].u64;
 			epids = malloc(n * sizeof(psm2_epid_t));
 			if (!epids) {
-				ofi_atomic_inc32(&req->error_count);
-				req->errors[i] = PSM2_NO_MEMORY;
+				ofi_atomic_set32(status, -FI_ENOMEM);
 			} else {
 				for (j=0; j<n; j++)
 					epids[j] = ((psm2_epid_t *)src)[j];
 				/*
 				 * the sender of the SEP query request should
 				 * have acquired the lock and is waiting for
-				 * the response. see psmx2_av_connect_trx_ctxt.
+				 * the response. see psmx2_av_query_sep().
 				 */
-				av->peers[i].sep_ctxt_cnt = n;
-				av->peers[i].sep_ctxt_epids = epids;
+				sep_info->ctxt_cnt = n;
+				sep_info->epids = epids;
+				ofi_atomic_set32(status, 0);
 			}
 		}
-		ofi_atomic_dec32(&req->pending);
 		break;
 
 	default:
@@ -234,16 +232,15 @@ int psmx2_epid_to_epaddr(struct psmx2_trx_ctxt *trx_ctxt,
 
 	err = psm2_ep_connect(trx_ctxt->psm2_ep, 1, &epid, NULL, &errors,
 			      epaddr, psmx2_conn_timeout(1));
-	if (err != PSM2_OK) {
-		FI_WARN(&psmx2_prov, FI_LOG_AV,
-			"psm2_ep_connect retured error %s, remote epid=%lx.\n",
-			psm2_error_get_string(err), epid);
-		return psmx2_errno(err);
+	if (err == PSM2_OK || err == PSM2_EPID_ALREADY_CONNECTED) {
+		psmx2_set_epaddr_context(trx_ctxt, epid, *epaddr);
+		return 0;
 	}
 
-	psmx2_set_epaddr_context(trx_ctxt,epid,*epaddr);
-
-	return 0;
+	FI_WARN(&psmx2_prov, FI_LOG_AV,
+		"psm2_ep_connect retured error %s, remote epid=%lx.\n",
+		psm2_error_get_string(err), epid);
+	return psmx2_errno(err);
 }
 
 /*
@@ -251,52 +248,67 @@ int psmx2_epid_to_epaddr(struct psmx2_trx_ctxt *trx_ctxt,
  */
 static int psmx2_av_check_space(struct psmx2_fid_av *av, size_t count)
 {
-	psm2_epid_t *new_epids;
 	psm2_epaddr_t *new_epaddrs;
 	psm2_epaddr_t **new_sepaddrs;
-	struct psmx2_av_peer *new_peers;
+	struct psmx2_av_hdr *new_hdr;
+	struct psmx2_av_sep *new_sep_info;
 	size_t new_count;
+	size_t old_table_size, new_table_size;
 	int i;
 
 	new_count = av->count;
-	while (new_count < av->last + count)
-		new_count = new_count * 2 + 1;
+	while (new_count < av->hdr->last + count)
+		new_count = new_count * 2;
 
-	if ((new_count <= av->count) && av->epids)
+	if ((new_count <= av->count) && av->table)
 		return 0;
 
-	new_epids = realloc(av->epids, new_count * sizeof(*new_epids));
-	if (!new_epids)
-		return -FI_ENOMEM;
-	av->epids = new_epids;
+	old_table_size = PSMX2_AV_TABLE_SIZE(av->count, av->shared);
+	new_table_size = PSMX2_AV_TABLE_SIZE(new_count, av->shared);
+	if (av->shared) {
+		new_hdr = mremap(av->hdr, old_table_size, new_table_size, 0);
+		if (new_hdr == MAP_FAILED)
+			return -FI_ENOMEM;
+		av->hdr = new_hdr;
+		av->map = (fi_addr_t *)(av->hdr + 1);
+		av->table = (struct psmx2_av_addr *)(av->map + new_count);
+		for (i = 0; i < new_count; i++)
+			av->map[i] = i;
+	} else {
+		new_hdr = realloc(av->hdr, new_table_size);
+		if (!new_hdr)
+			return -FI_ENOMEM;
+		av->hdr = new_hdr;
+		av->table = (struct psmx2_av_addr *)(av->hdr + 1);
+	}
 
-	new_peers = realloc(av->peers, new_count * sizeof(*new_peers));
-	if (!new_peers)
+	new_sep_info = realloc(av->sep_info, new_count * sizeof(*new_sep_info));
+	if (!new_sep_info)
 		return -FI_ENOMEM;
-	av->peers = new_peers;
+	av->sep_info = new_sep_info;
 
 	for (i = 0; i < av->max_trx_ctxt; i++) {
-		if (!av->tables[i].trx_ctxt)
+		if (!av->conn_info[i].trx_ctxt)
 			continue;
 
-		new_epaddrs = realloc(av->tables[i].epaddrs,
+		new_epaddrs = realloc(av->conn_info[i].epaddrs,
 				      new_count * sizeof(*new_epaddrs));
 		if (!new_epaddrs)
 			return -FI_ENOMEM;
-		memset(new_epaddrs + av->last, 0,
-		       (new_count - av->last)  * sizeof(*new_epaddrs));
-		av->tables[i].epaddrs = new_epaddrs;
+		memset(new_epaddrs + av->hdr->last, 0,
+		       (new_count - av->hdr->last)  * sizeof(*new_epaddrs));
+		av->conn_info[i].epaddrs = new_epaddrs;
 
-		new_sepaddrs = realloc(av->tables[i].sepaddrs,
+		new_sepaddrs = realloc(av->conn_info[i].sepaddrs,
 				       new_count * sizeof(*new_sepaddrs));
 		if (!new_sepaddrs)
 			return -FI_ENOMEM;
-		memset(new_sepaddrs + av->last, 0,
-		       (new_count - av->last)  * sizeof(*new_sepaddrs));
-		av->tables[i].sepaddrs = new_sepaddrs;
+		memset(new_sepaddrs + av->hdr->last, 0,
+		       (new_count - av->hdr->last)  * sizeof(*new_sepaddrs));
+		av->conn_info[i].sepaddrs = new_sepaddrs;
 	}
 
-	av->count = new_count;
+	av->count = av->hdr->size = new_count;
 	return 0;
 }
 
@@ -326,191 +338,49 @@ static void psmx2_av_post_completion(struct psmx2_fid_av *av, void *context,
 /*
  * Must be called with av->lock held
  */
-static int psmx2_av_connect_trx_ctxt(struct psmx2_fid_av *av,
-				     int trx_ctxt_id,
-				     size_t av_idx_start,
-				     size_t count,
-				     psm2_error_t *errors)
+static int psmx2_av_query_sep(struct psmx2_fid_av *av,
+			      struct psmx2_trx_ctxt *trx_ctxt,
+			      size_t idx)
 {
-	struct psmx2_trx_ctxt *trx_ctxt;
-	struct psmx2_sep_query *req;
-	struct psmx2_av_peer *peers;
-	struct psmx2_epaddr_context *epaddr_context;
-	psm2_epconn_t epconn;
-	psm2_ep_t ep;
-	psm2_epid_t *epids;
-	psm2_epaddr_t *epaddrs;
-	psm2_epaddr_t **sepaddrs;
+	ofi_atomic32_t status; /* 1: pending, 0: succ, <0: error */
 	psm2_amarg_t args[3];
-	int *mask;
-	int error_count = 0;
-	int to_connect = 0;
-	int sep_count = 0;
-	int i;
+	int error;
 
-	trx_ctxt = av->tables[trx_ctxt_id].trx_ctxt;
-	ep = trx_ctxt->psm2_ep;
-	epids = av->epids + av_idx_start;
-	epaddrs = av->tables[trx_ctxt_id].epaddrs + av_idx_start;
-	sepaddrs = av->tables[trx_ctxt_id].sepaddrs + av_idx_start;
-	peers = av->peers + av_idx_start;
-
-	/* set up mask to avoid duplicated connection */
-
-	mask = calloc(count, sizeof(*mask));
-	if (!mask) {
-		for (i = 0; i < count; i++)
-			errors[i] = PSM2_NO_MEMORY;
-		error_count += count;
-		return error_count;
+	if (!av->conn_info[trx_ctxt->id].epaddrs[idx]) {
+		psmx2_epid_to_epaddr(trx_ctxt, av->table[idx].epid,
+				     &av->conn_info[trx_ctxt->id].epaddrs[idx]);
+		assert(av->conn_info[trx_ctxt->id].epaddrs[idx]);
 	}
 
-	for (i = 0; i < count; i++) {
-		errors[i] = PSM2_OK;
+	psmx2_am_init(trx_ctxt); /* check AM handler installation */
 
-		if (psm2_ep_epid_lookup2(ep, epids[i], &epconn) == PSM2_OK) {
-			epaddr_context = psm2_epaddr_getctxt(epconn.addr);
-			if (epaddr_context && epaddr_context->epid == epids[i])
-				epaddrs[i] = epconn.addr;
-			else
-				mask[i] = 1;
-		} else {
-			mask[i] = 1;
-		}
+	ofi_atomic_initialize32(&status, 1);
 
-		if (peers[i].type == PSMX2_EP_SCALABLE)
-			sep_count++;
+	args[0].u32w0 = PSMX2_AM_REQ_SEP_QUERY;
+	PSMX2_AM_SET_VER(args[0].u32w0, PSMX2_AM_SEP_VERSION);
+	args[0].u32w1 = av->table[idx].sep_id;
+	args[1].u64 = (uint64_t)(uintptr_t)&av->sep_info[idx];
+	args[2].u64 = (uint64_t)(uintptr_t)&status;
+	psm2_am_request_short(av->conn_info[trx_ctxt->id].epaddrs[idx],
+			      PSMX2_AM_SEP_HANDLER, args, 3, NULL,
+			      0, 0, NULL, NULL);
 
-		if (mask[i]) {
-			if (peers[i].type == PSMX2_EP_SCALABLE) {
-				if (peers[i].sep_ctxt_epids)
-					mask[i] = 0;
-				 else
-					to_connect++;
-			} else if (psmx2_env.lazy_conn) {
-				epaddrs[i] = NULL;
-				mask[i] = 0;
-			} else {
-				to_connect++;
-			}
-		}
-	}
+	/*
+	 * make sure AM is progressed promptly. don't call
+	 * psmx2_progress() which may call functions that
+	 * need to access the address vector.
+	 */
+	while (ofi_atomic_get32(&status) == 1)
+		psm2_poll(trx_ctxt->psm2_ep);
 
-	if (to_connect)
-		psm2_ep_connect(ep, count, epids, mask, errors, epaddrs,
-				psmx2_conn_timeout(count));
+	error = (int)(int32_t)ofi_atomic_get32(&status);
 
-	/* check the connection results */
-
-	for (i = 0; i < count; i++) {
-		if (!mask[i]) {
-			errors[i] = PSM2_OK;
-			continue;
-		}
-
-		if (errors[i] == PSM2_OK ||
-		    errors[i] == PSM2_EPID_ALREADY_CONNECTED) {
-			psmx2_set_epaddr_context(trx_ctxt, epids[i], epaddrs[i]);
-			errors[i] = PSM2_OK;
-		} else {
-			/* If duplicated addrs are passed to psm2_ep_connect(),
-			 * all but one will fail with error "Endpoint could not
-			 * be reached". This should be treated the same as
-			 * "Endpoint already connected".
-			 */
-			if (psm2_ep_epid_lookup2(ep, epids[i], &epconn) == PSM2_OK) {
-				epaddr_context = psm2_epaddr_getctxt(epconn.addr);
-				if (epaddr_context &&
-				    epaddr_context->epid == epids[i]) {
-					epaddrs[i] = epconn.addr;
-					errors[i] = PSM2_OK;
-					continue;
-				}
-			}
-
-			FI_WARN(&psmx2_prov, FI_LOG_AV,
-				"%d: psm2_ep_connect (%lx --> %lx): %s\n",
-				i, trx_ctxt->psm2_epid, epids[i],
-				psm2_error_get_string(errors[i]));
-			epaddrs[i] = NULL;
-			error_count++;
-		}
-	}
-
-	free(mask);
-
-	if (sep_count) {
-
-		/* query SEP information */
-
-		psmx2_am_init(trx_ctxt); /* check AM handler installation */
-
-		req = malloc(sizeof *req);
-		if (req) {
-			req->av = av;
-			req->errors = errors;
-			ofi_atomic_initialize32(&req->error_count, 0);
-			ofi_atomic_initialize32(&req->pending, 0);
-		}
-
-		for (i = 0; i < count; i++) {
-			if (peers[i].type != PSMX2_EP_SCALABLE ||
-			    peers[i].sep_ctxt_epids ||
-			    errors[i] != PSM2_OK)
-				continue;
-
-			if (!req) {
-				errors[i] = PSM2_NO_MEMORY;
-				error_count++;
-				continue;
-			}
-
-			ofi_atomic_inc32(&req->pending);
-			args[0].u32w0 = PSMX2_AM_REQ_SEP_QUERY;
-			args[0].u32w1 = peers[i].sep_id;
-			args[1].u64 = (uint64_t)(uintptr_t)req;
-			args[2].u64 = av_idx_start + i;
-			psm2_am_request_short(epaddrs[i], PSMX2_AM_SEP_HANDLER,
-					      args, 3, NULL, 0, 0, NULL, NULL);
-		}
-
-		/*
-		 * make it synchronous for now to:
-		 * (1) ensure the array "req->errors" is valid;
-		 * (2) simplify the logic of generating the final completion.
-		 */
-
-		if (req) {
-			/*
-			 * make sure AM is progressed promptly. don't call
-			 * psmx2_progress() which may call functions that
-			 * need to access the address vector.
-			 */
-			while (ofi_atomic_get32(&req->pending))
-				psm2_poll(trx_ctxt->psm2_ep);
-
-			error_count += ofi_atomic_get32(&req->error_count);
-			free(req);
-		}
-	}
-
-	/* alloate context specific epaddrs for SEP */
-
-	for (i = 0; i < count; i++) {
-		if (peers[i].type == PSMX2_EP_SCALABLE &&
-		    peers[i].sep_ctxt_epids && !sepaddrs[i])
-			sepaddrs[i] = calloc(peers[i].sep_ctxt_cnt,
-					     sizeof(*sepaddrs[i]));
-	}
-
-	return error_count;
+	return error;
 }
 
 int psmx2_av_add_trx_ctxt(struct psmx2_fid_av *av,
-			  struct psmx2_trx_ctxt *trx_ctxt,
-			  int connect_now)
+			  struct psmx2_trx_ctxt *trx_ctxt)
 {
-	psm2_error_t *errors;
 	int id = trx_ctxt->id;
 	int err = 0;
 
@@ -524,8 +394,8 @@ int psmx2_av_add_trx_ctxt(struct psmx2_fid_av *av,
 		goto out;
 	}
 
-	if (av->tables[id].trx_ctxt) {
-		if (av->tables[id].trx_ctxt == trx_ctxt) {
+	if (av->conn_info[id].trx_ctxt) {
+		if (av->conn_info[id].trx_ctxt == trx_ctxt) {
 			FI_INFO(&psmx2_prov, FI_LOG_AV,
 				"trx_ctxt(%p) with id(%d) already added.\n",
 				trx_ctxt, id);
@@ -539,29 +409,21 @@ int psmx2_av_add_trx_ctxt(struct psmx2_fid_av *av,
 		}
 	}
 
-	av->tables[id].epaddrs = (psm2_epaddr_t *) calloc(av->count,
+	av->conn_info[id].epaddrs = (psm2_epaddr_t *) calloc(av->count,
 							  sizeof(psm2_epaddr_t));
-	if (!av->tables[id].epaddrs) {
+	if (!av->conn_info[id].epaddrs) {
 		err = -FI_ENOMEM;
 		goto out;
 	}
 
-	av->tables[id].sepaddrs = (psm2_epaddr_t **)calloc(av->count,
+	av->conn_info[id].sepaddrs = (psm2_epaddr_t **)calloc(av->count,
 							   sizeof(psm2_epaddr_t *));
-	if (!av->tables[id].sepaddrs) {
+	if (!av->conn_info[id].sepaddrs) {
 		err = -FI_ENOMEM;
 		goto out;
 	}
 
-	av->tables[id].trx_ctxt = trx_ctxt;
-
-	if (connect_now) {
-		errors = calloc(av->count, sizeof(*errors));
-		if (errors) {
-			psmx2_av_connect_trx_ctxt(av, id, 0, av->last, errors);
-			free(errors);
-		}
-	}
+	av->conn_info[id].trx_ctxt = trx_ctxt;
 
 out:
 	av->domain->av_unlock_fn(&av->lock, 1);
@@ -580,7 +442,6 @@ STATIC int psmx2_av_insert(struct fid_av *av, const void *addr,
 	psm2_error_t *errors = NULL;
 	int error_count = 0;
 	int i, idx, ret;
-	int sep_count = 0;
 
 	assert(addr || !count);
 
@@ -590,6 +451,11 @@ STATIC int psmx2_av_insert(struct fid_av *av, const void *addr,
 
 	if ((av_priv->flags & FI_EVENT) && !av_priv->eq) {
 		ret = -FI_ENOEQ;
+		goto out;
+	}
+
+	if (av_priv->flags & FI_READ) {
+		ret = -FI_EINVAL;
 		goto out;
 	}
 
@@ -606,62 +472,37 @@ STATIC int psmx2_av_insert(struct fid_av *av, const void *addr,
 
 	/* save the peer address information */
 	for (i = 0; i < count; i++) {
-		idx = av_priv->last + i;
+		idx = av_priv->hdr->last + i;
 		if (av_priv->addr_format == FI_ADDR_STR) {
 			ep_name = psmx2_string_to_ep_name(string_names[i]);
 			if (!ep_name) {
 				ret = -FI_EINVAL;
 				goto out;
 			}
-			av_priv->epids[idx] = ep_name->epid;
-			av_priv->peers[idx].type = ep_name->type;
-			av_priv->peers[idx].sep_id = ep_name->sep_id;
+			av_priv->table[idx].type = ep_name->type;
+			av_priv->table[idx].epid = ep_name->epid;
+			av_priv->table[idx].sep_id = ep_name->sep_id;
 			free(ep_name);
 		} else {
-			av_priv->epids[idx] = names[i].epid;
-			av_priv->peers[idx].type = names[i].type;
-			av_priv->peers[idx].sep_id = names[i].sep_id;
+			av_priv->table[idx].type = names[i].type;
+			av_priv->table[idx].epid = names[i].epid;
+			av_priv->table[idx].sep_id = names[i].sep_id;
 		}
-		av_priv->peers[idx].sep_ctxt_cnt = 1;
-		av_priv->peers[idx].sep_ctxt_epids = NULL;
-		if (av_priv->peers[idx].type == PSMX2_EP_SCALABLE)
-			sep_count++;
-	}
-
-	/*
-	 * try to establish connection when:
-	 *  (1) there are Tx/Rx context(s) bound to the AV; and
-	 *  (2) the connection is desired right now
-	 */
-	if (sep_count || !psmx2_env.lazy_conn) {
-		for (i = 0; i < av_priv->max_trx_ctxt; i++) {
-			if (!av_priv->tables[i].trx_ctxt)
-				continue;
-
-			error_count = psmx2_av_connect_trx_ctxt(av_priv, i,
-								av_priv->last,
-								count, errors);
-
-			if (error_count || psmx2_env.lazy_conn)
-				break;
-		}
+		av_priv->sep_info[idx].ctxt_cnt = 1;
+		av_priv->sep_info[idx].epids = NULL;
 	}
 
 	if (fi_addr) {
 		for (i = 0; i < count; i++) {
-			idx = av_priv->last + i;
+			idx = av_priv->hdr->last + i;
 			if (errors[i] != PSM2_OK)
 				fi_addr[i] = FI_ADDR_NOTAVAIL;
-			else if (av_priv->peers[idx].type == PSMX2_EP_SCALABLE)
-				fi_addr[i] = idx | PSMX2_SEP_ADDR_FLAG;
-			else if (av_priv->type == FI_AV_TABLE)
-				fi_addr[i] = idx;
 			else
-				fi_addr[i] = PSMX2_EP_TO_ADDR(av_priv->tables[0].epaddrs[idx]);
+				fi_addr[i] = idx;
 		}
 	}
 
-	av_priv->last += count;
+	av_priv->hdr->last += count;
 
 	if (av_priv->flags & FI_EVENT) {
 		if (error_count) {
@@ -697,9 +538,8 @@ STATIC int psmx2_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 			   size_t *addrlen)
 {
 	struct psmx2_fid_av *av_priv;
-	struct psmx2_epaddr_context *context;
 	struct psmx2_ep_name name;
-	int idx;
+	int idx = PSMX2_ADDR_IDX(fi_addr);
 	int err = 0;
 
 	assert(addr);
@@ -711,28 +551,14 @@ STATIC int psmx2_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 
 	av_priv->domain->av_lock_fn(&av_priv->lock, 1);
 
-	if (PSMX2_SEP_ADDR_TEST(fi_addr)) {
-		idx = PSMX2_SEP_ADDR_IDX(fi_addr);
-		if (idx >= av_priv->last) {
-			err = -FI_EINVAL;
-			goto out;
-		}
-		name.type = PSMX2_EP_SCALABLE;
-		name.epid = av_priv->epids[idx];
-		name.sep_id = av_priv->peers[idx].sep_id;
-	} else if (av_priv->type == FI_AV_TABLE) {
-		idx = (int)(int64_t)fi_addr;
-		if (idx >= av_priv->last) {
-			err = -FI_EINVAL;
-			goto out;
-		}
-		name.type = PSMX2_EP_REGULAR;
-		name.epid = av_priv->epids[idx];
-	} else {
-		context = psm2_epaddr_getctxt(PSMX2_ADDR_TO_EP(fi_addr));
-		name.type = PSMX2_EP_REGULAR;
-		name.epid = context->epid;
+	if (idx >= av_priv->hdr->last) {
+		err = -FI_EINVAL;
+		goto out;
 	}
+
+	name.type = av_priv->table[idx].type;
+	name.epid = av_priv->table[idx].epid;
+	name.sep_id = av_priv->table[idx].sep_id;
 
 	if (av_priv->addr_format == FI_ADDR_STR) {
 		ofi_straddr(addr, addrlen, FI_ADDR_PSMX2, &name);
@@ -746,71 +572,75 @@ out:
 	return err;
 }
 
-psm2_epaddr_t psmx2_av_translate_sep(struct psmx2_fid_av *av,
-				     struct psmx2_trx_ctxt *trx_ctxt,
-				     fi_addr_t addr)
+psm2_epaddr_t psmx2_av_translate_addr(struct psmx2_fid_av *av,
+				      struct psmx2_trx_ctxt *trx_ctxt,
+				      fi_addr_t addr)
 {
-	int idx = PSMX2_SEP_ADDR_IDX(addr);
-	int ctxt = PSMX2_SEP_ADDR_CTXT(addr, av->rx_ctx_bits);
-	psm2_epaddr_t epaddr = NULL;
-	psm2_error_t errors;
-	int err;
+	psm2_epaddr_t epaddr;
+	size_t idx = PSMX2_ADDR_IDX(addr);
+	int ctxt;
+	int err = 0;
 
 	av->domain->av_lock_fn(&av->lock, 1);
+	assert(idx < av->hdr->last);
 
-	if (av->peers[idx].type != PSMX2_EP_SCALABLE ||
-	    ctxt >= av->peers[idx].sep_ctxt_cnt)
-		goto out;
-
-	/* this can be NULL when lazy connection is enabled */
-	if (!av->tables[trx_ctxt->id].sepaddrs[idx]) {
-		psmx2_av_connect_trx_ctxt(av, trx_ctxt->id, idx, 1, &errors);
-		assert(av->tables[trx_ctxt->id].sepaddrs[idx]);
-	}
-
-	if (!av->tables[trx_ctxt->id].sepaddrs[idx][ctxt]) {
-		err = psmx2_epid_to_epaddr(trx_ctxt,
-					   av->peers[idx].sep_ctxt_epids[ctxt],
-					   &epaddr);
-		if (err) {
-			FI_WARN(&psmx2_prov, FI_LOG_AV,
-				"fatal error: unable to translate epid %lx to epaddr.\n",
-				av->peers[idx].sep_ctxt_epids[ctxt]);
-			goto out;
+	if (av->table[idx].type == PSMX2_EP_SCALABLE) {
+		if (!av->sep_info[idx].epids) {
+			psmx2_av_query_sep(av, trx_ctxt, idx);
+			assert(av->sep_info[idx].epids);
 		}
 
-		av->tables[trx_ctxt->id].sepaddrs[idx][ctxt] = epaddr;
+		if (!av->conn_info[trx_ctxt->id].sepaddrs[idx]) {
+			av->conn_info[trx_ctxt->id].sepaddrs[idx] =
+				calloc(av->sep_info[idx].ctxt_cnt, sizeof(psm2_epaddr_t));
+			assert(av->conn_info[trx_ctxt->id].sepaddrs[idx]);
+		}
+
+		ctxt = PSMX2_ADDR_CTXT(addr, av->rx_ctx_bits);
+		assert(ctxt < av->sep_info[idx].ctxt_cnt);
+
+		if (!av->conn_info[trx_ctxt->id].sepaddrs[idx][ctxt]) {
+			err = psmx2_epid_to_epaddr(trx_ctxt,
+						   av->sep_info[idx].epids[ctxt],
+						   &av->conn_info[trx_ctxt->id].sepaddrs[idx][ctxt]);
+			assert(!err);
+		}
+		epaddr = av->conn_info[trx_ctxt->id].sepaddrs[idx][ctxt];
+	} else {
+		if (!av->conn_info[trx_ctxt->id].epaddrs[idx]) {
+			err = psmx2_epid_to_epaddr(trx_ctxt, av->table[idx].epid,
+						   &av->conn_info[trx_ctxt->id].epaddrs[idx]);
+			assert(!err);
+		}
+		epaddr = av->conn_info[trx_ctxt->id].epaddrs[idx];
 	}
 
-	epaddr = av->tables[trx_ctxt->id].sepaddrs[idx][ctxt];
-
-out:
+#ifdef NDEBUG
+	(void) err;
+#endif
 	av->domain->av_unlock_fn(&av->lock, 1);
 	return epaddr;
 }
 
-fi_addr_t psmx2_av_translate_source(struct psmx2_fid_av *av, fi_addr_t source)
+fi_addr_t psmx2_av_translate_source(struct psmx2_fid_av *av, psm2_epaddr_t source)
 {
-	psm2_epaddr_t epaddr;
 	psm2_epid_t epid;
 	fi_addr_t ret = FI_ADDR_NOTAVAIL;
 	int i, j, found = 0;
 
-	epaddr = PSMX2_ADDR_TO_EP(source);
-	psm2_epaddr_to_epid(epaddr, &epid);
+	psm2_epaddr_to_epid(source, &epid);
 
 	av->domain->av_lock_fn(&av->lock, 1);
 
-	for (i = av->last - 1; i >= 0 && !found; i--) {
-		if (av->peers[i].type == PSMX2_EP_REGULAR) {
-			if (av->epids[i] == epid) {
-				ret = (av->type == FI_AV_MAP) ?
-				      source : (fi_addr_t)i;
+	for (i = av->hdr->last - 1; i >= 0 && !found; i--) {
+		if (av->table[i].type == PSMX2_EP_REGULAR) {
+			if (av->table[i].epid == epid) {
+				ret = (fi_addr_t)i;
 				found = 1;
 			}
 		} else {
-			for (j=0; j<av->peers[i].sep_ctxt_cnt; j++) {
-				if (av->peers[i].sep_ctxt_epids[j] == epid) {
+			for (j=0; j<av->sep_info[i].ctxt_cnt; j++) {
+				if (av->sep_info[i].epids[j] == epid) {
 					ret = fi_rx_addr((fi_addr_t)i, j,
 							 av->rx_ctx_bits);
 					found = 1;
@@ -833,24 +663,24 @@ void psmx2_av_remove_conn(struct psmx2_fid_av *av,
 
 	psm2_epaddr_to_epid(epaddr, &epid);
 
-	psmx2_lock(&av->lock, 1);
+	av->domain->av_lock_fn(&av->lock, 1);
 
-	for (i = 0; i < av->last; i++) {
-		if (av->peers[i].type == PSMX2_EP_REGULAR) {
-			if (av->epids[i] == epid &&
-			    av->tables[trx_ctxt->id].epaddrs[i] == epaddr)
-				av->tables[trx_ctxt->id].epaddrs[i] = NULL;
+	for (i = 0; i < av->hdr->last; i++) {
+		if (av->table[i].type == PSMX2_EP_REGULAR) {
+			if (av->table[i].epid == epid &&
+			    av->conn_info[trx_ctxt->id].epaddrs[i] == epaddr)
+				av->conn_info[trx_ctxt->id].epaddrs[i] = NULL;
 		} else {
-			for (j=0; j<av->peers[i].sep_ctxt_cnt; j++) {
-				if (av->peers[i].sep_ctxt_epids[j] == epid &&
-				    av->tables[trx_ctxt->id].sepaddrs[i] &&
-				    av->tables[trx_ctxt->id].sepaddrs[i][j] == epaddr)
-					    av->tables[trx_ctxt->id].sepaddrs[i][j] = NULL;
+			for (j=0; j<av->sep_info[i].ctxt_cnt; j++) {
+				if (av->sep_info[i].epids[j] == epid &&
+				    av->conn_info[trx_ctxt->id].sepaddrs[i] &&
+				    av->conn_info[trx_ctxt->id].sepaddrs[i][j] == epaddr)
+					    av->conn_info[trx_ctxt->id].sepaddrs[i][j] = NULL;
 			}
 		}
 	}
 
-	psmx2_unlock(&av->lock, 1);
+	av->domain->av_unlock_fn(&av->lock, 1);
 }
 
 DIRECT_FN
@@ -864,22 +694,30 @@ static int psmx2_av_close(fid_t fid)
 {
 	struct psmx2_fid_av *av;
 	int i, j;
+	int err;
 
 	av = container_of(fid, struct psmx2_fid_av, av.fid);
 	psmx2_domain_release(av->domain);
 	fastlock_destroy(&av->lock);
 	for (i = 0; i < av->max_trx_ctxt; i++) {
-		if (!av->tables[i].trx_ctxt)
+		if (!av->conn_info[i].trx_ctxt)
 			continue;
-		free(av->tables[i].epaddrs);
-		if (av->tables[i].sepaddrs) {
-			for (j = 0; j < av->last; j++)
-				free(av->tables[i].sepaddrs[j]);
+		free(av->conn_info[i].epaddrs);
+		if (av->conn_info[i].sepaddrs) {
+			for (j = 0; j < av->hdr->last; j++)
+				free(av->conn_info[i].sepaddrs[j]);
 		}
-		free(av->tables[i].sepaddrs);
+		free(av->conn_info[i].sepaddrs);
 	}
-	free(av->peers);
-	free(av->epids);
+	if (av->shared) {
+		err = ofi_shm_unmap(&av->shm);
+		if (err)
+			FI_INFO(&psmx2_prov, FI_LOG_AV,
+				"Failed to unmap shared AV: %s.\n",
+				strerror(ofi_syserr()));
+	} else {
+		free(av->hdr);
+	}
 	free(av);
 	return 0;
 }
@@ -929,61 +767,29 @@ int psmx2_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 {
 	struct psmx2_fid_domain *domain_priv;
 	struct psmx2_fid_av *av_priv;
-	int type;
-	size_t count = 64;
+	size_t count = PSMX2_AV_DEFAULT_SIZE;
 	uint64_t flags = 0;
+	int shared = 0;
 	int rx_ctx_bits = PSMX2_MAX_RX_CTX_BITS;
+	size_t conn_size;
 	size_t table_size;
+	int err;
+	int i;
 
 	domain_priv = container_of(domain, struct psmx2_fid_domain,
 				   util_domain.domain_fid);
 
-	if (psmx2_env.lazy_conn || psmx2_env.max_trx_ctxt > 1)
-		type = FI_AV_TABLE;
-	else
-		type = FI_AV_MAP;
-
 	if (attr) {
-		switch (attr->type) {
-		case FI_AV_UNSPEC:
-			break;
+		if (attr->count)
+			count = attr->count;
 
-		case FI_AV_MAP:
-			if (psmx2_env.lazy_conn) {
-				FI_INFO(&psmx2_prov, FI_LOG_AV,
-					"Lazy connection is enabled, force FI_AV_TABLE\n");
-				break;
-			}
-			if (psmx2_env.max_trx_ctxt > 1) {
-				FI_INFO(&psmx2_prov, FI_LOG_AV,
-					"Multi-EP is enabled, force FI_AV_TABLE\n");
-				break;
-			}
-			/* fall through */
-		case FI_AV_TABLE:
-			type = attr->type;
-			break;
-		default:
-			FI_INFO(&psmx2_prov, FI_LOG_AV,
-				"attr->type=%d, supported=%d %d\n",
-				attr->type, FI_AV_MAP, FI_AV_TABLE);
-			return -FI_EINVAL;
-		}
+		if (attr->name)
+			shared = 1;
 
-		count = attr->count;
 		flags = attr->flags;
-
-		if (flags & (FI_READ | FI_SYMMETRIC)) {
+		if (flags & FI_SYMMETRIC) {
 			FI_INFO(&psmx2_prov, FI_LOG_AV,
-				"attr->flags=%"PRIu64", supported=%llu\n",
-				attr->flags, FI_EVENT);
-			return -FI_ENOSYS;
-		}
-
-		if (attr->name) {
-			FI_INFO(&psmx2_prov, FI_LOG_AV,
-				"attr->name=%s, named AV is not supported\n",
-				attr->name);
+				"FI_SYMMETRIC flags is no supported\n");
 			return -FI_ENOSYS;
 		}
 
@@ -997,17 +803,60 @@ int psmx2_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		rx_ctx_bits = attr->rx_ctx_bits;
 	}
 
-	table_size = psmx2_env.max_trx_ctxt * sizeof(struct psmx2_av_table);
-	av_priv = (struct psmx2_fid_av *) calloc(1, sizeof(*av_priv) + table_size);
+	conn_size = psmx2_env.max_trx_ctxt * sizeof(struct psmx2_av_conn);
+	av_priv = (struct psmx2_fid_av *) calloc(1, sizeof(*av_priv) + conn_size);
 	if (!av_priv)
 		return -FI_ENOMEM;
+
+	av_priv->sep_info = calloc(count, sizeof(struct psmx2_av_sep));
+	if (!av_priv->sep_info) {
+		err = -FI_ENOMEM;
+		goto errout_free;
+	}
+
+	table_size = PSMX2_AV_TABLE_SIZE(count, shared);
+	if (attr && attr->name) {
+		err = ofi_shm_map(&av_priv->shm, attr->name, table_size,
+				  flags & FI_READ, (void**)&av_priv->hdr);
+		if (err || av_priv->hdr == MAP_FAILED) {
+			FI_WARN(&psmx2_prov, FI_LOG_AV,
+				"failed to map shared AV: %s\n", attr->name);
+			err = -FI_EINVAL;
+			goto errout_free;
+		}
+
+		if (flags & FI_READ) {
+			if (av_priv->hdr->size != count) {
+				FI_WARN(&psmx2_prov, FI_LOG_AV,
+					"AV size doesn't match: shared %ld, asking %ld\n",
+					av_priv->hdr->size, count);
+				err = -FI_EINVAL;
+				goto errout_free;
+			}
+		} else {
+			av_priv->hdr->size = count;
+			av_priv->hdr->last = 0;
+		}
+		av_priv->shared = 1;
+		av_priv->map = (fi_addr_t *)(av_priv->hdr + 1);
+		av_priv->table = (struct psmx2_av_addr *)(av_priv->map + count);
+		for (i = 0; i < count; i++)
+			av_priv->map[i] = i;
+	} else {
+		av_priv->hdr = calloc(1, table_size);
+		if (!av_priv->hdr) {
+			err = -FI_ENOMEM;
+			goto errout_free;
+		}
+		av_priv->hdr->size = count;
+		av_priv->table = (struct psmx2_av_addr *)(av_priv->hdr + 1);
+	}
 
 	fastlock_init(&av_priv->lock);
 
 	psmx2_domain_acquire(domain_priv);
 
 	av_priv->domain = domain_priv;
-	av_priv->type = type;
 	av_priv->addrlen = sizeof(psm2_epaddr_t);
 	av_priv->count = count;
 	av_priv->flags = flags;
@@ -1021,12 +870,17 @@ int psmx2_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	av_priv->av.ops = &psmx2_av_ops;
 
 	*av = &av_priv->av;
-	if (attr)
-		attr->type = type;
-
-	FI_INFO(&psmx2_prov, FI_LOG_AV,
-		"type = %s\n", fi_tostr(&type, FI_TYPE_AV_TYPE));
+	if (attr) {
+		attr->type = FI_AV_TABLE;
+		if (shared)
+			attr->map_addr = av_priv->map;
+	}
 
 	return 0;
+
+errout_free:
+	free(av_priv->sep_info);
+	free(av_priv);
+	return err;
 }
 
