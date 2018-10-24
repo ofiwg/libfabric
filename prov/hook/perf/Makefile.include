@@ -7,6 +7,5 @@ _perfhook_headers = \
 
 src_libfabric_la_SOURCES  +=	$(_perfhook_files) \
 				$(_perfhook_headers)
-src_libfabric_la_CPPFLAGS +=	-I$(top_srcdir)/prov/hook/src \
-				-I$(top_srcdir)/prov/hook/perf/include
+src_libfabric_la_CPPFLAGS +=	-I$(top_srcdir)/prov/hook/perf/include
 src_libfabric_la_LIBADD	  +=	$(perfhook_shm_LIBS)
