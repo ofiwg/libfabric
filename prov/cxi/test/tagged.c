@@ -890,3 +890,182 @@ Test(tagged, multitudes_sw_rdvs, .timeout = 10)
 	pthread_attr_destroy(&attr);
 }
 
+struct multitudes_params {
+	size_t length;
+	size_t num_ios;
+};
+
+/* This is a parameterized test to execute an arbitrary set of tagged send/recv
+ * operations. The test is configurable in two parameters, the length value is
+ * the size of the data to be transferred. The num_ios will set the number of
+ * matching send/recv that are launched in each test.
+ *
+ * The test will first execute the fi_tsend() for `num_ios` number of buffers.
+ * A background thread is launched to start processing the Cassini events for
+ * the Send operations. The test will then pause for 1 second. After the pause,
+ * The test will execute the fi_trecv() to receive the buffers that were
+ * previously sent. Another background thread is then launched to process the
+ * receive events. When all send and receive operations have completed, the
+ * threads exit and the results are compared to ensure the expected data was
+ * returned.
+ *
+ * Based on the test's length parameter it will change the processing of the
+ * send and receive operation. 2kiB and below lengths will cause the eager
+ * data path to be used. Larger than 2kiB buffers will use the SW Rendezvous
+ * data path to be used.
+ */
+ParameterizedTestParameters(tagged, multitudes)
+{
+	size_t param_sz;
+
+	static struct multitudes_params params[] = {
+		{.length = 1024,	/* Eager */
+		 .num_ios = 10},
+		{.length = 2 * 1024,	/* Eager */
+		 .num_ios = 15},
+		{.length = 4 * 1024,	/* Rendezvous */
+		 .num_ios = 12},
+		{.length = 128 * 1024,	/* Rendezvous */
+		 .num_ios = 25},
+	};
+
+	param_sz = ARRAY_SIZE(params);
+	return cr_make_param_array(struct multitudes_params, params,
+				   param_sz);
+}
+
+ParameterizedTest(struct multitudes_params *param, tagged, multitudes,
+		  .timeout = 10)
+{
+	int ret;
+	size_t buf_len = param->length;
+	struct fi_cq_tagged_entry *rx_cqe;
+	struct fi_cq_tagged_entry *tx_cqe;
+	struct tagged_thread_args *tx_args;
+	struct tagged_thread_args *rx_args;
+	pthread_t tx_thread;
+	pthread_t rx_thread;
+	pthread_attr_t attr;
+	struct tagged_event_args tx_evt_args = {
+		.cq = cxit_tx_cq,
+		.io_num = param->num_ios,
+	};
+	struct tagged_event_args rx_evt_args = {
+		.cq = cxit_rx_cq,
+		.io_num = param->num_ios,
+	};
+
+	tx_cqe = calloc(param->num_ios, sizeof(struct fi_cq_tagged_entry));
+	cr_assert_not_null(tx_cqe);
+
+	rx_cqe = calloc(param->num_ios, sizeof(struct fi_cq_tagged_entry));
+	cr_assert_not_null(rx_cqe);
+
+	tx_args = calloc(param->num_ios, sizeof(struct tagged_thread_args));
+	cr_assert_not_null(tx_args);
+
+	rx_args = calloc(param->num_ios, sizeof(struct tagged_thread_args));
+	cr_assert_not_null(rx_args);
+
+	pthread_attr_init(&attr);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+
+	tx_evt_args.cqe = tx_cqe;
+	rx_evt_args.cqe = rx_cqe;
+
+	/* Issue the Sends */
+	for (size_t tx_io = 0; tx_io < param->num_ios; tx_io++) {
+		tx_args[tx_io].len = buf_len;
+		tx_args[tx_io].tag_offset = RDVS_TAG + tx_io;
+		tx_args[tx_io].buf = aligned_alloc(C_PAGE_SIZE, buf_len);
+		cr_assert_not_null(tx_args[tx_io].buf);
+		for (size_t i = 0; i < buf_len; i++)
+			tx_args[tx_io].buf[i] = i + 0xa0 + tx_io;
+
+		ret = fi_tsend(cxit_ep, tx_args[tx_io].buf, tx_args[tx_io].len,
+			       NULL, cxit_ep_fi_addr, tx_args[tx_io].tag_offset,
+			       NULL);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_tsend %ld: unexpected ret %d",
+			     tx_io, ret);
+	}
+
+	/* Start processing Send events */
+	ret = pthread_create(&tx_thread, &attr, tagged_evt_worker,
+				(void *)&tx_evt_args);
+	cr_assert_eq(ret, 0, "Send thread create failed %d", ret);
+
+	sleep(1);
+
+	/* Issue the Receives */
+	for (size_t rx_io = 0; rx_io < param->num_ios; rx_io++) {
+		rx_args[rx_io].len = buf_len;
+		rx_args[rx_io].tag_offset = RDVS_TAG + rx_io;
+		rx_args[rx_io].buf = aligned_alloc(C_PAGE_SIZE, buf_len);
+		cr_assert_not_null(rx_args[rx_io].buf);
+		memset(rx_args[rx_io].buf, 0, buf_len);
+
+		ret = fi_trecv(cxit_ep, rx_args[rx_io].buf, rx_args[rx_io].len,
+			       NULL, FI_ADDR_UNSPEC, rx_args[rx_io].tag_offset,
+			       0, NULL);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_trecv %ld: unexpected ret %d",
+			     rx_io, ret);
+	}
+
+	/* Start processing Receive events */
+	ret = pthread_create(&rx_thread, &attr, tagged_evt_worker,
+			     (void *)&rx_evt_args);
+	cr_assert_eq(ret, 0, "Receive thread create failed %d", ret);
+
+	/* Wait for the RX/TX event threads to complete */
+	ret = pthread_join(tx_thread, NULL);
+	cr_assert_eq(ret, 0, "Send thread join failed %d", ret);
+
+	ret = pthread_join(rx_thread, NULL);
+	cr_assert_eq(ret, 0, "Recv thread join failed %d", ret);
+
+	/* Validate results */
+	for (size_t io = 0; io < param->num_ios; io++) {
+		/* Validate sent data */
+		cr_expect_arr_eq(rx_args[io].buf, tx_args[io].buf, buf_len);
+
+		/* Validate TX event fields */
+		cr_expect_null(tx_cqe[io].op_context,
+			       "TX CQE %ld Context mismatch", io);
+		cr_expect_null(tx_cqe[io].buf, "Invalid TX CQE %ld address %p",
+			      io, tx_cqe[io].buf);
+		cr_expect_eq(tx_cqe[io].flags, (FI_TAGGED | FI_SEND),
+			     "TX CQE %ld flags mismatch %lx", io,
+			     tx_cqe[io].flags);
+		cr_expect_eq(tx_cqe[io].len, 0, "Invalid TX CQE %ld length %lx",
+			     io, buf_len);
+		cr_expect_eq(tx_cqe[io].data, 0, "Invalid TX CQE %ld data %lx",
+			     io, tx_cqe[io].data);
+		cr_expect_eq(tx_cqe[io].tag, 0, "Invalid TX CQE %ld tag %lx",
+			     io, tx_cqe[io].tag);
+
+		/* Validate RX event fields */
+		cr_expect_null(rx_cqe[io].op_context,
+			       "RX CQE %ld Context mismatch", io);
+		cr_expect_null(rx_cqe[io].buf, "Invalid RX CQE %ld address %p",
+			       io, rx_cqe[io].buf);
+		cr_expect_eq(rx_cqe[io].flags, (FI_TAGGED | FI_RECV),
+			     "RX CQE %ld flags mismatch %lx", io,
+			     rx_cqe[io].flags);
+		cr_expect_eq(rx_cqe[io].len, buf_len,
+			     "Invalid RX CQE %ld length %lx", io,
+			     rx_cqe[io].len);
+		cr_expect_eq(rx_cqe[io].data, 0, "Invalid RX CQE %ld data %lx",
+			     io, rx_cqe[io].data);
+		cr_expect_eq(rx_cqe[io].tag, 0, "Invalid RX CQE %ld tag %lx",
+			     io, rx_cqe[io].tag);
+
+		free(tx_args[io].buf);
+		free(rx_args[io].buf);
+	}
+
+	pthread_attr_destroy(&attr);
+	free(rx_cqe);
+	free(tx_cqe);
+	free(tx_args);
+	free(rx_args);
+}
