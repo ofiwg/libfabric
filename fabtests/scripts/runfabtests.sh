@@ -318,7 +318,7 @@ function unit_test {
 	start_time=$(date '+%s')
 
 	cmd="${BIN_PATH}${test_exe}"
-	${SERVER_CMD} "$cmd" &> $s_outp &
+	${SERVER_CMD} "${EXPORT_ENV} $cmd" &> $s_outp &
 	p1=$!
 
 	wait $p1
@@ -363,12 +363,12 @@ function cs_test {
 	start_time=$(date '+%s')
 
 	s_cmd="${BIN_PATH}${test_exe} -s $S_INTERFACE"
-	${SERVER_CMD} "$s_cmd" &> $s_outp &
+	${SERVER_CMD} "${EXPORT_ENV} $s_cmd" &> $s_outp &
 	p1=$!
 	sleep 1
 
 	c_cmd="${BIN_PATH}${test_exe} -s $C_INTERFACE $S_INTERFACE"
-	${CLIENT_CMD} "$c_cmd" &> $c_outp &
+	${CLIENT_CMD} "${EXPORT_ENV} $c_cmd" &> $c_outp &
 	p2=$!
 
 	wait $p1
@@ -417,12 +417,12 @@ function complex_test {
 	fi
 
 	s_cmd="${BIN_PATH}${test_exe} -x $opts"
-	FI_LOG_LEVEL=error ${SERVER_CMD} "$s_cmd" &> $s_outp &
+	FI_LOG_LEVEL=error ${SERVER_CMD} "${EXPORT_ENV} $s_cmd" &> $s_outp &
 	p1=$!
 	sleep 1
 
 	c_cmd="${BIN_PATH}${test_exe} -p \"${PROV}\" -t $config $S_INTERFACE $opts"
-	FI_LOG_LEVEL=error ${CLIENT_CMD} "$c_cmd" &> $c_outp &
+	FI_LOG_LEVEL=error ${CLIENT_CMD} "${EXPORT_ENV} $c_cmd" &> $c_outp &
 	p2=$!
 
 	wait $p2
@@ -559,6 +559,8 @@ function usage {
 	errcho -e " -t\ttest set(s): all,quick,unit,functional,standard,short,complex (default quick)"
 	errcho -e " -e\texclude tests: comma delimited list of test names /
 			 regex patterns (with -R) e.g. \"dgram,rma.*write\""
+	errcho -e " -E\texport provided variable name and value to ssh client and server processes.
+			 options must of of the form '-E var=value'"
 	errcho -e " -f\texclude tests file: File containing list of test names /
 			 regex patterns (with -R) to exclude (one per line)"
 	errcho -e " -R\tTreat test exclusions as regex patterns"
@@ -575,7 +577,7 @@ function usage {
 	exit 1
 }
 
-while getopts ":vt:p:g:e:f:c:s:u:T:NRSk" opt; do
+while getopts ":vt:p:g:e:f:c:s:u:T:NRSkE:" opt; do
 case ${opt} in
 	t) TEST_TYPE=$OPTARG
 	;;
@@ -604,6 +606,17 @@ case ${opt} in
 	S) STRICT_MODE=1
 	;;
 	k) FORK=1
+	;;
+	E)
+	delimiter="="
+	value=${OPTARG#*$delimiter}
+	var=${OPTARG:0:$(( ${#OPTARG} - ${#value} - ${#delimiter} ))}
+	EXPORT_STRING="export $var=\"$value\""
+	if [[ -z $EXPORT_ENV ]] ; then
+		EXPORT_ENV="$EXPORT_STRING ;"
+	else
+		EXPORT_ENV="$EXPORT_ENV $EXPORT_STRING ;"
+	fi
 	;;
 	:|\?) usage
 	;;
