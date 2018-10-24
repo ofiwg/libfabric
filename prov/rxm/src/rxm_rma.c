@@ -306,7 +306,8 @@ rxm_ep_rma_inject(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t 
 	/* Use fi_inject_write instead of fi_writemsg since the latter generates
 	 * completion by default */
 	if ((total_size <= rxm_ep->msg_info->tx_attr->inject_size) &&
-	    !(flags & FI_COMPLETION)) {
+	    !(flags & FI_COMPLETION) &&
+	    (msg->iov_count == 1) && (msg->rma_iov_count == 1)) {
 		if (flags & FI_REMOTE_CQ_DATA) {
 			ret = fi_inject_writedata(rxm_conn->msg_ep,
 						  msg->msg_iov->iov_base,
