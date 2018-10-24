@@ -31,8 +31,7 @@
  */
 
 #include <stdlib.h>
-#include "ofi_hook.h"
-#include "hook_perf.h"
+#include "hook_prov.h"
 
 
 static ssize_t hook_cq_read(struct fid_cq *cq, void *buf, size_t count)

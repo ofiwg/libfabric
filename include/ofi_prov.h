@@ -228,9 +228,13 @@ RSTREAM_INI ;
 #  define RSTREAM_INIT NULL
 #endif
 
+#if(HAVE_PERF)
 #  define PERF_HOOK_INI INI_SIG(fi_perf_hook_ini)
 #  define PERF_HOOK_INIT fi_perf_hook_ini()
 PERF_HOOK_INI ;
+#else
+#  define PERF_HOOK_INIT NULL
+#endif
 
 #  define NOOP_HOOK_INI INI_SIG(fi_noop_hook_ini)
 #  define NOOP_HOOK_INIT fi_noop_hook_ini()

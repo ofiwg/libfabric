@@ -30,7 +30,6 @@
  * SOFTWARE.
  */
 
-#include "hook_perf.h"
 #include "ofi_perf.h"
 #include "ofi_prov.h"
 #include "hook_prov.h"
