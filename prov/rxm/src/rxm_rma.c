@@ -288,23 +288,46 @@ static ssize_t rxm_ep_read(struct fid_ep *ep_fid, void *buf, size_t len,
 }
 
 static inline ssize_t
-rxm_ep_rma_inject(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t flags)
+rxm_ep_rma_emulate_inject_msg(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, size_t total_size,
+			      const struct fi_msg_rma *msg, uint64_t flags)
 {
 	struct rxm_tx_entry *tx_entry;
 	struct rxm_rma_buf *rma_buf;
+	ssize_t ret;
+
+	assert(msg->rma_iov_count <= rxm_ep->rxm_info->tx_attr->rma_iov_limit);
+
+	ret = rxm_ep_format_rma_inject_res(rxm_ep, rxm_conn, total_size, flags,
+					   FI_WRITE, msg, &rma_buf, &tx_entry);
+	if (OFI_UNLIKELY(ret))
+		return ret;
+	flags = (flags & ~FI_INJECT) | FI_COMPLETION;
+	ret = fi_writemsg(rxm_conn->msg_ep, &rma_buf->msg, flags);
+	if (OFI_UNLIKELY(ret)) {
+		if (ret == -FI_EAGAIN)
+			rxm_ep_progress_multi(&rxm_ep->util_ep);
+		goto err;
+	}
+	return 0;
+err:
+	rxm_rma_buf_release(rxm_ep, tx_entry->rma_buf);
+	rxm_tx_entry_release(rxm_conn->send_queue, tx_entry);
+	return ret;
+}
+
+static inline ssize_t
+rxm_ep_rma_inject_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t flags)
+{
 	struct rxm_conn *rxm_conn;
 	size_t total_size = ofi_total_iov_len(msg->msg_iov, msg->iov_count);
 	ssize_t ret;
 
-	assert(msg->rma_iov_count <= rxm_ep->rxm_info->tx_attr->rma_iov_limit);
 	assert(total_size <= rxm_ep->rxm_info->tx_attr->inject_size);
 
 	ret = rxm_acquire_conn_connect(rxm_ep, msg->addr, &rxm_conn);
 	if (OFI_UNLIKELY(ret))
 		return ret;
 
-	/* Use fi_inject_write instead of fi_writemsg since the latter generates
-	 * completion by default */
 	if ((total_size <= rxm_ep->msg_info->tx_attr->inject_size) &&
 	    !(flags & FI_COMPLETION) &&
 	    (msg->iov_count == 1) && (msg->rma_iov_count == 1)) {
@@ -331,24 +354,9 @@ rxm_ep_rma_inject(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t 
 				rxm_ep_progress_multi(&rxm_ep->util_ep);
 		}
 		return ret;
+	} else {
+		return rxm_ep_rma_emulate_inject_msg(rxm_ep, rxm_conn, total_size, msg, flags);
 	}
-
-	ret = rxm_ep_format_rma_inject_res(rxm_ep, rxm_conn, total_size, flags, FI_WRITE,
-					   msg, &rma_buf, &tx_entry);
-	if (OFI_UNLIKELY(ret))
-		return ret;
-	flags = (flags & ~FI_INJECT) | FI_COMPLETION;
-	ret = fi_writemsg(rxm_conn->msg_ep, &rma_buf->msg, flags);
-	if (OFI_UNLIKELY(ret)) {
-		if (ret == -FI_EAGAIN)
-			rxm_ep_progress_multi(&rxm_ep->util_ep);
-		goto err;
-	}
-	return 0;
-err:
-	rxm_rma_buf_release(rxm_ep, tx_entry->rma_buf);
-	rxm_tx_entry_release(rxm_conn->send_queue, tx_entry);
-	return ret;
 }
 
 static inline ssize_t
@@ -358,7 +366,7 @@ rxm_ep_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg, uint64_t fl
 		container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
 
 	if (flags & FI_INJECT)
-		return rxm_ep_rma_inject(rxm_ep, msg, flags);
+		return rxm_ep_rma_inject_common(rxm_ep, msg, flags);
 	else
 		return rxm_ep_rma_common(rxm_ep, msg, flags,
 					 fi_writemsg, FI_WRITE);
