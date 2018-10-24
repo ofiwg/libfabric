@@ -1105,12 +1105,14 @@ static inline int rxm_finish_send_nobuf(struct rxm_tx_entry *tx_entry)
 		rxm_cq_log_comp(tx_entry->comp_flags);
 	}
 	if (tx_entry->ep->util_ep.flags & OFI_CNTR_ENABLED) {
-		if (tx_entry->comp_flags & FI_SEND)
+		if (tx_entry->comp_flags & FI_SEND) {
 			ofi_ep_tx_cntr_inc(&tx_entry->ep->util_ep);
-		else if (tx_entry->comp_flags & FI_WRITE)
+		} else if (tx_entry->comp_flags & FI_WRITE) {
 			ofi_ep_wr_cntr_inc(&tx_entry->ep->util_ep);
-		else
-			ofi_ep_rem_rd_cntr_inc(&tx_entry->ep->util_ep);
+		} else {
+			assert(tx_entry->comp_flags & FI_READ);
+			ofi_ep_rd_cntr_inc(&tx_entry->ep->util_ep);
+		}
 	}
 	rxm_tx_entry_release(tx_entry->conn->send_queue, tx_entry);
 	return 0;
