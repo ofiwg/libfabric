@@ -1106,7 +1106,7 @@ int ft_init_av_dst_addr(struct fid_av *av_ptr, struct fid_ep *ep_ptr,
 			return ret;
 		}
 
-		ret = (int) ft_tx(ep, remote_fi_addr, addrlen, &tx_ctx);
+		ret = (int) ft_tx(ep, *remote_addr, addrlen, &tx_ctx);
 		if (ret)
 			return ret;
 
@@ -1118,12 +1118,18 @@ int ft_init_av_dst_addr(struct fid_av *av_ptr, struct fid_ep *ep_ptr,
 		if (ret)
 			return ret;
 
+		/* Test passing NULL fi_addr on one of the sides (server) if
+		 * AV type is FI_AV_TABLE */
 		ret = ft_av_insert(av_ptr, (char *) rx_buf + ft_rx_prefix_size(),
-				1, remote_addr, 0, NULL);
+				   1, ((fi->domain_attr->av_type == FI_AV_TABLE) ?
+				       NULL : remote_addr), 0, NULL);
 		if (ret)
 			return ret;
 
-		ret = (int) ft_tx(ep, remote_fi_addr, 1, &tx_ctx);
+		if (fi->domain_attr->av_type == FI_AV_TABLE)
+			*remote_addr = 0;
+
+		ret = (int) ft_tx(ep, *remote_addr, 1, &tx_ctx);
 		if (ret)
 			return ret;
 	}
