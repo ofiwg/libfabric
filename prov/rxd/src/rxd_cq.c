@@ -526,41 +526,89 @@ static void rxd_handle_rts(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 	}
 }
 
+struct rxd_x_entry *rxd_progress_multi_recv(struct rxd_ep *ep,
+					   struct rxd_x_entry *rx_entry,
+					   size_t total_size)
+{
+	struct rxd_x_entry *dup_entry;
+	size_t left;
+
+	left = rx_entry->iov[0].iov_len - total_size;
+
+	//TODO turn rx_fs into pool to properly handle this
+		//right now this will consume the entire recv if there's no more space
+	if (left < ep->min_multi_recv_size || freestack_isempty(ep->rx_fs)) {
+		rx_entry->cq_entry.flags |= FI_MULTI_RECV;
+		return NULL;
+	}
+
+	dup_entry = freestack_pop(ep->rx_fs);
+	memcpy(dup_entry, rx_entry, sizeof(*rx_entry));
+	dup_entry->rx_id = rxd_x_fs_index(ep->rx_fs, dup_entry);
+	dup_entry->iov[0].iov_base = rx_entry->iov[0].iov_base;
+	dup_entry->iov[0].iov_len = total_size;
+	dup_entry->cq_entry.len = total_size;
+
+	rx_entry->iov[0].iov_base = (char *) rx_entry->iov[0].iov_base + total_size;
+	rx_entry->iov[0].iov_len = left;
+	rx_entry->cq_entry.len = left;
+
+	ep->rx_list_size++;
+	return dup_entry;
+}
+
 static struct rxd_x_entry *rxd_match_rx(struct rxd_ep *ep,
 					struct rxd_pkt_entry *pkt_entry,
 					struct rxd_base_hdr *base,
 					struct rxd_tag_hdr *tag,
 					struct rxd_sar_hdr *op, size_t msg_size)
 {
-	struct rxd_x_entry *rx_entry;
+	struct rxd_x_entry *rx_entry, *dup_entry;
+	struct dlist_entry *rx_list;
 	struct dlist_entry *unexp_list;
 	struct dlist_entry *match;
 	struct rxd_match_attr attr;
+	size_t total_size;
 
 	attr.peer = base->peer;
 
 	if (tag) {
 		attr.tag = tag->tag;
-		match = dlist_remove_first_match(&ep->rx_tag_list, &rxd_match_tmsg,
+		rx_list = &ep->rx_tag_list;
+		match = dlist_find_first_match(rx_list, &rxd_match_tmsg,
 					 (void *) &attr);
 		unexp_list = &ep->unexp_tag_list;
 	} else {
 		attr.tag = 0;
-		match = dlist_remove_first_match(&ep->rx_list, &rxd_match_msg,
+		rx_list = &ep->rx_list;
+		match = dlist_find_first_match(rx_list, &rxd_match_msg,
 					 (void *) &attr);
 		unexp_list = &ep->unexp_list;
 	}
 
-	if (match) {
-		rx_entry = container_of(match, struct rxd_x_entry, entry);
-		rx_entry->cq_entry.len = MIN(rx_entry->cq_entry.len,
-			op ? op->size : msg_size);
-		rx_entry->start_seq = base->seq_no;
-		return rx_entry;
+	if (!match) {
+		rxd_check_post_unexp(ep, unexp_list, pkt_entry);
+		return NULL;
 	}
 
-	rxd_check_post_unexp(ep, unexp_list, pkt_entry);
-	return NULL;
+	rx_entry = container_of(match, struct rxd_x_entry, entry);
+
+	total_size = op ? op->size : msg_size;
+	if (rx_entry->flags & RXD_MULTI_RECV) {
+		dup_entry = rxd_progress_multi_recv(ep, rx_entry, total_size);
+		if (!dup_entry)
+			goto out;
+
+		dup_entry->start_seq = base->seq_no;
+		dlist_init(&dup_entry->entry);
+		return dup_entry;
+	}
+
+out:
+	dlist_remove(&rx_entry->entry);
+	rx_entry->cq_entry.len = MIN(rx_entry->cq_entry.len, total_size);
+	rx_entry->start_seq = base->seq_no;
+	return rx_entry;
 }
 
 static int rxd_verify_iov(struct rxd_ep *ep, struct ofi_rma_iov *rma,

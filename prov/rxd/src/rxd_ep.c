@@ -122,13 +122,30 @@ out:
 static int rxd_ep_getopt(fid_t fid, int level, int optname,
 		   void *optval, size_t *optlen)
 {
-	return -FI_ENOSYS;
+	struct rxd_ep *rxd_ep =
+		container_of(fid, struct rxd_ep, util_ep.ep_fid);
+
+	if ((level != FI_OPT_ENDPOINT) || (optname != FI_OPT_MIN_MULTI_RECV))
+		return -FI_ENOPROTOOPT;
+
+	*(size_t *)optval = rxd_ep->min_multi_recv_size;
+	*optlen = sizeof(size_t);
+
+	return FI_SUCCESS;
 }
 
 static int rxd_ep_setopt(fid_t fid, int level, int optname,
 		   const void *optval, size_t optlen)
 {
-	return -FI_ENOSYS;
+	struct rxd_ep *rxd_ep =
+		container_of(fid, struct rxd_ep, util_ep.ep_fid);
+
+	if ((level != FI_OPT_ENDPOINT) || (optname != FI_OPT_MIN_MULTI_RECV))
+		return -FI_ENOPROTOOPT;
+
+	rxd_ep->min_multi_recv_size = *(size_t *)optval;
+
+	return FI_SUCCESS;
 }
 
 struct fi_ops_ep rxd_ops_ep = {
@@ -174,12 +191,7 @@ struct rxd_x_entry *rxd_rx_entry_init(struct rxd_ep *ep,
 	rx_entry->cq_entry.tag = tag;
 
 	rx_entry->cq_entry.flags = ofi_rx_cq_flags(op);
-	if (rx_entry->cq_entry.flags & FI_TAGGED)
-		dlist_insert_tail(&rx_entry->entry, &ep->rx_tag_list);
-	else if (rx_entry->cq_entry.flags & FI_RECV)
-		dlist_insert_tail(&rx_entry->entry, &ep->rx_list);
-	else
-		dlist_init(&rx_entry->entry);
+	dlist_init(&rx_entry->entry);
 
 	return rx_entry;
 }
