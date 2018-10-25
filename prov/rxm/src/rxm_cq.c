@@ -215,10 +215,63 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 	return FI_SUCCESS;
 }
 
+static inline int
+rxm_cq_tx_comp_write(struct rxm_ep *rxm_ep, uint64_t comp_flags,
+		     void *app_context,  uint64_t flags)
+{
+	if (flags & FI_COMPLETION) {
+		int ret = ofi_cq_write(rxm_ep->util_ep.tx_cq, app_context,
+				       comp_flags, 0, NULL, 0, 0);
+		if (OFI_UNLIKELY(ret)) {
+			FI_WARN(&rxm_prov, FI_LOG_CQ,
+				"Unable to report completion\n");
+			return ret;
+		}
+		rxm_cq_log_comp(comp_flags);
+	}
+	return 0;
+}
+
+static inline void
+rxm_cq_tx_comp_cntr_inc(struct rxm_ep *rxm_ep, uint64_t comp_flags)
+{
+	if (rxm_ep->util_ep.flags & OFI_CNTR_ENABLED) {
+		if (comp_flags & FI_SEND) {
+			ofi_ep_tx_cntr_inc(&rxm_ep->util_ep);
+		} else if (comp_flags & FI_WRITE) {
+			ofi_ep_wr_cntr_inc(&rxm_ep->util_ep);
+		} else {
+			assert(comp_flags & FI_READ);
+			ofi_ep_rd_cntr_inc(&rxm_ep->util_ep);
+ 		}
+	}
+}
+
+static inline int rxm_finish_send_nobuf(struct rxm_tx_entry *tx_entry)
+{
+	int ret = rxm_cq_tx_comp_write(tx_entry->ep, tx_entry->comp_flags,
+				       tx_entry->context, tx_entry->flags);
+	rxm_cq_tx_comp_cntr_inc(tx_entry->ep, tx_entry->comp_flags);
+	rxm_tx_entry_release(tx_entry->conn->send_queue, tx_entry);
+	return ret;
+}
+
 static inline int rxm_finish_send(struct rxm_tx_entry *tx_entry)
 {
 	rxm_tx_buf_release(tx_entry->ep, tx_entry->tx_buf);
 	return rxm_finish_send_nobuf(tx_entry);
+}
+
+static inline int rxm_finish_eager_send(struct rxm_ep *rxm_ep, struct rxm_tx_eager_buf *tx_buf)
+{
+	int ret = rxm_cq_tx_comp_write(rxm_ep, ofi_tx_cq_flags(tx_buf->pkt.hdr.op),
+				       tx_buf->app_context, tx_buf->flags);
+	if (rxm_ep->util_ep.flags & OFI_CNTR_ENABLED) {
+		assert(ofi_tx_cq_flags(tx_buf->pkt.hdr.op) & FI_SEND);
+		ofi_ep_tx_cntr_inc(&rxm_ep->util_ep);
+	}
+	rxm_tx_buf_release(rxm_ep, (struct rxm_tx_buf *)tx_buf);
+	return ret;
 }
 
 static inline int rxm_finish_sar_segment_send(struct rxm_tx_sar_buf *tx_buf)
@@ -726,6 +779,7 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 	struct rxm_rx_buf *rx_buf;
 	struct rxm_tx_entry *tx_entry;
 	struct rxm_tx_sar_buf *tx_sar_buf;
+	struct rxm_tx_eager_buf *tx_eager_buf;
 
 	/* Remote write events may not consume a posted recv so op context
 	 * and hence state would be NULL */
@@ -740,9 +794,9 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 			rxm_ep_msg_mr_closev(tx_entry->mr, tx_entry->count);
 		return rxm_finish_send_nobuf(tx_entry);
 	case RXM_TX:
-		tx_entry = comp->op_context;
+		tx_eager_buf = comp->op_context;
 		assert(comp->flags & FI_SEND);
-		return rxm_finish_send(tx_entry);
+		return rxm_finish_eager_send(rxm_ep, tx_eager_buf);
 	case RXM_SAR_TX:
 		tx_sar_buf = comp->op_context;
 		assert(comp->flags & FI_SEND);
@@ -859,7 +913,6 @@ static void rxm_cq_write_error_all(struct rxm_ep *rxm_ep, int err)
 static void rxm_cq_read_write_error(struct rxm_ep *rxm_ep)
 {
 	struct rxm_tx_entry *tx_entry;
-	struct rxm_tx_sar_buf *tx_sar_buf;
 	struct rxm_rx_buf *rx_buf;
 	struct fi_cq_err_entry err_entry = {0};
 	struct util_cq *util_cq;
@@ -875,19 +928,16 @@ static void rxm_cq_read_write_error(struct rxm_ep *rxm_ep)
 		return;
 	}
 
-	tx_sar_buf = (struct rxm_tx_sar_buf *)err_entry.op_context;
 	tx_entry = (struct rxm_tx_entry *)err_entry.op_context;
 	rx_buf = (struct rxm_rx_buf *)err_entry.op_context;
 
 	switch (RXM_GET_PROTO_STATE(err_entry.op_context)) {
 	case RXM_SAR_TX:
-		tx_entry = tx_sar_buf->tx_entry;
-		/* fall through */
 	case RXM_TX:
 	case RXM_LMT_TX:
-		util_cq = tx_entry->ep->util_ep.tx_cq;
-		if (tx_entry->ep->util_ep.flags & OFI_CNTR_ENABLED)
-			util_cntr = tx_entry->ep->util_ep.tx_cntr;
+		util_cq = rxm_ep->util_ep.tx_cq;
+		if (rxm_ep->util_ep.flags & OFI_CNTR_ENABLED)
+			util_cntr = rxm_ep->util_ep.tx_cntr;
 		break;
 	case RXM_LMT_ACK_SENT:
 		util_cq = tx_entry->ep->util_ep.rx_cq;

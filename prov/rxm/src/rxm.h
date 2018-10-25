@@ -440,6 +440,18 @@ struct rxm_tx_sar_buf {
 	struct rxm_pkt pkt;
 };
 
+struct rxm_tx_eager_buf {
+	/* Must stay at top */
+	struct rxm_buf hdr;
+
+	enum rxm_buf_pool_type type;
+	void *app_context;
+	uint64_t flags;
+
+	/* Must stay at bottom */
+	struct rxm_pkt pkt;
+};
+
 struct rxm_rma_buf {
 	/* Must stay at top */
 	struct rxm_buf hdr;
@@ -1006,10 +1018,10 @@ rxm_tx_buf_release(struct rxm_ep *rxm_ep, struct rxm_tx_buf *tx_buf)
 	       (tx_buf->type == RXM_BUF_POOL_TX_ACK) ||
 	       (tx_buf->type == RXM_BUF_POOL_TX_LMT) ||
 	       (tx_buf->type == RXM_BUF_POOL_TX_SAR));
-	assert((tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_data) ||
+	/*assert((tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_data) ||
 	       (tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_large_data) ||
 	       (tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_seg_data) ||
-	       (tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_ack));
+	       (tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_ack));*/
 	rxm_buf_release(&rxm_ep->buf_pools[tx_buf->type],
 			(struct rxm_buf *)tx_buf);
 }
@@ -1094,35 +1106,6 @@ rxm_fill_tx_entry(struct rxm_conn *rxm_conn, void *context, uint8_t count, uint6
 	tx_entry->flags = flags;
 	tx_entry->tx_buf = tx_buf;
 	tx_entry->comp_flags = comp_flags | FI_SEND;
-}
-
-static inline int rxm_finish_send_nobuf(struct rxm_tx_entry *tx_entry)
-{
-	int ret;
-
-	if (tx_entry->flags & FI_COMPLETION) {
-		ret = ofi_cq_write(tx_entry->ep->util_ep.tx_cq,
-				   tx_entry->context, tx_entry->comp_flags, 0,
-				   NULL, 0, 0);
-		if (OFI_UNLIKELY(ret)) {
-			FI_WARN(&rxm_prov, FI_LOG_CQ,
-				"Unable to report completion\n");
-			return ret;
-		}
-		rxm_cq_log_comp(tx_entry->comp_flags);
-	}
-	if (tx_entry->ep->util_ep.flags & OFI_CNTR_ENABLED) {
-		if (tx_entry->comp_flags & FI_SEND) {
-			ofi_ep_tx_cntr_inc(&tx_entry->ep->util_ep);
-		} else if (tx_entry->comp_flags & FI_WRITE) {
-			ofi_ep_wr_cntr_inc(&tx_entry->ep->util_ep);
-		} else {
-			assert(tx_entry->comp_flags & FI_READ);
-			ofi_ep_rd_cntr_inc(&tx_entry->ep->util_ep);
-		}
-	}
-	rxm_tx_entry_release(tx_entry->conn->send_queue, tx_entry);
-	return 0;
 }
 
 static inline int rxm_cq_write_recv_comp(struct rxm_rx_buf *rx_buf,
