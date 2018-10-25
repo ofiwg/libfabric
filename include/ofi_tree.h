@@ -81,6 +81,7 @@ void ofi_rbmap_cleanup(struct ofi_rbmap *map);
 struct ofi_rbnode *ofi_rbmap_find(struct ofi_rbmap *map, void *key);
 int ofi_rbmap_insert(struct ofi_rbmap *map, void *key, void *data);
 void ofi_rbmap_delete(struct ofi_rbmap *map, struct ofi_rbnode *node);
+int ofi_rbmap_empty(struct ofi_rbmap *map);
 
 
 #endif /* OFI_TREE_H_ */
