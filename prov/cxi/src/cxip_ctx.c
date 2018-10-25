@@ -396,6 +396,10 @@ static void tx_ctx_disable(struct cxip_tx_ctx *txc)
 				       ret);
 	}
 
+	ret = cxil_destroy_cmdq(txc->rx_cmdq);
+	if (ret)
+		CXIP_LOG_ERROR("Unable to destroy RX CMDQ, ret: %d\n", ret);
+
 	ret = cxil_destroy_cmdq(txc->tx_cmdq);
 	if (ret)
 		CXIP_LOG_ERROR("Unable to destroy TX CMDQ, ret: %d\n", ret);

@@ -165,7 +165,9 @@ void cxip_put_if(struct cxip_if *dev_if)
 	fastlock_acquire(&dev_if->lock);
 
 	if (!ofi_atomic_dec32(&dev_if->ref)) {
-		cxil_destroy_evtq(dev_if->mr_evtq);
+		ret = cxil_destroy_evtq(dev_if->mr_evtq);
+		if (ret)
+			CXIP_LOG_ERROR("Failed to destroy EVTQ: %d\n", ret);
 
 		ret = cxil_destroy_cmdq(dev_if->mr_cmdq);
 		if (ret)
