@@ -126,8 +126,7 @@ ssize_t rxd_ep_generic_recvmsg(struct rxd_ep *rxd_ep, const struct iovec *iov,
 	fastlock_acquire(&rxd_ep->util_ep.lock);
 	fastlock_acquire(&rxd_ep->util_ep.rx_cq->cq_lock);
 
-	if (ofi_cirque_isfull(rxd_ep->util_ep.rx_cq->cirq) ||
-	    rxd_ep->rx_list_size >= rxd_ep->rx_size) {
+	if (ofi_cirque_isfull(rxd_ep->util_ep.rx_cq->cirq)) {
 		ret = -FI_EAGAIN;
 		goto out;
 	}
@@ -141,7 +140,6 @@ ssize_t rxd_ep_generic_recvmsg(struct rxd_ep *rxd_ep, const struct iovec *iov,
 		goto out;
 	}
 
-	rxd_ep->rx_list_size++;
 	if (op == ofi_op_tagged) {
 		unexp_list = &rxd_ep->unexp_tag_list;
 		rx_list = &rxd_ep->rx_tag_list;

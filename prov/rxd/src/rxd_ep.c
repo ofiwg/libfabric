@@ -45,6 +45,9 @@ struct rxd_pkt_entry *rxd_get_tx_pkt(struct rxd_ep *ep)
 		    util_buf_alloc_ex(ep->tx_pkt_pool, &mr) :
 		    util_buf_alloc(ep->tx_pkt_pool);
 
+	if (!pkt_entry)
+		return NULL;
+
 	pkt_entry->mr = (struct fid_mr *) mr;
 	pkt_entry->retry_cnt = 0;
 	rxd_set_pkt(ep, pkt_entry);
@@ -61,12 +64,41 @@ static struct rxd_pkt_entry *rxd_get_rx_pkt(struct rxd_ep *ep)
 		    util_buf_alloc_ex(ep->rx_pkt_pool, &mr) :
 		    util_buf_alloc(ep->rx_pkt_pool);
 
+	if (!pkt_entry)
+		return NULL;
+
 	pkt_entry->mr = (struct fid_mr *) mr;
 	pkt_entry->retry_cnt = 0;
 
 	rxd_set_pkt(ep, pkt_entry);
 
 	return pkt_entry;
+}
+
+struct rxd_x_entry *rxd_get_tx_entry(struct rxd_ep *ep)
+{
+	struct rxd_x_entry *tx_entry;
+
+	tx_entry = util_buf_indexed_alloc(ep->tx_entry_pool);
+	if (!tx_entry)
+		return NULL;
+
+	tx_entry->tx_id = util_get_buf_index(ep->tx_entry_pool, tx_entry);
+
+	return tx_entry;
+}
+
+struct rxd_x_entry *rxd_get_rx_entry(struct rxd_ep *ep)
+{
+	struct rxd_x_entry *rx_entry;
+
+	rx_entry = util_buf_indexed_alloc(ep->rx_entry_pool);
+	if (!rx_entry)
+		return NULL;
+
+	rx_entry->rx_id = util_get_buf_index(ep->rx_entry_pool, rx_entry);
+
+	return rx_entry;
 }
 
 void rxd_release_tx_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt)
@@ -77,6 +109,16 @@ void rxd_release_tx_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt)
 void rxd_release_rx_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt)
 {
 	util_buf_release(ep->rx_pkt_pool, pkt);
+}
+
+static void rxd_release_tx_entry(struct rxd_ep *ep, struct rxd_x_entry *x_entry)
+{
+	util_buf_indexed_release(ep->tx_entry_pool, x_entry);
+}
+
+void rxd_release_rx_entry(struct rxd_ep *ep, struct rxd_x_entry *x_entry)
+{
+	util_buf_indexed_release(ep->rx_entry_pool, x_entry);
 }
 
 static int rxd_match_ctx(struct dlist_entry *item, const void *arg)
@@ -166,13 +208,12 @@ struct rxd_x_entry *rxd_rx_entry_init(struct rxd_ep *ep,
 {
 	struct rxd_x_entry *rx_entry;
 
-	if (freestack_isempty(ep->rx_fs)) {
-		FI_INFO(&rxd_prov, FI_LOG_EP_CTRL, "no-more rx entries\n");
+	rx_entry = rxd_get_rx_entry(ep);
+	if (!rx_entry) {
+		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "could not get rx entry\n");
 		return NULL;
 	}
 
-	rx_entry = freestack_pop(ep->rx_fs);
-	rx_entry->rx_id = rxd_x_fs_index(ep->rx_fs, rx_entry);
 	rx_entry->peer = addr;
 	rx_entry->flags = flags;
 	rx_entry->bytes_done = 0;
@@ -294,15 +335,12 @@ struct rxd_x_entry *rxd_tx_entry_init(struct rxd_ep *ep, const struct iovec *iov
 	struct rxd_domain *rxd_domain = rxd_ep_domain(ep);
 	size_t max_inline;
 
-	if (freestack_isempty(ep->tx_fs)) {
-		FI_INFO(&rxd_prov, FI_LOG_EP_CTRL, "no-more tx entries\n");
+
+	tx_entry = rxd_get_tx_entry(ep);
+	if (!tx_entry) {
+		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "could not get tx entry\n");
 		return NULL;
 	}
-
-	tx_entry = freestack_pop(ep->tx_fs);
-
-	tx_entry->tx_id = rxd_x_fs_index(ep->tx_fs, tx_entry);
-	tx_entry->rx_id = 0;
 
 	tx_entry->op = op;
 	tx_entry->peer = addr;
@@ -369,7 +407,7 @@ void rxd_tx_entry_free(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
 {
 	tx_entry->op = RXD_NO_OP;
 	dlist_remove(&tx_entry->entry);
-	freestack_push(ep->tx_fs, tx_entry);
+	rxd_release_tx_entry(ep, tx_entry);
 }
 
 void rxd_insert_unacked(struct rxd_ep *ep, fi_addr_t peer,
@@ -644,14 +682,10 @@ void rxd_ep_send_ack(struct rxd_ep *rxd_ep, fi_addr_t peer)
 static void rxd_ep_free_res(struct rxd_ep *ep)
 {
 
-	if (ep->tx_fs)
-		rxd_x_fs_free(ep->tx_fs);
-
-	if (ep->rx_fs)
-		rxd_x_fs_free(ep->rx_fs);
-
 	util_buf_pool_destroy(ep->tx_pkt_pool);
 	util_buf_pool_destroy(ep->rx_pkt_pool);
+	util_buf_pool_destroy(ep->tx_entry_pool);
+	util_buf_pool_destroy(ep->rx_entry_pool);
 }
 
 static void rxd_close_peer(struct rxd_ep *ep, struct rxd_peer *peer)
@@ -941,6 +975,12 @@ static void rxd_buf_region_free_hndlr(void *pool_ctx, void *context)
 int rxd_ep_init_res(struct rxd_ep *ep, struct fi_info *fi_info)
 {
 	struct rxd_domain *rxd_domain = rxd_ep_domain(ep);
+	struct util_buf_attr entry_pool_attr = {
+		.size		= sizeof(struct rxd_x_entry),
+		.alignment	= RXD_BUF_POOL_ALIGNMENT,
+		.max_cnt	= 0,
+		.indexing	= 1,
+	};
 
 	int ret = util_buf_pool_create_ex(
 		&ep->tx_pkt_pool,
@@ -962,13 +1002,16 @@ int rxd_ep_init_res(struct rxd_ep *ep, struct fi_info *fi_info)
 	if (ret)
 		goto err;
 
-	//doubling sizes to handle incoming RMA operations (not included in tx and rx size)
-	ep->tx_fs = rxd_x_fs_create(ep->tx_size * 2, NULL, NULL);
-	if (!ep->tx_fs)
+	entry_pool_attr.chunk_cnt = ep->tx_size;
+	ret = util_buf_pool_create_attr(&entry_pool_attr, &ep->tx_entry_pool);
+	if (ret)
 		goto err;
-	ep->rx_fs = rxd_x_fs_create(ep->rx_size * 2, NULL, NULL);
-	if (!ep->rx_fs)
+
+	entry_pool_attr.chunk_cnt = ep->rx_size;
+	ret = util_buf_pool_create_attr(&entry_pool_attr, &ep->rx_entry_pool);
+	if (ret)
 		goto err;
+
 
 	dlist_init(&ep->rx_list);
 	dlist_init(&ep->rx_tag_list);
@@ -985,11 +1028,11 @@ err:
 	if (ep->rx_pkt_pool)
 		util_buf_pool_destroy(ep->rx_pkt_pool);
 
-	if (ep->tx_fs)
-		rxd_x_fs_free(ep->tx_fs);
+	if (ep->tx_entry_pool)
+		util_buf_pool_destroy(ep->tx_entry_pool);
 
-	if (ep->rx_fs)
-		rxd_x_fs_free(ep->rx_fs);
+	if (ep->rx_entry_pool)
+		util_buf_pool_destroy(ep->rx_entry_pool);
 
 	return -FI_ENOMEM;
 }
