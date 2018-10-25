@@ -90,9 +90,15 @@ static int rxm_match_iov(const struct iovec *iov, void **desc,
 	return FI_SUCCESS;
 }
 
+static uint64_t rxm_cq_get_rx_flags(struct rxm_rx_buf *rx_buf)
+{
+	return ((rx_buf->pkt.hdr.flags & FI_REMOTE_CQ_DATA) |
+		ofi_rx_flags[rx_buf->pkt.hdr.op]);
+}
+
 static int rxm_finish_buf_recv(struct rxm_rx_buf *rx_buf)
 {
-	uint64_t flags = rx_buf->pkt.hdr.flags | FI_RECV;
+	uint64_t flags = rxm_cq_get_rx_flags(rx_buf);
 	char *data;
 
 	if (rx_buf->pkt.ctrl_hdr.type != ofi_ctrl_data)
@@ -124,7 +130,7 @@ static int rxm_cq_write_error_trunc(struct rxm_rx_buf *rx_buf, size_t done_len)
 	ret = ofi_cq_write_error_trunc(rx_buf->ep->util_ep.rx_cq,
 				       rx_buf->recv_entry->context,
 				       rx_buf->recv_entry->comp_flags |
-				       rx_buf->pkt.hdr.flags,
+				       rxm_cq_get_rx_flags(rx_buf),
 				       rx_buf->pkt.hdr.size,
 				       rx_buf->recv_entry->rxm_iov.iov[0].iov_base,
 				       rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag,
@@ -150,8 +156,8 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 		if (rx_buf->recv_entry->flags & FI_COMPLETION) {
 			ret = rxm_cq_write_recv_comp(
 					rx_buf, rx_buf->recv_entry->context,
-					(rx_buf->recv_entry->comp_flags |
-					 rx_buf->pkt.hdr.flags),
+					rx_buf->recv_entry->comp_flags |
+					rxm_cq_get_rx_flags(rx_buf),
 					rx_buf->pkt.hdr.size,
 					rx_buf->recv_entry->rxm_iov.iov[0].iov_base);
 			if (ret)
@@ -514,7 +520,7 @@ rxm_cq_match_rx_buf(struct rxm_rx_buf *rx_buf,
 		rx_buf->unexp_msg.tag = match_attr->tag;
 		rx_buf->repost = 0;
 
-		msg_ep = rx_buf->hdr.msg_ep;
+		msg_ep = rx_buf->msg_ep;
 		rxm_ep = rx_buf->ep;
 
 		dlist_insert_tail(&rx_buf->unexp_msg.entry,
@@ -526,7 +532,7 @@ rxm_cq_match_rx_buf(struct rxm_rx_buf *rx_buf,
 			return -FI_ENOMEM;
 
 		rx_buf->hdr.state = RXM_RX;
-		rx_buf->hdr.msg_ep = msg_ep;
+		rx_buf->msg_ep = msg_ep;
 		rx_buf->repost = 1;
 		if (!rxm_ep->srx_ctx)
 			rx_buf->conn = container_of(msg_ep->fid.context,
@@ -915,7 +921,7 @@ static inline int rxm_ep_repost_buf(struct rxm_rx_buf *rx_buf)
 		rx_buf->conn = NULL;
 	rx_buf->hdr.state = RXM_RX;
 
-	if (fi_recv(rx_buf->hdr.msg_ep, &rx_buf->pkt, rx_buf->ep->eager_pkt_size,
+	if (fi_recv(rx_buf->msg_ep, &rx_buf->pkt, rx_buf->ep->eager_pkt_size,
 		    rx_buf->hdr.desc, FI_ADDR_UNSPEC, rx_buf)) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to repost buf\n");
 		return -FI_EAVAIL;
@@ -935,7 +941,7 @@ int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep)
 			return -FI_ENOMEM;
 
 		rx_buf->hdr.state = RXM_RX;
-		rx_buf->hdr.msg_ep = msg_ep;
+		rx_buf->msg_ep = msg_ep;
 		rx_buf->repost = 1;
 
 		if (!rxm_ep->srx_ctx)

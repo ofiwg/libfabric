@@ -391,8 +391,6 @@ struct rxm_buf {
 
 	struct dlist_entry entry;
 	void *desc;
-	/* MSG EP / shared context to which bufs would be posted to */
-	struct fid_ep *msg_ep;
 };
 
 struct rxm_rx_buf {
@@ -400,6 +398,8 @@ struct rxm_rx_buf {
 	struct rxm_buf hdr;
 
 	struct rxm_ep *ep;
+	/* MSG EP / shared context to which bufs would be posted to */
+	struct fid_ep *msg_ep;
 	struct dlist_entry repost_entry;
 	struct rxm_conn *conn;
 	struct rxm_recv_entry *recv_entry;
@@ -1002,7 +1002,6 @@ rxm_tx_buf_release(struct rxm_ep *rxm_ep, struct rxm_tx_buf *tx_buf)
 	       (tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_large_data) ||
 	       (tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_seg_data) ||
 	       (tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_ack));
-	tx_buf->pkt.hdr.flags = 0;
 	rxm_buf_release(&rxm_ep->buf_pools[tx_buf->type],
 			(struct rxm_buf *)tx_buf);
 }

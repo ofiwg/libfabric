@@ -871,39 +871,22 @@ rxm_ep_normal_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		       tx_entry->tx_buf->hdr.desc, 0, tx_entry);
 }
 
-static inline ssize_t
-rxm_ep_format_tx_res_lightweight(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
-				 size_t len, uint64_t data, uint64_t flags, uint64_t tag,
-				 struct rxm_tx_buf **tx_buf, struct rxm_buf_pool *pool)
+static inline void
+rxm_ep_format_tx_buf_pkt(struct rxm_conn *rxm_conn, size_t len, uint8_t op, uint64_t data,
+			 uint64_t tag, uint64_t flags, struct rxm_pkt *pkt)
 {
-	*tx_buf = (struct rxm_tx_buf *)rxm_buf_get(pool);
-	if (OFI_UNLIKELY(!*tx_buf)) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_DATA, "TX queue full!\n");
-		return -FI_EAGAIN;
-	}
-
-	assert((((*tx_buf)->pkt.ctrl_hdr.type == ofi_ctrl_data) &&
-		 (len <= rxm_ep->rxm_info->tx_attr->inject_size)) ||
-	       (((*tx_buf)->pkt.ctrl_hdr.type == ofi_ctrl_seg_data)) ||
-	       ((*tx_buf)->pkt.ctrl_hdr.type == ofi_ctrl_large_data));
-
-	(*tx_buf)->pkt.ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
-
-	(*tx_buf)->pkt.hdr.size = len;
-	(*tx_buf)->pkt.hdr.tag = tag;
-
-	if (flags & FI_REMOTE_CQ_DATA) {
-		(*tx_buf)->pkt.hdr.flags |= FI_REMOTE_CQ_DATA;
-		(*tx_buf)->pkt.hdr.data = data;
-	}
-
-	return FI_SUCCESS;
+	pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
+	pkt->hdr.size = len;
+	pkt->hdr.op = op;
+	pkt->hdr.tag = tag;
+	pkt->hdr.flags = (flags & FI_REMOTE_CQ_DATA);
+	pkt->hdr.data = data;
 }
 
 static inline ssize_t
 rxm_ep_format_tx_entry(struct rxm_conn *rxm_conn, void *context, uint8_t count,
-		       uint64_t flags, uint64_t comp_flags,
-		       struct rxm_tx_buf *tx_buf, struct rxm_tx_entry **tx_entry)
+		       uint64_t flags, uint64_t comp_flags, struct rxm_tx_buf *tx_buf,
+		       struct rxm_tx_entry **tx_entry)
 {
 	*tx_entry = rxm_tx_entry_get(rxm_conn->send_queue);
 	if (OFI_UNLIKELY(!*tx_entry))
@@ -916,18 +899,20 @@ rxm_ep_format_tx_entry(struct rxm_conn *rxm_conn, void *context, uint8_t count,
 static inline ssize_t
 rxm_ep_format_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void *context,
 		     uint8_t count, size_t len, uint64_t data, uint64_t flags,
-		     uint64_t comp_flags, uint64_t tag, struct rxm_tx_buf **tx_buf,
-		     struct rxm_tx_entry **tx_entry, struct rxm_buf_pool *pool)
+		     uint8_t op, uint64_t tag, struct rxm_tx_buf **tx_buf,
+		     struct rxm_tx_entry **tx_entry, enum rxm_buf_pool_type buf_pool_type)
 {
 	ssize_t ret;
 
-	ret = rxm_ep_format_tx_res_lightweight(rxm_ep, rxm_conn, len, data,
-					       flags, tag, tx_buf, pool);
-	if (OFI_UNLIKELY(ret))
-		return ret;
+	*tx_buf = rxm_tx_buf_get(rxm_ep, buf_pool_type);
+	if (OFI_UNLIKELY(!*tx_buf)) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_DATA, "TX buf full!\n");
+		return -FI_EAGAIN;
+	}
+	rxm_ep_format_tx_buf_pkt(rxm_conn, len, op, data, tag, flags, &(*tx_buf)->pkt);
 
 	ret = rxm_ep_format_tx_entry(rxm_conn, context, count, flags,
-				     comp_flags, *tx_buf, tx_entry);
+				     ofi_tx_flags[op], *tx_buf, tx_entry);
 	if (OFI_UNLIKELY(ret))
 		goto err;
 
@@ -950,12 +935,10 @@ rxm_ep_alloc_lmt_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void *
 
 	/* Use LMT buf pool instead of buf pool provided to the function */
 	ret = rxm_ep_format_tx_res(rxm_ep, rxm_conn, context, (uint8_t)count, data_len,
-				   data, flags, comp_flags, tag, &tx_buf, tx_entry,
-				   &rxm_ep->buf_pools[RXM_BUF_POOL_TX_LMT]);
+				   data, flags, op, tag, &tx_buf, tx_entry,
+				   RXM_BUF_POOL_TX_LMT);
 	if (OFI_UNLIKELY(ret))
 		return ret;
-	tx_buf->pkt.hdr.op = op;
-	tx_buf->pkt.hdr.flags |= comp_flags;
 	tx_buf->pkt.ctrl_hdr.msg_id = rxm_txe_fs_index(rxm_conn->send_queue->fs,
 						       (*tx_entry));
 	if (!rxm_ep->rxm_mr_local) {
@@ -1033,24 +1016,20 @@ rxm_ep_sar_tx_prepare_segment(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 			      enum rxm_sar_seg_type seg_type,
 			      struct rxm_tx_entry *tx_entry)
 {
-	struct rxm_tx_buf *tx_buf;
-	ssize_t ret;
+	struct rxm_tx_buf *tx_buf = rxm_tx_buf_get(rxm_ep, RXM_BUF_POOL_TX_SAR);
 
-	ret = rxm_ep_format_tx_res_lightweight(rxm_ep, rxm_conn, total_len,
-					       data, flags, tag, &tx_buf,
-					       &rxm_ep->buf_pools[RXM_BUF_POOL_TX_SAR]);
-	if (OFI_UNLIKELY(ret))
+	if (OFI_UNLIKELY(!tx_buf)) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_DATA, "TX buf full!\n");
 		return NULL;
+	};
 
-	tx_buf->pkt.hdr.op = op;
+	rxm_ep_format_tx_buf_pkt(rxm_conn, total_len, op, data, tag, flags, &tx_buf->pkt);
 	tx_buf->pkt.ctrl_hdr.msg_id = tx_entry->msg_id;
 	tx_buf->pkt.ctrl_hdr.seg_size = seg_len;
 	tx_buf->pkt.ctrl_hdr.seg_no = seg_no;
 	rxm_sar_set_seg_type(&tx_buf->pkt.ctrl_hdr, seg_type);
 	assert(offset <= (uint32_t)-1);
 	rxm_sar_set_offset(&tx_buf->pkt.ctrl_hdr, offset);
-
-	tx_buf->pkt.hdr.flags |= comp_flags;
 
 	tx_buf->tx_entry = tx_entry;
 
@@ -1220,60 +1199,11 @@ void rxm_ep_sar_handle_send_segment_failure(struct rxm_tx_entry *tx_entry, ssize
 	rxm_tx_entry_release(tx_entry->conn->send_queue, tx_entry);
 }
 
-static inline void
-rxm_ep_fill_tx_inject_buf(const void *buf, size_t len, uint8_t op,
-			  uint64_t comp_flags, struct rxm_tx_buf *tx_buf)
-{
-	tx_buf->pkt.hdr.op = op;
-	tx_buf->pkt.hdr.flags |= comp_flags;
-	memcpy(tx_buf->pkt.data, buf, len);
-}
-
-static inline ssize_t
-rxm_ep_format_tx_inject_buf(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
-			    const void *buf, size_t len, uint64_t data,
-			    uint64_t flags, uint64_t tag, uint8_t op,
-			    uint64_t comp_flags, struct rxm_tx_buf **tx_buf)
-{
-	if (OFI_UNLIKELY(rxm_ep_format_tx_res_lightweight(
-				rxm_ep, rxm_conn, len, data, flags, tag, tx_buf,
-				&rxm_ep->buf_pools[RXM_BUF_POOL_TX_INJECT]))) {
-		return -FI_EAGAIN;
-	}
-	rxm_ep_fill_tx_inject_buf(buf, len, op, comp_flags, *tx_buf);
-	return 0;
-}
-
-static inline void
-rxm_ep_fill_tx_inject_iov(const struct iovec *iov, size_t count, uint8_t op,
-			  uint64_t comp_flags, struct rxm_tx_buf *tx_buf)
-{
-	tx_buf->pkt.hdr.op = op;
-	tx_buf->pkt.hdr.flags |= comp_flags;
-	ofi_copy_from_iov(tx_buf->pkt.data, tx_buf->pkt.hdr.size,
-			  iov, count, 0);
-}
-
-static inline ssize_t
-rxm_ep_format_tx_inject_iov(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
-			    size_t len, const struct iovec *iov, size_t count,
-			    uint64_t data, uint64_t flags, uint64_t tag,
-			    uint8_t op, uint64_t comp_flags, struct rxm_tx_buf **tx_buf)
-{
-	if (OFI_UNLIKELY(rxm_ep_format_tx_res_lightweight(
-				rxm_ep, rxm_conn, len, data, flags, tag, tx_buf,
-				&rxm_ep->buf_pools[RXM_BUF_POOL_TX_INJECT]))) {
-		return -FI_EAGAIN;
-	}
-	rxm_ep_fill_tx_inject_iov(iov, count, op, comp_flags, *tx_buf);
-	return 0;
-}
-
 static inline ssize_t
 rxm_ep_emulate_inject(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		      const void *buf, size_t len, size_t pkt_size,
 		      uint64_t data, uint64_t flags, uint64_t tag,
-		      uint8_t op, uint64_t comp_flags)
+		      uint8_t op)
 {
 	struct rxm_tx_buf *tx_buf;
 	struct rxm_tx_entry *tx_entry;
@@ -1283,18 +1213,18 @@ rxm_ep_emulate_inject(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	       "is too big for MSG provider (max inject size = %zd)\n",
 	       pkt_size, rxm_ep->msg_info->tx_attr->inject_size);
 
-	ret = rxm_ep_format_tx_res(rxm_ep, rxm_conn, NULL, 1,
-				   len, data, flags, comp_flags,
-				   tag, &tx_buf, &tx_entry,
-				   &rxm_ep->buf_pools[RXM_BUF_POOL_TX]);
+	ret = rxm_ep_format_tx_res(rxm_ep, rxm_conn, NULL, 1, len, data,
+				   flags, op, tag, &tx_buf, &tx_entry,
+				   RXM_BUF_POOL_TX);
 	if (OFI_UNLIKELY(ret))
 		return ret;
-	rxm_ep_fill_tx_inject_buf(buf, len, op, comp_flags, tx_buf);
+	memcpy(tx_buf->pkt.data, buf, len);
 	tx_entry->state = RXM_TX;
 	ret = rxm_ep_normal_send(rxm_ep, rxm_conn, tx_entry, pkt_size);
 	if (OFI_UNLIKELY(ret)) {
 		if (ret == -FI_EAGAIN)
 			rxm_ep_progress_multi(&rxm_ep->util_ep);
+		rxm_tx_buf_release(rxm_ep, tx_buf);
 		rxm_tx_entry_release(rxm_conn->send_queue, tx_entry);
 	}
 	return ret;
@@ -1324,16 +1254,14 @@ rxm_ep_inject_common_data_fast(struct rxm_ep *rxm_ep, const void *buf, size_t le
 	if (pkt_size <= rxm_ep->msg_info->tx_attr->inject_size) {
 		inject_pkt->hdr.size = len;
 		inject_pkt->hdr.tag = tag;
-		inject_pkt->hdr.flags |= FI_REMOTE_CQ_DATA;
+		inject_pkt->hdr.flags = FI_REMOTE_CQ_DATA;
 		inject_pkt->hdr.data = data;
 		inject_pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
 		memcpy(inject_pkt->data, buf, len);
-		ret = rxm_ep_inject_send(rxm_ep, rxm_conn, inject_pkt, pkt_size);
-		inject_pkt->hdr.flags &= ~FI_REMOTE_CQ_DATA;
-		return ret;
+		return rxm_ep_inject_send(rxm_ep, rxm_conn, inject_pkt, pkt_size);
 	} else {
-		return rxm_ep_emulate_inject(rxm_ep, rxm_conn, buf, len, pkt_size, data, flags,
-					     tag, inject_pkt->hdr.op, inject_pkt->hdr.flags);
+		return rxm_ep_emulate_inject(rxm_ep, rxm_conn, buf, len, pkt_size,
+					     data, flags, tag, inject_pkt->hdr.op);
 	}
 }
 
@@ -1365,8 +1293,8 @@ rxm_ep_inject_common_fast(struct rxm_ep *rxm_ep, const void *buf, size_t len,
 		memcpy(inject_pkt->data, buf, len);
 		return rxm_ep_inject_send(rxm_ep, rxm_conn, inject_pkt, pkt_size);
 	} else {
-		return rxm_ep_emulate_inject(rxm_ep, rxm_conn, buf, len, pkt_size, 0, flags,
-					     tag, inject_pkt->hdr.op, inject_pkt->hdr.flags);
+		return rxm_ep_emulate_inject(rxm_ep, rxm_conn, buf, len, pkt_size,
+					     0, flags, tag, inject_pkt->hdr.op);
 	}
 }
 
@@ -1393,19 +1321,22 @@ rxm_ep_inject_common(struct rxm_ep *rxm_ep, const void *buf, size_t len,
 	}
 
 	if (pkt_size <= rxm_ep->msg_info->tx_attr->inject_size) {
-		struct rxm_tx_buf *tx_buf;
-		ret = rxm_ep_format_tx_inject_buf(rxm_ep, rxm_conn, buf,
-						  len, data, flags, tag,
-						  op, comp_flags, &tx_buf);
-		if (OFI_UNLIKELY(ret))
-	    		return ret;
+		struct rxm_tx_buf *tx_buf =
+			rxm_tx_buf_get(rxm_ep, RXM_BUF_POOL_TX_INJECT);
+		if (OFI_UNLIKELY(!tx_buf)) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_DATA, "TX buf full!\n");
+			return -FI_EAGAIN;
+		}
+		rxm_ep_format_tx_buf_pkt(rxm_conn, len, op, data, tag,
+					 flags, &tx_buf->pkt);
+		memcpy(tx_buf->pkt.data, buf, len);
 		ret = rxm_ep_inject_send(rxm_ep, rxm_conn, &tx_buf->pkt, pkt_size);
 		/* release allocated buffer for further reuse */
 		rxm_tx_buf_release(rxm_ep, tx_buf);
 		return ret;
 	} else {
-		return rxm_ep_emulate_inject(rxm_ep, rxm_conn, buf, len, pkt_size,
-					     data, flags, tag, op, comp_flags);
+		return rxm_ep_emulate_inject(rxm_ep, rxm_conn, buf, len,
+					     pkt_size, data, flags, tag, op);
 	}
 }
 
@@ -1415,33 +1346,33 @@ rxm_ep_send_inject(struct rxm_ep *rxm_ep, const struct iovec *iov, size_t count,
 		   uint64_t flags, uint64_t tag, uint8_t op, uint64_t comp_flags,
 		   size_t data_len, size_t total_len, struct rxm_pkt *inject_pkt)
 {
-	struct rxm_tx_buf *tx_buf;
 	int ret;
 
 	if (rxm_ep->util_ep.domain->threading != FI_THREAD_SAFE) {
 		inject_pkt->hdr.size = data_len;
 		inject_pkt->hdr.tag = tag;
-		if (flags & FI_REMOTE_CQ_DATA) {
-			inject_pkt->hdr.flags |= FI_REMOTE_CQ_DATA;
-			inject_pkt->hdr.data = data;
-		}
+		inject_pkt->hdr.flags = (flags & FI_REMOTE_CQ_DATA);
+		inject_pkt->hdr.data = data;
 		inject_pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
 		ofi_copy_from_iov(inject_pkt->data, inject_pkt->hdr.size,
 				  iov, count, 0);
-		ret = rxm_ep_inject_send(rxm_ep, rxm_conn,
-					 inject_pkt, total_len);
-		inject_pkt->hdr.flags &= ~FI_REMOTE_CQ_DATA;
+		ret = rxm_ep_inject_send(rxm_ep, rxm_conn, inject_pkt, total_len);
 	} else {
-		ret = rxm_ep_format_tx_inject_iov(rxm_ep, rxm_conn, data_len,
-						  iov, count, data, flags, tag,
-						  op, comp_flags, &tx_buf);
-		if (OFI_UNLIKELY(ret))
-			return ret;
+		struct rxm_tx_buf *tx_buf =
+			rxm_tx_buf_get(rxm_ep, RXM_BUF_POOL_TX_INJECT);
+		if (OFI_UNLIKELY(!tx_buf)) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_DATA, "TX buf full!\n");
+			return -FI_EAGAIN;
+		}
+		rxm_ep_format_tx_buf_pkt(rxm_conn, total_len, op, data, tag,
+				         flags, &tx_buf->pkt);
+		ofi_copy_from_iov(tx_buf->pkt.data, tx_buf->pkt.hdr.size,
+				  iov, count, 0);
 		ret = rxm_ep_inject_send(rxm_ep, rxm_conn, &tx_buf->pkt, total_len);
 		/* release allocated buffer for further reuse */
 		rxm_tx_buf_release(rxm_ep, tx_buf);
 	}
-	if (ret)
+	if (OFI_UNLIKELY(ret))
 		return ret;
 
 	if (flags & FI_COMPLETION) {
@@ -1491,18 +1422,21 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 						  comp_flags, data_len, total_len,
 						  inject_pkt);
 
-		ret = rxm_ep_format_tx_res(rxm_ep, rxm_conn, context,
-					   (uint8_t)count, data_len, data, flags,
-					   comp_flags, tag, &tx_buf, &tx_entry,
-					   &rxm_ep->buf_pools[RXM_BUF_POOL_TX]);
+		ret = rxm_ep_format_tx_res(rxm_ep, rxm_conn, context, (uint8_t)count,
+					   data_len, data, flags, op, tag, &tx_buf,
+					   &tx_entry, RXM_BUF_POOL_TX);
 		if (OFI_UNLIKELY(ret))
 			return ret;
-		rxm_ep_fill_tx_inject_iov(iov, count, op, comp_flags, tx_buf);
+
+		ofi_copy_from_iov(tx_buf->pkt.data, tx_buf->pkt.hdr.size,
+				  iov, count, 0);
 		tx_entry->state = RXM_TX;
+
 		ret = rxm_ep_normal_send(rxm_ep, rxm_conn, tx_entry, total_len);
 		if (OFI_UNLIKELY(ret)) {
 			if (ret == -FI_EAGAIN)
 				rxm_ep_progress_multi(&rxm_ep->util_ep);
+			rxm_tx_buf_release(rxm_ep, tx_buf);
 			rxm_tx_entry_release(rxm_conn->send_queue, tx_entry);
 		}
 		return ret;
@@ -2308,7 +2242,7 @@ static void rxm_ep_sar_init(struct rxm_ep *rxm_ep)
 
 static int
 rxm_ep_inject_pkt_alloc(struct rxm_ep *rxm_ep, struct rxm_pkt **inject_pkt,
-			uint8_t op, uint64_t comp_flags)
+			uint8_t op)
 {
 	*inject_pkt = calloc(1, rxm_ep->msg_info->tx_attr->inject_size +
 				sizeof(**inject_pkt));
@@ -2319,7 +2253,6 @@ rxm_ep_inject_pkt_alloc(struct rxm_ep *rxm_ep, struct rxm_pkt **inject_pkt,
 	(*inject_pkt)->ctrl_hdr.type = ofi_ctrl_data;
 	(*inject_pkt)->hdr.version = OFI_OP_VERSION;
 	(*inject_pkt)->hdr.op = op;
-	(*inject_pkt)->hdr.flags = comp_flags;
 
 	return FI_SUCCESS;
 }
@@ -2337,11 +2270,11 @@ static int rxm_ep_txrx_res_open(struct rxm_ep *rxm_ep)
 		rxm_ep->res_fastlock_release = ofi_fastlock_release_noop;
 
 		ret = rxm_ep_inject_pkt_alloc(rxm_ep, &rxm_ep->inject_tx_pkt,
-					      ofi_op_msg, FI_MSG);
+					      ofi_op_msg);
 		if (ret)
 			return ret;
 		ret = rxm_ep_inject_pkt_alloc(rxm_ep, &rxm_ep->tinject_tx_pkt,
-					      ofi_op_tagged, FI_TAGGED);
+					      ofi_op_tagged);
 		if (ret) {
 			free(rxm_ep->inject_tx_pkt);
 			return ret;
