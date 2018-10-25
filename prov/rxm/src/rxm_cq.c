@@ -221,11 +221,11 @@ static inline int rxm_finish_send(struct rxm_tx_entry *tx_entry)
 	return rxm_finish_send_nobuf(tx_entry);
 }
 
-static inline int rxm_finish_sar_segment_send(struct rxm_tx_buf *tx_buf)
+static inline int rxm_finish_sar_segment_send(struct rxm_tx_sar_buf *tx_buf)
 {
 	struct rxm_tx_entry *tx_entry = tx_buf->tx_entry;
 
-	rxm_tx_buf_release(tx_entry->ep, tx_buf);
+	rxm_tx_buf_release(tx_entry->ep, (struct rxm_tx_buf *)tx_buf);
 	/* If `segs_left` == 0, all segments of the message have been fully sent */
 	if (!(--tx_entry->segs_left - tx_entry->fail_segs_cnt)) {
 		if (OFI_LIKELY(tx_entry->msg_id != RXM_SAR_TX_ERROR)) {
@@ -725,7 +725,7 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 {
 	struct rxm_rx_buf *rx_buf;
 	struct rxm_tx_entry *tx_entry;
-	struct rxm_tx_buf *tx_buf;
+	struct rxm_tx_sar_buf *tx_sar_buf;
 
 	/* Remote write events may not consume a posted recv so op context
 	 * and hence state would be NULL */
@@ -744,9 +744,9 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 		assert(comp->flags & FI_SEND);
 		return rxm_finish_send(tx_entry);
 	case RXM_SAR_TX:
-		tx_buf = comp->op_context;
+		tx_sar_buf = comp->op_context;
 		assert(comp->flags & FI_SEND);
-		return rxm_finish_sar_segment_send(tx_buf);
+		return rxm_finish_sar_segment_send(tx_sar_buf);
 	case RXM_TX_RMA:
 		tx_entry = comp->op_context;
 		assert(comp->flags & (FI_WRITE | FI_READ));
@@ -859,7 +859,7 @@ static void rxm_cq_write_error_all(struct rxm_ep *rxm_ep, int err)
 static void rxm_cq_read_write_error(struct rxm_ep *rxm_ep)
 {
 	struct rxm_tx_entry *tx_entry;
-	struct rxm_tx_buf *tx_buf;
+	struct rxm_tx_sar_buf *tx_sar_buf;
 	struct rxm_rx_buf *rx_buf;
 	struct fi_cq_err_entry err_entry = {0};
 	struct util_cq *util_cq;
@@ -875,13 +875,13 @@ static void rxm_cq_read_write_error(struct rxm_ep *rxm_ep)
 		return;
 	}
 
-	tx_buf = (struct rxm_tx_buf *)err_entry.op_context;
+	tx_sar_buf = (struct rxm_tx_sar_buf *)err_entry.op_context;
 	tx_entry = (struct rxm_tx_entry *)err_entry.op_context;
 	rx_buf = (struct rxm_rx_buf *)err_entry.op_context;
 
 	switch (RXM_GET_PROTO_STATE(err_entry.op_context)) {
 	case RXM_SAR_TX:
-		tx_entry = tx_buf->tx_entry;
+		tx_entry = tx_sar_buf->tx_entry;
 		/* fall through */
 	case RXM_TX:
 	case RXM_LMT_TX:

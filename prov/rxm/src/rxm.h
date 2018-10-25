@@ -389,7 +389,6 @@ struct rxm_buf {
 
 	enum rxm_proto_state state;
 
-	struct dlist_entry entry;
 	void *desc;
 };
 
@@ -425,7 +424,16 @@ struct rxm_tx_buf {
 
 	enum rxm_buf_pool_type type;
 
-	/* Used for SAR protocol */
+	/* Must stay at bottom */
+	struct rxm_pkt pkt;
+};
+
+struct rxm_tx_sar_buf {
+	/* Must stay at top */
+	struct rxm_buf hdr;
+
+	enum rxm_buf_pool_type type;
+	struct dlist_entry entry;
 	struct rxm_tx_entry *tx_entry;
 
 	/* Must stay at bottom */
@@ -919,11 +927,11 @@ static inline ssize_t
 rxm_ep_progress_sar_deferred_tx_queue(struct rxm_tx_entry *tx_entry)
 {
 	ssize_t ret = 0;
-	struct rxm_tx_buf *tx_buf;
+	struct rxm_tx_sar_buf *tx_buf;
 
 	while (!dlist_empty(&tx_entry->deferred_tx_buf_list)) {
 		tx_buf = container_of(tx_entry->deferred_tx_buf_list.next,
-				      struct rxm_tx_buf, hdr.entry);
+				      struct rxm_tx_sar_buf, entry);
 		ret = fi_send(tx_entry->conn->msg_ep, &tx_buf->pkt,
 			      sizeof(tx_buf->pkt) + tx_buf->pkt.ctrl_hdr.seg_size,
 			      tx_buf->hdr.desc, 0, tx_buf);
@@ -932,7 +940,7 @@ rxm_ep_progress_sar_deferred_tx_queue(struct rxm_tx_entry *tx_entry)
 				rxm_ep_sar_handle_send_segment_failure(tx_entry, ret);
 			return ret;
 		}
-		dlist_remove(&tx_buf->hdr.entry);
+		dlist_remove(&tx_buf->entry);
 	}
 	if (dlist_empty(&tx_entry->deferred_tx_buf_list)) {
 		rxm_ep_dequeue_deferred_tx_queue(tx_entry);
