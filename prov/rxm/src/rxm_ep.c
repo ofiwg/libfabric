@@ -164,7 +164,7 @@ static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 			tx_buf->pkt.hdr.version = OFI_OP_VERSION;
 			tx_buf->hdr.desc = mr_desc;
 			tx_buf->pkt.ctrl_hdr.type = ofi_ctrl_data;
-		} else if (pool->type == RXM_BUF_POOL_TX_LMT) {
+		} else if (pool->type == RXM_BUF_POOL_TX_RNDV) {
 			struct rxm_tx_rndv_buf *tx_buf =
 				(struct rxm_tx_rndv_buf *)((char *)addr + i * entry_sz);
 			tx_buf->type = pool->type;
@@ -365,7 +365,7 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 		rxm_ep->msg_info->tx_attr->size,	/* TX */
 		rxm_ep->msg_info->tx_attr->size,	/* TX INJECT */
 		rxm_ep->msg_info->tx_attr->size,	/* TX ACK */
-		rxm_ep->msg_info->tx_attr->size,	/* TX LMT */
+		rxm_ep->msg_info->tx_attr->size,	/* TX RNDV */
 		rxm_ep->msg_info->tx_attr->size,	/* TX SAR */
 		rxm_ep->msg_info->tx_attr->size,	/* RMA */
 	};
@@ -378,7 +378,7 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 		sizeof(struct rxm_tx_buf),			/* TX INJECT */
 		sizeof(struct rxm_tx_buf),			/* TX ACK */
 		sizeof(struct rxm_rndv_hdr) + rxm_ep->buffered_min +
-		sizeof(struct rxm_tx_rndv_buf),			/* TX LMT */
+		sizeof(struct rxm_tx_rndv_buf),			/* TX RNDV */
 		rxm_ep->rxm_info->tx_attr->inject_size +
 		sizeof(struct rxm_tx_sar_buf),			/* TX SAR */
 		rxm_ep->rxm_info->tx_attr->inject_size +
@@ -950,7 +950,7 @@ err:
 }
 
 static inline ssize_t
-rxm_ep_alloc_lmt_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void *context,
+rxm_ep_alloc_rndv_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void *context,
 			uint8_t count, const struct iovec *iov, void **desc, size_t data_len,
 			uint64_t data, uint64_t flags, uint64_t tag, uint8_t op,
 			struct rxm_tx_rndv_buf **tx_rndv_buf)
@@ -958,7 +958,7 @@ rxm_ep_alloc_lmt_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void *
 	struct fid_mr **mr_iov;
 	ssize_t ret;
 	struct rxm_tx_rndv_buf *tx_buf =
-		(struct rxm_tx_rndv_buf *)rxm_tx_buf_get(rxm_ep, RXM_BUF_POOL_TX_LMT);
+		(struct rxm_tx_rndv_buf *)rxm_tx_buf_get(rxm_ep, RXM_BUF_POOL_TX_RNDV);
 
 	if (OFI_UNLIKELY(!tx_buf)) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA, "TX buf full!\n");
@@ -1001,19 +1001,19 @@ err:
 }
 
 static inline ssize_t
-rxm_ep_lmt_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
+rxm_ep_rndv_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		   struct rxm_tx_rndv_buf *tx_buf, size_t pkt_size)
 {
 	ssize_t ret;
 
-	RXM_LOG_STATE(FI_LOG_EP_DATA, tx_buf->pkt, RXM_TX, RXM_LMT_TX);
+	RXM_LOG_STATE(FI_LOG_EP_DATA, tx_buf->pkt, RXM_TX, RXM_RNDV_TX);
 	if (pkt_size <= rxm_ep->msg_info->tx_attr->inject_size) {
-		RXM_LOG_STATE(FI_LOG_CQ, tx_buf->pkt, RXM_LMT_TX, RXM_LMT_ACK_WAIT);
-		tx_buf->hdr.state = RXM_LMT_ACK_WAIT;
+		RXM_LOG_STATE(FI_LOG_CQ, tx_buf->pkt, RXM_RNDV_TX, RXM_RNDV_ACK_WAIT);
+		tx_buf->hdr.state = RXM_RNDV_ACK_WAIT;
 
 		ret = fi_inject(rxm_conn->msg_ep, &tx_buf->pkt, pkt_size, 0);
 	} else {
-		tx_buf->hdr.state = RXM_LMT_TX;
+		tx_buf->hdr.state = RXM_RNDV_TX;
 
 		ret = fi_send(rxm_conn->msg_ep, &tx_buf->pkt, pkt_size,
 			      tx_buf->hdr.desc, 0, tx_buf);
@@ -1479,12 +1479,12 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 			return rxm_ep_sar_tx_send(rxm_ep, rxm_conn, context, count, iov,
 						  data_len, segs_cnt, data, flags, tag, op);
 		}
-		ret = rxm_ep_alloc_lmt_tx_res(rxm_ep, rxm_conn, context, (uint8_t)count,
+		ret = rxm_ep_alloc_rndv_tx_res(rxm_ep, rxm_conn, context, (uint8_t)count,
 					      iov, desc, data_len, data, flags, tag, op,
 					      &tx_buf);
 		if (OFI_UNLIKELY(ret < 0))
 			return ret;
-		return rxm_ep_lmt_tx_send(rxm_ep, rxm_conn, tx_buf, ret);
+		return rxm_ep_rndv_tx_send(rxm_ep, rxm_conn, tx_buf, ret);
 	}
 }
 
@@ -1498,7 +1498,7 @@ rxm_ep_conn_progress_deferred_queue(struct rxm_ep *rxm_ep,
 		tx_entry = container_of(rxm_conn->deferred_tx_queue.next,
 					struct rxm_tx_entry, deferred_tx_entry);
 		switch (tx_entry->state) {
-		case RXM_LMT_ACK_DEFERRED:	/* RNDV (LMT TX ack) */
+		case RXM_RNDV_ACK_DEFERRED:	/* RNDV (RNDV TX ack) */
 			ret = fi_send(tx_entry->rx_buf->conn->msg_ep,
 				      &tx_entry->rx_buf->recv_entry->rndv.tx_buf->pkt,
 				      tx_entry->deferred_pkt_size,
@@ -1514,7 +1514,7 @@ rxm_ep_conn_progress_deferred_queue(struct rxm_ep *rxm_ep,
 			rxm_ep_dequeue_deferred_tx_queue(tx_entry);
 			free(tx_entry);
 			break;
-		case RXM_LMT_READ:
+		case RXM_RNDV_READ:
 			ret = fi_readv(tx_entry->conn->msg_ep,
 				       tx_entry->rma_buf->rxm_iov.iov,
 				       tx_entry->rma_buf->rxm_iov.desc,

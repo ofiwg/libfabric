@@ -80,7 +80,7 @@
 			       info->domain_attr->mr_mode & FI_MR_PROV_KEY)
 
 #define RXM_LOG_STATE(subsystem, pkt, prev_state, next_state) 			\
-	FI_DBG(&rxm_prov, subsystem, "[LMT] msg_id: 0x%" PRIx64 " %s -> %s\n",	\
+	FI_DBG(&rxm_prov, subsystem, "[RNDV] msg_id: 0x%" PRIx64 " %s -> %s\n",	\
 	       pkt.ctrl_hdr.msg_id, rxm_proto_state_str[prev_state],		\
 	       rxm_proto_state_str[next_state])
 
@@ -297,13 +297,13 @@ struct rxm_rndv_hdr {
 	FUNC(RXM_TX_RMA),		\
 	FUNC(RXM_RX),			\
 	FUNC(RXM_SAR_TX),		\
-	FUNC(RXM_LMT_TX),		\
-	FUNC(RXM_LMT_ACK_WAIT),		\
-	FUNC(RXM_LMT_READ),		\
-	FUNC(RXM_LMT_ACK_SENT),		\
-	FUNC(RXM_LMT_ACK_DEFERRED),	\
-	FUNC(RXM_LMT_ACK_RECVD),	\
-	FUNC(RXM_LMT_FINISH),
+	FUNC(RXM_RNDV_TX),		\
+	FUNC(RXM_RNDV_ACK_WAIT),		\
+	FUNC(RXM_RNDV_READ),		\
+	FUNC(RXM_RNDV_ACK_SENT),		\
+	FUNC(RXM_RNDV_ACK_DEFERRED),	\
+	FUNC(RXM_RNDV_ACK_RECVD),	\
+	FUNC(RXM_RNDV_FINISH),
 
 enum rxm_proto_state {
 	RXM_PROTO_STATES(OFI_ENUM_VAL)
@@ -383,7 +383,7 @@ enum rxm_buf_pool_type {
 	RXM_BUF_POOL_TX_START	= RXM_BUF_POOL_TX,
 	RXM_BUF_POOL_TX_INJECT,
 	RXM_BUF_POOL_TX_ACK,
-	RXM_BUF_POOL_TX_LMT,
+	RXM_BUF_POOL_TX_RNDV,
 	RXM_BUF_POOL_TX_SAR,
 	RXM_BUF_POOL_TX_END	= RXM_BUF_POOL_TX_SAR,
 	RXM_BUF_POOL_RMA,
@@ -560,7 +560,7 @@ struct rxm_recv_entry {
 		} sar;
 		/* Used for Rendezvous protocol */
 		struct {
-			/* This is used to send LMT ACK */
+			/* This is used to send RNDV ACK */
 			struct rxm_tx_buf *tx_buf;
 		} rndv;
 	};
@@ -1031,7 +1031,7 @@ rxm_tx_buf_get(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
 	assert((type == RXM_BUF_POOL_TX) ||
 	       (type == RXM_BUF_POOL_TX_INJECT) ||
 	       (type == RXM_BUF_POOL_TX_ACK) ||
-	       (type == RXM_BUF_POOL_TX_LMT) ||
+	       (type == RXM_BUF_POOL_TX_RNDV) ||
 	       (type == RXM_BUF_POOL_TX_SAR));
 	return (struct rxm_tx_buf *)rxm_buf_get(&rxm_ep->buf_pools[type]);
 }
@@ -1042,7 +1042,7 @@ rxm_tx_buf_release(struct rxm_ep *rxm_ep, struct rxm_tx_buf *tx_buf)
 	assert((tx_buf->type == RXM_BUF_POOL_TX) ||
 	       (tx_buf->type == RXM_BUF_POOL_TX_INJECT) ||
 	       (tx_buf->type == RXM_BUF_POOL_TX_ACK) ||
-	       (tx_buf->type == RXM_BUF_POOL_TX_LMT) ||
+	       (tx_buf->type == RXM_BUF_POOL_TX_RNDV) ||
 	       (tx_buf->type == RXM_BUF_POOL_TX_SAR));
 	/*assert((tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_data) ||
 	       (tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_large_data) ||
