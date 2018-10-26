@@ -124,78 +124,122 @@ rxm_mr_buf_reg(struct rxm_ep *rxm_ep, void *addr, size_t len, void **context)
 	return ret;
 }
 
+static void rxm_buf_reg_set_common(struct rxm_buf *hdr, struct rxm_pkt *pkt,
+				   uint8_t type, void *mr_desc)
+{
+	if (pkt) {
+		pkt->ctrl_hdr.version = RXM_CTRL_VERSION;
+		pkt->hdr.version = OFI_OP_VERSION;
+		pkt->ctrl_hdr.type = type;
+	}
+	if (hdr) {
+		hdr->desc = mr_desc;
+	}
+}
+
 static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 {
 	struct rxm_buf_pool *pool = (struct rxm_buf_pool *)pool_ctx;
 	size_t i, entry_sz = pool->pool->entry_sz;
 	int ret;
 	void *mr_desc;
+	uint8_t type;
+	struct rxm_buf *hdr;
+	struct rxm_pkt *pkt;
+	struct rxm_rx_buf *rx_buf;
+	struct rxm_tx_base_buf *tx_base_buf;
+	struct rxm_tx_eager_buf *tx_eager_buf;
+	struct rxm_tx_sar_buf *tx_sar_buf;
+	struct rxm_tx_rndv_buf *tx_rndv_buf;
+	struct rxm_rma_buf *rma_buf;
 
-	if (pool->type != RXM_BUF_POOL_TX_INJECT) {
+	if ((pool->type != RXM_BUF_POOL_TX_INJECT) && pool->rxm_ep->msg_mr_local) {
 		ret = rxm_mr_buf_reg(pool->rxm_ep, addr, len, context);
 		if (ret)
 			return ret;
+		mr_desc = fi_mr_desc((struct fid_mr *)*context);
 	} else {
-		*context = NULL;
+		*context = mr_desc = NULL;
 	}
 
-	mr_desc = (*context != NULL) ? fi_mr_desc((struct fid_mr *)*context) : NULL;
-
 	for (i = 0; i < pool->pool->attr.chunk_cnt; i++) {
-		if (pool->type == RXM_BUF_POOL_RX) {
-			struct rxm_rx_buf *rx_buf =
-				(struct rxm_rx_buf *)((char *)addr + i * entry_sz);
+		switch (pool->type) {
+		case RXM_BUF_POOL_RX:
+			rx_buf = (struct rxm_rx_buf *)
+				((char *)addr + i * entry_sz);
 			rx_buf->ep = pool->rxm_ep;
-			rx_buf->hdr.desc = mr_desc;
-		} else if (pool->type == RXM_BUF_POOL_TX_SAR) {
-			struct rxm_tx_sar_buf *tx_buf =
-				(struct rxm_tx_sar_buf *)((char *)addr + i * entry_sz);
-			tx_buf->type = pool->type;
-			tx_buf->pkt.ctrl_hdr.version = RXM_CTRL_VERSION;
-			tx_buf->pkt.hdr.version = OFI_OP_VERSION;
-			tx_buf->hdr.desc = mr_desc;
-			tx_buf->pkt.ctrl_hdr.type = ofi_ctrl_seg_data;
-			tx_buf->hdr.state = RXM_SAR_TX;
-		} else if (pool->type == RXM_BUF_POOL_TX) {
-			struct rxm_tx_eager_buf *tx_buf =
-				(struct rxm_tx_eager_buf *)((char *)addr + i * entry_sz);
-			tx_buf->type = pool->type;
-			tx_buf->pkt.ctrl_hdr.version = RXM_CTRL_VERSION;
-			tx_buf->pkt.hdr.version = OFI_OP_VERSION;
-			tx_buf->hdr.desc = mr_desc;
-			tx_buf->pkt.ctrl_hdr.type = ofi_ctrl_data;
-		} else if (pool->type == RXM_BUF_POOL_TX_RNDV) {
-			struct rxm_tx_rndv_buf *tx_buf =
-				(struct rxm_tx_rndv_buf *)((char *)addr + i * entry_sz);
-			tx_buf->type = pool->type;
-			tx_buf->pkt.ctrl_hdr.version = RXM_CTRL_VERSION;
-			tx_buf->pkt.hdr.version = OFI_OP_VERSION;
-			tx_buf->hdr.desc = mr_desc;
-			tx_buf->pkt.ctrl_hdr.type = ofi_ctrl_large_data;
-		} else {
-			struct rxm_tx_buf *tx_buf =
-				(struct rxm_tx_buf *)((char *)addr + i * entry_sz);
-			tx_buf->type = pool->type;
-			tx_buf->pkt.ctrl_hdr.version = RXM_CTRL_VERSION;
-			tx_buf->pkt.hdr.version = OFI_OP_VERSION;
-			tx_buf->hdr.desc = mr_desc;
 
-			switch (pool->type) {
-			case RXM_BUF_POOL_RMA:
-				tx_buf->pkt.hdr.op = ofi_op_msg;
-				/* fall through */
-			case RXM_BUF_POOL_TX_INJECT:
-				tx_buf->pkt.ctrl_hdr.type = ofi_ctrl_data;
-				break;
-			case RXM_BUF_POOL_TX_ACK:
-				tx_buf->pkt.ctrl_hdr.type = ofi_ctrl_ack;
-				tx_buf->pkt.hdr.op = ofi_op_msg;
-				break;
-			default:
-				assert(0);
-				break;
-			}
+			hdr = &rx_buf->hdr;
+			pkt = NULL;
+			type = ofi_ctrl_data; /* This can be any value */
+			break;
+		case RXM_BUF_POOL_TX:
+			tx_eager_buf = (struct rxm_tx_eager_buf *)
+				((char *)addr + i * entry_sz);
+			tx_eager_buf->type = pool->type;
+			tx_eager_buf->hdr.state = RXM_TX;
+
+			hdr = &tx_eager_buf->hdr;
+			pkt = &tx_eager_buf->pkt;
+			type = ofi_ctrl_data;
+			break;
+		case RXM_BUF_POOL_TX_INJECT:
+			tx_base_buf = (struct rxm_tx_base_buf *)
+				((char *)addr + i * entry_sz);
+			tx_base_buf->type = pool->type;
+			tx_base_buf->hdr.state = RXM_TX;
+
+			hdr = NULL;
+			pkt = &tx_base_buf->pkt;
+			type = ofi_ctrl_data;
+			break;
+		case RXM_BUF_POOL_TX_SAR:
+			tx_sar_buf = (struct rxm_tx_sar_buf *)
+				((char *)addr + i * entry_sz);
+			tx_sar_buf->type = pool->type;
+			tx_sar_buf->hdr.state = RXM_SAR_TX;
+
+			hdr = &tx_sar_buf->hdr;
+			pkt = &tx_sar_buf->pkt;
+			type = ofi_ctrl_seg_data;
+			break;
+		case RXM_BUF_POOL_TX_RNDV:
+			tx_rndv_buf = (struct rxm_tx_rndv_buf *)
+				((char *)addr + i * entry_sz);
+			tx_rndv_buf->type = pool->type;
+
+			hdr = &tx_rndv_buf->hdr;
+			pkt = &tx_rndv_buf->pkt;
+			type = ofi_ctrl_large_data;
+			break;
+		case RXM_BUF_POOL_TX_ACK:
+			tx_base_buf = (struct rxm_tx_base_buf *)
+				((char *)addr + i * entry_sz);
+			tx_base_buf->type = pool->type;
+			tx_base_buf->pkt.hdr.op = ofi_op_msg;
+
+			hdr = &tx_base_buf->hdr;
+			pkt = &tx_base_buf->pkt;
+			type = ofi_ctrl_ack;
+			break;
+		case RXM_BUF_POOL_RMA:
+			rma_buf = (struct rxm_rma_buf *)
+				((char *)addr + i * entry_sz);
+			rma_buf->pkt.hdr.op = ofi_op_msg;
+
+			hdr = &rma_buf->hdr;
+			pkt = &rma_buf->pkt;
+			type = ofi_ctrl_data;
+			break;
+		default:
+			assert(0);
+			hdr = NULL;
+			pkt = NULL;
+			mr_desc = NULL;
+			type = ofi_ctrl_data;
+			break;
 		}
+		rxm_buf_reg_set_common(hdr, pkt, type, mr_desc);
 	}
 
 	return FI_SUCCESS;
@@ -371,18 +415,18 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 	};
 	size_t entry_sizes[RXM_BUF_POOL_MAX] = {
 		rxm_ep->rxm_info->tx_attr->inject_size +
-		sizeof(struct rxm_rx_buf),			/* RX */
+		sizeof(struct rxm_rx_buf),				/* RX */
 		rxm_ep->rxm_info->tx_attr->inject_size +
-		sizeof(struct rxm_tx_eager_buf),		/* TX */
+		sizeof(struct rxm_tx_eager_buf),			/* TX */
 		rxm_ep->msg_info->tx_attr->inject_size +
-		sizeof(struct rxm_tx_buf),			/* TX INJECT */
-		sizeof(struct rxm_tx_buf),			/* TX ACK */
+		sizeof(struct rxm_tx_base_buf),			/* TX INJECT */
+		sizeof(struct rxm_tx_base_buf),			/* TX ACK */
 		sizeof(struct rxm_rndv_hdr) + rxm_ep->buffered_min +
 		sizeof(struct rxm_tx_rndv_buf),			/* TX RNDV */
 		rxm_ep->rxm_info->tx_attr->inject_size +
-		sizeof(struct rxm_tx_sar_buf),			/* TX SAR */
+		sizeof(struct rxm_tx_sar_buf),				/* TX SAR */
 		rxm_ep->rxm_info->tx_attr->inject_size +
-		sizeof(struct rxm_rma_buf),			/* RMA */
+		sizeof(struct rxm_rma_buf),				/* RMA */
 	};
 
 	dlist_init(&rxm_ep->repost_ready_list);
@@ -910,46 +954,6 @@ rxm_ep_format_tx_buf_pkt(struct rxm_conn *rxm_conn, size_t len, uint8_t op, uint
 }
 
 static inline ssize_t
-rxm_ep_format_tx_entry(struct rxm_conn *rxm_conn, void *context, uint8_t count,
-		       uint64_t flags, uint64_t comp_flags, struct rxm_tx_buf *tx_buf,
-		       struct rxm_tx_entry **tx_entry)
-{
-	*tx_entry = rxm_tx_entry_get(rxm_conn->send_queue);
-	if (OFI_UNLIKELY(!*tx_entry))
-		return -FI_EAGAIN;
-	rxm_fill_tx_entry(rxm_conn, context, count, flags,
-			  comp_flags, tx_buf, *tx_entry);
-	return FI_SUCCESS;
-}
-
-static inline ssize_t
-rxm_ep_format_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void *context,
-		     uint8_t count, size_t len, uint64_t data, uint64_t flags,
-		     uint8_t op, uint64_t tag, struct rxm_tx_buf **tx_buf,
-		     struct rxm_tx_entry **tx_entry, enum rxm_buf_pool_type buf_pool_type)
-{
-	ssize_t ret;
-
-	*tx_buf = rxm_tx_buf_get(rxm_ep, buf_pool_type);
-	if (OFI_UNLIKELY(!*tx_buf)) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_DATA, "TX buf full!\n");
-		return -FI_EAGAIN;
-	}
-	rxm_ep_format_tx_buf_pkt(rxm_conn, len, op, data, tag, flags, &(*tx_buf)->pkt);
-
-	ret = rxm_ep_format_tx_entry(rxm_conn, context, count, flags,
-				     ofi_tx_flags[op], *tx_buf, tx_entry);
-	if (OFI_UNLIKELY(ret))
-		goto err;
-
-	return FI_SUCCESS;
-err:
-	rxm_tx_buf_release(rxm_ep, *tx_buf);
-	*tx_buf = NULL;
-	return ret;
-}
-
-static inline ssize_t
 rxm_ep_alloc_rndv_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void *context,
 			uint8_t count, const struct iovec *iov, void **desc, size_t data_len,
 			uint64_t data, uint64_t flags, uint64_t tag, uint8_t op,
@@ -996,7 +1000,7 @@ rxm_ep_alloc_rndv_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void 
 	return ret;
 err:
 	*tx_rndv_buf = NULL;
-	rxm_tx_buf_release(rxm_ep, (struct rxm_tx_buf *)tx_buf);
+	rxm_tx_buf_release(rxm_ep, tx_buf);
 	return ret;
 }
 
@@ -1026,7 +1030,7 @@ err:
 	       "Transmit for MSG provider failed\n");
 	if (!rxm_ep->rxm_mr_local)
 		rxm_ep_msg_mr_closev(tx_buf->mr, tx_buf->count);
-	rxm_tx_buf_release(rxm_ep, (struct rxm_tx_buf *)tx_buf);
+	rxm_tx_buf_release(rxm_ep, tx_buf);
 	return ret;
 }
 
@@ -1081,7 +1085,7 @@ rxm_ep_sar_tx_cleanup(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	while (!dlist_empty(&tx_entry->deferred_tx_buf_list)) {
 		dlist_pop_front(&tx_entry->deferred_tx_buf_list,
 				struct rxm_tx_sar_buf, tx_buf, entry);
-		rxm_tx_buf_release(tx_entry->ep, (struct rxm_tx_buf *)tx_buf);
+		rxm_tx_buf_release(tx_entry->ep, tx_buf);
 	}
 	if (!dlist_empty(&tx_entry->deferred_tx_entry))
 		rxm_ep_dequeue_deferred_tx_queue(tx_entry);
@@ -1137,7 +1141,7 @@ rxm_ep_sar_tx_prepare_and_send_segment(struct rxm_ep *rxm_ep, struct rxm_conn *r
 		if (seg_type == RXM_SAR_SEG_FIRST) {
 			/* if the sending for the first segment fails,
 			 * release resources and report this to user */
-			rxm_tx_buf_release(tx_entry->ep, (struct rxm_tx_buf *)tx_buf);
+			rxm_tx_buf_release(tx_entry->ep, tx_buf);
 			rxm_tx_entry_release(rxm_conn->send_queue, tx_entry);
 			return -FI_EAGAIN;
 		}
@@ -1159,10 +1163,12 @@ rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	size_t i, remain_len = data_len;
 	ssize_t ret;
 
-	ret = rxm_ep_format_tx_entry(rxm_conn, context, count, flags,
-				     ofi_tx_flags[op], NULL, &tx_entry);
-	if (OFI_UNLIKELY(ret))
-		return ret;
+	tx_entry = rxm_tx_entry_get(rxm_conn->send_queue);
+	if (OFI_UNLIKELY(!tx_entry))
+		return -FI_EAGAIN;
+
+	rxm_fill_tx_entry(rxm_conn, context, count, flags,
+			  ofi_tx_flags[op], tx_entry);
 
 	dlist_init(&tx_entry->deferred_tx_buf_list);
 	tx_entry->iov_offset = 0;
@@ -1245,7 +1251,6 @@ rxm_ep_emulate_inject(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	}
 	rxm_ep_format_tx_buf_pkt(rxm_conn, len, op, data, tag, flags, &tx_buf->pkt);
 	memcpy(tx_buf->pkt.data, buf, len);
-	tx_buf->hdr.state = RXM_TX;
 	tx_buf->flags = flags;
 
 	ret = rxm_ep_normal_send(rxm_ep, rxm_conn, &tx_buf->pkt, pkt_size,
@@ -1253,7 +1258,7 @@ rxm_ep_emulate_inject(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	if (OFI_UNLIKELY(ret)) {
 		if (OFI_LIKELY(ret == -FI_EAGAIN))
 			rxm_ep_progress_multi(&rxm_ep->util_ep);
-		rxm_tx_buf_release(rxm_ep, (struct rxm_tx_buf *)tx_buf);
+		rxm_tx_buf_release(rxm_ep, tx_buf);
 	}
 	return ret;
 }
@@ -1348,7 +1353,7 @@ rxm_ep_inject_common(struct rxm_ep *rxm_ep, const void *buf, size_t len,
 	}
 
 	if (pkt_size <= rxm_ep->msg_info->tx_attr->inject_size) {
-		struct rxm_tx_buf *tx_buf =
+		struct rxm_tx_base_buf *tx_buf = (struct rxm_tx_base_buf *)
 			rxm_tx_buf_get(rxm_ep, RXM_BUF_POOL_TX_INJECT);
 		if (OFI_UNLIKELY(!tx_buf)) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA, "TX buf full!\n");
@@ -1385,7 +1390,7 @@ rxm_ep_send_inject(struct rxm_ep *rxm_ep, const struct iovec *iov, size_t count,
 				  iov, count, 0);
 		ret = rxm_ep_inject_send(rxm_ep, rxm_conn, inject_pkt, total_len);
 	} else {
-		struct rxm_tx_buf *tx_buf =
+		struct rxm_tx_base_buf *tx_buf = (struct rxm_tx_base_buf *)
 			rxm_tx_buf_get(rxm_ep, RXM_BUF_POOL_TX_INJECT);
 		if (OFI_UNLIKELY(!tx_buf)) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA, "TX buf full!\n");
@@ -1457,7 +1462,6 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 
 		ofi_copy_from_iov(tx_buf->pkt.data, tx_buf->pkt.hdr.size,
 				  iov, count, 0);
-		tx_buf->hdr.state = RXM_TX;
 		tx_buf->app_context = context;
 		tx_buf->flags = flags;
 
@@ -1466,7 +1470,7 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 		if (OFI_UNLIKELY(ret)) {
 			if (ret == -FI_EAGAIN)
 				rxm_ep_progress_multi(&rxm_ep->util_ep);
-			rxm_tx_buf_release(rxm_ep, (struct rxm_tx_buf *)tx_buf);
+			rxm_tx_buf_release(rxm_ep, tx_buf);
 		}
 		return ret;
 	} else {

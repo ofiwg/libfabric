@@ -425,23 +425,10 @@ struct rxm_rx_buf {
 	struct rxm_pkt pkt;
 };
 
-struct rxm_tx_buf {
+struct rxm_tx_base_buf {
 	/* Must stay at top */
 	struct rxm_buf hdr;
-
 	enum rxm_buf_pool_type type;
-
-	/* Must stay at bottom */
-	struct rxm_pkt pkt;
-};
-
-struct rxm_tx_sar_buf {
-	/* Must stay at top */
-	struct rxm_buf hdr;
-
-	enum rxm_buf_pool_type type;
-	struct dlist_entry entry;
-	struct rxm_tx_entry *tx_entry;
 
 	/* Must stay at bottom */
 	struct rxm_pkt pkt;
@@ -450,10 +437,22 @@ struct rxm_tx_sar_buf {
 struct rxm_tx_eager_buf {
 	/* Must stay at top */
 	struct rxm_buf hdr;
-
 	enum rxm_buf_pool_type type;
+
 	void *app_context;
 	uint64_t flags;
+
+	/* Must stay at bottom */
+	struct rxm_pkt pkt;
+};
+
+struct rxm_tx_sar_buf {
+	/* Must stay at top */
+	struct rxm_buf hdr;
+	enum rxm_buf_pool_type type;
+
+	struct dlist_entry entry;
+	struct rxm_tx_entry *tx_entry;
 
 	/* Must stay at bottom */
 	struct rxm_pkt pkt;
@@ -462,8 +461,8 @@ struct rxm_tx_eager_buf {
 struct rxm_tx_rndv_buf {
 	/* Must stay at top */
 	struct rxm_buf hdr;
-
 	enum rxm_buf_pool_type type;
+
 	void *app_context;
 	uint64_t flags;
 	struct rxm_rx_buf *rx_buf;
@@ -474,6 +473,16 @@ struct rxm_tx_rndv_buf {
 	struct rxm_pkt pkt;
 };
 
+union rxm_tx_buf {
+	struct {
+		struct rxm_buf hdr;
+		enum rxm_buf_pool_type type;
+	} top;
+	struct rxm_tx_base_buf base;
+	struct rxm_tx_eager_buf eager;
+	struct rxm_tx_sar_buf sar;
+	struct rxm_tx_rndv_buf rndv;
+};
 
 struct rxm_rma_buf {
 	/* Must stay at top */
@@ -504,7 +513,7 @@ struct rxm_tx_entry {
 	size_t deferred_pkt_size;
 
 	union {
-		struct rxm_tx_buf *tx_buf;
+		struct rxm_tx_sar_buf *tx_buf;
 		struct rxm_rma_buf *rma_buf;
 	};
 
@@ -561,7 +570,7 @@ struct rxm_recv_entry {
 		/* Used for Rendezvous protocol */
 		struct {
 			/* This is used to send RNDV ACK */
-			struct rxm_tx_buf *tx_buf;
+			struct rxm_tx_base_buf *tx_buf;
 		} rndv;
 	};
 };
@@ -1033,22 +1042,37 @@ rxm_tx_buf_get(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
 	       (type == RXM_BUF_POOL_TX_ACK) ||
 	       (type == RXM_BUF_POOL_TX_RNDV) ||
 	       (type == RXM_BUF_POOL_TX_SAR));
-	return (struct rxm_tx_buf *)rxm_buf_get(&rxm_ep->buf_pools[type]);
+	return (union rxm_tx_buf *)rxm_buf_get(&rxm_ep->buf_pools[type]);
 }
 
 static inline void
-rxm_tx_buf_release(struct rxm_ep *rxm_ep, struct rxm_tx_buf *tx_buf)
+rxm_tx_buf_release(struct rxm_ep *rxm_ep, void *tx_buf)
 {
-	assert((tx_buf->type == RXM_BUF_POOL_TX) ||
-	       (tx_buf->type == RXM_BUF_POOL_TX_INJECT) ||
-	       (tx_buf->type == RXM_BUF_POOL_TX_ACK) ||
-	       (tx_buf->type == RXM_BUF_POOL_TX_RNDV) ||
-	       (tx_buf->type == RXM_BUF_POOL_TX_SAR));
-	/*assert((tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_data) ||
-	       (tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_large_data) ||
-	       (tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_seg_data) ||
-	       (tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_ack));*/
-	rxm_buf_release(&rxm_ep->buf_pools[tx_buf->type],
+#ifdef NDEBUG
+	union rxm_tx_buf *buf = (union rxm_tx_buf *)tx_buf;
+
+	switch (buf->top.type) {
+	case RXM_BUF_POOL_TX:
+		assert(buf->eager.pkt.ctrl_hdr.type == ofi_ctrl_data);
+		break;
+	case RXM_BUF_POOL_TX_INJECT:
+		assert(tx_buf->base.pkt.ctrl_hdr.type == ofi_ctrl_data);
+		break;
+	case RXM_BUF_POOL_TX_ACK:
+		assert(tx_buf->base.pkt.ctrl_hdr.type == ofi_ctrl_ack);
+		break;
+	case RXM_BUF_POOL_TX_RNDV:
+		assert(tx_buf->rndv.pkt.ctrl_hdr.type == ofi_ctrl_large_data);
+		break;
+	case RXM_BUF_POOL_TX_SAR:
+		assert(tx_buf->sar.pkt.ctrl_hdr.type == ofi_ctrl_seg_data);
+		break;
+	default:
+		assert(0);
+	}
+#endif
+	rxm_buf_release(&rxm_ep->buf_pools[
+				((union rxm_tx_buf *)tx_buf)->top.type],
 			(struct rxm_buf *)tx_buf);
 }
 
@@ -1123,14 +1147,12 @@ RXM_DEFINE_QUEUE_ENTRY(recv, recv);
 
 static inline void
 rxm_fill_tx_entry(struct rxm_conn *rxm_conn, void *context, uint8_t count, uint64_t flags,
-		  uint64_t comp_flags, struct rxm_tx_buf *tx_buf,
-		  struct rxm_tx_entry *tx_entry)
+		  uint64_t comp_flags, struct rxm_tx_entry *tx_entry)
 {
 	tx_entry->conn = rxm_conn;
 	tx_entry->context = context;
 	tx_entry->count = count;
 	tx_entry->flags = flags;
-	tx_entry->tx_buf = tx_buf;
 	tx_entry->comp_flags = comp_flags | FI_SEND;
 }
 

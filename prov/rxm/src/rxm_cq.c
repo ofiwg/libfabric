@@ -256,12 +256,6 @@ static inline int rxm_finish_send_nobuf(struct rxm_tx_entry *tx_entry)
 	return ret;
 }
 
-static inline int rxm_finish_send(struct rxm_tx_entry *tx_entry)
-{
-	rxm_tx_buf_release(tx_entry->ep, tx_entry->tx_buf);
-	return rxm_finish_send_nobuf(tx_entry);
-}
-
 static inline int rxm_finish_eager_send(struct rxm_ep *rxm_ep, struct rxm_tx_eager_buf *tx_buf)
 {
 	int ret = rxm_cq_tx_comp_write(rxm_ep, ofi_tx_cq_flags(tx_buf->pkt.hdr.op),
@@ -270,7 +264,7 @@ static inline int rxm_finish_eager_send(struct rxm_ep *rxm_ep, struct rxm_tx_eag
 		assert(ofi_tx_cq_flags(tx_buf->pkt.hdr.op) & FI_SEND);
 		ofi_ep_tx_cntr_inc(&rxm_ep->util_ep);
 	}
-	rxm_tx_buf_release(rxm_ep, (struct rxm_tx_buf *)tx_buf);
+	rxm_tx_buf_release(rxm_ep, tx_buf);
 	return ret;
 }
 
@@ -278,7 +272,7 @@ static inline int rxm_finish_sar_segment_send(struct rxm_tx_sar_buf *tx_buf)
 {
 	struct rxm_tx_entry *tx_entry = tx_buf->tx_entry;
 
-	rxm_tx_buf_release(tx_entry->ep, (struct rxm_tx_buf *)tx_buf);
+	rxm_tx_buf_release(tx_entry->ep, tx_buf);
 	/* If `segs_left` == 0, all segments of the message have been fully sent */
 	if (!(--tx_entry->segs_left - tx_entry->fail_segs_cnt)) {
 		if (OFI_LIKELY(tx_entry->msg_id != RXM_SAR_TX_ERROR)) {
@@ -325,7 +319,7 @@ static int rxm_rndv_tx_finish(struct rxm_ep *rxm_ep, struct rxm_tx_rndv_buf *tx_
 
 	rxm_enqueue_rx_buf_for_repost_check(tx_buf->rx_buf);
 
-	rxm_tx_buf_release(rxm_ep, (struct rxm_tx_buf *)tx_buf);
+	rxm_tx_buf_release(rxm_ep, tx_buf);
 
 	return ret;
 }
@@ -676,7 +670,7 @@ static ssize_t rxm_rndv_send_ack(struct rxm_rx_buf *rx_buf)
 
 	assert(rx_buf->conn);
 
-	rx_buf->recv_entry->rndv.tx_buf =
+	rx_buf->recv_entry->rndv.tx_buf = (struct rxm_tx_base_buf *)
 		rxm_tx_buf_get(rx_buf->ep, RXM_BUF_POOL_TX_ACK);
 	if (OFI_UNLIKELY(!rx_buf->recv_entry->rndv.tx_buf)) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ,
