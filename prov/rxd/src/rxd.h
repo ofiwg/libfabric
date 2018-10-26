@@ -133,12 +133,11 @@ struct rxd_peer {
 	uint16_t curr_rx_id;
 	uint16_t curr_tx_id;
 
-	uint8_t blocking;
 	struct dlist_entry tx_list;
 	struct dlist_entry rx_list;
 	struct dlist_entry rma_rx_list;
 	struct dlist_entry unacked;
-	struct dlist_entry buf_ops;
+	struct dlist_entry buf_pkts;
 };
 
 struct rxd_av {
