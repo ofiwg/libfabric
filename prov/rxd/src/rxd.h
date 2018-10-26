@@ -81,6 +81,7 @@
 #define RXD_INJECT		(1 << 3)
 #define RXD_TAG_HDR		(1 << 4)
 #define RXD_INLINE		(1 << 5)
+#define RXD_MULTI_RECV		(1 << 6)
 
 struct rxd_env {
 	int spin_count;
@@ -168,15 +169,15 @@ struct rxd_ep {
 	size_t tx_size;
 	size_t prefix_size;
 	uint32_t posted_bufs;
-	uint32_t rx_list_size;
+	size_t min_multi_recv_size;
 	int do_local_mr;
 
 	struct util_buf_pool *tx_pkt_pool;
 	struct util_buf_pool *rx_pkt_pool;
 	struct slist rx_pkt_list;
 
-	struct rxd_x_fs *tx_fs;
-	struct rxd_x_fs *rx_fs;
+	struct util_buf_pool *tx_entry_pool;
+	struct util_buf_pool *rx_entry_pool;
 
 	struct dlist_entry unexp_list;
 	struct dlist_entry unexp_tag_list;
@@ -232,7 +233,6 @@ struct rxd_x_entry {
 	struct rxd_pkt_entry *pkt;
 	struct dlist_entry entry;
 };
-DECLARE_FREESTACK(struct rxd_x_entry, rxd_x_fs);
 
 static inline uint32_t rxd_flags(uint64_t fi_flags)
 {
@@ -242,6 +242,8 @@ static inline uint32_t rxd_flags(uint64_t fi_flags)
 		rxd_flags |= RXD_REMOTE_CQ_DATA;
 	if (fi_flags & FI_INJECT)
 		rxd_flags |= RXD_INJECT;
+	if (fi_flags & FI_MULTI_RECV)
+		rxd_flags |= RXD_MULTI_RECV;
 
 	return rxd_flags;
 }
@@ -358,6 +360,9 @@ void rxd_ep_send_ack(struct rxd_ep *rxd_ep, fi_addr_t peer);
 struct rxd_pkt_entry *rxd_get_tx_pkt(struct rxd_ep *ep);
 void rxd_release_rx_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt);
 void rxd_release_tx_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt);
+struct rxd_x_entry *rxd_get_tx_entry(struct rxd_ep *ep);
+struct rxd_x_entry *rxd_get_rx_entry(struct rxd_ep *ep);
+void rxd_release_rx_entry(struct rxd_ep *ep, struct rxd_x_entry *x_entry);
 int rxd_ep_retry_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry);
 ssize_t rxd_ep_post_data_pkts(struct rxd_ep *ep, struct rxd_x_entry *tx_entry);
 void rxd_insert_unacked(struct rxd_ep *ep, fi_addr_t peer,
@@ -416,6 +421,9 @@ void rxd_progress_op(struct rxd_ep *ep, struct rxd_x_entry *rx_entry,
 		     struct rxd_atom_hdr *atom_hdr,
 		     void **msg, size_t size);
 void rxd_progress_tx_list(struct rxd_ep *ep, struct rxd_peer *peer);
+struct rxd_x_entry *rxd_progress_multi_recv(struct rxd_ep *ep,
+					    struct rxd_x_entry *rx_entry,
+					    size_t total_size);
 
 /* CQ sub-functions */
 void rxd_cq_report_error(struct rxd_cq *cq, struct fi_cq_err_entry *err_entry);

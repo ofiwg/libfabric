@@ -55,10 +55,13 @@ static int rxd_match_unexp(struct dlist_entry *item, const void *arg)
 			     rxd_get_tag_hdr(pkt_entry)->tag);
 }
 
-static void rxd_ep_check_unexp_msg_list(struct rxd_ep *ep, struct dlist_entry *list,
+static int rxd_ep_check_unexp_msg_list(struct rxd_ep *ep,
+					struct dlist_entry *unexp_list,
+					struct dlist_entry *rx_list,
 					struct rxd_x_entry *rx_entry)
 {
 	struct dlist_entry *match;
+	struct rxd_x_entry *progress_entry, *dup_entry = NULL;
 	struct rxd_pkt_entry *pkt_entry;
 	struct rxd_base_hdr *base_hdr;
 	struct rxd_sar_hdr *sar_hdr = NULL;
@@ -67,29 +70,42 @@ static void rxd_ep_check_unexp_msg_list(struct rxd_ep *ep, struct dlist_entry *l
 	struct rxd_atom_hdr *atom_hdr = NULL;
 	struct rxd_rma_hdr *rma_hdr = NULL;
 	void *msg = NULL;
-	size_t msg_size;
+	size_t msg_size, total_size;
 
-	match = dlist_remove_first_match(list, &rxd_match_unexp, (void *) rx_entry);
-	if (!match)
-		return;
+	while (!dlist_empty(unexp_list)) {
+		match = dlist_remove_first_match(unexp_list, &rxd_match_unexp,
+						 (void *) rx_entry);
+		if (!match)
+			return 0;
+	
+		FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "progressing unexp msg entry\n");
+	
+		pkt_entry = container_of(match, struct rxd_pkt_entry, d_entry);
+		base_hdr = rxd_get_base_hdr(pkt_entry);
+	
+		rxd_unpack_hdrs(pkt_entry->pkt_size, base_hdr, &sar_hdr, &tag_hdr,
+				&data_hdr, &rma_hdr, &atom_hdr, &msg, &msg_size);
+	
+		total_size = sar_hdr ? sar_hdr->size : msg_size;
+		if (rx_entry->flags & RXD_MULTI_RECV)
+			dup_entry = rxd_progress_multi_recv(ep, rx_entry, total_size);
 
-	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "progressing unexp msg entry\n");
-	dlist_remove(&rx_entry->entry);
+		progress_entry = dup_entry ? dup_entry : rx_entry;
+	
+		progress_entry->cq_entry.len = MIN(rx_entry->cq_entry.len, total_size);
+		dlist_insert_tail(&progress_entry->entry,
+				  &ep->peers[base_hdr->peer].rx_list);
+	
+		rxd_progress_op(ep, progress_entry, pkt_entry, base_hdr, sar_hdr, tag_hdr,
+				data_hdr, rma_hdr, atom_hdr, &msg, msg_size);
+		rxd_release_repost_rx(ep, pkt_entry);
+		rxd_ep_send_ack(ep, base_hdr->peer);
 
-	pkt_entry = container_of(match, struct rxd_pkt_entry, d_entry);
-	base_hdr = rxd_get_base_hdr(pkt_entry);
+		if (!dup_entry)
+			return 1;
+	}
 
-	rxd_unpack_hdrs(pkt_entry->pkt_size, base_hdr, &sar_hdr, &tag_hdr,
-			&data_hdr, &rma_hdr, &atom_hdr, &msg, &msg_size);
-
-	rx_entry->cq_entry.len = MIN(rx_entry->cq_entry.len,
-		sar_hdr ? sar_hdr->size : msg_size);
-	dlist_insert_tail(&rx_entry->entry, &ep->peers[base_hdr->peer].rx_list);
-
-	rxd_progress_op(ep, rx_entry, pkt_entry, base_hdr, sar_hdr, tag_hdr, data_hdr,
-			rma_hdr, atom_hdr, &msg, msg_size);
-	rxd_ep_send_ack(ep, base_hdr->peer);
-	rxd_release_repost_rx(ep, pkt_entry);
+	return 0;
 }
 
 ssize_t rxd_ep_generic_recvmsg(struct rxd_ep *rxd_ep, const struct iovec *iov,
@@ -100,17 +116,17 @@ ssize_t rxd_ep_generic_recvmsg(struct rxd_ep *rxd_ep, const struct iovec *iov,
 	ssize_t ret = 0;
 	struct rxd_av *rxd_av;
 	struct rxd_x_entry *rx_entry;
-	struct dlist_entry *unexp_list;
+	struct dlist_entry *unexp_list, *rx_list;
 
 	assert(iov_count <= RXD_IOV_LIMIT);
+	assert(!(rxd_flags & RXD_MULTI_RECV) || iov_count == 1);
 
 	rxd_av = rxd_ep_av(rxd_ep);
 
 	fastlock_acquire(&rxd_ep->util_ep.lock);
 	fastlock_acquire(&rxd_ep->util_ep.rx_cq->cq_lock);
 
-	if (ofi_cirque_isfull(rxd_ep->util_ep.rx_cq->cirq) ||
-	    rxd_ep->rx_list_size >= rxd_ep->rx_size) {
+	if (ofi_cirque_isfull(rxd_ep->util_ep.rx_cq->cirq)) {
 		ret = -FI_EAGAIN;
 		goto out;
 	}
@@ -124,11 +140,19 @@ ssize_t rxd_ep_generic_recvmsg(struct rxd_ep *rxd_ep, const struct iovec *iov,
 		goto out;
 	}
 
-	rxd_ep->rx_list_size++;
-	unexp_list = (op == ofi_op_tagged) ? &rxd_ep->unexp_tag_list :
-		      &rxd_ep->unexp_list;
-	if (!dlist_empty(unexp_list))
-		rxd_ep_check_unexp_msg_list(rxd_ep, unexp_list, rx_entry);
+	if (op == ofi_op_tagged) {
+		unexp_list = &rxd_ep->unexp_tag_list;
+		rx_list = &rxd_ep->rx_tag_list;
+	} else {
+		unexp_list = &rxd_ep->unexp_list;
+		rx_list = &rxd_ep->rx_list;
+	}
+
+	if (!dlist_empty(unexp_list) &&
+	    rxd_ep_check_unexp_msg_list(rxd_ep, unexp_list, rx_list, rx_entry))
+		goto out;	
+
+	dlist_insert_tail(&rx_entry->entry, rx_list);
 out:
 	fastlock_release(&rxd_ep->util_ep.rx_cq->cq_lock);
 	fastlock_release(&rxd_ep->util_ep.lock);
