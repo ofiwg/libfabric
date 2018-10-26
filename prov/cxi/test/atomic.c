@@ -71,43 +71,43 @@ Test(atomic_invalid, invalid_amo)
 	};
 	int ret;
 
-	ret = fi_atomic(cxit_ep, &operand1, 1, 0, 0, 0, 0,
+	ret = fi_atomic(cxit_ep, &operand1, 1, 0, cxit_ep_fi_addr, 0, 0,
 			FI_UINT64, FI_ATOMIC_OP_LAST, 0);
 	cr_assert_eq(ret, -FI_EINVAL);
-	ret = fi_atomic(cxit_ep, &operand1, 1, 0, 0, 0, 0,
+	ret = fi_atomic(cxit_ep, &operand1, 1, 0, cxit_ep_fi_addr, 0, 0,
 			FI_UINT64, -1, 0);
 	cr_assert_eq(ret, -FI_EINVAL);
-	ret = fi_atomic(cxit_ep, &operand1, 1, 0, 0, 0, 0,
+	ret = fi_atomic(cxit_ep, &operand1, 1, 0, cxit_ep_fi_addr, 0, 0,
 			FI_DATATYPE_LAST, FI_SUM, 0);
 	cr_assert_eq(ret, -FI_EINVAL);
-	ret = fi_atomic(cxit_ep, &operand1, 1, 0, 0, 0, 0,
+	ret = fi_atomic(cxit_ep, &operand1, 1, 0, cxit_ep_fi_addr, 0, 0,
 			-1, FI_SUM, 0);
 	cr_assert_eq(ret, -FI_EINVAL);
-	ret = fi_atomic(cxit_ep, &operand1, 0, 0, 0, 0, 0,
+	ret = fi_atomic(cxit_ep, &operand1, 0, 0, cxit_ep_fi_addr, 0, 0,
 			FI_UINT64, FI_SUM, 0);
 	cr_assert_eq(ret, -FI_EINVAL);
-	ret = fi_atomic(cxit_ep, &operand1, 2, 0, 0, 0, 0,
+	ret = fi_atomic(cxit_ep, &operand1, 2, 0, cxit_ep_fi_addr, 0, 0,
 			FI_UINT64, FI_SUM, 0);
 	cr_assert_eq(ret, -FI_EINVAL);
-	ret = fi_atomic(cxit_ep, 0, 1, 0, 0, 0, 0,
+	ret = fi_atomic(cxit_ep, 0, 1, 0, cxit_ep_fi_addr, 0, 0,
 			FI_UINT64, FI_SUM, 0);
 	cr_assert_eq(ret, -FI_EINVAL);
 
-	ret = fi_atomicv(cxit_ep, &iov, 0, 0, 0, 0, 0,
+	ret = fi_atomicv(cxit_ep, &iov, 0, 0, cxit_ep_fi_addr, 0, 0,
 			 FI_UINT64, FI_SUM, 0);
 	cr_assert_eq(ret, -FI_EINVAL);
-	ret = fi_atomicv(cxit_ep, &iov, 0, 2, 0, 0, 0,
+	ret = fi_atomicv(cxit_ep, &iov, 0, 2, cxit_ep_fi_addr, 0, 0,
 			 FI_UINT64, FI_SUM, 0);
 	cr_assert_eq(ret, -FI_EINVAL);
 	iov.count = 0;
-	ret = fi_atomicv(cxit_ep, &iov, 0, 1, 0, 0, 0,
+	ret = fi_atomicv(cxit_ep, &iov, 0, 1, cxit_ep_fi_addr, 0, 0,
 			 FI_UINT64, FI_SUM, 0);
 	cr_assert_eq(ret, -FI_EINVAL);
 	iov.count = 2;
-	ret = fi_atomicv(cxit_ep, &iov, 0, 1, 0, 0, 0,
+	ret = fi_atomicv(cxit_ep, &iov, 0, 1, cxit_ep_fi_addr, 0, 0,
 			 FI_UINT64, FI_SUM, 0);
 	cr_assert_eq(ret, -FI_EINVAL);
-	ret = fi_atomicv(cxit_ep, 0, 0, 1, 0, 0, 0,
+	ret = fi_atomicv(cxit_ep, 0, 0, 1, cxit_ep_fi_addr, 0, 0,
 			 FI_UINT64, FI_SUM, 0);
 	cr_assert_eq(ret, -FI_EINVAL);
 }
@@ -127,64 +127,66 @@ Test(atomic_invalid, invalid_fetch)
 	int ret;
 
 	ret = fi_fetch_atomic(cxit_ep, &operand1, 1, 0, &result, 0,
-			      0, 0, 0, FI_UINT64, FI_ATOMIC_OP_LAST, 0);
+			      cxit_ep_fi_addr, 0, 0, FI_UINT64,
+			      FI_ATOMIC_OP_LAST, 0);
 	cr_assert_eq(ret, -FI_EINVAL);
 	ret = fi_fetch_atomic(cxit_ep, &operand1, 1, 0, &result, 0,
-			      0, 0, 0, FI_UINT64, -1, 0);
+			      cxit_ep_fi_addr, 0, 0, FI_UINT64, -1, 0);
 	cr_assert_eq(ret, -FI_EINVAL);
 	ret = fi_fetch_atomic(cxit_ep, &operand1, 1, 0, &result, 0,
-			      0, 0, 0, FI_DATATYPE_LAST, FI_SUM, 0);
+			      cxit_ep_fi_addr, 0, 0, FI_DATATYPE_LAST, FI_SUM,
+			      0);
 	cr_assert_eq(ret, -FI_EINVAL);
 	ret = fi_fetch_atomic(cxit_ep, &operand1, 1, 0, &result, 0,
-			      0, 0, 0, -1, FI_SUM, 0);
+			      cxit_ep_fi_addr, 0, 0, -1, FI_SUM, 0);
 	cr_assert_eq(ret, -FI_EINVAL);
 	ret = fi_fetch_atomic(cxit_ep, &operand1, 1, 0, 0, 0,
-			      0, 0, 0, FI_UINT64, FI_SUM, 0);
+			      cxit_ep_fi_addr, 0, 0, FI_UINT64, FI_SUM, 0);
 	cr_assert_eq(ret, -FI_EINVAL);
 	ret = fi_fetch_atomic(cxit_ep, &operand1, 0, 0, &result, 0,
-			      0, 0, 0, FI_UINT64, FI_SUM, 0);
+			      cxit_ep_fi_addr, 0, 0, FI_UINT64, FI_SUM, 0);
 	cr_assert_eq(ret, -FI_EINVAL);
 	ret = fi_fetch_atomic(cxit_ep, &operand1, 2, 0, &result, 0,
-			      0, 0, 0, FI_UINT64, FI_SUM, 0);
+			      cxit_ep_fi_addr, 0, 0, FI_UINT64, FI_SUM, 0);
 	cr_assert_eq(ret, -FI_EINVAL);
 	ret = fi_fetch_atomic(cxit_ep, 0, 1, 0, &result, 0,
-			      0, 0, 0, FI_UINT64, FI_SUM, 0);
+			      cxit_ep_fi_addr, 0, 0, FI_UINT64, FI_SUM, 0);
 	cr_assert_eq(ret, -FI_EINVAL);
 
 
 	ret = fi_fetch_atomicv(cxit_ep, &iov, 0, 1, &riov, 0, 0,
-			       0, 0, 0, FI_UINT64, FI_SUM, 0);
+			       cxit_ep_fi_addr, 0, 0, FI_UINT64, FI_SUM, 0);
 	cr_assert_eq(ret, -FI_EINVAL);
 	ret = fi_fetch_atomicv(cxit_ep, &iov, 0, 1, &riov, 0, 2,
-			       0, 0, 0, FI_UINT64, FI_SUM, 0);
+			       cxit_ep_fi_addr, 0, 0, FI_UINT64, FI_SUM, 0);
 	cr_assert_eq(ret, -FI_EINVAL);
 	ret = fi_fetch_atomicv(cxit_ep, &iov, 0, 1, 0, 0, 1,
-			       0, 0, 0, FI_UINT64, FI_SUM, 0);
+			       cxit_ep_fi_addr, 0, 0, FI_UINT64, FI_SUM, 0);
 	cr_assert_eq(ret, -FI_EINVAL);
 	ret = fi_fetch_atomicv(cxit_ep, &iov, 0, 0, &riov, 0, 1,
-			       0, 0, 0, FI_UINT64, FI_SUM, 0);
+			       cxit_ep_fi_addr, 0, 0, FI_UINT64, FI_SUM, 0);
 	cr_assert_eq(ret, -FI_EINVAL);
 	ret = fi_fetch_atomicv(cxit_ep, &iov, 0, 2, &riov, 0, 1,
-			       0, 0, 0, FI_UINT64, FI_SUM, 0);
+			       cxit_ep_fi_addr, 0, 0, FI_UINT64, FI_SUM, 0);
 	cr_assert_eq(ret, -FI_EINVAL);
 	ret = fi_fetch_atomicv(cxit_ep, 0, 0, 1, &riov, 0, 1,
-			       0, 0, 0, FI_UINT64, FI_SUM, 0);
+			       cxit_ep_fi_addr, 0, 0, FI_UINT64, FI_SUM, 0);
 	cr_assert_eq(ret, -FI_EINVAL);
 	riov.count = 0;
 	ret = fi_fetch_atomicv(cxit_ep, &iov, 0, 1, &riov, 0, 1,
-			       0, 0, 0, FI_UINT64, FI_SUM, 0);
+			       cxit_ep_fi_addr, 0, 0, FI_UINT64, FI_SUM, 0);
 	cr_assert_eq(ret, -FI_EINVAL);
 	riov.count = 2;
 	ret = fi_fetch_atomicv(cxit_ep, &iov, 0, 1, &riov, 0, 1,
-			       0, 0, 0, FI_UINT64, FI_SUM, 0);
+			       cxit_ep_fi_addr, 0, 0, FI_UINT64, FI_SUM, 0);
 	riov.count = 1;
 	iov.count = 0;
 	ret = fi_fetch_atomicv(cxit_ep, &iov, 0, 1, &riov, 0, 1,
-			       0, 0, 0, FI_UINT64, FI_SUM, 0);
+			       cxit_ep_fi_addr, 0, 0, FI_UINT64, FI_SUM, 0);
 	cr_assert_eq(ret, -FI_EINVAL);
 	iov.count = 2;
 	ret = fi_fetch_atomicv(cxit_ep, &iov, 0, 1, &riov, 0, 1,
-			       0, 0, 0, FI_UINT64, FI_SUM, 0);
+			       cxit_ep_fi_addr, 0, 0, FI_UINT64, FI_SUM, 0);
 	cr_assert_eq(ret, -FI_EINVAL);
 	iov.count = 1;
 	cr_assert_eq(ret, -FI_EINVAL);
@@ -213,105 +215,105 @@ Test(atomic_invalid, invalid_swap)
 				&operand1, 1, 0,
 				&compare, 0,
 				&result, 0,
-				0, 0, 0,
+				cxit_ep_fi_addr, 0, 0,
 				FI_UINT64, FI_ATOMIC_OP_LAST, 0);
 	cr_assert_eq(ret, -FI_EINVAL);
 	ret = fi_compare_atomic(cxit_ep,
 				&operand1, 1, 0,
 				&compare, 0,
 				&result, 0,
-				0, 0, 0,
+				cxit_ep_fi_addr, 0, 0,
 				FI_UINT64, -1, 0);
 	cr_assert_eq(ret, -FI_EINVAL);
 	ret = fi_compare_atomic(cxit_ep,
 				&operand1, 1, 0,
 				&compare, 0,
 				&result, 0,
-				0, 0, 0,
+				cxit_ep_fi_addr, 0, 0,
 				FI_DATATYPE_LAST, FI_CSWAP_NE, NULL);
 	cr_assert_eq(ret, -FI_EINVAL);
 	ret = fi_compare_atomic(cxit_ep,
 				&operand1, 1, 0,
 				&compare, 0,
 				&result, 0,
-				0, 0, 0,
+				cxit_ep_fi_addr, 0, 0,
 				-1, FI_CSWAP_NE, NULL);
 	cr_assert_eq(ret, -FI_EINVAL);
 	ret = fi_compare_atomic(cxit_ep,
 				&operand1, 1, 0,
 				&compare, 0,
 				0, 0,
-				0, 0, 0,
+				cxit_ep_fi_addr, 0, 0,
 				FI_UINT64, FI_CSWAP_NE, NULL);
 	cr_assert_eq(ret, -FI_EINVAL);
 	ret = fi_compare_atomic(cxit_ep,
 				&operand1, 1, 0,
 				0, 0,
 				&result, 0,
-				0, 0, 0,
+				cxit_ep_fi_addr, 0, 0,
 				FI_UINT64, FI_CSWAP_NE, NULL);
 	cr_assert_eq(ret, -FI_EINVAL);
 	ret = fi_compare_atomic(cxit_ep,
 				&operand1, 2, 0,
 				&compare, 0,
 				&result, 0,
-				0, 0, 0,
+				cxit_ep_fi_addr, 0, 0,
 				FI_UINT64, FI_CSWAP_NE, NULL);
 	cr_assert_eq(ret, -FI_EINVAL);
 	ret = fi_compare_atomic(cxit_ep,
 				&operand1, 0, 0,
 				&compare, 0,
 				&result, 0,
-				0, 0, 0,
+				cxit_ep_fi_addr, 0, 0,
 				FI_UINT64, FI_CSWAP_NE, NULL);
 	cr_assert_eq(ret, -FI_EINVAL);
 	ret = fi_compare_atomic(cxit_ep,
 				0, 1, 0,
 				&compare, 0,
 				&result, 0,
-				0, 0, 0,
+				cxit_ep_fi_addr, 0, 0,
 				FI_UINT64, FI_CSWAP_NE, NULL);
 
 	ret = fi_compare_atomicv(cxit_ep,
 				&iov, 0, 1,
 				&ciov, 0, 1,
 				&riov, 0, 2,
-				0, 0, 0,
+				cxit_ep_fi_addr, 0, 0,
 				FI_UINT64, FI_CSWAP_NE, NULL);
 	cr_assert_eq(ret, -FI_EINVAL);
 	ret = fi_compare_atomicv(cxit_ep,
 				&iov, 0, 1,
 				&ciov, 0, 1,
 				&riov, 0, 0,
-				0, 0, 0,
+				cxit_ep_fi_addr, 0, 0,
 				FI_UINT64, FI_CSWAP_NE, NULL);
 	cr_assert_eq(ret, -FI_EINVAL);
 	ret = fi_compare_atomicv(cxit_ep,
 				&iov, 0, 1,
 				&ciov, 0, 2,
 				&riov, 0, 1,
-				0, 0, 0,
+				cxit_ep_fi_addr, 0, 0,
 				FI_UINT64, FI_CSWAP_NE, NULL);
 	cr_assert_eq(ret, -FI_EINVAL);
 	ret = fi_compare_atomicv(cxit_ep,
 				&iov, 0, 1,
 				&ciov, 0, 0,
 				&riov, 0, 1,
-				0, 0, 0,
+				cxit_ep_fi_addr, 0, 0,
 				FI_UINT64, FI_CSWAP_NE, NULL);
 	cr_assert_eq(ret, -FI_EINVAL);
 	ret = fi_compare_atomicv(cxit_ep,
 				&iov, 0, 2,
 				&ciov, 0, 1,
 				&riov, 0, 1,
-				0, 0, 0,
+				cxit_ep_fi_addr, 0, 0,
 				FI_UINT64, FI_CSWAP_NE, NULL);
 	cr_assert_eq(ret, -FI_EINVAL);
 	ret = fi_compare_atomicv(cxit_ep,
 				&iov, 0, 0,
 				&ciov, 0, 1,
 				&riov, 0, 1,
-				0, 0, 0,
+				cxit_ep_fi_addr, 0, 0,
 				FI_UINT64, FI_CSWAP_NE, NULL);
 	cr_assert_eq(ret, -FI_EINVAL);
 	riov.count = 2;
@@ -319,7 +321,7 @@ Test(atomic_invalid, invalid_swap)
 				&iov, 0, 1,
 				&ciov, 0, 1,
 				&riov, 0, 1,
-				0, 0, 0,
+				cxit_ep_fi_addr, 0, 0,
 				FI_UINT64, FI_CSWAP_NE, NULL);
 	cr_assert_eq(ret, -FI_EINVAL);
 	riov.count = 0;
@@ -327,7 +329,7 @@ Test(atomic_invalid, invalid_swap)
 				&iov, 0, 1,
 				&ciov, 0, 1,
 				&riov, 0, 1,
-				0, 0, 0,
+				cxit_ep_fi_addr, 0, 0,
 				FI_UINT64, FI_CSWAP_NE, NULL);
 	cr_assert_eq(ret, -FI_EINVAL);
 	riov.count = 1;
@@ -336,7 +338,7 @@ Test(atomic_invalid, invalid_swap)
 				&iov, 0, 1,
 				&ciov, 0, 1,
 				&riov, 0, 1,
-				0, 0, 0,
+				cxit_ep_fi_addr, 0, 0,
 				FI_UINT64, FI_CSWAP_NE, NULL);
 	cr_assert_eq(ret, -FI_EINVAL);
 	ciov.count = 0;
@@ -344,7 +346,7 @@ Test(atomic_invalid, invalid_swap)
 				&iov, 0, 1,
 				&ciov, 0, 1,
 				&riov, 0, 1,
-				0, 0, 0,
+				cxit_ep_fi_addr, 0, 0,
 				FI_UINT64, FI_CSWAP_NE, NULL);
 	cr_assert_eq(ret, -FI_EINVAL);
 	ciov.count = 1;
@@ -353,7 +355,7 @@ Test(atomic_invalid, invalid_swap)
 				&iov, 0, 1,
 				&ciov, 0, 1,
 				&riov, 0, 1,
-				0, 0, 0,
+				cxit_ep_fi_addr, 0, 0,
 				FI_UINT64, FI_CSWAP_NE, NULL);
 	cr_assert_eq(ret, -FI_EINVAL);
 	iov.count = 0;
@@ -361,7 +363,7 @@ Test(atomic_invalid, invalid_swap)
 				&iov, 0, 1,
 				&ciov, 0, 1,
 				&riov, 0, 1,
-				0, 0, 0,
+				cxit_ep_fi_addr, 0, 0,
 				FI_UINT64, FI_CSWAP_NE, NULL);
 	cr_assert_eq(ret, -FI_EINVAL);
 	iov.count = 1;
@@ -390,7 +392,7 @@ Test(atomic, simple_amo, .timeout = 10)
 	operand1 = 1;
 	exp_remote += operand1;
 	ret = fi_atomic(cxit_ep, &operand1, 1, 0,
-			0, 0, RMA_WIN_KEY,
+			cxit_ep_fi_addr, 0, RMA_WIN_KEY,
 			FI_UINT64, FI_SUM, NULL);
 	cr_assert(ret == FI_SUCCESS, "Return code  = %d", ret);
 	ret = cxit_await_completion(cxit_tx_cq, &cqe);
@@ -402,7 +404,7 @@ Test(atomic, simple_amo, .timeout = 10)
 	operand1 = 3;
 	exp_remote += operand1;
 	ret = fi_atomic(cxit_ep, &operand1, 1, 0,
-			0, 0, RMA_WIN_KEY,
+			cxit_ep_fi_addr, 0, RMA_WIN_KEY,
 			FI_UINT64, FI_SUM, NULL);
 	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
 	ret = cxit_await_completion(cxit_tx_cq, &cqe);
@@ -414,7 +416,7 @@ Test(atomic, simple_amo, .timeout = 10)
 	operand1 = 9;
 	exp_remote += operand1;
 	ret = fi_atomic(cxit_ep, &operand1, 1, 0,
-			0, 0, RMA_WIN_KEY,
+			cxit_ep_fi_addr, 0, RMA_WIN_KEY,
 			FI_UINT64, FI_SUM, NULL);
 	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
 	ret = cxit_await_completion(cxit_tx_cq, &cqe);
@@ -451,7 +453,7 @@ Test(atomic, simple_fetch, .timeout = 10)
 	exp_remote += operand1;
 	ret = fi_fetch_atomic(cxit_ep, &operand1, 1, 0,
 			      loc, 0,
-			      0, 0, RMA_WIN_KEY,
+			      cxit_ep_fi_addr, 0, RMA_WIN_KEY,
 			      FI_UINT64, FI_SUM, NULL);
 	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
 	ret = cxit_await_completion(cxit_tx_cq, &cqe);
@@ -469,7 +471,7 @@ Test(atomic, simple_fetch, .timeout = 10)
 	exp_remote += operand1;
 	ret = fi_fetch_atomic(cxit_ep, &operand1, 1, 0,
 			      loc, 0,
-			      0, 0, RMA_WIN_KEY,
+			      cxit_ep_fi_addr, 0, RMA_WIN_KEY,
 			      FI_UINT64, FI_SUM, NULL);
 	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
 	ret = cxit_await_completion(cxit_tx_cq, &cqe);
@@ -487,7 +489,7 @@ Test(atomic, simple_fetch, .timeout = 10)
 	exp_remote += operand1;
 	ret = fi_fetch_atomic(cxit_ep, &operand1, 1, 0,
 			      loc, 0,
-			      0, 0, RMA_WIN_KEY,
+			      cxit_ep_fi_addr, 0, RMA_WIN_KEY,
 			      FI_UINT64, FI_SUM, NULL);
 	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
 	ret = cxit_await_completion(cxit_tx_cq, &cqe);
@@ -533,7 +535,7 @@ Test(atomic, simple_swap, .timeout = 10)
 				&operand1, 1, 0,
 				&compare, 0,
 				loc, 0,
-				0, 0, RMA_WIN_KEY,
+				cxit_ep_fi_addr, 0, RMA_WIN_KEY,
 				FI_UINT64, FI_CSWAP_NE, NULL);
 	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
 	ret = cxit_await_completion(cxit_tx_cq, &cqe);
@@ -555,7 +557,7 @@ Test(atomic, simple_swap, .timeout = 10)
 				&operand1, 1, 0,
 				&compare, 0,
 				loc, 0,
-				0, 0, RMA_WIN_KEY,
+				cxit_ep_fi_addr, 0, RMA_WIN_KEY,
 				FI_UINT64, FI_CSWAP_NE, NULL);
 	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
 	ret = cxit_await_completion(cxit_tx_cq, &cqe);
@@ -725,15 +727,17 @@ static void _test_amo(int index, enum fi_datatype dt, enum fi_op op, int err,
 		/* This is a compare command */
 		ret = fi_compare_atomic(cxit_ep, operand1, 1, 0,
 					compare, 0, loc, 0,
-					0, 0, RMA_WIN_KEY, dt, op, NULL);
+					cxit_ep_fi_addr, 0, RMA_WIN_KEY, dt,
+					op, NULL);
 	} else if (loc) {
 		/* This is a fetch command */
 		ret = fi_fetch_atomic(cxit_ep, operand1, 1, 0, loc, 0,
-				      0, 0, RMA_WIN_KEY, dt, op, NULL);
+				      cxit_ep_fi_addr, 0, RMA_WIN_KEY, dt, op,
+				      NULL);
 	} else {
 		/* This is a simple command */
 		ret = fi_atomic(cxit_ep, operand1, 1, 0,
-				0, 0, RMA_WIN_KEY, dt, op, NULL);
+				cxit_ep_fi_addr, 0, RMA_WIN_KEY, dt, op, NULL);
 	}
 
 	if (err) {

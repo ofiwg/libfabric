@@ -27,6 +27,7 @@ Test(tagged, ping, .timeout = 3)
 	struct fi_cq_tagged_entry tx_cqe,
 				  rx_cqe;
 	int err = 0;
+	fi_addr_t from;
 
 	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
 	cr_assert(recv_buf);
@@ -43,12 +44,15 @@ Test(tagged, ping, .timeout = 3)
 		       0, NULL);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_trecv failed %d", ret);
 
-	/* Send 64 bytes to FI address 0 (self) */
-	ret = fi_tsend(cxit_ep, send_buf, send_len, NULL, 0, 0, NULL);
+	/* Send 64 bytes to self */
+	ret = fi_tsend(cxit_ep, send_buf, send_len, NULL, cxit_ep_fi_addr, 0,
+		       NULL);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_tsend failed %d", ret);
 
 	/* Wait for async event indicating data has been received */
-	ret = cxit_await_completion(cxit_rx_cq, &rx_cqe);
+	do {
+		ret = fi_cq_readfrom(cxit_rx_cq, &rx_cqe, 1, &from);
+	} while (ret == -FI_EAGAIN);
 	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
 
 	/* Validate RX event fields */
@@ -59,6 +63,7 @@ Test(tagged, ping, .timeout = 3)
 	cr_assert(rx_cqe.buf == 0, "Invalid RX CQE address");
 	cr_assert(rx_cqe.data == 0, "Invalid RX CQE data");
 	cr_assert(rx_cqe.tag == 0, "Invalid RX CQE tag");
+	cr_assert(from == cxit_ep_fi_addr, "Invalid source address");
 
 	/* Wait for async event indicating data has been sent */
 	ret = cxit_await_completion(cxit_tx_cq, &tx_cqe);
@@ -95,6 +100,7 @@ Test(tagged, ux_ping, .timeout = 3)
 	int send_len = 64;
 	struct fi_cq_tagged_entry tx_cqe,
 				  rx_cqe;
+	fi_addr_t from;
 
 	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
 	cr_assert(recv_buf);
@@ -106,8 +112,9 @@ Test(tagged, ux_ping, .timeout = 3)
 	for (i = 0; i < send_len; i++)
 		send_buf[i] = i + 0xa0;
 
-	/* Send 64 bytes to FI address 0 (self) */
-	ret = fi_tsend(cxit_ep, send_buf, send_len, NULL, 0, 0, NULL);
+	/* Send 64 bytes to self */
+	ret = fi_tsend(cxit_ep, send_buf, send_len, NULL, cxit_ep_fi_addr, 0,
+		       NULL);
 	cr_assert(ret == FI_SUCCESS);
 
 	/* Give some time for the message to move */
@@ -119,7 +126,9 @@ Test(tagged, ux_ping, .timeout = 3)
 	cr_assert(ret == FI_SUCCESS);
 
 	/* Wait for async event indicating data has been received */
-	ret = cxit_await_completion(cxit_rx_cq, &rx_cqe);
+	do {
+		ret = fi_cq_readfrom(cxit_rx_cq, &rx_cqe, 1, &from);
+	} while (ret == -FI_EAGAIN);
 	cr_assert(ret == 1);
 
 	/* Validate RX event fields */
@@ -130,6 +139,7 @@ Test(tagged, ux_ping, .timeout = 3)
 	cr_assert(rx_cqe.buf == 0, "Invalid RX CQE address");
 	cr_assert(rx_cqe.data == 0, "Invalid RX CQE data");
 	cr_assert(rx_cqe.tag == 0, "Invalid RX CQE tag");
+	cr_assert(from == cxit_ep_fi_addr, "Invalid source address");
 
 	/* Wait for async event indicating data has been sent */
 	ret = cxit_await_completion(cxit_tx_cq, &tx_cqe);
@@ -155,7 +165,7 @@ Test(tagged, ux_ping, .timeout = 3)
 }
 
 /* Test DIRECTED_RECV send/recv */
-Test(tagged, directed, .timeout = 3)
+void directed_recv(bool logical)
 {
 	int i, ret;
 	uint8_t *recv_buf,
@@ -166,11 +176,24 @@ Test(tagged, directed, .timeout = 3)
 	struct fi_cq_tagged_entry tx_cqe,
 				  rx_cqe;
 	int err = 0;
-	struct cxip_addr fake_ep_addr = { .nic = 0xbad, .pid = 0xba };
+#define N_FAKE_ADDRS 3
+	struct cxip_addr fake_ep_addrs[N_FAKE_ADDRS+1];
 	fi_addr_t from;
 
-	/* Insert non-existent peer addr into AV (addr 1) */
-	ret = fi_av_insert(cxit_av, (void *)&fake_ep_addr, 1, NULL, 0, NULL);
+	if (logical)
+		cxit_av_attr.flags = FI_SYMMETRIC;
+	cxit_setup_enabled_ep();
+
+	/* Create multiple logical names for the local EP address */
+	for (i = 0; i < N_FAKE_ADDRS; i++) {
+		fake_ep_addrs[i].nic = i + 0x41c;
+		fake_ep_addrs[i].pid = i + 0x21;
+	}
+
+	ret = fi_av_insert(cxit_av, (void *)fake_ep_addrs, 3, NULL, 0, NULL);
+	cr_assert(ret == 3);
+
+	ret = fi_av_insert(cxit_av, (void *)&cxit_ep_addr, 1, NULL, 0, NULL);
 	cr_assert(ret == 1);
 
 	recv_buf = calloc(recv_len, 1);
@@ -185,20 +208,26 @@ Test(tagged, directed, .timeout = 3)
 	for (i = 0; i < send_len; i++)
 		send_buf[i] = i + 0xa0;
 
-	/* Post RX buffer matching non-existent peer (addr 2) */
-	ret = fi_trecv(cxit_ep, recv_buf, recv_len, NULL, 2, 0, 0, NULL);
-	cr_assert(ret == -FI_EINVAL);
+	/* Post an RX buffer matching each EP name that won't be targeted */
+	for (i = 0; i < N_FAKE_ADDRS; i++) {
+		ret = fi_trecv(cxit_ep, fake_recv_buf, recv_len, NULL, i, 0, 0,
+			       NULL);
+		cr_assert(ret == FI_SUCCESS);
+	}
 
-	/* Post RX buffer matching fake peer (addr 1) */
-	ret = fi_trecv(cxit_ep, fake_recv_buf, recv_len, NULL, 1, 0, 0, NULL);
+	if (!logical) {
+		/* Test bad source addr (not valid for logical matching) */
+		ret = fi_trecv(cxit_ep, fake_recv_buf, recv_len, NULL, 100, 0,
+			       0, NULL);
+		cr_assert(ret == -FI_EINVAL);
+	}
+
+	/* Post RX buffer matching EP name 3 */
+	ret = fi_trecv(cxit_ep, recv_buf, recv_len, NULL, 3, 0, 0, NULL);
 	cr_assert(ret == FI_SUCCESS);
 
-	/* Post RX buffer matching self (addr 0) */
-	ret = fi_trecv(cxit_ep, recv_buf, recv_len, NULL, 0, 0, 0, NULL);
-	cr_assert(ret == FI_SUCCESS);
-
-	/* Send 64 bytes to FI address 0 (self) */
-	ret = fi_tsend(cxit_ep, send_buf, send_len, NULL, 0, 0, NULL);
+	/* Send 64 bytes to self (FI address 3)  */
+	ret = fi_tsend(cxit_ep, send_buf, send_len, NULL, 3, 0, NULL);
 	cr_assert(ret == FI_SUCCESS);
 
 	/* Wait for async event indicating data has been received */
@@ -215,7 +244,7 @@ Test(tagged, directed, .timeout = 3)
 	cr_assert(rx_cqe.buf == 0, "Invalid RX CQE address");
 	cr_assert(rx_cqe.data == 0, "Invalid RX CQE data");
 	cr_assert(rx_cqe.tag == 0, "Invalid RX CQE tag");
-	cr_assert(from == 0, "Invalid source address");
+	cr_assert(from == 3, "Invalid source address");
 
 	/* Wait for async event indicating data has been sent */
 	do {
@@ -246,6 +275,21 @@ Test(tagged, directed, .timeout = 3)
 	free(send_buf);
 	free(fake_recv_buf);
 	free(recv_buf);
+
+	/* TODO need RX request cleanup */
+	//cxit_teardown_tagged();
+}
+
+TestSuite(tagged_noinit);
+
+Test(tagged_noinit, directed, .timeout = 3)
+{
+	directed_recv(false);
+}
+
+Test(tagged_noinit, directed_logical, .timeout = 3)
+{
+	directed_recv(true);
 }
 
 /* Test unexpected send/recv */
@@ -255,6 +299,7 @@ struct tagged_thread_args {
 	uint8_t *buf;
 	size_t len;
 	struct fi_cq_tagged_entry *cqe;
+	fi_addr_t src_addr;
 	size_t io_num;
 	size_t tag_offset;
 };
@@ -269,7 +314,8 @@ static void *tsend_worker(void *data)
 	tag = RDVS_TAG + args->tag_offset;
 
 	/* Send 64 bytes to FI address 0 (self) */
-	ret = fi_tsend(cxit_ep, args->buf, args->len, NULL, 0, tag, NULL);
+	ret = fi_tsend(cxit_ep, args->buf, args->len, NULL, cxit_ep_fi_addr,
+		       tag, NULL);
 	cr_assert_eq(ret, FI_SUCCESS, "%s %ld: unexpected ret %d", __func__,
 		     args->io_num, ret);
 
@@ -300,7 +346,7 @@ static void *trecv_worker(void *data)
 
 	/* Wait for async event indicating data has been received */
 	do {
-		ret = fi_cq_read(cxit_rx_cq, args->cqe, 1);
+		ret = fi_cq_readfrom(cxit_rx_cq, args->cqe, 1, &args->src_addr);
 	} while (ret == -FI_EAGAIN);
 	cr_assert_eq(ret, 1, "%s %ld: unexpected ret %d", __func__,
 		     args->io_num, ret);
@@ -391,6 +437,8 @@ Test(tagged, ux_sw_rdvs, .timeout = 10)
 	cr_assert_eq(rx_cqe.data, 0, "Invalid RX CQE data %lx", rx_cqe.data);
 	cr_assert_eq(rx_cqe.tag, 0, "Invalid RX CQE tag %lx",
 		     rx_cqe.tag);
+	cr_assert_eq(args[1].src_addr, cxit_ep_fi_addr,
+		     "Invalid source address");
 
 	free(send_buf);
 	free(recv_buf);
@@ -480,6 +528,8 @@ Test(tagged, expected_sw_rdvs, .timeout = 10)
 	cr_assert_eq(rx_cqe.data, 0, "Invalid RX CQE data %lx", rx_cqe.data);
 	cr_assert_eq(rx_cqe.tag, 0, "Invalid RX CQE tag %lx",
 		     rx_cqe.tag);
+	cr_assert_eq(args[1].src_addr, cxit_ep_fi_addr,
+		     "Invalid source address");
 
 	free(send_buf);
 	free(recv_buf);
@@ -585,7 +635,8 @@ Test(tagged, multitudes_sw_rdvs, .timeout = 10)
 			tx_args[tx_io].buf[i] = i + 0xa0 + tx_io;
 
 		ret = fi_tsend(cxit_ep, tx_args[tx_io].buf, tx_args[tx_io].len,
-			       NULL, 0, tx_args[tx_io].tag_offset, NULL);
+			       NULL, cxit_ep_fi_addr, tx_args[tx_io].tag_offset,
+			       NULL);
 		cr_assert_eq(ret, FI_SUCCESS, "fi_tsend %ld: unexpected ret %d",
 			     tx_io, ret);
 	}

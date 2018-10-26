@@ -17,6 +17,7 @@ struct fid_fabric *cxit_fabric;
 struct fid_domain *cxit_domain;
 struct fid_ep *cxit_ep;
 struct cxip_addr cxit_ep_addr;
+fi_addr_t cxit_ep_fi_addr;
 struct fid_ep *cxit_sep;
 struct fi_cq_attr cxit_tx_cq_attr, cxit_rx_cq_attr;
 struct fid_cq *cxit_tx_cq, *cxit_rx_cq;
@@ -406,7 +407,7 @@ void cxit_teardown_ep(void)
 	cxit_teardown_domain();
 }
 
-void cxit_setup_rma(void)
+void cxit_setup_enabled_ep(void)
 {
 	int ret;
 	size_t addrlen = sizeof(cxit_ep_addr);
@@ -415,6 +416,7 @@ void cxit_setup_rma(void)
 
 	cxit_tx_cq_attr.format = FI_CQ_FORMAT_TAGGED;
 	cxit_av_attr.type = FI_AV_TABLE;
+	cxit_av_attr.rx_ctx_bits = 4;
 
 	cxit_fi_hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
 	cxit_fi_hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
@@ -435,9 +437,22 @@ void cxit_setup_rma(void)
 	ret = fi_getname(&cxit_ep->fid, &cxit_ep_addr, &addrlen);
 	cr_assert(ret == FI_SUCCESS);
 	cr_assert(addrlen == sizeof(cxit_ep_addr));
+}
+
+void cxit_setup_rma(void)
+{
+	int ret;
+	struct cxip_addr fake_addr = { .nic = 0xad, .pid = 0xbc };
+
+	cxit_setup_enabled_ep();
 
 	/* Insert local address into AV to prepare to send to self */
-	ret = fi_av_insert(cxit_av, (void *)&cxit_ep_addr, 1, NULL, 0, NULL);
+	ret = fi_av_insert(cxit_av, (void *)&fake_addr, 1, NULL, 0, NULL);
+	cr_assert(ret == 1);
+
+	/* Insert local address into AV to prepare to send to self */
+	ret = fi_av_insert(cxit_av, (void *)&cxit_ep_addr, 1, &cxit_ep_fi_addr,
+			   0, NULL);
 	cr_assert(ret == 1);
 }
 

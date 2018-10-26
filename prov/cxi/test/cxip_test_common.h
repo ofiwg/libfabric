@@ -15,6 +15,7 @@ extern struct fid_fabric *cxit_fabric;
 extern struct fid_domain *cxit_domain;
 extern struct fid_ep *cxit_ep;
 extern struct cxip_addr cxit_ep_addr;
+extern fi_addr_t cxit_ep_fi_addr;
 extern struct fid_ep *cxit_sep;
 extern struct fi_cq_attr cxit_tx_cq_attr, cxit_rx_cq_attr;
 extern struct fid_cq *cxit_tx_cq, *cxit_rx_cq;
@@ -60,6 +61,7 @@ void cxit_teardown_ep(void);
 #define cxit_teardown_cq cxit_teardown_ep
 #define cxit_setup_av cxit_setup_ep
 #define cxit_teardown_av cxit_teardown_ep
+void cxit_setup_enabled_ep(void);
 void cxit_setup_rma(void);
 #define cxit_setup_tagged cxit_setup_rma
 void cxit_teardown_rma(void);

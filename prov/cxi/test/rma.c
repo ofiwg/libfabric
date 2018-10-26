@@ -65,10 +65,9 @@ Test(rma, simple_write)
 
 	mr_create(win_len, FI_REMOTE_WRITE, 0xa0, key_val, &mem_window);
 
-	/* Send 8 bytes from send buffer data to RMA window 0 at FI address 0
-	 * (self)
-	 */
-	ret = fi_write(cxit_ep, send_buf, send_len, 0, 0, 0, key_val, NULL);
+	/* Send 8 bytes from send buffer data to RMA window 0 */
+	ret = fi_write(cxit_ep, send_buf, send_len, NULL, cxit_ep_fi_addr, 0,
+		       key_val, NULL);
 	cr_assert(ret == FI_SUCCESS);
 
 	/* Wait for async event indicating data has been sent */
@@ -114,10 +113,9 @@ Test(rma, simple_writev)
 	iov[0].iov_base = send_buf;
 	iov[0].iov_len = send_len;
 
-	/* Send 8 bytes from send buffer data to RMA window 0 at FI address 0
-	 * (self)
-	 */
-	ret = fi_writev(cxit_ep, iov, NULL, 1, 0, 0, key_val, NULL);
+	/* Send 8 bytes from send buffer data to RMA window 0 */
+	ret = fi_writev(cxit_ep, iov, NULL, 1, cxit_ep_fi_addr, 0, key_val,
+			NULL);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_writev failed %d", ret);
 
 	/* Wait for async event indicating data has been sent */
@@ -174,6 +172,7 @@ Test(rma, simple_writemsg)
 	msg.iov_count = 1;
 	msg.rma_iov = rma;
 	msg.rma_iov_count = 1;
+	msg.addr = cxit_ep_fi_addr;
 
 	/* Send 8 bytes from send buffer data to RMA window 0 at FI address 0
 	 * (self)
@@ -221,7 +220,8 @@ Test(rma, simple_read)
 	mr_create(remote_len, FI_REMOTE_READ, 0xc0, key_val, &remote);
 
 	/* Get 8 bytes from the source buffer to the receive buffer */
-	ret = fi_read(cxit_ep, local, local_len, NULL, 0, 0, key_val, NULL);
+	ret = fi_read(cxit_ep, local, local_len, NULL, cxit_ep_fi_addr, 0,
+		      key_val, NULL);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_read() failed (%d)", ret);
 
 	/* Wait for async event indicating data has been sent */
@@ -268,7 +268,8 @@ Test(rma, simple_readv)
 	iov[0].iov_len = local_len;
 
 	/* Get 8 bytes from the source buffer to the receive buffer */
-	ret = fi_readv(cxit_ep, iov, NULL, 1, 0, 0, key_val, NULL);
+	ret = fi_readv(cxit_ep, iov, NULL, 1, cxit_ep_fi_addr, 0, key_val,
+		       NULL);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_readv() failed (%d)", ret);
 
 	/* Wait for async event indicating data has been sent */
@@ -325,6 +326,7 @@ Test(rma, simple_readmsg)
 	msg.iov_count = 1;
 	msg.rma_iov = rma;
 	msg.rma_iov_count = 1;
+	msg.addr = cxit_ep_fi_addr;
 
 	/* Get 8 bytes from the source buffer to the receive buffer */
 	ret = fi_readmsg(cxit_ep, &msg, flags);
@@ -414,8 +416,8 @@ Test(rma, readv_failures)
 	struct iovec iov = {};
 
 	 /* Invalid count value */
-	ret = fi_readv(cxit_ep, &iov, NULL, CXIP_RMA_MAX_IOV + 1, 0, 0, 0,
-		       NULL);
+	ret = fi_readv(cxit_ep, &iov, NULL, CXIP_RMA_MAX_IOV + 1,
+		       cxit_ep_fi_addr, 0, 0, NULL);
 	cr_assert_eq(ret, -FI_EINVAL, "Invalid count return %d", ret);
 }
 
@@ -426,7 +428,7 @@ Test(rma, writev_failures)
 	struct iovec iov = {};
 
 	 /* Invalid count value */
-	ret = fi_writev(cxit_ep, &iov, NULL, CXIP_RMA_MAX_IOV + 1, 0, 0, 0,
-			NULL);
+	ret = fi_writev(cxit_ep, &iov, NULL, CXIP_RMA_MAX_IOV + 1,
+			cxit_ep_fi_addr, 0, 0, NULL);
 	cr_assert_eq(ret, -FI_EINVAL, "Invalid count return %d", ret);
 }
