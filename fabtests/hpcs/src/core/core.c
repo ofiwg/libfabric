@@ -43,6 +43,7 @@
 #include <rdma/fabric.h>
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_cm.h>
+#include <rdma/fi_trigger.h>
 
 #include <core/user.h>
 #include <pattern/user.h>
@@ -65,7 +66,6 @@ static int verbose = 0;
 struct domain_state {
 	struct fid_domain *domain;
 	struct fid_ep *endpoint;
-
 	struct fid_av *av;
 
 	/* Will contain only one completion object if
@@ -225,18 +225,19 @@ err_init_tx_cntrs:
  * corresponding unbind function, since completion objects are implicitly
  * unbound when they are freed.
  */
-int bind_ofi_endpoint_completion(struct domain_state *domain_state)
+int bind_ofi_endpoint_completion(const struct test_config *test_config,
+		struct domain_state *domain_state)
 {
 	int ret;
 
 	if (domain_state->tx_cq) {
-		/* If we have a tx counter, suppress cq completions by default. */
 		uint64_t flags =
-				domain_state->tx_cntr == NULL
+				test_config->tx_use_cq
 					? FI_TRANSMIT
 					: FI_TRANSMIT | FI_SELECTIVE_COMPLETION;
 
-		ret = fi_ep_bind(domain_state->endpoint, &domain_state->tx_cq->fid, flags);
+		ret = fi_ep_bind(domain_state->endpoint,
+				&domain_state->tx_cq->fid, flags);
 		if (ret) {
 			hpcs_error("binding tx cq to ep failed\n");
 			goto err;
@@ -244,7 +245,12 @@ int bind_ofi_endpoint_completion(struct domain_state *domain_state)
 	}
 
 	if (domain_state->rx_cq) {
-		ret = fi_ep_bind(domain_state->endpoint, &domain_state->rx_cq->fid, FI_RECV);
+		uint64_t flags =
+				test_config->rx_use_cq
+					? FI_RECV
+					: FI_RECV | FI_SELECTIVE_COMPLETION;
+		ret = fi_ep_bind(domain_state->endpoint,
+				&domain_state->rx_cq->fid, flags);
 		if (ret) {
 			hpcs_error("binding rx cq to ep failed\n");
 			goto err;
@@ -252,12 +258,28 @@ int bind_ofi_endpoint_completion(struct domain_state *domain_state)
 	}
 
 	if (domain_state->tx_cntr) {
-		ret = fi_ep_bind(domain_state->endpoint, &domain_state->tx_cntr->fid, FI_TRANSMIT);
+		ret = fi_ep_bind(domain_state->endpoint,
+				&domain_state->tx_cntr->fid,
+				FI_SEND | FI_READ | FI_WRITE);
 		if (ret) {
 			hpcs_error("binding tx counter to ep failed\n");
 			goto err;
 		}
 	}
+
+	/*
+	 * Tests that bind counters to memory regions for rx notification
+	 * shouldn't also bind the counter to the EP.
+	 */
+	if (domain_state->rx_cntr && !test_config->rx_use_mr) {
+		ret = fi_ep_bind(domain_state->endpoint,
+				&domain_state->rx_cntr->fid, FI_RECV);
+		if (ret) {
+			hpcs_error("binding rx counter to ep failed\n");
+			goto err;
+		}
+	}
+
 err:
 	return ret;
 }
@@ -327,7 +349,7 @@ int init_ofi_domain(
 		goto err;
 	}
 
-	ret = bind_ofi_endpoint_completion(domain_state);
+	ret = bind_ofi_endpoint_completion(test_config, domain_state);
 	if (ret) {
 		hpcs_error("bind_ofi_endpoint_completion failed\n");
 		goto err;
@@ -425,8 +447,9 @@ int init_ofi(
 	hints->domain_attr->resource_mgmt = FI_RM_ENABLED;
 	hints->domain_attr->mr_mode = FI_MR_RMA_EVENT;
 	hints->domain_attr->mr_key_size = 4;
-	hints->caps = test_config->minimum_caps;
-	hints->mode = FI_CONTEXT;
+	hints->caps = test_config->minimum_caps |
+			(arguments->pattern_api.enable_triggered ? FI_TRIGGER : 0);
+	hints->mode = FI_CONTEXT2;
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->tx_attr->op_flags = FI_DELIVERY_COMPLETE;
 
@@ -625,7 +648,7 @@ void next_args(int *argc, char * const**argv)
 static int parse_arguments(int argc, char * const* argv,
 		struct arguments **arguments)
 {
-	int longopt_idx, op, onesided = 0, ret = 0;
+	int longopt_idx, op, ret = 0;
 	struct option longopt[] = {
 		{"prov", required_argument, 0, 'p'},
 		{"window", required_argument, 0, 'w'},
@@ -651,9 +674,6 @@ static int parse_arguments(int argc, char * const* argv,
 	if (args == NULL)
 		return -ENOMEM;
 
-	if(strstr(argv[0], "onesided") != NULL)
-		onesided = 1;
-
 	while ((op = getopt_long(argc, argv, "vp:w:o:a:n:h", longopt, &longopt_idx)) != -1) {
 		switch (op) {
 		case 0:
@@ -674,28 +694,25 @@ static int parse_arguments(int argc, char * const* argv,
 			else if (strcmp(optarg, "expected") == 0)
 				args->callback_order = CALLBACK_ORDER_EXPECTED;
 			else if (strcmp(optarg, "unexpected") == 0)
-			{
-				if(onesided) {
-					hpcs_error("Unexpected is not supported"
-						   " in onesided test\n");
-					return -EINVAL;
-				}
-
-
 				args->callback_order = CALLBACK_ORDER_UNEXPECTED;
-			}
-			else
+			else {
+				hpcs_error("failed to parse ordering\n");
 				return -EINVAL;
+			}
 			break;
 		case 'a':
 			if ((!strcmp(optarg, "alltoall")) || (!strcmp(optarg, "a2a")))
-				args->pattern_api = a2a_pattern_api ();
+				args->pattern_api = a2a_pattern_api();
 			else if (!strcmp(optarg, "self"))
-				args->pattern_api = self_pattern_api ();
+				args->pattern_api = self_pattern_api();
 			else if (!strcmp(optarg, "alltoone"))
-				args->pattern_api = alltoone_pattern_api ();
-			else
+				args->pattern_api = alltoone_pattern_api();
+			else if (!strcmp(optarg, "ring"))
+				args->pattern_api = ring_pattern_api();
+			else {
+				hpcs_error("unknown pattern\n");
 				return -EINVAL;
+			}
 			have_pattern = 1;
 			break;
 		case 'n':
@@ -717,6 +734,19 @@ static int parse_arguments(int argc, char * const* argv,
 				   "\t[-h | --help]\n");
 			return -1;
 		}
+	}
+
+	/*
+	 * Onsided tests create memory region before any data movement happens,
+	 * but core doesn't initialize the buffer until it posts receives.
+	 *
+	 * In non-expected ordering, the buffer could be initialized after the
+	 * payload is received, which isn't what we want.
+	 */
+	if (strstr(argv[0], "onesided") != NULL &&
+			args->callback_order != CALLBACK_ORDER_EXPECTED) {
+		hpcs_error("onsided test requires expected ording (\"--order=expected\")\n");
+		return -EINVAL;
 	}
 
 	if (!have_pattern) {
@@ -742,12 +772,12 @@ static int parse_arguments(int argc, char * const* argv,
 			&args->test_arguments,
                 	&args->buffer_size);
 
-	*arguments = args;
-
 	if (ret) {
 		hpcs_error("failed to parse test arguments\n");
 		return ret;
 	}
+
+	*arguments = args;
 
 	return 0;
 }
@@ -802,14 +832,17 @@ static int core_inner (
 	uint64_t recvs_posted = 0, sends_posted = 0;
 	uint64_t recvs_done = 0, sends_done = 0;
 
+	uint64_t tx_flags = pattern->enable_triggered ? FI_TRIGGER : 0;
+	uint64_t rx_flags = 0;
+
 	memset((char*)&tx_context[0], 0, sizeof(tx_context[0])*window);
 	memset((char*)&rx_context[0], 0, sizeof(rx_context[0])*window);
 
 	for (i = 0; i < window; i++) {
 		tx_context[i].ctxinfo =
-				calloc(test_config->tx_context_count*sizeof(struct context_info), 1);
+				calloc(test_config->tx_context_count, sizeof(struct context_info));
 		rx_context[i].ctxinfo =
-				calloc(test_config->rx_context_count*sizeof(struct context_info), 1);
+				calloc(test_config->rx_context_count, sizeof(struct context_info));
 
 		if (tx_context[i].ctxinfo == NULL || rx_context[i].ctxinfo == NULL)
 			return -FI_ENOMEM;
@@ -903,6 +936,8 @@ static int core_inner (
 	for (i = 0; i < iterations; i++) {
 		int cur_sender = PATTERN_NO_CURRENT;
 		int cur_receiver = PATTERN_NO_CURRENT;
+		int cur_sender_rx_threshold = 0;
+		int cur_receiver_tx_threshold = 0;
 		int prev;
 		int completions_done = 0, rx_done = 0, tx_done = 0;
 		struct op_context* op_context;
@@ -917,11 +952,15 @@ static int core_inner (
 					break;
 
 				prev = cur_sender;
-				if (pattern->next_sender(pattern_args, rank, ranks, &cur_sender) != 0) {
+				ret = pattern->next_sender(pattern_args, rank, ranks, &cur_sender, &cur_sender_rx_threshold);
+				if (ret == -ENODATA) {
 					rx_done = 1;
 					if (order == CALLBACK_ORDER_EXPECTED)
 						barrier();
 					break;
+				} else if (ret < 0) {
+					hpcs_error("next_sender failed\n");
+					return ret;
 				}
 
 				/*
@@ -947,13 +986,17 @@ static int core_inner (
 
 				op_context->buf = DATA_BUF(rx_buf, recvs_posted);
 
+				/*
+				 * cur_sender_rx_threshold is currently ignored, but we could enable
+				 * triggered receives in the future if we have a good reason to do so.
+				 */
+
 				ret = test->rx_transfer(test_args, cur_sender,
 						1, domain_state->addresses[cur_sender],
 						domain_state->endpoint,
 						op_context,
 						op_context->buf,
-						NULL, NULL, NULL);
-
+						NULL, NULL, NULL, rx_flags);
 
 				if (ret == -FI_EAGAIN) {
 					cur_sender = prev;
@@ -982,11 +1025,15 @@ static int core_inner (
                                         break;
 
 				prev = cur_receiver;
-				if (pattern->next_receiver(pattern_args, rank, ranks, &cur_receiver) != 0) {
+				ret = pattern->next_receiver(pattern_args, rank, ranks, &cur_receiver, &cur_receiver_tx_threshold);
+				if (ret == -ENODATA) {
 					if (order == CALLBACK_ORDER_UNEXPECTED)
 						barrier();
 					tx_done = 1;
 					break;
+				} else if (ret < 0) {
+					hpcs_error("next_receiver failed\n");
+					return ret;
 				}
 
 				if (tx_window == 0) {
@@ -1016,19 +1063,6 @@ static int core_inner (
 						goto err_mem;
 					}
 
-					if (test_config->tx_use_cntr) {
-						if (domain_state->tx_cntr) {
-							ret = fi_mr_bind(mr, &domain_state->tx_cntr->fid, FI_SEND);
-							if (ret) {
-								hpcs_error("fi_mr_bind (tx_cntr) failed: ret %d\n", ret);
-								return -1;
-							}
-						} else {
-							hpcs_error("no counter to bind tx memory region to\n");
-							return -EINVAL;
-						}
-					}
-
 					mr_desc = fi_mr_desc(mr);
 				}
 
@@ -1037,12 +1071,28 @@ static int core_inner (
 				op_context->buf = DATA_BUF(tx_buf, sends_posted);
 				op_context->tx_mr = mr;
 
+				if (pattern->enable_triggered) {
+					for (j=0; j < test_config->tx_context_count; j++) {
+						op_context->ctxinfo[j].fi_trig_context.event_type = FI_TRIGGER_THRESHOLD;
+						op_context->ctxinfo[j].fi_trig_context.trigger.threshold =
+							(struct fi_trigger_threshold) {
+								.threshold =
+									sends_done_prev +
+									(cur_receiver_tx_threshold * test_config->tx_context_count),
+								.cntr = domain_state->rx_cntr
+							};
+					}
+
+					op_context->tx_cntr = domain_state->tx_cntr;
+					op_context->domain = domain_state->domain;
+				}
+
 				ret = test->tx_transfer(test_args, rank,
 						1, domain_state->addresses[cur_receiver],
 						domain_state->endpoint,
 						op_context,
 						op_context->buf,
-						mr_desc, keys[cur_receiver], rank, NULL, NULL);
+						mr_desc, keys[cur_receiver], rank, NULL, NULL, tx_flags);
 
 				if (ret == -FI_EAGAIN) {
 					cur_receiver = prev;
@@ -1050,9 +1100,10 @@ static int core_inner (
 				}
 
 				hpcs_verbose("tx_transfer initiated from rank %ld "
-					     "to rank %d: ctx %p key %ld ret %d\n",
-					     rank, cur_receiver, op_context,
-					     keys[cur_receiver], ret);
+						"to rank %d: ctx %p key %ld trigger %d ret %d\n",
+						rank, cur_receiver, op_context,
+						keys[cur_receiver],
+						cur_receiver_tx_threshold, ret);
 
 				if (ret) {
 					hpcs_error("tx_transfer failed, ret=%d\n", ret);
@@ -1077,7 +1128,7 @@ static int core_inner (
 					}
 
 					if (test->rx_datacheck(test_args, op_context->buf, 0)) {
-						hpcs_error("rx data check error at iteration %ld\n", i);
+						hpcs_error("rank %d: rx data check error at iteration %ld\n", rank, i);
 						return -1;
 					}
 
@@ -1102,7 +1153,7 @@ static int core_inner (
 						     op_context);
 
 					if (test->tx_datacheck(test_args, op_context->buf)) {
-						hpcs_error("tx data check error at iteration %ld\n", i);
+						hpcs_error("rank %d: tx data check error at iteration %ld\n", rank, i);
 						return -1;
 					}
 
@@ -1126,10 +1177,13 @@ static int core_inner (
 
 			/*
 			 * Counters are generally used for RMA/atomics and completion is handled
-			 * as all-or-nothing rather than individual completions.
+			 * as all-or-nothing rather than tracking individual completions.
+			 *
+			 * Triggered ops tests may use counters and CQs at the same time, in which
+			 * case we ignore the counter completions here.
 			 */
 			if (rx_done && tx_done) {
-				if (test_config->tx_use_cntr && sends_done < sends_posted) {
+				if (test_config->tx_use_cntr && sends_done < sends_posted && !test_config->tx_use_cq) {
 					ret = test->tx_cntr_completion(test_args, sends_posted, domain_state->tx_cntr);
 					if (ret) {
 						hpcs_error("cntr_completion (tx) failed, ret=%d\n", ret);
@@ -1157,10 +1211,10 @@ static int core_inner (
 						return -EFAULT;
 					}
 
-					hpcs_verbose("TX counter completion done\n");
+					hpcs_verbose("tx counter completion done\n");
 				}
 
-				if (test_config->rx_use_cntr && recvs_done < recvs_posted) {
+				if (test_config->rx_use_cntr && recvs_done < recvs_posted && !test_config->rx_use_cq) {
 					ret = test->rx_cntr_completion(test_args, recvs_posted, domain_state->rx_cntr);
 					if (ret) {
 						hpcs_error("cntr_completion (rx) failed, ret=%d\n", ret);
@@ -1175,7 +1229,7 @@ static int core_inner (
 						rx_window++;
 					}
 
-					/* 
+					/*
 					 * note: counter tests use rx_buf directly,
 					 * rather than DATA_BUF(rx_buf, j)
 					 */
@@ -1184,8 +1238,6 @@ static int core_inner (
 						hpcs_error("rx data check error at iteration %ld\n", i);
 						return -1;
 					}
-
-					test->rx_init_buffer(test_args, rx_buf);
 
 					if (recvs_done != recvs_posted) {
 						hpcs_error("rx accounting internal error\n");
@@ -1199,8 +1251,8 @@ static int core_inner (
 			if (recvs_posted == recvs_done && sends_posted == sends_done) {
 				completions_done = 1;
 			} else {
-				hpcs_verbose("recvs_posted=%ld, recvs_done=%ld, sends_posted=%ld, sends_done=%ld\n",
-					      recvs_posted, recvs_done, sends_posted, sends_done);
+				hpcs_verbose("rank %d: recvs_posted=%ld, recvs_done=%ld, sends_posted=%ld, sends_done=%ld\n",
+					      rank, recvs_posted, recvs_done, sends_posted, sends_done);
 				usleep(50000);
 			}
 		}
@@ -1268,6 +1320,11 @@ int core (
 
 	test_config = test.config(arguments->test_arguments);
 
+	if (pattern.enable_triggered && !test_config.rx_use_cntr) {
+		hpcs_error("patterns that rely on triggered ops may only be used with tests that use rx counters\n");
+		return -FI_EINVAL;
+	}
+
 	hpcs_verbose("Initializing ofi resources\n");
 
 	domain_state.addresses = &addresses[0];
@@ -1293,7 +1350,7 @@ int core (
 			our_mpi_rank, num_mpi_ranks, address_exchange, barrier);
 
 	if (ret) {
-		hpcs_error("Test failed, ret=%d\n", ret);
+		hpcs_error("Test failed, ret=%d (%s)\n", ret, fi_strerror(-ret));
 		return -1;
 	}
 

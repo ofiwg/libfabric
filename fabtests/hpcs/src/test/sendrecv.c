@@ -52,6 +52,7 @@ _Static_assert((TEST_API_VERSION_MAJOR == 0), "bad version");
 
 struct test_arguments {
 	size_t transfer_size;
+	bool use_workqueue;
 };
 
 static int parse_arguments(
@@ -63,6 +64,7 @@ static int parse_arguments(
 	int longopt_idx=0, op;
 	static struct option longopt[] = {
 		{"size", required_argument, 0, 's'},
+		{"workqueue", no_argument, 0, 'w'},
 		{"help", no_argument, 0, 'h'},
 		{0}
 	};
@@ -76,16 +78,20 @@ static int parse_arguments(
 	};
 
 	if (argc > 0 && argv != NULL) {
-		while ((op = getopt_long(argc, argv, "s:h", longopt, &longopt_idx)) != -1) {
+		while ((op = getopt_long(argc, argv, "s:wh", longopt, &longopt_idx)) != -1) {
 			switch (op) {
 			case 's':
 				if (sscanf(optarg, "%zu", &args->transfer_size) != 1)
 					return -EINVAL;
 				break;
+			case 'w':
+				args->use_workqueue = 1;
+				break;
 			case 'h':
 			default:
 				fprintf(stderr, "<test arguments> :=\n"
 						"\t[-s | --size=<size>]\n"
+						"\t[-w | --workqueue]\n"
 						"\t[-h | --help]\n");
 				return -EINVAL;
 				break;
@@ -112,8 +118,8 @@ static struct test_config config(const struct test_arguments *arguments)
 
 		.minimum_caps = FI_TAGGED | FI_SEND | FI_RECV,
 
-		.tx_use_cntr = false,
-		.rx_use_cntr = false,
+		.tx_use_cntr = true,
+		.rx_use_cntr = true,
 		.tx_use_cq = true,
 		.rx_use_cq = true,
 
@@ -218,17 +224,51 @@ static int tx_transfer(
 		uint64_t key,
 		int rank,
 		struct fid_cntr *tx_cntr,
-		struct fid_cntr *rx_cntr)
+		struct fid_cntr *rx_cntr,
+		uint64_t flags)
 {
 	const uint64_t tag = transfer_id;
-	return fi_tsend (
-			endpoint,
-			buffer,
-			arguments->transfer_size,
-			desc,
-			rx_address,
-			tag,
-			&op_context->ctxinfo[0].fi_context);
+	struct context_info *ctxinfo = op_context->ctxinfo;
+	int ret;
+
+	ctxinfo->iov = (struct iovec) {
+		.iov_base = buffer,
+		.iov_len = arguments->transfer_size
+	};
+
+	ctxinfo->tagged = (struct fi_msg_tagged) {
+		.msg_iov = &ctxinfo->iov,
+		.iov_count = 1,
+		.desc = desc,
+		.addr = rx_address,
+		.tag = tag,
+		.context = &ctxinfo->fi_context,
+		.data = 0
+	};
+
+	if (arguments->use_workqueue && flags & FI_TRIGGER) {
+		struct fi_deferred_work *work = &ctxinfo->def_work;
+		work->triggering_cntr =
+				ctxinfo->fi_trig_context.trigger.threshold.cntr;
+		work->threshold = ctxinfo->fi_trig_context.trigger.threshold.threshold;
+		work->completion_cntr = op_context->tx_cntr;
+
+		flags = flags & ~FI_TRIGGER;
+
+		ctxinfo->tagged_op = (struct fi_op_tagged) {
+			.ep = endpoint,
+			.msg = ctxinfo->tagged,
+			.flags = flags | FI_COMPLETION
+		};
+		work->op_type = FI_OP_TSEND;
+		work->op.tagged = &ctxinfo->tagged_op;
+
+		ret = fi_control(&op_context->domain->fid, FI_QUEUE_WORK, work);
+	} else {
+		ret = fi_tsendmsg(endpoint, &ctxinfo->tagged, flags);
+	}
+
+	return ret;
 }
 
 static int rx_transfer(
@@ -241,7 +281,8 @@ static int rx_transfer(
 		uint8_t *buffer,
 		void *desc,
 		struct fid_cntr *tx_cntr,
-		struct fid_cntr *rx_cntr)
+		struct fid_cntr *rx_cntr,
+		uint64_t flags)
 {
 	const uint64_t tag = transfer_id;
 	const uint64_t ignore = 0;
@@ -257,12 +298,33 @@ static int rx_transfer(
 }
 
 
-static int tx_cntr_completion(
+static int cntr_completion(
 		const struct test_arguments *arguments,
 		const size_t completion_count,
-		struct fid_cntr *cntr)
+		struct fid_cntr *cntr,
+		const char *cntr_name)
 {
-	return fi_cntr_wait (cntr, completion_count, -1);
+	int ret;
+
+	do {
+		ret = fi_cntr_wait(cntr, completion_count, 1000);
+		if (ret == -FI_ETIMEDOUT) {
+			printf("waiting on %s: current=%ld, expected=%ld\n",
+					cntr_name,
+					fi_cntr_read(cntr),
+					completion_count);
+		}
+	} while (ret == -FI_ETIMEDOUT);
+
+	return ret;
+}
+
+static int tx_cntr_completion (
+	const struct test_arguments *arguments,
+	const size_t completion_count,
+	struct fid_cntr *cntr)
+{
+	return cntr_completion(arguments, completion_count, cntr, "tx counter");
 }
 
 static int rx_cntr_completion (
@@ -270,8 +332,9 @@ static int rx_cntr_completion (
 	const size_t completion_count,
 	struct fid_cntr *cntr)
 {
-	return fi_cntr_wait(cntr, completion_count, -1);
+	return cntr_completion(arguments, completion_count, cntr, "rx counter");
 }
+
 
 static int cq_completion (
 	struct op_context **context,
@@ -316,7 +379,8 @@ static int datacheck(
 
 	for (b = 0; b < arguments->transfer_size; b += 1) {
 		if (((uint8_t *) buffer)[b] != UINT8_MAX) {
-			fprintf(stderr, "datacheck failed at byte %zu\n", b);
+			fprintf(stderr, "datacheck failed at byte %zu (expected %u, found %u)\n",
+					b, UINT8_MAX, buffer[b]);
 			our_ret = -EIO;
 			goto err_data_check;
 		}

@@ -56,14 +56,15 @@ static int self_pattern_next(
 		const struct pattern_arguments *arguments,
 		int my_rank,
 		int num_ranks,
-		int *cur)
+		int *cur,
+		int *threshold)
 {
 	if (*cur == PATTERN_NO_CURRENT) {
 		*cur = my_rank;
 		return 0;
 	}
 
-	return -1;
+	return -ENODATA;
 }
 
 struct pattern_api

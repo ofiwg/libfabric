@@ -37,7 +37,8 @@
 #include <stdbool.h>
 
 #include <rdma/fabric.h>
-
+#include <rdma/fi_trigger.h>
+#include <sys/uio.h>
 
 /*
  * -----------------------------------------------------------------------------
@@ -162,7 +163,29 @@ enum op_state {
 };
 
 struct context_info {
-	struct fi_context	fi_context;
+	union {
+		struct fi_context2		fi_context;
+		struct fi_triggered_context2	fi_trig_context;
+	};
+	union {
+		struct fi_msg_tagged	tagged;
+		struct fi_msg_rma	rma_msg;
+		struct fi_msg_atomic	atomic_msg;
+	};
+	union {
+		struct iovec		iov;
+		struct fi_ioc		ioc;
+	};
+	union {
+		struct fi_rma_iov	rma_remote_iov;
+		struct fi_rma_ioc	rma_remote_ioc;
+	};
+	struct fi_deferred_work def_work;
+	union {
+		struct fi_op_rma	rma_op;
+		struct fi_op_atomic	atomic_op;
+		struct fi_op_tagged	tagged_op;
+	};
 	struct op_context	*op_context;
 };
 
@@ -173,6 +196,8 @@ struct op_context {
 	uint64_t		core_context;
 	uint64_t		test_context;
 	struct fid_mr		*tx_mr;
+	struct fid_cntr		*tx_cntr;
+	struct fid_domain	*domain;
 	uint64_t		test_state; /* reserved for test internal accounting */
 };
 
@@ -320,7 +345,8 @@ typedef int (*test_tx_transfer)(
 	uint64_t key,
 	int rank,
 	struct fid_cntr *tx_cntr,
-	struct fid_cntr *rx_cntr
+	struct fid_cntr *rx_cntr,
+	uint64_t tx_flags
 );
 
 typedef int (*test_rx_transfer)(
@@ -333,7 +359,8 @@ typedef int (*test_rx_transfer)(
 	uint8_t *buffer,
 	void *desc,
 	struct fid_cntr *tx_cntr,
-	struct fid_cntr *rx_cntr
+	struct fid_cntr *rx_cntr,
+	uint64_t rx_flags
 );
 
 

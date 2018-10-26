@@ -56,12 +56,13 @@ static int pattern_next(
 		const struct pattern_arguments *arguments,
 		int my_rank,
 		int num_ranks,
-		int *cur)
+		int *cur,
+		int *threshold)
 {
 	int next = *cur + 1;
 
 	if (next >= num_ranks)
-		return -1;
+		return -ENODATA;
 
 	*cur = next;
 	return 0;

@@ -33,7 +33,8 @@
 #pragma once
 
 #include <stdlib.h>
-
+#include <stdbool.h>
+#include <errno.h>
 
 /*
  * -----------------------------------------------------------------------------
@@ -128,19 +129,25 @@ typedef void (*pattern_free_arguments)(
  * current: the pair from which to search for the next valid pair.
  *
  * next: the next valid pair found in the pattern.
+ *
+ * threshold: triggered op threshold (we don't need to trigger receives, but
+ *	patterns may nevertheless need to use the threshold as an internal
+ *	counter).
  */
 
 typedef int (*pattern_next_sender)(
 		const struct pattern_arguments *arguments,
 		int my_rank,
 		int num_ranks,
-		int *cur_sender);
+		int *cur_sender,
+		int *threshold);
 
 typedef int (*pattern_next_receiver) (
 		const struct pattern_arguments *arguments,
 		int my_rank,
 		int num_ranks,
-		int *cur_receiver);
+		int *cur_receiver,
+		int *threshold);
 
 /*
  * CALLER INTERFACE
@@ -155,9 +162,9 @@ typedef int (*pattern_next_receiver) (
 struct pattern_api {
 	pattern_parse_arguments parse_arguments;
 	pattern_free_arguments free_arguments;
-
 	pattern_next_sender next_sender;
 	pattern_next_receiver next_receiver;
+	bool enable_triggered;
 };
 
 
@@ -166,3 +173,4 @@ struct pattern_api {
 struct pattern_api a2a_pattern_api(void);
 struct pattern_api self_pattern_api(void);
 struct pattern_api alltoone_pattern_api(void);
+struct pattern_api ring_pattern_api(void);

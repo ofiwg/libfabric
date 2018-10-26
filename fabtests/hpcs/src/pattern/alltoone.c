@@ -94,18 +94,19 @@ static int ato_pattern_next_sender(
 		const struct pattern_arguments *arguments,
 		int my_rank,
 		int num_ranks,
-		int *cur)
+		int *cur,
+		int *threshold)
 {
 	if (my_rank == arguments->target_rank){
 		int next = *cur + 1;
 
 		if (next >= num_ranks)
-			return -1;
+			return -ENODATA;
 
 		*cur = next;
 		return 0;
 	} else {
-		return -1;
+		return -ENODATA;
 	}
 }
 
@@ -113,14 +114,15 @@ static int ato_pattern_next_receiver(
 		const struct pattern_arguments *arguments,
 		int my_rank,
 		int num_ranks,
-		int *cur)
+		int *cur,
+		int *threshold)
 {
 	if (*cur == PATTERN_NO_CURRENT) {
 		*cur = arguments->target_rank;
 		return 0;
 	}
 
-	return -1;
+	return -ENODATA;
 }
 
 

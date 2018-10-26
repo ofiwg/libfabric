@@ -65,11 +65,13 @@ struct test_arguments {
 	enum dest_mode dest_mode;
 	enum test_op test_op;
 	size_t repeat;
+	bool use_workqueue;
 };
 
 #define DEFAULT_TRANSFER_SIZE 4
 #define DEFAULT_DEST_MODE SEPARATE_DEST
 #define DEFAULT_TEST_OP WRITE
+#define DEFAULT_USE_WORKQUEUE 0
 
 static int parse_arguments(
 		const int argc,
@@ -83,6 +85,7 @@ static int parse_arguments(
 		{"dest-mode", required_argument, 0, 'd'},
 		{"op", required_argument, 0, 'o'},
 		{"repeat", required_argument, 0, 'r'},
+		{"workqueue", no_argument, 0, 'w'},
 		{"help", no_argument, 0, 'h'},
 		{0}
 	};
@@ -99,7 +102,7 @@ static int parse_arguments(
 	};
 
 	if (argc > 0 && argv != NULL) {
-		while ((op = getopt_long(argc, argv, "s:d:o:r:h", longopt, &longopt_idx)) != -1) {
+		while ((op = getopt_long(argc, argv, "s:d:o:r:wh", longopt, &longopt_idx)) != -1) {
 			switch (op) {
 			case 's':
 				if (sscanf(optarg, "%zu", &args->transfer_size) != 1) {
@@ -133,6 +136,9 @@ static int parse_arguments(
 				if (sscanf(optarg, "%zu", &args->repeat) != 1)
 				 	return -EINVAL;
 				break;
+			case 'w':
+				args->use_workqueue = 1;
+				break;
 			case 'h':
 			default:
 				fprintf(stderr, "<test arguments> := \n"
@@ -140,6 +146,7 @@ static int parse_arguments(
 						"\t[-d | --dest_mode=<shared_dest|separate_dest>]\n"
 						"\t[-o | --op=<write|read|add>]\n"
 						"\t[-r | --repeat<N>]\n"
+						"\t[-w | --workqueue]\n"
 						"\t[-h | --help]\n");
 				return -EINVAL;
 			}
@@ -167,9 +174,9 @@ struct test_config config(const struct test_arguments *arguments)
 
 		.minimum_caps = FI_RMA | FI_ATOMIC | FI_RMA_EVENT,
 
-		.tx_use_cntr = false,
+		.tx_use_cntr = true,
 		.rx_use_cntr = true,
-		.tx_use_cq = true,
+		.tx_use_cq = false,
 		.rx_use_cq = false,
 
 		.rx_use_mr = true,
@@ -295,12 +302,12 @@ static int tx_transfer(
 		uint64_t key,
 		int rank,
 		struct fid_cntr *tx_cntr,
-		struct fid_cntr *rx_cntr
+		struct fid_cntr *rx_cntr,
+		uint64_t flags
 ){
 	size_t addr = 0;
 	int ret = 0;
 	int i;
-	struct context_info *ctxinfo = op_context->ctxinfo;
 
 	switch (arguments->dest_mode) {
 	case SHARED_DEST:
@@ -314,45 +321,118 @@ static int tx_transfer(
 	}
 
 	for (i=0; i<arguments->repeat; i++) {
+		struct context_info *ctxinfo = &op_context->ctxinfo[i];
+
 		switch (arguments->test_op) {
 		case WRITE:
-			ret = fi_write(endpoint,
-					buffer,
-					arguments->transfer_size,
-					desc,
-					rx_address,
-					addr,
-					key,
-					&ctxinfo[i].fi_context);
-			break;
 		case READ:
-			ret = fi_read(endpoint,
-					buffer,
-					arguments->transfer_size,
-					desc,
-					rx_address,
-					addr,
-					key,
-					&ctxinfo[i].fi_context);
-			break;
+			ctxinfo->iov = (struct iovec) {
+				.iov_base = buffer,
+				.iov_len = arguments->transfer_size
+			};
 
+			ctxinfo->rma_remote_iov = (struct fi_rma_iov) {
+				.addr = addr,
+				.len = arguments->transfer_size,
+				.key = key
+			};
+
+			ctxinfo->rma_msg = (struct fi_msg_rma) {
+				.msg_iov = &ctxinfo->iov,
+				.desc = desc,
+				.iov_count = 1,
+				.addr = rx_address,
+				.rma_iov = &ctxinfo->rma_remote_iov,
+				.rma_iov_count = 1,
+				.context = &ctxinfo->fi_context
+			};
+			break;
 		case ADD:
-			ret = fi_atomic(endpoint,
-					buffer,
-					arguments->transfer_size,
-					desc,
-					rx_address,
-					addr,
-					key,
-					FI_UINT8,
-					FI_SUM,
-					&ctxinfo[i]);
-			break;
+			ctxinfo->ioc = (struct fi_ioc) {
+				.addr = buffer,
+				.count = arguments->transfer_size
+			};
 
-		default:
-			return -FI_ENOSYS;
+			ctxinfo->rma_remote_ioc = (struct fi_rma_ioc) {
+				.addr = addr,
+				.count = arguments->transfer_size,
+				.key = key
+			};
+
+			ctxinfo->atomic_msg = (struct fi_msg_atomic) {
+				.msg_iov = &ctxinfo->ioc,
+				.desc = desc,
+				.iov_count = 1,
+				.addr = rx_address,
+				.rma_iov = &ctxinfo->rma_remote_ioc,
+				.rma_iov_count = 1,
+				.datatype = FI_UINT8,
+				.op = FI_SUM,
+				.context = &ctxinfo->fi_context
+			};
 			break;
 		}
+
+		if (arguments->use_workqueue && flags & FI_TRIGGER) {
+			struct fi_deferred_work *work = &ctxinfo->def_work;
+
+			work->triggering_cntr =
+					ctxinfo->fi_trig_context.trigger.threshold.cntr;
+			work->threshold =
+					ctxinfo->fi_trig_context.trigger.threshold.threshold;
+			work->completion_cntr =
+					op_context->tx_cntr;
+
+			switch (arguments->test_op) {
+			case WRITE:
+				ctxinfo->rma_op = (struct fi_op_rma) {
+					.ep = endpoint,
+					.msg = ctxinfo->rma_msg,
+					.flags = flags
+				};
+				work->op_type = FI_OP_WRITE;
+				work->op.rma = &ctxinfo->rma_op;
+				break;
+			case READ:
+				ctxinfo->rma_op = (struct fi_op_rma) {
+					.ep = endpoint,
+					.msg = ctxinfo->rma_msg,
+					.flags = flags
+				};
+				work->op_type = FI_OP_READ;
+				work->op.rma = &ctxinfo->rma_op;
+				break;
+			case ADD:
+				ctxinfo->atomic_op = (struct fi_op_atomic) {
+					.ep = endpoint,
+					.msg = ctxinfo->atomic_msg,
+					.flags = flags
+				};
+				work->op_type = FI_OP_ATOMIC;
+				work->op.atomic = &ctxinfo->atomic_op;
+				break;
+			default:
+				return -FI_ENOSYS;
+				break;
+			}
+
+			ret = fi_control(&op_context->domain->fid, FI_QUEUE_WORK, work);
+		} else {
+			switch (arguments->test_op) {
+			case WRITE:
+				ret = fi_writemsg(endpoint, &ctxinfo->rma_msg, flags);
+				break;
+			case READ:
+				ret = fi_readmsg(endpoint, &ctxinfo->rma_msg, flags);
+				break;
+			case ADD:
+				ret = fi_atomicmsg(endpoint, &ctxinfo->atomic_msg, flags);
+				break;
+			default:
+				return -FI_ENOSYS;
+				break;
+			}
+		};
 	}
 
 	return ret;
@@ -369,7 +449,8 @@ static int rx_transfer(
 		uint8_t *buffer,
 		void *desc,
 		struct fid_cntr *tx_cntr,
-		struct fid_cntr *rx_cntr)
+		struct fid_cntr *rx_cntr,
+		uint64_t flags)
 {
 	return 0;
 }
@@ -391,7 +472,7 @@ static int rx_cntr_completion(
 	return fi_cntr_wait(cntr, completion_count*arguments->repeat, -1);
 }
 
-static int cq_completion(
+int cq_completion(
 		const struct test_arguments *args,
 		struct op_context **op_contextp,
 		struct fid_cq *cq)
@@ -440,6 +521,9 @@ static int cq_completion(
 	return 0;
 }
 
+#ifdef __GNUC__
+__attribute__ ((unused))
+#endif
 static int tx_cq_completion(
 		const struct test_arguments *args,
 		struct op_context **context,
@@ -462,7 +546,7 @@ static int datacheck(
 		if (((uint8_t *) buffer)[b] != expected) {
 			fprintf (stderr, "datacheck failed at byte %zu (expected %u, got %u)\n",
 					b, expected, ((uint8_t *) buffer)[b]);
-			our_ret = -EIO;
+			our_ret = -FI_EIO;
 			goto err_data_check;
 		}
 	}
@@ -558,7 +642,7 @@ struct test_api test_api(void)
 		.rx_transfer = &rx_transfer,
 		.tx_cntr_completion = &tx_cntr_completion,
 		.rx_cntr_completion = &rx_cntr_completion,
-		.tx_cq_completion = &tx_cq_completion,
+		.tx_cq_completion = NULL,
 		.rx_cq_completion = NULL,
 
 		.tx_datacheck = &tx_datacheck,

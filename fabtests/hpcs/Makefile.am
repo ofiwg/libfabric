@@ -17,6 +17,7 @@ libpattern_la_SOURCES = \
 	src/pattern/alltoall.c \
 	src/pattern/self.c \
 	src/pattern/alltoone.c \
+	src/pattern/ring.c \
 	include/pattern/user.h \
 	src/pattern/util.h
 
