@@ -84,11 +84,11 @@
 	       pkt.ctrl_hdr.msg_id, rxm_proto_state_str[prev_state],		\
 	       rxm_proto_state_str[next_state])
 
-#define RXM_LOG_STATE_TX(subsystem, tx_entry, next_state)		\
-	RXM_LOG_STATE(subsystem, tx_entry->tx_buf->pkt, tx_entry->state,\
+#define RXM_LOG_STATE_TX(subsystem, tx_buf, next_state)		\
+	RXM_LOG_STATE(subsystem, tx_buf->pkt, tx_buf->hdr.state,	\
 		      next_state)
 
-#define RXM_LOG_STATE_RX(subsystem, rx_buf, next_state)			\
+#define RXM_LOG_STATE_RX(subsystem, rx_buf, next_state)		\
 	RXM_LOG_STATE(subsystem, rx_buf->pkt, rx_buf->hdr.state,	\
 		      next_state)
 
@@ -107,6 +107,13 @@ do {									\
 	  ((unsigned char *)(comp)->op_context +			\
 		offsetof(struct rxm_buf, state))) = (new_state);	\
 } while (0)
+
+#define rxm_tx_buf_2_msg_id(rxm_ep, pool_type, tx_buf)				\
+	((uint64_t) rxm_get_buf_index(&(rxm_ep)->buf_pools[pool_type],		\
+				       (void *) tx_buf))
+#define rxm_msg_id_2_tx_buf(rxm_ep, pool_type, msg_id)				\
+	((void *) rxm_buf_get_by_index(&(rxm_ep)->buf_pools[pool_type],		\
+				       (uint64_t) msg_id))
 
 extern struct fi_provider rxm_prov;
 extern struct util_prov rxm_util_prov;
@@ -451,6 +458,22 @@ struct rxm_tx_eager_buf {
 	/* Must stay at bottom */
 	struct rxm_pkt pkt;
 };
+
+struct rxm_tx_rndv_buf {
+	/* Must stay at top */
+	struct rxm_buf hdr;
+
+	enum rxm_buf_pool_type type;
+	void *app_context;
+	uint64_t flags;
+	struct rxm_rx_buf *rx_buf;
+	struct fid_mr *mr[RXM_IOV_LIMIT];
+	uint8_t count;
+
+	/* Must stay at bottom */
+	struct rxm_pkt pkt;
+};
+
 
 struct rxm_rma_buf {
 	/* Must stay at top */
@@ -978,6 +1001,28 @@ void rxm_buf_release(struct rxm_buf_pool *pool, struct rxm_buf *buf)
 	pool->rxm_ep->res_fastlock_acquire(&pool->lock);
 	util_buf_release(pool->pool, buf);
 	pool->rxm_ep->res_fastlock_release(&pool->lock);
+}
+
+static inline
+struct rxm_buf *rxm_buf_get_by_index(struct rxm_buf_pool *pool, size_t index)
+{
+	struct rxm_buf *buf;
+
+	pool->rxm_ep->res_fastlock_acquire(&pool->lock);
+	buf = util_buf_get_by_index(pool->pool, index);
+	pool->rxm_ep->res_fastlock_release(&pool->lock);
+	return buf;
+}
+
+static inline
+size_t rxm_get_buf_index(struct rxm_buf_pool *pool, struct rxm_buf *buf)
+{
+	size_t index;
+
+	pool->rxm_ep->res_fastlock_acquire(&pool->lock);
+	index = util_get_buf_index(pool->pool, buf);
+	pool->rxm_ep->res_fastlock_release(&pool->lock);
+	return index;
 }
 
 static inline union rxm_tx_buf *

@@ -306,46 +306,49 @@ static inline int rxm_finish_send_lmt_ack(struct rxm_rx_buf *rx_buf)
 	return rxm_finish_recv(rx_buf, rx_buf->recv_entry->total_len);
 }
 
-static int rxm_lmt_tx_finish(struct rxm_tx_entry *tx_entry)
+static int rxm_lmt_tx_finish(struct rxm_ep *rxm_ep, struct rxm_tx_rndv_buf *tx_buf)
 {
 	int ret;
 
-	RXM_LOG_STATE_TX(FI_LOG_CQ, tx_entry, RXM_LMT_FINISH);
-	tx_entry->state = RXM_LMT_FINISH;
+	RXM_LOG_STATE_TX(FI_LOG_CQ, tx_buf, RXM_LMT_FINISH);
+	tx_buf->hdr.state = RXM_LMT_FINISH;
 
-	if (!tx_entry->ep->rxm_mr_local)
-		rxm_ep_msg_mr_closev(tx_entry->mr, tx_entry->count);
+	if (!rxm_ep->rxm_mr_local)
+		rxm_ep_msg_mr_closev(tx_buf->mr, tx_buf->count);
 
-	ret = rxm_finish_send(tx_entry);
-	if (ret)
-		return ret;
+	ret = rxm_cq_tx_comp_write(rxm_ep, ofi_tx_cq_flags(tx_buf->pkt.hdr.op),
+				   tx_buf->app_context, tx_buf->flags);
+	if (rxm_ep->util_ep.flags & OFI_CNTR_ENABLED) {
+		assert(ofi_tx_cq_flags(tx_buf->pkt.hdr.op) & FI_SEND);
+		ofi_ep_tx_cntr_inc(&rxm_ep->util_ep);
+	}
 
-	rxm_enqueue_rx_buf_for_repost_check(tx_entry->rx_buf);
+	rxm_enqueue_rx_buf_for_repost_check(tx_buf->rx_buf);
+
+	rxm_tx_buf_release(rxm_ep, (struct rxm_tx_buf *)tx_buf);
 
 	return ret;
 }
 
-static int rxm_lmt_handle_ack(struct rxm_rx_buf *rx_buf)
+static int rxm_lmt_handle_ack(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_buf)
 {
-	struct rxm_tx_entry *tx_entry;
-	struct rxm_conn *rxm_conn = rxm_key2conn(rx_buf->ep,
-						 rx_buf->pkt.ctrl_hdr.conn_id);
+	struct rxm_tx_rndv_buf *tx_buf =
+		rxm_msg_id_2_tx_buf(rxm_ep, RXM_BUF_POOL_TX_RNDV,
+				    rx_buf->pkt.ctrl_hdr.msg_id);
 
 	FI_DBG(&rxm_prov, FI_LOG_CQ, "Got ACK for msg_id: 0x%" PRIx64 "\n",
 	       rx_buf->pkt.ctrl_hdr.msg_id);
 
-	tx_entry = &rxm_conn->send_queue->fs->entry[rx_buf->pkt.ctrl_hdr.msg_id].buf;
+	assert(tx_buf->pkt.ctrl_hdr.msg_id == rx_buf->pkt.ctrl_hdr.msg_id);
 
-	assert(tx_entry->tx_buf->pkt.ctrl_hdr.msg_id == rx_buf->pkt.ctrl_hdr.msg_id);
+	tx_buf->rx_buf = rx_buf;
 
-	tx_entry->rx_buf = rx_buf;
-
-	if (tx_entry->state == RXM_LMT_ACK_WAIT) {
-		return rxm_lmt_tx_finish(tx_entry);
+	if (tx_buf->hdr.state == RXM_LMT_ACK_WAIT) {
+		return rxm_lmt_tx_finish(rxm_ep, tx_buf);
 	} else {
-		assert(tx_entry->state == RXM_LMT_TX);
-		RXM_LOG_STATE_TX(FI_LOG_CQ, tx_entry, RXM_LMT_ACK_RECVD);
-		tx_entry->state = RXM_LMT_ACK_RECVD;
+		assert(tx_buf->hdr.state == RXM_LMT_TX);
+		RXM_LOG_STATE_TX(FI_LOG_CQ, tx_buf, RXM_LMT_ACK_RECVD);
+		tx_buf->hdr.state = RXM_LMT_ACK_RECVD;
 		return 0;
 	}
 }
@@ -780,6 +783,7 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 	struct rxm_tx_entry *tx_entry;
 	struct rxm_tx_sar_buf *tx_sar_buf;
 	struct rxm_tx_eager_buf *tx_eager_buf;
+	struct rxm_tx_rndv_buf *tx_rndv_buf;
 
 	/* Remote write events may not consume a posted recv so op context
 	 * and hence state would be NULL */
@@ -819,7 +823,7 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 		case ofi_ctrl_large_data:
 			return rxm_handle_recv_comp(rx_buf);
 		case ofi_ctrl_ack:
-			return rxm_lmt_handle_ack(rx_buf);
+			return rxm_lmt_handle_ack(rxm_ep, rx_buf);
 		case ofi_ctrl_seg_data:
 			return rxm_sar_handle_segment(rx_buf);
 		default:
@@ -828,15 +832,15 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 			return -FI_EINVAL;
 		}
 	case RXM_LMT_TX:
-		tx_entry = comp->op_context;
+		tx_rndv_buf = comp->op_context;
 		assert(comp->flags & FI_SEND);
-		RXM_LOG_STATE_TX(FI_LOG_CQ, tx_entry, RXM_LMT_ACK_WAIT);
+		RXM_LOG_STATE_TX(FI_LOG_CQ, tx_rndv_buf, RXM_LMT_ACK_WAIT);
 		RXM_SET_PROTO_STATE(comp, RXM_LMT_ACK_WAIT);
 		return 0;
 	case RXM_LMT_ACK_RECVD:
-		tx_entry = comp->op_context;
+		tx_rndv_buf = comp->op_context;
 		assert(comp->flags & FI_SEND);
-		return rxm_lmt_tx_finish(tx_entry);
+		return rxm_lmt_tx_finish(rxm_ep, tx_rndv_buf);
 	case RXM_LMT_READ:
 		rx_buf = comp->op_context;
 		assert(comp->flags & FI_READ);
