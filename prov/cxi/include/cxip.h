@@ -207,9 +207,9 @@ struct cxip_addr {
 #define CXIP_RXC_TO_IDX(rx_id) (rx_id)
 #define CXIP_RDVS_IDX(pid_granule) ((pid_granule) - 1)
 
-#define	CXIP_AV_ADDR_IDX(av, fi_addr)	((uint64_t)fi_addr & av->mask)
-#define	CXIP_AV_ADDR_RXC(av, fi_addr)	((uint64_t)fi_addr >> \
-						(64 - av->rx_ctx_bits))
+#define CXIP_AV_ADDR_IDX(av, fi_addr) ((uint64_t)fi_addr & av->mask)
+#define CXIP_AV_ADDR_RXC(av, fi_addr) \
+	(av->rx_ctx_bits ? ((uint64_t)fi_addr >> (64 - av->rx_ctx_bits)) : 0)
 
 #ifndef ARRAY_SIZE
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
