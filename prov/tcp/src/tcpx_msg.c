@@ -60,7 +60,6 @@ tcpx_alloc_recv_entry(struct tcpx_ep *tcpx_ep)
 	recv_entry = tcpx_xfer_entry_alloc(tcpx_cq, TCPX_OP_MSG_RECV);
 	if (recv_entry) {
 		recv_entry->ep = tcpx_ep;
-		recv_entry->done_len = 0;
 	}
 	return recv_entry;
 }
@@ -77,7 +76,6 @@ tcpx_alloc_send_entry(struct tcpx_ep *tcpx_ep)
 	send_entry = tcpx_xfer_entry_alloc(tcpx_cq, TCPX_OP_MSG_SEND);
 	if (send_entry) {
 		send_entry->ep = tcpx_ep;
-		send_entry->done_len = 0;
 	}
 	return send_entry;
 }
@@ -226,7 +224,6 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	tx_entry->hdr.base_hdr.flags = htons(tx_entry->hdr.base_hdr.flags);
 	tx_entry->ep = tcpx_ep;
 	tx_entry->context = msg->context;
-	tx_entry->done_len = 0;
 
 	fastlock_acquire(&tcpx_ep->lock);
 	tcpx_tx_queue_insert(tcpx_ep, tx_entry);

@@ -72,8 +72,6 @@ static void tcpx_rma_read_send_entry_fill(struct tcpx_xfer_entry *send_entry,
 	send_entry->iov[0].iov_len = offset;
 	send_entry->iov_cnt = 1;
 	send_entry->ep = tcpx_ep;
-	send_entry->done_len = 0;
-	send_entry->flags = 0;
 }
 
 static void tcpx_rma_read_recv_entry_fill(struct tcpx_xfer_entry *recv_entry,
@@ -87,7 +85,6 @@ static void tcpx_rma_read_recv_entry_fill(struct tcpx_xfer_entry *recv_entry,
 	recv_entry->iov_cnt = msg->iov_count;
 	recv_entry->ep = tcpx_ep;
 	recv_entry->context = msg->context;
-	recv_entry->done_len = 0;
 	recv_entry->flags = ((tcpx_ep->util_ep.tx_op_flags & FI_COMPLETION) |
 			     flags | FI_RMA | FI_READ);
 }
@@ -253,7 +250,6 @@ static ssize_t tcpx_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg
 	send_entry->hdr.base_hdr.flags = htons(send_entry->hdr.base_hdr.flags);
 	send_entry->ep = tcpx_ep;
 	send_entry->context = msg->context;
-	send_entry->done_len = 0;
 
 	fastlock_acquire(&tcpx_ep->lock);
 	tcpx_tx_queue_insert(tcpx_ep, send_entry);
@@ -387,7 +383,6 @@ static ssize_t tcpx_rma_inject_common(struct fid_ep *ep, const void *buf,
 	send_entry->hdr.base_hdr.size = htonll(offset);
 	send_entry->hdr.base_hdr.flags = htons(send_entry->hdr.base_hdr.flags);
 	send_entry->ep = tcpx_ep;
-	send_entry->done_len = 0;
 
 	fastlock_acquire(&tcpx_ep->lock);
 	tcpx_tx_queue_insert(tcpx_ep, send_entry);
