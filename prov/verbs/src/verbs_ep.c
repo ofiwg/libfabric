@@ -566,6 +566,13 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	struct fi_info *fi;
 	int ret;
 
+	if (info->src_addr)
+		ofi_straddr_dbg(&fi_ibv_prov, FI_LOG_FABRIC,
+				"open_ep src addr", info->src_addr);
+	if (info->dest_addr)
+		ofi_straddr_dbg(&fi_ibv_prov, FI_LOG_FABRIC,
+				"open_ep dest addr", info->dest_addr);
+
 	dom = container_of(domain, struct fi_ibv_domain,
 			   util_domain.domain_fid);
 	/* strncmp is used here, because the function is used
