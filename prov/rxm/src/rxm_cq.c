@@ -418,35 +418,28 @@ ssize_t rxm_cq_handle_seg_data(struct rxm_rx_buf *rx_buf)
 }
 
 static inline ssize_t
-rxm_cq_rndv_read_prepare_deferred(struct rxm_tx_entry **tx_entry, size_t index,
+rxm_cq_rndv_read_prepare_deferred(struct rxm_deferred_tx_entry **def_tx_entry, size_t index,
 				 struct iovec *iov, void *desc[RXM_IOV_LIMIT],
 				 size_t count, struct rxm_rx_buf *rx_buf)
 {
 	uint8_t i;
 
-	*tx_entry = calloc(1, sizeof(**tx_entry));
-	if (OFI_UNLIKELY(!*tx_entry))
+	*def_tx_entry = rxm_ep_alloc_deferred_tx_entry(rx_buf->ep, rx_buf->conn,
+						       RXM_DEFERRED_TX_RNDV_READ);
+	if (OFI_UNLIKELY(!*def_tx_entry))
 		return -FI_ENOMEM;
-	(*tx_entry)->rx_buf = rx_buf;
-	(*tx_entry)->conn = rx_buf->conn;
-	(*tx_entry)->ep = rx_buf->ep;
-	(*tx_entry)->context = rx_buf->recv_entry->context;
-	(*tx_entry)->state = RXM_RNDV_READ;
-	dlist_init(&(*tx_entry)->deferred_tx_entry);
-	(*tx_entry)->rma_buf = calloc(1, sizeof(*(*tx_entry)->rma_buf));
-	if (OFI_UNLIKELY(!(*tx_entry)->rma_buf)) {
-		free((*tx_entry)->rma_buf);
-		return -FI_ENOMEM;
-	}
-	(*tx_entry)->rma_buf->def.rxm_rma_iov.iov[0].addr =
-		(*tx_entry)->rx_buf->rndv_hdr->iov[index].addr;
-	(*tx_entry)->rma_buf->def.rxm_rma_iov.iov[0].key =
-		(*tx_entry)->rx_buf->rndv_hdr->iov[index].key;
+
+	(*def_tx_entry)->rndv_read.rx_buf = rx_buf;
+	(*def_tx_entry)->rndv_read.rma_iov.addr =
+			rx_buf->rndv_hdr->iov[index].addr;
+	(*def_tx_entry)->rndv_read.rma_iov.key =
+			rx_buf->rndv_hdr->iov[index].key;
 	for (i = 0; i < count; i++) {
-		(*tx_entry)->rma_buf->def.rxm_iov.iov[i] = iov[i];
-		(*tx_entry)->rma_buf->def.rxm_iov.desc[i] = desc[i];
+		(*def_tx_entry)->rndv_read.rxm_iov.iov[i] = iov[i];
+		(*def_tx_entry)->rndv_read.rxm_iov.desc[i] = desc[i];
 	}
-	(*tx_entry)->rma_buf->def.rxm_iov.count = count;
+	(*def_tx_entry)->rndv_read.rxm_iov.count = count;
+
 	return 0;
 }
 
@@ -457,8 +450,6 @@ ssize_t rxm_cq_handle_large_data(struct rxm_rx_buf *rx_buf)
 	struct iovec iov[RXM_IOV_LIMIT];
 	void *desc[RXM_IOV_LIMIT];
 	int ret = 0;
-	/* The TX entry is used only to handle the failure of the fi_readv() */
-	struct rxm_tx_entry *tx_entry;
 
 	if (!rx_buf->conn) {
 		assert(rx_buf->ep->srx_ctx);
@@ -525,12 +516,14 @@ ssize_t rxm_cq_handle_large_data(struct rxm_rx_buf *rx_buf)
 			       rx_buf->rndv_hdr->iov[i].key, rx_buf);
 		if (OFI_UNLIKELY(ret)) {
 			if (OFI_LIKELY(ret == -FI_EAGAIN)) {
+				struct rxm_deferred_tx_entry *def_tx_entry;
+
 				ret = rxm_cq_rndv_read_prepare_deferred(
-						&tx_entry, i, iov, desc,
+						&def_tx_entry, i, iov, desc,
 						count, rx_buf);
 				if (ret)
 					goto readv_err;
-				rxm_ep_enqueue_deferred_tx_queue(tx_entry);
+				rxm_ep_enqueue_deferred_tx_queue(def_tx_entry);
 				continue;
 			}
 readv_err:
@@ -687,7 +680,6 @@ ssize_t rxm_sar_handle_segment(struct rxm_rx_buf *rx_buf)
 
 static ssize_t rxm_rndv_send_ack(struct rxm_rx_buf *rx_buf)
 {
-	struct rxm_tx_entry *tx_entry;
 	ssize_t ret;
 
 	assert(rx_buf->conn);
@@ -715,22 +707,19 @@ static ssize_t rxm_rndv_send_ack(struct rxm_rx_buf *rx_buf)
 	if (OFI_UNLIKELY(ret)) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "Unable to send ACK\n");
 		if (OFI_LIKELY(ret == -FI_EAGAIN)) {
-			tx_entry = calloc(1, sizeof(*tx_entry));
-			if (OFI_UNLIKELY(!tx_entry)) {
+			struct rxm_deferred_tx_entry *def_tx_entry =
+				rxm_ep_alloc_deferred_tx_entry(rx_buf->ep, rx_buf->conn,
+							       RXM_DEFERRED_TX_RNDV_ACK);
+			if (OFI_UNLIKELY(!def_tx_entry)) {
 				FI_WARN(&rxm_prov, FI_LOG_CQ,
 					"Unable to allocate TX entry for deferred ACK\n");
 				ret = -FI_EAGAIN;
 				goto err;
 			}
-			tx_entry->rx_buf = rx_buf;
-			tx_entry->conn = rx_buf->conn;
-			tx_entry->ep = rx_buf->ep;
-			tx_entry->context = rx_buf->recv_entry->context;
-			tx_entry->state = RXM_RNDV_ACK_DEFERRED;
-			dlist_init(&tx_entry->deferred_tx_entry);
-			tx_entry->deferred_pkt_size =
-				sizeof(rx_buf->recv_entry->rndv.tx_buf->pkt);
-			rxm_ep_enqueue_deferred_tx_queue(tx_entry);
+
+			def_tx_entry->rndv_ack.rx_buf = rx_buf;
+			rxm_ep_enqueue_deferred_tx_queue(def_tx_entry);
+
 			return 0;
 		}
 		goto err;

@@ -1082,7 +1082,7 @@ rxm_ep_sar_tx_cleanup(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		rxm_tx_buf_release(tx_entry->ep, tx_buf);
 	}
 	if (!dlist_empty(&tx_entry->deferred_tx_entry))
-		rxm_ep_dequeue_deferred_tx_queue(tx_entry);
+		rxm_ep_dequeue_deferred_tx_queue(tx_entry->def_tx_entry);
 	/* TX entry will be released in the rxm_finish_sar_segment_send() */
 	tx_entry->msg_id = RXM_SAR_TX_ERROR;
 	/* Updates TX entry's `fail_segs_cnt` field to the value that's should
@@ -1127,6 +1127,8 @@ rxm_ep_sar_tx_prepare_and_send_segment(struct rxm_ep *rxm_ep, struct rxm_conn *r
 		      sizeof(struct rxm_pkt) + tx_buf->pkt.ctrl_hdr.seg_size,
 		      tx_buf->hdr.desc, 0, tx_buf);
 	if (OFI_UNLIKELY(ret)) {
+		struct rxm_deferred_tx_entry *def_tx_entry;
+
 		if (OFI_UNLIKELY(ret != -FI_EAGAIN)) {
 			rxm_ep_sar_tx_cleanup(rxm_ep, rxm_conn, tx_entry,
 					      total_segs_cnt, seg_no);
@@ -1139,9 +1141,22 @@ rxm_ep_sar_tx_prepare_and_send_segment(struct rxm_ep *rxm_ep, struct rxm_conn *r
 			rxm_tx_entry_release(rxm_conn->send_queue, tx_entry);
 			return -FI_EAGAIN;
 		}
+
+		def_tx_entry = rxm_ep_alloc_deferred_tx_entry(rxm_ep, rxm_conn,
+							      RXM_DEFERRED_TX_SAR_SEG);
+		if (OFI_UNLIKELY(!def_tx_entry)) {
+			rxm_ep_sar_tx_cleanup(rxm_ep, rxm_conn, tx_entry,
+					      total_segs_cnt, seg_no);
+			return -FI_EAGAIN;
+		}
+
+		def_tx_entry->sar_seg.tx_entry = tx_entry;
+
 		dlist_insert_tail(&tx_buf->entry,
 				  &tx_entry->deferred_tx_buf_list);
-		rxm_ep_enqueue_deferred_tx_queue(tx_entry);
+		rxm_ep_enqueue_deferred_tx_queue(def_tx_entry);
+
+		tx_entry->def_tx_entry = def_tx_entry;
 	}
 	*remain_len -= seg_len;
 	return FI_SUCCESS;
@@ -1221,7 +1236,7 @@ void rxm_ep_sar_handle_send_segment_failure(struct rxm_tx_entry *tx_entry, ssize
 				      struct rxm_tx_sar_buf, entry);
 		dlist_remove(&tx_buf->entry);
 	}
-	rxm_ep_dequeue_deferred_tx_queue(tx_entry);
+	rxm_ep_dequeue_deferred_tx_queue(tx_entry->def_tx_entry);
 	rxm_tx_entry_release(tx_entry->conn->send_queue, tx_entry);
 }
 
@@ -1486,62 +1501,76 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 	}
 }
 
+struct rxm_deferred_tx_entry *
+rxm_ep_alloc_deferred_tx_entry(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
+			       enum rxm_deferred_tx_entry_type type)
+{
+	struct rxm_deferred_tx_entry *def_tx_entry =
+			calloc(1, sizeof(*def_tx_entry));
+	if (OFI_UNLIKELY(!def_tx_entry))
+		return NULL;
+
+	def_tx_entry->rxm_ep = rxm_ep;
+	def_tx_entry->rxm_conn = rxm_conn;
+	def_tx_entry->type = type;
+	dlist_init(&def_tx_entry->entry);
+
+	return def_tx_entry;
+}
+
 static void
 rxm_ep_conn_progress_deferred_queue(struct rxm_ep *rxm_ep,
 				    struct rxm_conn *rxm_conn)
 {
-	struct rxm_tx_entry *tx_entry;
+	struct rxm_deferred_tx_entry *def_tx_entry;
 	ssize_t ret = 0;
+
 	while (!dlist_empty(&rxm_conn->deferred_tx_queue) && !ret) {
-		tx_entry = container_of(rxm_conn->deferred_tx_queue.next,
-					struct rxm_tx_entry, deferred_tx_entry);
-		switch (tx_entry->state) {
-		case RXM_RNDV_ACK_DEFERRED:	/* RNDV (RNDV TX ack) */
-			ret = fi_send(tx_entry->rx_buf->conn->msg_ep,
-				      &tx_entry->rx_buf->recv_entry->rndv.tx_buf->pkt,
-				      tx_entry->deferred_pkt_size,
-				      tx_entry->rx_buf->recv_entry->rndv.tx_buf->hdr.desc,
-				      0, tx_entry->rx_buf);
+		def_tx_entry = container_of(rxm_conn->deferred_tx_queue.next,
+					    struct rxm_deferred_tx_entry, entry);
+		switch (def_tx_entry->type) {
+		case RXM_DEFERRED_TX_RNDV_ACK:
+			ret = fi_send(def_tx_entry->rxm_conn->msg_ep,
+				      &def_tx_entry->rndv_ack.rx_buf->
+					recv_entry->rndv.tx_buf->pkt,
+				      sizeof(def_tx_entry->rndv_ack.rx_buf->
+					recv_entry->rndv.tx_buf->pkt),
+				      def_tx_entry->rndv_ack.rx_buf->recv_entry->
+					rndv.tx_buf->hdr.desc,
+				      0, def_tx_entry->rndv_ack.rx_buf);
 			if (OFI_UNLIKELY(ret)) {
 				if (OFI_LIKELY(ret == -FI_EAGAIN))
 					break;
-				rxm_cq_write_error(tx_entry->ep->util_ep.rx_cq,
-						   tx_entry->ep->util_ep.rx_cntr,
-						   tx_entry->context, ret);
+				rxm_cq_write_error(def_tx_entry->rxm_ep->util_ep.rx_cq,
+						   def_tx_entry->rxm_ep->util_ep.rx_cntr,
+						   def_tx_entry->rndv_read.rx_buf->
+							recv_entry->context, ret);
 			}
-			rxm_ep_dequeue_deferred_tx_queue(tx_entry);
-			free(tx_entry);
+			rxm_ep_dequeue_deferred_tx_queue(def_tx_entry);
+			free(def_tx_entry);
 			break;
-		case RXM_RNDV_READ:
-			ret = fi_readv(tx_entry->conn->msg_ep,
-				       tx_entry->rma_buf->def.rxm_iov.iov,
-				       tx_entry->rma_buf->def.rxm_iov.desc,
-				       tx_entry->rma_buf->def.rxm_iov.count, 0,
-				       tx_entry->rma_buf->def.rxm_rma_iov.iov[0].addr,
-				       tx_entry->rma_buf->def.rxm_rma_iov.iov[0].key,
-				       tx_entry->rx_buf);
+		case RXM_DEFERRED_TX_RNDV_READ:
+			ret = fi_readv(def_tx_entry->rxm_conn->msg_ep,
+				       def_tx_entry->rndv_read.rxm_iov.iov,
+				       def_tx_entry->rndv_read.rxm_iov.desc,
+				       def_tx_entry->rndv_read.rxm_iov.count, 0,
+				       def_tx_entry->rndv_read.rma_iov.addr,
+				       def_tx_entry->rndv_read.rma_iov.key,
+				       def_tx_entry->rndv_read.rx_buf);
 			if (OFI_UNLIKELY(ret)) {
 				if (OFI_LIKELY(ret == -FI_EAGAIN))
 					break;
-				rxm_cq_write_error(tx_entry->ep->util_ep.rx_cq,
-						   tx_entry->ep->util_ep.rx_cntr,
-						   tx_entry->context, ret);
+				rxm_cq_write_error(def_tx_entry->rxm_ep->util_ep.rx_cq,
+						   def_tx_entry->rxm_ep->util_ep.rx_cntr,
+						   def_tx_entry->rndv_read.rx_buf->
+							recv_entry->context, ret);
 				break;
 			}
-			rxm_ep_dequeue_deferred_tx_queue(tx_entry);
-			free(tx_entry->rma_buf);
-			free(tx_entry);
+			rxm_ep_dequeue_deferred_tx_queue(def_tx_entry);
+			free(def_tx_entry);
 			break;
-		case RXM_SAR_TX:	/* SAR (TX segments) */
-			ret = rxm_ep_progress_sar_deferred_tx_queue(tx_entry);
-			break;
-		default:
-			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
-				"The deferred operation (TX state - %d) "
-				"doesn't have registered hanlder\n",
-				tx_entry->state);
-			ret = -FI_EAGAIN;
-			assert(0);
+		case RXM_DEFERRED_TX_SAR_SEG:
+			ret = rxm_ep_progress_sar_deferred_tx_queue(def_tx_entry->sar_seg.tx_entry);
 			break;
 		}
 	}

@@ -300,7 +300,6 @@ struct rxm_rndv_hdr {
 	FUNC(RXM_RNDV_ACK_WAIT),	\
 	FUNC(RXM_RNDV_READ),		\
 	FUNC(RXM_RNDV_ACK_SENT),	\
-	FUNC(RXM_RNDV_ACK_DEFERRED),	\
 	FUNC(RXM_RNDV_ACK_RECVD),	\
 	FUNC(RXM_RNDV_FINISH),
 
@@ -367,11 +366,6 @@ struct rxm_unexp_msg {
 struct rxm_iov {
 	struct iovec iov[RXM_IOV_LIMIT];
 	void *desc[RXM_IOV_LIMIT];
-	uint8_t count;
-};
-
-struct rxm_rma_iov_storage {
-	struct fi_rma_iov iov[RXM_IOV_LIMIT];
 	uint8_t count;
 };
 
@@ -497,11 +491,33 @@ struct rxm_rma_buf {
 			struct fid_mr *mr[RXM_IOV_LIMIT];
 			uint8_t count;
 		} mr;
-		/* TODO: delete fields below */
+	};
+};
+
+enum rxm_deferred_tx_entry_type {
+	RXM_DEFERRED_TX_RNDV_ACK,
+	RXM_DEFERRED_TX_RNDV_READ,
+	RXM_DEFERRED_TX_SAR_SEG,
+};
+
+struct rxm_deferred_tx_entry {
+	struct rxm_ep *rxm_ep;
+	struct rxm_conn *rxm_conn;
+	struct dlist_entry entry;
+	enum rxm_deferred_tx_entry_type type;
+
+	union {
 		struct {
+			struct rxm_rx_buf *rx_buf;
+		} rndv_ack;
+		struct {
+			struct rxm_rx_buf *rx_buf;
+			struct fi_rma_iov rma_iov;
 			struct rxm_iov rxm_iov;
-			struct rxm_rma_iov_storage rxm_rma_iov;
-		} def;
+		} rndv_read;
+		struct {
+			struct rxm_tx_entry *tx_entry;
+		} sar_seg;
 	};
 };
 
@@ -542,6 +558,7 @@ struct rxm_tx_entry {
 			struct dlist_entry deferred_tx_buf_list;
 			struct rxm_iov rxm_iov;
 			uint64_t iov_offset;
+			struct rxm_deferred_tx_entry *def_tx_entry;
 		};
 	};
 };
@@ -730,22 +747,25 @@ static inline struct rxm_conn *rxm_key2conn(struct rxm_ep *rxm_ep, uint64_t key)
 	return (struct rxm_conn *)rxm_cmap_key2handle(rxm_ep->cmap, key);
 }
 
+struct rxm_deferred_tx_entry *
+rxm_ep_alloc_deferred_tx_entry(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
+			       enum rxm_deferred_tx_entry_type type);
+
 static inline void
-rxm_ep_enqueue_deferred_tx_queue(struct rxm_tx_entry *tx_entry)
+rxm_ep_enqueue_deferred_tx_queue(struct rxm_deferred_tx_entry *tx_entry)
 {
-	if (dlist_empty(&tx_entry->conn->deferred_tx_queue))
-		dlist_insert_tail(&tx_entry->conn->deferred_conn_entry,
-				  &tx_entry->ep->deferred_tx_conn_queue);
-	dlist_insert_tail(&tx_entry->deferred_tx_entry,
-			  &tx_entry->conn->deferred_tx_queue);
+	if (dlist_empty(&tx_entry->rxm_conn->deferred_tx_queue))
+		dlist_insert_tail(&tx_entry->rxm_conn->deferred_conn_entry,
+				  &tx_entry->rxm_ep->deferred_tx_conn_queue);
+	dlist_insert_tail(&tx_entry->entry, &tx_entry->rxm_conn->deferred_tx_queue);
 }
 
 static inline void
-rxm_ep_dequeue_deferred_tx_queue(struct rxm_tx_entry *tx_entry)
+rxm_ep_dequeue_deferred_tx_queue(struct rxm_deferred_tx_entry *tx_entry)
 {
-	dlist_remove_init(&tx_entry->deferred_tx_entry);
-	if (dlist_empty(&tx_entry->conn->deferred_tx_queue))
-		dlist_remove(&tx_entry->conn->deferred_conn_entry);
+	dlist_remove_init(&tx_entry->entry);
+	if (dlist_empty(&tx_entry->rxm_conn->deferred_tx_queue))
+		dlist_remove(&tx_entry->rxm_conn->deferred_conn_entry);
 }
 
 int rxm_conn_process_eq_events(struct rxm_ep *rxm_ep);
@@ -996,7 +1016,8 @@ rxm_ep_progress_sar_deferred_tx_queue(struct rxm_tx_entry *tx_entry)
 		dlist_remove(&tx_buf->entry);
 	}
 	if (dlist_empty(&tx_entry->deferred_tx_buf_list)) {
-		rxm_ep_dequeue_deferred_tx_queue(tx_entry);
+		rxm_ep_dequeue_deferred_tx_queue(tx_entry->def_tx_entry);
+		free(tx_entry->def_tx_entry);
 		return 0;
 	}
 	return ret;
