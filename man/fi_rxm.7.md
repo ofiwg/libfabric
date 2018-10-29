@@ -129,10 +129,6 @@ The ofi_rxm provider checks for the following environment variables.
 : Set this to 1 to use shared receive context from MSG provider. This reduces
   overall memory usage but there may be a slight increase in latency (default: 0).
 
-*FI_OFI_RXM_USE_FAIR_TX_QUEUES*
-: Set this to 1 to use common TX queue instead of per connection / MSG endpoint.
-  (default: 0).
-
 *FI_OFI_RXM_TX_SIZE*
 : Defines default TX context size (default: 1024)
 

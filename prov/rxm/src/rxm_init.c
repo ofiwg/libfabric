@@ -303,10 +303,6 @@ RXM_INI
 			"memory consumption, but it may increase small message "
 			"latency as a side-effect.");
 
-	fi_param_define(&rxm_prov, "use_fair_tx_queues", FI_PARAM_BOOL,
-			"The environment variable controls whether RxM should use "
-			"TX queue per connection or shared TX queue (default: 0).");
-
 	fi_param_define(&rxm_prov, "tx_size", FI_PARAM_SIZE_T,
 			"Defines default tx context size (default: 1024).");
 

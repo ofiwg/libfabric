@@ -468,14 +468,7 @@ static void rxm_ep_txrx_pool_destroy(struct rxm_ep *rxm_ep)
 
 static int rxm_ep_txrx_queue_init(struct rxm_ep *rxm_ep)
 {
-	int ret, param = 1;
-
-	if (!fi_param_get_bool(&rxm_prov, "use_fair_tx_queues", &param) && !param) {
-		ret = rxm_send_queue_init(rxm_ep, &rxm_ep->send_queue,
-					  rxm_ep->rxm_info->tx_attr->size);
-		if (ret)
-			return ret;
-	}
+	int ret;
 
 	ret = rxm_recv_queue_init(rxm_ep, &rxm_ep->recv_queue,
 				  rxm_ep->rxm_info->rx_attr->size,
