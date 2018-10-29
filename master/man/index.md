@@ -30,6 +30,7 @@ You have been warned.
   * [fi_rxm(7)](fi_rxm.7.html)
   * [fi_shm(7)](fi_shm.7.html)
   * [fi_sockets(7)](fi_sockets.7.html)
+  * [fi_tcp(7)](fi_tcp.7.html)
   * [fi_udp(7)](fi_udp.7.html)
   * [fi_usnic(7)](fi_usnic.7.html)
   * [fi_verbs(7)](fi_verbs.7.html)
