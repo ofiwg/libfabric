@@ -30,9 +30,9 @@
  * SOFTWARE.
  */
 
-#include "hook_perf.h"
 #include "ofi_perf.h"
 #include "ofi_prov.h"
+#include "hook_prov.h"
 
 
 const char *perf_counters_str[] = {
@@ -843,13 +843,24 @@ struct fi_ops_cntr perf_cntr_ops = {
 };
 
 
-void perf_hook_destroy(struct hook_fabric *fabric)
+static struct fi_ops perf_fabric_fid_ops = {
+	.size = sizeof(struct fi_ops),
+	.close = perf_hook_destroy,
+	.bind = hook_bind,
+	.control = hook_control,
+	.ops_open = hook_ops_open,
+};
+
+int perf_hook_destroy(struct fid *fid)
 {
 	struct perf_fabric *fab;
 
-	fab = container_of(fabric, struct perf_fabric, fabric_hook);
+	fab = container_of(fid, struct perf_fabric, fabric_hook);
 	ofi_perfset_log(&fab->perf_set, perf_counters_str);
 	ofi_perfset_close(&fab->perf_set);
+	hook_close(fid);
+
+	return FI_SUCCESS;
 }
 
 static int perf_hook_fabric(struct fi_fabric_attr *attr,
@@ -871,7 +882,8 @@ static int perf_hook_fabric(struct fi_fabric_attr *attr,
 		return ret;
 	}
 
-	hook_fabric_init(&fab->fabric_hook, HOOK_PERF, attr->fabric, hprov);
+	hook_fabric_init(&fab->fabric_hook, HOOK_PERF, attr->fabric, hprov,
+			 &perf_fabric_fid_ops);
 	*fabric = &fab->fabric_hook.fabric;
 	return 0;
 }

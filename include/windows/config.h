@@ -50,6 +50,9 @@
 /* psm provider is built */
 /* #undef HAVE_PSM */
 
+/* perf provider is built */
+#define HAVE_PERF 1
+
 /* psm2 provider is built */
 /* #undef HAVE_PSM2 */
 

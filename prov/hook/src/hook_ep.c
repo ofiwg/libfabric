@@ -32,8 +32,7 @@
 
 #include <stdlib.h>
 #include <ofi_enosys.h>
-#include "ofi_hook.h"
-#include "hook_perf.h"
+#include "hook_prov.h"
 
 
 static int hook_open_tx_ctx(struct fid_ep *sep, int index,

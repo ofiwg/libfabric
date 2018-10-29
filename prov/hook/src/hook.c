@@ -36,7 +36,6 @@
 #include <ofi.h>
 
 #include "ofi_hook.h"
-#include "hook_perf.h"
 #include "ofi_prov.h"
 
 
@@ -98,7 +97,7 @@ struct fid_wait *hook_to_hwait(const struct fid_wait *wait)
 }
 
 
-static int hook_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
+int hook_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct fid *hfid, *hbfid;
 
@@ -110,7 +109,7 @@ static int hook_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	return hfid->ops->bind(hfid, hbfid, flags);
 }
 
-static int hook_control(struct fid *fid, int command, void *arg)
+int hook_control(struct fid *fid, int command, void *arg)
 {
 	struct fid *hfid;
 
@@ -121,7 +120,7 @@ static int hook_control(struct fid *fid, int command, void *arg)
 	return hfid->ops->control(hfid, command, arg);
 }
 
-static int hook_ops_open(struct fid *fid, const char *name,
+int hook_ops_open(struct fid *fid, const char *name,
 			 uint64_t flags, void **ops, void *context)
 {
 	struct fid *hfid;
@@ -133,7 +132,7 @@ static int hook_ops_open(struct fid *fid, const char *name,
 	return hfid->ops->ops_open(hfid, name, flags, ops, context);
 }
 
-static int hook_close(struct fid *fid)
+int hook_close(struct fid *fid)
 {
 	struct fid *hfid;
 	int ret;
@@ -148,20 +147,6 @@ static int hook_close(struct fid *fid)
 	return ret;
 }
 
-static int hook_fabric_close(struct fid *fid)
-{
-	struct hook_fabric *fab;
-
-	fab = container_of(fid, struct hook_fabric, fabric.fid);
-	switch (fab->hclass) {
-	case HOOK_PERF:
-		perf_hook_destroy(fab);
-		break;
-	default:
-		break;
-	}
-	return hook_close(fid);
-}
 
 struct fi_ops hook_fid_ops = {
 	.size = sizeof(struct fi_ops),
@@ -173,7 +158,7 @@ struct fi_ops hook_fid_ops = {
 
 static struct fi_ops hook_fabric_fid_ops = {
 	.size = sizeof(struct fi_ops),
-	.close = hook_fabric_close,
+	.close = hook_close,
 	.bind = hook_bind,
 	.control = hook_control,
 	.ops_open = hook_ops_open,
@@ -189,14 +174,15 @@ static struct fi_ops_fabric hook_fabric_ops = {
 };
 
 void hook_fabric_init(struct hook_fabric *fabric, enum ofi_hook_class hclass,
-		      struct fid_fabric *hfabric, struct fi_provider *hprov)
+		      struct fid_fabric *hfabric, struct fi_provider *hprov,
+		      struct fi_ops *f_ops)
 {
 	fabric->hclass = hclass;
 	fabric->hfabric = hfabric;
 	fabric->prov = hprov;
 	fabric->fabric.fid.fclass = FI_CLASS_FABRIC;
 	fabric->fabric.fid.context = hfabric->fid.context;
-	fabric->fabric.fid.ops = &hook_fabric_fid_ops;
+	fabric->fabric.fid.ops = f_ops;
 	fabric->fabric.api_version = hfabric->api_version;
 	fabric->fabric.ops = &hook_fabric_ops;
 
@@ -214,7 +200,8 @@ static int noop_hook_fabric(struct fi_fabric_attr *attr,
 	if (!fab)
 		return -FI_ENOMEM;
 
-	hook_fabric_init(fab, HOOK_NOOP, attr->fabric, hprov);
+	hook_fabric_init(fab, HOOK_NOOP, attr->fabric, hprov,
+			 &hook_fabric_fid_ops);
 	*fabric = &fab->fabric;
 	return 0;
 }

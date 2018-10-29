@@ -31,8 +31,7 @@
  */
 
 #include <stdlib.h>
-#include "ofi_hook.h"
-#include "hook_perf.h"
+#include "hook_prov.h"
 
 
 static uint64_t hook_cntr_read(struct fid_cntr *cntr)

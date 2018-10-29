@@ -76,7 +76,8 @@ struct hook_fabric {
 };
 
 void hook_fabric_init(struct hook_fabric *fabric, enum ofi_hook_class hclass,
-		      struct fid_fabric *hfabric, struct fi_provider *hprov);
+		      struct fid_fabric *hfabric, struct fi_provider *hprov,
+		      struct fi_ops *f_ops);
 
 
 struct hook_domain {
