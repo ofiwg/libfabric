@@ -226,6 +226,7 @@ static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 			rma_buf = (struct rxm_rma_buf *)
 				((char *)addr + i * entry_sz);
 			rma_buf->pkt.hdr.op = ofi_op_msg;
+			rma_buf->hdr.state = RXM_RMA;
 
 			hdr = &rma_buf->hdr;
 			pkt = &rma_buf->pkt;
@@ -1520,11 +1521,11 @@ rxm_ep_conn_progress_deferred_queue(struct rxm_ep *rxm_ep,
 			break;
 		case RXM_RNDV_READ:
 			ret = fi_readv(tx_entry->conn->msg_ep,
-				       tx_entry->rma_buf->rxm_iov.iov,
-				       tx_entry->rma_buf->rxm_iov.desc,
-				       tx_entry->rma_buf->rxm_iov.count, 0,
-				       tx_entry->rma_buf->rxm_rma_iov.iov[0].addr,
-				       tx_entry->rma_buf->rxm_rma_iov.iov[0].key,
+				       tx_entry->rma_buf->def.rxm_iov.iov,
+				       tx_entry->rma_buf->def.rxm_iov.desc,
+				       tx_entry->rma_buf->def.rxm_iov.count, 0,
+				       tx_entry->rma_buf->def.rxm_rma_iov.iov[0].addr,
+				       tx_entry->rma_buf->def.rxm_rma_iov.iov[0].key,
 				       tx_entry->rx_buf);
 			if (OFI_UNLIKELY(ret)) {
 				if (OFI_LIKELY(ret == -FI_EAGAIN))

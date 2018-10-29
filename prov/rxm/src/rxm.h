@@ -292,15 +292,14 @@ struct rxm_rndv_hdr {
 
 /* RXM protocol states / tx/rx context */
 #define RXM_PROTO_STATES(FUNC)		\
-	FUNC(RXM_TX_NOBUF),		\
 	FUNC(RXM_TX),			\
-	FUNC(RXM_TX_RMA),		\
+	FUNC(RXM_RMA),			\
 	FUNC(RXM_RX),			\
 	FUNC(RXM_SAR_TX),		\
 	FUNC(RXM_RNDV_TX),		\
-	FUNC(RXM_RNDV_ACK_WAIT),		\
+	FUNC(RXM_RNDV_ACK_WAIT),	\
 	FUNC(RXM_RNDV_READ),		\
-	FUNC(RXM_RNDV_ACK_SENT),		\
+	FUNC(RXM_RNDV_ACK_SENT),	\
 	FUNC(RXM_RNDV_ACK_DEFERRED),	\
 	FUNC(RXM_RNDV_ACK_RECVD),	\
 	FUNC(RXM_RNDV_FINISH),
@@ -488,12 +487,22 @@ struct rxm_rma_buf {
 	/* Must stay at top */
 	struct rxm_buf hdr;
 
-	struct fi_msg_rma msg;
-	struct rxm_iov rxm_iov;
-	struct rxm_rma_iov_storage rxm_rma_iov;
+	void *app_context;
+	uint64_t flags;
 
 	/* Must stay at bottom */
-	struct rxm_pkt pkt;
+ 	union {
+		struct rxm_pkt pkt;
+		struct {
+			struct fid_mr *mr[RXM_IOV_LIMIT];
+			uint8_t count;
+		} mr;
+		/* TODO: delete fields below */
+		struct {
+			struct rxm_iov rxm_iov;
+			struct rxm_rma_iov_storage rxm_rma_iov;
+		} def;
+	};
 };
 
 struct rxm_tx_entry {

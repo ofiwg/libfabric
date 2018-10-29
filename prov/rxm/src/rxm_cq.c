@@ -256,6 +256,28 @@ static inline int rxm_finish_send_nobuf(struct rxm_tx_entry *tx_entry)
 	return ret;
 }
 
+static inline int rxm_finish_rma(struct rxm_ep *rxm_ep, struct rxm_rma_buf *rma_buf,
+				 uint64_t comp_flags)
+{
+	int ret = rxm_cq_tx_comp_write(rxm_ep, comp_flags,
+				       rma_buf->app_context, rma_buf->flags);
+	if (rxm_ep->util_ep.flags & OFI_CNTR_ENABLED) {
+		if (comp_flags & FI_WRITE) {
+			ofi_ep_wr_cntr_inc(&rxm_ep->util_ep);
+		} else {
+			assert(comp_flags & FI_READ);
+			ofi_ep_rd_cntr_inc(&rxm_ep->util_ep);
+		}
+	}
+
+	if (!(rma_buf->flags & FI_INJECT) && !rxm_ep->rxm_mr_local && rxm_ep->msg_mr_local) {
+		rxm_ep_msg_mr_closev(rma_buf->mr.mr, rma_buf->mr.count);
+	}
+
+	rxm_rma_buf_release(rxm_ep, rma_buf);
+	return ret;
+}
+
 static inline int rxm_finish_eager_send(struct rxm_ep *rxm_ep, struct rxm_tx_eager_buf *tx_buf)
 {
 	int ret = rxm_cq_tx_comp_write(rxm_ep, ofi_tx_cq_flags(tx_buf->pkt.hdr.op),
@@ -416,15 +438,15 @@ rxm_cq_rndv_read_prepare_deferred(struct rxm_tx_entry **tx_entry, size_t index,
 		free((*tx_entry)->rma_buf);
 		return -FI_ENOMEM;
 	}
-	(*tx_entry)->rma_buf->rxm_rma_iov.iov[0].addr =
+	(*tx_entry)->rma_buf->def.rxm_rma_iov.iov[0].addr =
 		(*tx_entry)->rx_buf->rndv_hdr->iov[index].addr;
-	(*tx_entry)->rma_buf->rxm_rma_iov.iov[0].key =
+	(*tx_entry)->rma_buf->def.rxm_rma_iov.iov[0].key =
 		(*tx_entry)->rx_buf->rndv_hdr->iov[index].key;
 	for (i = 0; i < count; i++) {
-		(*tx_entry)->rma_buf->rxm_iov.iov[i] = iov[i];
-		(*tx_entry)->rma_buf->rxm_iov.desc[i] = desc[i];
+		(*tx_entry)->rma_buf->def.rxm_iov.iov[i] = iov[i];
+		(*tx_entry)->rma_buf->def.rxm_iov.desc[i] = desc[i];
 	}
-	(*tx_entry)->rma_buf->rxm_iov.count = count;
+	(*tx_entry)->rma_buf->def.rxm_iov.count = count;
 	return 0;
 }
 
@@ -774,10 +796,10 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 				  struct fi_cq_data_entry *comp)
 {
 	struct rxm_rx_buf *rx_buf;
-	struct rxm_tx_entry *tx_entry;
 	struct rxm_tx_sar_buf *tx_sar_buf;
 	struct rxm_tx_eager_buf *tx_eager_buf;
 	struct rxm_tx_rndv_buf *tx_rndv_buf;
+	struct rxm_rma_buf *rma_buf;
 
 	/* Remote write events may not consume a posted recv so op context
 	 * and hence state would be NULL */
@@ -785,12 +807,6 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 		return rxm_handle_remote_write(rxm_ep, comp);
 
 	switch (RXM_GET_PROTO_STATE(comp->op_context)) {
-	case RXM_TX_NOBUF:
-		tx_entry = comp->op_context;
-		assert(comp->flags & (FI_SEND | FI_WRITE | FI_READ));
-		if (tx_entry->ep->msg_mr_local && !tx_entry->ep->rxm_mr_local)
-			rxm_ep_msg_mr_closev(tx_entry->mr, tx_entry->count);
-		return rxm_finish_send_nobuf(tx_entry);
 	case RXM_TX:
 		tx_eager_buf = comp->op_context;
 		assert(comp->flags & FI_SEND);
@@ -799,13 +815,11 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 		tx_sar_buf = comp->op_context;
 		assert(comp->flags & FI_SEND);
 		return rxm_finish_sar_segment_send(tx_sar_buf);
-	case RXM_TX_RMA:
-		tx_entry = comp->op_context;
-		assert(comp->flags & (FI_WRITE | FI_READ));
-		if (tx_entry->ep->msg_mr_local && !tx_entry->ep->rxm_mr_local)
-			rxm_ep_msg_mr_closev(tx_entry->mr, tx_entry->count);
-		rxm_rma_buf_release(rxm_ep, tx_entry->rma_buf);
-		return rxm_finish_send_nobuf(tx_entry);
+	case RXM_RMA:
+		rma_buf = comp->op_context;
+		assert((comp->flags & (FI_WRITE | FI_RMA)) ||
+		       (comp->flags & (FI_READ | FI_RMA)));
+		return rxm_finish_rma(rxm_ep, rma_buf, comp->flags);
 	case RXM_RX:
 		rx_buf = comp->op_context;
 		assert(!(comp->flags & FI_REMOTE_READ));
