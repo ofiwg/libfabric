@@ -92,15 +92,15 @@
 #define VERBS_WARN(subsys, ...) FI_WARN(&fi_ibv_prov, subsys, __VA_ARGS__)
 
 
-#define VERBS_INJECT_FLAGS(ep, len, flags) (((flags & FI_INJECT) || \
-		len <= ep->info->tx_attr->inject_size) ? IBV_SEND_INLINE : 0)
-#define VERBS_INJECT(ep, len) VERBS_INJECT_FLAGS(ep, len, ep->info->tx_attr->op_flags)
+#define VERBS_INJECT_FLAGS(ep, len, flags) ((((flags) & FI_INJECT) || \
+		len <= (ep)->info->tx_attr->inject_size) ? IBV_SEND_INLINE : 0)
+#define VERBS_INJECT(ep, len) VERBS_INJECT_FLAGS(ep, len, (ep)->info->tx_attr->op_flags)
 
 #define VERBS_COMP_FLAGS(ep, flags, context)		\
-	((ep->util_ep.tx_op_flags | flags) &		\
+	(((ep)->util_ep.tx_op_flags | (flags)) &		\
 	 FI_COMPLETION ? context : VERBS_NO_COMP_FLAG)
 #define VERBS_COMP(ep, context)						\
-	VERBS_COMP_FLAGS(ep, ep->info->tx_attr->op_flags, context)
+	VERBS_COMP_FLAGS((ep), (ep)->info->tx_attr->op_flags, context)
 
 #define VERBS_WCE_CNT 1024
 #define VERBS_WRE_CNT 1024
