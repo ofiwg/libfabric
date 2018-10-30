@@ -77,7 +77,7 @@ static int rxd_ep_check_unexp_msg_list(struct rxd_ep *ep,
 						 (void *) rx_entry);
 		if (!match)
 			return 0;
-	
+
 		FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "progressing unexp msg entry\n");
 	
 		pkt_entry = container_of(match, struct rxd_pkt_entry, d_entry);
@@ -93,9 +93,7 @@ static int rxd_ep_check_unexp_msg_list(struct rxd_ep *ep,
 		progress_entry = dup_entry ? dup_entry : rx_entry;
 	
 		progress_entry->cq_entry.len = MIN(rx_entry->cq_entry.len, total_size);
-		dlist_insert_tail(&progress_entry->entry,
-				  &ep->peers[base_hdr->peer].rx_list);
-	
+
 		rxd_progress_op(ep, progress_entry, pkt_entry, base_hdr, sar_hdr, tag_hdr,
 				data_hdr, rma_hdr, atom_hdr, &msg, msg_size);
 		rxd_release_repost_rx(ep, pkt_entry);
@@ -150,7 +148,7 @@ ssize_t rxd_ep_generic_recvmsg(struct rxd_ep *rxd_ep, const struct iovec *iov,
 
 	if (!dlist_empty(unexp_list) &&
 	    rxd_ep_check_unexp_msg_list(rxd_ep, unexp_list, rx_list, rx_entry))
-		goto out;	
+		goto out;
 
 	dlist_insert_tail(&rx_entry->entry, rx_list);
 out:
