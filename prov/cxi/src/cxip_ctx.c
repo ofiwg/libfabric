@@ -278,7 +278,7 @@ static int tx_ctx_recv_init(struct cxip_tx_ctx *txc)
 {
 	int ret;
 	union c_cmdu cmd = {};
-	struct cxi_pt_alloc_opts opts = {.is_matching = 1,};
+	struct cxi_pt_alloc_opts opts = { .is_matching = 1 };
 	uint64_t pid_idx;
 
 	/* initialize the rendezvous ID structure */

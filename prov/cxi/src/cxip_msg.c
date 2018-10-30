@@ -208,14 +208,15 @@ static int sw_rdvs_issue_get(struct cxip_req *req, struct cxip_ux_send *ux_send)
 	cmd.full_dma.command.cmd_type = C_CMD_TYPE_DMA;
 	cmd.full_dma.command.opcode = C_CMD_GET;
 	cmd.full_dma.index_ext = idx_ext;
-	cmd.full_dma.lac = ux_send->oflow_buf->md.lac;
+	cmd.full_dma.lac = req->recv.recv_md.lac;
+	cmd.full_dma.remote_offset = 0;
 	cmd.full_dma.event_send_disable = 1;
 	cmd.full_dma.dfa = dfa;
 	cmd.full_dma.local_addr = CXI_VA_TO_IOVA(&req->recv.recv_md,
 						 req->recv.recv_buf);
 	cmd.full_dma.eq = rxc->comp.recv_cq->evtq->eqn;
 	cmd.full_dma.request_len = ux_send->length;
-	cmd.full_dma.match_bits = ux_send->match_bits;
+	cmd.full_dma.match_bits = ux_send->match_bits.rdvs_id;
 	cmd.full_dma.initiator = CXI_MATCH_ID(pid_bits,
 					      rxc->ep_obj->src_addr.pid,
 					      rxc->ep_obj->src_addr.nic);
@@ -354,7 +355,7 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 
 		ux_send->oflow_buf = oflow_buf;
 		ux_send->start = event->tgt_long.start;
-		ux_send->match_bits = event->tgt_long.match_bits;
+		ux_send->match_bits.raw = event->tgt_long.match_bits;
 		ux_send->initiator =
 			event->tgt_long.initiator.initiator.process;
 
@@ -410,7 +411,7 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 			ux_send.oflow_buf = oflow_buf;
 			ux_send.start = event->tgt_long.start;
 			ux_send.length = event->tgt_long.rlength;
-			ux_send.match_bits = event->tgt_long.match_bits;
+			ux_send.match_bits.raw = event->tgt_long.match_bits;
 			ux_send.initiator =
 				event->tgt_long.initiator.initiator.process;
 
@@ -444,6 +445,10 @@ static int oflow_buf_add(struct cxip_rx_ctx *rxc)
 	struct cxip_oflow_buf *oflow_buf;
 	struct cxip_req *req;
 	uint64_t min_free;
+
+	/* Match all tagged, eager sends */
+	union cxip_match_bits mb = { .tagged = 1, .rdvs = 0 };
+	union cxip_match_bits ib = { .rdvs_id = ~0, .tag = ~0 };
 
 	dom = rxc->domain;
 
@@ -497,9 +502,9 @@ static int oflow_buf_add(struct cxip_rx_ctx *rxc)
 			dom->dev_if->if_dev->info.min_free_shift);
 	ret = issue_append_le(rxc->rx_pte->pte, oflow_buf->buf,
 			      rxc->oflow_buf_size, &oflow_buf->md,
-			      C_PTL_LIST_OVERFLOW, req->req_id, 0,
-			      ~CXIP_RDVS_PROT_MASK, -1, min_free, false,
-			      false, true, true, true, false, rxc->rx_cmdq);
+			      C_PTL_LIST_OVERFLOW, req->req_id, mb.raw, ib.raw,
+			      -1, min_free, false, false, true, true, true,
+			      false, rxc->rx_cmdq);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
 		goto oflow_unlock;
@@ -621,6 +626,10 @@ int cxip_sw_rdvs_ux_buf_add(struct cxip_rx_ctx *rxc)
 	void *ux_buf;
 	struct cxi_iova md;
 
+	/* Match all tagged, rendezvous sends */
+	union cxip_match_bits mb = { .tagged = 1, .rdvs = 1 };
+	union cxip_match_bits ib = { .rdvs_id = ~0, .tag = ~0 };
+
 	dom = rxc->domain;
 
 	/* Allocate a small data buffer */
@@ -656,9 +665,8 @@ int cxip_sw_rdvs_ux_buf_add(struct cxip_rx_ctx *rxc)
 	}
 
 	ret = issue_append_le(rxc->rx_pte->pte, ux_buf, 1, &md, // TODO len 1?
-			      C_PTL_LIST_OVERFLOW, req->req_id,
-			      CXIP_RDVS_PROT_BIT, ~CXIP_RDVS_PROT_MASK, -1, 0,
-			      false, false, true, false, true, false,
+			      C_PTL_LIST_OVERFLOW, req->req_id, mb.raw, ib.raw,
+			      -1, 0, false, false, true, false, true, false,
 			      rxc->rx_cmdq);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to write UX Append command: %d\n", ret);
@@ -952,9 +960,9 @@ static void cxip_trecv_cb(struct cxip_req *req, const union c_event *event)
 	cxip_cq_req_free(req);
 }
 
-static ssize_t cxip_trecv(struct fid_ep *ep, void *buf, size_t len, void *desc,
+static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 			  fi_addr_t src_addr, uint64_t tag, uint64_t ignore,
-			  void *context)
+			  void *context, bool tagged)
 {
 	struct cxip_ep *cxi_ep;
 	struct cxip_rx_ctx *rxc;
@@ -965,9 +973,10 @@ static ssize_t cxip_trecv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	struct cxip_addr caddr;
 	uint32_t match_id;
 	uint32_t pid_bits;
+	union cxip_match_bits mb = {};
+	union cxip_match_bits ib = { .rdvs = ~0, .rdvs_id = ~0, .tag = ~0 };
 
-	if (!ep || !buf || (tag & CXIP_RDVS_MASK) != 0 ||
-	    (ignore & CXIP_RDVS_MASK) != 0)
+	if (!ep || !buf)
 		return -FI_EINVAL;
 
 	/* The input FID could be a standard endpoint (containing a RX
@@ -1036,7 +1045,13 @@ static ssize_t cxip_trecv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	 * may be overwritten later.
 	 */
 	req->context = (uint64_t)context;
-	req->flags = FI_TAGGED | FI_RECV;
+
+	req->flags = FI_RECV;
+	if (tagged)
+		req->flags |= FI_TAGGED;
+	else
+		req->flags |= FI_MSG;
+
 	req->buf = 0;
 	req->data = 0;
 	req->cb = cxip_trecv_cb;
@@ -1046,17 +1061,19 @@ static ssize_t cxip_trecv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	req->recv.recv_md = recv_md;
 	req->recv.rlength = len;
 
-	/* Ignore any of the rendezvous protocol bits */
-	ignore |= CXIP_RDVS_MASK;
+	if (tagged) {
+		mb.tagged = 1;
+		mb.tag = tag;
+		ib.tag = tag;
+	}
 
 	fastlock_acquire(&rxc->lock);
 
 	/* Issue Append command */
 	ret = issue_append_le(rxc->rx_pte->pte, buf, len, &recv_md,
-			      C_PTL_LIST_PRIORITY, req->req_id, tag, ignore,
+			      C_PTL_LIST_PRIORITY, req->req_id, mb.raw, ib.raw,
 			      match_id, 0, false, true, false, false, true,
-			      (len > rxc->eager_threshold) ? true : false,
-			      rxc->rx_cmdq);
+			      false, rxc->rx_cmdq);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
 		goto trecv_unlock;
@@ -1282,8 +1299,8 @@ rdvs_unlink_le:
 	}
 }
 
-static int start_rendezvous_xaction(struct cxip_tx_ctx *txc, union c_cmdu *cmd,
-				    const void *buf)
+static int start_rdvs(struct cxip_tx_ctx *txc, union c_cmdu *cmd,
+		      const void *buf)
 {
 	int rdvs_id = -1;
 	int ret = FI_SUCCESS;
@@ -1300,10 +1317,6 @@ static int start_rendezvous_xaction(struct cxip_tx_ctx *txc, union c_cmdu *cmd,
 	if (rdvs_id < 0)
 		return rdvs_id;
 
-	/* Update Tags */
-	cmd->full_dma.match_bits |= (CXIP_RDVS_PROT_BIT |
-				     CXIP_RDVS_ID(rdvs_id));
-
 	/* Update request structure */
 	req->send.rdvs_id = rdvs_id;
 	req->cb = cxip_tsend_rdvs_cb;
@@ -1313,9 +1326,8 @@ static int start_rendezvous_xaction(struct cxip_tx_ctx *txc, union c_cmdu *cmd,
 			txc->domain->dev_if->if_dev->info.min_free_shift);
 	ret = issue_append_le(txc->rdvs_pte->pte, buf, req->send.length,
 			      &req->send.send_md, C_PTL_LIST_PRIORITY,
-			      req->req_id, cmd->full_dma.match_bits, -1, 0,
-			      min_free, false, true, false, true, false, true,
-			      txc->rx_cmdq);
+			      req->req_id, rdvs_id, 0, -1, min_free, false,
+			      true, false, true, false, true, txc->rx_cmdq);
 	if (ret) {
 		CXIP_LOG_DBG("SW RDVS TX: Failed to send Append command: %d\n",
 			ret);
@@ -1328,8 +1340,8 @@ static int start_rendezvous_xaction(struct cxip_tx_ctx *txc, union c_cmdu *cmd,
 	return ret;
 }
 
-static void cxip_tsend_eager_cb(struct cxip_req *req,
-				const union c_event *event)
+/* Basic send callback, used for both tagged and untagged messages. */
+static void cxip_send_cb(struct cxip_req *req, const union c_event *event)
 {
 	int ret;
 	int event_rc;
@@ -1368,9 +1380,9 @@ static fi_addr_t _txc_fi_addr(struct cxip_tx_ctx *txc)
 	return txc->ep_obj->fi_addr;
 }
 
-static ssize_t cxip_tsend(struct fid_ep *ep, const void *buf, size_t len,
+static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 			  void *desc, fi_addr_t dest_addr, uint64_t tag,
-			  void *context)
+			  void *context, bool tagged)
 {
 	struct cxip_ep *cxi_ep;
 	struct cxip_tx_ctx *txc;
@@ -1385,11 +1397,12 @@ static ssize_t cxip_tsend(struct fid_ep *ep, const void *buf, size_t len,
 	uint32_t pid_granule;
 	uint32_t pid_idx;
 	uint64_t rx_id;
-	int remap;
+	bool rdvs;
 	uint32_t match_id;
 	uint32_t pid_bits;
+	union cxip_match_bits mb = {};
 
-	if (!ep || !buf || (tag & CXIP_RDVS_MASK) != 0)
+	if (!ep || !buf)
 		return -FI_EINVAL;
 
 	/* The input FID could be a standard endpoint (containing a TX
@@ -1410,6 +1423,11 @@ static ssize_t cxip_tsend(struct fid_ep *ep, const void *buf, size_t len,
 		return -FI_EINVAL;
 	}
 
+	if (tagged && len > txc->eager_threshold)
+		rdvs = true;
+	else
+		rdvs = false;
+
 	dom = txc->domain;
 
 	/* Look up target CXI address */
@@ -1428,8 +1446,7 @@ static ssize_t cxip_tsend(struct fid_ep *ep, const void *buf, size_t len,
 	}
 
 	/* Populate request */
-	remap = len > txc->eager_threshold ? 1 : 0;
-	req = cxip_cq_req_alloc(txc->comp.send_cq, remap);
+	req = cxip_cq_req_alloc(txc->comp.send_cq, rdvs);
 	if (!req) {
 		CXIP_LOG_DBG("Failed to allocate request\n");
 		ret = -FI_ENOMEM;
@@ -1437,13 +1454,19 @@ static ssize_t cxip_tsend(struct fid_ep *ep, const void *buf, size_t len,
 	}
 
 	req->context = (uint64_t)context;
-	req->flags = FI_TAGGED | FI_SEND;
+	req->flags = FI_SEND;
+
+	if (tagged)
+		req->flags |= FI_TAGGED;
+	else
+		req->flags |= FI_MSG;
+
 	req->data_len = 0;
 	req->buf = 0;
 	req->data = 0;
 	req->tag = 0;
 
-	req->cb = cxip_tsend_eager_cb;
+	req->cb = cxip_send_cb;
 	req->send.txc = txc;
 	req->send.send_md = send_md;
 	req->send.length = len;
@@ -1482,11 +1505,17 @@ static ssize_t cxip_tsend(struct fid_ep *ep, const void *buf, size_t len,
 	cmd.full_dma.request_len = len;
 	cmd.full_dma.eq = txc->comp.send_cq->evtq->eqn;
 	cmd.full_dma.user_ptr = (uint64_t)req;
-	cmd.full_dma.match_bits = tag;
 	cmd.full_dma.initiator = match_id;
 
-	if (len > txc->eager_threshold) {
-		ret = start_rendezvous_xaction(txc, &cmd, buf);
+	/* Generate hardware match bits */
+	if (tagged) {
+		mb.tagged = 1;
+		mb.tag = tag;
+	}
+	cmd.full_dma.match_bits = mb.raw;
+
+	if (rdvs) {
+		ret = start_rdvs(txc, &cmd, buf);
 		if (ret != FI_SUCCESS)
 			goto tsend_req_free;
 	} else {
@@ -1522,6 +1551,25 @@ tsend_unmap:
 	return ret;
 }
 
+/*
+ * APIs
+ */
+
+static ssize_t cxip_trecv(struct fid_ep *ep, void *buf, size_t len, void *desc,
+			  fi_addr_t src_addr, uint64_t tag, uint64_t ignore,
+			  void *context)
+{
+	return _cxip_recv(ep, buf, len, desc, src_addr, tag, ignore, context,
+			  true);
+}
+
+static ssize_t cxip_tsend(struct fid_ep *ep, const void *buf, size_t len,
+			  void *desc, fi_addr_t dest_addr, uint64_t tag,
+			  void *context)
+{
+	return _cxip_send(ep, buf, len, desc, dest_addr, tag, context, true);
+}
+
 struct fi_ops_tagged cxip_ep_tagged_ops = {
 	.size = sizeof(struct fi_ops_tagged),
 	.recv = cxip_trecv,
@@ -1535,12 +1583,24 @@ struct fi_ops_tagged cxip_ep_tagged_ops = {
 	.injectdata = fi_no_tagged_injectdata,
 };
 
+static ssize_t cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
+			 fi_addr_t src_addr, void *context)
+{
+	return _cxip_recv(ep, buf, len, desc, src_addr, 0, 0, context, false);
+}
+
+static ssize_t cxip_send(struct fid_ep *ep, const void *buf, size_t len,
+			 void *desc, fi_addr_t dest_addr, void *context)
+{
+	return _cxip_send(ep, buf, len, desc, dest_addr, 0, context, false);
+}
+
 struct fi_ops_msg cxip_ep_msg_ops = {
 	.size = sizeof(struct fi_ops_msg),
-	.recv = fi_no_msg_recv,
+	.recv = cxip_recv,
 	.recvv = fi_no_msg_recvv,
 	.recvmsg = fi_no_msg_recvmsg,
-	.send = fi_no_msg_send,
+	.send = cxip_send,
 	.sendv = fi_no_msg_sendv,
 	.sendmsg = fi_no_msg_sendmsg,
 	.inject = fi_no_msg_inject,

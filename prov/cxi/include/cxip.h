@@ -39,6 +39,10 @@
 
 #include "libcxi/libcxi.h"
 
+#ifndef ARRAY_SIZE
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+#endif
+
 #define CXIP_EP_MAX_MSG_SZ (1 << 23)
 #define CXIP_EP_MAX_INJECT_SZ ((1 << 8) - 1)
 #define CXIP_EP_MAX_BUFF_RECV (1 << 26)
@@ -82,8 +86,7 @@
 #define CXIP_EP_RDM_PRI_CAP \
 	(FI_RMA | FI_ATOMICS | FI_TAGGED | FI_RECV | FI_SEND | \
 	 FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE | \
-	 FI_DIRECTED_RECV | FI_NAMED_RX_CTX | /* TODO FI_MSG | */ 0 \
-	)
+	 FI_DIRECTED_RECV | FI_MSG | FI_NAMED_RX_CTX)
 
 #define CXIP_EP_RDM_SEC_CAP_BASE \
 	(FI_SOURCE | FI_SHARED_AV | FI_LOCAL_COMM | FI_REMOTE_COMM | \
@@ -134,21 +137,6 @@ extern uint64_t CXIP_EP_RDM_CAP;
 #ifndef CXIP_MAX_OFLOW_MSGS
 #define CXIP_MAX_OFLOW_MSGS (1024)
 #endif
-
-#define CXIP_RDVS_PROT_SHIFT (63)
-#define CXIP_RDVS_PROT_MASK (1ULL << CXIP_RDVS_PROT_SHIFT)
-#define CXIP_RDVS_PROT_BIT (1ULL << (CXIP_RDVS_PROT_SHIFT))
-#define CXIP_RDVS_ID_SHIFT (56)
-#define CXIP_RDVS_ID_MASK (0x7fULL << CXIP_RDVS_ID_SHIFT)
-#define CXIP_RDVS_MASK (CXIP_RDVS_ID_MASK | CXIP_RDVS_PROT_MASK)
-#define CXIP_RDVS_ID(id) (CXIP_RDVS_ID_MASK & \
-			  (((uint64_t)id) << CXIP_RDVS_ID_SHIFT))
-#define CXIP_RDVS_GET_ID(match) ((CXIP_RDVS_ID_MASK & match) >> \
-				 CXIP_RDVS_ID_SHIFT)
-
-#define CXIP_MAKE_INIT(pid, nic_addr) (((pid) << 24) | (nic_addr))
-#define CXIP_GET_INIT_PID(init) ((init) >> 24)
-#define CXIP_GET_INIT_NID(init) ((init) & ((1 << 24) - 1))
 
 extern const char cxip_fab_fmt[];
 extern const char cxip_dom_fmt[];
@@ -211,9 +199,16 @@ struct cxip_addr {
 #define CXIP_AV_ADDR_RXC(av, fi_addr) \
 	(av->rx_ctx_bits ? ((uint64_t)fi_addr >> (64 - av->rx_ctx_bits)) : 0)
 
-#ifndef ARRAY_SIZE
-#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
-#endif
+/* Messaging Match Bit layout */
+union cxip_match_bits {
+	struct {
+		uint64_t tagged  : 1;  /* Tagged API */
+		uint64_t rdvs    : 1;  /* Rendezvous protocol (Tagged only) */
+		uint64_t rdvs_id : 8;  /* Rendezvous ID (used by protocol) */
+		uint64_t tag     : 54; /* User tag value */
+	};
+	uint64_t raw;
+};
 
 // TODO: comments are not yet complete, and may not be entirely correct
 //       complete documentation and review thoroughly
@@ -568,7 +563,7 @@ struct cxip_ux_send {
 	struct cxip_oflow_buf *oflow_buf;
 	uint64_t start;
 	uint64_t length;
-	uint64_t match_bits;
+	union cxip_match_bits match_bits;
 	uint32_t initiator;
 };
 
