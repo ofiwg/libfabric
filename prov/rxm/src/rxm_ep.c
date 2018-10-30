@@ -965,7 +965,8 @@ rxm_ep_alloc_rndv_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void 
 		(struct rxm_tx_rndv_buf *)rxm_tx_buf_get(rxm_ep, RXM_BUF_POOL_TX_RNDV);
 
 	if (OFI_UNLIKELY(!tx_buf)) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_DATA, "TX buf full!\n");
+		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+			"Ran out of buffers from RNDV buffer pool\n");
 		return -FI_EAGAIN;
 	}
 
@@ -1052,7 +1053,8 @@ rxm_ep_sar_tx_prepare_segment(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		(struct rxm_tx_sar_buf *)rxm_tx_buf_get(rxm_ep, RXM_BUF_POOL_TX_SAR);
 
 	if (OFI_UNLIKELY(!tx_buf)) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_DATA, "TX buf full!\n");
+		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+			"Ran out of buffers from SAR buffer pool\n");
 		return NULL;
 	};
 
@@ -1261,7 +1263,8 @@ rxm_ep_emulate_inject(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 	tx_buf = (struct rxm_tx_eager_buf *)rxm_tx_buf_get(rxm_ep, RXM_BUF_POOL_TX);
 	if (OFI_UNLIKELY(!tx_buf)) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_DATA, "TX buf full!\n");
+		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+			"Ran out of buffers from Eager buffer pool\n");
 		return -FI_EAGAIN;
 	}
 	rxm_ep_format_tx_buf_pkt(rxm_conn, len, op, data, tag, flags, &tx_buf->pkt);
@@ -1371,7 +1374,8 @@ rxm_ep_inject_common(struct rxm_ep *rxm_ep, const void *buf, size_t len,
 		struct rxm_tx_base_buf *tx_buf = (struct rxm_tx_base_buf *)
 			rxm_tx_buf_get(rxm_ep, RXM_BUF_POOL_TX_INJECT);
 		if (OFI_UNLIKELY(!tx_buf)) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_DATA, "TX buf full!\n");
+			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+				"Ran out of buffers from Eager Inject buffer pool\n");
 			return -FI_EAGAIN;
 		}
 		rxm_ep_format_tx_buf_pkt(rxm_conn, len, op, data, tag,
@@ -1408,7 +1412,8 @@ rxm_ep_send_inject(struct rxm_ep *rxm_ep, const struct iovec *iov, size_t count,
 		struct rxm_tx_base_buf *tx_buf = (struct rxm_tx_base_buf *)
 			rxm_tx_buf_get(rxm_ep, RXM_BUF_POOL_TX_INJECT);
 		if (OFI_UNLIKELY(!tx_buf)) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_DATA, "TX buf full!\n");
+			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+				"Ran out of buffers from Eager Inject buffer pool\n");
 			return -FI_EAGAIN;
 		}
 		rxm_ep_format_tx_buf_pkt(rxm_conn, total_len, op, data, tag,
@@ -1467,7 +1472,8 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 
 		tx_buf = (struct rxm_tx_eager_buf *)rxm_tx_buf_get(rxm_ep, RXM_BUF_POOL_TX);
 		if (OFI_UNLIKELY(!tx_buf)) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_DATA, "TX buf full!\n");
+			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+				"Ran out of buffers from Eager buffer pool\n");
 			return -FI_EAGAIN;
 		}
 		rxm_ep_format_tx_buf_pkt(rxm_conn, data_len, op, data, tag,

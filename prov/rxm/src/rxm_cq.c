@@ -590,8 +590,11 @@ rxm_cq_match_rx_buf(struct rxm_rx_buf *rx_buf,
 		rx_buf->ep->res_fastlock_release(&recv_queue->lock);
 
 		rx_buf = rxm_rx_buf_get(rxm_ep);
-		if (!rx_buf)
+		if (OFI_UNLIKELY(!rx_buf)) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+				"Ran out of buffers from RX buffer pool\n");
 			return -FI_ENOMEM;
+		}
 
 		rx_buf->hdr.state = RXM_RX;
 		rx_buf->msg_ep = msg_ep;
@@ -685,7 +688,7 @@ static ssize_t rxm_rndv_send_ack(struct rxm_rx_buf *rx_buf)
 		rxm_tx_buf_get(rx_buf->ep, RXM_BUF_POOL_TX_ACK);
 	if (OFI_UNLIKELY(!rx_buf->recv_entry->rndv.tx_buf)) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ,
-			"Unable to allocate TX buffer\n");
+			"Ran out of buffers from ACK buffer pool\n");
 		return -FI_EAGAIN;
 	}
 	assert(rx_buf->recv_entry->rndv.tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_ack);
@@ -985,8 +988,11 @@ int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep)
 
 	for (i = 0; i < rxm_ep->msg_info->rx_attr->size; i++) {
 		rx_buf = rxm_rx_buf_get(rxm_ep);
-		if (OFI_UNLIKELY(!rx_buf))
+		if (OFI_UNLIKELY(!rx_buf)) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+				"Ran out of buffers from RX buffer pool\n");
 			return -FI_ENOMEM;
+		}
 
 		rx_buf->hdr.state = RXM_RX;
 		rx_buf->msg_ep = msg_ep;
