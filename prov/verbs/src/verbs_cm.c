@@ -150,7 +150,7 @@ fi_ibv_msg_ep_connect(struct fid_ep *ep, const void *addr,
 		return -FI_EINVAL;
 
 	if (!_ep->id->qp) {
-		ret = ep->fid.ops->control(&ep->fid, FI_ENABLE, NULL);
+		ret = fi_control(&ep->fid, FI_ENABLE, NULL);
 		if (ret)
 			return ret;
 	}
@@ -195,7 +195,7 @@ fi_ibv_msg_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 		return -FI_EINVAL;
 
 	if (!_ep->id->qp) {
-		ret = ep->fid.ops->control(&ep->fid, FI_ENABLE, NULL);
+		ret = fi_control(&ep->fid, FI_ENABLE, NULL);
 		if (ret)
 			return ret;
 	}
