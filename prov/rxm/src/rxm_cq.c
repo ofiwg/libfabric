@@ -90,15 +90,21 @@ static int rxm_match_iov(const struct iovec *iov, void **desc,
 	return FI_SUCCESS;
 }
 
-static uint64_t rxm_cq_get_rx_flags(struct rxm_rx_buf *rx_buf)
+static inline uint64_t
+rxm_cq_get_rx_comp_and_op_flags(struct rxm_rx_buf *rx_buf)
 {
-	return ((rx_buf->pkt.hdr.flags & FI_REMOTE_CQ_DATA) |
-		ofi_rx_flags[rx_buf->pkt.hdr.op]);
+	return (rx_buf->pkt.hdr.flags | ofi_rx_flags[rx_buf->pkt.hdr.op]);
+}
+
+static inline uint64_t
+rxm_cq_get_rx_comp_flags(struct rxm_rx_buf *rx_buf)
+{
+	return (rx_buf->pkt.hdr.flags);
 }
 
 static int rxm_finish_buf_recv(struct rxm_rx_buf *rx_buf)
 {
-	uint64_t flags = rxm_cq_get_rx_flags(rx_buf);
+	uint64_t flags = rxm_cq_get_rx_comp_and_op_flags(rx_buf);
 	char *data;
 
 	if (rx_buf->pkt.ctrl_hdr.type != ofi_ctrl_data)
@@ -130,7 +136,7 @@ static int rxm_cq_write_error_trunc(struct rxm_rx_buf *rx_buf, size_t done_len)
 	ret = ofi_cq_write_error_trunc(rx_buf->ep->util_ep.rx_cq,
 				       rx_buf->recv_entry->context,
 				       rx_buf->recv_entry->comp_flags |
-				       rxm_cq_get_rx_flags(rx_buf),
+				       rxm_cq_get_rx_comp_flags(rx_buf),
 				       rx_buf->pkt.hdr.size,
 				       rx_buf->recv_entry->rxm_iov.iov[0].iov_base,
 				       rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag,
@@ -157,7 +163,7 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 			ret = rxm_cq_write_recv_comp(
 					rx_buf, rx_buf->recv_entry->context,
 					rx_buf->recv_entry->comp_flags |
-					rxm_cq_get_rx_flags(rx_buf),
+					rxm_cq_get_rx_comp_flags(rx_buf),
 					rx_buf->pkt.hdr.size,
 					rx_buf->recv_entry->rxm_iov.iov[0].iov_base);
 			if (ret)
@@ -235,16 +241,12 @@ rxm_cq_tx_comp_write(struct rxm_ep *rxm_ep, uint64_t comp_flags,
 static inline void
 rxm_cq_tx_comp_cntr_inc(struct rxm_ep *rxm_ep, uint64_t comp_flags)
 {
-	if (rxm_ep->util_ep.flags & OFI_CNTR_ENABLED) {
-		if (comp_flags & FI_SEND) {
-			ofi_ep_tx_cntr_inc(&rxm_ep->util_ep);
-		} else if (comp_flags & FI_WRITE) {
-			ofi_ep_wr_cntr_inc(&rxm_ep->util_ep);
-		} else {
-			assert(comp_flags & FI_READ);
-			ofi_ep_rd_cntr_inc(&rxm_ep->util_ep);
- 		}
-	}
+	assert(((comp_flags & FI_SEND) && !(comp_flags & (FI_WRITE | FI_READ))) ||
+	       ((comp_flags & FI_WRITE) && !(comp_flags & (FI_SEND | FI_READ))) ||
+	       ((comp_flags & FI_READ) && !(comp_flags & (FI_SEND | FI_WRITE))));
+
+	ofi_ep_cntr_inc_funcs[comp_flags &
+		(FI_SEND | FI_WRITE | FI_READ)](&rxm_ep->util_ep);
 }
 
 static inline int rxm_finish_send_nobuf(struct rxm_tx_entry *tx_entry)
@@ -261,14 +263,10 @@ static inline int rxm_finish_rma(struct rxm_ep *rxm_ep, struct rxm_rma_buf *rma_
 {
 	int ret = rxm_cq_tx_comp_write(rxm_ep, comp_flags,
 				       rma_buf->app_context, rma_buf->flags);
-	if (rxm_ep->util_ep.flags & OFI_CNTR_ENABLED) {
-		if (comp_flags & FI_WRITE) {
-			ofi_ep_wr_cntr_inc(&rxm_ep->util_ep);
-		} else {
-			assert(comp_flags & FI_READ);
-			ofi_ep_rd_cntr_inc(&rxm_ep->util_ep);
-		}
-	}
+
+	assert(((comp_flags & FI_WRITE) && !(comp_flags & FI_READ)) ||
+	       ((comp_flags & FI_READ) && !(comp_flags & FI_WRITE)));
+	ofi_ep_cntr_inc_funcs[comp_flags & (FI_WRITE | FI_READ)](&rxm_ep->util_ep);
 
 	if (!(rma_buf->flags & FI_INJECT) && !rxm_ep->rxm_mr_local && rxm_ep->msg_mr_local) {
 		rxm_ep_msg_mr_closev(rma_buf->mr.mr, rma_buf->mr.count);
@@ -282,10 +280,10 @@ static inline int rxm_finish_eager_send(struct rxm_ep *rxm_ep, struct rxm_tx_eag
 {
 	int ret = rxm_cq_tx_comp_write(rxm_ep, ofi_tx_cq_flags(tx_buf->pkt.hdr.op),
 				       tx_buf->app_context, tx_buf->flags);
-	if (rxm_ep->util_ep.flags & OFI_CNTR_ENABLED) {
-		assert(ofi_tx_cq_flags(tx_buf->pkt.hdr.op) & FI_SEND);
-		ofi_ep_tx_cntr_inc(&rxm_ep->util_ep);
-	}
+
+	assert(ofi_tx_cq_flags(tx_buf->pkt.hdr.op) & FI_SEND);
+	ofi_ep_tx_cntr_inc(&rxm_ep->util_ep);
+
 	rxm_tx_buf_release(rxm_ep, tx_buf);
 	return ret;
 }
@@ -334,10 +332,9 @@ static int rxm_rndv_tx_finish(struct rxm_ep *rxm_ep, struct rxm_tx_rndv_buf *tx_
 
 	ret = rxm_cq_tx_comp_write(rxm_ep, ofi_tx_cq_flags(tx_buf->pkt.hdr.op),
 				   tx_buf->app_context, tx_buf->flags);
-	if (rxm_ep->util_ep.flags & OFI_CNTR_ENABLED) {
-		assert(ofi_tx_cq_flags(tx_buf->pkt.hdr.op) & FI_SEND);
-		ofi_ep_tx_cntr_inc(&rxm_ep->util_ep);
-	}
+
+	assert(ofi_tx_cq_flags(tx_buf->pkt.hdr.op) & FI_SEND);
+	ofi_ep_tx_cntr_inc(&rxm_ep->util_ep);
 
 	rxm_enqueue_rx_buf_for_repost_check(tx_buf->rx_buf);
 

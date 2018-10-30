@@ -912,6 +912,9 @@ rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 {
 	FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Posting inject with length: %" PRIu64
 	       " tag: 0x%" PRIx64 "\n", pkt_size, tx_pkt->hdr.tag);
+
+	assert((tx_pkt->hdr.flags & FI_REMOTE_CQ_DATA) || !tx_pkt->hdr.flags);
+
 	ssize_t ret = fi_inject(rxm_conn->msg_ep, tx_pkt, pkt_size, 0);
 	if (OFI_LIKELY(!ret)) {
 		ofi_ep_tx_cntr_inc(&rxm_ep->util_ep);
@@ -932,6 +935,9 @@ rxm_ep_normal_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 {
 	FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Posting send with length: %" PRIu64
 	       " tag: 0x%" PRIx64 "\n", pkt_size, tx_pkt->hdr.tag);
+
+	assert((tx_pkt->hdr.flags & FI_REMOTE_CQ_DATA) || !tx_pkt->hdr.flags);
+
 	return fi_send(rxm_conn->msg_ep, tx_pkt, pkt_size, desc, 0, context);
 }
 
