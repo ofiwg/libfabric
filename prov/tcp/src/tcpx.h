@@ -69,7 +69,8 @@
 #define TCPX_IOV_LIMIT		(4)
 #define TCPX_MAX_INJECT_SZ	(64)
 
-#define MAX_EPOLL_EVENTS 100
+#define MAX_EPOLL_EVENTS	100
+#define STAGE_BUF_SIZE		512
 
 extern struct fi_provider	tcpx_prov;
 extern struct util_prov		tcpx_util_prov;
@@ -149,6 +150,13 @@ typedef int (*tcpx_rx_process_fn_t)(struct tcpx_xfer_entry *rx_entry);
 typedef void (*tcpx_ep_progress_func_t)(struct tcpx_ep *ep);
 typedef int (*tcpx_get_rx_func_t)(struct tcpx_ep *ep);
 
+struct stage_buf {
+	uint8_t			buf[STAGE_BUF_SIZE];
+	size_t			size;
+	size_t			len;
+	size_t			off;
+};
+
 struct tcpx_ep {
 	struct util_ep		util_ep;
 	SOCKET			conn_fd;
@@ -166,6 +174,7 @@ struct tcpx_ep {
 	fastlock_t		lock;
 	tcpx_ep_progress_func_t progress_func;
 	tcpx_get_rx_func_t	get_rx_entry[ofi_op_write + 1];
+	struct stage_buf	stage_buf;
 	bool			send_ready_monitor;
 };
 
@@ -227,7 +236,9 @@ void tcpx_cq_report_completion(struct util_cq *cq,
 
 int tcpx_recv_msg_data(struct tcpx_xfer_entry *recv_entry);
 int tcpx_send_msg(struct tcpx_xfer_entry *tx_entry);
-int tcpx_recv_hdr(SOCKET sock, struct tcpx_rx_detect *rx_detect);
+int tcpx_recv_hdr(SOCKET sock, struct stage_buf *sbuf,
+		  struct tcpx_rx_detect *rx_detect);
+int tcpx_read_to_buffer(SOCKET sock, struct stage_buf *stage_buf);
 
 struct tcpx_xfer_entry *tcpx_xfer_entry_alloc(struct tcpx_cq *cq,
 					      enum tcpx_xfer_op_codes type);

@@ -836,6 +836,10 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		goto err3;
 
+	ep->stage_buf.size = STAGE_BUF_SIZE;
+	ep->stage_buf.len = 0;
+	ep->stage_buf.off = 0;
+
 	slist_init(&ep->rx_queue);
 	slist_init(&ep->tx_queue);
 	slist_init(&ep->rma_read_queue);

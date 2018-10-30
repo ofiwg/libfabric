@@ -588,12 +588,54 @@ int tcpx_get_rx_entry_op_read_rsp(struct tcpx_ep *tcpx_ep)
 	return FI_SUCCESS;
 }
 
+static void tcpx_process_stage_buffer(struct tcpx_ep *ep)
+{
+	int ret;
+
+	while (ep->stage_buf.len != ep->stage_buf.off) {
+		if (!ep->cur_rx_entry) {
+			ret = tcpx_recv_hdr(ep->conn_fd, &ep->stage_buf,
+					    &ep->rx_detect);
+			if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
+				return;
+
+			if (ret)
+				goto err1;
+
+			ret = ep->get_rx_entry[ep->rx_detect.hdr.hdr.op](ep);
+			if (ret == -FI_EAGAIN)
+				return;
+			if (ret)
+				goto err2;
+		}
+		assert(ep->cur_rx_proc_fn != NULL);
+		ep->cur_rx_proc_fn(ep->cur_rx_entry);
+	}
+	return;
+err2:
+	tcpx_report_error(ep, ret);
+	return;
+err1:
+	if (ret == -FI_ENOTCONN)
+		tcpx_ep_shutdown_report(ep, &ep->util_ep.ep_fid.fid);
+}
+
 static void tcpx_process_rx_msg(struct tcpx_ep *ep)
 {
 	int ret;
 
 	if (!ep->cur_rx_entry) {
-		ret = tcpx_recv_hdr(ep->conn_fd, &ep->rx_detect);
+		if (ep->stage_buf.len == ep->stage_buf.off) {
+			ret = tcpx_read_to_buffer(ep->conn_fd, &ep->stage_buf);
+			if (ret && !OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
+				goto err1;
+
+			tcpx_process_stage_buffer(ep);
+			return;
+		}
+
+		ret = tcpx_recv_hdr(ep->conn_fd, &ep->stage_buf,
+				    &ep->rx_detect);
 		if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
 			return;
 
