@@ -727,7 +727,8 @@ static ssize_t rxm_cq_write_error(struct fid_cq *msg_cq,
 					       err_entry.err_data, NULL, 0));
 		return -FI_EOPBADSTATE;
 	}
-	rxm_cntr_incerr(util_cntr);
+	if (util_cntr)
+		rxm_cntr_incerr(util_cntr);
 	return ofi_cq_write_error(util_cq, &err_entry);
 }
 
