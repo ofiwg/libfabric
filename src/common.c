@@ -620,6 +620,13 @@ int ofi_is_wildcard_listen_addr(const char *node, const char *service,
 	struct addrinfo *res = NULL;
 	int ret;
 
+	if (hints && hints->addr_format != FI_SOCKADDR &&
+	    hints->addr_format != FI_SOCKADDR_IN &&
+	    hints->addr_format != FI_SOCKADDR_IN6)
+		return 0;
+
+	/* else it's okay to call getaddrinfo, proceed with processing */
+
 	if (node) {
 		ret = getaddrinfo(node, service, NULL, &res);
 		if (ret) {
