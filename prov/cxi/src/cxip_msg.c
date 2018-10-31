@@ -503,8 +503,8 @@ static int oflow_buf_add(struct cxip_rx_ctx *rxc)
 	ret = issue_append_le(rxc->rx_pte->pte, oflow_buf->buf,
 			      rxc->oflow_buf_size, &oflow_buf->md,
 			      C_PTL_LIST_OVERFLOW, req->req_id, mb.raw, ib.raw,
-			      -1, min_free, false, false, true, true, true,
-			      false, rxc->rx_cmdq);
+			      CXI_MATCH_ID_ANY, min_free, false, false, true,
+			      true, true, false, rxc->rx_cmdq);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
 		goto oflow_unlock;
@@ -666,8 +666,8 @@ int cxip_sw_rdvs_ux_buf_add(struct cxip_rx_ctx *rxc)
 
 	ret = issue_append_le(rxc->rx_pte->pte, ux_buf, 1, &md, // TODO len 1?
 			      C_PTL_LIST_OVERFLOW, req->req_id, mb.raw, ib.raw,
-			      -1, 0, false, false, true, false, true, false,
-			      rxc->rx_cmdq);
+			      CXI_MATCH_ID_ANY, 0, false, false, true, false,
+			      true, false, rxc->rx_cmdq);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to write UX Append command: %d\n", ret);
 		goto unlock_ux;
@@ -1326,8 +1326,9 @@ static int start_rdvs(struct cxip_tx_ctx *txc, union c_cmdu *cmd,
 			txc->domain->dev_if->if_dev->info.min_free_shift);
 	ret = issue_append_le(txc->rdvs_pte->pte, buf, req->send.length,
 			      &req->send.send_md, C_PTL_LIST_PRIORITY,
-			      req->req_id, rdvs_id, 0, -1, min_free, false,
-			      true, false, true, false, true, txc->rx_cmdq);
+			      req->req_id, rdvs_id, 0, CXI_MATCH_ID_ANY,
+			      min_free, false, true, false, true, false, true,
+			      txc->rx_cmdq);
 	if (ret) {
 		CXIP_LOG_DBG("SW RDVS TX: Failed to send Append command: %d\n",
 			ret);
