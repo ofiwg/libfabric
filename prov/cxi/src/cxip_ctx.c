@@ -130,24 +130,15 @@ int cxip_rx_ctx_enable(struct cxip_rx_ctx *rxc)
 
 	fastlock_release(&rxc->lock);
 
-	/* Allocate pool of overflow buffers */
-	ret = cxip_rxc_oflow_replenish(rxc);
+	/* Initialize tagged messaging */
+	ret = cxip_rxc_tagged_init(rxc);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("cxip_rxc_oflow_replenish returned: %d\n", ret);
-		goto cleanup_oflow;
-	}
-
-	/* Allocate the unexpected send overflow buffer for SW Rendezvous */
-	ret = cxip_sw_rdvs_ux_buf_add(rxc);
-	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("cxip_sw_rdvs_ux_buf_add returned: %d\n", ret);
-		goto cleanup_oflow;
+		CXIP_LOG_DBG("cxip_rxc_tagged_init returned: %d\n", ret);
+		goto free_tx_cmdq;
 	}
 
 	return FI_SUCCESS;
 
-cleanup_oflow:
-	cxip_rxc_oflow_cleanup(rxc);
 free_tx_cmdq:
 	tmp = cxil_destroy_cmdq(rxc->tx_cmdq);
 	if (tmp)
@@ -171,9 +162,7 @@ static void rx_ctx_disable(struct cxip_rx_ctx *rxc)
 	if (!rxc->enabled)
 		goto unlock;
 
-	/* Free pool of overflow buffers */
-	cxip_rxc_oflow_cleanup(rxc);
-	cxip_rxc_sw_rdvs_ux_cleanup(rxc);
+	cxip_rxc_tagged_fini(rxc);
 
 	ret = rx_ctx_recv_fini(rxc);
 	if (ret)

@@ -943,10 +943,9 @@ void cxip_rx_ctx_free(struct cxip_rx_ctx *rx_ctx);
 int cxip_tx_ctx_alloc_rdvs_id(struct cxip_tx_ctx *txc);
 int cxip_tx_ctx_free_rdvs_id(struct cxip_tx_ctx *txc, int tag);
 
-int cxip_rxc_oflow_replenish(struct cxip_rx_ctx *rxc);
-void cxip_rxc_oflow_cleanup(struct cxip_rx_ctx *rxc);
-int cxip_sw_rdvs_ux_buf_add(struct cxip_rx_ctx *rxc);
-void cxip_rxc_sw_rdvs_ux_cleanup(struct cxip_rx_ctx *rxc);
+int cxip_rxc_tagged_init(struct cxip_rx_ctx *rxc);
+void cxip_rxc_tagged_fini(struct cxip_rx_ctx *rxc);
+
 int cxip_rx_ctx_enable(struct cxip_rx_ctx *rxc);
 int cxip_tx_ctx_enable(struct cxip_tx_ctx *txc);
 struct cxip_tx_ctx *cxip_tx_ctx_alloc(const struct fi_tx_attr *attr,

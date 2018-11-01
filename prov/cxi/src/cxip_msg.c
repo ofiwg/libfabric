@@ -184,7 +184,7 @@ static void oflow_buf_put(struct cxip_oflow_buf *oflow_buf)
 	}
 }
 
-static int sw_rdvs_issue_get(struct cxip_req *req, struct cxip_ux_send *ux_send)
+static int rdvs_issue_get(struct cxip_req *req, struct cxip_ux_send *ux_send)
 {
 
 	union c_fab_addr dfa;
@@ -227,21 +227,25 @@ static int sw_rdvs_issue_get(struct cxip_req *req, struct cxip_ux_send *ux_send)
 	/* Issue Rendezvous Get command */
 	ret = cxi_cq_emit_dma(rxc->tx_cmdq, &cmd.full_dma);
 	if (ret) {
-		CXIP_LOG_ERROR("SW RDVS RX: Failed to send GET command: %d\n",
-			       ret);
+		CXIP_LOG_ERROR("Failed to queue GET command: %d\n", ret);
 
 		ret = cxip_cq_report_error(req->cq, req, 0, FI_EIO, ret, NULL,
 					   0);
 		if (ret != FI_SUCCESS)
-			CXIP_LOG_ERROR("SW RDVS RX: Failed to report error: %d\n",
-				       ret);
+			CXIP_LOG_ERROR("Failed to report error: %d\n", ret);
+		goto unlock;
 	}
 
 	cxi_cq_ring(rxc->tx_cmdq);
 	fastlock_release(&rxc->lock);
 
-	return ret;
+	return FI_SUCCESS;
+
+unlock:
+	return -FI_ENOSPC;
 }
+
+int cxip_rxc_oflow_replenish(struct cxip_rx_ctx *rxc);
 
 /* Process an overflow buffer event.
  *
@@ -405,7 +409,7 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 			/* For SW Rendezvous messages, issue a GET to retrieve
 			 * the data from the initiator
 			 */
-			int rc;
+			int ret;
 			struct cxip_ux_send ux_send;
 
 			ux_send.oflow_buf = oflow_buf;
@@ -415,8 +419,8 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 			ux_send.initiator =
 				event->tgt_long.initiator.initiator.process;
 
-			rc = sw_rdvs_issue_get(ux_recv, &ux_send);
-			if (rc)
+			ret = rdvs_issue_get(ux_recv, &ux_send);
+			if (ret != FI_SUCCESS)
 				cxip_cq_req_free(ux_recv);
 		}
 	}
@@ -437,7 +441,7 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 	}
 }
 
-/* Append a new overflow buffer to an RX Context. */
+/* Append a Locally Managed LE to the Overflow list to match Eager Sends. */
 static int oflow_buf_add(struct cxip_rx_ctx *rxc)
 {
 	struct cxip_domain *dom;
@@ -538,7 +542,7 @@ free_oflow:
 	return ret;
 }
 
-/* Replenish RX Context overflow buffers. */
+/* Replenish RXC Overflow buffers for Eager Sends. */
 int cxip_rxc_oflow_replenish(struct cxip_rx_ctx *rxc)
 {
 	int ret;
@@ -557,14 +561,14 @@ int cxip_rxc_oflow_replenish(struct cxip_rx_ctx *rxc)
 
 /* Free RX Context overflow buffers.
  *
- * The RXC must be disabled with no outstanding posted receives.  Adding new
+ * The RXC must be disabled with no outstanding posted receives. Adding new
  * posted receives that could match the overflow buffers while cleanup is in
- * progress will cause issues.  Also, with the RXC lock held, processing
+ * progress will cause issues. Also, with the RXC lock held, processing
  * messages on the context may cause a deadlock.
  *
  * Caller must hold rxc->lock.
  */
-void cxip_rxc_oflow_cleanup(struct cxip_rx_ctx *rxc)
+static void cxip_rxc_oflow_fini(struct cxip_rx_ctx *rxc)
 {
 	int ret;
 	union c_cmdu cmd = {};
@@ -615,10 +619,8 @@ void cxip_rxc_oflow_cleanup(struct cxip_rx_ctx *rxc)
 	}
 }
 
-/* Append a unexpected receive buffer for software rendezvous to an RX
- * Context
- */
-int cxip_sw_rdvs_ux_buf_add(struct cxip_rx_ctx *rxc)
+/* Append a persistent LE to the Overflow list to match RDVS Sends. */
+static int cxip_rxc_rdvs_init(struct cxip_rx_ctx *rxc)
 {
 	struct cxip_domain *dom;
 	int ret;
@@ -703,14 +705,14 @@ free_ux_buf:
 
 /* Free RX Context Software Rendezvous buffers.
  *
- * The RXC must be disabled with no outstanding posted receives.  Adding new
+ * The RXC must be disabled with no outstanding posted receives. Adding new
  * posted receives that could match the overflow buffers while cleanup is in
- * progress will cause issues.  Also, with the RXC lock held, processing
+ * progress will cause issues. Also, with the RXC lock held, processing
  * messages on the context may cause a deadlock.
  *
  * Caller must hold rxc->lock.
  */
-void cxip_rxc_sw_rdvs_ux_cleanup(struct cxip_rx_ctx *rxc)
+static void cxip_rxc_rdvs_fini(struct cxip_rx_ctx *rxc)
 {
 	int ret;
 
@@ -734,6 +736,35 @@ void cxip_rxc_sw_rdvs_ux_cleanup(struct cxip_rx_ctx *rxc)
 		}
 		free(rxc->ux_rdvs_buf.buf);
 	}
+}
+
+/* Initialize an RXC for Tagged messaging */
+int cxip_rxc_tagged_init(struct cxip_rx_ctx *rxc)
+{
+	int ret;
+
+	ret = cxip_rxc_oflow_replenish(rxc);
+	if (ret) {
+		CXIP_LOG_ERROR("cxip_rxc_oflow_replenish failed: %d\n", ret);
+		return ret;
+	}
+
+	ret = cxip_rxc_rdvs_init(rxc);
+	if (ret) {
+		CXIP_LOG_ERROR("cxip_rxc_rdvs_init failed: %d\n", ret);
+		cxip_rxc_oflow_fini(rxc);
+		return ret;
+	}
+
+	return FI_SUCCESS;
+}
+
+/* Finalize an RXC for Tagged messaging */
+void cxip_rxc_tagged_fini(struct cxip_rx_ctx *rxc)
+{
+	cxip_rxc_rdvs_fini(rxc);
+
+	cxip_rxc_oflow_fini(rxc);
 }
 
 /* Return the FI address of the initiator of the send operation. */
@@ -895,7 +926,7 @@ static void cxip_trecv_cb(struct cxip_req *req, const union c_event *event)
 			 * operation to receive the data that was sent by the
 			 * Put operation's initiator.
 			 */
-			ret = sw_rdvs_issue_get(req, ux_send);
+			ret = rdvs_issue_get(req, ux_send);
 			if (ret)
 				cxip_cq_req_free(req);
 		}
@@ -1093,7 +1124,7 @@ trecv_unmap:
 	return ret;
 }
 
-static void rdvs_clean_up_complete(struct cxip_req *req)
+static void rdvs_send_req_free(struct cxip_req *req)
 {
 	int ret;
 
@@ -1106,86 +1137,93 @@ static void rdvs_clean_up_complete(struct cxip_req *req)
 
 	ret = cxil_unmap(req->cq->domain->dev_if->if_lni, &req->send.send_md);
 	if (ret != FI_SUCCESS)
-		CXIP_LOG_ERROR("SW RDVS TX: Failed to free MD: %d\n", ret);
+		CXIP_LOG_ERROR("Failed to free MD: %d\n", ret);
+
+	cxip_cq_req_free(req);
 }
 
-static void cxip_tsend_rdvs_cb(struct cxip_req *req,
-				const union c_event *event)
+/*
+ * Rendezvous Send callback.
+ *
+ * Progress a Rendezvous Send operation to completion. A Rendezvous Send
+ * operation is performed as follows:
+ *
+ * 1. An LE describing the Send buffer is appended to the TX PtlTE Priority list
+ * 2. An Unlink event is generated indicating the LE was appended
+ * 3. The Initiator performs a Put of the entire Send payload
+ * 4. An Ack event is generated indicating the Put completed
+ * 5. An Unlink event is generated indicating the source buffer LE has been
+ *    matched to a transaction.
+ * 6. A Get event is generated indicating the source data was read.
+ */
+static void cxip_rdvs_send_cb(struct cxip_req *req, const union c_event *event)
 {
 	int ret;
 	int event_rc;
 	struct cxip_tx_ctx *txc = req->send.txc;
 
-	CXIP_LOG_DBG("SW RDVS TX: CB event: %d\n", event->hdr.event_type);
+	CXIP_LOG_DBG("got event: %d\n", event->hdr.event_type);
 
 	switch (event->hdr.event_type) {
 
 	case C_EVENT_LINK:
 		if (event->tgt_long.return_code != C_RC_OK) {
-			CXIP_LOG_ERROR(
-				"SW RDVS TX: Invalid Link Event rc: %d id: %d\n",
-				event->tgt_long.return_code,
-				event->tgt_long.buffer_id);
+			CXIP_LOG_ERROR("Link error: %d id: %d\n",
+				       event->tgt_long.return_code,
+				       event->tgt_long.buffer_id);
 
 			event_rc = event->tgt_long.return_code;
-			rdvs_clean_up_complete(req);
 			ret = cxip_cq_report_error(req->cq, req, 0, FI_EIO,
 						   event_rc, NULL, 0);
 			if (ret != FI_SUCCESS)
-				CXIP_LOG_ERROR(
-					"SW RDVS TX: Failed to report error: %d\n",
-					ret);
+				CXIP_LOG_ERROR("Failed to report error: %d\n",
+					       ret);
 
-			cxip_cq_req_free(req);
+			rdvs_send_req_free(req);
 			return;
 		}
 
-		/* The LE with the send buffer is linked.
-		 * Send the cmd to the target
-		 */
+		/* The send buffer LE is linked. Perform Put of the payload. */
 		fastlock_acquire(&txc->lock);
+
 		ret = cxi_cq_emit_dma(txc->tx_cmdq, &req->send.cmd.full_dma);
 		if (ret) {
-			CXIP_LOG_ERROR(
-				"SW RDVS TX: Failed to send PUT command: %d\n",
-				ret);
-			/* Clean up */
-			fastlock_release(&txc->lock);
+			CXIP_LOG_ERROR("Failed to enqueue PUT: %d\n", ret);
+
+			/* Save the error and clean up operation. */
 			req->send.event_failure = ret;
 			goto rdvs_unlink_le;
 		}
 
 		cxi_cq_ring(txc->tx_cmdq);
+
 		fastlock_release(&txc->lock);
+
 		return;
 	case C_EVENT_ACK:
-		/* The Put command went to the target */
-
+		/* The payload was delivered to the target. */
 		event_rc = event->init_short.return_code;
 		if (event_rc != C_RC_OK) {
-			/* This is a Rendezvous Put that was expected
-			 * Except it failed, save the failure for later
-			 * Unlink the send buffer
-			 */
-			CXIP_LOG_ERROR(
-				"SW RDVS TX: Failure on ACK event: %d\n",
-				event_rc);
+			CXIP_LOG_ERROR("Ack error: %d\n", event_rc);
+
+			/* Save the error and clean up operation. */
 			req->send.event_failure = event_rc;
-rdvs_unlink_le:
+
 			fastlock_acquire(&txc->lock);
+rdvs_unlink_le:
 			issue_unlink_le(txc->rdvs_pte->pte,
 					C_PTL_LIST_PRIORITY,
 					req->req_id,
 					txc->rx_cmdq);
+
 			fastlock_release(&txc->lock);
 
 			return;
 		}
 
-		/* Check if all data was sent or wait for a GET event */
-		if (event->init_short.mlength == req->send.length) {
-			/* This is a Rendezvous Put that was expected
-			 * Unlink the send buffer
+		if (event->init_short.ptl_list == C_PTL_LIST_PRIORITY) {
+			/* The Put matched in the Priority list, the source
+			 * buffer LE is unneeded.
 			 */
 			fastlock_acquire(&txc->lock);
 			issue_unlink_le(txc->rdvs_pte->pte,
@@ -1200,40 +1238,27 @@ rdvs_unlink_le:
 			return;
 		}
 
-		/* Getting here means this is a Rendezvous send
-		 * Not all data has been transferred to the destination
-		 * Need to wait for the Get event to complete IO
+		/* The Put matched in the Overflow list. Wait for the receiver
+		 * to perform a Get of the payload data.
 		 */
-
 		return;
 	case C_EVENT_UNLINK:
-		/* Unlink event means either an error occurred with the ACK
-		 * Or that the Rendezvous Put was expected
-		 * The IO should to be completed.
-		 */
-
-		/* Check if the unlink was caused by a previous failure */
+		/* Check if the unlink was caused by a previous failure. */
 		if (req->send.event_failure != C_RC_NO_EVENT)
 			event_rc = req->send.event_failure;
 		else
 			event_rc = event->tgt_long.return_code;
 
 		if (event_rc != C_RC_OK) {
-			/* Report Error */
-			CXIP_LOG_ERROR(
-				"SW RDVS TX: Failure on Unlink event: %d\n",
-				event_rc);
-
-			rdvs_clean_up_complete(req);
+			CXIP_LOG_ERROR("Unlink error: %d\n", event_rc);
 
 			ret = cxip_cq_report_error(req->cq, req, 0, FI_EIO,
 						   event_rc, NULL, 0);
 			if (ret != FI_SUCCESS)
-				CXIP_LOG_ERROR(
-					"SW RDVS TX: Failed to report error: %d\n",
-					ret);
+				CXIP_LOG_ERROR("Failed to report error: %d\n",
+					       ret);
 
-			cxip_cq_req_free(req);
+			rdvs_send_req_free(req);
 		} else if (req->send.complete_on_unlink) {
 			/* The Ack event for the Put operation was received and
 			 * all data has already transferred because it was an
@@ -1244,60 +1269,49 @@ rdvs_unlink_le:
 			ret = req->cq->report_completion(req->cq,
 							 FI_ADDR_UNSPEC, req);
 			if (ret != req->cq->cq_entry_size)
-				CXIP_LOG_ERROR(
-					"SW RDVS TX: Failed to report completion: %d\n",
-					ret);
+				CXIP_LOG_ERROR("Failed to report completion: %d\n",
+					       ret);
 
-			cxip_cq_req_free(req);
+			rdvs_send_req_free(req);
 		}
 
+		/* A final Get event is expected indicating the source data has
+		 * been read.
+		 */
 		return;
 	case C_EVENT_GET:
-		/* The Rendezvous Put has been completed from the initiator
-		 * perspective. All data has been transferred to the destination
-		 * buffer. Ready to complete the operation.
-		 */
-
 		event_rc = event->tgt_long.return_code;
 		if (event_rc != C_RC_OK) {
-			/* fail command */
-			CXIP_LOG_ERROR(
-				"SW RDVS TX: Failure on Get event: %d\n",
-				event_rc);
+			CXIP_LOG_ERROR("Get error: %d\n", event_rc);
 
 			ret = cxip_cq_report_error(req->cq, req, 0, FI_EIO,
 						   event_rc, NULL, 0);
 			if (ret != FI_SUCCESS)
-				CXIP_LOG_ERROR(
-					"SW RDVS TX: Failed to report error: %d\n",
-					ret);
+				CXIP_LOG_ERROR("Failed to report error: %d\n",
+					       ret);
 		} else {
-
-			/* Report rendezvous send successful completion */
 			ret = req->cq->report_completion(req->cq,
 							 FI_ADDR_UNSPEC, req);
 			if (ret != req->cq->cq_entry_size)
-				CXIP_LOG_ERROR(
-					"SW RDVS TX: Failed to report completion: %d\n",
-					ret);
+				CXIP_LOG_ERROR("Failed to report completion: %d\n",
+					       ret);
 		}
 
-		rdvs_clean_up_complete(req);
+		rdvs_send_req_free(req);
 
-		/* Free the user buffer request */
-		cxip_cq_req_free(req);
 		return;
 	default:
-		CXIP_LOG_ERROR("SW RDVS TX: Unexpected event received: %d\n",
-				event->hdr.event_type);
+		CXIP_LOG_ERROR("Unexpected event received: %d\n",
+			       event->hdr.event_type);
 
-		rdvs_clean_up_complete(req);
 		ret = cxip_cq_report_error(req->cq, req, 0, FI_EIO, -FI_EOTHER,
 					   NULL, 0);
 		if (ret != FI_SUCCESS)
-			CXIP_LOG_ERROR(
-				"SW RDVS TX: Failed to report error: %d\n",
-				ret);
+			CXIP_LOG_ERROR("Failed to report error: %d\n",
+				       ret);
+
+		rdvs_send_req_free(req);
+
 		return;
 	}
 }
@@ -1328,6 +1342,7 @@ static void cxip_send_cb(struct cxip_req *req, const union c_event *event)
 	cxip_cq_req_free(req);
 }
 
+/* Return the FI address of the TXC. */
 static fi_addr_t _txc_fi_addr(struct cxip_tx_ctx *txc)
 {
 	if (txc->ep_obj->fi_addr == FI_ADDR_NOTAVAIL) {
@@ -1430,7 +1445,7 @@ static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 	req->tag = 0;
 
 	if (rdvs)
-		req->cb = cxip_tsend_rdvs_cb;
+		req->cb = cxip_rdvs_send_cb;
 	else
 		req->cb = cxip_send_cb;
 
