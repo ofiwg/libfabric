@@ -974,7 +974,7 @@ static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	uint32_t match_id;
 	uint32_t pid_bits;
 	union cxip_match_bits mb = {};
-	union cxip_match_bits ib = { .rdvs = ~0, .rdvs_id = ~0, .tag = ~0 };
+	union cxip_match_bits ib = { .rdvs = ~0, .rdvs_id = ~0 };
 
 	if (!ep || !buf)
 		return -FI_EINVAL;
@@ -1100,6 +1100,7 @@ static void rdvs_clean_up_complete(struct cxip_req *req)
 	fastlock_acquire(&req->send.txc->lock);
 
 	cxip_tx_ctx_free_rdvs_id(req->send.txc, req->send.rdvs_id);
+	CXIP_LOG_DBG("Freed RDVS ID: %d\n", req->send.rdvs_id);
 
 	fastlock_release(&req->send.txc->lock);
 
@@ -1281,6 +1282,8 @@ rdvs_unlink_le:
 					ret);
 		}
 
+		rdvs_clean_up_complete(req);
+
 		/* Free the user buffer request */
 		cxip_cq_req_free(req);
 		return;
@@ -1297,48 +1300,6 @@ rdvs_unlink_le:
 				ret);
 		return;
 	}
-}
-
-static int start_rdvs(struct cxip_tx_ctx *txc, union c_cmdu *cmd,
-		      const void *buf)
-{
-	int rdvs_id = -1;
-	int ret = FI_SUCCESS;
-	struct cxip_req *req;
-	uint64_t min_free;
-
-	req = (struct cxip_req *)cmd->full_dma.user_ptr;
-
-	/* Issue Append cmd for the send buffer */
-	fastlock_acquire(&txc->lock);
-
-	/* Get Rendezvous ID */
-	rdvs_id = cxip_tx_ctx_alloc_rdvs_id(txc);
-	if (rdvs_id < 0)
-		return rdvs_id;
-
-	/* Update request structure */
-	req->send.rdvs_id = rdvs_id;
-	req->cb = cxip_tsend_rdvs_cb;
-	req->send.cmd = *cmd;
-
-	min_free = (txc->eager_threshold >>
-			txc->domain->dev_if->if_dev->info.min_free_shift);
-	ret = issue_append_le(txc->rdvs_pte->pte, buf, req->send.length,
-			      &req->send.send_md, C_PTL_LIST_PRIORITY,
-			      req->req_id, rdvs_id, 0, CXI_MATCH_ID_ANY,
-			      min_free, false, true, false, true, false, true,
-			      txc->rx_cmdq);
-	if (ret) {
-		CXIP_LOG_DBG("SW RDVS TX: Failed to send Append command: %d\n",
-			ret);
-		/* Clean up command */
-		rdvs_clean_up_complete(req);
-	}
-
-	fastlock_release(&txc->lock);
-
-	return ret;
 }
 
 /* Basic send callback, used for both tagged and untagged messages. */
@@ -1402,6 +1363,7 @@ static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 	uint32_t match_id;
 	uint32_t pid_bits;
 	union cxip_match_bits mb = {};
+	int rdvs_id = -1;
 
 	if (!ep || !buf)
 		return -FI_EINVAL;
@@ -1451,7 +1413,7 @@ static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 	if (!req) {
 		CXIP_LOG_DBG("Failed to allocate request\n");
 		ret = -FI_ENOMEM;
-		goto tsend_unmap;
+		goto send_unmap;
 	}
 
 	req->context = (uint64_t)context;
@@ -1467,11 +1429,14 @@ static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 	req->data = 0;
 	req->tag = 0;
 
-	req->cb = cxip_send_cb;
+	if (rdvs)
+		req->cb = cxip_tsend_rdvs_cb;
+	else
+		req->cb = cxip_send_cb;
+
 	req->send.txc = txc;
 	req->send.send_md = send_md;
 	req->send.length = len;
-	req->send.rdvs_id = -1;
 	req->send.event_failure = C_RC_NO_EVENT;
 
 	/* Build Put command descriptor */
@@ -1508,19 +1473,45 @@ static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 	cmd.full_dma.user_ptr = (uint64_t)req;
 	cmd.full_dma.initiator = match_id;
 
-	/* Generate hardware match bits */
-	if (tagged) {
-		mb.tagged = 1;
-		mb.tag = tag;
-	}
-	cmd.full_dma.match_bits = mb.raw;
+	fastlock_acquire(&txc->lock);
 
 	if (rdvs) {
-		ret = start_rdvs(txc, &cmd, buf);
-		if (ret != FI_SUCCESS)
-			goto tsend_req_free;
+		/* Get Rendezvous ID */
+		rdvs_id = cxip_tx_ctx_alloc_rdvs_id(txc);
+		if (rdvs_id < 0) {
+			CXIP_LOG_DBG("Failed alloc RDVS ID\n");
+			goto send_unlock;
+		}
+		CXIP_LOG_DBG("Alloced RDVS ID: %d\n", rdvs_id);
+
+		/* Generate hardware match bits */
+		mb.tagged = 1;
+		mb.rdvs = 1;
+		mb.rdvs_id = rdvs_id;
+		mb.tag = tag;
+		cmd.full_dma.match_bits = mb.raw;
+
+		/* Update request structure */
+		req->send.rdvs_id = rdvs_id;
+		req->send.cmd = cmd;
+
+		ret = issue_append_le(txc->rdvs_pte->pte, buf, len, &send_md,
+				      C_PTL_LIST_PRIORITY, req->req_id,
+				      rdvs_id, 0, CXI_MATCH_ID_ANY, 0, false,
+				      true, false, true, false, true,
+				      txc->rx_cmdq);
+		if (ret) {
+			CXIP_LOG_DBG("Failed append source buffer: %d\n", ret);
+			cxip_tx_ctx_free_rdvs_id(txc, rdvs_id);
+			goto send_unlock;
+		}
 	} else {
-		fastlock_acquire(&txc->lock);
+		/* Generate hardware match bits */
+		if (tagged) {
+			mb.tagged = 1;
+			mb.tag = tag;
+		}
+		cmd.full_dma.match_bits = mb.raw;
 
 		/* Issue Eager Put command */
 		ret = cxi_cq_emit_dma(txc->tx_cmdq, &cmd.full_dma);
@@ -1529,24 +1520,23 @@ static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 
 			/* Return error according to Domain Resource Mgmt */
 			ret = -FI_EAGAIN;
-			goto tsend_unlock;
+			goto send_unlock;
 		}
 
 		cxi_cq_ring(txc->tx_cmdq);
-
-		/* TODO take reference on EP or context for the outstanding
-		 * request
-		 */
-		fastlock_release(&txc->lock);
 	}
+
+	/* TODO take reference on EP or context for the outstanding
+	 * request
+	 */
+	fastlock_release(&txc->lock);
 
 	return FI_SUCCESS;
 
-tsend_unlock:
+send_unlock:
 	fastlock_release(&txc->lock);
-tsend_req_free:
 	cxip_cq_req_free(req);
-tsend_unmap:
+send_unmap:
 	cxil_unmap(dom->dev_if->if_lni, &send_md);
 
 	return ret;
