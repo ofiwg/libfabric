@@ -112,14 +112,11 @@ ssize_t rxd_ep_generic_recvmsg(struct rxd_ep *rxd_ep, const struct iovec *iov,
 			       uint32_t rxd_flags)
 {
 	ssize_t ret = 0;
-	struct rxd_av *rxd_av;
 	struct rxd_x_entry *rx_entry;
 	struct dlist_entry *unexp_list, *rx_list;
 
 	assert(iov_count <= RXD_IOV_LIMIT);
 	assert(!(rxd_flags & RXD_MULTI_RECV) || iov_count == 1);
-
-	rxd_av = rxd_ep_av(rxd_ep);
 
 	fastlock_acquire(&rxd_ep->util_ep.lock);
 	fastlock_acquire(&rxd_ep->util_ep.rx_cq->cq_lock);
@@ -130,8 +127,8 @@ ssize_t rxd_ep_generic_recvmsg(struct rxd_ep *rxd_ep, const struct iovec *iov,
 	}
 
 	rx_entry = rxd_rx_entry_init(rxd_ep, iov, iov_count, tag, ignore, context,
-				(rxd_ep->util_ep.caps & FI_DIRECTED_RECV) ?
-				rxd_av_dg_addr(rxd_av, addr) :
+				rxd_ep->util_ep.caps & FI_DIRECTED_RECV ?
+				rxd_ep_av(rxd_ep)->fi_addr_table[addr] :
 				FI_ADDR_UNSPEC, op, rxd_flags);
 	if (!rx_entry) {
 		ret = -FI_EAGAIN;
@@ -200,14 +197,12 @@ ssize_t rxd_ep_generic_inject(struct rxd_ep *rxd_ep, const struct iovec *iov,
 			      uint64_t data, uint32_t op, uint32_t rxd_flags)
 {
 	struct rxd_x_entry *tx_entry;
-	fi_addr_t dg_addr;
 	ssize_t ret = -FI_EAGAIN;
+	fi_addr_t rxd_addr;
 
 	assert(iov_count <= RXD_IOV_LIMIT);
 	assert(ofi_total_iov_len(iov, iov_count) <=
 	       rxd_ep_domain(rxd_ep)->max_inline_msg);
-
-	dg_addr = rxd_av_dg_addr(rxd_ep_av(rxd_ep), addr);
 
 	fastlock_acquire(&rxd_ep->util_ep.lock);
 	fastlock_acquire(&rxd_ep->util_ep.tx_cq->cq_lock);
@@ -215,12 +210,13 @@ ssize_t rxd_ep_generic_inject(struct rxd_ep *rxd_ep, const struct iovec *iov,
 	if (ofi_cirque_isfull(rxd_ep->util_ep.tx_cq->cirq))
 		goto out;
 
-	if (rxd_ep->peers[dg_addr].peer_addr == FI_ADDR_UNSPEC &&
-	    dlist_empty(&rxd_ep->peers[dg_addr].unacked))
-		rxd_ep_send_rts(rxd_ep, dg_addr);
+	rxd_addr = rxd_ep_av(rxd_ep)->fi_addr_table[addr];
+	if (rxd_ep->peers[rxd_addr].peer_addr == FI_ADDR_UNSPEC &&
+	    dlist_empty(&rxd_ep->peers[rxd_addr].unacked))
+		rxd_ep_send_rts(rxd_ep, rxd_addr);
 
 	tx_entry = rxd_tx_entry_init(rxd_ep, iov, iov_count, NULL, 0, 0, data,
-				     tag, NULL, dg_addr, op, rxd_flags | RXD_INJECT);
+				     tag, NULL, rxd_addr, op, rxd_flags | RXD_INJECT);
 	if (!tx_entry)
 		goto out;
 
@@ -240,8 +236,8 @@ ssize_t rxd_ep_generic_sendmsg(struct rxd_ep *rxd_ep, const struct iovec *iov,
 			       uint32_t rxd_flags)
 {
 	struct rxd_x_entry *tx_entry;
-	fi_addr_t dg_addr;
 	ssize_t ret = -FI_EAGAIN;
+	fi_addr_t rxd_addr;
 
 	assert(iov_count <= RXD_IOV_LIMIT);
 
@@ -249,20 +245,19 @@ ssize_t rxd_ep_generic_sendmsg(struct rxd_ep *rxd_ep, const struct iovec *iov,
 		return rxd_ep_generic_inject(rxd_ep, iov, iov_count, addr, tag, 0,
 					     op, rxd_flags);
 
-	dg_addr = rxd_av_dg_addr(rxd_ep_av(rxd_ep), addr);
-
 	fastlock_acquire(&rxd_ep->util_ep.lock);
 	fastlock_acquire(&rxd_ep->util_ep.tx_cq->cq_lock);
 
 	if (ofi_cirque_isfull(rxd_ep->util_ep.tx_cq->cirq))
 		goto out;
 
-	if (rxd_ep->peers[dg_addr].peer_addr == FI_ADDR_UNSPEC &&
-	    dlist_empty(&rxd_ep->peers[dg_addr].unacked))
-		rxd_ep_send_rts(rxd_ep, dg_addr);
+	rxd_addr = rxd_ep_av(rxd_ep)->fi_addr_table[addr];
+	if (rxd_ep->peers[rxd_addr].peer_addr == FI_ADDR_UNSPEC &&
+	    dlist_empty(&rxd_ep->peers[rxd_addr].unacked))
+		rxd_ep_send_rts(rxd_ep, rxd_addr);
 
 	tx_entry = rxd_tx_entry_init(rxd_ep, iov, iov_count, NULL, 0, 0,
-				     data, tag, context, dg_addr, op, rxd_flags);
+				     data, tag, context, rxd_addr, op, rxd_flags);
 	if (!tx_entry)
 		goto out;
 

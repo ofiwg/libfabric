@@ -455,10 +455,11 @@ int rxd_ep_retry_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 	rxd_set_timeout(pkt_entry);
 	return fi_send(ep->dg_ep, (const void *) rxd_pkt_start(pkt_entry),
 		       pkt_entry->pkt_size, rxd_mr_desc(pkt_entry->mr, ep),
-		       pkt_entry->peer, &pkt_entry->context);
+		       rxd_ep_av(ep)->rxd_addr_table[pkt_entry->peer].dg_addr,
+		       &pkt_entry->context);
 }
 
-ssize_t rxd_ep_send_rts(struct rxd_ep *rxd_ep, int dg_addr)
+ssize_t rxd_ep_send_rts(struct rxd_ep *rxd_ep, fi_addr_t rxd_addr)
 {
 	struct rxd_pkt_entry *pkt_entry;
 	struct rxd_rts_pkt *rts_pkt;
@@ -471,11 +472,11 @@ ssize_t rxd_ep_send_rts(struct rxd_ep *rxd_ep, int dg_addr)
 
 	rts_pkt = (struct rxd_rts_pkt *) (pkt_entry->pkt);
 	pkt_entry->pkt_size = sizeof(*rts_pkt) + rxd_ep->prefix_size;
-	pkt_entry->peer = dg_addr;
+	pkt_entry->peer = rxd_addr;
 
 	rts_pkt->base_hdr.version = RXD_PROTOCOL_VERSION;
 	rts_pkt->base_hdr.type = RXD_RTS;
-	rts_pkt->dg_addr = dg_addr;
+	rts_pkt->rts_addr = rxd_addr;
 
 	addrlen = RXD_NAME_LENGTH;
 	memset(rts_pkt->source, 0, RXD_NAME_LENGTH);
@@ -486,8 +487,7 @@ ssize_t rxd_ep_send_rts(struct rxd_ep *rxd_ep, int dg_addr)
 		return ret;
 	}
 
-	//don't insert this here, it won't get retransmitted
-	dlist_insert_head(&pkt_entry->d_entry, &rxd_ep->peers[dg_addr].unacked);
+	dlist_insert_head(&pkt_entry->d_entry, &rxd_ep->peers[rxd_addr].unacked);
 
 	return rxd_ep_retry_pkt(rxd_ep, pkt_entry);
 }
@@ -1029,20 +1029,20 @@ err:
 	return -FI_ENOMEM;
 }
 
-static void rxd_init_peer(struct rxd_ep *ep, uint64_t dg_addr)
+static void rxd_init_peer(struct rxd_ep *ep, uint64_t rxd_addr)
 {
-	ep->peers[dg_addr].peer_addr = FI_ADDR_UNSPEC;
-	ep->peers[dg_addr].tx_seq_no = 0;
-	ep->peers[dg_addr].rx_seq_no = 0;
-	ep->peers[dg_addr].last_rx_ack = 0;
-	ep->peers[dg_addr].last_tx_ack = 0;
-	ep->peers[dg_addr].rx_window = rxd_env.max_unacked;
-	ep->peers[dg_addr].unacked_cnt = 0;
-	dlist_init(&ep->peers[dg_addr].unacked);
-	dlist_init(&ep->peers[dg_addr].tx_list);
-	dlist_init(&ep->peers[dg_addr].rx_list);
-	dlist_init(&ep->peers[dg_addr].rma_rx_list);
-	dlist_init(&ep->peers[dg_addr].buf_pkts);
+	ep->peers[rxd_addr].peer_addr = FI_ADDR_UNSPEC;
+	ep->peers[rxd_addr].tx_seq_no = 0;
+	ep->peers[rxd_addr].rx_seq_no = 0;
+	ep->peers[rxd_addr].last_rx_ack = 0;
+	ep->peers[rxd_addr].last_tx_ack = 0;
+	ep->peers[rxd_addr].rx_window = rxd_env.max_unacked;
+	ep->peers[rxd_addr].unacked_cnt = 0;
+	dlist_init(&ep->peers[rxd_addr].unacked);
+	dlist_init(&ep->peers[rxd_addr].tx_list);
+	dlist_init(&ep->peers[rxd_addr].rx_list);
+	dlist_init(&ep->peers[rxd_addr].rma_rx_list);
+	dlist_init(&ep->peers[rxd_addr].buf_pkts);
 }
 
 int rxd_endpoint(struct fid_domain *domain, struct fi_info *info,
