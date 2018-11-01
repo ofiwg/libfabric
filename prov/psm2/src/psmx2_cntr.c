@@ -276,6 +276,8 @@ static int psmx2_cntr_close(fid_t fid)
 	while (!slist_empty(&cntr->poll_list)) {
 		entry = slist_remove_head(&cntr->poll_list);
 		item = container_of(entry, struct psmx2_poll_ctxt, list_entry);
+		if (!ofi_atomic_dec32(&item->trx_ctxt->poll_refcnt))
+			free(item->trx_ctxt);
 		free(item);
 	}
 

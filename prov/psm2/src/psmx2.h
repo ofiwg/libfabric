@@ -529,6 +529,12 @@ struct psmx2_trx_ctxt {
 	struct dlist_entry	peer_list;
 	fastlock_t		peer_lock;
 
+	/* number of pathes this tx/rx context can be polled. this include
+	 * CQs and counters, as well as domain->trx_ctxt_list.
+	 */
+	ofi_atomic32_t		poll_refcnt;
+	int			poll_active;
+
 	struct dlist_entry	entry;
 };
 
@@ -1100,7 +1106,7 @@ static inline void psmx2_get_source_string_name(psm2_epaddr_t source, char *name
 
 static inline void psmx2_progress(struct psmx2_trx_ctxt *trx_ctxt)
 {
-	if (trx_ctxt) {
+	if (trx_ctxt && trx_ctxt->poll_active) {
 #if HAVE_PSM2_MQ_REQ_USER
 		psmx2_cq_poll_mq(NULL, trx_ctxt, NULL, 1, NULL);
 #else
