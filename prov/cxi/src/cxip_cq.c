@@ -268,6 +268,7 @@ out:
 	return ret;
 }
 
+/* caller must hold cq->lock */
 static int cxip_cq_report_context(struct cxip_cq *cq, fi_addr_t addr,
 				  struct cxip_req *req)
 {
@@ -278,6 +279,7 @@ static int cxip_cq_report_context(struct cxip_cq *cq, fi_addr_t addr,
 	return _cxip_cq_write(cq, addr, &cq_entry, sizeof(cq_entry));
 }
 
+/* caller must hold cq->lock */
 static uint64_t cxip_cq_sanitize_flags(uint64_t flags)
 {
 	return (flags & (FI_SEND | FI_RECV | FI_RMA | FI_ATOMIC | FI_MSG |
@@ -285,6 +287,7 @@ static uint64_t cxip_cq_sanitize_flags(uint64_t flags)
 			 FI_REMOTE_WRITE | FI_REMOTE_CQ_DATA | FI_MULTI_RECV));
 }
 
+/* caller must hold cq->lock */
 static int cxip_cq_report_msg(struct cxip_cq *cq, fi_addr_t addr,
 			      struct cxip_req *req)
 {
@@ -297,6 +300,7 @@ static int cxip_cq_report_msg(struct cxip_cq *cq, fi_addr_t addr,
 	return _cxip_cq_write(cq, addr, &cq_entry, sizeof(cq_entry));
 }
 
+/* caller must hold cq->lock */
 static int cxip_cq_report_data(struct cxip_cq *cq, fi_addr_t addr,
 			       struct cxip_req *req)
 {
@@ -311,6 +315,7 @@ static int cxip_cq_report_data(struct cxip_cq *cq, fi_addr_t addr,
 	return _cxip_cq_write(cq, addr, &cq_entry, sizeof(cq_entry));
 }
 
+/* caller must hold cq->lock */
 static int cxip_cq_report_tagged(struct cxip_cq *cq, fi_addr_t addr,
 				 struct cxip_req *req)
 {
@@ -444,7 +449,7 @@ static ssize_t cxip_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 				ofi_atomic_set32(&cxi_cq->signaled, 0);
 				return -FI_ECANCELED;
 			}
-		};
+		}
 	} else {
 		do {
 			fastlock_acquire(&cxi_cq->lock);
@@ -489,7 +494,7 @@ static ssize_t cxip_cq_sread(struct fid_cq *cq, void *buf, size_t len,
 static ssize_t cxip_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 				fi_addr_t *src_addr)
 {
-	return cxip_cq_sreadfrom(cq, buf, count, src_addr, NULL, -1);
+	return cxip_cq_sreadfrom(cq, buf, count, src_addr, NULL, 0);
 }
 
 static ssize_t cxip_cq_read(struct fid_cq *cq, void *buf, size_t count)
@@ -880,6 +885,7 @@ err1:
 	return ret;
 }
 
+/* caller must hold cq->lock */
 int cxip_cq_report_error(struct cxip_cq *cq, struct cxip_req *req, size_t olen,
 			 int err, int prov_errno, void *err_data,
 			 size_t err_data_size)
@@ -887,7 +893,6 @@ int cxip_cq_report_error(struct cxip_cq *cq, struct cxip_req *req, size_t olen,
 	int ret;
 	struct fi_cq_err_entry err_entry;
 
-	fastlock_acquire(&cq->lock);
 	if (ofi_rbavail(&cq->cqerr_rb) < sizeof(err_entry)) {
 		ret = -FI_ENOSPC;
 		goto out;
@@ -903,15 +908,7 @@ int cxip_cq_report_error(struct cxip_cq *cq, struct cxip_req *req, size_t olen,
 	err_entry.data = req->data;
 	err_entry.tag = req->tag;
 	err_entry.op_context = (void *)(uintptr_t)req->context;
-
-#if 0
-	if (entry->type == CXIP_PE_RX)
-		err_entry.buf = (void *)(uintptr_t)
-					entry->pe.rx.rx_iov[0].iov.addr;
-	else
-		err_entry.buf = (void *)(uintptr_t)
-					entry->pe.tx.tx_iov[0].src.iov.addr;
-#endif
+	err_entry.buf = (void *)(uintptr_t)req->buf;
 
 	ofi_rbwrite(&cq->cqerr_rb, &err_entry, sizeof(err_entry));
 	ofi_rbcommit(&cq->cqerr_rb);
@@ -920,6 +917,5 @@ int cxip_cq_report_error(struct cxip_cq *cq, struct cxip_req *req, size_t olen,
 	ofi_rbfdsignal(&cq->cq_rbfd);
 
 out:
-	fastlock_release(&cq->lock);
 	return ret;
 }
