@@ -144,9 +144,11 @@ static void report_recv_completion(struct cxip_req *req)
 	int truncated;
 	int err;
 
+	req->data_len = req->recv.mlength;
+
 	truncated = req->recv.rlength - req->recv.mlength;
 	if (req->recv.rc == C_RC_OK && !truncated) {
-		req->data_len = req->recv.mlength;
+		CXIP_LOG_DBG("Request success: %p\n", req);
 
 		ret = req->cq->report_completion(req->cq, req->recv.src_addr,
 						 req);
@@ -155,6 +157,7 @@ static void report_recv_completion(struct cxip_req *req)
 				       ret);
 	} else {
 		err = truncated ? FI_EMSGSIZE : FI_EIO;
+		CXIP_LOG_DBG("Request error: %p (err: %d)\n", req, err);
 
 		ret = cxip_cq_report_error(req->cq, req, truncated, err,
 					   req->recv.rc, NULL, 0);
@@ -199,7 +202,11 @@ static int rdvs_issue_get(struct cxip_req *req, struct cxip_ux_send *ux_send)
 	nic = CXI_MATCH_ID_EP(pid_bits, ux_send->initiator);
 	pid = CXI_MATCH_ID_PID(pid_bits, ux_send->initiator);
 
-	req->recv.rlength = req->recv.mlength = ux_send->length;
+	if (req->recv.rlength < ux_send->length)
+		req->recv.mlength = req->recv.rlength;
+	else
+		req->recv.mlength = ux_send->length;
+	req->recv.rlength = ux_send->length;
 
 	pid_granule = rxc->domain->dev_if->if_pid_granule;
 	pid_idx = CXIP_RDVS_IDX(pid_granule);
@@ -215,7 +222,7 @@ static int rdvs_issue_get(struct cxip_req *req, struct cxip_ux_send *ux_send)
 	cmd.full_dma.local_addr = CXI_VA_TO_IOVA(&req->recv.recv_md,
 						 req->recv.recv_buf);
 	cmd.full_dma.eq = rxc->comp.recv_cq->evtq->eqn;
-	cmd.full_dma.request_len = ux_send->length;
+	cmd.full_dma.request_len = req->recv.mlength;
 	cmd.full_dma.match_bits = ux_send->match_bits.rdvs_id;
 	cmd.full_dma.initiator = CXI_MATCH_ID(pid_bits,
 					      rxc->ep_obj->src_addr.pid,
@@ -237,12 +244,11 @@ static int rdvs_issue_get(struct cxip_req *req, struct cxip_ux_send *ux_send)
 	}
 
 	cxi_cq_ring(rxc->tx_cmdq);
-	fastlock_release(&rxc->lock);
 
-	return FI_SUCCESS;
-
+	ret = FI_SUCCESS;
 unlock:
-	return -FI_ENOSPC;
+	fastlock_release(&rxc->lock);
+	return ret;
 }
 
 int cxip_rxc_oflow_replenish(struct cxip_rx_ctx *rxc);
@@ -837,6 +843,7 @@ static void cxip_trecv_cb(struct cxip_req *req, const union c_event *event)
 	struct cxip_ux_send *ux_send;
 	struct cxip_oflow_buf *oflow_buf;
 	void *oflow_va;
+	union cxip_match_bits mb;
 
 	CXIP_LOG_DBG("got event: %d\n", event->hdr.event_type);
 
@@ -863,6 +870,8 @@ static void cxip_trecv_cb(struct cxip_req *req, const union c_event *event)
 			 * future events.
 			 */
 			req->recv.start = event->tgt_long.start;
+			mb.raw = event->tgt_long.match_bits;
+			req->tag = mb.tag;
 			req->recv.src_addr = _rxc_event_src_addr(rxc, event);
 
 			dlist_insert_tail(&req->list, &rxc->ux_recvs);
@@ -880,6 +889,8 @@ static void cxip_trecv_cb(struct cxip_req *req, const union c_event *event)
 		oflow_buf = ux_send->oflow_buf;
 
 		req->recv.rc = event->tgt_long.return_code;
+		mb.raw = event->tgt_long.match_bits;
+		req->tag = mb.tag;
 		req->recv.src_addr = _rxc_event_src_addr(rxc, event);
 
 		/* A matching, unexpected Put event arrived earlier.  Data is
@@ -933,32 +944,26 @@ static void cxip_trecv_cb(struct cxip_req *req, const union c_event *event)
 
 		return;
 	} else if (event->hdr.event_type == C_EVENT_PUT) {
-		/* A PUT event can occur for either an eager sized or a
-		 * software rendezvous operation.
+		/* Data was delivered directly to the user buffer. Complete the
+		 * request.
 		 */
 
 		req->recv.rc = event->tgt_long.return_code;
 		req->recv.rlength = event->tgt_long.rlength;
 		req->recv.mlength = event->tgt_long.mlength;
+		mb.raw = event->tgt_long.match_bits;
+		req->tag = mb.tag;
 		req->recv.src_addr = _rxc_event_src_addr(rxc, event);
 
-		if (req->recv.rlength == req->recv.mlength) {
-			/* An eager or expected long message was received
-			 * The data has been transferred.
-			 * Complete the operation.
-			 */
-			ret = cxil_unmap(req->cq->domain->dev_if->if_lni,
-					&req->recv.recv_md);
-			if (ret != FI_SUCCESS)
-				CXIP_LOG_ERROR("Failed to free MD: %d\n", ret);
+		ret = cxil_unmap(req->cq->domain->dev_if->if_lni,
+				 &req->recv.recv_md);
+		if (ret != FI_SUCCESS)
+			CXIP_LOG_ERROR("Failed to free MD: %d\n", ret);
 
-			report_recv_completion(req);
+		report_recv_completion(req);
 
-			/* Free the user buffer request */
-			cxip_cq_req_free(req);
-			return;
-		}
-
+		/* Free the user buffer request */
+		cxip_cq_req_free(req);
 		return;
 	} else if (event->hdr.event_type == C_EVENT_REPLY) {
 		/* The GET operation that was issued as part of the SW
@@ -1199,6 +1204,7 @@ static void cxip_rdvs_send_cb(struct cxip_req *req, const union c_event *event)
 
 		fastlock_release(&txc->lock);
 
+		CXIP_LOG_ERROR("Enqueued Put: %p\n", req);
 		return;
 	case C_EVENT_ACK:
 		/* The payload was delivered to the target. */
@@ -1217,11 +1223,9 @@ rdvs_unlink_le:
 					txc->rx_cmdq);
 
 			fastlock_release(&txc->lock);
+		} else if (event->init_short.ptl_list == C_PTL_LIST_PRIORITY) {
+			CXIP_LOG_ERROR("Put Acked (Priority): %p\n", req);
 
-			return;
-		}
-
-		if (event->init_short.ptl_list == C_PTL_LIST_PRIORITY) {
 			/* The Put matched in the Priority list, the source
 			 * buffer LE is unneeded.
 			 */
@@ -1234,13 +1238,11 @@ rdvs_unlink_le:
 
 			/* Wait for the Unlink event */
 			req->send.complete_on_unlink = 1;
-
-			return;
+		} else {
+			CXIP_LOG_ERROR("Put Acked (Overflow): %p\n", req);
 		}
 
-		/* The Put matched in the Overflow list. Wait for the receiver
-		 * to perform a Get of the payload data.
-		 */
+		/* Wait for the source buffer LE to be unlinked. */
 		return;
 	case C_EVENT_UNLINK:
 		/* Check if the unlink was caused by a previous failure. */
@@ -1266,6 +1268,7 @@ rdvs_unlink_le:
 			 * successfully unlinked. Report the completion of the
 			 * operation.
 			 */
+			CXIP_LOG_DBG("Request success (Priority): %p\n", req);
 			ret = req->cq->report_completion(req->cq,
 							 FI_ADDR_UNSPEC, req);
 			if (ret != req->cq->cq_entry_size)
@@ -1273,6 +1276,8 @@ rdvs_unlink_le:
 					       ret);
 
 			rdvs_send_req_free(req);
+		} else {
+			CXIP_LOG_ERROR("Source LE unlinked:  %p\n", req);
 		}
 
 		/* A final Get event is expected indicating the source data has
@@ -1290,6 +1295,7 @@ rdvs_unlink_le:
 				CXIP_LOG_ERROR("Failed to report error: %d\n",
 					       ret);
 		} else {
+			CXIP_LOG_DBG("Request success (Overflow): %p\n", req);
 			ret = req->cq->report_completion(req->cq,
 							 FI_ADDR_UNSPEC, req);
 			if (ret != req->cq->cq_entry_size)
@@ -1328,11 +1334,15 @@ static void cxip_send_cb(struct cxip_req *req, const union c_event *event)
 
 	event_rc = event->init_short.return_code;
 	if (event_rc == C_RC_OK) {
+		CXIP_LOG_DBG("Request success: %p\n", req);
+
 		ret = req->cq->report_completion(req->cq, FI_ADDR_UNSPEC, req);
 		if (ret != req->cq->cq_entry_size)
 			CXIP_LOG_ERROR("Failed to report completion: %d\n",
 				       ret);
 	} else {
+		CXIP_LOG_DBG("Request error: %p\n", req);
+
 		ret = cxip_cq_report_error(req->cq, req, 0, FI_EIO, event_rc,
 					   NULL, 0);
 		if (ret != FI_SUCCESS)
