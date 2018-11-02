@@ -1626,6 +1626,10 @@ STATIC ssize_t psmx2_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 		slist_foreach(&cq_priv->poll_list, item, prev) {
 			poll_ctxt = container_of(item, struct psmx2_poll_ctxt,
 						 list_entry);
+
+			if (OFI_UNLIKELY(!poll_ctxt->trx_ctxt->poll_active))
+				continue;
+
 			ret = psmx2_cq_poll_mq(cq_priv, poll_ctxt->trx_ctxt,
 					       (struct psmx2_cq_event *)buf,
 					       count, src_addr);
@@ -1775,6 +1779,10 @@ STATIC ssize_t psmx2_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 					poll_ctxt = container_of(item,
 								 struct psmx2_poll_ctxt,
 								 list_entry);
+
+					if (OFI_UNLIKELY(!poll_ctxt->trx_ctxt->poll_active))
+						continue;
+
 					sth_happened =
 						psmx2_cq_poll_mq(cq_priv,
 								 poll_ctxt->trx_ctxt,
@@ -1849,6 +1857,8 @@ static int psmx2_cq_close(fid_t fid)
 	while (!slist_empty(&cq->poll_list)) {
 		entry = slist_remove_head(&cq->poll_list);
 		poll_item = container_of(entry, struct psmx2_poll_ctxt, list_entry);
+		if (!ofi_atomic_dec32(&poll_item->trx_ctxt->poll_refcnt))
+			free(poll_item->trx_ctxt);
 		free(poll_item);
 	}
 

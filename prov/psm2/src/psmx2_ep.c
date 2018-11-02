@@ -254,6 +254,7 @@ static int psmx2_add_poll_ctxt(struct slist *list, struct psmx2_trx_ctxt *trx_ct
 	if (!item)
 		return -FI_ENOMEM;
 
+	ofi_atomic_inc32(&trx_ctxt->poll_refcnt);
 	item->trx_ctxt = trx_ctxt;
 	slist_insert_tail(&item->list_entry, list);
 	return 0;
