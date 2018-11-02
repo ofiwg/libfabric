@@ -73,15 +73,18 @@ rxm_av_insert_cmap(struct fid_av *av_fid, const void *addr, size_t count,
 	fi_addr_t fi_addr_tmp;
 	size_t i;
 	int ret = 0;
+	const void *cur_addr;
 
 	dlist_foreach_container(&av->ep_list, struct rxm_ep,
 				rxm_ep, util_ep.av_entry) {
+		
 		for (i = 0; i < count; i++) {
+			cur_addr = (const void *) ((char *) addr + i * av->addrlen);
 			fi_addr_tmp = (fi_addr ? fi_addr[i] :
-				       ofi_av_lookup_fi_addr(av, addr));
+				       ofi_av_lookup_fi_addr(av, cur_addr));
 			if (fi_addr_tmp == FI_ADDR_NOTAVAIL)
 				continue;
-			ret = rxm_cmap_update(rxm_ep->cmap, addr, fi_addr_tmp);
+			ret = rxm_cmap_update(rxm_ep->cmap, cur_addr, fi_addr_tmp);
 			if (OFI_UNLIKELY(ret)) {
 				FI_WARN(&rxm_prov, FI_LOG_AV,
 					"Unable to update CM for OFI endpoints\n");
