@@ -119,7 +119,7 @@ int util_buf_grow(struct util_buf_pool *pool)
 
 		if (pool->attr.init) {
 #if ENABLE_DEBUG
-			if (!pool->attr.indexing) {
+			if (!pool->attr.indexing.ordered) {
 				buf_ftr->entry.slist.next = (void *) OFI_MAGIC_64;
 
 				pool->attr.init(pool->attr.ctx, buf);
@@ -141,7 +141,7 @@ int util_buf_grow(struct util_buf_pool *pool)
 
 		buf_ftr->region = buf_region;
 		buf_ftr->index = pool->num_allocated + i;
-		if (!pool->attr.indexing) {
+		if (!pool->attr.indexing.ordered) {
 			slist_insert_tail(&buf_ftr->entry.slist,
 					  &pool->list.buffers);
 		} else {
@@ -150,7 +150,7 @@ int util_buf_grow(struct util_buf_pool *pool)
 		}
 	}
 
-	if (pool->attr.indexing) {
+	if (pool->attr.indexing.ordered) {
 		dlist_insert_tail(&buf_region->entry,
 				  &pool->list.regions);
 	}
@@ -189,7 +189,7 @@ int util_buf_pool_create_attr(struct util_buf_attr *attr,
 	else
 		(*buf_pool)->attr.is_mmap_region = 1;
 
-	if (!(*buf_pool)->attr.indexing)
+	if (!(*buf_pool)->attr.indexing.ordered)
 		slist_init(&(*buf_pool)->list.buffers);
 	else
 		dlist_init(&(*buf_pool)->list.regions);
@@ -213,7 +213,10 @@ int util_buf_pool_create_ex(struct util_buf_pool **buf_pool,
 		.free_hndlr	= free_hndlr,
 		.ctx		= pool_ctx,
 		.track_used	= 1,
-		.indexing	= 0,
+		.indexing	= {
+			.used		= 1,
+			.ordered	= 0,
+		},
 	};
 	return util_buf_pool_create_attr(&attr, buf_pool);
 }

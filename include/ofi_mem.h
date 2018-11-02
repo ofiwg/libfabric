@@ -277,7 +277,12 @@ struct util_buf_attr {
 	void 				*ctx;
 	uint8_t				track_used;
 	uint8_t				is_mmap_region;
-	uint8_t				indexing;
+	struct {
+		uint8_t			used;
+		/* if the `ordered` capability is used, the buffer
+		 * with the lowest index is returned */
+		uint8_t			ordered;
+	} indexing;
 };
 
 struct util_buf_pool {
@@ -352,7 +357,7 @@ static inline void *util_buf_get(struct util_buf_pool *pool)
 {
 	struct util_buf_footer *buf_ftr;
 
-	assert(!pool->attr.indexing);
+	assert(!pool->attr.indexing.ordered);
 
 	slist_remove_head_container(&pool->list.buffers, struct util_buf_footer,
 				    buf_ftr, entry.slist);
@@ -363,7 +368,7 @@ static inline void *util_buf_get(struct util_buf_pool *pool)
 static inline void util_buf_release(struct util_buf_pool *pool, void *buf)
 {
 	assert(util_buf_get_ftr(pool, buf)->region->num_used--);
-	assert(!pool->attr.indexing);
+	assert(!pool->attr.indexing.ordered);
 	slist_insert_head(&util_buf_get_ftr(pool, buf)->entry.slist, &pool->list.buffers);
 }
 
@@ -372,7 +377,7 @@ static inline void *util_buf_indexed_get(struct util_buf_pool *pool)
 	struct util_buf_footer *buf_ftr;
 	struct util_buf_region *buf_region;
 
-	assert(pool->attr.indexing);
+	assert(pool->attr.indexing.ordered);
 
 	buf_region = container_of(pool->list.regions.next,
 				  struct util_buf_region, entry);
@@ -391,7 +396,7 @@ static inline void util_buf_indexed_release(struct util_buf_pool *pool, void *bu
 {
 	struct util_buf_footer *buf_ftr;
 
-	assert(pool->attr.indexing);
+	assert(pool->attr.indexing.ordered);
 
 	buf_ftr = util_buf_get_ftr(pool, buf);
 
@@ -410,14 +415,14 @@ static inline void util_buf_indexed_release(struct util_buf_pool *pool, void *bu
 static inline size_t util_get_buf_index(struct util_buf_pool *pool, void *buf)
 {
 	assert(util_buf_get_ftr(pool, buf)->region->num_used);
-	assert(pool->attr.indexing);
+	assert(pool->attr.indexing.used);
 	return util_buf_get_ftr(pool, buf)->index;
 }
 
 static inline void *util_buf_get_by_index(struct util_buf_pool *pool, size_t index)
 {
 	void *buf;
-	assert(pool->attr.indexing);
+	assert(pool->attr.indexing.used);
 	buf = pool->regions_table[(size_t)(index / pool->attr.chunk_cnt)]->
 		mem_region + (index % pool->attr.chunk_cnt) * pool->entry_sz;
 	assert(util_buf_get_ftr(pool, buf)->region->num_used);

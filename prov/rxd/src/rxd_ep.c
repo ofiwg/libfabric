@@ -970,7 +970,10 @@ int rxd_ep_init_res(struct rxd_ep *ep, struct fi_info *fi_info)
 		.size		= sizeof(struct rxd_x_entry),
 		.alignment	= RXD_BUF_POOL_ALIGNMENT,
 		.max_cnt	= 0,
-		.indexing	= 1,
+		.indexing	= {
+			.used 		= 1,
+			.ordered	= 1,
+		},
 	};
 
 	int ret = util_buf_pool_create_ex(
