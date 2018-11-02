@@ -434,3 +434,24 @@ void *rbtFind(RbtHandle h, void *key) {
     }
     return NULL;
 }
+
+void rbtTraversal(RbtHandle h, RbtIterator it, void *handler_arg,
+          void(*handler)(void *arg, RbtIterator it)) {
+    RbtType *rbt = h;
+    NodeType *root = it;
+
+    // apply handler for:
+    // -o the root of the tree/subtree
+    handler(handler_arg, it);
+    // - the left subtree
+    if (root->left != SENTINEL)
+        rbtTraversal(h, root->left, handler_arg, handler);
+    // - the right subtree
+    if (root->right != SENTINEL)
+        rbtTraversal(h, root->right, handler_arg, handler);
+}
+
+void *rbtRoot(RbtHandle h) {
+    RbtType *rbt = h;
+    return rbt->root;
+}
