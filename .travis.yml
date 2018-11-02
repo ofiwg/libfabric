@@ -41,7 +41,7 @@ install:
     - ./autogen.sh
     # Build verbs only in linux as OS X doesn't have verbs support
     - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
-        LIBRARY_CONFIGURE_ARGS="$LIBFABRIC_CONFIGURE_ARGS --enable-usnic
+        LIBFABRIC_CONFIGURE_ARGS="$LIBFABRIC_CONFIGURE_ARGS --enable-usnic
         --enable-verbs --enable-mlx=$HOME/mlx";
         UCX_BRANCH=v1.2.x;
         git clone --depth 1 -b $UCX_BRANCH https://github.com/openucx/ucx.git && cd ucx && ./autogen.sh && ./configure --prefix=$HOME/mlx CFLAGS="-w" && make -j2 install && cd -;
