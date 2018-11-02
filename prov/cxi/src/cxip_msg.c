@@ -1095,7 +1095,7 @@ static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	if (tagged) {
 		mb.tagged = 1;
 		mb.tag = tag;
-		ib.tag = tag;
+		ib.tag = ignore;
 	}
 
 	fastlock_acquire(&rxc->lock);
