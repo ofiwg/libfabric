@@ -33,6 +33,27 @@ static int rstream_setname(fid_t fid, void *addr, size_t addrlen)
 	return fi_setname(rstream_fid, addr, addrlen);
 }
 
+static int rstream_getname(fid_t fid, void *addr, size_t *addrlen)
+{
+	fid_t rstream_fid;
+	struct rstream_pep *rstream_pep;
+	struct rstream_ep *rstream_ep;
+
+	if (fid->fclass == FI_CLASS_PEP) {
+		rstream_pep = container_of(fid, struct rstream_pep,
+			util_pep.pep_fid);
+		rstream_fid = &rstream_pep->pep_fd->fid;
+	} else if (fid->fclass == FI_CLASS_EP) {
+		rstream_ep = container_of(fid, struct rstream_ep,
+			util_ep.ep_fid);
+		rstream_fid = &rstream_ep->ep_fd->fid;
+	} else {
+		return -FI_ENOSYS;
+	}
+
+	return fi_getname(rstream_fid, addr, addrlen);
+}
+
 static int rstream_getpeer(struct fid_ep *ep, void *addr, size_t *addrlen)
 {
 	struct rstream_ep *rstream_ep =
@@ -110,7 +131,7 @@ static int rstream_shutdown(struct fid_ep *ep, uint64_t flags)
 struct fi_ops_cm rstream_ops_pep_cm = {
 	.size = sizeof(struct fi_ops_cm),
 	.setname = rstream_setname,
-	.getname = fi_no_getname,
+	.getname = rstream_getname,
 	.getpeer = fi_no_getpeer,
 	.connect = fi_no_connect,
 	.listen = rstream_listen,
