@@ -1886,6 +1886,11 @@ static int rxm_ep_close(struct fid *fid)
 	if (rxm_ep->cmap)
 		rxm_cmap_free(rxm_ep->cmap);
 
+	// TODO move this to cmap_free and encapsulate eq progress fns
+	// these vars shouldn't be accessed outside rxm_conn file
+	fastlock_destroy(&rxm_ep->msg_eq_entry_list_lock);
+	slistfd_free(&rxm_ep->msg_eq_entry_list);
+
 	ret = rxm_listener_close(rxm_ep);
 	if (ret)
 		retv = ret;
