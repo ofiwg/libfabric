@@ -327,19 +327,6 @@ static int ft_recv_test_info(void)
 	return 0;
 }
 
-static int ft_skip_info(struct fi_info *hints, struct fi_info *info)
-{
-	size_t len;
-
-	//check needed to skip utility providers, unless requested
-	if (!ft_util_name(hints->fabric_attr->prov_name, &len) &&
-		strcmp(hints->fabric_attr->prov_name,
-		info->fabric_attr->prov_name))
-		return 1;
-
-	return 0;
-}
-
 static int ft_transfer_subindex(int subindex, int *remote_idx)
 {
 	int ret;
@@ -373,9 +360,6 @@ static int ft_fw_process_list_server(struct fi_info *hints, struct fi_info *info
 
 	for (subindex = 1, fabric_info = info; fabric_info;
 	     fabric_info = fabric_info->next, subindex++) {
-
-		if (ft_skip_info(hints, fabric_info))
-			continue;
 
 		ret = ft_check_info(hints, fabric_info);
 		if (ret)
@@ -476,9 +460,6 @@ static int ft_fw_process_list_client(struct fi_info *hints, struct fi_info *info
 			ret = ft_transfer_subindex(subindex, &remote_idx);
 			if (ret)
 				return ret;
-
-			if (ft_skip_info(hints, fabric_info))
-				continue;
 
 			ret = ft_check_info(hints, fabric_info);
 			if (ret)
