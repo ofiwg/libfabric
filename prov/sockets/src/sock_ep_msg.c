@@ -705,6 +705,8 @@ static int sock_ep_cm_accept(struct fid_ep *ep, const void *param, size_t paraml
 		SOCK_LOG_ERROR("Couldnt create accept handler\n");
 		return -FI_ENOMEM;
 	}
+
+	sock_ep_enable(ep);
 	return 0;
 }
 
