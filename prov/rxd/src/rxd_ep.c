@@ -280,11 +280,11 @@ static int rxd_ep_enable(struct rxd_ep *ep)
 	for (i = 0; i < ep->rx_size; i++) {
 		ret = rxd_ep_post_buf(ep);
 		if (ret)
-			goto out;
+			break;
 	}
-out:
+
 	fastlock_release(&ep->util_ep.lock);
-	return ret;
+	return 0;
 }
 
 /*
