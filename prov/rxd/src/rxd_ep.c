@@ -630,12 +630,11 @@ int rxd_ep_send_op(struct rxd_ep *rxd_ep, struct rxd_x_entry *tx_entry,
 			rxd_ep->peers[tx_entry->peer].tx_seq_no = tx_entry->start_seq +
 								  tx_entry->num_segs;
 		rxd_insert_unacked(rxd_ep, tx_entry->peer, pkt_entry);
+		if (tx_entry->op != RXD_READ_REQ && tx_entry->num_segs > 1)
+			ret = rxd_ep_post_data_pkts(rxd_ep, tx_entry);
 	} else {
 		tx_entry->pkt = pkt_entry;
 	}
-
-	if (tx_entry->op != RXD_READ_REQ && tx_entry->num_segs > 1)
-		ret = rxd_ep_post_data_pkts(rxd_ep, tx_entry);
 
 	return ret == -FI_ENOMEM ? ret : 0;
 }
