@@ -1078,10 +1078,12 @@ int rxd_endpoint(struct fid_domain *domain, struct fi_info *info,
 	rxd_ep->do_local_mr = (rxd_domain->mr_mode & FI_MR_LOCAL) ? 1 : 0;
 
 	ret = fi_endpoint(rxd_domain->dg_domain, dg_info, &rxd_ep->dg_ep, rxd_ep);
-	cq_attr.size = dg_info->tx_attr->size + dg_info->rx_attr->size;
-	fi_freeinfo(dg_info);
 	if (ret)
 		goto err2;
+
+	cq_attr.size = dg_info->tx_attr->size + dg_info->rx_attr->size;
+	rxd_ep->prefix_size = dg_info->ep_attr->msg_prefix_size;
+	fi_freeinfo(dg_info);
 
 	ret = fi_cq_open(rxd_domain->dg_domain, &cq_attr, &rxd_ep->dg_cq, rxd_ep);
 	if (ret)
@@ -1094,7 +1096,6 @@ int rxd_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	rxd_ep->rx_size = info->rx_attr->size;
 	rxd_ep->tx_size = info->tx_attr->size;
-	rxd_ep->prefix_size = info->ep_attr->msg_prefix_size;
 	ret = rxd_ep_init_res(rxd_ep, info);
 	if (ret)
 		goto err4;
