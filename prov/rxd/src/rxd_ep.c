@@ -977,8 +977,8 @@ int rxd_ep_init_res(struct rxd_ep *ep, struct fi_info *fi_info)
 		&ep->tx_pkt_pool,
 		rxd_domain->max_mtu_sz + sizeof(struct rxd_pkt_entry),
 		RXD_BUF_POOL_ALIGNMENT, 0, RXD_TX_POOL_CHUNK_CNT,
-	        (fi_info->mode & FI_LOCAL_MR) ? rxd_buf_region_alloc_hndlr : NULL,
-		(fi_info->mode & FI_LOCAL_MR) ? rxd_buf_region_free_hndlr : NULL,
+	        ep->do_local_mr ? rxd_buf_region_alloc_hndlr : NULL,
+		ep->do_local_mr ? rxd_buf_region_free_hndlr : NULL,
 		rxd_domain);
 	if (ret)
 		return -FI_ENOMEM;
@@ -987,8 +987,8 @@ int rxd_ep_init_res(struct rxd_ep *ep, struct fi_info *fi_info)
 		&ep->rx_pkt_pool,
 		rxd_domain->max_mtu_sz + sizeof (struct rxd_pkt_entry),
 		RXD_BUF_POOL_ALIGNMENT, 0, RXD_RX_POOL_CHUNK_CNT,
-	        (fi_info->mode & FI_LOCAL_MR) ? rxd_buf_region_alloc_hndlr : NULL,
-		(fi_info->mode & FI_LOCAL_MR) ? rxd_buf_region_free_hndlr : NULL,
+	        ep->do_local_mr ? rxd_buf_region_alloc_hndlr : NULL,
+		ep->do_local_mr ? rxd_buf_region_free_hndlr : NULL,
 		rxd_domain);
 	if (ret)
 		goto err;
