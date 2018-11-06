@@ -605,6 +605,7 @@ int rxd_ep_send_op(struct rxd_ep *rxd_ep, struct rxd_x_entry *tx_entry,
 						    tx_entry->iov_count,
 						    tx_entry->cq_entry.len,
 						    rxd_ep_domain(rxd_ep)->max_mtu_sz -
+						    rxd_ep->prefix_size -
 			 			    ((char *) ptr - (char *) base_hdr));
 		if (tx_entry->op == RXD_ATOMIC_COMPARE) {
 			len = rxd_init_msg(&ptr, comp_iov, comp_count,
