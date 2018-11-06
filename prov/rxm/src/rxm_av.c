@@ -44,7 +44,7 @@ static int rxm_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 	dlist_foreach_container(&av->ep_list, struct rxm_ep,
 				rxm_ep, util_ep.av_entry) {
 		for (i = 0; i < count; i++) {
-			if (!rxm_ep->cmap->handles_av[i])
+			if (!rxm_ep->cmap->handles_av[fi_addr[i]])
 				continue;
 			/* TODO this is not optimal. Replace this with something
 			 * more deterministic: delete handle if we know that peer
@@ -98,15 +98,19 @@ rxm_av_insert_cmap(struct fid_av *av_fid, const void *addr, size_t count,
 static int rxm_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 			 fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
+	struct util_av *av = container_of(av_fid, struct util_av, av_fid);
 	int ret, retv;
 
 	ret = ofi_ip_av_insert(av_fid, addr, count, fi_addr, flags, context);
-	if (ret <= 0)
+	if (ret < 0)
 		return ret;
 
-	retv = rxm_av_insert_cmap(av_fid, addr, ret, fi_addr, flags);
+	if (!av->eq && !ret)
+		return ret;
+
+	retv = rxm_av_insert_cmap(av_fid, addr, count, fi_addr, flags);
 	if (retv) {
-		ret = rxm_av_remove(av_fid, fi_addr, ret, flags);
+		ret = rxm_av_remove(av_fid, fi_addr, count, flags);
 		if (ret)
 			FI_WARN(&rxm_prov, FI_LOG_AV, "Failed to remove addr "
 				"from AV during error handling\n");
@@ -119,12 +123,11 @@ static int rxm_av_insertsym(struct fid_av *av_fid, const char *node,
 			    size_t nodecnt, const char *service, size_t svccnt,
 			    fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
-	struct util_av *av;
+	struct util_av *av = container_of(av_fid, struct util_av, av_fid);
 	void *addr;
-	size_t addrlen;
+	size_t addrlen, count = nodecnt * svccnt;
 	int ret, retv;
 
-	av = container_of(av_fid, struct util_av, av_fid);
 	ret = ofi_verify_av_insert(av, flags);
 	if (ret)
 		return ret;
@@ -134,15 +137,18 @@ static int rxm_av_insertsym(struct fid_av *av_fid, const char *node,
 	if (ret <= 0)
 		return ret;
 
-	assert(ret == nodecnt * svccnt);
+	assert(ret == count);
 
-	ret = ofi_ip_av_insertv(av, addr, addrlen, ret, fi_addr, context);
-	if (ret <= 0)
+	ret = ofi_ip_av_insertv(av, addr, addrlen, count, fi_addr, context);
+	if (ret < 0)
 		goto out;
 
-	retv = rxm_av_insert_cmap(av_fid, addr, ret, fi_addr, flags);
+	if (!av->eq && !ret)
+		goto out;
+
+	retv = rxm_av_insert_cmap(av_fid, addr, count, fi_addr, flags);
 	if (retv) {
-		ret = rxm_av_remove(av_fid, fi_addr, ret, flags);
+		ret = rxm_av_remove(av_fid, fi_addr, count, flags);
 		if (ret)
 			FI_WARN(&rxm_prov, FI_LOG_AV, "Failed to remove addr "
 				"from AV during error handling\n");
