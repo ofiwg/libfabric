@@ -204,10 +204,6 @@ static int tcpx_buf_pool_init(void *pool_ctx, void *addr,
 	return FI_SUCCESS;
 }
 
-void tcpx_buf_pool_close(void *pool_ctx, void *context)
-{
-}
-
 static int tcpx_buf_pools_create(struct tcpx_buf_pool *buf_pools)
 {
 	int i, ret;
@@ -218,9 +214,10 @@ static int tcpx_buf_pools_create(struct tcpx_buf_pool *buf_pools)
 		ret = util_buf_pool_create_ex(&buf_pools[i].pool,
 					      sizeof(struct tcpx_xfer_entry),
 					      16, 0, 1024, tcpx_buf_pool_init,
-					      tcpx_buf_pool_close, &buf_pools[i]);
+					      NULL, &buf_pools[i]);
 		if (ret) {
-			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "Unable to create buf pool\n");
+			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+				"Unable to create buf pool\n");
 			goto err;
 		}
 	}
