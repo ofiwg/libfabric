@@ -176,28 +176,6 @@ rxm_cmap_check_and_realloc_handles_table(struct rxm_cmap *cmap,
 	return ret;
 }
 
-static int rxm_conn_send_queue_init(struct rxm_ep *rxm_ep,
-				    struct rxm_conn *rxm_conn,
-				    size_t size)
-{
-	if (!rxm_ep->send_queue) {
-		return rxm_send_queue_init(rxm_ep, &rxm_conn->send_queue, size);
-	} else {
-		rxm_conn->send_queue = rxm_ep->send_queue;
-	}
-	return 0;
-}
-
-static void
-rxm_conn_send_queue_close(struct rxm_conn *rxm_conn)
-{
-	if (!rxm_conn->send_queue->rxm_ep->send_queue) {
-		rxm_send_queue_close(rxm_conn->send_queue);
-	} else {
-		rxm_conn->send_queue = NULL;
-	}
-}
-
 void rxm_cmap_del_handle_ts(struct rxm_cmap_handle *handle)
 {
 	struct rxm_cmap *cmap = handle->cmap;
@@ -235,7 +213,6 @@ static void rxm_conn_free(struct rxm_cmap_handle *handle)
 		       "Closed msg_ep\n");
 	}
 	rxm_conn->msg_ep = NULL;
-	rxm_conn_send_queue_close(rxm_conn);
 
 	free(container_of(handle, struct rxm_conn, handle));
 }
@@ -967,21 +944,15 @@ rxm_conn_av_updated_handler(struct rxm_cmap_handle *handle)
 
 static struct rxm_cmap_handle *rxm_conn_alloc(struct rxm_cmap *cmap)
 {
-	int ret;
-	struct rxm_ep *rxm_ep = container_of(cmap->ep, struct rxm_ep, util_ep);
 	struct rxm_conn *rxm_conn = calloc(1, sizeof(*rxm_conn));
+
 	if (OFI_UNLIKELY(!rxm_conn))
 		return NULL;
 
 	dlist_init(&rxm_conn->deferred_conn_entry);
 	dlist_init(&rxm_conn->deferred_tx_queue);
-	ret = rxm_conn_send_queue_init(rxm_ep, rxm_conn,
-				       rxm_ep->msg_info->tx_attr->size);
-	if (ret) {
-		free(rxm_conn);
-		return NULL;
-	}
 	dlist_init(&rxm_conn->sar_rx_msg_list);
+
 	return &rxm_conn->handle;
 }
 

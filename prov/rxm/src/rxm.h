@@ -339,18 +339,6 @@ rxm_sar_set_seg_type(struct ofi_ctrl_hdr *ctrl_hdr, enum rxm_sar_seg_type seg_ty
 	((union rxm_sar_ctrl_data *)&(ctrl_hdr->ctrl_data))->seg_type = seg_type;
 }
 
-static inline uint32_t
-rxm_sar_get_offset(struct ofi_ctrl_hdr *ctrl_hdr)
-{
-	return ((union rxm_sar_ctrl_data *)&(ctrl_hdr->ctrl_data))->offset;
-}
-
-static inline void
-rxm_sar_set_offset(struct ofi_ctrl_hdr *ctrl_hdr, uint32_t offset)
-{
-	((union rxm_sar_ctrl_data *)&(ctrl_hdr->ctrl_data))->offset = offset;
-}
-
 struct rxm_recv_match_attr {
 	fi_addr_t addr;
 	uint64_t tag;
@@ -444,8 +432,8 @@ struct rxm_tx_sar_buf {
 	struct rxm_buf hdr;
 	enum rxm_buf_pool_type type;
 
-	struct dlist_entry entry;
-	struct rxm_tx_entry *tx_entry;
+	void *app_context;
+	uint64_t flags;
 
 	/* Must stay at bottom */
 	struct rxm_pkt pkt;
@@ -516,53 +504,25 @@ struct rxm_deferred_tx_entry {
 			struct rxm_iov rxm_iov;
 		} rndv_read;
 		struct {
-			struct rxm_tx_entry *tx_entry;
+			struct rxm_tx_sar_buf *cur_seg_tx_buf;
+			struct {
+				struct iovec iov[RXM_IOV_LIMIT];
+				uint8_t count;
+				size_t cur_iov_offset;
+				uint64_t data;
+				uint64_t tag;
+			} payload;
+			size_t next_seg_no;
+			size_t segs_cnt;
+			uint8_t op;
+			size_t total_len;
+			size_t remain_len;
+			uint64_t msg_id;
+			void *app_context;
+			uint64_t flags;
 		} sar_seg;
 	};
 };
-
-struct rxm_tx_entry {
-	/* Must stay at top */
-	struct fi_context fi_context;
-
-	enum rxm_proto_state state;
-
-	struct rxm_conn *conn;
-	struct rxm_ep *ep;
-	uint8_t count;
-	void *context;
-	uint64_t flags;
-	uint64_t comp_flags;
-
-	struct dlist_entry deferred_tx_entry;
-	size_t deferred_pkt_size;
-
-	union {
-		struct rxm_tx_sar_buf *tx_buf;
-		struct rxm_rma_buf *rma_buf;
-	};
-
-	union {
-		/* Used for large messages and RMA */
-		struct {
-			struct fid_mr *mr[RXM_IOV_LIMIT];
-			struct rxm_rx_buf *rx_buf;
-		};
-		/* Used for SAR protocol */
-		struct {
-			size_t segs_left;
-			size_t fail_segs_cnt;
-			uint64_t msg_id;
-			/* The list for the TX buffers that have been 
-			 * queued until it would be possbile to send it  */
-			struct dlist_entry deferred_tx_buf_list;
-			struct rxm_iov rxm_iov;
-			uint64_t iov_offset;
-			struct rxm_deferred_tx_entry *def_tx_entry;
-		};
-	};
-};
-DECLARE_FREESTACK(struct rxm_tx_entry, rxm_txe_fs);
 
 struct rxm_recv_entry {
 	struct dlist_entry entry;
@@ -585,13 +545,8 @@ struct rxm_recv_entry {
 		struct {
 			struct dlist_entry entry;
 			size_t total_recv_len;
-			size_t segs_rcvd;
 			struct rxm_conn *conn;
 			uint64_t msg_id;
-			/* This is used when a message with the `RXM_SAR_SEG_LAST`
-			 * flag is receved, but not all messages has been received
-			 * yet */
-			size_t last_seg_no;
 		} sar;
 		/* Used for Rendezvous protocol */
 		struct {
@@ -601,13 +556,6 @@ struct rxm_recv_entry {
 	};
 };
 DECLARE_FREESTACK(struct rxm_recv_entry, rxm_recv_fs);
-
-struct rxm_send_queue {
-	struct rxm_ep *rxm_ep;
-	struct rxm_conn *rxm_conn;
-	struct rxm_txe_fs *fs;
-	fastlock_t lock;
-};
 
 enum rxm_recv_queue_type {
 	RXM_RECV_QUEUE_UNSPEC,
@@ -682,7 +630,6 @@ struct rxm_ep {
 	struct dlist_entry	repost_ready_list;
 	struct dlist_entry	deferred_tx_conn_queue;
 
-	struct rxm_send_queue	*send_queue;
 	struct rxm_recv_queue	recv_queue;
 	struct rxm_recv_queue	trecv_queue;
 
@@ -698,8 +645,8 @@ struct rxm_conn {
 
 	struct dlist_entry deferred_conn_entry;
 	struct dlist_entry deferred_tx_queue;
-	struct rxm_send_queue *send_queue;
 	struct dlist_entry sar_rx_msg_list;
+
 	/* This is saved MSG EP fid, that hasn't been closed during
 	 * handling of CONN_RECV in RXM_CMAP_CONNREQ_SENT for passive side */
 	struct fid_ep *saved_msg_ep;
@@ -737,10 +684,7 @@ void rxm_ep_progress_one(struct util_ep *util_ep);
 void rxm_ep_progress_multi(struct util_ep *util_ep);
 
 int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep);
-int rxm_send_queue_init(struct rxm_ep *rxm_ep, struct rxm_send_queue **send_queue, size_t size);
-void rxm_send_queue_close(struct rxm_send_queue *send_queue);
 void rxm_ep_progress_deferred_queues(struct rxm_ep *rxm_ep);
-void rxm_ep_sar_handle_send_segment_failure(struct rxm_tx_entry *tx_entry, ssize_t ret);
 
 static inline struct rxm_conn *rxm_key2conn(struct rxm_ep *rxm_ep, uint64_t key)
 {
@@ -994,35 +938,6 @@ rxm_acquire_conn_connect(struct rxm_ep *rxm_ep, fi_addr_t fi_addr,
 	return 0;
 }
 
-/* Returns FI_SUCCESS if the SAR deferred TX queue is empty,
- * otherwise, it returns -FI_EAGAIN or error from MSG provider */
-static inline ssize_t
-rxm_ep_progress_sar_deferred_tx_queue(struct rxm_tx_entry *tx_entry)
-{
-	ssize_t ret = 0;
-	struct rxm_tx_sar_buf *tx_buf;
-
-	while (!dlist_empty(&tx_entry->deferred_tx_buf_list)) {
-		tx_buf = container_of(tx_entry->deferred_tx_buf_list.next,
-				      struct rxm_tx_sar_buf, entry);
-		ret = fi_send(tx_entry->conn->msg_ep, &tx_buf->pkt,
-			      sizeof(tx_buf->pkt) + tx_buf->pkt.ctrl_hdr.seg_size,
-			      tx_buf->hdr.desc, 0, tx_buf);
-		if (OFI_UNLIKELY(ret)) {
-			if (OFI_UNLIKELY(ret != -FI_EAGAIN))
-				rxm_ep_sar_handle_send_segment_failure(tx_entry, ret);
-			return ret;
-		}
-		dlist_remove(&tx_buf->entry);
-	}
-	if (dlist_empty(&tx_entry->deferred_tx_buf_list)) {
-		rxm_ep_dequeue_deferred_tx_queue(tx_entry->def_tx_entry);
-		free(tx_entry->def_tx_entry);
-		return 0;
-	}
-	return ret;
-}
-
 static inline
 struct rxm_buf *rxm_buf_get(struct rxm_buf_pool *pool)
 {
@@ -1147,7 +1062,6 @@ rxm_rma_buf_release(struct rxm_ep *rxm_ep, struct rxm_rma_buf *rx_buf)
 		queue->rxm_ep->res_fastlock_release(&queue->lock);	\
 	} while (0)
 
-#define rxm_tx_entry_cleanup(entry)		(entry)->tx_buf = NULL
 #define rxm_recv_entry_cleanup(entry)		(entry)->total_len = 0
 
 #define RXM_DEFINE_QUEUE_ENTRY(type, queue_type)				\
@@ -1172,19 +1086,7 @@ rxm_ ## type ## _entry_release(struct rxm_ ## queue_type ## _queue *queue,	\
 	rxm_entry_push(queue, entry);						\
 }
 
-RXM_DEFINE_QUEUE_ENTRY(tx, send);
 RXM_DEFINE_QUEUE_ENTRY(recv, recv);
-
-static inline void
-rxm_fill_tx_entry(struct rxm_conn *rxm_conn, void *context, uint8_t count, uint64_t flags,
-		  uint64_t comp_flags, struct rxm_tx_entry *tx_entry)
-{
-	tx_entry->conn = rxm_conn;
-	tx_entry->context = context;
-	tx_entry->count = count;
-	tx_entry->flags = flags;
-	tx_entry->comp_flags = comp_flags | FI_SEND;
-}
 
 static inline int rxm_cq_write_recv_comp(struct rxm_rx_buf *rx_buf,
 					 void *context, uint64_t flags,
