@@ -43,7 +43,8 @@ static int rxd_tree_compare(struct ofi_rbmap *map, void *key, void *data)
 
 	memset(addr, 0, len);
 	av = container_of(map, struct rxd_av, rbmap);
-	ret = fi_av_lookup(av->dg_av, (fi_addr_t) data, addr, &len);
+	ret = fi_av_lookup(av->dg_av, av->rxd_addr_table[(fi_addr_t) data].dg_addr,
+			   addr, &len);
 	if (ret)
 		return -1;
 
@@ -63,12 +64,12 @@ static int rxd_av_set_addrlen(struct rxd_av *av, const void *addr)
 	struct fid_av *tmp_av;
 	struct fi_av_attr attr;
 	uint8_t tmp_addr[RXD_NAME_LENGTH];
+	fi_addr_t fiaddr;
 	size_t len;
 	int ret;
 
 	FI_INFO(&rxd_prov, FI_LOG_AV, "determine dgram address len\n");
 	memset(&attr, 0, sizeof attr);
-	attr.type = FI_AV_TABLE;
 	attr.count = 1;
 
 	domain = container_of(av->util_av.domain, struct rxd_domain, util_domain);
@@ -79,7 +80,7 @@ static int rxd_av_set_addrlen(struct rxd_av *av, const void *addr)
 		return ret;
 	}
 
-	ret = fi_av_insert(tmp_av, addr, 1, NULL, 0, NULL);
+	ret = fi_av_insert(tmp_av, addr, 1, &fiaddr, 0, NULL);
 	if (ret != 1) {
 		FI_WARN(&rxd_prov, FI_LOG_AV, "addr insert failed: %d (%s)\n",
 			-ret, fi_strerror(-ret));
@@ -87,7 +88,7 @@ static int rxd_av_set_addrlen(struct rxd_av *av, const void *addr)
 	}
 
 	len = sizeof tmp_addr;
-	ret = fi_av_lookup(tmp_av, 0, tmp_addr, &len);
+	ret = fi_av_lookup(tmp_av, fiaddr, tmp_addr, &len);
 	if (ret) {
 		FI_WARN(&rxd_prov, FI_LOG_AV, "addr lookup failed: %d (%s)\n",
 			-ret, fi_strerror(-ret));
@@ -101,55 +102,64 @@ close:
 	return ret;
 }
 
-fi_addr_t rxd_av_dg_addr(struct rxd_av *av, fi_addr_t fi_addr)
+static fi_addr_t rxd_av_dg_addr(struct rxd_av *av, fi_addr_t fi_addr)
 {
-	return (fi_addr >= av->util_av.count || fi_addr == FI_ADDR_UNSPEC) ?
-		FI_ADDR_UNSPEC : av->tx_map[fi_addr];
+	fi_addr_t rxd_addr = av->fi_addr_table[fi_addr];
+
+	return rxd_addr == FI_ADDR_UNSPEC ? rxd_addr :
+		av->rxd_addr_table[rxd_addr].dg_addr;
 }
 
-fi_addr_t rxd_av_fi_addr(struct rxd_av *av, fi_addr_t dg_fiaddr)
-{
-	//TODO define behavior for duplicate av_insert calls
-	fi_addr_t fi_addr = 0;
-
-	for (fi_addr = 0; fi_addr < av->util_av.count; fi_addr++) {
-		if (av->tx_map[fi_addr] == dg_fiaddr)
-			return fi_addr;
-	}
-	return FI_ADDR_UNSPEC;
-}
-
-static fi_addr_t rxd_set_tx_addr(struct rxd_av *av, fi_addr_t addr)
+static fi_addr_t rxd_set_rxd_addr(struct rxd_av *av, fi_addr_t dg_addr)
 {
 	int tries = 0;
 
-	while (av->tx_map[av->tx_idx] != FI_ADDR_UNSPEC &&
+	while (av->rxd_addr_table[av->rxd_addr_idx].dg_addr != FI_ADDR_UNSPEC &&
 	       tries < av->util_av.count) {
-		if (++av->tx_idx == av->util_av.count)
-			av->tx_idx = 0;
+		if (++av->rxd_addr_idx == av->util_av.count)
+			av->rxd_addr_idx = 0;
 		tries++;
 	}
-	assert(av->tx_idx < av->util_av.count && tries < av->util_av.count);
-	av->tx_map[av->tx_idx] = addr;
+	assert(av->rxd_addr_idx < av->util_av.count && tries < av->util_av.count);
+	av->rxd_addr_table[av->rxd_addr_idx].dg_addr = dg_addr;
 
-	return av->tx_idx;
+	return av->rxd_addr_idx;
+}
+
+static fi_addr_t rxd_set_fi_addr(struct rxd_av *av, fi_addr_t rxd_addr)
+{
+	int tries = 0;
+
+	while (av->fi_addr_table[av->rxd_addr_idx] != FI_ADDR_UNSPEC &&
+	       tries < av->util_av.count) {
+		if (++av->fi_addr_idx == av->util_av.count)
+			av->fi_addr_idx = 0;
+		tries++;
+	}
+	assert(av->fi_addr_idx < av->util_av.count && tries < av->util_av.count);
+	av->fi_addr_table[av->fi_addr_idx] = rxd_addr;
+	av->rxd_addr_table[rxd_addr].fi_addr = av->fi_addr_idx;
+
+	return av->fi_addr_idx;
 }
 
 int rxd_av_insert_dg_addr(struct rxd_av *av, const void *addr,
-			  fi_addr_t *dg_fiaddr, uint64_t flags,
+			  fi_addr_t *rxd_addr, uint64_t flags,
 			  void *context)
 {
+	fi_addr_t dg_addr;
 	int ret;
 
-	ret = fi_av_insert(av->dg_av, addr, 1, dg_fiaddr,
+	ret = fi_av_insert(av->dg_av, addr, 1, &dg_addr,
 			     flags, context);
 	if (ret != 1)
 		return -errno;
 
-	ret = ofi_rbmap_insert(&av->rbmap, (void *) addr, (void *) (*dg_fiaddr));
+	*rxd_addr = rxd_set_rxd_addr(av, dg_addr);
 
+	ret = ofi_rbmap_insert(&av->rbmap, (void *) addr, (void *) (*rxd_addr));
 	if (ret && ret != -FI_EALREADY) {
-		fi_av_remove(av->dg_av, dg_fiaddr, 1, flags);
+		fi_av_remove(av->dg_av, &dg_addr, 1, flags);
 		return ret;
 	}
 
@@ -161,7 +171,8 @@ static int rxd_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 {
 	struct rxd_av *av;
 	int i = 0, ret = 0, success_cnt = 0;
-	fi_addr_t dg_fiaddr, tx_addr;
+	fi_addr_t rxd_addr, util_addr;
+	struct ofi_rbnode *node;
 
 	av = container_of(av_fid, struct rxd_av, util_av.av_fid);
 	fastlock_acquire(&av->util_av.lock);
@@ -172,19 +183,22 @@ static int rxd_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 	}
 
 	for (; i < count; i++, addr = (uint8_t *) addr + av->dg_addrlen) {
-		ret = rxd_av_insert_dg_addr(av, addr, &dg_fiaddr,
-					    flags, context);
-		if (ret && ret != -FI_EALREADY)
-			break;
-		if (!ret) {
-			tx_addr = rxd_set_tx_addr(av, dg_fiaddr);
+		node = ofi_rbmap_find(&av->rbmap, (void *) addr);
+		if (node) {
+			rxd_addr = (fi_addr_t) node->data;
 		} else {
-			tx_addr = rxd_av_fi_addr(av, dg_fiaddr);
-			ret = 0;
+			ret = rxd_av_insert_dg_addr(av, addr, &rxd_addr,
+						    flags, context);
+			if (ret)
+				break;
 		}
 
+		util_addr = av->rxd_addr_table[rxd_addr].fi_addr == FI_ADDR_UNSPEC ?
+			    rxd_set_fi_addr(av, rxd_addr) :
+			    av->rxd_addr_table[rxd_addr].fi_addr;
 		if (fi_addr)
-			fi_addr[i] = tx_addr;
+			fi_addr[i] = util_addr;
+
 		success_cnt++;
 	}
 
@@ -236,31 +250,43 @@ static int rxd_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr, size_t count
 {
 	int ret = 0;
 	size_t i, addrlen;
-	fi_addr_t dg_fiaddr;
+	fi_addr_t rxd_addr;
 	struct rxd_av *av;
-	struct ofi_rbnode *node;
 	uint8_t addr[RXD_NAME_LENGTH];
+	struct ofi_rbnode *node;
 
 	av = container_of(av_fid, struct rxd_av, util_av.av_fid);
 	fastlock_acquire(&av->util_av.lock);
 	for (i = 0; i < count; i++) {
-		dg_fiaddr = av->tx_map[fi_addr[i]];
-		ret = fi_av_lookup(av->dg_av, dg_fiaddr, addr, &addrlen);
-		if (ret)
-			continue;
+		rxd_addr = av->fi_addr_table[fi_addr[i]];
 
-		node = ofi_rbmap_find(&av->rbmap, addr);
+		addrlen = RXD_NAME_LENGTH;
+		ret = fi_av_lookup(av->dg_av, av->rxd_addr_table[rxd_addr].dg_addr,
+				   addr, &addrlen);
+		if (ret)
+			goto err;
+		
+		node = ofi_rbmap_find(&av->rbmap, (void *) addr);
 		if (!node)
-			continue;
-
-		ret = fi_av_remove(av->dg_av, &dg_fiaddr, 1, flags);
-		if (ret)
-			break;
+			goto err;
 
 		ofi_rbmap_delete(&av->rbmap, node);
-		av->tx_map[fi_addr[i]] = FI_ADDR_UNSPEC;
+
+		ret = fi_av_remove(av->dg_av, &av->rxd_addr_table[rxd_addr].dg_addr,
+				   1, flags);
+		if (ret)
+			goto err;
+
+		av->fi_addr_table[fi_addr[i]] = FI_ADDR_UNSPEC;
+		av->rxd_addr_table[rxd_addr].fi_addr = FI_ADDR_UNSPEC;
+		av->rxd_addr_table[rxd_addr].dg_addr = FI_ADDR_UNSPEC;
 		av->dg_av_used--;
 	}
+
+err:
+	if (ret)
+		FI_WARN(&rxd_prov, FI_LOG_AV, "Unable to remove address from AV\n");
+
 	fastlock_release(&av->util_av.lock);
 	return ret;
 }
@@ -311,6 +337,8 @@ static int rxd_av_close(struct fid *fid)
 	if (ret)
 		return ret;
 
+	free(av->fi_addr_table);
+	free(av->rxd_addr_table);
 	free(av);
 	return 0;
 }
@@ -343,10 +371,15 @@ int rxd_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	if (attr->name)
 		return -FI_ENOSYS;
 
+	attr->count = roundup_power_of_two(attr->count ?
+					   attr->count : RXD_DEFAULT_AV_SIZE);
 	domain = container_of(domain_fid, struct rxd_domain, util_domain.domain_fid);
-	av = calloc(1, sizeof(*av) + (attr->count * sizeof(fi_addr_t)));
-	if (!av)
+	av = calloc(1, sizeof(*av));
+	av->fi_addr_table = calloc(1, attr->count * sizeof(fi_addr_t));
+	av->rxd_addr_table = calloc(1, rxd_env.max_peers * sizeof(struct rxd_addr));
+	if (!av || !av->fi_addr_table || !av->rxd_addr_table)
 		return -FI_ENOMEM;
+
 
 	util_attr.addrlen = sizeof(fi_addr_t);
 	util_attr.flags = 0;
@@ -360,11 +393,14 @@ int rxd_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 
 	av->rbmap.compare = &rxd_tree_compare;
 	ofi_rbmap_init(&av->rbmap);
-	for (i = 0; i < attr->count; av->tx_map[i++] = FI_ADDR_UNSPEC)
+	for (i = 0; i < attr->count; av->fi_addr_table[i++] = FI_ADDR_UNSPEC)
 		;
+	for (i = 0; i < rxd_env.max_peers; i++) {
+		av->rxd_addr_table[i].fi_addr = FI_ADDR_UNSPEC;
+		av->rxd_addr_table[i].dg_addr = FI_ADDR_UNSPEC;
+	}
 
 	av_attr = *attr;
-	av_attr.type = FI_AV_TABLE;
 	av_attr.count = 0;
 	av_attr.flags = 0;
 	ret = fi_av_open(domain->dg_domain, &av_attr, &av->dg_av, context);
@@ -379,6 +415,8 @@ int rxd_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 err2:
 	ofi_av_close(&av->util_av);
 err1:
+	free(av->fi_addr_table);
+	free(av->rxd_addr_table);
 	free(av);
 	return ret;
 }

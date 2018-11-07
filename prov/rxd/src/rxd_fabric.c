@@ -74,7 +74,7 @@ int rxd_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 		void *context)
 {
 	struct rxd_fabric *rxd_fabric;
-	struct fi_info hints, *dg_info;
+	struct fi_info *dg_info;
 	int ret;
 
 	rxd_fabric = calloc(1, sizeof(*rxd_fabric));
@@ -86,37 +86,25 @@ int rxd_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 	if (ret)
 		goto err1;
 
-	memset(&hints, 0, sizeof hints);
-	if (!(hints.fabric_attr = calloc(1, sizeof(*hints.fabric_attr)))) {
-		ret = -FI_ENOMEM;
-		goto err2;
-	}
-	hints.fabric_attr->name = attr->name;
-
-	ret = ofi_get_core_info(attr->api_version, NULL, NULL, 0, &rxd_util_prov,
-				&hints, rxd_info_to_core, &dg_info);
+	ret = ofi_get_core_info_fabric(&rxd_prov, attr, &dg_info);
 	if (ret) {
+		FI_WARN(&rxd_prov, FI_LOG_FABRIC, "Unable to get core info!\n");
 		ret = -FI_EINVAL;
-		goto err3;
+		goto err2; 
 	}
 
 	ret = fi_fabric(dg_info->fabric_attr, &rxd_fabric->dg_fabric, context);
-	if (ret) {
-		goto err4;
-	}
+	if (ret)
+		goto err3;
 
 	*fabric = &rxd_fabric->util_fabric.fabric_fid;
 	(*fabric)->fid.ops = &rxd_fabric_fi_ops;
 	(*fabric)->ops = &rxd_fabric_ops;
 
-	free(hints.fabric_attr);
 	fi_freeinfo(dg_info);
-
 	return 0;
-err4:
-	fi_freeinfo(dg_info);
 err3:
-	free(hints.fabric_attr);
+	fi_freeinfo(dg_info);
 err2:
 	ofi_fabric_close(&rxd_fabric->util_fabric);
 err1:

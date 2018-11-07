@@ -383,14 +383,12 @@ void rxd_progress_tx_list(struct rxd_ep *ep, struct rxd_peer *peer)
 	}
 }
 
-static void rxd_update_peer(struct rxd_ep *ep, fi_addr_t peer, fi_addr_t dg_addr)
+static void rxd_update_peer(struct rxd_ep *ep, fi_addr_t peer, fi_addr_t peer_addr)
 {
 	struct rxd_pkt_entry *pkt_entry;
 
-	if (rxd_verify_active(ep, peer, dg_addr))
+	if (rxd_verify_active(ep, peer, peer_addr))
 		return;
-
-	ep->peers[peer].peer_addr = dg_addr;
 
 	if (!dlist_empty(&ep->peers[peer].unacked)) {
 		pkt_entry = container_of((&ep->peers[peer].unacked)->next,
@@ -411,7 +409,7 @@ static int rxd_send_cts(struct rxd_ep *rxd_ep, struct rxd_rts_pkt *rts_pkt,
 	struct rxd_cts_pkt *cts;
 	int ret = 0;
 
-	rxd_update_peer(rxd_ep, peer, rts_pkt->dg_addr);
+	rxd_update_peer(rxd_ep, peer, rts_pkt->rts_addr);
 
 	pkt_entry = rxd_get_tx_pkt(rxd_ep);
 	if (!pkt_entry)
@@ -424,8 +422,8 @@ static int rxd_send_cts(struct rxd_ep *rxd_ep, struct rxd_rts_pkt *rts_pkt,
 
 	cts->base_hdr.version = RXD_PROTOCOL_VERSION;
 	cts->base_hdr.type = RXD_CTS;
-	cts->dg_addr = peer;
-	cts->peer_addr = rts_pkt->dg_addr;
+	cts->cts_addr = peer;
+	cts->rts_addr = rts_pkt->rts_addr;
 
 	ret = rxd_ep_retry_pkt(rxd_ep, pkt_entry);
 	rxd_release_tx_pkt(rxd_ep, pkt_entry);
@@ -482,7 +480,7 @@ static void rxd_handle_rts(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 {
 	struct rxd_av *rxd_av;
 	struct ofi_rbnode *node;
-	fi_addr_t dg_addr;
+	fi_addr_t rxd_addr;
 	struct rxd_rts_pkt *pkt = (struct rxd_rts_pkt *) (pkt_entry->pkt);
 	int ret;
 
@@ -490,15 +488,15 @@ static void rxd_handle_rts(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 	node = ofi_rbmap_find(&rxd_av->rbmap, pkt->source);
 
 	if (node) {
-		dg_addr = (fi_addr_t) node->data;
+		rxd_addr = (fi_addr_t) node->data;
 	} else {
 		ret = rxd_av_insert_dg_addr(rxd_av, (void *) pkt->source,
-					    &dg_addr, 0, NULL);
+					    &rxd_addr, 0, NULL);
 		if (ret)
 			return;
 	}
 
-	if (rxd_send_cts(ep, pkt, dg_addr)) {
+	if (rxd_send_cts(ep, pkt, rxd_addr)) {
 		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL,
 			"error posting CTS\n");
 	}
@@ -1023,7 +1021,7 @@ static void rxd_handle_cts(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 {
 	struct rxd_cts_pkt *cts = (struct rxd_cts_pkt *) (pkt_entry->pkt);
 
-	rxd_update_peer(ep, cts->peer_addr, cts->dg_addr);
+	rxd_update_peer(ep, cts->rts_addr, cts->cts_addr);
 }
 
 static void rxd_handle_ack(struct rxd_ep *ep, struct rxd_pkt_entry *ack_entry)

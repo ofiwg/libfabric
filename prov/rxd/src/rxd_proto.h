@@ -89,24 +89,24 @@ struct rxd_ext_hdr {
 
 /*
  * Ready to send: initialize peer communication and exchange addressing info
- * 	- dg_addr: local address for peer
+ * 	- rts_addr: local address for peer sending RTS
  * 	- source: name of transmitting endpoint for peer to add to AV
  */
 struct rxd_rts_pkt {
 	struct rxd_base_hdr	base_hdr;
-	uint64_t		dg_addr;
+	uint64_t		rts_addr;
 	uint8_t			source[RXD_NAME_LENGTH];
 };
 
 /*
  * Clear to send: response to RTS request
- * 	- dg_addr: peer address packet is responding to
- * 	- peer_addr: local address for peer
+ * 	- rts_addr: peer address packet is responding to
+ * 	- cts_addr: local address for peer
  */
 struct rxd_cts_pkt {
 	struct	rxd_base_hdr	base_hdr;
-	uint64_t		dg_addr;
-	uint64_t		peer_addr;
+	uint64_t		rts_addr;
+	uint64_t		cts_addr;
 };
 
 /*

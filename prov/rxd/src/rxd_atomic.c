@@ -50,7 +50,7 @@ static ssize_t rxd_generic_atomic(struct rxd_ep *rxd_ep,
 	struct rxd_x_entry *tx_entry;
 	struct iovec iov[RXD_IOV_LIMIT], res_iov[RXD_IOV_LIMIT], comp_iov[RXD_IOV_LIMIT];
 	struct fi_rma_iov rma_iov[RXD_IOV_LIMIT]; 
-	fi_addr_t dg_addr;
+	fi_addr_t rxd_addr;
 	ssize_t ret = -FI_EAGAIN;
 
 	assert(count <= RXD_IOV_LIMIT);
@@ -66,20 +66,19 @@ static ssize_t rxd_generic_atomic(struct rxd_ep *rxd_ep,
 	ofi_ioc_to_iov(compare_ioc, comp_iov, compare_count, ofi_datatype_size(datatype));
 	ofi_rma_ioc_to_iov(rma_ioc, rma_iov, rma_count, ofi_datatype_size(datatype));
 
-	dg_addr = rxd_av_dg_addr(rxd_ep_av(rxd_ep), addr);
-
 	fastlock_acquire(&rxd_ep->util_ep.lock);
 	fastlock_acquire(&rxd_ep->util_ep.tx_cq->cq_lock);
 
 	if (ofi_cirque_isfull(rxd_ep->util_ep.tx_cq->cirq))
 		goto out;
 
-	if (rxd_ep->peers[dg_addr].peer_addr == FI_ADDR_UNSPEC &&
-	    dlist_empty(&rxd_ep->peers[dg_addr].unacked))
-		rxd_ep_send_rts(rxd_ep, dg_addr);
+	rxd_addr = rxd_ep_av(rxd_ep)->fi_addr_table[addr];
+	if (rxd_ep->peers[rxd_addr].peer_addr == FI_ADDR_UNSPEC &&
+	    dlist_empty(&rxd_ep->peers[rxd_addr].unacked))
+		rxd_ep_send_rts(rxd_ep, rxd_addr);
 
 	tx_entry = rxd_tx_entry_init(rxd_ep, iov, count, res_iov, result_count, rma_count,
-				     data, 0, context, dg_addr, op, rxd_flags);
+				     data, 0, context, rxd_addr, op, rxd_flags);
 	if (!tx_entry)
 		goto out;
 
@@ -159,7 +158,7 @@ static ssize_t rxd_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 	struct rxd_x_entry *tx_entry;
 	struct iovec iov;
 	struct fi_rma_iov rma_iov; 
-	fi_addr_t dg_addr;
+	fi_addr_t rxd_addr;
 	ssize_t ret = -FI_EAGAIN;
 
 	iov.iov_base = (void *) buf;
@@ -170,20 +169,20 @@ static ssize_t rxd_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 	rma_iov.len = count * ofi_datatype_size(datatype);
 	rma_iov.key = key;
 
-	dg_addr = rxd_av_dg_addr(rxd_ep_av(rxd_ep), dest_addr);
-
 	fastlock_acquire(&rxd_ep->util_ep.lock);
 	fastlock_acquire(&rxd_ep->util_ep.tx_cq->cq_lock);
 
 	if (ofi_cirque_isfull(rxd_ep->util_ep.tx_cq->cirq))
 		goto out;
 
-	if (rxd_ep->peers[dg_addr].peer_addr == FI_ADDR_UNSPEC &&
-	    dlist_empty(&rxd_ep->peers[dg_addr].unacked))
-		rxd_ep_send_rts(rxd_ep, dg_addr);
+	rxd_addr = rxd_ep_av(rxd_ep)->fi_addr_table[addr];
+	if (rxd_ep->peers[rxd_addr].peer_addr == FI_ADDR_UNSPEC &&
+	    dlist_empty(&rxd_ep->peers[rxd_addr].unacked))
+		rxd_ep_send_rts(rxd_ep, rxd_addr);
 
 	tx_entry = rxd_tx_entry_init(rxd_ep, &iov, 1, NULL, 0, 1, 0, 0, NULL,
-				     dg_addr, ofi_op_atomic, RXD_INJECT | RXD_NO_TX_COMP);
+				     rxd_addr, ofi_op_atomic,
+				     RXD_INJECT | RXD_NO_TX_COMP);
 	if (!tx_entry)
 		goto out;
 

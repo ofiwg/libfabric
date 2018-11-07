@@ -56,6 +56,8 @@ int rxd_info_to_core(uint32_t version, const struct fi_info *rxd_info,
 	core_info->caps = FI_MSG;
 	core_info->mode = FI_LOCAL_MR | FI_CONTEXT | FI_MSG_PREFIX;
 	core_info->ep_attr->type = FI_EP_DGRAM;
+
+	core_info->domain_attr->mr_mode = FI_MR_LOCAL | FI_MR_ALLOCATED;
 	return 0;
 }
 

@@ -68,6 +68,7 @@
 
 #define RXD_MAX_TX_BITS 	10
 #define RXD_MAX_RX_BITS 	10
+#define RXD_DEFAULT_AV_SIZE	1024
 
 #define RXD_BUF_POOL_ALIGNMENT	16
 #define RXD_TX_POOL_CHUNK_CNT	1024
@@ -140,15 +141,23 @@ struct rxd_peer {
 	struct dlist_entry buf_pkts;
 };
 
+struct rxd_addr {
+	fi_addr_t fi_addr;
+	fi_addr_t dg_addr;
+};
+
 struct rxd_av {
 	struct util_av util_av;
 	struct fid_av *dg_av;
 	struct ofi_rbmap rbmap;
-	int tx_idx;
+	int fi_addr_idx;
+	int rxd_addr_idx;
 
 	int dg_av_used;
 	size_t dg_addrlen;
-	fi_addr_t tx_map[];
+
+	fi_addr_t *fi_addr_table;
+	struct rxd_addr *rxd_addr_table;
 };
 
 struct rxd_cq;
@@ -349,8 +358,6 @@ int rxd_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 int rxd_av_insert_dg_addr(struct rxd_av *av, const void *addr,
 			  fi_addr_t *dg_fiaddr, uint64_t flags,
 			  void *context);
-fi_addr_t rxd_av_dg_addr(struct rxd_av *av, fi_addr_t fi_addr);
-fi_addr_t rxd_av_fi_addr(struct rxd_av *av, fi_addr_t dg_fiaddr);
 
 /* Pkt resource functions */
 int rxd_ep_post_buf(struct rxd_ep *ep);
@@ -366,7 +373,7 @@ int rxd_ep_retry_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry);
 ssize_t rxd_ep_post_data_pkts(struct rxd_ep *ep, struct rxd_x_entry *tx_entry);
 void rxd_insert_unacked(struct rxd_ep *ep, fi_addr_t peer,
 			struct rxd_pkt_entry *pkt_entry);
-ssize_t rxd_ep_send_rts(struct rxd_ep *rxd_ep, int dg_addr);
+ssize_t rxd_ep_send_rts(struct rxd_ep *rxd_ep, fi_addr_t rxd_addr);
 int rxd_ep_send_op(struct rxd_ep *rxd_ep, struct rxd_x_entry *tx_entry,
 		   const struct fi_rma_iov *rma_iov, size_t rma_count,
 		   const struct iovec *comp_iov, size_t comp_count,
