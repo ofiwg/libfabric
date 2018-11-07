@@ -123,12 +123,11 @@ out:
 	return ret;
 }
 
-static ssize_t ofi_eq_readerr(struct fid_eq *eq_fid, struct fi_eq_err_entry *buf,
-			      uint64_t flags)
+ssize_t ofi_eq_readerr(struct fid_eq *eq_fid, struct fi_eq_err_entry *buf,
+		       uint64_t flags)
 {
-
-	return ofi_eq_read(eq_fid, NULL, buf, sizeof(*buf),
-			    flags | UTIL_FLAG_ERROR);
+	return fi_eq_read(eq_fid, NULL, buf, sizeof(*buf),
+			  flags | UTIL_FLAG_ERROR);
 }
 
 ssize_t ofi_eq_write(struct fid_eq *eq_fid, uint32_t event,
@@ -157,8 +156,8 @@ ssize_t ofi_eq_write(struct fid_eq *eq_fid, uint32_t event,
 	return len;
 }
 
-static ssize_t ofi_eq_sread(struct fid_eq *eq_fid, uint32_t *event, void *buf,
-			    size_t len, int timeout, uint64_t flags)
+ssize_t ofi_eq_sread(struct fid_eq *eq_fid, uint32_t *event, void *buf,
+		     size_t len, int timeout, uint64_t flags)
 {
 	struct util_eq *eq;
 
