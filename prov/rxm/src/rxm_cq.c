@@ -264,7 +264,6 @@ static inline int rxm_finish_eager_send(struct rxm_ep *rxm_ep, struct rxm_tx_eag
 	assert(ofi_tx_cq_flags(tx_buf->pkt.hdr.op) & FI_SEND);
 	ofi_ep_tx_cntr_inc(&rxm_ep->util_ep);
 
-	rxm_tx_buf_release(rxm_ep, tx_buf);
 	return ret;
 }
 
@@ -277,7 +276,7 @@ static inline int rxm_finish_sar_segment_send(struct rxm_ep *rxm_ep, struct rxm_
 	case RXM_SAR_SEG_FIRST:
 		break;
 	case RXM_SAR_SEG_MIDDLE:
-		rxm_tx_buf_release(rxm_ep, tx_buf);
+		rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_SAR, tx_buf);
 		break;
 	case RXM_SAR_SEG_LAST:
 		ret = rxm_cq_tx_comp_write(rxm_ep, ofi_tx_cq_flags(tx_buf->pkt.hdr.op),
@@ -287,8 +286,8 @@ static inline int rxm_finish_sar_segment_send(struct rxm_ep *rxm_ep, struct rxm_
 		ofi_ep_tx_cntr_inc(&rxm_ep->util_ep);
 		first_tx_buf = rxm_msg_id_2_tx_buf(rxm_ep, RXM_BUF_POOL_TX_SAR,
 						   tx_buf->pkt.ctrl_hdr.msg_id);
-		rxm_tx_buf_release(rxm_ep, first_tx_buf);
-		rxm_tx_buf_release(rxm_ep, tx_buf);
+		rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_SAR, first_tx_buf);
+		rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_SAR, tx_buf);
 		break;
 	}
 
@@ -322,7 +321,7 @@ static int rxm_rndv_tx_finish(struct rxm_ep *rxm_ep, struct rxm_tx_rndv_buf *tx_
 
 	rxm_enqueue_rx_buf_for_repost_check(tx_buf->rx_buf);
 
-	rxm_tx_buf_release(rxm_ep, tx_buf);
+	rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_RNDV, tx_buf);
 
 	return ret;
 }
@@ -704,7 +703,8 @@ static ssize_t rxm_rndv_send_ack(struct rxm_rx_buf *rx_buf)
 	}
 	return 0;
 err:
-	rxm_tx_buf_release(rx_buf->ep, rx_buf->recv_entry->rndv.tx_buf);
+	rxm_tx_buf_release(rx_buf->ep, RXM_BUF_POOL_TX_ACK,
+			   rx_buf->recv_entry->rndv.tx_buf);
 	return ret;
 }
 
@@ -762,6 +762,7 @@ static int rxm_handle_remote_write(struct rxm_ep *rxm_ep,
 static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 				  struct fi_cq_data_entry *comp)
 {
+	ssize_t ret;
 	struct rxm_rx_buf *rx_buf;
 	struct rxm_tx_sar_buf *tx_sar_buf;
 	struct rxm_tx_eager_buf *tx_eager_buf;
@@ -777,7 +778,15 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 	case RXM_TX:
 		tx_eager_buf = comp->op_context;
 		assert(comp->flags & FI_SEND);
-		return rxm_finish_eager_send(rxm_ep, tx_eager_buf);
+		ret = rxm_finish_eager_send(rxm_ep, tx_eager_buf);
+		rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX, tx_eager_buf);
+		return ret;
+	case RXM_INJECT_TX:
+		tx_eager_buf = comp->op_context;
+		assert(comp->flags & FI_SEND);
+		ret = rxm_finish_eager_send(rxm_ep, tx_eager_buf);
+		rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX, tx_eager_buf);
+		return ret;
 	case RXM_SAR_TX:
 		tx_sar_buf = comp->op_context;
 		assert(comp->flags & FI_SEND);
@@ -828,7 +837,8 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 	case RXM_RNDV_ACK_SENT:
 		rx_buf = comp->op_context;
 		assert(comp->flags & FI_SEND);
-		rxm_tx_buf_release(rx_buf->ep, rx_buf->recv_entry->rndv.tx_buf);
+		rxm_tx_buf_release(rx_buf->ep, RXM_BUF_POOL_TX_ACK,
+				   rx_buf->recv_entry->rndv.tx_buf);
 		return rxm_finish_send_rndv_ack(rx_buf);
 	default:
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "Invalid state!\n");
@@ -911,6 +921,7 @@ static void rxm_cq_read_write_error(struct rxm_ep *rxm_ep)
 	switch (RXM_GET_PROTO_STATE(err_entry.op_context)) {
 	case RXM_SAR_TX:
 	case RXM_TX:
+	case RXM_INJECT_TX:
 	case RXM_RNDV_TX:
 		util_cq = rxm_ep->util_ep.tx_cq;
 		if (rxm_ep->util_ep.flags & OFI_CNTR_ENABLED)

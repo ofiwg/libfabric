@@ -293,6 +293,7 @@ struct rxm_rndv_hdr {
 /* RXM protocol states / tx/rx context */
 #define RXM_PROTO_STATES(FUNC)		\
 	FUNC(RXM_TX),			\
+	FUNC(RXM_INJECT_TX),		\
 	FUNC(RXM_RMA),			\
 	FUNC(RXM_RX),			\
 	FUNC(RXM_SAR_TX),		\
@@ -409,7 +410,6 @@ struct rxm_rx_buf {
 struct rxm_tx_base_buf {
 	/* Must stay at top */
 	struct rxm_buf hdr;
-	enum rxm_buf_pool_type type;
 
 	/* Must stay at bottom */
 	struct rxm_pkt pkt;
@@ -418,7 +418,6 @@ struct rxm_tx_base_buf {
 struct rxm_tx_eager_buf {
 	/* Must stay at top */
 	struct rxm_buf hdr;
-	enum rxm_buf_pool_type type;
 
 	void *app_context;
 	uint64_t flags;
@@ -430,7 +429,6 @@ struct rxm_tx_eager_buf {
 struct rxm_tx_sar_buf {
 	/* Must stay at top */
 	struct rxm_buf hdr;
-	enum rxm_buf_pool_type type;
 
 	void *app_context;
 	uint64_t flags;
@@ -442,7 +440,6 @@ struct rxm_tx_sar_buf {
 struct rxm_tx_rndv_buf {
 	/* Must stay at top */
 	struct rxm_buf hdr;
-	enum rxm_buf_pool_type type;
 
 	void *app_context;
 	uint64_t flags;
@@ -452,17 +449,6 @@ struct rxm_tx_rndv_buf {
 
 	/* Must stay at bottom */
 	struct rxm_pkt pkt;
-};
-
-union rxm_tx_buf {
-	struct {
-		struct rxm_buf hdr;
-		enum rxm_buf_pool_type type;
-	} top;
-	struct rxm_tx_base_buf base;
-	struct rxm_tx_eager_buf eager;
-	struct rxm_tx_sar_buf sar;
-	struct rxm_tx_rndv_buf rndv;
 };
 
 struct rxm_rma_buf {
@@ -979,7 +965,7 @@ size_t rxm_get_buf_index(struct rxm_buf_pool *pool, struct rxm_buf *buf)
 	return index;
 }
 
-static inline union rxm_tx_buf *
+static inline struct rxm_buf *
 rxm_tx_buf_get(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
 {
 	assert((type == RXM_BUF_POOL_TX) ||
@@ -987,38 +973,13 @@ rxm_tx_buf_get(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
 	       (type == RXM_BUF_POOL_TX_ACK) ||
 	       (type == RXM_BUF_POOL_TX_RNDV) ||
 	       (type == RXM_BUF_POOL_TX_SAR));
-	return (union rxm_tx_buf *)rxm_buf_get(&rxm_ep->buf_pools[type]);
+	return rxm_buf_get(&rxm_ep->buf_pools[type]);
 }
 
 static inline void
-rxm_tx_buf_release(struct rxm_ep *rxm_ep, void *tx_buf)
+rxm_tx_buf_release(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type, void *tx_buf)
 {
-#ifdef NDEBUG
-	union rxm_tx_buf *buf = (union rxm_tx_buf *)tx_buf;
-
-	switch (buf->top.type) {
-	case RXM_BUF_POOL_TX:
-		assert(buf->eager.pkt.ctrl_hdr.type == ofi_ctrl_data);
-		break;
-	case RXM_BUF_POOL_TX_INJECT:
-		assert(tx_buf->base.pkt.ctrl_hdr.type == ofi_ctrl_data);
-		break;
-	case RXM_BUF_POOL_TX_ACK:
-		assert(tx_buf->base.pkt.ctrl_hdr.type == ofi_ctrl_ack);
-		break;
-	case RXM_BUF_POOL_TX_RNDV:
-		assert(tx_buf->rndv.pkt.ctrl_hdr.type == ofi_ctrl_large_data);
-		break;
-	case RXM_BUF_POOL_TX_SAR:
-		assert(tx_buf->sar.pkt.ctrl_hdr.type == ofi_ctrl_seg_data);
-		break;
-	default:
-		assert(0);
-	}
-#endif
-	rxm_buf_release(&rxm_ep->buf_pools[
-				((union rxm_tx_buf *)tx_buf)->top.type],
-			(struct rxm_buf *)tx_buf);
+	rxm_buf_release(&rxm_ep->buf_pools[type], (struct rxm_buf *)tx_buf);
 }
 
 static inline struct rxm_rx_buf *rxm_rx_buf_get(struct rxm_ep *rxm_ep)

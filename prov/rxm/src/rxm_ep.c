@@ -176,7 +176,6 @@ static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 		case RXM_BUF_POOL_TX:
 			tx_eager_buf = (struct rxm_tx_eager_buf *)
 				((char *)addr + i * entry_sz);
-			tx_eager_buf->type = pool->type;
 			tx_eager_buf->hdr.state = RXM_TX;
 
 			hdr = &tx_eager_buf->hdr;
@@ -186,8 +185,7 @@ static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 		case RXM_BUF_POOL_TX_INJECT:
 			tx_base_buf = (struct rxm_tx_base_buf *)
 				((char *)addr + i * entry_sz);
-			tx_base_buf->type = pool->type;
-			tx_base_buf->hdr.state = RXM_TX;
+			tx_base_buf->hdr.state = RXM_INJECT_TX;
 
 			hdr = NULL;
 			pkt = &tx_base_buf->pkt;
@@ -196,7 +194,6 @@ static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 		case RXM_BUF_POOL_TX_SAR:
 			tx_sar_buf = (struct rxm_tx_sar_buf *)
 				((char *)addr + i * entry_sz);
-			tx_sar_buf->type = pool->type;
 			tx_sar_buf->hdr.state = RXM_SAR_TX;
 
 			hdr = &tx_sar_buf->hdr;
@@ -206,7 +203,6 @@ static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 		case RXM_BUF_POOL_TX_RNDV:
 			tx_rndv_buf = (struct rxm_tx_rndv_buf *)
 				((char *)addr + i * entry_sz);
-			tx_rndv_buf->type = pool->type;
 
 			hdr = &tx_rndv_buf->hdr;
 			pkt = &tx_rndv_buf->pkt;
@@ -215,7 +211,6 @@ static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 		case RXM_BUF_POOL_TX_ACK:
 			tx_base_buf = (struct rxm_tx_base_buf *)
 				((char *)addr + i * entry_sz);
-			tx_base_buf->type = pool->type;
 			tx_base_buf->pkt.hdr.op = ofi_op_msg;
 
 			hdr = &tx_base_buf->hdr;
@@ -957,7 +952,7 @@ rxm_ep_alloc_rndv_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void 
 	return ret;
 err:
 	*tx_rndv_buf = NULL;
-	rxm_tx_buf_release(rxm_ep, tx_buf);
+	rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_RNDV, tx_buf);
 	return ret;
 }
 
@@ -987,7 +982,7 @@ err:
 	       "Transmit for MSG provider failed\n");
 	if (!rxm_ep->rxm_mr_local)
 		rxm_ep_msg_mr_closev(tx_buf->mr, tx_buf->count);
-	rxm_tx_buf_release(rxm_ep, tx_buf);
+	rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_RNDV, tx_buf);
 	return ret;
 }
 
@@ -1036,8 +1031,8 @@ rxm_ep_sar_tx_cleanup(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	struct rxm_tx_sar_buf *first_tx_buf =
 		rxm_msg_id_2_tx_buf(rxm_ep, RXM_BUF_POOL_TX_SAR,
 				    tx_buf->pkt.ctrl_hdr.msg_id);
-	rxm_tx_buf_release(rxm_ep, first_tx_buf);
-	rxm_tx_buf_release(rxm_ep, tx_buf);
+	rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_SAR, first_tx_buf);
+	rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_SAR, tx_buf);
 }
 
 static inline ssize_t
@@ -1103,7 +1098,7 @@ rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	if (OFI_UNLIKELY(ret)) {
 		if (OFI_LIKELY(ret == -FI_EAGAIN))
 			rxm_ep_progress_multi(&rxm_ep->util_ep);
-		rxm_tx_buf_release(rxm_ep, first_tx_buf);
+		rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_SAR, first_tx_buf);
 		return ret;
 	}
 
@@ -1121,7 +1116,8 @@ rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 									      RXM_DEFERRED_TX_SAR_SEG);
 				if (OFI_UNLIKELY(!def_tx_entry)) {
 					if (tx_buf)
-						rxm_tx_buf_release(rxm_ep, tx_buf);
+						rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_SAR,
+								   tx_buf);
 					return -FI_ENOMEM;
 				}
 				memcpy(def_tx_entry->sar_seg.payload.iov, iov, sizeof(*iov) * count);
@@ -1142,7 +1138,7 @@ rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 				return 0;
 			}
 
-			rxm_tx_buf_release(rxm_ep, first_tx_buf);
+			rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_SAR, first_tx_buf);
 			return ret;
 		}
 		remain_len -= rxm_ep->rxm_info->tx_attr->inject_size;
@@ -1179,7 +1175,7 @@ rxm_ep_emulate_inject(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	if (OFI_UNLIKELY(ret)) {
 		if (OFI_LIKELY(ret == -FI_EAGAIN))
 			rxm_ep_progress_multi(&rxm_ep->util_ep);
-		rxm_tx_buf_release(rxm_ep, tx_buf);
+		rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX, tx_buf);
 	}
 	return ret;
 }
@@ -1286,7 +1282,7 @@ rxm_ep_inject_common(struct rxm_ep *rxm_ep, const void *buf, size_t len,
 		memcpy(tx_buf->pkt.data, buf, len);
 		ret = rxm_ep_inject_send(rxm_ep, rxm_conn, &tx_buf->pkt, pkt_size);
 		/* release allocated buffer for further reuse */
-		rxm_tx_buf_release(rxm_ep, tx_buf);
+		rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_INJECT, tx_buf);
 		return ret;
 	} else {
 		return rxm_ep_emulate_inject(rxm_ep, rxm_conn, buf, len,
@@ -1325,7 +1321,7 @@ rxm_ep_send_inject(struct rxm_ep *rxm_ep, const struct iovec *iov, size_t count,
 				  iov, count, 0);
 		ret = rxm_ep_inject_send(rxm_ep, rxm_conn, &tx_buf->pkt, total_len);
 		/* release allocated buffer for further reuse */
-		rxm_tx_buf_release(rxm_ep, tx_buf);
+		rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_INJECT, tx_buf);
 	}
 	if (OFI_UNLIKELY(ret))
 		return ret;
@@ -1394,7 +1390,7 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 		if (OFI_UNLIKELY(ret)) {
 			if (ret == -FI_EAGAIN)
 				rxm_ep_progress_multi(&rxm_ep->util_ep);
-			rxm_tx_buf_release(rxm_ep, tx_buf);
+			rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX, tx_buf);
 		}
 		return ret;
 	} else {
