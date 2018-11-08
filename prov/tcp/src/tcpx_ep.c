@@ -752,7 +752,7 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 	struct tcpx_ep *ep;
 	struct tcpx_pep *pep;
 	struct tcpx_conn_handle *handle;
-	int af, ret;
+	int ret;
 
 	ep = calloc(1, sizeof(*ep));
 	if (!ep)
@@ -781,9 +781,7 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 				goto err3;
 		}
 	} else {
-		af = ofi_get_sa_family(info);
-
-		ep->conn_fd = ofi_socket(af, SOCK_STREAM, 0);
+		ep->conn_fd = ofi_socket(ofi_get_sa_family(info), SOCK_STREAM, 0);
 		if (ep->conn_fd == INVALID_SOCKET) {
 			ret = -ofi_sockerr();
 			goto err2;
