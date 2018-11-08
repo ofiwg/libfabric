@@ -78,6 +78,11 @@ void ofi_rbmap_cleanup(struct ofi_rbmap *map)
 	free(map);
 }
 
+int ofi_rbmap_empty(struct ofi_rbmap *map)
+{
+	return map->root == &map->sentinel;
+}
+
 static void ofi_rotate_left(struct ofi_rbmap *map, struct ofi_rbnode *node)
 {
 	struct ofi_rbnode *y = node->right;

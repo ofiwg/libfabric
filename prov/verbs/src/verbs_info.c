@@ -133,12 +133,21 @@ const struct fi_tx_attr verbs_dgram_tx_attr = {
 const struct verbs_ep_domain verbs_msg_domain = {
 	.suffix			= "",
 	.type			= FI_EP_MSG,
+	.protocol		= FI_PROTO_UNSPEC,
+	.caps			= VERBS_MSG_CAPS,
+};
+
+const struct verbs_ep_domain verbs_msg_xrc_domain = {
+	.suffix			= "-xrc",
+	.type			= FI_EP_MSG,
+	.protocol		= FI_PROTO_RDMA_CM_IB_XRC,
 	.caps			= VERBS_MSG_CAPS,
 };
 
 const struct verbs_ep_domain verbs_dgram_domain = {
 	.suffix			= "-dgram",
 	.type			= FI_EP_DGRAM,
+	.protocol		= FI_PROTO_UNSPEC,
 	.caps			= VERBS_DGRAM_CAPS,
 };
 
@@ -158,6 +167,7 @@ int fi_ibv_check_ep_attr(const struct fi_info *hints,
 	switch (hints->ep_attr->protocol) {
 	case FI_PROTO_UNSPEC:
 	case FI_PROTO_RDMA_CM_IB_RC:
+	case FI_PROTO_RDMA_CM_IB_XRC:
 	case FI_PROTO_IWARP:
 	case FI_PROTO_IB_UD:
 		break;
@@ -390,7 +400,7 @@ static int fi_ibv_rai_to_fi(struct rdma_addrinfo *rai, struct fi_info *fi)
 }
 
 static inline int fi_ibv_get_qp_cap(struct ibv_context *ctx,
-				    struct fi_info *info)
+				    struct fi_info *info, uint32_t protocol)
 {
 	struct ibv_pd *pd;
 	struct ibv_cq *cq;
@@ -412,16 +422,21 @@ static inline int fi_ibv_get_qp_cap(struct ibv_context *ctx,
 		goto err1;
 	}
 
-	qp_type = (info->ep_attr->type != FI_EP_DGRAM) ?
-			    IBV_QPT_RC : IBV_QPT_UD;
+	if (protocol == FI_PROTO_RDMA_CM_IB_XRC)
+		qp_type = IBV_QPT_XRC_SEND;
+	else
+		qp_type = (info->ep_attr->type != FI_EP_DGRAM) ?
+				    IBV_QPT_RC : IBV_QPT_UD;
 
 	memset(&init_attr, 0, sizeof init_attr);
 	init_attr.send_cq = cq;
-	init_attr.recv_cq = cq;
 	init_attr.cap.max_send_wr = fi_ibv_gl_data.def_tx_size;
-	init_attr.cap.max_recv_wr = fi_ibv_gl_data.def_rx_size;
 	init_attr.cap.max_send_sge = fi_ibv_gl_data.def_tx_iov_limit;
-	init_attr.cap.max_recv_sge = fi_ibv_gl_data.def_rx_iov_limit;
+	if (!fi_ibv_is_xrc_send_qp(qp_type)) {
+		init_attr.recv_cq = cq;
+		init_attr.cap.max_recv_wr = fi_ibv_gl_data.def_rx_size;
+		init_attr.cap.max_recv_sge = fi_ibv_gl_data.def_rx_iov_limit;
+	}
 	init_attr.cap.max_inline_data = fi_ibv_find_max_inline(pd, ctx, qp_type);
 	init_attr.qp_type = qp_type;
 
@@ -462,7 +477,7 @@ static int fi_ibv_mtu_type_to_len(enum ibv_mtu mtu_type)
 }
 
 static int fi_ibv_get_device_attrs(struct ibv_context *ctx,
-				   struct fi_info *info)
+				   struct fi_info *info, uint32_t protocol)
 {
 	struct ibv_device_attr device_attr;
 	struct ibv_port_attr port_attr;
@@ -475,6 +490,13 @@ static int fi_ibv_get_device_attrs(struct ibv_context *ctx,
 		VERBS_INFO_ERRNO(FI_LOG_FABRIC,
 				 "ibv_query_device", errno);
 		return -errno;
+	}
+
+	if (protocol == FI_PROTO_RDMA_CM_IB_XRC) {
+		if (!(device_attr.device_cap_flags & IBV_DEVICE_XRC)) {
+			VERBS_WARN(FI_LOG_FABRIC, "XRC not supported\n");
+			return -FI_EINVAL;
+		}
 	}
 
 	info->domain_attr->cq_cnt 		= device_attr.max_cq;
@@ -500,8 +522,10 @@ static int fi_ibv_get_device_attrs(struct ibv_context *ctx,
 						  MIN(device_attr.max_sge,
 						      device_attr.max_srq_sge) :
 						  device_attr.max_sge;
+	if (protocol == FI_PROTO_RDMA_CM_IB_XRC)
+		info->rx_attr->iov_limit = MIN(info->rx_attr->iov_limit, 1);
 
-	ret = fi_ibv_get_qp_cap(ctx, info);
+	ret = fi_ibv_get_qp_cap(ctx, info, protocol);
 	if (ret)
 		return ret;
 
@@ -584,7 +608,8 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 	int ret;
 
 	if ((ctx->device->transport_type != IBV_TRANSPORT_IB) &&
-	    (ep_dom->type == FI_EP_DGRAM))
+	    ((ep_dom->type == FI_EP_DGRAM) ||
+	    (ep_dom->protocol == FI_PROTO_RDMA_CM_IB_XRC)))
 		return -FI_EINVAL;
 
 	if (!(fi = fi_allocinfo()))
@@ -618,7 +643,7 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 	fi->tx_attr->caps = ep_dom->caps;
 	fi->rx_attr->caps = ep_dom->caps;
 
-	ret = fi_ibv_get_device_attrs(ctx, fi);
+	ret = fi_ibv_get_device_attrs(ctx, fi, ep_dom->protocol);
 	if (ret)
 		goto err;
 
@@ -642,7 +667,9 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 
 		switch (ep_dom->type) {
 		case FI_EP_MSG:
-			fi->ep_attr->protocol = FI_PROTO_RDMA_CM_IB_RC;
+			fi->ep_attr->protocol =
+				ep_dom->protocol == FI_PROTO_UNSPEC ?
+				FI_PROTO_RDMA_CM_IB_RC : ep_dom->protocol;
 			break;
 		case FI_EP_DGRAM:
 			fi->ep_attr->protocol = FI_PROTO_IB_UD;
@@ -1016,13 +1043,26 @@ rai_to_fi:
 				     NULL, NULL);
 }
 
+#define VERBS_NUM_DOMAIN_TYPES		3
+
 int fi_ibv_init_info(const struct fi_info **all_infos)
 {
 	struct ibv_context **ctx_list;
 	struct fi_info *fi = NULL, *tail = NULL;
-	int ret = 0, i, num_devices;
+	const struct verbs_ep_domain *ep_type[VERBS_NUM_DOMAIN_TYPES];
+	int ret = 0, i, j, num_devices;
 
 	*all_infos = NULL;
+
+	/* List XRC MSG_EP domain before default RC MSG_EP if requested */
+	if (fi_ibv_gl_data.msg.prefer_xrc) {
+		ep_type[0] = &verbs_msg_xrc_domain;
+		ep_type[1] = &verbs_msg_domain;
+	} else {
+		ep_type[0] = &verbs_msg_domain;
+		ep_type[1] = &verbs_msg_xrc_domain;
+	}
+	ep_type[2] = &verbs_dgram_domain;
 
 	if (!fi_ibv_gl_data.fork_unsafe) {
 		VERBS_INFO(FI_LOG_CORE, "Enabling IB fork support\n");
@@ -1051,18 +1091,13 @@ int fi_ibv_init_info(const struct fi_info **all_infos)
 	}
 
 	for (i = 0; i < num_devices; i++) {
-		ret = fi_ibv_alloc_info(ctx_list[i], &fi, &verbs_msg_domain);
-		if (!ret) {
-			if (!*all_infos)
-				*all_infos = fi;
-			else
-				tail->next = fi;
-			tail = fi;
-
-			ret = fi_ibv_alloc_info(ctx_list[i], &fi,
-						&verbs_dgram_domain);
+		for (j = 0; j < VERBS_NUM_DOMAIN_TYPES; j++) {
+			ret = fi_ibv_alloc_info(ctx_list[i], &fi, ep_type[j]);
 			if (!ret) {
-				tail->next = fi;
+				if (!*all_infos)
+					*all_infos = fi;
+				else
+					tail->next = fi;
 				tail = fi;
 			}
 		}

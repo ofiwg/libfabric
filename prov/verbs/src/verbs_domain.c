@@ -258,6 +258,11 @@ static int fi_ibv_domain_close(fid_t fid)
 			ofi_ns_stop_server(&fab->name_server);
 		break;
 	case FI_EP_MSG:
+		if (domain->use_xrc) {
+			ret = fi_ibv_domain_xrc_cleanup(domain);
+			if (ret)
+				return ret;
+		}
 		break;
 	default:
 		/* Never should go here */
@@ -303,7 +308,9 @@ static int fi_ibv_open_device_by_name(struct fi_ibv_domain *domain, const char *
 		const char *rdma_name = ibv_get_device_name(dev_list[i]->device);
 		switch (domain->ep_type) {
 		case FI_EP_MSG:
-			ret = strcmp(name, rdma_name);
+			ret = domain->use_xrc ?
+				fi_ibv_cmp_xrc_domain_name(name, rdma_name) :
+				strcmp(name, rdma_name);
 			break;
 		case FI_EP_DGRAM:
 			ret = strncmp(name, rdma_name,
@@ -410,9 +417,12 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 		goto err2;
 
 	_domain->ep_type = FI_IBV_EP_TYPE(info);
+	_domain->use_xrc = fi_ibv_is_xrc(info);
+
 	ret = fi_ibv_open_device_by_name(_domain, info->domain_attr->name);
 	if (ret)
 		goto err3;
+
 	_domain->pd = ibv_alloc_pd(_domain->verbs);
 	if (!_domain->pd) {
 		ret = -errno;
@@ -470,6 +480,11 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 		_domain->util_domain.domain_fid.ops = &fi_ibv_dgram_domain_ops;
 		break;
 	case FI_EP_MSG:
+		if (_domain->use_xrc) {
+			ret = fi_ibv_domain_xrc_init(_domain);
+			if (ret)
+				goto err5;
+		}
 		_domain->util_domain.domain_fid.ops = &fi_ibv_msg_domain_ops;
 		break;
 	default:
@@ -481,6 +496,9 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 
 	*domain = &_domain->util_domain.domain_fid;
 	return FI_SUCCESS;
+err5:
+	if (fi_ibv_gl_data.mr_cache_enable)
+		ofi_mr_cache_cleanup(&_domain->cache);
 err4:
 	if (fi_ibv_gl_data.mr_cache_enable)
 		ofi_monitor_cleanup(&_domain->monitor);
