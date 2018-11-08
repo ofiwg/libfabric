@@ -111,6 +111,8 @@ static inline int ofi_sendall_socket(SOCKET sock, const void *buf, size_t len)
 	return (size_t) ret != len;
 }
 
+int ofi_discard_socket(SOCKET sock, size_t len);
+
 /*
  * Address utility functions
  */

@@ -38,17 +38,6 @@
 #include <sys/types.h>
 #include <ofi_util.h>
 
-static void discard_cm_data(SOCKET fd, size_t discard_sz)
-{
-	char tmp_buf;
-	ssize_t ret = 0;
-	size_t i;
-
-	for (i = 0; ((i < discard_sz) && (ret > 0)); i++) {
-		ret = ofi_recv_socket(fd, &tmp_buf, 1,
-				      MSG_WAITALL);
-	}
-}
 
 static int read_cm_data(SOCKET fd, struct tcpx_cm_context *cm_ctx,
 			struct ofi_ctrl_hdr *hdr)
@@ -65,8 +54,8 @@ static int read_cm_data(SOCKET fd, struct tcpx_cm_context *cm_ctx,
 
 		if (OFI_UNLIKELY(cm_ctx->cm_data_sz >
 					TCPX_MAX_CM_DATA_SIZE)) {
-			discard_cm_data(fd, cm_ctx->cm_data_sz -
-					TCPX_MAX_CM_DATA_SIZE);
+			ofi_discard_socket(fd, cm_ctx->cm_data_sz -
+					   TCPX_MAX_CM_DATA_SIZE);
 		}
 	}
 	return FI_SUCCESS;
