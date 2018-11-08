@@ -308,10 +308,11 @@ rxm_cmap_get_handle_peer(struct rxm_cmap *cmap, const void *addr)
 
 int rxm_cmap_move_handle_to_peer_list(struct rxm_cmap *cmap, int index)
 {
-	struct rxm_cmap_handle *handle = cmap->handles_av[index];
+	struct rxm_cmap_handle *handle;
 	int ret = 0;
 
 	cmap->acquire(&cmap->lock);
+	handle = cmap->handles_av[index];
 	if (!handle)
 		goto unlock;
 
@@ -320,6 +321,8 @@ int rxm_cmap_move_handle_to_peer_list(struct rxm_cmap *cmap, int index)
 		ret = -FI_ENOMEM;
 		goto unlock;
 	}
+	handle->fi_addr = FI_ADDR_NOTAVAIL;
+	cmap->handles_av[index] = NULL;
 	handle->peer->handle = handle;
 	memcpy(handle->peer->addr, ofi_av_get_addr(cmap->av, index),
 	       cmap->av->addrlen);
