@@ -404,17 +404,17 @@ struct psmx2_am_request {
 			int	datatype;
 		} atomic;
 	};
-	uint64_t cq_flags;
-	struct fi_context fi_context;
-	struct psmx2_fid_ep *ep;
-	int no_event;
-	int error;
-	struct slist_entry list_entry;
+	uint64_t		cq_flags;
+	struct fi_context	fi_context;
+	struct psmx2_fid_ep	*ep;
+	int			no_event;
+	int			error;
+	struct slist_entry	list_entry;
 	union {
-		struct iovec *iov;	/* for readv */
-		struct fi_ioc *ioc;	/* for atomic read */
+		struct iovec	*iov;	/* for readv */
+		struct fi_ioc	*ioc;	/* for atomic read */
 	};
-	void *tmpbuf;
+	void			*tmpbuf;
 };
 
 #define PSMX2_IOV_PROTO_PACK	0
@@ -424,43 +424,40 @@ struct psmx2_am_request {
 #define PSMX2_IOV_MAX_COUNT	(PSMX2_IOV_BUF_SIZE / sizeof(uint32_t) - 3)
 
 struct psmx2_iov_info {
-	uint32_t seq_num;
-	uint32_t total_len;
-	uint32_t count;
-	uint32_t len[PSMX2_IOV_MAX_COUNT];
+	uint32_t	seq_num;
+	uint32_t	total_len;
+	uint32_t	count;
+	uint32_t	len[PSMX2_IOV_MAX_COUNT];
 };
 
 struct psmx2_sendv_request {
-#if !HAVE_PSM2_MQ_REQ_USER
-	PSMX2_STATUS_DECL(status);
-#endif
-	struct fi_context fi_context;
-	struct fi_context fi_context_iov;
-	void *user_context;
-	int iov_protocol;
-	int no_completion;
-	int comp_flag;
-	uint32_t iov_done;
-	psm2_mq_tag_t tag;
+	struct fi_context	fi_context;
+	struct fi_context	fi_context_iov;
+	void			*user_context;
+	int			iov_protocol;
+	int			no_completion;
+	int			comp_flag;
+	uint32_t		iov_done;
+	psm2_mq_tag_t		tag;
 	union {
-		struct psmx2_iov_info iov_info;
-		char buf[PSMX2_IOV_BUF_SIZE];
+		struct psmx2_iov_info	iov_info;
+		char			buf[PSMX2_IOV_BUF_SIZE];
 	};
 };
 
 struct psmx2_sendv_reply {
-	struct fi_context fi_context;
-	int no_completion;
-	int multi_recv;
-	psm2_mq_tag_t tag;
-	uint8_t *buf;
-	void *user_context;
-	size_t iov_done;
-	size_t bytes_received;
-	size_t msg_length;
-	int error_code;
-	int comp_flag;
-	struct psmx2_iov_info iov_info;
+	struct fi_context	fi_context;
+	int			no_completion;
+	int			multi_recv;
+	psm2_mq_tag_t		tag;
+	uint8_t			*buf;
+	void			*user_context;
+	size_t			iov_done;
+	size_t			bytes_received;
+	size_t			msg_length;
+	int			error_code;
+	int			comp_flag;
+	struct psmx2_iov_info	iov_info;
 };
 
 struct psmx2_req_queue {
@@ -538,9 +535,9 @@ struct psmx2_trx_ctxt {
 	struct dlist_entry	entry;
 };
 
-typedef void (*psmx2_lock_fn_t) (fastlock_t *lock, int lock_level);
-typedef int (*psmx2_trylock_fn_t) (fastlock_t *lock, int lock_level);
-typedef void (*psmx2_unlock_fn_t) (fastlock_t *lock, int lock_level);
+typedef void	(*psmx2_lock_fn_t) (fastlock_t *lock, int lock_level);
+typedef int	(*psmx2_trylock_fn_t) (fastlock_t *lock, int lock_level);
+typedef void	(*psmx2_unlock_fn_t) (fastlock_t *lock, int lock_level);
 
 struct psmx2_fid_domain {
 	struct util_domain	util_domain;
@@ -570,30 +567,30 @@ struct psmx2_fid_domain {
 	struct dlist_entry	entry;
 
 	/* Lock/Unlock function pointers set based on FI_THREAD model */
-	psmx2_lock_fn_t av_lock_fn;
-	psmx2_unlock_fn_t av_unlock_fn;
-	psmx2_lock_fn_t am_req_pool_lock_fn;
-	psmx2_unlock_fn_t am_req_pool_unlock_fn;
-	psmx2_lock_fn_t trx_ctxt_lock_fn;
-	psmx2_unlock_fn_t trx_ctxt_unlock_fn;
-	psmx2_lock_fn_t rma_queue_lock_fn;
-	psmx2_unlock_fn_t rma_queue_unlock_fn;
-	psmx2_lock_fn_t trigger_queue_lock_fn;
-	psmx2_unlock_fn_t trigger_queue_unlock_fn;
-	psmx2_lock_fn_t peer_lock_fn;
-	psmx2_unlock_fn_t peer_unlock_fn;
-	psmx2_lock_fn_t sep_lock_fn;
-	psmx2_unlock_fn_t sep_unlock_fn;
-	psmx2_lock_fn_t trigger_lock_fn;
-	psmx2_unlock_fn_t trigger_unlock_fn;
-	psmx2_lock_fn_t cq_lock_fn;
-	psmx2_unlock_fn_t cq_unlock_fn;
-	psmx2_lock_fn_t mr_lock_fn;
-	psmx2_unlock_fn_t mr_unlock_fn;
-	psmx2_lock_fn_t context_lock_fn;
-	psmx2_unlock_fn_t context_unlock_fn;
-	psmx2_trylock_fn_t poll_trylock_fn;
-	psmx2_unlock_fn_t poll_unlock_fn;
+	psmx2_lock_fn_t		av_lock_fn;
+	psmx2_unlock_fn_t	av_unlock_fn;
+	psmx2_lock_fn_t		am_req_pool_lock_fn;
+	psmx2_unlock_fn_t	am_req_pool_unlock_fn;
+	psmx2_lock_fn_t		trx_ctxt_lock_fn;
+	psmx2_unlock_fn_t	trx_ctxt_unlock_fn;
+	psmx2_lock_fn_t		rma_queue_lock_fn;
+	psmx2_unlock_fn_t	rma_queue_unlock_fn;
+	psmx2_lock_fn_t		trigger_queue_lock_fn;
+	psmx2_unlock_fn_t	trigger_queue_unlock_fn;
+	psmx2_lock_fn_t		peer_lock_fn;
+	psmx2_unlock_fn_t	peer_unlock_fn;
+	psmx2_lock_fn_t		sep_lock_fn;
+	psmx2_unlock_fn_t	sep_unlock_fn;
+	psmx2_lock_fn_t		trigger_lock_fn;
+	psmx2_unlock_fn_t	trigger_unlock_fn;
+	psmx2_lock_fn_t		cq_lock_fn;
+	psmx2_unlock_fn_t	cq_unlock_fn;
+	psmx2_lock_fn_t		mr_lock_fn;
+	psmx2_unlock_fn_t	mr_unlock_fn;
+	psmx2_lock_fn_t		context_lock_fn;
+	psmx2_unlock_fn_t	context_unlock_fn;
+	psmx2_trylock_fn_t	poll_trylock_fn;
+	psmx2_unlock_fn_t	poll_unlock_fn;
 };
 
 #define PSMX2_EP_REGULAR	0
@@ -620,10 +617,10 @@ struct psmx2_ep_name {
 #define PSMX2_MAX_STRING_NAME_LEN	64	/* "fi_addr_psmx2://<uint64_t>:<uint64_t>"  */
 
 struct psmx2_status_data {
-	struct psmx2_fid_cq		*poll_cq;
+	struct psmx2_fid_cq	*poll_cq;
 	struct psmx2_trx_ctxt	*trx_ctxt;
-	fi_addr_t				*src_addr;
-	void					*event_buffer;
+	fi_addr_t		*src_addr;
+	void			*event_buffer;
 };
 
 struct psmx2_cq_event {
@@ -634,11 +631,11 @@ struct psmx2_cq_event {
 		struct fi_cq_tagged_entry	tagged;
 		struct fi_cq_err_entry		err;
 	} cqe;
-	int error;
-	int source_is_valid;
-	psm2_epaddr_t source;
-	struct psmx2_fid_av *source_av;
-	struct slist_entry list_entry;
+	int			error;
+	int			source_is_valid;
+	psm2_epaddr_t		source;
+	struct psmx2_fid_av	*source_av;
+	struct slist_entry	list_entry;
 };
 
 #define PSMX2_ERR_DATA_SIZE		64	/* large enough to hold a string address */
@@ -819,22 +816,22 @@ struct psmx2_epaddr_context {
 };
 
 struct psmx2_env {
-	int name_server;
-	int tagged_rma;
-	char *uuid;
-	int delay;
-	int timeout;
-	int prog_interval;
-	char *prog_affinity;
-	int multi_ep;
-	int max_trx_ctxt;
-	int free_trx_ctxt;
-	int num_devunits;
-	int inject_size;
-	int lock_level;
-	int disconnect;
+	int	name_server;
+	int	tagged_rma;
+	char	*uuid;
+	int	delay;
+	int	timeout;
+	int	prog_interval;
+	char	*prog_affinity;
+	int	multi_ep;
+	int	max_trx_ctxt;
+	int	free_trx_ctxt;
+	int	num_devunits;
+	int	inject_size;
+	int	lock_level;
+	int	disconnect;
 #if (PSMX2_TAG_LAYOUT == PSMX2_TAG_LAYOUT_RUNTIME)
-	char *tag_layout;
+	char	*tag_layout;
 #endif
 };
 
