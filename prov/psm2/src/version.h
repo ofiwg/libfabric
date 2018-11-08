@@ -59,7 +59,6 @@
 #define PSMX2_USE_REQ_CONTEXT	1
 #endif
 
-#define PSMX2_MQ_REQ_USER(s)	((struct psm2_mq_req_user *)(s))
 #define PSMX2_STATUS_TYPE	struct psm2_mq_req_user
 #define PSMX2_STATUS_ERROR(s)	((s)->error_code)
 #define PSMX2_STATUS_TAG(s)	((s)->tag)
@@ -75,12 +74,7 @@
 #endif
 #define PSMX2_USE_REQ_CONTEXT	0
 
-#define PSMX2_MQ_REQ_USER(s)	(s)
-
 #define PSMX2_STATUS_TYPE	psm2_mq_status2_t
-#define PSMX2_STATUS_DECL(s)	psm2_mq_status2_t s##_priv, *s
-#define PSMX2_STATUS_INIT(s)	do { s = &s##_priv; } while (0)
-#define PSMX2_STATUS_SAVE(s,t)	do { *(t) = *(s); } while (0)
 #define PSMX2_STATUS_ERROR(s)	((s)->error_code)
 #define PSMX2_STATUS_TAG(s)	((s)->msg_tag)
 #define PSMX2_STATUS_RCVLEN(s)	((s)->nbytes)
@@ -88,27 +82,8 @@
 #define PSMX2_STATUS_PEER(s)	((s)->msg_peer)
 #define PSMX2_STATUS_CONTEXT(s)	((s)->context)
 
-/*
- * psm2_mq_test2 is called immediately after psm2_mq_ipeek with a lock held to
- * prevent psm2_mq_ipeek from returning the same request multiple times under
- * different threads.
- */
-#define PSMX2_POLL_COMPLETION(trx_ctxt, status, err) \
-	do { \
-		if (trx_ctxt->domain->poll_trylock_fn(&(trx_ctxt)->poll_lock, 2)) { \
-			(err) = PSM2_MQ_NO_COMPLETIONS; \
-		} else { \
-			psm2_mq_req_t psm2_req; \
-			(err) = psm2_mq_ipeek((trx_ctxt)->psm2_mq, &psm2_req, NULL); \
-			if ((err) == PSM2_OK) \
-				psm2_mq_test2(&psm2_req, (status)); \
-			trx_ctxt->domain->poll_unlock_fn(&(trx_ctxt)->poll_lock, 2); \
-		} \
-	} while(0)
+#endif /* !HAVE_PSM2_MQ_REQ_USER */
 
-#define PSMX2_FREE_COMPLETION(trx_ctxt, status)
-
-#endif
 /*
  * Provide backward compatibility for older PSM2 libraries that lack the
  * psm2_am_register_handlers_2 function.
@@ -123,10 +98,10 @@ typedef int (*psm2_am_handler_2_fn_t) (
 			psm2_amarg_t *args, int nargs,
 			void *src, uint32_t len, void *hctx);
 
-extern psm2_am_handler_fn_t psmx2_am_handlers[];
-extern psm2_am_handler_2_fn_t psmx2_am_handlers_2[];
-extern void *psmx2_am_handler_ctxts[];
-extern int psmx2_am_handler_count;
+extern psm2_am_handler_fn_t	psmx2_am_handlers[];
+extern psm2_am_handler_2_fn_t	psmx2_am_handlers_2[];
+extern void			*psmx2_am_handler_ctxts[];
+extern int			psmx2_am_handler_count;
 
 static inline
 psm2_error_t psm2_am_register_handlers_2(
@@ -158,7 +133,7 @@ psm2_error_t psm2_am_register_handlers_2(
  * Use reserved space within psm2_mq_req_user for fi_context instead of
  * allocating from a internal queue.
  *
- * Only work when compiled with PSM2 source. Can be turned off by
+ * Only work with PSM2 that has psm2_mq_req_user defined. Can be turned off by
  * passing "-DPSMX2_USE_REQ_CONTEXT=0" to the compiler.
  */
 
@@ -183,14 +158,15 @@ psm2_error_t psm2_am_register_handlers_2(
 
 #define PSMX2_REQ_GET_OP_CONTEXT(req, ctx) \
 	do { \
-		(ctx) = PSMX2_MQ_REQ_USER(req)->context = PSMX2_MQ_REQ_USER(req)->user_reserved; \
+		struct psm2_mq_req_user *req_user = (void *)(req); \
+		(ctx) = req_user->context = req_user->user_reserved; \
 	} while (0)
 
 #else /* !PSMX2_USE_REQ_CONTEXT */
 
 struct psmx2_context {
-        struct fi_context fi_context;
-        struct slist_entry list_entry;
+        struct fi_context	fi_context;
+        struct slist_entry	list_entry;
 };
 
 #define PSMX2_EP_DECL_OP_CONTEXT \
@@ -255,7 +231,7 @@ struct psmx2_context {
 		ep->domain->context_unlock_fn(&(ep)->context_lock, 2); \
 	} while (0)
 
-#endif /* PSMX2_USE_REQ_CONTEXT */
+#endif /* !PSMX2_USE_REQ_CONTEXT */
 
 #endif
 
