@@ -84,6 +84,7 @@ static int rxd_av_set_addrlen(struct rxd_av *av, const void *addr)
 	if (ret != 1) {
 		FI_WARN(&rxd_prov, FI_LOG_AV, "addr insert failed: %d (%s)\n",
 			-ret, fi_strerror(-ret));
+		ret = -FI_EINVAL;
 		goto close;
 	}
 
@@ -153,7 +154,7 @@ int rxd_av_insert_dg_addr(struct rxd_av *av, const void *addr,
 	ret = fi_av_insert(av->dg_av, addr, 1, &dg_addr,
 			     flags, context);
 	if (ret != 1)
-		return -errno;
+		return -FI_EINVAL;
 
 	*rxd_addr = rxd_set_rxd_addr(av, dg_addr);
 
@@ -375,21 +376,25 @@ int rxd_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 					   attr->count : RXD_DEFAULT_AV_SIZE);
 	domain = container_of(domain_fid, struct rxd_domain, util_domain.domain_fid);
 	av = calloc(1, sizeof(*av));
+	if (!av)
+		return -FI_ENOMEM;
 	av->fi_addr_table = calloc(1, attr->count * sizeof(fi_addr_t));
 	av->rxd_addr_table = calloc(1, rxd_env.max_peers * sizeof(struct rxd_addr));
-	if (!av || !av->fi_addr_table || !av->rxd_addr_table)
-		return -FI_ENOMEM;
+	if (!av->fi_addr_table || !av->rxd_addr_table) {
+		ret = -FI_ENOMEM;
+		goto err1;
+	}
 
 
 	util_attr.addrlen = sizeof(fi_addr_t);
 	util_attr.flags = 0;
-	attr->type = FI_AV_TABLE;
+	attr->type = domain->util_domain.av_type != FI_AV_UNSPEC ?
+		     domain->util_domain.av_type : FI_AV_TABLE;
 
 	ret = ofi_av_init(&domain->util_domain, attr, &util_attr,
 			 &av->util_av, context);
 	if (ret)
 		goto err1;
-
 
 	av->rbmap.compare = &rxd_tree_compare;
 	ofi_rbmap_init(&av->rbmap);
