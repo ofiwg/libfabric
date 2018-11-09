@@ -193,7 +193,7 @@ static uint64_t psmx2_comp_flags[PSMX2_MAX_CONTEXT_TYPE] = {
  * field could refer to an allocated descriptor that may have already been
  * freed. All the information that are dependent on the field are obtained
  * in advance and passed in as separate parameters ("op_context", "buf",
- * "flags", and "data").
+ * "flags", "data", and "is_recv").
  *
  * The flag "event_saved" is set to indicate to the caller that the event
  * was saved to the user's provided buffer, otherwise the event was an error
@@ -211,7 +211,8 @@ static inline int psmx2_cq_any_complete(struct psmx2_fid_cq *poll_cq,
 					uint64_t data,
 					struct psmx2_cq_event *event_in,
 					int *event_saved,
-					fi_addr_t *src_addr)
+					fi_addr_t *src_addr,
+					int is_recv)
 {
 	struct psmx2_cq_event *event = event_in;
 
@@ -245,30 +246,32 @@ static inline int psmx2_cq_any_complete(struct psmx2_fid_cq *poll_cq,
 		event->error = 0;
 	}
 
-	if (src_addr) {
+	if (is_recv) {
 		psm2_epaddr_t source = PSMX2_STATUS_PEER(status);
 
 		if (event == event_in) {
-			src_addr[0] = psmx2_av_translate_source(av, source);
-			if (src_addr[0] == FI_ADDR_NOTAVAIL) {
-				event = psmx2_cq_alloc_event(comp_cq);
-				if (!event)
-					return -FI_ENOMEM;
+			if (src_addr) {
+				src_addr[0] = psmx2_av_translate_source(av, source);
+				if (src_addr[0] == FI_ADDR_NOTAVAIL) {
+					event = psmx2_cq_alloc_event(comp_cq);
+					if (!event)
+						return -FI_ENOMEM;
 
-				event->cqe = event_in->cqe;
-				event->cqe.err.err = FI_EADDRNOTAVAIL;
-				event->cqe.err.err_data = &comp_cq->error_data;
-				event->error = !!event->cqe.err.err;
-				if (av->addr_format == FI_ADDR_STR) {
-					event->cqe.err.err_data_size = PSMX2_ERR_DATA_SIZE;
-					psmx2_get_source_string_name(source, (void *)&comp_cq->error_data,
-									 &event->cqe.err.err_data_size);
-				} else {
-					psmx2_get_source_name(source, (void *)&comp_cq->error_data);
-					event->cqe.err.err_data_size = sizeof(struct psmx2_ep_name);
+					event->cqe = event_in->cqe;
+					event->cqe.err.err = FI_EADDRNOTAVAIL;
+					event->cqe.err.err_data = &comp_cq->error_data;
+					event->error = !!event->cqe.err.err;
+					if (av->addr_format == FI_ADDR_STR) {
+						event->cqe.err.err_data_size = PSMX2_ERR_DATA_SIZE;
+						psmx2_get_source_string_name(source, (void *)&comp_cq->error_data,
+										 &event->cqe.err.err_data_size);
+					} else {
+						psmx2_get_source_name(source, (void *)&comp_cq->error_data);
+						event->cqe.err.err_data_size = sizeof(struct psmx2_ep_name);
+					}
+
+					return -FI_EAVAIL;
 				}
-
-				return -FI_EAVAIL;
 			}
 		} else {
 			event->source_is_valid = 1;
@@ -332,7 +335,7 @@ static inline int psmx2_cq_tx_complete(struct psmx2_fid_cq *poll_cq,
 {
 	return psmx2_cq_any_complete(poll_cq, comp_cq, av, status,
 				     op_context, buf, flags, data,
-				     event_in, event_saved, NULL);
+				     event_in, event_saved, NULL, 0);
 }
 
 static inline int psmx2_cq_rx_complete(struct psmx2_fid_cq *poll_cq,
@@ -349,7 +352,7 @@ static inline int psmx2_cq_rx_complete(struct psmx2_fid_cq *poll_cq,
 {
 	return psmx2_cq_any_complete(poll_cq, comp_cq, av, status,
 				     op_context, buf, flags, data,
-				     event_in, event_saved, src_addr);
+				     event_in, event_saved, src_addr, 1);
 }
 
 int
