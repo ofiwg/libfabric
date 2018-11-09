@@ -214,7 +214,7 @@ static void rxd_complete_rx(struct rxd_ep *ep, struct rxd_x_entry *rx_entry)
 	if ((!(rx_entry->cq_entry.flags & FI_REMOTE_CQ_DATA) &&
 	     (rx_entry->cq_entry.flags & FI_RMA ||
 	     rx_entry->cq_entry.flags & FI_ATOMIC)) ||
-	     rx_entry->flags & RXD_NO_RX_COMP)
+	     rx_entry->flags & (RXD_NO_RX_COMP | RXD_CANCELLED))
 		goto out;
 
 	/* Handle CQ comp */
@@ -572,6 +572,9 @@ static struct rxd_x_entry *rxd_match_rx(struct rxd_ep *ep,
 	rx_entry = container_of(match, struct rxd_x_entry, entry);
 
 	total_size = op ? op->size : msg_size;
+	if (rx_entry->flags & RXD_CANCELLED)
+		goto out;
+
 	if (rx_entry->flags & RXD_MULTI_RECV) {
 		dup_entry = rxd_progress_multi_recv(ep, rx_entry, total_size);
 		if (!dup_entry)
@@ -854,6 +857,14 @@ void rxd_progress_op(struct rxd_ep *ep, struct rxd_x_entry *rx_entry,
 		     struct rxd_atom_hdr *atom_hdr,
 		     void **msg, size_t size)
 {
+
+	if (rx_entry->flags & RXD_CANCELLED) {
+		rxd_complete_rx(ep, rx_entry);
+		ep->peers[base_hdr->peer].rx_seq_no += base_hdr->flags & RXD_INLINE ?
+				1 : sar_hdr->num_segs;
+		return;
+	}
+
 	ep->peers[base_hdr->peer].rx_seq_no++;
 	if (sar_hdr)
 		ep->peers[base_hdr->peer].curr_tx_id = sar_hdr->tx_id;

@@ -130,34 +130,50 @@ static int rxd_match_ctx(struct dlist_entry *item, const void *arg)
 	return (x_entry->cq_entry.op_context == arg);
 }
 
-static ssize_t rxd_ep_cancel(fid_t fid, void *context)
+static ssize_t rxd_ep_cancel_recv(struct rxd_ep *ep, struct dlist_entry *list,
+				  void *context)
 {
-	struct rxd_ep *ep;
 	struct dlist_entry *entry;
 	struct rxd_x_entry *rx_entry;
 	struct fi_cq_err_entry err_entry;
+	int ret = 0;
 
-	ep = container_of(fid, struct rxd_ep, util_ep.ep_fid.fid);
 	fastlock_acquire(&ep->util_ep.lock);
 
-	entry = dlist_remove_first_match(&ep->rx_list,
-				&rxd_match_ctx, context);
+	entry = dlist_find_first_match(list, &rxd_match_ctx, context);
 	if (!entry)
 		goto out;
 
 	rx_entry = container_of(entry, struct rxd_x_entry, entry);
-
 	memset(&err_entry, 0, sizeof(struct fi_cq_err_entry));
-
-	rxd_rx_entry_free(ep, rx_entry);
 	err_entry.op_context = rx_entry->cq_entry.op_context;
-	err_entry.flags = (FI_MSG | FI_RECV);
+	err_entry.flags = rx_entry->cq_entry.flags;
 	err_entry.err = FI_ECANCELED;
-	err_entry.prov_errno = -FI_ECANCELED;
+	err_entry.prov_errno = 0;
 	rxd_cq_report_error(rxd_ep_rx_cq(ep), &err_entry);
 
+	rx_entry->flags |= RXD_CANCELLED;
+
+	ret = 1;
 out:
 	fastlock_release(&ep->util_ep.lock);
+	return ret;
+}
+
+static ssize_t rxd_ep_cancel(fid_t fid, void *context)
+{
+	struct rxd_ep *ep;
+	int ret;
+
+	ep = container_of(fid, struct rxd_ep, util_ep.ep_fid);
+
+	ret = rxd_ep_cancel_recv(ep, &ep->rx_tag_list, context);
+	if (ret)
+		goto out;
+
+	ret = rxd_ep_cancel_recv(ep, &ep->rx_list, context);
+
+out:
 	return 0;
 }
 
