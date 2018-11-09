@@ -109,6 +109,8 @@ static int rstream_getinfo(uint32_t version, const char *node,
 
 	ret = ofix_getinfo(version, node, service, flags, &rstream_util_prov,
 		hints, rstream_info_to_core, rstream_info_to_rstream, info);
+	if (ret)
+		return ret;
 
 	if (port_save) {
 		for (cur = *info; cur; cur = cur->next) {
