@@ -49,8 +49,6 @@
 #include "shared.h"
 
 
-char *sock_sync_port = "2710";
-
 static size_t concurrent_msgs = 5;
 static size_t num_iters = 600;
 struct fi_context *tx_ctxs;
@@ -162,7 +160,7 @@ static int run_test_loop(void)
 			}
 		}
 
-		ret = ft_sock_sync(0);
+		ret = ft_sync();
 		if (ret)
 			return ret;
 
@@ -203,7 +201,7 @@ static int run_test_loop(void)
 				getpid(), i, num_iters);
 	}
 
-	ft_sock_sync(0);
+	(void) ft_sync();
 	printf("%d GOOD all done\n", getpid());
 	return ret;
 }
@@ -211,7 +209,6 @@ static int run_test_loop(void)
 static int run_test(void)
 {
 	int ret;
-	int retries = 100;
 
 	if (hints->ep_attr->type == FI_EP_MSG)
 		ret = ft_init_fabric_cm();
@@ -219,27 +216,6 @@ static int run_test(void)
 		ret = ft_init_fabric();
 	if (ret)
 		return ret;
-
-	if (opts.dst_addr) {
-		while (retries > 0) {
-			ret = ft_sock_connect(opts.dst_addr, sock_sync_port);
-			if (ret) {
-				usleep(100);
-				retries--;
-			} else {
-				break;
-			}
-		}
-		if (ret)
-			return ret;
-	} else {
-		ret = ft_sock_listen(opts.src_addr, sock_sync_port);
-		if (ret)
-			return ret;
-		ret = ft_sock_accept();
-		if (ret)
-			return ret;
-	}
 
 	alloc_bufs();
 	ret = run_test_loop();
@@ -254,6 +230,7 @@ int main(int argc, char **argv)
 	int ret;
 
 	opts = INIT_OPTS;
+	opts.options |= FT_OPT_OOB_SYNC;
 
 	hints = fi_allocinfo();
 	if (!hints)
@@ -312,6 +289,5 @@ int main(int argc, char **argv)
 	ret = run_test();
 
 	ft_free_res();
-	ft_sock_shutdown(sock);
 	return ft_exit_code(ret);
 }
