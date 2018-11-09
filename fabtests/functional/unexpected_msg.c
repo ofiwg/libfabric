@@ -197,12 +197,12 @@ static int run_test_loop(void)
 		}
 
 		if (i % 100 == 0)
-			printf("%d GOOD iter %d/%ld completed\n",
+			printf("PID %d GOOD iter %d/%ld completed\n",
 				getpid(), i, num_iters);
 	}
 
 	(void) ft_sync();
-	printf("%d GOOD all done\n", getpid());
+	printf("PID %d GOOD all done\n", getpid());
 	return ret;
 }
 
@@ -265,14 +265,13 @@ int main(int argc, char **argv)
 			ft_usage(argv[0], "Unexpected message functional test");
 			FT_PRINT_OPTS_USAGE("-c <int>",
 				"Concurrent messages per iteration ");
-			FT_PRINT_OPTS_USAGE("-v", "Enable DataCheck testing");
+			FT_PRINT_OPTS_USAGE("-v", "Enable data verification");
 			FT_PRINT_OPTS_USAGE("-i <int>", "Number of iterations");
 			FT_PRINT_OPTS_USAGE("-S",
 				"Use fi_cq_sread instead of polling fi_cq_read");
 			FT_PRINT_OPTS_USAGE("-m <size>",
 				"Size of unexpected messages");
-			FT_PRINT_OPTS_USAGE("-d",
-				"Send remote CQ data");
+			FT_PRINT_OPTS_USAGE("-d", "Send remote CQ data");
 			return EXIT_FAILURE;
 		}
 	}
