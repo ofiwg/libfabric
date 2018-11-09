@@ -742,41 +742,9 @@ static struct fi_ops_ep tcpx_ep_ops = {
 	.tx_size_left = fi_no_tx_size_left,
 };
 
-static SOCKET create_ep_sock_from_pep_sock(SOCKET pep_sock)
-{
-	struct sockaddr_storage ss;
-	socklen_t ss_len;
-	SOCKET ep_sock;
-	int ret, af;
-
-	ss_len = sizeof(ss);
-	ret = ofi_getsockname(pep_sock, (struct sockaddr *)&ss, &ss_len);
-	if (ret)
-		return INVALID_SOCKET;
-
-	af = ss.ss_family;
-
-	ep_sock = ofi_socket(af, SOCK_STREAM, 0);
-	if (ep_sock == INVALID_SOCKET)
-		return INVALID_SOCKET;
-
-	ret = tcpx_setup_socket(ep_sock);
-	if (ret)
-		goto err;
-
-	if (bind(ep_sock, (struct sockaddr *)&ss, ss_len) != 0) {
-		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-			"bind failed \n");
-		goto err;
-	}
-	return ep_sock;
-err:
-	ofi_close_socket(ep_sock);
-	return INVALID_SOCKET;
-}
-
 static void tcpx_empty_progress(struct tcpx_ep *ep)
-{}
+{
+}
 
 int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep_fid, void *context)
@@ -784,7 +752,7 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 	struct tcpx_ep *ep;
 	struct tcpx_pep *pep;
 	struct tcpx_conn_handle *handle;
-	int af, ret;
+	int ret;
 
 	ep = calloc(1, sizeof(*ep));
 	if (!ep)
@@ -796,19 +764,15 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 		goto err1;
 
 	if (info->handle) {
-		handle = container_of(info->handle, struct tcpx_conn_handle,
-				      handle);
-
-		if (info->handle->fclass == FI_CLASS_PEP) {
+		if (((fid_t) info->handle)->fclass == FI_CLASS_PEP) {
 			pep = container_of(info->handle, struct tcpx_pep,
 					   util_pep.pep_fid.fid);
 
-			ep->conn_fd = create_ep_sock_from_pep_sock(pep->sock);
-			if (ep->conn_fd == INVALID_SOCKET) {
-				ret = -ofi_sockerr();
-				goto err2;
-			}
+			ep->conn_fd = pep->sock;
+			pep->sock = INVALID_SOCKET;
 		} else {
+			handle = container_of(info->handle,
+					      struct tcpx_conn_handle, handle);
 			ep->conn_fd = handle->conn_fd;
 			free(handle);
 
@@ -817,9 +781,7 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 				goto err3;
 		}
 	} else {
-		af = ofi_get_sa_family(info);
-
-		ep->conn_fd = ofi_socket(af, SOCK_STREAM, 0);
+		ep->conn_fd = ofi_socket(ofi_get_sa_family(info), SOCK_STREAM, 0);
 		if (ep->conn_fd == INVALID_SOCKET) {
 			ret = -ofi_sockerr();
 			goto err2;

@@ -701,6 +701,17 @@ void ofi_straddr_log_internal(const char *func, int line,
 	}
 }
 
+int ofi_discard_socket(SOCKET sock, size_t len)
+{
+	char buf;
+	ssize_t ret = 0;
+
+	for (; len && !ret; len--)
+		ret = ofi_recvall_socket(sock, &buf, 1);
+	return ret;
+}
+
+
 #ifndef HAVE_EPOLL
 
 int fi_epoll_create(struct fi_epoll **ep)

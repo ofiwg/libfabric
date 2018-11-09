@@ -52,34 +52,11 @@ static ssize_t tcpx_eq_read(struct fid_eq *eq_fid, uint32_t *event,
 	return ofi_eq_read(eq_fid, event, buf, len, flags);
 }
 
-static ssize_t tcpx_eq_readerr(struct fid_eq *eq_fid,
-			       struct fi_eq_err_entry *buf,
-			       uint64_t flags)
-{
-	return tcpx_eq_read(eq_fid, NULL, buf, sizeof(*buf),
-			    flags | UTIL_FLAG_ERROR);
-}
-
-static ssize_t tcpx_eq_sread(struct fid_eq *eq_fid, uint32_t *event, void *buf,
-			    size_t len, int timeout, uint64_t flags)
-{
-	struct util_eq *eq;
-
-	eq = container_of(eq_fid, struct util_eq, eq_fid);
-	if (!eq->internal_wait) {
-		FI_WARN(eq->prov, FI_LOG_EQ, "EQ not configured for sread\n");
-		return -FI_ENOSYS;
-	}
-
-	fi_wait(&eq->wait->wait_fid, timeout);
-	return tcpx_eq_read(eq_fid, event, buf, len, flags);
-}
-
 static struct fi_ops_eq tcpx_eq_ops = {
 	.size = sizeof(struct fi_ops_eq),
 	.read = tcpx_eq_read,
-	.readerr = tcpx_eq_readerr,
-	.sread = tcpx_eq_sread,
+	.readerr = ofi_eq_readerr,
+	.sread = ofi_eq_sread,
 	.write = ofi_eq_write,
 	.strerror = ofi_eq_strerror,
 };
