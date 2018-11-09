@@ -380,7 +380,7 @@ static int fi_ibv_create_dgram_ep(struct fi_ibv_domain *domain, struct fi_ibv_ep
 	ep->ep_name.qpn = ep->ibv_qp->qp_num;
 	ep->ep_name.pkey = p_key;
 
-	fab = container_of(&ep->util_ep.domain->fabric,
+	fab = container_of(ep->util_ep.domain->fabric,
 			   struct fi_ibv_fabric, util_fabric);
 
 	ofi_ns_add_local_name(&fab->name_server,

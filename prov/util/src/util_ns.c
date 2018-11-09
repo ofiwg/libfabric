@@ -168,8 +168,10 @@ static int util_ns_process_cmd(struct util_ns *ns, struct util_ns_cmd *cmd,
 	case OFI_UTIL_NS_DEL:
 		io_len = ns->name_len + ns->service_len;
 		io_buf = calloc(io_len, 1);
-		if (!io_buf)
-			return -FI_ENOMEM;
+		if (!io_buf) {
+			ret = -FI_ENOMEM;
+			goto out;
+		}
 
 		ret = ofi_recvall_socket(sock, io_buf, io_len);
 		if (!ret) {
@@ -185,8 +187,10 @@ static int util_ns_process_cmd(struct util_ns *ns, struct util_ns_cmd *cmd,
 	case OFI_UTIL_NS_QUERY:
 		io_len = ns->service_len;
 		io_buf = calloc(cmd_len + ns->service_len + ns->name_len, 1);
-		if (!io_buf)
-			return -FI_ENOMEM;
+		if (!io_buf) {
+			ret = -FI_ENOMEM;
+			goto out;
+		}
 
 		memcpy(io_buf, cmd, cmd_len);
 		cmd = io_buf;
@@ -212,10 +216,15 @@ static int util_ns_process_cmd(struct util_ns *ns, struct util_ns_cmd *cmd,
 
 	default:
 		assert(0);
-		return -FI_ENODATA;
+		ret = -FI_ENODATA;
+		goto out;
 	}
 
 	free(io_buf);
+
+out:
+	FI_INFO(&core_prov, FI_LOG_CORE,
+		"Name server processed command - returned %d (%s)\n", ret, fi_strerror(-ret));
 	return ret;
 }
 
@@ -356,8 +365,11 @@ int ofi_ns_add_local_name(struct util_ns *ns, void *service, void *name)
 		.op = OFI_UTIL_NS_ADD,
 	};
 
-	if (!ns->is_initialized)
+	if (!ns->is_initialized) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Cannot add local name - name server uninitialized\n");
 		return -FI_EINVAL;
+	}
 
 	write_buf = calloc(cmd_len + ns->service_len + ns->name_len, 1);
 	if (!write_buf) {
@@ -539,6 +551,7 @@ err3:
 err2:
 	rbtDelete(ns->map);
 err1:
+	FI_WARN(&core_prov, FI_LOG_CORE, "Error starting name server\n");
 	ofi_atomic_dec32(&ns->ref);
 	return ret;
 }
