@@ -452,11 +452,18 @@ ssize_t rxd_ep_post_data_pkts(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
 
 int rxd_ep_retry_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 {
+	int ret;
 	rxd_set_timeout(pkt_entry);
-	return fi_send(ep->dg_ep, (const void *) rxd_pkt_start(pkt_entry),
-		       pkt_entry->pkt_size, rxd_mr_desc(pkt_entry->mr, ep),
-		       rxd_ep_av(ep)->rxd_addr_table[pkt_entry->peer].dg_addr,
-		       &pkt_entry->context);
+
+	ret = fi_send(ep->dg_ep, (const void *) rxd_pkt_start(pkt_entry),
+		      pkt_entry->pkt_size, rxd_mr_desc(pkt_entry->mr, ep),
+		      rxd_ep_av(ep)->rxd_addr_table[pkt_entry->peer].dg_addr,
+		      &pkt_entry->context);
+	if (ret)
+		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "error sending packet: %d (%s)\n",
+			ret, fi_strerror(-ret));
+
+	return ret;
 }
 
 ssize_t rxd_ep_send_rts(struct rxd_ep *rxd_ep, fi_addr_t rxd_addr)
@@ -644,7 +651,6 @@ void rxd_ep_send_ack(struct rxd_ep *rxd_ep, fi_addr_t peer)
 {
 	struct rxd_pkt_entry *pkt_entry;
 	struct rxd_ack_pkt *ack;
-	int ret;
 
 	pkt_entry = rxd_get_tx_pkt(rxd_ep);
 	if (!pkt_entry) {
@@ -664,10 +670,7 @@ void rxd_ep_send_ack(struct rxd_ep *rxd_ep, fi_addr_t peer)
 	ack->ext_hdr.rx_id = rxd_ep->peers[peer].curr_rx_id;
 	rxd_ep->peers[peer].last_tx_ack = ack->base_hdr.seq_no;
 
-	ret = rxd_ep_retry_pkt(rxd_ep, pkt_entry);
-	if (ret)
-		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "Unable to send ack\n");
-
+	rxd_ep_retry_pkt(rxd_ep, pkt_entry);
 	rxd_release_tx_pkt(rxd_ep, pkt_entry);
 }
 
