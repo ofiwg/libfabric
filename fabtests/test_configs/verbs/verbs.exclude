@@ -20,6 +20,3 @@ recv_cancel -e msg
 unexpected_msg -e msg
 rdm.+atomic
 inj_complete
-
-# Remove this once ubertest supports setting MR modes
-ubertest
