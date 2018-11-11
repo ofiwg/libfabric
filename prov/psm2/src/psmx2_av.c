@@ -526,10 +526,89 @@ out:
 	return ret;
 }
 
+
+static int psmx2_av_disconnect_addr(int trx_ctxt_id, psm2_epid_t epid,
+				    psm2_epaddr_t epaddr)
+{
+	struct psmx2_epaddr_context *epaddr_context;
+	psm2_error_t errors;
+	int err;
+
+	if (!epaddr)
+		return 0;
+
+	FI_INFO(&psmx2_prov, FI_LOG_AV,
+		"trx_ctxt_id %d epid %lx epaddr %p\n", trx_ctxt_id, epid, epaddr);
+
+	epaddr_context = psm2_epaddr_getctxt(epaddr);
+	if (!epaddr_context)
+		return -FI_EINVAL;
+
+	if (trx_ctxt_id != epaddr_context->trx_ctxt->id)
+		return -FI_EINVAL;
+
+	if (epid != epaddr_context->epid)
+		return -FI_EINVAL;
+
+	err = psm2_ep_disconnect2(epaddr_context->trx_ctxt->psm2_ep, 1, &epaddr,
+				  NULL, &errors, PSM2_EP_DISCONNECT_FORCE, 0);
+
+	return psmx2_errno(err);
+}
+
 DIRECT_FN
 STATIC int psmx2_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 			   uint64_t flags)
 {
+	struct psmx2_fid_av *av_priv;
+	int idx, i, j, k;
+	int err;
+
+	av_priv = container_of(av, struct psmx2_fid_av, av);
+
+	av_priv->domain->av_lock_fn(&av_priv->lock, 1);
+
+	for (i = 0; i < count; i++) {
+		idx = PSMX2_ADDR_IDX(fi_addr[i]);
+		if (idx >= av_priv->hdr->last) {
+			FI_WARN(&psmx2_prov, FI_LOG_AV,
+				"AV index out of range: fi_addr %lx idx %d last %ld\n",
+				fi_addr[i], idx, av_priv->hdr->last);
+			continue;
+		}
+
+		if (av_priv->table[idx].type == PSMX2_EP_REGULAR) {
+			for (j = 0; j < av_priv->max_trx_ctxt; j++) {
+				if (!av_priv->conn_info[j].trx_ctxt)
+					continue;
+
+				err = psmx2_av_disconnect_addr(
+						j, av_priv->table[idx].epid,
+						av_priv->conn_info[j].epaddrs[idx]);
+				if (!err)
+					av_priv->conn_info[j].epaddrs[idx] = NULL;
+			}
+		} else {
+			for (j = 0; j < av_priv->max_trx_ctxt; j++) {
+				if (!av_priv->conn_info[j].trx_ctxt)
+					continue;
+
+				if (!av_priv->conn_info[j].sepaddrs)
+					continue;
+
+				for (k = 0; k < av_priv->sep_info[idx].ctxt_cnt; k++) {
+					err = psmx2_av_disconnect_addr(
+							j, av_priv->table[idx].epid,
+							av_priv->conn_info[j].sepaddrs[idx][k]);
+					if (!err)
+						av_priv->conn_info[j].sepaddrs[idx][k] = NULL;
+				}
+			}
+		}
+	}
+
+	av_priv->domain->av_unlock_fn(&av_priv->lock, 1);
+
 	return 0;
 }
 
