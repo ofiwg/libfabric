@@ -253,6 +253,7 @@ static inline int psmx2_cq_any_complete(struct psmx2_fid_cq *poll_cq,
 			if (src_addr) {
 				src_addr[0] = psmx2_av_translate_source(av, source);
 				if (src_addr[0] == FI_ADDR_NOTAVAIL) {
+					*event_saved = 0;
 					event = psmx2_cq_alloc_event(comp_cq);
 					if (!event)
 						return -FI_ENOMEM;
@@ -269,8 +270,6 @@ static inline int psmx2_cq_any_complete(struct psmx2_fid_cq *poll_cq,
 						psmx2_get_source_name(source, (void *)&comp_cq->error_data);
 						event->cqe.err.err_data_size = sizeof(struct psmx2_ep_name);
 					}
-
-					return -FI_EAVAIL;
 				}
 			}
 		} else {
