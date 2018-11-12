@@ -602,7 +602,7 @@ int rxd_ep_send_op(struct rxd_ep *rxd_ep, struct rxd_x_entry *tx_entry,
 	struct rxd_pkt_entry *pkt_entry;
 	struct rxd_base_hdr *base_hdr;
 	int ret = 0;
-	size_t len;
+	size_t len, avail;
 	void *ptr;
 
 	pkt_entry = rxd_get_tx_pkt(rxd_ep);
@@ -613,29 +613,36 @@ int rxd_ep_send_op(struct rxd_ep *rxd_ep, struct rxd_x_entry *tx_entry,
 	ptr = (void *) base_hdr;
 	rxd_init_base_hdr(rxd_ep, &ptr, tx_entry);
 
-	if (!(tx_entry->flags & RXD_INLINE))
-		rxd_init_sar_hdr(&ptr, tx_entry, rma_count); 
-	if (tx_entry->flags & RXD_TAG_HDR)
+	avail = rxd_ep_domain(rxd_ep)->max_inline_msg;
+
+	if (!(tx_entry->flags & RXD_INLINE)) {
+		rxd_init_sar_hdr(&ptr, tx_entry, rma_count);
+		avail -= sizeof(struct rxd_sar_hdr);
+	}
+	if (tx_entry->flags & RXD_TAG_HDR) {
 		rxd_init_tag_hdr(&ptr, tx_entry);
-	if (tx_entry->flags & RXD_REMOTE_CQ_DATA)
+		avail -= sizeof(struct rxd_tag_hdr);
+	}
+	if (tx_entry->flags & RXD_REMOTE_CQ_DATA) {
 		rxd_init_data_hdr(&ptr, tx_entry);
+		avail -= sizeof(struct rxd_data_hdr);
+	}
 	if (tx_entry->cq_entry.flags & (FI_RMA | FI_ATOMIC)) {
 		rxd_init_rma_hdr(&ptr, rma_iov, rma_count);
-		if (tx_entry->cq_entry.flags & FI_ATOMIC)
+		avail -= sizeof(struct ofi_rma_iov) * rma_count;
+		if (tx_entry->cq_entry.flags & FI_ATOMIC) {
 			rxd_init_atom_hdr(&ptr, datatype, atomic_op);
+			avail -= sizeof(struct rxd_atom_hdr);
+		}
 	}
 	if (tx_entry->op != RXD_READ_REQ && atomic_op != FI_ATOMIC_READ) {
 		tx_entry->bytes_done = rxd_init_msg(&ptr, tx_entry->iov,
 						    tx_entry->iov_count,
-						    tx_entry->cq_entry.len,
-						    rxd_ep_domain(rxd_ep)->max_mtu_sz -
-						    rxd_ep->prefix_size -
-			 			    ((char *) ptr - (char *) base_hdr));
+						    tx_entry->cq_entry.len, avail);
 		if (tx_entry->op == RXD_ATOMIC_COMPARE) {
+			avail -= tx_entry->bytes_done;
 			len = rxd_init_msg(&ptr, comp_iov, comp_count,
-					   tx_entry->cq_entry.len,
-					   rxd_ep_domain(rxd_ep)->max_mtu_sz -
-			 		   ((char *) ptr - (char *) base_hdr));
+					   tx_entry->cq_entry.len, avail);
 			if (len != tx_entry->bytes_done) {
 				FI_WARN(&rxd_prov, FI_LOG_EP_CTRL,
 					"compare data length mismatch\n");
