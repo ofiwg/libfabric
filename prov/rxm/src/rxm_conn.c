@@ -1201,7 +1201,7 @@ static ssize_t rxm_eq_sread(struct rxm_ep *rxm_ep, size_t len,
 		return rd;
 	}
 
-	OFI_EQ_READERR(&rxm_prov, FI_LOG_EP_CTRL, rxm_ep->msg_eq, rd, entry->err_entry);
+	RXM_EQ_READERR(&rxm_prov, FI_LOG_EP_CTRL, rxm_ep->msg_eq, rd, entry->err_entry);
 
 	if (entry->err_entry.err == ECONNREFUSED) {
 		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Connection refused\n");
