@@ -993,8 +993,7 @@ int fi_ibv_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 		goto err1;
 	}
 
-	/* Need to be able to make reciprocal XRC connections */
-	if (fi_ibv_is_xrc(_pep->info) && _pep->info->dest_addr) {
+	if (_pep->info->dest_addr || _pep->info->dest_addrlen) {
 		free(_pep->info->dest_addr);
 		_pep->info->dest_addr = NULL;
 		_pep->info->dest_addrlen = 0;
