@@ -314,6 +314,8 @@ static void rxd_ep_recv_data(struct rxd_ep *ep, struct rxd_x_entry *x_entry,
 
 static int rxd_verify_active(struct rxd_ep *ep, fi_addr_t addr, fi_addr_t peer_addr)
 {
+	struct rxd_pkt_entry *pkt_entry;
+
 	if (ep->peers[addr].peer_addr == peer_addr)
 		return 1;
 	if (ep->peers[addr].peer_addr != FI_ADDR_UNSPEC) {
@@ -323,6 +325,14 @@ static int rxd_verify_active(struct rxd_ep *ep, fi_addr_t addr, fi_addr_t peer_a
 	}
 
 	ep->peers[addr].peer_addr = peer_addr;
+
+	if (!dlist_empty(&ep->peers[addr].unacked)) {
+		dlist_pop_front(&ep->peers[addr].unacked,
+				struct rxd_pkt_entry, pkt_entry, d_entry);
+		rxd_release_tx_pkt(ep, pkt_entry);
+		ep->peers[addr].unacked_cnt--;
+		dlist_remove(&ep->peers[addr].entry);
+	}
 	dlist_insert_tail(&ep->peers[addr].entry, &ep->active_peers);
 
 	return 0;
@@ -385,19 +395,8 @@ void rxd_progress_tx_list(struct rxd_ep *ep, struct rxd_peer *peer)
 
 static void rxd_update_peer(struct rxd_ep *ep, fi_addr_t peer, fi_addr_t peer_addr)
 {
-	struct rxd_pkt_entry *pkt_entry;
-
 	if (rxd_verify_active(ep, peer, peer_addr))
 		return;
-
-	if (!dlist_empty(&ep->peers[peer].unacked)) {
-		pkt_entry = container_of((&ep->peers[peer].unacked)->next,
-					 struct rxd_pkt_entry, d_entry);
-		if (rxd_pkt_type(pkt_entry) == RXD_RTS) {
-			dlist_remove(&pkt_entry->d_entry);
-			rxd_release_tx_pkt(ep, pkt_entry);
-		}
-	}
 
 	rxd_progress_tx_list(ep, &ep->peers[peer]);
 }

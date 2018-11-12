@@ -192,6 +192,7 @@ struct rxd_ep {
 	struct dlist_entry rx_list;
 	struct dlist_entry rx_tag_list;
 	struct dlist_entry active_peers;
+	struct dlist_entry rts_sent_list;
 
 	struct rxd_peer peers[];
 };
