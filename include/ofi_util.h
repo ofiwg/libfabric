@@ -216,7 +216,7 @@ static const uint64_t ofi_rx_mr_flags[] = {
 	[ofi_op_read_req] = FI_REMOTE_READ,
 	[ofi_op_write] = FI_REMOTE_WRITE,
 	[ofi_op_atomic] = FI_REMOTE_WRITE,
-	[ofi_op_atomic_fetch] =  FI_REMOTE_WRITE | FI_REMOTE_READ,
+	[ofi_op_atomic_fetch] = FI_REMOTE_WRITE | FI_REMOTE_READ,
 	[ofi_op_atomic_compare] = FI_REMOTE_WRITE | FI_REMOTE_READ,
 };
 
@@ -341,6 +341,16 @@ static inline void ofi_ep_rem_wr_cntr_inc(struct util_ep *ep)
 	ep->rem_wr_cntr_inc(ep->rem_wr_cntr);
 }
 
+typedef void (*ofi_ep_cntr_inc_func)(struct util_ep *);
+
+static const ofi_ep_cntr_inc_func ofi_ep_cntr_inc_funcs[] = {
+	[FI_TRANSMIT] = ofi_ep_tx_cntr_inc,
+	[FI_RECV] = ofi_ep_rx_cntr_inc,
+	[FI_READ] = ofi_ep_rd_cntr_inc,
+	[FI_WRITE] = ofi_ep_wr_cntr_inc,
+	[FI_REMOTE_READ] = ofi_ep_rem_rd_cntr_inc,
+	[FI_REMOTE_WRITE] = ofi_ep_rem_wr_cntr_inc,
+};
 
 /*
  * Tag and address match

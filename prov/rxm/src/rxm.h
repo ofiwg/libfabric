@@ -80,15 +80,15 @@
 			       info->domain_attr->mr_mode & FI_MR_PROV_KEY)
 
 #define RXM_LOG_STATE(subsystem, pkt, prev_state, next_state) 			\
-	FI_DBG(&rxm_prov, subsystem, "[LMT] msg_id: 0x%" PRIx64 " %s -> %s\n",	\
+	FI_DBG(&rxm_prov, subsystem, "[RNDV] msg_id: 0x%" PRIx64 " %s -> %s\n",	\
 	       pkt.ctrl_hdr.msg_id, rxm_proto_state_str[prev_state],		\
 	       rxm_proto_state_str[next_state])
 
-#define RXM_LOG_STATE_TX(subsystem, tx_entry, next_state)		\
-	RXM_LOG_STATE(subsystem, tx_entry->tx_buf->pkt, tx_entry->state,\
+#define RXM_LOG_STATE_TX(subsystem, tx_buf, next_state)		\
+	RXM_LOG_STATE(subsystem, tx_buf->pkt, tx_buf->hdr.state,	\
 		      next_state)
 
-#define RXM_LOG_STATE_RX(subsystem, rx_buf, next_state)			\
+#define RXM_LOG_STATE_RX(subsystem, rx_buf, next_state)		\
 	RXM_LOG_STATE(subsystem, rx_buf->pkt, rx_buf->hdr.state,	\
 		      next_state)
 
@@ -107,6 +107,13 @@ do {									\
 	  ((unsigned char *)(comp)->op_context +			\
 		offsetof(struct rxm_buf, state))) = (new_state);	\
 } while (0)
+
+#define rxm_tx_buf_2_msg_id(rxm_ep, pool_type, tx_buf)				\
+	((uint64_t) rxm_get_buf_index(&(rxm_ep)->buf_pools[pool_type],		\
+				       (void *) tx_buf))
+#define rxm_msg_id_2_tx_buf(rxm_ep, pool_type, msg_id)				\
+	((void *) rxm_buf_get_by_index(&(rxm_ep)->buf_pools[pool_type],		\
+				       (uint64_t) msg_id))
 
 extern struct fi_provider rxm_prov;
 extern struct util_prov rxm_util_prov;
@@ -285,18 +292,17 @@ struct rxm_rndv_hdr {
 
 /* RXM protocol states / tx/rx context */
 #define RXM_PROTO_STATES(FUNC)		\
-	FUNC(RXM_TX_NOBUF),		\
 	FUNC(RXM_TX),			\
-	FUNC(RXM_TX_RMA),		\
+	FUNC(RXM_INJECT_TX),		\
+	FUNC(RXM_RMA),			\
 	FUNC(RXM_RX),			\
 	FUNC(RXM_SAR_TX),		\
-	FUNC(RXM_LMT_TX),		\
-	FUNC(RXM_LMT_ACK_WAIT),		\
-	FUNC(RXM_LMT_READ),		\
-	FUNC(RXM_LMT_ACK_SENT),		\
-	FUNC(RXM_LMT_ACK_DEFERRED),	\
-	FUNC(RXM_LMT_ACK_RECVD),	\
-	FUNC(RXM_LMT_FINISH),
+	FUNC(RXM_RNDV_TX),		\
+	FUNC(RXM_RNDV_ACK_WAIT),	\
+	FUNC(RXM_RNDV_READ),		\
+	FUNC(RXM_RNDV_ACK_SENT),	\
+	FUNC(RXM_RNDV_ACK_RECVD),	\
+	FUNC(RXM_RNDV_FINISH),
 
 enum rxm_proto_state {
 	RXM_PROTO_STATES(OFI_ENUM_VAL)
@@ -334,18 +340,6 @@ rxm_sar_set_seg_type(struct ofi_ctrl_hdr *ctrl_hdr, enum rxm_sar_seg_type seg_ty
 	((union rxm_sar_ctrl_data *)&(ctrl_hdr->ctrl_data))->seg_type = seg_type;
 }
 
-static inline uint32_t
-rxm_sar_get_offset(struct ofi_ctrl_hdr *ctrl_hdr)
-{
-	return ((union rxm_sar_ctrl_data *)&(ctrl_hdr->ctrl_data))->offset;
-}
-
-static inline void
-rxm_sar_set_offset(struct ofi_ctrl_hdr *ctrl_hdr, uint32_t offset)
-{
-	((union rxm_sar_ctrl_data *)&(ctrl_hdr->ctrl_data))->offset = offset;
-}
-
 struct rxm_recv_match_attr {
 	fi_addr_t addr;
 	uint64_t tag;
@@ -364,11 +358,6 @@ struct rxm_iov {
 	uint8_t count;
 };
 
-struct rxm_rma_iov_storage {
-	struct fi_rma_iov iov[RXM_IOV_LIMIT];
-	uint8_t count;
-};
-
 enum rxm_buf_pool_type {
 	RXM_BUF_POOL_RX		= 0,
 	RXM_BUF_POOL_START	= RXM_BUF_POOL_RX,
@@ -376,7 +365,7 @@ enum rxm_buf_pool_type {
 	RXM_BUF_POOL_TX_START	= RXM_BUF_POOL_TX,
 	RXM_BUF_POOL_TX_INJECT,
 	RXM_BUF_POOL_TX_ACK,
-	RXM_BUF_POOL_TX_LMT,
+	RXM_BUF_POOL_TX_RNDV,
 	RXM_BUF_POOL_TX_SAR,
 	RXM_BUF_POOL_TX_END	= RXM_BUF_POOL_TX_SAR,
 	RXM_BUF_POOL_RMA,
@@ -389,10 +378,7 @@ struct rxm_buf {
 
 	enum rxm_proto_state state;
 
-	struct dlist_entry entry;
 	void *desc;
-	/* MSG EP / shared context to which bufs would be posted to */
-	struct fid_ep *msg_ep;
 };
 
 struct rxm_rx_buf {
@@ -400,6 +386,8 @@ struct rxm_rx_buf {
 	struct rxm_buf hdr;
 
 	struct rxm_ep *ep;
+	/* MSG EP / shared context to which bufs would be posted to */
+	struct fid_ep *msg_ep;
 	struct dlist_entry repost_entry;
 	struct rxm_conn *conn;
 	struct rxm_recv_entry *recv_entry;
@@ -419,14 +407,45 @@ struct rxm_rx_buf {
 	struct rxm_pkt pkt;
 };
 
-struct rxm_tx_buf {
+struct rxm_tx_base_buf {
 	/* Must stay at top */
 	struct rxm_buf hdr;
 
-	enum rxm_buf_pool_type type;
+	/* Must stay at bottom */
+	struct rxm_pkt pkt;
+};
 
-	/* Used for SAR protocol */
-	struct rxm_tx_entry *tx_entry;
+struct rxm_tx_eager_buf {
+	/* Must stay at top */
+	struct rxm_buf hdr;
+
+	void *app_context;
+	uint64_t flags;
+
+	/* Must stay at bottom */
+	struct rxm_pkt pkt;
+};
+
+struct rxm_tx_sar_buf {
+	/* Must stay at top */
+	struct rxm_buf hdr;
+
+	void *app_context;
+	uint64_t flags;
+
+	/* Must stay at bottom */
+	struct rxm_pkt pkt;
+};
+
+struct rxm_tx_rndv_buf {
+	/* Must stay at top */
+	struct rxm_buf hdr;
+
+	void *app_context;
+	uint64_t flags;
+	struct rxm_rx_buf *rx_buf;
+	struct fid_mr *mr[RXM_IOV_LIMIT];
+	uint8_t count;
 
 	/* Must stay at bottom */
 	struct rxm_pkt pkt;
@@ -436,55 +455,60 @@ struct rxm_rma_buf {
 	/* Must stay at top */
 	struct rxm_buf hdr;
 
-	struct fi_msg_rma msg;
-	struct rxm_iov rxm_iov;
-	struct rxm_rma_iov_storage rxm_rma_iov;
+	void *app_context;
+	uint64_t flags;
 
 	/* Must stay at bottom */
-	struct rxm_pkt pkt;
-};
-
-struct rxm_tx_entry {
-	/* Must stay at top */
-	struct fi_context fi_context;
-
-	enum rxm_proto_state state;
-
-	struct rxm_conn *conn;
-	struct rxm_ep *ep;
-	uint8_t count;
-	void *context;
-	uint64_t flags;
-	uint64_t comp_flags;
-
-	struct dlist_entry deferred_tx_entry;
-	size_t deferred_pkt_size;
-
-	union {
-		struct rxm_tx_buf *tx_buf;
-		struct rxm_rma_buf *rma_buf;
-	};
-
-	union {
-		/* Used for large messages and RMA */
+ 	union {
+		struct rxm_pkt pkt;
 		struct {
 			struct fid_mr *mr[RXM_IOV_LIMIT];
-			struct rxm_rx_buf *rx_buf;
-		};
-		/* Used for SAR protocol */
-		struct {
-			size_t segs_left;
-			size_t fail_segs_cnt;
-			uint64_t msg_id;
-			/* The list for the TX buffers that have been 
-			 * queued until it would be possbile to send it  */
-			struct dlist_entry deferred_tx_buf_list;
-			struct rxm_iov rxm_iov;
-			uint64_t iov_offset;
-		};
+			uint8_t count;
+		} mr;
 	};
 };
-DECLARE_FREESTACK(struct rxm_tx_entry, rxm_txe_fs);
+
+enum rxm_deferred_tx_entry_type {
+	RXM_DEFERRED_TX_RNDV_ACK,
+	RXM_DEFERRED_TX_RNDV_READ,
+	RXM_DEFERRED_TX_SAR_SEG,
+};
+
+struct rxm_deferred_tx_entry {
+	struct rxm_ep *rxm_ep;
+	struct rxm_conn *rxm_conn;
+	struct dlist_entry entry;
+	enum rxm_deferred_tx_entry_type type;
+
+	union {
+		struct {
+			struct rxm_rx_buf *rx_buf;
+		} rndv_ack;
+		struct {
+			struct rxm_rx_buf *rx_buf;
+			struct fi_rma_iov rma_iov;
+			struct rxm_iov rxm_iov;
+		} rndv_read;
+		struct {
+			struct rxm_tx_sar_buf *cur_seg_tx_buf;
+			struct {
+				struct iovec iov[RXM_IOV_LIMIT];
+				uint8_t count;
+				size_t cur_iov_offset;
+				uint64_t data;
+				uint64_t tag;
+			} payload;
+			size_t next_seg_no;
+			size_t segs_cnt;
+			uint8_t op;
+			size_t total_len;
+			size_t remain_len;
+			uint64_t msg_id;
+			void *app_context;
+			uint64_t flags;
+		} sar_seg;
+	};
+};
 
 struct rxm_recv_entry {
 	struct dlist_entry entry;
@@ -507,29 +531,17 @@ struct rxm_recv_entry {
 		struct {
 			struct dlist_entry entry;
 			size_t total_recv_len;
-			size_t segs_rcvd;
 			struct rxm_conn *conn;
 			uint64_t msg_id;
-			/* This is used when a message with the `RXM_SAR_SEG_LAST`
-			 * flag is receved, but not all messages has been received
-			 * yet */
-			size_t last_seg_no;
 		} sar;
 		/* Used for Rendezvous protocol */
 		struct {
-			/* This is used to send LMT ACK */
-			struct rxm_tx_buf *tx_buf;
+			/* This is used to send RNDV ACK */
+			struct rxm_tx_base_buf *tx_buf;
 		} rndv;
 	};
 };
 DECLARE_FREESTACK(struct rxm_recv_entry, rxm_recv_fs);
-
-struct rxm_send_queue {
-	struct rxm_ep *rxm_ep;
-	struct rxm_conn *rxm_conn;
-	struct rxm_txe_fs *fs;
-	fastlock_t lock;
-};
 
 enum rxm_recv_queue_type {
 	RXM_RECV_QUEUE_UNSPEC,
@@ -604,7 +616,6 @@ struct rxm_ep {
 	struct dlist_entry	repost_ready_list;
 	struct dlist_entry	deferred_tx_conn_queue;
 
-	struct rxm_send_queue	*send_queue;
 	struct rxm_recv_queue	recv_queue;
 	struct rxm_recv_queue	trecv_queue;
 
@@ -620,8 +631,8 @@ struct rxm_conn {
 
 	struct dlist_entry deferred_conn_entry;
 	struct dlist_entry deferred_tx_queue;
-	struct rxm_send_queue *send_queue;
 	struct dlist_entry sar_rx_msg_list;
+
 	/* This is saved MSG EP fid, that hasn't been closed during
 	 * handling of CONN_RECV in RXM_CMAP_CONNREQ_SENT for passive side */
 	struct fid_ep *saved_msg_ep;
@@ -659,32 +670,32 @@ void rxm_ep_progress_one(struct util_ep *util_ep);
 void rxm_ep_progress_multi(struct util_ep *util_ep);
 
 int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep);
-int rxm_send_queue_init(struct rxm_ep *rxm_ep, struct rxm_send_queue **send_queue, size_t size);
-void rxm_send_queue_close(struct rxm_send_queue *send_queue);
 void rxm_ep_progress_deferred_queues(struct rxm_ep *rxm_ep);
-void rxm_ep_sar_handle_send_segment_failure(struct rxm_tx_entry *tx_entry, ssize_t ret);
 
 static inline struct rxm_conn *rxm_key2conn(struct rxm_ep *rxm_ep, uint64_t key)
 {
 	return (struct rxm_conn *)rxm_cmap_key2handle(rxm_ep->cmap, key);
 }
 
+struct rxm_deferred_tx_entry *
+rxm_ep_alloc_deferred_tx_entry(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
+			       enum rxm_deferred_tx_entry_type type);
+
 static inline void
-rxm_ep_enqueue_deferred_tx_queue(struct rxm_tx_entry *tx_entry)
+rxm_ep_enqueue_deferred_tx_queue(struct rxm_deferred_tx_entry *tx_entry)
 {
-	if (dlist_empty(&tx_entry->conn->deferred_tx_queue))
-		dlist_insert_tail(&tx_entry->conn->deferred_conn_entry,
-				  &tx_entry->ep->deferred_tx_conn_queue);
-	dlist_insert_tail(&tx_entry->deferred_tx_entry,
-			  &tx_entry->conn->deferred_tx_queue);
+	if (dlist_empty(&tx_entry->rxm_conn->deferred_tx_queue))
+		dlist_insert_tail(&tx_entry->rxm_conn->deferred_conn_entry,
+				  &tx_entry->rxm_ep->deferred_tx_conn_queue);
+	dlist_insert_tail(&tx_entry->entry, &tx_entry->rxm_conn->deferred_tx_queue);
 }
 
 static inline void
-rxm_ep_dequeue_deferred_tx_queue(struct rxm_tx_entry *tx_entry)
+rxm_ep_dequeue_deferred_tx_queue(struct rxm_deferred_tx_entry *tx_entry)
 {
-	dlist_remove_init(&tx_entry->deferred_tx_entry);
-	if (dlist_empty(&tx_entry->conn->deferred_tx_queue))
-		dlist_remove(&tx_entry->conn->deferred_conn_entry);
+	dlist_remove_init(&tx_entry->entry);
+	if (dlist_empty(&tx_entry->rxm_conn->deferred_tx_queue))
+		dlist_remove(&tx_entry->rxm_conn->deferred_conn_entry);
 }
 
 int rxm_conn_process_eq_events(struct rxm_ep *rxm_ep);
@@ -913,34 +924,6 @@ rxm_acquire_conn_connect(struct rxm_ep *rxm_ep, fi_addr_t fi_addr,
 	return 0;
 }
 
-/* Returns FI_SUCCESS if the SAR deferred TX queue is empty,
- * otherwise, it returns -FI_EAGAIN or error from MSG provider */
-static inline ssize_t
-rxm_ep_progress_sar_deferred_tx_queue(struct rxm_tx_entry *tx_entry)
-{
-	ssize_t ret = 0;
-	struct rxm_tx_buf *tx_buf;
-
-	while (!dlist_empty(&tx_entry->deferred_tx_buf_list)) {
-		tx_buf = container_of(tx_entry->deferred_tx_buf_list.next,
-				      struct rxm_tx_buf, hdr.entry);
-		ret = fi_send(tx_entry->conn->msg_ep, &tx_buf->pkt,
-			      sizeof(tx_buf->pkt) + tx_buf->pkt.ctrl_hdr.seg_size,
-			      tx_buf->hdr.desc, 0, tx_buf);
-		if (OFI_UNLIKELY(ret)) {
-			if (OFI_UNLIKELY(ret != -FI_EAGAIN))
-				rxm_ep_sar_handle_send_segment_failure(tx_entry, ret);
-			return ret;
-		}
-		dlist_remove(&tx_buf->hdr.entry);
-	}
-	if (dlist_empty(&tx_entry->deferred_tx_buf_list)) {
-		rxm_ep_dequeue_deferred_tx_queue(tx_entry);
-		return 0;
-	}
-	return ret;
-}
-
 static inline
 struct rxm_buf *rxm_buf_get(struct rxm_buf_pool *pool)
 {
@@ -961,63 +944,55 @@ void rxm_buf_release(struct rxm_buf_pool *pool, struct rxm_buf *buf)
 }
 
 static inline
-struct rxm_buf *rxm_buf_get_ts(struct rxm_buf_pool *pool)
+struct rxm_buf *rxm_buf_get_by_index(struct rxm_buf_pool *pool, size_t index)
 {
 	struct rxm_buf *buf;
 
-	fastlock_acquire(&pool->lock);
-	buf = util_buf_alloc(pool->pool);
-	fastlock_release(&pool->lock);
+	pool->rxm_ep->res_fastlock_acquire(&pool->lock);
+	buf = util_buf_get_by_index(pool->pool, index);
+	pool->rxm_ep->res_fastlock_release(&pool->lock);
 	return buf;
 }
 
 static inline
-void rxm_buf_release_ts(struct rxm_buf_pool *pool, struct rxm_buf *buf)
+size_t rxm_get_buf_index(struct rxm_buf_pool *pool, struct rxm_buf *buf)
 {
-	fastlock_acquire(&pool->lock);
-	util_buf_release(pool->pool, buf);
-	fastlock_release(&pool->lock);
+	size_t index;
+
+	pool->rxm_ep->res_fastlock_acquire(&pool->lock);
+	index = util_get_buf_index(pool->pool, buf);
+	pool->rxm_ep->res_fastlock_release(&pool->lock);
+	return index;
 }
 
-static inline struct rxm_tx_buf *
+static inline struct rxm_buf *
 rxm_tx_buf_get(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
 {
 	assert((type == RXM_BUF_POOL_TX) ||
 	       (type == RXM_BUF_POOL_TX_INJECT) ||
 	       (type == RXM_BUF_POOL_TX_ACK) ||
-	       (type == RXM_BUF_POOL_TX_LMT) ||
+	       (type == RXM_BUF_POOL_TX_RNDV) ||
 	       (type == RXM_BUF_POOL_TX_SAR));
-	return (struct rxm_tx_buf *)rxm_buf_get(&rxm_ep->buf_pools[type]);
+	return rxm_buf_get(&rxm_ep->buf_pools[type]);
 }
 
 static inline void
-rxm_tx_buf_release(struct rxm_ep *rxm_ep, struct rxm_tx_buf *tx_buf)
+rxm_tx_buf_release(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type, void *tx_buf)
 {
-	assert((tx_buf->type == RXM_BUF_POOL_TX) ||
-	       (tx_buf->type == RXM_BUF_POOL_TX_INJECT) ||
-	       (tx_buf->type == RXM_BUF_POOL_TX_ACK) ||
-	       (tx_buf->type == RXM_BUF_POOL_TX_LMT) ||
-	       (tx_buf->type == RXM_BUF_POOL_TX_SAR));
-	assert((tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_data) ||
-	       (tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_large_data) ||
-	       (tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_seg_data) ||
-	       (tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_ack));
-	tx_buf->pkt.hdr.flags = 0;
-	rxm_buf_release(&rxm_ep->buf_pools[tx_buf->type],
-			(struct rxm_buf *)tx_buf);
+	rxm_buf_release(&rxm_ep->buf_pools[type], (struct rxm_buf *)tx_buf);
 }
 
 static inline struct rxm_rx_buf *rxm_rx_buf_get(struct rxm_ep *rxm_ep)
 {
-	return (struct rxm_rx_buf *)rxm_buf_get_ts(
+	return (struct rxm_rx_buf *)rxm_buf_get(
 			&rxm_ep->buf_pools[RXM_BUF_POOL_RX]);
 }
 
 static inline void
 rxm_rx_buf_release(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_buf)
 {
-	rxm_buf_release_ts(&rxm_ep->buf_pools[RXM_BUF_POOL_RX],
-			   (struct rxm_buf *)rx_buf);
+	rxm_buf_release(&rxm_ep->buf_pools[RXM_BUF_POOL_RX],
+			(struct rxm_buf *)rx_buf);
 }
 
 static inline struct rxm_rma_buf *rxm_rma_buf_get(struct rxm_ep *rxm_ep)
@@ -1048,7 +1023,6 @@ rxm_rma_buf_release(struct rxm_ep *rxm_ep, struct rxm_rma_buf *rx_buf)
 		queue->rxm_ep->res_fastlock_release(&queue->lock);	\
 	} while (0)
 
-#define rxm_tx_entry_cleanup(entry)		(entry)->tx_buf = NULL
 #define rxm_recv_entry_cleanup(entry)		(entry)->total_len = 0
 
 #define RXM_DEFINE_QUEUE_ENTRY(type, queue_type)				\
@@ -1073,50 +1047,7 @@ rxm_ ## type ## _entry_release(struct rxm_ ## queue_type ## _queue *queue,	\
 	rxm_entry_push(queue, entry);						\
 }
 
-RXM_DEFINE_QUEUE_ENTRY(tx, send);
 RXM_DEFINE_QUEUE_ENTRY(recv, recv);
-
-static inline void
-rxm_fill_tx_entry(struct rxm_conn *rxm_conn, void *context, uint8_t count, uint64_t flags,
-		  uint64_t comp_flags, struct rxm_tx_buf *tx_buf,
-		  struct rxm_tx_entry *tx_entry)
-{
-	tx_entry->conn = rxm_conn;
-	tx_entry->context = context;
-	tx_entry->count = count;
-	tx_entry->flags = flags;
-	tx_entry->tx_buf = tx_buf;
-	tx_entry->comp_flags = comp_flags | FI_SEND;
-}
-
-static inline int rxm_finish_send_nobuf(struct rxm_tx_entry *tx_entry)
-{
-	int ret;
-
-	if (tx_entry->flags & FI_COMPLETION) {
-		ret = ofi_cq_write(tx_entry->ep->util_ep.tx_cq,
-				   tx_entry->context, tx_entry->comp_flags, 0,
-				   NULL, 0, 0);
-		if (OFI_UNLIKELY(ret)) {
-			FI_WARN(&rxm_prov, FI_LOG_CQ,
-				"Unable to report completion\n");
-			return ret;
-		}
-		rxm_cq_log_comp(tx_entry->comp_flags);
-	}
-	if (tx_entry->ep->util_ep.flags & OFI_CNTR_ENABLED) {
-		if (tx_entry->comp_flags & FI_SEND) {
-			ofi_ep_tx_cntr_inc(&tx_entry->ep->util_ep);
-		} else if (tx_entry->comp_flags & FI_WRITE) {
-			ofi_ep_wr_cntr_inc(&tx_entry->ep->util_ep);
-		} else {
-			assert(tx_entry->comp_flags & FI_READ);
-			ofi_ep_rd_cntr_inc(&tx_entry->ep->util_ep);
-		}
-	}
-	rxm_tx_entry_release(tx_entry->conn->send_queue, tx_entry);
-	return 0;
-}
 
 static inline int rxm_cq_write_recv_comp(struct rxm_rx_buf *rx_buf,
 					 void *context, uint64_t flags,
