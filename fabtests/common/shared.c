@@ -1052,26 +1052,25 @@ int ft_init_av(void)
 int ft_exchange_addresses_oob(struct fid_av *av_ptr, struct fid_ep *ep_ptr,
 		fi_addr_t *remote_addr)
 {
+	char buf[FT_MAX_CTRL_MSG];
 	int ret;
 	size_t addrlen = FT_MAX_CTRL_MSG;
 
-	ret = fi_getname(&ep_ptr->fid, (char *) tx_buf + ft_tx_prefix_size(),
-			 &addrlen);
+	ret = fi_getname(&ep_ptr->fid, buf, &addrlen);
 	if (ret) {
 		FT_PRINTERR("fi_getname", ret);
 		return ret;
 	}
 
-	ret = ft_sock_send(oob_sock, (char *) tx_buf + ft_tx_prefix_size(),  FT_MAX_CTRL_MSG);
+	ret = ft_sock_send(oob_sock, buf, FT_MAX_CTRL_MSG);
 	if (ret)
 		return ret;
 
-	ret = ft_sock_recv(oob_sock, (char *) rx_buf + ft_rx_prefix_size(), FT_MAX_CTRL_MSG);
+	ret = ft_sock_recv(oob_sock, buf, FT_MAX_CTRL_MSG);
 	if (ret)
 		return ret;
 
-	ret = ft_av_insert(av_ptr, (char *) rx_buf + ft_rx_prefix_size(),
-			1, remote_addr, 0, NULL);
+	ret = ft_av_insert(av_ptr, buf, 1, remote_addr, 0, NULL);
 	if (ret)
 		return ret;	
 
@@ -2313,8 +2312,8 @@ void eq_readerr(struct fid_eq *eq, const char *eq_str)
 
 int ft_sync()
 {
+	char buf;
 	int ret;
-	int result;
 
 	if (opts.dst_addr) {
 		if (!opts.oob_port) {
@@ -2324,11 +2323,11 @@ int ft_sync()
 
 			ret = ft_rx(ep, 1);
 		} else {
-			ret = ft_sock_send(oob_sock, &tx_buf, 1);
+			ret = ft_sock_send(oob_sock, &buf, 1);
 			if (ret)
 				return ret;
 
-			ret = ft_sock_recv(oob_sock, &result, 1);
+			ret = ft_sock_recv(oob_sock, &buf, 1);
 			if (ret)
 				return ret;
 		}
@@ -2340,11 +2339,11 @@ int ft_sync()
 
 			ret = ft_tx(ep, remote_fi_addr, 1, &tx_ctx);
 		} else {
-			ret = ft_sock_recv(oob_sock, &result, 1);
+			ret = ft_sock_recv(oob_sock, &buf, 1);
 			if (ret)
 				return ret;
 
-			ret = ft_sock_send(oob_sock, &tx_buf, 1);
+			ret = ft_sock_send(oob_sock, &buf, 1);
 			if (ret)
 				return ret;
 		}
