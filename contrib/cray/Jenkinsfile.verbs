@@ -46,6 +46,12 @@ pipeline {
                 sh "./configure --prefix=$LIBFABRIC_INSTALL"
                 sh "make -j 12"
                 sh "make install"
+                dir ("fabtests") {
+                    sh './autogen.sh'
+                    sh "./configure --with-libfabric=$LIBFABRIC_INSTALL --prefix=$FABTEST_PATH"
+                    sh "make -j12"
+                    sh "make -j12 install"
+                }
             }
         }
         stage('Test') {
@@ -83,14 +89,8 @@ pipeline {
                         }
                     }
                 }
-                stage('Functional Tests') {
+                stage('Functional Tests: RC') {
                     steps {
-                        dir ("fabtests") {
-                            sh './autogen.sh'
-                            sh "./configure --with-libfabric=$LIBFABRIC_INSTALL --prefix=$FABTEST_PATH"
-                            sh "make -j12"
-                            sh "make -j12 install"
-                        }
                         tee ('fabtests.log') {
                             sh 'srun -n 2 --ntasks-per-node=1 contrib/cray/bin/fabtest_wrapper.sh -p ${FABTEST_PATH}/bin -v -T 60'
                         }
@@ -101,13 +101,35 @@ pipeline {
                                     -r fabtests.log \\
                                     -w fabtests.xml \\
                                     fabtests \\
-                                    functional.fabtests.quick \\
+                                    functional.fabtests.rc.quick \\
                                     functional"""
 
                             step ([$class: 'XUnitBuilder',
                                thresholds: [
                                     [$class: 'FailedThreshold', unstableThreshold: '0']],
                                     tools: [[$class: 'JUnitType', pattern: "fabtests.xml"]]])
+                        }
+                    }
+		}
+                stage('Functional Tests: XRC') {
+                    steps {
+                        tee ('fabtests-xrc.log') {
+                            sh 'srun -n 2 --ntasks-per-node=1 contrib/cray/bin/fabtest_wrapper.sh -p ${FABTEST_PATH}/bin -v -T 60 -e FI_VERBS_PREFER_XRC=1 -e FI_OFI_RXM_USE_SRX=1'
+                        }
+                    }
+                    post {
+                        always {
+                            sh """contrib/cray/bin/parse_logfiles.sh \\
+                                    -r fabtests-xrc.log \\
+                                    -w fabtests-xrc.xml \\
+                                    fabtests \\
+                                    functional.fabtests.xrc.quick \\
+                                    functional"""
+
+                            step ([$class: 'XUnitBuilder',
+                               thresholds: [
+                                    [$class: 'FailedThreshold', unstableThreshold: '0']],
+                                    tools: [[$class: 'JUnitType', pattern: "fabtests-xrc.xml"]]])
                         }
                     }
                 }
@@ -199,7 +221,7 @@ pipeline {
                 stage("Applications") {
                     steps {
                         tee ('mpi.tap') {
-                            timeout(time: 5, unit: 'MINUTES') {
+                            timeout(time: 10, unit: 'MINUTES') {
                                 sh '${BATS_INSTALL_PATH}/bats -t contrib/cray/bats/mpi.bats'
                             }
                         }
