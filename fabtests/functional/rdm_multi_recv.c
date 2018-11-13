@@ -327,7 +327,7 @@ int main(int argc, char **argv)
 	int op, ret;
 
 	opts = INIT_OPTS;
-	opts.options |= FT_OPT_SIZE;
+	opts.options |= FT_OPT_SIZE | FT_OPT_SKIP_MSG_ALLOC;
 	use_recvmsg = 0;
 
 	hints = fi_allocinfo();

@@ -115,6 +115,7 @@ enum {
 	FT_OPT_BW		= 1 << 9,
 	FT_OPT_CQ_SHARED	= 1 << 10,
 	FT_OPT_OOB_SYNC		= 1 << 11,
+	FT_OPT_SKIP_MSG_ALLOC	= 1 << 12,
 };
 
 /* for RMA tests --- we want to be able to select fi_writedata, but there is no

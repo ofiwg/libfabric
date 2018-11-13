@@ -214,7 +214,7 @@ int main(int argc, char **argv)
 	int ret;
 
 	opts = INIT_OPTS;
-	opts.options |= FT_OPT_OOB_SYNC;
+	opts.options |= FT_OPT_OOB_SYNC | FT_OPT_SKIP_MSG_ALLOC;
 
 	hints = fi_allocinfo();
 	if (!hints)

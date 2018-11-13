@@ -355,13 +355,12 @@ void ft_free_bit_combo(uint64_t *combo)
  * buffer is large enough for a control message used to exchange addressing
  * data.
  */
-int ft_alloc_msgs(void)
+static int ft_alloc_msgs(void)
 {
 	int ret;
 	long alignment = 1;
 
-	/* TODO: support multi-recv tests */
-	if (fi->rx_attr->op_flags == FI_MULTI_RECV)
+	if (ft_check_opts(FT_OPT_SKIP_MSG_ALLOC))
 		return 0;
 
 	tx_size = opts.options & FT_OPT_SIZE ?
@@ -985,7 +984,7 @@ int ft_enable_ep_recv(void)
 	if (ret)
 		return ret;
 
-	if (fi->rx_attr->op_flags != FI_MULTI_RECV &&
+	if (!ft_check_opts(FT_OPT_SKIP_MSG_ALLOC) &&
 	    (fi->caps & (FI_MSG | FI_TAGGED))) {
 		/* Initial receive will get remote address for unconnected EPs */
 		ret = ft_post_rx(ep, MAX(rx_size, FT_MAX_CTRL_MSG), &rx_ctx);
