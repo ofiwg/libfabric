@@ -446,7 +446,7 @@ int main(int argc, char **argv)
 	int op, ret;
 
 	opts = INIT_OPTS;
-	opts.options |= FT_OPT_SIZE;
+	opts.options |= FT_OPT_SIZE | FT_OPT_SKIP_REG_MR;
 
 	hints = fi_allocinfo();
 	if (!hints)
@@ -476,7 +476,6 @@ int main(int argc, char **argv)
 	hints->ep_attr->type	= FI_EP_MSG;
 	hints->caps		= FI_MSG;
 	hints->domain_attr->mr_mode = FI_MR_LOCAL | OFI_MR_BASIC_MAP;
-	ft_skip_mr = 1;
 
 	ret = run();
 

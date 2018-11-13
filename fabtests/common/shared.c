@@ -70,7 +70,6 @@ struct fi_context *tx_ctx_arr = NULL, *rx_ctx_arr = NULL;
 uint64_t remote_cq_data = 0;
 
 uint64_t tx_seq, rx_seq, tx_cq_cntr, rx_cq_cntr;
-int ft_skip_mr = 0;
 int (*ft_mr_alloc_func)(void);
 uint64_t ft_tag = 0;
 int ft_parent_proc = 0;
@@ -398,8 +397,9 @@ static int ft_alloc_msgs(void)
 
 	remote_cq_data = ft_init_cq_data(fi);
 
-	if (!ft_mr_alloc_func && !ft_skip_mr && ((fi->domain_attr->mr_mode & FI_MR_LOCAL) ||
-				(fi->caps & (FI_RMA | FI_ATOMIC)))) {
+	if (!ft_mr_alloc_func && !ft_check_opts(FT_OPT_SKIP_REG_MR) &&
+	    ((fi->domain_attr->mr_mode & FI_MR_LOCAL) ||
+	     (fi->caps & (FI_RMA | FI_ATOMIC)))) {
 		ret = fi_mr_reg(domain, buf, buf_size, ft_info_to_mr_access(fi),
 				0, FT_MR_KEY, 0, &mr, NULL);
 		if (ret) {
@@ -409,6 +409,7 @@ static int ft_alloc_msgs(void)
 		mr_desc = ft_check_mr_local_flag(fi) ? fi_mr_desc(mr) : NULL;
 	} else {
 		if (ft_mr_alloc_func) {
+			assert(!ft_check_opts(FT_OPT_SKIP_REG_MR));
 			ret = ft_mr_alloc_func();
 			if (ret)
 				return ret;
