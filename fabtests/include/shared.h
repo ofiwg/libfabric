@@ -115,6 +115,8 @@ enum {
 	FT_OPT_BW		= 1 << 9,
 	FT_OPT_CQ_SHARED	= 1 << 10,
 	FT_OPT_OOB_SYNC		= 1 << 11,
+	FT_OPT_SKIP_MSG_ALLOC	= 1 << 12,
+	FT_OPT_SKIP_REG_MR	= 1 << 13,
 };
 
 /* for RMA tests --- we want to be able to select fi_writedata, but there is no
@@ -216,7 +218,6 @@ int ft_sock_send(int fd, void *msg, size_t len);
 int ft_sock_recv(int fd, void *msg, size_t len);
 int ft_sock_sync(int value);
 void ft_sock_shutdown(int fd);
-extern int ft_skip_mr;
 extern int (*ft_mr_alloc_func)(void);
 extern uint64_t ft_tag;
 extern int ft_parent_proc;

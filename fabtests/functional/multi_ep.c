@@ -277,6 +277,7 @@ int main(int argc, char **argv)
 
 	opts = INIT_OPTS;
 	opts.transfer_size = 256;
+	opts.options |= FT_OPT_SKIP_REG_MR;
 
 	hints = fi_allocinfo();
 	if (!hints)
@@ -307,7 +308,6 @@ int main(int argc, char **argv)
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
 
-	ft_skip_mr = 1;
 	hints->caps = FI_MSG;
 	hints->mode = FI_CONTEXT;
 

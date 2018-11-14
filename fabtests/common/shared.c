@@ -70,7 +70,6 @@ struct fi_context *tx_ctx_arr = NULL, *rx_ctx_arr = NULL;
 uint64_t remote_cq_data = 0;
 
 uint64_t tx_seq, rx_seq, tx_cq_cntr, rx_cq_cntr;
-int ft_skip_mr = 0;
 int (*ft_mr_alloc_func)(void);
 uint64_t ft_tag = 0;
 int ft_parent_proc = 0;
@@ -355,13 +354,12 @@ void ft_free_bit_combo(uint64_t *combo)
  * buffer is large enough for a control message used to exchange addressing
  * data.
  */
-int ft_alloc_msgs(void)
+static int ft_alloc_msgs(void)
 {
 	int ret;
 	long alignment = 1;
 
-	/* TODO: support multi-recv tests */
-	if (fi->rx_attr->op_flags == FI_MULTI_RECV)
+	if (ft_check_opts(FT_OPT_SKIP_MSG_ALLOC))
 		return 0;
 
 	tx_size = opts.options & FT_OPT_SIZE ?
@@ -399,8 +397,9 @@ int ft_alloc_msgs(void)
 
 	remote_cq_data = ft_init_cq_data(fi);
 
-	if (!ft_mr_alloc_func && !ft_skip_mr && ((fi->domain_attr->mr_mode & FI_MR_LOCAL) ||
-				(fi->caps & (FI_RMA | FI_ATOMIC)))) {
+	if (!ft_mr_alloc_func && !ft_check_opts(FT_OPT_SKIP_REG_MR) &&
+	    ((fi->domain_attr->mr_mode & FI_MR_LOCAL) ||
+	     (fi->caps & (FI_RMA | FI_ATOMIC)))) {
 		ret = fi_mr_reg(domain, buf, buf_size, ft_info_to_mr_access(fi),
 				0, FT_MR_KEY, 0, &mr, NULL);
 		if (ret) {
@@ -410,6 +409,7 @@ int ft_alloc_msgs(void)
 		mr_desc = ft_check_mr_local_flag(fi) ? fi_mr_desc(mr) : NULL;
 	} else {
 		if (ft_mr_alloc_func) {
+			assert(!ft_check_opts(FT_OPT_SKIP_REG_MR));
 			ret = ft_mr_alloc_func();
 			if (ret)
 				return ret;
@@ -985,7 +985,7 @@ int ft_enable_ep_recv(void)
 	if (ret)
 		return ret;
 
-	if (fi->rx_attr->op_flags != FI_MULTI_RECV &&
+	if (!ft_check_opts(FT_OPT_SKIP_MSG_ALLOC) &&
 	    (fi->caps & (FI_MSG | FI_TAGGED))) {
 		/* Initial receive will get remote address for unconnected EPs */
 		ret = ft_post_rx(ep, MAX(rx_size, FT_MAX_CTRL_MSG), &rx_ctx);
@@ -1052,26 +1052,25 @@ int ft_init_av(void)
 int ft_exchange_addresses_oob(struct fid_av *av_ptr, struct fid_ep *ep_ptr,
 		fi_addr_t *remote_addr)
 {
+	char buf[FT_MAX_CTRL_MSG];
 	int ret;
 	size_t addrlen = FT_MAX_CTRL_MSG;
 
-	ret = fi_getname(&ep_ptr->fid, (char *) tx_buf + ft_tx_prefix_size(),
-			 &addrlen);
+	ret = fi_getname(&ep_ptr->fid, buf, &addrlen);
 	if (ret) {
 		FT_PRINTERR("fi_getname", ret);
 		return ret;
 	}
 
-	ret = ft_sock_send(oob_sock, (char *) tx_buf + ft_tx_prefix_size(),  FT_MAX_CTRL_MSG);
+	ret = ft_sock_send(oob_sock, buf, FT_MAX_CTRL_MSG);
 	if (ret)
 		return ret;
 
-	ret = ft_sock_recv(oob_sock, (char *) rx_buf + ft_rx_prefix_size(), FT_MAX_CTRL_MSG);
+	ret = ft_sock_recv(oob_sock, buf, FT_MAX_CTRL_MSG);
 	if (ret)
 		return ret;
 
-	ret = ft_av_insert(av_ptr, (char *) rx_buf + ft_rx_prefix_size(),
-			1, remote_addr, 0, NULL);
+	ret = ft_av_insert(av_ptr, buf, 1, remote_addr, 0, NULL);
 	if (ret)
 		return ret;	
 
@@ -2313,8 +2312,8 @@ void eq_readerr(struct fid_eq *eq, const char *eq_str)
 
 int ft_sync()
 {
+	char buf;
 	int ret;
-	int result;
 
 	if (opts.dst_addr) {
 		if (!opts.oob_port) {
@@ -2324,11 +2323,11 @@ int ft_sync()
 
 			ret = ft_rx(ep, 1);
 		} else {
-			ret = ft_sock_send(oob_sock, &tx_buf, 1);
+			ret = ft_sock_send(oob_sock, &buf, 1);
 			if (ret)
 				return ret;
 
-			ret = ft_sock_recv(oob_sock, &result, 1);
+			ret = ft_sock_recv(oob_sock, &buf, 1);
 			if (ret)
 				return ret;
 		}
@@ -2340,11 +2339,11 @@ int ft_sync()
 
 			ret = ft_tx(ep, remote_fi_addr, 1, &tx_ctx);
 		} else {
-			ret = ft_sock_recv(oob_sock, &result, 1);
+			ret = ft_sock_recv(oob_sock, &buf, 1);
 			if (ret)
 				return ret;
 
-			ret = ft_sock_send(oob_sock, &tx_buf, 1);
+			ret = ft_sock_send(oob_sock, &buf, 1);
 			if (ret)
 				return ret;
 		}

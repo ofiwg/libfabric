@@ -578,7 +578,8 @@ int main(int argc, char **argv)
 	int op, ret;
 
 	opts = INIT_OPTS;
-	opts.options = FT_OPT_SIZE | FT_OPT_RX_CNTR | FT_OPT_TX_CNTR;
+	opts.options = FT_OPT_SIZE | FT_OPT_RX_CNTR | FT_OPT_TX_CNTR |
+		       FT_OPT_SKIP_REG_MR;
 
 	hints = fi_allocinfo();
 	if (!hints)
@@ -633,7 +634,6 @@ int main(int argc, char **argv)
 	hints->domain_attr->mr_mode = (FI_MR_LOCAL | FI_MR_VIRT_ADDR |
 				       FI_MR_ALLOCATED);
 
-	ft_skip_mr = 1;
 	ret = ft_init_fabric();
 	if (ret)
 		return ret;

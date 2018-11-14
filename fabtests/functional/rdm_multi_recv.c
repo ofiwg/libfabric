@@ -227,9 +227,6 @@ static int alloc_ep_res(struct fi_info *fi)
 		return ret;
 	}
 
-	/* Prevent memory registration by ft_alloc_active_res() -> ft_alloc_msgs() */
-	ft_skip_mr = 1;
-
 	ret = ft_alloc_active_res(fi);
 	if (ret)
 		return ret;
@@ -327,7 +324,7 @@ int main(int argc, char **argv)
 	int op, ret;
 
 	opts = INIT_OPTS;
-	opts.options |= FT_OPT_SIZE;
+	opts.options |= FT_OPT_SIZE | FT_OPT_SKIP_MSG_ALLOC;
 	use_recvmsg = 0;
 
 	hints = fi_allocinfo();

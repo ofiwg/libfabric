@@ -379,9 +379,6 @@ static int alloc_ep_res(struct fi_info *fi)
 	int ret;
 	int mr_local = !!(fi->domain_attr->mr_mode & FI_MR_LOCAL);
 
-	/* Prevent memory registration by ft_alloc_active_res() -> ft_alloc_msgs() */
-	ft_skip_mr = 1;
-
 	ret = ft_alloc_active_res(fi);
 	if (ret)
 		return ret;
@@ -488,6 +485,7 @@ int main(int argc, char **argv)
 	int op, ret;
 
 	opts = INIT_OPTS;
+	opts.options |= FT_OPT_SKIP_REG_MR;
 
 	hints = fi_allocinfo();
 	if (!hints)
