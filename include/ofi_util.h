@@ -526,10 +526,9 @@ ofi_cq_write(struct util_cq *cq, void *context, uint64_t flags, size_t len,
 }
 
 static inline int
-ofi_cq_write_src(struct util_cq *cq, void *context, uint64_t flags, size_t len,
-		 void *buf, uint64_t data, uint64_t tag, fi_addr_t src)
+ofi_cq_write_src_thread_unsafe(struct util_cq *cq, void *context, uint64_t flags, size_t len,
+			       void *buf, uint64_t data, uint64_t tag, fi_addr_t src)
 {
-	cq->cq_fastlock_acquire(&cq->cq_lock);
 	if (OFI_UNLIKELY(ofi_cirque_isfull(cq->cirq))) {
 		FI_DBG(cq->domain->prov, FI_LOG_CQ,
 		       "util_cq cirq is full!\n");
@@ -538,8 +537,19 @@ ofi_cq_write_src(struct util_cq *cq, void *context, uint64_t flags, size_t len,
 	}
 	cq->src[ofi_cirque_windex(cq->cirq)] = src;
 	ofi_cq_write_comp_entry(cq, context, flags, len, buf, data, tag);
-	cq->cq_fastlock_release(&cq->cq_lock);
 	return 0;
+}
+
+static inline int
+ofi_cq_write_src(struct util_cq *cq, void *context, uint64_t flags, size_t len,
+		 void *buf, uint64_t data, uint64_t tag, fi_addr_t src)
+{
+	int ret;
+	cq->cq_fastlock_acquire(&cq->cq_lock);
+	ret = ofi_cq_write_src_thread_unsafe(cq, context, flags, len,
+					     buf, data, tag, src);
+	cq->cq_fastlock_release(&cq->cq_lock);
+	return ret;
 }
 
 int ofi_cq_write_error(struct util_cq *cq,
