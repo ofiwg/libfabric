@@ -294,29 +294,30 @@ pipeline {
                 }
             }
         }
-	    stage('Publish') {
-	        agent {
+        stage('Publish') {
+            agent {
                 node {
                     label 'utility_pod'
                 }
-	        }
-	        when {
+            }
+            when {
                 allOf {
                     expression { currentBuild.result == 'SUCCESS' } ;
                     expression { env.BRANCH_NAME == 'master' }
                 }
             }
-	        steps {
+            steps {
                 container('utility') {
-                    unstash 'sources'
-		            // publishes the source RPM to DST's Artifactory instance
-                    transfer(artifactName: 'rpmbuild/SOURCES/libfabric-*tar.bz2')
+                    sh 'tar -cvzf libfabric-source.tar.gz --exclude "*.log" --exclude "*.tar.gz" .'
 
-		            // Sends event to message bus to notify other builds 
-		            publishEvents(["os-networking-libfabric-verbs-publish"])
-		        }
-	        }
-	    }
+                    // publishes the source RPM to DST's Artifactory instance
+                    transfer(artifactName: 'libfabric-source.tar.gz')
+
+                    // Sends event to message bus to notify other builds 
+                    publishEvents(["os-networking-libfabric-verbs-publish"])
+                }
+            }
+        }
     }
     post {
         success {
@@ -353,7 +354,7 @@ pipeline {
                 //    recipientProviders: providers,
                 //    replyTo: '$DEFAULT_REPLYTO',
                 //    to: defaultMailer
-		echo 'hello world, add an email structure/function call here'
+                echo 'hello world, add an email structure/function call here'
              }
         }
     }
