@@ -308,10 +308,10 @@ pipeline {
             }
             steps {
                 container('utility') {
-                    sh 'tar -cvzf libfabric-source.tar.gz --exclude "*.log" --exclude "*.tar.gz" .'
+                    sh 'tar -cvzf /tmp/libfabric-source.tar.gz --exclude "*.log" .'
 
                     // publishes the source RPM to DST's Artifactory instance
-                    transfer(artifactName: 'libfabric-source.tar.gz')
+                    transfer(artifactName: '/tmp/libfabric-source.tar.gz')
 
                     // Sends event to message bus to notify other builds 
                     publishEvents(["os-networking-libfabric-verbs-publish"])
