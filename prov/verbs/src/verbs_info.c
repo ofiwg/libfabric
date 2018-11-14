@@ -522,8 +522,10 @@ static int fi_ibv_get_device_attrs(struct ibv_context *ctx,
 						  MIN(device_attr.max_sge,
 						      device_attr.max_srq_sge) :
 						  device_attr.max_sge;
-	if (protocol == FI_PROTO_RDMA_CM_IB_XRC)
+	if (protocol == FI_PROTO_RDMA_CM_IB_XRC) {
 		info->rx_attr->iov_limit = MIN(info->rx_attr->iov_limit, 1);
+		info->ep_attr->rx_ctx_cnt = FI_SHARED_CONTEXT;
+	}
 
 	ret = fi_ibv_get_qp_cap(ctx, info, protocol);
 	if (ret)
