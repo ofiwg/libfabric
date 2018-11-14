@@ -440,10 +440,20 @@ static void mrail_cq_progress(struct util_cq *cq)
 	ofi_cq_progress(cq);
 }
 
+static void mrail_cq_progress_ts(struct util_cq *cq)
+{
+	mrail_poll_cq(cq);
+
+	/* Progress the bound EPs */
+	ofi_cq_progress_ts(cq);
+}
+
 int mrail_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		   struct fid_cq **cq_fid, void *context)
 {
-	struct mrail_domain *mrail_domain;
+	struct mrail_domain *mrail_domain =
+		container_of(domain, struct mrail_domain,
+			     util_domain.domain_fid);;
 	struct mrail_cq *mrail_cq;
 	struct fi_cq_attr rail_cq_attr = {
 		.wait_obj = FI_WAIT_NONE,
@@ -458,14 +468,13 @@ int mrail_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		return -FI_ENOMEM;
 
 	ret = ofi_cq_init(&mrail_prov, domain, attr, &mrail_cq->util_cq,
-			  &mrail_cq_progress, context);
+			  ((mrail_domain->util_domain.threading == FI_THREAD_COMPLETION) ||
+			   (mrail_domain->util_domain.threading == FI_THREAD_DOMAIN)) ?
+			  &mrail_cq_progress : mrail_cq_progress_ts, context);
 	if (ret) {
 		free(mrail_cq);
 		return ret;
 	}
-
-	mrail_domain = container_of(domain, struct mrail_domain,
-				    util_domain.domain_fid);
 
 	mrail_cq->cqs = calloc(mrail_domain->num_domains,
 			       sizeof(*mrail_cq->cqs));

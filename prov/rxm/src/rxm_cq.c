@@ -1105,7 +1105,7 @@ static struct fi_ops_cq rxm_cq_ops = {
 };
 
 int rxm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
-		 struct fid_cq **cq_fid, void *context)
+		struct fid_cq **cq_fid, void *context)
 {
 	struct util_cq *util_cq;
 	int ret;
@@ -1114,8 +1114,7 @@ int rxm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	if (!util_cq)
 		return -FI_ENOMEM;
 
-	ret = ofi_cq_init(&rxm_prov, domain, attr, util_cq, &ofi_cq_progress,
-			context);
+	ret = ofi_cq_init(&rxm_prov, domain, attr, util_cq, NULL, context);
 	if (ret)
 		goto err1;
 

@@ -1128,7 +1128,7 @@ int rxd_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		return -FI_ENOMEM;
 
 	ret = ofi_cq_init(&rxd_prov, domain, attr, &cq->util_cq,
-			  &ofi_cq_progress, context);
+			  NULL, context);
 	if (ret)
 		goto free;
 

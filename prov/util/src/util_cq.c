@@ -519,7 +519,7 @@ static int fi_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
 	dlist_init(&cq->ep_list);
 	fastlock_init(&cq->ep_list_lock);
 	fastlock_init(&cq->cq_lock);
-	if (cq->domain->threading == FI_THREAD_COMPLETION ||
+	if ((cq->domain->threading == FI_THREAD_COMPLETION) ||
 	    (cq->domain->threading == FI_THREAD_DOMAIN)) {
 		cq->cq_fastlock_acquire = ofi_fastlock_acquire_noop;
 		cq->cq_fastlock_release = ofi_fastlock_release_noop;
@@ -584,37 +584,30 @@ int ofi_check_bind_cq_flags(struct util_ep *ep, struct util_cq *cq,
 	return FI_SUCCESS;
 }
 
-void ofi_cq_progress(struct util_cq *cq)
-{
-	struct util_ep *ep;
-	struct fid_list_entry *fid_entry;
-	struct dlist_entry *item;
-
-	cq->cq_fastlock_acquire(&cq->ep_list_lock);
-	dlist_foreach(&cq->ep_list, item) {
-		fid_entry = container_of(item, struct fid_list_entry, entry);
-		ep = container_of(fid_entry->fid, struct util_ep, ep_fid.fid);
-		ep->progress(ep);
-
-	}
-	cq->cq_fastlock_release(&cq->ep_list_lock);
-}
-
 int ofi_cq_init(const struct fi_provider *prov, struct fid_domain *domain,
 		 struct fi_cq_attr *attr, struct util_cq *cq,
 		 ofi_cq_progress_func progress, void *context)
 {
 	fi_cq_read_func read_func;
 	int ret;
+	struct util_domain *dom = container_of(domain, struct util_domain, domain_fid);
 
-	assert(progress);
 	ret = ofi_check_cq_attr(prov, attr);
 	if (ret)
 		return ret;
 
+	if (!progress) {
+		if ((dom->threading == FI_THREAD_COMPLETION) ||
+		    (dom->threading == FI_THREAD_DOMAIN)) {
+			progress = ofi_cq_progress;
+		} else {
+			progress = ofi_cq_progress_ts;
+		}
+	}
+	cq->progress = progress;
+
 	cq->cq_fid.fid.ops = &util_cq_fi_ops;
 	cq->cq_fid.ops = &util_cq_ops;
-	cq->progress = progress;
 
 	switch (attr->format) {
 	case FI_CQ_FORMAT_UNSPEC:

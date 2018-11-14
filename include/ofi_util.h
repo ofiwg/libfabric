@@ -146,6 +146,16 @@ struct ofi_common_locks {
 	pthread_mutex_t util_fabric_lock;
 };
 
+struct fid_list_entry {
+	struct dlist_entry	entry;
+	struct fid		*fid;
+};
+
+int fid_list_insert(struct dlist_entry *fid_list, fastlock_t *lock,
+		    struct fid *fid);
+void fid_list_remove(struct dlist_entry *fid_list, fastlock_t *lock,
+		     struct fid *fid);
+
 /*
  * Provider details
  */
@@ -463,7 +473,6 @@ int ofi_cq_init(const struct fi_provider *prov, struct fid_domain *domain,
 		 ofi_cq_progress_func progress, void *context);
 int ofi_check_bind_cq_flags(struct util_ep *ep, struct util_cq *cq,
 			    uint64_t flags);
-void ofi_cq_progress(struct util_cq *cq);
 int ofi_cq_cleanup(struct util_cq *cq);
 int ofi_cq_control(struct fid *fid, int command, void *arg);
 ssize_t ofi_cq_read(struct fid_cq *cq_fid, void *buf, size_t count);
@@ -540,6 +549,25 @@ ofi_cq_write_src(struct util_cq *cq, void *context, uint64_t flags, size_t len,
 	ofi_cq_write_comp_entry(cq, context, flags, len, buf, data, tag);
 	cq->cq_fastlock_release(&cq->cq_lock);
 	return 0;
+}
+
+static inline void ofi_cq_progress(struct util_cq *cq)
+{
+	struct util_ep *ep;
+	struct fid_list_entry *fid_entry;
+
+	dlist_foreach_container(&cq->ep_list, struct fid_list_entry,
+				fid_entry, entry) {
+		ep = container_of(fid_entry->fid, struct util_ep, ep_fid.fid);
+		ep->progress(ep);
+	}
+}
+
+static inline void ofi_cq_progress_ts(struct util_cq *cq)
+{
+	fastlock_acquire(&cq->ep_list_lock);
+	ofi_cq_progress(cq);
+	fastlock_release(&cq->ep_list_lock);
 }
 
 int ofi_cq_write_error(struct util_cq *cq,
@@ -836,17 +864,6 @@ struct fi_info *ofi_allocinfo_internal(void);
 int util_getinfo(const struct util_prov *util_prov, uint32_t version,
 		 const char *node, const char *service, uint64_t flags,
 		 const struct fi_info *hints, struct fi_info **info);
-
-
-struct fid_list_entry {
-	struct dlist_entry	entry;
-	struct fid		*fid;
-};
-
-int fid_list_insert(struct dlist_entry *fid_list, fastlock_t *lock,
-		    struct fid *fid);
-void fid_list_remove(struct dlist_entry *fid_list, fastlock_t *lock,
-		     struct fid *fid);
 
 void ofi_fabric_insert(struct util_fabric *fabric);
 struct util_fabric *ofi_fabric_find(struct util_fabric_info *fabric_info);

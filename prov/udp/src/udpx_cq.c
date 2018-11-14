@@ -67,7 +67,7 @@ int udpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		return -FI_ENOMEM;
 
 	ret = ofi_cq_init(&udpx_prov, domain, attr, cq,
-			   &ofi_cq_progress, context);
+			  NULL, context);
 	if (ret) {
 		free(cq);
 		return ret;

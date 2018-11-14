@@ -46,7 +46,7 @@ int mlx_cq_open (
 
 	status = ofi_cq_init(
 			&mlx_prov, domain, 
-			attr, u_cq, &ofi_cq_progress, context);
+			attr, u_cq, NULL, context);
 	if (status) {
 		free(u_cq);
 		return status;

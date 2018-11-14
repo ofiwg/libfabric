@@ -247,7 +247,7 @@ int tcpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		goto free_cq;
 
 	ret = ofi_cq_init(&tcpx_prov, domain, attr, &tcpx_cq->util_cq,
-			  &ofi_cq_progress, context);
+			  NULL, context);
 	if (ret)
 		goto destroy_pool;
 
