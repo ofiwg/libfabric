@@ -328,6 +328,54 @@ static int ft_recv_test_info(void)
 	return 0;
 }
 
+static int ft_exchange_uint32(uint32_t local, uint32_t *remote)
+{
+	uint32_t local_net = htonl(local);
+	int ret;
+
+	ret = ft_sock_send(sock, &local_net, sizeof local);
+	if (ret) {
+		FT_PRINTERR("ft_sock_send", ret);
+		return ret;
+	}
+
+	ret = ft_sock_recv(sock, remote, sizeof *remote);
+	if (ret) {
+		FT_PRINTERR("ft_sock_recv", ret);
+		return ret;
+	}
+
+	*remote = ntohl(*remote);
+
+	return 0;
+}
+
+static int ft_skip_info(struct fi_info *hints, struct fi_info *info)
+{
+	uint32_t remote_protocol, skip, remote_skip;
+	size_t len;
+	int ret;
+
+	//make sure remote side is using the same protocol
+	ret = ft_exchange_uint32(info->ep_attr->protocol, &remote_protocol);
+	if (ret)
+		return ret;
+
+	if (info->ep_attr->protocol != remote_protocol)
+		return 1;
+
+	//check needed to skip utility providers, unless requested
+	skip = (!ft_util_name(hints->fabric_attr->prov_name, &len) &&
+		strcmp(hints->fabric_attr->prov_name,
+		info->fabric_attr->prov_name));
+
+	ret = ft_exchange_uint32(skip, &remote_skip);
+	if (ret)
+		return ret;
+
+	return skip || remote_skip;
+}
+
 static int ft_transfer_subindex(int subindex, int *remote_idx)
 {
 	int ret;
@@ -349,7 +397,7 @@ static int ft_transfer_subindex(int subindex, int *remote_idx)
 
 static int ft_fw_process_list_server(struct fi_info *hints, struct fi_info *info)
 {
-	int ret, subindex, remote_idx = 0, result = 0, end_test = 0;
+	int ret, subindex, remote_idx = 0, result = -FI_ENODATA, end_test = 0;
 	int server_ready = 0;
 	struct fi_info *open_res_info;
 
@@ -395,6 +443,11 @@ static int ft_fw_process_list_server(struct fi_info *hints, struct fi_info *info
 			if (end_test) {
 				ft_cleanup();
 				break;
+			}
+
+			if (ft_skip_info(hints, fabric_info)) {
+				ft_cleanup();
+				continue;
 			}
 
 			ret = ft_transfer_subindex(subindex, &remote_idx);
@@ -445,7 +498,7 @@ static int ft_fw_process_list_server(struct fi_info *hints, struct fi_info *info
 
 static int ft_fw_process_list_client(struct fi_info *hints, struct fi_info *info)
 {
-	int ret, subindex, remote_idx = 0, result = 0, sresult, end_test = 0;
+	int ret, subindex, remote_idx = 0, result = -FI_ENODATA, sresult, end_test = 0;
 
 	while (!end_test) {
 		for (subindex = 1, fabric_info = info; fabric_info;
@@ -457,6 +510,9 @@ static int ft_fw_process_list_client(struct fi_info *hints, struct fi_info *info
 				FT_PRINTERR("ft_sock_send", ret);
 				return ret;
 			}
+
+			if (ft_skip_info(hints, fabric_info))
+				continue;
 
 			ret = ft_transfer_subindex(subindex, &remote_idx);
 			if (ret)
