@@ -1,11 +1,7 @@
 // Copyright (c) 2018. Cray Inc. All rights reserved.
 // Libfabric Verbs provider Jenkins Pipeline file
 
-// This pipeline uses shared pipeline libraries for the following
-// functions:
-//   -- launch
-//   -- publish
-@Library('CrayNetworkCI@master') _
+@Library(['CrayNetworkCI@master', 'dst-shared@master']) _
 
 pipeline {
     options {
@@ -298,6 +294,29 @@ pipeline {
                 }
             }
         }
+	    stage('Publish') {
+	        agent {
+                node {
+                    label 'utility_pod'
+                }
+	        }
+	        when {
+                allOf {
+                    expression { currentBuild.result == 'SUCCESS' } ;
+                    expression { env.BRANCH_NAME == 'master' }
+                }
+            }
+	        steps {
+                container('utility') {
+                    unstash 'sources'
+		            // publishes the source RPM to DST's Artifactory instance
+                    transfer(artifactName: 'rpmbuild/SOURCES/libfabric-*tar.bz2')
+
+		            // Sends event to message bus to notify other builds 
+		            publishEvents(["os-networking-libfabric-verbs-publish"])
+		        }
+	        }
+	    }
     }
     post {
         success {
@@ -317,23 +336,24 @@ pipeline {
             script {
                 // send email when the state of the pipeline changes
                 // only sends email to @cray.com
-                def emailBody = '${SCRIPT, template="libfabric-template.groovy"}'
-                def providers = []
-                def defaultMailer = ''
+                //def emailBody = '${SCRIPT, template="libfabric-template.groovy"}'
+                //def providers = []
+                //def defaultMailer = ''
 
-                if (env.BRANCH_NAME == 'master') {
-                    defaultMailer = mailingList()
-                } else {
-                    providers.add ( [$class: 'CulpritsRecipientProvider'] )
-                    providers.add ( [$class: 'RequesterRecipientProvider'] )
-                    providers.add ( [$class: 'DevelopersRecipientProvider'] )
-                }
-                emailext subject: '$DEFAULT_SUBJECT',
-                    body: emailBody,
-                    mimeType: 'text/html',
-                    recipientProviders: providers,
-                    replyTo: '$DEFAULT_REPLYTO',
-                    to: defaultMailer
+                //if (env.BRANCH_NAME == 'master') {
+                //    defaultMailer = mailingList()
+                //} else {
+                //    providers.add ( [$class: 'CulpritsRecipientProvider'] )
+                //    providers.add ( [$class: 'RequesterRecipientProvider'] )
+                //    providers.add ( [$class: 'DevelopersRecipientProvider'] )
+                //}
+                //emailext subject: '$DEFAULT_SUBJECT',
+                //    body: emailBody,
+                //    mimeType: 'text/html',
+                //    recipientProviders: providers,
+                //    replyTo: '$DEFAULT_REPLYTO',
+                //    to: defaultMailer
+		echo 'hello world, add an email structure/function call here'
              }
         }
     }
