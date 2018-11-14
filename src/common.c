@@ -620,7 +620,8 @@ int ofi_is_wildcard_listen_addr(const char *node, const char *service,
 	struct addrinfo *res = NULL;
 	int ret;
 
-	if (hints && hints->addr_format != FI_SOCKADDR &&
+	if (hints && hints->addr_format != FI_FORMAT_UNSPEC &&
+	    hints->addr_format != FI_SOCKADDR &&
 	    hints->addr_format != FI_SOCKADDR_IN &&
 	    hints->addr_format != FI_SOCKADDR_IN6)
 		return 0;

@@ -80,6 +80,8 @@ void rxm_info_to_core_mr_modes(uint32_t version, const struct fi_info *hints,
 int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 		     struct fi_info *core_info)
 {
+	int use_srx = 0;
+
 	rxm_info_to_core_mr_modes(version, hints, core_info);
 
 	core_info->mode |= FI_RX_CQ_DATA | FI_CONTEXT;
@@ -106,6 +108,11 @@ int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 		}
 	}
 	core_info->ep_attr->type = FI_EP_MSG;
+	if (!fi_param_get_bool(&rxm_prov, "use_srx", &use_srx) && use_srx) {
+		FI_DBG(&rxm_prov, FI_LOG_FABRIC,
+		       "Requesting shared receive context from core provider\n");
+		core_info->ep_attr->rx_ctx_cnt = FI_SHARED_CONTEXT;
+	}
 
 	core_info->tx_attr->size = rxm_msg_tx_size;
 	core_info->rx_attr->size = rxm_msg_rx_size;

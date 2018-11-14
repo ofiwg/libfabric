@@ -115,6 +115,35 @@ do {									\
 	((void *) rxm_buf_get_by_index(&(rxm_ep)->buf_pools[pool_type],		\
 				       (uint64_t) msg_id))
 
+#define RXM_Q_STRERROR(prov, log, q, q_str, entry, strerror)					\
+	FI_WARN(prov, log, "fi_" q_str "_readerr: err: %d, prov_err: %s (%d)\n",		\
+		(entry).err,strerror((q), (entry).prov_errno, (entry).err_data, NULL, 0),	\
+		(entry).prov_errno)
+
+#define RXM_CQ_READERR(prov, log, cq, ret, err_entry)			\
+	do {								\
+		(ret) = fi_cq_readerr((cq), &(err_entry), 0);		\
+		if ((ret) < 0) {					\
+			FI_WARN(prov, log,				\
+				"Unable to fi_cq_readerr: %zd\n", ret);	\
+		} else {						\
+			RXM_Q_STRERROR(prov, log, cq, "cq",		\
+				       err_entry, fi_cq_strerror);	\
+		}							\
+	} while (0)
+
+#define RXM_EQ_READERR(prov, log, eq, ret, err_entry)			\
+	do {								\
+		(ret) = fi_eq_readerr((eq), &(err_entry), 0);		\
+		if ((ret) != sizeof(err_entry)) {			\
+			FI_WARN(prov, log,				\
+				"Unable to fi_eq_readerr: %zd\n", ret);	\
+		} else {						\
+			RXM_Q_STRERROR(prov, log, eq, "eq",		\
+				       err_entry, fi_eq_strerror);	\
+		}							\
+	} while (0)
+
 extern struct fi_provider rxm_prov;
 extern struct util_prov rxm_util_prov;
 extern struct fi_ops_rma rxm_ops_rma;

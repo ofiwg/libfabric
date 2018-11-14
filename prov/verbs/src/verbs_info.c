@@ -1210,9 +1210,21 @@ static int fi_ibv_get_matching_info(uint32_t version,
 	*info = tail = NULL;
 
 	for ( ; check_info; check_info = check_info->next) {
+		VERBS_DBG(FI_LOG_FABRIC, "Checking domain: %s\n",
+			  check_info->domain_attr->name);
+
 		if (hints) {
-			VERBS_DBG(FI_LOG_FABRIC, "Checking domain: %s\n",
-				  check_info->domain_attr->name);
+			if ((check_info->ep_attr->protocol ==
+			     FI_PROTO_RDMA_CM_IB_XRC) &&
+			    (!hints->ep_attr ||
+			     (hints->ep_attr->rx_ctx_cnt != FI_SHARED_CONTEXT))) {
+				VERBS_INFO(FI_LOG_FABRIC,
+					   "hints->ep_attr->rx_ctx_cnt != "
+					   "FI_SHARED_CONTEXT. Skipping "
+					   "XRC FI_EP_MSG endpoints\n");
+				continue;
+			}
+
 			ret = fi_ibv_check_hints(version, hints,
 						 check_info);
 			if (ret)
@@ -1240,6 +1252,8 @@ static int fi_ibv_get_matching_info(uint32_t version,
 			}
 		}
 
+		VERBS_DBG(FI_LOG_FABRIC, "Adding fi_info for domain: %s\n",
+			  fi->domain_attr->name);
 		if (!*info)
 			*info = fi;
 		else

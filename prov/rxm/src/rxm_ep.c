@@ -1886,6 +1886,11 @@ static int rxm_ep_close(struct fid *fid)
 	if (rxm_ep->cmap)
 		rxm_cmap_free(rxm_ep->cmap);
 
+	// TODO move this to cmap_free and encapsulate eq progress fns
+	// these vars shouldn't be accessed outside rxm_conn file
+	fastlock_destroy(&rxm_ep->msg_eq_entry_list_lock);
+	slistfd_free(&rxm_ep->msg_eq_entry_list);
+
 	ret = rxm_listener_close(rxm_ep);
 	if (ret)
 		retv = ret;
@@ -2177,45 +2182,16 @@ err:
 	return ret;
 }
 
-static int rxm_info_to_core_srx_ctx(uint32_t version, const struct fi_info *rxm_hints,
-				    struct fi_info *core_hints)
-{
-	int ret;
-
-	ret = rxm_info_to_core(version, rxm_hints, core_hints);
-	if (ret)
-		return ret;
-	core_hints->ep_attr->rx_ctx_cnt = FI_SHARED_CONTEXT;
-	return 0;
-}
-
-static int rxm_ep_get_core_info(uint32_t version, const struct fi_info *hints,
-				struct fi_info **info)
-{
-	int ret;
-
-	ret = ofi_get_core_info(version, NULL, NULL, 0, &rxm_util_prov, hints,
-				rxm_info_to_core_srx_ctx, info);
-	if (!ret)
-		return 0;
-
-	FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Shared receive context not "
-		"supported by MSG provider.\n");
-
-	return ofi_get_core_info(version, NULL, NULL, 0, &rxm_util_prov, hints,
-				 rxm_info_to_core, info);
-}
-
 static int rxm_ep_msg_res_open(struct rxm_ep *rxm_ep)
 {
 	int ret;
 	size_t max_prog_val;
-	int use_srx;
 	struct rxm_domain *rxm_domain =
 		container_of(rxm_ep->util_ep.domain, struct rxm_domain, util_domain);
 
-	ret = rxm_ep_get_core_info(rxm_ep->util_ep.domain->fabric->fabric_fid.api_version,
-				   rxm_ep->rxm_info, &rxm_ep->msg_info);
+	ret = ofi_get_core_info(rxm_ep->util_ep.domain->fabric->fabric_fid.api_version,
+				NULL, NULL, 0, &rxm_util_prov, rxm_ep->rxm_info,
+				rxm_info_to_core, &rxm_ep->msg_info);
 	if (ret)
 		return ret;
 
@@ -2226,10 +2202,7 @@ static int rxm_ep_msg_res_open(struct rxm_ep *rxm_ep)
 	rxm_ep->eager_pkt_size =
 		rxm_ep->rxm_info->tx_attr->inject_size + sizeof(struct rxm_pkt);
 
-	if (fi_param_get_bool(&rxm_prov, "use_srx", &use_srx))
-		use_srx = 0;
-
-	if ((rxm_ep->msg_info->ep_attr->rx_ctx_cnt == FI_SHARED_CONTEXT) && use_srx) {
+	if (rxm_ep->msg_info->ep_attr->rx_ctx_cnt == FI_SHARED_CONTEXT) {
 		ret = fi_srx_context(rxm_domain->msg_domain, rxm_ep->msg_info->rx_attr,
 				     &rxm_ep->srx_ctx, NULL);
 		if (ret) {

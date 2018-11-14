@@ -907,7 +907,7 @@ static void rxm_cq_read_write_error(struct rxm_ep *rxm_ep)
 	struct util_cntr *util_cntr = NULL;
 	ssize_t ret;
 
-	OFI_CQ_READERR(&rxm_prov, FI_LOG_CQ, rxm_ep->msg_cq, ret,
+	RXM_CQ_READERR(&rxm_prov, FI_LOG_CQ, rxm_ep->msg_cq, ret,
 		       err_entry);
 	if (ret < 0) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ,
