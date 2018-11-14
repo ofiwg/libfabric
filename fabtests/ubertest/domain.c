@@ -274,6 +274,9 @@ static int ft_setup_mr_control(struct ft_mr_control *ctrl)
 	int ret;
 	uint64_t access;
 
+	if (!(fabric_info->caps & (FI_RMA | FI_ATOMIC)))
+		return 0;
+
 	size = ft_ctrl.size_array[ft_ctrl.size_cnt - 1];
 	if (!ctrl->buf) {
 		ctrl->buf = calloc(1, size);
