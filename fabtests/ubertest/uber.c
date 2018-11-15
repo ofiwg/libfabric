@@ -242,12 +242,6 @@ static void ft_fw_convert_info(struct fi_info *info, struct ft_info *test_info)
 {
 	info->caps = test_info->caps;
 
-	if ((test_info->class_function == FT_FUNC_WRITEDATA) ||
-	    (test_info->class_function == FT_FUNC_INJECT_WRITEDATA) ||
-	    (test_info->class_function == FT_FUNC_INJECTDATA) ||
-	    (test_info->class_function == FT_FUNC_SENDDATA))
-		info->domain_attr->cq_data_size = 4;
-
 	info->mode = test_info->mode;
 
 	info->domain_attr->mr_mode = test_info->mr_mode;
@@ -269,6 +263,13 @@ static void ft_fw_convert_info(struct fi_info *info, struct ft_info *test_info)
 
 	info->tx_attr->op_flags = test_info->tx_op_flags;
 	info->rx_attr->op_flags = test_info->rx_op_flags;
+
+	if (is_data_func(test_info->class_function) ||
+	    (is_msg_func(test_info->class_function) &&
+	     test_info->msg_flags & FI_REMOTE_CQ_DATA)) {
+		info->domain_attr->cq_data_size = 4;
+		info->mode |= FI_RX_CQ_DATA;
+	}
 }
 
 static void

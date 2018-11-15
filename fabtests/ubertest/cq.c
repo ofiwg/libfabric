@@ -70,13 +70,13 @@ int ft_use_comp_cq(enum ft_comp_type comp_type)
 
 int ft_generates_rx_comp(void)
 {
-	if (test_info.test_class & (FI_RMA | FI_ATOMIC)) {
-		if (is_data_func(test_info.class_function) ||
-		    (is_msg_func(test_info.class_function) &&
-		    test_info.msg_flags & FI_REMOTE_CQ_DATA))
-			return 1;
+	if (is_data_func(test_info.class_function) ||
+	    (is_msg_func(test_info.class_function) &&
+	    test_info.msg_flags & FI_REMOTE_CQ_DATA))
+		return 1;
+
+	if (test_info.test_class & (FI_RMA | FI_ATOMIC))
 		return 0;
-	}
 
 	if (!(test_info.rx_cq_bind_flags & FI_SELECTIVE_COMPLETION))
 		return 1;

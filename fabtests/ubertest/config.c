@@ -870,8 +870,6 @@ void fts_cur_info(struct ft_series *series, struct ft_info *info)
 	info->mode = (set->mode[series->cur_mode] == FT_MODE_NONE) ?
 			0 : set->mode[series->cur_mode];
 
-	info->mode |= FI_RX_CQ_DATA;
-
 	info->ep_type = set->ep_type[series->cur_ep];
 	info->av_type = set->av_type[series->cur_av];
 	if (set->comp_type[0])
