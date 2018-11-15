@@ -2,11 +2,9 @@ dist: trusty
 sudo: false
 language: c
 compiler:
-    - clang
     - gcc
 os:
     - linux
-    - osx
 addons:
     apt:
         packages:
@@ -42,68 +40,44 @@ addons:
 
 env:
     global:
+   # The next declaration is the encrypted COVERITY_SCAN_TOKEN, created
+   #   via the "travis encrypt" command using the project repo's public key
+	- secure: "fei95s92tZdo/jLNt2m2Q/+wqWxJOgvhLM8tLz2pcEFMumVs4I/QMracsI/sb8/sc1gBI+y8khmj6odTqXzYdTB1wPE7KMsJUVW8rqMe1hiIg7tI5O6uw2eT5lcEcYwJg+ZhkQPwb29yjfbb34wR/p1MZGorua11vncOQ8KIxu/uKsPUkc2/wV3MXEeMBea4djRNP7c//0LAzTF5Kyxn0FFUmmlMJgY544Zf0JK4j+oikhEM8g1IYx7Aj8qcQ8Vd4Cvh9kudtf4Z1kR+ajvbnY+O4ds7FgtS1osVR3cJnpNo3+P3Mk8bg0XaLdFef4HJkZNKN/iVPAdQ54Jqb74BLa/ggxpTCXBcF/HI90Ot5Em3mXcMm6x792EWI4fa26nioJGRQeEQFKGFw9ym7W2rn6nSmEeskoVYkI58j7hg8E5+j8ADxOHPWkRLMaedYPLX0cNixtDRc+OzR1kyBZD33px5oTBxfS3Hobf07G8PUHvkhb5EpOXhoa1EdL34wt+uruxZzKDsW1Hw+4f9beQQ2y9ZcKQkMQAEfxWfiLBrQOYpNKHqyodVm/rtKycpE7PObW3BtK8FEPXT/9CMJD55fe3XgcVqORIwxhcYFfbicpOVIkNqTRkVm0t6/QWEVYb2dNs3u4DaudtkMQ961WScIwg88LaRfrPgojiG+XAKwVc="
+
         - PREFIX=$HOME/install
         - PATH=$PREFIX/bin:$PATH
         - CPPFLAGS="-Werror -I$PREFIX/include"
         - LDFLAGS=-L$PREFIX/lib
         - LD_LIBRARY_PATH=$PREFIX/lib
-        - LIBFABRIC_CONFIGURE_ARGS="--prefix=$PREFIX --enable-sockets"
+        - LIBFABRIC_CONFIGURE_ARGS="--prefix=$PREFIX"
 
 # Brew update GNU Autotools so that autogen can succeed
 before_install:
-    - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update;
-        brew upgrade automake || true; brew upgrade libtool || true;
-      fi
+
+    - echo -n | openssl s_client -connect https://scan.coverity.com:443 | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' | sudo tee -a /etc/ssl/certs/ca-
+
 
 install:
     - ./autogen.sh
     # Build rdma-core because ubuntu trusty doesn't have a sufficiently new version of ibverbs/rdma-core
     # Build verbs only in linux as OS X doesn't have verbs support
-    - if [[ "$TRAVIS_OS_NAME" == "linux" ]] ; then
-        RDMA_CORE_BRANCH=v13 ;
-        git clone --depth 1 -b $RDMA_CORE_BRANCH https://github.com/linux-rdma/rdma-core.git && cd rdma-core && bash build.sh && cd - ;
-        RDMA_CORE_PATH=$PWD/rdma-core/build ;
-        export LD_LIBRARY_PATH="$RDMA_CORE_PATH/lib:$LD_LIBRARY_PATH" ;
-        LIBFABRIC_CONFIGURE_ARGS="$LIBFABRIC_CONFIGURE_ARGS --enable-usnic
-        --enable-verbs=$RDMA_CORE_PATH --enable-mlx=$HOME/mlx";
-        UCX_BRANCH=v1.2.x;
-        git clone --depth 1 -b $UCX_BRANCH https://github.com/openucx/ucx.git && cd ucx && ./autogen.sh && ./configure --prefix=$HOME/mlx CFLAGS="-w" && make -j2 install && cd -;
-      fi
-    - if [[ "$TRAVIS_OS_NAME" == "linux" && "`basename $CC`" == "clang" ]]; then
-        ./configure CFLAGS="-Werror $CFLAGS" $LIBFABRIC_CONFIGURE_ARGS
-        --enable-debug && make -j2;
-      fi
-    # Test fabric direct
-    - ./configure --prefix=$PREFIX --enable-direct=sockets --enable-udp=no
-      --enable-psm=no --enable-gni=no --enable-psm2=no --enable-verbs=no
-      --enable-usnic=no --enable-rxm=no --enable-rxd=no --enable-mlx=no
-    - make -j2
-    # Test loadable library option
-    - ./configure --enable-sockets=dl --disable-udp --disable-rxm --disable-rxd
-      --disable-verbs --disable-usnic --disable-mlx --prefix=$PREFIX
-    - make -j2
-    - make install
-    - make test
-    - rm -rf $PREFIX
+    -   git clone --depth 1 -b v13 https://github.com/linux-rdma/rdma-core.git && cd rdma-core && bash build.sh && cd - ;
+    -   RDMA_CORE_PATH=$PWD/rdma-core/build ;
+    -   export LD_LIBRARY_PATH="$RDMA_CORE_PATH/lib:$LD_LIBRARY_PATH" ;
+    -   UCX_BRANCH=v1.2.x;
+    -   git clone --depth 1 -b $UCX_BRANCH https://github.com/openucx/ucx.git && cd ucx && ./autogen.sh && ./configure --prefix=$HOME/mlx CFLAGS="-w" && make -j2 install && cd -;
     # Test regular build
-    - ./configure $LIBFABRIC_CONFIGURE_ARGS
-    - make -j2
-    - make install
-    - make test
-    - make distcheck
-    - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then make rpm; fi
-    # Prepare build for fabtests
-    - ./configure $LIBFABRIC_CONFIGURE_ARGS
-    - make -j2
-    - make install
-    - make test
-    - make distcheck
-    - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then make rpm; fi
+#    - ./configure $LIBFABRIC_CONFIGURE_ARGS
+#    - make -j2
+#    - make install
+#    - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then make rpm; fi
 
-script:
-    - cd fabtests
-    - ./autogen.sh
-    - ./configure --prefix=$PREFIX --with-libfabric=$PREFIX
-    - make -j2
-    - make install
-    - make test
+addons:
+  coverity_scan:
+    project:
+      name: "ofiwg/libfabric"
+      description: "Open Fabrics Interfaces"
+    notification_email: sean.hefty@intel.com
+    build_command_prepend: "./autogen.sh && ./configure"
+    build_command: "make -j2"
+    branch_pattern: coverity_scan
