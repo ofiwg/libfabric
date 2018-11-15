@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2013-2018 Intel Corporation. All rights reserved.
- * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2016-2018 Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -181,11 +181,6 @@ int ofi_check_rx_mode(const struct fi_info *info, uint64_t flags);
 
 uint64_t fi_gettime_ms(void);
 uint64_t fi_gettime_us(void);
-
-int ofi_rm_substr(char *str, const char *substr);
-int ofi_rm_substr_delim(char *str, const char *substr, const char delim);
-char **ofi_split_and_alloc(const char *s, const char *delim, size_t *count);
-void ofi_free_string_array(char **s);
 
 #define OFI_ENUM_VAL(X) X
 #define OFI_STR(X) #X

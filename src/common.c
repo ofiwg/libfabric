@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2004, 2005 Topspin Communications.  All rights reserved.
  * Copyright (c) 2006-2017 Cisco Systems, Inc.  All rights reserved.
- * Copyright (c) 2013 Intel Corp., Inc.  All rights reserved.
+ * Copyright (c) 2013-2018 Intel Corp., Inc.  All rights reserved.
  * Copyright (c) 2015 Los Alamos Nat. Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -59,6 +59,7 @@
 #include <ofi.h>
 #include <ofi_util.h>
 #include <ofi_epoll.h>
+#include <shared/ofi_str.h>
 
 struct fi_provider core_prov = {
 	.name = "core",
@@ -980,113 +981,4 @@ int ofi_cpu_supports(unsigned func, unsigned reg, unsigned bit)
 
 	ofi_cpuid(func, 0, cpuinfo);
 	return cpuinfo[reg] & bit;
-}
-
-/* String utility functions */
-
-int ofi_rm_substr(char *str, const char *substr)
-{
-	char *dest, *src;
-
-	dest = strstr(str, substr);
-	if (!dest)
-		return -FI_EINVAL;
-
-	src = dest + strlen(substr);
-	memmove(dest, src, strlen(src) + 1);
-	return 0;
-}
-
-int ofi_rm_substr_delim(char *str, const char *substr, const char delim)
-{
-	char *pattern;
-	size_t len = strlen(substr) + 2; // account for delim and null char
-	int ret;
-
-	pattern = malloc(len);
-	if (!pattern)
-		return -FI_ENOMEM;
-
-	snprintf(pattern, len, "%c%s", delim, substr);
-	ret = ofi_rm_substr(str, pattern);
-	if (!ret)
-		goto out;
-
-	snprintf(pattern, len, "%s%c", substr, delim);
-	ret = ofi_rm_substr(str, pattern);
-	if (!ret)
-		goto out;
-
-	ret = ofi_rm_substr(str, substr);
-out:
-	free(pattern);
-	return ret;
-}
-
-/* Split the given string "s" using the specified delimiter(s) in the string
- * "delim" and return an array of strings. The array is terminated with a NULL
- * pointer. Returned array should be freed with ofi_free_string_array().
- *
- * Returns NULL on failure.
- */
-char **ofi_split_and_alloc(const char *s, const char *delim, size_t *count)
-{
-	int i, n;
-	char *tmp;
-	char *dup = NULL;
-	char **arr = NULL;
-
-	if (!s || !delim)
-		return NULL;
-
-	dup = strdup(s);
-	if (!dup) {
-		FI_WARN(&core_prov, FI_LOG_CORE, "failed to allocate memory\n");
-		return NULL;
-	}
-
-	/* compute the array size */
-	n = 1;
-	for (tmp = dup; *tmp != '\0'; ++tmp) {
-		for (i = 0; delim[i] != '\0'; ++i) {
-			if (*tmp == delim[i]) {
-				++n;
-				break;
-			}
-		}
-	}
-
-	/* +1 to leave space for NULL terminating pointer */
-	arr = calloc(n + 1, sizeof(*arr));
-	if (!arr) {
-		FI_WARN(&core_prov, FI_LOG_CORE, "failed to allocate memory\n");
-		goto cleanup;
-	}
-
-	/* set array elts to point inside the dup'ed string */
-	for (tmp = dup, i = 0; tmp != NULL; ++i) {
-		arr[i] = strsep(&tmp, delim);
-	}
-	assert(i == n);
-
-	if (count)
-		*count = n;
-	return arr;
-
-cleanup:
-	free(dup);
-	free(arr);
-	return NULL;
-}
-
-/* see ofi_split_and_alloc() */
-void ofi_free_string_array(char **s)
-{
-	/* all strings are allocated from the same strdup'ed slab, so just free
-	 * the first element */
-	if (s != NULL)
-		free(s[0]);
-
-	/* and then the actual array of pointers */
-	free(s);
 }

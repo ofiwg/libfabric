@@ -30,6 +30,8 @@
  * SOFTWARE.
  */
 
+#include <shared/ofi_str.h>
+
 #include "mrail.h"
 
 static char **mrail_addr_strv = NULL;
