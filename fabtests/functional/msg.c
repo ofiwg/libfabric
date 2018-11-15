@@ -34,7 +34,7 @@
 
 #include <rdma/fi_cm.h>
 
-#include "shared.h"
+#include "common.h"
 
 static int run(void)
 {

@@ -32,7 +32,7 @@
 #include <getopt.h>
 #include <rdma/fi_cm.h>
 
-#include <shared.h>
+#include <common.h>
 
 
 static int listener;

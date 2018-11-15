@@ -35,7 +35,7 @@
 #include <string.h>
 #include <getopt.h>
 #include <rdma/fi_tagged.h>
-#include "shared.h"
+#include "common.h"
 
 int use_sendmsg, use_recvmsg, send_inj_count;
 

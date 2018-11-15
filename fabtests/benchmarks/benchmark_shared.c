@@ -36,7 +36,7 @@
 
 #include <rdma/fi_errno.h>
 
-#include "shared.h"
+#include "common.h"
 #include "benchmark_shared.h"
 
 void ft_parse_benchmark_opts(int op, char *optarg)

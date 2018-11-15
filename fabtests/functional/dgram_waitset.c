@@ -34,7 +34,7 @@
 
 #include <rdma/fi_errno.h>
 
-#include <shared.h>
+#include <common.h>
 
 static int alloc_ep_res(struct fi_info *fi)
 {

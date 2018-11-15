@@ -34,7 +34,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <getopt.h>
-#include "shared.h"
+#include "common.h"
 
 #define lengthof(arr) (sizeof(arr) / sizeof(*arr))
 

@@ -47,7 +47,7 @@
 #include <rdma/fi_tagged.h>
 #include <rdma/fi_atomic.h>
 
-#include <shared.h>
+#include <common.h>
 
 struct fi_info *fi_pep, *fi, *hints;
 struct fid_fabric *fabric;

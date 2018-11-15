@@ -36,7 +36,7 @@
 #include <rdma/fi_errno.h>
 #include <rdma/fi_cm.h>
 
-#include <shared.h>
+#include <common.h>
 
 #define MAX_POLL_CNT 10
 

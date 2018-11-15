@@ -35,7 +35,7 @@
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_cm.h>
 
-#include <shared.h>
+#include <common.h>
 
 // MULTI_BUF_SIZE_FACTOR defines how large the multi recv buffer will be.
 // The minimum value of the factor is 2 which will set the multi recv buffer

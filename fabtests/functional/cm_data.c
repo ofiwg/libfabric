@@ -37,7 +37,7 @@
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_cm.h>
 
-#include "shared.h"
+#include "common.h"
 
 static char *cm_data;
 static size_t cm_data_size;

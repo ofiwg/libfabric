@@ -13,7 +13,7 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
-    <Filter Include="Source Files\common">
+    <Filter Include="Source Files\core">
       <UniqueIdentifier>{506aaadf-53cc-4344-941b-011008029037}</UniqueIdentifier>
     </Filter>
     <Filter Include="Source Files\functional">
@@ -45,11 +45,11 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="common\jsmn.c">
-      <Filter>Source Files\common</Filter>
+    <ClCompile Include="core\jsmn.c">
+      <Filter>Source Files\core</Filter>
     </ClCompile>
-    <ClCompile Include="common\shared.c">
-      <Filter>Source Files\common</Filter>
+    <ClCompile Include="core\common.c">
+      <Filter>Source Files\core</Filter>
     </ClCompile>
     <ClCompile Include="functional\cq_data.c">
       <Filter>Source Files\functional</Filter>
@@ -120,7 +120,7 @@
     <ClCompile Include="unit\av_test.c">
       <Filter>Source Files\unit</Filter>
     </ClCompile>
-    <ClCompile Include="unit\common.c">
+    <ClCompile Include="unit\unit_common.c">
       <Filter>Source Files\unit</Filter>
     </ClCompile>
     <ClCompile Include="unit\dom_test.c">
@@ -132,11 +132,11 @@
     <ClCompile Include="functional\msg_netdir.c">
       <Filter>Source Files\functional</Filter>
     </ClCompile>
-    <ClCompile Include="common\windows\getopt.c">
-      <Filter>Source Files\common</Filter>
+    <ClCompile Include="core\windows\getopt.c">
+      <Filter>Source Files\core</Filter>
     </ClCompile>
-    <ClCompile Include="common\windows\osd.c">
-      <Filter>Source Files\common</Filter>
+    <ClCompile Include="core\windows\osd.c">
+      <Filter>Source Files\core</Filter>
     </ClCompile>
     <ClCompile Include="benchmarks\benchmark_shared.c">
       <Filter>Source Files\benchmarks</Filter>
@@ -185,7 +185,7 @@
     <ClInclude Include="include\jsmn.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\shared.h">
+    <ClInclude Include="include\common.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\unit_common.h">
