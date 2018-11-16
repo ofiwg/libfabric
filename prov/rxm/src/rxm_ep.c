@@ -1191,15 +1191,9 @@ rxm_ep_inject_common_data_fast(struct rxm_ep *rxm_ep, const void *buf, size_t le
 
 	assert(len <= rxm_ep->rxm_info->tx_attr->inject_size);
 
-	ret = rxm_acquire_conn_connect(rxm_ep, dest_addr, &rxm_conn);
+	ret = rxm_ep_prepare_tx(rxm_ep, dest_addr, &rxm_conn);
 	if (OFI_UNLIKELY(ret))
 		return ret;
-
-	if (OFI_UNLIKELY(!dlist_empty(&rxm_conn->deferred_tx_queue))) {
-		rxm_ep_progress_multi(&rxm_ep->util_ep);
-		if (!dlist_empty(&rxm_conn->deferred_tx_queue))
-			return -FI_EAGAIN;
-	}
 
 	if (pkt_size <= rxm_ep->msg_info->tx_attr->inject_size) {
 		inject_pkt->hdr.size = len;
@@ -1226,15 +1220,9 @@ rxm_ep_inject_common_fast(struct rxm_ep *rxm_ep, const void *buf, size_t len,
 
 	assert(len <= rxm_ep->rxm_info->tx_attr->inject_size);
 
-	ret = rxm_acquire_conn_connect(rxm_ep, dest_addr, &rxm_conn);
+	ret = rxm_ep_prepare_tx(rxm_ep, dest_addr, &rxm_conn);
 	if (OFI_UNLIKELY(ret))
 		return ret;
-
-	if (OFI_UNLIKELY(!dlist_empty(&rxm_conn->deferred_tx_queue))) {
-		rxm_ep_progress_multi(&rxm_ep->util_ep);
-		if (!dlist_empty(&rxm_conn->deferred_tx_queue))
-			return -FI_EAGAIN;
-	}
 
 	if (pkt_size <= rxm_ep->msg_info->tx_attr->inject_size) {
 		inject_pkt->hdr.size = len;
@@ -1259,15 +1247,9 @@ rxm_ep_inject_common(struct rxm_ep *rxm_ep, const void *buf, size_t len,
 
 	assert(len <= rxm_ep->rxm_info->tx_attr->inject_size);
 
-	ret = rxm_acquire_conn_connect(rxm_ep, dest_addr, &rxm_conn);
+	ret = rxm_ep_prepare_tx(rxm_ep, dest_addr, &rxm_conn);
 	if (OFI_UNLIKELY(ret))
 		return ret;
-
-	if (OFI_UNLIKELY(!dlist_empty(&rxm_conn->deferred_tx_queue))) {
-		rxm_ep_progress_multi(&rxm_ep->util_ep);
-		if (!dlist_empty(&rxm_conn->deferred_tx_queue))
-			return -FI_EAGAIN;
-	}
 
 	if (pkt_size <= rxm_ep->msg_info->tx_attr->inject_size) {
 		struct rxm_tx_base_buf *tx_buf = (struct rxm_tx_base_buf *)
@@ -1350,15 +1332,9 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 
 	assert(count <= rxm_ep->rxm_info->tx_attr->iov_limit);
 
-	ret = rxm_acquire_conn_connect(rxm_ep, dest_addr, &rxm_conn);
+	ret = rxm_ep_prepare_tx(rxm_ep, dest_addr, &rxm_conn);
 	if (OFI_UNLIKELY(ret))
 		return ret;
-
-	if (OFI_UNLIKELY(!dlist_empty(&rxm_conn->deferred_tx_queue))) {
-		rxm_ep_progress_multi(&rxm_ep->util_ep);
-		if (!dlist_empty(&rxm_conn->deferred_tx_queue))
-			return -FI_EAGAIN;
-	}
 
 	if (data_len <= rxm_ep->rxm_info->tx_attr->inject_size) {
 		struct rxm_tx_eager_buf *tx_buf;
