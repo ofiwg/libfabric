@@ -48,7 +48,7 @@
  * The test callbacks define test code to be run a certain number of times and
  * with certain ordering guarantees.  These details are described in the
  * documentation comments for each callback.  A test is therefore written by
- * providing implementations of all the callbacks described here.  The ordering
+ * providing implementations of the callbacks described here.  The ordering
  * guarantees ensure that test code can be written in a way to avoid deadlock
  * while placing as few constraints on the ordering and completion of callbacks
  * as possible, which allows for callbacks to be executed in a multithreaded
@@ -58,9 +58,6 @@
  * A test implementation also defines a configuration that is processed by the
  * caller.  For example, how to size and align buffers.
  */
-
-#define TEST_API_VERSION_MAJOR 0
-#define TEST_API_VERSION_MINOR 0
 
 /*
  * USER ARGUMENTS
@@ -92,17 +89,14 @@
 
 struct test_arguments;
 
-typedef int (*test_parse_arguments)(
-	const int argc,
-	char * const *argv,
-	struct test_arguments **arguments,
-	size_t *buffer_size
-);
+typedef int (test_parse_arguments)(const int argc, char * const *argv,
+	struct test_arguments **arguments, size_t *buffer_size);
 
-typedef void (*test_free_arguments)(
-	struct test_arguments *arguments
-);
+test_parse_arguments test_generic_parse_arguments;
 
+typedef void (test_free_arguments)(struct test_arguments *arguments);
+
+test_free_arguments test_generic_free_arguments;
 
 /*
  * CONFIGURATION
@@ -146,7 +140,10 @@ struct test_config {
 	enum data_object_sharing tx_data_object_sharing;
 	enum data_object_sharing rx_data_object_sharing;
 
-	/* number of fi_contexts to allocate for per-iteration state */
+	/*
+	 * Number of fi_contexts to allocate for per-transfer state.
+	 * Also affects number of counter events expected per transfer.
+	 */
 	size_t tx_context_count;
 	size_t rx_context_count;
 
@@ -158,8 +155,8 @@ typedef struct test_config (*test_config)(
 );
 
 enum op_state {
-	DONE = 0,
-	PENDING
+	OP_DONE = 0,
+	OP_PENDING
 };
 
 struct context_info {
@@ -225,34 +222,27 @@ struct op_context {
  * (allocated automatically by the caller).
  */
 
-typedef void (*test_tx_init_buffer)(
-	const struct test_arguments *arguments,
-	uint8_t *buffer
-);
+typedef void (test_tx_init_buffer)(const struct test_arguments *arguments,
+		uint8_t *buffer, size_t len);
 
-typedef void (*test_rx_init_buffer)(
-	const struct test_arguments *arguments,
-	uint8_t *buffer
-);
+test_tx_init_buffer test_generic_tx_init_buffer;
 
-typedef struct fid_mr *(*test_tx_create_mr)(
-	const struct test_arguments *arguments,
-	struct fid_domain *domain,
-	const uint64_t key,
-	uint8_t *buffer,
-	size_t len,
-	uint64_t access
-);
+typedef void (test_rx_init_buffer)(const struct test_arguments *arguments,
+		uint8_t *buffer, size_t len);
 
-typedef struct fid_mr *(*test_rx_create_mr)(
-	const struct test_arguments *arguments,
-	struct fid_domain *domain,
-	const uint64_t key,
-	uint8_t *buffer,
-	size_t len,
-	uint64_t access
-);
+test_rx_init_buffer test_generic_rx_init_buffer;
 
+typedef struct fid_mr *(test_tx_create_mr)(const struct test_arguments *arguments,
+		struct fid_domain *domain, const uint64_t key,
+		uint8_t *buffer, size_t len, uint64_t access, uint64_t flags);
+
+test_tx_create_mr test_generic_tx_create_mr;
+
+typedef struct fid_mr *(test_rx_create_mr)(const struct test_arguments *arguments,
+		struct fid_domain *domain, const uint64_t key,
+		uint8_t *buffer, size_t len, uint64_t access, uint64_t flags);
+
+test_rx_create_mr test_generic_rx_create_mr;
 
 /*
  * DATA TRANSFER WINDOW USAGE
@@ -277,18 +267,15 @@ typedef struct fid_mr *(*test_rx_create_mr)(
  * of endpoints.
  */
 
-typedef size_t (*test_tx_window_usage)(
-	const struct test_arguments *arguments,
-	const size_t transfer_id,
-	const size_t transfer_count
-);
+typedef size_t (test_tx_window_usage)(const struct test_arguments *arguments,
+		const size_t transfer_id, const size_t transfer_count);
 
-typedef size_t (*test_rx_window_usage)(
-	const struct test_arguments *arguments,
-	const size_t transfer_id,
-	const size_t transfer_count
-);
+test_tx_window_usage test_generic_tx_window_usage;
 
+typedef size_t (test_rx_window_usage)(const struct test_arguments *arguments,
+		const size_t transfer_id, const size_t transfer_count);
+
+test_rx_window_usage test_generic_rx_window_usage;
 
 /*
  * DATA TRANSFER
@@ -333,36 +320,21 @@ typedef size_t (*test_rx_window_usage)(
  * triggered chains.
  */
 
-typedef int (*test_tx_transfer)(
-	const struct test_arguments *arguments,
-	const size_t transfer_id,
-	const size_t transfer_count,
-	const fi_addr_t rx_address,
-	struct fid_ep *endpoint,
-	struct op_context *op_context,
-	uint8_t *buffer,
-	void *desc,
-	uint64_t key,
-	int rank,
-	struct fid_cntr *tx_cntr,
-	struct fid_cntr *rx_cntr,
-	uint64_t tx_flags
-);
+typedef int (test_tx_transfer)(const struct test_arguments *arguments,
+		const size_t transfer_id, const size_t transfer_count,
+		const fi_addr_t rx_address, struct fid_ep *endpoint,
+		struct op_context *op_context, uint8_t *buffer,
+		void *desc, uint64_t key, int rank, uint64_t tx_flags);
 
-typedef int (*test_rx_transfer)(
-	const struct test_arguments *arguments,
-	const size_t transfer_id,
-	const size_t transfer_count,
-	const fi_addr_t tx_address,
-	struct fid_ep *endpoint,
-	struct op_context *op_context,
-	uint8_t *buffer,
-	void *desc,
-	struct fid_cntr *tx_cntr,
-	struct fid_cntr *rx_cntr,
-	uint64_t rx_flags
-);
+test_tx_transfer generic_tx_transfer;
 
+typedef int (test_rx_transfer)(const struct test_arguments *arguments,
+		const size_t transfer_id, const size_t transfer_count,
+		const fi_addr_t tx_address, struct fid_ep *endpoint,
+		struct op_context *op_context, uint8_t *buffer,
+		void *desc, uint64_t rx_flags);
+
+test_rx_transfer generic_rx_transfer;
 
 /*
  * DATA TRANSFER COMPLETION
@@ -381,29 +353,28 @@ typedef int (*test_rx_transfer)(
  * cq: the TX or RX completion queue from which to consume completion events.
  */
 
-typedef int (*test_tx_cntr_completion)(
-	const struct test_arguments *arguments,
-	const size_t completion_count,
-	struct fid_cntr *cntr
-);
+typedef int (test_tx_cntr_completion)(const struct test_arguments *arguments,
+		const size_t completion_count, struct fid_cntr *cntr);
 
-typedef int (*test_rx_cntr_completion)(
-	const struct test_arguments *arguments,
-	const size_t completion_count,
-	struct fid_cntr *cntr
-);
+test_tx_cntr_completion test_generic_tx_cntr_completion;
 
-typedef int (*test_tx_cq_completion)(
-	const struct test_arguments *arguments,
-	struct op_context **op_context,
-	struct fid_cq *cq
-);
 
-typedef int (*test_rx_cq_completion)(
-	const struct test_arguments *arguments,
-	struct op_context **op_context,
-	struct fid_cq *cq
-);
+typedef int (test_rx_cntr_completion)(const struct test_arguments *arguments,
+		const size_t completion_count, struct fid_cntr *cntr);
+
+test_rx_cntr_completion test_generic_rx_cntr_completion;
+
+
+typedef int (test_tx_cq_completion)(const struct test_arguments *arguments,
+		struct op_context **op_context, struct fid_cq *cq);
+
+test_tx_cq_completion test_generic_tx_cq_completion;
+
+
+typedef int (test_rx_cq_completion)(const struct test_arguments *arguments,
+		struct op_context **op_context, struct fid_cq *cq);
+
+test_rx_cq_completion test_generic_rx_cq_completion;
 
 
 /*
@@ -424,16 +395,16 @@ typedef int (*test_rx_cq_completion)(
  * validating atomic add).
  */
 
-typedef int (*test_tx_datacheck)(
-	const struct test_arguments *arguments,
-	const uint8_t *buffer
-);
+typedef int (test_tx_datacheck)(const struct test_arguments *arguments,
+		const uint8_t *buffer, size_t len);
 
-typedef int (*test_rx_datacheck)(
-	const struct test_arguments *arguments,
-	const uint8_t *buffer,
-	size_t rx_peers
-);
+test_tx_datacheck test_generic_tx_datacheck;
+
+
+typedef int (test_rx_datacheck)(const struct test_arguments *arguments,
+		const uint8_t *buffer, size_t len, size_t rx_peers);
+
+test_rx_datacheck test_generic_rx_datacheck;
 
 
 /*
@@ -452,25 +423,28 @@ typedef int (*test_rx_datacheck)(
  * mr: the memory region to destroy.
  */
 
-typedef int (*test_tx_fini_buffer)(
-	const struct test_arguments *arguments,
-	uint8_t *buffer
-);
+typedef int (test_tx_fini_buffer)(const struct test_arguments *arguments,
+		uint8_t *buffer);
 
-typedef int (*test_rx_fini_buffer)(
-	const struct test_arguments *arguments,
-	uint8_t *buffer
-);
+test_tx_fini_buffer test_generic_tx_fini_buffer;
 
-typedef int (*test_tx_destroy_mr)(
-	const struct test_arguments *arguments,
-	struct fid_mr *mr
-);
 
-typedef int (*test_rx_destroy_mr)(
-	const struct test_arguments *arguments,
-	struct fid_mr *mr
-);
+typedef int (test_rx_fini_buffer)(const struct test_arguments *arguments,
+		uint8_t *buffer);
+
+test_rx_fini_buffer test_generic_rx_fini_buffer;
+
+
+typedef int (test_tx_destroy_mr)(const struct test_arguments *arguments,
+		struct fid_mr *mr);
+
+test_tx_destroy_mr test_generic_tx_destroy_mr;
+
+
+typedef int (test_rx_destroy_mr)(const struct test_arguments *arguments,
+		struct fid_mr *mr);
+
+test_rx_destroy_mr test_generic_rx_destroy_mr;
 
 
 /*
@@ -485,35 +459,34 @@ typedef int (*test_rx_destroy_mr)(
  */
 
 struct test_api {
+	test_parse_arguments	*parse_arguments;
+	test_free_arguments	*free_arguments;
 
-	test_parse_arguments parse_arguments;
-	test_free_arguments free_arguments;
+	test_config		config;
 
-	test_config config;
+	test_tx_init_buffer	*tx_init_buffer;
+	test_rx_init_buffer	*rx_init_buffer;
+	test_tx_create_mr	*tx_create_mr;
+	test_rx_create_mr	*rx_create_mr;
 
-	test_tx_init_buffer tx_init_buffer;
-	test_rx_init_buffer rx_init_buffer;
-	test_tx_create_mr tx_create_mr;
-	test_rx_create_mr rx_create_mr;
+	test_tx_window_usage	*tx_window_usage;
+	test_rx_window_usage	*rx_window_usage;
 
-	test_tx_window_usage tx_window_usage;
-	test_rx_window_usage rx_window_usage;
+	test_tx_transfer	*tx_transfer;
+	test_rx_transfer	*rx_transfer;
 
-	test_tx_transfer tx_transfer;
-	test_rx_transfer rx_transfer;
+	test_tx_cntr_completion	*tx_cntr_completion;
+	test_rx_cntr_completion	*rx_cntr_completion;
+	test_tx_cq_completion	*tx_cq_completion;
+	test_rx_cq_completion	*rx_cq_completion;
 
-	test_tx_cntr_completion tx_cntr_completion;
-	test_rx_cntr_completion rx_cntr_completion;
-	test_tx_cq_completion tx_cq_completion;
-	test_rx_cq_completion rx_cq_completion;
+	test_tx_datacheck	*tx_datacheck;
+	test_rx_datacheck	*rx_datacheck;
 
-	test_tx_datacheck tx_datacheck;
-	test_rx_datacheck rx_datacheck;
-
-	test_tx_fini_buffer tx_fini_buffer;
-	test_rx_fini_buffer rx_fini_buffer;
-	test_tx_destroy_mr tx_destroy_mr;
-	test_rx_destroy_mr rx_destroy_mr;
+	test_tx_fini_buffer	*tx_fini_buffer;
+	test_rx_fini_buffer	*rx_fini_buffer;
+	test_tx_destroy_mr	*tx_destroy_mr;
+	test_rx_destroy_mr	*rx_destroy_mr;
 };
 
 struct test_api test_api (void);

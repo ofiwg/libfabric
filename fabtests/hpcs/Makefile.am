@@ -25,6 +25,7 @@ libpattern_la_CFLAGS = $(libcore_la_CFLAGS)
 
 
 hpcs_sendrecv_SOURCES = src/test/sendrecv.c \
+			src/test/generic.c \
 			include/test/user.h
 
 hpcs_sendrecv_CFLAGS = $(libcore_la_CFLAGS)
@@ -35,6 +36,7 @@ hpcs_sendrecv_LDADD = \
 	libpattern.la
 
 hpcs_onesided_SOURCES = src/test/onesided.c \
+			src/test/generic.c \
 			include/test/user.h
 
 hpcs_onesided_CFLAGS = $(libcore_la_CFLAGS)

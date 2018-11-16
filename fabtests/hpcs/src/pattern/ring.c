@@ -94,45 +94,42 @@ static int ring_parse_arguments(
 
 	struct pattern_arguments *args = calloc(sizeof(struct pattern_arguments), 1);
 	if (args == NULL)
-		return -FI_ENOMEM;
+	return -FI_ENOMEM;
 
 	*args = (struct pattern_arguments) {.leader = 0, .rings = 1};
 
-	if (argc > 0 && argv != NULL) {
-		while ((op = getopt_long(argc, argv, "l:r:mh", longopt, &longopt_idx)) != -1) {
-			switch (op) {
-			case 'l':
-				if (sscanf(optarg, "%d", &args->leader) != 1) {
-					hpcs_error("unable to parse --leader argument\n");
-					return -EINVAL;
-				}
-				if (args->leader < 0)
-					hpcs_error("ring pattern has no leader; deadlock expected if triggered ops are working correctly\n");
-				break;
-			case 'r':
-				if (sscanf(optarg, "%u", &args->rings) != 1) {
-					hpcs_error("unable to parse --rings argument\n");
-					return -EINVAL;
-				}
-				have_rings = 1;
-				break;
-			case 'm':
-				args->rings = -1;
-				have_multi_ring = 1;
-				break;
-			case 'v':
-				args->verbose = 1;
-				break;
-			case 'h':
-			default:
-				fprintf(stderr, "<pattern arguments> :=\n"
-						"\t[-l | --leader=<rank>]\n"
-						"\t[-r | --rings=<rings> | -m | --multi-ring]\n"
-						"\t[-v | --verbose]\n"
-						"\t[-h | --help]\n");
+	while ((op = getopt_long(argc, argv, "l:r:mh", longopt, &longopt_idx)) != -1) {
+		switch (op) {
+		case 'l':
+			if (sscanf(optarg, "%d", &args->leader) != 1) {
+				hpcs_error("unable to parse --leader argument\n");
 				return -EINVAL;
-				break;
 			}
+			if (args->leader < 0)
+			hpcs_error("ring pattern has no leader; deadlock expected if triggered ops are working correctly\n");
+			break;
+		case 'r':
+			if (sscanf(optarg, "%u", &args->rings) != 1) {
+				hpcs_error("unable to parse --rings argument\n");
+				return -EINVAL;
+			}
+			have_rings = 1;
+			break;
+		case 'm':
+			args->rings = -1;
+			have_multi_ring = 1;
+			break;
+		case 'v':
+			args->verbose = 1;
+			break;
+		case 'h':
+		default:
+			fprintf(stderr, "<pattern arguments> :=\n"
+					"\t[-l | --leader=<rank>]\n"
+					"\t[-r | --rings=<rings> | -m | --multi-ring]\n"
+					"\t[-v | --verbose]\n"
+					"\t[-h | --help]\n");
+			return -EINVAL;
 		}
 	}
 

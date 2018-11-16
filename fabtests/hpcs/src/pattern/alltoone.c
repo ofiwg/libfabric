@@ -57,27 +57,24 @@ static int ato_parse_arguments(
 		{0}
 	};
 
-	struct pattern_arguments *args = calloc(sizeof(struct pattern_arguments), 1);
+	struct pattern_arguments *args = calloc(sizeof(*args), 1);
 	if (args == NULL)
 		return -FI_ENOMEM;
 
 	*args = (struct pattern_arguments) {.target_rank = 0};
 
-	if (argc > 0 && argv != NULL) {
-		while ((op = getopt_long(argc, argv, "t:h", longopt, &longopt_idx)) != -1) {
-			switch (op) {
-			case 't':
-				if (sscanf(optarg, "%zu", &args->target_rank) != 1)
-					return -FI_EINVAL;
-				break;
-			case 'h':
-			default:
-				fprintf(stderr, "<pattern arguments> :=\n"
-						"\t[-t | --target-rank=<rank>]\n"
-						"\t[-h | --help]\n");
+	while ((op = getopt_long(argc, argv, "t:h", longopt, &longopt_idx)) != -1) {
+		switch (op) {
+		case 't':
+			if (sscanf(optarg, "%zu", &args->target_rank) != 1)
 				return -FI_EINVAL;
-				break;
-			}
+			break;
+		case 'h':
+		default:
+			fprintf(stderr, "<pattern arguments> :=\n"
+					"\t[-t | --target-rank=<rank>]\n"
+					"\t[-h | --help]\n");
+			return -FI_EINVAL;
 		}
 	}
 

@@ -91,77 +91,61 @@ enum callback_order {
 };
 
 struct arguments {
-	char prov_name[128];
-	size_t window_size;
-	size_t buffer_size;
-	enum callback_order callback_order;
-	size_t iterations;
+	char				*prov_name;
+	size_t				window_size;
+	size_t				buffer_size;
+	enum callback_order		callback_order;
+	size_t				iterations;
 
-	struct pattern_api pattern_api;
-	struct test_api test_api;
+	struct pattern_api		pattern_api;
+	struct test_api			test_api;
 
-	struct pattern_arguments *pattern_arguments;
-	struct test_arguments *test_arguments;
+	struct pattern_arguments	*pattern_arguments;
+	struct test_arguments		*test_arguments;
 };
 
 #define DEFAULT_WINDOW_SIZE 10
 #define DEFAULT_CALLBACK_ORDER CALLBACK_ORDER_NONE
 
-int init_ofi_cntrs(
+static int init_cntrs(
 		const size_t num,
 		struct fid_domain *domain,
 		struct fid_cntr *cntrs[])
 {
-	int our_ret = FI_SUCCESS;
 	size_t i;
-	int ret;
+	int ret = 0;
 
 	struct fi_cntr_attr cntr_attr = {0};
 	cntr_attr.events = FI_CNTR_EVENTS_COMP;
 	cntr_attr.wait_obj = FI_WAIT_UNSPEC;
 
-	for (i = 0; i < num; i += 1) {
+	for (i = 0; i < num && ret == 0; i++)
 		ret = fi_cntr_open(domain, &cntr_attr, cntrs + i, NULL);
-		if (ret) {
-			our_ret = ret;
-			goto err_cntr_open;
-		}
-	}
 
-err_cntr_open:
-
-	return our_ret;
+	return ret;
 }
 
-int init_ofi_cqs(
+static int init_cqs(
 		const size_t num,
 		const size_t cq_size,
 		struct fid_domain *domain,
 		struct fid_cq **cqs)
 {
-	int our_ret = FI_SUCCESS;
 	size_t i;
-	int ret;
+	int ret = 0;
 
 	struct fi_cq_attr cq_attr = {0};
 	cq_attr.size = cq_size;
 	cq_attr.format = FI_CQ_FORMAT_TAGGED;
 	cq_attr.wait_obj = FI_WAIT_UNSPEC;
 
-	for (i = 0; i < num; i += 1) {
+	for (i = 0; i < num && ret == 0; i++)
 		ret = fi_cq_open(domain, &cq_attr, cqs + i, NULL);
-		if (ret) {
-			our_ret = ret;
-			goto err_cq_open;
-		}
-	}
 
-err_cq_open:
-
-	return our_ret;
+	return ret;
 }
 
-int init_ofi_completion(
+static int init_completion(
 		const struct arguments *arguments,
 		const struct test_config *test_config,
 		struct domain_state *domain_state,
@@ -170,53 +154,35 @@ int init_ofi_completion(
 	int ret;
 
 	if (test_config->tx_use_cntr) {
-		ret = init_ofi_cntrs(
-				1,
-				domain_state->domain,
-				&domain_state->tx_cntr);
+		ret = init_cntrs(1, domain_state->domain, &domain_state->tx_cntr);
 		if (ret) {
 			hpcs_error("error initializing tx counters, ret=%d\n", ret);
-			goto err_init_tx_cntrs;
+			return ret;
 		}
 	}
 
 	if (test_config->rx_use_cntr) {
-		ret = init_ofi_cntrs(
-				1,
-				domain_state->domain,
-				&domain_state->rx_cntr);
+		ret = init_cntrs(1, domain_state->domain, &domain_state->rx_cntr);
 		if (ret) {
 			hpcs_error("error initializing rx counters, ret=%d\n", ret);
-			goto err_init_rx_cntrs;
+			return ret;
 		}
 	}
 
-	ret = init_ofi_cqs(
-			1,
-			cq_size,
-			domain_state->domain,
-			&domain_state->tx_cq);
+	ret = init_cqs(1, cq_size, domain_state->domain, &domain_state->tx_cq);
 	if (ret) {
 		hpcs_error("initializing ofi tx cq failed\n");
-		goto err_init_tx_cqs;
+		return ret;
 	}
 
-	ret = init_ofi_cqs(
-			1,
-			arguments->window_size,
-			domain_state->domain,
+	ret = init_cqs(1, arguments->window_size, domain_state->domain,
 			&domain_state->rx_cq);
 	if (ret) {
 		hpcs_error("initializing ofi rx cq failed\n");
-		goto err_init_rx_cqs;
+		return ret;
 	}
 
-err_init_rx_cqs:
-err_init_tx_cqs:
-err_init_rx_cntrs:
-err_init_tx_cntrs:
-
-	return ret;
+	return 0;
 }
 
 
@@ -225,7 +191,7 @@ err_init_tx_cntrs:
  * corresponding unbind function, since completion objects are implicitly
  * unbound when they are freed.
  */
-int bind_ofi_endpoint_completion(const struct test_config *test_config,
+static int bind_endpoint_completion(const struct test_config *test_config,
 		struct domain_state *domain_state)
 {
 	int ret;
@@ -240,7 +206,7 @@ int bind_ofi_endpoint_completion(const struct test_config *test_config,
 				&domain_state->tx_cq->fid, flags);
 		if (ret) {
 			hpcs_error("binding tx cq to ep failed\n");
-			goto err;
+			return ret;
 		}
 	}
 
@@ -253,7 +219,7 @@ int bind_ofi_endpoint_completion(const struct test_config *test_config,
 				&domain_state->rx_cq->fid, flags);
 		if (ret) {
 			hpcs_error("binding rx cq to ep failed\n");
-			goto err;
+			return ret;
 		}
 	}
 
@@ -263,7 +229,7 @@ int bind_ofi_endpoint_completion(const struct test_config *test_config,
 				FI_SEND | FI_READ | FI_WRITE);
 		if (ret) {
 			hpcs_error("binding tx counter to ep failed\n");
-			goto err;
+			return ret;
 		}
 	}
 
@@ -276,16 +242,15 @@ int bind_ofi_endpoint_completion(const struct test_config *test_config,
 				&domain_state->rx_cntr->fid, FI_RECV);
 		if (ret) {
 			hpcs_error("binding rx counter to ep failed\n");
-			goto err;
+			return ret;
 		}
 	}
 
-err:
-	return ret;
+	return 0;
 }
 
 
-int init_ofi_endpoint(
+static int init_endpoint(
 		struct fi_info *info,
 		struct domain_state *domain_state,
 		struct fid_ep **endpoint)
@@ -301,7 +266,7 @@ int init_ofi_endpoint(
 	return 0;
 }
 
-int init_ofi_domain(
+static int init_domain(
 		const struct arguments *arguments,
 		const struct test_config *test_config,
 		struct fid_fabric *fabric,
@@ -333,25 +298,21 @@ int init_ofi_domain(
 		goto err;
 	}
 
-	ret = init_ofi_endpoint(
-		info,
-		domain_state,
-		&domain_state->endpoint
-	);
+	ret = init_endpoint(info, domain_state, &domain_state->endpoint);
 	if (ret) {
-		hpcs_error( "init_ofi_endpoint failed\n");
+		hpcs_error( "init_endpoint failed\n");
 		goto err;
 	}
 
-	ret = init_ofi_completion(arguments, test_config, domain_state, cq_size);
+	ret = init_completion(arguments, test_config, domain_state, cq_size);
 	if (ret) {
-		hpcs_error("init_ofi_completion failed\n");
+		hpcs_error("init_completion failed\n");
 		goto err;
 	}
 
-	ret = bind_ofi_endpoint_completion(test_config, domain_state);
+	ret = bind_endpoint_completion(test_config, domain_state);
 	if (ret) {
-		hpcs_error("bind_ofi_endpoint_completion failed\n");
+		hpcs_error("bind_endpoint_completion failed\n");
 		goto err;
 	}
 
@@ -389,26 +350,20 @@ int init_ofi_domain(
 		goto err;
 	}
 
-	ret = fi_av_insert(domain_state->av,
-			   names,
-			   num_mpi_ranks,
-			   domain_state->addresses,
-			   0,
-			   NULL);
+	ret = fi_av_insert(domain_state->av, names, num_mpi_ranks,
+			   domain_state->addresses, 0, NULL);
 	if (ret != num_mpi_ranks) {
 		hpcs_error("unable to insert all addresses into AV table\n");
 		ret = -1;
 		goto err;
-	}
-	else {
+	} else {
 		ret = 0;
 	}
 
 	if(verbose){
 		hpcs_verbose("Rank %d peer addresses: ", our_mpi_rank);
-		for (i=0; i<num_mpi_ranks; i++) {
+		for (i = 0; i < num_mpi_ranks; i++)
 			printf("%d:%lx ", i, (uint64_t)(domain_state->addresses[i]));
-		}
 		printf("\n");
 	}
 
@@ -418,11 +373,10 @@ err:
 	return ret;
 }
 
-/* Initializes OFI.  Calls fi_allocinfo, fi_getinfo, fi_fabric.  Local resources
- * will be cleaned up on finish / error, returned resources must be cleaned up
- * by calling fini_ofi. */
-
-int init_ofi(
+/*
+ * Initializes OFI resources.
+ */
+static int init_ofi(
 		const struct arguments *arguments,
 		const void *test_arguments,
 		const struct test_config *test_config,
@@ -431,19 +385,19 @@ int init_ofi(
 		int num_mpi_ranks,
 		int our_mpi_rank)
 {
-	int our_ret = FI_SUCCESS;
 	int ret;
-
 	struct fi_info *hints;
 	struct fi_info *info;
+	const char *node = NULL;
+	const char *service = "2042";
+	const uint64_t flags = 0;
+	void *context = NULL;
 
 	hints = fi_allocinfo();
-	if (!hints) {
-		our_ret = -FI_ENOMEM;
-		goto err_allocinfo;
-	}
+	if (!hints)
+		return -FI_ENOMEM;
 
-	hints->fabric_attr->prov_name = strdup(arguments->prov_name);
+	hints->fabric_attr->prov_name = arguments->prov_name;
 	hints->domain_attr->resource_mgmt = FI_RM_ENABLED;
 	hints->domain_attr->mr_mode = FI_MR_RMA_EVENT;
 	hints->domain_attr->mr_key_size = 4;
@@ -453,72 +407,48 @@ int init_ofi(
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->tx_attr->op_flags = FI_DELIVERY_COMPLETE;
 
-	const char *node = NULL;
-	const char *service = "2042";
-	const uint64_t flags = 0;
-
-	ret = fi_getinfo(
-			fi_version (),
-			node,
-			service,
-			flags,
-			hints,
-			&info);
-	if (ret) {
-		our_ret = ret;
+	ret = fi_getinfo(FI_VERSION(1,6), node, service, flags, hints, &info);
+	if (ret)
 		goto err_getinfo;
-	}
 
-	void *context = NULL;
-	ret = fi_fabric(
-			info->fabric_attr,
-			&ofi_state->fabric,
-			context);
+	ret = fi_fabric(info->fabric_attr, &ofi_state->fabric, context);
 	if (ret) {
 		hpcs_error("fi_fabric failed\n");
-		our_ret = ret;
 		goto err_fabric;
 	}
 
+	/*
 	fi_addr_t* domain_state_addr = ofi_state->domain_state->addresses;
-
 	*ofi_state->domain_state = (struct domain_state) {0};
-
 	ofi_state->domain_state->addresses = domain_state_addr;
+	*/
 
-	ret = init_ofi_domain(
-			arguments,
-			test_config,
-			ofi_state->fabric,
-			info,
-			ofi_state->domain_state,
-			address_exchange,
-			num_mpi_ranks,
-			our_mpi_rank);
+	ret = init_domain(arguments, test_config, ofi_state->fabric, info,
+			ofi_state->domain_state, address_exchange,
+			num_mpi_ranks, our_mpi_rank);
 	if (ret) {
-		hpcs_error("init_ofi_domain failed\n");
-		our_ret = ret;
-		goto err_init_domains;
-	}
-	else {
-		hpcs_verbose("init_ofi_domain complete, Using %s provider\n",
+		hpcs_error("init_domain failed\n");
+		goto err_domain;
+	} else {
+		hpcs_verbose("init_domain complete, Using %s provider\n",
 			     info->fabric_attr->name);
-		goto err_allocinfo;
 	}
 
-err_init_domains:
+	return 0;
+
+err_domain:
+	fi_close(&ofi_state->fabric->fid);
+
 err_fabric:
-
 	fi_freeinfo(info);
+
 err_getinfo:
-
 	fi_freeinfo(hints);
-err_allocinfo:
 
-	return our_ret;
+	return ret;
 }
 
-int fini_ofi_completion(struct domain_state *domain_state)
+static int fini_completion(struct domain_state *domain_state)
 {
 	int ret;
 
@@ -561,7 +491,7 @@ int fini_ofi_completion(struct domain_state *domain_state)
 	return ret;
 }
 
-int fini_ofi_domain(struct domain_state *domain_state)
+static int fini_domain(struct domain_state *domain_state)
 {
 	int ret = 0;
 
@@ -578,7 +508,7 @@ int fini_ofi_domain(struct domain_state *domain_state)
 		return ret;
 	}
 
-	ret = fini_ofi_completion(domain_state);
+	ret = fini_completion(domain_state);
 	if (ret)
 		return ret;
 
@@ -601,7 +531,7 @@ int fini_ofi(struct ofi_state *ofi_state)
 {
 	int ret;
 
-	ret = fini_ofi_domain(ofi_state->domain_state);
+	ret = fini_domain(ofi_state->domain_state);
 	if (ret)
 		return ret;
 
@@ -623,9 +553,10 @@ int fini_ofi(struct ofi_state *ofi_state)
  * This function updates argc and argv to start at the next group of args,
  * with argv[0] pointing to the separator.
  */
-void next_args(int *argc, char * const**argv)
+static void next_args(int *argc, char * const**argv)
 {
 	int i;
+	static char* empty = "--";
 
 	/* 0th element is either binary name or previous separator. */
 	for (i=1; i<*argc; i++) {
@@ -637,8 +568,8 @@ void next_args(int *argc, char * const**argv)
 		*argc = *argc - i;
 		*argv = &(*argv)[i];
 	} else {
-		*argc = 0;
-		*argv = NULL;
+		*argc = 1;
+		*argv = &empty;
 	}
 
 	/* Current option index global variable must be reset. */
@@ -663,16 +594,16 @@ static int parse_arguments(int argc, char * const* argv,
 	struct arguments *args = calloc(sizeof (struct arguments), 1);
 	int have_pattern = 0;
 
+	if (args == NULL)
+		return -ENOMEM;
+
 	*args = (struct arguments) {
-		.prov_name = "",
+		.prov_name = NULL,
 		.window_size = DEFAULT_WINDOW_SIZE,
 		.callback_order = DEFAULT_CALLBACK_ORDER,
 		.pattern_api = {0},
 		.iterations = 1
 	};
-
-	if (args == NULL)
-		return -ENOMEM;
 
 	while ((op = getopt_long(argc, argv, "vp:w:o:a:n:h", longopt, &longopt_idx)) != -1) {
 		switch (op) {
@@ -681,12 +612,15 @@ static int parse_arguments(int argc, char * const* argv,
 				printf("verbose mode enabled\n");
 			break;
 		case 'p':
+			args->prov_name = calloc(1, 128);
+			if (args->prov_name == NULL)
+				return -FI_ENOMEM;
 			if (sscanf(optarg, "%127s", args->prov_name) != 1)
-				return -EINVAL;
+				return -FI_EINVAL;
 			break;
 		case 'w':
 			if (sscanf(optarg, "%zu", &args->window_size) != 1)
-				return -EINVAL;
+				return -FI_EINVAL;
 			break;
 		case 'o':
 			if (strcmp(optarg, "none") == 0)
@@ -697,7 +631,7 @@ static int parse_arguments(int argc, char * const* argv,
 				args->callback_order = CALLBACK_ORDER_UNEXPECTED;
 			else {
 				hpcs_error("failed to parse ordering\n");
-				return -EINVAL;
+				return -FI_EINVAL;
 			}
 			break;
 		case 'a':
@@ -711,13 +645,13 @@ static int parse_arguments(int argc, char * const* argv,
 				args->pattern_api = ring_pattern_api();
 			else {
 				hpcs_error("unknown pattern\n");
-				return -EINVAL;
+				return -FI_EINVAL;
 			}
 			have_pattern = 1;
 			break;
 		case 'n':
 			if (sscanf(optarg, "%zu", &args->iterations) != 1)
-				return -EINVAL;
+				return -FI_EINVAL;
 			break;
 		case 'v':
 			verbose = 1;
@@ -769,8 +703,7 @@ static int parse_arguments(int argc, char * const* argv,
 	next_args(&argc, &argv);
 
 	ret = args->test_api.parse_arguments(argc, argv,
-			&args->test_arguments,
-                	&args->buffer_size);
+			&args->test_arguments, &args->buffer_size);
 
 	if (ret) {
 		hpcs_error("failed to parse test arguments\n");
@@ -791,14 +724,15 @@ static void free_arguments (struct arguments *arguments)
 	_pattern_api.free_arguments (arguments->pattern_arguments);
 	_test_api.free_arguments (arguments->test_arguments);
 
-	free (arguments);
+	free(arguments->prov_name);
+
+	free(arguments);
 }
 
 #define DATA_BUF(base, counter) ((base) + ((counter % window) * size))
 #define CONTEXT(base, counter) (&base[counter % window])
 
-static int core_inner (
-		struct domain_state *domain_state,
+static int core_inner (struct domain_state *domain_state,
 		struct arguments *arguments,
 		struct pattern_api *pattern,
 		struct test_api *test,
@@ -816,9 +750,9 @@ static int core_inner (
 
 	struct op_context tx_context [window];
 	struct op_context rx_context [window];
-	uint8_t *tx_buf = calloc(window, size);
-	uint8_t *rx_buf = calloc(window, size);
-	uint64_t *keys = calloc(ranks, sizeof(uint64_t));
+	uint8_t *tx_buf = NULL;
+	uint8_t *rx_buf = NULL;
+	uint64_t *keys = NULL;
 
 	struct test_arguments *test_args = arguments->test_arguments;
 	struct pattern_arguments *pattern_args = arguments->pattern_arguments;
@@ -835,6 +769,18 @@ static int core_inner (
 	uint64_t tx_flags = pattern->enable_triggered ? FI_TRIGGER : 0;
 	uint64_t rx_flags = 0;
 
+	tx_buf = calloc(window, size);
+	if (tx_buf == NULL)
+		return -FI_ENOMEM;
+
+	rx_buf = calloc(window, size);
+	if (rx_buf == NULL)
+		return -FI_ENOMEM;
+
+	keys = calloc(ranks, sizeof(uint64_t));
+	if (keys == NULL)
+		return -FI_ENOMEM;
+
 	memset((char*)&tx_context[0], 0, sizeof(tx_context[0])*window);
 	memset((char*)&rx_context[0], 0, sizeof(rx_context[0])*window);
 
@@ -848,20 +794,12 @@ static int core_inner (
 			return -FI_ENOMEM;
 
 		/* Populate backlinks. */
-		for (j = 0; j < test_config->tx_context_count; j++) {
+		for (j = 0; j < test_config->tx_context_count; j++)
 			tx_context[i].ctxinfo[j].op_context = &tx_context[i];
-		}
 
-		for (j = 0; j < test_config->rx_context_count; j++) {
+		for (j = 0; j < test_config->rx_context_count; j++)
 			rx_context[i].ctxinfo[j].op_context = &rx_context[i];
-		}
 
-	}
-
-	if (tx_buf == NULL || rx_buf == NULL || keys == NULL) {
-		hpcs_error("unable to allocate memory\n");
-		ret = -ENOMEM;
-		goto err_mem;
 	}
 
 	hpcs_verbose("Beginning test: buffer_size=%ld window=%ld iterations=%ld %s%s%s\n",
@@ -884,7 +822,7 @@ static int core_inner (
 
 		/* Key can be any arbitrary number. */
 		rx_mr = test->rx_create_mr(test_args, domain_state->domain, 42+rank,
-				rx_buf, window*size, test_config->mr_rx_flags);
+				rx_buf, window*size, test_config->mr_rx_flags, 0);
 		if (rx_mr == NULL) {
 			hpcs_error("failed to create target memory region\n");
 			return -1;
@@ -974,13 +912,13 @@ static int core_inner (
 				}
 
 				op_context = CONTEXT(rx_context, recvs_posted);
-				if (op_context->state != DONE) {
+				if (op_context->state != OP_DONE) {
 					cur_sender = prev;
 					break;
 				}
 
-				test->rx_init_buffer(test_args, DATA_BUF(rx_buf, recvs_posted));
-
+				test->rx_init_buffer(test_args, DATA_BUF(rx_buf, recvs_posted),
+						test_config->rx_buffer_size);
 
 				/* fprintf(stdout, "Posting rx:  rank %d, sender %d\n", rank, cur_sender); */
 
@@ -996,7 +934,7 @@ static int core_inner (
 						domain_state->endpoint,
 						op_context,
 						op_context->buf,
-						NULL, NULL, NULL, rx_flags);
+						NULL, rx_flags);
 
 				if (ret == -FI_EAGAIN) {
 					cur_sender = prev;
@@ -1012,7 +950,7 @@ static int core_inner (
 					return ret;
 				}
 
-				op_context->state = PENDING;
+				op_context->state = OP_PENDING;
 				op_context->core_context = recvs_posted;
 
 				recvs_posted++;
@@ -1025,7 +963,8 @@ static int core_inner (
                                         break;
 
 				prev = cur_receiver;
-				ret = pattern->next_receiver(pattern_args, rank, ranks, &cur_receiver, &cur_receiver_tx_threshold);
+				ret = pattern->next_receiver(pattern_args, rank, ranks,
+						&cur_receiver, &cur_receiver_tx_threshold);
 				if (ret == -ENODATA) {
 					if (order == CALLBACK_ORDER_UNEXPECTED)
 						barrier();
@@ -1042,22 +981,21 @@ static int core_inner (
 				}
 
 				op_context = CONTEXT(tx_context, sends_posted);
-				if (op_context->state != DONE) {
+				if (op_context->state != OP_DONE) {
 					cur_receiver = prev;
 					break;
 				}
 
-				test->tx_init_buffer(test_args, DATA_BUF(tx_buf, sends_posted));
+				test->tx_init_buffer(test_args, DATA_BUF(tx_buf, sends_posted),
+						test_config->tx_buffer_size);
 
 				struct fid_mr* mr = NULL;
 				void *mr_desc = NULL;
 				if (do_tx_reg) {
 					mr = test->tx_create_mr(test_args,
-							domain_state->domain,
-							0, /* key */
+							domain_state->domain, 0,
 							DATA_BUF(tx_buf, sends_posted),
-							size,
-							FI_SEND);
+							size, FI_SEND, 0);
 					if (mr == NULL) {
 						ret = -1;
 						goto err_mem;
@@ -1092,7 +1030,7 @@ static int core_inner (
 						domain_state->endpoint,
 						op_context,
 						op_context->buf,
-						mr_desc, keys[cur_receiver], rank, NULL, NULL, tx_flags);
+						mr_desc, keys[cur_receiver], rank, tx_flags);
 
 				if (ret == -FI_EAGAIN) {
 					cur_receiver = prev;
@@ -1110,7 +1048,7 @@ static int core_inner (
 					return ret;
 				}
 
-				op_context->state = PENDING;
+				op_context->state = OP_PENDING;
 				op_context->core_context = sends_posted;
 
 				sends_posted++;
@@ -1127,12 +1065,12 @@ static int core_inner (
 						return -1;
 					}
 
-					if (test->rx_datacheck(test_args, op_context->buf, 0)) {
+					if (test->rx_datacheck(test_args, op_context->buf, test_config->rx_buffer_size, 0)) {
 						hpcs_error("rank %d: rx data check error at iteration %ld\n", rank, i);
-						return -1;
+						return -EFAULT;
 					}
 
-					op_context->state = DONE;
+					op_context->state = OP_DONE;
 					recvs_done++;
 					rx_window++;
 
@@ -1152,9 +1090,9 @@ static int core_inner (
 					hpcs_verbose("Received tx completion for ctx %lx\n",
 						     op_context);
 
-					if (test->tx_datacheck(test_args, op_context->buf)) {
+					if (test->tx_datacheck(test_args, op_context->buf, test_config->tx_buffer_size)) {
 						hpcs_error("rank %d: tx data check error at iteration %ld\n", rank, i);
-						return -1;
+						return -EFAULT;
 					}
 
 					if (do_tx_reg && test->tx_destroy_mr != NULL) {
@@ -1165,7 +1103,7 @@ static int core_inner (
 						}
 					}
 
-					op_context->state = DONE;
+					op_context->state = OP_DONE;
 					op_context->test_state = 0;
 					sends_done++;
 					tx_window++;
@@ -1184,7 +1122,9 @@ static int core_inner (
 			 */
 			if (rx_done && tx_done) {
 				if (test_config->tx_use_cntr && sends_done < sends_posted && !test_config->tx_use_cq) {
-					ret = test->tx_cntr_completion(test_args, sends_posted, domain_state->tx_cntr);
+					ret = test->tx_cntr_completion(test_args,
+							sends_posted*test_config->tx_context_count,
+							domain_state->tx_cntr);
 					if (ret) {
 						hpcs_error("cntr_completion (tx) failed, ret=%d\n", ret);
 						return -1;
@@ -1201,7 +1141,7 @@ static int core_inner (
 							}
 						}
 						sends_done++;
-						op_context->state = DONE;
+						op_context->state = OP_DONE;
 						op_context->test_state = 0;
 						tx_window++;
 					}
@@ -1215,7 +1155,9 @@ static int core_inner (
 				}
 
 				if (test_config->rx_use_cntr && recvs_done < recvs_posted && !test_config->rx_use_cq) {
-					ret = test->rx_cntr_completion(test_args, recvs_posted, domain_state->rx_cntr);
+					ret = test->rx_cntr_completion(test_args,
+							recvs_posted*test_config->rx_context_count,
+							domain_state->rx_cntr);
 					if (ret) {
 						hpcs_error("cntr_completion (rx) failed, ret=%d\n", ret);
 						return -1;
@@ -1224,7 +1166,7 @@ static int core_inner (
 					for (j = recvs_done_prev; j < recvs_posted; j++) {
 						op_context = CONTEXT(rx_context, j);
 						recvs_done++;
-						op_context->state = DONE;
+						op_context->state = OP_DONE;
 						op_context->test_state = 0;
 						rx_window++;
 					}
@@ -1234,9 +1176,11 @@ static int core_inner (
 					 * rather than DATA_BUF(rx_buf, j)
 					 */
 
-					if (test->rx_datacheck(test_args, rx_buf, recvs_posted - recvs_done_prev)) {
+					if (test->rx_datacheck(test_args, rx_buf,
+							test_config->rx_buffer_size,
+							recvs_posted - recvs_done_prev)) {
 						hpcs_error("rx data check error at iteration %ld\n", i);
-						return -1;
+						return -EFAULT;
 					}
 
 					if (recvs_done != recvs_posted) {
@@ -1266,7 +1210,7 @@ static int core_inner (
 		ret = test->rx_destroy_mr(test_args, rx_mr);
 		if (ret) {
 			hpcs_error("unable to release rx memory region\n");
-			return -1;
+			return -EFAULT;
 		}
 	}
 
@@ -1295,7 +1239,7 @@ int core (
 		address_exchange_t address_exchange,
 		barrier_t barrier)
 {
-	int ret;
+	int ret, cleanup_ret;
 
 	struct arguments *arguments = NULL;
 	struct test_api test = test_api ();
@@ -1305,11 +1249,6 @@ int core (
 	struct pattern_api pattern = {0};
 
 	fi_addr_t addresses[num_mpi_ranks];
-
-	/*
-	struct fid_cntr *tx_cntrs [num_tx_cntr (arguments, test_config)];
-	struct fid_cntr *rx_cntrs [num_rx_cntr (arguments, test_config)];
-	*/
 
 	ret = parse_arguments(argc, argv, &arguments);
 
@@ -1321,7 +1260,7 @@ int core (
 	test_config = test.config(arguments->test_arguments);
 
 	if (pattern.enable_triggered && !test_config.rx_use_cntr) {
-		hpcs_error("patterns that rely on triggered ops may only be used with tests that use rx counters\n");
+		hpcs_error("patterns that use triggered ops may only be used with tests that use rx counters\n");
 		return -FI_EINVAL;
 	}
 
@@ -1331,13 +1270,8 @@ int core (
 
 	ofi_state.domain_state = &domain_state;
 
-	ret = init_ofi(
-			arguments,
-			arguments->test_arguments,
-			&test_config,
-			&ofi_state,
-			address_exchange,
-			num_mpi_ranks,
+	ret = init_ofi(arguments, arguments->test_arguments, &test_config,
+			&ofi_state, address_exchange, num_mpi_ranks,
 			our_mpi_rank);
 	if (ret) {
 		hpcs_error("Init_ofi failed, ret=%d\n", ret);
@@ -1349,20 +1283,18 @@ int core (
 	ret = core_inner(&domain_state, arguments, &pattern, &test, &test_config,
 			our_mpi_rank, num_mpi_ranks, address_exchange, barrier);
 
-	if (ret) {
+	if (ret)
 		hpcs_error("Test failed, ret=%d (%s)\n", ret, fi_strerror(-ret));
-		return -1;
-	}
 
-	ret = fini_ofi(&ofi_state);
-	if (ret) {
+	cleanup_ret = fini_ofi(&ofi_state);
+	if (cleanup_ret) {
 		hpcs_error("Resource cleanup failed, ret=%d\n", ret);
 		return -1;
 	}
 
 	free_arguments(arguments);
 
-	return 0;
+	return ret;
 }
 
 

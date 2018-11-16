@@ -141,6 +141,7 @@ ifdef(AX_MPI,
 			[ AC_MSG_ERROR([No suitable MPI provided, set MPICC])])]) ],
 	[AS_IF([test $hpcs -eq 1], [
 		AS_IF([test -n "$MPICC"], [
-			AC_CONFIG_FILES([hpcs/Makefile hpcs/src/harness/Makefile])],[ AC_MSG_ERROR([No suitable MPI provided, set MPICC])] )])])
+			AC_CONFIG_FILES([hpcs/Makefile hpcs/src/harness/Makefile])],
+			[ AC_MSG_ERROR([No suitable MPI provided, set MPICC])] )])])
 
 AC_OUTPUT

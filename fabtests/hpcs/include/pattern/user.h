@@ -44,17 +44,16 @@
  * A pattern can be described as a connectivity matrix between TX and RX
  * endpoints, with TX endpoints as rows and RX endpoints as columns.  Example:
  *
- *     EP0 EP1 EP2
- * EP0  1   0   1
- * EP1  0   1   0
- * EP2  0   0   1
+ *                         receivers
+ *
+ *                        EP0 EP1 EP2
+ *                    EP0  1   0   1
+ *        senders     EP1  0   1   0
+ *                    EP2  0   0   1
  *
  * The above pattern shows every endpoint sending to itself, with endpoint 0
  * additionaly sending to endpoint 2.
  */
-
-#define PATTERN_API_VERSION_MAJOR 0
-#define PATTERN_API_VERSION_MINOR 0
 
 /* Initial value for iterator position. */
 #define PATTERN_NO_CURRENT (-1)
@@ -99,40 +98,25 @@ typedef void (*pattern_free_arguments)(
 /*
  * TRAFFIC PATTERN GENERATION
  *
- * All calculations required for using a pattern happen on-demand, as buffering
- * the pattern would not scale for large numbers of endpoints.
- *
- * Due to limitations of the C programming language, patterns are generated
- * rather than specified.  The caller provides a TX and RX index pair, and the
- * pattern generator returns the next TX and RX index pair as outputs.
- *
- * There are two kinds of pattern generators that may be implemented: TX (row)
- * major, and RX (column) major.  A pattern implementation must have at least
- * one of them implemented, and implementing both may provide efficiency
- * benefits.
- *
- * The caller may wish to get the first valid index pair in some range.  This
- * can be done by passing in the index pair immediately before the start of the
- * range of interest.  For example, if the caller is interested in TX = [6] and
- * RX = [10-20], the caller may invoke the TX major pattern generator with TX =
- * 6 and RX = 9.  If the caller is interested in TX = [3-4] and RX = [0], they
- * may invoke the TX major pattern generator with TX = 2 and RX = <rx_count> -
- * 1.  Generators will automatically wrap around at the end of the row or
- * column, but may overshoot the submatrix of interest, so callers must be
- * careful to detect if the generator has traversed outside the bounds of
- * interest.
+ * Patterns are generated using a pair of iterators.  One is used by the
+ * sender logic to iterate across all receivers it will be sending something
+ * to, and the other is used by the receiver logic to iterate across all the
+ * senders that it expects something from.
  *
  * arguments: the parsed version of the arguments.
  *
- * size: the number of endpoints in the job (size of the square pattern matrix).
+ * my_rank: the rank of the local process.
  *
- * current: the pair from which to search for the next valid pair.
+ * num_ranks: the number of ranks in the job.
  *
- * next: the next valid pair found in the pattern.
+ * cur_[sender,receiver]: the pair from which to search for the next valid pair.
  *
  * threshold: triggered op threshold (we don't need to trigger receives, but
- *	patterns may nevertheless need to use the threshold as an internal
+ *	patterns may nevertheless want to use the threshold as an internal
  *	counter).
+ *
+ * return value: 0 in the normal, non-error case, -ENODATA if iterator is done,
+ *      some other negative error number if an error occurred.
  */
 
 typedef int (*pattern_next_sender)(
