@@ -633,7 +633,7 @@ struct ft_series *fts_load(char *filename)
 
 		fp = fopen(filename, "rb");
 		if (!fp) {
-			FT_ERR("Unable to open file");
+			FT_ERR("Unable to open config file: %s\n", filename);
 			return NULL;
 		}
 
