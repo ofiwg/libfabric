@@ -513,8 +513,10 @@ int fi_ibv_domain_xrc_init(struct fi_ibv_domain *domain)
 rbmap_err:
 	(void)ibv_close_xrcd(domain->xrc.xrcd);
 xrcd_err:
-	close(domain->xrc.xrcd_fd);
-	domain->xrc.xrcd_fd = -1;
+	if (domain->xrc.xrcd_fd >= 0) {
+		close(domain->xrc.xrcd_fd);
+		domain->xrc.xrcd_fd = -1;
+	}
 	return ret;
 }
 
