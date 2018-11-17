@@ -407,8 +407,6 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 err:
 	while (--i >= RXM_BUF_POOL_START)
 		rxm_buf_pool_destroy(&rxm_ep->buf_pools[i]);
-	free(rxm_ep->inject_tx_pkt);
-	free(rxm_ep->tinject_tx_pkt);
 	free(rxm_ep->buf_pools);
 	return ret;
 }
