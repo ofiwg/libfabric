@@ -349,7 +349,6 @@ int rxm_cmap_update(struct rxm_cmap *cmap, const void *addr, fi_addr_t fi_addr)
 }
 
 /* Caller must hold cmap->lock */
-
 void rxm_cmap_process_shutdown(struct rxm_cmap *cmap,
 			       struct rxm_cmap_handle *handle)
 {
@@ -555,6 +554,26 @@ int rxm_cmap_handle_connect(struct rxm_cmap *cmap, fi_addr_t fi_addr,
 		ret = -FI_EOPBADSTATE;
 	}
 	return ret;
+}
+
+/* Caller must hold cmap->lock */
+int rxm_cmap_handle_unconnected(struct rxm_ep *rxm_ep, struct rxm_cmap_handle *handle,
+				fi_addr_t dest_addr)
+{
+	int ret;
+
+	if (handle->state == RXM_CMAP_CONNECTED_NOTIFY) {
+		rxm_cmap_process_conn_notify(rxm_ep->cmap, handle);
+		return 0;
+	}
+	/* Since we handling unoonnected state and `cmap:lock`
+	 * is on hold, it shouldn't return 0 */
+	ret = rxm_cmap_handle_connect(rxm_ep->cmap,
+				      dest_addr, handle);
+	if (OFI_UNLIKELY(ret != -FI_EAGAIN))
+		return ret;
+
+	return -FI_EAGAIN;
 }
 
 int rxm_cmap_get_handle(struct rxm_cmap *cmap, fi_addr_t fi_addr,

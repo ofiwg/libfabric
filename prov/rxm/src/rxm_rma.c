@@ -73,7 +73,7 @@ rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t 
 
 	assert(msg->rma_iov_count <= rxm_ep->rxm_info->tx_attr->rma_iov_limit);
 
-	ret = rxm_acquire_conn_connect(rxm_ep, msg->addr, &rxm_conn);
+	ret = rxm_ep_prepare_tx(rxm_ep, msg->addr, &rxm_conn);
 	if (OFI_UNLIKELY(ret))
 		return ret;
 
@@ -264,7 +264,7 @@ rxm_ep_rma_inject_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, ui
 
 	assert(total_size <= rxm_ep->rxm_info->tx_attr->inject_size);
 
-	ret = rxm_acquire_conn_connect(rxm_ep, msg->addr, &rxm_conn);
+	ret = rxm_ep_prepare_tx(rxm_ep, msg->addr, &rxm_conn);
 	if (OFI_UNLIKELY(ret))
 		return ret;
 
@@ -406,7 +406,7 @@ static ssize_t rxm_ep_inject_write(struct fid_ep *ep_fid, const void *buf,
 	struct rxm_ep *rxm_ep = container_of(ep_fid, struct rxm_ep,
 					     util_ep.ep_fid.fid);
 
-	ret = rxm_acquire_conn_connect(rxm_ep, dest_addr, &rxm_conn);
+	ret = rxm_ep_prepare_tx(rxm_ep, dest_addr, &rxm_conn);
 	if (OFI_UNLIKELY(ret))
 		return ret;
 
@@ -438,7 +438,7 @@ static ssize_t rxm_ep_inject_writedata(struct fid_ep *ep_fid, const void *buf,
 	struct rxm_conn *rxm_conn;
 	struct rxm_ep *rxm_ep = container_of(ep_fid, struct rxm_ep,
 					     util_ep.ep_fid.fid);
-	ret = rxm_acquire_conn_connect(rxm_ep, dest_addr, &rxm_conn);
+	ret = rxm_ep_prepare_tx(rxm_ep, dest_addr, &rxm_conn);
 	if (OFI_UNLIKELY(ret))
 		return ret;
 

@@ -245,6 +245,8 @@ int rxm_cmap_process_connreq(struct rxm_cmap *cmap, void *addr,
 			     enum rxm_cmap_reject_flag *cm_reject_flag);
 void rxm_cmap_process_shutdown(struct rxm_cmap *cmap,
 			       struct rxm_cmap_handle *handle);
+int rxm_cmap_handle_unconnected(struct rxm_ep *rxm_ep, struct rxm_cmap_handle *handle,
+				fi_addr_t dest_addr);
 void rxm_cmap_del_handle_ts(struct rxm_cmap_handle *handle);
 void rxm_cmap_free(struct rxm_cmap *cmap);
 int rxm_cmap_alloc(struct rxm_ep *rxm_ep, struct rxm_cmap_attr *attr);
@@ -915,27 +917,6 @@ rxm_acquire_conn(struct rxm_ep *rxm_ep, fi_addr_t fi_addr)
 							  fi_addr);
 }
 
-/* Caller must hold `cmap::lock` */
-static inline int
-rxm_ep_handle_unconnected(struct rxm_ep *rxm_ep, struct rxm_cmap_handle *handle,
-			  fi_addr_t dest_addr)
-{
-	int ret;
-
-	if (handle->state == RXM_CMAP_CONNECTED_NOTIFY) {
-		rxm_cmap_process_conn_notify(rxm_ep->cmap, handle);
-		return 0;
-	}
-	/* Since we handling unoonnected state and `cmap:lock`
-	 * is on hold, it shouldn't return 0 */
-	ret = rxm_cmap_handle_connect(rxm_ep->cmap,
-				      dest_addr, handle);
-	if (OFI_UNLIKELY(ret != -FI_EAGAIN))
-		return ret;
-
-	return -FI_EAGAIN;
-}
-
 static inline int
 rxm_acquire_conn_connect(struct rxm_ep *rxm_ep, fi_addr_t fi_addr,
 			 struct rxm_conn **rxm_conn)
@@ -946,10 +927,28 @@ rxm_acquire_conn_connect(struct rxm_ep *rxm_ep, fi_addr_t fi_addr,
 		if (!*rxm_conn)
 			return -FI_ENOTCONN;
 		rxm_ep->cmap->acquire(&rxm_ep->cmap->lock);
-		ret = rxm_ep_handle_unconnected(rxm_ep, &(*rxm_conn)->handle, fi_addr);
+		ret = rxm_cmap_handle_unconnected(rxm_ep, &(*rxm_conn)->handle, fi_addr);
 		rxm_ep->cmap->release(&rxm_ep->cmap->lock);
 		return ret;
 	}
+	return 0;
+}
+
+static inline ssize_t
+rxm_ep_prepare_tx(struct rxm_ep *rxm_ep, fi_addr_t dest_addr,
+		 struct rxm_conn **rxm_conn)
+{
+	ssize_t ret = rxm_acquire_conn_connect(rxm_ep, dest_addr, rxm_conn);
+
+	if (OFI_UNLIKELY(ret))
+		return ret;
+
+	if (OFI_UNLIKELY(!dlist_empty(&(*rxm_conn)->deferred_tx_queue))) {
+		rxm_ep_progress_multi(&rxm_ep->util_ep);
+		if (!dlist_empty(&(*rxm_conn)->deferred_tx_queue))
+			return -FI_EAGAIN;
+	}
+
 	return 0;
 }
 
