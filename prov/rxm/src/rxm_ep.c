@@ -420,7 +420,7 @@ static void rxm_ep_txrx_pool_destroy(struct rxm_ep *rxm_ep)
 	free(rxm_ep->buf_pools);
 }
 
-static int rxm_ep_txrx_queue_init(struct rxm_ep *rxm_ep)
+static int rxm_ep_rx_queue_init(struct rxm_ep *rxm_ep)
 {
 	int ret;
 
@@ -442,7 +442,7 @@ err_recv_tag:
 	return ret;
 }
 
-static void rxm_ep_txrx_queue_close(struct rxm_ep *rxm_ep)
+static void rxm_ep_rx_queue_close(struct rxm_ep *rxm_ep)
 {
 	rxm_recv_queue_close(&rxm_ep->trecv_queue);
 	rxm_recv_queue_close(&rxm_ep->recv_queue);
@@ -450,7 +450,7 @@ static void rxm_ep_txrx_queue_close(struct rxm_ep *rxm_ep)
 
 static void rxm_ep_txrx_res_close(struct rxm_ep *rxm_ep)
 {
-	rxm_ep_txrx_queue_close(rxm_ep);
+	rxm_ep_rx_queue_close(rxm_ep);
 	if (rxm_ep->buf_pools)
 		rxm_ep_txrx_pool_destroy(rxm_ep);
 	if (rxm_ep->util_ep.domain->threading != FI_THREAD_SAFE) {
@@ -2275,7 +2275,7 @@ static int rxm_ep_txrx_res_open(struct rxm_ep *rxm_ep)
 
 	dlist_init(&rxm_ep->deferred_tx_conn_queue);
 
-	ret = rxm_ep_txrx_queue_init(rxm_ep);
+	ret = rxm_ep_rx_queue_init(rxm_ep);
 	if (ret)
 		goto err1;
 
