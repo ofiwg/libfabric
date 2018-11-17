@@ -2153,10 +2153,73 @@ err:
 	return ret;
 }
 
+static void rxm_ep_sar_init(struct rxm_ep *rxm_ep)
+{
+	size_t param;
+
+	if (!fi_param_get_size_t(&rxm_prov, "sar_limit", &param)) {
+		if (param < rxm_ep->eager_limit) {
+			FI_WARN(&rxm_prov, FI_LOG_CORE,
+				"Requested SAR limit (%zd) less than inject size (%zd). "
+				"SAR protocol won't be used. Messages of size <= (>) inject "
+				"size would would be transmitted via eager (rendezvous) "
+				"protocol.\n", param, rxm_ep->eager_limit);
+		} else {
+			rxm_ep->sar_limit = param;
+		}
+	} else {
+		size_t segs_cnt_limit = rxm_ep->msg_info->tx_attr->size;
+		rxm_ep->sar_limit = segs_cnt_limit * rxm_ep->eager_limit;
+		if (rxm_ep->sar_limit > RXM_SAR_LIMIT)
+			rxm_ep->sar_limit = RXM_SAR_LIMIT;
+	}
+}
+
+static void rxm_ep_settings_init(struct rxm_ep *rxm_ep)
+{
+	size_t max_prog_val;
+
+	assert(rxm_ep->msg_info);
+
+	max_prog_val = MIN(rxm_ep->msg_info->tx_attr->size,
+			   rxm_ep->msg_info->rx_attr->size) / 2;
+	rxm_ep->comp_per_progress = (rxm_ep->comp_per_progress > max_prog_val) ?
+				    max_prog_val : rxm_ep->comp_per_progress;
+
+	rxm_ep->msg_mr_local = ofi_mr_local(rxm_ep->msg_info);
+	rxm_ep->rxm_mr_local = ofi_mr_local(rxm_ep->rxm_info);
+
+	rxm_ep->inject_limit = rxm_ep->msg_info->tx_attr->inject_size;
+
+	if (rxm_ep->inject_limit > (sizeof(struct rxm_pkt) + sizeof(struct rxm_rndv_hdr)))
+		rxm_ep->buffered_min = (rxm_ep->inject_limit -
+					(sizeof(struct rxm_pkt) +
+					 sizeof(struct rxm_rndv_hdr)));
+	else
+		assert(!rxm_ep->buffered_min);
+
+	rxm_ep->eager_limit = rxm_ep->rxm_info->tx_attr->inject_size;
+
+	rxm_ep->min_multi_recv_size = rxm_ep->eager_limit;
+ 	rxm_ep->buffered_limit = rxm_ep->eager_limit;
+
+	rxm_ep_sar_init(rxm_ep);
+
+ 	FI_INFO(&rxm_prov, FI_LOG_CORE,
+		"Settings:\n"
+		"\t\t MR local: MSG - %d, RxM - %d\n"
+		"\t\t Completions per progress: MSG - %zu\n"
+		"\t\t Protocol limits: Inject - %zu, "
+				      "Eager - %zu, "
+				      "SAR - %zu\n",
+		rxm_ep->msg_mr_local, rxm_ep->rxm_mr_local,
+		rxm_ep->comp_per_progress,
+		rxm_ep->inject_limit, rxm_ep->eager_limit, rxm_ep->sar_limit);
+}
+
 static int rxm_ep_msg_res_open(struct rxm_ep *rxm_ep)
 {
 	int ret;
-	size_t max_prog_val;
 	struct rxm_domain *rxm_domain =
 		container_of(rxm_ep->util_ep.domain, struct rxm_domain, util_domain);
 
@@ -2165,11 +2228,6 @@ static int rxm_ep_msg_res_open(struct rxm_ep *rxm_ep)
 				rxm_info_to_core, &rxm_ep->msg_info);
 	if (ret)
 		return ret;
-
-	max_prog_val = MIN(rxm_ep->msg_info->tx_attr->size,
-			   rxm_ep->msg_info->rx_attr->size) / 2;
-	rxm_ep->comp_per_progress = (rxm_ep->comp_per_progress > max_prog_val) ?
-				    max_prog_val : rxm_ep->comp_per_progress;
 
 	if (rxm_ep->msg_info->ep_attr->rx_ctx_cnt == FI_SHARED_CONTEXT) {
 		ret = fi_srx_context(rxm_domain->msg_domain, rxm_ep->msg_info->rx_attr,
@@ -2200,28 +2258,6 @@ err2:
 err1:
 	fi_freeinfo(rxm_ep->msg_info);
 	return ret;
-}
-
-static void rxm_ep_sar_init(struct rxm_ep *rxm_ep)
-{
-	size_t param;
-
-	if (!fi_param_get_size_t(&rxm_prov, "sar_limit", &param)) {
-		if (param < rxm_ep->eager_limit) {
-			FI_WARN(&rxm_prov, FI_LOG_CORE,
-				"Requested SAR limit (%zd) less than inject size (%zd). "
-				"SAR protocol won't be used. Messages of size <= (>) inject "
-				"size would would be transmitted via eager (rendezvous) "
-				"protocol.\n", param, rxm_ep->eager_limit);
-		} else {
-			rxm_ep->sar_limit = param;
-		}
-	} else {
-		size_t segs_cnt_limit = rxm_ep->msg_info->tx_attr->size;
-		rxm_ep->sar_limit = segs_cnt_limit * rxm_ep->eager_limit;
-		if (rxm_ep->sar_limit > RXM_SAR_LIMIT)
-			rxm_ep->sar_limit = RXM_SAR_LIMIT;
-	}
 }
 
 static int
@@ -2279,8 +2315,6 @@ static int rxm_ep_txrx_res_open(struct rxm_ep *rxm_ep)
 	if (ret)
 		goto err1;
 
-	rxm_ep_sar_init(rxm_ep);
-
 	return FI_SUCCESS;
 err1:
 	if (rxm_ep->util_ep.domain->threading != FI_THREAD_SAFE) {
@@ -2326,22 +2360,7 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		goto err2;
 
-	rxm_ep->msg_mr_local = ofi_mr_local(rxm_ep->msg_info);
-	rxm_ep->rxm_mr_local = ofi_mr_local(rxm_ep->rxm_info);
-
-	rxm_ep->inject_limit = rxm_ep->msg_info->tx_attr->inject_size;
-	rxm_ep->eager_limit = rxm_ep->rxm_info->tx_attr->inject_size;
-
-	rxm_ep->min_multi_recv_size = rxm_ep->eager_limit;
-
-	if (rxm_ep->inject_limit > (sizeof(struct rxm_pkt) + sizeof(struct rxm_rndv_hdr)))
-		rxm_ep->buffered_min = (rxm_ep->inject_limit -
-					(sizeof(struct rxm_pkt) +
-					 sizeof(struct rxm_rndv_hdr)));
-	else
-		assert(!rxm_ep->buffered_min);
-
-	rxm_ep->buffered_limit = rxm_ep->eager_limit;
+	rxm_ep_settings_init(rxm_ep);
 
 	ret = rxm_ep_txrx_res_open(rxm_ep);
 	if (ret)
