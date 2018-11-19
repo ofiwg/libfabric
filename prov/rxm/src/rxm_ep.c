@@ -1351,11 +1351,9 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, void **desc,
 				"Ran out of buffers from Eager buffer pool\n");
 			return -FI_EAGAIN;
 		}
+
 		rxm_ep_format_tx_buf_pkt(rxm_conn, data_len, op, data, tag,
 					 flags, &tx_buf->pkt);
-		if (OFI_UNLIKELY(ret))
-			return ret;
-
 		ofi_copy_from_iov(tx_buf->pkt.data, tx_buf->pkt.hdr.size,
 				  iov, count, 0);
 		tx_buf->app_context = context;

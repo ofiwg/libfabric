@@ -774,7 +774,7 @@ static int ip_av_nodesym_getaddr(struct util_av *av, const char *node,
 	return count;
 err:
 	freeaddrinfo(ai);
-	free(addr);
+	free(*addr);
 	return ret;
 }
 

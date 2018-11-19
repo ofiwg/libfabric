@@ -238,7 +238,7 @@ static int fi_ibv_msg_alloc_xrc_params(void **adjusted_param,
 		return -FI_ENOMEM;
 	}
 
-	if (paramlen)
+	if (*paramlen)
 		memcpy((cm_data + 1), param, *paramlen);
 
 	*paramlen = cm_datalen;
