@@ -58,12 +58,9 @@ static ssize_t rxd_generic_write_inject(struct rxd_ep *rxd_ep,
 	}
 
 	rxd_addr = rxd_ep_av(rxd_ep)->fi_addr_table[addr];
-	if (rxd_ep->peers[rxd_addr].peer_addr == FI_ADDR_UNSPEC &&
-	    dlist_empty(&rxd_ep->peers[rxd_addr].unacked)) {
-		ret = rxd_ep_send_rts(rxd_ep, rxd_addr);
-		if (ret)
-			goto out;
-	}
+	ret = rxd_send_rts_if_needed(rxd_ep, rxd_addr);
+	if (ret)
+		goto out;
 
 	tx_entry = rxd_tx_entry_init(rxd_ep, iov, iov_count, NULL, 0, rma_count, data,
 				     0, context, rxd_addr, op, rxd_flags);
@@ -110,12 +107,9 @@ ssize_t rxd_generic_rma(struct rxd_ep *rxd_ep, const struct iovec *iov,
 	}
 
 	rxd_addr = rxd_ep_av(rxd_ep)->fi_addr_table[addr];
-	if (rxd_ep->peers[rxd_addr].peer_addr == FI_ADDR_UNSPEC &&
-	    dlist_empty(&rxd_ep->peers[rxd_addr].unacked)) {
-		ret = rxd_ep_send_rts(rxd_ep, rxd_addr);
-		if (ret)
-			goto out;
-	}
+	ret = rxd_send_rts_if_needed(rxd_ep, rxd_addr);
+	if (ret)
+		goto out;
 
 	tx_entry = rxd_tx_entry_init(rxd_ep, iov, iov_count, NULL, 0, rma_count,
 				     data, 0, context, rxd_addr, op, rxd_flags);

@@ -482,7 +482,7 @@ int rxd_ep_retry_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 	return ret;
 }
 
-ssize_t rxd_ep_send_rts(struct rxd_ep *rxd_ep, fi_addr_t rxd_addr)
+static ssize_t rxd_ep_send_rts(struct rxd_ep *rxd_ep, fi_addr_t rxd_addr)
 {
 	struct rxd_pkt_entry *pkt_entry;
 	struct rxd_rts_pkt *rts_pkt;
@@ -514,6 +514,14 @@ ssize_t rxd_ep_send_rts(struct rxd_ep *rxd_ep, fi_addr_t rxd_addr)
 	dlist_insert_tail(&rxd_ep->peers[rxd_addr].entry, &rxd_ep->rts_sent_list);
 
 	return rxd_ep_retry_pkt(rxd_ep, pkt_entry);
+}
+
+ssize_t rxd_send_rts_if_needed(struct rxd_ep *ep, fi_addr_t addr)
+{
+	if (ep->peers[addr].peer_addr == FI_ADDR_UNSPEC &&
+	    dlist_empty(&ep->peers[addr].unacked))
+		return rxd_ep_send_rts(ep, addr);
+	return 0;
 }
 
 static void rxd_init_base_hdr(struct rxd_ep *rxd_ep, void **ptr,
