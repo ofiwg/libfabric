@@ -168,7 +168,7 @@ int ofi_get_src_addr(uint32_t addr_format,
 	}
 }
 
-static int fi_get_sockaddr(int sa_family, uint64_t flags,
+static int fi_get_sockaddr(int *sa_family, uint64_t flags,
 			   const char *node, const char *service,
 			   struct sockaddr **addr, size_t *addrlen)
 {
@@ -176,7 +176,7 @@ static int fi_get_sockaddr(int sa_family, uint64_t flags,
 	int ret;
 
 	memset(&hints, 0, sizeof hints);
-	hints.ai_family = sa_family;
+	hints.ai_family = *sa_family;
 	hints.ai_socktype = SOCK_STREAM;
 	if (flags & FI_SOURCE)
 		hints.ai_flags = AI_PASSIVE;
@@ -191,6 +191,7 @@ static int fi_get_sockaddr(int sa_family, uint64_t flags,
 		goto out;
 	}
 
+	*sa_family = ai->ai_family;
 	*addrlen = ai->ai_addrlen;
 out:
 	freeaddrinfo(ai);
@@ -207,19 +208,29 @@ void ofi_get_str_addr(const char *node, const char *service,
 	*addrlen = strlen(node) + 1;
 }
 
-int ofi_get_addr(uint32_t addr_format, uint64_t flags,
+int ofi_get_addr(uint32_t *addr_format, uint64_t flags,
 		const char *node, const char *service,
 		void **addr, size_t *addrlen)
 {
-	switch (addr_format) {
+	int sa_family, ret;
+
+	switch (*addr_format) {
 	case FI_SOCKADDR:
-		return fi_get_sockaddr(0, flags, node, service,
-				       (struct sockaddr **) addr, addrlen);
+		sa_family = 0;
+		ret = fi_get_sockaddr(&sa_family, flags, node, service,
+				      (struct sockaddr **) addr, addrlen);
+		if (ret)
+			return ret;
+		*addr_format = sa_family == AF_INET ?
+			       FI_SOCKADDR_IN : FI_SOCKADDR_IN6;
+		return 0;
 	case FI_SOCKADDR_IN:
-		return fi_get_sockaddr(AF_INET, flags, node, service,
+		sa_family = AF_INET;
+		return fi_get_sockaddr(&sa_family, flags, node, service,
 				       (struct sockaddr **) addr, addrlen);
 	case FI_SOCKADDR_IN6:
-		return fi_get_sockaddr(AF_INET6, flags, node, service,
+		sa_family = AF_INET6;
+		return fi_get_sockaddr(&sa_family, flags, node, service,
 				       (struct sockaddr **) addr, addrlen);
 	case FI_ADDR_STR:
 		ofi_get_str_addr(node, service, (char **) addr, addrlen);
