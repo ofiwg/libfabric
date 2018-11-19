@@ -71,6 +71,7 @@ static void util_mr_free_entry(struct ofi_mr_cache *cache,
 	assert(!entry->cached);
 	if (entry->subscribed) {
 		ofi_monitor_unsubscribe(&entry->subscription);
+		entry->subscribed = 0;
 	}
 	cache->delete_region(cache, entry);
 	assert((cache->cached_cnt != 0) &&
