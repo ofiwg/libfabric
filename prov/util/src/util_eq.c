@@ -36,7 +36,7 @@
 #include <ofi_enosys.h>
 #include <ofi_util.h>
 
-void ofi_eq_handle_err_entry(uint32_t api_version,
+void ofi_eq_handle_err_entry(uint32_t api_version, uint64_t flags,
 			     struct fi_eq_err_entry *err_entry,
 			     struct fi_eq_err_entry *user_err_entry)
 {
@@ -52,15 +52,19 @@ void ofi_eq_handle_err_entry(uint32_t api_version,
 		user_err_entry->err_data = err_data;
 		user_err_entry->err_data_size = err_data_size;
 
-		free(err_entry->err_data);
-		err_entry->err_data = NULL;
-		err_entry->err_data_size = 0;
+		if (!(flags & FI_PEEK)) {
+			free(err_entry->err_data);
+			err_entry->err_data = NULL;
+			err_entry->err_data_size = 0;
+		}
 	} else {
 		*user_err_entry = *err_entry;
 	}
 
-	err_entry->err = 0;
-	err_entry->prov_errno = 0;
+	if (!(flags & FI_PEEK)) {
+		err_entry->err = 0;
+		err_entry->prov_errno = 0;
+	}
 }
 
 ssize_t ofi_eq_read(struct fid_eq *eq_fid, uint32_t *event,
@@ -99,8 +103,9 @@ ssize_t ofi_eq_read(struct fid_eq *eq_fid, uint32_t *event,
 			assert((size_t)entry->size == sizeof(struct fi_eq_err_entry));
 			user_err_data = ((struct fi_eq_err_entry *)buf)->err_data;
 			ofi_eq_handle_err_entry(eq->fabric->fabric_fid.api_version,
-						(struct fi_eq_err_entry *)entry->data,
-						(struct fi_eq_err_entry *)buf);
+						flags,
+						(struct fi_eq_err_entry *) entry->data,
+						(struct fi_eq_err_entry *) buf);
 			ret = (ssize_t)entry->size;
 		} else {
 			ret = MIN(len, (size_t)entry->size);

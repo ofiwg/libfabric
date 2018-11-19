@@ -747,7 +747,7 @@ struct util_event {
 
 int ofi_eq_create(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		 struct fid_eq **eq_fid, void *context);
-void ofi_eq_handle_err_entry(uint32_t api_version,
+void ofi_eq_handle_err_entry(uint32_t api_version, uint64_t flags,
 			     struct fi_eq_err_entry *err_entry,
 			     struct fi_eq_err_entry *user_err_entry);
 ssize_t ofi_eq_read(struct fid_eq *eq_fid, uint32_t *event,
