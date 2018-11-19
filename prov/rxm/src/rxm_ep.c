@@ -1166,6 +1166,9 @@ rxm_ep_emulate_inject(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 			"Ran out of buffers from Eager buffer pool\n");
 		return -FI_EAGAIN;
 	}
+	/* This is needed so that we don't report bogus context in fi_cq_err_entry */
+	tx_buf->app_context = NULL;
+
 	rxm_ep_format_tx_buf_pkt(rxm_conn, len, op, data, tag, flags, &tx_buf->pkt);
 	memcpy(tx_buf->pkt.data, buf, len);
 	tx_buf->flags = flags;

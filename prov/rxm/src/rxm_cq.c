@@ -899,12 +899,21 @@ static void rxm_cq_write_error_all(struct rxm_ep *rxm_ep, int err)
 		rxm_cntr_incerr(rxm_ep->util_ep.rd_cntr);
 }
 
+#define RXM_IS_PROTO_STATE_TX(state)	\
+	((state == RXM_SAR_TX) ||	\
+	 (state == RXM_TX) ||		\
+	 (state == RXM_RNDV_TX))
+
 static void rxm_cq_read_write_error(struct rxm_ep *rxm_ep)
 {
+	struct rxm_tx_eager_buf *eager_buf;
+	struct rxm_tx_sar_buf *sar_buf;
+	struct rxm_tx_rndv_buf *rndv_buf;
 	struct rxm_rx_buf *rx_buf;
 	struct fi_cq_err_entry err_entry = {0};
-	struct util_cq *util_cq;
+	struct util_cq *util_cq = NULL;
 	struct util_cntr *util_cntr = NULL;
+	enum rxm_proto_state state = RXM_GET_PROTO_STATE(err_entry.op_context);
 	ssize_t ret;
 
 	RXM_CQ_READERR(&rxm_prov, FI_LOG_CQ, rxm_ep->msg_cq, ret,
@@ -916,22 +925,43 @@ static void rxm_cq_read_write_error(struct rxm_ep *rxm_ep)
 		return;
 	}
 
-	rx_buf = (struct rxm_rx_buf *)err_entry.op_context;
-
-	switch (RXM_GET_PROTO_STATE(err_entry.op_context)) {
-	case RXM_SAR_TX:
-	case RXM_TX:
-	case RXM_INJECT_TX:
-	case RXM_RNDV_TX:
+	if (RXM_IS_PROTO_STATE_TX(state)) {
 		util_cq = rxm_ep->util_ep.tx_cq;
-		if (rxm_ep->util_ep.flags & OFI_CNTR_ENABLED)
-			util_cntr = rxm_ep->util_ep.tx_cntr;
+		util_cntr = rxm_ep->util_ep.tx_cntr;
+	}
+
+	switch (state) {
+	case RXM_SAR_TX:
+		assert(err_entry.flags & FI_SEND);
+		sar_buf = err_entry.op_context;
+		err_entry.op_context = sar_buf->app_context;
+		err_entry.flags = ofi_tx_cq_flags(sar_buf->pkt.hdr.op);
+		break;
+	case RXM_TX:
+		assert(err_entry.flags & FI_SEND);
+		eager_buf = err_entry.op_context;
+		err_entry.op_context = eager_buf->app_context;
+		err_entry.flags = ofi_tx_cq_flags(eager_buf->pkt.hdr.op);
+		break;
+	case RXM_RNDV_TX:
+		assert(err_entry.flags & FI_SEND);
+		rndv_buf = err_entry.op_context;
+		err_entry.op_context = rndv_buf->app_context;
+		err_entry.flags = ofi_tx_cq_flags(rndv_buf->pkt.hdr.op);
 		break;
 	case RXM_RNDV_ACK_SENT:
+		/* fall through */
 	case RXM_RX:
+		/* fall through */
 	case RXM_RNDV_READ:
+		assert(((state == RXM_RNDV_ACK_SENT) && (err_entry.flags & FI_SEND)) ||
+		       ((state == RXM_RX) && (err_entry.flags & FI_RECV)) ||
+		       ((state == RXM_RNDV_READ) && (err_entry.flags & FI_READ)));
+		rx_buf = (struct rxm_rx_buf *)err_entry.op_context;
 		util_cq = rx_buf->ep->util_ep.rx_cq;
 		util_cntr = rx_buf->ep->util_ep.rx_cntr;
+		err_entry.op_context = rx_buf->recv_entry->context;
+		err_entry.flags = rx_buf->recv_entry->comp_flags;
 		break;
 	default:
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "Invalid state!\n");
@@ -939,14 +969,15 @@ static void rxm_cq_read_write_error(struct rxm_ep *rxm_ep)
 			fi_cq_strerror(rxm_ep->msg_cq, err_entry.prov_errno,
 				       err_entry.err_data, NULL, 0));
 		rxm_cq_write_error_all(rxm_ep, -FI_EOPBADSTATE);
-		return;
 	}
 	if (util_cntr)
 		rxm_cntr_incerr(util_cntr);
-	ret = ofi_cq_write_error(util_cq, &err_entry);
-	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_CQ, "Unable to ofi_cq_write_error\n");
-		assert(0);
+	if (util_cq) {
+		ret = ofi_cq_write_error(util_cq, &err_entry);
+		if (ret) {
+			FI_WARN(&rxm_prov, FI_LOG_CQ, "Unable to ofi_cq_write_error\n");
+			assert(0);
+		}
 	}
 }
 
