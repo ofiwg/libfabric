@@ -1441,6 +1441,22 @@ fn:
 	return ret;
 }
 
+static inline int
+fi_ibv_hints_match_dgram_ep(const struct fi_info *hints)
+{
+	return (hints && ((hints->addr_format == FI_ADDR_IB_UD) ||
+			  (hints->ep_attr && (hints->ep_attr->type == FI_EP_DGRAM))));
+}
+
+static inline int
+fi_ibv_hints_match_msg_ep(const struct fi_info *hints)
+{
+	return (hints && ((hints->addr_format == FI_SOCKADDR) ||
+			  (hints->addr_format == FI_SOCKADDR_IN) ||
+			  (hints->addr_format == FI_SOCKADDR_IN6) ||
+			  (hints->addr_format == FI_SOCKADDR_IB) ||
+			  (hints->ep_attr && (hints->ep_attr->type == FI_EP_MSG))));
+}
 
 static int fi_ibv_get_match_infos(uint32_t version, const char *node,
 				  const char *service, uint64_t flags,
@@ -1457,21 +1473,45 @@ static int fi_ibv_get_match_infos(uint32_t version, const char *node,
 	if (ret)
 		return ret;
 
-	if (hints && (hints->addr_format == FI_ADDR_IB_UD)) {
+	/* Check if the user requested to support DGRAM EP type only */
+	if (fi_ibv_hints_match_dgram_ep(hints)) {
 		/* This is case when only IB UD addresses are passed */
 		ret = fi_ibv_handle_ib_ud_addr(node, service, flags, info);
-		if (ret)
+		if (ret) {
+			VERBS_INFO(FI_LOG_CORE,
+				   "Handling of the IB UD address fails - %d, "
+				   "support of this was requested thru the passed hints\n",
+				   ret);
 			fi_freeinfo(*info);
+		}
+		return ret;
+	}
+
+	/* Check if the user requested to support MSG EP type only */
+	if (fi_ibv_hints_match_msg_ep(hints)) {
+		ret = fi_ibv_handle_sock_addr(node, service, flags, hints, info);
+		if (ret) {
+			VERBS_INFO(FI_LOG_CORE,
+				   "Handling of the socket address fails - %d, but the "
+				   "support of this was requested thru the passed hints\n",
+				   ret);
+			if (*info)
+				fi_freeinfo(*info);
+		} else {
+			if (!*info)
+				return -FI_ENODATA;
+		}
 		return ret;
 	}
 
 	ret_sock_addr = fi_ibv_handle_sock_addr(node, service, flags, hints, info);
-	if (ret_sock_addr)
+	if (ret_sock_addr) {
 		VERBS_INFO(FI_LOG_CORE, "Handling of the socket address fails - %d\n",
 			   ret_sock_addr);
-
-	if (!*info)
-		return -FI_ENODATA;
+	} else {
+		if (!*info)
+			return -FI_ENODATA;
+	}
 
 	ret_ib_ud_addr = fi_ibv_handle_ib_ud_addr(node, service, flags, info);
 	if (ret_ib_ud_addr)
