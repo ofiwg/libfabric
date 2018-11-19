@@ -32,11 +32,61 @@
 
 #include "rstream.h"
 
+static int rstream_eq_events(uint32_t *event, struct fi_eq_cm_entry *cm_entry,
+	struct fi_eq_cm_entry *usr_cm_entry, struct rstream_eq *rstream_eq)
+{
+	int ret = 0;
+
+	if (*event == FI_CONNREQ) {
+	/* have to store to transfer to ep during FI_CONNECT */
+		if (cm_entry->info) {
+			usr_cm_entry->info = cm_entry->info;
+			rstream_set_info(usr_cm_entry->info);
+		}
+	} else if (*event == FI_CONNECTED) {
+		struct rstream_ep *rstream_ep = NULL;
+		void *itr = rbtFind(rstream_eq->ep_map, cm_entry->fid);
+		assert(itr);
+		rbtKeyValue(rstream_eq->ep_map, itr,
+			(void **) &cm_entry->fid, (void **) &rstream_ep);
+		rstream_process_cm_event(rstream_ep, cm_entry->data);
+		usr_cm_entry->fid = &rstream_ep->util_ep.ep_fid.fid;
+	} else {
+		ret = -FI_ENODATA;
+	}
+	rstream_eq->prev_cm_state = *event;
+	return ret;
+}
 
 static ssize_t rstream_read(struct fid_eq *eq, uint32_t *event,
 	void *buf, size_t len, uint64_t flags)
 {
-	return -FI_ENOSYS;
+	uint32_t rlen = sizeof(struct fi_eq_cm_entry);
+	assert(len == rlen && event);
+	struct fi_eq_cm_entry *usr_cm_entry = (struct fi_eq_cm_entry *) buf;
+	ssize_t ret;
+	struct fi_eq_cm_entry *cm_entry = NULL;
+
+	struct rstream_eq *rstream_eq = container_of(eq,
+		struct rstream_eq, util_eq.eq_fid);
+
+	cm_entry = rstream_eq->cm_entry;
+	assert(cm_entry);
+
+	if (rstream_eq->prev_cm_state != FI_CONNREQ) {
+		rlen = rlen + rstream_eq->cm_data_len;
+	}
+
+	ret = fi_eq_read(rstream_eq->eq_fd, event, cm_entry, rlen, flags);
+	if (ret == rlen) {
+		ret = rstream_eq_events(event, cm_entry, usr_cm_entry, rstream_eq);
+		if (ret)
+			return ret;
+	} else {
+		return ret;
+	}
+
+	return len;
 }
 
 static ssize_t rstream_readerr(struct fid_eq *eq, struct fi_eq_err_entry *buf,
@@ -54,7 +104,7 @@ static ssize_t rstream_sread(struct fid_eq *eq, uint32_t *event,
 	uint32_t rlen = sizeof(struct fi_eq_cm_entry);
 	assert(len == rlen && event);
 	struct fi_eq_cm_entry *usr_cm_entry = (struct fi_eq_cm_entry *) buf;
-	size_t ret;
+	ssize_t ret;
 	struct fi_eq_cm_entry *cm_entry = NULL;
 
 	struct rstream_eq *rstream_eq = container_of(eq,
@@ -70,26 +120,12 @@ static ssize_t rstream_sread(struct fid_eq *eq, uint32_t *event,
 	ret = fi_eq_sread(rstream_eq->eq_fd, event, cm_entry, rlen, timeout,
 		flags);
 	if (ret == rlen) {
-		if (*event == FI_CONNREQ) {
-			/* have to store to transfer to ep during FI_CONNECT */
-			if (cm_entry->info) {
-				usr_cm_entry->info = cm_entry->info;
-				rstream_set_info(usr_cm_entry->info);
-			}
-		} else if (*event == FI_CONNECTED) {
-			struct rstream_ep *rstream_ep = NULL;
-			void *itr = rbtFind(rstream_eq->ep_map, cm_entry->fid);
-			assert(itr);
-			rbtKeyValue(rstream_eq->ep_map, itr,
-				(void **) &cm_entry->fid, (void **) &rstream_ep);
-			rstream_process_cm_event(rstream_ep, cm_entry->data);
-			usr_cm_entry->fid = &rstream_ep->util_ep.ep_fid.fid;
-		} else {
-			ret = -FI_ENODATA;
-		}
+		ret = rstream_eq_events(event, cm_entry, usr_cm_entry, rstream_eq);
+		if (ret)
+			return ret;
+	} else {
+		return ret;
 	}
-
-	rstream_eq->prev_cm_state = *event;
 
 	return len;
 }
