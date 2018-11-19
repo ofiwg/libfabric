@@ -214,7 +214,7 @@ static void rxd_complete_rx(struct rxd_ep *ep, struct rxd_x_entry *rx_entry)
 	if ((!(rx_entry->cq_entry.flags & FI_REMOTE_CQ_DATA) &&
 	     (rx_entry->cq_entry.flags & FI_RMA ||
 	     rx_entry->cq_entry.flags & FI_ATOMIC)) ||
-	     rx_entry->flags & RXD_NO_RX_COMP)
+	     rx_entry->flags & (RXD_NO_RX_COMP | RXD_CANCELLED))
 		goto out;
 
 	/* Handle CQ comp */
@@ -314,6 +314,8 @@ static void rxd_ep_recv_data(struct rxd_ep *ep, struct rxd_x_entry *x_entry,
 
 static int rxd_verify_active(struct rxd_ep *ep, fi_addr_t addr, fi_addr_t peer_addr)
 {
+	struct rxd_pkt_entry *pkt_entry;
+
 	if (ep->peers[addr].peer_addr == peer_addr)
 		return 1;
 	if (ep->peers[addr].peer_addr != FI_ADDR_UNSPEC) {
@@ -323,6 +325,14 @@ static int rxd_verify_active(struct rxd_ep *ep, fi_addr_t addr, fi_addr_t peer_a
 	}
 
 	ep->peers[addr].peer_addr = peer_addr;
+
+	if (!dlist_empty(&ep->peers[addr].unacked)) {
+		dlist_pop_front(&ep->peers[addr].unacked,
+				struct rxd_pkt_entry, pkt_entry, d_entry);
+		rxd_release_tx_pkt(ep, pkt_entry);
+		ep->peers[addr].unacked_cnt--;
+		dlist_remove(&ep->peers[addr].entry);
+	}
 	dlist_insert_tail(&ep->peers[addr].entry, &ep->active_peers);
 
 	return 0;
@@ -385,19 +395,8 @@ void rxd_progress_tx_list(struct rxd_ep *ep, struct rxd_peer *peer)
 
 static void rxd_update_peer(struct rxd_ep *ep, fi_addr_t peer, fi_addr_t peer_addr)
 {
-	struct rxd_pkt_entry *pkt_entry;
-
 	if (rxd_verify_active(ep, peer, peer_addr))
 		return;
-
-	if (!dlist_empty(&ep->peers[peer].unacked)) {
-		pkt_entry = container_of((&ep->peers[peer].unacked)->next,
-					 struct rxd_pkt_entry, d_entry);
-		if (rxd_pkt_type(pkt_entry) == RXD_RTS) {
-			dlist_remove(&pkt_entry->d_entry);
-			rxd_release_tx_pkt(ep, pkt_entry);
-		}
-	}
 
 	rxd_progress_tx_list(ep, &ep->peers[peer]);
 }
@@ -573,6 +572,9 @@ static struct rxd_x_entry *rxd_match_rx(struct rxd_ep *ep,
 	rx_entry = container_of(match, struct rxd_x_entry, entry);
 
 	total_size = op ? op->size : msg_size;
+	if (rx_entry->flags & RXD_CANCELLED)
+		goto out;
+
 	if (rx_entry->flags & RXD_MULTI_RECV) {
 		dup_entry = rxd_progress_multi_recv(ep, rx_entry, total_size);
 		if (!dup_entry)
@@ -855,6 +857,14 @@ void rxd_progress_op(struct rxd_ep *ep, struct rxd_x_entry *rx_entry,
 		     struct rxd_atom_hdr *atom_hdr,
 		     void **msg, size_t size)
 {
+
+	if (rx_entry->flags & RXD_CANCELLED) {
+		rxd_complete_rx(ep, rx_entry);
+		ep->peers[base_hdr->peer].rx_seq_no += base_hdr->flags & RXD_INLINE ?
+				1 : sar_hdr->num_segs;
+		return;
+	}
+
 	ep->peers[base_hdr->peer].rx_seq_no++;
 	if (sar_hdr)
 		ep->peers[base_hdr->peer].curr_tx_id = sar_hdr->tx_id;

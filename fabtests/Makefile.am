@@ -83,6 +83,7 @@ nobase_dist_config_DATA = \
 	test_configs/psm2/verify.test \
 	test_configs/psm2/psm2.exclude \
 	test_configs/ofi_rxm/ofi_rxm.exclude \
+	test_configs/ofi_rxd/ofi_rxd.exclude \
 	test_configs/ofi_rxd/udp.test \
 	test_configs/shm/all.test \
 	test_configs/shm/verify.test
@@ -381,3 +382,4 @@ test:
 	./scripts/runfabtests.sh -vvv -S $(os_excludes)
 	./scripts/runfabtests.sh -vvv -S $(os_excludes) -R -f ./test_configs/udp/udp.exclude udp
 	./scripts/runfabtests.sh -vvv -S $(os_excludes) -R -f ./test_configs/tcp/tcp.exclude tcp
+	./scripts/runfabtests.sh -vvv -S $(os_excludes) -R -f ./test_configs/ofi_rxd/ofi_rxd.exclude "UDP;ofi_rxd"

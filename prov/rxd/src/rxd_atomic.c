@@ -73,9 +73,9 @@ static ssize_t rxd_generic_atomic(struct rxd_ep *rxd_ep,
 		goto out;
 
 	rxd_addr = rxd_ep_av(rxd_ep)->fi_addr_table[addr];
-	if (rxd_ep->peers[rxd_addr].peer_addr == FI_ADDR_UNSPEC &&
-	    dlist_empty(&rxd_ep->peers[rxd_addr].unacked))
-		rxd_ep_send_rts(rxd_ep, rxd_addr);
+	ret = rxd_send_rts_if_needed(rxd_ep, rxd_addr);
+	if (ret)
+		goto out;
 
 	tx_entry = rxd_tx_entry_init(rxd_ep, iov, count, res_iov, result_count, rma_count,
 				     data, 0, context, rxd_addr, op, rxd_flags);
@@ -176,9 +176,9 @@ static ssize_t rxd_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 		goto out;
 
 	rxd_addr = rxd_ep_av(rxd_ep)->fi_addr_table[addr];
-	if (rxd_ep->peers[rxd_addr].peer_addr == FI_ADDR_UNSPEC &&
-	    dlist_empty(&rxd_ep->peers[rxd_addr].unacked))
-		rxd_ep_send_rts(rxd_ep, rxd_addr);
+	ret = rxd_send_rts_if_needed(rxd_ep, rxd_addr);
+	if (ret)
+		goto out;
 
 	tx_entry = rxd_tx_entry_init(rxd_ep, &iov, 1, NULL, 0, 1, 0, 0, NULL,
 				     rxd_addr, ofi_op_atomic,

@@ -66,10 +66,10 @@ prov/*/*.spec
 .vs
 fabtests.spec
 
-ubertest/fabtest
-ubertest/fi_ubertest
+fabtests/ubertest/fabtest
+fabtests/ubertest/fi_ubertest
 
-benchmarks/fi_*
-functional/fi_*
-unit/fi_*
+fabtests/benchmarks/fi_*
+fabtests/functional/fi_*
+fabtests/unit/fi_*
 pingpong/fi_*

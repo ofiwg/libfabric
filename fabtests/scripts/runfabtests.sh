@@ -53,7 +53,7 @@ declare GOOD_ADDR=""
 declare -i VERBOSE=0
 declare -i SKIP_NEG=0
 declare COMPLEX_CFG
-declare TIMEOUT_VAL="90"
+declare TIMEOUT_VAL="120"
 declare STRICT_MODE=0
 declare REGEX=0
 declare FORK=0

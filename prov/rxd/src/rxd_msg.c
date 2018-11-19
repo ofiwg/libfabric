@@ -211,9 +211,9 @@ ssize_t rxd_ep_generic_inject(struct rxd_ep *rxd_ep, const struct iovec *iov,
 		goto out;
 
 	rxd_addr = rxd_ep_av(rxd_ep)->fi_addr_table[addr];
-	if (rxd_ep->peers[rxd_addr].peer_addr == FI_ADDR_UNSPEC &&
-	    dlist_empty(&rxd_ep->peers[rxd_addr].unacked))
-		rxd_ep_send_rts(rxd_ep, rxd_addr);
+	ret = rxd_send_rts_if_needed(rxd_ep, rxd_addr);
+	if (ret)
+		goto out;
 
 	tx_entry = rxd_tx_entry_init(rxd_ep, iov, iov_count, NULL, 0, 0, data,
 				     tag, NULL, rxd_addr, op, rxd_flags | RXD_INJECT);
@@ -252,9 +252,9 @@ ssize_t rxd_ep_generic_sendmsg(struct rxd_ep *rxd_ep, const struct iovec *iov,
 		goto out;
 
 	rxd_addr = rxd_ep_av(rxd_ep)->fi_addr_table[addr];
-	if (rxd_ep->peers[rxd_addr].peer_addr == FI_ADDR_UNSPEC &&
-	    dlist_empty(&rxd_ep->peers[rxd_addr].unacked))
-		rxd_ep_send_rts(rxd_ep, rxd_addr);
+	ret = rxd_send_rts_if_needed(rxd_ep, rxd_addr);
+	if (ret)
+		goto out;
 
 	tx_entry = rxd_tx_entry_init(rxd_ep, iov, iov_count, NULL, 0, 0,
 				     data, tag, context, rxd_addr, op, rxd_flags);
