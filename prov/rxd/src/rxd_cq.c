@@ -209,7 +209,6 @@ static void rxd_complete_rx(struct rxd_ep *ep, struct rxd_x_entry *rx_entry)
 {
 	struct fi_cq_err_entry err_entry;
 	struct rxd_cq *rx_cq = rxd_ep_rx_cq(ep);
-	struct util_cntr *cntr = ep->util_ep.rx_cntr;
 
 	if ((!(rx_entry->cq_entry.flags & FI_REMOTE_CQ_DATA) &&
 	     (rx_entry->cq_entry.flags & FI_RMA ||
@@ -220,9 +219,6 @@ static void rxd_complete_rx(struct rxd_ep *ep, struct rxd_x_entry *rx_entry)
 	/* Handle CQ comp */
 	if (rx_entry->bytes_done == rx_entry->cq_entry.len) {
 		rx_cq->write_fn(rx_cq, &rx_entry->cq_entry);
-		/* Handle cntr */
-		if (cntr)
-			cntr->cntr_fid.ops->add(&cntr->cntr_fid, 1);
 	} else {
 		memset(&err_entry, 0, sizeof(err_entry));
 		err_entry.op_context = rx_entry->cq_entry.op_context;
@@ -231,8 +227,10 @@ static void rxd_complete_rx(struct rxd_ep *ep, struct rxd_x_entry *rx_entry)
 		err_entry.err = FI_ETRUNC;
 		err_entry.prov_errno = 0;
 		rxd_cq_report_error(rx_cq, &err_entry);
+		goto out;
 	}
 
+	rxd_cntr_report_rx_comp(ep, rx_entry);
 out:
 	rxd_rx_entry_free(ep, rx_entry);
 }
@@ -240,15 +238,14 @@ out:
 static void rxd_complete_tx(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
 {
 	struct rxd_cq *tx_cq = rxd_ep_tx_cq(ep);
-	struct util_cntr *cntr = ep->util_ep.tx_cntr;
 
 	if (tx_entry->flags & RXD_NO_TX_COMP)
 		goto out;
+
 	tx_cq->write_fn(tx_cq, &tx_entry->cq_entry);
-	if (cntr)
-		cntr->cntr_fid.ops->add(&cntr->cntr_fid, 1);
 
 out:
+	rxd_cntr_report_tx_comp(ep, tx_entry);
 	rxd_tx_entry_free(ep, tx_entry);
 }
 
@@ -382,9 +379,15 @@ void rxd_progress_tx_list(struct rxd_ep *ep, struct rxd_peer *peer)
 		if (tx_entry->bytes_done == tx_entry->cq_entry.len) {
 			if (ofi_before(tx_entry->start_seq + (tx_entry->num_segs - 1),
 			    peer->last_rx_ack)) {
-				fastlock_acquire(&ep->util_ep.tx_cq->cq_lock);
-				rxd_complete_tx(ep, tx_entry);
-				fastlock_release(&ep->util_ep.tx_cq->cq_lock);
+				if (tx_entry->cq_entry.flags & FI_READ) {
+					fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
+					rxd_complete_rx(ep, tx_entry);
+					fastlock_release(&ep->util_ep.rx_cq->cq_lock);
+				} else {
+					fastlock_acquire(&ep->util_ep.tx_cq->cq_lock);
+					rxd_complete_tx(ep, tx_entry);
+					fastlock_release(&ep->util_ep.tx_cq->cq_lock);
+				}
 			}
 			continue;
 		}
@@ -711,7 +714,8 @@ static struct rxd_x_entry *rxd_rx_atomic_fetch(struct rxd_ep *ep,
 	if (ret)
 		return NULL;
 
-	tx_entry->cq_entry.flags = FI_READ | FI_ATOMIC;
+	tx_entry->cq_entry.flags = FI_ATOMIC | FI_READ | FI_REMOTE_WRITE |
+				   FI_REMOTE_READ;
 	tx_entry->cq_entry.len = sar_hdr->size;
 
 	rxd_init_data_pkt(ep, tx_entry, tx_entry->pkt);
