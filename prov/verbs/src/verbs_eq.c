@@ -56,7 +56,7 @@ fi_ibv_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *entry,
 	struct fi_ibv_eq *_eq =
 		container_of(eq, struct fi_ibv_eq, eq_fid.fid);
 	ofi_eq_handle_err_entry(_eq->fab->util_fabric.fabric_fid.api_version,
-				&_eq->err, entry);
+				flags, &_eq->err, entry);
 	return sizeof(*entry);
 }
 
