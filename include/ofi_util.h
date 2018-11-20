@@ -677,7 +677,7 @@ void *ofi_av_get_addr(struct util_av *av, fi_addr_t fi_addr);
 #define ofi_ip_av_get_addr ofi_av_get_addr
 fi_addr_t ofi_ip_av_get_fi_addr(struct util_av *av, const void *addr);
 
-int ofi_get_addr(uint32_t addr_format, uint64_t flags,
+int ofi_get_addr(uint32_t *addr_format, uint64_t flags,
 		 const char *node, const char *service,
 		 void **addr, size_t *addrlen);
 int ofi_get_src_addr(uint32_t addr_format,

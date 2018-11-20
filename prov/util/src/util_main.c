@@ -192,7 +192,7 @@ int util_getinfo(const struct util_prov *util_prov, uint32_t version,
 		}
 
 		if (flags & FI_SOURCE) {
-			ret = ofi_get_addr((*info)->addr_format, flags,
+			ret = ofi_get_addr(&(*info)->addr_format, flags,
 					  node, service, &(*info)->src_addr,
 					  &(*info)->src_addrlen);
 			if (ret) {
@@ -204,7 +204,7 @@ int util_getinfo(const struct util_prov *util_prov, uint32_t version,
 		} else {
 			if (node || service) {
 				copy_dest = 0;
-				ret = ofi_get_addr((*info)->addr_format,
+				ret = ofi_get_addr(&(*info)->addr_format,
 						   flags, node, service,
 						   &(*info)->dest_addr,
 						   &(*info)->dest_addrlen);
@@ -225,6 +225,7 @@ int util_getinfo(const struct util_prov *util_prov, uint32_t version,
 					goto err;
 				}
 				(*info)->src_addrlen = hints->src_addrlen;
+				(*info)->addr_format = hints->addr_format;
 			}
 		}
 
@@ -236,6 +237,7 @@ int util_getinfo(const struct util_prov *util_prov, uint32_t version,
 				goto err;
 			}
 			(*info)->dest_addrlen = hints->dest_addrlen;
+			(*info)->addr_format = hints->addr_format;
 		}
 
 		if ((*info)->dest_addr && !(*info)->src_addr) {

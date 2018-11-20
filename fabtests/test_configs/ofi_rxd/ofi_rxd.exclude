@@ -21,6 +21,3 @@ multi_mr
 
 # Exclude because it takes too long
 ubertest
-
-# Exclude unexpected test until bug is resolved
-unexpected_msg
