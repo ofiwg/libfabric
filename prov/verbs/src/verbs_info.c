@@ -1367,8 +1367,15 @@ static int fi_ibv_handle_ib_ud_addr(const char *node, const char *service,
 		}
 
 		if (flags & FI_SOURCE) {
-			if (service)
-				sscanf(service, "%" SCNu16, &src_addr->service);
+			if (service) {
+				ret = sscanf(service, "%" SCNu16,
+					     &src_addr->service);
+				if (ret != 1) {
+					ret = -errno;
+					goto fn2;
+				}
+			}
+
 			VERBS_INFO(FI_LOG_CORE, "node '%s' service '%s' "
 				                "converted to <service=%d>\n",
 				   node, service, src_addr->service);
