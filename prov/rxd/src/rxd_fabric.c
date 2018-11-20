@@ -106,7 +106,7 @@ int rxd_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 err3:
 	fi_freeinfo(dg_info);
 err2:
-	ofi_fabric_close(&rxd_fabric->util_fabric);
+	(void) ofi_fabric_close(&rxd_fabric->util_fabric);
 err1:
 	free(rxd_fabric);
 	return ret;

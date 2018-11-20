@@ -702,7 +702,7 @@ static struct rxd_x_entry *rxd_rx_atomic_fetch(struct rxd_ep *ep,
 	tx_entry->next_seg_no = 0;
 	tx_entry->num_segs = 1;
 
-	tx_entry->iov_count = sar_hdr ? sar_hdr->iov_count : 1;
+	tx_entry->iov_count = sar_hdr->iov_count;
  	ret = rxd_verify_iov(ep, rma_hdr->rma, tx_entry->iov_count,
 			     base_hdr->type, tx_entry->iov);
 	if (ret)
