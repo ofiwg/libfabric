@@ -965,7 +965,7 @@ static void fi_ibv_sockaddr_set_port(struct sockaddr *sa, uint16_t port)
 	}
 }
 
-/* the `rai` parameter is used for the MSG/RDM EP types */
+/* the `rai` parameter is used for the MSG EP type */
 /* the `fmt`, `[src | dest]_addr` parameters are used for the DGRAM EP type */
 /* if the `fmt` parameter isn't used, pass FI_FORMAT_UNSPEC */
 static int fi_ibv_set_info_addrs(struct fi_info *info,
@@ -1278,8 +1278,7 @@ static int fi_ibv_del_info_not_belong_to_dev(const char *dev_name, struct fi_inf
 	*info = NULL;
 
 	while (check_info) {
-		/* Use strncmp since verbs RDM domain name
-		 * would have "-rdm" suffix */
+		/* Use strncmp since verbs domain names would have "-<ep_type>" suffix */
 		if (dev_name && strncmp(dev_name, check_info->domain_attr->name,
 					strlen(dev_name))) {
 			/* This branch removing `check_info` entry from the list */
