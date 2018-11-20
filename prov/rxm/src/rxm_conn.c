@@ -151,29 +151,25 @@ static inline int
 rxm_cmap_check_and_realloc_handles_table(struct rxm_cmap *cmap,
 					 fi_addr_t fi_addr)
 {
-	int ret = FI_SUCCESS;
+	void *new_handles;
+	size_t grow_size;
 
 	if (OFI_LIKELY(fi_addr < cmap->num_allocated))
-		return ret;
+		return 0;
 
-	while (fi_addr >= cmap->num_allocated) {
-		struct rxm_cmap_handle **handles_av_new =
-				realloc(cmap->handles_av,
-					(cmap->av->count +
-					 cmap->num_allocated) *
-					sizeof(*cmap->handles_av));
-		if (OFI_LIKELY(*handles_av_new != NULL)) {
-			cmap->handles_av = handles_av_new;
- 			memset(&cmap->handles_av[cmap->num_allocated],
-			       0, sizeof(*cmap->handles_av) *
-				  cmap->av->count);
-			cmap->num_allocated += cmap->av->count;
-		} else {
-			ret = -FI_ENOMEM;
-			break;
-		}
-	}
-	return ret;
+	grow_size = MAX(cmap->av->count, fi_addr - cmap->num_allocated + 1);
+
+	new_handles = realloc(cmap->handles_av,
+			      (grow_size + cmap->num_allocated) *
+			      sizeof(*cmap->handles_av));
+	if (OFI_LIKELY(!new_handles))
+		return -FI_ENOMEM;
+
+	cmap->handles_av = new_handles;
+	memset(&cmap->handles_av[cmap->num_allocated], 0,
+	       sizeof(*cmap->handles_av) * grow_size);
+	cmap->num_allocated += grow_size;
+	return 0;
 }
 
 void rxm_cmap_del_handle_ts(struct rxm_cmap_handle *handle)
