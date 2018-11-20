@@ -938,6 +938,7 @@ static int tcpx_pep_reject(struct fid_pep *pep, fid_t handle,
 {
 	struct ofi_ctrl_hdr hdr;
 	struct tcpx_conn_handle *tcpx_handle;
+	int ret;
 
 	tcpx_handle = container_of(handle, struct tcpx_conn_handle, handle);
 
@@ -946,12 +947,9 @@ static int tcpx_pep_reject(struct fid_pep *pep, fid_t handle,
 	hdr.type = ofi_ctrl_nack;
 	hdr.seg_size = htons((uint16_t) paramlen);
 
-	ofi_send_socket(tcpx_handle->conn_fd, &hdr,
-			sizeof(hdr), 0);
-
-	if (paramlen)
-		ofi_send_socket(tcpx_handle->conn_fd, param,
-				paramlen, 0);
+	ret = ofi_sendall_socket(tcpx_handle->conn_fd, &hdr, sizeof(hdr));
+	if (!ret && paramlen)
+		(void) ofi_sendall_socket(tcpx_handle->conn_fd, param, paramlen);
 
 	ofi_shutdown(tcpx_handle->conn_fd, SHUT_RDWR);
 	return ofi_close_socket(tcpx_handle->conn_fd);

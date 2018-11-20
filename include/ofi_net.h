@@ -105,10 +105,13 @@ static inline int ofi_sendall_socket(SOCKET sock, const void *buf, size_t len)
 	size_t sent;
 	ssize_t ret;
 
-	for (sent = 0, ret = 0; (sent < len) && (ret >= 0); sent += ret)
+	for (sent = 0, ret = 0; (sent < len) && (ret >= 0); ) {
 		ret = ofi_send_socket(sock, ((char *) buf) + sent, len - sent, 0);
+		if (ret > 0)
+			sent += ret;
+	}
 
-	return (size_t) ret != len;
+	return (size_t) sent != len;
 }
 
 int ofi_discard_socket(SOCKET sock, size_t len);

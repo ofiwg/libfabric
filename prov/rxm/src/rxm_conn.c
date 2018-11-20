@@ -738,11 +738,12 @@ int rxm_cmap_alloc(struct rxm_ep *rxm_ep, struct rxm_cmap_attr *attr)
 err4:
 	rxm_cmap_cm_thread_close(cmap);
 err3:
+	rxm_ep->cmap = NULL;
 	free(cmap->attr.name);
 err2:
 	free(cmap->handles_av);
 err1:
-	rxm_ep->cmap = NULL;
+	free(cmap);
 	return ret;
 }
 
