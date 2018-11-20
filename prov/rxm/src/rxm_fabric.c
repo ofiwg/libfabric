@@ -109,7 +109,7 @@ int rxm_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 err3:
 	fi_freeinfo(msg_info);
 err2:
-	ofi_fabric_close(&rxm_fabric->util_fabric);
+	(void) ofi_fabric_close(&rxm_fabric->util_fabric);
 err1:
 	free(rxm_fabric);
 	return ret;
