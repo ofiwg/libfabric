@@ -328,8 +328,9 @@ void rxd_init_data_pkt(struct rxd_ep *ep, struct rxd_x_entry *tx_entry,
 	seg_size = MIN(rxd_ep_domain(ep)->max_seg_sz, seg_size);
 
 	data_pkt->base_hdr.version = RXD_PROTOCOL_VERSION;
-	data_pkt->base_hdr.type = tx_entry->cq_entry.flags & FI_READ ?
-				  RXD_DATA_READ : RXD_DATA;
+	data_pkt->base_hdr.type = (tx_entry->cq_entry.flags &
+				  (FI_READ | FI_REMOTE_READ)) ?
+				   RXD_DATA_READ : RXD_DATA;
 
 	data_pkt->ext_hdr.rx_id = tx_entry->rx_id;
 	data_pkt->ext_hdr.tx_id = tx_entry->tx_id;

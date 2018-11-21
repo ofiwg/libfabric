@@ -379,7 +379,7 @@ void rxd_progress_tx_list(struct rxd_ep *ep, struct rxd_peer *peer)
 		if (tx_entry->bytes_done == tx_entry->cq_entry.len) {
 			if (ofi_before(tx_entry->start_seq + (tx_entry->num_segs - 1),
 			    peer->last_rx_ack)) {
-				if (tx_entry->cq_entry.flags & FI_READ) {
+				if (tx_entry->op == RXD_DATA_READ) {
 					fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
 					rxd_complete_rx(ep, tx_entry);
 					fastlock_release(&ep->util_ep.rx_cq->cq_lock);
@@ -714,8 +714,7 @@ static struct rxd_x_entry *rxd_rx_atomic_fetch(struct rxd_ep *ep,
 	if (ret)
 		return NULL;
 
-	tx_entry->cq_entry.flags = FI_ATOMIC | FI_READ | FI_REMOTE_WRITE |
-				   FI_REMOTE_READ;
+	tx_entry->cq_entry.flags = ofi_rx_cq_flags(ofi_op_atomic_fetch);
 	tx_entry->cq_entry.len = sar_hdr->size;
 
 	rxd_init_data_pkt(ep, tx_entry, tx_entry->pkt);
