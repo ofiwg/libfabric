@@ -313,7 +313,7 @@ pipeline {
                     // publishes the source RPM to DST's Artifactory instance
                     transfer(artifactName: '/tmp/libfabric-source.tar.gz')
 
-                    // Sends event to message bus to notify other builds 
+                    // Sends event to message bus to notify other builds
                     publishEvents(["os-networking-libfabric-verbs-publish"])
                 }
             }
@@ -337,24 +337,24 @@ pipeline {
             script {
                 // send email when the state of the pipeline changes
                 // only sends email to @cray.com
-                //def emailBody = '${SCRIPT, template="libfabric-template.groovy"}'
-                //def providers = []
-                //def defaultMailer = ''
 
-                //if (env.BRANCH_NAME == 'master') {
-                //    defaultMailer = mailingList()
-                //} else {
-                //    providers.add ( [$class: 'CulpritsRecipientProvider'] )
-                //    providers.add ( [$class: 'RequesterRecipientProvider'] )
-                //    providers.add ( [$class: 'DevelopersRecipientProvider'] )
-                //}
-                //emailext subject: '$DEFAULT_SUBJECT',
-                //    body: emailBody,
-                //    mimeType: 'text/html',
-                //    recipientProviders: providers,
-                //    replyTo: '$DEFAULT_REPLYTO',
-                //    to: defaultMailer
-                echo 'hello world, add an email structure/function call here'
+                def emailBody = createEmail(build : currentBuild)
+                def providers = []
+                def defaultMailer = ''
+
+                if (env.BRANCH_NAME == 'master') {
+                    defaultMailer = mailingList()
+                } else {
+                    providers.add ( [$class: 'CulpritsRecipientProvider'] )
+                    providers.add ( [$class: 'RequesterRecipientProvider'] )
+                    providers.add ( [$class: 'DevelopersRecipientProvider'] )
+                }
+                emailext subject: '$DEFAULT_SUBJECT',
+                    body: emailBody,
+                    mimeType: 'text/html',
+                    recipientProviders: providers,
+                    replyTo: '$DEFAULT_REPLYTO',
+                    to: defaultMailer
              }
         }
     }
