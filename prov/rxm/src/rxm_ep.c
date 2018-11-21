@@ -1879,10 +1879,12 @@ static int rxm_ep_close(struct fid *fid)
 
 	rxm_ep_txrx_res_close(rxm_ep);
 
-	ret = fi_close(&rxm_ep->msg_cq->fid);
-	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to close msg CQ\n");
-		retv = ret;
+	if (rxm_ep->msg_cq) {
+		ret = fi_close(&rxm_ep->msg_cq->fid);
+		if (ret) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to close msg CQ\n");
+			retv = ret;
+		}
 	}
 
 	ret = rxm_ep_msg_res_close(rxm_ep);
