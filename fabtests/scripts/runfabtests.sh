@@ -351,8 +351,8 @@ function unit_test {
 
 function cs_test {
 	local test=$1
-	local ret1=0
-	local ret2=0
+	local s_ret=0
+	local c_ret=0
 	local test_exe="fi_${test} -p \"${PROV}\""
 	local start_time
 	local end_time
@@ -364,29 +364,31 @@ function cs_test {
 
 	s_cmd="${BIN_PATH}${test_exe} -s $S_INTERFACE"
 	${SERVER_CMD} "${EXPORT_ENV} $s_cmd" &> $s_outp &
-	p1=$!
+	s_pid=$!
 	sleep 1
 
 	c_cmd="${BIN_PATH}${test_exe} -s $C_INTERFACE $S_INTERFACE"
 	${CLIENT_CMD} "${EXPORT_ENV} $c_cmd" &> $c_outp &
-	p2=$!
+	c_pid=$!
 
-	wait $p1
-	ret1=$?
+	wait $c_pid
+	c_ret=$?
 
-	wait $p2
-	ret2=$?
+	[[ c_ret -ne 0 ]] && kill -9 $s_pid
+
+	wait $s_pid
+	s_ret=$?
 
 	end_time=$(date '+%s')
 	test_time=$(compute_duration "$start_time" "$end_time")
 
-	if [[ $STRICT_MODE -eq 0 && $ret1 -eq $FI_ENODATA && $ret2 -eq $FI_ENODATA ]] ||
-	   [[ $STRICT_MODE -eq 0 && $ret1 -eq $FI_ENOSYS && $ret2 -eq $FI_ENOSYS ]]; then
+	if [[ $STRICT_MODE -eq 0 && $s_ret -eq $FI_ENODATA && $c_ret -eq $FI_ENODATA ]] ||
+	   [[ $STRICT_MODE -eq 0 && $s_ret -eq $FI_ENOSYS && $c_ret -eq $FI_ENOSYS ]]; then
 		print_results "$test_exe" "Notrun" "$test_time" "$s_outp" "$s_cmd" "$c_outp" "$c_cmd"
 		skip_count+=1
-	elif [ $ret1 -ne 0 -o $ret2 -ne 0 ]; then
+	elif [ $s_ret -ne 0 -o $c_ret -ne 0 ]; then
 		print_results "$test_exe" "Fail" "$test_time" "$s_outp" "$s_cmd" "$c_outp" "$c_cmd"
-		if [ $ret1 -eq 124 -o $ret2 -eq 124 ]; then
+		if [ $s_ret -eq 124 -o $c_ret -eq 124 ]; then
 			cleanup
 		fi
 		fail_count+=1
@@ -400,8 +402,8 @@ function complex_test {
 	local test=$1
 	local config=$2
 	local test_exe="fi_${test}"
-	local ret1=0
-	local ret2=0
+	local s_ret=0
+	local c_ret=0
 	local start_time
 	local end_time
 	local test_time
@@ -418,31 +420,33 @@ function complex_test {
 
 	s_cmd="${BIN_PATH}${test_exe} -x $opts"
 	FI_LOG_LEVEL=error ${SERVER_CMD} "${EXPORT_ENV} $s_cmd" &> $s_outp &
-	p1=$!
+	s_pid=$!
 	sleep 1
 
 	c_cmd="${BIN_PATH}${test_exe} -p \"${PROV}\" -t $config $S_INTERFACE $opts"
 	FI_LOG_LEVEL=error ${CLIENT_CMD} "${EXPORT_ENV} $c_cmd" &> $c_outp &
-	p2=$!
+	c_pid=$!
 
-	wait $p2
-	ret2=$?
+	wait $c_pid
+	c_ret=$?
 
-	wait $p1
-	ret1=$?
+	[[ c_ret -ne 0 ]] && kill -9 $s_pid
+
+	wait $s_pid
+	s_ret=$?
 
 	end_time=$(date '+%s')
 	test_time=$(compute_duration "$start_time" "$end_time")
 
 	# case: config file doesn't exist or invalid option provided
-	if [ $ret1 -eq 1 -o $ret2 -eq 1 ]; then
+	if [ $s_ret -eq 1 -o $c_ret -eq 1 ]; then
 		print_results "$test_exe" "Notrun" "0" "$s_outp" "$s_cmd" "$c_outp" "$c_cmd"
 		cleanup
 		skip_count+=1
 		return
 	# case: test didn't run becasue some error occured
-	elif [ $ret1 -ne 0 -o $ret2 -ne 0 ]; then
-		printf "%-50s%s\n" "$test_exe:" "Server returns $ret1, client returns $ret2"
+	elif [ $s_ret -ne 0 -o $c_ret -ne 0 ]; then
+		printf "%-50s%s\n" "$test_exe:" "Server returns $s_ret, client returns $c_ret"
 		print_results "$test_exe" "Fail [$f_cnt/$total]" "$test_time" "$s_outp" "$s_cmd" "$c_outp" "$c_cmd"
                 cleanup
                 fail_count+=1
