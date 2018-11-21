@@ -257,9 +257,76 @@ static void rxm_buf_pool_destroy(struct rxm_buf_pool *pool)
 {
 	/* This indicates whether the pool is allocated or not */
 	if (pool->rxm_ep) {
-		fastlock_destroy(&pool->lock);
 		util_buf_pool_destroy(pool->pool);
 	}
+}
+
+static inline struct rxm_buf *
+rxm_buf_get_thread_unsafe(struct rxm_buf_pool *pool)
+{
+	return util_buf_alloc(pool->pool);
+}
+
+static inline void
+rxm_buf_release_thread_unsafe(struct rxm_buf_pool *pool, struct rxm_buf *rxm_buf)
+{
+	util_buf_release(pool->pool, rxm_buf);
+}
+
+static inline struct rxm_buf *
+rxm_buf_get_by_index_thread_unsafe(struct rxm_buf_pool *pool, size_t index)
+{
+	return util_buf_get_by_index(pool->pool, index);
+}
+
+static inline size_t
+rxm_get_buf_index_thread_unsafe(struct rxm_buf_pool *pool, struct rxm_buf *rxm_buf)
+{
+	return util_get_buf_index(pool->pool, rxm_buf);
+}
+
+static struct rxm_buf *
+rxm_buf_get_thread_safe(struct rxm_buf_pool *pool)
+{
+	struct rxm_buf *rxm_buf;
+
+	fastlock_acquire(&pool->rxm_ep->util_ep.lock);
+	rxm_buf = rxm_buf_get_thread_unsafe(pool);
+	fastlock_release(&pool->rxm_ep->util_ep.lock);
+
+	return rxm_buf;
+}
+
+static void
+rxm_buf_release_thread_safe(struct rxm_buf_pool *pool, struct rxm_buf *rxm_buf)
+{
+	fastlock_acquire(&pool->rxm_ep->util_ep.lock);
+	rxm_buf_release_thread_unsafe(pool, rxm_buf);
+	fastlock_release(&pool->rxm_ep->util_ep.lock);
+}
+
+static struct rxm_buf *
+rxm_buf_get_by_index_thread_safe(struct rxm_buf_pool *pool, size_t index)
+{
+	struct rxm_buf *rxm_buf;
+
+	fastlock_acquire(&pool->rxm_ep->util_ep.lock);
+	rxm_buf = rxm_buf_get_by_index_thread_unsafe(pool, index);
+	fastlock_release(&pool->rxm_ep->util_ep.lock);
+
+	return rxm_buf;
+}
+
+static size_t
+rxm_get_buf_index_thread_safe(struct rxm_buf_pool *pool, struct rxm_buf *rxm_buf)
+{
+	size_t index;
+
+	fastlock_acquire(&pool->rxm_ep->util_ep.lock);
+	index = rxm_get_buf_index_thread_unsafe(pool, rxm_buf);
+	fastlock_release(&pool->rxm_ep->util_ep.lock);
+
+	return index;
 }
 
 static int rxm_buf_pool_create(struct rxm_ep *rxm_ep,
@@ -282,11 +349,11 @@ static int rxm_buf_pool_create(struct rxm_ep *rxm_ep,
 	switch (type) {
 	case RXM_BUF_POOL_TX_RNDV:
 	case RXM_BUF_POOL_TX_SAR:
-	    attr.indexing.used = 1;
-	    break;
+		attr.indexing.used = 1;
+		break;
 	default:
-	    attr.indexing.used = 0;
-	    break;
+		attr.indexing.used = 0;
+		break;
 	}
 
 	pool->rxm_ep = rxm_ep;
@@ -296,7 +363,19 @@ static int rxm_buf_pool_create(struct rxm_ep *rxm_ep,
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to create buf pool\n");
 		return -FI_ENOMEM;
 	}
-	fastlock_init(&pool->lock);
+
+	if (rxm_ep->util_ep.domain->threading != FI_THREAD_SAFE) {
+		pool->buf_get = rxm_buf_get_thread_unsafe;
+		pool->buf_release = rxm_buf_release_thread_unsafe;
+		pool->buf_get_by_index = rxm_buf_get_by_index_thread_unsafe;
+		pool->get_buf_index = rxm_get_buf_index_thread_unsafe;
+	} else {
+		pool->buf_get = rxm_buf_get_thread_safe;
+		pool->buf_release = rxm_buf_release_thread_safe;
+		pool->buf_get_by_index = rxm_buf_get_by_index_thread_safe;
+		pool->get_buf_index = rxm_get_buf_index_thread_safe;
+	}
+
 	return 0;
 }
 
@@ -315,6 +394,41 @@ static void rxm_recv_entry_init(struct rxm_recv_entry *entry, void *arg)
 		entry->comp_flags |= FI_MSG;
 	else
 		entry->comp_flags |= FI_TAGGED;
+}
+
+static inline struct rxm_recv_entry *
+rxm_recv_entry_pop_thread_unsafe(struct rxm_recv_queue *recv_queue)
+{
+	return (freestack_isempty(recv_queue->fs) ?
+		NULL : freestack_pop(recv_queue->fs));
+}
+
+static inline void
+rxm_recv_entry_push_thread_unsafe(struct rxm_recv_queue *recv_queue,
+				  struct rxm_recv_entry *entry)
+{
+	freestack_push(recv_queue->fs, entry);
+}
+
+static struct rxm_recv_entry *
+rxm_recv_entry_pop_thread_safe(struct rxm_recv_queue *recv_queue)
+{
+	void *entry;
+
+	fastlock_acquire(&recv_queue->rxm_ep->util_ep.lock);
+	entry = rxm_recv_entry_pop_thread_unsafe(recv_queue);
+	fastlock_release(&recv_queue->rxm_ep->util_ep.lock);
+
+	return entry;
+}
+
+static void
+rxm_recv_entry_push_thread_safe(struct rxm_recv_queue *recv_queue,
+				struct rxm_recv_entry *entry)
+{
+	fastlock_acquire(&recv_queue->rxm_ep->util_ep.lock);
+	rxm_recv_entry_push_thread_unsafe(recv_queue, entry);
+	fastlock_release(&recv_queue->rxm_ep->util_ep.lock);
 }
 
 static int rxm_recv_queue_init(struct rxm_ep *rxm_ep,  struct rxm_recv_queue *recv_queue,
@@ -345,7 +459,15 @@ static int rxm_recv_queue_init(struct rxm_ep *rxm_ep,  struct rxm_recv_queue *re
 			recv_queue->match_unexp = rxm_match_unexp_msg_tag;
 		}
 	}
-	fastlock_init(&recv_queue->lock);
+
+	if (rxm_ep->util_ep.domain->threading != FI_THREAD_SAFE) {
+		recv_queue->pop = rxm_recv_entry_pop_thread_unsafe;
+		recv_queue->push = rxm_recv_entry_push_thread_unsafe;
+	} else {
+		recv_queue->pop = rxm_recv_entry_pop_thread_safe;
+		recv_queue->push = rxm_recv_entry_push_thread_safe;
+	}
+
 	return 0;
 }
 
@@ -354,7 +476,6 @@ static void rxm_recv_queue_close(struct rxm_recv_queue *recv_queue)
 	/* It indicates that the recv_queue were allocated */
 	if (recv_queue->fs) {
 		rxm_recv_fs_free(recv_queue->fs);
-		fastlock_destroy(&recv_queue->lock);
 	}
 	// TODO cleanup recv_list and unexp msg list
 }
@@ -501,11 +622,11 @@ static int rxm_ep_cancel_recv(struct rxm_ep *rxm_ep,
 	struct rxm_recv_entry *recv_entry;
 	struct dlist_entry *entry;
 
-	rxm_ep->res_fastlock_acquire(&recv_queue->lock);
+	ofi_ep_lock_acquire(&recv_queue->rxm_ep->util_ep);
 	entry = dlist_remove_first_match(&recv_queue->recv_list,
 					 rxm_match_recv_entry_context,
 					 context);
-	rxm_ep->res_fastlock_release(&recv_queue->lock);
+	ofi_ep_lock_release(&recv_queue->rxm_ep->util_ep);
 	if (entry) {
 		recv_entry = container_of(entry, struct rxm_recv_entry, entry);
 		memset(&err_entry, 0, sizeof(err_entry));
@@ -635,10 +756,10 @@ static int rxm_ep_discard_recv(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_buf,
 	RXM_DBG_ADDR_TAG(FI_LOG_EP_DATA, "Discarding message",
 			 rx_buf->unexp_msg.addr, rx_buf->unexp_msg.tag);
 
-	rxm_ep->res_fastlock_acquire(&rxm_ep->util_ep.lock);
+	ofi_ep_lock_acquire(&rxm_ep->util_ep);
 	dlist_insert_tail(&rx_buf->repost_entry,
 			  &rx_buf->ep->repost_ready_list);
-	rxm_ep->res_fastlock_release(&rxm_ep->util_ep.lock);
+	ofi_ep_lock_release(&rxm_ep->util_ep);
 
 	return ofi_cq_write(rxm_ep->util_ep.rx_cq, context, FI_TAGGED | FI_RECV,
 			    0, NULL, rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
@@ -654,11 +775,10 @@ static int rxm_ep_peek_recv(struct rxm_ep *rxm_ep, fi_addr_t addr, uint64_t tag,
 
 	rxm_ep_progress_multi(&rxm_ep->util_ep);
 
-	rxm_ep->res_fastlock_acquire(&recv_queue->lock);
-
+	ofi_ep_lock_acquire(&recv_queue->rxm_ep->util_ep);
 	rx_buf = rxm_check_unexp_msg_list(recv_queue, addr, tag, ignore);
 	if (!rx_buf) {
-		rxm_ep->res_fastlock_release(&recv_queue->lock);
+		ofi_ep_lock_release(&recv_queue->rxm_ep->util_ep);
 		FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Message not found\n");
 		return ofi_cq_write_error_peek(rxm_ep->util_ep.rx_cq, tag,
 					       context);
@@ -668,7 +788,7 @@ static int rxm_ep_peek_recv(struct rxm_ep *rxm_ep, fi_addr_t addr, uint64_t tag,
 
 	if (flags & FI_DISCARD) {
 		dlist_remove(&rx_buf->unexp_msg.entry);
-		rxm_ep->res_fastlock_release(&recv_queue->lock);
+		ofi_ep_lock_release(&recv_queue->rxm_ep->util_ep);
 		return rxm_ep_discard_recv(rxm_ep, rx_buf, context);
 	}
 
@@ -677,7 +797,7 @@ static int rxm_ep_peek_recv(struct rxm_ep *rxm_ep, fi_addr_t addr, uint64_t tag,
 		((struct fi_context *)context)->internal[0] = rx_buf;
 		dlist_remove(&rx_buf->unexp_msg.entry);
 	}
-	rxm_ep->res_fastlock_release(&recv_queue->lock);
+	ofi_ep_lock_release(&recv_queue->rxm_ep->util_ep);
 
 	return ofi_cq_write(rxm_ep->util_ep.rx_cq, context, FI_TAGGED | FI_RECV,
 			    rx_buf->pkt.hdr.size, NULL,
@@ -2209,9 +2329,6 @@ static int rxm_ep_txrx_res_open(struct rxm_ep *rxm_ep)
 	rxm_ep_settings_init(rxm_ep);
 
 	if (rxm_ep->util_ep.domain->threading != FI_THREAD_SAFE) {
-		rxm_ep->res_fastlock_acquire = ofi_fastlock_acquire_noop;
-		rxm_ep->res_fastlock_release = ofi_fastlock_release_noop;
-
 		ret = rxm_ep_inject_pkt_alloc(rxm_ep, &rxm_ep->inject_tx_pkt,
 					      ofi_op_msg);
 		if (ret)
@@ -2222,9 +2339,6 @@ static int rxm_ep_txrx_res_open(struct rxm_ep *rxm_ep)
 			free(rxm_ep->inject_tx_pkt);
 			return ret;
 		}
-	} else {
-		rxm_ep->res_fastlock_acquire = ofi_fastlock_acquire;
-		rxm_ep->res_fastlock_release = ofi_fastlock_release;
 	}
 
 	ret = rxm_ep_txrx_pool_create(rxm_ep);

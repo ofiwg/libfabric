@@ -887,7 +887,7 @@ static int rxm_conn_reprocess_directed_recvs(struct rxm_recv_queue *recv_queue)
 	dlist_init(&rx_buf_list);
 
 	recv_queue->rxm_ep->cmap->acquire(&recv_queue->rxm_ep->cmap->lock);
-	recv_queue->rxm_ep->res_fastlock_acquire(&recv_queue->lock);
+	ofi_ep_lock_acquire(&recv_queue->rxm_ep->util_ep);
 
 	dlist_foreach_container_safe(&recv_queue->unexp_msg_list,
 				     struct rxm_rx_buf, rx_buf,
@@ -912,7 +912,7 @@ static int rxm_conn_reprocess_directed_recvs(struct rxm_recv_queue *recv_queue)
 						  entry);
 		dlist_insert_tail(&rx_buf->unexp_msg.entry, &rx_buf_list);
 	}
-	recv_queue->rxm_ep->res_fastlock_release(&recv_queue->lock);
+	ofi_ep_lock_release(&recv_queue->rxm_ep->util_ep);
 	recv_queue->rxm_ep->cmap->release(&recv_queue->rxm_ep->cmap->lock);
 
 	while (!dlist_empty(&rx_buf_list)) {

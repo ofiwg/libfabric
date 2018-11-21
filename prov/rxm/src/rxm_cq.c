@@ -546,7 +546,7 @@ rxm_cq_match_rx_buf(struct rxm_rx_buf *rx_buf,
 	struct rxm_ep *rxm_ep;
 	struct fid_ep *msg_ep;
 
-	rx_buf->ep->res_fastlock_acquire(&recv_queue->lock);
+	ofi_ep_lock_acquire(&recv_queue->rxm_ep->util_ep);
 	entry = dlist_remove_first_match(&recv_queue->recv_list,
 					 recv_queue->match_recv, match_attr);
 	if (!entry) {
@@ -564,7 +564,7 @@ rxm_cq_match_rx_buf(struct rxm_rx_buf *rx_buf,
 
 		dlist_insert_tail(&rx_buf->unexp_msg.entry,
 				  &recv_queue->unexp_msg_list);
-		rx_buf->ep->res_fastlock_release(&recv_queue->lock);
+		ofi_ep_lock_release(&recv_queue->rxm_ep->util_ep);
 
 		rx_buf = rxm_rx_buf_get(rxm_ep);
 		if (OFI_UNLIKELY(!rx_buf)) {
@@ -584,7 +584,7 @@ rxm_cq_match_rx_buf(struct rxm_rx_buf *rx_buf,
 		rxm_enqueue_rx_buf_for_repost(rx_buf);
 		return 0;
 	}
-	rx_buf->ep->res_fastlock_release(&recv_queue->lock);
+	ofi_ep_lock_release(&recv_queue->rxm_ep->util_ep);
 
 	rx_buf->recv_entry = container_of(entry, struct rxm_recv_entry, entry);
 	return rxm_cq_handle_rx_buf(rx_buf);
@@ -1030,13 +1030,14 @@ int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep)
 static inline void rxm_cq_repost_rx_buffers(struct rxm_ep *rxm_ep)
 {
 	struct rxm_rx_buf *buf;
-	rxm_ep->res_fastlock_acquire(&rxm_ep->util_ep.lock);
+
+	ofi_ep_lock_acquire(&rxm_ep->util_ep);
 	while (!dlist_empty(&rxm_ep->repost_ready_list)) {
 		dlist_pop_front(&rxm_ep->repost_ready_list, struct rxm_rx_buf,
 				buf, repost_entry);
 		(void) rxm_ep_repost_buf(buf);
 	}
-	rxm_ep->res_fastlock_release(&rxm_ep->util_ep.lock);
+	ofi_ep_lock_release(&rxm_ep->util_ep);
 }
 
 static inline ssize_t rxm_ep_read_msg_cq(struct rxm_ep *rxm_ep)
