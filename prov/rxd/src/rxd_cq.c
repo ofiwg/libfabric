@@ -1122,13 +1122,71 @@ static struct fi_ops rxd_cq_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
+ssize_t rxd_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
+			 fi_addr_t *src_addr, const void *cond, int timeout)
+{
+	struct fid_list_entry *fid_entry;
+	struct util_cq *cq;
+	struct rxd_ep *ep;
+	uint64_t start;
+	int ret, ep_retry;
+
+	cq = container_of(cq_fid, struct util_cq, cq_fid);
+	assert(cq->wait && cq->internal_wait);
+	start = (timeout >= 0) ? fi_gettime_ms() : 0;
+
+	do {
+		ret = ofi_cq_readfrom(cq_fid, buf, count, src_addr);
+		if (ret != -FI_EAGAIN)
+			break;
+
+		if (timeout >= 0) {
+			timeout -= (int) (fi_gettime_ms() - start);
+			if (timeout <= 0)
+				return -FI_EAGAIN;
+		}
+
+		if (ofi_atomic_get32(&cq->signaled)) {
+			ofi_atomic_set32(&cq->signaled, 0);
+			return -FI_ECANCELED;
+		}
+
+		ep_retry = -1;
+		cq->cq_fastlock_acquire(&cq->ep_list_lock);
+		dlist_foreach_container(&cq->ep_list, struct fid_list_entry,
+					fid_entry, entry) {
+			ep = container_of(fid_entry->fid, struct rxd_ep,
+					  util_ep.ep_fid.fid);
+			if (ep->next_retry == -1)
+				continue;
+			ep_retry = ep_retry == -1 ? ep->next_retry :
+					MIN(ep_retry, ep->next_retry);
+		}
+		cq->cq_fastlock_release(&cq->ep_list_lock);
+
+		ret = fi_wait(&cq->wait->wait_fid, ep_retry == -1 ?
+			      timeout : rxd_get_timeout(ep_retry));
+
+		if (ep_retry != -1 && ret == -FI_ETIMEDOUT)
+			ret = 0;
+	} while (!ret);
+
+	return ret == -FI_ETIMEDOUT ? -FI_EAGAIN : ret;
+}
+
+ssize_t rxd_cq_sread(struct fid_cq *cq_fid, void *buf, size_t count,
+		const void *cond, int timeout)
+{
+	return rxd_cq_sreadfrom(cq_fid, buf, count, NULL, cond, timeout);
+}
+
 static struct fi_ops_cq rxd_cq_ops = {
 	.size = sizeof(struct fi_ops_cq),
 	.read = ofi_cq_read,
 	.readfrom = ofi_cq_readfrom,
 	.readerr = ofi_cq_readerr,
-	.sread = ofi_cq_sread,
-	.sreadfrom = ofi_cq_sreadfrom,
+	.sread = rxd_cq_sread,
+	.sreadfrom = rxd_cq_sreadfrom,
 	.signal = ofi_cq_signal,
 	.strerror = rxd_cq_strerror,
 };

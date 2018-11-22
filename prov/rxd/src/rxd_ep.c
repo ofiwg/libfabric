@@ -308,9 +308,14 @@ static int rxd_ep_enable(struct rxd_ep *ep)
 /*
  * Exponential back-off starting at 1ms, max 4s.
  */
+int rxd_get_timeout(uint8_t retry_cnt)
+{
+	return MIN(1 << retry_cnt, 4000);
+}
+
 uint64_t rxd_get_retry_time(uint64_t start, uint8_t retry_cnt)
 {
-	return start + MIN(1 << retry_cnt, 4000);
+	return start + rxd_get_timeout(retry_cnt);
 }
 
 void rxd_init_data_pkt(struct rxd_ep *ep, struct rxd_x_entry *tx_entry,
@@ -1048,7 +1053,6 @@ static void rxd_progress_pkt_list(struct rxd_ep *ep, struct rxd_peer *peer)
 		if (ret)
 			break;
 	}
-
 	if (retry)
 		peer->retry_cnt++;
 

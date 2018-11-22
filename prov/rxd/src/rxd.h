@@ -401,6 +401,7 @@ struct rxd_x_entry *rxd_rx_entry_init(struct rxd_ep *ep,
 			uint32_t op, uint32_t flags);
 void rxd_tx_entry_free(struct rxd_ep *ep, struct rxd_x_entry *tx_entry);
 void rxd_rx_entry_free(struct rxd_ep *ep, struct rxd_x_entry *rx_entry);
+int rxd_get_timeout(uint8_t retry_cnt);
 uint64_t rxd_get_retry_time(uint64_t start, uint8_t retry_cnt);
 
 /* Generic message functions */
