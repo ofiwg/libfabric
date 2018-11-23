@@ -589,16 +589,19 @@ STATIC int psmx2_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 					av_priv->conn_info[j].epaddrs[idx] = NULL;
 			}
 		} else {
+			if (!av_priv->sep_info[idx].epids)
+				continue;
+
 			for (j = 0; j < av_priv->max_trx_ctxt; j++) {
 				if (!av_priv->conn_info[j].trx_ctxt)
 					continue;
 
-				if (!av_priv->conn_info[j].sepaddrs)
+				if (!av_priv->conn_info[j].sepaddrs[idx])
 					continue;
 
 				for (k = 0; k < av_priv->sep_info[idx].ctxt_cnt; k++) {
 					err = psmx2_av_disconnect_addr(
-							j, av_priv->table[idx].epid,
+							j, av_priv->sep_info[idx].epids[k],
 							av_priv->conn_info[j].sepaddrs[idx][k]);
 					if (!err)
 						av_priv->conn_info[j].sepaddrs[idx][k] = NULL;
