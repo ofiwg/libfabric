@@ -718,6 +718,17 @@ fi_addr_t psmx2_av_translate_source(struct psmx2_fid_av *av, psm2_epaddr_t sourc
 				found = 1;
 			}
 		} else {
+			if (!av->sep_info[i].epids) {
+				for (j = 0; j < av->max_trx_ctxt; j++) {
+					if (av->conn_info[j].trx_ctxt)
+						break;
+				}
+				if (j >= av->max_trx_ctxt)
+					continue;
+				psmx2_av_query_sep(av, av->conn_info[j].trx_ctxt, i);
+				if (!av->sep_info[i].epids)
+					continue;
+			}
 			for (j=0; j<av->sep_info[i].ctxt_cnt; j++) {
 				if (av->sep_info[i].epids[j] == epid) {
 					ret = fi_rx_addr((fi_addr_t)i, j,
@@ -750,6 +761,8 @@ void psmx2_av_remove_conn(struct psmx2_fid_av *av,
 			    av->conn_info[trx_ctxt->id].epaddrs[i] == epaddr)
 				av->conn_info[trx_ctxt->id].epaddrs[i] = NULL;
 		} else {
+			if (!av->sep_info[i].epids)
+				continue;
 			for (j=0; j<av->sep_info[i].ctxt_cnt; j++) {
 				if (av->sep_info[i].epids[j] == epid &&
 				    av->conn_info[trx_ctxt->id].sepaddrs[i] &&
