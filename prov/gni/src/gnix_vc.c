@@ -53,6 +53,7 @@
 #include "gnix_trigger.h"
 #include "gnix_vector.h"
 #include "gnix_xpmem.h"
+#include "gnix_cq.h"
 
 /*
  * forward declarations and local struct defs.
@@ -961,9 +962,12 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 
 				dlist_insert_tail(&vc->list, &ep->unmapped_vcs);
 
+				/*
+				 * see issue 4521 for the error_data size allocated
+				 */
 				if (vc->ep->caps & FI_SOURCE) {
 					error_data =
-						calloc(1, sizeof(*error_data));
+						calloc(1, GNIX_CQ_MAX_ERR_DATA_SIZE);
 					if (error_data == NULL) {
 						ret = -FI_ENOMEM;
 						goto err;
