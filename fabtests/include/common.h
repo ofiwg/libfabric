@@ -464,6 +464,8 @@ void ft_free_bit_combo(uint64_t *combo);
 int ft_cntr_open(struct fid_cntr **cntr);
 const char *ft_util_name(const char *str, size_t *len);
 const char *ft_core_name(const char *str, size_t *len);
+char **ft_split_and_alloc(const char *s, const char *delim, size_t *count);
+void ft_free_string_array(char **s);
 
 #define FT_PROCESS_QUEUE_ERR(readerr, rd, queue, fn, str)	\
 	do {							\

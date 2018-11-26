@@ -36,7 +36,7 @@
 #include <sys/wait.h>
 
 #include <limits.h>
-#include <shared.h>
+#include <common.h>
 
 #include "fabtest.h"
 
@@ -794,6 +794,73 @@ void ft_free()
 		free(provname);
 }
 
+static int ft_get_config_file(char *provname, char *testname, char **filename)
+{
+	char **prov_vec, **path_vec, *str;
+	size_t i, prov_count, path_count, len;
+	int ret = -FI_ENOMEM;
+
+	// TODO use macro for ";"
+	prov_vec = ft_split_and_alloc(provname, ";", &prov_count);
+	if (!prov_vec) {
+		FT_ERR("Unable to split provname\n");
+		return -FI_EINVAL;
+	}
+
+	/* prov_count + count_of(CONFIG_PATH, "test_configs", "testname", ".test") */
+	path_count = prov_count + 4;
+	path_vec = calloc(path_count, sizeof(*path_vec));
+	if (!path_vec)
+		goto err1;
+
+	path_vec[0] = CONFIG_PATH;
+	path_vec[1] = "test_configs";
+
+	/* Path for "prov1;prov2;prov3;..." is ".../prov3/prov2/prov1" */
+	for (i = 0; i < prov_count; i++)
+		path_vec[i + 2] = prov_vec[prov_count - i - 1];
+
+	path_vec[prov_count + 2] = testname;
+	path_vec[prov_count + 3] = "test";
+
+	for (i = 0, len = 0; i < path_count; i++)
+		len += strlen(path_vec[i]) + 1;
+
+	// NULL char at the end
+	len++;
+
+	*filename = calloc(1, len);
+	if (!*filename)
+		goto err2;
+
+	for (i = 0, str = *filename; i < path_count; i++) {
+		if (i < path_count - 1)
+			ret = snprintf(str, len, "/%s", path_vec[i]);
+		else
+			ret = snprintf(str, len, ".%s", path_vec[i]);
+		if (ret < 0)
+			goto err3;
+
+		if (ret >= (int)len) {
+			ret = -FI_ETRUNC;
+			goto err3;
+		}
+		str += ret;
+		len -= ret;
+	}
+	free(path_vec);
+	ft_free_string_array(prov_vec);
+	return 0;
+err3:
+	free(*filename);
+	*filename = NULL;
+err2:
+	free(path_vec);
+err1:
+	ft_free_string_array(prov_vec);
+	return ret;
+}
+
 int main(int argc, char **argv)
 {
 	char *service = "2710";
@@ -853,10 +920,9 @@ int main(int argc, char **argv)
 				ft_free();
 				exit(1);
 			} else {
-				ret = asprintf(&filename, "%s/test_configs/%s/%s.test",
-					CONFIG_PATH, provname, testname);
-				if (ret == -1) {
-					fprintf(stderr, "asprintf failed!\n");
+				ret = ft_get_config_file(provname, testname,
+							 &filename);
+				if (ret < 0) {
 					ft_free();
 					exit(1);
 				}

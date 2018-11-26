@@ -47,7 +47,7 @@
 #include <rdma/fi_tagged.h>
 #include <rdma/fi_atomic.h>
 
-#include <shared.h>
+#include <common.h>
 
 struct fi_info *fi_pep, *fi, *hints;
 struct fid_fabric *fabric;
@@ -3123,4 +3123,69 @@ const char *ft_core_name(const char *str, size_t *len)
 	}
 	*len = 0;
 	return NULL;
+}
+
+/* Split the given string "s" using the specified delimiter(s) in the string
+ * "delim" and return an array of strings. The array is terminated with a NULL
+ * pointer. Returned array should be freed with ft_free_string_array().
+ *
+ * Returns NULL on failure.
+ */
+
+char **ft_split_and_alloc(const char *s, const char *delim, size_t *count)
+{
+	int i, n;
+	char *tmp;
+	char *dup = NULL;
+	char **arr = NULL;
+
+	if (!s || !delim)
+		return NULL;
+
+	dup = strdup(s);
+	if (!dup)
+		return NULL;
+
+	/* compute the array size */
+	n = 1;
+	for (tmp = dup; *tmp != '\0'; ++tmp) {
+		for (i = 0; delim[i] != '\0'; ++i) {
+			if (*tmp == delim[i]) {
+				++n;
+				break;
+			}
+		}
+	}
+
+	/* +1 to leave space for NULL terminating pointer */
+	arr = calloc(n + 1, sizeof(*arr));
+	if (!arr)
+		goto cleanup;
+
+	/* set array elts to point inside the dup'ed string */
+	for (tmp = dup, i = 0; tmp != NULL; ++i) {
+		arr[i] = strsep(&tmp, delim);
+	}
+	assert(i == n);
+
+	if (count)
+		*count = n;
+	return arr;
+
+cleanup:
+	free(dup);
+	free(arr);
+	return NULL;
+}
+
+/* see ft_split_and_alloc() */
+void ft_free_string_array(char **s)
+{
+	/* all strings are allocated from the same strdup'ed slab, so just free
+	 * the first element */
+	if (s != NULL)
+		free(s[0]);
+
+	/* and then the actual array of pointers */
+	free(s);
 }

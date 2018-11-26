@@ -27,8 +27,8 @@ outdir = $(output_root)$(arch)\release-v141
 CFLAGS = $(CFLAGS) /O2 /MT
 !endif
 
-basedeps = common\shared.c common\jsmn.c common\windows\getopt.c \
-	common\windows\osd.c
+basedeps = core\common.c core\jsmn.c core\windows\getopt.c \
+	core\windows\osd.c
 
 includes = /Iinclude /Iinclude\windows /I..\include /FIft_osd.h \
 	/Iinclude\windows\getopt
@@ -105,11 +105,11 @@ $(outdir)\scalable_ep.exe: {functional}scalable_ep.c $(basedeps)
 
 $(outdir)\inj_complete.exe: {functional}inj_complete.c $(basedeps)
 
-$(outdir)\av_test.exe: {unit}av_test.c $(basedeps) {unit}common.c
+$(outdir)\av_test.exe: {unit}av_test.c $(basedeps) {unit}unit_common.c
 
-$(outdir)\dom_test.exe: {unit}dom_test.c $(basedeps) {unit}common.c
+$(outdir)\dom_test.exe: {unit}dom_test.c $(basedeps) {unit}unit_common.c
 
-$(outdir)\eq_test.exe: {unit}eq_test.c $(basedeps) {unit}common.c
+$(outdir)\eq_test.exe: {unit}eq_test.c $(basedeps) {unit}unit_common.c
 
 $(outdir)\complex.exe: {complex}ft_comm.c {complex}ft_comp.c {complex}ft_config.c {complex}ft_domain.c {complex}ft_endpoint.c {complex}ft_main.c {complex}ft_msg.c {complex}ft_test.c $(basedeps)
 	if not exist $(@D) mkdir $(@D)

@@ -39,7 +39,7 @@
 #include <rdma/fi_errno.h>
 
 #include "unit_common.h"
-#include "shared.h"
+#include "common.h"
 
 
 static char err_buf[512];

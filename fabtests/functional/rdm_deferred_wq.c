@@ -36,7 +36,7 @@
 #include <rdma/fi_errno.h>
 #include <rdma/fi_trigger.h>
 
-#include <shared.h>
+#include <common.h>
 
 struct fi_context2 trig_ctx1, trig_ctx2;
 static char *welcome_text = "Hello from Client!";

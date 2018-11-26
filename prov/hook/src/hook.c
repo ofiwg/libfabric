@@ -34,6 +34,7 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <ofi.h>
+#include <shared/ofi_str.h>
 
 #include "ofi_hook.h"
 #include "ofi_prov.h"

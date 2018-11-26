@@ -83,6 +83,7 @@ nobase_dist_config_DATA = \
 	test_configs/psm2/verify.test \
 	test_configs/psm2/psm2.exclude \
 	test_configs/ofi_rxm/ofi_rxm.exclude \
+	test_configs/ofi_rxm/verbs/all.test \
 	test_configs/ofi_rxd/ofi_rxd.exclude \
 	test_configs/ofi_rxd/udp.test \
 	test_configs/shm/all.test \
@@ -90,9 +91,9 @@ nobase_dist_config_DATA = \
 
 noinst_LTLIBRARIES = libfabtests.la
 libfabtests_la_SOURCES = \
-	common/shared.c \
-	common/jsmn.c \
-	include/shared.h \
+	core/common.c \
+	core/jsmn.c \
+	include/common.h \
 	include/jsmn.h \
 	include/unix/osd.h \
 	include/ft_osd.h
@@ -103,11 +104,11 @@ benchmarks_srcs = \
 
 unit_srcs = \
 	include/unit_common.h \
-	unit/common.c
+	unit/unit_common.c
 
 if MACOS
 if !HAVE_CLOCK_GETTIME
-libfabtests_la_SOURCES += common/osx/osd.c
+libfabtests_la_SOURCES += core/osx/osd.c
 endif
 endif
 

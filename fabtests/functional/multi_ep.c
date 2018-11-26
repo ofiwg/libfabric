@@ -45,7 +45,7 @@
 #include <rdma/fi_rma.h>
 #include <rdma/fi_cm.h>
 
-#include "shared.h"
+#include "common.h"
 
 static struct fid_ep **eps;
 static char *data_bufs;

@@ -38,7 +38,7 @@
 
 #include <rdma/fi_errno.h>
 
-#include "shared.h"
+#include "common.h"
 #include "unit_common.h"
 
 #define TEST_ENTRY_GETINFO(name) TEST_ENTRY(getinfo_ ## name,\

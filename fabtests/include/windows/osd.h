@@ -43,6 +43,7 @@ struct iovec
 	size_t iov_len; /* Length of data.  */
 };
 
+#define strdup _strdup
 #define strncasecmp _strnicmp
 #define SHUT_RDWR SD_BOTH
 #define CLOCK_MONOTONIC	1
@@ -90,6 +91,24 @@ static inline char* strndup(const char* str, size_t n)
 	if (strlen(res) > n)
 		res[n] = '\0';
 	return res;
+}
+
+static inline char* strsep(char **stringp, const char *delim)
+{
+	char* ptr = *stringp;
+	char* p;
+
+	p = ptr ? strpbrk(ptr, delim) : NULL;
+
+	if(!p)
+		*stringp = NULL;
+	else
+	{
+		*p = 0;
+		*stringp = p + 1;
+	}
+
+	return ptr;
 }
 
 #define _SC_PAGESIZE	30

@@ -33,6 +33,7 @@
 
 #include <stdio.h>
 
+#include <shared/ofi_str.h>
 #include <ofi_util.h>
 
 #define OFI_MSG_CAPS	(FI_SEND | FI_RECV)

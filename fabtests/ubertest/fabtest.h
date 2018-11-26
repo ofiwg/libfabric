@@ -41,7 +41,7 @@
 #include <rdma/fi_errno.h>
 #include <rdma/fi_rma.h>
 #include <rdma/fi_tagged.h>
-#include <shared.h>
+#include <common.h>
 #include <assert.h>
 
 #ifdef __cplusplus

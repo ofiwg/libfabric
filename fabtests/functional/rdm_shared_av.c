@@ -36,7 +36,7 @@
 
 #include <rdma/fi_errno.h>
 
-#include "shared.h"
+#include "common.h"
 
 static int init_fabric(void)
 {

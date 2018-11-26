@@ -42,7 +42,7 @@
 #include <rdma/fi_rma.h>
 #include <rdma/fi_cm.h>
 
-#include "shared.h"
+#include "common.h"
 
 struct test_mr {
 	uint8_t *buf;

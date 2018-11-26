@@ -565,6 +565,7 @@
     <ClCompile Include="src\fi_tostr.c" />
     <ClCompile Include="src\indexer.c" />
     <ClCompile Include="src\iov.c" />
+    <ClCompile Include="src\shared\ofi_str.c" />
     <ClCompile Include="src\log.c" />
     <ClCompile Include="src\perf.c" />
     <ClCompile Include="src\mem.c" />
@@ -587,6 +588,7 @@
     <ClInclude Include="include\ofi_iov.h" />
     <ClInclude Include="include\ofi_indexer.h" />
     <ClInclude Include="include\ofi_list.h" />
+    <ClInclude Include="include\shared\ofi_str.h" />
     <ClInclude Include="include\ofi_lock.h" />
     <ClInclude Include="include\ofi_mem.h" />
     <ClInclude Include="include\ofi_osd.h" />

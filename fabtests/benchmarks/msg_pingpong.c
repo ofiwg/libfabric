@@ -33,7 +33,7 @@
 #include <rdma/fi_errno.h>
 #include <rdma/fi_cm.h>
 
-#include "shared.h"
+#include "common.h"
 #include "benchmark_shared.h"
 
 static int run(void)

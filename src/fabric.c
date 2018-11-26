@@ -43,6 +43,7 @@
 #include <rdma/fi_errno.h>
 #include "ofi_util.h"
 #include "ofi.h"
+#include "shared/ofi_str.h"
 #include "ofi_prov.h"
 #include "ofi_perf.h"
 

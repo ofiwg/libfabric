@@ -3,11 +3,7 @@
 # TODO
 #  - Disable INJECT, INJECTDATA for verbs until the failure is debugged
 #    In pingpong test, we get a FLUSH error on recv CQ but no error on send
-#    queue when we don't read send completions for ibv_post_sends.
-#  - Debug WRITEDATA, WRITEMSG, READMSG for RxM before enabling
-#  - Test without FI_MR_LOCAL for RxM
-#  - disable quick test for some configs (takes long time on some fabric)
-#  - Adding more tests results in timeout in runfabtests.sh - fix the script"
+#    queue when we don't read send completions for ibv_post_sends."
 {
 	prov_name: verbs,
 	test_type: [
@@ -30,7 +26,6 @@
 		FT_CAP_MSG,
 	],
 	mr_mode: [FI_MR_LOCAL, FI_MR_VIRT_ADDR, FI_MR_ALLOCATED, FI_MR_PROV_KEY],
-	test_flags: FT_FLAG_QUICKTEST,
 },
 {
 	prov_name: verbs,
@@ -77,7 +72,6 @@
 		FT_CAP_RMA,
 	],
 	mr_mode: [FI_MR_LOCAL, FI_MR_VIRT_ADDR, FI_MR_ALLOCATED, FI_MR_PROV_KEY],
-	test_flags: FT_FLAG_QUICKTEST,
 },
 {
 	prov_name: verbs,
@@ -99,7 +93,6 @@
 	],
 	mr_mode: [FI_MR_LOCAL, FI_MR_VIRT_ADDR, FI_MR_ALLOCATED, FI_MR_PROV_KEY],
 	msg_flags: FI_REMOTE_CQ_DATA,
-	test_flags: FT_FLAG_QUICKTEST,
 },
 {
 	prov_name: verbs,
@@ -127,8 +120,6 @@
 		FT_CAP_MSG,
 	],
 	mr_mode: [FI_MR_LOCAL, FI_MR_VIRT_ADDR, FI_MR_ALLOCATED, FI_MR_PROV_KEY],
-	progress: [FI_PROGRESS_MANUAL, FI_PROGRESS_AUTO],
-	test_flags: FT_FLAG_QUICKTEST,
 },
 {
 	prov_name: verbs,
@@ -157,6 +148,4 @@
 		FT_CAP_MSG,
 	],
 	mr_mode: [FI_MR_LOCAL, FI_MR_VIRT_ADDR, FI_MR_ALLOCATED, FI_MR_PROV_KEY],
-	progress: [FI_PROGRESS_MANUAL, FI_PROGRESS_AUTO],
-	test_flags: FT_FLAG_QUICKTEST,
 },

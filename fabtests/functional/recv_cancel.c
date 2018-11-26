@@ -32,7 +32,7 @@
 
 #include <stdio.h>
 #include <unistd.h>
-#include "shared.h"
+#include "common.h"
 
 #define CANCEL_TAG 0xC
 #define STANDARD_TAG 0xA

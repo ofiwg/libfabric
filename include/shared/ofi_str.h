@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2013-2014 Intel Corporation.  All rights reserved.
- * Copyright (c) 2014 Cisco Systems, Inc.  All rights reserved.
+ * Copyright (c) 2013-2018 Intel Corporation. All rights reserved.
+ * Copyright (c) 2016-2018 Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -31,27 +31,24 @@
  * SOFTWARE.
  */
 
-#ifndef _UNIT_COMMON_H_
-#define _UNIT_COMMON_H_
+#ifndef _OFI_STR_H_
+#define _OFI_STR_H_
 
-#include <common.h>
+#include <string.h>
 
-enum { PASS, FAIL, NOTSUPP, SKIPPED };
-#define TEST_ENTRY(NAME, DESC) { NAME, #NAME, DESC}
+#include "config.h"
 
-#define TEST_RET_VAL(_ret, _testret) \
-	(_ret == -FI_ENOSYS || _ret == -FI_ENODATA) ? SKIPPED : (_testret)
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-#define FT_UNIT_STRERR(buf, str, ret) \
-	sprintf(buf, str ": ret=%d (%s)", (int)-ret, fi_strerror((int)-ret))
+int ofi_rm_substr(char *str, const char *substr);
+int ofi_rm_substr_delim(char *str, const char *substr, const char delim);
+char **ofi_split_and_alloc(const char *s, const char *delim, size_t *count);
+void ofi_free_string_array(char **s);
 
-struct test_entry {
-	int (*test)();
-	char *name;
-	char *desc;
-};
+#ifdef __cplusplus
+}
+#endif
 
-void ft_unit_usage(char *name, char *desc);
-int run_tests(struct test_entry *test_array, char *err_buf);
-
-#endif /* _UNIT_COMMON_H_ */
+#endif /* _OFI_STR_H_ */
