@@ -505,7 +505,7 @@ libdl_done:
 	ofi_register_provider(SHM_INIT, NULL);
 	ofi_register_provider(RXM_INIT, NULL);
 	ofi_register_provider(VERBS_INIT, NULL);
-	ofi_register_provider(RSTREAM_INIT, NULL);
+	/* ofi_register_provider(RSTREAM_INIT, NULL); - no support */
 	ofi_register_provider(MRAIL_INIT, NULL);
 	ofi_register_provider(RXD_INIT, NULL);
 
