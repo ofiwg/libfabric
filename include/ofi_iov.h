@@ -61,6 +61,15 @@ static inline size_t ofi_total_ioc_cnt(const struct fi_ioc *ioc, size_t ioc_coun
 	return cnt;
 }
 
+static inline size_t ofi_total_rma_ioc_cnt(const struct fi_rma_ioc *rma_ioc,
+					   size_t ioc_count)
+{
+	size_t i, cnt = 0;
+	for (i = 0; i < ioc_count; i++)
+		cnt += rma_ioc[i].count;
+	return cnt;
+}
+
 #define OFI_COPY_IOV_TO_BUF 0
 #define OFI_COPY_BUF_TO_IOV 1
 
