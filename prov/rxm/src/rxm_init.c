@@ -38,6 +38,10 @@
 #include <ofi_prov.h>
 #include "rxm.h"
 
+#define RXM_ATOMIC_UNSUPPORTED_MSG_ORDER (FI_ORDER_RAR | FI_ORDER_RAW |	\
+					  FI_ORDER_WAR | FI_ORDER_WAW |	\
+					  FI_ORDER_SAR | FI_ORDER_SAW)
+
 size_t rxm_msg_tx_size		= 128;
 size_t rxm_msg_rx_size		= 128;
 size_t rxm_def_univ_size	= 256;
@@ -188,7 +192,10 @@ static void rxm_alter_info(const struct fi_info *hints, struct fi_info *info)
 		/* Remove the following caps if they are not requested as they
 		 * may affect performance in fast-path */
 		if (!hints) {
-			cur->caps &= ~(FI_DIRECTED_RECV | FI_SOURCE);
+			cur->caps &= ~(FI_DIRECTED_RECV | FI_SOURCE |
+				       FI_ATOMIC);
+			cur->tx_attr->caps &= ~FI_ATOMIC;
+			cur->rx_attr->caps &= ~FI_ATOMIC;
 			cur->domain_attr->data_progress = FI_PROGRESS_MANUAL;
 		} else {
 			if (!(hints->caps & FI_DIRECTED_RECV))
@@ -198,6 +205,17 @@ static void rxm_alter_info(const struct fi_info *hints, struct fi_info *info)
 
 			if (hints->mode & FI_BUFFERED_RECV)
 				cur->mode |= FI_BUFFERED_RECV;
+
+			if (hints->caps & FI_ATOMIC) {
+				cur->tx_attr->msg_order &=
+					~(RXM_ATOMIC_UNSUPPORTED_MSG_ORDER);
+				cur->rx_attr->msg_order &=
+					~(RXM_ATOMIC_UNSUPPORTED_MSG_ORDER);
+			} else {
+				cur->caps &= ~FI_ATOMIC;
+				cur->tx_attr->caps &= ~FI_ATOMIC;
+				cur->rx_attr->caps &= ~FI_ATOMIC;
+			}
 
 			if (!ofi_mr_local(hints)) {
 				cur->mode &= ~FI_LOCAL_MR;
@@ -222,6 +240,26 @@ static void rxm_alter_info(const struct fi_info *hints, struct fi_info *info)
 			}
 		}
 	}
+}
+
+static int rxm_validate_atomic_hints(const struct fi_info *hints)
+{
+	if (!hints || !(hints->caps & FI_ATOMIC))
+		return 0;
+
+	if (hints->tx_attr && (hints->tx_attr->msg_order &
+			       RXM_ATOMIC_UNSUPPORTED_MSG_ORDER)) {
+		FI_DBG(&rxm_prov, FI_LOG_FABRIC,
+		       "Hints tx_attr msg_order not supported for atomics\n");
+		return -FI_EINVAL;
+	}
+	if (hints->rx_attr && (hints->rx_attr->msg_order &
+			       RXM_ATOMIC_UNSUPPORTED_MSG_ORDER)) {
+		FI_DBG(&rxm_prov, FI_LOG_FABRIC,
+		       "Hints rx_attr msg_order not supported for atomics\n");
+		return -FI_EINVAL;
+	}
+	return 0;
 }
 
 static int rxm_getinfo(uint32_t version, const char *node, const char *service,
@@ -250,6 +288,9 @@ static int rxm_getinfo(uint32_t version, const char *node, const char *service,
 			ofi_addr_set_port(hints->src_addr, 0);
 		}
 	}
+	ret = rxm_validate_atomic_hints(hints);
+	if (ret)
+		return ret;
 
 	ret = ofix_getinfo(version, node, service, flags, &rxm_util_prov, hints,
 			   rxm_info_to_core, rxm_info_to_rxm, info);

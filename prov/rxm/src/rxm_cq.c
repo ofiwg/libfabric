@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2016 Intel Corporation. All rights reserved.
+ * Copyright (c) 2018 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -36,6 +37,7 @@
 
 #include "ofi.h"
 #include "ofi_iov.h"
+#include "ofi_atomic.h"
 
 #include "rxm.h"
 
@@ -759,6 +761,231 @@ static int rxm_handle_remote_write(struct rxm_ep *rxm_ep,
 	return 0;
 }
 
+static inline void rxm_ep_format_atomic_resp_pkt_hdr(struct rxm_conn *rxm_conn,
+				struct rxm_tx_atomic_buf *tx_buf,
+				size_t data_len, uint32_t pkt_op,
+				enum fi_datatype datatype, uint8_t atomic_op)
+{
+	rxm_ep_format_tx_buf_pkt(rxm_conn, data_len, pkt_op, 0, 0, 0,
+				 &tx_buf->pkt);
+	tx_buf->pkt.ctrl_hdr.type = ofi_ctrl_atomic_resp;
+	tx_buf->pkt.hdr.op = pkt_op;
+	tx_buf->pkt.hdr.atomic.datatype = datatype;
+	tx_buf->pkt.hdr.atomic.op = atomic_op;
+	tx_buf->pkt.hdr.atomic.ioc_count = 0;
+}
+
+static ssize_t rxm_atomic_send_resp(struct rxm_ep *rxm_ep,
+				    struct rxm_rx_buf *rx_buf,
+				    struct rxm_tx_atomic_buf *resp_buf,
+				    ssize_t result_len, uint32_t status)
+{
+	struct rxm_deferred_tx_entry *def_tx_entry;
+	struct rxm_atomic_resp_hdr *atomic_hdr;
+	ssize_t ret;
+	ssize_t resp_len = result_len + sizeof(struct rxm_atomic_resp_hdr) +
+				sizeof(struct rxm_pkt);
+
+	resp_buf->hdr.state = RXM_ATOMIC_RESP_SENT;
+	rxm_ep_format_atomic_resp_pkt_hdr(rx_buf->conn,
+					  resp_buf,
+					  resp_len,
+					  rx_buf->pkt.hdr.op,
+					  rx_buf->pkt.hdr.atomic.datatype,
+					  rx_buf->pkt.hdr.atomic.op);
+	resp_buf->pkt.ctrl_hdr.conn_id = rx_buf->conn->handle.remote_key;
+	resp_buf->pkt.ctrl_hdr.msg_id = rx_buf->pkt.ctrl_hdr.msg_id;
+	atomic_hdr = (struct rxm_atomic_resp_hdr *) resp_buf->pkt.data;
+	atomic_hdr->status = htonl(status);
+	atomic_hdr->result_len = htonl(result_len);
+
+	if (resp_len < rxm_ep->inject_limit) {
+		ret = fi_inject(rx_buf->conn->msg_ep, &resp_buf->pkt,
+				resp_len, 0);
+		if (OFI_LIKELY(!ret))
+			rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_ATOMIC,
+					   resp_buf);
+	} else {
+		ret = rxm_atomic_send_respmsg(rxm_ep, rx_buf->conn, resp_buf,
+					      resp_len);
+	}
+	if (OFI_UNLIKELY(ret)) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ,
+			"Unable to send Atomic Response\n");
+		if (OFI_LIKELY(ret == -FI_EAGAIN)) {
+			def_tx_entry =
+				rxm_ep_alloc_deferred_tx_entry(rxm_ep,
+						rx_buf->conn,
+						RXM_DEFERRED_TX_ATOMIC_RESP);
+			if (OFI_UNLIKELY(!def_tx_entry)) {
+				FI_WARN(&rxm_prov, FI_LOG_CQ,
+					"Unable to allocate deferred Atomic "
+					"Response\n");
+				return -FI_ENOMEM;
+			}
+
+			def_tx_entry->atomic_resp.tx_buf = resp_buf;
+			def_tx_entry->atomic_resp.len = resp_len;
+			rxm_ep_enqueue_deferred_tx_queue(def_tx_entry);
+			ret = 0;
+		}
+	}
+	rxm_enqueue_rx_buf_for_repost_check(rx_buf);
+
+	return ret;
+}
+
+static inline void rxm_do_atomic(struct rxm_pkt *pkt, void *dst, void *src,
+				 void *cmp, void *res, size_t count,
+				 enum fi_datatype datatype, enum fi_op op)
+{
+	switch (pkt->hdr.op) {
+	case ofi_op_atomic:
+		ofi_atomic_write_handlers[op][datatype](dst, src, count);
+		break;
+	case ofi_op_atomic_fetch:
+		ofi_atomic_readwrite_handlers[op][datatype](dst, src, res,
+							    count);
+		break;
+	case ofi_op_atomic_compare:
+		ofi_atomic_swap_handlers[op - OFI_SWAP_OP_START][datatype](dst,
+						src, cmp, res, count);
+		break;
+	default:
+		/* Validated prior to calling function */
+		break;
+	}
+}
+
+static inline ssize_t rxm_handle_atomic_req(struct rxm_ep *rxm_ep,
+					    struct rxm_rx_buf *rx_buf)
+{
+	struct rxm_atomic_hdr *req_hdr =
+			(struct rxm_atomic_hdr *) rx_buf->pkt.data;
+	enum fi_datatype datatype = rx_buf->pkt.hdr.atomic.datatype;
+	enum fi_op atomic_op = rx_buf->pkt.hdr.atomic.op;
+	size_t datatype_sz = ofi_datatype_size(datatype);
+	size_t len;
+	ssize_t result_len;
+	uint64_t offset;
+	int i;
+	int ret = 0;
+	struct rxm_tx_atomic_buf *resp_buf;
+	struct rxm_atomic_resp_hdr *resp_hdr;
+	struct rxm_domain *domain = container_of(rxm_ep->util_ep.domain,
+					 struct rxm_domain, util_domain);
+
+	assert(!(rx_buf->comp_flags &
+		 ~(FI_RECV | FI_RECV | FI_REMOTE_CQ_DATA)));
+	assert(rx_buf->pkt.hdr.op == ofi_op_atomic ||
+	       rx_buf->pkt.hdr.op == ofi_op_atomic_fetch ||
+	       rx_buf->pkt.hdr.op == ofi_op_atomic_compare);
+
+	if (rx_buf->ep->srx_ctx)
+		rx_buf->conn = rxm_key2conn(rx_buf->ep,
+					    rx_buf->pkt.ctrl_hdr.conn_id);
+	if (OFI_UNLIKELY(!rx_buf->conn))
+		return -FI_EOTHER;
+
+	resp_buf = (struct rxm_tx_atomic_buf *) rxm_tx_buf_get(rxm_ep,
+							RXM_BUF_POOL_TX_ATOMIC);
+	if (OFI_UNLIKELY(!resp_buf)) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+			"Unable to allocate from Atomic buffer pool\n");
+		/* TODO: Should this be -FI_ENOMEM - how does it get
+		 * processed again */
+		return -FI_EAGAIN;
+	}
+
+	for (i = 0; i < rx_buf->pkt.hdr.atomic.ioc_count; i++) {
+		ret = ofi_mr_verify(&domain->util_domain.mr_map,
+				    req_hdr->rma_ioc[i].count * datatype_sz,
+				    (uintptr_t *)&req_hdr->rma_ioc[i].addr,
+				    req_hdr->rma_ioc[i].key,
+				    ofi_rx_mr_reg_flags(rx_buf->pkt.hdr.op,
+							atomic_op));
+		if (ret) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+				"Atomic RMA MR verify error %d\n", ret);
+			ret = -FI_EACCES;
+			goto send_nak;
+		}
+	}
+
+	len = ofi_total_rma_ioc_cnt(req_hdr->rma_ioc,
+			rx_buf->pkt.hdr.atomic.ioc_count) * datatype_sz;
+	resp_hdr = (struct rxm_atomic_resp_hdr *) resp_buf->pkt.data;
+
+	for (i = 0, offset = 0; i < rx_buf->pkt.hdr.atomic.ioc_count; i++) {
+		rxm_do_atomic(&rx_buf->pkt,
+			      (uintptr_t *) req_hdr->rma_ioc[i].addr,
+			      req_hdr->data + offset,
+			      req_hdr->data + len + offset,
+			      resp_hdr->data + offset,
+			      req_hdr->rma_ioc[i].count, datatype, atomic_op);
+		offset += req_hdr->rma_ioc[i].count * datatype_sz;
+	}
+	result_len = rx_buf->pkt.hdr.op == ofi_op_atomic ? 0 : offset;
+
+	if (rx_buf->pkt.hdr.op == ofi_op_atomic)
+		ofi_ep_rem_wr_cntr_inc(&rxm_ep->util_ep);
+	else
+		ofi_ep_rem_rd_cntr_inc(&rxm_ep->util_ep);
+
+	return rxm_atomic_send_resp(rxm_ep, rx_buf, resp_buf,
+				    result_len, FI_SUCCESS);
+send_nak:
+	return rxm_atomic_send_resp(rxm_ep, rx_buf, resp_buf, 0, ret);
+}
+
+
+static inline ssize_t rxm_handle_atomic_resp(struct rxm_ep *rxm_ep,
+					     struct rxm_rx_buf *rx_buf)
+{
+	struct rxm_tx_atomic_buf *tx_buf;
+	struct rxm_atomic_resp_hdr *resp_hdr =
+			(struct rxm_atomic_resp_hdr *) rx_buf->pkt.data;
+	uint64_t len;
+	int ret = 0;
+
+	tx_buf = rxm_msg_id_2_tx_buf(rxm_ep, RXM_BUF_POOL_TX_ATOMIC,
+				     rx_buf->pkt.ctrl_hdr.msg_id);
+	FI_DBG(&rxm_prov, FI_LOG_CQ,
+	       "Received Atomic Response for msg_id: 0x%" PRIx64 "\n",
+	       rx_buf->pkt.ctrl_hdr.msg_id);
+
+	assert(!(rx_buf->comp_flags & ~(FI_RECV | FI_REMOTE_CQ_DATA)));
+
+	if (resp_hdr->status) {
+		FI_DBG(&rxm_prov, FI_LOG_CQ,
+		       "Bad Atomic response status %d\n", ntohl(resp_hdr->status));
+		rxm_cq_write_error(rxm_ep->util_ep.tx_cq,
+				   rxm_ep->util_ep.tx_cntr,
+				   tx_buf->app_context, ntohl(resp_hdr->status));
+		goto done;
+	}
+
+	len = ofi_total_iov_len(tx_buf->result_iov, tx_buf->result_iov_count);
+	assert(ntohl(resp_hdr->result_len) == len);
+	ofi_copy_to_iov(tx_buf->result_iov, tx_buf->result_iov_count, 0,
+			resp_hdr->data, len);
+
+	if (!(tx_buf->flags & FI_INJECT))
+		ret = rxm_cq_tx_comp_write(rxm_ep,
+					   ofi_tx_cq_flags(tx_buf->pkt.hdr.op),
+					   tx_buf->app_context, tx_buf->flags);
+done:
+	if (tx_buf->pkt.hdr.atomic.op == ofi_op_atomic)
+		ofi_ep_wr_cntr_inc(&rxm_ep->util_ep);
+	else
+		ofi_ep_rd_cntr_inc(&rxm_ep->util_ep);
+
+	rxm_enqueue_rx_buf_for_repost_check(rx_buf);
+	rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_ATOMIC, tx_buf);
+
+	return ret;
+}
+
 static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 				  struct fi_cq_data_entry *comp)
 {
@@ -767,6 +994,7 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 	struct rxm_tx_sar_buf *tx_sar_buf;
 	struct rxm_tx_eager_buf *tx_eager_buf;
 	struct rxm_tx_rndv_buf *tx_rndv_buf;
+	struct rxm_tx_atomic_buf *tx_atomic_buf;
 	struct rxm_rma_buf *rma_buf;
 
 	/* Remote write events may not consume a posted recv so op context
@@ -810,6 +1038,10 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 			return rxm_rndv_handle_ack(rxm_ep, rx_buf);
 		case ofi_ctrl_seg_data:
 			return rxm_sar_handle_segment(rx_buf);
+		case ofi_ctrl_atomic:
+			return rxm_handle_atomic_req(rxm_ep, rx_buf);
+		case ofi_ctrl_atomic_resp:
+			return rxm_handle_atomic_resp(rxm_ep, rx_buf);
 		default:
 			FI_WARN(&rxm_prov, FI_LOG_CQ, "Unknown message type\n");
 			assert(0);
@@ -840,6 +1072,17 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 		rxm_tx_buf_release(rx_buf->ep, RXM_BUF_POOL_TX_ACK,
 				   rx_buf->recv_entry->rndv.tx_buf);
 		return rxm_finish_send_rndv_ack(rx_buf);
+	case RXM_ATOMIC_RESP_SENT:
+		tx_atomic_buf = comp->op_context;
+		assert(comp->flags & FI_SEND);
+		rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_ATOMIC,
+				   tx_atomic_buf);
+		return 0;
+	case RXM_ATOMIC_RESP_WAIT:
+		/* Optional atomic request completion; TX completion
+		 * processing is performed when atomic response is received */
+		assert(comp->flags & FI_SEND);
+		return 0;
 	default:
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "Invalid state!\n");
 		assert(0);

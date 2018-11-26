@@ -312,6 +312,7 @@
     <ClCompile Include="prov\rxm\src\rxm_domain.c" />
     <ClCompile Include="prov\rxm\src\rxm_ep.c" />
     <ClCompile Include="prov\rxm\src\rxm_fabric.c" />
+    <ClCompile Include="prov\rxm\src\rxm_atomic.c" />
     <ClCompile Include="prov\rxm\src\rxm_init.c">
       <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug-v140|x64'">
       </ForcedIncludeFiles>

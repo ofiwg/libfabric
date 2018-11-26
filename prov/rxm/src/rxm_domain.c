@@ -70,18 +70,14 @@ static struct fi_ops_domain rxm_domain_ops = {
 	.poll_open = fi_poll_create,
 	.stx_ctx = fi_no_stx_context,
 	.srx_ctx = fi_no_srx_context,
-	.query_atomic = fi_no_query_atomic,
+	.query_atomic = rxm_ep_query_atomic,
 };
 
 static void rxm_mr_remove_map_entry(struct rxm_mr *mr)
 {
-	int ret;
-
 	fastlock_acquire(&mr->domain->util_domain.lock);
-	ret = ofi_mr_map_remove(&mr->domain->util_domain.mr_map,
-				mr->mr_fid.key);
-	if (OFI_LIKELY(!ret))
-		ofi_atomic_dec32(&mr->domain->util_domain.ref);
+	(void) ofi_mr_map_remove(&mr->domain->util_domain.mr_map,
+				 mr->mr_fid.key);
 	fastlock_release(&mr->domain->util_domain.lock);
 }
 
@@ -101,11 +97,10 @@ static int rxm_mr_add_map_entry(struct util_domain *domain,
 			"MR map insert for atomic verification failed %d\n",
 			ret);
 	} else {
-		ofi_atomic_inc32(&domain->ref);
+		assert(rxm_mr->mr_fid.key == temp_key);
 	}
 	fastlock_release(&domain->lock);
 
-	assert(rxm_mr->mr_fid.key == temp_key);
 	return ret;
 }
 
@@ -149,6 +144,8 @@ static int rxm_mr_close(fid_t fid)
 	ret = fi_close(&rxm_mr->msg_mr->fid);
 	if (ret)
 		FI_WARN(&rxm_prov, FI_LOG_DOMAIN, "Unable to close MSG MR\n");
+
+	ofi_atomic_dec32(&rxm_mr->domain->util_domain.ref);
 	free(rxm_mr);
 	return ret;
 }
@@ -184,6 +181,7 @@ static void rxm_mr_init(struct rxm_mr *rxm_mr, struct rxm_domain *domain,
 	rxm_mr->mr_fid.mem_desc = rxm_mr->msg_mr;
 	rxm_mr->mr_fid.key = fi_mr_key(rxm_mr->msg_mr);
 	rxm_mr->domain = domain;
+	ofi_atomic_inc32(&domain->util_domain.ref);
 }
 
 static int rxm_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
@@ -223,6 +221,7 @@ static int rxm_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 
 map_err:
 	fi_close(&rxm_mr->mr_fid.fid);
+	return ret;
 err:
 	free(rxm_mr);
 	return ret;
@@ -273,6 +272,7 @@ static int rxm_mr_regv(struct fid *fid, const struct iovec *iov, size_t count,
 	return 0;
 map_err:
 	fi_close(&rxm_mr->mr_fid.fid);
+	return ret;
 err:
 	free(rxm_mr);
 	return ret;
@@ -337,6 +337,10 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	 * and bounds validation. We turn off the map mode bit FI_MR_PROV_KEY
 	 * since we specify the key used by MSG_EP provider. */
 	rxm_domain->util_domain.mr_map.mode &= ~FI_MR_PROV_KEY;
+
+	/* Must be set to eager size or less */
+	rxm_domain->max_atomic_size = info->tx_attr ?
+				      info->tx_attr->inject_size : 0;
 
 	*domain = &rxm_domain->util_domain.domain_fid;
 	(*domain)->fid.ops = &rxm_domain_fi_ops;
