@@ -279,6 +279,7 @@ int rxm_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 struct rxm_mr {
 	struct fid_mr mr_fid;
 	struct fid_mr *msg_mr;
+	struct rxm_domain *domain;
 };
 
 struct rxm_ep_wire_proto {
