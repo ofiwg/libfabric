@@ -1010,18 +1010,6 @@ rxm_ep_msg_normal_send(struct rxm_conn *rxm_conn, struct rxm_pkt *tx_pkt,
 	return fi_send(rxm_conn->msg_ep, tx_pkt, pkt_size, desc, 0, context);
 }
 
-static inline void
-rxm_ep_format_tx_buf_pkt(struct rxm_conn *rxm_conn, size_t len, uint8_t op, uint64_t data,
-			 uint64_t tag, uint64_t flags, struct rxm_pkt *pkt)
-{
-	pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
-	pkt->hdr.size = len;
-	pkt->hdr.op = op;
-	pkt->hdr.tag = tag;
-	pkt->hdr.flags = (flags & FI_REMOTE_CQ_DATA);
-	pkt->hdr.data = data;
-}
-
 static inline ssize_t
 rxm_ep_alloc_rndv_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void *context,
 			uint8_t count, const struct iovec *iov, void **desc, size_t data_len,

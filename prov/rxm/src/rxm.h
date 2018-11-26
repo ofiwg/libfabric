@@ -958,6 +958,19 @@ rxm_ep_prepare_tx(struct rxm_ep *rxm_ep, fi_addr_t dest_addr,
 	return 0;
 }
 
+static inline void
+rxm_ep_format_tx_buf_pkt(struct rxm_conn *rxm_conn, size_t len, uint8_t op,
+			 uint64_t data, uint64_t tag, uint64_t flags,
+			 struct rxm_pkt *pkt)
+{
+	pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
+	pkt->hdr.size = len;
+	pkt->hdr.op = op;
+	pkt->hdr.tag = tag;
+	pkt->hdr.flags = (flags & FI_REMOTE_CQ_DATA);
+	pkt->hdr.data = data;
+}
+
 static inline
 struct rxm_buf *rxm_buf_get(struct rxm_buf_pool *pool)
 {
