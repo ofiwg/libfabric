@@ -334,6 +334,7 @@ static int rxd_verify_active(struct rxd_ep *ep, fi_addr_t addr, fi_addr_t peer_a
 		dlist_remove(&ep->peers[addr].entry);
 	}
 	dlist_insert_tail(&ep->peers[addr].entry, &ep->active_peers);
+	ep->peers[addr].retry_cnt = 0;
 
 	return 0;
 }
@@ -391,6 +392,9 @@ void rxd_progress_tx_list(struct rxd_ep *ep, struct rxd_peer *peer)
 		if (!rxd_ep_post_data_pkts(ep, tx_entry))
 			break;
 	}
+
+	if (dlist_empty(&peer->tx_list))
+		peer->retry_cnt = 0;
 }
 
 static void rxd_update_peer(struct rxd_ep *ep, fi_addr_t peer, fi_addr_t peer_addr)
@@ -416,7 +420,6 @@ static int rxd_send_cts(struct rxd_ep *rxd_ep, struct rxd_rts_pkt *rts_pkt,
 
 	cts = (struct rxd_cts_pkt *) (pkt_entry->pkt);
 	pkt_entry->pkt_size = sizeof(*cts) + rxd_ep->prefix_size;
-	pkt_entry->retry_cnt = 0;
 	pkt_entry->peer = peer;
 
 	cts->base_hdr.version = RXD_PROTOCOL_VERSION;
@@ -1041,7 +1044,10 @@ static void rxd_handle_ack(struct rxd_ep *ep, struct rxd_pkt_entry *ack_entry)
 	fi_addr_t peer = ack->base_hdr.peer;
 	struct rxd_base_hdr *hdr;
 
-	ep->peers[peer].last_rx_ack = ack->base_hdr.seq_no;
+	if (ep->peers[peer].last_rx_ack != ack->base_hdr.seq_no) {
+		ep->peers[peer].retry_cnt = 0;
+		ep->peers[peer].last_rx_ack = ack->base_hdr.seq_no;
+	}
 
 	while (!dlist_empty(&ep->peers[peer].unacked)) {
 		pkt_entry = container_of((&ep->peers[peer].unacked)->next,
