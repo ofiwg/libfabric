@@ -1664,6 +1664,19 @@ static struct fi_ops_msg rxm_ops_msg = {
 	.injectdata = rxm_ep_injectdata,
 };
 
+static struct fi_ops_msg rxm_ops_msg_thread_unsafe = {
+	.size = sizeof(struct fi_ops_msg),
+	.recv = rxm_ep_recv,
+	.recvv = rxm_ep_recvv,
+	.recvmsg = rxm_ep_recvmsg,
+	.send = rxm_ep_send,
+	.sendv = rxm_ep_sendv,
+	.sendmsg = rxm_ep_sendmsg,
+	.inject = rxm_ep_inject_fast,
+	.senddata = rxm_ep_senddata,
+	.injectdata = rxm_ep_injectdata_fast,
+};
+
 static ssize_t rxm_ep_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 			       uint64_t flags)
 {
@@ -1806,7 +1819,7 @@ static ssize_t rxm_ep_tinjectdata_fast(struct fid_ep *ep_fid, const void *buf, s
 					    tag, rxm_ep->tinject_tx_pkt);
 }
 
-struct fi_ops_tagged rxm_ops_tagged = {
+static struct fi_ops_tagged rxm_ops_tagged = {
 	.size = sizeof(struct fi_ops_tagged),
 	.recv = rxm_ep_trecv,
 	.recvv = rxm_ep_trecvv,
@@ -1817,6 +1830,19 @@ struct fi_ops_tagged rxm_ops_tagged = {
 	.inject = rxm_ep_tinject,
 	.senddata = rxm_ep_tsenddata,
 	.injectdata = rxm_ep_tinjectdata,
+};
+
+static struct fi_ops_tagged rxm_ops_tagged_thread_unsafe = {
+	.size = sizeof(struct fi_ops_tagged),
+	.recv = rxm_ep_trecv,
+	.recvv = rxm_ep_trecvv,
+	.recvmsg = rxm_ep_trecvmsg,
+	.send = rxm_ep_tsend,
+	.sendv = rxm_ep_tsendv,
+	.sendmsg = rxm_ep_tsendmsg,
+	.inject = rxm_ep_tinject_fast,
+	.senddata = rxm_ep_tsenddata,
+	.injectdata = rxm_ep_tinjectdata_fast,
 };
 
 static int rxm_ep_msg_res_close(struct rxm_ep *rxm_ep)
@@ -2196,11 +2222,6 @@ static int rxm_ep_txrx_res_open(struct rxm_ep *rxm_ep)
 			free(rxm_ep->inject_tx_pkt);
 			return ret;
 		}
-
-		rxm_ops_msg.inject = rxm_ep_inject_fast;
-		rxm_ops_msg.injectdata = rxm_ep_injectdata_fast;
-		rxm_ops_tagged.inject = rxm_ep_tinject_fast;
-		rxm_ops_tagged.injectdata = rxm_ep_tinjectdata_fast;
 	} else {
 		rxm_ep->res_fastlock_acquire = ofi_fastlock_acquire;
 		rxm_ep->res_fastlock_release = ofi_fastlock_release;
@@ -2396,8 +2417,13 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 	(*ep_fid)->fid.ops = &rxm_ep_fi_ops;
 	(*ep_fid)->ops = &rxm_ops_ep;
 	(*ep_fid)->cm = &rxm_ops_cm;
-	(*ep_fid)->msg = &rxm_ops_msg;
-	(*ep_fid)->tagged = &rxm_ops_tagged;
+	if (rxm_ep->util_ep.domain->threading != FI_THREAD_SAFE) {
+		(*ep_fid)->msg = &rxm_ops_msg_thread_unsafe;
+		(*ep_fid)->tagged = &rxm_ops_tagged_thread_unsafe;
+	} else {
+		(*ep_fid)->msg = &rxm_ops_msg;
+		(*ep_fid)->tagged = &rxm_ops_tagged;
+	}
 	(*ep_fid)->rma = &rxm_ops_rma;
 
 	return 0;
