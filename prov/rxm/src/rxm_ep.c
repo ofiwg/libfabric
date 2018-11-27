@@ -1297,7 +1297,7 @@ rxm_ep_send_inject(struct rxm_ep *rxm_ep, const struct iovec *iov, size_t count,
 				"Ran out of buffers from Eager Inject buffer pool\n");
 			return -FI_EAGAIN;
 		}
-		rxm_ep_format_tx_buf_pkt(rxm_conn, total_len, op, data, tag,
+		rxm_ep_format_tx_buf_pkt(rxm_conn, data_len, op, data, tag,
 				         flags, &tx_buf->pkt);
 		ofi_copy_from_iov(tx_buf->pkt.data, tx_buf->pkt.hdr.size,
 				  iov, count, 0);
