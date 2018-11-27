@@ -53,6 +53,7 @@ rxm_ep_rma_reg_iov(struct rxm_ep *rxm_ep, const struct iovec *msg_iov,
 
 			for (i = 0; i < iov_count; i++)
 				desc_storage[i] = fi_mr_desc(rma_buf->mr.mr[i]);
+			rma_buf->mr.count = iov_count;
 		} else {
 			for (i = 0; i < iov_count; i++)
 				desc_storage[i] = fi_mr_desc(desc[i]);
