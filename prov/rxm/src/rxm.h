@@ -643,10 +643,6 @@ struct rxm_ep {
 	size_t			eager_limit;
 	size_t			sar_limit;
 
-	/* This is used only in non-FI_THREAD_SAFE case */
-	struct rxm_pkt		*inject_tx_pkt;
-	struct rxm_pkt		*tinject_tx_pkt;
-
 	struct rxm_buf_pool	*buf_pools;
 
 	struct dlist_entry	repost_ready_list;
@@ -661,6 +657,12 @@ struct rxm_conn {
 	struct rxm_cmap_handle handle;
 
 	struct fid_ep *msg_ep;
+
+	/* This is used only in non-FI_THREAD_SAFE case */
+	struct rxm_pkt *inject_pkt;
+	struct rxm_pkt *inject_data_pkt;
+	struct rxm_pkt *tinject_pkt;
+	struct rxm_pkt *tinject_data_pkt;
 
 	struct dlist_entry deferred_conn_entry;
 	struct dlist_entry deferred_tx_queue;
