@@ -945,6 +945,10 @@ static void rxd_progress_pkt_list(struct rxd_ep *ep, struct rxd_peer *peer)
 
 	if (retry)
 		peer->retry_cnt++;
+
+	if (!dlist_empty(&peer->unacked))
+		ep->next_retry = ep->next_retry == -1 ? peer->retry_cnt :
+				 MIN(ep->next_retry, peer->retry_cnt);
 }
 
 static void rxd_ep_progress(struct util_ep *util_ep)
@@ -973,6 +977,7 @@ static void rxd_ep_progress(struct util_ep *util_ep)
 	if (!rxd_env.retry)
 		goto out;
 
+	ep->next_retry = -1;
 	dlist_foreach_container_safe(&ep->rts_sent_list, struct rxd_peer,
 				     peer, entry, tmp)
 		rxd_progress_pkt_list(ep, peer);
@@ -1148,6 +1153,7 @@ int rxd_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	rxd_ep->rx_size = info->rx_attr->size;
 	rxd_ep->tx_size = info->tx_attr->size;
+	rxd_ep->next_retry = -1;
 	ret = rxd_ep_init_res(rxd_ep, info);
 	if (ret)
 		goto err4;

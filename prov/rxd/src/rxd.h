@@ -181,6 +181,7 @@ struct rxd_ep {
 	uint32_t posted_bufs;
 	size_t min_multi_recv_size;
 	int do_local_mr;
+	int next_retry;
 
 	struct util_buf_pool *tx_pkt_pool;
 	struct util_buf_pool *rx_pkt_pool;
