@@ -162,9 +162,9 @@ int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
 
 static int rxm_init_info(void)
 {
-	int param;
+	size_t param;
 
-	if (!fi_param_get_int(&rxm_prov, "buffer_size", &param)) {
+	if (!fi_param_get_size_t(&rxm_prov, "buffer_size", &param)) {
 		if (param > sizeof(struct rxm_pkt)) {
 			rxm_info.tx_attr->inject_size = param;
 		} else {
@@ -284,7 +284,7 @@ struct fi_provider rxm_prov = {
 
 RXM_INI
 {
-	fi_param_define(&rxm_prov, "buffer_size", FI_PARAM_INT,
+	fi_param_define(&rxm_prov, "buffer_size", FI_PARAM_SIZE_T,
 			"Defines the transmit buffer size / inject size. Messages"
 			" of size less than this would be transmitted via an "
 			"eager protocol and those above would be transmitted "
