@@ -41,6 +41,12 @@
 #include "ofi.h"
 #include "ofi_osd.h"
 
+#include <net/if.h>
+#include <sys/types.h>
+#include <linux/ethtool.h>
+#include <linux/sockios.h>
+#include <sys/ioctl.h>
+
 ssize_t ofi_get_hugepage_size(void)
 {
 	FILE *fd;
@@ -64,3 +70,115 @@ ssize_t ofi_get_hugepage_size(void)
 
 	return val * 1024;
 }
+
+#ifdef HAVE_ETHTOOL
+
+#ifdef HAVE_DECL_ETHTOOL_CMD_SPEED
+static inline uint32_t ofi_ethtool_cmd_speed(struct ethtool_cmd *ecmd)
+{
+	return ethtool_cmd_speed(ecmd);
+}
+#else /* HAVE_DECL_ETHTOOL_CMD_SPEED */
+static inline uint32_t ofi_ethtool_cmd_speed(struct ethtool_cmd *ecmd)
+{
+	return ecmd->speed;
+}
+#endif /* HAVE_DECL_ETHTOOL_CMD_SPEED */
+
+#ifdef HAVE_DECL_SPEED_UNKNOWN
+static inline int ofi_ethtool_is_known(uint32_t speed_mbps)
+{
+	return (speed_mbps != SPEED_UNKNOWN);
+}
+#else /* HAVE_DECL_SPEED_UNKNOWN */
+static inline int ofi_ethtool_is_known(uint32_t speed_mbps)
+{
+	return ((speed_mbps != 0) && ((uint16_t)speed_mbps != (uint16_t)-1));
+}
+#endif /* HAVE_DECL_SPEED_UNKNOWN */
+
+/* Note: If the value of the speed is unknown, set it to 100 Mb/s */
+static inline size_t ofi_ethtool_get_speed(struct ethtool_cmd *ecmd)
+{
+	uint32_t speed_mbps = ofi_ethtool_cmd_speed(ecmd);
+
+	return (ofi_ethtool_is_known(speed_mbps) ? speed_mbps : 100);
+}
+
+size_t ofi_ifaddr_get_speed(struct ifaddrs *ifa)
+{
+	struct ethtool_cmd cmd = {
+		.cmd = ETHTOOL_GSET,
+	};
+	struct ifreq ifr = {
+		.ifr_data = (void *)&cmd,
+	};
+	SOCKET fd;
+	int ret;
+
+	fd = socket(ifa->ifa_addr->sa_family, SOCK_STREAM, IPPROTO_IP);
+	if (fd < 0)
+		return 0;
+
+	strncpy(ifr.ifr_name, ifa->ifa_name, IF_NAMESIZE);
+
+	ret = ioctl(fd, SIOCETHTOOL, &ifr);
+	if (ret) {
+		close(fd);
+		return 0;
+	}
+
+	close(fd);
+
+	return ofi_ethtool_get_speed(&cmd);
+}
+
+#else /* HAVE_ETHTOOL */
+
+size_t ofi_ifaddr_get_speed(struct ifaddrs *ifa)
+{
+	FILE *fd;
+	char *line = NULL;
+	size_t len = 0;
+	char *speed_filename_prefix = "/sys/class/net/";
+	char *speed_filename_suffix = "/speed";
+	char *speed_filename;
+	size_t speed;
+	/* IF_NAMESIZE includes NULL-terminated symbol */
+	size_t filename_len = strlen(speed_filename_prefix) +
+			      strlen(speed_filename_prefix) +
+			      IF_NAMESIZE;
+
+	speed_filename = calloc(1, filename_len);
+	if (!speed_filename)
+		return 0;
+
+	snprintf(speed_filename, filename_len, "%s%s%s",
+		 speed_filename_prefix, ifa->ifa_name, speed_filename_suffix);
+
+	fd = fopen(speed_filename, "r");
+	if (!fd)
+		 goto err1;
+
+	if (getline(&line, &len, fd) == -1) {
+		goto err2;
+	}
+
+	if (sscanf(line, "%zu", &speed) != 1)
+		goto err3;
+
+	free(line);
+	fclose(fd);
+	free(speed_filename);
+
+	return speed;
+err3:
+	free(line);
+err2:
+	fclose(fd);
+err1:
+	free(speed_filename);
+	return 0;
+}
+
+#endif /* HAVE_ETHTOOL */

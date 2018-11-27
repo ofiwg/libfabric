@@ -42,6 +42,7 @@
 #include <string.h>
 #include <assert.h>
 
+#include <ifaddrs.h>
 #include "unix/osd.h"
 #include "rdma/fi_errno.h"
 
@@ -71,5 +72,7 @@ static inline int ofi_free_hugepage_buf(void *memptr, size_t size)
 {
 	return munmap(memptr, size);
 }
+
+size_t ofi_ifaddr_get_speed(struct ifaddrs *ifa);
 
 #endif /* _LINUX_OSD_H_ */

@@ -249,7 +249,7 @@ AC_TRY_LINK([
     ],
     [
 	AC_MSG_RESULT(yes)
-        AC_DEFINE(HAVE_CPUID, 1, [Set to 1 to to use cpuid])
+        AC_DEFINE(HAVE_CPUID, 1, [Set to 1 to use cpuid])
     ],
     [AC_MSG_RESULT(no)])
 
@@ -345,6 +345,34 @@ AC_TRY_LINK(
 AC_DEFINE_UNQUOTED([HAVE_ALIAS_ATTRIBUTE], [$ac_prog_cc_alias_symbols],
 	  	   [Define to 1 if the linker supports alias attribute.])
 AC_CHECK_FUNCS([getifaddrs])
+
+dnl Check for ethtool support
+AC_MSG_CHECKING(ethtool support)
+AC_TRY_LINK([
+    #include <net/if.h>
+    #include <sys/types.h>
+    #include <linux/ethtool.h>
+    #include <linux/sockios.h>
+    #include <sys/ioctl.h>],
+    [
+        unsigned long ioctl_req = SIOCETHTOOL;
+        struct ethtool_cmd cmd = {
+            .cmd = ETHTOOL_GSET,
+        };
+        long speed = cmd.speed;
+    ],
+    [
+	AC_MSG_RESULT(yes)
+        AC_DEFINE(HAVE_ETHTOOL, 1, [Set to 1 to use ethtool])
+
+    ],
+    [AC_MSG_RESULT(no)])
+
+dnl Check for ethtool SPEED_UNKNOWN macro (suppoirted in the linux
+dnl kernel >= 3.2) and ethtool_cmd_speed function declarations
+dnl (supported in the linux kernel >= 2.6.26)
+AC_CHECK_DECLS([ethtool_cmd_speed, SPEED_UNKNOWN], [], [],
+               [#include <linux/ethtool.h>])
 
 dnl Provider-specific checks
 FI_PROVIDER_INIT
