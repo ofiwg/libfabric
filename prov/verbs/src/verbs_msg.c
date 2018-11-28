@@ -213,7 +213,7 @@ static ssize_t fi_ibv_msg_ep_injectdata_fast(struct fid_ep *ep_fid, const void *
 	return ret;
 }
 
-struct fi_ops_msg fi_ibv_msg_ep_msg_ops_ts = {
+const struct fi_ops_msg fi_ibv_msg_ep_msg_ops_ts = {
 	.size = sizeof(struct fi_ops_msg),
 	.recv = fi_ibv_msg_ep_recv,
 	.recvv = fi_ibv_msg_ep_recvv,
@@ -226,7 +226,7 @@ struct fi_ops_msg fi_ibv_msg_ep_msg_ops_ts = {
 	.injectdata = fi_ibv_msg_ep_injectdata,
 };
 
-struct fi_ops_msg fi_ibv_msg_ep_msg_ops = {
+const struct fi_ops_msg fi_ibv_msg_ep_msg_ops = {
 	.size = sizeof(struct fi_ops_msg),
 	.recv = fi_ibv_msg_ep_recv,
 	.recvv = fi_ibv_msg_ep_recvv,
@@ -237,19 +237,6 @@ struct fi_ops_msg fi_ibv_msg_ep_msg_ops = {
 	.inject = fi_ibv_msg_inject_fast,
 	.senddata = fi_ibv_msg_ep_senddata,
 	.injectdata = fi_ibv_msg_ep_injectdata_fast,
-};
-
-struct fi_ops_msg fi_ibv_msg_srq_ep_msg_ops = {
-	.size = sizeof(struct fi_ops_msg),
-	.recv = fi_no_msg_recv,
-	.recvv = fi_no_msg_recvv,
-	.recvmsg = fi_no_msg_recvmsg,
-	.send = fi_ibv_msg_ep_send,
-	.sendv = fi_ibv_msg_ep_sendv,
-	.sendmsg = fi_ibv_msg_ep_sendmsg,
-	.inject = fi_ibv_msg_ep_inject,
-	.senddata = fi_ibv_msg_ep_senddata,
-	.injectdata = fi_ibv_msg_ep_injectdata,
 };
 
 static ssize_t
@@ -352,7 +339,7 @@ static ssize_t fi_ibv_msg_xrc_ep_injectdata(struct fid_ep *ep_fid, const void *b
 }
 
 /* NOTE: Initially the XRC endpoint must be used with a SRQ. */
-struct fi_ops_msg fi_ibv_msg_xrc_ep_msg_ops_ts = {
+const struct fi_ops_msg fi_ibv_msg_xrc_ep_msg_ops_ts = {
 	.size = sizeof(struct fi_ops_msg),
 	.recv = fi_no_msg_recv,
 	.recvv = fi_no_msg_recvv,
@@ -365,7 +352,7 @@ struct fi_ops_msg fi_ibv_msg_xrc_ep_msg_ops_ts = {
 	.injectdata = fi_no_msg_injectdata,
 };
 
-struct fi_ops_msg fi_ibv_msg_xrc_ep_msg_ops = {
+const struct fi_ops_msg fi_ibv_msg_xrc_ep_msg_ops = {
 	.size = sizeof(struct fi_ops_msg),
 	.recv = fi_no_msg_recv,
 	.recvv = fi_no_msg_recvv,
@@ -378,7 +365,7 @@ struct fi_ops_msg fi_ibv_msg_xrc_ep_msg_ops = {
 	.injectdata = fi_no_msg_injectdata,
 };
 
-struct fi_ops_msg fi_ibv_msg_srq_xrc_ep_msg_ops = {
+const struct fi_ops_msg fi_ibv_msg_srq_xrc_ep_msg_ops = {
 	.size = sizeof(struct fi_ops_msg),
 	.recv = fi_no_msg_recv,
 	.recvv = fi_no_msg_recvv,
