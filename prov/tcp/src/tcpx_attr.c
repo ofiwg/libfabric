@@ -32,14 +32,20 @@
 
 #include "tcpx.h"
 
-#define TCPX_DOMAIN_CAPS FI_LOCAL_COMM | FI_REMOTE_COMM
+
+#define TCPX_DOMAIN_CAPS (FI_LOCAL_COMM | FI_REMOTE_COMM)
+#define TCPX_EP_CAPS	 (FI_MSG | FI_RMA | FI_RMA_PMEM)
+#define TCPX_TX_CAPS	 (FI_SEND | FI_WRITE | FI_READ)
+#define TCPX_RX_CAPS	 (FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE)
+
 
 #define TCPX_MSG_ORDER (FI_ORDER_RAR | FI_ORDER_RAW | FI_ORDER_RAS |	\
 			FI_ORDER_WAW | FI_ORDER_WAS |			\
 			FI_ORDER_SAW | FI_ORDER_SAS)
 
+
 static struct fi_tx_attr tcpx_tx_attr = {
-	.caps = FI_MSG | FI_SEND,
+	.caps = TCPX_EP_CAPS | TCPX_TX_CAPS,
 	.comp_order = FI_ORDER_STRICT,
 	.msg_order = TCPX_MSG_ORDER,
 	.inject_size = 64,
@@ -49,7 +55,7 @@ static struct fi_tx_attr tcpx_tx_attr = {
 };
 
 static struct fi_rx_attr tcpx_rx_attr = {
-	.caps = FI_MSG | FI_RECV,
+	.caps = TCPX_EP_CAPS | TCPX_RX_CAPS,
 	.comp_order = FI_ORDER_STRICT,
 	.msg_order = TCPX_MSG_ORDER,
 	.total_buffered_recv = 0,
@@ -94,9 +100,7 @@ static struct fi_fabric_attr tcpx_fabric_attr = {
 };
 
 struct fi_info tcpx_info = {
-	.caps = FI_MSG | FI_SEND | FI_RECV |
-		FI_RMA | FI_WRITE | FI_REMOTE_WRITE |
-		FI_READ | FI_REMOTE_READ | TCPX_DOMAIN_CAPS,
+	.caps = TCPX_DOMAIN_CAPS | TCPX_EP_CAPS | TCPX_TX_CAPS | TCPX_RX_CAPS,
 	.addr_format = FI_SOCKADDR,
 	.tx_attr = &tcpx_tx_attr,
 	.rx_attr = &tcpx_rx_attr,

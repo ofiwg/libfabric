@@ -143,7 +143,9 @@ int fi_query_atomic(struct fid_domain *domain,
 : Additional flags to apply for the atomic operation
 
 *context*
-: User specified pointer to associate with the operation.
+: User specified pointer to associate with the operation.  This parameter is
+  ignored if the operation will not generate a successful completion, unless
+  an op flag specifies the context parameter be used for required input.
 
 # DESCRIPTION
 

@@ -5,6 +5,120 @@ This file contains the main features as well as overviews of specific
 bug fixes (and other actions) for each version of Libfabric since
 version 1.0.
 
+v1.7.0, Fri Dec 21, 2018
+========================
+
+## PSM2
+
+- Requires PSM2 library version 10.2.260 or later
+- Clean up connection state in fi_av_remove
+- Use psm2_info_query to read HFI device info
+- Clean up CQ/counter poll list when endpoint is closed
+- Support shared address vector
+- Optimize CQ event conversion with psm2_mq_ipeek_dequeue_multi
+- Lock optimization for FI_THREAD_DOMAIN
+- Use new PSM2 fast path isend/irecv functions for large size RMA
+- Support building with latest PSM2 source code (version 11.2.68)
+- Support fabric direct
+
+v1.6.2, Fri Sep 28, 2018
+========================
+
+## Core
+
+- Cleanup of debug messages
+
+## GNI
+- Fix problems with Scalable Endpoint creation
+- Fix interoperability problem with HPC toolkit
+- Improve configuration check for kdreg
+
+## PSM
+
+- Enforce FI_RMA_EVENT checking when updating counters
+- Fix race condition in fi_cq_readerr()
+- Always try to make progress when fi_cntr_read is called
+
+## PSM2
+
+- Revert "Avoid long delay in psm2_ep_close"
+- Fix memory corruption related to sendv
+- Performance tweak for bi-directional send/recv on KNL
+- Fix CPU detection
+- Enforce FI_RMA_EVENT checking when updating counters
+- Remove stale info from address vector when disconnecting
+- Fix race condition in fi_cq_readerr()
+- Adjust reported context numbers for special cases
+- Always try to make progress when fi_cntr_read is called
+- Support control functions related to MR mode
+- Unblock fi_cntr_wait on errors
+- Properly update error counters
+- Fix irregular performance drop for aggregated RMA operations
+- Reset Tx/Rx context counter when fabric is initialized
+- Fix incorrect completion event for iov send
+
+## RXM
+
+- Fix incorrect increments of error counters for small messages
+- Increment write completion counter for small transfers
+- Use FI_UNIVERSE_SIZE when defining MSG provider CQ size
+- Make TX, RX queue sizes independent of MSG provider
+- Make deferred requests opt-in
+- Fill missing rxm_conn in rx_buf when shared context is not used
+- Fix an issue where MSG endpoint recv queue got empty resulting
+  in a hang
+- Set FI_ORDER_NONE for tx and rx completion ordering
+- Serialize access to repost_ready_list
+- Reprocess unexpected messages on av update
+- Fix a bug in matching directed receives
+- Fix desc field when postponing RMA ops
+- Fix incorrect reporting of mem_tag format
+- Don't include FI_DIRECTED_RECV, FI_SOURCE caps if they're not needed
+- Fix matching for RMA I/O vectors
+
+## Sockets
+
+- Increase maximum messages size as MPICH bug work-around
+
+## Verbs
+
+- Detect string format of wildcard address in node argument
+- Don't report unusable fi_info (no source IP address)
+- Don't assert when a verbs device exposes unsupported MTU types
+- Report correct rma_iov_limit
+- Add new variable - FI_VERBS_MR_CACHE_MERGE_REGIONS
+- eq->err.err must return a positive error code
+
+v1.6.1, Wed May 8, 2018
+===========================
+
+## Core
+
+- Fix compile issues with older compilers
+- Check that all debug compiler flags are supported by compiler
+
+## PSM2
+
+- Fix occasional assertion failure in psm2_ep_close
+- Avoid long delay in psm2_ep_close
+- Fix potential duplication of iov send completion
+- Replace some parameter checking with assertions
+- Check iov limit in sendmsg
+- Avoid adding FI_TRIGGER caps automatically
+- Avoid unnecessary calls to psmx2_am_progress()
+
+## RXM
+
+- Fix reading pointer after freeing it.
+- Avoid reading invalid AV entry
+- Handle deleting the same address multiple times
+- Fix crash in fi_av_remove if FI_SOURCE wasn't enabled
+
+## Sockets
+
+- Fix use after free error handling triggered ops.
+
+
 v1.6.0, Wed Mar 14, 2018
 ========================
 
