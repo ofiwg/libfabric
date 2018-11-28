@@ -317,7 +317,7 @@ static void rxm_fini(void)
 struct fi_provider rxm_prov = {
 	.name = OFI_UTIL_PREFIX "rxm",
 	.version = FI_VERSION(RXM_MAJOR_VERSION, RXM_MINOR_VERSION),
-	.fi_version = FI_VERSION(1, 6),
+	.fi_version = FI_VERSION(1, 7),
 	.getinfo = rxm_getinfo,
 	.fabric = rxm_fabric,
 	.cleanup = rxm_fini

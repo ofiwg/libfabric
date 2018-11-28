@@ -62,7 +62,6 @@
 #define RXD_MAJOR_VERSION 	(1)
 #define RXD_MINOR_VERSION 	(0)
 #define RXD_PROTOCOL_VERSION 	(1)
-#define RXD_FI_VERSION 		FI_VERSION(1,6)
 
 #define RXD_MAX_MTU_SIZE	4096
 

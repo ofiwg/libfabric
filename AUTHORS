@@ -1,11 +1,15 @@
+aikatz <aik49@cornell.edu>
 aingerson <aingerson@gmail.com>
 aingerson <alexia.ingerson@intel.com>
 Ajay Kulkarni <ajaykulk@cisco.com>
+aleksandra.justa <ajusta@gklab-125-155.igk.intel.com>
 Amith Abraham <aabraham@cray.com>
 Ana Guerrero López <ana@ekaia.org>
+Anatoliy Rozanov <anatoliy.rozanov@intel.com>
 Andrew Friedley <andrew.friedley@intel.com>
 Arun C Ilango <arun.ilango@intel.com>
 arun ilango <a-ilango@users.noreply.github.com>
+Arun Ilango <arun.ilango@intel.com>
 Ashley Pittman <ampittma@ampittma-mac02.pittman.co.uk.20.20.172.in-addr.arpa>
 Ashley Pittman <ashley.m.pittman@intel.com>
 Automated bot for the OFIWG organization <ofiwg-bot@users.noreply.github.com>
@@ -14,8 +18,10 @@ Ben Turrubiates <bturrubiates@lanl.gov>
 Ben Turrubiates <bturrubi@cisco.com>
 Brian Li <brian14708@gmail.com>
 Chang Hyun Park <heartinpiece@gmail.com>
+Charles J Archer <charles.j.archer@intel.com>
 Chen Zhao <soniczhao@gmail.com>
 Chuck Fossen <chuckf@cray.com>
+Dardo D Kleiner <dkleiner@cmf.nrl.navy.mil>
 Dave Goodell <dgoodell@cisco.com>
 David Noel <david.noel19@gmail.com>
 Dmitry Durnov <dmitry.durnov@intel.com>
@@ -27,10 +33,15 @@ Evan Harvey <eharvey@lanl.gov>
 Evgeny Leksikov <evgeny.leksikov@intel.com>
 Ezra Kissel <ezkissel@indiana.edu>
 Frank Zago <fzago@cray.com>
+germanafro <andreasberger86@hotmail.de>
 Gilles Gouaillardet <gilles.gouaillardet@iferc.org>
 Gilles Gouaillardet <gilles@rist.or.jp>
 Hefty <sean.hefty@intel.com>
+Holger Hoffstätte <holger@applied-asynchrony.com>
 Howard Pritchard <howardp@lanl.gov>
+Ignacio Hernandez <ignacio.hernandez@intel.com>
+Ira Weiny <ira.weiny@intel.com>
+Jaime Arteaga <jaime.a.arteaga.molina@intel.com>
 James Dinan <james.dinan@intel.com>
 James Shimek <jshimek@cray.com>
 James Swaro <james.swaro@gmail.com>
@@ -41,20 +52,32 @@ Jay Sternberg <jay.e.sternberg@intel.com>
 Jeff Hammond <jeff.r.hammond@intel.com>
 Jeff Hammond <jeff.science@gmail.com>
 Jeff Squyres <jsquyres@cisco.com>
+Jerome Berryhill <Jerome.Berryhill@Intel.com>
+Jerome Boyd Berryhill <JeromeBerryhill@Intel.com>
+Jerome Soumagne <jsoumagne@hdfgroup.org>
 Jianxin Xiong <jianxin.xiong@intel.com>
 Jim Snow <jim.m.snow@intel.com>
 Jithin Jose <jithin.jose@intel.com>
 Joe Doyle <joseph.doyle@intel.com>
+Johannes Ziegenbalg <Johannes.Ziegenbalg@gmail.com>
+John Biddiscombe <biddisco@cscs.ch>
+John Byrne <john.l.byrne@hpe.com>
 Jonathan Behrens <fintelia@gmail.com>
+jose <jose@cst-fs.(none)>
+jose <jose@cstnh-8.(none)>
+JoZie <JoZie@users.noreply.github.com>
 Ken Raffenetti <raffenet@mcs.anl.gov>
 kseager <kayla.seager@intel.com>
 Latchesar Ionkov <lionkov@lanl.gov>
 Lisanna Dettwyler <levi.e.dettwyler@intel.com>
 Lisanna Dettwyler <lisanna.dettwyler@intel.com>
+Marcin Salnik <marcin.salnik@intel.com>
 Martin Kontsek <mkontsek@cisco.com>
 Miao Luo <miao.luo@intel.com>
 Michael Blocksome <michael.blocksome@intel.com>
 Michael Chuvelev <michael.chuvelev@intel.com>
+Mohan Gandhi <mohgan@amazon.com>
+Neil Spruit <neil.r.spruit@intel.com>
 Oblomov, Sergey <hoopoepg@gmail.com>
 Oblomov, Sergey <sergey.oblomov@intel.com>
 OFIWG Bot <ofiwg@lists.openfabrics.org>
@@ -64,8 +87,10 @@ Patrick McCormick <patrick.m.mccormick@intel.com>
 Paul Coffman <pcoffman@anl.gov>
 Pierre Roux <piroux@cisco.com>
 Prankur Gupta <prankgup@cisco.com>
+Raghu Raja <craghun@amazon.com>
 Reese Faucette <rfaucett@cisco.com>
 Richard Halkyard <rhalkyard@cray.com>
+Robert Wespetal <wesper@amazon.com>
 Sannikov, Alexander <alexander.sannikov@intel.com>
 Sayantan Sur <sayantan.sur@intel.com>
 Sean Hefty <sean.hefty@intel.com>
@@ -74,8 +99,10 @@ Shantonu Hossain <shantonu.hossain@intel.com>
 soblomov <sergey.oblomov@intel.com>
 Solovyev, Dmitriy <dmitriy.solovyev@intel.com>
 Spruit, Neil R <neil.r.spruit@intel.com>
+Srdjan Milakovic <srdjan@rice.edu>
 Stan Smith <stan.smith@intel.com>
 Steven Vormwald <sdvormwa@cray.com>
+Steve Welch <swelch@systemfabricworks.com>
 Sung-Eun Choi <sungeunchoi@users.noreply.github.com>
 Sung-Eun Choi <sungeun@cray.com>
 Sylvain Didelot <didelot.sylvain@gmail.com>
@@ -83,10 +110,13 @@ Sylvain Didelot <sdidelot@ddn.com>
 Thananon Patinyasakdikul <apatinya@cisco.com>
 Thomas Smith <thomasm2@cisco.com>
 Tony Zinger <ajz@cray.com>
+tonyzinger <ajz@cray.com>
+Venkata Krishna Nimmagadda <nvkrishna85@gmail.com>
 Venkata Krishna Nimmagadda <venkata.krishna.nimmagadda@intel.com>
 Wesley Bland <wesley.bland@intel.com>
 Xuyang Wang <xuywang@cisco.com>
 Yohann Burette <yohann.burette@intel.com>
+yohann <yohann.burette@intel.com>
 Zach Tiffany <ztiffany@cray.com>
 Zach <ztiffany@cray.com>
 ztaylor <ztaylor@twitter.com>

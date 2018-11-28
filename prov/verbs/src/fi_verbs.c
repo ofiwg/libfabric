@@ -86,7 +86,7 @@ struct fi_ibv_dev_preset {
 struct fi_provider fi_ibv_prov = {
 	.name = VERBS_PROV_NAME,
 	.version = VERBS_PROV_VERS,
-	.fi_version = FI_VERSION(1, 6),
+	.fi_version = FI_VERSION(1, 7),
 	.getinfo = fi_ibv_getinfo,
 	.fabric = fi_ibv_fabric,
 	.cleanup = fi_ibv_fini

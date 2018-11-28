@@ -155,7 +155,7 @@ static void fi_tcp_fini(void)
 struct fi_provider tcpx_prov = {
 	.name = "tcp",
 	.version = FI_VERSION(TCPX_MAJOR_VERSION,TCPX_MINOR_VERSION),
-	.fi_version = FI_VERSION(1, 6),
+	.fi_version = FI_VERSION(1, 7),
 	.getinfo = tcpx_getinfo,
 	.fabric = tcpx_create_fabric,
 	.cleanup = fi_tcp_fini,
