@@ -535,6 +535,7 @@ struct rxd_x_entry *rxd_progress_multi_recv(struct rxd_ep *ep,
 	dup_entry->cq_entry.len = total_size;
 
 	rx_entry->iov[0].iov_base = (char *) rx_entry->iov[0].iov_base + total_size;
+	rx_entry->cq_entry.buf = rx_entry->iov[0].iov_base;
 	rx_entry->iov[0].iov_len = left;
 	rx_entry->cq_entry.len = left;
 
