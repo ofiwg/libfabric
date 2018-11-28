@@ -163,6 +163,50 @@ out:
 	return ret;
 }
 
+int fi_ibv_get_rai_id(const char *node, const char *service, uint64_t flags,
+		      const struct fi_info *hints, struct rdma_addrinfo **rai,
+		      struct rdma_cm_id **id)
+{
+	int ret;
+
+	// TODO create a similar function that won't require pruning ib_rai
+	ret = fi_ibv_get_rdma_rai(node, service, flags, hints, rai);
+	if (ret)
+		return ret;
+
+	ret = rdma_create_id(NULL, id, NULL, RDMA_PS_TCP);
+	if (ret) {
+		VERBS_INFO_ERRNO(FI_LOG_FABRIC, "rdma_create_id", errno);
+		ret = -errno;
+		goto err1;
+	}
+
+	if ((*rai)->ai_flags & RAI_PASSIVE) {
+		ret = rdma_bind_addr(*id, (*rai)->ai_src_addr);
+		if (ret) {
+			VERBS_INFO_ERRNO(FI_LOG_FABRIC, "rdma_bind_addr", errno);
+			ret = -errno;
+			goto err2;
+		}
+		return 0;
+	}
+
+	ret = rdma_resolve_addr(*id, (*rai)->ai_src_addr,
+				(*rai)->ai_dst_addr, 2000);
+	if (ret) {
+		VERBS_INFO_ERRNO(FI_LOG_FABRIC, "rdma_resolve_addr", errno);
+		ret = -errno;
+		goto err2;
+	}
+	return 0;
+err2:
+	if (rdma_destroy_id(*id))
+		VERBS_INFO_ERRNO(FI_LOG_FABRIC, "rdma_destroy_id", errno);
+err1:
+	rdma_freeaddrinfo(*rai);
+	return ret;
+}
+
 int fi_ibv_create_ep(const char *node, const char *service,
 		     uint64_t flags, const struct fi_info *hints,
 		     struct rdma_addrinfo **rai, struct rdma_cm_id **id)
