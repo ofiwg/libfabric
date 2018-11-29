@@ -342,10 +342,10 @@ static void ofi_tostr_tx_attr(char *buf, const struct fi_tx_attr *attr,
 	ofi_tostr_order(buf, attr->comp_order);
 	ofi_strcatf(buf, " ]\n");
 
-	ofi_strcatf(buf, "%s%sinject_size: %zd\n", prefix, TAB, attr->inject_size);
-	ofi_strcatf(buf, "%s%ssize: %zd\n", prefix, TAB, attr->size);
-	ofi_strcatf(buf, "%s%siov_limit: %zd\n", prefix, TAB, attr->iov_limit);
-	ofi_strcatf(buf, "%s%srma_iov_limit: %zd\n", prefix, TAB, attr->rma_iov_limit);
+	ofi_strcatf(buf, "%s%sinject_size: %zu\n", prefix, TAB, attr->inject_size);
+	ofi_strcatf(buf, "%s%ssize: %zu\n", prefix, TAB, attr->size);
+	ofi_strcatf(buf, "%s%siov_limit: %zu\n", prefix, TAB, attr->iov_limit);
+	ofi_strcatf(buf, "%s%srma_iov_limit: %zu\n", prefix, TAB, attr->rma_iov_limit);
 }
 
 static void ofi_tostr_rx_attr(char *buf, const struct fi_rx_attr *attr,
@@ -377,9 +377,9 @@ static void ofi_tostr_rx_attr(char *buf, const struct fi_rx_attr *attr,
 	ofi_tostr_order(buf, attr->comp_order);
 	ofi_strcatf(buf, " ]\n");
 
-	ofi_strcatf(buf, "%s%stotal_buffered_recv: %zd\n", prefix, TAB, attr->total_buffered_recv);
-	ofi_strcatf(buf, "%s%ssize: %zd\n", prefix, TAB, attr->size);
-	ofi_strcatf(buf, "%s%siov_limit: %zd\n", prefix, TAB, attr->iov_limit);
+	ofi_strcatf(buf, "%s%stotal_buffered_recv: %zu\n", prefix, TAB, attr->total_buffered_recv);
+	ofi_strcatf(buf, "%s%ssize: %zu\n", prefix, TAB, attr->size);
+	ofi_strcatf(buf, "%s%siov_limit: %zu\n", prefix, TAB, attr->iov_limit);
 }
 
 static void ofi_tostr_ep_attr(char *buf, const struct fi_ep_attr *attr, const char *prefix)
@@ -397,17 +397,17 @@ static void ofi_tostr_ep_attr(char *buf, const struct fi_ep_attr *attr, const ch
 	ofi_tostr_protocol(buf, attr->protocol);
 	ofi_strcatf(buf, "\n");
 	ofi_strcatf(buf, "%s%sprotocol_version: %d\n", prefix, TAB, attr->protocol_version);
-	ofi_strcatf(buf, "%s%smax_msg_size: %zd\n", prefix, TAB, attr->max_msg_size);
-	ofi_strcatf(buf, "%s%smsg_prefix_size: %zd\n", prefix, TAB, attr->msg_prefix_size);
-	ofi_strcatf(buf, "%s%smax_order_raw_size: %zd\n", prefix, TAB, attr->max_order_raw_size);
-	ofi_strcatf(buf, "%s%smax_order_war_size: %zd\n", prefix, TAB, attr->max_order_war_size);
-	ofi_strcatf(buf, "%s%smax_order_waw_size: %zd\n", prefix, TAB, attr->max_order_waw_size);
+	ofi_strcatf(buf, "%s%smax_msg_size: %zu\n", prefix, TAB, attr->max_msg_size);
+	ofi_strcatf(buf, "%s%smsg_prefix_size: %zu\n", prefix, TAB, attr->msg_prefix_size);
+	ofi_strcatf(buf, "%s%smax_order_raw_size: %zu\n", prefix, TAB, attr->max_order_raw_size);
+	ofi_strcatf(buf, "%s%smax_order_war_size: %zu\n", prefix, TAB, attr->max_order_war_size);
+	ofi_strcatf(buf, "%s%smax_order_waw_size: %zu\n", prefix, TAB, attr->max_order_waw_size);
 	ofi_strcatf(buf, "%s%smem_tag_format: 0x%016llx\n", prefix, TAB, attr->mem_tag_format);
 
-	ofi_strcatf(buf, "%s%stx_ctx_cnt: %zd\n", prefix, TAB, attr->tx_ctx_cnt);
-	ofi_strcatf(buf, "%s%srx_ctx_cnt: %zd\n", prefix, TAB, attr->rx_ctx_cnt);
+	ofi_strcatf(buf, "%s%stx_ctx_cnt: %zu\n", prefix, TAB, attr->tx_ctx_cnt);
+	ofi_strcatf(buf, "%s%srx_ctx_cnt: %zu\n", prefix, TAB, attr->rx_ctx_cnt);
 
-	ofi_strcatf(buf, "%s%sauth_key_size: %zd\n", prefix, TAB, attr->auth_key_size);
+	ofi_strcatf(buf, "%s%sauth_key_size: %zu\n", prefix, TAB, attr->auth_key_size);
 }
 
 static void ofi_tostr_resource_mgmt(char *buf, enum fi_resource_mgmt rm)
@@ -502,18 +502,18 @@ static void ofi_tostr_domain_attr(char *buf, const struct fi_domain_attr *attr,
 	ofi_tostr_mr_mode(buf, attr->mr_mode);
 	ofi_strcatf(buf, " ]\n");
 
-	ofi_strcatf(buf, "%s%smr_key_size: %zd\n", prefix, TAB, attr->mr_key_size);
-	ofi_strcatf(buf, "%s%scq_data_size: %zd\n", prefix, TAB, attr->cq_data_size);
-	ofi_strcatf(buf, "%s%scq_cnt: %zd\n", prefix, TAB, attr->cq_cnt);
-	ofi_strcatf(buf, "%s%sep_cnt: %zd\n", prefix, TAB, attr->ep_cnt);
-	ofi_strcatf(buf, "%s%stx_ctx_cnt: %zd\n", prefix, TAB, attr->tx_ctx_cnt);
-	ofi_strcatf(buf, "%s%srx_ctx_cnt: %zd\n", prefix, TAB, attr->rx_ctx_cnt);
-	ofi_strcatf(buf, "%s%smax_ep_tx_ctx: %zd\n", prefix, TAB, attr->max_ep_tx_ctx);
-	ofi_strcatf(buf, "%s%smax_ep_rx_ctx: %zd\n", prefix, TAB, attr->max_ep_rx_ctx);
-	ofi_strcatf(buf, "%s%smax_ep_stx_ctx: %zd\n", prefix, TAB, attr->max_ep_stx_ctx);
-	ofi_strcatf(buf, "%s%smax_ep_srx_ctx: %zd\n", prefix, TAB, attr->max_ep_srx_ctx);
-	ofi_strcatf(buf, "%s%scntr_cnt: %zd\n", prefix, TAB, attr->cntr_cnt);
-	ofi_strcatf(buf, "%s%smr_iov_limit: %zd\n", prefix, TAB, attr->mr_iov_limit);
+	ofi_strcatf(buf, "%s%smr_key_size: %zu\n", prefix, TAB, attr->mr_key_size);
+	ofi_strcatf(buf, "%s%scq_data_size: %zu\n", prefix, TAB, attr->cq_data_size);
+	ofi_strcatf(buf, "%s%scq_cnt: %zu\n", prefix, TAB, attr->cq_cnt);
+	ofi_strcatf(buf, "%s%sep_cnt: %zu\n", prefix, TAB, attr->ep_cnt);
+	ofi_strcatf(buf, "%s%stx_ctx_cnt: %zu\n", prefix, TAB, attr->tx_ctx_cnt);
+	ofi_strcatf(buf, "%s%srx_ctx_cnt: %zu\n", prefix, TAB, attr->rx_ctx_cnt);
+	ofi_strcatf(buf, "%s%smax_ep_tx_ctx: %zu\n", prefix, TAB, attr->max_ep_tx_ctx);
+	ofi_strcatf(buf, "%s%smax_ep_rx_ctx: %zu\n", prefix, TAB, attr->max_ep_rx_ctx);
+	ofi_strcatf(buf, "%s%smax_ep_stx_ctx: %zu\n", prefix, TAB, attr->max_ep_stx_ctx);
+	ofi_strcatf(buf, "%s%smax_ep_srx_ctx: %zu\n", prefix, TAB, attr->max_ep_srx_ctx);
+	ofi_strcatf(buf, "%s%scntr_cnt: %zu\n", prefix, TAB, attr->cntr_cnt);
+	ofi_strcatf(buf, "%s%smr_iov_limit: %zu\n", prefix, TAB, attr->mr_iov_limit);
 
 	ofi_strcatf(buf, "%scaps: [ ", TAB);
 	ofi_tostr_caps(buf, attr->caps);
@@ -523,9 +523,9 @@ static void ofi_tostr_domain_attr(char *buf, const struct fi_domain_attr *attr,
 	ofi_tostr_mode(buf, attr->mode);
 	ofi_strcatf(buf, " ]\n");
 
-	ofi_strcatf(buf, "%s%sauth_key_size: %zd\n", prefix, TAB, attr->auth_key_size);
-	ofi_strcatf(buf, "%s%smax_err_data: %zd\n", prefix, TAB, attr->max_err_data);
-	ofi_strcatf(buf, "%s%smr_cnt: %zd\n", prefix, TAB, attr->mr_cnt);
+	ofi_strcatf(buf, "%s%sauth_key_size: %zu\n", prefix, TAB, attr->auth_key_size);
+	ofi_strcatf(buf, "%s%smax_err_data: %zu\n", prefix, TAB, attr->max_err_data);
+	ofi_strcatf(buf, "%s%smr_cnt: %zu\n", prefix, TAB, attr->mr_cnt);
 }
 
 static void ofi_tostr_fabric_attr(char *buf, const struct fi_fabric_attr *attr,
@@ -664,8 +664,8 @@ static void ofi_tostr_info(char *buf, const struct fi_info *info)
 	oofi_tostr_addr_format(buf, info->addr_format);
 	ofi_strcatf(buf, "\n");
 
-	ofi_strcatf(buf, "%ssrc_addrlen: %zd\n", TAB, info->src_addrlen);
-	ofi_strcatf(buf, "%sdest_addrlen: %zd\n", TAB, info->dest_addrlen);
+	ofi_strcatf(buf, "%ssrc_addrlen: %zu\n", TAB, info->src_addrlen);
+	ofi_strcatf(buf, "%sdest_addrlen: %zu\n", TAB, info->dest_addrlen);
 	ofi_strcatf(buf, "%ssrc_addr: ", TAB);
 	ofi_tostr_addr(buf, info->addr_format, info->src_addr);
 	ofi_strcatf(buf, "\n");
