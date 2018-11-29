@@ -209,17 +209,16 @@ static void rxd_complete_rx(struct rxd_ep *ep, struct rxd_x_entry *rx_entry)
 {
 	struct fi_cq_err_entry err_entry;
 	struct rxd_cq *rx_cq = rxd_ep_rx_cq(ep);
+	int write_cq = rx_entry->cq_entry.flags & (FI_RECV | FI_REMOTE_CQ_DATA);
 
-	if ((!(rx_entry->cq_entry.flags & FI_REMOTE_CQ_DATA) &&
-	     (rx_entry->cq_entry.flags & FI_RMA ||
-	     rx_entry->cq_entry.flags & FI_ATOMIC)) ||
-	     rx_entry->flags & (RXD_NO_RX_COMP | RXD_CANCELLED))
+	if (rx_entry->flags & (RXD_NO_RX_COMP | RXD_CANCELLED))
 		goto out;
 
-	/* Handle CQ comp */
 	if (rx_entry->bytes_done == rx_entry->cq_entry.len) {
-		rx_cq->write_fn(rx_cq, &rx_entry->cq_entry);
-	} else {
+		rxd_cntr_report_rx_comp(ep, rx_entry);
+		if (write_cq)
+			rx_cq->write_fn(rx_cq, &rx_entry->cq_entry);
+	} else if (write_cq) {
 		memset(&err_entry, 0, sizeof(err_entry));
 		err_entry.op_context = rx_entry->cq_entry.op_context;
 		err_entry.flags = rx_entry->cq_entry.flags;
@@ -227,10 +226,8 @@ static void rxd_complete_rx(struct rxd_ep *ep, struct rxd_x_entry *rx_entry)
 		err_entry.err = FI_ETRUNC;
 		err_entry.prov_errno = 0;
 		rxd_cq_report_error(rx_cq, &err_entry);
-		goto out;
 	}
 
-	rxd_cntr_report_rx_comp(ep, rx_entry);
 out:
 	rxd_rx_entry_free(ep, rx_entry);
 }
@@ -647,7 +644,7 @@ static struct rxd_x_entry *rxd_rma_read_entry_init(struct rxd_ep *ep,
 		return NULL;
 
 	tx_entry->iov_count = sar_hdr->iov_count;
-	tx_entry->cq_entry.flags = FI_RMA | FI_READ;
+	tx_entry->cq_entry.flags = ofi_rx_cq_flags(ofi_op_read_req);
 	tx_entry->cq_entry.len = sar_hdr->size;
 
 	dlist_insert_tail(&tx_entry->entry, &ep->peers[tx_entry->peer].tx_list);
@@ -897,7 +894,7 @@ void rxd_progress_op(struct rxd_ep *ep, struct rxd_x_entry *rx_entry,
 	rx_entry->peer = base_hdr->peer;
 
 	if (!sar_hdr || sar_hdr->num_segs == 1) {
-		if (!(rx_entry->cq_entry.flags & FI_READ))
+		if (!(rx_entry->cq_entry.flags & FI_REMOTE_READ))
 			rxd_complete_rx(ep, rx_entry);
 		return;
 	}

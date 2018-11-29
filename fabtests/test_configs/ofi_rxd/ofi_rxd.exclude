@@ -10,7 +10,6 @@ poll
 cq_data
 
 # Exclude tests with unsupported capabilities
-rdm_rma_simple
 rdm_tagged_peek
 cm_data
 trigger
