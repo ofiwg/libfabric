@@ -101,7 +101,9 @@ ssize_t fi_inject_writedata(struct fid_ep *ep, const void *buf, size_t len,
 : Additional flags to apply for the read or write operation.
 
 *context*
-: User specified pointer to associate with the operation.
+: User specified pointer to associate with the operation.  This parameter is
+  ignored if the operation will not generate a successful completion, unless
+  an op flag specifies the context parameter be used for required input.
 
 # DESCRIPTION
 

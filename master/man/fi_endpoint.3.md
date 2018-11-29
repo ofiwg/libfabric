@@ -284,10 +284,11 @@ together when binding an endpoint to a completion domain CQ.
   into a completion queue after they have successfully completed.
   Applications can use this bind flag to selectively enable when
   completions are generated.  If FI_SELECTIVE_COMPLETION is specified,
-  data transfer operations will not generate entries for successful
+  data transfer operations will not generate entries for _successful_
   completions unless FI_COMPLETION is set as an operational flag for the
-  given operation.  FI_SELECTIVE_COMPLETION must be OR'ed with FI_TRANSMIT
-  and/or FI_RECV flags.
+  given operation.  Operations that fail asynchronously will still generate
+  completions, even if a completion is not requested.  FI_SELECTIVE_COMPLETION
+  must be OR'ed with FI_TRANSMIT and/or FI_RECV flags.
 
   When FI_SELECTIVE_COMPLETION is set, the user must determine when a
   request that does NOT have FI_COMPLETION set has completed indirectly,
