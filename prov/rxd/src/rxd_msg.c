@@ -127,7 +127,8 @@ ssize_t rxd_ep_generic_recvmsg(struct rxd_ep *rxd_ep, const struct iovec *iov,
 	}
 
 	rx_entry = rxd_rx_entry_init(rxd_ep, iov, iov_count, tag, ignore, context,
-				rxd_ep->util_ep.caps & FI_DIRECTED_RECV ?
+				(rxd_ep->util_ep.caps & FI_DIRECTED_RECV &&
+				addr != FI_ADDR_UNSPEC) ?
 				rxd_ep_av(rxd_ep)->fi_addr_table[addr] :
 				FI_ADDR_UNSPEC, op, rxd_flags);
 	if (!rx_entry) {
