@@ -77,7 +77,6 @@ rxm_av_insert_cmap(struct fid_av *av_fid, const void *addr, size_t count,
 
 	dlist_foreach_container(&av->ep_list, struct rxm_ep,
 				rxm_ep, util_ep.av_entry) {
-		
 		for (i = 0; i < count; i++) {
 			cur_addr = (const void *) ((char *) addr + i * av->addrlen);
 			fi_addr_tmp = (fi_addr ? fi_addr[i] :

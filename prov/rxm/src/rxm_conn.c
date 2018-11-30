@@ -328,6 +328,17 @@ int rxm_cmap_update(struct rxm_cmap *cmap, const void *addr, fi_addr_t fi_addr)
 	int ret;
 
 	cmap->acquire(&cmap->lock);
+	/* Check whether we have already allocated a handle for this `fi_addr`. */
+	/* We rely on the fact that `ofi_ip_av_insert`/`ofi_av_insert_addr` returns
+	 * the same `fi_addr` for the equal addresses */
+	if (fi_addr < cmap->num_allocated) {
+		handle = rxm_cmap_acquire_handle(cmap, fi_addr);
+		if (handle) {
+			cmap->release(&cmap->lock);
+			return 0;
+		}
+	}
+
 	handle = rxm_cmap_get_handle_peer(cmap, addr);
 	if (!handle) {
 		ret = rxm_cmap_alloc_handle(cmap, fi_addr,

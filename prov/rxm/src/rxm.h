@@ -258,7 +258,7 @@ int rxm_cmap_move_handle_to_peer_list(struct rxm_cmap *cmap, int index);
 static inline struct rxm_cmap_handle *
 rxm_cmap_acquire_handle(struct rxm_cmap *cmap, fi_addr_t fi_addr)
 {
-	assert(fi_addr <= cmap->num_allocated);
+	assert(fi_addr < cmap->num_allocated);
 	return cmap->handles_av[fi_addr];
 }
 
