@@ -253,7 +253,7 @@ fi_ibv_dgram_ep_inject_fast(struct fid_ep *ep_fid, const void *buf, size_t len,
 	return fi_ibv_send_poll_cq_if_needed(ep, &ep->wrs->msg_wr);
 }
 
-struct fi_ops_msg fi_ibv_dgram_msg_ops = {
+const struct fi_ops_msg fi_ibv_dgram_msg_ops = {
 	.size		= sizeof(fi_ibv_dgram_msg_ops),
 	.recv		= fi_ibv_dgram_ep_recv,
 	.recvv		= fi_ibv_dgram_ep_recvv,
@@ -266,7 +266,7 @@ struct fi_ops_msg fi_ibv_dgram_msg_ops = {
 	.injectdata	= fi_ibv_dgram_ep_injectdata_fast,
 };
 
-struct fi_ops_msg fi_ibv_dgram_msg_ops_ts = {
+const struct fi_ops_msg fi_ibv_dgram_msg_ops_ts = {
 	.size		= sizeof(fi_ibv_dgram_msg_ops),
 	.recv		= fi_ibv_dgram_ep_recv,
 	.recvv		= fi_ibv_dgram_ep_recvv,

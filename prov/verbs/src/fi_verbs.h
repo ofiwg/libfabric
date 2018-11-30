@@ -95,7 +95,7 @@
 
 
 #define VERBS_INJECT_FLAGS(ep, len, flags) ((((flags) & FI_INJECT) || \
-		len <= (ep)->info->tx_attr->inject_size) ? IBV_SEND_INLINE : 0)
+		len <= (ep)->inject_limit) ? IBV_SEND_INLINE : 0)
 #define VERBS_INJECT(ep, len) VERBS_INJECT_FLAGS(ep, len, (ep)->info->tx_attr->op_flags)
 
 #define VERBS_COMP_FLAGS(ep, flags, context)		\
@@ -584,6 +584,9 @@ struct fi_ibv_ep {
 			int				service;
 		};
 	};
+
+	size_t				inject_limit;
+
 	struct fi_ibv_eq		*eq;
 	struct fi_ibv_srq_ep		*srq_ep;
 	struct fi_info			*info;
@@ -637,16 +640,17 @@ struct fi_ops_atomic fi_ibv_msg_ep_atomic_ops;
 struct fi_ops_atomic fi_ibv_msg_xrc_ep_atomic_ops;
 struct fi_ops_cm fi_ibv_msg_ep_cm_ops;
 struct fi_ops_cm fi_ibv_msg_xrc_ep_cm_ops;
-struct fi_ops_msg fi_ibv_msg_ep_msg_ops_ts;
-struct fi_ops_msg fi_ibv_msg_ep_msg_ops;
-struct fi_ops_msg fi_ibv_msg_xrc_ep_msg_ops_ts;
-struct fi_ops_msg fi_ibv_msg_xrc_ep_msg_ops;
+const struct fi_ops_msg fi_ibv_msg_ep_msg_ops_ts;
+const struct fi_ops_msg fi_ibv_msg_ep_msg_ops;
+const struct fi_ops_msg fi_ibv_dgram_msg_ops_ts;
+const struct fi_ops_msg fi_ibv_dgram_msg_ops;
+const struct fi_ops_msg fi_ibv_msg_xrc_ep_msg_ops;
+const struct fi_ops_msg fi_ibv_msg_xrc_ep_msg_ops_ts;
+const struct fi_ops_msg fi_ibv_msg_srq_xrc_ep_msg_ops;
 struct fi_ops_rma fi_ibv_msg_ep_rma_ops_ts;
 struct fi_ops_rma fi_ibv_msg_ep_rma_ops;
 struct fi_ops_rma fi_ibv_msg_xrc_ep_rma_ops_ts;
 struct fi_ops_rma fi_ibv_msg_xrc_ep_rma_ops;
-struct fi_ops_msg fi_ibv_msg_srq_ep_msg_ops;
-struct fi_ops_msg fi_ibv_msg_srq_xrc_ep_msg_ops;
 
 #define FI_IBV_XRC_VERSION	1
 
@@ -784,9 +788,6 @@ struct fi_ibv_dgram_av_entry {
 	struct ofi_ib_ud_ep_name addr;
 	struct ibv_ah *ah;
 };
-
-extern struct fi_ops_msg fi_ibv_dgram_msg_ops;
-extern struct fi_ops_msg fi_ibv_dgram_msg_ops_ts;
 
 static inline struct fi_ibv_dgram_av_entry*
 fi_ibv_dgram_av_lookup_av_entry(fi_addr_t fi_addr)

@@ -106,6 +106,19 @@ static struct fi_ops_ep fi_ibv_ep_base_ops = {
 	.tx_size_left = fi_no_tx_size_left,
 };
 
+static struct fi_ops_rma fi_ibv_dgram_rma_ops = {
+	.size = sizeof(struct fi_ops_rma),
+	.read = fi_no_rma_read,
+	.readv = fi_no_rma_readv,
+	.readmsg = fi_no_rma_readmsg,
+	.write = fi_no_rma_write,
+	.writev = fi_no_rma_writev,
+	.writemsg = fi_no_rma_writemsg,
+	.inject = fi_no_rma_inject,
+	.writedata = fi_no_rma_writedata,
+	.injectdata = fi_no_rma_injectdata,
+};
+
 static int fi_ibv_alloc_wrs(struct fi_ibv_ep *ep)
 {
 	ep->wrs = calloc(1, sizeof(*ep->wrs));
@@ -132,10 +145,19 @@ static void fi_ibv_free_wrs(struct fi_ibv_ep *ep)
 	free(ep->wrs);
 }
 
-static struct fi_ibv_ep *fi_ibv_alloc_ep(struct fi_info *info)
+static void fi_ibv_util_ep_progress_noop(struct util_ep *util_ep)
+{
+	/* This routine shouldn't be called */
+	assert(0);
+}
+
+static struct fi_ibv_ep *
+fi_ibv_alloc_init_ep(struct fi_info *info, struct fi_ibv_domain *domain,
+		     void *context)
 {
 	struct fi_ibv_ep *ep;
 	struct fi_ibv_xrc_ep *xrc_ep;
+	int ret;
 
 	if (fi_ibv_is_xrc(info)) {
 		xrc_ep = calloc(1, sizeof(*xrc_ep));
@@ -150,19 +172,53 @@ static struct fi_ibv_ep *fi_ibv_alloc_ep(struct fi_info *info)
 
 	ep->info = fi_dupinfo(info);
 	if (!ep->info)
-		goto err;
+		goto err1;
+
+	if (domain->util_domain.threading != FI_THREAD_SAFE) {
+		if (fi_ibv_alloc_wrs(ep))
+			goto err2;
+	}
+
+	ret = ofi_endpoint_init(&domain->util_domain.domain_fid, &fi_ibv_util_prov, info,
+				&ep->util_ep, context, fi_ibv_util_ep_progress_noop);
+	if (ret) {
+		VERBS_WARN(FI_LOG_EP_CTRL,
+			   "Unable to initialize EP, error - %d\n", ret);
+		goto err3;
+	}
+
+	ep->util_ep.ep_fid.msg = calloc(1, sizeof(*ep->util_ep.ep_fid.msg));
+	if (!ep->util_ep.ep_fid.msg)
+		goto err4;
 
 	return ep;
-err:
+err4:
+	(void) ofi_endpoint_close(&ep->util_ep);
+err3:
+	fi_ibv_free_wrs(ep);
+err2:
+	fi_freeinfo(ep->info);
+err1:
 	free(ep);
 	return NULL;
 }
 
-static void fi_ibv_free_ep(struct fi_ibv_ep *ep)
+static int fi_ibv_close_free_ep(struct fi_ibv_ep *ep)
 {
+	int ret;
+
+	free(ep->util_ep.ep_fid.msg);
+	ep->util_ep.ep_fid.msg = NULL;
+
+	ret = ofi_endpoint_close(&ep->util_ep);
+	if (ret)
+		return ret;
+
 	fi_ibv_free_wrs(ep);
 	fi_freeinfo(ep->info);
 	free(ep);
+
+	return 0;
 }
 
 static inline void fi_ibv_ep_xrc_close(struct fi_ibv_ep *ep)
@@ -209,13 +265,14 @@ static int fi_ibv_ep_close(fid_t fid)
 		return -FI_EINVAL;
 	}
 
-	ret = ofi_endpoint_close(&ep->util_ep);
-	if (ret)
+	VERBS_INFO(FI_LOG_DOMAIN, "EP %p is being closed\n", ep);
+
+	ret = fi_ibv_close_free_ep(ep);
+	if (ret) {
+		VERBS_WARN(FI_LOG_DOMAIN,
+			   "Unable to close EP (%p), error - %d\n", ep, ret);
 		return ret;
-
-	VERBS_INFO(FI_LOG_DOMAIN, "EP %p was closed \n", ep);
-
-	fi_ibv_free_ep(ep);
+	}
 
 	return 0;
 }
@@ -560,13 +617,15 @@ static int fi_ibv_ep_enable(struct fid_ep *ep_fid)
 	switch (ep->util_ep.type) {
 	case FI_EP_MSG:
 		if (ep->srq_ep) {
-			/* Override the default ops to prevent the user from
-			 * posting WRs to a QP where a SRQ is attached to it */
+			/* Override receive function pointers to prevent the user from
+			 * posting Receive WRs to a QP where a SRQ is attached to it */
 			if (domain->use_xrc) {
-				ep->util_ep.ep_fid.msg = &fi_ibv_msg_srq_xrc_ep_msg_ops;
+				*ep->util_ep.ep_fid.msg = fi_ibv_msg_srq_xrc_ep_msg_ops;
 				return fi_ibv_ep_enable_xrc(ep);
 			} else {
-				ep->util_ep.ep_fid.msg = &fi_ibv_msg_srq_ep_msg_ops;
+				ep->util_ep.ep_fid.msg->recv = fi_no_msg_recv;
+				ep->util_ep.ep_fid.msg->recvv = fi_no_msg_recvv;
+				ep->util_ep.ep_fid.msg->recvmsg = fi_no_msg_recvmsg;
 			}
 		} else if (domain->use_xrc) {
 			VERBS_WARN(FI_LOG_EP_CTRL, "XRC EP_MSG not bound "
@@ -714,12 +773,6 @@ static struct fi_ops_cm fi_ibv_dgram_cm_ops = {
 	.join = fi_no_join,
 };
 
-void fi_ibv_util_ep_progress_noop(struct util_ep *util_ep)
-{
-	/* This routine shouldn't be called */
-	assert(0);
-}
-
 int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 		   struct fid_ep **ep_fid, void *context)
 {
@@ -770,39 +823,30 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 			return ret;
 	}
 
-	ep = fi_ibv_alloc_ep(info);
+	ep = fi_ibv_alloc_init_ep(info, dom, context);
 	if (!ep)
 		return -FI_ENOMEM;
 
-	ret = ofi_endpoint_init(domain, &fi_ibv_util_prov, info, &ep->util_ep, context,
-				fi_ibv_util_ep_progress_noop);
-	if (ret)
-		goto err1;
-
-	if (dom->util_domain.threading != FI_THREAD_SAFE) {
-		ret = fi_ibv_alloc_wrs(ep);
-		if (ret)
-			goto err2;
-	}
+	ep->inject_limit = ep->info->tx_attr->inject_size;
 
 	switch (info->ep_attr->type) {
 	case FI_EP_MSG:
 		if (dom->use_xrc) {
 			if (dom->util_domain.threading == FI_THREAD_SAFE) {
-				ep->util_ep.ep_fid.msg = &fi_ibv_msg_xrc_ep_msg_ops_ts;
+				*ep->util_ep.ep_fid.msg = fi_ibv_msg_xrc_ep_msg_ops_ts;
 				ep->util_ep.ep_fid.rma = &fi_ibv_msg_xrc_ep_rma_ops_ts;
 			} else {
-				ep->util_ep.ep_fid.msg = &fi_ibv_msg_xrc_ep_msg_ops;
+				*ep->util_ep.ep_fid.msg = fi_ibv_msg_xrc_ep_msg_ops;
 				ep->util_ep.ep_fid.rma = &fi_ibv_msg_xrc_ep_rma_ops;
 			}
 			ep->util_ep.ep_fid.cm = &fi_ibv_msg_xrc_ep_cm_ops;
 			ep->util_ep.ep_fid.atomic = &fi_ibv_msg_xrc_ep_atomic_ops;
 		} else {
 			if (dom->util_domain.threading == FI_THREAD_SAFE) {
-				ep->util_ep.ep_fid.msg = &fi_ibv_msg_ep_msg_ops_ts;
+				*ep->util_ep.ep_fid.msg = fi_ibv_msg_ep_msg_ops_ts;
 				ep->util_ep.ep_fid.rma = &fi_ibv_msg_ep_rma_ops_ts;
 			} else {
-				ep->util_ep.ep_fid.msg = &fi_ibv_msg_ep_msg_ops;
+				*ep->util_ep.ep_fid.msg = fi_ibv_msg_ep_msg_ops;
 				ep->util_ep.ep_fid.rma = &fi_ibv_msg_ep_rma_ops;
 			}
 			ep->util_ep.ep_fid.cm = &fi_ibv_msg_ep_cm_ops;
@@ -812,7 +856,7 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 		if (!info->handle) {
 			ret = fi_ibv_create_ep(NULL, NULL, 0, info, NULL, &ep->id);
 			if (ret)
-				goto err2;
+				goto err1;
 		} else if (info->handle->fclass == FI_CLASS_CONNREQ) {
 			connreq = container_of(info->handle,
 					       struct fi_ibv_connreq, handle);
@@ -823,7 +867,7 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 					ret = fi_ibv_process_xrc_connreq(ep,
 								connreq);
 					if (ret)
-						goto err2;
+						goto err1;
 				}
 			} else {
 				ep->id = connreq->id;
@@ -839,17 +883,17 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 					      VERBS_RESOLVE_TIMEOUT)) {
 				ret = -errno;
 				VERBS_INFO(FI_LOG_DOMAIN, "Unable to rdma_resolve_addr\n");
-				goto err3;
+				goto err2;
 			}
 
 			if (rdma_resolve_route(ep->id, VERBS_RESOLVE_TIMEOUT)) {
 				ret = -errno;
 				VERBS_INFO(FI_LOG_DOMAIN, "Unable to rdma_resolve_route\n");
-				goto err3;
+				goto err2;
 			}
 		} else {
 			ret = -FI_ENOSYS;
-			goto err2;
+			goto err1;
 		}
 		ep->id->context = &ep->util_ep.ep_fid.fid;
 		break;
@@ -859,17 +903,18 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 			(((getpid() & 0x7FFF) << 16) + ((uintptr_t)ep & 0xFFFF));
 
 		if (dom->util_domain.threading == FI_THREAD_SAFE) {
-			ep->util_ep.ep_fid.msg = &fi_ibv_dgram_msg_ops_ts;
+			*ep->util_ep.ep_fid.msg = fi_ibv_dgram_msg_ops_ts;
 		} else {
-			ep->util_ep.ep_fid.msg = &fi_ibv_dgram_msg_ops;
+			*ep->util_ep.ep_fid.msg = fi_ibv_dgram_msg_ops;
 		}
+		ep->util_ep.ep_fid.rma = &fi_ibv_dgram_rma_ops;
 		ep->util_ep.ep_fid.cm = &fi_ibv_dgram_cm_ops;
 		break;
 	default:
 		VERBS_INFO(FI_LOG_DOMAIN, "Unknown EP type\n");
 		ret = -FI_EINVAL;
 		assert(0);
-		goto err2;
+		goto err1;
 	}
 
 	*ep_fid = &ep->util_ep.ep_fid;
@@ -877,13 +922,11 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	ep->util_ep.ep_fid.ops = &fi_ibv_ep_base_ops;
 
 	return FI_SUCCESS;
-err3:
+err2:
 	ep->ibv_qp = NULL;
 	rdma_destroy_ep(ep->id);
-err2:
-	ofi_endpoint_close(&ep->util_ep);
 err1:
-	fi_ibv_free_ep(ep);
+	fi_ibv_close_free_ep(ep);
 	return ret;
 }
 
