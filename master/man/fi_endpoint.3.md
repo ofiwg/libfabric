@@ -348,22 +348,22 @@ binding an endpoint to a counter, the following flags may be specified.
   and normal message operations.
 
 *FI_READ*
-: Increments the specified counter whenever an RMA read or atomic fetch
-  operation initiated from the endpoint has completed successfully or
-  in error.
+: Increments the specified counter whenever an RMA read, atomic fetch,
+  or atomic compare operation initiated from the endpoint has completed
+  successfully or in error.
 
 *FI_WRITE*
-: Increments the specified counter whenever an RMA write or atomic operation
-  initiated from the endpoint has completed successfully or in error.
+: Increments the specified counter whenever an RMA write or base atomic
+  operation initiated from the endpoint has completed successfully or in error.
 
 *FI_REMOTE_READ*
-: Increments the specified counter whenever an RMA read or
-  atomic fetch operation is initiated from a remote endpoint that
+: Increments the specified counter whenever an RMA read, atomic fetch, or
+  atomic compare operation is initiated from a remote endpoint that
   targets the given endpoint.  Use of this flag requires that the
   endpoint be created using FI_RMA_EVENT.
 
 *FI_REMOTE_WRITE*
-: Increments the specified counter whenever an RMA write or
+: Increments the specified counter whenever an RMA write or base
   atomic operation is initiated from a remote endpoint that targets
   the given endpoint.  Use of this flag requires that the
   endpoint be created using FI_RMA_EVENT.
