@@ -3,10 +3,8 @@
 # Exclude all prefix tests
 -k
 
+rdm
 dgram
-
-# This test requires FI_RMA_EVENT
-rdm_rma_simple
 
 trigger
 
@@ -14,9 +12,7 @@ trigger
 shared_ctx$|shared_ctx --no|shared_ctx -e msg$|shared_ctx -e msg --no-rx
 
 scalable_ep
-shared_av
 multi_mr
-recv_cancel -e msg
-unexpected_msg -e msg
-rdm.+atomic
+recv_cancel
+unexpected_msg
 inj_complete
