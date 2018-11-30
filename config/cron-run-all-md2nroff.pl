@@ -182,8 +182,8 @@ if (defined($pages_branch_arg)) {
         doit(0, "cp $tmpdir/$file man/$base", "loop-cp");
 
         # Is there a new man page?  If so, we need to "git add" it.
-        my $out = `git status --porcelain man/$file`;
-        doit(0, "git add man/$file", "loop-git-add")
+        my $out = `git status --porcelain man/$base`;
+        doit(0, "git add man/$base", "loop-git-add")
             if ($out =~ /^\?\?/);
     }
 
