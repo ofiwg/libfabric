@@ -839,27 +839,25 @@ static int fi_ibv_getifaddrs(struct dlist_entry *verbs_devs)
 			goto err1;
 		}
 
-		ret = fi_ibv_create_ep(name, NULL, FI_NUMERICHOST | FI_SOURCE,
-				NULL, &rai, &id);
+		ret = fi_ibv_get_rai_id(name, NULL, FI_NUMERICHOST | FI_SOURCE,
+					NULL, &rai, &id);
 		if (ret)
 			continue;
 
 		ret = fi_ibv_add_rai(verbs_devs, id, rai);
-		if (ret)
-			goto err2;
-
+		if (ret) {
+			rdma_freeaddrinfo(rai);
+			rdma_destroy_id(id);
+			goto err1;
+		}
 		VERBS_DBG(FI_LOG_FABRIC, "Found active interface for verbs device: "
 			  "%s with address: %s\n",
 			  ibv_get_device_name(id->verbs->device), name);
-
-		rdma_destroy_ep(id);
-
+		rdma_destroy_id(id);
 		num_verbs_ifs++;
 	}
 	freeifaddrs(ifaddr);
 	return num_verbs_ifs ? 0 : -FI_ENODATA;
-err2:
-	fi_ibv_destroy_ep(rai, &id);
 err1:
 	fi_ibv_verbs_devs_free(verbs_devs);
 	freeifaddrs(ifaddr);
@@ -1430,20 +1428,22 @@ static int fi_ibv_handle_sock_addr(const char *node, const char *service,
 	const char *dev_name = NULL;
 	int ret;
 
-	ret = fi_ibv_create_ep(node, service, flags, hints, &rai, &id);
+	ret = fi_ibv_get_rai_id(node, service, flags, hints, &rai, &id);
 	if (ret)
 		return ret;
 	if (id->verbs) {
 		dev_name = ibv_get_device_name(id->verbs->device);
 		ret = fi_ibv_del_info_not_belong_to_dev(dev_name, info);
 		if (ret)
-			goto fn;
+			goto out;
 	}
 
 	ret = fi_ibv_fill_addr(rai, info, id);
 	fi_ibv_remove_nosrc_info(info);
-fn:
-	fi_ibv_destroy_ep(rai, &id);
+out:
+	rdma_freeaddrinfo(rai);
+	if (rdma_destroy_id(id))
+		VERBS_INFO_ERRNO(FI_LOG_FABRIC, "rdma_destroy_id", errno);
 	return ret;
 }
 
