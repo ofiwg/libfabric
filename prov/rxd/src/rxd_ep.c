@@ -830,7 +830,7 @@ static int rxd_ep_get_wait_cq_fd(struct rxd_ep *rxd_ep, enum fi_wait_obj wait_ob
 {
 	int ret = 0;
 
-	if ((wait_obj != FI_WAIT_NONE) && (!rxd_ep->dg_cq_fd)) {
+	if (wait_obj == FI_WAIT_FD && (!rxd_ep->dg_cq_fd)) {
 		ret = fi_control(&rxd_ep->dg_cq->fid, FI_GETWAIT,
 				 &rxd_ep->dg_cq_fd);
 		if (ret)
