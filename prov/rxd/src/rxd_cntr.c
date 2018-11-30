@@ -35,6 +35,55 @@
 
 #define RXD_FLAG(flag, mask) (((flag) & (mask)) == (mask))
 
+static int rxd_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int timeout)
+{
+	struct fid_list_entry *fid_entry;
+	struct util_cntr *cntr;
+	struct rxd_ep *ep;
+	uint64_t start, errcnt;
+	int ret, ep_retry;
+
+	cntr = container_of(cntr_fid, struct util_cntr, cntr_fid);
+	assert(cntr->wait);
+	errcnt = ofi_atomic_get64(&cntr->err);
+	start = (timeout >= 0) ? fi_gettime_ms() : 0;
+
+	do {
+		cntr->progress(cntr);
+		if (threshold <= ofi_atomic_get64(&cntr->cnt))
+			return FI_SUCCESS;
+
+		if (errcnt != ofi_atomic_get64(&cntr->err))
+			return -FI_EAVAIL;
+
+		if (timeout >= 0) {
+			timeout -= (int) (fi_gettime_ms() - start);
+			if (timeout <= 0)
+				return -FI_ETIMEDOUT;
+		}
+
+		ep_retry = -1;
+		fastlock_acquire(&cntr->ep_list_lock);
+		dlist_foreach_container(&cntr->ep_list, struct fid_list_entry,
+					fid_entry, entry) {
+			ep = container_of(fid_entry->fid, struct rxd_ep,
+					  util_ep.ep_fid.fid);
+			if (ep->next_retry == -1)
+				continue;
+			ep_retry = ep_retry == -1 ? ep->next_retry :
+					MIN(ep_retry, ep->next_retry);
+		}
+		fastlock_release(&cntr->ep_list_lock);
+
+		ret = fi_wait(&cntr->wait->wait_fid, ep_retry == -1 ?
+			      timeout : rxd_get_timeout(ep_retry));
+		if (ep_retry != -1 && ret == -FI_ETIMEDOUT)
+			ret = 0;
+	} while (!ret);
+
+	return ret;
+}
+
 int rxd_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		  struct fid_cntr **cntr_fid, void *context)
 {
@@ -51,6 +100,7 @@ int rxd_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		goto free;
 
 	*cntr_fid = &cntr->cntr_fid;
+	cntr->cntr_fid.ops->wait = rxd_cntr_wait;
 	return FI_SUCCESS;
 
 free:
@@ -60,11 +110,20 @@ free:
 
 void rxd_cntr_report_tx_comp(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
 {
-        struct util_cntr *cntr;
+	uint64_t flags = tx_entry->cq_entry.flags &
+			 (FI_SEND | FI_WRITE | FI_READ);
 
-	cntr = ep->util_ep.tx_cntr;
-	if (cntr)
-		cntr->cntr_fid.ops->add(&cntr->cntr_fid, 1);
+	assert(ofi_lsb(flags) == ofi_msb(flags));
+	ofi_ep_cntr_inc_funcs[flags](&ep->util_ep);
+}
+
+void rxd_cntr_report_rx_comp(struct rxd_ep *ep, struct rxd_x_entry *rx_entry)
+{
+	uint64_t flags = rx_entry->cq_entry.flags &
+			(FI_RECV | FI_REMOTE_WRITE | FI_REMOTE_READ);
+
+	assert(ofi_lsb(flags) == ofi_msb(flags));
+	ofi_ep_cntr_inc_funcs[flags](&ep->util_ep);
 }
 
 void rxd_cntr_report_error(struct rxd_ep *ep, struct fi_cq_err_entry *err)

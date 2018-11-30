@@ -104,6 +104,11 @@ uint8_t ofi_msb(uint64_t num)
 	return msb;
 }
 
+uint8_t ofi_lsb(uint64_t num)
+{
+	return ofi_msb(num & (~(num - 1)));
+}
+
 int ofi_send_allowed(uint64_t caps)
 {
 	if (caps & FI_MSG ||

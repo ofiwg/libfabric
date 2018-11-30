@@ -49,7 +49,6 @@ struct rxd_pkt_entry *rxd_get_tx_pkt(struct rxd_ep *ep)
 		return NULL;
 
 	pkt_entry->mr = (struct fid_mr *) mr;
-	pkt_entry->retry_cnt = 0;
 	rxd_set_pkt(ep, pkt_entry);
 
 	return pkt_entry;
@@ -68,7 +67,6 @@ static struct rxd_pkt_entry *rxd_get_rx_pkt(struct rxd_ep *ep)
 		return NULL;
 
 	pkt_entry->mr = (struct fid_mr *) mr;
-	pkt_entry->retry_cnt = 0;
 
 	rxd_set_pkt(ep, pkt_entry);
 
@@ -288,6 +286,10 @@ static int rxd_ep_enable(struct rxd_ep *ep)
 	size_t i;
 	ssize_t ret;
 
+	ret = fi_ep_bind(ep->dg_ep, &ep->dg_cq->fid, FI_TRANSMIT | FI_RECV);
+	if (ret)
+		return ret;
+
 	ret = fi_enable(ep->dg_ep);
 	if (ret)
 		return ret;
@@ -306,10 +308,14 @@ static int rxd_ep_enable(struct rxd_ep *ep)
 /*
  * Exponential back-off starting at 1ms, max 4s.
  */
-void rxd_set_timeout(struct rxd_pkt_entry *pkt_entry)
+int rxd_get_timeout(uint8_t retry_cnt)
 {
-	pkt_entry->retry_time = fi_gettime_ms() +
-			      MIN(1 << (++pkt_entry->retry_cnt), 4000);
+	return MIN(1 << retry_cnt, 4000);
+}
+
+uint64_t rxd_get_retry_time(uint64_t start, uint8_t retry_cnt)
+{
+	return start + rxd_get_timeout(retry_cnt);
 }
 
 void rxd_init_data_pkt(struct rxd_ep *ep, struct rxd_x_entry *tx_entry,
@@ -322,8 +328,9 @@ void rxd_init_data_pkt(struct rxd_ep *ep, struct rxd_x_entry *tx_entry,
 	seg_size = MIN(rxd_ep_domain(ep)->max_seg_sz, seg_size);
 
 	data_pkt->base_hdr.version = RXD_PROTOCOL_VERSION;
-	data_pkt->base_hdr.type = tx_entry->cq_entry.flags & FI_READ ?
-				  RXD_DATA_READ : RXD_DATA;
+	data_pkt->base_hdr.type = (tx_entry->cq_entry.flags &
+				  (FI_READ | FI_REMOTE_READ)) ?
+				   RXD_DATA_READ : RXD_DATA;
 
 	data_pkt->ext_hdr.rx_id = tx_entry->rx_id;
 	data_pkt->ext_hdr.tx_id = tx_entry->tx_id;
@@ -469,7 +476,8 @@ ssize_t rxd_ep_post_data_pkts(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
 int rxd_ep_retry_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 {
 	int ret;
-	rxd_set_timeout(pkt_entry);
+
+	pkt_entry->timestamp = fi_gettime_ms();
 
 	ret = fi_send(ep->dg_ep, (const void *) rxd_pkt_start(pkt_entry),
 		      pkt_entry->pkt_size, rxd_mr_desc(pkt_entry->mr, ep),
@@ -513,7 +521,7 @@ static ssize_t rxd_ep_send_rts(struct rxd_ep *rxd_ep, fi_addr_t rxd_addr)
 	rxd_insert_unacked(rxd_ep, rxd_addr, pkt_entry);
 	dlist_insert_tail(&rxd_ep->peers[rxd_addr].entry, &rxd_ep->rts_sent_list);
 
-	return rxd_ep_retry_pkt(rxd_ep, pkt_entry);
+	return 0;
 }
 
 ssize_t rxd_send_rts_if_needed(struct rxd_ep *ep, fi_addr_t addr)
@@ -806,10 +814,74 @@ static int rxd_ep_close(struct fid *fid)
 	return 0;
 }
 
+static int rxd_ep_trywait(void *arg)
+{
+	struct rxd_fabric *rxd_fabric;
+	struct rxd_ep *rxd_ep = (struct rxd_ep *) arg;
+	struct fid *fids[1] = {&rxd_ep->dg_cq->fid};
+
+	rxd_fabric = container_of(rxd_ep->util_ep.domain->fabric,
+				  struct rxd_fabric, util_fabric);
+
+	return fi_trywait(rxd_fabric->dg_fabric, fids, 1);
+}
+
+static int rxd_ep_get_wait_cq_fd(struct rxd_ep *rxd_ep, enum fi_wait_obj wait_obj)
+{
+	int ret = 0;
+
+	if ((wait_obj != FI_WAIT_NONE) && (!rxd_ep->dg_cq_fd)) {
+		ret = fi_control(&rxd_ep->dg_cq->fid, FI_GETWAIT,
+				 &rxd_ep->dg_cq_fd);
+		if (ret)
+			FI_WARN(&rxd_prov, FI_LOG_EP_CTRL,
+				"Unable to get dg CQ fd\n");
+	}
+	return ret;
+}
+
+static int rxd_ep_wait_fd_add(struct rxd_ep *rxd_ep, struct util_wait *wait)
+{
+	return ofi_wait_fd_add(wait, rxd_ep->dg_cq_fd, FI_EPOLL_IN,
+			       rxd_ep_trywait, rxd_ep,
+			       &rxd_ep->util_ep.ep_fid.fid);
+}
+
+static int rxd_dg_cq_open(struct rxd_ep *rxd_ep, enum fi_wait_obj wait_obj)
+{
+	struct rxd_domain *rxd_domain;
+	struct fi_cq_attr cq_attr = {0};
+	int ret;
+
+	assert((wait_obj == FI_WAIT_NONE) || (wait_obj == FI_WAIT_FD));
+
+	cq_attr.size = rxd_ep->tx_size + rxd_ep->tx_size;
+	cq_attr.format = FI_CQ_FORMAT_MSG;
+	cq_attr.wait_obj = wait_obj;
+
+	rxd_domain = container_of(rxd_ep->util_ep.domain, struct rxd_domain,
+				  util_domain);
+
+	ret = fi_cq_open(rxd_domain->dg_domain, &cq_attr, &rxd_ep->dg_cq, rxd_ep);
+	if (ret)
+		return ret;
+
+	ret = rxd_ep_get_wait_cq_fd(rxd_ep, wait_obj);
+	if (ret)
+		goto err;
+
+	return 0;
+err:
+	fi_close(&rxd_ep->dg_cq->fid);
+	return ret;
+}
+
 static int rxd_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 {
 	struct rxd_ep *ep;
 	struct rxd_av *av;
+	struct util_cq *cq;
+	struct util_cntr *cntr;
 	int ret = 0;
 
 	ep = container_of(ep_fid, struct rxd_ep, util_ep.ep_fid.fid);
@@ -825,14 +897,52 @@ static int rxd_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 			return ret;
 		break;
 	case FI_CLASS_CQ:
-		ret = ofi_ep_bind_cq(&ep->util_ep, container_of(bfid,
-				     struct util_cq, cq_fid.fid), flags);
+		cq = container_of(bfid, struct util_cq, cq_fid.fid);
+
+		ret = ofi_ep_bind_cq(&ep->util_ep, cq, flags);
+		if (ret)
+			return ret;
+
+		if (!ep->dg_cq) {
+			ret = rxd_dg_cq_open(ep, cq->wait ? FI_WAIT_FD : FI_WAIT_NONE);
+			if (ret)
+				return ret;
+		}
+
+		if (cq->wait)
+			ret = rxd_ep_wait_fd_add(ep, cq->wait);
 		break;
 	case FI_CLASS_EQ:
 		break;
 	case FI_CLASS_CNTR:
-		return ofi_ep_bind_cntr(&ep->util_ep, container_of(bfid,
-					struct util_cntr, cntr_fid.fid), flags);
+		cntr = container_of(bfid, struct util_cntr, cntr_fid.fid);
+
+		ret = ofi_ep_bind_cntr(&ep->util_ep, cntr, flags);
+		if (ret)
+			return ret;
+
+		if (!ep->dg_cq) {
+			ret = rxd_dg_cq_open(ep, cntr->wait ? FI_WAIT_FD : FI_WAIT_NONE);
+			if (ret)
+				return ret;
+		} else if (!ep->dg_cq_fd && cntr->wait) {
+			/* Reopen CQ with WAIT fd set */
+			ret = fi_close(&ep->dg_cq->fid);
+			if (ret) {
+				FI_WARN(&rxd_prov, FI_LOG_EP_CTRL,
+					"Unable to close dg CQ: %s\n",
+					fi_strerror(-ret));
+				return ret;
+			} else {
+				ret = rxd_dg_cq_open(ep, FI_WAIT_FD);
+				if (ret)
+					return ret;
+			}
+		}
+
+		if (cntr->wait)
+			ret = rxd_ep_wait_fd_add(ep, cntr->wait);
+		break;
 	default:
 		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL,
 			"invalid fid class\n");
@@ -923,28 +1033,33 @@ static void rxd_peer_timeout(struct rxd_ep *rxd_ep, struct rxd_peer *peer)
 	dlist_remove(&peer->entry);
 }
 
-static void rxd_progress_pkt_list(struct rxd_ep *ep, struct dlist_entry *list)
+static void rxd_progress_pkt_list(struct rxd_ep *ep, struct rxd_peer *peer)
 {
 	struct rxd_pkt_entry *pkt_entry;
-	struct dlist_entry *tmp;
 	uint64_t current;
-	int ret;
+	int ret, retry = 0;
 
 	current = fi_gettime_ms();
-	dlist_foreach_container_safe(list, struct rxd_pkt_entry,
-				     pkt_entry, d_entry, tmp) {
-		if (current < pkt_entry->retry_time)
-			continue;
+	if (peer->retry_cnt > RXD_MAX_PKT_RETRY) {
+		rxd_peer_timeout(ep, peer);
+		return;
+	}
 
-		if (pkt_entry->retry_cnt > RXD_MAX_PKT_RETRY) {
-			rxd_peer_timeout(ep,
-				&ep->peers[rxd_get_base_hdr(pkt_entry)->peer]);
-			break;
-		}
+	dlist_foreach_container(&peer->unacked, struct rxd_pkt_entry,
+				pkt_entry, d_entry) {
+		if (current < rxd_get_retry_time(pkt_entry->timestamp, peer->retry_cnt))
+			continue;
+		retry = 1;
 		ret = rxd_ep_retry_pkt(ep, pkt_entry);
 		if (ret)
 			break;
 	}
+	if (retry)
+		peer->retry_cnt++;
+
+	if (!dlist_empty(&peer->unacked))
+		ep->next_retry = ep->next_retry == -1 ? peer->retry_cnt :
+				 MIN(ep->next_retry, peer->retry_cnt);
 }
 
 static void rxd_ep_progress(struct util_ep *util_ep)
@@ -973,13 +1088,14 @@ static void rxd_ep_progress(struct util_ep *util_ep)
 	if (!rxd_env.retry)
 		goto out;
 
+	ep->next_retry = -1;
 	dlist_foreach_container_safe(&ep->rts_sent_list, struct rxd_peer,
 				     peer, entry, tmp)
-		rxd_progress_pkt_list(ep, &peer->unacked);
+		rxd_progress_pkt_list(ep, peer);
 
 	dlist_foreach_container_safe(&ep->active_peers, struct rxd_peer,
 				     peer, entry, tmp) {
-		rxd_progress_pkt_list(ep, &peer->unacked);
+		rxd_progress_pkt_list(ep, peer);
 		if (dlist_empty(&peer->unacked))
 			rxd_progress_tx_list(ep, peer);
 	}
@@ -1087,6 +1203,7 @@ static void rxd_init_peer(struct rxd_ep *ep, uint64_t rxd_addr)
 	ep->peers[rxd_addr].last_tx_ack = 0;
 	ep->peers[rxd_addr].rx_window = rxd_env.max_unacked;
 	ep->peers[rxd_addr].unacked_cnt = 0;
+	ep->peers[rxd_addr].retry_cnt = 0;
 	dlist_init(&ep->peers[rxd_addr].unacked);
 	dlist_init(&ep->peers[rxd_addr].tx_list);
 	dlist_init(&ep->peers[rxd_addr].rx_list);
@@ -1100,7 +1217,6 @@ int rxd_endpoint(struct fid_domain *domain, struct fi_info *info,
 	struct fi_info *dg_info;
 	struct rxd_domain *rxd_domain;
 	struct rxd_ep *rxd_ep;
-	struct fi_cq_attr cq_attr;
 	int ret, i;
 
 	rxd_ep = calloc(1, sizeof(*rxd_ep) + sizeof(struct rxd_peer) *
@@ -1110,9 +1226,6 @@ int rxd_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	rxd_domain = container_of(domain, struct rxd_domain,
 				  util_domain.domain_fid);
-	memset(&cq_attr, 0, sizeof cq_attr);
-	cq_attr.format = FI_CQ_FORMAT_MSG;
-	cq_attr.wait_obj = FI_WAIT_FD;
 
 	ret = ofi_endpoint_init(domain, &rxd_util_prov, info, &rxd_ep->util_ep,
 				context, rxd_ep_progress);
@@ -1132,24 +1245,15 @@ int rxd_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		goto err2;
 
-	cq_attr.size = dg_info->tx_attr->size + dg_info->rx_attr->size;
 	rxd_ep->prefix_size = dg_info->ep_attr->msg_prefix_size;
 	fi_freeinfo(dg_info);
 
-	ret = fi_cq_open(rxd_domain->dg_domain, &cq_attr, &rxd_ep->dg_cq, rxd_ep);
-	if (ret)
-		goto err3;
-
-	ret = fi_ep_bind(rxd_ep->dg_ep, &rxd_ep->dg_cq->fid,
-			 FI_TRANSMIT | FI_RECV);
-	if (ret)
-		goto err4;
-
 	rxd_ep->rx_size = info->rx_attr->size;
 	rxd_ep->tx_size = info->tx_attr->size;
+	rxd_ep->next_retry = -1;
 	ret = rxd_ep_init_res(rxd_ep, info);
 	if (ret)
-		goto err4;
+		goto err3;
 
 	for (i = 0; i < rxd_env.max_peers; rxd_init_peer(rxd_ep, i++))
 		;
@@ -1165,8 +1269,6 @@ int rxd_endpoint(struct fid_domain *domain, struct fi_info *info,
 	*ep = &rxd_ep->util_ep.ep_fid;
 	return 0;
 
-err4:
-	fi_close(&rxd_ep->dg_cq->fid);
 err3:
 	fi_close(&rxd_ep->dg_ep->fid);
 err2:

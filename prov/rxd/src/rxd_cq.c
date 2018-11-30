@@ -209,21 +209,16 @@ static void rxd_complete_rx(struct rxd_ep *ep, struct rxd_x_entry *rx_entry)
 {
 	struct fi_cq_err_entry err_entry;
 	struct rxd_cq *rx_cq = rxd_ep_rx_cq(ep);
-	struct util_cntr *cntr = ep->util_ep.rx_cntr;
+	int write_cq = rx_entry->cq_entry.flags & (FI_RECV | FI_REMOTE_CQ_DATA);
 
-	if ((!(rx_entry->cq_entry.flags & FI_REMOTE_CQ_DATA) &&
-	     (rx_entry->cq_entry.flags & FI_RMA ||
-	     rx_entry->cq_entry.flags & FI_ATOMIC)) ||
-	     rx_entry->flags & (RXD_NO_RX_COMP | RXD_CANCELLED))
+	if (rx_entry->flags & (RXD_NO_RX_COMP | RXD_CANCELLED))
 		goto out;
 
-	/* Handle CQ comp */
 	if (rx_entry->bytes_done == rx_entry->cq_entry.len) {
-		rx_cq->write_fn(rx_cq, &rx_entry->cq_entry);
-		/* Handle cntr */
-		if (cntr)
-			cntr->cntr_fid.ops->add(&cntr->cntr_fid, 1);
-	} else {
+		rxd_cntr_report_rx_comp(ep, rx_entry);
+		if (write_cq)
+			rx_cq->write_fn(rx_cq, &rx_entry->cq_entry);
+	} else if (write_cq) {
 		memset(&err_entry, 0, sizeof(err_entry));
 		err_entry.op_context = rx_entry->cq_entry.op_context;
 		err_entry.flags = rx_entry->cq_entry.flags;
@@ -240,15 +235,14 @@ out:
 static void rxd_complete_tx(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
 {
 	struct rxd_cq *tx_cq = rxd_ep_tx_cq(ep);
-	struct util_cntr *cntr = ep->util_ep.tx_cntr;
 
 	if (tx_entry->flags & RXD_NO_TX_COMP)
 		goto out;
+
 	tx_cq->write_fn(tx_cq, &tx_entry->cq_entry);
-	if (cntr)
-		cntr->cntr_fid.ops->add(&cntr->cntr_fid, 1);
 
 out:
+	rxd_cntr_report_tx_comp(ep, tx_entry);
 	rxd_tx_entry_free(ep, tx_entry);
 }
 
@@ -334,6 +328,7 @@ static int rxd_verify_active(struct rxd_ep *ep, fi_addr_t addr, fi_addr_t peer_a
 		dlist_remove(&ep->peers[addr].entry);
 	}
 	dlist_insert_tail(&ep->peers[addr].entry, &ep->active_peers);
+	ep->peers[addr].retry_cnt = 0;
 
 	return 0;
 }
@@ -381,9 +376,15 @@ void rxd_progress_tx_list(struct rxd_ep *ep, struct rxd_peer *peer)
 		if (tx_entry->bytes_done == tx_entry->cq_entry.len) {
 			if (ofi_before(tx_entry->start_seq + (tx_entry->num_segs - 1),
 			    peer->last_rx_ack)) {
-				fastlock_acquire(&ep->util_ep.tx_cq->cq_lock);
-				rxd_complete_tx(ep, tx_entry);
-				fastlock_release(&ep->util_ep.tx_cq->cq_lock);
+				if (tx_entry->op == RXD_DATA_READ) {
+					fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
+					rxd_complete_rx(ep, tx_entry);
+					fastlock_release(&ep->util_ep.rx_cq->cq_lock);
+				} else {
+					fastlock_acquire(&ep->util_ep.tx_cq->cq_lock);
+					rxd_complete_tx(ep, tx_entry);
+					fastlock_release(&ep->util_ep.tx_cq->cq_lock);
+				}
 			}
 			continue;
 		}
@@ -391,6 +392,9 @@ void rxd_progress_tx_list(struct rxd_ep *ep, struct rxd_peer *peer)
 		if (!rxd_ep_post_data_pkts(ep, tx_entry))
 			break;
 	}
+
+	if (dlist_empty(&peer->tx_list))
+		peer->retry_cnt = 0;
 }
 
 static void rxd_update_peer(struct rxd_ep *ep, fi_addr_t peer, fi_addr_t peer_addr)
@@ -416,7 +420,6 @@ static int rxd_send_cts(struct rxd_ep *rxd_ep, struct rxd_rts_pkt *rts_pkt,
 
 	cts = (struct rxd_cts_pkt *) (pkt_entry->pkt);
 	pkt_entry->pkt_size = sizeof(*cts) + rxd_ep->prefix_size;
-	pkt_entry->retry_cnt = 0;
 	pkt_entry->peer = peer;
 
 	cts->base_hdr.version = RXD_PROTOCOL_VERSION;
@@ -529,6 +532,7 @@ struct rxd_x_entry *rxd_progress_multi_recv(struct rxd_ep *ep,
 	dup_entry->cq_entry.len = total_size;
 
 	rx_entry->iov[0].iov_base = (char *) rx_entry->iov[0].iov_base + total_size;
+	rx_entry->cq_entry.buf = rx_entry->iov[0].iov_base;
 	rx_entry->iov[0].iov_len = left;
 	rx_entry->cq_entry.len = left;
 
@@ -640,7 +644,7 @@ static struct rxd_x_entry *rxd_rma_read_entry_init(struct rxd_ep *ep,
 		return NULL;
 
 	tx_entry->iov_count = sar_hdr->iov_count;
-	tx_entry->cq_entry.flags = FI_RMA | FI_READ;
+	tx_entry->cq_entry.flags = ofi_rx_cq_flags(ofi_op_read_req);
 	tx_entry->cq_entry.len = sar_hdr->size;
 
 	dlist_insert_tail(&tx_entry->entry, &ep->peers[tx_entry->peer].tx_list);
@@ -708,7 +712,7 @@ static struct rxd_x_entry *rxd_rx_atomic_fetch(struct rxd_ep *ep,
 	if (ret)
 		return NULL;
 
-	tx_entry->cq_entry.flags = FI_READ | FI_ATOMIC;
+	tx_entry->cq_entry.flags = ofi_rx_cq_flags(ofi_op_atomic_fetch);
 	tx_entry->cq_entry.len = sar_hdr->size;
 
 	rxd_init_data_pkt(ep, tx_entry, tx_entry->pkt);
@@ -890,7 +894,7 @@ void rxd_progress_op(struct rxd_ep *ep, struct rxd_x_entry *rx_entry,
 	rx_entry->peer = base_hdr->peer;
 
 	if (!sar_hdr || sar_hdr->num_segs == 1) {
-		if (!(rx_entry->cq_entry.flags & FI_READ))
+		if (!(rx_entry->cq_entry.flags & FI_REMOTE_READ))
 			rxd_complete_rx(ep, rx_entry);
 		return;
 	}
@@ -1041,7 +1045,10 @@ static void rxd_handle_ack(struct rxd_ep *ep, struct rxd_pkt_entry *ack_entry)
 	fi_addr_t peer = ack->base_hdr.peer;
 	struct rxd_base_hdr *hdr;
 
-	ep->peers[peer].last_rx_ack = ack->base_hdr.seq_no;
+	if (ep->peers[peer].last_rx_ack != ack->base_hdr.seq_no) {
+		ep->peers[peer].retry_cnt = 0;
+		ep->peers[peer].last_rx_ack = ack->base_hdr.seq_no;
+	}
 
 	while (!dlist_empty(&ep->peers[peer].unacked)) {
 		pkt_entry = container_of((&ep->peers[peer].unacked)->next,
@@ -1116,13 +1123,71 @@ static struct fi_ops rxd_cq_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
+ssize_t rxd_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
+			 fi_addr_t *src_addr, const void *cond, int timeout)
+{
+	struct fid_list_entry *fid_entry;
+	struct util_cq *cq;
+	struct rxd_ep *ep;
+	uint64_t start;
+	int ret, ep_retry;
+
+	cq = container_of(cq_fid, struct util_cq, cq_fid);
+	assert(cq->wait && cq->internal_wait);
+	start = (timeout >= 0) ? fi_gettime_ms() : 0;
+
+	do {
+		ret = ofi_cq_readfrom(cq_fid, buf, count, src_addr);
+		if (ret != -FI_EAGAIN)
+			break;
+
+		if (timeout >= 0) {
+			timeout -= (int) (fi_gettime_ms() - start);
+			if (timeout <= 0)
+				return -FI_EAGAIN;
+		}
+
+		if (ofi_atomic_get32(&cq->signaled)) {
+			ofi_atomic_set32(&cq->signaled, 0);
+			return -FI_ECANCELED;
+		}
+
+		ep_retry = -1;
+		cq->cq_fastlock_acquire(&cq->ep_list_lock);
+		dlist_foreach_container(&cq->ep_list, struct fid_list_entry,
+					fid_entry, entry) {
+			ep = container_of(fid_entry->fid, struct rxd_ep,
+					  util_ep.ep_fid.fid);
+			if (ep->next_retry == -1)
+				continue;
+			ep_retry = ep_retry == -1 ? ep->next_retry :
+					MIN(ep_retry, ep->next_retry);
+		}
+		cq->cq_fastlock_release(&cq->ep_list_lock);
+
+		ret = fi_wait(&cq->wait->wait_fid, ep_retry == -1 ?
+			      timeout : rxd_get_timeout(ep_retry));
+
+		if (ep_retry != -1 && ret == -FI_ETIMEDOUT)
+			ret = 0;
+	} while (!ret);
+
+	return ret == -FI_ETIMEDOUT ? -FI_EAGAIN : ret;
+}
+
+ssize_t rxd_cq_sread(struct fid_cq *cq_fid, void *buf, size_t count,
+		const void *cond, int timeout)
+{
+	return rxd_cq_sreadfrom(cq_fid, buf, count, NULL, cond, timeout);
+}
+
 static struct fi_ops_cq rxd_cq_ops = {
 	.size = sizeof(struct fi_ops_cq),
 	.read = ofi_cq_read,
 	.readfrom = ofi_cq_readfrom,
 	.readerr = ofi_cq_readerr,
-	.sread = ofi_cq_sread,
-	.sreadfrom = ofi_cq_sreadfrom,
+	.sread = rxd_cq_sread,
+	.sreadfrom = rxd_cq_sreadfrom,
 	.signal = ofi_cq_signal,
 	.strerror = rxd_cq_strerror,
 };

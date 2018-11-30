@@ -129,6 +129,7 @@ struct rxd_peer {
 	uint64_t last_tx_ack;
 	uint16_t rx_window;//constant at MAX_UNACKED for now
 	uint16_t tx_window;//unused for now, will be used for slow start
+	int retry_cnt;
 
 	uint16_t unacked_cnt;
 
@@ -180,6 +181,8 @@ struct rxd_ep {
 	uint32_t posted_bufs;
 	size_t min_multi_recv_size;
 	int do_local_mr;
+	int next_retry;
+	int dg_cq_fd;
 
 	struct util_buf_pool *tx_pkt_pool;
 	struct util_buf_pool *rx_pkt_pool;
@@ -265,8 +268,7 @@ struct rxd_pkt_entry {
 	struct dlist_entry d_entry;
 	struct slist_entry s_entry;//TODO - keep both or make separate tx/rx pkt structs
 	size_t pkt_size;
-	uint64_t retry_time;
-	uint8_t retry_cnt;
+	uint64_t timestamp;
 	struct fi_context context;
 	struct fid_mr *mr;
 	fi_addr_t peer;
@@ -399,7 +401,8 @@ struct rxd_x_entry *rxd_rx_entry_init(struct rxd_ep *ep,
 			uint32_t op, uint32_t flags);
 void rxd_tx_entry_free(struct rxd_ep *ep, struct rxd_x_entry *tx_entry);
 void rxd_rx_entry_free(struct rxd_ep *ep, struct rxd_x_entry *rx_entry);
-void rxd_set_timeout(struct rxd_pkt_entry *pkt_entry);
+int rxd_get_timeout(uint8_t retry_cnt);
+uint64_t rxd_get_retry_time(uint64_t start, uint8_t retry_cnt);
 
 /* Generic message functions */
 ssize_t rxd_ep_generic_recvmsg(struct rxd_ep *rxd_ep, const struct iovec *iov,
@@ -437,5 +440,6 @@ struct rxd_x_entry *rxd_progress_multi_recv(struct rxd_ep *ep,
 void rxd_cq_report_error(struct rxd_cq *cq, struct fi_cq_err_entry *err_entry);
 void rxd_cq_report_tx_comp(struct rxd_cq *cq, struct rxd_x_entry *tx_entry);
 void rxd_cntr_report_tx_comp(struct rxd_ep *ep, struct rxd_x_entry *tx_entry);
+void rxd_cntr_report_rx_comp(struct rxd_ep *ep, struct rxd_x_entry *rx_entry);
 
 #endif
