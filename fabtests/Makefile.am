@@ -91,9 +91,9 @@ nobase_dist_config_DATA = \
 
 noinst_LTLIBRARIES = libfabtests.la
 libfabtests_la_SOURCES = \
-	core/common.c \
-	core/jsmn.c \
-	include/common.h \
+	common/shared.c \
+	common/jsmn.c \
+	include/shared.h \
 	include/jsmn.h \
 	include/unix/osd.h \
 	include/ft_osd.h
@@ -104,11 +104,11 @@ benchmarks_srcs = \
 
 unit_srcs = \
 	include/unit_common.h \
-	unit/unit_common.c
+	unit/common.c
 
 if MACOS
 if !HAVE_CLOCK_GETTIME
-libfabtests_la_SOURCES += core/osx/osd.c
+libfabtests_la_SOURCES += common/osx/osd.c
 endif
 endif
 

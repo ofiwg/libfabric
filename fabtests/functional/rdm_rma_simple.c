@@ -34,7 +34,7 @@
 
 #include <rdma/fi_errno.h>
 
-#include <common.h>
+#include <shared.h>
 
 struct fi_rma_iov local;
 

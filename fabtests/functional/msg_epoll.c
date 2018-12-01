@@ -32,7 +32,7 @@
 #  include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <common.h>
+#include <shared.h>
 
 #if HAVE_EPOLL == 1
 

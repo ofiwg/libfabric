@@ -35,7 +35,7 @@
 #include <rdma/fi_errno.h>
 #include <rdma/fi_trigger.h>
 
-#include <common.h>
+#include <shared.h>
 
 struct fi_triggered_context triggered_ctx;
 

@@ -36,7 +36,7 @@
 #include <sys/wait.h>
 
 #include <limits.h>
-#include <common.h>
+#include <shared.h>
 
 #include "fabtest.h"
 

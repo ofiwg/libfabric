@@ -36,7 +36,7 @@
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_cm.h>
 
-#include <common.h>
+#include <shared.h>
 
 
 static int ctx_cnt = 2;

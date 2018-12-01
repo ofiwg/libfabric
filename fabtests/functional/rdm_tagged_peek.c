@@ -36,7 +36,7 @@
 #include <rdma/fi_errno.h>
 #include <rdma/fi_tagged.h>
 
-#include <common.h>
+#include <shared.h>
 
 static struct fi_context fi_context;
 

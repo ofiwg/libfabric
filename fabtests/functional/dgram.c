@@ -32,7 +32,7 @@
 #include <stdlib.h>
 #include <getopt.h>
 
-#include <common.h>
+#include <shared.h>
 
 static int run(void)
 {

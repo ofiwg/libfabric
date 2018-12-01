@@ -32,7 +32,7 @@
 #include <getopt.h>
 #include <unistd.h>
 
-#include <common.h>
+#include <shared.h>
 
 
 static struct fi_info *base_hints;

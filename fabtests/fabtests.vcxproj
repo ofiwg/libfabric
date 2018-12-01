@@ -107,10 +107,10 @@
     <ClCompile Include="benchmarks\rdm_tagged_bw.c" />
     <ClCompile Include="benchmarks\rdm_tagged_pingpong.c" />
     <ClCompile Include="benchmarks\rma_bw.c" />
-    <ClCompile Include="core\jsmn.c" />
-    <ClCompile Include="core\common.c" />
-    <ClCompile Include="core\windows\getopt.c" />
-    <ClCompile Include="core\windows\osd.c" />
+    <ClCompile Include="common\jsmn.c" />
+    <ClCompile Include="common\shared.c" />
+    <ClCompile Include="common\windows\getopt.c" />
+    <ClCompile Include="common\windows\osd.c" />
     <ClCompile Include="ubertest\connect.c" />
     <ClCompile Include="ubertest\cq.c" />
     <ClCompile Include="ubertest\config.c" />
@@ -137,7 +137,7 @@
     <ClCompile Include="functional\inj_complete.c" />
     <ClCompile Include="unit\av_test.c" />
     <ClCompile Include="unit\cntr_test.c" />
-    <ClCompile Include="unit\unit_common.c" />
+    <ClCompile Include="unit\common.c" />
     <ClCompile Include="unit\cq_test.c" />
     <ClCompile Include="unit\dom_test.c" />
     <ClCompile Include="unit\eq_test.c" />
@@ -149,7 +149,7 @@
     <ClInclude Include="ubertest\fabtest.h" />
     <ClInclude Include="include\ft_osd.h" />
     <ClInclude Include="include\jsmn.h" />
-    <ClInclude Include="include\common.h" />
+    <ClInclude Include="include\shared.h" />
     <ClInclude Include="include\unit_common.h" />
     <ClInclude Include="include\windows\getopt\getopt.h" />
     <ClInclude Include="include\windows\netdb.h" />

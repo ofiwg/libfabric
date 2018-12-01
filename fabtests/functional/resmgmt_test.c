@@ -33,7 +33,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <rdma/fi_tagged.h>
-#include "common.h"
+#include "shared.h"
 
 static uint16_t max_opts = 100;
 int delay, tagged;
