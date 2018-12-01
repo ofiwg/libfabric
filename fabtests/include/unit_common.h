@@ -34,7 +34,7 @@
 #ifndef _UNIT_COMMON_H_
 #define _UNIT_COMMON_H_
 
-#include <common.h>
+#include <shared.h>
 
 enum { PASS, FAIL, NOTSUPP, SKIPPED };
 #define TEST_ENTRY(NAME, DESC) { NAME, #NAME, DESC}

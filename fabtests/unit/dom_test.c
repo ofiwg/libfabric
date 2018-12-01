@@ -38,7 +38,7 @@
 
 #include <rdma/fi_errno.h>
 
-#include "common.h"
+#include "shared.h"
 #include "unit_common.h"
 
 #define MAX_ADDR 256

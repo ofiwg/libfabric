@@ -34,7 +34,7 @@
 #include <rdma/fi_errno.h>
 #include <rdma/fi_atomic.h>
 
-#include "common.h"
+#include "shared.h"
 
 static enum fi_op op_type = FI_MIN;
 static void *result;

@@ -42,7 +42,7 @@
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_cm.h>
 
-#include "common.h"
+#include "shared.h"
 
 union sockaddr_any {
 	struct sockaddr		sa;
