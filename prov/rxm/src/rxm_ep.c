@@ -151,6 +151,7 @@ static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 	struct rxm_tx_eager_buf *tx_eager_buf;
 	struct rxm_tx_sar_buf *tx_sar_buf;
 	struct rxm_tx_rndv_buf *tx_rndv_buf;
+	struct rxm_tx_atomic_buf *tx_atomic_buf;
 	struct rxm_rma_buf *rma_buf;
 
 	if ((pool->type != RXM_BUF_POOL_TX_INJECT) && pool->rxm_ep->msg_mr_local) {
@@ -207,6 +208,14 @@ static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 			hdr = &tx_rndv_buf->hdr;
 			pkt = &tx_rndv_buf->pkt;
 			type = ofi_ctrl_large_data;
+			break;
+		case RXM_BUF_POOL_TX_ATOMIC:
+			tx_atomic_buf = (struct rxm_tx_atomic_buf *)
+				((char *)addr + i * entry_sz);
+
+			hdr = &tx_atomic_buf->hdr;
+			pkt = &tx_atomic_buf->pkt;
+			type = ofi_ctrl_atomic;
 			break;
 		case RXM_BUF_POOL_TX_ACK:
 			tx_base_buf = (struct rxm_tx_base_buf *)
@@ -348,6 +357,7 @@ static int rxm_buf_pool_create(struct rxm_ep *rxm_ep,
 
 	switch (type) {
 	case RXM_BUF_POOL_TX_RNDV:
+	case RXM_BUF_POOL_TX_ATOMIC:
 	case RXM_BUF_POOL_TX_SAR:
 		attr.indexing.used = 1;
 		break;
@@ -489,6 +499,7 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 		[RXM_BUF_POOL_TX_INJECT] = rxm_ep->msg_info->tx_attr->size,
 		[RXM_BUF_POOL_TX_ACK] = rxm_ep->msg_info->tx_attr->size,
 		[RXM_BUF_POOL_TX_RNDV] = rxm_ep->msg_info->tx_attr->size,
+		[RXM_BUF_POOL_TX_ATOMIC] = rxm_ep->msg_info->tx_attr->size,
 		[RXM_BUF_POOL_TX_SAR] = rxm_ep->msg_info->tx_attr->size,
 		[RXM_BUF_POOL_RMA] = rxm_ep->msg_info->tx_attr->size,
 	};
@@ -503,6 +514,8 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 		[RXM_BUF_POOL_TX_RNDV] = sizeof(struct rxm_rndv_hdr) +
 					 rxm_ep->buffered_min +
 					 sizeof(struct rxm_tx_rndv_buf),
+		[RXM_BUF_POOL_TX_ATOMIC] = rxm_ep->eager_limit +
+					 sizeof(struct rxm_tx_atomic_buf),
 		[RXM_BUF_POOL_TX_SAR] = rxm_ep->eager_limit +
 					sizeof(struct rxm_tx_sar_buf),
 		[RXM_BUF_POOL_RMA] = rxm_ep->eager_limit +
@@ -1008,18 +1021,6 @@ rxm_ep_msg_normal_send(struct rxm_conn *rxm_conn, struct rxm_pkt *tx_pkt,
 	assert((tx_pkt->hdr.flags & FI_REMOTE_CQ_DATA) || !tx_pkt->hdr.flags);
 
 	return fi_send(rxm_conn->msg_ep, tx_pkt, pkt_size, desc, 0, context);
-}
-
-static inline void
-rxm_ep_format_tx_buf_pkt(struct rxm_conn *rxm_conn, size_t len, uint8_t op, uint64_t data,
-			 uint64_t tag, uint64_t flags, struct rxm_pkt *pkt)
-{
-	pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
-	pkt->hdr.size = len;
-	pkt->hdr.op = op;
-	pkt->hdr.tag = tag;
-	pkt->hdr.flags = (flags & FI_REMOTE_CQ_DATA);
-	pkt->hdr.data = data;
 }
 
 static inline ssize_t
@@ -1605,6 +1606,17 @@ rxm_ep_conn_progress_deferred_queue(struct rxm_ep *rxm_ep,
 			break;
 		case RXM_DEFERRED_TX_SAR_SEG:
 			ret = rxm_ep_progress_sar_deferred_segments(def_tx_entry);
+			break;
+		case RXM_DEFERRED_TX_ATOMIC_RESP:
+			ret = rxm_atomic_send_respmsg(rxm_ep,
+					def_tx_entry->rxm_conn,
+					def_tx_entry->atomic_resp.tx_buf,
+					def_tx_entry->atomic_resp.len);
+			if (OFI_UNLIKELY(ret))
+				if (OFI_LIKELY(ret == -FI_EAGAIN))
+					break;
+			rxm_ep_dequeue_deferred_tx_queue(def_tx_entry);
+			free(def_tx_entry);
 			break;
 		}
 	}
@@ -2553,6 +2565,9 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 		(*ep_fid)->tagged = &rxm_ops_tagged;
 	}
 	(*ep_fid)->rma = &rxm_ops_rma;
+
+	if (rxm_ep->rxm_info->caps & FI_ATOMIC)
+		(*ep_fid)->atomic = &rxm_ops_atomic;
 
 	return 0;
 err2:

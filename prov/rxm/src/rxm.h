@@ -147,6 +147,7 @@ do {									\
 extern struct fi_provider rxm_prov;
 extern struct util_prov rxm_util_prov;
 extern struct fi_ops_rma rxm_ops_rma;
+extern struct fi_ops_atomic rxm_ops_atomic;
 
 extern size_t rxm_msg_tx_size;
 extern size_t rxm_msg_rx_size;
@@ -270,6 +271,7 @@ struct rxm_fabric {
 struct rxm_domain {
 	struct util_domain util_domain;
 	struct fid_domain *msg_domain;
+	size_t max_atomic_size;
 	uint8_t mr_local;
 };
 
@@ -279,6 +281,7 @@ int rxm_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 struct rxm_mr {
 	struct fid_mr mr_fid;
 	struct fid_mr *msg_mr;
+	struct rxm_domain *domain;
 };
 
 struct rxm_ep_wire_proto {
@@ -302,6 +305,17 @@ struct rxm_rndv_hdr {
 
 #define rxm_pkt_rndv_data(rxm_pkt) \
 	((rxm_pkt)->data + sizeof(struct rxm_rndv_hdr))
+
+struct rxm_atomic_hdr {
+	struct fi_rma_ioc rma_ioc[RXM_IOV_LIMIT];
+	char data[];
+};
+
+struct rxm_atomic_resp_hdr {
+	int32_t status;
+	uint32_t result_len;
+	char data[];
+};
 
 /*
  * Macros to generate enums and associated string values
@@ -333,7 +347,9 @@ struct rxm_rndv_hdr {
 	FUNC(RXM_RNDV_READ),		\
 	FUNC(RXM_RNDV_ACK_SENT),	\
 	FUNC(RXM_RNDV_ACK_RECVD),	\
-	FUNC(RXM_RNDV_FINISH),
+	FUNC(RXM_RNDV_FINISH),		\
+	FUNC(RXM_ATOMIC_RESP_WAIT),	\
+	FUNC(RXM_ATOMIC_RESP_SENT)
 
 enum rxm_proto_state {
 	RXM_PROTO_STATES(OFI_ENUM_VAL)
@@ -397,6 +413,7 @@ enum rxm_buf_pool_type {
 	RXM_BUF_POOL_TX_INJECT,
 	RXM_BUF_POOL_TX_ACK,
 	RXM_BUF_POOL_TX_RNDV,
+	RXM_BUF_POOL_TX_ATOMIC,
 	RXM_BUF_POOL_TX_SAR,
 	RXM_BUF_POOL_TX_END	= RXM_BUF_POOL_TX_SAR,
 	RXM_BUF_POOL_RMA,
@@ -499,10 +516,24 @@ struct rxm_rma_buf {
 	};
 };
 
+struct rxm_tx_atomic_buf {
+	/* Must stay at top */
+	struct rxm_buf hdr;
+
+	void *app_context;
+	uint64_t flags;
+	struct iovec result_iov[RXM_IOV_LIMIT];
+	uint8_t result_iov_count;
+
+	/* Must stay at bottom */
+	struct rxm_pkt pkt;
+};
+
 enum rxm_deferred_tx_entry_type {
 	RXM_DEFERRED_TX_RNDV_ACK,
 	RXM_DEFERRED_TX_RNDV_READ,
 	RXM_DEFERRED_TX_SAR_SEG,
+	RXM_DEFERRED_TX_ATOMIC_RESP,
 };
 
 struct rxm_deferred_tx_entry {
@@ -538,6 +569,10 @@ struct rxm_deferred_tx_entry {
 			void *app_context;
 			uint64_t flags;
 		} sar_seg;
+		struct {
+			struct rxm_tx_atomic_buf *tx_buf;
+			ssize_t len;
+		} atomic_resp;
 	};
 };
 
@@ -706,6 +741,27 @@ void rxm_ep_progress_multi(struct util_ep *util_ep);
 
 int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep);
 void rxm_ep_progress_deferred_queues(struct rxm_ep *rxm_ep);
+
+int rxm_ep_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
+			enum fi_op op, struct fi_atomic_attr *attr,
+			uint64_t flags);
+static inline ssize_t
+rxm_atomic_send_respmsg(struct rxm_ep *rxm_ep, struct rxm_conn *conn,
+			struct rxm_tx_atomic_buf *resp_buf, ssize_t len)
+{
+	struct iovec iov = {
+		.iov_base = (void *) &resp_buf->pkt,
+		.iov_len = len,
+	};
+	struct fi_msg msg = {
+		.msg_iov = &iov,
+		.desc = NULL,
+		.iov_count = 1,
+		.context = resp_buf,
+		.data = 0,
+	};
+	return fi_sendmsg(conn->msg_ep, &msg, FI_COMPLETION);
+}
 
 static inline struct rxm_conn *rxm_key2conn(struct rxm_ep *rxm_ep, uint64_t key)
 {
@@ -957,6 +1013,19 @@ rxm_ep_prepare_tx(struct rxm_ep *rxm_ep, fi_addr_t dest_addr,
 	return 0;
 }
 
+static inline void
+rxm_ep_format_tx_buf_pkt(struct rxm_conn *rxm_conn, size_t len, uint8_t op,
+			 uint64_t data, uint64_t tag, uint64_t flags,
+			 struct rxm_pkt *pkt)
+{
+	pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
+	pkt->hdr.size = len;
+	pkt->hdr.op = op;
+	pkt->hdr.tag = tag;
+	pkt->hdr.flags = (flags & FI_REMOTE_CQ_DATA);
+	pkt->hdr.data = data;
+}
+
 static inline
 struct rxm_buf *rxm_buf_get(struct rxm_buf_pool *pool)
 {
@@ -988,6 +1057,7 @@ rxm_tx_buf_get(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
 	       (type == RXM_BUF_POOL_TX_INJECT) ||
 	       (type == RXM_BUF_POOL_TX_ACK) ||
 	       (type == RXM_BUF_POOL_TX_RNDV) ||
+	       (type == RXM_BUF_POOL_TX_ATOMIC) ||
 	       (type == RXM_BUF_POOL_TX_SAR));
 	return rxm_buf_get(&rxm_ep->buf_pools[type]);
 }
@@ -1022,6 +1092,13 @@ rxm_rma_buf_release(struct rxm_ep *rxm_ep, struct rxm_rma_buf *rx_buf)
 {
 	rxm_buf_release(&rxm_ep->buf_pools[RXM_BUF_POOL_RMA],
 			(struct rxm_buf *)rx_buf);
+}
+
+static inline
+struct rxm_tx_atomic_buf *rxm_tx_atomic_buf_get(struct rxm_ep *rxm_ep)
+{
+	return (struct rxm_tx_atomic_buf *) rxm_tx_buf_get(rxm_ep,
+						RXM_BUF_POOL_TX_ATOMIC);
 }
 
 static inline struct rxm_recv_entry *rxm_recv_entry_get(struct rxm_recv_queue *queue)

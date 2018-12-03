@@ -70,8 +70,39 @@ static struct fi_ops_domain rxm_domain_ops = {
 	.poll_open = fi_poll_create,
 	.stx_ctx = fi_no_stx_context,
 	.srx_ctx = fi_no_srx_context,
-	.query_atomic = fi_no_query_atomic,
+	.query_atomic = rxm_ep_query_atomic,
 };
+
+static void rxm_mr_remove_map_entry(struct rxm_mr *mr)
+{
+	fastlock_acquire(&mr->domain->util_domain.lock);
+	(void) ofi_mr_map_remove(&mr->domain->util_domain.mr_map,
+				 mr->mr_fid.key);
+	fastlock_release(&mr->domain->util_domain.lock);
+}
+
+static int rxm_mr_add_map_entry(struct util_domain *domain,
+				struct fi_mr_attr *msg_attr,
+				struct rxm_mr *rxm_mr)
+{
+	uint64_t temp_key;
+	int ret;
+
+	msg_attr->requested_key = rxm_mr->mr_fid.key;
+
+	fastlock_acquire(&domain->lock);
+	ret = ofi_mr_map_insert(&domain->mr_map, msg_attr, &temp_key, rxm_mr);
+	if (OFI_UNLIKELY(ret)) {
+		FI_WARN(&rxm_prov, FI_LOG_DOMAIN,
+			"MR map insert for atomic verification failed %d\n",
+			ret);
+	} else {
+		assert(rxm_mr->mr_fid.key == temp_key);
+	}
+	fastlock_release(&domain->lock);
+
+	return ret;
+}
 
 static int rxm_domain_close(fid_t fid)
 {
@@ -106,9 +137,15 @@ static int rxm_mr_close(fid_t fid)
 	int ret;
 
 	rxm_mr = container_of(fid, struct rxm_mr, mr_fid.fid);
+
+	if (rxm_mr->domain->util_domain.info_domain_caps & FI_ATOMIC)
+		rxm_mr_remove_map_entry(rxm_mr);
+
 	ret = fi_close(&rxm_mr->msg_mr->fid);
 	if (ret)
 		FI_WARN(&rxm_prov, FI_LOG_DOMAIN, "Unable to close MSG MR\n");
+
+	ofi_atomic_dec32(&rxm_mr->domain->util_domain.ref);
 	free(rxm_mr);
 	return ret;
 }
@@ -132,7 +169,8 @@ rxm_mr_get_msg_access(struct rxm_domain *rxm_domain, uint64_t access)
 	return access;
 }
 
-static void rxm_mr_init(struct rxm_mr *rxm_mr, void *context)
+static void rxm_mr_init(struct rxm_mr *rxm_mr, struct rxm_domain *domain,
+			void *context)
 {
 	rxm_mr->mr_fid.fid.fclass = FI_CLASS_MR;
 	rxm_mr->mr_fid.fid.context = context;
@@ -142,6 +180,8 @@ static void rxm_mr_init(struct rxm_mr *rxm_mr, void *context)
 	 * The key would be used in large message transfer protocol and RMA. */
 	rxm_mr->mr_fid.mem_desc = rxm_mr->msg_mr;
 	rxm_mr->mr_fid.key = fi_mr_key(rxm_mr->msg_mr);
+	rxm_mr->domain = domain;
+	ofi_atomic_inc32(&domain->util_domain.ref);
 }
 
 static int rxm_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
@@ -167,9 +207,21 @@ static int rxm_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		FI_WARN(&rxm_prov, FI_LOG_DOMAIN, "Unable to register MSG MR\n");
 		goto err;
 	}
-	rxm_mr_init(rxm_mr, attr->context);
+	rxm_mr_init(rxm_mr, rxm_domain, attr->context);
 	*mr = &rxm_mr->mr_fid;
+
+	if (rxm_domain->util_domain.info_domain_caps & FI_ATOMIC) {
+		ret = rxm_mr_add_map_entry(&rxm_domain->util_domain,
+					   &msg_attr, rxm_mr);
+		if (ret)
+			goto map_err;
+	}
+
 	return 0;
+
+map_err:
+	fi_close(&rxm_mr->mr_fid.fid);
+	return ret;
 err:
 	free(rxm_mr);
 	return ret;
@@ -183,6 +235,14 @@ static int rxm_mr_regv(struct fid *fid, const struct iovec *iov, size_t count,
 	struct rxm_domain *rxm_domain;
 	struct rxm_mr *rxm_mr;
 	int ret;
+	struct fi_mr_attr msg_attr = {
+		.mr_iov = iov,
+		.iov_count = count,
+		.access = access,
+		.offset = offset,
+		.requested_key = requested_key,
+		.context = context,
+	};
 
 	rxm_domain = container_of(fid, struct rxm_domain,
 				  util_domain.domain_fid.fid);
@@ -199,9 +259,20 @@ static int rxm_mr_regv(struct fid *fid, const struct iovec *iov, size_t count,
 		FI_WARN(&rxm_prov, FI_LOG_DOMAIN, "Unable to register MSG MR\n");
 		goto err;
 	}
-	rxm_mr_init(rxm_mr, context);
+	rxm_mr_init(rxm_mr, rxm_domain, context);
 	*mr = &rxm_mr->mr_fid;
+
+	if (rxm_domain->util_domain.info_domain_caps & FI_ATOMIC) {
+		ret = rxm_mr_add_map_entry(&rxm_domain->util_domain,
+					   &msg_attr, rxm_mr);
+		if (ret)
+			goto map_err;
+	}
+
 	return 0;
+map_err:
+	fi_close(&rxm_mr->mr_fid.fid);
+	return ret;
 err:
 	free(rxm_mr);
 	return ret;
@@ -261,6 +332,15 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	if (ret) {
 		goto err3;
 	}
+
+	/* We maintain an RMA key to MR map used for emulated atomic access
+	 * and bounds validation. We turn off the map mode bit FI_MR_PROV_KEY
+	 * since we specify the key used by MSG_EP provider. */
+	rxm_domain->util_domain.mr_map.mode &= ~FI_MR_PROV_KEY;
+
+	/* Must be set to eager size or less */
+	rxm_domain->max_atomic_size = info->tx_attr ?
+				      info->tx_attr->inject_size : 0;
 
 	*domain = &rxm_domain->util_domain.domain_fid;
 	(*domain)->fid.ops = &rxm_domain_fi_ops;
