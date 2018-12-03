@@ -148,15 +148,10 @@ pipeline {
                 stage('SFT tests: RC') {
                     environment {
                         SFT_ADD_ARGS = "--additional-args ' '"
-                        SFT_TEST_RESULTS_BASE_DIR = "${ROOT_BUILD_PATH}" + "/sft_test_results/RC/"
-                        SFT_TEST_RESULTS_DIR = ""
+                        SFT_TEST_RESULTS_SUBDIR = "sft_test_results/RC"
+                        SFT_TEST_RESULTS_DIR = "${env.WORKSPACE}" + "/" + "${env.SFT_TEST_RESULTS_SUBDIR}"
                     }
                     steps {
-                        script {
-                            def cur_date_time = new Date().format('yyyy_MM_dd_HH_mm_ss')
-                            SFT_TEST_RESULTS_SUBDIR = "${SFT_TEST_RESULTS_PREFIX}" + env.BUILD_ID + "_DATE_" + "${cur_date_time}"
-                            SFT_TEST_RESULTS_DIR = "${SFT_TEST_RESULTS_BASE_DIR}" + "${SFT_TEST_RESULTS_SUBDIR}"
-                        }
                         sh "mkdir -p ${SFT_TEST_RESULTS_DIR}"
                         timeout (time: 10, unit: 'MINUTES') {
                             // run the test
@@ -201,24 +196,16 @@ pipeline {
                                thresholds: [
                                     [$class: 'FailedThreshold', unstableThreshold: '100']],
                                     tools: [[$class: 'JUnitType', pattern: "${SFT_TEST_RESULTS_SUBDIR}/sft_*${SFT_TEST_RESULTS}"]]])
-
-                            // remove result directory after parsing
-                            sh "rm -rf ${SFT_TEST_RESULTS_DIR} || true"
                         }
                     }
                 }
                 stage('SFT tests: XRC') {
                     environment {
                         SFT_ADD_ARGS = "--additional-args '--use-xrc'"
-                        SFT_TEST_RESULTS_BASE_DIR = "${ROOT_BUILD_PATH}" + "/sft_test_results/XRC/"
-                        SFT_TEST_RESULTS_DIR = ""
+                        SFT_TEST_RESULTS_SUBDIR = "sft_test_results/XRC"
+                        SFT_TEST_RESULTS_DIR = "${env.WORKSPACE}" + "/" + "${env.SFT_TEST_RESULTS_SUBDIR}"
                     }
                     steps {
-                        script {
-                            def cur_date_time = new Date().format('yyyy_MM_dd_HH_mm_ss')
-                            SFT_TEST_RESULTS_SUBDIR = "${SFT_TEST_RESULTS_PREFIX}" + env.BUILD_ID + "_DATE_" + "${cur_date_time}"
-                            SFT_TEST_RESULTS_DIR = "${SFT_TEST_RESULTS_BASE_DIR}" + "${SFT_TEST_RESULTS_SUBDIR}"
-                        }
                         sh "mkdir -p ${SFT_TEST_RESULTS_DIR}"
                         timeout (time: 10, unit: 'MINUTES') {
                             // run the test
@@ -263,9 +250,6 @@ pipeline {
                                thresholds: [
                                     [$class: 'FailedThreshold', unstableThreshold: '100']],
                                     tools: [[$class: 'JUnitType', pattern: "${SFT_TEST_RESULTS_SUBDIR}/sft_*${SFT_TEST_RESULTS}"]]])
-
-                            // remove result directory after parsing
-                            sh "rm -rf ${SFT_TEST_RESULTS_DIR} || true"
                         }
                     }
                 }
