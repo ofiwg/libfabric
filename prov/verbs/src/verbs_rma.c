@@ -289,8 +289,9 @@ fi_ibv_msg_xrc_ep_rma_write(struct fid_ep *ep_fid, const void *buf,
 		.wr.rdma.remote_addr = addr,
 		.wr.rdma.rkey = (uint32_t)key,
 		.send_flags = VERBS_INJECT(&ep->base_ep, len),
-		.qp_type.xrc.remote_srqn = ep->peer_srqn,
 	};
+
+	FI_IBV_SET_REMOTE_SRQN(wr, ep->peer_srqn);
 
 	return fi_ibv_send_buf(&ep->base_ep, &wr, buf, len, desc);
 }
@@ -307,8 +308,9 @@ fi_ibv_msg_xrc_ep_rma_writev(struct fid_ep *ep_fid, const struct iovec *iov,
 		.opcode = IBV_WR_RDMA_WRITE,
 		.wr.rdma.remote_addr = addr,
 		.wr.rdma.rkey = (uint32_t)key,
-		.qp_type.xrc.remote_srqn = ep->peer_srqn,
 	};
+
+	FI_IBV_SET_REMOTE_SRQN(wr, ep->peer_srqn);
 
 	return fi_ibv_send_iov(&ep->base_ep, &wr, iov, desc, count);
 }
@@ -323,8 +325,9 @@ fi_ibv_msg_xrc_ep_rma_writemsg(struct fid_ep *ep_fid,
 		.wr_id = (uintptr_t)msg->context,
 		.wr.rdma.remote_addr = msg->rma_iov->addr,
 		.wr.rdma.rkey = (uint32_t)msg->rma_iov->key,
-		.qp_type.xrc.remote_srqn = ep->peer_srqn,
 	};
+
+	FI_IBV_SET_REMOTE_SRQN(wr, ep->peer_srqn);
 
 	if (flags & FI_REMOTE_CQ_DATA) {
 		wr.opcode = IBV_WR_RDMA_WRITE_WITH_IMM;
@@ -348,8 +351,9 @@ fi_ibv_msg_xrc_ep_rma_read(struct fid_ep *ep_fid, void *buf, size_t len,
 		.opcode = IBV_WR_RDMA_READ,
 		.wr.rdma.remote_addr = addr,
 		.wr.rdma.rkey = (uint32_t)key,
-		.qp_type.xrc.remote_srqn = ep->peer_srqn,
 	};
+
+	FI_IBV_SET_REMOTE_SRQN(wr, ep->peer_srqn);
 
 	return fi_ibv_send_buf(&ep->base_ep, &wr, buf, len, desc);
 }
@@ -367,8 +371,9 @@ fi_ibv_msg_xrc_ep_rma_readv(struct fid_ep *ep_fid, const struct iovec *iov,
 		.wr.rdma.remote_addr = addr,
 		.wr.rdma.rkey = (uint32_t)key,
 		.num_sge = count,
-		.qp_type.xrc.remote_srqn = ep->peer_srqn,
 	};
+
+	FI_IBV_SET_REMOTE_SRQN(wr, ep->peer_srqn);
 
 	fi_ibv_set_sge_iov(wr.sg_list, iov, count, desc);
 
@@ -388,8 +393,9 @@ fi_ibv_msg_xrc_ep_rma_readmsg(struct fid_ep *ep_fid,
 		.wr.rdma.remote_addr = msg->rma_iov->addr,
 		.wr.rdma.rkey = (uint32_t)msg->rma_iov->key,
 		.num_sge = msg->iov_count,
-		.qp_type.xrc.remote_srqn = ep->peer_srqn,
 	};
+
+	FI_IBV_SET_REMOTE_SRQN(wr, ep->peer_srqn);
 
 	fi_ibv_set_sge_iov(wr.sg_list, msg->msg_iov, msg->iov_count, msg->desc);
 
@@ -410,8 +416,9 @@ fi_ibv_msg_xrc_ep_rma_writedata(struct fid_ep *ep_fid, const void *buf,
 		.wr.rdma.remote_addr = addr,
 		.wr.rdma.rkey = (uint32_t)key,
 		.send_flags = VERBS_INJECT(&ep->base_ep, len),
-		.qp_type.xrc.remote_srqn = ep->peer_srqn,
 	};
+
+	FI_IBV_SET_REMOTE_SRQN(wr, ep->peer_srqn);
 
 	return fi_ibv_send_buf(&ep->base_ep, &wr, buf, len, desc);
 }
@@ -429,8 +436,9 @@ fi_ibv_msg_xrc_ep_rma_inject_write(struct fid_ep *ep_fid, const void *buf,
 		.wr.rdma.remote_addr = addr,
 		.wr.rdma.rkey = (uint32_t)key,
 		.send_flags = IBV_SEND_INLINE,
-		.qp_type.xrc.remote_srqn = ep->peer_srqn,
 	};
+
+	FI_IBV_SET_REMOTE_SRQN(wr, ep->peer_srqn);
 
 	return fi_ibv_send_buf_inline(&ep->base_ep, &wr, buf, len);
 }
@@ -444,7 +452,7 @@ fi_ibv_xrc_rma_write_fast(struct fid_ep *ep_fid, const void *buf,
 
 	ep->base_ep.wrs->rma_wr.wr.rdma.remote_addr = addr;
 	ep->base_ep.wrs->rma_wr.wr.rdma.rkey = (uint32_t) key;
-	ep->base_ep.wrs->rma_wr.qp_type.xrc.remote_srqn = ep->peer_srqn;
+	FI_IBV_SET_REMOTE_SRQN(ep->base_ep.wrs->rma_wr, ep->peer_srqn);
 	ep->base_ep.wrs->sge.addr = (uintptr_t) buf;
 	ep->base_ep.wrs->sge.length = (uint32_t) len;
 
@@ -467,8 +475,9 @@ fi_ibv_msg_xrc_ep_rma_inject_writedata(struct fid_ep *ep_fid,
 		.wr.rdma.remote_addr = addr,
 		.wr.rdma.rkey = (uint32_t)key,
 		.send_flags = IBV_SEND_INLINE,
-		.qp_type.xrc.remote_srqn = ep->peer_srqn,
 	};
+
+	FI_IBV_SET_REMOTE_SRQN(wr, ep->peer_srqn);
 
 	return fi_ibv_send_buf_inline(&ep->base_ep, &wr, buf, len);
 }
@@ -483,7 +492,8 @@ fi_ibv_msg_xrc_ep_rma_inject_writedata_fast(struct fid_ep *ep_fid,
 						base_ep.util_ep.ep_fid);
 	ep->base_ep.wrs->rma_wr.wr.rdma.remote_addr = addr;
 	ep->base_ep.wrs->rma_wr.wr.rdma.rkey = (uint32_t) key;
-	ep->base_ep.wrs->rma_wr.qp_type.xrc.remote_srqn = ep->peer_srqn;
+	FI_IBV_SET_REMOTE_SRQN(ep->base_ep.wrs->rma_wr, ep->peer_srqn);
+
 	ep->base_ep.wrs->rma_wr.imm_data = htonl((uint32_t) data);
 	ep->base_ep.wrs->rma_wr.opcode = IBV_WR_RDMA_WRITE_WITH_IMM;
 

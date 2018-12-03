@@ -447,6 +447,7 @@ static int fi_ibv_create_dgram_ep(struct fi_ibv_domain *domain, struct fi_ibv_ep
 }
 
 /* fi_ibv_srq_ep::xrc.prepost_lock must be held */
+FI_VERBS_XRC_ONLY
 static int fi_ibv_process_xrc_preposted(struct fi_ibv_srq_ep *srq_ep)
 {
 	struct fi_ibv_xrc_srx_prepost *recv;
@@ -472,6 +473,7 @@ static int fi_ibv_process_xrc_preposted(struct fi_ibv_srq_ep *srq_ep)
 
 static int fi_ibv_ep_enable_xrc(struct fi_ibv_ep *ep)
 {
+#if VERBS_HAVE_XRC
 	struct fi_ibv_xrc_ep *xrc_ep = container_of(ep, struct fi_ibv_xrc_ep,
 						    base_ep);
 	struct fi_ibv_srq_ep *srq_ep = ep->srq_ep;
@@ -534,6 +536,9 @@ done:
 	fastlock_release(&srq_ep->xrc.prepost_lock);
 
 	return ret;
+#else /* VERBS_HAVE_XRC */
+	return -FI_ENOSYS;
+#endif /* !VERBS_HAVE_XRC */
 }
 
 void fi_ibv_msg_ep_get_qp_attr(struct fi_ibv_ep *ep,
@@ -723,7 +728,6 @@ static int fi_ibv_dgram_ep_setname(fid_t ep_fid, void *addr, size_t addrlen)
 err:
 	ep->info->src_addr = save_addr;
 	return ret;
-	
 }
 
 static int fi_ibv_dgram_ep_getname(fid_t ep_fid, void *addr, size_t *addrlen)
@@ -1810,7 +1814,6 @@ fi_ibv_msg_xrc_ep_atomic_write(struct fid_ep *ep_fid, const void *buf,
 		.wr.rdma.rkey = (uint32_t)(uintptr_t)key,
 		.send_flags = VERBS_INJECT(&ep->base_ep, sizeof(uint64_t)) |
 			      IBV_SEND_FENCE,
-		.qp_type.xrc.remote_srqn = ep->peer_srqn,
 	};
 	size_t count_copy;
 	int ret;
@@ -1820,6 +1823,8 @@ fi_ibv_msg_xrc_ep_atomic_write(struct fid_ep *ep_fid, const void *buf,
 
 	if (OFI_UNLIKELY(op != FI_ATOMIC_WRITE))
 		return -FI_ENOSYS;
+
+	FI_IBV_SET_REMOTE_SRQN(wr, ep->peer_srqn);
 
 	count_copy = count;
 
@@ -1843,7 +1848,6 @@ fi_ibv_msg_xrc_ep_atomic_writemsg(struct fid_ep *ep_fid,
 		.wr.rdma.rkey = (uint32_t)(uintptr_t)msg->rma_iov->key,
 		.send_flags = VERBS_INJECT_FLAGS(&ep->base_ep,
 				sizeof(uint64_t), flags) | IBV_SEND_FENCE,
-		.qp_type.xrc.remote_srqn = ep->peer_srqn,
 	};
 	size_t count_copy;
 	int ret;
@@ -1854,6 +1858,7 @@ fi_ibv_msg_xrc_ep_atomic_writemsg(struct fid_ep *ep_fid,
 	if (OFI_UNLIKELY(msg->op != FI_ATOMIC_WRITE))
 		return -FI_ENOSYS;
 
+	FI_IBV_SET_REMOTE_SRQN(wr, ep->peer_srqn);
 	count_copy = msg->iov_count;
 
 	ret = fi_ibv_msg_ep_atomic_writevalid(ep_fid, msg->datatype, msg->op,
@@ -1883,7 +1888,6 @@ fi_ibv_msg_xrc_ep_atomic_readwrite(struct fid_ep *ep_fid, const void *buf,
 	struct ibv_send_wr wr = {
 		.wr_id = VERBS_COMP(&ep->base_ep, (uintptr_t)context),
 		.send_flags = IBV_SEND_FENCE,
-		.qp_type.xrc.remote_srqn = ep->peer_srqn,
 	};
 	size_t count_copy;
 	int ret;
@@ -1891,6 +1895,7 @@ fi_ibv_msg_xrc_ep_atomic_readwrite(struct fid_ep *ep_fid, const void *buf,
 	if (OFI_UNLIKELY(count != 1))
 		return -FI_E2BIG;
 
+	FI_IBV_SET_REMOTE_SRQN(wr, ep->peer_srqn);
 	count_copy = count;
 
 	ret = fi_ibv_msg_ep_atomic_readwritevalid(ep_fid, datatype, op,
@@ -1931,7 +1936,6 @@ fi_ibv_msg_xrc_ep_atomic_readwritemsg(struct fid_ep *ep_fid,
 		.wr_id = VERBS_COMP_FLAGS(&ep->base_ep, flags,
 					  (uintptr_t)msg->context),
 		.send_flags = IBV_SEND_FENCE,
-		.qp_type.xrc.remote_srqn = ep->peer_srqn,
 	};
 	size_t count_copy;
 	int ret;
@@ -1939,6 +1943,7 @@ fi_ibv_msg_xrc_ep_atomic_readwritemsg(struct fid_ep *ep_fid,
 	if (OFI_UNLIKELY(msg->iov_count != 1 || msg->msg_iov->count != 1))
 		return -FI_E2BIG;
 
+	FI_IBV_SET_REMOTE_SRQN(wr, ep->peer_srqn);
 	count_copy = msg->iov_count;
 
 	ret = fi_ibv_msg_ep_atomic_readwritevalid(ep_fid, msg->datatype, msg->op,
@@ -1989,7 +1994,6 @@ fi_ibv_msg_xrc_ep_atomic_compwrite(struct fid_ep *ep_fid, const void *buf, size_
 		.wr.atomic.swap = (uintptr_t)buf,
 		.wr.atomic.rkey = (uint32_t)(uintptr_t)key,
 		.send_flags = IBV_SEND_FENCE,
-		.qp_type.xrc.remote_srqn = ep->peer_srqn,
 	};
 	size_t count_copy;
 	int ret;
@@ -1997,6 +2001,7 @@ fi_ibv_msg_xrc_ep_atomic_compwrite(struct fid_ep *ep_fid, const void *buf, size_
 	if (OFI_UNLIKELY(count != 1))
 		return -FI_E2BIG;
 
+	FI_IBV_SET_REMOTE_SRQN(wr, ep->peer_srqn);
 	count_copy = count;
 
 	ret = fi_ibv_msg_ep_atomic_compwritevalid(ep_fid, datatype, op, &count_copy);
@@ -2027,7 +2032,6 @@ fi_ibv_msg_xrc_ep_atomic_compwritemsg(struct fid_ep *ep_fid,
 		.wr.atomic.swap = (uintptr_t)msg->addr,
 		.wr.atomic.rkey = (uint32_t)(uintptr_t)msg->rma_iov->key,
 		.send_flags = IBV_SEND_FENCE,
-		.qp_type.xrc.remote_srqn = ep->peer_srqn,
 	};
 	size_t count_copy;
 	int ret;
@@ -2035,6 +2039,7 @@ fi_ibv_msg_xrc_ep_atomic_compwritemsg(struct fid_ep *ep_fid,
 	if (OFI_UNLIKELY(msg->iov_count != 1 || msg->msg_iov->count != 1))
 		return -FI_E2BIG;
 
+	FI_IBV_SET_REMOTE_SRQN(wr, ep->peer_srqn);
 	count_copy = msg->iov_count;
 
 	ret = fi_ibv_msg_ep_atomic_compwritevalid(ep_fid, msg->datatype, msg->op,
