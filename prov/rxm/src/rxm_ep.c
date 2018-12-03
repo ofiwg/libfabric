@@ -493,7 +493,7 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 		[RXM_BUF_POOL_RMA] = rxm_ep->msg_info->tx_attr->size,
 	};
 	size_t entry_sizes[] = {		
-		[RXM_BUF_POOL_RX] = rxm_ep->eager_limit +
+		[RXM_BUF_POOL_RX] = rxm_ep->rx_buf_size - sizeof(struct rxm_pkt) +
 				    sizeof(struct rxm_rx_buf),
 		[RXM_BUF_POOL_TX] = rxm_ep->eager_limit +
 				    sizeof(struct rxm_tx_eager_buf),
@@ -1412,42 +1412,45 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		   uint8_t op, struct rxm_pkt *inject_pkt)
 {
 	size_t data_len = ofi_total_iov_len(iov, count);
-	size_t total_len = sizeof(struct rxm_pkt) + data_len;
 	ssize_t ret;
 
 	assert(count <= rxm_ep->rxm_info->tx_attr->iov_limit);
 	assert((!(flags & FI_INJECT) && (data_len > rxm_ep->eager_limit)) ||
 	       (data_len <= rxm_ep->eager_limit));
 
-	if (total_len <= rxm_ep->inject_limit) {
-		return rxm_ep_inject_send_common(rxm_ep, iov, count, rxm_conn,
-						 context, data, flags, tag, op,
-						 data_len, total_len, inject_pkt);
-	} else if (data_len <= rxm_ep->eager_limit) {
-		struct rxm_tx_eager_buf *tx_buf = (struct rxm_tx_eager_buf *)
-			rxm_tx_buf_get(rxm_ep, RXM_BUF_POOL_TX);
+	if (data_len <= rxm_ep->eager_limit) {
+		size_t total_len = sizeof(struct rxm_pkt) + data_len;
 
-		if (OFI_UNLIKELY(!tx_buf)) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
-				"Ran out of buffers from Eager buffer pool\n");
-			return -FI_EAGAIN;
+		if (total_len <= rxm_ep->eager_limit) {
+			return rxm_ep_inject_send_common(rxm_ep, iov, count, rxm_conn,
+							 context, data, flags, tag, op,
+							 data_len, total_len, inject_pkt);
+		} else {
+			struct rxm_tx_eager_buf *tx_buf = (struct rxm_tx_eager_buf *)
+				rxm_tx_buf_get(rxm_ep, RXM_BUF_POOL_TX);
+
+			if (OFI_UNLIKELY(!tx_buf)) {
+				FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+					"Ran out of buffers from Eager buffer pool\n");
+				return -FI_EAGAIN;
+			}
+
+			rxm_ep_format_tx_buf_pkt(rxm_conn, data_len, op, data, tag,
+						 flags, &tx_buf->pkt);
+			ofi_copy_from_iov(tx_buf->pkt.data, tx_buf->pkt.hdr.size,
+					  iov, count, 0);
+			tx_buf->app_context = context;
+			tx_buf->flags = flags;
+
+			ret = rxm_ep_msg_normal_send(rxm_conn, &tx_buf->pkt, total_len,
+						     tx_buf->hdr.desc, tx_buf);
+			if (OFI_UNLIKELY(ret)) {
+				if (ret == -FI_EAGAIN)
+					rxm_ep_progress_multi(&rxm_ep->util_ep);
+				rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX, tx_buf);
+			}
+			return ret;
 		}
-
-		rxm_ep_format_tx_buf_pkt(rxm_conn, data_len, op, data, tag,
-					 flags, &tx_buf->pkt);
-		ofi_copy_from_iov(tx_buf->pkt.data, tx_buf->pkt.hdr.size,
-				  iov, count, 0);
-		tx_buf->app_context = context;
-		tx_buf->flags = flags;
-
-		ret = rxm_ep_msg_normal_send(rxm_conn, &tx_buf->pkt, total_len,
-					     tx_buf->hdr.desc, tx_buf);
-		if (OFI_UNLIKELY(ret)) {
-			if (ret == -FI_EAGAIN)
-				rxm_ep_progress_multi(&rxm_ep->util_ep);
-			rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX, tx_buf);
-		}
-		return ret;
 	} else if (data_len <= rxm_ep->sar_limit) {
 		return rxm_ep_sar_tx_send(rxm_ep, rxm_conn, context,
 					  count, iov, data_len,
@@ -2275,12 +2278,17 @@ err:
 	return ret;
 }
 
+/* The SAR initialization must be done after Eager is initialized */
 static void rxm_ep_sar_init(struct rxm_ep *rxm_ep)
 {
 	size_t param;
 
-	/* The SAR initialization must be done after Eager is initialized */
-	assert(rxm_ep->eager_limit > 0);
+	if (!rxm_ep->eager_limit) {
+		FI_WARN(&rxm_prov, FI_LOG_CORE,
+			"SAR can't be used, because Eager limit (buffer size) = 0\n");
+		rxm_ep->sar_limit = 0;
+		return;
+	}
 
 	if (!fi_param_get_size_t(&rxm_prov, "sar_limit", &param)) {
 		if (param <= rxm_ep->eager_limit) {
@@ -2298,7 +2306,7 @@ static void rxm_ep_sar_init(struct rxm_ep *rxm_ep)
 		rxm_ep->sar_limit = param;
 	} else {
 		size_t sar_limit = rxm_ep->msg_info->tx_attr->size *
-				   rxm_ep->eager_limit;
+				   (rxm_ep->eager_limit + sizeof(struct rxm_pkt));
 
 		rxm_ep->sar_limit = (sar_limit > RXM_SAR_LIMIT) ?
 				    RXM_SAR_LIMIT : sar_limit;
@@ -2352,6 +2360,11 @@ static void rxm_ep_settings_init(struct rxm_ep *rxm_ep)
 		rxm_ep->msg_mr_local, rxm_ep->rxm_mr_local,
 		rxm_ep->comp_per_progress,
 		rxm_ep->inject_limit, rxm_ep->eager_limit, rxm_ep->sar_limit);
+
+	rxm_ep->rx_buf_size = MAX(rxm_ep->eager_limit,
+				  sizeof(struct rxm_rndv_hdr) +
+				  rxm_ep->buffered_min) +
+			      sizeof(struct rxm_pkt);
 }
 
 static int rxm_ep_txrx_res_open(struct rxm_ep *rxm_ep)

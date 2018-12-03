@@ -646,6 +646,7 @@ struct rxm_ep {
 	struct rxm_buf_pool	*buf_pools;
 
 	struct dlist_entry	repost_ready_list;
+	size_t			rx_buf_size;
 	struct dlist_entry	deferred_tx_conn_queue;
 
 	struct rxm_recv_queue	recv_queue;
