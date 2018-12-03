@@ -91,7 +91,8 @@ int cxip_get_if(uint32_t nic_addr, struct cxip_if **dev_if)
 		/* TODO Temporary fake CP setup, needed for CMDQ allocation */
 		if_entry->n_cps = 1;
 		if_entry->cps[0].vni = 0;
-		if_entry->cps[0].dscp = 0;
+		if_entry->cps[0].dscp_rstuno = 0;
+		if_entry->cps[0].dscp_unrsto = 0;
 		ret = cxil_set_cps(if_entry->if_lni, if_entry->cps,
 				   if_entry->n_cps);
 		assert(!ret);
