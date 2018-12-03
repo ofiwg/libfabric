@@ -374,7 +374,7 @@ function cs_test {
 	wait $c_pid
 	c_ret=$?
 
-	[[ c_ret -ne 0 ]] && kill -9 $s_pid
+	[[ c_ret -ne 0 ]] && kill -9 $s_pid 2> /dev/null
 
 	wait $s_pid
 	s_ret=$?
