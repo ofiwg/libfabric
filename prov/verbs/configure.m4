@@ -65,6 +65,16 @@ AC_DEFUN([FI_VERBS_CONFIGURE],[
 			   [Experimental verbs features support])],
 		[])
 
+	#See if we have XRC support
+	VERBS_HAVE_XRC=0
+	AS_IF([test $verbs_ibverbs_happy -eq 1],[
+		AC_CHECK_DECL([IBV_QPT_XRC_SEND],
+			[VERBS_HAVE_XRC=1],[],
+			[#include <infiniband/verbs.h>])
+		])
+	AC_DEFINE_UNQUOTED([VERBS_HAVE_XRC],[$VERBS_HAVE_XRC],
+		[Whether infiniband/verbs.h has XRC support or not])
+
 	# Technically, verbs_ibverbs_CPPFLAGS and
 	# verbs_rdmacm_CPPFLAGS could be different, but it is highly
 	# unlikely that they ever will be.  So only list

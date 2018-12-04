@@ -76,6 +76,8 @@
 #include <infiniband/verbs_exp.h>
 #endif /* HAVE_VERBS_EXP_H */
 
+#include "ofi_verbs_priv.h"
+
 #ifndef AF_IB
 #define AF_IB 27
 #endif

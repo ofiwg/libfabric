@@ -74,6 +74,7 @@ int fi_ibv_reserve_qpn(struct fi_ibv_xrc_ep *ep, struct ibv_qp **qp)
 
 static int fi_ibv_create_ini_qp(struct fi_ibv_xrc_ep *ep)
 {
+#if VERBS_HAVE_XRC
 	struct ibv_qp_init_attr_ex attr_ex;
 	struct fi_ibv_domain *domain = fi_ibv_ep_to_domain(&ep->base_ep);
 	int ret;
@@ -93,6 +94,9 @@ static int fi_ibv_create_ini_qp(struct fi_ibv_xrc_ep *ep)
 		return ret;
 	}
 	return FI_SUCCESS;
+#else /* VERBS_HAVE_XRC */
+	return -FI_ENOSYS;
+#endif /* !VERBS_HAVE_XRC */
 }
 
 static inline void fi_ibv_set_ini_conn_key(struct fi_ibv_xrc_ep *ep,
@@ -318,6 +322,7 @@ int fi_ibv_process_ini_conn(struct fi_ibv_xrc_ep *ep,int reciprocal,
 
 int fi_ibv_ep_create_tgt_qp(struct fi_ibv_xrc_ep *ep, uint32_t tgt_qpn)
 {
+#if VERBS_HAVE_XRC
 	struct ibv_qp_open_attr open_attr;
 	struct ibv_qp_init_attr_ex attr_ex;
 	struct fi_ibv_domain *domain = fi_ibv_ep_to_domain(&ep->base_ep);
@@ -375,6 +380,9 @@ int fi_ibv_ep_create_tgt_qp(struct fi_ibv_xrc_ep *ep, uint32_t tgt_qpn)
 	ep->tgt_ibv_qp = ep->tgt_id->qp;
 
 	return FI_SUCCESS;
+#else /* VERBS_HAVE_XRC */
+	return -FI_ENOSYS;
+#endif /* !VERBS_HAVE_XRC */
 }
 
 static int fi_ibv_put_tgt_qp(struct fi_ibv_xrc_ep *ep)
@@ -420,6 +428,7 @@ int fi_ibv_ep_destroy_xrc_qp(struct fi_ibv_xrc_ep *ep)
 	return 0;
 }
 
+FI_VERBS_XRC_ONLY
 static int fi_ibv_ini_conn_compare(struct ofi_rbmap *map, void *key, void *data)
 {
 	struct fi_ibv_ini_shared_conn *ini_conn = data;
@@ -452,6 +461,7 @@ static int fi_ibv_ini_conn_compare(struct ofi_rbmap *map, void *key, void *data)
 			-1 : _key->tx_cq > ini_conn->tx_cq;
 }
 
+FI_VERBS_XRC_ONLY
 static int fi_ibv_domain_xrc_validate_hw(struct fi_ibv_domain *domain)
 {
 	struct ibv_device_attr attr;
@@ -467,6 +477,7 @@ static int fi_ibv_domain_xrc_validate_hw(struct fi_ibv_domain *domain)
 
 int fi_ibv_domain_xrc_init(struct fi_ibv_domain *domain)
 {
+#if VERBS_HAVE_XRC
 	struct ibv_xrcd_init_attr attr;
 	int ret;
 
@@ -518,10 +529,14 @@ xrcd_err:
 		domain->xrc.xrcd_fd = -1;
 	}
 	return ret;
+#else /* VERBS_HAVE_XRC */
+	return -FI_ENOSYS;
+#endif /* !VERBS_HAVE_XRC */
 }
 
 int fi_ibv_domain_xrc_cleanup(struct fi_ibv_domain *domain)
 {
+#if VERBS_HAVE_XRC
 	int ret;
 
 	assert(domain->xrc.xrcd);
@@ -544,6 +559,6 @@ int fi_ibv_domain_xrc_cleanup(struct fi_ibv_domain *domain)
 
 	ofi_rbmap_cleanup(domain->xrc.ini_conn_rbmap);
 	fastlock_destroy(&domain->xrc.ini_mgmt_lock);
-
+#endif /* VERBS_HAVE_XRC */
 	return 0;
 }

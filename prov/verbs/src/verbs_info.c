@@ -1222,6 +1222,14 @@ static int fi_ibv_get_matching_info(uint32_t version,
 					   "XRC FI_EP_MSG endpoints\n");
 				continue;
 			}
+			if ((check_info->ep_attr->protocol ==
+			    FI_PROTO_RDMA_CM_IB_XRC) && !VERBS_HAVE_XRC) {
+				VERBS_INFO(FI_LOG_FABRIC,
+					   "XRC not built into provider, "
+					   "skipping XRC FI_EP_MSG "
+					   "endpoints\n");
+				continue;
+			}
 
 			ret = fi_ibv_check_hints(version, hints,
 						 check_info);
