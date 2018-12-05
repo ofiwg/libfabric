@@ -52,6 +52,14 @@ typedef int (address_exchange_t) (void *my_address,
 /* synchronization barrier callback signature */
 typedef void (barrier_t) ();
 
+/* wrapper around MPI callbacks and job metadata */
+struct job {
+	address_exchange_t	*address_exchange;
+	barrier_t		*barrier;
+	size_t			rank;
+	size_t			ranks;
+};
+
 /*
  * Core combines a test and pattern, and drives the callback routines in each.
  *
@@ -72,13 +80,7 @@ typedef void (barrier_t) ();
  *  barrier: MPI barrier function.
  */
 
-int core(
-		const int argc,
-		char * const *argv,
-		const int num_mpi_ranks,
-		const int our_mpi_rank,
-		address_exchange_t address_exchange,
-		barrier_t barrier);
+int core(const int argc, char * const *argv, struct job *job);
 
 void hpcs_error(const char* format, ...);
 void hpcs_verbose(const char* format, ...);

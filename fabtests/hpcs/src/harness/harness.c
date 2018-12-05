@@ -74,6 +74,7 @@ int main(const int argc, char * const *argv)
 {
 	int our_ret = 0;
 	int ret;
+	struct job job;
 
 	/* TODO: can support multiple "test cores" per run by dynamically
 	 * loading and unloading here and storing the results of these calls. */
@@ -96,9 +97,14 @@ int main(const int argc, char * const *argv)
 		goto err_mpi_comm_rank;
 	}
 
-	ret = core(argc, argv,
-			num_mpi_ranks, our_mpi_rank,
-			address_exchange, barrier);
+	job = (struct job) {
+		.address_exchange = address_exchange,
+		.barrier = barrier,
+		.ranks = num_mpi_ranks,
+		.rank = our_mpi_rank
+	};
+
+	ret = core(argc, argv, &job);
 	if (ret) {
 		fprintf(stderr, "TEST FAILED\n");
 		our_ret = EXIT_FAILURE;

@@ -250,8 +250,7 @@ static int bind_endpoint_completion(const struct test_config *test_config,
 }
 
 
-static int init_endpoint(
-		struct fi_info *info,
+static int init_endpoint(struct fi_info *info,
 		struct domain_state *domain_state,
 		struct fid_ep **endpoint)
 {
@@ -266,15 +265,12 @@ static int init_endpoint(
 	return 0;
 }
 
-static int init_domain(
-		const struct arguments *arguments,
+static int init_domain(const struct arguments *arguments,
 		const struct test_config *test_config,
 		struct fid_fabric *fabric,
 		struct fi_info *info,
 		struct domain_state *domain_state,
-		address_exchange_t address_exchange,
-		int num_mpi_ranks,
-		int our_mpi_rank)
+		struct job *job)
 {
 	int ret;
 	int i;
@@ -283,12 +279,12 @@ static int init_domain(
 	void *context = NULL;
 	size_t len = NAMELEN;
 
-	size_t cq_size = arguments->window_size * num_mpi_ranks *
+	size_t cq_size = arguments->window_size * job->ranks *
 			(test_config->tx_context_count + test_config->rx_context_count);
 
 	struct fi_av_attr av_attr = (struct fi_av_attr) {
 		.type = FI_AV_MAP,
-		.count = num_mpi_ranks,
+		.count = job->ranks,
 		.name = NULL
 	};
 
@@ -337,22 +333,22 @@ static int init_domain(
 		goto err;
 	}
 
-	names = malloc(len * num_mpi_ranks);
+	names = malloc(len * job->ranks);
 	if (names == NULL) {
 		hpcs_error("error allocating memory for address exchange\n");
 		ret = -1;
 		goto err;
 	}
 
-	ret = address_exchange(&our_name, names, len, num_mpi_ranks);
+	ret = job->address_exchange(&our_name, names, len, job->ranks);
 	if (ret) {
 		hpcs_error("error exchanging addresses\n");
 		goto err;
 	}
 
-	ret = fi_av_insert(domain_state->av, names, num_mpi_ranks,
+	ret = fi_av_insert(domain_state->av, names, job->ranks,
 			   domain_state->addresses, 0, NULL);
-	if (ret != num_mpi_ranks) {
+	if (ret != job->ranks) {
 		hpcs_error("unable to insert all addresses into AV table\n");
 		ret = -1;
 		goto err;
@@ -361,8 +357,8 @@ static int init_domain(
 	}
 
 	if(verbose){
-		hpcs_verbose("Rank %d peer addresses: ", our_mpi_rank);
-		for (i = 0; i < num_mpi_ranks; i++)
+		hpcs_verbose("Rank %d peer addresses: ", job->rank);
+		for (i = 0; i < job->ranks; i++)
 			printf("%d:%lx ", i, (uint64_t)(domain_state->addresses[i]));
 		printf("\n");
 	}
@@ -381,9 +377,7 @@ static int init_ofi(
 		const void *test_arguments,
 		const struct test_config *test_config,
 		struct ofi_state *ofi_state,
-		address_exchange_t address_exchange,
-		int num_mpi_ranks,
-		int our_mpi_rank)
+		struct job *job)
 {
 	int ret;
 	struct fi_info *hints;
@@ -417,15 +411,8 @@ static int init_ofi(
 		goto err_fabric;
 	}
 
-	/*
-	fi_addr_t* domain_state_addr = ofi_state->domain_state->addresses;
-	*ofi_state->domain_state = (struct domain_state) {0};
-	ofi_state->domain_state->addresses = domain_state_addr;
-	*/
-
 	ret = init_domain(arguments, test_config, ofi_state->fabric, info,
-			ofi_state->domain_state, address_exchange,
-			num_mpi_ranks, our_mpi_rank);
+			ofi_state->domain_state, job);
 	if (ret) {
 		hpcs_error("init_domain failed\n");
 		goto err_domain;
@@ -595,7 +582,7 @@ static int parse_arguments(int argc, char * const* argv,
 	int have_pattern = 0;
 
 	if (args == NULL)
-		return -ENOMEM;
+		return -FI_ENOMEM;
 
 	*args = (struct arguments) {
 		.prov_name = NULL,
@@ -680,12 +667,12 @@ static int parse_arguments(int argc, char * const* argv,
 	if (strstr(argv[0], "onesided") != NULL &&
 			args->callback_order != CALLBACK_ORDER_EXPECTED) {
 		hpcs_error("onsided test requires expected ording (\"--order=expected\")\n");
-		return -EINVAL;
+		return -FI_EINVAL;
 	}
 
 	if (!have_pattern) {
 		hpcs_error("you must specify a pattern\n");
-		return -EINVAL;
+		return -FI_EINVAL;
 	}
 
 	args->test_api = test_api();
@@ -729,56 +716,581 @@ static void free_arguments (struct arguments *arguments)
 	free(arguments);
 }
 
-#define DATA_BUF(base, counter) ((base) + ((counter % window) * size))
-#define CONTEXT(base, counter) (&base[counter % window])
+/*
+ * Pre-test setup of memory regions used by one-sided operations.
+ * This includes exchanging keys with peers.
+ *
+ * This creates a single target-side memory region, which peers read
+ * or write at some offset.
+ */
+static int core_setup_target_mr(struct domain_state *domain_state,
+		struct arguments *args, struct test_config *config,
+		struct job *job, struct fid_mr **rx_mr,
+		uint8_t *rx_buf, uint64_t *keys)
+{
+	uint64_t my_key;
+	int i, ret;
 
-static int core_inner (struct domain_state *domain_state,
+	if (args->test_api.rx_create_mr == NULL || !config->rx_use_mr)
+		return 0;
+
+	if (args->window_size < job->ranks) {
+		hpcs_error("for one-sided communication, window must be >= number of ranks\n");
+		return (-FI_EINVAL);
+	}
+
+	/* Key can be any arbitrary number. */
+	*rx_mr = args->test_api.rx_create_mr(args->test_arguments, domain_state->domain, 42+job->rank,
+			rx_buf, args->window_size*args->buffer_size, config->mr_rx_flags, 0);
+	if (*rx_mr == NULL) {
+		hpcs_error("failed to create target memory region\n");
+		return -1;
+	}
+
+	my_key = fi_mr_key(*rx_mr);
+	job->address_exchange(&my_key, keys, sizeof(uint64_t), job->ranks);
+
+	if (verbose) {
+		hpcs_verbose("mr key exchange complete: rank %ld my_key %ld len %ld keys: ",
+				job->rank, my_key, args->window_size*args->buffer_size);
+		for (i=0; i < job->ranks; i++)
+			printf("%ld ", keys[i]);
+		printf("\n");
+	}
+
+	if (config->rx_use_cntr) {
+		if (!domain_state->rx_cntr) {
+			hpcs_error("no rx counter to bind mr to\n");
+			return -FI_EINVAL;
+		}
+
+		ret = fi_mr_bind(*rx_mr, &domain_state->rx_cntr->fid, config->mr_rx_flags);
+		if (ret) {
+			hpcs_error("fi_mr_bind (rx_cntr) failed: %d\n", ret);
+
+			/*
+			 * Binding an MR with FI_REMOTE_READ isn't defined by the OFI spec,
+ 			 * so we don't consider this a failure.
+			 */
+			if (config->mr_rx_flags & FI_REMOTE_READ) {
+					hpcs_error("FI_REMOTE_READ memory region bind flag unsupported by this provider, skipping test.\n");
+				return -FI_EOPNOTSUPP;
+			}
+
+			return -1;
+		}
+	}
+
+	ret = fi_mr_enable(*rx_mr);
+	if (ret)
+		hpcs_error("fi_mr_enable failed: %d\n", ret);
+
+	job->barrier();
+
+	return 0;
+}
+
+/* Core loop progress information and context state. */
+struct core_state {
+	/* iteration counter (sometimes useful for debug messages) */
+	size_t			iteration;
+
+	/* allocated and pre-initialized memory resources */
+	uint8_t			*rx_buf;
+	uint8_t			*tx_buf;
+	struct op_context	*tx_context;
+	struct op_context	*rx_context;
+	uint64_t		*keys;
+	struct fid_mr		*rx_mr;
+
+	/* initiated and completed operation counters, not reset per iteration */
+	size_t			recvs_posted;
+	size_t			sends_posted;
+	size_t			recvs_done;
+	size_t			sends_done;
+
+	/* sends/recvs completed at beginning of current iteration */
+	size_t			sends_done_prev;
+	size_t			recvs_done_prev;
+
+	/* window slots */
+	size_t			tx_window;
+	size_t			rx_window;
+
+	/* pattern iterator state */
+	int			cur_sender;
+	int			cur_receiver;
+	int			cur_sender_rx_threshold;
+	int			cur_receiver_tx_threshold;
+
+	/* current iteration is complete when all three are true */
+	bool			all_recvs_done;
+	bool			all_sends_done;
+	bool			all_completions_done;
+
+	/* options */
+	uint64_t		tx_flags;
+	uint64_t		rx_flags;
+};
+
+
+#define DATA_BUF(base, counter) \
+		((base) + ((counter % arguments->window_size) * arguments->buffer_size))
+
+#define CONTEXT(base, counter) (&base[counter % arguments->window_size])
+
+/*
+ * Initiate as many rx transfers as our window allows, within
+ * a single iteration of test/pattern.
+ *
+ * Return 0 unless an error occurs.
+ */
+static int core_initiate_rx(struct domain_state *domain_state,
 		struct arguments *arguments,
 		struct pattern_api *pattern,
 		struct test_api *test,
 		struct test_config *test_config,
-		size_t rank,
-		size_t ranks,
-		address_exchange_t address_exchange,
-		barrier_t barrier)
+		struct job *job,
+		struct core_state *state)
 {
-	size_t i, j;
+	int ret, prev, prev_threshold;
+	struct op_context* op_context;
+	enum callback_order order = arguments->callback_order;
+
+	/* post receives */
+	while (!state->all_recvs_done) {
+		if (order == CALLBACK_ORDER_UNEXPECTED && !state->all_sends_done)
+			break;
+
+		prev = state->cur_sender;
+		prev_threshold = state->cur_sender_rx_threshold;
+
+		ret = pattern->next_sender(arguments->pattern_arguments,
+				job->rank, job->ranks, &state->cur_sender,
+				&state->cur_sender_rx_threshold);
+
+		if (ret == -ENODATA) {
+			state->all_recvs_done = true;
+			if (order == CALLBACK_ORDER_EXPECTED)
+				job->barrier();
+			break;
+		} else if (ret < 0) {
+			hpcs_error("next_sender failed\n");
+			return ret;
+		}
+
+		/*
+		 * Doing window check after calling next_sender allows us to
+		 * mark receives as done if our window is zero but there are
+		 * no more senders.
+		 */
+		if (state->rx_window == 0) {
+			state->cur_sender = prev;
+			state->cur_sender_rx_threshold = prev_threshold;
+			break;
+		}
+
+		op_context = CONTEXT(state->rx_context, state->recvs_posted);
+		if (op_context->state != OP_DONE) {
+			state->cur_sender = prev;
+			state->cur_sender_rx_threshold = prev_threshold;
+			break;
+		}
+
+		test->rx_init_buffer(arguments->test_arguments, DATA_BUF(state->rx_buf, state->recvs_posted),
+				test_config->rx_buffer_size);
+
+		op_context->buf = DATA_BUF(state->rx_buf, state->recvs_posted);
+
+		/*
+		 * cur_sender_rx_threshold is currently ignored, but we could enable
+		 * triggered receives in the future if we have a good reason to do so.
+		 */
+
+		ret = test->rx_transfer(arguments->test_arguments,
+				state->cur_sender, 1,
+				domain_state->addresses[state->cur_sender],
+				domain_state->endpoint,
+				op_context, op_context->buf,
+				NULL, state->rx_flags);
+
+		if (ret == -FI_EAGAIN) {
+			state->cur_sender = prev;
+			state->cur_sender_rx_threshold = prev_threshold;
+			break;
+		}
+
+		hpcs_verbose("rx_transfer initiated: ctx %p "
+			     "from rank %ld\n",
+			     op_context, state->cur_sender);
+
+		if (ret) {
+			hpcs_error("test receive failed, ret=%d\n", ret);
+			return ret;
+		}
+
+		op_context->state = OP_PENDING;
+		op_context->core_context = state->recvs_posted;
+
+		state->recvs_posted++;
+		state->rx_window--;
+	};
+
+	return 0;
+}
+
+/*
+ * Initiate as many tx transfers as our window allows, within
+ * a single iteration of test/pattern.
+ *
+ * Return 0 unless an error occurs.
+ */
+
+static int core_initiate_tx(struct domain_state *domain_state,
+		struct arguments *arguments,
+		struct pattern_api *pattern,
+		struct test_api *test,
+		struct test_config *test_config,
+		struct job *job,
+		struct core_state *state)
+{
+	int ret, i, prev, prev_threshold;
+	struct op_context* op_context;
+	enum callback_order order = arguments->callback_order;
+
+	struct fid_mr* mr;
+	void *mr_desc;
+
+	/* post send(s) */
+	while (!state->all_sends_done) {
+		if (order == CALLBACK_ORDER_EXPECTED && !state->all_recvs_done)
+			break;
+
+		prev = state->cur_receiver;
+		prev_threshold = state->cur_receiver_tx_threshold;
+
+		ret = pattern->next_receiver(arguments->pattern_arguments,
+				job->rank, job->ranks, &state->cur_receiver,
+				&state->cur_receiver_tx_threshold);
+		if (ret == -ENODATA) {
+			if (order == CALLBACK_ORDER_UNEXPECTED)
+				job->barrier();
+			state->all_sends_done = true;
+			break;
+		} else if (ret < 0) {
+			hpcs_error("next_receiver failed\n");
+			return ret;
+		}
+
+		if (state->tx_window == 0) {
+			state->cur_receiver = prev;
+			state->cur_receiver_tx_threshold = prev_threshold;
+			break;
+		}
+
+		op_context = CONTEXT(state->tx_context, state->sends_posted);
+		if (op_context->state != OP_DONE) {
+			state->cur_receiver = prev;
+			state->cur_receiver_tx_threshold = prev_threshold;
+			break;
+		}
+
+		test->tx_init_buffer(arguments->test_arguments,
+				DATA_BUF(state->tx_buf, state->sends_posted),
+				test_config->tx_buffer_size);
+
+		if (test_config->tx_use_cntr) {
+			mr = test->tx_create_mr(arguments->test_arguments,
+					domain_state->domain, 0,
+					DATA_BUF(state->tx_buf, state->sends_posted),
+					arguments->buffer_size, FI_SEND, 0);
+			if (mr == NULL) {
+				ret = -1;
+				hpcs_error("unable to register tx memory region\n");
+				return ret;
+			}
+
+			mr_desc = fi_mr_desc(mr);
+		} else {
+			mr = NULL;
+			mr_desc = NULL;
+		}
+
+		op_context->buf = DATA_BUF(state->tx_buf, state->sends_posted);
+		op_context->tx_mr = mr;
+
+		if (pattern->enable_triggered) {
+			for (i=0; i < test_config->tx_context_count; i++) {
+				op_context->ctxinfo[i].fi_trig_context.event_type = FI_TRIGGER_THRESHOLD;
+				op_context->ctxinfo[i].fi_trig_context.trigger.threshold =
+					(struct fi_trigger_threshold) {
+						.threshold =
+							state->recvs_done_prev +
+							(state->cur_receiver_tx_threshold * test_config->tx_context_count),
+						.cntr = domain_state->rx_cntr
+					};
+			}
+
+			op_context->tx_cntr = domain_state->tx_cntr;
+			op_context->domain = domain_state->domain;
+		}
+
+		ret = test->tx_transfer(arguments->test_arguments,
+				job->rank, 1,
+				domain_state->addresses[state->cur_receiver],
+				domain_state->endpoint, op_context,
+				op_context->buf, mr_desc, state->keys[state->cur_receiver],
+				job->rank, state->tx_flags);
+
+		if (ret == -FI_EAGAIN) {
+			state->cur_receiver = prev;
+			state->cur_receiver_tx_threshold = prev_threshold;
+			break;
+		}
+
+		hpcs_verbose("tx_transfer initiated from rank %ld "
+				"to rank %d: ctx %p key %ld trigger %d ret %d\n",
+				job->rank, state->cur_receiver, op_context,
+				state->keys[state->cur_receiver],
+				state->cur_receiver_tx_threshold, ret);
+
+		if (ret) {
+			hpcs_error("tx_transfer failed, ret=%d\n", ret);
+			return ret;
+		}
+
+		op_context->state = OP_PENDING;
+		op_context->core_context = state->sends_posted;
+
+		state->sends_posted++;
+		state->tx_window--;
+	};
+
+	return 0;
+}
+
+static int core_completion(struct domain_state *domain_state,
+		struct arguments *arguments,
+		struct pattern_api *pattern,
+		struct test_api *test,
+		struct test_config *test_config,
+		struct job *job,
+		struct core_state *state)
+{
+	int ret, i;
+	struct op_context* op_context;
+
+	/* poll completions */
+	if (test_config->rx_use_cq) {
+		while ((ret = test->rx_cq_completion(arguments->test_arguments,
+				&op_context,
+				domain_state->rx_cq)) != -FI_EAGAIN) {
+			if (ret) {
+				hpcs_error("cq_completion (rx) failed, ret=%d\n", ret);
+				return -1;
+			}
+
+			if (test->rx_datacheck(arguments->test_arguments,
+					op_context->buf, test_config->rx_buffer_size, 0)) {
+				hpcs_error("rank %d: rx data check error at iteration %ld\n",
+						job->rank, state->iteration);
+				return -FI_EFAULT;
+			}
+
+			op_context->state = OP_DONE;
+			state->recvs_done++;
+			state->rx_window++;
+
+			hpcs_verbose("ctx %p receive %ld complete\n",
+				     op_context, op_context->core_context);
+		}
+	}
+
+	if (test_config->tx_use_cq) {
+		while ((ret = test->tx_cq_completion(arguments->test_arguments,
+				&op_context,
+				domain_state->tx_cq)) != -FI_EAGAIN) {
+			if (ret) {
+				hpcs_error("cq_completion (tx) failed, ret=%d\n", ret);
+				return -1;
+			}
+			hpcs_verbose("Received tx completion for ctx %lx\n",
+				     op_context);
+
+			if (test->tx_datacheck(arguments->test_arguments,
+					op_context->buf,
+					test_config->tx_buffer_size)) {
+				hpcs_error("rank %d: tx data check error at iteration %ld\n",
+						job->rank, state->iteration);
+				return -FI_EFAULT;
+			}
+
+			if (test_config->tx_use_cntr && test->tx_destroy_mr != NULL) {
+				ret = test->tx_destroy_mr(arguments->test_arguments,
+						op_context->tx_mr);
+				if (ret) {
+					hpcs_error("unable to release tx memory region\n");
+					return -1;
+				}
+			}
+
+			op_context->state = OP_DONE;
+			op_context->test_state = 0;
+			state->sends_done++;
+			state->tx_window++;
+
+			hpcs_verbose("ctx %p send %ld complete\n",
+				     op_context, op_context->core_context);
+		}
+	}
+
+	/*
+	 * Counters are generally used for RMA/atomics and completion is handled
+	 * as all-or-nothing rather than tracking individual completions.
+	 *
+	 * Triggered ops tests may use counters and CQs at the same time, in which
+	 * case we ignore the counter completions here.
+	 */
+	if (state->all_recvs_done && state->all_sends_done) {
+		if (test_config->tx_use_cntr &&
+				state->sends_done < state->sends_posted &&
+				!test_config->tx_use_cq) {
+			ret = test->tx_cntr_completion(arguments->test_arguments,
+					state->sends_posted*test_config->tx_context_count,
+					domain_state->tx_cntr);
+			if (ret) {
+				hpcs_error("cntr_completion (tx) failed, ret=%d\n",
+						ret);
+				return -1;
+			}
+
+			for (i = state->sends_done_prev; i < state->sends_posted; i++) {
+				op_context = CONTEXT(state->tx_context, i);
+
+				if (test_config->tx_use_cntr && test->tx_destroy_mr != NULL) {
+					ret = test->tx_destroy_mr(arguments->test_arguments,
+							op_context->tx_mr);
+					if (ret) {
+						hpcs_error("unable to release tx memory region\n");
+						return -1;
+					}
+				}
+				op_context->state = OP_DONE;
+				op_context->test_state = 0;
+
+				state->sends_done++;
+				state->tx_window++;
+			}
+
+			if (state->sends_done != state->sends_posted) {
+				hpcs_error("tx accounting internal error\n");
+				return -FI_EFAULT;
+			}
+
+			hpcs_verbose("tx counter completion done\n");
+		}
+
+		if (test_config->rx_use_cntr &&
+				state->recvs_done < state->recvs_posted &&
+				!test_config->rx_use_cq) {
+			ret = test->rx_cntr_completion(arguments->test_arguments,
+					state->recvs_posted*test_config->rx_context_count,
+					domain_state->rx_cntr);
+			if (ret) {
+				hpcs_error("cntr_completion (rx) failed, ret=%d\n", ret);
+				return -1;
+			}
+
+			for (i = state->recvs_done_prev; i < state->recvs_posted; i++) {
+				op_context = CONTEXT(state->rx_context, i);
+				op_context->state = OP_DONE;
+				op_context->test_state = 0;
+				state->recvs_done++;
+				state->rx_window++;
+			}
+
+			/*
+			 * note: counter tests use rx_buf directly,
+			 * rather than DATA_BUF(rx_buf, i)
+			 */
+
+			if (test->rx_datacheck(arguments->test_arguments, state->rx_buf,
+					test_config->rx_buffer_size,
+					state->recvs_posted - state->recvs_done_prev)) {
+				hpcs_error("rx data check error at iteration %ld\n", i);
+				return -FI_EFAULT;
+			}
+
+			if (state->recvs_done != state->recvs_posted) {
+				hpcs_error("rx accounting internal error\n");
+				return -FI_EFAULT;
+			}
+
+			hpcs_verbose("rx counter completion done\n");
+		}
+	}
+
+	if (state->recvs_posted == state->recvs_done &&
+			state->sends_posted == state->sends_done) {
+		state->all_completions_done = true;
+	} else {
+		hpcs_verbose("rank %d: recvs posted/done = %ld/%ld, sends posted/done = %ld/%ld\n",
+				job->rank, state->recvs_posted, state->recvs_done,
+				state->sends_posted, state->sends_done);
+		/* rate-limit print statements */
+		if (verbose)
+			usleep(50000);
+	}
+
+	return 0;
+}
+
+static int core_inner(struct domain_state *domain_state,
+		struct arguments *arguments,
+		struct pattern_api *pattern,
+		struct test_api *test,
+		struct test_config *test_config,
+		struct job *job)
+{
 	int ret;
-	size_t size = arguments->buffer_size;
+	size_t i, j;
 	size_t window = arguments->window_size;
 	size_t iterations = arguments->iterations;
 
 	struct op_context tx_context [window];
 	struct op_context rx_context [window];
-	uint8_t *tx_buf = NULL;
-	uint8_t *rx_buf = NULL;
-	uint64_t *keys = NULL;
 
-	struct test_arguments *test_args = arguments->test_arguments;
-	struct pattern_arguments *pattern_args = arguments->pattern_arguments;
+	struct core_state state = (struct core_state) {
+		.tx_context = tx_context,
+		.rx_context = rx_context,
+		.tx_window = window,
+		.rx_window = window,
 
-	int tx_window = window, rx_window = window;
+		.cur_sender = PATTERN_NO_CURRENT,
+		.cur_receiver = PATTERN_NO_CURRENT,
+		.cur_sender_rx_threshold = 0,
+		.cur_receiver_tx_threshold = 0,
+
+		.all_sends_done = false,
+		.all_recvs_done = false,
+		.all_completions_done =	false,
+
+		.tx_flags = pattern->enable_triggered ? FI_TRIGGER : 0,
+		.rx_flags = 0,
+	};
+
 	enum callback_order order = arguments->callback_order;
 
-	struct fid_mr *rx_mr = NULL;
-	int do_tx_reg = test_config->tx_use_cntr;
-
-	uint64_t recvs_posted = 0, sends_posted = 0;
-	uint64_t recvs_done = 0, sends_done = 0;
-
-	uint64_t tx_flags = pattern->enable_triggered ? FI_TRIGGER : 0;
-	uint64_t rx_flags = 0;
-
-	tx_buf = calloc(window, size);
-	if (tx_buf == NULL)
+	state.tx_buf = calloc(window, test_config->tx_buffer_size);
+	if (state.tx_buf == NULL)
 		return -FI_ENOMEM;
 
-	rx_buf = calloc(window, size);
-	if (rx_buf == NULL)
+	state.rx_buf = calloc(window, test_config->rx_buffer_size);
+	if (state.rx_buf == NULL)
 		return -FI_ENOMEM;
 
-	keys = calloc(ranks, sizeof(uint64_t));
-	if (keys == NULL)
+	state.keys = calloc(job->ranks, sizeof(uint64_t));
+	if (state.keys == NULL)
 		return -FI_ENOMEM;
 
 	memset((char*)&tx_context[0], 0, sizeof(tx_context[0])*window);
@@ -786,9 +1298,11 @@ static int core_inner (struct domain_state *domain_state,
 
 	for (i = 0; i < window; i++) {
 		tx_context[i].ctxinfo =
-				calloc(test_config->tx_context_count, sizeof(struct context_info));
+				calloc(test_config->tx_context_count,
+						sizeof(struct context_info));
 		rx_context[i].ctxinfo =
-				calloc(test_config->rx_context_count, sizeof(struct context_info));
+				calloc(test_config->rx_context_count,
+						sizeof(struct context_info));
 
 		if (tx_context[i].ctxinfo == NULL || rx_context[i].ctxinfo == NULL)
 			return -FI_ENOMEM;
@@ -803,441 +1317,71 @@ static int core_inner (struct domain_state *domain_state,
 	}
 
 	hpcs_verbose("Beginning test: buffer_size=%ld window=%ld iterations=%ld %s%s%s\n",
-			size, window, iterations,
+			test_config->tx_buffer_size, window, iterations,
 			order == CALLBACK_ORDER_UNEXPECTED ? "unexpected" : "",
 			order == CALLBACK_ORDER_EXPECTED ? "expected" : "",
 			order == CALLBACK_ORDER_NONE ? "undefined order" : "");
 
-	/*
-	 * One-sided tests create a single memory region, and then share
-	 * that key with peers (who may each write to some offset).
-	 */
-	if (test->rx_create_mr != NULL && test_config->rx_use_mr) {
-		uint64_t my_key;
-
-		if (window < ranks) {
-			hpcs_error("for one-sided communication, window must be >= number of ranks\n");
-			return (-EINVAL);
-		}
-
-		/* Key can be any arbitrary number. */
-		rx_mr = test->rx_create_mr(test_args, domain_state->domain, 42+rank,
-				rx_buf, window*size, test_config->mr_rx_flags, 0);
-		if (rx_mr == NULL) {
-			hpcs_error("failed to create target memory region\n");
-			return -1;
-		}
-
-		my_key = fi_mr_key(rx_mr);
-		address_exchange(&my_key, keys, sizeof(uint64_t), ranks);
-
-		if (verbose) {
-			hpcs_verbose("mr key exchange complete: rank %ld my_key %ld len %ld keys: ",
-					rank, my_key, window*size);
-			for (i=0; i<ranks; i++) {
-				printf("%ld ", keys[i]);
-			}
-			printf("\n");
-		}
-
-		if (test_config->rx_use_cntr) {
-			if (domain_state->rx_cntr) {
-				ret = fi_mr_bind(rx_mr, &domain_state->rx_cntr->fid, test_config->mr_rx_flags);
-				if (ret) {
-					hpcs_error("fi_mr_bind (rx_cntr) failed: %d\n", ret);
-
-					/*
-					 * Binding an MR with FI_REMOTE_READ isn't defined by the OFI spec,
-	 				 * so we don't consider this a failure.
- 					 */
-					if (test_config->mr_rx_flags & FI_REMOTE_READ) {
-						hpcs_error("FI_REMOTE_READ memory region bind flag unsupported by this provider, skipping test.\n");
-						return 0;
-					}
-
-					return -1;
-				}
-			} else {
-				hpcs_error("no rx counter to bind mr to\n");
-				return -EINVAL;
-			}
-		}
-
-		ret = fi_mr_enable(rx_mr);
-		if (ret)
-			hpcs_error("fi_mr_enable failed: %d\n", ret);
-
-		barrier();
-	}
-
-
-	for (i = 0; i < iterations; i++) {
-		int cur_sender = PATTERN_NO_CURRENT;
-		int cur_receiver = PATTERN_NO_CURRENT;
-		int cur_sender_rx_threshold = 0;
-		int cur_receiver_tx_threshold = 0;
-		int prev;
-		int completions_done = 0, rx_done = 0, tx_done = 0;
-		struct op_context* op_context;
-
-		uint64_t recvs_done_prev = recvs_done;
-		uint64_t sends_done_prev = sends_done;
-
-		while (!completions_done || !rx_done || !tx_done) {
-			/* post receives */
-			while (!rx_done) {
-				if (order == CALLBACK_ORDER_UNEXPECTED && !tx_done)
-					break;
-
-				prev = cur_sender;
-				ret = pattern->next_sender(pattern_args, rank, ranks, &cur_sender, &cur_sender_rx_threshold);
-				if (ret == -ENODATA) {
-					rx_done = 1;
-					if (order == CALLBACK_ORDER_EXPECTED)
-						barrier();
-					break;
-				} else if (ret < 0) {
-					hpcs_error("next_sender failed\n");
-					return ret;
-				}
-
-				/*
-				 * Doing window check after calling next_sender allows us to
-				 * mark receives as done if our window is zero but there are
-				 * no more senders.
-				 */
-				if (rx_window == 0) {
-					cur_sender = prev;
-					break;
-				}
-
-				op_context = CONTEXT(rx_context, recvs_posted);
-				if (op_context->state != OP_DONE) {
-					cur_sender = prev;
-					break;
-				}
-
-				test->rx_init_buffer(test_args, DATA_BUF(rx_buf, recvs_posted),
-						test_config->rx_buffer_size);
-
-				/* fprintf(stdout, "Posting rx:  rank %d, sender %d\n", rank, cur_sender); */
-
-				op_context->buf = DATA_BUF(rx_buf, recvs_posted);
-
-				/*
-				 * cur_sender_rx_threshold is currently ignored, but we could enable
-				 * triggered receives in the future if we have a good reason to do so.
-				 */
-
-				ret = test->rx_transfer(test_args, cur_sender,
-						1, domain_state->addresses[cur_sender],
-						domain_state->endpoint,
-						op_context,
-						op_context->buf,
-						NULL, rx_flags);
-
-				if (ret == -FI_EAGAIN) {
-					cur_sender = prev;
-					break;
-				}
-
-				hpcs_verbose("rx_transfer initiated: ctx %p "
-					     "from rank %ld\n",
-					     op_context, cur_sender);
-
-				if (ret) {
-					hpcs_error("test receive failed, ret=%d\n", ret);
-					return ret;
-				}
-
-				op_context->state = OP_PENDING;
-				op_context->core_context = recvs_posted;
-
-				recvs_posted++;
-				rx_window--;
-			};
-
-			/* post send(s) */
-			while (!tx_done) {
-				if (order == CALLBACK_ORDER_EXPECTED && !rx_done)
-                                        break;
-
-				prev = cur_receiver;
-				ret = pattern->next_receiver(pattern_args, rank, ranks,
-						&cur_receiver, &cur_receiver_tx_threshold);
-				if (ret == -ENODATA) {
-					if (order == CALLBACK_ORDER_UNEXPECTED)
-						barrier();
-					tx_done = 1;
-					break;
-				} else if (ret < 0) {
-					hpcs_error("next_receiver failed\n");
-					return ret;
-				}
-
-				if (tx_window == 0) {
-					cur_receiver = prev;
-					break;
-				}
-
-				op_context = CONTEXT(tx_context, sends_posted);
-				if (op_context->state != OP_DONE) {
-					cur_receiver = prev;
-					break;
-				}
-
-				test->tx_init_buffer(test_args, DATA_BUF(tx_buf, sends_posted),
-						test_config->tx_buffer_size);
-
-				struct fid_mr* mr = NULL;
-				void *mr_desc = NULL;
-				if (do_tx_reg) {
-					mr = test->tx_create_mr(test_args,
-							domain_state->domain, 0,
-							DATA_BUF(tx_buf, sends_posted),
-							size, FI_SEND, 0);
-					if (mr == NULL) {
-						ret = -1;
-						goto err_mem;
-					}
-
-					mr_desc = fi_mr_desc(mr);
-				}
-
-				/* fprintf(stdout, "Posting tx:  rank %d, receiver %d\n", rank, cur_receiver);*/
-
-				op_context->buf = DATA_BUF(tx_buf, sends_posted);
-				op_context->tx_mr = mr;
-
-				if (pattern->enable_triggered) {
-					for (j=0; j < test_config->tx_context_count; j++) {
-						op_context->ctxinfo[j].fi_trig_context.event_type = FI_TRIGGER_THRESHOLD;
-						op_context->ctxinfo[j].fi_trig_context.trigger.threshold =
-							(struct fi_trigger_threshold) {
-								.threshold =
-									sends_done_prev +
-									(cur_receiver_tx_threshold * test_config->tx_context_count),
-								.cntr = domain_state->rx_cntr
-							};
-					}
-
-					op_context->tx_cntr = domain_state->tx_cntr;
-					op_context->domain = domain_state->domain;
-				}
-
-				ret = test->tx_transfer(test_args, rank,
-						1, domain_state->addresses[cur_receiver],
-						domain_state->endpoint,
-						op_context,
-						op_context->buf,
-						mr_desc, keys[cur_receiver], rank, tx_flags);
-
-				if (ret == -FI_EAGAIN) {
-					cur_receiver = prev;
-					break;
-				}
-
-				hpcs_verbose("tx_transfer initiated from rank %ld "
-						"to rank %d: ctx %p key %ld trigger %d ret %d\n",
-						rank, cur_receiver, op_context,
-						keys[cur_receiver],
-						cur_receiver_tx_threshold, ret);
-
-				if (ret) {
-					hpcs_error("tx_transfer failed, ret=%d\n", ret);
-					return ret;
-				}
-
-				op_context->state = OP_PENDING;
-				op_context->core_context = sends_posted;
-
-				sends_posted++;
-				tx_window--;
-			};
-
-			/* poll completions */
-			if (test_config->rx_use_cq) {
-				while ((ret = test->rx_cq_completion(test_args,
-						&op_context,
-						domain_state->rx_cq)) != -FI_EAGAIN) {
-					if (ret) {
-						hpcs_error("cq_completion (rx) failed, ret=%d\n", ret);
-						return -1;
-					}
-
-					if (test->rx_datacheck(test_args, op_context->buf, test_config->rx_buffer_size, 0)) {
-						hpcs_error("rank %d: rx data check error at iteration %ld\n", rank, i);
-						return -EFAULT;
-					}
-
-					op_context->state = OP_DONE;
-					recvs_done++;
-					rx_window++;
-
-					hpcs_verbose("ctx %p receive %ld complete\n",
-						     op_context, op_context->core_context);
-				}
-			}
-
-			if (test_config->tx_use_cq) {
-				while ((ret = test->tx_cq_completion(test_args,
-						&op_context,
-						domain_state->tx_cq)) != -FI_EAGAIN) {
-					if (ret) {
-						hpcs_error("cq_completion (tx) failed, ret=%d\n", ret);
-						return -1;
-					}
-					hpcs_verbose("Received tx completion for ctx %lx\n",
-						     op_context);
-
-					if (test->tx_datacheck(test_args, op_context->buf, test_config->tx_buffer_size)) {
-						hpcs_error("rank %d: tx data check error at iteration %ld\n", rank, i);
-						return -EFAULT;
-					}
-
-					if (do_tx_reg && test->tx_destroy_mr != NULL) {
-						ret = test->tx_destroy_mr(test_args, op_context->tx_mr);
-						if (ret) {
-							hpcs_error("unable to release tx memory region\n");
-							return -1;
-						}
-					}
-
-					op_context->state = OP_DONE;
-					op_context->test_state = 0;
-					sends_done++;
-					tx_window++;
-
-					hpcs_verbose("ctx %p send %ld complete\n",
-						     op_context, op_context->core_context);
-				}
-			}
-
-			/*
-			 * Counters are generally used for RMA/atomics and completion is handled
-			 * as all-or-nothing rather than tracking individual completions.
-			 *
-			 * Triggered ops tests may use counters and CQs at the same time, in which
-			 * case we ignore the counter completions here.
-			 */
-			if (rx_done && tx_done) {
-				if (test_config->tx_use_cntr && sends_done < sends_posted && !test_config->tx_use_cq) {
-					ret = test->tx_cntr_completion(test_args,
-							sends_posted*test_config->tx_context_count,
-							domain_state->tx_cntr);
-					if (ret) {
-						hpcs_error("cntr_completion (tx) failed, ret=%d\n", ret);
-						return -1;
-					}
-
-					for (j = sends_done_prev; j < sends_posted; j++) {
-						op_context = CONTEXT(tx_context, j);
-
-						if (do_tx_reg && test->tx_destroy_mr != NULL) {
-							ret = test->tx_destroy_mr(test_args, op_context->tx_mr);
-							if (ret) {
-								hpcs_error("unable to release tx memory region\n");
-								return -1;
-							}
-						}
-						sends_done++;
-						op_context->state = OP_DONE;
-						op_context->test_state = 0;
-						tx_window++;
-					}
-
-					if (sends_done != sends_posted) {
-						hpcs_error("tx accounting internal error\n");
-						return -EFAULT;
-					}
-
-					hpcs_verbose("tx counter completion done\n");
-				}
-
-				if (test_config->rx_use_cntr && recvs_done < recvs_posted && !test_config->rx_use_cq) {
-					ret = test->rx_cntr_completion(test_args,
-							recvs_posted*test_config->rx_context_count,
-							domain_state->rx_cntr);
-					if (ret) {
-						hpcs_error("cntr_completion (rx) failed, ret=%d\n", ret);
-						return -1;
-					}
-
-					for (j = recvs_done_prev; j < recvs_posted; j++) {
-						op_context = CONTEXT(rx_context, j);
-						recvs_done++;
-						op_context->state = OP_DONE;
-						op_context->test_state = 0;
-						rx_window++;
-					}
-
-					/*
-					 * note: counter tests use rx_buf directly,
-					 * rather than DATA_BUF(rx_buf, j)
-					 */
-
-					if (test->rx_datacheck(test_args, rx_buf,
-							test_config->rx_buffer_size,
-							recvs_posted - recvs_done_prev)) {
-						hpcs_error("rx data check error at iteration %ld\n", i);
-						return -EFAULT;
-					}
-
-					if (recvs_done != recvs_posted) {
-						hpcs_error("rx accounting internal error\n");
-						return -EFAULT;
-					}
-
-					hpcs_verbose("rx counter completion done\n");
-				}
-			}
-
-			if (recvs_posted == recvs_done && sends_posted == sends_done) {
-				completions_done = 1;
-			} else {
-				hpcs_verbose("rank %d: recvs_posted=%ld, recvs_done=%ld, sends_posted=%ld, sends_done=%ld\n",
-					      rank, recvs_posted, recvs_done, sends_posted, sends_done);
-				usleep(50000);
-			}
+	ret = core_setup_target_mr(domain_state, arguments, test_config, job,
+			&state.rx_mr, state.rx_buf, state.keys);
+	if (ret == -FI_EOPNOTSUPP)
+		return 0;
+	else if (ret)
+		return ret;
+
+	for (state.iteration = 0; state.iteration < iterations; state.iteration++) {
+		state.cur_sender = PATTERN_NO_CURRENT;
+		state.cur_receiver = PATTERN_NO_CURRENT;
+		state.cur_sender_rx_threshold = 0;
+		state.cur_receiver_tx_threshold = 0;
+
+		state.all_completions_done = false;
+		state.all_recvs_done = false;
+		state.all_sends_done = false;
+
+		state.recvs_done_prev = state.recvs_done;
+		state.sends_done_prev = state.sends_done;
+
+		while (!state.all_completions_done ||
+				!state.all_recvs_done ||
+				!state.all_sends_done) {
+			ret = core_initiate_rx(domain_state, arguments, pattern,
+					test, test_config, job, &state);
+			if (ret)
+				return ret;
+
+			ret = core_initiate_tx(domain_state, arguments, pattern,
+					test, test_config, job, &state);
+			if (ret)
+				return ret;
+
+			ret = core_completion(domain_state, arguments, pattern,
+					test, test_config, job, &state);
+			if (ret)
+				return ret;
 		}
 	}
+
+	/* Make sure all our peers are done before shutting down. */
+	job->barrier();
 
 	/*
 	 * OFI docs are unclear about proper order of closing memory region
 	 * and counter that are bound to each other.
 	 */
-	if (rx_mr != NULL && test->rx_destroy_mr != NULL) {
-		ret = test->rx_destroy_mr(test_args, rx_mr);
+	if (state.rx_mr != NULL && test->rx_destroy_mr != NULL) {
+		ret = test->rx_destroy_mr(arguments->test_arguments, state.rx_mr);
 		if (ret) {
 			hpcs_error("unable to release rx memory region\n");
-			return -EFAULT;
+			return -FI_EFAULT;
 		}
 	}
 
-	/* Make sure all our peers are done before exiting. */
-	barrier();
-	ret = 0;
-
-err_mem:
-	if (tx_buf)
-		free(tx_buf);
-
-	if (rx_buf)
-		free(rx_buf);
-
-	if (keys)
-		free(keys);
-
-	return ret;
+	return 0;
 }
 
-int core (
-		const int argc,
-		char * const *argv,
-		const int num_mpi_ranks,
-		const int our_mpi_rank,
-		address_exchange_t address_exchange,
-		barrier_t barrier)
+
+int core(const int argc, char * const *argv, struct job *job)
 {
 	int ret, cleanup_ret;
 
@@ -1248,12 +1392,12 @@ int core (
 	struct domain_state domain_state = {0};
 	struct pattern_api pattern = {0};
 
-	fi_addr_t addresses[num_mpi_ranks];
+	fi_addr_t addresses[job->ranks];
 
 	ret = parse_arguments(argc, argv, &arguments);
 
 	if (ret < 0)
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	pattern = arguments->pattern_api;
 
@@ -1271,8 +1415,7 @@ int core (
 	ofi_state.domain_state = &domain_state;
 
 	ret = init_ofi(arguments, arguments->test_arguments, &test_config,
-			&ofi_state, address_exchange, num_mpi_ranks,
-			our_mpi_rank);
+			&ofi_state, job);
 	if (ret) {
 		hpcs_error("Init_ofi failed, ret=%d\n", ret);
 		return -1;
@@ -1280,8 +1423,8 @@ int core (
 		hpcs_verbose("OFI resource initialization successful\n");
 	}
 
-	ret = core_inner(&domain_state, arguments, &pattern, &test, &test_config,
-			our_mpi_rank, num_mpi_ranks, address_exchange, barrier);
+	ret = core_inner(&domain_state, arguments, &pattern, &test,
+			&test_config, job);
 
 	if (ret)
 		hpcs_error("Test failed, ret=%d (%s)\n", ret, fi_strerror(-ret));
