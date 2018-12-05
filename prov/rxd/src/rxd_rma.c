@@ -68,8 +68,10 @@ static ssize_t rxd_generic_write_inject(struct rxd_ep *rxd_ep,
 		goto out;
 
 	ret = rxd_ep_send_op(rxd_ep, tx_entry, rma_iov, rma_count, NULL, 0, 0, 0);
-	if (ret)
+	if (ret) {
 		rxd_tx_entry_free(rxd_ep, tx_entry);
+		goto out;
+	}
 
 	if (tx_entry->op == RXD_READ_REQ)
 		goto out;
