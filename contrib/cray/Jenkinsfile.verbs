@@ -365,7 +365,7 @@ pipeline {
             when {
                 allOf {
                     expression { currentBuild.result == 'SUCCESS' } ;
-                    expression { env.BRANCH_NAME == 'master' }
+                    expression { return isRelease("${env.GIT_BRANCH}") }
                 }
             }
             steps {
