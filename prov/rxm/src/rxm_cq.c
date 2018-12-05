@@ -916,6 +916,7 @@ static inline ssize_t rxm_handle_atomic_req(struct rxm_ep *rxm_ep,
 			rx_buf->pkt.hdr.atomic.ioc_count) * datatype_sz;
 	resp_hdr = (struct rxm_atomic_resp_hdr *) resp_buf->pkt.data;
 
+	ofi_ep_lock_acquire(&rxm_ep->util_ep);
 	for (i = 0, offset = 0; i < rx_buf->pkt.hdr.atomic.ioc_count; i++) {
 		rxm_do_atomic(&rx_buf->pkt,
 			      (uintptr_t *) req_hdr->rma_ioc[i].addr,
@@ -925,6 +926,8 @@ static inline ssize_t rxm_handle_atomic_req(struct rxm_ep *rxm_ep,
 			      req_hdr->rma_ioc[i].count, datatype, atomic_op);
 		offset += req_hdr->rma_ioc[i].count * datatype_sz;
 	}
+	ofi_ep_lock_release(&rxm_ep->util_ep);
+
 	result_len = rx_buf->pkt.hdr.op == ofi_op_atomic ? 0 : offset;
 
 	if (rx_buf->pkt.hdr.op == ofi_op_atomic)
