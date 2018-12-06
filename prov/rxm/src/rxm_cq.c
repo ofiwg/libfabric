@@ -1270,19 +1270,6 @@ int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep)
 	return 0;
 }
 
-static inline void rxm_cq_repost_rx_buffers(struct rxm_ep *rxm_ep)
-{
-	struct rxm_rx_buf *buf;
-
-	ofi_ep_lock_acquire(&rxm_ep->util_ep);
-	while (!dlist_empty(&rxm_ep->repost_ready_list)) {
-		dlist_pop_front(&rxm_ep->repost_ready_list, struct rxm_rx_buf,
-				buf, repost_entry);
-		(void) rxm_ep_repost_buf(buf);
-	}
-	ofi_ep_lock_release(&rxm_ep->util_ep);
-}
-
 static inline ssize_t rxm_ep_read_msg_cq(struct rxm_ep *rxm_ep)
 {	
 	struct fi_cq_data_entry comp;
@@ -1314,13 +1301,20 @@ void rxm_ep_progress(struct util_ep *util_ep)
 {
 	struct rxm_ep *rxm_ep =
 		container_of(util_ep, struct rxm_ep, util_ep);
+	struct rxm_rx_buf *buf;
 	ssize_t ret;
 	size_t comp_read = 0;
 
 	if (!slistfd_empty(&rxm_ep->msg_eq_entry_list))
 		rxm_conn_process_eq_events(rxm_ep);
 
-	rxm_cq_repost_rx_buffers(rxm_ep);
+	ofi_ep_lock_acquire(&rxm_ep->util_ep);
+	while (!dlist_empty(&rxm_ep->repost_ready_list)) {
+		dlist_pop_front(&rxm_ep->repost_ready_list, struct rxm_rx_buf,
+				buf, repost_entry);
+		(void) rxm_ep_repost_buf(buf);
+	}
+	ofi_ep_lock_release(&rxm_ep->util_ep);
 
 	do {
 		ret = rxm_ep_read_msg_cq(rxm_ep);
