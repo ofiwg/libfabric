@@ -547,7 +547,6 @@ rxm_cq_match_rx_buf(struct rxm_rx_buf *rx_buf,
 	struct rxm_ep *rxm_ep;
 	struct fid_ep *msg_ep;
 
-	ofi_ep_lock_acquire(&recv_queue->rxm_ep->util_ep);
 	entry = dlist_remove_first_match(&recv_queue->recv_list,
 					 recv_queue->match_recv, match_attr);
 	if (!entry) {
@@ -565,7 +564,6 @@ rxm_cq_match_rx_buf(struct rxm_rx_buf *rx_buf,
 
 		dlist_insert_tail(&rx_buf->unexp_msg.entry,
 				  &recv_queue->unexp_msg_list);
-		ofi_ep_lock_release(&recv_queue->rxm_ep->util_ep);
 
 		rx_buf = rxm_rx_buf_alloc(rxm_ep);
 		if (OFI_UNLIKELY(!rx_buf)) {
@@ -585,7 +583,6 @@ rxm_cq_match_rx_buf(struct rxm_rx_buf *rx_buf,
 		rxm_rx_buf_release(rxm_ep, rx_buf);
 		return 0;
 	}
-	ofi_ep_lock_release(&recv_queue->rxm_ep->util_ep);
 
 	rx_buf->recv_entry = container_of(entry, struct rxm_recv_entry, entry);
 	return rxm_cq_handle_rx_buf(rx_buf);
@@ -1063,7 +1060,7 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 	case RXM_RNDV_ACK_SENT:
 		rx_buf = comp->op_context;
 		assert(comp->flags & FI_SEND);
-		rxm_tx_buf_release(rx_buf->ep, RXM_BUF_POOL_TX_ACK,
+		rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_ACK,
 				   rx_buf->recv_entry->rndv.tx_buf);
 		return rxm_finish_send_rndv_ack(rx_buf);
 	case RXM_ATOMIC_RESP_SENT:
@@ -1265,7 +1262,7 @@ int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep)
 	return 0;
 }
 
-void rxm_ep_progress(struct util_ep *util_ep)
+void rxm_ep_do_progress(struct util_ep *util_ep)
 {
 	struct rxm_ep *rxm_ep = container_of(util_ep, struct rxm_ep, util_ep);
 	struct fi_cq_data_entry comp;
@@ -1278,13 +1275,11 @@ void rxm_ep_progress(struct util_ep *util_ep)
 	if (!slistfd_empty(&rxm_ep->msg_eq_entry_list))
 		rxm_conn_process_eq_events(rxm_ep);
 
-	ofi_ep_lock_acquire(&rxm_ep->util_ep);
 	while (!dlist_empty(&rxm_ep->repost_ready_list)) {
 		dlist_pop_front(&rxm_ep->repost_ready_list, struct rxm_rx_buf,
 				buf, repost_entry);
 		(void) rxm_ep_repost_buf(buf);
 	}
-	ofi_ep_lock_release(&rxm_ep->util_ep);
 
 	do {
 		ret = fi_cq_read(rxm_ep->msg_cq, &comp, 1);
@@ -1311,6 +1306,13 @@ void rxm_ep_progress(struct util_ep *util_ep)
 					     deferred_conn_entry, conn_entry_tmp)
 			rxm_ep_progress_deferred_queue(rxm_ep, rxm_conn);
 	}
+}
+
+void rxm_ep_progress(struct util_ep *util_ep)
+{
+	ofi_ep_lock_acquire(util_ep);
+	rxm_ep_do_progress(util_ep);
+	ofi_ep_lock_release(util_ep);
 }
 
 static int rxm_cq_close(struct fid *fid)

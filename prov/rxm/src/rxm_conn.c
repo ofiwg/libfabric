@@ -967,14 +967,10 @@ static int rxm_conn_reprocess_directed_recvs(struct rxm_recv_queue *recv_queue)
 	struct rxm_rx_buf *rx_buf;
 	struct dlist_entry *entry, *tmp_entry;
 	struct rxm_recv_match_attr match_attr;
-	struct dlist_entry rx_buf_list;
 	struct fi_cq_err_entry err_entry = {0};
 	int ret, count = 0;
 
-	dlist_init(&rx_buf_list);
-
 	ofi_ep_lock_acquire(&recv_queue->rxm_ep->util_ep);
-
 	dlist_foreach_container_safe(&recv_queue->unexp_msg_list,
 				     struct rxm_rx_buf, rx_buf,
 				     unexp_msg.entry, tmp_entry) {
@@ -983,8 +979,8 @@ static int rxm_conn_reprocess_directed_recvs(struct rxm_recv_queue *recv_queue)
 
 		assert(rx_buf->unexp_msg.addr == FI_ADDR_NOTAVAIL);
 
-		match_attr.addr = rx_buf->unexp_msg.addr =
-			rx_buf->conn->handle.fi_addr;
+		rx_buf->unexp_msg.addr = rx_buf->conn->handle.fi_addr;
+		match_attr.addr = rx_buf->unexp_msg.addr;
 		match_attr.tag = rx_buf->unexp_msg.tag;
 
 		entry = dlist_remove_first_match(&recv_queue->recv_list,
@@ -996,13 +992,7 @@ static int rxm_conn_reprocess_directed_recvs(struct rxm_recv_queue *recv_queue)
 		dlist_remove(&rx_buf->unexp_msg.entry);
 		rx_buf->recv_entry = container_of(entry, struct rxm_recv_entry,
 						  entry);
-		dlist_insert_tail(&rx_buf->unexp_msg.entry, &rx_buf_list);
-	}
-	ofi_ep_lock_release(&recv_queue->rxm_ep->util_ep);
 
-	while (!dlist_empty(&rx_buf_list)) {
-		dlist_pop_front(&rx_buf_list, struct rxm_rx_buf,
-				rx_buf, unexp_msg.entry);
 		ret = rxm_cq_handle_rx_buf(rx_buf);
 		if (ret) {
 			err_entry.op_context = rx_buf;
@@ -1025,6 +1015,8 @@ static int rxm_conn_reprocess_directed_recvs(struct rxm_recv_queue *recv_queue)
 		}
 		count++;
 	}
+	ofi_ep_lock_release(&recv_queue->rxm_ep->util_ep);
+
 	return count;
 }
 
