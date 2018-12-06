@@ -81,7 +81,7 @@ int cxip_get_if(uint32_t nic_addr, struct cxip_if **dev_if)
 			goto unlock;
 		}
 
-		ret = cxil_alloc_lni(if_entry->if_dev, 0, &if_entry->if_lni);
+		ret = cxil_alloc_lni(if_entry->if_dev, &if_entry->if_lni);
 		if (ret) {
 			CXIP_LOG_DBG("cxil_alloc_lni returned: %d\n", ret);
 			ret = -FI_ENODEV;
