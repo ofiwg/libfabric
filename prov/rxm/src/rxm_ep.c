@@ -2152,14 +2152,12 @@ err:
 static int rxm_ep_eq_entry_list_trywait(void *arg)
 {
 	struct rxm_ep *rxm_ep = (struct rxm_ep *)arg;
+	int ret;
 
 	fastlock_acquire(&rxm_ep->msg_eq_entry_list_lock);
-	if (!slistfd_empty(&rxm_ep->msg_eq_entry_list)) {
-		fastlock_release(&rxm_ep->msg_eq_entry_list_lock);
-		return -FI_EAGAIN;
-	}
+	ret = slistfd_empty(&rxm_ep->msg_eq_entry_list) ? 0 : -FI_EAGAIN;
 	fastlock_release(&rxm_ep->msg_eq_entry_list_lock);
-	return 0;
+	return ret;
 }
 
 static int rxm_ep_trywait(void *arg)
