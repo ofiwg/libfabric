@@ -554,7 +554,7 @@ static void psmx2_fini(void)
 struct fi_provider psmx2_prov = {
 	.name = PSMX2_PROV_NAME,
 	.version = PSMX2_VERSION,
-	.fi_version = FI_VERSION(1,6),
+	.fi_version = FI_VERSION(1, 7),
 	.getinfo = psmx2_getinfo,
 	.fabric = psmx2_fabric,
 	.cleanup = psmx2_fini

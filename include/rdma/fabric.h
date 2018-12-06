@@ -76,11 +76,8 @@ extern "C" {
 	((sizeof(x)/sizeof(0[x])) / ((size_t)(!(sizeof(x) % sizeof(0[x])))))
 #endif
 
-/* API version (which is not necessarily the same as the
- * tarball/libfabric package version number).
- */
 #define FI_MAJOR_VERSION 1
-#define FI_MINOR_VERSION 6
+#define FI_MINOR_VERSION 7
 
 enum {
 	FI_PATH_MAX		= 256,
@@ -92,10 +89,13 @@ enum {
 #define FI_MAJOR(version)	(version >> 16)
 #define FI_MINOR(version)	(version & 0xFFFF)
 #define FI_VERSION_GE(v1, v2)   ((FI_MAJOR(v1) > FI_MAJOR(v2)) || \
-				 (FI_MAJOR(v1) == FI_MAJOR(v2) && FI_MINOR(v1) == FI_MINOR(v2)) || \
-				 (FI_MAJOR(v1) == FI_MAJOR(v2) && FI_MINOR(v1) > FI_MINOR(v2)))
+				 (FI_MAJOR(v1) == FI_MAJOR(v2) && \
+				  FI_MINOR(v1) == FI_MINOR(v2)) || \
+				 (FI_MAJOR(v1) == FI_MAJOR(v2) && \
+				  FI_MINOR(v1) > FI_MINOR(v2)))
 #define FI_VERSION_LT(v1, v2)	((FI_MAJOR(v1) < FI_MAJOR(v2)) || \
-				 (FI_MAJOR(v1) == FI_MAJOR(v2) && FI_MINOR(v1) < FI_MINOR(v2)))
+				 (FI_MAJOR(v1) == FI_MAJOR(v2) && \
+				  FI_MINOR(v1) < FI_MINOR(v2)))
 
 uint32_t fi_version(void);
 

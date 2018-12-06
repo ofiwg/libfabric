@@ -76,7 +76,7 @@ extern struct fi_provider psmx_prov;
 
 extern int psmx_am_compat_mode;
 
-#define PSMX_VERSION	(FI_VERSION(1, 6))
+#define PSMX_VERSION	(FI_VERSION(1, 7))
 
 #define PSMX_OP_FLAGS	(FI_INJECT | FI_MULTI_RECV | FI_COMPLETION | \
 			 FI_TRIGGER | FI_INJECT_COMPLETE | \
