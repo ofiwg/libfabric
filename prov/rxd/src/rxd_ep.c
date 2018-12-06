@@ -358,7 +358,6 @@ struct rxd_x_entry *rxd_tx_entry_init(struct rxd_ep *ep, const struct iovec *iov
 	struct rxd_domain *rxd_domain = rxd_ep_domain(ep);
 	size_t max_inline;
 
-
 	tx_entry = rxd_get_tx_entry(ep);
 	if (!tx_entry) {
 		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "could not get tx entry\n");
