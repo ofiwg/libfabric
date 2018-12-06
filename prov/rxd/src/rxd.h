@@ -419,8 +419,8 @@ ssize_t rxd_ep_generic_inject(struct rxd_ep *rxd_ep, const struct iovec *iov,
 /* Progress functions */
 void rxd_tx_entry_progress(struct rxd_ep *ep, struct rxd_x_entry *tx_entry,
 			   int try_send);
-void rxd_handle_send_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp);
 void rxd_handle_recv_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp);
+void rxd_handle_error(struct rxd_ep *ep);
 void rxd_progress_op(struct rxd_ep *ep, struct rxd_x_entry *rx_entry,
 		     struct rxd_pkt_entry *pkt_entry,
 		     struct rxd_base_hdr *base_hdr,

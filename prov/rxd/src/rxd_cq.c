@@ -772,6 +772,13 @@ void rxd_unpack_hdrs(size_t pkt_size, struct rxd_base_hdr *base_hdr,
 		*atom_hdr = NULL;
 	}
 
+	if (pkt_size < (ptr - (char *) base_hdr)) {
+		FI_WARN(&rxd_prov, FI_LOG_CQ,
+			"Cannot process packet smaller than minimum header size\n");
+		*msg_size = 0;
+		return;
+	}
+
 	*msg = ptr;
 	*msg_size = pkt_size - (ptr - (char *) base_hdr);
 }
@@ -963,6 +970,12 @@ static void rxd_handle_data(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 	struct rxd_data_pkt *pkt = (struct rxd_data_pkt *) (pkt_entry->pkt);
 	struct rxd_x_entry *x_entry;
 
+	if (pkt_entry->pkt_size < sizeof(*pkt) + ep->prefix_size) {
+		FI_WARN(&rxd_prov, FI_LOG_CQ,
+			"Cannot process packet smaller than minimum header size\n");
+		return;
+	}
+
 	if (pkt->base_hdr.seq_no == ep->peers[pkt->base_hdr.peer].rx_seq_no) {
 		x_entry = rxd_get_data_x_entry(ep, pkt);
 		rxd_ep_recv_data(ep, x_entry, pkt, pkt_entry->pkt_size);
@@ -1098,6 +1111,22 @@ void rxd_handle_recv_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp)
 	if (release) {
 		rxd_remove_rx_pkt(ep, pkt_entry);
 		rxd_release_repost_rx(ep, pkt_entry);
+	}
+}
+
+void rxd_handle_error(struct rxd_ep *ep)
+{
+	struct fi_cq_err_entry err = {0};
+	int ret;
+
+	ret = fi_cq_readerr(ep->dg_cq, &err, 0);
+	if (ret < 0) {
+		FI_WARN(&rxd_prov, FI_LOG_CQ,
+			"Error reading CQ: %s\n", fi_strerror(-ret));
+	} else {
+		FI_WARN(&rxd_prov, FI_LOG_CQ,
+			"Received %s error from core provider: %s\n",
+			err.flags & FI_SEND ? "tx" : "rx", fi_strerror(-err.err)); 
 	}
 }
 

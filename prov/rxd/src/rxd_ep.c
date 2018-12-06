@@ -1080,6 +1080,11 @@ static void rxd_ep_progress(struct util_ep *util_ep)
 		if (ret == -FI_EAGAIN)
 			break;
 
+		if (ret == -FI_EAVAIL) {
+			rxd_handle_error(ep);
+			continue;
+		}
+
 		if (cq_entry.flags & FI_RECV)
 			rxd_handle_recv_comp(ep, &cq_entry);
 	}
