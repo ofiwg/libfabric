@@ -736,8 +736,7 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 int rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep);
 void rxm_cq_write_error(struct util_cq *cq, struct util_cntr *cntr,
 			void *op_context, int err);
-void rxm_ep_progress_one(struct util_ep *util_ep);
-void rxm_ep_progress_multi(struct util_ep *util_ep);
+void rxm_ep_progress(struct util_ep *util_ep);
 
 int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep);
 void rxm_ep_progress_deferred_queues(struct rxm_ep *rxm_ep);
@@ -1005,7 +1004,7 @@ rxm_ep_prepare_tx(struct rxm_ep *rxm_ep, fi_addr_t dest_addr,
 		return ret;
 
 	if (OFI_UNLIKELY(!dlist_empty(&(*rxm_conn)->deferred_tx_queue))) {
-		rxm_ep_progress_multi(&rxm_ep->util_ep);
+		rxm_ep_progress(&rxm_ep->util_ep);
 		if (!dlist_empty(&(*rxm_conn)->deferred_tx_queue))
 			return -FI_EAGAIN;
 	}

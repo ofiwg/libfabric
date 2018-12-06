@@ -1310,23 +1310,7 @@ static inline ssize_t rxm_ep_read_msg_cq(struct rxm_ep *rxm_ep)
 	return ret;
 }
 
-void rxm_ep_progress_one(struct util_ep *util_ep)
-{
-	struct rxm_ep *rxm_ep =
-		container_of(util_ep, struct rxm_ep, util_ep);
-
-	if (!slistfd_empty(&rxm_ep->msg_eq_entry_list))
-		rxm_conn_process_eq_events(rxm_ep);
-
-	rxm_cq_repost_rx_buffers(rxm_ep);
-
-	(void) rxm_ep_read_msg_cq(rxm_ep);
-
-	if (OFI_UNLIKELY(!dlist_empty(&rxm_ep->deferred_tx_conn_queue)))
-		rxm_ep_progress_deferred_queues(rxm_ep);
-}
-
-void rxm_ep_progress_multi(struct util_ep *util_ep)
+void rxm_ep_progress(struct util_ep *util_ep)
 {
 	struct rxm_ep *rxm_ep =
 		container_of(util_ep, struct rxm_ep, util_ep);

@@ -218,7 +218,7 @@ rxm_ep_rma_emulate_inject_msg(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, 
 	ret = fi_writemsg(rxm_conn->msg_ep, &rxm_rma_msg, flags);
 	if (OFI_UNLIKELY(ret)) {
 		if (ret == -FI_EAGAIN)
-			rxm_ep_progress_multi(&rxm_ep->util_ep);
+			rxm_ep_progress(&rxm_ep->util_ep);
 		goto err;
 	}
 	return 0;
@@ -292,7 +292,7 @@ rxm_ep_rma_inject_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, ui
 			       "fi_inject_write* for MSG provider failed with ret - %"
 			       PRId64"\n", ret);
 			if (OFI_LIKELY(ret == -FI_EAGAIN))
-				rxm_ep_progress_multi(&rxm_ep->util_ep);
+				rxm_ep_progress(&rxm_ep->util_ep);
 		}
 		return ret;
 	} else {
@@ -421,7 +421,7 @@ static ssize_t rxm_ep_inject_write(struct fid_ep *ep_fid, const void *buf,
 			       "fi_inject_write for MSG provider failed with ret - %"
 			       PRId64"\n", ret);
 			if (OFI_LIKELY(ret == -FI_EAGAIN))
-				rxm_ep_progress_multi(&rxm_ep->util_ep);
+				rxm_ep_progress(&rxm_ep->util_ep);
 		}
 		return ret;
 	} else {
@@ -453,7 +453,7 @@ static ssize_t rxm_ep_inject_writedata(struct fid_ep *ep_fid, const void *buf,
 			       "fi_inject_writedata for MSG provider failed with ret - %"
 			       PRId64"\n", ret);
 			if (OFI_LIKELY(ret == -FI_EAGAIN))
-				rxm_ep_progress_multi(&rxm_ep->util_ep);
+				rxm_ep_progress(&rxm_ep->util_ep);
 		}
 		return ret;
 	} else {
