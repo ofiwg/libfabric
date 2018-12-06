@@ -1553,8 +1553,7 @@ sar_finish:
 	return ret;
 }
 
-static void
-rxm_ep_conn_progress_deferred_queue(struct rxm_ep *rxm_ep,
+void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 				    struct rxm_conn *rxm_conn)
 {
 	struct rxm_deferred_tx_entry *def_tx_entry;
@@ -1619,16 +1618,6 @@ rxm_ep_conn_progress_deferred_queue(struct rxm_ep *rxm_ep,
 			free(def_tx_entry);
 			break;
 		}
-	}
-}
-
-void rxm_ep_progress_deferred_queues(struct rxm_ep *rxm_ep)
-{
-	struct dlist_entry *conn_entry_tmp;
-	struct rxm_conn *rxm_conn;
-	dlist_foreach_container_safe(&rxm_ep->deferred_tx_conn_queue, struct rxm_conn,
-				     rxm_conn, deferred_conn_entry, conn_entry_tmp) {
-		rxm_ep_conn_progress_deferred_queue(rxm_ep, rxm_conn);
 	}
 }
 

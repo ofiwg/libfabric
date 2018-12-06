@@ -1299,8 +1299,9 @@ static inline ssize_t rxm_ep_read_msg_cq(struct rxm_ep *rxm_ep)
 
 void rxm_ep_progress(struct util_ep *util_ep)
 {
-	struct rxm_ep *rxm_ep =
-		container_of(util_ep, struct rxm_ep, util_ep);
+	struct rxm_ep *rxm_ep = container_of(util_ep, struct rxm_ep, util_ep);
+	struct dlist_entry *conn_entry_tmp;
+	struct rxm_conn *rxm_conn;
 	struct rxm_rx_buf *buf;
 	ssize_t ret;
 	size_t comp_read = 0;
@@ -1320,8 +1321,12 @@ void rxm_ep_progress(struct util_ep *util_ep)
 		ret = rxm_ep_read_msg_cq(rxm_ep);
 	} while ((++comp_read < rxm_ep->comp_per_progress) && (ret > 0));
 
-	if (OFI_UNLIKELY(!dlist_empty(&rxm_ep->deferred_tx_conn_queue)))
-		rxm_ep_progress_deferred_queues(rxm_ep);
+	if (OFI_UNLIKELY(!dlist_empty(&rxm_ep->deferred_tx_conn_queue))) {
+		dlist_foreach_container_safe(&rxm_ep->deferred_tx_conn_queue,
+					     struct rxm_conn, rxm_conn,
+					     deferred_conn_entry, conn_entry_tmp)
+			rxm_ep_progress_deferred_queue(rxm_ep, rxm_conn);
+	}
 }
 
 static int rxm_cq_close(struct fid *fid)

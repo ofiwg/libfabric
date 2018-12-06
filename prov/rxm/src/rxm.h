@@ -739,7 +739,6 @@ void rxm_cq_write_error(struct util_cq *cq, struct util_cntr *cntr,
 void rxm_ep_progress(struct util_ep *util_ep);
 
 int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep);
-void rxm_ep_progress_deferred_queues(struct rxm_ep *rxm_ep);
 
 int rxm_ep_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 			enum fi_op op, struct fi_atomic_attr *attr,
@@ -766,6 +765,9 @@ static inline struct rxm_conn *rxm_key2conn(struct rxm_ep *rxm_ep, uint64_t key)
 {
 	return (struct rxm_conn *)rxm_cmap_key2handle(rxm_ep->cmap, key);
 }
+
+void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
+				    struct rxm_conn *rxm_conn);
 
 struct rxm_deferred_tx_entry *
 rxm_ep_alloc_deferred_tx_entry(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
