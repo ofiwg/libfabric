@@ -302,8 +302,6 @@ static void rxd_ep_recv_data(struct rxd_ep *ep, struct rxd_x_entry *x_entry,
 		rxd_complete_rx(ep, x_entry);
 		fastlock_release(&ep->util_ep.rx_cq->cq_lock);
 	}
-
-	rxd_ep_send_ack(ep, pkt->base_hdr.peer);
 }
 
 static int rxd_verify_active(struct rxd_ep *ep, fi_addr_t addr, fi_addr_t peer_addr)
@@ -364,6 +362,9 @@ void rxd_progress_tx_list(struct rxd_ep *ep, struct rxd_peer *peer)
 {
 	struct dlist_entry *tmp_entry;
 	struct rxd_x_entry *tx_entry;
+
+	if (peer->peer_addr == FI_ADDR_UNSPEC)
+		return;
 
 	dlist_foreach_container_safe(&peer->tx_list, struct rxd_x_entry,
 				tx_entry, entry, tmp_entry) {
@@ -1000,10 +1001,14 @@ static void rxd_handle_op(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 		}
 
 		if (ep->peers[base_hdr->peer].rx_seq_no !=
-		    ep->peers[base_hdr->peer].last_tx_ack)
+		    ep->peers[base_hdr->peer].last_tx_ack &&
+		    ep->peers[base_hdr->peer].peer_addr != FI_ADDR_UNSPEC)
 			goto ack;
 		goto release;
 	}
+
+	if (ep->peers[base_hdr->peer].peer_addr == FI_ADDR_UNSPEC)
+		goto release;
 
 	rx_entry = rxd_unpack_init_rx(ep, pkt_entry, base_hdr, &sar_hdr,
 				      &tag_hdr, &data_hdr, &rma_hdr, &atom_hdr,
