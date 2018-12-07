@@ -53,6 +53,9 @@ before_install:
     - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update;
         brew upgrade automake || true; brew upgrade libtool || true;
       fi
+    - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
+        sudo apt-get install -y gdb;
+      fi
 
 install:
     - ./autogen.sh
@@ -71,6 +74,9 @@ install:
     - if [[ "$TRAVIS_OS_NAME" == "linux" && "`basename $CC`" == "clang" ]]; then
         ./configure CFLAGS="-Werror $CFLAGS" $LIBFABRIC_CONFIGURE_ARGS
         --enable-debug && make -j2;
+      fi
+    - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
+        export CFLAGS="-g -O0" ;
       fi
     # Test fabric direct
     - ./configure --prefix=$PREFIX --enable-direct=sockets --enable-udp=no
@@ -99,6 +105,9 @@ install:
     - make distcheck
     - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then make rpm; fi
 
+before_script:
+    - ulimit -c unlimited -S
+
 script:
     - cd fabtests
     - ./autogen.sh
@@ -106,3 +115,9 @@ script:
     - make -j2
     - make install
     - make test
+
+
+after_failure:
+    - COREFILE=$(find . -maxdepth 1 -name "core*" | head -n 1)
+    - if [[ -f "$COREFILE" ]]; then gdb -c "$COREFILE" example -ex "thread apply all bt" -ex "set pagination 0" -batch; fi
+

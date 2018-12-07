@@ -53,7 +53,7 @@ declare GOOD_ADDR=""
 declare -i VERBOSE=0
 declare -i SKIP_NEG=0
 declare COMPLEX_CFG
-declare TIMEOUT_VAL="120"
+declare TIMEOUT_VAL="10"
 declare STRICT_MODE=0
 declare REGEX=0
 declare FORK=0
@@ -79,47 +79,25 @@ neg_unit_tests=(
 )
 
 functional_tests=(
-	"av_xfer -e rdm"
-	"av_xfer -e dgram"
-	"cm_data"
-	"cq_data -e msg"
-	"cq_data -e rdm"
-	"cq_data -e dgram"
-	"dgram"
-	"dgram_waitset"
-	"msg"
-	"msg_epoll"
-	"msg_sockets"
-	"poll -t queue"
-	"poll -t counter"
-	"rdm"
-	"rdm_rma_simple"
-	"rdm_rma_trigger"
-	"shared_ctx"
-	"shared_ctx --no-tx-shared-ctx"
-	"shared_ctx --no-rx-shared-ctx"
-	"shared_ctx -e msg"
-	"shared_ctx -e msg --no-tx-shared-ctx"
-	"shared_ctx -e msg --no-rx-shared-ctx"
-	"shared_ctx -e dgram"
-	"shared_ctx -e dgram --no-tx-shared-ctx"
-	"shared_ctx -e dgram --no-rx-shared-ctx"
-	"rdm_tagged_peek"
-	"scalable_ep"
-	"rdm_shared_av"
-	"multi_mr -e msg -V"
-	"multi_mr -e rdm -V"
-	"recv_cancel -e rdm -V"
-	"unexpected_msg -e msg -i 10"
 	"unexpected_msg -e rdm -i 10"
-	"unexpected_msg -e msg -S -i 10"
-	"unexpected_msg -e rdm -S -i 10"
-	"inj_complete -e msg"
-	"inj_complete -e rdm"
-	"inj_complete -e dgram"
-	"inj_complete -e msg -SR"
-	"inj_complete -e rdm -SR"
-	"inj_complete -e dgram -SR"
+	"unexpected_msg -e rdm -i 10"
+	"unexpected_msg -e rdm -i 10"
+	"unexpected_msg -e rdm -i 10"
+	"unexpected_msg -e rdm -i 10"
+	"unexpected_msg -e rdm -i 10"
+	"unexpected_msg -e rdm -i 10"
+	"unexpected_msg -e rdm -i 10"
+	"unexpected_msg -e rdm -i 10"
+	"unexpected_msg -e rdm -i 10"
+	"unexpected_msg -e rdm -i 10"
+	"unexpected_msg -e rdm -i 10"
+	"unexpected_msg -e rdm -i 10"
+	"unexpected_msg -e rdm -i 10"
+	"unexpected_msg -e rdm -i 10"
+	"unexpected_msg -e rdm -i 10"
+	"unexpected_msg -e rdm -i 10"
+	"unexpected_msg -e rdm -i 10"
+	"unexpected_msg -e rdm -i 10"
 )
 
 short_tests=(
@@ -362,12 +340,12 @@ function cs_test {
 
 	start_time=$(date '+%s')
 
-	s_cmd="${BIN_PATH}${test_exe} -s $S_INTERFACE"
+	s_cmd="gdb -batch -ex "run" -ex "bt" -ex "quit" --args ${BIN_PATH}${test_exe} -s $S_INTERFACE"
 	${SERVER_CMD} "${EXPORT_ENV} $s_cmd" &> $s_outp &
 	s_pid=$!
 	sleep 1
 
-	c_cmd="${BIN_PATH}${test_exe} -s $C_INTERFACE $S_INTERFACE"
+	c_cmd="gdb -batch -ex "run" -ex "bt" -ex "quit" --args ${BIN_PATH}${test_exe} -s $C_INTERFACE $S_INTERFACE"
 	${CLIENT_CMD} "${EXPORT_ENV} $c_cmd" &> $c_outp &
 	c_pid=$!
 
