@@ -244,8 +244,10 @@ static void fi_ibv_eq_skip_xrc_cm_data(const void **priv_data,
 {
 	const struct fi_ibv_xrc_cm_data *cm_data = *priv_data;
 
-	*priv_data = (cm_data + 1);
-	*priv_data_len -= sizeof(*cm_data);
+	if (*priv_data_len > sizeof(*cm_data)) {
+		*priv_data = (cm_data + 1);
+		*priv_data_len -= sizeof(*cm_data);
+	}
 }
 
 static int
