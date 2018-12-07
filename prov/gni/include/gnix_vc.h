@@ -101,6 +101,7 @@ enum gnix_vc_conn_req_type {
  *                           associated
  * @var smsg_mbox            pointer to GNI SMSG mailbox used by this VC
  *                           to exchange SMSG messages with its peer
+ * @var gnix_ep_name         cache for storing remote endpoint name
  * @var gni_ep               GNI endpoint for this VC
  * @var outstanding_fab_reqs Count of outstanding libfabric level requests
  *                           associated with this endpoint.

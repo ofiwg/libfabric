@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
- * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
+ * Copyright (c) 2015-2018 Los Alamos National Security, LLC.
  *                         All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -400,11 +400,15 @@ static int __recv_completion_src(
 		fi_addr_t src_addr)
 {
 	ssize_t rc;
+	char *buffer;
 
 	GNIX_DBG_TRACE(FI_LOG_TRACE, "\n");
 
 	if ((req->msg.recv_flags & FI_COMPLETION) && ep->recv_cq) {
 		if (src_addr == FI_ADDR_NOTAVAIL) {
+			buffer = malloc(GNIX_CQ_MAX_ERR_DATA_SIZE);
+			memcpy(buffer, req->vc->gnix_ep_name,
+				sizeof(struct gnix_ep_name));
 			rc = _gnix_cq_add_error(ep->recv_cq,
 						req->user_context,
 						flags,
@@ -415,7 +419,7 @@ static int __recv_completion_src(
 						0,
 						FI_EADDRNOTAVAIL,
 						0,
-						req->vc->gnix_ep_name,
+						buffer,
 						sizeof(struct gnix_ep_name));
 		} else {
 			rc = _gnix_cq_add_event(ep->recv_cq,

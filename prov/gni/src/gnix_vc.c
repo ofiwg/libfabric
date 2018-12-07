@@ -1510,6 +1510,7 @@ int _gnix_vc_alloc(struct gnix_fid_ep *ep_priv,
 	if (ret != FI_SUCCESS)
 		goto err;
 	vc_ptr->vc_id = remote_id;
+	vc_ptr->gnix_ep_name = NULL;
 
 	*vc = vc_ptr;
 
@@ -1640,6 +1641,11 @@ int _gnix_vc_destroy(struct gnix_vc *vc)
 		      fi_strerror(-ret));
 
 	_gnix_free_bitmap(&vc->flags);
+
+	if (vc->gnix_ep_name != NULL) {
+		free(vc->gnix_ep_name);
+		vc->gnix_ep_name = NULL;
+	}
 
 	/*
 	 * put VC back on the freelist
