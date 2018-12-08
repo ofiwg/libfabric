@@ -33,7 +33,6 @@
 
 #include "config.h"
 
-#include <infiniband/cm.h>	/* For Reject Codes */
 #include <ofi_util.h>
 #include "fi_verbs.h"
 
@@ -413,7 +412,7 @@ fi_ibv_eq_xrc_rej_event(struct fi_ibv_eq *eq, struct rdma_cm_event *cma_event)
 	}
 
 	/* If reject comes from remote provider peer */
-	if (cma_event->status == IB_CM_REJ_CONSUMER_DEFINED) {
+	if (cma_event->status == FI_IBV_CM_REJ_CONSUMER_DEFINED) {
 		if (cma_event->param.conn.private_data_len &&
 		    fi_ibv_eq_set_xrc_info(cma_event, &xrc_info)) {
 			VERBS_WARN(FI_LOG_FABRIC,
@@ -459,7 +458,11 @@ fi_ibv_eq_xrc_connected_event(struct fi_ibv_eq *eq,
 	 * ID(s) since  RDMA CM is used for connection setup only */
 	*acked = 1;
 	rdma_ack_cm_event(cma_event);
-	fi_ibv_free_xrc_conn_setup(ep);
+
+	/* TODO: Ultimately we will want to initiate freeing of the connection
+	 * resources here with fi_ibv_free_xrc_conn_setup(ep); however, timewait
+	 * issues in larger fabrics need to be resolved first. The resources
+	 * will be freed at EP close if not freed here */
 
 	return ret;
 }
