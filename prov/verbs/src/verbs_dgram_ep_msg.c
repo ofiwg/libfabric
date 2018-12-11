@@ -115,7 +115,7 @@ fi_ibv_dgram_ep_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	if (fi_ibv_dgram_ep_set_addr(ep, msg->addr, &wr))
 		return -FI_ENOENT;
 
-	return fi_ibv_dgram_send_msg(ep, &wr, msg, flags);
+	return fi_ibv_send_msg(ep, &wr, msg, flags);
 }
 
 static inline ssize_t
@@ -133,7 +133,7 @@ fi_ibv_dgram_ep_sendv(struct fid_ep *ep_fid, const struct iovec *iov,
 	if (fi_ibv_dgram_ep_set_addr(ep, dest_addr, &wr))
 		return -FI_ENOENT;
 
-	return fi_ibv_dgram_send_iov(ep, &wr, iov, desc, count);
+	return fi_ibv_send_iov(ep, &wr, iov, desc, count);
 }
 
 static ssize_t
@@ -151,7 +151,7 @@ fi_ibv_dgram_ep_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 	if (fi_ibv_dgram_ep_set_addr(ep, dest_addr, &wr))
 		return -FI_ENOENT;
 
-	return fi_ibv_dgram_send_buf(ep, &wr, buf, len, desc);
+	return fi_ibv_send_buf(ep, &wr, buf, len, desc);
 }
 
 static inline ssize_t
@@ -171,7 +171,7 @@ fi_ibv_dgram_ep_senddata(struct fid_ep *ep_fid, const void *buf,
 	if (fi_ibv_dgram_ep_set_addr(ep, dest_addr, &wr))
 		return -FI_ENOENT;
 
-	return fi_ibv_dgram_send_buf(ep, &wr, buf, len, desc);
+	return fi_ibv_send_buf(ep, &wr, buf, len, desc);
 }
 
 static ssize_t
@@ -190,7 +190,7 @@ fi_ibv_dgram_ep_injectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
 	if (fi_ibv_dgram_ep_set_addr(ep, dest_addr, &wr))
 		return -FI_ENOENT;
 
-	return fi_ibv_dgram_send_buf_inline(ep, &wr, buf, len);
+	return fi_ibv_send_buf(ep, &wr, buf, len, NULL);
 }
 
 static ssize_t
@@ -204,10 +204,8 @@ fi_ibv_dgram_ep_injectdata_fast(struct fid_ep *ep_fid, const void *buf, size_t l
 	ep->wrs->msg_wr.imm_data = htonl((uint32_t)data);
 	ep->wrs->msg_wr.opcode = IBV_WR_SEND_WITH_IMM;
 
-	ep->wrs->sge.addr = (uintptr_t)
-		fi_ibv_dgram_moderate_user_buf(buf, ep->info->ep_attr->msg_prefix_size);
-	ep->wrs->sge.length = (uint32_t)
-		fi_ibv_dgram_moderate_user_buf_len(len, ep->info->ep_attr->msg_prefix_size);
+	ep->wrs->sge.addr = (uintptr_t) buf;
+	ep->wrs->sge.length = (uint32_t) len;
 
 	if (fi_ibv_dgram_ep_set_addr(ep, dest_addr, &ep->wrs->msg_wr))
 		return -FI_ENOENT;
@@ -232,7 +230,7 @@ fi_ibv_dgram_ep_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
 	if (fi_ibv_dgram_ep_set_addr(ep, dest_addr, &wr))
 		return -FI_ENOENT;
 
-	return fi_ibv_dgram_send_buf_inline(ep, &wr, buf, len);
+	return fi_ibv_send_buf(ep, &wr, buf, len, NULL);
 }
 
 static ssize_t
@@ -242,10 +240,8 @@ fi_ibv_dgram_ep_inject_fast(struct fid_ep *ep_fid, const void *buf, size_t len,
 	struct fi_ibv_ep *ep =
 		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 
-	ep->wrs->sge.addr = (uintptr_t)
-		fi_ibv_dgram_moderate_user_buf(buf, ep->info->ep_attr->msg_prefix_size);
-	ep->wrs->sge.length = (uint32_t)
-		fi_ibv_dgram_moderate_user_buf_len(len, ep->info->ep_attr->msg_prefix_size);
+	ep->wrs->sge.addr = (uintptr_t) buf;
+	ep->wrs->sge.length = (uint32_t) len;
 
 	if (fi_ibv_dgram_ep_set_addr(ep, dest_addr, &ep->wrs->msg_wr))
 		return -FI_ENOENT;
