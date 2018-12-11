@@ -176,7 +176,8 @@ struct rxd_ep {
 
 	size_t rx_size;
 	size_t tx_size;
-	size_t prefix_size;
+	size_t tx_prefix_size;
+	size_t rx_prefix_size;
 	uint32_t posted_bufs;
 	size_t min_multi_recv_size;
 	int do_local_mr;
@@ -311,10 +312,16 @@ static inline struct rxd_tag_hdr *rxd_get_tag_hdr(struct rxd_pkt_entry *pkt_entr
 		(hdr->flags & RXD_INLINE ? 0 : sizeof(struct rxd_sar_hdr)));
 }
 
-static inline void rxd_set_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
+static inline void rxd_set_tx_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 {
 	pkt_entry->pkt = (void *) ((char *) pkt_entry +
-			  sizeof(*pkt_entry) + ep->prefix_size);
+			  sizeof(*pkt_entry) + ep->tx_prefix_size);
+}
+
+static inline void rxd_set_rx_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
+{
+	pkt_entry->pkt = (void *) ((char *) pkt_entry +
+			  sizeof(*pkt_entry) + ep->rx_prefix_size);
 }
 
 static inline void *rxd_pkt_start(struct rxd_pkt_entry *pkt_entry)

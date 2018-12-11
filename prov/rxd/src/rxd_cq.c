@@ -279,7 +279,7 @@ static void rxd_ep_recv_data(struct rxd_ep *ep, struct rxd_x_entry *x_entry,
 	done = ofi_copy_to_iov(iov, iov_count, x_entry->offset +
 			       (pkt->ext_hdr.seg_no * rxd_domain->max_seg_sz),
 			       pkt->msg, size - sizeof(struct rxd_data_pkt) -
-			       ep->prefix_size);
+			       ep->rx_prefix_size);
 
 	x_entry->bytes_done += done;
 	ep->peers[pkt->base_hdr.peer].rx_seq_no++;
@@ -419,7 +419,7 @@ static int rxd_send_cts(struct rxd_ep *rxd_ep, struct rxd_rts_pkt *rts_pkt,
 		return -FI_ENOMEM;
 
 	cts = (struct rxd_cts_pkt *) (pkt_entry->pkt);
-	pkt_entry->pkt_size = sizeof(*cts) + rxd_ep->prefix_size;
+	pkt_entry->pkt_size = sizeof(*cts) + rxd_ep->tx_prefix_size;
 	pkt_entry->peer = peer;
 
 	cts->base_hdr.version = RXD_PROTOCOL_VERSION;
@@ -793,7 +793,7 @@ static struct rxd_x_entry *rxd_unpack_init_rx(struct rxd_ep *ep,
 					      struct rxd_atom_hdr **atom_hdr,
 					      void **msg, size_t *msg_size)
 {
-	rxd_unpack_hdrs(pkt_entry->pkt_size - ep->prefix_size, base_hdr, sar_hdr,
+	rxd_unpack_hdrs(pkt_entry->pkt_size - ep->rx_prefix_size, base_hdr, sar_hdr,
 			tag_hdr, data_hdr, rma_hdr, atom_hdr, msg, msg_size);
 
 	switch (base_hdr->type) {
@@ -970,7 +970,7 @@ static void rxd_handle_data(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 	struct rxd_data_pkt *pkt = (struct rxd_data_pkt *) (pkt_entry->pkt);
 	struct rxd_x_entry *x_entry;
 
-	if (pkt_entry->pkt_size < sizeof(*pkt) + ep->prefix_size) {
+	if (pkt_entry->pkt_size < sizeof(*pkt) + ep->rx_prefix_size) {
 		FI_WARN(&rxd_prov, FI_LOG_CQ,
 			"Cannot process packet smaller than minimum header size\n");
 		return;
