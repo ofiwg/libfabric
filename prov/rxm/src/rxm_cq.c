@@ -1265,36 +1265,10 @@ int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep)
 	return 0;
 }
 
-static inline ssize_t rxm_ep_read_msg_cq(struct rxm_ep *rxm_ep)
-{	
-	struct fi_cq_data_entry comp;
-	ssize_t ret;
-
-	ret = fi_cq_read(rxm_ep->msg_cq, &comp, 1);
-	if (ret > 0) {
-		// TODO handle errors internally and make this function return void.
-		// We don't have enough info to write a good error entry to the CQ at
-		// this point
-		ret = rxm_cq_handle_comp(rxm_ep, &comp);
-		if (OFI_UNLIKELY(ret)) {
-			rxm_cq_write_error_all(rxm_ep, ret);
-		} else {
-			return 1;
-		}
-	} else if (ret < 0) {
-		if (ret != -FI_EAGAIN) {
-			if (ret == -FI_EAVAIL)
-				rxm_cq_read_write_error(rxm_ep);
-			else
-				rxm_cq_write_error_all(rxm_ep, ret);
-		}
-	}
-	return ret;
-}
-
 void rxm_ep_progress(struct util_ep *util_ep)
 {
 	struct rxm_ep *rxm_ep = container_of(util_ep, struct rxm_ep, util_ep);
+	struct fi_cq_data_entry comp;
 	struct dlist_entry *conn_entry_tmp;
 	struct rxm_conn *rxm_conn;
 	struct rxm_rx_buf *buf;
@@ -1313,8 +1287,23 @@ void rxm_ep_progress(struct util_ep *util_ep)
 	ofi_ep_lock_release(&rxm_ep->util_ep);
 
 	do {
-		ret = rxm_ep_read_msg_cq(rxm_ep);
-	} while ((++comp_read < rxm_ep->comp_per_progress) && (ret > 0));
+		ret = fi_cq_read(rxm_ep->msg_cq, &comp, 1);
+		if (ret > 0) {
+			// We don't have enough info to write a good
+			// error entry to the CQ at this point
+			ret = rxm_cq_handle_comp(rxm_ep, &comp);
+			if (OFI_UNLIKELY(ret)) {
+				rxm_cq_write_error_all(rxm_ep, ret);
+			} else {
+				ret = 1;
+			}
+		} else if (ret < 0 && (ret != -FI_EAGAIN)) {
+			if (ret == -FI_EAVAIL)
+				rxm_cq_read_write_error(rxm_ep);
+			else
+				rxm_cq_write_error_all(rxm_ep, ret);
+		}
+	} while ((ret > 0) && (++comp_read < rxm_ep->comp_per_progress));
 
 	if (OFI_UNLIKELY(!dlist_empty(&rxm_ep->deferred_tx_conn_queue))) {
 		dlist_foreach_container_safe(&rxm_ep->deferred_tx_conn_queue,
