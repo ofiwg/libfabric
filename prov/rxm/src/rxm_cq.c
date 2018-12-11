@@ -568,7 +568,7 @@ rxm_cq_match_rx_buf(struct rxm_rx_buf *rx_buf,
 				  &recv_queue->unexp_msg_list);
 		ofi_ep_lock_release(&recv_queue->rxm_ep->util_ep);
 
-		rx_buf = rxm_rx_buf_get(rxm_ep);
+		rx_buf = rxm_rx_buf_alloc(rxm_ep);
 		if (OFI_UNLIKELY(!rx_buf)) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 				"Ran out of buffers from RX buffer pool\n");
@@ -664,7 +664,7 @@ static ssize_t rxm_rndv_send_ack(struct rxm_rx_buf *rx_buf)
 	assert(rx_buf->conn);
 
 	rx_buf->recv_entry->rndv.tx_buf = (struct rxm_tx_base_buf *)
-		rxm_tx_buf_get(rx_buf->ep, RXM_BUF_POOL_TX_ACK);
+		rxm_tx_buf_alloc(rx_buf->ep, RXM_BUF_POOL_TX_ACK);
 	if (OFI_UNLIKELY(!rx_buf->recv_entry->rndv.tx_buf)) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ,
 			"Ran out of buffers from ACK buffer pool\n");
@@ -887,8 +887,8 @@ static inline ssize_t rxm_handle_atomic_req(struct rxm_ep *rxm_ep,
 	if (OFI_UNLIKELY(!rx_buf->conn))
 		return -FI_EOTHER;
 
-	resp_buf = (struct rxm_tx_atomic_buf *) rxm_tx_buf_get(rxm_ep,
-							RXM_BUF_POOL_TX_ATOMIC);
+	resp_buf = (struct rxm_tx_atomic_buf *)
+		   rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_ATOMIC);
 	if (OFI_UNLIKELY(!resp_buf)) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 			"Unable to allocate from Atomic buffer pool\n");
@@ -1241,7 +1241,7 @@ int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep)
 	size_t i;
 
 	for (i = 0; i < rxm_ep->msg_info->rx_attr->size; i++) {
-		rx_buf = rxm_rx_buf_get(rxm_ep);
+		rx_buf = rxm_rx_buf_alloc(rxm_ep);
 		if (OFI_UNLIKELY(!rx_buf)) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 				"Ran out of buffers from RX buffer pool\n");

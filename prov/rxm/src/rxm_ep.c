@@ -270,74 +270,6 @@ static void rxm_buf_pool_destroy(struct rxm_buf_pool *pool)
 	}
 }
 
-static inline struct rxm_buf *
-rxm_buf_get_thread_unsafe(struct rxm_buf_pool *pool)
-{
-	return util_buf_alloc(pool->pool);
-}
-
-static inline void
-rxm_buf_release_thread_unsafe(struct rxm_buf_pool *pool, struct rxm_buf *rxm_buf)
-{
-	util_buf_release(pool->pool, rxm_buf);
-}
-
-static inline struct rxm_buf *
-rxm_buf_get_by_index_thread_unsafe(struct rxm_buf_pool *pool, size_t index)
-{
-	return util_buf_get_by_index(pool->pool, index);
-}
-
-static inline size_t
-rxm_get_buf_index_thread_unsafe(struct rxm_buf_pool *pool, struct rxm_buf *rxm_buf)
-{
-	return util_get_buf_index(pool->pool, rxm_buf);
-}
-
-static struct rxm_buf *
-rxm_buf_get_thread_safe(struct rxm_buf_pool *pool)
-{
-	struct rxm_buf *rxm_buf;
-
-	fastlock_acquire(&pool->rxm_ep->util_ep.lock);
-	rxm_buf = rxm_buf_get_thread_unsafe(pool);
-	fastlock_release(&pool->rxm_ep->util_ep.lock);
-
-	return rxm_buf;
-}
-
-static void
-rxm_buf_release_thread_safe(struct rxm_buf_pool *pool, struct rxm_buf *rxm_buf)
-{
-	fastlock_acquire(&pool->rxm_ep->util_ep.lock);
-	rxm_buf_release_thread_unsafe(pool, rxm_buf);
-	fastlock_release(&pool->rxm_ep->util_ep.lock);
-}
-
-static struct rxm_buf *
-rxm_buf_get_by_index_thread_safe(struct rxm_buf_pool *pool, size_t index)
-{
-	struct rxm_buf *rxm_buf;
-
-	fastlock_acquire(&pool->rxm_ep->util_ep.lock);
-	rxm_buf = rxm_buf_get_by_index_thread_unsafe(pool, index);
-	fastlock_release(&pool->rxm_ep->util_ep.lock);
-
-	return rxm_buf;
-}
-
-static size_t
-rxm_get_buf_index_thread_safe(struct rxm_buf_pool *pool, struct rxm_buf *rxm_buf)
-{
-	size_t index;
-
-	fastlock_acquire(&pool->rxm_ep->util_ep.lock);
-	index = rxm_get_buf_index_thread_unsafe(pool, rxm_buf);
-	fastlock_release(&pool->rxm_ep->util_ep.lock);
-
-	return index;
-}
-
 static int rxm_buf_pool_create(struct rxm_ep *rxm_ep,
 			       size_t chunk_count, size_t size,
 			       struct rxm_buf_pool *pool,
@@ -372,18 +304,6 @@ static int rxm_buf_pool_create(struct rxm_ep *rxm_ep,
 	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to create buf pool\n");
 		return -FI_ENOMEM;
-	}
-
-	if (rxm_ep->util_ep.domain->threading != FI_THREAD_SAFE) {
-		pool->buf_get = rxm_buf_get_thread_unsafe;
-		pool->buf_release = rxm_buf_release_thread_unsafe;
-		pool->buf_get_by_index = rxm_buf_get_by_index_thread_unsafe;
-		pool->get_buf_index = rxm_get_buf_index_thread_unsafe;
-	} else {
-		pool->buf_get = rxm_buf_get_thread_safe;
-		pool->buf_release = rxm_buf_release_thread_safe;
-		pool->buf_get_by_index = rxm_buf_get_by_index_thread_safe;
-		pool->get_buf_index = rxm_get_buf_index_thread_safe;
 	}
 
 	return 0;
@@ -1031,8 +951,8 @@ rxm_ep_alloc_rndv_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void 
 {
 	struct fid_mr **mr_iov;
 	ssize_t ret;
-	struct rxm_tx_rndv_buf *tx_buf =
-		(struct rxm_tx_rndv_buf *)rxm_tx_buf_get(rxm_ep, RXM_BUF_POOL_TX_RNDV);
+	struct rxm_tx_rndv_buf *tx_buf = (struct rxm_tx_rndv_buf *)
+			rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_RNDV);
 
 	if (OFI_UNLIKELY(!tx_buf)) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
@@ -1119,8 +1039,8 @@ rxm_ep_sar_tx_prepare_segment(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 			      size_t seg_no, uint64_t data, uint64_t flags, uint64_t tag,
 			      uint8_t op, enum rxm_sar_seg_type seg_type, uint64_t *msg_id)
 {
-	struct rxm_tx_sar_buf *tx_buf =
-		(struct rxm_tx_sar_buf *)rxm_tx_buf_get(rxm_ep, RXM_BUF_POOL_TX_SAR);
+	struct rxm_tx_sar_buf *tx_buf = (struct rxm_tx_sar_buf *)
+		rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_SAR);
 
 	if (OFI_UNLIKELY(!tx_buf)) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
@@ -1278,7 +1198,8 @@ rxm_ep_emulate_inject(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	       "is too big for MSG provider (max inject size = %zd)\n",
 	       pkt_size, rxm_ep->inject_limit);
 
-	tx_buf = (struct rxm_tx_eager_buf *)rxm_tx_buf_get(rxm_ep, RXM_BUF_POOL_TX);
+	tx_buf = (struct rxm_tx_eager_buf *)
+		  rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX);
 	if (OFI_UNLIKELY(!tx_buf)) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 			"Ran out of buffers from Eager buffer pool\n");
@@ -1333,7 +1254,7 @@ rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 	if (pkt_size <= rxm_ep->inject_limit) {
 		struct rxm_tx_base_buf *tx_buf = (struct rxm_tx_base_buf *)
-			rxm_tx_buf_get(rxm_ep, RXM_BUF_POOL_TX_INJECT);
+			rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_INJECT);
 		if (OFI_UNLIKELY(!tx_buf)) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 				"Ran out of buffers from Eager Inject buffer pool\n");
@@ -1375,7 +1296,7 @@ rxm_ep_inject_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, size_t
 					     total_len, rxm_ep->util_ep.tx_cntr_inc);
 	} else {
 		struct rxm_tx_base_buf *tx_buf = (struct rxm_tx_base_buf *)
-			rxm_tx_buf_get(rxm_ep, RXM_BUF_POOL_TX_INJECT);
+			rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_INJECT);
 		if (OFI_UNLIKELY(!tx_buf)) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 				"Ran out of buffers from Eager Inject buffer pool\n");
@@ -1426,7 +1347,7 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 						 data_len, total_len, inject_pkt);
 	} else if (data_len <= rxm_ep->eager_limit) {
 		struct rxm_tx_eager_buf *tx_buf = (struct rxm_tx_eager_buf *)
-			rxm_tx_buf_get(rxm_ep, RXM_BUF_POOL_TX);
+			rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX);
 
 		if (OFI_UNLIKELY(!tx_buf)) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,

@@ -632,11 +632,6 @@ struct rxm_buf_pool {
 	enum rxm_buf_pool_type type;
 	struct util_buf_pool *pool;
 	struct rxm_ep *rxm_ep;
-
-	struct rxm_buf *(*buf_get)(struct rxm_buf_pool *);
-	void (*buf_release)(struct rxm_buf_pool *, struct rxm_buf *);
-	struct rxm_buf *(*buf_get_by_index)(struct rxm_buf_pool *, size_t);
-	size_t (*get_buf_index)(struct rxm_buf_pool *, struct rxm_buf *);
 };
 
 struct rxm_msg_eq_entry {
@@ -1027,32 +1022,45 @@ rxm_ep_format_tx_buf_pkt(struct rxm_conn *rxm_conn, size_t len, uint8_t op,
 	pkt->hdr.data = data;
 }
 
-static inline
-struct rxm_buf *rxm_buf_get(struct rxm_buf_pool *pool)
+static inline struct rxm_buf *rxm_buf_alloc(struct rxm_buf_pool *pool)
 {
-	return pool->buf_get(pool);
+	struct rxm_buf *rxm_buf;
+
+	ofi_ep_lock_acquire(&pool->rxm_ep->util_ep);
+	rxm_buf = util_buf_alloc(pool->pool);
+	ofi_ep_lock_release(&pool->rxm_ep->util_ep);
+
+	return rxm_buf;
 }
 
 static inline
 void rxm_buf_release(struct rxm_buf_pool *pool, struct rxm_buf *buf)
 {
-	pool->buf_release(pool, buf);
+	ofi_ep_lock_acquire(&pool->rxm_ep->util_ep);
+	util_buf_release(pool->pool, buf);
+	ofi_ep_lock_release(&pool->rxm_ep->util_ep);
 }
 
-static inline
-struct rxm_buf *rxm_buf_get_by_index(struct rxm_buf_pool *pool, size_t index)
+static inline struct rxm_buf *
+rxm_buf_get_by_index(struct rxm_buf_pool *pool, size_t index)
 {
-	return pool->buf_get_by_index(pool, index);
+	struct rxm_buf *rxm_buf;
+
+	ofi_ep_lock_acquire(&pool->rxm_ep->util_ep);
+	rxm_buf = util_buf_get_by_index(pool->pool, index);
+	ofi_ep_lock_release(&pool->rxm_ep->util_ep);
+
+	return rxm_buf;
 }
 
 static inline
 size_t rxm_get_buf_index(struct rxm_buf_pool *pool, struct rxm_buf *buf)
 {
-	return pool->get_buf_index(pool, buf);
+	return util_get_buf_index(pool->pool, buf);
 }
 
 static inline struct rxm_buf *
-rxm_tx_buf_get(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
+rxm_tx_buf_alloc(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
 {
 	assert((type == RXM_BUF_POOL_TX) ||
 	       (type == RXM_BUF_POOL_TX_INJECT) ||
@@ -1060,7 +1068,7 @@ rxm_tx_buf_get(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
 	       (type == RXM_BUF_POOL_TX_RNDV) ||
 	       (type == RXM_BUF_POOL_TX_ATOMIC) ||
 	       (type == RXM_BUF_POOL_TX_SAR));
-	return rxm_buf_get(&rxm_ep->buf_pools[type]);
+	return rxm_buf_alloc(&rxm_ep->buf_pools[type]);
 }
 
 static inline void
@@ -1069,10 +1077,10 @@ rxm_tx_buf_release(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type, void *tx_
 	rxm_buf_release(&rxm_ep->buf_pools[type], (struct rxm_buf *)tx_buf);
 }
 
-static inline struct rxm_rx_buf *rxm_rx_buf_get(struct rxm_ep *rxm_ep)
+static inline struct rxm_rx_buf *rxm_rx_buf_alloc(struct rxm_ep *rxm_ep)
 {
-	return (struct rxm_rx_buf *)rxm_buf_get(
-			&rxm_ep->buf_pools[RXM_BUF_POOL_RX]);
+	return (struct rxm_rx_buf *)
+		rxm_buf_alloc(&rxm_ep->buf_pools[RXM_BUF_POOL_RX]);
 }
 
 static inline void
@@ -1082,10 +1090,10 @@ rxm_rx_buf_release(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_buf)
 			(struct rxm_buf *)rx_buf);
 }
 
-static inline struct rxm_rma_buf *rxm_rma_buf_get(struct rxm_ep *rxm_ep)
+static inline struct rxm_rma_buf *rxm_rma_buf_alloc(struct rxm_ep *rxm_ep)
 {
-	return (struct rxm_rma_buf *)rxm_buf_get(
-			&rxm_ep->buf_pools[RXM_BUF_POOL_RMA]);
+	return (struct rxm_rma_buf *)
+		rxm_buf_alloc(&rxm_ep->buf_pools[RXM_BUF_POOL_RMA]);
 }
 
 static inline void
@@ -1096,10 +1104,10 @@ rxm_rma_buf_release(struct rxm_ep *rxm_ep, struct rxm_rma_buf *rx_buf)
 }
 
 static inline
-struct rxm_tx_atomic_buf *rxm_tx_atomic_buf_get(struct rxm_ep *rxm_ep)
+struct rxm_tx_atomic_buf *rxm_tx_atomic_buf_alloc(struct rxm_ep *rxm_ep)
 {
-	return (struct rxm_tx_atomic_buf *) rxm_tx_buf_get(rxm_ep,
-						RXM_BUF_POOL_TX_ATOMIC);
+	return (struct rxm_tx_atomic_buf *)
+		rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_ATOMIC);
 }
 
 static inline struct rxm_recv_entry *rxm_recv_entry_get(struct rxm_recv_queue *queue)
