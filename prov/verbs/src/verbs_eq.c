@@ -244,8 +244,10 @@ static void fi_ibv_eq_skip_xrc_cm_data(const void **priv_data,
 {
 	const struct fi_ibv_xrc_cm_data *cm_data = *priv_data;
 
-	*priv_data = (cm_data + 1);
-	*priv_data_len -= sizeof(*cm_data);
+	if (*priv_data_len > sizeof(*cm_data)) {
+		*priv_data = (cm_data + 1);
+		*priv_data_len -= sizeof(*cm_data);
+	}
 }
 
 static int
@@ -398,21 +400,38 @@ fi_ibv_eq_xrc_rej_event(struct fi_ibv_eq *eq, struct rdma_cm_event *cma_event)
 	struct fi_ibv_xrc_ep *ep;
 	fid_t fid = cma_event->id->context;
 	struct fi_ibv_xrc_conn_info xrc_info;
+	enum fi_ibv_xrc_ep_conn_state state;
 
 	ep = container_of(fid, struct fi_ibv_xrc_ep, base_ep.util_ep.ep_fid);
+	state = ep->conn_state;
 
-	if (!cma_event->param.conn.private_data_len ||
-			fi_ibv_eq_set_xrc_info(cma_event, &xrc_info)) {
-		/* IB CM infrastructure reject and user CM data is not
-		 * available. Handle internally. */
+	if (ep->base_ep.id != cma_event->id || state == FI_IBV_XRC_CONNECTED) {
 		VERBS_WARN(FI_LOG_FABRIC,
-			   "CM Reject %d\n", cma_event->status);
-		fi_ibv_ep_ini_conn_rejected(ep);
+			   "Stale CM Reject %d received\n", cma_event->status);
 		return -FI_EAGAIN;
 	}
 
+	/* If reject comes from remote provider peer */
+	if (cma_event->status == FI_IBV_CM_REJ_CONSUMER_DEFINED) {
+		if (cma_event->param.conn.private_data_len &&
+		    fi_ibv_eq_set_xrc_info(cma_event, &xrc_info)) {
+			VERBS_WARN(FI_LOG_FABRIC,
+				   "CM REJ private data not valid\n");
+			return -FI_EAGAIN;
+		}
+
+		fi_ibv_ep_ini_conn_rejected(ep);
+		return FI_SUCCESS;
+	}
+
+	VERBS_WARN(FI_LOG_FABRIC, "Non-application generated CM Reject %d\n",
+		   cma_event->status);
+	if (cma_event->param.conn.private_data_len)
+		VERBS_WARN(FI_LOG_FABRIC, "Unexpected CM Reject priv_data\n");
+
 	fi_ibv_ep_ini_conn_rejected(ep);
-	return ep->base_ep.id == cma_event->id ? FI_SUCCESS : -FI_EAGAIN;
+
+	return state == FI_IBV_XRC_ORIG_CONNECTING ? FI_SUCCESS : -FI_EAGAIN;
 }
 
 static inline int
@@ -439,7 +458,11 @@ fi_ibv_eq_xrc_connected_event(struct fi_ibv_eq *eq,
 	 * ID(s) since  RDMA CM is used for connection setup only */
 	*acked = 1;
 	rdma_ack_cm_event(cma_event);
-	fi_ibv_free_xrc_conn_setup(ep);
+
+	/* TODO: Ultimately we will want to initiate freeing of the connection
+	 * resources here with fi_ibv_free_xrc_conn_setup(ep); however, timewait
+	 * issues in larger fabrics need to be resolved first. The resources
+	 * will be freed at EP close if not freed here */
 
 	return ret;
 }

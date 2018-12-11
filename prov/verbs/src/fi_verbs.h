@@ -118,6 +118,8 @@
 #define VERBS_CM_DATA_SIZE	(FI_IBV_CM_DATA_SIZE -		\
 				 sizeof(struct fi_ibv_cm_data_hdr))
 
+#define FI_IBV_CM_REJ_CONSUMER_DEFINED	28
+
 #define VERBS_DGRAM_MSG_PREFIX_SIZE	(40)
 
 #define FI_IBV_EP_TYPE(info)						\
