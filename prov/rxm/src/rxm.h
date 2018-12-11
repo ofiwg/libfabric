@@ -1086,8 +1086,15 @@ static inline struct rxm_rx_buf *rxm_rx_buf_alloc(struct rxm_ep *rxm_ep)
 static inline void
 rxm_rx_buf_release(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_buf)
 {
-	rxm_buf_release(&rxm_ep->buf_pools[RXM_BUF_POOL_RX],
-			(struct rxm_buf *)rx_buf);
+	ofi_ep_lock_acquire(&rx_buf->ep->util_ep);
+	if (rx_buf->repost) {
+		dlist_insert_tail(&rx_buf->repost_entry,
+				  &rx_buf->ep->repost_ready_list);
+	} else {
+		util_buf_release(rxm_ep->buf_pools[RXM_BUF_POOL_RX].pool,
+				 rx_buf);
+	}
+	ofi_ep_lock_release(&rx_buf->ep->util_ep);
 }
 
 static inline struct rxm_rma_buf *rxm_rma_buf_alloc(struct rxm_ep *rxm_ep)
@@ -1149,19 +1156,4 @@ rxm_cq_write_multi_recv_comp(struct rxm_ep *rxm_ep, struct rxm_recv_entry *recv_
 		return ofi_cq_write(rxm_ep->util_ep.rx_cq, recv_entry->context,
 				    FI_MULTI_RECV, recv_entry->multi_recv.len,
 				    recv_entry->multi_recv.buf, 0, 0);
-}
-
-static inline void rxm_enqueue_rx_buf_for_repost(struct rxm_rx_buf *rx_buf)
-{
-	ofi_ep_lock_acquire(&rx_buf->ep->util_ep);
-	dlist_insert_tail(&rx_buf->repost_entry, &rx_buf->ep->repost_ready_list);
-	ofi_ep_lock_release(&rx_buf->ep->util_ep);
-}
-
-static inline void rxm_enqueue_rx_buf_for_repost_check(struct rxm_rx_buf *rx_buf)
-{
-	if (rx_buf->repost)
-		rxm_enqueue_rx_buf_for_repost(rx_buf);
-	else
-		rxm_rx_buf_release(rx_buf->ep, rx_buf);
 }

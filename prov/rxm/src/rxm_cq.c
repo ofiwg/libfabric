@@ -179,7 +179,7 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 		size_t recv_size = rx_buf->pkt.hdr.size;
 		struct rxm_ep *rxm_ep = rx_buf->ep;
 
-		rxm_enqueue_rx_buf_for_repost_check(rx_buf);
+		rxm_rx_buf_release(rxm_ep, rx_buf);
 
 		recv_entry->total_len -= recv_size;
 
@@ -216,7 +216,7 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 
 		return rxm_process_recv_entry(recv_entry->recv_queue, recv_entry);
 	} else {
-		rxm_enqueue_rx_buf_for_repost_check(rx_buf);
+		rxm_rx_buf_release(rx_buf->ep, rx_buf);
 		rxm_recv_entry_release(recv_entry->recv_queue, recv_entry);
 	}
 
@@ -321,8 +321,7 @@ static int rxm_rndv_tx_finish(struct rxm_ep *rxm_ep, struct rxm_tx_rndv_buf *tx_
 	assert(ofi_tx_cq_flags(tx_buf->pkt.hdr.op) & FI_SEND);
 	ofi_ep_tx_cntr_inc(&rxm_ep->util_ep);
 
-	rxm_enqueue_rx_buf_for_repost_check(tx_buf->rx_buf);
-
+	rxm_rx_buf_release(rxm_ep, tx_buf->rx_buf);
 	rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_RNDV, tx_buf);
 
 	return ret;
@@ -388,7 +387,7 @@ ssize_t rxm_cq_handle_seg_data(struct rxm_rx_buf *rx_buf)
 
 		/* The RX buffer can be reposted for further re-use */
 		rx_buf->recv_entry = NULL;
-		rxm_enqueue_rx_buf_for_repost_check(rx_buf);
+		rxm_rx_buf_release(rx_buf->ep, rx_buf);
 		return FI_SUCCESS;
 	}
 }
@@ -583,7 +582,7 @@ rxm_cq_match_rx_buf(struct rxm_rx_buf *rx_buf,
 						    struct rxm_conn,
 						    handle);
 
-		rxm_enqueue_rx_buf_for_repost(rx_buf);
+		rxm_rx_buf_release(rxm_ep, rx_buf);
 		return 0;
 	}
 	ofi_ep_lock_release(&recv_queue->rxm_ep->util_ep);
@@ -757,7 +756,7 @@ static int rxm_handle_remote_write(struct rxm_ep *rxm_ep,
 	}
 	ofi_ep_rem_wr_cntr_inc(&rxm_ep->util_ep);
 	if (comp->op_context)
-		rxm_enqueue_rx_buf_for_repost_check(comp->op_context);
+		rxm_rx_buf_release(rxm_ep, comp->op_context);
 	return 0;
 }
 
@@ -830,7 +829,7 @@ static ssize_t rxm_atomic_send_resp(struct rxm_ep *rxm_ep,
 			ret = 0;
 		}
 	}
-	rxm_enqueue_rx_buf_for_repost_check(rx_buf);
+	rxm_rx_buf_release(rxm_ep, rx_buf);
 
 	return ret;
 }
@@ -980,7 +979,7 @@ done:
 	else
 		ofi_ep_rd_cntr_inc(&rxm_ep->util_ep);
 
-	rxm_enqueue_rx_buf_for_repost_check(rx_buf);
+	rxm_rx_buf_release(rxm_ep, rx_buf);
 	rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_ATOMIC, tx_buf);
 
 	return ret;
@@ -1258,7 +1257,8 @@ int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep)
 						    handle);
 		ret = rxm_ep_repost_buf(rx_buf);
 		if (ret) {
-			rxm_rx_buf_release(rxm_ep, rx_buf);
+			rxm_buf_release(&rxm_ep->buf_pools[RXM_BUF_POOL_RX],
+					&rx_buf->hdr);
 			return ret;
 		}
 	}
