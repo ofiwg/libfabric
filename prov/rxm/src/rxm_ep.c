@@ -548,12 +548,12 @@ static int rxm_ep_cancel_recv(struct rxm_ep *rxm_ep,
 	struct fi_cq_err_entry err_entry;
 	struct rxm_recv_entry *recv_entry;
 	struct dlist_entry *entry;
+	int ret;
 
 	ofi_ep_lock_acquire(&recv_queue->rxm_ep->util_ep);
 	entry = dlist_remove_first_match(&recv_queue->recv_list,
 					 rxm_match_recv_entry_context,
 					 context);
-	ofi_ep_lock_release(&recv_queue->rxm_ep->util_ep);
 	if (entry) {
 		recv_entry = container_of(entry, struct rxm_recv_entry, entry);
 		memset(&err_entry, 0, sizeof(err_entry));
@@ -563,9 +563,12 @@ static int rxm_ep_cancel_recv(struct rxm_ep *rxm_ep,
 		err_entry.err = FI_ECANCELED;
 		err_entry.prov_errno = -FI_ECANCELED;
 		rxm_recv_entry_release(recv_queue, recv_entry);
-		return ofi_cq_write_error(rxm_ep->util_ep.rx_cq, &err_entry);
+		ret = ofi_cq_write_error(rxm_ep->util_ep.rx_cq, &err_entry);
+	} else {
+		ret = 0;
 	}
-	return 0;
+	ofi_ep_lock_release(&recv_queue->rxm_ep->util_ep);
+	return ret;
 }
 
 static ssize_t rxm_ep_cancel(fid_t fid_ep, void *context)
