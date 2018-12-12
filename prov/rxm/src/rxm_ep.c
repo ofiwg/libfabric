@@ -818,8 +818,10 @@ static ssize_t rxm_ep_recv_common_flags(struct rxm_ep *rxm_ep, const struct iove
 
 		assert(flags & FI_DISCARD);
 		FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Discarding buffered receive\n");
+		ofi_ep_lock_acquire(&rxm_ep->util_ep);
 		dlist_insert_tail(&rx_buf->repost_entry,
 				  &rx_buf->ep->repost_ready_list);
+		ofi_ep_lock_release(&rxm_ep->util_ep);
 		return 0;
 	}
 
