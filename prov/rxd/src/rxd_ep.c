@@ -49,7 +49,7 @@ struct rxd_pkt_entry *rxd_get_tx_pkt(struct rxd_ep *ep)
 		return NULL;
 
 	pkt_entry->mr = (struct fid_mr *) mr;
-	rxd_set_pkt(ep, pkt_entry);
+	rxd_set_tx_pkt(ep, pkt_entry);
 
 	return pkt_entry;
 }
@@ -67,8 +67,7 @@ static struct rxd_pkt_entry *rxd_get_rx_pkt(struct rxd_ep *ep)
 		return NULL;
 
 	pkt_entry->mr = (struct fid_mr *) mr;
-
-	rxd_set_pkt(ep, pkt_entry);
+	rxd_set_rx_pkt(ep, pkt_entry);
 
 	return pkt_entry;
 }
@@ -345,7 +344,7 @@ void rxd_init_data_pkt(struct rxd_ep *ep, struct rxd_x_entry *tx_entry,
 
 	tx_entry->bytes_done += pkt_entry->pkt_size;
 
-	pkt_entry->pkt_size += sizeof(*data_pkt) + ep->prefix_size;
+	pkt_entry->pkt_size += sizeof(*data_pkt) + ep->tx_prefix_size;
 }
 
 struct rxd_x_entry *rxd_tx_entry_init(struct rxd_ep *ep, const struct iovec *iov,
@@ -501,7 +500,7 @@ static ssize_t rxd_ep_send_rts(struct rxd_ep *rxd_ep, fi_addr_t rxd_addr)
 		return -FI_ENOMEM;
 
 	rts_pkt = (struct rxd_rts_pkt *) (pkt_entry->pkt);
-	pkt_entry->pkt_size = sizeof(*rts_pkt) + rxd_ep->prefix_size;
+	pkt_entry->pkt_size = sizeof(*rts_pkt) + rxd_ep->tx_prefix_size;
 	pkt_entry->peer = rxd_addr;
 
 	rts_pkt->base_hdr.version = RXD_PROTOCOL_VERSION;
@@ -666,7 +665,7 @@ int rxd_ep_send_op(struct rxd_ep *rxd_ep, struct rxd_x_entry *tx_entry,
 	}
 
 	pkt_entry->peer = tx_entry->peer;
-	pkt_entry->pkt_size = ((char *) ptr - (char *) base_hdr) + rxd_ep->prefix_size;
+	pkt_entry->pkt_size = ((char *) ptr - (char *) base_hdr) + rxd_ep->tx_prefix_size;
 
 	if (rxd_ep->peers[tx_entry->peer].unacked_cnt < rxd_env.max_unacked &&
 	    rxd_ep->peers[tx_entry->peer].peer_addr != FI_ADDR_UNSPEC) {
@@ -697,7 +696,7 @@ void rxd_ep_send_ack(struct rxd_ep *rxd_ep, fi_addr_t peer)
 	}
 
 	ack = (struct rxd_ack_pkt *) (pkt_entry->pkt);
-	pkt_entry->pkt_size = sizeof(*ack) + rxd_ep->prefix_size;
+	pkt_entry->pkt_size = sizeof(*ack) + rxd_ep->tx_prefix_size;
 	pkt_entry->peer = peer;
 
 	ack->base_hdr.version = RXD_PROTOCOL_VERSION;
@@ -1080,6 +1079,11 @@ static void rxd_ep_progress(struct util_ep *util_ep)
 		if (ret == -FI_EAGAIN)
 			break;
 
+		if (ret == -FI_EAVAIL) {
+			rxd_handle_error(ep);
+			continue;
+		}
+
 		if (cq_entry.flags & FI_RECV)
 			rxd_handle_recv_comp(ep, &cq_entry);
 	}
@@ -1244,11 +1248,15 @@ int rxd_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		goto err2;
 
-	rxd_ep->prefix_size = dg_info->ep_attr->msg_prefix_size;
+	rxd_ep->tx_prefix_size = dg_info->tx_attr->mode & FI_MSG_PREFIX ?
+				 dg_info->ep_attr->msg_prefix_size : 0;
+	rxd_ep->rx_prefix_size = dg_info->rx_attr->mode & FI_MSG_PREFIX ?
+				 dg_info->ep_attr->msg_prefix_size : 0;
 	fi_freeinfo(dg_info);
 
-	rxd_ep->rx_size = info->rx_attr->size;
-	rxd_ep->tx_size = info->tx_attr->size;
+	rxd_ep->rx_size = MIN(dg_info->rx_attr->size, info->rx_attr->size);
+	rxd_ep->tx_size = MIN(dg_info->tx_attr->size, info->tx_attr->size);
+
 	rxd_ep->next_retry = -1;
 	ret = rxd_ep_init_res(rxd_ep, info);
 	if (ret)

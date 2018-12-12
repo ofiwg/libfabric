@@ -279,7 +279,7 @@ static void rxd_ep_recv_data(struct rxd_ep *ep, struct rxd_x_entry *x_entry,
 	done = ofi_copy_to_iov(iov, iov_count, x_entry->offset +
 			       (pkt->ext_hdr.seg_no * rxd_domain->max_seg_sz),
 			       pkt->msg, size - sizeof(struct rxd_data_pkt) -
-			       ep->prefix_size);
+			       ep->rx_prefix_size);
 
 	x_entry->bytes_done += done;
 	ep->peers[pkt->base_hdr.peer].rx_seq_no++;
@@ -420,7 +420,7 @@ static int rxd_send_cts(struct rxd_ep *rxd_ep, struct rxd_rts_pkt *rts_pkt,
 		return -FI_ENOMEM;
 
 	cts = (struct rxd_cts_pkt *) (pkt_entry->pkt);
-	pkt_entry->pkt_size = sizeof(*cts) + rxd_ep->prefix_size;
+	pkt_entry->pkt_size = sizeof(*cts) + rxd_ep->tx_prefix_size;
 	pkt_entry->peer = peer;
 
 	cts->base_hdr.version = RXD_PROTOCOL_VERSION;
@@ -773,6 +773,13 @@ void rxd_unpack_hdrs(size_t pkt_size, struct rxd_base_hdr *base_hdr,
 		*atom_hdr = NULL;
 	}
 
+	if (pkt_size < (ptr - (char *) base_hdr)) {
+		FI_WARN(&rxd_prov, FI_LOG_CQ,
+			"Cannot process packet smaller than minimum header size\n");
+		*msg_size = 0;
+		return;
+	}
+
 	*msg = ptr;
 	*msg_size = pkt_size - (ptr - (char *) base_hdr);
 }
@@ -787,7 +794,7 @@ static struct rxd_x_entry *rxd_unpack_init_rx(struct rxd_ep *ep,
 					      struct rxd_atom_hdr **atom_hdr,
 					      void **msg, size_t *msg_size)
 {
-	rxd_unpack_hdrs(pkt_entry->pkt_size - ep->prefix_size, base_hdr, sar_hdr,
+	rxd_unpack_hdrs(pkt_entry->pkt_size - ep->rx_prefix_size, base_hdr, sar_hdr,
 			tag_hdr, data_hdr, rma_hdr, atom_hdr, msg, msg_size);
 
 	switch (base_hdr->type) {
@@ -964,6 +971,12 @@ static void rxd_handle_data(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 	struct rxd_data_pkt *pkt = (struct rxd_data_pkt *) (pkt_entry->pkt);
 	struct rxd_x_entry *x_entry;
 
+	if (pkt_entry->pkt_size < sizeof(*pkt) + ep->rx_prefix_size) {
+		FI_WARN(&rxd_prov, FI_LOG_CQ,
+			"Cannot process packet smaller than minimum header size\n");
+		return;
+	}
+
 	if (pkt->base_hdr.seq_no == ep->peers[pkt->base_hdr.peer].rx_seq_no) {
 		x_entry = rxd_get_data_x_entry(ep, pkt);
 		rxd_ep_recv_data(ep, x_entry, pkt, pkt_entry->pkt_size);
@@ -1103,6 +1116,22 @@ void rxd_handle_recv_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp)
 	if (release) {
 		rxd_remove_rx_pkt(ep, pkt_entry);
 		rxd_release_repost_rx(ep, pkt_entry);
+	}
+}
+
+void rxd_handle_error(struct rxd_ep *ep)
+{
+	struct fi_cq_err_entry err = {0};
+	int ret;
+
+	ret = fi_cq_readerr(ep->dg_cq, &err, 0);
+	if (ret < 0) {
+		FI_WARN(&rxd_prov, FI_LOG_CQ,
+			"Error reading CQ: %s\n", fi_strerror(-ret));
+	} else {
+		FI_WARN(&rxd_prov, FI_LOG_CQ,
+			"Received %s error from core provider: %s\n",
+			err.flags & FI_SEND ? "tx" : "rx", fi_strerror(-err.err)); 
 	}
 }
 

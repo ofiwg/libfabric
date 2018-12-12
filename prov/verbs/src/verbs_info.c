@@ -49,7 +49,7 @@
 			VERBS_DOMAIN_CAPS)
 #define VERBS_DGRAM_CAPS (FI_MSG | FI_RECV | FI_SEND | VERBS_DOMAIN_CAPS)
 
-#define VERBS_DGRAM_MODE (FI_MSG_PREFIX)
+#define VERBS_DGRAM_RX_MODE (FI_MSG_PREFIX)
 
 #define VERBS_TX_OP_FLAGS (FI_INJECT | FI_COMPLETION | FI_TRANSMIT_COMPLETE)
 #define VERBS_TX_OP_FLAGS_IWARP (FI_INJECT | FI_COMPLETION)
@@ -106,7 +106,7 @@ const struct fi_rx_attr verbs_rx_attr = {
 };
 
 const struct fi_rx_attr verbs_dgram_rx_attr = {
-	.mode			= VERBS_DGRAM_MODE | VERBS_RX_MODE,
+	.mode			= VERBS_DGRAM_RX_MODE | VERBS_RX_MODE,
 	.msg_order		= VERBS_MSG_ORDER,
 	.comp_order		= FI_ORDER_STRICT | FI_ORDER_DATA,
 	.total_buffered_recv	= 0,
@@ -122,7 +122,7 @@ const struct fi_tx_attr verbs_tx_attr = {
 };
 
 const struct fi_tx_attr verbs_dgram_tx_attr = {
-	.mode			= VERBS_DGRAM_MODE,
+	.mode			= 0,
 	.op_flags		= VERBS_TX_OP_FLAGS,
 	.msg_order		= VERBS_MSG_ORDER,
 	.comp_order		= FI_ORDER_STRICT,
@@ -628,7 +628,7 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 		*(fi->rx_attr) = verbs_rx_attr;
 		break;
 	case FI_EP_DGRAM:
-		fi->mode = VERBS_DGRAM_MODE;
+		fi->mode = VERBS_DGRAM_RX_MODE;
 		*(fi->tx_attr) = verbs_dgram_tx_attr;
 		*(fi->rx_attr) = verbs_dgram_rx_attr;
 		fi->ep_attr->msg_prefix_size = VERBS_DGRAM_MSG_PREFIX_SIZE;
