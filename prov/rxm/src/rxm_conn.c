@@ -418,7 +418,6 @@ int rxm_cmap_update(struct rxm_cmap *cmap, const void *addr, fi_addr_t fi_addr)
 	return 0;
 }
 
-/* Caller must hold cmap->lock */
 void rxm_cmap_process_shutdown(struct rxm_cmap *cmap,
 			       struct rxm_cmap_handle *handle)
 {
@@ -974,7 +973,6 @@ static int rxm_conn_reprocess_directed_recvs(struct rxm_recv_queue *recv_queue)
 
 	dlist_init(&rx_buf_list);
 
-	recv_queue->rxm_ep->cmap->acquire(&recv_queue->rxm_ep->cmap->lock);
 	ofi_ep_lock_acquire(&recv_queue->rxm_ep->util_ep);
 
 	dlist_foreach_container_safe(&recv_queue->unexp_msg_list,
@@ -1001,7 +999,6 @@ static int rxm_conn_reprocess_directed_recvs(struct rxm_recv_queue *recv_queue)
 		dlist_insert_tail(&rx_buf->unexp_msg.entry, &rx_buf_list);
 	}
 	ofi_ep_lock_release(&recv_queue->rxm_ep->util_ep);
-	recv_queue->rxm_ep->cmap->release(&recv_queue->rxm_ep->cmap->lock);
 
 	while (!dlist_empty(&rx_buf_list)) {
 		dlist_pop_front(&rx_buf_list, struct rxm_rx_buf,
