@@ -623,9 +623,6 @@ struct rxm_recv_queue {
 	struct dlist_entry unexp_msg_list;
 	dlist_func_t *match_recv;
 	dlist_func_t *match_unexp;
-
-	struct rxm_recv_entry *(*pop)(struct rxm_recv_queue *);
-	void (*push)(struct rxm_recv_queue *, struct rxm_recv_entry *);
 };
 
 struct rxm_buf_pool {
@@ -1097,14 +1094,15 @@ struct rxm_tx_atomic_buf *rxm_tx_atomic_buf_alloc(struct rxm_ep *rxm_ep)
 
 static inline struct rxm_recv_entry *rxm_recv_entry_get(struct rxm_recv_queue *queue)
 {
-	return queue->pop(queue);
+	return (freestack_isempty(queue->fs) ?
+		NULL : freestack_pop(queue->fs));
 }
 
 static inline void
 rxm_recv_entry_release(struct rxm_recv_queue *queue, struct rxm_recv_entry *entry)
 {
 	entry->total_len = 0;
-	queue->push(queue, entry);
+	freestack_push(queue->fs, entry);
 }
 
 static inline int rxm_cq_write_recv_comp(struct rxm_rx_buf *rx_buf,

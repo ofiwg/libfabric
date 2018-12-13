@@ -326,37 +326,6 @@ static void rxm_recv_entry_init(struct rxm_recv_entry *entry, void *arg)
 		entry->comp_flags |= FI_TAGGED;
 }
 
-static inline struct rxm_recv_entry *
-rxm_recv_entry_pop_thread_unsafe(struct rxm_recv_queue *recv_queue)
-{
-	return (freestack_isempty(recv_queue->fs) ?
-		NULL : freestack_pop(recv_queue->fs));
-}
-
-static inline void
-rxm_recv_entry_push_thread_unsafe(struct rxm_recv_queue *recv_queue,
-				  struct rxm_recv_entry *entry)
-{
-	freestack_push(recv_queue->fs, entry);
-}
-
-static struct rxm_recv_entry *
-rxm_recv_entry_pop_thread_safe(struct rxm_recv_queue *recv_queue)
-{
-	void *entry;
-
-	entry = rxm_recv_entry_pop_thread_unsafe(recv_queue);
-
-	return entry;
-}
-
-static void
-rxm_recv_entry_push_thread_safe(struct rxm_recv_queue *recv_queue,
-				struct rxm_recv_entry *entry)
-{
-	rxm_recv_entry_push_thread_unsafe(recv_queue, entry);
-}
-
 static int rxm_recv_queue_init(struct rxm_ep *rxm_ep,  struct rxm_recv_queue *recv_queue,
 			       size_t size, enum rxm_recv_queue_type type)
 {
@@ -384,14 +353,6 @@ static int rxm_recv_queue_init(struct rxm_ep *rxm_ep,  struct rxm_recv_queue *re
 			recv_queue->match_recv = rxm_match_recv_entry_tag;
 			recv_queue->match_unexp = rxm_match_unexp_msg_tag;
 		}
-	}
-
-	if (rxm_ep->util_ep.domain->threading != FI_THREAD_SAFE) {
-		recv_queue->pop = rxm_recv_entry_pop_thread_unsafe;
-		recv_queue->push = rxm_recv_entry_push_thread_unsafe;
-	} else {
-		recv_queue->pop = rxm_recv_entry_pop_thread_safe;
-		recv_queue->push = rxm_recv_entry_push_thread_safe;
 	}
 
 	return 0;
