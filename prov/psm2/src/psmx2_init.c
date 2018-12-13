@@ -30,8 +30,8 @@
  * SOFTWARE.
  */
 
-#include "psmx2.h"
 #include "ofi_prov.h"
+#include "psmx2.h"
 #include <glob.h>
 #include <dlfcn.h>
 
