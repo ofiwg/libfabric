@@ -89,6 +89,15 @@ rxm_av_insert_cmap(struct fid_av *av_fid, const void *addr, size_t count,
 					"Unable to update CM for OFI endpoints\n");
 				return ret;
 			}
+
+			if (rxm_static_connect) {
+				struct rxm_cmap_handle *handle;
+				struct rxm_cmap *cmap = rxm_ep->cmap;
+				cmap->acquire(&(cmap->lock));
+				handle = rxm_cmap_acquire_handle(cmap, fi_addr_tmp);
+				(void) rxm_cmap_handle_connect(cmap, fi_addr_tmp, handle);
+				cmap->release(&(cmap->lock));
+			}
 		}
 	}
 	return 0;

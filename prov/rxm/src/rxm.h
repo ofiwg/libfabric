@@ -153,6 +153,7 @@ extern size_t rxm_msg_tx_size;
 extern size_t rxm_msg_rx_size;
 extern size_t rxm_def_univ_size;
 
+extern int rxm_static_connect;
 /*
  * Connection Map
  */

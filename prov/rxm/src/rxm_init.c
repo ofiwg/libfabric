@@ -45,6 +45,7 @@
 size_t rxm_msg_tx_size		= 128;
 size_t rxm_msg_rx_size		= 128;
 size_t rxm_def_univ_size	= 256;
+int rxm_static_connect		= 0;
 
 char *rxm_proto_state_str[] = {
 	RXM_PROTO_STATES(OFI_STR)
@@ -367,11 +368,16 @@ RXM_INI
 			"(default: 128). Setting this to 0 would get default "
 			"value defined by the MSG provider.");
 
+	fi_param_define(&rxm_prov, "static_connect", FI_PARAM_BOOL,
+			"Enables static connections on RXM level. (default: off) "
+			"May increase startup time in case of large run.");
+
 	fi_param_get_size_t(&rxm_prov, "tx_size", &rxm_info.tx_attr->size);
 	fi_param_get_size_t(&rxm_prov, "rx_size", &rxm_info.rx_attr->size);
 	fi_param_get_size_t(&rxm_prov, "msg_tx_size", &rxm_msg_tx_size);
 	fi_param_get_size_t(&rxm_prov, "msg_rx_size", &rxm_msg_rx_size);
 	fi_param_get_size_t(NULL, "universe_size", &rxm_def_univ_size);
+	fi_param_get_bool(&rxm_prov, "static_connect", &rxm_static_connect);
 
 	if (rxm_init_info()) {
 		FI_WARN(&rxm_prov, FI_LOG_CORE, "Unable to initialize rxm_info\n");
