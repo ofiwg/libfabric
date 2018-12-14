@@ -233,7 +233,7 @@ rxm_ep_atomic_inject(struct fid_ep *ep_fid, const void *buf, size_t count,
 	};
 	struct fi_rma_ioc rma_iov = {
 		.addr = addr,
-		.count = 1,
+		.count = count,
 		.key = key,
 	};
 	struct fi_msg_atomic msg = {
