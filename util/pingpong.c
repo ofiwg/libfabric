@@ -565,6 +565,18 @@ static int pp_send_name(struct ct_pingpong *ct, struct fid *endpoint)
 	if (ret < 0)
 		goto fn;
 
+	PP_DEBUG("Sending address format\n");
+	if (ct->fi) {
+		ret = pp_ctrl_send(ct, (char *) &ct->fi->addr_format,
+				   sizeof(ct->fi->addr_format));
+	} else {
+		ret = pp_ctrl_send(ct, (char *) &ct->fi_pep->addr_format,
+				   sizeof(ct->fi_pep->addr_format));
+
+	}
+	if (ret < 0)
+		goto fn;
+
 	PP_DEBUG("Sending name\n");
 	ret = pp_ctrl_send(ct, local_name, addrlen);
 	PP_DEBUG("Sent name\n");
@@ -591,6 +603,12 @@ static int pp_recv_name(struct ct_pingpong *ct)
 		PP_ERR("Failed to allocate memory for the address\n");
 		return -ENOMEM;
 	}
+
+	PP_DEBUG("Receiving address format\n");
+	ret = pp_ctrl_recv(ct, (char *) &ct->hints->addr_format,
+			   sizeof(ct->hints->addr_format));
+	if (ret < 0)
+		return ret;
 
 	PP_DEBUG("Receiving name\n");
 	ret = pp_ctrl_recv(ct, ct->rem_name, len);
