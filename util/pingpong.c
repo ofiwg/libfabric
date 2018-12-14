@@ -1520,10 +1520,6 @@ static int pp_exchange_names_connected(struct ct_pingpong *ct)
 
 	PP_DEBUG("Connection-based endpoint: setting up connection\n");
 
-	ret = pp_ctrl_sync(ct);
-	if (ret)
-		return ret;
-
 	if (ct->opts.dst_addr) {
 		ret = pp_recv_name(ct);
 		if (ret < 0)
@@ -1599,10 +1595,6 @@ static int pp_server_connect(struct ct_pingpong *ct)
 	if (ret)
 		goto err;
 
-	ret = pp_ctrl_sync(ct);
-	if (ret)
-		goto err;
-
 	/* Listen */
 	rd = fi_eq_sread(ct->eq, &event, &entry, sizeof(entry), -1, 0);
 	if (rd != sizeof(entry)) {
@@ -1639,10 +1631,6 @@ static int pp_server_connect(struct ct_pingpong *ct)
 		goto err;
 	}
 
-	ret = pp_ctrl_sync(ct);
-	if (ret)
-		goto err;
-
 	/* Accept */
 	rd = fi_eq_sread(ct->eq, &event, &entry, sizeof(entry), -1, 0);
 	if (rd != sizeof(entry)) {
@@ -1677,11 +1665,6 @@ static int pp_client_connect(struct ct_pingpong *ct)
 	if (ret)
 		return ret;
 
-	/* Check that the remote is still up */
-	ret = pp_ctrl_sync(ct);
-	if (ret)
-		return ret;
-
 	ret = pp_open_fabric_res(ct);
 	if (ret)
 		return ret;
@@ -1699,10 +1682,6 @@ static int pp_client_connect(struct ct_pingpong *ct)
 		PP_PRINTERR("fi_connect", ret);
 		return ret;
 	}
-
-	ret = pp_ctrl_sync(ct);
-	if (ret)
-		return ret;
 
 	/* Connect */
 	rd = fi_eq_sread(ct->eq, &event, &entry, sizeof(entry), -1, 0);
