@@ -1219,11 +1219,9 @@ rxm_ep_inject_send_fast(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		ret = rxm_ep_msg_inject_send(rxm_ep, rxm_conn, inject_pkt,
 					      pkt_size, rxm_ep->util_ep.tx_cntr_inc);
 	} else {
-		ofi_ep_lock_acquire(&rxm_ep->util_ep);
 		ret = rxm_ep_emulate_inject(rxm_ep, rxm_conn, buf, len, pkt_size,
 					    inject_pkt->hdr.data, inject_pkt->hdr.flags,
 					    inject_pkt->hdr.tag, inject_pkt->hdr.op);
-		ofi_ep_lock_release(&rxm_ep->util_ep);
 	}
 	return ret;
 }
