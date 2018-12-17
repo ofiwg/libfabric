@@ -75,6 +75,9 @@
 #define RXD_MAX_PENDING		128
 #define RXD_MAX_PKT_RETRY	50
 
+#define RXD_PKT_IN_USE		(1 << 0)
+#define RXD_PKT_ACKED		(1 << 1)
+
 #define RXD_REMOTE_CQ_DATA	(1 << 0)
 #define RXD_NO_TX_COMP		(1 << 1)
 #define RXD_NO_RX_COMP		(1 << 2)
@@ -131,6 +134,7 @@ struct rxd_peer {
 	int retry_cnt;
 
 	uint16_t unacked_cnt;
+	uint8_t active;
 
 	uint16_t curr_rx_id;
 	uint16_t curr_tx_id;
@@ -197,6 +201,7 @@ struct rxd_ep {
 	struct dlist_entry rx_tag_list;
 	struct dlist_entry active_peers;
 	struct dlist_entry rts_sent_list;
+	struct dlist_entry ctrl_pkts;
 
 	struct rxd_peer peers[];
 };
@@ -267,6 +272,7 @@ static inline uint32_t rxd_flags(uint64_t fi_flags)
 struct rxd_pkt_entry {
 	struct dlist_entry d_entry;
 	struct slist_entry s_entry;//TODO - keep both or make separate tx/rx pkt structs
+	uint8_t flags;
 	size_t pkt_size;
 	uint64_t timestamp;
 	struct fi_context context;
@@ -427,6 +433,7 @@ ssize_t rxd_ep_generic_inject(struct rxd_ep *rxd_ep, const struct iovec *iov,
 void rxd_tx_entry_progress(struct rxd_ep *ep, struct rxd_x_entry *tx_entry,
 			   int try_send);
 void rxd_handle_recv_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp);
+void rxd_handle_send_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp);
 void rxd_handle_error(struct rxd_ep *ep);
 void rxd_progress_op(struct rxd_ep *ep, struct rxd_x_entry *rx_entry,
 		     struct rxd_pkt_entry *pkt_entry,

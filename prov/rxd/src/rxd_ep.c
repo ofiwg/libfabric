@@ -49,6 +49,7 @@ struct rxd_pkt_entry *rxd_get_tx_pkt(struct rxd_ep *ep)
 		return NULL;
 
 	pkt_entry->mr = (struct fid_mr *) mr;
+	pkt_entry->flags = 0;
 	rxd_set_tx_pkt(ep, pkt_entry);
 
 	return pkt_entry;
@@ -484,6 +485,8 @@ int rxd_ep_retry_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 	if (ret)
 		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "error sending packet: %d (%s)\n",
 			ret, fi_strerror(-ret));
+	else
+		pkt_entry->flags |= RXD_PKT_IN_USE;
 
 	return ret;
 }
@@ -707,13 +710,15 @@ void rxd_ep_send_ack(struct rxd_ep *rxd_ep, fi_addr_t peer)
 	ack->ext_hdr.rx_id = rxd_ep->peers[peer].curr_rx_id;
 	rxd_ep->peers[peer].last_tx_ack = ack->base_hdr.seq_no;
 
-	rxd_ep_retry_pkt(rxd_ep, pkt_entry);
-	rxd_release_tx_pkt(rxd_ep, pkt_entry);
+	dlist_insert_tail(&pkt_entry->d_entry, &rxd_ep->ctrl_pkts);
+	if (rxd_ep_retry_pkt(rxd_ep, pkt_entry)) {
+		dlist_remove(&pkt_entry->d_entry);
+		rxd_release_tx_pkt(rxd_ep, pkt_entry);
+	}
 }
 
 static void rxd_ep_free_res(struct rxd_ep *ep)
 {
-
 	util_buf_pool_destroy(ep->tx_pkt_pool);
 	util_buf_pool_destroy(ep->rx_pkt_pool);
 	util_buf_pool_destroy(ep->tx_entry_pool);
@@ -749,6 +754,9 @@ static void rxd_close_peer(struct rxd_ep *ep, struct rxd_peer *peer)
 				x_entry, entry);
 		rxd_tx_entry_free(ep, x_entry);
 	}
+
+	dlist_remove(&peer->entry);
+	peer->active = 0;
 }
 
 static int rxd_ep_close(struct fid *fid)
@@ -788,6 +796,12 @@ static int rxd_ep_close(struct fid *fid)
 		dlist_pop_front(&ep->unexp_tag_list, struct rxd_pkt_entry,
 				pkt_entry, d_entry);
 		rxd_release_rx_pkt(ep, pkt_entry);
+	}
+
+	while (!dlist_empty(&ep->ctrl_pkts)) {
+		dlist_pop_front(&ep->ctrl_pkts, struct rxd_pkt_entry,
+				pkt_entry, d_entry);
+		rxd_release_tx_pkt(ep, pkt_entry);
 	}
 
 	if (ep->util_ep.tx_cq) {
@@ -1045,7 +1059,8 @@ static void rxd_progress_pkt_list(struct rxd_ep *ep, struct rxd_peer *peer)
 
 	dlist_foreach_container(&peer->unacked, struct rxd_pkt_entry,
 				pkt_entry, d_entry) {
-		if (current < rxd_get_retry_time(pkt_entry->timestamp, peer->retry_cnt))
+		if (pkt_entry->flags & (RXD_PKT_IN_USE | RXD_PKT_ACKED) ||
+		    current < rxd_get_retry_time(pkt_entry->timestamp, peer->retry_cnt))
 			continue;
 		retry = 1;
 		ret = rxd_ep_retry_pkt(ep, pkt_entry);
@@ -1086,6 +1101,8 @@ static void rxd_ep_progress(struct util_ep *util_ep)
 
 		if (cq_entry.flags & FI_RECV)
 			rxd_handle_recv_comp(ep, &cq_entry);
+		else
+			rxd_handle_send_comp(ep, &cq_entry);
 	}
 
 	if (!rxd_env.retry)
@@ -1178,6 +1195,7 @@ int rxd_ep_init_res(struct rxd_ep *ep, struct fi_info *fi_info)
 	dlist_init(&ep->rts_sent_list);
 	dlist_init(&ep->unexp_list);
 	dlist_init(&ep->unexp_tag_list);
+	dlist_init(&ep->ctrl_pkts);
 	slist_init(&ep->rx_pkt_list);
 
 	return 0;
@@ -1207,6 +1225,7 @@ static void rxd_init_peer(struct rxd_ep *ep, uint64_t rxd_addr)
 	ep->peers[rxd_addr].rx_window = rxd_env.max_unacked;
 	ep->peers[rxd_addr].unacked_cnt = 0;
 	ep->peers[rxd_addr].retry_cnt = 0;
+	ep->peers[rxd_addr].active = 0;
 	dlist_init(&ep->peers[rxd_addr].unacked);
 	dlist_init(&ep->peers[rxd_addr].tx_list);
 	dlist_init(&ep->peers[rxd_addr].rx_list);

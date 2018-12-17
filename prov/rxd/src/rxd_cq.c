@@ -304,31 +304,37 @@ static void rxd_ep_recv_data(struct rxd_ep *ep, struct rxd_x_entry *x_entry,
 	}
 }
 
-static int rxd_verify_active(struct rxd_ep *ep, fi_addr_t addr, fi_addr_t peer_addr)
+static void rxd_verify_active(struct rxd_ep *ep, fi_addr_t addr, fi_addr_t peer_addr)
 {
 	struct rxd_pkt_entry *pkt_entry;
 
-	if (ep->peers[addr].peer_addr == peer_addr)
-		return 1;
-	if (ep->peers[addr].peer_addr != FI_ADDR_UNSPEC) {
+	if (ep->peers[addr].peer_addr == peer_addr &&
+	    ep->peers[addr].peer_addr != FI_ADDR_UNSPEC)
 		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL,
 			"overwriting active peer - unexpected behavior\n");
-		return 1;
-	}
 
 	ep->peers[addr].peer_addr = peer_addr;
 
-	if (!dlist_empty(&ep->peers[addr].unacked)) {
+	if (!dlist_empty(&ep->peers[addr].unacked) && 
+	    rxd_get_base_hdr(container_of((&ep->peers[addr].unacked)->next,
+			     struct rxd_pkt_entry, d_entry))->type == RXD_RTS) {
 		dlist_pop_front(&ep->peers[addr].unacked,
 				struct rxd_pkt_entry, pkt_entry, d_entry);
-		rxd_release_tx_pkt(ep, pkt_entry);
-		ep->peers[addr].unacked_cnt--;
+		if (pkt_entry->flags & RXD_PKT_IN_USE) {
+			dlist_insert_tail(&pkt_entry->d_entry, &ep->ctrl_pkts);
+			pkt_entry->flags |= RXD_PKT_ACKED;
+		} else {
+			rxd_release_tx_pkt(ep, pkt_entry);
+			ep->peers[addr].unacked_cnt--;
+		}
 		dlist_remove(&ep->peers[addr].entry);
 	}
-	dlist_insert_tail(&ep->peers[addr].entry, &ep->active_peers);
-	ep->peers[addr].retry_cnt = 0;
 
-	return 0;
+	if (!ep->peers[addr].active) {
+		dlist_insert_tail(&ep->peers[addr].entry, &ep->active_peers);
+		ep->peers[addr].retry_cnt = 0;
+		ep->peers[addr].active = 1;
+	}
 }
 
 static int rxd_move_tx_pkt(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
@@ -362,6 +368,13 @@ void rxd_progress_tx_list(struct rxd_ep *ep, struct rxd_peer *peer)
 {
 	struct dlist_entry *tmp_entry;
 	struct rxd_x_entry *tx_entry;
+	uint64_t head_seq = peer->last_rx_ack;
+
+	if (!dlist_empty(&peer->unacked)) {
+		head_seq = rxd_get_base_hdr(container_of(
+					    (&peer->unacked)->next,
+					    struct rxd_pkt_entry, d_entry))->seq_no;
+	}
 
 	if (peer->peer_addr == FI_ADDR_UNSPEC)
 		return;
@@ -376,7 +389,7 @@ void rxd_progress_tx_list(struct rxd_ep *ep, struct rxd_peer *peer)
 
 		if (tx_entry->bytes_done == tx_entry->cq_entry.len) {
 			if (ofi_before(tx_entry->start_seq + (tx_entry->num_segs - 1),
-			    peer->last_rx_ack)) {
+			    head_seq)) {
 				if (tx_entry->op == RXD_DATA_READ) {
 					fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
 					rxd_complete_rx(ep, tx_entry);
@@ -400,9 +413,7 @@ void rxd_progress_tx_list(struct rxd_ep *ep, struct rxd_peer *peer)
 
 static void rxd_update_peer(struct rxd_ep *ep, fi_addr_t peer, fi_addr_t peer_addr)
 {
-	if (rxd_verify_active(ep, peer, peer_addr))
-		return;
-
+	rxd_verify_active(ep, peer, peer_addr);
 	rxd_progress_tx_list(ep, &ep->peers[peer]);
 }
 
@@ -428,8 +439,12 @@ static int rxd_send_cts(struct rxd_ep *rxd_ep, struct rxd_rts_pkt *rts_pkt,
 	cts->cts_addr = peer;
 	cts->rts_addr = rts_pkt->rts_addr;
 
+	dlist_insert_tail(&pkt_entry->d_entry, &rxd_ep->ctrl_pkts);
 	ret = rxd_ep_retry_pkt(rxd_ep, pkt_entry);
-	rxd_release_tx_pkt(rxd_ep, pkt_entry);
+	if (ret) {
+		dlist_remove(&pkt_entry->d_entry);
+		rxd_release_tx_pkt(rxd_ep, pkt_entry);
+	}
 
 	return ret;
 }
@@ -1062,25 +1077,65 @@ static void rxd_handle_ack(struct rxd_ep *ep, struct rxd_pkt_entry *ack_entry)
 	fi_addr_t peer = ack->base_hdr.peer;
 	struct rxd_base_hdr *hdr;
 
-	if (ep->peers[peer].last_rx_ack != ack->base_hdr.seq_no) {
-		ep->peers[peer].retry_cnt = 0;
-		ep->peers[peer].last_rx_ack = ack->base_hdr.seq_no;
-	}
+	if (ep->peers[peer].last_rx_ack == ack->base_hdr.seq_no)
+		return;
 
-	while (!dlist_empty(&ep->peers[peer].unacked)) {
-		pkt_entry = container_of((&ep->peers[peer].unacked)->next,
-					struct rxd_pkt_entry, d_entry);
+	ep->peers[peer].retry_cnt = 0;
+	ep->peers[peer].last_rx_ack = ack->base_hdr.seq_no;
+
+	if (dlist_empty(&ep->peers[peer].unacked))
+		return;
+
+	pkt_entry = container_of((&ep->peers[peer].unacked)->next,
+				struct rxd_pkt_entry, d_entry);
+
+	while (&pkt_entry->d_entry != &ep->peers[peer].unacked) {
 		hdr = rxd_get_base_hdr(pkt_entry);
 		if (ofi_after_eq(hdr->seq_no, ack->base_hdr.seq_no))
 			break;
 
+		if (pkt_entry->flags & RXD_PKT_IN_USE) {
+			pkt_entry->flags |= RXD_PKT_ACKED;
+			pkt_entry = container_of((&pkt_entry->d_entry)->next,
+						 struct rxd_pkt_entry, d_entry);
+			continue;
+		}
 		dlist_remove(&pkt_entry->d_entry);
 		rxd_release_tx_pkt(ep, pkt_entry);
 	     	ep->peers[peer].unacked_cnt--;
+
+		pkt_entry = container_of((&ep->peers[peer].unacked)->next,
+					struct rxd_pkt_entry, d_entry);
 	}
 
 	rxd_progress_tx_list(ep, &ep->peers[ack->base_hdr.peer]);
 } 
+
+void rxd_handle_send_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp)
+{
+	struct rxd_pkt_entry *pkt_entry;
+	fi_addr_t peer;
+
+	pkt_entry = container_of(comp->op_context, struct rxd_pkt_entry, context);
+
+	switch (rxd_pkt_type(pkt_entry)) {
+	case RXD_CTS:
+	case RXD_ACK:
+		dlist_remove(&pkt_entry->d_entry);
+		rxd_release_tx_pkt(ep, pkt_entry);
+		break;
+	default:
+		if (pkt_entry->flags & RXD_PKT_ACKED) {
+			peer = pkt_entry->peer;
+			dlist_remove(&pkt_entry->d_entry);
+			rxd_release_tx_pkt(ep, pkt_entry);
+	     		ep->peers[peer].unacked_cnt--;
+			rxd_progress_tx_list(ep, &ep->peers[peer]);
+		} else {
+			pkt_entry->flags &= ~RXD_PKT_IN_USE;
+		}
+	}
+}
 
 void rxd_handle_recv_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp)
 {
