@@ -304,18 +304,14 @@ static void rxd_ep_recv_data(struct rxd_ep *ep, struct rxd_x_entry *x_entry,
 	}
 }
 
-static int rxd_verify_active(struct rxd_ep *ep, fi_addr_t addr, fi_addr_t peer_addr)
+static void rxd_verify_active(struct rxd_ep *ep, fi_addr_t addr, fi_addr_t peer_addr)
 {
 	struct rxd_pkt_entry *pkt_entry;
-	int ret = 0;
 
-	if (ep->peers[addr].peer_addr == peer_addr)
-		ret = 1;
-	if (ep->peers[addr].peer_addr != FI_ADDR_UNSPEC) {
+	if (ep->peers[addr].peer_addr == peer_addr &&
+	    ep->peers[addr].peer_addr != FI_ADDR_UNSPEC)
 		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL,
 			"overwriting active peer - unexpected behavior\n");
-		ret = 1;
-	}
 
 	ep->peers[addr].peer_addr = peer_addr;
 
@@ -334,12 +330,11 @@ static int rxd_verify_active(struct rxd_ep *ep, fi_addr_t addr, fi_addr_t peer_a
 		dlist_remove(&ep->peers[addr].entry);
 	}
 
-	if (ret) {
+	if (!ep->peers[addr].active) {
 		dlist_insert_tail(&ep->peers[addr].entry, &ep->active_peers);
 		ep->peers[addr].retry_cnt = 0;
+		ep->peers[addr].active = 1;
 	}
-
-	return ret;
 }
 
 static int rxd_move_tx_pkt(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
@@ -418,9 +413,7 @@ void rxd_progress_tx_list(struct rxd_ep *ep, struct rxd_peer *peer)
 
 static void rxd_update_peer(struct rxd_ep *ep, fi_addr_t peer, fi_addr_t peer_addr)
 {
-	if (rxd_verify_active(ep, peer, peer_addr))
-		return;
-
+	rxd_verify_active(ep, peer, peer_addr);
 	rxd_progress_tx_list(ep, &ep->peers[peer]);
 }
 

@@ -134,6 +134,7 @@ struct rxd_peer {
 	int retry_cnt;
 
 	uint16_t unacked_cnt;
+	uint8_t active;
 
 	uint16_t curr_rx_id;
 	uint16_t curr_tx_id;

@@ -754,6 +754,9 @@ static void rxd_close_peer(struct rxd_ep *ep, struct rxd_peer *peer)
 				x_entry, entry);
 		rxd_tx_entry_free(ep, x_entry);
 	}
+
+	dlist_remove(&peer->entry);
+	peer->active = 0;
 }
 
 static int rxd_ep_close(struct fid *fid)
@@ -1222,6 +1225,7 @@ static void rxd_init_peer(struct rxd_ep *ep, uint64_t rxd_addr)
 	ep->peers[rxd_addr].rx_window = rxd_env.max_unacked;
 	ep->peers[rxd_addr].unacked_cnt = 0;
 	ep->peers[rxd_addr].retry_cnt = 0;
+	ep->peers[rxd_addr].active = 0;
 	dlist_init(&ep->peers[rxd_addr].unacked);
 	dlist_init(&ep->peers[rxd_addr].tx_list);
 	dlist_init(&ep->peers[rxd_addr].rx_list);
