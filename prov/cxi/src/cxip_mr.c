@@ -61,7 +61,7 @@ int cxip_mr_enable(struct cxip_mr *mr)
 	/* Map the window buffer into IO address space */
 	ret = cxil_map(mr->domain->dev_if->if_lni, mr->buf, mr->len,
 		       CXI_MAP_PIN | CXI_MAP_NTA | CXI_MAP_READ | CXI_MAP_WRITE,
-		       &mr->md);
+		       NULL, &mr->md);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to IO map MR buffer: %d\n", ret);
 		ret = -FI_EFAULT;
@@ -115,8 +115,8 @@ int cxip_mr_enable(struct cxip_mr *mr)
 	cmd.target.no_truncate = 0;
 	cmd.target.unexpected_hdr_disable = 0;
 	cmd.target.buffer_id   = buffer_id;
-	cmd.target.lac         = mr->md.lac;
-	cmd.target.start       = mr->md.iova + ((uint64_t)mr->buf - mr->md.va);
+	cmd.target.lac         = mr->md->lac;
+	cmd.target.start       = CXI_VA_TO_IOVA(mr->md, mr->buf);
 	cmd.target.length      = mr->len;
 	cmd.target.match_bits  = 0;
 
@@ -159,7 +159,7 @@ unmap_buf:
 	cxi_eq_ack_events(mr->domain->dev_if->mr_evtq);
 	fastlock_release(&mr->domain->dev_if->lock);
 
-	cxil_unmap(mr->domain->dev_if->if_lni, &mr->md);
+	cxil_unmap(mr->md);
 unmap_pte:
 	cxil_unmap_pte(mr->pte_map);
 free_lep:
@@ -219,7 +219,7 @@ int cxip_mr_disable(struct cxip_mr *mr)
 unlock:
 	fastlock_release(&mr->domain->dev_if->lock);
 
-	ret = cxil_unmap(mr->domain->dev_if->if_lni, &mr->md);
+	ret = cxil_unmap(mr->md);
 	if (ret)
 		CXIP_LOG_ERROR("Failed to unmap MR buffer: %d\n", ret);
 

@@ -370,18 +370,18 @@ struct cxip_eq {
  * Support structures, accumulated in a union.
  */
 struct cxip_req_rma {
-	struct cxi_iova local_md;	// RMA target buffer
+	struct cxi_md *local_md;	// RMA target buffer
 };
 
 struct cxip_req_amo {
-	struct cxi_iova local_md;	// RMA target buffer
+	struct cxi_md *local_md;	// RMA target buffer
 	void *result_buf;		// local buffer for fetch
 };
 
 struct cxip_req_recv {
 	struct cxip_rx_ctx *rxc;	// receive context
 	void *recv_buf;			// local receive buffer
-	struct cxi_iova recv_md;	// local receive MD
+	struct cxi_md *recv_md;		// local receive MD
 	int rc;				// result code
 	uint32_t rlength;		// receive length
 	uint32_t mlength;		// message length
@@ -390,7 +390,7 @@ struct cxip_req_recv {
 };
 
 struct cxip_req_send {
-	struct cxi_iova send_md;	// message target buffer
+	struct cxi_md *send_md;		// message target buffer
 	struct cxip_tx_ctx *txc;
 	size_t length;			// request length
 	int rdvs_id;			// SW RDVS ID for long messages
@@ -582,7 +582,7 @@ struct cxip_oflow_buf {
 	enum oflow_buf_type type;
 	struct cxip_rx_ctx *rxc;
 	void *buf;
-	struct cxi_iova md;
+	struct cxi_md *md;
 	ofi_atomic32_t ref;
 	int exhausted;
 	int buffer_id;
@@ -787,7 +787,7 @@ struct cxip_mr {
 
 	void *buf;			// memory buffer VA
 	uint64_t len;			// memory length
-	struct cxi_iova md;		// memory buffer IOVA
+	struct cxi_md *md;		// buffer IO descriptor
 };
 
 /**

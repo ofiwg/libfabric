@@ -25,7 +25,7 @@
 /* Append a buffer to a PtlTE. */
 /* Caller must hold cmdq lock */
 static int issue_append_le(struct cxil_pte *pte, const void *buf, size_t len,
-			   struct cxi_iova *md, enum c_ptl_list list,
+			   struct cxi_md *md, enum c_ptl_list list,
 			   uint32_t buffer_id, uint64_t match_bits,
 			   uint64_t ignore_bits, uint32_t match_id,
 			   uint64_t min_free, bool event_success_disable,
@@ -168,9 +168,7 @@ static void report_recv_completion(struct cxip_req *req)
 
 static void oflow_buf_free(struct cxip_oflow_buf *oflow_buf)
 {
-	struct cxip_if *dev_if = oflow_buf->rxc->domain->dev_if;
-
-	cxil_unmap(dev_if->if_lni, &oflow_buf->md);
+	cxil_unmap(oflow_buf->md);
 	free(oflow_buf->buf);
 	free(oflow_buf);
 }
@@ -215,11 +213,11 @@ static int rdvs_issue_get(struct cxip_req *req, struct cxip_ux_send *ux_send)
 	cmd.full_dma.command.cmd_type = C_CMD_TYPE_DMA;
 	cmd.full_dma.command.opcode = C_CMD_GET;
 	cmd.full_dma.index_ext = idx_ext;
-	cmd.full_dma.lac = req->recv.recv_md.lac;
+	cmd.full_dma.lac = req->recv.recv_md->lac;
 	cmd.full_dma.remote_offset = 0;
 	cmd.full_dma.event_send_disable = 1;
 	cmd.full_dma.dfa = dfa;
-	cmd.full_dma.local_addr = CXI_VA_TO_IOVA(&req->recv.recv_md,
+	cmd.full_dma.local_addr = CXI_VA_TO_IOVA(req->recv.recv_md,
 						 req->recv.recv_buf);
 	cmd.full_dma.eq = rxc->comp.recv_cq->evtq->eqn;
 	cmd.full_dma.request_len = req->recv.mlength;
@@ -393,8 +391,8 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 			/* For eager messages, copy data from the overflow
 			 * buffer
 			 */
-			oflow_va = (void *)CXI_IOVA_TO_VA(&oflow_buf->md,
-							ux_recv->recv.start);
+			oflow_va = (void *)CXI_IOVA_TO_VA(oflow_buf->md,
+							  ux_recv->recv.start);
 
 			if (event->tgt_long.mlength > req->recv.rlength) {
 				req->recv.mlength = req->recv.rlength;
@@ -481,7 +479,7 @@ static int oflow_buf_add(struct cxip_rx_ctx *rxc)
 	ret = cxil_map(dom->dev_if->if_lni, (void *)oflow_buf->buf,
 		       rxc->oflow_buf_size,
 		       CXI_MAP_PIN | CXI_MAP_NTA | CXI_MAP_WRITE,
-		       &oflow_buf->md);
+		       NULL, &oflow_buf->md);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to map oflow buffer: %d\n", ret);
 		goto free_buf;
@@ -511,7 +509,7 @@ static int oflow_buf_add(struct cxip_rx_ctx *rxc)
 	min_free = (rxc->eager_threshold >>
 			dom->dev_if->if_dev->info.min_free_shift);
 	ret = issue_append_le(rxc->rx_pte->pte, oflow_buf->buf,
-			      rxc->oflow_buf_size, &oflow_buf->md,
+			      rxc->oflow_buf_size, oflow_buf->md,
 			      C_PTL_LIST_OVERFLOW, req->req_id, mb.raw, ib.raw,
 			      CXI_MATCH_ID_ANY, min_free, false, false, true,
 			      true, true, false, rxc->rx_cmdq);
@@ -539,7 +537,7 @@ oflow_unlock:
 	fastlock_release(&rxc->lock);
 	cxip_cq_req_free(req);
 oflow_unmap:
-	cxil_unmap(dom->dev_if->if_lni, &oflow_buf->md);
+	cxil_unmap(oflow_buf->md);
 free_buf:
 	free(oflow_buf->buf);
 free_oflow:
@@ -632,7 +630,7 @@ static int cxip_rxc_rdvs_init(struct cxip_rx_ctx *rxc)
 	int ret;
 	struct cxip_req *req;
 	void *ux_buf;
-	struct cxi_iova md;
+	struct cxi_md *md;
 
 	/* Match all tagged, rendezvous sends */
 	union cxip_match_bits mb = { .tagged = 1, .rdvs = 1 };
@@ -649,7 +647,7 @@ static int cxip_rxc_rdvs_init(struct cxip_rx_ctx *rxc)
 
 	/* Map overflow data buffer */
 	ret = cxil_map(dom->dev_if->if_lni, ux_buf, 1,
-		       CXI_MAP_PIN | CXI_MAP_NTA | CXI_MAP_WRITE, &md);
+		       CXI_MAP_PIN | CXI_MAP_NTA | CXI_MAP_WRITE, NULL, &md);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to map ux buffer: %d\n", ret);
 		goto free_ux_buf;
@@ -672,7 +670,7 @@ static int cxip_rxc_rdvs_init(struct cxip_rx_ctx *rxc)
 		goto unlock_ux;
 	}
 
-	ret = issue_append_le(rxc->rx_pte->pte, ux_buf, 1, &md, // TODO len 1?
+	ret = issue_append_le(rxc->rx_pte->pte, ux_buf, 1, md, // TODO len 1?
 			      C_PTL_LIST_OVERFLOW, req->req_id, mb.raw, ib.raw,
 			      CXI_MATCH_ID_ANY, 0, false, false, true, false,
 			      true, false, rxc->rx_cmdq);
@@ -702,7 +700,7 @@ unlock_ux:
 	fastlock_release(&rxc->lock);
 	cxip_cq_req_free(req);
 unmap_ux:
-	cxil_unmap(dom->dev_if->if_lni, &md);
+	cxil_unmap(md);
 free_ux_buf:
 	free(ux_buf);
 
@@ -734,8 +732,7 @@ static void cxip_rxc_rdvs_fini(struct cxip_rx_ctx *rxc)
 		} while (ofi_atomic_get32(&rxc->ux_rdvs_buf.ref));
 
 		/* Clean up overflow buffers */
-		ret = cxil_unmap(rxc->domain->dev_if->if_lni,
-				 &rxc->ux_rdvs_buf.md);
+		ret = cxil_unmap(rxc->ux_rdvs_buf.md);
 		if (ret) {
 			/* TODO handle error */
 			CXIP_LOG_ERROR("Failed to unmap ux buffer: %d\n", ret);
@@ -902,7 +899,7 @@ static void cxip_trecv_cb(struct cxip_req *req, const union c_event *event)
 			 * Copy data from the overflow buffer
 			 */
 			oflow_va =
-				(void *)CXI_IOVA_TO_VA(&oflow_buf->md,
+				(void *)CXI_IOVA_TO_VA(oflow_buf->md,
 						       event->tgt_long.start);
 
 			if (ux_send->length > req->recv.rlength) {
@@ -923,8 +920,7 @@ static void cxip_trecv_cb(struct cxip_req *req, const union c_event *event)
 			/* Release the unexpected Put event record */
 			free(ux_send);
 
-			ret = cxil_unmap(req->cq->domain->dev_if->if_lni,
-					&req->recv.recv_md);
+			ret = cxil_unmap(req->recv.recv_md);
 			if (ret != FI_SUCCESS)
 				CXIP_LOG_ERROR("Failed to free MD: %d\n", ret);
 
@@ -955,8 +951,7 @@ static void cxip_trecv_cb(struct cxip_req *req, const union c_event *event)
 		req->tag = mb.tag;
 		req->recv.src_addr = _rxc_event_src_addr(rxc, event);
 
-		ret = cxil_unmap(req->cq->domain->dev_if->if_lni,
-				 &req->recv.recv_md);
+		ret = cxil_unmap(req->recv.recv_md);
 		if (ret != FI_SUCCESS)
 			CXIP_LOG_ERROR("Failed to free MD: %d\n", ret);
 
@@ -973,8 +968,7 @@ static void cxip_trecv_cb(struct cxip_req *req, const union c_event *event)
 		 */
 		req->recv.rc = event->init_short.return_code;
 
-		ret = cxil_unmap(req->cq->domain->dev_if->if_lni,
-				 &req->recv.recv_md);
+		ret = cxil_unmap(req->recv.recv_md);
 		if (ret != FI_SUCCESS)
 			CXIP_LOG_ERROR("Failed to free MD: %d\n", ret);
 
@@ -1004,7 +998,7 @@ static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	struct cxip_rx_ctx *rxc;
 	struct cxip_domain *dom;
 	int ret;
-	struct cxi_iova recv_md;
+	struct cxi_md *recv_md;
 	struct cxip_req *req;
 	struct cxip_addr caddr;
 	uint32_t match_id;
@@ -1063,7 +1057,8 @@ static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 
 	/* Map local buffer */
 	ret = cxil_map(dom->dev_if->if_lni, (void *)buf, len,
-		       CXI_MAP_PIN | CXI_MAP_NTA | CXI_MAP_WRITE, &recv_md);
+		       CXI_MAP_PIN | CXI_MAP_NTA | CXI_MAP_WRITE, NULL,
+		       &recv_md);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to map recv buffer: %d\n", ret);
 		return ret;
@@ -1106,7 +1101,7 @@ static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	fastlock_acquire(&rxc->lock);
 
 	/* Issue Append command */
-	ret = issue_append_le(rxc->rx_pte->pte, buf, len, &recv_md,
+	ret = issue_append_le(rxc->rx_pte->pte, buf, len, recv_md,
 			      C_PTL_LIST_PRIORITY, req->req_id, mb.raw, ib.raw,
 			      match_id, 0, false, true, false, false, true,
 			      false, rxc->rx_cmdq);
@@ -1124,7 +1119,7 @@ trecv_unlock:
 	fastlock_release(&rxc->lock);
 	cxip_cq_req_free(req);
 trecv_unmap:
-	cxil_unmap(dom->dev_if->if_lni, &recv_md);
+	cxil_unmap(recv_md);
 
 	return ret;
 }
@@ -1140,7 +1135,7 @@ static void rdvs_send_req_free(struct cxip_req *req)
 
 	fastlock_release(&req->send.txc->lock);
 
-	ret = cxil_unmap(req->cq->domain->dev_if->if_lni, &req->send.send_md);
+	ret = cxil_unmap(req->send.send_md);
 	if (ret != FI_SUCCESS)
 		CXIP_LOG_ERROR("Failed to free MD: %d\n", ret);
 
@@ -1328,7 +1323,7 @@ static void cxip_send_cb(struct cxip_req *req, const union c_event *event)
 	int ret;
 	int event_rc;
 
-	ret = cxil_unmap(req->cq->domain->dev_if->if_lni, &req->send.send_md);
+	ret = cxil_unmap(req->send.send_md);
 	if (ret != FI_SUCCESS)
 		CXIP_LOG_ERROR("Failed to free MD: %d\n", ret);
 
@@ -1375,7 +1370,7 @@ static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 	struct cxip_tx_ctx *txc;
 	struct cxip_domain *dom;
 	int ret;
-	struct cxi_iova send_md;
+	struct cxi_md *send_md;
 	struct cxip_req *req;
 	union c_cmdu cmd = {};
 	struct cxip_addr caddr;
@@ -1427,7 +1422,8 @@ static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 
 	/* Map local buffer */
 	ret = cxil_map(dom->dev_if->if_lni, (void *)buf, len,
-		       CXI_MAP_PIN | CXI_MAP_NTA | CXI_MAP_READ, &send_md);
+		       CXI_MAP_PIN | CXI_MAP_NTA | CXI_MAP_READ, NULL,
+		       &send_md);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to map send buffer: %d\n", ret);
 		return ret;
@@ -1487,12 +1483,12 @@ static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 	cmd.full_dma.command.cmd_type = C_CMD_TYPE_DMA;
 	cmd.full_dma.command.opcode = C_CMD_PUT;
 	cmd.full_dma.index_ext = idx_ext;
-	cmd.full_dma.lac = send_md.lac;
+	cmd.full_dma.lac = send_md->lac;
 	cmd.full_dma.event_send_disable = 1;
 	cmd.full_dma.restricted = 0;
 	cmd.full_dma.dfa = dfa;
 	cmd.full_dma.remote_offset = 0;
-	cmd.full_dma.local_addr = CXI_VA_TO_IOVA(&send_md, buf);
+	cmd.full_dma.local_addr = CXI_VA_TO_IOVA(send_md, buf);
 	cmd.full_dma.request_len = len;
 	cmd.full_dma.eq = txc->comp.send_cq->evtq->eqn;
 	cmd.full_dma.user_ptr = (uint64_t)req;
@@ -1520,7 +1516,7 @@ static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 		req->send.rdvs_id = rdvs_id;
 		req->send.cmd = cmd;
 
-		ret = issue_append_le(txc->rdvs_pte->pte, buf, len, &send_md,
+		ret = issue_append_le(txc->rdvs_pte->pte, buf, len, send_md,
 				      C_PTL_LIST_PRIORITY, req->req_id,
 				      rdvs_id, 0, CXI_MATCH_ID_ANY, 0, false,
 				      true, false, true, false, true,
@@ -1562,7 +1558,7 @@ send_unlock:
 	fastlock_release(&txc->lock);
 	cxip_cq_req_free(req);
 send_unmap:
-	cxil_unmap(dom->dev_if->if_lni, &send_md);
+	cxil_unmap(send_md);
 
 	return ret;
 }
