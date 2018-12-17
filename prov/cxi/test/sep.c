@@ -935,7 +935,7 @@ Test(sep, simple_amo_swap, .timeout = 10)
  * information is displayed in the event of a crash.
  */
 // TODO: cleanup and enable when memory problem is fixed
-Test(sep, advancing_amo_fetch, .timeout = 10, .disabled = false)
+Test(sep, advancing_amo_fetch, .timeout = 10, .disabled = true)
 {
 	struct fi_cq_tagged_entry cqe;
 	uint64_t operand1;
