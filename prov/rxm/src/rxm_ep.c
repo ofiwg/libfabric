@@ -270,74 +270,6 @@ static void rxm_buf_pool_destroy(struct rxm_buf_pool *pool)
 	}
 }
 
-static inline struct rxm_buf *
-rxm_buf_get_thread_unsafe(struct rxm_buf_pool *pool)
-{
-	return util_buf_alloc(pool->pool);
-}
-
-static inline void
-rxm_buf_release_thread_unsafe(struct rxm_buf_pool *pool, struct rxm_buf *rxm_buf)
-{
-	util_buf_release(pool->pool, rxm_buf);
-}
-
-static inline struct rxm_buf *
-rxm_buf_get_by_index_thread_unsafe(struct rxm_buf_pool *pool, size_t index)
-{
-	return util_buf_get_by_index(pool->pool, index);
-}
-
-static inline size_t
-rxm_get_buf_index_thread_unsafe(struct rxm_buf_pool *pool, struct rxm_buf *rxm_buf)
-{
-	return util_get_buf_index(pool->pool, rxm_buf);
-}
-
-static struct rxm_buf *
-rxm_buf_get_thread_safe(struct rxm_buf_pool *pool)
-{
-	struct rxm_buf *rxm_buf;
-
-	fastlock_acquire(&pool->rxm_ep->util_ep.lock);
-	rxm_buf = rxm_buf_get_thread_unsafe(pool);
-	fastlock_release(&pool->rxm_ep->util_ep.lock);
-
-	return rxm_buf;
-}
-
-static void
-rxm_buf_release_thread_safe(struct rxm_buf_pool *pool, struct rxm_buf *rxm_buf)
-{
-	fastlock_acquire(&pool->rxm_ep->util_ep.lock);
-	rxm_buf_release_thread_unsafe(pool, rxm_buf);
-	fastlock_release(&pool->rxm_ep->util_ep.lock);
-}
-
-static struct rxm_buf *
-rxm_buf_get_by_index_thread_safe(struct rxm_buf_pool *pool, size_t index)
-{
-	struct rxm_buf *rxm_buf;
-
-	fastlock_acquire(&pool->rxm_ep->util_ep.lock);
-	rxm_buf = rxm_buf_get_by_index_thread_unsafe(pool, index);
-	fastlock_release(&pool->rxm_ep->util_ep.lock);
-
-	return rxm_buf;
-}
-
-static size_t
-rxm_get_buf_index_thread_safe(struct rxm_buf_pool *pool, struct rxm_buf *rxm_buf)
-{
-	size_t index;
-
-	fastlock_acquire(&pool->rxm_ep->util_ep.lock);
-	index = rxm_get_buf_index_thread_unsafe(pool, rxm_buf);
-	fastlock_release(&pool->rxm_ep->util_ep.lock);
-
-	return index;
-}
-
 static int rxm_buf_pool_create(struct rxm_ep *rxm_ep,
 			       size_t chunk_count, size_t size,
 			       struct rxm_buf_pool *pool,
@@ -374,18 +306,6 @@ static int rxm_buf_pool_create(struct rxm_ep *rxm_ep,
 		return -FI_ENOMEM;
 	}
 
-	if (rxm_ep->util_ep.domain->threading != FI_THREAD_SAFE) {
-		pool->buf_get = rxm_buf_get_thread_unsafe;
-		pool->buf_release = rxm_buf_release_thread_unsafe;
-		pool->buf_get_by_index = rxm_buf_get_by_index_thread_unsafe;
-		pool->get_buf_index = rxm_get_buf_index_thread_unsafe;
-	} else {
-		pool->buf_get = rxm_buf_get_thread_safe;
-		pool->buf_release = rxm_buf_release_thread_safe;
-		pool->buf_get_by_index = rxm_buf_get_by_index_thread_safe;
-		pool->get_buf_index = rxm_get_buf_index_thread_safe;
-	}
-
 	return 0;
 }
 
@@ -404,41 +324,6 @@ static void rxm_recv_entry_init(struct rxm_recv_entry *entry, void *arg)
 		entry->comp_flags |= FI_MSG;
 	else
 		entry->comp_flags |= FI_TAGGED;
-}
-
-static inline struct rxm_recv_entry *
-rxm_recv_entry_pop_thread_unsafe(struct rxm_recv_queue *recv_queue)
-{
-	return (freestack_isempty(recv_queue->fs) ?
-		NULL : freestack_pop(recv_queue->fs));
-}
-
-static inline void
-rxm_recv_entry_push_thread_unsafe(struct rxm_recv_queue *recv_queue,
-				  struct rxm_recv_entry *entry)
-{
-	freestack_push(recv_queue->fs, entry);
-}
-
-static struct rxm_recv_entry *
-rxm_recv_entry_pop_thread_safe(struct rxm_recv_queue *recv_queue)
-{
-	void *entry;
-
-	fastlock_acquire(&recv_queue->rxm_ep->util_ep.lock);
-	entry = rxm_recv_entry_pop_thread_unsafe(recv_queue);
-	fastlock_release(&recv_queue->rxm_ep->util_ep.lock);
-
-	return entry;
-}
-
-static void
-rxm_recv_entry_push_thread_safe(struct rxm_recv_queue *recv_queue,
-				struct rxm_recv_entry *entry)
-{
-	fastlock_acquire(&recv_queue->rxm_ep->util_ep.lock);
-	rxm_recv_entry_push_thread_unsafe(recv_queue, entry);
-	fastlock_release(&recv_queue->rxm_ep->util_ep.lock);
 }
 
 static int rxm_recv_queue_init(struct rxm_ep *rxm_ep,  struct rxm_recv_queue *recv_queue,
@@ -468,14 +353,6 @@ static int rxm_recv_queue_init(struct rxm_ep *rxm_ep,  struct rxm_recv_queue *re
 			recv_queue->match_recv = rxm_match_recv_entry_tag;
 			recv_queue->match_unexp = rxm_match_unexp_msg_tag;
 		}
-	}
-
-	if (rxm_ep->util_ep.domain->threading != FI_THREAD_SAFE) {
-		recv_queue->pop = rxm_recv_entry_pop_thread_unsafe;
-		recv_queue->push = rxm_recv_entry_push_thread_unsafe;
-	} else {
-		recv_queue->pop = rxm_recv_entry_pop_thread_safe;
-		recv_queue->push = rxm_recv_entry_push_thread_safe;
 	}
 
 	return 0;
@@ -628,12 +505,12 @@ static int rxm_ep_cancel_recv(struct rxm_ep *rxm_ep,
 	struct fi_cq_err_entry err_entry;
 	struct rxm_recv_entry *recv_entry;
 	struct dlist_entry *entry;
+	int ret;
 
-	ofi_ep_lock_acquire(&recv_queue->rxm_ep->util_ep);
+	ofi_ep_lock_acquire(&rxm_ep->util_ep);
 	entry = dlist_remove_first_match(&recv_queue->recv_list,
 					 rxm_match_recv_entry_context,
 					 context);
-	ofi_ep_lock_release(&recv_queue->rxm_ep->util_ep);
 	if (entry) {
 		recv_entry = container_of(entry, struct rxm_recv_entry, entry);
 		memset(&err_entry, 0, sizeof(err_entry));
@@ -643,9 +520,12 @@ static int rxm_ep_cancel_recv(struct rxm_ep *rxm_ep,
 		err_entry.err = FI_ECANCELED;
 		err_entry.prov_errno = -FI_ECANCELED;
 		rxm_recv_entry_release(recv_queue, recv_entry);
-		return ofi_cq_write_error(rxm_ep->util_ep.rx_cq, &err_entry);
+		ret = ofi_cq_write_error(rxm_ep->util_ep.rx_cq, &err_entry);
+	} else {
+		ret = 0;
 	}
-	return 0;
+	ofi_ep_lock_release(&rxm_ep->util_ep);
+	return ret;
 }
 
 static ssize_t rxm_ep_cancel(fid_t fid_ep, void *context)
@@ -763,11 +643,8 @@ static int rxm_ep_discard_recv(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_buf,
 	RXM_DBG_ADDR_TAG(FI_LOG_EP_DATA, "Discarding message",
 			 rx_buf->unexp_msg.addr, rx_buf->unexp_msg.tag);
 
-	ofi_ep_lock_acquire(&rxm_ep->util_ep);
 	dlist_insert_tail(&rx_buf->repost_entry,
 			  &rx_buf->ep->repost_ready_list);
-	ofi_ep_lock_release(&rxm_ep->util_ep);
-
 	return ofi_cq_write(rxm_ep->util_ep.rx_cq, context, FI_TAGGED | FI_RECV,
 			    0, NULL, rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
 }
@@ -780,12 +657,10 @@ static int rxm_ep_peek_recv(struct rxm_ep *rxm_ep, fi_addr_t addr, uint64_t tag,
 
 	RXM_DBG_ADDR_TAG(FI_LOG_EP_DATA, "Peeking message", addr, tag);
 
-	rxm_ep_progress_multi(&rxm_ep->util_ep);
+	rxm_ep_do_progress(&rxm_ep->util_ep);
 
-	ofi_ep_lock_acquire(&recv_queue->rxm_ep->util_ep);
 	rx_buf = rxm_check_unexp_msg_list(recv_queue, addr, tag, ignore);
 	if (!rx_buf) {
-		ofi_ep_lock_release(&recv_queue->rxm_ep->util_ep);
 		FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Message not found\n");
 		return ofi_cq_write_error_peek(rxm_ep->util_ep.rx_cq, tag,
 					       context);
@@ -795,7 +670,6 @@ static int rxm_ep_peek_recv(struct rxm_ep *rxm_ep, fi_addr_t addr, uint64_t tag,
 
 	if (flags & FI_DISCARD) {
 		dlist_remove(&rx_buf->unexp_msg.entry);
-		ofi_ep_lock_release(&recv_queue->rxm_ep->util_ep);
 		return rxm_ep_discard_recv(rxm_ep, rx_buf, context);
 	}
 
@@ -804,7 +678,6 @@ static int rxm_ep_peek_recv(struct rxm_ep *rxm_ep, fi_addr_t addr, uint64_t tag,
 		((struct fi_context *)context)->internal[0] = rx_buf;
 		dlist_remove(&rx_buf->unexp_msg.entry);
 	}
-	ofi_ep_lock_release(&recv_queue->rxm_ep->util_ep);
 
 	return ofi_cq_write(rxm_ep->util_ep.rx_cq, context, FI_TAGGED | FI_RECV,
 			    rx_buf->pkt.hdr.size, NULL,
@@ -846,10 +719,10 @@ rxm_ep_format_rx_res(struct rxm_ep *rxm_ep, const struct iovec *iov,
 }
 
 static inline ssize_t
-rxm_ep_recv_common(struct rxm_ep *rxm_ep, const struct iovec *iov,
-		   void **desc, size_t count, fi_addr_t src_addr,
-		   uint64_t tag, uint64_t ignore, void *context,
-		   uint64_t op_flags, struct rxm_recv_queue *recv_queue)
+rxm_ep_post_recv(struct rxm_ep *rxm_ep, const struct iovec *iov,
+		 void **desc, size_t count, fi_addr_t src_addr,
+		 uint64_t tag, uint64_t ignore, void *context,
+		 uint64_t op_flags, struct rxm_recv_queue *recv_queue)
 {
 	struct rxm_recv_entry *recv_entry;
 	ssize_t ret;
@@ -861,10 +734,28 @@ rxm_ep_recv_common(struct rxm_ep *rxm_ep, const struct iovec *iov,
 				   recv_queue, &recv_entry);
 	if (OFI_UNLIKELY(ret))
 		return ret;
+
 	FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Posting recv with length: %zu "
 	       "tag: 0x%" PRIx64 " ignore: 0x%" PRIx64 "\n",
 	       recv_entry->total_len, recv_entry->tag, recv_entry->ignore);
-	return rxm_process_recv_entry(recv_queue, recv_entry);
+	ret = rxm_process_recv_entry(recv_queue, recv_entry);
+
+	return ret;
+}
+
+static inline ssize_t
+rxm_ep_recv_common(struct rxm_ep *rxm_ep, const struct iovec *iov,
+		   void **desc, size_t count, fi_addr_t src_addr,
+		   uint64_t tag, uint64_t ignore, void *context,
+		   uint64_t op_flags, struct rxm_recv_queue *recv_queue)
+{
+	ssize_t ret;
+
+	ofi_ep_lock_acquire(&rxm_ep->util_ep);
+	ret = rxm_ep_post_recv(rxm_ep, iov, desc, count, src_addr,
+			       tag, ignore, context, op_flags, recv_queue);
+	ofi_ep_lock_release(&rxm_ep->util_ep);
+	return ret;
 }
 
 static ssize_t rxm_ep_recv_common_flags(struct rxm_ep *rxm_ep, const struct iovec *iov,
@@ -876,7 +767,7 @@ static ssize_t rxm_ep_recv_common_flags(struct rxm_ep *rxm_ep, const struct iove
 	struct rxm_recv_entry *recv_entry;
 	struct fi_recv_context *recv_ctx;
 	struct rxm_rx_buf *rx_buf;
-	ssize_t ret;
+	ssize_t ret = 0;
 
 	assert(count <= rxm_ep->rxm_info->rx_attr->iov_limit);
 	assert(!(flags & FI_PEEK) ||
@@ -884,6 +775,7 @@ static ssize_t rxm_ep_recv_common_flags(struct rxm_ep *rxm_ep, const struct iove
 	assert(!(flags & (FI_MULTI_RECV)) ||
 		(recv_queue->type == RXM_RECV_QUEUE_MSG));
 
+	ofi_ep_lock_acquire(&rxm_ep->util_ep);
 	if (rxm_ep->rxm_info->mode & FI_BUFFERED_RECV) {
 		assert(!(flags & FI_PEEK));
 		recv_ctx = context;
@@ -900,37 +792,47 @@ static ssize_t rxm_ep_recv_common_flags(struct rxm_ep *rxm_ep, const struct iove
 		FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Discarding buffered receive\n");
 		dlist_insert_tail(&rx_buf->repost_entry,
 				  &rx_buf->ep->repost_ready_list);
-		return 0;
+		goto unlock;
 	}
 
-	if (flags & FI_PEEK)
-		return rxm_ep_peek_recv(rxm_ep, src_addr, tag, ignore,
+	if (flags & FI_PEEK) {
+		ret = rxm_ep_peek_recv(rxm_ep, src_addr, tag, ignore,
 					context, flags, recv_queue);
+		goto unlock;
+	}
 
-	if (!(flags & FI_CLAIM))
-		return rxm_ep_recv_common(rxm_ep, iov, desc, count, src_addr,
-					  tag, ignore, context, flags | op_flags,
-					  recv_queue);
+	if (!(flags & FI_CLAIM)) {
+		ret = rxm_ep_post_recv(rxm_ep, iov, desc, count, src_addr,
+				       tag, ignore, context, flags | op_flags,
+				       recv_queue);
+		goto unlock;
+	}
 
 	rx_buf = ((struct fi_context *)context)->internal[0];
 	assert(rx_buf);
 	FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Claim message\n");
 
-	if (flags & FI_DISCARD)
-		return rxm_ep_discard_recv(rxm_ep, rx_buf, context);
+	if (flags & FI_DISCARD) {
+		ret = rxm_ep_discard_recv(rxm_ep, rx_buf, context);
+		goto unlock;
+	}
 
 claim:
 	ret = rxm_ep_format_rx_res(rxm_ep, iov, desc, count, src_addr,
 				   tag, ignore, context, flags | op_flags,
 				   recv_queue, &recv_entry);
 	if (OFI_UNLIKELY(ret))
-		return ret;
+		goto unlock;
 
 	if (rxm_ep->rxm_info->mode & FI_BUFFERED_RECV)
 		recv_entry->comp_flags |= FI_CLAIM;
 
 	rx_buf->recv_entry = recv_entry;
-	return rxm_cq_handle_rx_buf(rx_buf);
+	ret = rxm_cq_handle_rx_buf(rx_buf);
+
+unlock:
+	ofi_ep_lock_release(&rxm_ep->util_ep);
+	return ret;
 }
 
 static ssize_t rxm_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
@@ -1006,7 +908,7 @@ rxm_ep_msg_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		       "fi_inject for MSG provider failed with ret - %" PRId64"\n",
 		       ret);
 		if (OFI_LIKELY(ret == -FI_EAGAIN))
-			rxm_ep_progress_multi(&rxm_ep->util_ep);
+			rxm_ep_do_progress(&rxm_ep->util_ep);
 	}
 	return ret;
 }
@@ -1031,8 +933,8 @@ rxm_ep_alloc_rndv_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void 
 {
 	struct fid_mr **mr_iov;
 	ssize_t ret;
-	struct rxm_tx_rndv_buf *tx_buf =
-		(struct rxm_tx_rndv_buf *)rxm_tx_buf_get(rxm_ep, RXM_BUF_POOL_TX_RNDV);
+	struct rxm_tx_rndv_buf *tx_buf = (struct rxm_tx_rndv_buf *)
+			rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_RNDV);
 
 	if (OFI_UNLIKELY(!tx_buf)) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
@@ -1119,8 +1021,8 @@ rxm_ep_sar_tx_prepare_segment(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 			      size_t seg_no, uint64_t data, uint64_t flags, uint64_t tag,
 			      uint8_t op, enum rxm_sar_seg_type seg_type, uint64_t *msg_id)
 {
-	struct rxm_tx_sar_buf *tx_buf =
-		(struct rxm_tx_sar_buf *)rxm_tx_buf_get(rxm_ep, RXM_BUF_POOL_TX_SAR);
+	struct rxm_tx_sar_buf *tx_buf = (struct rxm_tx_sar_buf *)
+		rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_SAR);
 
 	if (OFI_UNLIKELY(!tx_buf)) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
@@ -1216,7 +1118,7 @@ rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		      first_tx_buf->pkt.ctrl_hdr.seg_size, first_tx_buf->hdr.desc, 0, first_tx_buf);
 	if (OFI_UNLIKELY(ret)) {
 		if (OFI_LIKELY(ret == -FI_EAGAIN))
-			rxm_ep_progress_multi(&rxm_ep->util_ep);
+			rxm_ep_do_progress(&rxm_ep->util_ep);
 		rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_SAR, first_tx_buf);
 		return ret;
 	}
@@ -1278,7 +1180,8 @@ rxm_ep_emulate_inject(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	       "is too big for MSG provider (max inject size = %zd)\n",
 	       pkt_size, rxm_ep->inject_limit);
 
-	tx_buf = (struct rxm_tx_eager_buf *)rxm_tx_buf_get(rxm_ep, RXM_BUF_POOL_TX);
+	tx_buf = (struct rxm_tx_eager_buf *)
+		  rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX);
 	if (OFI_UNLIKELY(!tx_buf)) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 			"Ran out of buffers from Eager buffer pool\n");
@@ -1295,7 +1198,7 @@ rxm_ep_emulate_inject(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 				     tx_buf->hdr.desc, tx_buf);
 	if (OFI_UNLIKELY(ret)) {
 		if (OFI_LIKELY(ret == -FI_EAGAIN))
-			rxm_ep_progress_multi(&rxm_ep->util_ep);
+			rxm_ep_do_progress(&rxm_ep->util_ep);
 		rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX, tx_buf);
 	}
 	return ret;
@@ -1306,19 +1209,21 @@ rxm_ep_inject_send_fast(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 			const void *buf, size_t len, struct rxm_pkt *inject_pkt)
 {
 	size_t pkt_size = sizeof(struct rxm_pkt) + len;
+	ssize_t ret;
 
 	assert(len <= rxm_ep->eager_limit);
 
 	if (pkt_size <= rxm_ep->inject_limit) {
 		inject_pkt->hdr.size = len;
 		memcpy(inject_pkt->data, buf, len);
-		return rxm_ep_msg_inject_send(rxm_ep, rxm_conn, inject_pkt,
+		ret = rxm_ep_msg_inject_send(rxm_ep, rxm_conn, inject_pkt,
 					      pkt_size, rxm_ep->util_ep.tx_cntr_inc);
 	} else {
-		return rxm_ep_emulate_inject(rxm_ep, rxm_conn, buf, len, pkt_size,
-					     inject_pkt->hdr.data, inject_pkt->hdr.flags,
-					     inject_pkt->hdr.tag, inject_pkt->hdr.op);
+		ret = rxm_ep_emulate_inject(rxm_ep, rxm_conn, buf, len, pkt_size,
+					    inject_pkt->hdr.data, inject_pkt->hdr.flags,
+					    inject_pkt->hdr.tag, inject_pkt->hdr.op);
 	}
+	return ret;
 }
 
 static inline ssize_t
@@ -1331,13 +1236,15 @@ rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 	assert(len <= rxm_ep->eager_limit);
 
+	ofi_ep_lock_acquire(&rxm_ep->util_ep);
 	if (pkt_size <= rxm_ep->inject_limit) {
 		struct rxm_tx_base_buf *tx_buf = (struct rxm_tx_base_buf *)
-			rxm_tx_buf_get(rxm_ep, RXM_BUF_POOL_TX_INJECT);
+			rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_INJECT);
 		if (OFI_UNLIKELY(!tx_buf)) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 				"Ran out of buffers from Eager Inject buffer pool\n");
-			return -FI_EAGAIN;
+			ret = -FI_EAGAIN;
+			goto unlock;
 		}
 		rxm_ep_format_tx_buf_pkt(rxm_conn, len, op, data, tag,
 					 flags, &tx_buf->pkt);
@@ -1346,11 +1253,14 @@ rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		ret = rxm_ep_msg_inject_send(rxm_ep, rxm_conn, &tx_buf->pkt,
 					     pkt_size, rxm_ep->util_ep.tx_cntr_inc);
 		rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_INJECT, tx_buf);
-		return ret;
 	} else {
-		return rxm_ep_emulate_inject(rxm_ep, rxm_conn, buf, len,
-					     pkt_size, data, flags, tag, op);
+		ret = rxm_ep_emulate_inject(rxm_ep, rxm_conn, buf, len,
+					    pkt_size, data, flags, tag, op);
 	}
+unlock:
+	ofi_ep_lock_release(&rxm_ep->util_ep);
+	return ret;
+
 }
 
 static inline ssize_t
@@ -1375,7 +1285,7 @@ rxm_ep_inject_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, size_t
 					     total_len, rxm_ep->util_ep.tx_cntr_inc);
 	} else {
 		struct rxm_tx_base_buf *tx_buf = (struct rxm_tx_base_buf *)
-			rxm_tx_buf_get(rxm_ep, RXM_BUF_POOL_TX_INJECT);
+			rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_INJECT);
 		if (OFI_UNLIKELY(!tx_buf)) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 				"Ran out of buffers from Eager Inject buffer pool\n");
@@ -1420,18 +1330,20 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	assert((!(flags & FI_INJECT) && (data_len > rxm_ep->eager_limit)) ||
 	       (data_len <= rxm_ep->eager_limit));
 
+	ofi_ep_lock_acquire(&rxm_ep->util_ep);
 	if (total_len <= rxm_ep->inject_limit) {
-		return rxm_ep_inject_send_common(rxm_ep, iov, count, rxm_conn,
-						 context, data, flags, tag, op,
-						 data_len, total_len, inject_pkt);
+		ret = rxm_ep_inject_send_common(rxm_ep, iov, count, rxm_conn,
+						context, data, flags, tag, op,
+						data_len, total_len, inject_pkt);
 	} else if (data_len <= rxm_ep->eager_limit) {
 		struct rxm_tx_eager_buf *tx_buf = (struct rxm_tx_eager_buf *)
-			rxm_tx_buf_get(rxm_ep, RXM_BUF_POOL_TX);
+			rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX);
 
 		if (OFI_UNLIKELY(!tx_buf)) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 				"Ran out of buffers from Eager buffer pool\n");
-			return -FI_EAGAIN;
+			ret = -FI_EAGAIN;
+			goto unlock;
 		}
 
 		rxm_ep_format_tx_buf_pkt(rxm_conn, data_len, op, data, tag,
@@ -1445,25 +1357,26 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 					     tx_buf->hdr.desc, tx_buf);
 		if (OFI_UNLIKELY(ret)) {
 			if (ret == -FI_EAGAIN)
-				rxm_ep_progress_multi(&rxm_ep->util_ep);
+				rxm_ep_do_progress(&rxm_ep->util_ep);
 			rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX, tx_buf);
 		}
-		return ret;
 	} else if (data_len <= rxm_ep->sar_limit) {
-		return rxm_ep_sar_tx_send(rxm_ep, rxm_conn, context,
-					  count, iov, data_len,
-					  rxm_ep_sar_calc_segs_cnt(rxm_ep, data_len),
-					  data, flags, tag, op);
+		ret = rxm_ep_sar_tx_send(rxm_ep, rxm_conn, context,
+					 count, iov, data_len,
+					 rxm_ep_sar_calc_segs_cnt(rxm_ep, data_len),
+					 data, flags, tag, op);
 	} else {
 		struct rxm_tx_rndv_buf *tx_buf;
 
 		ret = rxm_ep_alloc_rndv_tx_res(rxm_ep, rxm_conn, context, (uint8_t)count,
 					      iov, desc, data_len, data, flags, tag, op,
 					      &tx_buf);
-		if (OFI_UNLIKELY(ret < 0))
-			return ret;
-		return rxm_ep_rndv_tx_send(rxm_ep, rxm_conn, tx_buf, ret);
+		if (OFI_LIKELY(ret >= 0))
+			ret = rxm_ep_rndv_tx_send(rxm_ep, rxm_conn, tx_buf, ret);
 	}
+unlock:
+	ofi_ep_lock_release(&rxm_ep->util_ep);
+	return ret;
 }
 
 struct rxm_deferred_tx_entry *
@@ -1553,8 +1466,7 @@ sar_finish:
 	return ret;
 }
 
-static void
-rxm_ep_conn_progress_deferred_queue(struct rxm_ep *rxm_ep,
+void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 				    struct rxm_conn *rxm_conn)
 {
 	struct rxm_deferred_tx_entry *def_tx_entry;
@@ -1619,16 +1531,6 @@ rxm_ep_conn_progress_deferred_queue(struct rxm_ep *rxm_ep,
 			free(def_tx_entry);
 			break;
 		}
-	}
-}
-
-void rxm_ep_progress_deferred_queues(struct rxm_ep *rxm_ep)
-{
-	struct dlist_entry *conn_entry_tmp;
-	struct rxm_conn *rxm_conn;
-	dlist_foreach_container_safe(&rxm_ep->deferred_tx_conn_queue, struct rxm_conn,
-				     rxm_conn, deferred_conn_entry, conn_entry_tmp) {
-		rxm_ep_conn_progress_deferred_queue(rxm_ep, rxm_conn);
 	}
 }
 
@@ -2152,14 +2054,12 @@ err:
 static int rxm_ep_eq_entry_list_trywait(void *arg)
 {
 	struct rxm_ep *rxm_ep = (struct rxm_ep *)arg;
+	int ret;
 
 	fastlock_acquire(&rxm_ep->msg_eq_entry_list_lock);
-	if (!slistfd_empty(&rxm_ep->msg_eq_entry_list)) {
-		fastlock_release(&rxm_ep->msg_eq_entry_list_lock);
-		return -FI_EAGAIN;
-	}
+	ret = slistfd_empty(&rxm_ep->msg_eq_entry_list) ? 0 : -FI_EAGAIN;
 	fastlock_release(&rxm_ep->msg_eq_entry_list_lock);
-	return 0;
+	return ret;
 }
 
 static int rxm_ep_trywait(void *arg)
@@ -2532,17 +2432,12 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 		goto err1;
 	}
 
-	if (!fi_param_get_int(&rxm_prov, "comp_per_progress",
-			     (int *)&rxm_ep->comp_per_progress)) {
-		ret = ofi_endpoint_init(domain, &rxm_util_prov,
-					info, &rxm_ep->util_ep,
-					context, &rxm_ep_progress_multi);
-	} else {
+	if (fi_param_get_int(&rxm_prov, "comp_per_progress",
+			     (int *)&rxm_ep->comp_per_progress))
 		rxm_ep->comp_per_progress = 1;
-		ret = ofi_endpoint_init(domain, &rxm_util_prov,
-					info, &rxm_ep->util_ep,
-					context, &rxm_ep_progress_one);
-	}
+
+	ret = ofi_endpoint_init(domain, &rxm_util_prov, info, &rxm_ep->util_ep,
+				context, &rxm_ep_progress);
 	if (ret)
 		goto err1;
 

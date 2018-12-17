@@ -78,11 +78,13 @@ rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t 
 	if (OFI_UNLIKELY(ret))
 		return ret;
 
-	rma_buf = rxm_rma_buf_get(rxm_ep);
+	ofi_ep_lock_acquire(&rxm_ep->util_ep);
+	rma_buf = rxm_rma_buf_alloc(rxm_ep);
 	if (OFI_UNLIKELY(!rma_buf)) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 			"Ran out of buffers from RMA buffer pool\n");
-		return -FI_ENOMEM;
+		ret = -FI_ENOMEM;
+		goto unlock;
 	}
 
 	rma_buf->app_context = msg->context;
@@ -92,18 +94,21 @@ rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t 
 				 msg_rma.iov_count, comp_flags & (FI_WRITE | FI_READ),
 				 rma_buf);
 	if (OFI_UNLIKELY(ret))
-		goto err;
+		goto release;
+
 	msg_rma.desc = mr_desc;
 	msg_rma.context = rma_buf;
 
 	ret = rma_msg(rxm_conn->msg_ep, &msg_rma, flags);
 	if (OFI_LIKELY(!ret))
-		return ret;
+		goto unlock;
 
 	if ((rxm_ep->msg_mr_local) && (!rxm_ep->rxm_mr_local))
 		rxm_ep_msg_mr_closev(rma_buf->mr.mr, rma_buf->mr.count);
-err:
+release:
 	rxm_rma_buf_release(rxm_ep, rma_buf);
+unlock:
+	ofi_ep_lock_release(&rxm_ep->util_ep);
 	return ret;
 }
 
@@ -201,11 +206,13 @@ rxm_ep_rma_emulate_inject_msg(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, 
 
 	assert(msg->rma_iov_count <= rxm_ep->rxm_info->tx_attr->rma_iov_limit);
 
-	rma_buf = rxm_rma_buf_get(rxm_ep);
+	ofi_ep_lock_acquire(&rxm_ep->util_ep);
+	rma_buf = rxm_rma_buf_alloc(rxm_ep);
 	if (OFI_UNLIKELY(!rma_buf)) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 			"Ran out of buffers from RMA buffer pool\n");
-		return -FI_ENOMEM;
+		ret = -FI_ENOMEM;
+		goto unlock;
 	}
 
 	rma_buf->pkt.hdr.size = total_size;
@@ -218,12 +225,11 @@ rxm_ep_rma_emulate_inject_msg(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, 
 	ret = fi_writemsg(rxm_conn->msg_ep, &rxm_rma_msg, flags);
 	if (OFI_UNLIKELY(ret)) {
 		if (ret == -FI_EAGAIN)
-			rxm_ep_progress_multi(&rxm_ep->util_ep);
-		goto err;
+			rxm_ep_do_progress(&rxm_ep->util_ep);
+		rxm_rma_buf_release(rxm_ep, rma_buf);
 	}
-	return 0;
-err:
-	rxm_rma_buf_release(rxm_ep, rma_buf);
+unlock:
+	ofi_ep_lock_release(&rxm_ep->util_ep);
 	return ret;
 }
 
@@ -292,7 +298,7 @@ rxm_ep_rma_inject_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, ui
 			       "fi_inject_write* for MSG provider failed with ret - %"
 			       PRId64"\n", ret);
 			if (OFI_LIKELY(ret == -FI_EAGAIN))
-				rxm_ep_progress_multi(&rxm_ep->util_ep);
+				rxm_ep_progress(&rxm_ep->util_ep);
 		}
 		return ret;
 	} else {
@@ -421,7 +427,7 @@ static ssize_t rxm_ep_inject_write(struct fid_ep *ep_fid, const void *buf,
 			       "fi_inject_write for MSG provider failed with ret - %"
 			       PRId64"\n", ret);
 			if (OFI_LIKELY(ret == -FI_EAGAIN))
-				rxm_ep_progress_multi(&rxm_ep->util_ep);
+				rxm_ep_progress(&rxm_ep->util_ep);
 		}
 		return ret;
 	} else {
@@ -453,7 +459,7 @@ static ssize_t rxm_ep_inject_writedata(struct fid_ep *ep_fid, const void *buf,
 			       "fi_inject_writedata for MSG provider failed with ret - %"
 			       PRId64"\n", ret);
 			if (OFI_LIKELY(ret == -FI_EAGAIN))
-				rxm_ep_progress_multi(&rxm_ep->util_ep);
+				rxm_ep_progress(&rxm_ep->util_ep);
 		}
 		return ret;
 	} else {

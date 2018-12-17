@@ -72,7 +72,7 @@ rxm_ep_send_atomic_req(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		ret = fi_send(rxm_conn->msg_ep, &tx_buf->pkt, len,
 			      tx_buf->hdr.desc, 0, tx_buf);
 	if (ret == -FI_EAGAIN)
-		rxm_ep_progress_multi(&rxm_ep->util_ep);
+		rxm_ep_do_progress(&rxm_ep->util_ep);
 
 	return ret;
 }
@@ -127,12 +127,14 @@ rxm_ep_atomic_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		return -FI_EINVAL;
 	}
 
-	tx_buf = (struct rxm_tx_atomic_buf *)rxm_tx_buf_get(rxm_ep,
-						RXM_BUF_POOL_TX_ATOMIC);
+	ofi_ep_lock_acquire(&rxm_ep->util_ep);
+	tx_buf = (struct rxm_tx_atomic_buf *)
+		 rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_ATOMIC);
 	if (OFI_UNLIKELY(!tx_buf)) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 			"Ran out of buffers from Atomic buffer pool\n");
-		return -FI_EAGAIN;
+		ret = -FI_EAGAIN;
+		goto unlock;
 	}
 
 	rxm_ep_format_atomic_pkt_hdr(rxm_conn, tx_buf, tot_len, op,
@@ -158,7 +160,8 @@ rxm_ep_atomic_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	ret = rxm_ep_send_atomic_req(rxm_ep, rxm_conn, tx_buf, tot_len);
 	if (ret)
 		rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_ATOMIC, tx_buf);
-
+unlock:
+	ofi_ep_lock_release(&rxm_ep->util_ep);
 	return ret;
 }
 

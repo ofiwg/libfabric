@@ -623,20 +623,12 @@ struct rxm_recv_queue {
 	struct dlist_entry unexp_msg_list;
 	dlist_func_t *match_recv;
 	dlist_func_t *match_unexp;
-
-	struct rxm_recv_entry *(*pop)(struct rxm_recv_queue *);
-	void (*push)(struct rxm_recv_queue *, struct rxm_recv_entry *);
 };
 
 struct rxm_buf_pool {
 	enum rxm_buf_pool_type type;
 	struct util_buf_pool *pool;
 	struct rxm_ep *rxm_ep;
-
-	struct rxm_buf *(*buf_get)(struct rxm_buf_pool *);
-	void (*buf_release)(struct rxm_buf_pool *, struct rxm_buf *);
-	struct rxm_buf *(*buf_get_by_index)(struct rxm_buf_pool *, size_t);
-	size_t (*get_buf_index)(struct rxm_buf_pool *, struct rxm_buf *);
 };
 
 struct rxm_msg_eq_entry {
@@ -736,11 +728,10 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 int rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep);
 void rxm_cq_write_error(struct util_cq *cq, struct util_cntr *cntr,
 			void *op_context, int err);
-void rxm_ep_progress_one(struct util_ep *util_ep);
-void rxm_ep_progress_multi(struct util_ep *util_ep);
+void rxm_ep_progress(struct util_ep *util_ep);
+void rxm_ep_do_progress(struct util_ep *util_ep);
 
 int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep);
-void rxm_ep_progress_deferred_queues(struct rxm_ep *rxm_ep);
 
 int rxm_ep_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 			enum fi_op op, struct fi_atomic_attr *attr,
@@ -767,6 +758,9 @@ static inline struct rxm_conn *rxm_key2conn(struct rxm_ep *rxm_ep, uint64_t key)
 {
 	return (struct rxm_conn *)rxm_cmap_key2handle(rxm_ep->cmap, key);
 }
+
+void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
+				    struct rxm_conn *rxm_conn);
 
 struct rxm_deferred_tx_entry *
 rxm_ep_alloc_deferred_tx_entry(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
@@ -901,7 +895,6 @@ rxm_process_recv_entry(struct rxm_recv_queue *recv_queue,
 {
 	struct rxm_rx_buf *rx_buf;
 
-	ofi_ep_lock_acquire(&recv_queue->rxm_ep->util_ep);
 	rx_buf = rxm_check_unexp_msg_list(recv_queue, recv_entry->addr,
 					  recv_entry->tag, recv_entry->ignore);
 	if (rx_buf) {
@@ -911,7 +904,6 @@ rxm_process_recv_entry(struct rxm_recv_queue *recv_queue,
 			rx_buf->pkt.hdr.op == ofi_op_tagged));
 		dlist_remove(&rx_buf->unexp_msg.entry);
 		rx_buf->recv_entry = recv_entry;
-		ofi_ep_lock_release(&recv_queue->rxm_ep->util_ep);
 
 		if (rx_buf->pkt.ctrl_hdr.type != ofi_ctrl_seg_data) {
 			return rxm_cq_handle_rx_buf(rx_buf);
@@ -930,7 +922,6 @@ rxm_process_recv_entry(struct rxm_recv_queue *recv_queue,
 			match_attr.tag = recv_entry->tag;
 			match_attr.ignore = recv_entry->ignore;
 
-			ofi_ep_lock_acquire(&recv_queue->rxm_ep->util_ep);
 			dlist_foreach_container_safe(&recv_queue->unexp_msg_list,
 						     struct rxm_rx_buf, rx_buf,
 						     unexp_msg.entry, entry) {
@@ -952,13 +943,10 @@ rxm_process_recv_entry(struct rxm_recv_queue *recv_queue,
 				dlist_remove(&rx_buf->unexp_msg.entry);
 				last = (rxm_sar_get_seg_type(&rx_buf->pkt.ctrl_hdr)
 								== RXM_SAR_SEG_LAST);
-				ofi_ep_lock_release(&recv_queue->rxm_ep->util_ep);
 				ret = rxm_cq_handle_rx_buf(rx_buf);
-				ofi_ep_lock_acquire(&recv_queue->rxm_ep->util_ep);
 				if (ret || last)
 					break;
 			}
-			ofi_ep_lock_release(&recv_queue->rxm_ep->util_ep);
 			return ret;
 		}
 	}
@@ -966,7 +954,6 @@ rxm_process_recv_entry(struct rxm_recv_queue *recv_queue,
 	RXM_DBG_ADDR_TAG(FI_LOG_EP_DATA, "Enqueuing recv", recv_entry->addr,
 			 recv_entry->tag);
 	dlist_insert_tail(&recv_entry->entry, &recv_queue->recv_list);
-	ofi_ep_lock_release(&recv_queue->rxm_ep->util_ep);
 
 	return FI_SUCCESS;
 }
@@ -1005,7 +992,7 @@ rxm_ep_prepare_tx(struct rxm_ep *rxm_ep, fi_addr_t dest_addr,
 		return ret;
 
 	if (OFI_UNLIKELY(!dlist_empty(&(*rxm_conn)->deferred_tx_queue))) {
-		rxm_ep_progress_multi(&rxm_ep->util_ep);
+		rxm_ep_progress(&rxm_ep->util_ep);
 		if (!dlist_empty(&(*rxm_conn)->deferred_tx_queue))
 			return -FI_EAGAIN;
 	}
@@ -1026,32 +1013,31 @@ rxm_ep_format_tx_buf_pkt(struct rxm_conn *rxm_conn, size_t len, uint8_t op,
 	pkt->hdr.data = data;
 }
 
-static inline
-struct rxm_buf *rxm_buf_get(struct rxm_buf_pool *pool)
+static inline struct rxm_buf *rxm_buf_alloc(struct rxm_buf_pool *pool)
 {
-	return pool->buf_get(pool);
+	return util_buf_alloc(pool->pool);
 }
 
 static inline
 void rxm_buf_release(struct rxm_buf_pool *pool, struct rxm_buf *buf)
 {
-	pool->buf_release(pool, buf);
+	util_buf_release(pool->pool, buf);
 }
 
-static inline
-struct rxm_buf *rxm_buf_get_by_index(struct rxm_buf_pool *pool, size_t index)
+static inline struct rxm_buf *
+rxm_buf_get_by_index(struct rxm_buf_pool *pool, size_t index)
 {
-	return pool->buf_get_by_index(pool, index);
+	return util_buf_get_by_index(pool->pool, index);
 }
 
 static inline
 size_t rxm_get_buf_index(struct rxm_buf_pool *pool, struct rxm_buf *buf)
 {
-	return pool->get_buf_index(pool, buf);
+	return util_get_buf_index(pool->pool, buf);
 }
 
 static inline struct rxm_buf *
-rxm_tx_buf_get(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
+rxm_tx_buf_alloc(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
 {
 	assert((type == RXM_BUF_POOL_TX) ||
 	       (type == RXM_BUF_POOL_TX_INJECT) ||
@@ -1059,7 +1045,7 @@ rxm_tx_buf_get(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
 	       (type == RXM_BUF_POOL_TX_RNDV) ||
 	       (type == RXM_BUF_POOL_TX_ATOMIC) ||
 	       (type == RXM_BUF_POOL_TX_SAR));
-	return rxm_buf_get(&rxm_ep->buf_pools[type]);
+	return rxm_buf_alloc(&rxm_ep->buf_pools[type]);
 }
 
 static inline void
@@ -1068,23 +1054,28 @@ rxm_tx_buf_release(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type, void *tx_
 	rxm_buf_release(&rxm_ep->buf_pools[type], (struct rxm_buf *)tx_buf);
 }
 
-static inline struct rxm_rx_buf *rxm_rx_buf_get(struct rxm_ep *rxm_ep)
+static inline struct rxm_rx_buf *rxm_rx_buf_alloc(struct rxm_ep *rxm_ep)
 {
-	return (struct rxm_rx_buf *)rxm_buf_get(
-			&rxm_ep->buf_pools[RXM_BUF_POOL_RX]);
+	return (struct rxm_rx_buf *)
+		rxm_buf_alloc(&rxm_ep->buf_pools[RXM_BUF_POOL_RX]);
 }
 
 static inline void
 rxm_rx_buf_release(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_buf)
 {
-	rxm_buf_release(&rxm_ep->buf_pools[RXM_BUF_POOL_RX],
-			(struct rxm_buf *)rx_buf);
+	if (rx_buf->repost) {
+		dlist_insert_tail(&rx_buf->repost_entry,
+				  &rx_buf->ep->repost_ready_list);
+	} else {
+		util_buf_release(rxm_ep->buf_pools[RXM_BUF_POOL_RX].pool,
+				 rx_buf);
+	}
 }
 
-static inline struct rxm_rma_buf *rxm_rma_buf_get(struct rxm_ep *rxm_ep)
+static inline struct rxm_rma_buf *rxm_rma_buf_alloc(struct rxm_ep *rxm_ep)
 {
-	return (struct rxm_rma_buf *)rxm_buf_get(
-			&rxm_ep->buf_pools[RXM_BUF_POOL_RMA]);
+	return (struct rxm_rma_buf *)
+		rxm_buf_alloc(&rxm_ep->buf_pools[RXM_BUF_POOL_RMA]);
 }
 
 static inline void
@@ -1095,22 +1086,23 @@ rxm_rma_buf_release(struct rxm_ep *rxm_ep, struct rxm_rma_buf *rx_buf)
 }
 
 static inline
-struct rxm_tx_atomic_buf *rxm_tx_atomic_buf_get(struct rxm_ep *rxm_ep)
+struct rxm_tx_atomic_buf *rxm_tx_atomic_buf_alloc(struct rxm_ep *rxm_ep)
 {
-	return (struct rxm_tx_atomic_buf *) rxm_tx_buf_get(rxm_ep,
-						RXM_BUF_POOL_TX_ATOMIC);
+	return (struct rxm_tx_atomic_buf *)
+		rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_ATOMIC);
 }
 
 static inline struct rxm_recv_entry *rxm_recv_entry_get(struct rxm_recv_queue *queue)
 {
-	return queue->pop(queue);
+	return (freestack_isempty(queue->fs) ?
+		NULL : freestack_pop(queue->fs));
 }
 
 static inline void
 rxm_recv_entry_release(struct rxm_recv_queue *queue, struct rxm_recv_entry *entry)
 {
 	entry->total_len = 0;
-	queue->push(queue, entry);
+	freestack_push(queue->fs, entry);
 }
 
 static inline int rxm_cq_write_recv_comp(struct rxm_rx_buf *rx_buf,
@@ -1140,19 +1132,4 @@ rxm_cq_write_multi_recv_comp(struct rxm_ep *rxm_ep, struct rxm_recv_entry *recv_
 		return ofi_cq_write(rxm_ep->util_ep.rx_cq, recv_entry->context,
 				    FI_MULTI_RECV, recv_entry->multi_recv.len,
 				    recv_entry->multi_recv.buf, 0, 0);
-}
-
-static inline void rxm_enqueue_rx_buf_for_repost(struct rxm_rx_buf *rx_buf)
-{
-	ofi_ep_lock_acquire(&rx_buf->ep->util_ep);
-	dlist_insert_tail(&rx_buf->repost_entry, &rx_buf->ep->repost_ready_list);
-	ofi_ep_lock_release(&rx_buf->ep->util_ep);
-}
-
-static inline void rxm_enqueue_rx_buf_for_repost_check(struct rxm_rx_buf *rx_buf)
-{
-	if (rx_buf->repost)
-		rxm_enqueue_rx_buf_for_repost(rx_buf);
-	else
-		rxm_rx_buf_release(rx_buf->ep, rx_buf);
 }
