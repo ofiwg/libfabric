@@ -1593,22 +1593,21 @@ static int pp_server_connect(struct ct_pingpong *ct)
 
 	ret = pp_exchange_names_connected(ct);
 	if (ret)
-		goto err;
+		return ret;
 
 	/* Listen */
 	rd = fi_eq_sread(ct->eq, &event, &entry, sizeof(entry), -1, 0);
 	if (rd != sizeof(entry)) {
 		pp_process_eq_err(rd, ct->eq, "fi_eq_sread");
-		return (int)rd;
+		return (int) rd;
+	}
+
+	if (event != FI_CONNREQ) {
+		fprintf(stderr, "Unexpected CM event %d\n", event);
+		return -FI_EOTHER;
 	}
 
 	ct->fi = entry.info;
-	if (event != FI_CONNREQ) {
-		fprintf(stderr, "Unexpected CM event %d\n", event);
-		ret = -FI_EOTHER;
-		goto err;
-	}
-
 	ret = fi_domain(ct->fabric, ct->fi, &(ct->domain), NULL);
 	if (ret) {
 		PP_PRINTERR("fi_domain", ret);
