@@ -574,6 +574,8 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq)
 
 	/* TODO set EVTQ size with CQ attrs */
 	evtq_opts.count = 1024;
+	evtq_opts.initr_use_long = 0;
+	evtq_opts.trgt_use_long = 1;
 
 	ret = cxil_alloc_evtq(cxi_cq->domain->dev_if->if_lni, &evtq_opts, NULL,
 			      &cxi_cq->evtq);
