@@ -1076,7 +1076,7 @@ static int pp_get_cq_comp(struct fid_cq *cq, uint64_t *cur, uint64_t total,
 	if (timeout_sec >= 0)
 		a = pp_gettime_us();
 
-	while (total - *cur > 0) {
+	do {
 		ret = fi_cq_read(cq, &comp, 1);
 		if (ret > 0) {
 			if (timeout_sec >= 0)
@@ -1100,7 +1100,7 @@ static int pp_get_cq_comp(struct fid_cq *cq, uint64_t *cur, uint64_t total,
 				return -FI_ENODATA;
 			}
 		}
-	}
+	} while (total - *cur > 0);
 
 	return 0;
 }
