@@ -65,10 +65,6 @@
 #define OFI_MR_BASIC_MAP (FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_VIRT_ADDR)
 #endif
 
-#ifndef PP_FIVERSION
-#define PP_FIVERSION FI_VERSION(1, 5)
-#endif
-
 static const uint64_t TAG = 1234;
 
 enum precision {
@@ -1426,7 +1422,8 @@ static int pp_getinfo(struct ct_pingpong *ct, struct fi_info *hints,
 	if (!hints->ep_attr->type)
 		hints->ep_attr->type = FI_EP_DGRAM;
 
-	ret = fi_getinfo(PP_FIVERSION, NULL, NULL, flags, hints, info);
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+			 NULL, NULL, flags, hints, info);
 	if (ret) {
 		PP_PRINTERR("fi_getinfo", ret);
 		return ret;
