@@ -962,12 +962,6 @@ struct sock_conn_req_handle {
 	char cm_data[SOCK_EP_MAX_CM_DATA_SZ];
 };
 
-struct sock_host_list_entry {
-	char ipstr[INET6_ADDRSTRLEN];
-	union ofi_sock_ip ipaddr;
-	struct slist_entry entry;
-};
-
 union sock_tx_op {
 	struct sock_msg {
 		struct sock_op_send op;
