@@ -245,13 +245,8 @@ static long parse_ulong(char *str, long max)
 
 static void pp_banner_fabric_info(struct ct_pingpong *ct)
 {
-	PP_DEBUG(
-	    "Running pingpong test with the %s provider and %s endpoint type\n",
-	    ct->fi->fabric_attr->prov_name,
-	    fi_tostr(&ct->fi->ep_attr->type, FI_TYPE_EP_TYPE));
-	PP_DEBUG("%s", fi_tostr(ct->fi->fabric_attr, FI_TYPE_FABRIC_ATTR));
-	PP_DEBUG("%s", fi_tostr(ct->fi->domain_attr, FI_TYPE_DOMAIN_ATTR));
-	PP_DEBUG("%s", fi_tostr(ct->fi->ep_attr, FI_TYPE_EP_ATTR));
+	PP_DEBUG("Running pingpong test with fi_info:\n%s\n",
+		 fi_tostr(ct->fi, FI_TYPE_INFO));
 }
 
 static void pp_banner_options(struct ct_pingpong *ct)
