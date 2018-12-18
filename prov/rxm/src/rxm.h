@@ -973,7 +973,7 @@ rxm_acquire_conn_connect(struct rxm_ep *rxm_ep, fi_addr_t fi_addr,
 	if (OFI_UNLIKELY(!*rxm_conn || (*rxm_conn)->handle.state != RXM_CMAP_CONNECTED)) {
 		int ret;
 		if (!*rxm_conn)
-			return -FI_ENOTCONN;
+			return -FI_EHOSTUNREACH;
 		rxm_ep->cmap->acquire(&rxm_ep->cmap->lock);
 		ret = rxm_cmap_handle_unconnected(rxm_ep, &(*rxm_conn)->handle, fi_addr);
 		rxm_ep->cmap->release(&rxm_ep->cmap->lock);
