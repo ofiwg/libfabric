@@ -565,6 +565,18 @@ static int pp_send_name(struct ct_pingpong *ct, struct fid *endpoint)
 	if (ret < 0)
 		goto fn;
 
+	PP_DEBUG("Sending address format\n");
+	if (ct->fi) {
+		ret = pp_ctrl_send(ct, (char *) &ct->fi->addr_format,
+				   sizeof(ct->fi->addr_format));
+	} else {
+		ret = pp_ctrl_send(ct, (char *) &ct->fi_pep->addr_format,
+				   sizeof(ct->fi_pep->addr_format));
+
+	}
+	if (ret < 0)
+		goto fn;
+
 	PP_DEBUG("Sending name\n");
 	ret = pp_ctrl_send(ct, local_name, addrlen);
 	PP_DEBUG("Sent name\n");
@@ -591,6 +603,12 @@ static int pp_recv_name(struct ct_pingpong *ct)
 		PP_ERR("Failed to allocate memory for the address\n");
 		return -ENOMEM;
 	}
+
+	PP_DEBUG("Receiving address format\n");
+	ret = pp_ctrl_recv(ct, (char *) &ct->hints->addr_format,
+			   sizeof(ct->hints->addr_format));
+	if (ret < 0)
+		return ret;
 
 	PP_DEBUG("Receiving name\n");
 	ret = pp_ctrl_recv(ct, ct->rem_name, len);
@@ -1520,10 +1538,6 @@ static int pp_exchange_names_connected(struct ct_pingpong *ct)
 
 	PP_DEBUG("Connection-based endpoint: setting up connection\n");
 
-	ret = pp_ctrl_sync(ct);
-	if (ret)
-		return ret;
-
 	if (ct->opts.dst_addr) {
 		ret = pp_recv_name(ct);
 		if (ret < 0)
@@ -1597,26 +1611,21 @@ static int pp_server_connect(struct ct_pingpong *ct)
 
 	ret = pp_exchange_names_connected(ct);
 	if (ret)
-		goto err;
-
-	ret = pp_ctrl_sync(ct);
-	if (ret)
-		goto err;
+		return ret;
 
 	/* Listen */
 	rd = fi_eq_sread(ct->eq, &event, &entry, sizeof(entry), -1, 0);
 	if (rd != sizeof(entry)) {
 		pp_process_eq_err(rd, ct->eq, "fi_eq_sread");
-		return (int)rd;
+		return (int) rd;
+	}
+
+	if (event != FI_CONNREQ) {
+		fprintf(stderr, "Unexpected CM event %d\n", event);
+		return -FI_EOTHER;
 	}
 
 	ct->fi = entry.info;
-	if (event != FI_CONNREQ) {
-		fprintf(stderr, "Unexpected CM event %d\n", event);
-		ret = -FI_EOTHER;
-		goto err;
-	}
-
 	ret = fi_domain(ct->fabric, ct->fi, &(ct->domain), NULL);
 	if (ret) {
 		PP_PRINTERR("fi_domain", ret);
@@ -1638,10 +1647,6 @@ static int pp_server_connect(struct ct_pingpong *ct)
 		PP_PRINTERR("fi_accept", ret);
 		goto err;
 	}
-
-	ret = pp_ctrl_sync(ct);
-	if (ret)
-		goto err;
 
 	/* Accept */
 	rd = fi_eq_sread(ct->eq, &event, &entry, sizeof(entry), -1, 0);
@@ -1677,11 +1682,6 @@ static int pp_client_connect(struct ct_pingpong *ct)
 	if (ret)
 		return ret;
 
-	/* Check that the remote is still up */
-	ret = pp_ctrl_sync(ct);
-	if (ret)
-		return ret;
-
 	ret = pp_open_fabric_res(ct);
 	if (ret)
 		return ret;
@@ -1699,10 +1699,6 @@ static int pp_client_connect(struct ct_pingpong *ct)
 		PP_PRINTERR("fi_connect", ret);
 		return ret;
 	}
-
-	ret = pp_ctrl_sync(ct);
-	if (ret)
-		return ret;
 
 	/* Connect */
 	rd = fi_eq_sread(ct->eq, &event, &entry, sizeof(entry), -1, 0);
