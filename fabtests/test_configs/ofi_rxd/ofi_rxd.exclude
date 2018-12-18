@@ -3,6 +3,9 @@
 ^msg|-e msg
 ^dgram|-e dgram
 
+# Exclude all prefix tests
+-k
+
 # Exclude tests that use sread/polling until issues are resolved
 -S
 rdm_cntr_pingpong
