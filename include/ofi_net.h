@@ -45,6 +45,7 @@
 #include <ifaddrs.h>
 
 #include <ofi_osd.h>
+#include <ofi_list.h>
 
 #include <rdma/fabric.h>
 #include <rdma/providers/fi_prov.h>
@@ -131,9 +132,18 @@ union ofi_sock_ip {
 	uint8_t			align[32];
 };
 
+struct ofi_addr_list_entry {
+	char ipstr[INET6_ADDRSTRLEN];
+	union ofi_sock_ip ipaddr;
+	size_t speed;
+	struct slist_entry entry;
+};
+
 int ofi_addr_cmp(const struct fi_provider *prov, const struct sockaddr *sa1,
 		const struct sockaddr *sa2);
 int ofi_getifaddrs(struct ifaddrs **ifap);
+void ofi_get_list_of_addr(struct fi_provider *prov, const char *env_name,
+			  struct slist *addr_list);
 
 #define ofi_sa_family(addr) ((struct sockaddr *)(addr))->sa_family
 #define ofi_sin_addr(addr) (((struct sockaddr_in *)(addr))->sin_addr)
