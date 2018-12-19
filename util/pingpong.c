@@ -65,10 +65,6 @@
 #define OFI_MR_BASIC_MAP (FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_VIRT_ADDR)
 #endif
 
-#ifndef PP_FIVERSION
-#define PP_FIVERSION FI_VERSION(1, 5)
-#endif
-
 static const uint64_t TAG = 1234;
 
 enum precision {
@@ -245,13 +241,8 @@ static long parse_ulong(char *str, long max)
 
 static void pp_banner_fabric_info(struct ct_pingpong *ct)
 {
-	PP_DEBUG(
-	    "Running pingpong test with the %s provider and %s endpoint type\n",
-	    ct->fi->fabric_attr->prov_name,
-	    fi_tostr(&ct->fi->ep_attr->type, FI_TYPE_EP_TYPE));
-	PP_DEBUG("%s", fi_tostr(ct->fi->fabric_attr, FI_TYPE_FABRIC_ATTR));
-	PP_DEBUG("%s", fi_tostr(ct->fi->domain_attr, FI_TYPE_DOMAIN_ATTR));
-	PP_DEBUG("%s", fi_tostr(ct->fi->ep_attr, FI_TYPE_EP_ATTR));
+	PP_DEBUG("Running pingpong test with fi_info:\n%s\n",
+		 fi_tostr(ct->fi, FI_TYPE_INFO));
 }
 
 static void pp_banner_options(struct ct_pingpong *ct)
@@ -1085,7 +1076,7 @@ static int pp_get_cq_comp(struct fid_cq *cq, uint64_t *cur, uint64_t total,
 	if (timeout_sec >= 0)
 		a = pp_gettime_us();
 
-	while (total - *cur > 0) {
+	do {
 		ret = fi_cq_read(cq, &comp, 1);
 		if (ret > 0) {
 			if (timeout_sec >= 0)
@@ -1109,7 +1100,7 @@ static int pp_get_cq_comp(struct fid_cq *cq, uint64_t *cur, uint64_t total,
 				return -FI_ENODATA;
 			}
 		}
-	}
+	} while (total - *cur > 0);
 
 	return 0;
 }
@@ -1431,7 +1422,8 @@ static int pp_getinfo(struct ct_pingpong *ct, struct fi_info *hints,
 	if (!hints->ep_attr->type)
 		hints->ep_attr->type = FI_EP_DGRAM;
 
-	ret = fi_getinfo(PP_FIVERSION, NULL, NULL, flags, hints, info);
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+			 NULL, NULL, flags, hints, info);
 	if (ret) {
 		PP_PRINTERR("fi_getinfo", ret);
 		return ret;
