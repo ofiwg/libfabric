@@ -163,6 +163,12 @@ To conserve memory, ensure FI_UNIVERSE_SIZE set to what is required. Similarly
 check that FI_OFI_RXM_TX_SIZE, FI_OFI_RXM_RX_SIZE, FI_OFI_RXM_MSG_TX_SIZE and
 FI_OFI_RXM_MSG_RX_SIZE env variables are set to only required values.
 
+# NOTES
+
+The data transfer API may return -FI_EAGAIN during on-demand connection setup
+of the core provider FI_MSG_EP. See [`fi_msg`(3)](fi_msg.3.html) for a detailed
+description of handling FI_EAGAIN.
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),
