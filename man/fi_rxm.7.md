@@ -44,13 +44,13 @@ result in a stall. See also the ERRORS section in fi_msg(3).
 
 # SUPPORTED FEATURES
 
-The RxM provider currently supports *FI_MSG*, *FI_TAGGED* and *FI_RMA* capabilities.
+The RxM provider currently supports *FI_MSG*, *FI_TAGGED*, *FI_RMA* and *FI_ATOMIC* capabilities.
 
 *Endpoint types*
 : The provider supports only *FI_EP_RDM*.
 
 *Endpoint capabilities*
-: The following data transfer interface is supported: *FI_MSG*, *FI_TAGGED*, *FI_RMA*.
+: The following data transfer interface is supported: *FI_MSG*, *FI_TAGGED*, *FI_RMA*, *FI_ATOMIC*.
 
 *Progress*
 : The RxM provider supports both *FI_PROGRESS_MANUAL* and *FI_PROGRESS_AUTO*.
@@ -73,8 +73,6 @@ up. Please refer to the corresponding MSG provider man pages to find about those
 RxM provider does not support the following features:
 
   * op_flags: FI_FENCE.
-
-  * FI_ATOMIC
 
   * Scalable endpoints
 
@@ -105,6 +103,13 @@ because RxM uses a rendezvous protocol for large message sends. An app would get
 woken up from waiting on CQ fd when rendezvous protocol request completes but it
 would have to wait again to get an ACK from the receiver indicating completion of
 large message transfer by remote RMA read.
+
+## FI_ATOMIC limitations
+
+The FI_ATOMIC capability will only be listed in the fi_info if the fi_info
+hints parameter specifies FI_ATOMIC. If FI_ATOMIC is requested, message order
+FI_ORDER_RAR, FI_ORDER_RAW, FI_ORDER_WAR, FI_ORDER_WAW, FI_ORDER_SAR, and
+FI_ORDER_SAW can not be supported.
 
 # RUNTIME PARAMETERS
 
