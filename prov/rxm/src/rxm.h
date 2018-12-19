@@ -165,18 +165,33 @@ enum rxm_cmap_signal {
 };
 
 enum rxm_cmap_state {
+	RXM_CMAP_INIT = 0,
 	RXM_CMAP_IDLE,
 	RXM_CMAP_CONNREQ_SENT,
 	RXM_CMAP_CONNREQ_RECV,
-	RXM_CMAP_ACCEPT,
 	RXM_CMAP_CONNECTED_NOTIFY,
 	RXM_CMAP_CONNECTED,
 	RXM_CMAP_SHUTDOWN,
+	RXM_CMAP_STATES_NUMBER, /* must be at the end */
 };
+
+#define RXM_CMAP_ANY_STATE (~0ULL)
 
 enum rxm_cmap_reject_flag {
 	RXM_CMAP_REJECT_GENUINE,
 	RXM_CMAP_REJECT_SIMULT_CONN,
+};
+
+struct rxm_cmap_handle;
+typedef void (*rxm_cmap_state_subscr_cb)(struct rxm_cmap_handle *handle,
+					 void *subscr,
+					 enum rxm_cmap_state prev_state,
+					 enum rxm_cmap_state new_state);
+
+struct rxm_cmap_state_subscr {
+	uint64_t prev_state_bm;
+	void *context;
+	rxm_cmap_state_subscr_cb cb;
 };
 
 struct rxm_cmap_handle {
@@ -190,6 +205,8 @@ struct rxm_cmap_handle {
 	uint64_t remote_key;
 	fi_addr_t fi_addr;
 	struct rxm_cmap_peer *peer;
+
+	struct rxm_cmap_state_subscr **state_subscr;
 };
 
 struct rxm_cmap_peer {
@@ -258,6 +275,39 @@ rxm_cmap_acquire_handle(struct rxm_cmap *cmap, fi_addr_t fi_addr)
 	assert(fi_addr < cmap->num_allocated);
 	return cmap->handles_av[fi_addr];
 }
+
+/* Caller must hold cmap->lock */
+static inline void
+rxm_cmap_change_state(struct rxm_cmap_handle *handle,
+		      enum rxm_cmap_state new_state)
+{
+	enum rxm_cmap_state prev_state = handle->state;
+
+	handle->state = new_state;
+
+	if (handle->state_subscr) {
+		if (handle->state_subscr[new_state]) {
+			struct rxm_cmap_state_subscr *subscr =
+				handle->state_subscr[new_state];
+
+			if (subscr->prev_state_bm & (1 << prev_state)) {
+				subscr->cb(handle, subscr->context,
+					   prev_state, new_state);
+			}
+		}
+	}
+}
+
+/* Caller must hold cmap->lock */
+int rxm_cmap_state_subscribe(struct rxm_cmap_handle *handle,
+			     void *subscr_context,
+			     rxm_cmap_state_subscr_cb subscr_cb,
+			     uint64_t prev_state_bm,
+			     uint64_t new_state_bm);
+/* Caller must hold cmap->lock */
+void rxm_cmap_state_unsubscribe(struct rxm_cmap_handle *handle,
+				uint64_t prev_state_bm,
+				uint64_t new_state_bm);
 
 struct rxm_fabric {
 	struct util_fabric util_fabric;

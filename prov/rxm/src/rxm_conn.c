@@ -102,7 +102,7 @@ static void rxm_cmap_init_handle(struct rxm_cmap_handle *handle,
 				  struct rxm_cmap_peer *peer)
 {
 	handle->cmap = cmap;
-	handle->state = state;
+	rxm_cmap_change_state(handle, state);
 	rxm_cmap_set_key(handle);
 	handle->fi_addr = fi_addr;
 	handle->peer = peer;
@@ -133,7 +133,7 @@ static int rxm_cmap_del_handle(struct rxm_cmap_handle *handle)
 	}
 	rxm_cmap_clear_key(handle);
 
-	handle->state = RXM_CMAP_SHUTDOWN;
+	rxm_cmap_change_state(handle, RXM_CMAP_SHUTDOWN);
 	/* Signal CM thread to delete the handle. This is required
 	 * so that the CM thread handles any pending events for this
 	 * ep correctly. Handle would be freed finally after processing the
@@ -418,6 +418,73 @@ int rxm_cmap_update(struct rxm_cmap *cmap, const void *addr, fi_addr_t fi_addr)
 	return 0;
 }
 
+/* Caller must hold cmap->lock */
+int rxm_cmap_state_subscribe(struct rxm_cmap_handle *handle,
+			     void *subscr_context,
+			     rxm_cmap_state_subscr_cb subscr_cb,
+			     uint64_t prev_state_bm,
+			     uint64_t new_state_bm)
+{
+	uint8_t state_iter;
+
+	if (!handle->state_subscr) {
+		handle->state_subscr = calloc(RXM_CMAP_STATES_NUMBER,
+					      sizeof(*handle->state_subscr));
+		if (!handle->state_subscr)
+			return -FI_ENOMEM;
+	}
+
+	for (state_iter = 0; state_iter < RXM_CMAP_STATES_NUMBER; state_iter++) {
+		if (new_state_bm & (1 << state_iter)) {
+			handle->state_subscr[state_iter] =
+				calloc(1, sizeof(*handle->state_subscr[state_iter]));
+			if (!handle->state_subscr[state_iter]) {
+				rxm_cmap_state_unsubscribe(handle, prev_state_bm,
+							   new_state_bm);
+				return -FI_ENOMEM;
+			}
+			handle->state_subscr[state_iter]->prev_state_bm = prev_state_bm;
+			handle->state_subscr[state_iter]->context = subscr_context;
+			handle->state_subscr[state_iter]->cb = subscr_cb;
+		}
+	}
+
+	return FI_SUCCESS;
+}
+
+/* Caller must hold cmap->lock */
+void rxm_cmap_state_unsubscribe(struct rxm_cmap_handle *handle,
+				uint64_t prev_state_bm,
+				uint64_t new_state_bm)
+{
+	uint8_t state_iter, subscr_cnt = 0;
+
+	if (!handle->state_subscr)
+		return;
+
+	for (state_iter = 0; state_iter < RXM_CMAP_STATES_NUMBER; state_iter++) {
+		if (!handle->state_subscr[state_iter])
+			continue;
+
+		subscr_cnt++;
+		if (new_state_bm & (1 << state_iter)) {
+			handle->state_subscr[state_iter]->prev_state_bm &=
+				~prev_state_bm;
+			if (!handle->state_subscr[state_iter]->prev_state_bm) {
+				free(handle->state_subscr[state_iter]);
+				handle->state_subscr[state_iter] = NULL;
+				subscr_cnt--;
+			}
+		}
+	}
+
+	if (!subscr_cnt) {
+		free(handle->state_subscr);
+		handle->state_subscr = NULL;
+	}
+}
+
+/* Caller must hold cmap->lock */
 void rxm_cmap_process_shutdown(struct rxm_cmap *cmap,
 			       struct rxm_cmap_handle *handle)
 {
@@ -442,7 +509,8 @@ void rxm_cmap_process_conn_notify(struct rxm_cmap *cmap,
 {
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 	       "Processing connection notification for handle: %p.\n", handle);
-	handle->state = RXM_CMAP_CONNECTED;
+
+	rxm_cmap_change_state(handle, RXM_CMAP_CONNECTED);
 	rxm_conn_connected_handler(handle);
 }
 
@@ -455,7 +523,9 @@ void rxm_cmap_process_connect(struct rxm_cmap *cmap,
 
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 	       "Processing connect for handle: %p\n", handle);
-	handle->state = RXM_CMAP_CONNECTED_NOTIFY;
+
+	rxm_cmap_change_state(handle, RXM_CMAP_CONNECTED_NOTIFY);
+
 	if (remote_key)
 		handle->remote_key = *remote_key;
 
@@ -583,7 +653,7 @@ int rxm_cmap_process_connreq(struct rxm_cmap *cmap, void *addr,
 		}
 		/* Fall through */
 	case RXM_CMAP_IDLE:
-		handle->state = RXM_CMAP_CONNREQ_RECV;
+		rxm_cmap_change_state(handle, RXM_CMAP_CONNREQ_RECV);
 		/* Fall through */
 	case RXM_CMAP_CONNREQ_RECV:
 		*handle_ret = handle;
@@ -619,13 +689,14 @@ static int rxm_cmap_handle_connect(struct rxm_cmap *cmap, fi_addr_t fi_addr,
 			rxm_cmap_del_handle(handle);
 			return ret;
 		}
-		handle->state = RXM_CMAP_CONNREQ_SENT;
+
+		rxm_cmap_change_state(handle, RXM_CMAP_CONNREQ_SENT);
+
 		ret = -FI_EAGAIN;
 		// TODO sleep on event fd instead of busy polling
 		break;
 	case RXM_CMAP_CONNREQ_SENT:
 	case RXM_CMAP_CONNREQ_RECV:
-	case RXM_CMAP_ACCEPT:
 	case RXM_CMAP_SHUTDOWN:
 		ret = -FI_EAGAIN;
 		break;
