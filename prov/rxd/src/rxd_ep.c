@@ -383,6 +383,8 @@ struct rxd_x_entry *rxd_tx_entry_init(struct rxd_ep *ep, const struct iovec *iov
 	tx_entry->cq_entry.flags = ofi_tx_cq_flags(op);
 	tx_entry->cq_entry.tag = tag;
 
+	tx_entry->pkt = NULL;
+
 	max_inline = rxd_domain->max_inline_msg;
 	if (tx_entry->cq_entry.flags & FI_RMA) {
 		max_inline -= sizeof(struct ofi_rma_iov) * rma_count;
