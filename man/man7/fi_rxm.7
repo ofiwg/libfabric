@@ -41,8 +41,8 @@ Not doing so would result in a stall.
 See also the ERRORS section in fi_msg(3).
 .SH SUPPORTED FEATURES
 .PP
-The RxM provider currently supports \f[I]FI_MSG\f[], \f[I]FI_TAGGED\f[]
-and \f[I]FI_RMA\f[] capabilities.
+The RxM provider currently supports \f[I]FI_MSG\f[], \f[I]FI_TAGGED\f[],
+\f[I]FI_RMA\f[] and \f[I]FI_ATOMIC\f[] capabilities.
 .TP
 .B \f[I]Endpoint types\f[]
 The provider supports only \f[I]FI_EP_RDM\f[].
@@ -51,7 +51,7 @@ The provider supports only \f[I]FI_EP_RDM\f[].
 .TP
 .B \f[I]Endpoint capabilities\f[]
 The following data transfer interface is supported: \f[I]FI_MSG\f[],
-\f[I]FI_TAGGED\f[], \f[I]FI_RMA\f[].
+\f[I]FI_TAGGED\f[], \f[I]FI_RMA\f[], \f[I]FI_ATOMIC\f[].
 .RS
 .RE
 .TP
@@ -84,8 +84,6 @@ RxM provider does not support the following features:
 .IP \[bu] 2
 op_flags: FI_FENCE.
 .IP \[bu] 2
-FI_ATOMIC
-.IP \[bu] 2
 Scalable endpoints
 .IP \[bu] 2
 Shared contexts
@@ -117,6 +115,13 @@ An app would get woken up from waiting on CQ fd when rendezvous protocol
 request completes but it would have to wait again to get an ACK from the
 receiver indicating completion of large message transfer by remote RMA
 read.
+.SS FI_ATOMIC limitations
+.PP
+The FI_ATOMIC capability will only be listed in the fi_info if the
+fi_info hints parameter specifies FI_ATOMIC.
+If FI_ATOMIC is requested, message order FI_ORDER_RAR, FI_ORDER_RAW,
+FI_ORDER_WAR, FI_ORDER_WAW, FI_ORDER_SAR, and FI_ORDER_SAW can not be
+supported.
 .SH RUNTIME PARAMETERS
 .PP
 The ofi_rxm provider checks for the following environment variables.
