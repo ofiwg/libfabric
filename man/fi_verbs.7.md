@@ -159,6 +159,10 @@ The support for fork in the provider has the following limitations:
     marks the entire page that a memory region belongs to as not to be re-mapped
     when the process is forked (MADV_DONTFORK).
 
+### XRC Transport
+The XRC transport is intended to be used when layered with the RXM provider and
+requires the use of shared receive contexts. See [`fi_rxm`(7)](fi_rxm.7.thml).
+
 # RUNTIME PARAMETERS
 
 The verbs provider checks for the following environment variables.
@@ -202,6 +206,9 @@ The verbs provider checks for the following environment variables.
 
 *FI_VERBS_MR_MAX_CACHED_SIZE*
 : Maximum total size of cache entries (default: 4 GB)
+
+*FI_VERBS_PREFER_XRC*
+: Prioritize XRC transport fi_info before RC transport fi_info (default: 0, RC fi_info will be before XRC fi_info)
 
 ### Variables specific to RDM (internal - deprecated) endpoints
 
