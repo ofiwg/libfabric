@@ -22,6 +22,7 @@
 #include <Mswsock.h>
 #include <ws2tcpip.h>
 #include <windows.h>
+#include <process.h>
 #include <io.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -275,6 +276,9 @@ do						\
 #define htonll _byteswap_uint64
 #define ntohll _byteswap_uint64
 #define strncasecmp _strnicmp
+
+typedef int pid_t;
+#define getpid _getpid
 
 int fd_set_nonblock(int fd);
 
