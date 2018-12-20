@@ -241,6 +241,11 @@ struct rxm_cmap {
 	ofi_fastlock_acquire_t	acquire;
 	ofi_fastlock_release_t	release;
 	fastlock_t		lock;
+
+	struct dlist_entry	wait_list_entry;
+	struct dlist_entry	wait_list;
+	struct fd_signal	signal;
+	int			progress_fd;
 };
 
 struct rxm_ep;
@@ -266,6 +271,11 @@ int rxm_cmap_handle_unconnected(struct rxm_ep *rxm_ep, struct rxm_cmap_handle *h
 void rxm_cmap_del_handle_ts(struct rxm_cmap_handle *handle);
 void rxm_cmap_free(struct rxm_cmap *cmap);
 int rxm_cmap_alloc(struct rxm_ep *rxm_ep, struct rxm_cmap_attr *attr);
+int rxm_cmap_insert_addrs_and_connect(struct rxm_cmap *cmap, const void *addr,
+				      size_t count, fi_addr_t *fi_addr);
+int rxm_cmap_insert_addrs(struct rxm_cmap *cmap, const void *addr,
+			  size_t count, fi_addr_t *fi_addr);
+
 /* Caller must hold cmap->lock */
 int rxm_cmap_move_handle_to_peer_list(struct rxm_cmap *cmap, int index);
 

@@ -65,41 +65,112 @@ static int rxm_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 }
 
 static int
-rxm_av_insert_cmap(struct fid_av *av_fid, const void *addr, size_t count,
-		   fi_addr_t *fi_addr, uint64_t flags)
+rxm_av_cmap_comp_wait(struct util_av *av, struct dlist_entry *cmap_wait_list)
+{
+	fi_epoll_t epoll;
+	int ret;
+	struct rxm_cmap *cmap;
+	struct dlist_entry *tmp;
+
+	ret = fi_epoll_create(&epoll);
+	if (ret)
+		return ret;
+
+	dlist_foreach_container(cmap_wait_list, struct rxm_cmap,
+				cmap, wait_list_entry) {
+		ret = fi_epoll_add(epoll, cmap->progress_fd,
+				   FI_EPOLL_IN, cmap);
+		if (ret) {
+			goto err1;
+		}
+	}
+
+	while (!dlist_empty(cmap_wait_list)) {
+		struct rxm_ep *rxm_ep;
+
+		cmap = NULL;
+
+		ret = fi_epoll_wait(epoll, (void **)&cmap, 1, -1);
+		if (ret < 0) {
+			goto err2;
+		}
+
+		assert(ret == 1);
+
+		rxm_ep = container_of(cmap->ep, struct rxm_ep, util_ep);
+
+		if (av->domain->data_progress != FI_PROGRESS_AUTO) {
+			assert(!slistfd_empty(&rxm_ep->msg_eq_entry_list));
+
+			ret = rxm_conn_process_eq_events(rxm_ep);
+			if (ret) {
+				goto err2;
+			}
+		} else {
+			assert(dlist_empty(&cmap->wait_list));
+			fd_signal_reset(&cmap->signal);
+			fd_signal_free(&cmap->signal);
+		}
+
+		cmap->acquire(&cmap->lock);
+		if (dlist_empty(&cmap->wait_list)) {
+			dlist_remove(&cmap->wait_list_entry);
+			fi_epoll_del(epoll, cmap->progress_fd);
+		}
+		cmap->release(&cmap->lock);
+	}
+
+	fi_epoll_close(epoll);
+	return 0;
+
+err2:
+	dlist_foreach_container_safe(cmap_wait_list, struct rxm_cmap,
+				     cmap, wait_list_entry, tmp) {
+		dlist_remove(&cmap->wait_list_entry);
+	}
+err1:
+	fi_epoll_close(epoll);
+	return ret;
+}
+
+static int
+rxm_av_insert_cmap(struct fid_av *av_fid, const void *addr,
+		   size_t count, fi_addr_t *fi_addr)
 {
 	struct util_av *av = container_of(av_fid, struct util_av, av_fid);
 	struct rxm_ep *rxm_ep;
-	fi_addr_t fi_addr_tmp;
-	size_t i;
 	int ret = 0;
-	const void *cur_addr;
+	struct dlist_entry cmap_wait_list = DLIST_INIT(&cmap_wait_list);
 
 	dlist_foreach_container(&av->ep_list, struct rxm_ep,
 				rxm_ep, util_ep.av_entry) {
-		for (i = 0; i < count; i++) {
-			cur_addr = (const void *) ((char *) addr + i * av->addrlen);
-			fi_addr_tmp = (fi_addr ? fi_addr[i] :
-				       ofi_av_lookup_fi_addr(av, cur_addr));
-			if (fi_addr_tmp == FI_ADDR_NOTAVAIL)
-				continue;
-			ret = rxm_cmap_update(rxm_ep->cmap, cur_addr, fi_addr_tmp);
-			if (OFI_UNLIKELY(ret)) {
-				FI_WARN(&rxm_prov, FI_LOG_AV,
-					"Unable to update CM for OFI endpoints\n");
-				return ret;
-			}
-
-			if (!rxm_lazy_conn) {
-				struct rxm_cmap_handle *handle;
-				struct rxm_cmap *cmap = rxm_ep->cmap;
-				cmap->acquire(&(cmap->lock));
-				handle = rxm_cmap_acquire_handle(cmap, fi_addr_tmp);
-				(void) rxm_cmap_handle_connect(cmap, fi_addr_tmp, handle);
-				cmap->release(&(cmap->lock));
-			}
+		if (!rxm_lazy_conn) {
+			ret = rxm_cmap_insert_addrs_and_connect(rxm_ep->cmap, addr,
+								count, fi_addr);
+			dlist_insert_tail(&rxm_ep->cmap->wait_list_entry,
+					  &cmap_wait_list);
+		} else {
+			ret = rxm_cmap_insert_addrs(rxm_ep->cmap, addr,
+						    count, fi_addr);
+		}
+		if (ret) {
+			FI_WARN(&rxm_prov, FI_LOG_AV,
+				"Unable to update CM for OFI endpoints\n");
+			return ret;
 		}
 	}
+
+	if (!rxm_lazy_conn) {
+		ret = rxm_av_cmap_comp_wait(av, &cmap_wait_list);
+		if (ret) {
+			FI_WARN(&rxm_prov, FI_LOG_AV,
+				"Unable to wait for OFI endpoints processing completion\n");
+			return ret;
+		}
+	}
+
+	assert(dlist_empty(&cmap_wait_list));
+
 	return 0;
 }
 
@@ -116,7 +187,7 @@ static int rxm_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 	if (!av->eq && !ret)
 		return ret;
 
-	retv = rxm_av_insert_cmap(av_fid, addr, count, fi_addr, flags);
+	retv = rxm_av_insert_cmap(av_fid, addr, count, fi_addr);
 	if (retv) {
 		ret = rxm_av_remove(av_fid, fi_addr, count, flags);
 		if (ret)
@@ -154,7 +225,7 @@ static int rxm_av_insertsym(struct fid_av *av_fid, const char *node,
 	if (!av->eq && !ret)
 		goto out;
 
-	retv = rxm_av_insert_cmap(av_fid, addr, count, fi_addr, flags);
+	retv = rxm_av_insert_cmap(av_fid, addr, count, fi_addr);
 	if (retv) {
 		ret = rxm_av_remove(av_fid, fi_addr, count, flags);
 		if (ret)
