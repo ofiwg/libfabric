@@ -67,7 +67,7 @@ int ofi_trywait(struct fid_fabric *fabric, struct fid **fids, int count)
 			return -FI_EINVAL;
 		}
 
-		ret = wait->try(wait);
+		ret = wait->wait_try(wait);
 		if (ret)
 			return ret;
 	}
@@ -182,7 +182,7 @@ out:
 }
 
 int ofi_wait_fd_add(struct util_wait *wait, int fd, uint32_t events,
-		    ofi_wait_fd_try_func try, void *arg, void *context)
+		    ofi_wait_fd_try_func wait_try, void *arg, void *context)
 {
 	struct ofi_wait_fd_entry *fd_entry;
 	struct dlist_entry *entry;
@@ -214,7 +214,7 @@ int ofi_wait_fd_add(struct util_wait *wait, int fd, uint32_t events,
 		goto out;
 	}
 	fd_entry->fd = fd;
-	fd_entry->try = try;
+	fd_entry->wait_try = wait_try;
 	fd_entry->arg = arg;
 	ofi_atomic_initialize32(&fd_entry->ref, 1);
 
@@ -243,7 +243,7 @@ static int util_wait_fd_try(struct util_wait *wait)
 	fastlock_acquire(&wait_fd->lock);
 	dlist_foreach_container(&wait_fd->fd_list, struct ofi_wait_fd_entry,
 				fd_entry, entry) {
-		ret = fd_entry->try(fd_entry->arg);
+		ret = fd_entry->wait_try(fd_entry->arg);
 		if (ret != FI_SUCCESS) {
 			fastlock_release(&wait_fd->lock);
 			return ret;
@@ -265,7 +265,7 @@ static int util_wait_fd_run(struct fid_wait *wait_fid, int timeout)
 	start = (timeout >= 0) ? fi_gettime_ms() : 0;
 
 	while (1) {
-		ret = wait->util_wait.try(&wait->util_wait);
+		ret = wait->util_wait.wait_try(&wait->util_wait);
 		if (ret)
 			return ret == -FI_EAGAIN ? 0 : ret;
 
@@ -391,7 +391,7 @@ int ofi_wait_fd_open(struct fid_fabric *fabric_fid, struct fi_wait_attr *attr,
 		goto err1;
 
 	wait->util_wait.signal = util_wait_fd_signal;
-	wait->util_wait.try = util_wait_fd_try;
+	wait->util_wait.wait_try = util_wait_fd_try;
 	ret = fd_signal_init(&wait->signal);
 	if (ret)
 		goto err2;
