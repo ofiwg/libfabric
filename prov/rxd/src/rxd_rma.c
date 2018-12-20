@@ -52,10 +52,8 @@ static ssize_t rxd_generic_write_inject(struct rxd_ep *rxd_ep,
 	fastlock_acquire(&rxd_ep->util_ep.lock);
 	fastlock_acquire(&rxd_ep->util_ep.tx_cq->cq_lock);
 
-	if (ofi_cirque_isfull(rxd_ep->util_ep.tx_cq->cirq)) {
-		ret = -FI_EAGAIN;
+	if (ofi_cirque_isfull(rxd_ep->util_ep.tx_cq->cirq))
 		goto out;
-	}
 
 	rxd_addr = rxd_ep_av(rxd_ep)->fi_addr_table[addr];
 	ret = rxd_send_rts_if_needed(rxd_ep, rxd_addr);
@@ -103,10 +101,8 @@ ssize_t rxd_generic_rma(struct rxd_ep *rxd_ep, const struct iovec *iov,
 	fastlock_acquire(&rxd_ep->util_ep.lock);
 	fastlock_acquire(&rxd_ep->util_ep.tx_cq->cq_lock);
 
-	if (ofi_cirque_isfull(rxd_ep->util_ep.tx_cq->cirq)) {
-		ret = -FI_EAGAIN;
+	if (ofi_cirque_isfull(rxd_ep->util_ep.tx_cq->cirq))
 		goto out;
-	}
 
 	rxd_addr = rxd_ep_av(rxd_ep)->fi_addr_table[addr];
 	ret = rxd_send_rts_if_needed(rxd_ep, rxd_addr);
