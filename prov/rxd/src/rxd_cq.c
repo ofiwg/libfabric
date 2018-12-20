@@ -1028,9 +1028,7 @@ static void rxd_handle_op(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 			return;
 		}
 
-		if (ep->peers[base_hdr->peer].rx_seq_no !=
-		    ep->peers[base_hdr->peer].last_tx_ack &&
-		    ep->peers[base_hdr->peer].peer_addr != FI_ADDR_UNSPEC)
+		if (ep->peers[base_hdr->peer].peer_addr != FI_ADDR_UNSPEC)
 			goto ack;
 		goto release;
 	}
