@@ -610,7 +610,9 @@ static void ofi_tostr_atomic_op(char *buf, enum fi_op op)
 static void ofi_tostr_version(char *buf)
 {
 	ofi_strcatf(buf, VERSION);
+#ifdef BUILD_ID
 	ofi_strcatf(buf, BUILD_ID);
+#endif
 }
 
 static void ofi_tostr_eq_event(char *buf, int type)
