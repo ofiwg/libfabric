@@ -652,6 +652,7 @@ static struct rxd_x_entry *rxd_rma_read_entry_init(struct rxd_ep *ep,
 	rx_entry->bytes_done = 0;
 	rx_entry->next_seg_no = 0;
 	rx_entry->num_segs = ofi_div_ceil(sar_hdr->size, rxd_domain->max_seg_sz);
+	rx_entry->pkt = NULL;
 
  	ret = rxd_verify_iov(ep, rma_hdr->rma, sar_hdr->iov_count,
 			     base_hdr->type, rx_entry->iov);
@@ -1028,9 +1029,7 @@ static void rxd_handle_op(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 			return;
 		}
 
-		if (ep->peers[base_hdr->peer].rx_seq_no !=
-		    ep->peers[base_hdr->peer].last_tx_ack &&
-		    ep->peers[base_hdr->peer].peer_addr != FI_ADDR_UNSPEC)
+		if (ep->peers[base_hdr->peer].peer_addr != FI_ADDR_UNSPEC)
 			goto ack;
 		goto release;
 	}
