@@ -131,7 +131,8 @@ static int util_find_domain(struct dlist_entry *item, const void *arg)
 
 	domain = container_of(item, struct util_domain, list_entry);
 
-	return !strcmp(domain->name, info->domain_attr->name) &&
+	return (!info->domain_attr->name ||
+		 !strcmp(domain->name, info->domain_attr->name)) &&
 		!((info->caps | info->domain_attr->caps) & ~domain->info_domain_caps) &&
 		 (((info->mode | info->domain_attr->mode) &
 		   domain->info_domain_mode) == domain->info_domain_mode) &&
