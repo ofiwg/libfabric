@@ -564,7 +564,6 @@ static const char *cxip_cq_strerror(struct fid_cq *cq, int prov_errno,
 
 int cxip_cq_enable(struct cxip_cq *cxi_cq)
 {
-	struct cxi_eq_alloc_opts evtq_opts;
 	int ret = FI_SUCCESS;
 
 	fastlock_acquire(&cxi_cq->lock);
@@ -573,16 +572,34 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq)
 		goto unlock;
 
 	/* TODO set EVTQ size with CQ attrs */
-	evtq_opts.count = 1024;
-	evtq_opts.initr_use_long = 0;
-	evtq_opts.trgt_use_long = 1;
+	cxi_cq->evtq_buf_len = C_PAGE_SIZE;
+	cxi_cq->evtq_buf = aligned_alloc(C_PAGE_SIZE,
+					 cxi_cq->evtq_buf_len);
+	if (!cxi_cq->evtq_buf) {
+		CXIP_LOG_DBG("Unable to allocate MR EVTQ buffer\n");
+		goto unlock;
+	}
 
-	ret = cxil_alloc_evtq(cxi_cq->domain->dev_if->if_lni, &evtq_opts, NULL,
+	ret = cxil_map(cxi_cq->domain->dev_if->if_lni,
+		       cxi_cq->evtq_buf, cxi_cq->evtq_buf_len,
+		       CXI_MAP_NTA | CXI_MAP_PIN | CXI_MAP_WRITE,
+		       NULL, &cxi_cq->evtq_buf_md);
+	if (ret) {
+		CXIP_LOG_DBG("Unable to MAP MR EVTQ buffer, ret: %d\n",
+			     ret);
+		goto free_evtq_buf;
+	}
+
+	ret = cxil_alloc_evtq(cxi_cq->domain->dev_if->if_lni,
+			      cxi_cq->evtq_buf,
+			      cxi_cq->evtq_buf_len,
+			      cxi_cq->evtq_buf_md,
+			      NULL, CXI_EQ_TGT_LONG,
 			      &cxi_cq->evtq);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Unable to allocate EVTQ, ret: %d\n", ret);
 		ret = -FI_EDOMAIN;
-		goto unlock;
+		goto unmap_evtq_buf;
 	}
 
 	/* TODO set buffer pool size with CQ attrs */
@@ -600,6 +617,12 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq)
 
 	return FI_SUCCESS;
 
+unmap_evtq_buf:
+	ret = cxil_unmap(cxi_cq->evtq_buf_md);
+	if (ret)
+		CXIP_LOG_ERROR("Failed to unmap evtq MD, ret: %d\n", ret);
+free_evtq_buf:
+	free(cxi_cq->evtq_buf);
 free_evtq:
 	cxil_destroy_evtq(cxi_cq->evtq);
 unlock:

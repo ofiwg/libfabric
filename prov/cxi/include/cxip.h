@@ -278,6 +278,9 @@ struct cxip_if {
 	ofi_atomic32_t ref;
 	struct cxi_cmdq *mr_cmdq;	// used for all MR activation
 	struct cxi_evtq *mr_evtq;	// used for async completion
+	void *evtq_buf;
+	size_t evtq_buf_len;
+	struct cxi_md *evtq_buf_md;
 	fastlock_t lock;
 };
 
@@ -502,6 +505,9 @@ struct cxip_cq {
 
 	int enabled;
 	struct cxi_evtq *evtq;		// set when enabled
+	void *evtq_buf;
+	size_t evtq_buf_len;
+	struct cxi_md *evtq_buf_md;
 	fastlock_t req_lock;
 	struct util_buf_pool *req_pool;	// utility pool for cxip_req
 	struct indexer req_table;	// fast lookup index table for cxip_req

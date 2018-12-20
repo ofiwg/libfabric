@@ -60,7 +60,6 @@ int cxip_get_if(uint32_t nic_addr, struct cxip_if **dev_if)
 {
 	struct cxip_if *if_entry;
 	int ret, tmp;
-	struct cxi_eq_alloc_opts evtq_opts;
 	struct cxi_cq_alloc_opts cq_opts;
 
 	/* The IF list device info is static, no need to lock */
@@ -112,17 +111,34 @@ int cxip_get_if(uint32_t nic_addr, struct cxip_if **dev_if)
 			goto free_lni;
 		}
 
-		evtq_opts.count = 1024;
-		evtq_opts.initr_use_long = 0;
-		evtq_opts.trgt_use_long = 1;
+		if_entry->evtq_buf_len = C_PAGE_SIZE;
+		if_entry->evtq_buf = aligned_alloc(C_PAGE_SIZE,
+						   if_entry->evtq_buf_len);
+		if (!if_entry->evtq_buf) {
+			CXIP_LOG_DBG("Unable to allocate MR EVTQ buffer\n");
+			goto free_mr_cmdq;
+		}
 
-		ret = cxil_alloc_evtq(if_entry->if_lni, &evtq_opts, NULL,
+		ret = cxil_map(if_entry->if_lni, if_entry->evtq_buf,
+			       if_entry->evtq_buf_len,
+			       CXI_MAP_NTA | CXI_MAP_PIN | CXI_MAP_WRITE,
+			       NULL, &if_entry->evtq_buf_md);
+		if (ret) {
+			CXIP_LOG_DBG("Unable to MAP MR EVTQ buffer, ret: %d\n",
+				     ret);
+			goto free_mr_evtq_buf;
+		}
+
+		ret = cxil_alloc_evtq(if_entry->if_lni, if_entry->evtq_buf,
+				      if_entry->evtq_buf_len,
+				      if_entry->evtq_buf_md,
+				      NULL, CXI_EQ_TGT_LONG,
 				      &if_entry->mr_evtq);
 		if (ret != FI_SUCCESS) {
 			CXIP_LOG_DBG("Unable to allocate MR EVTQ, ret: %d\n",
 				     ret);
 			ret = -FI_ENODEV;
-			goto free_mr_cmdq;
+			goto free_evtq_md;
 		}
 
 		CXIP_LOG_DBG("Allocated IF, NIC: %u ID: %u\n", if_entry->if_nic,
@@ -140,6 +156,12 @@ int cxip_get_if(uint32_t nic_addr, struct cxip_if **dev_if)
 
 	return FI_SUCCESS;
 
+free_evtq_md:
+	ret = cxil_unmap(if_entry->evtq_buf_md);
+	if (ret)
+		CXIP_LOG_ERROR("Failed to unmap EVTQ buffer: %d\n", ret);
+free_mr_evtq_buf:
+	free(if_entry->evtq_buf);
 free_mr_cmdq:
 	tmp = cxil_destroy_cmdq(if_entry->mr_cmdq);
 	if (tmp)
