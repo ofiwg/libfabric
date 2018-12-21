@@ -251,8 +251,6 @@ int rxm_cmap_handle_unconnected(struct rxm_ep *rxm_ep, struct rxm_cmap_handle *h
 void rxm_cmap_del_handle_ts(struct rxm_cmap_handle *handle);
 void rxm_cmap_free(struct rxm_cmap *cmap);
 int rxm_cmap_alloc(struct rxm_ep *rxm_ep, struct rxm_cmap_attr *attr);
-int rxm_cmap_handle_connect(struct rxm_cmap *cmap, fi_addr_t fi_addr,
-			    struct rxm_cmap_handle *handle);
 /* Caller must hold cmap->lock */
 int rxm_cmap_move_handle_to_peer_list(struct rxm_cmap *cmap, int index);
 
