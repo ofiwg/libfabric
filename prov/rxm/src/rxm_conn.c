@@ -600,16 +600,17 @@ unlock:
 }
 
 /* Caller must hold `cmap::lock` */
-int rxm_cmap_handle_connect(struct rxm_cmap *cmap, fi_addr_t fi_addr,
-			    struct rxm_cmap_handle *handle)
+static int rxm_cmap_handle_connect(struct rxm_cmap *cmap, fi_addr_t fi_addr,
+				   struct rxm_cmap_handle *handle)
 {
 	int ret;
 
-	if (handle->state == RXM_CMAP_CONNECTED_NOTIFY ||
-	    handle->state == RXM_CMAP_CONNECTED)
-		return FI_SUCCESS;
-
 	switch (handle->state) {
+	case RXM_CMAP_CONNECTED_NOTIFY:
+		rxm_cmap_process_conn_notify(cmap, handle);
+		/* Fall through */
+	case RXM_CMAP_CONNECTED:
+		return FI_SUCCESS;
 	case RXM_CMAP_IDLE:
 		ret = rxm_conn_connect(cmap->ep, handle,
 				       ofi_av_get_addr(cmap->av, fi_addr),
@@ -641,20 +642,13 @@ int rxm_cmap_handle_connect(struct rxm_cmap *cmap, fi_addr_t fi_addr,
 int rxm_cmap_handle_unconnected(struct rxm_ep *rxm_ep, struct rxm_cmap_handle *handle,
 				fi_addr_t dest_addr)
 {
-	int ret;
+	/* Progress connection events */
+	rxm_ep->cmap->release(&rxm_ep->cmap->lock);
+	if (!slistfd_empty(&rxm_ep->msg_eq_entry_list))
+		rxm_conn_process_eq_events(rxm_ep);
+	rxm_ep->cmap->acquire(&rxm_ep->cmap->lock);
 
-	if (handle->state == RXM_CMAP_CONNECTED_NOTIFY) {
-		rxm_cmap_process_conn_notify(rxm_ep->cmap, handle);
-		return 0;
-	}
-	/* Since we handling unoonnected state and `cmap:lock`
-	 * is on hold, it shouldn't return 0 */
-	ret = rxm_cmap_handle_connect(rxm_ep->cmap,
-				      dest_addr, handle);
-	if (OFI_UNLIKELY(ret != -FI_EAGAIN))
-		return ret;
-
-	return -FI_EAGAIN;
+	return rxm_cmap_handle_connect(rxm_ep->cmap, dest_addr, handle);
 }
 
 static int rxm_cmap_cm_thread_close(struct rxm_cmap *cmap)
