@@ -119,6 +119,22 @@ static void sock_rx_ctx_close(struct sock_rx_ctx *rx_ctx)
 		sock_cntr_remove_rx_ctx(rx_ctx->comp.rem_write_cntr, rx_ctx);
 }
 
+static void sock_ep_release_ctx_rx_entries(struct sock_rx_ctx *rx_ctx) {
+	/* These are recv commands that have not completed before closing the RX_CTX.
+	   Release them all because some might be malloc'd. In principle the client
+	   should cancel all recvs before closing so there should be none left
+	   here. But regardless of that correctness, ep should not leak memory. */
+	struct dlist_entry *entry, *tmp;
+	struct sock_rx_entry *rx_entry;
+	fastlock_acquire(&rx_ctx->lock);
+	dlist_foreach_safe(&rx_ctx->rx_entry_list, entry, tmp) {
+		rx_entry = container_of(entry, struct sock_rx_entry, entry);
+		dlist_remove(&rx_entry->entry);
+		sock_rx_release_entry(rx_entry);
+	}
+	fastlock_release(&rx_ctx->lock);
+}
+
 static int sock_ctx_close(struct fid *fid)
 {
 	struct sock_tx_ctx *tx_ctx;
@@ -130,6 +146,8 @@ static int sock_ctx_close(struct fid *fid)
 		sock_pe_remove_tx_ctx(tx_ctx);
 		ofi_atomic_dec32(&tx_ctx->ep_attr->num_tx_ctx);
 		ofi_atomic_dec32(&tx_ctx->domain->ref);
+		if (tx_ctx->rx_ctrl_ctx && tx_ctx->rx_ctrl_ctx->is_ctrl_ctx)
+			sock_ep_release_ctx_rx_entries(tx_ctx->rx_ctrl_ctx);
 		sock_tx_ctx_close(tx_ctx);
 		sock_tx_ctx_free(tx_ctx);
 		break;
@@ -139,6 +157,7 @@ static int sock_ctx_close(struct fid *fid)
 		sock_pe_remove_rx_ctx(rx_ctx);
 		ofi_atomic_dec32(&rx_ctx->ep_attr->num_rx_ctx);
 		ofi_atomic_dec32(&rx_ctx->domain->ref);
+		sock_ep_release_ctx_rx_entries(rx_ctx);
 		sock_rx_ctx_close(rx_ctx);
 		sock_rx_ctx_free(rx_ctx);
 		break;
@@ -146,6 +165,8 @@ static int sock_ctx_close(struct fid *fid)
 	case FI_CLASS_STX_CTX:
 		tx_ctx = container_of(fid, struct sock_tx_ctx, fid.stx.fid);
 		ofi_atomic_dec32(&tx_ctx->domain->ref);
+		if (tx_ctx->rx_ctrl_ctx && tx_ctx->rx_ctrl_ctx->is_ctrl_ctx)
+			sock_ep_release_ctx_rx_entries(tx_ctx->rx_ctrl_ctx);
 		sock_pe_remove_tx_ctx(tx_ctx);
 		sock_tx_ctx_free(tx_ctx);
 		break;
@@ -153,6 +174,7 @@ static int sock_ctx_close(struct fid *fid)
 	case FI_CLASS_SRX_CTX:
 		rx_ctx = container_of(fid, struct sock_rx_ctx, ctx.fid);
 		ofi_atomic_dec32(&rx_ctx->domain->ref);
+		sock_ep_release_ctx_rx_entries(rx_ctx);
 		sock_pe_remove_rx_ctx(rx_ctx);
 		sock_rx_ctx_free(rx_ctx);
 		break;
@@ -681,6 +703,12 @@ static int sock_ep_close(struct fid *fid)
 	} else {
 		if (sock_ep->attr->av)
 			ofi_atomic_dec32(&sock_ep->attr->av->ref);
+	}
+	if (sock_ep->attr->fclass != FI_CLASS_SEP) {
+		if (!sock_ep->attr->rx_shared)
+			sock_ep_release_ctx_rx_entries(sock_ep->attr->rx_array[0]);
+		if (sock_ep->attr->tx_ctx->rx_ctrl_ctx && sock_ep->attr->tx_ctx->rx_ctrl_ctx->is_ctrl_ctx)
+			sock_ep_release_ctx_rx_entries(sock_ep->attr->tx_ctx->rx_ctrl_ctx);
 	}
 	if (sock_ep->attr->av) {
 		fastlock_acquire(&sock_ep->attr->av->list_lock);
