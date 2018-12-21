@@ -240,7 +240,7 @@ ssize_t ofi_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 	cq = container_of(cq_fid, struct util_cq, cq_fid);
 
 	cq->cq_fastlock_acquire(&cq->cq_lock);
-	if (ofi_cirque_isempty(cq->cirq)) {
+	if (ofi_cirque_isempty(cq->cirq) || !count) {
 		cq->cq_fastlock_release(&cq->cq_lock);
 		cq->progress(cq);
 		cq->cq_fastlock_acquire(&cq->cq_lock);
