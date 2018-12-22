@@ -1044,8 +1044,11 @@ static void rxd_handle_op(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 				      &tag_hdr, &data_hdr, &rma_hdr, &atom_hdr,
 				      &msg, &msg_size);
 	if (!rx_entry) {
-		rxd_remove_rx_pkt(ep, pkt_entry);
-		return;
+		if (base_hdr->type == RXD_MSG || base_hdr->type == RXD_TAGGED) {
+			rxd_remove_rx_pkt(ep, pkt_entry);
+			return;
+		}
+		goto release;
 	}
 
 	fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
