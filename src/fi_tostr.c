@@ -185,9 +185,8 @@ static void ofi_tostr_threading(char *buf, enum fi_threading threading)
 	}
 }
 
-static void ofi_tostr_order(char *buf, uint64_t flags)
+static void ofi_tostr_msgorder(char *buf, uint64_t flags)
 {
-	IFFLAGSTR(flags, FI_ORDER_NONE);
 	IFFLAGSTR(flags, FI_ORDER_RAR);
 	IFFLAGSTR(flags, FI_ORDER_RAW);
 	IFFLAGSTR(flags, FI_ORDER_RAS);
@@ -197,7 +196,19 @@ static void ofi_tostr_order(char *buf, uint64_t flags)
 	IFFLAGSTR(flags, FI_ORDER_SAR);
 	IFFLAGSTR(flags, FI_ORDER_SAW);
 	IFFLAGSTR(flags, FI_ORDER_SAS);
-	IFFLAGSTR(flags, FI_ORDER_STRICT);
+
+
+	ofi_remove_comma(buf);
+}
+
+static void ofi_tostr_comporder(char *buf, uint64_t flags)
+{
+	if ((flags & FI_ORDER_STRICT) == FI_ORDER_NONE) {
+		ofi_strcatf(buf, "FI_ORDER_NONE, ");
+	} else if ((flags & FI_ORDER_STRICT) == FI_ORDER_STRICT) {
+		ofi_strcatf(buf, "FI_ORDER_STRICT, ");
+	}
+
 	IFFLAGSTR(flags, FI_ORDER_DATA);
 
 	ofi_remove_comma(buf);
@@ -335,11 +346,11 @@ static void ofi_tostr_tx_attr(char *buf, const struct fi_tx_attr *attr,
 	ofi_strcatf(buf, " ]\n");
 
 	ofi_strcatf(buf, "%s%smsg_order: [ ", prefix, TAB);
-	ofi_tostr_order(buf, attr->msg_order);
+	ofi_tostr_msgorder(buf, attr->msg_order);
 	ofi_strcatf(buf, " ]\n");
 
 	ofi_strcatf(buf, "%s%scomp_order: [ ", prefix, TAB);
-	ofi_tostr_order(buf, attr->comp_order);
+	ofi_tostr_comporder(buf, attr->comp_order);
 	ofi_strcatf(buf, " ]\n");
 
 	ofi_strcatf(buf, "%s%sinject_size: %zu\n", prefix, TAB, attr->inject_size);
@@ -370,11 +381,11 @@ static void ofi_tostr_rx_attr(char *buf, const struct fi_rx_attr *attr,
 	ofi_strcatf(buf, " ]\n");
 
 	ofi_strcatf(buf, "%s%smsg_order: [ ", prefix, TAB);
-	ofi_tostr_order(buf, attr->msg_order);
+	ofi_tostr_msgorder(buf, attr->msg_order);
 	ofi_strcatf(buf, " ]\n");
 
 	ofi_strcatf(buf, "%s%scomp_order: [ ", prefix, TAB);
-	ofi_tostr_order(buf, attr->comp_order);
+	ofi_tostr_comporder(buf, attr->comp_order);
 	ofi_strcatf(buf, " ]\n");
 
 	ofi_strcatf(buf, "%s%stotal_buffered_recv: %zu\n", prefix, TAB, attr->total_buffered_recv);
@@ -836,7 +847,7 @@ char *DEFAULT_SYMVER_PRE(fi_tostr)(const void *data, enum fi_type datatype)
 		ofi_tostr_protocol(buf, *val32);
 		break;
 	case FI_TYPE_MSG_ORDER:
-		ofi_tostr_order(buf, *val64);
+		ofi_tostr_msgorder(buf, *val64);
 		break;
 	case FI_TYPE_MODE:
 		ofi_tostr_mode(buf, *val64);
