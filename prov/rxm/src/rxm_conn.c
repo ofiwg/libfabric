@@ -1158,6 +1158,7 @@ static int
 rxm_conn_handle_event(struct rxm_ep *rxm_ep, struct rxm_msg_eq_entry *entry)
 {
 	struct rxm_cm_data *cm_data;
+	int ret;
 
 	if (entry->rd == -FI_ECONNREFUSED) {
 		enum rxm_cmap_reject_flag cm_reject_flag;
@@ -1199,7 +1200,22 @@ rxm_conn_handle_event(struct rxm_ep *rxm_ep, struct rxm_msg_eq_entry *entry)
 				entry->rd, RXM_CM_ENTRY_SZ);
 			goto err;
 		}
-		rxm_msg_process_connreq(rxm_ep, entry->cm_entry.info, entry->cm_entry.data);
+		ret = rxm_msg_process_connreq(rxm_ep, entry->cm_entry.info,
+		                              entry->cm_entry.data);
+		/* Propagate connect failures. But ignore EALREADY which means two peers
+		 * tried to connect to each other simultaneously and this one lost.
+		 */
+		if (ret && ret != -FI_EALREADY) {
+		  struct util_eq *eq = rxm_ep->util_ep.eq;
+		  if (eq) {
+		    struct fi_eq_err_entry err;
+		    memset(&err, 0, sizeof(err));
+		    err.fid = &rxm_ep->util_ep.ep_fid.fid;
+		    err.err = -ret;
+		    err.prov_errno = -ret;
+		    fi_eq_write(&eq->eq_fid, FI_CONNREQ, &err, sizeof(err), 0);
+		  }
+		}
 		fi_freeinfo(entry->cm_entry.info);
 		break;
 	case FI_CONNECTED:
