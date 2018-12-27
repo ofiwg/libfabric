@@ -68,6 +68,13 @@ Specific details on changes since the 1.6.2 release are outlined below.
 - Suppress huge page counting for ARM
 - Fix incorrect check of FI_SYNC_ERR flag
 
+## MRAIL
+
+- Initial release of mrail provider. The current status is experimental: not all
+  features are supported and performance is not guaranteed.
+- Enables increased bandwidth for an underlying provider by utilizing multiple
+  network ports (rails).
+
 ## NetDir
 
 - Fix crash in initialization code
@@ -89,7 +96,7 @@ Specific details on changes since the 1.6.2 release are outlined below.
 ## RxD
 
 - Initial release of RxD provider
-- Providers reliable datagram semantics over unreliable datagram EPs
+- Provides reliable datagram semantics over unreliable datagram EPs
 - Target is to improve scalability for very large clusters relative to RxM
 
 ## RxM
