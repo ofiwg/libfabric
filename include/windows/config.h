@@ -162,7 +162,7 @@
 #define PACKAGE_NAME "libfabric"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "libfabric 1.7.0rc1"
+#define PACKAGE_STRING "libfabric 1.7.0"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "libfabric"
@@ -171,7 +171,7 @@
 #define PACKAGE_URL ""
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "1.7.0rc1"
+#define PACKAGE_VERSION "1.7.0"
 
 /* Define to 1 if pthread_spin_init is available. */
 /* #undef PT_LOCK_SPIN */
