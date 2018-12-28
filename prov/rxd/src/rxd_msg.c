@@ -82,10 +82,11 @@ static int rxd_ep_check_unexp_msg_list(struct rxd_ep *ep,
 	
 		pkt_entry = container_of(match, struct rxd_pkt_entry, d_entry);
 		base_hdr = rxd_get_base_hdr(pkt_entry);
-	
-		rxd_unpack_hdrs(pkt_entry->pkt_size, base_hdr, &sar_hdr, &tag_hdr,
+
+		rxd_unpack_hdrs(pkt_entry->pkt_size - ep->rx_prefix_size,
+				base_hdr, &sar_hdr, &tag_hdr,
 				&data_hdr, &rma_hdr, &atom_hdr, &msg, &msg_size);
-	
+
 		total_size = sar_hdr ? sar_hdr->size : msg_size;
 		if (rx_entry->flags & RXD_MULTI_RECV)
 			dup_entry = rxd_progress_multi_recv(ep, rx_entry, total_size);

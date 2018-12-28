@@ -687,6 +687,9 @@ static struct rxd_x_entry *rxd_rma_rx_entry_init(struct rxd_ep *ep,
 	rx_entry = rxd_rx_entry_init(ep, iov, iov_count, 0, 0, NULL,
 				     base_hdr->peer, base_hdr->type,
 				     base_hdr->flags);
+	if (!rx_entry)
+		return NULL;
+
 	rx_entry->start_seq = base_hdr->seq_no;
 
 	return rx_entry;
@@ -1041,8 +1044,11 @@ static void rxd_handle_op(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 				      &tag_hdr, &data_hdr, &rma_hdr, &atom_hdr,
 				      &msg, &msg_size);
 	if (!rx_entry) {
-		rxd_remove_rx_pkt(ep, pkt_entry);
-		return;
+		if (base_hdr->type == RXD_MSG || base_hdr->type == RXD_TAGGED) {
+			rxd_remove_rx_pkt(ep, pkt_entry);
+			return;
+		}
+		goto release;
 	}
 
 	fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);

@@ -386,11 +386,8 @@ struct rxd_x_entry *rxd_tx_entry_init(struct rxd_ep *ep, const struct iovec *iov
 	tx_entry->pkt = NULL;
 
 	max_inline = rxd_domain->max_inline_msg;
-	if (tx_entry->cq_entry.flags & FI_RMA) {
+	if (tx_entry->cq_entry.flags & FI_RMA)
 		max_inline -= sizeof(struct ofi_rma_iov) * rma_count;
-		if (rma_count > 1)
-			max_inline -= sizeof(struct rxd_sar_hdr);
-	}
 
 	if (tx_entry->flags & RXD_TAG_HDR)
 		max_inline -= sizeof(tx_entry->cq_entry.tag);
@@ -398,6 +395,12 @@ struct rxd_x_entry *rxd_tx_entry_init(struct rxd_ep *ep, const struct iovec *iov
 		max_inline -= sizeof(tx_entry->cq_entry.data);
 		tx_entry->cq_entry.data = data;
 	}
+
+	if (rma_count > 1 || tx_entry->cq_entry.flags & FI_READ ||
+	    tx_entry->cq_entry.len > max_inline)
+		max_inline -= sizeof(struct rxd_sar_hdr);
+	else
+		tx_entry->flags |= RXD_INLINE;
 
 	if (tx_entry->cq_entry.flags & FI_ATOMIC || tx_entry->cq_entry.len <= max_inline)
 		tx_entry->num_segs = 1;
@@ -407,10 +410,6 @@ struct rxd_x_entry *rxd_tx_entry_init(struct rxd_ep *ep, const struct iovec *iov
 	else
 		tx_entry->num_segs = ofi_div_ceil(tx_entry->cq_entry.len - max_inline,
 						  rxd_domain->max_seg_sz) + 1;
-
-	if (!(tx_entry->cq_entry.flags & FI_READ) && tx_entry->num_segs == 1 &&
-	    rma_count <= 1)
-		tx_entry->flags |= RXD_INLINE;
 
 	if ((tx_entry->op == RXD_READ_REQ || tx_entry->op == RXD_ATOMIC_FETCH ||
 	     tx_entry->op == RXD_ATOMIC_COMPARE) &&
