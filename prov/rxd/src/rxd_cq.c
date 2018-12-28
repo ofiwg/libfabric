@@ -1112,10 +1112,13 @@ static void rxd_handle_ack(struct rxd_ep *ep, struct rxd_pkt_entry *ack_entry)
 
 void rxd_handle_send_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp)
 {
-	struct rxd_pkt_entry *pkt_entry;
+	struct rxd_pkt_entry *pkt_entry =
+		container_of(comp->op_context, struct rxd_pkt_entry, context);
 	fi_addr_t peer;
 
-	pkt_entry = container_of(comp->op_context, struct rxd_pkt_entry, context);
+	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL,
+	       "got send completion (type: %s)\n",
+	       rxd_pkt_type_str[(rxd_pkt_type(pkt_entry))]);
 
 	switch (rxd_pkt_type(pkt_entry)) {
 	case RXD_CTS:
@@ -1138,12 +1141,14 @@ void rxd_handle_send_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp)
 
 void rxd_handle_recv_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp)
 {
-	struct rxd_pkt_entry *pkt_entry;
+	struct rxd_pkt_entry *pkt_entry =
+		container_of(comp->op_context, struct rxd_pkt_entry, context);
 	int release = 1;
 
-	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "got recv completion\n");
+	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL,
+	       "got recv completion (type: %s)\n",
+	       rxd_pkt_type_str[(rxd_pkt_type(pkt_entry))]);
 
-	pkt_entry = container_of(comp->op_context, struct rxd_pkt_entry, context);
 	ep->posted_bufs--;
 
 	pkt_entry->pkt_size = comp->len;

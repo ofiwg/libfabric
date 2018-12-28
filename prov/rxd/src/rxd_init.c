@@ -32,14 +32,23 @@
 
 #include <rdma/fi_errno.h>
 
+#include <ofi.h>
 #include <ofi_prov.h>
+
+#include "rxd_proto.h"
 #include "rxd.h"
+
+#define RXD_OFI_STR_EX(X, VAL) OFI_STR(X)
 
 struct rxd_env rxd_env = {
 	.spin_count	= 1000,
 	.retry		= 1,
 	.max_peers	= 1024,
 	.max_unacked	= 128,
+};
+
+char *rxd_pkt_type_str[] = {
+	RXD_PKT_TYPES(RXD_OFI_STR_EX, OFI_STR)
 };
 
 static void rxd_init_env(void)
