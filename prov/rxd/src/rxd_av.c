@@ -131,7 +131,7 @@ static fi_addr_t rxd_set_fi_addr(struct rxd_av *av, fi_addr_t rxd_addr)
 {
 	int tries = 0;
 
-	while (av->fi_addr_table[av->rxd_addr_idx] != FI_ADDR_UNSPEC &&
+	while (av->fi_addr_table[av->fi_addr_idx] != FI_ADDR_UNSPEC &&
 	       tries < av->util_av.count) {
 		if (++av->fi_addr_idx == av->util_av.count)
 			av->fi_addr_idx = 0;
