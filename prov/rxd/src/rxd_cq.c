@@ -1143,7 +1143,6 @@ void rxd_handle_recv_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp)
 {
 	struct rxd_pkt_entry *pkt_entry =
 		container_of(comp->op_context, struct rxd_pkt_entry, context);
-	int release = 1;
 
 	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL,
 	       "got recv completion (type: %s)\n",
@@ -1168,14 +1167,14 @@ void rxd_handle_recv_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp)
 		break;
 	default:
 		rxd_handle_op(ep, pkt_entry);
-		release = 0;
-		break;
+		/* don't need to perform action below:
+		 * - remove RX packet
+		 * - release/repost RX packet */
+		return;
 	}
 
-	if (release) {
-		rxd_remove_rx_pkt(ep, pkt_entry);
-		rxd_release_repost_rx(ep, pkt_entry);
-	}
+	rxd_remove_rx_pkt(ep, pkt_entry);
+	rxd_release_repost_rx(ep, pkt_entry);
 }
 
 void rxd_handle_error(struct rxd_ep *ep)
