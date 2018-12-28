@@ -650,24 +650,6 @@ int rxm_cmap_handle_unconnected(struct rxm_ep *rxm_ep, struct rxm_cmap_handle *h
 	return rxm_cmap_handle_connect(rxm_ep->cmap, dest_addr, handle);
 }
 
-int rxm_cmap_get_handle(struct rxm_cmap *cmap, fi_addr_t fi_addr,
-			struct rxm_cmap_handle **handle_ret)
-{
-	int ret;
-
-	cmap->acquire(&cmap->lock);
-	*handle_ret = rxm_cmap_acquire_handle(cmap, fi_addr);
-	if (OFI_UNLIKELY(!*handle_ret)) {
-		ret = -FI_EAGAIN;
-		goto unlock;
-	}
-
-	ret = rxm_cmap_handle_connect(cmap, fi_addr, *handle_ret);
-unlock:
-	cmap->release(&cmap->lock);
-	return ret;
-}
-
 static int rxm_cmap_cm_thread_close(struct rxm_cmap *cmap)
 {
 	int ret;
