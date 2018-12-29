@@ -190,7 +190,7 @@ fi_ibv_dgram_ep_injectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
 	if (fi_ibv_dgram_ep_set_addr(ep, dest_addr, &wr))
 		return -FI_ENOENT;
 
-	return fi_ibv_send_buf(ep, &wr, buf, len, NULL);
+	return fi_ibv_send_buf_inline(ep, &wr, buf, len);
 }
 
 static ssize_t
@@ -230,7 +230,7 @@ fi_ibv_dgram_ep_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
 	if (fi_ibv_dgram_ep_set_addr(ep, dest_addr, &wr))
 		return -FI_ENOENT;
 
-	return fi_ibv_send_buf(ep, &wr, buf, len, NULL);
+	return fi_ibv_send_buf_inline(ep, &wr, buf, len);
 }
 
 static ssize_t
