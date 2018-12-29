@@ -865,7 +865,7 @@ static int pp_check_buf(void *buf, int size)
 
 static void eq_readerr(struct fid_eq *eq)
 {
-	struct fi_eq_err_entry eq_err;
+	struct fi_eq_err_entry eq_err = { 0 };
 	int rd;
 
 	rd = fi_eq_readerr(eq, &eq_err, 0);
@@ -1051,7 +1051,7 @@ static void show_perf(char *name, int tsize, int sent, int acked,
 
 static int pp_cq_readerr(struct fid_cq *cq)
 {
-	struct fi_cq_err_entry cq_err;
+	struct fi_cq_err_entry cq_err = { 0 };
 	int ret;
 
 	ret = fi_cq_readerr(cq, &cq_err, 0);
