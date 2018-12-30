@@ -118,7 +118,7 @@ static int mlx_av_insert(
 {
 	struct mlx_av *av;
 	struct mlx_ep *ep;
-	int i;
+	size_t i;
 	ucs_status_t status = UCS_OK;
 	int added = 0;
 
@@ -129,35 +129,34 @@ static int mlx_av_insert(
 		return -FI_ENOEQ;
 	}
 
-	for ( i = 0; i < count ; ++i) {
-		ucp_ep_params_t ep_params = {};
+	for (i = 0; i < count ; ++i) {
+		ucp_ep_params_t ep_params = { 0 };
 
 		if (mlx_descriptor.use_ns) {
 			if (mlx_av_resolve_if_addr(
 				(struct sockaddr*)
-				  (&(((struct sockaddr_in*)addr)[i])),
-				(char**)&ep_params.address) != FI_SUCCESS)
+				  (&(((struct sockaddr_in *) addr)[i])),
+				(char**) &ep_params.address) != FI_SUCCESS)
 				break;
 		} else {
 			ep_params.address = (const ucp_address_t *)
-				(&(((const char *)addr)[i * FI_MLX_MAX_NAME_LEN]));
+				(&(((const char *) addr)[i * av->addr_len]));
 		}
 
 		ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
-		FI_WARN( &mlx_prov, FI_LOG_CORE,
-			"Try to insert address #%d, offset=%d (size=%ld)"
+		FI_WARN(&mlx_prov, FI_LOG_CORE,
+			"Try to insert address #%zd, offset=%zd (size=%zd)"
 			" fi_addr=%p \naddr = %s\n",
-			i, i * FI_MLX_MAX_NAME_LEN, count,
-			fi_addr, &(((const char *)addr)[i * FI_MLX_MAX_NAME_LEN]));
+			i, i * av->addr_len, count,
+			fi_addr, &(((const char *) addr)[i * av->addr_len]));
 
-		status = ucp_ep_create( ep->worker,
-					&ep_params,
-					(ucp_ep_h *)(&(fi_addr[i])));
+		status = ucp_ep_create(ep->worker, &ep_params,
+				       (ucp_ep_h *)(&(fi_addr[i])));
 		if (mlx_descriptor.use_ns) {
-			free((void*)ep_params.address);
+			free((void *) ep_params.address);
 		}
 		if (status == UCS_OK) {
-			FI_WARN( &mlx_prov, FI_LOG_CORE, "address inserted\n");
+			FI_WARN(&mlx_prov, FI_LOG_CORE, "address inserted\n");
 			added++;
 		} else {
 			if (av->eq) {

@@ -89,11 +89,14 @@ static int mlx_cm_getname_ai_format(
 			size_t *addrlen)
 {
 	int ofi_status = FI_SUCCESS;
-	struct mlx_ep* ep;
-	ep = container_of(fid, struct mlx_ep, ep.ep_fid.fid);
+	struct mlx_ep* ep = container_of(fid, struct mlx_ep, ep.ep_fid.fid);
+
 	if (ep->addr) {
 		if (ep->addr_len > *addrlen) {
 			ofi_status = -FI_ETOOSMALL;
+			FI_WARN(&mlx_prov, FI_LOG_EP_CTRL,
+				"addrlen expected: %"PRIu64", got: %"PRIu64"\n",
+				ep->addr_len, *addrlen);
 		} else {
 			memcpy(addr, ep->addr, ep->addr_len);
 		}
@@ -101,32 +104,35 @@ static int mlx_cm_getname_ai_format(
 	} else {
 		char *hostname = mlx_descriptor.localhost;
 		int service = (((getpid() & 0xFFFF)));
-		struct addrinfo hints;
+		struct addrinfo hints = {
+			.ai_family = AF_INET,
+			.ai_socktype = SOCK_STREAM,
+			.ai_protocol = IPPROTO_TCP,
+		};
 		struct addrinfo *res;
 
-		memset(&hints, 0, sizeof(hints));
-		hints.ai_flags = 0;
-		hints.ai_family = AF_INET;
-		hints.ai_socktype = SOCK_STREAM;
-		hints.ai_protocol = IPPROTO_TCP;
-		hints.ai_addrlen = 0;
-		hints.ai_addr = NULL;
-		hints.ai_canonname = NULL;
-		hints.ai_next = NULL;
-
-		if(getaddrinfo(hostname, NULL, &hints, &res) != 0) {
-			FI_WARN( &mlx_prov, FI_LOG_CORE,
-					"Unable to resolve hostname:%s\n",hostname);
+		if (getaddrinfo(hostname, NULL, &hints, &res) != 0) {
+			FI_WARN(&mlx_prov, FI_LOG_CORE,
+				"Unable to resolve hostname:%s\n", hostname);
+			return -FI_EAVAIL;
 		}
 		FI_INFO(&mlx_prov, FI_LOG_CORE,
-			"Loaded IPv4 address: [%"PRIu64"]%s:%d\n",
-			(uint64_t)res->ai_addrlen, hostname, service);
+			"Loaded IPv4 address: [%jd]%s:%d\n",
+			(intmax_t) res->ai_addrlen, hostname, service);
 
-		memcpy(addr,res->ai_addr,res->ai_addrlen);
-		((struct sockaddr_in*)addr)->sin_port = htons((short)service);
+		if (res->ai_addrlen > *addrlen) {
+			ofi_status = -FI_ETOOSMALL;
+			FI_WARN(&mlx_prov, FI_LOG_EP_CTRL,
+				"addrlen expected: %jd, got: %"PRIu64"\n",
+				(intmax_t) res->ai_addrlen, *addrlen);
+		} else {
+			memcpy(addr, res->ai_addr, res->ai_addrlen);
+			((struct sockaddr_in *)addr)->sin_port = htons((short)service);
+		}
+
+		*addrlen = res->ai_addrlen;
+
 		freeaddrinfo(res);
-
-		*addrlen = sizeof(struct sockaddr);
 	}
 
 	return ofi_status;
