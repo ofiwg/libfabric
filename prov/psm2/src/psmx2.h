@@ -1042,9 +1042,9 @@ struct psmx2_am_request *psmx2_am_request_alloc(struct psmx2_trx_ctxt *trx_ctxt)
 {
 	struct psmx2_am_request *req;
 
-	trx_ctxt->domain->am_req_pool_lock_fn(&trx_ctxt->am_req_pool_lock, 2);
+	trx_ctxt->domain->am_req_pool_lock_fn(&trx_ctxt->am_req_pool_lock, 0);
 	req = util_buf_alloc(trx_ctxt->am_req_pool);
-	trx_ctxt->domain->am_req_pool_unlock_fn(&trx_ctxt->am_req_pool_lock, 2);
+	trx_ctxt->domain->am_req_pool_unlock_fn(&trx_ctxt->am_req_pool_lock, 0);
 
 	if (req)
 		memset(req, 0, sizeof(*req));
@@ -1055,9 +1055,9 @@ struct psmx2_am_request *psmx2_am_request_alloc(struct psmx2_trx_ctxt *trx_ctxt)
 static inline void psmx2_am_request_free(struct psmx2_trx_ctxt *trx_ctxt,
 					 struct psmx2_am_request *req)
 {
-	trx_ctxt->domain->am_req_pool_lock_fn(&trx_ctxt->am_req_pool_lock, 2);
+	trx_ctxt->domain->am_req_pool_lock_fn(&trx_ctxt->am_req_pool_lock, 0);
 	util_buf_release(trx_ctxt->am_req_pool, req);
-	trx_ctxt->domain->am_req_pool_unlock_fn(&trx_ctxt->am_req_pool_lock, 2);
+	trx_ctxt->domain->am_req_pool_unlock_fn(&trx_ctxt->am_req_pool_lock, 0);
 }
 
 struct	psmx2_fid_mr *psmx2_mr_get(struct psmx2_fid_domain *domain, uint64_t key);
