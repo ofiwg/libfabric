@@ -1239,7 +1239,10 @@ int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep)
 	int ret;
 	size_t i;
 
-	for (i = 0; i < rxm_ep->msg_info->rx_attr->size; i++) {
+	/* -1 because we always post the next recv before releasing the previous
+	 * one. Without the -1 we routinely exceeded the recv pool size for the
+	 * sockets provider, for example. */
+	for (i = 0; i < rxm_ep->msg_info->rx_attr->size - 1; i++) {
 		rx_buf = rxm_rx_buf_alloc(rxm_ep);
 		if (OFI_UNLIKELY(!rx_buf)) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
