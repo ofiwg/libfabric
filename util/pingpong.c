@@ -178,7 +178,8 @@ struct ct_pingpong {
 
 	fi_addr_t remote_fi_addr;
 	void *buf, *tx_buf, *rx_buf;
-	size_t buf_size, tx_size, rx_size, msg_prefix_size;
+	size_t buf_size, tx_size, rx_size;
+	size_t rx_prefix_size, tx_prefix_size;
 
 	int timeout_sec;
 	uint64_t start, end;
@@ -865,7 +866,7 @@ static int pp_check_buf(void *buf, int size)
 
 static void eq_readerr(struct fid_eq *eq)
 {
-	struct fi_eq_err_entry eq_err;
+	struct fi_eq_err_entry eq_err = { 0 };
 	int rd;
 
 	rd = fi_eq_readerr(eq, &eq_err, 0);
@@ -1051,7 +1052,7 @@ static void show_perf(char *name, int tsize, int sent, int acked,
 
 static int pp_cq_readerr(struct fid_cq *cq)
 {
-	struct fi_cq_err_entry cq_err;
+	struct fi_cq_err_entry cq_err = { 0 };
 	int ret;
 
 	ret = fi_cq_readerr(cq, &cq_err, 0);
@@ -1180,9 +1181,9 @@ static ssize_t pp_tx(struct ct_pingpong *ct, struct fid_ep *ep, size_t size)
 	ssize_t ret;
 
 	if (pp_check_opts(ct, PP_OPT_VERIFY_DATA | PP_OPT_ACTIVE))
-		pp_fill_buf((char *)ct->tx_buf + ct->msg_prefix_size, size);
+		pp_fill_buf((char *)ct->tx_buf + ct->tx_prefix_size, size);
 
-	ret = pp_post_tx(ct, ep, size + ct->msg_prefix_size, ct->tx_ctx_ptr);
+	ret = pp_post_tx(ct, ep, size + ct->tx_prefix_size, ct->tx_ctx_ptr);
 	if (ret)
 		return ret;
 
@@ -1209,9 +1210,9 @@ static ssize_t pp_inject(struct ct_pingpong *ct, struct fid_ep *ep, size_t size)
 	ssize_t ret;
 
 	if (pp_check_opts(ct, PP_OPT_VERIFY_DATA | PP_OPT_ACTIVE))
-		pp_fill_buf((char *)ct->tx_buf + ct->msg_prefix_size, size);
+		pp_fill_buf((char *)ct->tx_buf + ct->tx_prefix_size, size);
 
-	ret = pp_post_inject(ct, ep, size + ct->msg_prefix_size);
+	ret = pp_post_inject(ct, ep, size + ct->tx_prefix_size);
 	if (ret)
 		return ret;
 
@@ -1239,7 +1240,7 @@ static ssize_t pp_rx(struct ct_pingpong *ct, struct fid_ep *ep, size_t size)
 		return ret;
 
 	if (pp_check_opts(ct, PP_OPT_VERIFY_DATA | PP_OPT_ACTIVE)) {
-		ret = pp_check_buf((char *)ct->rx_buf + ct->msg_prefix_size,
+		ret = pp_check_buf((char *)ct->rx_buf + ct->rx_prefix_size,
 				   size);
 		if (ret)
 			return ret;
@@ -1252,7 +1253,7 @@ static ssize_t pp_rx(struct ct_pingpong *ct, struct fid_ep *ep, size_t size)
 	 * next incoming message.
 	 */
 	ret = pp_post_rx(ct, ct->ep, MAX(ct->rx_size , PP_MAX_CTRL_MSG) +
-			 ct->msg_prefix_size, ct->rx_ctx_ptr);
+			 ct->rx_prefix_size, ct->rx_ctx_ptr);
 	if (!ret)
 		ct->cnt_ack_msg++;
 
@@ -1294,7 +1295,7 @@ static int pp_alloc_msgs(struct ct_pingpong *ct)
 	ct->rx_size = ct->tx_size;
 	ct->buf_size = MAX(ct->tx_size, PP_MAX_CTRL_MSG) +
 		       MAX(ct->rx_size, PP_MAX_CTRL_MSG) +
-		       2 * ct->msg_prefix_size;
+		       ct->tx_prefix_size + ct->rx_prefix_size;
 
 	alignment = ofi_sysconf(_SC_PAGESIZE);
 	if (alignment < 0) {
@@ -1314,7 +1315,7 @@ static int pp_alloc_msgs(struct ct_pingpong *ct)
 	ct->rx_buf = ct->buf;
 	ct->tx_buf = (char *)ct->buf +
 			MAX(ct->rx_size, PP_MAX_CTRL_MSG) +
-			ct->msg_prefix_size;
+			ct->tx_prefix_size;
 	ct->tx_buf = (void *)(((uintptr_t)ct->tx_buf + alignment - 1) &
 			      ~(alignment - 1));
 
@@ -1402,7 +1403,11 @@ static int pp_alloc_active_res(struct ct_pingpong *ct, struct fi_info *fi)
 			return ret;
 		}
 	}
-	ct->msg_prefix_size = fi->ep_attr->msg_prefix_size;
+
+	if (fi->tx_attr->mode & FI_MSG_PREFIX)
+		ct->tx_prefix_size = fi->ep_attr->msg_prefix_size;
+	if (fi->rx_attr->mode & FI_MSG_PREFIX)
+		ct->rx_prefix_size = fi->ep_attr->msg_prefix_size;
 
 	ret = fi_endpoint(ct->domain, fi, &(ct->ep), NULL);
 	if (ret) {
@@ -1492,7 +1497,7 @@ static int pp_init_ep(struct ct_pingpong *ct)
 	}
 
 	ret = pp_post_rx(ct, ct->ep, MAX(ct->rx_size, PP_MAX_CTRL_MSG) +
-			 ct->msg_prefix_size, ct->rx_ctx_ptr);
+			 ct->rx_prefix_size, ct->rx_ctx_ptr);
 	if (ret)
 		return ret;
 
@@ -1840,7 +1845,7 @@ static int pp_finalize(struct ct_pingpong *ct)
 
 	strcpy(ct->tx_buf, "fin");
 	iov.iov_base = ct->tx_buf;
-	iov.iov_len = 4 + ct->msg_prefix_size;
+	iov.iov_len = 4 + ct->tx_prefix_size;
 
 	if (!(ct->fi->caps & FI_TAGGED)) {
 		memset(&msg, 0, sizeof(msg));
