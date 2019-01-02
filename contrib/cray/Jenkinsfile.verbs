@@ -93,11 +93,6 @@ pipeline {
                                     -r smoketests.tap \\
                                     -w smoketests.xml \\
                                     tap simple.smoketests simple"""
-
-                            step ([$class: 'XUnitBuilder',
-                               thresholds: [
-                                    [$class: 'FailedThreshold', unstableThreshold: '0']],
-                                    tools: [[$class: 'JUnitType', pattern: "smoketests.xml"]]])
                         }
                     }
                 }
@@ -125,12 +120,6 @@ pipeline {
                                     fabtests \\
                                     functional.fabtests.rc.uber \\
                                     functional"""
-
-
-                            step ([$class: 'XUnitBuilder',
-                               thresholds: [
-                                    [$class: 'FailedThreshold', unstableThreshold: '0']],
-                                    tools: [[$class: 'JUnitType', pattern: "*-rc.xml"]]])
                         }
                     }
 		}
@@ -158,11 +147,6 @@ pipeline {
                                     fabtests \\
                                     functional.fabtests.xrc.uber \\
                                     functional"""
-
-                            step ([$class: 'XUnitBuilder',
-                               thresholds: [
-                                    [$class: 'FailedThreshold', unstableThreshold: '0']],
-                                    tools: [[$class: 'JUnitType', pattern: "*-xrc.xml"]]])
                         }
                     }
                 }
@@ -210,12 +194,6 @@ pipeline {
                             """
                             // archive the results
                             archiveArtifacts artifacts: "${env.SFT_TEST_RESULTS_SUBDIR}/*"
-
-                            // skip validation of SFT for now until intermittent errors are fixed
-                            step ([$class: 'XUnitBuilder',
-                               thresholds: [
-                                    [$class: 'FailedThreshold', unstableThreshold: '0']],
-                                    tools: [[$class: 'JUnitType', pattern: "${env.SFT_TEST_RESULTS_SUBDIR}/sft_*${SFT_TEST_RESULTS}"]]])
                         }
                     }
                 }
@@ -263,12 +241,6 @@ pipeline {
                             """
                             // archive the results
                             archiveArtifacts artifacts: "${env.SFT_TEST_RESULTS_SUBDIR}/*"
-
-                            // skip validation of SFT for now until intermittent errors are fixed
-                            step ([$class: 'XUnitBuilder',
-                               thresholds: [
-                                    [$class: 'FailedThreshold', unstableThreshold: '0']],
-                                    tools: [[$class: 'JUnitType', pattern: "${env.SFT_TEST_RESULTS_SUBDIR}/sft_*${SFT_TEST_RESULTS}"]]])
                         }
                     }
                 }
@@ -291,13 +263,36 @@ pipeline {
                                     -r mpi.tap \\
                                     -w mpi.xml \\
                                     tap applications.mpi applications"""
-
-                            step ([$class: 'XUnitBuilder',
-                               thresholds: [
-                                    [$class: 'FailedThreshold', unstableThreshold: '0']],
-                                    tools: [[$class: 'JUnitType', pattern: "mpi.xml"]]])
                         }
                     }
+                }
+            }
+            post {
+                always {
+                    step ([$class: 'XUnitBuilder',
+                       thresholds: [
+                            [$class: 'FailedThreshold', unstableThreshold: '0']],
+                            tools: [[$class: 'JUnitType', pattern: "smoketests.xml"]]])
+                    step ([$class: 'XUnitBuilder',
+                       thresholds: [
+                            [$class: 'FailedThreshold', unstableThreshold: '0']],
+                            tools: [[$class: 'JUnitType', pattern: "*-rc.xml"]]])
+                    step ([$class: 'XUnitBuilder',
+                       thresholds: [
+                            [$class: 'FailedThreshold', unstableThreshold: '0']],
+                            tools: [[$class: 'JUnitType', pattern: "*-xrc.xml"]]])
+                    step ([$class: 'XUnitBuilder',
+                       thresholds: [
+                            [$class: 'FailedThreshold', unstableThreshold: '0']],
+                            tools: [[$class: 'JUnitType', pattern: "sft_test_results/RC/sft_*_test_results.xml"]]])
+                    step ([$class: 'XUnitBuilder',
+                       thresholds: [
+                            [$class: 'FailedThreshold', unstableThreshold: '0']],
+                            tools: [[$class: 'JUnitType', pattern: "sft_test_results/XRC/sft_*_test_results.xml"]]])
+                    step ([$class: 'XUnitBuilder',
+                       thresholds: [
+                            [$class: 'FailedThreshold', unstableThreshold: '0']],
+                            tools: [[$class: 'JUnitType', pattern: "mpi.xml"]]])
                 }
             }
         }
@@ -376,15 +371,15 @@ pipeline {
             }
         }
         stage('Publish') {
-            agent {
-                node {
-                    label 'utility_pod'
-                }
-            }
             when {
                 allOf {
                     expression { currentBuild.result == 'SUCCESS' } ;
                     expression { return isRelease("${env.GIT_BRANCH}") }
+                }
+            }
+            agent {
+                node {
+                    label 'utility_pod'
                 }
             }
             steps {
