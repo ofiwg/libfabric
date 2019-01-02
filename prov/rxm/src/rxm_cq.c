@@ -1195,8 +1195,15 @@ static void rxm_cq_read_write_error(struct rxm_ep *rxm_ep)
 		rx_buf = (struct rxm_rx_buf *)err_entry.op_context;
 		util_cq = rx_buf->ep->util_ep.rx_cq;
 		util_cntr = rx_buf->ep->util_ep.rx_cntr;
-		err_entry.op_context = rx_buf->recv_entry->context;
-		err_entry.flags = rx_buf->recv_entry->comp_flags;
+		if (rx_buf->recv_entry) {
+			err_entry.op_context = rx_buf->recv_entry->context;
+			err_entry.flags = rx_buf->recv_entry->comp_flags;
+		} else {
+			/* This branch may be reached if we are aborting the eagerly submitted
+			 * msg recv buffers for incoming tagged messages. In that case, there's
+			 * no context for the error. */
+			err_entry.op_context = NULL;
+		}
 		break;
 	default:
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "Invalid state!\n");
