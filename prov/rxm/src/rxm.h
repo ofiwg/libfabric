@@ -289,7 +289,7 @@ struct rxm_ep_wire_proto {
 };
 
 struct rxm_cm_data {
-	struct sockaddr name;
+	struct sockaddr_storage name;
 	uint64_t conn_id;
 	struct rxm_ep_wire_proto proto;
 };
