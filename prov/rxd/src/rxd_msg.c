@@ -218,7 +218,7 @@ ssize_t rxd_ep_generic_inject(struct rxd_ep *rxd_ep, const struct iovec *iov,
 		goto out;
 
 	tx_entry = rxd_tx_entry_init(rxd_ep, iov, iov_count, NULL, 0, 0, data,
-				     tag, NULL, rxd_addr, op, rxd_flags | RXD_INJECT);
+				     tag, NULL, rxd_addr, op, rxd_flags);
 	if (!tx_entry)
 		goto out;
 
