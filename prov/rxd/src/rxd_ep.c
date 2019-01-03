@@ -437,7 +437,6 @@ void rxd_insert_unacked(struct rxd_ep *ep, fi_addr_t peer,
 	dlist_insert_tail(&pkt_entry->d_entry,
 			  &ep->peers[peer].unacked);
 	ep->peers[peer].unacked_cnt++;
-	rxd_ep_send_pkt(ep, pkt_entry);
 }
 
 ssize_t rxd_ep_post_data_pkts(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
@@ -467,6 +466,7 @@ ssize_t rxd_ep_post_data_pkts(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
 		if (data->base_hdr.type != RXD_DATA_READ)
 			data->base_hdr.seq_no++;
 
+		rxd_ep_send_pkt(ep, pkt_entry);
 		rxd_insert_unacked(ep, tx_entry->peer, pkt_entry);
 	}
 
@@ -525,6 +525,7 @@ static ssize_t rxd_ep_send_rts(struct rxd_ep *rxd_ep, fi_addr_t rxd_addr)
 		return ret;
 	}
 
+	rxd_ep_send_pkt(rxd_ep, pkt_entry);
 	rxd_insert_unacked(rxd_ep, rxd_addr, pkt_entry);
 	dlist_insert_tail(&rxd_ep->peers[rxd_addr].entry, &rxd_ep->rts_sent_list);
 
@@ -684,6 +685,7 @@ int rxd_ep_send_op(struct rxd_ep *rxd_ep, struct rxd_x_entry *tx_entry,
 		if (tx_entry->op != RXD_READ_REQ && tx_entry->num_segs > 1)
 			rxd_ep->peers[tx_entry->peer].tx_seq_no = tx_entry->start_seq +
 								  tx_entry->num_segs;
+		rxd_ep_send_pkt(rxd_ep, pkt_entry);
 		rxd_insert_unacked(rxd_ep, tx_entry->peer, pkt_entry);
 		if (tx_entry->op != RXD_READ_REQ && tx_entry->num_segs > 1)
 			ret = rxd_ep_post_data_pkts(rxd_ep, tx_entry);

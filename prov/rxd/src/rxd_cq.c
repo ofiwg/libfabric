@@ -351,6 +351,7 @@ static int rxd_move_tx_pkt(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
 						      tx_entry->num_segs;
 	}
 	hdr->peer = ep->peers[tx_entry->peer].peer_addr;
+	rxd_ep_send_pkt(ep, tx_entry->pkt);
 	rxd_insert_unacked(ep, tx_entry->peer, tx_entry->pkt);
 	tx_entry->pkt = NULL;
 
