@@ -337,7 +337,7 @@ static void rxd_verify_active(struct rxd_ep *ep, fi_addr_t addr, fi_addr_t peer_
 	}
 }
 
-static int rxd_move_tx_pkt(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
+static int rxd_start_xfer(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
 {
 	struct rxd_base_hdr *hdr = rxd_get_base_hdr(tx_entry->pkt);
 
@@ -383,7 +383,7 @@ void rxd_progress_tx_list(struct rxd_ep *ep, struct rxd_peer *peer)
 	dlist_foreach_container_safe(&peer->tx_list, struct rxd_x_entry,
 				tx_entry, entry, tmp_entry) {
 		if (tx_entry->pkt) {
-			if (!rxd_move_tx_pkt(ep, tx_entry) ||
+			if (!rxd_start_xfer(ep, tx_entry) ||
 			    tx_entry->op == RXD_READ_REQ)
 				break;
 		}
