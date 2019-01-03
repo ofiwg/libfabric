@@ -159,7 +159,7 @@ while getopts nomi:e:dc:r:svh flag; do
          ;;
       c) configure_options="$configure_options $OPTARG"
          ;;
-      r) configure_options="$rpmbuild_options $OPTARG"
+      r) rpmbuild_options="$rpmbuild_options $OPTARG"
          ;;
       s) unpack_spec="true"
          ;;
