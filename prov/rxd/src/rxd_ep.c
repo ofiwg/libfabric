@@ -437,7 +437,7 @@ void rxd_insert_unacked(struct rxd_ep *ep, fi_addr_t peer,
 	dlist_insert_tail(&pkt_entry->d_entry,
 			  &ep->peers[peer].unacked);
 	ep->peers[peer].unacked_cnt++;
-	rxd_ep_retry_pkt(ep, pkt_entry);
+	rxd_ep_send_pkt(ep, pkt_entry);
 }
 
 ssize_t rxd_ep_post_data_pkts(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
@@ -473,7 +473,7 @@ ssize_t rxd_ep_post_data_pkts(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
 	return ep->peers[tx_entry->peer].unacked_cnt < rxd_env.max_unacked;
 }
 
-int rxd_ep_retry_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
+int rxd_ep_send_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 {
 	int ret;
 
@@ -718,7 +718,7 @@ void rxd_ep_send_ack(struct rxd_ep *rxd_ep, fi_addr_t peer)
 	rxd_ep->peers[peer].last_tx_ack = ack->base_hdr.seq_no;
 
 	dlist_insert_tail(&pkt_entry->d_entry, &rxd_ep->ctrl_pkts);
-	if (rxd_ep_retry_pkt(rxd_ep, pkt_entry)) {
+	if (rxd_ep_send_pkt(rxd_ep, pkt_entry)) {
 		dlist_remove(&pkt_entry->d_entry);
 		rxd_release_tx_pkt(rxd_ep, pkt_entry);
 	}
@@ -1070,7 +1070,7 @@ static void rxd_progress_pkt_list(struct rxd_ep *ep, struct rxd_peer *peer)
 		    current < rxd_get_retry_time(pkt_entry->timestamp, peer->retry_cnt))
 			continue;
 		retry = 1;
-		ret = rxd_ep_retry_pkt(ep, pkt_entry);
+		ret = rxd_ep_send_pkt(ep, pkt_entry);
 		if (ret)
 			break;
 	}

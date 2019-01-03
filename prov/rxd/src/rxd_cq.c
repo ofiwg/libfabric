@@ -440,7 +440,7 @@ static int rxd_send_cts(struct rxd_ep *rxd_ep, struct rxd_rts_pkt *rts_pkt,
 	cts->rts_addr = rts_pkt->rts_addr;
 
 	dlist_insert_tail(&pkt_entry->d_entry, &rxd_ep->ctrl_pkts);
-	ret = rxd_ep_retry_pkt(rxd_ep, pkt_entry);
+	ret = rxd_ep_send_pkt(rxd_ep, pkt_entry);
 	if (ret) {
 		dlist_remove(&pkt_entry->d_entry);
 		rxd_release_tx_pkt(rxd_ep, pkt_entry);
