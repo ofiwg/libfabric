@@ -110,7 +110,9 @@ int cxip_rx_ctx_enable(struct cxip_rx_ctx *rxc)
 
 	/* Create transmit cmdq for SW Rendezvous GET operations */
 	/* TODO set CMDQ size with RX attrs */
+	opts.count = 64;
 	opts.is_transmit = 1;
+	opts.lcid = rxc->domain->dev_if->cps[0]->lcid;
 	ret = cxil_alloc_cmdq(rxc->domain->dev_if->if_lni, NULL, &opts,
 			      &rxc->tx_cmdq);
 	if (ret != FI_SUCCESS) {
@@ -345,6 +347,7 @@ int cxip_tx_ctx_enable(struct cxip_tx_ctx *txc)
 	memset(&opts, 0, sizeof(opts));
 	opts.count = 64;
 	opts.is_transmit = 1;
+	opts.lcid = txc->domain->dev_if->cps[0]->lcid;
 	ret = cxil_alloc_cmdq(txc->domain->dev_if->if_lni, NULL, &opts,
 			      &txc->tx_cmdq);
 	if (ret != FI_SUCCESS) {
@@ -354,6 +357,7 @@ int cxip_tx_ctx_enable(struct cxip_tx_ctx *txc)
 	}
 
 	/* Allocate a target-side cmdq for Rendezvous buffers */
+	opts.count = 64;
 	opts.is_transmit = 0;
 	ret = cxil_alloc_cmdq(txc->domain->dev_if->if_lni, NULL, &opts,
 			      &txc->rx_cmdq);

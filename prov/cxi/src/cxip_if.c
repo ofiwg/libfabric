@@ -87,14 +87,15 @@ int cxip_get_if(uint32_t nic_addr, struct cxip_if **dev_if)
 			goto close_dev;
 		}
 
-		/* TODO Temporary fake CP setup, needed for CMDQ allocation */
-		if_entry->n_cps = 1;
-		if_entry->cps[0].vni = 0;
-		if_entry->cps[0].dscp_rstuno = 0;
-		if_entry->cps[0].dscp_unrsto = 0;
-		ret = cxil_set_cps(if_entry->if_lni, if_entry->cps,
-				   if_entry->n_cps);
-		assert(!ret);
+		/* TODO Temporary CP setup, needed for CMDQ allocation */
+		ret = cxil_alloc_cp(if_entry->if_lni, 0, CXI_TC_BEST_EFFORT,
+				    &if_entry->cps[0]);
+		if (ret) {
+			CXIP_LOG_DBG("Unable to allocate CP, ret: %d\n", ret);
+			ret = -FI_ENODEV;
+			goto free_lni;
+		}
+		if_entry->n_cps++;
 
 		/* TODO Temporary allocation of CMDQ and EQ specifically for MR
 		 * allocation.
@@ -108,7 +109,7 @@ int cxip_get_if(uint32_t nic_addr, struct cxip_if **dev_if)
 			CXIP_LOG_DBG("Unable to allocate MR CMDQ, ret: %d\n",
 				     ret);
 			ret = -FI_ENODEV;
-			goto free_lni;
+			goto free_cp;
 		}
 
 		if_entry->evtq_buf_len = C_PAGE_SIZE;
@@ -157,8 +158,8 @@ int cxip_get_if(uint32_t nic_addr, struct cxip_if **dev_if)
 	return FI_SUCCESS;
 
 free_evtq_md:
-	ret = cxil_unmap(if_entry->evtq_buf_md);
-	if (ret)
+	tmp = cxil_unmap(if_entry->evtq_buf_md);
+	if (tmp)
 		CXIP_LOG_ERROR("Failed to unmap EVTQ buffer: %d\n", ret);
 free_mr_evtq_buf:
 	free(if_entry->evtq_buf);
@@ -166,6 +167,10 @@ free_mr_cmdq:
 	tmp = cxil_destroy_cmdq(if_entry->mr_cmdq);
 	if (tmp)
 		CXIP_LOG_ERROR("Failed to destroy CMDQ: %d\n", tmp);
+free_cp:
+	tmp = cxil_destroy_cp(if_entry->cps[0]);
+	if (tmp)
+		CXIP_LOG_ERROR("Failed to destroy CP: %d\n", tmp);
 free_lni:
 	tmp = cxil_destroy_lni(if_entry->if_lni);
 	if (tmp)

@@ -271,7 +271,7 @@ struct cxip_if {
 	struct cxil_dev *if_dev;	// cxil NIC DEV structure
 	uint32_t if_pid_granule;	// cxil NIC granule size
 	struct cxil_lni *if_lni;	// cxil NIC LNI structure
-	struct cxi_cp cps[16];		// Cassini communication profiles
+	struct cxi_cp *cps[16];		// Cassini communication profiles
 	int n_cps;
 	struct dlist_entry if_doms;	// if_domain list
 	struct dlist_entry ptes;	// PTE list
