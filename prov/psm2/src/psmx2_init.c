@@ -69,7 +69,7 @@ int	 psmx2_tag_layout_locked = 0;
 
 static void psmx2_init_env(void)
 {
-	if (getenv("OMPI_COMM_WORLD_RANK") || getenv("PMI_RANK"))
+	if (getenv("OMPI_COMM_WORLD_RANK") || getenv("PMI_RANK") || getenv("PMIx_RANK"))
 		psmx2_env.name_server = 0;
 
 	fi_param_get_bool(&psmx2_prov, "name_server", &psmx2_env.name_server);
