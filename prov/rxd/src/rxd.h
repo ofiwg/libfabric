@@ -187,6 +187,7 @@ struct rxd_ep {
 	int do_local_mr;
 	int next_retry;
 	int dg_cq_fd;
+	size_t pending_cnt;
 
 	struct util_buf_pool *tx_pkt_pool;
 	struct util_buf_pool *rx_pkt_pool;

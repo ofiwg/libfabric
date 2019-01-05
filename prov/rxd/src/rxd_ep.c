@@ -477,17 +477,22 @@ int rxd_ep_retry_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 {
 	int ret;
 
+	if (ep->pending_cnt >= ep->tx_size)
+		return 1;
+
 	pkt_entry->timestamp = fi_gettime_ms();
 
 	ret = fi_send(ep->dg_ep, (const void *) rxd_pkt_start(pkt_entry),
 		      pkt_entry->pkt_size, rxd_mr_desc(pkt_entry->mr, ep),
 		      rxd_ep_av(ep)->rxd_addr_table[pkt_entry->peer].dg_addr,
 		      &pkt_entry->context);
-	if (ret)
+	if (ret) {
 		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "error sending packet: %d (%s)\n",
 			ret, fi_strerror(-ret));
-	else
+	} else {
 		pkt_entry->flags |= RXD_PKT_IN_USE;
+		ep->pending_cnt++;
+	}
 
 	return ret;
 }
