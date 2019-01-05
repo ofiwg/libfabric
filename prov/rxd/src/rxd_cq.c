@@ -1140,6 +1140,7 @@ void rxd_handle_send_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp)
 			pkt_entry->flags &= ~RXD_PKT_IN_USE;
 		}
 	}
+	ep->pending_cnt--;
 }
 
 void rxd_handle_recv_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp)

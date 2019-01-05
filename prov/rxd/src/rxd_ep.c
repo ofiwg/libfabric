@@ -477,17 +477,22 @@ int rxd_ep_retry_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 {
 	int ret;
 
+	if (ep->pending_cnt >= ep->tx_size)
+		return 1;
+
 	pkt_entry->timestamp = fi_gettime_ms();
 
 	ret = fi_send(ep->dg_ep, (const void *) rxd_pkt_start(pkt_entry),
 		      pkt_entry->pkt_size, rxd_mr_desc(pkt_entry->mr, ep),
 		      rxd_ep_av(ep)->rxd_addr_table[pkt_entry->peer].dg_addr,
 		      &pkt_entry->context);
-	if (ret)
+	if (ret) {
 		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "error sending packet: %d (%s)\n",
 			ret, fi_strerror(-ret));
-	else
+	} else {
 		pkt_entry->flags |= RXD_PKT_IN_USE;
+		ep->pending_cnt++;
+	}
 
 	return ret;
 }
@@ -868,7 +873,7 @@ static int rxd_dg_cq_open(struct rxd_ep *rxd_ep, enum fi_wait_obj wait_obj)
 
 	assert((wait_obj == FI_WAIT_NONE) || (wait_obj == FI_WAIT_FD));
 
-	cq_attr.size = rxd_ep->tx_size + rxd_ep->tx_size;
+	cq_attr.size = rxd_ep->tx_size + rxd_ep->rx_size;
 	cq_attr.format = FI_CQ_FORMAT_MSG;
 	cq_attr.wait_obj = wait_obj;
 
