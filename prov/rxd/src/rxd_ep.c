@@ -868,7 +868,7 @@ static int rxd_dg_cq_open(struct rxd_ep *rxd_ep, enum fi_wait_obj wait_obj)
 
 	assert((wait_obj == FI_WAIT_NONE) || (wait_obj == FI_WAIT_FD));
 
-	cq_attr.size = rxd_ep->tx_size + rxd_ep->tx_size;
+	cq_attr.size = rxd_ep->tx_size + rxd_ep->rx_size;
 	cq_attr.format = FI_CQ_FORMAT_MSG;
 	cq_attr.wait_obj = wait_obj;
 
