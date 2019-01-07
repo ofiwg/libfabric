@@ -5,8 +5,8 @@ This file contains the main features as well as overviews of specific
 bug fixes (and other actions) for each version of Libfabric since
 version 1.0.
 
-v1.7.0, Fri Dec 28, 2018
-========================
+v1.7.0, Mon Jan 7, 2019
+=======================
 
 The 1.7 release provides a few enhancements to the libfabric API.
 Notably, it extends the fi_info structure in order to report NIC
