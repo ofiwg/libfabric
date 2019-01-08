@@ -389,7 +389,7 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 		[RXM_BUF_POOL_TX_INJECT] = rxm_ep->inject_limit +
 					   sizeof(struct rxm_tx_base_buf),
 		[RXM_BUF_POOL_TX_ACK] = sizeof(struct rxm_tx_base_buf),
-		[RXM_BUF_POOL_TX_RNDV] = sizeof(struct rxm_rndv_hdr) +
+		[RXM_BUF_POOL_TX_RNDV] = rxm_rndv_hdr_size(rxm_ep) +
 					 rxm_ep->buffered_min +
 					 sizeof(struct rxm_tx_rndv_buf),
 		[RXM_BUF_POOL_TX_ATOMIC] = rxm_ep->eager_limit +
@@ -892,9 +892,9 @@ static ssize_t rxm_ep_recvv(struct fid_ep *ep_fid, const struct iovec *iov,
 				  &rxm_ep->recv_queue);
 }
 
-static void rxm_rndv_hdr_init(struct rxm_ep *rxm_ep, void *buf,
-			      const struct iovec *iov, size_t count,
-			      struct fid_mr **mr)
+static int rxm_rndv_hdr_init(struct rxm_ep *rxm_ep, void *buf,
+			     const struct iovec *iov, size_t count,
+			     struct fid_mr **mr)
 {
 	struct rxm_rndv_hdr *rndv_hdr = (struct rxm_rndv_hdr *)buf;
 	size_t i;
@@ -904,8 +904,24 @@ static void rxm_rndv_hdr_init(struct rxm_ep *rxm_ep, void *buf,
 			(uintptr_t)iov[i].iov_base : 0;
 		rndv_hdr->iov[i].len = (uint64_t)iov[i].iov_len;
 		rndv_hdr->iov[i].key = fi_mr_key(mr[i]);
+		if (RXM_MR_RAW(rxm_ep->msg_info)) {
+			size_t raw_key_size = rxm_ep->msg_info->domain_attr->mr_key_size;
+			char* raw_key_base = (char*)buf + sizeof(struct rxm_rndv_hdr);
+			size_t raw_key_hdr_size = sizeof(struct rxm_rndv_raw_key_hdr) + raw_key_size;
+			struct rxm_rndv_raw_key_hdr* raw_key_hdr =
+			    (struct rxm_rndv_raw_key_hdr*)(raw_key_base + i * raw_key_hdr_size);
+			size_t key_size = raw_key_size;
+			memset(raw_key_hdr->raw_key, 0, raw_key_size);
+			int ret = fi_mr_raw_attr(mr[i], &raw_key_hdr->base_addr,
+			                         raw_key_hdr->raw_key, &key_size,
+			                         /* flags = */ 0);
+			if (OFI_UNLIKELY(ret))
+				return ret;
+			assert(key_size == raw_key_size); /* variable key size not supported */
+		}
 	}
 	rndv_hdr->count = (uint8_t)count;
+	return FI_SUCCESS;
 }
 
 static inline ssize_t
@@ -978,12 +994,14 @@ rxm_ep_alloc_rndv_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void 
 		mr_iov = (struct fid_mr **)desc;
 	}
 
-	rxm_rndv_hdr_init(rxm_ep, &tx_buf->pkt.data, iov, tx_buf->count, mr_iov);
+	ret = rxm_rndv_hdr_init(rxm_ep, &tx_buf->pkt.data, iov, tx_buf->count, mr_iov);
+	if (ret)
+	  goto err;
 
-	ret = sizeof(struct rxm_pkt) + sizeof(struct rxm_rndv_hdr);
+	ret = sizeof(struct rxm_pkt) + rxm_rndv_hdr_size(rxm_ep);
 
 	if (rxm_ep->rxm_info->mode & FI_BUFFERED_RECV) {
-		ofi_copy_from_iov(rxm_pkt_rndv_data(&tx_buf->pkt),
+		ofi_copy_from_iov(rxm_pkt_rndv_data(&tx_buf->pkt, rxm_ep),
 				  rxm_ep->buffered_min, iov, count, 0);
 		ret += rxm_ep->buffered_min;
 	}
@@ -2258,10 +2276,10 @@ static void rxm_ep_settings_init(struct rxm_ep *rxm_ep)
 	 * injected by FI_EP_MSG provider */
 	assert(!rxm_ep->buffered_min);
 	if (rxm_ep->inject_limit >
-	    (sizeof(struct rxm_pkt) + sizeof(struct rxm_rndv_hdr)))
+	    (sizeof(struct rxm_pkt) + rxm_rndv_hdr_size(rxm_ep)))
 		rxm_ep->buffered_min = MIN((rxm_ep->inject_limit -
 					(sizeof(struct rxm_pkt) +
-					 sizeof(struct rxm_rndv_hdr))),
+					 rxm_rndv_hdr_size(rxm_ep))),
 					   rxm_ep->eager_limit);
 
 	assert(!rxm_ep->min_multi_recv_size);

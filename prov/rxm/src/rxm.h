@@ -72,12 +72,15 @@
 
 #define RXM_IOV_LIMIT 4
 
-#define RXM_MR_MODES	(OFI_MR_BASIC_MAP | FI_MR_LOCAL)
+#define RXM_MR_MODES	(OFI_MR_BASIC_MAP | FI_MR_LOCAL | FI_MR_RAW)
 #define RXM_MR_VIRT_ADDR(info) ((info->domain_attr->mr_mode == FI_MR_BASIC) ||\
 				info->domain_attr->mr_mode & FI_MR_VIRT_ADDR)
 
 #define RXM_MR_PROV_KEY(info) ((info->domain_attr->mr_mode == FI_MR_BASIC) ||\
 			       info->domain_attr->mr_mode & FI_MR_PROV_KEY)
+
+#define RXM_MR_RAW(info) ((info->domain_attr->mr_mode & FI_MR_RAW) ||\
+			   info->domain_attr->mr_key_size > sizeof(uint64_t))
 
 #define RXM_LOG_STATE(subsystem, pkt, prev_state, next_state) 			\
 	FI_DBG(&rxm_prov, subsystem, "[RNDV] msg_id: 0x%" PRIx64 " %s -> %s\n",	\
@@ -299,8 +302,18 @@ struct rxm_rndv_hdr {
 	uint8_t count;
 };
 
-#define rxm_pkt_rndv_data(rxm_pkt) \
-	((rxm_pkt)->data + sizeof(struct rxm_rndv_hdr))
+struct rxm_rndv_raw_key_hdr {
+	uint64_t base_addr;
+	uint8_t raw_key[];
+};
+
+#define rxm_rndv_hdr_size(rxm_ep) \
+	(sizeof(struct rxm_rndv_hdr) + \
+	 RXM_IOV_LIMIT * (sizeof(struct rxm_rndv_raw_key_hdr) + \
+	 (rxm_ep)->msg_info->domain_attr->mr_key_size))
+
+#define rxm_pkt_rndv_data(rxm_pkt, rxm_ep) \
+	((rxm_pkt)->data + rxm_rndv_hdr_size(rxm_ep))
 
 struct rxm_atomic_hdr {
 	struct fi_rma_ioc rma_ioc[RXM_IOV_LIMIT];

@@ -76,7 +76,7 @@ void rxm_info_to_core_mr_modes(uint32_t version, const struct fi_info *hints,
 		 * providers that support only FI_MR_SCALABLE aren't dropped */
 		core_info->domain_attr->mr_mode = FI_MR_UNSPEC;
 	} else {
-		core_info->domain_attr->mr_mode |= FI_MR_LOCAL;
+		core_info->domain_attr->mr_mode |= FI_MR_LOCAL | FI_MR_RAW;
 		if (!hints || !ofi_rma_target_allowed(hints->caps))
 			core_info->domain_attr->mr_mode |= OFI_MR_BASIC_MAP;
 		else if (hints->domain_attr)

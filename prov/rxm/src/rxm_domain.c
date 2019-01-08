@@ -321,7 +321,7 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	    (msg_info->domain_attr->mr_mode & (FI_MR_BASIC | FI_MR_SCALABLE)))
 		msg_info->domain_attr->mr_mode = FI_MR_BASIC;
 	else
-		msg_info->domain_attr->mr_mode |= FI_MR_PROV_KEY;
+		msg_info->domain_attr->mr_mode |= FI_MR_PROV_KEY | FI_MR_RAW;
 
 	ret = fi_domain(rxm_fabric->msg_fabric, msg_info,
 			&rxm_domain->msg_domain, context);

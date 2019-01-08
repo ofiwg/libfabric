@@ -113,7 +113,7 @@ static int rxm_finish_buf_recv(struct rxm_rx_buf *rx_buf)
 		flags |= FI_MORE;
 
 	if (rx_buf->pkt.ctrl_hdr.type == ofi_ctrl_large_data)
-		data = rxm_pkt_rndv_data(&rx_buf->pkt);
+		data = rxm_pkt_rndv_data(&rx_buf->pkt, rx_buf->ep);
 	else
 		data = rx_buf->pkt.data;
 
@@ -424,6 +424,9 @@ ssize_t rxm_cq_handle_large_data(struct rxm_rx_buf *rx_buf)
 	struct iovec iov[RXM_IOV_LIMIT];
 	void *desc[RXM_IOV_LIMIT];
 	int ret = 0;
+	struct rxm_domain *rxm_domain = container_of(rx_buf->ep->util_ep.domain,
+	                                             struct rxm_domain, util_domain);
+	struct fid_domain *msg_domain = rxm_domain->msg_domain;
 
 	if (!rx_buf->conn) {
 		assert(rx_buf->ep->srx_ctx);
@@ -485,9 +488,31 @@ ssize_t rxm_cq_handle_large_data(struct rxm_rx_buf *rx_buf)
 				rx_buf, rx_buf->recv_entry->total_len);
 		}
 		total_recv_len -= copy_len;
+		if (RXM_MR_RAW(rx_buf->ep->msg_info)) {
+			size_t raw_key_size = rx_buf->ep->msg_info->domain_attr->mr_key_size;
+			char* raw_key_base = rx_buf->pkt.data + sizeof(struct rxm_rndv_hdr);
+			size_t raw_key_hdr_size = sizeof(struct rxm_rndv_raw_key_hdr) + raw_key_size;
+			struct rxm_rndv_raw_key_hdr* raw_key_hdr =
+			    (struct rxm_rndv_raw_key_hdr*)(raw_key_base + i * raw_key_hdr_size);
+			ret = fi_mr_map_raw(msg_domain, raw_key_hdr->base_addr,
+			                    raw_key_hdr->raw_key, raw_key_size,
+			                    &rx_buf->rndv_hdr->iov[i].key, /* flags = */ 0);
+			if (OFI_UNLIKELY(ret)) {
+				FI_WARN(&rxm_prov, FI_LOG_CQ, "fi_mr_map_raw failed\n");
+				rxm_cq_write_error(rx_buf->ep->util_ep.rx_cq,
+				                   rx_buf->ep->util_ep.rx_cntr,
+				                   rx_buf->recv_entry->context, ret);
+				return ret;
+			}
+		}
 		ret = fi_readv(rx_buf->conn->msg_ep, iov, desc, count, 0,
 			       rx_buf->rndv_hdr->iov[i].addr,
 			       rx_buf->rndv_hdr->iov[i].key, rx_buf);
+		if (RXM_MR_RAW(rx_buf->ep->msg_info)) {
+			int unmap_ret = fi_mr_unmap_key(msg_domain, rx_buf->rndv_hdr->iov[i].key);
+			if (unmap_ret)
+				FI_WARN(&rxm_prov, FI_LOG_CQ, "Failed to unmap raw key\n");
+		}
 		if (OFI_UNLIKELY(ret)) {
 			if (OFI_LIKELY(ret == -FI_EAGAIN)) {
 				struct rxm_deferred_tx_entry *def_tx_entry;
