@@ -176,7 +176,7 @@ struct ct_pingpong {
 
 	uint64_t tx_seq, rx_seq, tx_cq_cntr, rx_cq_cntr;
 
-	fi_addr_t remote_fi_addr;
+	fi_addr_t local_fi_addr, remote_fi_addr;
 	void *buf, *tx_buf, *rx_buf;
 	size_t buf_size, tx_size, rx_size;
 	size_t rx_prefix_size, tx_prefix_size;
@@ -193,7 +193,8 @@ struct ct_pingpong {
 
 	SOCKET ctrl_connfd;
 	char ctrl_buf[PP_CTRL_BUF_LEN + 1];
-	void *rem_name;
+
+	void *local_name, *rem_name;
 };
 
 static const char integ_alphabet[] =
@@ -526,26 +527,27 @@ static int pp_ctrl_recv(struct ct_pingpong *ct, char *buf, size_t size)
 
 static int pp_send_name(struct ct_pingpong *ct, struct fid *endpoint)
 {
-	void *local_name = NULL;
 	size_t addrlen = 0;
 	uint32_t len;
 	int ret;
 
 	PP_DEBUG("Fetching local address\n");
 
-	ret = fi_getname(endpoint, local_name, &addrlen);
+	ct->local_name = NULL;
+
+	ret = fi_getname(endpoint, ct->local_name, &addrlen);
 	if ((ret != -FI_ETOOSMALL) || (addrlen <= 0)) {
 		PP_ERR("fi_getname didn't return length\n");
 		return -EMSGSIZE;
 	}
 
-	local_name = calloc(1, addrlen);
-	if (!local_name) {
+	ct->local_name = calloc(1, addrlen);
+	if (!ct->local_name) {
 		PP_ERR("Failed to allocate memory for the address\n");
 		return -ENOMEM;
 	}
 
-	ret = fi_getname(endpoint, local_name, &addrlen);
+	ret = fi_getname(endpoint, ct->local_name, &addrlen);
 	if (ret) {
 		PP_PRINTERR("fi_getname", ret);
 		goto fn;
@@ -570,11 +572,10 @@ static int pp_send_name(struct ct_pingpong *ct, struct fid *endpoint)
 		goto fn;
 
 	PP_DEBUG("Sending name\n");
-	ret = pp_ctrl_send(ct, local_name, addrlen);
+	ret = pp_ctrl_send(ct, ct->local_name, addrlen);
 	PP_DEBUG("Sent name\n");
 
 fn:
-	free(local_name);
 	return ret;
 }
 
@@ -1780,8 +1781,22 @@ static int pp_init_fabric(struct ct_pingpong *ct)
 	if (ret < 0)
 		return ret;
 
-	ret = pp_av_insert(ct->av, ct->rem_name, 1, &(ct->remote_fi_addr), 0,
-			   NULL);
+	if (ct->opts.dst_addr) {
+		/* Set */
+		ret = pp_av_insert(ct->av, ct->rem_name, 1, &(ct->remote_fi_addr), 0,
+				   NULL);
+		if (ret)
+			return ret;
+		ret = pp_av_insert(ct->av, ct->local_name, 1, &(ct->local_fi_addr), 0,
+				   NULL);
+	} else {
+		ret = pp_av_insert(ct->av, ct->local_name, 1, &(ct->local_fi_addr), 0,
+				   NULL);
+		if (ret)
+			return ret;
+		ret = pp_av_insert(ct->av, ct->rem_name, 1, &(ct->remote_fi_addr), 0,
+				   NULL);
+	}
 	if (ret)
 		return ret;
 	PP_DEBUG("Connection-less endpoint: address vector initialized\n");
@@ -1810,8 +1825,9 @@ static void pp_free_res(struct ct_pingpong *ct)
 	PP_CLOSE_FID(ct->domain);
 	PP_CLOSE_FID(ct->fabric);
 
-	if (ct->buf)
-		free(ct->rem_name);
+	free(ct->rem_name);
+	free(ct->local_name);
+	
 	if (ct->buf) {
 		ofi_freealign(ct->buf);
 		ct->buf = ct->rx_buf = ct->tx_buf = NULL;
