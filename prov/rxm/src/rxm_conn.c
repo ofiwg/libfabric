@@ -1192,8 +1192,11 @@ rxm_conn_handle_event(struct rxm_ep *rxm_ep, struct rxm_msg_eq_entry *entry)
 		FI_DBG(&rxm_prov, FI_LOG_FABRIC, "Got new connection\n");
 		if ((size_t)entry->rd != RXM_CM_ENTRY_SZ) {
 			FI_WARN(&rxm_prov, FI_LOG_FABRIC,
-				"Received size (%zd) not matching "
-				"expected (%zu)\n", entry->rd, RXM_CM_ENTRY_SZ);
+				"Received a connection request with no CM data. "
+				"Is sender running FI_PROTO_RXM?\n");
+			FI_WARN(&rxm_prov, FI_LOG_FABRIC, "Received CM entry "
+				"size (%zd) not matching expected (%zu)\n",
+				entry->rd, RXM_CM_ENTRY_SZ);
 			goto err;
 		}
 		rxm_msg_process_connreq(rxm_ep, entry->cm_entry.info, entry->cm_entry.data);

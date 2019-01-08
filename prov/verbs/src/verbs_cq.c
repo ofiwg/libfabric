@@ -604,6 +604,15 @@ int fi_ibv_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 
 	size = attr->size ? attr->size : VERBS_DEF_CQ_SIZE;
 
+	/*
+	 * Verbs may throw an error if CQ size exceeds ibv_device_attr->max_cqe.
+	 * OFI doesn't expose CQ size to the apps because it's better to fix the
+	 * issue in the provider than the app dealing with it. The fix is to
+	 * open multiple verbs CQs and load balance "MSG EP to CQ binding"* among
+	 * them to avoid any CQ overflow.
+	 * Something like:
+	 * num_qp_per_cq = ibv_device_attr->max_cqe / (qp_send_wr + qp_recv_wr)
+	 */
 	cq->cq = ibv_create_cq(domain->verbs, size, cq, cq->channel,
 			       attr->signaling_vector);
 	if (!cq->cq) {
