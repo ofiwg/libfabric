@@ -359,7 +359,13 @@ pipeline {
                 stage("Create RPMs") {
                     steps {
                         sh 'make dist-bzip2'
-                        sh '$WORKSPACE/contrib/buildrpm/buildrpmLibfabric.sh -i verbs -i sockets -osmv $(ls libfabric-*.tar.bz2)'
+                        sh '''$WORKSPACE/contrib/buildrpm/buildrpmLibfabric.sh \
+                                -i verbs \
+                                -i sockets \
+                                -smv \
+                                -r '--define "_prefix /opt/cray/libfabric/$version"' \
+                                -r '--define "modulefile_path /opt/cray/modulefiles"' \
+                                $(ls libfabric-*.tar.bz2)'''
                     }
                     post {
                         success {

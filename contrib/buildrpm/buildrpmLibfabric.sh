@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # Copyright (c) 2016-2017   Cisco Systems, Inc.  All rights reserved.
+# Copyright (c) 2019    Cray Inc.  All rights reserved.
 #
 # This software is available to you under a choice of one of two
 # licenses.  You may choose to be licensed under the terms of the GNU
@@ -159,7 +160,7 @@ while getopts nomi:e:dc:r:svh flag; do
          ;;
       c) configure_options="$configure_options $OPTARG"
          ;;
-      r) configure_options="$rpmbuild_options $OPTARG"
+      r) rpmbuild_options="$rpmbuild_options $OPTARG"
          ;;
       s) unpack_spec="true"
          ;;
