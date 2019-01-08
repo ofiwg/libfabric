@@ -53,12 +53,19 @@
 #include <sys/socket.h>
 #include <netdb.h>
 
+#if HAVE_GETIFADDRS
+#include <net/if.h>
+#include <ifaddrs.h>
+#endif
+
 #include <ofi_signal.h>
 #include <rdma/providers/fi_prov.h>
 #include <rdma/fi_errno.h>
 #include <ofi.h>
 #include <ofi_util.h>
 #include <ofi_epoll.h>
+#include <ofi_list.h>
+#include <ofi_osd.h>
 #include <shared/ofi_str.h>
 
 struct fi_provider core_prov = {
@@ -944,6 +951,38 @@ void fi_epoll_close(struct fi_epoll *ep)
 
 #endif
 
+
+
+static inline
+void ofi_insert_loopback_addr(struct fi_provider *prov, struct slist *addr_list)
+{
+	struct ofi_addr_list_entry *addr_entry;
+
+	addr_entry = calloc(1, sizeof(struct ofi_addr_list_entry));
+	if (!addr_entry)
+		return;
+
+	addr_entry->ipaddr.sin.sin_family = AF_INET;
+	addr_entry->ipaddr.sin.sin_addr.s_addr = INADDR_LOOPBACK;
+	ofi_straddr_log(prov, FI_LOG_INFO, FI_LOG_CORE,
+			"available addr: ", &addr_entry->ipaddr);
+
+	strncpy(addr_entry->ipstr, "127.0.0.1", sizeof(addr_entry->ipstr));
+	slist_insert_tail(&addr_entry->entry, addr_list);
+
+	addr_entry = calloc(1, sizeof(struct ofi_addr_list_entry));
+	if (!addr_entry)
+		return;
+
+	addr_entry->ipaddr.sin6.sin6_family = AF_INET6;
+	addr_entry->ipaddr.sin6.sin6_addr = in6addr_loopback;
+	ofi_straddr_log(prov, FI_LOG_INFO, FI_LOG_CORE,
+			"available addr: ", &addr_entry->ipaddr);
+
+	strncpy(addr_entry->ipstr, "::1", sizeof(addr_entry->ipstr));
+	slist_insert_tail(&addr_entry->entry, addr_list);
+}
+
 #if HAVE_GETIFADDRS
 
 /* getifaddrs can fail when connecting the netlink socket. Try again
@@ -974,6 +1013,145 @@ int ofi_getifaddrs(struct ifaddrs **ifaddr)
 	return FI_SUCCESS;
 }
 
+static int
+ofi_addr_list_entry_comp_speed(struct slist_entry *cur, const void *insert)
+{
+	const struct ofi_addr_list_entry *cur_addr =
+		container_of(cur, struct ofi_addr_list_entry, entry);
+	const struct ofi_addr_list_entry *insert_addr =
+		container_of((const struct slist_entry *) insert,
+			     struct ofi_addr_list_entry, entry);
+
+	return (cur_addr->speed < insert_addr->speed);
+}
+
+void ofi_get_list_of_addr(struct fi_provider *prov, const char *env_name,
+			  struct slist *addr_list)
+{
+	int ret;
+	char *iface = NULL;
+	struct ofi_addr_list_entry *addr_entry;
+	struct ifaddrs *ifaddrs, *ifa;
+
+	fi_param_get_str(prov, env_name, &iface);
+
+	ret = ofi_getifaddrs(&ifaddrs);
+	if (!ret) {
+		if (iface) {
+			for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
+				if (strncmp(iface, ifa->ifa_name,
+					    strlen(iface)) == 0) {
+					break;
+				}
+			}
+			if (ifa == NULL) {
+				FI_INFO(prov, FI_LOG_CORE,
+					"Can't set filter to unknown interface: (%s)\n",
+					iface);
+				iface = NULL;
+			}
+		}
+		for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
+			if (ifa->ifa_addr == NULL ||
+			    !(ifa->ifa_flags & IFF_UP) ||
+			    (ifa->ifa_flags & IFF_LOOPBACK) ||
+			    ((ifa->ifa_addr->sa_family != AF_INET) &&
+			     (ifa->ifa_addr->sa_family != AF_INET6)))
+				continue;
+			if (iface && strncmp(iface, ifa->ifa_name, strlen(iface)) != 0) {
+				FI_DBG(prov, FI_LOG_CORE,
+				       "Skip (%s) interface\n", ifa->ifa_name);
+				continue;
+			}
+
+			addr_entry = calloc(1, sizeof(struct ofi_addr_list_entry));
+			if (!addr_entry)
+				continue;
+
+			memcpy(&addr_entry->ipaddr, ifa->ifa_addr,
+			       ofi_sizeofaddr(ifa->ifa_addr));
+			ofi_straddr_log(prov, FI_LOG_INFO, FI_LOG_CORE,
+					"available addr: ", ifa->ifa_addr);
+
+			if (!inet_ntop(ifa->ifa_addr->sa_family,
+					ofi_get_ipaddr(ifa->ifa_addr),
+					addr_entry->ipstr,
+					sizeof(addr_entry->ipstr))) {
+				FI_DBG(prov, FI_LOG_CORE,
+				       "inet_ntop failed: %d\n", errno);
+				free(addr_entry);
+				continue;
+			}
+
+			addr_entry->speed = ofi_ifaddr_get_speed(ifa);
+
+			slist_insert_before_first_match(addr_list, ofi_addr_list_entry_comp_speed,
+							&addr_entry->entry);
+		}
+
+		freeifaddrs(ifaddrs);
+	}
+
+	/* Always add loopback address at the end */
+	ofi_insert_loopback_addr(prov, addr_list);
+}
+
+#elif defined HAVE_MIB_IPADDRTABLE
+
+void ofi_get_list_of_addr(struct fi_provider *prov, const char *env_name,
+			  struct slist *addr_list)
+{
+	struct ofi_addr_list_entry *addr_entry;
+	DWORD i;
+	MIB_IPADDRTABLE _iptbl;
+	MIB_IPADDRTABLE *iptbl = &_iptbl;
+	ULONG ips = 1;
+	ULONG res;
+
+	res = GetIpAddrTable(iptbl, &ips, 0);
+	if (res == ERROR_INSUFFICIENT_BUFFER) {
+		iptbl = malloc(ips);
+		if (!iptbl)
+			return;
+
+		res = GetIpAddrTable(iptbl, &ips, 0);
+	}
+
+	if (res != NO_ERROR)
+		goto out;
+
+	for (i = 0; i < iptbl->dwNumEntries; i++) {
+		if (iptbl->table[i].dwAddr &&
+		    (iptbl->table[i].dwAddr != ntohl(INADDR_LOOPBACK))) {
+			addr_entry = calloc(1, sizeof(*addr_entry));
+			if (!addr_entry)
+				break;
+
+			addr_entry->ipaddr.sin.sin_family = AF_INET;
+			addr_entry->ipaddr.sin.sin_addr.s_addr =
+						iptbl->table[i].dwAddr;
+			inet_ntop(AF_INET, &iptbl->table[i].dwAddr,
+				  addr_entry->ipstr,
+				  sizeof(addr_entry->ipstr));
+			slist_insert_tail(&addr_entry->entry, addr_list);
+		}
+	}
+
+	/* Always add loopback address at the end */
+	ofi_insert_loopback_addr(prov, addr_list);
+
+out:
+	if (iptbl != &_iptbl)
+		free(iptbl);
+}
+
+#else /* !HAVE_MIB_IPADDRTABLE && !HAVE_MIB_IPADDRTABLE */
+
+void ofi_get_list_of_addr(struct fi_provider *prov, const char *env_name,
+			  struct slist *addr_list)
+{
+	ofi_insert_loopback_addr(prov, addr_list);
+}
 #endif
 
 int ofi_cpu_supports(unsigned func, unsigned reg, unsigned bit)

@@ -37,6 +37,8 @@
 #include <sys/endian.h>
 #include <pthread_np.h>
 
+#include <ifaddrs.h>
+
 #include "unix/osd.h"
 
 #define bswap_64 bswap64
@@ -65,6 +67,11 @@ static inline int ofi_alloc_hugepage_buf(void **memptr, size_t size)
 static inline int ofi_free_hugepage_buf(void *memptr, size_t size)
 {
 	return -FI_ENOSYS;
+}
+
+static inline size_t ofi_ifaddr_get_speed(struct ifaddrs *ifa)
+{
+	return 0;
 }
 
 #endif /* _FREEBSD_OSD_H_ */
