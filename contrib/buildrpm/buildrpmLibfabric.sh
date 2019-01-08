@@ -42,7 +42,9 @@
 ####################
 specfile="libfabric.spec"
 rpmbuilddir="$PWD/rpmbuild"
-prefix="/usr"
+default_prefix="/usr"
+default_opt_prefix="/usr/opt"
+prefix=""
 noop=""
 install_in_opt=""
 create_modulefile=""
@@ -50,6 +52,8 @@ unpack_spec=""
 verbose=""
 verboseoption=""
 st=""
+version=""
+modulepath=""
 
 ##################################
 # If you need custom configure and
@@ -132,6 +136,19 @@ usage="Usage: $0 [-i provider_name] [-e provider_name]
   -r    parameter
              add custom RPM build parameter
 
+  -D         install default version file (i.e., \".version\") for the modulefile
+              {default: do not install version file}
+
+  -P    prefix
+             install RPM under prefix as installation prefix
+
+  -M    prefix
+             install a modulefile at the specified prefix
+              {default: /usr/share/Modules/modulefiles}
+
+  -V    version
+             Use the specified version as the RPM version
+
   -v         be verbose
 
   -h         print this message and exit
@@ -143,7 +160,7 @@ usage="Usage: $0 [-i provider_name] [-e provider_name]
 # parse args
 ############
 export arguments="$@"
-while getopts nomi:e:dc:r:svh flag; do
+while getopts DP:M:V:nomi:e:dc:r:svh flag; do
     case "$flag" in
       n) noop="true"
          ;;
@@ -161,6 +178,14 @@ while getopts nomi:e:dc:r:svh flag; do
       c) configure_options="$configure_options $OPTARG"
          ;;
       r) rpmbuild_options="$rpmbuild_options $OPTARG"
+         ;;
+      P) prefix=$OPTARG
+         ;;
+      M) modulepath=$OPTARG
+         ;;
+      D) rpmbuild_options="$rpmbuild_options --define 'install_default_module_version 1'"
+         ;;
+      V) version=$OPTARG
          ;;
       s) unpack_spec="true"
          ;;
@@ -224,16 +249,33 @@ if [[ -z "$tardirname" ]]; then
 fi
 verbose "Name of package: $tardirname"
 
-version=$(basename "$tardirname" | cut -d- -f2)
-if [[ -z "$tardirname" ]]; then
-  error 4 "Cannot determine version from $tarball"
+if [[ -z "$version" ]] ; then
+  version=$(basename "$tardirname" | cut -d- -f2)
+  if [[ -z "$version" ]]; then
+    error 4 "Cannot determine version from $tarball"
+  fi
 fi
 verbose "Version: $version"
 
 if [[ -n "$install_in_opt" ]]; then
-  prefix="/opt/libfabric/$version"
-  rpmbuild_options="$rpmbuild_options --define '_prefix $prefix'"
+  if [[ -z "$prefix" ]] ; then
+    prefix=$default_opt_prefix
+  fi
+  prefix="$prefix/$version"
+
+  if [[ -n "$modulepath" ]] ; then
+    verbose "Setting RPM module path to: $modulepath"
+    rpmbuild_options="$rpmbuild_options --define 'modulefile_path $modulepath'"
+  fi
+else
+  if [[ -z "$prefix" ]] ; then
+    prefix="$default_prefix"
+  fi
+fi
+
+if [[ "$prefix" != "$default_prefix" ]] ; then
   verbose "Setting RPM install path to: $prefix"
+  rpmbuild_options="$rpmbuild_options --define '_prefix $prefix'"
 fi
 
 ######################################
