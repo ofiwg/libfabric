@@ -42,6 +42,10 @@
 					  FI_ORDER_WAR | FI_ORDER_WAW |	\
 					  FI_ORDER_SAR | FI_ORDER_SAW)
 
+#define RXM_PASSTHRU_CAPS (FI_MSG | FI_RMA | FI_SEND | FI_RECV |	\
+			   FI_READ | FI_WRITE | FI_REMOTE_READ |	\
+			   FI_REMOTE_WRITE)
+
 size_t rxm_msg_tx_size		= 128;
 size_t rxm_msg_rx_size		= 128;
 size_t rxm_def_univ_size	= 256;
@@ -91,12 +95,13 @@ int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 	core_info->mode |= FI_RX_CQ_DATA | FI_CONTEXT;
 
 	if (hints) {
-		if (hints->caps & FI_TAGGED)
-			core_info->caps |= FI_MSG;
+		core_info->caps = hints->caps & RXM_PASSTHRU_CAPS;
+		if (hints->caps & (FI_ATOMIC | FI_TAGGED))
+			core_info->caps |= FI_MSG | FI_SEND | FI_RECV;
 
 		/* FI_RMA cap is needed for large message transfer protocol */
-		if (hints->caps & (FI_MSG | FI_TAGGED))
-			core_info->caps |= FI_RMA;
+		if (core_info->caps & FI_MSG)
+			core_info->caps |= FI_RMA | FI_READ | FI_REMOTE_READ;
 
 		if (hints->domain_attr) {
 			core_info->domain_attr->caps |= hints->domain_attr->caps;
