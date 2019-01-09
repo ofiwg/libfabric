@@ -1854,36 +1854,42 @@ static int pp_finalize(struct ct_pingpong *ct)
 	struct iovec iov;
 	int ret;
 	struct fi_context ctx[2];
-	struct fi_msg msg;
-	struct fi_msg_tagged tmsg;
+	const char *fin_buf = "fin";
+	const size_t fin_buf_size = strlen(fin_buf) + 1;
 
 	PP_DEBUG("Terminating test\n");
 
-	strcpy(ct->tx_buf, "fin");
+	strcpy(ct->tx_buf, fin_buf);
+	((char *)ct->tx_buf)[fin_buf_size - 1] = '\0';
+
 	iov.iov_base = ct->tx_buf;
-	iov.iov_len = 4 + ct->tx_prefix_size;
+	iov.iov_len = fin_buf_size + ct->tx_prefix_size;
 
 	if (!(ct->fi->caps & FI_TAGGED)) {
-		memset(&msg, 0, sizeof(msg));
-		msg.msg_iov = &iov;
-		msg.iov_count = 1;
-		msg.addr = ct->remote_fi_addr;
-		msg.context = ctx;
+		struct fi_msg msg = {
+			.msg_iov = &iov,
+			.iov_count = 1,
+			.desc = fi_mr_desc(ct->mr),
+			.addr = ct->remote_fi_addr,
+			.context = ctx,
+		};
 
-		ret = fi_sendmsg(ct->ep, &msg, FI_INJECT | FI_TRANSMIT_COMPLETE);
+		ret = fi_sendmsg(ct->ep, &msg, FI_TRANSMIT_COMPLETE);
 		if (ret) {
 			PP_PRINTERR("transmit", ret);
 			return ret;
 		}
 	} else {
-		memset(&tmsg, 0, sizeof(tmsg));
-		tmsg.msg_iov = &iov;
-		tmsg.iov_count = 1;
-		tmsg.addr = ct->remote_fi_addr;
-		tmsg.context = ctx;
-		tmsg.tag = TAG;
+		struct fi_msg_tagged tmsg = {
+			.msg_iov = &iov,
+			.iov_count = 1,
+			.desc = fi_mr_desc(ct->mr),
+			.addr = ct->remote_fi_addr,
+			.context = ctx,
+			.tag = TAG,
+		};
 
-		ret = fi_tsendmsg(ct->ep, &tmsg, FI_INJECT | FI_TRANSMIT_COMPLETE);
+		ret = fi_tsendmsg(ct->ep, &tmsg, FI_TRANSMIT_COMPLETE);
 		if (ret) {
 			PP_PRINTERR("t-transmit", ret);
 			return ret;
@@ -1897,6 +1903,13 @@ static int pp_finalize(struct ct_pingpong *ct)
 	ret = pp_get_rx_comp(ct, ct->rx_seq);
 	if (ret)
 		return ret;
+
+	if (pp_check_opts(ct, PP_OPT_VERIFY_DATA | PP_OPT_ACTIVE)) {
+		if (strncmp((char *)ct->rx_buf, fin_buf, fin_buf_size))
+			return 1;
+
+		PP_DEBUG("Buffer verified\n");
+	}
 
 	ret = pp_ctrl_finish(ct);
 	if (ret)
