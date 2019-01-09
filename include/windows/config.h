@@ -162,7 +162,7 @@
 #define PACKAGE_NAME "libfabric"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "libfabric 1.7.0"
+#define PACKAGE_STRING "libfabric 1.8.0a1"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "libfabric"
@@ -171,7 +171,7 @@
 #define PACKAGE_URL ""
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "1.7.0"
+#define PACKAGE_VERSION "1.8.0a1"
 
 /* Define to 1 if pthread_spin_init is available. */
 /* #undef PT_LOCK_SPIN */
@@ -195,7 +195,7 @@
 /* Version number of package */
 #define _FI_EXP(s) #s
 #define _FI_TO_STRING(s) _FI_EXP(s)
-#define VERSION _FI_TO_STRING(FI_MAJOR_VERSION) "." _FI_TO_STRING(FI_MINOR_VERSION) ".1a1"
+#define VERSION _FI_TO_STRING(FI_MAJOR_VERSION) "." _FI_TO_STRING(FI_MINOR_VERSION) ".0a1"
 
 #ifndef BUILD_ID
 #define BUILD_ID ""
