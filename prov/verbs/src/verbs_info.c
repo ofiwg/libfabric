@@ -476,13 +476,89 @@ static int fi_ibv_mtu_type_to_len(enum ibv_mtu mtu_type)
 	}
 }
 
+static enum fi_link_state fi_ibv_pstate_2_lstate(enum ibv_port_state pstate)
+{
+	switch (pstate) {
+	case IBV_PORT_DOWN:
+	case IBV_PORT_INIT:
+	case IBV_PORT_ARMED:
+		return FI_LINK_DOWN;
+	case IBV_PORT_ACTIVE:
+		return FI_LINK_UP;
+	default:
+		return FI_LINK_UNKNOWN;
+	}
+}
+
+static const char *fi_ibv_link_layer_str(uint8_t link_layer)
+{
+	switch (link_layer) {
+	case IBV_LINK_LAYER_UNSPECIFIED:
+	case IBV_LINK_LAYER_INFINIBAND:
+		return "InfiniBand";
+	case IBV_LINK_LAYER_ETHERNET:
+		return "Ethernet";
+	default:
+		return "Unknown";
+	}
+}
+
+static size_t fi_ibv_speed(uint8_t speed, uint8_t width)
+{
+	const size_t gbit_2_bit_coef = 1024 * 1024;
+	size_t width_val, speed_val;
+
+	switch (speed) {
+	case 1:
+		speed_val = (size_t) (2.5 * (float) gbit_2_bit_coef);
+		break;
+	case 2:
+		speed_val = 5 * gbit_2_bit_coef;
+		break;
+	case 4:
+	case 8:
+		speed_val = 8 * gbit_2_bit_coef;
+		break;
+	case 16:
+		speed_val = 14 * gbit_2_bit_coef;
+		break;
+	case 32:
+		speed_val = 25 * gbit_2_bit_coef;
+		break;
+	default:
+		speed_val = 0;
+		break;
+	}
+
+	switch (width) {
+	case 1:
+		width_val = 1;
+		break;
+	case 2:
+		width_val = 4;
+		break;
+	case 4:
+		width_val = 8;
+		break;
+	case 8:
+		width_val = 12;
+		break;
+	default:
+		width_val = 0;
+		break;
+	}
+
+	return width_val * speed_val;
+}
+
+
 static int fi_ibv_get_device_attrs(struct ibv_context *ctx,
 				   struct fi_info *info, uint32_t protocol)
 {
 	struct ibv_device_attr device_attr;
 	struct ibv_port_attr port_attr;
 	size_t max_sup_size;
-	int ret = 0;
+	int ret = 0, mtu_size;
 	uint8_t port_num;
 
 	ret = ibv_query_device(ctx, &device_attr);
@@ -569,6 +645,54 @@ static int fi_ibv_get_device_attrs(struct ibv_context *ctx,
 	info->ep_attr->max_order_raw_size 	= max_sup_size;
 	info->ep_attr->max_order_waw_size	= max_sup_size;
 
+	ret = asprintf(&info->nic->device_attr->device_id, "%"PRIu32,
+		       device_attr.vendor_part_id);
+	if (ret < 0) {
+		info->nic->device_attr->device_id = NULL;
+		VERBS_WARN(FI_LOG_FABRIC,
+			   "Unable to allocate memory for device_attr::device_id\n");
+		return -FI_ENOMEM;
+	}
+
+	ret = asprintf(&info->nic->device_attr->vendor_id, "%"PRIu32,
+		       device_attr.vendor_id);
+	if (ret < 0) {
+		info->nic->device_attr->vendor_id = NULL;
+		VERBS_WARN(FI_LOG_FABRIC,
+			   "Unable to allocate memory for device_attr::vendor_id\n");
+		return -FI_ENOMEM;
+	}
+
+	ret = asprintf(&info->nic->device_attr->device_version, "%"PRIu32,
+		       device_attr.hw_ver);
+	if (ret < 0) {
+		info->nic->device_attr->device_version = NULL;
+		VERBS_WARN(FI_LOG_FABRIC,
+			   "Unable to allocate memory for device_attr::device_version\n");
+		return -FI_ENOMEM;
+	}
+
+        info->nic->device_attr->firmware = strdup(device_attr.fw_ver);
+	if (!info->nic->device_attr->firmware) {
+		VERBS_WARN(FI_LOG_FABRIC,
+			   "Unable to allocate memory for device_attr::firmware\n");
+		return -FI_ENOMEM;
+	}
+
+	mtu_size = fi_ibv_mtu_type_to_len(port_attr.active_mtu);
+	info->nic->link_attr->mtu = (size_t) (mtu_size > 0 ? mtu_size : 0);
+	info->nic->link_attr->speed = fi_ibv_speed(port_attr.active_speed,
+						   port_attr.active_width);
+	info->nic->link_attr->state =
+		fi_ibv_pstate_2_lstate(port_attr.state);
+	info->nic->link_attr->network_type =
+		strdup(fi_ibv_link_layer_str(port_attr.link_layer));
+	if (!info->nic->link_attr->network_type) {
+		VERBS_WARN(FI_LOG_FABRIC,
+			   "Unable to allocate memory for link_attr::network_type\n");
+		return -FI_ENOMEM;
+	}
+
 	return 0;
 }
 
@@ -614,7 +738,8 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 	    (ep_dom->protocol == FI_PROTO_RDMA_CM_IB_XRC)))
 		return -FI_EINVAL;
 
-	if (!(fi = fi_allocinfo()))
+	fi = fi_allocinfo();
+	if (!fi)
 		return -FI_ENOMEM;
 
 	fi->caps = ep_dom->caps;
@@ -645,13 +770,25 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 	fi->tx_attr->caps = ep_dom->caps;
 	fi->rx_attr->caps = ep_dom->caps;
 
+	fi->nic = ofi_nic_dup(NULL);
+	if (!fi->nic) {
+		ret = -FI_ENOMEM;
+		goto err;
+	}
+
+	fi->nic->device_attr->name = strdup(ibv_get_device_name(ctx->device));
+	if (!fi->nic->device_attr->name) {
+		ret = -FI_ENOMEM;
+		goto err;
+	}
+
 	ret = fi_ibv_get_device_attrs(ctx, fi, ep_dom->protocol);
 	if (ret)
 		goto err;
 
 	switch (ctx->device->transport_type) {
 	case IBV_TRANSPORT_IB:
-		if(ibv_query_gid(ctx, 1, 0, &gid)) {
+		if (ibv_query_gid(ctx, 1, 0, &gid)) {
 			VERBS_INFO_ERRNO(FI_LOG_FABRIC,
 					 "ibv_query_gid", errno);
 			ret = -errno;
@@ -702,7 +839,7 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 		goto err;
 	}
 
-	name_len = strlen(ctx->device->name) + strlen(ep_dom->suffix);
+	name_len = strlen(ibv_get_device_name(ctx->device)) + strlen(ep_dom->suffix);
 	fi->domain_attr->name = calloc(1, name_len + 2);
 	if (!fi->domain_attr->name) {
 		ret = -FI_ENOMEM;
@@ -713,6 +850,7 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 		 ctx->device->name, ep_dom->suffix);
 
 	*info = fi;
+
 	return 0;
 err:
 	fi_freeinfo(fi);

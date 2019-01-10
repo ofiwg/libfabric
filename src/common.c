@@ -1165,3 +1165,275 @@ int ofi_cpu_supports(unsigned func, unsigned reg, unsigned bit)
 	ofi_cpuid(func, 0, cpuinfo);
 	return cpuinfo[reg] & bit;
 }
+
+void ofi_remove_comma(char *buffer)
+{
+	size_t sz = strlen(buffer);
+	if (sz < 2)
+		return;
+	if (strcmp(&buffer[sz-2], ", ") == 0)
+		buffer[sz-2] = '\0';
+}
+
+void ofi_strncatf(char *dest, size_t n, const char *fmt, ...)
+{
+	size_t len = strnlen(dest, n);
+	va_list arglist;
+
+	va_start(arglist, fmt);
+	vsnprintf(&dest[len], n - 1 - len, fmt, arglist);
+	va_end(arglist);
+}
+
+/* The provider must free any prov_attr data prior to calling this
+ * routine.
+ */
+int ofi_nic_close(struct fid *fid)
+{
+	struct fid_nic *nic = (struct fid_nic *) fid;
+
+	assert(fid && fid->fclass == FI_CLASS_NIC);
+
+	if (nic->device_attr) {
+		free(nic->device_attr->name);
+		free(nic->device_attr->device_id);
+		free(nic->device_attr->device_version);
+		free(nic->device_attr->vendor_id);
+		free(nic->device_attr->driver);
+		free(nic->device_attr->firmware);
+		free(nic->device_attr);
+	}
+
+	free(nic->bus_attr);
+
+	if (nic->link_attr) {
+		free(nic->link_attr->address);
+		free(nic->link_attr->network_type);
+		free(nic->link_attr);
+	}
+
+	free(nic);
+	return 0;
+}
+
+int ofi_nic_control(struct fid *fid, int command, void *arg)
+{
+	struct fid_nic *nic = container_of(fid, struct fid_nic, fid);
+	struct fid_nic **dup = (struct fid_nic **) arg;
+
+	switch(command) {
+	case FI_DUP:
+		*dup = ofi_nic_dup(nic);
+		return *dup ? FI_SUCCESS : -FI_ENOMEM;
+	default:
+		return -FI_ENOSYS;
+	}
+}
+
+static void ofi_tostr_device_attr(char *buf, size_t len,
+				  const struct fi_device_attr *attr)
+{
+	const char *prefix = TAB TAB;
+
+	ofi_strncatf(buf, len, "%sfi_device_attr:\n", prefix);
+
+	prefix = TAB TAB TAB;
+	ofi_strncatf(buf, len, "%sname: %s\n", prefix, attr->name);
+	ofi_strncatf(buf, len, "%sdevice_id: %s\n", prefix, attr->device_id);
+	ofi_strncatf(buf, len, "%sdevice_version: %s\n", prefix,
+		     attr->device_version);
+	ofi_strncatf(buf, len, "%svendor_id: %s\n", prefix, attr->vendor_id);
+	ofi_strncatf(buf, len, "%sdriver: %s\n", prefix, attr->driver);
+	ofi_strncatf(buf, len, "%sfirmware: %s\n", prefix, attr->firmware);
+}
+
+static void ofi_tostr_pci_attr(char *buf, size_t len,
+			       const struct fi_pci_attr *attr)
+{
+	const char *prefix = TAB TAB TAB;
+
+	ofi_strncatf(buf, len, "%sfi_pci_attr:\n", prefix);
+
+	prefix = TAB TAB TAB TAB;
+	ofi_strncatf(buf, len, "%sdomain_id: %u\n", prefix, attr->domain_id);
+	ofi_strncatf(buf, len, "%sbus_id: %u\n", prefix, attr->bus_id);
+	ofi_strncatf(buf, len, "%sdevice_id: %u\n", prefix, attr->device_id);
+	ofi_strncatf(buf, len, "%sfunction_id: %u\n", prefix, attr->function_id);
+}
+
+static void ofi_tostr_bus_type(char *buf, size_t len, int type)
+{
+	switch (type) {
+	CASEENUMSTRN(FI_BUS_UNKNOWN, len);
+	CASEENUMSTRN(FI_BUS_PCI, len);
+	default:
+		ofi_strncatf(buf, len, "Unknown");
+		break;
+	}
+}
+
+static void ofi_tostr_bus_attr(char *buf, size_t len,
+			       const struct fi_bus_attr *attr)
+{
+	const char *prefix = TAB TAB;
+
+	ofi_strncatf(buf, len, "%sfi_bus_attr:\n", prefix);
+
+	prefix = TAB TAB TAB;
+	ofi_strncatf(buf, len, "%sfi_bus_type: ", prefix);
+	ofi_tostr_bus_type(buf, len, attr->bus_type);
+	ofi_strncatf(buf, len, "\n");
+
+	switch (attr->bus_type) {
+	case FI_BUS_PCI:
+		ofi_tostr_pci_attr(buf, len, &attr->attr.pci);
+		break;
+	default:
+		break;
+	}
+}
+
+static void ofi_tostr_link_state(char *buf, size_t len, int state)
+{
+	switch (state) {
+	CASEENUMSTRN(FI_LINK_UNKNOWN, len);
+	CASEENUMSTRN(FI_LINK_DOWN, len);
+	CASEENUMSTRN(FI_LINK_UP, len);
+	default:
+		ofi_strncatf(buf, len, "Unknown");
+		break;
+	}
+}
+
+static void ofi_tostr_link_attr(char *buf, size_t len,
+				const struct fi_link_attr *attr)
+{
+	const char *prefix = TAB TAB;
+	ofi_strncatf(buf, len, "%sfi_link_attr:\n", prefix);
+
+	prefix = TAB TAB TAB;
+	ofi_strncatf(buf, len, "%saddress: %s\n", prefix, attr->address);
+	ofi_strncatf(buf, len, "%smtu: %zu\n", prefix, attr->mtu);
+	ofi_strncatf(buf, len, "%sspeed: %zu\n", prefix, attr->speed);
+	ofi_strncatf(buf, len, "%sstate: ", prefix);
+	ofi_tostr_link_state(buf, len, attr->state);
+	ofi_strncatf(buf, len, "\n%snetwork_type: %s\n", prefix,
+		     attr->network_type);
+}
+
+int ofi_nic_tostr(const struct fid *fid_nic, char *buf, size_t len)
+{
+	const struct fid_nic *nic = (const struct fid_nic*) fid_nic;
+
+	assert(fid_nic->fclass == FI_CLASS_NIC);
+	ofi_strncatf(buf, len, "%sfid_nic:\n", TAB);
+
+	ofi_tostr_device_attr(buf, len, nic->device_attr);
+	ofi_tostr_bus_attr(buf, len, nic->bus_attr);
+	ofi_tostr_link_attr(buf, len, nic->link_attr);
+	return 0;
+}
+
+struct fi_ops default_nic_ops = {
+	.size = sizeof(struct fi_ops),
+	.close = ofi_nic_close,
+	.control = ofi_nic_control,
+	.tostr = ofi_nic_tostr,
+};
+
+static int ofi_dup_dev_attr(const struct fi_device_attr *attr,
+			    struct fi_device_attr **dup_attr)
+{
+	*dup_attr = calloc(1, sizeof(**dup_attr));
+	if (!*dup_attr)
+		return -FI_ENOMEM;
+
+	if (ofi_str_dup(attr->name, &(*dup_attr)->name) ||
+	    ofi_str_dup(attr->device_id, &(*dup_attr)->device_id) ||
+	    ofi_str_dup(attr->device_version, &(*dup_attr)->device_version) ||
+	    ofi_str_dup(attr->vendor_id, &(*dup_attr)->vendor_id) ||
+	    ofi_str_dup(attr->driver, &(*dup_attr)->driver) ||
+	    ofi_str_dup(attr->firmware, &(*dup_attr)->firmware))
+		return -FI_ENOMEM;
+
+	return 0;
+}
+
+static int ofi_dup_bus_attr(const struct fi_bus_attr *attr,
+			    struct fi_bus_attr **dup_attr)
+{
+	*dup_attr = calloc(1, sizeof(**dup_attr));
+	if (!*dup_attr)
+		return -FI_ENOMEM;
+
+	**dup_attr = *attr;
+	return 0;
+}
+
+static int ofi_dup_link_attr(const struct fi_link_attr *attr,
+			     struct fi_link_attr **dup_attr)
+{
+	*dup_attr = calloc(1, sizeof(**dup_attr));
+	if (!*dup_attr)
+		return -FI_ENOMEM;
+
+	if (ofi_str_dup(attr->address, &(*dup_attr)->address) ||
+	    ofi_str_dup(attr->network_type, &(*dup_attr)->network_type))
+		return -FI_ENOMEM;
+
+	(*dup_attr)->mtu = attr->mtu;
+	(*dup_attr)->speed = attr->speed;
+	(*dup_attr)->state = attr->state;
+	return 0;
+}
+
+struct fid_nic *ofi_nic_dup(const struct fid_nic *nic)
+{
+	struct fid_nic *dup_nic;
+	int ret;
+
+	dup_nic = calloc(1, sizeof(*dup_nic));
+	if (!dup_nic)
+		return NULL;
+
+	if (!nic) {
+		dup_nic->fid.fclass = FI_CLASS_NIC;
+		dup_nic->device_attr = calloc(1, sizeof(*dup_nic->device_attr));
+		dup_nic->bus_attr = calloc(1, sizeof(*dup_nic->bus_attr));
+		dup_nic->link_attr = calloc(1, sizeof(*dup_nic->link_attr));
+
+		if (!dup_nic->device_attr || !dup_nic->bus_attr ||
+		    !dup_nic->link_attr)
+			goto fail;
+
+		dup_nic->fid.ops = &default_nic_ops;
+		return dup_nic;
+	}
+
+	assert(nic->fid.fclass == FI_CLASS_NIC);
+	dup_nic->fid = nic->fid;
+
+	if (nic->device_attr) {
+		ret = ofi_dup_dev_attr(nic->device_attr, &dup_nic->device_attr);
+		if (ret)
+			goto fail;
+	}
+
+	if (nic->bus_attr) {
+		ret = ofi_dup_bus_attr(nic->bus_attr, &dup_nic->bus_attr);
+		if (ret)
+			goto fail;
+	}
+
+	if (nic->link_attr) {
+		ret = ofi_dup_link_attr(nic->link_attr, &dup_nic->link_attr);
+		if (ret)
+			goto fail;
+	}
+
+	return dup_nic;
+
+fail:
+	ofi_nic_close(&dup_nic->fid);
+	return NULL;
+}

@@ -86,6 +86,11 @@ int rxd_info_to_rxd(uint32_t version, const struct fi_info *core_info,
 	*info->rx_attr = *rxd_info.rx_attr;
 	*info->ep_attr = *rxd_info.ep_attr;
 	*info->domain_attr = *rxd_info.domain_attr;
+	if (core_info->nic) {
+		info->nic = ofi_nic_dup(core_info->nic);
+		if (!info->nic)
+			return -FI_ENOMEM;
+	}
 	return 0;
 }
 

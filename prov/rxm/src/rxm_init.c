@@ -166,6 +166,12 @@ int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
 					      rxm_info.domain_attr->cq_data_size);
 	info->domain_attr->mr_key_size = core_info->domain_attr->mr_key_size;
 
+	if (core_info->nic) {
+		info->nic = ofi_nic_dup(core_info->nic);
+		if (!info->nic)
+			return -FI_ENOMEM;
+	}
+
 	return 0;
 }
 
