@@ -564,6 +564,7 @@ static const char *cxip_cq_strerror(struct fid_cq *cq, int prov_errno,
 
 int cxip_cq_enable(struct cxip_cq *cxi_cq)
 {
+	struct cxi_eq_attr eq_attr = {};
 	int ret = FI_SUCCESS;
 
 	fastlock_acquire(&cxi_cq->lock);
@@ -590,12 +591,14 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq)
 		goto free_evtq_buf;
 	}
 
-	ret = cxil_alloc_evtq(cxi_cq->domain->dev_if->if_lni,
-			      cxi_cq->evtq_buf,
-			      cxi_cq->evtq_buf_len,
-			      cxi_cq->evtq_buf_md,
-			      NULL, CXI_EQ_TGT_LONG,
-			      &cxi_cq->evtq);
+
+	eq_attr.queue = cxi_cq->evtq_buf,
+	eq_attr.queue_len = cxi_cq->evtq_buf_len,
+	eq_attr.queue_md = cxi_cq->evtq_buf_md,
+	eq_attr.flags = CXI_EQ_TGT_LONG;
+
+	ret = cxil_alloc_evtq(cxi_cq->domain->dev_if->if_lni, &eq_attr,
+			      NULL, NULL, &cxi_cq->evtq);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Unable to allocate EVTQ, ret: %d\n", ret);
 		ret = -FI_EDOMAIN;

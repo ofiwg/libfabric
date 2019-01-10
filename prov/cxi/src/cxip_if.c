@@ -61,6 +61,7 @@ int cxip_get_if(uint32_t nic_addr, struct cxip_if **dev_if)
 	struct cxip_if *if_entry;
 	int ret, tmp;
 	struct cxi_cq_alloc_opts cq_opts;
+	struct cxi_eq_attr eq_attr = {};
 
 	/* The IF list device info is static, no need to lock */
 	if_entry = cxip_if_lookup(nic_addr);
@@ -130,11 +131,13 @@ int cxip_get_if(uint32_t nic_addr, struct cxip_if **dev_if)
 			goto free_mr_evtq_buf;
 		}
 
-		ret = cxil_alloc_evtq(if_entry->if_lni, if_entry->evtq_buf,
-				      if_entry->evtq_buf_len,
-				      if_entry->evtq_buf_md,
-				      NULL, CXI_EQ_TGT_LONG,
-				      &if_entry->mr_evtq);
+		eq_attr.queue = if_entry->evtq_buf;
+		eq_attr.queue_len = if_entry->evtq_buf_len;
+		eq_attr.queue_md = if_entry->evtq_buf_md;
+		eq_attr.flags = CXI_EQ_TGT_LONG;
+
+		ret = cxil_alloc_evtq(if_entry->if_lni, &eq_attr,
+				      NULL, NULL, &if_entry->mr_evtq);
 		if (ret != FI_SUCCESS) {
 			CXIP_LOG_DBG("Unable to allocate MR EVTQ, ret: %d\n",
 				     ret);
