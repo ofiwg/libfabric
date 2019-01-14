@@ -337,7 +337,7 @@ static void rxd_verify_active(struct rxd_ep *ep, fi_addr_t addr, fi_addr_t peer_
 	}
 }
 
-static int rxd_move_tx_pkt(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
+static int rxd_start_xfer(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
 {
 	struct rxd_base_hdr *hdr = rxd_get_base_hdr(tx_entry->pkt);
 
@@ -351,6 +351,7 @@ static int rxd_move_tx_pkt(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
 						      tx_entry->num_segs;
 	}
 	hdr->peer = ep->peers[tx_entry->peer].peer_addr;
+	rxd_ep_send_pkt(ep, tx_entry->pkt);
 	rxd_insert_unacked(ep, tx_entry->peer, tx_entry->pkt);
 	tx_entry->pkt = NULL;
 
@@ -382,7 +383,7 @@ void rxd_progress_tx_list(struct rxd_ep *ep, struct rxd_peer *peer)
 	dlist_foreach_container_safe(&peer->tx_list, struct rxd_x_entry,
 				tx_entry, entry, tmp_entry) {
 		if (tx_entry->pkt) {
-			if (!rxd_move_tx_pkt(ep, tx_entry) ||
+			if (!rxd_start_xfer(ep, tx_entry) ||
 			    tx_entry->op == RXD_READ_REQ)
 				break;
 		}
@@ -440,7 +441,7 @@ static int rxd_send_cts(struct rxd_ep *rxd_ep, struct rxd_rts_pkt *rts_pkt,
 	cts->rts_addr = rts_pkt->rts_addr;
 
 	dlist_insert_tail(&pkt_entry->d_entry, &rxd_ep->ctrl_pkts);
-	ret = rxd_ep_retry_pkt(rxd_ep, pkt_entry);
+	ret = rxd_ep_send_pkt(rxd_ep, pkt_entry);
 	if (ret) {
 		dlist_remove(&pkt_entry->d_entry);
 		rxd_release_tx_pkt(rxd_ep, pkt_entry);

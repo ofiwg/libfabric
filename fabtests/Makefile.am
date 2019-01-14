@@ -9,6 +9,7 @@ endif
 bin_PROGRAMS = \
 	functional/fi_av_xfer \
 	functional/fi_msg \
+	functional/fi_stream_msg \
 	functional/fi_msg_sockets \
 	functional/fi_rdm \
 	functional/fi_rdm_rma_simple \
@@ -127,6 +128,10 @@ functional_fi_msg_epoll_LDADD = libfabtests.la
 functional_fi_msg_SOURCES = \
 	functional/msg.c
 functional_fi_msg_LDADD = libfabtests.la
+
+functional_fi_stream_msg_SOURCES = \
+	functional/stream_msg.c
+functional_fi_stream_msg_LDADD = libfabtests.la
 
 functional_fi_rdm_SOURCES = \
 	functional/rdm.c

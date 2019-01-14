@@ -386,7 +386,7 @@ void rxd_release_tx_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt);
 struct rxd_x_entry *rxd_get_tx_entry(struct rxd_ep *ep);
 struct rxd_x_entry *rxd_get_rx_entry(struct rxd_ep *ep);
 void rxd_release_rx_entry(struct rxd_ep *ep, struct rxd_x_entry *x_entry);
-int rxd_ep_retry_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry);
+int rxd_ep_send_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry);
 ssize_t rxd_ep_post_data_pkts(struct rxd_ep *ep, struct rxd_x_entry *tx_entry);
 void rxd_insert_unacked(struct rxd_ep *ep, fi_addr_t peer,
 			struct rxd_pkt_entry *pkt_entry);
