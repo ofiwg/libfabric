@@ -1147,7 +1147,7 @@ static void rxm_cq_read_write_error(struct rxm_ep *rxm_ep)
 	struct fi_cq_err_entry err_entry = {0};
 	struct util_cq *util_cq = NULL;
 	struct util_cntr *util_cntr = NULL;
-	enum rxm_proto_state state = RXM_GET_PROTO_STATE(err_entry.op_context);
+	enum rxm_proto_state state;
 	ssize_t ret;
 
 	RXM_CQ_READERR(&rxm_prov, FI_LOG_CQ, rxm_ep->msg_cq, ret,
@@ -1159,6 +1159,7 @@ static void rxm_cq_read_write_error(struct rxm_ep *rxm_ep)
 		return;
 	}
 
+	state = RXM_GET_PROTO_STATE(err_entry.op_context);
 	if (RXM_IS_PROTO_STATE_TX(state)) {
 		util_cq = rxm_ep->util_ep.tx_cq;
 		util_cntr = rxm_ep->util_ep.tx_cntr;
