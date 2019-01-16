@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2018 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2019 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -45,6 +45,7 @@ struct psmx2_env psmx2_env = {
 	.uuid		= PSMX2_DEFAULT_UUID,
 	.delay		= 0,
 	.timeout	= 5,
+	.conn_timeout	= 5,
 	.prog_interval	= -1,
 	.prog_affinity	= NULL,
 	.multi_ep	= 0,
@@ -77,6 +78,7 @@ static void psmx2_init_env(void)
 	fi_param_get_str(&psmx2_prov, "uuid", &psmx2_env.uuid);
 	fi_param_get_int(&psmx2_prov, "delay", &psmx2_env.delay);
 	fi_param_get_int(&psmx2_prov, "timeout", &psmx2_env.timeout);
+	fi_param_get_int(&psmx2_prov, "conn_timeout", &psmx2_env.conn_timeout);
 	fi_param_get_int(&psmx2_prov, "prog_interval", &psmx2_env.prog_interval);
 	fi_param_get_str(&psmx2_prov, "prog_affinity", &psmx2_env.prog_affinity);
 	fi_param_get_int(&psmx2_prov, "inject_size", &psmx2_env.inject_size);
@@ -584,6 +586,9 @@ PROVIDER_INI
 
 	fi_param_define(&psmx2_prov, "timeout", FI_PARAM_INT,
 			"Timeout (seconds) for gracefully closing the PSM2 endpoint");
+
+	fi_param_define(&psmx2_prov, "conn_timeout", FI_PARAM_INT,
+			"Timeout (seconds) for establishing connection between two PSM2 endpoints");
 
 	fi_param_define(&psmx2_prov, "prog_interval", FI_PARAM_INT,
 			"Interval (microseconds) between progress calls made in the "
