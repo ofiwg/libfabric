@@ -155,6 +155,11 @@ The *psm2* provider checks for the following environment variables:
 
   The default setting is 5.
 
+*FI_PSM2_CONN_TIMEOUT*
+: Timeout (seconds) for establishing connection between two PSM endpoints.
+
+  The default setting is 5.
+
 *FI_PSM2_PROG_INTERVAL*
 : When auto progress is enabled (asked via the hints to *fi_getinfo*),
   a progress thread is created to make progress calls from time to time.

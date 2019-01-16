@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2018 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2019 Intel Corporation. All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -821,6 +821,7 @@ struct psmx2_env {
 	char	*uuid;
 	int	delay;
 	int	timeout;
+	int	conn_timeout;
 	int	prog_interval;
 	char	*prog_affinity;
 	int	multi_ep;

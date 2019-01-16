@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2018 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2019 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -165,20 +165,6 @@ int psmx2_am_sep_handler(psm2_am_token_t token, psm2_amarg_t *args,
 	return err;
 }
 
-#define PSMX2_MIN_CONN_TIMEOUT	5
-#define PSMX2_MAX_CONN_TIMEOUT	30
-
-static inline double psmx2_conn_timeout(int sec)
-{
-	if (sec < PSMX2_MIN_CONN_TIMEOUT)
-		return PSMX2_MIN_CONN_TIMEOUT * 1e9;
-
-	if (sec > PSMX2_MAX_CONN_TIMEOUT)
-		return PSMX2_MAX_CONN_TIMEOUT * 1e9;
-
-	return sec * 1e9;
-}
-
 static void psmx2_set_epaddr_context(struct psmx2_trx_ctxt *trx_ctxt,
 				     psm2_epid_t epid, psm2_epaddr_t epaddr)
 {
@@ -230,8 +216,8 @@ int psmx2_epid_to_epaddr(struct psmx2_trx_ctxt *trx_ctxt,
 		}
 	}
 
-	err = psm2_ep_connect(trx_ctxt->psm2_ep, 1, &epid, NULL, &errors,
-			      epaddr, psmx2_conn_timeout(1));
+	err = psm2_ep_connect(trx_ctxt->psm2_ep, 1, &epid, NULL, &errors, epaddr,
+			      (int64_t) psmx2_env.conn_timeout * 1000000000LL);
 	if (err == PSM2_OK || err == PSM2_EPID_ALREADY_CONNECTED) {
 		psmx2_set_epaddr_context(trx_ctxt, epid, *epaddr);
 		return 0;
