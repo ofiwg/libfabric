@@ -97,9 +97,10 @@ AS_IF([test x"$enable_debug" != x"no"],
       [dbg=1
        # See if all the flags in $debug_c_other_flags work
        good_flags=
+       CFLAGS_save="$CFLAGS"
        for flag in $debug_c_other_flags; do
            AC_MSG_CHECKING([to see if compiler supports $flag])
-           CFLAGS="$flag $CFLAGS"
+           CFLAGS="$flag $CFLAGS_save"
            AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[]], [[int i = 3;]])],
 	                     [AC_MSG_RESULT([yes])
 			      good_flags="$flag $good_flags"],
@@ -108,7 +109,8 @@ AS_IF([test x"$enable_debug" != x"no"],
        debug_c_other_flags=$good_flags
        unset good_flags
 
-       CFLAGS="-g -O0 ${base_c_warn_flags} ${debug_c_warn_flags} ${debug_c_other_flags} $CFLAGS"],
+       CFLAGS="-g -O0 ${base_c_warn_flags} ${debug_c_warn_flags} ${debug_c_other_flags} ${CFLAGS_save}"
+       unset CFLAGS_save],
       [dbg=0
        CFLAGS="-O2 -DNDEBUG $CFLAGS"])
 
