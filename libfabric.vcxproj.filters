@@ -135,9 +135,6 @@
     <ClCompile Include="src\perf.c">
       <Filter>Source Files\src</Filter>
     </ClCompile>
-    <ClCompile Include="src\shared\ofi_str.c">
-      <Filter>Source Files\src\shared</Filter>
-    </ClCompile>
     <ClCompile Include="src\mem.c">
       <Filter>Source Files\src</Filter>
     </ClCompile>
@@ -477,6 +474,9 @@
     <ClCompile Include="prov\hook\perf\src\hook_perf.c">
       <Filter>Source Files\prov\hook\perf\src</Filter>
     </ClCompile>
+    <ClCompile Include="src\shared\ofi_str.c">
+      <Filter>Source Files\src</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\fasthash.h">
@@ -703,6 +703,9 @@
     </ClInclude>
     <ClInclude Include="prov\hook\src\hook.h">
       <Filter>Source Files\prov\hook\src</Filter>
+    </ClInclude>
+    <ClInclude Include="include\ofi_hook.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
