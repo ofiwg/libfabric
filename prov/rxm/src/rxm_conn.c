@@ -1234,7 +1234,7 @@ int rxm_conn_process_eq_events(struct rxm_ep *rxm_ep)
 {
 	struct rxm_msg_eq_entry *entry;
 	struct slist_entry *slist_entry;
-	int ret;
+	int ret = 0;
 
 	fastlock_acquire(&rxm_ep->msg_eq_entry_list_lock);
 	while (!slistfd_empty(&rxm_ep->msg_eq_entry_list)) {
