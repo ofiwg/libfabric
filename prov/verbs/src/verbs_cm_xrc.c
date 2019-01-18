@@ -343,6 +343,7 @@ int fi_ibv_accept_xrc(struct fi_ibv_xrc_ep *ep, int reciprocal,
 		fi_ibv_prev_xrc_conn_state(ep);
 	} else
 		free(connreq);
+
 	return ret;
 }
 
