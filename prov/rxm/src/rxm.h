@@ -79,6 +79,8 @@
 #define RXM_MR_PROV_KEY(info) ((info->domain_attr->mr_mode == FI_MR_BASIC) ||\
 			       info->domain_attr->mr_mode & FI_MR_PROV_KEY)
 
+#define RXM_CONN_QUOTA	64
+
 #define RXM_LOG_STATE(subsystem, pkt, prev_state, next_state) 			\
 	FI_DBG(&rxm_prov, subsystem, "[RNDV] msg_id: 0x%" PRIx64 " %s -> %s\n",	\
 	       pkt.ctrl_hdr.msg_id, rxm_proto_state_str[prev_state],		\
@@ -205,6 +207,7 @@ struct rxm_cmap_handle {
 	uint64_t remote_key;
 	fi_addr_t fi_addr;
 	struct rxm_cmap_peer *peer;
+	struct slist_entry wait_conn_quota_entry;
 
 	struct rxm_cmap_state_subscr **state_subscr;
 };
@@ -246,6 +249,9 @@ struct rxm_cmap {
 	struct dlist_entry	wait_list;
 	struct fd_signal	signal;
 	int			progress_fd;
+
+	size_t			conn_quota;
+	struct slist		conn_wait_quota_list;
 };
 
 struct rxm_ep;
@@ -284,6 +290,47 @@ rxm_cmap_acquire_handle(struct rxm_cmap *cmap, fi_addr_t fi_addr)
 {
 	assert(fi_addr < cmap->num_allocated);
 	return cmap->handles_av[fi_addr];
+}
+
+/* Caller must hold cmap->lock */
+static inline int rxm_cmap_is_conn_quota_avail(struct rxm_cmap *cmap)
+{
+	return (cmap->conn_quota > 0);
+}
+
+/* Caller must hold cmap->lock */
+static inline void rxm_cmap_conn_quota_acquire(struct rxm_cmap *cmap)
+{
+	assert(cmap->conn_quota > 0);
+	cmap->conn_quota--;
+}
+
+/* Caller must hold cmap->lock */
+static inline void rxm_cmap_conn_quota_release(struct rxm_cmap *cmap)
+{
+	cmap->conn_quota++;
+	assert(cmap->conn_quota > 0);
+}
+
+/* Caller must hold cmap->lock */
+static inline void rxm_cmap_handle_wait_conn_quota(struct rxm_cmap *cmap,
+						   struct rxm_cmap_handle *handle)
+{
+	slist_insert_tail(&handle->wait_conn_quota_entry,
+			  &cmap->conn_wait_quota_list);
+}
+
+/* Caller must hold cmap->lock */
+static inline struct rxm_cmap_handle *
+rxm_cmap_get_next_wait_conn_quota(struct rxm_cmap *cmap)
+{
+	struct rxm_cmap_handle *handle;
+
+	slist_remove_head_container(&cmap->conn_wait_quota_list,
+				    struct rxm_cmap_handle,
+				    handle, wait_conn_quota_entry);
+
+	return handle;
 }
 
 /* Caller must hold cmap->lock */

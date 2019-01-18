@@ -451,7 +451,7 @@ static void rxm_cmap_conn_connected(struct rxm_cmap_handle *handle,
  				    enum rxm_cmap_state new_state)
 {
  	struct dlist_entry *wait_conn_entry = (struct dlist_entry *) context;
- 
+
   	rxm_cmap_state_unsubscribe(handle,
  				   RXM_CMAP_ANY_STATE,
  				   ((1 << RXM_CMAP_CONNECTED_NOTIFY) |
@@ -479,15 +479,21 @@ static int rxm_cmap_handle_connect(struct rxm_cmap *cmap, fi_addr_t fi_addr,
 	case RXM_CMAP_CONNECTED:
 		return FI_SUCCESS;
 	case RXM_CMAP_IDLE:
-		ret = rxm_conn_connect(cmap->ep, handle,
-				       ofi_av_get_addr(cmap->av, fi_addr),
-				       cmap->av->addrlen);
-		if (ret) {
-			rxm_cmap_del_handle(handle);
-			return ret;
-		}
+		if (rxm_cmap_is_conn_quota_avail(cmap)) {
+			ret = rxm_conn_connect(cmap->ep, handle,
+					       ofi_av_get_addr(cmap->av, fi_addr),
+					       cmap->av->addrlen);
+			if (ret) {
+				rxm_cmap_del_handle(handle);
+				return ret;
+			}
 
-		rxm_cmap_change_state(handle, RXM_CMAP_CONNREQ_SENT);
+			rxm_cmap_conn_quota_acquire(cmap);
+
+			rxm_cmap_change_state(handle, RXM_CMAP_CONNREQ_SENT);
+		} else {
+			rxm_cmap_handle_wait_conn_quota(cmap, handle);
+		}
 
 		ret = -FI_EAGAIN;
 		// TODO sleep on event fd instead of busy polling
@@ -698,6 +704,7 @@ void rxm_cmap_process_connect(struct rxm_cmap *cmap,
 			      uint64_t *remote_key)
 {
 	struct rxm_conn *rxm_conn;
+	struct rxm_cmap_handle *next_handle;
 
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 	       "Processing connect for handle: %p\n", handle);
@@ -715,6 +722,19 @@ void rxm_cmap_process_connect(struct rxm_cmap *cmap,
 		rxm_conn->inject_data_pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
 		rxm_conn->tinject_pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
 		rxm_conn->tinject_data_pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
+	}
+
+	rxm_cmap_conn_quota_release(cmap);
+
+	next_handle = rxm_cmap_get_next_wait_conn_quota(cmap);
+	if (next_handle) {
+		int ret = rxm_cmap_handle_connect(cmap, next_handle->fi_addr,
+						  next_handle);
+		if (ret && (ret != -FI_EAGAIN)) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+				"Handle connect fails with %d. Try again\n", ret);
+			rxm_cmap_handle_wait_conn_quota(cmap, next_handle);
+		}
 	}
 }
 
@@ -943,6 +963,10 @@ int rxm_cmap_alloc(struct rxm_ep *rxm_ep, struct rxm_cmap_attr *attr)
 	cmap = calloc(1, sizeof *cmap);
 	if (!cmap)
 		return -FI_ENOMEM;
+
+	cmap->conn_quota = RXM_CONN_QUOTA;
+	fi_param_get_size_t(&rxm_prov, "conn_quota", &cmap->conn_quota);
+	slist_init(&cmap->conn_wait_quota_list);
 
 	cmap->ep = ep;
 	cmap->av = ep->av;

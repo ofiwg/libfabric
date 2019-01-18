@@ -384,6 +384,10 @@ RXM_INI
 			"(default: on). Disabling this may increase startup time "
 			"in case of large run.");
 
+	fi_param_define(&rxm_prov, "conn_quota", FI_PARAM_SIZE_T,
+			"Defines how many connections per RxM EP can "
+			"progress simultaneously (default: 64).");
+
 	fi_param_get_size_t(&rxm_prov, "tx_size", &rxm_info.tx_attr->size);
 	fi_param_get_size_t(&rxm_prov, "rx_size", &rxm_info.rx_attr->size);
 	fi_param_get_size_t(&rxm_prov, "msg_tx_size", &rxm_msg_tx_size);
