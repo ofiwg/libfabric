@@ -341,9 +341,7 @@ static inline int
 fi_mr_refresh(struct fid_mr *mr, const struct iovec *iov, size_t count,
 	      uint64_t flags)
 {
-	struct fi_mr_modify modify = {0, 
-		{NULL, 0, 0, 0, 0, NULL, 0, NULL}
-	};
+	struct fi_mr_modify modify = { 0 };
 	modify.flags = flags;
 	modify.attr.mr_iov = iov;
 	modify.attr.iov_count = count;
