@@ -389,9 +389,19 @@ static inline void slist_init(struct slist *list)
 	list->head = list->tail = NULL;
 }
 
+static inline void slist_entry_init(struct slist_entry *item)
+{
+	item->next = NULL;
+}
+
 static inline int slist_empty(struct slist *list)
 {
 	return !list->head;
+}
+
+static inline int slist_entry_inlist(const struct slist_entry *item)
+{
+	return !item->next;
 }
 
 static inline void slist_insert_head(struct slist_entry *item, struct slist *list)
