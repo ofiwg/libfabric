@@ -441,14 +441,19 @@ static int rxm_cmap_handle_connect(struct rxm_cmap *cmap, fi_addr_t fi_addr,
 	case RXM_CMAP_CONNECTED:
 		return FI_SUCCESS;
 	case RXM_CMAP_IDLE:
-		ret = rxm_conn_connect(cmap->ep, handle,
-				       ofi_av_get_addr(cmap->av, fi_addr),
-				       cmap->av->addrlen);
-		if (ret) {
-			rxm_cmap_del_handle(handle);
-			return ret;
+		if (cmap->conn_quota > 0) {
+			ret = rxm_conn_connect(cmap->ep, handle,
+					       ofi_av_get_addr(cmap->av, fi_addr),
+					       cmap->av->addrlen);
+			if (ret) {
+				rxm_cmap_del_handle(handle);
+				return ret;
+			}
+			handle->state = RXM_CMAP_CONNREQ_SENT;
+		} else if (slist_entry_inlist(&handle->conn_wait_entry)) {
+			slist_insert_tail(&handle->conn_wait_entry,
+					  &cmap->conn_wait_list);
 		}
-		handle->state = RXM_CMAP_CONNREQ_SENT;
 		ret = -FI_EAGAIN;
 		// TODO sleep on event fd instead of busy polling
 		break;
@@ -485,7 +490,8 @@ rxm_cmap_process_shutdown(struct rxm_cmap *cmap, struct rxm_cmap_handle *handle)
 }
 
 /* Caller must hold cmap->lock */
-static inline void rxm_cmap_progress_conn_wait_list(struct rxm_cmap *cmap)¬
+static inline int rxm_cmap_progress_conn_wait_list(struct rxm_cmap *cmap)
+{
 	int ret;
 	struct rxm_cmap_handle *next_handle;
 
@@ -496,19 +502,29 @@ static inline void rxm_cmap_progress_conn_wait_list(struct rxm_cmap *cmap)¬
 		slist_entry_init(&next_handle->conn_wait_entry);
 
 		ret = rxm_cmap_handle_connect(cmap, next_handle->fi_addr, next_handle);
-		if (ret && (ret != -FI_EAGAIN) && (ret != RXM_CMAP_SHUTDOWN)) {
+		if (ret && (ret != -FI_EAGAIN) &&
+		    (next_handle->state != RXM_CMAP_SHUTDOWN)) {
+			/* If connection establishment fails, delete this entry to
+			 * notify an user about the error occurred */
 			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-				"Handle connect fails with %d. Try again\n", ret);
-			slist_insert_tail(&next_handle->conn_wait_entry,
-					  &cmap->conn_wait_list);
+				"Handle connect fails with %d. "
+				"Delete this CMAP handle\n", ret);
+			ret = rxm_cmap_del_handle(next_handle);
+			if (ret) {
+				FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+					"Unable to delete CMAP handle - %d\n", ret);
+				return ret;
+			}
 		}
 	}
+
+	return 0;
 }
 
 /* Caller must hold cmap->lock */
-static  void rxm_cmap_process_connect(struct rxm_cmap *cmap,
-				      struct rxm_cmap_handle *handle,
-				      uint64_t *remote_key)
+static int rxm_cmap_process_connect(struct rxm_cmap *cmap,
+				    struct rxm_cmap_handle *handle,
+				    uint64_t *remote_key)
 {
 	struct rxm_conn *rxm_conn;
 
@@ -527,6 +543,13 @@ static  void rxm_cmap_process_connect(struct rxm_cmap *cmap,
 		rxm_conn->tinject_pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
 		rxm_conn->tinject_data_pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
 	}
+
+	assert(slist_entry_inlist(&handle->conn_wait_entry));
+
+	cmap->conn_quota++;
+	assert(cmap->conn_quota > 0);
+
+	return rxm_cmap_progress_conn_wait_list(cmap);
 }
 
 static void rxm_cmap_process_reject(struct rxm_cmap *cmap,
@@ -771,6 +794,13 @@ static int rxm_cmap_alloc(struct rxm_ep *rxm_ep, struct rxm_cmap_attr *attr)
 		ret = -FI_ENOMEM;
 		goto err2;
 	}
+
+	cmap->conn_quota = RXM_CMAP_CONN_QUOTA;
+	fi_param_get_size_t(&rxm_prov, "conn_quota", &cmap->conn_quota);
+	FI_INFO(&rxm_prov, FI_LOG_EP_CTRL,
+		"RxM EP can progress %zu connections simultaneously \n",
+		cmap->conn_quota);
+	slist_init(&cmap->conn_wait_list);
 
 	memset(&cmap->handles_idx, 0, sizeof(cmap->handles_idx));
 	ofi_key_idx_init(&cmap->key_idx, RXM_CMAP_IDX_BITS);
@@ -1038,6 +1068,8 @@ static struct rxm_cmap_handle *rxm_conn_alloc(struct rxm_cmap *cmap)
 	if (OFI_UNLIKELY(!rxm_conn))
 		return NULL;
 
+	slist_entry_init(&rxm_conn->handle.conn_wait_entry);
+
 	return &rxm_conn->handle;
 }
 
@@ -1227,10 +1259,13 @@ rxm_conn_handle_event(struct rxm_ep *rxm_ep, struct rxm_msg_eq_entry *entry)
 		       "Connection successful\n");
 		rxm_ep->cmap->acquire(&rxm_ep->cmap->lock);
 		cm_data = (void *)entry->cm_entry.data;
-		rxm_cmap_process_connect(rxm_ep->cmap,
-					 entry->cm_entry.fid->context,
-					 ((entry->rd - sizeof(entry->cm_entry)) ?
-					  &cm_data->conn_id : NULL));
+
+		if (rxm_cmap_process_connect(rxm_ep->cmap, entry->cm_entry.fid->context,
+					     ((entry->rd - sizeof(entry->cm_entry)) ?
+					      &cm_data->conn_id : NULL))) {
+			goto err;
+		}
+
 		rxm_conn_wake_up_wait_obj(rxm_ep);
 		rxm_ep->cmap->release(&rxm_ep->cmap->lock);
 		break;

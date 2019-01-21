@@ -378,6 +378,10 @@ RXM_INI
 			"(default: 128). Setting this to 0 would get default "
 			"value defined by the MSG provider.");
 
+	fi_param_define(&rxm_prov, "conn_quota", FI_PARAM_SIZE_T,
+			"Defines how many connections per RxM EP can "
+			"progress simultaneously (default: 64).");
+
 	fi_param_get_size_t(&rxm_prov, "tx_size", &rxm_info.tx_attr->size);
 	fi_param_get_size_t(&rxm_prov, "rx_size", &rxm_info.rx_attr->size);
 	fi_param_get_size_t(&rxm_prov, "msg_tx_size", &rxm_msg_tx_size);

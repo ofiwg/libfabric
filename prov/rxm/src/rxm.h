@@ -159,6 +159,8 @@ extern size_t rxm_def_univ_size;
 
 #define RXM_CMAP_IDX_BITS OFI_IDX_INDEX_BITS
 
+#define RXM_CMAP_CONN_QUOTA	64
+
 enum rxm_cmap_signal {
 	RXM_CMAP_FREE,
 	RXM_CMAP_EXIT,
@@ -189,6 +191,7 @@ struct rxm_cmap_handle {
 	uint64_t remote_key;
 	fi_addr_t fi_addr;
 	struct rxm_cmap_peer *peer;
+	struct slist_entry conn_wait_entry;
 };
 
 struct rxm_cmap_peer {
@@ -223,6 +226,9 @@ struct rxm_cmap {
 	ofi_fastlock_acquire_t	acquire;
 	ofi_fastlock_release_t	release;
 	fastlock_t		lock;
+
+	size_t			conn_quota;
+	struct slist		conn_wait_list;
 };
 
 struct rxm_ep;
