@@ -418,6 +418,44 @@ int rxm_cmap_update(struct rxm_cmap *cmap, const void *addr, fi_addr_t fi_addr)
 	return 0;
 }
 
+/* Caller must hold `cmap::lock` */
+static int rxm_cmap_handle_connect(struct rxm_cmap *cmap, fi_addr_t fi_addr,
+				   struct rxm_cmap_handle *handle)
+{
+	int ret;
+
+	switch (handle->state) {
+	case RXM_CMAP_CONNECTED_NOTIFY:
+		rxm_cmap_process_conn_notify(cmap, handle);
+		/* Fall through */
+	case RXM_CMAP_CONNECTED:
+		return FI_SUCCESS;
+	case RXM_CMAP_IDLE:
+		ret = rxm_conn_connect(cmap->ep, handle,
+				       ofi_av_get_addr(cmap->av, fi_addr),
+				       cmap->av->addrlen);
+		if (ret) {
+			rxm_cmap_del_handle(handle);
+			return ret;
+		}
+		handle->state = RXM_CMAP_CONNREQ_SENT;
+		ret = -FI_EAGAIN;
+		// TODO sleep on event fd instead of busy polling
+		break;
+	case RXM_CMAP_CONNREQ_SENT:
+	case RXM_CMAP_CONNREQ_RECV:
+	case RXM_CMAP_SHUTDOWN:
+		ret = -FI_EAGAIN;
+		break;
+	default:
+		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL,
+			"Invalid cmap handle state\n");
+		assert(0);
+		ret = -FI_EOPBADSTATE;
+	}
+	return ret;
+}
+
 void rxm_cmap_process_shutdown(struct rxm_cmap *cmap,
 			       struct rxm_cmap_handle *handle)
 {
@@ -596,44 +634,6 @@ int rxm_cmap_process_connreq(struct rxm_cmap *cmap, void *addr,
 	}
 unlock:
 	cmap->release(&cmap->lock);
-	return ret;
-}
-
-/* Caller must hold `cmap::lock` */
-static int rxm_cmap_handle_connect(struct rxm_cmap *cmap, fi_addr_t fi_addr,
-				   struct rxm_cmap_handle *handle)
-{
-	int ret;
-
-	switch (handle->state) {
-	case RXM_CMAP_CONNECTED_NOTIFY:
-		rxm_cmap_process_conn_notify(cmap, handle);
-		/* Fall through */
-	case RXM_CMAP_CONNECTED:
-		return FI_SUCCESS;
-	case RXM_CMAP_IDLE:
-		ret = rxm_conn_connect(cmap->ep, handle,
-				       ofi_av_get_addr(cmap->av, fi_addr),
-				       cmap->av->addrlen);
-		if (ret) {
-			rxm_cmap_del_handle(handle);
-			return ret;
-		}
-		handle->state = RXM_CMAP_CONNREQ_SENT;
-		ret = -FI_EAGAIN;
-		// TODO sleep on event fd instead of busy polling
-		break;
-	case RXM_CMAP_CONNREQ_SENT:
-	case RXM_CMAP_CONNREQ_RECV:
-	case RXM_CMAP_SHUTDOWN:
-		ret = -FI_EAGAIN;
-		break;
-	default:
-		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL,
-			"Invalid cmap handle state\n");
-		assert(0);
-		ret = -FI_EOPBADSTATE;
-	}
 	return ret;
 }
 
