@@ -230,24 +230,10 @@ struct rxm_ep;
 struct rxm_cmap_handle *rxm_cmap_key2handle(struct rxm_cmap *cmap, uint64_t key);
 int rxm_cmap_update(struct rxm_cmap *cmap, const void *addr, fi_addr_t fi_addr);
 
-void rxm_cmap_process_conn_notify(struct rxm_cmap *cmap,
-				  struct rxm_cmap_handle *handle);
-void rxm_cmap_process_connect(struct rxm_cmap *cmap,
-			      struct rxm_cmap_handle *handle,
-			      uint64_t *remote_key);
-void rxm_cmap_process_reject(struct rxm_cmap *cmap,
-			     struct rxm_cmap_handle *handle,
-			     enum rxm_cmap_reject_flag cm_reject_flag);
-int rxm_cmap_process_connreq(struct rxm_cmap *cmap, void *addr,
-			     struct rxm_cmap_handle **handle_ret,
-			     enum rxm_cmap_reject_flag *cm_reject_flag);
-void rxm_cmap_process_shutdown(struct rxm_cmap *cmap,
-			       struct rxm_cmap_handle *handle);
 int rxm_cmap_handle_unconnected(struct rxm_ep *rxm_ep, struct rxm_cmap_handle *handle,
 				fi_addr_t dest_addr);
 void rxm_cmap_del_handle_ts(struct rxm_cmap_handle *handle);
 void rxm_cmap_free(struct rxm_cmap *cmap);
-int rxm_cmap_alloc(struct rxm_ep *rxm_ep, struct rxm_cmap_attr *attr);
 /* Caller must hold cmap->lock */
 int rxm_cmap_move_handle_to_peer_list(struct rxm_cmap *cmap, int index);
 

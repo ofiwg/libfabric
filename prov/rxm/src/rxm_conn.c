@@ -418,6 +418,16 @@ int rxm_cmap_update(struct rxm_cmap *cmap, const void *addr, fi_addr_t fi_addr)
 	return 0;
 }
 
+/* Caller must hold cmap->lock */
+static void
+rxm_cmap_process_conn_notify(struct rxm_cmap *cmap, struct rxm_cmap_handle *handle)
+{
+	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
+	       "Processing connection notification for handle: %p.\n", handle);
+	handle->state = RXM_CMAP_CONNECTED;
+	rxm_conn_connected_handler(handle);
+}
+
 /* Caller must hold `cmap::lock` */
 static int rxm_cmap_handle_connect(struct rxm_cmap *cmap, fi_addr_t fi_addr,
 				   struct rxm_cmap_handle *handle)
@@ -456,8 +466,8 @@ static int rxm_cmap_handle_connect(struct rxm_cmap *cmap, fi_addr_t fi_addr,
 	return ret;
 }
 
-void rxm_cmap_process_shutdown(struct rxm_cmap *cmap,
-			       struct rxm_cmap_handle *handle)
+static void
+rxm_cmap_process_shutdown(struct rxm_cmap *cmap, struct rxm_cmap_handle *handle)
 {
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 		"Processing shutdown for handle: %p\n", handle);
@@ -475,19 +485,30 @@ void rxm_cmap_process_shutdown(struct rxm_cmap *cmap,
 }
 
 /* Caller must hold cmap->lock */
-void rxm_cmap_process_conn_notify(struct rxm_cmap *cmap,
-				  struct rxm_cmap_handle *handle)
-{
-	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
-	       "Processing connection notification for handle: %p.\n", handle);
-	handle->state = RXM_CMAP_CONNECTED;
-	rxm_conn_connected_handler(handle);
+static inline void rxm_cmap_progress_conn_wait_list(struct rxm_cmap *cmap)¬
+	int ret;
+	struct rxm_cmap_handle *next_handle;
+
+	slist_remove_head_container(&cmap->conn_wait_list,
+				    struct rxm_cmap_handle,
+				    next_handle, conn_wait_entry);
+	if (next_handle) {
+		slist_entry_init(&next_handle->conn_wait_entry);
+
+		ret = rxm_cmap_handle_connect(cmap, next_handle->fi_addr, next_handle);
+		if (ret && (ret != -FI_EAGAIN) && (ret != RXM_CMAP_SHUTDOWN)) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+				"Handle connect fails with %d. Try again\n", ret);
+			slist_insert_tail(&next_handle->conn_wait_entry,
+					  &cmap->conn_wait_list);
+		}
+	}
 }
 
 /* Caller must hold cmap->lock */
-void rxm_cmap_process_connect(struct rxm_cmap *cmap,
-			      struct rxm_cmap_handle *handle,
-			      uint64_t *remote_key)
+static  void rxm_cmap_process_connect(struct rxm_cmap *cmap,
+				      struct rxm_cmap_handle *handle,
+				      uint64_t *remote_key)
 {
 	struct rxm_conn *rxm_conn;
 
@@ -508,9 +529,9 @@ void rxm_cmap_process_connect(struct rxm_cmap *cmap,
 	}
 }
 
-void rxm_cmap_process_reject(struct rxm_cmap *cmap,
-			     struct rxm_cmap_handle *handle,
-			     enum rxm_cmap_reject_flag cm_reject_flag)
+static void rxm_cmap_process_reject(struct rxm_cmap *cmap,
+				    struct rxm_cmap_handle *handle,
+				    enum rxm_cmap_reject_flag cm_reject_flag)
 {
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 		"Processing reject for handle: %p\n", handle);
@@ -547,9 +568,9 @@ void rxm_cmap_process_reject(struct rxm_cmap *cmap,
 	cmap->release(&cmap->lock);
 }
 
-int rxm_cmap_process_connreq(struct rxm_cmap *cmap, void *addr,
-			     struct rxm_cmap_handle **handle_ret,
-			     enum rxm_cmap_reject_flag *cm_reject_flag)
+static int rxm_cmap_process_connreq(struct rxm_cmap *cmap, void *addr,
+				    struct rxm_cmap_handle **handle_ret,
+				    enum rxm_cmap_reject_flag *cm_reject_flag)
 {
 	struct rxm_cmap_handle *handle;
 	int ret = 0, cmp;
@@ -718,13 +739,13 @@ rxm_cmap_update_addr(struct util_av *av, void *addr,
 	return rxm_cmap_update((struct rxm_cmap *)arg, addr, fi_addr);
 }
 
-int rxm_cmap_bind_to_av(struct rxm_cmap *cmap, struct util_av *av)
+static int rxm_cmap_bind_to_av(struct rxm_cmap *cmap, struct util_av *av)
 {
 	cmap->av = av;
 	return ofi_av_elements_iter(av, rxm_cmap_update_addr, (void *)cmap);
 }
 
-int rxm_cmap_alloc(struct rxm_ep *rxm_ep, struct rxm_cmap_attr *attr)
+static int rxm_cmap_alloc(struct rxm_ep *rxm_ep, struct rxm_cmap_attr *attr)
 {
 	struct rxm_cmap *cmap;
 	struct util_ep *ep = &rxm_ep->util_ep;
