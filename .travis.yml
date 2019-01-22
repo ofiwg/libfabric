@@ -47,6 +47,7 @@ env:
         # do not know how to fix
         #- MAKE_FLAGS="AM_CFLAGS=-Werror"
         - MAKE_FLAGS=
+        - ASAN_OPTIONS=detect_leaks=0
 
 # Brew update GNU Autotools so that autogen can succeed
 before_install:
@@ -98,7 +99,7 @@ install:
     - ./configure $LIBFABRIC_CONFIGURE_ARGS --enable-debug
     - make -j2 $MAKE_FLAGS
     # Test regular build
-    - ./configure $LIBFABRIC_CONFIGURE_ARGS
+    - CFLAGS="-fsanitize=address" ./configure $LIBFABRIC_CONFIGURE_ARGS
     - make -j2 $MAKE_FLAGS
     - make install
     - make test
@@ -108,7 +109,7 @@ install:
 script:
     - cd fabtests
     - ./autogen.sh
-    - ./configure --prefix=$PREFIX --with-libfabric=$PREFIX
+    - CFLAGS="-fsanitize=address" ./configure --prefix=$PREFIX --with-libfabric=$PREFIX
     # Do not use MAKE_FLAGS here because we use AM_CFLAGS in the
     # normal fabtests' Makefile.am (i.e., overriding it on the command
     # line removes information that we need to build fabtests itself).
