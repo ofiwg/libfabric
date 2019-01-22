@@ -467,33 +467,45 @@ as the mr_iov_limit domain attribute.  See `fi_domain(3)`.
 
 ## access
 
-Indicates the type of access that the local or a peer endpoint has to
-the registered memory region.  Supported access permissions are the
+Indicates the type of _operations_ that the local or a peer endpoint may
+perform on registered memory region.  Supported access permissions are the
 bitwise OR of the following flags:
 
 *FI_SEND*
 : The memory buffer may be used in outgoing message data transfers.  This
-  includes fi_msg and fi_tagged operations.
+  includes fi_msg and fi_tagged send operations.
 
 *FI_RECV*
 : The memory buffer may be used to receive inbound message transfers.
-  This includes fi_msg and fi_tagged operations.
+  This includes fi_msg and fi_tagged receive operations.
 
 *FI_READ*
 : The memory buffer may be used as the result buffer for RMA read
-  and atomic operations on the initiator side.
+  and atomic operations on the initiator side.  Note that from the
+  viewpoint of the application, the memory buffer is being written
+  into by the network.
 
 *FI_WRITE*
 : The memory buffer may be used as the source buffer for RMA write
-  and atomic operations on the initiator side.
+  and atomic operations on the initiator side.  Note that from the
+  viewpoint of the application, the endpoint is reading from the memory
+  buffer and copying the data onto the network.
 
 *FI_REMOTE_READ*
 : The memory buffer may be used as the source buffer of an RMA read
-  operation on the target side.
+  operation on the target side.  The contents of the memory buffer
+  are not modified by such operations.
 
 *FI_REMOTE_WRITE*
 : The memory buffer may be used as the target buffer of an RMA write
-  or atomic operation.
+  or atomic operation.  The contents of the memory buffer may be
+  modified as a result of such operations.
+
+Note that some providers may not enforce fine grained access permissions.
+For example, a memory region registered for FI_WRITE access may also
+behave as if FI_SEND were specified as well.  Relaxed enforcement of
+such access is permitted, though not guaranteed, provided security is
+maintained.
 
 ## offset
 
