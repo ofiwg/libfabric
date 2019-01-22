@@ -60,6 +60,39 @@ static int tcpx_cq_close(struct fid *fid)
 	return 0;
 }
 
+static void tcpx_xfer_entry_reset(struct tcpx_buf_pool *pool,
+                                  struct tcpx_xfer_entry *xfer_entry)
+{
+	memset(xfer_entry, 0, sizeof(*xfer_entry));
+
+	xfer_entry->msg_hdr.hdr.version = OFI_CTRL_VERSION;
+	xfer_entry->msg_hdr.hdr.op_data = pool->op_type;
+	switch (pool->op_type) {
+	case TCPX_OP_MSG_RECV:
+	case TCPX_OP_MSG_SEND:
+	case TCPX_OP_MSG_RESP:
+		xfer_entry->msg_hdr.hdr.op = ofi_op_msg;
+		break;
+	case TCPX_OP_WRITE:
+	case TCPX_OP_REMOTE_WRITE:
+		xfer_entry->msg_hdr.hdr.op = ofi_op_write;
+		break;
+	case TCPX_OP_READ_REQ:
+		xfer_entry->msg_hdr.hdr.op = ofi_op_read_req;
+		xfer_entry->msg_hdr.hdr.size =
+			htonll(sizeof(xfer_entry->msg_hdr));
+		break;
+	case TCPX_OP_READ_RSP:
+		xfer_entry->msg_hdr.hdr.op = ofi_op_read_rsp;
+		break;
+	case TCPX_OP_REMOTE_READ:
+		break;
+	default:
+		assert(0);
+		break;
+	}
+}
+
 struct tcpx_xfer_entry *tcpx_xfer_entry_alloc(struct tcpx_cq *tcpx_cq,
 					      enum tcpx_xfer_op_codes type)
 {
@@ -80,6 +113,8 @@ struct tcpx_xfer_entry *tcpx_xfer_entry_alloc(struct tcpx_cq *tcpx_cq,
 		return NULL;
 	}
 	tcpx_cq->util_cq.cq_fastlock_release(&tcpx_cq->util_cq.cq_lock);
+
+	tcpx_xfer_entry_reset(&tcpx_cq->buf_pools[type], xfer_entry);
 	return xfer_entry;
 }
 
@@ -174,32 +209,7 @@ static int tcpx_buf_pool_init(void *pool_ctx, void *addr,
 		xfer_entry = (struct tcpx_xfer_entry *)
 			((char *)addr + i * pool->pool->entry_sz);
 
-		xfer_entry->msg_hdr.hdr.version = OFI_CTRL_VERSION;
-		xfer_entry->msg_hdr.hdr.op_data = pool->op_type;
-		switch (pool->op_type) {
-		case TCPX_OP_MSG_RECV:
-		case TCPX_OP_MSG_SEND:
-		case TCPX_OP_MSG_RESP:
-			xfer_entry->msg_hdr.hdr.op = ofi_op_msg;
-			break;
-		case TCPX_OP_WRITE:
-		case TCPX_OP_REMOTE_WRITE:
-			xfer_entry->msg_hdr.hdr.op = ofi_op_write;
-			break;
-		case TCPX_OP_READ_REQ:
-			xfer_entry->msg_hdr.hdr.op = ofi_op_read_req;
-			xfer_entry->msg_hdr.hdr.size =
-				htonll(sizeof(xfer_entry->msg_hdr));
-			break;
-		case TCPX_OP_READ_RSP:
-			xfer_entry->msg_hdr.hdr.op = ofi_op_read_rsp;
-			break;
-		case TCPX_OP_REMOTE_READ:
-			break;
-		default:
-			assert(0);
-			break;
-		}
+		tcpx_xfer_entry_reset(pool, xfer_entry);
 	}
 	return FI_SUCCESS;
 }
