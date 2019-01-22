@@ -334,13 +334,14 @@ int fi_ibv_accept_xrc(struct fi_ibv_xrc_ep *ep, int reciprocal,
 	fi_ibv_next_xrc_conn_state(ep);
 
 	ret = rdma_accept(ep->tgt_id, &conn_param);
-	if (ret) {
+	if (OFI_UNLIKELY(ret)) {
 		ret = -errno;
 		VERBS_INFO_ERRNO(FI_LOG_EP_CTRL,
-				 "XRC TGT, ibv_open_qp", errno);
+				 "XRC TGT, rdma_accept", errno);
 		fi_ibv_prev_xrc_conn_state(ep);
-	}
-	free(connreq);
+	} else
+		free(connreq);
+
 	return ret;
 }
 
