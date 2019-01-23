@@ -113,7 +113,7 @@ struct tcpx_conn_handle {
 
 struct tcpx_pep {
 	struct util_pep 	util_pep;
-	struct fi_info		info;
+	struct fi_info		*info;
 	SOCKET			sock;
 	struct tcpx_cm_context	cm_ctx;
 };
