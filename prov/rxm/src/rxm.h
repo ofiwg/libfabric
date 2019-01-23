@@ -487,7 +487,6 @@ struct rxm_tx_rndv_buf {
 
 	void *app_context;
 	uint64_t flags;
-	struct rxm_rx_buf *rx_buf;
 	struct fid_mr *mr[RXM_IOV_LIMIT];
 	uint8_t count;
 
