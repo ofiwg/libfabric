@@ -91,6 +91,7 @@ int util_buf_grow(struct util_buf_pool *pool)
 			goto err1;
 	}
 
+	memset(buf_region->mem_region, 0, buf_region->size);
 	if (pool->attr.alloc_hndlr) {
 		ret = pool->attr.alloc_hndlr(pool->attr.ctx,
 					     buf_region->mem_region,
