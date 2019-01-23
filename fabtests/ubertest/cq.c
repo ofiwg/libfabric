@@ -40,7 +40,6 @@ static size_t comp_entry_cnt[] = {
 	[FI_CQ_FORMAT_TAGGED] = FT_COMP_BUF_SIZE / sizeof(struct fi_cq_tagged_entry)
 };
 
-/*
 static size_t comp_entry_size[] = {
 	[FI_CQ_FORMAT_UNSPEC] = 0,
 	[FI_CQ_FORMAT_CONTEXT] = sizeof(struct fi_cq_entry),
@@ -48,7 +47,6 @@ static size_t comp_entry_size[] = {
 	[FI_CQ_FORMAT_DATA] = sizeof(struct fi_cq_data_entry),
 	[FI_CQ_FORMAT_TAGGED] = sizeof(struct fi_cq_tagged_entry)
 };
-*/
 
 int ft_use_comp_cntr(enum ft_comp_type comp_type)
 {
@@ -253,10 +251,30 @@ int ft_bind_comp(struct fid_ep *ep)
 	return 0;
 }
 
+static inline size_t ft_update_credits(void *buf,
+			enum fi_cq_format format, size_t count)
+{
+	char *ptr = (char *) buf;
+	size_t credits = 0;
+	uint64_t flags;
+
+	if (format == FI_CQ_FORMAT_CONTEXT || test_info.mode & FI_RX_CQ_DATA)
+		return count;
+
+	while (count--) {
+		flags = ((struct fi_cq_msg_entry *) ptr)->flags;
+		if (!(flags & (FI_REMOTE_READ | FI_REMOTE_WRITE)))
+			credits++;
+		ptr += comp_entry_size[format];
+	}
+
+	return credits;
+}
+
 /* Read CQ until there are no more completions */
-#define ft_cq_read(cq_read, cq, buf, count, completions, str, ret, verify,...)	\
+#define ft_cq_read(cq_read, cq, buf, format, credits, completions, str, ret, verify,...)	\
 	do {							\
-		ret = cq_read(cq, buf, count, ##__VA_ARGS__);	\
+		ret = cq_read(cq, buf, comp_entry_cnt[format], ##__VA_ARGS__);	\
 		if (ret < 0) {					\
 			if (ret == -FI_EAGAIN)			\
 				break;				\
@@ -270,17 +288,18 @@ int ft_bind_comp(struct fid_ep *ep)
 			completions += ret;			\
 			if (verify)				\
 				ft_verify_comp(buf);		\
+			credits += ft_update_credits(buf, format, ret);	\
 		}						\
-	} while (ret == count)
+	} while (ret == comp_entry_cnt[format])
 
-static int ft_comp_x(struct fid_cq *cq, struct ft_xcontrol *ft_x,
+static size_t ft_comp_x(struct fid_cq *cq, struct ft_xcontrol *ft_x,
 		const char *x_str, int timeout)
 {
 	uint8_t buf[FT_COMP_BUF_SIZE], start = 0;
 	struct timespec s, e;
 	int poll_time = 0;
 	int ret, verify = (test_info.test_type == FT_TEST_UNIT && cq == rxcq);
-	size_t cur_credits = ft_x->credits;
+	int completions = 0;
 
 	switch(test_info.cq_wait_obj) {
 	case FI_WAIT_NONE:
@@ -290,23 +309,19 @@ static int ft_comp_x(struct fid_cq *cq, struct ft_xcontrol *ft_x,
 				start = 1;
 			}
 
-			ft_cq_read(fi_cq_read, cq, buf, comp_entry_cnt[ft_x->cq_format],
-					ft_x->credits, x_str, ret, verify);
+			ft_cq_read(fi_cq_read, cq, buf, ft_x->cq_format, ft_x->credits,
+				   completions, x_str, ret, verify);
 
 			clock_gettime(CLOCK_MONOTONIC, &e);
 			poll_time = get_elapsed(&s, &e, MILLI);
 		} while (ret == -FI_EAGAIN && poll_time < timeout &&
-			 ft_x->credits == cur_credits);
-
-		if (ft_x->credits != cur_credits)
-			ret = 0;
-
+			 !completions);
 		break;
 	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
 	case FI_WAIT_MUTEX_COND:
-		ft_cq_read(fi_cq_sread, cq, buf, comp_entry_cnt[ft_x->cq_format],
-			ft_x->credits, x_str, ret, verify, NULL, timeout);
+		ft_cq_read(fi_cq_sread, cq, buf, ft_x->cq_format, ft_x->credits,
+			   completions, x_str, ret, verify, NULL, timeout);
 		break;
 	case FI_WAIT_SET:
 		FT_ERR("fi_ubertest: Unsupported cq wait object");
@@ -316,7 +331,7 @@ static int ft_comp_x(struct fid_cq *cq, struct ft_xcontrol *ft_x,
 		return -1;
 	}
 
-	return (ret == -FI_EAGAIN && timeout) ? ret : 0;
+	return (ret == -FI_EAGAIN && timeout) ? ret : completions;
 }
 
 static int ft_cntr_x(struct fid_cntr *cntr, struct ft_xcontrol *ft_x,
@@ -325,6 +340,7 @@ static int ft_cntr_x(struct fid_cntr *cntr, struct ft_xcontrol *ft_x,
 	uint64_t cntr_val;
 	struct timespec s, e;
 	int poll_time = clock_gettime(CLOCK_MONOTONIC, &s);
+	int recvd = 0;
 
 	do {
 		cntr_val = fi_cntr_read(cntr);
@@ -332,27 +348,28 @@ static int ft_cntr_x(struct fid_cntr *cntr, struct ft_xcontrol *ft_x,
 		poll_time = get_elapsed(&s, &e, MILLI);
 	} while (cntr_val == ft_x->total_comp && poll_time < timeout);
 
-	ft_x->credits += (cntr_val - ft_x->total_comp);
+	recvd = cntr_val - ft_x->total_comp;
+	ft_x->credits += recvd;
 	ft_x->total_comp = cntr_val;
 
-	return 0;
+	return recvd;
 }
 
 int ft_comp_rx(int timeout)
 {
-	int ret;
+	int ret = 0;
 	size_t cur_credits = ft_rx_ctrl.credits;
 
 	if (ft_use_comp_cntr(test_info.comp_type)) {
 		ret = ft_cntr_x(rxcntr, &ft_rx_ctrl, timeout);
-		if (ret)
+		if (ret < 0)
 			return ret;
 	}
 	if (ft_use_comp_cq(test_info.comp_type)) {
 		if (test_info.comp_type == FT_COMP_ALL)
 			ft_rx_ctrl.credits = cur_credits;
 		ret = ft_comp_x(rxcq, &ft_rx_ctrl, "rxcq", timeout);
-		if (ret)
+		if (ret < 0)
 			return ret;
 
 		if (ft_use_comp_cntr(test_info.comp_type))
@@ -360,17 +377,17 @@ int ft_comp_rx(int timeout)
 	}
 	assert(ft_rx_ctrl.credits <= ft_rx_ctrl.max_credits);
 
-	return 0;
+	return ret;
 }
 
 int ft_comp_tx(int timeout)
 {
-	int ret;
+	int ret = 0;
 	size_t cur_credits = ft_tx_ctrl.credits;
 
 	if (ft_use_comp_cntr(test_info.comp_type)) {
 		ret = ft_cntr_x(txcntr, &ft_tx_ctrl, timeout);
-		if (ret)
+		if (ret < 0)
 			return ret;
 	}
 
@@ -378,7 +395,7 @@ int ft_comp_tx(int timeout)
 		if (test_info.comp_type == FT_COMP_ALL)
 			ft_tx_ctrl.credits = cur_credits;
 		ret = ft_comp_x(txcq, &ft_tx_ctrl, "txcq", timeout);
-		if (ret)
+		if (ret < 0)
 			return ret;
 
 		if (ft_use_comp_cntr(test_info.comp_type))
@@ -386,5 +403,5 @@ int ft_comp_tx(int timeout)
 	}
 	assert(ft_tx_ctrl.credits <= ft_tx_ctrl.max_credits);
 
-	return 0;
+	return ret;
 }

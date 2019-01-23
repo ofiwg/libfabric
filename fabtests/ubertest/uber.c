@@ -266,10 +266,8 @@ static void ft_fw_convert_info(struct fi_info *info, struct ft_info *test_info)
 
 	if (is_data_func(test_info->class_function) ||
 	    (is_msg_func(test_info->class_function) &&
-	     test_info->msg_flags & FI_REMOTE_CQ_DATA)) {
+	     test_info->msg_flags & FI_REMOTE_CQ_DATA))
 		info->domain_attr->cq_data_size = 4;
-		info->mode |= FI_RX_CQ_DATA;
-	}
 }
 
 static void
@@ -295,6 +293,8 @@ ft_fw_update_info(struct ft_info *test_info, struct fi_info *info, int subindex)
 
 	if (info->domain_attr)
 		test_info->progress = info->domain_attr->data_progress;
+
+	test_info->mode = info->mode;
 }
 
 static int ft_fw_result_index(int fi_errno)

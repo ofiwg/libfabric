@@ -322,7 +322,7 @@ int ft_get_ctx(struct ft_xcontrol *ctrl, struct fi_context **ctx)
 		if (ctrl == &ft_tx_ctrl) {
 			while (ctrl->credits < ctrl->max_credits) {
 				ret = ft_comp_tx(FT_COMP_TO);
-				if (ret)
+				if (ret < 0 && ret != -FI_EAGAIN)
 					return ret;
 			}
 		}
@@ -388,7 +388,7 @@ static int ft_sync_manual()
 				break;
 
 			ret = ft_comp_rx(0);
-			if (ret)
+			if (ret < 0)
 				return ret;
 		} while (1);
 	} else {
@@ -398,7 +398,7 @@ static int ft_sync_manual()
 				break;
 
 			ret = ft_comp_rx(0);
-			if (ret)
+			if (ret < 0)
 				return ret;
 		} while (1);
 
@@ -454,7 +454,7 @@ static int ft_pingpong_rma(void)
 
 			if (ft_check_tx_completion()) {
 				ret = ft_comp_tx(FT_COMP_TO);
-				if (ret)
+				if (ret < 0)
 					return ret;
 			}
 			ret = ft_sync_msg_needed();
@@ -477,7 +477,7 @@ static int ft_pingpong_rma(void)
 
 			if (ft_check_tx_completion()) {
 				ret = ft_comp_tx(FT_COMP_TO);
-				if (ret)
+				if (ret < 0)
 					return ret;
 			}
 
@@ -504,7 +504,7 @@ static int ft_pingpong(void)
 
 			if (ft_check_tx_completion()) {
 				ret = ft_comp_tx(FT_COMP_TO);
-				if (ret)
+				if (ret < 0)
 					return ret;
 			}
 
@@ -524,7 +524,7 @@ static int ft_pingpong(void)
 
 			if (ft_check_tx_completion()) {
 				ret = ft_comp_tx(FT_COMP_TO);
-				if (ret)
+				if (ret < 0)
 					return ret;
 			}
 		}
@@ -807,7 +807,7 @@ static int ft_unit_rma(void)
 
 		if (!is_inject_func(test_info.class_function)) {
 			ret = ft_comp_tx(FT_COMP_TO);
-			if (ret)
+			if (ret < 0)
 				return ret;
 		}
 
@@ -855,7 +855,7 @@ static int ft_unit_atomic(void)
 
 		if (!is_inject_func(test_info.class_function)) {
 			ret = ft_comp_tx(FT_COMP_TO);
-			if (ret)
+			if (ret < 0)
 				return ret;
 		}
 		ret = ft_sync_msg_needed();
@@ -896,7 +896,7 @@ static int ft_unit(void)
 
 		if (ft_check_tx_completion()) {
 			ret = ft_comp_tx(FT_COMP_TO);
-			if (ret)
+			if (ret < 0)
 				return ret;
 		}
 
