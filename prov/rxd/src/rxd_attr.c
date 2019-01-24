@@ -63,7 +63,10 @@ struct fi_ep_attr rxd_ep_attr = {
 	.protocol_version = 1,
 	.max_msg_size = SIZE_MAX,
 	.tx_ctx_cnt = 1,
-	.rx_ctx_cnt = 1
+	.rx_ctx_cnt = 1,
+	.max_order_raw_size = SIZE_MAX,
+	.max_order_waw_size = SIZE_MAX,
+	.mem_tag_format = FI_TAG_GENERIC,
 };
 
 struct fi_domain_attr rxd_domain_attr = {
