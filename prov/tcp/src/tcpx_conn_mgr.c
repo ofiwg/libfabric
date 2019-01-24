@@ -284,7 +284,7 @@ static void server_recv_connreq(struct util_wait *wait,
 		goto err1;
 
 	cm_entry->fid = &handle->pep->util_pep.pep_fid.fid;
-	cm_entry->info = fi_dupinfo(&handle->pep->info);
+	cm_entry->info = fi_dupinfo(handle->pep->info);
 	if (!cm_entry->info)
 		goto err2;
 
