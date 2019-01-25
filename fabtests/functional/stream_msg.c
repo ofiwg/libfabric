@@ -77,7 +77,7 @@ int recv_stream(struct fid_ep *ep, char *msg, size_t msg_len)
 	return offset;
 }
 
-int static send_greeting(struct fid_ep *ep)
+static int send_greeting(struct fid_ep *ep)
 {
 	const size_t msg_len = strlen(msg);
 	char buffer[msg_len];
@@ -99,7 +99,7 @@ int static send_greeting(struct fid_ep *ep)
 	return 0;
 }
 
-int static recv_greeting(struct fid_ep *ep)
+static int recv_greeting(struct fid_ep *ep)
 {
 	const size_t msg_len = strlen(msg);
 	char buffer[msg_len];
