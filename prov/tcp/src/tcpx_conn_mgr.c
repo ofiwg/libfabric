@@ -367,6 +367,7 @@ static void server_sock_accept(struct util_wait *wait,
 			       struct tcpx_cm_context *cm_ctx)
 {
 	struct tcpx_conn_handle *handle;
+	struct tcpx_cm_context *rx_req_cm_ctx;
 	struct tcpx_pep *pep;
 	SOCKET sock;
 	int ret;
@@ -390,25 +391,25 @@ static void server_sock_accept(struct util_wait *wait,
 		goto err1;
 	}
 
-	cm_ctx = calloc(1, sizeof(*cm_ctx));
-	if (!cm_ctx)
+	rx_req_cm_ctx = calloc(1, sizeof(*rx_req_cm_ctx));
+	if (!rx_req_cm_ctx)
 		goto err2;
 
 	handle->conn_fd = sock;
 	handle->handle.fclass = FI_CLASS_CONNREQ;
 	handle->pep = pep;
-	cm_ctx->fid = &handle->handle;
-	cm_ctx->type = SERVER_RECV_CONNREQ;
+	rx_req_cm_ctx->fid = &handle->handle;
+	rx_req_cm_ctx->type = SERVER_RECV_CONNREQ;
 
 	ret = ofi_wait_fd_add(wait, sock, FI_EPOLL_IN,
 			      tcpx_eq_wait_try_func,
-			      NULL, (void *) cm_ctx);
+			      NULL, (void *) rx_req_cm_ctx);
 	if (ret)
 		goto err3;
 	wait->signal(wait);
 	return;
 err3:
-	free(cm_ctx);
+	free(rx_req_cm_ctx);
 err2:
 	free(handle);
 err1:
