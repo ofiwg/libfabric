@@ -497,21 +497,19 @@ static int getinfo_unit_test(char *node, char *service, uint64_t flags,
 		struct fi_info *base_hints, ft_getinfo_init init, ft_getinfo_test test,
 		ft_getinfo_check check, int ret_exp)
 {
-	struct fi_info *info, *fi, *test_hints;
+	struct fi_info *info = NULL, *fi, *test_hints = NULL;
 	int ret;
 
 	if (base_hints) {
 		test_hints = fi_dupinfo(base_hints);
 		if (!test_hints)
 			return -FI_ENOMEM;
-	} else {
-		test_hints = NULL;
 	}
 
 	if (init) {
 		ret = init(test_hints);
 		if (ret)
-			return ret;
+			goto out;
 	}
 
 	if (test)
@@ -519,16 +517,15 @@ static int getinfo_unit_test(char *node, char *service, uint64_t flags,
 	else
 		ret = fi_getinfo(FT_FIVERSION, node, service, flags, test_hints, &info);
 	if (ret) {
-		if (ret == ret_exp)
-			return 0;
+		if (ret == ret_exp) {
+			ret = 0;
+			goto out;
+		}
 		sprintf(err_buf, "fi_getinfo failed %s(%d)", fi_strerror(-ret), -ret);
-		return ret;
+		goto out;
 	}
 
-	if (!info)
-		return ret;
-
-	if (!check)
+	if (!info || !check)
 		goto out;
 
 	ft_foreach_info(fi, info) {
@@ -540,6 +537,7 @@ static int getinfo_unit_test(char *node, char *service, uint64_t flags,
 			break;
 	}
 out:
+	fi_freeinfo(test_hints);
 	fi_freeinfo(info);
 	return ret;
 }
