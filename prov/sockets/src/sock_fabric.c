@@ -622,19 +622,6 @@ static int sock_node_matches_interface(struct slist *addr_list, const char *node
 	return sock_addr_matches_interface(addr_list, &addr.sa);
 }
 
-static void sock_free_addr_list(struct slist *addr_list)
-{
-	struct slist_entry *entry;
-	struct ofi_addr_list_entry *host_entry;
-
-	while (!slist_empty(addr_list)) {
-		entry = slist_remove_head(addr_list);
-		host_entry = container_of(entry, struct ofi_addr_list_entry,
-					  entry);
-		free(host_entry);
-	}
-}
-
 static int sock_getinfo(uint32_t version, const char *node, const char *service,
 			uint64_t flags, const struct fi_info *hints,
 			struct fi_info **info)
@@ -695,7 +682,7 @@ static int sock_getinfo(uint32_t version, const char *node, const char *service,
 
 static void fi_sockets_fini(void)
 {
-	sock_free_addr_list(&sock_addr_list);
+	ofi_free_list_of_addr(&sock_addr_list);
 	fastlock_destroy(&sock_list_lock);
 }
 

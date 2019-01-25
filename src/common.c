@@ -952,6 +952,16 @@ void fi_epoll_close(struct fi_epoll *ep)
 #endif
 
 
+void ofi_free_list_of_addr(struct slist *addr_list)
+{
+	struct ofi_addr_list_entry *addr_entry;
+
+	while (!slist_empty(addr_list)) {
+		slist_remove_head_container(addr_list, struct ofi_addr_list_entry,
+					    addr_entry, entry);
+		free(addr_entry);
+	}
+}
 
 static inline
 void ofi_insert_loopback_addr(struct fi_provider *prov, struct slist *addr_list)

@@ -144,6 +144,7 @@ int ofi_addr_cmp(const struct fi_provider *prov, const struct sockaddr *sa1,
 int ofi_getifaddrs(struct ifaddrs **ifap);
 void ofi_get_list_of_addr(struct fi_provider *prov, const char *env_name,
 			  struct slist *addr_list);
+void ofi_free_list_of_addr(struct slist *addr_list);
 
 #define ofi_sa_family(addr) ((struct sockaddr *)(addr))->sa_family
 #define ofi_sin_addr(addr) (((struct sockaddr_in *)(addr))->sin_addr)
