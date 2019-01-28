@@ -262,6 +262,14 @@ static inline void rxm_buf_close(void *pool_ctx, void *context)
 	}
 }
 
+static inline void rxm_buf_handle_unavail(void *pool_ctx)
+{
+	struct rxm_buf_pool *pool = (struct rxm_buf_pool *)pool_ctx;
+	struct rxm_ep *rxm_ep = pool->rxm_ep;
+
+	rxm_ep_progress_multi_unsafe(&rxm_ep->util_ep);
+}
+
 static void rxm_buf_pool_destroy(struct rxm_buf_pool *pool)
 {
 	/* This indicates whether the pool is allocated or not */
@@ -282,6 +290,8 @@ static int rxm_buf_pool_create(struct rxm_ep *rxm_ep,
 		.chunk_cnt	= chunk_count,
 		.alloc_hndlr	= rxm_buf_reg,
 		.free_hndlr	= rxm_buf_close,
+		.unavail_hndlr	= ((type == RXM_BUF_POOL_RX) ?
+				   NULL : rxm_buf_handle_unavail),
 		.ctx		= pool,
 		.track_used	= 0,
 	};
