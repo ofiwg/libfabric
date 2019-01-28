@@ -1267,7 +1267,8 @@ int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep)
 	return 0;
 }
 
-void rxm_ep_do_progress(struct util_ep *util_ep)
+/* Must call with EP lock held */
+void rxm_ep_progress_unsafe(struct util_ep *util_ep)
 {
 	struct rxm_ep *rxm_ep = container_of(util_ep, struct rxm_ep, util_ep);
 	struct fi_cq_data_entry comp;
@@ -1316,7 +1317,7 @@ void rxm_ep_do_progress(struct util_ep *util_ep)
 void rxm_ep_progress(struct util_ep *util_ep)
 {
 	ofi_ep_lock_acquire(util_ep);
-	rxm_ep_do_progress(util_ep);
+	rxm_ep_progress_unsafe(util_ep);
 	ofi_ep_lock_release(util_ep);
 }
 

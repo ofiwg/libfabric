@@ -657,7 +657,7 @@ static int rxm_ep_peek_recv(struct rxm_ep *rxm_ep, fi_addr_t addr, uint64_t tag,
 
 	RXM_DBG_ADDR_TAG(FI_LOG_EP_DATA, "Peeking message", addr, tag);
 
-	rxm_ep_do_progress(&rxm_ep->util_ep);
+	rxm_ep_progress_unsafe(&rxm_ep->util_ep);
 
 	rx_buf = rxm_check_unexp_msg_list(recv_queue, addr, tag, ignore);
 	if (!rx_buf) {
@@ -908,7 +908,7 @@ rxm_ep_msg_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		       "fi_inject for MSG provider failed with ret - %" PRId64"\n",
 		       ret);
 		if (OFI_LIKELY(ret == -FI_EAGAIN))
-			rxm_ep_do_progress(&rxm_ep->util_ep);
+			rxm_ep_progress_unsafe(&rxm_ep->util_ep);
 	}
 	return ret;
 }
@@ -1118,7 +1118,7 @@ rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		      first_tx_buf->pkt.ctrl_hdr.seg_size, first_tx_buf->hdr.desc, 0, first_tx_buf);
 	if (OFI_UNLIKELY(ret)) {
 		if (OFI_LIKELY(ret == -FI_EAGAIN))
-			rxm_ep_do_progress(&rxm_ep->util_ep);
+			rxm_ep_progress_unsafe(&rxm_ep->util_ep);
 		rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_SAR, first_tx_buf);
 		return ret;
 	}
@@ -1198,7 +1198,7 @@ rxm_ep_emulate_inject(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 				     tx_buf->hdr.desc, tx_buf);
 	if (OFI_UNLIKELY(ret)) {
 		if (OFI_LIKELY(ret == -FI_EAGAIN))
-			rxm_ep_do_progress(&rxm_ep->util_ep);
+			rxm_ep_progress_unsafe(&rxm_ep->util_ep);
 		rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX, tx_buf);
 	}
 	return ret;
@@ -1357,7 +1357,7 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 					     tx_buf->hdr.desc, tx_buf);
 		if (OFI_UNLIKELY(ret)) {
 			if (ret == -FI_EAGAIN)
-				rxm_ep_do_progress(&rxm_ep->util_ep);
+				rxm_ep_progress_unsafe(&rxm_ep->util_ep);
 			rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX, tx_buf);
 		}
 	} else if (data_len <= rxm_ep->sar_limit) {
@@ -2420,6 +2420,8 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 		 struct fid_ep **ep_fid, void *context)
 {
 	struct rxm_ep *rxm_ep;
+	struct util_domain *util_domain =
+		container_of(domain, struct util_domain, domain_fid);
 	int ret;
 
 	rxm_ep = calloc(1, sizeof(*rxm_ep));
@@ -2437,7 +2439,8 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 		rxm_ep->comp_per_progress = 1;
 
 	ret = ofi_endpoint_init(domain, &rxm_util_prov, info, &rxm_ep->util_ep,
-				context, &rxm_ep_progress);
+				context, ((util_domain->threading != FI_THREAD_SAFE) ?
+					 rxm_ep_progress_unsafe : rxm_ep_progress));
 	if (ret)
 		goto err1;
 

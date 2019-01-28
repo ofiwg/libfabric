@@ -72,7 +72,7 @@ rxm_ep_send_atomic_req(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		ret = fi_send(rxm_conn->msg_ep, &tx_buf->pkt, len,
 			      tx_buf->hdr.desc, 0, tx_buf);
 	if (ret == -FI_EAGAIN)
-		rxm_ep_do_progress(&rxm_ep->util_ep);
+		rxm_ep_progress_unsafe(&rxm_ep->util_ep);
 
 	return ret;
 }

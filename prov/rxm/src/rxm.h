@@ -723,8 +723,8 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 int rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep);
 void rxm_cq_write_error(struct util_cq *cq, struct util_cntr *cntr,
 			void *op_context, int err);
+void rxm_ep_progress_unsafe(struct util_ep *util_ep);
 void rxm_ep_progress(struct util_ep *util_ep);
-void rxm_ep_do_progress(struct util_ep *util_ep);
 
 int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep);
 

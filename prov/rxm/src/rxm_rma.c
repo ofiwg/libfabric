@@ -225,7 +225,7 @@ rxm_ep_rma_emulate_inject_msg(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, 
 	ret = fi_writemsg(rxm_conn->msg_ep, &rxm_rma_msg, flags);
 	if (OFI_UNLIKELY(ret)) {
 		if (ret == -FI_EAGAIN)
-			rxm_ep_do_progress(&rxm_ep->util_ep);
+			rxm_ep_progress_unsafe(&rxm_ep->util_ep);
 		rxm_rma_buf_release(rxm_ep, rma_buf);
 	}
 unlock:
