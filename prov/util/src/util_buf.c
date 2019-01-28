@@ -49,6 +49,17 @@ int util_buf_grow(struct util_buf_pool *pool)
 	ssize_t hp_size;
 	struct util_buf_footer *buf_ftr;
 
+	if ((pool->num_allocated > 0) && pool->attr.unavail_hndlr) {
+		pool->attr.unavail_hndlr(pool->attr.ctx);
+		if (!pool->attr.indexing.ordered) {
+			if (util_buf_avail(pool))
+				return 0;
+		} else {
+			if (util_buf_indexed_avail(pool))
+				return 0;
+		}
+	}
+
 	if (pool->attr.max_cnt && pool->num_allocated >= pool->attr.max_cnt) {
 		return -1;
 	}
