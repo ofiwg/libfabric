@@ -49,7 +49,7 @@ static int av_removal_test(void)
 
 	ret = ft_init_fabric();
 	if (ret)
-		return ret;
+		goto out;
 
 	if (opts.dst_addr) {
 		ret = ft_tx(ep, remote_fi_addr, opts.transfer_size, &tx_ctx);
