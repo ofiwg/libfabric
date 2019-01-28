@@ -155,6 +155,8 @@ static int server_reject(size_t paramlen)
 	if (ret)
 		FT_PRINTERR("fi_reject", ret);
 
+	fi_freeinfo(fi);
+	fi = NULL;
 	return ret;
 }
 
@@ -184,7 +186,7 @@ static int server_accept(size_t paramlen)
 		FT_PRINTERR("init_ep", ret);
 		goto err;
 	}
-	/* Data will apppear on accept event on remote end. */
+	/* Data will appear on accept event on remote end. */
 	ft_fill_buf(cm_data, paramlen);
 
 	/* Accept the incoming connection. Also transitions endpoint to active
@@ -222,7 +224,15 @@ static int server_accept(size_t paramlen)
 	FT_CLOSE_FID(rxcntr);
 	FT_CLOSE_FID(txcntr);
 	FT_CLOSE_FID(av);
+	if (mr != &no_mr)
+		FT_CLOSE_FID(mr);
 	FT_CLOSE_FID(domain);
+
+	free(buf);
+	buf = rx_buf = tx_buf = NULL;
+	buf_size = rx_size = tx_size = 0;
+	fi_freeinfo(fi);
+	fi = NULL;
 
 	return 0;
 
