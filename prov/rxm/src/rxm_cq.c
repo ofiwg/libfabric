@@ -987,6 +987,7 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 	ssize_t ret;
 	struct rxm_rx_buf *rx_buf;
 	struct rxm_tx_sar_buf *tx_sar_buf;
+	struct rxm_tx_base_buf *tx_base_buf;
 	struct rxm_tx_eager_buf *tx_eager_buf;
 	struct rxm_tx_rndv_buf *tx_rndv_buf;
 	struct rxm_tx_atomic_buf *tx_atomic_buf;
@@ -999,12 +1000,16 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 
 	switch (RXM_GET_PROTO_STATE(comp->op_context)) {
 	case RXM_TX:
-	case RXM_INJECT_TX:
 		tx_eager_buf = comp->op_context;
 		assert(comp->flags & FI_SEND);
 		ret = rxm_finish_eager_send(rxm_ep, tx_eager_buf);
 		rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX, tx_eager_buf);
 		return ret;
+	case RXM_INJECT_TX:
+		tx_base_buf = comp->op_context;
+		assert(comp->flags & FI_SEND);
+		rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_INJECT, tx_base_buf);
+		return 0;
 	case RXM_SAR_TX:
 		tx_sar_buf = comp->op_context;
 		assert(comp->flags & FI_SEND);
