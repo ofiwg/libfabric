@@ -657,7 +657,7 @@ static int rxm_ep_peek_recv(struct rxm_ep *rxm_ep, fi_addr_t addr, uint64_t tag,
 
 	RXM_DBG_ADDR_TAG(FI_LOG_EP_DATA, "Peeking message", addr, tag);
 
-	rxm_ep_progress_unsafe(&rxm_ep->util_ep);
+	rxm_ep_progress_multi_unsafe(&rxm_ep->util_ep);
 
 	rx_buf = rxm_check_unexp_msg_list(recv_queue, addr, tag, ignore);
 	if (!rx_buf) {
@@ -908,7 +908,7 @@ rxm_ep_msg_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		       "fi_inject for MSG provider failed with ret - %" PRId64"\n",
 		       ret);
 		if (OFI_LIKELY(ret == -FI_EAGAIN))
-			rxm_ep_progress_unsafe(&rxm_ep->util_ep);
+			rxm_ep_progress_multi_unsafe(&rxm_ep->util_ep);
 	}
 	return ret;
 }
@@ -1118,7 +1118,7 @@ rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		      first_tx_buf->pkt.ctrl_hdr.seg_size, first_tx_buf->hdr.desc, 0, first_tx_buf);
 	if (OFI_UNLIKELY(ret)) {
 		if (OFI_LIKELY(ret == -FI_EAGAIN))
-			rxm_ep_progress_unsafe(&rxm_ep->util_ep);
+			rxm_ep_progress_multi_unsafe(&rxm_ep->util_ep);
 		rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_SAR, first_tx_buf);
 		return ret;
 	}
@@ -1198,7 +1198,7 @@ rxm_ep_emulate_inject(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 				     tx_buf->hdr.desc, tx_buf);
 	if (OFI_UNLIKELY(ret)) {
 		if (OFI_LIKELY(ret == -FI_EAGAIN))
-			rxm_ep_progress_unsafe(&rxm_ep->util_ep);
+			rxm_ep_progress_multi_unsafe(&rxm_ep->util_ep);
 		rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX, tx_buf);
 	}
 	return ret;
@@ -1357,7 +1357,7 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 					     tx_buf->hdr.desc, tx_buf);
 		if (OFI_UNLIKELY(ret)) {
 			if (ret == -FI_EAGAIN)
-				rxm_ep_progress_unsafe(&rxm_ep->util_ep);
+				rxm_ep_progress_multi_unsafe(&rxm_ep->util_ep);
 			rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX, tx_buf);
 		}
 	} else if (data_len <= rxm_ep->sar_limit) {
@@ -2000,6 +2000,9 @@ static int rxm_ep_close(struct fid *fid)
 	if (ret)
 		retv = ret;
 
+	free(rxm_ep->comp_ents);
+	rxm_ep->comp_ents = NULL;
+
 	ofi_endpoint_close(&rxm_ep->util_ep);
 	fi_freeinfo(rxm_ep->rxm_info);
 	free(rxm_ep);
@@ -2225,8 +2228,8 @@ static void rxm_ep_settings_init(struct rxm_ep *rxm_ep)
 
 	max_prog_val = MIN(rxm_ep->msg_info->tx_attr->size,
 			   rxm_ep->msg_info->rx_attr->size) / 2;
-	rxm_ep->comp_per_progress = (rxm_ep->comp_per_progress > max_prog_val) ?
-				    max_prog_val : rxm_ep->comp_per_progress;
+	rxm_ep->comp_per_progress = (((size_t) rxm_ep->comp_per_progress > max_prog_val) ?
+				     (uint8_t) max_prog_val : rxm_ep->comp_per_progress);
 
 	rxm_ep->msg_mr_local = ofi_mr_local(rxm_ep->msg_info);
 	rxm_ep->rxm_mr_local = ofi_mr_local(rxm_ep->rxm_info);
@@ -2257,7 +2260,7 @@ static void rxm_ep_settings_init(struct rxm_ep *rxm_ep)
  	FI_INFO(&rxm_prov, FI_LOG_CORE,
 		"Settings:\n"
 		"\t\t MR local: MSG - %d, RxM - %d\n"
-		"\t\t Completions per progress: MSG - %zu\n"
+		"\t\t Completions per progress: MSG - %"PRIu8"\n"
 		"\t\t Protocol limits: MSG Inject - %zu, "
 				      "Eager - %zu, "
 				      "SAR - %zu\n",
@@ -2422,7 +2425,7 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 	struct rxm_ep *rxm_ep;
 	struct util_domain *util_domain =
 		container_of(domain, struct util_domain, domain_fid);
-	int ret;
+	int ret, comp_per_prog_val;
 
 	rxm_ep = calloc(1, sizeof(*rxm_ep));
 	if (!rxm_ep)
@@ -2435,18 +2438,35 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 	}
 
 	if (fi_param_get_int(&rxm_prov, "comp_per_progress",
-			     (int *)&rxm_ep->comp_per_progress))
+			     (int *) &comp_per_prog_val)) {
 		rxm_ep->comp_per_progress = 1;
+	} else if (comp_per_prog_val > UINT8_MAX) {
+		rxm_ep->comp_per_progress = UINT8_MAX;
+	} else if (comp_per_prog_val <= 0) {
+		rxm_ep->comp_per_progress = 1;
+	} else {
+		rxm_ep->comp_per_progress = (uint8_t) comp_per_prog_val;
+	}
 
 	ret = ofi_endpoint_init(domain, &rxm_util_prov, info, &rxm_ep->util_ep,
-				context, ((util_domain->threading != FI_THREAD_SAFE) ?
-					 rxm_ep_progress_unsafe : rxm_ep_progress));
+				context, ((rxm_ep->comp_per_progress > 1) ?
+					  ((util_domain->threading != FI_THREAD_SAFE) ?
+					   rxm_ep_progress_multi_unsafe :
+					   rxm_ep_progress_multi) :
+					  ((util_domain->threading != FI_THREAD_SAFE) ?
+					   rxm_ep_progress_unsafe :
+					   rxm_ep_progress)));
 	if (ret)
 		goto err1;
 
+	rxm_ep->comp_ents = calloc(1, sizeof(*rxm_ep->comp_ents) *
+				      rxm_ep->comp_per_progress);
+	if (!rxm_ep->comp_ents)
+		goto err2;
+
 	ret = rxm_ep_msg_res_open(rxm_ep);
 	if (ret)
-		goto err2;
+		goto err3;
 
 	slistfd_init(&rxm_ep->msg_eq_entry_list);
 	fastlock_init(&rxm_ep->msg_eq_entry_list_lock);
@@ -2468,6 +2488,9 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 		(*ep_fid)->atomic = &rxm_ops_atomic;
 
 	return 0;
+err3:
+	free(rxm_ep->comp_ents);
+	rxm_ep->comp_ents = NULL;
 err2:
 	ofi_endpoint_close(&rxm_ep->util_ep);
 err1:

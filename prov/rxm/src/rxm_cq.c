@@ -1267,57 +1267,117 @@ int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep)
 	return 0;
 }
 
-/* Must call with EP lock held */
-void rxm_ep_progress_unsafe(struct util_ep *util_ep)
+static inline void rxm_cq_progress_msg_cq(struct rxm_ep *rxm_ep)
 {
-	struct rxm_ep *rxm_ep = container_of(util_ep, struct rxm_ep, util_ep);
 	struct fi_cq_data_entry comp;
-	struct dlist_entry *conn_entry_tmp;
-	struct rxm_conn *rxm_conn;
-	struct rxm_rx_buf *buf;
 	ssize_t ret;
-	size_t comp_read = 0;
 
-	if (!slistfd_empty(&rxm_ep->msg_eq_entry_list))
-		rxm_conn_process_eq_events(rxm_ep);
+	ret = fi_cq_read(rxm_ep->msg_cq, &comp, 1);
+	if (ret > 0) {
+		// We don't have enough info to write a good
+		// error entry to the CQ at this point
+		ret = rxm_cq_handle_comp(rxm_ep, &comp);
+		if (OFI_UNLIKELY(ret)) {
+			rxm_cq_write_error_all(rxm_ep, ret);
+		}
+	} else if (ret < 0 && (ret != -FI_EAGAIN)) {
+		if (ret == -FI_EAVAIL)
+			rxm_cq_read_write_error(rxm_ep);
+		else
+			rxm_cq_write_error_all(rxm_ep, ret);
+	}
+}
+
+static inline void rxm_cq_progress_multi_msg_cq(struct rxm_ep *rxm_ep)
+{
+	ssize_t ret, rc, i;
+
+	do {
+		rc = fi_cq_read(rxm_ep->msg_cq, rxm_ep->comp_ents,
+				rxm_ep->comp_per_progress);
+		for (i = 0; i < rc; i++) {
+			// We don't have enough info to write a good
+			// error entry to the CQ at this point
+			ret = rxm_cq_handle_comp(rxm_ep, &rxm_ep->comp_ents[i]);
+			if (OFI_UNLIKELY(ret)) {
+				rxm_cq_write_error_all(rxm_ep, ret);
+			}
+		}
+	} while (rc > 0);
+
+	if (rc < 0 && (rc != -FI_EAGAIN)) {
+		if (rc == -FI_EAVAIL)
+			rxm_cq_read_write_error(rxm_ep);
+		else
+			rxm_cq_write_error_all(rxm_ep, rc);
+	}
+}
+
+static inline void rxm_cq_progress_repost_list(struct rxm_ep *rxm_ep)
+{
+	struct rxm_rx_buf *buf;
 
 	while (!dlist_empty(&rxm_ep->repost_ready_list)) {
 		dlist_pop_front(&rxm_ep->repost_ready_list, struct rxm_rx_buf,
 				buf, repost_entry);
 		(void) rxm_ep_repost_buf(buf);
 	}
+}
 
-	do {
-		ret = fi_cq_read(rxm_ep->msg_cq, &comp, 1);
-		if (ret > 0) {
-			// We don't have enough info to write a good
-			// error entry to the CQ at this point
-			ret = rxm_cq_handle_comp(rxm_ep, &comp);
-			if (OFI_UNLIKELY(ret)) {
-				rxm_cq_write_error_all(rxm_ep, ret);
-			} else {
-				ret = 1;
-			}
-		} else if (ret < 0 && (ret != -FI_EAGAIN)) {
-			if (ret == -FI_EAVAIL)
-				rxm_cq_read_write_error(rxm_ep);
-			else
-				rxm_cq_write_error_all(rxm_ep, ret);
-		}
-	} while ((ret > 0) && (++comp_read < rxm_ep->comp_per_progress));
+static inline void rxm_cq_progress_deferred_queue(struct rxm_ep *rxm_ep)
+{
+	struct dlist_entry *conn_entry_tmp;
+	struct rxm_conn *rxm_conn;
 
 	if (OFI_UNLIKELY(!dlist_empty(&rxm_ep->deferred_tx_conn_queue))) {
 		dlist_foreach_container_safe(&rxm_ep->deferred_tx_conn_queue,
 					     struct rxm_conn, rxm_conn,
 					     deferred_conn_entry, conn_entry_tmp)
-			rxm_ep_progress_deferred_queue(rxm_ep, rxm_conn);
+		rxm_ep_progress_deferred_queue(rxm_ep, rxm_conn);
 	}
+}
+
+/* Must call with EP lock held */
+void rxm_ep_progress_unsafe(struct util_ep *util_ep)
+{
+	struct rxm_ep *rxm_ep = container_of(util_ep, struct rxm_ep, util_ep);
+
+	if (!slistfd_empty(&rxm_ep->msg_eq_entry_list))
+		rxm_conn_process_eq_events(rxm_ep);
+
+	rxm_cq_progress_repost_list(rxm_ep);
+
+	rxm_cq_progress_msg_cq(rxm_ep);
+
+	rxm_cq_progress_deferred_queue(rxm_ep);
+}
+
+/* Must call with EP lock held */
+void rxm_ep_progress_multi_unsafe(struct util_ep *util_ep)
+{
+	struct rxm_ep *rxm_ep = container_of(util_ep, struct rxm_ep, util_ep);
+
+	if (!slistfd_empty(&rxm_ep->msg_eq_entry_list))
+		rxm_conn_process_eq_events(rxm_ep);
+
+	rxm_cq_progress_repost_list(rxm_ep);
+
+	rxm_cq_progress_multi_msg_cq(rxm_ep);
+
+	rxm_cq_progress_deferred_queue(rxm_ep);
 }
 
 void rxm_ep_progress(struct util_ep *util_ep)
 {
 	ofi_ep_lock_acquire(util_ep);
 	rxm_ep_progress_unsafe(util_ep);
+	ofi_ep_lock_release(util_ep);
+}
+
+void rxm_ep_progress_multi(struct util_ep *util_ep)
+{
+	ofi_ep_lock_acquire(util_ep);
+	rxm_ep_progress_multi_unsafe(util_ep);
 	ofi_ep_lock_release(util_ep);
 }
 

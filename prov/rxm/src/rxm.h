@@ -654,7 +654,8 @@ struct rxm_ep {
 	struct fid_cq 		*msg_cq;
 	int			msg_cq_fd;
 	struct fid_ep 		*srx_ctx;
-	size_t 			comp_per_progress;
+	uint8_t			comp_per_progress;
+	struct fi_cq_data_entry	*comp_ents;
 	int			msg_mr_local;
 	int			rxm_mr_local;
 	size_t			min_multi_recv_size;
@@ -724,7 +725,9 @@ int rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep);
 void rxm_cq_write_error(struct util_cq *cq, struct util_cntr *cntr,
 			void *op_context, int err);
 void rxm_ep_progress_unsafe(struct util_ep *util_ep);
+void rxm_ep_progress_multi_unsafe(struct util_ep *util_ep);
 void rxm_ep_progress(struct util_ep *util_ep);
+void rxm_ep_progress_multi(struct util_ep *util_ep);
 
 int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep);
 
