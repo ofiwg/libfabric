@@ -1682,12 +1682,40 @@ static int fi_ibv_get_match_infos(uint32_t version, const char *node,
 	return FI_SUCCESS;
 }
 
+static void fi_ibv_alter_info(const struct fi_info *hints, struct fi_info *info)
+{
+	struct fi_info *cur;
+
+	if (!ofi_check_rx_mode(hints, FI_RX_CQ_DATA)) {
+		for (cur = info; cur; cur = cur->next)
+			cur->domain_attr->cq_data_size = 0;
+	} else {
+		for (cur = info; cur; cur = cur->next) {
+			/* App may just set rx_attr.mode */
+			if (!hints || (hints->mode & FI_RX_CQ_DATA))
+				cur->mode |= FI_RX_CQ_DATA;
+			assert(cur->rx_attr->mode & FI_RX_CQ_DATA);
+		}
+	}
+
+	if (!hints || !hints->tx_attr || !hints->tx_attr->inject_size) {
+		for (cur = info; cur; cur = cur->next) {
+			if (cur->ep_attr->type != FI_EP_MSG)
+				continue;
+			/* The default inline size is usually smaller.
+			 * This is to avoid drop in throughput */
+			cur->tx_attr->inject_size =
+				MIN(cur->tx_attr->inject_size,
+				    fi_ibv_gl_data.def_inline_size);
+		}
+	}
+}
+
 int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 		   uint64_t flags, const struct fi_info *hints,
 		   struct fi_info **info)
 {
 	int ret;
-	const struct fi_info *cur;
 
 	ret = fi_ibv_get_match_infos(version, node, service,
 				     flags, hints,
@@ -1697,21 +1725,7 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 
 	ofi_alter_info(*info, hints, version);
 
-	if (!ofi_check_rx_mode(hints, FI_RX_CQ_DATA)) {
-		for (cur = *info; cur; cur = cur->next)
-			cur->domain_attr->cq_data_size = 0;
-	}
-
-	if (!hints || !hints->tx_attr || !hints->tx_attr->inject_size) {
-		for (cur = *info; cur; cur = cur->next) {
-			if (cur->ep_attr->type != FI_EP_MSG)
-				continue;
-			/* The default inline size is usually smaller.
-			 * This is to avoid drop in throughput */
-			cur->tx_attr->inject_size = MIN(cur->tx_attr->inject_size,
-							fi_ibv_gl_data.def_inline_size);
-		}
-	}
+	fi_ibv_alter_info(hints, *info);
 out:
 	if (!ret || ret == -FI_ENOMEM || ret == -FI_ENODEV)
 		return ret;
