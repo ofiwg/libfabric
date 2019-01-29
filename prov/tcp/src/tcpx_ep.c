@@ -953,7 +953,12 @@ static int tcpx_pep_reject(struct fid_pep *pep, fid_t handle,
 		(void) ofi_sendall_socket(tcpx_handle->conn_fd, param, paramlen);
 
 	ofi_shutdown(tcpx_handle->conn_fd, SHUT_RDWR);
-	return ofi_close_socket(tcpx_handle->conn_fd);
+	ret = ofi_close_socket(tcpx_handle->conn_fd);
+	if (ret)
+		return ret;
+
+	free(tcpx_handle);
+	return FI_SUCCESS;
 }
 
 static struct fi_ops_cm tcpx_pep_cm_ops = {
