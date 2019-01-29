@@ -117,8 +117,7 @@ int tcpx_recv_hdr(SOCKET sock, struct stage_buf *sbuf,
 	rx_detect->done_len += bytes_recvd;
 
 	if (rx_detect->done_len == sizeof(rx_detect->hdr.base_hdr)) {
-		rx_detect->hdr_len =
-			 (size_t) ntohs(rx_detect->hdr.base_hdr.payload_off);
+		rx_detect->hdr_len = (size_t) rx_detect->hdr.base_hdr.payload_off;
 
 		if (rx_detect->hdr_len > rx_detect->done_len)
 			return tcpx_recv_rem_hdr(sock, sbuf, rx_detect);

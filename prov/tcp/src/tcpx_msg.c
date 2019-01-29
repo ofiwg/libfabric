@@ -195,7 +195,7 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		offset += sizeof(msg->data);
 	}
 
-	tx_entry->hdr.base_hdr.payload_off = htons((uint16_t)offset);
+	tx_entry->hdr.base_hdr.payload_off = (uint8_t)offset;
 	tx_entry->hdr.base_hdr.size = htonll(offset + data_len);
 	if (flags & FI_INJECT) {
 		ofi_copy_iov_buf(msg->msg_iov, msg->iov_count, 0,
@@ -246,7 +246,7 @@ static ssize_t tcpx_send(struct fid_ep *ep, const void *buf, size_t len,
 	tx_entry->hdr.base_hdr.size =
 		htonll(len + sizeof(tx_entry->hdr.base_hdr));
 	tx_entry->hdr.base_hdr.payload_off =
-		htons((uint16_t)sizeof(tx_entry->hdr.base_hdr));
+		(uint8_t)sizeof(tx_entry->hdr.base_hdr);
 
 	tx_entry->iov[0].iov_base = (void *) &tx_entry->hdr;
 	tx_entry->iov[0].iov_len = sizeof(tx_entry->hdr.base_hdr);
@@ -284,7 +284,7 @@ static ssize_t tcpx_sendv(struct fid_ep *ep, const struct iovec *iov,
 	tx_entry->hdr.base_hdr.size =
 		htonll(data_len + sizeof(tx_entry->hdr.base_hdr));
 	tx_entry->hdr.base_hdr.payload_off =
-		htons((uint16_t)sizeof(tx_entry->hdr.base_hdr));
+		(uint8_t)sizeof(tx_entry->hdr.base_hdr);
 
 	/* move the resetting to release */
 	tx_entry->hdr.base_hdr.flags = 0;
@@ -323,7 +323,7 @@ static ssize_t tcpx_inject(struct fid_ep *ep, const void *buf, size_t len,
 		htonll(len + sizeof(tx_entry->hdr.base_hdr));
 
 	offset = sizeof(tx_entry->hdr.base_hdr);
-	tx_entry->hdr.base_hdr.payload_off = htons((uint16_t) offset);
+	tx_entry->hdr.base_hdr.payload_off = (uint8_t) offset;
 	memcpy((uint8_t *)&tx_entry->hdr + offset, (uint8_t *) buf, len);
 
 	tx_entry->iov[0].iov_base = (void *) &tx_entry->hdr;
@@ -359,7 +359,7 @@ static ssize_t tcpx_senddata(struct fid_ep *ep, const void *buf, size_t len,
 	tx_entry->hdr.cq_data_hdr.cq_data = htonll(data);
 
 	tx_entry->hdr.cq_data_hdr.base_hdr.payload_off =
-		htons((uint16_t)(sizeof(tx_entry->hdr.cq_data_hdr)));
+		(uint8_t)sizeof(tx_entry->hdr.cq_data_hdr);
 
 	tx_entry->iov[0].iov_base = (void *) &tx_entry->hdr;
 	tx_entry->iov[0].iov_len = sizeof(tx_entry->hdr.cq_data_hdr);
@@ -400,7 +400,7 @@ static ssize_t tcpx_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 	tx_entry->hdr.base_hdr.size =
 		htonll(len + sizeof(tx_entry->hdr.cq_data_hdr));
 	tx_entry->hdr.base_hdr.payload_off =
-		htons((uint16_t)sizeof(tx_entry->hdr.cq_data_hdr));
+		(uint8_t)sizeof(tx_entry->hdr.cq_data_hdr);
 
 	memcpy((uint8_t *) &tx_entry->hdr + sizeof(tx_entry->hdr.cq_data_hdr),
 	       (uint8_t *) buf, len);

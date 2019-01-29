@@ -66,7 +66,7 @@ static void tcpx_rma_read_send_entry_fill(struct tcpx_xfer_entry *send_entry,
 	offset += (msg->rma_iov_count * sizeof(*rma_iov));
 
 	send_entry->hdr.base_hdr.size = htonll(offset);
-	send_entry->hdr.base_hdr.payload_off = htons((uint16_t)offset);
+	send_entry->hdr.base_hdr.payload_off = (uint8_t)offset;
 
 	send_entry->iov[0].iov_base = (void *) &send_entry->hdr;
 	send_entry->iov[0].iov_len = offset;
@@ -216,7 +216,7 @@ static ssize_t tcpx_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg
 	offset += (send_entry->hdr.base_hdr.rma_iov_cnt *
 		   sizeof(*rma_iov));
 
-	send_entry->hdr.base_hdr.payload_off = htons((uint16_t)offset);
+	send_entry->hdr.base_hdr.payload_off = (uint8_t)offset;
 	send_entry->hdr.base_hdr.size = htonll(data_len + offset);
 	if (flags & FI_INJECT) {
 		ofi_copy_iov_buf(msg->msg_iov, msg->iov_count, 0,
@@ -372,7 +372,7 @@ static ssize_t tcpx_rma_inject_common(struct fid_ep *ep, const void *buf,
 	send_entry->hdr.base_hdr.rma_iov_cnt = 1;
 	offset += sizeof(*rma_iov);
 
-	send_entry->hdr.base_hdr.payload_off = htons((uint16_t)offset);
+	send_entry->hdr.base_hdr.payload_off = (uint8_t)offset;
 	memcpy((uint8_t *)&send_entry->hdr + offset, (uint8_t *)buf, len);
 	offset += len;
 
