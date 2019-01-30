@@ -730,6 +730,7 @@ static int sock_pe_process_rx_read(struct sock_pe *pe,
 	int i;
 	struct sock_mr *mr;
 	uint64_t len, entry_len, data_len;
+	uint8_t *raw_keys = NULL;
 
 	len = sizeof(struct sock_msg_hdr);
 	entry_len = sizeof(union sock_iov) * pe_entry->msg_hdr.dest_iov_len;
@@ -738,14 +739,29 @@ static int sock_pe_process_rx_read(struct sock_pe *pe,
 		return 0;
 	len += entry_len;
 
+	if (rx_ctx->domain->attr.mr_mode & FI_MR_RAW) {
+		size_t total_raw_size = rx_ctx->domain->attr.mr_key_size *
+				pe_entry->msg_hdr.dest_iov_len;
+		raw_keys = malloc(total_raw_size);
+		if (!raw_keys)
+			return -FI_ENOMEM;
+		if (sock_pe_recv_field(pe_entry, raw_keys, total_raw_size, len))
+			return 0;
+		len += total_raw_size;
+	}
+
 	/* verify mr */
 	data_len = 0;
 	for (i = 0; i < pe_entry->msg_hdr.dest_iov_len && !pe_entry->mr_checked; i++) {
+		size_t raw_size = raw_keys ? rx_ctx->domain->attr.mr_key_size : 0;
+		void *raw_key = raw_keys ?
+				&raw_keys[i * rx_ctx->domain->attr.mr_key_size] : NULL;
 
 		mr = sock_mr_verify_key(rx_ctx->domain,
 					pe_entry->pe.rx.rx_iov[i].iov.key,
 					(uintptr_t *) &pe_entry->pe.rx.rx_iov[i].iov.addr,
 					pe_entry->pe.rx.rx_iov[i].iov.len,
+					raw_key, raw_size,
 					FI_REMOTE_READ);
 		if (!mr) {
 			SOCK_LOG_ERROR("Remote memory access error: %p, %lu, %" PRIu64 "\n",
@@ -756,7 +772,7 @@ static int sock_pe_process_rx_read(struct sock_pe *pe,
 			pe_entry->rem = pe_entry->total_len - pe_entry->done_len;
 			sock_pe_send_response(pe, rx_ctx, pe_entry, 0,
 					      SOCK_OP_READ_ERROR, FI_EACCES);
-			return 0;
+			goto out;
 		}
 
 		data_len += pe_entry->pe.rx.rx_iov[i].iov.len;
@@ -771,6 +787,9 @@ static int sock_pe_process_rx_read(struct sock_pe *pe,
 	}
 	sock_pe_send_response(pe, rx_ctx, pe_entry, data_len,
 			      SOCK_OP_READ_COMPLETE, 0);
+
+out:
+	free(raw_keys);
 	return 0;
 }
 
@@ -781,6 +800,7 @@ static int sock_pe_process_rx_write(struct sock_pe *pe,
 	int i, ret = 0;
 	struct sock_mr *mr;
 	uint64_t rem, len, entry_len;
+	uint8_t *raw_keys = NULL;
 
 	len = sizeof(struct sock_msg_hdr);
 	if (pe_entry->msg_hdr.flags & FI_REMOTE_CQ_DATA) {
@@ -795,11 +815,27 @@ static int sock_pe_process_rx_write(struct sock_pe *pe,
 		return 0;
 	len += entry_len;
 
+	if (rx_ctx->domain->attr.mr_mode & FI_MR_RAW) {
+		size_t total_raw_size = rx_ctx->domain->attr.mr_key_size *
+				pe_entry->msg_hdr.dest_iov_len;
+		raw_keys = malloc(total_raw_size);
+		if (!raw_keys)
+			return -FI_ENOMEM;
+		if (sock_pe_recv_field(pe_entry, raw_keys, total_raw_size, len))
+			return 0;
+		len += total_raw_size;
+	}
+
 	for (i = 0; i < pe_entry->msg_hdr.dest_iov_len && !pe_entry->mr_checked; i++) {
+		size_t raw_size = raw_keys ? rx_ctx->domain->attr.mr_key_size : 0;
+		void *raw_key = raw_keys ?
+				&raw_keys[i * rx_ctx->domain->attr.mr_key_size] : NULL;
+
 		mr = sock_mr_verify_key(rx_ctx->domain,
 					pe_entry->pe.rx.rx_iov[i].iov.key,
 					(uintptr_t *) &pe_entry->pe.rx.rx_iov[i].iov.addr,
 					pe_entry->pe.rx.rx_iov[i].iov.len,
+					raw_key, raw_size,
 					FI_REMOTE_WRITE);
 		if (!mr) {
 			SOCK_LOG_ERROR("Remote memory access error: %p, %lu, %" PRIu64 "\n",
@@ -810,10 +846,12 @@ static int sock_pe_process_rx_write(struct sock_pe *pe,
 			pe_entry->rem = pe_entry->total_len - pe_entry->done_len;
 			sock_pe_send_response(pe, rx_ctx, pe_entry, 0,
 					      SOCK_OP_WRITE_ERROR, FI_EACCES);
+			free(raw_keys);
 			return 0;
 		}
 	}
 	pe_entry->mr_checked = 1;
+	free(raw_keys);
 
 	rem = pe_entry->msg_hdr.msg_len - len;
 	for (i = 0; rem > 0 && i < pe_entry->msg_hdr.dest_iov_len; i++) {
@@ -877,11 +915,11 @@ static void sock_pe_do_atomic(void *cmp, void *dst, void *src,
 	}
 }
 
-static int sock_pe_recv_atomic_hdrs(struct sock_pe *pe,
+static ssize_t sock_pe_recv_atomic_hdrs(struct sock_pe *pe,
 				    struct sock_pe_entry *pe_entry,
 				    size_t *datatype_sz, uint64_t *entry_len)
 {
-	uint64_t len;
+	ssize_t len;
 	int i;
 
 	if (!pe_entry->pe.rx.atomic_cmp) {
@@ -935,7 +973,7 @@ static int sock_pe_recv_atomic_hdrs(struct sock_pe *pe,
 		len += *entry_len;
 	}
 
-	return 0;
+	return len;
 }
 
 static int sock_pe_process_rx_atomic(struct sock_pe *pe,
@@ -946,16 +984,34 @@ static int sock_pe_process_rx_atomic(struct sock_pe *pe,
 	size_t datatype_sz;
 	struct sock_mr *mr;
 	uint64_t offset, entry_len;
+	uint8_t *raw_keys = NULL;
+	ssize_t len;
 
-	ret = sock_pe_recv_atomic_hdrs(pe, pe_entry, &datatype_sz, &entry_len);
-	if (ret)
-		return ret == -FI_EAGAIN ? 0 : ret;
+	len = sock_pe_recv_atomic_hdrs(pe, pe_entry, &datatype_sz, &entry_len);
+	if (len < 0)
+		return len == -FI_EAGAIN ? 0 : len;
+
+	if (rx_ctx->domain->attr.mr_mode & FI_MR_RAW) {
+		size_t total_raw_size = rx_ctx->domain->attr.mr_key_size *
+				pe_entry->msg_hdr.dest_iov_len;
+		raw_keys = malloc(total_raw_size);
+		if (!raw_keys)
+			return -FI_ENOMEM;
+		if (sock_pe_recv_field(pe_entry, raw_keys, total_raw_size, len))
+			return 0;
+		len += total_raw_size;
+	}
 
 	for (i = 0; i < pe_entry->pe.rx.rx_op.dest_iov_len && !pe_entry->mr_checked; i++) {
+		size_t raw_size = raw_keys ? rx_ctx->domain->attr.mr_key_size : 0;
+		void *raw_key = raw_keys ?
+				&raw_keys[i * rx_ctx->domain->attr.mr_key_size] : NULL;
+
 		mr = sock_mr_verify_key(rx_ctx->domain,
 					pe_entry->pe.rx.rx_iov[i].ioc.key,
 					(uintptr_t *) &pe_entry->pe.rx.rx_iov[i].ioc.addr,
 					pe_entry->pe.rx.rx_iov[i].ioc.count * datatype_sz,
+					raw_key, raw_size,
 					FI_REMOTE_WRITE);
 		if (!mr) {
 			SOCK_LOG_ERROR("Remote memory access error: %p, %lu, %" PRIu64 "\n",
@@ -1023,10 +1079,11 @@ sock_pe_process_rx_tatomic(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx,
 	size_t datatype_sz;
 	uint64_t entry_len;
 	struct sock_rx_entry *rx_entry;
+	ssize_t len;
 
-	ret = sock_pe_recv_atomic_hdrs(pe, pe_entry, &datatype_sz, &entry_len);
-	if (ret)
-		return ret == -FI_EAGAIN ? 0 : ret;
+	len = sock_pe_recv_atomic_hdrs(pe, pe_entry, &datatype_sz, &entry_len);
+	if (len < 0)
+		return len == -FI_EAGAIN ? 0 : len;
 
 	assert(pe_entry->pe.rx.rx_iov[0].ioc.addr == 0);
 	assert(pe_entry->pe.rx.rx_op.dest_iov_len == 1);

@@ -46,7 +46,7 @@
 
 extern struct fi_ops_mr sock_dom_mr_ops;
 
-const struct fi_domain_attr sock_domain_attr = {
+struct fi_domain_attr sock_domain_attr = {
 	.name = NULL,
 	.threading = FI_THREAD_SAFE,
 	.control_progress = FI_PROGRESS_AUTO,
@@ -141,7 +141,7 @@ int sock_verify_domain_attr(uint32_t version, const struct fi_info *info)
 		return -FI_ENODATA;
 	}
 
-	if (attr->mr_key_size > sock_domain_attr.mr_key_size)
+	if (attr->mr_key_size && attr->mr_key_size != sock_domain_attr.mr_key_size)
 		return -FI_ENODATA;
 
 	if (attr->cq_data_size > sock_domain_attr.cq_data_size)
@@ -186,6 +186,7 @@ static int sock_dom_close(struct fid *fid)
 
 	sock_pe_finalize(dom->pe);
 	fastlock_destroy(&dom->lock);
+	rbtDelete(dom->peer_raw_mr_map.rbtree);
 	ofi_mr_map_close(&dom->mr_map);
 	sock_dom_remove_from_list(dom);
 	free(dom);
@@ -210,6 +211,62 @@ static int sock_dom_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	return 0;
 }
 
+static int sock_map_raw_mr(struct sock_domain *domain,
+                           struct fi_mr_map_raw *raw_attr) {
+	struct sock_peer_mr_raw_attr* stored_attr;
+
+	if (!(domain->attr.mr_mode & FI_MR_RAW)) return -FI_ENOSYS;
+	if (!raw_attr) return -FI_EINVAL;
+	if (raw_attr->base_addr != 0) return -FI_EINVAL;  /* Not used. */
+	if (!raw_attr->raw_key) return -FI_EINVAL;
+	if (!raw_attr->key) return -FI_EINVAL;
+	if (raw_attr->flags != 0)
+		SOCK_LOG_DBG("Ignoring unknown flags in FI_MAP_RAW_MR: %lu\n",
+		             raw_attr->flags);
+
+	if (raw_attr->key_size != domain->attr.mr_key_size) {
+		SOCK_LOG_ERROR("Incorrect key size FI_MAP_RAW_MR: %zd\n", raw_attr->key_size);
+		return -FI_EINVAL;
+	}
+
+	stored_attr = malloc(sizeof(struct sock_peer_mr_raw_attr) + raw_attr->key_size);
+	if (!stored_attr) return -FI_ENOMEM;
+	stored_attr->key_size = raw_attr->key_size;
+	memcpy(stored_attr->raw_key, raw_attr->raw_key, raw_attr->key_size);
+
+	fastlock_acquire(&domain->lock);
+
+	stored_attr->local_key = domain->peer_raw_mr_map.key++;
+	rbtInsert(domain->peer_raw_mr_map.rbtree, &stored_attr->local_key,
+	          stored_attr);
+	*(raw_attr->key) = stored_attr->local_key;
+
+	fastlock_release(&domain->lock);
+
+	return FI_SUCCESS;
+}
+
+static int sock_unmap_key(struct sock_domain *domain, uint64_t* key) {
+	struct sock_peer_mr_raw_attr* stored_attr;
+	void *itr, *key_ptr;
+
+	if (!key) return -FI_EINVAL;
+
+	fastlock_acquire(&domain->lock);
+
+	itr = rbtFind(domain->peer_raw_mr_map.rbtree, key);
+	if (itr) {
+		rbtKeyValue(domain->peer_raw_mr_map.rbtree, itr, &key_ptr,
+		            (void **) &stored_attr);
+		rbtErase(domain->peer_raw_mr_map.rbtree, itr);
+		free(stored_attr);
+	}
+
+	fastlock_release(&domain->lock);
+
+	return FI_SUCCESS;
+}
+
 static int sock_dom_ctrl(struct fid *fid, int command, void *arg)
 {
 	struct sock_domain *dom;
@@ -218,6 +275,10 @@ static int sock_dom_ctrl(struct fid *fid, int command, void *arg)
 	switch (command) {
 	case FI_QUEUE_WORK:
 		return sock_queue_work(dom, arg);
+	case FI_MAP_RAW_MR:
+		return sock_map_raw_mr(dom, arg);
+	case FI_UNMAP_KEY:
+		return sock_unmap_key(dom, arg);
 	default:
 		return -FI_ENOSYS;
 	}
@@ -273,6 +334,13 @@ static struct fi_ops_domain sock_dom_ops = {
 	.srx_ctx = sock_srx_ctx,
 	.query_atomic = sock_query_atomic,
 };
+
+static int compare_local_mr_keys(void *key1, void *key2)
+{
+	uint64_t k1 = *((uint64_t *) key1);
+	uint64_t k2 = *((uint64_t *) key2);
+	return (k1 < k2) ? -1 : (k1 > k2);
+}
 
 int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_domain **dom, void *context)
@@ -333,19 +401,27 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 	if (ret)
 		goto err2;
 
+	sock_domain->peer_raw_mr_map.rbtree = rbtNew(compare_local_mr_keys);
+	if (!sock_domain->peer_raw_mr_map.rbtree)
+		goto err3;
+
 	ret = sock_conn_start_listener_thread(&sock_domain->conn_listener);
 	if (ret)
-		goto err2;
+		goto err4;
 
 	ret = sock_ep_cm_start_thread(&sock_domain->cm_head);
 	if (ret)
-		goto err3;
+		goto err5;
 
 	sock_dom_add_to_list(sock_domain);
 	return 0;
 
-err3:
+err5:
 	sock_conn_stop_listener_thread(&sock_domain->conn_listener);
+err4:
+	rbtDelete(sock_domain->peer_raw_mr_map.rbtree);
+err3:
+	ofi_mr_map_close(&sock_domain->mr_map);
 err2:
 	sock_pe_finalize(sock_domain->pe);
 err1:

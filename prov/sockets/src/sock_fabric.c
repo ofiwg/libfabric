@@ -71,6 +71,7 @@ uint64_t SOCK_EP_RDM_CAP = SOCK_EP_RDM_CAP_BASE;
 uint64_t SOCK_EP_MSG_SEC_CAP = SOCK_EP_MSG_SEC_CAP_BASE;
 uint64_t SOCK_EP_MSG_CAP = SOCK_EP_MSG_CAP_BASE;
 
+extern struct fi_domain_attr sock_domain_attr;
 
 const struct fi_fabric_attr sock_fabric_attr = {
 	.fabric = NULL,
@@ -741,6 +742,9 @@ SOCKETS_INI
 	fi_param_define(&sock_prov, "iface", FI_PARAM_STRING,
 			"Specify interface name");
 
+	fi_param_define(&sock_prov, "mr_key_size", FI_PARAM_SIZE_T,
+			"RMA key size in bytes, default 8");
+
 	fastlock_init(&sock_list_lock);
 	dlist_init(&sock_fab_list);
 	dlist_init(&sock_dom_list);
@@ -753,5 +757,10 @@ SOCKETS_INI
 	fi_param_define(&sock_prov, "dgram_drop_rate", FI_PARAM_INT,
 			"Drop every Nth dgram frame (debug only)");
 #endif
+
+	fi_param_get_size_t(&sock_prov, "mr_key_size", &sock_domain_attr.mr_key_size);
+	if (sock_domain_attr.mr_key_size > sizeof(uint64_t))
+		sock_domain_attr.mr_mode |= FI_MR_RAW;
+
 	return &sock_prov;
 }

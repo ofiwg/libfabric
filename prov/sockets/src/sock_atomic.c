@@ -241,6 +241,26 @@ ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 	}
 #endif
 
+	if (tx_ctx->domain->attr.mr_mode & FI_MR_RAW && !(flags & FI_TAGGED)) {
+		void *itr, *key_ptr;
+		struct sock_peer_mr_raw_attr *stored_attr;
+		fastlock_acquire(&tx_ctx->domain->lock);
+		for (i = 0; i < msg->rma_iov_count; i++) {
+			itr = rbtFind(tx_ctx->domain->peer_raw_mr_map.rbtree,
+			              (void*)&msg->rma_iov[i].key);
+			if (!itr) {
+				ret = -FI_ENODATA;
+				break;
+			}
+			rbtKeyValue(tx_ctx->domain->peer_raw_mr_map.rbtree, itr, &key_ptr,
+			            (void **) &stored_attr);
+			assert(stored_attr->key_size == tx_ctx->domain->attr.mr_key_size);
+			sock_tx_ctx_write(tx_ctx, stored_attr->raw_key, stored_attr->key_size);
+		}
+		fastlock_release(&tx_ctx->domain->lock);
+		if (ret) goto err;
+	}
+
 	sock_tx_ctx_commit(tx_ctx);
 	return 0;
 

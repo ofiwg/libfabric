@@ -64,7 +64,7 @@ extern struct fi_ops_ep sock_ep_ops;
 extern struct fi_ops sock_ep_fi_ops;
 extern struct fi_ops_ep sock_ctx_ep_ops;
 
-extern const struct fi_domain_attr sock_domain_attr;
+extern struct fi_domain_attr sock_domain_attr;
 extern const struct fi_fabric_attr sock_fabric_attr;
 
 const struct fi_tx_attr sock_stx_attr = {
@@ -1468,6 +1468,7 @@ static void sock_set_domain_attr(uint32_t api_version, void *src_addr,
 		attr->control_progress = sock_domain_attr.control_progress;
 	if (attr->data_progress == FI_PROGRESS_UNSPEC)
 		attr->data_progress = sock_domain_attr.data_progress;
+	attr->mr_mode &= ~FI_MR_RAW;
 	if (FI_VERSION_LT(api_version, FI_VERSION(1, 5))) {
 		if (attr->mr_mode == FI_MR_UNSPEC)
 			attr->mr_mode = FI_MR_SCALABLE;
@@ -1475,6 +1476,8 @@ static void sock_set_domain_attr(uint32_t api_version, void *src_addr,
 		if ((attr->mr_mode != FI_MR_BASIC) &&
 		    (attr->mr_mode != FI_MR_SCALABLE))
 			attr->mr_mode = 0;
+		if (sock_domain_attr.mr_mode & FI_MR_RAW)
+			attr->mr_mode |= FI_MR_RAW;
 	}
 
 	if (attr->cq_cnt == 0)

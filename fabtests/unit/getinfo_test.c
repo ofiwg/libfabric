@@ -413,7 +413,8 @@ static int init_mr_basic(struct fi_info *hints)
 
 static int check_mr_basic(struct fi_info *info)
 {
-	return (info->domain_attr->mr_mode != FI_MR_BASIC) ?
+	int mr_mode = info->domain_attr->mr_mode & ~FI_MR_RAW;
+	return (mr_mode != FI_MR_BASIC) ?
 		EXIT_FAILURE : 0;
 }
 
@@ -426,7 +427,8 @@ static int init_mr_scalable(struct fi_info *hints)
 
 static int check_mr_scalable(struct fi_info *info)
 {
-	return (info->domain_attr->mr_mode != FI_MR_SCALABLE) ?
+	int mr_mode = info->domain_attr->mr_mode & ~FI_MR_RAW;
+	return (mr_mode != FI_MR_SCALABLE) ?
 		EXIT_FAILURE : 0;
 }
 
@@ -445,8 +447,8 @@ static int test_mr_v1_0(char *node, char *service, uint64_t flags,
 
 static int check_mr_unspec(struct fi_info *info)
 {
-	return (info->domain_attr->mr_mode != FI_MR_BASIC &&
-		info->domain_attr->mr_mode != FI_MR_SCALABLE) ?
+	int mr_mode = info->domain_attr->mr_mode & ~FI_MR_RAW;
+	return (mr_mode != FI_MR_BASIC && mr_mode != FI_MR_SCALABLE) ?
 		EXIT_FAILURE : 0;
 }
 
@@ -457,6 +459,7 @@ static int test_mr_modes(char *node, char *service, uint64_t flags,
 	uint64_t *mr_modes;
 	int i, cnt, ret;
 
+	hints->caps |= FI_RMA;
 	ret = ft_alloc_bit_combo(0, FI_MR_LOCAL | FI_MR_RAW | FI_MR_VIRT_ADDR |
 			FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_MMU_NOTIFY |
 			FI_MR_RMA_EVENT | FI_MR_ENDPOINT, &mr_modes, &cnt);

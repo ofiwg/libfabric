@@ -249,11 +249,18 @@ struct sock_domain {
 
 	enum fi_progress	progress_mode;
 	struct ofi_mr_map	mr_map;
+	struct ofi_mr_map	peer_raw_mr_map;
 	struct sock_pe		*pe;
 	struct dlist_entry	dom_list_entry;
 	struct fi_domain_attr	attr;
 	struct sock_conn_listener conn_listener;
 	struct sock_ep_cm_head cm_head;
+};
+
+struct sock_peer_mr_raw_attr {
+	uint64_t local_key;
+	size_t key_size;
+	uint8_t raw_key[];
 };
 
 /* move to fi_trigger.h when removing experimental tag from work queues */
@@ -344,8 +351,10 @@ struct sock_cntr {
 struct sock_mr {
 	struct fid_mr mr_fid;
 	struct sock_domain *domain;
-	uint64_t key;
+	uint64_t map_key;
 	uint64_t flags;
+	void* raw_key;
+	size_t raw_key_len;
 	struct sock_cntr *cntr;
 	struct sock_cq *cq;
 };
@@ -1108,7 +1117,8 @@ void sock_cntr_remove_rx_ctx(struct sock_cntr *cntr, struct sock_rx_ctx *rx_ctx)
 
 
 struct sock_mr *sock_mr_verify_key(struct sock_domain *domain, uint64_t key,
-				   uintptr_t *buf, size_t len, uint64_t access);
+				   uintptr_t *buf, size_t len, void* raw_key,
+				   size_t raw_key_len, uint64_t access);
 struct sock_mr *sock_mr_verify_desc(struct sock_domain *domain, void *desc,
 				    void *buf, size_t len, uint64_t access);
 

@@ -53,12 +53,13 @@ static int sock_mr_close(struct fid *fid)
 	dom = mr->domain;
 
 	fastlock_acquire(&dom->lock);
-	err = ofi_mr_map_remove(&dom->mr_map, mr->key);
+	err = ofi_mr_map_remove(&dom->mr_map, mr->map_key);
 	if (err != 0)
 		SOCK_LOG_ERROR("MR Erase error %d \n", err);
 
 	fastlock_release(&dom->lock);
 	ofi_atomic_dec32(&dom->ref);
+	free(mr->raw_key);
 	free(mr);
 	return 0;
 }
@@ -95,19 +96,73 @@ static int sock_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	return 0;
 }
 
+static int sock_mr_get_raw(struct sock_mr *mr, struct fi_mr_raw_attr *attr) {
+	size_t copy_size;
+	void *copy_src;
+	int ret;
+
+	if (!attr) return -FI_EINVAL;
+	if (!attr->base_addr) return -FI_EINVAL;
+	if (!attr->raw_key) return -FI_EINVAL;
+	if (!attr->key_size) return -FI_EINVAL;
+	if (attr->flags != 0)
+		SOCK_LOG_DBG("Ignoring unknown flags in FI_GET_RAW_MR: %lu\n", attr->flags);
+
+	if (mr->domain->attr.mr_mode & FI_MR_RAW) {
+		copy_size = mr->raw_key_len;
+		copy_src = mr->raw_key;
+	} else {
+		copy_size = sizeof(mr->map_key);
+		copy_src = &mr->map_key;
+	}
+	memcpy(attr->raw_key, copy_src, MIN(copy_size, *attr->key_size));
+	ret = FI_SUCCESS;
+	if (*attr->key_size < copy_size) ret = -FI_ETOOSMALL;
+	*attr->key_size = copy_size;
+	*attr->base_addr = 0; /* TODO: this assumes FI_MR_VIRT_ADDR... */
+	return ret;
+}
+
+static int sock_mr_control(struct fid *fid, int command, void *arg)
+{
+	struct sock_mr *mr;
+
+	mr = container_of(fid, struct sock_mr, mr_fid.fid);
+	switch (command) {
+	case FI_GET_RAW_MR:
+		return sock_mr_get_raw(mr, arg);
+	default:
+		return -FI_ENOSYS;
+	}
+	return 0;
+}
+
 static struct fi_ops sock_mr_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = sock_mr_close,
 	.bind = sock_mr_bind,
-	.control = fi_no_control,
+	.control = sock_mr_control,
 	.ops_open = fi_no_ops_open,
 };
 
 struct sock_mr *sock_mr_verify_key(struct sock_domain *domain, uint64_t key,
-	uintptr_t *buf, size_t len, uint64_t access)
+	uintptr_t *buf, size_t len, void* raw_key, size_t raw_key_len, uint64_t access)
 {
 	int err = 0;
 	struct sock_mr *mr;
+
+	if (domain->attr.mr_mode & FI_MR_RAW) {
+		if (raw_key_len != domain->attr.mr_key_size || !raw_key ||
+		    key != FI_KEY_NOTAVAIL) {
+			SOCK_LOG_ERROR("MR check failed - invalid raw key input\n");
+			return NULL;
+		}
+		/* In raw mode, provided key is meaningless. Read real key from raw_key. */
+		key = *(uint64_t*)raw_key;
+	} else if (raw_key_len) {
+		SOCK_LOG_ERROR("MR check failed - unexpected raw key\n");
+		return NULL;
+	}
 
 	fastlock_acquire(&domain->lock);
 
@@ -118,6 +173,17 @@ struct sock_mr *sock_mr_verify_key(struct sock_domain *domain, uint64_t key,
 	}
 
 	fastlock_release(&domain->lock);
+
+	if (mr && domain->attr.mr_mode & FI_MR_RAW) {
+		if (mr->raw_key_len != raw_key_len) {
+			SOCK_LOG_ERROR("MR check failed - wrong raw key length\n");
+			mr = NULL;
+		} else if (0 != memcmp(mr->raw_key, raw_key, mr->raw_key_len)) {
+			SOCK_LOG_ERROR("MR check failed - raw key mismatch\n");
+			mr = NULL;
+		}
+	}
+
 	return mr;
 }
 
@@ -125,7 +191,7 @@ struct sock_mr *sock_mr_verify_desc(struct sock_domain *domain, void *desc,
 	void *buf, size_t len, uint64_t access)
 {
 	uint64_t key = (uintptr_t)desc;
-	return sock_mr_verify_key(domain, key, buf, len, access);
+	return sock_mr_verify_key(domain, key, buf, len, NULL, 0, access);
 }
 
 static int sock_regattr(struct fid *fid, const struct fi_mr_attr *attr,
@@ -149,6 +215,16 @@ static int sock_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	if (!_mr)
 		return -FI_ENOMEM;
 
+	if (dom->attr.mr_mode & FI_MR_RAW) {
+		_mr->raw_key_len = dom->attr.mr_key_size;
+		assert(_mr->raw_key_len > sizeof(uint64_t));
+		_mr->raw_key = calloc(1, _mr->raw_key_len);
+		if (!_mr->raw_key) {
+			free(_mr);
+			return -FI_ENOMEM;
+		}
+	}
+
 	fastlock_acquire(&dom->lock);
 
 	_mr->mr_fid.fid.fclass = FI_CLASS_MR;
@@ -162,7 +238,20 @@ static int sock_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	if (ret != 0)
 		goto err;
 
-	_mr->mr_fid.key = _mr->key = key;
+	_mr->map_key = key;
+	if (dom->attr.mr_mode & FI_MR_RAW) {
+		int i;
+		/* Hide the map key from the user in raw mode */
+		_mr->mr_fid.key = FI_KEY_NOTAVAIL;
+		/* Raw key is the rbtree key plus a pseudo-random suffix.
+		 * This is not cryptographically secure, but no worse than the rbtree key
+		 * implementation which is just an incremented index. */
+		*(uint64_t*)(_mr->raw_key) = key;
+		for (i = sizeof(key); i < _mr->raw_key_len; ++i)
+			((uint8_t*)_mr->raw_key)[i] = (uint8_t)rand();
+	} else {
+		_mr->mr_fid.key = key;
+	}
 	_mr->mr_fid.mem_desc = (void *)(uintptr_t)key;
 	fastlock_release(&dom->lock);
 
@@ -180,6 +269,7 @@ static int sock_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 
 err:
 	fastlock_release(&dom->lock);
+	free(_mr->raw_key);
 	free(_mr);
 	return ret;
 }
