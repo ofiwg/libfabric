@@ -71,9 +71,9 @@ ssize_t ofi_get_hugepage_size(void)
 	return val * 1024;
 }
 
-#ifdef HAVE_ETHTOOL
+#if HAVE_ETHTOOL == 1
 
-#ifdef HAVE_DECL_ETHTOOL_CMD_SPEED
+#if HAVE_DECL_ETHTOOL_CMD_SPEED == 1
 static inline uint32_t ofi_ethtool_cmd_speed(struct ethtool_cmd *ecmd)
 {
 	return ethtool_cmd_speed(ecmd);
@@ -85,7 +85,7 @@ static inline uint32_t ofi_ethtool_cmd_speed(struct ethtool_cmd *ecmd)
 }
 #endif /* HAVE_DECL_ETHTOOL_CMD_SPEED */
 
-#ifdef HAVE_DECL_SPEED_UNKNOWN
+#if HAVE_DECL_SPEED_UNKNOWN == 1
 static inline int ofi_ethtool_is_known(uint32_t speed_mbps)
 {
 	return (speed_mbps != SPEED_UNKNOWN);
