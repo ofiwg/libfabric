@@ -715,6 +715,7 @@ struct psmx2_av_conn {
 
 struct psmx2_fid_av {
 	struct fid_av		av;
+	int			type;
 	struct psmx2_fid_domain	*domain;
 	struct fid_eq		*eq;
 	int			addr_format;
@@ -725,6 +726,7 @@ struct psmx2_fid_av {
 	size_t			addrlen;
 	size_t			count;
 	fastlock_t		lock;
+	struct psmx2_trx_ctxt	*av_map_trx_ctxt;
 	struct util_shm		shm;
 	struct psmx2_av_hdr	*hdr;	/* shared AV header */
 	fi_addr_t		*map;	/* shared AV address mapping */
@@ -830,6 +832,7 @@ struct psmx2_env {
 	int	num_devunits;
 	int	inject_size;
 	int	lock_level;
+	int	lazy_conn;
 	int	disconnect;
 #if (PSMX2_TAG_LAYOUT == PSMX2_TAG_LAYOUT_RUNTIME)
 	char	*tag_layout;

@@ -54,6 +54,7 @@ struct psmx2_env psmx2_env = {
 	.num_devunits	= 1,
 	.inject_size	= 64,
 	.lock_level	= 2,
+	.lazy_conn	= 0,
 	.disconnect	= 0,
 #if (PSMX2_TAG_LAYOUT == PSMX2_TAG_LAYOUT_RUNTIME)
 	.tag_layout	= "auto",
@@ -83,6 +84,7 @@ static void psmx2_init_env(void)
 	fi_param_get_str(&psmx2_prov, "prog_affinity", &psmx2_env.prog_affinity);
 	fi_param_get_int(&psmx2_prov, "inject_size", &psmx2_env.inject_size);
 	fi_param_get_bool(&psmx2_prov, "lock_level", &psmx2_env.lock_level);
+	fi_param_get_bool(&psmx2_prov, "lazy_conn", &psmx2_env.lazy_conn);
 	fi_param_get_bool(&psmx2_prov, "disconnect", &psmx2_env.disconnect);
 #if (PSMX2_TAG_LAYOUT == PSMX2_TAG_LAYOUT_RUNTIME)
 	fi_param_get_str(&psmx2_prov, "tag_layout", &psmx2_env.tag_layout);
@@ -608,6 +610,9 @@ PROVIDER_INI
 
 	fi_param_define(&psmx2_prov, "lock_level", FI_PARAM_INT,
 			"How internal locking is used. 0 means no locking. (default: 2).");
+
+	fi_param_define(&psmx2_prov, "lazy_conn", FI_PARAM_BOOL,
+			"Whether to force lazy connection mode. (default: no).");
 
 	fi_param_define(&psmx2_prov, "disconnect", FI_PARAM_BOOL,
 			"Whether to issue disconnect request when process ends (default: no).");
