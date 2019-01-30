@@ -133,7 +133,8 @@ int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
 		    struct fi_info *info)
 {
 	info->caps = rxm_info.caps;
-	info->mode = core_info->mode | rxm_info.mode;
+	// TODO find which other modes should be filtered
+	info->mode = (core_info->mode & ~FI_RX_CQ_DATA) | rxm_info.mode;
 
 	info->tx_attr->caps		= rxm_info.tx_attr->caps;
 	info->tx_attr->mode		= info->mode;
@@ -147,7 +148,7 @@ int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
 					      core_info->tx_attr->rma_iov_limit);
 
 	info->rx_attr->caps		= rxm_info.rx_attr->caps;
-	info->rx_attr->mode		= info->mode;
+	info->rx_attr->mode		= info->rx_attr->mode & ~FI_RX_CQ_DATA;
 	info->rx_attr->msg_order 	= core_info->rx_attr->msg_order;
 	info->rx_attr->comp_order 	= rxm_info.rx_attr->comp_order;
 	info->rx_attr->size 		= rxm_info.rx_attr->size;
