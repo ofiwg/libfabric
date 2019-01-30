@@ -588,6 +588,9 @@ static int rxm_ep_setopt(fid_t fid, int level, int optname,
 	switch (optname) {
 	case FI_OPT_MIN_MULTI_RECV:
 		rxm_ep->min_multi_recv_size = *(size_t *)optval;
+		FI_INFO(&rxm_prov, FI_LOG_CORE,
+			"FI_OPT_MIN_MULTI_RECV set to %zu\n",
+			rxm_ep->min_multi_recv_size);
 		break;
 	case FI_OPT_BUFFERED_MIN:
 		if (rxm_ep->buf_pools) {
@@ -602,6 +605,9 @@ static int rxm_ep_setopt(fid_t fid, int level, int optname,
 			ret = -FI_EINVAL;
 		} else {
 			rxm_ep->buffered_min = *(size_t *)optval;
+			FI_INFO(&rxm_prov, FI_LOG_CORE,
+				"FI_OPT_BUFFERED_MIN set to %zu\n",
+				rxm_ep->buffered_min);
 		}
 		break;
 	case FI_OPT_BUFFERED_LIMIT:
@@ -618,6 +624,9 @@ static int rxm_ep_setopt(fid_t fid, int level, int optname,
 			ret = -FI_EINVAL;
 		} else {
 			rxm_ep->buffered_limit = *(size_t *)optval;
+			FI_INFO(&rxm_prov, FI_LOG_CORE,
+				"FI_OPT_BUFFERED_LIMIT set to %zu\n",
+				rxm_ep->buffered_limit);
 		}
 		break;
 	default:
@@ -2232,25 +2241,23 @@ static void rxm_ep_settings_init(struct rxm_ep *rxm_ep)
 	rxm_ep->rxm_mr_local = ofi_mr_local(rxm_ep->rxm_info);
 
 	rxm_ep->inject_limit = rxm_ep->msg_info->tx_attr->inject_size;
-
-	if (!rxm_ep->buffered_min) {
-		if (rxm_ep->inject_limit >
-		    (sizeof(struct rxm_pkt) + sizeof(struct rxm_rndv_hdr)))
-			rxm_ep->buffered_min = (rxm_ep->inject_limit -
-						(sizeof(struct rxm_pkt) +
-						 sizeof(struct rxm_rndv_hdr)));
-		else
-			assert(!rxm_ep->buffered_min);
-	}
-
 	rxm_ep->eager_limit = rxm_ep->rxm_info->tx_attr->inject_size;
 
-	rxm_ep->min_multi_recv_size = rxm_ep->min_multi_recv_size ?
-				      rxm_ep->min_multi_recv_size :
-				      rxm_ep->eager_limit;
-	rxm_ep->buffered_limit = rxm_ep->buffered_limit ?
-				 rxm_ep->buffered_limit :
-				 rxm_ep->eager_limit;
+	/* Favor a default buffered_min size that's small enough to be
+	 * injected by FI_EP_MSG provider */
+	assert(!rxm_ep->buffered_min);
+	if (rxm_ep->inject_limit >
+	    (sizeof(struct rxm_pkt) + sizeof(struct rxm_rndv_hdr)))
+		rxm_ep->buffered_min = MIN((rxm_ep->inject_limit -
+					(sizeof(struct rxm_pkt) +
+					 sizeof(struct rxm_rndv_hdr))),
+					   rxm_ep->eager_limit);
+
+	assert(!rxm_ep->min_multi_recv_size);
+	rxm_ep->min_multi_recv_size = rxm_ep->eager_limit;
+
+	assert(!rxm_ep->buffered_limit);
+	rxm_ep->buffered_limit = rxm_ep->eager_limit;
 
 	rxm_ep_sar_init(rxm_ep);
 
@@ -2258,19 +2265,20 @@ static void rxm_ep_settings_init(struct rxm_ep *rxm_ep)
 		"Settings:\n"
 		"\t\t MR local: MSG - %d, RxM - %d\n"
 		"\t\t Completions per progress: MSG - %zu\n"
+	        "\t\t Buffered min: %zu\n"
+	        "\t\t Min multi recv size: %zu\n"
 		"\t\t Protocol limits: MSG Inject - %zu, "
 				      "Eager - %zu, "
 				      "SAR - %zu\n",
 		rxm_ep->msg_mr_local, rxm_ep->rxm_mr_local,
-		rxm_ep->comp_per_progress,
-		rxm_ep->inject_limit, rxm_ep->eager_limit, rxm_ep->sar_limit);
+		rxm_ep->comp_per_progress, rxm_ep->buffered_min,
+		rxm_ep->min_multi_recv_size, rxm_ep->inject_limit,
+		rxm_ep->eager_limit, rxm_ep->sar_limit);
 }
 
 static int rxm_ep_txrx_res_open(struct rxm_ep *rxm_ep)
 {
 	int ret;
-
-	rxm_ep_settings_init(rxm_ep);
 
 	ret = rxm_ep_txrx_pool_create(rxm_ep);
 	if (ret)
@@ -2444,6 +2452,8 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 	ret = rxm_ep_msg_res_open(rxm_ep);
 	if (ret)
 		goto err2;
+
+	rxm_ep_settings_init(rxm_ep);
 
 	slistfd_init(&rxm_ep->msg_eq_entry_list);
 	fastlock_init(&rxm_ep->msg_eq_entry_list_lock);
