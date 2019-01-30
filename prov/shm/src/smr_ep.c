@@ -314,12 +314,6 @@ static int smr_ep_bind_cq(struct smr_ep *ep, struct util_cq *cq, uint64_t flags)
 {
 	int ret = 0;
 
-	if (flags & ~(FI_TRANSMIT | FI_RECV)) {
-		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-			"unsupported flags\n");
-		return -FI_EBADFLAGS;
-	}
-
 	if (((flags & FI_TRANSMIT) && ep->util_ep.tx_cq) ||
 	    ((flags & FI_RECV) && ep->util_ep.rx_cq)) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
@@ -327,16 +321,15 @@ static int smr_ep_bind_cq(struct smr_ep *ep, struct util_cq *cq, uint64_t flags)
 		return -FI_EINVAL;
 	}
 
+	ret = ofi_ep_bind_cq(&ep->util_ep, cq, flags);
+	if (ret)
+		return ret;
+
 	if (flags & FI_TRANSMIT) {
-		ep->util_ep.tx_cq = cq;
-		ofi_atomic_inc32(&cq->ref);
 		ep->tx_comp = cq->wait ? smr_tx_comp_signal : smr_tx_comp;
 	}
 
 	if (flags & FI_RECV) {
-		ep->util_ep.rx_cq = cq;
-		ofi_atomic_inc32(&cq->ref);
-
 		if (cq->wait) {
 			ep->rx_comp = (cq->domain->info_domain_caps & FI_SOURCE) ?
 				      smr_rx_src_comp_signal :
@@ -346,10 +339,6 @@ static int smr_ep_bind_cq(struct smr_ep *ep, struct util_cq *cq, uint64_t flags)
 				      smr_rx_src_comp : smr_rx_comp;
 		}
 	}
-
-	ret = fid_list_insert(&cq->ep_list,
-			      &cq->ep_list_lock,
-			      &ep->util_ep.ep_fid.fid);
 
 	return ret;
 }
