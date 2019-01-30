@@ -802,10 +802,10 @@ ssize_t psmx2_atomic_write_generic(struct fid_ep *ep,
 {
 	struct psmx2_fid_ep *ep_priv;
 	struct psmx2_fid_av *av;
-	struct psmx2_epaddr_context *epaddr_context;
 	struct psmx2_am_request *req;
 	psm2_amarg_t args[8];
 	psm2_epaddr_t psm2_epaddr;
+	psm2_epid_t psm2_epid;
 	int am_flags = PSM2_AM_FLAG_ASYNC;
 	int chunk_size, len;
 
@@ -825,9 +825,9 @@ ssize_t psmx2_atomic_write_generic(struct fid_ep *ep,
 	assert(av);
 
 	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, dest_addr);
+	psm2_epaddr_to_epid(psm2_epaddr, &psm2_epid);
 
-	epaddr_context = psm2_epaddr_getctxt((void *)psm2_epaddr);
-	if (epaddr_context->epid == ep_priv->tx->psm2_epid)
+	if (psm2_epid == ep_priv->tx->psm2_epid)
 		return psmx2_atomic_self(PSMX2_AM_REQ_ATOMIC_WRITE, ep_priv,
 					 buf, count, desc, NULL, NULL, NULL,
 					 NULL, addr, key, datatype, op,
@@ -891,10 +891,10 @@ ssize_t psmx2_atomic_writev_generic(struct fid_ep *ep,
 {
 	struct psmx2_fid_ep *ep_priv;
 	struct psmx2_fid_av *av;
-	struct psmx2_epaddr_context *epaddr_context;
 	struct psmx2_am_request *req;
 	psm2_amarg_t args[8];
 	psm2_epaddr_t psm2_epaddr;
+	psm2_epid_t psm2_epid;
 	int am_flags = PSM2_AM_FLAG_ASYNC;
 	int chunk_size;
 	size_t len;
@@ -920,12 +920,12 @@ ssize_t psmx2_atomic_writev_generic(struct fid_ep *ep,
 	av = ep_priv->av;
 	assert(av);
 
-	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, dest_addr);
-
 	len = psmx2_ioc_size(iov, count, datatype);
 
-	epaddr_context = psm2_epaddr_getctxt((void *)psm2_epaddr);
-	if (epaddr_context->epid == ep_priv->tx->psm2_epid) {
+	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, dest_addr);
+	psm2_epaddr_to_epid(psm2_epaddr, &psm2_epid);
+
+	if (psm2_epid == ep_priv->tx->psm2_epid) {
 		buf = malloc(len);
 		if (!buf)
 			return -FI_ENOMEM;
@@ -1091,10 +1091,10 @@ ssize_t psmx2_atomic_readwrite_generic(struct fid_ep *ep,
 {
 	struct psmx2_fid_ep *ep_priv;
 	struct psmx2_fid_av *av;
-	struct psmx2_epaddr_context *epaddr_context;
 	struct psmx2_am_request *req;
 	psm2_amarg_t args[8];
 	psm2_epaddr_t psm2_epaddr;
+	psm2_epid_t psm2_epid;
 	int am_flags = PSM2_AM_FLAG_ASYNC;
 	int chunk_size, len;
 
@@ -1116,9 +1116,9 @@ ssize_t psmx2_atomic_readwrite_generic(struct fid_ep *ep,
 	assert(av);
 
 	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, dest_addr);
+	psm2_epaddr_to_epid(psm2_epaddr, &psm2_epid);
 
-	epaddr_context = psm2_epaddr_getctxt((void *)psm2_epaddr);
-	if (epaddr_context->epid == ep_priv->tx->psm2_epid)
+	if (psm2_epid == ep_priv->tx->psm2_epid)
 		return psmx2_atomic_self(PSMX2_AM_REQ_ATOMIC_READWRITE, ep_priv,
 					 buf, count, desc, NULL, NULL, result,
 					 result_desc, addr, key, datatype, op,
@@ -1189,10 +1189,10 @@ ssize_t psmx2_atomic_readwritev_generic(struct fid_ep *ep,
 {
 	struct psmx2_fid_ep *ep_priv;
 	struct psmx2_fid_av *av;
-	struct psmx2_epaddr_context *epaddr_context;
 	struct psmx2_am_request *req;
 	psm2_amarg_t args[8];
 	psm2_epaddr_t psm2_epaddr;
+	psm2_epid_t psm2_epid;
 	int am_flags = PSM2_AM_FLAG_ASYNC;
 	int chunk_size;
 	size_t len, result_len, iov_size;
@@ -1243,9 +1243,9 @@ ssize_t psmx2_atomic_readwritev_generic(struct fid_ep *ep,
 	assert(av);
 
 	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, dest_addr);
+	psm2_epaddr_to_epid(psm2_epaddr, &psm2_epid);
 
-	epaddr_context = psm2_epaddr_getctxt((void *)psm2_epaddr);
-	if (epaddr_context->epid == ep_priv->tx->psm2_epid) {
+	if (psm2_epid == ep_priv->tx->psm2_epid) {
 		if (buf && count > 1) {
 			buf = malloc(len);
 			psmx2_ioc_read(iov, count, datatype, buf, len);
@@ -1470,10 +1470,10 @@ ssize_t psmx2_atomic_compwrite_generic(struct fid_ep *ep,
 {
 	struct psmx2_fid_ep *ep_priv;
 	struct psmx2_fid_av *av;
-	struct psmx2_epaddr_context *epaddr_context;
 	struct psmx2_am_request *req;
 	psm2_amarg_t args[8];
 	psm2_epaddr_t psm2_epaddr;
+	psm2_epid_t psm2_epid;
 	int am_flags = PSM2_AM_FLAG_ASYNC;
 	int chunk_size, len;
 
@@ -1496,9 +1496,9 @@ ssize_t psmx2_atomic_compwrite_generic(struct fid_ep *ep,
 	assert(av);
 
 	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, dest_addr);
+	psm2_epaddr_to_epid(psm2_epaddr, &psm2_epid);
 
-	epaddr_context = psm2_epaddr_getctxt((void *)psm2_epaddr);
-	if (epaddr_context->epid == ep_priv->tx->psm2_epid)
+	if (psm2_epid == ep_priv->tx->psm2_epid)
 		return psmx2_atomic_self(PSMX2_AM_REQ_ATOMIC_COMPWRITE, ep_priv,
 					 buf, count, desc, compare,
 					 compare_desc, result, result_desc,
@@ -1573,10 +1573,10 @@ ssize_t psmx2_atomic_compwritev_generic(struct fid_ep *ep,
 {
 	struct psmx2_fid_ep *ep_priv;
 	struct psmx2_fid_av *av;
-	struct psmx2_epaddr_context *epaddr_context;
 	struct psmx2_am_request *req;
 	psm2_amarg_t args[8];
 	psm2_epaddr_t psm2_epaddr;
+	psm2_epid_t psm2_epid;
 	int am_flags = PSM2_AM_FLAG_ASYNC;
 	int chunk_size;
 	size_t len, iov_size;
@@ -1625,9 +1625,9 @@ ssize_t psmx2_atomic_compwritev_generic(struct fid_ep *ep,
 	assert(av);
 
 	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, dest_addr);
+	psm2_epaddr_to_epid(psm2_epaddr, &psm2_epid);
 
-	epaddr_context = psm2_epaddr_getctxt((void *)psm2_epaddr);
-	if (epaddr_context->epid == ep_priv->tx->psm2_epid) {
+	if (psm2_epid == ep_priv->tx->psm2_epid) {
 		if (count > 1) {
 			buf = malloc(len);
 			if (!buf)
