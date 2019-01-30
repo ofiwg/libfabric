@@ -866,9 +866,8 @@ void fts_cur_info(struct ft_series *series, struct ft_info *info)
 		while (set->tx_op_flags[i])
 			info->tx_op_flags |= set->tx_op_flags[i++];
 	}
-
-	info->mode = (set->mode[series->cur_mode] == FT_MODE_NONE) ?
-			0 : set->mode[series->cur_mode];
+	info->mode = !set->mode[series->cur_mode] ?
+			FT_MODE_ALL : set->mode[series->cur_mode];
 
 	info->ep_type = set->ep_type[series->cur_ep];
 	info->av_type = set->av_type[series->cur_av];
