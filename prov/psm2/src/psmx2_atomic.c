@@ -824,7 +824,7 @@ ssize_t psmx2_atomic_write_generic(struct fid_ep *ep,
 	av = ep_priv->av;
 	assert(av);
 
-	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, dest_addr);
+	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, dest_addr, av->type);
 	psm2_epaddr_to_epid(psm2_epaddr, &psm2_epid);
 
 	if (psm2_epid == ep_priv->tx->psm2_epid)
@@ -922,7 +922,7 @@ ssize_t psmx2_atomic_writev_generic(struct fid_ep *ep,
 
 	len = psmx2_ioc_size(iov, count, datatype);
 
-	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, dest_addr);
+	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, dest_addr, av->type);
 	psm2_epaddr_to_epid(psm2_epaddr, &psm2_epid);
 
 	if (psm2_epid == ep_priv->tx->psm2_epid) {
@@ -1115,7 +1115,7 @@ ssize_t psmx2_atomic_readwrite_generic(struct fid_ep *ep,
 	av = ep_priv->av;
 	assert(av);
 
-	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, dest_addr);
+	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, dest_addr, av->type);
 	psm2_epaddr_to_epid(psm2_epaddr, &psm2_epid);
 
 	if (psm2_epid == ep_priv->tx->psm2_epid)
@@ -1242,7 +1242,7 @@ ssize_t psmx2_atomic_readwritev_generic(struct fid_ep *ep,
 	av = ep_priv->av;
 	assert(av);
 
-	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, dest_addr);
+	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, dest_addr, av->type);
 	psm2_epaddr_to_epid(psm2_epaddr, &psm2_epid);
 
 	if (psm2_epid == ep_priv->tx->psm2_epid) {
@@ -1495,7 +1495,7 @@ ssize_t psmx2_atomic_compwrite_generic(struct fid_ep *ep,
 	av = ep_priv->av;
 	assert(av);
 
-	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, dest_addr);
+	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, dest_addr, av->type);
 	psm2_epaddr_to_epid(psm2_epaddr, &psm2_epid);
 
 	if (psm2_epid == ep_priv->tx->psm2_epid)
@@ -1624,7 +1624,7 @@ ssize_t psmx2_atomic_compwritev_generic(struct fid_ep *ep,
 	av = ep_priv->av;
 	assert(av);
 
-	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, dest_addr);
+	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, dest_addr, av->type);
 	psm2_epaddr_to_epid(psm2_epaddr, &psm2_epid);
 
 	if (psm2_epid == ep_priv->tx->psm2_epid) {

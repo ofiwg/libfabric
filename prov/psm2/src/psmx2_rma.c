@@ -648,7 +648,7 @@ ssize_t psmx2_read_generic(struct fid_ep *ep, void *buf, size_t len,
 	av = ep_priv->av;
 	assert(av);
 
-	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, src_addr);
+	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, src_addr, av->type);
 	psm2_epaddr_to_epid(psm2_epaddr, &psm2_epid);
 
 	if (psm2_epid == ep_priv->tx->psm2_epid)
@@ -752,7 +752,7 @@ ssize_t psmx2_readv_generic(struct fid_ep *ep, const struct iovec *iov,
 	av = ep_priv->av;
 	assert(av);
 
-	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, src_addr);
+	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, src_addr, av->type);
 	psm2_epaddr_to_epid(psm2_epaddr, &psm2_epid);
 
 	if (psm2_epid == ep_priv->tx->psm2_epid)
@@ -950,7 +950,7 @@ ssize_t psmx2_write_generic(struct fid_ep *ep, const void *buf, size_t len,
 	av = ep_priv->av;
 	assert(av);
 
-	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, dest_addr);
+	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, dest_addr, av->type);
 	psm2_epaddr_to_epid(psm2_epaddr, &psm2_epid);
 
 	if (psm2_epid == ep_priv->tx->psm2_epid)
@@ -1097,7 +1097,7 @@ ssize_t psmx2_writev_generic(struct fid_ep *ep, const struct iovec *iov,
 	av = ep_priv->av;
 	assert(av);
 
-	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, dest_addr);
+	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, dest_addr, av->type);
 	psm2_epaddr_to_epid(psm2_epaddr, &psm2_epid);
 
 	if (psm2_epid == ep_priv->tx->psm2_epid)

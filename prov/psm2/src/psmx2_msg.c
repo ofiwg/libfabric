@@ -56,7 +56,7 @@ ssize_t psmx2_recv_generic(struct fid_ep *ep, void *buf, size_t len,
 	if ((ep_priv->caps & FI_DIRECTED_RECV) && src_addr != FI_ADDR_UNSPEC) {
 		av = ep_priv->av;
 		assert(av);
-		psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->rx, src_addr);
+		psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->rx, src_addr, av->type);
 	} else {
 		psm2_epaddr = 0;
 	}
@@ -209,7 +209,7 @@ ssize_t psmx2_send_generic(struct fid_ep *ep, const void *buf, size_t len,
 
 	av = ep_priv->av;
 	assert(av);
-	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, dest_addr);
+	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, dest_addr, av->type);
 
 	PSMX2_SET_TAG(psm2_tag, 0, data, PSMX2_TYPE_MSG | PSMX2_IMM_BIT_SET(have_data));
 
@@ -351,7 +351,7 @@ ssize_t psmx2_sendv_generic(struct fid_ep *ep, const struct iovec *iov,
 
 	av = ep_priv->av;
 	assert(av);
-	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, dest_addr);
+	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, dest_addr, av->type);
 
 	if (flags & FI_REMOTE_CQ_DATA)
 		msg_flags |= PSMX2_IMM_BIT;
