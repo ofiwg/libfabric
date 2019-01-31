@@ -53,16 +53,25 @@ static void tcpx_rma_read_send_entry_fill(struct tcpx_xfer_entry *send_entry,
 					  struct tcpx_ep *tcpx_ep,
 					  const struct fi_msg_rma *msg)
 {
-	memcpy(send_entry->msg_hdr.rma_iov, msg->rma_iov,
-	       msg->rma_iov_count * sizeof(msg->rma_iov[0]));
-	send_entry->msg_hdr.rma_iov_cnt = msg->rma_iov_count;
+	struct ofi_rma_iov *rma_iov;
+	size_t offset;
 
-	send_entry->msg_data.iov[0].iov_base = (void *) &send_entry->msg_hdr;
-	send_entry->msg_data.iov[0].iov_len = sizeof(send_entry->msg_hdr);
-	send_entry->msg_data.iov_cnt = 1;
+	offset = sizeof(send_entry->hdr.base_hdr);
+	rma_iov = (struct ofi_rma_iov *)((uint8_t *)&send_entry->hdr + offset);
+
+	send_entry->hdr.base_hdr.rma_iov_cnt = msg->rma_iov_count;
+	memcpy(rma_iov, msg->rma_iov,
+	       msg->rma_iov_count * sizeof(msg->rma_iov[0]));
+
+	offset += (msg->rma_iov_count * sizeof(*rma_iov));
+
+	send_entry->hdr.base_hdr.size = htonll(offset);
+	send_entry->hdr.base_hdr.payload_off = (uint8_t)offset;
+
+	send_entry->iov[0].iov_base = (void *) &send_entry->hdr;
+	send_entry->iov[0].iov_len = offset;
+	send_entry->iov_cnt = 1;
 	send_entry->ep = tcpx_ep;
-	send_entry->done_len = 0;
-	send_entry->flags = 0;
 }
 
 static void tcpx_rma_read_recv_entry_fill(struct tcpx_xfer_entry *recv_entry,
@@ -70,13 +79,12 @@ static void tcpx_rma_read_recv_entry_fill(struct tcpx_xfer_entry *recv_entry,
 					  const struct fi_msg_rma *msg,
 					  uint64_t flags)
 {
-	memcpy(&recv_entry->msg_data.iov[0], &msg->msg_iov[0],
+	memcpy(&recv_entry->iov[0], &msg->msg_iov[0],
 	       msg->iov_count * sizeof(struct iovec));
 
-	recv_entry->msg_data.iov_cnt = msg->iov_count;
+	recv_entry->iov_cnt = msg->iov_count;
 	recv_entry->ep = tcpx_ep;
 	recv_entry->context = msg->context;
-	recv_entry->done_len = 0;
 	recv_entry->flags = ((tcpx_ep->util_ep.tx_op_flags & FI_COMPLETION) |
 			     flags | FI_RMA | FI_READ);
 }
@@ -170,7 +178,11 @@ static ssize_t tcpx_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg
 	struct tcpx_ep *tcpx_ep;
 	struct tcpx_cq *tcpx_cq;
 	struct tcpx_xfer_entry *send_entry;
+	struct ofi_rma_iov *rma_iov;
 	uint64_t data_len;
+	uint64_t *cq_data;
+	size_t offset;
+
 
 	tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
 	tcpx_cq = container_of(tcpx_ep->util_ep.tx_cq, struct tcpx_cq,
@@ -186,54 +198,58 @@ static ssize_t tcpx_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg
 	data_len = ofi_total_iov_len(msg->msg_iov, msg->iov_count);
 
 	assert(!(flags & FI_INJECT) || (data_len <= TCPX_MAX_INJECT_SZ));
-
-	send_entry->msg_hdr.hdr.size = htonll(data_len + sizeof(send_entry->msg_hdr));
-	send_entry->msg_hdr.hdr.flags = 0;
-
-	memcpy(send_entry->msg_hdr.rma_iov, msg->rma_iov,
-	       msg->rma_iov_count * sizeof(msg->rma_iov[0]));
-	send_entry->msg_hdr.rma_iov_cnt = msg->rma_iov_count;
-
-	send_entry->msg_data.iov[0].iov_base = (void *) &send_entry->msg_hdr;
-	send_entry->msg_data.iov[0].iov_len = sizeof(send_entry->msg_hdr);
-	send_entry->msg_data.iov_cnt = msg->iov_count + 1;
-
-	if (flags & FI_INJECT) {
-		ofi_copy_iov_buf(msg->msg_iov, msg->iov_count, 0,
-				 send_entry->msg_data.inject,
-				 data_len,
-				 OFI_COPY_IOV_TO_BUF);
-
-		send_entry->msg_data.iov[1].iov_base = (void *)send_entry->msg_data.inject;
-		send_entry->msg_data.iov[1].iov_len = data_len;
-		send_entry->msg_data.iov_cnt++;
-	} else {
-		memcpy(&send_entry->msg_data.iov[1], &msg->msg_iov[0],
-		       msg->iov_count * sizeof(struct iovec));
-	}
+	send_entry->hdr.base_hdr.flags = 0;
+	offset = sizeof(send_entry->hdr.base_hdr);
 
 	if (flags & FI_REMOTE_CQ_DATA) {
-		send_entry->msg_hdr.hdr.flags |= OFI_REMOTE_CQ_DATA;
-		send_entry->msg_hdr.hdr.data = htonll(msg->data);
+		send_entry->hdr.base_hdr.flags |= OFI_REMOTE_CQ_DATA;
+		cq_data = (uint64_t *)((uint8_t *)&send_entry->hdr + offset);
+		*cq_data = htonll(msg->data);
+		offset += sizeof(msg->data);
 	}
+
+	rma_iov = (struct ofi_rma_iov *)((uint8_t *)&send_entry->hdr + offset);
+	memcpy(rma_iov, msg->rma_iov,
+	       msg->rma_iov_count * sizeof(msg->rma_iov[0]));
+	send_entry->hdr.base_hdr.rma_iov_cnt = msg->rma_iov_count;
+
+	offset += (send_entry->hdr.base_hdr.rma_iov_cnt *
+		   sizeof(*rma_iov));
+
+	send_entry->hdr.base_hdr.payload_off = (uint8_t)offset;
+	send_entry->hdr.base_hdr.size = htonll(data_len + offset);
+	if (flags & FI_INJECT) {
+		ofi_copy_iov_buf(msg->msg_iov, msg->iov_count, 0,
+				 (uint8_t *)&send_entry->hdr + offset,
+				 data_len,
+				 OFI_COPY_IOV_TO_BUF);
+		send_entry->iov_cnt = 1;
+		offset += data_len;
+	} else {
+		memcpy(&send_entry->iov[1], &msg->msg_iov[0],
+		       msg->iov_count * sizeof(struct iovec));
+		send_entry->iov_cnt = msg->iov_count + 1;
+	}
+
+	send_entry->iov[0].iov_base = (void *) &send_entry->hdr;
+	send_entry->iov[0].iov_len = offset;
 
 	send_entry->flags = ((tcpx_ep->util_ep.tx_op_flags & FI_COMPLETION) |
 			     flags | FI_RMA | FI_WRITE);
 
 	if (flags & (FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)) {
 		send_entry->flags &= ~FI_COMPLETION;
-		send_entry->msg_hdr.hdr.flags |= OFI_DELIVERY_COMPLETE;
+		send_entry->hdr.base_hdr.flags |= OFI_DELIVERY_COMPLETE;
 	}
 
 	if (flags & FI_COMMIT_COMPLETE) {
 		send_entry->flags &= ~FI_COMPLETION;
-		send_entry->msg_hdr.hdr.flags |= OFI_COMMIT_COMPLETE;
+		send_entry->hdr.base_hdr.flags |= OFI_COMMIT_COMPLETE;
 	}
 
-	send_entry->msg_hdr.hdr.flags = htonl(send_entry->msg_hdr.hdr.flags);
+	send_entry->hdr.base_hdr.flags = htons(send_entry->hdr.base_hdr.flags);
 	send_entry->ep = tcpx_ep;
 	send_entry->context = msg->context;
-	send_entry->done_len = 0;
 
 	fastlock_acquire(&tcpx_ep->lock);
 	tcpx_tx_queue_insert(tcpx_ep, send_entry);
@@ -326,6 +342,9 @@ static ssize_t tcpx_rma_inject_common(struct fid_ep *ep, const void *buf,
 	struct tcpx_ep *tcpx_ep;
 	struct tcpx_cq *tcpx_cq;
 	struct tcpx_xfer_entry *send_entry;
+	struct ofi_rma_iov *rma_iov;
+	uint64_t *cq_data;
+	size_t offset;
 
 	tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
 	tcpx_cq = container_of(tcpx_ep->util_ep.tx_cq, struct tcpx_cq,
@@ -336,31 +355,34 @@ static ssize_t tcpx_rma_inject_common(struct fid_ep *ep, const void *buf,
 		return -FI_EAGAIN;
 
 	assert(len <= TCPX_MAX_INJECT_SZ);
-	send_entry->msg_hdr.hdr.size = htonll(len + sizeof(send_entry->msg_hdr));
-	send_entry->msg_hdr.hdr.flags = 0;
+	offset = sizeof(send_entry->hdr.base_hdr);
 
-	send_entry->msg_hdr.rma_iov[0].addr = addr;
-	send_entry->msg_hdr.rma_iov[0].key = key;
-	send_entry->msg_hdr.rma_iov[0].len = len;
-	send_entry->msg_hdr.rma_iov_cnt = 1;
-
-	send_entry->msg_data.iov[0].iov_base = (void *) &send_entry->msg_hdr;
-	send_entry->msg_data.iov[0].iov_len = sizeof(send_entry->msg_hdr);
-
-	memcpy(send_entry->msg_data.inject, (uint8_t *)buf, len);
-	send_entry->msg_data.iov[1].iov_base = (void *)send_entry->msg_data.inject;
-	send_entry->msg_data.iov[1].iov_len = len;
-
-	send_entry->msg_data.iov_cnt = 2;
-
+	send_entry->hdr.base_hdr.flags = 0;
 	if (flags & FI_REMOTE_CQ_DATA) {
-		send_entry->msg_hdr.hdr.flags |= OFI_REMOTE_CQ_DATA;
-		send_entry->msg_hdr.hdr.data = htonll(data);
+		send_entry->hdr.base_hdr.flags |= OFI_REMOTE_CQ_DATA;
+		cq_data = (uint64_t *)((uint8_t *)&send_entry->hdr + offset);
+		*cq_data = htonll(data);
+		offset += sizeof(data);
 	}
 
-	send_entry->msg_hdr.hdr.flags = htonl(send_entry->msg_hdr.hdr.flags);
+	rma_iov = (struct ofi_rma_iov *)((uint8_t *)&send_entry->hdr + offset);
+	rma_iov[0].addr = addr;
+	rma_iov[0].key = key;
+	rma_iov[0].len = len;
+	send_entry->hdr.base_hdr.rma_iov_cnt = 1;
+	offset += sizeof(*rma_iov);
+
+	send_entry->hdr.base_hdr.payload_off = (uint8_t)offset;
+	memcpy((uint8_t *)&send_entry->hdr + offset, (uint8_t *)buf, len);
+	offset += len;
+
+	send_entry->iov[0].iov_base = (void *) &send_entry->hdr;
+	send_entry->iov[0].iov_len = offset;
+	send_entry->iov_cnt = 1;
+
+	send_entry->hdr.base_hdr.size = htonll(offset);
+	send_entry->hdr.base_hdr.flags = htons(send_entry->hdr.base_hdr.flags);
 	send_entry->ep = tcpx_ep;
-	send_entry->done_len = 0;
 
 	fastlock_acquire(&tcpx_ep->lock);
 	tcpx_tx_queue_insert(tcpx_ep, send_entry);

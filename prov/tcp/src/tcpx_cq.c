@@ -89,8 +89,13 @@ void tcpx_xfer_entry_release(struct tcpx_cq *tcpx_cq,
 	if (xfer_entry->ep->cur_rx_entry == xfer_entry) {
 		xfer_entry->ep->cur_rx_entry = NULL;
 	}
+
+	xfer_entry->flags = 0;
+	xfer_entry->context = 0;
+	xfer_entry->done_len = 0;
+
 	tcpx_cq->util_cq.cq_fastlock_acquire(&tcpx_cq->util_cq.cq_lock);
-	util_buf_release(tcpx_cq->buf_pools[xfer_entry->msg_hdr.hdr.op_data].pool,
+	util_buf_release(tcpx_cq->buf_pools[xfer_entry->hdr.base_hdr.op_data].pool,
 			 xfer_entry);
 	tcpx_cq->util_cq.cq_fastlock_release(&tcpx_cq->util_cq.cq_lock);
 }
@@ -100,16 +105,27 @@ void tcpx_cq_report_completion(struct util_cq *cq,
 			       int err)
 {
 	struct fi_cq_err_entry err_entry;
+	uint64_t data = 0;
 
 	if (!(xfer_entry->flags & FI_COMPLETION))
 		return;
+
+	if (ntohs(xfer_entry->hdr.base_hdr.flags) &
+	    OFI_REMOTE_CQ_DATA) {
+		data = *((uint64_t *)
+			 ((uint8_t *)&xfer_entry->hdr +
+			  sizeof(xfer_entry->hdr.base_hdr)));
+
+		data = ntohll(data);
+		xfer_entry->flags |= FI_REMOTE_CQ_DATA;
+	}
 
 	if (err) {
 		err_entry.op_context = xfer_entry->context;
 		err_entry.flags = xfer_entry->flags;
 		err_entry.len = 0;
 		err_entry.buf = NULL;
-		err_entry.data = ntohll(xfer_entry->msg_hdr.hdr.data);
+		err_entry.data = data;
 		err_entry.tag = 0;
 		err_entry.olen = 0;
 		err_entry.err = err;
@@ -121,8 +137,7 @@ void tcpx_cq_report_completion(struct util_cq *cq,
 	} else {
 		ofi_cq_write(cq, xfer_entry->context,
 			     xfer_entry->flags, 0, NULL,
-			     ntohll(xfer_entry->msg_hdr.hdr.data), 0);
-
+			     data, 0);
 		if (cq->wait)
 			ofi_cq_signal(&cq->cq_fid);
 	}
@@ -174,25 +189,25 @@ static int tcpx_buf_pool_init(void *pool_ctx, void *addr,
 		xfer_entry = (struct tcpx_xfer_entry *)
 			((char *)addr + i * pool->pool->entry_sz);
 
-		xfer_entry->msg_hdr.hdr.version = OFI_CTRL_VERSION;
-		xfer_entry->msg_hdr.hdr.op_data = pool->op_type;
+		xfer_entry->hdr.base_hdr.version = TCPX_HDR_VERSION;
+		xfer_entry->hdr.base_hdr.op_data = pool->op_type;
 		switch (pool->op_type) {
 		case TCPX_OP_MSG_RECV:
 		case TCPX_OP_MSG_SEND:
 		case TCPX_OP_MSG_RESP:
-			xfer_entry->msg_hdr.hdr.op = ofi_op_msg;
+			xfer_entry->hdr.base_hdr.op = ofi_op_msg;
 			break;
 		case TCPX_OP_WRITE:
 		case TCPX_OP_REMOTE_WRITE:
-			xfer_entry->msg_hdr.hdr.op = ofi_op_write;
+			xfer_entry->hdr.base_hdr.op = ofi_op_write;
 			break;
 		case TCPX_OP_READ_REQ:
-			xfer_entry->msg_hdr.hdr.op = ofi_op_read_req;
-			xfer_entry->msg_hdr.hdr.size =
-				htonll(sizeof(xfer_entry->msg_hdr));
+			xfer_entry->hdr.base_hdr.op = ofi_op_read_req;
+			xfer_entry->hdr.base_hdr.size =
+				htonll(sizeof(xfer_entry->hdr.base_hdr));
 			break;
 		case TCPX_OP_READ_RSP:
-			xfer_entry->msg_hdr.hdr.op = ofi_op_read_rsp;
+			xfer_entry->hdr.base_hdr.op = ofi_op_read_rsp;
 			break;
 		case TCPX_OP_REMOTE_READ:
 			break;

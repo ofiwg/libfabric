@@ -62,8 +62,10 @@
 #ifndef _TCP_H_
 #define _TCP_H_
 
-#define TCPX_MAJOR_VERSION 0
-#define TCPX_MINOR_VERSION 1
+#define TCPX_MAJOR_VERSION 	0
+#define TCPX_MINOR_VERSION 	1
+
+#define TCPX_HDR_VERSION	3
 
 #define TCPX_MAX_CM_DATA_SIZE	(1<<8)
 #define TCPX_IOV_LIMIT		(4)
@@ -125,18 +127,35 @@ enum tcpx_cm_state {
 	TCPX_EP_ERROR,
 };
 
-struct tcpx_msg_hdr {
-	struct ofi_op_hdr	hdr;
-	size_t			rma_iov_cnt;
-	union {
-		struct fi_rma_iov	rma_iov[TCPX_IOV_LIMIT];
-		struct fi_rma_ioc	rma_ioc[TCPX_IOV_LIMIT];
-	};
+struct tcpx_base_hdr {
+	uint8_t			version;
+	uint8_t			op;
+	uint16_t		flags;
+	uint8_t			op_data;
+	uint8_t			rma_iov_cnt;
+	uint8_t			payload_off;
+	uint8_t			rsvd;
+	uint64_t		size;
 };
 
+struct tcpx_cq_data_hdr {
+	struct tcpx_base_hdr 	base_hdr;
+	uint64_t		cq_data;
+};
+
+#define TCPX_MAX_HDR_SZ (sizeof(struct tcpx_base_hdr) + 	\
+			 sizeof(uint64_t) +			\
+			 sizeof(struct ofi_rma_iov) *		\
+			 TCPX_IOV_LIMIT +			\
+			 TCPX_MAX_INJECT_SZ)
+
 struct tcpx_rx_detect {
-	struct tcpx_msg_hdr	hdr;
-	uint64_t		done_len;
+	union {
+		struct tcpx_base_hdr	base_hdr;
+		uint8_t		       	max_hdr[TCPX_MAX_HDR_SZ];
+	} hdr;
+	size_t			hdr_len;
+	size_t			done_len;
 };
 
 struct tcpx_rx_ctx {
@@ -182,16 +201,15 @@ struct tcpx_fabric {
 	struct util_fabric	util_fabric;
 };
 
-struct tcpx_msg_data {
-	size_t			iov_cnt;
-	struct iovec		iov[TCPX_IOV_LIMIT+1];
-	uint8_t			inject[TCPX_MAX_INJECT_SZ];
-};
-
 struct tcpx_xfer_entry {
 	struct slist_entry	entry;
-	struct tcpx_msg_hdr	msg_hdr;
-	struct tcpx_msg_data	msg_data;
+	union {
+		struct tcpx_base_hdr	base_hdr;
+		struct tcpx_cq_data_hdr cq_data_hdr;
+		uint8_t		       	max_hdr[TCPX_MAX_HDR_SZ];
+	} hdr;
+	size_t			iov_cnt;
+	struct iovec		iov[TCPX_IOV_LIMIT+1];
 	struct tcpx_ep		*ep;
 	uint64_t		flags;
 	void			*context;
