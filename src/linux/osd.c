@@ -71,7 +71,7 @@ ssize_t ofi_get_hugepage_size(void)
 	return val * 1024;
 }
 
-#if HAVE_ETHTOOL
+#ifdef HAVE_ETHTOOL
 
 #if HAVE_DECL_ETHTOOL_CMD_SPEED
 static inline uint32_t ofi_ethtool_cmd_speed(struct ethtool_cmd *ecmd)
