@@ -628,12 +628,12 @@ ssize_t psmx2_read_generic(struct fid_ep *ep, void *buf, size_t len,
 {
 	struct psmx2_fid_ep *ep_priv;
 	struct psmx2_fid_av *av;
-	struct psmx2_epaddr_context *epaddr_context;
 	struct psmx2_am_request *req;
 	psm2_amarg_t args[8];
 	int chunk_size;
 	size_t offset = 0;
 	psm2_epaddr_t psm2_epaddr;
+	psm2_epid_t psm2_epid;
 	psm2_mq_req_t psm2_req;
 	psm2_mq_tag_t psm2_tag, psm2_tagsel;
 
@@ -647,10 +647,11 @@ ssize_t psmx2_read_generic(struct fid_ep *ep, void *buf, size_t len,
 
 	av = ep_priv->av;
 	assert(av);
-	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, src_addr);
 
-	epaddr_context = psm2_epaddr_getctxt((void *)psm2_epaddr);
-	if (epaddr_context->epid == ep_priv->tx->psm2_epid)
+	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, src_addr);
+	psm2_epaddr_to_epid(psm2_epaddr, &psm2_epid);
+
+	if (psm2_epid == ep_priv->tx->psm2_epid)
 		return psmx2_rma_self(PSMX2_AM_REQ_READ, ep_priv,
 				      buf, len, desc, addr, key,
 				      context, flags, 0);
@@ -730,12 +731,12 @@ ssize_t psmx2_readv_generic(struct fid_ep *ep, const struct iovec *iov,
 {
 	struct psmx2_fid_ep *ep_priv;
 	struct psmx2_fid_av *av;
-	struct psmx2_epaddr_context *epaddr_context;
 	struct psmx2_am_request *req;
 	psm2_amarg_t args[8];
 	int chunk_size;
 	size_t offset = 0;
 	psm2_epaddr_t psm2_epaddr;
+	psm2_epid_t psm2_epid;
 	psm2_mq_req_t psm2_req;
 	psm2_mq_tag_t psm2_tag, psm2_tagsel;
 	size_t total_len, long_len = 0, short_len;
@@ -750,10 +751,11 @@ ssize_t psmx2_readv_generic(struct fid_ep *ep, const struct iovec *iov,
 
 	av = ep_priv->av;
 	assert(av);
-	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, src_addr);
 
-	epaddr_context = psm2_epaddr_getctxt((void *)psm2_epaddr);
-	if (epaddr_context->epid == ep_priv->tx->psm2_epid)
+	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, src_addr);
+	psm2_epaddr_to_epid(psm2_epaddr, &psm2_epid);
+
+	if (psm2_epid == ep_priv->tx->psm2_epid)
 		return psmx2_rma_self(PSMX2_AM_REQ_READV, ep_priv,
 				      (void *)iov, count, desc, addr,
 				      key, context, flags, 0);
@@ -924,13 +926,13 @@ ssize_t psmx2_write_generic(struct fid_ep *ep, const void *buf, size_t len,
 {
 	struct psmx2_fid_ep *ep_priv;
 	struct psmx2_fid_av *av;
-	struct psmx2_epaddr_context *epaddr_context;
 	struct psmx2_am_request *req;
 	psm2_amarg_t args[8];
 	int nargs;
 	int am_flags = PSM2_AM_FLAG_ASYNC;
 	int chunk_size;
 	psm2_epaddr_t psm2_epaddr;
+	psm2_epid_t psm2_epid;
 	psm2_mq_req_t psm2_req;
 	psm2_mq_tag_t psm2_tag;
 	void *psm2_context;
@@ -947,10 +949,11 @@ ssize_t psmx2_write_generic(struct fid_ep *ep, const void *buf, size_t len,
 
 	av = ep_priv->av;
 	assert(av);
-	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, dest_addr);
 
-	epaddr_context = psm2_epaddr_getctxt((void *)psm2_epaddr);
-	if (epaddr_context->epid == ep_priv->tx->psm2_epid)
+	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, dest_addr);
+	psm2_epaddr_to_epid(psm2_epaddr, &psm2_epid);
+
+	if (psm2_epid == ep_priv->tx->psm2_epid)
 		return psmx2_rma_self(PSMX2_AM_REQ_WRITE, ep_priv,
 				      (void *)buf, len, desc, addr,
 				      key, context, flags, data);
@@ -1069,13 +1072,13 @@ ssize_t psmx2_writev_generic(struct fid_ep *ep, const struct iovec *iov,
 {
 	struct psmx2_fid_ep *ep_priv;
 	struct psmx2_fid_av *av;
-	struct psmx2_epaddr_context *epaddr_context;
 	struct psmx2_am_request *req;
 	psm2_amarg_t args[8];
 	int nargs;
 	int am_flags = PSM2_AM_FLAG_ASYNC;
 	int chunk_size;
 	psm2_epaddr_t psm2_epaddr;
+	psm2_epid_t psm2_epid;
 	psm2_mq_req_t psm2_req;
 	psm2_mq_tag_t psm2_tag;
 	void *psm2_context;
@@ -1093,10 +1096,11 @@ ssize_t psmx2_writev_generic(struct fid_ep *ep, const struct iovec *iov,
 
 	av = ep_priv->av;
 	assert(av);
-	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, dest_addr);
 
-	epaddr_context = psm2_epaddr_getctxt((void *)psm2_epaddr);
-	if (epaddr_context->epid == ep_priv->tx->psm2_epid)
+	psm2_epaddr = psmx2_av_translate_addr(av, ep_priv->tx, dest_addr);
+	psm2_epaddr_to_epid(psm2_epaddr, &psm2_epid);
+
+	if (psm2_epid == ep_priv->tx->psm2_epid)
 		return psmx2_rma_self(PSMX2_AM_REQ_WRITEV, ep_priv,
 				      (void *)iov, count, desc, addr,
 				      key, context, flags, data);
