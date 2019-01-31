@@ -1369,7 +1369,10 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 				rxm_ep_do_progress(&rxm_ep->util_ep);
 			rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX, tx_buf);
 		}
-	} else if (data_len <= rxm_ep->sar_limit) {
+	} else if (data_len <= rxm_ep->sar_limit &&
+		   /* SAR uses eager_limit as segment size */
+		   (rxm_ep->eager_limit <
+		    (1ULL << (8 * sizeof_field(struct ofi_ctrl_hdr, seg_size))))) {
 		ret = rxm_ep_sar_tx_send(rxm_ep, rxm_conn, context,
 					 count, iov, data_len,
 					 rxm_ep_sar_calc_segs_cnt(rxm_ep, data_len),
