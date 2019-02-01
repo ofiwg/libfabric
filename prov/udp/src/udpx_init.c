@@ -88,6 +88,7 @@ static void udpx_getinfo_ifs(struct fi_info **info)
 		}
 	}
 
+	ofi_free_list_of_addr(&addr_list);
 	fi_freeinfo(*info);
 	*info = head;
 }
