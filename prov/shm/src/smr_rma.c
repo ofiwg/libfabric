@@ -159,7 +159,10 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 				  iov, iov_count, op, 0, data, op_flags,
 				  peer_smr, tx_buf);
 	} else {
-		assert(!ofi_cirque_isfull(smr_resp_queue(ep->region)));
+		if (ofi_cirque_isfull(smr_resp_queue(ep->region))) {
+			ret = -FI_EAGAIN;
+			goto unlock_cq;
+		}
 		resp = ofi_cirque_tail(smr_resp_queue(ep->region));
 		pend = freestack_pop(ep->pend_fs);
 		smr_format_iov(cmd, smr_peer_addr(ep->region)[peer_id].addr,
