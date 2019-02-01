@@ -185,7 +185,7 @@ commit_comp:
 	if (!comp)
 		goto unlock_cq;
 
-	ret = ep->tx_comp(ep, context, op, comp_flags, err);
+	ret = smr_complete_tx(ep, context, op, comp_flags, err);
 	if (ret) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"unable to process tx completion\n");
@@ -346,6 +346,8 @@ ssize_t smr_generic_rma_inject(struct fid_ep *ep_fid, const void *buf,
 	if (cmds == 1) {
 		ret = smr_rma_fast(peer_smr, cmd, &iov, 1, &rma_iov, 1, NULL,
 				   peer_id, NULL, ofi_op_write, flags);
+		if (ret)
+			goto unlock_region;
 		goto commit;
 	}
 
@@ -367,6 +369,7 @@ ssize_t smr_generic_rma_inject(struct fid_ep *ep_fid, const void *buf,
 commit:
 	ofi_cirque_commit(smr_cmd_queue(peer_smr));
 	peer_smr->cmd_cnt--;
+	smr_cntr_report_tx_comp(ep, ofi_op_write);
 unlock_region:
 	fastlock_release(&peer_smr->lock);
 	return ret;

@@ -282,7 +282,7 @@ static ssize_t smr_generic_atomic(struct smr_ep *ep,
 				"unable to fetch results");
 	}
 
-	ret = ep->tx_comp(ep, context, op, cmd->msg.hdr.op_flags, err);
+	ret = smr_complete_tx(ep, context, op, cmd->msg.hdr.op_flags, err);
 	if (ret) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"unable to process tx completion\n");
@@ -414,6 +414,7 @@ static ssize_t smr_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 	ofi_cirque_commit(smr_cmd_queue(peer_smr));
 	peer_smr->cmd_cnt--;
 
+	smr_cntr_report_tx_comp(ep, ofi_op_atomic);
 unlock_region:
 	fastlock_release(&peer_smr->lock);
 	return ret;

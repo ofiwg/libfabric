@@ -214,7 +214,7 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 		ofi_cirque_commit(smr_resp_queue(ep->region));
 		goto commit;
 	}
-	ret = ep->tx_comp(ep, context, op, cmd->msg.hdr.op_flags, 0);
+	ret = smr_complete_tx(ep, context, op, cmd->msg.hdr.op_flags, 0);
 	if (ret) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"unable to process tx completion\n");
@@ -312,7 +312,7 @@ static ssize_t smr_generic_inject(struct fid_ep *ep_fid, const void *buf,
 				  &msg_iov, 1, op, tag, data, op_flags,
 				  peer_smr, tx_buf);
 	}
-
+	smr_cntr_report_tx_comp(ep, op);
 	peer_smr->cmd_cnt--;
 	ofi_cirque_commit(smr_cmd_queue(peer_smr));
 unlock:

@@ -136,7 +136,7 @@ static int smr_ep_cancel_recv(struct smr_ep *ep, struct smr_queue *queue,
 					 context);
 	if (entry) {
 		recv_entry = container_of(entry, struct smr_ep_entry, entry);
-		ret = ep->rx_comp(ep, (void *) recv_entry->context, ofi_op_msg,
+		ret = smr_complete_rx(ep, (void *) recv_entry->context, ofi_op_msg,
 				  recv_entry->flags, 0,
 				  NULL, (void *) recv_entry->addr,
 				  recv_entry->tag, 0, FI_ECANCELED);
@@ -367,6 +367,10 @@ static int smr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 						      cq_fid.fid), flags);
 		break;
 	case FI_CLASS_EQ:
+		break;
+	case FI_CLASS_CNTR:
+		ret = ofi_ep_bind_cntr(&ep->util_ep, container_of(bfid,
+				struct util_cntr, cntr_fid.fid), flags);
 		break;
 	default:
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,

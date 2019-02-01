@@ -37,6 +37,17 @@
 #include "ofi_iov.h"
 #include "smr.h"
 
+int smr_complete_tx(struct smr_ep *ep, void *context, uint32_t op,
+		    uint16_t flags, uint64_t err)
+{
+	smr_cntr_report_tx_comp(ep, op);
+
+	if (!err && !(flags & SMR_TX_COMPLETION))
+		return 0;
+
+	return ep->tx_comp(ep, context, op, flags, err);
+}
+
 int smr_tx_comp(struct smr_ep *ep, void *context, uint32_t op,
 		uint16_t flags, uint64_t err)
 {
@@ -54,14 +65,12 @@ int smr_tx_comp(struct smr_ep *ep, void *context, uint32_t op,
 		slist_insert_tail(&entry->list_entry,
 				  &ep->util_ep.tx_cq->oflow_err_list);
 		comp->flags = UTIL_FLAG_ERROR;
-	} else if (flags & SMR_TX_COMPLETION) {
+	} else {
 		comp->op_context = context;
 		comp->flags = ofi_tx_cq_flags(op);
 		comp->len = 0;
 		comp->buf = NULL;
 		comp->data = 0;
-	} else {
-		return 0;
 	}
 	ofi_cirque_commit(ep->util_ep.tx_cq->cirq);
 	return 0;
@@ -77,6 +86,19 @@ int smr_tx_comp_signal(struct smr_ep *ep, void *context, uint32_t op,
 		return ret;
 	ep->util_ep.tx_cq->wait->signal(ep->util_ep.tx_cq->wait);
 	return 0;
+}
+
+int smr_complete_rx(struct smr_ep *ep, void *context, uint32_t op, uint16_t flags,
+		    size_t len, void *buf, void *addr, uint64_t tag, uint64_t data,
+		    uint64_t err)
+{
+	smr_cntr_report_rx_comp(ep, op);
+
+	if (!err && !(flags & (SMR_REMOTE_CQ_DATA | SMR_RX_COMPLETION)))
+		return 0;
+
+	return ep->rx_comp(ep, context, op, flags, len, buf,
+			   addr, tag, data, err);
 }
 
 int smr_rx_comp(struct smr_ep *ep, void *context, uint32_t op,
@@ -98,15 +120,13 @@ int smr_rx_comp(struct smr_ep *ep, void *context, uint32_t op,
 		slist_insert_tail(&entry->list_entry,
 				  &ep->util_ep.rx_cq->oflow_err_list);
 		comp->flags = UTIL_FLAG_ERROR;
-	} else if (flags & SMR_REMOTE_CQ_DATA || flags & SMR_RX_COMPLETION) {
+	} else {
 		comp->op_context = context;
 		comp->flags = smr_rx_cq_flags(op, flags);
 		comp->len = len;
 		comp->buf = buf;
 		comp->data = data;
 		comp->tag = tag;
-	} else {
-		return 0;
 	}
 	ofi_cirque_commit(ep->util_ep.rx_cq->cirq);
 	return 0;
