@@ -37,8 +37,8 @@
 #include "ofi_iov.h"
 #include "smr.h"
 
-
-int smr_tx_comp(struct smr_ep *ep, void *context, uint64_t flags, uint64_t err)
+int smr_tx_comp(struct smr_ep *ep, void *context, uint64_t flags,
+		uint16_t op_flags, uint64_t err)
 {
 	struct fi_cq_tagged_entry *comp;
 	struct util_cq_oflow_err_entry *entry;
@@ -54,31 +54,33 @@ int smr_tx_comp(struct smr_ep *ep, void *context, uint64_t flags, uint64_t err)
 		slist_insert_tail(&entry->list_entry,
 				  &ep->util_ep.tx_cq->oflow_err_list);
 		comp->flags = UTIL_FLAG_ERROR;
-	} else {
+	} else if (op_flags & SMR_COMPLETION) {
 		comp->op_context = context;
 		comp->flags = flags;
 		comp->len = 0;
 		comp->buf = NULL;
 		comp->data = 0;
+	} else {
+		return 0;
 	}
 	ofi_cirque_commit(ep->util_ep.tx_cq->cirq);
 	return 0;
 }
 
 int smr_tx_comp_signal(struct smr_ep *ep, void *context, uint64_t flags,
-		       uint64_t err)
+		       uint16_t op_flags, uint64_t err)
 {
 	int ret;
 
-	ret = smr_tx_comp(ep, context, flags, err);
+	ret = smr_tx_comp(ep, context, flags, op_flags, err);
 	if (ret)
 		return ret;
 	ep->util_ep.tx_cq->wait->signal(ep->util_ep.tx_cq->wait);
 	return 0;
 }
 
-int smr_rx_comp(struct smr_ep *ep, void *context, uint64_t flags, size_t len,
-		void *buf, void *addr, uint64_t tag, uint64_t data,
+int smr_rx_comp(struct smr_ep *ep, void *context, uint64_t flags, uint64_t msg_flags,
+		size_t len, void *buf, void *addr, uint64_t tag, uint64_t data,
 		uint64_t err)
 {
 	struct fi_cq_tagged_entry *comp;
@@ -96,34 +98,37 @@ int smr_rx_comp(struct smr_ep *ep, void *context, uint64_t flags, size_t len,
 		slist_insert_tail(&entry->list_entry,
 				  &ep->util_ep.rx_cq->oflow_err_list);
 		comp->flags = UTIL_FLAG_ERROR;
-	} else {
+	} else if (flags & FI_REMOTE_CQ_DATA || msg_flags & FI_COMPLETION) {
 		comp->op_context = context;
 		comp->flags = flags;
 		comp->len = len;
 		comp->buf = buf;
 		comp->data = data;
 		comp->tag = tag;
+	} else {
+		return 0;
 	}
 	ofi_cirque_commit(ep->util_ep.rx_cq->cirq);
 	return 0;
 }
 
 int smr_rx_src_comp(struct smr_ep *ep, void *context, uint64_t flags,
-		    size_t len, void *buf, void *addr, uint64_t tag,
-		    uint64_t data, uint64_t err)
+		    uint64_t msg_flags, size_t len, void *buf, void *addr,
+		    uint64_t tag, uint64_t data, uint64_t err)
 {
 	ep->util_ep.rx_cq->src[ofi_cirque_windex(ep->util_ep.rx_cq->cirq)] =
 		(uint32_t) (uintptr_t) addr;
-	return smr_rx_comp(ep, context, flags, len, buf, addr, tag, data, err);
+	return smr_rx_comp(ep, context, flags, msg_flags, len, buf, addr, tag,
+			   data, err);
 }
 
 int smr_rx_comp_signal(struct smr_ep *ep, void *context, uint64_t flags,
-		       size_t len, void *buf, void *addr, uint64_t tag,
-		       uint64_t data, uint64_t err)
+		       uint64_t msg_flags, size_t len, void *buf, void *addr,
+		       uint64_t tag, uint64_t data, uint64_t err)
 {
 	int ret;
 
-	ret = smr_rx_comp(ep, context, flags, len, buf, addr, tag, data, err);
+	ret = smr_rx_comp(ep, context, flags, msg_flags, len, buf, addr, tag, data, err);
 	if (ret)
 		return ret;
 	ep->util_ep.rx_cq->wait->signal(ep->util_ep.rx_cq->wait);
@@ -131,12 +136,13 @@ int smr_rx_comp_signal(struct smr_ep *ep, void *context, uint64_t flags,
 }
 
 int smr_rx_src_comp_signal(struct smr_ep *ep, void *context, uint64_t flags,
-			   size_t len, void *buf, void *addr, uint64_t tag,
-			   uint64_t data, uint64_t err)
+			   uint64_t msg_flags, size_t len, void *buf, void *addr,
+			   uint64_t tag, uint64_t data, uint64_t err)
 {
 	int ret;
 
-	ret = smr_rx_src_comp(ep, context, flags, len, buf, addr, tag, data, err);
+	ret = smr_rx_src_comp(ep, context, flags, msg_flags, len, buf, addr,
+			      tag, data, err);
 	if (ret)
 		return ret;
 	ep->util_ep.rx_cq->wait->signal(ep->util_ep.rx_cq->wait);
