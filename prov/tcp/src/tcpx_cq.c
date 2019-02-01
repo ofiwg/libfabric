@@ -90,6 +90,8 @@ void tcpx_xfer_entry_release(struct tcpx_cq *tcpx_cq,
 		xfer_entry->ep->cur_rx_entry = NULL;
 	}
 
+	xfer_entry->hdr.base_hdr.flags = 0;
+
 	xfer_entry->flags = 0;
 	xfer_entry->context = 0;
 	xfer_entry->done_len = 0;

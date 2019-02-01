@@ -186,7 +186,6 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	assert(!(flags & FI_INJECT) || (data_len <= TCPX_MAX_INJECT_SZ));
 
 	offset = sizeof(tx_entry->hdr.base_hdr);
-	tx_entry->hdr.base_hdr.flags = 0;
 
 	if (flags & FI_REMOTE_CQ_DATA) {
 		tx_entry->hdr.base_hdr.flags |= OFI_REMOTE_CQ_DATA;
@@ -258,7 +257,6 @@ static ssize_t tcpx_send(struct fid_ep *ep, const void *buf, size_t len,
 	tx_entry->flags = ((tcpx_ep->util_ep.tx_op_flags & FI_COMPLETION) |
 			   FI_MSG | FI_SEND);
 
-	tx_entry->hdr.base_hdr.flags = 0;
 	fastlock_acquire(&tcpx_ep->lock);
 	tcpx_tx_queue_insert(tcpx_ep, tx_entry);
 	fastlock_release(&tcpx_ep->lock);
@@ -285,9 +283,6 @@ static ssize_t tcpx_sendv(struct fid_ep *ep, const struct iovec *iov,
 		htonll(data_len + sizeof(tx_entry->hdr.base_hdr));
 	tx_entry->hdr.base_hdr.payload_off =
 		(uint8_t)sizeof(tx_entry->hdr.base_hdr);
-
-	/* move the resetting to release */
-	tx_entry->hdr.base_hdr.flags = 0;
 
 	tx_entry->iov[0].iov_base = (void *) &tx_entry->hdr;
 	tx_entry->iov[0].iov_len = sizeof(tx_entry->hdr.base_hdr);
@@ -330,7 +325,6 @@ static ssize_t tcpx_inject(struct fid_ep *ep, const void *buf, size_t len,
 	tx_entry->iov[0].iov_len = len + sizeof(tx_entry->hdr.base_hdr);
 	tx_entry->iov_cnt = 1;
 
-	tx_entry->hdr.base_hdr.flags = 0;
 	tx_entry->flags = FI_MSG | FI_SEND;
 
 	fastlock_acquire(&tcpx_ep->lock);
