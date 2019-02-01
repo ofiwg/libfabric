@@ -851,9 +851,8 @@ static ssize_t rxm_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 					     util_ep.ep_fid.fid);
 
 	return rxm_ep_recv_common_flags(rxm_ep, msg->msg_iov, msg->desc, msg->iov_count,
-					msg->addr, 0, 0, msg->context,
-					flags, (rxm_ep_rx_flags(rxm_ep) & FI_COMPLETION),
-					&rxm_ep->recv_queue);
+					msg->addr, 0, 0, msg->context, flags,
+					rxm_ep->util_ep.rx_msg_flags, &rxm_ep->recv_queue);
 }
 
 static ssize_t rxm_ep_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
@@ -1560,8 +1559,7 @@ static ssize_t rxm_ep_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 
 	return rxm_ep_send_common(rxm_ep, rxm_conn, msg->msg_iov, msg->desc,
 				  msg->iov_count, msg->context, msg->data,
-				  flags | (rxm_ep_tx_flags(rxm_ep) & FI_COMPLETION),
-				  0, ofi_op_msg,
+				  flags | rxm_ep->util_ep.tx_msg_flags, 0, ofi_op_msg,
 				  ((flags & FI_REMOTE_CQ_DATA) ?
 				   rxm_conn->inject_data_pkt : rxm_conn->inject_pkt));
 }
@@ -1729,7 +1727,7 @@ static ssize_t rxm_ep_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged
 
 	return rxm_ep_recv_common_flags(rxm_ep, msg->msg_iov, msg->desc, msg->iov_count,
 					msg->addr, msg->tag, msg->ignore, msg->context,
-					flags, (rxm_ep_rx_flags(rxm_ep) & FI_COMPLETION),
+					flags, rxm_ep->util_ep.rx_msg_flags,
 					&rxm_ep->trecv_queue);
 }
 
@@ -1775,9 +1773,8 @@ static ssize_t rxm_ep_tsendmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged
 
 	return rxm_ep_send_common(rxm_ep, rxm_conn, msg->msg_iov, msg->desc,
 				  msg->iov_count, msg->context, msg->data,
-				  flags | (rxm_ep_tx_flags(rxm_ep) & FI_COMPLETION),
-				  msg->tag, ofi_op_tagged,
-				  ((flags & FI_REMOTE_CQ_DATA) ?
+				  flags | rxm_ep->util_ep.tx_msg_flags, msg->tag,
+				  ofi_op_tagged, ((flags & FI_REMOTE_CQ_DATA) ?
 				   rxm_conn->tinject_data_pkt : rxm_conn->tinject_pkt));
 }
 
