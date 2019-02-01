@@ -720,10 +720,18 @@ int fts_info_is_valid(void)
 	if (test_info.msg_flags && !is_msg_func(test_info.class_function))
 		return 0;
 
-	if (test_info.rx_cq_bind_flags & FI_SELECTIVE_COMPLETION &&
-	    !(test_info.rx_op_flags & FI_COMPLETION) &&
-	    !(test_info.msg_flags & FI_COMPLETION))
-		return 0;
+	if (test_info.rx_cq_bind_flags & FI_SELECTIVE_COMPLETION) {
+		if (!(test_info.rx_op_flags & FI_COMPLETION) &&
+		    !(test_info.msg_flags & FI_COMPLETION))
+			return 0;
+
+		/* Skip RX selective completion if not using a counter
+		 * - Hard to test (because of needed sync messages)
+		 * - Not intended use case for FI_SELECTIVE_COMPLETION
+		 */
+		if (!ft_use_comp_cntr(test_info.comp_type))
+			return 0;
+	}
 
 	if (test_info.test_class & (FI_MSG | FI_TAGGED) &&
 	    !ft_check_rx_completion(test_info) &&
