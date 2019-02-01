@@ -312,8 +312,7 @@ static ssize_t smr_atomic_writemsg(struct fid_ep *ep_fid,
 				  NULL, NULL, 0, NULL, NULL, 0, msg->addr,
 				  msg->rma_iov, msg->rma_iov_count,
 				  msg->datatype, msg->op, msg->context,
-				  ofi_op_atomic,
-				  flags | (smr_ep_tx_flags(ep) & FI_COMPLETION));
+				  ofi_op_atomic, flags | ep->util_ep.tx_msg_flags);
 }
 
 static ssize_t smr_atomic_writev(struct fid_ep *ep_fid,
@@ -435,7 +434,7 @@ static ssize_t smr_atomic_readwritemsg(struct fid_ep *ep_fid,
 				  msg->rma_iov, msg->rma_iov_count,
 				  msg->datatype, msg->op, msg->context,
 				  ofi_op_atomic_fetch,
-				  flags | (smr_ep_tx_flags(ep) & FI_COMPLETION));
+				  flags | ep->util_ep.tx_msg_flags);
 }
 
 static ssize_t smr_atomic_readwritev(struct fid_ep *ep_fid,
@@ -505,7 +504,7 @@ static ssize_t smr_atomic_compwritemsg(struct fid_ep *ep_fid,
 				  msg->rma_iov, msg->rma_iov_count,
 				  msg->datatype, msg->op, msg->context,
 				  ofi_op_atomic_compare,
-				  flags | (smr_ep_tx_flags(ep) & FI_COMPLETION));
+				  flags | ep->util_ep.tx_msg_flags);
 }
 
 static ssize_t smr_atomic_compwritev(struct fid_ep *ep_fid,

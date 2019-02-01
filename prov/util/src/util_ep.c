@@ -46,15 +46,19 @@ int ofi_ep_bind_cq(struct util_ep *ep, struct util_cq *cq, uint64_t flags)
 
 	if (flags & FI_TRANSMIT) {
 		ep->tx_cq = cq;
-		if (!(flags & FI_SELECTIVE_COMPLETION))
+		if (!(flags & FI_SELECTIVE_COMPLETION)) {
 			ep->tx_op_flags |= FI_COMPLETION;
+			ep->tx_msg_flags = FI_COMPLETION;
+		}
 		ofi_atomic_inc32(&cq->ref);
 	}
 
 	if (flags & FI_RECV) {
 		ep->rx_cq = cq;
-		if (!(flags & FI_SELECTIVE_COMPLETION))
+		if (!(flags & FI_SELECTIVE_COMPLETION)) {
 			ep->rx_op_flags |= FI_COMPLETION;
+			ep->rx_msg_flags = FI_COMPLETION;
+		}
 		ofi_atomic_inc32(&cq->ref);
 	}
 
@@ -212,6 +216,8 @@ int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_pr
 	ep->progress = progress;
 	ep->tx_op_flags = info->tx_attr->op_flags;
 	ep->rx_op_flags = info->rx_attr->op_flags;
+	ep->tx_msg_flags = 0;
+	ep->rx_msg_flags = 0;
 	ep->inject_op_flags =
 		((info->tx_attr->op_flags &
 		  ~(FI_COMPLETION | FI_INJECT_COMPLETE |
