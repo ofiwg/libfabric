@@ -241,6 +241,11 @@ struct util_ep {
 	uint64_t		tx_op_flags;
 	uint64_t		inject_op_flags;
 
+	/* flags to be ORed in to flags for *msg API calls
+	 * to properly handle FI_SELECTIVE_COMPLETION bind */
+	uint64_t		tx_msg_flags;
+	uint64_t		rx_msg_flags;
+
 	/* CNTR entries */
 	struct util_cntr	*tx_cntr;     /* transmit/send */
 	struct util_cntr	*rx_cntr;     /* receive       */

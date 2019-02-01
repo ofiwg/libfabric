@@ -75,7 +75,7 @@ ssize_t smr_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	memcpy(&entry->iov, msg->msg_iov, sizeof(*msg->msg_iov) * msg->iov_count);
 
 	entry->context = msg->context;
-	entry->flags = flags | (smr_ep_rx_flags(ep) & FI_COMPLETION);
+	entry->flags = flags | ep->util_ep.rx_msg_flags;
 	entry->addr = msg->addr;
 
 	dlist_insert_tail(&entry->entry, &ep->recv_queue.list);
@@ -253,8 +253,7 @@ ssize_t smr_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 
 	return smr_generic_sendmsg(ep, msg->msg_iov, msg->iov_count,
 				   msg->addr, 0, msg->data, msg->context,
-				   ofi_op_msg,
-				   flags | (smr_ep_tx_flags(ep) & FI_COMPLETION));
+				   ofi_op_msg, flags | ep->util_ep.tx_msg_flags);
 }
 
 static ssize_t smr_generic_inject(struct fid_ep *ep_fid, const void *buf,
@@ -464,7 +463,7 @@ ssize_t smr_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 	memcpy(&entry->iov, msg->msg_iov, sizeof(*msg->msg_iov) * msg->iov_count);
 
 	entry->context = msg->context;
-	entry->flags = flags | (smr_ep_rx_flags(ep) & FI_COMPLETION);
+	entry->flags = flags | ep->util_ep.rx_msg_flags;
 	entry->addr = msg->addr;
 	entry->tag = msg->tag;
 	entry->ignore = msg->ignore;
@@ -513,8 +512,7 @@ ssize_t smr_tsendmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 
 	return smr_generic_sendmsg(ep, msg->msg_iov, msg->iov_count,
 				   msg->addr, msg->tag, msg->data, msg->context,
-				   ofi_op_tagged,
-				   flags | (smr_ep_tx_flags(ep) | FI_COMPLETION));
+				   ofi_op_tagged, flags | ep->util_ep.tx_msg_flags);
 }
 
 ssize_t smr_tinject(struct fid_ep *ep_fid, const void *buf, size_t len,

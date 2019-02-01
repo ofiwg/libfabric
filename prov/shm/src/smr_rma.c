@@ -244,7 +244,7 @@ ssize_t smr_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 			       msg->rma_iov, msg->rma_iov_count,
 			       msg->desc, msg->addr, msg->context,
 			       ofi_op_read_req, 0,
-			       flags | (smr_ep_tx_flags(ep) & FI_COMPLETION));
+			       flags | ep->util_ep.tx_msg_flags);
 }
 
 ssize_t smr_write(struct fid_ep *ep_fid, const void *buf, size_t len, void *desc,
@@ -297,7 +297,7 @@ ssize_t smr_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 			       msg->rma_iov, msg->rma_iov_count,
 			       msg->desc, msg->addr, msg->context,
 			       ofi_op_write, msg->data,
-			       flags | (smr_ep_tx_flags(ep) & FI_COMPLETION));
+			       flags | ep->util_ep.tx_msg_flags);
 }
 
 ssize_t smr_generic_rma_inject(struct fid_ep *ep_fid, const void *buf,
