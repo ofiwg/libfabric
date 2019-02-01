@@ -715,6 +715,7 @@ struct psmx2_av_conn {
 
 struct psmx2_fid_av {
 	struct fid_av		av;
+	int			type;
 	struct psmx2_fid_domain	*domain;
 	struct fid_eq		*eq;
 	int			addr_format;
@@ -725,6 +726,7 @@ struct psmx2_fid_av {
 	size_t			addrlen;
 	size_t			count;
 	fastlock_t		lock;
+	struct psmx2_trx_ctxt	*av_map_trx_ctxt;
 	struct util_shm		shm;
 	struct psmx2_av_hdr	*hdr;	/* shared AV header */
 	fi_addr_t		*map;	/* shared AV address mapping */
@@ -830,6 +832,7 @@ struct psmx2_env {
 	int	num_devunits;
 	int	inject_size;
 	int	lock_level;
+	int	lazy_conn;
 	int	disconnect;
 #if (PSMX2_TAG_LAYOUT == PSMX2_TAG_LAYOUT_RUNTIME)
 	char	*tag_layout;
@@ -847,6 +850,14 @@ extern struct fi_ops_tagged	psmx2_tagged_ops_no_flag_undirected;
 extern struct fi_ops_tagged	psmx2_tagged_ops_no_event_undirected;
 extern struct fi_ops_tagged	psmx2_tagged_ops_no_send_event_undirected;
 extern struct fi_ops_tagged	psmx2_tagged_ops_no_recv_event_undirected;
+extern struct fi_ops_tagged	psmx2_tagged_ops_no_flag_directed_av_map;
+extern struct fi_ops_tagged	psmx2_tagged_ops_no_event_directed_av_map;
+extern struct fi_ops_tagged	psmx2_tagged_ops_no_send_event_directed_av_map;
+extern struct fi_ops_tagged	psmx2_tagged_ops_no_recv_event_directed_av_map;
+extern struct fi_ops_tagged	psmx2_tagged_ops_no_flag_undirected_av_map;
+extern struct fi_ops_tagged	psmx2_tagged_ops_no_event_undirected_av_map;
+extern struct fi_ops_tagged	psmx2_tagged_ops_no_send_event_undirected_av_map;
+extern struct fi_ops_tagged	psmx2_tagged_ops_no_recv_event_undirected_av_map;
 extern struct fi_ops_msg	psmx2_msg_ops;
 extern struct fi_ops_msg	psmx2_msg2_ops;
 extern struct fi_ops_rma	psmx2_rma_ops;
@@ -1010,8 +1021,65 @@ int	psmx2_av_add_trx_ctxt(struct psmx2_fid_av *av, struct psmx2_trx_ctxt *trx_ct
 void	psmx2_av_remove_conn(struct psmx2_fid_av *av, struct psmx2_trx_ctxt *trx_ctxt,
 			     psm2_epaddr_t epaddr);
 
+int	psmx2_av_query_sep(struct psmx2_fid_av *av, struct psmx2_trx_ctxt *trx_ctxt,
+			   size_t idx);
+
+static inline
 psm2_epaddr_t psmx2_av_translate_addr(struct psmx2_fid_av *av,
-				      struct psmx2_trx_ctxt *trx_ctxt, fi_addr_t addr);
+				      struct psmx2_trx_ctxt *trx_ctxt,
+				      fi_addr_t addr,
+				      int av_type)
+{
+	psm2_epaddr_t epaddr;
+	size_t idx;
+	int ctxt;
+	int err;
+
+	if (av_type == FI_AV_MAP)
+		return (psm2_epaddr_t) addr;
+
+	av->domain->av_lock_fn(&av->lock, 1);
+
+	idx = PSMX2_ADDR_IDX(addr);
+	assert(idx < av->hdr->last);
+
+	if (OFI_UNLIKELY(av->table[idx].type == PSMX2_EP_SCALABLE)) {
+		if (OFI_UNLIKELY(!av->sep_info[idx].epids)) {
+			psmx2_av_query_sep(av, trx_ctxt, idx);
+			assert(av->sep_info[idx].epids);
+		}
+
+		if (OFI_UNLIKELY(!av->conn_info[trx_ctxt->id].sepaddrs[idx])) {
+			av->conn_info[trx_ctxt->id].sepaddrs[idx] =
+				calloc(av->sep_info[idx].ctxt_cnt, sizeof(psm2_epaddr_t));
+			assert(av->conn_info[trx_ctxt->id].sepaddrs[idx]);
+		}
+
+		ctxt = PSMX2_ADDR_CTXT(addr, av->rx_ctx_bits);
+		assert(ctxt < av->sep_info[idx].ctxt_cnt);
+
+		if (OFI_UNLIKELY(!av->conn_info[trx_ctxt->id].sepaddrs[idx][ctxt])) {
+			err = psmx2_epid_to_epaddr(trx_ctxt,
+						   av->sep_info[idx].epids[ctxt],
+						   &av->conn_info[trx_ctxt->id].sepaddrs[idx][ctxt]);
+			assert(!err);
+		}
+		epaddr = av->conn_info[trx_ctxt->id].sepaddrs[idx][ctxt];
+	} else {
+		if (OFI_UNLIKELY(!av->conn_info[trx_ctxt->id].epaddrs[idx])) {
+			err = psmx2_epid_to_epaddr(trx_ctxt, av->table[idx].epid,
+						   &av->conn_info[trx_ctxt->id].epaddrs[idx]);
+			assert(!err);
+		}
+		epaddr = av->conn_info[trx_ctxt->id].epaddrs[idx];
+	}
+
+#ifdef NDEBUG
+	(void) err;
+#endif
+	av->domain->av_unlock_fn(&av->lock, 1);
+	return epaddr;
+}
 
 void	psmx2_am_global_init(void);
 void	psmx2_am_global_fini(void);
