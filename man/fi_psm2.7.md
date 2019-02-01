@@ -155,6 +155,11 @@ The *psm2* provider checks for the following environment variables:
 
   The default setting is 5.
 
+*FI_PSM2_CONN_TIMEOUT*
+: Timeout (seconds) for establishing connection between two PSM endpoints.
+
+  The default setting is 5.
+
 *FI_PSM2_PROG_INTERVAL*
 : When auto progress is enabled (asked via the hints to *fi_getinfo*),
   a progress thread is created to make progress calls from time to time.
@@ -193,6 +198,23 @@ The *psm2* provider checks for the following environment variables:
   needed for these levels.
 
   The default setting is 2.
+
+*FI_PSM2_LAZY_CONN*
+: There are two strategies on when to establish connections between the PSM2
+  endpoints that OFI endpoints are built on top of. In eager connection mode,
+  connections are established when addresses are inserted into the address
+  vector. In lazy connection mode, connections are established when addresses
+  are used the first time in communication. Eager connection mode has slightly
+  lower critical path overhead but lazy connection mode scales better.
+
+  This option controls how the two connection modes are used. When set to 1,
+  lazy connection mode is always used. When set to 0, eager connection mode
+  is used when required conditions are all met and lazy connection mode is
+  used otherwise. The conditions for eager connection mode are: (1) multiple
+  endpoint (and scalable endpoint) support is disabled by explicitly setting
+  PSM2_MULTI_EP=0; and (2) the address vector type is FI_AV_MAP.
+
+  The default setting is 0.
 
 *FI_PSM2_DISCONNECT*
 : The provider has a mechanism to automatically send disconnection notifications
