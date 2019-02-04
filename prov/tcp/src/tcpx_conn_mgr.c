@@ -71,7 +71,7 @@ static int rx_cm_data(SOCKET fd, struct ofi_ctrl_hdr *hdr,
 	if (ret != sizeof(*hdr))
 		return -FI_EIO;
 
-	if (hdr->version != OFI_CTRL_VERSION)
+	if (hdr->version != TCPX_CTRL_HDR_VERSION)
 		return -FI_ENOPROTOOPT;
 
 	ret = read_cm_data(fd, cm_ctx, hdr);
@@ -87,9 +87,10 @@ static int tx_cm_data(SOCKET fd, uint8_t type, struct tcpx_cm_context *cm_ctx)
 	ssize_t ret;
 
 	memset(&hdr, 0, sizeof(hdr));
-	hdr.version = OFI_CTRL_VERSION;
+	hdr.version = TCPX_CTRL_HDR_VERSION;
 	hdr.type = type;
 	hdr.seg_size = htons((uint16_t) cm_ctx->cm_data_sz);
+	hdr.conn_data = 1; /* For testing endianess mismatch at peer */
 
 	ret = ofi_send_socket(fd, &hdr, sizeof(hdr), MSG_NOSIGNAL);
 	if (ret != sizeof(hdr))
@@ -146,6 +147,9 @@ static int proc_conn_resp(struct tcpx_cm_context *cm_ctx,
 
 	cm_entry->fid = cm_ctx->fid;
 	memcpy(cm_entry->data, cm_ctx->cm_data, cm_ctx->cm_data_sz);
+
+	ep->hdr_bswap = (conn_resp.conn_data == 1)?
+		tcpx_hdr_none:tcpx_hdr_bswap;
 
 	ret = tcpx_ep_msg_xfer_enable(ep);
 	if (ret)
@@ -288,6 +292,7 @@ static void server_recv_connreq(struct util_wait *wait,
 	if (!cm_entry->info)
 		goto err2;
 
+	handle->endian_match = (conn_req.conn_data == 1);
 	cm_entry->info->handle = &handle->handle;
 	memcpy(cm_entry->data, cm_ctx->cm_data, cm_ctx->cm_data_sz);
 

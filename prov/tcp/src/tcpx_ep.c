@@ -41,6 +41,30 @@
 extern struct fi_ops_rma tcpx_rma_ops;
 extern struct fi_ops_msg tcpx_msg_ops;
 
+void tcpx_hdr_none(struct tcpx_base_hdr *hdr) {}
+
+void tcpx_hdr_bswap(struct tcpx_base_hdr *hdr)
+{
+	struct ofi_rma_iov *rma_iov;
+	uint8_t *ptr = (uint8_t *)hdr + sizeof(*hdr);
+	int i;
+
+	hdr->flags = ntohs(hdr->flags);
+	hdr->size = ntohll(hdr->size);
+
+	if (hdr->flags & OFI_REMOTE_CQ_DATA) {
+		*((uint64_t *)ptr) = ntohll(*((uint64_t *) ptr));
+		ptr += sizeof(uint64_t);
+	}
+
+	rma_iov = (struct ofi_rma_iov *)ptr;
+	for ( i = 0; i < hdr->rma_iov_cnt; i++) {
+		rma_iov[i].addr = ntohll(rma_iov[i].addr);
+		rma_iov[i].len = ntohll(rma_iov[i].len);
+		rma_iov[i].key = ntohll(rma_iov[i].key);
+	}
+}
+
 static int tcpx_setup_socket(SOCKET sock)
 {
 	int ret, optval = 1;
@@ -417,6 +441,9 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 			ret = tcpx_setup_socket(ep->conn_fd);
 			if (ret)
 				goto err3;
+
+			ep->hdr_bswap = (handle->endian_match)?
+				tcpx_hdr_none:tcpx_hdr_bswap;
 		}
 	} else {
 		ep->conn_fd = ofi_socket(ofi_get_sa_family(info), SOCK_STREAM, 0);
@@ -585,7 +612,7 @@ static int tcpx_pep_reject(struct fid_pep *pep, fid_t handle,
 	tcpx_handle = container_of(handle, struct tcpx_conn_handle, handle);
 
 	memset(&hdr, 0, sizeof(hdr));
-	hdr.version = OFI_CTRL_VERSION;
+	hdr.version = TCPX_CTRL_HDR_VERSION;
 	hdr.type = ofi_ctrl_nack;
 	hdr.seg_size = htons((uint16_t) paramlen);
 

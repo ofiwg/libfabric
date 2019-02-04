@@ -109,11 +109,13 @@ void process_tx_entry(struct tcpx_xfer_entry *tx_entry)
 		tcpx_ep_shutdown_report(tx_entry->ep,
 					&tx_entry->ep->util_ep.ep_fid.fid);
 done:
+	/* Keep this path below as a single pass path.*/
+	tx_entry->ep->hdr_bswap(&tx_entry->hdr.base_hdr);
 	tcpx_cq_report_completion(tx_entry->ep->util_ep.tx_cq,
 				  tx_entry, -ret);
 	slist_remove_head(&tx_entry->ep->tx_queue);
 
-	if (ntohs(tx_entry->hdr.base_hdr.flags) &
+	if (tx_entry->hdr.base_hdr.flags &
 	    (OFI_DELIVERY_COMPLETE | OFI_COMMIT_COMPLETE)) {
 		tx_entry->flags |= FI_COMPLETION;
 		slist_insert_tail(&tx_entry->entry,
@@ -143,14 +145,16 @@ static int tcpx_prepare_rx_entry_resp(struct tcpx_xfer_entry *rx_entry)
 	resp_entry->iov_cnt = 1;
 
 	resp_entry->hdr.base_hdr.op = ofi_op_msg;
-	resp_entry->hdr.base_hdr.size = htonll(sizeof(resp_entry->hdr.base_hdr));
+	resp_entry->hdr.base_hdr.size = sizeof(resp_entry->hdr.base_hdr);
 	resp_entry->hdr.base_hdr.payload_off =
 		(uint8_t)sizeof(resp_entry->hdr.base_hdr);
 
 	resp_entry->flags = 0;
 	resp_entry->context = NULL;
-	resp_entry->done_len = 0;
+	resp_entry->rem_len = sizeof(resp_entry->hdr.base_hdr);
 	resp_entry->ep = rx_entry->ep;
+
+	resp_entry->ep->hdr_bswap(&resp_entry->hdr.base_hdr);
 	tcpx_tx_queue_insert(resp_entry->ep, resp_entry);
 
 	tcpx_cq_report_completion(rx_entry->ep->util_ep.rx_cq,
@@ -180,7 +184,7 @@ static int process_rx_entry(struct tcpx_xfer_entry *rx_entry)
 		tcpx_ep_shutdown_report(rx_entry->ep,
 					&rx_entry->ep->util_ep.ep_fid.fid);
 done:
-	if (ntohs(rx_entry->hdr.base_hdr.flags) & OFI_DELIVERY_COMPLETE) {
+	if (rx_entry->hdr.base_hdr.flags & OFI_DELIVERY_COMPLETE) {
 
 		if (tcpx_prepare_rx_entry_resp(rx_entry))
 			rx_entry->ep->cur_rx_proc_fn = tcpx_prepare_rx_entry_resp;
@@ -211,7 +215,7 @@ static int process_srx_entry(struct tcpx_xfer_entry *rx_entry)
 					&rx_entry->ep->util_ep.ep_fid.fid);
 	}
 
-	if ((ntohs(rx_entry->hdr.base_hdr.flags) &
+	if ((rx_entry->hdr.base_hdr.flags &
 	     OFI_DELIVERY_COMPLETE) && !ret) {
 		if (tcpx_prepare_rx_entry_resp(rx_entry))
 			rx_entry->ep->cur_rx_proc_fn = tcpx_prepare_rx_entry_resp;
@@ -250,14 +254,15 @@ static int tcpx_prepare_rx_write_resp(struct tcpx_xfer_entry *rx_entry)
 	resp_entry->iov_cnt = 1;
 
 	resp_entry->hdr.base_hdr.op = ofi_op_msg;
-	resp_entry->hdr.base_hdr.size = htonll(sizeof(resp_entry->hdr.base_hdr));
+	resp_entry->hdr.base_hdr.size = sizeof(resp_entry->hdr.base_hdr);
 	resp_entry->hdr.base_hdr.payload_off =
 		(uint8_t)sizeof(resp_entry->hdr.base_hdr);
 
 	resp_entry->flags &= ~FI_COMPLETION;
 	resp_entry->context = NULL;
-	resp_entry->done_len = 0;
+	resp_entry->rem_len = resp_entry->hdr.base_hdr.size;
 	resp_entry->ep = rx_entry->ep;
+	resp_entry->ep->hdr_bswap(&resp_entry->hdr.base_hdr);
 	tcpx_tx_queue_insert(resp_entry->ep, resp_entry);
 
 	tcpx_cq_report_completion(rx_entry->ep->util_ep.rx_cq,
@@ -277,7 +282,7 @@ static void tcpx_pmem_commit(struct tcpx_xfer_entry *rx_entry)
 	if (!ofi_pmem_commit)
 		return ;
 
-	if (ntohs(rx_entry->hdr.base_hdr.flags) &
+	if (rx_entry->hdr.base_hdr.flags &
 	    OFI_REMOTE_CQ_DATA)
 		offset = sizeof(rx_entry->hdr.base_hdr) + sizeof(uint64_t);
 	else
@@ -312,7 +317,7 @@ static int process_rx_remote_write_entry(struct tcpx_xfer_entry *rx_entry)
 		tcpx_ep_shutdown_report(rx_entry->ep,
 					&rx_entry->ep->util_ep.ep_fid.fid);
 done:
-	flags = ntohs(rx_entry->hdr.base_hdr.flags) &
+	flags = rx_entry->hdr.base_hdr.flags &
 		(OFI_DELIVERY_COMPLETE | OFI_COMMIT_COMPLETE);
 
 	if (flags) {
@@ -365,7 +370,7 @@ static void tcpx_copy_rma_iov_to_msg_iov(struct tcpx_xfer_entry *xfer_entry)
 	size_t offset;
 	int i;
 
-	if (ntohs(xfer_entry->hdr.base_hdr.flags) &
+	if (xfer_entry->hdr.base_hdr.flags &
 	    OFI_REMOTE_CQ_DATA)
 		offset = sizeof(xfer_entry->hdr.base_hdr) + sizeof(uint64_t);
 	else
@@ -400,15 +405,14 @@ static int tcpx_prepare_rx_remote_read_resp(struct tcpx_xfer_entry *resp_entry)
 	}
 
 	resp_entry->hdr.base_hdr.op = ofi_op_read_rsp;
-	resp_entry->hdr.base_hdr.size =
-		htonll(resp_entry->hdr.base_hdr.size);
 	resp_entry->hdr.base_hdr.payload_off =
 		(uint8_t)sizeof(resp_entry->hdr.base_hdr);
 
 	resp_entry->flags &= ~FI_COMPLETION;
 	resp_entry->context = NULL;
-	resp_entry->done_len = 0;
+	resp_entry->rem_len = resp_entry->hdr.base_hdr.size;
 
+	resp_entry->ep->hdr_bswap(&resp_entry->hdr.base_hdr);
 	tcpx_tx_queue_insert(resp_entry->ep, resp_entry);
 	resp_entry->ep->cur_rx_entry = NULL;
 	return FI_SUCCESS;
@@ -422,8 +426,7 @@ static int tcpx_validate_rx_rma_data(struct tcpx_xfer_entry *rx_entry,
 	size_t offset;
 	int i, ret;
 
-	if (ntohs(rx_entry->hdr.base_hdr.flags) &
-	    OFI_REMOTE_CQ_DATA)
+	if (rx_entry->hdr.base_hdr.flags & OFI_REMOTE_CQ_DATA)
 		offset = sizeof(rx_entry->hdr.base_hdr) + sizeof(uint64_t);
 	else
 		offset = sizeof(rx_entry->hdr.base_hdr);
@@ -452,6 +455,7 @@ int tcpx_get_rx_entry_op_invalid(struct tcpx_ep *tcpx_ep)
 
 static inline void
 tcpx_rx_detect_init(struct tcpx_rx_detect *rx_detect)
+
 {
 	rx_detect->hdr_len = sizeof(rx_detect->hdr.base_hdr);
 	rx_detect->done_len = 0;
@@ -512,17 +516,16 @@ int tcpx_get_rx_entry_op_msg(struct tcpx_ep *tcpx_ep)
 	       (size_t) tcpx_ep->rx_detect.hdr.base_hdr.payload_off);
 	rx_entry->ep = tcpx_ep;
 	rx_entry->hdr.base_hdr.op_data = TCPX_OP_MSG_RECV;
-	rx_entry->done_len = rx_detect->done_len;
+	rx_entry->rem_len = rx_entry->hdr.base_hdr.size - rx_detect->done_len;
 	if (tcpx_ep->srx_ctx)
 		rx_entry->flags |= tcpx_ep->util_ep.rx_op_flags & FI_COMPLETION;
 
-	if (ntohs(rx_detect->hdr.base_hdr.flags) & OFI_REMOTE_CQ_DATA)
+	if (rx_detect->hdr.base_hdr.flags & OFI_REMOTE_CQ_DATA)
 		rx_entry->flags |= FI_REMOTE_CQ_DATA;
 
 	ret = ofi_truncate_iov(rx_entry->iov,
 			       &rx_entry->iov_cnt,
-			       (ntohll(rx_entry->hdr.base_hdr.size) -
-				rx_entry->done_len));
+			       rx_entry->rem_len);
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,
 			"posted rx buffer size is not big enough\n");
@@ -554,7 +557,8 @@ int tcpx_get_rx_entry_op_read_req(struct tcpx_ep *tcpx_ep)
 	       (size_t) tcpx_ep->rx_detect.hdr.base_hdr.payload_off);
 	rx_entry->hdr.base_hdr.op_data = TCPX_OP_REMOTE_READ;
 	rx_entry->ep = tcpx_ep;
-	rx_entry->done_len = tcpx_ep->rx_detect.done_len;
+	rx_entry->rem_len = (rx_entry->hdr.base_hdr.size -
+			      tcpx_ep->rx_detect.done_len);
 
 	ret = tcpx_validate_rx_rma_data(rx_entry, FI_REMOTE_READ);
 	if (ret) {
@@ -584,7 +588,7 @@ int tcpx_get_rx_entry_op_write(struct tcpx_ep *tcpx_ep)
 		return -FI_EAGAIN;
 
 	rx_entry->flags = 0;
-	if (ntohs(tcpx_ep->rx_detect.hdr.base_hdr.flags) & OFI_REMOTE_CQ_DATA)
+	if (tcpx_ep->rx_detect.hdr.base_hdr.flags & OFI_REMOTE_CQ_DATA)
 		rx_entry->flags = (FI_COMPLETION |
 				   FI_REMOTE_CQ_DATA | FI_REMOTE_WRITE);
 
@@ -592,7 +596,8 @@ int tcpx_get_rx_entry_op_write(struct tcpx_ep *tcpx_ep)
 	       (size_t) tcpx_ep->rx_detect.hdr.base_hdr.payload_off);
 	rx_entry->hdr.base_hdr.op_data = TCPX_OP_REMOTE_WRITE;
 	rx_entry->ep = tcpx_ep;
-	rx_entry->done_len = tcpx_ep->rx_detect.done_len;
+	rx_entry->rem_len = (rx_entry->hdr.base_hdr.size -
+			      tcpx_ep->rx_detect.done_len);
 
 	ret = tcpx_validate_rx_rma_data(rx_entry, FI_REMOTE_WRITE);
 	if (ret) {
@@ -625,7 +630,8 @@ int tcpx_get_rx_entry_op_read_rsp(struct tcpx_ep *tcpx_ep)
 	memcpy(&rx_entry->hdr, &tcpx_ep->rx_detect.hdr,
 	       (size_t) tcpx_ep->rx_detect.hdr.base_hdr.payload_off);
 	rx_entry->hdr.base_hdr.op_data = TCPX_OP_READ_RSP;
-	rx_entry->done_len = tcpx_ep->rx_detect.done_len;
+	rx_entry->rem_len = (rx_entry->hdr.base_hdr.size -
+			     tcpx_ep->rx_detect.done_len);
 
 	tcpx_rx_detect_init(&tcpx_ep->rx_detect);
 	tcpx_ep->cur_rx_entry = rx_entry;
@@ -646,6 +652,9 @@ static void tcpx_process_stage_buffer(struct tcpx_ep *ep)
 
 			if (ret)
 				goto err1;
+
+			// TODO: Fix possiblity of multiple passes here.
+			ep->hdr_bswap(&ep->rx_detect.hdr.base_hdr);
 
 			ret = ep->get_rx_entry[ep->rx_detect.hdr.base_hdr.op](ep);
 			if (ret == -FI_EAGAIN)
@@ -686,6 +695,9 @@ static void tcpx_process_rx_msg(struct tcpx_ep *ep)
 
 		if (ret)
 			goto err1;
+
+		// TODO: Fix possiblity of multiple passes here.
+		ep->hdr_bswap(&ep->rx_detect.hdr.base_hdr);
 
 		ret = ep->get_rx_entry[ep->rx_detect.hdr.base_hdr.op](ep);
 		if (ret == -FI_EAGAIN)

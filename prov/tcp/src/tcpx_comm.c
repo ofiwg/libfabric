@@ -50,8 +50,8 @@ int tcpx_send_msg(struct tcpx_xfer_entry *tx_entry)
 	if (bytes_sent < 0)
 		return ofi_sockerr() == EPIPE ? -FI_ENOTCONN : -ofi_sockerr();
 
-	tx_entry->done_len += bytes_sent;
-	if (tx_entry->done_len < ntohll(tx_entry->hdr.base_hdr.size)) {
+	tx_entry->rem_len -= bytes_sent;
+	if (tx_entry->rem_len) {
 		ofi_consume_iov(tx_entry->iov, &tx_entry->iov_cnt, bytes_sent);
 		return -FI_EAGAIN;
 	}
@@ -166,8 +166,8 @@ int tcpx_recv_msg_data(struct tcpx_xfer_entry *rx_entry)
 	if (bytes_recvd <= 0)
 		return (bytes_recvd)? -ofi_sockerr(): -FI_ENOTCONN;
 
-	rx_entry->done_len += bytes_recvd;
-	if (rx_entry->done_len < ntohll(rx_entry->hdr.base_hdr.size)) {
+	rx_entry->rem_len -= bytes_recvd;
+	if (rx_entry->rem_len) {
 		ofi_consume_iov(rx_entry->iov, &rx_entry->iov_cnt, bytes_recvd);
 		return -FI_EAGAIN;
 	}

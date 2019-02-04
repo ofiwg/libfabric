@@ -44,9 +44,6 @@ tcpx_srx_ctx_rx_entry_alloc(struct tcpx_rx_ctx *srx_ctx)
 
 	fastlock_acquire(&srx_ctx->lock);
 	recv_entry = util_buf_alloc(srx_ctx->buf_pool);
-	if (recv_entry)
-		recv_entry->done_len = 0;
-
 	fastlock_release(&srx_ctx->lock);
 	return recv_entry;
 }
