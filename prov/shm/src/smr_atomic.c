@@ -282,8 +282,7 @@ static ssize_t smr_generic_atomic(struct smr_ep *ep,
 				"unable to fetch results");
 	}
 
-	ret = ep->tx_comp(ep, context, ofi_tx_cq_flags(op),
-			  cmd->msg.hdr.op_flags, err);
+	ret = ep->tx_comp(ep, context, op, cmd->msg.hdr.op_flags, err);
 	if (ret) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"unable to process tx completion\n");

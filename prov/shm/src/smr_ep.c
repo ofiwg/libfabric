@@ -136,9 +136,8 @@ static int smr_ep_cancel_recv(struct smr_ep *ep, struct smr_queue *queue,
 					 context);
 	if (entry) {
 		recv_entry = container_of(entry, struct smr_ep_entry, entry);
-		ret = ep->rx_comp(ep, (void *) recv_entry->context,
-				  recv_entry->flags | FI_RECV,
-				  recv_entry->flags & FI_COMPLETION ? SMR_COMPLETION : 0, 0,
+		ret = ep->rx_comp(ep, (void *) recv_entry->context, ofi_op_msg,
+				  recv_entry->flags, 0,
 				  NULL, (void *) recv_entry->addr,
 				  recv_entry->tag, 0, FI_ECANCELED);
 		freestack_push(ep->recv_fs, recv_entry);
@@ -243,7 +242,7 @@ void smr_generic_format(struct smr_cmd *cmd, fi_addr_t peer_id,
 	if (op_flags & FI_REMOTE_CQ_DATA)
 		cmd->msg.hdr.op_flags |= SMR_REMOTE_CQ_DATA;
 	if (op_flags & FI_COMPLETION)
-		cmd->msg.hdr.op_flags |= SMR_COMPLETION;
+		cmd->msg.hdr.op_flags |= SMR_TX_COMPLETION;
 
 	if (op == ofi_op_tagged) {
 		cmd->msg.hdr.tag = tag;
