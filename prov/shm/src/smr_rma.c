@@ -182,7 +182,7 @@ commit_comp:
 	if (!comp)
 		goto unlock_cq;
 
-	ret = ep->tx_comp(ep, context, ofi_tx_cq_flags(op), comp_flags, err);
+	ret = ep->tx_comp(ep, context, op, comp_flags, err);
 	if (ret) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"unable to process tx completion\n");
