@@ -471,7 +471,7 @@ supported set of modes will be returned in the info structure(s).
   operation does not generate a completion (i.e. the endpoint was
   configured with FI_SELECTIVE_COMPLETION and the operation was not
   initiated with the FI_COMPLETION flag) then the context parameter is
-  ignored by the fabric provider.The structure is specified in 
+  ignored by the fabric provider.  The structure is specified in
   rdma/fabric.h.
 
 *FI_CONTEXT2*

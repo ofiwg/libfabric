@@ -180,15 +180,8 @@ struct fi_rma_iov {
 
 ## fi_inject_write
 
-The write inject call is an optimized version of fi_write.  The
-fi_inject_write function behaves as if the FI_INJECT transfer flag
-were set, and FI_COMPLETION were not.  That is, the data buffer is
-available for reuse immediately on returning from
-fi_inject_write, and no completion event will be generated for this
-write.  The completion event will be suppressed even if the endpoint
-has not been configured with FI_SELECTIVE_COMPLETION.  See the flags
-discussion below for more details. The requested message size that
-can be used with fi_inject_write is limited by inject_size.
+The write inject call is an optimized version of fi_write.  It provides
+similar completion semantics as fi_inject [`fi_msg`(3)](fi_msg.3.html).
 
 ## fi_writedata
 
