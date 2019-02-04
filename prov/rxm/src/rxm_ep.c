@@ -33,6 +33,7 @@
 #include <inttypes.h>
 #include <math.h>
 
+#include <rdma/fabric.h>
 #include "ofi.h"
 #include <ofi_util.h>
 
@@ -744,9 +745,18 @@ rxm_ep_post_recv(struct rxm_ep *rxm_ep, const struct iovec *iov,
 	if (OFI_UNLIKELY(ret))
 		return ret;
 
-	FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Posting recv with length: %zu "
-	       "tag: 0x%" PRIx64 " ignore: 0x%" PRIx64 "\n",
-	       recv_entry->total_len, recv_entry->tag, recv_entry->ignore);
+	if (recv_queue->type == RXM_RECV_QUEUE_MSG)
+		FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Posting recv with length: %zu "
+		       "addr: 0x%" PRIx64 "\n", recv_entry->total_len,
+		       recv_entry->addr);
+	else
+		FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Posting trecv with "
+		       "length: %zu addr: 0x%" PRIx64 " tag: 0x%" PRIx64
+		       " ignore: 0x%" PRIx64 "\n", recv_entry->total_len,
+		       recv_entry->addr, recv_entry->tag, recv_entry->ignore);
+
+	FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "recv op_flags: %s\n",
+	       fi_tostr(&recv_entry->flags, FI_TYPE_OP_FLAGS));
 	ret = rxm_process_recv_entry(recv_queue, recv_entry);
 
 	return ret;
