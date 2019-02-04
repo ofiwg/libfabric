@@ -122,12 +122,12 @@ int ft_reset_ep(void)
 	int ret;
 
 	ret = ft_comp_rx(0);
-	if (ret)
+	if (ret < 0)
 		return ret;
 
 	while (ft_tx_ctrl.credits < ft_tx_ctrl.max_credits) {
 		ret = ft_comp_tx(0);
-		if (ret)
+		if (ret < 0)
 			return ret;
 	}
 

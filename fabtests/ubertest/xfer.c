@@ -536,7 +536,7 @@ int ft_send_rma(void)
 
 	while (!ft_tx_ctrl.credits) {
 		ret = ft_comp_tx(FT_COMP_TO);
-		if (ret)
+		if (ret < 0)
 			return ret;
 	}
 
@@ -556,7 +556,7 @@ int ft_send_rma(void)
 
 	if (!ft_tx_ctrl.credits) {
 		ret = ft_comp_tx(0);
-		if (ret)
+		if (ret < 0)
 			return ret;
 	}
 
@@ -587,7 +587,7 @@ int ft_post_recv_bufs(void)
 
 int ft_recv_n_msg(int n)
 {
-	int credits, ret, recved = 0;
+	int ret, recved = 0;
 
 	do {
 		if (ft_rx_ctrl.credits > (ft_rx_ctrl.max_credits >> 1)) {
@@ -596,13 +596,12 @@ int ft_recv_n_msg(int n)
 				return ret;
 		}
 
-		credits = ft_rx_ctrl.credits;
 		ret = ft_comp_rx(0);
-		if (ret)
+		if (ret < 0)
 			return ret;
 
 		//ft_comp_rx may have found multiple completions (bw testing)
-		recved += (ft_rx_ctrl.credits - credits);
+		recved += ret;
 
 		// handle manual progress. we should progress sends if
 		// we don't get any recv completions. the send could have
@@ -714,7 +713,7 @@ int ft_send_sync_msg(void)
 
 	while (ft_tx_ctrl.credits != ft_tx_ctrl.max_credits) {
 		ret = ft_comp_tx(0);
-		if (ret)
+		if (ret < 0)
 			return ret;
 	}
 
@@ -728,7 +727,8 @@ int ft_send_sync_msg(void)
 	if (ret)
 		return ret;
 
-	return ft_comp_tx(FT_COMP_TO);
+	ret = ft_comp_tx(FT_COMP_TO);
+	return ret < 0 ? ret : 0;
 }
 
 int ft_send_msg(void)
@@ -737,7 +737,7 @@ int ft_send_msg(void)
 
 	while (!ft_tx_ctrl.credits) {
 		ret = ft_comp_tx(FT_COMP_TO);
-		if (ret)
+		if (ret < 0)
 			return ret;
 	}
 
@@ -760,7 +760,7 @@ int ft_send_msg(void)
 
 	if (!ft_tx_ctrl.credits) {
 		ret = ft_comp_tx(0);
-		if (ret)
+		if (ret < 0)
 			return ret;
 	}
 
@@ -793,7 +793,7 @@ int ft_send_dgram_flood(void)
 
 int ft_recv_dgram(void)
 {
-	int credits, ret;
+	int ret;
 
 	do {
 		if (ft_rx_ctrl.credits > (ft_rx_ctrl.max_credits >> 1)) {
@@ -802,15 +802,12 @@ int ft_recv_dgram(void)
 				return ret;
 		}
 
-		credits = ft_rx_ctrl.credits;
-
 		ret = ft_comp_rx(FT_DGRAM_POLL_TO);
-		if ((credits != ft_rx_ctrl.credits) &&
-		    (*(uint8_t *) ft_rx_ctrl.buf == ft_rx_ctrl.seqno)) {
+		if (ret && (*(uint8_t *) ft_rx_ctrl.buf == ft_rx_ctrl.seqno)) {
 			ft_rx_ctrl.seqno++;
 			return 0;
 		}
-	} while (!ret);
+	} while (ret >= 0);
 
 	return (ret == -FI_EAGAIN) ? -FI_ETIMEDOUT : ret;
 }
@@ -826,12 +823,12 @@ int ft_recv_dgram_flood(size_t *recv_cnt)
 			break;
 
 		ret = ft_comp_rx(0);
-		cnt += ft_rx_ctrl.credits;
+		cnt += ret;
 
-	} while (!ret && ((*(uint8_t *) ft_rx_ctrl.buf != (uint8_t) ~0) || !cnt));
+	} while ((*(uint8_t *) ft_rx_ctrl.buf != (uint8_t) ~0) || !cnt);
 
 	*recv_cnt = cnt;
-	return ret;
+	return ret < 0 ? ret : 0;
 }
 
 int ft_sendrecv_dgram(void)

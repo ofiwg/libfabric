@@ -38,7 +38,7 @@
 #define FT_CAP_RMA	FI_RMA | FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE
 #define FT_CAP_ATOMIC	FI_ATOMICS | FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE
 
-#define FT_MODE_ALL	FI_CONTEXT | FI_LOCAL_MR /*| FI_MSG_PREFIX*/
+#define FT_MODE_ALL	FI_CONTEXT | FI_LOCAL_MR | FI_RX_CQ_DATA /*| FI_MSG_PREFIX*/
 #define FT_MODE_NONE	~0ULL
 
 struct key_t {
@@ -720,10 +720,18 @@ int fts_info_is_valid(void)
 	if (test_info.msg_flags && !is_msg_func(test_info.class_function))
 		return 0;
 
-	if (test_info.rx_cq_bind_flags & FI_SELECTIVE_COMPLETION &&
-	    !(test_info.rx_op_flags & FI_COMPLETION) &&
-	    !(test_info.msg_flags & FI_COMPLETION))
-		return 0;
+	if (test_info.rx_cq_bind_flags & FI_SELECTIVE_COMPLETION) {
+		if (!(test_info.rx_op_flags & FI_COMPLETION) &&
+		    !(test_info.msg_flags & FI_COMPLETION))
+			return 0;
+
+		/* Skip RX selective completion if not using a counter
+		 * - Hard to test (because of needed sync messages)
+		 * - Not intended use case for FI_SELECTIVE_COMPLETION
+		 */
+		if (!ft_use_comp_cntr(test_info.comp_type))
+			return 0;
+	}
 
 	if (test_info.test_class & (FI_MSG | FI_TAGGED) &&
 	    !ft_check_rx_completion(test_info) &&
@@ -866,9 +874,8 @@ void fts_cur_info(struct ft_series *series, struct ft_info *info)
 		while (set->tx_op_flags[i])
 			info->tx_op_flags |= set->tx_op_flags[i++];
 	}
-
-	info->mode = (set->mode[series->cur_mode] == FT_MODE_NONE) ?
-			0 : set->mode[series->cur_mode];
+	info->mode = !set->mode[series->cur_mode] ?
+			FT_MODE_ALL : set->mode[series->cur_mode];
 
 	info->ep_type = set->ep_type[series->cur_ep];
 	info->av_type = set->av_type[series->cur_av];
