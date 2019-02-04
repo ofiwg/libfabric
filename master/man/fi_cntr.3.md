@@ -81,17 +81,21 @@ int fi_cntr_wait(struct fid_cntr *cntr, uint64_t threshold,
 
 Counters record the number of requested operations that have
 completed.  Counters can provide a light-weight completion mechanism
-by suppressing the generation of a full completion event.  They are
+by allowing the suppression of CQ completion entries.  They are
 useful for applications that only need to know the number of requests
 that have completed, and not details about each request.  For example,
 counters may be useful for implementing credit based flow control or
-tracking the number of remote processes which have responded to a
+tracking the number of remote processes that have responded to a
 request.
 
 Counters typically only count successful completions.  However, if an
 operation completes in error, it may increment an associated error
 value.  That is, a counter actually stores two distinct values, with
 error completions updating an error specific value.
+
+Counters are updated following the completion event semantics defined
+in [`fi_cq`(3)](fi_cq.3.html).  The timing of the update is based
+on the type of transfer and any specified operation flags.
 
 ## fi_cntr_open
 

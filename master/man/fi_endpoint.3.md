@@ -253,20 +253,31 @@ behavior to discard completed operations is provider specific.
 
 ## fi_ep_bind
 
-fi_ep_bind is used to associate an endpoint with hardware resources.
-The common use of fi_ep_bind is to direct asynchronous operations
-associated with an endpoint to a completion queue.  An endpoint must
-be bound with CQs capable of reporting completions for any
-asynchronous operation initiated on the endpoint.  This is true even
-for endpoints which are configured to suppress successful completions,
-in order that operations that complete in error may be reported to the
-user.  For passive endpoints, this requires binding the endpoint with
-an EQ that supports the communication management (CM) domain.
+fi_ep_bind is used to associate an endpoint with other allocated
+resources, such as completion queues, counters, address vectors,
+event queues, shared contexts, and memory regions.  The type of objects that
+must be bound with an endpoint depend on the endpoint type and its
+configuration.
+
+Passive endpoints must be bound with an EQ that supports connection
+management events.  Connectionless endpoints must be bound to a
+single address vector.  If an endpoint is using a shared transmit
+and/or receive context, the shared contexts must be bound to the endpoint.
+CQs, counters, AV, and shared contexts must be bound to endpoints
+before they are enabled either explicitly or implicitly.
+
+An endpoint must be bound with CQs capable of reporting completions for any
+asynchronous operation initiated on the endpoint.  For example, if the
+endpoint supports any outbound transfers (sends, RMA, atomics, etc.), then
+it must be bound to a completion queue that can report transmit completions.
+This is true even if the endpoint is configured to suppress successful
+completions, in order that operations that complete in error may be reported
+to the user.
 
 An active endpoint may direct asynchronous completions to different
 CQs, based on the type of operation.  This is specified using
-fi_ep_bind flags.  The following flags may be used separately or OR'ed
-together when binding an endpoint to a completion domain CQ.
+fi_ep_bind flags.  The following flags may be OR'ed together when
+binding an endpoint to a completion domain CQ.
 
 *FI_TRANSMIT*
 : Directs the completion of outbound data transfer requests to the
@@ -280,11 +291,11 @@ together when binding an endpoint to a completion domain CQ.
   endpoint.
 
 *FI_SELECTIVE_COMPLETION*
-: By default, data transfer operations generate completion entries
-  into a completion queue after they have successfully completed.
+: By default, data transfer operations write CQ completion entries
+  into the associated completion queue after they have successfully completed.
   Applications can use this bind flag to selectively enable when
   completions are generated.  If FI_SELECTIVE_COMPLETION is specified,
-  data transfer operations will not generate entries for _successful_
+  data transfer operations will not generate CQ entries for _successful_
   completions unless FI_COMPLETION is set as an operational flag for the
   given operation.  Operations that fail asynchronously will still generate
   completions, even if a completion is not requested.  FI_SELECTIVE_COMPLETION
@@ -292,49 +303,15 @@ together when binding an endpoint to a completion domain CQ.
 
   When FI_SELECTIVE_COMPLETION is set, the user must determine when a
   request that does NOT have FI_COMPLETION set has completed indirectly,
-  usually based on the completion of a subsequent operation.  Use of
-  this flag may improve performance by allowing the provider to avoid
-  writing a completion entry for every operation.
+  usually based on the completion of a subsequent operation or by using
+  completion counters.  Use of this flag may improve performance by allowing
+  the provider to avoid writing a CQ completion entry for every operation.
 
-  Example: An application can selectively generate send completions by
-  using the following general approach:
+  See Notes section below for additional information on how this flag
+  interacts with the FI_CONTEXT and FI_CONTEXT2 mode bits.
 
-```c
-  fi_tx_attr::op_flags = 0; // default - no completion
-  fi_ep_bind(ep, cq, FI_TRANSMIT | FI_SELECTIVE_COMPLETION);
-  fi_send(ep, ...);                   // no completion
-  fi_sendv(ep, ...);                  // no completion
-  fi_sendmsg(ep, ..., FI_COMPLETION); // completion!
-  fi_inject(ep, ...);                 // no completion
-```
-
-  Example: An application can selectively disable send completions by
-  modifying the operational flags:
-
-```c
-  fi_tx_attr::op_flags = FI_COMPLETION; // default - completion
-  fi_ep_bind(ep, cq, FI_TRANSMIT | FI_SELECTIVE_COMPLETION);
-  fi_send(ep, ...);       // completion
-  fi_sendv(ep, ...);      // completion
-  fi_sendmsg(ep, ..., 0); // no completion!
-  fi_inject(ep, ...);     // no completion!
-```
-
-  Example: Omitting FI_SELECTIVE_COMPLETION when binding will generate
-  completions for all non-fi_inject calls:
-
-```c
-  fi_tx_attr::op_flags = 0;
-  fi_ep_bind(ep, cq, FI_TRANSMIT);    // default - completion
-  fi_send(ep, ...);                   // completion
-  fi_sendv(ep, ...);                  // completion
-  fi_sendmsg(ep, ..., 0);             // completion!
-  fi_sendmsg(ep, ..., FI_COMPLETION); // completion
-  fi_sendmsg(ep, ..., FI_INJECT|FI_COMPLETION); // completion!
-  fi_inject(ep, ...);                 // no completion!
-```
-
-An endpoint may also be bound to a fabric counter.  When
+An endpoint may optionally be bound to a completion counter.  Associating
+an endpoint with a counter is in addition to binding the EP with a CQ.  When
 binding an endpoint to a counter, the following flags may be specified.
 
 *FI_SEND*
@@ -372,12 +349,6 @@ An endpoint may only be bound to a single CQ or counter for a given
 type of operation.  For example, a EP may not bind to two counters
 both using FI_WRITE.  Furthermore, providers may limit CQ and counter
 bindings to endpoints of the same endpoint type (DGRAM, MSG, RDM, etc.).
-
-Connectionless endpoints must be bound to a single address vector.
-
-If an endpoint is using a shared transmit and/or receive context, the
-shared contexts must be bound to the endpoint.  CQs, counters, AV, and
-shared contexts must be bound to endpoints before they are enabled.
 
 ## fi_scalable_ep_bind
 
@@ -1336,11 +1307,11 @@ value of transmit or receive context attributes of an endpoint.
   FI_OPT_MIN_MULTI_RECV).
 
 *FI_COMPLETION*
-: Indicates that a completion entry should be generated for data
-  transfer operations. This flag only applies to operations issued on
-  endpoints that were bound to a CQ or counter with the 
-  FI_SELECTIVE_COMPLETION flag. See the fi_ep_bind section above for more
-  detail.
+: Indicates that a completion queue entry should be written for data
+  transfer operations. This flag only applies to operations issued on an
+  endpoint that was bound to a completion queue with the
+  FI_SELECTIVE_COMPLETION flag set, otherwise, it is ignored.  See the
+  fi_ep_bind section above for more detail.
 
 *FI_INJECT_COMPLETE*
 : Indicates that a completion should be generated when the
@@ -1373,12 +1344,12 @@ value of transmit or receive context attributes of an endpoint.
 Users should call fi_close to release all resources allocated to the
 fabric endpoint.
 
-Endpoints allocated with the FI_CONTEXT mode set must typically
-provide struct fi_context as their per operation context parameter.
+Endpoints allocated with the FI_CONTEXT or FI_CONTEXT2 mode bits set must
+typically provide struct fi_context(2) as their per operation context parameter.
 (See fi_getinfo.3 for details.)  However, when FI_SELECTIVE_COMPLETION is
-enabled to suppress completion entries, and an operation is initiated
-without FI_COMPLETION flag set, then the context parameter is ignored.
-An application does not need to pass in a valid struct fi_context into
+enabled to suppress CQ completion entries, and an operation is initiated
+without the FI_COMPLETION flag set, then the context parameter is ignored.
+An application does not need to pass in a valid struct fi_context(2) into
 such data transfers.
 
 Operations that complete in error that are not associated with valid
@@ -1391,8 +1362,7 @@ both a counter and completion queue.  When combined with using
 selective completions, this allows an application to use counters to
 track successful completions, with a CQ used to report errors.
 Operations that complete with an error increment the error counter
-and generate a completion event.  The generation of entries going to
-the CQ can then be controlled using FI_SELECTIVE_COMPLETION.
+and generate a CQ completion event.
 
 As mentioned in fi_getinfo(3), the ep_attr structure can be used to
 query providers that support various endpoint attributes. fi_getinfo

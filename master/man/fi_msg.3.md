@@ -160,16 +160,18 @@ struct fi_msg {
 
 ## fi_inject
 
-The send inject call is an optimized version of fi_send.  The
-fi_inject function behaves as if the FI_INJECT transfer flag were
-set, and FI_COMPLETION were not.  That is, the data buffer is
-available for reuse immediately on returning from fi_inject, and
-no completion event will be generated for this send.  The completion
-event will be suppressed even if the CQ was bound without
-FI_SELECTIVE_COMPLETION or the endpoint's op_flags contain
-FI_COMPLETION.  See the flags discussion below for more details. The
-requested message size that can be used with fi_inject is limited
-by inject_size.
+The send inject call is an optimized version of fi_send with the
+following characteristics.  The data buffer is available for reuse
+immediately on return from the call, and no CQ entry will be written
+if the transfer completes successfully.
+
+Conceptually, this means that the fi_inject function behaves as if
+the FI_INJECT transfer flag were set, selective completions are enabled,
+and the FI_COMPLETION flag is not specified.  Note that the CQ entry
+will be suppressed even if the default behavior of the endpoint is
+to write CQ entries for all successful completions.  See the flags
+discussion below for more details. The requested message size that
+can be used with fi_inject is limited by inject_size.
 
 ## fi_senddata
 

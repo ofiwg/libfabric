@@ -183,15 +183,8 @@ struct fi_msg_tagged {
 
 ## fi_tinject
 
-The tagged inject call is an optimized version of fi_tsend.  The
-fi_tinject function behaves as if the FI_INJECT transfer flag were
-set, and FI_COMPLETION were not.  That is, the data buffer is
-available for reuse immediately on returning from fi_tinject, and
-no completion event will be generated for this send.  The completion
-event will be suppressed even if the endpoint has not been configured
-with FI_SELECTIVE_COMPLETION.  See the flags discussion below for more
-details. The requested message size that can be used with fi_tinject is
-limited by inject_size.
+The tagged inject call is an optimized version of fi_tsend.  It provides
+similar completion semantics as fi_inject [`fi_msg`(3)](fi_msg.3.html).
 
 ## fi_tsenddata
 
