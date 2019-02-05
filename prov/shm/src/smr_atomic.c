@@ -50,12 +50,12 @@ static void smr_format_inline_atomic(struct smr_cmd *cmd, fi_addr_t peer_id,
 				     const struct iovec *compv,
 				     size_t comp_count,  uint32_t op,
 				     enum fi_datatype datatype,
-				     enum fi_op atomic_op)
+				     enum fi_op atomic_op, uint64_t op_flags)
 {
 	size_t comp_size;
 
 	smr_generic_format(cmd, peer_id, op, 0, datatype,
-			   atomic_op, 0, 0);
+			   atomic_op, 0, op_flags);
 	cmd->msg.hdr.op_src = smr_src_inline;
 	switch (op) {
 	case ofi_op_atomic:
@@ -87,12 +87,12 @@ static void smr_format_inject_atomic(struct smr_cmd *cmd, fi_addr_t peer_id,
 				     uint32_t op, enum fi_datatype datatype,
 				     enum fi_op atomic_op,
 				     struct smr_region *smr,
-				     struct smr_inject_buf *tx_buf)
+				     struct smr_inject_buf *tx_buf, uint64_t op_flags)
 {
 	size_t comp_size;
 
 	smr_generic_format(cmd, peer_id, op, 0, datatype,
-			   atomic_op, 0, 0);
+			   atomic_op, 0, op_flags);
 	cmd->msg.hdr.op_src = smr_src_inject;
 	cmd->msg.hdr.src_data = (char **) tx_buf - (char **) smr;
 
@@ -170,16 +170,16 @@ static void smr_post_fetch_resp(struct smr_ep *ep, struct smr_cmd *cmd,
 	ofi_cirque_commit(smr_resp_queue(ep->region));
 }
 
-static ssize_t smr_generic_atomic(struct fid_ep *ep_fid,
+static ssize_t smr_generic_atomic(struct smr_ep *ep,
 			const struct fi_ioc *ioc, void **desc, size_t count,
 			const struct fi_ioc *compare_ioc, void **compare_desc,
 			size_t compare_count, struct fi_ioc *result_ioc,
 			void **result_desc, size_t result_count,
 			fi_addr_t addr, const struct fi_rma_ioc *rma_ioc,
 			size_t rma_count, enum fi_datatype datatype,
-			enum fi_op atomic_op, void *context, uint32_t op)
+			enum fi_op atomic_op, void *context, uint32_t op,
+			uint64_t op_flags)
 {
-	struct smr_ep *ep;
 	struct smr_domain *domain;
 	struct smr_region *peer_smr;
 	struct smr_inject_buf *tx_buf;
@@ -197,7 +197,6 @@ static ssize_t smr_generic_atomic(struct fid_ep *ep_fid,
 	assert(compare_count <= SMR_IOV_LIMIT);
 	assert(rma_count <= SMR_IOV_LIMIT);
 
-	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 	domain = container_of(ep->util_ep.domain, struct smr_domain, util_domain);
 
 	peer_id = (int) addr;
@@ -251,13 +250,13 @@ static ssize_t smr_generic_atomic(struct fid_ep *ep_fid,
 	if (total_len <= SMR_MSG_DATA_LEN && !(flags & SMR_RMA_REQ)) {
 		smr_format_inline_atomic(cmd, smr_peer_addr(ep->region)[peer_id].addr,
 					 iov, count, compare_iov, compare_count,
-					 op, datatype, atomic_op);
+					 op, datatype, atomic_op, op_flags);
 	} else if (total_len <= SMR_INJECT_SIZE) {
 		tx_buf = smr_freestack_pop(smr_inject_pool(peer_smr));
 		smr_format_inject_atomic(cmd, smr_peer_addr(ep->region)[peer_id].addr,
 					 iov, count, result_iov, result_count,
 					 compare_iov, compare_count, op, datatype,
-					 atomic_op, peer_smr, tx_buf);
+					 atomic_op, peer_smr, tx_buf, op_flags);
 	} else {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"message too large\n");
@@ -283,7 +282,7 @@ static ssize_t smr_generic_atomic(struct fid_ep *ep_fid,
 				"unable to fetch results");
 	}
 
-	ret = ep->tx_comp(ep, context, ofi_tx_cq_flags(op), err);
+	ret = ep->tx_comp(ep, context, op, cmd->msg.hdr.op_flags, err);
 	if (ret) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"unable to process tx completion\n");
@@ -301,22 +300,29 @@ unlock_region:
 	return ret;
 }
 
-static ssize_t smr_atomic_writemsg(struct fid_ep *ep,
+static ssize_t smr_atomic_writemsg(struct fid_ep *ep_fid,
 			const struct fi_msg_atomic *msg, uint64_t flags)
 {
+	struct smr_ep *ep;
+
+	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
+
 	return smr_generic_atomic(ep, msg->msg_iov, msg->desc, msg->iov_count,
 				  NULL, NULL, 0, NULL, NULL, 0, msg->addr,
 				  msg->rma_iov, msg->rma_iov_count,
 				  msg->datatype, msg->op, msg->context,
-				  ofi_op_atomic);
+				  ofi_op_atomic, flags | ep->util_ep.tx_msg_flags);
 }
 
-static ssize_t smr_atomic_writev(struct fid_ep *ep,
+static ssize_t smr_atomic_writev(struct fid_ep *ep_fid,
 			const struct fi_ioc *iov, void **desc, size_t count,
 			fi_addr_t dest_addr, uint64_t addr, uint64_t key,
 			enum fi_datatype datatype, enum fi_op op, void *context)
 {
+	struct smr_ep *ep;
 	struct fi_rma_ioc rma_iov;
+
+	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 
 	rma_iov.addr = addr;
 	rma_iov.count = ofi_total_ioc_cnt(iov, count);
@@ -324,16 +330,19 @@ static ssize_t smr_atomic_writev(struct fid_ep *ep,
 
 	return smr_generic_atomic(ep, iov, desc, count, NULL, NULL, 0, NULL,
 				  NULL, 0, dest_addr, &rma_iov, 1, datatype,
-				  op, context, ofi_op_atomic);
+				  op, context, ofi_op_atomic, smr_ep_tx_flags(ep));
 }
 
-static ssize_t smr_atomic_write(struct fid_ep *ep, const void *buf, size_t count,
+static ssize_t smr_atomic_write(struct fid_ep *ep_fid, const void *buf, size_t count,
 			void *desc, fi_addr_t dest_addr, uint64_t addr,
 			uint64_t key, enum fi_datatype datatype, enum fi_op op,
 			void *context)
 {
+	struct smr_ep *ep;
 	struct fi_ioc iov;
 	struct fi_rma_ioc rma_iov;
+
+	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 
 	iov.addr = (void *) buf;
 	iov.count = count;
@@ -344,7 +353,7 @@ static ssize_t smr_atomic_write(struct fid_ep *ep, const void *buf, size_t count
 
 	return smr_generic_atomic(ep, &iov, &desc, 1, NULL, NULL, 0, NULL, NULL, 0,
 				  dest_addr, &rma_iov, 1, datatype, op, context,
-				  ofi_op_atomic);
+				  ofi_op_atomic, smr_ep_tx_flags(ep));
 }
 
 static ssize_t smr_atomic_inject(struct fid_ep *ep_fid, const void *buf,
@@ -390,12 +399,12 @@ static ssize_t smr_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 	if (total_len <= SMR_MSG_DATA_LEN) {
 		smr_format_inline_atomic(cmd, smr_peer_addr(ep->region)[peer_id].addr,
 					 &iov, 1, NULL, 0, ofi_op_atomic,
-					 datatype, op);
+					 datatype, op, 0);
 	} else if (total_len <= SMR_INJECT_SIZE) {
 		tx_buf = smr_freestack_pop(smr_inject_pool(peer_smr));
 		smr_format_inject_atomic(cmd, smr_peer_addr(ep->region)[peer_id].addr,
 					 &iov, 1, NULL, 0, NULL, 0, ofi_op_atomic,
-					 datatype, op, peer_smr, tx_buf);
+					 datatype, op, peer_smr, tx_buf, 0);
 	}
 
 	ofi_cirque_commit(smr_cmd_queue(peer_smr));
@@ -410,26 +419,34 @@ unlock_region:
 	return ret;
 }
 
-static ssize_t smr_atomic_readwritemsg(struct fid_ep *ep,
+static ssize_t smr_atomic_readwritemsg(struct fid_ep *ep_fid,
 			const struct fi_msg_atomic *msg, struct fi_ioc *resultv,
 			void **result_desc, size_t result_count, uint64_t flags)
 {
+	struct smr_ep *ep;
+
+	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
+
 	return smr_generic_atomic(ep, msg->msg_iov, msg->desc, msg->iov_count,
 				  NULL, NULL, 0, resultv, result_desc,
 				  result_count, msg->addr,
 				  msg->rma_iov, msg->rma_iov_count,
 				  msg->datatype, msg->op, msg->context,
-				  ofi_op_atomic_fetch);
+				  ofi_op_atomic_fetch,
+				  flags | ep->util_ep.tx_msg_flags);
 }
 
-static ssize_t smr_atomic_readwritev(struct fid_ep *ep,
+static ssize_t smr_atomic_readwritev(struct fid_ep *ep_fid,
 			const struct fi_ioc *iov, void **desc, size_t count,
 			struct fi_ioc *resultv, void **result_desc,
 			size_t result_count, fi_addr_t dest_addr, uint64_t addr,
 			uint64_t key, enum fi_datatype datatype, enum fi_op op,
 			void *context)
 {
+	struct smr_ep *ep;
 	struct fi_rma_ioc rma_iov;
+
+	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 
 	rma_iov.addr = addr;
 	rma_iov.count = ofi_total_ioc_cnt(iov, count);
@@ -438,17 +455,20 @@ static ssize_t smr_atomic_readwritev(struct fid_ep *ep,
 	return smr_generic_atomic(ep, iov, desc, count, NULL, NULL, 0, resultv,
 				  result_desc, result_count, dest_addr,
 				  &rma_iov, 1, datatype, op, context,
-				  ofi_op_atomic_fetch);
+				  ofi_op_atomic_fetch, smr_ep_tx_flags(ep));
 }
 
-static ssize_t smr_atomic_readwrite(struct fid_ep *ep, const void *buf,
+static ssize_t smr_atomic_readwrite(struct fid_ep *ep_fid, const void *buf,
 			size_t count, void *desc, void *result,
 			void *result_desc, fi_addr_t dest_addr, uint64_t addr,
 			uint64_t key, enum fi_datatype datatype, enum fi_op op,
 			void *context)
 {
+	struct smr_ep *ep;
 	struct fi_ioc iov, resultv;
 	struct fi_rma_ioc rma_iov;
+
+	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 
 	iov.addr = (void *) buf;
 	iov.count = count;
@@ -462,25 +482,31 @@ static ssize_t smr_atomic_readwrite(struct fid_ep *ep, const void *buf,
 
 	return smr_generic_atomic(ep, &iov, &desc, 1, NULL, NULL, 0, &resultv,
 				  &result_desc, 1, dest_addr, &rma_iov, 1,
-				  datatype, op, context, ofi_op_atomic_fetch);
+				  datatype, op, context, ofi_op_atomic_fetch,
+				  smr_ep_tx_flags(ep));
 }
 
-static ssize_t smr_atomic_compwritemsg(struct fid_ep *ep,
+static ssize_t smr_atomic_compwritemsg(struct fid_ep *ep_fid,
 			const struct fi_msg_atomic *msg,
 			const struct fi_ioc *comparev, void **compare_desc,
 			size_t compare_count, struct fi_ioc *resultv,
 			void **result_desc, size_t result_count, uint64_t flags)
 {
+	struct smr_ep *ep;
+
+	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
+
 	return smr_generic_atomic(ep, msg->msg_iov, msg->desc, msg->iov_count,
 				  comparev, compare_desc, compare_count,
 				  resultv, result_desc,
 				  result_count, msg->addr,
 				  msg->rma_iov, msg->rma_iov_count,
 				  msg->datatype, msg->op, msg->context,
-				  ofi_op_atomic_compare);
+				  ofi_op_atomic_compare,
+				  flags | ep->util_ep.tx_msg_flags);
 }
 
-static ssize_t smr_atomic_compwritev(struct fid_ep *ep,
+static ssize_t smr_atomic_compwritev(struct fid_ep *ep_fid,
 			const struct fi_ioc *iov, void **desc, size_t count,
 			const struct fi_ioc *comparev, void **compare_desc,
 			size_t compare_count, struct fi_ioc *resultv,
@@ -488,7 +514,10 @@ static ssize_t smr_atomic_compwritev(struct fid_ep *ep,
 			fi_addr_t dest_addr, uint64_t addr, uint64_t key,
 			enum fi_datatype datatype, enum fi_op op, void *context)
 {
+	struct smr_ep *ep;
 	struct fi_rma_ioc rma_iov;
+
+	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 
 	rma_iov.addr = addr;
 	rma_iov.count = ofi_total_ioc_cnt(iov, count);
@@ -497,17 +526,21 @@ static ssize_t smr_atomic_compwritev(struct fid_ep *ep,
 	return smr_generic_atomic(ep, iov, desc, count, comparev, compare_desc,
 				  compare_count, resultv, result_desc,
 				  result_count, dest_addr, &rma_iov, 1,
-				  datatype, op, context, ofi_op_atomic_compare);
+				  datatype, op, context, ofi_op_atomic_compare,
+				  smr_ep_tx_flags(ep));
 }
 
-static ssize_t smr_atomic_compwrite(struct fid_ep *ep, const void *buf,
+static ssize_t smr_atomic_compwrite(struct fid_ep *ep_fid, const void *buf,
 			size_t count, void *desc, const void *compare,
 			void *compare_desc, void *result, void *result_desc,
 			fi_addr_t dest_addr, uint64_t addr, uint64_t key,
 			enum fi_datatype datatype, enum fi_op op, void *context)
 {
+	struct smr_ep *ep;
 	struct fi_ioc iov, resultv, comparev;
 	struct fi_rma_ioc rma_iov;
+
+	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 
 	iov.addr = (void *) buf;
 	iov.count = count;
@@ -525,7 +558,7 @@ static ssize_t smr_atomic_compwrite(struct fid_ep *ep, const void *buf,
 	return smr_generic_atomic(ep, &iov, &desc, 1, &comparev, &compare_desc,
 				  1, &resultv, &result_desc, 1, dest_addr,
 				  &rma_iov, 1, datatype, op, context,
-				  ofi_op_atomic_compare);
+				  ofi_op_atomic_compare, smr_ep_tx_flags(ep));
 }
 
 int smr_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,

@@ -88,7 +88,6 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 		goto err2;
 	}
 
-	/* TODO: If we unlink here, can other processes open the region? */
 	close(fd);
 
 	*smr = mapped_addr;
@@ -129,6 +128,7 @@ err1:
 void smr_free(struct smr_region *smr)
 {
 	shm_unlink(smr_name(smr));
+	munmap(smr, smr->total_size);
 }
 
 int smr_map_create(const struct fi_provider *prov, int peer_count,

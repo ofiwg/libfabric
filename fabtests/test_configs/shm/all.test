@@ -36,6 +36,96 @@
 		FT_TEST_BANDWIDTH,
 	],
 	class_function: [
+		FT_FUNC_SENDMSG,
+	],
+	ep_type: [
+		FI_EP_RDM,
+	],
+	mode: [
+		FT_MODE_ALL,
+	],
+	test_class: [
+		FT_CAP_MSG,
+		FT_CAP_TAGGED,
+	],
+	comp_type: [
+		FT_COMP_QUEUE,
+	],
+	tx_cq_bind_flags: [
+		FI_SELECTIVE_COMPLETION,
+	],
+	tx_op_flags: [
+		FI_COMPLETION,
+	],
+	msg_flags: [
+		FI_COMPLETION,
+	],
+},
+{
+	prov_name: shm,
+	test_type: [
+		FT_TEST_LATENCY,
+		FT_TEST_BANDWIDTH,
+	],
+	class_function: [
+		FT_FUNC_SENDMSG,
+	],
+	ep_type: [
+		FI_EP_RDM,
+	],
+	mode: [
+		FT_MODE_ALL,
+	],
+	test_class: [
+		FT_CAP_MSG,
+		FT_CAP_TAGGED,
+	],
+	comp_type: [
+		FT_COMP_QUEUE,
+	],
+	tx_cq_bind_flags: [
+		FI_SELECTIVE_COMPLETION,
+	],
+	msg_flags: [
+		FI_COMPLETION,
+	],
+},
+{
+	prov_name: shm,
+	test_type: [
+		FT_TEST_LATENCY,
+		FT_TEST_BANDWIDTH,
+	],
+	class_function: [
+		FT_FUNC_SENDMSG,
+	],
+	ep_type: [
+		FI_EP_RDM,
+	],
+	mode: [
+		FT_MODE_ALL,
+	],
+	test_class: [
+		FT_CAP_MSG,
+		FT_CAP_TAGGED,
+	],
+	comp_type: [
+		FT_COMP_QUEUE,
+	],
+	tx_cq_bind_flags: [
+		FI_SELECTIVE_COMPLETION,
+	],
+	tx_op_flags: [
+		FI_COMPLETION,
+	],
+},
+{
+	prov_name: shm,
+	test_type: [
+		FT_TEST_LATENCY,
+		FT_TEST_BANDWIDTH,
+	],
+	class_function: [
 		FT_FUNC_WRITE,
 		FT_FUNC_WRITEV,
 		FT_FUNC_WRITEMSG,

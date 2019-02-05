@@ -75,6 +75,7 @@ struct fi_domain_attr smr_domain_attr = {
 	.resource_mgmt = FI_RM_ENABLED,
 	.av_type = FI_AV_UNSPEC,
 	.mr_mode = FI_MR_SCALABLE,
+	.mr_key_size = sizeof_field(struct fi_rma_iov, key),
 	.cq_data_size = sizeof_field(struct smr_msg_hdr, data),
 	.cq_cnt = (1 << 10),
 	.ep_cnt = (1 << 10),
