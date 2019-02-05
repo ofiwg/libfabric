@@ -69,6 +69,7 @@ A set of man pages have been carefully written to specify the libfabric API.
 
 Additionally, developers may find the documents listed below useful in understanding the libfabric architecture and objectives in more detail.
 
+* [Feb 2019 OFA Webinar: Overview of libfabric](https://www.slideshare.net/seanhefty/ofi-overview-2019-webinar) - general introduction to libfabic.
 * [A Short Introduction to the libfabric Architecture](https://www.slideshare.net/seanhefty/ofi-overview) - recommended for anyone new to libfabric.
 * [Developer Tutorial - from HOTI '17](https://www.slideshare.net/seanhefty/2017-ofihotitutorial) - walks through design guidelines, architecture, followed by middleware use cases (PGAS and MPICH)
 * [Developer Tutorial - from SC '15](https://www.slideshare.net/dgoodell/ofi-libfabric-tutorial) - walks through low-level interface details, followed by examples of application and middleware (MPI, SHMEM) using the APIs.
