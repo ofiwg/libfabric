@@ -217,6 +217,7 @@ static void mrail_save_ooo_recv(struct mrail_ep *mrail_ep,
 		FI_WARN(&mrail_prov, FI_LOG_CQ, "Cannot allocate ooo_recv\n");
 		assert(0);
 	}
+	ooo_recv->entry.next = NULL;
 	ooo_recv->seq_no = seq_no;
 	memcpy(&ooo_recv->comp, comp, sizeof(*comp));
 
