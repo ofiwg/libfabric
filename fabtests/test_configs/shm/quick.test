@@ -28,6 +28,7 @@
 	mr_mode: [
 		FI_MR_VIRT_ADDR,
 	],
+	test_flags: FT_FLAG_QUICKTEST
 },
 {
 	prov_name: shm,
@@ -59,6 +60,7 @@
 	mr_mode: [
 		FI_MR_VIRT_ADDR,
 	],
+	test_flags: FT_FLAG_QUICKTEST
 },
 {
 	prov_name: shm,
@@ -87,6 +89,7 @@
 	comp_type: [
 		FT_COMP_QUEUE,
 	],
+	test_flags: FT_FLAG_QUICKTEST
 },
 {
 	prov_name: shm,
