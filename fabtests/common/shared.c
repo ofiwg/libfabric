@@ -1357,7 +1357,6 @@ static void ft_close_fids(void)
 	FT_CLOSE_FID(alias_ep);
 	FT_CLOSE_FID(ep);
 	FT_CLOSE_FID(pep);
-	FT_CLOSE_FID(pollset);
 	if (opts.options & FT_OPT_CQ_SHARED) {
 		FT_CLOSE_FID(txcq);
 	} else {
@@ -1366,6 +1365,7 @@ static void ft_close_fids(void)
 	}
 	FT_CLOSE_FID(rxcntr);
 	FT_CLOSE_FID(txcntr);
+	FT_CLOSE_FID(pollset);
 	FT_CLOSE_FID(av);
 	FT_CLOSE_FID(eq);
 	FT_CLOSE_FID(domain);
