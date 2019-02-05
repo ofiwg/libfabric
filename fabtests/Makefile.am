@@ -87,6 +87,7 @@ nobase_dist_config_DATA = \
 	test_configs/ofi_rxd/ofi_rxd.exclude \
 	test_configs/ofi_rxd/udp.test \
 	test_configs/shm/all.test \
+	test_configs/shm/shm.exclude \
 	test_configs/shm/verify.test
 
 noinst_LTLIBRARIES = libfabtests.la
