@@ -216,6 +216,10 @@ int ft_bind_comp(struct fid_ep *ep)
 	int ret;
 	uint64_t flags;
 
+	if (!ft_use_comp_cq(test_info.comp_type)) {
+		test_info.tx_cq_bind_flags |= FI_SELECTIVE_COMPLETION;
+		test_info.rx_cq_bind_flags |= FI_SELECTIVE_COMPLETION;
+	}
 	flags = FI_TRANSMIT | test_info.tx_cq_bind_flags;
 	ret = fi_ep_bind(ep, &txcq->fid, flags);
 	if (ret) {
@@ -349,7 +353,6 @@ static int ft_cntr_x(struct fid_cntr *cntr, struct ft_xcontrol *ft_x,
 	} while (cntr_val == ft_x->total_comp && poll_time < timeout);
 
 	recvd = cntr_val - ft_x->total_comp;
-	ft_x->credits += recvd;
 	ft_x->total_comp = cntr_val;
 
 	return recvd;
@@ -359,12 +362,28 @@ int ft_comp_rx(int timeout)
 {
 	int ret = 0;
 	size_t cur_credits = ft_rx_ctrl.credits;
+	int cq_ret;
 
 	if (ft_use_comp_cntr(test_info.comp_type)) {
 		ret = ft_cntr_x(rxcntr, &ft_rx_ctrl, timeout);
 		if (ret < 0)
 			return ret;
+
+		if (ft_generates_rx_comp()) {
+			do {
+				cq_ret = ft_comp_x(rxcq, &ft_rx_ctrl, "rxcq", 0);
+				if (cq_ret < 0)
+					return cq_ret;
+			} while (cq_ret > 0);
+		}
+		if (test_info.test_class & (FI_MSG | FI_TAGGED)) {
+			ft_rx_ctrl.credits = cur_credits;
+			ft_rx_ctrl.credits += ret;
+			if (ret)
+				return ret;
+		}
 	}
+
 	if (ft_use_comp_cq(test_info.comp_type)) {
 		if (test_info.comp_type == FT_COMP_ALL)
 			ft_rx_ctrl.credits = cur_credits;
@@ -384,11 +403,22 @@ int ft_comp_tx(int timeout)
 {
 	int ret = 0;
 	size_t cur_credits = ft_tx_ctrl.credits;
+	int cq_ret;
 
 	if (ft_use_comp_cntr(test_info.comp_type)) {
 		ret = ft_cntr_x(txcntr, &ft_tx_ctrl, timeout);
 		if (ret < 0)
 			return ret;
+
+		if (ft_generates_tx_comp()) {
+			do {
+				cq_ret = ft_comp_x(txcq, &ft_tx_ctrl, "txcq", 0);
+				if (cq_ret < 0)
+					return cq_ret;
+			} while (cq_ret > 0);
+		}
+		ft_tx_ctrl.credits = cur_credits;
+		ft_tx_ctrl.credits += ret;
 	}
 
 	if (ft_use_comp_cq(test_info.comp_type)) {
