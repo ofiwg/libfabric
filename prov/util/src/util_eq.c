@@ -222,6 +222,7 @@ static int util_eq_close(struct fid *fid)
 			fi_close(&eq->wait->wait_fid.fid);
 	}
 
+	free(eq->saved_err_data);
 	fastlock_destroy(&eq->lock);
 	ofi_atomic_dec32(&eq->fabric->ref);
 	free(eq);
