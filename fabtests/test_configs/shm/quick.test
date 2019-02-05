@@ -24,10 +24,12 @@
 	],
 	comp_type: [
 		FT_COMP_QUEUE,
+		FT_COMP_CNTR,
 	],
 	mr_mode: [
 		FI_MR_VIRT_ADDR,
 	],
+	test_flags: FT_FLAG_QUICKTEST
 },
 {
 	prov_name: shm,
@@ -61,6 +63,7 @@
 	msg_flags: [
 		FI_COMPLETION,
 	],
+	test_flags: FT_FLAG_QUICKTEST
 },
 {
 	prov_name: shm,
@@ -91,6 +94,7 @@
 	msg_flags: [
 		FI_COMPLETION,
 	],
+	test_flags: FT_FLAG_QUICKTEST
 },
 {
 	prov_name: shm,
@@ -121,6 +125,7 @@
 	tx_op_flags: [
 		FI_COMPLETION,
 	],
+	test_flags: FT_FLAG_QUICKTEST
 },
 {
 	prov_name: shm,
@@ -155,6 +160,7 @@
 	mr_mode: [
 		FI_MR_VIRT_ADDR,
 	],
+	test_flags: FT_FLAG_QUICKTEST
 },
 {
 	prov_name: shm,
@@ -184,7 +190,9 @@
 	],
 	comp_type: [
 		FT_COMP_QUEUE,
+		FT_COMP_CNTR,
 	],
+	test_flags: FT_FLAG_QUICKTEST
 },
 {
 	prov_name: shm,
@@ -218,6 +226,7 @@
 	],
 	comp_type: [
 		FT_COMP_QUEUE,
+		FT_COMP_CNTR,
 	],
 	mode: [
 		FT_MODE_ALL,
@@ -258,6 +267,7 @@
 	],
 	comp_type: [
 		FT_COMP_QUEUE,
+		FT_COMP_CNTR,
 	],
 	mode: [
 		FT_MODE_ALL,
@@ -302,6 +312,7 @@
 	],
 	comp_type: [
 		FT_COMP_QUEUE,
+		FT_COMP_CNTR,
 	],
 	mode: [
 		FT_MODE_ALL,
@@ -346,6 +357,7 @@
 	],
 	comp_type: [
 		FT_COMP_QUEUE,
+		FT_COMP_CNTR,
 	],
 	mode: [
 		FT_MODE_ALL,
@@ -381,6 +393,7 @@
 	],
 	comp_type: [
 		FT_COMP_QUEUE,
+		FT_COMP_CNTR,
 	],
 	mode: [
 		FT_MODE_ALL,
@@ -422,6 +435,7 @@
 	],
 	comp_type: [
 		FT_COMP_QUEUE,
+		FT_COMP_CNTR,
 	],
 	mode: [
 		FT_MODE_ALL,
