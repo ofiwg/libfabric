@@ -338,10 +338,7 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	 * since we specify the key used by MSG_EP provider. */
 	rxm_domain->util_domain.mr_map.mode &= ~FI_MR_PROV_KEY;
 
-	/* Must be set to eager size or less */
-	rxm_domain->max_atomic_size = info->tx_attr ?
-				      info->tx_attr->inject_size : 0;
-
+	rxm_domain->max_atomic_size = rxm_ep_max_atomic_size(info);
 	*domain = &rxm_domain->util_domain.domain_fid;
 	(*domain)->fid.ops = &rxm_domain_fi_ops;
 	/* Replace MR ops set by ofi_domain_init() */
