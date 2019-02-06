@@ -159,7 +159,6 @@ static int tcpx_prepare_rx_entry_resp(struct tcpx_xfer_entry *rx_entry)
 
 	tcpx_cq_report_completion(rx_entry->ep->util_ep.rx_cq,
 				  rx_entry, 0);
-	slist_remove_head(&rx_entry->ep->rx_queue);
 	tcpx_rx_msg_release(rx_entry);
 	return FI_SUCCESS;
 }
