@@ -155,7 +155,7 @@ static int init_multi_mr_res()
 
 		if (verbose) {
 			printf("MR_REG:domain_ptr, buf_ptr, mr_size, mr_ptr, mr_key)\n");
-			printf("%p, %p, %d, %p, %lu)\n",
+			printf("%p, %p, %zu, %p, %lu)\n",
 					domain,
 					mr_res_array[i].buf,
 					opts.transfer_size,

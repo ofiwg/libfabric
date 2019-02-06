@@ -223,7 +223,7 @@ int main(int argc, char **argv)
 			break;
 		case 'l':
 			opts.transfer_size = strtoul(optarg, NULL, 0);
-			printf("Testing Message Size: %d\n", opts.transfer_size);
+			printf("Testing Message Size: %zu\n", opts.transfer_size);
 			break;
 		case 't':
 			tagged = 1;
