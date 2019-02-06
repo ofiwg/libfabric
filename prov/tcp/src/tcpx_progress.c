@@ -130,7 +130,7 @@ done:
 
 static int tcpx_prepare_rx_entry_resp(struct tcpx_xfer_entry *rx_entry)
 {
-	struct tcpx_cq *tcpx_rx_cq, *tcpx_tx_cq;
+	struct tcpx_cq *tcpx_tx_cq;
 	struct tcpx_xfer_entry *resp_entry;
 
 	tcpx_tx_cq = container_of(rx_entry->ep->util_ep.tx_cq,
@@ -160,46 +160,11 @@ static int tcpx_prepare_rx_entry_resp(struct tcpx_xfer_entry *rx_entry)
 	tcpx_cq_report_completion(rx_entry->ep->util_ep.rx_cq,
 				  rx_entry, 0);
 	slist_remove_head(&rx_entry->ep->rx_queue);
-	tcpx_rx_cq = container_of(rx_entry->ep->util_ep.rx_cq,
-			       struct tcpx_cq, util_cq);
-	tcpx_xfer_entry_release(tcpx_rx_cq, rx_entry);
+	tcpx_rx_msg_release(rx_entry);
 	return FI_SUCCESS;
 }
 
 static int process_rx_entry(struct tcpx_xfer_entry *rx_entry)
-{
-	struct tcpx_cq *tcpx_cq;
-	int ret;
-
-	ret = tcpx_recv_msg_data(rx_entry);
-	if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
-		return ret;
-
-	if (!ret)
-		goto done;
-
-	FI_WARN(&tcpx_prov, FI_LOG_DOMAIN, "msg recv Failed ret = %d\n", ret);
-
-	if (ret == -FI_ENOTCONN)
-		tcpx_ep_shutdown_report(rx_entry->ep,
-					&rx_entry->ep->util_ep.ep_fid.fid);
-done:
-	if (rx_entry->hdr.base_hdr.flags & OFI_DELIVERY_COMPLETE) {
-
-		if (tcpx_prepare_rx_entry_resp(rx_entry))
-			rx_entry->ep->cur_rx_proc_fn = tcpx_prepare_rx_entry_resp;
-
-		return FI_SUCCESS;
-	}
-	tcpx_cq_report_completion(rx_entry->ep->util_ep.rx_cq,
-				  rx_entry, -ret);
-	tcpx_cq = container_of(rx_entry->ep->util_ep.rx_cq,
-			       struct tcpx_cq, util_cq);
-	tcpx_xfer_entry_release(tcpx_cq, rx_entry);
-	return FI_SUCCESS;
-}
-
-static int process_srx_entry(struct tcpx_xfer_entry *rx_entry)
 {
 	int ret;
 
@@ -208,30 +173,21 @@ static int process_srx_entry(struct tcpx_xfer_entry *rx_entry)
 		return ret;
 
 	if (ret) {
-		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,
+		FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
 			"msg recv Failed ret = %d\n", ret);
 
 		tcpx_ep_shutdown_report(rx_entry->ep,
 					&rx_entry->ep->util_ep.ep_fid.fid);
 	}
 
-	if ((rx_entry->hdr.base_hdr.flags &
-	     OFI_DELIVERY_COMPLETE) && !ret) {
+	if ((rx_entry->hdr.base_hdr.flags & OFI_DELIVERY_COMPLETE) && !ret) {
 		if (tcpx_prepare_rx_entry_resp(rx_entry))
 			rx_entry->ep->cur_rx_proc_fn = tcpx_prepare_rx_entry_resp;
-
-		return FI_SUCCESS;
+	} else {
+		tcpx_cq_report_completion(rx_entry->ep->util_ep.rx_cq,
+					  rx_entry, -ret);
+		tcpx_rx_msg_release(rx_entry);
 	}
-
-	tcpx_cq_report_completion(rx_entry->ep->util_ep.rx_cq,
-				  rx_entry, -ret);
-
-	/* release the shared entry */
-	if (rx_entry->ep->cur_rx_entry == rx_entry) {
-		rx_entry->ep->cur_rx_entry = NULL;
-	}
-
-	tcpx_srx_xfer_release(rx_entry->ep->srx_ctx, rx_entry);
 	return FI_SUCCESS;
 }
 
@@ -487,7 +443,6 @@ int tcpx_get_rx_entry_op_msg(struct tcpx_ep *tcpx_ep)
 	}
 
 	if (tcpx_ep->srx_ctx){
-		tcpx_ep->cur_rx_proc_fn = process_srx_entry;
 		rx_entry = tcpx_srx_dequeue(tcpx_ep->srx_ctx);
 		if (!rx_entry)
 			return -FI_EAGAIN;
@@ -496,10 +451,10 @@ int tcpx_get_rx_entry_op_msg(struct tcpx_ep *tcpx_ep)
 		if (slist_empty(&tcpx_ep->rx_queue))
 			return -FI_EAGAIN;
 
-		tcpx_ep->cur_rx_proc_fn = process_rx_entry;
 		rx_entry = container_of(slist_remove_head(&tcpx_ep->rx_queue),
 					struct tcpx_xfer_entry, entry);
 	}
+	tcpx_ep->cur_rx_proc_fn = process_rx_entry;
 
 	memcpy(&rx_entry->hdr, &tcpx_ep->rx_detect.hdr,
 	       (size_t) tcpx_ep->rx_detect.hdr.base_hdr.payload_off);
