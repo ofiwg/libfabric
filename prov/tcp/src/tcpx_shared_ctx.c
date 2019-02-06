@@ -56,6 +56,22 @@ void tcpx_srx_xfer_release(struct tcpx_rx_ctx *srx_ctx,
 	fastlock_release(&srx_ctx->lock);
 }
 
+struct tcpx_xfer_entry *
+tcpx_srx_dequeue(struct tcpx_rx_ctx *srx_ctx)
+{
+	struct tcpx_xfer_entry *xfer_entry;
+
+	fastlock_acquire(&srx_ctx->lock);
+	if (!slist_empty(&srx_ctx->rx_queue)) {
+		xfer_entry = container_of(slist_remove_head(&srx_ctx->rx_queue),
+					  struct tcpx_xfer_entry, entry);
+	} else {
+		xfer_entry = NULL;
+	}
+	fastlock_release(&srx_ctx->lock);
+	return xfer_entry;
+}
+
 static ssize_t tcpx_srx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 				uint64_t flags)
 {
