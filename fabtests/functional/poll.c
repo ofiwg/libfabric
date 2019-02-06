@@ -86,6 +86,39 @@ err:
 	return ret;
 }
 
+static int free_poll_res(void)
+{
+	int ret;
+
+	if (txcq) {
+		ret = fi_poll_del(pollset, &txcq->fid, 0);
+		if (ret)
+			goto err;
+	}
+
+	if (rxcq) {
+		ret = fi_poll_del(pollset, &rxcq->fid, 0);
+		if (ret)
+			goto err;
+	}
+
+	if (txcntr) {
+		ret = fi_poll_del(pollset, &txcntr->fid, 0);
+		if (ret)
+			goto err;
+	}
+
+	if (rxcntr) {
+		ret = fi_poll_del(pollset, &rxcntr->fid, 0);
+		if (ret)
+			goto err;
+	}
+	return 0;
+err:
+	FT_PRINTERR("fi_poll_del", ret);
+	return ret;
+}
+
 static int init_fabric(void)
 {
 	int ret;
@@ -239,6 +272,7 @@ int main(int argc, char **argv)
 
 	ret = run();
 
+	free_poll_res();
 	ft_free_res();
 	return ft_exit_code(ret);
 }
