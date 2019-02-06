@@ -37,16 +37,6 @@
 #include <ofi_util.h>
 #include <unistd.h>
 
-static inline struct tcpx_xfer_entry *
-tcpx_srx_xfer_alloc(struct tcpx_rx_ctx *srx_ctx)
-{
-	struct tcpx_xfer_entry *recv_entry;
-
-	fastlock_acquire(&srx_ctx->lock);
-	recv_entry = util_buf_alloc(srx_ctx->buf_pool);
-	fastlock_release(&srx_ctx->lock);
-	return recv_entry;
-}
 
 void tcpx_srx_xfer_release(struct tcpx_rx_ctx *srx_ctx,
 			   struct tcpx_xfer_entry *xfer_entry)
@@ -54,6 +44,20 @@ void tcpx_srx_xfer_release(struct tcpx_rx_ctx *srx_ctx,
 	fastlock_acquire(&srx_ctx->lock);
 	util_buf_release(srx_ctx->buf_pool, xfer_entry);
 	fastlock_release(&srx_ctx->lock);
+}
+
+static inline void tcpx_srx_recv_init(struct tcpx_xfer_entry *recv_entry,
+				      uint64_t base_flags, void *context)
+{
+	recv_entry->flags = base_flags | FI_MSG | FI_RECV;
+	recv_entry->context = context;
+}
+
+static inline void tcpx_srx_recv_init_iov(struct tcpx_xfer_entry *recv_entry,
+					  size_t count, const struct iovec *iov)
+{
+	recv_entry->iov_cnt = count;
+	memcpy(&recv_entry->iov[0], iov, count * sizeof(*iov));
 }
 
 struct tcpx_xfer_entry *
@@ -77,25 +81,25 @@ static ssize_t tcpx_srx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 {
 	struct tcpx_xfer_entry *recv_entry;
 	struct tcpx_rx_ctx *srx_ctx;
+	ssize_t ret = FI_SUCCESS;
 
 	srx_ctx = container_of(ep, struct tcpx_rx_ctx, rx_fid);
 	assert(msg->iov_count <= TCPX_IOV_LIMIT);
 
-	recv_entry = tcpx_srx_xfer_alloc(srx_ctx);
-	if (!recv_entry)
-		return -FI_EAGAIN;
-
-	recv_entry->iov_cnt = msg->iov_count;
-	memcpy(&recv_entry->iov[0], &msg->msg_iov[0],
-	       msg->iov_count * sizeof(struct iovec));
-
-	recv_entry->flags = flags | FI_MSG | FI_RECV;
-	recv_entry->context = msg->context;
-
 	fastlock_acquire(&srx_ctx->lock);
+	recv_entry = util_buf_alloc(srx_ctx->buf_pool);
+	if (!recv_entry) {
+		ret = -FI_EAGAIN;
+		goto unlock;
+	}
+
+	tcpx_srx_recv_init(recv_entry, flags, msg->context);
+	tcpx_srx_recv_init_iov(recv_entry, msg->iov_count, msg->msg_iov);
+
 	slist_insert_tail(&recv_entry->entry, &srx_ctx->rx_queue);
+unlock:
 	fastlock_release(&srx_ctx->lock);
-	return FI_SUCCESS;
+	return ret;
 }
 
 static ssize_t tcpx_srx_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
@@ -103,24 +107,26 @@ static ssize_t tcpx_srx_recv(struct fid_ep *ep, void *buf, size_t len, void *des
 {
 	struct tcpx_xfer_entry *recv_entry;
 	struct tcpx_rx_ctx *srx_ctx;
+	ssize_t ret = FI_SUCCESS;
 
 	srx_ctx = container_of(ep, struct tcpx_rx_ctx, rx_fid);
 
-	recv_entry = tcpx_srx_xfer_alloc(srx_ctx);
-	if (!recv_entry)
-		return -FI_EAGAIN;
+	fastlock_acquire(&srx_ctx->lock);
+	recv_entry = util_buf_alloc(srx_ctx->buf_pool);
+	if (!recv_entry) {
+		ret = -FI_EAGAIN;
+		goto unlock;
+	}
 
+	tcpx_srx_recv_init(recv_entry, 0, context);
 	recv_entry->iov_cnt = 1;
 	recv_entry->iov[0].iov_base = buf;
 	recv_entry->iov[0].iov_len = len;
 
-	recv_entry->flags = FI_MSG | FI_RECV;
-	recv_entry->context = context;
-
-	fastlock_acquire(&srx_ctx->lock);
 	slist_insert_tail(&recv_entry->entry, &srx_ctx->rx_queue);
+unlock:
 	fastlock_release(&srx_ctx->lock);
-	return FI_SUCCESS;
+	return ret;
 }
 
 static ssize_t tcpx_srx_recvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
@@ -128,24 +134,25 @@ static ssize_t tcpx_srx_recvv(struct fid_ep *ep, const struct iovec *iov, void *
 {
 	struct tcpx_xfer_entry *recv_entry;
 	struct tcpx_rx_ctx *srx_ctx;
+	ssize_t ret = FI_SUCCESS;
 
 	srx_ctx = container_of(ep, struct tcpx_rx_ctx, rx_fid);
 	assert(count <= TCPX_IOV_LIMIT);
 
-	recv_entry = tcpx_srx_xfer_alloc(srx_ctx);
-	if (!recv_entry)
-		return -FI_EAGAIN;
-
-	recv_entry->iov_cnt = count;
-	memcpy(recv_entry->iov, iov, count * sizeof(*iov));
-
-	recv_entry->flags = FI_MSG | FI_RECV;
-	recv_entry->context = context;
-
 	fastlock_acquire(&srx_ctx->lock);
+	recv_entry = util_buf_alloc(srx_ctx->buf_pool);
+	if (!recv_entry) {
+		ret = -FI_EAGAIN;
+		goto unlock;
+	}
+
+	tcpx_srx_recv_init(recv_entry, 0, context);
+	tcpx_srx_recv_init_iov(recv_entry, count, iov);
+
 	slist_insert_tail(&recv_entry->entry, &srx_ctx->rx_queue);
+unlock:
 	fastlock_release(&srx_ctx->lock);
-	return FI_SUCCESS;
+	return ret;
 }
 
 struct fi_ops_msg tcpx_srx_msg_ops = {
