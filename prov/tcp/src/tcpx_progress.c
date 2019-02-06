@@ -231,9 +231,7 @@ static int process_srx_entry(struct tcpx_xfer_entry *rx_entry)
 		rx_entry->ep->cur_rx_entry = NULL;
 	}
 
-	fastlock_acquire(&rx_entry->ep->srx_ctx->lock);
-	util_buf_release(rx_entry->ep->srx_ctx->buf_pool, rx_entry);
-	fastlock_release(&rx_entry->ep->srx_ctx->lock);
+	tcpx_srx_xfer_release(rx_entry->ep->srx_ctx, rx_entry);
 	return FI_SUCCESS;
 }
 
