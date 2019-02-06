@@ -367,6 +367,8 @@ static inline void *util_buf_get(struct util_buf_pool *pool)
 
 static inline void util_buf_release(struct util_buf_pool *pool, void *buf)
 {
+	assert(util_buf_get_ftr(pool, buf)->region);
+	assert(util_buf_get_ftr(pool, buf)->region->pool == pool);
 	assert(util_buf_get_ftr(pool, buf)->region->num_used--);
 	assert(!pool->attr.indexing.ordered);
 	slist_insert_head(&util_buf_get_ftr(pool, buf)->entry.slist, &pool->list.buffers);
