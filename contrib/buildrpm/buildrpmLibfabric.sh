@@ -261,7 +261,7 @@ if [[ -n "$install_in_opt" ]]; then
   if [[ -z "$prefix" ]] ; then
     prefix=$default_opt_prefix
   fi
-  prefix="$prefix/$version"
+  prefix="$prefix/libfabric/$version"
 
   if [[ -n "$modulepath" ]] ; then
     verbose "Setting RPM module path to: $modulepath"
@@ -269,7 +269,7 @@ if [[ -n "$install_in_opt" ]]; then
   fi
 else
   if [[ -z "$prefix" ]] ; then
-    prefix="$default_prefix"
+    prefix="$default_prefix/libfabric"
   fi
 fi
 
