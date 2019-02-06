@@ -91,7 +91,7 @@ int tcpx_ep_shutdown_report(struct tcpx_ep *ep, fid_t fid)
 	return FI_SUCCESS;
 }
 
-void process_tx_entry(struct tcpx_xfer_entry *tx_entry)
+static void process_tx_entry(struct tcpx_xfer_entry *tx_entry)
 {
 	struct tcpx_cq *tcpx_cq;
 	int ret;
@@ -100,15 +100,13 @@ void process_tx_entry(struct tcpx_xfer_entry *tx_entry)
 	if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
 		return;
 
-	if (!ret)
-		goto done;
+	if (ret) {
+		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN, "msg send failed\n");
 
-	FI_WARN(&tcpx_prov, FI_LOG_DOMAIN, "msg send failed\n");
-
-	if (ret == -FI_ENOTCONN)
 		tcpx_ep_shutdown_report(tx_entry->ep,
 					&tx_entry->ep->util_ep.ep_fid.fid);
-done:
+	}
+
 	/* Keep this path below as a single pass path.*/
 	tx_entry->ep->hdr_bswap(&tx_entry->hdr.base_hdr);
 	tcpx_cq_report_completion(tx_entry->ep->util_ep.tx_cq,
@@ -120,12 +118,11 @@ done:
 		tx_entry->flags |= FI_COMPLETION;
 		slist_insert_tail(&tx_entry->entry,
 				  &tx_entry->ep->tx_rsp_pend_queue);
-		return;
+	} else {
+		tcpx_cq = container_of(tx_entry->ep->util_ep.tx_cq,
+				       struct tcpx_cq, util_cq);
+		tcpx_xfer_entry_release(tcpx_cq, tx_entry);
 	}
-
-	tcpx_cq = container_of(tx_entry->ep->util_ep.tx_cq,
-			       struct tcpx_cq, util_cq);
-	tcpx_xfer_entry_release(tcpx_cq, tx_entry);
 }
 
 static int tcpx_prepare_rx_entry_resp(struct tcpx_xfer_entry *rx_entry)
@@ -669,8 +666,7 @@ static void process_tx_queue(struct tcpx_ep *ep)
 		return;
 
 	entry = ep->tx_queue.head;
-	tx_entry = container_of(entry, struct tcpx_xfer_entry,
-				entry);
+	tx_entry = container_of(entry, struct tcpx_xfer_entry, entry);
 	process_tx_entry(tx_entry);
 }
 
