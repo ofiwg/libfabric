@@ -418,7 +418,6 @@ int tcpx_get_rx_entry_op_msg(struct tcpx_ep *tcpx_ep)
 {
 	struct tcpx_xfer_entry *rx_entry;
 	struct tcpx_xfer_entry *tx_entry;
-	struct slist_entry *entry;
 	struct tcpx_cq *tcpx_cq;
 	struct tcpx_rx_detect *rx_detect = &tcpx_ep->rx_detect;
 	int ret;
@@ -428,9 +427,8 @@ int tcpx_get_rx_entry_op_msg(struct tcpx_ep *tcpx_ep)
 
 	if (rx_detect->hdr.hdr.op_data == TCPX_OP_MSG_RESP) {
 		assert(!slist_empty(&tcpx_ep->tx_rsp_pend_queue));
-		entry = tcpx_ep->tx_rsp_pend_queue.head;
-		tx_entry = container_of(entry, struct tcpx_xfer_entry,
-					entry);
+		tx_entry = container_of(tcpx_ep->tx_rsp_pend_queue.head,
+					struct tcpx_xfer_entry, entry);
 
 		tcpx_cq = container_of(tcpx_ep->util_ep.tx_cq, struct tcpx_cq,
 				       util_cq);
@@ -445,27 +443,21 @@ int tcpx_get_rx_entry_op_msg(struct tcpx_ep *tcpx_ep)
 
 	if (tcpx_ep->srx_ctx){
 		tcpx_ep->cur_rx_proc_fn = process_srx_entry;
-		fastlock_acquire(&tcpx_ep->srx_ctx->lock);
-		if (slist_empty(&tcpx_ep->srx_ctx->rx_queue)) {
-			fastlock_release(&tcpx_ep->srx_ctx->lock);
+		rx_entry = tcpx_srx_dequeue(tcpx_ep->srx_ctx);
+		if (!rx_entry)
 			return -FI_EAGAIN;
-		}
-
-		entry = slist_remove_head(&tcpx_ep->srx_ctx->rx_queue);
-		fastlock_release(&tcpx_ep->srx_ctx->lock);
 
 	} else {
 		if (slist_empty(&tcpx_ep->rx_queue))
 			return -FI_EAGAIN;
 
 		tcpx_ep->cur_rx_proc_fn = process_rx_entry;
-		entry = slist_remove_head(&tcpx_ep->rx_queue);
+		rx_entry = container_of(slist_remove_head(&tcpx_ep->rx_queue),
+					struct tcpx_xfer_entry, entry);
 	}
 
-	rx_entry = container_of(entry, struct tcpx_xfer_entry,
-				entry);
-
 	rx_entry->msg_hdr = rx_detect->hdr;
+
 	rx_entry->ep = tcpx_ep;
 	rx_entry->msg_hdr.hdr.op_data = TCPX_OP_MSG_RECV;
 	rx_entry->done_len = sizeof(rx_detect->hdr);
