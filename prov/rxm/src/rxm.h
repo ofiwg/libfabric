@@ -731,6 +731,16 @@ int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep);
 int rxm_ep_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 			enum fi_op op, struct fi_atomic_attr *attr,
 			uint64_t flags);
+static inline size_t rxm_ep_max_atomic_size(struct fi_info *info)
+{
+	size_t overhead = sizeof(struct rxm_atomic_hdr) +
+			  sizeof(struct rxm_pkt);
+
+	/* Must be set to eager size or less */
+	return (info->tx_attr && info->tx_attr->inject_size > overhead) ?
+		info->tx_attr->inject_size - overhead : 0;
+}
+
 static inline ssize_t
 rxm_atomic_send_respmsg(struct rxm_ep *rxm_ep, struct rxm_conn *conn,
 			struct rxm_tx_atomic_buf *resp_buf, ssize_t len)
