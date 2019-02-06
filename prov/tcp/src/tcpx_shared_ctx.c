@@ -38,7 +38,7 @@
 #include <unistd.h>
 
 static inline struct tcpx_xfer_entry *
-tcpx_srx_ctx_rx_entry_alloc(struct tcpx_rx_ctx *srx_ctx)
+tcpx_srx_xfer_alloc(struct tcpx_rx_ctx *srx_ctx)
 {
 	struct tcpx_xfer_entry *recv_entry;
 
@@ -51,6 +51,14 @@ tcpx_srx_ctx_rx_entry_alloc(struct tcpx_rx_ctx *srx_ctx)
 	return recv_entry;
 }
 
+void tcpx_srx_xfer_release(struct tcpx_rx_ctx *srx_ctx,
+			   struct tcpx_xfer_entry *xfer_entry)
+{
+	fastlock_acquire(&srx_ctx->lock);
+	util_buf_release(srx_ctx->buf_pool, xfer_entry);
+	fastlock_release(&srx_ctx->lock);
+}
+
 static ssize_t tcpx_srx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 				uint64_t flags)
 {
@@ -60,7 +68,7 @@ static ssize_t tcpx_srx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	srx_ctx = container_of(ep, struct tcpx_rx_ctx, rx_fid);
 	assert(msg->iov_count <= TCPX_IOV_LIMIT);
 
-	recv_entry = tcpx_srx_ctx_rx_entry_alloc(srx_ctx);
+	recv_entry = tcpx_srx_xfer_alloc(srx_ctx);
 	if (!recv_entry)
 		return -FI_EAGAIN;
 
@@ -85,7 +93,7 @@ static ssize_t tcpx_srx_recv(struct fid_ep *ep, void *buf, size_t len, void *des
 
 	srx_ctx = container_of(ep, struct tcpx_rx_ctx, rx_fid);
 
-	recv_entry = tcpx_srx_ctx_rx_entry_alloc(srx_ctx);
+	recv_entry = tcpx_srx_xfer_alloc(srx_ctx);
 	if (!recv_entry)
 		return -FI_EAGAIN;
 
@@ -111,7 +119,7 @@ static ssize_t tcpx_srx_recvv(struct fid_ep *ep, const struct iovec *iov, void *
 	srx_ctx = container_of(ep, struct tcpx_rx_ctx, rx_fid);
 	assert(count <= TCPX_IOV_LIMIT);
 
-	recv_entry = tcpx_srx_ctx_rx_entry_alloc(srx_ctx);
+	recv_entry = tcpx_srx_xfer_alloc(srx_ctx);
 	if (!recv_entry)
 		return -FI_EAGAIN;
 
