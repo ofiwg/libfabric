@@ -66,6 +66,7 @@
 #define TCPX_MINOR_VERSION 	1
 
 #define TCPX_HDR_VERSION	3
+#define TCPX_CTRL_HDR_VERSION	3
 
 #define TCPX_MAX_CM_DATA_SIZE	(1<<8)
 #define TCPX_IOV_LIMIT		(4)
@@ -111,6 +112,7 @@ struct tcpx_conn_handle {
 	struct fid		handle;
 	struct tcpx_pep		*pep;
 	SOCKET			conn_fd;
+	bool			endian_match;
 };
 
 struct tcpx_pep {
@@ -193,6 +195,7 @@ struct tcpx_ep {
 	fastlock_t		lock;
 	tcpx_ep_progress_func_t progress_func;
 	tcpx_get_rx_func_t	get_rx_entry[ofi_op_write + 1];
+	void (*hdr_bswap)(struct tcpx_base_hdr *hdr);
 	struct stage_buf	stage_buf;
 	bool			send_ready_monitor;
 };
@@ -213,7 +216,7 @@ struct tcpx_xfer_entry {
 	struct tcpx_ep		*ep;
 	uint64_t		flags;
 	void			*context;
-	uint64_t		done_len;
+	uint64_t		rem_len;
 };
 
 struct tcpx_domain {
@@ -265,6 +268,10 @@ void tcpx_xfer_entry_release(struct tcpx_cq *tcpx_cq,
 
 void tcpx_progress(struct util_ep *util_ep);
 void tcpx_ep_progress(struct tcpx_ep *ep);
+
+void tcpx_hdr_none(struct tcpx_base_hdr *hdr);
+void tcpx_hdr_bswap(struct tcpx_base_hdr *hdr);
+
 int tcpx_ep_shutdown_report(struct tcpx_ep *ep, fid_t fid);
 int tcpx_cq_wait_ep_add(struct tcpx_ep *ep);
 void tcpx_cq_wait_ep_del(struct tcpx_ep *ep);

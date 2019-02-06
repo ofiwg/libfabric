@@ -90,9 +90,10 @@ void tcpx_xfer_entry_release(struct tcpx_cq *tcpx_cq,
 		xfer_entry->ep->cur_rx_entry = NULL;
 	}
 
+	xfer_entry->hdr.base_hdr.flags = 0;
+
 	xfer_entry->flags = 0;
 	xfer_entry->context = 0;
-	xfer_entry->done_len = 0;
 
 	tcpx_cq->util_cq.cq_fastlock_acquire(&tcpx_cq->util_cq.cq_lock);
 	util_buf_release(tcpx_cq->buf_pools[xfer_entry->hdr.base_hdr.op_data].pool,
@@ -110,13 +111,11 @@ void tcpx_cq_report_completion(struct util_cq *cq,
 	if (!(xfer_entry->flags & FI_COMPLETION))
 		return;
 
-	if (ntohs(xfer_entry->hdr.base_hdr.flags) &
+	if (xfer_entry->hdr.base_hdr.flags &
 	    OFI_REMOTE_CQ_DATA) {
 		data = *((uint64_t *)
 			 ((uint8_t *)&xfer_entry->hdr +
 			  sizeof(xfer_entry->hdr.base_hdr)));
-
-		data = ntohll(data);
 		xfer_entry->flags |= FI_REMOTE_CQ_DATA;
 	}
 
@@ -203,8 +202,6 @@ static int tcpx_buf_pool_init(void *pool_ctx, void *addr,
 			break;
 		case TCPX_OP_READ_REQ:
 			xfer_entry->hdr.base_hdr.op = ofi_op_read_req;
-			xfer_entry->hdr.base_hdr.size =
-				htonll(sizeof(xfer_entry->hdr.base_hdr));
 			break;
 		case TCPX_OP_READ_RSP:
 			xfer_entry->hdr.base_hdr.op = ofi_op_read_rsp;

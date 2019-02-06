@@ -186,17 +186,16 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	assert(!(flags & FI_INJECT) || (data_len <= TCPX_MAX_INJECT_SZ));
 
 	offset = sizeof(tx_entry->hdr.base_hdr);
-	tx_entry->hdr.base_hdr.flags = 0;
 
 	if (flags & FI_REMOTE_CQ_DATA) {
 		tx_entry->hdr.base_hdr.flags |= OFI_REMOTE_CQ_DATA;
 		cq_data = (uint64_t *)((uint8_t *)&tx_entry->hdr + offset);
-		*cq_data = htonll(msg->data);
+		*cq_data = msg->data;
 		offset += sizeof(msg->data);
 	}
 
 	tx_entry->hdr.base_hdr.payload_off = (uint8_t)offset;
-	tx_entry->hdr.base_hdr.size = htonll(offset + data_len);
+	tx_entry->hdr.base_hdr.size = offset + data_len;
 	if (flags & FI_INJECT) {
 		ofi_copy_iov_buf(msg->msg_iov, msg->iov_count, 0,
 				 (uint8_t *)&tx_entry->hdr + offset,
@@ -221,10 +220,11 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		tx_entry->flags &= ~FI_COMPLETION;
 	}
 
-	tx_entry->hdr.base_hdr.flags = htons(tx_entry->hdr.base_hdr.flags);
 	tx_entry->ep = tcpx_ep;
 	tx_entry->context = msg->context;
+	tx_entry->rem_len = tx_entry->hdr.base_hdr.size;
 
+	tcpx_ep->hdr_bswap(&tx_entry->hdr.base_hdr);
 	fastlock_acquire(&tcpx_ep->lock);
 	tcpx_tx_queue_insert(tcpx_ep, tx_entry);
 	fastlock_release(&tcpx_ep->lock);
@@ -244,7 +244,7 @@ static ssize_t tcpx_send(struct fid_ep *ep, const void *buf, size_t len,
 		return -FI_EAGAIN;
 
 	tx_entry->hdr.base_hdr.size =
-		htonll(len + sizeof(tx_entry->hdr.base_hdr));
+		(len + sizeof(tx_entry->hdr.base_hdr));
 	tx_entry->hdr.base_hdr.payload_off =
 		(uint8_t)sizeof(tx_entry->hdr.base_hdr);
 
@@ -255,10 +255,11 @@ static ssize_t tcpx_send(struct fid_ep *ep, const void *buf, size_t len,
 	tx_entry->iov[1].iov_len = len;
 	tx_entry->iov_cnt = 2;
 	tx_entry->context = context;
+	tx_entry->rem_len = tx_entry->hdr.base_hdr.size;
 	tx_entry->flags = ((tcpx_ep->util_ep.tx_op_flags & FI_COMPLETION) |
 			   FI_MSG | FI_SEND);
 
-	tx_entry->hdr.base_hdr.flags = 0;
+	tcpx_ep->hdr_bswap(&tx_entry->hdr.base_hdr);
 	fastlock_acquire(&tcpx_ep->lock);
 	tcpx_tx_queue_insert(tcpx_ep, tx_entry);
 	fastlock_release(&tcpx_ep->lock);
@@ -282,12 +283,9 @@ static ssize_t tcpx_sendv(struct fid_ep *ep, const struct iovec *iov,
 	assert(count <= TCPX_IOV_LIMIT);
 	data_len = ofi_total_iov_len(iov, count);
 	tx_entry->hdr.base_hdr.size =
-		htonll(data_len + sizeof(tx_entry->hdr.base_hdr));
+		(data_len + sizeof(tx_entry->hdr.base_hdr));
 	tx_entry->hdr.base_hdr.payload_off =
 		(uint8_t)sizeof(tx_entry->hdr.base_hdr);
-
-	/* move the resetting to release */
-	tx_entry->hdr.base_hdr.flags = 0;
 
 	tx_entry->iov[0].iov_base = (void *) &tx_entry->hdr;
 	tx_entry->iov[0].iov_len = sizeof(tx_entry->hdr.base_hdr);
@@ -295,9 +293,11 @@ static ssize_t tcpx_sendv(struct fid_ep *ep, const struct iovec *iov,
 	memcpy(&tx_entry->iov[1], &iov[0], count * sizeof(struct iovec));
 
 	tx_entry->context = context;
+	tx_entry->rem_len = tx_entry->hdr.base_hdr.size;
 	tx_entry->flags = ((tcpx_ep->util_ep.tx_op_flags & FI_COMPLETION) |
 			   FI_MSG | FI_SEND);
 
+	tcpx_ep->hdr_bswap(&tx_entry->hdr.base_hdr);
 	fastlock_acquire(&tcpx_ep->lock);
 	tcpx_tx_queue_insert(tcpx_ep, tx_entry);
 	fastlock_release(&tcpx_ep->lock);
@@ -320,7 +320,7 @@ static ssize_t tcpx_inject(struct fid_ep *ep, const void *buf, size_t len,
 
 	assert(len <= TCPX_MAX_INJECT_SZ);
 	tx_entry->hdr.base_hdr.size =
-		htonll(len + sizeof(tx_entry->hdr.base_hdr));
+		(len + sizeof(tx_entry->hdr.base_hdr));
 
 	offset = sizeof(tx_entry->hdr.base_hdr);
 	tx_entry->hdr.base_hdr.payload_off = (uint8_t) offset;
@@ -329,10 +329,10 @@ static ssize_t tcpx_inject(struct fid_ep *ep, const void *buf, size_t len,
 	tx_entry->iov[0].iov_base = (void *) &tx_entry->hdr;
 	tx_entry->iov[0].iov_len = len + sizeof(tx_entry->hdr.base_hdr);
 	tx_entry->iov_cnt = 1;
-
-	tx_entry->hdr.base_hdr.flags = 0;
+	tx_entry->rem_len = tx_entry->hdr.base_hdr.size;
 	tx_entry->flags = FI_MSG | FI_SEND;
 
+	tcpx_ep->hdr_bswap(&tx_entry->hdr.base_hdr);
 	fastlock_acquire(&tcpx_ep->lock);
 	tcpx_tx_queue_insert(tcpx_ep, tx_entry);
 	fastlock_release(&tcpx_ep->lock);
@@ -353,10 +353,10 @@ static ssize_t tcpx_senddata(struct fid_ep *ep, const void *buf, size_t len,
 		return -FI_EAGAIN;
 
 	tx_entry->hdr.cq_data_hdr.base_hdr.size =
-		htonll(len + sizeof(tx_entry->hdr.cq_data_hdr));
-	tx_entry->hdr.cq_data_hdr.base_hdr.flags = htons(OFI_REMOTE_CQ_DATA);
+		(len + sizeof(tx_entry->hdr.cq_data_hdr));
+	tx_entry->hdr.cq_data_hdr.base_hdr.flags = OFI_REMOTE_CQ_DATA;
 
-	tx_entry->hdr.cq_data_hdr.cq_data = htonll(data);
+	tx_entry->hdr.cq_data_hdr.cq_data = data;
 
 	tx_entry->hdr.cq_data_hdr.base_hdr.payload_off =
 		(uint8_t)sizeof(tx_entry->hdr.cq_data_hdr);
@@ -370,9 +370,11 @@ static ssize_t tcpx_senddata(struct fid_ep *ep, const void *buf, size_t len,
 	tx_entry->iov_cnt = 2;
 
 	tx_entry->context = context;
+	tx_entry->rem_len = tx_entry->hdr.base_hdr.size;
 	tx_entry->flags = ((tcpx_ep->util_ep.tx_op_flags & FI_COMPLETION) |
 			   FI_MSG | FI_SEND);
 
+	tcpx_ep->hdr_bswap(&tx_entry->hdr.base_hdr);
 	fastlock_acquire(&tcpx_ep->lock);
 	tcpx_tx_queue_insert(tcpx_ep, tx_entry);
 	fastlock_release(&tcpx_ep->lock);
@@ -393,12 +395,11 @@ static ssize_t tcpx_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 
 	assert(len <= TCPX_MAX_INJECT_SZ);
 
-	tx_entry->hdr.cq_data_hdr.base_hdr.flags = htons(OFI_REMOTE_CQ_DATA);
-
-	tx_entry->hdr.cq_data_hdr.cq_data = htonll(data);
+	tx_entry->hdr.cq_data_hdr.base_hdr.flags = OFI_REMOTE_CQ_DATA;
+	tx_entry->hdr.cq_data_hdr.cq_data = data;
 
 	tx_entry->hdr.base_hdr.size =
-		htonll(len + sizeof(tx_entry->hdr.cq_data_hdr));
+		(len + sizeof(tx_entry->hdr.cq_data_hdr));
 	tx_entry->hdr.base_hdr.payload_off =
 		(uint8_t)sizeof(tx_entry->hdr.cq_data_hdr);
 
@@ -408,8 +409,10 @@ static ssize_t tcpx_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 	tx_entry->iov[0].iov_base = (void *) &tx_entry->hdr;
 	tx_entry->iov[0].iov_len = len + sizeof(tx_entry->hdr.cq_data_hdr);
 	tx_entry->iov_cnt = 1;
-
+	tx_entry->rem_len = tx_entry->hdr.base_hdr.size;
 	tx_entry->flags = FI_MSG | FI_SEND;
+
+	tcpx_ep->hdr_bswap(&tx_entry->hdr.base_hdr);
 	fastlock_acquire(&tcpx_ep->lock);
 	tcpx_tx_queue_insert(tcpx_ep, tx_entry);
 	fastlock_release(&tcpx_ep->lock);
