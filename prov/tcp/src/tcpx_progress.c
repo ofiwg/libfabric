@@ -520,7 +520,7 @@ int tcpx_get_rx_entry_op_msg(struct tcpx_ep *tcpx_ep)
 			"posted rx buffer size is not big enough\n");
 		tcpx_cq_report_completion(rx_entry->ep->util_ep.rx_cq,
 					  rx_entry, -ret);
-		tcpx_xfer_entry_release(tcpx_cq, rx_entry);
+		tcpx_rx_msg_release(rx_entry);
 		return ret;
 	}
 
