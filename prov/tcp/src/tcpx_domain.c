@@ -51,6 +51,7 @@ static int tcpx_srx_ctx_close(struct fid *fid)
 		util_buf_release(srx_ctx->buf_pool, xfer_entry);
 	}
 
+	util_buf_pool_destroy(srx_ctx->buf_pool);
 	fastlock_destroy(&srx_ctx->lock);
 	free(srx_ctx);
 	return FI_SUCCESS;

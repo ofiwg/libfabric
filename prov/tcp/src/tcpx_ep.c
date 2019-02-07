@@ -270,6 +270,21 @@ static struct fi_ops_cm tcpx_cm_ops = {
 	.join = fi_no_join,
 };
 
+void tcpx_rx_msg_release(struct tcpx_xfer_entry *rx_entry)
+{
+	struct tcpx_cq *tcpx_cq;
+
+	assert(rx_entry->hdr.base_hdr.op_data == TCPX_OP_MSG_RECV);
+
+	if (rx_entry->ep->srx_ctx) {
+		tcpx_srx_xfer_release(rx_entry->ep->srx_ctx, rx_entry);
+	} else {
+		tcpx_cq = container_of(rx_entry->ep->util_ep.rx_cq,
+				       struct tcpx_cq, util_cq);
+		tcpx_xfer_entry_release(tcpx_cq, rx_entry);
+	}
+}
+
 static void tcpx_ep_tx_rx_queues_release(struct tcpx_ep *ep)
 {
 	struct slist_entry *entry;
@@ -436,14 +451,13 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 			handle = container_of(info->handle,
 					      struct tcpx_conn_handle, handle);
 			ep->conn_fd = handle->conn_fd;
+			ep->hdr_bswap = handle->endian_match ?
+					tcpx_hdr_none : tcpx_hdr_bswap;
 			free(handle);
 
 			ret = tcpx_setup_socket(ep->conn_fd);
 			if (ret)
 				goto err3;
-
-			ep->hdr_bswap = (handle->endian_match)?
-				tcpx_hdr_none:tcpx_hdr_bswap;
 		}
 	} else {
 		ep->conn_fd = ofi_socket(ofi_get_sa_family(info), SOCK_STREAM, 0);
