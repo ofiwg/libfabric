@@ -997,9 +997,10 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 	if (comp->flags & FI_REMOTE_WRITE)
 		return rxm_handle_remote_write(rxm_ep, comp);
 
+	assert(RXM_GET_PROTO_STATE(comp->op_context) != RXM_INJECT_TX);
+
 	switch (RXM_GET_PROTO_STATE(comp->op_context)) {
 	case RXM_TX:
-	case RXM_INJECT_TX:
 		tx_eager_buf = comp->op_context;
 		assert(comp->flags & FI_SEND);
 		ret = rxm_finish_eager_send(rxm_ep, tx_eager_buf);
