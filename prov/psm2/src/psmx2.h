@@ -514,7 +514,7 @@ struct psmx2_trx_ctxt {
 	struct psmx2_req_queue	trigger_queue;
 
 	/* request pool for RMA/atomic ops */
-	struct util_buf_pool	*am_req_pool;
+	struct ofi_bufpool	*am_req_pool;
 	fastlock_t		am_req_pool_lock;
 
 	/* lock to prevent the sequence of psm2_mq_ipeek and psm2_mq_test be
@@ -1112,7 +1112,7 @@ struct psmx2_am_request *psmx2_am_request_alloc(struct psmx2_trx_ctxt *trx_ctxt)
 	struct psmx2_am_request *req;
 
 	trx_ctxt->domain->am_req_pool_lock_fn(&trx_ctxt->am_req_pool_lock, 0);
-	req = util_buf_alloc(trx_ctxt->am_req_pool);
+	req = ofi_buf_alloc(trx_ctxt->am_req_pool);
 	trx_ctxt->domain->am_req_pool_unlock_fn(&trx_ctxt->am_req_pool_lock, 0);
 
 	if (req)
@@ -1125,7 +1125,7 @@ static inline void psmx2_am_request_free(struct psmx2_trx_ctxt *trx_ctxt,
 					 struct psmx2_am_request *req)
 {
 	trx_ctxt->domain->am_req_pool_lock_fn(&trx_ctxt->am_req_pool_lock, 0);
-	util_buf_release(trx_ctxt->am_req_pool, req);
+	ofi_buf_free(trx_ctxt->am_req_pool, req);
 	trx_ctxt->domain->am_req_pool_unlock_fn(&trx_ctxt->am_req_pool_lock, 0);
 }
 

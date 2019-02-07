@@ -378,7 +378,7 @@ struct fi_ibv_cq {
 	struct slist		wcq;
 	fi_ibv_trywait_func	trywait;
 	ofi_atomic32_t		nevents;
-	struct util_buf_pool	*wce_pool;
+	struct ofi_bufpool	*wce_pool;
 
 	struct {
 		/* The list of XRC SRQ contexts associated with this CQ */
@@ -852,7 +852,7 @@ static inline int fi_ibv_wc_2_wce(struct fi_ibv_cq *cq,
 				  struct fi_ibv_wce **wce)
 
 {
-	*wce = util_buf_alloc(cq->wce_pool);
+	*wce = ofi_buf_alloc(cq->wce_pool);
 	if (OFI_UNLIKELY(!*wce))
 		return -FI_ENOMEM;
 	memset(*wce, 0, sizeof(**wce));

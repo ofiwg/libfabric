@@ -323,7 +323,7 @@ static struct mrail_tx_buf *mrail_get_tx_buf(struct mrail_ep *mrail_ep,
 					     void *context, uint32_t seq,
 					     uint8_t op, uint64_t flags)
 {
-	struct mrail_tx_buf *tx_buf = util_buf_alloc(mrail_ep->tx_buf_pool);
+	struct mrail_tx_buf *tx_buf = ofi_buf_alloc(mrail_ep->tx_buf_pool);
 	if (OFI_UNLIKELY(!tx_buf))
 		return NULL;
 
@@ -388,7 +388,7 @@ mrail_send_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	ofi_ep_lock_release(&mrail_ep->util_ep);
 	return ret;
 err2:
-	util_buf_release(mrail_ep->tx_buf_pool, tx_buf);
+	ofi_buf_free(mrail_ep->tx_buf_pool, tx_buf);
 err1:
 	peer_info->seq_no--;
 	ofi_ep_lock_release(&mrail_ep->util_ep);
@@ -447,7 +447,7 @@ mrail_tsend_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	ofi_ep_lock_release(&mrail_ep->util_ep);
 	return ret;
 err2:
-	util_buf_release(mrail_ep->tx_buf_pool, tx_buf);
+	ofi_buf_free(mrail_ep->tx_buf_pool, tx_buf);
 err1:
 	peer_info->seq_no--;
 	ofi_ep_lock_release(&mrail_ep->util_ep);
@@ -606,13 +606,13 @@ static void mrail_tx_buf_init(void *pool_ctx, void *buf)
 static void mrail_ep_free_bufs(struct mrail_ep *mrail_ep)
 {
 	if (mrail_ep->req_pool)
-		util_buf_pool_destroy(mrail_ep->req_pool);
+		ofi_bufpool_destroy(mrail_ep->req_pool);
 
 	if (mrail_ep->ooo_recv_pool)
-		util_buf_pool_destroy(mrail_ep->ooo_recv_pool);
+		ofi_bufpool_destroy(mrail_ep->ooo_recv_pool);
 
 	if (mrail_ep->tx_buf_pool)
-		util_buf_pool_destroy(mrail_ep->tx_buf_pool);
+		ofi_bufpool_destroy(mrail_ep->tx_buf_pool);
 
 	if (mrail_ep->recv_fs)
 		mrail_recv_fs_free(mrail_ep->recv_fs);
@@ -620,14 +620,14 @@ static void mrail_ep_free_bufs(struct mrail_ep *mrail_ep)
 
 static int mrail_ep_alloc_bufs(struct mrail_ep *mrail_ep)
 {
-	struct util_buf_attr attr = {
+	struct ofi_bufpool_attr attr = {
 		.size		= sizeof(struct mrail_tx_buf),
 		.alignment	= sizeof(void *),
 		.max_cnt	= 0,
 		.chunk_cnt	= 64,
-		.alloc_hndlr	= NULL,
-		.free_hndlr	= NULL,
-		.init		= mrail_tx_buf_init,
+		.alloc_fn	= NULL,
+		.free_fn	= NULL,
+		.init_fn	= mrail_tx_buf_init,
 		.ctx		= mrail_ep,
 	};
 	size_t buf_size, rxq_total_size = 0;
@@ -642,20 +642,20 @@ static int mrail_ep_alloc_bufs(struct mrail_ep *mrail_ep)
 	if (!mrail_ep->recv_fs)
 		return -FI_ENOMEM;
 
-	ret = util_buf_pool_create(&mrail_ep->ooo_recv_pool,
+	ret = ofi_bufpool_create(&mrail_ep->ooo_recv_pool,
 				   sizeof(struct mrail_ooo_recv),
 				   sizeof(void *), 0, 64);
 	if (!mrail_ep->ooo_recv_pool)
 		goto err;
 
-	ret = util_buf_pool_create_attr(&attr, &mrail_ep->tx_buf_pool);
+	ret = ofi_bufpool_create_attr(&attr, &mrail_ep->tx_buf_pool);
 	if (!mrail_ep->tx_buf_pool)
 		goto err;
 
 	buf_size = (sizeof(struct mrail_req) +
 		    (mrail_ep->num_eps * sizeof(struct mrail_subreq)));
 
-	ret = util_buf_pool_create(&mrail_ep->req_pool, buf_size,
+	ret = ofi_bufpool_create(&mrail_ep->req_pool, buf_size,
 				   sizeof(void *), 0, 64);
 	if (ret)
 		goto err;

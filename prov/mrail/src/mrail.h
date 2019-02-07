@@ -219,9 +219,9 @@ struct mrail_ep {
 	struct mrail_recv_queue recv_queue;
 	struct mrail_recv_queue trecv_queue;
 
-	struct util_buf_pool	*req_pool;
-	struct util_buf_pool 	*ooo_recv_pool;
-	struct util_buf_pool 	*tx_buf_pool;
+	struct ofi_bufpool	*req_pool;
+	struct ofi_bufpool 	*ooo_recv_pool;
+	struct ofi_bufpool 	*tx_buf_pool;
 	struct slist		deferred_reqs;
 };
 
@@ -337,7 +337,7 @@ struct mrail_req *mrail_alloc_req(struct mrail_ep *mrail_ep)
 	struct mrail_req *req;
 
 	ofi_ep_lock_acquire(&mrail_ep->util_ep);
-	req = util_buf_alloc(mrail_ep->req_pool);
+	req = ofi_buf_alloc(mrail_ep->req_pool);
 	ofi_ep_lock_release(&mrail_ep->util_ep);
 
 	return req;
@@ -347,7 +347,7 @@ static inline
 void mrail_free_req(struct mrail_ep *mrail_ep, struct mrail_req *req)
 {
 	ofi_ep_lock_acquire(&mrail_ep->util_ep);
-	util_buf_release(mrail_ep->req_pool, req);
+	ofi_buf_free(mrail_ep->req_pool, req);
 	ofi_ep_lock_release(&mrail_ep->util_ep);
 }
 

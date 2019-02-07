@@ -266,7 +266,7 @@ static void rxm_buf_pool_destroy(struct rxm_buf_pool *pool)
 {
 	/* This indicates whether the pool is allocated or not */
 	if (pool->rxm_ep) {
-		util_buf_pool_destroy(pool->pool);
+		ofi_bufpool_destroy(pool->pool);
 	}
 }
 
@@ -275,13 +275,13 @@ static int rxm_buf_pool_create(struct rxm_ep *rxm_ep,
 			       struct rxm_buf_pool *pool,
 			       enum rxm_buf_pool_type type)
 {
-	struct util_buf_attr attr = {
+	struct ofi_bufpool_attr attr = {
 		.size		= size,
 		.alignment	= 16,
 		.max_cnt	= 0,
 		.chunk_cnt	= chunk_count,
-		.alloc_hndlr	= rxm_buf_reg,
-		.free_hndlr	= rxm_buf_close,
+		.alloc_fn	= rxm_buf_reg,
+		.free_fn	= rxm_buf_close,
 		.ctx		= pool,
 		.track_used	= 0,
 	};
@@ -300,7 +300,7 @@ static int rxm_buf_pool_create(struct rxm_ep *rxm_ep,
 
 	pool->rxm_ep = rxm_ep;
 	pool->type = type;
-	ret = util_buf_pool_create_attr(&attr, &pool->pool);
+	ret = ofi_bufpool_create_attr(&attr, &pool->pool);
 	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to create buf pool\n");
 		return -FI_ENOMEM;

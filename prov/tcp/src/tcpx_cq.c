@@ -42,7 +42,7 @@ static void tcpx_buf_pools_destroy(struct tcpx_buf_pool *buf_pools)
 	int i;
 
 	for (i = 0; i < TCPX_OP_CODE_MAX; i++)
-		util_buf_pool_destroy(buf_pools[i].pool);
+		ofi_bufpool_destroy(buf_pools[i].pool);
 }
 
 static int tcpx_cq_close(struct fid *fid)
@@ -73,7 +73,7 @@ struct tcpx_xfer_entry *tcpx_xfer_entry_alloc(struct tcpx_cq *tcpx_cq,
 		return NULL;
 	}
 
-	xfer_entry = util_buf_alloc(tcpx_cq->buf_pools[type].pool);
+	xfer_entry = ofi_buf_alloc(tcpx_cq->buf_pools[type].pool);
 	if (!xfer_entry) {
 		tcpx_cq->util_cq.cq_fastlock_release(&tcpx_cq->util_cq.cq_lock);
 		FI_INFO(&tcpx_prov, FI_LOG_DOMAIN,"failed to get buffer\n");
@@ -96,7 +96,7 @@ void tcpx_xfer_entry_release(struct tcpx_cq *tcpx_cq,
 	xfer_entry->context = 0;
 
 	tcpx_cq->util_cq.cq_fastlock_acquire(&tcpx_cq->util_cq.cq_lock);
-	util_buf_release(tcpx_cq->buf_pools[xfer_entry->hdr.base_hdr.op_data].pool,
+	ofi_buf_free(tcpx_cq->buf_pools[xfer_entry->hdr.base_hdr.op_data].pool,
 			 xfer_entry);
 	tcpx_cq->util_cq.cq_fastlock_release(&tcpx_cq->util_cq.cq_lock);
 }
@@ -173,8 +173,8 @@ static struct fi_ops tcpx_cq_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-/* Using this function to preset some values of buffers managed by util_buf_pool api.
- * Note that the util_buf_pool uses first sizeof(slist_entry) bytes in every buffer
+/* Using this function to preset some values of buffers managed by ofi_bufpool api.
+ * Note that the ofi_bufpool uses first sizeof(slist_entry) bytes in every buffer
  * internally for keeping buf list. So don't try to set those values. They won't stick
  */
 static int tcpx_buf_pool_init(void *pool_ctx, void *addr,
@@ -223,7 +223,7 @@ static int tcpx_buf_pools_create(struct tcpx_buf_pool *buf_pools)
 	for (i = 0; i < TCPX_OP_CODE_MAX; i++) {
 		buf_pools[i].op_type = i;
 
-		ret = util_buf_pool_create_ex(&buf_pools[i].pool,
+		ret = ofi_bufpool_create_ex(&buf_pools[i].pool,
 					      sizeof(struct tcpx_xfer_entry),
 					      16, 0, 1024, tcpx_buf_pool_init,
 					      NULL, &buf_pools[i]);
@@ -236,7 +236,7 @@ static int tcpx_buf_pools_create(struct tcpx_buf_pool *buf_pools)
 	return 0;
 err:
 	while (i--) {
-		util_buf_pool_destroy(buf_pools[i].pool);
+		ofi_bufpool_destroy(buf_pools[i].pool);
 	}
 	return -FI_ENOMEM;
 }

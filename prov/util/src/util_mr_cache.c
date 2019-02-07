@@ -79,7 +79,7 @@ static void util_mr_free_entry(struct ofi_mr_cache *cache,
 	cache->cached_cnt--;
 	cache->cached_size -= entry->iov.iov_len;
 	
-	util_buf_release(cache->entry_pool, entry);
+	ofi_buf_free(cache->entry_pool, entry);
 }
 
 static void util_mr_uncache_entry(struct ofi_mr_cache *cache,
@@ -155,7 +155,7 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct iovec *iov,
 
 	util_mr_cache_process_events(cache);
 
-	*entry = util_buf_alloc(cache->entry_pool);
+	*entry = ofi_buf_alloc(cache->entry_pool);
 	if (OFI_UNLIKELY(!*entry))
 		return -FI_ENOMEM;
 
@@ -169,7 +169,7 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct iovec *iov,
 		}
 		if (ret) {
 			assert(!ofi_mr_cache_flush(cache));
-			util_buf_release(cache->entry_pool, *entry);
+			ofi_buf_free(cache->entry_pool, *entry);
 			return ret;
 		}
 	}
@@ -293,7 +293,7 @@ void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache)
 	cache->mr_storage.destroy(&cache->mr_storage);
 	ofi_monitor_del_queue(&cache->nq);
 	ofi_atomic_dec32(&cache->domain->ref);
-	util_buf_pool_destroy(cache->entry_pool);
+	ofi_bufpool_destroy(cache->entry_pool);
 	assert(cache->cached_cnt == 0);
 	assert(cache->cached_size == 0);
 }
@@ -397,7 +397,7 @@ int ofi_mr_cache_init(struct util_domain *domain,
 	cache->hit_cnt = 0;
 	ofi_monitor_add_queue(monitor, &cache->nq);
 
-	ret = util_buf_pool_create(&cache->entry_pool,
+	ret = ofi_bufpool_create(&cache->entry_pool,
 				   sizeof(struct ofi_mr_entry) +
 				   cache->entry_data_size,
 				   16, 0, cache->max_cached_cnt);

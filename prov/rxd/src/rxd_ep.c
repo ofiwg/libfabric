@@ -42,8 +42,8 @@ struct rxd_pkt_entry *rxd_get_tx_pkt(struct rxd_ep *ep)
 	void *mr = NULL;
 
 	pkt_entry = ep->do_local_mr ?
-		    util_buf_alloc_ex(ep->tx_pkt_pool, &mr) :
-		    util_buf_alloc(ep->tx_pkt_pool);
+		    ofi_buf_alloc_ex(ep->tx_pkt_pool, &mr) :
+		    ofi_buf_alloc(ep->tx_pkt_pool);
 
 	if (!pkt_entry)
 		return NULL;
@@ -61,8 +61,8 @@ static struct rxd_pkt_entry *rxd_get_rx_pkt(struct rxd_ep *ep)
 	void *mr = NULL;
 
 	pkt_entry = ep->do_local_mr ?
-		    util_buf_alloc_ex(ep->rx_pkt_pool, &mr) :
-		    util_buf_alloc(ep->rx_pkt_pool);
+		    ofi_buf_alloc_ex(ep->rx_pkt_pool, &mr) :
+		    ofi_buf_alloc(ep->rx_pkt_pool);
 
 	if (!pkt_entry)
 		return NULL;
@@ -77,11 +77,11 @@ struct rxd_x_entry *rxd_get_tx_entry(struct rxd_ep *ep)
 {
 	struct rxd_x_entry *tx_entry;
 
-	tx_entry = util_buf_indexed_alloc(ep->tx_entry_pool);
+	tx_entry = ofi_ibuf_alloc(ep->tx_entry_pool);
 	if (!tx_entry)
 		return NULL;
 
-	tx_entry->tx_id = util_get_buf_index(ep->tx_entry_pool, tx_entry);
+	tx_entry->tx_id = ofi_buf_index(ep->tx_entry_pool, tx_entry);
 
 	return tx_entry;
 }
@@ -90,33 +90,33 @@ struct rxd_x_entry *rxd_get_rx_entry(struct rxd_ep *ep)
 {
 	struct rxd_x_entry *rx_entry;
 
-	rx_entry = util_buf_indexed_alloc(ep->rx_entry_pool);
+	rx_entry = ofi_ibuf_alloc(ep->rx_entry_pool);
 	if (!rx_entry)
 		return NULL;
 
-	rx_entry->rx_id = util_get_buf_index(ep->rx_entry_pool, rx_entry);
+	rx_entry->rx_id = ofi_buf_index(ep->rx_entry_pool, rx_entry);
 
 	return rx_entry;
 }
 
 void rxd_release_tx_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt)
 {
-	util_buf_release(ep->tx_pkt_pool, pkt);
+	ofi_buf_free(ep->tx_pkt_pool, pkt);
 }
 
 void rxd_release_rx_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt)
 {
-	util_buf_release(ep->rx_pkt_pool, pkt);
+	ofi_buf_free(ep->rx_pkt_pool, pkt);
 }
 
 static void rxd_release_tx_entry(struct rxd_ep *ep, struct rxd_x_entry *x_entry)
 {
-	util_buf_indexed_release(ep->tx_entry_pool, x_entry);
+	ofi_ibuf_free(ep->tx_entry_pool, x_entry);
 }
 
 void rxd_release_rx_entry(struct rxd_ep *ep, struct rxd_x_entry *x_entry)
 {
-	util_buf_indexed_release(ep->rx_entry_pool, x_entry);
+	ofi_ibuf_free(ep->rx_entry_pool, x_entry);
 }
 
 static int rxd_match_ctx(struct dlist_entry *item, const void *arg)
@@ -728,10 +728,10 @@ void rxd_ep_send_ack(struct rxd_ep *rxd_ep, fi_addr_t peer)
 
 static void rxd_ep_free_res(struct rxd_ep *ep)
 {
-	util_buf_pool_destroy(ep->tx_pkt_pool);
-	util_buf_pool_destroy(ep->rx_pkt_pool);
-	util_buf_pool_destroy(ep->tx_entry_pool);
-	util_buf_pool_destroy(ep->rx_entry_pool);
+	ofi_bufpool_destroy(ep->tx_pkt_pool);
+	ofi_bufpool_destroy(ep->rx_pkt_pool);
+	ofi_bufpool_destroy(ep->tx_entry_pool);
+	ofi_bufpool_destroy(ep->rx_entry_pool);
 }
 
 static void rxd_close_peer(struct rxd_ep *ep, struct rxd_peer *peer)
@@ -1136,7 +1136,7 @@ out:
 	fastlock_release(&ep->util_ep.lock);
 }
 
-static int rxd_buf_region_alloc_hndlr(void *pool_ctx, void *addr, size_t len,
+static int rxd_buf_region_alloc_fn(void *pool_ctx, void *addr, size_t len,
 				void **context)
 {
 	int ret;
@@ -1149,7 +1149,7 @@ static int rxd_buf_region_alloc_hndlr(void *pool_ctx, void *addr, size_t len,
 	return ret;
 }
 
-static void rxd_buf_region_free_hndlr(void *pool_ctx, void *context)
+static void rxd_buf_region_free_fn(void *pool_ctx, void *context)
 {
 	fi_close((struct fid *) context);
 }
@@ -1157,7 +1157,7 @@ static void rxd_buf_region_free_hndlr(void *pool_ctx, void *context)
 int rxd_ep_init_res(struct rxd_ep *ep, struct fi_info *fi_info)
 {
 	struct rxd_domain *rxd_domain = rxd_ep_domain(ep);
-	struct util_buf_attr entry_pool_attr = {
+	struct ofi_bufpool_attr entry_pool_attr = {
 		.size		= sizeof(struct rxd_x_entry),
 		.alignment	= RXD_BUF_POOL_ALIGNMENT,
 		.max_cnt	= 0,
@@ -1167,33 +1167,33 @@ int rxd_ep_init_res(struct rxd_ep *ep, struct fi_info *fi_info)
 		},
 	};
 
-	int ret = util_buf_pool_create_ex(
+	int ret = ofi_bufpool_create_ex(
 		&ep->tx_pkt_pool,
 		rxd_domain->max_mtu_sz + sizeof(struct rxd_pkt_entry),
 		RXD_BUF_POOL_ALIGNMENT, 0, RXD_TX_POOL_CHUNK_CNT,
-	        ep->do_local_mr ? rxd_buf_region_alloc_hndlr : NULL,
-		ep->do_local_mr ? rxd_buf_region_free_hndlr : NULL,
+	        ep->do_local_mr ? rxd_buf_region_alloc_fn : NULL,
+		ep->do_local_mr ? rxd_buf_region_free_fn : NULL,
 		rxd_domain);
 	if (ret)
 		return -FI_ENOMEM;
 
-	ret = util_buf_pool_create_ex(
+	ret = ofi_bufpool_create_ex(
 		&ep->rx_pkt_pool,
 		rxd_domain->max_mtu_sz + sizeof (struct rxd_pkt_entry),
 		RXD_BUF_POOL_ALIGNMENT, 0, RXD_RX_POOL_CHUNK_CNT,
-	        ep->do_local_mr ? rxd_buf_region_alloc_hndlr : NULL,
-		ep->do_local_mr ? rxd_buf_region_free_hndlr : NULL,
+	        ep->do_local_mr ? rxd_buf_region_alloc_fn : NULL,
+		ep->do_local_mr ? rxd_buf_region_free_fn : NULL,
 		rxd_domain);
 	if (ret)
 		goto err;
 
 	entry_pool_attr.chunk_cnt = ep->tx_size;
-	ret = util_buf_pool_create_attr(&entry_pool_attr, &ep->tx_entry_pool);
+	ret = ofi_bufpool_create_attr(&entry_pool_attr, &ep->tx_entry_pool);
 	if (ret)
 		goto err;
 
 	entry_pool_attr.chunk_cnt = ep->rx_size;
-	ret = util_buf_pool_create_attr(&entry_pool_attr, &ep->rx_entry_pool);
+	ret = ofi_bufpool_create_attr(&entry_pool_attr, &ep->rx_entry_pool);
 	if (ret)
 		goto err;
 
@@ -1210,16 +1210,16 @@ int rxd_ep_init_res(struct rxd_ep *ep, struct fi_info *fi_info)
 	return 0;
 err:
 	if (ep->tx_pkt_pool)
-		util_buf_pool_destroy(ep->tx_pkt_pool);
+		ofi_bufpool_destroy(ep->tx_pkt_pool);
 
 	if (ep->rx_pkt_pool)
-		util_buf_pool_destroy(ep->rx_pkt_pool);
+		ofi_bufpool_destroy(ep->rx_pkt_pool);
 
 	if (ep->tx_entry_pool)
-		util_buf_pool_destroy(ep->tx_entry_pool);
+		ofi_bufpool_destroy(ep->tx_entry_pool);
 
 	if (ep->rx_entry_pool)
-		util_buf_pool_destroy(ep->rx_entry_pool);
+		ofi_bufpool_destroy(ep->rx_entry_pool);
 
 	return -FI_ENOMEM;
 }

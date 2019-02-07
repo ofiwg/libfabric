@@ -243,7 +243,7 @@ int ofi_get_addr(uint32_t *addr_format, uint64_t flags,
 void *ofi_av_get_addr(struct util_av *av, fi_addr_t fi_addr)
 {
 	struct util_av_entry *entry =
-		util_buf_get_by_index(av->av_entry_pool, fi_addr);
+		ofi_buf_index_get(av->av_entry_pool, fi_addr);
 	return entry->addr;
 }
 
@@ -272,15 +272,15 @@ int ofi_av_insert_addr(struct util_av *av, const void *addr, fi_addr_t *fi_addr)
 	HASH_FIND(hh, av->hash, addr, av->addrlen, entry);
 	if (entry) {
 		if (fi_addr)
-			*fi_addr = util_get_buf_index(av->av_entry_pool, entry);
+			*fi_addr = ofi_buf_index(av->av_entry_pool, entry);
 		ofi_atomic_inc32(&entry->use_cnt);
 		return 0;
 	} else {
-		entry = util_buf_indexed_alloc(av->av_entry_pool);
+		entry = ofi_ibuf_alloc(av->av_entry_pool);
 		if (!entry)
 			return -FI_ENOMEM;
 		if (fi_addr)
-			*fi_addr = util_get_buf_index(av->av_entry_pool, entry);
+			*fi_addr = ofi_buf_index(av->av_entry_pool, entry);
 		memcpy(entry->addr, addr, av->addrlen);
 		ofi_atomic_initialize32(&entry->use_cnt, 1);
 		HASH_ADD(hh, av->hash, addr, av->addrlen, entry);
@@ -295,7 +295,7 @@ int ofi_av_elements_iter(struct util_av *av, ofi_av_apply_func apply, void *arg)
 
 	HASH_ITER(hh, av->hash, av_entry, av_entry_tmp) {
 		ret = apply(av, av_entry->addr,
-			    util_get_buf_index(av->av_entry_pool, av_entry),
+			    ofi_buf_index(av->av_entry_pool, av_entry),
 			    arg);
 		if (OFI_UNLIKELY(ret))
 			return ret;
@@ -309,7 +309,7 @@ int ofi_av_elements_iter(struct util_av *av, ofi_av_apply_func apply, void *arg)
 int ofi_av_remove_addr(struct util_av *av, fi_addr_t fi_addr)
 {
 	struct util_av_entry *av_entry =
-		util_buf_get_by_index(av->av_entry_pool, fi_addr);
+		ofi_buf_index_get(av->av_entry_pool, fi_addr);
 	if (!av_entry)
 		return -FI_ENOENT;
 
@@ -317,7 +317,7 @@ int ofi_av_remove_addr(struct util_av *av, fi_addr_t fi_addr)
 		return FI_SUCCESS;
 
 	HASH_DELETE(hh, av->hash, av_entry);
-	util_buf_indexed_release(av->av_entry_pool, av_entry);
+	ofi_ibuf_free(av->av_entry_pool, av_entry);
 	return 0;
 }
 
@@ -329,7 +329,7 @@ fi_addr_t ofi_av_lookup_fi_addr(struct util_av *av, const void *addr)
 	HASH_FIND(hh, av->hash, addr, av->addrlen, entry);
 	fastlock_release(&av->lock);
 
-	return entry ? util_get_buf_index(av->av_entry_pool, entry) :
+	return entry ? ofi_buf_index(av->av_entry_pool, entry) :
 		       FI_ADDR_NOTAVAIL;
 }
 
@@ -365,7 +365,7 @@ int ofi_av_bind(struct fid *av_fid, struct fid *eq_fid, uint64_t flags)
 static void util_av_close(struct util_av *av)
 {
 	HASH_CLEAR(hh, av->hash);
-	util_buf_pool_destroy(av->av_entry_pool);
+	ofi_bufpool_destroy(av->av_entry_pool);
 }
 
 int ofi_av_close_lightweight(struct util_av *av)
@@ -409,7 +409,7 @@ static int util_av_init(struct util_av *av, const struct fi_av_attr *attr,
 {
 	int ret = 0;
 	size_t max_count;
-	struct util_buf_attr pool_attr = {
+	struct ofi_bufpool_attr pool_attr = {
 		.size		= util_attr->addrlen +
 				  sizeof(struct util_av_entry),
 		.alignment	= 16,
@@ -447,7 +447,7 @@ static int util_av_init(struct util_av *av, const struct fi_av_attr *attr,
 	av->hash = NULL;
 
 	pool_attr.chunk_cnt = av->count;
-	ret = util_buf_pool_create_attr(&pool_attr, &av->av_entry_pool);
+	ret = ofi_bufpool_create_attr(&pool_attr, &av->av_entry_pool);
 	if (ret)
 		return ret;
 

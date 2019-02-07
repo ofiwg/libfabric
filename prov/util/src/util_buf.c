@@ -40,14 +40,19 @@
 #include <ofi_osd.h>
 
 
-int util_buf_grow(struct util_buf_pool *pool)
+enum {
+	OFI_BUFPOOL_REGION_CHUNK_CNT = 16
+};
+
+
+int ofi_bufpool_grow(struct ofi_bufpool *pool)
 {
 	void *buf;
 	int ret;
 	size_t i;
-	struct util_buf_region *buf_region;
+	struct ofi_bufpool_region *buf_region;
 	ssize_t hp_size;
-	struct util_buf_footer *buf_ftr;
+	struct ofi_bufpool_ftr *buf_ftr;
 
 	if (pool->attr.max_cnt && pool->num_allocated >= pool->attr.max_cnt) {
 		return -1;
@@ -92,8 +97,8 @@ int util_buf_grow(struct util_buf_pool *pool)
 	}
 
 	memset(buf_region->mem_region, 0, buf_region->size);
-	if (pool->attr.alloc_hndlr) {
-		ret = pool->attr.alloc_hndlr(pool->attr.ctx,
+	if (pool->attr.alloc_fn) {
+		ret = pool->attr.alloc_fn(pool->attr.ctx,
 					     buf_region->mem_region,
 					     buf_region->size,
 					     &buf_region->context);
@@ -101,11 +106,11 @@ int util_buf_grow(struct util_buf_pool *pool)
 			goto err2;
 	}
 
-	if (!(pool->regions_cnt % UTIL_BUF_POOL_REGION_CHUNK_CNT)) {
-		struct util_buf_region **new_table =
+	if (!(pool->regions_cnt % OFI_BUFPOOL_REGION_CHUNK_CNT)) {
+		struct ofi_bufpool_region **new_table =
 			realloc(pool->regions_table,
 				(pool->regions_cnt +
-				 UTIL_BUF_POOL_REGION_CHUNK_CNT) *
+				 OFI_BUFPOOL_REGION_CHUNK_CNT) *
 				sizeof(*pool->regions_table));
 		if (!new_table)
 			goto err3;
@@ -116,27 +121,27 @@ int util_buf_grow(struct util_buf_pool *pool)
 
 	for (i = 0; i < pool->attr.chunk_cnt; i++) {
 		buf = (buf_region->mem_region + i * pool->entry_sz);
-		buf_ftr = util_buf_get_ftr(pool, buf);
+		buf_ftr = ofi_buf_ftr(pool, buf);
 
-		if (pool->attr.init) {
+		if (pool->attr.init_fn) {
 #if ENABLE_DEBUG
 			if (!pool->attr.indexing.ordered) {
 				buf_ftr->entry.slist.next = (void *) OFI_MAGIC_64;
 
-				pool->attr.init(pool->attr.ctx, buf);
+				pool->attr.init_fn(pool->attr.ctx, buf);
 
 				assert(buf_ftr->entry.slist.next == (void *) OFI_MAGIC_64);
 			} else {
 				buf_ftr->entry.dlist.next = (void *) OFI_MAGIC_64;
 				buf_ftr->entry.dlist.prev = (void *) OFI_MAGIC_64;
 
-				pool->attr.init(pool->attr.ctx, buf);
+				pool->attr.init_fn(pool->attr.ctx, buf);
 
 				assert((buf_ftr->entry.dlist.next == (void *) OFI_MAGIC_64) &&
 				       (buf_ftr->entry.dlist.prev == (void *) OFI_MAGIC_64));
 			}
 #else
-			pool->attr.init(pool->attr.ctx, buf);
+			pool->attr.init_fn(pool->attr.ctx, buf);
 #endif
 		}
 
@@ -159,8 +164,8 @@ int util_buf_grow(struct util_buf_pool *pool)
 	pool->num_allocated += pool->attr.chunk_cnt;
 	return 0;
 err3:
-	if (pool->attr.free_hndlr)
-	    pool->attr.free_hndlr(pool->attr.ctx, buf_region->context);
+	if (pool->attr.free_fn)
+	    pool->attr.free_fn(pool->attr.ctx, buf_region->context);
 err2:
 	ofi_freealign(buf_region->mem_region);
 err1:
@@ -168,8 +173,8 @@ err1:
 	return -1;
 }
 
-int util_buf_pool_create_attr(struct util_buf_attr *attr,
-			      struct util_buf_pool **buf_pool)
+int ofi_bufpool_create_attr(struct ofi_bufpool_attr *attr,
+			      struct ofi_bufpool **buf_pool)
 {
 	size_t entry_sz;
 	ssize_t hp_size;
@@ -180,7 +185,7 @@ int util_buf_pool_create_attr(struct util_buf_attr *attr,
 
 	(*buf_pool)->attr = *attr;
 
-	entry_sz = (attr->size + sizeof(struct util_buf_footer));
+	entry_sz = (attr->size + sizeof(struct ofi_bufpool_ftr));
 	(*buf_pool)->entry_sz = fi_get_aligned_sz(entry_sz, attr->alignment);
 
 	hp_size = ofi_get_hugepage_size();
@@ -198,20 +203,20 @@ int util_buf_pool_create_attr(struct util_buf_attr *attr,
 	return FI_SUCCESS;
 }
 
-int util_buf_pool_create_ex(struct util_buf_pool **buf_pool,
+int ofi_bufpool_create_ex(struct ofi_bufpool **buf_pool,
 			    size_t size, size_t alignment,
 			    size_t max_cnt, size_t chunk_cnt,
-			    util_buf_region_alloc_hndlr alloc_hndlr,
-			    util_buf_region_free_hndlr free_hndlr,
+			    ofi_bufpool_alloc_fn alloc_fn,
+			    ofi_bufpool_free_fn free_fn,
 			    void *pool_ctx)
 {
-	struct util_buf_attr attr = {
+	struct ofi_bufpool_attr attr = {
 		.size		= size,
 		.alignment 	= alignment,
 		.max_cnt	= max_cnt,
 		.chunk_cnt	= chunk_cnt,
-		.alloc_hndlr	= alloc_hndlr,
-		.free_hndlr	= free_hndlr,
+		.alloc_fn	= alloc_fn,
+		.free_fn	= free_fn,
 		.ctx		= pool_ctx,
 		.track_used	= 1,
 		.indexing	= {
@@ -219,12 +224,12 @@ int util_buf_pool_create_ex(struct util_buf_pool **buf_pool,
 			.ordered	= 0,
 		},
 	};
-	return util_buf_pool_create_attr(&attr, buf_pool);
+	return ofi_bufpool_create_attr(&attr, buf_pool);
 }
 
-void util_buf_pool_destroy(struct util_buf_pool *pool)
+void ofi_bufpool_destroy(struct ofi_bufpool *pool)
 {
-	struct util_buf_region *buf_region;
+	struct ofi_bufpool_region *buf_region;
 	int ret;
 	size_t i;
 
@@ -234,8 +239,8 @@ void util_buf_pool_destroy(struct util_buf_pool *pool)
 		if (pool->attr.track_used)
 			assert(buf_region->num_used == 0);
 #endif
-		if (pool->attr.free_hndlr)
-			pool->attr.free_hndlr(pool->attr.ctx, buf_region->context);
+		if (pool->attr.free_fn)
+			pool->attr.free_fn(pool->attr.ctx, buf_region->context);
 		if (pool->attr.is_mmap_region) {
 			ret = ofi_free_hugepage_buf(buf_region->mem_region,
 						    buf_region->size);
@@ -255,29 +260,29 @@ void util_buf_pool_destroy(struct util_buf_pool *pool)
 	free(pool);
 }
 
-int util_buf_is_lower(struct dlist_entry *item, const void *arg)
+int ofi_ibuf_is_lower(struct dlist_entry *item, const void *arg)
 {
-	struct util_buf_footer *buf_ftr1 =
+	struct ofi_bufpool_ftr *buf_ftr1 =
 		container_of((struct dlist_entry *)arg,
-			     struct util_buf_footer, entry.dlist);
-	struct util_buf_footer *buf_ftr2 =
-		container_of(item, struct util_buf_footer, entry.dlist);
+			     struct ofi_bufpool_ftr, entry.dlist);
+	struct ofi_bufpool_ftr *buf_ftr2 =
+		container_of(item, struct ofi_bufpool_ftr, entry.dlist);
 	return (buf_ftr1->index < buf_ftr2->index);
 }
 
-int util_buf_region_is_lower(struct dlist_entry *item, const void *arg)
+int ofi_ibufpool_region_is_lower(struct dlist_entry *item, const void *arg)
 {
-	struct util_buf_region *buf_region1 =
+	struct ofi_bufpool_region *buf_region1 =
 		container_of((struct dlist_entry *)arg,
-			     struct util_buf_region, entry);
-	struct util_buf_region *buf_region2 =
-		container_of(item, struct util_buf_region, entry);
-	struct util_buf_footer *buf_region1_head =
+			     struct ofi_bufpool_region, entry);
+	struct ofi_bufpool_region *buf_region2 =
+		container_of(item, struct ofi_bufpool_region, entry);
+	struct ofi_bufpool_ftr *buf_region1_head =
 		container_of(buf_region1->buf_list.next,
-			     struct util_buf_footer, entry.dlist);
-	struct util_buf_footer *buf_region2_head =
+			     struct ofi_bufpool_ftr, entry.dlist);
+	struct ofi_bufpool_ftr *buf_region2_head =
 		container_of(buf_region2->buf_list.next,
-			     struct util_buf_footer, entry.dlist);
+			     struct ofi_bufpool_ftr, entry.dlist);
 	size_t buf_region1_index =
 		(size_t)(buf_region1_head->index / buf_region1->pool->attr.chunk_cnt);
 	size_t buf_region2_index =
