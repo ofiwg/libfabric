@@ -468,19 +468,6 @@ static inline void *util_buf_indexed_alloc(struct util_buf_pool *pool)
 	return util_buf_get_data(pool, buf_ftr);
 }
 
-static inline void *util_buf_indexed_alloc_ex(struct util_buf_pool *pool,
-						 void **context)
-{
-	void *buf = util_buf_indexed_alloc(pool);
-
-	assert(context);
-	if (OFI_UNLIKELY(!buf))
-		return NULL;
-
-	*context = util_buf_get_ctx(pool, buf);
-	return buf;
-}
-
 void util_buf_pool_destroy(struct util_buf_pool *pool);
 
 
