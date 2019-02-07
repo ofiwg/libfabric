@@ -446,16 +446,6 @@ static inline int util_buf_indexed_avail(struct util_buf_pool *pool)
 	return !dlist_empty(&pool->list.regions);
 }
 
-static inline void *util_buf_get_ex(struct util_buf_pool *pool,
-				    void **context)
-{
-	void *buf = util_buf_get(pool);
-
-	assert(context);
-	*context = util_buf_get_ctx(pool, buf);
-	return buf;
-}
-
 static inline void *util_buf_alloc(struct util_buf_pool *pool)
 {
 	if (OFI_UNLIKELY(!util_buf_avail(pool))) {
@@ -474,16 +464,6 @@ static inline void *util_buf_alloc_ex(struct util_buf_pool *pool,
 	if (OFI_UNLIKELY(!buf))
 		return NULL;
 
-	*context = util_buf_get_ctx(pool, buf);
-	return buf;
-}
-
-static inline void *util_buf_indexed_get_ex(struct util_buf_pool *pool,
-					    void **context)
-{
-	void *buf = util_buf_indexed_get(pool);
-
-	assert(context);
 	*context = util_buf_get_ctx(pool, buf);
 	return buf;
 }
