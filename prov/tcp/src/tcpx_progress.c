@@ -486,7 +486,11 @@ int tcpx_get_rx_entry_op_read_req(struct tcpx_ep *tcpx_ep)
 	struct tcpx_cq *tcpx_cq;
 	int ret;
 
-	tcpx_cq = container_of(tcpx_ep->util_ep.rx_cq,
+	/* The read request will generate a response once done,
+	 * so the xfer_entry will become a transmit and returned
+	 * to the tx cq buffer pool.
+	 */
+	tcpx_cq = container_of(tcpx_ep->util_ep.tx_cq,
 			       struct tcpx_cq, util_cq);
 
 	rx_entry = tcpx_xfer_entry_alloc(tcpx_cq, TCPX_OP_REMOTE_READ);
