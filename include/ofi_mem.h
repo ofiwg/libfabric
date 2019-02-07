@@ -446,38 +446,69 @@ static inline int util_buf_indexed_avail(struct util_buf_pool *pool)
 	return !dlist_empty(&pool->list.regions);
 }
 
-#define UTIL_BUF_DEFINE_GETTERS(name)						\
-static inline void *util_buf ## name ## get_ex(struct util_buf_pool *pool,	\
-					       void **context)			\
-{										\
-	void *buf = util_buf ## name ## get(pool);				\
-	assert(context);							\
-	*context = util_buf_get_ctx(pool, buf);					\
-	return buf;								\
-}										\
-										\
-static inline void *util_buf ## name ## alloc(struct util_buf_pool *pool)	\
-{										\
-	if (OFI_UNLIKELY(!util_buf ## name ## avail(pool))) {			\
-		if (util_buf_grow(pool))					\
-			return NULL;						\
-	}									\
-	return util_buf ## name ## get(pool);					\
-}										\
-										\
-static inline void *util_buf ## name ## alloc_ex(struct util_buf_pool *pool,	\
-						 void **context)		\
-{										\
-	void *buf = util_buf ## name ## alloc(pool);				\
-	if (OFI_UNLIKELY(!buf))							\
-		return NULL;							\
-	assert(context);							\
-	*context = util_buf_get_ctx(pool, buf);					\
-	return buf;								\
+static inline void *util_buf_get_ex(struct util_buf_pool *pool,
+				    void **context)
+{
+	void *buf = util_buf_get(pool);
+
+	assert(context);
+	*context = util_buf_get_ctx(pool, buf);
+	return buf;
 }
 
-UTIL_BUF_DEFINE_GETTERS(_);
-UTIL_BUF_DEFINE_GETTERS(_indexed_);
+static inline void *util_buf_alloc(struct util_buf_pool *pool)
+{
+	if (OFI_UNLIKELY(!util_buf_avail(pool))) {
+		if (util_buf_grow(pool))
+			return NULL;
+	}
+	return util_buf_get(pool);
+}
+
+static inline void *util_buf_alloc_ex(struct util_buf_pool *pool,
+				      void **context)
+{
+	void *buf = util_buf_alloc(pool);
+
+	assert(context);
+	if (OFI_UNLIKELY(!buf))
+		return NULL;
+
+	*context = util_buf_get_ctx(pool, buf);
+	return buf;
+}
+
+static inline void *util_buf_indexed_get_ex(struct util_buf_pool *pool,
+					    void **context)
+{
+	void *buf = util_buf_indexed_get(pool);
+
+	assert(context);
+	*context = util_buf_get_ctx(pool, buf);
+	return buf;
+}
+
+static inline void *util_buf_indexed_alloc(struct util_buf_pool *pool)
+{
+	if (OFI_UNLIKELY(!util_buf_indexed_avail(pool))) {
+		if (util_buf_grow(pool))
+			return NULL;
+	}
+	return util_buf_indexed_get(pool);
+}
+
+static inline void *util_buf_indexed_alloc_ex(struct util_buf_pool *pool,
+						 void **context)
+{
+	void *buf = util_buf_indexed_alloc(pool);
+
+	assert(context);
+	if (OFI_UNLIKELY(!buf))
+		return NULL;
+
+	*context = util_buf_get_ctx(pool, buf);
+	return buf;
+}
 
 void util_buf_pool_destroy(struct util_buf_pool *pool);
 
