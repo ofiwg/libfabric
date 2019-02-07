@@ -258,6 +258,12 @@ static inline void name ## _free(struct name *fs)		\
  * Buffer Pool
  */
 
+enum {
+	OFI_BUFPOOL_INDEXED		= 1 << 1,
+	OFI_BUFPOOL_NO_TRACK		= 1 << 2,
+	OFI_BUFPOOL_MMAPPED		= 1 << 3,
+};
+
 typedef int (*ofi_bufpool_alloc_fn)(void *pool_ctx, void *addr, size_t len,
 				    void **context);
 typedef void (*ofi_bufpool_free_fn)(void *pool_ctx, void *context);
@@ -272,14 +278,7 @@ struct ofi_bufpool_attr {
 	ofi_bufpool_free_fn 		free_fn;
 	ofi_bufpool_init_fn 		init_fn;
 	void 				*ctx;
-	uint8_t				track_used;
-	uint8_t				is_mmap_region;
-	struct {
-		uint8_t			used;
-		/* if the `ordered` capability is used, the buffer
-		 * with the lowest index is returned */
-		uint8_t			ordered;
-	} indexing;
+	int				flags;
 };
 
 struct ofi_bufpool {
@@ -355,7 +354,7 @@ static inline void ofi_buf_free(struct ofi_bufpool *pool, void *buf)
 	assert(ofi_buf_ftr(pool, buf)->region);
 	assert(ofi_buf_ftr(pool, buf)->region->pool == pool);
 	assert(ofi_buf_ftr(pool, buf)->region->num_used--);
-	assert(!pool->attr.indexing.ordered);
+	assert(!(pool->attr.flags & OFI_BUFPOOL_INDEXED));
 	slist_insert_head(&ofi_buf_ftr(pool, buf)->entry.slist, &pool->list.buffers);
 }
 
@@ -366,7 +365,7 @@ static inline void ofi_ibuf_free(struct ofi_bufpool *pool, void *buf)
 {
 	struct ofi_bufpool_ftr *buf_ftr;
 
-	assert(pool->attr.indexing.ordered);
+	assert(pool->attr.flags & OFI_BUFPOOL_INDEXED);
 	buf_ftr = ofi_buf_ftr(pool, buf);
 	assert(buf_ftr->region->num_used--);
 
@@ -383,7 +382,6 @@ static inline void ofi_ibuf_free(struct ofi_bufpool *pool, void *buf)
 static inline size_t ofi_buf_index(struct ofi_bufpool *pool, void *buf)
 {
 	assert(ofi_buf_ftr(pool, buf)->region->num_used);
-	assert(pool->attr.indexing.used);
 	return ofi_buf_ftr(pool, buf)->index;
 }
 
@@ -391,7 +389,6 @@ static inline void *ofi_buf_index_get(struct ofi_bufpool *pool, size_t index)
 {
 	void *buf;
 
-	assert(pool->attr.indexing.used);
 	buf = pool->regions_table[(size_t)(index / pool->attr.chunk_cnt)]->
 		mem_region + (index % pool->attr.chunk_cnt) * pool->entry_sz;
 
@@ -418,7 +415,7 @@ static inline void *ofi_buf_alloc(struct ofi_bufpool *pool)
 {
 	struct ofi_bufpool_ftr *buf_ftr;
 
-	assert(!pool->attr.indexing.ordered);
+	assert(!(pool->attr.flags & OFI_BUFPOOL_INDEXED));
 	if (OFI_UNLIKELY(ofi_bufpool_empty(pool))) {
 		if (ofi_bufpool_grow(pool))
 			return NULL;
@@ -448,7 +445,7 @@ static inline void *ofi_ibuf_alloc(struct ofi_bufpool *pool)
 	struct ofi_bufpool_ftr *buf_ftr;
 	struct ofi_bufpool_region *buf_region;
 
-	assert(pool->attr.indexing.ordered);
+	assert(pool->attr.flags & OFI_BUFPOOL_INDEXED);
 	if (OFI_UNLIKELY(ofi_ibufpool_empty(pool))) {
 		if (ofi_bufpool_grow(pool))
 			return NULL;

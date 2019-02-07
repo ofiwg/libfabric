@@ -1161,32 +1161,29 @@ int rxd_ep_init_res(struct rxd_ep *ep, struct fi_info *fi_info)
 		.size		= sizeof(struct rxd_x_entry),
 		.alignment	= RXD_BUF_POOL_ALIGNMENT,
 		.max_cnt	= 0,
-		.indexing	= {
-			.used 		= 1,
-			.ordered	= 1,
-		},
+		.flags		= OFI_BUFPOOL_INDEXED,
 	};
+	int ret;
 
-	int ret = ofi_bufpool_create_ex(
-		&ep->tx_pkt_pool,
-		rxd_domain->max_mtu_sz + sizeof(struct rxd_pkt_entry),
-		RXD_BUF_POOL_ALIGNMENT, 0, RXD_TX_POOL_CHUNK_CNT,
-	        ep->do_local_mr ? rxd_buf_region_alloc_fn : NULL,
-		ep->do_local_mr ? rxd_buf_region_free_fn : NULL,
-		rxd_domain);
+	ret = ofi_bufpool_create_ex(&ep->tx_pkt_pool,
+			rxd_domain->max_mtu_sz + sizeof(struct rxd_pkt_entry),
+			RXD_BUF_POOL_ALIGNMENT, 0, RXD_TX_POOL_CHUNK_CNT,
+			ep->do_local_mr ? rxd_buf_region_alloc_fn : NULL,
+			ep->do_local_mr ? rxd_buf_region_free_fn : NULL,
+			rxd_domain);
 	if (ret)
-		return -FI_ENOMEM;
+		return ret;
 
-	ret = ofi_bufpool_create_ex(
-		&ep->rx_pkt_pool,
-		rxd_domain->max_mtu_sz + sizeof (struct rxd_pkt_entry),
-		RXD_BUF_POOL_ALIGNMENT, 0, RXD_RX_POOL_CHUNK_CNT,
-	        ep->do_local_mr ? rxd_buf_region_alloc_fn : NULL,
-		ep->do_local_mr ? rxd_buf_region_free_fn : NULL,
-		rxd_domain);
+	ret = ofi_bufpool_create_ex(&ep->rx_pkt_pool,
+			rxd_domain->max_mtu_sz + sizeof (struct rxd_pkt_entry),
+			RXD_BUF_POOL_ALIGNMENT, 0, RXD_RX_POOL_CHUNK_CNT,
+			ep->do_local_mr ? rxd_buf_region_alloc_fn : NULL,
+			ep->do_local_mr ? rxd_buf_region_free_fn : NULL,
+			rxd_domain);
 	if (ret)
 		goto err;
 
+	entry_pool_attr.flags |= OFI_BUFPOOL_NO_TRACK;
 	entry_pool_attr.chunk_cnt = ep->tx_size;
 	ret = ofi_bufpool_create_attr(&entry_pool_attr, &ep->tx_entry_pool);
 	if (ret)
@@ -1196,7 +1193,6 @@ int rxd_ep_init_res(struct rxd_ep *ep, struct fi_info *fi_info)
 	ret = ofi_bufpool_create_attr(&entry_pool_attr, &ep->rx_entry_pool);
 	if (ret)
 		goto err;
-
 
 	dlist_init(&ep->rx_list);
 	dlist_init(&ep->rx_tag_list);
@@ -1221,7 +1217,7 @@ err:
 	if (ep->rx_entry_pool)
 		ofi_bufpool_destroy(ep->rx_entry_pool);
 
-	return -FI_ENOMEM;
+	return ret;
 }
 
 static void rxd_init_peer(struct rxd_ep *ep, uint64_t rxd_addr)

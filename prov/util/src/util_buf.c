@@ -64,7 +64,7 @@ int ofi_bufpool_grow(struct ofi_bufpool *pool)
 	buf_region->pool = pool;
 	dlist_init(&buf_region->buf_list);
 
-	if (pool->attr.is_mmap_region) {
+	if (pool->attr.flags & OFI_BUFPOOL_MMAPPED) {
 		hp_size = ofi_get_hugepage_size();
 		if (hp_size < 0) {
 			ret = (int) hp_size;
@@ -84,11 +84,11 @@ int ofi_bufpool_grow(struct ofi_bufpool *pool)
 			if (pool->num_allocated > 0)
 				goto err1;
 
-			pool->attr.is_mmap_region = 0;
+			pool->attr.flags &= ~OFI_BUFPOOL_MMAPPED;
 		}
 	}
 
-	if (!pool->attr.is_mmap_region) {
+	if (!(pool->attr.flags & OFI_BUFPOOL_MMAPPED)) {
 		buf_region->size = pool->attr.chunk_cnt * pool->entry_sz;
 
 		ret = ofi_memalign((void **)&buf_region->mem_region,
@@ -128,13 +128,7 @@ int ofi_bufpool_grow(struct ofi_bufpool *pool)
 
 		if (pool->attr.init_fn) {
 #if ENABLE_DEBUG
-			if (!pool->attr.indexing.ordered) {
-				buf_ftr->entry.slist.next = (void *) OFI_MAGIC_64;
-
-				pool->attr.init_fn(pool->attr.ctx, buf);
-
-				assert(buf_ftr->entry.slist.next == (void *) OFI_MAGIC_64);
-			} else {
+			if (pool->attr.flags & OFI_BUFPOOL_INDEXED) {
 				buf_ftr->entry.dlist.next = (void *) OFI_MAGIC_64;
 				buf_ftr->entry.dlist.prev = (void *) OFI_MAGIC_64;
 
@@ -142,6 +136,12 @@ int ofi_bufpool_grow(struct ofi_bufpool *pool)
 
 				assert((buf_ftr->entry.dlist.next == (void *) OFI_MAGIC_64) &&
 				       (buf_ftr->entry.dlist.prev == (void *) OFI_MAGIC_64));
+			} else {
+				buf_ftr->entry.slist.next = (void *) OFI_MAGIC_64;
+
+				pool->attr.init_fn(pool->attr.ctx, buf);
+
+				assert(buf_ftr->entry.slist.next == (void *) OFI_MAGIC_64);
 			}
 #else
 			pool->attr.init_fn(pool->attr.ctx, buf);
@@ -150,16 +150,16 @@ int ofi_bufpool_grow(struct ofi_bufpool *pool)
 
 		buf_ftr->region = buf_region;
 		buf_ftr->index = pool->num_allocated + i;
-		if (!pool->attr.indexing.ordered) {
-			slist_insert_tail(&buf_ftr->entry.slist,
-					  &pool->list.buffers);
-		} else {
+		if (pool->attr.flags & OFI_BUFPOOL_INDEXED) {
 			dlist_insert_tail(&buf_ftr->entry.dlist,
 					  &buf_region->buf_list);
+		} else {
+			slist_insert_tail(&buf_ftr->entry.slist,
+					  &pool->list.buffers);
 		}
 	}
 
-	if (pool->attr.indexing.ordered)
+	if (pool->attr.flags & OFI_BUFPOOL_INDEXED)
 		dlist_insert_tail(&buf_region->entry, &pool->list.regions);
 
 	pool->num_allocated += pool->attr.chunk_cnt;
@@ -192,15 +192,13 @@ int ofi_bufpool_create_attr(struct ofi_bufpool_attr *attr,
 
 	hp_size = ofi_get_hugepage_size();
 
-	if ((*buf_pool)->attr.chunk_cnt * (*buf_pool)->entry_sz < hp_size)
-		(*buf_pool)->attr.is_mmap_region = 0;
-	else
-		(*buf_pool)->attr.is_mmap_region = 1;
+	if ((*buf_pool)->attr.chunk_cnt * (*buf_pool)->entry_sz >= hp_size)
+		(*buf_pool)->attr.flags |= OFI_BUFPOOL_MMAPPED;
 
-	if (!(*buf_pool)->attr.indexing.ordered)
-		slist_init(&(*buf_pool)->list.buffers);
-	else
+	if ((*buf_pool)->attr.flags & OFI_BUFPOOL_INDEXED)
 		dlist_init(&(*buf_pool)->list.regions);
+	else
+		slist_init(&(*buf_pool)->list.buffers);
 
 	return FI_SUCCESS;
 }
@@ -220,11 +218,6 @@ int ofi_bufpool_create_ex(struct ofi_bufpool **buf_pool,
 		.alloc_fn	= alloc_fn,
 		.free_fn	= free_fn,
 		.ctx		= pool_ctx,
-		.track_used	= 1,
-		.indexing	= {
-			.used		= 1,
-			.ordered	= 0,
-		},
 	};
 	return ofi_bufpool_create_attr(&attr, buf_pool);
 }
@@ -237,14 +230,13 @@ void ofi_bufpool_destroy(struct ofi_bufpool *pool)
 
 	for (i = 0; i < pool->regions_cnt; i++) {
 		buf_region = pool->regions_table[i];
-#if ENABLE_DEBUG
-		if (pool->attr.track_used)
-			assert(buf_region->num_used == 0);
-#endif
+
+		assert((pool->attr.flags & OFI_BUFPOOL_NO_TRACK) ||
+			(buf_region->num_used == 0));
 		if (pool->attr.free_fn)
 			pool->attr.free_fn(pool->attr.ctx, buf_region->context);
 
-		if (pool->attr.is_mmap_region) {
+		if (pool->attr.flags & OFI_BUFPOOL_MMAPPED) {
 			ret = ofi_free_hugepage_buf(buf_region->mem_region,
 						    buf_region->size);
 			if (ret) {

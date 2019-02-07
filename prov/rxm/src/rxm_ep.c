@@ -275,6 +275,7 @@ static int rxm_buf_pool_create(struct rxm_ep *rxm_ep,
 			       struct rxm_buf_pool *pool,
 			       enum rxm_buf_pool_type type)
 {
+	int ret;
 	struct ofi_bufpool_attr attr = {
 		.size		= size,
 		.alignment	= 16,
@@ -283,30 +284,16 @@ static int rxm_buf_pool_create(struct rxm_ep *rxm_ep,
 		.alloc_fn	= rxm_buf_reg,
 		.free_fn	= rxm_buf_close,
 		.ctx		= pool,
-		.track_used	= 0,
+		.flags		= OFI_BUFPOOL_NO_TRACK,
 	};
-	int ret;
-
-	switch (type) {
-	case RXM_BUF_POOL_TX_RNDV:
-	case RXM_BUF_POOL_TX_ATOMIC:
-	case RXM_BUF_POOL_TX_SAR:
-		attr.indexing.used = 1;
-		break;
-	default:
-		attr.indexing.used = 0;
-		break;
-	}
 
 	pool->rxm_ep = rxm_ep;
 	pool->type = type;
 	ret = ofi_bufpool_create_attr(&attr, &pool->pool);
-	if (ret) {
+	if (ret)
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to create buf pool\n");
-		return -FI_ENOMEM;
-	}
 
-	return 0;
+	return ret;
 }
 
 static void rxm_recv_entry_init(struct rxm_recv_entry *entry, void *arg)

@@ -416,11 +416,7 @@ static int util_av_init(struct util_av *av, const struct fi_av_attr *attr,
 		.max_cnt	= 0,
 		/* Don't use track of buffer, because user can close
 		 * the AV without prior deletion of addresses */
-		.track_used	= 0,
-		.indexing	= {
-			.used		= 1,
-			.ordered	= 1,
-		},
+		.flags		= OFI_BUFPOOL_NO_TRACK | OFI_BUFPOOL_INDEXED,
 	};
 
 	/* TODO: Handle FI_READ */
@@ -447,11 +443,7 @@ static int util_av_init(struct util_av *av, const struct fi_av_attr *attr,
 	av->hash = NULL;
 
 	pool_attr.chunk_cnt = av->count;
-	ret = ofi_bufpool_create_attr(&pool_attr, &av->av_entry_pool);
-	if (ret)
-		return ret;
-
-	return ret;
+	return ofi_bufpool_create_attr(&pool_attr, &av->av_entry_pool);
 }
 
 static int util_verify_av_attr(struct util_domain *domain,

@@ -224,9 +224,9 @@ static int tcpx_buf_pools_create(struct tcpx_buf_pool *buf_pools)
 		buf_pools[i].op_type = i;
 
 		ret = ofi_bufpool_create_ex(&buf_pools[i].pool,
-					      sizeof(struct tcpx_xfer_entry),
-					      16, 0, 1024, tcpx_buf_pool_init,
-					      NULL, &buf_pools[i]);
+					    sizeof(struct tcpx_xfer_entry),
+					    16, 0, 1024, tcpx_buf_pool_init,
+					    NULL, &buf_pools[i]);
 		if (ret) {
 			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 				"Unable to create buf pool\n");
@@ -234,11 +234,12 @@ static int tcpx_buf_pools_create(struct tcpx_buf_pool *buf_pools)
 		}
 	}
 	return 0;
+
 err:
-	while (i--) {
+	while (i--)
 		ofi_bufpool_destroy(buf_pools[i].pool);
-	}
-	return -FI_ENOMEM;
+
+	return -ret;
 }
 
 int tcpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
