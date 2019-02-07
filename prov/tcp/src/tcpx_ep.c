@@ -451,14 +451,13 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 			handle = container_of(info->handle,
 					      struct tcpx_conn_handle, handle);
 			ep->conn_fd = handle->conn_fd;
+			ep->hdr_bswap = handle->endian_match ?
+					tcpx_hdr_none : tcpx_hdr_bswap;
 			free(handle);
 
 			ret = tcpx_setup_socket(ep->conn_fd);
 			if (ret)
 				goto err3;
-
-			ep->hdr_bswap = (handle->endian_match)?
-				tcpx_hdr_none:tcpx_hdr_bswap;
 		}
 	} else {
 		ep->conn_fd = ofi_socket(ofi_get_sa_family(info), SOCK_STREAM, 0);
