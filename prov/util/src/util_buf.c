@@ -54,9 +54,8 @@ int ofi_bufpool_grow(struct ofi_bufpool *pool)
 	ssize_t hp_size;
 	struct ofi_bufpool_ftr *buf_ftr;
 
-	if (pool->attr.max_cnt && pool->num_allocated >= pool->attr.max_cnt) {
+	if (pool->attr.max_cnt && pool->num_allocated >= pool->attr.max_cnt)
 		return -1;
-	}
 
 	buf_region = calloc(1, sizeof(*buf_region));
 	if (!buf_region)
@@ -241,6 +240,7 @@ void ofi_bufpool_destroy(struct ofi_bufpool *pool)
 #endif
 		if (pool->attr.free_fn)
 			pool->attr.free_fn(pool->attr.ctx, buf_region->context);
+
 		if (pool->attr.is_mmap_region) {
 			ret = ofi_free_hugepage_buf(buf_region->mem_region,
 						    buf_region->size);
@@ -262,31 +262,29 @@ void ofi_bufpool_destroy(struct ofi_bufpool *pool)
 
 int ofi_ibuf_is_lower(struct dlist_entry *item, const void *arg)
 {
-	struct ofi_bufpool_ftr *buf_ftr1 =
-		container_of((struct dlist_entry *)arg,
-			     struct ofi_bufpool_ftr, entry.dlist);
-	struct ofi_bufpool_ftr *buf_ftr2 =
-		container_of(item, struct ofi_bufpool_ftr, entry.dlist);
-	return (buf_ftr1->index < buf_ftr2->index);
+	struct ofi_bufpool_ftr *ftr1, *ftr2;
+
+	ftr1 = container_of(arg, struct ofi_bufpool_ftr, entry.dlist);
+	ftr2 = container_of(item, struct ofi_bufpool_ftr, entry.dlist);
+
+	return ftr1->index < ftr2->index;
 }
 
 int ofi_ibufpool_region_is_lower(struct dlist_entry *item, const void *arg)
 {
-	struct ofi_bufpool_region *buf_region1 =
-		container_of((struct dlist_entry *)arg,
-			     struct ofi_bufpool_region, entry);
-	struct ofi_bufpool_region *buf_region2 =
-		container_of(item, struct ofi_bufpool_region, entry);
-	struct ofi_bufpool_ftr *buf_region1_head =
-		container_of(buf_region1->buf_list.next,
-			     struct ofi_bufpool_ftr, entry.dlist);
-	struct ofi_bufpool_ftr *buf_region2_head =
-		container_of(buf_region2->buf_list.next,
-			     struct ofi_bufpool_ftr, entry.dlist);
-	size_t buf_region1_index =
-		(size_t)(buf_region1_head->index / buf_region1->pool->attr.chunk_cnt);
-	size_t buf_region2_index =
-		(size_t)(buf_region2_head->index / buf_region2->pool->attr.chunk_cnt);
+	struct ofi_bufpool_region *reg1, *reg2;
+	struct ofi_bufpool_ftr *ftr1, *ftr2;
+	size_t index1, index2;
 
-	return (buf_region1_index < buf_region2_index);
+	reg1 = container_of(arg, struct ofi_bufpool_region, entry);
+	reg2 = container_of(item, struct ofi_bufpool_region, entry);
+
+	ftr1 = container_of(reg1->buf_list.next, struct ofi_bufpool_ftr,
+			    entry.dlist);
+	ftr2 = container_of(reg2->buf_list.next, struct ofi_bufpool_ftr,
+			    entry.dlist);
+
+	index1 = (size_t) (ftr1->index / reg1->pool->attr.chunk_cnt);
+	index2 = (size_t) (ftr2->index / reg2->pool->attr.chunk_cnt);
+	return index1 < index2;
 }

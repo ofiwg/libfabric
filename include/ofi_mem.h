@@ -308,10 +308,10 @@ struct ofi_bufpool_region {
 
 struct ofi_bufpool_ftr {
 	union {
-		struct slist_entry slist;
-		struct dlist_entry dlist;
+		struct slist_entry	slist;
+		struct dlist_entry	dlist;
 	} entry;
-	struct ofi_bufpool_region *region;
+	struct ofi_bufpool_region	*region;
 	size_t index;
 };
 
@@ -367,9 +367,7 @@ static inline void ofi_ibuf_free(struct ofi_bufpool *pool, void *buf)
 	struct ofi_bufpool_ftr *buf_ftr;
 
 	assert(pool->attr.indexing.ordered);
-
 	buf_ftr = ofi_buf_ftr(pool, buf);
-
 	assert(buf_ftr->region->num_used--);
 
 	dlist_insert_order(&buf_ftr->region->buf_list,
@@ -392,9 +390,11 @@ static inline size_t ofi_buf_index(struct ofi_bufpool *pool, void *buf)
 static inline void *ofi_buf_index_get(struct ofi_bufpool *pool, size_t index)
 {
 	void *buf;
+
 	assert(pool->attr.indexing.used);
 	buf = pool->regions_table[(size_t)(index / pool->attr.chunk_cnt)]->
 		mem_region + (index % pool->attr.chunk_cnt) * pool->entry_sz;
+
 	assert(ofi_buf_ftr(pool, buf)->region->num_used);
 	return buf;
 }
