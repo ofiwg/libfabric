@@ -353,18 +353,6 @@ static inline void *util_buf_get_data(struct util_buf_pool *pool,
 	return ((char *) buf_ftr - pool->attr.size);
 }
 
-static inline void *util_buf_get(struct util_buf_pool *pool)
-{
-	struct util_buf_footer *buf_ftr;
-
-	assert(!pool->attr.indexing.ordered);
-
-	slist_remove_head_container(&pool->list.buffers, struct util_buf_footer,
-				    buf_ftr, entry.slist);
-	assert(++buf_ftr->region->num_used);
-	return util_buf_get_data(pool, buf_ftr);
-}
-
 static inline void util_buf_release(struct util_buf_pool *pool, void *buf)
 {
 	assert(util_buf_get_ftr(pool, buf)->region);
@@ -372,23 +360,6 @@ static inline void util_buf_release(struct util_buf_pool *pool, void *buf)
 	assert(util_buf_get_ftr(pool, buf)->region->num_used--);
 	assert(!pool->attr.indexing.ordered);
 	slist_insert_head(&util_buf_get_ftr(pool, buf)->entry.slist, &pool->list.buffers);
-}
-
-static inline void *util_buf_indexed_get(struct util_buf_pool *pool)
-{
-	struct util_buf_footer *buf_ftr;
-	struct util_buf_region *buf_region;
-
-	assert(pool->attr.indexing.ordered);
-
-	buf_region = container_of(pool->list.regions.next,
-				  struct util_buf_region, entry);
-	dlist_pop_front(&buf_region->buf_list, struct util_buf_footer,
-			buf_ftr, entry.dlist);
-	assert(++buf_ftr->region->num_used);
-	if (dlist_empty(&buf_region->buf_list))
-		dlist_remove_init(&buf_region->entry);
-	return util_buf_get_data(pool, buf_ftr);
 }
 
 int util_buf_is_lower(struct dlist_entry *item, const void *arg);
@@ -448,11 +419,18 @@ static inline int util_buf_indexed_avail(struct util_buf_pool *pool)
 
 static inline void *util_buf_alloc(struct util_buf_pool *pool)
 {
+	struct util_buf_footer *buf_ftr;
+
+	assert(!pool->attr.indexing.ordered);
 	if (OFI_UNLIKELY(!util_buf_avail(pool))) {
 		if (util_buf_grow(pool))
 			return NULL;
 	}
-	return util_buf_get(pool);
+
+	slist_remove_head_container(&pool->list.buffers, struct util_buf_footer,
+				    buf_ftr, entry.slist);
+	assert(++buf_ftr->region->num_used);
+	return util_buf_get_data(pool, buf_ftr);
 }
 
 static inline void *util_buf_alloc_ex(struct util_buf_pool *pool,
@@ -470,11 +448,24 @@ static inline void *util_buf_alloc_ex(struct util_buf_pool *pool,
 
 static inline void *util_buf_indexed_alloc(struct util_buf_pool *pool)
 {
+	struct util_buf_footer *buf_ftr;
+	struct util_buf_region *buf_region;
+
+	assert(pool->attr.indexing.ordered);
 	if (OFI_UNLIKELY(!util_buf_indexed_avail(pool))) {
 		if (util_buf_grow(pool))
 			return NULL;
 	}
-	return util_buf_indexed_get(pool);
+
+	buf_region = container_of(pool->list.regions.next,
+				  struct util_buf_region, entry);
+	dlist_pop_front(&buf_region->buf_list, struct util_buf_footer,
+			buf_ftr, entry.dlist);
+	assert(++buf_ftr->region->num_used);
+
+	if (dlist_empty(&buf_region->buf_list))
+		dlist_remove_init(&buf_region->entry);
+	return util_buf_get_data(pool, buf_ftr);
 }
 
 static inline void *util_buf_indexed_alloc_ex(struct util_buf_pool *pool,
