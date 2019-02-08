@@ -120,7 +120,7 @@ int ofi_bufpool_grow(struct ofi_bufpool *pool)
 		pool->regions_table = new_table;
 	}
 	pool->regions_table[pool->regions_cnt] = buf_region;
-	pool->regions_cnt++;
+	buf_region->index = pool->regions_cnt++;
 
 	for (i = 0; i < pool->attr.chunk_cnt; i++) {
 		buf = (buf_region->mem_region + i * pool->entry_sz);
@@ -268,18 +268,9 @@ int ofi_ibuf_is_lower(struct dlist_entry *item, const void *arg)
 int ofi_ibufpool_region_is_lower(struct dlist_entry *item, const void *arg)
 {
 	struct ofi_bufpool_region *reg1, *reg2;
-	struct ofi_bufpool_ftr *ftr1, *ftr2;
-	size_t index1, index2;
 
 	reg1 = container_of(arg, struct ofi_bufpool_region, entry);
 	reg2 = container_of(item, struct ofi_bufpool_region, entry);
 
-	ftr1 = container_of(reg1->buf_list.next, struct ofi_bufpool_ftr,
-			    entry.dlist);
-	ftr2 = container_of(reg2->buf_list.next, struct ofi_bufpool_ftr,
-			    entry.dlist);
-
-	index1 = (size_t) (ftr1->index / reg1->pool->attr.chunk_cnt);
-	index2 = (size_t) (ftr2->index / reg2->pool->attr.chunk_cnt);
-	return index1 < index2;
+	return reg1->index < reg2->index;
 }

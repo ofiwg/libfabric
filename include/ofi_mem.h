@@ -298,6 +298,7 @@ struct ofi_bufpool_region {
 	struct dlist_entry 		buf_list;
 	char 				*mem_region;
 	size_t 				size;
+	size_t				index;
 	void 				*context;
 	struct ofi_bufpool 		*pool;
 #ifndef NDEBUG
