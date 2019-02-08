@@ -520,6 +520,10 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq,
 			return fi_ibv_eq_xrc_connected_event(eq, cma_event,
 							     entry, len, acked);
 		entry->info = NULL;
+		if (priv_datalen) {
+			cm_hdr = priv_data;
+			memcpy(&entry->data, cm_hdr->data, cm_hdr->size);
+		}
 		break;
 	case RDMA_CM_EVENT_DISCONNECTED:
 		ep = container_of(fid, struct fi_ibv_ep, util_ep.ep_fid);
