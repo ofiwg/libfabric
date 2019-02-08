@@ -124,27 +124,25 @@ rxm_mr_buf_reg(struct rxm_ep *rxm_ep, void *addr, size_t len, void **context)
 	return ret;
 }
 
-static void rxm_buf_reg_set_common(struct rxm_buf *hdr, struct rxm_pkt *pkt,
-				   uint8_t type, void *mr_desc)
-{
-	if (pkt) {
-		pkt->ctrl_hdr.version = RXM_CTRL_VERSION;
-		pkt->hdr.version = OFI_OP_VERSION;
-		pkt->ctrl_hdr.type = type;
-	}
-	if (hdr) {
-		hdr->desc = mr_desc;
-	}
-}
-
 static int rxm_buf_reg(struct ofi_bufpool_region *region)
 {
 	struct rxm_buf_pool *pool = region->pool->attr.context;
-	size_t i, entry_size = pool->pool->entry_size;
 	int ret;
-	void *mr_desc;
-	uint8_t type;
-	struct rxm_buf *hdr;
+
+	if ((pool->type != RXM_BUF_POOL_TX_INJECT) &&
+	    pool->rxm_ep->msg_mr_local) {
+		ret = rxm_mr_buf_reg(pool->rxm_ep, region->mem_region,
+				     region->size, &region->context);
+	} else {
+		ret = 0;
+	}
+
+	return ret;
+}
+
+static void rxm_buf_init(struct ofi_bufpool_region *region, void *buf)
+{
+	struct rxm_buf_pool *pool = region->pool->attr.context;
 	struct rxm_pkt *pkt;
 	struct rxm_rx_buf *rx_buf;
 	struct rxm_tx_base_buf *tx_base_buf;
@@ -153,102 +151,89 @@ static int rxm_buf_reg(struct ofi_bufpool_region *region)
 	struct rxm_tx_rndv_buf *tx_rndv_buf;
 	struct rxm_tx_atomic_buf *tx_atomic_buf;
 	struct rxm_rma_buf *rma_buf;
+	void *mr_desc;
+	uint8_t type;
 
 	if ((pool->type != RXM_BUF_POOL_TX_INJECT) && pool->rxm_ep->msg_mr_local) {
-		ret = rxm_mr_buf_reg(pool->rxm_ep, region->mem_region, region->size,
-				     &region->context);
-		if (ret)
-			return ret;
 		mr_desc = fi_mr_desc((struct fid_mr *) region->context);
 	} else {
 		mr_desc = NULL;
 	}
 
-	for (i = 0; i < pool->pool->attr.chunk_cnt; i++) {
-		switch (pool->type) {
-		case RXM_BUF_POOL_RX:
-			rx_buf = (struct rxm_rx_buf *)
-				 ((char *) region->mem_region + i * entry_size);
-			rx_buf->ep = pool->rxm_ep;
+	switch (pool->type) {
+	case RXM_BUF_POOL_RX:
+		rx_buf = buf;
+		rx_buf->ep = pool->rxm_ep;
 
-			hdr = &rx_buf->hdr;
-			pkt = NULL;
-			type = ofi_ctrl_data; /* This can be any value */
-			break;
-		case RXM_BUF_POOL_TX:
-			tx_eager_buf = (struct rxm_tx_eager_buf *)
-				       ((char *) region->mem_region + i * entry_size);
-			tx_eager_buf->hdr.state = RXM_TX;
+		rx_buf->hdr.desc = mr_desc;
+		pkt = NULL;
+		type = ofi_ctrl_data; /* This can be any value */
+		break;
+	case RXM_BUF_POOL_TX:
+		tx_eager_buf = buf;
+		tx_eager_buf->hdr.state = RXM_TX;
 
-			hdr = &tx_eager_buf->hdr;
-			pkt = &tx_eager_buf->pkt;
-			type = ofi_ctrl_data;
-			break;
-		case RXM_BUF_POOL_TX_INJECT:
-			tx_base_buf = (struct rxm_tx_base_buf *)
-				      ((char *) region->mem_region + i * entry_size);
-			tx_base_buf->hdr.state = RXM_INJECT_TX;
+		tx_eager_buf->hdr.desc = mr_desc;
+		pkt = &tx_eager_buf->pkt;
+		type = ofi_ctrl_data;
+		break;
+	case RXM_BUF_POOL_TX_INJECT:
+		tx_base_buf = buf;
+		tx_base_buf->hdr.state = RXM_INJECT_TX;
 
-			hdr = NULL;
-			pkt = &tx_base_buf->pkt;
-			type = ofi_ctrl_data;
-			break;
-		case RXM_BUF_POOL_TX_SAR:
-			tx_sar_buf = (struct rxm_tx_sar_buf *)
-				     ((char *) region->mem_region + i * entry_size);
-			tx_sar_buf->hdr.state = RXM_SAR_TX;
+		pkt = &tx_base_buf->pkt;
+		type = ofi_ctrl_data;
+		break;
+	case RXM_BUF_POOL_TX_SAR:
+		tx_sar_buf = buf;
+		tx_sar_buf->hdr.state = RXM_SAR_TX;
 
-			hdr = &tx_sar_buf->hdr;
-			pkt = &tx_sar_buf->pkt;
-			type = ofi_ctrl_seg_data;
-			break;
-		case RXM_BUF_POOL_TX_RNDV:
-			tx_rndv_buf = (struct rxm_tx_rndv_buf *)
-				      ((char *) region->mem_region + i * entry_size);
+		tx_sar_buf->hdr.desc = mr_desc;
+		pkt = &tx_sar_buf->pkt;
+		type = ofi_ctrl_seg_data;
+		break;
+	case RXM_BUF_POOL_TX_RNDV:
+		tx_rndv_buf = buf;
 
-			hdr = &tx_rndv_buf->hdr;
-			pkt = &tx_rndv_buf->pkt;
-			type = ofi_ctrl_large_data;
-			break;
-		case RXM_BUF_POOL_TX_ATOMIC:
-			tx_atomic_buf = (struct rxm_tx_atomic_buf *)
-				        ((char *) region->mem_region + i * entry_size);
+		tx_rndv_buf->hdr.desc = mr_desc;
+		pkt = &tx_rndv_buf->pkt;
+		type = ofi_ctrl_large_data;
+		break;
+	case RXM_BUF_POOL_TX_ATOMIC:
+		tx_atomic_buf = buf;
 
-			hdr = &tx_atomic_buf->hdr;
-			pkt = &tx_atomic_buf->pkt;
-			type = ofi_ctrl_atomic;
-			break;
-		case RXM_BUF_POOL_TX_ACK:
-			tx_base_buf = (struct rxm_tx_base_buf *)
-				      ((char *) region->mem_region + i * entry_size);
-			tx_base_buf->pkt.hdr.op = ofi_op_msg;
+		tx_atomic_buf->hdr.desc = mr_desc;
+		pkt = &tx_atomic_buf->pkt;
+		type = ofi_ctrl_atomic;
+		break;
+	case RXM_BUF_POOL_TX_ACK:
+		tx_base_buf = buf;
+		tx_base_buf->pkt.hdr.op = ofi_op_msg;
 
-			hdr = &tx_base_buf->hdr;
-			pkt = &tx_base_buf->pkt;
-			type = ofi_ctrl_ack;
-			break;
-		case RXM_BUF_POOL_RMA:
-			rma_buf = (struct rxm_rma_buf *)
-				  ((char *) region->mem_region + i * entry_size);
-			rma_buf->pkt.hdr.op = ofi_op_msg;
-			rma_buf->hdr.state = RXM_RMA;
+		tx_base_buf->hdr.desc = mr_desc;
+		pkt = &tx_base_buf->pkt;
+		type = ofi_ctrl_ack;
+		break;
+	case RXM_BUF_POOL_RMA:
+		rma_buf = buf;
+		rma_buf->pkt.hdr.op = ofi_op_msg;
+		rma_buf->hdr.state = RXM_RMA;
 
-			hdr = &rma_buf->hdr;
-			pkt = &rma_buf->pkt;
-			type = ofi_ctrl_data;
-			break;
-		default:
-			assert(0);
-			hdr = NULL;
-			pkt = NULL;
-			mr_desc = NULL;
-			type = ofi_ctrl_data;
-			break;
-		}
-		rxm_buf_reg_set_common(hdr, pkt, type, mr_desc);
+		rma_buf->hdr.desc = mr_desc;
+		pkt = &rma_buf->pkt;
+		type = ofi_ctrl_data;
+		break;
+	default:
+		assert(0);
+		pkt = NULL;
+		break;
 	}
 
-	return FI_SUCCESS;
+	if (pkt) {
+		pkt->ctrl_hdr.version = RXM_CTRL_VERSION;
+		pkt->hdr.version = OFI_OP_VERSION;
+		pkt->ctrl_hdr.type = type;
+	}
 }
 
 static inline void rxm_buf_close(struct ofi_bufpool_region *region)
@@ -284,6 +269,7 @@ static int rxm_buf_pool_create(struct rxm_ep *rxm_ep,
 		.chunk_cnt	= chunk_count,
 		.alloc_fn	= rxm_buf_reg,
 		.free_fn	= rxm_buf_close,
+		.init_fn	= rxm_buf_init,
 		.context	= pool,
 		.flags		= OFI_BUFPOOL_NO_TRACK,
 	};

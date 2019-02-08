@@ -173,59 +173,53 @@ static struct fi_ops tcpx_cq_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-/* Using this function to preset some values of buffers managed by ofi_bufpool api.
- * Note that the ofi_bufpool uses first sizeof(slist_entry) bytes in every buffer
- * internally for keeping buf list. So don't try to set those values. They won't stick
- */
-static int tcpx_buf_pool_init(struct ofi_bufpool_region *region)
+static void tcpx_buf_pool_init(struct ofi_bufpool_region *region, void *buf)
 {
 	struct tcpx_buf_pool *pool = region->pool->attr.context;
-	struct tcpx_xfer_entry *xfer_entry;
-	int i;
+	struct tcpx_xfer_entry *xfer_entry = buf;
 
-	for (i = 0; i < pool->pool->attr.chunk_cnt; i++) {
-		xfer_entry = (struct tcpx_xfer_entry *)
-			((char *) region->mem_region + i * pool->pool->entry_size);
+	xfer_entry->hdr.base_hdr.version = TCPX_HDR_VERSION;
+	xfer_entry->hdr.base_hdr.op_data = pool->op_type;
 
-		xfer_entry->hdr.base_hdr.version = TCPX_HDR_VERSION;
-		xfer_entry->hdr.base_hdr.op_data = pool->op_type;
-		switch (pool->op_type) {
-		case TCPX_OP_MSG_RECV:
-		case TCPX_OP_MSG_SEND:
-		case TCPX_OP_MSG_RESP:
-			xfer_entry->hdr.base_hdr.op = ofi_op_msg;
-			break;
-		case TCPX_OP_WRITE:
-		case TCPX_OP_REMOTE_WRITE:
-			xfer_entry->hdr.base_hdr.op = ofi_op_write;
-			break;
-		case TCPX_OP_READ_REQ:
-			xfer_entry->hdr.base_hdr.op = ofi_op_read_req;
-			break;
-		case TCPX_OP_READ_RSP:
-			xfer_entry->hdr.base_hdr.op = ofi_op_read_rsp;
-			break;
-		case TCPX_OP_REMOTE_READ:
-			break;
-		default:
-			assert(0);
-			break;
-		}
+	switch (pool->op_type) {
+	case TCPX_OP_MSG_RECV:
+	case TCPX_OP_MSG_SEND:
+	case TCPX_OP_MSG_RESP:
+		xfer_entry->hdr.base_hdr.op = ofi_op_msg;
+		break;
+	case TCPX_OP_WRITE:
+	case TCPX_OP_REMOTE_WRITE:
+		xfer_entry->hdr.base_hdr.op = ofi_op_write;
+		break;
+	case TCPX_OP_READ_REQ:
+		xfer_entry->hdr.base_hdr.op = ofi_op_read_req;
+		break;
+	case TCPX_OP_READ_RSP:
+		xfer_entry->hdr.base_hdr.op = ofi_op_read_rsp;
+		break;
+	case TCPX_OP_REMOTE_READ:
+		break;
+	default:
+		assert(0);
+		break;
 	}
-	return FI_SUCCESS;
 }
 
 static int tcpx_buf_pools_create(struct tcpx_buf_pool *buf_pools)
 {
 	int i, ret;
+	struct ofi_bufpool_attr attr = {
+		.size = sizeof(struct tcpx_xfer_entry),
+		.alignment = 16,
+		.chunk_cnt = 1024,
+		.init_fn = tcpx_buf_pool_init,
+	};
 
 	for (i = 0; i < TCPX_OP_CODE_MAX; i++) {
 		buf_pools[i].op_type = i;
 
-		ret = ofi_bufpool_create_ex(&buf_pools[i].pool,
-					    sizeof(struct tcpx_xfer_entry),
-					    16, 0, 1024, tcpx_buf_pool_init,
-					    NULL, &buf_pools[i]);
+		attr.context = &buf_pools[i];
+		ret = ofi_bufpool_create_attr(&attr, &buf_pools[i].pool);
 		if (ret) {
 			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 				"Unable to create buf pool\n");
