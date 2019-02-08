@@ -137,9 +137,9 @@ static void rxm_buf_reg_set_common(struct rxm_buf *hdr, struct rxm_pkt *pkt,
 	}
 }
 
-static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
+static int rxm_buf_reg(struct ofi_bufpool_region *region)
 {
-	struct rxm_buf_pool *pool = (struct rxm_buf_pool *)pool_ctx;
+	struct rxm_buf_pool *pool = region->pool->attr.context;
 	size_t i, entry_size = pool->pool->entry_size;
 	int ret;
 	void *mr_desc;
@@ -155,19 +155,20 @@ static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 	struct rxm_rma_buf *rma_buf;
 
 	if ((pool->type != RXM_BUF_POOL_TX_INJECT) && pool->rxm_ep->msg_mr_local) {
-		ret = rxm_mr_buf_reg(pool->rxm_ep, addr, len, context);
+		ret = rxm_mr_buf_reg(pool->rxm_ep, region->mem_region, region->size,
+				     &region->context);
 		if (ret)
 			return ret;
-		mr_desc = fi_mr_desc((struct fid_mr *)*context);
+		mr_desc = fi_mr_desc((struct fid_mr *) region->context);
 	} else {
-		*context = mr_desc = NULL;
+		mr_desc = NULL;
 	}
 
 	for (i = 0; i < pool->pool->attr.chunk_cnt; i++) {
 		switch (pool->type) {
 		case RXM_BUF_POOL_RX:
 			rx_buf = (struct rxm_rx_buf *)
-				((char *)addr + i * entry_size);
+				 ((char *) region->mem_region + i * entry_size);
 			rx_buf->ep = pool->rxm_ep;
 
 			hdr = &rx_buf->hdr;
@@ -176,7 +177,7 @@ static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 			break;
 		case RXM_BUF_POOL_TX:
 			tx_eager_buf = (struct rxm_tx_eager_buf *)
-				((char *)addr + i * entry_size);
+				       ((char *) region->mem_region + i * entry_size);
 			tx_eager_buf->hdr.state = RXM_TX;
 
 			hdr = &tx_eager_buf->hdr;
@@ -185,7 +186,7 @@ static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 			break;
 		case RXM_BUF_POOL_TX_INJECT:
 			tx_base_buf = (struct rxm_tx_base_buf *)
-				((char *)addr + i * entry_size);
+				      ((char *) region->mem_region + i * entry_size);
 			tx_base_buf->hdr.state = RXM_INJECT_TX;
 
 			hdr = NULL;
@@ -194,7 +195,7 @@ static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 			break;
 		case RXM_BUF_POOL_TX_SAR:
 			tx_sar_buf = (struct rxm_tx_sar_buf *)
-				((char *)addr + i * entry_size);
+				     ((char *) region->mem_region + i * entry_size);
 			tx_sar_buf->hdr.state = RXM_SAR_TX;
 
 			hdr = &tx_sar_buf->hdr;
@@ -203,7 +204,7 @@ static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 			break;
 		case RXM_BUF_POOL_TX_RNDV:
 			tx_rndv_buf = (struct rxm_tx_rndv_buf *)
-				((char *)addr + i * entry_size);
+				      ((char *) region->mem_region + i * entry_size);
 
 			hdr = &tx_rndv_buf->hdr;
 			pkt = &tx_rndv_buf->pkt;
@@ -211,7 +212,7 @@ static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 			break;
 		case RXM_BUF_POOL_TX_ATOMIC:
 			tx_atomic_buf = (struct rxm_tx_atomic_buf *)
-				((char *)addr + i * entry_size);
+				        ((char *) region->mem_region + i * entry_size);
 
 			hdr = &tx_atomic_buf->hdr;
 			pkt = &tx_atomic_buf->pkt;
@@ -219,7 +220,7 @@ static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 			break;
 		case RXM_BUF_POOL_TX_ACK:
 			tx_base_buf = (struct rxm_tx_base_buf *)
-				((char *)addr + i * entry_size);
+				      ((char *) region->mem_region + i * entry_size);
 			tx_base_buf->pkt.hdr.op = ofi_op_msg;
 
 			hdr = &tx_base_buf->hdr;
@@ -228,7 +229,7 @@ static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 			break;
 		case RXM_BUF_POOL_RMA:
 			rma_buf = (struct rxm_rma_buf *)
-				((char *)addr + i * entry_size);
+				  ((char *) region->mem_region + i * entry_size);
 			rma_buf->pkt.hdr.op = ofi_op_msg;
 			rma_buf->hdr.state = RXM_RMA;
 
@@ -250,15 +251,15 @@ static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 	return FI_SUCCESS;
 }
 
-static inline void rxm_buf_close(void *pool_ctx, void *context)
+static inline void rxm_buf_close(struct ofi_bufpool_region *region)
 {
-	struct rxm_buf_pool *pool = (struct rxm_buf_pool *)pool_ctx;
+	struct rxm_buf_pool *pool = region->pool->attr.context;
 	struct rxm_ep *rxm_ep = pool->rxm_ep;
 
 	if ((rxm_ep->msg_mr_local) && (pool->type != RXM_BUF_POOL_TX_INJECT)) {
 		/* We would get a (fid_mr *) in context but
 		 * it is safe to cast it into (fid *) */
-		fi_close((struct fid *)context);
+		fi_close(region->context);
 	}
 }
 

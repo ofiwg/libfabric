@@ -99,10 +99,7 @@ int ofi_bufpool_grow(struct ofi_bufpool *pool)
 
 	memset(buf_region->mem_region, 0, buf_region->size);
 	if (pool->attr.alloc_fn) {
-		ret = pool->attr.alloc_fn(pool->attr.context,
-					     buf_region->mem_region,
-					     buf_region->size,
-					     &buf_region->context);
+		ret = pool->attr.alloc_fn(buf_region);
 		if (ret)
 			goto err2;
 	}
@@ -132,19 +129,19 @@ int ofi_bufpool_grow(struct ofi_bufpool *pool)
 				buf_ftr->entry.dlist.next = (void *) OFI_MAGIC_64;
 				buf_ftr->entry.dlist.prev = (void *) OFI_MAGIC_64;
 
-				pool->attr.init_fn(pool->attr.context, buf);
+				pool->attr.init_fn(buf_region, buf);
 
 				assert((buf_ftr->entry.dlist.next == (void *) OFI_MAGIC_64) &&
 				       (buf_ftr->entry.dlist.prev == (void *) OFI_MAGIC_64));
 			} else {
 				buf_ftr->entry.slist.next = (void *) OFI_MAGIC_64;
 
-				pool->attr.init_fn(pool->attr.context, buf);
+				pool->attr.init_fn(buf_region, buf);
 
 				assert(buf_ftr->entry.slist.next == (void *) OFI_MAGIC_64);
 			}
 #else
-			pool->attr.init_fn(pool->attr.context, buf);
+			pool->attr.init_fn(buf_region, buf);
 #endif
 		}
 
@@ -167,7 +164,7 @@ int ofi_bufpool_grow(struct ofi_bufpool *pool)
 
 err3:
 	if (pool->attr.free_fn)
-	    pool->attr.free_fn(pool->attr.context, buf_region->context);
+	    pool->attr.free_fn(buf_region);
 err2:
 	ofi_freealign(buf_region->mem_region);
 err1:
@@ -234,7 +231,7 @@ void ofi_bufpool_destroy(struct ofi_bufpool *pool)
 		assert((pool->attr.flags & OFI_BUFPOOL_NO_TRACK) ||
 			(buf_region->use_cnt == 0));
 		if (pool->attr.free_fn)
-			pool->attr.free_fn(pool->attr.context, buf_region->context);
+			pool->attr.free_fn(buf_region);
 
 		if (pool->attr.flags & OFI_BUFPOOL_MMAPPED) {
 			ret = ofi_free_hugepage_buf(buf_region->mem_region,

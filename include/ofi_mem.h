@@ -264,10 +264,11 @@ enum {
 	OFI_BUFPOOL_MMAPPED		= 1 << 3,
 };
 
-typedef int (*ofi_bufpool_alloc_fn)(void *pool_ctx, void *addr, size_t len,
-				    void **context);
-typedef void (*ofi_bufpool_free_fn)(void *pool_ctx, void *context);
-typedef void (*ofi_bufpool_init_fn)(void *pool_ctx, void *buf);
+struct ofi_bufpool_region;
+
+typedef int (*ofi_bufpool_alloc_fn)(struct ofi_bufpool_region *region);
+typedef void (*ofi_bufpool_free_fn)(struct ofi_bufpool_region *region);
+typedef void (*ofi_bufpool_init_fn)(struct ofi_bufpool_region *region, void *buf);
 
 struct ofi_bufpool_attr {
 	size_t 				size;

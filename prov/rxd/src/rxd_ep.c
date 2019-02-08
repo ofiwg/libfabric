@@ -1136,22 +1136,21 @@ out:
 	fastlock_release(&ep->util_ep.lock);
 }
 
-static int rxd_buf_region_alloc_fn(void *pool_ctx, void *addr, size_t len,
-				void **context)
+static int rxd_buf_region_alloc_fn(struct ofi_bufpool_region *region)
 {
-	int ret;
+	struct rxd_domain *domain = region->pool->attr.context;
 	struct fid_mr *mr;
-	struct rxd_domain *domain = pool_ctx;
+	int ret;
 
-	ret = fi_mr_reg(domain->dg_domain, addr, len,
+	ret = fi_mr_reg(domain->dg_domain, region->mem_region, region->size,
 			FI_SEND | FI_RECV, 0, 0, 0, &mr, NULL);
-	*context = mr;
+	region->context = mr;
 	return ret;
 }
 
-static void rxd_buf_region_free_fn(void *pool_ctx, void *context)
+static void rxd_buf_region_free_fn(struct ofi_bufpool_region *region)
 {
-	fi_close((struct fid *) context);
+	fi_close(region->context);
 }
 
 int rxd_ep_init_res(struct rxd_ep *ep, struct fi_info *fi_info)

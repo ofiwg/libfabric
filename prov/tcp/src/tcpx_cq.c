@@ -177,16 +177,15 @@ static struct fi_ops tcpx_cq_fi_ops = {
  * Note that the ofi_bufpool uses first sizeof(slist_entry) bytes in every buffer
  * internally for keeping buf list. So don't try to set those values. They won't stick
  */
-static int tcpx_buf_pool_init(void *pool_ctx, void *addr,
-			      size_t len, void **context)
+static int tcpx_buf_pool_init(struct ofi_bufpool_region *region)
 {
-	struct tcpx_buf_pool *pool = (struct tcpx_buf_pool *)pool_ctx;
+	struct tcpx_buf_pool *pool = region->pool->attr.context;
 	struct tcpx_xfer_entry *xfer_entry;
 	int i;
 
 	for (i = 0; i < pool->pool->attr.chunk_cnt; i++) {
 		xfer_entry = (struct tcpx_xfer_entry *)
-			((char *)addr + i * pool->pool->entry_size);
+			((char *) region->mem_region + i * pool->pool->entry_size);
 
 		xfer_entry->hdr.base_hdr.version = TCPX_HDR_VERSION;
 		xfer_entry->hdr.base_hdr.op_data = pool->op_type;

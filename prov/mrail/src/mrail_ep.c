@@ -594,12 +594,11 @@ static int mrail_getname(fid_t fid, void *addr, size_t *addrlen)
 }
 
 
-static void mrail_tx_buf_init(void *pool_ctx, void *buf)
+static void mrail_tx_buf_init(struct ofi_bufpool_region *region, void *buf)
 {
-	struct mrail_ep *mrail_ep = pool_ctx;
 	struct mrail_tx_buf *tx_buf = buf;
 
-	tx_buf->ep		= mrail_ep;
+	tx_buf->ep		= region->pool->attr.context;
 	tx_buf->hdr.version	= MRAIL_HDR_VERSION;
 }
 
@@ -623,10 +622,7 @@ static int mrail_ep_alloc_bufs(struct mrail_ep *mrail_ep)
 	struct ofi_bufpool_attr attr = {
 		.size		= sizeof(struct mrail_tx_buf),
 		.alignment	= sizeof(void *),
-		.max_cnt	= 0,
 		.chunk_cnt	= 64,
-		.alloc_fn	= NULL,
-		.free_fn	= NULL,
 		.init_fn	= mrail_tx_buf_init,
 		.context	= mrail_ep,
 	};
