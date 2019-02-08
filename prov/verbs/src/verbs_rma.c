@@ -90,6 +90,9 @@ fi_ibv_msg_ep_rma_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 		.wr.rdma.rkey = (uint32_t)msg->rma_iov->key,
 	};
 
+	if (msg->rma_iov_count > ep->info->tx_attr->rma_iov_limit)
+		return -FI_EINVAL;
+
 	if (flags & FI_REMOTE_CQ_DATA) {
 		wr.opcode = IBV_WR_RDMA_WRITE_WITH_IMM;
 		wr.imm_data = htonl((uint32_t)msg->data);
@@ -150,6 +153,9 @@ fi_ibv_msg_ep_rma_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 		.wr.rdma.rkey = (uint32_t)msg->rma_iov->key,
 		.num_sge = msg->iov_count,
 	};
+
+	if (msg->rma_iov_count > ep->info->tx_attr->rma_iov_limit)
+		return -FI_EINVAL;
 
 	fi_ibv_set_sge_iov(wr.sg_list, msg->msg_iov, msg->iov_count, msg->desc);
 
@@ -336,6 +342,9 @@ fi_ibv_msg_xrc_ep_rma_writemsg(struct fid_ep *ep_fid,
 		wr.opcode = IBV_WR_RDMA_WRITE;
 	}
 
+	if (msg->rma_iov_count > ep->base_ep.info->tx_attr->rma_iov_limit)
+		return -FI_EINVAL;
+
 	return fi_ibv_send_msg(&ep->base_ep, &wr, msg, flags);
 }
 
@@ -394,6 +403,9 @@ fi_ibv_msg_xrc_ep_rma_readmsg(struct fid_ep *ep_fid,
 		.wr.rdma.rkey = (uint32_t)msg->rma_iov->key,
 		.num_sge = msg->iov_count,
 	};
+
+	if (msg->rma_iov_count > ep->base_ep.info->tx_attr->rma_iov_limit)
+		return -FI_EINVAL;
 
 	FI_IBV_SET_REMOTE_SRQN(wr, ep->peer_srqn);
 
