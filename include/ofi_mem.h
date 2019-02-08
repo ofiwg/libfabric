@@ -390,7 +390,7 @@ static inline size_t ofi_buf_index(struct ofi_bufpool *pool, void *buf)
 	return ofi_buf_ftr(pool, buf)->index;
 }
 
-static inline void *ofi_buf_index_get(struct ofi_bufpool *pool, size_t index)
+static inline void *ofi_bufpool_get_ibuf(struct ofi_bufpool *pool, size_t index)
 {
 	void *buf;
 

@@ -1032,7 +1032,7 @@ void rxm_buf_release(struct rxm_buf_pool *pool, struct rxm_buf *buf)
 static inline struct rxm_buf *
 rxm_buf_get_by_index(struct rxm_buf_pool *pool, size_t index)
 {
-	return ofi_buf_index_get(pool->pool, index);
+	return ofi_bufpool_get_ibuf(pool->pool, index);
 }
 
 static inline

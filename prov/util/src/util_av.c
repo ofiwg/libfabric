@@ -244,7 +244,7 @@ void *ofi_av_get_addr(struct util_av *av, fi_addr_t fi_addr)
 {
 	struct util_av_entry *entry;
 
-	entry = ofi_buf_index_get(av->av_entry_pool, fi_addr);
+	entry = ofi_bufpool_get_ibuf(av->av_entry_pool, fi_addr);
 	return entry->addr;
 }
 
@@ -311,7 +311,7 @@ int ofi_av_remove_addr(struct util_av *av, fi_addr_t fi_addr)
 {
 	struct util_av_entry *av_entry;
 
-	av_entry = ofi_buf_index_get(av->av_entry_pool, fi_addr);
+	av_entry = ofi_bufpool_get_ibuf(av->av_entry_pool, fi_addr);
 	if (!av_entry)
 		return -FI_ENOENT;
 
