@@ -186,7 +186,7 @@ static int tcpx_buf_pool_init(void *pool_ctx, void *addr,
 
 	for (i = 0; i < pool->pool->attr.chunk_cnt; i++) {
 		xfer_entry = (struct tcpx_xfer_entry *)
-			((char *)addr + i * pool->pool->entry_sz);
+			((char *)addr + i * pool->pool->entry_size);
 
 		xfer_entry->hdr.base_hdr.version = TCPX_HDR_VERSION;
 		xfer_entry->hdr.base_hdr.op_data = pool->op_type;

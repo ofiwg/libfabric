@@ -277,32 +277,34 @@ struct ofi_bufpool_attr {
 	ofi_bufpool_alloc_fn 		alloc_fn;
 	ofi_bufpool_free_fn 		free_fn;
 	ofi_bufpool_init_fn 		init_fn;
-	void 				*ctx;
+	void 				*context;
 	int				flags;
 };
 
 struct ofi_bufpool {
-	size_t 				entry_sz;
-	size_t 				num_allocated;
 	union {
-		struct slist		buffers;
+		struct slist		entries;
 		struct dlist_entry	regions;
-	} list;
-	struct ofi_bufpool_region	**regions_table;
-	size_t				regions_cnt;
+	} free_list;
+
+	size_t 				entry_size;
+	size_t 				entry_cnt;
+
+	struct ofi_bufpool_region	**region_table;
+	size_t				region_cnt;
 	struct ofi_bufpool_attr		attr;
 };
 
 struct ofi_bufpool_region {
-	struct dlist_entry		 entry;
-	struct dlist_entry 		buf_list;
+	struct dlist_entry		entry;
+	struct dlist_entry 		free_list;
 	char 				*mem_region;
 	size_t 				size;
 	size_t				index;
 	void 				*context;
 	struct ofi_bufpool 		*pool;
 #ifndef NDEBUG
-	size_t 				num_used;
+	size_t 				use_cnt;
 #endif
 };
 
@@ -312,7 +314,7 @@ struct ofi_bufpool_ftr {
 		struct dlist_entry	dlist;
 	} entry;
 	struct ofi_bufpool_region	*region;
-	size_t index;
+	size_t 				index;
 };
 
 int ofi_bufpool_create_attr(struct ofi_bufpool_attr *attr,
@@ -354,9 +356,10 @@ static inline void ofi_buf_free(struct ofi_bufpool *pool, void *buf)
 {
 	assert(ofi_buf_ftr(pool, buf)->region);
 	assert(ofi_buf_ftr(pool, buf)->region->pool == pool);
-	assert(ofi_buf_ftr(pool, buf)->region->num_used--);
+	assert(ofi_buf_ftr(pool, buf)->region->use_cnt--);
 	assert(!(pool->attr.flags & OFI_BUFPOOL_INDEXED));
-	slist_insert_head(&ofi_buf_ftr(pool, buf)->entry.slist, &pool->list.buffers);
+	slist_insert_head(&ofi_buf_ftr(pool, buf)->entry.slist,
+			  &pool->free_list.entries);
 }
 
 int ofi_ibuf_is_lower(struct dlist_entry *item, const void *arg);
@@ -368,13 +371,13 @@ static inline void ofi_ibuf_free(struct ofi_bufpool *pool, void *buf)
 
 	assert(pool->attr.flags & OFI_BUFPOOL_INDEXED);
 	buf_ftr = ofi_buf_ftr(pool, buf);
-	assert(buf_ftr->region->num_used--);
+	assert(buf_ftr->region->use_cnt--);
 
-	dlist_insert_order(&buf_ftr->region->buf_list,
+	dlist_insert_order(&buf_ftr->region->free_list,
 			   ofi_ibuf_is_lower, &buf_ftr->entry.dlist);
 
 	if (dlist_empty(&buf_ftr->region->entry)) {
-		dlist_insert_order(&pool->list.regions,
+		dlist_insert_order(&pool->free_list.regions,
 				   ofi_ibufpool_region_is_lower,
 				   &buf_ftr->region->entry);
 	}
@@ -382,7 +385,7 @@ static inline void ofi_ibuf_free(struct ofi_bufpool *pool, void *buf)
 
 static inline size_t ofi_buf_index(struct ofi_bufpool *pool, void *buf)
 {
-	assert(ofi_buf_ftr(pool, buf)->region->num_used);
+	assert(ofi_buf_ftr(pool, buf)->region->use_cnt);
 	return ofi_buf_ftr(pool, buf)->index;
 }
 
@@ -390,10 +393,10 @@ static inline void *ofi_buf_index_get(struct ofi_bufpool *pool, size_t index)
 {
 	void *buf;
 
-	buf = pool->regions_table[(size_t)(index / pool->attr.chunk_cnt)]->
-		mem_region + (index % pool->attr.chunk_cnt) * pool->entry_sz;
+	buf = pool->region_table[(size_t)(index / pool->attr.chunk_cnt)]->
+		mem_region + (index % pool->attr.chunk_cnt) * pool->entry_size;
 
-	assert(ofi_buf_ftr(pool, buf)->region->num_used);
+	assert(ofi_buf_ftr(pool, buf)->region->use_cnt);
 	return buf;
 }
 
@@ -404,12 +407,12 @@ static inline void *ofi_buf_region_ctx(struct ofi_bufpool *pool, void *buf)
 
 static inline int ofi_bufpool_empty(struct ofi_bufpool *pool)
 {
-	return slist_empty(&pool->list.buffers);
+	return slist_empty(&pool->free_list.entries);
 }
 
 static inline int ofi_ibufpool_empty(struct ofi_bufpool *pool)
 {
-	return dlist_empty(&pool->list.regions);
+	return dlist_empty(&pool->free_list.regions);
 }
 
 static inline void *ofi_buf_alloc(struct ofi_bufpool *pool)
@@ -422,9 +425,9 @@ static inline void *ofi_buf_alloc(struct ofi_bufpool *pool)
 			return NULL;
 	}
 
-	slist_remove_head_container(&pool->list.buffers, struct ofi_bufpool_ftr,
-				    buf_ftr, entry.slist);
-	assert(++buf_ftr->region->num_used);
+	slist_remove_head_container(&pool->free_list.entries,
+				struct ofi_bufpool_ftr, buf_ftr, entry.slist);
+	assert(++buf_ftr->region->use_cnt);
 	return ofi_buf_data(pool, buf_ftr);
 }
 
@@ -452,13 +455,13 @@ static inline void *ofi_ibuf_alloc(struct ofi_bufpool *pool)
 			return NULL;
 	}
 
-	buf_region = container_of(pool->list.regions.next,
+	buf_region = container_of(pool->free_list.regions.next,
 				  struct ofi_bufpool_region, entry);
-	dlist_pop_front(&buf_region->buf_list, struct ofi_bufpool_ftr,
+	dlist_pop_front(&buf_region->free_list, struct ofi_bufpool_ftr,
 			buf_ftr, entry.dlist);
-	assert(++buf_ftr->region->num_used);
+	assert(++buf_ftr->region->use_cnt);
 
-	if (dlist_empty(&buf_region->buf_list))
+	if (dlist_empty(&buf_region->free_list))
 		dlist_remove_init(&buf_region->entry);
 	return ofi_buf_data(pool, buf_ftr);
 }

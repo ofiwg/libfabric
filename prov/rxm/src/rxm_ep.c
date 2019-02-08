@@ -140,7 +140,7 @@ static void rxm_buf_reg_set_common(struct rxm_buf *hdr, struct rxm_pkt *pkt,
 static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 {
 	struct rxm_buf_pool *pool = (struct rxm_buf_pool *)pool_ctx;
-	size_t i, entry_sz = pool->pool->entry_sz;
+	size_t i, entry_size = pool->pool->entry_size;
 	int ret;
 	void *mr_desc;
 	uint8_t type;
@@ -167,7 +167,7 @@ static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 		switch (pool->type) {
 		case RXM_BUF_POOL_RX:
 			rx_buf = (struct rxm_rx_buf *)
-				((char *)addr + i * entry_sz);
+				((char *)addr + i * entry_size);
 			rx_buf->ep = pool->rxm_ep;
 
 			hdr = &rx_buf->hdr;
@@ -176,7 +176,7 @@ static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 			break;
 		case RXM_BUF_POOL_TX:
 			tx_eager_buf = (struct rxm_tx_eager_buf *)
-				((char *)addr + i * entry_sz);
+				((char *)addr + i * entry_size);
 			tx_eager_buf->hdr.state = RXM_TX;
 
 			hdr = &tx_eager_buf->hdr;
@@ -185,7 +185,7 @@ static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 			break;
 		case RXM_BUF_POOL_TX_INJECT:
 			tx_base_buf = (struct rxm_tx_base_buf *)
-				((char *)addr + i * entry_sz);
+				((char *)addr + i * entry_size);
 			tx_base_buf->hdr.state = RXM_INJECT_TX;
 
 			hdr = NULL;
@@ -194,7 +194,7 @@ static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 			break;
 		case RXM_BUF_POOL_TX_SAR:
 			tx_sar_buf = (struct rxm_tx_sar_buf *)
-				((char *)addr + i * entry_sz);
+				((char *)addr + i * entry_size);
 			tx_sar_buf->hdr.state = RXM_SAR_TX;
 
 			hdr = &tx_sar_buf->hdr;
@@ -203,7 +203,7 @@ static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 			break;
 		case RXM_BUF_POOL_TX_RNDV:
 			tx_rndv_buf = (struct rxm_tx_rndv_buf *)
-				((char *)addr + i * entry_sz);
+				((char *)addr + i * entry_size);
 
 			hdr = &tx_rndv_buf->hdr;
 			pkt = &tx_rndv_buf->pkt;
@@ -211,7 +211,7 @@ static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 			break;
 		case RXM_BUF_POOL_TX_ATOMIC:
 			tx_atomic_buf = (struct rxm_tx_atomic_buf *)
-				((char *)addr + i * entry_sz);
+				((char *)addr + i * entry_size);
 
 			hdr = &tx_atomic_buf->hdr;
 			pkt = &tx_atomic_buf->pkt;
@@ -219,7 +219,7 @@ static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 			break;
 		case RXM_BUF_POOL_TX_ACK:
 			tx_base_buf = (struct rxm_tx_base_buf *)
-				((char *)addr + i * entry_sz);
+				((char *)addr + i * entry_size);
 			tx_base_buf->pkt.hdr.op = ofi_op_msg;
 
 			hdr = &tx_base_buf->hdr;
@@ -228,7 +228,7 @@ static int rxm_buf_reg(void *pool_ctx, void *addr, size_t len, void **context)
 			break;
 		case RXM_BUF_POOL_RMA:
 			rma_buf = (struct rxm_rma_buf *)
-				((char *)addr + i * entry_sz);
+				((char *)addr + i * entry_size);
 			rma_buf->pkt.hdr.op = ofi_op_msg;
 			rma_buf->hdr.state = RXM_RMA;
 
@@ -283,7 +283,7 @@ static int rxm_buf_pool_create(struct rxm_ep *rxm_ep,
 		.chunk_cnt	= chunk_count,
 		.alloc_fn	= rxm_buf_reg,
 		.free_fn	= rxm_buf_close,
-		.ctx		= pool,
+		.context	= pool,
 		.flags		= OFI_BUFPOOL_NO_TRACK,
 	};
 

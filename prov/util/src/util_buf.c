@@ -54,7 +54,7 @@ int ofi_bufpool_grow(struct ofi_bufpool *pool)
 	int ret;
 	size_t i;
 
-	if (pool->attr.max_cnt && pool->num_allocated >= pool->attr.max_cnt)
+	if (pool->attr.max_cnt && pool->entry_cnt >= pool->attr.max_cnt)
 		return -FI_EINVAL;
 
 	buf_region = calloc(1, sizeof(*buf_region));
@@ -62,7 +62,7 @@ int ofi_bufpool_grow(struct ofi_bufpool *pool)
 		return -FI_ENOSPC;
 
 	buf_region->pool = pool;
-	dlist_init(&buf_region->buf_list);
+	dlist_init(&buf_region->free_list);
 
 	if (pool->attr.flags & OFI_BUFPOOL_MMAPPED) {
 		hp_size = ofi_get_hugepage_size();
@@ -72,7 +72,7 @@ int ofi_bufpool_grow(struct ofi_bufpool *pool)
 		}
 
 		buf_region->size = fi_get_aligned_sz(pool->attr.chunk_cnt *
-						     pool->entry_sz, hp_size);
+						     pool->entry_size, hp_size);
 
 		ret = ofi_alloc_hugepage_buf((void **) &buf_region->mem_region,
 					     buf_region->size);
@@ -81,7 +81,7 @@ int ofi_bufpool_grow(struct ofi_bufpool *pool)
 			       "Huge page allocation failed: %s\n",
 			       fi_strerror(-ret));
 
-			if (pool->num_allocated > 0)
+			if (pool->entry_cnt > 0)
 				goto err1;
 
 			pool->attr.flags &= ~OFI_BUFPOOL_MMAPPED;
@@ -89,7 +89,7 @@ int ofi_bufpool_grow(struct ofi_bufpool *pool)
 	}
 
 	if (!(pool->attr.flags & OFI_BUFPOOL_MMAPPED)) {
-		buf_region->size = pool->attr.chunk_cnt * pool->entry_sz;
+		buf_region->size = pool->attr.chunk_cnt * pool->entry_size;
 
 		ret = ofi_memalign((void **)&buf_region->mem_region,
 				   pool->attr.alignment, buf_region->size);
@@ -99,7 +99,7 @@ int ofi_bufpool_grow(struct ofi_bufpool *pool)
 
 	memset(buf_region->mem_region, 0, buf_region->size);
 	if (pool->attr.alloc_fn) {
-		ret = pool->attr.alloc_fn(pool->attr.ctx,
+		ret = pool->attr.alloc_fn(pool->attr.context,
 					     buf_region->mem_region,
 					     buf_region->size,
 					     &buf_region->context);
@@ -107,23 +107,23 @@ int ofi_bufpool_grow(struct ofi_bufpool *pool)
 			goto err2;
 	}
 
-	if (!(pool->regions_cnt % OFI_BUFPOOL_REGION_CHUNK_CNT)) {
+	if (!(pool->region_cnt % OFI_BUFPOOL_REGION_CHUNK_CNT)) {
 		struct ofi_bufpool_region **new_table;
 
-		new_table = realloc(pool->regions_table,
-				(pool->regions_cnt + OFI_BUFPOOL_REGION_CHUNK_CNT) *
-				sizeof(*pool->regions_table));
+		new_table = realloc(pool->region_table,
+				(pool->region_cnt + OFI_BUFPOOL_REGION_CHUNK_CNT) *
+				sizeof(*pool->region_table));
 		if (!new_table) {
 			ret = -FI_ENOMEM;
 			goto err3;
 		}
-		pool->regions_table = new_table;
+		pool->region_table = new_table;
 	}
-	pool->regions_table[pool->regions_cnt] = buf_region;
-	buf_region->index = pool->regions_cnt++;
+	pool->region_table[pool->region_cnt] = buf_region;
+	buf_region->index = pool->region_cnt++;
 
 	for (i = 0; i < pool->attr.chunk_cnt; i++) {
-		buf = (buf_region->mem_region + i * pool->entry_sz);
+		buf = (buf_region->mem_region + i * pool->entry_size);
 		buf_ftr = ofi_buf_ftr(pool, buf);
 
 		if (pool->attr.init_fn) {
@@ -132,42 +132,42 @@ int ofi_bufpool_grow(struct ofi_bufpool *pool)
 				buf_ftr->entry.dlist.next = (void *) OFI_MAGIC_64;
 				buf_ftr->entry.dlist.prev = (void *) OFI_MAGIC_64;
 
-				pool->attr.init_fn(pool->attr.ctx, buf);
+				pool->attr.init_fn(pool->attr.context, buf);
 
 				assert((buf_ftr->entry.dlist.next == (void *) OFI_MAGIC_64) &&
 				       (buf_ftr->entry.dlist.prev == (void *) OFI_MAGIC_64));
 			} else {
 				buf_ftr->entry.slist.next = (void *) OFI_MAGIC_64;
 
-				pool->attr.init_fn(pool->attr.ctx, buf);
+				pool->attr.init_fn(pool->attr.context, buf);
 
 				assert(buf_ftr->entry.slist.next == (void *) OFI_MAGIC_64);
 			}
 #else
-			pool->attr.init_fn(pool->attr.ctx, buf);
+			pool->attr.init_fn(pool->attr.context, buf);
 #endif
 		}
 
 		buf_ftr->region = buf_region;
-		buf_ftr->index = pool->num_allocated + i;
+		buf_ftr->index = pool->entry_cnt + i;
 		if (pool->attr.flags & OFI_BUFPOOL_INDEXED) {
 			dlist_insert_tail(&buf_ftr->entry.dlist,
-					  &buf_region->buf_list);
+					  &buf_region->free_list);
 		} else {
 			slist_insert_tail(&buf_ftr->entry.slist,
-					  &pool->list.buffers);
+					  &pool->free_list.entries);
 		}
 	}
 
 	if (pool->attr.flags & OFI_BUFPOOL_INDEXED)
-		dlist_insert_tail(&buf_region->entry, &pool->list.regions);
+		dlist_insert_tail(&buf_region->entry, &pool->free_list.regions);
 
-	pool->num_allocated += pool->attr.chunk_cnt;
+	pool->entry_cnt += pool->attr.chunk_cnt;
 	return 0;
 
 err3:
 	if (pool->attr.free_fn)
-	    pool->attr.free_fn(pool->attr.ctx, buf_region->context);
+	    pool->attr.free_fn(pool->attr.context, buf_region->context);
 err2:
 	ofi_freealign(buf_region->mem_region);
 err1:
@@ -188,17 +188,17 @@ int ofi_bufpool_create_attr(struct ofi_bufpool_attr *attr,
 	(*buf_pool)->attr = *attr;
 
 	entry_sz = (attr->size + sizeof(struct ofi_bufpool_ftr));
-	(*buf_pool)->entry_sz = fi_get_aligned_sz(entry_sz, attr->alignment);
+	(*buf_pool)->entry_size = fi_get_aligned_sz(entry_sz, attr->alignment);
 
 	hp_size = ofi_get_hugepage_size();
 
-	if ((*buf_pool)->attr.chunk_cnt * (*buf_pool)->entry_sz >= hp_size)
+	if ((*buf_pool)->attr.chunk_cnt * (*buf_pool)->entry_size >= hp_size)
 		(*buf_pool)->attr.flags |= OFI_BUFPOOL_MMAPPED;
 
 	if ((*buf_pool)->attr.flags & OFI_BUFPOOL_INDEXED)
-		dlist_init(&(*buf_pool)->list.regions);
+		dlist_init(&(*buf_pool)->free_list.regions);
 	else
-		slist_init(&(*buf_pool)->list.buffers);
+		slist_init(&(*buf_pool)->free_list.entries);
 
 	return FI_SUCCESS;
 }
@@ -217,7 +217,7 @@ int ofi_bufpool_create_ex(struct ofi_bufpool **buf_pool,
 		.chunk_cnt	= chunk_cnt,
 		.alloc_fn	= alloc_fn,
 		.free_fn	= free_fn,
-		.ctx		= pool_ctx,
+		.context	= pool_ctx,
 	};
 	return ofi_bufpool_create_attr(&attr, buf_pool);
 }
@@ -228,13 +228,13 @@ void ofi_bufpool_destroy(struct ofi_bufpool *pool)
 	int ret;
 	size_t i;
 
-	for (i = 0; i < pool->regions_cnt; i++) {
-		buf_region = pool->regions_table[i];
+	for (i = 0; i < pool->region_cnt; i++) {
+		buf_region = pool->region_table[i];
 
 		assert((pool->attr.flags & OFI_BUFPOOL_NO_TRACK) ||
-			(buf_region->num_used == 0));
+			(buf_region->use_cnt == 0));
 		if (pool->attr.free_fn)
-			pool->attr.free_fn(pool->attr.ctx, buf_region->context);
+			pool->attr.free_fn(pool->attr.context, buf_region->context);
 
 		if (pool->attr.flags & OFI_BUFPOOL_MMAPPED) {
 			ret = ofi_free_hugepage_buf(buf_region->mem_region,
@@ -251,7 +251,7 @@ void ofi_bufpool_destroy(struct ofi_bufpool *pool)
 
 		free(buf_region);
 	}
-	free(pool->regions_table);
+	free(pool->region_table);
 	free(pool);
 }
 

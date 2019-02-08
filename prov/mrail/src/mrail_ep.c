@@ -628,7 +628,7 @@ static int mrail_ep_alloc_bufs(struct mrail_ep *mrail_ep)
 		.alloc_fn	= NULL,
 		.free_fn	= NULL,
 		.init_fn	= mrail_tx_buf_init,
-		.ctx		= mrail_ep,
+		.context	= mrail_ep,
 	};
 	size_t buf_size, rxq_total_size = 0;
 	struct fi_info *fi;
