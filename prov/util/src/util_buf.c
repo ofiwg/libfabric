@@ -47,32 +47,34 @@ enum {
 
 int ofi_bufpool_grow(struct ofi_bufpool *pool)
 {
-	void *buf;
-	int ret;
-	size_t i;
 	struct ofi_bufpool_region *buf_region;
 	ssize_t hp_size;
 	struct ofi_bufpool_ftr *buf_ftr;
+	void *buf;
+	int ret;
+	size_t i;
 
 	if (pool->attr.max_cnt && pool->num_allocated >= pool->attr.max_cnt)
-		return -1;
+		return -FI_EINVAL;
 
 	buf_region = calloc(1, sizeof(*buf_region));
 	if (!buf_region)
-		return -1;
+		return -FI_ENOSPC;
 
 	buf_region->pool = pool;
 	dlist_init(&buf_region->buf_list);
 
 	if (pool->attr.is_mmap_region) {
 		hp_size = ofi_get_hugepage_size();
-		if (hp_size < 0)
+		if (hp_size < 0) {
+			ret = (int) hp_size;
 			goto err1;
+		}
 
 		buf_region->size = fi_get_aligned_sz(pool->attr.chunk_cnt *
 						     pool->entry_sz, hp_size);
 
-		ret = ofi_alloc_hugepage_buf((void **)&buf_region->mem_region,
+		ret = ofi_alloc_hugepage_buf((void **) &buf_region->mem_region,
 					     buf_region->size);
 		if (ret) {
 			FI_DBG(&core_prov, FI_LOG_CORE,
@@ -106,13 +108,15 @@ int ofi_bufpool_grow(struct ofi_bufpool *pool)
 	}
 
 	if (!(pool->regions_cnt % OFI_BUFPOOL_REGION_CHUNK_CNT)) {
-		struct ofi_bufpool_region **new_table =
-			realloc(pool->regions_table,
-				(pool->regions_cnt +
-				 OFI_BUFPOOL_REGION_CHUNK_CNT) *
+		struct ofi_bufpool_region **new_table;
+
+		new_table = realloc(pool->regions_table,
+				(pool->regions_cnt + OFI_BUFPOOL_REGION_CHUNK_CNT) *
 				sizeof(*pool->regions_table));
-		if (!new_table)
+		if (!new_table) {
+			ret = -FI_ENOMEM;
 			goto err3;
+		}
 		pool->regions_table = new_table;
 	}
 	pool->regions_table[pool->regions_cnt] = buf_region;
@@ -155,13 +159,12 @@ int ofi_bufpool_grow(struct ofi_bufpool *pool)
 		}
 	}
 
-	if (pool->attr.indexing.ordered) {
-		dlist_insert_tail(&buf_region->entry,
-				  &pool->list.regions);
-	}
+	if (pool->attr.indexing.ordered)
+		dlist_insert_tail(&buf_region->entry, &pool->list.regions);
 
 	pool->num_allocated += pool->attr.chunk_cnt;
 	return 0;
+
 err3:
 	if (pool->attr.free_fn)
 	    pool->attr.free_fn(pool->attr.ctx, buf_region->context);
@@ -169,7 +172,7 @@ err2:
 	ofi_freealign(buf_region->mem_region);
 err1:
 	free(buf_region);
-	return -1;
+	return ret;
 }
 
 int ofi_bufpool_create_attr(struct ofi_bufpool_attr *attr,
