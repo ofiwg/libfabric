@@ -251,9 +251,12 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 int tcpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq_fid, void *context);
-void tcpx_cq_report_completion(struct util_cq *cq,
-			       struct tcpx_xfer_entry *xfer_entry,
-			       int err);
+void tcpx_cq_report_success(struct util_cq *cq,
+			    struct tcpx_xfer_entry *xfer_entry);
+void tcpx_cq_report_error(struct util_cq *cq,
+			  struct tcpx_xfer_entry *xfer_entry,
+			  int err);
+
 
 int tcpx_recv_msg_data(struct tcpx_xfer_entry *recv_entry);
 int tcpx_send_msg(struct tcpx_xfer_entry *tx_entry);
