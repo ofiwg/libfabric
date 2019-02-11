@@ -52,8 +52,12 @@ int smr_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	ret = ofi_cq_init(&smr_prov, domain, attr, util_cq, ofi_cq_progress, context);
 	if (ret)
-		return ret;
+		goto free;
 
 	(*cq_fid) = &util_cq->cq_fid;
 	return 0;
+
+free:
+	free(util_cq);
+	return ret;
 }
