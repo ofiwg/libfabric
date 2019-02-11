@@ -6,6 +6,10 @@ if MACOS
 os_excludes = -f ./test_configs/osx.exclude
 endif
 
+if FREEBSD
+os_excludes = -f ./test_configs/freebsd.exclude
+endif
+
 bin_PROGRAMS = \
 	functional/fi_av_xfer \
 	functional/fi_msg \
