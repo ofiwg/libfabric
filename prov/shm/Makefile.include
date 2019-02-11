@@ -5,6 +5,7 @@ _shm_files = \
 	prov/shm/src/smr_domain.c	\
 	prov/shm/src/smr_progress.c	\
 	prov/shm/src/smr_comp.c		\
+	prov/shm/src/smr_cntr.c		\
 	prov/shm/src/smr_msg.c		\
 	prov/shm/src/smr_rma.c		\
 	prov/shm/src/smr_atomic.c	\

@@ -33,7 +33,7 @@
 #include "smr.h"
 
 #define SMR_TX_CAPS (OFI_TX_MSG_CAPS | FI_TAGGED | OFI_TX_RMA_CAPS | FI_ATOMICS)
-#define SMR_RX_CAPS (FI_SOURCE | OFI_RX_MSG_CAPS | FI_TAGGED | \
+#define SMR_RX_CAPS (FI_SOURCE | FI_RMA_EVENT | OFI_RX_MSG_CAPS | FI_TAGGED | \
 		     OFI_RX_RMA_CAPS | FI_ATOMICS)
 
 struct fi_tx_attr smr_tx_attr = {

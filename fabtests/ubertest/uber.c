@@ -181,15 +181,15 @@ static void ft_print_comp_flag(uint64_t bind, uint64_t op)
 
 static void ft_print_comp(struct ft_info *test)
 {
-	if (ft_use_comp_cq(test->comp_type)) {
+	if (ft_use_comp_cq(test->comp_type))
 		printf("comp_queue -- tx ");
-		ft_print_comp_flag(test->tx_cq_bind_flags, test->tx_op_flags);
-		printf(", rx: ");
-		ft_print_comp_flag(test->rx_cq_bind_flags, test->rx_op_flags);
-		printf(", ");
-	}
 	if (ft_use_comp_cntr(test->comp_type))
-		printf("comp_cntr, ");
+		printf("comp_cntr -- tx ");
+
+	ft_print_comp_flag(test->tx_cq_bind_flags, test->tx_op_flags);
+	printf(", rx: ");
+	ft_print_comp_flag(test->rx_cq_bind_flags, test->rx_op_flags);
+	printf(", ");
 } 
 
 static void ft_show_test_info(void)
