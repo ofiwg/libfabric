@@ -132,7 +132,8 @@ static int rxm_buf_reg(struct ofi_bufpool_region *region)
 	if ((pool->type != RXM_BUF_POOL_TX_INJECT) &&
 	    pool->rxm_ep->msg_mr_local) {
 		ret = rxm_mr_buf_reg(pool->rxm_ep, region->mem_region,
-				     region->size, &region->context);
+				     region->pool->region_size,
+				     &region->context);
 	} else {
 		ret = 0;
 	}

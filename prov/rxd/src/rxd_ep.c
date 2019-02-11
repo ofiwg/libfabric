@@ -1142,7 +1142,8 @@ static int rxd_buf_region_alloc_fn(struct ofi_bufpool_region *region)
 	struct fid_mr *mr;
 	int ret;
 
-	ret = fi_mr_reg(domain->dg_domain, region->mem_region, region->size,
+	ret = fi_mr_reg(domain->dg_domain, region->mem_region,
+			region->pool->region_size,
 			FI_SEND | FI_RECV, 0, 0, 0, &mr, NULL);
 	region->context = mr;
 	return ret;

@@ -45,10 +45,31 @@ enum {
 };
 
 
+static void ofi_bufpool_set_region_size(struct ofi_bufpool *pool)
+{
+	ssize_t hp_size;
+
+	if (pool->entry_cnt) {
+		assert(pool->region_size);
+		return;
+	}
+
+	hp_size = ofi_get_hugepage_size();
+	if (pool->attr.chunk_cnt * pool->entry_size >= hp_size) {
+		pool->attr.flags |= OFI_BUFPOOL_MMAPPED;
+		pool->region_size = fi_get_aligned_sz(pool->attr.chunk_cnt *
+						      pool->entry_size,
+						      hp_size);
+		return;
+	}
+
+	pool->attr.flags &= ~OFI_BUFPOOL_MMAPPED;
+	pool->region_size = pool->attr.chunk_cnt * pool->entry_size;
+}
+
 int ofi_bufpool_grow(struct ofi_bufpool *pool)
 {
 	struct ofi_bufpool_region *buf_region;
-	ssize_t hp_size;
 	struct ofi_bufpool_ftr *buf_ftr;
 	void *buf;
 	int ret;
@@ -57,6 +78,7 @@ int ofi_bufpool_grow(struct ofi_bufpool *pool)
 	if (pool->attr.max_cnt && pool->entry_cnt >= pool->attr.max_cnt)
 		return -FI_EINVAL;
 
+	ofi_bufpool_set_region_size(pool);
 	buf_region = calloc(1, sizeof(*buf_region));
 	if (!buf_region)
 		return -FI_ENOSPC;
@@ -65,39 +87,29 @@ int ofi_bufpool_grow(struct ofi_bufpool *pool)
 	dlist_init(&buf_region->free_list);
 
 	if (pool->attr.flags & OFI_BUFPOOL_MMAPPED) {
-		hp_size = ofi_get_hugepage_size();
-		if (hp_size < 0) {
-			ret = (int) hp_size;
-			goto err1;
-		}
-
-		buf_region->size = fi_get_aligned_sz(pool->attr.chunk_cnt *
-						     pool->entry_size, hp_size);
-
 		ret = ofi_alloc_hugepage_buf((void **) &buf_region->mem_region,
-					     buf_region->size);
-		if (ret) {
-			FI_DBG(&core_prov, FI_LOG_CORE,
-			       "Huge page allocation failed: %s\n",
-			       fi_strerror(-ret));
-
-			if (pool->entry_cnt > 0)
-				goto err1;
-
+					     pool->region_size);
+		/* If we can't allocate huge pages, fall back to normal
+		 * allocations if this is the first allocation attempt.
+		 */
+		if (ret && !pool->entry_cnt) {
 			pool->attr.flags &= ~OFI_BUFPOOL_MMAPPED;
+			pool->region_size = pool->attr.chunk_cnt *
+					    pool->entry_size;
+			goto retry;
 		}
+	} else {
+retry:
+		ret = ofi_memalign((void **) &buf_region->mem_region,
+				   pool->attr.alignment, pool->region_size);
+	}
+	if (ret) {
+		FI_DBG(&core_prov, FI_LOG_CORE, "Allocation failed: %s\n",
+		       fi_strerror(-ret));
+		goto err1;
 	}
 
-	if (!(pool->attr.flags & OFI_BUFPOOL_MMAPPED)) {
-		buf_region->size = pool->attr.chunk_cnt * pool->entry_size;
-
-		ret = ofi_memalign((void **)&buf_region->mem_region,
-				   pool->attr.alignment, buf_region->size);
-		if (ret)
-			goto err1;
-	}
-
-	memset(buf_region->mem_region, 0, buf_region->size);
+	memset(buf_region->mem_region, 0, pool->region_size);
 	if (pool->attr.alloc_fn) {
 		ret = pool->attr.alloc_fn(buf_region);
 		if (ret)
@@ -176,7 +188,6 @@ int ofi_bufpool_create_attr(struct ofi_bufpool_attr *attr,
 			      struct ofi_bufpool **buf_pool)
 {
 	size_t entry_sz;
-	ssize_t hp_size;
 
 	(*buf_pool) = calloc(1, sizeof(**buf_pool));
 	if (!*buf_pool)
@@ -186,11 +197,6 @@ int ofi_bufpool_create_attr(struct ofi_bufpool_attr *attr,
 
 	entry_sz = (attr->size + sizeof(struct ofi_bufpool_ftr));
 	(*buf_pool)->entry_size = fi_get_aligned_sz(entry_sz, attr->alignment);
-
-	hp_size = ofi_get_hugepage_size();
-
-	if ((*buf_pool)->attr.chunk_cnt * (*buf_pool)->entry_size >= hp_size)
-		(*buf_pool)->attr.flags |= OFI_BUFPOOL_MMAPPED;
 
 	if ((*buf_pool)->attr.flags & OFI_BUFPOOL_INDEXED)
 		dlist_init(&(*buf_pool)->free_list.regions);
@@ -235,7 +241,7 @@ void ofi_bufpool_destroy(struct ofi_bufpool *pool)
 
 		if (pool->attr.flags & OFI_BUFPOOL_MMAPPED) {
 			ret = ofi_free_hugepage_buf(buf_region->mem_region,
-						    buf_region->size);
+						    pool->region_size);
 			if (ret) {
 				FI_DBG(&core_prov, FI_LOG_CORE,
 				       "Huge page free failed: %s\n",

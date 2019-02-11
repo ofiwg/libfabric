@@ -293,6 +293,7 @@ struct ofi_bufpool {
 
 	struct ofi_bufpool_region	**region_table;
 	size_t				region_cnt;
+	size_t				region_size;
 	struct ofi_bufpool_attr		attr;
 };
 
@@ -300,7 +301,6 @@ struct ofi_bufpool_region {
 	struct dlist_entry		entry;
 	struct dlist_entry 		free_list;
 	char 				*mem_region;
-	size_t 				size;
 	size_t				index;
 	void 				*context;
 	struct ofi_bufpool 		*pool;
