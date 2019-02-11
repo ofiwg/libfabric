@@ -201,9 +201,9 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 		}
 
 		FI_DBG(&rxm_prov, FI_LOG_CQ,
-		       "Repost Multi-Recv entry: "
+		       "Repost Multi-Recv entry: %p "
 		       "consumed len = %zu, remain len = %zu\n",
-		       recv_size, recv_entry->total_len);
+		       recv_entry, recv_size, recv_entry->total_len);
 
 		rxm_iov = recv_entry->rxm_iov;
 		ret = rxm_match_iov(/* prev iovecs */
@@ -997,9 +997,10 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 	if (comp->flags & FI_REMOTE_WRITE)
 		return rxm_handle_remote_write(rxm_ep, comp);
 
+	assert(RXM_GET_PROTO_STATE(comp->op_context) != RXM_INJECT_TX);
+
 	switch (RXM_GET_PROTO_STATE(comp->op_context)) {
 	case RXM_TX:
-	case RXM_INJECT_TX:
 		tx_eager_buf = comp->op_context;
 		assert(comp->flags & FI_SEND);
 		ret = rxm_finish_eager_send(rxm_ep, tx_eager_buf);
@@ -1217,17 +1218,19 @@ static void rxm_cq_read_write_error(struct rxm_ep *rxm_ep)
 
 static inline int rxm_ep_repost_buf(struct rxm_rx_buf *rx_buf)
 {
+	int ret;
+
 	if (rx_buf->ep->srx_ctx)
 		rx_buf->conn = NULL;
 	rx_buf->hdr.state = RXM_RX;
 
-	if (fi_recv(rx_buf->msg_ep, &rx_buf->pkt,
-		    rx_buf->ep->eager_limit + sizeof(struct rxm_pkt),
-		    rx_buf->hdr.desc, FI_ADDR_UNSPEC, rx_buf)) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to repost buf\n");
-		return -FI_EAVAIL;
-	}
-	return FI_SUCCESS;
+	ret = fi_recv(rx_buf->msg_ep, &rx_buf->pkt,
+		      rx_buf->ep->eager_limit + sizeof(struct rxm_pkt),
+		      rx_buf->hdr.desc, FI_ADDR_UNSPEC, rx_buf);
+	if (ret)
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+			"Unable to repost buf: %d\n", ret);
+	return ret;
 }
 
 int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep)

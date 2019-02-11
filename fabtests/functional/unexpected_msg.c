@@ -109,8 +109,9 @@ static int wait_recvs()
 
 	if ((ret == 1) && send_data) {
 		if (entry.data != opts.transfer_size) {
-			printf("ERROR incorrect remote CQ data value. Got %lu, expected %d\n",
-					(unsigned long)entry.data, opts.transfer_size);
+			printf("ERROR incorrect remote CQ data value. Got %lu,"
+			       " expected %zu\n", (unsigned long)entry.data,
+			       opts.transfer_size);
 			return -FI_EOTHER;
 		}
 	}

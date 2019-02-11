@@ -956,8 +956,7 @@ rxm_process_recv_entry(struct rxm_recv_queue *recv_queue,
 		}
 	}
 
-	RXM_DBG_ADDR_TAG(FI_LOG_EP_DATA, "Enqueuing recv", recv_entry->addr,
-			 recv_entry->tag);
+	FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Enqueuing recv\n");
 	dlist_insert_tail(&recv_entry->entry, &recv_queue->recv_list);
 
 	return FI_SUCCESS;

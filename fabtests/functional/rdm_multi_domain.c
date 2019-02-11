@@ -173,7 +173,7 @@ static int init_ep_mr_res(struct test_domain *domain, struct fi_info *info)
 	}
 
 	if (verbose) {
-		printf("fi_mr_reg(fi_domain = %p,buffer = %p,size = %d,",
+		printf("fi_mr_reg(fi_domain = %p,buffer = %p,size = %zu,",
 				domain->dom, domain->buf, opts.transfer_size);
 		printf("memory_region = %p,mr_key %ld)\n",
 				domain->mr, (unsigned long)fi_mr_key(domain->mr));

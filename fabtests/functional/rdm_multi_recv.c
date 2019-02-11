@@ -100,6 +100,16 @@ int wait_for_recv_completion(int num_completions)
 		if (comp.len)
 			num_completions--;
 
+		if (ft_check_opts(FT_OPT_VERIFY_DATA | FT_OPT_ACTIVE)) {
+			if (comp.len != opts.transfer_size) {
+				FT_ERR("comp.len != opts.transfer_size");
+				return -FI_EOTHER;
+			}
+			ret = ft_check_buf(comp.buf, opts.transfer_size);
+			if (ret)
+				return ret;
+		}
+
 		if (comp.flags & FI_MULTI_RECV) {
 			i = (comp.op_context == &ctx_multi_recv[0]) ? 0 : 1;
 
@@ -331,7 +341,7 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "Mh" CS_OPTS INFO_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "Mhv" CS_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
 		default:
 			ft_parseinfo(op, optarg, hints);
@@ -339,6 +349,9 @@ int main(int argc, char **argv)
 			break;
 		case 'M':
 			use_recvmsg = 1;
+			break;
+		case 'v':
+			opts.options |= FT_OPT_VERIFY_DATA;
 			break;
 		case '?':
 		case 'h':

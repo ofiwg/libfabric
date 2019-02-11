@@ -71,7 +71,7 @@ static inline int ft_exit_code(int ret)
 #define ft_sa_family(addr) (((struct sockaddr *)(addr))->sa_family)
 
 struct test_size_param {
-	int size;
+	size_t size;
 	int enable_flags;
 };
 
@@ -136,7 +136,7 @@ enum ft_atomic_opcodes {
 struct ft_opts {
 	int iterations;
 	int warmup_iterations;
-	int transfer_size;
+	size_t transfer_size;
 	int window_size;
 	int av_size;
 	int verbose;
@@ -448,9 +448,9 @@ void eq_readerr(struct fid_eq *eq, const char *eq_str);
 
 int64_t get_elapsed(const struct timespec *b, const struct timespec *a,
 		enum precision p);
-void show_perf(char *name, int tsize, int iters, struct timespec *start,
+void show_perf(char *name, size_t tsize, int iters, struct timespec *start,
 		struct timespec *end, int xfers_per_iter);
-void show_perf_mr(int tsize, int iters, struct timespec *start,
+void show_perf_mr(size_t tsize, int iters, struct timespec *start,
 		struct timespec *end, int xfers_per_iter, int argc, char *argv[]);
 
 int ft_send_recv_greeting(struct fid_ep *ep);

@@ -33,6 +33,7 @@
 #include <inttypes.h>
 #include <math.h>
 
+#include <rdma/fabric.h>
 #include "ofi.h"
 #include <ofi_util.h>
 
@@ -744,9 +745,18 @@ rxm_ep_post_recv(struct rxm_ep *rxm_ep, const struct iovec *iov,
 	if (OFI_UNLIKELY(ret))
 		return ret;
 
-	FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Posting recv with length: %zu "
-	       "tag: 0x%" PRIx64 " ignore: 0x%" PRIx64 "\n",
-	       recv_entry->total_len, recv_entry->tag, recv_entry->ignore);
+	if (recv_queue->type == RXM_RECV_QUEUE_MSG)
+		FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Posting recv with length: %zu "
+		       "addr: 0x%" PRIx64 "\n", recv_entry->total_len,
+		       recv_entry->addr);
+	else
+		FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Posting trecv with "
+		       "length: %zu addr: 0x%" PRIx64 " tag: 0x%" PRIx64
+		       " ignore: 0x%" PRIx64 "\n", recv_entry->total_len,
+		       recv_entry->addr, recv_entry->tag, recv_entry->ignore);
+
+	FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "recv op_flags: %s\n",
+	       fi_tostr(&recv_entry->flags, FI_TYPE_OP_FLAGS));
 	ret = rxm_process_recv_entry(recv_queue, recv_entry);
 
 	return ret;
@@ -767,11 +777,11 @@ rxm_ep_recv_common(struct rxm_ep *rxm_ep, const struct iovec *iov,
 	return ret;
 }
 
-static ssize_t rxm_ep_recv_common_flags(struct rxm_ep *rxm_ep, const struct iovec *iov,
-					void **desc, size_t count, fi_addr_t src_addr,
-					uint64_t tag, uint64_t ignore, void *context,
-					uint64_t flags, uint64_t op_flags,
-					struct rxm_recv_queue *recv_queue)
+static ssize_t
+rxm_ep_recv_common_flags(struct rxm_ep *rxm_ep, const struct iovec *iov,
+			 void **desc, size_t count, fi_addr_t src_addr,
+			 uint64_t tag, uint64_t ignore, void *context,
+			 uint64_t flags, struct rxm_recv_queue *recv_queue)
 {
 	struct rxm_recv_entry *recv_entry;
 	struct fi_recv_context *recv_ctx;
@@ -812,7 +822,7 @@ static ssize_t rxm_ep_recv_common_flags(struct rxm_ep *rxm_ep, const struct iove
 
 	if (!(flags & FI_CLAIM)) {
 		ret = rxm_ep_post_recv(rxm_ep, iov, desc, count, src_addr,
-				       tag, ignore, context, flags | op_flags,
+				       tag, ignore, context, flags,
 				       recv_queue);
 		goto unlock;
 	}
@@ -828,7 +838,7 @@ static ssize_t rxm_ep_recv_common_flags(struct rxm_ep *rxm_ep, const struct iove
 
 claim:
 	ret = rxm_ep_format_rx_res(rxm_ep, iov, desc, count, src_addr,
-				   tag, ignore, context, flags | op_flags,
+				   tag, ignore, context, flags,
 				   recv_queue, &recv_entry);
 	if (OFI_UNLIKELY(ret))
 		goto unlock;
@@ -851,8 +861,9 @@ static ssize_t rxm_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 					     util_ep.ep_fid.fid);
 
 	return rxm_ep_recv_common_flags(rxm_ep, msg->msg_iov, msg->desc, msg->iov_count,
-					msg->addr, 0, 0, msg->context, flags,
-					rxm_ep->util_ep.rx_msg_flags, &rxm_ep->recv_queue);
+					msg->addr, 0, 0, msg->context,
+					flags | rxm_ep->util_ep.rx_msg_flags,
+					&rxm_ep->recv_queue);
 }
 
 static ssize_t rxm_ep_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
@@ -1727,7 +1738,7 @@ static ssize_t rxm_ep_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged
 
 	return rxm_ep_recv_common_flags(rxm_ep, msg->msg_iov, msg->desc, msg->iov_count,
 					msg->addr, msg->tag, msg->ignore, msg->context,
-					flags, rxm_ep->util_ep.rx_msg_flags,
+					flags | rxm_ep->util_ep.rx_msg_flags,
 					&rxm_ep->trecv_queue);
 }
 

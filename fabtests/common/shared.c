@@ -2509,7 +2509,7 @@ int64_t get_elapsed(const struct timespec *b, const struct timespec *a,
 	return elapsed / p;
 }
 
-void show_perf(char *name, int tsize, int iters, struct timespec *start,
+void show_perf(char *name, size_t tsize, int iters, struct timespec *start,
 		struct timespec *end, int xfers_per_iter)
 {
 	static int header = 1;
@@ -2550,7 +2550,7 @@ void show_perf(char *name, int tsize, int iters, struct timespec *start,
 		usec_per_xfer, 1.0/usec_per_xfer);
 }
 
-void show_perf_mr(int tsize, int iters, struct timespec *start,
+void show_perf_mr(size_t tsize, int iters, struct timespec *start,
 		  struct timespec *end, int xfers_per_iter, int argc, char *argv[])
 {
 	static int header = 1;
@@ -2572,7 +2572,7 @@ void show_perf_mr(int tsize, int iters, struct timespec *start,
 	usec_per_xfer = ((float)elapsed / iters / xfers_per_iter);
 
 	printf("- { ");
-	printf("xfer_size: %d, ", tsize);
+	printf("xfer_size: %zu, ", tsize);
 	printf("iterations: %d, ", iters);
 	printf("total: %lld, ", total);
 	printf("time: %f, ", elapsed / 1000000.0);
