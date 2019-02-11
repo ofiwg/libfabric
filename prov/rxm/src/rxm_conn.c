@@ -44,7 +44,7 @@ static void rxm_conn_close(struct rxm_cmap_handle *handle);
 static void rxm_conn_save(struct rxm_cmap_handle *handle);
 static int
 rxm_conn_connect(struct util_ep *util_ep, struct rxm_cmap_handle *handle,
-		 const void *addr, size_t addrlen);
+		 const void *addr);
 static int rxm_conn_signal(struct util_ep *util_ep, void *context,
 			   enum rxm_cmap_signal signal);
 static void
@@ -609,8 +609,7 @@ static int rxm_cmap_handle_connect(struct rxm_cmap *cmap, fi_addr_t fi_addr,
 		return FI_SUCCESS;
 	case RXM_CMAP_IDLE:
 		ret = rxm_conn_connect(cmap->ep, handle,
-				       ofi_av_get_addr(cmap->av, fi_addr),
-				       cmap->av->addrlen);
+				       ofi_av_get_addr(cmap->av, fi_addr));
 		if (ret) {
 			rxm_cmap_del_handle(handle);
 			return ret;
@@ -1409,9 +1408,8 @@ static int rxm_prepare_cm_data(struct fid_pep *pep, struct rxm_cmap_handle *hand
 
 static int
 rxm_conn_connect(struct util_ep *util_ep, struct rxm_cmap_handle *handle,
-		 const void *addr, size_t addrlen)
+		 const void *addr)
 {
-	struct fi_info *msg_info;
 	int ret;
 	struct rxm_ep *rxm_ep =
 		container_of(util_ep, struct rxm_ep, util_ep);
@@ -1428,46 +1426,38 @@ rxm_conn_connect(struct util_ep *util_ep, struct rxm_cmap_handle *handle,
 	};
 
 	free(rxm_ep->msg_info->dest_addr);
-	rxm_ep->msg_info->dest_addrlen = addrlen;
+	rxm_ep->msg_info->dest_addrlen = rxm_ep->msg_info->src_addrlen;
 
 	rxm_ep->msg_info->dest_addr = mem_dup(addr, rxm_ep->msg_info->dest_addrlen);
 	if (!rxm_ep->msg_info->dest_addr)
 		return -FI_ENOMEM;
 
-	ret = fi_getinfo(rxm_ep->util_ep.domain->fabric->fabric_fid.api_version,
-			 NULL, NULL, 0, rxm_ep->msg_info, &msg_info);
+	ret = rxm_msg_ep_open(rxm_ep, rxm_ep->msg_info, rxm_conn, &rxm_conn->handle);
 	if (ret)
 		return ret;
-
-	ret = rxm_msg_ep_open(rxm_ep, msg_info, rxm_conn, &rxm_conn->handle);
-	if (ret)
-		goto err1;
 
 	/* We have to send passive endpoint's address to the server since the
 	 * address from which connection request would be sent would have a
 	 * different port. */
 	ret = rxm_prepare_cm_data(rxm_ep->msg_pep, &rxm_conn->handle, &cm_data);
 	if (ret)
-		goto err2;
+		goto err;
 
-	ret = fi_connect(rxm_conn->msg_ep, msg_info->dest_addr,
+	ret = fi_connect(rxm_conn->msg_ep, rxm_ep->msg_info->dest_addr,
 			 &cm_data, sizeof(cm_data));
 	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to connect msg_ep\n");
-		goto err2;
+		goto err;
 	}
 
 	ret = rxm_conn_res_alloc(rxm_ep, rxm_conn);
 	if (ret)
-		goto err2;
+		goto err;
 
-	fi_freeinfo(msg_info);
 	return 0;
-err2:
+err:
 	fi_close(&rxm_conn->msg_ep->fid);
 	rxm_conn->msg_ep = NULL;
-err1:
-	fi_freeinfo(msg_info);
 	return ret;
 }
 
