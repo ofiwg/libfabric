@@ -507,16 +507,13 @@ int fi_ibv_domain_xrc_init(struct fi_ibv_domain *domain)
 	}
 
 	fastlock_init(&domain->xrc.ini_mgmt_lock);
-	domain->xrc.ini_conn_rbmap = calloc(1,
-			sizeof(*domain->xrc.ini_conn_rbmap));
 
+	domain->xrc.ini_conn_rbmap = ofi_rbmap_create(fi_ibv_ini_conn_compare);
 	if (!domain->xrc.ini_conn_rbmap) {
 		ret = -ENOMEM;
 		VERBS_INFO_ERRNO(FI_LOG_DOMAIN, "XRC INI QP RB Tree", -ret);
 		goto rbmap_err;
 	}
-	domain->xrc.ini_conn_rbmap->compare = &fi_ibv_ini_conn_compare;
-	ofi_rbmap_init(domain->xrc.ini_conn_rbmap);
 
 	domain->use_xrc = 1;
 	return FI_SUCCESS;
@@ -557,7 +554,7 @@ int fi_ibv_domain_xrc_cleanup(struct fi_ibv_domain *domain)
 		domain->xrc.xrcd_fd = -1;
 	}
 
-	ofi_rbmap_cleanup(domain->xrc.ini_conn_rbmap);
+	ofi_rbmap_destroy(domain->xrc.ini_conn_rbmap);
 	fastlock_destroy(&domain->xrc.ini_mgmt_lock);
 #endif /* VERBS_HAVE_XRC */
 	return 0;

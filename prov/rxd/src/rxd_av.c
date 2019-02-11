@@ -334,6 +334,7 @@ static int rxd_av_close(struct fid *fid)
 	if (ret)
 		return ret;
 
+	ofi_rbmap_cleanup(&av->rbmap);
 	ret = ofi_av_close(&av->util_av);
 	if (ret)
 		return ret;
@@ -396,8 +397,7 @@ int rxd_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	if (ret)
 		goto err1;
 
-	av->rbmap.compare = &rxd_tree_compare;
-	ofi_rbmap_init(&av->rbmap);
+	ofi_rbmap_init(&av->rbmap, rxd_tree_compare);
 	for (i = 0; i < attr->count; av->fi_addr_table[i++] = FI_ADDR_UNSPEC)
 		;
 	for (i = 0; i < rxd_env.max_peers; i++) {
