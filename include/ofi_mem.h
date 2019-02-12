@@ -107,9 +107,9 @@ do {								\
 
 static inline void* freestack_pop_impl(void *fs, void *fs_next)
 {
-	struct {
+	struct _freestack {
 		FREESTACK_HEADER
-	} *freestack = fs;
+	} *freestack = (struct _freestack *)fs;
 	assert(!freestack_isempty(freestack));
 	freestack->next = *((void **)fs_next);
 	freestack_init_next(fs_next);
@@ -150,7 +150,7 @@ name ## _create(size_t size, name ## _entry_init_func init,	\
 		void *arg)					\
 {								\
 	struct name *fs;					\
-	fs = calloc(1, sizeof(*fs) +				\
+	fs = (struct name*) calloc(1, sizeof(*fs) +		\
 		       sizeof(struct name ## _entry) *		\
 		       (roundup_power_of_two(size)));		\
 	if (fs)							\
@@ -197,9 +197,9 @@ static inline void* smr_freestack_pop_impl(void *fs, void *next)
 {
 	void *local;
 
-	struct {
+	struct _freestack {
 		SMR_FREESTACK_HEADER
-	} *freestack = fs;
+	} *freestack = (struct _freestack*) fs;
 	assert(next != NULL);
 
 	local = (char **) fs + ((char **) next -
@@ -233,7 +233,7 @@ static inline void name ## _init(struct name *fs, size_t size)	\
 static inline struct name * name ## _create(size_t size)	\
 {								\
 	struct name *fs;					\
-	fs = calloc(1, sizeof(*fs) + sizeof(entrytype) *	\
+	fs = (struct name*) calloc(1, sizeof(*fs) + sizeof(entrytype) *	\
 		    (roundup_power_of_two(size)));		\
 	if (fs)							\
 		name ##_init(fs, roundup_power_of_two(size));	\

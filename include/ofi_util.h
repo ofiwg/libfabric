@@ -67,6 +67,10 @@
 #include "rbtree.h"
 #include "uthash.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define UTIL_FLAG_ERROR		(1ULL << 60)
 #define UTIL_FLAG_OVERFLOW	(1ULL << 61)
 
@@ -363,7 +367,7 @@ struct util_wait {
 
 	enum fi_wait_obj	wait_obj;
 	fi_wait_signal_func	signal;
-	fi_wait_try_func	try;
+	fi_wait_try_func	wait_try;
 };
 
 int fi_wait_init(struct util_fabric *fabric, struct fi_wait_attr *attr,
@@ -383,7 +387,7 @@ typedef int (*ofi_wait_fd_try_func)(void *arg);
 struct ofi_wait_fd_entry {
 	struct dlist_entry	entry;
 	int 			fd;
-	ofi_wait_fd_try_func	try;
+	ofi_wait_fd_try_func	wait_try;
 	void			*arg;
 	ofi_atomic32_t		ref;
 };
@@ -391,7 +395,7 @@ struct ofi_wait_fd_entry {
 int ofi_wait_fd_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 		struct fid_wait **waitset);
 int ofi_wait_fd_add(struct util_wait *wait, int fd, uint32_t events,
-		    ofi_wait_fd_try_func try, void *arg, void *context);
+		    ofi_wait_fd_try_func wait_try, void *arg, void *context);
 int ofi_wait_fd_del(struct util_wait *wait, int fd);
 
 /*
@@ -917,5 +921,9 @@ int ofi_ns_add_local_name(struct util_ns *ns, void *service, void *name);
 int ofi_ns_del_local_name(struct util_ns *ns, void *service, void *name);
 void *ofi_ns_resolve_name(struct util_ns *ns, const char *server,
 			  void *service);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* _OFI_UTIL_H_ */
