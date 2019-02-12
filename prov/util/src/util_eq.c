@@ -176,7 +176,7 @@ ssize_t ofi_eq_sread(struct fid_eq *eq_fid, uint32_t *event, void *buf,
 const char *ofi_eq_strerror(struct fid_eq *eq_fid, int prov_errno,
 			    const void *err_data, char *buf, size_t len)
 {
-	return (buf && len) ? strncpy(buf, strerror(prov_errno), len) :
+	return (buf && len) ? strncpy(buf, fi_strerror(prov_errno), len) :
 			      fi_strerror(prov_errno);
 }
 
