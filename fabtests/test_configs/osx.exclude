@@ -2,4 +2,3 @@
 
 # Exclude msg_epoll test as OSX doesn't have epoll system call
 msg_epoll
-msg_sockets
