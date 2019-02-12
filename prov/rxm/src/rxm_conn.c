@@ -1203,6 +1203,7 @@ rxm_conn_handle_event(struct rxm_ep *rxm_ep, struct rxm_msg_eq_entry *entry)
 		fi_freeinfo(entry->cm_entry.info);
 		break;
 	case FI_CONNECTED:
+		assert(entry->cm_entry.fid->context);
 		FI_DBG(&rxm_prov, FI_LOG_FABRIC,
 		       "Connection successful\n");
 		rxm_ep->cmap->acquire(&rxm_ep->cmap->lock);
