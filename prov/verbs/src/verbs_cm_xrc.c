@@ -270,6 +270,8 @@ void fi_ibv_ep_ini_conn_rejected(struct fi_ibv_xrc_ep *ep)
 	fastlock_acquire(&domain->xrc.ini_mgmt_lock);
 	fi_ibv_log_ep_conn(ep, "INI Connection Rejected");
 
+	if (ep->ini_conn->state == FI_IBV_INI_QP_CONNECTING)
+		ep->ini_conn->state = FI_IBV_INI_QP_UNCONNECTED;
 	fi_ibv_put_shared_ini_conn(ep);
 	fastlock_release(&domain->xrc.ini_mgmt_lock);
 }
