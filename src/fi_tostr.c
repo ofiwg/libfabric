@@ -423,6 +423,7 @@ static void ofi_tostr_mr_mode(char *buf, int mr_mode)
 	IFFLAGSTR(mr_mode, FI_MR_PROV_KEY);
 	IFFLAGSTR(mr_mode, FI_MR_MMU_NOTIFY);
 	IFFLAGSTR(mr_mode, FI_MR_RMA_EVENT);
+	IFFLAGSTR(mr_mode, FI_MR_ENDPOINT);
 
 	ofi_remove_comma(buf);
 }
