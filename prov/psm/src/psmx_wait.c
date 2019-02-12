@@ -176,7 +176,7 @@ int psmx_wait_trywait(struct fid_fabric *fabric, struct fid **fids, int count)
 				return -FI_EINVAL;
 		}
 
-		ret = wait->try(wait);
+		ret = wait->wait_try(wait);
 		if (ret)
 			return ret;
 	}
