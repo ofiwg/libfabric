@@ -186,7 +186,7 @@ static int mrail_process_ooo_recvs(struct mrail_ep *mrail_ep,
 		}
 
 		ofi_ep_lock_acquire(&mrail_ep->util_ep);
-		util_buf_release(mrail_ep->ooo_recv_pool, ooo_recv);
+		ofi_buf_free(mrail_ep->ooo_recv_pool, ooo_recv);
 		ooo_recv = mrail_get_next_recv(peer_info);
 	}
 	ofi_ep_lock_release(&mrail_ep->util_ep);
@@ -212,7 +212,7 @@ static void mrail_save_ooo_recv(struct mrail_ep *mrail_ep,
 	struct slist *queue = &peer_info->ooo_recv_queue;
 	struct mrail_ooo_recv *ooo_recv;
 
-	ooo_recv = util_buf_alloc(mrail_ep->ooo_recv_pool);
+	ooo_recv = ofi_buf_alloc(mrail_ep->ooo_recv_pool);
 	if (!ooo_recv) {
 		FI_WARN(&mrail_prov, FI_LOG_CQ, "Cannot allocate ooo_recv\n");
 		assert(0);
@@ -408,7 +408,7 @@ void mrail_poll_cq(struct util_cq *cq)
 				}
 			}
 			ofi_ep_lock_acquire(&tx_buf->ep->util_ep);
-			util_buf_release(tx_buf->ep->tx_buf_pool, tx_buf);
+			ofi_buf_free(tx_buf->ep->tx_buf_pool, tx_buf);
 			ofi_ep_lock_release(&tx_buf->ep->util_ep);
 		} else {
 			/* We currently cannot support FI_REMOTE_READ and
@@ -426,7 +426,7 @@ void mrail_poll_cq(struct util_cq *cq)
 
 err2:
 	ofi_ep_lock_acquire(&tx_buf->ep->util_ep);
-	util_buf_release(tx_buf->ep->tx_buf_pool, tx_buf);
+	ofi_buf_free(tx_buf->ep->tx_buf_pool, tx_buf);
 	ofi_ep_lock_release(&tx_buf->ep->util_ep);
 err1:
 	// TODO write error to cq

@@ -163,7 +163,7 @@ struct tcpx_rx_detect {
 struct tcpx_rx_ctx {
 	struct fid_ep		rx_fid;
 	struct slist		rx_queue;
-	struct util_buf_pool	*buf_pool;
+	struct ofi_bufpool	*buf_pool;
 	fastlock_t		lock;
 };
 
@@ -224,7 +224,7 @@ struct tcpx_domain {
 };
 
 struct tcpx_buf_pool {
-	struct util_buf_pool	*pool;
+	struct ofi_bufpool	*pool;
 	enum tcpx_xfer_op_codes	op_type;
 };
 

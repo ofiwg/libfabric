@@ -938,10 +938,10 @@ static struct rxd_x_entry *rxd_get_data_x_entry(struct rxd_ep *ep,
 			struct rxd_data_pkt *data_pkt)
 {
 	if (data_pkt->base_hdr.type == RXD_DATA)
-		return util_buf_get_by_index(ep->rx_entry_pool,
+		return ofi_bufpool_get_ibuf(ep->rx_entry_pool,
 			     ep->peers[data_pkt->base_hdr.peer].curr_rx_id);
 
-	return util_buf_get_by_index(ep->tx_entry_pool, data_pkt->ext_hdr.tx_id);
+	return ofi_bufpool_get_ibuf(ep->tx_entry_pool, data_pkt->ext_hdr.tx_id);
 }
 
 static void rxd_progress_buf_pkts(struct rxd_ep *ep, fi_addr_t peer)

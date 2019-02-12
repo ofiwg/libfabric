@@ -189,12 +189,12 @@ struct rxd_ep {
 	int dg_cq_fd;
 	size_t pending_cnt;
 
-	struct util_buf_pool *tx_pkt_pool;
-	struct util_buf_pool *rx_pkt_pool;
+	struct ofi_bufpool *tx_pkt_pool;
+	struct ofi_bufpool *rx_pkt_pool;
 	struct slist rx_pkt_list;
 
-	struct util_buf_pool *tx_entry_pool;
-	struct util_buf_pool *rx_entry_pool;
+	struct ofi_bufpool *tx_entry_pool;
+	struct ofi_bufpool *rx_entry_pool;
 
 	struct dlist_entry unexp_list;
 	struct dlist_entry unexp_tag_list;

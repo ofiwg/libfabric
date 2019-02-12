@@ -43,7 +43,7 @@ static int mlx_domain_close(fid_t fid)
 	ucp_cleanup(domain->context);
 	status = ofi_domain_close( &(domain->u_domain));
 	if (!status) {
-		util_buf_pool_destroy(domain->fast_path_pool);
+		ofi_bufpool_destroy(domain->fast_path_pool);
 		free(domain);
 	}
 	return status;
@@ -116,10 +116,9 @@ int mlx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	}
 	fastlock_init(&(domain->fpp_lock));
 
-	ofi_status = util_buf_pool_create(
-			&domain->fast_path_pool,
-			sizeof(struct mlx_request),
-			16, 0, 1024 );
+	ofi_status = ofi_bufpool_create(&domain->fast_path_pool,
+					sizeof(struct mlx_request),
+					16, 0, 1024);
 	if (ofi_status)
 		goto cleanup_mlx;
 

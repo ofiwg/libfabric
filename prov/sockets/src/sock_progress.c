@@ -160,14 +160,14 @@ static void sock_pe_release_entry(struct sock_pe *pe,
 		pe_entry->conn->rx_pe_entry = NULL;
 
 	if (pe_entry->type == SOCK_PE_RX && pe_entry->pe.rx.atomic_cmp) {
-		util_buf_release(pe->atomic_rx_pool, pe_entry->pe.rx.atomic_cmp);
-		util_buf_release(pe->atomic_rx_pool, pe_entry->pe.rx.atomic_src);
+		ofi_buf_free(pe->atomic_rx_pool, pe_entry->pe.rx.atomic_cmp);
+		ofi_buf_free(pe->atomic_rx_pool, pe_entry->pe.rx.atomic_src);
 	}
 
 	if (pe_entry->is_pool_entry) {
 		ofi_rbfree(&pe_entry->comm_buf);
 		dlist_remove(&pe_entry->entry);
-		util_buf_release(pe->pe_rx_pool, pe_entry);
+		ofi_buf_free(pe->pe_rx_pool, pe_entry);
 		return;
 	}
 
@@ -205,7 +205,7 @@ static struct sock_pe_entry *sock_pe_acquire_entry(struct sock_pe *pe)
 	struct sock_pe_entry *pe_entry;
 
 	if (dlist_empty(&pe->free_list)) {
-		pe_entry = util_buf_alloc(pe->pe_rx_pool);
+		pe_entry = ofi_buf_alloc(pe->pe_rx_pool);
 		SOCK_LOG_DBG("Getting rx pool entry\n");
 		if (pe_entry) {
 			memset(pe_entry, 0, sizeof(*pe_entry));
@@ -885,8 +885,8 @@ static int sock_pe_recv_atomic_hdrs(struct sock_pe *pe,
 	int i;
 
 	if (!pe_entry->pe.rx.atomic_cmp) {
-		pe_entry->pe.rx.atomic_cmp = util_buf_alloc(pe->atomic_rx_pool);
-		pe_entry->pe.rx.atomic_src = util_buf_alloc(pe->atomic_rx_pool);
+		pe_entry->pe.rx.atomic_cmp = ofi_buf_alloc(pe->atomic_rx_pool);
+		pe_entry->pe.rx.atomic_src = ofi_buf_alloc(pe->atomic_rx_pool);
 		if (!pe_entry->pe.rx.atomic_cmp || !pe_entry->pe.rx.atomic_src)
 			return -FI_ENOMEM;
 	}
@@ -2698,17 +2698,15 @@ struct sock_pe *sock_pe_init(struct sock_domain *domain)
 	pe->domain = domain;
 
 	
-	ret = util_buf_pool_create(&pe->pe_rx_pool,
-				   sizeof(struct sock_pe_entry),
-				   16, 0, 1024);
+	ret = ofi_bufpool_create(&pe->pe_rx_pool,
+				 sizeof(struct sock_pe_entry), 16, 0, 1024);
 	if (ret) {
 		SOCK_LOG_ERROR("failed to create buffer pool\n");
 		goto err1;
 	}
 
-	ret = util_buf_pool_create(&pe->atomic_rx_pool,
-				   SOCK_EP_MAX_ATOMIC_SZ,
-				   16, 0, 32);
+	ret = ofi_bufpool_create(&pe->atomic_rx_pool,
+				 SOCK_EP_MAX_ATOMIC_SZ, 16, 0, 32);
 	if (ret) {
 		SOCK_LOG_ERROR("failed to create atomic rx buffer pool\n");
 		goto err2;
@@ -2745,9 +2743,9 @@ err5:
 err4:
 	fi_epoll_close(pe->epoll_set);
 err3:
-	util_buf_pool_destroy(pe->atomic_rx_pool);
+	ofi_bufpool_destroy(pe->atomic_rx_pool);
 err2:
-	util_buf_pool_destroy(pe->pe_rx_pool);
+	ofi_bufpool_destroy(pe->pe_rx_pool);
 err1:
 	fastlock_destroy(&pe->lock);
 	free(pe);
@@ -2764,11 +2762,11 @@ static void sock_pe_free_util_pool(struct sock_pe *pe)
 		pe_entry = container_of(entry, struct sock_pe_entry, entry);
 		ofi_rbfree(&pe_entry->comm_buf);
 		dlist_remove(&pe_entry->entry);
-		util_buf_release(pe->pe_rx_pool, pe_entry);
+		ofi_buf_free(pe->pe_rx_pool, pe_entry);
 	}
 
-	util_buf_pool_destroy(pe->pe_rx_pool);
-	util_buf_pool_destroy(pe->atomic_rx_pool);
+	ofi_bufpool_destroy(pe->pe_rx_pool);
+	ofi_bufpool_destroy(pe->atomic_rx_pool);
 }
 
 void sock_pe_finalize(struct sock_pe *pe)

@@ -865,8 +865,8 @@ struct sock_pe {
 	int signal_fds[2];
 	uint64_t waittime;
 
-	struct util_buf_pool *pe_rx_pool;
-	struct util_buf_pool *atomic_rx_pool;
+	struct ofi_bufpool *pe_rx_pool;
+	struct ofi_bufpool *atomic_rx_pool;
 	struct dlist_entry free_list;
 	struct dlist_entry busy_list;
 	struct dlist_entry pool_list;

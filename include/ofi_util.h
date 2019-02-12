@@ -646,7 +646,7 @@ struct util_av {
 	const struct fi_provider *prov;
 
 	struct util_av_entry	*hash;
-	struct util_buf_pool	*av_entry_pool;
+	struct ofi_bufpool	*av_entry_pool;
 
 	void			*context;
 	uint64_t		flags;

@@ -105,7 +105,7 @@ struct mlx_domain {
 	struct util_domain u_domain;
 	ucp_context_h context;
 
-	struct util_buf_pool *fast_path_pool;
+	struct ofi_bufpool *fast_path_pool;
 	fastlock_t fpp_lock;
 };
 

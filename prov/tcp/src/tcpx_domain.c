@@ -48,10 +48,10 @@ static int tcpx_srx_ctx_close(struct fid *fid)
 	while (!slist_empty(&srx_ctx->rx_queue)) {
 		entry = slist_remove_head(&srx_ctx->rx_queue);
 		xfer_entry = container_of(entry, struct tcpx_xfer_entry, entry);
-		util_buf_release(srx_ctx->buf_pool, xfer_entry);
+		ofi_buf_free(srx_ctx->buf_pool, xfer_entry);
 	}
 
-	util_buf_pool_destroy(srx_ctx->buf_pool);
+	ofi_bufpool_destroy(srx_ctx->buf_pool);
 	fastlock_destroy(&srx_ctx->lock);
 	free(srx_ctx);
 	return FI_SUCCESS;
@@ -86,9 +86,8 @@ static int tcpx_srx_ctx(struct fid_domain *domain, struct fi_rx_attr *attr,
 	if (ret)
 		goto err1;
 
-	ret = util_buf_pool_create(&srx_ctx->buf_pool,
-				   sizeof(struct tcpx_xfer_entry),
-				   16, 0, 1024);
+	ret = ofi_bufpool_create(&srx_ctx->buf_pool,
+				 sizeof(struct tcpx_xfer_entry), 16, 0, 1024);
 	if (ret)
 		goto err2;
 

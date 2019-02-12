@@ -50,9 +50,10 @@
 #include <rdma/fi_errno.h>
 
 
-void ofi_rbmap_init(struct ofi_rbmap *map)
+void ofi_rbmap_init(struct ofi_rbmap *map,
+		int (*compare)(struct ofi_rbmap *map, void *key, void *data))
 {
-	assert(map->compare);
+	map->compare = compare;
 
 	map->root = &map->sentinel;
 	map->sentinel.left = &map->sentinel;
@@ -60,6 +61,17 @@ void ofi_rbmap_init(struct ofi_rbmap *map)
 	map->sentinel.parent = NULL;
 	map->sentinel.color = BLACK;
 	map->sentinel.data = NULL;
+}
+
+struct ofi_rbmap *
+ofi_rbmap_create(int (*compare)(struct ofi_rbmap *map, void *key, void *data))
+{
+	struct ofi_rbmap *map;
+
+	map = calloc(1, sizeof *map);
+	if (map)
+		ofi_rbmap_init(map, compare);
+	return map;
 }
 
 static void ofi_delete_tree(struct ofi_rbmap *map, struct ofi_rbnode *node)
@@ -75,6 +87,11 @@ static void ofi_delete_tree(struct ofi_rbmap *map, struct ofi_rbnode *node)
 void ofi_rbmap_cleanup(struct ofi_rbmap *map)
 {
 	ofi_delete_tree(map, map->root);
+}
+
+void ofi_rbmap_destroy(struct ofi_rbmap *map)
+{
+	ofi_rbmap_cleanup(map);
 	free(map);
 }
 

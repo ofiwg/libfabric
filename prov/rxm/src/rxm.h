@@ -622,7 +622,7 @@ struct rxm_recv_queue {
 
 struct rxm_buf_pool {
 	enum rxm_buf_pool_type type;
-	struct util_buf_pool *pool;
+	struct ofi_bufpool *pool;
 	struct rxm_ep *rxm_ep;
 };
 
@@ -1019,25 +1019,25 @@ rxm_ep_format_tx_buf_pkt(struct rxm_conn *rxm_conn, size_t len, uint8_t op,
 
 static inline struct rxm_buf *rxm_buf_alloc(struct rxm_buf_pool *pool)
 {
-	return util_buf_alloc(pool->pool);
+	return ofi_buf_alloc(pool->pool);
 }
 
 static inline
 void rxm_buf_release(struct rxm_buf_pool *pool, struct rxm_buf *buf)
 {
-	util_buf_release(pool->pool, buf);
+	ofi_buf_free(pool->pool, buf);
 }
 
 static inline struct rxm_buf *
 rxm_buf_get_by_index(struct rxm_buf_pool *pool, size_t index)
 {
-	return util_buf_get_by_index(pool->pool, index);
+	return ofi_bufpool_get_ibuf(pool->pool, index);
 }
 
 static inline
 size_t rxm_get_buf_index(struct rxm_buf_pool *pool, struct rxm_buf *buf)
 {
-	return util_get_buf_index(pool->pool, buf);
+	return ofi_buf_index(pool->pool, buf);
 }
 
 static inline struct rxm_buf *
@@ -1071,7 +1071,7 @@ rxm_rx_buf_release(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_buf)
 		dlist_insert_tail(&rx_buf->repost_entry,
 				  &rx_buf->ep->repost_ready_list);
 	} else {
-		util_buf_release(rxm_ep->buf_pools[RXM_BUF_POOL_RX].pool,
+		ofi_buf_free(rxm_ep->buf_pools[RXM_BUF_POOL_RX].pool,
 				 rx_buf);
 	}
 }

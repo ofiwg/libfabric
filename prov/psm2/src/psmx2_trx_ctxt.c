@@ -212,7 +212,7 @@ void psmx2_trx_ctxt_free(struct psmx2_trx_ctxt *trx_ctxt, int usage_flags)
 	if (err != PSM2_OK)
 		psm2_ep_close(trx_ctxt->psm2_ep, PSM2_EP_CLOSE_FORCE, 0);
 
-	util_buf_pool_destroy(trx_ctxt->am_req_pool);
+	ofi_bufpool_destroy(trx_ctxt->am_req_pool);
 	fastlock_destroy(&trx_ctxt->am_req_pool_lock);
 	fastlock_destroy(&trx_ctxt->poll_lock);
 	fastlock_destroy(&trx_ctxt->peer_lock);
@@ -266,11 +266,9 @@ struct psmx2_trx_ctxt *psmx2_trx_ctxt_alloc(struct psmx2_fid_domain *domain,
 		return NULL;
 	}
 
-	err = util_buf_pool_create(&trx_ctxt->am_req_pool,
-				   sizeof(struct psmx2_am_request),
-				   sizeof(void *),
-				   0, /* max_cnt: unlimited */
-				   64); /* chunk_cnt */
+	err = ofi_bufpool_create(&trx_ctxt->am_req_pool,
+				 sizeof(struct psmx2_am_request),
+				 sizeof(void *), 0, 64);
 	if (err) {
 		FI_WARN(&psmx2_prov, FI_LOG_CORE,
 			"failed to allocate am_req_pool.\n");
@@ -356,7 +354,7 @@ err_out_close_ep:
 		psm2_ep_close(trx_ctxt->psm2_ep, PSM2_EP_CLOSE_FORCE, 0);
 
 err_out_destroy_pool:
-	util_buf_pool_destroy(trx_ctxt->am_req_pool);
+	ofi_bufpool_destroy(trx_ctxt->am_req_pool);
 
 err_out:
 	free(trx_ctxt);

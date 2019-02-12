@@ -119,7 +119,7 @@ fi_ibv_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
 			sizeof(wce->wc.vendor_err));
 	}
 
-	util_buf_release(cq->wce_pool, wce);
+	ofi_buf_free(cq->wce_pool, wce);
 	return 1;
 err:
 	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
@@ -316,7 +316,7 @@ static ssize_t fi_ibv_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 			entry = slist_remove_head(&cq->wcq);
 			wce = container_of(entry, struct fi_ibv_wce, entry);
 			cq->read_entry(&wce->wc, (char *)buf + i * cq->entry_size);
-			util_buf_release(cq->wce_pool, wce);
+			ofi_buf_free(cq->wce_pool, wce);
 			continue;
 		}
 
@@ -337,7 +337,7 @@ static ssize_t fi_ibv_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 				i--;
 				continue;
 			}
-			wce = util_buf_alloc(cq->wce_pool);
+			wce = ofi_buf_alloc(cq->wce_pool);
 			if (!wce) {
 				cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
 				return -FI_ENOMEM;
@@ -398,7 +398,7 @@ static int fi_ibv_cq_trywait(struct fid *fid)
 	if (!slist_empty(&cq->wcq))
 		goto out;
 
-	wce = util_buf_alloc(cq->wce_pool);
+	wce = ofi_buf_alloc(cq->wce_pool);
 	if (!wce) {
 		ret = -FI_ENOMEM;
 		goto out;
@@ -435,7 +435,7 @@ static int fi_ibv_cq_trywait(struct fid *fid)
 
 	ret = FI_SUCCESS;
 err:
-	util_buf_release(cq->wce_pool, wce);
+	ofi_buf_free(cq->wce_pool, wce);
 out:
 	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
 	return ret;
@@ -505,11 +505,11 @@ static int fi_ibv_cq_close(fid_t fid)
 	while (!slist_empty(&cq->wcq)) {
 		entry = slist_remove_head(&cq->wcq);
 		wce = container_of(entry, struct fi_ibv_wce, entry);
-		util_buf_release(cq->wce_pool, wce);
+		ofi_buf_free(cq->wce_pool, wce);
 	}
 	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
 
-	util_buf_pool_destroy(cq->wce_pool);
+	ofi_bufpool_destroy(cq->wce_pool);
 
 	if (cq->cq) {
 		ret = ibv_destroy_cq(cq->cq);
@@ -630,7 +630,7 @@ int fi_ibv_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 		}
 	}
 
-	ret = util_buf_pool_create(&cq->wce_pool, sizeof(struct fi_ibv_wce),
+	ret = ofi_bufpool_create(&cq->wce_pool, sizeof(struct fi_ibv_wce),
 				   16, 0, VERBS_WCE_CNT);
 	if (ret) {
 		VERBS_WARN(FI_LOG_CQ, "Failed to create wce_pool\n");
@@ -673,7 +673,7 @@ int fi_ibv_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	*cq_fid = &cq->util_cq.cq_fid;
 	return 0;
 err6:
-	util_buf_pool_destroy(cq->wce_pool);
+	ofi_bufpool_destroy(cq->wce_pool);
 err5:
 	ibv_destroy_cq(cq->cq);
 err4:
