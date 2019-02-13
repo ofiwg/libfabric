@@ -50,21 +50,20 @@ static void ofi_bufpool_set_region_size(struct ofi_bufpool *pool)
 	ssize_t hp_size;
 
 	if (pool->entry_cnt) {
-		assert(pool->region_size);
+		assert(pool->alloc_size && pool->region_size);
 		return;
 	}
 
 	hp_size = ofi_get_hugepage_size();
-	if (pool->attr.chunk_cnt * pool->entry_size >= hp_size) {
+	if ((pool->attr.chunk_cnt + 1) * pool->entry_size >= hp_size) {
 		pool->attr.flags |= OFI_BUFPOOL_MMAPPED;
-		pool->region_size = fi_get_aligned_sz(pool->attr.chunk_cnt *
-						      pool->entry_size,
-						      hp_size);
-		return;
+		pool->alloc_size = fi_get_aligned_sz((pool->attr.chunk_cnt + 1) *
+						      pool->entry_size, hp_size);
+	} else {
+		pool->attr.flags &= ~OFI_BUFPOOL_MMAPPED;
+		pool->alloc_size = (pool->attr.chunk_cnt + 1) * pool->entry_size;
 	}
-
-	pool->attr.flags &= ~OFI_BUFPOOL_MMAPPED;
-	pool->region_size = pool->attr.chunk_cnt * pool->entry_size;
+	pool->region_size = pool->alloc_size - pool->entry_size;
 }
 
 int ofi_bufpool_grow(struct ofi_bufpool *pool)
@@ -87,21 +86,22 @@ int ofi_bufpool_grow(struct ofi_bufpool *pool)
 	dlist_init(&buf_region->free_list);
 
 	if (pool->attr.flags & OFI_BUFPOOL_MMAPPED) {
-		ret = ofi_alloc_hugepage_buf((void **) &buf_region->mem_region,
-					     pool->region_size);
+		ret = ofi_alloc_hugepage_buf((void **) &buf_region->alloc_region,
+					     pool->alloc_size);
 		/* If we can't allocate huge pages, fall back to normal
 		 * allocations if this is the first allocation attempt.
 		 */
 		if (ret && !pool->entry_cnt) {
 			pool->attr.flags &= ~OFI_BUFPOOL_MMAPPED;
-			pool->region_size = pool->attr.chunk_cnt *
-					    pool->entry_size;
+			pool->alloc_size = (pool->attr.chunk_cnt + 1) *
+					   pool->entry_size;
+			pool->region_size = pool->alloc_size - pool->entry_size;
 			goto retry;
 		}
 	} else {
 retry:
-		ret = ofi_memalign((void **) &buf_region->mem_region,
-				   pool->attr.alignment, pool->region_size);
+		ret = ofi_memalign((void **) &buf_region->alloc_region,
+				   pool->attr.alignment, pool->alloc_size);
 	}
 	if (ret) {
 		FI_DBG(&core_prov, FI_LOG_CORE, "Allocation failed: %s\n",
@@ -109,7 +109,8 @@ retry:
 		goto err1;
 	}
 
-	memset(buf_region->mem_region, 0, pool->region_size);
+	memset(buf_region->alloc_region, 0, pool->alloc_size);
+	buf_region->mem_region = buf_region->alloc_region + pool->entry_size;
 	if (pool->attr.alloc_fn) {
 		ret = pool->attr.alloc_fn(buf_region);
 		if (ret)
@@ -178,7 +179,7 @@ err3:
 	if (pool->attr.free_fn)
 	    pool->attr.free_fn(buf_region);
 err2:
-	ofi_freealign(buf_region->mem_region);
+	ofi_freealign(buf_region->alloc_region);
 err1:
 	free(buf_region);
 	return ret;
@@ -240,8 +241,8 @@ void ofi_bufpool_destroy(struct ofi_bufpool *pool)
 			pool->attr.free_fn(buf_region);
 
 		if (pool->attr.flags & OFI_BUFPOOL_MMAPPED) {
-			ret = ofi_free_hugepage_buf(buf_region->mem_region,
-						    pool->region_size);
+			ret = ofi_free_hugepage_buf(buf_region->alloc_region,
+						    pool->alloc_size);
 			if (ret) {
 				FI_DBG(&core_prov, FI_LOG_CORE,
 				       "Huge page free failed: %s\n",
@@ -249,7 +250,7 @@ void ofi_bufpool_destroy(struct ofi_bufpool *pool)
 				assert(0);
 			}
 		} else {
-			ofi_freealign(buf_region->mem_region);
+			ofi_freealign(buf_region->alloc_region);
 		}
 
 		free(buf_region);
