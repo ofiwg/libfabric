@@ -81,6 +81,7 @@ enum {
 uint64_t log_mask;
 struct fi_filter prov_log_filter;
 
+static pid_t pid;
 
 static int fi_convert_log_str(const char *value)
 {
@@ -123,6 +124,7 @@ void fi_log_init(void)
 			log_mask |= (1ULL << (i + FI_LOG_SUBSYS_OFFSET));
 	}
 	ofi_free_filter(&subsys_filter);
+	pid = getpid();
 }
 
 void fi_log_fini(void)
@@ -153,8 +155,8 @@ void DEFAULT_SYMVER_PRE(fi_log)(const struct fi_provider *prov, enum fi_log_leve
 
 	va_list vargs;
 
-	size = snprintf(buf, sizeof(buf), "%s:%s:%s:%s():%d<%s> ", PACKAGE,
-			prov->name, log_subsys[subsys], func, line,
+	size = snprintf(buf, sizeof(buf), "%s:%d:%s:%s:%s():%d<%s> ", PACKAGE,
+			pid, prov->name, log_subsys[subsys], func, line,
 			log_levels[level]);
 
 	va_start(vargs, fmt);
