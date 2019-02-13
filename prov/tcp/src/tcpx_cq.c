@@ -101,9 +101,29 @@ void tcpx_xfer_entry_release(struct tcpx_cq *tcpx_cq,
 	tcpx_cq->util_cq.cq_fastlock_release(&tcpx_cq->util_cq.cq_lock);
 }
 
-void tcpx_cq_report_completion(struct util_cq *cq,
-			       struct tcpx_xfer_entry *xfer_entry,
-			       int err)
+void tcpx_cq_report_success(struct util_cq *cq,
+			    struct tcpx_xfer_entry *xfer_entry)
+{
+	uint64_t data = 0;
+
+	if (!(xfer_entry->flags & FI_COMPLETION))
+		return;
+
+	if (xfer_entry->hdr.base_hdr.flags & OFI_REMOTE_CQ_DATA) {
+		xfer_entry->flags |= FI_REMOTE_CQ_DATA;
+		data = xfer_entry->hdr.cq_data_hdr.cq_data;
+	}
+
+	ofi_cq_write(cq, xfer_entry->context,
+		     xfer_entry->flags, 0, NULL,
+		     data, 0);
+	if (cq->wait)
+		ofi_cq_signal(&cq->cq_fid);
+}
+
+void tcpx_cq_report_error(struct util_cq *cq,
+			  struct tcpx_xfer_entry *xfer_entry,
+			  int err)
 {
 	struct fi_cq_err_entry err_entry;
 	uint64_t data = 0;
@@ -111,35 +131,24 @@ void tcpx_cq_report_completion(struct util_cq *cq,
 	if (!(xfer_entry->flags & FI_COMPLETION))
 		return;
 
-	if (xfer_entry->hdr.base_hdr.flags &
-	    OFI_REMOTE_CQ_DATA) {
-		data = *((uint64_t *)
-			 ((uint8_t *)&xfer_entry->hdr +
-			  sizeof(xfer_entry->hdr.base_hdr)));
+	if (xfer_entry->hdr.base_hdr.flags & OFI_REMOTE_CQ_DATA) {
 		xfer_entry->flags |= FI_REMOTE_CQ_DATA;
+		data = xfer_entry->hdr.cq_data_hdr.cq_data;
 	}
 
-	if (err) {
-		err_entry.op_context = xfer_entry->context;
-		err_entry.flags = xfer_entry->flags;
-		err_entry.len = 0;
-		err_entry.buf = NULL;
-		err_entry.data = data;
-		err_entry.tag = 0;
-		err_entry.olen = 0;
-		err_entry.err = err;
-		err_entry.prov_errno = ofi_sockerr();
-		err_entry.err_data = NULL;
-		err_entry.err_data_size = 0;
+	err_entry.op_context = xfer_entry->context;
+	err_entry.flags = xfer_entry->flags;
+	err_entry.len = 0;
+	err_entry.buf = NULL;
+	err_entry.data = data;
+	err_entry.tag = 0;
+	err_entry.olen = 0;
+	err_entry.err = err;
+	err_entry.prov_errno = ofi_sockerr();
+	err_entry.err_data = NULL;
+	err_entry.err_data_size = 0;
 
-		ofi_cq_write_error(cq, &err_entry);
-	} else {
-		ofi_cq_write(cq, xfer_entry->context,
-			     xfer_entry->flags, 0, NULL,
-			     data, 0);
-		if (cq->wait)
-			ofi_cq_signal(&cq->cq_fid);
-	}
+	ofi_cq_write_error(cq, &err_entry);
 }
 
 static int tcpx_cq_control(struct fid *fid, int command, void *arg)
