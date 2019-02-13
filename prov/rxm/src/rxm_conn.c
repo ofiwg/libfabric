@@ -1025,6 +1025,8 @@ static inline int
 rxm_conn_verify_cm_data(struct rxm_cm_data *remote_cm_data,
 			struct rxm_cm_data *local_cm_data)
 {
+	/* This should stay at top as it helps to avoid endian conversion
+	 * for other fields in rxm_cm_data */
 	if (remote_cm_data->proto.endianness != local_cm_data->proto.endianness) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 			"endianness of two peers (%"PRIu8" vs %"PRIu8")"
@@ -1080,8 +1082,6 @@ rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 	int ret;
 	enum rxm_cmap_reject_flag cm_reject_flag = RXM_CMAP_REJECT_GENUINE;
 
-	remote_cm_data->proto.eager_size = ntohll(remote_cm_data->proto.eager_size);
-
 	if (rxm_conn_verify_cm_data(remote_cm_data, &cm_data)) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 			"CM data mismatch was detected\n");
@@ -1104,7 +1104,6 @@ rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 		goto err2;
 
 	cm_data.conn_id = rxm_conn->handle.key;
-	cm_data.proto.eager_size = htonll(cm_data.proto.eager_size);
 
 	ret = fi_accept(rxm_conn->msg_ep, &cm_data, sizeof(cm_data));
 	if (ret) {
@@ -1434,8 +1433,6 @@ rxm_conn_connect(struct util_ep *util_ep, struct rxm_cmap_handle *handle,
 	ret = rxm_prepare_cm_data(rxm_ep->msg_pep, &rxm_conn->handle, &cm_data);
 	if (ret)
 		goto err2;
-
-	cm_data.proto.eager_size = htonll(cm_data.proto.eager_size);
 
 	ret = fi_connect(rxm_conn->msg_ep, msg_info->dest_addr, &cm_data, sizeof(cm_data));
 	if (ret) {
