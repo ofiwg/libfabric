@@ -1087,7 +1087,7 @@ void rxm_cq_write_error(struct util_cq *cq, struct util_cntr *cntr,
 	struct fi_cq_err_entry err_entry = {0};
 	err_entry.op_context = op_context;
 	err_entry.prov_errno = err;
-	err_entry.err = err;
+	err_entry.err = -err;
 
 	if (cntr)
 		rxm_cntr_incerr(cntr);
@@ -1103,7 +1103,7 @@ static void rxm_cq_write_error_all(struct rxm_ep *rxm_ep, int err)
 	ssize_t ret = 0;
 
 	err_entry.prov_errno = err;
-	err_entry.err = err;
+	err_entry.err = -err;
 	if (rxm_ep->util_ep.tx_cq) {
 		ret = ofi_cq_write_error(rxm_ep->util_ep.tx_cq, &err_entry);
 		if (ret) {
