@@ -355,6 +355,10 @@ exception that the calls will not return until either an event has
 been read from the EQ or an error or timeout occurs.  Specifying a
 negative timeout means an infinite timeout.
 
+Threads blocking in this function will return to the caller if
+they are signaled by some external source.  This is true even if
+the timeout has not occurred or was specified as infinite.
+
 It is invalid for applications to call this function if the EQ
 has been configured with a wait object of FI_WAIT_NONE or FI_WAIT_SET.
 
@@ -491,10 +495,17 @@ fi_eq_open
 : Returns 0 on success.  On error, a negative value corresponding to
   fabric errno is returned.
 
-fi_eq_read / fi_eq_readerr / fi_eq_sread
+fi_eq_read / fi_eq_readerr
 : On success, returns the number of bytes read from the
   event queue.  On error, a negative value corresponding to fabric
   errno is returned.  If no data is available to be read from the
+  event queue, -FI_EAGAIN is returned.
+
+fi_eq_sread
+: On success, returns the number of bytes read from the
+  event queue.  On error, a negative value corresponding to fabric
+  errno is returned.  If the timeout expires or the calling
+  thread is signaled and no data is available to be read from the
   event queue, -FI_EAGAIN is returned.
 
 fi_eq_write

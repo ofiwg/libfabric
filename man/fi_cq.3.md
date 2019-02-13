@@ -382,6 +382,10 @@ similar to the non-blocking calls, with the exception that the calls
 will not return until either a completion has been read from the CQ or
 an error or timeout occurs.
 
+Threads blocking in this function will return to the caller if
+they are signaled by some external source.  This is true even if
+the timeout has not occurred or was specified as infinite.
+
 It is invalid for applications to call these functions if the CQ
 has been configured with a wait object of FI_WAIT_NONE or FI_WAIT_SET.
 
@@ -761,6 +765,13 @@ fi_cq_sread / fi_cq_sreadfrom
   the completion queue.  On error, a negative value corresponding to
   fabric errno is returned.  If no completions are available to
   return from the CQ, -FI_EAGAIN will be returned.
+
+fi_cq_sread / fi_cq_sreadfrom
+: On success, returns the number of completion events retrieved from
+  the completion queue.  On error, a negative value corresponding to
+  fabric errno is returned.  If the timeout expires or the calling
+  thread is signaled and no data is available to be read from the
+  completion queue, -FI_EAGAIN is returned.
 
 fi_cq_strerror
 : Returns a character string interpretation of the provider specific
