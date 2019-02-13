@@ -283,6 +283,51 @@ static int util_eq_init(struct fid_fabric *fabric, struct util_eq *eq,
 	return 0;
 }
 
+static int ofi_eq_match_fid_event(struct slist_entry *entry, const void *arg)
+{
+	fid_t fid = (fid_t) arg;
+	struct util_event *event;
+	struct fi_eq_cm_entry *cm_entry;
+	struct fi_eq_entry *cq_entry;
+
+	event = container_of(entry, struct util_event, entry);
+	cm_entry = (struct fi_eq_cm_entry *) event->data;
+
+	if (event->event == FI_CONNREQ &&
+	    fid == cm_entry->info->handle)
+		return 1;
+
+	cq_entry = (struct fi_eq_entry *)event->data;
+	return (fid == cq_entry->fid);
+}
+
+void ofi_eq_remove_fid_events(struct util_eq *eq, fid_t fid)
+{
+	struct fi_eq_err_entry *err_entry;
+	struct slist_entry *entry;
+	struct util_event *event;
+	struct fi_eq_cm_entry *cm_entry;
+
+	fastlock_acquire(&eq->lock);
+	while((entry =
+	      slist_remove_first_match(&eq->list, ofi_eq_match_fid_event,
+				       fid))) {
+		event = container_of(entry, struct util_event, entry);
+		if (event->err) {
+			err_entry = (struct fi_eq_err_entry *) event->data;
+			if (err_entry->err_data)
+				free(err_entry->err_data);
+
+		} else if (event->event == FI_CONNREQ) {
+			cm_entry = (struct fi_eq_cm_entry *) event->data;
+			assert(cm_entry->info);
+			fi_freeinfo(cm_entry->info);
+		}
+		free(event);
+	}
+	fastlock_release(&eq->lock);
+}
+
 static int util_verify_eq_attr(const struct fi_provider *prov,
 			       const struct fi_eq_attr *attr)
 {

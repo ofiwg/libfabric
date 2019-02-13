@@ -341,6 +341,8 @@ static int tcpx_ep_close(struct fid *fid)
 	if (ep->util_ep.eq->wait)
 		ofi_wait_fd_del(ep->util_ep.eq->wait, ep->conn_fd);
 
+	ofi_eq_remove_fid_events(ep->util_ep.eq,
+				  &ep->util_ep.ep_fid.fid);
 	ofi_close_socket(ep->conn_fd);
 	ofi_endpoint_close(&ep->util_ep);
 	fastlock_destroy(&ep->lock);
