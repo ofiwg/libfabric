@@ -69,7 +69,7 @@ static void ofi_bufpool_set_region_size(struct ofi_bufpool *pool)
 int ofi_bufpool_grow(struct ofi_bufpool *pool)
 {
 	struct ofi_bufpool_region *buf_region;
-	struct ofi_bufpool_ftr *buf_ftr;
+	struct ofi_bufpool_hdr *buf_hdr;
 	void *buf;
 	int ret;
 	size_t i;
@@ -134,37 +134,37 @@ retry:
 
 	for (i = 0; i < pool->attr.chunk_cnt; i++) {
 		buf = (buf_region->mem_region + i * pool->entry_size);
-		buf_ftr = ofi_buf_ftr(pool, buf);
+		buf_hdr = ofi_buf_hdr(pool, buf);
 
 		if (pool->attr.init_fn) {
 #if ENABLE_DEBUG
 			if (pool->attr.flags & OFI_BUFPOOL_INDEXED) {
-				buf_ftr->entry.dlist.next = (void *) OFI_MAGIC_64;
-				buf_ftr->entry.dlist.prev = (void *) OFI_MAGIC_64;
+				buf_hdr->entry.dlist.next = (void *) OFI_MAGIC_64;
+				buf_hdr->entry.dlist.prev = (void *) OFI_MAGIC_64;
 
 				pool->attr.init_fn(buf_region, buf);
 
-				assert((buf_ftr->entry.dlist.next == (void *) OFI_MAGIC_64) &&
-				       (buf_ftr->entry.dlist.prev == (void *) OFI_MAGIC_64));
+				assert((buf_hdr->entry.dlist.next == (void *) OFI_MAGIC_64) &&
+				       (buf_hdr->entry.dlist.prev == (void *) OFI_MAGIC_64));
 			} else {
-				buf_ftr->entry.slist.next = (void *) OFI_MAGIC_64;
+				buf_hdr->entry.slist.next = (void *) OFI_MAGIC_64;
 
 				pool->attr.init_fn(buf_region, buf);
 
-				assert(buf_ftr->entry.slist.next == (void *) OFI_MAGIC_64);
+				assert(buf_hdr->entry.slist.next == (void *) OFI_MAGIC_64);
 			}
 #else
 			pool->attr.init_fn(buf_region, buf);
 #endif
 		}
 
-		buf_ftr->region = buf_region;
-		buf_ftr->index = pool->entry_cnt + i;
+		buf_hdr->region = buf_region;
+		buf_hdr->index = pool->entry_cnt + i;
 		if (pool->attr.flags & OFI_BUFPOOL_INDEXED) {
-			dlist_insert_tail(&buf_ftr->entry.dlist,
+			dlist_insert_tail(&buf_hdr->entry.dlist,
 					  &buf_region->free_list);
 		} else {
-			slist_insert_tail(&buf_ftr->entry.slist,
+			slist_insert_tail(&buf_hdr->entry.slist,
 					  &pool->free_list.entries);
 		}
 	}
@@ -196,7 +196,7 @@ int ofi_bufpool_create_attr(struct ofi_bufpool_attr *attr,
 
 	(*buf_pool)->attr = *attr;
 
-	entry_sz = (attr->size + sizeof(struct ofi_bufpool_ftr));
+	entry_sz = (attr->size + sizeof(struct ofi_bufpool_hdr));
 	(*buf_pool)->entry_size = fi_get_aligned_sz(entry_sz, attr->alignment);
 
 	if ((*buf_pool)->attr.flags & OFI_BUFPOOL_INDEXED)
@@ -261,12 +261,12 @@ void ofi_bufpool_destroy(struct ofi_bufpool *pool)
 
 int ofi_ibuf_is_lower(struct dlist_entry *item, const void *arg)
 {
-	struct ofi_bufpool_ftr *ftr1, *ftr2;
+	struct ofi_bufpool_hdr *hdr1, *hdr2;
 
-	ftr1 = container_of(arg, struct ofi_bufpool_ftr, entry.dlist);
-	ftr2 = container_of(item, struct ofi_bufpool_ftr, entry.dlist);
+	hdr1 = container_of(arg, struct ofi_bufpool_hdr, entry.dlist);
+	hdr2 = container_of(item, struct ofi_bufpool_hdr, entry.dlist);
 
-	return ftr1->index < ftr2->index;
+	return hdr1->index < hdr2->index;
 }
 
 int ofi_ibufpool_region_is_lower(struct dlist_entry *item, const void *arg)
