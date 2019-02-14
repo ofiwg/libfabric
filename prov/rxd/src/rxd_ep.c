@@ -81,7 +81,7 @@ struct rxd_x_entry *rxd_get_tx_entry(struct rxd_ep *ep)
 	if (!tx_entry)
 		return NULL;
 
-	tx_entry->tx_id = ofi_buf_index(ep->tx_entry_pool, tx_entry);
+	tx_entry->tx_id = ofi_buf_index(tx_entry);
 
 	return tx_entry;
 }
@@ -94,29 +94,9 @@ struct rxd_x_entry *rxd_get_rx_entry(struct rxd_ep *ep)
 	if (!rx_entry)
 		return NULL;
 
-	rx_entry->rx_id = ofi_buf_index(ep->rx_entry_pool, rx_entry);
+	rx_entry->rx_id = ofi_buf_index(rx_entry);
 
 	return rx_entry;
-}
-
-void rxd_release_tx_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt)
-{
-	ofi_buf_free(ep->tx_pkt_pool, pkt);
-}
-
-void rxd_release_rx_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt)
-{
-	ofi_buf_free(ep->rx_pkt_pool, pkt);
-}
-
-static void rxd_release_tx_entry(struct rxd_ep *ep, struct rxd_x_entry *x_entry)
-{
-	ofi_ibuf_free(ep->tx_entry_pool, x_entry);
-}
-
-void rxd_release_rx_entry(struct rxd_ep *ep, struct rxd_x_entry *x_entry)
-{
-	ofi_ibuf_free(ep->rx_entry_pool, x_entry);
 }
 
 static int rxd_match_ctx(struct dlist_entry *item, const void *arg)
@@ -270,7 +250,7 @@ int rxd_ep_post_buf(struct rxd_ep *ep)
 		      rxd_mr_desc(pkt_entry->mr, ep),
 		      FI_ADDR_UNSPEC, &pkt_entry->context);
 	if (ret) {
-		rxd_release_rx_pkt(ep, pkt_entry);
+		ofi_buf_free(pkt_entry);
 		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "failed to repost\n");
 		return ret;
 	}
@@ -428,7 +408,7 @@ void rxd_tx_entry_free(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
 {
 	tx_entry->op = RXD_NO_OP;
 	dlist_remove(&tx_entry->entry);
-	rxd_release_tx_entry(ep, tx_entry);
+	ofi_ibuf_free(tx_entry);
 }
 
 void rxd_insert_unacked(struct rxd_ep *ep, fi_addr_t peer,
@@ -521,7 +501,7 @@ static ssize_t rxd_ep_send_rts(struct rxd_ep *rxd_ep, fi_addr_t rxd_addr)
 	ret = fi_getname(&rxd_ep->dg_ep->fid, (void *) rts_pkt->source,
 			 &addrlen);
 	if (ret) {
-		rxd_release_tx_pkt(rxd_ep, pkt_entry);
+		ofi_buf_free(pkt_entry);
 		return ret;
 	}
 
@@ -722,7 +702,7 @@ void rxd_ep_send_ack(struct rxd_ep *rxd_ep, fi_addr_t peer)
 	dlist_insert_tail(&pkt_entry->d_entry, &rxd_ep->ctrl_pkts);
 	if (rxd_ep_send_pkt(rxd_ep, pkt_entry)) {
 		dlist_remove(&pkt_entry->d_entry);
-		rxd_release_tx_pkt(rxd_ep, pkt_entry);
+		ofi_buf_free(pkt_entry);
 	}
 }
 
@@ -742,7 +722,7 @@ static void rxd_close_peer(struct rxd_ep *ep, struct rxd_peer *peer)
 	while (!dlist_empty(&peer->unacked)) {
 		dlist_pop_front(&peer->unacked, struct rxd_pkt_entry,
 				pkt_entry, d_entry);
-		rxd_release_tx_pkt(ep, pkt_entry);
+		ofi_buf_free(pkt_entry);
 		peer->unacked_cnt--;
 	}
 
@@ -792,25 +772,25 @@ static int rxd_ep_close(struct fid *fid)
 	while (!slist_empty(&ep->rx_pkt_list)) {
 		entry = slist_remove_head(&ep->rx_pkt_list);
 		pkt_entry = container_of(entry, struct rxd_pkt_entry, s_entry);
-		rxd_release_rx_pkt(ep, pkt_entry);
+		ofi_buf_free(pkt_entry);
 	}
 
 	while (!dlist_empty(&ep->unexp_list)) {
 		dlist_pop_front(&ep->unexp_list, struct rxd_pkt_entry,
 				pkt_entry, d_entry);
-		rxd_release_rx_pkt(ep, pkt_entry);
+		ofi_buf_free(pkt_entry);
 	}
 
 	while (!dlist_empty(&ep->unexp_tag_list)) {
 		dlist_pop_front(&ep->unexp_tag_list, struct rxd_pkt_entry,
 				pkt_entry, d_entry);
-		rxd_release_rx_pkt(ep, pkt_entry);
+		ofi_buf_free(pkt_entry);
 	}
 
 	while (!dlist_empty(&ep->ctrl_pkts)) {
 		dlist_pop_front(&ep->ctrl_pkts, struct rxd_pkt_entry,
 				pkt_entry, d_entry);
-		rxd_release_tx_pkt(ep, pkt_entry);
+		ofi_buf_free(pkt_entry);
 	}
 
 	if (ep->util_ep.tx_cq) {
@@ -1047,7 +1027,7 @@ static void rxd_peer_timeout(struct rxd_ep *rxd_ep, struct rxd_peer *peer)
 	while (!dlist_empty(&peer->unacked)) {
 		dlist_pop_front(&peer->unacked, struct rxd_pkt_entry, pkt_entry,
 				d_entry);
-		rxd_release_tx_pkt(rxd_ep, pkt_entry);
+		ofi_buf_free(pkt_entry);
 	     	peer->unacked_cnt--;
 	}
 

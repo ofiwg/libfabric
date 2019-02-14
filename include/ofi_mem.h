@@ -343,54 +343,62 @@ void ofi_bufpool_destroy(struct ofi_bufpool *pool);
 
 int ofi_bufpool_grow(struct ofi_bufpool *pool);
 
-static inline struct ofi_bufpool_hdr *
-ofi_buf_hdr(struct ofi_bufpool *pool, void *buf)
+static inline struct ofi_bufpool_hdr *ofi_buf_hdr(void *buf)
 {
 	return (struct ofi_bufpool_hdr *)
 		((char *) buf - sizeof(struct ofi_bufpool_hdr));
 }
 
-static inline void *ofi_buf_data(struct ofi_bufpool *pool,
-			         struct ofi_bufpool_hdr *buf_hdr)
+static inline void *ofi_buf_data(struct ofi_bufpool_hdr *buf_hdr)
 {
 	return buf_hdr + 1;
 }
 
-static inline void ofi_buf_free(struct ofi_bufpool *pool, void *buf)
+static inline struct ofi_bufpool_region *ofi_buf_region(void *buf)
 {
-	assert(ofi_buf_hdr(pool, buf)->region);
-	assert(ofi_buf_hdr(pool, buf)->region->pool == pool);
-	assert(ofi_buf_hdr(pool, buf)->region->use_cnt--);
-	assert(!(pool->attr.flags & OFI_BUFPOOL_INDEXED));
-	slist_insert_head(&ofi_buf_hdr(pool, buf)->entry.slist,
-			  &pool->free_list.entries);
+	assert(ofi_buf_hdr(buf)->region);
+	return ofi_buf_hdr(buf)->region;
+}
+
+static inline struct ofi_bufpool *ofi_buf_pool(void *buf)
+{
+	assert(ofi_buf_region(buf)->pool);
+	return ofi_buf_region(buf)->pool;
+}
+
+static inline void ofi_buf_free(void *buf)
+{
+	assert(ofi_buf_region(buf)->use_cnt--);
+	assert(!(ofi_buf_pool(buf)->attr.flags & OFI_BUFPOOL_INDEXED));
+	slist_insert_head(&ofi_buf_hdr(buf)->entry.slist,
+			  &ofi_buf_pool(buf)->free_list.entries);
 }
 
 int ofi_ibuf_is_lower(struct dlist_entry *item, const void *arg);
 int ofi_ibufpool_region_is_lower(struct dlist_entry *item, const void *arg);
 
-static inline void ofi_ibuf_free(struct ofi_bufpool *pool, void *buf)
+static inline void ofi_ibuf_free(void *buf)
 {
 	struct ofi_bufpool_hdr *buf_hdr;
 
-	assert(pool->attr.flags & OFI_BUFPOOL_INDEXED);
-	buf_hdr = ofi_buf_hdr(pool, buf);
-	assert(buf_hdr->region->use_cnt--);
+	assert(ofi_buf_pool(buf)->attr.flags & OFI_BUFPOOL_INDEXED);
+	assert(ofi_buf_region(buf)->use_cnt--);
+	buf_hdr = ofi_buf_hdr(buf);
 
 	dlist_insert_order(&buf_hdr->region->free_list,
 			   ofi_ibuf_is_lower, &buf_hdr->entry.dlist);
 
 	if (dlist_empty(&buf_hdr->region->entry)) {
-		dlist_insert_order(&pool->free_list.regions,
+		dlist_insert_order(&buf_hdr->region->pool->free_list.regions,
 				   ofi_ibufpool_region_is_lower,
 				   &buf_hdr->region->entry);
 	}
 }
 
-static inline size_t ofi_buf_index(struct ofi_bufpool *pool, void *buf)
+static inline size_t ofi_buf_index(void *buf)
 {
-	assert(ofi_buf_hdr(pool, buf)->region->use_cnt);
-	return ofi_buf_hdr(pool, buf)->index;
+	assert(ofi_buf_region(buf)->use_cnt);
+	return ofi_buf_hdr(buf)->index;
 }
 
 static inline void *ofi_bufpool_get_ibuf(struct ofi_bufpool *pool, size_t index)
@@ -400,13 +408,8 @@ static inline void *ofi_bufpool_get_ibuf(struct ofi_bufpool *pool, size_t index)
 	buf = pool->region_table[(size_t)(index / pool->attr.chunk_cnt)]->
 		mem_region + (index % pool->attr.chunk_cnt) * pool->entry_size;
 
-	assert(ofi_buf_hdr(pool, buf)->region->use_cnt);
+	assert(ofi_buf_region(buf)->use_cnt);
 	return buf;
-}
-
-static inline void *ofi_buf_region_ctx(struct ofi_bufpool *pool, void *buf)
-{
-	return ofi_buf_hdr(pool, buf)->region->context;
 }
 
 static inline int ofi_bufpool_empty(struct ofi_bufpool *pool)
@@ -432,7 +435,7 @@ static inline void *ofi_buf_alloc(struct ofi_bufpool *pool)
 	slist_remove_head_container(&pool->free_list.entries,
 				struct ofi_bufpool_hdr, buf_hdr, entry.slist);
 	assert(++buf_hdr->region->use_cnt);
-	return ofi_buf_data(pool, buf_hdr);
+	return ofi_buf_data(buf_hdr);
 }
 
 static inline void *ofi_buf_alloc_ex(struct ofi_bufpool *pool,
@@ -444,7 +447,7 @@ static inline void *ofi_buf_alloc_ex(struct ofi_bufpool *pool,
 	if (OFI_UNLIKELY(!buf))
 		return NULL;
 
-	*context = ofi_buf_region_ctx(pool, buf);
+	*context = ofi_buf_region(buf)->context;
 	return buf;
 }
 
@@ -467,7 +470,7 @@ static inline void *ofi_ibuf_alloc(struct ofi_bufpool *pool)
 
 	if (dlist_empty(&buf_region->free_list))
 		dlist_remove_init(&buf_region->entry);
-	return ofi_buf_data(pool, buf_hdr);
+	return ofi_buf_data(buf_hdr);
 }
 
 

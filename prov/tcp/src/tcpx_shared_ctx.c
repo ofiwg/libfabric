@@ -45,7 +45,7 @@ void tcpx_srx_xfer_release(struct tcpx_rx_ctx *srx_ctx,
 		xfer_entry->ep->cur_rx_entry = NULL;
 
 	fastlock_acquire(&srx_ctx->lock);
-	ofi_buf_free(srx_ctx->buf_pool, xfer_entry);
+	ofi_buf_free(xfer_entry);
 	fastlock_release(&srx_ctx->lock);
 }
 

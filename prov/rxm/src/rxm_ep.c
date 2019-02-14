@@ -937,7 +937,7 @@ rxm_ep_alloc_rndv_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void 
 	}
 
 	rxm_ep_format_tx_buf_pkt(rxm_conn, data_len, op, data, tag, flags, &(tx_buf)->pkt);
-	tx_buf->pkt.ctrl_hdr.msg_id = rxm_tx_buf_2_msg_id(rxm_ep, RXM_BUF_POOL_TX_RNDV, tx_buf);
+	tx_buf->pkt.ctrl_hdr.msg_id = ofi_buf_index(tx_buf);
 	tx_buf->app_context = context;
 	tx_buf->flags = flags;
 	tx_buf->count = count;
@@ -967,7 +967,7 @@ rxm_ep_alloc_rndv_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void 
 	return ret;
 err:
 	*tx_rndv_buf = NULL;
-	rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_RNDV, tx_buf);
+	ofi_buf_free(tx_buf);
 	return ret;
 }
 
@@ -998,7 +998,7 @@ err:
 	       "Transmit for MSG provider failed\n");
 	if (!rxm_ep->rxm_mr_local)
 		rxm_ep_msg_mr_closev(tx_buf->mr, tx_buf->count);
-	rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_RNDV, tx_buf);
+	ofi_buf_free(tx_buf);
 	return ret;
 }
 
@@ -1026,8 +1026,7 @@ rxm_ep_sar_tx_prepare_segment(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 	rxm_ep_format_tx_buf_pkt(rxm_conn, total_len, op, data, tag, flags, &tx_buf->pkt);
 	if (seg_type == RXM_SAR_SEG_FIRST) {
-		*msg_id = tx_buf->pkt.ctrl_hdr.msg_id =
-			rxm_tx_buf_2_msg_id(rxm_ep, RXM_BUF_POOL_TX_SAR, tx_buf);
+		*msg_id = tx_buf->pkt.ctrl_hdr.msg_id = ofi_buf_index(tx_buf);
 	} else {
 		tx_buf->pkt.ctrl_hdr.msg_id = *msg_id;
 	}
@@ -1044,11 +1043,13 @@ static void
 rxm_ep_sar_tx_cleanup(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		      struct rxm_tx_sar_buf *tx_buf)
 {
-	struct rxm_tx_sar_buf *first_tx_buf =
-		rxm_msg_id_2_tx_buf(rxm_ep, RXM_BUF_POOL_TX_SAR,
-				    tx_buf->pkt.ctrl_hdr.msg_id);
-	rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_SAR, first_tx_buf);
-	rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_SAR, tx_buf);
+	struct rxm_tx_sar_buf *first_tx_buf;
+
+	first_tx_buf = ofi_bufpool_get_ibuf(rxm_ep->
+				buf_pools[RXM_BUF_POOL_TX_SAR].pool,
+				tx_buf->pkt.ctrl_hdr.msg_id);
+	ofi_buf_free(first_tx_buf);
+	ofi_buf_free(tx_buf);
 }
 
 static inline ssize_t
@@ -1113,7 +1114,7 @@ rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	if (OFI_UNLIKELY(ret)) {
 		if (OFI_LIKELY(ret == -FI_EAGAIN))
 			rxm_ep_do_progress(&rxm_ep->util_ep);
-		rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_SAR, first_tx_buf);
+		ofi_buf_free(first_tx_buf);
 		return ret;
 	}
 
@@ -1130,8 +1131,7 @@ rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 									      RXM_DEFERRED_TX_SAR_SEG);
 				if (OFI_UNLIKELY(!def_tx_entry)) {
 					if (tx_buf)
-						rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_SAR,
-								   tx_buf);
+						ofi_buf_free(tx_buf);
 					return -FI_ENOMEM;
 				}
 				memcpy(def_tx_entry->sar_seg.payload.iov, iov, sizeof(*iov) * count);
@@ -1152,7 +1152,7 @@ rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 				return 0;
 			}
 
-			rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_SAR, first_tx_buf);
+			ofi_buf_free(first_tx_buf);
 			return ret;
 		}
 		remain_len -= rxm_ep->eager_limit;
@@ -1193,7 +1193,7 @@ rxm_ep_emulate_inject(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	if (OFI_UNLIKELY(ret)) {
 		if (OFI_LIKELY(ret == -FI_EAGAIN))
 			rxm_ep_do_progress(&rxm_ep->util_ep);
-		rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX, tx_buf);
+		ofi_buf_free(tx_buf);
 	}
 	return ret;
 }
@@ -1246,7 +1246,7 @@ rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 		ret = rxm_ep_msg_inject_send(rxm_ep, rxm_conn, &tx_buf->pkt,
 					     pkt_size, rxm_ep->util_ep.tx_cntr_inc);
-		rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_INJECT, tx_buf);
+		ofi_buf_free(tx_buf);
 	} else {
 		ret = rxm_ep_emulate_inject(rxm_ep, rxm_conn, buf, len,
 					    pkt_size, data, flags, tag, op);
@@ -1292,7 +1292,7 @@ rxm_ep_inject_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, size_t
 
 		ret = rxm_ep_msg_inject_send(rxm_ep, rxm_conn, &tx_buf->pkt,
 					     total_len, rxm_ep->util_ep.tx_cntr_inc);
-		rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_INJECT, tx_buf);
+		ofi_buf_free(tx_buf);
 	}
 	if (OFI_UNLIKELY(ret))
 		return ret;
@@ -1352,7 +1352,7 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		if (OFI_UNLIKELY(ret)) {
 			if (ret == -FI_EAGAIN)
 				rxm_ep_do_progress(&rxm_ep->util_ep);
-			rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX, tx_buf);
+			ofi_buf_free(tx_buf);
 		}
 	} else if (data_len <= rxm_ep->sar_limit &&
 		   /* SAR uses eager_limit as segment size */

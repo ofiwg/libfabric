@@ -388,7 +388,7 @@ mrail_send_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	ofi_ep_lock_release(&mrail_ep->util_ep);
 	return ret;
 err2:
-	ofi_buf_free(mrail_ep->tx_buf_pool, tx_buf);
+	ofi_buf_free(tx_buf);
 err1:
 	peer_info->seq_no--;
 	ofi_ep_lock_release(&mrail_ep->util_ep);
@@ -447,7 +447,7 @@ mrail_tsend_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	ofi_ep_lock_release(&mrail_ep->util_ep);
 	return ret;
 err2:
-	ofi_buf_free(mrail_ep->tx_buf_pool, tx_buf);
+	ofi_buf_free(tx_buf);
 err1:
 	peer_info->seq_no--;
 	ofi_ep_lock_release(&mrail_ep->util_ep);

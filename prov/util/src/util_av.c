@@ -273,7 +273,7 @@ int ofi_av_insert_addr(struct util_av *av, const void *addr, fi_addr_t *fi_addr)
 	HASH_FIND(hh, av->hash, addr, av->addrlen, entry);
 	if (entry) {
 		if (fi_addr)
-			*fi_addr = ofi_buf_index(av->av_entry_pool, entry);
+			*fi_addr = ofi_buf_index(entry);
 		ofi_atomic_inc32(&entry->use_cnt);
 		return 0;
 	} else {
@@ -281,7 +281,7 @@ int ofi_av_insert_addr(struct util_av *av, const void *addr, fi_addr_t *fi_addr)
 		if (!entry)
 			return -FI_ENOMEM;
 		if (fi_addr)
-			*fi_addr = ofi_buf_index(av->av_entry_pool, entry);
+			*fi_addr = ofi_buf_index(entry);
 		memcpy(entry->addr, addr, av->addrlen);
 		ofi_atomic_initialize32(&entry->use_cnt, 1);
 		HASH_ADD(hh, av->hash, addr, av->addrlen, entry);
@@ -296,8 +296,7 @@ int ofi_av_elements_iter(struct util_av *av, ofi_av_apply_func apply, void *arg)
 
 	HASH_ITER(hh, av->hash, av_entry, av_entry_tmp) {
 		ret = apply(av, av_entry->addr,
-			    ofi_buf_index(av->av_entry_pool, av_entry),
-			    arg);
+			    ofi_buf_index(av_entry), arg);
 		if (OFI_UNLIKELY(ret))
 			return ret;
 	}
@@ -319,7 +318,7 @@ int ofi_av_remove_addr(struct util_av *av, fi_addr_t fi_addr)
 		return FI_SUCCESS;
 
 	HASH_DELETE(hh, av->hash, av_entry);
-	ofi_ibuf_free(av->av_entry_pool, av_entry);
+	ofi_ibuf_free(av_entry);
 	return 0;
 }
 
@@ -331,8 +330,7 @@ fi_addr_t ofi_av_lookup_fi_addr(struct util_av *av, const void *addr)
 	HASH_FIND(hh, av->hash, addr, av->addrlen, entry);
 	fastlock_release(&av->lock);
 
-	return entry ? ofi_buf_index(av->av_entry_pool, entry) :
-		       FI_ADDR_NOTAVAIL;
+	return entry ? ofi_buf_index(entry) : FI_ADDR_NOTAVAIL;
 }
 
 static void *

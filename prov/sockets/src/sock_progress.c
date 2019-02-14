@@ -160,14 +160,14 @@ static void sock_pe_release_entry(struct sock_pe *pe,
 		pe_entry->conn->rx_pe_entry = NULL;
 
 	if (pe_entry->type == SOCK_PE_RX && pe_entry->pe.rx.atomic_cmp) {
-		ofi_buf_free(pe->atomic_rx_pool, pe_entry->pe.rx.atomic_cmp);
-		ofi_buf_free(pe->atomic_rx_pool, pe_entry->pe.rx.atomic_src);
+		ofi_buf_free(pe_entry->pe.rx.atomic_cmp);
+		ofi_buf_free(pe_entry->pe.rx.atomic_src);
 	}
 
 	if (pe_entry->is_pool_entry) {
 		ofi_rbfree(&pe_entry->comm_buf);
 		dlist_remove(&pe_entry->entry);
-		ofi_buf_free(pe->pe_rx_pool, pe_entry);
+		ofi_buf_free(pe_entry);
 		return;
 	}
 
@@ -2762,7 +2762,7 @@ static void sock_pe_free_util_pool(struct sock_pe *pe)
 		pe_entry = container_of(entry, struct sock_pe_entry, entry);
 		ofi_rbfree(&pe_entry->comm_buf);
 		dlist_remove(&pe_entry->entry);
-		ofi_buf_free(pe->pe_rx_pool, pe_entry);
+		ofi_buf_free(pe_entry);
 	}
 
 	ofi_bufpool_destroy(pe->pe_rx_pool);

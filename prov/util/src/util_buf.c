@@ -134,7 +134,7 @@ retry:
 
 	for (i = 0; i < pool->attr.chunk_cnt; i++) {
 		buf = (buf_region->mem_region + i * pool->entry_size);
-		buf_hdr = ofi_buf_hdr(pool, buf);
+		buf_hdr = ofi_buf_hdr(buf);
 
 		if (pool->attr.init_fn) {
 #if ENABLE_DEBUG

@@ -106,7 +106,7 @@ rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t 
 	if ((rxm_ep->msg_mr_local) && (!rxm_ep->rxm_mr_local))
 		rxm_ep_msg_mr_closev(rma_buf->mr.mr, rma_buf->mr.count);
 release:
-	rxm_rma_buf_release(rxm_ep, rma_buf);
+	ofi_buf_free(rma_buf);
 unlock:
 	ofi_ep_lock_release(&rxm_ep->util_ep);
 	return ret;
@@ -227,7 +227,7 @@ rxm_ep_rma_emulate_inject_msg(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, 
 	if (OFI_UNLIKELY(ret)) {
 		if (ret == -FI_EAGAIN)
 			rxm_ep_do_progress(&rxm_ep->util_ep);
-		rxm_rma_buf_release(rxm_ep, rma_buf);
+		ofi_buf_free(rma_buf);
 	}
 unlock:
 	ofi_ep_lock_release(&rxm_ep->util_ep);

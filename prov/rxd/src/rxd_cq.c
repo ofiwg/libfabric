@@ -162,7 +162,7 @@ void rxd_rx_entry_free(struct rxd_ep *ep, struct rxd_x_entry *rx_entry)
 {
 	rx_entry->op = RXD_NO_OP;
 	dlist_remove(&rx_entry->entry);
-	rxd_release_rx_entry(ep, rx_entry);
+	ofi_ibuf_free(rx_entry);
 }
 
 static int rxd_match_pkt_entry(struct slist_entry *item, const void *arg)
@@ -185,7 +185,7 @@ static void rxd_remove_rx_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry
 
 void rxd_release_repost_rx(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 {
-	rxd_release_rx_pkt(ep, pkt_entry);
+	ofi_buf_free(pkt_entry);
 	rxd_ep_post_buf(ep);
 }
 
@@ -324,7 +324,7 @@ static void rxd_verify_active(struct rxd_ep *ep, fi_addr_t addr, fi_addr_t peer_
 			dlist_insert_tail(&pkt_entry->d_entry, &ep->ctrl_pkts);
 			pkt_entry->flags |= RXD_PKT_ACKED;
 		} else {
-			rxd_release_tx_pkt(ep, pkt_entry);
+			ofi_buf_free(pkt_entry);
 			ep->peers[addr].unacked_cnt--;
 		}
 		dlist_remove(&ep->peers[addr].entry);
@@ -444,7 +444,7 @@ static int rxd_send_cts(struct rxd_ep *rxd_ep, struct rxd_rts_pkt *rts_pkt,
 	ret = rxd_ep_send_pkt(rxd_ep, pkt_entry);
 	if (ret) {
 		dlist_remove(&pkt_entry->d_entry);
-		rxd_release_tx_pkt(rxd_ep, pkt_entry);
+		ofi_buf_free(pkt_entry);
 	}
 
 	return ret;
@@ -1107,7 +1107,7 @@ static void rxd_handle_ack(struct rxd_ep *ep, struct rxd_pkt_entry *ack_entry)
 			continue;
 		}
 		dlist_remove(&pkt_entry->d_entry);
-		rxd_release_tx_pkt(ep, pkt_entry);
+		ofi_buf_free(pkt_entry);
 	     	ep->peers[peer].unacked_cnt--;
 
 		pkt_entry = container_of((&ep->peers[peer].unacked)->next,
@@ -1131,13 +1131,13 @@ void rxd_handle_send_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp)
 	case RXD_CTS:
 	case RXD_ACK:
 		dlist_remove(&pkt_entry->d_entry);
-		rxd_release_tx_pkt(ep, pkt_entry);
+		ofi_buf_free(pkt_entry);
 		break;
 	default:
 		if (pkt_entry->flags & RXD_PKT_ACKED) {
 			peer = pkt_entry->peer;
 			dlist_remove(&pkt_entry->d_entry);
-			rxd_release_tx_pkt(ep, pkt_entry);
+			ofi_buf_free(pkt_entry);
 	     		ep->peers[peer].unacked_cnt--;
 			rxd_progress_tx_list(ep, &ep->peers[peer]);
 		} else {

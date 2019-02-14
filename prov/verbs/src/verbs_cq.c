@@ -119,7 +119,7 @@ fi_ibv_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
 			sizeof(wce->wc.vendor_err));
 	}
 
-	ofi_buf_free(cq->wce_pool, wce);
+	ofi_buf_free(wce);
 	return 1;
 err:
 	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
@@ -316,7 +316,7 @@ static ssize_t fi_ibv_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 			entry = slist_remove_head(&cq->wcq);
 			wce = container_of(entry, struct fi_ibv_wce, entry);
 			cq->read_entry(&wce->wc, (char *)buf + i * cq->entry_size);
-			ofi_buf_free(cq->wce_pool, wce);
+			ofi_buf_free(wce);
 			continue;
 		}
 
@@ -435,7 +435,7 @@ static int fi_ibv_cq_trywait(struct fid *fid)
 
 	ret = FI_SUCCESS;
 err:
-	ofi_buf_free(cq->wce_pool, wce);
+	ofi_buf_free(wce);
 out:
 	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
 	return ret;
@@ -505,7 +505,7 @@ static int fi_ibv_cq_close(fid_t fid)
 	while (!slist_empty(&cq->wcq)) {
 		entry = slist_remove_head(&cq->wcq);
 		wce = container_of(entry, struct fi_ibv_wce, entry);
-		ofi_buf_free(cq->wce_pool, wce);
+		ofi_buf_free(wce);
 	}
 	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
 

@@ -347,7 +347,7 @@ static inline
 void mrail_free_req(struct mrail_ep *mrail_ep, struct mrail_req *req)
 {
 	ofi_ep_lock_acquire(&mrail_ep->util_ep);
-	ofi_buf_free(mrail_ep->req_pool, req);
+	ofi_buf_free(req);
 	ofi_ep_lock_release(&mrail_ep->util_ep);
 }
 

@@ -254,7 +254,7 @@ static inline int rxm_finish_rma(struct rxm_ep *rxm_ep, struct rxm_rma_buf *rma_
 		rxm_ep_msg_mr_closev(rma_buf->mr.mr, rma_buf->mr.count);
 	}
 
-	rxm_rma_buf_release(rxm_ep, rma_buf);
+	ofi_buf_free(rma_buf);
 	return ret;
 }
 
@@ -278,7 +278,7 @@ static inline int rxm_finish_sar_segment_send(struct rxm_ep *rxm_ep, struct rxm_
 	case RXM_SAR_SEG_FIRST:
 		break;
 	case RXM_SAR_SEG_MIDDLE:
-		rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_SAR, tx_buf);
+		ofi_buf_free(tx_buf);
 		break;
 	case RXM_SAR_SEG_LAST:
 		ret = rxm_cq_tx_comp_write(rxm_ep, ofi_tx_cq_flags(tx_buf->pkt.hdr.op),
@@ -286,10 +286,11 @@ static inline int rxm_finish_sar_segment_send(struct rxm_ep *rxm_ep, struct rxm_
 
 		assert(ofi_tx_cq_flags(tx_buf->pkt.hdr.op) & FI_SEND);
 		ofi_ep_tx_cntr_inc(&rxm_ep->util_ep);
-		first_tx_buf = rxm_msg_id_2_tx_buf(rxm_ep, RXM_BUF_POOL_TX_SAR,
-						   tx_buf->pkt.ctrl_hdr.msg_id);
-		rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_SAR, first_tx_buf);
-		rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_SAR, tx_buf);
+		first_tx_buf = ofi_bufpool_get_ibuf(rxm_ep->
+					buf_pools[RXM_BUF_POOL_TX_SAR].pool,
+					tx_buf->pkt.ctrl_hdr.msg_id);
+		ofi_buf_free(first_tx_buf);
+		ofi_buf_free(tx_buf);
 		break;
 	}
 
@@ -321,16 +322,17 @@ static int rxm_rndv_tx_finish(struct rxm_ep *rxm_ep, struct rxm_tx_rndv_buf *tx_
 	assert(ofi_tx_cq_flags(tx_buf->pkt.hdr.op) & FI_SEND);
 	ofi_ep_tx_cntr_inc(&rxm_ep->util_ep);
 
-	rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_RNDV, tx_buf);
+	ofi_buf_free(tx_buf);
 
 	return ret;
 }
 
 static int rxm_rndv_handle_ack(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_buf)
 {
-	struct rxm_tx_rndv_buf *tx_buf =
-		rxm_msg_id_2_tx_buf(rxm_ep, RXM_BUF_POOL_TX_RNDV,
-				    rx_buf->pkt.ctrl_hdr.msg_id);
+	struct rxm_tx_rndv_buf *tx_buf;
+
+	tx_buf = ofi_bufpool_get_ibuf(rxm_ep->buf_pools[RXM_BUF_POOL_TX_RNDV].pool,
+				      rx_buf->pkt.ctrl_hdr.msg_id);
 
 	FI_DBG(&rxm_prov, FI_LOG_CQ, "Got ACK for msg_id: 0x%" PRIx64 "\n",
 	       rx_buf->pkt.ctrl_hdr.msg_id);
@@ -700,8 +702,7 @@ static ssize_t rxm_rndv_send_ack(struct rxm_rx_buf *rx_buf)
 	}
 	return 0;
 err:
-	rxm_tx_buf_release(rx_buf->ep, RXM_BUF_POOL_TX_ACK,
-			   rx_buf->recv_entry->rndv.tx_buf);
+	ofi_buf_free(rx_buf->recv_entry->rndv.tx_buf);
 	return ret;
 }
 
@@ -798,8 +799,7 @@ static ssize_t rxm_atomic_send_resp(struct rxm_ep *rxm_ep,
 		ret = fi_inject(rx_buf->conn->msg_ep, &resp_buf->pkt,
 				resp_len, 0);
 		if (OFI_LIKELY(!ret))
-			rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_ATOMIC,
-					   resp_buf);
+			ofi_buf_free(resp_buf);
 	} else {
 		ret = rxm_atomic_send_respmsg(rxm_ep, rx_buf->conn, resp_buf,
 					      resp_len);
@@ -943,8 +943,8 @@ static inline ssize_t rxm_handle_atomic_resp(struct rxm_ep *rxm_ep,
 	uint64_t len;
 	int ret = 0;
 
-	tx_buf = rxm_msg_id_2_tx_buf(rxm_ep, RXM_BUF_POOL_TX_ATOMIC,
-				     rx_buf->pkt.ctrl_hdr.msg_id);
+	tx_buf = ofi_bufpool_get_ibuf(rxm_ep->buf_pools[RXM_BUF_POOL_TX_ATOMIC].pool,
+				      rx_buf->pkt.ctrl_hdr.msg_id);
 	FI_DBG(&rxm_prov, FI_LOG_CQ,
 	       "Received Atomic Response for msg_id: 0x%" PRIx64 "\n",
 	       rx_buf->pkt.ctrl_hdr.msg_id);
@@ -976,7 +976,7 @@ done:
 		ofi_ep_rd_cntr_inc(&rxm_ep->util_ep);
 
 	rxm_rx_buf_release(rxm_ep, rx_buf);
-	rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_ATOMIC, tx_buf);
+	ofi_buf_free(tx_buf);
 
 	return ret;
 }
@@ -1004,7 +1004,7 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 		tx_eager_buf = comp->op_context;
 		assert(comp->flags & FI_SEND);
 		ret = rxm_finish_eager_send(rxm_ep, tx_eager_buf);
-		rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX, tx_eager_buf);
+		ofi_buf_free(tx_eager_buf);
 		return ret;
 	case RXM_SAR_TX:
 		tx_sar_buf = comp->op_context;
@@ -1060,14 +1060,12 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 	case RXM_RNDV_ACK_SENT:
 		rx_buf = comp->op_context;
 		assert(comp->flags & FI_SEND);
-		rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_ACK,
-				   rx_buf->recv_entry->rndv.tx_buf);
+		ofi_buf_free(rx_buf->recv_entry->rndv.tx_buf);
 		return rxm_finish_send_rndv_ack(rx_buf);
 	case RXM_ATOMIC_RESP_SENT:
 		tx_atomic_buf = comp->op_context;
 		assert(comp->flags & FI_SEND);
-		rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_ATOMIC,
-				   tx_atomic_buf);
+		ofi_buf_free(tx_atomic_buf);
 		return 0;
 	case RXM_ATOMIC_RESP_WAIT:
 		/* Optional atomic request completion; TX completion
@@ -1257,8 +1255,7 @@ int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep)
 						    handle);
 		ret = rxm_ep_repost_buf(rx_buf);
 		if (ret) {
-			rxm_buf_release(&rxm_ep->buf_pools[RXM_BUF_POOL_RX],
-					&rx_buf->hdr);
+			ofi_buf_free(&rx_buf->hdr);
 			return ret;
 		}
 	}
