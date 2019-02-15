@@ -612,9 +612,9 @@ err:
 	handle->ep->attr->info.handle = NULL;
 	/* Register handle for later deletion */
 	handle->state = SOCK_CONN_HANDLE_DELETED;
-	fastlock_acquire(&cm_head->signal_lock);
+	/* `cm_head::signal_lock` has already been held
+	 * in `sock_ep_cm_thread` function */
 	sock_ep_cm_add_to_msg_list(cm_head, handle);
-	fastlock_release(&cm_head->signal_lock);
 out:
 	free(param);
 	free(cm_entry);
