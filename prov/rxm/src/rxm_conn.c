@@ -472,7 +472,7 @@ void rxm_cmap_process_connect(struct rxm_cmap *cmap,
 
 void rxm_cmap_process_reject(struct rxm_cmap *cmap,
 			     struct rxm_cmap_handle *handle,
-			     enum rxm_cmap_reject_flag cm_reject_flag)
+			     enum rxm_cmap_reject_reason reject_reason)
 {
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 		"Processing reject for handle: %p\n", handle);
@@ -487,7 +487,7 @@ void rxm_cmap_process_reject(struct rxm_cmap *cmap,
 		rxm_conn_close_saved(handle);
 		break;
 	case RXM_CMAP_CONNREQ_SENT:
-		if (cm_reject_flag == RXM_CMAP_REJECT_GENUINE) {
+		if (reject_reason == RXM_CMAP_REJECT_GENUINE) {
 			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 			       "Deleting connection handle\n");
 			rxm_cmap_del_handle(handle);
@@ -511,17 +511,14 @@ void rxm_cmap_process_reject(struct rxm_cmap *cmap,
 
 int rxm_cmap_process_connreq(struct rxm_cmap *cmap, void *addr,
 			     struct rxm_cmap_handle **handle_ret,
-			     enum rxm_cmap_reject_flag *cm_reject_flag)
+			     uint8_t *reject_reason)
 {
 	struct rxm_cmap_handle *handle;
 	int ret = 0, cmp;
 	fi_addr_t fi_addr = ofi_ip_av_get_fi_addr(cmap->av, addr);
 
-	/* Reset flag to initial state */
-	*cm_reject_flag = RXM_CMAP_REJECT_GENUINE;
-
 	ofi_straddr_dbg(cmap->av->prov, FI_LOG_EP_CTRL,
-			"Processing connreq for addr", addr);
+			"Processing connreq from remote pep", addr);
 
 	cmap->acquire(&cmap->lock);
 	if (fi_addr == FI_ADDR_NOTAVAIL)
@@ -560,15 +557,14 @@ int rxm_cmap_process_connreq(struct rxm_cmap *cmap, void *addr,
 		if (cmp < 0) {
 			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 				"Remote name lower than local name.\n");
-			*cm_reject_flag = RXM_CMAP_REJECT_SIMULT_CONN;
+			*reject_reason = RXM_CMAP_REJECT_SIMULT_CONN;
 			ret = -FI_EALREADY;
 			break;
 		} else if (cmp > 0) {
 			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 				"Re-using handle: %p to accept remote "
 				"connection\n", handle);
-			/* Re-use handle. If it receives FI_REJECT the handle
-			 * would not be deleted in this state */
+			*reject_reason = RXM_CMAP_REJECT_GENUINE;
 			rxm_conn_save(handle);
 		} else {
 			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
@@ -1022,39 +1018,44 @@ static struct rxm_cmap_handle *rxm_conn_alloc(struct rxm_cmap *cmap)
 }
 
 static inline int
-rxm_conn_verify_cm_data(struct rxm_cm_data *remote_cm_data,
-			struct rxm_cm_data *local_cm_data)
+rxm_conn_verify_cm_data(union rxm_cm_data *remote_cm_data,
+			union rxm_cm_data *local_cm_data)
 {
-	if (remote_cm_data->proto.endianness != local_cm_data->proto.endianness) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-			"endianness of two peers (%"PRIu8" vs %"PRIu8")"
-			"are mismatched\n",
-			remote_cm_data->proto.endianness,
-			local_cm_data->proto.endianness);
+	/* This should stay at top as it helps to avoid endian conversion
+	 * for other fields in rxm_cm_data */
+	if (remote_cm_data->connect.version != local_cm_data->connect.version) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "cm data version mismatch "
+			"(local: %" PRIu8 ", remote:  %" PRIu8 ")\n",
+			local_cm_data->connect.version,
+			remote_cm_data->connect.version);
 		goto err;
 	}
-	if (remote_cm_data->proto.ctrl_version != local_cm_data->proto.ctrl_version) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-			"ctrl_version of two peers (%"PRIu8" vs %"PRIu8")"
-			"are mismatched\n",
-			remote_cm_data->proto.ctrl_version,
-			local_cm_data->proto.ctrl_version);
+	if (remote_cm_data->connect.endianness != local_cm_data->connect.endianness) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "cm data endianness mismatch "
+			"(local: %" PRIu8 ", remote:  %" PRIu8 ")\n",
+			local_cm_data->connect.endianness,
+			remote_cm_data->connect.endianness);
 		goto err;
 	}
-	if (remote_cm_data->proto.op_version != local_cm_data->proto.op_version) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-			"op_version of two peers (%"PRIu8" vs %"PRIu8")"
-			"are mismatched\n",
-			remote_cm_data->proto.op_version,
-			local_cm_data->proto.op_version);
+	if (remote_cm_data->connect.ctrl_version != local_cm_data->connect.ctrl_version) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "cm data ctrl_version mismatch "
+			"(local: %" PRIu8 ", remote:  %" PRIu8 ")\n",
+			local_cm_data->connect.ctrl_version,
+			remote_cm_data->connect.ctrl_version);
 		goto err;
 	}
-	if (remote_cm_data->proto.eager_size != local_cm_data->proto.eager_size) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-			"inject_size of two peers (%"PRIu64" vs %"PRIu64")"
-			"are mismatched\n",
-			remote_cm_data->proto.eager_size,
-			local_cm_data->proto.eager_size);
+	if (remote_cm_data->connect.op_version != local_cm_data->connect.op_version) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "cm data op_version mismatch "
+			"(local: %" PRIu8 ", remote:  %" PRIu8 ")\n",
+			local_cm_data->connect.op_version,
+			remote_cm_data->connect.op_version);
+		goto err;
+	}
+	if (remote_cm_data->connect.eager_size != local_cm_data->connect.eager_size) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "cm data eager_size mismatch "
+			"(local: %" PRIu64 ", remote:  %" PRIu64 ")\n",
+			local_cm_data->connect.eager_size,
+			remote_cm_data->connect.eager_size);
 		goto err;
 	}
 	return FI_SUCCESS;
@@ -1064,23 +1065,21 @@ err:
 
 static int
 rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
-			void *data)
+			union rxm_cm_data *remote_cm_data)
 {
 	struct rxm_conn *rxm_conn;
-	struct rxm_cm_data *remote_cm_data = data;
-	struct rxm_cm_data cm_data = {
-		.proto = {
+	union rxm_cm_data cm_data = {
+		.connect = {
+			.version = RXM_CM_DATA_VERSION,
+			.endianness = ofi_detect_endianness(),
 			.ctrl_version = RXM_CTRL_VERSION,
 			.op_version = RXM_OP_VERSION,
-			.endianness = ofi_detect_endianness(),
 			.eager_size = rxm_ep->rxm_info->tx_attr->inject_size,
 		},
 	};
 	struct rxm_cmap_handle *handle;
+	struct sockaddr_storage remote_pep_addr;
 	int ret;
-	enum rxm_cmap_reject_flag cm_reject_flag = RXM_CMAP_REJECT_GENUINE;
-
-	remote_cm_data->proto.eager_size = ntohll(remote_cm_data->proto.eager_size);
 
 	if (rxm_conn_verify_cm_data(remote_cm_data, &cm_data)) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
@@ -1089,24 +1088,27 @@ rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 		goto err1;
 	}
 
-	ret = rxm_cmap_process_connreq(rxm_ep->cmap,
-				       &remote_cm_data->name,
-				       &handle, &cm_reject_flag);
+	memcpy(&remote_pep_addr, msg_info->dest_addr, msg_info->dest_addrlen);
+	ofi_addr_set_port((struct sockaddr *)&remote_pep_addr,
+			  remote_cm_data->connect.port);
+
+	ret = rxm_cmap_process_connreq(rxm_ep->cmap, &remote_pep_addr,
+				       &handle, &cm_data.reject.reason);
 	if (ret)
 		goto err1;
 
 	rxm_conn = container_of(handle, struct rxm_conn, handle);
 
-	rxm_conn->handle.remote_key = remote_cm_data->conn_id;
+	rxm_conn->handle.remote_key = remote_cm_data->connect.client_conn_id;
 
 	ret = rxm_msg_ep_open(rxm_ep, msg_info, rxm_conn, handle);
 	if (ret)
 		goto err2;
 
-	cm_data.conn_id = rxm_conn->handle.key;
-	cm_data.proto.eager_size = htonll(cm_data.proto.eager_size);
+	cm_data.accept.server_conn_id = rxm_conn->handle.key;
 
-	ret = fi_accept(rxm_conn->msg_ep, &cm_data, sizeof(cm_data));
+	ret = fi_accept(rxm_conn->msg_ep, &cm_data.accept.server_conn_id,
+			sizeof(cm_data.accept.server_conn_id));
 	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_FABRIC,
 			"Unable to accept incoming connection\n");
@@ -1126,9 +1128,9 @@ err2:
 err1:
 	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
 	       "Rejecting incoming connection request (reject flag - %d)\n",
-	       cm_reject_flag);
+	       cm_data.reject.reason);
 	if (fi_reject(rxm_ep->msg_pep, msg_info->handle,
-		      &cm_reject_flag, sizeof(cm_reject_flag)))
+		      &cm_data.reject.reason, sizeof(cm_data.reject.reason)))
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 			"Unable to reject incoming connection\n");
 	return ret;
@@ -1157,29 +1159,38 @@ static void rxm_conn_wake_up_wait_obj(struct rxm_ep *rxm_ep)
 static int
 rxm_conn_handle_event(struct rxm_ep *rxm_ep, struct rxm_msg_eq_entry *entry)
 {
-	struct rxm_cm_data *cm_data;
+	union rxm_cm_data *cm_data = entry->err_entry.err_data;
+	enum rxm_cmap_reject_reason reject_reason;
 
 	if (entry->rd == -FI_ECONNREFUSED) {
-		enum rxm_cmap_reject_flag cm_reject_flag;
-
-		if (OFI_LIKELY(entry->err_entry.err_data_size >=
-				sizeof(enum rxm_cmap_reject_flag))) {
-			assert(entry->err_entry.err_data);
-			cm_reject_flag = *((enum rxm_cmap_reject_flag *)
-						entry->err_entry.err_data);
-		} else {
-			FI_WARN(&rxm_prov, FI_LOG_FABRIC,
-				"Error -FI_ECONNREFUSED was provided without error data\n");
-			cm_reject_flag = RXM_CMAP_REJECT_GENUINE;
+		if (OFI_UNLIKELY(entry->err_entry.err_data_size !=
+				 sizeof(cm_data->reject.reason))) {
+			FI_WARN(&rxm_prov, FI_LOG_FABRIC, "connection reject: "
+				"no reject error data (cm_data) was found!\n");
+			goto err;
 		}
 
-		FI_DBG(&rxm_prov, FI_LOG_FABRIC,
-		       "Received reject (reject flag - %d)\n",
-		       cm_reject_flag);
-		assert((cm_reject_flag == RXM_CMAP_REJECT_GENUINE) ||
-		       (cm_reject_flag == RXM_CMAP_REJECT_SIMULT_CONN));
+		assert(cm_data);
+		if (cm_data->connect.version != RXM_CM_DATA_VERSION) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "connection reject: "
+				"cm data version mismatch (local: %" PRIu8
+				", remote:  %" PRIu8 ")\n",
+				(uint8_t) RXM_CM_DATA_VERSION,
+				cm_data->connect.ctrl_version);
+			goto err;
+		}
+		reject_reason = cm_data->reject.reason;
+
+		if (reject_reason == RXM_CMAP_REJECT_GENUINE)
+			FI_WARN(&rxm_prov, FI_LOG_FABRIC, "connection reject: "
+			       "(reason: RXM_CMAP_REJECT_GENUINE)\n");
+		else if (reject_reason == RXM_CMAP_REJECT_SIMULT_CONN)
+			FI_DBG(&rxm_prov, FI_LOG_FABRIC, "connection reject: "
+			       "(reason: RXM_CMAP_REJECT_SIMULT_CONN)\n");
+		else
+			assert(0);
 		rxm_cmap_process_reject(rxm_ep->cmap, entry->context,
-					cm_reject_flag);
+					reject_reason);
 		return 0;
 	}
 
@@ -1199,7 +1210,8 @@ rxm_conn_handle_event(struct rxm_ep *rxm_ep, struct rxm_msg_eq_entry *entry)
 				entry->rd, RXM_CM_ENTRY_SZ);
 			goto err;
 		}
-		rxm_msg_process_connreq(rxm_ep, entry->cm_entry.info, entry->cm_entry.data);
+		rxm_msg_process_connreq(rxm_ep, entry->cm_entry.info,
+					(union rxm_cm_data *)entry->cm_entry.data);
 		fi_freeinfo(entry->cm_entry.info);
 		break;
 	case FI_CONNECTED:
@@ -1211,7 +1223,7 @@ rxm_conn_handle_event(struct rxm_ep *rxm_ep, struct rxm_msg_eq_entry *entry)
 		rxm_cmap_process_connect(rxm_ep->cmap,
 					 entry->cm_entry.fid->context,
 					 ((entry->rd - sizeof(entry->cm_entry)) ?
-					  &cm_data->conn_id : NULL));
+					  &cm_data->accept.server_conn_id : NULL));
 		rxm_conn_wake_up_wait_obj(rxm_ep);
 		rxm_ep->cmap->release(&rxm_ep->cmap->lock);
 		break;
@@ -1364,10 +1376,11 @@ exit:
 }
 
 static int rxm_prepare_cm_data(struct fid_pep *pep, struct rxm_cmap_handle *handle,
-		struct rxm_cm_data *cm_data)
+		union rxm_cm_data *cm_data)
 {
+	struct sockaddr_storage name;
 	size_t cm_data_size = 0;
-	size_t name_size = sizeof(cm_data->name);
+	size_t name_size = sizeof(name);
 	size_t opt_size = sizeof(cm_data_size);
 	int ret;
 
@@ -1383,13 +1396,14 @@ static int rxm_prepare_cm_data(struct fid_pep *pep, struct rxm_cmap_handle *hand
 		return -FI_EOTHER;
 	}
 
-	ret = fi_getname(&pep->fid, &cm_data->name, &name_size);
+	ret = fi_getname(&pep->fid, &name, &name_size);
 	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to get msg pep name\n");
 		return ret;
 	}
 
-	cm_data->conn_id = handle->key;
+	cm_data->connect.port = ofi_addr_get_port((struct sockaddr *)&name);
+	cm_data->connect.client_conn_id = handle->key;
 	return 0;
 }
 
@@ -1403,8 +1417,9 @@ rxm_conn_connect(struct util_ep *util_ep, struct rxm_cmap_handle *handle,
 		container_of(util_ep, struct rxm_ep, util_ep);
 	struct rxm_conn *rxm_conn =
 		container_of(handle, struct rxm_conn, handle);
-	struct rxm_cm_data cm_data = {
-		.proto = {
+	union rxm_cm_data cm_data = {
+		.connect = {
+			.version = RXM_CM_DATA_VERSION,
 			.ctrl_version = RXM_CTRL_VERSION,
 			.op_version = RXM_OP_VERSION,
 			.endianness = ofi_detect_endianness(),
@@ -1435,9 +1450,8 @@ rxm_conn_connect(struct util_ep *util_ep, struct rxm_cmap_handle *handle,
 	if (ret)
 		goto err2;
 
-	cm_data.proto.eager_size = htonll(cm_data.proto.eager_size);
-
-	ret = fi_connect(rxm_conn->msg_ep, msg_info->dest_addr, &cm_data, sizeof(cm_data));
+	ret = fi_connect(rxm_conn->msg_ep, msg_info->dest_addr,
+			 &cm_data, sizeof(cm_data));
 	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to connect msg_ep\n");
 		goto err2;

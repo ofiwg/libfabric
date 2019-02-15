@@ -271,6 +271,7 @@ static void server_recv_connreq(struct util_wait *wait,
 	struct tcpx_conn_handle *handle;
 	struct fi_eq_cm_entry *cm_entry;
 	struct ofi_ctrl_hdr conn_req;
+	socklen_t len;
 	int ret;
 
 	assert(cm_ctx->fid->fclass == FI_CLASS_CONNREQ);
@@ -291,6 +292,15 @@ static void server_recv_connreq(struct util_wait *wait,
 	cm_entry->info = fi_dupinfo(handle->pep->info);
 	if (!cm_entry->info)
 		goto err2;
+
+	len = cm_entry->info->dest_addrlen = handle->pep->info->src_addrlen;
+	cm_entry->info->dest_addr = malloc(len);
+	if (!cm_entry->info->dest_addr)
+		goto err3;
+
+	ret = ofi_getpeername(handle->conn_fd, cm_entry->info->dest_addr, &len);
+	if (ret)
+		goto err3;
 
 	handle->endian_match = (conn_req.conn_data == 1);
 	cm_entry->info->handle = &handle->handle;
