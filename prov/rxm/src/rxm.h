@@ -61,6 +61,7 @@
 #define RXM_MAJOR_VERSION 1
 #define RXM_MINOR_VERSION 0
 
+#define RXM_CM_DATA_VERSION	1
 #define RXM_OP_VERSION		3
 #define RXM_CTRL_VERSION	3
 
@@ -174,11 +175,6 @@ enum rxm_cmap_state {
 	RXM_CMAP_SHUTDOWN,
 };
 
-enum rxm_cmap_reject_flag {
-	RXM_CMAP_REJECT_GENUINE,
-	RXM_CMAP_REJECT_SIMULT_CONN,
-};
-
 struct rxm_cmap_handle {
 	struct rxm_cmap *cmap;
 	enum rxm_cmap_state state;
@@ -228,6 +224,34 @@ struct rxm_cmap {
 
 struct rxm_ep;
 
+enum rxm_cmap_reject_reason {
+	RXM_CMAP_REJECT_UNSPEC,
+	RXM_CMAP_REJECT_GENUINE,
+	RXM_CMAP_REJECT_SIMULT_CONN,
+};
+
+union rxm_cm_data {
+	struct _connect {
+		uint8_t version;
+		uint8_t endianness;
+		uint8_t ctrl_version;
+		uint8_t op_version;
+		uint16_t port;
+		uint8_t padding[2];
+		uint64_t eager_size;
+		uint64_t client_conn_id;
+	} connect;
+
+	struct _accept {
+		uint64_t server_conn_id;
+	} accept;
+
+	struct _reject {
+		uint8_t version;
+		uint8_t reason;
+	} reject;
+};
+
 struct rxm_cmap_handle *rxm_cmap_key2handle(struct rxm_cmap *cmap, uint64_t key);
 int rxm_cmap_update(struct rxm_cmap *cmap, const void *addr, fi_addr_t fi_addr);
 
@@ -238,10 +262,7 @@ void rxm_cmap_process_connect(struct rxm_cmap *cmap,
 			      uint64_t *remote_key);
 void rxm_cmap_process_reject(struct rxm_cmap *cmap,
 			     struct rxm_cmap_handle *handle,
-			     enum rxm_cmap_reject_flag cm_reject_flag);
-int rxm_cmap_process_connreq(struct rxm_cmap *cmap, void *addr,
-			     struct rxm_cmap_handle **handle_ret,
-			     enum rxm_cmap_reject_flag *cm_reject_flag);
+			     enum rxm_cmap_reject_reason cm_reject_reason);
 void rxm_cmap_process_shutdown(struct rxm_cmap *cmap,
 			       struct rxm_cmap_handle *handle);
 int rxm_cmap_handle_unconnected(struct rxm_ep *rxm_ep, struct rxm_cmap_handle *handle,
@@ -278,20 +299,6 @@ struct rxm_mr {
 	struct fid_mr mr_fid;
 	struct fid_mr *msg_mr;
 	struct rxm_domain *domain;
-};
-
-struct rxm_ep_wire_proto {
-	uint8_t	ctrl_version;
-	uint8_t	op_version;
-	uint8_t endianness;
-	uint8_t padding[5];
-	uint64_t eager_size;
-};
-
-struct rxm_cm_data {
-	struct sockaddr name;
-	uint64_t conn_id;
-	struct rxm_ep_wire_proto proto;
 };
 
 struct rxm_rndv_hdr {
@@ -638,9 +645,9 @@ struct rxm_msg_eq_entry {
 };
 
 #define RXM_MSG_EQ_ENTRY_SZ (sizeof(struct rxm_msg_eq_entry) + \
-			     sizeof(struct rxm_cm_data))
+			     sizeof(union rxm_cm_data))
 #define RXM_CM_ENTRY_SZ (sizeof(struct fi_eq_cm_entry) + \
-			 sizeof(struct rxm_cm_data))
+			 sizeof(union rxm_cm_data))
 
 struct rxm_ep {
 	struct util_ep 		util_ep;
