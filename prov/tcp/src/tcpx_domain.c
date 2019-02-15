@@ -48,7 +48,7 @@ static int tcpx_srx_ctx_close(struct fid *fid)
 	while (!slist_empty(&srx_ctx->rx_queue)) {
 		entry = slist_remove_head(&srx_ctx->rx_queue);
 		xfer_entry = container_of(entry, struct tcpx_xfer_entry, entry);
-		ofi_buf_free(srx_ctx->buf_pool, xfer_entry);
+		ofi_buf_free(xfer_entry);
 	}
 
 	ofi_bufpool_destroy(srx_ctx->buf_pool);

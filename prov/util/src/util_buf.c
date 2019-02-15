@@ -50,27 +50,26 @@ static void ofi_bufpool_set_region_size(struct ofi_bufpool *pool)
 	ssize_t hp_size;
 
 	if (pool->entry_cnt) {
-		assert(pool->region_size);
+		assert(pool->alloc_size && pool->region_size);
 		return;
 	}
 
 	hp_size = ofi_get_hugepage_size();
-	if (pool->attr.chunk_cnt * pool->entry_size >= hp_size) {
+	if ((pool->attr.chunk_cnt + 1) * pool->entry_size >= hp_size) {
 		pool->attr.flags |= OFI_BUFPOOL_MMAPPED;
-		pool->region_size = fi_get_aligned_sz(pool->attr.chunk_cnt *
-						      pool->entry_size,
-						      hp_size);
-		return;
+		pool->alloc_size = fi_get_aligned_sz((pool->attr.chunk_cnt + 1) *
+						      pool->entry_size, hp_size);
+	} else {
+		pool->attr.flags &= ~OFI_BUFPOOL_MMAPPED;
+		pool->alloc_size = (pool->attr.chunk_cnt + 1) * pool->entry_size;
 	}
-
-	pool->attr.flags &= ~OFI_BUFPOOL_MMAPPED;
-	pool->region_size = pool->attr.chunk_cnt * pool->entry_size;
+	pool->region_size = pool->alloc_size - pool->entry_size;
 }
 
 int ofi_bufpool_grow(struct ofi_bufpool *pool)
 {
 	struct ofi_bufpool_region *buf_region;
-	struct ofi_bufpool_ftr *buf_ftr;
+	struct ofi_bufpool_hdr *buf_hdr;
 	void *buf;
 	int ret;
 	size_t i;
@@ -87,21 +86,22 @@ int ofi_bufpool_grow(struct ofi_bufpool *pool)
 	dlist_init(&buf_region->free_list);
 
 	if (pool->attr.flags & OFI_BUFPOOL_MMAPPED) {
-		ret = ofi_alloc_hugepage_buf((void **) &buf_region->mem_region,
-					     pool->region_size);
+		ret = ofi_alloc_hugepage_buf((void **) &buf_region->alloc_region,
+					     pool->alloc_size);
 		/* If we can't allocate huge pages, fall back to normal
 		 * allocations if this is the first allocation attempt.
 		 */
 		if (ret && !pool->entry_cnt) {
 			pool->attr.flags &= ~OFI_BUFPOOL_MMAPPED;
-			pool->region_size = pool->attr.chunk_cnt *
-					    pool->entry_size;
+			pool->alloc_size = (pool->attr.chunk_cnt + 1) *
+					   pool->entry_size;
+			pool->region_size = pool->alloc_size - pool->entry_size;
 			goto retry;
 		}
 	} else {
 retry:
-		ret = ofi_memalign((void **) &buf_region->mem_region,
-				   pool->attr.alignment, pool->region_size);
+		ret = ofi_memalign((void **) &buf_region->alloc_region,
+				   pool->attr.alignment, pool->alloc_size);
 	}
 	if (ret) {
 		FI_DBG(&core_prov, FI_LOG_CORE, "Allocation failed: %s\n",
@@ -109,7 +109,8 @@ retry:
 		goto err1;
 	}
 
-	memset(buf_region->mem_region, 0, pool->region_size);
+	memset(buf_region->alloc_region, 0, pool->alloc_size);
+	buf_region->mem_region = buf_region->alloc_region + pool->entry_size;
 	if (pool->attr.alloc_fn) {
 		ret = pool->attr.alloc_fn(buf_region);
 		if (ret)
@@ -133,37 +134,37 @@ retry:
 
 	for (i = 0; i < pool->attr.chunk_cnt; i++) {
 		buf = (buf_region->mem_region + i * pool->entry_size);
-		buf_ftr = ofi_buf_ftr(pool, buf);
+		buf_hdr = ofi_buf_hdr(buf);
 
 		if (pool->attr.init_fn) {
 #if ENABLE_DEBUG
 			if (pool->attr.flags & OFI_BUFPOOL_INDEXED) {
-				buf_ftr->entry.dlist.next = (void *) OFI_MAGIC_64;
-				buf_ftr->entry.dlist.prev = (void *) OFI_MAGIC_64;
+				buf_hdr->entry.dlist.next = (void *) OFI_MAGIC_64;
+				buf_hdr->entry.dlist.prev = (void *) OFI_MAGIC_64;
 
 				pool->attr.init_fn(buf_region, buf);
 
-				assert((buf_ftr->entry.dlist.next == (void *) OFI_MAGIC_64) &&
-				       (buf_ftr->entry.dlist.prev == (void *) OFI_MAGIC_64));
+				assert((buf_hdr->entry.dlist.next == (void *) OFI_MAGIC_64) &&
+				       (buf_hdr->entry.dlist.prev == (void *) OFI_MAGIC_64));
 			} else {
-				buf_ftr->entry.slist.next = (void *) OFI_MAGIC_64;
+				buf_hdr->entry.slist.next = (void *) OFI_MAGIC_64;
 
 				pool->attr.init_fn(buf_region, buf);
 
-				assert(buf_ftr->entry.slist.next == (void *) OFI_MAGIC_64);
+				assert(buf_hdr->entry.slist.next == (void *) OFI_MAGIC_64);
 			}
 #else
 			pool->attr.init_fn(buf_region, buf);
 #endif
 		}
 
-		buf_ftr->region = buf_region;
-		buf_ftr->index = pool->entry_cnt + i;
+		buf_hdr->region = buf_region;
+		buf_hdr->index = pool->entry_cnt + i;
 		if (pool->attr.flags & OFI_BUFPOOL_INDEXED) {
-			dlist_insert_tail(&buf_ftr->entry.dlist,
+			dlist_insert_tail(&buf_hdr->entry.dlist,
 					  &buf_region->free_list);
 		} else {
-			slist_insert_tail(&buf_ftr->entry.slist,
+			slist_insert_tail(&buf_hdr->entry.slist,
 					  &pool->free_list.entries);
 		}
 	}
@@ -178,7 +179,7 @@ err3:
 	if (pool->attr.free_fn)
 	    pool->attr.free_fn(buf_region);
 err2:
-	ofi_freealign(buf_region->mem_region);
+	ofi_freealign(buf_region->alloc_region);
 err1:
 	free(buf_region);
 	return ret;
@@ -195,7 +196,7 @@ int ofi_bufpool_create_attr(struct ofi_bufpool_attr *attr,
 
 	(*buf_pool)->attr = *attr;
 
-	entry_sz = (attr->size + sizeof(struct ofi_bufpool_ftr));
+	entry_sz = (attr->size + sizeof(struct ofi_bufpool_hdr));
 	(*buf_pool)->entry_size = fi_get_aligned_sz(entry_sz, attr->alignment);
 
 	if ((*buf_pool)->attr.flags & OFI_BUFPOOL_INDEXED)
@@ -240,8 +241,8 @@ void ofi_bufpool_destroy(struct ofi_bufpool *pool)
 			pool->attr.free_fn(buf_region);
 
 		if (pool->attr.flags & OFI_BUFPOOL_MMAPPED) {
-			ret = ofi_free_hugepage_buf(buf_region->mem_region,
-						    pool->region_size);
+			ret = ofi_free_hugepage_buf(buf_region->alloc_region,
+						    pool->alloc_size);
 			if (ret) {
 				FI_DBG(&core_prov, FI_LOG_CORE,
 				       "Huge page free failed: %s\n",
@@ -249,7 +250,7 @@ void ofi_bufpool_destroy(struct ofi_bufpool *pool)
 				assert(0);
 			}
 		} else {
-			ofi_freealign(buf_region->mem_region);
+			ofi_freealign(buf_region->alloc_region);
 		}
 
 		free(buf_region);
@@ -260,12 +261,12 @@ void ofi_bufpool_destroy(struct ofi_bufpool *pool)
 
 int ofi_ibuf_is_lower(struct dlist_entry *item, const void *arg)
 {
-	struct ofi_bufpool_ftr *ftr1, *ftr2;
+	struct ofi_bufpool_hdr *hdr1, *hdr2;
 
-	ftr1 = container_of(arg, struct ofi_bufpool_ftr, entry.dlist);
-	ftr2 = container_of(item, struct ofi_bufpool_ftr, entry.dlist);
+	hdr1 = container_of(arg, struct ofi_bufpool_hdr, entry.dlist);
+	hdr2 = container_of(item, struct ofi_bufpool_hdr, entry.dlist);
 
-	return ftr1->index < ftr2->index;
+	return hdr1->index < hdr2->index;
 }
 
 int ofi_ibufpool_region_is_lower(struct dlist_entry *item, const void *arg)

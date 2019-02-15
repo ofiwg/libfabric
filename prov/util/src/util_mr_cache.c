@@ -79,7 +79,7 @@ static void util_mr_free_entry(struct ofi_mr_cache *cache,
 	cache->cached_cnt--;
 	cache->cached_size -= entry->iov.iov_len;
 	
-	ofi_buf_free(cache->entry_pool, entry);
+	ofi_buf_free(entry);
 }
 
 static void util_mr_uncache_entry(struct ofi_mr_cache *cache,
@@ -169,7 +169,7 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct iovec *iov,
 		}
 		if (ret) {
 			assert(!ofi_mr_cache_flush(cache));
-			ofi_buf_free(cache->entry_pool, *entry);
+			ofi_buf_free(*entry);
 			return ret;
 		}
 	}

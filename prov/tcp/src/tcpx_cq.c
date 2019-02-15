@@ -96,8 +96,7 @@ void tcpx_xfer_entry_release(struct tcpx_cq *tcpx_cq,
 	xfer_entry->context = 0;
 
 	tcpx_cq->util_cq.cq_fastlock_acquire(&tcpx_cq->util_cq.cq_lock);
-	ofi_buf_free(tcpx_cq->buf_pools[xfer_entry->hdr.base_hdr.op_data].pool,
-			 xfer_entry);
+	ofi_buf_free(xfer_entry);
 	tcpx_cq->util_cq.cq_fastlock_release(&tcpx_cq->util_cq.cq_lock);
 }
 

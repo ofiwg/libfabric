@@ -1024,28 +1024,6 @@ rxm_ep_format_tx_buf_pkt(struct rxm_conn *rxm_conn, size_t len, uint8_t op,
 	pkt->hdr.data = data;
 }
 
-static inline struct rxm_buf *rxm_buf_alloc(struct rxm_buf_pool *pool)
-{
-	return ofi_buf_alloc(pool->pool);
-}
-
-static inline
-void rxm_buf_release(struct rxm_buf_pool *pool, struct rxm_buf *buf)
-{
-	ofi_buf_free(pool->pool, buf);
-}
-
-static inline struct rxm_buf *
-rxm_buf_get_by_index(struct rxm_buf_pool *pool, size_t index)
-{
-	return ofi_bufpool_get_ibuf(pool->pool, index);
-}
-
-static inline
-size_t rxm_get_buf_index(struct rxm_buf_pool *pool, struct rxm_buf *buf)
-{
-	return ofi_buf_index(pool->pool, buf);
-}
 
 static inline struct rxm_buf *
 rxm_tx_buf_alloc(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
@@ -1056,19 +1034,14 @@ rxm_tx_buf_alloc(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
 	       (type == RXM_BUF_POOL_TX_RNDV) ||
 	       (type == RXM_BUF_POOL_TX_ATOMIC) ||
 	       (type == RXM_BUF_POOL_TX_SAR));
-	return rxm_buf_alloc(&rxm_ep->buf_pools[type]);
+	return ofi_buf_alloc(rxm_ep->buf_pools[type].pool);
 }
 
-static inline void
-rxm_tx_buf_release(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type, void *tx_buf)
-{
-	rxm_buf_release(&rxm_ep->buf_pools[type], (struct rxm_buf *)tx_buf);
-}
 
 static inline struct rxm_rx_buf *rxm_rx_buf_alloc(struct rxm_ep *rxm_ep)
 {
 	return (struct rxm_rx_buf *)
-		rxm_buf_alloc(&rxm_ep->buf_pools[RXM_BUF_POOL_RX]);
+		ofi_buf_alloc(rxm_ep->buf_pools[RXM_BUF_POOL_RX].pool);
 }
 
 static inline void
@@ -1078,22 +1051,14 @@ rxm_rx_buf_release(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_buf)
 		dlist_insert_tail(&rx_buf->repost_entry,
 				  &rx_buf->ep->repost_ready_list);
 	} else {
-		ofi_buf_free(rxm_ep->buf_pools[RXM_BUF_POOL_RX].pool,
-				 rx_buf);
+		ofi_buf_free(rx_buf);
 	}
 }
 
 static inline struct rxm_rma_buf *rxm_rma_buf_alloc(struct rxm_ep *rxm_ep)
 {
 	return (struct rxm_rma_buf *)
-		rxm_buf_alloc(&rxm_ep->buf_pools[RXM_BUF_POOL_RMA]);
-}
-
-static inline void
-rxm_rma_buf_release(struct rxm_ep *rxm_ep, struct rxm_rma_buf *rx_buf)
-{
-	rxm_buf_release(&rxm_ep->buf_pools[RXM_BUF_POOL_RMA],
-			(struct rxm_buf *)rx_buf);
+		ofi_buf_alloc(rxm_ep->buf_pools[RXM_BUF_POOL_RMA].pool);
 }
 
 static inline

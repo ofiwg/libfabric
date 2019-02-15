@@ -1125,7 +1125,7 @@ static inline void psmx2_am_request_free(struct psmx2_trx_ctxt *trx_ctxt,
 					 struct psmx2_am_request *req)
 {
 	trx_ctxt->domain->am_req_pool_lock_fn(&trx_ctxt->am_req_pool_lock, 0);
-	ofi_buf_free(trx_ctxt->am_req_pool, req);
+	ofi_buf_free(req);
 	trx_ctxt->domain->am_req_pool_unlock_fn(&trx_ctxt->am_req_pool_lock, 0);
 }
 
