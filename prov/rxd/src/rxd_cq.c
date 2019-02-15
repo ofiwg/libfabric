@@ -215,7 +215,7 @@ static void rxd_complete_rx(struct rxd_ep *ep, struct rxd_x_entry *rx_entry)
 		goto out;
 
 	if (rx_entry->bytes_done == rx_entry->cq_entry.len) {
-		rxd_cntr_report_rx_comp(ep, rx_entry);
+		ofi_ep_rx_cntr_inc_funcs[rx_entry->op](&ep->util_ep);
 		if (write_cq)
 			rx_cq->write_fn(rx_cq, &rx_entry->cq_entry);
 	} else if (write_cq) {
@@ -242,7 +242,7 @@ static void rxd_complete_tx(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
 	tx_cq->write_fn(tx_cq, &tx_entry->cq_entry);
 
 out:
-	rxd_cntr_report_tx_comp(ep, tx_entry);
+	ofi_ep_tx_cntr_inc_funcs[tx_entry->op](&ep->util_ep);
 	rxd_tx_entry_free(ep, tx_entry);
 }
 

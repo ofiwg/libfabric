@@ -108,24 +108,6 @@ free:
 	return ret;
 }
 
-void rxd_cntr_report_tx_comp(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
-{
-	uint64_t flags = tx_entry->cq_entry.flags &
-			 (FI_SEND | FI_WRITE | FI_READ);
-
-	assert(ofi_lsb(flags) == ofi_msb(flags));
-	ofi_ep_cntr_inc_funcs[flags](&ep->util_ep);
-}
-
-void rxd_cntr_report_rx_comp(struct rxd_ep *ep, struct rxd_x_entry *rx_entry)
-{
-	uint64_t flags = rx_entry->cq_entry.flags &
-			(FI_RECV | FI_REMOTE_WRITE | FI_REMOTE_READ);
-
-	assert(ofi_lsb(flags) == ofi_msb(flags));
-	ofi_ep_cntr_inc_funcs[flags](&ep->util_ep);
-}
-
 void rxd_cntr_report_error(struct rxd_ep *ep, struct fi_cq_err_entry *err)
 {
         struct util_cntr *cntr;

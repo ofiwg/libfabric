@@ -326,15 +326,8 @@ static inline void ofi_ep_rem_wr_cntr_inc(struct util_ep *ep)
 }
 
 typedef void (*ofi_ep_cntr_inc_func)(struct util_ep *);
-
-static const ofi_ep_cntr_inc_func ofi_ep_cntr_inc_funcs[] = {
-	[FI_TRANSMIT] = ofi_ep_tx_cntr_inc,
-	[FI_RECV] = ofi_ep_rx_cntr_inc,
-	[FI_READ] = ofi_ep_rd_cntr_inc,
-	[FI_WRITE] = ofi_ep_wr_cntr_inc,
-	[FI_REMOTE_READ] = ofi_ep_rem_rd_cntr_inc,
-	[FI_REMOTE_WRITE] = ofi_ep_rem_wr_cntr_inc,
-};
+extern ofi_ep_cntr_inc_func ofi_ep_tx_cntr_inc_funcs[ofi_op_last];
+extern ofi_ep_cntr_inc_func ofi_ep_rx_cntr_inc_funcs[ofi_op_last];
 
 /*
  * Tag and address match

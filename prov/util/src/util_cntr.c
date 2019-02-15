@@ -313,3 +313,28 @@ int ofi_cntr_init(const struct fi_provider *prov, struct fid_domain *domain,
 	return 0;
 }
 
+ofi_ep_cntr_inc_func ofi_ep_tx_cntr_inc_funcs[] = {
+	[ofi_op_msg] = ofi_ep_tx_cntr_inc,
+	[ofi_op_tagged] = ofi_ep_tx_cntr_inc,
+	[ofi_op_read_req] = ofi_ep_rd_cntr_inc,
+	[ofi_op_read_rsp] = ofi_ep_rem_rd_cntr_inc,
+	[ofi_op_write] = ofi_ep_wr_cntr_inc,
+	[ofi_op_write_async] = ofi_ep_wr_cntr_inc,
+	[ofi_op_atomic] = ofi_ep_wr_cntr_inc,
+	[ofi_op_atomic_fetch] = ofi_ep_rd_cntr_inc,
+	[ofi_op_atomic_compare] = ofi_ep_rd_cntr_inc,
+	[ofi_op_read_async] = ofi_ep_rd_cntr_inc,
+};
+
+ofi_ep_cntr_inc_func ofi_ep_rx_cntr_inc_funcs[] = {
+	[ofi_op_msg] = ofi_ep_rx_cntr_inc,
+	[ofi_op_tagged] = ofi_ep_rx_cntr_inc,
+	[ofi_op_read_req] = ofi_ep_rem_rd_cntr_inc,
+	[ofi_op_read_rsp] = ofi_ep_rd_cntr_inc,
+	[ofi_op_write] = ofi_ep_rem_wr_cntr_inc,
+	[ofi_op_write_async] = ofi_ep_rem_wr_cntr_inc,
+	[ofi_op_atomic] = ofi_ep_rem_wr_cntr_inc,
+	[ofi_op_atomic_fetch] = ofi_ep_rem_rd_cntr_inc,
+	[ofi_op_atomic_compare] = ofi_ep_rem_rd_cntr_inc,
+	[ofi_op_read_async] = ofi_ep_rem_rd_cntr_inc,
+};

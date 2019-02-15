@@ -248,7 +248,9 @@ static inline int rxm_finish_rma(struct rxm_ep *rxm_ep, struct rxm_rma_buf *rma_
 
 	assert(((comp_flags & FI_WRITE) && !(comp_flags & FI_READ)) ||
 	       ((comp_flags & FI_READ) && !(comp_flags & FI_WRITE)));
-	ofi_ep_cntr_inc_funcs[comp_flags & (FI_WRITE | FI_READ)](&rxm_ep->util_ep);
+
+	ofi_ep_tx_cntr_inc_funcs[comp_flags & FI_WRITE ? ofi_op_write :
+				 ofi_op_read_req](&rxm_ep->util_ep);
 
 	if (!(rma_buf->flags & FI_INJECT) && !rxm_ep->rxm_mr_local && rxm_ep->msg_mr_local) {
 		rxm_ep_msg_mr_closev(rma_buf->mr.mr, rma_buf->mr.count);

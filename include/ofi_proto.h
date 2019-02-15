@@ -129,6 +129,7 @@ enum {
 	ofi_op_atomic_fetch,
 	ofi_op_atomic_compare,
 	ofi_op_read_async,
+	ofi_op_last,
 };
 
 #define OFI_REMOTE_CQ_DATA	(1 << 0)
