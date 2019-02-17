@@ -199,19 +199,23 @@ int fi_ibv_check_rx_attr(const struct fi_rx_attr *attr,
 			 const struct fi_info *hints,
 			 const struct fi_info *info)
 {
-	/* WARNING: This is not thread safe */
-	uint64_t saved_prov_mode = info->rx_attr->mode;
+	struct fi_info *dup_info;
 	int ret;
 
-	info->rx_attr->mode = (hints->domain_attr &&
-			       hints->domain_attr->cq_data_size) ?
-			info->rx_attr->mode :
-			(info->rx_attr->mode & ~FI_RX_CQ_DATA);
+	if ((hints->domain_attr && hints->domain_attr->cq_data_size) ||
+	    (hints->rx_attr && hints->rx_attr->mode & FI_RX_CQ_DATA) ||
+	    hints->mode & FI_RX_CQ_DATA) {
+		ret = ofi_check_rx_attr(&fi_ibv_prov, info, attr, hints->mode);
+	} else {
+		dup_info = fi_dupinfo(info);
+		if (!dup_info)
+			return -FI_ENOMEM;
 
-	ret = ofi_check_rx_attr(&fi_ibv_prov, info, attr, hints->mode);
-
-	info->rx_attr->mode = saved_prov_mode;
-
+		dup_info->rx_attr->mode &= ~FI_RX_CQ_DATA;
+		ret = ofi_check_rx_attr(&fi_ibv_prov, dup_info, attr,
+					hints->mode);
+		fi_freeinfo(dup_info);
+	}
 	return ret;
 }
 
