@@ -1077,9 +1077,15 @@ rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 			.eager_size = rxm_ep->rxm_info->tx_attr->inject_size,
 		},
 	};
+	union rxm_cm_data reject_cm_data = {
+		.reject = {
+			.version = RXM_CM_DATA_VERSION,
+			.reason = RXM_CMAP_REJECT_GENUINE,
+		}
+	};
 	struct rxm_cmap_handle *handle;
 	struct sockaddr_storage remote_pep_addr;
-	int ret;
+	int ret, rv;
 
 	if (rxm_conn_verify_cm_data(remote_cm_data, &cm_data)) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
@@ -1093,7 +1099,7 @@ rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 			  remote_cm_data->connect.port);
 
 	ret = rxm_cmap_process_connreq(rxm_ep->cmap, &remote_pep_addr,
-				       &handle, &cm_data.reject.reason);
+				       &handle, &reject_cm_data.reject.reason);
 	if (ret)
 		goto err1;
 
@@ -1127,12 +1133,14 @@ err2:
 	rxm_cmap_del_handle_ts(&rxm_conn->handle);
 err1:
 	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
-	       "Rejecting incoming connection request (reject flag - %d)\n",
-	       cm_data.reject.reason);
-	if (fi_reject(rxm_ep->msg_pep, msg_info->handle,
-		      &cm_data.reject.reason, sizeof(cm_data.reject.reason)))
+	       "Rejecting incoming connection request (reject reason: %d)\n",
+	       (enum rxm_cmap_reject_reason)reject_cm_data.reject.reason);
+	rv = fi_reject(rxm_ep->msg_pep, msg_info->handle,
+		      &reject_cm_data.reject, sizeof(reject_cm_data.reject));
+	if (rv)
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-			"Unable to reject incoming connection\n");
+			"Unable to reject incoming connection: %s (%d)\n",
+			fi_strerror(-rv), -rv);
 	return ret;
 }
 
@@ -1164,19 +1172,22 @@ rxm_conn_handle_event(struct rxm_ep *rxm_ep, struct rxm_msg_eq_entry *entry)
 
 	if (entry->rd == -FI_ECONNREFUSED) {
 		if (OFI_UNLIKELY(entry->err_entry.err_data_size !=
-				 sizeof(cm_data->reject.reason))) {
+				 sizeof(cm_data->reject))) {
 			FI_WARN(&rxm_prov, FI_LOG_FABRIC, "connection reject: "
-				"no reject error data (cm_data) was found!\n");
+				"no reject error data (cm_data) was found "
+				"(data length expected: %zu found: %zu)\n",
+				sizeof(cm_data->reject),
+				entry->err_entry.err_data_size);
 			goto err;
 		}
 
 		assert(cm_data);
-		if (cm_data->connect.version != RXM_CM_DATA_VERSION) {
+		if (cm_data->reject.version != RXM_CM_DATA_VERSION) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "connection reject: "
 				"cm data version mismatch (local: %" PRIu8
 				", remote:  %" PRIu8 ")\n",
 				(uint8_t) RXM_CM_DATA_VERSION,
-				cm_data->connect.ctrl_version);
+				cm_data->reject.version);
 			goto err;
 		}
 		reject_reason = cm_data->reject.reason;
