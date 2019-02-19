@@ -406,7 +406,7 @@ static ssize_t sock_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 		} while (ret > 0);
 	}
 
-	return (ret == 0 || ret == -FI_ETIMEDOUT) ? -FI_EAGAIN : ret;
+	return (ret == 0 || ret == -FI_ETIMEDOUT || ret == -EINTR) ? -FI_EAGAIN : ret;
 }
 
 static ssize_t sock_cq_sread(struct fid_cq *cq, void *buf, size_t len,
