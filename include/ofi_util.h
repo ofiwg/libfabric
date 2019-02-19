@@ -556,10 +556,11 @@ static const uint64_t ofi_rx_flags[] = {
 	[ofi_op_read_req] = FI_RMA | FI_REMOTE_READ,
 	[ofi_op_read_rsp] = FI_RMA | FI_REMOTE_READ,
 	[ofi_op_write] = FI_RMA | FI_REMOTE_WRITE,
-	[ofi_op_write_rsp] = FI_RMA | FI_REMOTE_WRITE,
+	[ofi_op_write_async] = FI_RMA | FI_REMOTE_WRITE,
 	[ofi_op_atomic] = FI_ATOMIC | FI_REMOTE_WRITE,
 	[ofi_op_atomic_fetch] = FI_ATOMIC | FI_REMOTE_READ,
 	[ofi_op_atomic_compare] = FI_ATOMIC | FI_REMOTE_READ,
+	[ofi_op_read_async] = FI_RMA | FI_REMOTE_READ,
 };
 
 static inline uint64_t ofi_rx_cq_flags(uint32_t op)
@@ -572,9 +573,11 @@ static const uint64_t ofi_tx_flags[] = {
 	[ofi_op_tagged] = FI_SEND | FI_TAGGED,
 	[ofi_op_read_req] = FI_RMA | FI_READ,
 	[ofi_op_write] = FI_RMA | FI_WRITE,
+	[ofi_op_write_async] = FI_RMA | FI_WRITE,
 	[ofi_op_atomic] = FI_ATOMIC | FI_WRITE,
 	[ofi_op_atomic_fetch] = FI_ATOMIC | FI_READ,
 	[ofi_op_atomic_compare] = FI_ATOMIC | FI_READ,
+	[ofi_op_read_async] = FI_RMA | FI_READ,
 };
 
 static inline uint64_t ofi_tx_cq_flags(uint32_t op)

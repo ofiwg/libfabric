@@ -92,8 +92,8 @@ ssize_t smr_rma_fast(struct smr_region *peer_smr, struct smr_cmd *cmd,
 	}
 
 	smr_format_rma_resp(cmd, peer_id, rma_iov, rma_count, total_len,
-			    (op == ofi_op_write) ? ofi_op_write_rsp :
-			    ofi_op_read_rsp, op_flags);
+			    (op == ofi_op_write) ? ofi_op_write_async :
+			    ofi_op_read_async, op_flags);
 
 	return 0;
 }

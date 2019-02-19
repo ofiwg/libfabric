@@ -561,8 +561,8 @@ static void smr_progress_cmd(struct smr_ep *ep)
 		case ofi_op_read_req:
 			ret = smr_progress_cmd_rma(ep, cmd);
 			break;
-		case ofi_op_write_rsp:
-		case ofi_op_read_rsp:
+		case ofi_op_write_async:
+		case ofi_op_read_async:
 			smr_cntr_report_rx_comp(ep, cmd->msg.hdr.op);
 			ofi_cirque_discard(smr_cmd_queue(ep->region));
 			ep->region->cmd_cnt++;
