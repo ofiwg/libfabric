@@ -105,8 +105,11 @@ fi_ibv_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
 	wce = container_of(slist_entry, struct fi_ibv_wce, entry);
 
 	entry->op_context = (void *)(uintptr_t)wce->wc.wr_id;
-	entry->err = EIO;
 	entry->prov_errno = wce->wc.status;
+	if (wce->wc.status == IBV_WC_WR_FLUSH_ERR)
+		entry->err = FI_ECANCELED;
+	else
+		entry->err = EIO;
 	fi_ibv_handle_wc(&wce->wc, &entry->flags, &entry->len, &entry->data);
 
 	if ((FI_VERSION_GE(api_version, FI_VERSION(1, 5))) &&
