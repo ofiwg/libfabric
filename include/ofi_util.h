@@ -758,6 +758,7 @@ struct util_event {
 
 int ofi_eq_create(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		 struct fid_eq **eq_fid, void *context);
+void ofi_eq_remove_fid_events(struct util_eq *eq, fid_t fid);
 void ofi_eq_handle_err_entry(uint32_t api_version, uint64_t flags,
 			     struct fi_eq_err_entry *err_entry,
 			     struct fi_eq_err_entry *user_err_entry);

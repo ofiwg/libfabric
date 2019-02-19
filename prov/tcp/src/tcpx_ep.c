@@ -341,6 +341,8 @@ static int tcpx_ep_close(struct fid *fid)
 	if (ep->util_ep.eq->wait)
 		ofi_wait_fd_del(ep->util_ep.eq->wait, ep->conn_fd);
 
+	ofi_eq_remove_fid_events(ep->util_ep.eq,
+				  &ep->util_ep.ep_fid.fid);
 	ofi_close_socket(ep->conn_fd);
 	ofi_endpoint_close(&ep->util_ep);
 	fastlock_destroy(&ep->lock);
@@ -630,9 +632,12 @@ static int tcpx_pep_reject(struct fid_pep *pep, fid_t handle,
 	hdr.type = ofi_ctrl_nack;
 	hdr.seg_size = htons((uint16_t) paramlen);
 
-	ret = ofi_sendall_socket(tcpx_handle->conn_fd, &hdr, sizeof(hdr));
-	if (!ret && paramlen)
-		(void) ofi_sendall_socket(tcpx_handle->conn_fd, param, paramlen);
+	ret = ofi_send_socket(tcpx_handle->conn_fd, &hdr,
+			      sizeof(hdr), MSG_NOSIGNAL);
+
+	if ((ret == sizeof(hdr)) && paramlen)
+		(void) ofi_send_socket(tcpx_handle->conn_fd, param,
+				       paramlen, MSG_NOSIGNAL);
 
 	ofi_shutdown(tcpx_handle->conn_fd, SHUT_RDWR);
 	ret = ofi_close_socket(tcpx_handle->conn_fd);
