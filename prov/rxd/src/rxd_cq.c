@@ -209,16 +209,11 @@ static void rxd_complete_rx(struct rxd_ep *ep, struct rxd_x_entry *rx_entry)
 {
 	struct fi_cq_err_entry err_entry;
 	struct rxd_cq *rx_cq = rxd_ep_rx_cq(ep);
-	int write_cq = rx_entry->cq_entry.flags & (FI_RECV | FI_REMOTE_CQ_DATA);
 
-	if (rx_entry->flags & (RXD_NO_RX_COMP | RXD_CANCELLED))
+	if (rx_entry->flags & RXD_CANCELLED)
 		goto out;
 
-	if (rx_entry->bytes_done == rx_entry->cq_entry.len) {
-		rxd_cntr_report_rx_comp(ep, rx_entry);
-		if (write_cq)
-			rx_cq->write_fn(rx_cq, &rx_entry->cq_entry);
-	} else if (write_cq) {
+	if (rx_entry->bytes_done != rx_entry->cq_entry.len) {
 		memset(&err_entry, 0, sizeof(err_entry));
 		err_entry.op_context = rx_entry->cq_entry.op_context;
 		err_entry.flags = rx_entry->cq_entry.flags;
@@ -226,7 +221,15 @@ static void rxd_complete_rx(struct rxd_ep *ep, struct rxd_x_entry *rx_entry)
 		err_entry.err = FI_ETRUNC;
 		err_entry.prov_errno = 0;
 		rxd_cq_report_error(rx_cq, &err_entry);
+		goto out;
 	}
+
+	if (rx_entry->cq_entry.flags & FI_REMOTE_CQ_DATA ||
+	    (!(rx_entry->flags & RXD_NO_RX_COMP) &&
+	      rx_entry->cq_entry.flags & FI_RECV))
+		rx_cq->write_fn(rx_cq, &rx_entry->cq_entry);
+
+	rxd_cntr_report_rx_comp(ep, rx_entry);
 
 out:
 	rxd_rx_entry_free(ep, rx_entry);
@@ -236,12 +239,9 @@ static void rxd_complete_tx(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
 {
 	struct rxd_cq *tx_cq = rxd_ep_tx_cq(ep);
 
-	if (tx_entry->flags & RXD_NO_TX_COMP)
-		goto out;
+	if (!(tx_entry->flags & RXD_NO_TX_COMP))
+		tx_cq->write_fn(tx_cq, &tx_entry->cq_entry);
 
-	tx_cq->write_fn(tx_cq, &tx_entry->cq_entry);
-
-out:
 	rxd_cntr_report_tx_comp(ep, tx_entry);
 	rxd_tx_entry_free(ep, tx_entry);
 }
