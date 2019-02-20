@@ -505,8 +505,11 @@ static int sock_ep_getinfo(uint32_t version, const char *node,
 	if (rai)
 		freeaddrinfo(rai);
 
-	if (ret == 0)
-		return sock_fi_checkinfo(*info, hints);
+	if (ret == 0) {
+		ret = sock_fi_checkinfo(*info, hints);
+		if (ret)
+			fi_freeinfo(*info);
+	}
 
 	return ret;
 }
