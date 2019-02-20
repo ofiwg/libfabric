@@ -188,6 +188,8 @@ struct rxd_ep {
 	int next_retry;
 	int dg_cq_fd;
 	size_t pending_cnt;
+	uint32_t tx_flags;
+	uint32_t rx_flags;
 
 	struct util_buf_pool *tx_pkt_pool;
 	struct util_buf_pool *rx_pkt_pool;
@@ -278,9 +280,6 @@ static inline uint32_t rxd_rx_flags(uint64_t fi_flags)
 
 	return rxd_flags | RXD_NO_RX_COMP;
 }
-
-#define rxd_ep_rx_flags(rxd_ep) (rxd_rx_flags((rxd_ep)->util_ep.rx_op_flags))
-#define rxd_ep_tx_flags(rxd_ep) (rxd_tx_flags((rxd_ep)->util_ep.tx_op_flags))
 
 struct rxd_pkt_entry {
 	struct dlist_entry d_entry;

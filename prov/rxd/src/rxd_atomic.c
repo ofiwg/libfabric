@@ -125,7 +125,7 @@ static ssize_t rxd_atomic_writev(struct fid_ep *ep_fid,
 	return rxd_generic_atomic(ep, iov, desc, count, NULL, NULL, 0, NULL,
 				  NULL, 0, dest_addr, &rma_iov, 1, 0, datatype,
 				  op, context, ofi_op_atomic,
-				  rxd_ep_tx_flags(ep));
+				  ep->tx_flags);
 }
 
 static ssize_t rxd_atomic_write(struct fid_ep *ep_fid, const void *buf, size_t count,
@@ -148,7 +148,7 @@ static ssize_t rxd_atomic_write(struct fid_ep *ep_fid, const void *buf, size_t c
 
 	return rxd_generic_atomic(ep, &iov, &desc, 1, NULL, NULL, 0, NULL, NULL, 0,
 				  dest_addr, &rma_iov, 1, 0, datatype, op, context,
-				  ofi_op_atomic, rxd_ep_tx_flags(ep));
+				  ofi_op_atomic, ep->tx_flags);
 }
 
 static ssize_t rxd_atomic_inject(struct fid_ep *ep_fid, const void *buf,
@@ -233,7 +233,7 @@ static ssize_t rxd_atomic_readwritev(struct fid_ep *ep_fid,
 	return rxd_generic_atomic(ep, iov, desc, count, NULL, NULL, 0, resultv,
 				  result_desc, result_count, dest_addr,
 				  &rma_iov, 1, 0, datatype, op, context,
-				  ofi_op_atomic_fetch, rxd_ep_tx_flags(ep));
+				  ofi_op_atomic_fetch, ep->tx_flags);
 }
 
 static ssize_t rxd_atomic_readwrite(struct fid_ep *ep_fid, const void *buf,
@@ -261,7 +261,7 @@ static ssize_t rxd_atomic_readwrite(struct fid_ep *ep_fid, const void *buf,
 	return rxd_generic_atomic(ep, &iov, &desc, 1, NULL, NULL, 0, &resultv,
 				  &result_desc, 1, dest_addr, &rma_iov, 1, 0,
 				  datatype, op, context, ofi_op_atomic_fetch,
-				  rxd_ep_tx_flags(ep));
+				  ep->tx_flags);
 }
 
 static ssize_t rxd_atomic_compwritemsg(struct fid_ep *ep_fid,
@@ -305,7 +305,7 @@ static ssize_t rxd_atomic_compwritev(struct fid_ep *ep_fid,
 				  compare_count, resultv, result_desc,
 				  result_count, dest_addr, &rma_iov, 1, 0,
 				  datatype, op, context, ofi_op_atomic_compare,
-				  rxd_ep_tx_flags(ep));
+				  ep->tx_flags);
 }
 
 static ssize_t rxd_atomic_compwrite(struct fid_ep *ep_fid, const void *buf,
@@ -336,7 +336,7 @@ static ssize_t rxd_atomic_compwrite(struct fid_ep *ep_fid, const void *buf,
 	return rxd_generic_atomic(ep, &iov, &desc, 1, &comparev, &compare_desc,
 				  1, &resultv, &result_desc, 1, dest_addr,
 				  &rma_iov, 1, 0, datatype, op, context,
-				  ofi_op_atomic_compare, rxd_ep_tx_flags(ep));
+				  ofi_op_atomic_compare, ep->tx_flags);
 }
 
 int rxd_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
