@@ -176,6 +176,7 @@ void fi_ibv_put_shared_ini_conn(struct fi_ibv_xrc_ep *ep)
 	ini_conn = ep->ini_conn;
 	ep->ini_conn = NULL;
 	ep->base_ep.ibv_qp = NULL;
+	ep->base_ep.id->qp = NULL;
 
 	/* Tear down physical INI/TGT when no longer being used */
 	if (!ofi_atomic_dec32(&ini_conn->ref_cnt)) {
@@ -239,6 +240,11 @@ void fi_ibv_sched_ini_conn(struct fi_ibv_ini_shared_conn *ini_conn)
 				  &ep->ini_conn->active_list);
 		last_state = ep->ini_conn->state;
 		if (last_state == FI_IBV_INI_QP_UNCONNECTED) {
+			if (ep->ini_conn->ini_qp &&
+			    ibv_destroy_qp(ep->ini_conn->ini_qp)) {
+				VERBS_WARN(FI_LOG_FABRIC, "Failed to destroy "
+					   "physical INI QP %d\n", errno);
+			}
 			ret = fi_ibv_create_ini_qp(ep);
 			if (ret) {
 				VERBS_WARN(FI_LOG_FABRIC, "Failed to create "
