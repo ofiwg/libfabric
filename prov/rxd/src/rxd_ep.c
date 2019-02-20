@@ -274,6 +274,9 @@ static int rxd_ep_enable(struct rxd_ep *ep)
 	if (ret)
 		return ret;
 
+	ep->tx_flags = rxd_tx_flags(ep->util_ep.tx_op_flags);
+	ep->rx_flags = rxd_rx_flags(ep->util_ep.rx_op_flags);
+
 	fastlock_acquire(&ep->util_ep.lock);
 	for (i = 0; i < ep->rx_size; i++) {
 		ret = rxd_ep_post_buf(ep);
