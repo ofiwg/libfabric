@@ -48,7 +48,6 @@ declare PROV=""
 declare TEST_TYPE="quick"
 declare SERVER="127.0.0.1"
 declare CLIENT="127.0.0.1"
-declare EXCLUDE=""
 declare GOOD_ADDR=""
 declare -i VERBOSE=0
 declare -i SKIP_NEG=0
@@ -57,6 +56,10 @@ declare TIMEOUT_VAL="120"
 declare STRICT_MODE=0
 declare REGEX=0
 declare FORK=0
+
+declare cur_excludes=""
+declare file_excludes=""
+declare input_excludes=""
 
 declare -r c_outp=$(mktemp fabtests.c_outp.XXXXXX)
 declare -r s_outp=$(mktemp fabtests.s_outp.XXXXXX)
@@ -267,9 +270,9 @@ function compute_duration {
 }
 
 function read_exclude_file {
-	exclude_file=$1
+	local excl_file=$1
 
-	if [ ! -f $exclude_file ]; then
+	if [ ! -f $excl_file ]; then
 		echo "Given exclusion file does not exist!"
 		exit 1
 	fi
@@ -278,21 +281,57 @@ function read_exclude_file {
 		# Ignore patterns that are comments or just whitespaces
 		ignore_pattern="#.*|^[\t ]*$"
 		if [[ ! "$pattern" =~ $ignore_pattern ]]; then
-			if [ -z "$EXCLUDE" ]; then
-				EXCLUDE="$pattern"
+			if [ -z "$file_excludes" ]; then
+				file_excludes="$pattern"
 			else
-				EXCLUDE="${EXCLUDE},$pattern"
+				file_excludes="${file_excludes},$pattern"
 			fi
 		fi
-	done < "$exclude_file"
+	done < "$excl_file"
+}
+
+function auto_exclude {
+	local excl_file
+
+	excl_file="./fabtests/test_configs/${PROV}/${PROV}.exclude"
+	if [[ ! -f "$excl_file" ]]; then
+		excl_file="./test_configs/${PROV}/${PROV}.exclude"
+		if [[ ! -f "$excl_file" ]]; then
+			excl_file="../test_configs/${PROV}/${PROV}.exclude"
+			if [[ ! -f "$excl_file" ]]; then
+				return
+			fi
+		fi
+	fi
+
+	read_exclude_file ${excl_file}
+	cur_excludes=${file_excludes}
+	file_excludes=""
+}
+
+function set_excludes {
+	if [[ -n "$input_excludes" ]]; then
+		cur_excludes=${input_excludes}
+	fi
+
+	if [[ -n "$file_excludes" ]]; then
+		[[ -z "$cur_excludes" ]] && cur_excludes=${file_excludes} || \
+			cur_excludes="${cur_excludes},${file_excludes}"
+	fi
+
+	if [[ -n "$cur_excludes" ]]; then
+		return
+	fi
+
+	auto_exclude
 }
 
 function is_excluded {
 	test_name=$1
 
-	[[ -z "$EXCLUDE" ]] && return 1
+	[[ -z "$cur_excludes" ]] && return 1
 
-	IFS="," read -ra exclude_array <<< "$EXCLUDE"
+	IFS="," read -ra exclude_array <<< "$cur_excludes"
 	for pattern in "${exclude_array[@]}"; do
 		if [[ $REGEX -eq 1 && "$test_name" =~ $pattern ]] ||
 		   [[ "$test_name" == "$pattern" ]]; then
@@ -472,6 +511,8 @@ function main {
 	fail_count=0
 	local complex_cfg="quick"
 
+	set_excludes
+
 	if [[ $1 == "quick" ]]; then
 		local -r tests="unit functional short"
 	elif [[ $1 == "verify" ]]; then
@@ -594,7 +635,8 @@ case ${opt} in
 	;;
 	f) read_exclude_file ${OPTARG}
 	;;
-	e) [[ -z "$EXCLUDE" ]] && EXCLUDE=${OPTARG} || EXCLUDE="${EXCLUDE},${OPTARG}"
+	e) [[ -z "$input_excludes" ]] && input_excludes=${OPTARG} || \
+		input_excludes="${input_excludes},${OPTARG}"
 	;;
 	c) C_INTERFACE=${OPTARG}
 	;;
