@@ -414,7 +414,7 @@ static ssize_t smr_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 	ofi_cirque_commit(smr_cmd_queue(peer_smr));
 	peer_smr->cmd_cnt--;
 
-	smr_cntr_report_tx_comp(ep, ofi_op_atomic);
+	ofi_ep_tx_cntr_inc_funcs[ofi_op_atomic](&ep->util_ep);
 unlock_region:
 	fastlock_release(&peer_smr->lock);
 	return ret;

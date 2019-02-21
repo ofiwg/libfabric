@@ -92,8 +92,8 @@ ssize_t smr_rma_fast(struct smr_region *peer_smr, struct smr_cmd *cmd,
 	}
 
 	smr_format_rma_resp(cmd, peer_id, rma_iov, rma_count, total_len,
-			    (op == ofi_op_write) ? ofi_op_write_rsp :
-			    ofi_op_read_rsp, op_flags);
+			    (op == ofi_op_write) ? ofi_op_write_async :
+			    ofi_op_read_async, op_flags);
 
 	return 0;
 }
@@ -369,7 +369,7 @@ ssize_t smr_generic_rma_inject(struct fid_ep *ep_fid, const void *buf,
 commit:
 	ofi_cirque_commit(smr_cmd_queue(peer_smr));
 	peer_smr->cmd_cnt--;
-	smr_cntr_report_tx_comp(ep, ofi_op_write);
+	ofi_ep_tx_cntr_inc_funcs[ofi_op_write](&ep->util_ep);
 unlock_region:
 	fastlock_release(&peer_smr->lock);
 	return ret;

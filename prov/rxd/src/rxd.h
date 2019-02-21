@@ -450,7 +450,5 @@ struct rxd_x_entry *rxd_progress_multi_recv(struct rxd_ep *ep,
 /* CQ sub-functions */
 void rxd_cq_report_error(struct rxd_cq *cq, struct fi_cq_err_entry *err_entry);
 void rxd_cq_report_tx_comp(struct rxd_cq *cq, struct rxd_x_entry *tx_entry);
-void rxd_cntr_report_tx_comp(struct rxd_ep *ep, struct rxd_x_entry *tx_entry);
-void rxd_cntr_report_rx_comp(struct rxd_ep *ep, struct rxd_x_entry *rx_entry);
 
 #endif

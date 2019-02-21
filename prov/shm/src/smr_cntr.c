@@ -59,21 +59,3 @@ free:
 	free(cntr);
 	return ret;
 }
-
-void smr_cntr_report_tx_comp(struct smr_ep *ep, uint32_t op)
-{
-	uint64_t flags = ofi_tx_cq_flags(op) &
-			 (FI_SEND | FI_WRITE | FI_READ);
-
-	assert(ofi_lsb(flags) == ofi_msb(flags));
-	ofi_ep_cntr_inc_funcs[flags](&ep->util_ep);
-}
-
-void smr_cntr_report_rx_comp(struct smr_ep *ep, uint32_t op)
-{
-	uint64_t flags = ofi_rx_cq_flags(op) &
-			(FI_RECV | FI_REMOTE_WRITE | FI_REMOTE_READ);
-
-	assert(ofi_lsb(flags) == ofi_msb(flags));
-	ofi_ep_cntr_inc_funcs[flags](&ep->util_ep);
-}

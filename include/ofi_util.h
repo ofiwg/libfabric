@@ -326,15 +326,8 @@ static inline void ofi_ep_rem_wr_cntr_inc(struct util_ep *ep)
 }
 
 typedef void (*ofi_ep_cntr_inc_func)(struct util_ep *);
-
-static const ofi_ep_cntr_inc_func ofi_ep_cntr_inc_funcs[] = {
-	[FI_TRANSMIT] = ofi_ep_tx_cntr_inc,
-	[FI_RECV] = ofi_ep_rx_cntr_inc,
-	[FI_READ] = ofi_ep_rd_cntr_inc,
-	[FI_WRITE] = ofi_ep_wr_cntr_inc,
-	[FI_REMOTE_READ] = ofi_ep_rem_rd_cntr_inc,
-	[FI_REMOTE_WRITE] = ofi_ep_rem_wr_cntr_inc,
-};
+extern ofi_ep_cntr_inc_func ofi_ep_tx_cntr_inc_funcs[ofi_op_last];
+extern ofi_ep_cntr_inc_func ofi_ep_rx_cntr_inc_funcs[ofi_op_last];
 
 /*
  * Tag and address match
@@ -550,32 +543,13 @@ static inline int ofi_need_completion(uint64_t cq_flags, uint64_t op_flags)
 			     FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)));
 }
 
-static const uint64_t ofi_rx_flags[] = {
-	[ofi_op_msg] = FI_RECV,
-	[ofi_op_tagged] = FI_RECV | FI_TAGGED,
-	[ofi_op_read_req] = FI_RMA | FI_REMOTE_READ,
-	[ofi_op_read_rsp] = FI_RMA | FI_REMOTE_READ,
-	[ofi_op_write] = FI_RMA | FI_REMOTE_WRITE,
-	[ofi_op_write_rsp] = FI_RMA | FI_REMOTE_WRITE,
-	[ofi_op_atomic] = FI_ATOMIC | FI_REMOTE_WRITE,
-	[ofi_op_atomic_fetch] = FI_ATOMIC | FI_REMOTE_READ,
-	[ofi_op_atomic_compare] = FI_ATOMIC | FI_REMOTE_READ,
-};
+extern uint64_t ofi_rx_flags[ofi_op_last];
+extern uint64_t ofi_tx_flags[ofi_op_last];
 
 static inline uint64_t ofi_rx_cq_flags(uint32_t op)
 {
 	return ofi_rx_flags[op];
 }
-
-static const uint64_t ofi_tx_flags[] = {
-	[ofi_op_msg] = FI_SEND,
-	[ofi_op_tagged] = FI_SEND | FI_TAGGED,
-	[ofi_op_read_req] = FI_RMA | FI_READ,
-	[ofi_op_write] = FI_RMA | FI_WRITE,
-	[ofi_op_atomic] = FI_ATOMIC | FI_WRITE,
-	[ofi_op_atomic_fetch] = FI_ATOMIC | FI_READ,
-	[ofi_op_atomic_compare] = FI_ATOMIC | FI_READ,
-};
 
 static inline uint64_t ofi_tx_cq_flags(uint32_t op)
 {

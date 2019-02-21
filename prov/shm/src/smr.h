@@ -65,7 +65,7 @@
 
 
 #define SMR_MAJOR_VERSION 1
-#define SMR_MINOR_VERSION 0
+#define SMR_MINOR_VERSION 1
 
 extern struct fi_provider smr_prov;
 extern struct fi_info smr_info;
@@ -241,8 +241,6 @@ int smr_rx_comp_signal(struct smr_ep *ep, void *context, uint32_t op,
 int smr_rx_src_comp_signal(struct smr_ep *ep, void *context, uint32_t op,
 		uint16_t flags, size_t len, void *buf, void *addr,
 		uint64_t tag, uint64_t data, uint64_t err);
-void smr_cntr_report_tx_comp(struct smr_ep *ep, uint32_t op);
-void smr_cntr_report_rx_comp(struct smr_ep *ep, uint32_t op);
 
 uint64_t smr_rx_cq_flags(uint32_t op, uint16_t op_flags);
 

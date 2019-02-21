@@ -312,7 +312,7 @@ static ssize_t smr_generic_inject(struct fid_ep *ep_fid, const void *buf,
 				  &msg_iov, 1, op, tag, data, op_flags,
 				  peer_smr, tx_buf);
 	}
-	smr_cntr_report_tx_comp(ep, op);
+	ofi_ep_tx_cntr_inc_funcs[op](&ep->util_ep);
 	peer_smr->cmd_cnt--;
 	ofi_cirque_commit(smr_cmd_queue(peer_smr));
 unlock:
