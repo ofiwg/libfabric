@@ -265,8 +265,8 @@ void rxm_cmap_process_reject(struct rxm_cmap *cmap,
 			     enum rxm_cmap_reject_reason cm_reject_reason);
 void rxm_cmap_process_shutdown(struct rxm_cmap *cmap,
 			       struct rxm_cmap_handle *handle);
-int rxm_cmap_handle_unconnected(struct rxm_ep *rxm_ep, struct rxm_cmap_handle *handle,
-				fi_addr_t dest_addr);
+int rxm_cmap_connect(struct rxm_ep *rxm_ep, fi_addr_t fi_addr,
+		     struct rxm_cmap_handle *handle);
 void rxm_cmap_del_handle_ts(struct rxm_cmap_handle *handle);
 void rxm_cmap_free(struct rxm_cmap *cmap);
 int rxm_cmap_alloc(struct rxm_ep *rxm_ep, struct rxm_cmap_attr *attr);
@@ -969,45 +969,28 @@ rxm_process_recv_entry(struct rxm_recv_queue *recv_queue,
 	return FI_SUCCESS;
 }
 
-static inline struct rxm_conn *
-rxm_acquire_conn(struct rxm_ep *rxm_ep, fi_addr_t fi_addr)
-{
-	return (struct rxm_conn *)rxm_cmap_acquire_handle(rxm_ep->cmap,
-							  fi_addr);
-}
-
-static inline int
-rxm_acquire_conn_connect(struct rxm_ep *rxm_ep, fi_addr_t fi_addr,
-			 struct rxm_conn **rxm_conn)
-{
-	*rxm_conn = rxm_acquire_conn(rxm_ep, fi_addr);
-	if (OFI_UNLIKELY(!*rxm_conn || (*rxm_conn)->handle.state != RXM_CMAP_CONNECTED)) {
-		int ret;
-		if (!*rxm_conn)
-			return -FI_EHOSTUNREACH;
-		rxm_ep->cmap->acquire(&rxm_ep->cmap->lock);
-		ret = rxm_cmap_handle_unconnected(rxm_ep, &(*rxm_conn)->handle, fi_addr);
-		rxm_ep->cmap->release(&rxm_ep->cmap->lock);
-		return ret;
-	}
-	return 0;
-}
-
 static inline ssize_t
 rxm_ep_prepare_tx(struct rxm_ep *rxm_ep, fi_addr_t dest_addr,
 		 struct rxm_conn **rxm_conn)
 {
-	ssize_t ret = rxm_acquire_conn_connect(rxm_ep, dest_addr, rxm_conn);
+	ssize_t ret;
 
-	if (OFI_UNLIKELY(ret))
-		return ret;
+	*rxm_conn = (struct rxm_conn *)rxm_cmap_acquire_handle(rxm_ep->cmap,
+							       dest_addr);
+	if (OFI_UNLIKELY(!*rxm_conn))
+		return -FI_EHOSTUNREACH;
+
+	if (OFI_UNLIKELY((*rxm_conn)->handle.state != RXM_CMAP_CONNECTED)) {
+		ret = rxm_cmap_connect(rxm_ep, dest_addr, &(*rxm_conn)->handle);
+		if (ret)
+			return ret;
+	}
 
 	if (OFI_UNLIKELY(!dlist_empty(&(*rxm_conn)->deferred_tx_queue))) {
 		rxm_ep_progress(&rxm_ep->util_ep);
 		if (!dlist_empty(&(*rxm_conn)->deferred_tx_queue))
 			return -FI_EAGAIN;
 	}
-
 	return 0;
 }
 
