@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 #
-# Copyright (c) 2017-2018, Intel Corporation.  All rights reserved.
+# Copyright (c) 2017-2019, Intel Corporation.  All rights reserved.
 # Copyright (c) 2016-2018, Cisco Systems, Inc. All rights reserved.
 # Copyright (c) 2016, Cray, Inc. All rights reserved.
 #
@@ -44,7 +44,7 @@ trap cleanup_and_exit SIGINT
 # Default behavior with no args will use sockets provider with loopback
 #
 declare BIN_PATH
-declare PROV="sockets"
+declare PROV=""
 declare TEST_TYPE="quick"
 declare SERVER="127.0.0.1"
 declare CLIENT="127.0.0.1"
@@ -64,6 +64,7 @@ declare -r s_outp=$(mktemp fabtests.s_outp.XXXXXX)
 declare -i skip_count=0
 declare -i pass_count=0
 declare -i fail_count=0
+declare -i total_failures=0
 
 if [[ "$(uname)" == "FreeBSD" ]]; then
     declare -ri FI_ENODATA=$(python -c 'import errno; print(errno.ENOMSG)')
@@ -466,6 +467,9 @@ function complex_test {
 }
 
 function main {
+	skip_count=0
+	pass_count=0
+	fail_count=0
 	local complex_cfg="quick"
 
 	if [[ $1 == "quick" ]]; then
@@ -545,7 +549,7 @@ function main {
 	print_border
 
 	cleanup
-	exit $fail_count
+	total_failures+=$fail_count
 }
 
 function usage {
@@ -662,4 +666,13 @@ fi
 [ -z $S_INTERFACE ] && S_INTERFACE=$SERVER
 [ -z $GOOD_ADDR ] && GOOD_ADDR=$S_INTERFACE
 
-main ${TEST_TYPE}
+if [[ -z $PROV ]]; then
+	PROV="tcp"
+	main ${TEST_TYPE}
+	PROV="udp"
+	main ${TEST_TYPE}
+else
+	main ${TEST_TYPE}
+fi
+
+exit $total_failures
