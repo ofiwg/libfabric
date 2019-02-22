@@ -54,7 +54,6 @@ declare -i SKIP_NEG=0
 declare COMPLEX_CFG
 declare TIMEOUT_VAL="120"
 declare STRICT_MODE=0
-declare REGEX=0
 declare FORK=0
 
 declare cur_excludes=""
@@ -333,8 +332,7 @@ function is_excluded {
 
 	IFS="," read -ra exclude_array <<< "$cur_excludes"
 	for pattern in "${exclude_array[@]}"; do
-		if [[ $REGEX -eq 1 && "$test_name" =~ $pattern ]] ||
-		   [[ "$test_name" == "$pattern" ]]; then
+		if [[ "$test_name" =~ $pattern ]]; then
 			print_results "$test_exe" "Excluded" "0" "" ""
 			skip_count+=1
 			return 0
@@ -607,12 +605,11 @@ function usage {
 	errcho -e " -vvv\tprint output of failing/notrun/passing"
 	errcho -e " -t\ttest set(s): all,quick,unit,functional,standard,short,complex (default quick)"
 	errcho -e " -e\texclude tests: comma delimited list of test names /
-			 regex patterns (with -R) e.g. \"dgram,rma.*write\""
+			 regex patterns e.g. \"dgram,rma.*write\""
 	errcho -e " -E\texport provided variable name and value to ssh client and server processes.
 			 options must of of the form '-E var=value'"
 	errcho -e " -f\texclude tests file: File containing list of test names /
-			 regex patterns (with -R) to exclude (one per line)"
-	errcho -e " -R\tTreat test exclusions as regex patterns"
+			 regex patterns to exclude (one per line)"
 	errcho -e " -N\tskip negative unit tests"
 	errcho -e " -p\tpath to test bins (default PATH)"
 	errcho -e " -c\tclient interface"
@@ -648,7 +645,7 @@ case ${opt} in
 	;;
 	N) SKIP_NEG+=1
 	;;
-	R) REGEX=1
+	R)
 	;;
 	S) STRICT_MODE=1
 	;;
