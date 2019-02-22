@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2016 Intel Corporation. All rights reserved.
- * Copyright (c) 2018 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * Copyright (c) 2018-2019 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -179,7 +179,10 @@ err3:
 	if (pool->attr.free_fn)
 	    pool->attr.free_fn(buf_region);
 err2:
-	ofi_freealign(buf_region->alloc_region);
+	if (pool->attr.flags & OFI_BUFPOOL_MMAPPED)
+		ofi_free_hugepage_buf(buf_region->alloc_region, pool->alloc_size);
+	else
+		ofi_freealign(buf_region->alloc_region);
 err1:
 	free(buf_region);
 	return ret;
