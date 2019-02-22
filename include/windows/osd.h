@@ -262,7 +262,6 @@ do						\
 #define strdup _strdup
 #define strcasecmp _stricmp
 #define snprintf _snprintf
-#define getpid (int)GetCurrentProcessId
 #define sleep(x) Sleep(x * 1000)
 
 #define __PRI64_PREFIX "ll"
@@ -278,7 +277,7 @@ do						\
 #define strncasecmp _strnicmp
 
 typedef int pid_t;
-#define getpid _getpid
+#define getpid (int)GetCurrentProcessId
 
 int fd_set_nonblock(int fd);
 
