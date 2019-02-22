@@ -758,7 +758,7 @@ rxm_atomic_send_respmsg(struct rxm_ep *rxm_ep, struct rxm_conn *conn,
 	};
 	struct fi_msg msg = {
 		.msg_iov = &iov,
-		.desc = NULL,
+		.desc = &resp_buf->hdr.desc,
 		.iov_count = 1,
 		.context = resp_buf,
 		.data = 0,
