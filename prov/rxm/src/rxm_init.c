@@ -223,6 +223,9 @@ static void rxm_alter_info(const struct fi_info *hints, struct fi_info *info)
 					~(RXM_ATOMIC_UNSUPPORTED_MSG_ORDER);
 				cur->rx_attr->msg_order &=
 					~(RXM_ATOMIC_UNSUPPORTED_MSG_ORDER);
+				cur->ep_attr->max_order_raw_size = 0;
+				cur->ep_attr->max_order_war_size = 0;
+				cur->ep_attr->max_order_waw_size = 0;
 			} else {
 				cur->caps &= ~FI_ATOMIC;
 				cur->tx_attr->caps &= ~FI_ATOMIC;
@@ -259,6 +262,12 @@ static int rxm_validate_atomic_hints(const struct fi_info *hints)
 	if (!hints || !(hints->caps & FI_ATOMIC))
 		return 0;
 
+	if (hints->domain_attr &&
+	    hints->domain_attr->data_progress == FI_PROGRESS_AUTO) {
+		FI_DBG(&rxm_prov, FI_LOG_FABRIC,
+		       "FI_ATOMIC does not support data FI_PROGRESS_AUTO\n");
+		return -FI_EINVAL;
+	}
 	if (hints->tx_attr && (hints->tx_attr->msg_order &
 			       RXM_ATOMIC_UNSUPPORTED_MSG_ORDER)) {
 		FI_DBG(&rxm_prov, FI_LOG_FABRIC,
