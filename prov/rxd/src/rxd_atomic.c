@@ -67,7 +67,6 @@ static ssize_t rxd_generic_atomic(struct rxd_ep *rxd_ep,
 	ofi_rma_ioc_to_iov(rma_ioc, rma_iov, rma_count, ofi_datatype_size(datatype));
 
 	fastlock_acquire(&rxd_ep->util_ep.lock);
-	fastlock_acquire(&rxd_ep->util_ep.tx_cq->cq_lock);
 
 	if (ofi_cirque_isfull(rxd_ep->util_ep.tx_cq->cirq))
 		goto out;
@@ -88,7 +87,6 @@ static ssize_t rxd_generic_atomic(struct rxd_ep *rxd_ep,
 		rxd_tx_entry_free(rxd_ep, tx_entry);
 
 out:
-	fastlock_release(&rxd_ep->util_ep.tx_cq->cq_lock);
 	fastlock_release(&rxd_ep->util_ep.lock);
 	return ret;
 }
@@ -171,7 +169,6 @@ static ssize_t rxd_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 	rma_iov.key = key;
 
 	fastlock_acquire(&rxd_ep->util_ep.lock);
-	fastlock_acquire(&rxd_ep->util_ep.tx_cq->cq_lock);
 
 	if (ofi_cirque_isfull(rxd_ep->util_ep.tx_cq->cirq))
 		goto out;
@@ -192,7 +189,6 @@ static ssize_t rxd_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 		rxd_tx_entry_free(rxd_ep, tx_entry);
 
 out:
-	fastlock_release(&rxd_ep->util_ep.tx_cq->cq_lock);
 	fastlock_release(&rxd_ep->util_ep.lock);
 	return ret;
 }

@@ -148,7 +148,11 @@ static ssize_t rxd_ep_cancel_recv(struct rxd_ep *ep, struct dlist_entry *list,
 	err_entry.flags = rx_entry->cq_entry.flags;
 	err_entry.err = FI_ECANCELED;
 	err_entry.prov_errno = 0;
-	rxd_cq_report_error(rxd_ep_rx_cq(ep), &err_entry);
+	ret = ofi_cq_write_error(&rxd_ep_rx_cq(ep)->util_cq, &err_entry);
+	if (ret) {
+		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "could not write error entry\n");
+		goto out;
+	}
 
 	rx_entry->flags |= RXD_CANCELLED;
 
@@ -1032,6 +1036,7 @@ static void rxd_peer_timeout(struct rxd_ep *rxd_ep, struct rxd_peer *peer)
 	struct fi_cq_err_entry err_entry;
 	struct rxd_x_entry *tx_entry;
 	struct rxd_pkt_entry *pkt_entry;
+	int ret;
 
 	while (!dlist_empty(&peer->tx_list)) {
 		dlist_pop_front(&peer->tx_list, struct rxd_x_entry, tx_entry, entry);
@@ -1041,7 +1046,9 @@ static void rxd_peer_timeout(struct rxd_ep *rxd_ep, struct rxd_peer *peer)
 		err_entry.flags = tx_entry->cq_entry.flags;
 		err_entry.err = FI_ECONNREFUSED;
 		err_entry.prov_errno = 0;
-		rxd_cq_report_error(rxd_ep_tx_cq(rxd_ep), &err_entry);
+		ret = ofi_cq_write_error(&rxd_ep_tx_cq(rxd_ep)->util_cq, &err_entry);
+		if (ret)
+			FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "could not write error entry\n");
 	}
 
 	while (!dlist_empty(&peer->unacked)) {
