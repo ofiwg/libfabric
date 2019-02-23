@@ -104,7 +104,8 @@ static ssize_t rxd_atomic_writemsg(struct fid_ep *ep_fid,
 				  NULL, NULL, 0, NULL, NULL, 0, msg->addr,
 				  msg->rma_iov, msg->rma_iov_count, msg->data,
 				  msg->datatype, msg->op, msg->context,
-				  ofi_op_atomic, rxd_flags(flags));
+				  ofi_op_atomic, rxd_tx_flags(flags |
+				  ep->util_ep.tx_msg_flags));
 }
 
 static ssize_t rxd_atomic_writev(struct fid_ep *ep_fid,
@@ -209,7 +210,8 @@ static ssize_t rxd_atomic_readwritemsg(struct fid_ep *ep_fid,
 				  result_count, msg->addr,
 				  msg->rma_iov, msg->rma_iov_count, msg->data,
 				  msg->datatype, msg->op, msg->context,
-				  ofi_op_atomic_fetch, rxd_flags(flags));
+				  ofi_op_atomic_fetch, rxd_tx_flags(flags |
+				  ep->util_ep.tx_msg_flags));
 }
 
 static ssize_t rxd_atomic_readwritev(struct fid_ep *ep_fid,
@@ -278,7 +280,8 @@ static ssize_t rxd_atomic_compwritemsg(struct fid_ep *ep_fid,
 				  result_count, msg->addr,
 				  msg->rma_iov, msg->rma_iov_count, msg->data,
 				  msg->datatype, msg->op, msg->context,
-				  ofi_op_atomic_compare, rxd_flags(flags));
+				  ofi_op_atomic_compare, rxd_tx_flags(flags |
+				  ep->util_ep.tx_msg_flags));
 }
 
 static ssize_t rxd_atomic_compwritev(struct fid_ep *ep_fid,

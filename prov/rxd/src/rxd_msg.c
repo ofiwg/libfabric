@@ -165,7 +165,7 @@ static ssize_t rxd_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 
 	return rxd_ep_generic_recvmsg(ep, msg->msg_iov, msg->iov_count,
 				      msg->addr, 0, ~0, msg->context, ofi_op_msg,
-				      rxd_flags(flags));
+				      rxd_rx_flags(flags | ep->util_ep.rx_msg_flags));
 }
 
 static ssize_t rxd_ep_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
@@ -282,7 +282,8 @@ static ssize_t rxd_ep_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 
 	return rxd_ep_generic_sendmsg(ep, msg->msg_iov, msg->iov_count,
 				   msg->addr, 0, msg->data, msg->context,
-				   ofi_op_msg, rxd_flags(flags));
+				   ofi_op_msg, rxd_tx_flags(flags |
+				   ep->util_ep.tx_msg_flags));
 
 }
 

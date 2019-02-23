@@ -74,7 +74,8 @@ ssize_t rxd_ep_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 
 	return rxd_ep_generic_recvmsg(ep, msg->msg_iov, msg->iov_count, msg->addr,
 				      msg->tag, msg->ignore, msg->context,
-				      ofi_op_tagged, rxd_flags(flags) | RXD_TAG_HDR);
+				      ofi_op_tagged, rxd_rx_flags(flags |
+				      ep->util_ep.rx_msg_flags) | RXD_TAG_HDR);
 }
 
 ssize_t rxd_ep_tsend(struct fid_ep *ep_fid, const void *buf, size_t len,
@@ -115,7 +116,8 @@ ssize_t rxd_ep_tsendmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 
 	return rxd_ep_generic_sendmsg(ep, msg->msg_iov, msg->iov_count,
 				      msg->addr, msg->tag, msg->data, msg->context,
-				      ofi_op_tagged, rxd_flags(flags) | RXD_TAG_HDR);
+				      ofi_op_tagged, rxd_tx_flags(flags |
+				      ep->util_ep.tx_msg_flags) | RXD_TAG_HDR);
 }
 
 ssize_t rxd_ep_tinject(struct fid_ep *ep_fid, const void *buf, size_t len,
