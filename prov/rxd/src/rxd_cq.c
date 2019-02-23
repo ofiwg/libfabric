@@ -64,96 +64,19 @@ static const char *rxd_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
 	return str;
 }
 
-static int rxd_cq_write_ctx(struct rxd_cq *cq,
-			     struct fi_cq_tagged_entry *cq_entry)
+static int rxd_cq_write(struct rxd_cq *cq,
+			struct fi_cq_tagged_entry *cq_entry)
 {
-	struct fi_cq_tagged_entry *comp;
-
-	if (ofi_cirque_isfull(cq->util_cq.cirq))
-		return -FI_ENOSPC;
-
-	comp = ofi_cirque_tail(cq->util_cq.cirq);
-	comp->op_context = cq_entry->op_context;
-	ofi_cirque_commit(cq->util_cq.cirq);
-	return 0;
+	return ofi_cq_write(&cq->util_cq, cq_entry->op_context,
+			    cq_entry->flags, cq_entry->len,
+			    cq_entry->buf, cq_entry->data,
+			    cq_entry->tag);
 }
 
-static int rxd_cq_write_ctx_signal(struct rxd_cq *cq,
-				    struct fi_cq_tagged_entry *cq_entry)
+static int rxd_cq_write_signal(struct rxd_cq *cq,
+			       struct fi_cq_tagged_entry *cq_entry)
 {
-	int ret = rxd_cq_write_ctx(cq, cq_entry);
-	cq->util_cq.wait->signal(cq->util_cq.wait);
-	return ret;
-}
-
-static int rxd_cq_write_msg(struct rxd_cq *cq,
-			     struct fi_cq_tagged_entry *cq_entry)
-{
-	struct fi_cq_tagged_entry *comp;
-	if (ofi_cirque_isfull(cq->util_cq.cirq))
-		return -FI_ENOSPC;
-
-	comp = ofi_cirque_tail(cq->util_cq.cirq);
-	comp->op_context = cq_entry->op_context;
-	comp->flags = cq_entry->flags;
-	comp->len = cq_entry->len;
-	ofi_cirque_commit(cq->util_cq.cirq);
-	return 0;
-}
-
-static int rxd_cq_write_msg_signal(struct rxd_cq *cq,
-				    struct fi_cq_tagged_entry *cq_entry)
-{
-	int ret = rxd_cq_write_msg(cq, cq_entry);
-	cq->util_cq.wait->signal(cq->util_cq.wait);
-	return ret;
-}
-
-static int rxd_cq_write_data(struct rxd_cq *cq,
-			      struct fi_cq_tagged_entry *cq_entry)
-{
-	struct fi_cq_tagged_entry *comp;
-	if (ofi_cirque_isfull(cq->util_cq.cirq))
-		return -FI_ENOSPC;
-
-	comp = ofi_cirque_tail(cq->util_cq.cirq);
-	comp->op_context = cq_entry->op_context;
-	comp->flags = cq_entry->flags;
-	comp->len = cq_entry->len;
-	comp->buf = cq_entry->buf;
-	comp->data = cq_entry->data;
-	ofi_cirque_commit(cq->util_cq.cirq);
-	return 0;
-}
-
-static int rxd_cq_write_data_signal(struct rxd_cq *cq,
-				     struct fi_cq_tagged_entry *cq_entry)
-{
-	int ret = rxd_cq_write_data(cq, cq_entry);
-	cq->util_cq.wait->signal(cq->util_cq.wait);
-	return ret;
-}
-
-static int rxd_cq_write_tagged(struct rxd_cq *cq,
-				struct fi_cq_tagged_entry *cq_entry)
-{
-	struct fi_cq_tagged_entry *comp;
-	if (ofi_cirque_isfull(cq->util_cq.cirq))
-		return -FI_ENOSPC;
-
-	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL,
-	       "report completion: %" PRIx64 "\n", cq_entry->tag);
-
-	comp = ofi_cirque_tail(cq->util_cq.cirq);
-	*comp = *cq_entry;
-	ofi_cirque_commit(cq->util_cq.cirq);
-	return 0;
-}
-
-static int rxd_cq_write_tagged_signal(struct rxd_cq *cq,
-				       struct fi_cq_tagged_entry *cq_entry)
-{
-	int ret = rxd_cq_write_tagged(cq, cq_entry);
+	int ret = rxd_cq_write(cq, cq_entry);
 	cq->util_cq.wait->signal(cq->util_cq.wait);
 	return ret;
 }
@@ -189,22 +112,6 @@ void rxd_release_repost_rx(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 	rxd_ep_post_buf(ep);
 }
 
-void rxd_cq_report_error(struct rxd_cq *cq, struct fi_cq_err_entry *err_entry)
-{
-	struct fi_cq_tagged_entry cq_entry = {0};
-	struct util_cq_oflow_err_entry *entry = calloc(1, sizeof(*entry));
-	if (!entry) {
-		FI_WARN(&rxd_prov, FI_LOG_CQ,
-			"out of memory, cannot report CQ error\n");
-		return;
-	}
-
-	entry->comp = *err_entry;
-	slist_insert_tail(&entry->list_entry, &cq->util_cq.oflow_err_list);
-	cq_entry.flags = UTIL_FLAG_ERROR;
-	cq->write_fn(cq, &cq_entry);
-}
-
 static void rxd_complete_rx(struct rxd_ep *ep, struct rxd_x_entry *rx_entry)
 {
 	struct fi_cq_err_entry err_entry;
@@ -225,7 +132,11 @@ static void rxd_complete_rx(struct rxd_ep *ep, struct rxd_x_entry *rx_entry)
 		err_entry.len = rx_entry->bytes_done;
 		err_entry.err = FI_ETRUNC;
 		err_entry.prov_errno = 0;
-		rxd_cq_report_error(rx_cq, &err_entry);
+		ret = ofi_cq_write_error(&rx_cq->util_cq, &err_entry);
+		if (ret) {
+			FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "could not write error entry\n");
+			return;
+		}
 	}
 
 out:
@@ -293,15 +204,10 @@ static void rxd_ep_recv_data(struct rxd_ep *ep, struct rxd_x_entry *x_entry,
 	}
 	rxd_ep_send_ack(ep, pkt->base_hdr.peer);
 
-	if (x_entry->cq_entry.flags & FI_READ) {
-		fastlock_acquire(&ep->util_ep.tx_cq->cq_lock);
+	if (x_entry->cq_entry.flags & FI_READ)
 		rxd_complete_tx(ep, x_entry);
-		fastlock_release(&ep->util_ep.tx_cq->cq_lock);
-	} else {
-		fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
+	else
 		rxd_complete_rx(ep, x_entry);
-		fastlock_release(&ep->util_ep.rx_cq->cq_lock);
-	}
 }
 
 static void rxd_verify_active(struct rxd_ep *ep, fi_addr_t addr, fi_addr_t peer_addr)
@@ -393,13 +299,9 @@ void rxd_progress_tx_list(struct rxd_ep *ep, struct rxd_peer *peer)
 			    head_seq)) {
 				if (tx_entry->op == RXD_DATA_READ) {
 					tx_entry->op = ofi_op_read_req;
-					fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
 					rxd_complete_rx(ep, tx_entry);
-					fastlock_release(&ep->util_ep.rx_cq->cq_lock);
 				} else {
-					fastlock_acquire(&ep->util_ep.tx_cq->cq_lock);
 					rxd_complete_tx(ep, tx_entry);
-					fastlock_release(&ep->util_ep.tx_cq->cq_lock);
 				}
 			}
 			continue;
@@ -1053,15 +955,11 @@ static void rxd_handle_op(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 		goto release;
 	}
 
-	fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
 	rxd_progress_op(ep, rx_entry, pkt_entry, base_hdr, sar_hdr, tag_hdr,
 			data_hdr, rma_hdr, atom_hdr, &msg, msg_size);
 
-
 	if (!dlist_empty(&ep->peers[base_hdr->peer].buf_pkts))
 		rxd_progress_buf_pkts(ep, base_hdr->peer);
-
-	fastlock_release(&ep->util_ep.rx_cq->cq_lock);
 
 ack:
 	rxd_ep_send_ack(ep, base_hdr->peer);
@@ -1307,36 +1205,12 @@ int rxd_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	if (ret)
 		goto free;
 
-	switch (attr->format) {
-	case FI_CQ_FORMAT_UNSPEC:
-	case FI_CQ_FORMAT_CONTEXT:
-		cq->write_fn = cq->util_cq.wait ?
-			rxd_cq_write_ctx_signal : rxd_cq_write_ctx;
-		break;
-	case FI_CQ_FORMAT_MSG:
-		cq->write_fn = cq->util_cq.wait ?
-			rxd_cq_write_msg_signal : rxd_cq_write_msg;
-		break;
-	case FI_CQ_FORMAT_DATA:
-		cq->write_fn = cq->util_cq.wait ?
-			rxd_cq_write_data_signal : rxd_cq_write_data;
-		break;
-	case FI_CQ_FORMAT_TAGGED:
-		cq->write_fn = cq->util_cq.wait ?
-			rxd_cq_write_tagged_signal : rxd_cq_write_tagged;
-		break;
-	default:
-		ret = -FI_EINVAL;
-		goto cleanup;
-	}
-
+	cq->write_fn = cq->util_cq.wait ? rxd_cq_write_signal : rxd_cq_write;
 	*cq_fid = &cq->util_cq.cq_fid;
 	(*cq_fid)->fid.ops = &rxd_cq_fi_ops;
 	(*cq_fid)->ops = &rxd_cq_ops;
 	return 0;
 
-cleanup:
-	ofi_cq_cleanup(&cq->util_cq);
 free:
 	free(cq);
 	return ret;

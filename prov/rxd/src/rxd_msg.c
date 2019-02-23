@@ -120,7 +120,6 @@ ssize_t rxd_ep_generic_recvmsg(struct rxd_ep *rxd_ep, const struct iovec *iov,
 	assert(!(rxd_flags & RXD_MULTI_RECV) || iov_count == 1);
 
 	fastlock_acquire(&rxd_ep->util_ep.lock);
-	fastlock_acquire(&rxd_ep->util_ep.rx_cq->cq_lock);
 
 	if (ofi_cirque_isfull(rxd_ep->util_ep.rx_cq->cirq)) {
 		ret = -FI_EAGAIN;
@@ -151,7 +150,6 @@ ssize_t rxd_ep_generic_recvmsg(struct rxd_ep *rxd_ep, const struct iovec *iov,
 
 	dlist_insert_tail(&rx_entry->entry, rx_list);
 out:
-	fastlock_release(&rxd_ep->util_ep.rx_cq->cq_lock);
 	fastlock_release(&rxd_ep->util_ep.lock);
 	return ret;
 }
@@ -207,7 +205,6 @@ ssize_t rxd_ep_generic_inject(struct rxd_ep *rxd_ep, const struct iovec *iov,
 	       rxd_ep_domain(rxd_ep)->max_inline_msg);
 
 	fastlock_acquire(&rxd_ep->util_ep.lock);
-	fastlock_acquire(&rxd_ep->util_ep.tx_cq->cq_lock);
 
 	if (ofi_cirque_isfull(rxd_ep->util_ep.tx_cq->cirq))
 		goto out;
@@ -227,7 +224,6 @@ ssize_t rxd_ep_generic_inject(struct rxd_ep *rxd_ep, const struct iovec *iov,
 		rxd_tx_entry_free(rxd_ep, tx_entry);
 
 out:
-	fastlock_release(&rxd_ep->util_ep.tx_cq->cq_lock);
 	fastlock_release(&rxd_ep->util_ep.lock);
 	return ret;
 }
@@ -248,7 +244,6 @@ ssize_t rxd_ep_generic_sendmsg(struct rxd_ep *rxd_ep, const struct iovec *iov,
 					     op, rxd_flags);
 
 	fastlock_acquire(&rxd_ep->util_ep.lock);
-	fastlock_acquire(&rxd_ep->util_ep.tx_cq->cq_lock);
 
 	if (ofi_cirque_isfull(rxd_ep->util_ep.tx_cq->cirq))
 		goto out;
@@ -268,7 +263,6 @@ ssize_t rxd_ep_generic_sendmsg(struct rxd_ep *rxd_ep, const struct iovec *iov,
 		rxd_tx_entry_free(rxd_ep, tx_entry);
 
 out:
-	fastlock_release(&rxd_ep->util_ep.tx_cq->cq_lock);
 	fastlock_release(&rxd_ep->util_ep.lock);
 	return ret;
 }
