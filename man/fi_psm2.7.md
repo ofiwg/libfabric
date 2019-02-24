@@ -236,7 +236,7 @@ The *psm2* provider checks for the following environment variables:
   available: *tag60* means 32-4-60 partitioning for CQ data, internal protocol
   flags, and application tag. *tag64* means 4-28-64 partitioning for internal
   protocol flags, CQ data, and application tag. *auto* means to choose either
-  *tag60* or *tag64* based on the the hints passed to fi_getinfo -- *tag60* is used
+  *tag60* or *tag64* based on the hints passed to fi_getinfo -- *tag60* is used
   if remote CQ data support is requested explicitly, either by passing non-zero value
   via *hints->domain_attr->cq_data_size* or by including *FI_REMOTE_CQ_DATA* in
   *hints->caps*, otherwise *tag64* is used. If *tag64* is the result of automatic
