@@ -105,8 +105,11 @@ fi_ibv_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
 	wce = container_of(slist_entry, struct fi_ibv_wce, entry);
 
 	entry->op_context = (void *)(uintptr_t)wce->wc.wr_id;
-	entry->err = EIO;
 	entry->prov_errno = wce->wc.status;
+	if (wce->wc.status == IBV_WC_WR_FLUSH_ERR)
+		entry->err = FI_ECANCELED;
+	else
+		entry->err = EIO;
 	fi_ibv_handle_wc(&wce->wc, &entry->flags, &entry->len, &entry->data);
 
 	if ((FI_VERSION_GE(api_version, FI_VERSION(1, 5))) &&
@@ -248,14 +251,12 @@ static inline int fi_ibv_poll_outstanding_cq(struct fi_ibv_ep *ep,
 		return 1;
 	}
 
-	if (OFI_LIKELY(wc.status != IBV_WC_WR_FLUSH_ERR)) {
-		ret = fi_ibv_wc_2_wce(cq, &wc, &wce);
-		if (OFI_UNLIKELY(ret)) {
-			ret = -FI_EAGAIN;
-			goto fn;
-		}
-		slist_insert_tail(&wce->entry, &cq->wcq);
+	ret = fi_ibv_wc_2_wce(cq, &wc, &wce);
+	if (OFI_UNLIKELY(ret)) {
+		ret = -FI_EAGAIN;
+		goto fn;
 	}
+	slist_insert_tail(&wce->entry, &cq->wcq);
 	ret = 1;
 fn:
 
@@ -326,17 +327,6 @@ static ssize_t fi_ibv_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 
 		/* Insert error entry into wcq */
 		if (OFI_UNLIKELY(wc.status)) {
-			if (wc.status == IBV_WC_WR_FLUSH_ERR) {
-				/* Handle case when remote side destroys
-				 * the connection, but local side isn't aware
-				 * about that yet */
-				VERBS_DBG(FI_LOG_CQ,
-					  "Ignoring WC with status "
-					  "IBV_WC_WR_FLUSH_ERR(%d)\n",
-					  wc.status);
-				i--;
-				continue;
-			}
 			wce = ofi_buf_alloc(cq->wce_pool);
 			if (!wce) {
 				cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);

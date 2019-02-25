@@ -1167,34 +1167,38 @@ static void rxm_cq_read_write_error(struct rxm_ep *rxm_ep)
 
 	switch (state) {
 	case RXM_SAR_TX:
-		assert(err_entry.flags & FI_SEND);
 		sar_buf = err_entry.op_context;
 		err_entry.op_context = sar_buf->app_context;
 		err_entry.flags = ofi_tx_cq_flags(sar_buf->pkt.hdr.op);
 		break;
 	case RXM_TX:
-		assert(err_entry.flags & FI_SEND);
 		eager_buf = err_entry.op_context;
 		err_entry.op_context = eager_buf->app_context;
 		err_entry.flags = ofi_tx_cq_flags(eager_buf->pkt.hdr.op);
 		break;
 	case RXM_RNDV_TX:
-		assert(err_entry.flags & FI_SEND);
 		rndv_buf = err_entry.op_context;
 		err_entry.op_context = rndv_buf->app_context;
 		err_entry.flags = ofi_tx_cq_flags(rndv_buf->pkt.hdr.op);
 		break;
+	case RXM_RX:
+		/* Silently drop any MSG CQ error entries for canceled receive
+		 * operations as these are internal to RxM. This situation can
+		 * happen when the MSG EP receives a reject / shutdown and CM
+		 * thread hasn't handled the event yet. */
+		if (err_entry.err == FI_ECANCELED) {
+			/* No need to re-post these buffers. Free directly */
+			ofi_buf_free((struct rxm_rx_buf *)err_entry.op_context);
+			return;
+		}
+		/* fall through */
 	case RXM_RNDV_ACK_SENT:
 		/* fall through */
-	case RXM_RX:
-		/* fall through */
 	case RXM_RNDV_READ:
-		assert(((state == RXM_RNDV_ACK_SENT) && (err_entry.flags & FI_SEND)) ||
-		       ((state == RXM_RX) && (err_entry.flags & FI_RECV)) ||
-		       ((state == RXM_RNDV_READ) && (err_entry.flags & FI_READ)));
 		rx_buf = (struct rxm_rx_buf *)err_entry.op_context;
 		util_cq = rx_buf->ep->util_ep.rx_cq;
 		util_cntr = rx_buf->ep->util_ep.rx_cntr;
+		assert(rx_buf->recv_entry);
 		err_entry.op_context = rx_buf->recv_entry->context;
 		err_entry.flags = rx_buf->recv_entry->comp_flags;
 		break;

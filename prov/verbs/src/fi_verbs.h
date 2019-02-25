@@ -933,8 +933,7 @@ static inline int fi_ibv_poll_reap_unsig_cq(struct fi_ibv_ep *ep)
 		}
 
 		for (i = 0; i < ret; i++) {
-			if (!fi_ibv_process_wc(cq, &wc[i]) ||
-			    OFI_UNLIKELY(wc[i].status == IBV_WC_WR_FLUSH_ERR))
+			if (!fi_ibv_process_wc(cq, &wc[i]))
 				continue;
 			if (OFI_LIKELY(!fi_ibv_wc_2_wce(cq, &wc[i], &wce)))
 				slist_insert_tail(&wce->entry, &cq->wcq);
