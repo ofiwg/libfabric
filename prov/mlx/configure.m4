@@ -10,7 +10,7 @@ dnl
 AC_DEFUN([FI_MLX_CONFIGURE],[
     # Determine if we can support the mxm provider
     mlx_happy=0
-    AS_IF([test x"$enable_mlx" != x"no"],
+    AS_IF([test x"$enable_mlx" = x"yes"],
               [FI_CHECK_PACKAGE([mlx],
                     [ucp/api/ucp.h],
                     [ucp],
