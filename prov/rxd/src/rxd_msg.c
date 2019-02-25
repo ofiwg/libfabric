@@ -216,8 +216,10 @@ ssize_t rxd_ep_generic_inject(struct rxd_ep *rxd_ep, const struct iovec *iov,
 
 	tx_entry = rxd_tx_entry_init(rxd_ep, iov, iov_count, NULL, 0, 0, data,
 				     tag, NULL, rxd_addr, op, rxd_flags);
-	if (!tx_entry)
+	if (!tx_entry) {
+		ret = -FI_EAGAIN;
 		goto out;
+	}
 
 	ret = rxd_ep_send_op(rxd_ep, tx_entry, NULL, 0, NULL, 0, 0, 0);
 	if (ret)
