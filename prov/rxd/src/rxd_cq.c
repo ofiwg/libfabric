@@ -391,6 +391,7 @@ void rxd_progress_tx_list(struct rxd_ep *ep, struct rxd_peer *peer)
 			if (ofi_before(tx_entry->start_seq + (tx_entry->num_segs - 1),
 			    head_seq)) {
 				if (tx_entry->op == RXD_DATA_READ) {
+					tx_entry->op = ofi_op_read_req;
 					fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
 					rxd_complete_rx(ep, tx_entry);
 					fastlock_release(&ep->util_ep.rx_cq->cq_lock);
