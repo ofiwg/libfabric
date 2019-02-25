@@ -329,6 +329,18 @@ typedef void (*ofi_ep_cntr_inc_func)(struct util_ep *);
 extern ofi_ep_cntr_inc_func ofi_ep_tx_cntr_inc_funcs[ofi_op_last];
 extern ofi_ep_cntr_inc_func ofi_ep_rx_cntr_inc_funcs[ofi_op_last];
 
+static inline void ofi_ep_tx_cntr_inc_func(struct util_ep *ep, uint8_t op)
+{
+	assert(op < ofi_op_last);
+	ofi_ep_tx_cntr_inc_funcs[op](ep);
+}
+
+static inline void ofi_ep_rx_cntr_inc_func(struct util_ep *ep, uint8_t op)
+{
+	assert(op < ofi_op_last);
+	ofi_ep_rx_cntr_inc_funcs[op](ep);
+}
+
 /*
  * Tag and address match
  */

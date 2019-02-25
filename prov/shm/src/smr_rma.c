@@ -369,7 +369,7 @@ ssize_t smr_generic_rma_inject(struct fid_ep *ep_fid, const void *buf,
 commit:
 	ofi_cirque_commit(smr_cmd_queue(peer_smr));
 	peer_smr->cmd_cnt--;
-	ofi_ep_tx_cntr_inc_funcs[ofi_op_write](&ep->util_ep);
+	ofi_ep_tx_cntr_inc_func(&ep->util_ep, ofi_op_write);
 unlock_region:
 	fastlock_release(&peer_smr->lock);
 	return ret;

@@ -141,8 +141,7 @@ static void rxd_complete_rx(struct rxd_ep *ep, struct rxd_x_entry *rx_entry)
 	      rx_entry->cq_entry.flags & FI_RECV))
 		rx_cq->write_fn(rx_cq, &rx_entry->cq_entry);
 
-	assert(rx_entry->op < ofi_op_last);
-	ofi_ep_rx_cntr_inc_funcs[rx_entry->op](&ep->util_ep);
+	ofi_ep_rx_cntr_inc_func(&ep->util_ep, rx_entry->op);
 
 out:
 	rxd_rx_entry_free(ep, rx_entry);
@@ -155,8 +154,7 @@ static void rxd_complete_tx(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
 	if (!(tx_entry->flags & RXD_NO_TX_COMP))
 		tx_cq->write_fn(tx_cq, &tx_entry->cq_entry);
 
-	assert(tx_entry->op < ofi_op_last);
-	ofi_ep_tx_cntr_inc_funcs[tx_entry->op](&ep->util_ep);
+	ofi_ep_tx_cntr_inc_func(&ep->util_ep, tx_entry->op);
 
 	rxd_tx_entry_free(ep, tx_entry);
 }
