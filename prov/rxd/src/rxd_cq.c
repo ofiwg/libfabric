@@ -216,8 +216,8 @@ static void rxd_verify_active(struct rxd_ep *ep, fi_addr_t addr, fi_addr_t peer_
 {
 	struct rxd_pkt_entry *pkt_entry;
 
-	if (ep->peers[addr].peer_addr == peer_addr &&
-	    ep->peers[addr].peer_addr != FI_ADDR_UNSPEC)
+	if (ep->peers[addr].peer_addr != FI_ADDR_UNSPEC &&
+	    ep->peers[addr].peer_addr != peer_addr)
 		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL,
 			"overwriting active peer - unexpected behavior\n");
 
