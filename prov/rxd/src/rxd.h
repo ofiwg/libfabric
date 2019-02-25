@@ -129,8 +129,8 @@ struct rxd_peer {
 	uint64_t rx_seq_no;
 	uint64_t last_rx_ack;
 	uint64_t last_tx_ack;
-	uint16_t rx_window;//constant at MAX_UNACKED for now
-	uint16_t tx_window;//unused for now, will be used for slow start
+	uint16_t rx_window;
+	uint16_t tx_window;
 	int retry_cnt;
 
 	uint16_t unacked_cnt;
@@ -242,7 +242,6 @@ struct rxd_x_entry {
 	uint64_t next_seg_no;
 	uint64_t start_seq;
 	uint64_t offset;
-	uint16_t window;
 	uint64_t num_segs;
 	uint32_t op;
 
