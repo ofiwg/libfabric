@@ -38,6 +38,7 @@
 #include <pthread_np.h>
 
 #include "unix/osd.h"
+#include "rdma/fi_errno.h"
 
 #define bswap_64 bswap64
 
