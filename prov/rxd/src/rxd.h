@@ -193,6 +193,11 @@ struct rxd_ep {
 
 	struct util_buf_pool *tx_pkt_pool;
 	struct util_buf_pool *rx_pkt_pool;
+	size_t tx_msg_avail;
+	size_t rx_msg_avail;
+	size_t tx_rma_avail;
+	size_t rx_rma_avail;
+
 	struct slist rx_pkt_list;
 
 	struct util_buf_pool *tx_entry_pool;
@@ -394,8 +399,8 @@ void rxd_ep_send_ack(struct rxd_ep *rxd_ep, fi_addr_t peer);
 struct rxd_pkt_entry *rxd_get_tx_pkt(struct rxd_ep *ep);
 void rxd_release_rx_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt);
 void rxd_release_tx_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt);
-struct rxd_x_entry *rxd_get_tx_entry(struct rxd_ep *ep);
-struct rxd_x_entry *rxd_get_rx_entry(struct rxd_ep *ep);
+struct rxd_x_entry *rxd_get_tx_entry(struct rxd_ep *ep, uint32_t op);
+struct rxd_x_entry *rxd_get_rx_entry(struct rxd_ep *ep, uint32_t op);
 void rxd_release_rx_entry(struct rxd_ep *ep, struct rxd_x_entry *x_entry);
 int rxd_ep_retry_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry);
 ssize_t rxd_ep_post_data_pkts(struct rxd_ep *ep, struct rxd_x_entry *tx_entry);

@@ -83,6 +83,7 @@ static int rxd_cq_write_signal(struct rxd_cq *cq,
 
 void rxd_rx_entry_free(struct rxd_ep *ep, struct rxd_x_entry *rx_entry)
 {
+	rx_entry->op <= ofi_op_tagged ? ep->rx_msg_avail++ : ep->rx_rma_avail++;
 	rx_entry->op = RXD_NO_OP;
 	dlist_remove(&rx_entry->entry);
 	rxd_release_rx_entry(ep, rx_entry);
@@ -440,7 +441,7 @@ struct rxd_x_entry *rxd_progress_multi_recv(struct rxd_ep *ep,
 		return NULL;
 	}
 
-	dup_entry = rxd_get_rx_entry(ep);
+	dup_entry = rxd_get_rx_entry(ep, rx_entry->op);
 	if (!dup_entry) {
 		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "could not get rx entry\n");
 		return NULL;
@@ -544,7 +545,7 @@ static struct rxd_x_entry *rxd_rma_read_entry_init(struct rxd_ep *ep,
 	struct rxd_domain *rxd_domain = rxd_ep_domain(ep);
 	int ret;
 
-	rx_entry = rxd_get_rx_entry(ep);
+	rx_entry = rxd_get_rx_entry(ep, base_hdr->type);
 	if (!rx_entry) {
 		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "could not get rx entry\n");
 		return NULL;
@@ -609,7 +610,7 @@ static struct rxd_x_entry *rxd_rx_atomic_fetch(struct rxd_ep *ep,
 	struct rxd_x_entry *rx_entry;
 	int ret;
 
-	rx_entry = rxd_get_rx_entry(ep);
+	rx_entry = rxd_get_rx_entry(ep, base_hdr->type);
 	if (!rx_entry) {
 		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "could not get tx entry\n");
 		return NULL;
