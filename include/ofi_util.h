@@ -326,18 +326,18 @@ static inline void ofi_ep_rem_wr_cntr_inc(struct util_ep *ep)
 }
 
 typedef void (*ofi_ep_cntr_inc_func)(struct util_ep *);
-extern ofi_ep_cntr_inc_func ofi_ep_tx_cntr_inc_funcs[ofi_op_last];
-extern ofi_ep_cntr_inc_func ofi_ep_rx_cntr_inc_funcs[ofi_op_last];
+extern ofi_ep_cntr_inc_func ofi_ep_tx_cntr_inc_funcs[ofi_op_max];
+extern ofi_ep_cntr_inc_func ofi_ep_rx_cntr_inc_funcs[ofi_op_max];
 
 static inline void ofi_ep_tx_cntr_inc_func(struct util_ep *ep, uint8_t op)
 {
-	assert(op < ofi_op_last);
+	assert(op < ofi_op_max);
 	ofi_ep_tx_cntr_inc_funcs[op](ep);
 }
 
 static inline void ofi_ep_rx_cntr_inc_func(struct util_ep *ep, uint8_t op)
 {
-	assert(op < ofi_op_last);
+	assert(op < ofi_op_max);
 	ofi_ep_rx_cntr_inc_funcs[op](ep);
 }
 
@@ -555,8 +555,8 @@ static inline int ofi_need_completion(uint64_t cq_flags, uint64_t op_flags)
 			     FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)));
 }
 
-extern uint64_t ofi_rx_flags[ofi_op_last];
-extern uint64_t ofi_tx_flags[ofi_op_last];
+extern uint64_t ofi_rx_flags[ofi_op_max];
+extern uint64_t ofi_tx_flags[ofi_op_max];
 
 static inline uint64_t ofi_rx_cq_flags(uint32_t op)
 {
