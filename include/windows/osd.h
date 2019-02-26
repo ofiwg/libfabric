@@ -638,15 +638,22 @@ static inline int ffsll(long long val)
 	return 0;
 }
 
+static inline int vasprintf(char **ptr, const char *format, va_list args)
+{
+	int len = vsnprintf(0, 0, format, args);
+	*ptr = (char *)malloc(len + 1);
+	vsnprintf(*ptr, len + 1, format, args);
+	(*ptr)[len] = 0; /* to be sure that string is enclosed */
+	return len;
+}
+
 static inline int asprintf(char **ptr, const char *format, ...)
 {
 	va_list args;
-	va_start(args, format);
+	int len;
 
-	int len = vsnprintf(0, 0, format, args);
-	*ptr = (char*)malloc(len + 1);
-	vsnprintf(*ptr, len + 1, format, args);
-	(*ptr)[len] = 0; /* to be sure that string is enclosed */
+	va_start(args, format);
+	len = vasprintf(ptr, format, args);
 	va_end(args);
 
 	return len;
