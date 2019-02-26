@@ -895,6 +895,11 @@ void (*ofi_atomic_swap_handlers[OFI_SWAP_OP_LAST][FI_DATATYPE_LAST])
 	{ OFI_DEFINE_INT_HANDLERS(CSWAPEXT, NAME, OFI_OP_MSWAP) },
 };
 
+static void ofi_log_atomic_info(const struct fi_provider *prov)
+{
+	FI_INFO(prov, FI_LOG_DOMAIN, "Using built-in memory model atomics.\n");
+}
+
 #else /* HAVE_BUILTIN_MM_ATOMICS */
 
 /**********************
@@ -988,6 +993,12 @@ void (*ofi_atomic_swap_handlers[OFI_SWAP_OP_LAST][FI_DATATYPE_LAST])
 	{ OFI_DEFINE_INT_HANDLERS(CSWAP, NAME, OFI_OP_MSWAP) },
 };
 
+static void ofi_log_atomic_info(const struct fi_provider *prov)
+{
+	FI_INFO(prov, FI_LOG_DOMAIN, "Using open-coded atomics. "
+		"Use requires single-threaded access by provider.\n");
+}
+
 #endif /* HAVE_BUILTIN_MM_ATOMICS */
 
 int ofi_atomic_valid(const struct fi_provider *prov,
@@ -995,6 +1006,7 @@ int ofi_atomic_valid(const struct fi_provider *prov,
 {
 	int have_func;
 
+	ofi_log_atomic_info(prov);
 	if (flags & FI_TAGGED) {
 		/* Only tagged atomic write operations currently supported */
 		if (flags & (FI_FETCH_ATOMIC | FI_COMPARE_ATOMIC)) {
