@@ -534,9 +534,9 @@ semantics.  Completions generated for other types of atomic operations
 indicate that it is safe to re-use the source data buffers.
 
 Any updates to data at the target of an atomic operation will be
-visible to processes running on the target node prior to one of
-the following occurring.  If the atomic operation generates a
-completion event or updates a completion counter at the target
+visible to agents (CPU processes, NICs, and other devices) on the target
+node prior to one of the following occurring.  If the atomic operation
+generates a completion event or updates a completion counter at the target
 endpoint, the results will be available prior to the completion
 notification.  After processing a completion for the atomic, if
 the initiator submits a transfer between the same endpoints that
@@ -545,6 +545,19 @@ prior to the subsequent transfer's event.  Or, if a fenced data
 transfer from the initiator follows the atomic request, the results
 will be available prior to a completion at the target for the
 fenced transfer.
+
+The correctness of atomic operations on a target memory region is
+guaranteed only when performed by a single actor for a given window of
+time.  An actor is defined as a single libfabric domain (identified
+by the domain name, and not an open instance of that domain), a coherent
+CPU complex, or other device (e.g. GPU) capable of performing atomic
+operations on the target memory.  The results of atomic operations
+performed by multiple actors simultaneously are undefined.  For
+example, issuing CPU based atomic operations to a target region
+concurrently being updated by NIC based atomics may leave the region's
+data in an unknown state.  The results of a first actor's atomic operations
+must be visible to a second actor prior to the second actor issuing its
+own atomics.
 
 # FLAGS
 
