@@ -50,7 +50,6 @@ static ssize_t rxd_generic_write_inject(struct rxd_ep *rxd_ep,
 	assert(ofi_total_iov_len(iov, iov_count) <= rxd_ep_domain(rxd_ep)->max_inline_rma);
 
 	fastlock_acquire(&rxd_ep->util_ep.lock);
-	fastlock_acquire(&rxd_ep->util_ep.tx_cq->cq_lock);
 
 	if (ofi_cirque_isfull(rxd_ep->util_ep.tx_cq->cirq))
 		goto out;
@@ -62,8 +61,10 @@ static ssize_t rxd_generic_write_inject(struct rxd_ep *rxd_ep,
 
 	tx_entry = rxd_tx_entry_init(rxd_ep, iov, iov_count, NULL, 0, rma_count, data,
 				     0, context, rxd_addr, op, rxd_flags);
-	if (!tx_entry)
+	if (!tx_entry) {
+		ret = -FI_EAGAIN;
 		goto out;
+	}
 
 	ret = rxd_ep_send_op(rxd_ep, tx_entry, rma_iov, rma_count, NULL, 0, 0, 0);
 	if (ret) {
@@ -77,7 +78,6 @@ static ssize_t rxd_generic_write_inject(struct rxd_ep *rxd_ep,
 	ret = 0;
 
 out:
-	fastlock_release(&rxd_ep->util_ep.tx_cq->cq_lock);
 	fastlock_release(&rxd_ep->util_ep.lock);
 	return ret;
 }
@@ -99,7 +99,6 @@ ssize_t rxd_generic_rma(struct rxd_ep *rxd_ep, const struct iovec *iov,
 	assert(iov_count <= RXD_IOV_LIMIT && rma_count <= RXD_IOV_LIMIT);
 
 	fastlock_acquire(&rxd_ep->util_ep.lock);
-	fastlock_acquire(&rxd_ep->util_ep.tx_cq->cq_lock);
 
 	if (ofi_cirque_isfull(rxd_ep->util_ep.tx_cq->cirq))
 		goto out;
@@ -111,15 +110,16 @@ ssize_t rxd_generic_rma(struct rxd_ep *rxd_ep, const struct iovec *iov,
 
 	tx_entry = rxd_tx_entry_init(rxd_ep, iov, iov_count, NULL, 0, rma_count,
 				     data, 0, context, rxd_addr, op, rxd_flags);
-	if (!tx_entry)
+	if (!tx_entry) {
+		ret = -FI_EAGAIN;
 		goto out;
+	}
 
 	ret = rxd_ep_send_op(rxd_ep, tx_entry, rma_iov, rma_count, NULL, 0, 0, 0);
 	if (ret)
 		rxd_tx_entry_free(rxd_ep, tx_entry);
 
 out:
-	fastlock_release(&rxd_ep->util_ep.tx_cq->cq_lock);
 	fastlock_release(&rxd_ep->util_ep.lock);
 	return ret;
 }
@@ -141,7 +141,7 @@ ssize_t rxd_read(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 
 	return rxd_generic_rma(ep, &msg_iov, 1, &rma_iov, 1, &desc, 
 			       src_addr, context, ofi_op_read_req, 0,
-			       rxd_ep_tx_flags(ep));
+			       ep->tx_flags);
 }
 
 ssize_t rxd_readv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
@@ -159,7 +159,7 @@ ssize_t rxd_readv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 
 	return rxd_generic_rma(ep, iov, count, &rma_iov, 1, desc,
 			       src_addr, context, ofi_op_read_req, 0,
-			       rxd_ep_tx_flags(ep));
+			       ep->tx_flags);
 }
 
 ssize_t rxd_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
@@ -172,7 +172,8 @@ ssize_t rxd_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 	return rxd_generic_rma(ep, msg->msg_iov, msg->iov_count,
 			       msg->rma_iov, msg->rma_iov_count,
 			       msg->desc, msg->addr, msg->context,
-			       ofi_op_read_req, msg->data, rxd_flags(flags));
+			       ofi_op_read_req, msg->data, rxd_tx_flags(flags |
+			       ep->util_ep.tx_msg_flags));
 }
 
 ssize_t rxd_write(struct fid_ep *ep_fid, const void *buf, size_t len, void *desc,
@@ -192,7 +193,7 @@ ssize_t rxd_write(struct fid_ep *ep_fid, const void *buf, size_t len, void *desc
 
 	return rxd_generic_rma(ep, &msg_iov, 1, &rma_iov, 1, &desc, 
 			       dest_addr, context, ofi_op_write, 0,
-			       rxd_ep_tx_flags(ep));
+			       ep->tx_flags);
 }
 
 ssize_t rxd_writev(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
@@ -210,7 +211,7 @@ ssize_t rxd_writev(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 
 	return rxd_generic_rma(ep, iov, count, &rma_iov, 1, desc,
 			       dest_addr, context, ofi_op_write, 0,
-			       rxd_ep_tx_flags(ep));
+			       ep->tx_flags);
 }
 
 
@@ -224,7 +225,8 @@ ssize_t rxd_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 	return rxd_generic_rma(ep, msg->msg_iov, msg->iov_count,
 			       msg->rma_iov, msg->rma_iov_count,
 			       msg->desc, msg->addr, msg->context,
-			       ofi_op_write, msg->data, rxd_flags(flags));
+			       ofi_op_write, msg->data, rxd_tx_flags(flags |
+			       ep->util_ep.tx_msg_flags));
 }
 
 ssize_t rxd_writedata(struct fid_ep *ep_fid, const void *buf, size_t len,
@@ -245,7 +247,7 @@ ssize_t rxd_writedata(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	return rxd_generic_rma(ep, &iov, 1, &rma_iov, 1, &desc,
 			       dest_addr, context, ofi_op_write, data,
-			       rxd_ep_tx_flags(ep) | RXD_REMOTE_CQ_DATA);
+			       ep->tx_flags | RXD_REMOTE_CQ_DATA);
 }
 
 ssize_t rxd_inject_write(struct fid_ep *ep_fid, const void *buf,

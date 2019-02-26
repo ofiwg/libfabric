@@ -67,7 +67,6 @@ static ssize_t rxd_generic_atomic(struct rxd_ep *rxd_ep,
 	ofi_rma_ioc_to_iov(rma_ioc, rma_iov, rma_count, ofi_datatype_size(datatype));
 
 	fastlock_acquire(&rxd_ep->util_ep.lock);
-	fastlock_acquire(&rxd_ep->util_ep.tx_cq->cq_lock);
 
 	if (ofi_cirque_isfull(rxd_ep->util_ep.tx_cq->cirq))
 		goto out;
@@ -88,7 +87,6 @@ static ssize_t rxd_generic_atomic(struct rxd_ep *rxd_ep,
 		rxd_tx_entry_free(rxd_ep, tx_entry);
 
 out:
-	fastlock_release(&rxd_ep->util_ep.tx_cq->cq_lock);
 	fastlock_release(&rxd_ep->util_ep.lock);
 	return ret;
 }
@@ -104,7 +102,8 @@ static ssize_t rxd_atomic_writemsg(struct fid_ep *ep_fid,
 				  NULL, NULL, 0, NULL, NULL, 0, msg->addr,
 				  msg->rma_iov, msg->rma_iov_count, msg->data,
 				  msg->datatype, msg->op, msg->context,
-				  ofi_op_atomic, rxd_flags(flags));
+				  ofi_op_atomic, rxd_tx_flags(flags |
+				  ep->util_ep.tx_msg_flags));
 }
 
 static ssize_t rxd_atomic_writev(struct fid_ep *ep_fid,
@@ -124,7 +123,7 @@ static ssize_t rxd_atomic_writev(struct fid_ep *ep_fid,
 	return rxd_generic_atomic(ep, iov, desc, count, NULL, NULL, 0, NULL,
 				  NULL, 0, dest_addr, &rma_iov, 1, 0, datatype,
 				  op, context, ofi_op_atomic,
-				  rxd_ep_tx_flags(ep));
+				  ep->tx_flags);
 }
 
 static ssize_t rxd_atomic_write(struct fid_ep *ep_fid, const void *buf, size_t count,
@@ -147,7 +146,7 @@ static ssize_t rxd_atomic_write(struct fid_ep *ep_fid, const void *buf, size_t c
 
 	return rxd_generic_atomic(ep, &iov, &desc, 1, NULL, NULL, 0, NULL, NULL, 0,
 				  dest_addr, &rma_iov, 1, 0, datatype, op, context,
-				  ofi_op_atomic, rxd_ep_tx_flags(ep));
+				  ofi_op_atomic, ep->tx_flags);
 }
 
 static ssize_t rxd_atomic_inject(struct fid_ep *ep_fid, const void *buf,
@@ -170,7 +169,6 @@ static ssize_t rxd_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 	rma_iov.key = key;
 
 	fastlock_acquire(&rxd_ep->util_ep.lock);
-	fastlock_acquire(&rxd_ep->util_ep.tx_cq->cq_lock);
 
 	if (ofi_cirque_isfull(rxd_ep->util_ep.tx_cq->cirq))
 		goto out;
@@ -191,7 +189,6 @@ static ssize_t rxd_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 		rxd_tx_entry_free(rxd_ep, tx_entry);
 
 out:
-	fastlock_release(&rxd_ep->util_ep.tx_cq->cq_lock);
 	fastlock_release(&rxd_ep->util_ep.lock);
 	return ret;
 }
@@ -209,7 +206,8 @@ static ssize_t rxd_atomic_readwritemsg(struct fid_ep *ep_fid,
 				  result_count, msg->addr,
 				  msg->rma_iov, msg->rma_iov_count, msg->data,
 				  msg->datatype, msg->op, msg->context,
-				  ofi_op_atomic_fetch, rxd_flags(flags));
+				  ofi_op_atomic_fetch, rxd_tx_flags(flags |
+				  ep->util_ep.tx_msg_flags));
 }
 
 static ssize_t rxd_atomic_readwritev(struct fid_ep *ep_fid,
@@ -231,7 +229,7 @@ static ssize_t rxd_atomic_readwritev(struct fid_ep *ep_fid,
 	return rxd_generic_atomic(ep, iov, desc, count, NULL, NULL, 0, resultv,
 				  result_desc, result_count, dest_addr,
 				  &rma_iov, 1, 0, datatype, op, context,
-				  ofi_op_atomic_fetch, rxd_ep_tx_flags(ep));
+				  ofi_op_atomic_fetch, ep->tx_flags);
 }
 
 static ssize_t rxd_atomic_readwrite(struct fid_ep *ep_fid, const void *buf,
@@ -259,7 +257,7 @@ static ssize_t rxd_atomic_readwrite(struct fid_ep *ep_fid, const void *buf,
 	return rxd_generic_atomic(ep, &iov, &desc, 1, NULL, NULL, 0, &resultv,
 				  &result_desc, 1, dest_addr, &rma_iov, 1, 0,
 				  datatype, op, context, ofi_op_atomic_fetch,
-				  rxd_ep_tx_flags(ep));
+				  ep->tx_flags);
 }
 
 static ssize_t rxd_atomic_compwritemsg(struct fid_ep *ep_fid,
@@ -278,7 +276,8 @@ static ssize_t rxd_atomic_compwritemsg(struct fid_ep *ep_fid,
 				  result_count, msg->addr,
 				  msg->rma_iov, msg->rma_iov_count, msg->data,
 				  msg->datatype, msg->op, msg->context,
-				  ofi_op_atomic_compare, rxd_flags(flags));
+				  ofi_op_atomic_compare, rxd_tx_flags(flags |
+				  ep->util_ep.tx_msg_flags));
 }
 
 static ssize_t rxd_atomic_compwritev(struct fid_ep *ep_fid,
@@ -302,7 +301,7 @@ static ssize_t rxd_atomic_compwritev(struct fid_ep *ep_fid,
 				  compare_count, resultv, result_desc,
 				  result_count, dest_addr, &rma_iov, 1, 0,
 				  datatype, op, context, ofi_op_atomic_compare,
-				  rxd_ep_tx_flags(ep));
+				  ep->tx_flags);
 }
 
 static ssize_t rxd_atomic_compwrite(struct fid_ep *ep_fid, const void *buf,
@@ -333,7 +332,7 @@ static ssize_t rxd_atomic_compwrite(struct fid_ep *ep_fid, const void *buf,
 	return rxd_generic_atomic(ep, &iov, &desc, 1, &comparev, &compare_desc,
 				  1, &resultv, &result_desc, 1, dest_addr,
 				  &rma_iov, 1, 0, datatype, op, context,
-				  ofi_op_atomic_compare, rxd_ep_tx_flags(ep));
+				  ofi_op_atomic_compare, ep->tx_flags);
 }
 
 int rxd_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,

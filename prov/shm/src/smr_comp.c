@@ -40,7 +40,7 @@
 int smr_complete_tx(struct smr_ep *ep, void *context, uint32_t op,
 		    uint16_t flags, uint64_t err)
 {
-	ofi_ep_tx_cntr_inc_funcs[op](&ep->util_ep);
+	ofi_ep_tx_cntr_inc_func(&ep->util_ep, op);
 
 	if (!err && !(flags & SMR_TX_COMPLETION))
 		return 0;
@@ -92,7 +92,7 @@ int smr_complete_rx(struct smr_ep *ep, void *context, uint32_t op, uint16_t flag
 		    size_t len, void *buf, void *addr, uint64_t tag, uint64_t data,
 		    uint64_t err)
 {
-	ofi_ep_rx_cntr_inc_funcs[op](&ep->util_ep);
+	ofi_ep_rx_cntr_inc_func(&ep->util_ep, op);
 
 	if (!err && !(flags & (SMR_REMOTE_CQ_DATA | SMR_RX_COMPLETION)))
 		return 0;

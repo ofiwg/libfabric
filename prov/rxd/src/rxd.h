@@ -188,6 +188,8 @@ struct rxd_ep {
 	int next_retry;
 	int dg_cq_fd;
 	size_t pending_cnt;
+	uint32_t tx_flags;
+	uint32_t rx_flags;
 
 	struct ofi_bufpool *tx_pkt_pool;
 	struct ofi_bufpool *rx_pkt_pool;
@@ -253,7 +255,7 @@ struct rxd_x_entry {
 	struct dlist_entry entry;
 };
 
-static inline uint32_t rxd_flags(uint64_t fi_flags)
+static inline uint32_t rxd_tx_flags(uint64_t fi_flags)
 {
 	uint32_t rxd_flags = 0;
 
@@ -261,14 +263,23 @@ static inline uint32_t rxd_flags(uint64_t fi_flags)
 		rxd_flags |= RXD_REMOTE_CQ_DATA;
 	if (fi_flags & FI_INJECT)
 		rxd_flags |= RXD_INJECT;
-	if (fi_flags & FI_MULTI_RECV)
-		rxd_flags |= RXD_MULTI_RECV;
+	if (fi_flags & FI_COMPLETION)
+		return rxd_flags;
 
-	return rxd_flags;
+	return rxd_flags | RXD_NO_TX_COMP;
 }
 
-#define rxd_ep_rx_flags(rxd_ep) (rxd_flags((rxd_ep)->util_ep.rx_op_flags))
-#define rxd_ep_tx_flags(rxd_ep) (rxd_flags((rxd_ep)->util_ep.tx_op_flags))
+static inline uint32_t rxd_rx_flags(uint64_t fi_flags)
+{
+	uint32_t rxd_flags = 0;
+
+	if (fi_flags & FI_MULTI_RECV)
+		rxd_flags |= RXD_MULTI_RECV;
+	if (fi_flags & FI_COMPLETION)
+		return rxd_flags;
+
+	return rxd_flags | RXD_NO_RX_COMP;
+}
 
 struct rxd_pkt_entry {
 	struct dlist_entry d_entry;

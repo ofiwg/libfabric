@@ -335,7 +335,10 @@ static size_t ft_comp_x(struct fid_cq *cq, struct ft_xcontrol *ft_x,
 		return -1;
 	}
 
-	return (ret == -FI_EAGAIN && timeout) ? ret : completions;
+	if (completions)
+		return completions;
+
+	return (ret == -FI_EAGAIN && timeout) ? ret : 0;
 }
 
 static int ft_cntr_x(struct fid_cntr *cntr, struct ft_xcontrol *ft_x,
