@@ -167,16 +167,18 @@ void fi_param_undefine(const struct fi_provider *provider)
 __attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 int DEFAULT_SYMVER_PRE(fi_param_define)(const struct fi_provider *provider,
 		const char *param_name, enum fi_param_type type,
-		const char *help_string)
+		const char *help_string_fmt, ...)
 {
 	int i, ret;
 	struct fi_param_entry *v;
+	char *tmp_str;
+	va_list vargs;
 
 	if (!provider)
 		provider = &core_prov;
 
 	// Check for bozo cases
-	if (param_name == NULL || help_string == NULL || *help_string == '\0') {
+	if (param_name == NULL || help_string_fmt == NULL || *help_string_fmt == '\0') {
 		FI_DBG(provider, FI_LOG_CORE,
 			"Failed to register %s variable: provider coding error\n",
 			param_name);
@@ -193,17 +195,23 @@ int DEFAULT_SYMVER_PRE(fi_param_define)(const struct fi_provider *provider,
 	v->provider = provider;
 	v->name = strdup(param_name);
 	v->type = type;
+
+	va_start(vargs, help_string_fmt);
+	ret = vasprintf(&v->help_string, help_string_fmt, vargs);
+	va_end(vargs);
+	if (ret < 0)
+		v->help_string = NULL;
+
 	if (provider != &core_prov) {
-		ret = asprintf(&v->help_string, "%s: %s", provider->name, help_string);
+		ret = asprintf(&tmp_str, "%s: %s", provider->name, v->help_string);
+		free(v->help_string);
 		if (ret < 0)
 			v->help_string = NULL;
+		v->help_string = tmp_str;
 		ret = asprintf(&v->env_var_name, "FI_%s_%s", provider->name, param_name);
 		if (ret < 0)
 			v->env_var_name = NULL;
 	} else {
-		ret = asprintf(&v->help_string, "%s", help_string);
-		if (ret < 0)
-			v->help_string = NULL;
 		ret = asprintf(&v->env_var_name, "FI_%s", param_name);
 		if (ret < 0)
 			v->env_var_name = NULL;

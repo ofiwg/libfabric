@@ -86,7 +86,7 @@ struct fi_provider {
  * they can be freed upon return from fi_param_define().
  */
 int fi_param_define(const struct fi_provider *provider, const char *param_name,
-		    enum fi_param_type type, const char *help_string);
+		    enum fi_param_type type, const char *help_string_fmt, ...);
 
 /*
  * Get the value of a configuration variable.
