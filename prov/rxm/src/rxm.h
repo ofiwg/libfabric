@@ -66,6 +66,7 @@
 #define RXM_CTRL_VERSION	3
 
 #define RXM_BUF_SIZE	16384
+extern size_t rxm_eager_limit;
 
 #define RXM_SAR_LIMIT	131072
 #define RXM_SAR_TX_ERROR	UINT64_MAX

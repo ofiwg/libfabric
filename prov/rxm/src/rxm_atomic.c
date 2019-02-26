@@ -129,7 +129,7 @@ rxm_ep_atomic_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	tot_len = buf_len + cmp_len + sizeof(struct rxm_atomic_hdr) +
 			sizeof(struct rxm_pkt);
 
-	if (tot_len > rxm_ep->eager_limit) {
+	if (tot_len > rxm_eager_limit) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 			"atomic data too large %zu\n", tot_len);
 		return -FI_EINVAL;

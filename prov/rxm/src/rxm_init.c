@@ -49,6 +49,7 @@
 size_t rxm_msg_tx_size		= 128;
 size_t rxm_msg_rx_size		= 128;
 size_t rxm_def_univ_size	= 256;
+size_t rxm_eager_limit		= RXM_BUF_SIZE - sizeof(struct rxm_pkt);
 
 char *rxm_proto_state_str[] = {
 	RXM_PROTO_STATES(OFI_STR)
@@ -182,16 +183,14 @@ static int rxm_init_info(void)
 
 	if (!fi_param_get_size_t(&rxm_prov, "buffer_size", &param)) {
 		if (param > sizeof(struct rxm_pkt)) {
-			rxm_info.tx_attr->inject_size = param;
+			rxm_eager_limit = param - sizeof(struct rxm_pkt);
 		} else {
 			FI_WARN(&rxm_prov, FI_LOG_CORE,
 				"Requested buffer size too small\n");
 			return -FI_EINVAL;
 		}
-	} else {
-		rxm_info.tx_attr->inject_size = RXM_BUF_SIZE;
 	}
-	rxm_info.tx_attr->inject_size -= sizeof(struct rxm_pkt);
+	rxm_info.tx_attr->inject_size = rxm_eager_limit;
 	rxm_util_prov.info = &rxm_info;
 	return 0;
 }
@@ -347,12 +346,16 @@ struct fi_provider rxm_prov = {
 RXM_INI
 {
 	fi_param_define(&rxm_prov, "buffer_size", FI_PARAM_SIZE_T,
-			"Defines the transmit buffer size / inject size. Messages"
-			" of size less than this would be transmitted via an "
-			"eager protocol and those above would be transmitted "
-			"via a rendezvous or SAR (Segmentation And Reassembly) "
-			"protocol. Transmit data would be copied up to this size "
-			"(default: ~16k).");
+			"Defines the transmit buffer size / inject size "
+			"(default: 16 KB). Eager protocol would be used to "
+			"transmit messages of size less than eager limit "
+			"(FI_OFI_RXM_BUFFER_SIZE - RxM header size (%zu B)). "
+			"Any message whose size is greater than eager limit would"
+			" be transmitted via rendezvous or SAR "
+			"(Segmentation And Reassembly) protocol depending on "
+			"the value of FI_OFI_RXM_SAR_LIMIT). Also, transmit data "
+			" would be copied up to eager limit.",
+			sizeof(struct rxm_pkt));
 
 	fi_param_define(&rxm_prov, "comp_per_progress", FI_PARAM_INT,
 			"Defines the maximum number of MSG provider CQ entries "
@@ -360,10 +363,13 @@ RXM_INI
 			"(RxM CQ read).");
 
 	fi_param_define(&rxm_prov, "sar_limit", FI_PARAM_SIZE_T,
-			"Set this environment variable to control the RxM SAR "
-			"(Segmentation And Reassembly) protocol. "
-			"Messages of size greater than this (default: 256 Kb) "
-			"would be transmitted via rendezvous protocol.");
+			"Set this environment variable to enable and control "
+			"RxM SAR (Segmentation And Reassembly) protocol "
+			"(default: 256 KB). This value should be set greater than "
+			" eager limit (FI_OFI_RXM_BUFFER_SIZE - RxM protocol "
+			"header size (%zu B)) for SAR to take effect. Messages "
+			"of size greater than this would be transmitted via "
+			"rendezvous protocol.", sizeof(struct rxm_pkt));
 
 	fi_param_define(&rxm_prov, "use_srx", FI_PARAM_BOOL,
 			"Set this enivronment variable to control the RxM "
