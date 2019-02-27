@@ -394,4 +394,3 @@ test:
 	./scripts/runfabtests.sh -vvv -S $(os_excludes) -f ./test_configs/sockets/sockets.exclude sockets
 	./scripts/runfabtests.sh -vvv -S $(os_excludes) -f ./test_configs/udp/udp.exclude udp
 	./scripts/runfabtests.sh -vvv -S $(os_excludes) -f ./test_configs/tcp/tcp.exclude tcp
-	./scripts/runfabtests.sh -vvv -S $(os_excludes) -f ./test_configs/ofi_rxd/ofi_rxd.exclude "UDP;ofi_rxd"
