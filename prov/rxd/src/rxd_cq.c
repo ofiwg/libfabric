@@ -83,6 +83,7 @@ static int rxd_cq_write_signal(struct rxd_cq *cq,
 
 void rxd_rx_entry_free(struct rxd_ep *ep, struct rxd_x_entry *rx_entry)
 {
+	rx_entry->op <= ofi_op_tagged ? ep->rx_msg_avail++ : ep->rx_rma_avail++;
 	rx_entry->op = RXD_NO_OP;
 	dlist_remove(&rx_entry->entry);
 	ofi_ibuf_free(rx_entry);
@@ -249,7 +250,8 @@ static int rxd_start_xfer(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
 {
 	struct rxd_base_hdr *hdr = rxd_get_base_hdr(tx_entry->pkt);
 
-	if (ep->peers[tx_entry->peer].unacked_cnt >= rxd_env.max_unacked)
+	if (ep->peers[tx_entry->peer].unacked_cnt >=
+	    ep->peers[tx_entry->peer].tx_window)
 		return 0;
 
 	tx_entry->start_seq = rxd_set_pkt_seq(&ep->peers[tx_entry->peer],
@@ -270,7 +272,8 @@ static int rxd_start_xfer(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
 				  &ep->peers[tx_entry->peer].rma_rx_list);
 	}
 
-	return ep->peers[tx_entry->peer].unacked_cnt < rxd_env.max_unacked;
+	return ep->peers[tx_entry->peer].unacked_cnt <
+	       ep->peers[tx_entry->peer].tx_window;
 }
 
 void rxd_progress_tx_list(struct rxd_ep *ep, struct rxd_peer *peer)
@@ -441,7 +444,7 @@ struct rxd_x_entry *rxd_progress_multi_recv(struct rxd_ep *ep,
 		return NULL;
 	}
 
-	dup_entry = rxd_get_rx_entry(ep);
+	dup_entry = rxd_get_rx_entry(ep, rx_entry->op);
 	if (!dup_entry) {
 		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "could not get rx entry\n");
 		return NULL;
@@ -545,7 +548,7 @@ static struct rxd_x_entry *rxd_rma_read_entry_init(struct rxd_ep *ep,
 	struct rxd_domain *rxd_domain = rxd_ep_domain(ep);
 	int ret;
 
-	rx_entry = rxd_get_rx_entry(ep);
+	rx_entry = rxd_get_rx_entry(ep, base_hdr->type);
 	if (!rx_entry) {
 		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "could not get rx entry\n");
 		return NULL;
@@ -610,7 +613,7 @@ static struct rxd_x_entry *rxd_rx_atomic_fetch(struct rxd_ep *ep,
 	struct rxd_x_entry *rx_entry;
 	int ret;
 
-	rx_entry = rxd_get_rx_entry(ep);
+	rx_entry = rxd_get_rx_entry(ep, base_hdr->type);
 	if (!rx_entry) {
 		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "could not get tx entry\n");
 		return NULL;
@@ -954,9 +957,11 @@ static void rxd_handle_op(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 			rxd_remove_rx_pkt(ep, pkt_entry);
 			return;
 		}
-		goto release;
+		ep->peers[base_hdr->peer].rx_window = 0;
+		goto ack;
 	}
 
+	ep->peers[base_hdr->peer].rx_window = rxd_env.max_unacked;
 	rxd_progress_op(ep, rx_entry, pkt_entry, base_hdr, sar_hdr, tag_hdr,
 			data_hdr, rma_hdr, atom_hdr, &msg, msg_size);
 
@@ -983,6 +988,8 @@ static void rxd_handle_ack(struct rxd_ep *ep, struct rxd_pkt_entry *ack_entry)
 	struct rxd_pkt_entry *pkt_entry;
 	fi_addr_t peer = ack->base_hdr.peer;
 	struct rxd_base_hdr *hdr;
+
+	ep->peers[peer].tx_window = ack->ext_hdr.rx_id;
 
 	if (ep->peers[peer].last_rx_ack == ack->base_hdr.seq_no)
 		return;

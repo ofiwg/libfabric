@@ -129,8 +129,8 @@ struct rxd_peer {
 	uint64_t rx_seq_no;
 	uint64_t last_rx_ack;
 	uint64_t last_tx_ack;
-	uint16_t rx_window;//constant at MAX_UNACKED for now
-	uint16_t tx_window;//unused for now, will be used for slow start
+	uint16_t rx_window;
+	uint16_t tx_window;
 	int retry_cnt;
 
 	uint16_t unacked_cnt;
@@ -191,6 +191,11 @@ struct rxd_ep {
 	uint32_t tx_flags;
 	uint32_t rx_flags;
 
+	size_t tx_msg_avail;
+	size_t rx_msg_avail;
+	size_t tx_rma_avail;
+	size_t rx_rma_avail;
+
 	struct ofi_bufpool *tx_pkt_pool;
 	struct ofi_bufpool *rx_pkt_pool;
 	struct slist rx_pkt_list;
@@ -237,7 +242,6 @@ struct rxd_x_entry {
 	uint64_t next_seg_no;
 	uint64_t start_seq;
 	uint64_t offset;
-	uint16_t window;
 	uint64_t num_segs;
 	uint32_t op;
 
@@ -392,8 +396,8 @@ int rxd_ep_post_buf(struct rxd_ep *ep);
 void rxd_release_repost_rx(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry);
 void rxd_ep_send_ack(struct rxd_ep *rxd_ep, fi_addr_t peer);
 struct rxd_pkt_entry *rxd_get_tx_pkt(struct rxd_ep *ep);
-struct rxd_x_entry *rxd_get_tx_entry(struct rxd_ep *ep);
-struct rxd_x_entry *rxd_get_rx_entry(struct rxd_ep *ep);
+struct rxd_x_entry *rxd_get_tx_entry(struct rxd_ep *ep, uint32_t op);
+struct rxd_x_entry *rxd_get_rx_entry(struct rxd_ep *ep, uint32_t op);
 int rxd_ep_send_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry);
 ssize_t rxd_ep_post_data_pkts(struct rxd_ep *ep, struct rxd_x_entry *tx_entry);
 void rxd_insert_unacked(struct rxd_ep *ep, fi_addr_t peer,
