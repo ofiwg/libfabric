@@ -547,7 +547,7 @@ int _gnix_job_disable_unassigned_cpus(void)
 	return gnix_write_proc_job("disable_affinity_unassigned_cpus");
 }
 
-/* Indicate that the next task spawned should adhere to the the affinity rules. */
+/* Indicate that the next task spawned should adhere to the affinity rules. */
 int _gnix_job_enable_affinity_apply(void)
 {
 	return gnix_write_proc_job("enable_affinity_apply");

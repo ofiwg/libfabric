@@ -647,7 +647,7 @@ option is similar to delivery complete, but requires the intended recipient
 to sign for the letter.
 
 The 'commit complete' level has different semantics than the previously
-mentioned levels.  Commit complete would be closer to the the letter
+mentioned levels.  Commit complete would be closer to the letter
 arriving at the destination and being placed into a fire proof safe.
 
 The operational flags for the described completion levels are defined below.
