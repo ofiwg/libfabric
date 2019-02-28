@@ -971,10 +971,17 @@ static inline ssize_t rxm_handle_atomic_resp(struct rxm_ep *rxm_ep,
 					   ofi_tx_cq_flags(tx_buf->pkt.hdr.op),
 					   tx_buf->app_context, tx_buf->flags);
 done:
-	if (tx_buf->pkt.hdr.atomic.op == ofi_op_atomic)
+	if (tx_buf->pkt.hdr.op == ofi_op_atomic) {
 		ofi_ep_wr_cntr_inc(&rxm_ep->util_ep);
-	else
+	} else if (tx_buf->pkt.hdr.op == ofi_op_atomic_compare ||
+		   tx_buf->pkt.hdr.op == ofi_op_atomic_fetch) {
 		ofi_ep_rd_cntr_inc(&rxm_ep->util_ep);
+	} else {
+		FI_WARN(&rxm_prov, FI_LOG_CQ, "unknown atomic request op!\n");
+		rxm_cq_write_error(rxm_ep->util_ep.tx_cq, NULL,
+				   tx_buf->app_context, ntohl(resp_hdr->status));
+		assert(0);
+	}
 
 	rxm_rx_buf_release(rxm_ep, rx_buf);
 	rxm_tx_buf_release(rxm_ep, RXM_BUF_POOL_TX_ATOMIC, tx_buf);
