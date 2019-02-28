@@ -16,4 +16,3 @@ unexpected_msg -e msg
 cq_data -e rdm
 rdm_tagged_peek
 unexpected_msg -e rdm
-rdm_cntr_pingpong
