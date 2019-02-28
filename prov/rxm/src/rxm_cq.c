@@ -949,15 +949,15 @@ static inline ssize_t rxm_handle_atomic_resp(struct rxm_ep *rxm_ep,
 
 	tx_buf = ofi_bufpool_get_ibuf(rxm_ep->buf_pools[RXM_BUF_POOL_TX_ATOMIC].pool,
 				      rx_buf->pkt.ctrl_hdr.msg_id);
-	FI_DBG(&rxm_prov, FI_LOG_CQ,
-	       "Received Atomic Response for msg_id: 0x%" PRIx64 "\n",
+	FI_DBG(&rxm_prov, FI_LOG_CQ, "received atomic response: op: %" PRIu8
+	       " msg_id: 0x%" PRIx64 "\n", rx_buf->pkt.hdr.op,
 	       rx_buf->pkt.ctrl_hdr.msg_id);
 
 	assert(!(rx_buf->comp_flags & ~(FI_RECV | FI_REMOTE_CQ_DATA)));
 
 	if (resp_hdr->status) {
-		FI_DBG(&rxm_prov, FI_LOG_CQ,
-		       "Bad Atomic response status %d\n", ntohl(resp_hdr->status));
+		FI_WARN(&rxm_prov, FI_LOG_CQ,
+		       "bad atomic response status %d\n", ntohl(resp_hdr->status));
 		rxm_cq_write_error(rxm_ep->util_ep.tx_cq,
 				   rxm_ep->util_ep.tx_cntr,
 				   tx_buf->app_context, ntohl(resp_hdr->status));
