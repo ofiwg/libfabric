@@ -214,7 +214,9 @@ fi_ibv_mr_common_cache_reg(struct fi_ibv_domain *domain,
 	struct ofi_mr_entry *entry;
 	int ret;
 
+	fastlock_acquire(&domain->util_domain.lock);
 	ret = ofi_mr_cache_search(&domain->cache, attr, &entry);
+	fastlock_release(&domain->util_domain.lock);
 	if (OFI_UNLIKELY(ret))
 		return NULL;
 
@@ -227,7 +229,9 @@ fi_ibv_mr_common_cache_reg(struct fi_ibv_domain *domain,
 static inline
 void fi_ibv_common_cache_dereg(struct fi_ibv_mem_desc *md)
 {
+	fastlock_acquire(&md->domain->util_domain.lock);
 	ofi_mr_cache_delete(&md->domain->cache, md->entry);
+	fastlock_release(&md->domain->util_domain.lock);
 }
 
 static inline
