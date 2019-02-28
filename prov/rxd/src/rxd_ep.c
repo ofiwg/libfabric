@@ -807,9 +807,11 @@ static int rxd_ep_close(struct fid *fid)
 	if (ret)
 		return ret;
 
-	ret = fi_close(&ep->dg_cq->fid);
-	if (ret)
-		return ret;
+	if (ep->dg_cq) {
+		ret = fi_close(&ep->dg_cq->fid);
+		if (ret)
+			return ret;
+	}
 
 	while (!slist_empty(&ep->rx_pkt_list)) {
 		entry = slist_remove_head(&ep->rx_pkt_list);
@@ -916,6 +918,7 @@ static int rxd_dg_cq_open(struct rxd_ep *rxd_ep, enum fi_wait_obj wait_obj)
 	return 0;
 err:
 	fi_close(&rxd_ep->dg_cq->fid);
+	rxd_ep->dg_cq = NULL;
 	return ret;
 }
 
@@ -966,8 +969,6 @@ static int rxd_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 
 		if (!ep->dg_cq) {
 			ret = rxd_dg_cq_open(ep, cntr->wait ? FI_WAIT_FD : FI_WAIT_NONE);
-			if (ret)
-				return ret;
 		} else if (!ep->dg_cq_fd && cntr->wait) {
 			/* Reopen CQ with WAIT fd set */
 			ret = fi_close(&ep->dg_cq->fid);
@@ -976,12 +977,13 @@ static int rxd_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 					"Unable to close dg CQ: %s\n",
 					fi_strerror(-ret));
 				return ret;
-			} else {
-				ret = rxd_dg_cq_open(ep, FI_WAIT_FD);
-				if (ret)
-					return ret;
 			}
+
+			ep->dg_cq = NULL;
+			ret = rxd_dg_cq_open(ep, FI_WAIT_FD);
 		}
+		if (ret)
+			return ret;
 
 		if (cntr->wait)
 			ret = rxd_ep_wait_fd_add(ep, cntr->wait);
