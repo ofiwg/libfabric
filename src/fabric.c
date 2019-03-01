@@ -723,7 +723,7 @@ static int ofi_layering_ok(const struct fi_provider *provider,
 __attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 		const char *service, uint64_t flags,
-		const struct fi_info *hints, struct fi_info **info)
+		const struct fi_info *hints, struct fi_info **info, ...)
 {
 	struct ofi_prov *prov;
 	struct fi_info *tail, *cur;

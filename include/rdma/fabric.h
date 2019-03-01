@@ -500,7 +500,7 @@ struct fid {
 
 int fi_getinfo(uint32_t version, const char *node, const char *service,
 	       uint64_t flags, const struct fi_info *hints,
-	       struct fi_info **info);
+	       struct fi_info **info, ...);
 void fi_freeinfo(struct fi_info *info);
 struct fi_info *fi_dupinfo(const struct fi_info *info);
 
