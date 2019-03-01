@@ -1,6 +1,6 @@
 # Regex patterns of tests to exclude in runfabtests.sh
 
-^dgram| -e dgram
+dgram
 
 rdm_rma_simple
 rdm_rma_trigger
@@ -16,4 +16,3 @@ unexpected_msg -e msg
 cq_data -e rdm
 rdm_tagged_peek
 unexpected_msg -e rdm
-rdm_cntr_pingpong

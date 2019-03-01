@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 #
-# Copyright (c) 2017-2018, Intel Corporation.  All rights reserved.
+# Copyright (c) 2017-2019, Intel Corporation.  All rights reserved.
 # Copyright (c) 2016-2018, Cisco Systems, Inc. All rights reserved.
 # Copyright (c) 2016, Cray, Inc. All rights reserved.
 #
@@ -44,19 +44,21 @@ trap cleanup_and_exit SIGINT
 # Default behavior with no args will use sockets provider with loopback
 #
 declare BIN_PATH
-declare PROV="sockets"
+declare PROV=""
 declare TEST_TYPE="quick"
 declare SERVER="127.0.0.1"
 declare CLIENT="127.0.0.1"
-declare EXCLUDE=""
 declare GOOD_ADDR=""
 declare -i VERBOSE=0
 declare -i SKIP_NEG=0
 declare COMPLEX_CFG
 declare TIMEOUT_VAL="120"
 declare STRICT_MODE=0
-declare REGEX=0
 declare FORK=0
+
+declare cur_excludes=""
+declare file_excludes=""
+declare input_excludes=""
 
 declare -r c_outp=$(mktemp fabtests.c_outp.XXXXXX)
 declare -r s_outp=$(mktemp fabtests.s_outp.XXXXXX)
@@ -64,6 +66,7 @@ declare -r s_outp=$(mktemp fabtests.s_outp.XXXXXX)
 declare -i skip_count=0
 declare -i pass_count=0
 declare -i fail_count=0
+declare -i total_failures=0
 
 if [[ "$(uname)" == "FreeBSD" ]]; then
     declare -ri FI_ENODATA=$(python -c 'import errno; print(errno.ENOMSG)')
@@ -73,118 +76,118 @@ fi
 declare -ri FI_ENOSYS=$(python -c 'import errno; print(errno.ENOSYS)')
 
 neg_unit_tests=(
-	"dgram g00n13s"
-	"rdm g00n13s"
-	"msg g00n13s"
+	"fi_dgram g00n13s"
+	"fi_rdm g00n13s"
+	"fi_msg g00n13s"
 )
 
 functional_tests=(
-	"av_xfer -e rdm"
-	"av_xfer -e dgram"
-	"cm_data"
-	"cq_data -e msg"
-	"cq_data -e rdm"
-	"cq_data -e dgram"
-	"dgram"
-	"dgram_waitset"
-	"msg"
-	"msg_epoll"
-	"msg_sockets"
-	"poll -t queue"
-	"poll -t counter"
-	"rdm"
-	"rdm_rma_simple"
-	"rdm_rma_trigger"
-	"shared_ctx"
-	"shared_ctx --no-tx-shared-ctx"
-	"shared_ctx --no-rx-shared-ctx"
-	"shared_ctx -e msg"
-	"shared_ctx -e msg --no-tx-shared-ctx"
-	"shared_ctx -e msg --no-rx-shared-ctx"
-	"shared_ctx -e dgram"
-	"shared_ctx -e dgram --no-tx-shared-ctx"
-	"shared_ctx -e dgram --no-rx-shared-ctx"
-	"rdm_tagged_peek"
-	"scalable_ep"
-	"rdm_shared_av"
-	"multi_mr -e msg -V"
-	"multi_mr -e rdm -V"
-	"recv_cancel -e rdm -V"
-	"unexpected_msg -e msg -i 10"
-	"unexpected_msg -e rdm -i 10"
-	"unexpected_msg -e msg -S -i 10"
-	"unexpected_msg -e rdm -S -i 10"
-	"inj_complete -e msg"
-	"inj_complete -e rdm"
-	"inj_complete -e dgram"
-	"inj_complete -e msg -SR"
-	"inj_complete -e rdm -SR"
-	"inj_complete -e dgram -SR"
+	"fi_av_xfer -e rdm"
+	"fi_av_xfer -e dgram"
+	"fi_cm_data"
+	"fi_cq_data -e msg"
+	"fi_cq_data -e rdm"
+	"fi_cq_data -e dgram"
+	"fi_dgram"
+	"fi_dgram_waitset"
+	"fi_msg"
+	"fi_msg_epoll"
+	"fi_msg_sockets"
+	"fi_poll -t queue"
+	"fi_poll -t counter"
+	"fi_rdm"
+	"fi_rdm_rma_simple"
+	"fi_rdm_rma_trigger"
+	"fi_shared_ctx"
+	"fi_shared_ctx --no-tx-shared-ctx"
+	"fi_shared_ctx --no-rx-shared-ctx"
+	"fi_shared_ctx -e msg"
+	"fi_shared_ctx -e msg --no-tx-shared-ctx"
+	"fi_shared_ctx -e msg --no-rx-shared-ctx"
+	"fi_shared_ctx -e dgram"
+	"fi_shared_ctx -e dgram --no-tx-shared-ctx"
+	"fi_shared_ctx -e dgram --no-rx-shared-ctx"
+	"fi_rdm_tagged_peek"
+	"fi_scalable_ep"
+	"fi_rdm_shared_av"
+	"fi_multi_mr -e msg -V"
+	"fi_multi_mr -e rdm -V"
+	"fi_recv_cancel -e rdm -V"
+	"fi_unexpected_msg -e msg -i 10"
+	"fi_unexpected_msg -e rdm -i 10"
+	"fi_unexpected_msg -e msg -S -i 10"
+	"fi_unexpected_msg -e rdm -S -i 10"
+	"fi_inj_complete -e msg"
+	"fi_inj_complete -e rdm"
+	"fi_inj_complete -e dgram"
+	"fi_inj_complete -e msg -SR"
+	"fi_inj_complete -e rdm -SR"
+	"fi_inj_complete -e dgram -SR"
 )
 
 short_tests=(
-	"msg_pingpong -I 5"
-	"msg_pingpong -I 5 -v"
-	"msg_bw -I 5"
-	"msg_bw -I 5 -v"
-	"rma_bw -e msg -o write -I 5"
-	"rma_bw -e msg -o read -I 5"
-	"rma_bw -e msg -o writedata -I 5"
-	"rma_bw -e rdm -o write -I 5"
-	"rma_bw -e rdm -o read -I 5"
-	"rma_bw -e rdm -o writedata -I 5"
-	"rdm_atomic -I 5 -o all"
-	"rdm_cntr_pingpong -I 5"
-	"rdm_multi_recv -I 5"
-	"rdm_pingpong -I 5"
-	"rdm_pingpong -I 5 -v"
-	"rdm_tagged_pingpong -I 5"
-	"rdm_tagged_pingpong -I 5 -v"
-	"rdm_tagged_bw -I 5"
-	"rdm_tagged_bw -I 5 -v"
-	"dgram_pingpong -I 5"
+	"fi_msg_pingpong -I 5"
+	"fi_msg_pingpong -I 5 -v"
+	"fi_msg_bw -I 5"
+	"fi_msg_bw -I 5 -v"
+	"fi_rma_bw -e msg -o write -I 5"
+	"fi_rma_bw -e msg -o read -I 5"
+	"fi_rma_bw -e msg -o writedata -I 5"
+	"fi_rma_bw -e rdm -o write -I 5"
+	"fi_rma_bw -e rdm -o read -I 5"
+	"fi_rma_bw -e rdm -o writedata -I 5"
+	"fi_rdm_atomic -I 5 -o all"
+	"fi_rdm_cntr_pingpong -I 5"
+	"fi_rdm_multi_recv -I 5"
+	"fi_rdm_pingpong -I 5"
+	"fi_rdm_pingpong -I 5 -v"
+	"fi_rdm_tagged_pingpong -I 5"
+	"fi_rdm_tagged_pingpong -I 5 -v"
+	"fi_rdm_tagged_bw -I 5"
+	"fi_rdm_tagged_bw -I 5 -v"
+	"fi_dgram_pingpong -I 5"
 )
 
 standard_tests=(
-	"msg_pingpong"
-	"msg_pingpong -v"
-	"msg_pingpong -k"
-	"msg_pingpong -k -v"
-	"msg_bw"
-	"msg_bw -v"
-	"rma_bw -e msg -o write"
-	"rma_bw -e msg -o read"
-	"rma_bw -e msg -o writedata"
-	"rma_bw -e rdm -o write"
-	"rma_bw -e rdm -o read"
-	"rma_bw -e rdm -o writedata"
-	"rdm_atomic -o all -I 1000"
-	"rdm_cntr_pingpong"
-	"rdm_multi_recv"
-	"rdm_pingpong"
-	"rdm_pingpong -v"
-	"rdm_pingpong -k"
-	"rdm_pingpong -k -v"
-	"rdm_tagged_pingpong"
-	"rdm_tagged_pingpong -v"
-	"rdm_tagged_bw"
-	"rdm_tagged_bw -v"
-	"dgram_pingpong"
-	"dgram_pingpong -k"
+	"fi_msg_pingpong"
+	"fi_msg_pingpong -v"
+	"fi_msg_pingpong -k"
+	"fi_msg_pingpong -k -v"
+	"fi_msg_bw"
+	"fi_msg_bw -v"
+	"fi_rma_bw -e msg -o write"
+	"fi_rma_bw -e msg -o read"
+	"fi_rma_bw -e msg -o writedata"
+	"fi_rma_bw -e rdm -o write"
+	"fi_rma_bw -e rdm -o read"
+	"fi_rma_bw -e rdm -o writedata"
+	"fi_rdm_atomic -o all -I 1000"
+	"fi_rdm_cntr_pingpong"
+	"fi_rdm_multi_recv"
+	"fi_rdm_pingpong"
+	"fi_rdm_pingpong -v"
+	"fi_rdm_pingpong -k"
+	"fi_rdm_pingpong -k -v"
+	"fi_rdm_tagged_pingpong"
+	"fi_rdm_tagged_pingpong -v"
+	"fi_rdm_tagged_bw"
+	"fi_rdm_tagged_bw -v"
+	"fi_dgram_pingpong"
+	"fi_dgram_pingpong -k"
 )
 
 unit_tests=(
-	"getinfo_test -s SERVER_ADDR GOOD_ADDR"
-	"av_test -g GOOD_ADDR -n 1 -s SERVER_ADDR"
-	"dom_test -n 2"
-	"eq_test"
-	"cq_test"
-	"mr_test"
-	"cntr_test"
+	"fi_getinfo_test -s SERVER_ADDR GOOD_ADDR"
+	"fi_av_test -g GOOD_ADDR -n 1 -s SERVER_ADDR"
+	"fi_dom_test -n 2"
+	"fi_eq_test"
+	"fi_cq_test"
+	"fi_mr_test"
+	"fi_cntr_test"
 )
 
 complex_tests=(
-	"ubertest"
+	"fi_ubertest"
 )
 
 function errcho {
@@ -266,9 +269,9 @@ function compute_duration {
 }
 
 function read_exclude_file {
-	exclude_file=$1
+	local excl_file=$1
 
-	if [ ! -f $exclude_file ]; then
+	if [ ! -f $excl_file ]; then
 		echo "Given exclusion file does not exist!"
 		exit 1
 	fi
@@ -277,24 +280,59 @@ function read_exclude_file {
 		# Ignore patterns that are comments or just whitespaces
 		ignore_pattern="#.*|^[\t ]*$"
 		if [[ ! "$pattern" =~ $ignore_pattern ]]; then
-			if [ -z "$EXCLUDE" ]; then
-				EXCLUDE="$pattern"
+			if [ -z "$file_excludes" ]; then
+				file_excludes="$pattern"
 			else
-				EXCLUDE="${EXCLUDE},$pattern"
+				file_excludes="${file_excludes},$pattern"
 			fi
 		fi
-	done < "$exclude_file"
+	done < "$excl_file"
+}
+
+function auto_exclude {
+	local excl_file
+
+	excl_file="./fabtests/test_configs/${PROV}/${PROV}.exclude"
+	if [[ ! -f "$excl_file" ]]; then
+		excl_file="./test_configs/${PROV}/${PROV}.exclude"
+		if [[ ! -f "$excl_file" ]]; then
+			excl_file="../test_configs/${PROV}/${PROV}.exclude"
+			if [[ ! -f "$excl_file" ]]; then
+				return
+			fi
+		fi
+	fi
+
+	read_exclude_file ${excl_file}
+	cur_excludes=${file_excludes}
+	file_excludes=""
+}
+
+function set_excludes {
+	if [[ -n "$input_excludes" ]]; then
+		cur_excludes=${input_excludes}
+	fi
+
+	if [[ -n "$file_excludes" ]]; then
+		[[ -z "$cur_excludes" ]] && cur_excludes=${file_excludes} || \
+			cur_excludes="${cur_excludes},${file_excludes}"
+	fi
+
+	if [[ -n "$cur_excludes" ]]; then
+		return
+	fi
+
+	auto_exclude
 }
 
 function is_excluded {
 	test_name=$1
 
-	[[ -z "$EXCLUDE" ]] && return 1
+	[[ -z "$cur_excludes" ]] && return 1
 
-	IFS="," read -ra exclude_array <<< "$EXCLUDE"
+	IFS="," read -ra exclude_array <<< "$cur_excludes"
 	for pattern in "${exclude_array[@]}"; do
-		if [[ $REGEX -eq 1 && "$test_name" =~ $pattern ]] ||
-		   [[ "$test_name" == "$pattern" ]]; then
+		if [[ "$test_name" =~ $pattern ]]; then
 			print_results "$test_exe" "Excluded" "0" "" ""
 			skip_count+=1
 			return 0
@@ -307,7 +345,7 @@ function unit_test {
 	local test=$1
 	local is_neg=$2
 	local ret1=0
-	local test_exe=$(echo "fi_${test} -p \"$PROV\"" | \
+	local test_exe=$(echo "${test} -p \"$PROV\"" | \
 	    sed -e "s/GOOD_ADDR/$GOOD_ADDR/g" -e "s/SERVER_ADDR/${S_INTERFACE}/g")
 	local start_time
 	local end_time
@@ -353,7 +391,7 @@ function cs_test {
 	local test=$1
 	local s_ret=0
 	local c_ret=0
-	local test_exe="fi_${test} -p \"${PROV}\""
+	local test_exe="${test} -p \"${PROV}\""
 	local start_time
 	local end_time
 	local test_time
@@ -401,7 +439,7 @@ function cs_test {
 function complex_test {
 	local test=$1
 	local config=$2
-	local test_exe="fi_${test}"
+	local test_exe="${test}"
 	local s_ret=0
 	local c_ret=0
 	local start_time
@@ -466,7 +504,12 @@ function complex_test {
 }
 
 function main {
+	skip_count=0
+	pass_count=0
+	fail_count=0
 	local complex_cfg="quick"
+
+	set_excludes
 
 	if [[ $1 == "quick" ]]; then
 		local -r tests="unit functional short"
@@ -545,7 +588,7 @@ function main {
 	print_border
 
 	cleanup
-	exit $fail_count
+	total_failures+=$fail_count
 }
 
 function usage {
@@ -562,15 +605,11 @@ function usage {
 	errcho -e " -vvv\tprint output of failing/notrun/passing"
 	errcho -e " -t\ttest set(s): all,quick,unit,functional,standard,short,complex (default quick)"
 	errcho -e " -e\texclude tests: comma delimited list of test names /
-			 regex patterns (with -R) e.g. \"dgram,rma.*write\""
+			 regex patterns e.g. \"dgram,rma.*write\""
 	errcho -e " -E\texport provided variable name and value to ssh client and server processes.
 			 options must of of the form '-E var=value'"
 	errcho -e " -f\texclude tests file: File containing list of test names /
-			 regex patterns (with -R) to exclude (one per line)"
-	errcho -e " -R\tTreat test exclusions as regex patterns"
-	errcho -e "   \tNote: the test names / patterns for -e and -f options
-			would be matched with the list of test names defined
-			in this script. They don't have fi_ prefix"
+			 regex patterns to exclude (one per line)"
 	errcho -e " -N\tskip negative unit tests"
 	errcho -e " -p\tpath to test bins (default PATH)"
 	errcho -e " -c\tclient interface"
@@ -593,7 +632,8 @@ case ${opt} in
 	;;
 	f) read_exclude_file ${OPTARG}
 	;;
-	e) [[ -z "$EXCLUDE" ]] && EXCLUDE=${OPTARG} || EXCLUDE="${EXCLUDE},${OPTARG}"
+	e) [[ -z "$input_excludes" ]] && input_excludes=${OPTARG} || \
+		input_excludes="${input_excludes},${OPTARG}"
 	;;
 	c) C_INTERFACE=${OPTARG}
 	;;
@@ -605,7 +645,7 @@ case ${opt} in
 	;;
 	N) SKIP_NEG+=1
 	;;
-	R) REGEX=1
+	R)
 	;;
 	S) STRICT_MODE=1
 	;;
@@ -665,4 +705,13 @@ fi
 [ -z $S_INTERFACE ] && S_INTERFACE=$SERVER
 [ -z $GOOD_ADDR ] && GOOD_ADDR=$S_INTERFACE
 
-main ${TEST_TYPE}
+if [[ -z $PROV ]]; then
+	PROV="tcp"
+	main ${TEST_TYPE}
+	PROV="udp"
+	main ${TEST_TYPE}
+else
+	main ${TEST_TYPE}
+fi
+
+exit $total_failures
