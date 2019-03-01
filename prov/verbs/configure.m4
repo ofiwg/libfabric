@@ -42,6 +42,17 @@ AC_DEFUN([FI_VERBS_CONFIGURE],[
 				[$verbs_LIBDIR],
 				[verbs_rdmacm_happy=1],
 				[verbs_rdmacm_happy=0])
+
+	       FI_CHECK_PACKAGE([verbs_rdmacm_ex],
+				[rdma/rdma_cma.h],
+				[rdmacm],
+				[rdma_create_qp_ex],
+				[],
+				[$verbs_PREFIX],
+				[$verbs_LIBDIR],
+				[verbs_rdmacm_ex_happy=1],
+				[verbs_rdmacm_ex_happy=0])
+
 	      ])
 
 	AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
@@ -67,7 +78,8 @@ AC_DEFUN([FI_VERBS_CONFIGURE],[
 
 	#See if we have XRC support
 	VERBS_HAVE_XRC=0
-	AS_IF([test $verbs_ibverbs_happy -eq 1],[
+	AS_IF([test $verbs_ibverbs_happy -eq 1 && \
+	       test $verbs_rdmacm_ex_happy -eq 1],[
 		AC_CHECK_DECL([IBV_QPT_XRC_SEND],
 			[VERBS_HAVE_XRC=1],[],
 			[#include <infiniband/verbs.h>])
