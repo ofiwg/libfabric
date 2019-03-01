@@ -790,9 +790,11 @@ static int rxd_ep_close(struct fid *fid)
 	if (ret)
 		return ret;
 
-	ret = fi_close(&ep->dg_cq->fid);
-	if (ret)
-		return ret;
+	if (ep->dg_cq) {
+		ret = fi_close(&ep->dg_cq->fid);
+		if (ret)
+			return ret;
+	}
 
 	while (!slist_empty(&ep->rx_pkt_list)) {
 		entry = slist_remove_head(&ep->rx_pkt_list);
@@ -852,20 +854,6 @@ static int rxd_ep_trywait(void *arg)
 	return fi_trywait(rxd_fabric->dg_fabric, fids, 1);
 }
 
-static int rxd_ep_get_wait_cq_fd(struct rxd_ep *rxd_ep, enum fi_wait_obj wait_obj)
-{
-	int ret = 0;
-
-	if (wait_obj == FI_WAIT_FD && (!rxd_ep->dg_cq_fd)) {
-		ret = fi_control(&rxd_ep->dg_cq->fid, FI_GETWAIT,
-				 &rxd_ep->dg_cq_fd);
-		if (ret)
-			FI_WARN(&rxd_prov, FI_LOG_EP_CTRL,
-				"Unable to get dg CQ fd\n");
-	}
-	return ret;
-}
-
 static int rxd_ep_wait_fd_add(struct rxd_ep *rxd_ep, struct util_wait *wait)
 {
 	return ofi_wait_fd_add(wait, rxd_ep->dg_cq_fd, FI_EPOLL_IN,
@@ -892,13 +880,20 @@ static int rxd_dg_cq_open(struct rxd_ep *rxd_ep, enum fi_wait_obj wait_obj)
 	if (ret)
 		return ret;
 
-	ret = rxd_ep_get_wait_cq_fd(rxd_ep, wait_obj);
-	if (ret)
-		goto err;
+	if (wait_obj == FI_WAIT_FD && (!rxd_ep->dg_cq_fd)) {
+		ret = fi_control(&rxd_ep->dg_cq->fid, FI_GETWAIT,
+				 &rxd_ep->dg_cq_fd);
+		if (ret) {
+			FI_WARN(&rxd_prov, FI_LOG_EP_CTRL,
+				"Unable to get dg CQ fd\n");
+			goto err;
+		}
+	}
 
 	return 0;
 err:
 	fi_close(&rxd_ep->dg_cq->fid);
+	rxd_ep->dg_cq = NULL;
 	return ret;
 }
 
@@ -949,8 +944,6 @@ static int rxd_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 
 		if (!ep->dg_cq) {
 			ret = rxd_dg_cq_open(ep, cntr->wait ? FI_WAIT_FD : FI_WAIT_NONE);
-			if (ret)
-				return ret;
 		} else if (!ep->dg_cq_fd && cntr->wait) {
 			/* Reopen CQ with WAIT fd set */
 			ret = fi_close(&ep->dg_cq->fid);
@@ -959,12 +952,13 @@ static int rxd_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 					"Unable to close dg CQ: %s\n",
 					fi_strerror(-ret));
 				return ret;
-			} else {
-				ret = rxd_dg_cq_open(ep, FI_WAIT_FD);
-				if (ret)
-					return ret;
 			}
+
+			ep->dg_cq = NULL;
+			ret = rxd_dg_cq_open(ep, FI_WAIT_FD);
 		}
+		if (ret)
+			return ret;
 
 		if (cntr->wait)
 			ret = rxd_ep_wait_fd_add(ep, cntr->wait);

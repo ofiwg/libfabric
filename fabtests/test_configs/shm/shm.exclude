@@ -1,7 +1,9 @@
 # Regex patterns of tests to exclude in runfabtests.sh
 
-^msg|-e msg
-^dgram|-e dgram
+^fi_msg
+-e msg
+^fi_dgram
+-e dgram
 
 # Exclude tests that use sread/polling
 -S
