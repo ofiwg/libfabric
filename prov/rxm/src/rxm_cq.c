@@ -955,13 +955,24 @@ static inline ssize_t rxm_handle_atomic_resp(struct rxm_ep *rxm_ep,
 
 	assert(!(rx_buf->comp_flags & ~(FI_RECV | FI_REMOTE_CQ_DATA)));
 
-	if (resp_hdr->status) {
+	if (OFI_UNLIKELY(resp_hdr->status)) {
+		struct util_cntr *cntr = NULL;
 		FI_WARN(&rxm_prov, FI_LOG_CQ,
 		       "bad atomic response status %d\n", ntohl(resp_hdr->status));
-		rxm_cq_write_error(rxm_ep->util_ep.tx_cq,
-				   rxm_ep->util_ep.tx_cntr,
+
+		if (tx_buf->pkt.hdr.op == ofi_op_atomic) {
+			cntr = rxm_ep->util_ep.wr_cntr;
+		} else if (tx_buf->pkt.hdr.op == ofi_op_atomic_compare ||
+			   tx_buf->pkt.hdr.op == ofi_op_atomic_fetch) {
+			cntr = rxm_ep->util_ep.rd_cntr;
+		} else {
+			FI_WARN(&rxm_prov, FI_LOG_CQ,
+				"unknown atomic request op!\n");
+			assert(0);
+		}
+		rxm_cq_write_error(rxm_ep->util_ep.tx_cq, cntr,
 				   tx_buf->app_context, ntohl(resp_hdr->status));
-		goto done;
+		goto err;
 	}
 
 	len = ofi_total_iov_len(tx_buf->result_iov, tx_buf->result_iov_count);
@@ -973,7 +984,7 @@ static inline ssize_t rxm_handle_atomic_resp(struct rxm_ep *rxm_ep,
 		ret = rxm_cq_tx_comp_write(rxm_ep,
 					   ofi_tx_cq_flags(tx_buf->pkt.hdr.op),
 					   tx_buf->app_context, tx_buf->flags);
-done:
+
 	if (tx_buf->pkt.hdr.op == ofi_op_atomic) {
 		ofi_ep_wr_cntr_inc(&rxm_ep->util_ep);
 	} else if (tx_buf->pkt.hdr.op == ofi_op_atomic_compare ||
@@ -985,7 +996,7 @@ done:
 				   tx_buf->app_context, ntohl(resp_hdr->status));
 		assert(0);
 	}
-
+err:
 	rxm_rx_buf_release(rxm_ep, rx_buf);
 	ofi_buf_free(tx_buf);
 
