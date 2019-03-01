@@ -3,8 +3,10 @@
 # Exclude all prefix tests
 -k
 
-^msg|-e msg
-^dgram|-e dgram
+^fi_msg
+-e msg
+^fi_dgram
+-e dgram
 
 cm_data
 rdm_rma_simple

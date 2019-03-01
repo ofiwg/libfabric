@@ -5,7 +5,7 @@ cq_data
 inj_complete -e dgram
 
 # No utility provider available for MSG EP support
-msg
+^fi_msg
 -e msg
 cm_data
 

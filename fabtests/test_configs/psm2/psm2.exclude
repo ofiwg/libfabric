@@ -6,7 +6,8 @@
 # av_test supports only FI_SOCKADDR
 av_test
 
-^msg|-e msg
+^fi_msg
+-e msg
 
 cm_data
 shared_ctx
