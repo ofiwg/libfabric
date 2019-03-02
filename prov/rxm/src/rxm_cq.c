@@ -949,19 +949,30 @@ static inline ssize_t rxm_handle_atomic_resp(struct rxm_ep *rxm_ep,
 
 	tx_buf = ofi_bufpool_get_ibuf(rxm_ep->buf_pools[RXM_BUF_POOL_TX_ATOMIC].pool,
 				      rx_buf->pkt.ctrl_hdr.msg_id);
-	FI_DBG(&rxm_prov, FI_LOG_CQ,
-	       "Received Atomic Response for msg_id: 0x%" PRIx64 "\n",
+	FI_DBG(&rxm_prov, FI_LOG_CQ, "received atomic response: op: %" PRIu8
+	       " msg_id: 0x%" PRIx64 "\n", rx_buf->pkt.hdr.op,
 	       rx_buf->pkt.ctrl_hdr.msg_id);
 
 	assert(!(rx_buf->comp_flags & ~(FI_RECV | FI_REMOTE_CQ_DATA)));
 
-	if (resp_hdr->status) {
-		FI_DBG(&rxm_prov, FI_LOG_CQ,
-		       "Bad Atomic response status %d\n", ntohl(resp_hdr->status));
-		rxm_cq_write_error(rxm_ep->util_ep.tx_cq,
-				   rxm_ep->util_ep.tx_cntr,
+	if (OFI_UNLIKELY(resp_hdr->status)) {
+		struct util_cntr *cntr = NULL;
+		FI_WARN(&rxm_prov, FI_LOG_CQ,
+		       "bad atomic response status %d\n", ntohl(resp_hdr->status));
+
+		if (tx_buf->pkt.hdr.op == ofi_op_atomic) {
+			cntr = rxm_ep->util_ep.wr_cntr;
+		} else if (tx_buf->pkt.hdr.op == ofi_op_atomic_compare ||
+			   tx_buf->pkt.hdr.op == ofi_op_atomic_fetch) {
+			cntr = rxm_ep->util_ep.rd_cntr;
+		} else {
+			FI_WARN(&rxm_prov, FI_LOG_CQ,
+				"unknown atomic request op!\n");
+			assert(0);
+		}
+		rxm_cq_write_error(rxm_ep->util_ep.tx_cq, cntr,
 				   tx_buf->app_context, ntohl(resp_hdr->status));
-		goto done;
+		goto err;
 	}
 
 	len = ofi_total_iov_len(tx_buf->result_iov, tx_buf->result_iov_count);
@@ -973,12 +984,19 @@ static inline ssize_t rxm_handle_atomic_resp(struct rxm_ep *rxm_ep,
 		ret = rxm_cq_tx_comp_write(rxm_ep,
 					   ofi_tx_cq_flags(tx_buf->pkt.hdr.op),
 					   tx_buf->app_context, tx_buf->flags);
-done:
-	if (tx_buf->pkt.hdr.atomic.op == ofi_op_atomic)
-		ofi_ep_wr_cntr_inc(&rxm_ep->util_ep);
-	else
-		ofi_ep_rd_cntr_inc(&rxm_ep->util_ep);
 
+	if (tx_buf->pkt.hdr.op == ofi_op_atomic) {
+		ofi_ep_wr_cntr_inc(&rxm_ep->util_ep);
+	} else if (tx_buf->pkt.hdr.op == ofi_op_atomic_compare ||
+		   tx_buf->pkt.hdr.op == ofi_op_atomic_fetch) {
+		ofi_ep_rd_cntr_inc(&rxm_ep->util_ep);
+	} else {
+		FI_WARN(&rxm_prov, FI_LOG_CQ, "unknown atomic request op!\n");
+		rxm_cq_write_error(rxm_ep->util_ep.tx_cq, NULL,
+				   tx_buf->app_context, ntohl(resp_hdr->status));
+		assert(0);
+	}
+err:
 	rxm_rx_buf_release(rxm_ep, rx_buf);
 	ofi_buf_free(tx_buf);
 
