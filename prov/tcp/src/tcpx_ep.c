@@ -37,6 +37,7 @@
 #include <ofi_prov.h>
 #include <ofi_iov.h>
 #include "tcpx.h"
+#include <errno.h>
 
 extern struct fi_ops_rma tcpx_rma_ops;
 extern struct fi_ops_msg tcpx_msg_ops;
@@ -63,6 +64,20 @@ void tcpx_hdr_bswap(struct tcpx_base_hdr *hdr)
 		rma_iov[i].len = ntohll(rma_iov[i].len);
 		rma_iov[i].key = ntohll(rma_iov[i].key);
 	}
+}
+
+static int tcpx_setup_socket_nodelay(SOCKET sock)
+{
+	int ret, optval = 1;
+
+	ret = setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (char *) &optval,
+			 sizeof(optval));
+	if (ret) {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,"setsockopt nodelay failed\n");
+		return ret;
+	}
+
+	return ret;
 }
 
 static int tcpx_setup_socket(SOCKET sock)
@@ -185,6 +200,36 @@ static int tcpx_ep_shutdown(struct fid_ep *ep, uint64_t flags)
 	return ret;
 }
 
+static int tcpx_bind_to_port_range(SOCKET sock, void* src_addr, size_t addrlen)
+{
+	int ret, i, rand_port_number;
+
+	rand_port_number = rand() % (port_range.high + 1 - port_range.low) +
+			   port_range.low;
+
+	for (i = port_range.low; i <= port_range.high;
+	     i++, rand_port_number++) {
+		if (rand_port_number > port_range.high) {
+			rand_port_number = port_range.low;
+		}
+		ofi_addr_set_port(src_addr, rand_port_number);
+		ret = bind(sock, src_addr, (socklen_t) addrlen);
+		if (ret) {
+			if (errno == EADDRINUSE) {
+				continue;
+			} else {
+				FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+					"failed to bind listener: %s\n",
+					strerror(ofi_sockerr()));
+				return -errno;
+			}
+		} else {
+			break;
+		}
+	}
+	return (i <= port_range.high) ? FI_SUCCESS : -FI_EADDRNOTAVAIL;
+}
+
 static int tcpx_pep_sock_create(struct tcpx_pep *pep)
 {
 	int ret, af;
@@ -209,13 +254,23 @@ static int tcpx_pep_sock_create(struct tcpx_pep *pep)
 		return -FI_EIO;
 	}
 
-	ret = tcpx_setup_socket(pep->sock);
-	if (ret) {
-		goto err;
+	if (ofi_addr_get_port(pep->info->src_addr) != 0 || port_range.high == 0) {
+		ret = tcpx_setup_socket(pep->sock);
+		if (ret) {
+			goto err;
+		}
+		ret = bind(pep->sock, pep->info->src_addr,
+		      (socklen_t) pep->info->src_addrlen);
+	} else {
+		ret = tcpx_setup_socket_nodelay(pep->sock);
+		if (ret) {
+			goto err;
+		}
+
+		ret = tcpx_bind_to_port_range(pep->sock, pep->info->src_addr,
+					      pep->info->src_addrlen);
 	}
 
-	ret = bind(pep->sock, pep->info->src_addr,
-		   (socklen_t) pep->info->src_addrlen);
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"failed to bind listener: %s\n",
@@ -731,6 +786,12 @@ int tcpx_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	_pep->cm_ctx.cm_data_sz = 0;
 	_pep->sock = INVALID_SOCKET;
 
+	ret = tcpx_set_port_range();
+	if (ret == -FI_EINVAL) {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,"Invalid info\n");
+		return -FI_EINVAL;
+	}
+	
 	*pep = &_pep->util_pep.pep_fid;
 
 	if (info->src_addr) {
@@ -747,3 +808,24 @@ err1:
 	free(_pep);
 	return ret;
 }
+
+int tcpx_set_port_range ()
+{
+	int  low   = port_range.low;
+	int  high  = port_range.high;
+
+	if (high > TCPX_PORT_MAX_RANGE) {
+		high = TCPX_PORT_MAX_RANGE;
+	}
+
+	if (low < 0 || high < 0 || low > high) {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,"Invalid info\n");
+		return -FI_EINVAL;
+	}
+
+	port_range.high = (unsigned short)high;
+	port_range.low  = (unsigned short)low;
+
+	return FI_SUCCESS;
+}
+

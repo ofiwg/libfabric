@@ -39,6 +39,7 @@
 #include <ifaddrs.h>
 #include <net/if.h>
 #include <ofi_util.h>
+#include <stdlib.h>
 
 #if HAVE_GETIFADDRS
 static void tcpx_getinfo_ifs(struct fi_info **info)
@@ -116,6 +117,19 @@ static int tcpx_getinfo(uint32_t version, const char *node, const char *service,
 	return 0;
 }
 
+struct tcpx_port_range port_range = {
+	.low  = 0,
+	.high = 0,
+};
+
+static void tcpx_init_env(void)
+{
+	srand(getpid());
+
+	fi_param_get_int(&tcpx_prov, "port_high_range", &port_range.high);
+	fi_param_get_int(&tcpx_prov, "port_low_range", &port_range.low);
+}
+
 static void fi_tcp_fini(void)
 {
 	/* empty as of now */
@@ -137,6 +151,14 @@ TCP_INI
 #endif
 	fi_param_define(&tcpx_prov, "iface", FI_PARAM_STRING,
 			"Specify interface name");
+
+	fi_param_define(&tcpx_prov,"port_low_range", FI_PARAM_INT,
+			"define port low range");
+
+	fi_param_define(&tcpx_prov,"port_high_range", FI_PARAM_INT,
+			"define port high range");
+
+	tcpx_init_env();
 
 	return &tcpx_prov;
 }
