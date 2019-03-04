@@ -4,6 +4,7 @@ import sys
 import pprint
 import operator
 from optparse import OptionParser
+from functools import reduce
 
 try:
 	import yaml
@@ -18,7 +19,7 @@ def _diff(a,b):
 
 	for v1, v2 in zip(a,b):
 		d = {}
-		for k in v2.keys():
+		for k in list(v2.keys()):
 			if k == 'xfer_size':
 				d[k] = v2[k]
 			elif k == 'MB/sec' or k == 'usec/xfer':
@@ -43,7 +44,7 @@ def difference(ystream):
 			a.update(i)
 
 	result = {}
-	for k in b.keys():
+	for k in list(b.keys()):
 		result[k] = _diff(a[k], b[k])
 
 	return result
@@ -54,12 +55,12 @@ def pretty(stream):
 	return 0
 
 def perfprint(d):
-	for k,v in d.items():
-		print k, ":"
+	for k,v in list(d.items()):
+		print(k, ":")
 		for i in v:
-			print 'xfer_size: ', i['xfer_size'],
-			print ', MB/sec: %.2f' % i['MB/sec'] + '%',
-			print ', usec/xfer: %.2f' % i['usec/xfer'] + '%'
+			print('xfer_size: ', i['xfer_size'])
+			print(', MB/sec: %.2f' % i['MB/sec'] + '%')
+			print(', usec/xfer: %.2f' % i['usec/xfer'] + '%')
 	
 
 def main(argv=None):
@@ -75,8 +76,8 @@ def main(argv=None):
 		class fd:
 			@staticmethod
 			def read():
-				r1 = map(open, args)
-				r2 = map(lambda x: x.read(), r1) 
+				r1 = list(map(open, args))
+				r2 = [x.read() for x in r1]
 				return reduce(operator.add, r2)
 	else:
 		fd = open(args[0], 'r')
