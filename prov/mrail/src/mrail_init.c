@@ -92,6 +92,8 @@ int mrail_get_core_info(uint32_t version, const char *node, const char *service,
 		assert(core_hints->domain_attr);
 		core_hints->domain_attr->mr_mode = MRAIL_PASSTHRU_MR_MODES;
 	} else {
+		core_hints->mode &= MRAIL_PASSTHRU_MODES;
+		core_hints->domain_attr->mr_mode &= MRAIL_PASSTHRU_MR_MODES;
 		if (hints->tx_attr) {
 			if (hints->tx_attr->iov_limit)
 				core_hints->tx_attr->iov_limit =
@@ -263,28 +265,6 @@ err:
 	return NULL;
 }
 
-static int mrail_check_modes(const struct fi_info *hints)
-{
-	if (!hints)
-		return 0;
-
-	if (hints->mode & ~MRAIL_PASSTHRU_MODES) {
-		FI_INFO(&mrail_prov, FI_LOG_CORE,
-			"Unable to pass through given modes: %s\n",
-			fi_tostr(&hints->mode, FI_TYPE_MODE));
-		return -FI_ENODATA;
-	}
-
-	if (hints->domain_attr &&
-	    (hints->domain_attr->mr_mode & ~MRAIL_PASSTHRU_MR_MODES)) {
-		FI_INFO(&mrail_prov, FI_LOG_CORE,
-			"Unable to pass through given MR modes: %s\n",
-			fi_tostr(&hints->domain_attr->mr_mode, FI_TYPE_MR_MODE));
-		return -FI_ENODATA;
-	}
-	return 0;
-}
-
 static int mrail_getinfo(uint32_t version, const char *node, const char *service,
 			 uint64_t flags, const struct fi_info *hints,
 			 struct fi_info **info)
@@ -298,10 +278,6 @@ static int mrail_getinfo(uint32_t version, const char *node, const char *service
 		assert(0);
 		return -FI_ENODATA;
 	}
-
-	ret = mrail_check_modes(hints);
-	if (ret)
-		return ret;
 
 	ret = mrail_get_core_info(version, node, service, flags, hints, info);
 	if (ret)
