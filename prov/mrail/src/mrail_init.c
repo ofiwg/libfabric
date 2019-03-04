@@ -76,6 +76,8 @@ int mrail_get_core_info(uint32_t version, const char *node, const char *service,
 	struct fi_info *core_hints, *info, *fi = NULL;
 	size_t i;
 	int ret = 0;
+	uint64_t removed_mode;
+	uint64_t removed_mr_mode;
 
 	if (!mrail_addr_strv) {
 		FI_WARN(&mrail_prov, FI_LOG_FABRIC,
@@ -92,8 +94,25 @@ int mrail_get_core_info(uint32_t version, const char *node, const char *service,
 		assert(core_hints->domain_attr);
 		core_hints->domain_attr->mr_mode = MRAIL_PASSTHRU_MR_MODES;
 	} else {
+		removed_mode = core_hints->mode & ~MRAIL_PASSTHRU_MODES;
+		if (removed_mode) {
+			FI_INFO(&mrail_prov, FI_LOG_CORE,
+				"Unable to pass through given modes: %s\n",
+				fi_tostr(&removed_mode, FI_TYPE_MODE));
+		}
 		core_hints->mode &= MRAIL_PASSTHRU_MODES;
-		core_hints->domain_attr->mr_mode &= MRAIL_PASSTHRU_MR_MODES;
+
+		if (core_hints->domain_attr) {
+			removed_mr_mode = core_hints->domain_attr->mr_mode &
+					  ~MRAIL_PASSTHRU_MR_MODES;
+			if (removed_mr_mode) {
+				FI_INFO(&mrail_prov, FI_LOG_CORE,
+					"Unable to pass through given MR modes: %s\n",
+					fi_tostr(&removed_mr_mode, FI_TYPE_MR_MODE));
+			}
+			core_hints->domain_attr->mr_mode &= MRAIL_PASSTHRU_MR_MODES;
+		}
+
 		if (hints->tx_attr) {
 			if (hints->tx_attr->iov_limit)
 				core_hints->tx_attr->iov_limit =
