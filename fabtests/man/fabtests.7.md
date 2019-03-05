@@ -273,6 +273,11 @@ the list available for that test.
   synchronization.  A port for the out-of-band connection may be specified
   as part of this option to override the default.
 
+*-E[=oob_port]*
+: Enables out-of-band (via sockets) address exchange only. A port for the
+  out-of-band connection may be specified as part of this option to override
+  the default. Cannot be used together with the '-b' option.
+
 *-I <number>*
 : Number of data transfer iterations.
 

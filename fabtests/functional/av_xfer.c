@@ -197,7 +197,7 @@ int main(int argc, char **argv)
 	int op, ret;
 
 	opts = INIT_OPTS;
-	opts.options |= FT_OPT_SIZE | FT_OPT_OOB_SYNC;
+	opts.options |= FT_OPT_SIZE | FT_OPT_OOB_CTRL;
 
 	hints = fi_allocinfo();
 	if (!hints)
