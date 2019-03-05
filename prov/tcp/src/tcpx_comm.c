@@ -85,6 +85,9 @@ int tcpx_recv_hdr(SOCKET sock, struct stage_buf *sbuf,
 	rem_buf = (uint8_t *) &rx_detect->hdr + rx_detect->done_len;
 	rem_len = sizeof(rx_detect->hdr) - rx_detect->done_len;
 
+	if (!rem_len)
+		return FI_SUCCESS;
+
 	if (sbuf->len != sbuf->off) {
 		bytes_recvd = tcpx_read_from_buffer(sbuf, rem_buf, rem_len);
 	} else {
