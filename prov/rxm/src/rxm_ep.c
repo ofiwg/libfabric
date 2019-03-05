@@ -2128,8 +2128,11 @@ static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 			return ret;
 
 		if (!rxm_ep->msg_cq) {
-			ret = rxm_ep_msg_cq_open(rxm_ep, cq->wait ?
-						 FI_WAIT_FD : FI_WAIT_NONE);
+			ofi_ep_lock_acquire(&rxm_ep->util_ep);
+			ret = rxm_ep_msg_cq_open(rxm_ep, cq->wait ||
+				rxm_needs_atomic_progress(rxm_ep->rxm_info) ?
+				FI_WAIT_FD : FI_WAIT_NONE);
+			ofi_ep_lock_release(&rxm_ep->util_ep);
 			if (ret)
 				return ret;
 		}
@@ -2148,17 +2151,22 @@ static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 			return ret;
 
 		if (!rxm_ep->msg_cq) {
-			ret = rxm_ep_msg_cq_open(rxm_ep, cntr->wait ?
-						 FI_WAIT_FD : FI_WAIT_NONE);
+			ofi_ep_lock_acquire(&rxm_ep->util_ep);
+			ret = rxm_ep_msg_cq_open(rxm_ep, cntr->wait ||
+				rxm_needs_atomic_progress(rxm_ep->rxm_info) ?
+				FI_WAIT_FD : FI_WAIT_NONE);
+			ofi_ep_lock_release(&rxm_ep->util_ep);
 			if (ret)
 				return ret;
 		} else if (!rxm_ep->msg_cq_fd && cntr->wait) {
 			/* Reopen CQ with WAIT fd set */
+			ofi_ep_lock_acquire(&rxm_ep->util_ep);
 			ret = fi_close(&rxm_ep->msg_cq->fid);
 			if (ret)
 				FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 					"Unable to close msg CQ\n");
 			ret = rxm_ep_msg_cq_open(rxm_ep, FI_WAIT_FD);
+			ofi_ep_lock_release(&rxm_ep->util_ep);
 			if (ret)
 				return ret;
 		}

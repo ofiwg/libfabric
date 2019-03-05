@@ -767,6 +767,12 @@ rxm_atomic_send_respmsg(struct rxm_ep *rxm_ep, struct rxm_conn *conn,
 	return fi_sendmsg(conn->msg_ep, &msg, FI_COMPLETION);
 }
 
+static inline int rxm_needs_atomic_progress(const struct fi_info *info)
+{
+	return (info->caps & FI_ATOMIC) && info->domain_attr &&
+			info->domain_attr->data_progress == FI_PROGRESS_AUTO;
+}
+
 static inline struct rxm_conn *rxm_key2conn(struct rxm_ep *rxm_ep, uint64_t key)
 {
 	return (struct rxm_conn *)rxm_cmap_key2handle(rxm_ep->cmap, key);

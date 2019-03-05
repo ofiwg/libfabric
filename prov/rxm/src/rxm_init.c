@@ -106,7 +106,10 @@ int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 
 		if (hints->domain_attr) {
 			core_info->domain_attr->caps |= hints->domain_attr->caps;
-			core_info->domain_attr->threading = hints->domain_attr->threading;
+			if (rxm_needs_atomic_progress(hints))
+				core_info->domain_attr->threading = FI_THREAD_SAFE;
+			else
+				core_info->domain_attr->threading = hints->domain_attr->threading;
 		}
 		if (hints->tx_attr) {
 			core_info->tx_attr->msg_order = hints->tx_attr->msg_order;
@@ -267,12 +270,6 @@ static int rxm_validate_atomic_hints(const struct fi_info *hints)
 	if (!hints || !(hints->caps & FI_ATOMIC))
 		return 0;
 
-	if (hints->domain_attr &&
-	    hints->domain_attr->data_progress == FI_PROGRESS_AUTO) {
-		FI_INFO(&rxm_prov, FI_LOG_CORE,
-		        "FI_ATOMIC does not support data FI_PROGRESS_AUTO\n");
-		return -FI_EINVAL;
-	}
 	if (hints->tx_attr && (hints->tx_attr->msg_order &
 			       RXM_ATOMIC_UNSUPPORTED_MSG_ORDER)) {
 		FI_INFO(&rxm_prov, FI_LOG_CORE,
