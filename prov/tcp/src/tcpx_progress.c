@@ -583,82 +583,60 @@ int tcpx_get_rx_entry_op_read_rsp(struct tcpx_ep *tcpx_ep)
 	return FI_SUCCESS;
 }
 
-static void tcpx_process_stage_buffer(struct tcpx_ep *ep)
+static inline int tcpx_get_next_rx_hdr(struct tcpx_ep *ep)
 {
 	int ret;
 
-	while (ep->stage_buf.len != ep->stage_buf.off) {
-		if (!ep->cur_rx_entry) {
-			ret = tcpx_recv_hdr(ep->conn_fd, &ep->stage_buf,
-					    &ep->rx_detect);
-			if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
-				return;
+	/* hdr already read from socket in previous call */
+	if (ep->rx_detect.hdr_len == ep->rx_detect.done_len)
+		return FI_SUCCESS;
 
-			if (ret)
-				goto err1;
+	ret = tcpx_recv_hdr(ep->conn_fd,
+			    &ep->stage_buf,
+			    &ep->rx_detect);
+	if (ret)
+		return ret;
 
-			// TODO: Fix possiblity of multiple passes here.
-			ep->hdr_bswap(&ep->rx_detect.hdr.base_hdr);
-
-			ret = ep->get_rx_entry[ep->rx_detect.hdr.base_hdr.op](ep);
-			if (ret == -FI_EAGAIN)
-				return;
-			if (ret)
-				goto err2;
-		}
-		assert(ep->cur_rx_proc_fn != NULL);
-		ep->cur_rx_proc_fn(ep->cur_rx_entry);
-	}
-	return;
-err2:
-	tcpx_report_error(ep, ret);
-	return;
-err1:
-	if (ret == -FI_ENOTCONN)
-		tcpx_ep_shutdown_report(ep, &ep->util_ep.ep_fid.fid);
+	ep->hdr_bswap(&ep->rx_detect.hdr.base_hdr);
+	return FI_SUCCESS;
 }
 
 static void tcpx_process_rx_msg(struct tcpx_ep *ep)
 {
 	int ret;
 
-	if (!ep->cur_rx_entry) {
-		if (ep->stage_buf.len == ep->stage_buf.off) {
-			ret = tcpx_read_to_buffer(ep->conn_fd, &ep->stage_buf);
-			if (ret && !OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
-				goto err1;
-
-			tcpx_process_stage_buffer(ep);
-			return;
-		}
-
-		ret = tcpx_recv_hdr(ep->conn_fd, &ep->stage_buf,
-				    &ep->rx_detect);
-		if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
-			return;
-
+	if (!ep->cur_rx_entry &&
+	    (ep->stage_buf.len == ep->stage_buf.off)) {
+		ret = tcpx_read_to_buffer(ep->conn_fd,
+					  &ep->stage_buf);
 		if (ret)
-			goto err1;
-
-		// TODO: Fix possiblity of multiple passes here.
-		ep->hdr_bswap(&ep->rx_detect.hdr.base_hdr);
-
-		ret = ep->get_rx_entry[ep->rx_detect.hdr.base_hdr.op](ep);
-		if (ret == -FI_EAGAIN)
-			return;
-		if (ret)
-			goto err2;
+			goto err;
 	}
 
-	assert(ep->cur_rx_proc_fn != NULL);
-	ep->cur_rx_proc_fn(ep->cur_rx_entry);
+	do {
+		if (!ep->cur_rx_entry) {
+			ret = tcpx_get_next_rx_hdr(ep);
+			if (ret)
+				goto err;
+
+			ret = ep->get_rx_entry[ep->rx_detect.hdr.base_hdr.op](ep);
+			if (ret)
+				goto err;
+		}
+		assert(ep->cur_rx_proc_fn != NULL);
+		ep->cur_rx_proc_fn(ep->cur_rx_entry);
+
+	} while (ep->stage_buf.len != ep->stage_buf.off);
+
 	return;
-err2:
-	tcpx_report_error(ep, ret);
-	return;
-err1:
+err:
+	if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
+		return;
+
 	if (ret == -FI_ENOTCONN)
 		tcpx_ep_shutdown_report(ep, &ep->util_ep.ep_fid.fid);
+	else
+		tcpx_report_error(ep, ret);
 }
 
 static void process_tx_queue(struct tcpx_ep *ep)
