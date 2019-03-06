@@ -117,6 +117,8 @@ enum {
 	FT_OPT_OOB_SYNC		= 1 << 11,
 	FT_OPT_SKIP_MSG_ALLOC	= 1 << 12,
 	FT_OPT_SKIP_REG_MR	= 1 << 13,
+	FT_OPT_OOB_ADDR_EXCH	= 1 << 14,
+	FT_OPT_OOB_CTRL		= FT_OPT_OOB_SYNC | FT_OPT_OOB_ADDR_EXCH,
 };
 
 /* for RMA tests --- we want to be able to select fi_writedata, but there is no
@@ -224,7 +226,7 @@ extern int ft_parent_proc;
 extern int ft_socket_pair[2];
 extern int sock;
 extern int listen_sock;
-#define ADDR_OPTS "B:P:s:a:b::"
+#define ADDR_OPTS "B:P:s:a:b::E::"
 #define FAB_OPTS "f:d:p:"
 #define INFO_OPTS FAB_OPTS "e:"
 #define CS_OPTS ADDR_OPTS "I:S:mc:t:w:l"

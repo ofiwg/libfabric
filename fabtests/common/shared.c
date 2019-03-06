@@ -572,7 +572,7 @@ static int ft_init_oob(void)
 	int ret, op, err;
 	struct addrinfo *ai = NULL;
 
-	if (!(opts.options & FT_OPT_OOB_SYNC) || oob_sock != -1)
+	if (!(opts.options & FT_OPT_OOB_CTRL) || oob_sock != -1)
 		return 0;
 
 	if (!opts.oob_port)
@@ -2316,7 +2316,7 @@ int ft_sync()
 	int ret;
 
 	if (opts.dst_addr) {
-		if (!opts.oob_port) {
+		if (!(opts.options & FT_OPT_OOB_SYNC)) {
 			ret = ft_tx(ep, remote_fi_addr, 1, &tx_ctx);
 			if (ret)
 				return ret;
@@ -2332,7 +2332,7 @@ int ft_sync()
 				return ret;
 		}
 	} else {
-		if (!opts.oob_port) {
+		if (!(opts.options & FT_OPT_OOB_SYNC)) {
 			ret = ft_rx(ep, 1);
 			if (ret)
 				return ret;
@@ -2589,6 +2589,8 @@ void ft_addr_usage()
 	FT_PRINT_OPTS_USAGE("-s <address>", "source address");
 	FT_PRINT_OPTS_USAGE("-b[=<oob_port>]", "enable out-of-band address exchange and "
 			"synchronization over the, optional, port");
+	FT_PRINT_OPTS_USAGE("-E[=<oob_port>]", "enable out-of-band address exchange only "
+			"over the, optional, port");
 }
 
 void ft_usage(char *name, char *desc)
@@ -2719,6 +2721,9 @@ void ft_parse_addr_opts(int op, char *optarg, struct ft_opts *opts)
 		break;
 	case 'b':
 		opts->options |= FT_OPT_OOB_SYNC;
+		/* fall through */
+	case 'E':
+		opts->options |= FT_OPT_OOB_ADDR_EXCH;
 		if (optarg && strlen(optarg) > 1)
 			opts->oob_port = optarg + 1;
 		else
