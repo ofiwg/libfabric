@@ -28,7 +28,7 @@ def main(argv=None):
 	csv_fd = csv.writer(sys.stdout, delimiter=",", quotechar='"', quoting=csv.QUOTE_NONNUMERIC)
 	csv_fd.writerow(["Test name", "Status"])
 	
-	for k,v in yi.iteritems():
+	for k,v in yi.items():
 		csv_fd.writerow([k, v])
 
 	return 0
