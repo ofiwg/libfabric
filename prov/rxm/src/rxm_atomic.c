@@ -74,6 +74,14 @@ rxm_ep_send_atomic_req(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	if (ret == -FI_EAGAIN)
 		rxm_ep_do_progress(&rxm_ep->util_ep);
 
+	if (OFI_LIKELY(!ret))
+		FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "sent atomic request: op: %"
+		       PRIu8 " msg_id: 0x%" PRIx64 "\n", tx_buf->pkt.hdr.op,
+		       tx_buf->pkt.ctrl_hdr.msg_id);
+	else if (OFI_UNLIKELY(ret != -FI_EAGAIN))
+		FI_WARN(&rxm_prov, FI_LOG_EP_DATA, "unable to send atomic "
+			"request: op: %" PRIu8 " msg_id: 0x%" PRIx64 "\n",
+			tx_buf->pkt.hdr.op, tx_buf->pkt.ctrl_hdr.msg_id);
 	return ret;
 }
 
@@ -98,8 +106,8 @@ rxm_ep_atomic_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	       msg->rma_iov_count <= RXM_IOV_LIMIT);
 
 	if (flags & FI_REMOTE_CQ_DATA) {
-		FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
-		       "Atomic with remote CQ data not supported\n");
+		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+			"atomic with remote CQ data not supported\n");
 		return -FI_EINVAL;
 	}
 
@@ -122,8 +130,8 @@ rxm_ep_atomic_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 			sizeof(struct rxm_pkt);
 
 	if (tot_len > rxm_ep->eager_limit) {
-		FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
-		       "atomic data too large %" PRId64 "\n", tot_len);
+		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+			"atomic data too large %zu\n", tot_len);
 		return -FI_EINVAL;
 	}
 
