@@ -116,6 +116,7 @@ static void oofi_tostr_addr_format(char *buf, uint32_t addr_format)
 	CASEENUMSTR(FI_ADDR_BGQ);
 	CASEENUMSTR(FI_ADDR_MLX);
 	CASEENUMSTR(FI_ADDR_STR);
+	CASEENUMSTR(FI_ADDR_IB_UD);
 	default:
 		if (addr_format & FI_PROV_SPECIFIC)
 			ofi_strcatf(buf, "Provider specific");
