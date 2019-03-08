@@ -65,6 +65,7 @@
 #define RXM_CTRL_VERSION	3
 
 #define RXM_BUF_SIZE	16384
+extern size_t rxm_eager_limit;
 
 #define RXM_SAR_LIMIT	131072
 #define RXM_SAR_TX_ERROR	UINT64_MAX
@@ -959,8 +960,7 @@ rxm_process_recv_entry(struct rxm_recv_queue *recv_queue,
 		}
 	}
 
-	RXM_DBG_ADDR_TAG(FI_LOG_EP_DATA, "Enqueuing recv", recv_entry->addr,
-			 recv_entry->tag);
+	FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Enqueuing recv\n");
 	dlist_insert_tail(&recv_entry->entry, &recv_queue->recv_list);
 
 	return FI_SUCCESS;
