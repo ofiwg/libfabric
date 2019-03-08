@@ -1249,7 +1249,7 @@ static inline int rxm_ep_repost_buf(struct rxm_rx_buf *rx_buf)
 	rx_buf->hdr.state = RXM_RX;
 
 	ret = (int)fi_recv(rx_buf->msg_ep, &rx_buf->pkt,
-			   rx_buf->ep->eager_limit + sizeof(struct rxm_pkt),
+			   rxm_eager_limit + sizeof(struct rxm_pkt),
 			   rx_buf->hdr.desc, FI_ADDR_UNSPEC, rx_buf);
 	if (ret)
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
