@@ -29,8 +29,11 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+
 #include "config.h"
 #include "fi_verbs.h"
+#include <sys/stat.h>
+
 
 /* Domain XRC INI QP RBTree key */
 struct fi_ibv_ini_conn_key {
