@@ -2279,6 +2279,34 @@ err:
 	return ret;
 }
 
+#define RXM_NEED_RX_CQ_PROGRESS(info) 				\
+	((info->rx_attr->caps & (FI_MSG | FI_TAGGED)) ||	\
+	 (info->rx_attr->caps & FI_ATOMIC))
+
+static int rxm_ep_enable_check(struct rxm_ep *rxm_ep)
+{
+	if (!rxm_ep->util_ep.av || !rxm_ep->cmap)
+		return -FI_EOPBADSTATE;
+
+	if (rxm_ep->util_ep.rx_cq)
+		return 0;
+
+	if (RXM_NEED_RX_CQ_PROGRESS(rxm_ep->rxm_info)) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "endpoint missing recv CQ"
+			"needed for progress of operations enabled by one "
+			"or more of requested capabilities: %s\n",
+			fi_tostr(&rxm_ep->rxm_info->rx_attr->caps, FI_TYPE_CAPS));
+		return -FI_ENOCQ;
+	}
+
+	if (rxm_ep->rxm_info->domain_attr->cq_data_size) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "user hinted that CQ data "
+			"may be used but endpoint is missing recv CQ\n");
+		return -FI_ENOCQ;
+	}
+	return 0;
+}
+
 static int rxm_ep_ctrl(struct fid *fid, int command, void *arg)
 {
 	int ret;
@@ -2287,10 +2315,10 @@ static int rxm_ep_ctrl(struct fid *fid, int command, void *arg)
 
 	switch (command) {
 	case FI_ENABLE:
-		if (!rxm_ep->util_ep.rx_cq || !rxm_ep->util_ep.tx_cq)
-			return -FI_ENOCQ;
-		if (!rxm_ep->util_ep.av || !rxm_ep->cmap)
-			return -FI_EOPBADSTATE;
+		ret = rxm_ep_enable_check(rxm_ep);
+		if (ret)
+			return ret;
+
 		/* At the time of enabling endpoint, FI_OPT_BUFFERED_MIN,
 		 * FI_OPT_BUFFERED_LIMIT should have been frozen so we can
 		 * create the rendezvous protocol message pool with the right
