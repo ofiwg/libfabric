@@ -200,6 +200,12 @@ static void rxm_alter_info(const struct fi_info *hints, struct fi_info *info)
 	struct fi_info *cur;
 
 	for (cur = info; cur; cur = cur->next) {
+		/* RxM can support higher inject size without any big
+		 * performance penalty even if app had requested lower value
+		 * in hints. App is still free to reduce this when opening an
+		 * endpoint. This overrides setting by ofi_alter_info */
+		cur->tx_attr->inject_size = rxm_eager_limit;
+
 		/* Remove the following caps if they are not requested as they
 		 * may affect performance in fast-path */
 		if (!hints) {
