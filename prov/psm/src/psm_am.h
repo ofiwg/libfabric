@@ -126,7 +126,7 @@ void (*psm_am_completion_fn_t)(void *context);
  * multiple times to register additonal handlers. The maximum number of handlers
  * that can be registered is limited to the max_handlers value returned by
  * psm_am_get_parameters(). Handlers are associated with a PSM end-point. The
- * handlers are allocated index numbers in the the handler table for that end-point.
+ * handlers are allocated index numbers in the handler table for that end-point.
  * The allocated index for the handler function in handlers[i] is returned in
  * handlers_idx[i] for i in (0, num_handlers]. These handler index values are
  * used in the psm_am_request_short() and psm_am_reply_short() functions.

@@ -316,7 +316,7 @@ parsed and converted to FI_ADDR_GNI for use within the GNI provider.
 *FI_ADDR_STR* is formatted as follows:
 gni;node;service;GNIX_AV_STR_ADDR_VERSION;device_addr;cdm_id;name_type;cm_nic_cdm_id;cookie;rx_ctx_cnt;key_offset
 
-The GNI provider sets the domain attribute *cntr_cnt* to the the CQ limit divided by 2.
+The GNI provider sets the domain attribute *cntr_cnt* to the CQ limit divided by 2.
 
 The GNI provider sets the domain attribute *cq_cnt* to the CQ limit divided by 2.
 
