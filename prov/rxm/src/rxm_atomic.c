@@ -63,6 +63,10 @@ rxm_ep_send_atomic_req(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 {
 	int ret;
 
+	RXM_DEC_TX_CREDITS(rxm_ep, ret);
+	if (OFI_UNLIKELY(ret))
+		return -FI_EAGAIN;
+
 	/* Atomic request TX completion processing is performed when the
 	 * software generated atomic response message is received. */
 	tx_buf->hdr.state = RXM_ATOMIC_RESP_WAIT;
@@ -74,14 +78,17 @@ rxm_ep_send_atomic_req(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	if (ret == -FI_EAGAIN)
 		rxm_ep_do_progress(&rxm_ep->util_ep);
 
-	if (OFI_LIKELY(!ret))
+	if (OFI_LIKELY(!ret)) {
 		FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "sent atomic request: op: %"
 		       PRIu8 " msg_id: 0x%" PRIx64 "\n", tx_buf->pkt.hdr.op,
 		       tx_buf->pkt.ctrl_hdr.msg_id);
-	else if (OFI_UNLIKELY(ret != -FI_EAGAIN))
-		FI_WARN(&rxm_prov, FI_LOG_EP_DATA, "unable to send atomic "
-			"request: op: %" PRIu8 " msg_id: 0x%" PRIx64 "\n",
-			tx_buf->pkt.hdr.op, tx_buf->pkt.ctrl_hdr.msg_id);
+	} else {
+		if (OFI_UNLIKELY(ret != -FI_EAGAIN))
+			FI_WARN(&rxm_prov, FI_LOG_EP_DATA, "unable to send atomic "
+				"request: op: %" PRIu8 " msg_id: 0x%" PRIx64 "\n",
+				tx_buf->pkt.hdr.op, tx_buf->pkt.ctrl_hdr.msg_id);
+		RXM_INC_TX_CREDITS(rxm_ep);
+	}
 	return ret;
 }
 

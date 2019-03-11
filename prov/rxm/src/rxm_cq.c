@@ -423,6 +423,20 @@ rxm_cq_rndv_read_prepare_deferred(struct rxm_deferred_tx_entry **def_tx_entry, s
 	return 0;
 }
 
+static int rxm_rndv_defer_readv(size_t i, struct iovec *iov, void **desc,
+				size_t count, struct rxm_rx_buf *rx_buf)
+{
+	int ret;
+	struct rxm_deferred_tx_entry *def_tx_entry;
+
+	ret = rxm_cq_rndv_read_prepare_deferred(&def_tx_entry, i, iov,
+						desc, count, rx_buf);
+	if (ret)
+		return ret;
+	rxm_ep_enqueue_deferred_tx_queue(def_tx_entry);
+	return 0;
+}
+
 static inline
 ssize_t rxm_cq_handle_large_data(struct rxm_rx_buf *rx_buf)
 {
@@ -491,20 +505,24 @@ ssize_t rxm_cq_handle_large_data(struct rxm_rx_buf *rx_buf)
 				rx_buf, rx_buf->recv_entry->total_len);
 		}
 		total_recv_len -= copy_len;
+
+		RXM_DEC_TX_CREDITS(rx_buf->ep, ret);
+		if (OFI_UNLIKELY(ret)) {
+			ret = rxm_rndv_defer_readv(i, iov, desc, count, rx_buf);
+			if (OFI_UNLIKELY(ret))
+				goto readv_err;
+		}
+
 		ret = fi_readv(rx_buf->conn->msg_ep, iov, desc, count, 0,
 			       rx_buf->rndv_hdr->iov[i].addr,
 			       rx_buf->rndv_hdr->iov[i].key, rx_buf);
 		if (OFI_UNLIKELY(ret)) {
+			RXM_INC_TX_CREDITS(rx_buf->ep);
 			if (OFI_LIKELY(ret == -FI_EAGAIN)) {
-				struct rxm_deferred_tx_entry *def_tx_entry;
-
-				ret = rxm_cq_rndv_read_prepare_deferred(
-						&def_tx_entry, i, iov, desc,
-						count, rx_buf);
-				if (ret)
-					goto readv_err;
-				rxm_ep_enqueue_deferred_tx_queue(def_tx_entry);
-				continue;
+				ret = rxm_rndv_defer_readv(i, iov, desc,
+							   count, rx_buf);
+				if (OFI_LIKELY(!ret))
+					continue;
 			}
 readv_err:
 			rxm_cq_write_error(rx_buf->ep->util_ep.rx_cq,
@@ -658,17 +676,13 @@ ssize_t rxm_sar_handle_segment(struct rxm_rx_buf *rx_buf)
 	return rxm_cq_handle_seg_data(rx_buf);
 }
 
-static ssize_t rxm_rndv_send_ack(struct rxm_rx_buf *rx_buf)
+static int rxm_rndv_format_ack(struct rxm_rx_buf *rx_buf)
 {
-	ssize_t ret;
-
-	assert(rx_buf->conn);
-
 	rx_buf->recv_entry->rndv.tx_buf = (struct rxm_tx_base_buf *)
 		rxm_tx_buf_alloc(rx_buf->ep, RXM_BUF_POOL_TX_ACK);
 	if (OFI_UNLIKELY(!rx_buf->recv_entry->rndv.tx_buf)) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ,
-			"Ran out of buffers from ACK buffer pool\n");
+			"ran out of buffers from ACK buffer pool\n");
 		return -FI_EAGAIN;
 	}
 	assert(rx_buf->recv_entry->rndv.tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_ack);
@@ -680,30 +694,59 @@ static ssize_t rxm_rndv_send_ack(struct rxm_rx_buf *rx_buf)
 		rx_buf->conn->handle.remote_key;
 	rx_buf->recv_entry->rndv.tx_buf->pkt.ctrl_hdr.msg_id =
 		rx_buf->pkt.ctrl_hdr.msg_id;
+	return 0;
+}
+
+static int rxm_rndv_defer_ack(struct rxm_rx_buf *rx_buf)
+{
+	struct rxm_deferred_tx_entry *def_tx_entry;
+
+	FI_DBG(&rxm_prov, FI_LOG_CQ, "tx resources not available, "
+	       "defer RNDV ACK\n");
+
+	def_tx_entry =
+		rxm_ep_alloc_deferred_tx_entry(rx_buf->ep, rx_buf->conn,
+					       RXM_DEFERRED_TX_RNDV_ACK);
+	if (OFI_UNLIKELY(!def_tx_entry)) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ,
+			"unable to allocate tx entry for deferred ACK\n");
+		return -FI_EAGAIN;
+	}
+
+	def_tx_entry->rndv_ack.rx_buf = rx_buf;
+	rxm_ep_enqueue_deferred_tx_queue(def_tx_entry);
+	return 0;
+}
+
+static ssize_t rxm_rndv_send_ack(struct rxm_rx_buf *rx_buf)
+{
+	ssize_t ret;
+
+	assert(rx_buf->conn);
+
+	ret = rxm_rndv_format_ack(rx_buf);
+	if (OFI_UNLIKELY(ret))
+		return ret;
+
+	RXM_DEC_TX_CREDITS(rx_buf->ep, ret);
+	if (OFI_UNLIKELY(ret))
+		goto defer;
 
 	ret = fi_send(rx_buf->conn->msg_ep, &rx_buf->recv_entry->rndv.tx_buf->pkt,
 		      sizeof(rx_buf->recv_entry->rndv.tx_buf->pkt),
 		      rx_buf->recv_entry->rndv.tx_buf->hdr.desc, 0, rx_buf);
 	if (OFI_UNLIKELY(ret)) {
-		FI_WARN(&rxm_prov, FI_LOG_CQ, "Unable to send ACK\n");
-		if (OFI_LIKELY(ret == -FI_EAGAIN)) {
-			struct rxm_deferred_tx_entry *def_tx_entry =
-				rxm_ep_alloc_deferred_tx_entry(rx_buf->ep, rx_buf->conn,
-							       RXM_DEFERRED_TX_RNDV_ACK);
-			if (OFI_UNLIKELY(!def_tx_entry)) {
-				FI_WARN(&rxm_prov, FI_LOG_CQ,
-					"Unable to allocate TX entry for deferred ACK\n");
-				ret = -FI_EAGAIN;
-				goto err;
-			}
-
-			def_tx_entry->rndv_ack.rx_buf = rx_buf;
-			rxm_ep_enqueue_deferred_tx_queue(def_tx_entry);
-
-			return 0;
-		}
+		RXM_INC_TX_CREDITS(rx_buf->ep);
+		if (OFI_LIKELY(ret == -FI_EAGAIN))
+			goto defer;
+		FI_WARN(&rxm_prov, FI_LOG_CQ, "unable to send ACK\n");
 		goto err;
 	}
+	return 0;
+defer:
+	ret = rxm_rndv_defer_ack(rx_buf);
+	if (OFI_UNLIKELY(ret))
+		goto err;
 	return 0;
 err:
 	ofi_buf_free(rx_buf->recv_entry->rndv.tx_buf);
@@ -726,8 +769,25 @@ static ssize_t rxm_rndv_send_ack_fast(struct rxm_rx_buf *rx_buf)
 	pkt.ctrl_hdr.conn_id 	= rx_buf->conn->handle.remote_key;
 	pkt.ctrl_hdr.msg_id 	= rx_buf->pkt.ctrl_hdr.msg_id;
 
+	RXM_DEC_TX_CREDITS(rx_buf->ep, ret);
+	if (OFI_UNLIKELY(ret)) {
+		ret = rxm_rndv_format_ack(rx_buf);
+		if (OFI_UNLIKELY(ret)) {
+			RXM_INC_TX_CREDITS(rx_buf->ep);
+			return ret;
+		}
+
+		ret = rxm_rndv_defer_ack(rx_buf);
+		if (OFI_UNLIKELY(ret)) {
+			ofi_buf_free(rx_buf->recv_entry->rndv.tx_buf);
+			RXM_INC_TX_CREDITS(rx_buf->ep);
+			return ret;
+		}
+	}
+
 	ret = fi_inject(rx_buf->conn->msg_ep, &pkt, sizeof(pkt), 0);
 	if (OFI_UNLIKELY(ret)) {
+		RXM_INC_TX_CREDITS(rx_buf->ep);
 		FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
 		       "fi_inject(ack pkt) for MSG provider failed\n");
 		if (OFI_LIKELY(ret == -FI_EAGAIN)) {
@@ -799,6 +859,10 @@ static ssize_t rxm_atomic_send_resp(struct rxm_ep *rxm_ep,
 	atomic_hdr->status = htonl(status);
 	atomic_hdr->result_len = htonl(result_len);
 
+	RXM_DEC_TX_CREDITS(rxm_ep, ret);
+	if (OFI_UNLIKELY(ret))
+		goto defer;
+
 	if (resp_len < rxm_ep->inject_limit) {
 		ret = fi_inject(rx_buf->conn->msg_ep, &resp_buf->pkt,
 				resp_len, 0);
@@ -809,29 +873,28 @@ static ssize_t rxm_atomic_send_resp(struct rxm_ep *rxm_ep,
 					      resp_len);
 	}
 	if (OFI_UNLIKELY(ret)) {
+		RXM_INC_TX_CREDITS(rxm_ep);
 		FI_WARN(&rxm_prov, FI_LOG_CQ,
-			"Unable to send Atomic Response\n");
-		if (OFI_LIKELY(ret == -FI_EAGAIN)) {
-			def_tx_entry =
-				rxm_ep_alloc_deferred_tx_entry(rxm_ep,
-						rx_buf->conn,
-						RXM_DEFERRED_TX_ATOMIC_RESP);
-			if (OFI_UNLIKELY(!def_tx_entry)) {
-				FI_WARN(&rxm_prov, FI_LOG_CQ,
-					"Unable to allocate deferred Atomic "
-					"Response\n");
-				return -FI_ENOMEM;
-			}
-
-			def_tx_entry->atomic_resp.tx_buf = resp_buf;
-			def_tx_entry->atomic_resp.len = resp_len;
-			rxm_ep_enqueue_deferred_tx_queue(def_tx_entry);
-			ret = 0;
-		}
+			"unable to send atomic response\n");
+		if (OFI_LIKELY(ret == -FI_EAGAIN))
+			goto defer;
 	}
 	rxm_rx_buf_release(rxm_ep, rx_buf);
-
 	return ret;
+defer:
+	def_tx_entry =
+		rxm_ep_alloc_deferred_tx_entry(rxm_ep, rx_buf->conn,
+					       RXM_DEFERRED_TX_ATOMIC_RESP);
+	if (OFI_UNLIKELY(!def_tx_entry)) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ,
+			"unable to allocate deferred atomic response\n");
+		return -FI_ENOMEM;
+	}
+	def_tx_entry->atomic_resp.tx_buf = resp_buf;
+	def_tx_entry->atomic_resp.len = resp_len;
+	rxm_ep_enqueue_deferred_tx_queue(def_tx_entry);
+	rxm_rx_buf_release(rxm_ep, rx_buf);
+	return 0;
 }
 
 static inline void rxm_do_atomic(struct rxm_pkt *pkt, void *dst, void *src,
@@ -1310,6 +1373,8 @@ void rxm_ep_do_progress(struct util_ep *util_ep)
 	do {
 		ret = fi_cq_read(rxm_ep->msg_cq, &comp, 1);
 		if (ret > 0) {
+			RXM_INC_TX_CREDITS(rxm_ep);
+
 			// We don't have enough info to write a good
 			// error entry to the CQ at this point
 			ret = rxm_cq_handle_comp(rxm_ep, &comp);

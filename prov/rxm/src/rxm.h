@@ -146,6 +146,23 @@ do {									\
 		}							\
 	} while (0)
 
+#define RXM_DEC_TX_CREDITS(rxm_ep, ret)					\
+	do {								\
+		if (OFI_UNLIKELY(!ofi_atomic_get64(			\
+			&rxm_ep->tx_credits))) {			\
+			ret = -FI_EAGAIN;				\
+			FI_DBG(&rxm_prov, FI_LOG_EP_DATA,		\
+			       "tx resources not available, "		\
+			       "retry later\n");			\
+		} else {						\
+			ret = 0;					\
+			ofi_atomic_dec64(&rxm_ep->tx_credits);		\
+		}							\
+	} while (0)
+
+#define RXM_INC_TX_CREDITS(rxm_ep) \
+	ofi_atomic_inc64(&rxm_ep->tx_credits)
+
 extern struct fi_provider rxm_prov;
 extern struct util_prov rxm_util_prov;
 extern struct fi_ops_rma rxm_ops_rma;
@@ -665,6 +682,7 @@ struct rxm_ep {
 	size_t 			comp_per_progress;
 	int			msg_mr_local;
 	int			rxm_mr_local;
+	ofi_atomic64_t		tx_credits;
 	size_t			min_multi_recv_size;
 	size_t			buffered_min;
 	size_t			buffered_limit;

@@ -72,11 +72,15 @@ rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t 
 	void *mr_desc[RXM_IOV_LIMIT] = { 0 };
 	int ret;
 
+	RXM_DEC_TX_CREDITS(rxm_ep, ret);
+	if (OFI_UNLIKELY(ret))
+		return ret;
+
 	assert(msg->rma_iov_count <= rxm_ep->rxm_info->tx_attr->rma_iov_limit);
 
 	ret = rxm_ep_prepare_tx(rxm_ep, msg->addr, &rxm_conn);
 	if (OFI_UNLIKELY(ret))
-		return ret;
+		goto err1;
 
 	ofi_ep_lock_acquire(&rxm_ep->util_ep);
 	rma_buf = rxm_rma_buf_alloc(rxm_ep);
@@ -84,7 +88,7 @@ rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t 
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 			"Ran out of buffers from RMA buffer pool\n");
 		ret = -FI_ENOMEM;
-		goto unlock;
+		goto err2;
 	}
 
 	rma_buf->app_context = msg->context;
@@ -94,21 +98,26 @@ rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t 
 				 msg_rma.iov_count, comp_flags & (FI_WRITE | FI_READ),
 				 rma_buf);
 	if (OFI_UNLIKELY(ret))
-		goto release;
+		goto err3;
 
 	msg_rma.desc = mr_desc;
 	msg_rma.context = rma_buf;
 
 	ret = rma_msg(rxm_conn->msg_ep, &msg_rma, flags);
-	if (OFI_LIKELY(!ret))
-		goto unlock;
+	if (OFI_UNLIKELY(ret))
+		goto err4;
 
+	ofi_ep_lock_release(&rxm_ep->util_ep);
+	return 0;
+err4:
 	if ((rxm_ep->msg_mr_local) && (!rxm_ep->rxm_mr_local))
 		rxm_ep_msg_mr_closev(rma_buf->mr.mr, rma_buf->mr.count);
-release:
+err3:
 	ofi_buf_free(rma_buf);
-unlock:
+err2:
 	ofi_ep_lock_release(&rxm_ep->util_ep);
+err1:
+	RXM_INC_TX_CREDITS(rxm_ep);
 	return ret;
 }
 
@@ -205,6 +214,10 @@ rxm_ep_rma_emulate_inject_msg(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, 
 	struct iovec rxm_msg_iov = { 0 };
 	struct fi_msg_rma rxm_rma_msg = { 0 };
 
+	RXM_DEC_TX_CREDITS(rxm_ep, ret);
+	if (OFI_UNLIKELY(ret))
+		return ret;
+
 	assert(msg->rma_iov_count <= rxm_ep->rxm_info->tx_attr->rma_iov_limit);
 
 	ofi_ep_lock_acquire(&rxm_ep->util_ep);
@@ -213,7 +226,7 @@ rxm_ep_rma_emulate_inject_msg(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, 
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 			"Ran out of buffers from RMA buffer pool\n");
 		ret = -FI_ENOMEM;
-		goto unlock;
+		goto err1;
 	}
 
 	rma_buf->pkt.hdr.size = total_size;
@@ -227,9 +240,14 @@ rxm_ep_rma_emulate_inject_msg(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, 
 	if (OFI_UNLIKELY(ret)) {
 		if (ret == -FI_EAGAIN)
 			rxm_ep_do_progress(&rxm_ep->util_ep);
-		ofi_buf_free(rma_buf);
+		goto err2;
 	}
-unlock:
+	ofi_ep_lock_release(&rxm_ep->util_ep);
+	return 0;
+err2:
+	ofi_buf_free(rma_buf);
+err1:
+	RXM_INC_TX_CREDITS(rxm_ep);
 	ofi_ep_lock_release(&rxm_ep->util_ep);
 	return ret;
 }
