@@ -527,11 +527,11 @@ static int tcpx_pep_sock_create(struct tcpx_pep *pep)
 {
 	int ret, af;
 
-	switch (pep->info.addr_format) {
+	switch (pep->info->addr_format) {
 	case FI_SOCKADDR:
 	case FI_SOCKADDR_IN:
 	case FI_SOCKADDR_IN6:
-		af = ((struct sockaddr *)pep->info.src_addr)->sa_family;
+		af = ((struct sockaddr *)pep->info->src_addr)->sa_family;
 		break;
 	default:
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
@@ -552,8 +552,8 @@ static int tcpx_pep_sock_create(struct tcpx_pep *pep)
 		goto err;
 	}
 
-	ret = bind(pep->sock, pep->info.src_addr,
-		   (socklen_t) pep->info.src_addrlen);
+	ret = bind(pep->sock, pep->info->src_addr,
+		   (socklen_t) pep->info->src_addrlen);
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"failed to bind listener: %s\n",
@@ -607,6 +607,21 @@ static struct fi_ops_cm tcpx_cm_ops = {
 	.shutdown = tcpx_ep_shutdown,
 	.join = fi_no_join,
 };
+
+void tcpx_rx_msg_release(struct tcpx_xfer_entry *rx_entry)
+{
+	struct tcpx_cq *tcpx_cq;
+
+	assert(rx_entry->msg_hdr.hdr.op_data == TCPX_OP_MSG_RECV);
+
+	if (rx_entry->ep->srx_ctx) {
+		tcpx_srx_xfer_release(rx_entry->ep->srx_ctx, rx_entry);
+	} else {
+		tcpx_cq = container_of(rx_entry->ep->util_ep.rx_cq,
+				       struct tcpx_cq, util_cq);
+		tcpx_xfer_entry_release(tcpx_cq, rx_entry);
+	}
+}
 
 static void tcpx_ep_tx_rx_queues_release(struct tcpx_ep *ep)
 {
@@ -841,6 +856,7 @@ static int tcpx_pep_fi_close(struct fid *fid)
 
 	ofi_close_socket(pep->sock);
 	ofi_pep_close(&pep->util_pep);
+	fi_freeinfo(pep->info);
 	free(pep);
 	return 0;
 }
@@ -886,16 +902,16 @@ static int tcpx_pep_setname(fid_t fid, void *addr, size_t addrlen)
 		tcpx_pep->sock = INVALID_SOCKET;
 	}
 
-	if (tcpx_pep->info.src_addr) {
-		free(tcpx_pep->info.src_addr);
-		tcpx_pep->info.src_addrlen = 0;
+	if (tcpx_pep->info->src_addr) {
+		free(tcpx_pep->info->src_addr);
+		tcpx_pep->info->src_addrlen = 0;
 	}
 
 
-	tcpx_pep->info.src_addr = mem_dup(addr, addrlen);
-	if (!tcpx_pep->info.src_addr)
+	tcpx_pep->info->src_addr = mem_dup(addr, addrlen);
+	if (!tcpx_pep->info->src_addr)
 		return -FI_ENOMEM;
-	tcpx_pep->info.src_addrlen = addrlen;
+	tcpx_pep->info->src_addrlen = addrlen;
 
 	return tcpx_pep_sock_create(tcpx_pep);
 }
@@ -957,7 +973,12 @@ static int tcpx_pep_reject(struct fid_pep *pep, fid_t handle,
 				       paramlen, MSG_NOSIGNAL);
 
 	ofi_shutdown(tcpx_handle->conn_fd, SHUT_RDWR);
-	return ofi_close_socket(tcpx_handle->conn_fd);
+	ret = ofi_close_socket(tcpx_handle->conn_fd);
+	if (ret)
+		return ret;
+
+	free(tcpx_handle);
+	return FI_SUCCESS;
 }
 
 static struct fi_ops_cm tcpx_pep_cm_ops = {
@@ -1034,8 +1055,10 @@ int tcpx_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	_pep->util_pep.pep_fid.cm = &tcpx_pep_cm_ops;
 	_pep->util_pep.pep_fid.ops = &tcpx_pep_ops;
 
+	_pep->info = fi_dupinfo(info);
+	if (!_pep->info)
+		goto err2;
 
-	_pep->info = *info;
 	_pep->cm_ctx.fid = &_pep->util_pep.pep_fid.fid;
 	_pep->cm_ctx.type = SERVER_SOCK_ACCEPT;
 	_pep->cm_ctx.cm_data_sz = 0;
@@ -1046,9 +1069,11 @@ int tcpx_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	if (info->src_addr) {
 		ret = tcpx_pep_sock_create(_pep);
 		if (ret)
-			goto err2;
+			goto err3;
 	}
 	return FI_SUCCESS;
+err3:
+	fi_freeinfo(_pep->info);
 err2:
 	ofi_pep_close(&_pep->util_pep);
 err1:

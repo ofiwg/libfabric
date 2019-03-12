@@ -612,9 +612,9 @@ err:
 	handle->ep->attr->info.handle = NULL;
 	/* Register handle for later deletion */
 	handle->state = SOCK_CONN_HANDLE_DELETED;
-	fastlock_acquire(&cm_head->signal_lock);
+	/* `cm_head::signal_lock` has already been held
+	 * in `sock_ep_cm_thread` function */
 	sock_ep_cm_add_to_msg_list(cm_head, handle);
-	fastlock_release(&cm_head->signal_lock);
 out:
 	free(param);
 	free(cm_entry);
@@ -785,6 +785,7 @@ static int sock_ep_cm_accept(struct fid_ep *ep, const void *param, size_t paraml
 	sock_ep_cm_monitor_handle(cm_head, handle, FI_EPOLL_IN);
 	sock_ep_enable(ep);
 
+	memset(&cm_entry, 0, sizeof(cm_entry));
 	cm_entry.fid = &handle->ep->ep.fid;
 	SOCK_LOG_DBG("reporting FI_CONNECTED\n");
 	if (sock_eq_report_event(ep_attr->eq, FI_CONNECTED, &cm_entry,
