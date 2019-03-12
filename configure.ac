@@ -242,14 +242,16 @@ AC_TRY_LINK([#include <stdint.h>],
 
 dnl Check for gcc memory model aware built-in atomics
 dnl If supported check to see if not internal to compiler
+LIBS_save=$LIBS
+AC_SEARCH_LIBS([__atomic_load_8], [atomic])
 AC_MSG_CHECKING(compiler support for built-in memory model aware atomics)
-AC_TRY_LINK([#include <stdint.h>],
-    [uint64_t d;
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <stdint.h>]],
+    [[uint64_t d;
      uint64_t s;
      uint64_t c;
      uint64_t r;
       r = __atomic_fetch_add(&d, s, __ATOMIC_SEQ_CST);
-      __atomic_load(&d, &r, __ATOMIC_SEQ_CST);
+      r = __atomic_load_8(&d, __ATOMIC_SEQ_CST);
       __atomic_exchange(&d, &s, &r, __ATOMIC_SEQ_CST);
       __atomic_compare_exchange(&d,&c,&s,0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
      #if defined(__PPC__) && !defined(__PPC64__)
@@ -257,13 +259,16 @@ AC_TRY_LINK([#include <stdint.h>],
      #else
        return 0;
      #endif
-    ],
+    ]])],
     [
         AC_MSG_RESULT(yes)
-        AC_SEARCH_LIBS([__atomic_load_8], [atomic])
         AC_DEFINE(HAVE_BUILTIN_MM_ATOMICS, 1, [Set to 1 to use built-in intrinsics memory model aware atomics])
     ],
-    [AC_MSG_RESULT(no)])
+    [
+        AC_MSG_RESULT(no)
+        LIBS=$LIBS_save
+    ])
+unset LIBS_save
 
 dnl Check for gcc cpuid intrinsics
 AC_MSG_CHECKING(compiler support for cpuid)
