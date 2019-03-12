@@ -757,6 +757,10 @@ int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep);
 int rxm_ep_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 			enum fi_op op, struct fi_atomic_attr *attr,
 			uint64_t flags);
+void rxm_cq_write_error_atomic(struct util_cq *cq, struct util_cntr *wr_cntr,
+			       struct util_cntr *rd_cntr, int op,
+			       void *context, int err);
+
 static inline size_t rxm_ep_max_atomic_size(struct fi_info *info)
 {
 	size_t overhead = sizeof(struct rxm_atomic_hdr) +

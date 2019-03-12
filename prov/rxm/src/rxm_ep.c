@@ -1522,8 +1522,8 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 				RXM_INC_TX_CREDITS(rxm_ep);
 				if (OFI_LIKELY(ret == -FI_EAGAIN))
 					break;
-				rxm_cq_write_error(def_tx_entry->rxm_ep->util_ep.rx_cq,
-						   def_tx_entry->rxm_ep->util_ep.rx_cntr,
+				rxm_cq_write_error(rxm_ep->util_ep.rx_cq,
+						   rxm_ep->util_ep.rx_cntr,
 						   def_tx_entry->rndv_read.rx_buf->
 							recv_entry->context, ret);
 			}
@@ -1546,8 +1546,8 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 				RXM_INC_TX_CREDITS(rxm_ep);
 				if (OFI_LIKELY(ret == -FI_EAGAIN))
 					break;
-				rxm_cq_write_error(def_tx_entry->rxm_ep->util_ep.rx_cq,
-						   def_tx_entry->rxm_ep->util_ep.rx_cntr,
+				rxm_cq_write_error(rxm_ep->util_ep.rx_cq,
+						   rxm_ep->util_ep.rx_cntr,
 						   def_tx_entry->rndv_read.rx_buf->
 							recv_entry->context, ret);
 				break;
@@ -1567,11 +1567,17 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 					def_tx_entry->rxm_conn,
 					def_tx_entry->atomic_resp.tx_buf,
 					def_tx_entry->atomic_resp.len);
-			// TODO should't we error here?
 			if (OFI_UNLIKELY(ret)) {
 				RXM_INC_TX_CREDITS(rxm_ep);
 				if (OFI_LIKELY(ret == -FI_EAGAIN))
 					break;
+				rxm_cq_write_error_atomic(
+					rxm_ep->util_ep.rx_cq,
+					rxm_ep->util_ep.rem_wr_cntr,
+					rxm_ep->util_ep.rem_rd_cntr,
+					def_tx_entry->atomic_resp.tx_buf->pkt.hdr.op,
+					NULL, ret
+				);
 			}
 			rxm_ep_dequeue_deferred_tx_queue(def_tx_entry);
 			free(def_tx_entry);

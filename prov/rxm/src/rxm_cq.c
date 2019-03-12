@@ -835,6 +835,25 @@ static inline void rxm_ep_format_atomic_resp_pkt_hdr(struct rxm_conn *rxm_conn,
 	tx_buf->pkt.hdr.atomic.ioc_count = 0;
 }
 
+void rxm_cq_write_error_atomic(struct util_cq *cq, struct util_cntr *wr_cntr,
+			       struct util_cntr *rd_cntr, int op,
+			       void *context, int err)
+{
+	struct util_cntr *cntr = NULL;
+
+	if (op == ofi_op_atomic) {
+		cntr = wr_cntr;
+	} else if (op == ofi_op_atomic_compare ||
+		   op == ofi_op_atomic_fetch) {
+		cntr = rd_cntr;
+	} else {
+		FI_WARN(&rxm_prov, FI_LOG_CQ,
+			"unknown atomic op!\n");
+		assert(0);
+	}
+	rxm_cq_write_error(cq, cntr, context, err);
+}
+
 static ssize_t rxm_atomic_send_resp(struct rxm_ep *rxm_ep,
 				    struct rxm_rx_buf *rx_buf,
 				    struct rxm_tx_atomic_buf *resp_buf,
@@ -874,13 +893,22 @@ static ssize_t rxm_atomic_send_resp(struct rxm_ep *rxm_ep,
 	}
 	if (OFI_UNLIKELY(ret)) {
 		RXM_INC_TX_CREDITS(rxm_ep);
-		FI_WARN(&rxm_prov, FI_LOG_CQ,
-			"unable to send atomic response\n");
 		if (OFI_LIKELY(ret == -FI_EAGAIN))
 			goto defer;
+		FI_WARN(&rxm_prov, FI_LOG_CQ,
+			"unable to send atomic response\n");
+		goto err;
 	}
+	if (status != FI_SUCCESS)
+		goto err;
+
+	if (rx_buf->pkt.hdr.op == ofi_op_atomic)
+		ofi_ep_rem_wr_cntr_inc(&rxm_ep->util_ep);
+	else
+		ofi_ep_rem_rd_cntr_inc(&rxm_ep->util_ep);
+
 	rxm_rx_buf_release(rxm_ep, rx_buf);
-	return ret;
+	return 0;
 defer:
 	def_tx_entry =
 		rxm_ep_alloc_deferred_tx_entry(rxm_ep, rx_buf->conn,
@@ -893,6 +921,14 @@ defer:
 	def_tx_entry->atomic_resp.tx_buf = resp_buf;
 	def_tx_entry->atomic_resp.len = resp_len;
 	rxm_ep_enqueue_deferred_tx_queue(def_tx_entry);
+	rxm_rx_buf_release(rxm_ep, rx_buf);
+	return 0;
+err:
+	rxm_cq_write_error_atomic(
+		rxm_ep->util_ep.rx_cq, rxm_ep->util_ep.rem_wr_cntr,
+		rxm_ep->util_ep.rem_rd_cntr, rx_buf->pkt.hdr.op,
+		NULL, ret
+	);
 	rxm_rx_buf_release(rxm_ep, rx_buf);
 	return 0;
 }
@@ -989,11 +1025,6 @@ static inline ssize_t rxm_handle_atomic_req(struct rxm_ep *rxm_ep,
 	}
 	result_len = rx_buf->pkt.hdr.op == ofi_op_atomic ? 0 : offset;
 
-	if (rx_buf->pkt.hdr.op == ofi_op_atomic)
-		ofi_ep_rem_wr_cntr_inc(&rxm_ep->util_ep);
-	else
-		ofi_ep_rem_rd_cntr_inc(&rxm_ep->util_ep);
-
 	return rxm_atomic_send_resp(rxm_ep, rx_buf, resp_buf,
 				    result_len, FI_SUCCESS);
 send_nak:
@@ -1019,22 +1050,13 @@ static inline ssize_t rxm_handle_atomic_resp(struct rxm_ep *rxm_ep,
 	assert(!(rx_buf->comp_flags & ~(FI_RECV | FI_REMOTE_CQ_DATA)));
 
 	if (OFI_UNLIKELY(resp_hdr->status)) {
-		struct util_cntr *cntr = NULL;
 		FI_WARN(&rxm_prov, FI_LOG_CQ,
 		       "bad atomic response status %d\n", ntohl(resp_hdr->status));
-
-		if (tx_buf->pkt.hdr.op == ofi_op_atomic) {
-			cntr = rxm_ep->util_ep.wr_cntr;
-		} else if (tx_buf->pkt.hdr.op == ofi_op_atomic_compare ||
-			   tx_buf->pkt.hdr.op == ofi_op_atomic_fetch) {
-			cntr = rxm_ep->util_ep.rd_cntr;
-		} else {
-			FI_WARN(&rxm_prov, FI_LOG_CQ,
-				"unknown atomic request op!\n");
-			assert(0);
-		}
-		rxm_cq_write_error(rxm_ep->util_ep.tx_cq, cntr,
-				   tx_buf->app_context, ntohl(resp_hdr->status));
+		rxm_cq_write_error_atomic(
+			rxm_ep->util_ep.tx_cq, rxm_ep->util_ep.wr_cntr,
+			rxm_ep->util_ep.rd_cntr, tx_buf->pkt.hdr.op,
+			tx_buf->app_context, ntohl(resp_hdr->status)
+		);
 		goto err;
 	}
 
