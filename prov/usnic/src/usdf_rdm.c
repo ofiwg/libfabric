@@ -688,7 +688,7 @@ static inline ssize_t _usdf_rdm_send_vector(struct fid_ep *fep,
 
 	tot_len = 0;
 	if (flags & FI_INJECT) {
-		/* copy to the the wqe's tiny injection buffer */
+		/* copy to the wqe's tiny injection buffer */
 		for (i = 0; i < count; ++i) {
 			assert(tot_len + iov[i].iov_len <=
 			       USDF_RDM_MAX_INJECT_SIZE);
