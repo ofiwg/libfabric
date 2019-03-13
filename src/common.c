@@ -538,14 +538,91 @@ match_port:
 	return 0;
 }
 
+static int ofi_hostname_toaddr(const char *name, uint32_t *addr_format,
+			       void **addr, size_t *len)
+{
+	struct addrinfo *ai;
+	int ret;
+
+	ret = getaddrinfo(name, NULL, NULL, &ai);
+	if (ret)
+		return ret;
+
+	*addr_format = (ai->ai_family == AF_INET6) ? FI_SOCKADDR_IN6 : FI_SOCKADDR_IN;
+	*len = ai->ai_addrlen;
+	*addr = calloc(1, *len);
+	if (!*addr) {
+		ret = -FI_ENOMEM;
+		goto out;
+	}
+
+	memcpy(*addr, ai->ai_addr, *len);
+
+out:
+	freeaddrinfo(ai);
+	return ret;
+}
+
+static int ofi_ifname_toaddr(const char *name, uint32_t *addr_format,
+			     void **addr, size_t *len)
+{
+#if HAVE_GETIFADDRS
+	struct ifaddrs *ifaddrs, *ifa;
+	int ret;
+
+	ret = ofi_getifaddrs(&ifaddrs);
+	if (ret)
+		return ret;
+
+	for (ifa = ifaddrs; ifa; ifa = ifa->ifa_next) {
+		if (ifa->ifa_addr->sa_family != AF_INET &&
+		    ifa->ifa_addr->sa_family != AF_INET6)
+			continue;
+		if (!strcmp(name, ifa->ifa_name))
+			break;
+	}
+
+	if (!ifa) {
+		ret = -FI_EINVAL;
+		goto out;
+	}
+
+	if (ifa->ifa_addr->sa_family == AF_INET6) {
+		*addr_format = FI_SOCKADDR_IN6;
+		*len = sizeof(struct sockaddr_in6);
+	} else {
+		*addr_format = FI_SOCKADDR_IN;
+		*len = sizeof(struct sockaddr_in);
+	}
+
+	*addr = calloc(1, *len);
+	if (!*addr) {
+		ret = -FI_ENOMEM;
+		goto out;
+	}
+
+	memcpy(*addr, ifa->ifa_addr, *len);
+
+out:
+	freeifaddrs(ifaddrs);
+	return ret;
+#else
+	return -FI_ENOSYS;
+#endif
+}
+
 int ofi_str_toaddr(const char *str, uint32_t *addr_format,
 		   void **addr, size_t *len)
 {
 	*addr_format = ofi_addr_format(str);
-	if (*addr_format == FI_FORMAT_UNSPEC)
-		return -FI_EINVAL;
 
 	switch (*addr_format) {
+	case FI_FORMAT_UNSPEC:
+		if (!ofi_hostname_toaddr(str, addr_format, addr, len))
+			return 0;
+		if (!ofi_ifname_toaddr(str, addr_format, addr, len))
+			return 0;
+		return -FI_EINVAL;
 	case FI_SOCKADDR_IN:
 		return ofi_str_to_sin(str, addr, len);
 	case FI_SOCKADDR_IN6:
