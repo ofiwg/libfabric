@@ -75,6 +75,32 @@ static int ofi_find_name(char **names, const char *name)
 	return -1;
 }
 
+/* matches if names[i] == "xxx;yyy" and name == "xxx" */
+static int ofi_find_layered_name(char **names, const char *name)
+{
+	int i, len;
+
+	len = strlen(name);
+	for (i = 0; names[i]; i++) {
+		if (!strncasecmp(name, names[i], len) && names[i][len] == ';' )
+			return i;
+	}
+	return -1;
+}
+
+/* matches if names[i] == "xxx" and name == "xxx;yyy" */
+static int ofi_find_core_name(char **names, const char *name)
+{
+	int i, len;
+
+	for (i = 0; names[i]; i++) {
+		len = strlen(names[i]);
+		if (!strncasecmp(name, names[i], len) && name[len] == ';' )
+			return i;
+	}
+	return -1;
+}
+
 static enum ofi_prov_type ofi_prov_type(const struct fi_provider *provider)
 {
 	const struct fi_prov_context *ctx;
@@ -99,13 +125,65 @@ static int ofi_is_hook_prov(const struct fi_provider *provider)
 
 int ofi_apply_filter(struct fi_filter *filter, const char *name)
 {
-	if (filter->names) {
-		if (ofi_find_name(filter->names, name) >= 0)
-			return filter->negated ? 1 : 0;
+	if (!filter->names)
+		return 0;
 
-		return filter->negated ? 0 : 1;
-	}
-	return 0;
+	if (ofi_find_name(filter->names, name) >= 0)
+		return filter->negated ? 1 : 0;
+
+	return filter->negated ? 0 : 1;
+}
+
+/*
+ * The provider init filter is used to filter out unnecessary core providers
+ * at the initialization time. Utility providers are not concerned.
+ *
+ * Special handling is needed for layered provider names:
+ *
+ * If the filter is not negated, a name "xxx;yyy" in the filter should match
+ * input "xxx" to ensure that the core provider "xxx" is included.
+ *
+ * If the filter is negated, a name "xxx;yyy" in the filter should not match
+ * input "xxx" otherwise the core provider "xxx" may be incorrectly filtered
+ * out.
+ */
+int ofi_apply_prov_init_filter(struct fi_filter *filter, const char *name)
+{
+	if (!filter->names)
+		return 0;
+
+	if (ofi_find_name(filter->names, name) >= 0)
+		return filter->negated ? 1 : 0;
+
+	if (filter->negated)
+		return 0;
+
+	if (ofi_find_layered_name(filter->names, name) >= 0)
+		return 0;
+
+	return 1;
+}
+
+/*
+ * The provider post filter is used to remove unwanted entries from the fi_info
+ * list before returning from fi_getinfo().
+ *
+ * Layered provider names are handled in the same way as non-layered provider
+ * names -- requiring full match.
+ *
+ * In addition, a name "xxx" in the filter should be able to match an input
+ * "xxx;yyy" to allow extra layering on top of what is requested by the user.
+ */
+int ofi_apply_prov_post_filter(struct fi_filter *filter, const char *name)
+{
+	if (!filter->names)
+		return 0;
+
+	if (ofi_find_name(filter->names, name) >= 0 ||
+	    ofi_find_core_name(filter->names, name) >= 0)
+		return filter->negated ? 1 : 0;
+
+	return filter->negated ? 0 : 1;
 }
 
 static int ofi_getinfo_filter(const struct fi_provider *provider)
@@ -119,7 +197,35 @@ static int ofi_getinfo_filter(const struct fi_provider *provider)
 	if (!prov_filter.negated && !ofi_is_core_prov(provider))
 		return 0;
 
-	return ofi_apply_filter(&prov_filter, provider->name);
+	return ofi_apply_prov_init_filter(&prov_filter, provider->name);
+}
+
+static void ofi_filter_info(struct fi_info **info)
+{
+	struct fi_info *cur, *prev, *tmp;
+
+	if (!prov_filter.names)
+		return;
+
+	prev = NULL;
+	cur = *info;
+	while (cur) {
+		assert(cur->fabric_attr && cur->fabric_attr->prov_name);
+
+		if (ofi_apply_prov_post_filter(&prov_filter, cur->fabric_attr->prov_name)) {
+			tmp = cur;
+			cur = cur->next;
+			if (prev)
+				prev->next = cur;
+			else
+				*info = cur;
+			tmp->next = NULL;
+			fi_freeinfo(tmp);
+		} else {
+			prev = cur;
+			cur = cur->next;
+		}
+	}
 }
 
 static struct ofi_prov *ofi_getprov(const char *prov_name, size_t len)
@@ -800,6 +906,9 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 		tail->fabric_attr->api_version = version;
 	}
 	ofi_free_string_array(prov_vec);
+
+	if (!(flags & (OFI_CORE_PROV_ONLY | OFI_GETINFO_INTERNAL)))
+		ofi_filter_info(info);
 
 	return *info ? 0 : -FI_ENODATA;
 }
