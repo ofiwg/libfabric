@@ -64,6 +64,7 @@
 extern "C" {
 #endif
 
+#define OFI_GETINFO_INTERNAL	(1ULL << 58)
 #define OFI_CORE_PROV_ONLY	(1ULL << 59)
 
 #define sizeof_field(type, field) sizeof(((type *)0)->field)
