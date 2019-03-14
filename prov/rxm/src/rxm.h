@@ -976,6 +976,7 @@ rxm_ep_prepare_tx(struct rxm_ep *rxm_ep, fi_addr_t dest_addr,
 {
 	ssize_t ret;
 
+	assert(rxm_ep->util_ep.tx_cq);
 	*rxm_conn = (struct rxm_conn *)rxm_cmap_acquire_handle(rxm_ep->cmap,
 							       dest_addr);
 	if (OFI_UNLIKELY(!*rxm_conn))

@@ -1151,7 +1151,7 @@ static int rxm_conn_handle_notify(struct fi_eq_entry *eq_entry)
 
 static void rxm_conn_wake_up_wait_obj(struct rxm_ep *rxm_ep)
 {
-	if (rxm_ep->util_ep.tx_cq->wait)
+	if (rxm_ep->util_ep.tx_cq && rxm_ep->util_ep.tx_cq->wait)
 		util_cq_signal(rxm_ep->util_ep.tx_cq);
 	if (rxm_ep->util_ep.tx_cntr && rxm_ep->util_ep.tx_cntr->wait)
 		util_cntr_signal(rxm_ep->util_ep.tx_cntr);
