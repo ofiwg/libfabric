@@ -745,6 +745,7 @@ rxm_ep_recv_common(struct rxm_ep *rxm_ep, const struct iovec *iov,
 {
 	ssize_t ret;
 
+	assert(rxm_ep->util_ep.rx_cq);
 	ofi_ep_lock_acquire(&rxm_ep->util_ep);
 	ret = rxm_ep_post_recv(rxm_ep, iov, desc, count, src_addr,
 			       tag, ignore, context, op_flags, recv_queue);
@@ -763,6 +764,7 @@ rxm_ep_recv_common_flags(struct rxm_ep *rxm_ep, const struct iovec *iov,
 	struct rxm_rx_buf *rx_buf;
 	ssize_t ret = 0;
 
+	assert(rxm_ep->util_ep.rx_cq);
 	assert(count <= rxm_ep->rxm_info->rx_attr->iov_limit);
 	assert(!(flags & FI_PEEK) ||
 		(recv_queue->type == RXM_RECV_QUEUE_TAGGED));
