@@ -95,7 +95,7 @@ static void smr_progress_resp(struct smr_ep *ep)
 				break;
 
 		ret = ep->tx_comp(ep, (void *) (uintptr_t) pending->msg.hdr.msg_id,
-				  ofi_tx_cq_flags(pending->msg.hdr.op),
+				  pending->msg.hdr.op, pending->msg.hdr.op_flags,
 				  -(resp->status));
 		if (ret) {
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
@@ -207,7 +207,8 @@ static int smr_progress_multi_recv(struct smr_ep *ep, struct smr_queue *queue,
 
 	left = entry->iov[0].iov_len - len;
 	if (left < ep->min_multi_recv_size) {
-		ret = ep->rx_comp(ep, entry->context, FI_MULTI_RECV, 0, 0,
+		ret = ep->rx_comp(ep, entry->context, ofi_op_msg,
+				  SMR_MULTI_RECV | entry->flags, 0, 0,
 				  &entry->addr, 0, 0, 0);
 		freestack_push(ep->recv_fs, entry);
 		return ret;
@@ -381,9 +382,9 @@ static int smr_progress_cmd_msg(struct smr_ep *ep, struct smr_cmd *cmd)
 			"unidentified operation type\n");
 		err = -FI_EINVAL;
 	}
-	ret = ep->rx_comp(ep, entry->context, smr_rx_cq_flags(cmd->msg.hdr.op,
-			  cmd->msg.hdr.op_flags), total_len,
-			  entry->iov[0].iov_base, &addr, cmd->msg.hdr.tag,
+	ret = ep->rx_comp(ep, entry->context, cmd->msg.hdr.op,
+			  cmd->msg.hdr.op_flags | (entry->flags & ~SMR_MULTI_RECV),
+			  total_len, entry->iov[0].iov_base, &addr, cmd->msg.hdr.tag,
 			  cmd->msg.hdr.data, err);
 	if (ret) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
@@ -392,7 +393,7 @@ static int smr_progress_cmd_msg(struct smr_ep *ep, struct smr_cmd *cmd)
 	ofi_cirque_discard(smr_cmd_queue(ep->region));
 	ep->region->cmd_cnt++;
 
-	if (entry->flags & FI_MULTI_RECV) {
+	if (entry->flags & SMR_MULTI_RECV) {
 		ret = smr_progress_multi_recv(ep, recv_queue, entry, total_len);
 		return ret;
 	}
@@ -459,9 +460,8 @@ static int smr_progress_cmd_rma(struct smr_ep *ep, struct smr_cmd *cmd)
 	}
 	if (cmd->msg.hdr.op_flags & SMR_REMOTE_CQ_DATA) {
 		ret = ep->rx_comp(ep, (void *) cmd->msg.hdr.msg_id,
-				  smr_rx_cq_flags(cmd->msg.hdr.op,
-				  cmd->msg.hdr.op_flags), total_len,
-				  NULL, &cmd->msg.hdr.addr, 0,
+				  cmd->msg.hdr.op, cmd->msg.hdr.op_flags,
+				  total_len, iov[0].iov_base, &cmd->msg.hdr.addr, 0,
 				  cmd->msg.hdr.data, err);
 		if (ret) {
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
@@ -642,10 +642,9 @@ int smr_progress_unexp(struct smr_ep *ep, struct smr_ep_entry *entry)
 			"unidentified operation type\n");
 		entry->err = FI_EINVAL;
 	}
-	ret = ep->rx_comp(ep, entry->context,
-			  smr_rx_cq_flags(unexp_msg->cmd.msg.hdr.op,
-			  unexp_msg->cmd.msg.hdr.op_flags), total_len,
-			  entry->iov[0].iov_base, &entry->addr, entry->tag,
+	ret = ep->rx_comp(ep, entry->context, unexp_msg->cmd.msg.hdr.op,
+			  unexp_msg->cmd.msg.hdr.op_flags | entry->flags,
+			  total_len, entry->iov[0].iov_base, &entry->addr, entry->tag,
 			  unexp_msg->cmd.msg. hdr.data, entry->err);
 	if (ret) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
@@ -655,7 +654,7 @@ int smr_progress_unexp(struct smr_ep *ep, struct smr_ep_entry *entry)
 	ep->region->cmd_cnt++;
 	freestack_push(ep->unexp_fs, unexp_msg);
 
-	if (entry->flags & FI_MULTI_RECV) {
+	if (entry->flags & SMR_MULTI_RECV) {
 		ret = smr_progress_multi_recv(ep, &ep->trecv_queue, entry,
 					      total_len);
 		return ret ? ret : -FI_ENOMSG;

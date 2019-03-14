@@ -176,7 +176,8 @@ ssize_t rxd_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 	return rxd_generic_rma(ep, msg->msg_iov, msg->iov_count,
 			       msg->rma_iov, msg->rma_iov_count,
 			       msg->desc, msg->addr, msg->context,
-			       ofi_op_read_req, msg->data, rxd_flags(flags));
+			       ofi_op_read_req, msg->data, rxd_tx_flags(flags |
+			       ep->util_ep.tx_msg_flags));
 }
 
 ssize_t rxd_write(struct fid_ep *ep_fid, const void *buf, size_t len, void *desc,
@@ -228,7 +229,8 @@ ssize_t rxd_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 	return rxd_generic_rma(ep, msg->msg_iov, msg->iov_count,
 			       msg->rma_iov, msg->rma_iov_count,
 			       msg->desc, msg->addr, msg->context,
-			       ofi_op_write, msg->data, rxd_flags(flags));
+			       ofi_op_write, msg->data, rxd_tx_flags(flags |
+			       ep->util_ep.tx_msg_flags));
 }
 
 ssize_t rxd_writedata(struct fid_ep *ep_fid, const void *buf, size_t len,

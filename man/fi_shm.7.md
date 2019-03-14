@@ -105,8 +105,6 @@ structures
 
 EPs must be bound to both RX and TX CQs.
 
-No support for selective completions or multi-recv.
-
 No support for counters.
 
 # RUNTIME PARAMETERS
