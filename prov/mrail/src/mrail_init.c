@@ -165,7 +165,7 @@ int mrail_get_core_info(uint32_t version, const char *node, const char *service,
 		FI_DBG(&mrail_prov, FI_LOG_CORE,
 		       "--- Begin fi_getinfo for rail: %zd ---\n", i);
 
-		ret = fi_getinfo(version, NULL, NULL, 0, core_hints, &info);
+		ret = fi_getinfo(version, NULL, NULL, OFI_GETINFO_INTERNAL, core_hints, &info);
 
 		FI_DBG(&mrail_prov, FI_LOG_CORE,
 		       "--- End fi_getinfo for rail: %zd ---\n", i);
