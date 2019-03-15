@@ -234,10 +234,11 @@ static void mrail_adjust_info(struct fi_info *info, const struct fi_info *hints)
 	}
 }
 
-static struct fi_info *mrail_get_prefix_info(struct fi_info *core_info)
+static struct fi_info *mrail_get_prefix_info(struct fi_info *core_info, int id)
 {
 	struct fi_info *fi;
 	uint32_t num_rails;
+	char *s;
 
 	for (fi = core_info, num_rails = 0; fi; fi = fi->next, ++num_rails)
 		;
@@ -252,9 +253,9 @@ static struct fi_info *mrail_get_prefix_info(struct fi_info *core_info)
 	fi->fabric_attr->name = NULL;
 	fi->domain_attr->name = NULL;
 
-	fi->fabric_attr->name = strdup(mrail_info.fabric_attr->name);
-	if (!fi->fabric_attr->name)
+	if (asprintf(&s, "%s_%d", mrail_info.fabric_attr->name, id) < 0)
 		goto err;
+	fi->fabric_attr->name = s;
 
 	fi->domain_attr->name = strdup(mrail_info.domain_attr->name);
 	if (!fi->domain_attr->name)
@@ -304,7 +305,7 @@ static int mrail_getinfo(uint32_t version, const char *node, const char *service
 	if (ret)
 		return ret;
 
-	fi = mrail_get_prefix_info(*info);
+	fi = mrail_get_prefix_info(*info, mrail_num_info);
 	if (!fi) {
 		ret = -FI_ENOMEM;
 		goto err1;
