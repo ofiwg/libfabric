@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
  * Copyright (c) 2015-2016 Cray Inc.  All rights reserved.
+ * Copyright (c) 2019 Triad National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -100,6 +101,8 @@ struct gnix_slab {
  * @var mbox_size	Size per each mailbox.
  * @var mpmmap		Mailboxes per mmap slab.
  * @var slab_list	List of slab objects.
+ *
+ * @note  If HUGETLBFS is not available, memory is allocated via ANON mmap.
  */
 struct gnix_mbox_alloc_handle {
 	struct gnix_nic *nic_handle;
@@ -190,4 +193,9 @@ int _gnix_mbox_free(struct gnix_mbox *ptr);
  */
 extern ofi_atomic32_t file_id_counter;
 
+/*
+ * safety valve for disabling mbox allocator fallback to base pages
+ */
+
+extern bool gnix_mbox_alloc_allow_fallback;
 #endif /* _GNIX_MBOX_ALLOCATOR_ */
