@@ -103,6 +103,8 @@ int mrail_get_core_info(uint32_t version, const char *node, const char *service,
 		core_hints->mode &= MRAIL_PASSTHRU_MODES;
 
 		if (core_hints->domain_attr) {
+			if (core_hints->domain_attr->mr_mode == FI_MR_BASIC)
+				core_hints->domain_attr->mr_mode = OFI_MR_BASIC_MAP;
 			removed_mr_mode = core_hints->domain_attr->mr_mode &
 					  ~MRAIL_PASSTHRU_MR_MODES;
 			if (removed_mr_mode) {
