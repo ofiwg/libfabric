@@ -943,6 +943,7 @@ rxm_ep_alloc_rndv_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void 
 	tx_buf->app_context = context;
 	tx_buf->flags = flags;
 	tx_buf->count = count;
+	tx_buf->conn = rxm_conn;
 
 	if (!rxm_ep->rxm_mr_local) {
 		ret = rxm_ep_msg_mr_regv(rxm_ep, iov, tx_buf->count,
@@ -1365,12 +1366,19 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 					 data, flags, tag, op);
 	} else {
 		struct rxm_tx_rndv_buf *tx_buf;
+		if (!rxm_conn->rndv_tx_credits) {
+			ret = -FI_EAGAIN;
+			goto unlock;
+		}
 
 		ret = rxm_ep_alloc_rndv_tx_res(rxm_ep, rxm_conn, context, (uint8_t)count,
 					      iov, desc, data_len, data, flags, tag, op,
 					      &tx_buf);
-		if (OFI_LIKELY(ret >= 0))
+		if (OFI_LIKELY(ret >= 0)) {
 			ret = rxm_ep_rndv_tx_send(rxm_ep, rxm_conn, tx_buf, ret);
+			if (!ret)
+				rxm_conn->rndv_tx_credits--;
+		}
 	}
 unlock:
 	ofi_ep_lock_release(&rxm_ep->util_ep);
