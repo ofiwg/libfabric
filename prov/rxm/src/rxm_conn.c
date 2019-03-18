@@ -838,7 +838,7 @@ static int rxm_msg_ep_open(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 	}
 
 	if (!rxm_ep->srx_ctx) {
-		ret = rxm_ep_prepost_buf(rxm_ep, msg_ep);
+		ret = rxm_msg_ep_prepost_recv(rxm_ep, msg_ep);
 		if (ret)
 			goto err;
 	}
