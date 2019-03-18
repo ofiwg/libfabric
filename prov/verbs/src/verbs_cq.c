@@ -32,6 +32,7 @@
 
 #include "config.h"
 
+#include <stdint.h>
 #include <ofi_mem.h>
 
 #include "fi_verbs.h"
@@ -237,11 +238,14 @@ static void fi_ibv_cq_read_data_entry(struct ibv_wc *wc, void *buf)
 static inline int fi_ibv_poll_outstanding_cq(struct fi_ibv_ep *ep,
 					     struct fi_ibv_cq *cq)
 {
+	struct fi_ibv_domain *domain = container_of(cq->util_cq.domain,
+						    struct fi_ibv_domain,
+						    util_domain);
 	struct fi_ibv_wce *wce;
 	struct ibv_wc wc;
 	ssize_t ret;
 
-	ret = ibv_poll_cq(cq->cq, 1, &wc);
+	ret = domain->poll_cq(cq->cq, 1, &wc);
 	if (ret <= 0)
 		return ret;
 
@@ -284,11 +288,14 @@ void fi_ibv_cleanup_cq(struct fi_ibv_ep *ep)
 
 /* Must call with cq->lock held */
 static inline
-ssize_t fi_ibv_poll_cq(struct fi_ibv_cq *cq, struct ibv_wc *wc)
+ssize_t fi_ibv_poll_cq_process_wc(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 {
+	struct fi_ibv_domain *domain = container_of(cq->util_cq.domain,
+						    struct fi_ibv_domain,
+						    util_domain);
 	ssize_t ret;
 
-	ret = ibv_poll_cq(cq->cq, 1, wc);
+	ret = domain->poll_cq(cq->cq, 1, wc);
 	if (ret <= 0)
 		return ret;
 
@@ -321,7 +328,7 @@ static ssize_t fi_ibv_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 			continue;
 		}
 
-		ret = fi_ibv_poll_cq(cq, &wc);
+		ret = fi_ibv_poll_cq_process_wc(cq, &wc);
 		if (ret <= 0)
 			break;
 
@@ -395,7 +402,7 @@ static int fi_ibv_cq_trywait(struct fid *fid)
 	}
 	memset(wce, 0, sizeof(*wce));
 
-	rc = fi_ibv_poll_cq(cq, &wce->wc);
+	rc = fi_ibv_poll_cq_process_wc(cq, &wce->wc);
 	if (rc > 0) {
 		slist_insert_tail(&wce->entry, &cq->wcq);
 		goto out;
@@ -415,7 +422,7 @@ static int fi_ibv_cq_trywait(struct fid *fid)
 
 	/* Read again to fetch any completions that we might have missed
 	 * while rearming */
-	rc = fi_ibv_poll_cq(cq, &wce->wc);
+	rc = fi_ibv_poll_cq_process_wc(cq, &wce->wc);
 	if (rc > 0) {
 		slist_insert_tail(&wce->entry, &cq->wcq);
 		goto out;
@@ -659,6 +666,9 @@ int fi_ibv_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 
 	cq->trywait = fi_ibv_cq_trywait;
 	ofi_atomic_initialize32(&cq->nevents, 0);
+
+	assert(size < INT32_MAX);
+	ofi_atomic_initialize32(&cq->credits, size);
 
 	*cq_fid = &cq->util_cq.cq_fid;
 	return 0;
