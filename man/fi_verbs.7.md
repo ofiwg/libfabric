@@ -253,6 +253,12 @@ When running an app over verbs provider with Valgrind, there may be reports of
 memory leak in functions from dependent libraries (e.g. libibverbs, librdmacm).
 These leaks are safe to ignore.
 
+The provider protects CQ overruns that may happen because more TX operations were
+posted to endpoints than CQ size. On the receive side, it isn't expected to
+overrun the CQ. In case it happens the application developer should take care
+not to post excess receives without draining the CQ. CQ overruns can make the
+MSG endpoints unusable.
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),
