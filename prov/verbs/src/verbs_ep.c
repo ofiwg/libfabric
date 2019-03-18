@@ -290,7 +290,8 @@ static inline int fi_ibv_ep_xrc_set_tgt_chan(struct fi_ibv_ep *ep)
 static int fi_ibv_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct fi_ibv_ep *ep;
-	struct util_cq *cq;
+	struct fi_ibv_cq *cq =
+		container_of(bfid, struct fi_ibv_cq, util_cq.cq_fid.fid);
 	struct fi_ibv_dgram_av *av;
 	int ret;
 
@@ -303,8 +304,7 @@ static int fi_ibv_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	case FI_EP_MSG:
 		switch (bfid->fclass) {
 		case FI_CLASS_CQ:
-			cq = container_of(bfid, struct util_cq, cq_fid.fid);
-			ret = ofi_ep_bind_cq(&ep->util_ep, cq, flags);
+			ret = ofi_ep_bind_cq(&ep->util_ep, &cq->util_cq, flags);
 			if (ret)
 				return ret;
 			break;
@@ -329,8 +329,7 @@ static int fi_ibv_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	case FI_EP_DGRAM:
 		switch (bfid->fclass) {
 		case FI_CLASS_CQ:
-			cq = container_of(bfid, struct util_cq, cq_fid.fid);
-			ret = ofi_ep_bind_cq(&ep->util_ep, cq, flags);
+			ret = ofi_ep_bind_cq(&ep->util_ep, &cq->util_cq, flags);
 			if (ret)
 				return ret;
 			break;
@@ -348,6 +347,11 @@ static int fi_ibv_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		return -FI_EINVAL;
 	}
 
+	/* Reserve space for receives */
+	if ((bfid->fclass == FI_CLASS_CQ) && (flags & FI_RECV)) {
+		assert(ep->rx_size < INT32_MAX);
+		ofi_atomic_sub32(&cq->credits, (int32_t)ep->rx_size);
+	}
 	return 0;
 }
 
@@ -544,6 +548,8 @@ done:
 void fi_ibv_msg_ep_get_qp_attr(struct fi_ibv_ep *ep,
 			       struct ibv_qp_init_attr *attr)
 {
+	attr->qp_context = ep;
+
 	if (ep->util_ep.tx_cq) {
 		struct fi_ibv_cq *cq = container_of(ep->util_ep.tx_cq,
 						    struct fi_ibv_cq, util_cq);
@@ -638,7 +644,6 @@ static int fi_ibv_ep_enable(struct fid_ep *ep_fid)
 			return -FI_EINVAL;
 		}
 
-		attr.qp_context = ep;
 		ret = rdma_create_qp(ep->id, domain->pd, &attr);
 		if (ret) {
 			ret = -errno;
@@ -920,6 +925,8 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 		assert(0);
 		goto err1;
 	}
+
+	ep->rx_size = info->rx_attr->size;
 
 	*ep_fid = &ep->util_ep.ep_fid;
 	ep->util_ep.ep_fid.fid.ops = &fi_ibv_ep_ops;
