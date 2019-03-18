@@ -5,6 +5,11 @@ This file contains the main features as well as overviews of specific
 bug fixes (and other actions) for each version of Libfabric since
 version 1.0.
 
+v1.7.1rc1, Fri Mar 15, 2019
+===========================
+
+TODO: add comments on fixes applied to providers
+
 v1.7.0, Mon Jan 7, 2019
 =======================
 
