@@ -269,20 +269,20 @@ static int rxm_validate_atomic_hints(const struct fi_info *hints)
 
 	if (hints->domain_attr &&
 	    hints->domain_attr->data_progress == FI_PROGRESS_AUTO) {
-		FI_DBG(&rxm_prov, FI_LOG_FABRIC,
-		       "FI_ATOMIC does not support data FI_PROGRESS_AUTO\n");
+		FI_INFO(&rxm_prov, FI_LOG_CORE,
+		        "FI_ATOMIC does not support data FI_PROGRESS_AUTO\n");
 		return -FI_EINVAL;
 	}
 	if (hints->tx_attr && (hints->tx_attr->msg_order &
 			       RXM_ATOMIC_UNSUPPORTED_MSG_ORDER)) {
-		FI_DBG(&rxm_prov, FI_LOG_FABRIC,
-		       "Hints tx_attr msg_order not supported for atomics\n");
+		FI_INFO(&rxm_prov, FI_LOG_CORE,
+		        "Hints tx_attr msg_order not supported for atomics\n");
 		return -FI_EINVAL;
 	}
 	if (hints->rx_attr && (hints->rx_attr->msg_order &
 			       RXM_ATOMIC_UNSUPPORTED_MSG_ORDER)) {
-		FI_DBG(&rxm_prov, FI_LOG_FABRIC,
-		       "Hints rx_attr msg_order not supported for atomics\n");
+		FI_INFO(&rxm_prov, FI_LOG_CORE,
+		        "Hints rx_attr msg_order not supported for atomics\n");
 		return -FI_EINVAL;
 	}
 	return 0;
