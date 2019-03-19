@@ -179,6 +179,8 @@ void fi_ibv_put_shared_ini_conn(struct fi_ibv_xrc_ep *ep)
 	ini_conn = ep->ini_conn;
 	ep->ini_conn = NULL;
 	ep->base_ep.ibv_qp = NULL;
+	if (ep->base_ep.id)
+		ep->base_ep.id->qp = NULL;
 	ep->base_ep.id->qp = NULL;
 
 	/* Tear down physical INI/TGT when no longer being used */
@@ -410,6 +412,8 @@ static int fi_ibv_put_tgt_qp(struct fi_ibv_xrc_ep *ep)
 		return -errno;
 	}
 	ep->tgt_ibv_qp = NULL;
+	if (ep->tgt_id)
+		ep->tgt_id->qp = NULL;
 
 	return FI_SUCCESS;
 }

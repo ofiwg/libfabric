@@ -167,24 +167,24 @@ void fi_ibv_free_xrc_conn_setup(struct fi_ibv_xrc_ep *ep)
 {
 	assert(ep->conn_setup);
 
-	if (ep->conn_setup->rsvd_ini_qpn)
+	/* Disconnect RDMA CM IDs used for the shared XRC connections,
+	 * releasing the QP used to reserve a QP number during shared
+	 * connection setup. */
+	if (ep->conn_setup->rsvd_ini_qpn) {
+		assert(ep->base_ep.id);
+		ep->base_ep.id->qp = ep->conn_setup->rsvd_ini_qpn;
+		rdma_disconnect(ep->base_ep.id);
 		ibv_destroy_qp(ep->conn_setup->rsvd_ini_qpn);
-	if (ep->conn_setup->rsvd_tgt_qpn)
+	}
+	if (ep->conn_setup->rsvd_tgt_qpn) {
+		assert(ep->tgt_id);
+		ep->tgt_id->qp = ep->conn_setup->rsvd_tgt_qpn;
+		rdma_disconnect(ep->tgt_id);
 		ibv_destroy_qp(ep->conn_setup->rsvd_tgt_qpn);
+	}
 
 	free(ep->conn_setup);
 	ep->conn_setup = NULL;
-
-	/*Free RDMA CM IDs releasing their associated resources, RDMA CM
-	 * is used for connection setup only with XRC */
-	if (ep->base_ep.id) {
-		rdma_destroy_id(ep->base_ep.id);
-		ep->base_ep.id = NULL;
-	}
-	if (ep->tgt_id) {
-		rdma_destroy_id(ep->tgt_id);
-		ep->tgt_id = NULL;
-	}
 }
 
 int fi_ibv_connect_xrc(struct fi_ibv_xrc_ep *ep, struct sockaddr *addr,
