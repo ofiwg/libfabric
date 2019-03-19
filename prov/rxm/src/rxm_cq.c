@@ -429,7 +429,18 @@ ssize_t rxm_cq_handle_large_data(struct rxm_rx_buf *rx_buf)
 	size_t i, index = 0, offset = 0, count, total_recv_len;
 	struct iovec iov[RXM_IOV_LIMIT];
 	void *desc[RXM_IOV_LIMIT];
+	struct rxm_rx_buf *new_rx_buf;
 	int ret = 0;
+
+	rx_buf->repost = 0;
+
+	/* En-queue new rx buf to be posted ASAP so that we don't block any
+	 * incoming messages. RNDV processing can take a while. */
+	new_rx_buf = rxm_rx_buf_alloc(rx_buf->ep, rx_buf->msg_ep, 1);
+	if (OFI_UNLIKELY(!new_rx_buf))
+		return -FI_ENOMEM;
+	dlist_insert_tail(&new_rx_buf->repost_entry,
+			  &new_rx_buf->ep->repost_ready_list);
 
 	if (!rx_buf->conn) {
 		assert(rx_buf->ep->srx_ctx);
@@ -564,28 +575,21 @@ rxm_cq_match_rx_buf(struct rxm_rx_buf *rx_buf,
 		rx_buf->unexp_msg.tag = match_attr->tag;
 		rx_buf->repost = 0;
 
-		msg_ep = rx_buf->msg_ep;
-		rxm_ep = rx_buf->ep;
-
 		dlist_insert_tail(&rx_buf->unexp_msg.entry,
 				  &recv_queue->unexp_msg_list);
 
-		rx_buf = rxm_rx_buf_alloc(rxm_ep);
+		msg_ep = rx_buf->msg_ep;
+		rxm_ep = rx_buf->ep;
+
+		rx_buf = rxm_rx_buf_alloc(rxm_ep, msg_ep, 1);
 		if (OFI_UNLIKELY(!rx_buf)) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
-				"Ran out of buffers from RX buffer pool\n");
+				"ran out of buffers from RX buffer pool\n");
 			return -FI_ENOMEM;
 		}
 
-		rx_buf->hdr.state = RXM_RX;
-		rx_buf->msg_ep = msg_ep;
-		rx_buf->repost = 1;
-		if (!rxm_ep->srx_ctx)
-			rx_buf->conn = container_of(msg_ep->fid.context,
-						    struct rxm_conn,
-						    handle);
-
-		rxm_rx_buf_release(rxm_ep, rx_buf);
+		dlist_insert_tail(&rx_buf->repost_entry,
+				  &rxm_ep->repost_ready_list);
 		return 0;
 	}
 
@@ -1240,7 +1244,7 @@ static void rxm_cq_read_write_error(struct rxm_ep *rxm_ep)
 	}
 }
 
-static inline int rxm_ep_repost_buf(struct rxm_rx_buf *rx_buf)
+static inline int rxm_msg_ep_recv(struct rxm_rx_buf *rx_buf)
 {
 	int ret;
 
@@ -1253,34 +1257,23 @@ static inline int rxm_ep_repost_buf(struct rxm_rx_buf *rx_buf)
 			   rx_buf->hdr.desc, FI_ADDR_UNSPEC, rx_buf);
 	if (ret)
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-			"Unable to repost buf: %d\n", ret);
+			"unable to post recv buf: %d\n", ret);
 	return ret;
 }
 
-int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep)
+int rxm_msg_ep_prepost_recv(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep)
 {
 	struct rxm_rx_buf *rx_buf;
 	int ret;
 	size_t i;
 
 	for (i = 0; i < rxm_ep->msg_info->rx_attr->size; i++) {
-		rx_buf = rxm_rx_buf_alloc(rxm_ep);
-		if (OFI_UNLIKELY(!rx_buf)) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
-				"Ran out of buffers from RX buffer pool\n");
+		rx_buf = rxm_rx_buf_alloc(rxm_ep, msg_ep, 1);
+		if (OFI_UNLIKELY(!rx_buf))
 			return -FI_ENOMEM;
-		}
 
-		rx_buf->hdr.state = RXM_RX;
-		rx_buf->msg_ep = msg_ep;
-		rx_buf->repost = 1;
-
-		if (!rxm_ep->srx_ctx)
-			rx_buf->conn = container_of(msg_ep->fid.context,
-						    struct rxm_conn,
-						    handle);
-		ret = rxm_ep_repost_buf(rx_buf);
-		if (ret) {
+		ret = rxm_msg_ep_recv(rx_buf);
+		if (OFI_UNLIKELY(ret)) {
 			ofi_buf_free(&rx_buf->hdr);
 			return ret;
 		}
@@ -1304,7 +1297,11 @@ void rxm_ep_do_progress(struct util_ep *util_ep)
 	while (!dlist_empty(&rxm_ep->repost_ready_list)) {
 		dlist_pop_front(&rxm_ep->repost_ready_list, struct rxm_rx_buf,
 				buf, repost_entry);
-		(void) rxm_ep_repost_buf(buf);
+		ret = rxm_msg_ep_recv(buf);
+		if (ret) {
+			if (OFI_LIKELY(ret == -FI_EAGAIN))
+				ofi_buf_free(&buf->hdr);
+		}
 	}
 
 	do {

@@ -386,6 +386,44 @@ static void fi_ibv_domain_process_exp(struct fi_ibv_domain *domain)
 }
 
 static int
+fi_ibv_post_send_track_credits(struct ibv_qp *qp, struct ibv_send_wr *wr,
+			       struct ibv_send_wr **bad_wr)
+{
+	struct fi_ibv_cq *cq =
+		container_of(((struct fi_ibv_ep *)qp->qp_context)->util_ep.tx_cq,
+			     struct fi_ibv_cq, util_cq);
+	int credits = (int)ofi_atomic_dec32(&cq->credits);
+	int ret;
+
+	if (credits < 0) {
+		FI_DBG(&fi_ibv_prov, FI_LOG_EP_DATA, "CQ credits not available,"
+		       " retry later\n");
+		ofi_atomic_inc32(&cq->credits);
+		return ENOMEM;
+	}
+	ret = ibv_post_send(qp, wr, bad_wr);
+	if (ret)
+		ofi_atomic_inc32(&cq->credits);
+	return ret;
+}
+
+static int
+fi_ibv_poll_cq_track_credits(struct ibv_cq *cq, int num_entries,
+			     struct ibv_wc *wc)
+{
+	struct fi_ibv_cq *verbs_cq = (struct fi_ibv_cq *)cq->cq_context;
+	int i, ret;
+
+	ret = ibv_poll_cq(cq, num_entries, wc);
+	for (i = 0; i < ret; i++) {
+		if (!(wc[i].opcode & IBV_WC_RECV))
+			ofi_atomic_inc32(&verbs_cq->credits);
+	}
+	return ret;
+}
+
+
+static int
 fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	      struct fid_domain **domain, void *context)
 {
@@ -492,6 +530,14 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 			   "EP type :%d\n", _domain->ep_type);
 		ret = -FI_EINVAL;
 		goto err3;
+	}
+
+	if (!strncmp(info->domain_attr->name, "hfi1", strlen("hfi1"))) {
+		_domain->post_send = fi_ibv_post_send_track_credits;
+		_domain->poll_cq = fi_ibv_poll_cq_track_credits;
+	} else {
+		_domain->post_send = ibv_post_send;
+		_domain->poll_cq = ibv_poll_cq;
 	}
 
 	*domain = &_domain->util_domain.domain_fid;
