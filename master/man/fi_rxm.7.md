@@ -174,6 +174,12 @@ The data transfer API may return -FI_EAGAIN during on-demand connection setup
 of the core provider FI_MSG_EP. See [`fi_msg`(3)](fi_msg.3.html) for a detailed
 description of handling FI_EAGAIN.
 
+# Troubleshooting / Known issues
+
+If an RxM endpoint is expected to communicate with more peers than the default
+value of FI_UNIVERSE_SIZE (256) CQ overruns can happen. To avoid this set a
+higher value for FI_UNIVERSE_SIZE. CQ overrun can make a MSG endpoint unusable.
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),
