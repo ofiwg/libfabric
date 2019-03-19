@@ -239,9 +239,6 @@ struct mrail_mr {
 	} rails[];
 };
 
-int mrail_get_core_info(uint32_t version, const char *node, const char *service,
-			uint64_t flags, const struct fi_info *hints,
-			struct fi_info **core_info);
 int mrail_fabric_open(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 		       void *context);
 int mrail_domain_open(struct fid_fabric *fabric, struct fi_info *info,

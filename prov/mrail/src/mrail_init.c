@@ -69,25 +69,15 @@ static int mrail_parse_env_vars(void)
 	return 0;
 }
 
-int mrail_get_core_info(uint32_t version, const char *node, const char *service,
-			uint64_t flags, const struct fi_info *hints,
-			struct fi_info **core_info)
+static struct fi_info *mrail_create_core_hints(const struct fi_info *hints)
 {
-	struct fi_info *core_hints, *info, *fi = NULL;
-	size_t i;
-	int ret = 0;
+	struct fi_info *core_hints;
 	uint64_t removed_mode;
 	uint64_t removed_mr_mode;
 
-	if (!mrail_addr_strv) {
-		FI_WARN(&mrail_prov, FI_LOG_FABRIC,
-			"OFI_MRAIL_ADDR_STRC env variable not set!\n");
-		return -FI_ENODATA;
-	}
-
 	core_hints = fi_dupinfo(hints);
 	if (!core_hints)
-		return -FI_ENOMEM;
+		return NULL;
 
 	if (!hints) {
 		core_hints->mode = MRAIL_PASSTHRU_MODES;
@@ -131,27 +121,131 @@ int mrail_get_core_info(uint32_t version, const char *node, const char *service,
 
 	if (!core_hints->fabric_attr) {
 		core_hints->fabric_attr = calloc(1, sizeof(*core_hints->fabric_attr));
-		if (!core_hints->fabric_attr) {
-			ret = -FI_ENOMEM;
-			goto out;
-		}
+		if (!core_hints->fabric_attr)
+			goto err;
 	}
 
 	if (!core_hints->domain_attr) {
 		core_hints->domain_attr = calloc(1, sizeof(*core_hints->domain_attr));
-		if (!core_hints->domain_attr) {
-			ret = -FI_ENOMEM;
-			goto out;
-		}
+		if (!core_hints->domain_attr)
+			goto err;
 	}
 	core_hints->domain_attr->av_type = FI_AV_TABLE;
+	return core_hints;
+
+err:
+	fi_freeinfo(core_hints);
+	return NULL;
+}
+
+/*
+ * Gather entries from an array of per-rail info lists to form an array of multi-rail info.
+ * Each multi-rail info is a list consists of one info per rail.
+ */
+static int mrail_gather_rail_info(struct fi_info **rail_info, int num_rails,
+				  struct fi_info ***info_out, int *num_info_out)
+{
+	struct fi_info **mrail_info, **tails, *p;
+	int num_mrail_info = 0;
+	int i, j, n;
+
+	/*
+	 * find the shortest length of the per-rail list, this is the number of
+	 * multi-rail info available
+	 */
+	for (i = 0; i < num_rails; i++) {
+		n = 0;
+		p = rail_info[i];
+		while (p) {
+			n++;
+			p = p->next;
+		}
+		if (i == 0 || num_mrail_info > n)
+			num_mrail_info = n;
+	}
+
+	if (!num_mrail_info) {
+		FI_WARN(&mrail_prov, FI_LOG_FABRIC,
+			"Some rails cannot be used!\n");
+		return -FI_ENODATA;
+	}
+
+	mrail_info = calloc(num_mrail_info, sizeof(*mrail_info));
+	if (!mrail_info)
+		return -FI_ENOMEM;
+
+	tails = calloc(num_mrail_info, sizeof(*tails));
+	if (!tails) {
+		free(mrail_info);
+		return -FI_ENOMEM;
+	}
+
+	/*
+	 * Do the gathering -- Take one item from each rail and form a list.
+	 * Repeat until some rails run out of entries. Extra emtries are dumped.
+	 */
+	for (i = 0; i < num_rails; i++) {
+		p = rail_info[i];
+		for (j = 0; j < num_mrail_info; j++) {
+			if (!tails[j])
+				mrail_info[j] = p;
+			else
+				tails[j]->next = p;
+			tails[j] = p;
+			p = p->next;
+			tails[j]->next = NULL;
+		}
+		if (p)
+			fi_freeinfo(p);
+	}
+
+	free(tails);
+	*info_out = mrail_info;
+	*num_info_out = num_mrail_info;
+	return 0;
+}
+
+static int mrail_get_core_info(uint32_t version, const char *node, const char *service,
+			       uint64_t flags, const struct fi_info *hints,
+			       struct fi_info ***core_info_array, int *num_core_info)
+{
+	struct fi_info *core_hints;
+	struct fi_info **rail_info = NULL;
+	size_t i;
+	int ret = 0;
+	int num_rails;
+
+	if (!mrail_addr_strv) {
+		FI_WARN(&mrail_prov, FI_LOG_FABRIC,
+			"OFI_MRAIL_ADDR_STRC env variable not set!\n");
+		return -FI_ENODATA;
+	}
+
+	for (i = 0, num_rails = 0; mrail_addr_strv[i]; i++)
+		num_rails++;
+
+	if (!num_rails) {
+		FI_WARN(&mrail_prov, FI_LOG_FABRIC,
+			"OFI_MRAIL_ADDR_STRC env variable is set but empty!\n");
+		return -FI_ENODATA;
+	}
+
+	core_hints = mrail_create_core_hints(hints);
+	if (!core_hints)
+		return -FI_ENOMEM;
 
 	ret = ofi_exclude_prov_name(&core_hints->fabric_attr->prov_name,
 				    mrail_prov.name);
 	if (ret)
 		goto out;
 
-	for (i = 0; mrail_addr_strv[i]; i++) {
+	rail_info = calloc(num_rails, sizeof(*rail_info));
+	if (!rail_info) {
+		ret = -FI_ENOMEM;
+		goto out;
+	}
+
+	for (i = 0; i < num_rails; i++) {
 		free(core_hints->src_addr);
 		ret = ofi_str_toaddr(mrail_addr_strv[i],
 				     &core_hints->addr_format,
@@ -167,53 +261,24 @@ int mrail_get_core_info(uint32_t version, const char *node, const char *service,
 		FI_DBG(&mrail_prov, FI_LOG_CORE,
 		       "--- Begin fi_getinfo for rail: %zd ---\n", i);
 
-		ret = fi_getinfo(version, NULL, NULL, OFI_GETINFO_INTERNAL, core_hints, &info);
+		ret = fi_getinfo(version, NULL, NULL, OFI_GETINFO_INTERNAL, core_hints, &rail_info[i]);
 
 		FI_DBG(&mrail_prov, FI_LOG_CORE,
 		       "--- End fi_getinfo for rail: %zd ---\n", i);
 		if (ret)
 			goto err;
-
-		if (!fi)
-			*core_info = info;
-		else
-			fi->next = info;
-		fi = info;
-
-		/* We only want the first fi_info entry per rail */
-		if (info->next) {
-			fi_freeinfo(info->next);
-			info->next = NULL;
-		}
-
 	}
+
+	ret = mrail_gather_rail_info(rail_info, num_rails, core_info_array, num_core_info);
 	goto out;
+
 err:
-	if (fi)
-		fi_freeinfo(*core_info);
+	for (i = 0; i < num_rails; i++)
+		fi_freeinfo(rail_info[i]);
 out:
+	free(rail_info);
 	fi_freeinfo(core_hints);
 	return ret;
-}
-
-static struct fi_info *mrail_dupinfo(const struct fi_info *info)
-{
-	struct fi_info *dup, *fi, *head = NULL;
-
-	while (info) {
-		if (!(dup = fi_dupinfo(info)))
-			goto err;
-		if (!head)
-			head = fi = dup;
-		else
-			fi->next = dup;
-		fi = dup;
-		info = info->next;
-	}
-	return head;
-err:
-	fi_freeinfo(head);
-	return NULL;
 }
 
 static void mrail_adjust_info(struct fi_info *info, const struct fi_info *hints)
@@ -234,10 +299,11 @@ static void mrail_adjust_info(struct fi_info *info, const struct fi_info *hints)
 	}
 }
 
-static struct fi_info *mrail_get_prefix_info(struct fi_info *core_info)
+static struct fi_info *mrail_get_prefix_info(struct fi_info *core_info, int id)
 {
 	struct fi_info *fi;
 	uint32_t num_rails;
+	char *s;
 
 	for (fi = core_info, num_rails = 0; fi; fi = fi->next, ++num_rails)
 		;
@@ -252,9 +318,9 @@ static struct fi_info *mrail_get_prefix_info(struct fi_info *core_info)
 	fi->fabric_attr->name = NULL;
 	fi->domain_attr->name = NULL;
 
-	fi->fabric_attr->name = strdup(mrail_info.fabric_attr->name);
-	if (!fi->fabric_attr->name)
+	if (asprintf(&s, "%s_%d", mrail_info.fabric_attr->name, id) < 0)
 		goto err;
+	fi->fabric_attr->name = s;
 
 	fi->domain_attr->name = strdup(mrail_info.domain_attr->name);
 	if (!fi->domain_attr->name)
@@ -290,8 +356,11 @@ static int mrail_getinfo(uint32_t version, const char *node, const char *service
 			 uint64_t flags, const struct fi_info *hints,
 			 struct fi_info **info)
 {
-	struct fi_info *fi;
+	struct fi_info *fi, *tail;
+	struct fi_info **core_info;
+	int num_core_info = 0;
 	int ret;
+	int i;
 
 	if (mrail_num_info >= MRAIL_MAX_INFO) {
 		FI_WARN(&mrail_prov, FI_LOG_CORE,
@@ -300,34 +369,53 @@ static int mrail_getinfo(uint32_t version, const char *node, const char *service
 		return -FI_ENODATA;
 	}
 
-	ret = mrail_get_core_info(version, node, service, flags, hints, info);
+	ret = mrail_get_core_info(version, node, service, flags, hints, &core_info, &num_core_info);
 	if (ret)
 		return ret;
 
-	fi = mrail_get_prefix_info(*info);
-	if (!fi) {
-		ret = -FI_ENOMEM;
-		goto err1;
+	*info = tail = NULL;
+	for (i = 0; i < num_core_info; i++) {
+		fi = mrail_get_prefix_info(core_info[i], mrail_num_info);
+		if (!fi) {
+			ret = -FI_ENOMEM;
+			goto err;
+		}
+
+		mrail_adjust_info(fi, hints);
+
+		if (!tail)
+			*info = fi;
+		else
+			tail->next = fi;
+		tail = fi;
+
+		/* save a copy of the mrail info header */
+		mrail_info_vec[mrail_num_info] = fi_dupinfo(fi);
+		if (!mrail_info_vec[mrail_num_info]) {
+			ret = -FI_ENOMEM;
+			goto err;
+		}
+
+		/* link the saved header to per-rail information */
+		mrail_info_vec[mrail_num_info]->next = core_info[i];
+		core_info[i] = NULL;
+
+		mrail_num_info++;
+		if (mrail_num_info >= MRAIL_MAX_INFO) {
+			FI_WARN(&mrail_prov, FI_LOG_CORE,
+				"Max mrail_num_info reached, some info may be dropped\n");
+			break;
+		}
 	}
-
-	mrail_adjust_info(fi, hints);
-
-	// TODO set src_addr to FI_ADDR_STRC address
-	fi->next = *info;
-	*info = fi;
-
-	mrail_info_vec[mrail_num_info] = mrail_dupinfo(*info);
-	if (!mrail_info_vec[mrail_num_info])
-		goto err2;
-
-	mrail_num_info++;
-
-	return 0;
-err2:
-	fi_freeinfo(fi);
-err1:
-	fi_freeinfo(*info);
+out:
+	for (i = 0; i < num_core_info; i++)
+		fi_freeinfo(core_info[i]);
+	free(core_info);
 	return ret;
+
+err:
+	fi_freeinfo(*info);
+	goto out;
 }
 
 static void mrail_fini(void)
