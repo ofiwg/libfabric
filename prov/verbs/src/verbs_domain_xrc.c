@@ -283,6 +283,7 @@ err:
 			/* We need to let the application know that the
 			 * connect request has failed. */
 			fi_ibv_create_shutdown_event(ep);
+			break;
 		}
 	}
 }
