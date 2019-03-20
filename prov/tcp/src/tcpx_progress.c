@@ -392,13 +392,11 @@ static int tcpx_validate_rx_rma_data(struct tcpx_xfer_entry *rx_entry,
 	int i, ret;
 
 	for ( i = 0 ; i < rx_entry->msg_hdr.rma_iov_cnt ; i++) {
-		ret = ofi_mr_map_verify(map,
-					(uintptr_t *)&rma_iov[i].addr,
-					rma_iov[i].len,
-					rma_iov[i].key,
-					access, NULL);
+		ret = ofi_mr_verify(map, rma_iov[i].len,
+				    (uintptr_t *)&rma_iov[i].addr,
+				    rma_iov[i].key, access);
 		if (ret) {
-			FI_DBG(&tcpx_prov, FI_LOG_EP_DATA,
+			FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
 			       "invalid rma iov received\n");
 			return -FI_EINVAL;
 		}
