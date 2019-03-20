@@ -67,10 +67,11 @@ int fi_ibv_reserve_qpn(struct fi_ibv_xrc_ep *ep, struct ibv_qp **qp)
 	attr.qp_type = IBV_QPT_RC;
 
 	*qp = ibv_create_qp(domain->pd, &attr);
-	if (!*qp) {
+	if (OFI_UNLIKELY(!*qp)) {
 		ret = -errno;
 		VERBS_INFO_ERRNO(FI_LOG_EP_CTRL,
-				 "Reservation QP create failed", ret);
+				 "Reservation QP create failed", -ret);
+		return ret;
 	}
 	return FI_SUCCESS;
 }
@@ -282,6 +283,7 @@ err:
 			/* We need to let the application know that the
 			 * connect request has failed. */
 			fi_ibv_create_shutdown_event(ep);
+			break;
 		}
 	}
 }
