@@ -576,8 +576,10 @@ static int mrail_getname(fid_t fid, void *addr, size_t *addrlen)
 	size_t i, offset = 0, rail_addrlen;
 	int ret;
 
-	if (*addrlen < mrail_domain->addrlen)
+	if (*addrlen < mrail_domain->addrlen) {
+		*addrlen = mrail_domain->addrlen;
 		return -FI_ETOOSMALL;
+	}
 
 	for (i = 0; i < mrail_ep->num_eps; i++) {
 		rail_addrlen = *addrlen - offset;
@@ -590,6 +592,9 @@ static int mrail_getname(fid_t fid, void *addr, size_t *addrlen)
 		}
 		offset += rail_addrlen;
 	}
+
+	assert(offset == mrail_domain->addrlen);
+	*addrlen = mrail_domain->addrlen;
 	return 0;
 }
 
