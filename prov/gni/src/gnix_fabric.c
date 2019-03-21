@@ -3,6 +3,7 @@
  * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
  *                         All rights reserved.
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
+ * Copyright (c) 2019 Triad National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -62,6 +63,7 @@
 #include "gnix_nameserver.h"
 #include "gnix_wait.h"
 #include "gnix_xpmem.h"
+#include "gnix_mbox_allocator.h"
 
 /* check if only one bit of a set is enabled, when one is required */
 #define IS_EXCLUSIVE(x) \
@@ -774,6 +776,8 @@ GNI_INI
 
 	if (getenv("GNIX_DISABLE_XPMEM") != NULL)
 		gnix_xpmem_disabled = true;
+	if (getenv("GNIX_MBOX_FALLBACK_DISABLE") != NULL)
+		gnix_mbox_alloc_allow_fallback = false;
 
 	return (provider);
 }
