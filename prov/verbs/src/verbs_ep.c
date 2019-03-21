@@ -631,7 +631,11 @@ static int fi_ibv_ep_enable(struct fid_ep *ep_fid)
 			/* Override receive function pointers to prevent the user from
 			 * posting Receive WRs to a QP where a SRQ is attached to it */
 			if (domain->use_xrc) {
-				*ep->util_ep.ep_fid.msg = fi_ibv_msg_srq_xrc_ep_msg_ops;
+				if (domain->util_domain.threading == FI_THREAD_SAFE)
+					*ep->util_ep.ep_fid.msg = fi_ibv_msg_srq_xrc_ep_msg_ops_ts;
+				else
+					*ep->util_ep.ep_fid.msg = fi_ibv_msg_srq_xrc_ep_msg_ops;
+
 				return fi_ibv_ep_enable_xrc(ep);
 			} else {
 				ep->util_ep.ep_fid.msg->recv = fi_no_msg_recv;

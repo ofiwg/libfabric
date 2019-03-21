@@ -662,6 +662,7 @@ const struct fi_ops_msg fi_ibv_dgram_msg_ops;
 const struct fi_ops_msg fi_ibv_msg_xrc_ep_msg_ops;
 const struct fi_ops_msg fi_ibv_msg_xrc_ep_msg_ops_ts;
 const struct fi_ops_msg fi_ibv_msg_srq_xrc_ep_msg_ops;
+const struct fi_ops_msg fi_ibv_msg_srq_xrc_ep_msg_ops_ts;
 struct fi_ops_rma fi_ibv_msg_ep_rma_ops_ts;
 struct fi_ops_rma fi_ibv_msg_ep_rma_ops;
 struct fi_ops_rma fi_ibv_msg_xrc_ep_rma_ops_ts;

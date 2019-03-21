@@ -344,6 +344,45 @@ static ssize_t fi_ibv_msg_xrc_ep_injectdata(struct fid_ep *ep_fid, const void *b
 	return fi_ibv_send_buf_inline(&ep->base_ep, &wr, buf, len);
 }
 
+static ssize_t
+fi_ibv_msg_xrc_ep_inject_fast(struct fid_ep *ep_fid, const void *buf,
+			      size_t len, fi_addr_t dest_addr)
+{
+	struct fi_ibv_xrc_ep *ep = container_of(ep_fid, struct fi_ibv_xrc_ep,
+						base_ep.util_ep.ep_fid);
+
+	ep->base_ep.wrs->sge.addr = (uintptr_t) buf;
+	ep->base_ep.wrs->sge.length = (uint32_t) len;
+
+	FI_IBV_SET_REMOTE_SRQN(ep->base_ep.wrs->msg_wr, ep->peer_srqn);
+
+	return fi_ibv_send_poll_cq_if_needed(&ep->base_ep,
+					     &ep->base_ep.wrs->msg_wr);
+}
+
+static ssize_t
+fi_ibv_msg_xrc_ep_injectdata_fast(struct fid_ep *ep_fid, const void *buf,
+				  size_t len, uint64_t data,
+				  fi_addr_t dest_addr)
+{
+	ssize_t ret;
+	struct fi_ibv_xrc_ep *ep = container_of(ep_fid, struct fi_ibv_xrc_ep,
+						base_ep.util_ep.ep_fid);
+
+	ep->base_ep.wrs->msg_wr.imm_data = htonl((uint32_t)data);
+	ep->base_ep.wrs->msg_wr.opcode = IBV_WR_SEND_WITH_IMM;
+
+	FI_IBV_SET_REMOTE_SRQN(ep->base_ep.wrs->msg_wr, ep->peer_srqn);
+
+	ep->base_ep.wrs->sge.addr = (uintptr_t) buf;
+	ep->base_ep.wrs->sge.length = (uint32_t) len;
+
+	ret = fi_ibv_send_poll_cq_if_needed(&ep->base_ep,
+					    &ep->base_ep.wrs->msg_wr);
+	ep->base_ep.wrs->msg_wr.opcode = IBV_WR_SEND;
+	return ret;
+}
+
 /* NOTE: Initially the XRC endpoint must be used with a SRQ. */
 const struct fi_ops_msg fi_ibv_msg_xrc_ep_msg_ops_ts = {
 	.size = sizeof(struct fi_ops_msg),
@@ -371,7 +410,7 @@ const struct fi_ops_msg fi_ibv_msg_xrc_ep_msg_ops = {
 	.injectdata = fi_no_msg_injectdata,
 };
 
-const struct fi_ops_msg fi_ibv_msg_srq_xrc_ep_msg_ops = {
+const struct fi_ops_msg fi_ibv_msg_srq_xrc_ep_msg_ops_ts = {
 	.size = sizeof(struct fi_ops_msg),
 	.recv = fi_no_msg_recv,
 	.recvv = fi_no_msg_recvv,
@@ -382,4 +421,17 @@ const struct fi_ops_msg fi_ibv_msg_srq_xrc_ep_msg_ops = {
 	.inject = fi_ibv_msg_xrc_ep_inject,
 	.senddata = fi_ibv_msg_xrc_ep_senddata,
 	.injectdata = fi_ibv_msg_xrc_ep_injectdata,
+};
+
+const struct fi_ops_msg fi_ibv_msg_srq_xrc_ep_msg_ops = {
+	.size = sizeof(struct fi_ops_msg),
+	.recv = fi_no_msg_recv,
+	.recvv = fi_no_msg_recvv,
+	.recvmsg = fi_no_msg_recvmsg,
+	.send = fi_ibv_msg_xrc_ep_send,
+	.sendv = fi_ibv_msg_xrc_ep_sendv,
+	.sendmsg = fi_ibv_msg_xrc_ep_sendmsg,
+	.inject = fi_ibv_msg_xrc_ep_inject_fast,
+	.senddata = fi_ibv_msg_xrc_ep_senddata,
+	.injectdata = fi_ibv_msg_xrc_ep_injectdata_fast,
 };
