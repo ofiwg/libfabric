@@ -65,7 +65,7 @@ static int mrail_av_insert(struct fid_av *av_fid, const void *addr, size_t count
 	struct mrail_av *mrail_av;
 	struct mrail_peer_info *peer_info;
 	size_t i, j, offset, num_inserted = 0;
-	fi_addr_t index;
+	fi_addr_t index, index_rail0 = FI_ADDR_NOTAVAIL;
 	int ret;
 
 	mrail_av = container_of(av_fid, struct mrail_av, util_av.av_fid);
@@ -92,26 +92,31 @@ static int mrail_av_insert(struct fid_av *av_fid, const void *addr, size_t count
 					"addr", addr);
 			ret = fi_av_insert(mrail_av->avs[j],
 					   (char *)addr + offset, 1,
-					   NULL, flags, NULL);
+					   &index, flags, NULL);
 			if (ret != 1) {
 				free(peer_info);
 				return ret;
 			}
 			offset += mrail_av->rail_addrlen[j];
+			if (j == 0)
+				index_rail0 = index;
+			assert(index == index_rail0);
 		}
+
+		peer_info->addr = index_rail0;
 		ret = ofi_av_insert_addr(&mrail_av->util_av, peer_info,
 					 &index);
-		if (fi_addr) {
-			if (ret) {
-				FI_WARN(&mrail_prov, FI_LOG_AV, \
-					"Unable to get rail fi_addr\n");
-				peer_info->addr = FI_ADDR_NOTAVAIL;
-			} else {
-				peer_info->addr = index;
-				num_inserted++;
-			}
-			fi_addr[i] = peer_info->addr;
+		if (ret) {
+			FI_WARN(&mrail_prov, FI_LOG_AV, \
+				"Unable to get rail fi_addr\n");
+			index = FI_ADDR_NOTAVAIL;
+		} else {
+			assert(index == index_rail0);
+			num_inserted++;
 		}
+
+		if (fi_addr)
+			fi_addr[i] = index;
 	}
 
 	free(peer_info);
