@@ -2,6 +2,7 @@
  * Copyright (c) 2015-2018 Los Alamos National Security, LLC.
  *                         All rights reserved.
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
+ * Copyright (c) 2019 Triad National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -2160,7 +2161,7 @@ static void cancel_sep_send_sep(int index)
 	cr_assert(ret == 0, "fi_send failed err:%ld", ret);
 
 	ret = fi_cancel(&tx_ep[0][index]->fid, target);
-	fprintf(stderr, "ret = %d %s\n", ret, fi_strerror(-ret));
+	fprintf(stderr, "ret = %ld %s\n", ret, fi_strerror(-ret));
 	cr_assert(ret == FI_SUCCESS, "fi_cancel failed");
 
 	/* check for event */
