@@ -57,6 +57,10 @@ static void *rxm_conn_eq_read(void *arg);
  * Connection map
  */
 
+char *rxm_cm_state_str[] = {
+	RXM_CM_STATES(OFI_STR)
+};
+
 /* Caller should hold cmap->lock */
 static void rxm_cmap_set_key(struct rxm_cmap_handle *handle)
 {
@@ -102,7 +106,7 @@ static void rxm_cmap_init_handle(struct rxm_cmap_handle *handle,
 				  struct rxm_cmap_peer *peer)
 {
 	handle->cmap = cmap;
-	handle->state = state;
+	RXM_CM_UPDATE_STATE(handle, state);
 	rxm_cmap_set_key(handle);
 	handle->fi_addr = fi_addr;
 	handle->peer = peer;
@@ -133,7 +137,8 @@ static int rxm_cmap_del_handle(struct rxm_cmap_handle *handle)
 	}
 	rxm_cmap_clear_key(handle);
 
-	handle->state = RXM_CMAP_SHUTDOWN;
+	RXM_CM_UPDATE_STATE(handle, RXM_CMAP_SHUTDOWN);
+
 	/* Signal CM thread to delete the handle. This is required
 	 * so that the CM thread handles any pending events for this
 	 * ep correctly. Handle would be freed finally after processing the
@@ -442,7 +447,7 @@ void rxm_cmap_process_conn_notify(struct rxm_cmap *cmap,
 {
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 	       "Processing connection notification for handle: %p.\n", handle);
-	handle->state = RXM_CMAP_CONNECTED;
+	RXM_CM_UPDATE_STATE(handle, RXM_CMAP_CONNECTED);
 	rxm_conn_connected_handler(handle);
 }
 
@@ -462,7 +467,8 @@ void rxm_cmap_process_connect(struct rxm_cmap *cmap,
 	} else {
 		assert(handle->state == RXM_CMAP_CONNREQ_RECV);
 	}
-	handle->state = RXM_CMAP_CONNECTED_NOTIFY;
+	RXM_CM_UPDATE_STATE(handle, RXM_CMAP_CONNECTED_NOTIFY);
+
 	/* Set the remote key to the inject packets */
 	if (cmap->ep->domain->threading != FI_THREAD_SAFE) {
 		rxm_conn->inject_pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
@@ -581,7 +587,7 @@ int rxm_cmap_process_connreq(struct rxm_cmap *cmap, void *addr,
 		}
 		/* Fall through */
 	case RXM_CMAP_IDLE:
-		handle->state = RXM_CMAP_CONNREQ_RECV;
+		RXM_CM_UPDATE_STATE(handle, RXM_CMAP_CONNREQ_RECV);
 		/* Fall through */
 	case RXM_CMAP_CONNREQ_RECV:
 		*handle_ret = handle;
@@ -622,7 +628,7 @@ int rxm_cmap_connect(struct rxm_ep *rxm_ep, fi_addr_t fi_addr,
 		if (ret) {
 			rxm_cmap_del_handle(handle);
 		} else {
-			handle->state = RXM_CMAP_CONNREQ_SENT;
+			RXM_CM_UPDATE_STATE(handle, RXM_CMAP_CONNREQ_SENT);
 			ret = -FI_EAGAIN;
 		}
 		break;

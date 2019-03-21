@@ -166,15 +166,29 @@ enum rxm_cmap_signal {
 	RXM_CMAP_EXIT,
 };
 
+#define RXM_CM_STATES(FUNC)		\
+	FUNC(RXM_CMAP_IDLE),		\
+	FUNC(RXM_CMAP_CONNREQ_SENT),	\
+	FUNC(RXM_CMAP_CONNREQ_RECV),	\
+	FUNC(RXM_CMAP_ACCEPT),		\
+	FUNC(RXM_CMAP_CONNECTED_NOTIFY),\
+	FUNC(RXM_CMAP_CONNECTED),	\
+	FUNC(RXM_CMAP_SHUTDOWN),	\
+
 enum rxm_cmap_state {
-	RXM_CMAP_IDLE,
-	RXM_CMAP_CONNREQ_SENT,
-	RXM_CMAP_CONNREQ_RECV,
-	RXM_CMAP_ACCEPT,
-	RXM_CMAP_CONNECTED_NOTIFY,
-	RXM_CMAP_CONNECTED,
-	RXM_CMAP_SHUTDOWN,
+	RXM_CM_STATES(OFI_ENUM_VAL)
 };
+
+extern char *rxm_cm_state_str[];
+
+#define RXM_CM_UPDATE_STATE(handle, new_state)				\
+	do {								\
+		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "[CM] handle: "	\
+		       "%p %s -> %s\n",	handle,				\
+		       rxm_cm_state_str[handle->state],			\
+		       rxm_cm_state_str[new_state]);			\
+		handle->state = new_state;				\
+	} while (0)
 
 struct rxm_cmap_handle {
 	struct rxm_cmap *cmap;
