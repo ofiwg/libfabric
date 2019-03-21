@@ -3,7 +3,8 @@
  * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
  *                         All rights reserved.
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
- * Copyright (c) 2019 Triad National Security, LLC. All rights reserved.
+ * Copyrigth (c) 2019      Triad National Security, LLC. All rights
+ *                         reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -251,8 +252,7 @@ static struct fi_info *_gnix_allocinfo(void)
 	gnix_info->ep_attr->type = FI_EP_RDM;
 	gnix_info->ep_attr->protocol = FI_PROTO_GNI;
 	gnix_info->ep_attr->max_msg_size = GNIX_MAX_MSG_SIZE;
-	/* TODO: need to work on this */
-	gnix_info->ep_attr->mem_tag_format = 0x0;
+	gnix_info->ep_attr->mem_tag_format = FI_TAG_GENERIC;
 	gnix_info->ep_attr->tx_ctx_cnt = 1;
 	gnix_info->ep_attr->rx_ctx_cnt = 1;
 
