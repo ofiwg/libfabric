@@ -2,6 +2,7 @@
  * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
  *                         All rights reserved.
  * Copyright (c) 2015,2017-2018 Cray Inc.  All rights reserved.
+ * Copyright (c) 2019 Triad National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -40,6 +41,8 @@
 #include "gnix_mbox_allocator.h"
 #include "gnix_nic.h"
 #include "fi_ext_gni.h"
+
+bool gnix_mbox_alloc_allow_fallback = true;
 
 /**
  * Will attempt to find a directory in the hugetlbfs with the given page size.
@@ -195,6 +198,9 @@ static int __open_huge_page(struct gnix_mbox_alloc_handle *handle)
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
+	handle->fd = -1;
+	handle->filename = NULL;
+
 	ret = __generate_file_name(handle->page_size, &filename);
 	if (ret < 0) {
 		GNIX_WARN(FI_LOG_EP_CTRL, "Error in generating file name.\n");
@@ -296,7 +302,7 @@ static int __create_slab(struct gnix_mbox_alloc_handle *handle)
 	char error_buf[256];
 	char *error;
 	size_t total_size;
-	int ret;
+	int ret, mflags;
 	int vmdh_index = -1;
 	int flags = GNI_MEM_READWRITE;
 	struct gnix_auth_key *info;
@@ -328,7 +334,11 @@ static int __create_slab(struct gnix_mbox_alloc_handle *handle)
 		goto err_bitmap_calloc;
 	}
 
-	slab->base = mmap(0, total_size, (PROT_READ | PROT_WRITE), MAP_SHARED,
+	mflags = MAP_SHARED;
+	if (handle->fd == -1)
+		mflags |= MAP_ANONYMOUS;
+
+	slab->base = mmap(0, total_size, (PROT_READ | PROT_WRITE), mflags,
 			  handle->fd, handle->last_offset);
 	if (slab->base == MAP_FAILED) {
 		error = strerror_r(errno, error_buf, sizeof(error_buf));
@@ -620,25 +630,50 @@ int _gnix_mbox_allocator_create(struct gnix_nic *nic,
 	fastlock_init(&handle->lock);
 
 	ret = __open_huge_page(handle);
-	if (ret) {
+	if (ret == FI_SUCCESS) {
+		ret = __create_slab(handle);
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL, "Slab creation failed.\n");
+		}
+	} else {
 		GNIX_WARN(FI_LOG_EP_CTRL, "Error opening huge page.\n");
-		goto err_huge_page;
 	}
 
-	ret = __create_slab(handle);
-	if (ret) {
-		GNIX_WARN(FI_LOG_EP_CTRL, "Slab creation failed.\n");
-		goto err_slab_creation;
+	/*
+	 * try plan B - try to use anonymous mapping (base page size).
+	 * If a file was successfully opened, close fd and free filename
+	 * field in the handle.
+	 */
+
+	if ((ret != FI_SUCCESS) &&
+		(gnix_mbox_alloc_allow_fallback == true)) {
+		if (handle->filename != NULL) {
+			free(handle->filename);
+			handle->filename = NULL;
+		}
+		if (handle->fd != -1) {
+			ret = close(handle->fd);
+			handle->fd = -1;
+			if (ret) {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+				 "Error closing huge page - %d\n",
+				  ret);
+			}
+		}
+
+		ret = __create_slab(handle);
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				"Slab(anon) creation failed.\n");
+		}
 	}
 
-	*alloc_handle = handle;
+	if (ret == FI_SUCCESS) {
+		*alloc_handle = handle;
+	} else {
+		free(handle);
+	}
 
-	return ret;
-
-err_slab_creation:
-	free(handle->filename);
-err_huge_page:
-	free(handle);
 	return ret;
 }
 
@@ -649,7 +684,7 @@ int _gnix_mbox_allocator_destroy(struct gnix_mbox_alloc_handle *alloc_handle)
 	char error_buf[256];
 	int position;
 	char *error;
-	int ret;
+	int ret = FI_SUCCESS;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
@@ -677,9 +712,12 @@ int _gnix_mbox_allocator_destroy(struct gnix_mbox_alloc_handle *alloc_handle)
 				  "Error destroying slab.\n");
 	}
 
-	free(alloc_handle->filename);
+	if (alloc_handle->filename != NULL)
+		free(alloc_handle->filename);
 
-	ret = close(alloc_handle->fd);
+	if (alloc_handle->fd != -1)
+		ret = close(alloc_handle->fd);
+
 	if (ret) {
 		error = strerror_r(errno, error_buf, sizeof(error_buf));
 		GNIX_WARN(FI_LOG_EP_CTRL,
