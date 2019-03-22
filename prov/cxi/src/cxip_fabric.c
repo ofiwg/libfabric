@@ -732,7 +732,7 @@ static void fi_cxip_fini(void)
 struct fi_provider cxip_prov = {
 	.name = cxip_prov_name,
 	.version = FI_VERSION(CXIP_MAJOR_VERSION, CXIP_MINOR_VERSION),
-	.fi_version = FI_VERSION(1, 6),
+	.fi_version = FI_VERSION(1, 7),
 	.getinfo = cxip_getinfo,
 	.fabric = cxip_fabric,
 	.cleanup = fi_cxip_fini
