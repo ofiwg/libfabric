@@ -239,12 +239,14 @@ union rxm_cm_data {
 		uint8_t op_version;
 		uint16_t port;
 		uint8_t padding[2];
-		uint64_t eager_size;
+		uint32_t eager_size;
+		uint32_t rx_size;
 		uint64_t client_conn_id;
 	} connect;
 
 	struct _accept {
 		uint64_t server_conn_id;
+		uint32_t rx_size;
 	} accept;
 
 	struct _reject {
@@ -258,9 +260,6 @@ int rxm_cmap_update(struct rxm_cmap *cmap, const void *addr, fi_addr_t fi_addr);
 
 void rxm_cmap_process_conn_notify(struct rxm_cmap *cmap,
 				  struct rxm_cmap_handle *handle);
-void rxm_cmap_process_connect(struct rxm_cmap *cmap,
-			      struct rxm_cmap_handle *handle,
-			      uint64_t *remote_key);
 void rxm_cmap_process_reject(struct rxm_cmap *cmap,
 			     struct rxm_cmap_handle *handle,
 			     enum rxm_cmap_reject_reason cm_reject_reason);
@@ -701,6 +700,7 @@ struct rxm_conn {
 	/* This is saved MSG EP fid, that hasn't been closed during
 	 * handling of CONN_RECV in RXM_CMAP_CONNREQ_SENT for passive side */
 	struct fid_ep *saved_msg_ep;
+	uint32_t rndv_tx_credits;
 };
 
 extern struct fi_provider rxm_prov;
