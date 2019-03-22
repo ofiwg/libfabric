@@ -70,7 +70,7 @@ int mrail_cq_process_buf_recv(struct fi_cq_tagged_entry *comp,
 
 		recv_ctx->context = recv;
 
-		ret = fi_recvmsg(recv_ctx->ep, &msg, FI_CLAIM);
+		ret = fi_recvmsg(recv_ctx->ep, &msg, FI_CLAIM | FI_COMPLETION);
 		if (ret) {
 			FI_WARN(&mrail_prov, FI_LOG_CQ,
 				"Unable to claim buffered recv\n");
