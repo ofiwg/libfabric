@@ -189,7 +189,8 @@ static int rdvs_issue_get(struct cxip_req *req, struct cxip_ux_send *ux_send)
 {
 
 	union c_fab_addr dfa;
-	uint32_t pid_granule, pid_idx, idx_ext;
+	uint32_t pid_granule, pid_idx;
+	uint8_t idx_ext;
 	union c_cmdu cmd = {};
 	int ret;
 	struct cxip_rx_ctx *rxc = req->recv.rxc;
@@ -1375,7 +1376,7 @@ static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 	union c_cmdu cmd = {};
 	struct cxip_addr caddr;
 	union c_fab_addr dfa;
-	uint32_t idx_ext;
+	uint8_t idx_ext;
 	uint32_t pid_granule;
 	uint32_t pid_idx;
 	uint64_t rx_id;

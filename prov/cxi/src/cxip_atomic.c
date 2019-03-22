@@ -362,7 +362,7 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 	union c_cmdu cmd = {};
 	union c_cmdu state = {};
 	union c_fab_addr dfa;
-	uint32_t idx_ext;
+	uint8_t idx_ext;
 	uint32_t pid_granule;
 	uint32_t pid_idx;
 	uint32_t result_lac = 0;

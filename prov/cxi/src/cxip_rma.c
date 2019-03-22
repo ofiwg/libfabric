@@ -69,7 +69,7 @@ static ssize_t _cxip_rma_op(enum cxip_rma_op op, struct fid_ep *ep,
 	union c_cmdu cmd = {};
 	struct cxip_addr caddr;
 	union c_fab_addr dfa;
-	uint32_t idx_ext;
+	uint8_t idx_ext;
 	uint32_t pid_granule;
 	uint32_t pid_idx;
 	uint32_t map_flags = CXI_MAP_PIN | CXI_MAP_NTA;
