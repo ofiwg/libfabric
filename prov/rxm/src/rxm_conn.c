@@ -1029,12 +1029,25 @@ rxm_conn_av_updated_handler(struct rxm_cmap_handle *handle)
 	}
 }
 
+static size_t rxm_conn_get_rx_size(struct rxm_ep *rxm_ep,
+                                  struct fi_info *msg_info)
+{
+       if (msg_info->ep_attr->rx_ctx_cnt == FI_SHARED_CONTEXT)
+               return MAX(MIN(16, msg_info->rx_attr->size),
+                          (msg_info->rx_attr->size /
+                           rxm_ep->util_ep.av->count));
+       else
+               return msg_info->rx_attr->size;
+}
+
 static struct rxm_cmap_handle *rxm_conn_alloc(struct rxm_cmap *cmap)
 {
+	struct rxm_ep *rxm_ep = container_of(cmap->ep, struct rxm_ep, util_ep);
 	struct rxm_conn *rxm_conn = calloc(1, sizeof(*rxm_conn));
 
 	if (OFI_UNLIKELY(!rxm_conn))
 		return NULL;
+	rxm_conn->rndv_tx_credits = rxm_conn_get_rx_size(rxm_ep, rxm_ep->msg_info);
 
 	return &rxm_conn->handle;
 }

@@ -697,6 +697,7 @@ struct rxm_conn {
 	/* This is saved MSG EP fid, that hasn't been closed during
 	 * handling of CONN_RECV in RXM_CMAP_CONNREQ_SENT for passive side */
 	struct fid_ep *saved_msg_ep;
+	uint32_t rndv_tx_credits;
 };
 
 extern struct fi_provider rxm_prov;
