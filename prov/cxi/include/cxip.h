@@ -509,7 +509,7 @@ struct cxip_cq {
 	size_t evtq_buf_len;
 	struct cxi_md *evtq_buf_md;
 	fastlock_t req_lock;
-	struct util_buf_pool *req_pool;	// utility pool for cxip_req
+	struct ofi_bufpool *req_pool;	// utility pool for cxip_req
 	struct indexer req_table;	// fast lookup index table for cxip_req
 };
 

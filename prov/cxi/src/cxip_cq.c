@@ -36,7 +36,7 @@ struct cxip_req *cxip_cq_req_alloc(struct cxip_cq *cq, int remap)
 
 	fastlock_acquire(&cq->req_lock);
 
-	req = (struct cxip_req *)util_buf_alloc(cq->req_pool);
+	req = (struct cxip_req *)ofi_buf_alloc(cq->req_pool);
 	if (!req) {
 		CXIP_LOG_ERROR("Failed to allocate request\n");
 		goto out;
@@ -49,7 +49,7 @@ struct cxip_req *cxip_cq_req_alloc(struct cxip_cq *cq, int remap)
 		if (req->req_id < 0 || req->req_id >= (1 << 16)) {
 			CXIP_LOG_ERROR("Failed to map request: %d\n",
 				       req->req_id);
-			util_buf_release(cq->req_pool, req);
+			ofi_buf_free(req);
 			req = NULL;
 			goto out;
 		}
@@ -79,7 +79,7 @@ void cxip_cq_req_free(struct cxip_req *req)
 			CXIP_LOG_ERROR("Failed to free request\n");
 	}
 
-	util_buf_release(req->cq->req_pool, req);
+	ofi_buf_free(req);
 
 	fastlock_release(&cq->req_lock);
 }
@@ -606,8 +606,8 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq)
 	}
 
 	/* TODO set buffer pool size with CQ attrs */
-	ret = util_buf_pool_create(&cxi_cq->req_pool, sizeof(struct cxip_req),
-				   8, 0, 64);
+	ret = ofi_bufpool_create(&cxi_cq->req_pool, sizeof(struct cxip_req),
+				 8, UINT16_MAX, 64);
 	if (ret) {
 		ret = -FI_ENOMEM;
 		goto free_evtq;
@@ -641,7 +641,7 @@ static void cxip_cq_disable(struct cxip_cq *cxi_cq)
 	if (!cxi_cq->enabled)
 		goto unlock;
 
-	util_buf_pool_destroy(cxi_cq->req_pool);
+	ofi_bufpool_destroy(cxi_cq->req_pool);
 
 	cxil_destroy_evtq(cxi_cq->evtq);
 
