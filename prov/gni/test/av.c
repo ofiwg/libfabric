@@ -3,6 +3,8 @@
  *                         All rights reserved.
  * Copyright (c) 2015-2017 Cray Inc.  All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2019      Triad National Security, LLC.
+ *                         All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -315,9 +317,21 @@ static void addr_insert_test(void)
 	cr_assert_eq(ret, FI_SUCCESS);
 }
 
+static void addr_insert_null_fi_addr_test(void)
+{
+	int ret;
+	fi_addr_t *addresses = NULL;
+
+	ret = fi_av_insert(av, (void *) simple_ep_names, SIMPLE_ADDR_COUNT,
+			   addresses, 0, NULL);
+	cr_assert_eq(ret, -FI_EINVAL, "%d", ret);
+
+}
+
 Test(av_full_map, insert_addr)
 {
 	addr_insert_test();
+	addr_insert_null_fi_addr_test();
 }
 
 Test(av_full_table, insert_addr)

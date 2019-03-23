@@ -2,6 +2,8 @@
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
  *                         All rights reserved.
+ * Copyright (c) 2019      Triad National Security, LLC.
+ *                         All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -614,6 +616,9 @@ DIRECT_FN STATIC int gnix_av_insert(struct fid_av *av, const void *addr,
 	av_priv = container_of(av, struct gnix_fid_av, av_fid);
 
 	if (!av_priv)
+		return -FI_EINVAL;
+
+	if ((av_priv->type == FI_AV_MAP) && (fi_addr == NULL))
 		return -FI_EINVAL;
 
 	if ((flags & FI_SYNC_ERR) && (context == NULL)) {
