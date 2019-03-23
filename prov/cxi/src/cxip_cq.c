@@ -84,59 +84,6 @@ void cxip_cq_req_free(struct cxip_req *req)
 	fastlock_release(&cq->req_lock);
 }
 
-void cxip_cq_add_tx_ctx(struct cxip_cq *cq, struct cxip_tx_ctx *tx_ctx)
-{
-	struct dlist_entry *entry;
-	struct cxip_tx_ctx *curr_ctx;
-
-	fastlock_acquire(&cq->list_lock);
-	for (entry = cq->tx_list.next; entry != &cq->tx_list;
-	     entry = entry->next) {
-		curr_ctx = container_of(entry, struct cxip_tx_ctx, cq_entry);
-		if (tx_ctx == curr_ctx)
-			goto out;
-	}
-	dlist_insert_tail(&tx_ctx->cq_entry, &cq->tx_list);
-	ofi_atomic_inc32(&cq->ref);
-out:
-	fastlock_release(&cq->list_lock);
-}
-
-void cxip_cq_remove_tx_ctx(struct cxip_cq *cq, struct cxip_tx_ctx *tx_ctx)
-{
-	fastlock_acquire(&cq->list_lock);
-	dlist_remove(&tx_ctx->cq_entry);
-	ofi_atomic_dec32(&cq->ref);
-	fastlock_release(&cq->list_lock);
-}
-
-void cxip_cq_add_rx_ctx(struct cxip_cq *cq, struct cxip_rx_ctx *rx_ctx)
-{
-	struct dlist_entry *entry;
-	struct cxip_rx_ctx *curr_ctx;
-
-	fastlock_acquire(&cq->list_lock);
-
-	for (entry = cq->rx_list.next; entry != &cq->rx_list;
-	     entry = entry->next) {
-		curr_ctx = container_of(entry, struct cxip_rx_ctx, cq_entry);
-		if (rx_ctx == curr_ctx)
-			goto out;
-	}
-	dlist_insert_tail(&rx_ctx->cq_entry, &cq->rx_list);
-	ofi_atomic_inc32(&cq->ref);
-out:
-	fastlock_release(&cq->list_lock);
-}
-
-void cxip_cq_remove_rx_ctx(struct cxip_cq *cq, struct cxip_rx_ctx *rx_ctx)
-{
-	fastlock_acquire(&cq->list_lock);
-	dlist_remove(&rx_ctx->cq_entry);
-	ofi_atomic_dec32(&cq->ref);
-	fastlock_release(&cq->list_lock);
-}
-
 static struct cxip_req *cxip_cq_event_req(struct cxip_cq *cq,
 					  const union c_event *event)
 {
@@ -175,15 +122,16 @@ static struct cxip_req *cxip_cq_event_req(struct cxip_cq *cq,
 	return NULL;
 }
 
-/* Caller must hold the cq->lock. */
 void cxip_cq_progress(struct cxip_cq *cq)
 {
 	const union c_event *event;
 	struct cxip_req *req;
 	int events = 0;
 
+	fastlock_acquire(&cq->lock);
+
 	if (!cq->enabled)
-		return;
+		goto out;
 
 	/* TODO Limit the maximum number of events processed */
 	while ((event = cxi_eq_get_event(cq->evtq))) {
@@ -196,6 +144,9 @@ void cxip_cq_progress(struct cxip_cq *cq)
 
 	if (events)
 		cxi_eq_ack_events(cq->evtq);
+
+out:
+	fastlock_release(&cq->lock);
 }
 
 static ssize_t cxip_cq_entry_size(struct cxip_cq *cxi_cq)
@@ -228,12 +179,13 @@ static ssize_t cxip_cq_entry_size(struct cxip_cq *cxi_cq)
 	return size;
 }
 
-/* Caller must hold the cq->lock.  This is true for all EQE callbacks. */
 static ssize_t _cxip_cq_write(struct cxip_cq *cq, fi_addr_t addr,
 			      const void *buf, size_t len)
 {
 	ssize_t ret;
 	struct cxip_cq_overflow_entry_t *overflow_entry;
+
+	fastlock_acquire(&cq->rb_lock);
 
 	if (ofi_rbfdavail(&cq->cq_rbfd) < len) {
 		CXIP_LOG_ERROR("Not enough space in CQ\n");
@@ -265,10 +217,11 @@ static ssize_t _cxip_cq_write(struct cxip_cq *cq, fi_addr_t addr,
 	if (cq->signal)
 		cxip_wait_signal(cq->waitset);
 out:
+	fastlock_release(&cq->rb_lock);
+
 	return ret;
 }
 
-/* caller must hold cq->lock */
 static int cxip_cq_report_context(struct cxip_cq *cq, fi_addr_t addr,
 				  struct cxip_req *req)
 {
@@ -279,7 +232,6 @@ static int cxip_cq_report_context(struct cxip_cq *cq, fi_addr_t addr,
 	return _cxip_cq_write(cq, addr, &cq_entry, sizeof(cq_entry));
 }
 
-/* caller must hold cq->lock */
 static uint64_t cxip_cq_sanitize_flags(uint64_t flags)
 {
 	return (flags & (FI_SEND | FI_RECV | FI_RMA | FI_ATOMIC | FI_MSG |
@@ -287,7 +239,6 @@ static uint64_t cxip_cq_sanitize_flags(uint64_t flags)
 			 FI_REMOTE_WRITE | FI_REMOTE_CQ_DATA | FI_MULTI_RECV));
 }
 
-/* caller must hold cq->lock */
 static int cxip_cq_report_msg(struct cxip_cq *cq, fi_addr_t addr,
 			      struct cxip_req *req)
 {
@@ -300,7 +251,6 @@ static int cxip_cq_report_msg(struct cxip_cq *cq, fi_addr_t addr,
 	return _cxip_cq_write(cq, addr, &cq_entry, sizeof(cq_entry));
 }
 
-/* caller must hold cq->lock */
 static int cxip_cq_report_data(struct cxip_cq *cq, fi_addr_t addr,
 			       struct cxip_req *req)
 {
@@ -315,7 +265,6 @@ static int cxip_cq_report_data(struct cxip_cq *cq, fi_addr_t addr,
 	return _cxip_cq_write(cq, addr, &cq_entry, sizeof(cq_entry));
 }
 
-/* caller must hold cq->lock */
 static int cxip_cq_report_tagged(struct cxip_cq *cq, fi_addr_t addr,
 				 struct cxip_req *req)
 {
@@ -357,6 +306,7 @@ static void cxip_cq_set_report_fn(struct cxip_cq *cxi_cq)
 	}
 }
 
+/* caller must hold cq->rb_lock */
 static inline void cxip_cq_copy_overflow_list(struct cxip_cq *cq, size_t count)
 {
 	size_t i;
@@ -382,6 +332,7 @@ static inline void cxip_cq_copy_overflow_list(struct cxip_cq *cq, size_t count)
 	}
 }
 
+/* caller must hold cq->rb_lock */
 static inline ssize_t cxip_cq_rbuf_read(struct cxip_cq *cq, void *buf,
 					size_t count, fi_addr_t *src_addr,
 					size_t cq_entry_len)
@@ -423,10 +374,9 @@ static ssize_t cxip_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 
 	if (cxi_cq->domain->progress_mode == FI_PROGRESS_MANUAL) {
 		while (1) {
-			fastlock_acquire(&cxi_cq->lock);
-
 			cxip_cq_progress(cxi_cq);
 
+			fastlock_acquire(&cxi_cq->rb_lock);
 			avail = ofi_rbfdused(&cxi_cq->cq_rbfd);
 			if (avail) {
 				ret = cxip_cq_rbuf_read(
@@ -435,7 +385,7 @@ static ssize_t cxip_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 					    (size_t)(avail / cq_entry_len)),
 					src_addr, cq_entry_len);
 			}
-			fastlock_release(&cxi_cq->lock);
+			fastlock_release(&cxi_cq->rb_lock);
 			if (ret)
 				return ret;
 
@@ -452,7 +402,7 @@ static ssize_t cxip_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 		}
 	} else {
 		do {
-			fastlock_acquire(&cxi_cq->lock);
+			fastlock_acquire(&cxi_cq->rb_lock);
 			ret = 0;
 			avail = ofi_rbfdused(&cxi_cq->cq_rbfd);
 			if (avail) {
@@ -464,7 +414,7 @@ static ssize_t cxip_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 			} else {
 				ofi_rbfdreset(&cxi_cq->cq_rbfd);
 			}
-			fastlock_release(&cxi_cq->lock);
+			fastlock_release(&cxi_cq->rb_lock);
 			if (ret && ret != -FI_EAGAIN)
 				return ret;
 
@@ -517,10 +467,10 @@ static ssize_t cxip_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 
 	cxi_cq = container_of(cq, struct cxip_cq, cq_fid);
 
-	fastlock_acquire(&cxi_cq->lock);
-
 	if (cxi_cq->domain->progress_mode == FI_PROGRESS_MANUAL)
 		cxip_cq_progress(cxi_cq);
+
+	fastlock_acquire(&cxi_cq->rb_lock);
 
 	if (ofi_rbused(&cxi_cq->cqerr_rb) >= sizeof(struct fi_cq_err_entry)) {
 		api_version = cxi_cq->domain->fab->fab_fid.api_version;
@@ -546,7 +496,7 @@ static ssize_t cxip_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 	} else {
 		ret = -FI_EAGAIN;
 	}
-	fastlock_release(&cxi_cq->lock);
+	fastlock_release(&cxi_cq->rb_lock);
 	return ret;
 }
 
@@ -668,7 +618,7 @@ static int cxip_cq_close(struct fid *fid)
 	ofi_rbfdfree(&cq->cq_rbfd);
 
 	fastlock_destroy(&cq->lock);
-	fastlock_destroy(&cq->list_lock);
+	fastlock_destroy(&cq->rb_lock);
 	fastlock_destroy(&cq->req_lock);
 	ofi_atomic_dec32(&cq->domain->ref);
 
@@ -684,9 +634,11 @@ static int cxip_cq_signal(struct fid_cq *cq)
 	cxi_cq = container_of(cq, struct cxip_cq, cq_fid);
 
 	ofi_atomic_set32(&cxi_cq->signaled, 1);
-	fastlock_acquire(&cxi_cq->lock);
+
+	fastlock_acquire(&cxi_cq->rb_lock);
 	ofi_rbfdsignal(&cxi_cq->cq_rbfd);
-	fastlock_release(&cxi_cq->lock);
+	fastlock_release(&cxi_cq->rb_lock);
+
 	return 0;
 }
 
@@ -852,8 +804,6 @@ int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	if (ret)
 		goto err3;
 
-	fastlock_init(&cxi_cq->lock);
-
 	switch (cxi_cq->attr.wait_obj) {
 	case FI_WAIT_NONE:
 	case FI_WAIT_UNSPEC:
@@ -896,9 +846,10 @@ int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	}
 
 	*cq = &cxi_cq->cq_fid;
-	ofi_atomic_inc32(&cxi_dom->ref);
-	fastlock_init(&cxi_cq->list_lock);
+	fastlock_init(&cxi_cq->lock);
+	fastlock_init(&cxi_cq->rb_lock);
 	fastlock_init(&cxi_cq->req_lock);
+	ofi_atomic_inc32(&cxi_dom->ref);
 
 	return 0;
 
@@ -913,13 +864,14 @@ err1:
 	return ret;
 }
 
-/* caller must hold cq->lock */
 int cxip_cq_report_error(struct cxip_cq *cq, struct cxip_req *req, size_t olen,
 			 int err, int prov_errno, void *err_data,
 			 size_t err_data_size)
 {
 	int ret;
 	struct fi_cq_err_entry err_entry;
+
+	fastlock_acquire(&cq->rb_lock);
 
 	if (ofi_rbavail(&cq->cqerr_rb) < sizeof(err_entry)) {
 		ret = -FI_ENOSPC;
@@ -945,5 +897,7 @@ int cxip_cq_report_error(struct cxip_cq *cq, struct cxip_req *req, size_t olen,
 	ofi_rbfdsignal(&cq->cq_rbfd);
 
 out:
+	fastlock_release(&cq->rb_lock);
+
 	return ret;
 }

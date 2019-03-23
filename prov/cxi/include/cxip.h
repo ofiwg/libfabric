@@ -490,7 +490,7 @@ struct cxip_cq {
 	struct ofi_ringbuf cqerr_rb;
 	struct dlist_entry overflow_list; // slower: used when ring overfills
 	fastlock_t lock;
-	fastlock_t list_lock;
+	fastlock_t rb_lock;
 
 	struct fid_wait *waitset;
 	int signal;
@@ -962,10 +962,6 @@ void cxip_tx_ctx_free(struct cxip_tx_ctx *tx_ctx);
 
 struct cxip_req *cxip_cq_req_alloc(struct cxip_cq *cq, int remap);
 void cxip_cq_req_free(struct cxip_req *req);
-void cxip_cq_add_tx_ctx(struct cxip_cq *cq, struct cxip_tx_ctx *tx_ctx);
-void cxip_cq_remove_tx_ctx(struct cxip_cq *cq, struct cxip_tx_ctx *tx_ctx);
-void cxip_cq_add_rx_ctx(struct cxip_cq *cq, struct cxip_rx_ctx *rx_ctx);
-void cxip_cq_remove_rx_ctx(struct cxip_cq *cq, struct cxip_rx_ctx *rx_ctx);
 void cxip_cq_progress(struct cxip_cq *cq);
 int cxip_cq_enable(struct cxip_cq *cxi_cq);
 int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,

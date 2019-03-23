@@ -115,7 +115,7 @@ struct fi_ops_cm cxip_ep_cm_ops = {
 static void cxip_tx_ctx_close(struct cxip_tx_ctx *tx_ctx)
 {
 	if (tx_ctx->comp.send_cq)
-		cxip_cq_remove_tx_ctx(tx_ctx->comp.send_cq, tx_ctx);
+		ofi_atomic_dec32(&tx_ctx->comp.send_cq->ref);
 
 	if (tx_ctx->comp.send_cntr)
 		cxip_cntr_remove_tx_ctx(tx_ctx->comp.send_cntr, tx_ctx);
@@ -137,7 +137,7 @@ static void cxip_tx_ctx_close(struct cxip_tx_ctx *tx_ctx)
 static void cxip_rx_ctx_close(struct cxip_rx_ctx *rx_ctx)
 {
 	if (rx_ctx->comp.recv_cq)
-		cxip_cq_remove_rx_ctx(rx_ctx->comp.recv_cq, rx_ctx);
+		ofi_atomic_dec32(&rx_ctx->comp.recv_cq->ref);
 
 	if (rx_ctx->comp.recv_cntr)
 		cxip_cntr_remove_rx_ctx(rx_ctx->comp.recv_cntr, rx_ctx);
@@ -233,7 +233,7 @@ static int cxip_ctx_bind_cq(struct fid *fid, struct fid *bfid, uint64_t flags)
 				tx_ctx->comp.send_cq_event = 1;
 		}
 
-		cxip_cq_add_tx_ctx(cxi_cq, tx_ctx);
+		ofi_atomic_inc32(&cxi_cq->ref);
 		break;
 
 	case FI_CLASS_RX_CTX:
@@ -244,7 +244,7 @@ static int cxip_ctx_bind_cq(struct fid *fid, struct fid *bfid, uint64_t flags)
 				rx_ctx->comp.recv_cq_event = 1;
 		}
 
-		cxip_cq_add_rx_ctx(cxi_cq, rx_ctx);
+		ofi_atomic_inc32(&cxi_cq->ref);
 		break;
 
 	default:
