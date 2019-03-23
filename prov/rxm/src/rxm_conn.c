@@ -221,6 +221,7 @@ static int rxm_conn_res_alloc(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn)
 	dlist_init(&rxm_conn->deferred_conn_entry);
 	dlist_init(&rxm_conn->deferred_tx_queue);
 	dlist_init(&rxm_conn->sar_rx_msg_list);
+	dlist_init(&rxm_conn->sar_deferred_rx_msg_list);
 
 	if (rxm_ep->util_ep.domain->threading != FI_THREAD_SAFE) {
 		rxm_conn->inject_pkt =

@@ -711,6 +711,7 @@ struct rxm_conn {
 	struct dlist_entry deferred_conn_entry;
 	struct dlist_entry deferred_tx_queue;
 	struct dlist_entry sar_rx_msg_list;
+	struct dlist_entry sar_deferred_rx_msg_list;
 
 	/* This is saved MSG EP fid, that hasn't been closed during
 	 * handling of CONN_RECV in RXM_CMAP_CONNREQ_SENT for passive side */
