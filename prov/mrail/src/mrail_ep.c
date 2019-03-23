@@ -370,7 +370,7 @@ mrail_send_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	msg.context	= tx_buf;
 	msg.data	= data;
 
-	if (len < mrail_ep->rails[i].info->tx_attr->inject_size)
+	if (len + iov_dest[0].iov_len < mrail_ep->rails[i].info->tx_attr->inject_size)
 		flags |= FI_INJECT;
 
 	FI_DBG(&mrail_prov, FI_LOG_EP_DATA, "Posting send of length: %" PRIu64
@@ -429,7 +429,7 @@ mrail_tsend_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	msg.context	= tx_buf;
 	msg.data	= data;
 
-	if (len < mrail_ep->rails[i].info->tx_attr->inject_size)
+	if (len + iov_dest[0].iov_len < mrail_ep->rails[i].info->tx_attr->inject_size)
 		flags |= FI_INJECT;
 
 	FI_DBG(&mrail_prov, FI_LOG_EP_DATA, "Posting tsend of length: %" PRIu64
