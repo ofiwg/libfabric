@@ -132,10 +132,9 @@ int cxip_rx_ctx_enable(struct cxip_rx_ctx *rxc)
 
 	fastlock_release(&rxc->lock);
 
-	/* Initialize tagged messaging */
-	ret = cxip_rxc_tagged_init(rxc);
+	ret = cxip_rxc_msg_init(rxc);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("cxip_rxc_tagged_init returned: %d\n", ret);
+		CXIP_LOG_DBG("cxip_rxc_msg_init returned: %d\n", ret);
 		goto free_tx_cmdq;
 	}
 
@@ -164,7 +163,7 @@ static void rx_ctx_disable(struct cxip_rx_ctx *rxc)
 	if (!rxc->enabled)
 		goto unlock;
 
-	cxip_rxc_tagged_fini(rxc);
+	cxip_rxc_msg_fini(rxc);
 
 	ret = rx_ctx_recv_fini(rxc);
 	if (ret)

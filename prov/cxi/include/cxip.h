@@ -572,8 +572,8 @@ struct cxip_ux_send {
 };
 
 enum oflow_buf_type {
-	EAGER_OFLOW_BUF = 1,
-	LONG_RDVS_OFLOW_BUF,
+	EAGER_OFLOW_BUF = 1, /* Locally managed eager data overflow buffer */
+	RDVS_OFLOW_BUF,      /* Truncating overflow buffer for rdvs */
 };
 
 /**
@@ -947,8 +947,8 @@ void cxip_rx_ctx_free(struct cxip_rx_ctx *rx_ctx);
 int cxip_tx_ctx_alloc_rdvs_id(struct cxip_tx_ctx *txc);
 int cxip_tx_ctx_free_rdvs_id(struct cxip_tx_ctx *txc, int tag);
 
-int cxip_rxc_tagged_init(struct cxip_rx_ctx *rxc);
-void cxip_rxc_tagged_fini(struct cxip_rx_ctx *rxc);
+int cxip_rxc_msg_init(struct cxip_rx_ctx *rxc);
+void cxip_rxc_msg_fini(struct cxip_rx_ctx *rxc);
 
 int cxip_rx_ctx_enable(struct cxip_rx_ctx *rxc);
 int cxip_tx_ctx_enable(struct cxip_tx_ctx *txc);
