@@ -493,6 +493,7 @@ struct rxm_tx_rndv_buf {
 	struct rxm_rx_buf *rx_buf;
 	struct fid_mr *mr[RXM_IOV_LIMIT];
 	uint8_t count;
+	struct rxm_conn *conn;
 
 	/* Must stay at bottom */
 	struct rxm_pkt pkt;
@@ -697,6 +698,10 @@ struct rxm_conn {
 	/* This is saved MSG EP fid, that hasn't been closed during
 	 * handling of CONN_RECV in RXM_CMAP_CONNREQ_SENT for passive side */
 	struct fid_ep *saved_msg_ep;
+
+	/* Limit RNDV sends based on peer rx queue size to avoid increased
+	 * memory usage at peer */
+	uint32_t rndv_tx_credits;
 };
 
 extern struct fi_provider rxm_prov;
@@ -730,7 +735,7 @@ void rxm_cq_write_error(struct util_cq *cq, struct util_cntr *cntr,
 void rxm_ep_progress(struct util_ep *util_ep);
 void rxm_ep_do_progress(struct util_ep *util_ep);
 
-int rxm_ep_prepost_buf(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep);
+int rxm_msg_ep_prepost_recv(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep);
 
 int rxm_ep_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 			enum fi_op op, struct fi_atomic_attr *attr,
@@ -1062,10 +1067,22 @@ rxm_tx_buf_release(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type, void *tx_
 	rxm_buf_release(&rxm_ep->buf_pools[type], (struct rxm_buf *)tx_buf);
 }
 
-static inline struct rxm_rx_buf *rxm_rx_buf_alloc(struct rxm_ep *rxm_ep)
+static inline struct rxm_rx_buf *
+rxm_rx_buf_alloc(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep, uint8_t repost)
 {
-	return (struct rxm_rx_buf *)
-		rxm_buf_alloc(&rxm_ep->buf_pools[RXM_BUF_POOL_RX]);
+	struct rxm_rx_buf *rx_buf =
+		(struct rxm_rx_buf *)rxm_buf_alloc(&rxm_ep->buf_pools[RXM_BUF_POOL_RX]);
+	if (OFI_LIKELY((long int)rx_buf)) {
+		assert(rx_buf->ep == rxm_ep);
+		rx_buf->hdr.state = RXM_RX;
+		rx_buf->msg_ep = msg_ep;
+		rx_buf->repost = repost;
+
+		if (!rxm_ep->srx_ctx)
+			rx_buf->conn = container_of(msg_ep->fid.context,
+						    struct rxm_conn, handle);
+	}
+	return rx_buf;
 }
 
 static inline void

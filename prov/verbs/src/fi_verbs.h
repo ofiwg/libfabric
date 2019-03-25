@@ -354,6 +354,12 @@ struct fi_ibv_domain {
 	fi_ibv_mr_reg_cb		internal_mr_reg;
 	fi_ibv_mr_dereg_cb		internal_mr_dereg;
 	struct fi_ibv_mem_notifier	*notifier;
+	int 				(*post_send)(struct ibv_qp *qp,
+						     struct ibv_send_wr *wr,
+						     struct ibv_send_wr **bad_wr);
+	int				(*poll_cq)(struct ibv_cq *cq,
+						   int num_entries,
+						   struct ibv_wc *wc);
 };
 
 struct fi_ibv_cq;
@@ -385,6 +391,10 @@ struct fi_ibv_cq {
 		fastlock_t		srq_list_lock;
 		struct dlist_entry	srq_list;
 	} xrc;
+	/* Track tx credits for verbs devices that can free-up send queue
+	 * space after processing WRs even if the app hasn't read the CQ.
+	 * Without this tracking we might overrun the CQ */
+	ofi_atomic32_t		credits;
 };
 
 int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
@@ -600,6 +610,7 @@ struct fi_ibv_ep {
 		struct ibv_send_wr	msg_wr;
 		struct ibv_sge		sge;
 	} *wrs;
+	size_t				rx_size;
 };
 
 struct fi_ibv_xrc_ep {
@@ -835,10 +846,13 @@ fi_ibv_process_wc(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 static inline int
 fi_ibv_process_wc_poll_new(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 {
+	struct fi_ibv_domain *domain = container_of(cq->util_cq.domain,
+						    struct fi_ibv_domain,
+						    util_domain);
 	if (wc->wr_id == VERBS_NO_COMP_FLAG) {
 		int ret;
 
-		while ((ret = ibv_poll_cq(cq->cq, 1, wc)) > 0) {
+		while ((ret = domain->poll_cq(cq->cq, 1, wc)) > 0) {
 			if (wc->wr_id != VERBS_NO_COMP_FLAG)
 				return 1;
 		}
@@ -921,17 +935,19 @@ static inline int fi_ibv_poll_reap_unsig_cq(struct fi_ibv_ep *ep)
 	int ret, i;
 	struct fi_ibv_cq *cq =
 		container_of(ep->util_ep.tx_cq, struct fi_ibv_cq, util_cq);
+	struct fi_ibv_domain *domain = container_of(cq->util_cq.domain,
+						    struct fi_ibv_domain,
+						    util_domain);
 
 	cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
 	/* TODO: retrieve WCs as much as possible in a single
 	 * ibv_poll_cq call */
 	while (1) {
-		ret = ibv_poll_cq(cq->cq, 10, wc);
+		ret = domain->poll_cq(cq->cq, 10, wc);
 		if (ret <= 0) {
 			cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
 			return ret;
 		}
-
 		for (i = 0; i < ret; i++) {
 			if (!fi_ibv_process_wc(cq, &wc[i]))
 				continue;
@@ -948,10 +964,12 @@ static inline int fi_ibv_poll_reap_unsig_cq(struct fi_ibv_ep *ep)
 static inline ssize_t
 fi_ibv_send_poll_cq_if_needed(struct fi_ibv_ep *ep, struct ibv_send_wr *wr)
 {
-	int ret;
 	struct ibv_send_wr *bad_wr;
+	struct fi_ibv_domain *domain =
+		container_of(ep->util_ep.domain, struct fi_ibv_domain, util_domain);
+	int ret;
 
-	ret = ibv_post_send(ep->ibv_qp, wr, &bad_wr);
+	ret = domain->post_send(ep->ibv_qp, wr, &bad_wr);
 	if (OFI_UNLIKELY(ret)) {
 		ret = fi_ibv_handle_post(ret);
 		if (OFI_LIKELY(ret == -FI_EAGAIN)) {
@@ -959,8 +977,8 @@ fi_ibv_send_poll_cq_if_needed(struct fi_ibv_ep *ep, struct ibv_send_wr *wr)
 			if (OFI_UNLIKELY(ret))
 				return -FI_EAGAIN;
 			/* Try again and return control to a caller */
-			ret = fi_ibv_handle_post(ibv_post_send(ep->ibv_qp, wr,
-							       &bad_wr));
+			ret = fi_ibv_handle_post(
+				domain->post_send(ep->ibv_qp, wr, &bad_wr));
 		}
 	}
 	return ret;
