@@ -57,6 +57,10 @@ static void *rxm_conn_eq_read(void *arg);
  * Connection map
  */
 
+char *rxm_cm_state_str[] = {
+	RXM_CM_STATES(OFI_STR)
+};
+
 /* Caller should hold cmap->lock */
 static void rxm_cmap_set_key(struct rxm_cmap_handle *handle)
 {
@@ -102,7 +106,7 @@ static void rxm_cmap_init_handle(struct rxm_cmap_handle *handle,
 				  struct rxm_cmap_peer *peer)
 {
 	handle->cmap = cmap;
-	handle->state = state;
+	RXM_CM_UPDATE_STATE(handle, state);
 	rxm_cmap_set_key(handle);
 	handle->fi_addr = fi_addr;
 	handle->peer = peer;
@@ -133,7 +137,8 @@ static int rxm_cmap_del_handle(struct rxm_cmap_handle *handle)
 	}
 	rxm_cmap_clear_key(handle);
 
-	handle->state = RXM_CMAP_SHUTDOWN;
+	RXM_CM_UPDATE_STATE(handle, RXM_CMAP_SHUTDOWN);
+
 	/* Signal CM thread to delete the handle. This is required
 	 * so that the CM thread handles any pending events for this
 	 * ep correctly. Handle would be freed finally after processing the
@@ -442,27 +447,30 @@ void rxm_cmap_process_conn_notify(struct rxm_cmap *cmap,
 {
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 	       "Processing connection notification for handle: %p.\n", handle);
-	handle->state = RXM_CMAP_CONNECTED;
+	RXM_CM_UPDATE_STATE(handle, RXM_CMAP_CONNECTED);
 	rxm_conn_connected_handler(handle);
 }
 
 /* Caller must hold cmap->lock */
 void rxm_cmap_process_connect(struct rxm_cmap *cmap,
 			      struct rxm_cmap_handle *handle,
-			      uint64_t *remote_key)
+			      union rxm_cm_data *cm_data)
 {
-	struct rxm_conn *rxm_conn;
+	struct rxm_conn *rxm_conn = container_of(handle, struct rxm_conn, handle);
 
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 	       "Processing connect for handle: %p\n", handle);
-	handle->state = RXM_CMAP_CONNECTED_NOTIFY;
-	if (remote_key)
-		handle->remote_key = *remote_key;
+	if (cm_data) {
+		assert(handle->state == RXM_CMAP_CONNREQ_SENT);
+		handle->remote_key = cm_data->accept.server_conn_id;
+		rxm_conn->rndv_tx_credits = cm_data->accept.rx_size;
+	} else {
+		assert(handle->state == RXM_CMAP_CONNREQ_RECV);
+	}
+	RXM_CM_UPDATE_STATE(handle, RXM_CMAP_CONNECTED_NOTIFY);
 
 	/* Set the remote key to the inject packets */
 	if (cmap->ep->domain->threading != FI_THREAD_SAFE) {
-		rxm_conn = container_of(handle, struct rxm_conn, handle);
-
 		rxm_conn->inject_pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
 		rxm_conn->inject_data_pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
 		rxm_conn->tinject_pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
@@ -579,7 +587,7 @@ int rxm_cmap_process_connreq(struct rxm_cmap *cmap, void *addr,
 		}
 		/* Fall through */
 	case RXM_CMAP_IDLE:
-		handle->state = RXM_CMAP_CONNREQ_RECV;
+		RXM_CM_UPDATE_STATE(handle, RXM_CMAP_CONNREQ_RECV);
 		/* Fall through */
 	case RXM_CMAP_CONNREQ_RECV:
 		*handle_ret = handle;
@@ -620,7 +628,7 @@ int rxm_cmap_connect(struct rxm_ep *rxm_ep, fi_addr_t fi_addr,
 		if (ret) {
 			rxm_cmap_del_handle(handle);
 		} else {
-			handle->state = RXM_CMAP_CONNREQ_SENT;
+			RXM_CM_UPDATE_STATE(handle, RXM_CMAP_CONNREQ_SENT);
 			ret = -FI_EAGAIN;
 		}
 		break;
@@ -1046,7 +1054,7 @@ rxm_conn_verify_cm_data(union rxm_cm_data *remote_cm_data,
 	}
 	if (remote_cm_data->connect.eager_size != local_cm_data->connect.eager_size) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "cm data eager_size mismatch "
-			"(local: %" PRIu64 ", remote:  %" PRIu64 ")\n",
+			"(local: %" PRIu32 ", remote:  %" PRIu32 ")\n",
 			local_cm_data->connect.eager_size,
 			remote_cm_data->connect.eager_size);
 		goto err;
@@ -1054,6 +1062,18 @@ rxm_conn_verify_cm_data(union rxm_cm_data *remote_cm_data,
 	return FI_SUCCESS;
 err:
 	return -FI_EINVAL;
+}
+
+static size_t rxm_conn_get_rx_size(struct rxm_ep *rxm_ep,
+				   struct fi_info *msg_info)
+{
+	/* TODO add env variable to tune the value for shared context case */
+	if (msg_info->ep_attr->rx_ctx_cnt == FI_SHARED_CONTEXT)
+		return MAX(MIN(16, msg_info->rx_attr->size),
+			   (msg_info->rx_attr->size /
+			    rxm_ep->util_ep.av->count));
+	else
+		return msg_info->rx_attr->size;
 }
 
 static int
@@ -1080,6 +1100,9 @@ rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 	struct sockaddr_storage remote_pep_addr;
 	int ret, rv;
 
+	assert(sizeof(uint32_t) == sizeof(cm_data.accept.rx_size));
+	assert(msg_info->rx_attr->size <= (uint32_t)-1);
+
 	if (rxm_conn_verify_cm_data(remote_cm_data, &cm_data)) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 			"CM data mismatch was detected\n");
@@ -1099,15 +1122,18 @@ rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 	rxm_conn = container_of(handle, struct rxm_conn, handle);
 
 	rxm_conn->handle.remote_key = remote_cm_data->connect.client_conn_id;
+	rxm_conn->rndv_tx_credits = remote_cm_data->connect.rx_size;
+	assert(rxm_conn->rndv_tx_credits);
 
 	ret = rxm_msg_ep_open(rxm_ep, msg_info, rxm_conn, handle);
 	if (ret)
 		goto err2;
 
 	cm_data.accept.server_conn_id = rxm_conn->handle.key;
+	cm_data.accept.rx_size = rxm_conn_get_rx_size(rxm_ep, msg_info);
 
 	ret = fi_accept(rxm_conn->msg_ep, &cm_data.accept.server_conn_id,
-			sizeof(cm_data.accept.server_conn_id));
+			sizeof(cm_data.accept));
 	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_FABRIC,
 			"Unable to accept incoming connection\n");
@@ -1227,7 +1253,7 @@ rxm_conn_handle_event(struct rxm_ep *rxm_ep, struct rxm_msg_eq_entry *entry)
 		rxm_cmap_process_connect(rxm_ep->cmap,
 					 entry->cm_entry.fid->context,
 					 ((entry->rd - sizeof(entry->cm_entry)) ?
-					  &cm_data->accept.server_conn_id : NULL));
+					  cm_data : NULL));
 		rxm_conn_wake_up_wait_obj(rxm_ep);
 		rxm_ep->cmap->release(&rxm_ep->cmap->lock);
 		break;
@@ -1430,6 +1456,11 @@ rxm_conn_connect(struct util_ep *util_ep, struct rxm_cmap_handle *handle,
 		},
 	};
 
+	assert(sizeof(uint32_t) == sizeof(cm_data.connect.eager_size));
+	assert(sizeof(uint32_t) == sizeof(cm_data.connect.rx_size));
+	assert(rxm_ep->rxm_info->tx_attr->inject_size <= (uint32_t)-1);
+	assert(rxm_ep->msg_info->rx_attr->size <= (uint32_t)-1);
+
 	free(rxm_ep->msg_info->dest_addr);
 	rxm_ep->msg_info->dest_addrlen = rxm_ep->msg_info->src_addrlen;
 
@@ -1447,6 +1478,8 @@ rxm_conn_connect(struct util_ep *util_ep, struct rxm_cmap_handle *handle,
 	ret = rxm_prepare_cm_data(rxm_ep->msg_pep, &rxm_conn->handle, &cm_data);
 	if (ret)
 		goto err;
+
+	cm_data.connect.rx_size = rxm_conn_get_rx_size(rxm_ep, rxm_ep->msg_info);
 
 	ret = fi_connect(rxm_conn->msg_ep, rxm_ep->msg_info->dest_addr,
 			 &cm_data, sizeof(cm_data));

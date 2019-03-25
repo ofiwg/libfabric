@@ -316,6 +316,7 @@ static int rxm_rndv_tx_finish(struct rxm_ep *rxm_ep, struct rxm_tx_rndv_buf *tx_
 
 	RXM_LOG_STATE_TX(FI_LOG_CQ, tx_buf, RXM_RNDV_FINISH);
 	tx_buf->hdr.state = RXM_RNDV_FINISH;
+	tx_buf->conn->rndv_tx_credits++;
 
 	if (!rxm_ep->rxm_mr_local)
 		rxm_ep_msg_mr_closev(tx_buf->mr, tx_buf->count);

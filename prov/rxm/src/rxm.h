@@ -166,15 +166,29 @@ enum rxm_cmap_signal {
 	RXM_CMAP_EXIT,
 };
 
+#define RXM_CM_STATES(FUNC)		\
+	FUNC(RXM_CMAP_IDLE),		\
+	FUNC(RXM_CMAP_CONNREQ_SENT),	\
+	FUNC(RXM_CMAP_CONNREQ_RECV),	\
+	FUNC(RXM_CMAP_ACCEPT),		\
+	FUNC(RXM_CMAP_CONNECTED_NOTIFY),\
+	FUNC(RXM_CMAP_CONNECTED),	\
+	FUNC(RXM_CMAP_SHUTDOWN),	\
+
 enum rxm_cmap_state {
-	RXM_CMAP_IDLE,
-	RXM_CMAP_CONNREQ_SENT,
-	RXM_CMAP_CONNREQ_RECV,
-	RXM_CMAP_ACCEPT,
-	RXM_CMAP_CONNECTED_NOTIFY,
-	RXM_CMAP_CONNECTED,
-	RXM_CMAP_SHUTDOWN,
+	RXM_CM_STATES(OFI_ENUM_VAL)
 };
+
+extern char *rxm_cm_state_str[];
+
+#define RXM_CM_UPDATE_STATE(handle, new_state)				\
+	do {								\
+		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "[CM] handle: "	\
+		       "%p %s -> %s\n",	handle,				\
+		       rxm_cm_state_str[handle->state],			\
+		       rxm_cm_state_str[new_state]);			\
+		handle->state = new_state;				\
+	} while (0)
 
 struct rxm_cmap_handle {
 	struct rxm_cmap *cmap;
@@ -239,12 +253,14 @@ union rxm_cm_data {
 		uint8_t op_version;
 		uint16_t port;
 		uint8_t padding[2];
-		uint64_t eager_size;
+		uint32_t eager_size;
+		uint32_t rx_size;
 		uint64_t client_conn_id;
 	} connect;
 
 	struct _accept {
 		uint64_t server_conn_id;
+		uint32_t rx_size;
 	} accept;
 
 	struct _reject {
@@ -258,9 +274,6 @@ int rxm_cmap_update(struct rxm_cmap *cmap, const void *addr, fi_addr_t fi_addr);
 
 void rxm_cmap_process_conn_notify(struct rxm_cmap *cmap,
 				  struct rxm_cmap_handle *handle);
-void rxm_cmap_process_connect(struct rxm_cmap *cmap,
-			      struct rxm_cmap_handle *handle,
-			      uint64_t *remote_key);
 void rxm_cmap_process_reject(struct rxm_cmap *cmap,
 			     struct rxm_cmap_handle *handle,
 			     enum rxm_cmap_reject_reason cm_reject_reason);
@@ -497,6 +510,7 @@ struct rxm_tx_rndv_buf {
 	uint64_t flags;
 	struct fid_mr *mr[RXM_IOV_LIMIT];
 	uint8_t count;
+	struct rxm_conn *conn;
 
 	/* Must stay at bottom */
 	struct rxm_pkt pkt;
@@ -701,6 +715,10 @@ struct rxm_conn {
 	/* This is saved MSG EP fid, that hasn't been closed during
 	 * handling of CONN_RECV in RXM_CMAP_CONNREQ_SENT for passive side */
 	struct fid_ep *saved_msg_ep;
+
+	/* Limit RNDV sends based on peer rx queue size to avoid increased
+	 * memory usage at peer */
+	uint32_t rndv_tx_credits;
 };
 
 extern struct fi_provider rxm_prov;
