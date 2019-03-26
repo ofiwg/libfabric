@@ -161,7 +161,8 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 		if (ret)
 			return ret;
 	} else {
-		if (rx_buf->recv_entry->flags & FI_COMPLETION) {
+		if (rx_buf->recv_entry->flags & FI_COMPLETION ||
+		    rx_buf->ep->rxm_info->mode & FI_BUFFERED_RECV) {
 			ret = rxm_cq_write_recv_comp(
 					rx_buf, rx_buf->recv_entry->context,
 					rx_buf->recv_entry->comp_flags |
