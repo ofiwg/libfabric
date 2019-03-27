@@ -19,7 +19,8 @@ struct fid_ep *cxit_ep;
 struct cxip_addr cxit_ep_addr;
 fi_addr_t cxit_ep_fi_addr;
 struct fid_ep *cxit_sep;
-struct fi_cq_attr cxit_tx_cq_attr, cxit_rx_cq_attr;
+struct fi_cq_attr cxit_tx_cq_attr = { .format = FI_CQ_FORMAT_TAGGED };
+struct fi_cq_attr cxit_rx_cq_attr = { .format = FI_CQ_FORMAT_TAGGED };
 struct fid_cq *cxit_tx_cq, *cxit_rx_cq;
 struct fi_av_attr cxit_av_attr;
 struct fid_av *cxit_av;
@@ -276,12 +277,8 @@ void cxit_create_cqs(void)
 {
 	int ret;
 
-	cxit_tx_cq_attr.format = FI_CQ_FORMAT_TAGGED;
-
 	ret = fi_cq_open(cxit_domain, &cxit_tx_cq_attr, &cxit_tx_cq, NULL);
 	cr_assert(ret == FI_SUCCESS, "fi_cq_open (TX)");
-
-	cxit_rx_cq_attr.format = FI_CQ_FORMAT_TAGGED;
 
 	ret = fi_cq_open(cxit_domain, &cxit_rx_cq_attr, &cxit_rx_cq, NULL);
 	cr_assert(ret == FI_SUCCESS, "fi_cq_open (RX)");

@@ -180,8 +180,8 @@ Test(tagged, msgping, .timeout = 3)
 				  rx_cqe;
 	int err = 0;
 	fi_addr_t from;
-	struct fi_msg_tagged rmsg;
-	struct fi_msg_tagged smsg;
+	struct fi_msg_tagged rmsg = {};
+	struct fi_msg_tagged smsg = {};
 	struct iovec riovec;
 	struct iovec siovec;
 
@@ -1209,7 +1209,7 @@ void do_tagged(uint8_t *send_buf, size_t send_len, uint64_t send_tag,
 #define BUF_SIZE (8*1024)
 #define SEND_MIN 1024
 #define SEND_INC 64
-#define TAG 0x3333333333333
+#define TAG 0x333333333333
 
 struct tagged_rx_params {
 	size_t buf_size;

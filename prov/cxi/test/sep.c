@@ -534,7 +534,7 @@ static int _cmpdata(uint8_t *rx, uint8_t *tx, int len)
 }
 
 /* Test basic SEP send/recv */
-Test(sep, simple_msg_send, .timeout = 3)
+Test(sep, simple_msg_send, .timeout = 10)
 {
 	int i, ret;
 	int txi, rxi, rxi2;

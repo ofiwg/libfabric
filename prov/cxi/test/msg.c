@@ -178,8 +178,8 @@ Test(msg, msgping, .timeout = 3)
 				  rx_cqe;
 	int err = 0;
 	fi_addr_t from;
-	struct fi_msg rmsg;
-	struct fi_msg smsg;
+	struct fi_msg rmsg = {};
+	struct fi_msg smsg = {};
 	struct iovec riovec;
 	struct iovec siovec;
 
