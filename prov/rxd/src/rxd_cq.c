@@ -828,6 +828,9 @@ void rxd_progress_op(struct rxd_ep *ep, struct rxd_x_entry *rx_entry,
 
 	rx_entry->peer = base_hdr->peer;
 
+	if (tag_hdr)
+		rx_entry->cq_entry.tag = tag_hdr->tag;
+
 	if (!sar_hdr || sar_hdr->num_segs == 1) {
 		if (!(rx_entry->cq_entry.flags & FI_REMOTE_READ))
 			rxd_complete_rx(ep, rx_entry);
