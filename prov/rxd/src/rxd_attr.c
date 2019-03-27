@@ -45,7 +45,7 @@ struct fi_tx_attr rxd_tx_attr = {
 	.inject_size = RXD_MAX_MTU_SIZE - sizeof(struct rxd_base_hdr),
 	.size = (1ULL << RXD_MAX_TX_BITS),
 	.iov_limit = RXD_IOV_LIMIT,
-	.rma_iov_limit = 0,
+	.rma_iov_limit = RXD_IOV_LIMIT,
 };
 
 struct fi_rx_attr rxd_rx_attr = {
