@@ -1,7 +1,7 @@
 #
 # Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
 # Copyright (c) 2017-2018 Intel Corporation, Inc. All right reserved.
-# Copyright (c) 2018 Amazon.com, Inc. or its affiliates. All rights reserved.
+# Copyright (c) 2018-2019 Amazon.com, Inc. or its affiliates. All rights reserved.
 #
 # Makefile.am for libfabric
 
@@ -66,7 +66,8 @@ common_srcs =				\
 	prov/util/src/util_ns.c		\
 	prov/util/src/util_shm.c	\
 	prov/util/src/util_mem_monitor.c\
-	prov/util/src/util_mr_cache.c
+	prov/util/src/util_mr_cache.c	\
+	prov/util/src/util_uffd.c
 
 
 if MACOS
@@ -141,6 +142,7 @@ src_libfabric_la_SOURCES =			\
 	include/ofi_mr.h			\
 	include/ofi_net.h			\
 	include/ofi_perf.h			\
+	include/ofi_uffd.h                      \
 	include/fasthash.h			\
 	include/rbtree.h			\
 	include/uthash.h			\

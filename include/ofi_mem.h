@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015-2016 Intel Corporation, Inc.  All rights reserved.
- * Copyright (c) 2018 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * Copyright (c) 2018-2019 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -482,5 +482,22 @@ void ofi_pmem_init(void);
 extern uint64_t OFI_RMA_PMEM;
 extern void (*ofi_pmem_commit)(const void *addr, size_t len);
 
+static inline long get_page_size(void)
+{
+	long ret;
+
+	/* sysconf can return -1 and not change errno */
+	errno = 0;
+	ret = sysconf(_SC_PAGESIZE);
+
+	if (ret <= 0) {
+		if (errno)
+			return -errno;
+		else
+			return -FI_EOTHER;
+	}
+
+	return ret;
+}
 
 #endif /* _OFI_MEM_H_ */
