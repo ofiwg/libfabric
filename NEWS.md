@@ -10,6 +10,14 @@ v1.7.1rc1, Fri Mar 15, 2019
 
 TODO: add comments on fixes applied to providers
 
+## PSM2
+
+- Inline address translation function for performance
+- Create tagged ops specialization for FI_AV_MAP
+- Bring back true FI_AV_MAP support under certain conditions
+- Use psm2_epaddr_to_epid() for epaddr to epid conversion
+- Add runtime parameter for connection timeout
+
 v1.7.0, Mon Jan 7, 2019
 =======================
 
