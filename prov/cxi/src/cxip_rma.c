@@ -105,7 +105,7 @@ static ssize_t _cxip_rma_op(enum cxip_rma_op op, struct fid_ep *ep,
 	}
 
 	dom = txc->domain;
-	pid_granule = dom->dev_if->if_pid_granule;
+	pid_granule = dom->dev_if->if_dev->info.pid_granule;
 
 	if (rma[0].key >= CXIP_PID_MR_CNT(pid_granule)) {
 		CXIP_LOG_DBG("rma key = %lu, must be < %d\n", rma[0].key,

@@ -509,7 +509,6 @@ static void cxip_query_if_list(struct slist *if_list)
 	if_entry = calloc(1, sizeof(struct cxip_if));
 	if_entry->if_nic = dev_list->info[0].nic_addr;
 	if_entry->if_idx = dev_list->info[0].dev_id;
-	if_entry->if_pid_granule = dev_list->info[0].pid_granule;
 	if_entry->if_fabric = 0; /* TODO Find real network ID */
 	ofi_atomic_initialize32(&if_entry->ref, 0);
 	dlist_init(&if_entry->if_doms);

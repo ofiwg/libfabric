@@ -528,7 +528,7 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 	}
 
 	dev_if = txc->domain->dev_if;
-	pid_granule = dev_if->if_pid_granule;
+	pid_granule = dev_if->if_dev->info.pid_granule;
 
 	/* Do not allow an invalid memory key */
 	if (key >= CXIP_PID_MR_CNT(pid_granule))

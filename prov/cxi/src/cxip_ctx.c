@@ -281,7 +281,7 @@ static int tx_ctx_recv_init(struct cxip_tx_ctx *txc)
 	}
 
 	/* Reserve the Rendezvous Send PTE */
-	pid_idx = CXIP_RDVS_IDX(txc->domain->dev_if->if_pid_granule);
+	pid_idx = txc->domain->dev_if->if_dev->info.rdzv_get_idx;
 	ret = cxip_pte_alloc(txc->ep_obj->if_dom, txc->comp.send_cq->evtq,
 			     pid_idx, &opts, &txc->rdvs_pte);
 	if (ret != FI_SUCCESS) {

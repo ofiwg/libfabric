@@ -387,7 +387,7 @@ static int cxip_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		return -FI_ENOSYS;
 
 	dom = container_of(fid, struct cxip_domain, dom_fid.fid);
-	pid_granule = dom->dev_if->if_pid_granule;
+	pid_granule = dom->dev_if->if_dev->info.pid_granule;
 
 	if (attr->requested_key >= CXIP_PID_MR_CNT(pid_granule))
 		return -FI_EINVAL;

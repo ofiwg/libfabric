@@ -207,8 +207,8 @@ static int rdvs_issue_get(struct cxip_req *req, struct cxip_ux_send *ux_send)
 		req->recv.mlength = ux_send->length;
 	req->recv.rlength = ux_send->length;
 
-	pid_granule = rxc->domain->dev_if->if_pid_granule;
-	pid_idx = CXIP_RDVS_IDX(pid_granule);
+	pid_granule = rxc->domain->dev_if->if_dev->info.pid_granule;
+	pid_idx = rxc->domain->dev_if->if_dev->info.rdzv_get_idx;
 	cxi_build_dfa(nic, pid, pid_granule, pid_idx, &dfa, &idx_ext);
 
 	cmd.full_dma.command.cmd_type = C_CMD_TYPE_DMA;
@@ -1461,7 +1461,7 @@ static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 
 	/* Build Put command descriptor */
 	rx_id = CXIP_AV_ADDR_RXC(txc->ep_obj->av, dest_addr);
-	pid_granule = dom->dev_if->if_pid_granule;
+	pid_granule = dom->dev_if->if_dev->info.pid_granule;
 	pid_idx = CXIP_RXC_TO_IDX(rx_id);
 	cxi_build_dfa(caddr.nic, caddr.pid, pid_granule, pid_idx, &dfa,
 		      &idx_ext);

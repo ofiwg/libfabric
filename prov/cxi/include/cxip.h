@@ -193,7 +193,6 @@ struct cxip_addr {
 
 #define CXIP_MR_TO_IDX(key) (CXIP_PID_RXC_CNT + (key))
 #define CXIP_RXC_TO_IDX(rx_id) (rx_id)
-#define CXIP_RDVS_IDX(pid_granule) ((pid_granule) - 1)
 
 #define CXIP_AV_ADDR_IDX(av, fi_addr) ((uint64_t)fi_addr & av->mask)
 #define CXIP_AV_ADDR_RXC(av, fi_addr) \
@@ -269,7 +268,6 @@ struct cxip_if {
 	uint32_t if_idx;		// cxil NIC index
 	uint32_t if_fabric;		// cxil NIC fabric address
 	struct cxil_dev *if_dev;	// cxil NIC DEV structure
-	uint32_t if_pid_granule;	// cxil NIC granule size
 	struct cxil_lni *if_lni;	// cxil NIC LNI structure
 	struct cxi_cp *cps[16];		// Cassini communication profiles
 	int n_cps;
