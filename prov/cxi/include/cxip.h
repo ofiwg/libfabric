@@ -199,12 +199,22 @@ struct cxip_addr {
 	(av->rx_ctx_bits ? ((uint64_t)fi_addr >> (64 - av->rx_ctx_bits)) : 0)
 
 /* Messaging Match Bit layout */
+#define RDVS_ID_LO_WIDTH 14
+#define RDVS_ID_HI_WIDTH 8
+#define RDVS_ID_WIDTH (RDVS_ID_LO_WIDTH + RDIVS_ID_HI_WIDTH)
+#define RDVS_ID_LO(id) ((id) & ((1 << RDVS_ID_LO_WIDTH) - 1))
+#define RDVS_ID_HI(id) \
+	(((id) >> RDVS_ID_LO_WIDTH) & ((1 << RDVS_ID_HI_WIDTH) - 1))
+
 union cxip_match_bits {
 	struct {
-		uint64_t tagged  : 1;  /* Tagged API */
-		uint64_t rdvs    : 1;  /* Rendezvous protocol (Tagged only) */
-		uint64_t rdvs_id : 8;  /* Rendezvous ID (used by protocol) */
-		uint64_t tag     : 54; /* User tag value */
+		uint64_t tag        : 48; /* User tag value */
+		uint64_t rdvs_id_lo : RDVS_ID_LO_WIDTH;
+		uint64_t rdvs       : 1;  /* Rendezvous protocol */
+		uint64_t tagged     : 1;  /* Tagged API */
+	};
+	struct {
+		uint64_t rdvs_id_hi : RDVS_ID_HI_WIDTH;
 	};
 	uint64_t raw;
 };
@@ -391,6 +401,7 @@ struct cxip_req_recv {
 };
 
 struct cxip_req_send {
+	void *buf;			// local send buffer
 	struct cxi_md *send_md;		// message target buffer
 	struct cxip_tx_ctx *txc;
 	size_t length;			// request length
@@ -685,6 +696,7 @@ struct cxip_tx_ctx {
 	int eager_threshold;		// Threshold for eager IOs
 	struct cxi_cmdq *rx_cmdq;	// Target cmdq for Rendezvous buffers
 	struct cxip_rdvs_ids rdvs_ids;	// Set of Rendezvous IDs to be used
+	int rdzv_offload;
 };
 
 /**

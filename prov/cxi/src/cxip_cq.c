@@ -57,6 +57,7 @@ struct cxip_req *cxip_cq_req_alloc(struct cxip_cq *cq, int remap)
 		req->req_id = -1;
 	}
 
+	CXIP_LOG_DBG("Allocated req: %p (ID: %d)\n", req, req->req_id);
 	req->cq = cq;
 
 out:
@@ -93,33 +94,50 @@ static struct cxip_req *cxip_cq_event_req(struct cxip_cq *cq,
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_ACK:
-	case C_EVENT_REPLY:
-		return (struct cxip_req *)event->init_short.user_ptr;
+		req = (struct cxip_req *)event->init_short.user_ptr;
+		break;
 	case C_EVENT_LINK:
 	case C_EVENT_UNLINK:
 	case C_EVENT_GET:
 	case C_EVENT_PUT:
 	case C_EVENT_PUT_OVERFLOW:
+	case C_EVENT_RENDEZVOUS:
 		req = cxip_cq_req_find(cq, event->tgt_long.buffer_id);
-		if (!req) {
-			CXIP_LOG_ERROR("Invalid buffer_id: %d (type: %d)\n",
+		if (!req)
+			CXIP_LOG_ERROR("Invalid buffer_id: %d (%s)\n",
 				       event->tgt_long.buffer_id,
-				       event->hdr.event_type);
-			return NULL;
+				       cxi_event_to_str(event));
+		break;
+	case C_EVENT_REPLY:
+		if (!event->init_short.rendezvous) {
+			req = (struct cxip_req *)event->init_short.user_ptr;
+		} else {
+			req = cxip_cq_req_find(cq,
+					event->init_short.user_ptr >> 48);
+			if (!req)
+				CXIP_LOG_ERROR("Invalid buffer_id: %d (%s)\n",
+					       event->tgt_long.buffer_id,
+					       cxi_event_to_str(event));
 		}
-
-		return req;
+		break;
 	case C_EVENT_STATE_CHANGE:
 		pte_num = event->tgt_long.ptlte_index;
 		pte_state = event->tgt_long.initiator.state_change.ptlte_state;
 
 		cxip_pte_state_change(cq->domain->dev_if, pte_num, pte_state);
 
-		return NULL;
+		req = NULL;
+		break;
+	default:
+		CXIP_LOG_ERROR("Invalid event type: %d\n",
+				event->hdr.event_type);
+		req = NULL;
 	}
 
-	CXIP_LOG_ERROR("Invalid event type: %d\n", event->hdr.event_type);
-	return NULL;
+	CXIP_LOG_DBG("got event: %s (req: %p)\n",
+		     cxi_event_to_str(event), req);
+
+	return req;
 }
 
 void cxip_cq_progress(struct cxip_cq *cq)

@@ -196,6 +196,7 @@ static int rdvs_issue_get(struct cxip_req *req, struct cxip_ux_send *ux_send)
 	uint32_t pid_bits = rxc->domain->dev_if->if_dev->info.pid_bits;
 	uint32_t nic;
 	uint32_t pid;
+	union cxip_match_bits mb = {};
 
 	nic = CXI_MATCH_ID_EP(pid_bits, ux_send->initiator);
 	pid = CXI_MATCH_ID_PID(pid_bits, ux_send->initiator);
@@ -221,11 +222,20 @@ static int rdvs_issue_get(struct cxip_req *req, struct cxip_ux_send *ux_send)
 						 req->recv.recv_buf);
 	cmd.full_dma.eq = rxc->comp.recv_cq->evtq->eqn;
 	cmd.full_dma.request_len = req->recv.mlength;
-	cmd.full_dma.match_bits = ux_send->match_bits.rdvs_id;
+	mb.rdvs_id_lo = ux_send->match_bits.rdvs_id_lo;
+	cmd.full_dma.match_bits = mb.raw;
 	cmd.full_dma.initiator = CXI_MATCH_ID(pid_bits,
 					      rxc->ep_obj->src_addr.pid,
 					      rxc->ep_obj->src_addr.nic);
 	cmd.full_dma.user_ptr = (uint64_t)req;
+
+#if 0
+	cmd.full_dma.user_ptr = cxi_rdzv_user_ptr(uint16_t buffer_id,
+					 uint8_t rendezvous_id,
+					 uint16_t ptlte_index,
+					 uint16_t initiator_pid,
+					 uint32_t sfa_nid)
+#endif
 
 	fastlock_acquire(&rxc->lock);
 
@@ -368,6 +378,8 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 
 		fastlock_release(&rxc->lock);
 
+		CXIP_LOG_DBG("Queued ux_send: %p\n", ux_send);
+
 		return;
 	}
 
@@ -443,7 +455,7 @@ static int eager_buf_add(struct cxip_rx_ctx *rxc)
 
 	/* Match all tagged, eager sends */
 	union cxip_match_bits mb = { .tagged = 1, .rdvs = 0 };
-	union cxip_match_bits ib = { .rdvs_id = ~0, .tag = ~0 };
+	union cxip_match_bits ib = { .rdvs_id_lo = ~0, .tag = ~0 };
 
 	dom = rxc->domain;
 
@@ -621,7 +633,7 @@ static int cxip_rxc_rdvs_init(struct cxip_rx_ctx *rxc)
 
 	/* Match all tagged, rendezvous sends */
 	union cxip_match_bits mb = { .tagged = 1, .rdvs = 1 };
-	union cxip_match_bits ib = { .rdvs_id = ~0, .tag = ~0 };
+	union cxip_match_bits ib = { .rdvs_id_lo = ~0, .tag = ~0 };
 
 	dom = rxc->domain;
 
@@ -822,7 +834,7 @@ static fi_addr_t _rxc_event_src_addr(struct cxip_rx_ctx *rxc,
  * record of the posted user buffer to be matched when the forthcoming Put
  * event arrives.
  */
-static void cxip_trecv_cb(struct cxip_req *req, const union c_event *event)
+static void cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 {
 	int ret;
 	struct cxip_rx_ctx *rxc = req->recv.rxc;
@@ -934,11 +946,21 @@ static void cxip_trecv_cb(struct cxip_req *req, const union c_event *event)
 		 */
 
 		req->recv.rc = cxi_tgt_event_rc(event);
+		if (event->tgt_long.rlength > req->recv.rlength)
+			req->recv.mlength = req->recv.rlength;
+		else
+			req->recv.mlength = event->tgt_long.rlength;
 		req->recv.rlength = event->tgt_long.rlength;
-		req->recv.mlength = event->tgt_long.mlength;
 		mb.raw = event->tgt_long.match_bits;
 		req->tag = mb.tag;
 		req->recv.src_addr = _rxc_event_src_addr(rxc, event);
+
+		if (event->tgt_long.rendezvous) {
+			event_rc = cxi_tgt_event_rc(event);
+			CXIP_LOG_DBG("Received rdzv Put event: %d\n",
+				     event_rc);
+			return;
+		}
 
 		ret = cxil_unmap(req->recv.recv_md);
 		if (ret != FI_SUCCESS)
@@ -993,7 +1015,7 @@ static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	uint32_t match_id;
 	uint32_t pid_bits;
 	union cxip_match_bits mb = {};
-	union cxip_match_bits ib = { .rdvs = ~0, .rdvs_id = ~0 };
+	union cxip_match_bits ib = { .rdvs = ~0, .rdvs_id_lo = ~0 };
 
 	if (!ep || !buf)
 		return -FI_EINVAL;
@@ -1058,7 +1080,7 @@ static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	if (!req) {
 		CXIP_LOG_DBG("Failed to allocate request\n");
 		ret = -FI_ENOMEM;
-		goto trecv_unmap;
+		goto recv_unmap;
 	}
 
 	/* req->data_len, req->tag must be set later.  req->buf and req->data
@@ -1067,25 +1089,23 @@ static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	req->context = (uint64_t)context;
 
 	req->flags = FI_RECV;
-	if (tagged)
+	if (tagged) {
 		req->flags |= FI_TAGGED;
-	else
+		mb.tagged = 1;
+		mb.tag = tag;
+		ib.tag = ignore;
+	} else {
 		req->flags |= FI_MSG;
+	}
 
 	req->buf = 0;
 	req->data = 0;
-	req->cb = cxip_trecv_cb;
+	req->cb = cxip_recv_cb;
 
 	req->recv.rxc = rxc;
 	req->recv.recv_buf = buf;
 	req->recv.recv_md = recv_md;
 	req->recv.rlength = len;
-
-	if (tagged) {
-		mb.tagged = 1;
-		mb.tag = tag;
-		ib.tag = ignore;
-	}
 
 	fastlock_acquire(&rxc->lock);
 
@@ -1096,7 +1116,7 @@ static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 			      false, rxc->rx_cmdq);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
-		goto trecv_unlock;
+		goto recv_unlock;
 	}
 
 	/* TODO take reference on EP or context for the outstanding request */
@@ -1104,10 +1124,10 @@ static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 
 	return FI_SUCCESS;
 
-trecv_unlock:
+recv_unlock:
 	fastlock_release(&rxc->lock);
 	cxip_cq_req_free(req);
-trecv_unmap:
+recv_unmap:
 	cxil_unmap(recv_md);
 
 	return ret;
@@ -1210,15 +1230,17 @@ rdvs_unlink_le:
 			/* The Put matched in the Priority list, the source
 			 * buffer LE is unneeded.
 			 */
-			fastlock_acquire(&txc->lock);
-			issue_unlink_le(txc->rdvs_pte->pte,
-					C_PTL_LIST_PRIORITY,
-					req->req_id,
-					txc->rx_cmdq);
-			fastlock_release(&txc->lock);
+			if (!txc->rdzv_offload) {
+				fastlock_acquire(&txc->lock);
+				issue_unlink_le(txc->rdvs_pte->pte,
+						C_PTL_LIST_PRIORITY,
+						req->req_id,
+						txc->rx_cmdq);
+				fastlock_release(&txc->lock);
 
-			/* Wait for the Unlink event */
-			req->send.complete_on_unlink = 1;
+				/* Wait for the Unlink event */
+				req->send.complete_on_unlink = 1;
+			}
 		} else {
 			CXIP_LOG_DBG("Put Acked (Overflow): %p\n", req);
 		}
@@ -1348,6 +1370,107 @@ static fi_addr_t _txc_fi_addr(struct cxip_tx_ctx *txc)
 	return txc->ep_obj->fi_addr;
 }
 
+static ssize_t _cxip_send_rdvs(struct cxip_tx_ctx *txc, struct cxip_req *req)
+{
+	int ret;
+	int rdvs_id;
+	union cxip_match_bits *put_mb;
+	union cxip_match_bits le_mb = {};
+	union cxip_match_bits le_ib = { .rdvs_id_lo = ~0 }; /* inverted */
+
+	fastlock_acquire(&txc->lock);
+
+	/* Get Rendezvous ID */
+	rdvs_id = cxip_tx_ctx_alloc_rdvs_id(txc);
+	if (rdvs_id < 0) {
+		CXIP_LOG_DBG("Failed alloc RDVS ID\n");
+		goto unlock;
+	}
+	CXIP_LOG_DBG("Alloced RDVS ID: %d\n", rdvs_id);
+
+	req->send.rdvs_id = rdvs_id;
+
+	put_mb = (union cxip_match_bits *)&req->send.cmd.full_dma.match_bits;
+	put_mb->rdvs = 1;
+	put_mb->rdvs_id_lo = RDVS_ID_LO(rdvs_id);
+	le_mb.rdvs_id_lo = RDVS_ID_LO(rdvs_id);
+
+	/* RDVS ID is split between match bits and 8-bit rendezvous_id field in
+	 * the Put command. The command bits are only supported by hardware
+	 * (not available for software rendezvous).
+	 */
+	if (txc->rdzv_offload) {
+		uint32_t pid_bits = txc->domain->dev_if->if_dev->info.pid_bits;
+		uint32_t nic_addr = txc->domain->dev_if->if_dev->info.nic_addr;
+
+		req->send.cmd.full_dma.command.opcode = C_CMD_RENDEZVOUS_PUT;
+		req->send.cmd.full_dma.eager_length = txc->eager_threshold;
+		req->send.cmd.full_dma.initiator = CXI_MATCH_ID(pid_bits, 0,
+								nic_addr);
+		req->send.cmd.full_dma.rendezvous_id = RDVS_ID_HI(rdvs_id);
+		le_mb.rdvs_id_hi = RDVS_ID_HI(rdvs_id);
+		le_ib.rdvs_id_hi = ~0;
+	} else {
+		assert(rdvs_id < (1 << RDVS_ID_LO_WIDTH));
+	}
+
+	ret = issue_append_le(txc->rdvs_pte->pte, req->send.buf,
+			      req->send.length, req->send.send_md,
+			      C_PTL_LIST_PRIORITY, req->req_id,
+			      le_mb.raw, ~le_ib.raw, CXI_MATCH_ID_ANY, 0,
+			      false, true, false, true, false, true,
+			      txc->rx_cmdq);
+	if (ret) {
+		CXIP_LOG_DBG("Failed append source buffer: %d\n", ret);
+		goto free_id;
+	}
+
+	/* TODO take reference on EP or context for the outstanding
+	 * request
+	 */
+	fastlock_release(&txc->lock);
+
+	return FI_SUCCESS;
+
+free_id:
+	cxip_tx_ctx_free_rdvs_id(txc, rdvs_id);
+unlock:
+	fastlock_release(&txc->lock);
+
+	return FI_EAGAIN;
+}
+
+static ssize_t _cxip_send_eager(struct cxip_tx_ctx *txc, union c_cmdu *cmd)
+{
+	int ret;
+
+	fastlock_acquire(&txc->lock);
+
+	/* Issue Eager Put command */
+	ret = cxi_cq_emit_dma(txc->tx_cmdq, &cmd->full_dma);
+	if (ret) {
+		CXIP_LOG_DBG("Failed to write DMA command: %d\n", ret);
+
+		/* Return error according to Domain Resource Mgmt */
+		ret = -FI_EAGAIN;
+		goto unlock;
+	}
+
+	cxi_cq_ring(txc->tx_cmdq);
+
+	/* TODO take reference on EP or context for the outstanding
+	 * request
+	 */
+	fastlock_release(&txc->lock);
+
+	return FI_SUCCESS;
+
+unlock:
+	fastlock_release(&txc->lock);
+
+	return ret;
+}
+
 static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 			  void *desc, fi_addr_t dest_addr, uint64_t tag,
 			  void *context, uint64_t flags, bool tagged)
@@ -1369,7 +1492,6 @@ static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 	uint32_t match_id;
 	uint32_t pid_bits;
 	union cxip_match_bits mb = {};
-	int rdvs_id = -1;
 
 	if (!ep || !buf)
 		return -FI_EINVAL;
@@ -1426,10 +1548,13 @@ static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 	req->context = (uint64_t)context;
 	req->flags = FI_SEND;
 
-	if (tagged)
+	if (tagged) {
 		req->flags |= FI_TAGGED;
-	else
+		mb.tagged = 1;
+		mb.tag = tag;
+	} else {
 		req->flags |= FI_MSG;
+	}
 
 	req->data_len = 0;
 	req->buf = 0;
@@ -1442,6 +1567,7 @@ static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 		req->cb = cxip_send_cb;
 
 	req->send.txc = txc;
+	req->send.buf = (void *)buf;
 	req->send.send_md = send_md;
 	req->send.length = len;
 	req->send.event_failure = C_RC_NO_EVENT;
@@ -1479,69 +1605,22 @@ static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 	cmd.full_dma.eq = txc->comp.send_cq->evtq->eqn;
 	cmd.full_dma.user_ptr = (uint64_t)req;
 	cmd.full_dma.initiator = match_id;
-
-	fastlock_acquire(&txc->lock);
+	cmd.full_dma.match_bits = mb.raw;
 
 	if (rdvs) {
-		/* Get Rendezvous ID */
-		rdvs_id = cxip_tx_ctx_alloc_rdvs_id(txc);
-		if (rdvs_id < 0) {
-			CXIP_LOG_DBG("Failed alloc RDVS ID\n");
-			goto send_unlock;
-		}
-		CXIP_LOG_DBG("Alloced RDVS ID: %d\n", rdvs_id);
-
-		/* Generate hardware match bits */
-		mb.tagged = 1;
-		mb.rdvs = 1;
-		mb.rdvs_id = rdvs_id;
-		mb.tag = tag;
-		cmd.full_dma.match_bits = mb.raw;
-
-		/* Update request structure */
-		req->send.rdvs_id = rdvs_id;
 		req->send.cmd = cmd;
-
-		ret = issue_append_le(txc->rdvs_pte->pte, buf, len, send_md,
-				      C_PTL_LIST_PRIORITY, req->req_id,
-				      rdvs_id, 0, CXI_MATCH_ID_ANY, 0, false,
-				      true, false, true, false, true,
-				      txc->rx_cmdq);
-		if (ret) {
-			CXIP_LOG_DBG("Failed append source buffer: %d\n", ret);
-			cxip_tx_ctx_free_rdvs_id(txc, rdvs_id);
-			goto send_unlock;
-		}
+		ret = _cxip_send_rdvs(txc, req);
+		if (ret)
+			goto send_freereq;
 	} else {
-		/* Generate hardware match bits */
-		if (tagged) {
-			mb.tagged = 1;
-			mb.tag = tag;
-		}
-		cmd.full_dma.match_bits = mb.raw;
-
-		/* Issue Eager Put command */
-		ret = cxi_cq_emit_dma(txc->tx_cmdq, &cmd.full_dma);
-		if (ret) {
-			CXIP_LOG_DBG("Failed to write DMA command: %d\n", ret);
-
-			/* Return error according to Domain Resource Mgmt */
-			ret = -FI_EAGAIN;
-			goto send_unlock;
-		}
-
-		cxi_cq_ring(txc->tx_cmdq);
+		ret = _cxip_send_eager(txc, &cmd);
+		if (ret)
+			goto send_freereq;
 	}
-
-	/* TODO take reference on EP or context for the outstanding
-	 * request
-	 */
-	fastlock_release(&txc->lock);
 
 	return FI_SUCCESS;
 
-send_unlock:
-	fastlock_release(&txc->lock);
+send_freereq:
 	cxip_cq_req_free(req);
 send_unmap:
 	cxil_unmap(send_md);

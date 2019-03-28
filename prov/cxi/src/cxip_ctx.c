@@ -16,7 +16,7 @@
 #define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_EP_CTRL, __VA_ARGS__)
 
 /* Caller must hold rxc->lock */
-static int rx_ctx_recv_init(struct cxip_rx_ctx *rxc)
+static int rx_ctx_msg_init(struct cxip_rx_ctx *rxc)
 {
 	int ret;
 	union c_cmdu cmd = {};
@@ -121,9 +121,9 @@ int cxip_rx_ctx_enable(struct cxip_rx_ctx *rxc)
 		goto free_rx_cmdq;
 	}
 
-	ret = rx_ctx_recv_init(rxc);
+	ret = rx_ctx_msg_init(rxc);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("rx_ctx_recv_init returned: %d\n", ret);
+		CXIP_LOG_DBG("rx_ctx_msg_init returned: %d\n", ret);
 		ret = -FI_EDOMAIN;
 		goto free_tx_cmdq;
 	}
@@ -264,7 +264,7 @@ int cxip_tx_ctx_free_rdvs_id(struct cxip_tx_ctx *txc, int tag)
 }
 
 /* Caller must hold txc->lock */
-static int tx_ctx_recv_init(struct cxip_tx_ctx *txc)
+static int tx_ctx_msg_init(struct cxip_tx_ctx *txc)
 {
 	int ret;
 	union c_cmdu cmd = {};
@@ -317,7 +317,7 @@ free_rdvs_pte:
 }
 
 /* Caller must hold txc->lock */
-static int tx_ctx_recv_fini(struct cxip_tx_ctx *txc)
+static int tx_ctx_msg_fini(struct cxip_tx_ctx *txc)
 {
 	cxip_pte_free(txc->rdvs_pte);
 
@@ -367,7 +367,7 @@ int cxip_tx_ctx_enable(struct cxip_tx_ctx *txc)
 	}
 
 	if ((txc->attr.caps & (FI_TAGGED | FI_SEND)) == (FI_TAGGED | FI_SEND)) {
-		ret = tx_ctx_recv_init(txc);
+		ret = tx_ctx_msg_init(txc);
 		if (ret != FI_SUCCESS) {
 			CXIP_LOG_DBG("Unable to init TX CTX, ret: %d\n", ret);
 			goto unlock;
@@ -395,7 +395,7 @@ static void tx_ctx_disable(struct cxip_tx_ctx *txc)
 		goto unlock;
 
 	if ((txc->attr.caps & (FI_TAGGED | FI_SEND)) == (FI_TAGGED | FI_SEND)) {
-		ret = tx_ctx_recv_fini(txc);
+		ret = tx_ctx_msg_fini(txc);
 		if (ret)
 			CXIP_LOG_ERROR("Unable to destroy TX CTX, ret: %d\n",
 				       ret);
@@ -446,6 +446,11 @@ static struct cxip_tx_ctx *tx_context_alloc(const struct fi_tx_attr *attr,
 	tx_ctx->attr = *attr;
 	tx_ctx->attr.op_flags |= FI_TRANSMIT_COMPLETE;
 	tx_ctx->eager_threshold = CXIP_EAGER_THRESHOLD;
+
+	if (getenv("RDZV_OFFLOAD")) {
+		tx_ctx->rdzv_offload = 1;
+		fprintf(stderr, "Rendezvous offload enabled\n");
+	}
 
 	return tx_ctx;
 
