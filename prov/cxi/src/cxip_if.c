@@ -89,7 +89,7 @@ int cxip_get_if(uint32_t nic_addr, struct cxip_if **dev_if)
 		}
 
 		/* TODO Temporary CP setup, needed for CMDQ allocation */
-		ret = cxil_alloc_cp(if_entry->if_lni, 0, CXI_TC_BEST_EFFORT,
+		ret = cxil_alloc_cp(if_entry->if_lni, 0, CXI_TC_LOW_LATENCY,
 				    &if_entry->cps[0]);
 		if (ret) {
 			CXIP_LOG_DBG("Unable to allocate CP, ret: %d\n", ret);
