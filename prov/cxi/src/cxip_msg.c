@@ -1583,18 +1583,25 @@ static ssize_t cxip_trecvv(struct fid_ep *ep, const struct iovec *iov,
 	if (count != 1)
 		return -FI_EINVAL;
 
-	return _cxip_recv(ep, iov[0].iov_base, iov[0].iov_len, desc[0],
+	if (!iov)
+		return -FI_EINVAL;
+
+	return _cxip_recv(ep, iov[0].iov_base, iov[0].iov_len,
+			  desc ? desc[0] : NULL,
 			  src_addr, tag, ignore, context, 0, true);
 }
 
 static ssize_t cxip_trecvmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 			     uint64_t flags)
 {
+	if (!msg || !msg->msg_iov)
+		return -FI_EINVAL;
+
 	if (msg->iov_count != 1)
 		return -FI_EINVAL;
 
-	return _cxip_recv(ep, msg->msg_iov[0].iov_base,
-			  msg->msg_iov[0].iov_len, msg->desc[0], msg->addr,
+	return _cxip_recv(ep, msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len,
+			  msg->desc ? msg->desc[0] : NULL, msg->addr,
 			  msg->tag, msg->ignore, msg->context, 0, true);
 }
 
@@ -1612,19 +1619,26 @@ static ssize_t cxip_tsendv(struct fid_ep *ep, const struct iovec *iov,
 	if (count != 1)
 		return -FI_EINVAL;
 
-	return _cxip_send(ep, iov[0].iov_base, iov[0].iov_len, desc[0],
+	if (!iov)
+		return -FI_EINVAL;
+
+	return _cxip_send(ep, iov[0].iov_base, iov[0].iov_len,
+			  desc ? desc[0] : NULL,
 			  dest_addr, tag, context, 0, true);
 }
 
 static ssize_t cxip_tsendmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 			    uint64_t flags)
 {
+	if (!msg || !msg->msg_iov)
+		return -FI_EINVAL;
+
 	if (msg->iov_count != 1)
 		return -FI_EINVAL;
 
 	return _cxip_send(ep, msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len,
-			  msg->desc[0], msg->addr, msg->tag, msg->context,
-			  flags, true);
+			  msg->desc ? msg->desc[0] : NULL, msg->addr,
+			  msg->tag, msg->context, flags, true);
 }
 
 struct fi_ops_tagged cxip_ep_tagged_ops = {
@@ -1654,19 +1668,26 @@ static ssize_t cxip_recvv(struct fid_ep *ep, const struct iovec *iov,
 	if (count != 1)
 		return -FI_EINVAL;
 
-	return _cxip_recv(ep, iov[0].iov_base, iov[0].iov_len, desc[0],
+	if (!iov)
+		return -FI_EINVAL;
+
+	return _cxip_recv(ep, iov[0].iov_base, iov[0].iov_len,
+			  desc ? desc[0] : NULL,
 			  src_addr, 0, 0, context, 0, false);
 }
 
 static ssize_t cxip_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 			    uint64_t flags)
 {
+	if (!msg || !msg->msg_iov)
+		return -FI_EINVAL;
+
 	if (msg->iov_count != 1)
 		return -FI_EINVAL;
 
 	return _cxip_recv(ep, msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len,
-			  msg->desc[0], msg->addr, 0, 0, msg->context, flags,
-			  false);
+			  msg->desc ? msg->desc[0] : NULL, msg->addr, 0, 0,
+			  msg->context, flags, false);
 }
 
 static ssize_t cxip_send(struct fid_ep *ep, const void *buf, size_t len,
@@ -1682,18 +1703,25 @@ static ssize_t cxip_sendv(struct fid_ep *ep, const struct iovec *iov,
 	if (count != 1)
 		return -FI_EINVAL;
 
-	return _cxip_send(ep, iov[0].iov_base, iov[0].iov_len, desc[0],
-			  dest_addr, 0, context, 0, false);
+	if (!iov)
+		return -FI_EINVAL;
+
+	return _cxip_send(ep, iov[0].iov_base, iov[0].iov_len,
+			  desc ? desc[0] : NULL, dest_addr, 0, context, 0,
+			  false);
 }
 
 static ssize_t cxip_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 			    uint64_t flags)
 {
+	if (!msg || !msg->msg_iov)
+		return -FI_EINVAL;
+
 	if (msg->iov_count != 1)
 		return -FI_EINVAL;
 
-	return _cxip_send(ep, msg->msg_iov[0].iov_base,
-			  msg->msg_iov[0].iov_len, msg->desc[0], msg->addr, 0,
+	return _cxip_send(ep, msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len,
+			  msg->desc ? msg->desc[0] : NULL, msg->addr, 0,
 			  msg->context, flags, false);
 }
 
