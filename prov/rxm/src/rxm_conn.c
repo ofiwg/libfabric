@@ -1277,7 +1277,7 @@ static ssize_t rxm_eq_sread(struct rxm_ep *rxm_ep, size_t len,
 	} else {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unknown error: %d\n",
 			entry->err_entry.err);
-		return rd;
+		return -entry->err_entry.err;
 	}
 }
 
