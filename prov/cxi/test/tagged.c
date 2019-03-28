@@ -465,7 +465,7 @@ Test(tagged_noinit, directed_logical, .timeout = 3)
 }
 
 /* Test unexpected send/recv */
-#define RDVS_TAG (46)
+#define RDZV_TAG (46)
 
 struct tagged_thread_args {
 	uint8_t *buf;
@@ -526,7 +526,7 @@ static void *trecv_worker(void *data)
 	pthread_exit(NULL);
 }
 
-Test(tagged, ux_sw_rdvs, .timeout = 10)
+Test(tagged, ux_sw_rdzv, .timeout = 10)
 {
 	size_t i;
 	int ret;
@@ -556,12 +556,12 @@ Test(tagged, ux_sw_rdvs, .timeout = 10)
 	args[0].len = send_len;
 	args[0].cqe = &tx_cqe;
 	args[0].io_num = 0;
-	args[0].tag = RDVS_TAG;
+	args[0].tag = RDZV_TAG;
 	args[1].buf = recv_buf;
 	args[1].len = recv_len;
 	args[1].cqe = &rx_cqe;
 	args[1].io_num = 1;
-	args[1].tag = RDVS_TAG;
+	args[1].tag = RDZV_TAG;
 
 	/* Give some time for the message to move */
 	cr_assert_arr_neq(recv_buf, send_buf, buf_len);
@@ -616,7 +616,7 @@ Test(tagged, ux_sw_rdvs, .timeout = 10)
 	free(recv_buf);
 }
 
-Test(tagged, expected_sw_rdvs, .timeout = 10)
+Test(tagged, expected_sw_rdzv, .timeout = 10)
 {
 	size_t i;
 	int ret;
@@ -646,12 +646,12 @@ Test(tagged, expected_sw_rdvs, .timeout = 10)
 	args[0].len = send_len;
 	args[0].cqe = &tx_cqe;
 	args[0].io_num = 0;
-	args[0].tag = RDVS_TAG;
+	args[0].tag = RDZV_TAG;
 	args[1].buf = recv_buf;
 	args[1].len = recv_len;
 	args[1].cqe = &rx_cqe;
 	args[1].io_num = 1;
-	args[1].tag = RDVS_TAG;
+	args[1].tag = RDZV_TAG;
 
 	/* Give some time for the message to move */
 	cr_assert_arr_neq(recv_buf, send_buf, buf_len);
@@ -707,41 +707,41 @@ Test(tagged, expected_sw_rdvs, .timeout = 10)
 	free(recv_buf);
 }
 
-Test(tagged, rdvs_id, .timeout = 1)
+Test(tagged, rdzv_id, .timeout = 1)
 {
 	int rc;
 	struct cxip_tx_ctx tx_ctx = {};
 
 	/* Allocate all the IDs for the tx_ctx */
 	for (int i = 0; i < 128; i++) {
-		rc = cxip_tx_ctx_alloc_rdvs_id(&tx_ctx);
+		rc = cxip_tx_ctx_alloc_rdzv_id(&tx_ctx);
 		cr_assert_eq(rc, i, "Expected %d Got %d", i, rc);
 	}
 
 	/* Allocate one more expecting it to fail */
-	rc = cxip_tx_ctx_alloc_rdvs_id(&tx_ctx);
+	rc = cxip_tx_ctx_alloc_rdzv_id(&tx_ctx);
 	cr_assert_eq(rc, -FI_ENOSPC, "Got rc %d", rc);
 
 	/* Put ID 67 back */
-	rc = cxip_tx_ctx_free_rdvs_id(&tx_ctx, 67);
+	rc = cxip_tx_ctx_free_rdzv_id(&tx_ctx, 67);
 	cr_assert_eq(rc, FI_SUCCESS, "Got rc %d", rc);
 
 	/* Allocate one more expecting the one just put back */
-	rc = cxip_tx_ctx_alloc_rdvs_id(&tx_ctx);
+	rc = cxip_tx_ctx_alloc_rdzv_id(&tx_ctx);
 	cr_assert_eq(rc, 67, "Got ID %d instead", rc);
 
 	/* Allocate one more expecting it to fail */
-	rc = cxip_tx_ctx_alloc_rdvs_id(&tx_ctx);
+	rc = cxip_tx_ctx_alloc_rdzv_id(&tx_ctx);
 	cr_assert_eq(rc, -FI_ENOSPC, "Got rc %d", rc);
 
 	/* Allocate all the IDs for the tx_ctx */
 	for (int i = 0; i < 128; i++) {
-		rc = cxip_tx_ctx_free_rdvs_id(&tx_ctx, i);
+		rc = cxip_tx_ctx_free_rdzv_id(&tx_ctx, i);
 		cr_assert_eq(rc, FI_SUCCESS, "Got rc %d", rc);
 	}
 
 	/* Free out of bounds */
-	rc = cxip_tx_ctx_free_rdvs_id(&tx_ctx, 325);
+	rc = cxip_tx_ctx_free_rdzv_id(&tx_ctx, 325);
 	cr_assert_eq(rc, -FI_EINVAL, "Got rc %d", rc);
 }
 
@@ -772,7 +772,7 @@ static void *tagged_evt_worker(void *data)
 	pthread_exit(NULL);
 }
 
-Test(tagged, multitudes_sw_rdvs, .timeout = 10)
+Test(tagged, multitudes_sw_rdzv, .timeout = 10)
 {
 	int ret;
 	size_t buf_len = 4 * 1024;
@@ -800,7 +800,7 @@ Test(tagged, multitudes_sw_rdvs, .timeout = 10)
 	/* Issue the Sends */
 	for (size_t tx_io = 0; tx_io < NUM_IOS; tx_io++) {
 		tx_args[tx_io].len = buf_len;
-		tx_args[tx_io].tag = RDVS_TAG + tx_io;
+		tx_args[tx_io].tag = RDZV_TAG + tx_io;
 		tx_args[tx_io].buf = aligned_alloc(C_PAGE_SIZE, buf_len);
 		cr_assert_not_null(tx_args[tx_io].buf);
 		for (size_t i = 0; i < buf_len; i++)
@@ -823,7 +823,7 @@ Test(tagged, multitudes_sw_rdvs, .timeout = 10)
 	/* Issue the Receives */
 	for (size_t rx_io = 0; rx_io < NUM_IOS; rx_io++) {
 		rx_args[rx_io].len = buf_len;
-		rx_args[rx_io].tag = RDVS_TAG + rx_io;
+		rx_args[rx_io].tag = RDZV_TAG + rx_io;
 		rx_args[rx_io].buf = aligned_alloc(C_PAGE_SIZE, buf_len);
 		cr_assert_not_null(rx_args[rx_io].buf);
 		memset(rx_args[rx_io].buf, 0, buf_len);
@@ -980,7 +980,7 @@ ParameterizedTest(struct multitudes_params *param, tagged, multitudes,
 	/* Issue the Sends */
 	for (size_t tx_io = 0; tx_io < param->num_ios; tx_io++) {
 		tx_args[tx_io].len = buf_len;
-		tx_args[tx_io].tag = RDVS_TAG + tx_io;
+		tx_args[tx_io].tag = RDZV_TAG + tx_io;
 		tx_args[tx_io].buf = aligned_alloc(C_PAGE_SIZE, buf_len);
 		cr_assert_not_null(tx_args[tx_io].buf);
 		for (size_t i = 0; i < buf_len; i++)
@@ -1003,7 +1003,7 @@ ParameterizedTest(struct multitudes_params *param, tagged, multitudes,
 	/* Issue the Receives */
 	for (size_t rx_io = 0; rx_io < param->num_ios; rx_io++) {
 		rx_args[rx_io].len = buf_len;
-		rx_args[rx_io].tag = RDVS_TAG + rx_io;
+		rx_args[rx_io].tag = RDZV_TAG + rx_io;
 		rx_args[rx_io].buf = aligned_alloc(C_PAGE_SIZE, buf_len);
 		cr_assert_not_null(rx_args[rx_io].buf);
 		memset(rx_args[rx_io].buf, 0, buf_len);

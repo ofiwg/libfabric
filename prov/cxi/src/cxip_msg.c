@@ -185,7 +185,7 @@ static void oflow_buf_put(struct cxip_oflow_buf *oflow_buf)
 	}
 }
 
-static int rdvs_issue_get(struct cxip_req *req, struct cxip_ux_send *ux_send)
+static int rdzv_issue_get(struct cxip_req *req, struct cxip_ux_send *ux_send)
 {
 	union c_fab_addr dfa;
 	uint32_t pid_granule, pid_idx;
@@ -222,7 +222,7 @@ static int rdvs_issue_get(struct cxip_req *req, struct cxip_ux_send *ux_send)
 						 req->recv.recv_buf);
 	cmd.full_dma.eq = rxc->comp.recv_cq->evtq->eqn;
 	cmd.full_dma.request_len = req->recv.mlength;
-	mb.rdvs_id_lo = ux_send->match_bits.rdvs_id_lo;
+	mb.rdzv_id_lo = ux_send->match_bits.rdzv_id_lo;
 	cmd.full_dma.match_bits = mb.raw;
 	cmd.full_dma.initiator = CXI_MATCH_ID(pid_bits,
 					      rxc->ep_obj->src_addr.pid,
@@ -314,9 +314,9 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 		/* TODO Handle append errors. */
 		return;
 	case C_EVENT_UNLINK:
-		if (oflow_buf->type == RDVS_OFLOW_BUF) {
+		if (oflow_buf->type == RDZV_OFLOW_BUF) {
 			/* SW rendezvous buffer was manually unlinked. */
-			ofi_atomic_dec32(&rxc->ux_rdvs_buf.ref);
+			ofi_atomic_dec32(&rxc->ux_rdzv_buf.ref);
 		} else {
 			ofi_atomic_dec32(&rxc->oflow_buf_cnt);
 		}
@@ -392,7 +392,7 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 	CXIP_LOG_DBG("Matched ux_recv, data: 0x%lx\n",
 		     ux_recv->recv.start);
 
-	if (oflow_buf->type == RDVS_OFLOW_BUF) {
+	if (oflow_buf->type == RDZV_OFLOW_BUF) {
 		/* For SW Rendezvous messages, issue a Get to retrieve data
 		 * from the initiator.
 		 */
@@ -405,7 +405,7 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 		ux_send.match_bits.raw = event->tgt_long.match_bits;
 		ux_send.initiator = event->tgt_long.initiator.initiator.process;
 
-		ret = rdvs_issue_get(ux_recv, &ux_send);
+		ret = rdzv_issue_get(ux_recv, &ux_send);
 		if (ret != FI_SUCCESS)
 			cxip_cq_req_free(ux_recv);
 
@@ -454,8 +454,8 @@ static int eager_buf_add(struct cxip_rx_ctx *rxc)
 	uint64_t min_free;
 
 	/* Match all tagged, eager sends */
-	union cxip_match_bits mb = { .tagged = 1, .rdvs = 0 };
-	union cxip_match_bits ib = { .rdvs_id_lo = ~0, .tag = ~0 };
+	union cxip_match_bits mb = { .tagged = 1, .rdzv = 0 };
+	union cxip_match_bits ib = { .rdzv_id_lo = ~0, .tag = ~0 };
 
 	dom = rxc->domain;
 
@@ -622,8 +622,8 @@ static void cxip_rxc_eager_fini(struct cxip_rx_ctx *rxc)
 	}
 }
 
-/* Append a persistent LE to the Overflow list to match RDVS Sends. */
-static int cxip_rxc_rdvs_init(struct cxip_rx_ctx *rxc)
+/* Append a persistent LE to the Overflow list to match RDZV Sends. */
+static int cxip_rxc_rdzv_init(struct cxip_rx_ctx *rxc)
 {
 	struct cxip_domain *dom;
 	int ret;
@@ -632,8 +632,8 @@ static int cxip_rxc_rdvs_init(struct cxip_rx_ctx *rxc)
 	struct cxi_md *md;
 
 	/* Match all tagged, rendezvous sends */
-	union cxip_match_bits mb = { .tagged = 1, .rdvs = 1 };
-	union cxip_match_bits ib = { .rdvs_id_lo = ~0, .tag = ~0 };
+	union cxip_match_bits mb = { .tagged = 1, .rdzv = 1 };
+	union cxip_match_bits ib = { .rdzv_id_lo = ~0, .tag = ~0 };
 
 	dom = rxc->domain;
 
@@ -664,7 +664,7 @@ static int cxip_rxc_rdvs_init(struct cxip_rx_ctx *rxc)
 	fastlock_acquire(&rxc->lock);
 
 	/* Multiple callers can race to allocate ux buffer */
-	if (ofi_atomic_get32(&rxc->ux_rdvs_buf.ref) != 0) {
+	if (ofi_atomic_get32(&rxc->ux_rdzv_buf.ref) != 0) {
 		ret = FI_SUCCESS;
 		goto unlock_ux;
 	}
@@ -679,15 +679,15 @@ static int cxip_rxc_rdvs_init(struct cxip_rx_ctx *rxc)
 	}
 
 	/* Initialize oflow_buf structure */
-	ofi_atomic_inc32(&rxc->ux_rdvs_buf.ref);
-	rxc->ux_rdvs_buf.type = RDVS_OFLOW_BUF;
-	rxc->ux_rdvs_buf.buf = ux_buf;
-	rxc->ux_rdvs_buf.md = md;
-	rxc->ux_rdvs_buf.rxc = rxc;
-	rxc->ux_rdvs_buf.buffer_id = req->req_id;
+	ofi_atomic_inc32(&rxc->ux_rdzv_buf.ref);
+	rxc->ux_rdzv_buf.type = RDZV_OFLOW_BUF;
+	rxc->ux_rdzv_buf.buf = ux_buf;
+	rxc->ux_rdzv_buf.md = md;
+	rxc->ux_rdzv_buf.rxc = rxc;
+	rxc->ux_rdzv_buf.buffer_id = req->req_id;
 
 	req->oflow.rxc = rxc;
-	req->oflow.oflow_buf = &rxc->ux_rdvs_buf;
+	req->oflow.oflow_buf = &rxc->ux_rdzv_buf;
 	req->cb = cxip_oflow_cb;
 
 	/* TODO take reference on EP or context for the outstanding request */
@@ -715,12 +715,12 @@ free_ux_buf:
  *
  * Caller must hold rxc->lock.
  */
-static void cxip_rxc_rdvs_fini(struct cxip_rx_ctx *rxc)
+static void cxip_rxc_rdzv_fini(struct cxip_rx_ctx *rxc)
 {
 	int ret;
 
 	ret = issue_unlink_le(rxc->rx_pte->pte, C_PTL_LIST_OVERFLOW,
-			      rxc->ux_rdvs_buf.buffer_id, rxc->rx_cmdq);
+			      rxc->ux_rdzv_buf.buffer_id, rxc->rx_cmdq);
 	if (ret) {
 		/* TODO handle error */
 		CXIP_LOG_ERROR("Failed to enqueue unlink command: %d\n", ret);
@@ -728,15 +728,15 @@ static void cxip_rxc_rdvs_fini(struct cxip_rx_ctx *rxc)
 		do {
 			sched_yield();
 			cxip_cq_progress(rxc->comp.recv_cq);
-		} while (ofi_atomic_get32(&rxc->ux_rdvs_buf.ref));
+		} while (ofi_atomic_get32(&rxc->ux_rdzv_buf.ref));
 
 		/* Clean up overflow buffers */
-		ret = cxil_unmap(rxc->ux_rdvs_buf.md);
+		ret = cxil_unmap(rxc->ux_rdzv_buf.md);
 		if (ret) {
 			/* TODO handle error */
 			CXIP_LOG_ERROR("Failed to unmap ux buffer: %d\n", ret);
 		}
-		free(rxc->ux_rdvs_buf.buf);
+		free(rxc->ux_rdzv_buf.buf);
 	}
 }
 
@@ -751,9 +751,9 @@ int cxip_rxc_msg_init(struct cxip_rx_ctx *rxc)
 		return ret;
 	}
 
-	ret = cxip_rxc_rdvs_init(rxc);
+	ret = cxip_rxc_rdzv_init(rxc);
 	if (ret) {
-		CXIP_LOG_ERROR("cxip_rxc_rdvs_init failed: %d\n", ret);
+		CXIP_LOG_ERROR("cxip_rxc_rdzv_init failed: %d\n", ret);
 		cxip_rxc_eager_fini(rxc);
 		return ret;
 	}
@@ -766,7 +766,7 @@ int cxip_rxc_msg_init(struct cxip_rx_ctx *rxc)
 /* Finalize an RXC for messaging */
 void cxip_rxc_msg_fini(struct cxip_rx_ctx *rxc)
 {
-	cxip_rxc_rdvs_fini(rxc);
+	cxip_rxc_rdzv_fini(rxc);
 
 	cxip_rxc_eager_fini(rxc);
 }
@@ -929,7 +929,7 @@ static void cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 			 * operation to receive the data that was sent by the
 			 * Put operation's initiator.
 			 */
-			ret = rdvs_issue_get(req, ux_send);
+			ret = rdzv_issue_get(req, ux_send);
 			if (ret)
 				cxip_cq_req_free(req);
 		}
@@ -1015,7 +1015,7 @@ static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	uint32_t match_id;
 	uint32_t pid_bits;
 	union cxip_match_bits mb = {};
-	union cxip_match_bits ib = { .rdvs = ~0, .rdvs_id_lo = ~0 };
+	union cxip_match_bits ib = { .rdzv = ~0, .rdzv_id_lo = ~0 };
 
 	if (!ep || !buf)
 		return -FI_EINVAL;
@@ -1133,14 +1133,14 @@ recv_unmap:
 	return ret;
 }
 
-static void rdvs_send_req_free(struct cxip_req *req)
+static void rdzv_send_req_free(struct cxip_req *req)
 {
 	int ret;
 
 	fastlock_acquire(&req->send.txc->lock);
 
-	cxip_tx_ctx_free_rdvs_id(req->send.txc, req->send.rdvs_id);
-	CXIP_LOG_DBG("Freed RDVS ID: %d\n", req->send.rdvs_id);
+	cxip_tx_ctx_free_rdzv_id(req->send.txc, req->send.rdzv_id);
+	CXIP_LOG_DBG("Freed RDZV ID: %d\n", req->send.rdzv_id);
 
 	fastlock_release(&req->send.txc->lock);
 
@@ -1165,7 +1165,7 @@ static void rdvs_send_req_free(struct cxip_req *req)
  *    matched to a transaction.
  * 6. A Get event is generated indicating the source data was read.
  */
-static void cxip_rdvs_send_cb(struct cxip_req *req, const union c_event *event)
+static void cxip_rdzv_send_cb(struct cxip_req *req, const union c_event *event)
 {
 	int ret;
 	int event_rc;
@@ -1185,7 +1185,7 @@ static void cxip_rdvs_send_cb(struct cxip_req *req, const union c_event *event)
 				CXIP_LOG_ERROR("Failed to report error: %d\n",
 					       ret);
 
-			rdvs_send_req_free(req);
+			rdzv_send_req_free(req);
 			return;
 		}
 
@@ -1198,7 +1198,7 @@ static void cxip_rdvs_send_cb(struct cxip_req *req, const union c_event *event)
 
 			/* Save the error and clean up operation. */
 			req->send.event_failure = ret;
-			goto rdvs_unlink_le;
+			goto rdzv_unlink_le;
 		}
 
 		cxi_cq_ring(txc->tx_cmdq);
@@ -1217,8 +1217,8 @@ static void cxip_rdvs_send_cb(struct cxip_req *req, const union c_event *event)
 			req->send.event_failure = event_rc;
 
 			fastlock_acquire(&txc->lock);
-rdvs_unlink_le:
-			issue_unlink_le(txc->rdvs_pte->pte,
+rdzv_unlink_le:
+			issue_unlink_le(txc->rdzv_pte->pte,
 					C_PTL_LIST_PRIORITY,
 					req->req_id,
 					txc->rx_cmdq);
@@ -1232,7 +1232,7 @@ rdvs_unlink_le:
 			 */
 			if (!txc->rdzv_offload) {
 				fastlock_acquire(&txc->lock);
-				issue_unlink_le(txc->rdvs_pte->pte,
+				issue_unlink_le(txc->rdzv_pte->pte,
 						C_PTL_LIST_PRIORITY,
 						req->req_id,
 						txc->rx_cmdq);
@@ -1263,7 +1263,7 @@ rdvs_unlink_le:
 				CXIP_LOG_ERROR("Failed to report error: %d\n",
 					       ret);
 
-			rdvs_send_req_free(req);
+			rdzv_send_req_free(req);
 		} else if (req->send.complete_on_unlink) {
 			/* The Ack event for the Put operation was received and
 			 * all data has already transferred because it was an
@@ -1278,7 +1278,7 @@ rdvs_unlink_le:
 				CXIP_LOG_ERROR("Failed to report completion: %d\n",
 					       ret);
 
-			rdvs_send_req_free(req);
+			rdzv_send_req_free(req);
 		} else {
 			CXIP_LOG_DBG("Source LE unlinked:  %p\n", req);
 		}
@@ -1306,7 +1306,7 @@ rdvs_unlink_le:
 					       ret);
 		}
 
-		rdvs_send_req_free(req);
+		rdzv_send_req_free(req);
 
 		return;
 	default:
@@ -1319,7 +1319,7 @@ rdvs_unlink_le:
 			CXIP_LOG_ERROR("Failed to report error: %d\n",
 				       ret);
 
-		rdvs_send_req_free(req);
+		rdzv_send_req_free(req);
 
 		return;
 	}
@@ -1370,32 +1370,32 @@ static fi_addr_t _txc_fi_addr(struct cxip_tx_ctx *txc)
 	return txc->ep_obj->fi_addr;
 }
 
-static ssize_t _cxip_send_rdvs(struct cxip_tx_ctx *txc, struct cxip_req *req)
+static ssize_t _cxip_send_rdzv(struct cxip_tx_ctx *txc, struct cxip_req *req)
 {
 	int ret;
-	int rdvs_id;
+	int rdzv_id;
 	union cxip_match_bits *put_mb;
 	union cxip_match_bits le_mb = {};
-	union cxip_match_bits le_ib = { .rdvs_id_lo = ~0 }; /* inverted */
+	union cxip_match_bits le_ib = { .rdzv_id_lo = ~0 }; /* inverted */
 
 	fastlock_acquire(&txc->lock);
 
 	/* Get Rendezvous ID */
-	rdvs_id = cxip_tx_ctx_alloc_rdvs_id(txc);
-	if (rdvs_id < 0) {
-		CXIP_LOG_DBG("Failed alloc RDVS ID\n");
+	rdzv_id = cxip_tx_ctx_alloc_rdzv_id(txc);
+	if (rdzv_id < 0) {
+		CXIP_LOG_DBG("Failed alloc RDZV ID\n");
 		goto unlock;
 	}
-	CXIP_LOG_DBG("Alloced RDVS ID: %d\n", rdvs_id);
+	CXIP_LOG_DBG("Alloced RDZV ID: %d\n", rdzv_id);
 
-	req->send.rdvs_id = rdvs_id;
+	req->send.rdzv_id = rdzv_id;
 
 	put_mb = (union cxip_match_bits *)&req->send.cmd.full_dma.match_bits;
-	put_mb->rdvs = 1;
-	put_mb->rdvs_id_lo = RDVS_ID_LO(rdvs_id);
-	le_mb.rdvs_id_lo = RDVS_ID_LO(rdvs_id);
+	put_mb->rdzv = 1;
+	put_mb->rdzv_id_lo = RDZV_ID_LO(rdzv_id);
+	le_mb.rdzv_id_lo = RDZV_ID_LO(rdzv_id);
 
-	/* RDVS ID is split between match bits and 8-bit rendezvous_id field in
+	/* RDZV ID is split between match bits and 8-bit rendezvous_id field in
 	 * the Put command. The command bits are only supported by hardware
 	 * (not available for software rendezvous).
 	 */
@@ -1407,14 +1407,14 @@ static ssize_t _cxip_send_rdvs(struct cxip_tx_ctx *txc, struct cxip_req *req)
 		req->send.cmd.full_dma.eager_length = txc->eager_threshold;
 		req->send.cmd.full_dma.initiator = CXI_MATCH_ID(pid_bits, 0,
 								nic_addr);
-		req->send.cmd.full_dma.rendezvous_id = RDVS_ID_HI(rdvs_id);
-		le_mb.rdvs_id_hi = RDVS_ID_HI(rdvs_id);
-		le_ib.rdvs_id_hi = ~0;
+		req->send.cmd.full_dma.rendezvous_id = RDZV_ID_HI(rdzv_id);
+		le_mb.rdzv_id_hi = RDZV_ID_HI(rdzv_id);
+		le_ib.rdzv_id_hi = ~0;
 	} else {
-		assert(rdvs_id < (1 << RDVS_ID_LO_WIDTH));
+		assert(rdzv_id < (1 << RDZV_ID_LO_WIDTH));
 	}
 
-	ret = issue_append_le(txc->rdvs_pte->pte, req->send.buf,
+	ret = issue_append_le(txc->rdzv_pte->pte, req->send.buf,
 			      req->send.length, req->send.send_md,
 			      C_PTL_LIST_PRIORITY, req->req_id,
 			      le_mb.raw, ~le_ib.raw, CXI_MATCH_ID_ANY, 0,
@@ -1433,7 +1433,7 @@ static ssize_t _cxip_send_rdvs(struct cxip_tx_ctx *txc, struct cxip_req *req)
 	return FI_SUCCESS;
 
 free_id:
-	cxip_tx_ctx_free_rdvs_id(txc, rdvs_id);
+	cxip_tx_ctx_free_rdzv_id(txc, rdzv_id);
 unlock:
 	fastlock_release(&txc->lock);
 
@@ -1488,7 +1488,7 @@ static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 	uint32_t pid_granule;
 	uint32_t pid_idx;
 	uint64_t rx_id;
-	bool rdvs;
+	bool rdzv;
 	uint32_t match_id;
 	uint32_t pid_bits;
 	union cxip_match_bits mb = {};
@@ -1515,9 +1515,9 @@ static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 	}
 
 	if (tagged && len > txc->eager_threshold)
-		rdvs = true;
+		rdzv = true;
 	else
-		rdvs = false;
+		rdzv = false;
 
 	dom = txc->domain;
 
@@ -1538,7 +1538,7 @@ static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 	}
 
 	/* Populate request */
-	req = cxip_cq_req_alloc(txc->comp.send_cq, rdvs);
+	req = cxip_cq_req_alloc(txc->comp.send_cq, rdzv);
 	if (!req) {
 		CXIP_LOG_DBG("Failed to allocate request\n");
 		ret = -FI_ENOMEM;
@@ -1561,8 +1561,8 @@ static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 	req->data = 0;
 	req->tag = 0;
 
-	if (rdvs)
-		req->cb = cxip_rdvs_send_cb;
+	if (rdzv)
+		req->cb = cxip_rdzv_send_cb;
 	else
 		req->cb = cxip_send_cb;
 
@@ -1607,9 +1607,9 @@ static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 	cmd.full_dma.initiator = match_id;
 	cmd.full_dma.match_bits = mb.raw;
 
-	if (rdvs) {
+	if (rdzv) {
 		req->send.cmd = cmd;
-		ret = _cxip_send_rdvs(txc, req);
+		ret = _cxip_send_rdzv(txc, req);
 		if (ret)
 			goto send_freereq;
 	} else {

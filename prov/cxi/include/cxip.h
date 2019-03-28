@@ -199,22 +199,22 @@ struct cxip_addr {
 	(av->rx_ctx_bits ? ((uint64_t)fi_addr >> (64 - av->rx_ctx_bits)) : 0)
 
 /* Messaging Match Bit layout */
-#define RDVS_ID_LO_WIDTH 14
-#define RDVS_ID_HI_WIDTH 8
-#define RDVS_ID_WIDTH (RDVS_ID_LO_WIDTH + RDIVS_ID_HI_WIDTH)
-#define RDVS_ID_LO(id) ((id) & ((1 << RDVS_ID_LO_WIDTH) - 1))
-#define RDVS_ID_HI(id) \
-	(((id) >> RDVS_ID_LO_WIDTH) & ((1 << RDVS_ID_HI_WIDTH) - 1))
+#define RDZV_ID_LO_WIDTH 14
+#define RDZV_ID_HI_WIDTH 8
+#define RDZV_ID_WIDTH (RDZV_ID_LO_WIDTH + RDIVS_ID_HI_WIDTH)
+#define RDZV_ID_LO(id) ((id) & ((1 << RDZV_ID_LO_WIDTH) - 1))
+#define RDZV_ID_HI(id) \
+	(((id) >> RDZV_ID_LO_WIDTH) & ((1 << RDZV_ID_HI_WIDTH) - 1))
 
 union cxip_match_bits {
 	struct {
 		uint64_t tag        : 48; /* User tag value */
-		uint64_t rdvs_id_lo : RDVS_ID_LO_WIDTH;
-		uint64_t rdvs       : 1;  /* Rendezvous protocol */
+		uint64_t rdzv_id_lo : RDZV_ID_LO_WIDTH;
+		uint64_t rdzv       : 1;  /* Rendezvous protocol */
 		uint64_t tagged     : 1;  /* Tagged API */
 	};
 	struct {
-		uint64_t rdvs_id_hi : RDVS_ID_HI_WIDTH;
+		uint64_t rdzv_id_hi : RDZV_ID_HI_WIDTH;
 	};
 	uint64_t raw;
 };
@@ -405,9 +405,9 @@ struct cxip_req_send {
 	struct cxi_md *send_md;		// message target buffer
 	struct cxip_tx_ctx *txc;
 	size_t length;			// request length
-	int rdvs_id;			// SW RDVS ID for long messages
-	enum c_return_code event_failure;// SW RDVS Failure status on prev event
-	int complete_on_unlink;		// SW RDVS state for expected messages
+	int rdzv_id;			// SW RDZV ID for long messages
+	enum c_return_code event_failure;// SW RDZV Failure status on prev event
+	int complete_on_unlink;		// SW RDZV state for expected messages
 	union c_cmdu cmd;	// Rendezvous cmd to send after LE is linked
 };
 
@@ -584,7 +584,7 @@ struct cxip_ux_send {
 
 enum oflow_buf_type {
 	EAGER_OFLOW_BUF = 1, /* Locally managed eager data overflow buffer */
-	RDVS_OFLOW_BUF,      /* Truncating overflow buffer for rdvs */
+	RDZV_OFLOW_BUF,      /* Truncating overflow buffer for rdzv */
 };
 
 /**
@@ -648,13 +648,13 @@ struct cxip_rx_ctx {
 	struct dlist_entry oflow_bufs;	// Overflow buffers
 	struct dlist_entry ux_sends;	// Sends matched in overflow list
 	struct dlist_entry ux_recvs;	// Recvs matched in overflow list
-	struct cxip_oflow_buf ux_rdvs_buf; // Long UX Rendezvous buffer
+	struct cxip_oflow_buf ux_rdzv_buf; // Long UX Rendezvous buffer
 };
 
-#define CXIP_RDVS_BM_LEN (8)
+#define CXIP_RDZV_BM_LEN (8)
 
-struct cxip_rdvs_ids {
-	uint16_t bitmap[CXIP_RDVS_BM_LEN];
+struct cxip_rdzv_ids {
+	uint16_t bitmap[CXIP_RDZV_BM_LEN];
 };
 
 /**
@@ -692,10 +692,10 @@ struct cxip_tx_ctx {
 	struct cxi_cmdq *tx_cmdq;	// added during cxip_tx_ctx_enable()
 
 	/* Software Rendezvous related structures */
-	struct cxip_pte *rdvs_pte;	// PTE for SW Rendezvous commands
+	struct cxip_pte *rdzv_pte;	// PTE for SW Rendezvous commands
 	int eager_threshold;		// Threshold for eager IOs
 	struct cxi_cmdq *rx_cmdq;	// Target cmdq for Rendezvous buffers
-	struct cxip_rdvs_ids rdvs_ids;	// Set of Rendezvous IDs to be used
+	struct cxip_rdzv_ids rdzv_ids;	// Set of Rendezvous IDs to be used
 	int rdzv_offload;
 };
 
@@ -956,8 +956,8 @@ struct cxip_rx_ctx *cxip_rx_ctx_alloc(const struct fi_rx_attr *attr,
 				      void *context, int use_shared);
 void cxip_rx_ctx_free(struct cxip_rx_ctx *rx_ctx);
 
-int cxip_tx_ctx_alloc_rdvs_id(struct cxip_tx_ctx *txc);
-int cxip_tx_ctx_free_rdvs_id(struct cxip_tx_ctx *txc, int tag);
+int cxip_tx_ctx_alloc_rdzv_id(struct cxip_tx_ctx *txc);
+int cxip_tx_ctx_free_rdzv_id(struct cxip_tx_ctx *txc, int tag);
 
 int cxip_rxc_msg_init(struct cxip_rx_ctx *rxc);
 void cxip_rxc_msg_fini(struct cxip_rx_ctx *rxc);

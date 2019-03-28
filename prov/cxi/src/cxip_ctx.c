@@ -202,7 +202,7 @@ struct cxip_rx_ctx *cxip_rx_ctx_alloc(const struct fi_rx_attr *attr,
 	rx_ctx->use_shared = use_shared;
 
 	ofi_atomic_initialize32(&rx_ctx->oflow_buf_cnt, 0);
-	ofi_atomic_initialize32(&rx_ctx->ux_rdvs_buf.ref, 0);
+	ofi_atomic_initialize32(&rx_ctx->ux_rdzv_buf.ref, 0);
 	dlist_init(&rx_ctx->oflow_bufs);
 	dlist_init(&rx_ctx->ux_sends);
 	dlist_init(&rx_ctx->ux_recvs);
@@ -224,20 +224,20 @@ void cxip_rx_ctx_free(struct cxip_rx_ctx *rx_ctx)
 }
 
 /* Caller must hold txc->lock */
-int cxip_tx_ctx_alloc_rdvs_id(struct cxip_tx_ctx *txc)
+int cxip_tx_ctx_alloc_rdzv_id(struct cxip_tx_ctx *txc)
 {
 	int rc;
 
 	/* Find a bitmap with cleared bits */
-	for (int idx = 0; idx < CXIP_RDVS_BM_LEN; idx++) {
-		if (txc->rdvs_ids.bitmap[idx] != 0xFFFF)
+	for (int idx = 0; idx < CXIP_RDZV_BM_LEN; idx++) {
+		if (txc->rdzv_ids.bitmap[idx] != 0xFFFF)
 
 			/* Find the lowest cleared bit */
 			for (int bit = 0; bit < 16; bit++)
-				if (!(txc->rdvs_ids.bitmap[idx] & (1 << bit))) {
+				if (!(txc->rdzv_ids.bitmap[idx] & (1 << bit))) {
 
 					/* Set the bit and save the context */
-					txc->rdvs_ids.bitmap[idx] |= (1 << bit);
+					txc->rdzv_ids.bitmap[idx] |= (1 << bit);
 					rc = (idx << 4) | bit;
 
 					return rc;
@@ -249,16 +249,16 @@ int cxip_tx_ctx_alloc_rdvs_id(struct cxip_tx_ctx *txc)
 }
 
 /* Caller must hold txc->lock */
-int cxip_tx_ctx_free_rdvs_id(struct cxip_tx_ctx *txc, int tag)
+int cxip_tx_ctx_free_rdzv_id(struct cxip_tx_ctx *txc, int tag)
 {
 	int idx = tag >> 4;
 	int bit = (tag & 0xF);
 	uint16_t clear_bitmask = 1 << bit;
 
-	if (idx >= CXIP_RDVS_BM_LEN || idx < 0)
+	if (idx >= CXIP_RDZV_BM_LEN || idx < 0)
 		return -FI_EINVAL;
 
-	txc->rdvs_ids.bitmap[idx] &= ~clear_bitmask;
+	txc->rdzv_ids.bitmap[idx] &= ~clear_bitmask;
 
 	return FI_SUCCESS;
 }
@@ -272,7 +272,7 @@ static int tx_ctx_msg_init(struct cxip_tx_ctx *txc)
 	uint64_t pid_idx;
 
 	/* initialize the rendezvous ID structure */
-	memset(&txc->rdvs_ids, 0, sizeof(txc->rdvs_ids));
+	memset(&txc->rdzv_ids, 0, sizeof(txc->rdzv_ids));
 
 	if (txc->ep_obj->av->attr.flags & FI_SYMMETRIC) {
 		CXIP_LOG_DBG("Using logical PTE matching\n");
@@ -282,22 +282,22 @@ static int tx_ctx_msg_init(struct cxip_tx_ctx *txc)
 	/* Reserve the Rendezvous Send PTE */
 	pid_idx = txc->domain->dev_if->if_dev->info.rdzv_get_idx;
 	ret = cxip_pte_alloc(txc->ep_obj->if_dom, txc->comp.send_cq->evtq,
-			     pid_idx, &opts, &txc->rdvs_pte);
+			     pid_idx, &opts, &txc->rdzv_pte);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("Failed to allocate RDVS PTE: %d\n", ret);
+		CXIP_LOG_DBG("Failed to allocate RDZV PTE: %d\n", ret);
 		return ret;
 	}
 
 	/* Enable the Rendezvous PTE */
 	cmd.command.opcode = C_CMD_TGT_SETSTATE;
-	cmd.set_state.ptlte_index = txc->rdvs_pte->pte->ptn;
+	cmd.set_state.ptlte_index = txc->rdzv_pte->pte->ptn;
 	cmd.set_state.ptlte_state = C_PTLTE_ENABLED;
 
 	ret = cxi_cq_emit_target(txc->rx_cmdq, &cmd);
 	if (ret) {
 		/* This is a bug, we have exclusive access to this CMDQ. */
 		CXIP_LOG_ERROR("Failed to enqueue command: %d\n", ret);
-		goto free_rdvs_pte;
+		goto free_rdzv_pte;
 	}
 
 	cxi_cq_ring(txc->rx_cmdq);
@@ -306,12 +306,12 @@ static int tx_ctx_msg_init(struct cxip_tx_ctx *txc)
 	do {
 		sched_yield();
 		cxip_cq_progress(txc->comp.send_cq);
-	} while (txc->rdvs_pte->state != C_PTLTE_ENABLED);
+	} while (txc->rdzv_pte->state != C_PTLTE_ENABLED);
 
 	return FI_SUCCESS;
 
-free_rdvs_pte:
-	cxip_pte_free(txc->rdvs_pte);
+free_rdzv_pte:
+	cxip_pte_free(txc->rdzv_pte);
 
 	return ret;
 }
@@ -319,7 +319,7 @@ free_rdvs_pte:
 /* Caller must hold txc->lock */
 static int tx_ctx_msg_fini(struct cxip_tx_ctx *txc)
 {
-	cxip_pte_free(txc->rdvs_pte);
+	cxip_pte_free(txc->rdzv_pte);
 
 	return FI_SUCCESS;
 }
