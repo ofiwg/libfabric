@@ -38,7 +38,7 @@ static void cxip_rma_cb(struct cxip_req *req, const union c_event *event)
 	if (ret != FI_SUCCESS)
 		CXIP_LOG_ERROR("Failed to free MD: %d\n", ret);
 
-	event_rc = event->init_short.return_code;
+	event_rc = cxi_init_event_rc(event);
 	if (event_rc == C_RC_OK) {
 		ret = req->cq->report_completion(req->cq, FI_ADDR_UNSPEC, req);
 		if (ret != req->cq->cq_entry_size)

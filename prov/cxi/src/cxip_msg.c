@@ -297,8 +297,6 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 
 	oflow_buf = req->oflow.oflow_buf;
 
-	CXIP_LOG_DBG("got event: %d\n", event->hdr.event_type);
-
 	/* Netsim is currently giving events in the order: LINK-UNLINK-PUT.
 	 * Assume this order is guaranteed for now.
 	 */
@@ -842,14 +840,17 @@ static void cxip_trecv_cb(struct cxip_req *req, const union c_event *event)
 	struct cxip_oflow_buf *oflow_buf;
 	void *oflow_va;
 	union cxip_match_bits mb;
-
-	CXIP_LOG_DBG("got event: %d\n", event->hdr.event_type);
+	int event_rc;
 
 	if (event->hdr.event_type == C_EVENT_LINK) {
 		/* TODO Handle append errors. */
+		event_rc = cxi_tgt_event_rc(event);
+		CXIP_LOG_DBG("Link completed with: %d\n", event_rc);
 		return;
 	} else if (event->hdr.event_type == C_EVENT_UNLINK) {
 		/* TODO Handle unlink errors. */
+		event_rc = cxi_tgt_event_rc(event);
+		CXIP_LOG_DBG("Unlink completed with: %d\n", event_rc);
 		return;
 	} else if (event->hdr.event_type == C_EVENT_PUT_OVERFLOW) {
 		/* We matched an unexpected header */
@@ -886,7 +887,7 @@ static void cxip_trecv_cb(struct cxip_req *req, const union c_event *event)
 
 		oflow_buf = ux_send->oflow_buf;
 
-		req->recv.rc = event->tgt_long.return_code;
+		req->recv.rc = cxi_tgt_event_rc(event);
 		mb.raw = event->tgt_long.match_bits;
 		req->tag = mb.tag;
 		req->recv.src_addr = _rxc_event_src_addr(rxc, event);
@@ -945,7 +946,7 @@ static void cxip_trecv_cb(struct cxip_req *req, const union c_event *event)
 		 * request.
 		 */
 
-		req->recv.rc = event->tgt_long.return_code;
+		req->recv.rc = cxi_tgt_event_rc(event);
 		req->recv.rlength = event->tgt_long.rlength;
 		req->recv.mlength = event->tgt_long.mlength;
 		mb.raw = event->tgt_long.match_bits;
@@ -967,7 +968,7 @@ static void cxip_trecv_cb(struct cxip_req *req, const union c_event *event)
 		 * into the data buffer.
 		 * Complete the operation
 		 */
-		req->recv.rc = event->init_short.return_code;
+		req->recv.rc = cxi_init_event_rc(event);
 
 		ret = cxil_unmap(req->recv.recv_md);
 		if (ret != FI_SUCCESS)
@@ -1163,17 +1164,14 @@ static void cxip_rdvs_send_cb(struct cxip_req *req, const union c_event *event)
 	int event_rc;
 	struct cxip_tx_ctx *txc = req->send.txc;
 
-	CXIP_LOG_DBG("got event: %d\n", event->hdr.event_type);
-
 	switch (event->hdr.event_type) {
-
 	case C_EVENT_LINK:
-		if (event->tgt_long.return_code != C_RC_OK) {
+		event_rc = cxi_tgt_event_rc(event);
+		if (event_rc != C_RC_OK) {
 			CXIP_LOG_ERROR("Link error: %d id: %d\n",
-				       event->tgt_long.return_code,
+				       event_rc,
 				       event->tgt_long.buffer_id);
 
-			event_rc = event->tgt_long.return_code;
 			ret = cxip_cq_report_error(req->cq, req, 0, FI_EIO,
 						   event_rc, NULL, 0);
 			if (ret != FI_SUCCESS)
@@ -1200,11 +1198,11 @@ static void cxip_rdvs_send_cb(struct cxip_req *req, const union c_event *event)
 
 		fastlock_release(&txc->lock);
 
-		CXIP_LOG_ERROR("Enqueued Put: %p\n", req);
+		CXIP_LOG_DBG("Enqueued Put: %p\n", req);
 		return;
 	case C_EVENT_ACK:
 		/* The payload was delivered to the target. */
-		event_rc = event->init_short.return_code;
+		event_rc = cxi_init_event_rc(event);
 		if (event_rc != C_RC_OK) {
 			CXIP_LOG_ERROR("Ack error: %d\n", event_rc);
 
@@ -1220,7 +1218,7 @@ rdvs_unlink_le:
 
 			fastlock_release(&txc->lock);
 		} else if (event->init_short.ptl_list == C_PTL_LIST_PRIORITY) {
-			CXIP_LOG_ERROR("Put Acked (Priority): %p\n", req);
+			CXIP_LOG_DBG("Put Acked (Priority): %p\n", req);
 
 			/* The Put matched in the Priority list, the source
 			 * buffer LE is unneeded.
@@ -1235,7 +1233,7 @@ rdvs_unlink_le:
 			/* Wait for the Unlink event */
 			req->send.complete_on_unlink = 1;
 		} else {
-			CXIP_LOG_ERROR("Put Acked (Overflow): %p\n", req);
+			CXIP_LOG_DBG("Put Acked (Overflow): %p\n", req);
 		}
 
 		/* Wait for the source buffer LE to be unlinked. */
@@ -1245,7 +1243,7 @@ rdvs_unlink_le:
 		if (req->send.event_failure != C_RC_NO_EVENT)
 			event_rc = req->send.event_failure;
 		else
-			event_rc = event->tgt_long.return_code;
+			event_rc = cxi_tgt_event_rc(event);
 
 		if (event_rc != C_RC_OK) {
 			CXIP_LOG_ERROR("Unlink error: %d\n", event_rc);
@@ -1273,7 +1271,7 @@ rdvs_unlink_le:
 
 			rdvs_send_req_free(req);
 		} else {
-			CXIP_LOG_ERROR("Source LE unlinked:  %p\n", req);
+			CXIP_LOG_DBG("Source LE unlinked:  %p\n", req);
 		}
 
 		/* A final Get event is expected indicating the source data has
@@ -1281,7 +1279,7 @@ rdvs_unlink_le:
 		 */
 		return;
 	case C_EVENT_GET:
-		event_rc = event->tgt_long.return_code;
+		event_rc = cxi_tgt_event_rc(event);
 		if (event_rc != C_RC_OK) {
 			CXIP_LOG_ERROR("Get error: %d\n", event_rc);
 
@@ -1303,8 +1301,8 @@ rdvs_unlink_le:
 
 		return;
 	default:
-		CXIP_LOG_ERROR("Unexpected event received: %d\n",
-			       event->hdr.event_type);
+		CXIP_LOG_ERROR("Unexpected event received: %s\n",
+			       cxi_event_to_str(event));
 
 		ret = cxip_cq_report_error(req->cq, req, 0, FI_EIO, -FI_EOTHER,
 					   NULL, 0);
@@ -1328,7 +1326,7 @@ static void cxip_send_cb(struct cxip_req *req, const union c_event *event)
 	if (ret != FI_SUCCESS)
 		CXIP_LOG_ERROR("Failed to free MD: %d\n", ret);
 
-	event_rc = event->init_short.return_code;
+	event_rc = cxi_init_event_rc(event);
 	if (event_rc == C_RC_OK) {
 		CXIP_LOG_DBG("Request success: %p\n", req);
 
