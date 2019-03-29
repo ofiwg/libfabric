@@ -1280,8 +1280,14 @@ static inline ssize_t rxm_eq_readerr(struct rxm_ep *rxm_ep,
 {
 	ssize_t ret;
 
-	RXM_EQ_READERR(&rxm_prov, FI_LOG_EP_CTRL, rxm_ep->msg_eq,
-		       ret, entry->err_entry);
+	ret = fi_eq_readerr(rxm_ep->msg_eq, &entry->err_entry, 0);
+	if (ret != sizeof(entry->err_entry)) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+			"Unable to fi_eq_readerr: %zd\n", ret);
+	} else {
+		RXM_Q_STRERROR(&rxm_prov, FI_LOG_EP_CTRL, rxm_ep->msg_eq,
+			       "eq", entry->err_entry, fi_eq_strerror);
+	}
 
 	if (entry->err_entry.err == ECONNREFUSED) {
 		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Connection refused\n");
@@ -1404,6 +1410,8 @@ static void *rxm_conn_progress(void *arg)
 		if (rxm_conn_eq_event(rxm_ep, entry))
 			break;
 	}
+
+	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Stoping conn event handler\n");
 	return NULL;
 }
 
@@ -1553,6 +1561,7 @@ static void *rxm_conn_atomic_progress(void *arg)
 
 	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
 	       "Stoping CM conn thread with atomic AUTO_PROGRESS\n");
+
 	return NULL;
 }
 

@@ -134,18 +134,6 @@ do {									\
 		}							\
 	} while (0)
 
-#define RXM_EQ_READERR(prov, log, eq, ret, err_entry)			\
-	do {								\
-		(ret) = fi_eq_readerr((eq), &(err_entry), 0);		\
-		if ((ret) != sizeof(err_entry)) {			\
-			FI_WARN(prov, log,				\
-				"Unable to fi_eq_readerr: %zd\n", ret);	\
-		} else {						\
-			RXM_Q_STRERROR(prov, log, eq, "eq",		\
-				       err_entry, fi_eq_strerror);	\
-		}							\
-	} while (0)
-
 extern struct fi_provider rxm_prov;
 extern struct util_prov rxm_util_prov;
 extern struct fi_ops_rma rxm_ops_rma;
