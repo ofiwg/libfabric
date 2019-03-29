@@ -445,8 +445,11 @@ struct fi_ibv_monitor_entry {
 	struct iovec		iov;
 };
 
+extern struct fi_ibv_mem_notifier *fi_ibv_mem_notifier;
+
 void fi_ibv_mem_notifier_free_hook(void *ptr, const void *caller);
 void *fi_ibv_mem_notifier_realloc_hook(void *ptr, size_t size, const void *caller);
+void fi_ibv_mem_notifier_free(void);
 
 extern struct fi_ibv_mr_internal_ops fi_ibv_mr_internal_ops;
 extern struct fi_ibv_mr_internal_ops fi_ibv_mr_internal_cache_ops;
