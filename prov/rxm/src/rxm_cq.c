@@ -106,8 +106,26 @@ rxm_cq_get_rx_comp_flags(struct rxm_rx_buf *rx_buf)
 
 static int rxm_finish_buf_recv(struct rxm_rx_buf *rx_buf)
 {
-	uint64_t flags = rxm_cq_get_rx_comp_and_op_flags(rx_buf);
+	uint64_t flags;
 	char *data;
+
+	if (rx_buf->pkt.ctrl_hdr.type == ofi_ctrl_seg_data &&
+	    rxm_sar_get_seg_type(&rx_buf->pkt.ctrl_hdr) != RXM_SAR_SEG_FIRST) {
+		dlist_insert_tail(&rx_buf->unexp_msg.entry,
+				  &rx_buf->conn->sar_deferred_rx_msg_list);
+		rx_buf = rxm_rx_buf_alloc(rx_buf->ep, rx_buf->msg_ep, 1);
+		if (OFI_UNLIKELY(!rx_buf)) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+				"ran out of buffers from RX buffer pool\n");
+			return -FI_ENOMEM;
+		}
+		dlist_insert_tail(&rx_buf->repost_entry,
+				  &rx_buf->ep->repost_ready_list);
+
+		return 0;
+	}
+
+	flags = rxm_cq_get_rx_comp_and_op_flags(rx_buf);
 
 	if (rx_buf->pkt.ctrl_hdr.type != ofi_ctrl_data)
 		flags |= FI_MORE;
@@ -357,8 +375,16 @@ static int rxm_rndv_handle_ack(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_buf)
 	}
 }
 
+static int rxm_rx_buf_match_msg_id(struct dlist_entry *item, const void *arg)
+{
+	uint64_t msg_id = *((uint64_t *)arg);
+	struct rxm_rx_buf *rx_buf =
+		container_of(item, struct rxm_rx_buf, unexp_msg.entry);
+	return (msg_id == rx_buf->pkt.ctrl_hdr.msg_id);
+}
+
 static inline
-ssize_t rxm_cq_handle_seg_data(struct rxm_rx_buf *rx_buf)
+ssize_t rxm_cq_copy_seg_data(struct rxm_rx_buf *rx_buf, int *done)
 {
 	uint64_t done_len = ofi_copy_to_iov(rx_buf->recv_entry->rxm_iov.iov,
 					    rx_buf->recv_entry->rxm_iov.count,
@@ -377,6 +403,7 @@ ssize_t rxm_cq_handle_seg_data(struct rxm_rx_buf *rx_buf)
 		done_len = rx_buf->recv_entry->sar.total_recv_len;
 		rx_buf->recv_entry->sar.total_recv_len = 0;
 
+		*done = 1;
 		return rxm_finish_recv(rx_buf, done_len);
 	} else {
 		if (rx_buf->recv_entry->sar.msg_id == RXM_SAR_RX_INIT) {
@@ -395,7 +422,42 @@ ssize_t rxm_cq_handle_seg_data(struct rxm_rx_buf *rx_buf)
 		/* The RX buffer can be reposted for further re-use */
 		rx_buf->recv_entry = NULL;
 		rxm_rx_buf_release(rx_buf->ep, rx_buf);
+
+		*done = 0;
 		return FI_SUCCESS;
+	}
+}
+
+static inline
+ssize_t rxm_cq_handle_seg_data(struct rxm_rx_buf *rx_buf)
+{
+	int done;
+
+	if (rx_buf->ep->rxm_info->mode & FI_BUFFERED_RECV) {
+		struct rxm_recv_entry *recv_entry = rx_buf->recv_entry;
+		struct rxm_conn *conn = rx_buf->conn;
+		uint64_t msg_id = rx_buf->pkt.ctrl_hdr.msg_id;
+		struct dlist_entry *entry;
+		ssize_t ret;
+
+		ret = rxm_cq_copy_seg_data(rx_buf, &done);
+		if (done)
+			return ret;
+
+		dlist_foreach_container_safe(&conn->sar_deferred_rx_msg_list,
+					     struct rxm_rx_buf, rx_buf,
+					     unexp_msg.entry, entry) {
+			if (!rxm_rx_buf_match_msg_id(&rx_buf->unexp_msg.entry, &msg_id))
+				continue;
+			dlist_remove(&rx_buf->unexp_msg.entry);
+			rx_buf->recv_entry = recv_entry;
+			ret = rxm_cq_copy_seg_data(rx_buf, &done);
+			if (done)
+				break;
+		}
+		return ret;
+	} else {
+		return rxm_cq_copy_seg_data(rx_buf, &done);
 	}
 }
 
