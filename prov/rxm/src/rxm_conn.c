@@ -981,7 +981,7 @@ static int rxm_conn_reprocess_directed_recvs(struct rxm_recv_queue *recv_queue)
 			if (rx_buf->ep->util_ep.flags & OFI_CNTR_ENABLED)
 				rxm_cntr_incerr(rx_buf->ep->util_ep.rx_cntr);
 
-			rxm_rx_buf_release(recv_queue->rxm_ep, rx_buf);
+			rxm_rx_buf_release(recv_queue->rxm_ep, rx_buf, rx_buf->repost);
 
 			if (!(rx_buf->recv_entry->flags & FI_MULTI_RECV))
 				rxm_recv_entry_release(recv_queue,
