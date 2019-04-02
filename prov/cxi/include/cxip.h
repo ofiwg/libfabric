@@ -583,8 +583,10 @@ struct cxip_ux_send {
 };
 
 enum oflow_buf_type {
-	EAGER_OFLOW_BUF = 1, /* Locally managed eager data overflow buffer */
-	RDZV_OFLOW_BUF,      /* Truncating overflow buffer for rdzv */
+	OFLOW_BUF_EAGER = 1, /* Locally-managed eager data overflow buffer */
+	OFLOW_BUF_SINK,      /* Truncating overflow buffer for long eager
+			      * protocol
+			      */
 };
 
 /**
@@ -648,7 +650,7 @@ struct cxip_rx_ctx {
 	struct dlist_entry oflow_bufs;	// Overflow buffers
 	struct dlist_entry ux_sends;	// Sends matched in overflow list
 	struct dlist_entry ux_recvs;	// Recvs matched in overflow list
-	struct cxip_oflow_buf ux_rdzv_buf; // Long UX Rendezvous buffer
+	struct cxip_oflow_buf ux_sink_buf; // Long UX sink buffer
 };
 
 #define CXIP_RDZV_BM_LEN (8)

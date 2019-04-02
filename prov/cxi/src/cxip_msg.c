@@ -22,8 +22,13 @@
 #define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_EP_DATA, __VA_ARGS__)
 #define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_EP_DATA, __VA_ARGS__)
 
-/* Append a buffer to a PtlTE. */
-/* Caller must hold cmdq lock */
+/*
+ * issue_append_le() - Append a buffer to a PtlTE.
+ *
+ * TODO: Make common.
+ *
+ * Caller must hold cmdq lock.
+ */
 static int issue_append_le(struct cxil_pte *pte, const void *buf, size_t len,
 			   struct cxi_md *md, enum c_ptl_list list,
 			   uint32_t buffer_id, uint64_t match_bits,
@@ -67,8 +72,14 @@ static int issue_append_le(struct cxil_pte *pte, const void *buf, size_t len,
 	return FI_SUCCESS;
 }
 
-/* Unlink a buffer to a PtlTE. */
-/* Caller must hold cmdq lock */
+
+/*
+ * issue_unlink_le() - Unlink a buffer from a PtlTE.
+ *
+ * TODO: Make common.
+ *
+ * Caller must hold cmdq lock.
+ */
 static int issue_unlink_le(struct cxil_pte *pte, enum c_ptl_list list,
 			   int buffer_id, struct cxi_cmdq *cmdq)
 {
@@ -93,18 +104,20 @@ static int issue_unlink_le(struct cxil_pte *pte, enum c_ptl_list list,
 	return FI_SUCCESS;
 }
 
-/* Caller must hold rxc->lock */
+/*
+ * match_ux_send() - Search for a previously received unexpected Put event with
+ * matching start pointer.
+ *
+ * TODO this assumes all overflow buffers use the same AC so all start pointers
+ * are unique.
+ *
+ * Caller must hold rxc->lock.
+ */
 static struct cxip_ux_send *
 match_ux_send(struct cxip_rx_ctx *rxc, const union c_event *event)
 {
 	struct cxip_ux_send *ux_send;
 
-	/* Look for a previously received unexpected Put event with matching
-	 * start pointer.
-	 *
-	 * TODO this assumes all overflow buffers use the same AC so all start
-	 * pointers are unique.
-	 */
 	dlist_foreach_container(&rxc->ux_sends, struct cxip_ux_send, ux_send,
 				list) {
 		if (ux_send->start == event->tgt_long.start) {
@@ -116,18 +129,20 @@ match_ux_send(struct cxip_rx_ctx *rxc, const union c_event *event)
 	return NULL;
 }
 
-/* Caller must hold rxc->lock */
+/*
+ * match_ux_recv() - Search for a previously completed request which was
+ * matched to an overflow buffer that has a matching start pointer.
+ *
+ * TODO this assumes all overflow buffers use the same AC so all start pointers
+ * are unique.
+ *
+ * Caller must hold rxc->lock.
+ */
 static struct cxip_req *
 match_ux_recv(struct cxip_rx_ctx *rxc, const union c_event *event)
 {
 	struct cxip_req *req;
 
-	/* Look for a previously completed request which was matched to an
-	 * overflow buffer that has a matching start pointer.
-	 *
-	 * TODO this assumes all overflow buffers use the same AC so all start
-	 * pointers are unique.
-	 */
 	dlist_foreach_container(&rxc->ux_recvs, struct cxip_req, req, list) {
 		if (req->recv.start == event->tgt_long.start) {
 			dlist_remove(&req->list);
@@ -138,6 +153,9 @@ match_ux_recv(struct cxip_rx_ctx *rxc, const union c_event *event)
 	return NULL;
 }
 
+/*
+ * report_recv_completion() - Report the completion of a receive operation.
+ */
 static void report_recv_completion(struct cxip_req *req)
 {
 	int ret;
@@ -166,6 +184,9 @@ static void report_recv_completion(struct cxip_req *req)
 	}
 }
 
+/*
+ * oflow_buf_free() - Free an overflow buffer.
+ */
 static void oflow_buf_free(struct cxip_oflow_buf *oflow_buf)
 {
 	cxil_unmap(oflow_buf->md);
@@ -173,11 +194,19 @@ static void oflow_buf_free(struct cxip_oflow_buf *oflow_buf)
 	free(oflow_buf);
 }
 
+/*
+ * oflow_buf_get() - Take a reference to the overflow buffer, preventing it
+ * from being freed.
+ */
 static void oflow_buf_get(struct cxip_oflow_buf *oflow_buf)
 {
 	ofi_atomic_inc32(&oflow_buf->ref);
 }
 
+/*
+ * oflow_buf_put() - Put a reference to the overflow buffer. Overflow buffers
+ * are automatically freed when they become unused.
+ */
 static void oflow_buf_put(struct cxip_oflow_buf *oflow_buf)
 {
 	if (!ofi_atomic_dec32(&oflow_buf->ref)) {
@@ -185,6 +214,10 @@ static void oflow_buf_put(struct cxip_oflow_buf *oflow_buf)
 	}
 }
 
+/*
+ * rdzv_issue_get() - Perform a Get to pull source data from the Initiator of a
+ * long send operation.
+ */
 static int rdzv_issue_get(struct cxip_req *req, struct cxip_ux_send *ux_send)
 {
 	union c_fab_addr dfa;
@@ -261,7 +294,8 @@ unlock:
 
 int cxip_rxc_eager_replenish(struct cxip_rx_ctx *rxc);
 
-/* Process an overflow buffer event.
+/*
+ * cxip_oflow_cb() - Process an overflow buffer event.
  *
  * We can expect Link, Unlink and Put events from the overflow buffer.
  *
@@ -314,9 +348,9 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 		/* TODO Handle append errors. */
 		return;
 	case C_EVENT_UNLINK:
-		if (oflow_buf->type == RDZV_OFLOW_BUF) {
-			/* SW rendezvous buffer was manually unlinked. */
-			ofi_atomic_dec32(&rxc->ux_rdzv_buf.ref);
+		if (oflow_buf->type == OFLOW_BUF_SINK) {
+			/* Long sink buffer was manually unlinked. */
+			ofi_atomic_dec32(&rxc->ux_sink_buf.ref);
 		} else {
 			ofi_atomic_dec32(&rxc->oflow_buf_cnt);
 		}
@@ -392,8 +426,8 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 	CXIP_LOG_DBG("Matched ux_recv, data: 0x%lx\n",
 		     ux_recv->recv.start);
 
-	if (oflow_buf->type == RDZV_OFLOW_BUF) {
-		/* For SW Rendezvous messages, issue a Get to retrieve data
+	if (oflow_buf->type == OFLOW_BUF_SINK) {
+		/* For long eager messages, issue a Get to retrieve data
 		 * from the initiator.
 		 */
 		int ret;
@@ -444,7 +478,10 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 	}
 }
 
-/* Append a Locally Managed LE to the Overflow list to match Eager Sends. */
+/*
+ * eager_buf_add() - Append a Locally Managed LE to the Overflow list to match
+ * eager Sends.
+ */
 static int eager_buf_add(struct cxip_rx_ctx *rxc)
 {
 	struct cxip_domain *dom;
@@ -523,7 +560,7 @@ static int eager_buf_add(struct cxip_rx_ctx *rxc)
 	ofi_atomic_initialize32(&oflow_buf->ref, 1);
 	oflow_buf->exhausted = 0;
 	oflow_buf->buffer_id = req->req_id;
-	oflow_buf->type = EAGER_OFLOW_BUF;
+	oflow_buf->type = OFLOW_BUF_EAGER;
 
 	ofi_atomic_inc32(&rxc->oflow_buf_cnt);
 
@@ -545,7 +582,9 @@ free_oflow:
 	return ret;
 }
 
-/* Replenish RXC Overflow buffers for Eager Sends. */
+/*
+ * cxip_rxc_eager_replenish() - Replenish RXC eager overflow buffers.
+ */
 int cxip_rxc_eager_replenish(struct cxip_rx_ctx *rxc)
 {
 	int ret;
@@ -562,7 +601,8 @@ int cxip_rxc_eager_replenish(struct cxip_rx_ctx *rxc)
 	return FI_SUCCESS;
 }
 
-/* Free RX Context eager overflow buffers.
+/*
+ * cxip_rxc_eager_fini() - Free RXC eager overflow buffers.
  *
  * The RXC must be disabled with no outstanding posted receives. Adding new
  * posted receives that could match the overflow buffers while cleanup is in
@@ -622,8 +662,10 @@ static void cxip_rxc_eager_fini(struct cxip_rx_ctx *rxc)
 	}
 }
 
-/* Append a persistent LE to the Overflow list to match RDZV Sends. */
-static int cxip_rxc_rdzv_init(struct cxip_rx_ctx *rxc)
+/*
+ * cxip_rxc_sink_init() - Initialize RXC sink buffer.
+ */
+static int cxip_rxc_sink_init(struct cxip_rx_ctx *rxc)
 {
 	struct cxip_domain *dom;
 	int ret;
@@ -664,7 +706,7 @@ static int cxip_rxc_rdzv_init(struct cxip_rx_ctx *rxc)
 	fastlock_acquire(&rxc->lock);
 
 	/* Multiple callers can race to allocate ux buffer */
-	if (ofi_atomic_get32(&rxc->ux_rdzv_buf.ref) != 0) {
+	if (ofi_atomic_get32(&rxc->ux_sink_buf.ref) != 0) {
 		ret = FI_SUCCESS;
 		goto unlock_ux;
 	}
@@ -679,15 +721,15 @@ static int cxip_rxc_rdzv_init(struct cxip_rx_ctx *rxc)
 	}
 
 	/* Initialize oflow_buf structure */
-	ofi_atomic_inc32(&rxc->ux_rdzv_buf.ref);
-	rxc->ux_rdzv_buf.type = RDZV_OFLOW_BUF;
-	rxc->ux_rdzv_buf.buf = ux_buf;
-	rxc->ux_rdzv_buf.md = md;
-	rxc->ux_rdzv_buf.rxc = rxc;
-	rxc->ux_rdzv_buf.buffer_id = req->req_id;
+	ofi_atomic_inc32(&rxc->ux_sink_buf.ref);
+	rxc->ux_sink_buf.type = OFLOW_BUF_SINK;
+	rxc->ux_sink_buf.buf = ux_buf;
+	rxc->ux_sink_buf.md = md;
+	rxc->ux_sink_buf.rxc = rxc;
+	rxc->ux_sink_buf.buffer_id = req->req_id;
 
 	req->oflow.rxc = rxc;
-	req->oflow.oflow_buf = &rxc->ux_rdzv_buf;
+	req->oflow.oflow_buf = &rxc->ux_sink_buf;
 	req->cb = cxip_oflow_cb;
 
 	/* TODO take reference on EP or context for the outstanding request */
@@ -706,7 +748,8 @@ free_ux_buf:
 	return ret;
 }
 
-/* Free RX Context Software Rendezvous buffers.
+/*
+ * cxip_rxc_sink_fini() - Tear down RXC sink buffer.
  *
  * The RXC must be disabled with no outstanding posted receives. Adding new
  * posted receives that could match the overflow buffers while cleanup is in
@@ -715,12 +758,12 @@ free_ux_buf:
  *
  * Caller must hold rxc->lock.
  */
-static void cxip_rxc_rdzv_fini(struct cxip_rx_ctx *rxc)
+static void cxip_rxc_sink_fini(struct cxip_rx_ctx *rxc)
 {
 	int ret;
 
 	ret = issue_unlink_le(rxc->rx_pte->pte, C_PTL_LIST_OVERFLOW,
-			      rxc->ux_rdzv_buf.buffer_id, rxc->rx_cmdq);
+			      rxc->ux_sink_buf.buffer_id, rxc->rx_cmdq);
 	if (ret) {
 		/* TODO handle error */
 		CXIP_LOG_ERROR("Failed to enqueue unlink command: %d\n", ret);
@@ -728,19 +771,21 @@ static void cxip_rxc_rdzv_fini(struct cxip_rx_ctx *rxc)
 		do {
 			sched_yield();
 			cxip_cq_progress(rxc->comp.recv_cq);
-		} while (ofi_atomic_get32(&rxc->ux_rdzv_buf.ref));
+		} while (ofi_atomic_get32(&rxc->ux_sink_buf.ref));
 
 		/* Clean up overflow buffers */
-		ret = cxil_unmap(rxc->ux_rdzv_buf.md);
+		ret = cxil_unmap(rxc->ux_sink_buf.md);
 		if (ret) {
 			/* TODO handle error */
 			CXIP_LOG_ERROR("Failed to unmap ux buffer: %d\n", ret);
 		}
-		free(rxc->ux_rdzv_buf.buf);
+		free(rxc->ux_sink_buf.buf);
 	}
 }
 
-/* Initialize an RXC for messaging */
+/*
+ * cxip_rxc_msg_init() - Initialize RXC messaging resources.
+ */
 int cxip_rxc_msg_init(struct cxip_rx_ctx *rxc)
 {
 	int ret;
@@ -751,9 +796,9 @@ int cxip_rxc_msg_init(struct cxip_rx_ctx *rxc)
 		return ret;
 	}
 
-	ret = cxip_rxc_rdzv_init(rxc);
+	ret = cxip_rxc_sink_init(rxc);
 	if (ret) {
-		CXIP_LOG_ERROR("cxip_rxc_rdzv_init failed: %d\n", ret);
+		CXIP_LOG_ERROR("cxip_rxc_sink_init failed: %d\n", ret);
 		cxip_rxc_eager_fini(rxc);
 		return ret;
 	}
@@ -763,15 +808,21 @@ int cxip_rxc_msg_init(struct cxip_rx_ctx *rxc)
 	return FI_SUCCESS;
 }
 
-/* Finalize an RXC for messaging */
+/*
+ * cxip_rxc_msg_fini() - Tear down RXC messaging resources.
+ *
+ * Caller must hold rxc->lock.
+ */
 void cxip_rxc_msg_fini(struct cxip_rx_ctx *rxc)
 {
-	cxip_rxc_rdzv_fini(rxc);
+	cxip_rxc_sink_fini(rxc);
 
 	cxip_rxc_eager_fini(rxc);
 }
 
-/* Return the FI address of the initiator of the send operation. */
+/*
+ * _rxc_event_src_addr() - Translate CXI event initiator to FI address.
+ */
 static fi_addr_t _rxc_event_src_addr(struct cxip_rx_ctx *rxc,
 				     const union c_event *event)
 {
@@ -799,7 +850,8 @@ static fi_addr_t _rxc_event_src_addr(struct cxip_rx_ctx *rxc,
 	return FI_ADDR_NOTAVAIL;
 }
 
-/* Process a posted receive buffer event.
+/*
+ * cxip_recv_cb() - Process a posted receive buffer event.
  *
  * We can expect Link, Unlink, Put and Put_Overflow and Reply events from a
  * posted receive buffer.
@@ -899,7 +951,7 @@ static void cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		 * waiting in the overflow buffer.
 		 */
 
-		if (oflow_buf->type == EAGER_OFLOW_BUF) {
+		if (oflow_buf->type == OFLOW_BUF_EAGER) {
 			/* This is an eager sized operation
 			 * Copy data from the overflow buffer
 			 */
@@ -1001,6 +1053,10 @@ static void cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 	}
 }
 
+/*
+ * _cxip_recv() - Common message receive function. Used for tagged and untagged
+ * sends of all sizes.
+ */
 static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 			  fi_addr_t src_addr, uint64_t tag, uint64_t ignore,
 			  void *context, uint64_t flags, bool tagged)
@@ -1133,6 +1189,9 @@ recv_unmap:
 	return ret;
 }
 
+/*
+ * rdzv_send_req_free() - Clean up a long send request.
+ */
 static void rdzv_send_req_free(struct cxip_req *req)
 {
 	int ret;
@@ -1152,20 +1211,11 @@ static void rdzv_send_req_free(struct cxip_req *req)
 }
 
 /*
- * Rendezvous Send callback.
+ * cxip_send_long_cb() - Long send callback.
  *
- * Progress a Rendezvous Send operation to completion. A Rendezvous Send
- * operation is performed as follows:
- *
- * 1. An LE describing the Send buffer is appended to the TX PtlTE Priority list
- * 2. An Unlink event is generated indicating the LE was appended
- * 3. The Initiator performs a Put of the entire Send payload
- * 4. An Ack event is generated indicating the Put completed
- * 5. An Unlink event is generated indicating the source buffer LE has been
- *    matched to a transaction.
- * 6. A Get event is generated indicating the source data was read.
+ * Progress a long send operation to completion.
  */
-static void cxip_rdzv_send_cb(struct cxip_req *req, const union c_event *event)
+static void cxip_send_long_cb(struct cxip_req *req, const union c_event *event)
 {
 	int ret;
 	int event_rc;
@@ -1325,52 +1375,35 @@ rdzv_unlink_le:
 	}
 }
 
-/* Basic send callback, used for both tagged and untagged messages. */
-static void cxip_send_cb(struct cxip_req *req, const union c_event *event)
-{
-	int ret;
-	int event_rc;
-
-	ret = cxil_unmap(req->send.send_md);
-	if (ret != FI_SUCCESS)
-		CXIP_LOG_ERROR("Failed to free MD: %d\n", ret);
-
-	event_rc = cxi_init_event_rc(event);
-	if (event_rc == C_RC_OK) {
-		CXIP_LOG_DBG("Request success: %p\n", req);
-
-		ret = req->cq->report_completion(req->cq, FI_ADDR_UNSPEC, req);
-		if (ret != req->cq->cq_entry_size)
-			CXIP_LOG_ERROR("Failed to report completion: %d\n",
-				       ret);
-	} else {
-		CXIP_LOG_DBG("Request error: %p\n", req);
-
-		ret = cxip_cq_report_error(req->cq, req, 0, FI_EIO, event_rc,
-					   NULL, 0);
-		if (ret != FI_SUCCESS)
-			CXIP_LOG_ERROR("Failed to report error: %d\n", ret);
-	}
-
-	cxip_cq_req_free(req);
-}
-
-/* Return the FI address of the TXC. */
-static fi_addr_t _txc_fi_addr(struct cxip_tx_ctx *txc)
-{
-	if (txc->ep_obj->fi_addr == FI_ADDR_NOTAVAIL) {
-		txc->ep_obj->fi_addr =
-				_cxip_av_reverse_lookup(
-						txc->ep_obj->av,
-						txc->ep_obj->src_addr.nic,
-						txc->ep_obj->src_addr.pid);
-		CXIP_LOG_DBG("Found EP FI Addr: %lu\n", txc->ep_obj->fi_addr);
-	}
-
-	return txc->ep_obj->fi_addr;
-}
-
-static ssize_t _cxip_send_rdzv(struct cxip_tx_ctx *txc, struct cxip_req *req)
+/*
+ * _cxip_send_long() - Initiate a long send operation.
+ *
+ * There are two long send protocols implemented: an eager (long) protocol and
+ * an offloaded rendezvous protocol.
+ *
+ * The eager (long) protocol works as follows:
+ *
+ * 1. The Initiator prepares an LE describing the source buffer.
+ * 2. The Initiator performs a Put of the entire source buffer.
+ * 3. An Ack event is generated indicating the Put completed. The Ack indicates
+ *    whether it matched in the Priority or Overflow list at the target.
+ * 4a. If the Put matched in the Priority list, the entire payload was copied
+ *     directly to a receive buffer at the target. The operation is complete.
+ *     The source buffer LE was unused.
+ * 4b. If the Put matched in the Overflow list, the payload was truncated to
+ *     zero. The Target receives events describing the Put attempt.
+ * 5b. The Target performs a Get of the entire source buffer using the source
+ *     buffer LE.
+ *
+ * The rendezvous protocol works as follows:
+ *
+ * 1. The Initiator prepares an LE describing the source buffer.
+ * 2. The Initiator performs a Rendezvous Put command which includes a portion
+ *    of the source buffer data.
+ * 3. Once the Put is matched to a user receive buffer (in the Priority list),
+ *    a Get of the remaining source data is performed.
+ */
+static ssize_t _cxip_send_long(struct cxip_tx_ctx *txc, struct cxip_req *req)
 {
 	int ret;
 	int rdzv_id;
@@ -1440,6 +1473,43 @@ unlock:
 	return FI_EAGAIN;
 }
 
+/*
+ * cxip_send_eager_cb() - Eager send callback. Used for both tagged and
+ * untagged messages.
+ */
+static void cxip_send_eager_cb(struct cxip_req *req,
+			       const union c_event *event)
+{
+	int ret;
+	int event_rc;
+
+	ret = cxil_unmap(req->send.send_md);
+	if (ret != FI_SUCCESS)
+		CXIP_LOG_ERROR("Failed to free MD: %d\n", ret);
+
+	event_rc = cxi_init_event_rc(event);
+	if (event_rc == C_RC_OK) {
+		CXIP_LOG_DBG("Request success: %p\n", req);
+
+		ret = req->cq->report_completion(req->cq, FI_ADDR_UNSPEC, req);
+		if (ret != req->cq->cq_entry_size)
+			CXIP_LOG_ERROR("Failed to report completion: %d\n",
+				       ret);
+	} else {
+		CXIP_LOG_DBG("Request error: %p\n", req);
+
+		ret = cxip_cq_report_error(req->cq, req, 0, FI_EIO, event_rc,
+					   NULL, 0);
+		if (ret != FI_SUCCESS)
+			CXIP_LOG_ERROR("Failed to report error: %d\n", ret);
+	}
+
+	cxip_cq_req_free(req);
+}
+
+/*
+ * _cxip_send_eager() - Enqueue eager send command.
+ */
 static ssize_t _cxip_send_eager(struct cxip_tx_ctx *txc, union c_cmdu *cmd)
 {
 	int ret;
@@ -1471,6 +1541,27 @@ unlock:
 	return ret;
 }
 
+/*
+ * _txc_fi_addr() - Return the FI address of the TXC.
+ */
+static fi_addr_t _txc_fi_addr(struct cxip_tx_ctx *txc)
+{
+	if (txc->ep_obj->fi_addr == FI_ADDR_NOTAVAIL) {
+		txc->ep_obj->fi_addr =
+				_cxip_av_reverse_lookup(
+						txc->ep_obj->av,
+						txc->ep_obj->src_addr.nic,
+						txc->ep_obj->src_addr.pid);
+		CXIP_LOG_DBG("Found EP FI Addr: %lu\n", txc->ep_obj->fi_addr);
+	}
+
+	return txc->ep_obj->fi_addr;
+}
+
+/*
+ * _cxip_send() - Common message send function. Used for tagged and untagged
+ * sends of all sizes.
+ */
 static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 			  void *desc, fi_addr_t dest_addr, uint64_t tag,
 			  void *context, uint64_t flags, bool tagged)
@@ -1488,7 +1579,7 @@ static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 	uint32_t pid_granule;
 	uint32_t pid_idx;
 	uint64_t rx_id;
-	bool rdzv;
+	bool long_send;
 	uint32_t match_id;
 	uint32_t pid_bits;
 	union cxip_match_bits mb = {};
@@ -1514,10 +1605,7 @@ static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 		return -FI_EINVAL;
 	}
 
-	if (tagged && len > txc->eager_threshold)
-		rdzv = true;
-	else
-		rdzv = false;
+	long_send = tagged && len > txc->eager_threshold ? true : false;
 
 	dom = txc->domain;
 
@@ -1538,7 +1626,7 @@ static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 	}
 
 	/* Populate request */
-	req = cxip_cq_req_alloc(txc->comp.send_cq, rdzv);
+	req = cxip_cq_req_alloc(txc->comp.send_cq, long_send);
 	if (!req) {
 		CXIP_LOG_DBG("Failed to allocate request\n");
 		ret = -FI_ENOMEM;
@@ -1560,11 +1648,6 @@ static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 	req->buf = 0;
 	req->data = 0;
 	req->tag = 0;
-
-	if (rdzv)
-		req->cb = cxip_rdzv_send_cb;
-	else
-		req->cb = cxip_send_cb;
 
 	req->send.txc = txc;
 	req->send.buf = (void *)buf;
@@ -1607,12 +1690,16 @@ static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 	cmd.full_dma.initiator = match_id;
 	cmd.full_dma.match_bits = mb.raw;
 
-	if (rdzv) {
+	if (long_send) {
+		req->cb = cxip_send_long_cb;
 		req->send.cmd = cmd;
-		ret = _cxip_send_rdzv(txc, req);
+
+		ret = _cxip_send_long(txc, req);
 		if (ret)
 			goto send_freereq;
 	} else {
+		req->cb = cxip_send_eager_cb;
+
 		ret = _cxip_send_eager(txc, &cmd);
 		if (ret)
 			goto send_freereq;
@@ -1629,7 +1716,7 @@ send_unmap:
 }
 
 /*
- * APIs
+ * Libfabric APIs
  */
 
 static ssize_t cxip_trecv(struct fid_ep *ep, void *buf, size_t len, void *desc,

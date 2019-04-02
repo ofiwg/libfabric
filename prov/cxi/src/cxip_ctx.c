@@ -202,7 +202,7 @@ struct cxip_rx_ctx *cxip_rx_ctx_alloc(const struct fi_rx_attr *attr,
 	rx_ctx->use_shared = use_shared;
 
 	ofi_atomic_initialize32(&rx_ctx->oflow_buf_cnt, 0);
-	ofi_atomic_initialize32(&rx_ctx->ux_rdzv_buf.ref, 0);
+	ofi_atomic_initialize32(&rx_ctx->ux_sink_buf.ref, 0);
 	dlist_init(&rx_ctx->oflow_bufs);
 	dlist_init(&rx_ctx->ux_sends);
 	dlist_init(&rx_ctx->ux_recvs);
