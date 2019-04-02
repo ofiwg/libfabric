@@ -541,7 +541,6 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq)
 		goto free_evtq_buf;
 	}
 
-
 	eq_attr.queue = cxi_cq->evtq_buf,
 	eq_attr.queue_len = cxi_cq->evtq_buf_len,
 	eq_attr.queue_md = cxi_cq->evtq_buf_md,
@@ -568,16 +567,17 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq)
 	cxi_cq->enabled = 1;
 	fastlock_release(&cxi_cq->lock);
 
+	CXIP_LOG_ERROR("enabled eq_id: %d\n", cxi_cq->evtq->eqn);
 	return FI_SUCCESS;
 
+free_evtq:
+	cxil_destroy_evtq(cxi_cq->evtq);
 unmap_evtq_buf:
 	ret = cxil_unmap(cxi_cq->evtq_buf_md);
 	if (ret)
 		CXIP_LOG_ERROR("Failed to unmap evtq MD, ret: %d\n", ret);
 free_evtq_buf:
 	free(cxi_cq->evtq_buf);
-free_evtq:
-	cxil_destroy_evtq(cxi_cq->evtq);
 unlock:
 	fastlock_release(&cxi_cq->lock);
 
@@ -586,6 +586,8 @@ unlock:
 
 static void cxip_cq_disable(struct cxip_cq *cxi_cq)
 {
+	int ret;
+
 	fastlock_acquire(&cxi_cq->lock);
 
 	if (!cxi_cq->enabled)
@@ -593,9 +595,19 @@ static void cxip_cq_disable(struct cxip_cq *cxi_cq)
 
 	ofi_bufpool_destroy(cxi_cq->req_pool);
 
-	cxil_destroy_evtq(cxi_cq->evtq);
+	ret = cxil_destroy_evtq(cxi_cq->evtq);
+	if (ret)
+		CXIP_LOG_ERROR("Failed to free evtq, ret: %d\n", ret);
+
+	ret = cxil_unmap(cxi_cq->evtq_buf_md);
+	if (ret)
+		CXIP_LOG_ERROR("Failed to unmap evtq MD, ret: %d\n", ret);
+
+	free(cxi_cq->evtq_buf);
 
 	cxi_cq->enabled = 0;
+
+	CXIP_LOG_ERROR("disabled eq_id: %d\n", cxi_cq->evtq->eqn);
 unlock:
 	fastlock_release(&cxi_cq->lock);
 }
