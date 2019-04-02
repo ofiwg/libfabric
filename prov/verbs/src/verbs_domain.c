@@ -38,7 +38,7 @@
 #include <malloc.h>
 
 /* This is the memory notifier for the entire verbs provider */
-static struct fi_ibv_mem_notifier *fi_ibv_mem_notifier = NULL;
+struct fi_ibv_mem_notifier *fi_ibv_mem_notifier = NULL;
 
 static int fi_ibv_domain_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
@@ -143,6 +143,19 @@ out:
 	return ret_ptr;
 }
 
+void fi_ibv_mem_notifier_free(void)
+{
+	ofi_set_mem_free_hook(fi_ibv_mem_notifier->prev_free_hook);
+	ofi_set_mem_realloc_hook(fi_ibv_mem_notifier->prev_realloc_hook);
+	rbtDelete(fi_ibv_mem_notifier->subscr_storage);
+	fi_ibv_mem_notifier->prev_free_hook = NULL;
+	fi_ibv_mem_notifier->prev_realloc_hook = NULL;
+	pthread_mutex_unlock(&fi_ibv_mem_notifier->lock);
+	pthread_mutex_destroy(&fi_ibv_mem_notifier->lock);
+	free(fi_ibv_mem_notifier);
+	fi_ibv_mem_notifier = NULL;
+}
+
 static void fi_ibv_mem_notifier_finalize(struct fi_ibv_mem_notifier *notifier)
 {
 #ifdef HAVE_GLIBC_MALLOC_HOOKS
@@ -150,15 +163,7 @@ static void fi_ibv_mem_notifier_finalize(struct fi_ibv_mem_notifier *notifier)
 	assert(fi_ibv_mem_notifier && (notifier == fi_ibv_mem_notifier));
 	pthread_mutex_lock(&fi_ibv_mem_notifier->lock);
 	if (--fi_ibv_mem_notifier->ref_cnt == 0) {
-		ofi_set_mem_free_hook(fi_ibv_mem_notifier->prev_free_hook);
-		ofi_set_mem_realloc_hook(fi_ibv_mem_notifier->prev_realloc_hook);
-		rbtDelete(fi_ibv_mem_notifier->subscr_storage);
-		fi_ibv_mem_notifier->prev_free_hook = NULL;
-		fi_ibv_mem_notifier->prev_realloc_hook = NULL;
-		pthread_mutex_unlock(&fi_ibv_mem_notifier->lock);
-		pthread_mutex_destroy(&fi_ibv_mem_notifier->lock);
-		free(fi_ibv_mem_notifier);
-		fi_ibv_mem_notifier = NULL;
+		fi_ibv_mem_notifier_free();
 		return;
 	}
 	pthread_mutex_unlock(&fi_ibv_mem_notifier->lock);
