@@ -202,9 +202,20 @@ void cxip_put_if(struct cxip_if *dev_if)
 		if (ret)
 			CXIP_LOG_ERROR("Failed to destroy EVTQ: %d\n", ret);
 
+		ret = cxil_unmap(dev_if->evtq_buf_md);
+		if (ret)
+			CXIP_LOG_ERROR("Failed to unmap EVTQ buffer: %d\n",
+				       ret);
+
+		free(dev_if->evtq_buf);
+
 		ret = cxil_destroy_cmdq(dev_if->mr_cmdq);
 		if (ret)
 			CXIP_LOG_ERROR("Failed to destroy CMDQ: %d\n", ret);
+
+		ret = cxil_destroy_cp(dev_if->cps[0]);
+		if (ret)
+			CXIP_LOG_ERROR("Failed to destroy CP: %d\n", ret);
 
 		ret = cxil_destroy_lni(dev_if->if_lni);
 		if (ret)
