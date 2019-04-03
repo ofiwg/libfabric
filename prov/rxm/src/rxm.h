@@ -1071,6 +1071,19 @@ rxm_rx_buf_release(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_buf, uint8_t rep
 	}
 }
 
+static inline int
+rxm_rx_buf_acquire(struct rxm_ep *rxm_ep, struct rxm_rx_buf **rx_buf)
+{
+	if (!dlist_empty(&rxm_ep->repost_ready_list)) {
+		dlist_pop_front(&rxm_ep->repost_ready_list, struct rxm_rx_buf,
+				*rx_buf, repost_entry);
+		return FI_SUCCESS;
+	} else {
+		*rx_buf = NULL;
+		return -FI_ENOMEM;
+	}
+}
+
 static inline struct rxm_rma_buf *rxm_rma_buf_alloc(struct rxm_ep *rxm_ep)
 {
 	return (struct rxm_rma_buf *)

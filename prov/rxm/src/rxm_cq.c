@@ -1356,9 +1356,7 @@ void rxm_ep_do_progress(struct util_ep *util_ep)
 	if (!slistfd_empty(&rxm_ep->msg_eq_entry_list))
 		rxm_conn_process_eq_events(rxm_ep);
 
-	while (!dlist_empty(&rxm_ep->repost_ready_list)) {
-		dlist_pop_front(&rxm_ep->repost_ready_list, struct rxm_rx_buf,
-				buf, repost_entry);
+	while (!rxm_rx_buf_acquire(rxm_ep, &buf)) {
 		ret = rxm_msg_ep_recv(buf);
 		if (ret) {
 			if (OFI_LIKELY(ret == -FI_EAGAIN))
