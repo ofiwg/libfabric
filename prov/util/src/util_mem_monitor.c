@@ -34,6 +34,8 @@
 #include <ofi_mr.h>
 
 
+struct ofi_mem_monitor uffd_monitor;
+
 void ofi_monitor_init(struct ofi_mem_monitor *monitor)
 {
 	ofi_atomic_initialize32(&monitor->refcnt, 0);

@@ -37,8 +37,6 @@
 #include "fi_verbs.h"
 #include <malloc.h>
 
-/* This is the memory notifier for the entire verbs provider */
-struct fi_ibv_mem_notifier *fi_ibv_mem_notifier = NULL;
 
 static int fi_ibv_domain_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
@@ -70,55 +68,6 @@ static int fi_ibv_domain_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	}
 
 	return 0;
-}
-
-void fi_ibv_mem_notifier_handle_hook(void *arg, RbtIterator iter)
-{
-	struct iovec *key;
-	struct fi_ibv_subscr_entry *subscr_entry;
-	struct fi_ibv_monitor_entry *entry;
-
-	rbtKeyValue(fi_ibv_mem_notifier->subscr_storage, iter,
-		    (void *)&key, (void *)&entry);
-	dlist_foreach_container(&entry->subscription_list, struct fi_ibv_subscr_entry,
-				subscr_entry, entry) {
-		ofi_monitor_add_event_to_nq(subscr_entry->subscription);
-	}
-
-	VERBS_DBG(FI_LOG_MR, "Write event for region %p:%lu\n",
-		  key->iov_base, key->iov_len);
-}
-
-static inline void
-fi_ibv_mem_notifier_search_iov(struct fi_ibv_mem_notifier *notifier,
-			       struct iovec *iov)
-{
-	RbtIterator iter;
-	iter = rbtFind(notifier->subscr_storage, (void *)iov);
-	if (iter) {
-		VERBS_DBG(FI_LOG_MR, "Catch hook for memory %p:%lu\n",
-			  iov->iov_base, iov->iov_len);
-		rbtTraversal(fi_ibv_mem_notifier->subscr_storage, iter, NULL,
-			     fi_ibv_mem_notifier_handle_hook);
-	}
-}
-
-void fi_ibv_mem_notifier_free(void)
-{
-	rbtDelete(fi_ibv_mem_notifier->subscr_storage);
-	pthread_mutex_unlock(&fi_ibv_mem_notifier->lock);
-	pthread_mutex_destroy(&fi_ibv_mem_notifier->lock);
-	free(fi_ibv_mem_notifier);
-	fi_ibv_mem_notifier = NULL;
-}
-
-static void fi_ibv_mem_notifier_finalize(struct fi_ibv_mem_notifier *notifier)
-{
-}
-
-static struct fi_ibv_mem_notifier *fi_ibv_mem_notifier_init(void)
-{
-	return NULL;
 }
 
 static int fi_ibv_domain_close(fid_t fid)
@@ -155,8 +104,6 @@ static int fi_ibv_domain_close(fid_t fid)
 
 	if (fi_ibv_gl_data.mr_cache_enable) {
 		ofi_mr_cache_cleanup(&domain->cache);
-		ofi_monitor_cleanup(&domain->monitor);
-		fi_ibv_mem_notifier_finalize(domain->notifier);
 	}
 
 	if (domain->pd) {
@@ -357,18 +304,13 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	fi_ibv_domain_process_exp(_domain);
 
 	if (fi_ibv_gl_data.mr_cache_enable) {
-		_domain->notifier = fi_ibv_mem_notifier_init();
-		_domain->monitor.subscribe = fi_ibv_monitor_subscribe;
-		_domain->monitor.unsubscribe = fi_ibv_monitor_unsubscribe;
-		ofi_monitor_init(&_domain->monitor);
-
 		_domain->cache.max_cached_cnt = fi_ibv_gl_data.mr_max_cached_cnt;
 		_domain->cache.max_cached_size = fi_ibv_gl_data.mr_max_cached_size;
 		_domain->cache.merge_regions = fi_ibv_gl_data.mr_cache_merge_regions;
 		_domain->cache.entry_data_size = sizeof(struct fi_ibv_mem_desc);
 		_domain->cache.add_region = fi_ibv_mr_cache_entry_reg;
 		_domain->cache.delete_region = fi_ibv_mr_cache_entry_dereg;
-		ret = ofi_mr_cache_init(&_domain->util_domain, &_domain->monitor,
+		ret = ofi_mr_cache_init(&_domain->util_domain, &uffd_monitor,
 					&_domain->cache);
 		if (ret)
 			goto err4;
@@ -430,8 +372,6 @@ err5:
 	if (fi_ibv_gl_data.mr_cache_enable)
 		ofi_mr_cache_cleanup(&_domain->cache);
 err4:
-	if (fi_ibv_gl_data.mr_cache_enable)
-		ofi_monitor_cleanup(&_domain->monitor);
 	if (ibv_dealloc_pd(_domain->pd))
 		VERBS_INFO_ERRNO(FI_LOG_DOMAIN,
 				 "ibv_dealloc_pd", errno);

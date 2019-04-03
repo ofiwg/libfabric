@@ -107,6 +107,8 @@ struct ofi_mem_monitor {
 			    struct ofi_subscription *subscription);
 };
 
+extern struct ofi_mem_monitor uffd_monitor;
+
 struct ofi_notification_queue {
 	struct ofi_mem_monitor		*monitor;
 	fastlock_t			lock;
