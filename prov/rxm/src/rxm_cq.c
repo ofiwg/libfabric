@@ -1357,6 +1357,13 @@ void rxm_ep_do_progress(struct util_ep *util_ep)
 		rxm_conn_process_eq_events(rxm_ep);
 
 	while (!rxm_rx_buf_acquire(rxm_ep, &buf)) {
+		// Discard rx buffer if its msg_ep was
+		// closed after eq processing.
+		if (!buf->conn->msg_ep) {
+			ofi_buf_free(&buf->hdr);
+			continue;
+		}
+
 		ret = rxm_msg_ep_recv(buf);
 		if (ret) {
 			if (OFI_LIKELY(ret == -FI_EAGAIN))
