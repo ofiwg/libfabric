@@ -135,18 +135,6 @@
 #define VERBS_ANY_DOMAIN "verbs_any_domain"
 #define VERBS_ANY_FABRIC "verbs_any_fabric"
 
-#define FI_IBV_MEMORY_HOOK_BEGIN(notifier)			\
-{								\
-	pthread_mutex_lock(&notifier->lock);			\
-	ofi_set_mem_free_hook(notifier->prev_free_hook);	\
-	ofi_set_mem_realloc_hook(notifier->prev_realloc_hook);	\
-
-#define FI_IBV_MEMORY_HOOK_END(notifier)				\
-	ofi_set_mem_realloc_hook(fi_ibv_mem_notifier_realloc_hook);	\
-	ofi_set_mem_free_hook(fi_ibv_mem_notifier_free_hook);		\
-	pthread_mutex_unlock(&notifier->lock);				\
-}
-
 extern struct fi_provider fi_ibv_prov;
 extern struct util_prov fi_ibv_util_prov;
 
@@ -428,8 +416,6 @@ struct fi_ibv_mr_internal_ops {
 
 struct fi_ibv_mem_notifier {
 	RbtHandle			subscr_storage;
-	ofi_mem_free_hook		prev_free_hook;
-	ofi_mem_realloc_hook		prev_realloc_hook;
 	int				ref_cnt;
 	pthread_mutex_t			lock;
 };

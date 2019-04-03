@@ -356,9 +356,6 @@ int fi_ibv_monitor_subscribe(struct ofi_mem_monitor *notifier,
 		return -FI_ENOMEM;
 
 	pthread_mutex_lock(&domain->notifier->lock);
-	ofi_set_mem_free_hook(domain->notifier->prev_free_hook);
-	ofi_set_mem_realloc_hook(domain->notifier->prev_realloc_hook);
-
 	entry->iov = subscription->iov;
 	dlist_init(&entry->subscription_list);
 
@@ -394,8 +391,6 @@ int fi_ibv_monitor_subscribe(struct ofi_mem_monitor *notifier,
 		break;
 	}
 
-	ofi_set_mem_free_hook(fi_ibv_mem_notifier_free_hook);
-	ofi_set_mem_realloc_hook(fi_ibv_mem_notifier_realloc_hook);
 	pthread_mutex_unlock(&domain->notifier->lock);
 	return ret;
 }
@@ -411,9 +406,6 @@ void fi_ibv_monitor_unsubscribe(struct ofi_mem_monitor *notifier,
 	struct iovec *key;
 
 	pthread_mutex_lock(&domain->notifier->lock);
-	ofi_set_mem_free_hook(domain->notifier->prev_free_hook);
-	ofi_set_mem_realloc_hook(domain->notifier->prev_realloc_hook);
-
 	iter = rbtFind(domain->notifier->subscr_storage,
 		       (void *)&subscription->iov);
 	assert(iter);
@@ -432,9 +424,6 @@ void fi_ibv_monitor_unsubscribe(struct ofi_mem_monitor *notifier,
 		rbtErase(domain->notifier->subscr_storage, iter);
 		free(entry);
 	}
-
-	ofi_set_mem_realloc_hook(fi_ibv_mem_notifier_realloc_hook);
-	ofi_set_mem_free_hook(fi_ibv_mem_notifier_free_hook);
 	pthread_mutex_unlock(&domain->notifier->lock);
 }
 

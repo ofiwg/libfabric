@@ -103,53 +103,9 @@ fi_ibv_mem_notifier_search_iov(struct fi_ibv_mem_notifier *notifier,
 	}
 }
 
-void fi_ibv_mem_notifier_free_hook(void *ptr, const void *caller)
-{
-	struct iovec iov = {
-		.iov_base = ptr,
-		.iov_len = malloc_usable_size(ptr),
-	};
-	OFI_UNUSED(caller);
-
-	FI_IBV_MEMORY_HOOK_BEGIN(fi_ibv_mem_notifier)
-
-	free(ptr);
-
-	if (!ptr)
-		goto out;
-	fi_ibv_mem_notifier_search_iov(fi_ibv_mem_notifier, &iov);
-out:
-	FI_IBV_MEMORY_HOOK_END(fi_ibv_mem_notifier)
-}
-
-void *fi_ibv_mem_notifier_realloc_hook(void *ptr, size_t size, const void *caller)
-{
-	struct iovec iov = {
-		.iov_base = ptr,
-		.iov_len = malloc_usable_size(ptr),
-	};
-	void *ret_ptr;
-	OFI_UNUSED(caller);
-
-	FI_IBV_MEMORY_HOOK_BEGIN(fi_ibv_mem_notifier)
-	
-	ret_ptr = realloc(ptr, size);
-
-	if (!ptr)
-		goto out;
-	fi_ibv_mem_notifier_search_iov(fi_ibv_mem_notifier, &iov);
-out:
-	FI_IBV_MEMORY_HOOK_END(fi_ibv_mem_notifier)
-	return ret_ptr;
-}
-
 void fi_ibv_mem_notifier_free(void)
 {
-	ofi_set_mem_free_hook(fi_ibv_mem_notifier->prev_free_hook);
-	ofi_set_mem_realloc_hook(fi_ibv_mem_notifier->prev_realloc_hook);
 	rbtDelete(fi_ibv_mem_notifier->subscr_storage);
-	fi_ibv_mem_notifier->prev_free_hook = NULL;
-	fi_ibv_mem_notifier->prev_realloc_hook = NULL;
 	pthread_mutex_unlock(&fi_ibv_mem_notifier->lock);
 	pthread_mutex_destroy(&fi_ibv_mem_notifier->lock);
 	free(fi_ibv_mem_notifier);
@@ -158,89 +114,11 @@ void fi_ibv_mem_notifier_free(void)
 
 static void fi_ibv_mem_notifier_finalize(struct fi_ibv_mem_notifier *notifier)
 {
-#ifdef HAVE_GLIBC_MALLOC_HOOKS
-	OFI_UNUSED(notifier);
-	assert(fi_ibv_mem_notifier && (notifier == fi_ibv_mem_notifier));
-	pthread_mutex_lock(&fi_ibv_mem_notifier->lock);
-	if (--fi_ibv_mem_notifier->ref_cnt == 0) {
-		fi_ibv_mem_notifier_free();
-		return;
-	}
-	pthread_mutex_unlock(&fi_ibv_mem_notifier->lock);
-#endif
 }
-
-#ifdef HAVE_GLIBC_MALLOC_HOOKS
-static int fi_ibv_mem_notifier_find_within(void *a, void *b)
-{
-	struct iovec *iov1 = a, *iov2 = b;
-
-	if (ofi_iov_shifted_left(iov1, iov2))
-		return -1;
-	else if (ofi_iov_shifted_right(iov1, iov2))
-		return 1;
-	else
-		return 0;
-}
-
-static int fi_ibv_mem_notifier_find_overlap(void *a, void *b)
-{
-	struct iovec *iov1 = a, *iov2 = b;
-
-	if (ofi_iov_left(iov1, iov2))
-		return -1;
-	else if (ofi_iov_right(iov1, iov2))
-		return 1;
-	else
-		return 0;
-}
-#endif
 
 static struct fi_ibv_mem_notifier *fi_ibv_mem_notifier_init(void)
 {
-#ifdef HAVE_GLIBC_MALLOC_HOOKS
-	pthread_mutexattr_t mutex_attr;
-	if (fi_ibv_mem_notifier) {
-		/* already initialized */
-		fi_ibv_mem_notifier->ref_cnt++;
-		goto fn;
-	}
-	fi_ibv_mem_notifier = calloc(1, sizeof(*fi_ibv_mem_notifier));
-	if (!fi_ibv_mem_notifier)
-		goto fn;
-
-	fi_ibv_mem_notifier->subscr_storage =
-		rbtNew(fi_ibv_gl_data.mr_cache_merge_regions ?
-		       fi_ibv_mem_notifier_find_overlap :
-		       fi_ibv_mem_notifier_find_within);
-	if (!fi_ibv_mem_notifier->subscr_storage)
-		goto err1;
-
-	pthread_mutexattr_init(&mutex_attr);
-	pthread_mutexattr_settype(&mutex_attr, PTHREAD_MUTEX_RECURSIVE);
-	if (pthread_mutex_init(&fi_ibv_mem_notifier->lock, &mutex_attr))
-		goto err2;
-	pthread_mutexattr_destroy(&mutex_attr);
-
-	pthread_mutex_lock(&fi_ibv_mem_notifier->lock);
-	fi_ibv_mem_notifier->prev_free_hook = ofi_get_mem_free_hook();
-	fi_ibv_mem_notifier->prev_realloc_hook = ofi_get_mem_realloc_hook();
-	ofi_set_mem_free_hook(fi_ibv_mem_notifier_free_hook);
-	ofi_set_mem_realloc_hook(fi_ibv_mem_notifier_realloc_hook);
-	fi_ibv_mem_notifier->ref_cnt++;
-	pthread_mutex_unlock(&fi_ibv_mem_notifier->lock);
-fn:
-	return fi_ibv_mem_notifier;
-
-err2:
-	rbtDelete(fi_ibv_mem_notifier->subscr_storage);
-err1:
-	free(fi_ibv_mem_notifier);
-	fi_ibv_mem_notifier = NULL;
 	return NULL;
-#else
-	return NULL;
-#endif
 }
 
 static int fi_ibv_domain_close(fid_t fid)
