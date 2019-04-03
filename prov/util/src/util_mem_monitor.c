@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2017 Cray Inc. All rights reserved.
- * Copyright (c) 2017 Intel Inc. All rights reserved.
+ * Copyright (c) 2017-2019 Intel Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -38,94 +38,51 @@ struct ofi_mem_monitor uffd_monitor;
 
 void ofi_monitor_init(struct ofi_mem_monitor *monitor)
 {
-	ofi_atomic_initialize32(&monitor->refcnt, 0);
+	fastlock_init(&monitor->lock);
 }
 
 void ofi_monitor_cleanup(struct ofi_mem_monitor *monitor)
 {
-	assert(ofi_atomic_get32(&monitor->refcnt) == 0);
+	assert(dlist_empty(&monitor->list));
 }
 
-void ofi_monitor_add_queue(struct ofi_mem_monitor *monitor,
-			   struct ofi_notification_queue *nq)
+void ofi_monitor_add_cache(struct ofi_mem_monitor *monitor,
+			   struct ofi_mr_cache *cache)
 {
-	fastlock_init(&nq->lock);
-	dlist_init(&nq->list);
-	fastlock_acquire(&nq->lock);
-	nq->refcnt = 0;
-	fastlock_release(&nq->lock);
-
-	nq->monitor = monitor;
-	ofi_atomic_inc32(&monitor->refcnt);
+	cache->monitor = monitor;
+	fastlock_acquire(&monitor->lock);
+	dlist_insert_tail(&cache->notify_entry, &monitor->list);
+	fastlock_release(&monitor->lock);
 }
 
-void ofi_monitor_del_queue(struct ofi_notification_queue *nq)
+void ofi_monitor_del_cache(struct ofi_mr_cache *cache)
 {
-	assert(dlist_empty(&nq->list) && (nq->refcnt == 0));
-	ofi_atomic_dec32(&nq->monitor->refcnt);
-	fastlock_destroy(&nq->lock);
+	fastlock_acquire(&cache->monitor->lock);
+	dlist_remove(&cache->notify_entry);
+	fastlock_release(&cache->monitor->lock);
 }
 
-int ofi_monitor_subscribe(struct ofi_notification_queue *nq,
-			  void *addr, size_t len,
-			  struct ofi_subscription *subscription)
+int ofi_monitor_subscribe(struct ofi_mem_monitor *monitor,
+			  const void *addr, size_t len)
 {
 	int ret;
 
 	FI_DBG(&core_prov, FI_LOG_MR,
-	       "subscribing addr=%p len=%zu subscription=%p nq=%p\n",
-	       addr, len, subscription, nq);
+	       "subscribing addr=%p len=%zu\n", addr, len);
 
-	/* Ensure the subscription is initialized before we can get events */
-	dlist_init(&subscription->entry);
-
-	subscription->nq = nq;
-	subscription->iov.iov_base = addr;
-	subscription->iov.iov_len = len;
-	fastlock_acquire(&nq->lock);
-	nq->refcnt++;
-	fastlock_release(&nq->lock);
-
-	ret = nq->monitor->subscribe(nq->monitor, subscription);
+	ret = monitor->subscribe(monitor, addr, len);
 	if (OFI_UNLIKELY(ret)) {
 		FI_WARN(&core_prov, FI_LOG_MR,
 			"Failed (ret = %d) to monitor addr=%p len=%zu",
 			ret, addr, len);
-		fastlock_acquire(&nq->lock);
-		nq->refcnt--;
-		fastlock_release(&nq->lock);
 	}
 	return ret;
 }
 
-void ofi_monitor_unsubscribe(struct ofi_subscription *subscription)
+void ofi_monitor_unsubscribe(struct ofi_mem_monitor *monitor,
+			     const void *addr, size_t len)
 {
 	FI_DBG(&core_prov, FI_LOG_MR,
-	       "unsubscribing addr=%p len=%zu subscription=%p\n",
-	       subscription->iov.iov_base, subscription->iov.iov_len, subscription);
-	subscription->nq->monitor->unsubscribe(subscription->nq->monitor,
-					       subscription);
-	fastlock_acquire(&subscription->nq->lock);
-	if (!dlist_empty(&subscription->entry))
-		dlist_remove_init(&subscription->entry);
-	subscription->nq->refcnt--;
-	fastlock_release(&subscription->nq->lock);
-}
-
-struct ofi_subscription *ofi_monitor_get_event(struct ofi_notification_queue *nq)
-{
-	struct ofi_subscription *subscription;
-
-	fastlock_acquire(&nq->lock);
-	if (!dlist_empty(&nq->list)) {
-		dlist_pop_front(&nq->list, struct ofi_subscription,
-				subscription, entry);
-		/* needed to protect against double insertions */
-		dlist_init(&subscription->entry);
-	} else {
-		subscription = NULL;
-	}
-	fastlock_release(&nq->lock);
-
-	return subscription;
+	       "unsubscribing addr=%p len=%zu\n", addr, len);
+	monitor->unsubscribe(monitor, addr, len);
 }
