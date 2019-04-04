@@ -1297,6 +1297,14 @@ void rxm_ep_do_progress(struct util_ep *util_ep)
 	while (!dlist_empty(&rxm_ep->repost_ready_list)) {
 		dlist_pop_front(&rxm_ep->repost_ready_list, struct rxm_rx_buf,
 				buf, repost_entry);
+
+		/* Discard rx buffer if its msg_ep was closed */
+		if (!buf->conn->msg_ep) {
+			util_buf_release(rxm_ep->buf_pools[RXM_BUF_POOL_RX].pool,
+					 buf);
+			continue;
+		}
+
 		ret = rxm_msg_ep_recv(buf);
 		if (ret) {
 			if (OFI_LIKELY(ret == -FI_EAGAIN))
