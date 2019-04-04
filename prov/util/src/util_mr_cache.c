@@ -96,9 +96,7 @@ static void util_mr_uncache_entry(struct ofi_mr_cache *cache,
 	entry->cached = 0;
 }
 
-/* TODO: Cache must acquire some monitor level lock as part of all
- * search/insert/delete operations.
- */
+/* Caller must hold ofi_mem_monitor lock */
 void ofi_mr_cache_notify(struct ofi_mr_cache *cache, const void *addr, size_t len)
 {
 	struct ofi_mr_entry *entry;
@@ -120,7 +118,7 @@ void ofi_mr_cache_notify(struct ofi_mr_cache *cache, const void *addr, size_t le
 	}
 }
 
-bool ofi_mr_cache_flush(struct ofi_mr_cache *cache)
+static bool mr_cache_flush(struct ofi_mr_cache *cache)
 {
 	struct ofi_mr_entry *entry;
 
@@ -138,10 +136,22 @@ bool ofi_mr_cache_flush(struct ofi_mr_cache *cache)
 	return true;
 }
 
+bool ofi_mr_cache_flush(struct ofi_mr_cache *cache)
+{
+	bool empty;
+
+	fastlock_acquire(&cache->monitor->lock);
+	empty = mr_cache_flush(cache);
+	fastlock_release(&cache->monitor->lock);
+	return empty;
+}
+
 void ofi_mr_cache_delete(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 {
 	FI_DBG(cache->domain->prov, FI_LOG_MR, "delete %p (len: %" PRIu64 ")\n",
 	       entry->iov.iov_base, entry->iov.iov_len);
+
+	fastlock_acquire(&cache->monitor->lock);
 	cache->delete_cnt++;
 
 	if (--entry->use_cnt == 0) {
@@ -151,6 +161,7 @@ void ofi_mr_cache_delete(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 			util_mr_free_entry(cache, entry);
 		}
 	}
+	fastlock_release(&cache->monitor->lock);
 }
 
 static int
@@ -171,11 +182,11 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct iovec *iov,
 
 	ret = cache->add_region(cache, *entry);
 	if (ret) {
-		while (ret && ofi_mr_cache_flush(cache)) {
+		while (ret && mr_cache_flush(cache)) {
 			ret = cache->add_region(cache, *entry);
 		}
 		if (ret) {
-			assert(!ofi_mr_cache_flush(cache));
+			assert(!mr_cache_flush(cache));
 			ofi_buf_free(*entry);
 			return ret;
 		}
@@ -247,31 +258,40 @@ util_mr_cache_merge(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
 int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
 			struct ofi_mr_entry **entry)
 {
+	int ret = 0;
+
 	assert(attr->iov_count == 1);
 	FI_DBG(cache->domain->prov, FI_LOG_MR, "search %p (len: %" PRIu64 ")\n",
 	       attr->mr_iov->iov_base, attr->mr_iov->iov_len);
+
+	fastlock_acquire(&cache->monitor->lock);
 	cache->search_cnt++;
 
 	while (((cache->cached_cnt >= cache->max_cached_cnt) ||
 		(cache->cached_size >= cache->max_cached_size)) &&
-	       ofi_mr_cache_flush(cache))
+	       mr_cache_flush(cache))
 		;
 
 	*entry = cache->storage.find(&cache->storage, attr->mr_iov);
 	if (!*entry) {
-		return util_mr_cache_create(cache, attr->mr_iov,
-					    attr->access, entry);
+		ret = util_mr_cache_create(cache, attr->mr_iov,
+					   attr->access, entry);
+		goto unlock;
 	}
 
 	/* This branch is always false if the merging entries wasn't requested */
-	if (!ofi_iov_within(attr->mr_iov, &(*entry)->iov))
-		return util_mr_cache_merge(cache, attr, *entry, entry);
+	if (!ofi_iov_within(attr->mr_iov, &(*entry)->iov)) {
+		ret = util_mr_cache_merge(cache, attr, *entry, entry);
+		goto unlock;
+	}
 
 	cache->hit_cnt++;
 	if ((*entry)->use_cnt++ == 0)
 		dlist_remove_init(&(*entry)->lru_entry);
 
-	return 0;
+unlock:
+	fastlock_release(&cache->monitor->lock);
+	return ret;
 }
 
 void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache)
