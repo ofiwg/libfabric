@@ -214,7 +214,7 @@ struct ofi_mr_cache {
 	int				merge_regions;
 	size_t				entry_data_size;
 
-	struct ofi_mr_storage		mr_storage;
+	struct ofi_mr_storage		storage;
 	struct dlist_entry		lru_list;
 
 	size_t				cached_cnt;

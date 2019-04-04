@@ -92,7 +92,7 @@ static void util_mr_uncache_entry(struct ofi_mr_cache *cache,
 				  struct ofi_mr_entry *entry)
 {
 	assert(entry->cached);
-	cache->mr_storage.erase(&cache->mr_storage, entry);
+	cache->storage.erase(&cache->storage, entry);
 	entry->cached = 0;
 }
 
@@ -107,7 +107,7 @@ void ofi_mr_cache_notify(struct ofi_mr_cache *cache, const void *addr, size_t le
 	iov.iov_base = (void *) addr;
 	iov.iov_len = len;
 
-	entry = cache->mr_storage.find(&cache->mr_storage, &iov);
+	entry = cache->storage.find(&cache->storage, &iov);
 	if (!entry)
 		return;
 
@@ -186,8 +186,8 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct iovec *iov,
 	    (cache->cached_size > cache->max_cached_size)) {
 		(*entry)->cached = 0;
 	} else {
-		if (cache->mr_storage.insert(&cache->mr_storage,
-					     &(*entry)->iov, *entry)) {
+		if (cache->storage.insert(&cache->storage,
+					  &(*entry)->iov, *entry)) {
 			ret = -FI_ENOMEM;
 			goto err;
 		}
@@ -231,7 +231,7 @@ util_mr_cache_merge(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
 		/* New entry will expand range of subscription */
 		old_entry->subscribed = 0;
 
-		cache->mr_storage.erase(&cache->mr_storage, old_entry);
+		cache->storage.erase(&cache->storage, old_entry);
 		old_entry->cached = 0;
 
 		if (old_entry->use_cnt == 0) {
@@ -239,7 +239,7 @@ util_mr_cache_merge(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
 			util_mr_free_entry(cache, old_entry); 
 		}
 
-	} while ((old_entry = cache->mr_storage.find(&cache->mr_storage, &iov)));
+	} while ((old_entry = cache->storage.find(&cache->storage, &iov)));
 
 	return util_mr_cache_create(cache, &iov, attr->access, entry);
 }
@@ -257,7 +257,7 @@ int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *att
 	       ofi_mr_cache_flush(cache))
 		;
 
-	*entry = cache->mr_storage.find(&cache->mr_storage, attr->mr_iov);
+	*entry = cache->storage.find(&cache->storage, attr->mr_iov);
 	if (!*entry) {
 		return util_mr_cache_create(cache, attr->mr_iov,
 					    attr->access, entry);
@@ -290,7 +290,7 @@ void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache)
 		dlist_remove_init(&entry->lru_entry);
 		util_mr_free_entry(cache, entry);
 	}
-	cache->mr_storage.destroy(&cache->mr_storage);
+	cache->storage.destroy(&cache->storage);
 	ofi_monitor_del_cache(cache);
 	ofi_atomic_dec32(&cache->domain->ref);
 	ofi_bufpool_destroy(cache->entry_pool);
@@ -298,29 +298,29 @@ void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache)
 	assert(cache->cached_size == 0);
 }
 
-static void ofi_mr_rbt_storage_destroy(struct ofi_mr_storage *storage)
+static void ofi_mr_rbt_destroy(struct ofi_mr_storage *storage)
 {
-	rbtDelete((RbtHandle)storage->storage);
+	rbtDelete((RbtHandle) storage->storage);
 }
 
-static struct ofi_mr_entry *ofi_mr_rbt_storage_find(struct ofi_mr_storage *storage,
-						    const struct iovec *key)
+static struct ofi_mr_entry *ofi_mr_rbt_find(struct ofi_mr_storage *storage,
+					    const struct iovec *key)
 {
 	struct ofi_mr_entry *entry;
-	RbtIterator iter = rbtFind((RbtHandle)storage->storage, (void *)key);
+	RbtIterator iter = rbtFind((RbtHandle) storage->storage, (void *) key);
 	if (OFI_UNLIKELY(!iter))
 		return iter;
 
-	rbtKeyValue(storage->storage, iter, (void *)&key, (void *)&entry);
+	rbtKeyValue(storage->storage, iter, (void *) &key, (void *) &entry);
 	return entry;
 }
 
-static int ofi_mr_rbt_storage_insert(struct ofi_mr_storage *storage,
-				     struct iovec *key,
-				     struct ofi_mr_entry *entry)
+static int ofi_mr_rbt_insert(struct ofi_mr_storage *storage,
+			     struct iovec *key,
+			     struct ofi_mr_entry *entry)
 {
-	int ret = rbtInsert((RbtHandle)storage->storage,
-			    (void *)&entry->iov, (void *)entry);
+	int ret = rbtInsert((RbtHandle) storage->storage,
+			    (void *) &entry->iov, (void *) entry);
 	if (ret != RBT_STATUS_OK) {
 		switch (ret) {
 		case RBT_STATUS_MEM_EXHAUSTED:
@@ -334,39 +334,40 @@ static int ofi_mr_rbt_storage_insert(struct ofi_mr_storage *storage,
 	return ret;
 }
 
-static int ofi_mr_rbt_storage_erase(struct ofi_mr_storage *storage,
-				    struct ofi_mr_entry *entry)
+static int ofi_mr_rbt_erase(struct ofi_mr_storage *storage,
+			    struct ofi_mr_entry *entry)
 {
 	RbtIterator iter = rbtFind(storage->storage, &entry->iov);
 	assert(iter);
-	return (rbtErase((RbtHandle)storage->storage, iter) != RBT_STATUS_OK) ?
+	return (rbtErase((RbtHandle) storage->storage, iter) != RBT_STATUS_OK) ?
 	       -FI_EAVAIL : 0;
 }
 
-static int ofi_mr_cache_init_rbt_storage(struct ofi_mr_cache *cache)
+static int ofi_mr_cache_init_rbt(struct ofi_mr_cache *cache)
 {
-	cache->mr_storage.storage = rbtNew(cache->merge_regions ?
+	cache->storage.storage = rbtNew(cache->merge_regions ?
 					   util_mr_find_overlap :
 					   util_mr_find_within);
-	if (!cache->mr_storage.storage)
+	if (!cache->storage.storage)
 		return -FI_ENOMEM;
-	cache->mr_storage.destroy = ofi_mr_rbt_storage_destroy;
-	cache->mr_storage.find = ofi_mr_rbt_storage_find;
-	cache->mr_storage.insert = ofi_mr_rbt_storage_insert;
-	cache->mr_storage.erase = ofi_mr_rbt_storage_erase;
+
+	cache->storage.destroy = ofi_mr_rbt_destroy;
+	cache->storage.find = ofi_mr_rbt_find;
+	cache->storage.insert = ofi_mr_rbt_insert;
+	cache->storage.erase = ofi_mr_rbt_erase;
 	return 0;
 }
 
 static int ofi_mr_cache_init_storage(struct ofi_mr_cache *cache)
 {
-	switch (cache->mr_storage.type) {
+	switch (cache->storage.type) {
 	case OFI_MR_STORAGE_DEFAULT:
 	case OFI_MR_STORAGE_RBT:
-		return ofi_mr_cache_init_rbt_storage(cache);
+		return ofi_mr_cache_init_rbt(cache);
 	case OFI_MR_STORAGE_USER:
-		if (!(cache->mr_storage.storage &&
-		      cache->mr_storage.destroy && cache->mr_storage.find &&
-		      cache->mr_storage.insert && cache->mr_storage.erase))
+		if (!(cache->storage.storage &&
+		      cache->storage.destroy && cache->storage.find &&
+		      cache->storage.insert && cache->storage.erase))
 			return -FI_EINVAL;
 		break;
 	}
@@ -410,6 +411,6 @@ int ofi_mr_cache_init(struct util_domain *domain,
 err:
 	ofi_atomic_dec32(&cache->domain->ref);
 	ofi_monitor_del_cache(cache);
-	cache->mr_storage.destroy(&cache->mr_storage);
+	cache->storage.destroy(&cache->storage);
 	return ret;
 }
