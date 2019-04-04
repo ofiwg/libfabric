@@ -350,6 +350,10 @@ int fi_ibv_set_rnr_timer(struct ibv_qp *qp)
 		attr.min_rnr_timer = fi_ibv_gl_data.min_rnr_timer;
 	}
 
+	/* XRC initiator QP do not have responder logic */
+	if (qp->qp_type == IBV_QPT_XRC_SEND)
+		return 0;
+
 	ret = ibv_modify_qp(qp, &attr, IBV_QP_MIN_RNR_TIMER);
 	if (ret) {
 		VERBS_WARN(FI_LOG_EQ, "Unable to modify QP attribute\n");
