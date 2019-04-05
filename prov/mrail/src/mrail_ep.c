@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2018-2019 Intel Corporation, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -337,6 +337,129 @@ static struct mrail_tx_buf *mrail_get_tx_buf(struct mrail_ep *mrail_ep,
 	return tx_buf;
 }
 
+/*
+ * This is an internal send that doesn't use seq_no and doesn't update
+ * the counters.
+ */
+int mrail_send_rndv_ack(struct mrail_ep *mrail_ep, fi_addr_t dest_addr,
+			void *context)
+{
+	struct iovec iov_dest;
+	struct mrail_tx_buf *tx_buf;
+	uint32_t i = mrail_get_tx_rail(mrail_ep);
+	struct fi_msg msg;
+	ssize_t ret;
+	uint64_t flags = FI_COMPLETION;
+
+	ofi_ep_lock_acquire(&mrail_ep->util_ep);
+
+	tx_buf = mrail_get_tx_buf(mrail_ep, context, 0, ofi_op_tagged, 0);
+	if (OFI_UNLIKELY(!tx_buf))
+		return -FI_ENOMEM;
+
+	tx_buf->hdr.protocol = MRAIL_PROTO_RNDV;
+	tx_buf->rndv_hdr.context = (uint64_t)context;
+	tx_buf->rndv_hdr.cmd = MRAIL_RNDV_ACK;
+
+	iov_dest.iov_base = &tx_buf->hdr;
+	iov_dest.iov_len = sizeof(tx_buf->hdr) + sizeof(tx_buf->rndv_hdr);
+
+	msg.msg_iov 	= &iov_dest;
+	msg.desc    	= NULL;
+	msg.iov_count	= 1;
+	msg.addr	= dest_addr;
+	msg.context	= tx_buf;
+
+	if (iov_dest.iov_len < mrail_ep->rails[i].info->tx_attr->inject_size)
+		flags |= FI_INJECT;
+
+	FI_DBG(&mrail_prov, FI_LOG_EP_DATA, "Posting rdnv ack "
+	       " dest_addr: 0x%" PRIx64 " on rail: %d\n", dest_addr, i);
+
+	ret = fi_sendmsg(mrail_ep->rails[i].ep, &msg, flags);
+	if (ret) {
+		FI_WARN(&mrail_prov, FI_LOG_EP_DATA,
+			"Unable to fi_sendmsg on rail: %" PRIu32 "\n", i);
+		ofi_buf_free(tx_buf);
+	}
+	ofi_ep_lock_release(&mrail_ep->util_ep);
+	return ret;
+}
+
+static ssize_t
+mrail_prepare_rndv_req(struct mrail_ep *mrail_ep, struct mrail_tx_buf *tx_buf,
+		       const struct iovec *iov, void **desc, size_t count,
+		       size_t len, struct iovec *iov_dest)
+{
+	size_t mr_count;
+	struct fid_mr *mr;
+	uint64_t addr, *base_addrs;
+	size_t key_size, offset;
+	size_t total_key_size = 0;
+	ssize_t ret;
+	int i;
+
+	tx_buf->hdr.protocol = MRAIL_PROTO_RNDV;
+	tx_buf->rndv_hdr.context = (uint64_t)tx_buf;
+	tx_buf->rndv_hdr.cmd = MRAIL_RNDV_REQ;
+
+	if (!desc || !desc[0]) {
+		ret = fi_mr_regv(&mrail_ep->util_ep.domain->domain_fid,
+				 iov, count, FI_REMOTE_READ, 0, 0, 0, &mr, 0);
+		if (ret)
+			return ret;
+		total_key_size = 0;
+		ret = fi_mr_raw_attr(mr, &addr, NULL, &total_key_size, 0);
+		assert(ret == -FI_ETOOSMALL);
+		mr_count = 1;
+	} else {
+		total_key_size = 0;
+		for (i = 0; i < count; i++) {
+			mr = &((struct mrail_mr *)desc[i])->mr_fid;
+			key_size = 0;
+			ret = fi_mr_raw_attr(mr, &addr, NULL, &key_size, 0);
+			assert(ret == -FI_ETOOSMALL);
+			total_key_size += key_size;
+		}
+		mr_count = count;
+	}
+
+	tx_buf->rndv_req = malloc(sizeof(*tx_buf->rndv_req) + total_key_size +
+				  sizeof(*base_addrs) * mr_count);
+	if (!tx_buf->rndv_req)
+		return -FI_ENOMEM;
+
+	tx_buf->rndv_req->len = len;
+	tx_buf->rndv_req->count = count;
+	tx_buf->rndv_req->mr_count = mr_count;
+	tx_buf->rndv_req->rawkey_size = total_key_size;
+
+	base_addrs = (uint64_t *)(tx_buf->rndv_req->rawkey + total_key_size);
+	for (offset = 0, i = 0; i < count; i++) {
+		if (i < mr_count) {
+			if (mr_count > 1)
+				mr = &((struct mrail_mr *)desc[i])->mr_fid;
+			key_size = total_key_size - offset;
+			ret = fi_mr_raw_attr(mr, &base_addrs[i],
+					     tx_buf->rndv_req->rawkey + offset,
+					     &key_size, 0);
+			assert(!ret);
+			offset += key_size;
+		}
+		tx_buf->rndv_req->rma_iov[i].addr = (uint64_t)iov[i].iov_base;
+		tx_buf->rndv_req->rma_iov[i].len = iov[i].iov_len;
+		tx_buf->rndv_req->rma_iov[i].key = key_size; /* otherwise unused */
+	}
+
+	iov_dest[0].iov_base = &tx_buf->hdr;
+	iov_dest[0].iov_len = sizeof(tx_buf->hdr) + sizeof(tx_buf->rndv_hdr);
+	iov_dest[1].iov_base = tx_buf->rndv_req;
+	iov_dest[1].iov_len = sizeof(*tx_buf->rndv_req) + total_key_size +
+			      sizeof(uint64_t) * mr_count;
+
+	return 0;
+}
+
 static ssize_t
 mrail_send_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 		  size_t count, size_t len, fi_addr_t dest_addr, uint64_t data,
@@ -350,6 +473,7 @@ mrail_send_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	uint32_t i = mrail_get_tx_rail(mrail_ep);
 	struct fi_msg msg;
 	ssize_t ret;
+	size_t total_len;
 
 	peer_info = ofi_av_get_addr(mrail_ep->util_ep.av, (int) dest_addr);
 
@@ -361,16 +485,33 @@ mrail_send_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 		ret = -FI_ENOMEM;
 		goto err1;
 	}
-	mrail_copy_iov_hdr(&tx_buf->hdr, iov_dest, iov, count);
 
-	msg.msg_iov 	= iov_dest;
-	msg.desc    	= desc;
-	msg.iov_count	= count + 1;
-	msg.addr	= dest_addr;
-	msg.context	= tx_buf;
-	msg.data	= data;
+	if (len <= MRAIL_RNDV_THRESHOLD) {
+		mrail_copy_iov_hdr(&tx_buf->hdr, iov_dest, iov, count);
 
-	if (len + iov_dest[0].iov_len < mrail_ep->rails[i].info->tx_attr->inject_size)
+		msg.msg_iov 	= iov_dest;
+		msg.desc    	= desc;
+		msg.iov_count	= count + 1;
+		msg.addr	= dest_addr;
+		msg.context	= tx_buf;
+		msg.data	= data;
+		total_len = len + iov_dest[0].iov_len;
+	} else {
+		ret = mrail_prepare_rndv_req(mrail_ep, tx_buf, iov, desc,
+					     count, len, iov_dest);
+		if (ret)
+			goto err2;
+
+		msg.msg_iov 	= iov_dest;
+		msg.desc    	= desc;
+		msg.iov_count	= 2;
+		msg.addr	= dest_addr;
+		msg.context	= tx_buf;
+		msg.data	= data;
+		total_len = iov_dest[0].iov_len + iov_dest[1].iov_len;
+	}
+
+	if (total_len < mrail_ep->rails[i].info->tx_attr->inject_size)
 		flags |= FI_INJECT;
 
 	FI_DBG(&mrail_prov, FI_LOG_EP_DATA, "Posting send of length: %" PRIu64
@@ -408,6 +549,7 @@ mrail_tsend_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	uint32_t i = mrail_get_tx_rail(mrail_ep);
 	struct fi_msg msg;
 	ssize_t ret;
+	size_t total_len;
 
 	peer_info = ofi_av_get_addr(mrail_ep->util_ep.av, (int) dest_addr);
 
@@ -420,16 +562,34 @@ mrail_tsend_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 		goto err1;
 	}
 	tx_buf->hdr.tag = tag;
-	mrail_copy_iov_hdr(&tx_buf->hdr, iov_dest, iov, count);
 
-	msg.msg_iov 	= iov_dest;
-	msg.desc    	= desc;
-	msg.iov_count	= count + 1;
-	msg.addr	= dest_addr;
-	msg.context	= tx_buf;
-	msg.data	= data;
+	if (len <= MRAIL_RNDV_THRESHOLD) {
+		tx_buf->hdr.protocol = MRAIL_PROTO_EAGER;
+		mrail_copy_iov_hdr(&tx_buf->hdr, iov_dest, iov, count);
 
-	if (len + iov_dest[0].iov_len < mrail_ep->rails[i].info->tx_attr->inject_size)
+		msg.msg_iov 	= iov_dest;
+		msg.desc    	= desc;
+		msg.iov_count	= count + 1;
+		msg.addr	= dest_addr;
+		msg.context	= tx_buf;
+		msg.data	= data;
+		total_len = len + iov_dest[0].iov_len;
+	} else {
+		ret = mrail_prepare_rndv_req(mrail_ep, tx_buf, iov, desc,
+					     count, len, iov_dest);
+		if (ret)
+			goto err2;
+
+		msg.msg_iov 	= iov_dest;
+		msg.desc    	= desc;
+		msg.iov_count	= 2;
+		msg.addr	= dest_addr;
+		msg.context	= tx_buf;
+		msg.data	= data;
+		total_len = iov_dest[0].iov_len + iov_dest[1].iov_len;
+	}
+
+	if (total_len < mrail_ep->rails[i].info->tx_attr->inject_size)
 		flags |= FI_INJECT;
 
 	FI_DBG(&mrail_prov, FI_LOG_EP_DATA, "Posting tsend of length: %" PRIu64

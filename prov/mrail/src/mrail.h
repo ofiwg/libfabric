@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2018-2019 Intel Corporation, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -106,14 +106,43 @@ mrail_match_recv_handle_unexp(struct mrail_recv_queue *recv_queue, uint64_t tag,
 			      uint64_t addr, char *data, size_t len, void *context);
 
 /* mrail protocol */
-#define MRAIL_HDR_VERSION 1
+#define MRAIL_HDR_VERSION 2
+
+#define MRAIL_PROTO_EAGER	0
+#define MRAIL_PROTO_RNDV	1
 
 struct mrail_hdr {
 	uint8_t		version;
 	uint8_t		op;
-	uint8_t		padding[2];
+	uint8_t		protocol;
+	uint8_t		padding;
 	uint32_t	seq;
 	uint64_t 	tag;
+};
+
+#define MRAIL_IOV_LIMIT		5
+
+/* bit 60~63 are provider defined */
+#define MRAIL_RNDV_FLAG		(1ULL << 60)
+
+#define MRAIL_RNDV_THRESHOLD	16384
+
+#define MRAIL_RNDV_REQ		0
+#define MRAIL_RNDV_ACK		1
+
+struct mrail_rndv_hdr {
+	uint8_t			cmd;
+	uint8_t			padding[3];
+	uint64_t		context;
+};
+
+struct mrail_rndv_req {
+	size_t			len;
+	size_t			count;
+	size_t			mr_count;
+	struct fi_rma_iov	rma_iov[MRAIL_IOV_LIMIT];
+	size_t			rawkey_size;
+	uint8_t			rawkey[]; /* rawkey + base_addr */
 };
 
 struct mrail_tx_buf {
@@ -125,6 +154,8 @@ struct mrail_tx_buf {
 	 * and completion flags (FI_MSG, FI_TAGGED, etc) */
 	uint64_t		flags;
 	struct mrail_hdr	hdr;
+	struct mrail_rndv_hdr	rndv_hdr;
+	struct mrail_rndv_req	*rndv_req;
 };
 
 struct mrail_pkt {
@@ -134,11 +165,17 @@ struct mrail_pkt {
 
 /* TX & RX processing */
 
-#define MRAIL_IOV_LIMIT	5
-
 struct mrail_rx_buf {
 	struct fid_ep		*rail_ep;
 	struct mrail_pkt	pkt;
+};
+
+struct mrail_rndv_recv {
+	void			*context;
+	uint64_t		flags;
+	uint64_t		tag;
+	uint64_t		data;
+	size_t			len;
 };
 
 struct mrail_recv {
@@ -154,6 +191,7 @@ struct mrail_recv {
 	fi_addr_t 		addr;
 	uint64_t 		tag;
 	uint64_t 		ignore;
+	struct mrail_rndv_recv	rndv;
 };
 DECLARE_FREESTACK(struct mrail_recv, mrail_recv_fs);
 
@@ -358,3 +396,6 @@ static inline void mrail_cntr_incerr(struct util_cntr *cntr)
                cntr->cntr_fid.ops->adderr(&cntr->cntr_fid, 1);
        }
 }
+
+int mrail_send_rndv_ack(struct mrail_ep *mrail_ep, fi_addr_t dest_addr,
+			void *context);
