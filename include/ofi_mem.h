@@ -54,6 +54,11 @@
 #   define VALGRIND_MAKE_MEM_DEFINED(addr, len)
 #endif
 
+static inline long ofi_get_page_size()
+{
+	return ofi_sysconf(_SC_PAGESIZE);
+}
+
 /* We implement memdup to avoid external library dependency */
 static inline void *mem_dup(const void *src, size_t size)
 {

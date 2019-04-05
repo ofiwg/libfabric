@@ -831,7 +831,7 @@ static inline char * strndup(char const *src, size_t n)
 	return dst;
 }
 
-static inline int ofi_sysconf(int name)
+static inline long ofi_sysconf(int name)
 {
 	SYSTEM_INFO si;
 

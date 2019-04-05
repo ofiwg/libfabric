@@ -37,11 +37,11 @@
 
 #include <stdlib.h>
 #include <unistd.h>
-#include <errno.h>
 #include <complex.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <sys/uio.h>
+#include <rdma/fi_errno.h>
 
 
 /* MSG_NOSIGNAL doesn't exist on OS X */
@@ -209,9 +209,17 @@ static inline int ofi_syserr(void)
 	return errno;
 }
 
-static inline int ofi_sysconf(int name)
+/* sysconf can return -1 and not change errno */
+static inline long ofi_sysconf(int name)
 {
-	return sysconf(name);
+	int ret;
+
+	errno = 0;
+	ret = sysconf(name);
+	if (ret <= 0)
+		return errno ? -errno : -FI_EOTHER;
+
+	return ret;
 }
 
 /* OSX has no such definition. So, add it manually */
