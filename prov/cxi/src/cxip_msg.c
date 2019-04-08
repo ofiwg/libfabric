@@ -940,6 +940,8 @@ static void cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 
 		fastlock_release(&rxc->lock);
 
+		CXIP_LOG_DBG("Matched ux_send: %p\n", ux_send);
+
 		oflow_buf = ux_send->oflow_buf;
 
 		req->recv.rc = cxi_tgt_event_rc(event);
@@ -952,14 +954,16 @@ static void cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		 */
 
 		if (oflow_buf->type == OFLOW_BUF_EAGER) {
-			/* This is an eager sized operation
-			 * Copy data from the overflow buffer
+			/* The request contains the parameters of the receive.
+			 * Compare the receive buffer to the incoming send.
 			 */
-			req->recv.rlength = ux_send->length;
 			if (ux_send->length > req->recv.rlength)
 				req->recv.mlength = req->recv.rlength;
 			else
 				req->recv.mlength = ux_send->length;
+
+			/* Update rlength to reflect the send */
+			req->recv.rlength = ux_send->length;
 
 			oflow_va = (void *)CXI_IOVA_TO_VA(oflow_buf->md,
 					event->tgt_long.start);
@@ -998,11 +1002,16 @@ static void cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		 */
 
 		req->recv.rc = cxi_tgt_event_rc(event);
+
+		/* The request contains the parameters of the receive. Compare
+		 * the receive buffer to the incoming send.
+		 */
 		if (event->tgt_long.rlength > req->recv.rlength)
 			req->recv.mlength = req->recv.rlength;
 		else
 			req->recv.mlength = event->tgt_long.rlength;
 		req->recv.rlength = event->tgt_long.rlength;
+
 		mb.raw = event->tgt_long.match_bits;
 		req->tag = mb.tag;
 		req->recv.src_addr = _rxc_event_src_addr(rxc, event);
@@ -1321,7 +1330,7 @@ rdzv_unlink_le:
 			 * successfully unlinked. Report the completion of the
 			 * operation.
 			 */
-			CXIP_LOG_DBG("Request success (Priority): %p\n", req);
+			CXIP_LOG_DBG("Request success: %p\n", req);
 			ret = req->cq->report_completion(req->cq,
 							 FI_ADDR_UNSPEC, req);
 			if (ret != req->cq->cq_entry_size)
@@ -1348,7 +1357,7 @@ rdzv_unlink_le:
 				CXIP_LOG_ERROR("Failed to report error: %d\n",
 					       ret);
 		} else {
-			CXIP_LOG_DBG("Request success (Overflow): %p\n", req);
+			CXIP_LOG_DBG("Request success: %p\n", req);
 			ret = req->cq->report_completion(req->cq,
 							 FI_ADDR_UNSPEC, req);
 			if (ret != req->cq->cq_entry_size)
@@ -1433,12 +1442,13 @@ static ssize_t _cxip_send_long(struct cxip_tx_ctx *txc, struct cxip_req *req)
 	 * (not available for software rendezvous).
 	 */
 	if (txc->rdzv_offload) {
+		uint8_t pid = txc->ep_obj->src_addr.pid;
 		uint32_t pid_bits = txc->domain->dev_if->if_dev->info.pid_bits;
 		uint32_t nic_addr = txc->domain->dev_if->if_dev->info.nic_addr;
 
 		req->send.cmd.full_dma.command.opcode = C_CMD_RENDEZVOUS_PUT;
 		req->send.cmd.full_dma.eager_length = txc->eager_threshold;
-		req->send.cmd.full_dma.initiator = CXI_MATCH_ID(pid_bits, 0,
+		req->send.cmd.full_dma.initiator = CXI_MATCH_ID(pid_bits, pid,
 								nic_addr);
 		req->send.cmd.full_dma.rendezvous_id = RDZV_ID_HI(rdzv_id);
 		le_mb.rdzv_id_hi = RDZV_ID_HI(rdzv_id);
