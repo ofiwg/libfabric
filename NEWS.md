@@ -5,11 +5,12 @@ This file contains the main features as well as overviews of specific
 bug fixes (and other actions) for each version of Libfabric since
 version 1.0.
 
-v1.7.1, Fri Mar 29, 2019
+v1.7.1, Mon Apr 8, 2019
 ========================
 
 ## Core
 
+- Support layered provider names with FI_PROVIDER filter
 - Minor cleanups to man pages
 - Add missing header for FreeBSD support
 - Fix built-in atomic tests
@@ -50,6 +51,8 @@ v1.7.1, Fri Mar 29, 2019
 
 ## RxM
 
+- Avoid unnecessary fi_getinfo calls to avoid possible failures
+- Discard Rx buffers for closed EPs to avoid segfaults
 - Repost receive buffers to avoid possible fabric deadlock
 - Fix crash accessing invalid Tx CQ
 - Use correct flags for *msg APIs
@@ -89,9 +92,11 @@ v1.7.1, Fri Mar 29, 2019
 
 ## Verbs
 
+- Cleanup from use of memory registration cache
+- Do not update minimum RNR timer for XRC initiator QPs
 - Fix possible CQ overrun issues with hfi1 and qib devices
 - Fix synchronization issue accessing MR cache from multiple threads
-- Fix double free in XRC 	accept path
+- Fix double free in XRC accept path
 - Add missing include file
 - Make fi_getinfo call thread safe
 - Fix CQ busy issue in MPI finalize when using XRC
