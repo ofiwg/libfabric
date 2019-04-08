@@ -15,6 +15,8 @@
 #include "cxip_test_common.h"
 
 TestSuite(tagged, .init = cxit_setup_tagged, .fini = cxit_teardown_tagged);
+TestSuite(tagged_offload, .init = cxit_setup_tagged_offload,
+	  .fini = cxit_teardown_tagged_offload);
 
 /* Test basic send/recv */
 Test(tagged, ping, .timeout = 3)
@@ -1078,9 +1080,11 @@ ParameterizedTest(struct multitudes_params *param, tagged, multitudes,
 	free(rx_args);
 }
 
+#define RECV_INIT 0
+
 void do_tagged(uint8_t *send_buf, size_t send_len, uint64_t send_tag,
 	       uint8_t *recv_buf, size_t recv_len, uint64_t recv_tag,
-	       uint64_t recv_ignore, bool send_first)
+	       uint64_t recv_ignore, bool send_first, size_t buf_size)
 {
 	int i, ret;
 	struct fi_cq_tagged_entry tx_cqe,
@@ -1092,7 +1096,7 @@ void do_tagged(uint8_t *send_buf, size_t send_len, uint64_t send_tag,
 	     truncated = false;
 	struct fi_cq_err_entry err_cqe = {};
 
-	memset(recv_buf, 0, recv_len);
+	memset(recv_buf, RECV_INIT, buf_size);
 
 	for (i = 0; i < send_len; i++)
 		send_buf[i] = i + 0xa0;
@@ -1196,14 +1200,18 @@ void do_tagged(uint8_t *send_buf, size_t send_len, uint64_t send_tag,
 	cr_assert(tx_cqe.tag == 0, "Invalid TX CQE tag");
 
 	/* Validate sent data */
-	for (i = 0; i < recv_len; i++) {
-		cr_expect_eq(recv_buf[i], send_buf[i],
-			  "data mismatch, element[%d], exp=%d saw=%d, err=%d\n",
-			  i, send_buf[i], recv_buf[i], err++);
-		if (recv_buf[i] != send_buf[i])
+	for (i = 0; i < buf_size; i++) {
+		uint8_t cmp = RECV_INIT;
+		if (i < recv_len)
+			cmp = send_buf[i];
+
+		cr_expect_eq(recv_buf[i], cmp,
+			  "data mismatch, len: %d, element[%d], exp=%d saw=%d, err=%d\n",
+			  recv_len, i, cmp, recv_buf[i], err++);
+		if (err > 10)
 			break;
 	}
-	cr_assert_eq(err, 0, "Data errors seen\n");
+	cr_assert_eq(err, 0, "%d data errors seen\n", err);
 }
 
 #define BUF_SIZE (8*1024)
@@ -1222,116 +1230,124 @@ struct tagged_rx_params {
 	bool ux;
 };
 
+static struct tagged_rx_params params[] = {
+	{.buf_size = BUF_SIZE, /* truncate */
+	 .send_min = SEND_MIN,
+	 .send_inc = SEND_INC,
+	 .send_tag = 0,
+	 .recv_len_off = -8,
+	 .recv_tag = 0,
+	 .ignore = 0,
+	 .ux = false},
+	{.buf_size = BUF_SIZE, /* truncate UX */
+	 .send_min = SEND_MIN,
+	 .send_inc = SEND_INC,
+	 .send_tag = 0,
+	 .recv_len_off = -8,
+	 .recv_tag = 0,
+	 .ignore = 0,
+	 .ux = true},
+	{.buf_size = BUF_SIZE, /* truncate ignore */
+	 .send_min = SEND_MIN,
+	 .send_inc = SEND_INC,
+	 .send_tag = TAG,
+	 .recv_len_off = -8,
+	 .recv_tag = ~TAG,
+	 .ignore = -1ULL,
+	 .ux = false},
+	{.buf_size = BUF_SIZE, /* truncate ignore UX */
+	 .send_min = SEND_MIN,
+	 .send_inc = SEND_INC,
+	 .send_tag = TAG,
+	 .recv_len_off = -8,
+	 .recv_tag = ~TAG,
+	 .ignore = -1ULL,
+	 .ux = true},
+	{.buf_size = BUF_SIZE, /* equal length */
+	 .send_min = SEND_MIN,
+	 .send_inc = SEND_INC,
+	 .send_tag = 0,
+	 .recv_len_off = 0,
+	 .recv_tag = 0,
+	 .ignore = 0,
+	 .ux = false},
+	{.buf_size = BUF_SIZE, /* equal length UX */
+	 .send_min = SEND_MIN,
+	 .send_inc = SEND_INC,
+	 .send_tag = 0,
+	 .recv_len_off = 0,
+	 .recv_tag = 0,
+	 .ignore = 0,
+	 .ux = true},
+	{.buf_size = BUF_SIZE, /* equal length ignore */
+	 .send_min = SEND_MIN,
+	 .send_inc = SEND_INC,
+	 .send_tag = TAG,
+	 .recv_len_off = 0,
+	 .recv_tag = ~TAG,
+	 .ignore = -1ULL,
+	 .ux = false},
+	{.buf_size = BUF_SIZE, /* equal length ignore UX */
+	 .send_min = SEND_MIN,
+	 .send_inc = SEND_INC,
+	 .send_tag = TAG,
+	 .recv_len_off = 0,
+	 .recv_tag = ~TAG,
+	 .ignore = -1ULL,
+	 .ux = true},
+	{.buf_size = BUF_SIZE, /* excess */
+	 .send_min = SEND_MIN,
+	 .send_inc = SEND_INC,
+	 .send_tag = 0,
+	 .recv_len_off = 8,
+	 .recv_tag = 0,
+	 .ignore = 0,
+	 .ux = false},
+	{.buf_size = BUF_SIZE, /* excess UX */
+	 .send_min = SEND_MIN,
+	 .send_inc = SEND_INC,
+	 .send_tag = 0,
+	 .recv_len_off = 8,
+	 .recv_tag = 0,
+	 .ignore = 0,
+	 .ux = true},
+	{.buf_size = BUF_SIZE, /* excess ignore */
+	 .send_min = SEND_MIN,
+	 .send_inc = SEND_INC,
+	 .send_tag = TAG,
+	 .recv_len_off = 8,
+	 .recv_tag = ~TAG,
+	 .ignore = -1ULL,
+	 .ux = false},
+	{.buf_size = BUF_SIZE, /* excess ignore UX */
+	 .send_min = SEND_MIN,
+	 .send_inc = SEND_INC,
+	 .send_tag = TAG,
+	 .recv_len_off = 8,
+	 .recv_tag = ~TAG,
+	 .ignore = -1ULL,
+	 .ux = true},
+};
+
 ParameterizedTestParameters(tagged, rx)
 {
 	size_t param_sz;
-
-	static struct tagged_rx_params params[] = {
-		{.buf_size = BUF_SIZE, /* truncate */
-		 .send_min = SEND_MIN,
-		 .send_inc = SEND_INC,
-		 .send_tag = 0,
-		 .recv_len_off = -8,
-		 .recv_tag = 0,
-		 .ignore = 0,
-		 .ux = false},
-		{.buf_size = BUF_SIZE, /* truncate UX */
-		 .send_min = SEND_MIN,
-		 .send_inc = SEND_INC,
-		 .send_tag = 0,
-		 .recv_len_off = -8,
-		 .recv_tag = 0,
-		 .ignore = 0,
-		 .ux = true},
-		{.buf_size = BUF_SIZE, /* truncate ignore */
-		 .send_min = SEND_MIN,
-		 .send_inc = SEND_INC,
-		 .send_tag = TAG,
-		 .recv_len_off = -8,
-		 .recv_tag = ~TAG,
-		 .ignore = -1ULL,
-		 .ux = false},
-		{.buf_size = BUF_SIZE, /* truncate ignore UX */
-		 .send_min = SEND_MIN,
-		 .send_inc = SEND_INC,
-		 .send_tag = TAG,
-		 .recv_len_off = -8,
-		 .recv_tag = ~TAG,
-		 .ignore = -1ULL,
-		 .ux = true},
-		{.buf_size = BUF_SIZE, /* equal length */
-		 .send_min = SEND_MIN,
-		 .send_inc = SEND_INC,
-		 .send_tag = 0,
-		 .recv_len_off = 0,
-		 .recv_tag = 0,
-		 .ignore = 0,
-		 .ux = false},
-		{.buf_size = BUF_SIZE, /* equal length UX */
-		 .send_min = SEND_MIN,
-		 .send_inc = SEND_INC,
-		 .send_tag = 0,
-		 .recv_len_off = 0,
-		 .recv_tag = 0,
-		 .ignore = 0,
-		 .ux = true},
-		{.buf_size = BUF_SIZE, /* equal length ignore */
-		 .send_min = SEND_MIN,
-		 .send_inc = SEND_INC,
-		 .send_tag = TAG,
-		 .recv_len_off = 0,
-		 .recv_tag = ~TAG,
-		 .ignore = -1ULL,
-		 .ux = false},
-		{.buf_size = BUF_SIZE, /* equal length ignore UX */
-		 .send_min = SEND_MIN,
-		 .send_inc = SEND_INC,
-		 .send_tag = TAG,
-		 .recv_len_off = 0,
-		 .recv_tag = ~TAG,
-		 .ignore = -1ULL,
-		 .ux = true},
-		{.buf_size = BUF_SIZE, /* excess */
-		 .send_min = SEND_MIN,
-		 .send_inc = SEND_INC,
-		 .send_tag = 0,
-		 .recv_len_off = 8,
-		 .recv_tag = 0,
-		 .ignore = 0,
-		 .ux = false},
-		{.buf_size = BUF_SIZE, /* excess UX */
-		 .send_min = SEND_MIN,
-		 .send_inc = SEND_INC,
-		 .send_tag = 0,
-		 .recv_len_off = 8,
-		 .recv_tag = 0,
-		 .ignore = 0,
-		 .ux = true},
-		{.buf_size = BUF_SIZE, /* excess ignore */
-		 .send_min = SEND_MIN,
-		 .send_inc = SEND_INC,
-		 .send_tag = TAG,
-		 .recv_len_off = 8,
-		 .recv_tag = ~TAG,
-		 .ignore = -1ULL,
-		 .ux = false},
-		{.buf_size = BUF_SIZE, /* excess ignore UX */
-		 .send_min = SEND_MIN,
-		 .send_inc = SEND_INC,
-		 .send_tag = TAG,
-		 .recv_len_off = 8,
-		 .recv_tag = ~TAG,
-		 .ignore = -1ULL,
-		 .ux = true},
-	};
 
 	param_sz = ARRAY_SIZE(params);
 	return cr_make_param_array(struct tagged_rx_params, params,
 				   param_sz);
 }
 
-ParameterizedTest(struct tagged_rx_params *param, tagged, rx,
-		  .timeout = 10)
+ParameterizedTestParameters(tagged_offload, rx)
+{
+	size_t param_sz;
+
+	param_sz = ARRAY_SIZE(params);
+	return cr_make_param_array(struct tagged_rx_params, params,
+				   param_sz);
+}
+
+void do_tagged_rx(struct tagged_rx_params *param)
 {
 	uint8_t *recv_buf,
 		*send_buf;
@@ -1348,10 +1364,23 @@ ParameterizedTest(struct tagged_rx_params *param, tagged, rx,
 	     send_len += param->send_inc) {
 		do_tagged(send_buf, send_len, param->send_tag,
 			  recv_buf, send_len + param->recv_len_off,
-			  param->recv_tag, param->ignore, false);
+			  param->recv_tag, param->ignore, param->ux,
+			  param->buf_size);
 	}
 
 	free(send_buf);
 	free(recv_buf);
 }
 
+ParameterizedTest(struct tagged_rx_params *param, tagged, rx, .timeout = 10)
+{
+	do_tagged_rx(param);
+}
+
+#if 0
+ParameterizedTest(struct tagged_rx_params *param, tagged_offload, rx,
+		  .timeout = 10)
+{
+	do_tagged_rx(param);
+}
+#endif

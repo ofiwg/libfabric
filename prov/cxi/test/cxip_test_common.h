@@ -65,9 +65,11 @@ void cxit_setup_enabled_ep(void);
 void cxit_setup_rma(void);
 #define cxit_setup_tagged cxit_setup_rma
 #define cxit_setup_msg cxit_setup_rma
+void cxit_setup_tagged_offload(void);
 void cxit_teardown_rma(void);
 #define cxit_teardown_tagged cxit_teardown_rma
 #define cxit_teardown_msg cxit_teardown_rma
+void cxit_teardown_tagged_offload(void);
 int cxit_await_completion(struct fid_cq *cq, struct fi_cq_tagged_entry *cqe);
 
 #endif
