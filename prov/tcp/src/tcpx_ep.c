@@ -255,7 +255,14 @@ static ssize_t tcpx_send(struct fid_ep *ep, const void *buf, size_t len, void *d
 	tx_entry->flags = ((tcpx_ep->util_ep.tx_op_flags & FI_COMPLETION) |
 			   FI_MSG | FI_SEND);
 
-	tx_entry->msg_hdr.hdr.flags = 0;
+
+	if (tcpx_ep->util_ep.tx_op_flags &
+	    (FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)) {
+		tx_entry->msg_hdr.hdr.flags |= htonl(OFI_DELIVERY_COMPLETE);
+	} else {
+		tx_entry->msg_hdr.hdr.flags = 0;
+	}
+
 	fastlock_acquire(&tcpx_ep->lock);
 	tcpx_tx_queue_insert(tcpx_ep, tx_entry);
 	fastlock_release(&tcpx_ep->lock);
@@ -284,10 +291,17 @@ static ssize_t tcpx_sendv(struct fid_ep *ep, const struct iovec *iov, void **des
 	memcpy(&tx_entry->msg_data.iov[1], &iov[0],
 	       count * sizeof(struct iovec));
 
-	tx_entry->msg_hdr.hdr.flags = 0;
+
 	tx_entry->context = context;
 	tx_entry->flags = ((tcpx_ep->util_ep.tx_op_flags & FI_COMPLETION) |
 			   FI_MSG | FI_SEND);
+
+	if (tcpx_ep->util_ep.tx_op_flags &
+	    (FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)) {
+		tx_entry->msg_hdr.hdr.flags |= htonl(OFI_DELIVERY_COMPLETE);
+	} else {
+		tx_entry->msg_hdr.hdr.flags = 0;
+	}
 
 	fastlock_acquire(&tcpx_ep->lock);
 	tcpx_tx_queue_insert(tcpx_ep, tx_entry);
@@ -351,6 +365,11 @@ static ssize_t tcpx_senddata(struct fid_ep *ep, const void *buf, size_t len, voi
 	tx_entry->context = context;
 	tx_entry->flags = ((tcpx_ep->util_ep.tx_op_flags & FI_COMPLETION) |
 			   FI_MSG | FI_SEND);
+
+	if (tcpx_ep->util_ep.tx_op_flags &
+	    (FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)) {
+		tx_entry->msg_hdr.hdr.flags |= htonl(OFI_DELIVERY_COMPLETE);
+	}
 
 	fastlock_acquire(&tcpx_ep->lock);
 	tcpx_tx_queue_insert(tcpx_ep, tx_entry);
