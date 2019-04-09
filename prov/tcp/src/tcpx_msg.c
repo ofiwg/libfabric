@@ -217,7 +217,6 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 
 	if (flags & (FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)) {
 		tx_entry->hdr.base_hdr.flags |= OFI_DELIVERY_COMPLETE;
-		tx_entry->flags &= ~FI_COMPLETION;
 	}
 
 	tx_entry->ep = tcpx_ep;

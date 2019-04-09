@@ -239,12 +239,10 @@ static ssize_t tcpx_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg
 			     flags | FI_RMA | FI_WRITE);
 
 	if (flags & (FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)) {
-		send_entry->flags &= ~FI_COMPLETION;
 		send_entry->hdr.base_hdr.flags |= OFI_DELIVERY_COMPLETE;
 	}
 
 	if (flags & FI_COMMIT_COMPLETE) {
-		send_entry->flags &= ~FI_COMPLETION;
 		send_entry->hdr.base_hdr.flags |= OFI_COMMIT_COMPLETE;
 	}
 
