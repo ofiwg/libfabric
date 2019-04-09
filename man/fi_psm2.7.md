@@ -79,6 +79,13 @@ Scalable endpoints
   accessing the same context, either directly by posting send/recv/read/write
   request, or indirectly by polling associated completion queues or counters.
 
+  Using the scalable endpoint as a whole in communication functions is not
+  supported. Instead, individual tx context or rx context of the scalable
+  endpoint should be used. Similarly, using the address of the scalable
+  endpoint as the source address or destination address doesn't collectively
+  address all the tx/rx contexts. It addresses only the first tx/rx context,
+  instead.
+
 Shared Tx contexts
 : In order to achieve the purpose of saving PSM context by using shared Tx
   context, the endpoints bound to the shared Tx contexts need to be Tx only.
