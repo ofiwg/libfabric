@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2018-2019 Intel Corporation, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -39,6 +39,13 @@ static char **mrail_addr_strv = NULL;
 struct fi_info *mrail_info_vec[MRAIL_MAX_INFO] = {0};
 size_t mrail_num_info = 0;
 
+struct mrail_config mrail_config[MRAIL_MAX_CONFIG] = {
+	{ .max_size = 16384, .policy = MRAIL_POLICY_FIXED },
+	{ .max_size = ULONG_MAX, .policy = MRAIL_POLICY_STRIPING },
+};
+int mrail_num_config = 2;
+int mrail_local_rank = 0;
+
 static inline char **mrail_split_addr_strc(const char *addr_strc)
 {
 	char **addr_strv = ofi_split_and_alloc(addr_strc, ",", NULL);
@@ -52,8 +59,47 @@ static inline char **mrail_split_addr_strc(const char *addr_strc)
 
 static int mrail_parse_env_vars(void)
 {
+	char *str, *token, *alg, *p;
 	char *addr_strc;
 	int ret;
+	int i;
+
+	/* experimental, subject to change */
+	fi_param_define(&mrail_prov, "config", FI_PARAM_STRING,
+			"Comma separated list of '<max_size>:<policy>' pairs, "
+			"with <max_size> in ascending order and <policy> being "
+			"fixed, round-robin, or striping");
+	ret = fi_param_get_str(&mrail_prov, "config", &str);
+	if (!ret) {
+		for (i = 0; i < MRAIL_MAX_CONFIG; i++) {
+			token = strsep(&str, ",");
+			if (!token)
+				break;
+
+			mrail_config[i].max_size = strtoul(token, &p, 0);
+			if (p == token)
+				mrail_config[i].max_size = ULONG_MAX;
+
+			mrail_config[i].policy = MRAIL_POLICY_FIXED;
+			alg = strchr(token, ':');
+			if (!alg)
+				continue;
+
+			alg++;
+			if (!alg[0] || !strcasecmp(alg, "fixed")) {
+				/* use the default */
+			} else if (!strcasecmp(alg, "round-robin")) {
+				mrail_config[i].policy = MRAIL_POLICY_ROUND_ROBIN;
+			} else if (!strcasecmp(alg, "striping")) {
+				mrail_config[i].policy = MRAIL_POLICY_STRIPING;
+			} else {
+				FI_WARN(&mrail_prov, FI_LOG_CORE, "Invalid policy "
+					"specification %s\n", alg);
+				break;
+			}
+		}
+		mrail_num_config = i;
+	}
 
 	fi_param_define(&mrail_prov, "addr_strc", FI_PARAM_STRING, "List of rail"
 			" addresses of format FI_ADDR_STR delimited by comma");
@@ -66,6 +112,17 @@ static int mrail_parse_env_vars(void)
 	mrail_addr_strv = mrail_split_addr_strc(addr_strc);
 	if (!mrail_addr_strv)
 		return -FI_ENOMEM;
+
+	/*
+	 * Local rank is used to set the default tx rail when fixed mapping
+	 * is used.
+	 */
+	str = getenv("MPI_LOCALRANKID");
+	if (!str)
+		str = getenv("OMPI_COMM_WORLD_LOCAL_RANK");
+	if (str)
+		mrail_local_rank = atoi(str);
+
 	return 0;
 }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2018-2019 Intel Corporation, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -347,7 +347,8 @@ mrail_send_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	struct mrail_peer_info *peer_info;
 	struct iovec *iov_dest = alloca(sizeof(*iov_dest) * (count + 1));
 	struct mrail_tx_buf *tx_buf;
-	uint32_t i = mrail_get_tx_rail(mrail_ep);
+	int policy = mrail_get_policy(len);
+	uint32_t rail = mrail_get_tx_rail(mrail_ep, policy);
 	struct fi_msg msg;
 	ssize_t ret;
 
@@ -370,17 +371,18 @@ mrail_send_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	msg.context	= tx_buf;
 	msg.data	= data;
 
-	if (len + iov_dest[0].iov_len < mrail_ep->rails[i].info->tx_attr->inject_size)
+	if (len + iov_dest[0].iov_len <
+	    mrail_ep->rails[rail].info->tx_attr->inject_size)
 		flags |= FI_INJECT;
 
 	FI_DBG(&mrail_prov, FI_LOG_EP_DATA, "Posting send of length: %" PRIu64
 	       " dest_addr: 0x%" PRIx64 "  seq: %d on rail: %d\n",
-	       len, dest_addr, peer_info->seq_no - 1, i);
+	       len, dest_addr, peer_info->seq_no - 1, rail);
 
-	ret = fi_sendmsg(mrail_ep->rails[i].ep, &msg, flags | FI_COMPLETION);
+	ret = fi_sendmsg(mrail_ep->rails[rail].ep, &msg, flags | FI_COMPLETION);
 	if (ret) {
 		FI_WARN(&mrail_prov, FI_LOG_EP_DATA,
-			"Unable to fi_sendmsg on rail: %" PRIu32 "\n", i);
+			"Unable to fi_sendmsg on rail: %" PRIu32 "\n", rail);
 		goto err2;
 	} else if (!(flags & FI_COMPLETION)) {
 		ofi_ep_tx_cntr_inc(&mrail_ep->util_ep);
@@ -405,7 +407,8 @@ mrail_tsend_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	struct mrail_peer_info *peer_info;
 	struct iovec *iov_dest = alloca(sizeof(*iov_dest) * (count + 1));
 	struct mrail_tx_buf *tx_buf;
-	uint32_t i = mrail_get_tx_rail(mrail_ep);
+	int policy = mrail_get_policy(len);
+	uint32_t rail = mrail_get_tx_rail(mrail_ep, policy);
 	struct fi_msg msg;
 	ssize_t ret;
 
@@ -429,17 +432,18 @@ mrail_tsend_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	msg.context	= tx_buf;
 	msg.data	= data;
 
-	if (len + iov_dest[0].iov_len < mrail_ep->rails[i].info->tx_attr->inject_size)
+	if (len + iov_dest[0].iov_len <
+	    mrail_ep->rails[rail].info->tx_attr->inject_size)
 		flags |= FI_INJECT;
 
 	FI_DBG(&mrail_prov, FI_LOG_EP_DATA, "Posting tsend of length: %" PRIu64
 	       " dest_addr: 0x%" PRIx64 " tag: 0x%" PRIx64 " seq: %d"
-	       " on rail: %d\n", len, dest_addr, tag, peer_info->seq_no - 1, i);
+	       " on rail: %d\n", len, dest_addr, tag, peer_info->seq_no - 1, rail);
 
-	ret = fi_sendmsg(mrail_ep->rails[i].ep, &msg, flags | FI_COMPLETION);
+	ret = fi_sendmsg(mrail_ep->rails[rail].ep, &msg, flags | FI_COMPLETION);
 	if (ret) {
 		FI_WARN(&mrail_prov, FI_LOG_EP_DATA,
-			"Unable to fi_sendmsg on rail: %" PRIu32 "\n", i);
+			"Unable to fi_sendmsg on rail: %" PRIu32 "\n", rail);
 		goto err2;
 	} else if (!(flags & FI_COMPLETION)) {
 		ofi_ep_tx_cntr_inc(&mrail_ep->util_ep);
@@ -943,6 +947,7 @@ int mrail_ep_open(struct fid_domain *domain_fid, struct fi_info *info,
 
 	ofi_atomic_initialize32(&mrail_ep->tx_rail, 0);
 	ofi_atomic_initialize32(&mrail_ep->rx_rail, 0);
+	mrail_ep->default_tx_rail = mrail_local_rank % mrail_ep->num_eps;
 
 	*ep_fid = &mrail_ep->util_ep.ep_fid;
 	(*ep_fid)->fid.ops = &mrail_ep_fi_ops;
