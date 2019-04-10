@@ -111,17 +111,15 @@ static void process_tx_entry(struct tcpx_xfer_entry *tx_entry)
 		tcpx_cq_report_error(tx_entry->ep->util_ep.tx_cq,
 				     tx_entry, ret);
 	} else {
-		tcpx_cq_report_success(tx_entry->ep->util_ep.tx_cq,
-				       tx_entry);
-
 		if (tx_entry->hdr.base_hdr.flags &
 		    (OFI_DELIVERY_COMPLETE | OFI_COMMIT_COMPLETE)) {
-			tx_entry->flags |= FI_COMPLETION;
 			slist_insert_tail(&tx_entry->entry,
 					  &tx_entry->ep->tx_rsp_pend_queue);
 			return;
 		}
+		tcpx_cq_report_success(tx_entry->ep->util_ep.tx_cq, tx_entry);
 	}
+
 	tcpx_cq = container_of(tx_entry->ep->util_ep.tx_cq,
 			       struct tcpx_cq, util_cq);
 	tcpx_xfer_entry_release(tcpx_cq, tx_entry);
