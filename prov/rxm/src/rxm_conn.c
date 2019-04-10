@@ -129,14 +129,7 @@ static int rxm_cmap_del_handle(struct rxm_cmap_handle *handle)
 	int ret;
 
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
-	       "Deleting connection handle: %p\n", handle);
-	if (handle->peer) {
-		dlist_remove(&handle->peer->entry);
-		free(handle->peer);
-		handle->peer = NULL;
-	} else {
-		cmap->handles_av[handle->fi_addr] = 0;
-	}
+	       "marking connection handle: %p for deletion\n", handle);
 	rxm_cmap_clear_key(handle);
 
 	RXM_CM_UPDATE_STATE(handle, RXM_CMAP_SHUTDOWN);
@@ -661,10 +654,7 @@ static int rxm_cmap_cm_thread_close(struct rxm_cmap *cmap)
 			"Unable to signal CM thread\n");
 		return ret;
 	}
-	/* Release lock so that CM thread could process shutdown events */
-	cmap->release(&cmap->lock);
 	ret = pthread_join(cmap->cm_thread, NULL);
-	cmap->acquire(&cmap->lock);
 	if (ret) {
 		FI_WARN(cmap->av->prov, FI_LOG_FABRIC,
 			"Unable to join CM thread\n");
@@ -686,23 +676,28 @@ void rxm_cmap_free(struct rxm_cmap *cmap)
 	struct dlist_entry *entry;
 	size_t i;
 
-	cmap->acquire(&cmap->lock);
-	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "Closing cmap\n");
-	for (i = 0; i < cmap->num_allocated; i++) {
-		if (cmap->handles_av[i])
-			rxm_cmap_del_handle(cmap->handles_av[i]);
-	}
-	while(!dlist_empty(&cmap->peer_list)) {
-		entry = cmap->peer_list.next;
-		peer = container_of(entry, struct rxm_cmap_peer, entry);
-		rxm_cmap_del_handle(peer->handle);
-	}
 	rxm_cmap_cm_thread_close(cmap);
-	cmap->release(&cmap->lock);
 
 	/* cleanup function would be used in manual progress mode */
 	if (cmap->ep->domain->data_progress != FI_PROGRESS_AUTO)
 		rxm_conn_cleanup(cmap->ep);
+
+	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "Closing cmap\n");
+	for (i = 0; i < cmap->num_allocated; i++) {
+		if (cmap->handles_av[i]) {
+			rxm_cmap_clear_key(cmap->handles_av[i]);
+			rxm_conn_free(cmap->handles_av[i]);
+			cmap->handles_av[i] = 0;
+		}
+	}
+	while(!dlist_empty(&cmap->peer_list)) {
+		entry = cmap->peer_list.next;
+		peer = container_of(entry, struct rxm_cmap_peer, entry);
+		dlist_remove(&peer->entry);
+		rxm_cmap_clear_key(peer->handle);
+		rxm_conn_free(peer->handle);
+		free(peer);
+	}
 
 	free(cmap->handles_av);
 	free(cmap->attr.name);
@@ -1170,8 +1165,22 @@ err1:
 
 static int rxm_conn_handle_notify(struct fi_eq_entry *eq_entry)
 {
+	struct rxm_cmap *cmap;
+	struct rxm_cmap_handle *handle;
+
 	if ((enum rxm_cmap_signal)eq_entry->data == RXM_CMAP_FREE) {
-		rxm_conn_free((struct rxm_cmap_handle *)eq_entry->context);
+		handle = eq_entry->context;
+		cmap = handle->cmap;
+		cmap->acquire(&cmap->lock);
+		if (handle->peer) {
+			dlist_remove(&handle->peer->entry);
+			free(handle->peer);
+			handle->peer = NULL;
+		} else {
+			cmap->handles_av[handle->fi_addr] = 0;
+		}
+		rxm_conn_free(handle);
+		cmap->release(&cmap->lock);
 		return 0;
 	} else {
 		FI_WARN(&rxm_prov, FI_LOG_FABRIC, "Unknown cmap signal\n");
