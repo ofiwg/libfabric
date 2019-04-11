@@ -95,10 +95,10 @@ and the following completion ordering:
   * RX contexts: FI_ORDER_DATA
 
 ### Fork
-Verbs provider supports the fork system call by default. See the limitations section
-for restrictions. It can be turned off by setting the FI_FORK_UNSAFE environment
-variable to "yes". This can improve the performance of memory registrations but it
-also makes the use of fork unsafe.
+Verbs provider does not provide fork safety by default. Fork safety can be requested
+by setting IBV_FORK_SAFE, or RDMAV_FORK_SAFE. If the system configuration supports
+the use of huge pages, it is recommended to set RDMAV_HUGEPAGES_SAFE.
+See ibv_fork_init(3) for additional details.
 
 ### Memory Registration Cache
 The verbs provider features a memory registration cache. This speeds up memory
