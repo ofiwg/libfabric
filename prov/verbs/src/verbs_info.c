@@ -1206,19 +1206,6 @@ int fi_ibv_init_info(const struct fi_info **all_infos)
 	}
 	ep_type[2] = &verbs_dgram_domain;
 
-	if (!fi_ibv_gl_data.fork_unsafe) {
-		VERBS_INFO(FI_LOG_CORE, "Enabling IB fork support\n");
-		ret = ibv_fork_init();
-		if (ret) {
-			VERBS_WARN(FI_LOG_CORE,
-				   "Enabling IB fork support failed: %s (%d)\n",
-				   strerror(ret), ret);
-			goto done;
-		}
-	} else {
-		VERBS_INFO(FI_LOG_CORE, "Not enabling IB fork support\n");
-	}
-
 	if (!fi_ibv_have_device()) {
 		VERBS_INFO(FI_LOG_FABRIC, "No RDMA devices found\n");
 		ret = -FI_ENODATA;
