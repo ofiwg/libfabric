@@ -154,7 +154,7 @@ static ssize_t rxd_ep_cancel_recv(struct rxd_ep *ep, struct dlist_entry *list,
 
 	fastlock_acquire(&ep->util_ep.lock);
 
-	entry = dlist_find_first_match(list, &rxd_match_ctx, context);
+	entry = dlist_remove_first_match(list, &rxd_match_ctx, context);
 	if (!entry)
 		goto out;
 
@@ -169,9 +169,7 @@ static ssize_t rxd_ep_cancel_recv(struct rxd_ep *ep, struct dlist_entry *list,
 		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "could not write error entry\n");
 		goto out;
 	}
-
-	rx_entry->flags |= RXD_CANCELLED;
-
+	rxd_rx_entry_free(ep, rx_entry);
 	ret = 1;
 out:
 	fastlock_release(&ep->util_ep.lock);

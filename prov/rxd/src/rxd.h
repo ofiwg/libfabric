@@ -86,7 +86,6 @@
 #define RXD_TAG_HDR		(1 << 4)
 #define RXD_INLINE		(1 << 5)
 #define RXD_MULTI_RECV		(1 << 6)
-#define RXD_CANCELLED		(1 << 7)
 
 struct rxd_env {
 	int spin_count;

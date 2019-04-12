@@ -119,9 +119,6 @@ static void rxd_complete_rx(struct rxd_ep *ep, struct rxd_x_entry *rx_entry)
 	struct rxd_cq *rx_cq = rxd_ep_rx_cq(ep);
 	int ret;
 
-	if (rx_entry->flags & RXD_CANCELLED)
-		goto out;
-
 	if (rx_entry->bytes_done != rx_entry->cq_entry.len) {
 		memset(&err_entry, 0, sizeof(err_entry));
 		err_entry.op_context = rx_entry->cq_entry.op_context;
@@ -511,8 +508,6 @@ static struct rxd_x_entry *rxd_match_rx(struct rxd_ep *ep,
 	rx_entry = container_of(match, struct rxd_x_entry, entry);
 
 	total_size = op ? op->size : msg_size;
-	if (rx_entry->flags & RXD_CANCELLED)
-		goto out;
 
 	if (rx_entry->flags & RXD_MULTI_RECV) {
 		dup_entry = rxd_progress_multi_recv(ep, rx_entry, total_size);
@@ -806,15 +801,6 @@ void rxd_progress_op(struct rxd_ep *ep, struct rxd_x_entry *rx_entry,
 		     struct rxd_atom_hdr *atom_hdr,
 		     void **msg, size_t size)
 {
-
-	if (rx_entry->flags & RXD_CANCELLED) {
-		rxd_complete_rx(ep, rx_entry);
-		if (sar_hdr)
-			ep->peers[base_hdr->peer].rx_seq_no +=
-				(sar_hdr->num_segs - 1);
-		return;
-	}
-
 	if (sar_hdr)
 		ep->peers[base_hdr->peer].curr_tx_id = sar_hdr->tx_id;
 
