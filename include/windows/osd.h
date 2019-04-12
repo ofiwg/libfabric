@@ -863,6 +863,11 @@ static inline int ofi_free_hugepage_buf(void *memptr, size_t size)
 	return -FI_ENOSYS;
 }
 
+static inline int ofi_hugepage_enabled(void)
+{
+	return 0;
+}
+
 static inline int ofi_is_loopback_addr(struct sockaddr *addr) {
 	return (addr->sa_family == AF_INET &&
 		((struct sockaddr_in *)addr)->sin_addr.s_addr == ntohl(INADDR_LOOPBACK)) ||
