@@ -174,8 +174,8 @@ static int rxd_comp_pkt_seq_no(struct dlist_entry *item, const void *arg)
 	return new_hdr->seq_no > list_hdr->seq_no;
 }
 
-static void rxd_ep_recv_data(struct rxd_ep *ep, struct rxd_x_entry *x_entry,
-			     struct rxd_data_pkt *pkt, size_t size)
+void rxd_ep_recv_data(struct rxd_ep *ep, struct rxd_x_entry *x_entry,
+		      struct rxd_data_pkt *pkt, size_t size)
 {
 	struct rxd_domain *rxd_domain = rxd_ep_domain(ep);
 	uint64_t done;
@@ -196,7 +196,6 @@ static void rxd_ep_recv_data(struct rxd_ep *ep, struct rxd_x_entry *x_entry,
 			       ep->rx_prefix_size);
 
 	x_entry->bytes_done += done;
-	ep->peers[pkt->base_hdr.peer].rx_seq_no++;
 	x_entry->next_seg_no++;
 
 	if (x_entry->next_seg_no < x_entry->num_segs) {
@@ -379,27 +378,64 @@ static int rxd_match_tmsg(struct dlist_entry *item, const void *arg)
 			     attr->tag);
 }
 
-static void rxd_check_post_unexp(struct rxd_ep *ep, struct dlist_entry *list,
-				 struct rxd_pkt_entry *pkt_entry)
+static struct rxd_unexp_msg *rxd_init_unexp(struct rxd_ep *ep,
+					    struct rxd_pkt_entry *pkt_entry,
+					    struct rxd_base_hdr *base_hdr,
+					    struct rxd_sar_hdr *sar_hdr,
+			 		    struct rxd_tag_hdr *tag_hdr,
+					    struct rxd_data_hdr *data_hdr,
+					    void *msg, size_t msg_size)
 {
-	struct rxd_pkt_entry *unexp_entry;
-	struct rxd_base_hdr *new_hdr = rxd_get_base_hdr(pkt_entry);
+	struct rxd_unexp_msg *unexp_msg;
+
+	unexp_msg = calloc(1, sizeof(*unexp_msg));
+	if (!unexp_msg)
+		return NULL;
+
+	unexp_msg->pkt_entry = pkt_entry;
+	unexp_msg->base_hdr = base_hdr;
+	unexp_msg->sar_hdr = sar_hdr;
+	unexp_msg->tag_hdr = tag_hdr;
+	unexp_msg->data_hdr = data_hdr;
+	unexp_msg->msg_size = msg_size;
+	unexp_msg->msg = msg;
+
+	dlist_init(&unexp_msg->pkt_list);
+
+	return unexp_msg;
+}
+
+static void rxd_check_post_unexp(struct rxd_ep *ep, struct dlist_entry *list,
+				 struct rxd_pkt_entry *pkt_entry,
+				 struct rxd_base_hdr *base_hdr,
+				 struct rxd_sar_hdr *sar_hdr,
+				 struct rxd_tag_hdr *tag_hdr,
+				 struct rxd_data_hdr *data_hdr,
+				 void *msg, size_t msg_size)
+{
+	struct rxd_unexp_msg *unexp_msg;
 	struct rxd_base_hdr *unexp_hdr;
 
 	if (!rxd_env.retry)
 		goto insert;
 
-	dlist_foreach_container(list, struct rxd_pkt_entry, unexp_entry, d_entry) {
-		unexp_hdr = rxd_get_base_hdr(unexp_entry);
-		if (unexp_hdr->seq_no == new_hdr->seq_no &&
-		    unexp_hdr->peer == new_hdr->peer) {
+
+	dlist_foreach_container(list, struct rxd_unexp_msg, unexp_msg, entry) {
+		unexp_hdr = rxd_get_base_hdr(unexp_msg->pkt_entry);
+		if (unexp_hdr->seq_no == base_hdr->seq_no &&
+		    unexp_hdr->peer == base_hdr->peer) {
 			rxd_release_repost_rx(ep, pkt_entry);
 			return;
 		}
 	}
 
 insert:
-	dlist_insert_tail(&pkt_entry->d_entry, list);
+	ep->peers[base_hdr->peer].rx_seq_no++;
+	ep->peers[base_hdr->peer].curr_rx_id = RXD_UNEXP_ID;
+	unexp_msg = rxd_init_unexp(ep, pkt_entry, base_hdr, sar_hdr,
+				   tag_hdr, data_hdr, msg, msg_size);
+	if (unexp_msg)
+		dlist_insert_tail(&unexp_msg->entry, list);
 }
 
 static void rxd_handle_rts(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
@@ -467,7 +503,9 @@ static struct rxd_x_entry *rxd_match_rx(struct rxd_ep *ep,
 					struct rxd_pkt_entry *pkt_entry,
 					struct rxd_base_hdr *base,
 					struct rxd_tag_hdr *tag,
-					struct rxd_sar_hdr *op, size_t msg_size)
+					struct rxd_sar_hdr *op,
+					struct rxd_data_hdr *data,
+					void *msg, size_t msg_size)
 {
 	struct rxd_x_entry *rx_entry, *dup_entry;
 	struct dlist_entry *rx_list;
@@ -493,7 +531,8 @@ static struct rxd_x_entry *rxd_match_rx(struct rxd_ep *ep,
 	}
 
 	if (!match) {
-		rxd_check_post_unexp(ep, unexp_list, pkt_entry);
+		rxd_check_post_unexp(ep, unexp_list, pkt_entry, base, op, tag, data,
+				     msg, msg_size);
 		return NULL;
 	}
 
@@ -728,7 +767,7 @@ static struct rxd_x_entry *rxd_unpack_init_rx(struct rxd_ep *ep,
 	case RXD_MSG:
 	case RXD_TAGGED:
 		return rxd_match_rx(ep, pkt_entry, base_hdr, *tag_hdr, *sar_hdr,
-				    *msg_size);
+				    *data_hdr, *msg, *msg_size);
 	case RXD_READ_REQ:
 		return rxd_rma_read_entry_init(ep, base_hdr, *sar_hdr, *rma_hdr);
 	case RXD_ATOMIC_FETCH:
@@ -798,12 +837,12 @@ void rxd_progress_op(struct rxd_ep *ep, struct rxd_x_entry *rx_entry,
 
 	if (rx_entry->flags & RXD_CANCELLED) {
 		rxd_complete_rx(ep, rx_entry);
-		ep->peers[base_hdr->peer].rx_seq_no += base_hdr->flags & RXD_INLINE ?
-				1 : sar_hdr->num_segs;
+		if (sar_hdr)
+			ep->peers[base_hdr->peer].rx_seq_no +=
+				(sar_hdr->num_segs - 1);
 		return;
 	}
 
-	ep->peers[base_hdr->peer].rx_seq_no++;
 	if (sar_hdr)
 		ep->peers[base_hdr->peer].curr_tx_id = sar_hdr->tx_id;
 
@@ -876,21 +915,28 @@ static void rxd_progress_buf_pkts(struct rxd_ep *ep, fi_addr_t peer)
 			return;
 
 		if (base_hdr->type == RXD_DATA || base_hdr->type == RXD_DATA_READ) {
-			data_pkt = (struct rxd_data_pkt *) (pkt_entry->pkt);
+			data_pkt = (struct rxd_data_pkt *) pkt_entry->pkt;
 			rx_entry = rxd_get_data_x_entry(ep, data_pkt);
 			rxd_ep_recv_data(ep, rx_entry, data_pkt, pkt_entry->pkt_size);
 		} else {
 			rx_entry = rxd_unpack_init_rx(ep, pkt_entry, base_hdr, &sar_hdr,
 					      &tag_hdr, &data_hdr, &rma_hdr, &atom_hdr,
 					      &msg, &msg_size);
-			if (!rx_entry)
+			if (!rx_entry) {
+				if (base_hdr->type == RXD_MSG ||
+				    base_hdr->type == RXD_TAGGED) {
+					ep->peers[base_hdr->peer].rx_seq_no++;
+					continue;
+				}
 				break;
+			}
 
 			rxd_progress_op(ep, rx_entry, pkt_entry, base_hdr,
 					sar_hdr, tag_hdr, data_hdr, rma_hdr,
 					atom_hdr, &msg, msg_size);
 		}
 
+		ep->peers[base_hdr->peer].rx_seq_no++;
 		dlist_remove(&pkt_entry->d_entry);
 		rxd_release_repost_rx(ep, pkt_entry);
 	}
@@ -900,14 +946,31 @@ static void rxd_handle_data(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 {
 	struct rxd_data_pkt *pkt = (struct rxd_data_pkt *) (pkt_entry->pkt);
 	struct rxd_x_entry *x_entry;
+	struct dlist_entry *unexp_list;
+	struct rxd_unexp_msg *unexp_msg;
 
 	if (pkt_entry->pkt_size < sizeof(*pkt) + ep->rx_prefix_size) {
 		FI_WARN(&rxd_prov, FI_LOG_CQ,
 			"Cannot process packet smaller than minimum header size\n");
-		return;
+		goto free;
 	}
 
 	if (pkt->base_hdr.seq_no == ep->peers[pkt->base_hdr.peer].rx_seq_no) {
+		ep->peers[pkt->base_hdr.peer].rx_seq_no++;
+		if (pkt->base_hdr.type == RXD_DATA &&
+		    ep->peers[pkt->base_hdr.peer].curr_rx_id ==
+		    (uint16_t) RXD_UNEXP_ID) {
+			unexp_list = pkt->base_hdr.flags & RXD_TAG_HDR ?
+				     &ep->unexp_tag_list : &ep->unexp_list;
+			assert(!dlist_empty(unexp_list));
+			unexp_msg = container_of(unexp_list->prev,
+						 struct rxd_unexp_msg, entry);
+			dlist_insert_tail(&pkt_entry->d_entry, &unexp_msg->pkt_list);
+			if (pkt->ext_hdr.seg_no + 1 == unexp_msg->sar_hdr->num_segs - 1)
+				rxd_ep_send_ack(ep, pkt->base_hdr.peer);
+			rxd_remove_rx_pkt(ep, pkt_entry);
+			return;
+		}
 		x_entry = rxd_get_data_x_entry(ep, pkt);
 		rxd_ep_recv_data(ep, x_entry, pkt, pkt_entry->pkt_size);
 		if (!dlist_empty(&ep->peers[pkt->base_hdr.peer].buf_pkts))
@@ -916,10 +979,13 @@ static void rxd_handle_data(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 		rxd_remove_rx_pkt(ep, pkt_entry);
 		dlist_insert_order(&ep->peers[pkt->base_hdr.peer].buf_pkts,
 				   &rxd_comp_pkt_seq_no, &pkt_entry->d_entry);
-		ep->peers[pkt->base_hdr.peer].rx_seq_no++;
+		return;
 	} else {
 		rxd_ep_send_ack(ep, pkt->base_hdr.peer);
 	}
+free:
+	rxd_remove_rx_pkt(ep, pkt_entry);
+	rxd_release_repost_rx(ep, pkt_entry);
 }
 
 static void rxd_handle_op(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
@@ -939,7 +1005,6 @@ static void rxd_handle_op(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 			rxd_remove_rx_pkt(ep, pkt_entry);
 			dlist_insert_order(&ep->peers[base_hdr->peer].buf_pkts,
 					   &rxd_comp_pkt_seq_no, &pkt_entry->d_entry);
-			ep->peers[base_hdr->peer].rx_seq_no++;
 			return;
 		}
 
@@ -956,6 +1021,7 @@ static void rxd_handle_op(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 				      &msg, &msg_size);
 	if (!rx_entry) {
 		if (base_hdr->type == RXD_MSG || base_hdr->type == RXD_TAGGED) {
+			rxd_ep_send_ack(ep, base_hdr->peer);
 			rxd_remove_rx_pkt(ep, pkt_entry);
 			return;
 		}
@@ -963,6 +1029,7 @@ static void rxd_handle_op(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 		goto ack;
 	}
 
+	ep->peers[base_hdr->peer].rx_seq_no++;
 	ep->peers[base_hdr->peer].rx_window = rxd_env.max_unacked;
 	rxd_progress_op(ep, rx_entry, pkt_entry, base_hdr, sar_hdr, tag_hdr,
 			data_hdr, rma_hdr, atom_hdr, &msg, msg_size);
@@ -1078,7 +1145,10 @@ void rxd_handle_recv_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp)
 	case RXD_DATA:
 	case RXD_DATA_READ:
 		rxd_handle_data(ep, pkt_entry);
-		break;
+		/* don't need to perform action below:
+		 * - remove RX packet
+		 * - release/repost RX packet */
+		return;
 	default:
 		rxd_handle_op(ep, pkt_entry);
 		release = 0;
