@@ -333,6 +333,7 @@ void rxd_init_data_pkt(struct rxd_ep *ep, struct rxd_x_entry *tx_entry,
 	data_pkt->base_hdr.type = (tx_entry->cq_entry.flags &
 				  (FI_READ | FI_REMOTE_READ)) ?
 				   RXD_DATA_READ : RXD_DATA;
+	data_pkt->base_hdr.flags = tx_entry->flags & RXD_TAG_HDR;
 
 	data_pkt->ext_hdr.rx_id = tx_entry->rx_id;
 	data_pkt->ext_hdr.tx_id = tx_entry->tx_id;
@@ -773,6 +774,24 @@ static void rxd_close_peer(struct rxd_ep *ep, struct rxd_peer *peer)
 	peer->active = 0;
 }
 
+static void rxd_cleanup_unexp_msg(struct dlist_entry *list)
+{
+	struct rxd_unexp_msg *unexp_msg;
+	struct rxd_pkt_entry *pkt_entry;
+
+	while (!dlist_empty(list)) {
+		dlist_pop_front(list, struct rxd_unexp_msg,
+				unexp_msg, entry);
+		while (!dlist_empty(&unexp_msg->pkt_list)) {
+			dlist_pop_front(&unexp_msg->pkt_list, struct rxd_pkt_entry,
+					pkt_entry, d_entry);
+			ofi_buf_free(pkt_entry);
+		}
+		ofi_buf_free(unexp_msg->pkt_entry);
+		free(unexp_msg);
+	}
+}
+
 static int rxd_ep_close(struct fid *fid)
 {
 	int ret;
@@ -802,17 +821,8 @@ static int rxd_ep_close(struct fid *fid)
 		ofi_buf_free(pkt_entry);
 	}
 
-	while (!dlist_empty(&ep->unexp_list)) {
-		dlist_pop_front(&ep->unexp_list, struct rxd_pkt_entry,
-				pkt_entry, d_entry);
-		ofi_buf_free(pkt_entry);
-	}
-
-	while (!dlist_empty(&ep->unexp_tag_list)) {
-		dlist_pop_front(&ep->unexp_tag_list, struct rxd_pkt_entry,
-				pkt_entry, d_entry);
-		ofi_buf_free(pkt_entry);
-	}
+	rxd_cleanup_unexp_msg(&ep->unexp_list);
+	rxd_cleanup_unexp_msg(&ep->unexp_tag_list);
 
 	while (!dlist_empty(&ep->ctrl_pkts)) {
 		dlist_pop_front(&ep->ctrl_pkts, struct rxd_pkt_entry,
@@ -1086,7 +1096,7 @@ static void rxd_progress_pkt_list(struct rxd_ep *ep, struct rxd_peer *peer)
 				 MIN(ep->next_retry, peer->retry_cnt);
 }
 
-static void rxd_ep_progress(struct util_ep *util_ep)
+void rxd_ep_progress(struct util_ep *util_ep)
 {
 	struct rxd_peer *peer;
 	struct fi_cq_msg_entry cq_entry;
@@ -1162,7 +1172,7 @@ int rxd_ep_init_res(struct rxd_ep *ep, struct fi_info *fi_info)
 	struct ofi_bufpool_attr entry_pool_attr = {
 		.size		= sizeof(struct rxd_x_entry),
 		.alignment	= RXD_BUF_POOL_ALIGNMENT,
-		.max_cnt	= 0,
+		.max_cnt	= (size_t) ((uint16_t) RXD_UNEXP_ID),
 		.flags		= OFI_BUFPOOL_INDEXED,
 	};
 	int ret;
