@@ -73,6 +73,26 @@ static inline int ofi_free_hugepage_buf(void *memptr, size_t size)
 	return munmap(memptr, size);
 }
 
+static inline int ofi_hugepage_enabled(void)
+{
+	size_t len;
+	void *buffer;
+	int ret;
+
+	len = ofi_get_hugepage_size();
+	if (len <= 0)
+		return 0;
+
+	ret = ofi_alloc_hugepage_buf(&buffer, len);
+	if (ret)
+		return 0;
+
+	ret = ofi_free_hugepage_buf(buffer, len);
+	assert(ret == 0);
+
+	return 1;
+}
+
 size_t ofi_ifaddr_get_speed(struct ifaddrs *ifa);
 
 #endif /* _LINUX_OSD_H_ */

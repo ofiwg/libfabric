@@ -90,6 +90,11 @@ static inline size_t ofi_ifaddr_get_speed(struct ifaddrs *ifa)
 	return 0;
 }
 
+static inline int ofi_hugepage_enabled(void)
+{
+	return 0;
+}
+
 #ifdef __cplusplus
 }
 #endif
