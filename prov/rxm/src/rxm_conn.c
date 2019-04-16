@@ -1320,20 +1320,18 @@ static inline ssize_t rxm_eq_readerr(struct rxm_ep *rxm_ep,
 	if (ret != sizeof(entry->err_entry)) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 			"Unable to fi_eq_readerr: %zd\n", ret);
-	} else {
-		RXM_Q_STRERROR(&rxm_prov, FI_LOG_EP_CTRL, rxm_ep->msg_eq,
-			       "eq", entry->err_entry, fi_eq_strerror);
+		return ret < 0 ? ret : -FI_EINVAL;
 	}
 
 	if (entry->err_entry.err == ECONNREFUSED) {
 		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Connection refused\n");
 		entry->context = entry->err_entry.fid->context;
 		return -FI_ECONNREFUSED;
-	} else {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unknown error: %d\n",
-			entry->err_entry.err);
-		return -entry->err_entry.err;
 	}
+
+	RXM_Q_STRERROR(&rxm_prov, FI_LOG_EP_CTRL, rxm_ep->msg_eq,
+		       "eq", entry->err_entry, fi_eq_strerror);
+	return -entry->err_entry.err;
 }
 
 static ssize_t rxm_eq_sread(struct rxm_ep *rxm_ep, size_t len,
