@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2019 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * Copyright (c) 2017-2020 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -33,7 +33,6 @@
 #include "config.h"
 #include <ofi_util.h>
 #include "efa.h"
-#include "efa_verbs.h"
 
 static int efa_mr_reg(struct fid *fid, const void *buf, size_t len,
 		      uint64_t access, uint64_t offset, uint64_t requested_key,
@@ -71,10 +70,10 @@ int efa_mr_cache_entry_reg(struct ofi_mr_cache *cache,
 	md->mr_fid.fid.fclass = FI_CLASS_MR;
 	md->mr_fid.fid.context = NULL;
 
-	md->mr = efa_cmd_reg_mr(md->domain->pd, entry->info.iov.iov_base,
-				entry->info.iov.iov_len, fi_ibv_access);
+	md->mr = ibv_reg_mr(md->domain->ibv_pd, entry->info.iov.iov_base,
+			    entry->info.iov.iov_len, fi_ibv_access);
 	if (!md->mr) {
-		EFA_WARN_ERRNO(FI_LOG_MR, "efa_cmd_reg_mr", errno);
+		EFA_WARN_ERRNO(FI_LOG_MR, "ibv_reg_mr", errno);
 		return -errno;
 	}
 
@@ -88,7 +87,7 @@ void efa_mr_cache_entry_dereg(struct ofi_mr_cache *cache,
 			      struct ofi_mr_entry *entry)
 {
 	struct efa_mem_desc *md = (struct efa_mem_desc *)entry->data;
-	int ret = -efa_cmd_dereg_mr(md->mr);
+	int ret = -ibv_dereg_mr(md->mr);
 	if (ret)
 		EFA_WARN(FI_LOG_MR, "Unable to dereg mr: %d\n", ret);
 }
@@ -180,7 +179,7 @@ static int efa_mr_close(fid_t fid)
 	int ret;
 
 	mr = container_of(fid, struct efa_mem_desc, mr_fid.fid);
-	ret = -efa_cmd_dereg_mr(mr->mr);
+	ret = -ibv_dereg_mr(mr->mr);
 	if (!ret)
 		free(mr);
 	return ret;
@@ -245,9 +244,10 @@ static int efa_mr_reg(struct fid *fid, const void *buf, size_t len,
 	if (access & FI_RECV)
 		fi_ibv_access |= IBV_ACCESS_LOCAL_WRITE;
 
-	md->mr = efa_cmd_reg_mr(md->domain->pd, (void *)buf, len, fi_ibv_access);
+	md->mr = ibv_reg_mr(md->domain->ibv_pd, (void *)buf, len,
+			    fi_ibv_access);
 	if (!md->mr) {
-		EFA_WARN_ERRNO(FI_LOG_MR, "efa_cmd_reg_mr", errno);
+		EFA_WARN_ERRNO(FI_LOG_MR, "ibv_reg_mr", errno);
 		ret = -errno;
 		goto err;
 	}
@@ -261,8 +261,7 @@ static int efa_mr_reg(struct fid *fid, const void *buf, size_t len,
 err:
 	EFA_WARN(FI_LOG_MR, "Unable to register MR: %s\n",
 			fi_strerror(-ret));
-	if (md)
-		free(md);
+	free(md);
 	return ret;
 }
 
