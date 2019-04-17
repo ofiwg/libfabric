@@ -310,7 +310,7 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 		_domain->cache.entry_data_size = sizeof(struct fi_ibv_mem_desc);
 		_domain->cache.add_region = fi_ibv_mr_cache_entry_reg;
 		_domain->cache.delete_region = fi_ibv_mr_cache_entry_dereg;
-		ret = ofi_mr_cache_init(&_domain->util_domain, &uffd_monitor,
+		ret = ofi_mr_cache_init(&_domain->util_domain, uffd_monitor,
 					&_domain->cache);
 		if (ret)
 			goto err4;

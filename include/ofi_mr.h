@@ -107,8 +107,6 @@ struct ofi_mem_monitor {
 			    const void *addr, size_t len);
 };
 
-extern struct ofi_mem_monitor uffd_monitor;
-
 void ofi_monitor_init(struct ofi_mem_monitor *monitor);
 void ofi_monitor_cleanup(struct ofi_mem_monitor *monitor);
 void ofi_monitor_add_cache(struct ofi_mem_monitor *monitor,
@@ -119,6 +117,21 @@ int ofi_monitor_subscribe(struct ofi_mem_monitor *monitor,
 			  const void *addr, size_t len);
 void ofi_monitor_unsubscribe(struct ofi_mem_monitor *monitor,
 			     const void *addr, size_t len);
+
+/*
+ * Userfault fd memory monitor
+ */
+struct ofi_uffd {
+	struct ofi_mem_monitor		monitor;
+	long				page_size;
+	long				hugepage_size;
+	int				fd;
+};
+
+int ofi_uffd_init(void);
+void ofi_uffd_cleanup(void);
+
+extern struct ofi_mem_monitor *uffd_monitor;
 
 
 /*

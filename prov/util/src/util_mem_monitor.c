@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2017 Cray Inc. All rights reserved.
  * Copyright (c) 2017-2019 Intel Inc. All rights reserved.
+ * Copyright (c) 2019 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -34,7 +35,9 @@
 #include <ofi_mr.h>
 
 
-struct ofi_mem_monitor uffd_monitor;
+static struct ofi_uffd uffd;
+struct ofi_mem_monitor *uffd_monitor = &uffd.monitor;
+
 
 void ofi_monitor_init(struct ofi_mem_monitor *monitor)
 {
@@ -86,3 +89,143 @@ void ofi_monitor_unsubscribe(struct ofi_mem_monitor *monitor,
 	       "unsubscribing addr=%p len=%zu\n", addr, len);
 	monitor->unsubscribe(monitor, addr, len);
 }
+
+#if HAVE_UFFD_UNMAP
+
+#include <sys/syscall.h>
+#include <sys/ioctl.h>
+#include <linux/userfaultfd.h>
+
+
+static int ofi_uffd_register(const void *addr, size_t len, size_t page_size)
+{
+	struct uffdio_register reg;
+	int ret;
+
+	reg.range.start = (uint64_t) (uintptr_t)
+			  ofi_get_page_start(addr, page_size);
+	reg.range.len = ofi_get_page_bytes(addr, len, page_size);
+	reg.mode = UFFDIO_REGISTER_MODE_MISSING;
+	ret = ioctl(uffd.fd, UFFDIO_REGISTER, &reg);
+	if (ret < 0) {
+		if (errno != EINVAL) {
+			FI_WARN(&core_prov, FI_LOG_MR,
+				"ioctl/uffd_unreg: %s\n", strerror(errno));
+		}
+		return -errno;
+	}
+	return 0;
+}
+
+static int ofi_uffd_subscribe(struct ofi_mem_monitor *monitor,
+			      const void *addr, size_t len)
+{
+	int ret;
+
+	assert(monitor == &uffd.monitor);
+	ret = ofi_uffd_register(addr, len, uffd.page_size);
+	if (ret)
+		ret = ofi_uffd_register(addr, len, uffd.hugepage_size);
+	return ret;
+}
+
+static int ofi_uffd_unregister(const void *addr, size_t len, size_t page_size)
+{
+	struct uffdio_range range;
+	int ret;
+
+	range.start = (uint64_t) (uintptr_t)
+		      ofi_get_page_start(addr, page_size);
+	range.len = ofi_get_page_bytes(addr, len, page_size);
+	ret = ioctl(uffd.fd, UFFDIO_UNREGISTER, &range);
+	if (ret < 0) {
+		if (errno != EINVAL) {
+			FI_WARN(&core_prov, FI_LOG_MR,
+				"ioctl/uffd_unreg: %s\n", strerror(errno));
+		}
+		return -errno;
+	}
+	return 0;
+}
+
+static void ofi_uffd_unsubscribe(struct ofi_mem_monitor *monitor,
+				 const void *addr, size_t len)
+{
+	int ret;
+
+	assert(monitor == &uffd.monitor);
+	ret = ofi_uffd_unregister(addr, len, uffd.page_size);
+	if (ret)
+		ret = ofi_uffd_unregister(addr, len, uffd.hugepage_size);
+}
+
+int ofi_uffd_init(void)
+{
+	struct uffdio_api api;
+	int ret;
+
+	ofi_monitor_init(&uffd.monitor);
+	uffd.monitor.subscribe = ofi_uffd_subscribe;
+	uffd.monitor.unsubscribe = ofi_uffd_unsubscribe;
+
+	uffd.page_size = ofi_get_page_size();
+	if (uffd.page_size < 0) {
+		ret = (int) uffd.page_size;
+		goto cleanup;
+	}
+
+	uffd.hugepage_size = ofi_get_hugepage_size();
+	if (uffd.hugepage_size < 0)
+		uffd.hugepage_size = 0;
+
+	uffd.fd = syscall(__NR_userfaultfd, O_CLOEXEC | O_NONBLOCK);
+	if (uffd.fd < 0) {
+		FI_WARN(&core_prov, FI_LOG_MR,
+			"syscall/userfaultfd %s\n", strerror(errno));
+		ret = -errno;
+		goto cleanup;
+	}
+
+	api.api = UFFD_API;
+	api.features = UFFD_FEATURE_EVENT_UNMAP | UFFD_FEATURE_EVENT_REMOVE |
+		       UFFD_FEATURE_EVENT_REMAP;
+	ret = ioctl(uffd.fd, UFFDIO_API, &api);
+	if (ret < 0) {
+		FI_WARN(&core_prov, FI_LOG_MR,
+			"ioctl/uffdio: %s\n", strerror(errno));
+		ret = -errno;
+		goto closefd;
+	}
+
+	if (api.api != UFFD_API) {
+		FI_WARN(&core_prov, FI_LOG_MR, "uffd features not supported\n");
+		ret = -FI_ENOSYS;
+		goto closefd;
+	}
+	return 0;
+
+closefd:
+	close(uffd.fd);
+cleanup:
+	ofi_monitor_cleanup(&uffd.monitor);
+	return ret;
+}
+
+void ofi_uffd_cleanup(void)
+{
+	close(uffd.fd);
+	ofi_monitor_cleanup(&uffd.monitor);
+}
+
+#else /* HAVE_UFFD_UNMAP */
+
+int ofi_uffd_init(void)
+{
+	return -FI_ENOSYS;
+}
+
+void ofi_uffd_cleanup(void)
+{
+}
+
+#endif /* HAVE_UFFD_UNMAP */
