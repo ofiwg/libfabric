@@ -57,6 +57,45 @@ static void *rxm_conn_eq_read(void *arg);
  * Connection map
  */
 
+static inline ssize_t rxm_eq_readerr(struct rxm_ep *rxm_ep,
+				     struct rxm_msg_eq_entry *entry)
+{
+	ssize_t ret;
+
+	ret = fi_eq_readerr(rxm_ep->msg_eq, &entry->err_entry, 0);
+	if (ret != sizeof(entry->err_entry)) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+			"Unable to fi_eq_readerr: %zd\n", ret);
+		return ret < 0 ? ret : -FI_EINVAL;
+	}
+
+	if (entry->err_entry.err == ECONNREFUSED) {
+		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Connection refused\n");
+		entry->context = entry->err_entry.fid->context;
+		return -FI_ECONNREFUSED;
+	}
+
+	RXM_Q_STRERROR(&rxm_prov, FI_LOG_EP_CTRL, rxm_ep->msg_eq,
+		       "eq", entry->err_entry, fi_eq_strerror);
+	return -entry->err_entry.err;
+}
+
+static ssize_t rxm_eq_read(struct rxm_ep *rxm_ep, size_t len,
+			   struct rxm_msg_eq_entry *entry)
+{
+	ssize_t rd;
+
+	rd = fi_eq_read(rxm_ep->msg_eq, &entry->event, &entry->cm_entry,
+			len, 0);
+	if (OFI_LIKELY(rd >= 0))
+		return rd;
+
+	if (rd != -FI_EAVAIL)
+		return rd;
+
+	return rxm_eq_readerr(rxm_ep, entry);
+}
+
 /* Caller should hold cmap->lock */
 static void rxm_cmap_set_key(struct rxm_cmap_handle *handle)
 {
@@ -1252,29 +1291,6 @@ int rxm_conn_process_eq_events(struct rxm_ep *rxm_ep)
 	}
 	fastlock_release(&rxm_ep->msg_eq_entry_list_lock);
 	return ret;
-}
-
-static inline ssize_t rxm_eq_readerr(struct rxm_ep *rxm_ep,
-				     struct rxm_msg_eq_entry *entry)
-{
-	ssize_t ret;
-
-	ret = fi_eq_readerr(rxm_ep->msg_eq, &entry->err_entry, 0);
-	if (ret != sizeof(entry->err_entry)) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-			"Unable to fi_eq_readerr: %zd\n", ret);
-		return ret < 0 ? ret : -FI_EINVAL;
-	}
-
-	if (entry->err_entry.err == ECONNREFUSED) {
-		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Connection refused\n");
-		entry->context = entry->err_entry.fid->context;
-		return -FI_ECONNREFUSED;
-	}
-
-	RXM_Q_STRERROR(&rxm_prov, FI_LOG_EP_CTRL, rxm_ep->msg_eq,
-		       "eq", entry->err_entry, fi_eq_strerror);
-	return -entry->err_entry.err;
 }
 
 static ssize_t rxm_eq_sread(struct rxm_ep *rxm_ep, size_t len,
