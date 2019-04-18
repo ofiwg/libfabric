@@ -75,9 +75,12 @@
 #define MAX_EPOLL_EVENTS	100
 #define STAGE_BUF_SIZE		512
 
+#define TCPX_PORT_MAX_RANGE	(USHRT_MAX)
+
 extern struct fi_provider	tcpx_prov;
 extern struct util_prov		tcpx_util_prov;
 extern struct fi_info		tcpx_info;
+extern struct tcpx_port_range	port_range;
 struct tcpx_xfer_entry;
 struct tcpx_ep;
 
@@ -106,6 +109,11 @@ struct tcpx_cm_context {
 	enum tcpx_cm_event_type	type;
 	size_t			cm_data_sz;
 	char			cm_data[TCPX_MAX_CM_DATA_SIZE];
+};
+
+struct tcpx_port_range {
+	int high;
+	int low;
 };
 
 struct tcpx_conn_handle {
@@ -240,6 +248,8 @@ int tcpx_create_fabric(struct fi_fabric_attr *attr,
 
 int tcpx_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 		    struct fid_pep **pep, void *context);
+
+int tcpx_set_port_range(void);
 
 int tcpx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		     struct fid_domain **domain, void *context);
