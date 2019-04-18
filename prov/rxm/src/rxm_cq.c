@@ -1238,8 +1238,8 @@ static void rxm_cq_read_write_error(struct rxm_ep *rxm_ep)
 	enum rxm_proto_state state;
 	ssize_t ret;
 
-	RXM_CQ_READERR(&rxm_prov, FI_LOG_CQ, rxm_ep->msg_cq, ret,
-		       err_entry);
+	RXM_CQ_READERR(&rxm_prov, FI_LOG_WARN, FI_LOG_CQ,
+		       rxm_ep->msg_cq, ret, &err_entry);
 	if (ret < 0) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ,
 			"Unable to fi_cq_readerr on msg cq\n");
