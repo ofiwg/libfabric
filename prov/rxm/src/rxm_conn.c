@@ -692,7 +692,6 @@ int rxm_cmap_connect(struct rxm_ep *rxm_ep, fi_addr_t fi_addr,
 		break;
 	case RXM_CMAP_CONNREQ_SENT:
 	case RXM_CMAP_CONNREQ_RECV:
-	case RXM_CMAP_ACCEPT:
 	case RXM_CMAP_SHUTDOWN:
 		ret = -FI_EAGAIN;
 		break;
