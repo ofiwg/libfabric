@@ -80,7 +80,6 @@ static inline ssize_t rxm_eq_readerr(struct rxm_ep *rxm_ep,
 	}
 
 	if (entry->err_entry.err == ECONNREFUSED) {
-		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Connection refused\n");
 		entry->context = entry->err_entry.fid->context;
 		return -FI_ECONNREFUSED;
 	}
@@ -1275,14 +1274,21 @@ rxm_conn_handle_event(struct rxm_ep *rxm_ep, struct rxm_msg_eq_entry *entry)
 		}
 		reject_reason = cm_data->reject.reason;
 
-		if (reject_reason == RXM_CMAP_REJECT_GENUINE)
+		if (reject_reason == RXM_CMAP_REJECT_GENUINE) {
 			FI_WARN(&rxm_prov, FI_LOG_FABRIC, "connection reject: "
+			       "remote peer didn't accept the connection\n");
+			FI_DBG(&rxm_prov, FI_LOG_FABRIC, "connection reject: "
 			       "(reason: RXM_CMAP_REJECT_GENUINE)\n");
-		else if (reject_reason == RXM_CMAP_REJECT_SIMULT_CONN)
+			RXM_EQ_STRERROR(&rxm_prov, FI_LOG_WARN, FI_LOG_EP_CTRL,
+					rxm_ep->msg_eq, &entry->err_entry);
+		} else if (reject_reason == RXM_CMAP_REJECT_SIMULT_CONN) {
 			FI_DBG(&rxm_prov, FI_LOG_FABRIC, "connection reject: "
 			       "(reason: RXM_CMAP_REJECT_SIMULT_CONN)\n");
-		else
-			assert(0);
+		} else {
+			FI_WARN(&rxm_prov, FI_LOG_FABRIC, "connection reject: "
+			        "received unknown reject reason: %d\n",
+				reject_reason);
+		}
 		rxm_cmap_process_reject(rxm_ep->cmap, entry->context,
 					reject_reason);
 		return 0;

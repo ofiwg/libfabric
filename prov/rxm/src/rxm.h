@@ -132,18 +132,6 @@ do {									\
 #define RXM_EQ_STRERROR(prov, level, subsys, eq, entry) \
 	RXM_Q_STRERROR(prov, level, subsys, eq, "eq", entry, fi_eq_strerror)
 
-#define RXM_CQ_READERR(prov, level, subsys, cq, ret, err_entry)		\
-	do {								\
-		(ret) = fi_cq_readerr((cq), err_entry, 0);		\
-		if ((ret) < 0) {					\
-			FI_WARN(prov, subsys,				\
-				"unable to fi_cq_readerr: %zd\n", ret);	\
-		} else {						\
-			RXM_CQ_STRERROR(prov, level, subsys, 		\
-					cq, err_entry);			\
-		}							\
-	} while (0)
-
 extern struct fi_provider rxm_prov;
 extern struct util_prov rxm_util_prov;
 extern struct fi_ops_rma rxm_ops_rma;
