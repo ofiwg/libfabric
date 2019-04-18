@@ -1365,9 +1365,6 @@ void rxm_ep_do_progress(struct util_ep *util_ep)
 	ssize_t ret;
 	size_t comp_read = 0;
 
-	if (!slistfd_empty(&rxm_ep->msg_eq_entry_list))
-		rxm_conn_process_eq_events(rxm_ep);
-
 	while (!dlist_empty(&rxm_ep->repost_ready_list)) {
 		dlist_pop_front(&rxm_ep->repost_ready_list, struct rxm_rx_buf,
 				buf, repost_entry);
@@ -1394,6 +1391,12 @@ void rxm_ep_do_progress(struct util_ep *util_ep)
 				rxm_cq_read_write_error(rxm_ep);
 			else
 				rxm_cq_write_error_all(rxm_ep, ret);
+		} else {
+			if (++rxm_ep->msg_cq_eagain_count >
+			    RXM_EQ_PROGRESS_SPIN_COUNT) {
+				rxm_ep->msg_cq_eagain_count = 0;
+				rxm_msg_eq_progress(rxm_ep);
+			}
 		}
 	} while ((ret > 0) && (++comp_read < rxm_ep->comp_per_progress));
 

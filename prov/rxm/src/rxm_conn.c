@@ -52,7 +52,8 @@ static void
 rxm_conn_av_updated_handler(struct rxm_cmap_handle *handle);
 static void *rxm_conn_progress(void *arg);
 static void *rxm_conn_atomic_progress(void *arg);
-static void *rxm_conn_eq_read(void *arg);
+static int
+rxm_conn_handle_event(struct rxm_ep *rxm_ep, struct rxm_msg_eq_entry *entry);
 
 
 /*
@@ -62,6 +63,48 @@ static void *rxm_conn_eq_read(void *arg);
 char *rxm_cm_state_str[] = {
 	RXM_CM_STATES(OFI_STR)
 };
+
+static inline ssize_t rxm_eq_readerr(struct rxm_ep *rxm_ep,
+				     struct rxm_msg_eq_entry *entry)
+{
+	ssize_t ret;
+
+	/* reset previous err data info */
+	entry->err_entry.err_data_size = 0;
+
+	ret = fi_eq_readerr(rxm_ep->msg_eq, &entry->err_entry, 0);
+	if (ret != sizeof(entry->err_entry)) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+			"Unable to fi_eq_readerr: %zd\n", ret);
+		return ret < 0 ? ret : -FI_EINVAL;
+	}
+
+	if (entry->err_entry.err == ECONNREFUSED) {
+		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Connection refused\n");
+		entry->context = entry->err_entry.fid->context;
+		return -FI_ECONNREFUSED;
+	}
+
+	RXM_Q_STRERROR(&rxm_prov, FI_LOG_EP_CTRL, rxm_ep->msg_eq,
+		       "eq", entry->err_entry, fi_eq_strerror);
+	return -entry->err_entry.err;
+}
+
+static ssize_t rxm_eq_read(struct rxm_ep *rxm_ep, size_t len,
+			   struct rxm_msg_eq_entry *entry)
+{
+	ssize_t rd;
+
+	rd = fi_eq_read(rxm_ep->msg_eq, &entry->event, &entry->cm_entry,
+			len, 0);
+	if (OFI_LIKELY(rd >= 0))
+		return rd;
+
+	if (rd != -FI_EAVAIL)
+		return rd;
+
+	return rxm_eq_readerr(rxm_ep, entry);
+}
 
 /* Caller should hold cmap->lock */
 static void rxm_cmap_set_key(struct rxm_cmap_handle *handle)
@@ -599,15 +642,35 @@ unlock:
 	return ret;
 }
 
+int rxm_msg_eq_progress(struct rxm_ep *rxm_ep)
+{
+	struct rxm_msg_eq_entry *entry;
+       int ret;
+
+	entry = alloca(RXM_MSG_EQ_ENTRY_SZ);
+	if (!entry) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+			"unable to allocate memory!\n");
+		return -FI_ENOMEM;
+	}
+
+	while (1) {
+		entry->rd = rxm_eq_read(rxm_ep, RXM_MSG_EQ_ENTRY_SZ, entry);
+		if (entry->rd < 0 && entry->rd != -FI_ECONNREFUSED) {
+			ret = (int)entry->rd;
+			break;
+		}
+		ret = rxm_conn_handle_event(rxm_ep, entry);
+		if (ret)
+			break;
+	}
+	return ret;
+}
+
 int rxm_cmap_connect(struct rxm_ep *rxm_ep, fi_addr_t fi_addr,
 		     struct rxm_cmap_handle *handle)
 {
 	int ret = FI_SUCCESS;
-
-	/* Progress connection events to detect any incoming connections
-	 * from peer corresponding to fi_addr */
-	if (!slistfd_empty(&rxm_ep->msg_eq_entry_list))
-		rxm_conn_process_eq_events(rxm_ep);
 
 	rxm_ep->cmap->acquire(&rxm_ep->cmap->lock);
 
@@ -641,12 +704,18 @@ int rxm_cmap_connect(struct rxm_ep *rxm_ep, fi_addr_t fi_addr,
 		ret = -FI_EOPBADSTATE;
 	}
 	rxm_ep->cmap->release(&rxm_ep->cmap->lock);
+	if (ret == -FI_EAGAIN)
+		rxm_msg_eq_progress(rxm_ep);
+
 	return ret;
 }
 
 static int rxm_cmap_cm_thread_close(struct rxm_cmap *cmap)
 {
 	int ret;
+
+	if (cmap->ep->domain->data_progress != FI_PROGRESS_AUTO)
+		return 0;
 
 	ret = rxm_conn_signal(cmap->ep, NULL, RXM_CMAP_EXIT);
 	if (ret) {
@@ -663,13 +732,6 @@ static int rxm_cmap_cm_thread_close(struct rxm_cmap *cmap)
 	return 0;
 }
 
-static int rxm_conn_cleanup(void *arg)
-{
-	return rxm_conn_process_eq_events(container_of(arg, struct rxm_ep,
-						       util_ep));
-}
-
-
 void rxm_cmap_free(struct rxm_cmap *cmap)
 {
 	struct rxm_cmap_peer *peer;
@@ -677,10 +739,6 @@ void rxm_cmap_free(struct rxm_cmap *cmap)
 	size_t i;
 
 	rxm_cmap_cm_thread_close(cmap);
-
-	/* cleanup function would be used in manual progress mode */
-	if (cmap->ep->domain->data_progress != FI_PROGRESS_AUTO)
-		rxm_conn_cleanup(cmap->ep);
 
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "Closing cmap\n");
 	for (i = 0; i < cmap->num_allocated; i++) {
@@ -769,15 +827,7 @@ int rxm_cmap_alloc(struct rxm_ep *rxm_ep, struct rxm_cmap_attr *attr)
 				   rxm_conn_atomic_progress :
 				   rxm_conn_progress, ep)) {
 			FI_WARN(ep->av->prov, FI_LOG_FABRIC,
-				"Unable to create cmap thread\n");
-			ret = -ofi_syserr();
-			goto err3;
-		}
-	} else {
-		if (pthread_create(&cmap->cm_thread, 0,
-				   rxm_conn_eq_read, ep)) {
-			FI_WARN(ep->av->prov, FI_LOG_FABRIC,
-				"Unable to create cmap thread\n");
+				"unable to create cmap thread\n");
 			ret = -ofi_syserr();
 			goto err3;
 		}
@@ -1287,53 +1337,6 @@ err:
 	return -FI_EOTHER;
 }
 
-int rxm_conn_process_eq_events(struct rxm_ep *rxm_ep)
-{
-	struct rxm_msg_eq_entry *entry;
-	struct slist_entry *slist_entry;
-	int ret;
-
-	fastlock_acquire(&rxm_ep->msg_eq_entry_list_lock);
-	while (!slistfd_empty(&rxm_ep->msg_eq_entry_list)) {
-		slist_entry = slistfd_remove_head(&rxm_ep->msg_eq_entry_list);
-		entry = container_of(slist_entry, struct rxm_msg_eq_entry,
-				     slist_entry);
-
-		fastlock_release(&rxm_ep->msg_eq_entry_list_lock);
-
-		ret = rxm_conn_handle_event(rxm_ep, entry);
-		free(entry);
-		fastlock_acquire(&rxm_ep->msg_eq_entry_list_lock);
-		if (ret)
-			break;
-	}
-	fastlock_release(&rxm_ep->msg_eq_entry_list_lock);
-	return ret;
-}
-
-static inline ssize_t rxm_eq_readerr(struct rxm_ep *rxm_ep,
-				     struct rxm_msg_eq_entry *entry)
-{
-	ssize_t ret;
-
-	ret = fi_eq_readerr(rxm_ep->msg_eq, &entry->err_entry, 0);
-	if (ret != sizeof(entry->err_entry)) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-			"Unable to fi_eq_readerr: %zd\n", ret);
-		return ret < 0 ? ret : -FI_EINVAL;
-	}
-
-	if (entry->err_entry.err == ECONNREFUSED) {
-		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Connection refused\n");
-		entry->context = entry->err_entry.fid->context;
-		return -FI_ECONNREFUSED;
-	}
-
-	RXM_Q_STRERROR(&rxm_prov, FI_LOG_EP_CTRL, rxm_ep->msg_eq,
-		       "eq", entry->err_entry, fi_eq_strerror);
-	return -entry->err_entry.err;
-}
-
 static ssize_t rxm_eq_sread(struct rxm_ep *rxm_ep, size_t len,
 			    struct rxm_msg_eq_entry *entry)
 {
@@ -1358,58 +1361,6 @@ static ssize_t rxm_eq_sread(struct rxm_ep *rxm_ep, size_t len,
 	}
 
 	return rxm_eq_readerr(rxm_ep, entry);
-}
-
-static ssize_t rxm_eq_read(struct rxm_ep *rxm_ep, size_t len,
-			   struct rxm_msg_eq_entry *entry)
-{
-	ssize_t rd;
-
-	rd = fi_eq_read(rxm_ep->msg_eq, &entry->event, &entry->cm_entry,
-			len, 0);
-	if (OFI_LIKELY(rd >= 0))
-		return rd;
-
-	if (rd != -FI_EAVAIL)
-		return rd;
-
-	return rxm_eq_readerr(rxm_ep, entry);
-}
-
-static void *rxm_conn_eq_read(void *arg)
-{
-	struct rxm_ep *rxm_ep = arg;
-	struct rxm_msg_eq_entry *entry;
-
-	while (1) {
-		entry = calloc(1, RXM_MSG_EQ_ENTRY_SZ);
-		if (!entry) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-				"Unable to allocate memory!\n");
-			return NULL;
-		}
-
-		entry->rd = rxm_eq_sread(rxm_ep, RXM_CM_ENTRY_SZ, entry);
-		if (entry->rd < 0 && entry->rd != -FI_ECONNREFUSED)
-			goto exit;
-
-		if (entry->event == FI_NOTIFY &&
-		    (enum rxm_cmap_signal)((struct fi_eq_entry *)
-					   &entry->cm_entry)->data == RXM_CMAP_EXIT) {
-			FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Closing CM thread\n");
-			goto exit;
-		}
-
-		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
-		       "Enqueing event: %d\n", entry->event);
-		fastlock_acquire(&rxm_ep->msg_eq_entry_list_lock);
-		slistfd_insert_tail(&entry->slist_entry,
-				    &rxm_ep->msg_eq_entry_list);
-		fastlock_release(&rxm_ep->msg_eq_entry_list_lock);
-	}
-exit:
-	free(entry);
-	return NULL;
 }
 
 static inline int rxm_conn_eq_event(struct rxm_ep *rxm_ep,
