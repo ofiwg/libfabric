@@ -122,12 +122,24 @@ struct tcpx_port_range port_range = {
 	.high = 0,
 };
 
-static void tcpx_init_env(void)
+static int tcpx_init_env(void)
 {
 	srand(getpid());
 
 	fi_param_get_int(&tcpx_prov, "port_high_range", &port_range.high);
 	fi_param_get_int(&tcpx_prov, "port_low_range", &port_range.low);
+
+	if (port_range.high > TCPX_PORT_MAX_RANGE) {
+		port_range.high = TCPX_PORT_MAX_RANGE;
+	}
+	if (port_range.low < 0 || port_range.high < 0 ||
+	    port_range.low > port_range.high) {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,"User provided "
+			"port range invalid. Ignoring. \n");
+		port_range.low  = 0;
+		port_range.high = 0;
+	}
+	return 0;
 }
 
 static void fi_tcp_fini(void)
@@ -158,7 +170,9 @@ TCP_INI
 	fi_param_define(&tcpx_prov,"port_high_range", FI_PARAM_INT,
 			"define port high range");
 
-	tcpx_init_env();
-
+	if (tcpx_init_env()) {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,"Invalid info\n");
+		return NULL;
+	}
 	return &tcpx_prov;
 }
