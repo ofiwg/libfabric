@@ -1372,7 +1372,7 @@ void rxm_ep_do_progress(struct util_ep *util_ep)
 				buf, repost_entry);
 
 		/* Discard rx buffer if its msg_ep was closed */
-		if (!buf->conn->msg_ep) {
+		if (!buf->ep->srx_ctx && !buf->conn->msg_ep) {
 			util_buf_release(rxm_ep->buf_pools[RXM_BUF_POOL_RX].pool,
 					 buf);
 			continue;
