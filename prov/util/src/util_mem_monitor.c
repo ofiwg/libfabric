@@ -65,6 +65,18 @@ void ofi_monitor_del_cache(struct ofi_mr_cache *cache)
 	fastlock_release(&cache->monitor->lock);
 }
 
+/* Must be called holding monitor lock */
+void ofi_monitor_notify(struct ofi_mem_monitor *monitor,
+			const void *addr, size_t len)
+{
+	struct ofi_mr_cache *cache;
+
+	dlist_foreach_container(&monitor->list, struct ofi_mr_cache,
+			cache, notify_entry) {
+		ofi_mr_cache_notify(cache, addr, len);
+	}
+}
+
 int ofi_monitor_subscribe(struct ofi_mem_monitor *monitor,
 			  const void *addr, size_t len)
 {
@@ -90,12 +102,58 @@ void ofi_monitor_unsubscribe(struct ofi_mem_monitor *monitor,
 	monitor->unsubscribe(monitor, addr, len);
 }
 
-#if HAVE_UFFD_UNMAP
+//#if HAVE_UFFD_UNMAP
 
+#include <poll.h>
 #include <sys/syscall.h>
 #include <sys/ioctl.h>
 #include <linux/userfaultfd.h>
 
+
+static void *ofi_uffd_handler(void *arg)
+{
+	struct uffd_msg msg;
+	struct pollfd fds;
+	int ret;
+
+	fds.fd = uffd.fd;
+	fds.events = POLLIN;
+	for (;;) {
+		ret = poll(&fds, 1, -1);
+		if (ret != 1)
+			break;
+
+		fastlock_acquire(&uffd.monitor.lock);
+		ret = read(uffd.fd, &msg, sizeof(msg));
+		if (ret != sizeof(msg)) {
+			fastlock_release(&uffd.monitor.lock);
+			if (errno != EAGAIN)
+				break;
+			continue;
+		}
+
+		switch (msg.event) {
+		case UFFD_EVENT_REMOVE:
+		case UFFD_EVENT_UNMAP:
+			ofi_monitor_notify(&uffd.monitor,
+				(void *) (uintptr_t) msg.arg.remove.start,
+				(size_t) (msg.arg.remove.end -
+					  msg.arg.remove.start));
+			break;
+		case UFFD_EVENT_REMAP:
+			ofi_monitor_notify(&uffd.monitor,
+				(void *) (uintptr_t) msg.arg.remap.from,
+				(size_t) msg.arg.remap.len);
+			break;
+		default:
+			FI_WARN(&core_prov, FI_LOG_MR,
+				"Unhandled uffd event %d\n", msg.event);
+			break;
+		}
+		fastlock_release(&uffd.monitor.lock);
+	}
+	return NULL;
+}
 
 static int ofi_uffd_register(const void *addr, size_t len, size_t page_size)
 {
@@ -148,6 +206,7 @@ static int ofi_uffd_unregister(const void *addr, size_t len, size_t page_size)
 	return 0;
 }
 
+/* May be called from mr cache notifier callback */
 static void ofi_uffd_unsubscribe(struct ofi_mem_monitor *monitor,
 				 const void *addr, size_t len)
 {
@@ -202,6 +261,14 @@ int ofi_uffd_init(void)
 		ret = -FI_ENOSYS;
 		goto closefd;
 	}
+
+	ret = pthread_create(&uffd.thread, NULL, ofi_uffd_handler, &uffd);
+	if (ret) {
+		FI_WARN(&core_prov, FI_LOG_MR,
+			"failed to create handler thread %s\n", strerror(ret));
+		ret = -ret;
+		goto closefd;
+	}
 	return 0;
 
 closefd:
@@ -213,11 +280,14 @@ cleanup:
 
 void ofi_uffd_cleanup(void)
 {
+	pthread_cancel(uffd.thread);
+	pthread_join(uffd.thread, NULL);
 	close(uffd.fd);
 	ofi_monitor_cleanup(&uffd.monitor);
 }
 
-#else /* HAVE_UFFD_UNMAP */
+#if 0
+//#else /* HAVE_UFFD_UNMAP */
 
 int ofi_uffd_init(void)
 {

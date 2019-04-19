@@ -112,6 +112,8 @@ void ofi_monitor_cleanup(struct ofi_mem_monitor *monitor);
 void ofi_monitor_add_cache(struct ofi_mem_monitor *monitor,
 			   struct ofi_mr_cache *cache);
 void ofi_monitor_del_cache(struct ofi_mr_cache *cache);
+void ofi_monitor_notify(struct ofi_mem_monitor *monitor,
+			const void *addr, size_t len);
 
 int ofi_monitor_subscribe(struct ofi_mem_monitor *monitor,
 			  const void *addr, size_t len);
@@ -125,6 +127,7 @@ struct ofi_uffd {
 	struct ofi_mem_monitor		monitor;
 	long				page_size;
 	long				hugepage_size;
+	pthread_t			thread;
 	int				fd;
 };
 
