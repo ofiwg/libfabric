@@ -496,11 +496,12 @@ static struct rxd_x_entry *rxd_match_rx(struct rxd_ep *ep,
 	}
 
 	if (!match) {
+		assert(!ep->peers[base->peer].curr_unexp);
 		unexp_msg = rxd_init_unexp(ep, pkt_entry, base, op,
 					   tag, data, msg, msg_size);
 		if (unexp_msg) {
-			ep->peers[base->peer].curr_rx_id = RXD_UNEXP_ID;
 			dlist_insert_tail(&unexp_msg->entry, unexp_list);
+			ep->peers[base->peer].curr_unexp = unexp_msg;
 		}
 		return NULL;
 	}
@@ -904,7 +905,6 @@ static void rxd_handle_data(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 {
 	struct rxd_data_pkt *pkt = (struct rxd_data_pkt *) (pkt_entry->pkt);
 	struct rxd_x_entry *x_entry;
-	struct dlist_entry *unexp_list;
 	struct rxd_unexp_msg *unexp_msg;
 
 	if (pkt_entry->pkt_size < sizeof(*pkt) + ep->rx_prefix_size) {
@@ -916,16 +916,13 @@ static void rxd_handle_data(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 	if (pkt->base_hdr.seq_no == ep->peers[pkt->base_hdr.peer].rx_seq_no) {
 		ep->peers[pkt->base_hdr.peer].rx_seq_no++;
 		if (pkt->base_hdr.type == RXD_DATA &&
-		    ep->peers[pkt->base_hdr.peer].curr_rx_id ==
-		    (uint16_t) RXD_UNEXP_ID) {
-			unexp_list = pkt->base_hdr.flags & RXD_TAG_HDR ?
-				     &ep->unexp_tag_list : &ep->unexp_list;
-			assert(!dlist_empty(unexp_list));
-			unexp_msg = container_of(unexp_list->prev,
-						 struct rxd_unexp_msg, entry);
+		    ep->peers[pkt->base_hdr.peer].curr_unexp) {
+			unexp_msg = ep->peers[pkt->base_hdr.peer].curr_unexp;
 			dlist_insert_tail(&pkt_entry->d_entry, &unexp_msg->pkt_list);
-			if (pkt->ext_hdr.seg_no + 1 == unexp_msg->sar_hdr->num_segs - 1)
+			if (pkt->ext_hdr.seg_no + 1 == unexp_msg->sar_hdr->num_segs - 1) {
+				ep->peers[pkt->base_hdr.peer].curr_unexp = NULL;
 				rxd_ep_send_ack(ep, pkt->base_hdr.peer);
+			}
 			rxd_remove_rx_pkt(ep, pkt_entry);
 			return;
 		}
@@ -979,8 +976,15 @@ static void rxd_handle_op(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 				      &msg, &msg_size);
 	if (!rx_entry) {
 		if (base_hdr->type == RXD_MSG || base_hdr->type == RXD_TAGGED) {
+			if (!ep->peers[base_hdr->peer].curr_unexp)
+				goto ack;
+
 			ep->peers[base_hdr->peer].rx_seq_no++;
 			rxd_remove_rx_pkt(ep, pkt_entry);
+
+			if (!sar_hdr)
+				ep->peers[base_hdr->peer].curr_unexp = NULL;
+
 			rxd_ep_send_ack(ep, base_hdr->peer);
 			return;
 		}

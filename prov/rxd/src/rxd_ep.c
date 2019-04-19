@@ -1195,7 +1195,7 @@ int rxd_ep_init_res(struct rxd_ep *ep, struct fi_info *fi_info)
 	struct util_buf_attr entry_pool_attr = {
 		.size		= sizeof(struct rxd_x_entry),
 		.alignment	= RXD_BUF_POOL_ALIGNMENT,
-		.max_cnt	= (size_t) ((uint16_t) RXD_UNEXP_ID),
+		.max_cnt	= (size_t) ((uint16_t) (~0)),
 		.indexing	= {
 			.used 		= 1,
 			.ordered	= 1,
