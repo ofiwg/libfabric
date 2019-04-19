@@ -1170,7 +1170,7 @@ int rxd_ep_init_res(struct rxd_ep *ep, struct fi_info *fi_info)
 	struct ofi_bufpool_attr entry_pool_attr = {
 		.size		= sizeof(struct rxd_x_entry),
 		.alignment	= RXD_BUF_POOL_ALIGNMENT,
-		.max_cnt	= (size_t) ((uint16_t) RXD_UNEXP_ID),
+		.max_cnt	= (size_t) ((uint16_t) (~0)),
 		.flags		= OFI_BUFPOOL_INDEXED,
 	};
 	int ret;

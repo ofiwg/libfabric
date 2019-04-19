@@ -76,6 +76,8 @@ static void rxd_progress_unexp_msg(struct rxd_ep *ep, struct rxd_x_entry *rx_ent
 				   struct rxd_unexp_msg *unexp_msg)
 {
 	struct rxd_pkt_entry *pkt_entry;
+	uint64_t num_segs = 0;
+	uint16_t curr_id = ep->peers[unexp_msg->base_hdr->peer].curr_rx_id;
 
 	rxd_progress_op(ep, rx_entry, unexp_msg->pkt_entry, unexp_msg->base_hdr,
 			unexp_msg->sar_hdr, unexp_msg->tag_hdr,
@@ -88,7 +90,16 @@ static void rxd_progress_unexp_msg(struct rxd_ep *ep, struct rxd_x_entry *rx_ent
 		rxd_ep_recv_data(ep, rx_entry, (struct rxd_data_pkt *)
 				 (pkt_entry->pkt), pkt_entry->pkt_size);
 		rxd_release_repost_rx(ep, pkt_entry);
+		num_segs++;
 	}
+
+	if (ep->peers[unexp_msg->base_hdr->peer].curr_unexp) {
+		if (!unexp_msg->sar_hdr || num_segs == unexp_msg->sar_hdr->num_segs - 1)
+			ep->peers[unexp_msg->base_hdr->peer].curr_rx_id = curr_id;
+		else
+			ep->peers[unexp_msg->base_hdr->peer].curr_unexp = NULL;
+	}
+
 	rxd_release_repost_rx(ep, unexp_msg->pkt_entry);
 	dlist_remove(&unexp_msg->entry);
 	free(unexp_msg);

@@ -74,7 +74,6 @@
 #define RXD_RX_POOL_CHUNK_CNT	1024
 #define RXD_MAX_PENDING		128
 #define RXD_MAX_PKT_RETRY	50
-#define RXD_UNEXP_ID		(~0)
 
 #define RXD_PKT_IN_USE		(1 << 0)
 #define RXD_PKT_ACKED		(1 << 1)
@@ -139,6 +138,7 @@ struct rxd_peer {
 	uint16_t curr_rx_id;
 	uint16_t curr_tx_id;
 
+	struct rxd_unexp_msg *curr_unexp;
 	struct dlist_entry tx_list;
 	struct dlist_entry rx_list;
 	struct dlist_entry rma_rx_list;
