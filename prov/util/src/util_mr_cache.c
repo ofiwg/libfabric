@@ -69,10 +69,11 @@ static void util_mr_free_entry(struct ofi_mr_cache *cache,
 	       entry->iov.iov_base, entry->iov.iov_len);
 
 	assert(!entry->cached);
-	/* There's currently no safe to unsubscribe an address range if we
-	 * aren't merging overlapping regions.  So, we remain subscribed.
-	 * This may result in extra notification events, but is harmless
-	 * to correct operation.
+	/* If regions are not being merged, then we can't safely
+	 * unsubscribe this region from the monitor.  Otherwise, we
+	 * might unsubscribe an address range in use by another region.
+	 * As a result, we remain subscribed.  This may result in extra
+	 * notification events, but is harmless to correct operation.
 	 */
 	if (entry->subscribed && cache->merge_regions) {
 		ofi_monitor_unsubscribe(cache->monitor, entry->iov.iov_base,
@@ -102,20 +103,31 @@ void ofi_mr_cache_notify(struct ofi_mr_cache *cache, const void *addr, size_t le
 	struct ofi_mr_entry *entry;
 	struct iovec iov;
 
+	cache->notify_cnt++;
 	iov.iov_base = (void *) addr;
 	iov.iov_len = len;
 
-	entry = cache->storage.find(&cache->storage, &iov);
-	if (!entry)
-		return;
+	for (entry = cache->storage.find(&cache->storage, &iov); entry;
+	     entry = cache->storage.find(&cache->storage, &iov)) {
 
-	if (entry->cached)
+		/* Notifications should only occur on regions that are not
+		 * actively being used, or the application is buggy.  And if
+		 * the entry is not in use but found here, then it must have
+		 * been cached.
+		 */
+		assert(entry->cached);
 		util_mr_uncache_entry(cache, entry);
 
-	if (entry->use_cnt == 0) {
+		assert(entry->use_cnt == 0);
 		dlist_remove_init(&entry->lru_entry);
 		util_mr_free_entry(cache, entry);
 	}
+
+	/* See comment in util_mr_free_entry.  If we're not merging address
+	 * ranges, we can only safely unsubscribe for the reported range.
+	 */
+	if (!cache->merge_regions)
+		ofi_monitor_unsubscribe(cache->monitor, addr, len);
 }
 
 static bool mr_cache_flush(struct ofi_mr_cache *cache)
@@ -300,8 +312,9 @@ void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache)
 	struct dlist_entry *tmp;
 
 	FI_INFO(cache->domain->prov, FI_LOG_MR, "MR cache stats: "
-		"searches %zu, deletes %zu, hits %zu\n",
-		cache->search_cnt, cache->delete_cnt, cache->hit_cnt);
+		"searches %zu, deletes %zu, hits %zu notify %zu\n",
+		cache->search_cnt, cache->delete_cnt, cache->hit_cnt,
+		cache->notify_cnt);
 
 	dlist_foreach_container_safe(&cache->lru_list, struct ofi_mr_entry,
 				     entry, lru_entry, tmp) {
@@ -400,7 +413,7 @@ int ofi_mr_cache_init(struct util_domain *domain,
 {
 	int ret;
 
-	assert(cache->notify && cache->add_region && cache->delete_region);
+	assert(cache->add_region && cache->delete_region);
 
 	ret = ofi_mr_cache_init_storage(cache);
 	if (ret)

@@ -238,8 +238,6 @@ struct ofi_mr_cache {
 	size_t				notify_cnt;
 	struct ofi_bufpool		*entry_pool;
 
-	void				(*notify)(struct ofi_mr_cache *cache,
-						  const void *addr, size_t len);
 	int				(*add_region)(struct ofi_mr_cache *cache,
 						      struct ofi_mr_entry *entry);
 	void				(*delete_region)(struct ofi_mr_cache *cache,
