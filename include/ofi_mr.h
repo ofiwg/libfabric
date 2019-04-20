@@ -138,7 +138,10 @@ extern struct ofi_mem_monitor *uffd_monitor;
 
 
 /*
- * MR map
+ * Used to store registered memory regions into a lookup map.  This
+ * is used by the ofi_mr_xxx calls below, and may be accessed by a
+ * provider when processing incoming RMA operations to verify that
+ * a region has been registered for the specified operation.
  */
 
 struct ofi_mr_map {
@@ -161,6 +164,11 @@ void *ofi_mr_map_get(struct ofi_mr_map *map,  uint64_t key);
 int ofi_mr_map_verify(struct ofi_mr_map *map, uintptr_t *io_addr,
 		      size_t len, uint64_t key, uint64_t access,
 		      void **context);
+
+/*
+ * These calls may be used be providers to implement software memory
+ * registration.
+ */
 
 struct ofi_mr {
 	struct fid_mr mr_fid;
