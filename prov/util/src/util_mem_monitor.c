@@ -39,30 +39,50 @@ static struct ofi_uffd uffd;
 struct ofi_mem_monitor *uffd_monitor = &uffd.monitor;
 
 
-void ofi_monitor_init(struct ofi_mem_monitor *monitor)
+/*
+ * Initialize all available memory monitors
+ */
+void ofi_monitor_init(void)
 {
-	fastlock_init(&monitor->lock);
+	fastlock_init(&uffd_monitor->lock);
+	dlist_init(&uffd_monitor->list);
 }
 
-void ofi_monitor_cleanup(struct ofi_mem_monitor *monitor)
+void ofi_monitor_cleanup(void)
 {
-	assert(dlist_empty(&monitor->list));
+	assert(dlist_empty(&uffd_monitor->list));
 }
 
-void ofi_monitor_add_cache(struct ofi_mem_monitor *monitor,
-			   struct ofi_mr_cache *cache)
+int ofi_monitor_add_cache(struct ofi_mem_monitor *monitor,
+			  struct ofi_mr_cache *cache)
 {
-	cache->monitor = monitor;
+	int ret;
+
 	fastlock_acquire(&monitor->lock);
+	if (dlist_empty(&monitor->list) && (monitor == uffd_monitor))
+		ret = ofi_uffd_init();
+	else
+		ret = 0;
+
+	if (ret)
+		goto out;
+	cache->monitor = monitor;
 	dlist_insert_tail(&cache->notify_entry, &monitor->list);
+out:
 	fastlock_release(&monitor->lock);
+	return ret;
 }
 
 void ofi_monitor_del_cache(struct ofi_mr_cache *cache)
 {
-	fastlock_acquire(&cache->monitor->lock);
+	struct ofi_mem_monitor *monitor = cache->monitor;
+
+	fastlock_acquire(&monitor->lock);
 	dlist_remove(&cache->notify_entry);
-	fastlock_release(&cache->monitor->lock);
+
+	if (dlist_empty(&monitor->list) && (monitor == uffd_monitor))
+		ofi_uffd_cleanup();
+	fastlock_release(&monitor->lock);
 }
 
 /* Must be called holding monitor lock */
@@ -102,7 +122,7 @@ void ofi_monitor_unsubscribe(struct ofi_mem_monitor *monitor,
 	monitor->unsubscribe(monitor, addr, len);
 }
 
-//#if HAVE_UFFD_UNMAP
+#if HAVE_UFFD_UNMAP
 
 #include <poll.h>
 #include <sys/syscall.h>
@@ -223,15 +243,12 @@ int ofi_uffd_init(void)
 	struct uffdio_api api;
 	int ret;
 
-	ofi_monitor_init(&uffd.monitor);
 	uffd.monitor.subscribe = ofi_uffd_subscribe;
 	uffd.monitor.unsubscribe = ofi_uffd_unsubscribe;
 
 	uffd.page_size = ofi_get_page_size();
-	if (uffd.page_size < 0) {
-		ret = (int) uffd.page_size;
-		goto cleanup;
-	}
+	if (uffd.page_size < 0)
+		return (int) uffd.page_size;
 
 	uffd.hugepage_size = ofi_get_hugepage_size();
 	if (uffd.hugepage_size < 0)
@@ -241,8 +258,7 @@ int ofi_uffd_init(void)
 	if (uffd.fd < 0) {
 		FI_WARN(&core_prov, FI_LOG_MR,
 			"syscall/userfaultfd %s\n", strerror(errno));
-		ret = -errno;
-		goto cleanup;
+		return -errno;
 	}
 
 	api.api = UFFD_API;
@@ -273,8 +289,6 @@ int ofi_uffd_init(void)
 
 closefd:
 	close(uffd.fd);
-cleanup:
-	ofi_monitor_cleanup(&uffd.monitor);
 	return ret;
 }
 
@@ -283,11 +297,9 @@ void ofi_uffd_cleanup(void)
 	pthread_cancel(uffd.thread);
 	pthread_join(uffd.thread, NULL);
 	close(uffd.fd);
-	ofi_monitor_cleanup(&uffd.monitor);
 }
 
-#if 0
-//#else /* HAVE_UFFD_UNMAP */
+#else /* HAVE_UFFD_UNMAP */
 
 int ofi_uffd_init(void)
 {

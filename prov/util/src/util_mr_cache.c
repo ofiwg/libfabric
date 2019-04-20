@@ -431,19 +431,22 @@ int ofi_mr_cache_init(struct util_domain *domain,
 	cache->delete_cnt = 0;
 	cache->hit_cnt = 0;
 	cache->notify_cnt = 0;
-	ofi_monitor_add_cache(monitor, cache);
+	ret = ofi_monitor_add_cache(monitor, cache);
+	if (ret)
+		goto destroy;
 
 	ret = ofi_bufpool_create(&cache->entry_pool,
 				   sizeof(struct ofi_mr_entry) +
 				   cache->entry_data_size,
 				   16, 0, cache->max_cached_cnt);
 	if (ret)
-		goto err;
+		goto del;
 
 	return 0;
-err:
-	ofi_atomic_dec32(&cache->domain->ref);
+del:
 	ofi_monitor_del_cache(cache);
+destroy:
+	ofi_atomic_dec32(&cache->domain->ref);
 	cache->storage.destroy(&cache->storage);
 	return ret;
 }

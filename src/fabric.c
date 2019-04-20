@@ -554,6 +554,7 @@ void fi_ini(void)
 	ofi_pmem_init();
 	ofi_perf_init();
 	ofi_hook_init();
+	ofi_monitor_init();
 
 	fi_param_define(NULL, "provider", FI_PARAM_STRING,
 			"Only use specified provider (default: all available)");
@@ -644,6 +645,7 @@ FI_DESTRUCTOR(fi_fini(void))
 	}
 
 	ofi_free_filter(&prov_filter);
+	ofi_monitor_cleanup();
 	fi_log_fini();
 	fi_param_fini();
 	ofi_osd_fini();
