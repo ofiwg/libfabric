@@ -216,6 +216,7 @@ static int rxm_conn_res_alloc(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn)
 	dlist_init(&rxm_conn->deferred_conn_entry);
 	dlist_init(&rxm_conn->deferred_tx_queue);
 	dlist_init(&rxm_conn->sar_rx_msg_list);
+	dlist_init(&rxm_conn->sar_deferred_rx_msg_list);
 
 	if (rxm_ep->util_ep.domain->threading != FI_THREAD_SAFE) {
 		rxm_conn->inject_pkt =
@@ -599,28 +600,34 @@ unlock:
 	return ret;
 }
 
-/* Caller must hold `cmap::lock` */
-static int rxm_cmap_handle_connect(struct rxm_cmap *cmap, fi_addr_t fi_addr,
-				   struct rxm_cmap_handle *handle)
+int rxm_cmap_connect(struct rxm_ep *rxm_ep, fi_addr_t fi_addr,
+		     struct rxm_cmap_handle *handle)
 {
-	int ret;
+	int ret = FI_SUCCESS;
+
+	/* Progress connection events to detect any incoming connections
+	 * from peer corresponding to fi_addr */
+	if (!slistfd_empty(&rxm_ep->msg_eq_entry_list))
+		rxm_conn_process_eq_events(rxm_ep);
+
+	rxm_ep->cmap->acquire(&rxm_ep->cmap->lock);
 
 	switch (handle->state) {
 	case RXM_CMAP_CONNECTED_NOTIFY:
-		rxm_cmap_process_conn_notify(cmap, handle);
-		/* Fall through */
-	case RXM_CMAP_CONNECTED:
-		return FI_SUCCESS;
+		rxm_cmap_process_conn_notify(rxm_ep->cmap, handle);
+		break;
 	case RXM_CMAP_IDLE:
-		ret = rxm_conn_connect(cmap->ep, handle,
-				       ofi_av_get_addr(cmap->av, fi_addr));
+		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "initiating MSG_EP connect "
+		       "for fi_addr: %" PRIu64 "\n", fi_addr);
+		ret = rxm_conn_connect(rxm_ep->cmap->ep, handle,
+				       ofi_av_get_addr(rxm_ep->cmap->av,
+						       fi_addr));
 		if (ret) {
 			rxm_cmap_del_handle(handle);
-			return ret;
+		} else {
+			handle->state = RXM_CMAP_CONNREQ_SENT;
+			ret = -FI_EAGAIN;
 		}
-		handle->state = RXM_CMAP_CONNREQ_SENT;
-		ret = -FI_EAGAIN;
-		// TODO sleep on event fd instead of busy polling
 		break;
 	case RXM_CMAP_CONNREQ_SENT:
 	case RXM_CMAP_CONNREQ_RECV:
@@ -629,42 +636,12 @@ static int rxm_cmap_handle_connect(struct rxm_cmap *cmap, fi_addr_t fi_addr,
 		ret = -FI_EAGAIN;
 		break;
 	default:
-		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL,
+		FI_WARN(rxm_ep->cmap->av->prov, FI_LOG_EP_CTRL,
 			"Invalid cmap handle state\n");
 		assert(0);
 		ret = -FI_EOPBADSTATE;
 	}
-	return ret;
-}
-
-/* Caller must hold cmap->lock */
-int rxm_cmap_handle_unconnected(struct rxm_ep *rxm_ep, struct rxm_cmap_handle *handle,
-				fi_addr_t dest_addr)
-{
-	/* Progress connection events */
 	rxm_ep->cmap->release(&rxm_ep->cmap->lock);
-	if (!slistfd_empty(&rxm_ep->msg_eq_entry_list))
-		rxm_conn_process_eq_events(rxm_ep);
-	rxm_ep->cmap->acquire(&rxm_ep->cmap->lock);
-
-	return rxm_cmap_handle_connect(rxm_ep->cmap, dest_addr, handle);
-}
-
-int rxm_cmap_get_handle(struct rxm_cmap *cmap, fi_addr_t fi_addr,
-			struct rxm_cmap_handle **handle_ret)
-{
-	int ret;
-
-	cmap->acquire(&cmap->lock);
-	*handle_ret = rxm_cmap_acquire_handle(cmap, fi_addr);
-	if (OFI_UNLIKELY(!*handle_ret)) {
-		ret = -FI_EAGAIN;
-		goto unlock;
-	}
-
-	ret = rxm_cmap_handle_connect(cmap, fi_addr, *handle_ret);
-unlock:
-	cmap->release(&cmap->lock);
 	return ret;
 }
 
@@ -1300,7 +1277,7 @@ static ssize_t rxm_eq_sread(struct rxm_ep *rxm_ep, size_t len,
 	} else {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unknown error: %d\n",
 			entry->err_entry.err);
-		return rd;
+		return -entry->err_entry.err;
 	}
 }
 
