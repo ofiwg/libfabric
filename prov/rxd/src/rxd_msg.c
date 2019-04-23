@@ -38,68 +38,97 @@
 
 static int rxd_match_unexp(struct dlist_entry *item, const void *arg)
 {
-	struct rxd_x_entry *rx_entry = (struct rxd_x_entry *) arg;
-	struct rxd_pkt_entry *pkt_entry;
-	struct rxd_base_hdr *hdr;
+	struct rxd_match_attr *attr = (struct rxd_match_attr *) arg;
+	struct rxd_unexp_msg *unexp_msg;
 
-	pkt_entry = container_of(item, struct rxd_pkt_entry, d_entry);
-	hdr = rxd_get_base_hdr(pkt_entry);
+	unexp_msg = container_of(item, struct rxd_unexp_msg, entry);
 
-	if (!rxd_match_addr(rx_entry->peer, hdr->peer))
+	if (!rxd_match_addr(attr->peer, unexp_msg->base_hdr->peer))
 		return 0;
 
-	if (hdr->type != RXD_TAGGED)
+	if (!unexp_msg->tag_hdr)
 		return 1;
 
-	return rxd_match_tag(rx_entry->cq_entry.tag, rx_entry->ignore,
-			     rxd_get_tag_hdr(pkt_entry)->tag);
+	return rxd_match_tag(attr->tag, attr->ignore,
+			     unexp_msg->tag_hdr->tag);
 }
 
-static int rxd_ep_check_unexp_msg_list(struct rxd_ep *ep,
-					struct dlist_entry *unexp_list,
-					struct dlist_entry *rx_list,
-					struct rxd_x_entry *rx_entry)
+static struct rxd_unexp_msg *rxd_ep_check_unexp_list(struct dlist_entry *list,
+				fi_addr_t addr, uint64_t tag, uint64_t ignore)
 {
+	struct rxd_match_attr attr;
 	struct dlist_entry *match;
-	struct rxd_x_entry *progress_entry, *dup_entry = NULL;
+
+	attr.peer = addr;
+	attr.tag = tag;
+	attr.ignore = ignore;
+
+	match = dlist_find_first_match(list, &rxd_match_unexp, &attr);
+	if (!match)
+		return NULL;
+
+	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "Matched to unexp msg entry\n");
+
+	return container_of(match, struct rxd_unexp_msg, entry);
+}
+
+static void rxd_progress_unexp_msg(struct rxd_ep *ep, struct rxd_x_entry *rx_entry,
+				   struct rxd_unexp_msg *unexp_msg)
+{
 	struct rxd_pkt_entry *pkt_entry;
-	struct rxd_base_hdr *base_hdr;
-	struct rxd_sar_hdr *sar_hdr = NULL;
-	struct rxd_tag_hdr *tag_hdr = NULL;
-	struct rxd_data_hdr *data_hdr = NULL;
-	struct rxd_atom_hdr *atom_hdr = NULL;
-	struct rxd_rma_hdr *rma_hdr = NULL;
-	void *msg = NULL;
-	size_t msg_size, total_size;
+	uint64_t num_segs = 0;
+	uint16_t curr_id = ep->peers[unexp_msg->base_hdr->peer].curr_rx_id;
+
+	rxd_progress_op(ep, rx_entry, unexp_msg->pkt_entry, unexp_msg->base_hdr,
+			unexp_msg->sar_hdr, unexp_msg->tag_hdr,
+			unexp_msg->data_hdr, NULL, NULL, &unexp_msg->msg,
+			unexp_msg->msg_size);
+
+	while (!dlist_empty(&unexp_msg->pkt_list)) {
+		dlist_pop_front(&unexp_msg->pkt_list, struct rxd_pkt_entry,
+				pkt_entry, d_entry);
+		rxd_ep_recv_data(ep, rx_entry, (struct rxd_data_pkt *)
+				 (pkt_entry->pkt), pkt_entry->pkt_size);
+		rxd_release_repost_rx(ep, pkt_entry);
+		num_segs++;
+	}
+
+	if (ep->peers[unexp_msg->base_hdr->peer].curr_unexp) {
+		if (!unexp_msg->sar_hdr || num_segs == unexp_msg->sar_hdr->num_segs - 1)
+			ep->peers[unexp_msg->base_hdr->peer].curr_rx_id = curr_id;
+		else
+			ep->peers[unexp_msg->base_hdr->peer].curr_unexp = NULL;
+	}
+
+	rxd_release_repost_rx(ep, unexp_msg->pkt_entry);
+	dlist_remove(&unexp_msg->entry);
+	free(unexp_msg);
+}
+
+static int rxd_progress_unexp_list(struct rxd_ep *ep,
+				   struct dlist_entry *unexp_list,
+				   struct dlist_entry *rx_list,
+				   struct rxd_x_entry *rx_entry)
+{
+	struct rxd_x_entry *progress_entry, *dup_entry = NULL;
+	struct rxd_unexp_msg *unexp_msg;
+	size_t total_size;
 
 	while (!dlist_empty(unexp_list)) {
-		match = dlist_remove_first_match(unexp_list, &rxd_match_unexp,
-						 (void *) rx_entry);
-		if (!match)
+		unexp_msg = rxd_ep_check_unexp_list(unexp_list, rx_entry->peer,
+					rx_entry->cq_entry.tag, rx_entry->ignore);
+		if (!unexp_msg)
 			return 0;
 
-		FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "progressing unexp msg entry\n");
-	
-		pkt_entry = container_of(match, struct rxd_pkt_entry, d_entry);
-		base_hdr = rxd_get_base_hdr(pkt_entry);
+		total_size = unexp_msg->sar_hdr ? unexp_msg->sar_hdr->size :
+			     unexp_msg->msg_size;
 
-		rxd_unpack_hdrs(pkt_entry->pkt_size - ep->rx_prefix_size,
-				base_hdr, &sar_hdr, &tag_hdr,
-				&data_hdr, &rma_hdr, &atom_hdr, &msg, &msg_size);
-
-		total_size = sar_hdr ? sar_hdr->size : msg_size;
 		if (rx_entry->flags & RXD_MULTI_RECV)
 			dup_entry = rxd_progress_multi_recv(ep, rx_entry, total_size);
 
 		progress_entry = dup_entry ? dup_entry : rx_entry;
-	
 		progress_entry->cq_entry.len = MIN(rx_entry->cq_entry.len, total_size);
-
-		rxd_progress_op(ep, progress_entry, pkt_entry, base_hdr, sar_hdr, tag_hdr,
-				data_hdr, rma_hdr, atom_hdr, &msg, msg_size);
-		rxd_release_repost_rx(ep, pkt_entry);
-		rxd_ep_send_ack(ep, base_hdr->peer);
-
+		rxd_progress_unexp_msg(ep, progress_entry, unexp_msg);
 		if (!dup_entry)
 			return 1;
 	}
@@ -107,31 +136,91 @@ static int rxd_ep_check_unexp_msg_list(struct rxd_ep *ep,
 	return 0;
 }
 
+static int rxd_ep_discard_recv(struct rxd_ep *rxd_ep, void *context,
+			       struct rxd_unexp_msg *unexp_msg)
+{
+	struct rxd_pkt_entry *pkt_entry;
+	uint64_t seq = unexp_msg->base_hdr->seq_no;
+	int ret;
+
+	assert(unexp_msg->tag_hdr);
+	seq += unexp_msg->sar_hdr ? unexp_msg->sar_hdr->num_segs : 1;
+
+	rxd_ep->peers[unexp_msg->base_hdr->peer].rx_seq_no =
+			MAX(seq, rxd_ep->peers[unexp_msg->base_hdr->peer].rx_seq_no);
+	rxd_ep_send_ack(rxd_ep, unexp_msg->base_hdr->peer);
+
+	ret = ofi_cq_write(rxd_ep->util_ep.rx_cq, context, FI_TAGGED | FI_RECV,
+			   0, NULL, unexp_msg->data_hdr ?
+			   unexp_msg->data_hdr->cq_data : 0,
+			   unexp_msg->tag_hdr->tag);
+
+	while (!dlist_empty(&unexp_msg->pkt_list)) {
+		dlist_pop_front(&unexp_msg->pkt_list, struct rxd_pkt_entry,
+				pkt_entry, d_entry);
+		rxd_release_repost_rx(rxd_ep, pkt_entry);
+	}
+
+	rxd_release_repost_rx(rxd_ep, unexp_msg->pkt_entry);
+
+	dlist_remove(&unexp_msg->entry);
+	free(unexp_msg);
+
+	return ret;
+}
+
+static int rxd_peek_recv(struct rxd_ep *rxd_ep, fi_addr_t addr, uint64_t tag,
+			 uint64_t ignore, void *context, uint64_t flags,
+			 struct dlist_entry *unexp_list)
+{
+	struct rxd_unexp_msg *unexp_msg;
+
+	fastlock_release(&rxd_ep->util_ep.lock);
+	rxd_ep_progress(&rxd_ep->util_ep);
+	fastlock_acquire(&rxd_ep->util_ep.lock);
+
+	unexp_msg = rxd_ep_check_unexp_list(unexp_list, addr, tag, ignore);
+	if (!unexp_msg) {
+		FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "Message not found\n");
+		return ofi_cq_write_error_peek(rxd_ep->util_ep.rx_cq, tag,
+					       context);
+	}
+	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "Message found\n");
+
+	assert(unexp_msg->tag_hdr);
+	if (flags & FI_DISCARD)
+		return rxd_ep_discard_recv(rxd_ep, context, unexp_msg);
+
+	if (flags & FI_CLAIM) {
+		FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "Marking message for CLAIM\n");
+		((struct fi_context *)context)->internal[0] = unexp_msg;
+		dlist_remove(&unexp_msg->entry);
+	}
+
+	return ofi_cq_write(rxd_ep->util_ep.rx_cq, context, FI_TAGGED | FI_RECV,
+			    unexp_msg->sar_hdr ? unexp_msg->sar_hdr->size :
+			    unexp_msg->msg_size, NULL, unexp_msg->data_hdr ?
+			    unexp_msg->data_hdr->cq_data : 0,
+			    unexp_msg->tag_hdr->tag);
+}
+
 ssize_t rxd_ep_generic_recvmsg(struct rxd_ep *rxd_ep, const struct iovec *iov,
 			       size_t iov_count, fi_addr_t addr, uint64_t tag,
 			       uint64_t ignore, void *context, uint32_t op,
-			       uint32_t rxd_flags)
+			       uint32_t rxd_flags, uint64_t flags)
 {
 	ssize_t ret = 0;
 	struct rxd_x_entry *rx_entry;
 	struct dlist_entry *unexp_list, *rx_list;
+	struct rxd_unexp_msg *unexp_msg;
 
 	assert(iov_count <= RXD_IOV_LIMIT);
 	assert(!(rxd_flags & RXD_MULTI_RECV) || iov_count == 1);
+	assert(!(flags & FI_PEEK) || op == ofi_op_tagged);
 
 	fastlock_acquire(&rxd_ep->util_ep.lock);
 
 	if (ofi_cirque_isfull(rxd_ep->util_ep.rx_cq->cirq)) {
-		ret = -FI_EAGAIN;
-		goto out;
-	}
-
-	rx_entry = rxd_rx_entry_init(rxd_ep, iov, iov_count, tag, ignore, context,
-				(rxd_ep->util_ep.caps & FI_DIRECTED_RECV &&
-				addr != FI_ADDR_UNSPEC) ?
-				rxd_ep_av(rxd_ep)->fi_addr_table[addr] :
-				FI_ADDR_UNSPEC, op, rxd_flags);
-	if (!rx_entry) {
 		ret = -FI_EAGAIN;
 		goto out;
 	}
@@ -144,11 +233,38 @@ ssize_t rxd_ep_generic_recvmsg(struct rxd_ep *rxd_ep, const struct iovec *iov,
 		rx_list = &rxd_ep->rx_list;
 	}
 
-	if (!dlist_empty(unexp_list) &&
-	    rxd_ep_check_unexp_msg_list(rxd_ep, unexp_list, rx_list, rx_entry))
+	if (flags & FI_PEEK) {
+		ret = rxd_peek_recv(rxd_ep, addr, tag, ignore, context, flags,
+				    unexp_list);
 		goto out;
+	}
 
-	dlist_insert_tail(&rx_entry->entry, rx_list);
+	if (!(flags & FI_DISCARD)) {
+		rx_entry = rxd_rx_entry_init(rxd_ep, iov, iov_count, tag, ignore, context,
+					(rxd_ep->util_ep.caps & FI_DIRECTED_RECV &&
+					addr != FI_ADDR_UNSPEC) ?
+					rxd_ep_av(rxd_ep)->fi_addr_table[addr] :
+					FI_ADDR_UNSPEC, op, rxd_flags);
+		if (!rx_entry) {
+			ret = -FI_EAGAIN;
+		} else if (flags & FI_CLAIM) {
+			FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "Claiming message\n");
+			unexp_msg = (struct rxd_unexp_msg *)
+				(((struct fi_context *) context)->internal[0]);
+			rxd_progress_unexp_msg(rxd_ep, rx_entry, unexp_msg);
+		} else if (!rxd_progress_unexp_list(rxd_ep, unexp_list,
+			   rx_list, rx_entry)) {
+			dlist_insert_tail(&rx_entry->entry, rx_list);
+		}
+		goto out;
+	}
+
+	assert(flags & FI_CLAIM);
+	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL, "Discarding message\n");
+	unexp_msg = (struct rxd_unexp_msg *)
+			(((struct fi_context *) context)->internal[0]);
+	ret = rxd_ep_discard_recv(rxd_ep, context, unexp_msg);
+
 out:
 	fastlock_release(&rxd_ep->util_ep.lock);
 	return ret;
@@ -163,7 +279,8 @@ static ssize_t rxd_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 
 	return rxd_ep_generic_recvmsg(ep, msg->msg_iov, msg->iov_count,
 				      msg->addr, 0, ~0, msg->context, ofi_op_msg,
-				      rxd_rx_flags(flags | ep->util_ep.rx_msg_flags));
+				      rxd_rx_flags(flags | ep->util_ep.rx_msg_flags),
+				      flags);
 }
 
 static ssize_t rxd_ep_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
@@ -178,7 +295,7 @@ static ssize_t rxd_ep_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *d
 	msg_iov.iov_len = len;
 
 	return rxd_ep_generic_recvmsg(ep, &msg_iov, 1, src_addr, 0, ~0, context,
-				      ofi_op_msg, ep->rx_flags);
+				      ofi_op_msg, ep->rx_flags, 0);
 }
 
 static ssize_t rxd_ep_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
@@ -189,7 +306,7 @@ static ssize_t rxd_ep_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void
 	ep = container_of(ep_fid, struct rxd_ep, util_ep.ep_fid.fid);
 
 	return rxd_ep_generic_recvmsg(ep, iov, count, src_addr,
-				      0, ~0, context, ofi_op_msg, ep->rx_flags);
+				      0, ~0, context, ofi_op_msg, ep->rx_flags, 0);
 }
 
 ssize_t rxd_ep_generic_inject(struct rxd_ep *rxd_ep, const struct iovec *iov,
