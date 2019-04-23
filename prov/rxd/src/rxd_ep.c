@@ -242,7 +242,7 @@ struct rxd_x_entry *rxd_rx_entry_init(struct rxd_ep *ep,
 
 	rx_entry->cq_entry.op_context = context;
 	rx_entry->cq_entry.len = ofi_total_iov_len(iov, iov_count);
-	rx_entry->cq_entry.buf = iov[0].iov_base;
+	rx_entry->cq_entry.buf = iov_count ? iov[0].iov_base : NULL;
 	rx_entry->cq_entry.tag = tag;
 
 	rx_entry->cq_entry.flags = ofi_rx_cq_flags(op);
