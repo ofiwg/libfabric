@@ -386,7 +386,7 @@ int fi_ibv_ep_create_tgt_qp(struct fi_ibv_xrc_ep *ep, uint32_t tgt_qpn)
 	attr_ex.xrcd = domain->xrc.xrcd;
 	if (rdma_create_qp_ex(ep->tgt_id, &attr_ex)) {
 		VERBS_INFO_ERRNO(FI_LOG_EP_CTRL,
-				 "Physical XRC TGT QP, rdma_create_ep_ex()",
+				 "Physical XRC TGT QP, rdma_create_qp_ex()",
 				 errno);
 		return -errno;
 	}
