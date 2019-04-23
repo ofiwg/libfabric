@@ -1196,8 +1196,6 @@ rxm_ep_emulate_inject(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	struct rxm_tx_eager_buf *tx_buf;
 	ssize_t ret;
 
-	assert(pkt_size <= rxm_ep->rxm_info->tx_attr->inject_size);
-
 	tx_buf = (struct rxm_tx_eager_buf *)
 		  rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX);
 	if (OFI_UNLIKELY(!tx_buf)) {
