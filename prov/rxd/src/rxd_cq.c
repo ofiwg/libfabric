@@ -83,7 +83,7 @@ static int rxd_cq_write_signal(struct rxd_cq *cq,
 
 void rxd_rx_entry_free(struct rxd_ep *ep, struct rxd_x_entry *rx_entry)
 {
-	rx_entry->op <= ofi_op_tagged ? ep->rx_msg_avail++ : ep->rx_rma_avail++;
+	rx_entry->op <= RXD_TAGGED ? ep->rx_msg_avail++ : ep->rx_rma_avail++;
 	rx_entry->op = RXD_NO_OP;
 	dlist_remove(&rx_entry->entry);
 	ofi_ibuf_free(rx_entry);
@@ -299,7 +299,7 @@ void rxd_progress_tx_list(struct rxd_ep *ep, struct rxd_peer *peer)
 			if (ofi_before(tx_entry->start_seq + (tx_entry->num_segs - 1),
 			    head_seq)) {
 				if (tx_entry->op == RXD_DATA_READ) {
-					tx_entry->op = ofi_op_read_req;
+					tx_entry->op = RXD_READ_REQ;
 					rxd_complete_rx(ep, tx_entry);
 				} else {
 					rxd_complete_tx(ep, tx_entry);
@@ -576,7 +576,7 @@ static struct rxd_x_entry *rxd_rma_read_entry_init(struct rxd_ep *ep,
 		return NULL;
 
 	rx_entry->iov_count = sar_hdr->iov_count;
-	rx_entry->cq_entry.flags = ofi_rx_cq_flags(ofi_op_read_req);
+	rx_entry->cq_entry.flags = ofi_rx_cq_flags(RXD_READ_REQ);
 	rx_entry->cq_entry.len = sar_hdr->size;
 
 	dlist_insert_tail(&rx_entry->entry, &ep->peers[rx_entry->peer].tx_list);
@@ -647,7 +647,7 @@ static struct rxd_x_entry *rxd_rx_atomic_fetch(struct rxd_ep *ep,
 	if (ret)
 		return NULL;
 
-	rx_entry->cq_entry.flags = ofi_rx_cq_flags(ofi_op_atomic_fetch);
+	rx_entry->cq_entry.flags = ofi_rx_cq_flags(RXD_ATOMIC_FETCH);
 	rx_entry->cq_entry.len = sar_hdr->size;
 
 	rxd_init_data_pkt(ep, rx_entry, rx_entry->pkt);
