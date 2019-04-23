@@ -716,12 +716,6 @@ static struct fi_ops_cm tcpx_pep_cm_ops = {
 	.join = fi_no_join,
 };
 
-static int tcpx_verify_info(uint32_t version, struct fi_info *info)
-{
-	/* TODO: write me! */
-	return 0;
-}
-
 static int  tcpx_pep_getopt(fid_t fid, int level, int optname,
 			    void *optval, size_t *optlen)
 {
@@ -761,7 +755,8 @@ int tcpx_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 		return -FI_EINVAL;
 	}
 
-	ret = tcpx_verify_info(fabric->api_version, info);
+	ret = ofi_check_info(&tcpx_util_prov, tcpx_util_prov.info,
+			     fabric->api_version, info);
 	if (ret)
 		return ret;
 
