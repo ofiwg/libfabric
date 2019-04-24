@@ -102,9 +102,7 @@ static int fi_ibv_domain_close(fid_t fid)
 		return -FI_EINVAL;
 	}
 
-	if (fi_ibv_gl_data.mr_cache_enable) {
-		ofi_mr_cache_cleanup(&domain->cache);
-	}
+	ofi_mr_cache_cleanup(&domain->cache);
 
 	if (domain->pd) {
 		ret = ibv_dealloc_pd(domain->pd);
@@ -303,17 +301,15 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 
 	fi_ibv_domain_process_exp(_domain);
 
-	if (fi_ibv_gl_data.mr_cache_enable) {
-		_domain->cache.max_cached_cnt = fi_ibv_gl_data.mr_max_cached_cnt;
-		_domain->cache.max_cached_size = fi_ibv_gl_data.mr_max_cached_size;
-		_domain->cache.merge_regions = fi_ibv_gl_data.mr_cache_merge_regions;
-		_domain->cache.entry_data_size = sizeof(struct fi_ibv_mem_desc);
-		_domain->cache.add_region = fi_ibv_mr_cache_entry_reg;
-		_domain->cache.delete_region = fi_ibv_mr_cache_entry_dereg;
-		ret = ofi_mr_cache_init(&_domain->util_domain, uffd_monitor,
-					&_domain->cache);
-		if (ret)
-			goto err4;
+	_domain->cache.max_cached_cnt = fi_ibv_gl_data.mr_max_cached_cnt;
+	_domain->cache.max_cached_size = fi_ibv_gl_data.mr_max_cached_size;
+	_domain->cache.merge_regions = fi_ibv_gl_data.mr_cache_merge_regions;
+	_domain->cache.entry_data_size = sizeof(struct fi_ibv_mem_desc);
+	_domain->cache.add_region = fi_ibv_mr_cache_entry_reg;
+	_domain->cache.delete_region = fi_ibv_mr_cache_entry_dereg;
+	ret = ofi_mr_cache_init(&_domain->util_domain, uffd_monitor,
+				&_domain->cache);
+	if (!ret) {
 		_domain->util_domain.domain_fid.mr = fi_ibv_mr_internal_cache_ops.fi_ops;
 		_domain->internal_mr_reg = fi_ibv_mr_internal_cache_ops.internal_mr_reg;
 		_domain->internal_mr_dereg = fi_ibv_mr_internal_cache_ops.internal_mr_dereg;
@@ -346,7 +342,7 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 		if (_domain->use_xrc) {
 			ret = fi_ibv_domain_xrc_init(_domain);
 			if (ret)
-				goto err5;
+				goto err4;
 		}
 		_domain->util_domain.domain_fid.ops = &fi_ibv_msg_domain_ops;
 		break;
@@ -354,7 +350,7 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 		VERBS_INFO(FI_LOG_DOMAIN, "Ivalid EP type is provided, "
 			   "EP type :%d\n", _domain->ep_type);
 		ret = -FI_EINVAL;
-		goto err3;
+		goto err4;
 	}
 
 	if (!strncmp(info->domain_attr->name, "hfi1", strlen("hfi1")) ||
@@ -368,10 +364,8 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 
 	*domain = &_domain->util_domain.domain_fid;
 	return FI_SUCCESS;
-err5:
-	if (fi_ibv_gl_data.mr_cache_enable)
-		ofi_mr_cache_cleanup(&_domain->cache);
 err4:
+	ofi_mr_cache_cleanup(&_domain->cache);
 	if (ibv_dealloc_pd(_domain->pd))
 		VERBS_INFO_ERRNO(FI_LOG_DOMAIN,
 				 "ibv_dealloc_pd", errno);
