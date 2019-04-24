@@ -26,7 +26,8 @@ _cxi_files = \
 	prov/cxi/src/cxip_rma.c \
 	prov/cxi/src/cxip_mr.c \
 	prov/cxi/src/cxip_msg.c \
-	prov/cxi/src/cxip_atomic.c
+	prov/cxi/src/cxip_atomic.c \
+	prov/cxi/src/cxip_iomm.c
 
 _cxi_headers = \
 	prov/cxi/include/cxip.h

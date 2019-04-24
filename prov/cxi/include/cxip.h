@@ -43,6 +43,14 @@
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 #endif
 
+#ifndef FLOOR
+#define FLOOR(a, b) ((long long)(a) - (((long long)(a)) % (b)))
+#endif
+
+#ifndef CEILING
+#define CEILING(a, b) ((long long)(a) <= 0LL ? 0 : (FLOOR((a)-1, b) + (b)))
+#endif
+
 #define CXIP_EP_MAX_MSG_SZ (1 << 23)
 #define CXIP_EP_MAX_INJECT_SZ ((1 << 8) - 1)
 #define CXIP_EP_MAX_BUFF_RECV (1 << 26)
@@ -325,6 +333,7 @@ struct cxip_pte {
  */
 struct cxip_fabric {
 	struct fid_fabric fab_fid;
+	struct util_fabric util_fabric;		// fabric used for MR cache
 	ofi_atomic32_t ref;
 	struct dlist_entry service_list;	// contains services (TODO)
 	struct dlist_entry fab_list_entry;	// attaches to cxip_fab_list
@@ -341,12 +350,16 @@ struct cxip_fabric {
 struct cxip_domain {
 	struct fid_domain dom_fid;
 	struct fi_info info;		// copy of user-supplied domain info
+	struct util_domain util_domain; // domain used for MR cache
 	struct cxip_fabric *fab;	// parent cxip_fabric
 	fastlock_t lock;
 	ofi_atomic32_t ref;
 
 	struct cxip_eq *eq;		// linked during cxip_dom_bind()
 	struct cxip_eq *mr_eq;		// == eq || == NULL
+	struct ofi_mr_cache iomm;	// IO Memory Map
+	struct ofi_mem_monitor iomm_mon;// IOMM monitor
+	fastlock_t iomm_lock;
 
 	enum fi_progress progress_mode;
 	struct dlist_entry dom_list_entry;
@@ -356,6 +369,12 @@ struct cxip_domain {
 	uint32_t nic_addr;		// dev address of source NIC
 	int enabled;			// set when domain is enabled
 	struct cxip_if *dev_if;		// looked when domain is enabled
+};
+
+/* CXI Provider Memory Descriptor */
+struct cxip_md {
+	struct cxip_domain *dom;
+	struct cxi_md *md;
 };
 
 // Apparently not yet in use (??)
@@ -381,18 +400,18 @@ struct cxip_eq {
  * Support structures, accumulated in a union.
  */
 struct cxip_req_rma {
-	struct cxi_md *local_md;	// RMA target buffer
+	struct cxip_md *local_md;	// RMA target buffer
 };
 
 struct cxip_req_amo {
-	struct cxi_md *local_md;	// RMA target buffer
+	struct cxip_md *local_md;	// RMA target buffer
 	void *result_buf;		// local buffer for fetch
 };
 
 struct cxip_req_recv {
 	struct cxip_rx_ctx *rxc;	// receive context
 	void *recv_buf;			// local receive buffer
-	struct cxi_md *recv_md;		// local receive MD
+	struct cxip_md *recv_md;	// local receive MD
 	int rc;				// result code
 	uint32_t rlength;		// receive length
 	uint32_t mlength;		// message length
@@ -402,7 +421,7 @@ struct cxip_req_recv {
 
 struct cxip_req_send {
 	void *buf;			// local send buffer
-	struct cxi_md *send_md;		// message target buffer
+	struct cxip_md *send_md;		// message target buffer
 	struct cxip_tx_ctx *txc;
 	size_t length;			// request length
 	int rdzv_id;			// SW RDZV ID for long messages
@@ -599,7 +618,7 @@ struct cxip_oflow_buf {
 	enum oflow_buf_type type;
 	struct cxip_rx_ctx *rxc;
 	void *buf;
-	struct cxi_md *md;
+	struct cxip_md *md;
 	ofi_atomic32_t ref;
 	int exhausted;
 	int buffer_id;
@@ -991,6 +1010,12 @@ void cxip_cntr_remove_rx_ctx(struct cxip_cntr *cntr,
 int cxip_cntr_progress(struct cxip_cntr *cntr);
 int cxip_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		   struct fid_cntr **cntr, void *context);
+
+int cxip_iomm_init(struct cxip_domain *dom);
+void cxip_iomm_fini(struct cxip_domain *dom);
+int cxip_map(struct cxip_domain *dom, void *buf, unsigned long len,
+	     struct cxip_md **md);
+void cxip_unmap(struct cxip_md *md);
 
 #define _CXIP_LOG_DBG(subsys, ...) FI_DBG(&cxip_prov, subsys, __VA_ARGS__)
 #define _CXIP_LOG_ERROR(subsys, ...) FI_WARN(&cxip_prov, subsys, __VA_ARGS__)

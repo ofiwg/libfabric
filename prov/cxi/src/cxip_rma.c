@@ -34,9 +34,7 @@ static void cxip_rma_cb(struct cxip_req *req, const union c_event *event)
 	int ret;
 	int event_rc;
 
-	ret = cxil_unmap(req->rma.local_md);
-	if (ret != FI_SUCCESS)
-		CXIP_LOG_ERROR("Failed to free MD: %d\n", ret);
+	cxip_unmap(req->rma.local_md);
 
 	event_rc = cxi_init_event_rc(event);
 	if (event_rc == C_RC_OK) {
@@ -64,7 +62,7 @@ static ssize_t _cxip_rma_op(enum cxip_rma_op op, struct fid_ep *ep,
 	struct cxip_tx_ctx *txc;
 	struct cxip_domain *dom;
 	int ret;
-	struct cxi_md *md;
+	struct cxip_md *md;
 	struct cxip_req *req;
 	union c_cmdu cmd = {};
 	struct cxip_addr caddr;
@@ -72,7 +70,6 @@ static ssize_t _cxip_rma_op(enum cxip_rma_op op, struct fid_ep *ep,
 	uint8_t idx_ext;
 	uint32_t pid_granule;
 	uint32_t pid_idx;
-	uint32_t map_flags = CXI_MAP_PIN | CXI_MAP_NTA;
 
 	if (!iov || !rma)
 		return -FI_EINVAL;
@@ -121,9 +118,7 @@ static ssize_t _cxip_rma_op(enum cxip_rma_op op, struct fid_ep *ep,
 	}
 
 	/* Map local buffer */
-	map_flags |= (op == CXIP_RMA_READ ? CXI_MAP_WRITE : CXI_MAP_READ);
-	ret = cxil_map(dom->dev_if->if_lni, iov[0].iov_base, iov[0].iov_len,
-		       map_flags, NULL, &md);
+	ret = cxip_map(dom, iov[0].iov_base, iov[0].iov_len, &md);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to map buffer: %d\n", ret);
 		return ret;
@@ -156,12 +151,12 @@ static ssize_t _cxip_rma_op(enum cxip_rma_op op, struct fid_ep *ep,
 		(op == CXIP_RMA_READ ? C_CMD_GET : C_CMD_PUT);
 	cmd.full_dma.command.cmd_type = C_CMD_TYPE_DMA;
 	cmd.full_dma.index_ext = idx_ext;
-	cmd.full_dma.lac = md->lac;
+	cmd.full_dma.lac = md->md->lac;
 	cmd.full_dma.event_send_disable = 1;
 	cmd.full_dma.restricted = 1;
 	cmd.full_dma.dfa = dfa;
 	cmd.full_dma.remote_offset = rma[0].addr;
-	cmd.full_dma.local_addr = CXI_VA_TO_IOVA(md, iov[0].iov_base);
+	cmd.full_dma.local_addr = CXI_VA_TO_IOVA(md->md, iov[0].iov_base);
 	cmd.full_dma.request_len = rma[0].len;
 	cmd.full_dma.eq = txc->comp.send_cq->evtq->eqn;
 	cmd.full_dma.user_ptr = (uint64_t)req;
@@ -190,7 +185,7 @@ unlock_op:
 	fastlock_release(&txc->lock);
 	cxip_cq_req_free(req);
 unmap_op:
-	cxil_unmap(md);
+	cxip_unmap(md);
 
 	return ret;
 }

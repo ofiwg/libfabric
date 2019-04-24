@@ -182,11 +182,21 @@ int cxip_domain_enable(struct cxip_domain *dom)
 		goto unlock;
 	}
 
+	ret = cxip_iomm_init(dom);
+	if (ret != FI_SUCCESS) {
+		CXIP_LOG_DBG("Failed to initialize IOMM: %d\n", ret);
+		ret = -FI_EDOMAIN;
+		goto put_if;
+	}
+
 	dom->enabled = 1;
 	fastlock_release(&dom->lock);
 
 	return FI_SUCCESS;
 
+put_if:
+	cxip_put_if(dom->dev_if);
+	dom->dev_if = NULL;
 unlock:
 	fastlock_release(&dom->lock);
 
@@ -199,6 +209,8 @@ static void cxip_domain_disable(struct cxip_domain *dom)
 
 	if (!dom->enabled)
 		goto unlock;
+
+	cxip_iomm_fini(dom);
 
 	cxip_put_if(dom->dev_if);
 
@@ -219,6 +231,7 @@ static int cxip_dom_close(struct fid *fid)
 
 	cxip_dom_remove_from_list(dom);
 	fastlock_destroy(&dom->lock);
+	ofi_domain_close(&dom->util_domain);
 	free(dom);
 
 	return 0;
@@ -325,12 +338,17 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 	if (!cxi_domain)
 		return -FI_ENOMEM;
 
+	ret = ofi_domain_init(&fab->util_fabric.fabric_fid, info,
+			      &cxi_domain->util_domain, context);
+	if (ret)
+		goto unlock;
+
 	fastlock_init(&cxi_domain->lock);
 	ofi_atomic_initialize32(&cxi_domain->ref, 0);
 
 	if (!info || !info->src_addr) {
 		CXIP_LOG_ERROR("Invalid fi_info\n");
-		goto unlock;
+		goto free_util_dom;
 	}
 
 	cxi_domain->info = *info;
@@ -362,6 +380,8 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 	cxip_dom_add_to_list(cxi_domain);
 	return 0;
 
+free_util_dom:
+	ofi_domain_close(&cxi_domain->util_domain);
 unlock:
 	fastlock_destroy(&cxi_domain->lock);
 	free(cxi_domain);

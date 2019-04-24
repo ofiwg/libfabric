@@ -334,6 +334,83 @@ Test(msg, sizes)
 	free(recv_buf);
 }
 
+/* Test send/recv sizes large to small (this exercises MR caching) */
+Test(msg, sizes_desc)
+{
+	int i, j, ret;
+	uint8_t *recv_buf,
+		*send_buf;
+	int recv_len = 64*1024; /* 128k fails */
+	int send_len = 64*1024;
+	struct fi_cq_tagged_entry tx_cqe,
+				  rx_cqe;
+	int err = 0;
+	fi_addr_t from;
+
+	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	cr_assert(recv_buf);
+	memset(recv_buf, 0, recv_len);
+
+	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	cr_assert(send_buf);
+
+	for (i = 0; i < send_len; i++)
+		send_buf[i] = i + 0xa0;
+
+	for (i = recv_len; i >= 1; i >>= 1) {
+		/* Post RX buffer */
+		ret = fi_recv(cxit_ep, recv_buf, i, NULL, FI_ADDR_UNSPEC,
+			      NULL);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_recv failed %d", ret);
+
+		/* Send 64 bytes to self */
+		ret = fi_send(cxit_ep, send_buf, i, NULL, cxit_ep_fi_addr,
+			      NULL);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_send failed %d", ret);
+
+		/* Wait for async event indicating data has been received */
+		do {
+			ret = fi_cq_readfrom(cxit_rx_cq, &rx_cqe, 1, &from);
+		} while (ret == -FI_EAGAIN);
+		cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
+
+		/* Validate RX event fields */
+		cr_assert(rx_cqe.op_context == NULL, "RX CQE Context mismatch");
+		cr_assert(rx_cqe.flags == (FI_MSG | FI_RECV),
+			  "RX CQE flags mismatch");
+		cr_assert(rx_cqe.len == i, "Invalid RX CQE length");
+		cr_assert(rx_cqe.buf == 0, "Invalid RX CQE address");
+		cr_assert(rx_cqe.data == 0, "Invalid RX CQE data");
+		cr_assert(rx_cqe.tag == 0, "Invalid RX CQE tag");
+		cr_assert(from == cxit_ep_fi_addr, "Invalid source address");
+
+		/* Wait for async event indicating data has been sent */
+		ret = cxit_await_completion(cxit_tx_cq, &tx_cqe);
+		cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
+
+		/* Validate TX event fields */
+		cr_assert(tx_cqe.op_context == NULL, "TX CQE Context mismatch");
+		cr_assert(tx_cqe.flags == (FI_MSG | FI_SEND),
+			  "TX CQE flags mismatch");
+		cr_assert(tx_cqe.len == 0, "Invalid TX CQE length");
+		cr_assert(tx_cqe.buf == 0, "Invalid TX CQE address");
+		cr_assert(tx_cqe.data == 0, "Invalid TX CQE data");
+		cr_assert(tx_cqe.tag == 0, "Invalid TX CQE tag");
+
+		/* Validate sent data */
+		for (j = 0; j < i; j++) {
+			cr_expect_eq(recv_buf[j], send_buf[j],
+				     "data mismatch, element[%d], exp=%d saw=%d, size:%d err=%d\n",
+				     j, send_buf[j], recv_buf[j], i, err++);
+		}
+	}
+
+	cr_assert_eq(err, 0, "Data errors seen\n");
+
+	free(send_buf);
+	free(recv_buf);
+}
+
 /* Test send/recv interoperability with tagged messaging */
 Test(msg, tagged_interop)
 {

@@ -327,6 +327,7 @@ static int cxip_fabric_close(fid_t fid)
 
 	cxip_fab_remove_from_list(fab);
 	fastlock_destroy(&fab->lock);
+	ofi_fabric_close(&fab->util_fabric);
 	free(fab);
 
 	return 0;
@@ -350,6 +351,7 @@ static int cxip_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 		       void *context)
 {
 	struct cxip_fabric *fab;
+	int ret;
 
 	if (slist_empty(&cxip_if_list)) {
 		CXIP_LOG_ERROR("Device not found\n");
@@ -359,6 +361,11 @@ static int cxip_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 	fab = calloc(1, sizeof(*fab));
 	if (!fab)
 		return -FI_ENOMEM;
+
+	ret = ofi_fabric_init(&cxip_prov, &cxip_fabric_attr, attr,
+			      &fab->util_fabric, context);
+	if (ret != FI_SUCCESS)
+		goto free_fab;
 
 	cxip_read_default_params();
 
@@ -375,6 +382,10 @@ static int cxip_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 	cxip_fab_add_to_list(fab);
 
 	return 0;
+
+free_fab:
+	free(fab);
+	return ret;
 }
 
 int cxip_get_src_addr(struct cxip_addr *dest_addr, struct cxip_addr *src_addr)

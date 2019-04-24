@@ -280,14 +280,10 @@ static void _cxip_amo_cb(struct cxip_req *req, const union c_event *event)
  */
 static void _cxip_famo_cb(struct cxip_req *req, const union c_event *event)
 {
-	int ret;
-
 	/* Free the temporary result buffer, if allocated (free is NULL-safe) */
 	free(req->amo.result_buf);
 
-	ret = cxil_unmap(req->amo.local_md);
-	if (ret != FI_SUCCESS)
-		CXIP_LOG_ERROR("Failed to free MD: %d\n", ret);
+	cxip_unmap(req->amo.local_md);
 
 	_cxip_amo_cb(req, event);
 }
@@ -353,7 +349,7 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 {
 	struct cxip_tx_ctx *txc;
 	struct cxip_if *dev_if;
-	struct cxi_md *result_md = NULL;
+	struct cxip_md *result_md = NULL;
 	struct cxip_addr caddr;
 	struct cxip_req *req;
 	enum c_atomic_op opcode;
@@ -544,16 +540,13 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 	/* Map local buffer for fetching AMO */
 	if (result) {
 		/* Map local buffer */
-		ret = cxil_map(dev_if->if_lni, result, len,
-			       CXI_MAP_PIN | CXI_MAP_NTA |
-			       CXI_MAP_READ | CXI_MAP_WRITE,
-			       NULL, &result_md);
+		ret = cxip_map(txc->domain, result, len, &result_md);
 		if (ret) {
 			CXIP_LOG_DBG("Failed to map result buffer: %d\n", ret);
 			return ret;
 		}
-		result_iova = CXI_VA_TO_IOVA(result_md, result);
-		result_lac = result_md->lac;
+		result_iova = CXI_VA_TO_IOVA(result_md->md, result);
+		result_lac = result_md->md->lac;
 	}
 
 	/* Allocate a CQ request */
@@ -633,7 +626,7 @@ unlock_amo:
 
 unmap_amo:
 	if (result_count)
-		cxil_unmap(result_md);
+		cxip_unmap(result_md);
 
 	return ret;
 }
