@@ -55,8 +55,10 @@ fi_ibv_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *entry,
 {
 	struct fi_ibv_eq *_eq =
 		container_of(eq, struct fi_ibv_eq, eq_fid.fid);
+	fastlock_acquire(&_eq->lock);
 	ofi_eq_handle_err_entry(_eq->fab->util_fabric.fabric_fid.api_version,
 				flags, &_eq->err, entry);
+	fastlock_release(&_eq->lock);
 	return sizeof(*entry);
 }
 
@@ -687,7 +689,7 @@ fi_ibv_eq_read(struct fid_eq *eq_fid, uint32_t *event,
 			goto ack;
 
 		if (flags & FI_PEEK)
-			ret = fi_ibv_eq_write_event(eq, *event, buf, len);
+			ret = fi_ibv_eq_write_event(eq, *event, buf, ret);
 ack:
 		if (!acked)
 			rdma_ack_cm_event(cma_event);
