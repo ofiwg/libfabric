@@ -18,7 +18,8 @@ _cxi_files = \
 	prov/cxi/src/cxip_dom.c \
 	prov/cxi/src/cxip_ep.c \
 	prov/cxi/src/cxip_ep_rdm.c \
-	prov/cxi/src/cxip_ctx.c \
+	prov/cxi/src/cxip_txc.c \
+	prov/cxi/src/cxip_rxc.c \
 	prov/cxi/src/cxip_av.c \
 	prov/cxi/src/cxip_cq.c \
 	prov/cxi/src/cxip_cntr.c \
