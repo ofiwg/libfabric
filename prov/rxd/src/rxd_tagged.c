@@ -48,7 +48,7 @@ ssize_t rxd_ep_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 	msg_iov.iov_len = len;
 
 	return rxd_ep_generic_recvmsg(ep, &msg_iov, 1, src_addr, tag, ignore,
-				      context, ofi_op_tagged,
+				      context, RXD_TAGGED,
 				      ep->rx_flags | RXD_TAG_HDR, 0);
 }
 
@@ -61,7 +61,7 @@ ssize_t rxd_ep_trecvv(struct fid_ep *ep_fid, const struct iovec *iov, void **des
 	ep = container_of(ep_fid, struct rxd_ep, util_ep.ep_fid.fid);
 
 	return rxd_ep_generic_recvmsg(ep, iov, count, src_addr, tag, ignore,
-				      context, ofi_op_tagged,
+				      context, RXD_TAGGED,
 				      ep->rx_flags | RXD_TAG_HDR, 0);
 }
 
@@ -74,7 +74,7 @@ ssize_t rxd_ep_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 
 	return rxd_ep_generic_recvmsg(ep, msg->msg_iov, msg->iov_count, msg->addr,
 				      msg->tag, msg->ignore, msg->context,
-				      ofi_op_tagged, rxd_rx_flags(flags |
+				      RXD_TAGGED, rxd_rx_flags(flags |
 				      ep->util_ep.rx_msg_flags) | RXD_TAG_HDR, flags);
 }
 
@@ -90,7 +90,7 @@ ssize_t rxd_ep_tsend(struct fid_ep *ep_fid, const void *buf, size_t len,
 	msg_iov.iov_len = len;
 
 	return rxd_ep_generic_sendmsg(ep, &msg_iov, 1, dest_addr, tag,
-				      0, context, ofi_op_tagged,
+				      0, context, RXD_TAGGED,
 				      ep->tx_flags | RXD_TAG_HDR);
 }
 
@@ -103,7 +103,7 @@ ssize_t rxd_ep_tsendv(struct fid_ep *ep_fid, const struct iovec *iov,
 	ep = container_of(ep_fid, struct rxd_ep, util_ep.ep_fid.fid);
 
 	return rxd_ep_generic_sendmsg(ep, iov, count, dest_addr, tag,
-				      0, context, ofi_op_tagged,
+				      0, context, RXD_TAGGED,
 				      ep->tx_flags | RXD_TAG_HDR);
 }
 
@@ -116,7 +116,7 @@ ssize_t rxd_ep_tsendmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 
 	return rxd_ep_generic_sendmsg(ep, msg->msg_iov, msg->iov_count,
 				      msg->addr, msg->tag, msg->data, msg->context,
-				      ofi_op_tagged, rxd_tx_flags(flags |
+				      RXD_TAGGED, rxd_tx_flags(flags |
 				      ep->util_ep.tx_msg_flags) | RXD_TAG_HDR);
 }
 
@@ -132,7 +132,7 @@ ssize_t rxd_ep_tinject(struct fid_ep *ep_fid, const void *buf, size_t len,
 	iov.iov_len = len;
 
 	return rxd_ep_generic_inject(ep, &iov, 1, dest_addr, tag, 0,
-				     ofi_op_tagged, RXD_NO_TX_COMP | RXD_INJECT |
+				     RXD_TAGGED, RXD_NO_TX_COMP | RXD_INJECT |
 				     RXD_TAG_HDR);
 }
 
@@ -149,7 +149,7 @@ ssize_t rxd_ep_tsenddata(struct fid_ep *ep_fid, const void *buf, size_t len,
 	iov.iov_len = len;
 
 	return rxd_ep_generic_sendmsg(ep, &iov, 1, dest_addr, tag, data, context,
-				      ofi_op_tagged, ep->tx_flags |
+				      RXD_TAGGED, ep->tx_flags |
 				      RXD_REMOTE_CQ_DATA | RXD_TAG_HDR);
 }
 
@@ -164,7 +164,7 @@ ssize_t rxd_ep_tinjectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
 	iov.iov_base = (void *) buf;
 	iov.iov_len = len;
 
-	return rxd_ep_generic_inject(ep, &iov, 1, dest_addr, tag, data, ofi_op_tagged,
+	return rxd_ep_generic_inject(ep, &iov, 1, dest_addr, tag, data, RXD_TAGGED,
 				     RXD_NO_TX_COMP | RXD_INJECT |
 				     RXD_REMOTE_CQ_DATA | RXD_TAG_HDR);
 }

@@ -76,7 +76,7 @@ static struct rxd_pkt_entry *rxd_get_rx_pkt(struct rxd_ep *ep)
 struct rxd_x_entry *rxd_get_tx_entry(struct rxd_ep *ep, uint32_t op)
 {
 	struct rxd_x_entry *tx_entry;
-	size_t *avail = op <= ofi_op_tagged ? &ep->tx_msg_avail :
+	size_t *avail = op <= RXD_TAGGED ? &ep->tx_msg_avail :
 			&ep->tx_rma_avail;
 
 	if (!(*avail)) {
@@ -97,7 +97,7 @@ struct rxd_x_entry *rxd_get_tx_entry(struct rxd_ep *ep, uint32_t op)
 struct rxd_x_entry *rxd_get_rx_entry(struct rxd_ep *ep, uint32_t op)
 {
 	struct rxd_x_entry *rx_entry;
-	size_t *avail = op <= ofi_op_tagged ? &ep->rx_msg_avail :
+	size_t *avail = op <= RXD_TAGGED ? &ep->rx_msg_avail :
 			&ep->rx_rma_avail;
 
 	if (!(*avail)) {
@@ -427,7 +427,7 @@ struct rxd_x_entry *rxd_tx_entry_init(struct rxd_ep *ep, const struct iovec *iov
 
 void rxd_tx_entry_free(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
 {
-	tx_entry->op <= ofi_op_tagged ? ep->tx_msg_avail++ : ep->tx_rma_avail++;
+	tx_entry->op <= RXD_TAGGED ? ep->tx_msg_avail++ : ep->tx_rma_avail++;
 	tx_entry->op = RXD_NO_OP;
 	dlist_remove(&tx_entry->entry);
 	ofi_ibuf_free(tx_entry);

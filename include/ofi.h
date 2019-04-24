@@ -201,7 +201,6 @@ uint64_t fi_gettime_ms(void);
 uint64_t fi_gettime_us(void);
 
 #define OFI_ENUM_VAL(X) X
-#define OFI_ENUM_VAL_EX(X, VAL) X = VAL
 #define OFI_STR(X) #X
 #define OFI_STR_INT(X) OFI_STR(X)
 
