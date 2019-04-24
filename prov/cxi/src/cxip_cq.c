@@ -163,6 +163,11 @@ void cxip_cq_progress(struct cxip_cq *cq)
 	if (events)
 		cxi_eq_ack_events(cq->evtq);
 
+	if (cxi_eq_get_drops(cq->evtq)) {
+		CXIP_LOG_ERROR("EQ drops detected\n");
+		abort();
+	}
+
 out:
 	fastlock_release(&cq->lock);
 }
@@ -541,7 +546,7 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq)
 		goto unlock;
 
 	/* TODO set EVTQ size with CQ attrs */
-	cxi_cq->evtq_buf_len = C_PAGE_SIZE;
+	cxi_cq->evtq_buf_len = C_PAGE_SIZE * 64;
 	cxi_cq->evtq_buf = aligned_alloc(C_PAGE_SIZE,
 					 cxi_cq->evtq_buf_len);
 	if (!cxi_cq->evtq_buf) {
