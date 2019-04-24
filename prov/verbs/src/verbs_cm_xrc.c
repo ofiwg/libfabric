@@ -183,6 +183,9 @@ void fi_ibv_free_xrc_conn_setup(struct fi_ibv_xrc_ep *ep)
 		ibv_destroy_qp(ep->conn_setup->rsvd_tgt_qpn);
 	}
 
+	if (ep->conn_setup->conn_tag != VERBS_CONN_TAG_INVALID)
+		fi_ibv_eq_clear_xrc_conn_tag(ep);
+
 	free(ep->conn_setup);
 	ep->conn_setup = NULL;
 }
@@ -210,6 +213,7 @@ int fi_ibv_connect_xrc(struct fi_ibv_xrc_ep *ep, struct sockaddr *addr,
 		ep->conn_setup = calloc(1, sizeof(*ep->conn_setup));
 		if (!ep->conn_setup)
 			return -FI_ENOMEM;
+		ep->conn_setup->conn_tag = VERBS_CONN_TAG_INVALID;
 	}
 
 	fastlock_acquire(&domain->xrc.ini_mgmt_lock);
@@ -326,9 +330,7 @@ int fi_ibv_accept_xrc(struct fi_ibv_xrc_ep *ep, int reciprocal,
 	if (!ep->tgt_id->qp)
 		conn_param.qp_num = ep->conn_setup->rsvd_tgt_qpn->qp_num;
 
-	if (connreq->xrc.is_reciprocal)
-		fi_ibv_eq_clear_xrc_conn_tag(ep);
-	else
+	if (!connreq->xrc.is_reciprocal)
 		ep->conn_setup->conn_tag = connreq->xrc.conn_tag;
 
 	assert(ep->conn_state == FI_IBV_XRC_UNCONNECTED ||
