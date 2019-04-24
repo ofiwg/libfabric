@@ -114,7 +114,7 @@ static int issue_unlink_le(struct cxil_pte *pte, enum c_ptl_list list,
  * Caller must hold rxc->lock.
  */
 static struct cxip_ux_send *
-match_ux_send(struct cxip_rx_ctx *rxc, const union c_event *event)
+match_ux_send(struct cxip_rxc *rxc, const union c_event *event)
 {
 	struct cxip_ux_send *ux_send;
 
@@ -139,7 +139,7 @@ match_ux_send(struct cxip_rx_ctx *rxc, const union c_event *event)
  * Caller must hold rxc->lock.
  */
 static struct cxip_req *
-match_ux_recv(struct cxip_rx_ctx *rxc, const union c_event *event)
+match_ux_recv(struct cxip_rxc *rxc, const union c_event *event)
 {
 	struct cxip_req *req;
 
@@ -225,7 +225,7 @@ static int rdzv_issue_get(struct cxip_req *req, struct cxip_ux_send *ux_send)
 	uint8_t idx_ext;
 	union c_cmdu cmd = {};
 	int ret;
-	struct cxip_rx_ctx *rxc = req->recv.rxc;
+	struct cxip_rxc *rxc = req->recv.rxc;
 	uint32_t pid_bits = rxc->domain->dev_if->if_dev->info.pid_bits;
 	uint32_t nic;
 	uint32_t pid;
@@ -292,7 +292,7 @@ unlock:
 	return ret;
 }
 
-int cxip_rxc_eager_replenish(struct cxip_rx_ctx *rxc);
+int cxip_rxc_eager_replenish(struct cxip_rxc *rxc);
 
 /*
  * cxip_oflow_cb() - Process an overflow buffer event.
@@ -331,7 +331,7 @@ int cxip_rxc_eager_replenish(struct cxip_rx_ctx *rxc);
  */
 static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 {
-	struct cxip_rx_ctx *rxc = req->oflow.rxc;
+	struct cxip_rxc *rxc = req->oflow.rxc;
 	struct cxip_req *ux_recv;
 	struct cxip_ux_send *ux_send;
 	struct cxip_oflow_buf *oflow_buf;
@@ -483,7 +483,7 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
  * eager_buf_add() - Append a Locally Managed LE to the Overflow list to match
  * eager Sends.
  */
-static int eager_buf_add(struct cxip_rx_ctx *rxc)
+static int eager_buf_add(struct cxip_rxc *rxc)
 {
 	struct cxip_domain *dom;
 	int ret;
@@ -584,7 +584,7 @@ free_oflow:
 /*
  * cxip_rxc_eager_replenish() - Replenish RXC eager overflow buffers.
  */
-int cxip_rxc_eager_replenish(struct cxip_rx_ctx *rxc)
+int cxip_rxc_eager_replenish(struct cxip_rxc *rxc)
 {
 	int ret;
 
@@ -610,7 +610,7 @@ int cxip_rxc_eager_replenish(struct cxip_rx_ctx *rxc)
  *
  * Caller must hold rxc->lock.
  */
-static void cxip_rxc_eager_fini(struct cxip_rx_ctx *rxc)
+static void cxip_rxc_eager_fini(struct cxip_rxc *rxc)
 {
 	int ret;
 	union c_cmdu cmd = {};
@@ -664,7 +664,7 @@ static void cxip_rxc_eager_fini(struct cxip_rx_ctx *rxc)
 /*
  * cxip_rxc_sink_init() - Initialize RXC sink buffer.
  */
-static int cxip_rxc_sink_init(struct cxip_rx_ctx *rxc)
+static int cxip_rxc_sink_init(struct cxip_rxc *rxc)
 {
 	struct cxip_domain *dom;
 	int ret;
@@ -756,7 +756,7 @@ free_ux_buf:
  *
  * Caller must hold rxc->lock.
  */
-static void cxip_rxc_sink_fini(struct cxip_rx_ctx *rxc)
+static void cxip_rxc_sink_fini(struct cxip_rxc *rxc)
 {
 	int ret;
 
@@ -778,9 +778,9 @@ static void cxip_rxc_sink_fini(struct cxip_rx_ctx *rxc)
 }
 
 /*
- * cxip_rxc_msg_init() - Initialize RXC messaging resources.
+ * cxip_msg_oflow_init() - Initialize overflow buffers used for messaging.
  */
-int cxip_rxc_msg_init(struct cxip_rx_ctx *rxc)
+int cxip_msg_oflow_init(struct cxip_rxc *rxc)
 {
 	int ret;
 
@@ -803,11 +803,11 @@ int cxip_rxc_msg_init(struct cxip_rx_ctx *rxc)
 }
 
 /*
- * cxip_rxc_msg_fini() - Tear down RXC messaging resources.
+ * cxip_msg_oflow_fini() - Finalize overflow buffers used for messaging.
  *
  * Caller must hold rxc->lock.
  */
-void cxip_rxc_msg_fini(struct cxip_rx_ctx *rxc)
+void cxip_msg_oflow_fini(struct cxip_rxc *rxc)
 {
 	cxip_rxc_sink_fini(rxc);
 
@@ -817,7 +817,7 @@ void cxip_rxc_msg_fini(struct cxip_rx_ctx *rxc)
 /*
  * _rxc_event_src_addr() - Translate CXI event initiator to FI address.
  */
-static fi_addr_t _rxc_event_src_addr(struct cxip_rx_ctx *rxc,
+static fi_addr_t _rxc_event_src_addr(struct cxip_rxc *rxc,
 				     const union c_event *event)
 {
 	/* If the FI_SOURCE capability is enabled, convert the initiator's
@@ -883,7 +883,7 @@ static fi_addr_t _rxc_event_src_addr(struct cxip_rx_ctx *rxc,
 static void cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 {
 	int ret;
-	struct cxip_rx_ctx *rxc = req->recv.rxc;
+	struct cxip_rxc *rxc = req->recv.rxc;
 	struct cxip_ux_send *ux_send;
 	struct cxip_oflow_buf *oflow_buf;
 	void *oflow_va;
@@ -1056,7 +1056,7 @@ static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 			  void *context, uint64_t flags, bool tagged)
 {
 	struct cxip_ep *cxi_ep;
-	struct cxip_rx_ctx *rxc;
+	struct cxip_rxc *rxc;
 	struct cxip_domain *dom;
 	int ret;
 	struct cxip_md *recv_md;
@@ -1076,11 +1076,11 @@ static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	switch (ep->fid.fclass) {
 	case FI_CLASS_EP:
 		cxi_ep = container_of(ep, struct cxip_ep, ep);
-		rxc = cxi_ep->ep_obj->rx_ctx;
+		rxc = cxi_ep->ep_obj->rxc;
 		break;
 
 	case FI_CLASS_RX_CTX:
-		rxc = container_of(ep, struct cxip_rx_ctx, ctx);
+		rxc = container_of(ep, struct cxip_rxc, ctx);
 		break;
 
 	default:

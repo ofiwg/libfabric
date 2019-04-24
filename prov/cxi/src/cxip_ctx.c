@@ -15,8 +15,15 @@
 #define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_EP_CTRL, __VA_ARGS__)
 #define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_EP_CTRL, __VA_ARGS__)
 
-/* Caller must hold rxc->lock */
-static int rx_ctx_msg_init(struct cxip_rx_ctx *rxc)
+/*
+ * rxc_msg_init() - Initialize an RX context for messaging.
+ *
+ * Allocates and initializes hardware resources used for receiving expected and
+ * unexpected message data.
+ *
+ * Caller must hold rxc->lock.
+ */
+static int rxc_msg_init(struct cxip_rxc *rxc)
 {
 	int ret;
 	union c_cmdu cmd = {};
@@ -69,15 +76,28 @@ free_rx_pte:
 	return ret;
 }
 
-/* Caller must hold rxc->lock */
-static int rx_ctx_recv_fini(struct cxip_rx_ctx *rxc)
+/*
+ * rxc_msg_fini() - Finalize RX context messaging.
+ *
+ * Free hardware resources allocated when the RX context was initialized for
+ * messaging.
+ *
+ * Caller must hold rxc->lock.
+ */
+static int rxc_msg_fini(struct cxip_rxc *rxc)
 {
 	cxip_pte_free(rxc->rx_pte);
 
 	return FI_SUCCESS;
 }
 
-int cxip_rx_ctx_enable(struct cxip_rx_ctx *rxc)
+/*
+ * cxip_rxc_enable() - Enable an RX context for use.
+ *
+ * Called via fi_enable(). The context could be used in a standard endpoint or
+ * a scalable endpoint.
+ */
+int cxip_rxc_enable(struct cxip_rxc *rxc)
 {
 	int ret = FI_SUCCESS;
 	int tmp;
@@ -121,9 +141,9 @@ int cxip_rx_ctx_enable(struct cxip_rx_ctx *rxc)
 		goto free_rx_cmdq;
 	}
 
-	ret = rx_ctx_msg_init(rxc);
+	ret = rxc_msg_init(rxc);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("rx_ctx_msg_init returned: %d\n", ret);
+		CXIP_LOG_DBG("rxc_msg_init returned: %d\n", ret);
 		ret = -FI_EDOMAIN;
 		goto free_tx_cmdq;
 	}
@@ -132,9 +152,9 @@ int cxip_rx_ctx_enable(struct cxip_rx_ctx *rxc)
 
 	fastlock_release(&rxc->lock);
 
-	ret = cxip_rxc_msg_init(rxc);
+	ret = cxip_msg_oflow_init(rxc);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("cxip_rxc_msg_init returned: %d\n", ret);
+		CXIP_LOG_DBG("cxip_msg_oflow_init returned: %d\n", ret);
 		goto free_tx_cmdq;
 	}
 
@@ -154,7 +174,14 @@ unlock:
 	return ret;
 }
 
-static void rx_ctx_disable(struct cxip_rx_ctx *rxc)
+/*
+ * cxip_rxc_disable() - Disable an RX context.
+ *
+ * Free hardware resources allocated when the context was enabled. Called via
+ * fi_close(). The context could be used in a standard endpoint or a scalable
+ * endpoint.
+ */
+static void rxc_disable(struct cxip_rxc *rxc)
 {
 	int ret;
 
@@ -163,11 +190,11 @@ static void rx_ctx_disable(struct cxip_rx_ctx *rxc)
 	if (!rxc->enabled)
 		goto unlock;
 
-	cxip_rxc_msg_fini(rxc);
+	cxip_msg_oflow_fini(rxc);
 
-	ret = rx_ctx_recv_fini(rxc);
+	ret = rxc_msg_fini(rxc);
 	if (ret)
-		CXIP_LOG_ERROR("rx_ctx_recv_fini returned: %d\n", ret);
+		CXIP_LOG_ERROR("rxc_msg_fini returned: %d\n", ret);
 
 	ret = cxil_destroy_cmdq(rxc->rx_cmdq);
 	if (ret)
@@ -182,45 +209,53 @@ unlock:
 	fastlock_release(&rxc->lock);
 }
 
-struct cxip_rx_ctx *cxip_rx_ctx_alloc(const struct fi_rx_attr *attr,
-				      void *context, int use_shared)
+/*
+ * cxip_rxc_alloc() - Allocate an RX context.
+ *
+ * Used to support creating an RX context for fi_endpoint() or fi_rx_context().
+ */
+struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr, void *context,
+				int use_shared)
 {
-	struct cxip_rx_ctx *rx_ctx;
+	struct cxip_rxc *rxc;
 
-	rx_ctx = calloc(1, sizeof(*rx_ctx));
-	if (!rx_ctx)
+	rxc = calloc(1, sizeof(*rxc));
+	if (!rxc)
 		return NULL;
 
-	dlist_init(&rx_ctx->cq_entry);
-	dlist_init(&rx_ctx->ep_list);
-	fastlock_init(&rx_ctx->lock);
+	dlist_init(&rxc->cq_entry);
+	dlist_init(&rxc->ep_list);
+	fastlock_init(&rxc->lock);
 
-	rx_ctx->ctx.fid.fclass = FI_CLASS_RX_CTX;
-	rx_ctx->ctx.fid.context = context;
-	rx_ctx->num_left = attr->size;
-	rx_ctx->attr = *attr;
-	rx_ctx->use_shared = use_shared;
+	rxc->ctx.fid.fclass = FI_CLASS_RX_CTX;
+	rxc->ctx.fid.context = context;
+	rxc->num_left = attr->size;
+	rxc->attr = *attr;
+	rxc->use_shared = use_shared;
 
-	ofi_atomic_initialize32(&rx_ctx->oflow_buf_cnt, 0);
-	ofi_atomic_initialize32(&rx_ctx->ux_sink_buf.ref, 0);
-	dlist_init(&rx_ctx->oflow_bufs);
-	dlist_init(&rx_ctx->ux_sends);
-	dlist_init(&rx_ctx->ux_recvs);
+	ofi_atomic_initialize32(&rxc->oflow_buf_cnt, 0);
+	ofi_atomic_initialize32(&rxc->ux_sink_buf.ref, 0);
+	dlist_init(&rxc->oflow_bufs);
+	dlist_init(&rxc->ux_sends);
+	dlist_init(&rxc->ux_recvs);
 
 	/* TODO make configurable */
-	rx_ctx->eager_threshold = CXIP_EAGER_THRESHOLD;
-	rx_ctx->oflow_bufs_max = CXIP_MAX_OFLOW_BUFS;
-	rx_ctx->oflow_msgs_max = CXIP_MAX_OFLOW_MSGS;
-	rx_ctx->oflow_buf_size = CXIP_MAX_OFLOW_MSGS * CXIP_EAGER_THRESHOLD;
+	rxc->eager_threshold = CXIP_EAGER_THRESHOLD;
+	rxc->oflow_bufs_max = CXIP_MAX_OFLOW_BUFS;
+	rxc->oflow_msgs_max = CXIP_MAX_OFLOW_MSGS;
+	rxc->oflow_buf_size = CXIP_MAX_OFLOW_MSGS * CXIP_EAGER_THRESHOLD;
 
-	return rx_ctx;
+	return rxc;
 }
 
-void cxip_rx_ctx_free(struct cxip_rx_ctx *rx_ctx)
+/*
+ * cxip_rxc_free() - Free an RX context allocated using cxip_rxc_alloc()
+ */
+void cxip_rxc_free(struct cxip_rxc *rxc)
 {
-	rx_ctx_disable(rx_ctx);
-	fastlock_destroy(&rx_ctx->lock);
-	free(rx_ctx);
+	rxc_disable(rxc);
+	fastlock_destroy(&rxc->lock);
+	free(rxc);
 }
 
 /* Caller must hold txc->lock */

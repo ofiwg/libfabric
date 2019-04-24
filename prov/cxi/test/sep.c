@@ -256,7 +256,7 @@ Test(sep, ctx_rx)
 {
 	int ret;
 	struct cxip_ep *cxi_ep;
-	struct cxip_rx_ctx *rx_ctx;
+	struct cxip_rxc *rxc;
 	struct fid_ep *rx_ep = NULL;
 	struct fid_ep *rx_ep2 = NULL;
 	void *context = &ret;
@@ -278,20 +278,20 @@ Test(sep, ctx_rx)
 	cr_assert_null(rx_ep2);
 
 	/* Validate RX ctx */
-	rx_ctx = container_of(rx_ep, struct cxip_rx_ctx, ctx);
-	cr_assert_eq(rx_ctx->ep_obj, cxi_ep->ep_obj);
-	cr_assert_eq(rx_ctx->domain, cxi_ep->ep_obj->domain);
-	cr_assert_eq(rx_ctx->min_multi_recv, cxi_ep->ep_obj->min_multi_recv);
-	cr_assert_eq(ofi_atomic_get32(&cxi_ep->ep_obj->num_rx_ctx), 1);
-	cr_assert_eq(rx_ctx->ctx.fid.fclass, FI_CLASS_RX_CTX);
-	cr_assert_eq(rx_ctx->ctx.fid.context, context);
+	rxc = container_of(rx_ep, struct cxip_rxc, ctx);
+	cr_assert_eq(rxc->ep_obj, cxi_ep->ep_obj);
+	cr_assert_eq(rxc->domain, cxi_ep->ep_obj->domain);
+	cr_assert_eq(rxc->min_multi_recv, cxi_ep->ep_obj->min_multi_recv);
+	cr_assert_eq(ofi_atomic_get32(&cxi_ep->ep_obj->num_rxc), 1);
+	cr_assert_eq(rxc->ctx.fid.fclass, FI_CLASS_RX_CTX);
+	cr_assert_eq(rxc->ctx.fid.context, context);
 
 	/* Make sure this went where we wanted it */
-	cr_assert_not_null(rx_ctx->ep_obj->rx_array);
-	cr_assert_null(rx_ctx->ep_obj->rx_ctx);
-	for (i = 0; i < rx_ctx->ep_obj->ep_attr.rx_ctx_cnt; i++) {
-		struct cxip_rx_ctx *ctx = rx_ctx->ep_obj->rx_array[i];
-		struct cxip_rx_ctx *exp = (i == idx) ? rx_ctx : NULL;
+	cr_assert_not_null(rxc->ep_obj->rx_array);
+	cr_assert_null(rxc->ep_obj->rxc);
+	for (i = 0; i < rxc->ep_obj->ep_attr.rx_ctx_cnt; i++) {
+		struct cxip_rxc *ctx = rxc->ep_obj->rx_array[i];
+		struct cxip_rxc *exp = (i == idx) ? rxc : NULL;
 
 		cr_assert_eq(ctx, exp,
 			     "mismatch on index %d, exp=%p, saw=%p\n",
@@ -361,8 +361,8 @@ void cxit_setup_sep(int ntx, int nrx, int nmr, int buf_size)
 	cxit_create_av();	// cxit_av
 
 	av = container_of(cxit_av, struct cxip_av, av_fid);
-	cr_assert_eq(av->rx_ctx_bits, CXIP_EP_MAX_CTX_BITS,
-		     "av->rx_ctx_bits = %d\n", av->rx_ctx_bits);
+	cr_assert_eq(av->rxc_bits, CXIP_EP_MAX_CTX_BITS,
+		     "av->rxc_bits = %d\n", av->rxc_bits);
 
 	ret = fi_ep_bind(cxit_sep, &cxit_av->fid, 0);
 	cr_assert_eq(ret, FI_SUCCESS, "bad retval = %d\n", ret);
@@ -456,7 +456,7 @@ void cxit_setup_sep(int ntx, int nrx, int nmr, int buf_size)
 	 * use, one for each target RX.
 	 */
 	for (i = 0; i < cxit_sep_rx_cnt; i++) {
-		cxit_sep_rx_addr[i] = fi_rx_addr(dest_addr, i, av->rx_ctx_bits);
+		cxit_sep_rx_addr[i] = fi_rx_addr(dest_addr, i, av->rxc_bits);
 	}
 
 	/* Post a single buffer to each RX */

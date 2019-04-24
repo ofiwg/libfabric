@@ -198,7 +198,7 @@ Test(ep, ep_bind_cq)
 	struct cxip_ep *ep;
 	struct cxip_cq *rx_cq, *tx_cq;
 	struct cxip_tx_ctx *tx_ctx = NULL;
-	struct cxip_rx_ctx *rx_ctx = NULL;
+	struct cxip_rxc *rxc = NULL;
 
 	cxit_create_ep();
 	cxit_create_cqs();
@@ -226,16 +226,16 @@ Test(ep, ep_bind_cq)
 	cr_assert_not_null(tx_ctx);
 
 	for (size_t i = 0; i < ep->ep_obj->ep_attr.rx_ctx_cnt; i++) {
-		rx_ctx = ep->ep_obj->rx_array[i];
+		rxc = ep->ep_obj->rx_array[i];
 
-		if (!rx_ctx)
+		if (!rxc)
 			continue;
 
-		cr_assert_eq(rx_ctx->ctx.fid.fclass, FI_CLASS_RX_CTX);
-		cr_assert_eq(rx_ctx->comp.recv_cq, rx_cq);
+		cr_assert_eq(rxc->ctx.fid.fclass, FI_CLASS_RX_CTX);
+		cr_assert_eq(rxc->comp.recv_cq, rx_cq);
 		break;
 	}
-	cr_assert_not_null(rx_ctx);
+	cr_assert_not_null(rxc);
 
 	cxit_destroy_ep();
 	cxit_destroy_cqs();
@@ -931,7 +931,7 @@ Test(ep, srx_ctx)
 	struct fid_ep *srx;
 	void *context = &ret;
 	struct cxip_domain *dom;
-	struct cxip_rx_ctx *rx_ctx;
+	struct cxip_rxc *rxc;
 	int refs;
 
 	dom = container_of(cxit_domain, struct cxip_domain, dom_fid);
@@ -943,16 +943,16 @@ Test(ep, srx_ctx)
 	if (ret == -FI_ENOSYS)
 		return;
 
-	rx_ctx = container_of(srx, struct cxip_rx_ctx, ctx);
+	rxc = container_of(srx, struct cxip_rxc, ctx);
 
 	/* Validate stx */
-	cr_assert_eq(rx_ctx->domain, dom);
+	cr_assert_eq(rxc->domain, dom);
 	cr_assert_eq(ofi_atomic_inc32(&dom->ref), refs + 1);
-	cr_assert_eq(rx_ctx->ctx.fid.fclass, FI_CLASS_SRX_CTX);
-	cr_assert_eq(rx_ctx->ctx.fid.fclass, FI_CLASS_RX_CTX);
-	cr_assert_eq(rx_ctx->ctx.fid.context, context);
-	cr_assert_eq(rx_ctx->enabled, 1);
-	cr_assert_eq(rx_ctx->min_multi_recv, CXIP_EP_MIN_MULTI_RECV);
+	cr_assert_eq(rxc->ctx.fid.fclass, FI_CLASS_SRX_CTX);
+	cr_assert_eq(rxc->ctx.fid.fclass, FI_CLASS_RX_CTX);
+	cr_assert_eq(rxc->ctx.fid.context, context);
+	cr_assert_eq(rxc->enabled, 1);
+	cr_assert_eq(rxc->min_multi_recv, CXIP_EP_MIN_MULTI_RECV);
 
 	ret = fi_close(&srx->fid);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_close srx_ep. %d", ret);

@@ -46,10 +46,10 @@ void cxip_cntr_remove_tx_ctx(struct cxip_cntr *cntr, struct cxip_tx_ctx *tx_ctx)
 	ofi_atomic_dec32(&cntr->ref);
 }
 
-void cxip_cntr_add_rx_ctx(struct cxip_cntr *cntr, struct cxip_rx_ctx *rx_ctx)
+void cxip_cntr_add_rxc(struct cxip_cntr *cntr, struct cxip_rxc *rxc)
 {
 	int ret;
-	struct fid *fid = &rx_ctx->ctx.fid;
+	struct fid *fid = &rxc->ctx.fid;
 
 	ret = fid_list_insert(&cntr->rx_list, &cntr->list_lock, fid);
 	if (ret)
@@ -58,9 +58,9 @@ void cxip_cntr_add_rx_ctx(struct cxip_cntr *cntr, struct cxip_rx_ctx *rx_ctx)
 		ofi_atomic_inc32(&cntr->ref);
 }
 
-void cxip_cntr_remove_rx_ctx(struct cxip_cntr *cntr, struct cxip_rx_ctx *rx_ctx)
+void cxip_cntr_remove_rxc(struct cxip_cntr *cntr, struct cxip_rxc *rxc)
 {
-	struct fid *fid = &rx_ctx->ctx.fid;
+	struct fid *fid = &rxc->ctx.fid;
 
 	fid_list_remove(&cntr->rx_list, &cntr->list_lock, fid);
 	ofi_atomic_dec32(&cntr->ref);

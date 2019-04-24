@@ -204,7 +204,7 @@ struct cxip_addr {
 
 #define CXIP_AV_ADDR_IDX(av, fi_addr) ((uint64_t)fi_addr & av->mask)
 #define CXIP_AV_ADDR_RXC(av, fi_addr) \
-	(av->rx_ctx_bits ? ((uint64_t)fi_addr >> (64 - av->rx_ctx_bits)) : 0)
+	(av->rxc_bits ? ((uint64_t)fi_addr >> (64 - av->rxc_bits)) : 0)
 
 /* Messaging Match Bit layout */
 #define RDZV_ID_LO_WIDTH 14
@@ -409,7 +409,7 @@ struct cxip_req_amo {
 };
 
 struct cxip_req_recv {
-	struct cxip_rx_ctx *rxc;	// receive context
+	struct cxip_rxc *rxc;		// receive context
 	void *recv_buf;			// local receive buffer
 	struct cxip_md *recv_md;	// local receive MD
 	int rc;				// result code
@@ -431,9 +431,8 @@ struct cxip_req_send {
 };
 
 struct cxip_req_oflow {
-	struct cxip_rx_ctx *rxc;	// ??
+	struct cxip_rxc *rxc;
 	struct cxip_oflow_buf *oflow_buf;
-					// ??
 };
 
 /**
@@ -616,7 +615,7 @@ enum oflow_buf_type {
 struct cxip_oflow_buf {
 	struct dlist_entry list;
 	enum oflow_buf_type type;
-	struct cxip_rx_ctx *rxc;
+	struct cxip_rxc *rxc;
 	void *buf;
 	struct cxip_md *md;
 	ofi_atomic32_t ref;
@@ -629,9 +628,9 @@ struct cxip_oflow_buf {
  *
  * Support structure.
  *
- * Created in cxip_rx_ctx_alloc(), during EP creation.
+ * Created in cxip_rxc(), during EP creation.
  */
-struct cxip_rx_ctx {
+struct cxip_rxc {
 	struct fid_ep ctx;
 
 	uint16_t rx_id;			// SEP index
@@ -644,7 +643,7 @@ struct cxip_rx_ctx {
 	size_t min_multi_recv;
 	uint64_t addr;
 	struct cxip_comp comp;
-	struct cxip_rx_ctx *srx_ctx;
+	struct cxip_rxc *srx;
 
 	struct cxip_ep_obj *ep_obj;	// parent EP object
 	struct cxip_domain *domain;	// parent domain
@@ -746,17 +745,17 @@ struct cxip_ep_obj {
 	struct cxip_domain *domain;	// parent domain
 
 	/* TX/RX context pointers for standard EPs. */
-	struct cxip_rx_ctx *rx_ctx;	// rx_array[0] || NULL
+	struct cxip_rxc *rxc;		// rx_array[0] || NULL
 	struct cxip_tx_ctx *tx_ctx;	// tx_array[0] || NULL
 
 	/* TX/RX contexts.  Standard EPs have 1 of each.  SEPs have many. */
-	struct cxip_rx_ctx **rx_array;	// rx contexts
+	struct cxip_rxc **rx_array;	// rx contexts
 	struct cxip_tx_ctx **tx_array;	// tx contexts
-	ofi_atomic32_t num_rx_ctx;	// num rx contexts (>= 1)
+	ofi_atomic32_t num_rxc;	// num rx contexts (>= 1)
 	ofi_atomic32_t num_tx_ctx;	// num tx contexts (>= 1)
 
 	/* List of shared contexts associated with the EP.  Necessary? */
-	struct dlist_entry rx_ctx_entry;
+	struct dlist_entry rxc_entry;
 	struct dlist_entry tx_ctx_entry;
 
 	struct fi_info info;		// TODO: use this properly
@@ -849,8 +848,8 @@ struct cxip_av {
 	struct cxip_domain *domain;	// parent domain
 	ofi_atomic32_t ref;
 	struct fi_av_attr attr;		// copy of user attributes
-	uint64_t mask;			// mask with rx_ctx_bits MSbits clear
-	int rx_ctx_bits;		// address bits needed for SEP RXs
+	uint64_t mask;			// mask with rxc_bits MSbits clear
+	int rxc_bits;			// address bits needed for SEP RXs
 	socklen_t addrlen;		// size of struct cxip_addr
 	struct cxip_eq *eq;		// event queue
 	struct cxip_av_table_hdr *table_hdr;
@@ -973,17 +972,17 @@ int cxip_wait_close(fid_t fid);
 int cxip_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 		   struct fid_wait **waitset);
 
-struct cxip_rx_ctx *cxip_rx_ctx_alloc(const struct fi_rx_attr *attr,
+struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr,
 				      void *context, int use_shared);
-void cxip_rx_ctx_free(struct cxip_rx_ctx *rx_ctx);
+void cxip_rxc_free(struct cxip_rxc *rxc);
 
 int cxip_tx_ctx_alloc_rdzv_id(struct cxip_tx_ctx *txc);
 int cxip_tx_ctx_free_rdzv_id(struct cxip_tx_ctx *txc, int tag);
 
-int cxip_rxc_msg_init(struct cxip_rx_ctx *rxc);
-void cxip_rxc_msg_fini(struct cxip_rx_ctx *rxc);
+int cxip_msg_oflow_init(struct cxip_rxc *rxc);
+void cxip_msg_oflow_fini(struct cxip_rxc *rxc);
 
-int cxip_rx_ctx_enable(struct cxip_rx_ctx *rxc);
+int cxip_rxc_enable(struct cxip_rxc *rxc);
 int cxip_tx_ctx_enable(struct cxip_tx_ctx *txc);
 struct cxip_tx_ctx *cxip_tx_ctx_alloc(const struct fi_tx_attr *attr,
 				      void *context, int use_shared);
@@ -1004,9 +1003,8 @@ int cxip_cq_report_error(struct cxip_cq *cq, struct cxip_req *req, size_t olen,
 void cxip_cntr_add_tx_ctx(struct cxip_cntr *cntr, struct cxip_tx_ctx *tx_ctx);
 void cxip_cntr_remove_tx_ctx(struct cxip_cntr *cntr,
 			     struct cxip_tx_ctx *tx_ctx);
-void cxip_cntr_add_rx_ctx(struct cxip_cntr *cntr, struct cxip_rx_ctx *rx_ctx);
-void cxip_cntr_remove_rx_ctx(struct cxip_cntr *cntr,
-			     struct cxip_rx_ctx *rx_ctx);
+void cxip_cntr_add_rxc(struct cxip_cntr *cntr, struct cxip_rxc *rxc);
+void cxip_cntr_remove_rxc(struct cxip_cntr *cntr, struct cxip_rxc *rxc);
 int cxip_cntr_progress(struct cxip_cntr *cntr);
 int cxip_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		   struct fid_cntr **cntr, void *context);
