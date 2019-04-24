@@ -12,7 +12,8 @@
 #include "cxip.h"
 #include "cxip_test_common.h"
 
-TestSuite(domain, .init = cxit_setup_domain, .fini = cxit_teardown_domain);
+TestSuite(domain, .init = cxit_setup_domain, .fini = cxit_teardown_domain,
+	  .timeout = CXIT_DEFAULT_TIMEOUT);
 
 /* Test basic domain creation */
 Test(domain, simple)

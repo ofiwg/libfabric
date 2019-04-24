@@ -15,7 +15,8 @@
 #include "cxip.h"
 #include "cxip_test_common.h"
 
-TestSuite(ep, .init = cxit_setup_ep, .fini = cxit_teardown_ep);
+TestSuite(ep, .init = cxit_setup_ep, .fini = cxit_teardown_ep,
+	  .timeout = CXIT_DEFAULT_TIMEOUT);
 
 /* Test basic EP creation */
 Test(ep, simple)

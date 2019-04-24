@@ -60,7 +60,7 @@ static void _cxit_destroy_mr(struct mem_region *mr)
 /* Test failures associated with bad call parameters.
  */
 TestSuite(atomic_invalid, .init = cxit_setup_rma, .fini = cxit_teardown_rma,
-	  .disabled = AMO_DISABLED);
+	  .disabled = AMO_DISABLED, .timeout = CXIT_DEFAULT_TIMEOUT);
 
 Test(atomic_invalid, invalid_amo)
 {
@@ -373,9 +373,9 @@ Test(atomic_invalid, invalid_swap)
  * UINT64_T. If this doesn't work, nothing else will.
  */
 TestSuite(atomic, .init = cxit_setup_rma, .fini = cxit_teardown_rma,
-	  .disabled = AMO_DISABLED);
+	  .disabled = AMO_DISABLED, .timeout = CXIT_DEFAULT_TIMEOUT);
 
-Test(atomic, simple_amo, .timeout = 10)
+Test(atomic, simple_amo)
 {
 	struct mem_region mr;
 	struct fi_cq_tagged_entry cqe;
@@ -428,7 +428,7 @@ Test(atomic, simple_amo, .timeout = 10)
 	_cxit_destroy_mr(&mr);
 }
 
-Test(atomic, simple_fetch, .timeout = 10)
+Test(atomic, simple_fetch)
 {
 	struct mem_region mr;
 	struct fi_cq_tagged_entry cqe;
@@ -505,7 +505,7 @@ Test(atomic, simple_fetch, .timeout = 10)
 	_cxit_destroy_mr(&mr);
 }
 
-Test(atomic, simple_swap, .timeout = 10)
+Test(atomic, simple_swap)
 {
 	struct mem_region mr;
 	struct fi_cq_tagged_entry cqe;

@@ -47,7 +47,8 @@ static void mr_destroy(struct mem_region *mr)
 	free(mr->mem);
 }
 
-TestSuite(rma, .init = cxit_setup_rma, .fini = cxit_teardown_rma, .timeout = 3);
+TestSuite(rma, .init = cxit_setup_rma, .fini = cxit_teardown_rma,
+	  .timeout = CXIT_DEFAULT_TIMEOUT);
 
 /* Test fi_write simple case */
 Test(rma, simple_write)

@@ -38,7 +38,8 @@ static inline void *CALLOC(size_t size)
 }
 #endif
 
-TestSuite(sep, .init = cxit_setup_ep, .fini = cxit_teardown_ep);
+TestSuite(sep, .init = cxit_setup_ep, .fini = cxit_teardown_ep,
+	  .timeout = CXIT_DEFAULT_TIMEOUT);
 
 /* Test basic SEP creation */
 Test(sep, simple)
@@ -534,7 +535,7 @@ static int _cmpdata(uint8_t *rx, uint8_t *tx, int len)
 }
 
 /* Test basic SEP send/recv */
-Test(sep, simple_msg_send, .timeout = 10)
+Test(sep, simple_msg_send)
 {
 	int i, ret;
 	int txi, rxi, rxi2;
@@ -637,7 +638,7 @@ Test(sep, simple_msg_send, .timeout = 10)
 	cxit_teardown_sep();
 }
 
-Test(sep, simple_rma_write, .timeout = 10)
+Test(sep, simple_rma_write)
 {
 	struct fi_cq_tagged_entry cqe;
 	uint8_t *tx_buf;
@@ -681,7 +682,7 @@ Test(sep, simple_rma_write, .timeout = 10)
 	cxit_teardown_sep();
 }
 
-Test(sep, simple_rma_read, .timeout = 10)
+Test(sep, simple_rma_read)
 {
 	struct fi_cq_tagged_entry cqe;
 	uint8_t *tx_buf;
@@ -721,7 +722,7 @@ Test(sep, simple_rma_read, .timeout = 10)
 	cxit_teardown_sep();
 }
 
-Test(sep, simple_amo, .timeout = 10)
+Test(sep, simple_amo)
 {
 	struct fi_cq_tagged_entry cqe;
 	uint64_t operand1;
@@ -777,7 +778,7 @@ Test(sep, simple_amo, .timeout = 10)
 	cxit_teardown_sep();
 }
 
-Test(sep, simple_amo_fetch, .timeout = 10)
+Test(sep, simple_amo_fetch)
 {
 	struct fi_cq_tagged_entry cqe;
 	uint64_t operand1;
@@ -859,7 +860,7 @@ Test(sep, simple_amo_fetch, .timeout = 10)
 	cxit_teardown_sep();
 }
 
-Test(sep, simple_amo_swap, .timeout = 10)
+Test(sep, simple_amo_swap)
 {
 	struct fi_cq_tagged_entry cqe;
 	uint64_t operand1;
@@ -935,7 +936,7 @@ Test(sep, simple_amo_swap, .timeout = 10)
  * information is displayed in the event of a crash.
  */
 // TODO: cleanup and enable when memory problem is fixed
-Test(sep, advancing_amo_fetch, .timeout = 10, .disabled = true)
+Test(sep, advancing_amo_fetch, .disabled = true)
 {
 	struct fi_cq_tagged_entry cqe;
 	uint64_t operand1;

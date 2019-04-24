@@ -35,7 +35,7 @@ static char *get_fab_name(int fab_id)
 }
 
 TestSuite(getinfo, .init = cxit_setup_getinfo,
-	  .fini = cxit_teardown_getinfo);
+	  .fini = cxit_teardown_getinfo, .timeout = CXIT_DEFAULT_TIMEOUT);
 
 /* Test fabric selection with provider name */
 Test(getinfo, prov_name)
@@ -434,7 +434,8 @@ Test(getinfo, service)
 	free(cxit_service);
 }
 
-TestSuite(fabric, .init = cxit_setup_fabric, .fini = cxit_teardown_fabric);
+TestSuite(fabric, .init = cxit_setup_fabric, .fini = cxit_teardown_fabric,
+	  .timeout = CXIT_DEFAULT_TIMEOUT);
 
 /* Test basic fabric creation */
 Test(fabric, simple)

@@ -14,10 +14,11 @@
 #include "cxip.h"
 #include "cxip_test_common.h"
 
-TestSuite(msg, .init = cxit_setup_msg, .fini = cxit_teardown_msg);
+TestSuite(msg, .init = cxit_setup_msg, .fini = cxit_teardown_msg,
+	  .timeout = CXIT_DEFAULT_TIMEOUT);
 
 /* Test basic send/recv */
-Test(msg, ping, .timeout = 3)
+Test(msg, ping)
 {
 	int i, ret;
 	uint8_t *recv_buf,
@@ -89,7 +90,7 @@ Test(msg, ping, .timeout = 3)
 }
 
 /* Test basic sendv/recvv */
-Test(msg, vping, .timeout = 3)
+Test(msg, vping)
 {
 	int i, ret;
 	uint8_t *recv_buf,
@@ -167,7 +168,7 @@ Test(msg, vping, .timeout = 3)
 }
 
 /* Test basic sendmsg/recvmsg */
-Test(msg, msgping, .timeout = 3)
+Test(msg, msgping)
 {
 	int i, ret;
 	uint8_t *recv_buf,
@@ -257,7 +258,7 @@ Test(msg, msgping, .timeout = 3)
 }
 
 /* Test send/recv sizes small to large */
-Test(msg, sizes, .timeout = 3)
+Test(msg, sizes)
 {
 	int i, j, ret;
 	uint8_t *recv_buf,
@@ -334,7 +335,7 @@ Test(msg, sizes, .timeout = 3)
 }
 
 /* Test send/recv interoperability with tagged messaging */
-Test(msg, tagged_interop, .timeout = 3)
+Test(msg, tagged_interop)
 {
 	int i, ret;
 	uint8_t *recv_buf,

@@ -15,7 +15,8 @@
 #include "cxip.h"
 #include "cxip_test_common.h"
 
-TestSuite(cq, .init = cxit_setup_cq, .fini = cxit_teardown_cq);
+TestSuite(cq, .init = cxit_setup_cq, .fini = cxit_teardown_cq,
+	  .timeout = CXIT_DEFAULT_TIMEOUT);
 
 /* Test basic CQ creation */
 Test(cq, simple)

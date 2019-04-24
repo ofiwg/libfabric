@@ -14,12 +14,14 @@
 #include "cxip.h"
 #include "cxip_test_common.h"
 
-TestSuite(tagged, .init = cxit_setup_tagged, .fini = cxit_teardown_tagged);
+TestSuite(tagged, .init = cxit_setup_tagged, .fini = cxit_teardown_tagged,
+	  .timeout = CXIT_DEFAULT_TIMEOUT);
 TestSuite(tagged_offload, .init = cxit_setup_tagged_offload,
-	  .fini = cxit_teardown_tagged_offload);
+	  .fini = cxit_teardown_tagged_offload,
+	  .timeout = CXIT_DEFAULT_TIMEOUT);
 
 /* Test basic send/recv */
-Test(tagged, ping, .timeout = 3)
+Test(tagged, ping)
 {
 	int i, ret;
 	uint8_t *recv_buf,
@@ -93,7 +95,7 @@ Test(tagged, ping, .timeout = 3)
 }
 
 /* Test basic sendv/recvv */
-Test(tagged, vping, .timeout = 3)
+Test(tagged, vping)
 {
 	int i, ret;
 	uint8_t *recv_buf,
@@ -171,7 +173,7 @@ Test(tagged, vping, .timeout = 3)
 }
 
 /* Test basic sendmsg/recvmsg */
-Test(tagged, msgping, .timeout = 3)
+Test(tagged, msgping)
 {
 	int i, ret;
 	uint8_t *recv_buf,
@@ -265,7 +267,7 @@ Test(tagged, msgping, .timeout = 3)
 }
 
 /* Test unexpected send/recv */
-Test(tagged, ux_ping, .timeout = 3)
+Test(tagged, ux_ping)
 {
 	int i, ret;
 	uint8_t *recv_buf,
@@ -454,14 +456,14 @@ void directed_recv(bool logical)
 	//cxit_teardown_tagged();
 }
 
-TestSuite(tagged_noinit);
+TestSuite(tagged_noinit, .timeout = CXIT_DEFAULT_TIMEOUT);
 
-Test(tagged_noinit, directed, .timeout = 3)
+Test(tagged_noinit, directed)
 {
 	directed_recv(false);
 }
 
-Test(tagged_noinit, directed_logical, .timeout = 3)
+Test(tagged_noinit, directed_logical)
 {
 	directed_recv(true);
 }
@@ -528,7 +530,7 @@ static void *trecv_worker(void *data)
 	pthread_exit(NULL);
 }
 
-Test(tagged, ux_sw_rdzv, .timeout = 10)
+Test(tagged, ux_sw_rdzv)
 {
 	size_t i;
 	int ret;
@@ -618,7 +620,7 @@ Test(tagged, ux_sw_rdzv, .timeout = 10)
 	free(recv_buf);
 }
 
-Test(tagged, expected_sw_rdzv, .timeout = 10)
+Test(tagged, expected_sw_rdzv)
 {
 	size_t i;
 	int ret;
@@ -709,7 +711,7 @@ Test(tagged, expected_sw_rdzv, .timeout = 10)
 	free(recv_buf);
 }
 
-Test(tagged, rdzv_id, .timeout = 1)
+Test(tagged, rdzv_id)
 {
 	int rc;
 	struct cxip_tx_ctx tx_ctx = {};
@@ -774,7 +776,7 @@ static void *tagged_evt_worker(void *data)
 	pthread_exit(NULL);
 }
 
-Test(tagged, multitudes_sw_rdzv, .timeout = 10)
+Test(tagged, multitudes_sw_rdzv)
 {
 	int ret;
 	size_t buf_len = 4 * 1024;
@@ -940,8 +942,7 @@ ParameterizedTestParameters(tagged, multitudes)
 				   param_sz);
 }
 
-ParameterizedTest(struct multitudes_params *param, tagged, multitudes,
-		  .timeout = 10)
+ParameterizedTest(struct multitudes_params *param, tagged, multitudes)
 {
 	int ret;
 	size_t buf_len = param->length;
@@ -1372,14 +1373,13 @@ void do_tagged_rx(struct tagged_rx_params *param)
 	free(recv_buf);
 }
 
-ParameterizedTest(struct tagged_rx_params *param, tagged, rx, .timeout = 10)
+ParameterizedTest(struct tagged_rx_params *param, tagged, rx)
 {
 	do_tagged_rx(param);
 }
 
 #if 0
-ParameterizedTest(struct tagged_rx_params *param, tagged_offload, rx,
-		  .timeout = 10)
+ParameterizedTest(struct tagged_rx_params *param, tagged_offload, rx)
 {
 	do_tagged_rx(param);
 }

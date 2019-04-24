@@ -9,6 +9,8 @@
 
 #include "cxip.h"
 
+#define CXIT_DEFAULT_TIMEOUT 10
+
 extern struct fi_info *cxit_fi_hints;
 extern struct fi_info *cxit_fi;
 extern struct fid_fabric *cxit_fabric;

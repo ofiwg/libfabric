@@ -272,7 +272,8 @@ shmem_readonly_term(struct fid_av *avRO)
 	cr_assert(ret == FI_SUCCESS, "fi_close RO");
 }
 
-TestSuite(av, .init = cxit_setup_av, .fini = cxit_teardown_av);
+TestSuite(av, .init = cxit_setup_av, .fini = cxit_teardown_av,
+	  .timeout = CXIT_DEFAULT_TIMEOUT);
 
 ReportHook(TEST_CRASH)(struct criterion_test_stats *stats)
 {
