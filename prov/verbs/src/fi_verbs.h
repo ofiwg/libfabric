@@ -263,10 +263,18 @@ struct fi_ibv_eq_entry {
 
 typedef int (*fi_ibv_trywait_func)(struct fid *fid);
 
-/* The number of valid OFI indexer bits in the connection key used during
- * XRC connection establishment. Note that only the lower 32-bits of the
- * key are exchanged, so this value must be kept below 32-bits. */
-#define VERBS_TAG_INDEX_BITS	18
+/* An OFI indexer is used to maintain a unique connection request to
+ * endpoint mapping. The key is a 32-bit value (referred to as a
+ * connection tag) and is passed to the remote peer by the active side
+ * of a connection request. When the reciprocal XRC connection in the
+ * reverse direction is made, the key is passed back and used to map
+ * back to the original endpoint. A key is defined as a 32-bit value:
+ *
+ *     SSSSSSSS:SSSSSSII:IIIIIIII:IIIIIIII
+ *     |-- sequence -||--- unique key ---|
+ */
+#define VERBS_CONN_TAG_INDEX_BITS	18
+#define VERBS_CONN_TAG_INVALID		0xFFFFFFFF	/* Key is not valid */
 
 struct fi_ibv_eq {
 	struct fid_eq		eq_fid;
@@ -567,7 +575,12 @@ enum fi_ibv_xrc_ep_conn_state {
  * is established.
  */
 struct fi_ibv_xrc_ep_conn_setup {
+	/* The connection tag is used to associate the reciprocal
+	 * XRC INI/TGT QP connection request in the reverse direction
+	 * with the original request. The tag is created by the
+	 * original active side. */
 	uint32_t			conn_tag;
+	bool				created_conn_tag;
 
 	/* IB CM message stale/duplicate detection processing requires
 	 * that shared INI/TGT connections use unique QP numbers during
