@@ -59,7 +59,7 @@ static ssize_t _cxip_rma_op(enum cxip_rma_op op, struct fid_ep *ep,
 			   uint64_t flags, void *context)
 {
 	struct cxip_ep *cxi_ep;
-	struct cxip_tx_ctx *txc;
+	struct cxip_txc *txc;
 	struct cxip_domain *dom;
 	int ret;
 	struct cxip_md *md;
@@ -89,11 +89,11 @@ static ssize_t _cxip_rma_op(enum cxip_rma_op op, struct fid_ep *ep,
 	switch (ep->fid.fclass) {
 	case FI_CLASS_EP:
 		cxi_ep = container_of(ep, struct cxip_ep, ep);
-		txc = cxi_ep->ep_obj->tx_ctx;
+		txc = cxi_ep->ep_obj->txc;
 		break;
 
 	case FI_CLASS_TX_CTX:
-		txc = container_of(ep, struct cxip_tx_ctx, fid.ctx);
+		txc = container_of(ep, struct cxip_txc, fid.ctx);
 		break;
 
 	default:

@@ -347,7 +347,7 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 			 size_t result_count,
 			 uint64_t flags)
 {
-	struct cxip_tx_ctx *txc;
+	struct cxip_txc *txc;
 	struct cxip_if *dev_if;
 	struct cxip_md *result_md = NULL;
 	struct cxip_addr caddr;
@@ -513,10 +513,10 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 		struct cxip_ep *cxi_ep;
 	case FI_CLASS_EP:
 		cxi_ep = container_of(ep, struct cxip_ep, ep);
-		txc = cxi_ep->ep_obj->tx_ctx;
+		txc = cxi_ep->ep_obj->txc;
 		break;
 	case FI_CLASS_TX_CTX:
-		txc = container_of(ep, struct cxip_tx_ctx, fid.ctx);
+		txc = container_of(ep, struct cxip_txc, fid.ctx);
 		break;
 	default:
 		CXIP_LOG_ERROR("Invalid EP type: %zd\n", ep->fid.fclass);

@@ -422,7 +422,7 @@ struct cxip_req_recv {
 struct cxip_req_send {
 	void *buf;			// local send buffer
 	struct cxip_md *send_md;		// message target buffer
-	struct cxip_tx_ctx *txc;
+	struct cxip_txc *txc;
 	size_t length;			// request length
 	int rdzv_id;			// SW RDZV ID for long messages
 	enum c_return_code event_failure;// SW RDZV Failure status on prev event
@@ -682,10 +682,10 @@ struct cxip_rdzv_ids {
  *
  * Support structure.
  *
- * Created by cxip_tx_ctx_alloc(), during EP creation.
+ * Created by cxip_txc_alloc(), during EP creation.
  *
  */
-struct cxip_tx_ctx {
+struct cxip_txc {
 	union {
 		struct fid_ep ctx;	// standard endpoint
 		struct fid_stx stx;	// scalable endpoint
@@ -698,7 +698,7 @@ struct cxip_tx_ctx {
 
 	int use_shared;
 	struct cxip_comp comp;
-	struct cxip_tx_ctx *stx_ctx;	// shared context (?)
+	struct cxip_txc *stx;		// shared context (?)
 
 	struct cxip_ep_obj *ep_obj;	// parent EP object
 	struct cxip_domain *domain;	// parent domain
@@ -709,7 +709,7 @@ struct cxip_tx_ctx {
 
 	struct fi_tx_attr attr;		// attributes
 
-	struct cxi_cmdq *tx_cmdq;	// added during cxip_tx_ctx_enable()
+	struct cxi_cmdq *tx_cmdq;	// added during cxip_txc_enable()
 
 	/* Software Rendezvous related structures */
 	struct cxip_pte *rdzv_pte;	// PTE for SW Rendezvous commands
@@ -746,17 +746,17 @@ struct cxip_ep_obj {
 
 	/* TX/RX context pointers for standard EPs. */
 	struct cxip_rxc *rxc;		// rx_array[0] || NULL
-	struct cxip_tx_ctx *tx_ctx;	// tx_array[0] || NULL
+	struct cxip_txc *txc;		// tx_array[0] || NULL
 
 	/* TX/RX contexts.  Standard EPs have 1 of each.  SEPs have many. */
 	struct cxip_rxc **rx_array;	// rx contexts
-	struct cxip_tx_ctx **tx_array;	// tx contexts
+	struct cxip_txc **tx_array;	// tx contexts
 	ofi_atomic32_t num_rxc;	// num rx contexts (>= 1)
-	ofi_atomic32_t num_tx_ctx;	// num tx contexts (>= 1)
+	ofi_atomic32_t num_txc;	// num tx contexts (>= 1)
 
 	/* List of shared contexts associated with the EP.  Necessary? */
 	struct dlist_entry rxc_entry;
-	struct dlist_entry tx_ctx_entry;
+	struct dlist_entry txc_entry;
 
 	struct fi_info info;		// TODO: use this properly
 	struct fi_ep_attr ep_attr;
@@ -976,19 +976,18 @@ struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr,
 				      void *context, int use_shared);
 void cxip_rxc_free(struct cxip_rxc *rxc);
 
-int cxip_tx_ctx_alloc_rdzv_id(struct cxip_tx_ctx *txc);
-int cxip_tx_ctx_free_rdzv_id(struct cxip_tx_ctx *txc, int tag);
+int cxip_txc_alloc_rdzv_id(struct cxip_txc *txc);
+int cxip_txc_free_rdzv_id(struct cxip_txc *txc, int tag);
 
 int cxip_msg_oflow_init(struct cxip_rxc *rxc);
 void cxip_msg_oflow_fini(struct cxip_rxc *rxc);
 
 int cxip_rxc_enable(struct cxip_rxc *rxc);
-int cxip_tx_ctx_enable(struct cxip_tx_ctx *txc);
-struct cxip_tx_ctx *cxip_tx_ctx_alloc(const struct fi_tx_attr *attr,
-				      void *context, int use_shared);
-struct cxip_tx_ctx *cxip_stx_ctx_alloc(const struct fi_tx_attr *attr,
-				       void *context);
-void cxip_tx_ctx_free(struct cxip_tx_ctx *tx_ctx);
+int cxip_txc_enable(struct cxip_txc *txc);
+struct cxip_txc *cxip_txc_alloc(const struct fi_tx_attr *attr, void *context,
+				int use_shared);
+struct cxip_txc *cxip_stx_alloc(const struct fi_tx_attr *attr, void *context);
+void cxip_txc_free(struct cxip_txc *txc);
 
 struct cxip_req *cxip_cq_req_alloc(struct cxip_cq *cq, int remap);
 void cxip_cq_req_free(struct cxip_req *req);
@@ -1000,9 +999,8 @@ int cxip_cq_report_error(struct cxip_cq *cq, struct cxip_req *req, size_t olen,
 			 int err, int prov_errno, void *err_data,
 			 size_t err_data_size);
 
-void cxip_cntr_add_tx_ctx(struct cxip_cntr *cntr, struct cxip_tx_ctx *tx_ctx);
-void cxip_cntr_remove_tx_ctx(struct cxip_cntr *cntr,
-			     struct cxip_tx_ctx *tx_ctx);
+void cxip_cntr_add_txc(struct cxip_cntr *cntr, struct cxip_txc *txc);
+void cxip_cntr_remove_txc(struct cxip_cntr *cntr, struct cxip_txc *txc);
 void cxip_cntr_add_rxc(struct cxip_cntr *cntr, struct cxip_rxc *rxc);
 void cxip_cntr_remove_rxc(struct cxip_cntr *cntr, struct cxip_rxc *rxc);
 int cxip_cntr_progress(struct cxip_cntr *cntr);

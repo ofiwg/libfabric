@@ -110,21 +110,21 @@ struct fi_ops_cm cxip_ep_cm_ops = {
  *
  * Support TX/RX context fi_close().
  *
- * @param tx_ctx : TX context to close
+ * @param txc : TX context to close
  */
-static void cxip_tx_ctx_close(struct cxip_tx_ctx *tx_ctx)
+static void cxip_txc_close(struct cxip_txc *txc)
 {
-	if (tx_ctx->comp.send_cq)
-		ofi_atomic_dec32(&tx_ctx->comp.send_cq->ref);
+	if (txc->comp.send_cq)
+		ofi_atomic_dec32(&txc->comp.send_cq->ref);
 
-	if (tx_ctx->comp.send_cntr)
-		cxip_cntr_remove_tx_ctx(tx_ctx->comp.send_cntr, tx_ctx);
+	if (txc->comp.send_cntr)
+		cxip_cntr_remove_txc(txc->comp.send_cntr, txc);
 
-	if (tx_ctx->comp.read_cntr)
-		cxip_cntr_remove_tx_ctx(tx_ctx->comp.read_cntr, tx_ctx);
+	if (txc->comp.read_cntr)
+		cxip_cntr_remove_txc(txc->comp.read_cntr, txc);
 
-	if (tx_ctx->comp.write_cntr)
-		cxip_cntr_remove_tx_ctx(tx_ctx->comp.write_cntr, tx_ctx);
+	if (txc->comp.write_cntr)
+		cxip_cntr_remove_txc(txc->comp.write_cntr, txc);
 }
 
 /**
@@ -162,16 +162,16 @@ static void cxip_rxc_close(struct cxip_rxc *rxc)
  */
 static int cxip_ctx_close(struct fid *fid)
 {
-	struct cxip_tx_ctx *tx_ctx;
+	struct cxip_txc *txc;
 	struct cxip_rxc *rxc;
 
 	switch (fid->fclass) {
 	case FI_CLASS_TX_CTX:
-		tx_ctx = container_of(fid, struct cxip_tx_ctx, fid.ctx.fid);
-		ofi_atomic_dec32(&tx_ctx->ep_obj->num_tx_ctx);
-		ofi_atomic_dec32(&tx_ctx->domain->ref);
-		cxip_tx_ctx_close(tx_ctx);
-		cxip_tx_ctx_free(tx_ctx);
+		txc = container_of(fid, struct cxip_txc, fid.ctx.fid);
+		ofi_atomic_dec32(&txc->ep_obj->num_txc);
+		ofi_atomic_dec32(&txc->domain->ref);
+		cxip_txc_close(txc);
+		cxip_txc_free(txc);
 		break;
 
 	case FI_CLASS_RX_CTX:
@@ -183,9 +183,9 @@ static int cxip_ctx_close(struct fid *fid)
 		break;
 
 	case FI_CLASS_STX_CTX:
-		tx_ctx = container_of(fid, struct cxip_tx_ctx, fid.stx.fid);
-		ofi_atomic_dec32(&tx_ctx->domain->ref);
-		cxip_tx_ctx_free(tx_ctx);
+		txc = container_of(fid, struct cxip_txc, fid.stx.fid);
+		ofi_atomic_dec32(&txc->domain->ref);
+		cxip_txc_free(txc);
 		break;
 
 	case FI_CLASS_SRX_CTX:
@@ -216,7 +216,7 @@ static int cxip_ctx_close(struct fid *fid)
 static int cxip_ctx_bind_cq(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct cxip_cq *cxi_cq;
-	struct cxip_tx_ctx *tx_ctx;
+	struct cxip_txc *txc;
 	struct cxip_rxc *rxc;
 
 	if ((flags | CXIP_EP_CQ_FLAGS) != CXIP_EP_CQ_FLAGS) {
@@ -226,11 +226,11 @@ static int cxip_ctx_bind_cq(struct fid *fid, struct fid *bfid, uint64_t flags)
 	cxi_cq = container_of(bfid, struct cxip_cq, cq_fid.fid);
 	switch (fid->fclass) {
 	case FI_CLASS_TX_CTX:
-		tx_ctx = container_of(fid, struct cxip_tx_ctx, fid.ctx);
+		txc = container_of(fid, struct cxip_txc, fid.ctx);
 		if (flags & FI_SEND) {
-			tx_ctx->comp.send_cq = cxi_cq;
+			txc->comp.send_cq = cxi_cq;
 			if (flags & FI_SELECTIVE_COMPLETION)
-				tx_ctx->comp.send_cq_event = 1;
+				txc->comp.send_cq_event = 1;
 		}
 
 		ofi_atomic_inc32(&cxi_cq->ref);
@@ -269,7 +269,7 @@ static int cxip_ctx_bind_cq(struct fid *fid, struct fid *bfid, uint64_t flags)
 static int cxip_ctx_bind_cntr(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct cxip_cntr *cntr;
-	struct cxip_tx_ctx *tx_ctx;
+	struct cxip_txc *txc;
 	struct cxip_rxc *rxc;
 
 	if ((flags | CXIP_EP_CNTR_FLAGS) != CXIP_EP_CNTR_FLAGS) {
@@ -280,20 +280,20 @@ static int cxip_ctx_bind_cntr(struct fid *fid, struct fid *bfid, uint64_t flags)
 	cntr = container_of(bfid, struct cxip_cntr, cntr_fid.fid);
 	switch (fid->fclass) {
 	case FI_CLASS_TX_CTX:
-		tx_ctx = container_of(fid, struct cxip_tx_ctx, fid.ctx.fid);
+		txc = container_of(fid, struct cxip_txc, fid.ctx.fid);
 		if (flags & FI_SEND) {
-			tx_ctx->comp.send_cntr = cntr;
-			cxip_cntr_add_tx_ctx(cntr, tx_ctx);
+			txc->comp.send_cntr = cntr;
+			cxip_cntr_add_txc(cntr, txc);
 		}
 
 		if (flags & FI_READ) {
-			tx_ctx->comp.read_cntr = cntr;
-			cxip_cntr_add_tx_ctx(cntr, tx_ctx);
+			txc->comp.read_cntr = cntr;
+			cxip_cntr_add_txc(cntr, txc);
 		}
 
 		if (flags & FI_WRITE) {
-			tx_ctx->comp.write_cntr = cntr;
-			cxip_cntr_add_tx_ctx(cntr, tx_ctx);
+			txc->comp.write_cntr = cntr;
+			cxip_cntr_add_txc(cntr, txc);
 		}
 		break;
 
@@ -366,13 +366,13 @@ static int cxip_ctx_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
  * each RX, but not for the SEP itself.
  *
  * @param ep_obj : EP or SEP object
- * @param tx_ctx : TX context (may be NULL)
+ * @param txc : TX context (may be NULL)
  * @param rxc : RX context (may be NULL)
  *
  * @return int 0 on success, -errno on failure
  */
 static int _ep_enable(struct cxip_ep_obj *ep_obj,
-		      struct cxip_tx_ctx *tx_ctx,
+		      struct cxip_txc *txc,
 		      struct cxip_rxc *rxc)
 {
 	int ret;
@@ -381,7 +381,7 @@ static int _ep_enable(struct cxip_ep_obj *ep_obj,
 		return FI_SUCCESS;
 
 	/* Make sure this is ready to enable */
-	if (tx_ctx && !tx_ctx->comp.send_cq) {
+	if (txc && !txc->comp.send_cq) {
 		CXIP_LOG_DBG("enable TX context without CQ\n");
 		return -FI_ENOCQ;
 	}
@@ -439,7 +439,7 @@ static int _ep_enable(struct cxip_ep_obj *ep_obj,
  */
 static int cxip_ctx_enable(struct fid_ep *ep)
 {
-	struct cxip_tx_ctx *tx_ctx;
+	struct cxip_txc *txc;
 	struct cxip_rxc *rxc;
 	int ret;
 
@@ -461,19 +461,19 @@ static int cxip_ctx_enable(struct fid_ep *ep)
 		return 0;
 
 	case FI_CLASS_TX_CTX:
-		tx_ctx = container_of(ep, struct cxip_tx_ctx, fid.ctx.fid);
+		txc = container_of(ep, struct cxip_txc, fid.ctx.fid);
 
-		ret = _ep_enable(tx_ctx->ep_obj, tx_ctx, NULL);
+		ret = _ep_enable(txc->ep_obj, txc, NULL);
 		if (ret != FI_SUCCESS)
 			return ret;
 
-		ret = cxip_tx_ctx_enable(tx_ctx);
+		ret = cxip_txc_enable(txc);
 		if (ret != FI_SUCCESS) {
-			CXIP_LOG_DBG("cxip_tx_ctx_enable returned: %d\n",
+			CXIP_LOG_DBG("cxip_txc_enable returned: %d\n",
 				     ret);
 			return ret;
 		}
-		tx_ctx->enabled = 1;
+		txc->enabled = 1;
 		return 0;
 
 	default:
@@ -561,7 +561,7 @@ int cxip_setopflags(struct fi_tx_attr *tx_attr, struct fi_rx_attr *rx_attr,
 static int cxip_ctx_control(struct fid *fid, int command, void *arg)
 {
 	struct fid_ep *ep;
-	struct cxip_tx_ctx *tx_ctx;
+	struct cxip_txc *txc;
 	struct cxip_rxc *rxc;
 	int ret;
 
@@ -569,17 +569,17 @@ static int cxip_ctx_control(struct fid *fid, int command, void *arg)
 	case FI_CLASS_TX_CTX:
 		switch (command) {
 		case FI_GETOPSFLAG:
-			tx_ctx = container_of(fid, struct cxip_tx_ctx,
+			txc = container_of(fid, struct cxip_txc,
 					      fid.ctx.fid);
-			ret = cxip_getopflags(&tx_ctx->attr, NULL,
+			ret = cxip_getopflags(&txc->attr, NULL,
 					      (uint64_t *)arg);
 			if (ret)
 				return -FI_EINVAL;
 			break;
 		case FI_SETOPSFLAG:
-			tx_ctx = container_of(fid, struct cxip_tx_ctx,
+			txc = container_of(fid, struct cxip_txc,
 					      fid.ctx.fid);
-			ret = cxip_setopflags(&tx_ctx->attr, NULL,
+			ret = cxip_setopflags(&txc->attr, NULL,
 					      *(uint64_t *)arg);
 			if (ret)
 				return -FI_EINVAL;
@@ -805,18 +805,18 @@ static int cxip_ep_enable(struct fid_ep *ep)
 {
 	int ret;
 	struct cxip_ep *cxi_ep;
-	struct cxip_tx_ctx *tx_ctx;
+	struct cxip_txc *txc;
 	struct cxip_rxc *rxc;
 
 	/* TODO add EP locking */
 
 	cxi_ep = container_of(ep, struct cxip_ep, ep);
-	tx_ctx = cxi_ep->ep_obj->tx_ctx;
+	txc = cxi_ep->ep_obj->txc;
 	rxc = cxi_ep->ep_obj->rxc;
 
 	if (cxi_ep->ep_obj->fclass == FI_CLASS_EP) {
 		/* Check for shared TX/RX not bound */
-		if (!tx_ctx) {
+		if (!txc) {
 			CXIP_LOG_DBG("enable EP with no TXC\n");
 			return -FI_EINVAL;
 		}
@@ -826,14 +826,14 @@ static int cxip_ep_enable(struct fid_ep *ep)
 		}
 
 		ret = _ep_enable(cxi_ep->ep_obj,
-				 cxi_ep->ep_obj->tx_ctx,
+				 cxi_ep->ep_obj->txc,
 				 cxi_ep->ep_obj->rxc);
 		if (ret != FI_SUCCESS)
 			return ret;
 
-		ret = cxip_tx_ctx_enable(tx_ctx);
+		ret = cxip_txc_enable(txc);
 		if (ret != FI_SUCCESS) {
-			CXIP_LOG_DBG("cxip_tx_ctx_enable returned: %d\n",
+			CXIP_LOG_DBG("cxip_txc_enable returned: %d\n",
 				     ret);
 			return ret;
 		}
@@ -900,7 +900,7 @@ static int cxip_ep_close(struct fid *fid)
 	 */
 	if (ofi_atomic_get32(&cxi_ep->ep_obj->ref) ||
 	    ofi_atomic_get32(&cxi_ep->ep_obj->num_rxc) ||
-	    ofi_atomic_get32(&cxi_ep->ep_obj->num_tx_ctx))
+	    ofi_atomic_get32(&cxi_ep->ep_obj->num_txc))
 		return -FI_EBUSY;
 
 	if (cxi_ep->ep_obj->av) {
@@ -915,12 +915,12 @@ static int cxip_ep_close(struct fid *fid)
 
 	if (cxi_ep->ep_obj->fclass == FI_CLASS_EP) {
 		if (cxi_ep->ep_obj->tx_shared) {
-			fastlock_acquire(&cxi_ep->ep_obj->tx_ctx->lock);
-			dlist_remove(&cxi_ep->ep_obj->tx_ctx_entry);
-			fastlock_release(&cxi_ep->ep_obj->tx_ctx->lock);
+			fastlock_acquire(&cxi_ep->ep_obj->txc->lock);
+			dlist_remove(&cxi_ep->ep_obj->txc_entry);
+			fastlock_release(&cxi_ep->ep_obj->txc->lock);
 		} else {
-			cxip_tx_ctx_close(cxi_ep->ep_obj->tx_array[0]);
-			cxip_tx_ctx_free(cxi_ep->ep_obj->tx_array[0]);
+			cxip_txc_close(cxi_ep->ep_obj->tx_array[0]);
+			cxip_txc_free(cxi_ep->ep_obj->tx_array[0]);
 		}
 		if (cxi_ep->ep_obj->rx_shared) {
 			fastlock_acquire(&cxi_ep->ep_obj->rxc->lock);
@@ -968,7 +968,7 @@ static int cxip_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	struct cxip_cq *cq;
 	struct cxip_av *av;
 	struct cxip_cntr *cntr;
-	struct cxip_tx_ctx *tx_ctx;
+	struct cxip_txc *txc;
 	struct cxip_rxc *rxc;
 
 	ret = ofi_ep_bind_valid(&cxip_prov, bfid, flags);
@@ -999,12 +999,12 @@ static int cxip_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		// TODO: prevent re-binding
 		if (flags & FI_SEND) {
 			for (i = 0; i < ep->ep_obj->ep_attr.tx_ctx_cnt; i++) {
-				tx_ctx = ep->ep_obj->tx_array[i];
+				txc = ep->ep_obj->tx_array[i];
 
-				if (!tx_ctx)
+				if (!txc)
 					continue;
 
-				ret = cxip_ctx_bind_cq(&tx_ctx->fid.ctx.fid,
+				ret = cxip_ctx_bind_cq(&txc->fid.ctx.fid,
 						       bfid, flags);
 				if (ret)
 					return ret;
@@ -1035,12 +1035,12 @@ static int cxip_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		// TODO: prevent re-binding
 		if (flags & FI_SEND || flags & FI_WRITE || flags & FI_READ) {
 			for (i = 0; i < ep->ep_obj->ep_attr.tx_ctx_cnt; i++) {
-				tx_ctx = ep->ep_obj->tx_array[i];
+				txc = ep->ep_obj->tx_array[i];
 
-				if (!tx_ctx)
+				if (!txc)
 					continue;
 
-				ret = cxip_ctx_bind_cntr(&tx_ctx->fid.ctx.fid,
+				ret = cxip_ctx_bind_cntr(&txc->fid.ctx.fid,
 							 bfid, flags);
 				if (ret)
 					return ret;
@@ -1085,13 +1085,13 @@ static int cxip_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	case FI_CLASS_STX_CTX:	/* shared TX context */
 		// TODO: should verify EP attr against CTX attr
 		// TODO: must not be SEP
-		tx_ctx = container_of(bfid, struct cxip_tx_ctx, fid.stx.fid);
-		fastlock_acquire(&tx_ctx->lock);
-		dlist_insert_tail(&ep->ep_obj->tx_ctx_entry, &tx_ctx->ep_list);
-		fastlock_release(&tx_ctx->lock);
+		txc = container_of(bfid, struct cxip_txc, fid.stx.fid);
+		fastlock_acquire(&txc->lock);
+		dlist_insert_tail(&ep->ep_obj->txc_entry, &txc->ep_list);
+		fastlock_release(&txc->lock);
 
-		ep->ep_obj->tx_ctx->use_shared = 1;
-		ep->ep_obj->tx_ctx->stx_ctx = tx_ctx;
+		ep->ep_obj->txc->use_shared = 1;
+		ep->ep_obj->txc->stx = txc;
 		break;
 
 	case FI_CLASS_SRX_CTX:	/* shared RX context */
@@ -1295,7 +1295,7 @@ static int cxip_ep_setopt(fid_t fid, int level, int optname, const void *optval,
  *
  * Provider fi_tx_context() implementation.
  *
- * The index value must be less than the SEP tx_ctx_cnt value.
+ * The index value must be less than the SEP num_txc value.
  *
  * Attributes default to the SEP TX attributes if attr is NULL.
  *
@@ -1311,12 +1311,12 @@ static int cxip_ep_setopt(fid_t fid, int level, int optname, const void *optval,
  *
  * @return int : 0 on success, -errno on failure
  */
-static int cxip_ep_tx_ctx(struct fid_ep *ep, int index, struct fi_tx_attr *attr,
+static int cxip_ep_txc(struct fid_ep *ep, int index, struct fi_tx_attr *attr,
 			  struct fid_ep **tx_ep, void *context)
 {
 	struct fi_tx_attr *ep_attr;
 	struct cxip_ep *cxi_ep;
-	struct cxip_tx_ctx *tx_ctx;
+	struct cxip_txc *txc;
 
 	cxi_ep = container_of(ep, struct cxip_ep, ep);
 	if (cxi_ep->ep_obj->fclass != FI_CLASS_SEP || !tx_ep ||
@@ -1336,29 +1336,29 @@ static int cxip_ep_tx_ctx(struct fid_ep *ep, int index, struct fi_tx_attr *attr,
 		    ofi_check_attr_subset(&cxip_prov, ep_attr->caps,
 					  attr->caps))
 			return -FI_ENODATA;
-		tx_ctx = cxip_tx_ctx_alloc(attr, context, 0);
+		txc = cxip_txc_alloc(attr, context, 0);
 	} else {
 		/* use the SEP TX attr */
-		tx_ctx = cxip_tx_ctx_alloc(ep_attr, context, 0);
+		txc = cxip_txc_alloc(ep_attr, context, 0);
 	}
-	if (!tx_ctx)
+	if (!txc)
 		return -FI_ENOMEM;
 
-	tx_ctx->tx_id = index;
-	tx_ctx->ep_obj = cxi_ep->ep_obj;
-	tx_ctx->domain = cxi_ep->ep_obj->domain;
-	dlist_insert_tail(&cxi_ep->ep_obj->tx_ctx_entry, &tx_ctx->ep_list);
+	txc->tx_id = index;
+	txc->ep_obj = cxi_ep->ep_obj;
+	txc->domain = cxi_ep->ep_obj->domain;
+	dlist_insert_tail(&cxi_ep->ep_obj->txc_entry, &txc->ep_list);
 
-	tx_ctx->fid.ctx.fid.ops = &cxip_ctx_ops;
-	tx_ctx->fid.ctx.ops = &cxip_ctx_ep_ops;
-	tx_ctx->fid.ctx.msg = &cxip_ep_msg_ops;
-	tx_ctx->fid.ctx.tagged = &cxip_ep_tagged_ops;
-	tx_ctx->fid.ctx.rma = &cxip_ep_rma;
-	tx_ctx->fid.ctx.atomic = &cxip_ep_atomic;
+	txc->fid.ctx.fid.ops = &cxip_ctx_ops;
+	txc->fid.ctx.ops = &cxip_ctx_ep_ops;
+	txc->fid.ctx.msg = &cxip_ep_msg_ops;
+	txc->fid.ctx.tagged = &cxip_ep_tagged_ops;
+	txc->fid.ctx.rma = &cxip_ep_rma;
+	txc->fid.ctx.atomic = &cxip_ep_atomic;
 
-	*tx_ep = &tx_ctx->fid.ctx;
-	cxi_ep->ep_obj->tx_array[index] = tx_ctx;
-	ofi_atomic_inc32(&cxi_ep->ep_obj->num_tx_ctx);
+	*tx_ep = &txc->fid.ctx;
+	cxi_ep->ep_obj->tx_array[index] = txc;
+	ofi_atomic_inc32(&cxi_ep->ep_obj->num_txc);
 	ofi_atomic_inc32(&cxi_ep->ep_obj->domain->ref);
 
 	return 0;
@@ -1450,7 +1450,7 @@ struct fi_ops_ep cxip_ep_ops = {
 	.cancel = cxip_ep_cancel,
 	.getopt = cxip_ep_getopt,
 	.setopt = cxip_ep_setopt,
-	.tx_ctx = cxip_ep_tx_ctx,
+	.tx_ctx = cxip_ep_txc,
 	.rx_ctx = cxip_ep_rxc,
 	.rx_size_left = fi_no_rx_size_left,
 	.tx_size_left = fi_no_tx_size_left,
@@ -1480,28 +1480,28 @@ static int cxip_verify_tx_attr(const struct fi_tx_attr *attr)
 }
 
 /* shared contexts */
-int cxip_stx_ctx(struct fid_domain *domain, struct fi_tx_attr *attr,
+int cxip_stx(struct fid_domain *domain, struct fi_tx_attr *attr,
 		 struct fid_stx **stx, void *context)
 {
 	struct cxip_domain *dom;
-	struct cxip_tx_ctx *tx_ctx;
+	struct cxip_txc *txc;
 
 	if ((attr && cxip_verify_tx_attr(attr)) || !stx)
 		return -FI_EINVAL;
 
 	dom = container_of(domain, struct cxip_domain, dom_fid);
 
-	tx_ctx = cxip_stx_ctx_alloc(attr ? attr : &cxip_stx_attr, context);
-	if (!tx_ctx)
+	txc = cxip_stx_alloc(attr ? attr : &cxip_stx_attr, context);
+	if (!txc)
 		return -FI_ENOMEM;
 
-	tx_ctx->domain = dom;
+	txc->domain = dom;
 
-	tx_ctx->fid.stx.fid.ops = &cxip_ctx_ops;
-	tx_ctx->fid.stx.ops = &cxip_ep_ops;
+	txc->fid.stx.fid.ops = &cxip_ctx_ops;
+	txc->fid.stx.ops = &cxip_ep_ops;
 	ofi_atomic_inc32(&dom->ref);
 
-	*stx = &tx_ctx->fid.stx;
+	*stx = &txc->fid.stx;
 
 	return 0;
 }
@@ -1785,7 +1785,7 @@ int cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 	int ret;
 	struct cxip_domain *cxi_dom;
 	struct cxip_ep *cxi_ep = NULL;
-	struct cxip_tx_ctx *tx_ctx = NULL;
+	struct cxip_txc *txc = NULL;
 	struct cxip_rxc *rxc = NULL;
 	uint32_t nic;
 	uint32_t pid;
@@ -1853,7 +1853,7 @@ int cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 
 	/* Initialize object */
 	ofi_atomic_initialize32(&cxi_ep->ep_obj->ref, 0);
-	ofi_atomic_initialize32(&cxi_ep->ep_obj->num_tx_ctx, 0);
+	ofi_atomic_initialize32(&cxi_ep->ep_obj->num_txc, 0);
 	ofi_atomic_initialize32(&cxi_ep->ep_obj->num_rxc, 0);
 	fastlock_init(&cxi_ep->ep_obj->lock);
 
@@ -1892,20 +1892,20 @@ int cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 	 *
 	 * FI_CLASS_EP has one TX and one RX context, either or both of which
 	 * may be shared. If shared, this must be created without that context.
-	 * The tx_ctx or rx_ctx field will be set to point to the shared context
+	 * The txc or rxc field will be set to point to the shared context
 	 * when this EP is bound to the shared context. No space is allocated
 	 * for the context.
 	 *
 	 * If not shared, this allocates space for one context of each type,
 	 * creates the context as tx_array[0] and/or rx_array[0], and sets
-	 * tx_ctx and/or rx_ctx to point to the context. Note that the hint
+	 * txc and/or rxc to point to the context. Note that the hint
 	 * count is ignored, and treated as 1.
 	 *
 	 * FI_CLASS_SEP does not support shared contexts. It can have zero or
 	 * more TX/RX contexts (they cannot both be zero), and allocates space
 	 * for them, but does not create them. They must be created and used
 	 * explicitly by the application. Creating them fills entries in the
-	 * tx_array[] or rx_array[] arrays. The tx_ctx and rx_ctx fields will
+	 * tx_array[] or rx_array[] arrays. The txc and rxc fields will
 	 * remain NULL.
 	 */
 	if (fclass == FI_CLASS_EP) {
@@ -1952,7 +1952,7 @@ int cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 	if (cxi_ep->ep_obj->ep_attr.tx_ctx_cnt) {
 		cxi_ep->ep_obj->tx_array =
 			calloc(cxi_ep->ep_obj->ep_attr.tx_ctx_cnt,
-			       sizeof(struct cxip_tx_ctx *));
+			       sizeof(struct cxip_txc *));
 		if (!cxi_ep->ep_obj->tx_array) {
 			ret = -FI_ENOMEM;
 			goto err;
@@ -1973,19 +1973,19 @@ int cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 	/* Standard EP automatically creates TX/RX, unless shared */
 	if (cxi_ep->ep_obj->fclass == FI_CLASS_EP) {
 		if (!cxi_ep->ep_obj->tx_shared) {
-			tx_ctx = cxip_tx_ctx_alloc(&cxi_ep->tx_attr, context,
+			txc = cxip_txc_alloc(&cxi_ep->tx_attr, context,
 						   cxi_ep->ep_obj->tx_shared);
-			if (!tx_ctx) {
+			if (!txc) {
 				ret = -FI_ENOMEM;
 				goto err;
 			}
-			tx_ctx->ep_obj = cxi_ep->ep_obj;
-			tx_ctx->domain = cxi_dom;
-			tx_ctx->tx_id = 0;
-			dlist_insert_tail(&cxi_ep->ep_obj->tx_ctx_entry,
-					  &tx_ctx->ep_list);
-			cxi_ep->ep_obj->tx_array[0] = tx_ctx;
-			cxi_ep->ep_obj->tx_ctx = tx_ctx;
+			txc->ep_obj = cxi_ep->ep_obj;
+			txc->domain = cxi_dom;
+			txc->tx_id = 0;
+			dlist_insert_tail(&cxi_ep->ep_obj->txc_entry,
+					  &txc->ep_list);
+			cxi_ep->ep_obj->tx_array[0] = txc;
+			cxi_ep->ep_obj->txc = txc;
 		}
 
 		if (!cxi_ep->ep_obj->rx_shared) {
@@ -2013,8 +2013,8 @@ int cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 err:
 	if (rxc)
 		cxip_rxc_free(rxc);
-	if (tx_ctx)
-		cxip_tx_ctx_free(tx_ctx);
+	if (txc)
+		cxip_txc_free(txc);
 	if (cxi_ep) {
 		if (cxi_ep->ep_obj) {
 			free(cxi_ep->ep_obj->rx_array);

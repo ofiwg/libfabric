@@ -17,8 +17,12 @@
 #define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_EP_CTRL, __VA_ARGS__)
 #define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_EP_CTRL, __VA_ARGS__)
 
-/* Caller must hold txc->lock */
-int cxip_tx_ctx_alloc_rdzv_id(struct cxip_tx_ctx *txc)
+/*
+ * cxip_txc_alloc_rdzv_id() - Allocate a rendezvous ID.
+ *
+ * Caller must hold txc->lock.
+ */
+int cxip_txc_alloc_rdzv_id(struct cxip_txc *txc)
 {
 	int rc;
 
@@ -42,8 +46,12 @@ int cxip_tx_ctx_alloc_rdzv_id(struct cxip_tx_ctx *txc)
 	return -FI_ENOSPC;
 }
 
-/* Caller must hold txc->lock */
-int cxip_tx_ctx_free_rdzv_id(struct cxip_tx_ctx *txc, int tag)
+/*
+ * cxip_txc_free_rdzv_id() - Free a rendezvous ID.
+ *
+ * Caller must hold txc->lock.
+ */
+int cxip_txc_free_rdzv_id(struct cxip_txc *txc, int tag)
 {
 	int idx = tag >> 4;
 	int bit = (tag & 0xF);
@@ -57,8 +65,14 @@ int cxip_tx_ctx_free_rdzv_id(struct cxip_tx_ctx *txc, int tag)
 	return FI_SUCCESS;
 }
 
-/* Caller must hold txc->lock */
-static int tx_ctx_msg_init(struct cxip_tx_ctx *txc)
+/*
+ * txc_msg_init() - Initialize an RX context for messaging.
+ *
+ * Allocates and initializes hardware resources used for transmitting messages.
+ *
+ * Caller must hold txc->lock.
+ */
+static int txc_msg_init(struct cxip_txc *txc)
 {
 	int ret;
 	union c_cmdu cmd = {};
@@ -110,15 +124,28 @@ free_rdzv_pte:
 	return ret;
 }
 
-/* Caller must hold txc->lock */
-static int tx_ctx_msg_fini(struct cxip_tx_ctx *txc)
+/*
+ * txc_msg_fini() - Finalize TX context messaging.
+ *
+ * Free hardware resources allocated when the TX context was initialized for
+ * messaging.
+ *
+ * Caller must hold txc->lock.
+ */
+static int txc_msg_fini(struct cxip_txc *txc)
 {
 	cxip_pte_free(txc->rdzv_pte);
 
 	return FI_SUCCESS;
 }
 
-int cxip_tx_ctx_enable(struct cxip_tx_ctx *txc)
+/*
+ * cxip_txc_enable() - Enable a TX context for use.
+ *
+ * Called via fi_enable(). The context could be used in a standard endpoint or
+ * a scalable endpoint.
+ */
+int cxip_txc_enable(struct cxip_txc *txc)
 {
 	int ret = FI_SUCCESS;
 	struct cxi_cq_alloc_opts opts;
@@ -161,7 +188,7 @@ int cxip_tx_ctx_enable(struct cxip_tx_ctx *txc)
 	}
 
 	if ((txc->attr.caps & (FI_TAGGED | FI_SEND)) == (FI_TAGGED | FI_SEND)) {
-		ret = tx_ctx_msg_init(txc);
+		ret = txc_msg_init(txc);
 		if (ret != FI_SUCCESS) {
 			CXIP_LOG_DBG("Unable to init TX CTX, ret: %d\n", ret);
 			goto unlock;
@@ -179,7 +206,14 @@ unlock:
 	return ret;
 }
 
-static void tx_ctx_disable(struct cxip_tx_ctx *txc)
+/*
+ * cxip_txc_disable() - Disable a TX context.
+ *
+ * Free hardware resources allocated when the context was enabled. Called via
+ * fi_close(). The context could be used in a standard endpoint or a scalable
+ * endpoint.
+ */
+static void txc_disable(struct cxip_txc *txc)
 {
 	int ret;
 
@@ -189,7 +223,7 @@ static void tx_ctx_disable(struct cxip_tx_ctx *txc)
 		goto unlock;
 
 	if ((txc->attr.caps & (FI_TAGGED | FI_SEND)) == (FI_TAGGED | FI_SEND)) {
-		ret = tx_ctx_msg_fini(txc);
+		ret = txc_msg_fini(txc);
 		if (ret)
 			CXIP_LOG_ERROR("Unable to destroy TX CTX, ret: %d\n",
 				       ret);
@@ -208,68 +242,79 @@ unlock:
 	fastlock_release(&txc->lock);
 }
 
-static struct cxip_tx_ctx *tx_context_alloc(const struct fi_tx_attr *attr,
-					    void *context, int use_shared,
-					    size_t fclass)
+/*
+ * txc_alloc() - Allocate a TX context.
+ *
+ * Used to support creating a TX context for fi_endpoint() or fi_tx_context().
+ */
+static struct cxip_txc *txc_alloc(const struct fi_tx_attr *attr, void *context,
+				  int use_shared, size_t fclass)
 {
-	struct cxip_tx_ctx *tx_ctx;
+	struct cxip_txc *txc;
 
-	tx_ctx = calloc(sizeof(*tx_ctx), 1);
-	if (!tx_ctx)
+	txc = calloc(sizeof(*txc), 1);
+	if (!txc)
 		return NULL;
 
-	dlist_init(&tx_ctx->cq_entry);
-	dlist_init(&tx_ctx->ep_list);
-	fastlock_init(&tx_ctx->lock);
+	dlist_init(&txc->cq_entry);
+	dlist_init(&txc->ep_list);
+	fastlock_init(&txc->lock);
 
 	switch (fclass) {
 	case FI_CLASS_TX_CTX:
-		tx_ctx->fid.ctx.fid.fclass = FI_CLASS_TX_CTX;
-		tx_ctx->fid.ctx.fid.context = context;
-		tx_ctx->fclass = FI_CLASS_TX_CTX;
-		tx_ctx->use_shared = use_shared;
+		txc->fid.ctx.fid.fclass = FI_CLASS_TX_CTX;
+		txc->fid.ctx.fid.context = context;
+		txc->fclass = FI_CLASS_TX_CTX;
+		txc->use_shared = use_shared;
 		break;
 	case FI_CLASS_STX_CTX:
-		tx_ctx->fid.stx.fid.fclass = FI_CLASS_STX_CTX;
-		tx_ctx->fid.stx.fid.context = context;
-		tx_ctx->fclass = FI_CLASS_STX_CTX;
+		txc->fid.stx.fid.fclass = FI_CLASS_STX_CTX;
+		txc->fid.stx.fid.context = context;
+		txc->fclass = FI_CLASS_STX_CTX;
 		break;
 	default:
 		goto err;
 	}
-	tx_ctx->attr = *attr;
-	tx_ctx->attr.op_flags |= FI_TRANSMIT_COMPLETE;
-	tx_ctx->eager_threshold = CXIP_EAGER_THRESHOLD;
+	txc->attr = *attr;
+	txc->attr.op_flags |= FI_TRANSMIT_COMPLETE;
+	txc->eager_threshold = CXIP_EAGER_THRESHOLD;
 
 	if (getenv("RDZV_OFFLOAD")) {
-		tx_ctx->rdzv_offload = 1;
+		txc->rdzv_offload = 1;
 		fprintf(stderr, "Rendezvous offload enabled\n");
 	}
 
-	return tx_ctx;
+	return txc;
 
 err:
-	fastlock_destroy(&tx_ctx->lock);
-	free(tx_ctx);
+	fastlock_destroy(&txc->lock);
+	free(txc);
 	return NULL;
 }
 
-struct cxip_tx_ctx *cxip_tx_ctx_alloc(const struct fi_tx_attr *attr,
-				      void *context, int use_shared)
+/*
+ * cxip_stx_alloc() - Allocate a regular (not shared) TX context.
+ */
+struct cxip_txc *cxip_txc_alloc(const struct fi_tx_attr *attr, void *context,
+				int use_shared)
 {
-	return tx_context_alloc(attr, context, use_shared,
-				     FI_CLASS_TX_CTX);
+	return txc_alloc(attr, context, use_shared, FI_CLASS_TX_CTX);
 }
 
-struct cxip_tx_ctx *cxip_stx_ctx_alloc(const struct fi_tx_attr *attr,
-				       void *context)
+/*
+ * cxip_stx_alloc() - Allocate a shared TX context.
+ */
+struct cxip_txc *cxip_stx_alloc(const struct fi_tx_attr *attr, void *context)
 {
-	return tx_context_alloc(attr, context, 0, FI_CLASS_STX_CTX);
+	return txc_alloc(attr, context, 0, FI_CLASS_STX_CTX);
 }
 
-void cxip_tx_ctx_free(struct cxip_tx_ctx *tx_ctx)
+/*
+ * cxip_txc_free() - Free a TX context allocated using cxip_txc_alloc()
+ */
+void cxip_txc_free(struct cxip_txc *txc)
 {
-	tx_ctx_disable(tx_ctx);
-	fastlock_destroy(&tx_ctx->lock);
-	free(tx_ctx);
+	txc_disable(txc);
+	fastlock_destroy(&txc->lock);
+	free(txc);
 }

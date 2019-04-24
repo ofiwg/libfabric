@@ -1188,7 +1188,7 @@ static void rdzv_send_req_free(struct cxip_req *req)
 {
 	fastlock_acquire(&req->send.txc->lock);
 
-	cxip_tx_ctx_free_rdzv_id(req->send.txc, req->send.rdzv_id);
+	cxip_txc_free_rdzv_id(req->send.txc, req->send.rdzv_id);
 	CXIP_LOG_DBG("Freed RDZV ID: %d\n", req->send.rdzv_id);
 
 	fastlock_release(&req->send.txc->lock);
@@ -1207,7 +1207,7 @@ static void cxip_send_long_cb(struct cxip_req *req, const union c_event *event)
 {
 	int ret;
 	int event_rc;
-	struct cxip_tx_ctx *txc = req->send.txc;
+	struct cxip_txc *txc = req->send.txc;
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_LINK:
@@ -1391,7 +1391,7 @@ rdzv_unlink_le:
  * 3. Once the Put is matched to a user receive buffer (in the Priority list),
  *    a Get of the remaining source data is performed.
  */
-static ssize_t _cxip_send_long(struct cxip_tx_ctx *txc, struct cxip_req *req)
+static ssize_t _cxip_send_long(struct cxip_txc *txc, struct cxip_req *req)
 {
 	int ret;
 	int rdzv_id;
@@ -1402,7 +1402,7 @@ static ssize_t _cxip_send_long(struct cxip_tx_ctx *txc, struct cxip_req *req)
 	fastlock_acquire(&txc->lock);
 
 	/* Get Rendezvous ID */
-	rdzv_id = cxip_tx_ctx_alloc_rdzv_id(txc);
+	rdzv_id = cxip_txc_alloc_rdzv_id(txc);
 	if (rdzv_id < 0) {
 		CXIP_LOG_DBG("Failed alloc RDZV ID\n");
 		goto unlock;
@@ -1455,7 +1455,7 @@ static ssize_t _cxip_send_long(struct cxip_tx_ctx *txc, struct cxip_req *req)
 	return FI_SUCCESS;
 
 free_id:
-	cxip_tx_ctx_free_rdzv_id(txc, rdzv_id);
+	cxip_txc_free_rdzv_id(txc, rdzv_id);
 unlock:
 	fastlock_release(&txc->lock);
 
@@ -1497,7 +1497,7 @@ static void cxip_send_eager_cb(struct cxip_req *req,
 /*
  * _cxip_send_eager() - Enqueue eager send command.
  */
-static ssize_t _cxip_send_eager(struct cxip_tx_ctx *txc, union c_cmdu *cmd)
+static ssize_t _cxip_send_eager(struct cxip_txc *txc, union c_cmdu *cmd)
 {
 	int ret;
 
@@ -1531,7 +1531,7 @@ unlock:
 /*
  * _txc_fi_addr() - Return the FI address of the TXC.
  */
-static fi_addr_t _txc_fi_addr(struct cxip_tx_ctx *txc)
+static fi_addr_t _txc_fi_addr(struct cxip_txc *txc)
 {
 	if (txc->ep_obj->fi_addr == FI_ADDR_NOTAVAIL) {
 		txc->ep_obj->fi_addr =
@@ -1554,7 +1554,7 @@ static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 			  void *context, uint64_t flags, bool tagged)
 {
 	struct cxip_ep *cxi_ep;
-	struct cxip_tx_ctx *txc;
+	struct cxip_txc *txc;
 	struct cxip_domain *dom;
 	int ret;
 	struct cxip_md *send_md;
@@ -1580,11 +1580,11 @@ static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 	switch (ep->fid.fclass) {
 	case FI_CLASS_EP:
 		cxi_ep = container_of(ep, struct cxip_ep, ep);
-		txc = cxi_ep->ep_obj->tx_ctx;
+		txc = cxi_ep->ep_obj->txc;
 		break;
 
 	case FI_CLASS_TX_CTX:
-		txc = container_of(ep, struct cxip_tx_ctx, fid.ctx);
+		txc = container_of(ep, struct cxip_txc, fid.ctx);
 		break;
 
 	default:

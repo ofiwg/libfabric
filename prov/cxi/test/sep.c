@@ -199,7 +199,7 @@ Test(sep, ctx_tx)
 {
 	int ret;
 	struct cxip_ep *cxi_ep;
-	struct cxip_tx_ctx *tx_ctx;
+	struct cxip_txc *txc;
 	struct fid_ep *tx_ep = NULL;
 	struct fid_ep *tx_ep2 = NULL;
 	void *context = &ret;
@@ -221,20 +221,20 @@ Test(sep, ctx_tx)
 	cr_assert_null(tx_ep2);
 
 	/* Validate TX ctx */
-	tx_ctx = container_of(tx_ep, struct cxip_tx_ctx, fid.ctx);
-	cr_assert_eq(tx_ctx->ep_obj, cxi_ep->ep_obj);
-	cr_assert_eq(tx_ctx->domain, cxi_ep->ep_obj->domain);
-	cr_assert_eq(ofi_atomic_get32(&cxi_ep->ep_obj->num_tx_ctx), 1);
-	cr_assert_eq(tx_ctx->fid.ctx.fid.fclass, FI_CLASS_TX_CTX);
-	cr_assert_eq(tx_ctx->fclass, FI_CLASS_TX_CTX);
-	cr_assert_eq(tx_ctx->fid.ctx.fid.context, context);
+	txc = container_of(tx_ep, struct cxip_txc, fid.ctx);
+	cr_assert_eq(txc->ep_obj, cxi_ep->ep_obj);
+	cr_assert_eq(txc->domain, cxi_ep->ep_obj->domain);
+	cr_assert_eq(ofi_atomic_get32(&cxi_ep->ep_obj->num_txc), 1);
+	cr_assert_eq(txc->fid.ctx.fid.fclass, FI_CLASS_TX_CTX);
+	cr_assert_eq(txc->fclass, FI_CLASS_TX_CTX);
+	cr_assert_eq(txc->fid.ctx.fid.context, context);
 
 	/* Make sure this went where we wanted it */
-	cr_assert_not_null(tx_ctx->ep_obj->tx_array);
-	cr_assert_null(tx_ctx->ep_obj->tx_ctx);
-	for (i = 0; i < tx_ctx->ep_obj->ep_attr.tx_ctx_cnt; i++) {
-		struct cxip_tx_ctx *ctx = tx_ctx->ep_obj->tx_array[i];
-		struct cxip_tx_ctx *exp = (i == idx) ? tx_ctx : NULL;
+	cr_assert_not_null(txc->ep_obj->tx_array);
+	cr_assert_null(txc->ep_obj->txc);
+	for (i = 0; i < txc->ep_obj->ep_attr.tx_ctx_cnt; i++) {
+		struct cxip_txc *ctx = txc->ep_obj->tx_array[i];
+		struct cxip_txc *exp = (i == idx) ? txc : NULL;
 
 		cr_assert_eq(ctx, exp,
 			     "mismatch on index %d, exp=%p, saw=%p\n",

@@ -26,10 +26,10 @@ const struct fi_cntr_attr cxip_cntr_attr = {
 	.flags = 0,
 };
 
-void cxip_cntr_add_tx_ctx(struct cxip_cntr *cntr, struct cxip_tx_ctx *tx_ctx)
+void cxip_cntr_add_txc(struct cxip_cntr *cntr, struct cxip_txc *txc)
 {
 	int ret;
-	struct fid *fid = &tx_ctx->fid.ctx.fid;
+	struct fid *fid = &txc->fid.ctx.fid;
 
 	ret = fid_list_insert(&cntr->tx_list, &cntr->list_lock, fid);
 	if (ret)
@@ -38,9 +38,9 @@ void cxip_cntr_add_tx_ctx(struct cxip_cntr *cntr, struct cxip_tx_ctx *tx_ctx)
 		ofi_atomic_inc32(&cntr->ref);
 }
 
-void cxip_cntr_remove_tx_ctx(struct cxip_cntr *cntr, struct cxip_tx_ctx *tx_ctx)
+void cxip_cntr_remove_txc(struct cxip_cntr *cntr, struct cxip_txc *txc)
 {
-	struct fid *fid = &tx_ctx->fid.ctx.fid;
+	struct fid *fid = &txc->fid.ctx.fid;
 
 	fid_list_remove(&cntr->tx_list, &cntr->list_lock, fid);
 	ofi_atomic_dec32(&cntr->ref);
