@@ -323,10 +323,13 @@ void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache)
 		dlist_remove_init(&entry->lru_entry);
 		util_mr_free_entry(cache, entry);
 	}
-	cache->storage.destroy(&cache->storage);
+	if (cache->storage.type != OFI_MR_STORAGE_NONE)
+		cache->storage.destroy(&cache->storage);
 	ofi_monitor_del_cache(cache);
-	ofi_atomic_dec32(&cache->domain->ref);
-	ofi_bufpool_destroy(cache->entry_pool);
+	if (cache->domain)
+		ofi_atomic_dec32(&cache->domain->ref);
+	if (cache->entry_pool)
+		ofi_bufpool_destroy(cache->entry_pool);
 	assert(cache->cached_cnt == 0);
 	assert(cache->cached_size == 0);
 }
@@ -393,18 +396,27 @@ static int ofi_mr_cache_init_rbt(struct ofi_mr_cache *cache)
 
 static int ofi_mr_cache_init_storage(struct ofi_mr_cache *cache)
 {
+	int ret;
+
 	switch (cache->storage.type) {
 	case OFI_MR_STORAGE_DEFAULT:
 	case OFI_MR_STORAGE_RBT:
-		return ofi_mr_cache_init_rbt(cache);
+		ret = ofi_mr_cache_init_rbt(cache);
+		break;
 	case OFI_MR_STORAGE_USER:
-		if (!(cache->storage.storage &&
+		ret = (cache->storage.storage &&
 		      cache->storage.destroy && cache->storage.find &&
-		      cache->storage.insert && cache->storage.erase))
-			return -FI_EINVAL;
+		      cache->storage.insert && cache->storage.erase) ?
+			0 : -FI_EINVAL;
+		break;
+	default:
+		ret = -FI_EINVAL;
 		break;
 	}
-	return 0;
+
+	if (ret)
+		cache->storage.type = OFI_MR_STORAGE_NONE;
+	return ret;
 }
 
 int ofi_mr_cache_init(struct util_domain *domain,
@@ -415,6 +427,14 @@ int ofi_mr_cache_init(struct util_domain *domain,
 
 	assert(cache->add_region && cache->delete_region);
 
+	dlist_init(&cache->lru_list);
+	cache->cached_cnt = 0;
+	cache->cached_size = 0;
+	cache->search_cnt = 0;
+	cache->delete_cnt = 0;
+	cache->hit_cnt = 0;
+	cache->notify_cnt = 0;
+
 	ret = ofi_mr_cache_init_storage(cache);
 	if (ret)
 		return ret;
@@ -422,15 +442,8 @@ int ofi_mr_cache_init(struct util_domain *domain,
 	cache->domain = domain;
 	ofi_atomic_inc32(&domain->ref);
 
-	dlist_init(&cache->lru_list);
-	cache->cached_cnt = 0;
-	cache->cached_size = 0;
 	if (!cache->max_cached_size)
 		cache->max_cached_size = SIZE_MAX;
-	cache->search_cnt = 0;
-	cache->delete_cnt = 0;
-	cache->hit_cnt = 0;
-	cache->notify_cnt = 0;
 	ret = ofi_monitor_add_cache(monitor, cache);
 	if (ret)
 		goto destroy;
@@ -444,9 +457,11 @@ int ofi_mr_cache_init(struct util_domain *domain,
 
 	return 0;
 del:
+	cache->entry_pool = NULL;
 	ofi_monitor_del_cache(cache);
 destroy:
 	ofi_atomic_dec32(&cache->domain->ref);
+	cache->domain = NULL;
 	cache->storage.destroy(&cache->storage);
 	return ret;
 }

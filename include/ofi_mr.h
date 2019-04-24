@@ -218,6 +218,7 @@ enum ofi_mr_storage_type {
 	OFI_MR_STORAGE_DEFAULT = 0,
 	OFI_MR_STORAGE_RBT,
 	OFI_MR_STORAGE_USER,
+	OFI_MR_STORAGE_NONE,
 };
 
 struct ofi_mr_storage {
