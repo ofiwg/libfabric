@@ -287,7 +287,7 @@ int main(int argc, char **argv)
 		switch (op) {
 		default:
 			ft_parse_addr_opts(op, optarg, &opts);
-			ft_parseinfo(op, optarg, hints);
+			ft_parseinfo(op, optarg, hints, &opts);
 			break;
 		case 'c':
 			num_eps = atoi(optarg);

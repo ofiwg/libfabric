@@ -79,7 +79,7 @@ int main(int argc, char **argv)
 			}
 			break;
 		default:
-			ft_parseinfo(op, optarg, hints);
+			ft_parseinfo(op, optarg, hints, &opts);
 			break;
 		case '?':
 		case 'h':

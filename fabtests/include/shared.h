@@ -157,6 +157,7 @@ struct ft_opts {
 	char *oob_port;
 	int argc;
 
+	uint64_t mr_mode;
 	/* Fail if the selected provider does not support FI_MSG_PREFIX.  */
 	int force_prefix;
 	char **argv;
@@ -199,7 +200,8 @@ extern char test_name[50];
 extern struct timespec start, end;
 extern struct ft_opts opts;
 
-void ft_parseinfo(int op, char *optarg, struct fi_info *hints);
+void ft_parseinfo(int op, char *optarg, struct fi_info *hints,
+		  struct ft_opts *opts);
 void ft_parse_addr_opts(int op, char *optarg, struct ft_opts *opts);
 void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts);
 int ft_parse_rma_opts(int op, char *optarg, struct fi_info *hints,
@@ -228,7 +230,7 @@ extern int sock;
 extern int listen_sock;
 #define ADDR_OPTS "B:P:s:a:b::E::"
 #define FAB_OPTS "f:d:p:"
-#define INFO_OPTS FAB_OPTS "e:"
+#define INFO_OPTS FAB_OPTS "e:M:"
 #define CS_OPTS ADDR_OPTS "I:S:mc:t:w:l"
 #define NO_CQ_DATA 0
 
@@ -247,6 +249,7 @@ extern char default_port[8];
 		.sizes_enabled = FT_DEFAULT_SIZE, \
 		.rma_op = FT_RMA_WRITE, \
 		.oob_port = NULL, \
+		.mr_mode = FI_MR_LOCAL | OFI_MR_BASIC_MAP, \
 		.argc = argc, .argv = argv \
 	}
 

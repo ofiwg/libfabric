@@ -2617,6 +2617,8 @@ void ft_usage(char *name, char *desc)
 	FT_PRINT_OPTS_USAGE("", "fi_unexpected_msg");
 	FT_PRINT_OPTS_USAGE("", "fi_resmgmt_test");
 	FT_PRINT_OPTS_USAGE("", "fi_inj_complete");
+	FT_PRINT_OPTS_USAGE("-M <mode>", "Disable mode bit from test");
+	FT_PRINT_OPTS_USAGE("", "mr_local");
 	FT_PRINT_OPTS_USAGE("-a <address vector name>", "name of address vector");
 	FT_PRINT_OPTS_USAGE("-h", "display this help output");
 
@@ -2659,7 +2661,8 @@ void ft_csusage(char *name, char *desc)
 	return;
 }
 
-void ft_parseinfo(int op, char *optarg, struct fi_info *hints)
+void ft_parseinfo(int op, char *optarg, struct fi_info *hints,
+		  struct ft_opts *opts)
 {
 	switch (op) {
 	case 'f':
@@ -2699,6 +2702,10 @@ void ft_parseinfo(int op, char *optarg, struct fi_info *hints)
 			hints->ep_attr->type = FI_EP_RDM;
 		if (!strncasecmp("dgram", optarg, 5))
 			hints->ep_attr->type = FI_EP_DGRAM;
+		break;
+	case 'M':
+		if (!strncasecmp("mr_local", optarg, 8))
+			opts->mr_mode &= ~FI_MR_LOCAL;
 		break;
 	default:
 		/* let getopt handle unknown opts*/

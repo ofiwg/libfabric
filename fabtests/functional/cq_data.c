@@ -117,7 +117,7 @@ int main(int argc, char **argv)
 		switch (op) {
 		default:
 			ft_parse_addr_opts(op, optarg, &opts);
-			ft_parseinfo(op, optarg, hints);
+			ft_parseinfo(op, optarg, hints, &opts);
 			break;
 		case '?':
 		case 'h':
@@ -133,7 +133,7 @@ int main(int argc, char **argv)
 	hints->mode |= FI_CONTEXT | FI_RX_CQ_DATA;
 
 	hints->caps = FI_MSG;
-	hints->domain_attr->mr_mode = FI_MR_LOCAL | OFI_MR_BASIC_MAP;
+	hints->domain_attr->mr_mode = opts.mr_mode;
 
 	cq_attr.format = FI_CQ_FORMAT_DATA;
 

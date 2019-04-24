@@ -600,7 +600,7 @@ int main(int argc, char **argv)
 	while ((op = getopt(argc, argv, FAB_OPTS "h")) != -1) {
 		switch (op) {
 		default:
-			ft_parseinfo(op, optarg, hints);
+			ft_parseinfo(op, optarg, hints, &opts);
 			break;
 		case '?':
 		case 'h':
@@ -613,9 +613,7 @@ int main(int argc, char **argv)
 		FI_RX_CQ_DATA | FI_NOTIFY_FLAGS_ONLY | FI_RESTRICTED_COMP |
 		FI_BUFFERED_RECV;
 	hints->domain_attr->mode = FI_RESTRICTED_COMP;
-	hints->domain_attr->mr_mode = FI_MR_LOCAL| FI_MR_RAW | FI_MR_VIRT_ADDR |
-		FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_MMU_NOTIFY |
-		FI_MR_RMA_EVENT | FI_MR_ENDPOINT;
+	hints->domain_attr->mr_mode = ~(FI_MR_BASIC | FI_MR_SCALABLE);
 
 	ret = fi_getinfo(FT_FIVERSION, NULL, 0, 0, hints, &fi);
 	if (ret) {

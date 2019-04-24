@@ -165,7 +165,7 @@ static int init_ep_mr_res(struct test_domain *domain, struct fi_info *info)
 	}
 
 	ret = fi_mr_reg(domain->dom, domain->buf,
-			opts.transfer_size, FI_REMOTE_WRITE,
+			opts.transfer_size, FI_WRITE | FI_REMOTE_WRITE,
 			0, FT_MR_KEY, 0, &domain->mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
@@ -230,7 +230,6 @@ static int init_domain_res()
 			return ret;
 		}
 
-		info->domain_attr->mr_mode = FI_MR_SCALABLE;
 		ret = fi_domain(fabric, info,
 				&domain_res_array[dom_idx].dom,
 				NULL);
@@ -406,7 +405,7 @@ int main(int argc, char **argv)
 		switch (op) {
 		default:
 			ft_parse_addr_opts(op, optarg, &opts);
-			ft_parseinfo(op, optarg, hints);
+			ft_parseinfo(op, optarg, hints, &opts);
 			break;
 		case 'c':
 			domain_cnt = strtoull(optarg, NULL, 10);
@@ -429,7 +428,7 @@ int main(int argc, char **argv)
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_RMA | FI_RMA_EVENT | FI_MSG;
 	hints->mode = FI_CONTEXT;
-	hints->domain_attr->mr_mode = FI_MR_LOCAL | OFI_MR_BASIC_MAP;
+	hints->domain_attr->mr_mode = opts.mr_mode;
 
 	ret = run_test();
 

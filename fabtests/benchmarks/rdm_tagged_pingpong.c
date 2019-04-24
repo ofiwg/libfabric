@@ -80,7 +80,7 @@ int main(int argc, char **argv)
 		switch (op) {
 		default:
 			ft_parse_benchmark_opts(op, optarg);
-			ft_parseinfo(op, optarg, hints);
+			ft_parseinfo(op, optarg, hints, &opts);
 			ft_parsecsopts(op, optarg, &opts);
 			break;
 		case '?':
@@ -97,7 +97,7 @@ int main(int argc, char **argv)
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_TAGGED;
 	hints->mode = FI_CONTEXT;
-	hints->domain_attr->mr_mode = FI_MR_LOCAL | OFI_MR_BASIC_MAP;
+	hints->domain_attr->mr_mode = opts.mr_mode;
 	hints->domain_attr->threading = FI_THREAD_DOMAIN;
 
 	ret = run();

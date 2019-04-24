@@ -197,7 +197,7 @@ int main(int argc, char **argv)
 		switch (op) {
 		default:
 			ft_parse_addr_opts(op, optarg, &opts);
-			ft_parseinfo(op, optarg, hints);
+			ft_parseinfo(op, optarg, hints, &opts);
 			break;
 		case 'V':
 			opts.verbose = 1;
@@ -215,7 +215,7 @@ int main(int argc, char **argv)
 
 	hints->caps = FI_TAGGED;
 	hints->mode = FI_CONTEXT;
-	hints->domain_attr->mr_mode = FI_MR_LOCAL | FI_MR_ALLOCATED;
+	hints->domain_attr->mr_mode = opts.mr_mode;
 
 	ret = run_test();
 

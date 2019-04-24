@@ -344,7 +344,7 @@ int main(int argc, char **argv)
 	while ((op = getopt(argc, argv, "Mhv" CS_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
 		default:
-			ft_parseinfo(op, optarg, hints);
+			ft_parseinfo(op, optarg, hints, &opts);
 			ft_parsecsopts(op, optarg, &opts);
 			break;
 		case 'M':
@@ -367,7 +367,7 @@ int main(int argc, char **argv)
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG | FI_MULTI_RECV;
 	hints->mode = FI_CONTEXT;
-	hints->domain_attr->mr_mode = FI_MR_LOCAL | OFI_MR_BASIC_MAP;
+	hints->domain_attr->mr_mode = opts.mr_mode;
 
 	cq_attr.format = FI_CQ_FORMAT_DATA;
 
