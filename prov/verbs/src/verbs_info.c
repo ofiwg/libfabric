@@ -623,7 +623,7 @@ static int fi_ibv_get_device_attrs(struct ibv_context *ctx,
 	}
 
 	if (port_num == device_attr.phys_port_cnt + 1) {
-		VERBS_WARN(FI_LOG_FABRIC, "There are no active ports\n");
+		VERBS_INFO(FI_LOG_FABRIC, "There are no active ports\n");
 		return -FI_ENODATA;
 	} else {
 		VERBS_INFO(FI_LOG_FABRIC,
