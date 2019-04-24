@@ -49,7 +49,6 @@ struct fi_ibv_gl_data fi_ibv_gl_data = {
 	.def_rx_iov_limit	= 4,
 	.def_inline_size	= 256,
 	.min_rnr_timer		= VERBS_DEFAULT_MIN_RNR_TIMER,
-	.fork_unsafe		= 0,
 	/* Disable by default. Because this feature may corrupt
 	 * data due to IBV_EXP_ACCESS_RELAXED flag. But usage
 	 * this feature w/o this flag leads to poor bandwidth */
@@ -530,8 +529,6 @@ static int fi_ibv_get_param_str(const char *param_name,
 
 static int fi_ibv_read_params(void)
 {
-	int ret;
-
 	/* Common parameters */
 	if (fi_ibv_get_param_int("tx_size", "Default maximum tx context size",
 				 &fi_ibv_gl_data.def_tx_size) ||
@@ -576,13 +573,6 @@ static int fi_ibv_read_params(void)
 	     (fi_ibv_gl_data.min_rnr_timer > 31))) {
 		VERBS_WARN(FI_LOG_CORE,
 			   "Invalid value of min_rnr_timer\n");
-		return -FI_EINVAL;
-	}
-
-	ret = fi_param_get_bool(NULL, "fork_unsafe", &fi_ibv_gl_data.fork_unsafe);
-	if (ret && ret != -FI_ENODATA) {
-		VERBS_WARN(FI_LOG_CORE,
-			   "Invalid value of FI_FORK_UNSAFE\n");
 		return -FI_EINVAL;
 	}
 

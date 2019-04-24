@@ -1317,9 +1317,19 @@ static inline int rxm_msg_ep_recv(struct rxm_rx_buf *rx_buf)
 	ret = (int)fi_recv(rx_buf->msg_ep, &rx_buf->pkt,
 			   rxm_eager_limit + sizeof(struct rxm_pkt),
 			   rx_buf->hdr.desc, FI_ADDR_UNSPEC, rx_buf);
-	if (ret)
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-			"unable to post recv buf: %d\n", ret);
+	if (OFI_LIKELY(!ret))
+		return 0;
+
+	if (ret != -FI_EAGAIN) {
+		int level = FI_LOG_WARN;
+		rx_buf->conn->handle.cmap->acquire(&rx_buf->conn->handle.cmap->lock);
+		if (rx_buf->conn->handle.state == RXM_CMAP_SHUTDOWN)
+			level = FI_LOG_DEBUG;
+		rx_buf->conn->handle.cmap->release(&rx_buf->conn->handle.cmap->lock);
+
+		FI_LOG(&rxm_prov, level, FI_LOG_EP_CTRL,
+		       "unable to post recv buf: %d\n", ret);
+	}
 	return ret;
 }
 
@@ -1362,7 +1372,7 @@ void rxm_ep_do_progress(struct util_ep *util_ep)
 				buf, repost_entry);
 
 		/* Discard rx buffer if its msg_ep was closed */
-		if (!buf->conn->msg_ep) {
+		if (!buf->ep->srx_ctx && !buf->conn->msg_ep) {
 			util_buf_release(rxm_ep->buf_pools[RXM_BUF_POOL_RX].pool,
 					 buf);
 			continue;
