@@ -97,6 +97,8 @@ static ssize_t tcpx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
 
 	assert(msg->iov_count <= TCPX_IOV_LIMIT);
+	assert(!(tcpx_ep->util_ep.rx_op_flags &
+		 flags & FI_MULTI_RECV) || msg->iov_count == 1);
 
 	recv_entry = tcpx_alloc_recv_entry(tcpx_ep);
 	if (!recv_entry)
@@ -147,6 +149,7 @@ static ssize_t tcpx_recvv(struct fid_ep *ep, const struct iovec *iov, void **des
 	tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
 
 	assert(count <= TCPX_IOV_LIMIT);
+	assert(!(tcpx_ep->util_ep.rx_op_flags & FI_MULTI_RECV) || count == 1);
 
 	recv_entry = tcpx_alloc_recv_entry(tcpx_ep);
 	if (!recv_entry)
