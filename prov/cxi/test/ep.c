@@ -214,7 +214,7 @@ Test(ep, ep_bind_cq)
 	cr_assert_not_null(ep->ep_obj);
 
 	for (size_t i = 0; i < ep->ep_obj->ep_attr.tx_ctx_cnt; i++) {
-		txc = ep->ep_obj->tx_array[i];
+		txc = ep->ep_obj->txcs[i];
 
 		if (!txc)
 			continue;
@@ -226,7 +226,7 @@ Test(ep, ep_bind_cq)
 	cr_assert_not_null(txc);
 
 	for (size_t i = 0; i < ep->ep_obj->ep_attr.rx_ctx_cnt; i++) {
-		rxc = ep->ep_obj->rx_array[i];
+		rxc = ep->ep_obj->rxcs[i];
 
 		if (!rxc)
 			continue;

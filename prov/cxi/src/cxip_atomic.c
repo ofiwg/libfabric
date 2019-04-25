@@ -513,7 +513,7 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 		struct cxip_ep *cxi_ep;
 	case FI_CLASS_EP:
 		cxi_ep = container_of(ep, struct cxip_ep, ep);
-		txc = cxi_ep->ep_obj->txc;
+		txc = cxi_ep->ep_obj->txcs[0];
 		break;
 	case FI_CLASS_TX_CTX:
 		txc = container_of(ep, struct cxip_txc, fid.ctx);

@@ -230,10 +230,9 @@ Test(sep, ctx_tx)
 	cr_assert_eq(txc->fid.ctx.fid.context, context);
 
 	/* Make sure this went where we wanted it */
-	cr_assert_not_null(txc->ep_obj->tx_array);
-	cr_assert_null(txc->ep_obj->txc);
+	cr_assert_not_null(txc->ep_obj->txcs);
 	for (i = 0; i < txc->ep_obj->ep_attr.tx_ctx_cnt; i++) {
-		struct cxip_txc *ctx = txc->ep_obj->tx_array[i];
+		struct cxip_txc *ctx = txc->ep_obj->txcs[i];
 		struct cxip_txc *exp = (i == idx) ? txc : NULL;
 
 		cr_assert_eq(ctx, exp,
@@ -287,10 +286,9 @@ Test(sep, ctx_rx)
 	cr_assert_eq(rxc->ctx.fid.context, context);
 
 	/* Make sure this went where we wanted it */
-	cr_assert_not_null(rxc->ep_obj->rx_array);
-	cr_assert_null(rxc->ep_obj->rxc);
+	cr_assert_not_null(rxc->ep_obj->rxcs);
 	for (i = 0; i < rxc->ep_obj->ep_attr.rx_ctx_cnt; i++) {
-		struct cxip_rxc *ctx = rxc->ep_obj->rx_array[i];
+		struct cxip_rxc *ctx = rxc->ep_obj->rxcs[i];
 		struct cxip_rxc *exp = (i == idx) ? rxc : NULL;
 
 		cr_assert_eq(ctx, exp,

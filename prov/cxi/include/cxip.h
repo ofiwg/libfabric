@@ -744,15 +744,11 @@ struct cxip_ep_obj {
 	struct cxip_av *av;		// target AV (network address vector)
 	struct cxip_domain *domain;	// parent domain
 
-	/* TX/RX context pointers for standard EPs. */
-	struct cxip_rxc *rxc;		// rx_array[0] || NULL
-	struct cxip_txc *txc;		// tx_array[0] || NULL
-
-	/* TX/RX contexts.  Standard EPs have 1 of each.  SEPs have many. */
-	struct cxip_rxc **rx_array;	// rx contexts
-	struct cxip_txc **tx_array;	// tx contexts
-	ofi_atomic32_t num_rxc;	// num rx contexts (>= 1)
-	ofi_atomic32_t num_txc;	// num tx contexts (>= 1)
+	/* TX/RX contexts. Standard EPs have 1 of each. SEPs have many. */
+	struct cxip_rxc **rxcs;		// RX contexts
+	struct cxip_txc **txcs;		// TX contexts
+	ofi_atomic32_t num_rxc;		// num RX contexts (>= 1)
+	ofi_atomic32_t num_txc;		// num TX contexts (>= 1)
 
 	struct fi_info info;		// TODO: use this properly
 	struct fi_ep_attr ep_attr;
