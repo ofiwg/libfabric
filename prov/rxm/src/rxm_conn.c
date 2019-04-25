@@ -379,19 +379,27 @@ rxm_cmap_get_handle_peer(struct rxm_cmap *cmap, const void *addr)
 	return peer->handle;
 }
 
-int rxm_cmap_move_handle_to_peer_list(struct rxm_cmap *cmap, int index)
+int rxm_cmap_remove(struct rxm_cmap *cmap, int index)
 {
 	struct rxm_cmap_handle *handle;
-	int ret = 0;
+	int ret = -FI_ENOENT;
+
+	assert(cmap->ep->domain->data_progress != FI_PROGRESS_AUTO ||
+	       cmap->acquire == ofi_fastlock_acquire);
 
 	cmap->acquire(&cmap->lock);
 	handle = cmap->handles_av[index];
-	if (!handle)
+	if (!handle) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "cmap entry not found\n");
 		goto unlock;
+	}
 
 	handle->peer = calloc(1, sizeof(*handle->peer) + cmap->av->addrlen);
 	if (!handle->peer) {
 		ret = -FI_ENOMEM;
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "unable to allocate memory "
+			"for moving handle to peer list, deleting it instead\n");
+		rxm_cmap_del_handle(handle);
 		goto unlock;
 	}
 	handle->fi_addr = FI_ADDR_NOTAVAIL;
@@ -985,7 +993,6 @@ static int rxm_conn_reprocess_directed_recvs(struct rxm_recv_queue *recv_queue)
 	struct fi_cq_err_entry err_entry = {0};
 	int ret, count = 0;
 
-	ofi_ep_lock_acquire(&recv_queue->rxm_ep->util_ep);
 	dlist_foreach_container_safe(&recv_queue->unexp_msg_list,
 				     struct rxm_rx_buf, rx_buf,
 				     unexp_msg.entry, tmp_entry) {
@@ -1030,8 +1037,6 @@ static int rxm_conn_reprocess_directed_recvs(struct rxm_recv_queue *recv_queue)
 		}
 		count++;
 	}
-	ofi_ep_lock_release(&recv_queue->rxm_ep->util_ep);
-
 	return count;
 }
 
