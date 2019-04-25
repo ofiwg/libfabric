@@ -23,8 +23,8 @@ extern struct fi_ops_mr cxip_dom_mr_ops;
 const struct fi_domain_attr cxip_domain_attr = {
 	.name = NULL,
 	.threading = FI_THREAD_SAFE,
-	.control_progress = FI_PROGRESS_AUTO,
-	.data_progress = FI_PROGRESS_AUTO,
+	.control_progress = FI_PROGRESS_MANUAL,
+	.data_progress = FI_PROGRESS_MANUAL,
 	.resource_mgmt = FI_RM_ENABLED,
 	.mr_mode = FI_MR_SCALABLE,
 	.mr_key_size = sizeof(uint64_t),
@@ -67,10 +67,10 @@ int cxip_verify_domain_attr(uint32_t version, const struct fi_info *info)
 
 	switch (attr->control_progress) {
 	case FI_PROGRESS_UNSPEC:
-	case FI_PROGRESS_AUTO:
 	case FI_PROGRESS_MANUAL:
 		break;
 
+	case FI_PROGRESS_AUTO:
 	default:
 		CXIP_LOG_DBG("Control progress mode not supported!\n");
 		return -FI_ENODATA;
@@ -78,11 +78,11 @@ int cxip_verify_domain_attr(uint32_t version, const struct fi_info *info)
 
 	switch (attr->data_progress) {
 	case FI_PROGRESS_UNSPEC:
-	case FI_PROGRESS_AUTO:
 	case FI_PROGRESS_MANUAL:
 		break;
 
 	default:
+	case FI_PROGRESS_AUTO:
 		CXIP_LOG_DBG("Data progress mode not supported!\n");
 		return -FI_ENODATA;
 	}
@@ -361,7 +361,7 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 
 	if (!info->domain_attr ||
 	    info->domain_attr->data_progress == FI_PROGRESS_UNSPEC)
-		cxi_domain->progress_mode = FI_PROGRESS_AUTO;
+		cxi_domain->progress_mode = FI_PROGRESS_MANUAL;
 	else
 		cxi_domain->progress_mode = info->domain_attr->data_progress;
 
