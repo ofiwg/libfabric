@@ -184,14 +184,14 @@ int cxip_txc_enable(struct cxip_txc *txc)
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Unable to allocate tgt_sd CMDQ, ret: %d\n", ret);
 		ret = -FI_EDOMAIN;
-		goto unlock;
+		goto free_tx_cmdq;
 	}
 
 	if ((txc->attr.caps & (FI_TAGGED | FI_SEND)) == (FI_TAGGED | FI_SEND)) {
 		ret = txc_msg_init(txc);
 		if (ret != FI_SUCCESS) {
 			CXIP_LOG_DBG("Unable to init TX CTX, ret: %d\n", ret);
-			goto unlock;
+			goto free_rx_cmdq;
 		}
 	}
 
@@ -200,6 +200,14 @@ int cxip_txc_enable(struct cxip_txc *txc)
 
 	return FI_SUCCESS;
 
+free_rx_cmdq:
+	ret = cxil_destroy_cmdq(txc->rx_cmdq);
+	if (ret)
+		CXIP_LOG_ERROR("Unable to destroy RX CMDQ, ret: %d\n", ret);
+free_tx_cmdq:
+	ret = cxil_destroy_cmdq(txc->tx_cmdq);
+	if (ret)
+		CXIP_LOG_ERROR("Unable to destroy TX CMDQ, ret: %d\n", ret);
 unlock:
 	fastlock_release(&txc->lock);
 
