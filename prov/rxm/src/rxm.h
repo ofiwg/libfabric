@@ -73,6 +73,8 @@ extern size_t rxm_eager_limit;
 
 #define RXM_IOV_LIMIT 4
 
+#define RXM_EQ_PROGRESS_SPIN_COUNT 10000
+
 #define RXM_MR_MODES	(OFI_MR_BASIC_MAP | FI_MR_LOCAL)
 #define RXM_MR_VIRT_ADDR(info) ((info->domain_attr->mr_mode == FI_MR_BASIC) ||\
 				info->domain_attr->mr_mode & FI_MR_VIRT_ADDR)
@@ -130,18 +132,6 @@ do {									\
 		} else {						\
 			RXM_Q_STRERROR(prov, log, cq, "cq",		\
 				       err_entry, fi_cq_strerror);	\
-		}							\
-	} while (0)
-
-#define RXM_EQ_READERR(prov, log, eq, ret, err_entry)			\
-	do {								\
-		(ret) = fi_eq_readerr((eq), &(err_entry), 0);		\
-		if ((ret) != sizeof(err_entry)) {			\
-			FI_WARN(prov, log,				\
-				"Unable to fi_eq_readerr: %zd\n", ret);	\
-		} else {						\
-			RXM_Q_STRERROR(prov, log, eq, "eq",		\
-				       err_entry, fi_eq_strerror);	\
 		}							\
 	} while (0)
 
@@ -252,6 +242,7 @@ void rxm_cmap_free(struct rxm_cmap *cmap);
 int rxm_cmap_alloc(struct rxm_ep *rxm_ep, struct rxm_cmap_attr *attr);
 /* Caller must hold cmap->lock */
 int rxm_cmap_move_handle_to_peer_list(struct rxm_cmap *cmap, int index);
+int rxm_msg_eq_progress(struct rxm_ep *rxm_ep);
 
 static inline struct rxm_cmap_handle *
 rxm_cmap_acquire_handle(struct rxm_cmap *cmap, fi_addr_t fi_addr)
@@ -629,7 +620,6 @@ struct rxm_buf_pool {
 };
 
 struct rxm_msg_eq_entry {
-	struct slist_entry	slist_entry;
 	ssize_t			rd;
 	uint32_t		event;
 	/* Used for connection refusal */
@@ -651,9 +641,9 @@ struct rxm_ep {
 	struct rxm_cmap		*cmap;
 	struct fid_pep 		*msg_pep;
 	struct fid_eq 		*msg_eq;
-	struct slistfd		msg_eq_entry_list;
-	fastlock_t		msg_eq_entry_list_lock;
+	int			msg_eq_fd;
 	struct fid_cq 		*msg_cq;
+	uint32_t		msg_cq_eagain_count;
 	int			msg_cq_fd;
 	struct fid_ep 		*srx_ctx;
 	size_t 			comp_per_progress;
