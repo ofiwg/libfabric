@@ -366,30 +366,15 @@ static int cxip_ctx_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
  * each RX, but not for the SEP itself.
  *
  * @param ep_obj : EP or SEP object
- * @param txc : TX context (may be NULL)
- * @param rxc : RX context (may be NULL)
  *
  * @return int 0 on success, -errno on failure
  */
-static int _ep_enable(struct cxip_ep_obj *ep_obj,
-		      struct cxip_txc *txc,
-		      struct cxip_rxc *rxc)
+static int _ep_enable(struct cxip_ep_obj *ep_obj)
 {
 	int ret;
 
 	if (ep_obj->is_enabled)
 		return FI_SUCCESS;
-
-	/* Make sure this is ready to enable */
-	if (txc && !txc->comp.send_cq) {
-		CXIP_LOG_DBG("enable TX context without CQ\n");
-		return -FI_ENOCQ;
-	}
-
-	if (rxc && !rxc->comp.recv_cq) {
-		CXIP_LOG_DBG("enable RX context without CQ\n");
-		return -FI_ENOCQ;
-	}
 
 	if (!ep_obj->av) {
 		CXIP_LOG_DBG("enable EP without AV\n");
@@ -434,7 +419,7 @@ static int _ep_enable(struct cxip_ep_obj *ep_obj,
  * Support TX/RX control(FI_ENABLE).
  *
  * @param ep
- : *
+ *
  * @return int : 0 on success, -errno on failure
  */
 static int cxip_ctx_enable(struct fid_ep *ep)
@@ -447,7 +432,7 @@ static int cxip_ctx_enable(struct fid_ep *ep)
 	case FI_CLASS_RX_CTX:
 		rxc = container_of(ep, struct cxip_rxc, ctx.fid);
 
-		ret = _ep_enable(rxc->ep_obj, NULL, rxc);
+		ret = _ep_enable(rxc->ep_obj);
 		if (ret != FI_SUCCESS)
 			return ret;
 
@@ -463,7 +448,7 @@ static int cxip_ctx_enable(struct fid_ep *ep)
 	case FI_CLASS_TX_CTX:
 		txc = container_of(ep, struct cxip_txc, fid.ctx.fid);
 
-		ret = _ep_enable(txc->ep_obj, txc, NULL);
+		ret = _ep_enable(txc->ep_obj);
 		if (ret != FI_SUCCESS)
 			return ret;
 
@@ -825,9 +810,7 @@ static int cxip_ep_enable(struct fid_ep *ep)
 			return -FI_EINVAL;
 		}
 
-		ret = _ep_enable(cxi_ep->ep_obj,
-				 cxi_ep->ep_obj->txc,
-				 cxi_ep->ep_obj->rxc);
+		ret = _ep_enable(cxi_ep->ep_obj);
 		if (ret != FI_SUCCESS)
 			return ret;
 
@@ -844,7 +827,7 @@ static int cxip_ep_enable(struct fid_ep *ep)
 			return ret;
 		}
 	} else {
-		ret = _ep_enable(cxi_ep->ep_obj, NULL, NULL);
+		ret = _ep_enable(cxi_ep->ep_obj);
 		if (ret != FI_SUCCESS)
 			return ret;
 	}
@@ -1312,7 +1295,7 @@ static int cxip_ep_setopt(fid_t fid, int level, int optname, const void *optval,
  * @return int : 0 on success, -errno on failure
  */
 static int cxip_ep_txc(struct fid_ep *ep, int index, struct fi_tx_attr *attr,
-			  struct fid_ep **tx_ep, void *context)
+		       struct fid_ep **tx_ep, void *context)
 {
 	struct fi_tx_attr *ep_attr;
 	struct cxip_ep *cxi_ep;

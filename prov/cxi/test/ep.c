@@ -623,11 +623,14 @@ Test(ep, control_enable_nocq)
 	int ret;
 
 	cxit_create_ep();
+	cxit_create_av();
+	cxit_bind_av();
 
 	ret = fi_enable(cxit_ep);
 	cr_assert_eq(ret, -FI_ENOCQ, "fi_enable. %d", ret);
 
 	cxit_destroy_ep();
+	cxit_destroy_av();
 }
 
 Test(ep, control_enable_noav)
@@ -678,7 +681,7 @@ ParameterizedTestParameters(ep, ctrl_null_arg)
 		{.command = FI_SETOPSFLAG,
 		 .retval = -FI_EINVAL},
 		{.command = FI_ENABLE,
-		 .retval = -FI_ENOCQ},
+		 .retval = -FI_ENOAV},
 	};
 
 	param_sz = ARRAY_SIZE(ep_null_params);

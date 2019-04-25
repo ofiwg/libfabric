@@ -155,12 +155,16 @@ int cxip_txc_enable(struct cxip_txc *txc)
 	if (txc->enabled)
 		goto unlock;
 
-	if (txc->comp.send_cq) {
-		ret = cxip_cq_enable(txc->comp.send_cq);
-		if (ret != FI_SUCCESS) {
-			CXIP_LOG_DBG("cxip_cq_enable returned: %d\n", ret);
-			goto unlock;
-		}
+	if (!txc->comp.send_cq) {
+		CXIP_LOG_DBG("Undefined send CQ\n");
+		ret = -FI_ENOCQ;
+		goto unlock;
+	}
+
+	ret = cxip_cq_enable(txc->comp.send_cq);
+	if (ret != FI_SUCCESS) {
+		CXIP_LOG_DBG("cxip_cq_enable returned: %d\n", ret);
+		goto unlock;
 	}
 
 	/* TODO set CMDQ size with TX attrs */

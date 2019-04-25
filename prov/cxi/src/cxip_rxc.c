@@ -110,12 +110,16 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 	if (rxc->enabled)
 		goto unlock;
 
-	if (rxc->comp.recv_cq) {
-		ret = cxip_cq_enable(rxc->comp.recv_cq);
-		if (ret != FI_SUCCESS) {
-			CXIP_LOG_DBG("cxip_cq_enable returned: %d\n", ret);
-			goto unlock;
-		}
+	if (!rxc->comp.recv_cq) {
+		CXIP_LOG_DBG("Undefined recv CQ\n");
+		ret = -FI_ENOCQ;
+		goto unlock;
+	}
+
+	ret = cxip_cq_enable(rxc->comp.recv_cq);
+	if (ret != FI_SUCCESS) {
+		CXIP_LOG_DBG("cxip_cq_enable returned: %d\n", ret);
+		goto unlock;
 	}
 
 	/* TODO set CMDQ size with RX attrs */
