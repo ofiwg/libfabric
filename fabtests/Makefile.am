@@ -35,6 +35,7 @@ bin_PROGRAMS = \
 	functional/fi_multi_ep \
 	functional/fi_recv_cancel \
 	functional/fi_unexpected_msg \
+	functional/fi_unmap_mem \
 	functional/fi_inj_complete \
 	functional/fi_resmgmt_test \
 	functional/fi_rdm_atomic \
@@ -207,6 +208,10 @@ functional_fi_unexpected_msg_SOURCES = \
 	functional/unexpected_msg.c
 functional_fi_unexpected_msg_LDADD = libfabtests.la
 
+functional_fi_unmap_mem_SOURCES = \
+	functional/unmap_mem.c
+functional_fi_unmap_mem_LDADD = libfabtests.la
+
 functional_fi_rdm_multi_domain_SOURCES = \
 	functional/rdm_multi_domain.c
 functional_fi_rdm_multi_domain_LDADD = libfabtests.la
@@ -357,6 +362,7 @@ dummy_man_pages = \
 	man/man1/fi_scalable_ep.1 \
 	man/man1/fi_shared_ctx.1 \
 	man/man1/fi_unexpected_msg.1 \
+	man/man1/fi_unmap_mem.1 \
 	man/man1/fi_dgram_pingpong.1 \
 	man/man1/fi_msg_bw.1 \
 	man/man1/fi_msg_pingpong.1 \
