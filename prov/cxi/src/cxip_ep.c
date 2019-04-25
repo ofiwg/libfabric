@@ -897,19 +897,11 @@ static int cxip_ep_close(struct fid *fid)
 	}
 
 	if (cxi_ep->ep_obj->fclass == FI_CLASS_EP) {
-		if (cxi_ep->ep_obj->tx_shared) {
-			fastlock_acquire(&cxi_ep->ep_obj->txc->lock);
-			dlist_remove(&cxi_ep->ep_obj->txc_entry);
-			fastlock_release(&cxi_ep->ep_obj->txc->lock);
-		} else {
+		if (!cxi_ep->ep_obj->tx_shared) {
 			cxip_txc_close(cxi_ep->ep_obj->tx_array[0]);
 			cxip_txc_free(cxi_ep->ep_obj->tx_array[0]);
 		}
-		if (cxi_ep->ep_obj->rx_shared) {
-			fastlock_acquire(&cxi_ep->ep_obj->rxc->lock);
-			dlist_remove(&cxi_ep->ep_obj->rxc_entry);
-			fastlock_release(&cxi_ep->ep_obj->rxc->lock);
-		} else {
+		if (!cxi_ep->ep_obj->rx_shared) {
 			cxip_rxc_close(cxi_ep->ep_obj->rx_array[0]);
 			cxip_rxc_free(cxi_ep->ep_obj->rx_array[0]);
 		}
@@ -1069,9 +1061,6 @@ static int cxip_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		// TODO: should verify EP attr against CTX attr
 		// TODO: must not be SEP
 		txc = container_of(bfid, struct cxip_txc, fid.stx.fid);
-		fastlock_acquire(&txc->lock);
-		dlist_insert_tail(&ep->ep_obj->txc_entry, &txc->ep_list);
-		fastlock_release(&txc->lock);
 
 		ep->ep_obj->txc->use_shared = 1;
 		ep->ep_obj->txc->stx = txc;
@@ -1081,9 +1070,6 @@ static int cxip_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		// TODO: should verify EP attr against CTX attr
 		// TODO: must not be SEP
 		rxc = container_of(bfid, struct cxip_rxc, ctx);
-		fastlock_acquire(&rxc->lock);
-		dlist_insert_tail(&ep->ep_obj->rxc_entry, &rxc->ep_list);
-		fastlock_release(&rxc->lock);
 
 		ep->ep_obj->rxc->use_shared = 1;
 		ep->ep_obj->rxc->srx = rxc;
@@ -1330,7 +1316,6 @@ static int cxip_ep_txc(struct fid_ep *ep, int index, struct fi_tx_attr *attr,
 	txc->tx_id = index;
 	txc->ep_obj = cxi_ep->ep_obj;
 	txc->domain = cxi_ep->ep_obj->domain;
-	dlist_insert_tail(&cxi_ep->ep_obj->txc_entry, &txc->ep_list);
 
 	txc->fid.ctx.fid.ops = &cxip_ctx_ops;
 	txc->fid.ctx.ops = &cxip_ctx_ep_ops;
@@ -1412,7 +1397,6 @@ static int cxip_ep_rxc(struct fid_ep *ep, int index, struct fi_rx_attr *attr,
 	rxc->rx_id = index;
 	rxc->ep_obj = cxi_ep->ep_obj;
 	rxc->domain = cxi_ep->ep_obj->domain;
-	dlist_insert_tail(&cxi_ep->ep_obj->rxc_entry, &rxc->ep_list);
 
 	rxc->ctx.fid.ops = &cxip_ctx_ops;
 	rxc->ctx.ops = &cxip_ctx_ep_ops;
@@ -1965,8 +1949,6 @@ int cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 			txc->ep_obj = cxi_ep->ep_obj;
 			txc->domain = cxi_dom;
 			txc->tx_id = 0;
-			dlist_insert_tail(&cxi_ep->ep_obj->txc_entry,
-					  &txc->ep_list);
 			cxi_ep->ep_obj->tx_array[0] = txc;
 			cxi_ep->ep_obj->txc = txc;
 		}
@@ -1981,8 +1963,6 @@ int cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 			rxc->ep_obj = cxi_ep->ep_obj;
 			rxc->domain = cxi_dom;
 			rxc->rx_id = 0;
-			dlist_insert_tail(&cxi_ep->ep_obj->rxc_entry,
-					  &rxc->ep_list);
 			cxi_ep->ep_obj->rx_array[0] = rxc;
 			cxi_ep->ep_obj->rxc = rxc;
 		}

@@ -754,10 +754,6 @@ struct cxip_ep_obj {
 	ofi_atomic32_t num_rxc;	// num rx contexts (>= 1)
 	ofi_atomic32_t num_txc;	// num tx contexts (>= 1)
 
-	/* List of shared contexts associated with the EP.  Necessary? */
-	struct dlist_entry rxc_entry;
-	struct dlist_entry txc_entry;
-
 	struct fi_info info;		// TODO: use this properly
 	struct fi_ep_attr ep_attr;
 
