@@ -65,9 +65,12 @@ void fi_ibv_eq_set_xrc_conn_tag(struct fi_ibv_xrc_ep *ep)
 	struct fi_ibv_eq *eq = ep->base_ep.eq;
 
 	fastlock_acquire(&eq->lock);
+	assert(ep->conn_setup);
+	assert(ep->conn_setup->conn_tag == VERBS_CONN_TAG_INVALID);
 	ep->conn_setup->conn_tag =
 		(uint32_t)ofi_idx2key(&eq->xrc.conn_key_idx,
 				ofi_idx_insert(eq->xrc.conn_key_map, ep));
+	ep->conn_setup->created_conn_tag = true;
 	fastlock_release(&eq->lock);
 }
 
@@ -76,6 +79,10 @@ void fi_ibv_eq_clear_xrc_conn_tag(struct fi_ibv_xrc_ep *ep)
 	struct fi_ibv_eq *eq = ep->base_ep.eq;
 	int index;
 
+	assert(ep->conn_setup);
+	if (!ep->conn_setup->created_conn_tag)
+		return;
+
 	fastlock_acquire(&eq->lock);
 	index = ofi_key2idx(&eq->xrc.conn_key_idx,
 			    (uint64_t)ep->conn_setup->conn_tag);
@@ -83,7 +90,7 @@ void fi_ibv_eq_clear_xrc_conn_tag(struct fi_ibv_xrc_ep *ep)
 	    VERBS_WARN(FI_LOG_EQ, "Invalid XRC connection connection tag\n");
 	else
 		ofi_idx_remove(eq->xrc.conn_key_map, index);
-	ep->conn_setup->conn_tag = 0;
+	ep->conn_setup->conn_tag = VERBS_CONN_TAG_INVALID;
 	fastlock_release(&eq->lock);
 }
 
@@ -96,9 +103,14 @@ struct fi_ibv_xrc_ep *fi_ibv_eq_xrc_conn_tag2ep(struct fi_ibv_eq *eq,
 	fastlock_acquire(&eq->lock);
 	index = ofi_key2idx(&eq->xrc.conn_key_idx, (uint64_t)conn_tag);
 	ep = ofi_idx_lookup(eq->xrc.conn_key_map, index);
-	if (!ep)
+	if (!ep || !ep->conn_setup || (ep->conn_setup->conn_tag != conn_tag)) {
 		VERBS_WARN(FI_LOG_FABRIC,
-			   "Invalid XRC connection tag\n");
+			   "Invalid/stale XRC connection tag\n");
+		goto err;
+	}
+	ofi_idx_remove(eq->xrc.conn_key_map, index);
+	ep->conn_setup->conn_tag = VERBS_CONN_TAG_INVALID;
+err:
 	fastlock_release(&eq->lock);
 
 	return ep;
@@ -274,7 +286,7 @@ fi_ibv_eq_xrc_connreq_event(struct fi_ibv_eq *eq, struct fi_eq_cm_entry *entry,
 	if (!ep) {
 		VERBS_WARN(FI_LOG_FABRIC,
 			   "Reciprocal XRC connection tag not found\n");
-		goto send_reject;
+		return -FI_EAGAIN;
 	}
 	ep->tgt_id = connreq->id;
 	ep->tgt_id->context = &ep->base_ep.util_ep.ep_fid.fid;
@@ -801,7 +813,7 @@ int fi_ibv_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	_eq->fab = container_of(fabric, struct fi_ibv_fabric,
 				util_fabric.fabric_fid);
 
-	ofi_key_idx_init(&_eq->xrc.conn_key_idx, VERBS_TAG_INDEX_BITS);
+	ofi_key_idx_init(&_eq->xrc.conn_key_idx, VERBS_CONN_TAG_INDEX_BITS);
 	_eq->xrc.conn_key_map = calloc(1, sizeof(*_eq->xrc.conn_key_map));
 	if (!_eq->xrc.conn_key_map) {
 		ret = -ENOMEM;
