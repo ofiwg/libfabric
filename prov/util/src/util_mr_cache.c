@@ -316,6 +316,7 @@ void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache)
 		cache->search_cnt, cache->delete_cnt, cache->hit_cnt,
 		cache->notify_cnt);
 
+	fastlock_acquire(&cache->monitor->lock);
 	dlist_foreach_container_safe(&cache->lru_list, struct ofi_mr_entry,
 				     entry, lru_entry, tmp) {
 		assert(entry->use_cnt == 0);
@@ -323,9 +324,11 @@ void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache)
 		dlist_remove_init(&entry->lru_entry);
 		util_mr_free_entry(cache, entry);
 	}
+	fastlock_release(&cache->monitor->lock);
+
+	ofi_monitor_del_cache(cache);
 	if (cache->storage.type != OFI_MR_STORAGE_NONE)
 		cache->storage.destroy(&cache->storage);
-	ofi_monitor_del_cache(cache);
 	if (cache->domain)
 		ofi_atomic_dec32(&cache->domain->ref);
 	if (cache->entry_pool)
