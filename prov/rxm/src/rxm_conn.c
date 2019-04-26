@@ -1427,55 +1427,6 @@ rxm_conn_auto_progress_eq(struct rxm_ep *rxm_ep, struct rxm_msg_eq_entry *entry)
 	return -1;
 }
 
-/* Atomic auto progress of EQ only, will return if/when CQ is bound */
-static int rxm_conn_atomic_progress_eq(struct rxm_ep *rxm_ep,
-				       struct rxm_msg_eq_entry *entry)
-{
-	struct rxm_fabric *rxm_fabric;
-	struct fid *fid = &rxm_ep->msg_eq->fid;
-	struct pollfd fds;
-	int again;
-	int ret;
-
-	rxm_fabric = container_of(rxm_ep->util_ep.domain->fabric,
-				  struct rxm_fabric, util_fabric);
-	ret = fi_control(fid, FI_GETWAIT, (void *) &fds.fd);
-	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-			"Unable to get MSG_EP EQ WAIT_FD %d\n", ret);
-		goto exit;
-	}
-	fds.events = POLLIN;
-
-	while (1) {
-		ofi_ep_lock_acquire(&rxm_ep->util_ep);
-		if (rxm_ep->msg_cq) {
-			ofi_ep_lock_release(&rxm_ep->util_ep);
-			return FI_SUCCESS;
-		}
-		again = fi_trywait(rxm_fabric->msg_fabric, &fid, 1);
-		ofi_ep_lock_release(&rxm_ep->util_ep);
-
-		if (!again) {
-			fds.revents = 0;
-
-			ret = poll(&fds, 1, -1);
-			if (OFI_UNLIKELY(ret == -1)) {
-				if (errno == EINTR)
-					continue;
-				FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-					"Select error %d, closing CM thread\n",
-					errno);
-				goto exit;
-			}
-		}
-		if (rxm_conn_auto_progress_eq(rxm_ep, entry))
-			goto exit;
-	}
-exit:
-	return -1;
-}
-
 /* Atomic auto progress of EQ and CQ */
 static int rxm_conn_atomic_progress_eq_cq(struct rxm_ep *rxm_ep,
 					  struct rxm_msg_eq_entry *entry)
@@ -1549,10 +1500,7 @@ static void *rxm_conn_atomic_progress(void *arg)
 	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
 	       "Starting CM conn thread with atomic AUTO_PROGRESS\n");
 
-	/* To reduce overhead, a unique progress function that progresses
-	 * only the EQ is used until the CQ has been bound to the EP */
-	if (!rxm_conn_atomic_progress_eq(rxm_ep, entry))
-		rxm_conn_atomic_progress_eq_cq(rxm_ep, entry);
+	rxm_conn_atomic_progress_eq_cq(rxm_ep, entry);
 
 	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
 	       "Stoping CM conn thread with atomic AUTO_PROGRESS\n");
