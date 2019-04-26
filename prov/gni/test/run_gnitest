@@ -1,6 +1,8 @@
 #!/bin/bash
 #
 # Copyright (c) 2015 Cray Inc.  All rights reserved.
+# Copyright (c) 2019 Triad National Security, LLC.
+#                    All rights reserved.
 #
 # This software is available to you under a choice of one of two
 # licenses.  You may choose to be licensed under the terms of the GNU
@@ -63,8 +65,12 @@ if [ ! -f "$gnitest_bin" ]; then
     exit -1
 fi
 
+#
+# for srun need to have multiple cores per task to insure we get enough
+# GNI resources assiged for tests to pass
+#
 if [ $launcher = "srun" ]; then
-    args="-N1 --exclusive --cpu_bind=none -t00:20:00 --ntasks=1"
+    args="-N1 --exclusive --cpu_bind=none -t00:20:00 --ntasks=1 --cpus-per-task=12"
 else
     args="-n1 -N1 -j0 -cc none -t1200"
 fi
