@@ -2,6 +2,7 @@
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
  *                         All rights reserved.
+ * Copyright (c) 2019 Triad National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -585,7 +586,8 @@ DIRECT_FN STATIC ssize_t gnix_cq_readerr(struct fid_cq *cq,
 			if (buf->err_data == NULL)
 				return -FI_EINVAL;
 
-			err_data_cpylen = MIN(buf->err_data_size, sizeof(cq_priv->err_data));
+			err_data_cpylen = MIN(buf->err_data_size,
+						gnix_cq_err->err_data_size);
 			memcpy(buf->err_data, gnix_cq_err->err_data, err_data_cpylen);
 			buf->err_data_size = err_data_cpylen;
 		}
