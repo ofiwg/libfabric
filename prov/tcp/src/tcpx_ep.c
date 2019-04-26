@@ -545,6 +545,7 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	ep->rx_detect.done_len = 0;
 	ep->rx_detect.hdr_len = sizeof(ep->rx_detect.hdr.base_hdr);
+	ep->min_multi_recv_size = TCPX_MIN_MULTI_RECV;
 
 	*ep_fid = &ep->util_ep.ep_fid;
 	(*ep_fid)->fid.ops = &tcpx_ep_fi_ops;
@@ -780,7 +781,7 @@ int tcpx_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	_pep->cm_ctx.type = SERVER_SOCK_ACCEPT;
 	_pep->cm_ctx.cm_data_sz = 0;
 	_pep->sock = INVALID_SOCKET;
-	
+
 	*pep = &_pep->util_pep.pep_fid;
 
 	if (info->src_addr) {

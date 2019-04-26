@@ -75,6 +75,8 @@
 #define MAX_EPOLL_EVENTS	100
 #define STAGE_BUF_SIZE		512
 
+#define TCPX_MIN_MULTI_RECV	16384
+
 #define TCPX_PORT_MAX_RANGE	(USHRT_MAX)
 
 extern struct fi_provider	tcpx_prov;
@@ -206,6 +208,7 @@ struct tcpx_ep {
 	tcpx_get_rx_func_t	get_rx_entry[ofi_op_write + 1];
 	void (*hdr_bswap)(struct tcpx_base_hdr *hdr);
 	struct stage_buf	stage_buf;
+	size_t			min_multi_recv_size;
 	bool			send_ready_monitor;
 };
 
