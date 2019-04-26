@@ -325,6 +325,13 @@ static struct fi_ops_cm tcpx_cm_ops = {
 	.join = fi_no_join,
 };
 
+void tcpx_rx_multi_recv_release(struct tcpx_xfer_entry *rx_entry)
+{
+	assert(rx_entry->iov_cnt == 1);
+	rx_entry->ep->cur_rx_entry = NULL;
+	rx_entry->iov[0].iov_len = rx_entry->rem_len;
+}
+
 void tcpx_rx_msg_release(struct tcpx_xfer_entry *rx_entry)
 {
 	struct tcpx_cq *tcpx_cq;

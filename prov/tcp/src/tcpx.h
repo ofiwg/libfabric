@@ -216,6 +216,8 @@ struct tcpx_fabric {
 	struct util_fabric	util_fabric;
 };
 
+typedef void (*release_func_t)(struct tcpx_xfer_entry *xfer_entry);
+
 struct tcpx_xfer_entry {
 	struct slist_entry	entry;
 	union {
@@ -229,6 +231,8 @@ struct tcpx_xfer_entry {
 	uint64_t		flags;
 	void			*context;
 	uint64_t		rem_len;
+	void			*mrecv_msg_start;
+	release_func_t		rx_msg_release_fn;
 };
 
 struct tcpx_domain {
@@ -284,10 +288,12 @@ void tcpx_xfer_entry_release(struct tcpx_cq *tcpx_cq,
 			     struct tcpx_xfer_entry *xfer_entry);
 void tcpx_srx_xfer_release(struct tcpx_rx_ctx *srx_ctx,
 			   struct tcpx_xfer_entry *xfer_entry);
-void tcpx_rx_msg_release(struct tcpx_xfer_entry *rx_entry);
-struct tcpx_xfer_entry *
-tcpx_srx_dequeue(struct tcpx_rx_ctx *srx_ctx);
 
+void tcpx_rx_msg_release(struct tcpx_xfer_entry *rx_entry);
+void tcpx_rx_multi_recv_release(struct tcpx_xfer_entry *rx_entry);
+struct tcpx_xfer_entry *
+tcpx_srx_next_xfer_entry(struct tcpx_rx_ctx *srx_ctx,
+			struct tcpx_ep *ep, size_t entry_size);
 
 void tcpx_progress(struct util_ep *util_ep);
 void tcpx_ep_progress(struct tcpx_ep *ep);
