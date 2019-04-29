@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2018-2019 Intel Corporation, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -369,15 +369,19 @@ void mrail_poll_cq(struct util_cq *cq)
 	struct mrail_tx_buf *tx_buf;
 	struct fi_cq_tagged_entry comp;
 	fi_addr_t src_addr;
-	size_t i;
+	size_t i, idx;
 	int ret;
+	static int last_succ_rail = 0;
 
 	mrail_cq = container_of(cq, struct mrail_cq, util_cq);
 
-	for (i = 0; i < mrail_cq->num_cqs; i++) {
-		ret = fi_cq_readfrom(mrail_cq->cqs[i], &comp, 1, &src_addr);
-		if (ret == -FI_EAGAIN || !ret)
+	for (i = 0; i < mrail_cq->num_cqs;) {
+		idx = (last_succ_rail + i) % mrail_cq->num_cqs;
+		ret = fi_cq_readfrom(mrail_cq->cqs[idx], &comp, 1, &src_addr);
+		if (ret == -FI_EAGAIN || !ret) {
+			i++;
 			continue;
+		}
 		if (ret < 0) {
 			FI_WARN(&mrail_prov, FI_LOG_CQ,
 				"Unable to read rail completion: %s\n",
@@ -420,6 +424,10 @@ void mrail_poll_cq(struct util_cq *cq)
 			FI_WARN(&mrail_prov, FI_LOG_CQ,
 				"Unsupported completion flag\n");
 		}
+
+		last_succ_rail = idx;
+		if (mrail_config[0].policy == MRAIL_POLICY_FIXED)
+			break;
 	}
 
 	return;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2018-2019 Intel Corporation, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -110,7 +110,7 @@ static ssize_t mrail_post_req(struct mrail_req *req)
 	while (req->pending_subreq >= 0) {
 		/* Try all rails before giving up */
 		for (i = 0; i < req->mrail_ep->num_eps; ++i) {
-			rail = mrail_get_tx_rail(req->mrail_ep);
+			rail = mrail_get_tx_rail_rr(req->mrail_ep);
 
 			ret = mrail_post_subreq(rail,
 					&req->subreqs[req->pending_subreq]);
@@ -393,7 +393,7 @@ static ssize_t mrail_ep_inject_write(struct fid_ep *ep_fid, const void *buf,
 	mrail_ep = container_of(ep_fid, struct mrail_ep, util_ep.ep_fid.fid);
 	mr_map = (struct mrail_addr_key *) key;
 
-	rail = mrail_get_tx_rail(mrail_ep);
+	rail = mrail_get_tx_rail_rr(mrail_ep);
 	ret = fi_inject_write(mrail_ep->rails[rail].ep, buf, len,
 			      dest_addr, addr, mr_map[rail].key);
 	if (ret) {

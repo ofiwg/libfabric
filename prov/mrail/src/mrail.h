@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2018-2019 Intel Corporation, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -71,6 +71,21 @@ extern struct fi_fabric_attr mrail_fabric_attr;
 
 extern struct fi_info *mrail_info_vec[MRAIL_MAX_INFO];
 extern size_t mrail_num_info;
+
+#define MRAIL_POLICY_FIXED		0
+#define MRAIL_POLICY_ROUND_ROBIN	1
+#define MRAIL_POLICY_STRIPING		2
+
+#define MRAIL_MAX_CONFIG		8
+
+struct mrail_config {
+	size_t		max_size;
+	int		policy;
+};
+
+extern struct mrail_config mrail_config[MRAIL_MAX_CONFIG];
+extern int mrail_num_config;
+extern int mrail_local_rank;
 
 extern struct fi_ops_rma mrail_ops_rma;
 
@@ -214,6 +229,7 @@ struct mrail_ep {
 	size_t			num_eps;
 	ofi_atomic32_t		tx_rail;
 	ofi_atomic32_t		rx_rail;
+	int			default_tx_rail;
 
 	struct mrail_recv_fs	*recv_fs;
 	struct mrail_recv_queue recv_queue;
@@ -300,9 +316,28 @@ static inline int mrail_close_fids(struct fid **fids, size_t count)
 	return retv;
 }
 
-static inline size_t mrail_get_tx_rail(struct mrail_ep *mrail_ep)
+static inline size_t mrail_get_tx_rail_rr(struct mrail_ep *mrail_ep)
 {
 	return (ofi_atomic_inc32(&mrail_ep->tx_rail) - 1) % mrail_ep->num_eps;
+}
+
+static inline int mrail_get_policy(size_t size)
+{
+	int i;
+
+	for (i = 0; i < mrail_num_config - 1; i++)
+		if (size <= mrail_config[i].max_size)
+			break;
+
+	return mrail_config[i].policy;
+}
+
+static inline size_t mrail_get_tx_rail(struct mrail_ep *mrail_ep, int policy)
+{
+	return policy == MRAIL_POLICY_FIXED ?
+				mrail_ep->default_tx_rail :
+				mrail_get_tx_rail_rr(mrail_ep);
+
 }
 
 struct mrail_subreq {
