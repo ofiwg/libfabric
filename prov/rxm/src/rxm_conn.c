@@ -75,18 +75,17 @@ static inline ssize_t rxm_eq_readerr(struct rxm_ep *rxm_ep,
 	ret = fi_eq_readerr(rxm_ep->msg_eq, &entry->err_entry, 0);
 	if (ret != sizeof(entry->err_entry)) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-			"Unable to fi_eq_readerr: %zd\n", ret);
+			"unable to fi_eq_readerr: %zd\n", ret);
 		return ret < 0 ? ret : -FI_EINVAL;
 	}
 
 	if (entry->err_entry.err == ECONNREFUSED) {
-		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Connection refused\n");
 		entry->context = entry->err_entry.fid->context;
 		return -FI_ECONNREFUSED;
 	}
 
-	RXM_Q_STRERROR(&rxm_prov, FI_LOG_EP_CTRL, rxm_ep->msg_eq,
-		       "eq", entry->err_entry, fi_eq_strerror);
+	RXM_EQ_STRERROR(&rxm_prov, FI_LOG_WARN, FI_LOG_EP_CTRL,
+			rxm_ep->msg_eq, &entry->err_entry);
 	return -entry->err_entry.err;
 }
 
@@ -183,7 +182,7 @@ static int rxm_cmap_del_handle(struct rxm_cmap_handle *handle)
 	 * events */
 	ret = rxm_conn_signal(cmap->ep, handle, RXM_CMAP_FREE);
 	if (ret) {
-		FI_WARN(cmap->av->prov, FI_LOG_FABRIC,
+		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL,
 			"Unable to signal CM thread\n");
 		return ret;
 	}
@@ -693,7 +692,6 @@ int rxm_cmap_connect(struct rxm_ep *rxm_ep, fi_addr_t fi_addr,
 		break;
 	case RXM_CMAP_CONNREQ_SENT:
 	case RXM_CMAP_CONNREQ_RECV:
-	case RXM_CMAP_ACCEPT:
 	case RXM_CMAP_SHUTDOWN:
 		ret = -FI_EAGAIN;
 		break;
@@ -719,13 +717,13 @@ static int rxm_cmap_cm_thread_close(struct rxm_cmap *cmap)
 
 	ret = rxm_conn_signal(cmap->ep, NULL, RXM_CMAP_EXIT);
 	if (ret) {
-		FI_WARN(cmap->av->prov, FI_LOG_FABRIC,
+		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL,
 			"Unable to signal CM thread\n");
 		return ret;
 	}
 	ret = pthread_join(cmap->cm_thread, NULL);
 	if (ret) {
-		FI_WARN(cmap->av->prov, FI_LOG_FABRIC,
+		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL,
 			"Unable to join CM thread\n");
 		return ret;
 	}
@@ -826,7 +824,7 @@ int rxm_cmap_alloc(struct rxm_ep *rxm_ep, struct rxm_cmap_attr *attr)
 				   rxm_ep->rxm_info->caps & FI_ATOMIC ?
 				   rxm_conn_atomic_progress :
 				   rxm_conn_progress, ep)) {
-			FI_WARN(ep->av->prov, FI_LOG_FABRIC,
+			FI_WARN(ep->av->prov, FI_LOG_EP_CTRL,
 				"unable to create cmap thread\n");
 			ret = -ofi_syserr();
 			goto err3;
@@ -868,14 +866,14 @@ static int rxm_msg_ep_open(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 
 	ret = fi_ep_bind(msg_ep, &rxm_ep->msg_eq->fid, 0);
 	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_FABRIC, "Unable to bind msg EP to EQ\n");
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to bind msg EP to EQ\n");
 		goto err;
 	}
 
 	if (rxm_ep->srx_ctx) {
 		ret = fi_ep_bind(msg_ep, &rxm_ep->srx_ctx->fid, 0);
 		if (ret) {
-			FI_WARN(&rxm_prov, FI_LOG_FABRIC,
+			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 				"Unable to bind msg EP to shared RX ctx\n");
 			goto err;
 		}
@@ -1185,14 +1183,14 @@ rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 	ret = fi_accept(rxm_conn->msg_ep, &cm_data.accept.server_conn_id,
 			sizeof(cm_data.accept));
 	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_FABRIC,
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 			"Unable to accept incoming connection\n");
 		goto err2;
 	}
 
 	ret = rxm_conn_res_alloc(rxm_ep, rxm_conn);
 	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_FABRIC,
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 			"Unable to allocate TX/RX resources for connection\n");
 		goto err2;
 	}
@@ -1233,7 +1231,7 @@ static int rxm_conn_handle_notify(struct fi_eq_entry *eq_entry)
 		cmap->release(&cmap->lock);
 		return 0;
 	} else {
-		FI_WARN(&rxm_prov, FI_LOG_FABRIC, "Unknown cmap signal\n");
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unknown cmap signal\n");
 		assert(0);
 		return -FI_EOTHER;
 	}
@@ -1256,7 +1254,7 @@ rxm_conn_handle_event(struct rxm_ep *rxm_ep, struct rxm_msg_eq_entry *entry)
 	if (entry->rd == -FI_ECONNREFUSED) {
 		if (OFI_UNLIKELY(entry->err_entry.err_data_size !=
 				 sizeof(cm_data->reject))) {
-			FI_WARN(&rxm_prov, FI_LOG_FABRIC, "connection reject: "
+			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "connection reject: "
 				"no reject error data (cm_data) was found "
 				"(data length expected: %zu found: %zu)\n",
 				sizeof(cm_data->reject),
@@ -1275,14 +1273,21 @@ rxm_conn_handle_event(struct rxm_ep *rxm_ep, struct rxm_msg_eq_entry *entry)
 		}
 		reject_reason = cm_data->reject.reason;
 
-		if (reject_reason == RXM_CMAP_REJECT_GENUINE)
-			FI_WARN(&rxm_prov, FI_LOG_FABRIC, "connection reject: "
+		if (reject_reason == RXM_CMAP_REJECT_GENUINE) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "connection reject: "
+			       "remote peer didn't accept the connection\n");
+			FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "connection reject: "
 			       "(reason: RXM_CMAP_REJECT_GENUINE)\n");
-		else if (reject_reason == RXM_CMAP_REJECT_SIMULT_CONN)
-			FI_DBG(&rxm_prov, FI_LOG_FABRIC, "connection reject: "
+			RXM_EQ_STRERROR(&rxm_prov, FI_LOG_WARN, FI_LOG_EP_CTRL,
+					rxm_ep->msg_eq, &entry->err_entry);
+		} else if (reject_reason == RXM_CMAP_REJECT_SIMULT_CONN) {
+			FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "connection reject: "
 			       "(reason: RXM_CMAP_REJECT_SIMULT_CONN)\n");
-		else
-			assert(0);
+		} else {
+			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "connection reject: "
+			        "received unknown reject reason: %d\n",
+				reject_reason);
+		}
 		rxm_cmap_process_reject(rxm_ep->cmap, entry->context,
 					reject_reason);
 		return 0;
@@ -1294,12 +1299,12 @@ rxm_conn_handle_event(struct rxm_ep *rxm_ep, struct rxm_msg_eq_entry *entry)
 			goto err;
 		break;
 	case FI_CONNREQ:
-		FI_DBG(&rxm_prov, FI_LOG_FABRIC, "Got new connection\n");
+		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Got new connection\n");
 		if ((size_t)entry->rd != RXM_CM_ENTRY_SZ) {
-			FI_WARN(&rxm_prov, FI_LOG_FABRIC,
+			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 				"Received a connection request with no CM data. "
 				"Is sender running FI_PROTO_RXM?\n");
-			FI_WARN(&rxm_prov, FI_LOG_FABRIC, "Received CM entry "
+			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Received CM entry "
 				"size (%zd) not matching expected (%zu)\n",
 				entry->rd, RXM_CM_ENTRY_SZ);
 			goto err;
@@ -1310,7 +1315,7 @@ rxm_conn_handle_event(struct rxm_ep *rxm_ep, struct rxm_msg_eq_entry *entry)
 		break;
 	case FI_CONNECTED:
 		assert(entry->cm_entry.fid->context);
-		FI_DBG(&rxm_prov, FI_LOG_FABRIC,
+		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
 		       "Connection successful\n");
 		rxm_ep->cmap->acquire(&rxm_ep->cmap->lock);
 		cm_data = (void *)entry->cm_entry.data;
@@ -1322,13 +1327,13 @@ rxm_conn_handle_event(struct rxm_ep *rxm_ep, struct rxm_msg_eq_entry *entry)
 		rxm_ep->cmap->release(&rxm_ep->cmap->lock);
 		break;
 	case FI_SHUTDOWN:
-		FI_DBG(&rxm_prov, FI_LOG_FABRIC,
+		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
 		       "Received connection shutdown\n");
 		rxm_cmap_process_shutdown(rxm_ep->cmap,
 					  entry->cm_entry.fid->context);
 		break;
 	default:
-		FI_WARN(&rxm_prov, FI_LOG_FABRIC,
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 			"Unknown event: %u\n", entry->event);
 		goto err;
 	}
@@ -1656,7 +1661,7 @@ static int rxm_conn_signal(struct util_ep *util_ep, void *context,
 
 	rd = fi_eq_write(rxm_ep->msg_eq, FI_NOTIFY, &entry, sizeof(entry), 0);
 	if (rd != sizeof(entry)) {
-		FI_WARN(&rxm_prov, FI_LOG_FABRIC, "Unable to signal\n");
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to signal\n");
 		return (int)rd;
 	}
 	return 0;

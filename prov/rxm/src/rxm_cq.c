@@ -1238,14 +1238,20 @@ static void rxm_cq_read_write_error(struct rxm_ep *rxm_ep)
 	enum rxm_proto_state state;
 	ssize_t ret;
 
-	RXM_CQ_READERR(&rxm_prov, FI_LOG_CQ, rxm_ep->msg_cq, ret,
-		       err_entry);
-	if (ret < 0) {
+	ret = fi_cq_readerr(rxm_ep->msg_cq, &err_entry, 0);
+	if ((ret) < 0) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ,
-			"Unable to fi_cq_readerr on msg cq\n");
+			"unable to fi_cq_readerr on msg cq\n");
 		rxm_cq_write_error_all(rxm_ep, (int)ret);
 		return;
 	}
+
+	if (err_entry.err == FI_ECANCELED)
+		RXM_CQ_STRERROR(&rxm_prov, FI_LOG_DEBUG, FI_LOG_CQ,
+				rxm_ep->msg_cq, &err_entry);
+	else
+		RXM_CQ_STRERROR(&rxm_prov, FI_LOG_WARN, FI_LOG_CQ,
+				rxm_ep->msg_cq, &err_entry);
 
 	state = RXM_GET_PROTO_STATE(err_entry.op_context);
 	if (RXM_IS_PROTO_STATE_TX(state)) {

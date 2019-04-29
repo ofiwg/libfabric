@@ -119,22 +119,18 @@ do {									\
 	((void *) rxm_buf_get_by_index(&(rxm_ep)->buf_pools[pool_type],		\
 				       (uint64_t) msg_id))
 
-#define RXM_Q_STRERROR(prov, log, q, q_str, entry, strerror)					\
-	FI_WARN(prov, log, "fi_" q_str "_readerr: err: %d, prov_err: %s (%d)\n",		\
-		(entry).err,strerror((q), (entry).prov_errno, (entry).err_data, NULL, 0),	\
-		(entry).prov_errno)
+#define RXM_Q_STRERROR(prov, level, subsys, q, q_str, entry, q_strerror)	\
+	FI_LOG(prov, level, subsys, "fi_" q_str "_readerr: err: %s (%d), "	\
+	       "prov_err: %s (%d)\n", strerror((entry)->err), (entry)->err,	\
+	       q_strerror((q), -(entry)->prov_errno,				\
+			  (entry)->err_data, NULL, 0),				\
+	       -(entry)->prov_errno)
 
-#define RXM_CQ_READERR(prov, log, cq, ret, err_entry)			\
-	do {								\
-		(ret) = fi_cq_readerr((cq), &(err_entry), 0);		\
-		if ((ret) < 0) {					\
-			FI_WARN(prov, log,				\
-				"Unable to fi_cq_readerr: %zd\n", ret);	\
-		} else {						\
-			RXM_Q_STRERROR(prov, log, cq, "cq",		\
-				       err_entry, fi_cq_strerror);	\
-		}							\
-	} while (0)
+#define RXM_CQ_STRERROR(prov, level, subsys, cq, entry) \
+	RXM_Q_STRERROR(prov, level, subsys, cq, "cq", entry, fi_cq_strerror)
+
+#define RXM_EQ_STRERROR(prov, level, subsys, eq, entry) \
+	RXM_Q_STRERROR(prov, level, subsys, eq, "eq", entry, fi_eq_strerror)
 
 extern struct fi_provider rxm_prov;
 extern struct util_prov rxm_util_prov;
@@ -160,7 +156,6 @@ enum rxm_cmap_signal {
 	FUNC(RXM_CMAP_IDLE),		\
 	FUNC(RXM_CMAP_CONNREQ_SENT),	\
 	FUNC(RXM_CMAP_CONNREQ_RECV),	\
-	FUNC(RXM_CMAP_ACCEPT),		\
 	FUNC(RXM_CMAP_CONNECTED_NOTIFY),\
 	FUNC(RXM_CMAP_CONNECTED),	\
 	FUNC(RXM_CMAP_SHUTDOWN),	\
