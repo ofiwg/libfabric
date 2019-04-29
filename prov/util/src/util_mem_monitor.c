@@ -56,16 +56,18 @@ void ofi_monitor_cleanup(void)
 int ofi_monitor_add_cache(struct ofi_mem_monitor *monitor,
 			  struct ofi_mr_cache *cache)
 {
-	int ret;
+	int ret = 0;
 
 	fastlock_acquire(&monitor->lock);
-	if (dlist_empty(&monitor->list) && (monitor == uffd_monitor))
-		ret = ofi_uffd_init();
-	else
-		ret = 0;
+	if (dlist_empty(&monitor->list)) {
+		if (monitor == uffd_monitor)
+			ret = ofi_uffd_init();
+		else
+			ret = -FI_ENOSYS;
 
-	if (ret)
-		goto out;
+		if (ret)
+			goto out;
+	}
 	cache->monitor = monitor;
 	dlist_insert_tail(&cache->notify_entry, &monitor->list);
 out:
