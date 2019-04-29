@@ -29,7 +29,11 @@ static int rxc_msg_init(struct cxip_rxc *rxc)
 {
 	int ret;
 	union c_cmdu cmd = {};
-	struct cxi_pt_alloc_opts opts = { .is_matching = 1 };
+	struct cxi_pt_alloc_opts opts = {
+		.is_matching = 1,
+		.pe_num = CXI_PE_NUM_ANY,
+		.le_pool = CXI_LE_POOL_ANY
+	};
 	uint64_t pid_idx;
 
 	/* Select the LEP where the queue will be mapped */

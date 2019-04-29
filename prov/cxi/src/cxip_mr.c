@@ -26,7 +26,10 @@ int cxip_mr_enable(struct cxip_mr *mr)
 	union c_cmdu cmd = {};
 	const union c_event *event;
 	uint32_t buffer_id = MR_LINK_EVENT_ID;
-	struct cxi_pt_alloc_opts opts = {};
+	struct cxi_pt_alloc_opts opts = {
+		.pe_num = CXI_PE_NUM_ANY,
+		.le_pool = CXI_LE_POOL_ANY
+	};
 
 	if (mr->enabled)
 		return FI_SUCCESS;

@@ -76,7 +76,11 @@ static int txc_msg_init(struct cxip_txc *txc)
 {
 	int ret;
 	union c_cmdu cmd = {};
-	struct cxi_pt_alloc_opts opts = { .is_matching = 1 };
+	struct cxi_pt_alloc_opts opts = {
+		.is_matching = 1,
+		.pe_num = CXI_PE_NUM_ANY,
+		.le_pool = CXI_LE_POOL_ANY
+	};
 	uint64_t pid_idx;
 
 	/* initialize the rendezvous ID structure */
