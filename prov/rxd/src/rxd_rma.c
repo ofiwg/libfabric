@@ -45,6 +45,8 @@ static ssize_t rxd_generic_write_inject(struct rxd_ep *rxd_ep,
 	struct rxd_x_entry *tx_entry;
 	fi_addr_t rxd_addr;
 	ssize_t ret = -FI_EAGAIN;
+	struct rxd_send_op_entry  *send_op_entry;
+	
 
 	assert(iov_count <= RXD_IOV_LIMIT && rma_count <= RXD_IOV_LIMIT);
 	assert(ofi_total_iov_len(iov, iov_count) <= rxd_ep_domain(rxd_ep)->max_inline_rma);
@@ -59,14 +61,19 @@ static ssize_t rxd_generic_write_inject(struct rxd_ep *rxd_ep,
 	if (ret)
 		goto out;
 
-	tx_entry = rxd_tx_entry_init(rxd_ep, iov, iov_count, NULL, 0, rma_count, data,
-				     0, context, rxd_addr, op, rxd_flags);
+	tx_entry = rxd_tx_entry_init_common(rxd_ep, iov, iov_count, NULL, 0, data,
+				     	    0, context, rxd_addr, op, rxd_flags);
 	if (!tx_entry) {
 		ret = -FI_EAGAIN;
 		goto out;
 	}
 
-	ret = rxd_ep_send_op(rxd_ep, tx_entry, rma_iov, rma_count, NULL, 0, 0, 0);
+	send_op_entry = rxd_tx_entry_init_rma(rxd_ep, iov, rma_count, data,
+				              tx_entry, rma_iov);
+	if (!send_op_entry)
+		goto out;
+	
+	ret = rxd_ep_send_op(rxd_ep, send_op_entry);
 	if (ret) {
 		rxd_tx_entry_free(rxd_ep, tx_entry);
 		goto out;
@@ -88,6 +95,7 @@ ssize_t rxd_generic_rma(struct rxd_ep *rxd_ep, const struct iovec *iov,
 	uint32_t rxd_flags)
 {
 	struct rxd_x_entry *tx_entry;
+	struct rxd_send_op_entry  *send_op_entry;
 	fi_addr_t rxd_addr;
 	ssize_t ret = -FI_EAGAIN;
 
@@ -108,14 +116,18 @@ ssize_t rxd_generic_rma(struct rxd_ep *rxd_ep, const struct iovec *iov,
 	if (ret)
 		goto out;
 
-	tx_entry = rxd_tx_entry_init(rxd_ep, iov, iov_count, NULL, 0, rma_count,
-				     data, 0, context, rxd_addr, op, rxd_flags);
+	tx_entry = rxd_tx_entry_init_common(rxd_ep, iov, iov_count, NULL, 0,
+					    data, 0, context, rxd_addr, op, rxd_flags);
 	if (!tx_entry) {
 		ret = -FI_EAGAIN;
 		goto out;
 	}
-
-	ret = rxd_ep_send_op(rxd_ep, tx_entry, rma_iov, rma_count, NULL, 0, 0, 0);
+	send_op_entry = rxd_tx_entry_init_rma(rxd_ep, iov, rma_count,
+				     	      data, tx_entry, rma_iov);
+	if (!send_op_entry)
+		goto out;
+		
+	ret = rxd_ep_send_op(rxd_ep, send_op_entry);
 	if (ret)
 		rxd_tx_entry_free(rxd_ep, tx_entry);
 

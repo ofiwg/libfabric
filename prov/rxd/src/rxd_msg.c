@@ -316,6 +316,7 @@ ssize_t rxd_ep_generic_inject(struct rxd_ep *rxd_ep, const struct iovec *iov,
 	struct rxd_x_entry *tx_entry;
 	ssize_t ret = -FI_EAGAIN;
 	fi_addr_t rxd_addr;
+	struct rxd_send_op_entry  *send_op_entry;
 
 	assert(iov_count <= RXD_IOV_LIMIT);
 	assert(ofi_total_iov_len(iov, iov_count) <=
@@ -331,14 +332,18 @@ ssize_t rxd_ep_generic_inject(struct rxd_ep *rxd_ep, const struct iovec *iov,
 	if (ret)
 		goto out;
 
-	tx_entry = rxd_tx_entry_init(rxd_ep, iov, iov_count, NULL, 0, 0, data,
-				     tag, NULL, rxd_addr, op, rxd_flags);
+	tx_entry = rxd_tx_entry_init_common(rxd_ep, iov, iov_count, NULL, 0, data,
+				    	    tag, NULL, rxd_addr, op, rxd_flags);
 	if (!tx_entry) {
 		ret = -FI_EAGAIN;
 		goto out;
 	}
 
-	ret = rxd_ep_send_op(rxd_ep, tx_entry, NULL, 0, NULL, 0, 0, 0);
+	send_op_entry = rxd_tx_entry_init_msg(rxd_ep, iov, 0, data,tx_entry);
+	if (!send_op_entry)
+		goto out;
+
+	ret = rxd_ep_send_op(rxd_ep, send_op_entry);
 	if (ret)
 		rxd_tx_entry_free(rxd_ep, tx_entry);
 
@@ -355,7 +360,7 @@ ssize_t rxd_ep_generic_sendmsg(struct rxd_ep *rxd_ep, const struct iovec *iov,
 	struct rxd_x_entry *tx_entry;
 	ssize_t ret = -FI_EAGAIN;
 	fi_addr_t rxd_addr;
-
+	struct rxd_send_op_entry  *send_op_entry;
 	assert(iov_count <= RXD_IOV_LIMIT);
 
 	if (rxd_flags & RXD_INJECT)
@@ -372,12 +377,16 @@ ssize_t rxd_ep_generic_sendmsg(struct rxd_ep *rxd_ep, const struct iovec *iov,
 	if (ret)
 		goto out;
 
-	tx_entry = rxd_tx_entry_init(rxd_ep, iov, iov_count, NULL, 0, 0,
-				     data, tag, context, rxd_addr, op, rxd_flags);
+	tx_entry = rxd_tx_entry_init_common(rxd_ep, iov, iov_count, NULL, 0,
+					   data, tag, context, rxd_addr, op, rxd_flags);
 	if (!tx_entry)
 		goto out;
+	
+	send_op_entry = rxd_tx_entry_init_msg(rxd_ep, iov, 0, data, tx_entry);
+	if (!send_op_entry)
+		goto out;
 
-	ret = rxd_ep_send_op(rxd_ep, tx_entry, NULL, 0, NULL, 0, 0, 0);
+	ret = rxd_ep_send_op(rxd_ep, send_op_entry);
 	if (ret)
 		rxd_tx_entry_free(rxd_ep, tx_entry);
 

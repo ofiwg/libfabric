@@ -49,7 +49,8 @@ static ssize_t rxd_generic_atomic(struct rxd_ep *rxd_ep,
 {
 	struct rxd_x_entry *tx_entry;
 	struct iovec iov[RXD_IOV_LIMIT], res_iov[RXD_IOV_LIMIT], comp_iov[RXD_IOV_LIMIT];
-	struct fi_rma_iov rma_iov[RXD_IOV_LIMIT]; 
+	struct fi_rma_iov rma_iov[RXD_IOV_LIMIT];
+	struct rxd_send_op_entry  *send_op_entry;
 	fi_addr_t rxd_addr;
 	ssize_t ret = -FI_EAGAIN;
 
@@ -76,13 +77,21 @@ static ssize_t rxd_generic_atomic(struct rxd_ep *rxd_ep,
 	if (ret)
 		goto out;
 
-	tx_entry = rxd_tx_entry_init(rxd_ep, iov, count, res_iov, result_count, rma_count,
+	tx_entry = rxd_tx_entry_init_common(rxd_ep, iov, count, res_iov, result_count,
 				     data, 0, context, rxd_addr, op, rxd_flags);
 	if (!tx_entry)
 		goto out;
 
-	ret = rxd_ep_send_op(rxd_ep, tx_entry, rma_iov, rma_count, comp_iov,
+	tx_entry = rxd_tx_entry_init_atomic(rxd_ep, iov, rma_count, data, tx_entry);
+	if (!tx_entry)
+		goto out;
+
+	send_op_entry = rxd_ep_send_op_atomic(rxd_ep, tx_entry, rma_iov, rma_count, comp_iov,
 			     compare_count, datatype, atomic_op);
+	if (!send_op_entry)
+		goto out;
+
+	ret = rxd_ep_send_op(rxd_ep, send_op_entry);
 	if (ret)
 		rxd_tx_entry_free(rxd_ep, tx_entry);
 
@@ -155,6 +164,7 @@ static ssize_t rxd_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 {
 	struct rxd_ep *rxd_ep = container_of(ep_fid, struct rxd_ep, util_ep.ep_fid.fid);
 	struct rxd_x_entry *tx_entry;
+	struct rxd_send_op_entry  *send_op_entry;
 	struct iovec iov;
 	struct fi_rma_iov rma_iov; 
 	fi_addr_t rxd_addr;
@@ -178,13 +188,22 @@ static ssize_t rxd_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 	if (ret)
 		goto out;
 
-	tx_entry = rxd_tx_entry_init(rxd_ep, &iov, 1, NULL, 0, 1, 0, 0, NULL,
-				     rxd_addr, RXD_ATOMIC,
-				     RXD_INJECT | RXD_NO_TX_COMP);
+	tx_entry = rxd_tx_entry_init_common(rxd_ep, &iov, 1, NULL, 0, 0, 0, NULL,
+					    rxd_addr, RXD_ATOMIC,
+					    RXD_INJECT | RXD_NO_TX_COMP);
 	if (!tx_entry)
 		goto out;
 
-	ret = rxd_ep_send_op(rxd_ep, tx_entry, &rma_iov, 1, NULL, 0, datatype, op);
+	tx_entry = rxd_tx_entry_init_atomic(rxd_ep, &iov, 0, 0, tx_entry);
+	if (!tx_entry)
+		goto out;
+
+	send_op_entry = rxd_ep_send_op_atomic(rxd_ep, tx_entry,
+					      &rma_iov, 1, NULL, 0, datatype, op);
+	if (!send_op_entry)
+		goto out;
+				      
+	ret = rxd_ep_send_op(rxd_ep, send_op_entry);
 	if (ret)
 		rxd_tx_entry_free(rxd_ep, tx_entry);
 
