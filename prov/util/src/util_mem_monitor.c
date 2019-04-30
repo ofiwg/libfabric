@@ -51,6 +51,7 @@ void ofi_monitor_init(void)
 void ofi_monitor_cleanup(void)
 {
 	assert(dlist_empty(&uffd_monitor->list));
+	fastlock_destroy(&uffd_monitor->lock);
 }
 
 int ofi_monitor_add_cache(struct ofi_mem_monitor *monitor,
