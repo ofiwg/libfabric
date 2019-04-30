@@ -416,23 +416,32 @@ ssize_t rxd_ep_post_data_pkts(struct rxd_ep *ep, struct rxd_x_entry *tx_entry);
 void rxd_insert_unacked(struct rxd_ep *ep, fi_addr_t peer,
 			struct rxd_pkt_entry *pkt_entry);
 ssize_t rxd_send_rts_if_needed(struct rxd_ep *rxd_ep, fi_addr_t rxd_addr);
-int rxd_ep_send_op(struct rxd_ep *rxd_ep, struct rxd_x_entry *tx_entry,
-		   const struct fi_rma_iov *rma_iov, size_t rma_count,
-		   const struct iovec *comp_iov, size_t comp_count,
-		   enum fi_datatype datatype, enum fi_op atomic_op);
+int rxd_start_xfer(struct rxd_ep *ep, struct rxd_x_entry *tx_entry);
 void rxd_init_data_pkt(struct rxd_ep *ep, struct rxd_x_entry *tx_entry,
 		       struct rxd_pkt_entry *pkt_entry);
 void rxd_unpack_hdrs(size_t pkt_size, struct rxd_base_hdr *base_hdr,
 		     struct rxd_sar_hdr **sar_hdr, struct rxd_tag_hdr **tag_hdr,
 		     struct rxd_data_hdr **data_hdr, struct rxd_rma_hdr **rma_hdr,
 		     struct rxd_atom_hdr **atom_hdr, void **msg, size_t *msg_size);
+void rxd_init_base_hdr(struct rxd_ep *rxd_ep, void **ptr,
+		       struct rxd_x_entry *tx_entry);
+void rxd_init_sar_hdr(void **ptr, struct rxd_x_entry *tx_entry,
+		      size_t iov_count);
+void rxd_init_tag_hdr(void **ptr, struct rxd_x_entry *tx_entry);
+void rxd_init_data_hdr(void **ptr, struct rxd_x_entry *tx_entry);
+void rxd_init_rma_hdr(void **ptr, const struct fi_rma_iov *rma_iov,
+		      size_t rma_count);
+void rxd_init_atom_hdr(void **ptr, enum fi_datatype datatype,
+		       enum fi_op atomic_op);
+size_t rxd_init_msg(void **ptr, const struct iovec *iov, size_t iov_count,
+		    size_t total_len, size_t avail_len);
+size_t rxd_avail_buf(struct rxd_ep *rxd_ep, struct rxd_base_hdr *hdr,
+		     void *ptr);
 
 /* Tx/Rx entry sub-functions */
-struct rxd_x_entry *rxd_tx_entry_init(struct rxd_ep *ep, const struct iovec *iov,
-				      size_t iov_count, const struct iovec *res_iov,
-				      size_t res_count, size_t rma_count,
-				      uint64_t data, uint64_t tag, void *context,
-				      fi_addr_t addr, uint32_t op, uint32_t flags);
+struct rxd_x_entry *rxd_tx_entry_init_common(struct rxd_ep *ep, fi_addr_t addr,
+			uint32_t op, const struct iovec *iov, size_t iov_count,
+			uint64_t tag, uint64_t data, uint32_t flags, void *context);
 struct rxd_x_entry *rxd_rx_entry_init(struct rxd_ep *ep,
 			const struct iovec *iov, size_t iov_count, uint64_t tag,
 			uint64_t ignore, void *context, fi_addr_t addr,
