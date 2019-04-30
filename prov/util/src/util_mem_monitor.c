@@ -236,12 +236,9 @@ static int ofi_uffd_unregister(const void *addr, size_t len, size_t page_size)
 static void ofi_uffd_unsubscribe(struct ofi_mem_monitor *monitor,
 				 const void *addr, size_t len)
 {
-	int ret;
-
 	assert(monitor == &uffd.monitor);
-	ret = ofi_uffd_unregister(addr, len, uffd.page_size);
-	if (ret)
-		ret = ofi_uffd_unregister(addr, len, uffd.hugepage_size);
+	if (ofi_uffd_unregister(addr, len, uffd.page_size))
+		ofi_uffd_unregister(addr, len, uffd.hugepage_size);
 }
 
 int ofi_uffd_init(void)
