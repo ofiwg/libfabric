@@ -665,12 +665,18 @@ static int fi_ibv_read_params(void)
 
 static void fi_ibv_fini(void)
 {
+#if HAVE_VERBS_DL
+	ofi_monitor_cleanup();
+#endif
 	fi_freeinfo((void *)fi_ibv_util_prov.info);
 	fi_ibv_util_prov.info = NULL;
 }
 
 VERBS_INI
 {
+#if HAVE_VERBS_DL
+	ofi_monitor_init();
+#endif
 	if (fi_ibv_read_params()|| fi_ibv_init_info(&fi_ibv_util_prov.info))
 		return NULL;
 	return &fi_ibv_prov;
