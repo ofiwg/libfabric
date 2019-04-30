@@ -1432,7 +1432,10 @@ static int rxm_conn_atomic_progress_eq_cq(struct rxm_ep *rxm_ep,
 					  struct rxm_msg_eq_entry *entry)
 {
 	struct rxm_fabric *rxm_fabric;
-	struct fid *fids[2];
+	struct fid *fids[2] = {
+		&rxm_ep->msg_eq->fid,
+		&rxm_ep->msg_cq->fid,
+	};
 	struct pollfd fds[2];
 	int again;
 	int ret;
@@ -1440,16 +1443,18 @@ static int rxm_conn_atomic_progress_eq_cq(struct rxm_ep *rxm_ep,
 	rxm_fabric = container_of(rxm_ep->util_ep.domain->fabric,
 				  struct rxm_fabric, util_fabric);
 
-	fids[0] = &rxm_ep->msg_eq->fid;
-	ret = fi_control(fids[0], FI_GETWAIT, (void *) &fds[0].fd);
-	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-			"Unable to get MSG_EP EQ WAIT_FD %d\n", ret);
-		goto exit;
+	if (!rxm_ep->msg_eq_fd) {
+		ret = fi_control(&rxm_ep->msg_eq->fid, FI_GETWAIT,
+				 &rxm_ep->msg_eq_fd);
+		if (ret) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+				"Unable to get MSG_EP EQ WAIT_FD %d\n", ret);
+			goto exit;
+		}
 	}
 	fds[0].events = POLLIN;
+	fds[0].fd = rxm_ep->msg_eq_fd;
 
-	fids[1] = &rxm_ep->msg_cq->fid;
 	fds[1].fd = rxm_ep->msg_cq_fd;
 	fds[1].events = POLLIN;
 	memset(entry, 0, RXM_MSG_EQ_ENTRY_SZ);
