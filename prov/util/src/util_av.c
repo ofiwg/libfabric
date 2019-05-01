@@ -357,6 +357,13 @@ int ofi_av_bind(struct fid *av_fid, struct fid *eq_fid, uint64_t flags)
 		return -FI_EINVAL;
 	}
 
+	if (!(av->flags & FI_EVENT)) {
+		FI_WARN(av->prov, FI_LOG_AV, "cannot bind EQ to an AV that was "
+			"configured for synchronous operation: FI_EVENT flag was"
+			" not specified in fi_av_attr when AV was opened\n");
+		return -FI_EINVAL;
+	}
+
 	if (flags) {
 		FI_WARN(av->prov, FI_LOG_AV, "invalid flags\n");
 		return -FI_EINVAL;
