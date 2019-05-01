@@ -44,7 +44,8 @@
 #include <rdma/fabric.h>
 
 
-#define CACHE_SIZE	64
+static const int OFI_CACHE_SIZE = 64;
+
 
 uint64_t OFI_RMA_PMEM;
 void (*ofi_pmem_commit)(const void *addr, size_t len);
@@ -54,8 +55,8 @@ static void pmem_commit_clwb(const void *addr, size_t len)
 {
 	uintptr_t uptr;
 
-	for (uptr = (uintptr_t) addr & ~(CACHE_SIZE - 1);
-	     uptr < (uintptr_t) addr + len; uptr += CACHE_SIZE) {
+	for (uptr = (uintptr_t) addr & ~(OFI_CACHE_SIZE - 1);
+	     uptr < (uintptr_t) addr + len; uptr += OFI_CACHE_SIZE) {
 		ofi_clwb(uptr);
 	}
 	ofi_sfence();
@@ -65,8 +66,8 @@ static void pmem_commit_clflushopt(const void *addr, size_t len)
 {
 	uintptr_t uptr;
 
-	for (uptr = (uintptr_t) addr & ~(CACHE_SIZE - 1);
-	     uptr < (uintptr_t) addr + len; uptr += CACHE_SIZE) {
+	for (uptr = (uintptr_t) addr & ~(OFI_CACHE_SIZE - 1);
+	     uptr < (uintptr_t) addr + len; uptr += OFI_CACHE_SIZE) {
 		ofi_clflushopt(uptr);
 	}
 	ofi_sfence();
@@ -76,8 +77,8 @@ static void pmem_commit_clflush(const void *addr, size_t len)
 {
 	uintptr_t uptr;
 
-	for (uptr = (uintptr_t) addr & ~(CACHE_SIZE - 1);
-	     uptr < (uintptr_t) addr + len; uptr += CACHE_SIZE) {
+	for (uptr = (uintptr_t) addr & ~(OFI_CACHE_SIZE - 1);
+	     uptr < (uintptr_t) addr + len; uptr += OFI_CACHE_SIZE) {
 		ofi_clflush(uptr);
 	}
 }
