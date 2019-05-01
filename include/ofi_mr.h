@@ -125,8 +125,6 @@ void ofi_monitor_unsubscribe(struct ofi_mem_monitor *monitor,
  */
 struct ofi_uffd {
 	struct ofi_mem_monitor		monitor;
-	long				page_size;
-	long				hugepage_size;
 	pthread_t			thread;
 	int				fd;
 };
