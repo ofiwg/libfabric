@@ -551,6 +551,7 @@ void fi_ini(void)
 	fi_param_init();
 	fi_log_init();
 	ofi_osd_init();
+	ofi_mem_init();
 	ofi_pmem_init();
 	ofi_perf_init();
 	ofi_hook_init();
@@ -646,6 +647,7 @@ FI_DESTRUCTOR(fi_fini(void))
 
 	ofi_free_filter(&prov_filter);
 	ofi_monitor_cleanup();
+	ofi_mem_fini();
 	fi_log_fini();
 	fi_param_fini();
 	ofi_osd_fini();
