@@ -85,7 +85,7 @@ static struct rxd_x_entry *rxd_tx_entry_init_rma(struct rxd_ep *ep, fi_addr_t ad
 		rxd_init_rma_hdr(&ptr, rma_iov, rma_count);
 		tx_entry->bytes_done = rxd_init_msg(&ptr, tx_entry->iov,
 			tx_entry->iov_count, tx_entry->cq_entry.len,
-			rxd_avail_buf(ep, base_hdr, ptr));
+			max_inline);
 	}
 	tx_entry->pkt->pkt_size = ((char *) ptr - (char *) base_hdr) +
 				ep->tx_prefix_size;

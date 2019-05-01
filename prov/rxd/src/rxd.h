@@ -435,8 +435,6 @@ void rxd_init_atom_hdr(void **ptr, enum fi_datatype datatype,
 		       enum fi_op atomic_op);
 size_t rxd_init_msg(void **ptr, const struct iovec *iov, size_t iov_count,
 		    size_t total_len, size_t avail_len);
-size_t rxd_avail_buf(struct rxd_ep *rxd_ep, struct rxd_base_hdr *hdr,
-		     void *ptr);
 
 /* Tx/Rx entry sub-functions */
 struct rxd_x_entry *rxd_tx_entry_init_common(struct rxd_ep *ep, fi_addr_t addr,

@@ -588,13 +588,6 @@ size_t rxd_init_msg(void **ptr, const struct iovec *iov, size_t iov_count,
 	return done;
 }
 
-size_t rxd_avail_buf(struct rxd_ep *rxd_ep, struct rxd_base_hdr *hdr,
-		     void *ptr)
-{
-	return rxd_ep_domain(rxd_ep)->max_inline_msg -
-		((uintptr_t) ptr - (uintptr_t) hdr);
-}
-
 void rxd_ep_send_ack(struct rxd_ep *rxd_ep, fi_addr_t peer)
 {
 	struct rxd_pkt_entry *pkt_entry;

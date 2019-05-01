@@ -46,8 +46,9 @@ static struct rxd_x_entry *rxd_tx_entry_init_atomic(struct rxd_ep *ep, fi_addr_t
 			enum fi_datatype datatype, enum fi_op atomic_op)
 {
 	struct rxd_x_entry *tx_entry;
+	struct rxd_domain *rxd_domain = rxd_ep_domain(ep);
 	struct rxd_base_hdr *base_hdr;
-	size_t len;
+	size_t max_inline, len;
 	void *ptr;
 
 	OFI_UNUSED(len);
@@ -65,29 +66,38 @@ static struct rxd_x_entry *rxd_tx_entry_init_atomic(struct rxd_ep *ep, fi_addr_t
 		memcpy(&tx_entry->res_iov[0], res_iov, sizeof(*res_iov) * res_count);
 	}
 
+	max_inline = rxd_domain->max_inline_msg;
 	if (rma_count > 1 || tx_entry->cq_entry.flags & FI_READ) {
 		rxd_init_base_hdr(ep, &ptr, tx_entry);
 		rxd_init_sar_hdr(&ptr, tx_entry, rma_count);
+		max_inline -= sizeof(struct rxd_sar_hdr);
 	} else {
 		tx_entry->flags |= RXD_INLINE;
 		tx_entry->num_segs = 1;
 		rxd_init_base_hdr(ep, &ptr, tx_entry);
 	}
 
-	if (tx_entry->flags & RXD_REMOTE_CQ_DATA)
+	if (tx_entry->flags & RXD_REMOTE_CQ_DATA) {
+		max_inline -= sizeof(struct rxd_data_hdr);
 		rxd_init_data_hdr(&ptr, tx_entry);
+	}
 
 	rxd_init_rma_hdr(&ptr, rma_iov, rma_count);
 	rxd_init_atom_hdr(&ptr, datatype, atomic_op);
+	max_inline -= (sizeof(struct ofi_rma_iov) * rma_count) +
+		      sizeof(struct rxd_atom_hdr) ;
 
+	assert(tx_entry->cq_entry.len < max_inline);
 	if (atomic_op != FI_ATOMIC_READ) {
 		tx_entry->bytes_done = rxd_init_msg(&ptr, tx_entry->iov,
 				tx_entry->iov_count, tx_entry->cq_entry.len,
-				rxd_avail_buf(ep, base_hdr, ptr));
+				max_inline);
 		if (tx_entry->op == RXD_ATOMIC_COMPARE) {
+			max_inline /= 2;
+			assert(tx_entry->cq_entry.len <= max_inline);
 			len = rxd_init_msg(&ptr, comp_iov, comp_count,
 					tx_entry->cq_entry.len,
-					rxd_avail_buf(ep, base_hdr, ptr));
+					max_inline);
 			assert(len == tx_entry->bytes_done);
 		}
 	}
