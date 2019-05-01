@@ -108,8 +108,8 @@ static ssize_t tcpx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	memcpy(&recv_entry->iov[0], &msg->msg_iov[0],
 	       msg->iov_count * sizeof(struct iovec));
 
-	recv_entry->flags = ((tcpx_ep->util_ep.rx_op_flags & FI_COMPLETION) |
-			     flags | FI_MSG | FI_RECV);
+	recv_entry->flags = (tcpx_ep->util_ep.rx_msg_flags | flags |
+			     FI_MSG | FI_RECV);
 	recv_entry->context = msg->context;
 
 	tcpx_queue_recv(tcpx_ep, recv_entry);
@@ -132,7 +132,8 @@ static ssize_t tcpx_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	recv_entry->iov[0].iov_base = buf;
 	recv_entry->iov[0].iov_len = len;
 
-	recv_entry->flags = ((tcpx_ep->util_ep.rx_op_flags & FI_COMPLETION) |
+	recv_entry->flags = ((tcpx_ep->util_ep.rx_op_flags &
+			      (FI_COMPLETION | FI_MULTI_RECV)) |
 			     FI_MSG | FI_RECV);
 	recv_entry->context = context;
 
@@ -158,7 +159,8 @@ static ssize_t tcpx_recvv(struct fid_ep *ep, const struct iovec *iov, void **des
 	recv_entry->iov_cnt = count;
 	memcpy(recv_entry->iov, iov, count * sizeof(*iov));
 
-	recv_entry->flags = ((tcpx_ep->util_ep.rx_op_flags & FI_COMPLETION) |
+	recv_entry->flags = ((tcpx_ep->util_ep.rx_op_flags &
+			      (FI_COMPLETION | FI_MULTI_RECV)) |
 			     FI_MSG | FI_RECV);
 	recv_entry->context = context;
 

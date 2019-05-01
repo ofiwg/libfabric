@@ -123,7 +123,8 @@ static ssize_t tcpx_srx_recv(struct fid_ep *ep, void *buf, size_t len, void *des
 		goto unlock;
 	}
 
-	tcpx_srx_recv_init(recv_entry, 0, context);
+	tcpx_srx_recv_init(recv_entry, srx_ctx->op_flags & FI_MULTI_RECV,
+			   context);
 	recv_entry->iov_cnt = 1;
 	recv_entry->iov[0].iov_base = buf;
 	recv_entry->iov[0].iov_len = len;
@@ -152,7 +153,8 @@ static ssize_t tcpx_srx_recvv(struct fid_ep *ep, const struct iovec *iov, void *
 		goto unlock;
 	}
 
-	tcpx_srx_recv_init(recv_entry, 0, context);
+	tcpx_srx_recv_init(recv_entry, srx_ctx->op_flags & FI_MULTI_RECV,
+			   context);
 	tcpx_srx_recv_init_iov(recv_entry, count, iov);
 
 	slist_insert_tail(&recv_entry->entry, &srx_ctx->rx_queue);
