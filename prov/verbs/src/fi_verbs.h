@@ -135,18 +135,6 @@
 #define VERBS_ANY_DOMAIN "verbs_any_domain"
 #define VERBS_ANY_FABRIC "verbs_any_fabric"
 
-#define FI_IBV_MEMORY_HOOK_BEGIN(notifier)			\
-{								\
-	pthread_mutex_lock(&notifier->lock);			\
-	ofi_set_mem_free_hook(notifier->prev_free_hook);	\
-	ofi_set_mem_realloc_hook(notifier->prev_realloc_hook);	\
-
-#define FI_IBV_MEMORY_HOOK_END(notifier)				\
-	ofi_set_mem_realloc_hook(fi_ibv_mem_notifier_realloc_hook);	\
-	ofi_set_mem_free_hook(fi_ibv_mem_notifier_free_hook);		\
-	pthread_mutex_unlock(&notifier->lock);				\
-}
-
 extern struct fi_provider fi_ibv_prov;
 extern struct util_prov fi_ibv_util_prov;
 
@@ -160,7 +148,6 @@ extern struct fi_ibv_gl_data {
 	int	use_odp;
 	int	cqread_bunch_size;
 	char	*iface;
-	int	mr_cache_enable;
 	int	mr_max_cached_cnt;
 	size_t	mr_max_cached_size;
 	int	mr_cache_merge_regions;
@@ -327,8 +314,6 @@ typedef int(*fi_ibv_mr_reg_cb)(struct fi_ibv_domain *domain, void *buf,
 			       struct fi_ibv_mem_desc *md);
 typedef int(*fi_ibv_mr_dereg_cb)(struct fi_ibv_mem_desc *md);
 
-struct fi_ibv_mem_notifier;
-
 struct fi_ibv_domain {
 	struct util_domain		util_domain;
 	struct ibv_context		*verbs;
@@ -357,10 +342,8 @@ struct fi_ibv_domain {
 	/* MR stuff */
 	int				use_odp;
 	struct ofi_mr_cache		cache;
-	struct ofi_mem_monitor		monitor;
 	fi_ibv_mr_reg_cb		internal_mr_reg;
 	fi_ibv_mr_dereg_cb		internal_mr_dereg;
-	struct fi_ibv_mem_notifier	*notifier;
 	int 				(*post_send)(struct ibv_qp *qp,
 						     struct ibv_send_wr *wr,
 						     struct ibv_send_wr **bad_wr);
@@ -434,29 +417,6 @@ struct fi_ibv_mr_internal_ops {
 	fi_ibv_mr_dereg_cb	internal_mr_dereg;
 };
 
-struct fi_ibv_mem_notifier {
-	RbtHandle			subscr_storage;
-	ofi_mem_free_hook		prev_free_hook;
-	ofi_mem_realloc_hook		prev_realloc_hook;
-	int				ref_cnt;
-	pthread_mutex_t			lock;
-};
-
-struct fi_ibv_subscr_entry {
-	struct dlist_entry	entry;
-	struct ofi_subscription	*subscription;
-};
-
-struct fi_ibv_monitor_entry {
-	struct dlist_entry	subscription_list;
-	struct iovec		iov;
-};
-
-extern struct fi_ibv_mem_notifier *fi_ibv_mem_notifier;
-
-void fi_ibv_mem_notifier_free_hook(void *ptr, const void *caller);
-void *fi_ibv_mem_notifier_realloc_hook(void *ptr, size_t size, const void *caller);
-void fi_ibv_mem_notifier_free(void);
 
 extern struct fi_ibv_mr_internal_ops fi_ibv_mr_internal_ops;
 extern struct fi_ibv_mr_internal_ops fi_ibv_mr_internal_cache_ops;
@@ -466,11 +426,6 @@ int fi_ibv_mr_cache_entry_reg(struct ofi_mr_cache *cache,
 			      struct ofi_mr_entry *entry);
 void fi_ibv_mr_cache_entry_dereg(struct ofi_mr_cache *cache,
 				 struct ofi_mr_entry *entry);
-int fi_ibv_monitor_subscribe(struct ofi_mem_monitor *notifier,
-			     struct ofi_subscription *subscription);
-void fi_ibv_monitor_unsubscribe(struct ofi_mem_monitor *notifier,
-				struct ofi_subscription *subscription);
-struct ofi_subscription *fi_ibv_monitor_get_event(struct ofi_mem_monitor *notifier);
 
 /*
  * An XRC SRQ cannot be created until the associated RX CQ is known,

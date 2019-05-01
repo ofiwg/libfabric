@@ -557,6 +557,7 @@
     <ClCompile Include="prov\util\src\util_poll.c" />
     <ClCompile Include="prov\util\src\util_wait.c" />
     <ClCompile Include="prov\util\src\util_mem_monitor.c" />
+    <ClCompile Include="prov\util\src\util_mr_cache.c" />
     <ClCompile Include="src\common.c" />
     <ClCompile Include="src\enosys.c">
       <DisableSpecificWarnings Condition="'$(Configuration)|$(Platform)'=='Debug-ICC|x64'">4127;869</DisableSpecificWarnings>

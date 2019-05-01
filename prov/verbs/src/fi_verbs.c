@@ -55,7 +55,6 @@ struct fi_ibv_gl_data fi_ibv_gl_data = {
 	.use_odp		= 0,
 	.cqread_bunch_size	= 8,
 	.iface			= NULL,
-	.mr_cache_enable	= 0,
 	.mr_max_cached_cnt	= 4096,
 	.mr_max_cached_size	= ULONG_MAX,
 	.mr_cache_merge_regions	= 0,
@@ -615,13 +614,6 @@ static int fi_ibv_read_params(void)
 			   "Invalid value of iface\n");
 		return -FI_EINVAL;
 	}
-	if (fi_ibv_get_param_bool("mr_cache_enable",
-				  "Enable Memory Region caching",
-				  &fi_ibv_gl_data.mr_cache_enable)) {
-		VERBS_WARN(FI_LOG_CORE,
-			   "Invalid value of mr_cache_enable\n");
-		return -FI_EINVAL;
-	}
 	if (fi_ibv_get_param_int("mr_max_cached_cnt",
 				 "Maximum number of cache entries",
 				 &fi_ibv_gl_data.mr_max_cached_cnt) ||
@@ -673,14 +665,18 @@ static int fi_ibv_read_params(void)
 
 static void fi_ibv_fini(void)
 {
-	if (fi_ibv_mem_notifier)
-		fi_ibv_mem_notifier_free();
+#if HAVE_VERBS_DL
+	ofi_monitor_cleanup();
+#endif
 	fi_freeinfo((void *)fi_ibv_util_prov.info);
 	fi_ibv_util_prov.info = NULL;
 }
 
 VERBS_INI
 {
+#if HAVE_VERBS_DL
+	ofi_monitor_init();
+#endif
 	if (fi_ibv_read_params()|| fi_ibv_init_info(&fi_ibv_util_prov.info))
 		return NULL;
 	return &fi_ibv_prov;

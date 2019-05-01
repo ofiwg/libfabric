@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2017 Cray Inc. All rights reserved.
- * Copyright (c) 2017 Intel Inc. All rights reserved.
+ * Copyright (c) 2017-2019 Intel Inc. All rights reserved.
+ * Copyright (c) 2019 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -34,96 +35,282 @@
 #include <ofi_mr.h>
 
 
-void ofi_monitor_init(struct ofi_mem_monitor *monitor)
+static struct ofi_uffd uffd;
+struct ofi_mem_monitor *uffd_monitor = &uffd.monitor;
+
+
+/*
+ * Initialize all available memory monitors
+ */
+void ofi_monitor_init(void)
 {
-	ofi_atomic_initialize32(&monitor->refcnt, 0);
+	fastlock_init(&uffd_monitor->lock);
+	dlist_init(&uffd_monitor->list);
 }
 
-void ofi_monitor_cleanup(struct ofi_mem_monitor *monitor)
+void ofi_monitor_cleanup(void)
 {
-	assert(ofi_atomic_get32(&monitor->refcnt) == 0);
+	assert(dlist_empty(&uffd_monitor->list));
+	fastlock_destroy(&uffd_monitor->lock);
 }
 
-void ofi_monitor_add_queue(struct ofi_mem_monitor *monitor,
-			   struct ofi_notification_queue *nq)
+int ofi_monitor_add_cache(struct ofi_mem_monitor *monitor,
+			  struct ofi_mr_cache *cache)
 {
-	fastlock_init(&nq->lock);
-	dlist_init(&nq->list);
-	fastlock_acquire(&nq->lock);
-	nq->refcnt = 0;
-	fastlock_release(&nq->lock);
+	int ret = 0;
 
-	nq->monitor = monitor;
-	ofi_atomic_inc32(&monitor->refcnt);
+	fastlock_acquire(&monitor->lock);
+	if (dlist_empty(&monitor->list)) {
+		if (monitor == uffd_monitor)
+			ret = ofi_uffd_init();
+		else
+			ret = -FI_ENOSYS;
+
+		if (ret)
+			goto out;
+	}
+	cache->monitor = monitor;
+	dlist_insert_tail(&cache->notify_entry, &monitor->list);
+out:
+	fastlock_release(&monitor->lock);
+	return ret;
 }
 
-void ofi_monitor_del_queue(struct ofi_notification_queue *nq)
+void ofi_monitor_del_cache(struct ofi_mr_cache *cache)
 {
-	assert(dlist_empty(&nq->list) && (nq->refcnt == 0));
-	ofi_atomic_dec32(&nq->monitor->refcnt);
-	fastlock_destroy(&nq->lock);
+	struct ofi_mem_monitor *monitor = cache->monitor;
+
+	if (!monitor)
+		return;
+
+	fastlock_acquire(&monitor->lock);
+	dlist_remove(&cache->notify_entry);
+
+	if (dlist_empty(&monitor->list) && (monitor == uffd_monitor))
+		ofi_uffd_cleanup();
+	fastlock_release(&monitor->lock);
 }
 
-int ofi_monitor_subscribe(struct ofi_notification_queue *nq,
-			  void *addr, size_t len,
-			  struct ofi_subscription *subscription)
+/* Must be called holding monitor lock */
+void ofi_monitor_notify(struct ofi_mem_monitor *monitor,
+			const void *addr, size_t len)
+{
+	struct ofi_mr_cache *cache;
+
+	dlist_foreach_container(&monitor->list, struct ofi_mr_cache,
+			cache, notify_entry) {
+		ofi_mr_cache_notify(cache, addr, len);
+	}
+}
+
+int ofi_monitor_subscribe(struct ofi_mem_monitor *monitor,
+			  const void *addr, size_t len)
 {
 	int ret;
 
 	FI_DBG(&core_prov, FI_LOG_MR,
-	       "subscribing addr=%p len=%zu subscription=%p nq=%p\n",
-	       addr, len, subscription, nq);
+	       "subscribing addr=%p len=%zu\n", addr, len);
 
-	/* Ensure the subscription is initialized before we can get events */
-	dlist_init(&subscription->entry);
-
-	subscription->nq = nq;
-	subscription->iov.iov_base = addr;
-	subscription->iov.iov_len = len;
-	fastlock_acquire(&nq->lock);
-	nq->refcnt++;
-	fastlock_release(&nq->lock);
-
-	ret = nq->monitor->subscribe(nq->monitor, subscription);
+	ret = monitor->subscribe(monitor, addr, len);
 	if (OFI_UNLIKELY(ret)) {
 		FI_WARN(&core_prov, FI_LOG_MR,
 			"Failed (ret = %d) to monitor addr=%p len=%zu",
 			ret, addr, len);
-		fastlock_acquire(&nq->lock);
-		nq->refcnt--;
-		fastlock_release(&nq->lock);
 	}
 	return ret;
 }
 
-void ofi_monitor_unsubscribe(struct ofi_subscription *subscription)
+void ofi_monitor_unsubscribe(struct ofi_mem_monitor *monitor,
+			     const void *addr, size_t len)
 {
 	FI_DBG(&core_prov, FI_LOG_MR,
-	       "unsubscribing addr=%p len=%zu subscription=%p\n",
-	       subscription->iov.iov_base, subscription->iov.iov_len, subscription);
-	subscription->nq->monitor->unsubscribe(subscription->nq->monitor,
-					       subscription);
-	fastlock_acquire(&subscription->nq->lock);
-	if (!dlist_empty(&subscription->entry))
-		dlist_remove_init(&subscription->entry);
-	subscription->nq->refcnt--;
-	fastlock_release(&subscription->nq->lock);
+	       "unsubscribing addr=%p len=%zu\n", addr, len);
+	monitor->unsubscribe(monitor, addr, len);
 }
 
-struct ofi_subscription *ofi_monitor_get_event(struct ofi_notification_queue *nq)
+#if HAVE_UFFD_UNMAP
+
+#include <poll.h>
+#include <sys/syscall.h>
+#include <sys/ioctl.h>
+#include <linux/userfaultfd.h>
+
+
+static void *ofi_uffd_handler(void *arg)
 {
-	struct ofi_subscription *subscription;
+	struct uffd_msg msg;
+	struct pollfd fds;
+	int ret;
 
-	fastlock_acquire(&nq->lock);
-	if (!dlist_empty(&nq->list)) {
-		dlist_pop_front(&nq->list, struct ofi_subscription,
-				subscription, entry);
-		/* needed to protect against double insertions */
-		dlist_init(&subscription->entry);
-	} else {
-		subscription = NULL;
+	fds.fd = uffd.fd;
+	fds.events = POLLIN;
+	for (;;) {
+		ret = poll(&fds, 1, -1);
+		if (ret != 1)
+			break;
+
+		fastlock_acquire(&uffd.monitor.lock);
+		ret = read(uffd.fd, &msg, sizeof(msg));
+		if (ret != sizeof(msg)) {
+			fastlock_release(&uffd.monitor.lock);
+			if (errno != EAGAIN)
+				break;
+			continue;
+		}
+
+		switch (msg.event) {
+		case UFFD_EVENT_REMOVE:
+		case UFFD_EVENT_UNMAP:
+			ofi_monitor_notify(&uffd.monitor,
+				(void *) (uintptr_t) msg.arg.remove.start,
+				(size_t) (msg.arg.remove.end -
+					  msg.arg.remove.start));
+			break;
+		case UFFD_EVENT_REMAP:
+			ofi_monitor_notify(&uffd.monitor,
+				(void *) (uintptr_t) msg.arg.remap.from,
+				(size_t) msg.arg.remap.len);
+			break;
+		default:
+			FI_WARN(&core_prov, FI_LOG_MR,
+				"Unhandled uffd event %d\n", msg.event);
+			break;
+		}
+		fastlock_release(&uffd.monitor.lock);
 	}
-	fastlock_release(&nq->lock);
-
-	return subscription;
+	return NULL;
 }
+
+static int ofi_uffd_register(const void *addr, size_t len, size_t page_size)
+{
+	struct uffdio_register reg;
+	int ret;
+
+	reg.range.start = (uint64_t) (uintptr_t)
+			  ofi_get_page_start(addr, page_size);
+	reg.range.len = ofi_get_page_bytes(addr, len, page_size);
+	reg.mode = UFFDIO_REGISTER_MODE_MISSING;
+	ret = ioctl(uffd.fd, UFFDIO_REGISTER, &reg);
+	if (ret < 0) {
+		if (errno != EINVAL) {
+			FI_WARN(&core_prov, FI_LOG_MR,
+				"ioctl/uffd_unreg: %s\n", strerror(errno));
+		}
+		return -errno;
+	}
+	return 0;
+}
+
+static int ofi_uffd_subscribe(struct ofi_mem_monitor *monitor,
+			      const void *addr, size_t len)
+{
+	int ret;
+
+	assert(monitor == &uffd.monitor);
+	ret = ofi_uffd_register(addr, len, uffd.page_size);
+	if (ret)
+		ret = ofi_uffd_register(addr, len, uffd.hugepage_size);
+	return ret;
+}
+
+static int ofi_uffd_unregister(const void *addr, size_t len, size_t page_size)
+{
+	struct uffdio_range range;
+	int ret;
+
+	range.start = (uint64_t) (uintptr_t)
+		      ofi_get_page_start(addr, page_size);
+	range.len = ofi_get_page_bytes(addr, len, page_size);
+	ret = ioctl(uffd.fd, UFFDIO_UNREGISTER, &range);
+	if (ret < 0) {
+		if (errno != EINVAL) {
+			FI_WARN(&core_prov, FI_LOG_MR,
+				"ioctl/uffd_unreg: %s\n", strerror(errno));
+		}
+		return -errno;
+	}
+	return 0;
+}
+
+/* May be called from mr cache notifier callback */
+static void ofi_uffd_unsubscribe(struct ofi_mem_monitor *monitor,
+				 const void *addr, size_t len)
+{
+	assert(monitor == &uffd.monitor);
+	if (ofi_uffd_unregister(addr, len, uffd.page_size))
+		ofi_uffd_unregister(addr, len, uffd.hugepage_size);
+}
+
+int ofi_uffd_init(void)
+{
+	struct uffdio_api api;
+	int ret;
+
+	uffd.monitor.subscribe = ofi_uffd_subscribe;
+	uffd.monitor.unsubscribe = ofi_uffd_unsubscribe;
+
+	uffd.page_size = ofi_get_page_size();
+	if (uffd.page_size < 0)
+		return (int) uffd.page_size;
+
+	uffd.hugepage_size = ofi_get_hugepage_size();
+	if (uffd.hugepage_size < 0)
+		uffd.hugepage_size = 0;
+
+	uffd.fd = syscall(__NR_userfaultfd, O_CLOEXEC | O_NONBLOCK);
+	if (uffd.fd < 0) {
+		FI_WARN(&core_prov, FI_LOG_MR,
+			"syscall/userfaultfd %s\n", strerror(errno));
+		return -errno;
+	}
+
+	api.api = UFFD_API;
+	api.features = UFFD_FEATURE_EVENT_UNMAP | UFFD_FEATURE_EVENT_REMOVE |
+		       UFFD_FEATURE_EVENT_REMAP;
+	ret = ioctl(uffd.fd, UFFDIO_API, &api);
+	if (ret < 0) {
+		FI_WARN(&core_prov, FI_LOG_MR,
+			"ioctl/uffdio: %s\n", strerror(errno));
+		ret = -errno;
+		goto closefd;
+	}
+
+	if (api.api != UFFD_API) {
+		FI_WARN(&core_prov, FI_LOG_MR, "uffd features not supported\n");
+		ret = -FI_ENOSYS;
+		goto closefd;
+	}
+
+	ret = pthread_create(&uffd.thread, NULL, ofi_uffd_handler, &uffd);
+	if (ret) {
+		FI_WARN(&core_prov, FI_LOG_MR,
+			"failed to create handler thread %s\n", strerror(ret));
+		ret = -ret;
+		goto closefd;
+	}
+	return 0;
+
+closefd:
+	close(uffd.fd);
+	return ret;
+}
+
+void ofi_uffd_cleanup(void)
+{
+	pthread_cancel(uffd.thread);
+	pthread_join(uffd.thread, NULL);
+	close(uffd.fd);
+}
+
+#else /* HAVE_UFFD_UNMAP */
+
+int ofi_uffd_init(void)
+{
+	return -FI_ENOSYS;
+}
+
+void ofi_uffd_cleanup(void)
+{
+}
+
+#endif /* HAVE_UFFD_UNMAP */

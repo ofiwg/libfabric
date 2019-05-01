@@ -37,15 +37,12 @@
 
 #include <stdlib.h>
 #include <unistd.h>
-#include <errno.h>
 #include <complex.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <sys/uio.h>
+#include <rdma/fi_errno.h>
 
-#ifdef HAVE_GLIBC_MALLOC_HOOKS
-# include <malloc.h>
-#endif
 
 /* MSG_NOSIGNAL doesn't exist on OS X */
 #ifndef MSG_NOSIGNAL
@@ -212,9 +209,17 @@ static inline int ofi_syserr(void)
 	return errno;
 }
 
-static inline int ofi_sysconf(int name)
+/* sysconf can return -1 and not change errno */
+static inline long ofi_sysconf(int name)
 {
-	return sysconf(name);
+	int ret;
+
+	errno = 0;
+	ret = sysconf(name);
+	if (ret <= 0)
+		return errno ? -errno : -FI_EOTHER;
+
+	return ret;
 }
 
 /* OSX has no such definition. So, add it manually */
@@ -313,122 +318,5 @@ ofi_cpuid(unsigned func, unsigned subfunc, unsigned cpuinfo[4])
 #define ofi_sfence()
 
 #endif /* defined(__x86_64__) || defined(__amd64__) */
-
-typedef void (*ofi_mem_free_hook)(void *, const void *);
-typedef void *(*ofi_mem_realloc_hook)(void *, size_t, const void *);
-
-#ifdef HAVE_GLIBC_MALLOC_HOOKS
-
-static inline void ofi_set_mem_free_hook(ofi_mem_free_hook free_hook)
-{
-#ifdef __INTEL_COMPILER /* ICC */
-# pragma warning push
-# pragma warning disable 1478
-	__free_hook = free_hook;
-# pragma warning pop
-#elif defined __clang__ /* Clang */
-# pragma clang diagnostic push
-# pragma clang diagnostic ignored "-Wdeprecated-declarations"
-	__free_hook = free_hook;
-# pragma clang diagnostic pop
-#elif __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 6) /* GCC >= 4.6 */
-# pragma GCC diagnostic push
-# pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-	__free_hook = free_hook;
-# pragma GCC diagnostic pop
-#else /* others */
-	__free_hook = free_hook;
-#endif
-}
-
-static inline void ofi_set_mem_realloc_hook(ofi_mem_realloc_hook realloc_hook)
-{
-#ifdef __INTEL_COMPILER /* ICC */
-# pragma warning push
-# pragma warning disable 1478
-	__realloc_hook = realloc_hook;
-# pragma warning pop
-#elif defined __clang__ /* Clang */
-# pragma clang diagnostic push
-# pragma clang diagnostic ignored "-Wdeprecated-declarations"
-	__realloc_hook = realloc_hook;
-# pragma clang diagnostic pop
-#elif __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 6) /* GCC >= 4.6 */
-# pragma GCC diagnostic push
-# pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-	__realloc_hook = realloc_hook;
-# pragma GCC diagnostic pop
-#else /* others */
-	__realloc_hook = realloc_hook;
-#endif
-}
-
-static inline ofi_mem_free_hook ofi_get_mem_free_hook(void)
-{
-#ifdef __INTEL_COMPILER /* ICC */
-# pragma warning push
-# pragma warning disable 1478
-	return __free_hook;
-# pragma warning pop
-#elif defined __clang__ /* Clang */
-# pragma clang diagnostic push
-# pragma clang diagnostic ignored "-Wdeprecated-declarations"
-	return __free_hook;
-# pragma clang diagnostic pop
-#elif __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 6) /* GCC >= 4.6 */
-# pragma GCC diagnostic push
-# pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-	return __free_hook;
-# pragma GCC diagnostic pop
-#else /* others */
-	return __free_hook;
-#endif
-}
-
-static inline ofi_mem_realloc_hook ofi_get_mem_realloc_hook(void)
-{
-#ifdef __INTEL_COMPILER /* ICC */
-# pragma warning push
-# pragma warning disable 1478
-	return __realloc_hook;
-# pragma warning pop
-#elif defined __clang__ /* Clang */
-# pragma clang diagnostic push
-# pragma clang diagnostic ignored "-Wdeprecated-declarations"
-	return __realloc_hook;
-# pragma clang diagnostic pop
-#elif __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 6) /* GCC >= 4.6 */
-# pragma GCC diagnostic push
-# pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-	return __realloc_hook;
-# pragma GCC diagnostic pop
-#else /* others */
-	return __realloc_hook;
-#endif
-}
-
-#else /* !HAVE_GLIBC_MALLOC_HOOKS */
-
-static inline void ofi_set_mem_free_hook(ofi_mem_free_hook free_hook)
-{
-	OFI_UNUSED(free_hook);
-}
-
-static inline void ofi_set_mem_realloc_hook(ofi_mem_realloc_hook realloc_hook)
-{
-	OFI_UNUSED(realloc_hook);
-}
-
-static inline ofi_mem_free_hook ofi_get_mem_free_hook(void)
-{
-	return NULL;
-}
-
-static inline ofi_mem_realloc_hook ofi_get_mem_realloc_hook(void)
-{
-	return NULL;
-}
-
-#endif /* HAVE_GLIBC_MALLOC_HOOKS */
 
 #endif /* _FI_UNIX_OSD_H_ */

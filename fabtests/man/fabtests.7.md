@@ -136,6 +136,12 @@ features of libfabric.
 *fi_unexpected_msg*
 : Tests the send and receive handling of unexpected tagged messages.
 
+*fi_unmap_mem*
+: Tests data transfers where the transmit buffer is mmapped and
+  unmapped between each transfer, but the virtual address of the transmit
+  buffer tries to remain the same.  This test is used to validate the
+  correct behavior of memory registration caches.
+
 # Benchmarks
 
 The client and the server exchange messages in either a ping-pong manner,

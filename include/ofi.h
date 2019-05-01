@@ -175,10 +175,27 @@ static inline uint64_t roundup_power_of_two(uint64_t n)
 	return n;
 }
 
-static inline size_t fi_get_aligned_sz(size_t size, size_t alignment)
+static inline size_t ofi_get_aligned_size(size_t size, size_t alignment)
 {
 	return ((size % alignment) == 0) ?
 		size : ((size / alignment) + 1) * alignment;
+}
+
+static inline void *ofi_get_page_start(const void *addr, size_t page_size)
+{
+	return (void *)((uintptr_t) addr & ~(page_size - 1));
+}
+
+static inline void *ofi_get_page_end(const void *addr, size_t page_size)
+{
+	return ofi_get_page_start((const char *) addr + page_size -1, page_size);
+}
+
+static inline size_t
+ofi_get_page_bytes(const void *addr, size_t len, size_t page_size)
+{
+	return (char *)ofi_get_page_end((const char *) addr + len, page_size) -
+	       (char *)ofi_get_page_start(addr, page_size);
 }
 
 #define FI_TAG_GENERIC	0xAAAAAAAAAAAAAAAAULL

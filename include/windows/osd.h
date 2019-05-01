@@ -831,7 +831,7 @@ static inline char * strndup(char const *src, size_t n)
 	return dst;
 }
 
-static inline int ofi_sysconf(int name)
+static inline long ofi_sysconf(int name)
 {
 	SYSTEM_INFO si;
 
@@ -992,28 +992,6 @@ ofi_cpuid(unsigned func, unsigned subfunc, unsigned cpuinfo[4])
 
 #endif /* defined(_M_X64) || defined(_M_AMD64) */
 
-typedef void (*ofi_mem_free_hook)(void *, const void *);
-typedef void *(*ofi_mem_realloc_hook)(void *, size_t, const void *);
-
-static inline void ofi_set_mem_free_hook(ofi_mem_free_hook free_hook)
-{
-	OFI_UNUSED(free_hook);
-}
-
-static inline void ofi_set_mem_realloc_hook(ofi_mem_realloc_hook realloc_hook)
-{
-	OFI_UNUSED(realloc_hook);
-}
-
-static inline ofi_mem_free_hook ofi_get_mem_free_hook(void)
-{
-	return NULL;
-}
-
-static inline ofi_mem_realloc_hook ofi_get_mem_realloc_hook(void)
-{
-	return NULL;
-}
 
 #ifdef __cplusplus
 }

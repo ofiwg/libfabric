@@ -180,6 +180,9 @@
     <ClCompile Include="prov\util\src\util_mem_monitor.c">
       <Filter>Source Files\prov\util</Filter>
     </ClCompile>
+    <ClCompile Include="prov\util\src\util_mr_cache.c">
+      <Filter>Source Files\prov\util</Filter>
+    </ClCompile>
     <ClCompile Include="src\windows\osd.c">
       <Filter>Source Files\src\windows</Filter>
     </ClCompile>

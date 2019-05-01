@@ -57,8 +57,8 @@ static void ofi_bufpool_set_region_size(struct ofi_bufpool *pool)
 	hp_size = ofi_get_hugepage_size();
 	if ((pool->attr.chunk_cnt + 1) * pool->entry_size >= hp_size) {
 		pool->attr.flags |= OFI_BUFPOOL_MMAPPED;
-		pool->alloc_size = fi_get_aligned_sz((pool->attr.chunk_cnt + 1) *
-						      pool->entry_size, hp_size);
+		pool->alloc_size = ofi_get_aligned_size((pool->attr.chunk_cnt + 1) *
+							pool->entry_size, hp_size);
 	} else {
 		pool->attr.flags &= ~OFI_BUFPOOL_MMAPPED;
 		pool->alloc_size = (pool->attr.chunk_cnt + 1) * pool->entry_size;
@@ -197,7 +197,7 @@ int ofi_bufpool_create_attr(struct ofi_bufpool_attr *attr,
 	(*buf_pool)->attr = *attr;
 
 	entry_sz = (attr->size + sizeof(struct ofi_bufpool_hdr));
-	(*buf_pool)->entry_size = fi_get_aligned_sz(entry_sz, attr->alignment);
+	(*buf_pool)->entry_size = ofi_get_aligned_size(entry_sz, attr->alignment);
 
 	if ((*buf_pool)->attr.flags & OFI_BUFPOOL_INDEXED)
 		dlist_init(&(*buf_pool)->free_list.regions);

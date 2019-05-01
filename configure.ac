@@ -1,5 +1,7 @@
 dnl
 dnl Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
+dnl Copyright (c) 2019 Intel, Inc.  All rights reserved.
+dnl Copyright (c) 2019 Amazon.com, Inc. or its affiliates. All rights reserved.
 dnl
 dnl Process this file with autoconf to produce a configure script.
 
@@ -285,21 +287,6 @@ AC_TRY_LINK([
     ],
     [AC_MSG_RESULT(no)])
 
-dnl Check for glibc malloc hooks
-AC_MSG_CHECKING(compiler support for glibc malloc hooks)
-AC_TRY_LINK([#include <malloc.h>],
-    [
-     __malloc_hook = NULL;
-     __realloc_hook = NULL;
-     __memalign_hook = NULL;
-     __free_hook = NULL;
-    ],
-    [
-	AC_MSG_RESULT(yes)
-        AC_DEFINE(HAVE_GLIBC_MALLOC_HOOKS, 1, [Set to 1 to use glibc malloc hooks])
-    ],
-    [AC_MSG_RESULT(no)])
-
 if test "$with_valgrind" != "" && test "$with_valgrind" != "no"; then
 AC_CHECK_HEADER(valgrind/memcheck.h, [],
     AC_MSG_ERROR([valgrind requested but <valgrind/memcheck.h> not found.]))
@@ -402,9 +389,46 @@ AC_TRY_LINK([
 
 dnl Check for ethtool SPEED_UNKNOWN macro (suppoirted in the linux
 dnl kernel >= 3.2) and ethtool_cmd_speed function declarations
-dnl (supported in the linux kernel >= 2.6.26)
+dnl supported in the linux kernel >= 2.6.26
 AC_CHECK_DECLS([ethtool_cmd_speed, SPEED_UNKNOWN], [], [],
                [#include <linux/ethtool.h>])
+
+dnl Check for userfault fd support
+have_uffd=0
+AC_CHECK_HEADERS([linux/userfaultfd.h],
+	[AC_CHECK_DECL([__NR_userfaultfd],
+		[have_uffd=1],
+		[],
+		[[#include <sys/syscall.h>]])],
+	[], [])
+
+AS_IF([test $have_uffd -eq 1],
+	[AC_MSG_CHECKING([for userfaultfd unmap support])
+	AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+			#include <sys/types.h>
+			#include <linux/userfaultfd.h>
+			#include <unistd.h>
+			#include <sys/syscall.h>
+			#include <fcntl.h>
+			#include <sys/ioctl.h>
+		]],
+		[[
+			int fd;
+			struct uffdio_api api_obj;
+			api_obj.api = UFFD_API;
+			api_obj.features = UFFD_FEATURE_EVENT_UNMAP |
+					UFFD_FEATURE_EVENT_REMOVE |
+					UFFD_FEATURE_EVENT_REMAP;
+			fd = syscall(__NR_userfaultfd, O_CLOEXEC | O_NONBLOCK);
+			return ioctl(fd, UFFDIO_API, &api_obj);
+		]])
+	],
+	[AC_MSG_RESULT([yes])],
+	[AC_MSG_RESULT([no])
+		have_uffd=0])])
+
+AC_DEFINE_UNQUOTED([HAVE_UFFD_UNMAP], [$have_uffd],
+	[Define to 1 if platform supports userfault fd unmap])
 
 dnl Provider-specific checks
 FI_PROVIDER_INIT

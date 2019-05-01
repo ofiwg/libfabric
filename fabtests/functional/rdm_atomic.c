@@ -518,7 +518,7 @@ int main(int argc, char **argv)
 			}
 			break;
 		default:
-			ft_parseinfo(op, optarg, hints);
+			ft_parseinfo(op, optarg, hints, &opts);
 			ft_parsecsopts(op, optarg, &opts);
 			break;
 		case '?':
@@ -534,7 +534,7 @@ int main(int argc, char **argv)
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG | FI_ATOMICS;
 	hints->mode = FI_CONTEXT;
-	hints->domain_attr->mr_mode = FI_MR_LOCAL | OFI_MR_BASIC_MAP;
+	hints->domain_attr->mr_mode = opts.mr_mode;
 
 	ret = run();
 

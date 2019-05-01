@@ -198,9 +198,6 @@ The verbs provider checks for the following environment variables.
 : The prefix or the full name of the network interface associated with the verbs
   device (default: ib)
 
-*FI_VERBS_MR_CACHE_ENABLE*
-: Enable Memory Registration caching (default: 0)
-
 *FI_VERBS_MR_MAX_CACHED_CNT*
 : Maximum number of cache entries (default: 4096)
 

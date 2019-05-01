@@ -214,7 +214,7 @@ int main(int argc, char **argv)
 	while ((op = getopt(argc, argv, FAB_OPTS "h")) != -1) {
 		switch (op) {
 		default:
-			ft_parseinfo(op, optarg, hints);
+			ft_parseinfo(op, optarg, hints, &opts);
 			break;
 		case '?':
 		case 'h':

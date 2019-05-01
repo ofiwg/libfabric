@@ -98,14 +98,13 @@ int main(int argc, char **argv)
 	hints->caps = FI_MSG | FI_RMA;
 	hints->domain_attr->resource_mgmt = FI_RM_ENABLED;
 	hints->mode = FI_CONTEXT;
-	hints->domain_attr->mr_mode = FI_MR_LOCAL | OFI_MR_BASIC_MAP;
 	hints->domain_attr->threading = FI_THREAD_DOMAIN;
 
 	while ((op = getopt(argc, argv, "ho:" CS_OPTS INFO_OPTS BENCHMARK_OPTS)) != -1) {
 		switch (op) {
 		default:
 			ft_parse_benchmark_opts(op, optarg);
-			ft_parseinfo(op, optarg, hints);
+			ft_parseinfo(op, optarg, hints, &opts);
 			ft_parsecsopts(op, optarg, &opts);
 			ret = ft_parse_rma_opts(op, optarg, hints, &opts);
 			if (ret)
@@ -126,6 +125,8 @@ int main(int argc, char **argv)
 
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
+
+	hints->domain_attr->mr_mode = opts.mr_mode;
 
 	ret = run();
 

@@ -52,7 +52,7 @@
 #include <sys/wait.h>
 #include <sys/time.h>
 
-#include <ofi_osd.h>
+#include <ofi_mem.h>
 #include <rdma/fabric.h>
 #include <rdma/fi_cm.h>
 #include <rdma/fi_domain.h>
@@ -1298,11 +1298,10 @@ static int pp_alloc_msgs(struct ct_pingpong *ct)
 		       MAX(ct->rx_size, PP_MAX_CTRL_MSG) +
 		       ct->tx_prefix_size + ct->rx_prefix_size;
 
-	alignment = ofi_sysconf(_SC_PAGESIZE);
+	alignment = ofi_get_page_size();
 	if (alignment < 0) {
-		ret = -ofi_sockerr();
-		PP_PRINTERR("ofi_sysconf", ret);
-		return ret;
+		PP_PRINTERR("ofi_get_page_size", alignment);
+		return alignment;
 	}
 	/* Extra alignment for the second part of the buffer */
 	ct->buf_size += alignment;

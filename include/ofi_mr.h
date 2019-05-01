@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 Intel Corporation, Inc. All rights reserved.
+ * Copyright (c) 2017-2019 Intel Corporation, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -95,58 +95,53 @@ static inline uint64_t ofi_mr_get_prov_mode(uint32_t version,
  * Memory notifier - Report memory mapping changes to address ranges
  */
 
-struct ofi_subscription;
-struct ofi_notification_queue;
+struct ofi_mr_cache;
 
 struct ofi_mem_monitor {
-	ofi_atomic32_t			refcnt;
-
-	int (*subscribe)(struct ofi_mem_monitor *notifier,
-			 struct ofi_subscription *subscription);
-	void (*unsubscribe)(struct ofi_mem_monitor *notifier,
-			    struct ofi_subscription *subscription);
-};
-
-struct ofi_notification_queue {
-	struct ofi_mem_monitor		*monitor;
 	fastlock_t			lock;
 	struct dlist_entry		list;
-	int				refcnt;
+
+	int (*subscribe)(struct ofi_mem_monitor *notifier,
+			 const void *addr, size_t len);
+	void (*unsubscribe)(struct ofi_mem_monitor *notifier,
+			    const void *addr, size_t len);
 };
 
-struct ofi_subscription {
-	struct ofi_notification_queue	*nq;
-	struct dlist_entry		entry;
-	struct iovec			iov;
-};
+void ofi_monitor_init(void);
+void ofi_monitor_cleanup(void);
+int ofi_monitor_add_cache(struct ofi_mem_monitor *monitor,
+			   struct ofi_mr_cache *cache);
+void ofi_monitor_del_cache(struct ofi_mr_cache *cache);
+void ofi_monitor_notify(struct ofi_mem_monitor *monitor,
+			const void *addr, size_t len);
 
-void ofi_monitor_init(struct ofi_mem_monitor *monitor);
-void ofi_monitor_cleanup(struct ofi_mem_monitor *monitor);
-void ofi_monitor_add_queue(struct ofi_mem_monitor *monitor,
-			   struct ofi_notification_queue *nq);
-void ofi_monitor_del_queue(struct ofi_notification_queue *nq);
-
-int ofi_monitor_subscribe(struct ofi_notification_queue *nq,
-			  void *addr, size_t len,
-			  struct ofi_subscription *subscription);
-void ofi_monitor_unsubscribe(struct ofi_subscription *subscription);
-struct ofi_subscription *ofi_monitor_get_event(struct ofi_notification_queue *nq);
-static inline void
-ofi_monitor_add_event_to_nq(struct ofi_subscription *subscription)
-{
-	FI_DBG(&core_prov, FI_LOG_MR,
-	       "Add event to NQ, context=%p, addr=%p, len=%"PRIu64" nq=%p\n",
-	       subscription, subscription->iov.iov_base,
-	       subscription->iov.iov_len, subscription->nq);
-	fastlock_acquire(&subscription->nq->lock);
-	if (dlist_empty(&subscription->entry))
-		dlist_insert_tail(&subscription->entry,
-				  &subscription->nq->list);
-	fastlock_release(&subscription->nq->lock);
-}
+int ofi_monitor_subscribe(struct ofi_mem_monitor *monitor,
+			  const void *addr, size_t len);
+void ofi_monitor_unsubscribe(struct ofi_mem_monitor *monitor,
+			     const void *addr, size_t len);
 
 /*
- * MR map
+ * Userfault fd memory monitor
+ */
+struct ofi_uffd {
+	struct ofi_mem_monitor		monitor;
+	long				page_size;
+	long				hugepage_size;
+	pthread_t			thread;
+	int				fd;
+};
+
+int ofi_uffd_init(void);
+void ofi_uffd_cleanup(void);
+
+extern struct ofi_mem_monitor *uffd_monitor;
+
+
+/*
+ * Used to store registered memory regions into a lookup map.  This
+ * is used by the ofi_mr_xxx calls below, and may be accessed by a
+ * provider when processing incoming RMA operations to verify that
+ * a region has been registered for the specified operation.
  */
 
 struct ofi_mr_map {
@@ -169,6 +164,11 @@ void *ofi_mr_map_get(struct ofi_mr_map *map,  uint64_t key);
 int ofi_mr_map_verify(struct ofi_mr_map *map, uintptr_t *io_addr,
 		      size_t len, uint64_t key, uint64_t access,
 		      void **context);
+
+/*
+ * These calls may be used be providers to implement software memory
+ * registration.
+ */
 
 struct ofi_mr {
 	struct fid_mr mr_fid;
@@ -200,7 +200,6 @@ struct ofi_mr_entry {
 	unsigned int			subscribed:1;
 	int				use_cnt;
 	struct dlist_entry		lru_entry;
-	struct ofi_subscription		subscription;
 	uint8_t				data[];
 };
 
@@ -219,6 +218,7 @@ enum ofi_mr_storage_type {
 	OFI_MR_STORAGE_DEFAULT = 0,
 	OFI_MR_STORAGE_RBT,
 	OFI_MR_STORAGE_USER,
+	OFI_MR_STORAGE_NONE,
 };
 
 struct ofi_mr_storage {
@@ -232,13 +232,14 @@ struct ofi_mr_storage {
 
 struct ofi_mr_cache {
 	struct util_domain		*domain;
-	struct ofi_notification_queue	nq;
+	struct ofi_mem_monitor		*monitor;
+	struct dlist_entry		notify_entry;
 	size_t				max_cached_cnt;
 	size_t				max_cached_size;
 	int				merge_regions;
 	size_t				entry_data_size;
 
-	struct ofi_mr_storage		mr_storage;
+	struct ofi_mr_storage		storage;
 	struct dlist_entry		lru_list;
 
 	size_t				cached_cnt;
@@ -246,6 +247,7 @@ struct ofi_mr_cache {
 	size_t				search_cnt;
 	size_t				delete_cnt;
 	size_t				hit_cnt;
+	size_t				notify_cnt;
 	struct ofi_bufpool		*entry_pool;
 
 	int				(*add_region)(struct ofi_mr_cache *cache,
@@ -258,7 +260,8 @@ int ofi_mr_cache_init(struct util_domain *domain, struct ofi_mem_monitor *monito
 		      struct ofi_mr_cache *cache);
 void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache);
 
-/* Caller must provide locking around calls */
+void ofi_mr_cache_notify(struct ofi_mr_cache *cache, const void *addr, size_t len);
+
 bool ofi_mr_cache_flush(struct ofi_mr_cache *cache);
 int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
 			struct ofi_mr_entry **entry);

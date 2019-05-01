@@ -912,7 +912,7 @@ int main(int argc, char **argv)
 			opts.src_addr = optarg;
 			break;
 		default:
-			ft_parseinfo(op, optarg, hints);
+			ft_parseinfo(op, optarg, hints, &opts);
 			break;
 		case '?':
 		case 'h':
