@@ -1221,6 +1221,8 @@ static int rxm_conn_handle_notify(struct fi_eq_entry *eq_entry)
 	struct rxm_cmap *cmap;
 	struct rxm_cmap_handle *handle;
 
+	assert((enum rxm_cmap_signal)eq_entry->data);
+
 	if ((enum rxm_cmap_signal)eq_entry->data == RXM_CMAP_FREE) {
 		handle = eq_entry->context;
 		cmap = handle->cmap;
