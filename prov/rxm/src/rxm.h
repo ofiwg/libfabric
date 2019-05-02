@@ -151,6 +151,7 @@ extern size_t rxm_def_univ_size;
 #define RXM_CMAP_IDX_BITS OFI_IDX_INDEX_BITS
 
 enum rxm_cmap_signal {
+	RXM_CMAP_UNSPEC,
 	RXM_CMAP_FREE,
 	RXM_CMAP_EXIT,
 };
