@@ -105,11 +105,8 @@ static int issue_unlink_le(struct cxil_pte *pte, enum c_ptl_list list,
 }
 
 /*
- * match_ux_send() - Search for a previously received unexpected Put event with
- * matching start pointer.
- *
- * TODO this assumes all overflow buffers use the same AC so all start pointers
- * are unique.
+ * match_ux_send() - Search for an unexpected Put that matches a Put Overflow
+ * event.
  *
  * Caller must hold rxc->lock.
  */
@@ -118,11 +115,37 @@ match_ux_send(struct cxip_rxc *rxc, const union c_event *event)
 {
 	struct cxip_ux_send *ux_send;
 
-	dlist_foreach_container(&rxc->ux_sends, struct cxip_ux_send, ux_send,
-				list) {
-		if (ux_send->start == event->tgt_long.start) {
-			dlist_remove(&ux_send->list);
-			return ux_send;
+	if (event->tgt_long.rendezvous) {
+		uint32_t process = event->tgt_long.initiator.initiator.process;
+		union cxip_match_bits mb = {
+			.raw = event->tgt_long.match_bits,
+		};
+		uint32_t ev_rdzv_id = RDZV_ID(event->tgt_long.rendezvous_id,
+					      mb.rdzv_id_lo);
+
+		/* Rendezvous events are correlated using rendezvous_id and
+		 * initiator.
+		 */
+		dlist_foreach_container(&rxc->ux_rdzv_sends,
+					struct cxip_ux_send, ux_send, list) {
+			if ((ux_send->rdzv_id == ev_rdzv_id) &&
+			    (ux_send->initiator == process)) {
+				dlist_remove(&ux_send->list);
+				return ux_send;
+			}
+		}
+	} else {
+		/* All other events are correlated using start address.
+		 *
+		 * TODO this assumes all overflow buffers use the same AC so
+		 * all start pointers are unique.
+		 */
+		dlist_foreach_container(&rxc->ux_sends, struct cxip_ux_send,
+					ux_send, list) {
+			if (ux_send->start == event->tgt_long.start) {
+				dlist_remove(&ux_send->list);
+				return ux_send;
+			}
 		}
 	}
 
@@ -130,11 +153,8 @@ match_ux_send(struct cxip_rxc *rxc, const union c_event *event)
 }
 
 /*
- * match_ux_recv() - Search for a previously completed request which was
- * matched to an overflow buffer that has a matching start pointer.
- *
- * TODO this assumes all overflow buffers use the same AC so all start pointers
- * are unique.
+ * match_ux_recv() - Search for a previously matched request that matches an
+ * unexpected Put event.
  *
  * Caller must hold rxc->lock.
  */
@@ -143,14 +163,70 @@ match_ux_recv(struct cxip_rxc *rxc, const union c_event *event)
 {
 	struct cxip_req *req;
 
-	dlist_foreach_container(&rxc->ux_recvs, struct cxip_req, req, list) {
-		if (req->recv.start == event->tgt_long.start) {
-			dlist_remove(&req->list);
-			return req;
+	if (event->tgt_long.rendezvous) {
+		uint32_t process = event->tgt_long.initiator.initiator.process;
+		union cxip_match_bits mb = {
+			.raw = event->tgt_long.match_bits,
+		};
+		uint32_t ev_rdzv_id = RDZV_ID(event->tgt_long.rendezvous_id,
+					      mb.rdzv_id_lo);
+
+		/* Rendezvous events are correlated using rendezvous_id and
+		 * initiator.
+		 */
+		dlist_foreach_container(&rxc->ux_rdzv_recvs, struct cxip_req,
+					req, list) {
+			if ((req->recv.rdzv_id == ev_rdzv_id) &&
+			    (req->recv.initiator == process)) {
+				dlist_remove(&req->list);
+				return req;
+			}
+		}
+	} else {
+		/* All other events are correlated using start address.
+		 *
+		 * TODO this assumes all overflow buffers use the same AC so
+		 * all start pointers are unique.
+		 */
+		dlist_foreach_container(&rxc->ux_recvs, struct cxip_req, req,
+					list) {
+			if (req->recv.start == event->tgt_long.start) {
+				dlist_remove(&req->list);
+				return req;
+			}
 		}
 	}
 
 	return NULL;
+}
+
+/*
+ * _rxc_event_src_addr() - Translate event process ID to FI address.
+ */
+static fi_addr_t _rxc_event_src_addr(struct cxip_rxc *rxc,
+				     uint32_t process)
+{
+	/* If the FI_SOURCE capability is enabled, convert the initiator's
+	 * address to an FI address to be reported in a CQ event. If
+	 * application AVs are symmetric, the match_id in the EQ event is
+	 * logical and translation is not needed.  Otherwise, translate the
+	 * physical address in the EQ event to logical FI address.
+	 */
+	if (rxc->attr.caps & FI_SOURCE) {
+		uint32_t pid_bits = rxc->domain->dev_if->if_dev->info.pid_bits;
+		uint32_t nic;
+		uint32_t pid;
+
+		if (rxc->ep_obj->av->attr.flags & FI_SYMMETRIC)
+			return CXI_MATCH_ID_EP(pid_bits, process);
+
+		nic = CXI_MATCH_ID_EP(pid_bits, process);
+		pid = CXI_MATCH_ID_PID(pid_bits, process);
+
+		return _cxip_av_reverse_lookup(rxc->ep_obj->av, nic, pid);
+	}
+
+	return FI_ADDR_NOTAVAIL;
 }
 
 /*
@@ -161,6 +237,7 @@ static void report_recv_completion(struct cxip_req *req)
 	int ret;
 	int truncated;
 	int err;
+	fi_addr_t src_addr;
 
 	req->data_len = req->recv.mlength;
 
@@ -168,8 +245,9 @@ static void report_recv_completion(struct cxip_req *req)
 	if (req->recv.rc == C_RC_OK && !truncated) {
 		CXIP_LOG_DBG("Request success: %p\n", req);
 
-		ret = req->cq->report_completion(req->cq, req->recv.src_addr,
-						 req);
+		src_addr = _rxc_event_src_addr(req->recv.rxc,
+					       req->recv.initiator);
+		ret = req->cq->report_completion(req->cq, src_addr, req);
 		if (ret != req->cq->cq_entry_size)
 			CXIP_LOG_ERROR("Failed to report completion: %d\n",
 				       ret);
@@ -215,60 +293,55 @@ static void oflow_buf_put(struct cxip_oflow_buf *oflow_buf)
 }
 
 /*
- * rdzv_issue_get() - Perform a Get to pull source data from the Initiator of a
- * long send operation.
+ * issue_rdzv_get() - Perform a Get to pull source data from the Initiator of a
+ * Send operation.
  */
-static int rdzv_issue_get(struct cxip_req *req, struct cxip_ux_send *ux_send)
+static int issue_rdzv_get(struct cxip_req *req, const union c_event *event)
 {
-	union c_fab_addr dfa;
-	uint32_t pid_granule, pid_idx;
-	uint8_t idx_ext;
+	const struct c_event_target_long *tev = &event->tgt_long;
 	union c_cmdu cmd = {};
-	int ret;
 	struct cxip_rxc *rxc = req->recv.rxc;
+	uint32_t pid_granule = rxc->domain->dev_if->if_dev->info.pid_granule;
+	uint32_t pid_idx = rxc->domain->dev_if->if_dev->info.rdzv_get_idx;
 	uint32_t pid_bits = rxc->domain->dev_if->if_dev->info.pid_bits;
-	uint32_t nic;
-	uint32_t pid;
-	union cxip_match_bits mb = {};
-
-	nic = CXI_MATCH_ID_EP(pid_bits, ux_send->initiator);
-	pid = CXI_MATCH_ID_PID(pid_bits, ux_send->initiator);
-
-	if (req->recv.rlength < ux_send->length)
-		req->recv.mlength = req->recv.rlength;
-	else
-		req->recv.mlength = ux_send->length;
-	req->recv.rlength = ux_send->length;
-
-	pid_granule = rxc->domain->dev_if->if_dev->info.pid_granule;
-	pid_idx = rxc->domain->dev_if->if_dev->info.rdzv_get_idx;
-	cxi_build_dfa(nic, pid, pid_granule, pid_idx, &dfa, &idx_ext);
+	uint8_t idx_ext;
+	uint32_t initiator = tev->initiator.initiator.process;
+	int ret;
 
 	cmd.full_dma.command.cmd_type = C_CMD_TYPE_DMA;
 	cmd.full_dma.command.opcode = C_CMD_GET;
-	cmd.full_dma.index_ext = idx_ext;
 	cmd.full_dma.lac = req->recv.recv_md->md->lac;
-	cmd.full_dma.remote_offset = 0;
 	cmd.full_dma.event_send_disable = 1;
-	cmd.full_dma.dfa = dfa;
-	cmd.full_dma.local_addr = CXI_VA_TO_IOVA(req->recv.recv_md->md,
-						 req->recv.recv_buf);
 	cmd.full_dma.eq = rxc->comp.recv_cq->evtq->eqn;
-	cmd.full_dma.request_len = req->recv.mlength;
-	mb.rdzv_id_lo = ux_send->match_bits.rdzv_id_lo;
-	cmd.full_dma.match_bits = mb.raw;
 	cmd.full_dma.initiator = CXI_MATCH_ID(pid_bits,
 					      rxc->ep_obj->src_addr.pid,
 					      rxc->ep_obj->src_addr.nic);
+	cmd.full_dma.match_bits = tev->match_bits;
 	cmd.full_dma.user_ptr = (uint64_t)req;
 
-#if 0
-	cmd.full_dma.user_ptr = cxi_rdzv_user_ptr(uint16_t buffer_id,
-					 uint8_t rendezvous_id,
-					 uint16_t ptlte_index,
-					 uint16_t initiator_pid,
-					 uint32_t sfa_nid)
-#endif
+	if (tev->rendezvous) {
+		/* TODO fix address format translation issues */
+		cmd.full_dma.dfa.unicast.nid = initiator >> 12;
+		cmd.full_dma.dfa.unicast.endpoint_defined = initiator & 0xFFF;
+		cmd.full_dma.index_ext =
+				PTL_INDEX_EXT(0, pid_granule, pid_idx);
+		cmd.full_dma.request_len = tev->rlength - tev->mlength;
+		cmd.full_dma.local_addr = tev->start;
+		cmd.full_dma.remote_offset = tev->remote_offset;
+	} else {
+		/* TODO translate initiator if logical */
+		uint32_t nic = CXI_MATCH_ID_EP(pid_bits, initiator);
+		uint32_t pid = CXI_MATCH_ID_PID(pid_bits, initiator);
+		union c_fab_addr dfa;
+
+		cxi_build_dfa(nic, pid, pid_granule, pid_idx, &dfa, &idx_ext);
+		cmd.full_dma.dfa = dfa;
+		cmd.full_dma.index_ext = idx_ext;
+		cmd.full_dma.request_len = req->recv.mlength;
+		cmd.full_dma.local_addr = CXI_VA_TO_IOVA(req->recv.recv_md->md,
+							 req->recv.recv_buf);
+		cmd.full_dma.remote_offset = 0;
+	}
 
 	fastlock_acquire(&rxc->lock);
 
@@ -292,42 +365,217 @@ unlock:
 	return ret;
 }
 
+/*
+ * recv_req_complete() - Complete receive request.
+ */
+static void recv_req_complete(struct cxip_req *req)
+{
+	cxip_unmap(req->recv.recv_md);
+	report_recv_completion(req);
+	cxip_cq_req_free(req);
+}
+
+/*
+ * recv_req_put_event() - Update receive request using the received Put event.
+ *
+ * Use rlength, match_bits, initiator, and return_code in Put event to update
+ * receive request state. This information is available in all Put and Put
+ * Overflow events.
+ */
+static void
+recv_req_put_event(struct cxip_req *req, const union c_event *event)
+{
+	union cxip_match_bits mb;
+
+	if (event->tgt_long.rlength > req->recv.rlength) {
+		/* Send truncated. */
+		req->recv.mlength = req->recv.rlength;
+	} else {
+		req->recv.mlength = event->tgt_long.rlength;
+	}
+	req->recv.rlength = event->tgt_long.rlength;
+
+	req->recv.rc = cxi_tgt_event_rc(event);
+
+	mb.raw = event->tgt_long.match_bits;
+	req->tag = mb.tag;
+	req->recv.initiator = event->tgt_long.initiator.initiator.process;
+}
+
+/*
+ * oflow_req_cleanup() - Clean up overflow buffer request.
+ *
+ * Free overflow buffer resources if the buffer is no longer in use.
+ */
+static void oflow_req_cleanup(struct cxip_req *req)
+{
+	struct cxip_oflow_buf *oflow_buf;
+
+	oflow_buf = req->oflow.oflow_buf;
+	if (oflow_buf->exhausted) {
+		CXIP_LOG_DBG("Oflow buf exhausted, buf: %p\n",
+			     oflow_buf->buf);
+
+		/* This is the last event to the overflow buffer, drop a
+		 * reference to it. The buffer will be freed once all user data
+		 * is copied out.
+		 */
+		oflow_buf_put(oflow_buf);
+
+		/* No further events are expected, free the overflow buffer
+		 * request immediately.
+		 */
+		cxip_cq_req_free(req);
+	}
+}
+
 int cxip_rxc_eager_replenish(struct cxip_rxc *rxc);
 
 /*
- * cxip_oflow_cb() - Process an overflow buffer event.
+ * cxip_oflow_rdzv_cb() - Progress an Overflow buffer rendezvous event.
  *
- * We can expect Link, Unlink and Put events from the overflow buffer.
+ * All target events which are related to a offloaded rendezvous Put operation
+ * have the rendezvous bit set. Handle all rendezvous events from an Overflow
+ * buffer. See cxip_oflow_cb() for more details about Overflow buffer event
+ * handling.
+ */
+static void
+cxip_oflow_rdzv_cb(struct cxip_req *req, const union c_event *event)
+{
+	struct cxip_rxc *rxc = req->oflow.rxc;
+	struct cxip_req *ux_recv;
+	struct cxip_ux_send *ux_send;
+	struct cxip_oflow_buf *oflow_buf;
+	void *oflow_va;
+
+	oflow_buf = req->oflow.oflow_buf;
+
+	switch (event->hdr.event_type) {
+	case C_EVENT_LINK:
+		/* TODO Handle append errors. */
+		return;
+	case C_EVENT_UNLINK:
+		ofi_atomic_dec32(&rxc->oflow_buf_cnt);
+
+		if (!event->tgt_long.auto_unlinked) {
+			cxip_cq_req_free(req);
+			return;
+		}
+
+		/* Mark the overflow buffer exhausted. One more Put event is
+		 * expected. When the event for the Put which exhausted
+		 * resources arrives, drop a reference to the overflow buffer.
+		 */
+		oflow_buf->exhausted = 1;
+
+		/* Replace the eager overflow buffer */
+		cxip_rxc_eager_replenish(rxc);
+
+		return;
+	case C_EVENT_PUT:
+		/* Put event handling is complicated. Handle below. */
+		break;
+	default:
+		CXIP_LOG_ERROR("Unexpected event type: %d\n",
+			       event->hdr.event_type);
+		return;
+	}
+
+	/* Handle Put events */
+	fastlock_acquire(&rxc->lock);
+
+	/* Check for a previously received Put Overflow event */
+	ux_recv = match_ux_recv(rxc, event);
+	if (!ux_recv) {
+		/* A Put Overflow event is pending. Store a record of this
+		 * unexpected Put event for lookup when the event arrives.
+		 */
+		union cxip_match_bits mb;
+
+		/* TODO make fast allocator for ux_sends */
+		ux_send = malloc(sizeof(struct cxip_ux_send));
+		if (!ux_send) {
+			CXIP_LOG_ERROR("Failed to malloc ux_send\n");
+			abort();
+		}
+
+		/* Use initiator and rdzv_id for matching. Store start pointer
+		 * since this is the only place that it's available for
+		 * offloaded rendezvous operations.
+		 */
+		mb.raw = event->tgt_long.match_bits;
+		ux_send->oflow_buf = oflow_buf;
+		ux_send->start = event->tgt_long.start;
+		ux_send->initiator =
+				event->tgt_long.initiator.initiator.process;
+		ux_send->rdzv_id = RDZV_ID(event->tgt_long.rendezvous_id,
+					   mb.rdzv_id_lo);
+
+		/* Prevent the overflow buffer from being freed until the user
+		 * has copied out data.
+		 */
+		oflow_buf_get(oflow_buf);
+
+		dlist_insert_tail(&ux_send->list, &rxc->ux_rdzv_sends);
+
+		fastlock_release(&rxc->lock);
+
+		CXIP_LOG_DBG("Queued ux_send: %p\n", ux_send);
+
+		return;
+	}
+
+	fastlock_release(&rxc->lock);
+
+	/* A matching Put Overflow event arrived earlier. Data is
+	 * waiting in the overflow buffer.
+	 */
+
+	CXIP_LOG_DBG("Matched ux_recv, data: 0x%lx\n",
+		     ux_recv->recv.start);
+
+	oflow_va = (void *)CXI_IOVA_TO_VA(oflow_buf->md->md,
+					  event->tgt_long.start);
+	memcpy(ux_recv->recv.recv_buf, oflow_va, event->tgt_long.mlength);
+
+	oflow_req_cleanup(req);
+}
+
+/*
+ * cxip_oflow_cb() - Process an Overflow buffer event.
  *
- * A Link event arrives when the append has been completed. If successful Link
- * events are suppressed, it can be assumed that the event contains an error
- * and the append failed.
+ * Overflow buffers are used to land unexpected Send data. Link, Unlink and Put
+ * events are expected from Overflow buffers.
  *
- * An Unlink event is expected when overflow buffer space is exhausted.
- * Overflow buffers are configured to use locally managed LEs. When enough Puts
- * match in an overflow buffer, consuming its space, the NIC automatically
- * unlinks the LE. An automatic Unlink event is generated before the final
- * Put which caused buffer space to become exhausted.
+ * A Link event indicates that a new buffer has been appended to the Overflow
+ * list.
  *
- * An Unlink may also be generated by an Unlink command. In this case, the
- * auto_unlinked field in the event will be zero. In this case, free the
- * request immediately.
+ * An Unlink event indicates that buffer space was exhausted. Overflow buffers
+ * are configured to use locally managed LEs. When enough Puts match in an
+ * Overflow buffer, consuming its space, the NIC automatically unlinks the LE.
+ * An automatic Unlink event is generated before the final Put which caused
+ * buffer space to become exhausted.
  *
- * A Put event will be generated for each Put that matches the overflow buffer
- * LE. The Put event indicates that data is available in the overflow buffer.
- * This event must be correlated to a Put_Overflow event from a user buffer LE.
- * The Put_Overflow event may arrive before or after the Put event.
+ * An Unlink may also be generated by an Unlink command. Overflow buffers are
+ * manually unlinked in this way during teardown. When an LE is manually
+ * unlinked the auto_unlinked field in the corresponding event is zero. In this
+ * case, the request is freed immediately.
+ *
+ * A Put event is generated for each Put that matches the Overflow buffer LE.
+ * This event indicates that data is available in the Overflow buffer. This
+ * event must be correlated to a Put Overflow event from a user receive buffer
+ * LE. The Put Overflow event may arrive before or after the Put event.
  *
  * When each Put event arrives, check for the existence of a previously posted
- * receive buffer which generated a matching Put_Overflow event. If such a
- * buffer exists, copy data from the overflow buffer to the user buffer.
- * Otherwise, store a record of the Put event for matching once a user posts a
- * new buffer that matches the unexpected Put.
+ * receive buffer which generated a matching Put Overflow event. If such a
+ * buffer exists, copy data from the Overflow buffer to the user receive
+ * buffer. Otherwise, store a record of the Put event for matching once a user
+ * posts a new buffer that matches the unexpected Put.
  *
- * If data will remain in the overflow buffer, take a reference to it to
- * prevent it from being freed. If a sequence of Unlink-Put events is
- * detected, drop a reference to the overflow buffer so it is automatically
- * freed once all user data is copied out.
+ * If data will remain in the Overflow buffer, take a reference to it to
+ * prevent it from being freed. If a sequence of Unlink-Put events is detected,
+ * drop a reference to the Overflow buffer so it is automatically freed ponce
+ * all user data is copied out.
  */
 static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 {
@@ -336,6 +584,11 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 	struct cxip_ux_send *ux_send;
 	struct cxip_oflow_buf *oflow_buf;
 	void *oflow_va;
+
+	if (event->tgt_long.rendezvous) {
+		cxip_oflow_rdzv_cb(req, event);
+		return;
+	}
 
 	oflow_buf = req->oflow.oflow_buf;
 
@@ -382,10 +635,10 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 	/* Handle Put events */
 	fastlock_acquire(&rxc->lock);
 
-	/* Check for a previously received PUT_OVERFLOW event */
+	/* Check for a previously received Put Overflow event */
 	ux_recv = match_ux_recv(rxc, event);
 	if (!ux_recv) {
-		/* A PUT_OVERFLOW event is pending. Store a record of this
+		/* A Put Overflow event is pending. Store a record of this
 		 * unexpected Put event for lookup when the event arrives.
 		 */
 
@@ -396,12 +649,9 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 			abort();
 		}
 
-		ux_send->length = event->tgt_long.rlength;
+		/* Use start pointer for matching. */
 		ux_send->oflow_buf = oflow_buf;
 		ux_send->start = event->tgt_long.start;
-		ux_send->match_bits.raw = event->tgt_long.match_bits;
-		ux_send->initiator =
-			event->tgt_long.initiator.initiator.process;
 
 		/* Prevent the overflow buffer from being freed until the user
 		 * has copied out data.
@@ -419,7 +669,7 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 
 	fastlock_release(&rxc->lock);
 
-	/* A matching PUT_OVERFLOW event arrived earlier. Data is
+	/* A matching Put Overflow event arrived earlier. Data is
 	 * waiting in the overflow buffer.
 	 */
 
@@ -430,53 +680,20 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 		/* For long eager messages, issue a Get to retrieve data
 		 * from the initiator.
 		 */
-		int ret;
-		struct cxip_ux_send ux_send;
-
-		ux_send.oflow_buf = oflow_buf;
-		ux_send.start = event->tgt_long.start;
-		ux_send.length = event->tgt_long.rlength;
-		ux_send.match_bits.raw = event->tgt_long.match_bits;
-		ux_send.initiator = event->tgt_long.initiator.initiator.process;
-
-		ret = rdzv_issue_get(ux_recv, &ux_send);
+		int ret = issue_rdzv_get(ux_recv, event);
 		if (ret != FI_SUCCESS)
-			cxip_cq_req_free(ux_recv);
-
+			abort();
 		return;
 	}
 
-	/* For eager messages, copy data from the overflow buffer, complete the
-	 * request and clean up the overflow buffer (if necessary).
-	 */
-	req->recv.rlength = event->tgt_long.mlength;
-	if (event->tgt_long.mlength > req->recv.rlength)
-		req->recv.mlength = req->recv.rlength;
-	else
-		req->recv.mlength = event->tgt_long.mlength;
-
+	/* Copy data out of overflow buffer. */
 	oflow_va = (void *)CXI_IOVA_TO_VA(oflow_buf->md->md,
-					  ux_recv->recv.start);
+					  event->tgt_long.start);
 	memcpy(ux_recv->recv.recv_buf, oflow_va, ux_recv->recv.mlength);
 
-	report_recv_completion(ux_recv);
-	cxip_cq_req_free(ux_recv);
+	recv_req_complete(ux_recv);
 
-	if (oflow_buf->exhausted) {
-		CXIP_LOG_DBG("Oflow buf exhausted, buf: %p\n",
-			     oflow_buf->buf);
-
-		/* This is the last event to the overflow buffer, drop a
-		 * reference to it. The buffer will be freed once all user data
-		 * is copied out.
-		 */
-		oflow_buf_put(oflow_buf);
-
-		/* No further events are expected, free the overflow buffer
-		 * request immediately.
-		 */
-		cxip_cq_req_free(req);
-	}
+	oflow_req_cleanup(req);
 }
 
 /*
@@ -492,7 +709,7 @@ static int eager_buf_add(struct cxip_rxc *rxc)
 	uint64_t min_free;
 
 	/* Match all tagged, eager sends */
-	union cxip_match_bits mb = { .tagged = 1, .rdzv = 0 };
+	union cxip_match_bits mb = { .tagged = 1, .sink = 0 };
 	union cxip_match_bits ib = { .rdzv_id_lo = ~0, .tag = ~0 };
 
 	dom = rxc->domain;
@@ -663,6 +880,11 @@ static void cxip_rxc_eager_fini(struct cxip_rxc *rxc)
 
 /*
  * cxip_rxc_sink_init() - Initialize RXC sink buffer.
+ *
+ * The sink buffer is used for matching long eager sends in the Overflow list.
+ * The sink buffer matches all long eager sends that do not match in the
+ * priority list and truncates all data. The sink buffer is not used with the
+ * off-loaded rendezvous protocol.
  */
 static int cxip_rxc_sink_init(struct cxip_rxc *rxc)
 {
@@ -673,7 +895,7 @@ static int cxip_rxc_sink_init(struct cxip_rxc *rxc)
 	struct cxip_md *md;
 
 	/* Match all tagged, rendezvous sends */
-	union cxip_match_bits mb = { .tagged = 1, .rdzv = 1 };
+	union cxip_match_bits mb = { .tagged = 1, .sink = 1 };
 	union cxip_match_bits ib = { .rdzv_id_lo = ~0, .tag = ~0 };
 
 	dom = rxc->domain;
@@ -790,11 +1012,13 @@ int cxip_msg_oflow_init(struct cxip_rxc *rxc)
 		return ret;
 	}
 
-	ret = cxip_rxc_sink_init(rxc);
-	if (ret) {
-		CXIP_LOG_ERROR("cxip_rxc_sink_init failed: %d\n", ret);
-		cxip_rxc_eager_fini(rxc);
-		return ret;
+	if (!rxc->ep_obj->rdzv_offload) {
+		ret = cxip_rxc_sink_init(rxc);
+		if (ret) {
+			CXIP_LOG_ERROR("cxip_rxc_sink_init failed: %d\n", ret);
+			cxip_rxc_eager_fini(rxc);
+			return ret;
+		}
 	}
 
 	/* TODO wait for link completions to ensure the RXC is ready. */
@@ -809,97 +1033,53 @@ int cxip_msg_oflow_init(struct cxip_rxc *rxc)
  */
 void cxip_msg_oflow_fini(struct cxip_rxc *rxc)
 {
-	cxip_rxc_sink_fini(rxc);
+	if (!rxc->ep_obj->rdzv_offload)
+		cxip_rxc_sink_fini(rxc);
 
 	cxip_rxc_eager_fini(rxc);
 }
 
 /*
- * _rxc_event_src_addr() - Translate CXI event initiator to FI address.
+ * rdzv_recv_req_event() - Count a rendezvous event.
+ *
+ * Call for each target rendezvous event generated on a user receive buffer.
+ * After three events, a rendezvous receive is complete. The three events could
+ * be either:
+ *   -Put, Rendezvous, Reply -- or
+ *   -Put Overflow, Rendezvous, Reply
+ *
+ * In either case, the events could be generated in any order. As soon as three
+ * events are processed, the request is complete.
  */
-static fi_addr_t _rxc_event_src_addr(struct cxip_rxc *rxc,
-				     const union c_event *event)
+static void rdzv_recv_req_event(struct cxip_req *req)
 {
-	/* If the FI_SOURCE capability is enabled, convert the initiator's
-	 * address to an FI address to be reported in a CQ event. If
-	 * application AVs are symmetric, the match_id in the EQ event is
-	 * logical and translation is not needed.  Otherwise, translate the
-	 * physical address in the EQ event to logical FI address.
-	 */
-	if (rxc->attr.caps & FI_SOURCE) {
-		uint32_t pid_bits = rxc->domain->dev_if->if_dev->info.pid_bits;
-		uint32_t process = event->tgt_long.initiator.initiator.process;
-		uint32_t nic;
-		uint32_t pid;
-
-		if (rxc->ep_obj->av->attr.flags & FI_SYMMETRIC)
-			return CXI_MATCH_ID_EP(pid_bits, process);
-
-		nic = CXI_MATCH_ID_EP(pid_bits, process);
-		pid = CXI_MATCH_ID_PID(pid_bits, process);
-
-		return _cxip_av_reverse_lookup(rxc->ep_obj->av, nic, pid);
-	}
-
-	return FI_ADDR_NOTAVAIL;
+	if (++req->recv.rdzv_events == 3)
+		recv_req_complete(req);
 }
 
 /*
- * cxip_recv_cb() - Process a posted receive buffer event.
+ * cxip_recv_rdzv_cb() - Progress rendezvous receive events.
  *
- * We can expect Link, Unlink, Put and Put_Overflow and Reply events from a
- * posted receive buffer.
+ * Handle rendezvous target events. All target events which are related to an
+ * offloaded rendezvous Put operation have the rendezvous field set.
  *
- * For eager-sized or expected sends a pre-posted receive matches an incoming
- * send, netsim generates events in the order: Link-Unlink-Put.  This order is
- * guaranteed. In this case, the Put event indicates that the LE was matched in
- * hardware and the operation is complete.
- *
- * For software rendezvous sends, the receive buffer will cause a match of the
- * truncated send that has occurred. The event order is: Put_Overflow-Reply The
- * Put_Overflow event indicates that a truncated send was attempted by an
- * initiator. A GET operation must be initiated by the receiver to collect the
- * data from the initiator's PUT operation. Once the GET operation completes and
- * the data is in the local buffer, the Reply event indicates the completion of
- * the GET operation.
- *
- * TODO Cassini allows successful Link and Unlink events to be suppressed.
- * Configure LEs to suppress these events.  In that case, a Link or Unlink
- * event would indicate a transaction failure.  Handle those errors.
- *
- * When a receive matches an unexpected header during the append, netsim
- * generates a Put_Overflow event.  There are no Link events associated with
- * the user buffer in this case.  The Put_Overflow event must be correlated
- * with a Put event generated from an overflow buffer.  The Put event may be
- * generated before or after the Put_Overflow event.
- *
- * When the Put_Overflow event arrives, check for the existence of a previously
- * received, matching Put event from an overflow buffer.  If such an event
- * exists, data may be copied from the overflow buffer to the user buffer and
- * the operation is completed.  If a matching event is not found, store a
- * record of the posted user buffer to be matched when the forthcoming Put
- * event arrives.
+ * Note that Reply events that were generated from a SW-issued Get will not
+ * have the rendezvous bit set.
  */
-static void cxip_recv_cb(struct cxip_req *req, const union c_event *event)
+static void cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 {
-	int ret;
 	struct cxip_rxc *rxc = req->recv.rxc;
 	struct cxip_ux_send *ux_send;
 	struct cxip_oflow_buf *oflow_buf;
 	void *oflow_va;
 	union cxip_match_bits mb;
-	int event_rc;
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_LINK:
 		/* TODO Handle append errors. */
-		event_rc = cxi_tgt_event_rc(event);
-		CXIP_LOG_DBG("Link completed with: %d\n", event_rc);
 		return;
 	case C_EVENT_UNLINK:
 		/* TODO Handle unlink errors. */
-		event_rc = cxi_tgt_event_rc(event);
-		CXIP_LOG_DBG("Unlink completed with: %d\n", event_rc);
 		return;
 	case C_EVENT_PUT_OVERFLOW:
 		/* We matched an unexpected header */
@@ -912,22 +1092,29 @@ static void cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 			/* An unexpected Put event is pending.  Link this
 			 * request to the pending list for lookup when the
 			 * event arrives.
-			 */
-
-			/* Store start address to use for matching against
+			 *
+			 * Store initiator and rendezvous ID to match against
 			 * future events.
 			 */
-			req->recv.start = event->tgt_long.start;
 			mb.raw = event->tgt_long.match_bits;
-			req->tag = mb.tag;
-			req->recv.src_addr = _rxc_event_src_addr(rxc, event);
+			req->recv.initiator =
+				event->tgt_long.initiator.initiator.process;
+			req->recv.rdzv_id =
+				RDZV_ID(event->tgt_long.rendezvous_id,
+					mb.rdzv_id_lo);
 
-			dlist_insert_tail(&req->list, &rxc->ux_recvs);
+			dlist_insert_tail(&req->list, &rxc->ux_rdzv_recvs);
 
 			CXIP_LOG_DBG("Queued recv req, data: 0x%lx\n",
 				     req->recv.start);
 
 			fastlock_release(&rxc->lock);
+
+			/* Update request fields. */
+			recv_req_put_event(req, event);
+
+			/* Count the rendezvous event. */
+			rdzv_recv_req_event(req);
 
 			return;
 		}
@@ -938,47 +1125,176 @@ static void cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 
 		oflow_buf = ux_send->oflow_buf;
 
-		req->recv.rc = cxi_tgt_event_rc(event);
-		mb.raw = event->tgt_long.match_bits;
-		req->tag = mb.tag;
-		req->recv.src_addr = _rxc_event_src_addr(rxc, event);
+		/* Update request fields. */
+		recv_req_put_event(req, event);
 
-		/* A matching, unexpected Put event arrived earlier.  Data is
+		/* Copy data out of overflow buffer. */
+		oflow_va = (void *)CXI_IOVA_TO_VA(oflow_buf->md->md,
+						  ux_send->start);
+		memcpy(req->recv.recv_buf, oflow_va, event->tgt_long.mlength);
+
+		/* Count the rendezvous event. */
+		rdzv_recv_req_event(req);
+
+		/* Release the unexpected Put event record */
+		free(ux_send);
+
+		/* Drop reference to the overflow buffer. It will be
+		 * freed once all user data is copied out.
+		 */
+		oflow_buf_put(oflow_buf);
+		return;
+	case C_EVENT_PUT:
+		/* Eager data was delivered directly to the user buffer. */
+		recv_req_put_event(req, event);
+
+		/* Count the rendezvous event. */
+		rdzv_recv_req_event(req);
+		return;
+	case C_EVENT_RENDEZVOUS:
+		if (!event->tgt_long.get_issued) {
+			int ret = issue_rdzv_get(req, event);
+			if (ret != FI_SUCCESS)
+				abort();
+			CXIP_LOG_DBG("Software issued Get, req: %p\n", req);
+		}
+
+		/* Count the rendezvous event. */
+		rdzv_recv_req_event(req);
+		return;
+	case C_EVENT_REPLY:
+		/* Rendezvous Get completed. Complete the request. */
+		req->recv.rc = cxi_init_event_rc(event);
+
+		/* Count the rendezvous event. */
+		rdzv_recv_req_event(req);
+		return;
+	default:
+		CXIP_LOG_ERROR("Unexpected event type: %d\n",
+			       event->hdr.event_type);
+	}
+}
+
+/*
+ * cxip_recv_cb() - Process a user receive buffer event.
+ *
+ * A user receive buffer is described by an LE linked to the Priority list.
+ * Link, Unlink, Put, Put Overflow, and Reply events are expected from a user
+ * receive buffer.
+ *
+ * A Link event indicates that a new user buffer has been linked to the
+ * priority list. Successful Link events may be suppressed.
+ *
+ * An Unlink event indicates that a user buffer has been unlinked. Normally, a
+ * receive is used once and unlinked when it is matched with a Send. In this
+ * case, a successful Unlink event may be suppressed.
+ *
+ * For expected, eager Sends, a Put will be matched to a user receive buffer by
+ * the NIC. Send data is copied directly to the user buffer. A Put event is
+ * generated describing the match.
+ *
+ * For unexpected, eager Sends, a Put will first match a buffer in the Overflow
+ * list. See cxip_oflow_cb() for details on Overflow event handling. Once a
+ * matching user receive buffer is appended to the Priority list, a Put
+ * Overflow event is generated. Put and Put Overflow events for an unexpected,
+ * eager Send must be correlated. These events may arrive in any order. Once
+ * both events are accounted, data is copied from the Overflow buffer to the
+ * user receive buffer.
+ *
+ * Unexpected, eager Sends that are longer than the eager threshold have their
+ * data truncated to zero. This is to avoid long messages consuming too much
+ * Overflow buffer space at the target. Once a match is made with a user
+ * receive buffer, data is re-read from the initiator using a Get.
+ *
+ * Rendezvous receive events are handled by cxip_recv_rdzv_cb().
+ */
+static void cxip_recv_cb(struct cxip_req *req, const union c_event *event)
+{
+	int ret;
+	struct cxip_rxc *rxc = req->recv.rxc;
+	struct cxip_ux_send *ux_send;
+	struct cxip_oflow_buf *oflow_buf;
+	void *oflow_va;
+
+	/* All events related to an offloaded rendezvous receive will be
+	 * handled by cxip_recv_rdzv_cb(). Those events are identified by the
+	 * event rendezvous field. One exception is a Reply event generated
+	 * from a SW-issued Get. When such an event is generated, the request
+	 * will have already processed a Rendezvous event. If the rendezvous
+	 * field is not set, but the rdzv_events count is elevated, this must
+	 * be a SW-issued Reply event.
+	 */
+	if (event->tgt_long.rendezvous || req->recv.rdzv_events) {
+		cxip_recv_rdzv_cb(req, event);
+		return;
+	}
+
+	switch (event->hdr.event_type) {
+	case C_EVENT_LINK:
+		/* TODO Handle append errors. */
+		return;
+	case C_EVENT_UNLINK:
+		/* TODO Handle unlink errors. */
+		return;
+	case C_EVENT_PUT_OVERFLOW:
+		/* We matched an unexpected header */
+
+		fastlock_acquire(&rxc->lock);
+
+		/* Check for a previously received unexpected Put event */
+		ux_send = match_ux_send(rxc, event);
+		if (!ux_send) {
+			/* An unexpected Put event is pending. Link this
+			 * request to the pending list for lookup when the
+			 * event arrives. Store start address for matching.
+			 */
+			req->recv.start = event->tgt_long.start;
+
+			dlist_insert_tail(&req->list, &rxc->ux_recvs);
+
+			CXIP_LOG_DBG("Queued recv req, data: 0x%lx\n",
+				     req->recv.start);
+
+			fastlock_release(&rxc->lock);
+
+			/* Update request fields. */
+			recv_req_put_event(req, event);
+
+			return;
+		}
+
+		fastlock_release(&rxc->lock);
+
+		CXIP_LOG_DBG("Matched ux_send: %p\n", ux_send);
+
+		oflow_buf = ux_send->oflow_buf;
+
+		/* Update request fields. */
+		recv_req_put_event(req, event);
+
+		/* A matching, unexpected Put event arrived earlier. Data is
 		 * waiting in the overflow buffer.
 		 */
 
 		if (oflow_buf->type == OFLOW_BUF_EAGER) {
-			/* The request contains the parameters of the receive.
-			 * Compare the receive buffer to the incoming send.
-			 */
-			if (ux_send->length > req->recv.rlength)
-				req->recv.mlength = req->recv.rlength;
-			else
-				req->recv.mlength = ux_send->length;
-
-			/* Update rlength to reflect the send */
-			req->recv.rlength = ux_send->length;
-
+			/* Copy data out of overflow buffer. */
 			oflow_va = (void *)CXI_IOVA_TO_VA(oflow_buf->md->md,
 					event->tgt_long.start);
-			memcpy(req->recv.recv_buf, oflow_va, req->recv.mlength);
+			memcpy(req->recv.recv_buf, oflow_va,
+			       req->recv.mlength);
 
 			/* Release the unexpected Put event record */
 			free(ux_send);
 
-			cxip_unmap(req->recv.recv_md);
-			report_recv_completion(req);
-
-			/* Free the user buffer request */
-			cxip_cq_req_free(req);
+			/* Complete receive request. */
+			recv_req_complete(req);
 		} else {
-			/* SW Rendezvous is in progress. Must issue a GET
-			 * operation to receive the data that was sent by the
-			 * Put operation's initiator.
+			/* For unexpected, long, eager messages, issue a Get to
+			 * retrieve data from the initiator.
 			 */
-			ret = rdzv_issue_get(req, ux_send);
-			if (ret)
-				cxip_cq_req_free(req);
+			ret = issue_rdzv_get(req, event);
+			if (ret != FI_SUCCESS)
+				abort();
 		}
 
 		/* Drop reference to the overflow buffer. It will be
@@ -991,59 +1307,21 @@ static void cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		/* Data was delivered directly to the user buffer. Complete the
 		 * request.
 		 */
+		recv_req_put_event(req, event);
 
-		req->recv.rc = cxi_tgt_event_rc(event);
-
-		/* The request contains the parameters of the receive. Compare
-		 * the receive buffer to the incoming send.
-		 */
-		if (event->tgt_long.rlength > req->recv.rlength)
-			req->recv.mlength = req->recv.rlength;
-		else
-			req->recv.mlength = event->tgt_long.rlength;
-		req->recv.rlength = event->tgt_long.rlength;
-
-		mb.raw = event->tgt_long.match_bits;
-		req->tag = mb.tag;
-		req->recv.src_addr = _rxc_event_src_addr(rxc, event);
-
-		if (event->tgt_long.rendezvous) {
-			event_rc = cxi_tgt_event_rc(event);
-			CXIP_LOG_DBG("Received rdzv Put event: %d\n",
-				     event_rc);
-			return;
-		}
-
-		cxip_unmap(req->recv.recv_md);
-		report_recv_completion(req);
-
-		/* Free the user buffer request */
-		cxip_cq_req_free(req);
-		return;
-	case C_EVENT_RENDEZVOUS:
-		/* TODO Handle rendezvous errors. */
-		event_rc = cxi_tgt_event_rc(event);
-		CXIP_LOG_DBG("Received rdzv event: %d\n", event_rc);
+		/* Complete receive request. */
+		recv_req_complete(req);
 		return;
 	case C_EVENT_REPLY:
-		event_rc = cxi_init_event_rc(event);
-		CXIP_LOG_DBG("Received reply event: %d\n", event_rc);
+		/* Long-send Get completed. Complete the request. */
+		req->recv.rc = cxi_init_event_rc(event);
 
-		/* Rendezvous Get completed. Complete the request. */
-		req->recv.rc = event_rc;
-
-		cxip_unmap(req->recv.recv_md);
-		report_recv_completion(req);
-
-		/* Free the user buffer request */
-		cxip_cq_req_free(req);
+		/* Complete receive request. */
+		recv_req_complete(req);
 		return;
 	default:
 		CXIP_LOG_ERROR("Unexpected event type: %d\n",
 			       event->hdr.event_type);
-
-		/* Free the user buffer request */
-		cxip_cq_req_free(req);
 	}
 }
 
@@ -1065,7 +1343,7 @@ static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	uint32_t match_id;
 	uint32_t pid_bits;
 	union cxip_match_bits mb = {};
-	union cxip_match_bits ib = { .rdzv = ~0, .rdzv_id_lo = ~0 };
+	union cxip_match_bits ib = { .sink = ~0, .rdzv_id_lo = ~0 };
 
 	if (!ep || !buf)
 		return -FI_EINVAL;
@@ -1154,6 +1432,9 @@ static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	req->recv.recv_buf = buf;
 	req->recv.recv_md = recv_md;
 	req->recv.rlength = len;
+
+	/* Count Put, Rendezvous, and Reply events during offloaded RPut. */
+	req->recv.rdzv_events = 0;
 
 	fastlock_acquire(&rxc->lock);
 
@@ -1268,7 +1549,7 @@ rdzv_unlink_le:
 			/* The Put matched in the Priority list, the source
 			 * buffer LE is unneeded.
 			 */
-			if (!txc->rdzv_offload) {
+			if (!txc->ep_obj->rdzv_offload) {
 				fastlock_acquire(&txc->lock);
 				issue_unlink_le(txc->rdzv_pte->pte,
 						C_PTL_LIST_PRIORITY,
@@ -1412,7 +1693,6 @@ static ssize_t _cxip_send_long(struct cxip_txc *txc, struct cxip_req *req)
 	req->send.rdzv_id = rdzv_id;
 
 	put_mb = (union cxip_match_bits *)&req->send.cmd.full_dma.match_bits;
-	put_mb->rdzv = 1;
 	put_mb->rdzv_id_lo = RDZV_ID_LO(rdzv_id);
 	le_mb.rdzv_id_lo = RDZV_ID_LO(rdzv_id);
 
@@ -1420,7 +1700,7 @@ static ssize_t _cxip_send_long(struct cxip_txc *txc, struct cxip_req *req)
 	 * the Put command. The command bits are only supported by hardware
 	 * (not available for software rendezvous).
 	 */
-	if (txc->rdzv_offload) {
+	if (txc->ep_obj->rdzv_offload) {
 		uint8_t pid = txc->ep_obj->src_addr.pid;
 		uint32_t pid_bits = txc->domain->dev_if->if_dev->info.pid_bits;
 		uint32_t nic_addr = txc->domain->dev_if->if_dev->info.nic_addr;
@@ -1434,6 +1714,9 @@ static ssize_t _cxip_send_long(struct cxip_txc *txc, struct cxip_req *req)
 		le_ib.rdzv_id_hi = ~0;
 	} else {
 		assert(rdzv_id < (1 << RDZV_ID_LO_WIDTH));
+
+		/* Match sink buffer */
+		put_mb->sink = 1;
 	}
 
 	ret = issue_append_le(txc->rdzv_pte->pte, req->send.buf,

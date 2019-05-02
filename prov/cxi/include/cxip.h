@@ -218,7 +218,7 @@ union cxip_match_bits {
 	struct {
 		uint64_t tag        : 48; /* User tag value */
 		uint64_t rdzv_id_lo : RDZV_ID_LO_WIDTH;
-		uint64_t rdzv       : 1;  /* Rendezvous protocol */
+		uint64_t sink       : 1;  /* Long eager protocol */
 		uint64_t tagged     : 1;  /* Tagged API */
 	};
 	struct {
@@ -226,6 +226,8 @@ union cxip_match_bits {
 	};
 	uint64_t raw;
 };
+
+#define RDZV_ID(hi, lo) (((hi) << RDZV_ID_LO_WIDTH) | (lo))
 
 // TODO: comments are not yet complete, and may not be entirely correct
 //       complete documentation and review thoroughly
@@ -412,11 +414,13 @@ struct cxip_req_recv {
 	struct cxip_rxc *rxc;		// receive context
 	void *recv_buf;			// local receive buffer
 	struct cxip_md *recv_md;	// local receive MD
-	int rc;				// result code
-	uint32_t rlength;		// receive length
-	uint32_t mlength;		// message length
-	uint64_t start;			// starting receive offset
-	fi_addr_t src_addr;		// receive source address
+	int rc;				// DMA return code
+	uint32_t rlength;		// DMA requested length
+	uint32_t mlength;		// DMA manipulated length
+	uint64_t start;			// DMA Overflow buffer address
+	uint32_t initiator;		// DMA initiator address
+	uint32_t rdzv_id;		// DMA initiator rendezvous ID
+	int rdzv_events;		// Processed rdzv event count
 };
 
 struct cxip_req_send {
@@ -590,14 +594,16 @@ struct cxip_comp {
  * Unexpected-Send buffer
  *
  * Support structure.
+ *
+ * Acts as a record of an unexpected send. Contains the fields from a Put event
+ * necessary to correlate the send with an Overflow event.
  */
 struct cxip_ux_send {
 	struct dlist_entry list;
 	struct cxip_oflow_buf *oflow_buf;
 	uint64_t start;
-	uint64_t length;
-	union cxip_match_bits match_bits;
 	uint32_t initiator;
+	uint32_t rdzv_id;
 };
 
 enum oflow_buf_type {
@@ -665,10 +671,12 @@ struct cxip_rxc {
 	int oflow_bufs_max;
 	int oflow_msgs_max;
 	int oflow_buf_size;
-	struct dlist_entry oflow_bufs;	// Overflow buffers
-	struct dlist_entry ux_sends;	// Sends matched in overflow list
-	struct dlist_entry ux_recvs;	// Recvs matched in overflow list
-	struct cxip_oflow_buf ux_sink_buf; // Long UX sink buffer
+	struct dlist_entry oflow_bufs;		// Overflow buffers
+	struct dlist_entry ux_sends;		// UX sends records
+	struct dlist_entry ux_recvs;		// UX recv records
+	struct dlist_entry ux_rdzv_sends;	// UX RDZV send records
+	struct dlist_entry ux_rdzv_recvs;	// UX RDZV recv records
+	struct cxip_oflow_buf ux_sink_buf;	// Long UX sink buffer
 };
 
 #define CXIP_RDZV_BM_LEN (8)
@@ -716,7 +724,6 @@ struct cxip_txc {
 	int eager_threshold;		// Threshold for eager IOs
 	struct cxi_cmdq *rx_cmdq;	// Target cmdq for Rendezvous buffers
 	struct cxip_rdzv_ids rdzv_ids;	// Set of Rendezvous IDs to be used
-	int rdzv_offload;
 };
 
 /**
@@ -760,6 +767,7 @@ struct cxip_ep_obj {
 	fi_addr_t fi_addr;		// AV address of this EP
 	uint32_t vni;			// VNI all EP addressing
 	struct cxip_if_domain *if_dom;
+	int rdzv_offload;
 };
 
 /**

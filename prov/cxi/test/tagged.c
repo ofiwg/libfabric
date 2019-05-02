@@ -1081,7 +1081,8 @@ ParameterizedTest(struct multitudes_params *param, tagged, multitudes)
 	free(rx_args);
 }
 
-#define RECV_INIT 0
+#define RECV_INIT 0x77
+#define SEND_INIT ~RECV_INIT
 
 void do_tagged(uint8_t *send_buf, size_t send_len, uint64_t send_tag,
 	       uint8_t *recv_buf, size_t recv_len, uint64_t recv_tag,
@@ -1096,11 +1097,16 @@ void do_tagged(uint8_t *send_buf, size_t send_len, uint64_t send_tag,
 	     recved = false,
 	     truncated = false;
 	struct fi_cq_err_entry err_cqe = {};
+	size_t recved_len;
 
 	memset(recv_buf, RECV_INIT, buf_size);
 
-	for (i = 0; i < send_len; i++)
-		send_buf[i] = i + 0xa0;
+	for (i = 0; i < buf_size; i++) {
+		if (i < send_len)
+			send_buf[i] = i + 0xa0;
+		else
+			send_buf[i] = SEND_INIT;
+	}
 
 	if (send_first) {
 		/* Send 64 bytes to self */
@@ -1167,18 +1173,21 @@ void do_tagged(uint8_t *send_buf, size_t send_len, uint64_t send_tag,
 		cr_assert(err_cqe.flags == (FI_TAGGED | FI_RECV),
 			  "Error RX CQE flags mismatch");
 		cr_assert(err_cqe.len == recv_len,
-			  "Invalid Error RX CQE length");
+			  "Invalid Error RX CQE length, got: %d exp: %d",
+			  err_cqe.len, recv_len);
 		cr_assert(err_cqe.buf == 0, "Invalid Error RX CQE address");
 		cr_assert(err_cqe.data == 0, "Invalid Error RX CQE data");
 		cr_assert(err_cqe.tag == send_tag, "Invalid Error RX CQE tag");
 		cr_assert(err_cqe.olen == (send_len - recv_len),
-			  "Invalid Error RX CQE olen");
+			  "Invalid Error RX CQE olen, got: %d exp: %d",
+			  err_cqe.olen, send_len - recv_len);
 		cr_assert(err_cqe.err == FI_EMSGSIZE,
 			  "Invalid Error RX CQE code\n");
 		cr_assert(err_cqe.prov_errno == C_RC_OK,
 			  "Invalid Error RX CQE errno");
 		cr_assert(err_cqe.err_data == NULL);
 		cr_assert(err_cqe.err_data_size == 0);
+		recved_len = err_cqe.len;
 	} else {
 		/* Validate RX event fields */
 		cr_assert(rx_cqe.op_context == NULL, "RX CQE Context mismatch");
@@ -1189,6 +1198,7 @@ void do_tagged(uint8_t *send_buf, size_t send_len, uint64_t send_tag,
 		cr_assert(rx_cqe.data == 0, "Invalid RX CQE data");
 		cr_assert(rx_cqe.tag == send_tag, "Invalid RX CQE tag");
 		cr_assert(from == cxit_ep_fi_addr, "Invalid source address");
+		recved_len = rx_cqe.len;
 	}
 
 	/* Validate TX event fields */
@@ -1203,13 +1213,13 @@ void do_tagged(uint8_t *send_buf, size_t send_len, uint64_t send_tag,
 	/* Validate sent data */
 	for (i = 0; i < buf_size; i++) {
 		uint8_t cmp = RECV_INIT;
-		if (i < recv_len)
+		if (i < recved_len)
 			cmp = send_buf[i];
 
 		cr_expect_eq(recv_buf[i], cmp,
-			  "data mismatch, len: %d, element[%d], exp=%d saw=%d, err=%d\n",
-			  recv_len, i, cmp, recv_buf[i], err++);
-		if (err > 10)
+			     "data mismatch, len: %d, element[%d], exp=0x%x saw=0x%x, err=%d\n",
+			     recv_len, i, cmp, recv_buf[i], err++);
+		if (err >= 10)
 			break;
 	}
 	cr_assert_eq(err, 0, "%d data errors seen\n", err);
@@ -1361,7 +1371,7 @@ void do_tagged_rx(struct tagged_rx_params *param)
 	cr_assert(send_buf);
 
 	for (send_len = param->send_min;
-	     send_len < param->buf_size;
+	     send_len <= param->buf_size;
 	     send_len += param->send_inc) {
 		do_tagged(send_buf, send_len, param->send_tag,
 			  recv_buf, send_len + param->recv_len_off,
@@ -1378,9 +1388,7 @@ ParameterizedTest(struct tagged_rx_params *param, tagged, rx)
 	do_tagged_rx(param);
 }
 
-#if 0
 ParameterizedTest(struct tagged_rx_params *param, tagged_offload, rx)
 {
 	do_tagged_rx(param);
 }
-#endif

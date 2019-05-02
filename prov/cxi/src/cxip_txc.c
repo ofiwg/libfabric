@@ -295,11 +295,6 @@ static struct cxip_txc *txc_alloc(const struct fi_tx_attr *attr, void *context,
 	txc->attr.op_flags |= FI_TRANSMIT_COMPLETE;
 	txc->eager_threshold = CXIP_EAGER_THRESHOLD;
 
-	if (getenv("RDZV_OFFLOAD")) {
-		txc->rdzv_offload = 1;
-		fprintf(stderr, "Rendezvous offload enabled\n");
-	}
-
 	return txc;
 
 err:

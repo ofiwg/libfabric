@@ -112,8 +112,10 @@ static struct cxip_req *cxip_cq_event_req(struct cxip_cq *cq,
 		if (!event->init_short.rendezvous) {
 			req = (struct cxip_req *)event->init_short.user_ptr;
 		} else {
-			req = cxip_cq_req_find(cq,
-					event->init_short.user_ptr >> 48);
+			struct cxi_rdzv_user_ptr *up =
+					(struct cxi_rdzv_user_ptr *)
+					 &event->init_short.user_ptr;
+			req = cxip_cq_req_find(cq, up->buffer_id);
 			if (!req)
 				CXIP_LOG_ERROR("Invalid buffer_id: %d (%s)\n",
 					       event->tgt_long.buffer_id,
@@ -134,8 +136,10 @@ static struct cxip_req *cxip_cq_event_req(struct cxip_cq *cq,
 		req = NULL;
 	}
 
-	CXIP_LOG_DBG("got event: %s (req: %p)\n",
-		     cxi_event_to_str(event), req);
+	CXIP_LOG_DBG("got event: %s rc: %s (req: %p)\n",
+		     cxi_event_to_str(event),
+		     cxi_rc_to_str(cxi_event_rc(event)),
+		     req);
 
 	return req;
 }

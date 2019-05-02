@@ -248,6 +248,8 @@ struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr, void *context,
 	dlist_init(&rxc->oflow_bufs);
 	dlist_init(&rxc->ux_sends);
 	dlist_init(&rxc->ux_recvs);
+	dlist_init(&rxc->ux_rdzv_sends);
+	dlist_init(&rxc->ux_rdzv_recvs);
 
 	/* TODO make configurable */
 	rxc->eager_threshold = CXIP_EAGER_THRESHOLD;

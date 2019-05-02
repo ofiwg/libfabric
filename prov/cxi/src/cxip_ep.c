@@ -408,6 +408,11 @@ static int _ep_enable(struct cxip_ep_obj *ep_obj)
 	CXIP_LOG_DBG("EP assigned PID: %u\n", ep_obj->if_dom->pid);
 	ep_obj->src_addr.pid = ep_obj->if_dom->pid;
 
+	if (getenv("RDZV_OFFLOAD")) {
+		ep_obj->rdzv_offload = 1;
+		fprintf(stderr, "Rendezvous offload enabled\n");
+	}
+
 	ep_obj->is_enabled = 1;
 
 	return FI_SUCCESS;
