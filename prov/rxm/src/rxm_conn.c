@@ -385,19 +385,27 @@ rxm_cmap_get_handle_peer(struct rxm_cmap *cmap, const void *addr)
 	return peer->handle;
 }
 
-int rxm_cmap_move_handle_to_peer_list(struct rxm_cmap *cmap, int index)
+int rxm_cmap_remove(struct rxm_cmap *cmap, int index)
 {
 	struct rxm_cmap_handle *handle;
-	int ret = 0;
+	int ret = -FI_ENOENT;
+
+	assert(cmap->ep->domain->data_progress != FI_PROGRESS_AUTO ||
+	       cmap->acquire == ofi_fastlock_acquire);
 
 	cmap->acquire(&cmap->lock);
 	handle = cmap->handles_av[index];
-	if (!handle)
+	if (!handle) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "cmap entry not found\n");
 		goto unlock;
+	}
 
 	handle->peer = calloc(1, sizeof(*handle->peer) + cmap->av->addrlen);
 	if (!handle->peer) {
 		ret = -FI_ENOMEM;
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "unable to allocate memory "
+			"for moving handle to peer list, deleting it instead\n");
+		rxm_cmap_del_handle(handle);
 		goto unlock;
 	}
 	handle->fi_addr = FI_ADDR_NOTAVAIL;
@@ -991,7 +999,6 @@ static int rxm_conn_reprocess_directed_recvs(struct rxm_recv_queue *recv_queue)
 	struct fi_cq_err_entry err_entry = {0};
 	int ret, count = 0;
 
-	ofi_ep_lock_acquire(&recv_queue->rxm_ep->util_ep);
 	dlist_foreach_container_safe(&recv_queue->unexp_msg_list,
 				     struct rxm_rx_buf, rx_buf,
 				     unexp_msg.entry, tmp_entry) {
@@ -1036,8 +1043,6 @@ static int rxm_conn_reprocess_directed_recvs(struct rxm_recv_queue *recv_queue)
 		}
 		count++;
 	}
-	ofi_ep_lock_release(&recv_queue->rxm_ep->util_ep);
-
 	return count;
 }
 
@@ -1422,61 +1427,15 @@ rxm_conn_auto_progress_eq(struct rxm_ep *rxm_ep, struct rxm_msg_eq_entry *entry)
 	return -1;
 }
 
-/* Atomic auto progress of EQ only, will return if/when CQ is bound */
-static int rxm_conn_atomic_progress_eq(struct rxm_ep *rxm_ep,
-				       struct rxm_msg_eq_entry *entry)
-{
-	struct rxm_fabric *rxm_fabric;
-	struct fid *fid = &rxm_ep->msg_eq->fid;
-	struct pollfd fds;
-	int again;
-	int ret;
-
-	rxm_fabric = container_of(rxm_ep->util_ep.domain->fabric,
-				  struct rxm_fabric, util_fabric);
-	ret = fi_control(fid, FI_GETWAIT, (void *) &fds.fd);
-	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-			"Unable to get MSG_EP EQ WAIT_FD %d\n", ret);
-		goto exit;
-	}
-	fds.events = POLLIN;
-
-	while (1) {
-		ofi_ep_lock_acquire(&rxm_ep->util_ep);
-		if (rxm_ep->msg_cq) {
-			ofi_ep_lock_release(&rxm_ep->util_ep);
-			return FI_SUCCESS;
-		}
-		again = fi_trywait(rxm_fabric->msg_fabric, &fid, 1);
-		ofi_ep_lock_release(&rxm_ep->util_ep);
-
-		if (!again) {
-			fds.revents = 0;
-
-			ret = poll(&fds, 1, -1);
-			if (OFI_UNLIKELY(ret == -1)) {
-				if (errno == EINTR)
-					continue;
-				FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-					"Select error %d, closing CM thread\n",
-					errno);
-				goto exit;
-			}
-		}
-		if (rxm_conn_auto_progress_eq(rxm_ep, entry))
-			goto exit;
-	}
-exit:
-	return -1;
-}
-
 /* Atomic auto progress of EQ and CQ */
 static int rxm_conn_atomic_progress_eq_cq(struct rxm_ep *rxm_ep,
 					  struct rxm_msg_eq_entry *entry)
 {
 	struct rxm_fabric *rxm_fabric;
-	struct fid *fids[2];
+	struct fid *fids[2] = {
+		&rxm_ep->msg_eq->fid,
+		&rxm_ep->msg_cq->fid,
+	};
 	struct pollfd fds[2];
 	int again;
 	int ret;
@@ -1484,24 +1443,32 @@ static int rxm_conn_atomic_progress_eq_cq(struct rxm_ep *rxm_ep,
 	rxm_fabric = container_of(rxm_ep->util_ep.domain->fabric,
 				  struct rxm_fabric, util_fabric);
 
-	fids[0] = &rxm_ep->msg_eq->fid;
-	ret = fi_control(fids[0], FI_GETWAIT, (void *) &fds[0].fd);
-	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-			"Unable to get MSG_EP EQ WAIT_FD %d\n", ret);
-		goto exit;
+	if (!rxm_ep->msg_eq_fd) {
+		ret = fi_control(&rxm_ep->msg_eq->fid, FI_GETWAIT,
+				 &rxm_ep->msg_eq_fd);
+		if (ret) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+				"Unable to get MSG_EP EQ WAIT_FD %d\n", ret);
+			goto exit;
+		}
 	}
 	fds[0].events = POLLIN;
+	fds[0].fd = rxm_ep->msg_eq_fd;
 
-	fids[1] = &rxm_ep->msg_cq->fid;
 	fds[1].fd = rxm_ep->msg_cq_fd;
 	fds[1].events = POLLIN;
 	memset(entry, 0, RXM_MSG_EQ_ENTRY_SZ);
 
 	while(1) {
-		ofi_ep_lock_acquire(&rxm_ep->util_ep);
+		/* Comply with restricted threading levels that MSG provider
+		 * may have been configured with */
+		if (rxm_ep->msg_info->domain_attr->threading != FI_THREAD_SAFE)
+			rxm_ep->cmap->acquire(&rxm_ep->cmap->lock);
+
 		again = fi_trywait(rxm_fabric->msg_fabric, fids, 2);
-		ofi_ep_lock_release(&rxm_ep->util_ep);
+
+		if (rxm_ep->msg_info->domain_attr->threading != FI_THREAD_SAFE)
+			rxm_ep->cmap->release(&rxm_ep->cmap->lock);
 
 		if (!again) {
 			fds[0].revents = 0;
@@ -1544,10 +1511,7 @@ static void *rxm_conn_atomic_progress(void *arg)
 	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
 	       "Starting CM conn thread with atomic AUTO_PROGRESS\n");
 
-	/* To reduce overhead, a unique progress function that progresses
-	 * only the EQ is used until the CQ has been bound to the EP */
-	if (!rxm_conn_atomic_progress_eq(rxm_ep, entry))
-		rxm_conn_atomic_progress_eq_cq(rxm_ep, entry);
+	rxm_conn_atomic_progress_eq_cq(rxm_ep, entry);
 
 	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
 	       "Stoping CM conn thread with atomic AUTO_PROGRESS\n");

@@ -1173,8 +1173,6 @@ rxm_ep_emulate_inject(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	struct rxm_tx_eager_buf *tx_buf;
 	ssize_t ret;
 
-	assert(pkt_size <= rxm_ep->rxm_info->tx_attr->inject_size);
-
 	tx_buf = (struct rxm_tx_eager_buf *)
 		  rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX);
 	if (OFI_UNLIKELY(!tx_buf)) {
@@ -2036,7 +2034,7 @@ static int rxm_ep_msg_cq_open(struct rxm_ep *rxm_ep, enum fi_wait_obj wait_obj)
 
 	ret = fi_cq_open(rxm_domain->msg_domain, &cq_attr, &rxm_ep->msg_cq, NULL);
 	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to open MSG CQ\n");
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "unable to open MSG CQ\n");
 		return ret;
 	}
 
@@ -2106,18 +2104,6 @@ static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		ret = ofi_ep_bind_av(&rxm_ep->util_ep, av);
 		if (ret)
 			return ret;
-
-		ret = fi_listen(rxm_ep->msg_pep);
-		if (ret) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-				"Unable to set msg PEP to listen state\n");
-			return ret;
-		}
-
-		ret = rxm_conn_cmap_alloc(rxm_ep);
-		if (ret)
-			return ret;
-
 		break;
 	case FI_CLASS_CQ:
 		cq = container_of(bfid, struct util_cq, cq_fid.fid);
@@ -2126,12 +2112,17 @@ static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		if (ret)
 			return ret;
 
+		/* Ensure atomics progress thread isn't started at this point.
+		 * The progress thread should be started only after CQ is bound
+		 * to keep it simple (avoids progressing only EQ first and then
+		 * progressing both EQ and CQ once CQ is bound) */
+		assert(!(rxm_ep->rxm_info->caps & FI_ATOMIC) ||
+		       !rxm_ep->cmap || !rxm_ep->cmap->cm_thread);
+
 		if (!rxm_ep->msg_cq) {
-			ofi_ep_lock_acquire(&rxm_ep->util_ep);
 			ret = rxm_ep_msg_cq_open(rxm_ep, cq->wait ||
 				rxm_needs_atomic_progress(rxm_ep->rxm_info) ?
 				FI_WAIT_FD : FI_WAIT_NONE);
-			ofi_ep_lock_release(&rxm_ep->util_ep);
 			if (ret)
 				return ret;
 		}
@@ -2150,22 +2141,18 @@ static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 			return ret;
 
 		if (!rxm_ep->msg_cq) {
-			ofi_ep_lock_acquire(&rxm_ep->util_ep);
 			ret = rxm_ep_msg_cq_open(rxm_ep, cntr->wait ||
 				rxm_needs_atomic_progress(rxm_ep->rxm_info) ?
 				FI_WAIT_FD : FI_WAIT_NONE);
-			ofi_ep_lock_release(&rxm_ep->util_ep);
 			if (ret)
 				return ret;
 		} else if (!rxm_ep->msg_cq_fd && cntr->wait) {
 			/* Reopen CQ with WAIT fd set */
-			ofi_ep_lock_acquire(&rxm_ep->util_ep);
 			ret = fi_close(&rxm_ep->msg_cq->fid);
 			if (ret)
 				FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 					"Unable to close msg CQ\n");
 			ret = rxm_ep_msg_cq_open(rxm_ep, FI_WAIT_FD);
-			ofi_ep_lock_release(&rxm_ep->util_ep);
 			if (ret)
 				return ret;
 		}
@@ -2294,7 +2281,7 @@ err:
 
 static int rxm_ep_enable_check(struct rxm_ep *rxm_ep)
 {
-	if (!rxm_ep->util_ep.av || !rxm_ep->cmap)
+	if (!rxm_ep->util_ep.av)
 		return -FI_EOPBADSTATE;
 
 	if (rxm_ep->util_ep.rx_cq)
@@ -2325,6 +2312,20 @@ static int rxm_ep_ctrl(struct fid *fid, int command, void *arg)
 	switch (command) {
 	case FI_ENABLE:
 		ret = rxm_ep_enable_check(rxm_ep);
+		if (ret)
+			return ret;
+
+		/* fi_listen should be called before cmap alloc as cmap alloc
+		 * calls fi_getname on pep which would succeed only if fi_listen
+		 * was called first */
+		ret = fi_listen(rxm_ep->msg_pep);
+		if (ret) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+				"unable to set msg PEP to listen state\n");
+			return ret;
+		}
+
+		ret = rxm_conn_cmap_alloc(rxm_ep);
 		if (ret)
 			return ret;
 

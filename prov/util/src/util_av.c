@@ -322,15 +322,21 @@ int ofi_av_remove_addr(struct util_av *av, fi_addr_t fi_addr)
 	return 0;
 }
 
-fi_addr_t ofi_av_lookup_fi_addr(struct util_av *av, const void *addr)
+fi_addr_t ofi_av_lookup_fi_addr_unsafe(struct util_av *av, const void *addr)
 {
 	struct util_av_entry *entry = NULL;
 
-	fastlock_acquire(&av->lock);
 	HASH_FIND(hh, av->hash, addr, av->addrlen, entry);
-	fastlock_release(&av->lock);
-
 	return entry ? ofi_buf_index(entry) : FI_ADDR_NOTAVAIL;
+}
+
+fi_addr_t ofi_av_lookup_fi_addr(struct util_av *av, const void *addr)
+{
+	fi_addr_t fi_addr;
+	fastlock_acquire(&av->lock);
+	fi_addr = ofi_av_lookup_fi_addr_unsafe(av, addr);
+	fastlock_release(&av->lock);
+	return fi_addr;
 }
 
 static void *
@@ -348,6 +354,13 @@ int ofi_av_bind(struct fid *av_fid, struct fid *eq_fid, uint64_t flags)
 	av = container_of(av_fid, struct util_av, av_fid.fid);
 	if (eq_fid->fclass != FI_CLASS_EQ) {
 		FI_WARN(av->prov, FI_LOG_AV, "invalid fid class\n");
+		return -FI_EINVAL;
+	}
+
+	if (!(av->flags & FI_EVENT)) {
+		FI_WARN(av->prov, FI_LOG_AV, "cannot bind EQ to an AV that was "
+			"configured for synchronous operation: FI_EVENT flag was"
+			" not specified in fi_av_attr when AV was opened\n");
 		return -FI_EINVAL;
 	}
 

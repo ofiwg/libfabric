@@ -227,6 +227,19 @@ av_create_addr_sockaddr_in(char *first_address, int index, void *addr)
 	return 0;
 }
 
+ssize_t av_get_addrlen(struct fi_info *info)
+{
+	switch (info->addr_format) {
+	case FI_SOCKADDR:
+	case FI_SOCKADDR_IN:
+		return sizeof(struct sockaddr_in);
+	default:
+		sprintf(err_buf, "test does not yet support %s",
+				fi_tostr(&info->addr_format, FI_TYPE_ADDR_FORMAT));
+		return -FI_ENOSYS;
+	}
+}
+
 /*
  * Create an address list
  */
@@ -834,6 +847,112 @@ fail:
 	return TEST_RET_VAL(ret, testret);
 }
 
+/*
+ * Test AV insert at different stages
+ */
+static int
+av_insert_stages(void)
+{
+	int testret, ret, i, count = 0;
+	struct fid_av *av;
+	struct fi_av_attr attr;
+	uint8_t addrbuf[4096];
+	uint32_t ctx;
+	int buflen;
+	fi_addr_t fi_addr[MAX_ADDR], *fi_addr_cur = NULL;
+	ssize_t addrlen;
+
+	testret = FAIL;
+
+	memset(&attr, 0, sizeof(attr));
+	attr.type = av_type;
+	attr.count = 32;
+
+	av = NULL;
+	ret = fi_av_open(domain, &attr, &av, NULL);
+	if (ret != 0) {
+		sprintf(err_buf, "fi_av_open(%s) = %d, %s",
+				fi_tostr(&av_type, FI_TYPE_AV_TYPE),
+				ret, fi_strerror(-ret));
+		goto fail;
+	}
+
+	addrlen = av_get_addrlen(fi);
+	if (addrlen < 0) {
+		ret = addrlen;
+		goto fail;
+	}
+
+	for (i = 0; i < MAX_ADDR; ++i) {
+		fi_addr[i] = FI_ADDR_NOTAVAIL;
+	}
+
+	buflen = sizeof(addrbuf);
+
+	ret = av_create_address_list(good_address, 0, 6, addrbuf, 0, buflen);
+	if (ret < 0)
+		goto fail;
+
+	if (av_type != FI_AV_TABLE)
+		fi_addr_cur = fi_addr + count;
+
+	ret = fi_av_insert(av, addrbuf + count * addrlen, 2,
+			   fi_addr_cur, 0, &ctx);
+	if (ret != 2) {
+		sprintf(err_buf, "fi_av_insert ret=%d, %s", ret, fi_strerror(-ret));
+		goto fail;
+	}
+	count += 2;
+
+	if (av_type != FI_AV_TABLE) {
+		for (i = 0; i < count; ++i) {
+			if (fi_addr[i] == FI_ADDR_NOTAVAIL) {
+				sprintf(err_buf, "fi_addr[%d] == FI_ADDR_NOTAVAIL", i);
+				goto fail;
+			}
+		}
+	}
+
+	ret = fi_endpoint(domain, fi, &ep, NULL);
+	if (ret) {
+		sprintf(err_buf, "fi_endpoint=%d, %s", ret, fi_strerror(-ret));
+		goto fail;
+	}
+
+	ret = fi_ep_bind(ep, &av->fid, 0);
+	if (ret) {
+		sprintf(err_buf, "fi_ep_bind=%d, %s", ret, fi_strerror(-ret));
+		goto fail;
+	}
+
+	if (av_type != FI_AV_TABLE)
+		fi_addr_cur = fi_addr + count;
+
+	ret = fi_av_insert(av, addrbuf + count * addrlen, 2,
+			   fi_addr_cur, 0, &ctx);
+	if (ret != 2) {
+		sprintf(err_buf, "fi_av_insert ret=%d, %s", ret, fi_strerror(-ret));
+		goto fail;
+	}
+	count += 2;
+
+	if (av_type != FI_AV_TABLE) {
+		for (i = 2; i < count; ++i) {
+			if (fi_addr[i] == FI_ADDR_NOTAVAIL) {
+				sprintf(err_buf, "fi_addr[%d] == FI_ADDR_NOTAVAIL", i);
+				goto fail;
+			}
+		}
+	}
+
+	// TODO test av insert after endpoint enable
+	testret = PASS;
+fail:
+	FT_CLOSE_FID(ep);
+	FT_CLOSE_FID(av);
+	return TEST_RET_VAL(ret, testret);
+}
+
 struct test_entry test_array_good[] = {
 	TEST_ENTRY(av_open_close, "Test open and close AVs of varying sizes"),
 	TEST_ENTRY(av_good_sync, "Test sync AV insert with good address"),
@@ -843,6 +962,7 @@ struct test_entry test_array_good[] = {
 	TEST_ENTRY(av_zero_async, "Test async insert AV insert of zero addresses"),
 	TEST_ENTRY(av_good_2vector_async,
 			"Test async AV inserts with two address vectors"),
+	TEST_ENTRY(av_insert_stages, "Test AV insert at various stages"),
 	{ NULL, "" }
 };
 
