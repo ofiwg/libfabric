@@ -54,34 +54,31 @@ static struct rxd_x_entry *rxd_tx_entry_init_rma(struct rxd_ep *ep, fi_addr_t ad
 
 	base_hdr = rxd_get_base_hdr(tx_entry->pkt);
 	ptr = (void *) base_hdr;
+	rxd_init_base_hdr(ep, &ptr, tx_entry);
 
 	if (tx_entry->cq_entry.flags & FI_READ) {
 		tx_entry->num_segs = ofi_div_ceil(tx_entry->cq_entry.len,
 						  rxd_domain->max_seg_sz);
-		rxd_init_base_hdr(ep, &ptr, tx_entry);
 		rxd_init_sar_hdr(&ptr, tx_entry, rma_count);
 		rxd_init_rma_hdr(&ptr, rma_iov, rma_count);
 	} else {
 		max_inline = rxd_domain->max_inline_msg;
 		max_inline -= sizeof(struct ofi_rma_iov) * rma_count;
-		if (tx_entry->flags & RXD_REMOTE_CQ_DATA)
+		if (tx_entry->flags & RXD_REMOTE_CQ_DATA) {
 			max_inline -= sizeof(tx_entry->cq_entry.data);
+			rxd_init_data_hdr(&ptr, tx_entry);
+		}
 
 		if (rma_count > 1 || tx_entry->cq_entry.len > max_inline) {
 			max_inline -= sizeof(struct rxd_sar_hdr);
 			tx_entry->num_segs = ofi_div_ceil(tx_entry->cq_entry.len -
 				max_inline, rxd_domain->max_seg_sz) + 1;
-			rxd_init_base_hdr(ep, &ptr, tx_entry);
 			rxd_init_sar_hdr(&ptr, tx_entry, rma_count);
 		} else {
 			tx_entry->flags |= RXD_INLINE;
+			base_hdr->flags = tx_entry->flags;
 			tx_entry->num_segs = 1;
-			rxd_init_base_hdr(ep, &ptr, tx_entry);
 		}
-
-		if (tx_entry->flags & RXD_REMOTE_CQ_DATA)
-			rxd_init_data_hdr(&ptr, tx_entry);
-
 		rxd_init_rma_hdr(&ptr, rma_iov, rma_count);
 		tx_entry->bytes_done = rxd_init_msg(&ptr, tx_entry->iov,
 			tx_entry->iov_count, tx_entry->cq_entry.len,

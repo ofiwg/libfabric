@@ -60,6 +60,7 @@ static struct rxd_x_entry *rxd_tx_entry_init_atomic(struct rxd_ep *ep, fi_addr_t
 
 	base_hdr = rxd_get_base_hdr(tx_entry->pkt);
 	ptr = (void *) base_hdr;
+	rxd_init_base_hdr(ep, &ptr, tx_entry);
 
 	if (res_count) {
 		tx_entry->res_count = res_count;
@@ -67,19 +68,19 @@ static struct rxd_x_entry *rxd_tx_entry_init_atomic(struct rxd_ep *ep, fi_addr_t
 	}
 
 	max_inline = rxd_domain->max_inline_msg;
-	if (rma_count > 1 || tx_entry->cq_entry.flags & FI_READ) {
-		rxd_init_base_hdr(ep, &ptr, tx_entry);
-		rxd_init_sar_hdr(&ptr, tx_entry, rma_count);
-		max_inline -= sizeof(struct rxd_sar_hdr);
-	} else {
-		tx_entry->flags |= RXD_INLINE;
-		tx_entry->num_segs = 1;
-		rxd_init_base_hdr(ep, &ptr, tx_entry);
-	}
 
 	if (tx_entry->flags & RXD_REMOTE_CQ_DATA) {
 		max_inline -= sizeof(struct rxd_data_hdr);
 		rxd_init_data_hdr(&ptr, tx_entry);
+	}
+
+	if (rma_count > 1 || tx_entry->cq_entry.flags & FI_READ) {
+		max_inline -= sizeof(struct rxd_sar_hdr);
+		rxd_init_sar_hdr(&ptr, tx_entry, rma_count);
+	} else {
+		tx_entry->flags |= RXD_INLINE;
+		base_hdr->flags = tx_entry->flags;
+		tx_entry->num_segs = 1;
 	}
 
 	rxd_init_rma_hdr(&ptr, rma_iov, rma_count);

@@ -330,11 +330,16 @@ static struct rxd_x_entry *rxd_tx_entry_init_msg(struct rxd_ep *ep, fi_addr_t ad
 	rxd_init_base_hdr(ep, &ptr, tx_entry);
 
 	max_inline = rxd_domain->max_inline_msg;
-	if (tx_entry->flags & RXD_REMOTE_CQ_DATA)
-		max_inline -= sizeof(tx_entry->cq_entry.data);
 
-	if (tx_entry->flags & RXD_TAG_HDR)
+	if (tx_entry->flags & RXD_TAG_HDR) {
 		max_inline -= sizeof(tx_entry->cq_entry.tag);
+		rxd_init_tag_hdr(&ptr, tx_entry);
+	}
+
+	if (tx_entry->flags & RXD_REMOTE_CQ_DATA) {
+		max_inline -= sizeof(tx_entry->cq_entry.data);
+		rxd_init_data_hdr(&ptr, tx_entry);
+	}
 
 	if (tx_entry->cq_entry.len > max_inline) {
 		max_inline -= sizeof(struct rxd_sar_hdr);
@@ -346,13 +351,6 @@ static struct rxd_x_entry *rxd_tx_entry_init_msg(struct rxd_ep *ep, fi_addr_t ad
 		base_hdr->flags = tx_entry->flags;
 		tx_entry->num_segs = 1;
 	}
-
-	//TODO figure out a way to combine this with above check? (init sar, set num?)
-	if (tx_entry->flags & RXD_TAG_HDR)
-		rxd_init_tag_hdr(&ptr, tx_entry);
-
-	if (tx_entry->flags & RXD_REMOTE_CQ_DATA)
-		rxd_init_data_hdr(&ptr, tx_entry);
 
 	tx_entry->bytes_done = rxd_init_msg(&ptr, tx_entry->iov,
 					    tx_entry->iov_count,

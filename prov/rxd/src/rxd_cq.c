@@ -671,14 +671,6 @@ void rxd_unpack_hdrs(size_t pkt_size, struct rxd_base_hdr *base_hdr,
 	char *ptr = (char *) base_hdr + sizeof(*base_hdr);
 	uint8_t rma_count = 1;
 
-	if (!(base_hdr->flags & RXD_INLINE)) {
-		*sar_hdr = (struct rxd_sar_hdr *) ptr;
-		rma_count = (*sar_hdr)->iov_count;
-		ptr += sizeof(**sar_hdr);
-	} else {
-		*sar_hdr = NULL;
-	}
-
 	if (base_hdr->flags & RXD_TAG_HDR) {
 		*tag_hdr = (struct rxd_tag_hdr *) ptr;
 		ptr += sizeof(**tag_hdr);
@@ -691,6 +683,14 @@ void rxd_unpack_hdrs(size_t pkt_size, struct rxd_base_hdr *base_hdr,
 		ptr += sizeof(**data_hdr);
 	} else {
 		*data_hdr = NULL;
+	}
+
+	if (!(base_hdr->flags & RXD_INLINE)) {
+		*sar_hdr = (struct rxd_sar_hdr *) ptr;
+		rma_count = (*sar_hdr)->iov_count;
+		ptr += sizeof(**sar_hdr);
+	} else {
+		*sar_hdr = NULL;
 	}
 
 	if (base_hdr->type >= RXD_READ_REQ && base_hdr->type <= RXD_ATOMIC_COMPARE) {
