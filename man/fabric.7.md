@@ -266,6 +266,19 @@ system.  Additionally, it can retrieve a list of all environment variables
 that may be used to configure libfabric and each provider.  See
 [`fi_info`(1)](fi_info.1.html) for more details.
 
+# ENVIRONMENT VARIABLE CONTROLS
+
+Core features of libfabric and its providers may be configured by an
+administrator through the use of environment variables.  Man pages
+will usually describe the most commonly accessed variables, such as those
+mentioned above.  However, libfabric defines interfaces for publishing
+and obtaining environment variables.  These are targeted for providers,
+but allow applications and users to obtain the full list of variables
+that may be set, along with a brief description of their use.
+
+A full list of variables available may be obtained by running the fi_info
+application, with the -e or --env command line option.
+
 # NOTES
 
 Because libfabric is designed to provide applications direct access to
