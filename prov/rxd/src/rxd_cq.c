@@ -411,6 +411,12 @@ static void rxd_handle_rts(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 	struct rxd_rts_pkt *pkt = (struct rxd_rts_pkt *) (pkt_entry->pkt);
 	int ret;
 
+	if (pkt->base_hdr.version != RXD_PROTOCOL_VERSION) {
+		FI_WARN(&rxd_prov, FI_LOG_CQ,
+			"ERROR: Protocol version mismatch with peer\n");
+		return;
+	}
+
 	rxd_av = rxd_ep_av(ep);
 	node = ofi_rbmap_find(&rxd_av->rbmap, pkt->source);
 
@@ -1011,6 +1017,12 @@ release:
 static void rxd_handle_cts(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 {
 	struct rxd_cts_pkt *cts = (struct rxd_cts_pkt *) (pkt_entry->pkt);
+
+	if (cts->base_hdr.version != RXD_PROTOCOL_VERSION) {
+		FI_WARN(&rxd_prov, FI_LOG_CQ,
+			"ERROR: Protocol version mismatch with peer\n");
+		return;
+	}
 
 	rxd_update_peer(ep, cts->rts_addr, cts->cts_addr);
 }
