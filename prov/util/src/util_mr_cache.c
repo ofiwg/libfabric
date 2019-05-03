@@ -224,8 +224,9 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct iovec *iov,
 		ret = ofi_monitor_subscribe(cache->monitor, iov->iov_base,
 					    iov->iov_len);
 		if (ret)
-			goto err;
-		(*entry)->subscribed = 1;
+			util_mr_uncache_entry(cache, *entry);
+		else
+			(*entry)->subscribed = 1;
 	}
 
 	return 0;
