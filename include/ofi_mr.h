@@ -125,8 +125,6 @@ void ofi_monitor_unsubscribe(struct ofi_mem_monitor *monitor,
  */
 struct ofi_uffd {
 	struct ofi_mem_monitor		monitor;
-	long				page_size;
-	long				hugepage_size;
 	pthread_t			thread;
 	int				fd;
 };
@@ -218,7 +216,6 @@ enum ofi_mr_storage_type {
 	OFI_MR_STORAGE_DEFAULT = 0,
 	OFI_MR_STORAGE_RBT,
 	OFI_MR_STORAGE_USER,
-	OFI_MR_STORAGE_NONE,
 };
 
 struct ofi_mr_storage {

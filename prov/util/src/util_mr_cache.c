@@ -311,6 +311,10 @@ void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache)
 	struct ofi_mr_entry *entry;
 	struct dlist_entry *tmp;
 
+	/* If we don't have a domain, initialization failed */
+	if (!cache->domain)
+		return;
+
 	FI_INFO(cache->domain->prov, FI_LOG_MR, "MR cache stats: "
 		"searches %zu, deletes %zu, hits %zu notify %zu\n",
 		cache->search_cnt, cache->delete_cnt, cache->hit_cnt,
@@ -327,12 +331,9 @@ void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache)
 	fastlock_release(&cache->monitor->lock);
 
 	ofi_monitor_del_cache(cache);
-	if (cache->storage.type != OFI_MR_STORAGE_NONE)
-		cache->storage.destroy(&cache->storage);
-	if (cache->domain)
-		ofi_atomic_dec32(&cache->domain->ref);
-	if (cache->entry_pool)
-		ofi_bufpool_destroy(cache->entry_pool);
+	cache->storage.destroy(&cache->storage);
+	ofi_atomic_dec32(&cache->domain->ref);
+	ofi_bufpool_destroy(cache->entry_pool);
 	assert(cache->cached_cnt == 0);
 	assert(cache->cached_size == 0);
 }
@@ -417,8 +418,6 @@ static int ofi_mr_cache_init_storage(struct ofi_mr_cache *cache)
 		break;
 	}
 
-	if (ret)
-		cache->storage.type = OFI_MR_STORAGE_NONE;
 	return ret;
 }
 
@@ -437,13 +436,12 @@ int ofi_mr_cache_init(struct util_domain *domain,
 	cache->delete_cnt = 0;
 	cache->hit_cnt = 0;
 	cache->notify_cnt = 0;
+	cache->domain = domain;
+	ofi_atomic_inc32(&domain->ref);
 
 	ret = ofi_mr_cache_init_storage(cache);
 	if (ret)
-		return ret;
-
-	cache->domain = domain;
-	ofi_atomic_inc32(&domain->ref);
+		goto dec;
 
 	if (!cache->max_cached_size)
 		cache->max_cached_size = SIZE_MAX;
@@ -452,19 +450,19 @@ int ofi_mr_cache_init(struct util_domain *domain,
 		goto destroy;
 
 	ret = ofi_bufpool_create(&cache->entry_pool,
-				   sizeof(struct ofi_mr_entry) +
-				   cache->entry_data_size,
-				   16, 0, cache->max_cached_cnt);
+				 sizeof(struct ofi_mr_entry) +
+				 cache->entry_data_size,
+				 16, cache->max_cached_cnt, 0);
 	if (ret)
 		goto del;
 
 	return 0;
 del:
-	cache->entry_pool = NULL;
 	ofi_monitor_del_cache(cache);
 destroy:
+	cache->storage.destroy(&cache->storage);
+dec:
 	ofi_atomic_dec32(&cache->domain->ref);
 	cache->domain = NULL;
-	cache->storage.destroy(&cache->storage);
 	return ret;
 }

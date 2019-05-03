@@ -199,6 +199,12 @@ int ofi_bufpool_create_attr(struct ofi_bufpool_attr *attr,
 	entry_sz = (attr->size + sizeof(struct ofi_bufpool_hdr));
 	(*buf_pool)->entry_size = ofi_get_aligned_size(entry_sz, attr->alignment);
 
+	if (!attr->chunk_cnt) {
+		(*buf_pool)->attr.chunk_cnt =
+			((*buf_pool)->entry_size < page_sizes[OFI_PAGE_SIZE]) ?
+			64 : 16;
+	}
+
 	if ((*buf_pool)->attr.flags & OFI_BUFPOOL_INDEXED)
 		dlist_init(&(*buf_pool)->free_list.regions);
 	else

@@ -204,13 +204,14 @@ static int ofi_uffd_register(const void *addr, size_t len, size_t page_size)
 static int ofi_uffd_subscribe(struct ofi_mem_monitor *monitor,
 			      const void *addr, size_t len)
 {
-	int ret;
+	int i;
 
 	assert(monitor == &uffd.monitor);
-	ret = ofi_uffd_register(addr, len, uffd.page_size);
-	if (ret)
-		ret = ofi_uffd_register(addr, len, uffd.hugepage_size);
-	return ret;
+	for (i = 0; i < num_page_sizes; i++) {
+		if (!ofi_uffd_register(addr, len, page_sizes[i]))
+			return 0;
+	}
+	return -FI_EFAULT;
 }
 
 static int ofi_uffd_unregister(const void *addr, size_t len, size_t page_size)
@@ -236,9 +237,13 @@ static int ofi_uffd_unregister(const void *addr, size_t len, size_t page_size)
 static void ofi_uffd_unsubscribe(struct ofi_mem_monitor *monitor,
 				 const void *addr, size_t len)
 {
+	int i;
+
 	assert(monitor == &uffd.monitor);
-	if (ofi_uffd_unregister(addr, len, uffd.page_size))
-		ofi_uffd_unregister(addr, len, uffd.hugepage_size);
+	for (i = 0; i < num_page_sizes; i++) {
+		if (!ofi_uffd_unregister(addr, len, page_sizes[i]))
+			break;
+	}
 }
 
 int ofi_uffd_init(void)
@@ -249,13 +254,8 @@ int ofi_uffd_init(void)
 	uffd.monitor.subscribe = ofi_uffd_subscribe;
 	uffd.monitor.unsubscribe = ofi_uffd_unsubscribe;
 
-	uffd.page_size = ofi_get_page_size();
-	if (uffd.page_size < 0)
-		return (int) uffd.page_size;
-
-	uffd.hugepage_size = ofi_get_hugepage_size();
-	if (uffd.hugepage_size < 0)
-		uffd.hugepage_size = 0;
+	if (!num_page_sizes)
+		return -FI_ENODATA;
 
 	uffd.fd = syscall(__NR_userfaultfd, O_CLOEXEC | O_NONBLOCK);
 	if (uffd.fd < 0) {
