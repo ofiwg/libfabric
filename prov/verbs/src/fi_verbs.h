@@ -542,6 +542,10 @@ struct fi_ibv_xrc_ep_conn_setup {
 	struct ibv_qp			*rsvd_ini_qpn;
 	struct ibv_qp			*rsvd_tgt_qpn;
 
+	/* Temporary flags to indicate if the INI QP setup and the
+	 * TGT QP setup have completed. */
+	bool				ini_connected;
+	bool				tgt_connected;
 
 	/* Delivery of the FI_CONNECTED event is delayed until
 	 * bidirectional connectivity is established. */
@@ -580,6 +584,7 @@ struct fi_ibv_ep {
 	size_t				rx_size;
 };
 
+#define VERBS_XRC_EP_MAGIC		0x1F3D5B79
 struct fi_ibv_xrc_ep {
 	/* Must be first */
 	struct fi_ibv_ep		base_ep;
@@ -588,6 +593,7 @@ struct fi_ibv_xrc_ep {
 	struct rdma_cm_id		*tgt_id;
 	struct ibv_qp			*tgt_ibv_qp;
 	enum fi_ibv_xrc_ep_conn_state	conn_state;
+	uint32_t			magic;
 	uint32_t			srqn;
 	uint32_t			peer_srqn;
 
@@ -687,7 +693,7 @@ int fi_ibv_connect_xrc(struct fi_ibv_xrc_ep *ep, struct sockaddr *addr,
 		       int reciprocal, void *param, size_t paramlen);
 int fi_ibv_accept_xrc(struct fi_ibv_xrc_ep *ep, int reciprocal,
 		      void *param, size_t paramlen);
-void fi_ibv_free_xrc_conn_setup(struct fi_ibv_xrc_ep *ep);
+void fi_ibv_free_xrc_conn_setup(struct fi_ibv_xrc_ep *ep, int disconnect);
 void fi_ibv_add_pending_ini_conn(struct fi_ibv_xrc_ep *ep, int reciprocal,
 				 void *conn_param, size_t conn_paramlen);
 void fi_ibv_sched_ini_conn(struct fi_ibv_ini_shared_conn *ini_conn);
