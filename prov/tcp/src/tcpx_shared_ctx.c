@@ -52,7 +52,7 @@ void tcpx_srx_xfer_release(struct tcpx_rx_ctx *srx_ctx,
 static inline void tcpx_srx_recv_init(struct tcpx_xfer_entry *recv_entry,
 				      uint64_t base_flags, void *context)
 {
-	recv_entry->flags = base_flags | FI_MSG | FI_RECV;
+	recv_entry->flags = base_flags | FI_COMPLETION | FI_MSG | FI_RECV;
 	recv_entry->context = context;
 }
 
