@@ -472,13 +472,57 @@ fi_ibv_eq_xrc_connected_event(struct fi_ibv_eq *eq,
 	 * ID(s) since  RDMA CM is used for connection setup only */
 	*acked = 1;
 	rdma_ack_cm_event(cma_event);
-
-	/* TODO: Ultimately we will want to initiate freeing of the connection
-	 * resources here with fi_ibv_free_xrc_conn_setup(ep); however, timewait
-	 * issues in larger fabrics need to be resolved first. The resources
-	 * will be freed at EP close if not freed here */
+	fi_ibv_free_xrc_conn_setup(ep, 1);
 
 	return ret;
+}
+
+static inline void
+fi_ibv_eq_xrc_timewait_event(struct fi_ibv_eq *eq,
+			     struct rdma_cm_event *cma_event, int *acked)
+{
+	fid_t fid = cma_event->id->context;
+	struct fi_ibv_xrc_ep *ep = container_of(fid, struct fi_ibv_xrc_ep,
+						base_ep.util_ep.ep_fid);
+	assert(ep->magic == VERBS_XRC_EP_MAGIC);
+	assert(ep->conn_setup);
+
+	if (cma_event->id == ep->tgt_id && ep->conn_setup->rsvd_tgt_qpn) {
+		*acked = 1;
+		rdma_ack_cm_event(cma_event);
+		ibv_destroy_qp(ep->conn_setup->rsvd_tgt_qpn);
+		ep->conn_setup->rsvd_tgt_qpn = NULL;
+		rdma_destroy_id(ep->tgt_id);
+		ep->tgt_id = NULL;
+	} else if (cma_event->id == ep->base_ep.id &&
+		   ep->conn_setup->rsvd_ini_qpn) {
+		*acked = 1;
+		rdma_ack_cm_event(cma_event);
+		ibv_destroy_qp(ep->conn_setup->rsvd_ini_qpn);
+		ep->conn_setup->rsvd_ini_qpn = NULL;
+		rdma_destroy_id(ep->base_ep.id);
+		ep->base_ep.id = NULL;
+	}
+	if (!ep->conn_setup->rsvd_ini_qpn && !ep->conn_setup->rsvd_tgt_qpn)
+		fi_ibv_free_xrc_conn_setup(ep, 0);
+}
+
+static inline void
+fi_ibv_eq_xrc_disconnect_event(struct fi_ibv_eq *eq,
+			       struct rdma_cm_event *cma_event, int *acked)
+{
+	fid_t fid = cma_event->id->context;
+	struct fi_ibv_xrc_ep *ep = container_of(fid, struct fi_ibv_xrc_ep,
+						base_ep.util_ep.ep_fid);
+	assert(ep->magic == VERBS_XRC_EP_MAGIC);
+
+	if (ep->conn_setup && cma_event->id == ep->base_ep.id &&
+	    ep->conn_setup->rsvd_ini_qpn) {
+		*acked = 1;
+		rdma_ack_cm_event(cma_event);
+		rdma_disconnect(ep->base_ep.id);
+		ep->conn_setup->ini_connected = 0;
+	}
 }
 
 static ssize_t
@@ -537,11 +581,18 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq,
 		break;
 	case RDMA_CM_EVENT_DISCONNECTED:
 		ep = container_of(fid, struct fi_ibv_ep, util_ep.ep_fid);
-		if (fi_ibv_is_xrc(ep->info))
+		if (fi_ibv_is_xrc(ep->info)) {
+			fi_ibv_eq_xrc_disconnect_event(eq, cma_event, acked);
 			return -FI_EAGAIN;
+		}
 		*event = FI_SHUTDOWN;
 		entry->info = NULL;
 		break;
+	case RDMA_CM_EVENT_TIMEWAIT_EXIT:
+		ep = container_of(fid, struct fi_ibv_ep, util_ep.ep_fid);
+		if (fi_ibv_is_xrc(ep->info))
+			fi_ibv_eq_xrc_timewait_event(eq, cma_event, acked);
+		return -FI_EAGAIN;
 	case RDMA_CM_EVENT_ADDR_ERROR:
 	case RDMA_CM_EVENT_ROUTE_ERROR:
 	case RDMA_CM_EVENT_CONNECT_ERROR:
