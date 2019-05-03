@@ -163,6 +163,7 @@ fi_ibv_alloc_init_ep(struct fi_info *info, struct fi_ibv_domain *domain,
 		xrc_ep = calloc(1, sizeof(*xrc_ep));
 		if (!xrc_ep)
 			return NULL;
+		xrc_ep->magic = VERBS_XRC_EP_MAGIC;
 		ep = &xrc_ep->base_ep;
 	} else {
 		ep = calloc(1, sizeof(*ep));
@@ -226,9 +227,10 @@ static inline void fi_ibv_ep_xrc_close(struct fi_ibv_ep *ep)
 	struct fi_ibv_xrc_ep *xrc_ep = container_of(ep, struct fi_ibv_xrc_ep,
 						    base_ep);
 
-	fi_ibv_ep_destroy_xrc_qp(xrc_ep);
 	if (xrc_ep->conn_setup)
-		fi_ibv_free_xrc_conn_setup(xrc_ep);
+		fi_ibv_free_xrc_conn_setup(xrc_ep, 0);
+	fi_ibv_ep_destroy_xrc_qp(xrc_ep);
+	xrc_ep->magic = 0;
 }
 
 static int fi_ibv_ep_close(fid_t fid)
