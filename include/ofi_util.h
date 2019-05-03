@@ -639,6 +639,7 @@ struct util_av {
 	size_t			count;
 	size_t			addrlen;
 	struct dlist_entry	ep_list;
+	fastlock_t		ep_list_lock;
 };
 
 struct util_av_attr {
