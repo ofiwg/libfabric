@@ -2634,7 +2634,7 @@ Test(scalable, av_insert)
 
 	ret = fi_av_insert(t_av, epname, TOTALEPS,
 			   addresses, FI_SYNC_ERR, err);
-	cr_assert_eq(ret, -FI_EINVAL, "%d", ret);
+	cr_assert((ret != TOTALEPS), "fi_av_insert should have failed but did not.");
 
 	cr_log_info("check for errors\n");
 	for (i = 0; i < NUMEPS; i++) {
@@ -2659,7 +2659,7 @@ Test(scalable, av_insert)
 
 	ret = fi_av_insert(t_av, epname, TOTALEPS,
 			   addresses, FI_SYNC_ERR, err);
-	cr_assert_eq(ret, -FI_EINVAL, "%d", ret);
+	cr_assert((ret != TOTALEPS), "fi_av_insert should have failed but did not.");
 
 	cr_log_info("check for errors\n");
 

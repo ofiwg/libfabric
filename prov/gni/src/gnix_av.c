@@ -159,7 +159,7 @@ static int table_insert(struct gnix_fid_av *av_priv, const void *addr,
 			void *context)
 {
 	struct gnix_ep_name ep_name;
-	int ret = count;
+	int ret = FI_SUCCESS, success_cnt = 0;
 	size_t index, i;
 	int *entry_err = context;
 
@@ -171,41 +171,47 @@ static int table_insert(struct gnix_fid_av *av_priv, const void *addr,
 
 	for (index = av_priv->count, i = 0; i < count; index++, i++) {
 		ret = _gnix_get_ep_name(addr, i, &ep_name, av_priv->domain);
-		if (ret != FI_SUCCESS)
-			return ret;
 
 		/* check if this ep_name fits in the av context bits */
-		if (ep_name.name_type & GNIX_EPN_TYPE_SEP) {
+		if ((ret == FI_SUCCESS) &&
+			(ep_name.name_type & GNIX_EPN_TYPE_SEP)) {
 			if ((1 << av_priv->rx_ctx_bits) < ep_name.rx_ctx_cnt) {
-				if (flags & FI_SYNC_ERR) {
-					entry_err[i] = -FI_EINVAL;
-					fi_addr[i] = FI_ADDR_NOTAVAIL;
-					ret = -FI_EINVAL;
-					continue;
-				}
+				fprintf(stderr, "rx_ctx_bits %d ep.name.rx_ctx_cnt = %d\n", (1 << av_priv->rx_ctx_bits), ep_name.rx_ctx_cnt);
+				ret = -FI_EINVAL;
 				GNIX_DEBUG(FI_LOG_AV, "ep_name doesn't fit "
 					"into the av context bits\n");
-				return -FI_EINVAL;
 			}
 		}
 
-		av_priv->table[index].gnix_addr = ep_name.gnix_addr;
-		av_priv->valid_entry_vec[index] = 1;
-		av_priv->table[index].name_type = ep_name.name_type;
-		av_priv->table[index].cookie = ep_name.cookie;
-		av_priv->table[index].rx_ctx_cnt = ep_name.rx_ctx_cnt;
-		av_priv->table[index].cm_nic_cdm_id =
-			ep_name.cm_nic_cdm_id;
-		av_priv->table[index].key_offset = ep_name.key_offset;
-		if (fi_addr)
-			fi_addr[i] = index;
-
-		if (flags & FI_SYNC_ERR) {
-			entry_err[i] = FI_SUCCESS;
+		if (ret != FI_SUCCESS) {
+			if (flags & FI_SYNC_ERR) {
+				entry_err[i] = ret;
+				if (fi_addr)
+					fi_addr[i] = FI_ADDR_NOTAVAIL;
+				continue;
+			} else {
+				return -FI_EINVAL;
+			}
+		} else {
+			if (flags & FI_SYNC_ERR)
+				entry_err[i] = FI_SUCCESS;
+			av_priv->table[index].gnix_addr = ep_name.gnix_addr;
+			av_priv->valid_entry_vec[index] = 1;
+			av_priv->table[index].name_type = ep_name.name_type;
+			av_priv->table[index].cookie = ep_name.cookie;
+			av_priv->table[index].rx_ctx_cnt = ep_name.rx_ctx_cnt;
+			av_priv->table[index].cm_nic_cdm_id =
+				ep_name.cm_nic_cdm_id;
+			av_priv->table[index].key_offset = ep_name.key_offset;
+			if (fi_addr)
+				fi_addr[i] = index;
+			success_cnt++;
 		}
+
 	}
 
-	av_priv->count += count;
+	av_priv->count += success_cnt;
+	ret = success_cnt;
 
 	return ret;
 }
