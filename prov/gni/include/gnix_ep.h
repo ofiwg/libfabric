@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2019 Cray Inc. All rights reserved.
  * Copyright (c) 2015-2018 Los Alamos National Security, LLC.
  *                         All rights reserved.
  *
@@ -415,6 +415,42 @@ int gnix_pep_bind(fid_t fid, struct fid *bfid, uint64_t flags);
  * @return -FI_ENONT	no entry to cancel
  */
 ssize_t gnix_cancel(fid_t fid, void *context);
+
+/**
+ * Get an endpoint option
+ *
+ * @param[in] fid       the endpoint
+ * @param[in] level     the option level, must be FI_OPT_ENDPOINT
+ * @param[in] optname   the option name
+ * @param[out] optval   the value of the named option
+ * @param[out] optlen   the width of the value in bytes
+ *
+ * @return FI_SUCCESS	upon successfully returning the value of the option
+ * @return -FI_EINVAL   missing or invalid fid, optval, and/or optlen
+ * @return -FI_ENOENT   unsupported context type
+ * @return -FI_ENOPROTOOPT  unknown option level or name
+ */
+
+int gnix_getopt(fid_t fid, int level, int optname,
+                                    void *optval, size_t *optlen);
+
+/**
+ * Set an endpoint option
+ *
+ * @param[in] fid       the endpoint
+ * @param[in] level     the option level, must be FI_OPT_ENDPOINT
+ * @param[in] optname   the option name
+ * @param[out] optval   the value to set in the named option
+ * @param[out] optlen   the width of the value in bytes
+ *
+ * @return FI_SUCCESS	upon successfully setting the value of the option
+ * @return -FI_EINVAL   missing or invalid fid, optval, and/or optlen
+ * @return -FI_ENOENT   unsupported context type
+ * @return -FI_ENOPROTOOPT  unknown option level or name
+ */
+
+int gnix_setopt(fid_t fid, int level, int optname,
+                                    const void *optval, size_t optlen);
 
 DIRECT_FN int gnix_ep_atomic_valid(struct fid_ep *ep,
 				   enum fi_datatype datatype,
