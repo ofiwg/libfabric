@@ -105,12 +105,8 @@ The verbs provider features a memory registration cache. This speeds up memory
 registration calls from applications by caching registrations of frequently used
 memory regions. The user can control the maximum combined size of all cache entries
 and the maximum number of cache entries with the environment variables
-FI_VERBS_MR_MAX_CACHED_SIZE and FI_VERBS_MR_MAX_CACHED_CNT respectively. Look below
-in the environment variables section for details.
-
-Note:
-The memory registration cache framework hooks into alloc and free calls to monitor
-the memory regions. If this doesn't work as expected caching would not be optimal.
+FI_MR_CACHE_MAX_SIZE and FI_MR_CACHE_MAX_COUNT respectively. See fi_mr(3) for
+more details.
 
 # LIMITATIONS
 
@@ -197,12 +193,6 @@ The verbs provider checks for the following environment variables.
 *FI_VERBS_IFACE*
 : The prefix or the full name of the network interface associated with the verbs
   device (default: ib)
-
-*FI_VERBS_MR_MAX_CACHED_CNT*
-: Maximum number of cache entries (default: 4096)
-
-*FI_VERBS_MR_MAX_CACHED_SIZE*
-: Maximum total size of cache entries (default: 4 GB)
 
 *FI_VERBS_PREFER_XRC*
 : Prioritize XRC transport fi_info before RC transport fi_info (default: 0, RC fi_info will be before XRC fi_info)

@@ -192,6 +192,14 @@ int ofi_mr_verify(struct ofi_mr_map *map, ssize_t len,
  * Memory registration cache
  */
 
+struct ofi_mr_cache_params {
+	size_t				max_cnt;
+	size_t				max_size;
+	int				merge_regions;
+};
+
+extern struct ofi_mr_cache_params	cache_params;
+
 struct ofi_mr_entry {
 	struct iovec			iov;
 	unsigned int			cached:1;
@@ -231,9 +239,6 @@ struct ofi_mr_cache {
 	struct util_domain		*domain;
 	struct ofi_mem_monitor		*monitor;
 	struct dlist_entry		notify_entry;
-	size_t				max_cached_cnt;
-	size_t				max_cached_size;
-	int				merge_regions;
 	size_t				entry_data_size;
 
 	struct ofi_mr_storage		storage;

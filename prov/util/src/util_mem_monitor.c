@@ -46,6 +46,33 @@ void ofi_monitor_init(void)
 {
 	fastlock_init(&uffd_monitor->lock);
 	dlist_init(&uffd_monitor->list);
+
+	fi_param_define(NULL, "mr_cache_max_size", FI_PARAM_SIZE_T,
+			"Defines the total number of bytes for all memory"
+			" regions that may be tracked by the MR cache."
+			" Setting this will reduce the amount of memory"
+			" not actively in use that may be registered."
+			" (default: 0 no limit is enforced)");
+	fi_param_define(NULL, "mr_cache_max_count", FI_PARAM_SIZE_T,
+			"Defines the total number of memory regions that"
+			" may be store in the cache.  Setting this will"
+			" reduce the number of registered regions, regardless"
+			" of their size, stored in the cache.  Setting this"
+			" to zero will disable MR caching.  (default: 1024)");
+	fi_param_define(NULL, "mr_cache_merge_regions", FI_PARAM_BOOL,
+			"If set to true, overlapping or adjacent memory"
+			" regions will be combined into a single, larger"
+			" region.  Merging regions can reduce the cache"
+			" memory footprint, but can negatively impact"
+			" performance in some situations.  (default: false)");
+
+	fi_param_get_size_t(NULL, "mr_cache_max_size", &cache_params.max_size);
+	fi_param_get_size_t(NULL, "mr_cache_max_count", &cache_params.max_cnt);
+	fi_param_get_bool(NULL, "mr_cache_merge_regions",
+			  &cache_params.merge_regions);
+
+	if (!cache_params.max_size)
+		cache_params.max_size = SIZE_MAX;
 }
 
 void ofi_monitor_cleanup(void)

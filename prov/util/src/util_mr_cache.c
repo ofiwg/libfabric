@@ -38,6 +38,11 @@
 #include <ofi_mr.h>
 #include <ofi_list.h>
 
+
+struct ofi_mr_cache_params cache_params = {
+	.max_cnt = 1024,
+};
+
 static int util_mr_find_within(void *a, void *b)
 {
 	struct iovec *iov1 = a, *iov2 = b;
@@ -75,7 +80,7 @@ static void util_mr_free_entry(struct ofi_mr_cache *cache,
 	 * As a result, we remain subscribed.  This may result in extra
 	 * notification events, but is harmless to correct operation.
 	 */
-	if (entry->subscribed && cache->merge_regions) {
+	if (entry->subscribed && cache_params.merge_regions) {
 		ofi_monitor_unsubscribe(cache->monitor, entry->iov.iov_base,
 					entry->iov.iov_len);
 		entry->subscribed = 0;
@@ -126,7 +131,7 @@ void ofi_mr_cache_notify(struct ofi_mr_cache *cache, const void *addr, size_t le
 	/* See comment in util_mr_free_entry.  If we're not merging address
 	 * ranges, we can only safely unsubscribe for the reported range.
 	 */
-	if (!cache->merge_regions)
+	if (!cache_params.merge_regions)
 		ofi_monitor_unsubscribe(cache->monitor, addr, len);
 }
 
@@ -205,8 +210,8 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct iovec *iov,
 	}
 
 	cache->cached_size += iov->iov_len;
-	if ((++cache->cached_cnt > cache->max_cached_cnt) ||
-	    (cache->cached_size > cache->max_cached_size)) {
+	if ((++cache->cached_cnt > cache_params.max_cnt) ||
+	    (cache->cached_size > cache_params.max_size)) {
 		(*entry)->cached = 0;
 	} else {
 		if (cache->storage.insert(&cache->storage,
@@ -219,8 +224,9 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct iovec *iov,
 		ret = ofi_monitor_subscribe(cache->monitor, iov->iov_base,
 					    iov->iov_len);
 		if (ret)
-			goto err;
-		(*entry)->subscribed = 1;
+			util_mr_uncache_entry(cache, *entry);
+		else
+			(*entry)->subscribed = 1;
 	}
 
 	return 0;
@@ -279,8 +285,8 @@ int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *att
 	fastlock_acquire(&cache->monitor->lock);
 	cache->search_cnt++;
 
-	while (((cache->cached_cnt >= cache->max_cached_cnt) ||
-		(cache->cached_size >= cache->max_cached_size)) &&
+	while (((cache->cached_cnt >= cache_params.max_cnt) ||
+		(cache->cached_size >= cache_params.max_size)) &&
 	       mr_cache_flush(cache))
 		;
 
@@ -385,7 +391,7 @@ static int ofi_mr_rbt_erase(struct ofi_mr_storage *storage,
 
 static int ofi_mr_cache_init_rbt(struct ofi_mr_cache *cache)
 {
-	cache->storage.storage = rbtNew(cache->merge_regions ?
+	cache->storage.storage = rbtNew(cache_params.merge_regions ?
 					   util_mr_find_overlap :
 					   util_mr_find_within);
 	if (!cache->storage.storage)
@@ -428,6 +434,8 @@ int ofi_mr_cache_init(struct util_domain *domain,
 	int ret;
 
 	assert(cache->add_region && cache->delete_region);
+	if (!cache_params.max_cnt)
+		return -FI_ENOSPC;
 
 	dlist_init(&cache->lru_list);
 	cache->cached_cnt = 0;
@@ -443,8 +451,6 @@ int ofi_mr_cache_init(struct util_domain *domain,
 	if (ret)
 		goto dec;
 
-	if (!cache->max_cached_size)
-		cache->max_cached_size = SIZE_MAX;
 	ret = ofi_monitor_add_cache(monitor, cache);
 	if (ret)
 		goto destroy;
@@ -452,7 +458,7 @@ int ofi_mr_cache_init(struct util_domain *domain,
 	ret = ofi_bufpool_create(&cache->entry_pool,
 				 sizeof(struct ofi_mr_entry) +
 				 cache->entry_data_size,
-				 16, cache->max_cached_cnt, 0);
+				 16, cache_params.max_cnt, 0);
 	if (ret)
 		goto del;
 
