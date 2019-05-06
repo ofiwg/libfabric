@@ -141,7 +141,7 @@ int ofi_monitor_subscribe(struct ofi_mem_monitor *monitor,
 	ret = monitor->subscribe(monitor, addr, len);
 	if (OFI_UNLIKELY(ret)) {
 		FI_WARN(&core_prov, FI_LOG_MR,
-			"Failed (ret = %d) to monitor addr=%p len=%zu",
+			"Failed (ret = %d) to monitor addr=%p len=%zu\n",
 			ret, addr, len);
 	}
 	return ret;
