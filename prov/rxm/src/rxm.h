@@ -999,7 +999,7 @@ rxm_ep_prepare_tx(struct rxm_ep *rxm_ep, fi_addr_t dest_addr,
 	}
 
 	if (OFI_UNLIKELY(!dlist_empty(&(*rxm_conn)->deferred_tx_queue))) {
-		rxm_ep_progress(&rxm_ep->util_ep);
+		rxm_ep_do_progress(&rxm_ep->util_ep);
 		if (!dlist_empty(&(*rxm_conn)->deferred_tx_queue))
 			return -FI_EAGAIN;
 	}

@@ -106,10 +106,7 @@ int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 
 		if (hints->domain_attr) {
 			core_info->domain_attr->caps |= hints->domain_attr->caps;
-			if (rxm_needs_atomic_progress(hints))
-				core_info->domain_attr->threading = FI_THREAD_SAFE;
-			else
-				core_info->domain_attr->threading = hints->domain_attr->threading;
+			core_info->domain_attr->threading = hints->domain_attr->threading;
 		}
 		if (hints->tx_attr) {
 			core_info->tx_attr->msg_order = hints->tx_attr->msg_order;
@@ -262,6 +259,8 @@ static void rxm_alter_info(const struct fi_info *hints, struct fi_info *info)
 					hints->ep_attr->mem_tag_format;
 			}
 		}
+		if (cur->domain_attr->data_progress == FI_PROGRESS_AUTO)
+			cur->domain_attr->threading = FI_THREAD_SAFE;
 	}
 }
 
