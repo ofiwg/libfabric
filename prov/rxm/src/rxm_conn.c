@@ -597,9 +597,14 @@ int rxm_cmap_process_connreq(struct rxm_cmap *cmap, void *addr,
 	case RXM_CMAP_CONNREQ_RECV:
 		*handle_ret = handle;
 		break;
+	case RXM_CMAP_SHUTDOWN:
+		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL, "handle :%p marked for "
+			"deletion / shutdown, reject connection\n", handle);
+		ret = -FI_EOPBADSTATE;
+		break;
 	default:
 		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL,
-		       "Invalid cmap state\n");
+		       "invalid handle state: %d\n", handle->state);
 		assert(0);
 		ret = -FI_EOPBADSTATE;
 	}
