@@ -112,18 +112,22 @@ int cxip_map(struct cxip_domain *dom, void *buf, unsigned long len,
 	     struct cxip_md **md)
 {
 	int ret;
-	const struct iovec iov = {
-		/* TODO align buffer inside cache so driver can control mapping
-		 * size.
-		 */
-		.iov_base = (void *)FLOOR(buf, C_PAGE_SIZE),
-		.iov_len = CEILING(len, C_PAGE_SIZE),
-	};
+	struct iovec iov;
+	unsigned long buf_adj;
 	const struct fi_mr_attr attr = {
 		.iov_count = 1,
 		.mr_iov = &iov,
 	};
 	struct ofi_mr_entry *entry;
+
+	/* TODO align buffer inside cache so driver can control mapping
+	 * size.
+	 */
+	buf_adj = FLOOR(buf, C_PAGE_SIZE);
+	iov.iov_base = (void *)buf_adj;
+
+	buf_adj = (unsigned long)buf - buf_adj;
+	iov.iov_len = CEILING(len + buf_adj, C_PAGE_SIZE);
 
 	fastlock_acquire(&dom->iomm_lock);
 	ret = ofi_mr_cache_search(&dom->iomm, &attr, &entry);

@@ -433,3 +433,53 @@ Test(rma, writev_failures)
 			cxit_ep_fi_addr, 0, 0, NULL);
 	cr_assert_eq(ret, -FI_EINVAL, "Invalid count return %d", ret);
 }
+
+/* Perform an RMA write spanning a page */
+Test(rma, write_spanning_page)
+{
+	int ret;
+	uint8_t *send_buf;
+	uint8_t *send_addr;
+	int win_len = 0x2000;
+	int send_len = 8;
+	struct mem_region mem_window;
+	int key_val = 0x1f;
+	struct fi_cq_tagged_entry cqe;
+
+	send_buf = calloc(1, win_len);
+	cr_assert_not_null(send_buf, "send_buf alloc failed");
+
+	send_addr = (uint8_t *)FLOOR(send_buf + C_PAGE_SIZE, C_PAGE_SIZE) - 4;
+	memset(send_addr, 0xcc, send_len);
+	printf("buf: %p addr: %p\n", send_buf, send_addr);
+
+	mr_create(win_len, FI_REMOTE_WRITE, 0xa0, key_val, &mem_window);
+	memset(mem_window.mem, 0x33, win_len);
+
+	/* Send 8 bytes from send buffer data to RMA window 0 */
+	ret = fi_write(cxit_ep, send_addr, send_len, NULL, cxit_ep_fi_addr, 0,
+		       key_val, NULL);
+	cr_assert(ret == FI_SUCCESS);
+
+	/* Wait for async event indicating data has been sent */
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+
+	/* Validate event fields */
+	cr_assert(cqe.op_context == NULL, "CQE Context mismatch");
+	cr_assert(cqe.flags == (FI_RMA | FI_WRITE), "CQE flags mismatch (%lx)",
+		  cqe.flags);
+	cr_assert(cqe.len == 0, "Invalid CQE length");
+	cr_assert(cqe.buf == 0, "Invalid CQE address");
+	cr_assert(cqe.data == 0, "Invalid CQE data");
+	cr_assert(cqe.tag == 0, "Invalid CQE tag");
+
+	/* Validate sent data */
+	for (int i = 0; i < send_len; i++)
+		cr_assert_eq(mem_window.mem[i], send_addr[i],
+			     "data mismatch, element: (%d) %02x != %02x\n", i,
+			     mem_window.mem[i], send_addr[i]);
+
+	mr_destroy(&mem_window);
+	free(send_buf);
+}
