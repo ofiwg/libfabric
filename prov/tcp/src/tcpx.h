@@ -172,6 +172,7 @@ struct tcpx_rx_ctx {
 	struct fid_ep		rx_fid;
 	struct slist		rx_queue;
 	struct ofi_bufpool	*buf_pool;
+	uint64_t		op_flags;
 	fastlock_t		lock;
 };
 
