@@ -1322,11 +1322,8 @@ static inline int rxm_msg_ep_recv(struct rxm_rx_buf *rx_buf)
 
 	if (ret != -FI_EAGAIN) {
 		int level = FI_LOG_WARN;
-		rx_buf->conn->handle.cmap->acquire(&rx_buf->conn->handle.cmap->lock);
 		if (rx_buf->conn->handle.state == RXM_CMAP_SHUTDOWN)
 			level = FI_LOG_DEBUG;
-		rx_buf->conn->handle.cmap->release(&rx_buf->conn->handle.cmap->lock);
-
 		FI_LOG(&rxm_prov, level, FI_LOG_EP_CTRL,
 		       "unable to post recv buf: %d\n", ret);
 	}
