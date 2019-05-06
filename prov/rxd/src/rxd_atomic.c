@@ -68,11 +68,7 @@ static struct rxd_x_entry *rxd_tx_entry_init_atomic(struct rxd_ep *ep, fi_addr_t
 	}
 
 	max_inline = rxd_domain->max_inline_msg;
-
-	if (tx_entry->flags & RXD_REMOTE_CQ_DATA) {
-		max_inline -= sizeof(struct rxd_data_hdr);
-		rxd_init_data_hdr(&ptr, tx_entry);
-	}
+	rxd_check_init_cq_data(&ptr, tx_entry, &max_inline);
 
 	if (rma_count > 1 || tx_entry->cq_entry.flags & FI_READ) {
 		max_inline -= sizeof(struct rxd_sar_hdr);
