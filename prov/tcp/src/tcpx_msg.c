@@ -106,8 +106,8 @@ static ssize_t tcpx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	memcpy(&recv_entry->iov[0], &msg->msg_iov[0],
 	       msg->iov_count * sizeof(struct iovec));
 
-	recv_entry->flags = ((tcpx_ep->util_ep.rx_op_flags & FI_COMPLETION) |
-			     flags | FI_MSG | FI_RECV);
+	recv_entry->flags = (tcpx_ep->util_ep.rx_msg_flags | flags |
+			     FI_MSG | FI_RECV);
 	recv_entry->context = msg->context;
 
 	tcpx_queue_recv(tcpx_ep, recv_entry);
