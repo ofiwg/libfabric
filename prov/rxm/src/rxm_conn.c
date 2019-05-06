@@ -1462,15 +1462,9 @@ static int rxm_conn_atomic_progress_eq_cq(struct rxm_ep *rxm_ep,
 	memset(entry, 0, RXM_MSG_EQ_ENTRY_SZ);
 
 	while(1) {
-		/* Comply with restricted threading levels that MSG provider
-		 * may have been configured with */
-		if (rxm_ep->msg_info->domain_attr->threading != FI_THREAD_SAFE)
-			rxm_ep->cmap->acquire(&rxm_ep->cmap->lock);
-
+		ofi_ep_lock_acquire(&rxm_ep->util_ep);
 		again = fi_trywait(rxm_fabric->msg_fabric, fids, 2);
-
-		if (rxm_ep->msg_info->domain_attr->threading != FI_THREAD_SAFE)
-			rxm_ep->cmap->release(&rxm_ep->cmap->lock);
+		ofi_ep_lock_release(&rxm_ep->util_ep);
 
 		if (!again) {
 			fds[0].revents = 0;
