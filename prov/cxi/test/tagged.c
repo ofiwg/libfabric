@@ -1173,13 +1173,13 @@ void do_tagged(uint8_t *send_buf, size_t send_len, uint64_t send_tag,
 		cr_assert(err_cqe.flags == (FI_TAGGED | FI_RECV),
 			  "Error RX CQE flags mismatch");
 		cr_assert(err_cqe.len == recv_len,
-			  "Invalid Error RX CQE length, got: %d exp: %d",
+			  "Invalid Error RX CQE length, got: %ld exp: %ld",
 			  err_cqe.len, recv_len);
 		cr_assert(err_cqe.buf == 0, "Invalid Error RX CQE address");
 		cr_assert(err_cqe.data == 0, "Invalid Error RX CQE data");
 		cr_assert(err_cqe.tag == send_tag, "Invalid Error RX CQE tag");
 		cr_assert(err_cqe.olen == (send_len - recv_len),
-			  "Invalid Error RX CQE olen, got: %d exp: %d",
+			  "Invalid Error RX CQE olen, got: %ld exp: %ld",
 			  err_cqe.olen, send_len - recv_len);
 		cr_assert(err_cqe.err == FI_EMSGSIZE,
 			  "Invalid Error RX CQE code\n");
@@ -1217,7 +1217,7 @@ void do_tagged(uint8_t *send_buf, size_t send_len, uint64_t send_tag,
 			cmp = send_buf[i];
 
 		cr_expect_eq(recv_buf[i], cmp,
-			     "data mismatch, len: %d, element[%d], exp=0x%x saw=0x%x, err=%d\n",
+			     "data mismatch, len: %ld, element[%d], exp=0x%x saw=0x%x, err=%d\n",
 			     recv_len, i, cmp, recv_buf[i], err++);
 		if (err >= 10)
 			break;
