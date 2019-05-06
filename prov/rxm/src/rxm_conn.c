@@ -823,21 +823,23 @@ static int rxm_msg_ep_open(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 			util_domain);
 	ret = fi_endpoint(rxm_domain->msg_domain, msg_info, &msg_ep, context);
 	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to create msg_ep\n");
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+			"unable to create msg_ep: %d\n", ret);
 		return ret;
 	}
 
 	ret = fi_ep_bind(msg_ep, &rxm_ep->msg_eq->fid, 0);
 	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to bind msg EP to EQ\n");
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+			"unable to bind msg EP to EQ: %d\n", ret);
 		goto err;
 	}
 
 	if (rxm_ep->srx_ctx) {
 		ret = fi_ep_bind(msg_ep, &rxm_ep->srx_ctx->fid, 0);
 		if (ret) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-				"Unable to bind msg EP to shared RX ctx\n");
+			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "unable to bind msg "
+				"EP to shared RX ctx: %d\n", ret);
 			goto err;
 		}
 	}
@@ -846,13 +848,14 @@ static int rxm_msg_ep_open(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 	ret = fi_ep_bind(msg_ep, &rxm_ep->msg_cq->fid, FI_TRANSMIT | FI_RECV);
 	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-				"Unable to bind msg_ep to msg_cq\n");
+				"unable to bind msg_ep to msg_cq: %d\n", ret);
 		goto err;
 	}
 
 	ret = fi_enable(msg_ep);
 	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to enable msg_ep\n");
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+			"unable to enable msg_ep: %d\n", ret);
 		goto err;
 	}
 
@@ -1180,6 +1183,8 @@ static int rxm_conn_handle_notify(struct fi_eq_entry *eq_entry)
 
 	if ((enum rxm_cmap_signal)eq_entry->data == RXM_CMAP_FREE) {
 		handle = eq_entry->context;
+		assert(handle->state == RXM_CMAP_SHUTDOWN);
+		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "freeing handle: %p\n", handle);
 		cmap = handle->cmap;
 		if (handle->peer) {
 			dlist_remove(&handle->peer->entry);
@@ -1191,7 +1196,7 @@ static int rxm_conn_handle_notify(struct fi_eq_entry *eq_entry)
 		rxm_conn_free(handle);
 		return 0;
 	} else {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unknown cmap signal\n");
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "unknown cmap signal\n");
 		assert(0);
 		return -FI_EOTHER;
 	}
