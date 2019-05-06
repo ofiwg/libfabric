@@ -758,7 +758,7 @@ int ofi_check_rx_attr(const struct fi_provider *prov,
 		return -FI_ENODATA;
 	}
 
-	if (prov_attr->op_flags & ~(prov_attr->op_flags)) {
+	if (user_attr->op_flags & ~(prov_attr->op_flags)) {
 		FI_INFO(prov, FI_LOG_CORE, "op_flags not supported\n");
 		FI_INFO_CHECK(prov, prov_attr, user_attr, op_flags,
 			     FI_TYPE_OP_FLAGS);
@@ -861,7 +861,7 @@ int ofi_check_tx_attr(const struct fi_provider *prov,
 		return -FI_ENODATA;
 	}
 
-	if (prov_attr->op_flags & ~(prov_attr->op_flags)) {
+	if (user_attr->op_flags & ~(prov_attr->op_flags)) {
 		FI_INFO(prov, FI_LOG_CORE, "op_flags not supported\n");
 		FI_INFO_CHECK(prov, prov_attr, user_attr, op_flags,
 			     FI_TYPE_OP_FLAGS);
