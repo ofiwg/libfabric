@@ -338,14 +338,6 @@ static inline struct rxd_sar_hdr *rxd_get_sar_hdr(struct rxd_pkt_entry *pkt_entr
 		sizeof(struct rxd_base_hdr));
 }
 
-static inline struct rxd_tag_hdr *rxd_get_tag_hdr(struct rxd_pkt_entry *pkt_entry)
-{
-	struct rxd_base_hdr *hdr = rxd_get_base_hdr(pkt_entry);
-	
-	return (struct rxd_tag_hdr *) ((char *) hdr + sizeof(*hdr) +
-		(hdr->flags & RXD_INLINE ? 0 : sizeof(struct rxd_sar_hdr)));
-}
-
 static inline void rxd_set_tx_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 {
 	pkt_entry->pkt = (void *) ((char *) pkt_entry +
