@@ -163,6 +163,7 @@ void fi_ibv_log_ep_conn(struct fi_ibv_xrc_ep *ep, char *desc)
 			  ep, ep->conn_setup->rsvd_tgt_qpn->qp_num);
 }
 
+/* Caller must hold eq:lock */
 void fi_ibv_free_xrc_conn_setup(struct fi_ibv_xrc_ep *ep, int disconnect)
 {
 	assert(ep->conn_setup);
@@ -221,13 +222,6 @@ int fi_ibv_connect_xrc(struct fi_ibv_xrc_ep *ep, struct sockaddr *addr,
 	if (peer_addr)
 		ofi_straddr_dbg(&fi_ibv_prov, FI_LOG_FABRIC,
 				"XRC connect dest_addr", peer_addr);
-
-	if (!reciprocal) {
-		ep->conn_setup = calloc(1, sizeof(*ep->conn_setup));
-		if (!ep->conn_setup)
-			return -FI_ENOMEM;
-		ep->conn_setup->conn_tag = VERBS_CONN_TAG_INVALID;
-	}
 
 	fastlock_acquire(&domain->xrc.ini_mgmt_lock);
 	ret = fi_ibv_get_shared_ini_conn(ep, &ep->ini_conn);
