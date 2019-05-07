@@ -59,14 +59,14 @@ static int rxc_msg_init(struct cxip_rxc *rxc)
 	cmd.set_state.ptlte_index = rxc->rx_pte->pte->ptn;
 	cmd.set_state.ptlte_state = C_PTLTE_ENABLED;
 
-	ret = cxi_cq_emit_target(rxc->rx_cmdq, &cmd);
+	ret = cxi_cq_emit_target(rxc->rx_cmdq->dev_cmdq, &cmd);
 	if (ret) {
 		/* This is a bug, we have exclusive access to this CMDQ. */
 		CXIP_LOG_ERROR("Failed to enqueue command: %d\n", ret);
 		goto free_rx_pte;
 	}
 
-	cxi_cq_ring(rxc->rx_cmdq);
+	cxi_cq_ring(rxc->rx_cmdq->dev_cmdq);
 
 	/* Wait for PTE state change */
 	do {
@@ -106,7 +106,6 @@ static int rxc_msg_fini(struct cxip_rxc *rxc)
 int cxip_rxc_enable(struct cxip_rxc *rxc)
 {
 	int ret = FI_SUCCESS;
-	int tmp;
 	struct cxi_cq_alloc_opts opts;
 
 	fastlock_acquire(&rxc->lock);
@@ -130,7 +129,7 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 	memset(&opts, 0, sizeof(opts));
 	opts.count = 64;
 	opts.is_transmit = 0;
-	ret = cxil_alloc_cmdq(rxc->domain->dev_if->if_lni, NULL, &opts,
+	ret = cxip_cmdq_alloc(rxc->domain->dev_if, NULL, &opts,
 			      &rxc->rx_cmdq);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Unable to allocate RX CMDQ, ret: %d\n", ret);
@@ -143,7 +142,7 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 	opts.count = 64;
 	opts.is_transmit = 1;
 	opts.lcid = rxc->domain->dev_if->cps[0]->lcid;
-	ret = cxil_alloc_cmdq(rxc->domain->dev_if->if_lni, NULL, &opts,
+	ret = cxip_cmdq_alloc(rxc->domain->dev_if, NULL, &opts,
 			      &rxc->tx_cmdq);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Unable to allocate TX CMDQ, ret: %d\n", ret);
@@ -171,13 +170,9 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 	return FI_SUCCESS;
 
 free_tx_cmdq:
-	tmp = cxil_destroy_cmdq(rxc->tx_cmdq);
-	if (tmp)
-		CXIP_LOG_ERROR("Unable to destroy TX CMDQ, ret: %d\n", tmp);
+	cxip_cmdq_free(rxc->tx_cmdq);
 free_rx_cmdq:
-	tmp = cxil_destroy_cmdq(rxc->rx_cmdq);
-	if (tmp)
-		CXIP_LOG_ERROR("Unable to destroy RX CMDQ, ret: %d\n", tmp);
+	cxip_cmdq_free(rxc->rx_cmdq);
 unlock:
 	fastlock_release(&rxc->lock);
 
@@ -206,13 +201,9 @@ static void rxc_disable(struct cxip_rxc *rxc)
 	if (ret)
 		CXIP_LOG_ERROR("rxc_msg_fini returned: %d\n", ret);
 
-	ret = cxil_destroy_cmdq(rxc->rx_cmdq);
-	if (ret)
-		CXIP_LOG_ERROR("Unable to destroy RX CMDQ, ret: %d\n", ret);
+	cxip_cmdq_free(rxc->rx_cmdq);
 
-	ret = cxil_destroy_cmdq(rxc->tx_cmdq);
-	if (ret)
-		CXIP_LOG_ERROR("Unable to destroy TX CMDQ, ret: %d\n", ret);
+	cxip_cmdq_free(rxc->tx_cmdq);
 
 	rxc->enabled = 0;
 unlock:

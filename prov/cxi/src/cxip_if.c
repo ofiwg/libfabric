@@ -104,7 +104,7 @@ int cxip_get_if(uint32_t nic_addr, struct cxip_if **dev_if)
 		memset(&cq_opts, 0, sizeof(cq_opts));
 		cq_opts.count = 64;
 		cq_opts.is_transmit = 0;
-		ret = cxil_alloc_cmdq(if_entry->if_lni, NULL, &cq_opts,
+		ret = cxip_cmdq_alloc(if_entry, NULL, &cq_opts,
 				      &if_entry->mr_cmdq);
 		if (ret != FI_SUCCESS) {
 			CXIP_LOG_DBG("Unable to allocate MR CMDQ, ret: %d\n",
@@ -167,9 +167,7 @@ free_evtq_md:
 free_mr_evtq_buf:
 	free(if_entry->evtq_buf);
 free_mr_cmdq:
-	tmp = cxil_destroy_cmdq(if_entry->mr_cmdq);
-	if (tmp)
-		CXIP_LOG_ERROR("Failed to destroy CMDQ: %d\n", tmp);
+	cxip_cmdq_free(if_entry->mr_cmdq);
 free_cp:
 	tmp = cxil_destroy_cp(if_entry->cps[0]);
 	if (tmp)
@@ -209,9 +207,7 @@ void cxip_put_if(struct cxip_if *dev_if)
 
 		free(dev_if->evtq_buf);
 
-		ret = cxil_destroy_cmdq(dev_if->mr_cmdq);
-		if (ret)
-			CXIP_LOG_ERROR("Failed to destroy CMDQ: %d\n", ret);
+		cxip_cmdq_free(dev_if->mr_cmdq);
 
 		ret = cxil_destroy_cp(dev_if->cps[0]);
 		if (ret)
@@ -491,6 +487,51 @@ int cxip_pte_state_change(struct cxip_if *dev_if, uint32_t pte_num,
 	fastlock_release(&dev_if->lock);
 
 	return -FI_EINVAL;
+}
+
+int cxip_cmdq_alloc(struct cxip_if *dev_if, struct cxi_evtq *evtq,
+		    struct cxi_cq_alloc_opts *cq_opts,
+		    struct cxip_cmdq **cmdq)
+{
+	int ret;
+	struct cxi_cmdq *dev_cmdq;
+	struct cxip_cmdq *new_cmdq;
+
+	new_cmdq = malloc(sizeof(*new_cmdq));
+	if (!new_cmdq) {
+		CXIP_LOG_ERROR("Unable to allocate CMDQ structure\n");
+		return -FI_ENOMEM;
+	}
+
+	ret = cxil_alloc_cmdq(dev_if->if_lni, evtq, cq_opts, &dev_cmdq);
+	if (ret) {
+		CXIP_LOG_DBG("cxil_alloc_cmdq() failed, ret: %d\n", ret);
+		ret = -FI_ENOSPC;
+		goto free_cmdq;
+	}
+
+	new_cmdq->dev_cmdq = dev_cmdq;
+	fastlock_init(&new_cmdq->lock);
+	*cmdq = new_cmdq;
+
+	return FI_SUCCESS;
+
+free_cmdq:
+	free(new_cmdq);
+
+	return ret;
+}
+
+void cxip_cmdq_free(struct cxip_cmdq *cmdq)
+{
+	int ret;
+
+	ret = cxil_destroy_cmdq(cmdq->dev_cmdq);
+	if (ret)
+		CXIP_LOG_ERROR("cxil_destroy_cmdq failed, ret: %d\n", ret);
+
+	fastlock_destroy(&cmdq->lock);
+	free(cmdq);
 }
 
 /*

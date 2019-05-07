@@ -294,7 +294,7 @@ struct cxip_if {
 	struct dlist_entry if_doms;	// if_domain list
 	struct dlist_entry ptes;	// PTE list
 	ofi_atomic32_t ref;
-	struct cxi_cmdq *mr_cmdq;	// used for all MR activation
+	struct cxip_cmdq *mr_cmdq;	// used for all MR activation
 	struct cxi_evtq *mr_evtq;	// used for async completion
 	void *evtq_buf;
 	size_t evtq_buf_len;
@@ -320,6 +320,18 @@ struct cxip_pte {
 	struct cxil_pte *pte;		// cxil PTE object
 	struct cxil_pte_map *pte_map;	// cxil PTE mapped object
 	enum c_ptlte_state state;	// Cassini PTE state
+};
+
+/**
+ * Command Queue
+ *
+ * Support structure.
+ *
+ * Created in cxip_cmdq_alloc().
+ */
+struct cxip_cmdq {
+	struct cxi_cmdq *dev_cmdq;
+	fastlock_t lock;
 };
 
 /**
@@ -638,6 +650,7 @@ struct cxip_oflow_buf {
  */
 struct cxip_rxc {
 	struct fid_ep ctx;
+	fastlock_t lock;		// Control ops lock
 
 	uint16_t rx_id;			// SEP index
 	int enabled;
@@ -656,13 +669,12 @@ struct cxip_rxc {
 
 	struct dlist_entry cq_entry;	// attaches to CQ RX list
 	struct dlist_entry ep_list;	// contains EPs using shared context
-	fastlock_t lock;
 
 	struct fi_rx_attr attr;
 
 	struct cxip_pte *rx_pte;
-	struct cxi_cmdq *rx_cmdq;
-	struct cxi_cmdq *tx_cmdq;	// Xmit cmdq for SW Rendezvous
+	struct cxip_cmdq *rx_cmdq;	// RX CMDQ for posting recvs
+	struct cxip_cmdq *tx_cmdq;	// TX CMDQ for Message Gets
 
 	int eager_threshold;
 
@@ -717,12 +729,12 @@ struct cxip_txc {
 
 	struct fi_tx_attr attr;		// attributes
 
-	struct cxi_cmdq *tx_cmdq;	// added during cxip_txc_enable()
+	struct cxip_cmdq *tx_cmdq;	// added during cxip_txc_enable()
 
 	/* Software Rendezvous related structures */
 	struct cxip_pte *rdzv_pte;	// PTE for SW Rendezvous commands
 	int eager_threshold;		// Threshold for eager IOs
-	struct cxi_cmdq *rx_cmdq;	// Target cmdq for Rendezvous buffers
+	struct cxip_cmdq *rx_cmdq;	// Target cmdq for Rendezvous buffers
 	struct cxip_rdzv_ids rdzv_ids;	// Set of Rendezvous IDs to be used
 };
 
@@ -912,6 +924,11 @@ int cxip_pte_alloc(struct cxip_if_domain *if_dom, struct cxi_evtq *evtq,
 void cxip_pte_free(struct cxip_pte *pte);
 int cxip_pte_state_change(struct cxip_if *dev_if, uint32_t pte_num,
 			  enum c_ptlte_state new_state);
+
+int cxip_cmdq_alloc(struct cxip_if *dev_if, struct cxi_evtq *evtq,
+		    struct cxi_cq_alloc_opts *cq_opts,
+		    struct cxip_cmdq **cmdq);
+void cxip_cmdq_free(struct cxip_cmdq *cmdq);
 
 int cxip_parse_addr(const char *node, const char *service,
 		    struct cxip_addr *addr);

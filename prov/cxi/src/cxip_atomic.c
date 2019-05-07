@@ -591,10 +591,10 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 	if (compare)
 		memcpy(&cmd.idc_amo.op2_word1, compare, len);
 
-	fastlock_acquire(&txc->lock);
+	fastlock_acquire(&txc->tx_cmdq->lock);
 
 	/* Issue a CSTATE command */
-	ret = cxi_cq_emit_c_state(txc->tx_cmdq, &state.c_state);
+	ret = cxi_cq_emit_c_state(txc->tx_cmdq->dev_cmdq, &state.c_state);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to issue CSTATE command: %d\n", ret);
 
@@ -604,7 +604,8 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 	}
 
 	/* Issue IDC AMO command */
-	ret = cxi_cq_emit_idc_amo(txc->tx_cmdq, &cmd.idc_amo, result != NULL);
+	ret = cxi_cq_emit_idc_amo(txc->tx_cmdq->dev_cmdq, &cmd.idc_amo,
+				  result != NULL);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to issue IDC AMO command: %d\n", ret);
 
@@ -613,15 +614,15 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 		goto unlock_amo;
 	}
 
-	cxi_cq_ring(txc->tx_cmdq);
+	cxi_cq_ring(txc->tx_cmdq->dev_cmdq);
 
 	/* TODO take reference on EP or context for the outstanding request */
-	fastlock_release(&txc->lock);
+	fastlock_release(&txc->tx_cmdq->lock);
 
 	return FI_SUCCESS;
 
 unlock_amo:
-	fastlock_release(&txc->lock);
+	fastlock_release(&txc->tx_cmdq->lock);
 	cxip_cq_req_free(req);
 
 unmap_amo:

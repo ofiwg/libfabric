@@ -84,14 +84,14 @@ int cxip_mr_enable(struct cxip_mr *mr)
 	cmd.set_state.ptlte_index = mr->pte->ptn;
 	cmd.set_state.ptlte_state = C_PTLTE_ENABLED;
 
-	ret = cxi_cq_emit_target(mr->domain->dev_if->mr_cmdq, &cmd);
+	ret = cxi_cq_emit_target(mr->domain->dev_if->mr_cmdq->dev_cmdq, &cmd);
 	if (ret) {
 		/* This is a bug, we have exclusive access to this CMDQ. */
 		CXIP_LOG_ERROR("Failed to enqueue command: %d\n", ret);
 		goto unmap_buf;
 	}
 
-	cxi_cq_ring(mr->domain->dev_if->mr_cmdq);
+	cxi_cq_ring(mr->domain->dev_if->mr_cmdq->dev_cmdq);
 
 	/* Wait for Enable event */
 	while (!(event = cxi_eq_get_event(mr->domain->dev_if->mr_evtq)))
@@ -128,14 +128,14 @@ int cxip_mr_enable(struct cxip_mr *mr)
 	if (mr->attr.access & FI_REMOTE_READ)
 		cmd.target.op_get = 1;
 
-	ret = cxi_cq_emit_target(mr->domain->dev_if->mr_cmdq, &cmd);
+	ret = cxi_cq_emit_target(mr->domain->dev_if->mr_cmdq->dev_cmdq, &cmd);
 	if (ret) {
 		/* This is a bug, we have exclusive access to this CMDQ. */
 		CXIP_LOG_ERROR("Failed to enqueue command: %d\n", ret);
 		goto unmap_buf;
 	}
 
-	cxi_cq_ring(mr->domain->dev_if->mr_cmdq);
+	cxi_cq_ring(mr->domain->dev_if->mr_cmdq->dev_cmdq);
 
 	/* Wait for link EQ event */
 	while (!(event = cxi_eq_get_event(mr->domain->dev_if->mr_evtq)))
@@ -195,7 +195,7 @@ int cxip_mr_disable(struct cxip_mr *mr)
 	cmd.target.ptlte_index = mr->pte->ptn;
 	cmd.target.buffer_id = buffer_id;
 
-	ret = cxi_cq_emit_target(mr->domain->dev_if->mr_cmdq, &cmd);
+	ret = cxi_cq_emit_target(mr->domain->dev_if->mr_cmdq->dev_cmdq, &cmd);
 	if (ret) {
 		/* This is a provider bug, we have exclusive access to this
 		 * CMDQ.
@@ -204,7 +204,7 @@ int cxip_mr_disable(struct cxip_mr *mr)
 		goto unlock;
 	}
 
-	cxi_cq_ring(mr->domain->dev_if->mr_cmdq);
+	cxi_cq_ring(mr->domain->dev_if->mr_cmdq->dev_cmdq);
 
 	/* Wait for unlink EQ event */
 	while (!(event = cxi_eq_get_event(mr->domain->dev_if->mr_evtq)))

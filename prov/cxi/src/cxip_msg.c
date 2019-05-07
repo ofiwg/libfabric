@@ -26,8 +26,6 @@
  * issue_append_le() - Append a buffer to a PtlTE.
  *
  * TODO: Make common.
- *
- * Caller must hold cmdq lock.
  */
 static int issue_append_le(struct cxil_pte *pte, const void *buf, size_t len,
 			   struct cxip_md *md, enum c_ptl_list list,
@@ -35,7 +33,7 @@ static int issue_append_le(struct cxil_pte *pte, const void *buf, size_t len,
 			   uint64_t ignore_bits, uint32_t match_id,
 			   uint64_t min_free, bool event_success_disable,
 			   bool use_once, bool manage_local, bool no_truncate,
-			   bool op_put, bool op_get, struct cxi_cmdq *cmdq)
+			   bool op_put, bool op_get, struct cxip_cmdq *cmdq)
 {
 	union c_cmdu cmd = {};
 	int rc;
@@ -59,29 +57,32 @@ static int issue_append_le(struct cxil_pte *pte, const void *buf, size_t len,
 	cmd.target.match_id     = match_id;
 	cmd.target.min_free     = min_free;
 
-	rc = cxi_cq_emit_target(cmdq, &cmd);
+	fastlock_acquire(&cmdq->lock);
+
+	rc = cxi_cq_emit_target(cmdq->dev_cmdq, &cmd);
 	if (rc) {
 		CXIP_LOG_DBG("Failed to write Append command: %d\n", rc);
+
+		fastlock_release(&cmdq->lock);
 
 		/* Return error according to Domain Resource Management */
 		return -FI_EAGAIN;
 	}
 
-	cxi_cq_ring(cmdq);
+	cxi_cq_ring(cmdq->dev_cmdq);
+
+	fastlock_release(&cmdq->lock);
 
 	return FI_SUCCESS;
 }
-
 
 /*
  * issue_unlink_le() - Unlink a buffer from a PtlTE.
  *
  * TODO: Make common.
- *
- * Caller must hold cmdq lock.
  */
 static int issue_unlink_le(struct cxil_pte *pte, enum c_ptl_list list,
-			   int buffer_id, struct cxi_cmdq *cmdq)
+			   int buffer_id, struct cxip_cmdq *cmdq)
 {
 	union c_cmdu cmd = {};
 	int rc;
@@ -91,15 +92,21 @@ static int issue_unlink_le(struct cxil_pte *pte, enum c_ptl_list list,
 	cmd.target.ptlte_index  = pte->ptn;
 	cmd.target.buffer_id = buffer_id;
 
-	rc = cxi_cq_emit_target(cmdq, &cmd);
+	fastlock_acquire(&cmdq->lock);
+
+	rc = cxi_cq_emit_target(cmdq->dev_cmdq, &cmd);
 	if (rc) {
 		CXIP_LOG_DBG("Failed to write Append command: %d\n", rc);
+
+		fastlock_release(&cmdq->lock);
 
 		/* Return error according to Domain Resource Management */
 		return -FI_EAGAIN;
 	}
 
-	cxi_cq_ring(cmdq);
+	cxi_cq_ring(cmdq->dev_cmdq);
+
+	fastlock_release(&cmdq->lock);
 
 	return FI_SUCCESS;
 }
@@ -343,10 +350,10 @@ static int issue_rdzv_get(struct cxip_req *req, const union c_event *event)
 		cmd.full_dma.remote_offset = 0;
 	}
 
-	fastlock_acquire(&rxc->lock);
+	fastlock_acquire(&rxc->tx_cmdq->lock);
 
 	/* Issue Rendezvous Get command */
-	ret = cxi_cq_emit_dma(rxc->tx_cmdq, &cmd.full_dma);
+	ret = cxi_cq_emit_dma(rxc->tx_cmdq->dev_cmdq, &cmd.full_dma);
 	if (ret) {
 		CXIP_LOG_ERROR("Failed to queue GET command: %d\n", ret);
 
@@ -357,11 +364,11 @@ static int issue_rdzv_get(struct cxip_req *req, const union c_event *event)
 		goto unlock;
 	}
 
-	cxi_cq_ring(rxc->tx_cmdq);
+	cxi_cq_ring(rxc->tx_cmdq->dev_cmdq);
 
 	ret = FI_SUCCESS;
 unlock:
-	fastlock_release(&rxc->lock);
+	fastlock_release(&rxc->tx_cmdq->lock);
 	return ret;
 }
 
@@ -845,14 +852,14 @@ static void cxip_rxc_eager_fini(struct cxip_rxc *rxc)
 				oflow_buf, list) {
 		cmd.target.buffer_id = oflow_buf->buffer_id;
 
-		ret = cxi_cq_emit_target(rxc->rx_cmdq, &cmd);
+		ret = cxi_cq_emit_target(rxc->rx_cmdq->dev_cmdq, &cmd);
 		if (ret) {
 			/* TODO handle insufficient CMDQ space */
 			CXIP_LOG_ERROR("Failed to enqueue command: %d\n", ret);
 		}
 	}
 
-	cxi_cq_ring(rxc->rx_cmdq);
+	cxi_cq_ring(rxc->rx_cmdq->dev_cmdq);
 
 	/* Wait for all overflow buffers to be unlinked */
 	do {
@@ -1509,9 +1516,10 @@ static void cxip_send_long_cb(struct cxip_req *req, const union c_event *event)
 		}
 
 		/* The send buffer LE is linked. Perform Put of the payload. */
-		fastlock_acquire(&txc->lock);
+		fastlock_acquire(&txc->tx_cmdq->lock);
 
-		ret = cxi_cq_emit_dma(txc->tx_cmdq, &req->send.cmd.full_dma);
+		ret = cxi_cq_emit_dma(txc->tx_cmdq->dev_cmdq,
+				      &req->send.cmd.full_dma);
 		if (ret) {
 			CXIP_LOG_ERROR("Failed to enqueue PUT: %d\n", ret);
 
@@ -1520,9 +1528,9 @@ static void cxip_send_long_cb(struct cxip_req *req, const union c_event *event)
 			goto rdzv_unlink_le;
 		}
 
-		cxi_cq_ring(txc->tx_cmdq);
+		cxi_cq_ring(txc->tx_cmdq->dev_cmdq);
 
-		fastlock_release(&txc->lock);
+		fastlock_release(&txc->tx_cmdq->lock);
 
 		CXIP_LOG_DBG("Enqueued Put: %p\n", req);
 		return;
@@ -1535,14 +1543,11 @@ static void cxip_send_long_cb(struct cxip_req *req, const union c_event *event)
 			/* Save the error and clean up operation. */
 			req->send.event_failure = event_rc;
 
-			fastlock_acquire(&txc->lock);
 rdzv_unlink_le:
 			issue_unlink_le(txc->rdzv_pte->pte,
 					C_PTL_LIST_PRIORITY,
 					req->req_id,
 					txc->rx_cmdq);
-
-			fastlock_release(&txc->lock);
 		} else if (event->init_short.ptl_list == C_PTL_LIST_PRIORITY) {
 			CXIP_LOG_DBG("Put Acked (Priority): %p\n", req);
 
@@ -1550,12 +1555,10 @@ rdzv_unlink_le:
 			 * buffer LE is unneeded.
 			 */
 			if (!txc->ep_obj->rdzv_offload) {
-				fastlock_acquire(&txc->lock);
 				issue_unlink_le(txc->rdzv_pte->pte,
 						C_PTL_LIST_PRIORITY,
 						req->req_id,
 						txc->rx_cmdq);
-				fastlock_release(&txc->lock);
 
 				/* Wait for the Unlink event */
 				req->send.complete_on_unlink = 1;
@@ -1784,10 +1787,10 @@ static ssize_t _cxip_send_eager(struct cxip_txc *txc, union c_cmdu *cmd)
 {
 	int ret;
 
-	fastlock_acquire(&txc->lock);
+	fastlock_acquire(&txc->tx_cmdq->lock);
 
 	/* Issue Eager Put command */
-	ret = cxi_cq_emit_dma(txc->tx_cmdq, &cmd->full_dma);
+	ret = cxi_cq_emit_dma(txc->tx_cmdq->dev_cmdq, &cmd->full_dma);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to write DMA command: %d\n", ret);
 
@@ -1796,17 +1799,17 @@ static ssize_t _cxip_send_eager(struct cxip_txc *txc, union c_cmdu *cmd)
 		goto unlock;
 	}
 
-	cxi_cq_ring(txc->tx_cmdq);
+	cxi_cq_ring(txc->tx_cmdq->dev_cmdq);
 
 	/* TODO take reference on EP or context for the outstanding
 	 * request
 	 */
-	fastlock_release(&txc->lock);
+	fastlock_release(&txc->tx_cmdq->lock);
 
 	return FI_SUCCESS;
 
 unlock:
-	fastlock_release(&txc->lock);
+	fastlock_release(&txc->tx_cmdq->lock);
 
 	return ret;
 }

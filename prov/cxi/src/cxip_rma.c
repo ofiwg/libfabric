@@ -163,9 +163,9 @@ static ssize_t _cxip_rma_op(enum cxip_rma_op op, struct fid_ep *ep,
 
 	/* Issue command */
 
-	fastlock_acquire(&txc->lock);
+	fastlock_acquire(&txc->tx_cmdq->lock);
 
-	ret = cxi_cq_emit_dma(txc->tx_cmdq, &cmd.full_dma);
+	ret = cxi_cq_emit_dma(txc->tx_cmdq->dev_cmdq, &cmd.full_dma);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to write DMA command: %d\n", ret);
 
@@ -174,15 +174,15 @@ static ssize_t _cxip_rma_op(enum cxip_rma_op op, struct fid_ep *ep,
 		goto unlock_op;
 	}
 
-	cxi_cq_ring(txc->tx_cmdq);
+	cxi_cq_ring(txc->tx_cmdq->dev_cmdq);
 
 	/* TODO take reference on EP or context for the outstanding request */
-	fastlock_release(&txc->lock);
+	fastlock_release(&txc->tx_cmdq->lock);
 
 	return FI_SUCCESS;
 
 unlock_op:
-	fastlock_release(&txc->lock);
+	fastlock_release(&txc->tx_cmdq->lock);
 	cxip_cq_req_free(req);
 unmap_op:
 	cxip_unmap(md);
