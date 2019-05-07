@@ -67,8 +67,8 @@ int efa_mr_cache_entry_reg(struct ofi_mr_cache *cache,
 	md->mr_fid.fid.fclass = FI_CLASS_MR;
 	md->mr_fid.fid.context = NULL;
 
-	md->mr = efa_cmd_reg_mr(md->domain->pd, entry->iov.iov_base,
-				entry->iov.iov_len, fi_ibv_access);
+	md->mr = efa_cmd_reg_mr(md->domain->pd, entry->info.iov.iov_base,
+				entry->info.iov.iov_len, fi_ibv_access);
 	if (!md->mr) {
 		EFA_WARN_ERRNO(FI_LOG_MR, "efa_cmd_reg_mr", errno);
 		return -errno;

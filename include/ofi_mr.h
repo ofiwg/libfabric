@@ -47,6 +47,11 @@
 #include <ofi_tree.h>
 
 
+struct ofi_mr_info {
+	struct iovec iov;
+};
+
+
 #define OFI_MR_BASIC_MAP (FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_VIRT_ADDR)
 
 /* FI_LOCAL_MR is valid in pre-libfaric-1.5 and can be valid in
@@ -201,7 +206,7 @@ struct ofi_mr_cache_params {
 extern struct ofi_mr_cache_params	cache_params;
 
 struct ofi_mr_entry {
-	struct iovec			iov;
+	struct ofi_mr_info		info;
 	unsigned int			cached:1;
 	unsigned int			subscribed:1;
 	int				use_cnt;
@@ -220,14 +225,14 @@ struct ofi_mr_storage {
 	void				*storage;
 
 	struct ofi_mr_entry *		(*find)(struct ofi_mr_storage *storage,
-						const struct iovec *key);
+						const struct ofi_mr_info *key);
 	struct ofi_mr_entry *		(*overlap)(struct ofi_mr_storage *storage,
 						const struct iovec *key);
 	int				(*insert)(struct ofi_mr_storage *storage,
-						  struct iovec *key,
-						  struct ofi_mr_entry *entry);
+						struct ofi_mr_info *key,
+						struct ofi_mr_entry *entry);
 	int				(*erase)(struct ofi_mr_storage *storage,
-						 struct ofi_mr_entry *entry);
+						struct ofi_mr_entry *entry);
 	void				(*destroy)(struct ofi_mr_storage *storage);
 };
 

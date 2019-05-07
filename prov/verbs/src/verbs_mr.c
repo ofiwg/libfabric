@@ -217,8 +217,8 @@ int fi_ibv_mr_cache_add_region(struct ofi_mr_cache *cache,
 
 	return fi_ibv_mr_reg_common(md, IBV_ACCESS_LOCAL_WRITE |
 			IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_ATOMIC |
-			IBV_ACCESS_REMOTE_READ, entry->iov.iov_base,
-			entry->iov.iov_len, NULL);
+			IBV_ACCESS_REMOTE_READ, entry->info.iov.iov_base,
+			entry->info.iov.iov_len, NULL);
 }
 
 void fi_ibv_mr_cache_delete_region(struct ofi_mr_cache *cache,
