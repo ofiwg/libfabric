@@ -299,9 +299,6 @@ int fi_ibv_process_ini_conn(struct fi_ibv_xrc_ep *ep,int reciprocal,
 
 	assert(ep->base_ep.ibv_qp);
 
-	if (!reciprocal)
-		fi_ibv_eq_set_xrc_conn_tag(ep);
-
 	fi_ibv_set_xrc_cm_data(cm_data, reciprocal, ep->conn_setup->conn_tag,
 			       ep->base_ep.eq->xrc.pep_port,
 			       ep->ini_conn->tgt_qpn);
