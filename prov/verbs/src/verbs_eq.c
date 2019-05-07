@@ -60,20 +60,20 @@ fi_ibv_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *entry,
 	return sizeof(*entry);
 }
 
+/* Caller must hold eq:lock */
 void fi_ibv_eq_set_xrc_conn_tag(struct fi_ibv_xrc_ep *ep)
 {
 	struct fi_ibv_eq *eq = ep->base_ep.eq;
 
-	fastlock_acquire(&eq->lock);
 	assert(ep->conn_setup);
 	assert(ep->conn_setup->conn_tag == VERBS_CONN_TAG_INVALID);
 	ep->conn_setup->conn_tag =
 		(uint32_t)ofi_idx2key(&eq->xrc.conn_key_idx,
 				ofi_idx_insert(eq->xrc.conn_key_map, ep));
 	ep->conn_setup->created_conn_tag = true;
-	fastlock_release(&eq->lock);
 }
 
+/* Caller must hold eq:lock */
 void fi_ibv_eq_clear_xrc_conn_tag(struct fi_ibv_xrc_ep *ep)
 {
 	struct fi_ibv_eq *eq = ep->base_ep.eq;
@@ -83,7 +83,6 @@ void fi_ibv_eq_clear_xrc_conn_tag(struct fi_ibv_xrc_ep *ep)
 	if (!ep->conn_setup->created_conn_tag)
 		return;
 
-	fastlock_acquire(&eq->lock);
 	index = ofi_key2idx(&eq->xrc.conn_key_idx,
 			    (uint64_t)ep->conn_setup->conn_tag);
 	if (!ofi_idx_is_valid(eq->xrc.conn_key_map, index))
@@ -91,27 +90,24 @@ void fi_ibv_eq_clear_xrc_conn_tag(struct fi_ibv_xrc_ep *ep)
 	else
 		ofi_idx_remove(eq->xrc.conn_key_map, index);
 	ep->conn_setup->conn_tag = VERBS_CONN_TAG_INVALID;
-	fastlock_release(&eq->lock);
 }
 
+/* Caller must hold eq:lock */
 struct fi_ibv_xrc_ep *fi_ibv_eq_xrc_conn_tag2ep(struct fi_ibv_eq *eq,
 						uint32_t conn_tag)
 {
 	struct fi_ibv_xrc_ep *ep;
 	int index;
 
-	fastlock_acquire(&eq->lock);
 	index = ofi_key2idx(&eq->xrc.conn_key_idx, (uint64_t)conn_tag);
 	ep = ofi_idx_lookup(eq->xrc.conn_key_map, index);
 	if (!ep || !ep->conn_setup || (ep->conn_setup->conn_tag != conn_tag)) {
 		VERBS_WARN(FI_LOG_FABRIC,
 			   "Invalid/stale XRC connection tag\n");
-		goto err;
+		return ep;
 	}
 	ofi_idx_remove(eq->xrc.conn_key_map, index);
 	ep->conn_setup->conn_tag = VERBS_CONN_TAG_INVALID;
-err:
-	fastlock_release(&eq->lock);
 
 	return ep;
 }
@@ -277,6 +273,7 @@ fi_ibv_eq_xrc_connreq_event(struct fi_ibv_eq *eq, struct fi_eq_cm_entry *entry,
 		return FI_SUCCESS;
 	}
 
+	fastlock_acquire(&eq->lock);
 	/*
 	 * Reciprocal connections are initiated and handled internally by
 	 * the provider, get the endpoint that issued the original connection
@@ -286,8 +283,9 @@ fi_ibv_eq_xrc_connreq_event(struct fi_ibv_eq *eq, struct fi_eq_cm_entry *entry,
 	if (!ep) {
 		VERBS_WARN(FI_LOG_FABRIC,
 			   "Reciprocal XRC connection tag not found\n");
-		return -FI_EAGAIN;
+		goto done;
 	}
+
 	ep->tgt_id = connreq->id;
 	ep->tgt_id->context = &ep->base_ep.util_ep.ep_fid.fid;
 	ep->base_ep.info->handle = entry->info->handle;
@@ -305,12 +303,17 @@ fi_ibv_eq_xrc_connreq_event(struct fi_ibv_eq *eq, struct fi_eq_cm_entry *entry,
 			   "Reciprocal XRC Accept failed %d\n", ret);
 		goto send_reject;
 	}
+done:
+	fastlock_release(&eq->lock);
+
 	/* Event is handled internally and not passed to the application */
 	return -FI_EAGAIN;
 
 send_reject:
 	if (rdma_reject(connreq->id, *priv_data, *priv_datalen))
 		VERBS_WARN(FI_LOG_FABRIC, "rdma_reject %d\n", -errno);
+	fastlock_release(&eq->lock);
+
 	return -FI_EAGAIN;
 }
 
@@ -406,6 +409,7 @@ fi_ibv_eq_xrc_recip_conn_event(struct fi_ibv_eq *eq,
 	return sizeof(*entry) + len;
 }
 
+/* Caller must hold eq:lock */
 static int
 fi_ibv_eq_xrc_rej_event(struct fi_ibv_eq *eq, struct rdma_cm_event *cma_event)
 {
@@ -446,6 +450,7 @@ fi_ibv_eq_xrc_rej_event(struct fi_ibv_eq *eq, struct rdma_cm_event *cma_event)
 	return state == FI_IBV_XRC_ORIG_CONNECTING ? FI_SUCCESS : -FI_EAGAIN;
 }
 
+/* Caller must hold eq:lock */
 static inline int
 fi_ibv_eq_xrc_connected_event(struct fi_ibv_eq *eq,
 			      struct rdma_cm_event *cma_event,
@@ -475,6 +480,7 @@ fi_ibv_eq_xrc_connected_event(struct fi_ibv_eq *eq,
 	return ret;
 }
 
+/* Caller must hold eq:lock */
 static inline void
 fi_ibv_eq_xrc_timewait_event(struct fi_ibv_eq *eq,
 			     struct rdma_cm_event *cma_event, int *acked)
@@ -505,6 +511,7 @@ fi_ibv_eq_xrc_timewait_event(struct fi_ibv_eq *eq,
 		fi_ibv_free_xrc_conn_setup(ep, 0);
 }
 
+/* Caller must hold eq:lock */
 static inline void
 fi_ibv_eq_xrc_disconnect_event(struct fi_ibv_eq *eq,
 			       struct rdma_cm_event *cma_event, int *acked)
@@ -572,15 +579,21 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq,
 				return ret;
 		}
 		ep = container_of(fid, struct fi_ibv_ep, util_ep.ep_fid);
-		if (fi_ibv_is_xrc(ep->info))
-			return fi_ibv_eq_xrc_connected_event(eq, cma_event,
-							     entry, len, acked);
+		if (fi_ibv_is_xrc(ep->info)) {
+			fastlock_acquire(&eq->lock);
+			ret = fi_ibv_eq_xrc_connected_event(eq, cma_event,
+							    entry, len, acked);
+			fastlock_release(&eq->lock);
+			return ret;
+		}
 		entry->info = NULL;
 		break;
 	case RDMA_CM_EVENT_DISCONNECTED:
 		ep = container_of(fid, struct fi_ibv_ep, util_ep.ep_fid);
 		if (fi_ibv_is_xrc(ep->info)) {
+			fastlock_acquire(&eq->lock);
 			fi_ibv_eq_xrc_disconnect_event(eq, cma_event, acked);
+			fastlock_release(&eq->lock);
 			return -FI_EAGAIN;
 		}
 		*event = FI_SHUTDOWN;
@@ -588,8 +601,11 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq,
 		break;
 	case RDMA_CM_EVENT_TIMEWAIT_EXIT:
 		ep = container_of(fid, struct fi_ibv_ep, util_ep.ep_fid);
-		if (fi_ibv_is_xrc(ep->info))
+		if (fi_ibv_is_xrc(ep->info)) {
+			fastlock_acquire(&eq->lock);
 			fi_ibv_eq_xrc_timewait_event(eq, cma_event, acked);
+			fastlock_release(&eq->lock);
+		}
 		return -FI_EAGAIN;
 	case RDMA_CM_EVENT_ADDR_ERROR:
 	case RDMA_CM_EVENT_ROUTE_ERROR:
@@ -600,7 +616,9 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq,
 	case RDMA_CM_EVENT_REJECTED:
 		ep = container_of(fid, struct fi_ibv_ep, util_ep.ep_fid);
 		if (fi_ibv_is_xrc(ep->info)) {
+			fastlock_acquire(&eq->lock);
 			ret = fi_ibv_eq_xrc_rej_event(eq, cma_event);
+			fastlock_release(&eq->lock);
 			if (ret == -FI_EAGAIN)
 				return ret;
 			fi_ibv_eq_skip_xrc_cm_data(&priv_data, &priv_datalen);
