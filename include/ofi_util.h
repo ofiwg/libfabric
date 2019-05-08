@@ -285,6 +285,13 @@ int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_pr
 
 int ofi_endpoint_close(struct util_ep *util_ep);
 
+static inline int
+ofi_ep_fid_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
+{
+	return ofi_ep_bind(container_of(ep_fid, struct util_ep, ep_fid.fid),
+			   bfid, flags);
+}
+
 static inline void ofi_ep_lock_acquire(struct util_ep *ep)
 {
 	ep->lock_acquire(&ep->lock);
