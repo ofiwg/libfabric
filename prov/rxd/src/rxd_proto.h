@@ -143,12 +143,12 @@ struct rxd_data_pkt {
  * The op header order is as follows:
  * base_hdr (present for all packets)
  *
- * sar_hdr: for all messages requiring more than one packet
- * 	- lack of the sar_hdr is signaled by base_hdr->flags & RXD_INLINE
  * tag_hdr: for all tagged messages
  * 	- signaled by base_hdr->flags & RXD_TAG_HDR
  * data_hdr: for messages carrying remote CQ data
  * 	- signaled by base_hdr->flags & RXD_REMOTE_CQ_DATA
+ * sar_hdr: for all messages requiring more than one packet
+ * 	- lack of the sar_hdr is signaled by base_hdr->flags & RXD_INLINE
  * rma_hdr: for FI_RMA and FI_ATOMIC operations
  * 	- signaled by base_hdr->type = RXD_READ_REQ, RXD_WRITE, RXD_ATOMIC,
  * 	  RXD_ATOMIC_FETCH, and RXD_ATOMIC_COMPARE

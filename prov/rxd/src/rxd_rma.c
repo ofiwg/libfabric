@@ -36,6 +36,60 @@
 #include <ofi_iov.h>
 #include "rxd.h"
 
+static struct rxd_x_entry *rxd_tx_entry_init_rma(struct rxd_ep *ep, fi_addr_t addr,
+				uint32_t op, const struct iovec *iov, size_t iov_count,
+				uint64_t data, uint32_t flags, void *context,
+				const struct fi_rma_iov *rma_iov, size_t rma_count)
+{
+	struct rxd_x_entry *tx_entry;
+	struct rxd_domain *rxd_domain = rxd_ep_domain(ep);
+	size_t max_inline;
+	struct rxd_base_hdr *base_hdr;
+	void *ptr;
+
+	tx_entry = rxd_tx_entry_init_common(ep, addr, op, iov, iov_count, 0,
+					    data, flags, context);
+	if (!tx_entry)
+		return NULL;
+
+	base_hdr = rxd_get_base_hdr(tx_entry->pkt);
+	ptr = (void *) base_hdr;
+	rxd_init_base_hdr(ep, &ptr, tx_entry);
+
+	if (tx_entry->cq_entry.flags & FI_READ) {
+		tx_entry->num_segs = ofi_div_ceil(tx_entry->cq_entry.len,
+						  rxd_domain->max_seg_sz);
+		rxd_init_sar_hdr(&ptr, tx_entry, rma_count);
+		rxd_init_rma_hdr(&ptr, rma_iov, rma_count);
+	} else {
+		max_inline = rxd_domain->max_inline_msg;
+		max_inline -= sizeof(struct ofi_rma_iov) * rma_count;
+		if (tx_entry->flags & RXD_REMOTE_CQ_DATA) {
+			max_inline -= sizeof(tx_entry->cq_entry.data);
+			rxd_init_data_hdr(&ptr, tx_entry);
+		}
+
+		if (rma_count > 1 || tx_entry->cq_entry.len > max_inline) {
+			max_inline -= sizeof(struct rxd_sar_hdr);
+			tx_entry->num_segs = ofi_div_ceil(tx_entry->cq_entry.len -
+				max_inline, rxd_domain->max_seg_sz) + 1;
+			rxd_init_sar_hdr(&ptr, tx_entry, rma_count);
+		} else {
+			tx_entry->flags |= RXD_INLINE;
+			base_hdr->flags = tx_entry->flags;
+			tx_entry->num_segs = 1;
+		}
+		rxd_init_rma_hdr(&ptr, rma_iov, rma_count);
+		tx_entry->bytes_done = rxd_init_msg(&ptr, tx_entry->iov,
+			tx_entry->iov_count, tx_entry->cq_entry.len,
+			max_inline);
+	}
+	tx_entry->pkt->pkt_size = ((char *) ptr - (char *) base_hdr) +
+				ep->tx_prefix_size;
+
+	return tx_entry;
+}
+
 static ssize_t rxd_generic_write_inject(struct rxd_ep *rxd_ep,
 		const struct iovec *iov, size_t iov_count,
 		const struct fi_rma_iov *rma_iov, size_t rma_count,
@@ -59,22 +113,20 @@ static ssize_t rxd_generic_write_inject(struct rxd_ep *rxd_ep,
 	if (ret)
 		goto out;
 
-	tx_entry = rxd_tx_entry_init(rxd_ep, iov, iov_count, NULL, 0, rma_count, data,
-				     0, context, rxd_addr, op, rxd_flags);
+	tx_entry = rxd_tx_entry_init_rma(rxd_ep, rxd_addr, op, iov, iov_count,
+					 data, rxd_flags, context, rma_iov,
+					 rma_count);
 	if (!tx_entry) {
 		ret = -FI_EAGAIN;
 		goto out;
 	}
 
-	ret = rxd_ep_send_op(rxd_ep, tx_entry, rma_iov, rma_count, NULL, 0, 0, 0);
-	if (ret) {
-		rxd_tx_entry_free(rxd_ep, tx_entry);
-		goto out;
-	}
-
-	if (tx_entry->op == RXD_READ_REQ)
+	if (rxd_ep->peers[rxd_addr].peer_addr == FI_ADDR_UNSPEC)
 		goto out;
 
+	ret = rxd_start_xfer(rxd_ep, tx_entry);
+	if (ret && tx_entry->num_segs > 1)
+		(void) rxd_ep_post_data_pkts(rxd_ep, tx_entry);
 	ret = 0;
 
 out:
@@ -108,16 +160,21 @@ ssize_t rxd_generic_rma(struct rxd_ep *rxd_ep, const struct iovec *iov,
 	if (ret)
 		goto out;
 
-	tx_entry = rxd_tx_entry_init(rxd_ep, iov, iov_count, NULL, 0, rma_count,
-				     data, 0, context, rxd_addr, op, rxd_flags);
+	tx_entry = rxd_tx_entry_init_rma(rxd_ep, rxd_addr, op, iov, iov_count,
+					 data, rxd_flags, context, rma_iov,
+					 rma_count);
 	if (!tx_entry) {
 		ret = -FI_EAGAIN;
 		goto out;
 	}
 
-	ret = rxd_ep_send_op(rxd_ep, tx_entry, rma_iov, rma_count, NULL, 0, 0, 0);
-	if (ret)
-		rxd_tx_entry_free(rxd_ep, tx_entry);
+	if (rxd_ep->peers[rxd_addr].peer_addr == FI_ADDR_UNSPEC)
+		goto out;
+
+	ret = rxd_start_xfer(rxd_ep, tx_entry);
+	if (ret && (tx_entry->cq_entry.flags & FI_WRITE) && tx_entry->num_segs > 1)
+		(void) rxd_ep_post_data_pkts(rxd_ep, tx_entry);
+	ret = 0;
 
 out:
 	fastlock_release(&rxd_ep->util_ep.lock);

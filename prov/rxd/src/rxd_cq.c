@@ -242,7 +242,7 @@ static void rxd_verify_active(struct rxd_ep *ep, fi_addr_t addr, fi_addr_t peer_
 	}
 }
 
-static int rxd_start_xfer(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
+int rxd_start_xfer(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
 {
 	struct rxd_base_hdr *hdr = rxd_get_base_hdr(tx_entry->pkt);
 
@@ -410,6 +410,12 @@ static void rxd_handle_rts(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 	fi_addr_t rxd_addr;
 	struct rxd_rts_pkt *pkt = (struct rxd_rts_pkt *) (pkt_entry->pkt);
 	int ret;
+
+	if (pkt->base_hdr.version != RXD_PROTOCOL_VERSION) {
+		FI_WARN(&rxd_prov, FI_LOG_CQ,
+			"ERROR: Protocol version mismatch with peer\n");
+		return;
+	}
 
 	rxd_av = rxd_ep_av(ep);
 	node = ofi_rbmap_find(&rxd_av->rbmap, pkt->source);
@@ -671,14 +677,6 @@ void rxd_unpack_hdrs(size_t pkt_size, struct rxd_base_hdr *base_hdr,
 	char *ptr = (char *) base_hdr + sizeof(*base_hdr);
 	uint8_t rma_count = 1;
 
-	if (!(base_hdr->flags & RXD_INLINE)) {
-		*sar_hdr = (struct rxd_sar_hdr *) ptr;
-		rma_count = (*sar_hdr)->iov_count;
-		ptr += sizeof(**sar_hdr);
-	} else {
-		*sar_hdr = NULL;
-	}
-
 	if (base_hdr->flags & RXD_TAG_HDR) {
 		*tag_hdr = (struct rxd_tag_hdr *) ptr;
 		ptr += sizeof(**tag_hdr);
@@ -691,6 +689,14 @@ void rxd_unpack_hdrs(size_t pkt_size, struct rxd_base_hdr *base_hdr,
 		ptr += sizeof(**data_hdr);
 	} else {
 		*data_hdr = NULL;
+	}
+
+	if (!(base_hdr->flags & RXD_INLINE)) {
+		*sar_hdr = (struct rxd_sar_hdr *) ptr;
+		rma_count = (*sar_hdr)->iov_count;
+		ptr += sizeof(**sar_hdr);
+	} else {
+		*sar_hdr = NULL;
 	}
 
 	if (base_hdr->type >= RXD_READ_REQ && base_hdr->type <= RXD_ATOMIC_COMPARE) {
@@ -1011,6 +1017,12 @@ release:
 static void rxd_handle_cts(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 {
 	struct rxd_cts_pkt *cts = (struct rxd_cts_pkt *) (pkt_entry->pkt);
+
+	if (cts->base_hdr.version != RXD_PROTOCOL_VERSION) {
+		FI_WARN(&rxd_prov, FI_LOG_CQ,
+			"ERROR: Protocol version mismatch with peer\n");
+		return;
+	}
 
 	rxd_update_peer(ep, cts->rts_addr, cts->cts_addr);
 }
