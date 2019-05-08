@@ -164,7 +164,14 @@ static void ofi_tostr_msgorder(char *buf, uint64_t flags)
 	IFFLAGSTR(flags, FI_ORDER_SAR);
 	IFFLAGSTR(flags, FI_ORDER_SAW);
 	IFFLAGSTR(flags, FI_ORDER_SAS);
-
+	IFFLAGSTR(flags, FI_ORDER_RMA_RAR);
+	IFFLAGSTR(flags, FI_ORDER_RMA_RAW);
+	IFFLAGSTR(flags, FI_ORDER_RMA_WAR);
+	IFFLAGSTR(flags, FI_ORDER_RMA_WAW);
+	IFFLAGSTR(flags, FI_ORDER_ATOMIC_RAR);
+	IFFLAGSTR(flags, FI_ORDER_ATOMIC_RAW);
+	IFFLAGSTR(flags, FI_ORDER_ATOMIC_WAR);
+	IFFLAGSTR(flags, FI_ORDER_ATOMIC_WAW);
 
 	ofi_remove_comma(buf);
 }

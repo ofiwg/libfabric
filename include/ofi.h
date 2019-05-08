@@ -67,6 +67,15 @@ extern "C" {
 #define OFI_GETINFO_INTERNAL	(1ULL << 58)
 #define OFI_CORE_PROV_ONLY	(1ULL << 59)
 
+#define OFI_ORDER_RAR_SET	(FI_ORDER_RAR | FI_ORDER_RMA_RAR | \
+				 FI_ORDER_ATOMIC_RAR)
+#define OFI_ORDER_RAW_SET	(FI_ORDER_RAW | FI_ORDER_RMA_RAW | \
+				 FI_ORDER_ATOMIC_RAW)
+#define OFI_ORDER_WAR_SET	(FI_ORDER_WAR | FI_ORDER_RMA_WAR | \
+				 FI_ORDER_ATOMIC_WAR)
+#define OFI_ORDER_WAW_SET	(FI_ORDER_WAW | FI_ORDER_RMA_WAW | \
+				 FI_ORDER_ATOMIC_WAW)
+
 #define sizeof_field(type, field) sizeof(((type *)0)->field)
 
 #ifndef MIN
