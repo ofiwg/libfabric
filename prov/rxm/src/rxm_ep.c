@@ -2047,51 +2047,6 @@ static int rxm_ep_close(struct fid *fid)
 	return retv;
 }
 
-static int rxm_ep_msg_get_wait_cq_fd(struct rxm_ep *rxm_ep,
-				     enum fi_wait_obj wait_obj)
-{
-	int ret = FI_SUCCESS;
-
-	if ((wait_obj != FI_WAIT_NONE) && (!rxm_ep->msg_cq_fd)) {
-		ret = fi_control(&rxm_ep->msg_cq->fid, FI_GETWAIT, &rxm_ep->msg_cq_fd);
-		if (ret)
-			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-				"Unable to get MSG CQ fd\n");
-	}
-	return ret;
-}
-
-static int rxm_ep_msg_cq_open(struct rxm_ep *rxm_ep, enum fi_wait_obj wait_obj)
-{
-	struct rxm_domain *rxm_domain;
-	struct fi_cq_attr cq_attr = { 0 };
-	int ret;
-
-	assert((wait_obj == FI_WAIT_NONE) || (wait_obj == FI_WAIT_FD));
-
-	cq_attr.size = (rxm_ep->msg_info->tx_attr->size +
-			rxm_ep->msg_info->rx_attr->size) * rxm_def_univ_size;
-	cq_attr.format = FI_CQ_FORMAT_DATA;
-	cq_attr.wait_obj = wait_obj;
-
-	rxm_domain = container_of(rxm_ep->util_ep.domain, struct rxm_domain, util_domain);
-
-	ret = fi_cq_open(rxm_domain->msg_domain, &cq_attr, &rxm_ep->msg_cq, NULL);
-	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "unable to open MSG CQ\n");
-		return ret;
-	}
-
-	ret = rxm_ep_msg_get_wait_cq_fd(rxm_ep, wait_obj);
-	if (ret)
-		goto err;
-
-	return 0;
-err:
-	fi_close(&rxm_ep->msg_cq->fid);
-	return ret;
-}
-
 static int rxm_ep_trywait_cq(void *arg)
 {
 	struct rxm_fabric *rxm_fabric;
@@ -2120,108 +2075,102 @@ static int rxm_ep_trywait_eq(void *arg)
 
 static int rxm_ep_wait_fd_add(struct rxm_ep *rxm_ep, struct util_wait *wait)
 {
-	int ret;
+	int msg_eq_fd, msg_cq_fd, ret;
 
-	ret = ofi_wait_fd_add(wait, rxm_ep->msg_cq_fd, FI_EPOLL_IN,
+	ret = fi_control(&rxm_ep->msg_cq->fid, FI_GETWAIT, &msg_cq_fd);
+	if (ret) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+			"unable to get MSG CQ wait fd %d\n", ret);
+		return ret;
+	}
+
+	ret = ofi_wait_fd_add(wait, msg_cq_fd, FI_EPOLL_IN,
 			      rxm_ep_trywait_cq, rxm_ep,
 			      &rxm_ep->util_ep.ep_fid.fid);
 	if (ret)
 		return ret;
 
-	ret = ofi_wait_fd_add(wait, rxm_ep->msg_eq_fd, FI_EPOLL_IN,
-			      rxm_ep_trywait_eq, rxm_ep,
-			      &rxm_ep->util_ep.ep_fid.fid);
-	if (ret)
-		return ret;
+	if (rxm_ep->util_ep.domain->data_progress == FI_PROGRESS_AUTO &&
+	    !(rxm_ep->util_ep.caps & FI_ATOMIC))
+		return 0;
 
-	return 0;
+	ret = fi_control(&rxm_ep->msg_eq->fid, FI_GETWAIT, &msg_eq_fd);
+	if (ret) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+			"unable to get MSG EQ wait fd %d\n", ret);
+		return ret;
+	}
+
+	return ofi_wait_fd_add(wait, msg_eq_fd, FI_EPOLL_IN, rxm_ep_trywait_eq,
+			       rxm_ep, &rxm_ep->util_ep.ep_fid.fid);
 }
 
-static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
+static int rxm_msg_cq_fd_needed(struct rxm_ep *rxm_ep)
 {
-	struct rxm_ep *rxm_ep =
-		container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
-	struct util_cq *cq;
-	struct util_av *av;
-	struct util_cntr *cntr;
-	int ret = 0;
+	return (rxm_needs_atomic_progress(rxm_ep->rxm_info) ||
+		(rxm_ep->util_ep.tx_cq && rxm_ep->util_ep.tx_cq->wait) ||
+		(rxm_ep->util_ep.rx_cq && rxm_ep->util_ep.rx_cq->wait) ||
+		(rxm_ep->util_ep.tx_cntr && rxm_ep->util_ep.tx_cntr->wait) ||
+		(rxm_ep->util_ep.rx_cntr && rxm_ep->util_ep.rx_cntr->wait) ||
+		(rxm_ep->util_ep.wr_cntr && rxm_ep->util_ep.wr_cntr->wait) ||
+		(rxm_ep->util_ep.rd_cntr && rxm_ep->util_ep.rd_cntr->wait) ||
+		(rxm_ep->util_ep.rem_wr_cntr && rxm_ep->util_ep.rem_wr_cntr->wait) ||
+		(rxm_ep->util_ep.rem_rd_cntr && rxm_ep->util_ep.rem_rd_cntr->wait));
+}
 
-	switch (bfid->fclass) {
-	case FI_CLASS_AV:
-		av = container_of(bfid, struct util_av, av_fid.fid);
-		ret = ofi_ep_bind_av(&rxm_ep->util_ep, av);
-		if (ret)
-			return ret;
-		break;
-	case FI_CLASS_CQ:
-		cq = container_of(bfid, struct util_cq, cq_fid.fid);
+static int rxm_ep_msg_cq_open(struct rxm_ep *rxm_ep)
+{
+	struct rxm_domain *rxm_domain;
+	struct fi_cq_attr cq_attr = { 0 };
+	struct util_cq *cq_list[] = {
+		rxm_ep->util_ep.tx_cq,
+		rxm_ep->util_ep.rx_cq,
+	};
+	struct util_cntr *cntr_list[] = {
+		rxm_ep->util_ep.tx_cntr,
+		rxm_ep->util_ep.rx_cntr,
+		rxm_ep->util_ep.rd_cntr,
+		rxm_ep->util_ep.wr_cntr,
+		rxm_ep->util_ep.rem_rd_cntr,
+		rxm_ep->util_ep.rem_wr_cntr,
+	};
+	int i, ret;
 
-		ret = ofi_ep_bind_cq(&rxm_ep->util_ep, cq, flags);
-		if (ret)
-			return ret;
+	cq_attr.size = (rxm_ep->msg_info->tx_attr->size +
+			rxm_ep->msg_info->rx_attr->size) * rxm_def_univ_size;
+	cq_attr.format = FI_CQ_FORMAT_DATA;
+	cq_attr.wait_obj = (rxm_msg_cq_fd_needed(rxm_ep) ?
+			    FI_WAIT_FD : FI_WAIT_NONE);
 
-		/* Ensure atomics progress thread isn't started at this point.
-		 * The progress thread should be started only after CQ is bound
-		 * to keep it simple (avoids progressing only EQ first and then
-		 * progressing both EQ and CQ once CQ is bound) */
-		assert(!(rxm_ep->rxm_info->caps & FI_ATOMIC) ||
-		       !rxm_ep->cmap || !rxm_ep->cmap->cm_thread);
+	rxm_domain = container_of(rxm_ep->util_ep.domain, struct rxm_domain, util_domain);
 
-		if (!rxm_ep->msg_cq) {
-			ret = rxm_ep_msg_cq_open(rxm_ep, cq->wait ||
-				rxm_needs_atomic_progress(rxm_ep->rxm_info) ?
-				FI_WAIT_FD : FI_WAIT_NONE);
-			if (ret)
-				return ret;
-		}
-
-		if (cq->wait) {
-			ret = rxm_ep_wait_fd_add(rxm_ep, cq->wait);
-			if (ret)
-				goto err;
-		}
-		break;
-	case FI_CLASS_CNTR:
-		cntr = container_of(bfid, struct util_cntr, cntr_fid.fid);
-
-		ret = ofi_ep_bind_cntr(&rxm_ep->util_ep, cntr, flags);
-		if (ret)
-			return ret;
-
-		if (!rxm_ep->msg_cq) {
-			ret = rxm_ep_msg_cq_open(rxm_ep, cntr->wait ||
-				rxm_needs_atomic_progress(rxm_ep->rxm_info) ?
-				FI_WAIT_FD : FI_WAIT_NONE);
-			if (ret)
-				return ret;
-		} else if (!rxm_ep->msg_cq_fd && cntr->wait) {
-			/* Reopen CQ with WAIT fd set */
-			ret = fi_close(&rxm_ep->msg_cq->fid);
-			if (ret)
-				FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-					"Unable to close msg CQ\n");
-			ret = rxm_ep_msg_cq_open(rxm_ep, FI_WAIT_FD);
-			if (ret)
-				return ret;
-		}
-
-		if (cntr->wait) {
-			ret = rxm_ep_wait_fd_add(rxm_ep, cntr->wait);
-			if (ret)
-				goto err;
-		}
-		break;
-	case FI_CLASS_EQ:
-		break;
-	default:
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "invalid fid class\n");
-		ret = -FI_EINVAL;
-		break;
+	ret = fi_cq_open(rxm_domain->msg_domain, &cq_attr, &rxm_ep->msg_cq, NULL);
+	if (ret) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "unable to open MSG CQ\n");
+		return ret;
 	}
-	return ret;
+
+	if (cq_attr.wait_obj != FI_WAIT_FD)
+		return 0;
+
+	for (i = 0; i < sizeof(cq_list) / sizeof(*cq_list); i++) {
+		if (cq_list[i] && cq_list[i]->wait) {
+			ret = rxm_ep_wait_fd_add(rxm_ep, cq_list[i]->wait);
+			if (ret)
+				goto err;
+		}
+	}
+
+	for (i = 0; i < sizeof(cntr_list) / sizeof(*cntr_list); i++) {
+		if (cntr_list[i] && cntr_list[i]->wait) {
+			ret = rxm_ep_wait_fd_add(rxm_ep, cntr_list[i]->wait);
+			if (ret)
+				goto err;
+		}
+	}
+	return 0;
 err:
-	if (fi_close(&rxm_ep->msg_cq->fid))
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to close msg CQ\n");
+	fi_close(&rxm_ep->msg_cq->fid);
 	return ret;
 }
 
@@ -2363,6 +2312,18 @@ static int rxm_ep_ctrl(struct fid *fid, int command, void *arg)
 		if (ret)
 			return ret;
 
+		/* Ensure atomics progress thread isn't started at this point.
+		 * The progress thread should be started only after MSG CQ is
+		 * opened to keep it simple (avoids progressing only MSG EQ first
+		 * and then progressing both MSG EQ and MSG CQ once the latter
+		 * is opened) */
+		assert(!(rxm_ep->rxm_info->caps & FI_ATOMIC) ||
+		       !rxm_ep->cmap || !rxm_ep->cmap->cm_thread);
+
+		ret = rxm_ep_msg_cq_open(rxm_ep);
+		if (ret)
+			return ret;
+
 		/* fi_listen should be called before cmap alloc as cmap alloc
 		 * calls fi_getname on pep which would succeed only if fi_listen
 		 * was called first */
@@ -2407,7 +2368,7 @@ err:
 static struct fi_ops rxm_ep_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = rxm_ep_close,
-	.bind = rxm_ep_bind,
+	.bind = ofi_ep_fid_bind,
 	.control = rxm_ep_ctrl,
 	.ops_open = fi_no_ops_open,
 };
@@ -2428,10 +2389,6 @@ static int rxm_listener_open(struct rxm_ep *rxm_ep)
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to open msg EQ\n");
 		return ret;
 	}
-
-	ret = fi_control(&rxm_ep->msg_eq->fid, FI_GETWAIT, &rxm_ep->msg_eq_fd);
-	if (ret)
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to get MSG EQ fd\n");
 
 	ret = fi_passive_ep(rxm_fabric->msg_fabric, rxm_ep->msg_info,
 			    &rxm_ep->msg_pep, rxm_ep);
