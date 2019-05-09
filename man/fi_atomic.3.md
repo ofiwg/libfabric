@@ -516,7 +516,9 @@ struct fi_atomic_attr {
 ```
 
 The count attribute field is as defined for the atomic valid calls.  The
-size field indicates the size in bytes of the atomic datatype.
+size field indicates the size in bytes of the atomic datatype.  The
+size field is useful for datatypes that may differ in sizes based on the
+platform or compiler, such FI_LONG_DOUBLE.
 
 ## Completions
 
