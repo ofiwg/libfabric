@@ -209,17 +209,6 @@ struct ofi_mr_entry {
 	uint8_t				data[];
 };
 
-struct ofi_mr_storage;
-
-typedef void (*ofi_mr_destroy_t)(struct ofi_mr_storage *storage);
-typedef struct ofi_mr_entry *(*ofi_mr_find_t)(struct ofi_mr_storage *storage,
-					      const struct iovec *key);
-typedef int (*ofi_mr_insert_t)(struct ofi_mr_storage *storage,
-			       struct iovec *key,
-			       struct ofi_mr_entry *entry);
-typedef int (*ofi_mr_erase_t)(struct ofi_mr_storage *storage,
-			      struct ofi_mr_entry *entry);
-
 enum ofi_mr_storage_type {
 	OFI_MR_STORAGE_DEFAULT = 0,
 	OFI_MR_STORAGE_RBT,
@@ -227,12 +216,17 @@ enum ofi_mr_storage_type {
 };
 
 struct ofi_mr_storage {
-	enum ofi_mr_storage_type type;
-	void *storage;
-	ofi_mr_destroy_t destroy;
-	ofi_mr_find_t find;
-	ofi_mr_insert_t insert;
-	ofi_mr_erase_t erase;
+	enum ofi_mr_storage_type	type;
+	void				*storage;
+
+	struct ofi_mr_entry *		(*find)(struct ofi_mr_storage *storage,
+						const struct iovec *key);
+	int				(*insert)(struct ofi_mr_storage *storage,
+						  struct iovec *key,
+						  struct ofi_mr_entry *entry);
+	int				(*erase)(struct ofi_mr_storage *storage,
+						 struct ofi_mr_entry *entry);
+	void				(*destroy)(struct ofi_mr_storage *storage);
 };
 
 struct ofi_mr_cache {
