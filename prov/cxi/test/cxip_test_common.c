@@ -463,17 +463,6 @@ void cxit_teardown_rma(void)
 	cxit_teardown_ep();
 }
 
-void cxit_setup_tagged_offload(void)
-{
-	setenv("RDZV_OFFLOAD", "1", 1);
-	cxit_setup_rma();
-}
-
-void cxit_teardown_tagged_offload(void)
-{
-	cxit_teardown_rma();
-}
-
 /* Everyone needs to wait sometime */
 int cxit_await_completion(struct fid_cq *cq, struct fi_cq_tagged_entry *cqe)
 {

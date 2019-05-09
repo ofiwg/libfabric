@@ -16,9 +16,6 @@
 
 TestSuite(tagged, .init = cxit_setup_tagged, .fini = cxit_teardown_tagged,
 	  .timeout = CXIT_DEFAULT_TIMEOUT);
-TestSuite(tagged_offload, .init = cxit_setup_tagged_offload,
-	  .fini = cxit_teardown_tagged_offload,
-	  .timeout = CXIT_DEFAULT_TIMEOUT);
 
 /* Test basic send/recv */
 Test(tagged, ping)
@@ -1349,15 +1346,6 @@ ParameterizedTestParameters(tagged, rx)
 				   param_sz);
 }
 
-ParameterizedTestParameters(tagged_offload, rx)
-{
-	size_t param_sz;
-
-	param_sz = ARRAY_SIZE(params);
-	return cr_make_param_array(struct tagged_rx_params, params,
-				   param_sz);
-}
-
 void do_tagged_rx(struct tagged_rx_params *param)
 {
 	uint8_t *recv_buf,
@@ -1384,11 +1372,6 @@ void do_tagged_rx(struct tagged_rx_params *param)
 }
 
 ParameterizedTest(struct tagged_rx_params *param, tagged, rx)
-{
-	do_tagged_rx(param);
-}
-
-ParameterizedTest(struct tagged_rx_params *param, tagged_offload, rx)
 {
 	do_tagged_rx(param);
 }
