@@ -667,7 +667,6 @@ struct cxip_rxc {
 	struct cxip_ep_obj *ep_obj;	// parent EP object
 	struct cxip_domain *domain;	// parent domain
 
-	struct dlist_entry cq_entry;	// attaches to CQ RX list
 	struct dlist_entry ep_list;	// contains EPs using shared context
 
 	struct fi_rx_attr attr;
@@ -723,7 +722,6 @@ struct cxip_txc {
 	struct cxip_ep_obj *ep_obj;	// parent EP object
 	struct cxip_domain *domain;	// parent domain
 
-	struct dlist_entry cq_entry;	// attaches to CQ TX list
 	struct dlist_entry ep_list;	// contains EPs using shared context
 	fastlock_t lock;
 

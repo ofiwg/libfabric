@@ -224,7 +224,6 @@ struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr, void *context,
 	if (!rxc)
 		return NULL;
 
-	dlist_init(&rxc->cq_entry);
 	dlist_init(&rxc->ep_list);
 	fastlock_init(&rxc->lock);
 

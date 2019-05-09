@@ -264,7 +264,6 @@ static struct cxip_txc *txc_alloc(const struct fi_tx_attr *attr, void *context,
 	if (!txc)
 		return NULL;
 
-	dlist_init(&txc->cq_entry);
 	dlist_init(&txc->ep_list);
 	fastlock_init(&txc->lock);
 
