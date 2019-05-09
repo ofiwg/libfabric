@@ -135,6 +135,7 @@ typedef struct fid *fid_t;
 #define FI_ATOMIC		(1ULL << 4)
 #define FI_ATOMICS		FI_ATOMIC
 #define FI_MULTICAST		(1ULL << 5)
+#define FI_COLLECTIVE		(1ULL << 6)
 
 #define FI_READ			(1ULL << 8)
 #define FI_WRITE		(1ULL << 9)

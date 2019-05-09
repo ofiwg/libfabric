@@ -197,6 +197,7 @@ static void ofi_tostr_caps(char *buf, uint64_t caps)
 	IFFLAGSTR(caps, FI_TAGGED);
 	IFFLAGSTR(caps, FI_ATOMIC);
 	IFFLAGSTR(caps, FI_MULTICAST);
+	IFFLAGSTR(caps, FI_COLLECTIVE);
 
 	IFFLAGSTR(caps, FI_READ);
 	IFFLAGSTR(caps, FI_WRITE);
@@ -584,6 +585,7 @@ static void ofi_tostr_atomic_type(char *buf, enum fi_datatype type)
 	CASEENUMSTR(FI_DOUBLE_COMPLEX);
 	CASEENUMSTR(FI_LONG_DOUBLE);
 	CASEENUMSTR(FI_LONG_DOUBLE_COMPLEX);
+	CASEENUMSTR(FI_VOID);
 	default:
 		ofi_strcatf(buf, "Unknown");
 		break;
@@ -612,6 +614,10 @@ static void ofi_tostr_atomic_op(char *buf, enum fi_op op)
 	CASEENUMSTR(FI_CSWAP_GE);
 	CASEENUMSTR(FI_CSWAP_GT);
 	CASEENUMSTR(FI_MSWAP);
+	CASEENUMSTR(FI_BARRIER);
+	CASEENUMSTR(FI_BROADCAST);
+	CASEENUMSTR(FI_ALLTOALL);
+	CASEENUMSTR(FI_ALLGATHER);
 	default:
 		ofi_strcatf(buf, "Unknown");
 		break;

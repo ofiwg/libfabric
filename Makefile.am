@@ -210,8 +210,10 @@ real_man_pages = \
         man/man1/fi_pingpong.1 \
         man/man1/fi_strerror.1 \
         man/man3/fi_av.3 \
+        man/man3/fi_av_set.3 \
         man/man3/fi_cm.3 \
         man/man3/fi_cntr.3 \
+        man/man3/fi_collective.3 \
         man/man3/fi_control.3 \
         man/man3/fi_cq.3 \
         man/man3/fi_domain.3 \
@@ -236,6 +238,9 @@ real_man_pages = \
 dummy_man_pages = \
         man/man3/fi_accept.3 \
         man/man3/fi_alias.3 \
+        man/man3/fi_allgather.3 \
+        man/man3/fi_allreduce.3 \
+        man/man3/fi_alltoall.3 \
         man/man3/fi_atomic.3 \
         man/man3/fi_atomic_valid.3 \
         man/man3/fi_atomicmsg.3 \
@@ -246,7 +251,14 @@ dummy_man_pages = \
         man/man3/fi_av_lookup.3 \
         man/man3/fi_av_open.3 \
         man/man3/fi_av_remove.3 \
+        man/man3/fi_av_set_diff.3 \
+        man/man3/fi_av_set_insert.3 \
+        man/man3/fi_av_set_intersect.3 \
+        man/man3/fi_av_set_remove.3 \
+        man/man3/fi_av_set_union.3 \
         man/man3/fi_av_straddr.3 \
+        man/man3/fi_barrier.3 \
+        man/man3/fi_broadcast.3 \
         man/man3/fi_cancel.3 \
         man/man3/fi_close.3 \
         man/man3/fi_cntr_add.3 \
@@ -293,6 +305,7 @@ dummy_man_pages = \
         man/man3/fi_inject_write.3 \
         man/man3/fi_inject_writedata.3 \
         man/man3/fi_join.3 \
+        man/man3/fi_join_collective.3 \
         man/man3/fi_leave.3 \
         man/man3/fi_listen.3 \
         man/man3/fi_mr_bind.3 \
@@ -308,12 +321,15 @@ dummy_man_pages = \
         man/man3/fi_poll_add.3 \
         man/man3/fi_poll_del.3 \
         man/man3/fi_poll_open.3 \
+        man/man3/fi_query_atomic.3 \
+        man/man3/fi_query_collective.3 \
         man/man3/fi_read.3 \
         man/man3/fi_readmsg.3 \
         man/man3/fi_readv.3 \
         man/man3/fi_recv.3 \
         man/man3/fi_recvmsg.3 \
         man/man3/fi_recvv.3 \
+        man/man3/fi_reduce_scatter.3 \
         man/man3/fi_reject.3 \
         man/man3/fi_rx_addr.3 \
         man/man3/fi_rx_size_left.3 \
