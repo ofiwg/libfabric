@@ -243,12 +243,16 @@ static int fi_ibv_ep_close(fid_t fid)
 
 	switch (ep->util_ep.type) {
 	case FI_EP_MSG:
-		fastlock_acquire(&ep->eq->lock);
+		if (ep->eq)
+			fastlock_acquire(&ep->eq->lock);
+
 		if (fi_ibv_is_xrc(ep->info))
 			fi_ibv_ep_xrc_close(ep);
 		else
 			rdma_destroy_ep(ep->id);
-		fastlock_release(&ep->eq->lock);
+
+		if (ep->eq)
+			fastlock_release(&ep->eq->lock);
 		fi_ibv_cleanup_cq(ep);
 		break;
 	case FI_EP_DGRAM:

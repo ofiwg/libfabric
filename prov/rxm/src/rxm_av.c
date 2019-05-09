@@ -39,7 +39,7 @@ static int rxm_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 	struct rxm_ep *rxm_ep;
 	int i, ret = 0;
 
-	fastlock_acquire(&av->lock);
+	fastlock_acquire(&av->ep_list_lock);
 	/* This should be before ofi_ip_av_remove as we need to know
 	 * fi_addr -> addr mapping when moving handle to peer list. */
 	dlist_foreach_container(&av->ep_list, struct rxm_ep,
@@ -54,7 +54,7 @@ static int rxm_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 		}
 		ofi_ep_lock_release(&rxm_ep->util_ep);
 	}
-	fastlock_release(&av->lock);
+	fastlock_release(&av->ep_list_lock);
 
 	return ofi_ip_av_remove(av_fid, fi_addr, count, flags);
 }
@@ -70,7 +70,7 @@ rxm_av_insert_cmap(struct fid_av *av_fid, const void *addr, size_t count,
 	int ret = 0;
 	const void *cur_addr;
 
-	fastlock_acquire(&av->lock);
+	fastlock_acquire(&av->ep_list_lock);
 	dlist_foreach_container(&av->ep_list, struct rxm_ep,
 				rxm_ep, util_ep.av_entry) {
 		ofi_ep_lock_acquire(&rxm_ep->util_ep);
@@ -94,7 +94,7 @@ rxm_av_insert_cmap(struct fid_av *av_fid, const void *addr, size_t count,
 		}
 		ofi_ep_lock_release(&rxm_ep->util_ep);
 	}
-	fastlock_release(&av->lock);
+	fastlock_release(&av->ep_list_lock);
 	return ret;
 }
 

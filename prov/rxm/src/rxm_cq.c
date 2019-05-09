@@ -1330,11 +1330,8 @@ static inline int rxm_msg_ep_recv(struct rxm_rx_buf *rx_buf)
 
 	if (ret != -FI_EAGAIN) {
 		int level = FI_LOG_WARN;
-		rx_buf->conn->handle.cmap->acquire(&rx_buf->conn->handle.cmap->lock);
 		if (rx_buf->conn->handle.state == RXM_CMAP_SHUTDOWN)
 			level = FI_LOG_DEBUG;
-		rx_buf->conn->handle.cmap->release(&rx_buf->conn->handle.cmap->lock);
-
 		FI_LOG(&rxm_prov, level, FI_LOG_EP_CTRL,
 		       "unable to post recv buf: %d\n", ret);
 	}
@@ -1382,17 +1379,8 @@ void rxm_ep_do_progress(struct util_ep *util_ep)
 	}
 
 	do {
-		/* Comply with restricted threading levels that MSG provider
-		 * may have been configured with. cmap->acquire would be no-op
-		 * in case rxm data progress is manual */
-		if (rxm_ep->msg_info->domain_attr->threading != FI_THREAD_SAFE)
-			rxm_ep->cmap->acquire(&rxm_ep->cmap->lock);
 
 		ret = fi_cq_read(rxm_ep->msg_cq, &comp, 1);
-
-		if (rxm_ep->msg_info->domain_attr->threading != FI_THREAD_SAFE)
-			rxm_ep->cmap->release(&rxm_ep->cmap->lock);
-
 		if (ret > 0) {
 			// We don't have enough info to write a good
 			// error entry to the CQ at this point

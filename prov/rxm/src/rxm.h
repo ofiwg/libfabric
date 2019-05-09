@@ -148,6 +148,7 @@ extern size_t rxm_def_univ_size;
 #define RXM_CMAP_IDX_BITS OFI_IDX_INDEX_BITS
 
 enum rxm_cmap_signal {
+	RXM_CMAP_UNSPEC,
 	RXM_CMAP_FREE,
 	RXM_CMAP_EXIT,
 };
@@ -655,10 +656,8 @@ struct rxm_ep {
 	struct rxm_cmap		*cmap;
 	struct fid_pep 		*msg_pep;
 	struct fid_eq 		*msg_eq;
-	int			msg_eq_fd;
 	struct fid_cq 		*msg_cq;
 	uint32_t		msg_cq_eagain_count;
-	int			msg_cq_fd;
 	struct fid_ep 		*srx_ctx;
 	size_t 			comp_per_progress;
 	int			msg_mr_local;
@@ -742,6 +741,7 @@ int rxm_msg_ep_prepost_recv(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep);
 int rxm_ep_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 			enum fi_op op, struct fi_atomic_attr *attr,
 			uint64_t flags);
+
 static inline size_t rxm_ep_max_atomic_size(struct fi_info *info)
 {
 	size_t overhead = sizeof(struct rxm_atomic_hdr) +
@@ -998,7 +998,7 @@ rxm_ep_prepare_tx(struct rxm_ep *rxm_ep, fi_addr_t dest_addr,
 	}
 
 	if (OFI_UNLIKELY(!dlist_empty(&(*rxm_conn)->deferred_tx_queue))) {
-		rxm_ep_progress(&rxm_ep->util_ep);
+		rxm_ep_do_progress(&rxm_ep->util_ep);
 		if (!dlist_empty(&(*rxm_conn)->deferred_tx_queue))
 			return -FI_EAGAIN;
 	}

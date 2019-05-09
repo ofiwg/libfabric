@@ -152,8 +152,8 @@ fi_ibv_pep_dev_domain_match(struct fi_info *hints, const char *devname)
 }
 
 static int
-fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event,
-		     struct fi_info *pep_info, struct fi_info **info)
+fi_ibv_eq_cm_getinfo(struct rdma_cm_event *event, struct fi_info *pep_info,
+		     struct fi_info **info)
 {
 	struct fi_info *hints;
 	struct fi_ibv_connreq *connreq;
@@ -554,11 +554,10 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq,
 	case RDMA_CM_EVENT_CONNECT_REQUEST:
 		*event = FI_CONNREQ;
 
-		ret = fi_ibv_eq_cm_getinfo(eq->fab, cma_event, pep->info, &entry->info);
+		ret = fi_ibv_eq_cm_getinfo(cma_event, pep->info, &entry->info);
 		if (ret) {
+			fastlock_acquire(&eq->lock);
 			rdma_destroy_id(cma_event->id);
-			if (ret == -FI_ENODATA)
-				return 0;
 			eq->err.err = -ret;
 			eq->err.prov_errno = ret;
 			goto err;
@@ -614,6 +613,7 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq,
 	case RDMA_CM_EVENT_ROUTE_ERROR:
 	case RDMA_CM_EVENT_CONNECT_ERROR:
 	case RDMA_CM_EVENT_UNREACHABLE:
+		fastlock_acquire(&eq->lock);
 		eq->err.err = -cma_event->status;
 		goto err;
 	case RDMA_CM_EVENT_REJECTED:
@@ -626,6 +626,7 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq,
 				return ret;
 			fi_ibv_eq_skip_xrc_cm_data(&priv_data, &priv_datalen);
 		}
+		fastlock_acquire(&eq->lock);
 		eq->err.err = ECONNREFUSED;
 		eq->err.prov_errno = -cma_event->status;
 		if (eq->err.err_data) {
@@ -644,9 +645,11 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq,
 		}
 		goto err;
 	case RDMA_CM_EVENT_DEVICE_REMOVAL:
+		fastlock_acquire(&eq->lock);
 		eq->err.err = ENODEV;
 		goto err;
 	case RDMA_CM_EVENT_ADDR_CHANGE:
+		fastlock_acquire(&eq->lock);
 		eq->err.err = EADDRNOTAVAIL;
 		goto err;
 	default:
@@ -662,6 +665,7 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq,
 	return sizeof(*entry) + datalen;
 err:
 	eq->err.fid = fid;
+	fastlock_release(&eq->lock);
 	return -FI_EAVAIL;
 }
 
@@ -746,7 +750,10 @@ fi_ibv_eq_read(struct fid_eq *eq_fid, uint32_t *event,
 		return ret;
 
 	if (eq->channel) {
+		fastlock_acquire(&eq->lock);
 		ret = rdma_get_cm_event(eq->channel, &cma_event);
+		fastlock_release(&eq->lock);
+
 		if (ret)
 			return -errno;
 

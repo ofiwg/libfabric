@@ -259,6 +259,8 @@ static void rxm_alter_info(const struct fi_info *hints, struct fi_info *info)
 					hints->ep_attr->mem_tag_format;
 			}
 		}
+		if (cur->domain_attr->data_progress == FI_PROGRESS_AUTO)
+			cur->domain_attr->threading = FI_THREAD_SAFE;
 	}
 }
 
