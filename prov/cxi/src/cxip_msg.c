@@ -134,10 +134,11 @@ match_ux_send(struct cxip_rxc *rxc, const union c_event *event)
 		 * initiator.
 		 */
 		dlist_foreach_container(&rxc->ux_rdzv_sends,
-					struct cxip_ux_send, ux_send, list) {
+					struct cxip_ux_send, ux_send,
+					ux_entry) {
 			if ((ux_send->rdzv_id == ev_rdzv_id) &&
 			    (ux_send->initiator == process)) {
-				dlist_remove(&ux_send->list);
+				dlist_remove(&ux_send->ux_entry);
 				return ux_send;
 			}
 		}
@@ -148,9 +149,9 @@ match_ux_send(struct cxip_rxc *rxc, const union c_event *event)
 		 * all start pointers are unique.
 		 */
 		dlist_foreach_container(&rxc->ux_sends, struct cxip_ux_send,
-					ux_send, list) {
+					ux_send, ux_entry) {
 			if (ux_send->start == event->tgt_long.start) {
-				dlist_remove(&ux_send->list);
+				dlist_remove(&ux_send->ux_entry);
 				return ux_send;
 			}
 		}
@@ -182,10 +183,10 @@ match_ux_recv(struct cxip_rxc *rxc, const union c_event *event)
 		 * initiator.
 		 */
 		dlist_foreach_container(&rxc->ux_rdzv_recvs, struct cxip_req,
-					req, list) {
+					req, recv.ux_entry) {
 			if ((req->recv.rdzv_id == ev_rdzv_id) &&
 			    (req->recv.initiator == process)) {
-				dlist_remove(&req->list);
+				dlist_remove(&req->recv.ux_entry);
 				return req;
 			}
 		}
@@ -196,9 +197,9 @@ match_ux_recv(struct cxip_rxc *rxc, const union c_event *event)
 		 * all start pointers are unique.
 		 */
 		dlist_foreach_container(&rxc->ux_recvs, struct cxip_req, req,
-					list) {
+					recv.ux_entry) {
 			if (req->recv.start == event->tgt_long.start) {
-				dlist_remove(&req->list);
+				dlist_remove(&req->recv.ux_entry);
 				return req;
 			}
 		}
@@ -523,7 +524,7 @@ cxip_oflow_rdzv_cb(struct cxip_req *req, const union c_event *event)
 		 */
 		oflow_buf_get(oflow_buf);
 
-		dlist_insert_tail(&ux_send->list, &rxc->ux_rdzv_sends);
+		dlist_insert_tail(&ux_send->ux_entry, &rxc->ux_rdzv_sends);
 
 		fastlock_release(&rxc->lock);
 
@@ -665,7 +666,7 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 		 */
 		oflow_buf_get(oflow_buf);
 
-		dlist_insert_tail(&ux_send->list, &rxc->ux_sends);
+		dlist_insert_tail(&ux_send->ux_entry, &rxc->ux_sends);
 
 		fastlock_release(&rxc->lock);
 
@@ -873,9 +874,9 @@ static void cxip_rxc_eager_fini(struct cxip_rxc *rxc)
 
 		dlist_foreach_container_safe(&rxc->ux_sends,
 					     struct cxip_ux_send, ux_send,
-					     list, itmp) {
+					     ux_entry, itmp) {
 			if (ux_send->oflow_buf == oflow_buf) {
-				dlist_remove(&ux_send->list);
+				dlist_remove(&ux_send->ux_entry);
 				free(ux_send);
 			}
 		}
@@ -1110,7 +1111,8 @@ static void cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 				RDZV_ID(event->tgt_long.rendezvous_id,
 					mb.rdzv_id_lo);
 
-			dlist_insert_tail(&req->list, &rxc->ux_rdzv_recvs);
+			dlist_insert_tail(&req->recv.ux_entry,
+					  &rxc->ux_rdzv_recvs);
 
 			CXIP_LOG_DBG("Queued recv req, data: 0x%lx\n",
 				     req->recv.start);
@@ -1257,7 +1259,7 @@ static void cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 			 */
 			req->recv.start = event->tgt_long.start;
 
-			dlist_insert_tail(&req->list, &rxc->ux_recvs);
+			dlist_insert_tail(&req->recv.ux_entry, &rxc->ux_recvs);
 
 			CXIP_LOG_DBG("Queued recv req, data: 0x%lx\n",
 				     req->recv.start);

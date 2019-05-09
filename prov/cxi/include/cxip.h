@@ -423,6 +423,7 @@ struct cxip_req_amo {
 };
 
 struct cxip_req_recv {
+	struct dlist_entry ux_entry;	// UX event list entry
 	struct cxip_rxc *rxc;		// receive context
 	void *recv_buf;			// local receive buffer
 	struct cxip_md *recv_md;	// local receive MD
@@ -611,7 +612,7 @@ struct cxip_comp {
  * necessary to correlate the send with an Overflow event.
  */
 struct cxip_ux_send {
-	struct dlist_entry list;
+	struct dlist_entry ux_entry;		// UX event list entry
 	struct cxip_oflow_buf *oflow_buf;
 	uint64_t start;
 	uint32_t initiator;
