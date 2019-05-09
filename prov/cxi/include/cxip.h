@@ -672,14 +672,17 @@ struct cxip_rxc {
 
 	struct fi_rx_attr attr;
 
-	struct cxip_pte *rx_pte;
-	struct cxip_cmdq *rx_cmdq;	// RX CMDQ for posting recvs
+	struct cxip_pte *rx_pte;	// HW RX Queue
+	struct cxip_cmdq *rx_cmdq;	// RX CMDQ for posting receive buffers
 	struct cxip_cmdq *tx_cmdq;	// TX CMDQ for Message Gets
 
 	int eager_threshold;
 
 	/* Unexpected message handling */
-	ofi_atomic32_t oflow_buf_cnt;
+	fastlock_t rx_lock;			// RX message lock
+	ofi_atomic32_t oflow_bufs_submitted;
+	ofi_atomic32_t oflow_bufs_linked;
+	ofi_atomic32_t oflow_bufs_in_use;
 	int oflow_bufs_max;
 	int oflow_msgs_max;
 	int oflow_buf_size;
@@ -688,6 +691,9 @@ struct cxip_rxc {
 	struct dlist_entry ux_recvs;		// UX recv records
 	struct dlist_entry ux_rdzv_sends;	// UX RDZV send records
 	struct dlist_entry ux_rdzv_recvs;	// UX RDZV recv records
+
+	/* Long eager send handling */
+	ofi_atomic32_t ux_sink_linked;
 	struct cxip_oflow_buf ux_sink_buf;	// Long UX sink buffer
 };
 

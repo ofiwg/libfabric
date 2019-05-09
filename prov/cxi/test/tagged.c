@@ -1375,3 +1375,43 @@ ParameterizedTest(struct tagged_rx_params *param, tagged, rx)
 {
 	do_tagged_rx(param);
 }
+
+/* Test UX cleanup */
+Test(tagged, ux_cleanup)
+{
+	int i, ret;
+	uint8_t *send_buf;
+	int send_len = 64;
+	struct fi_cq_tagged_entry cqe;
+
+	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	cr_assert(send_buf);
+
+	/* Send 64 bytes to self */
+	for (i = 0; i < 3; i++) {
+		ret = fi_tsend(cxit_ep, send_buf, send_len, NULL,
+			       cxit_ep_fi_addr, 0, NULL);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_tsend failed %d", ret);
+
+		/* Wait for async event indicating data has been sent */
+		ret = cxit_await_completion(cxit_tx_cq, &cqe);
+		cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
+	}
+
+	/* Validate TX event fields */
+	cr_assert(cqe.op_context == NULL, "TX CQE Context mismatch");
+	cr_assert(cqe.flags == (FI_TAGGED | FI_SEND),
+		  "TX CQE flags mismatch");
+	cr_assert(cqe.len == 0, "Invalid TX CQE length");
+	cr_assert(cqe.buf == 0, "Invalid TX CQE address");
+	cr_assert(cqe.data == 0, "Invalid TX CQE data");
+	cr_assert(cqe.tag == 0, "Invalid TX CQE tag");
+
+	/* Wait for async event indicating data has been received */
+	for (i = 0 ; i < 1000; i++)
+		fi_cq_readfrom(cxit_rx_cq, &cqe, 1, NULL);
+
+	free(send_buf);
+
+	/* Close Endpoint with 3 UX sends on the RX Queue */
+}
