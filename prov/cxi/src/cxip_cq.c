@@ -594,7 +594,7 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq)
 	cxi_cq->enabled = 1;
 	fastlock_release(&cxi_cq->lock);
 
-	CXIP_LOG_ERROR("enabled eq_id: %d\n", cxi_cq->evtq->eqn);
+	CXIP_LOG_DBG("CQ enabled: %p (EQ: %d)\n", cxi_cq, cxi_cq->evtq->eqn);
 	return FI_SUCCESS;
 
 free_evtq:
@@ -634,7 +634,7 @@ static void cxip_cq_disable(struct cxip_cq *cxi_cq)
 
 	cxi_cq->enabled = 0;
 
-	CXIP_LOG_ERROR("disabled eq_id: %d\n", cxi_cq->evtq->eqn);
+	CXIP_LOG_DBG("CQ disabled: %p\n", cxi_cq);
 unlock:
 	fastlock_release(&cxi_cq->lock);
 }
