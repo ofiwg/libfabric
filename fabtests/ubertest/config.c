@@ -416,9 +416,9 @@ static int ft_parse_num(char *str, int len, struct key_t *key, void *buf)
 		TEST_ENUM_SET_N_RETURN(str, len, FI_MR_PROV_KEY, uint64_t, buf);
 		FT_ERR("Unknown MR mode");
 	} else if (!strncmp(key->str, "progress", strlen("progress"))) {
-		TEST_ENUM_SET_N_RETURN(str, len, FI_PROGRESS_MANUAL, uint64_t, buf);
-		TEST_ENUM_SET_N_RETURN(str, len, FI_PROGRESS_AUTO, uint64_t, buf);
-		TEST_ENUM_SET_N_RETURN(str, len, FI_PROGRESS_UNSPEC, uint64_t, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_PROGRESS_MANUAL, int, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_PROGRESS_AUTO, int, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_PROGRESS_UNSPEC, int, buf);
 		FT_ERR("Unknown progress mode");
 	} else if (!strncmp(key->str, "constant_caps", strlen("constant_caps"))) {
 		TEST_ENUM_SET_N_RETURN(str, len, FI_RMA, uint64_t, buf);
@@ -805,7 +805,7 @@ void fts_next(struct ft_series *series)
 		return;
 	series->cur_type = 0;
 
-	if (set->test_class[++series->cur_progress])
+	if (set->progress[++series->cur_progress])
 		return;
 	series->cur_progress = 0;
 
