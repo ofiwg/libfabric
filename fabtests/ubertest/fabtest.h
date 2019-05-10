@@ -148,6 +148,7 @@ enum {
 	FT_COMP_BUF_SIZE	= 256,
 	FT_MAX_FLAGS		= 64,
 	FT_MAX_PROGRESS		= 3,
+	FT_MAX_THREADING	= 6,
 };
 
 enum ft_comp_type {
@@ -244,6 +245,7 @@ struct ft_set {
 	enum fi_wait_obj	cq_wait_obj[FT_MAX_WAIT_OBJ];
 	enum fi_wait_obj	cntr_wait_obj[FT_MAX_WAIT_OBJ];
 	enum fi_progress	progress[FT_MAX_PROGRESS];
+	enum fi_threading	threading[FT_MAX_THREADING];
 	uint64_t		mode[FT_MAX_PROV_MODES];
 	uint64_t		test_class[FT_MAX_CLASS];
 	uint64_t		constant_caps[FT_MAX_CAPS];
@@ -274,6 +276,7 @@ struct ft_series {
 	int			cur_mode;
 	int			cur_class;
 	int			cur_progress;
+	int			cur_threading;
 };
 
 struct ft_info {
@@ -296,6 +299,7 @@ struct ft_info {
 	enum fi_wait_obj	cq_wait_obj;
 	enum fi_wait_obj	cntr_wait_obj;
 	enum fi_progress	progress;
+	enum fi_threading	threading;
 	uint32_t		protocol;
 	uint32_t		protocol_version;
 	char			node[FI_NAME_MAX];
