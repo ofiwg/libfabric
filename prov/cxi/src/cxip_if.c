@@ -303,14 +303,15 @@ unlock:
  */
 void cxip_put_if_domain(struct cxip_if_domain *if_dom)
 {
+	struct cxip_if *dev_if = if_dom->dev_if;
 	int ret;
 
-	fastlock_acquire(&if_dom->dev_if->lock);
+	fastlock_acquire(&dev_if->lock);
 
 	if (!ofi_atomic_dec32(&if_dom->ref)) {
 		CXIP_LOG_DBG(
 			"Released IF Domain, NIC: %u VNI: %u PID: %u\n",
-			if_dom->dev_if->if_nic, if_dom->vni, if_dom->pid);
+			dev_if->if_nic, if_dom->vni, if_dom->pid);
 
 		fastlock_destroy(&if_dom->lock);
 
@@ -323,7 +324,7 @@ void cxip_put_if_domain(struct cxip_if_domain *if_dom)
 		free(if_dom);
 	}
 
-	fastlock_release(&if_dom->dev_if->lock);
+	fastlock_release(&dev_if->lock);
 }
 
 /*

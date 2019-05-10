@@ -620,6 +620,8 @@ static void cxip_cq_disable(struct cxip_cq *cxi_cq)
 	if (!cxi_cq->enabled)
 		goto unlock;
 
+	ofi_idx_reset(&cxi_cq->req_table);
+
 	ofi_bufpool_destroy(cxi_cq->req_pool);
 
 	ret = cxil_destroy_evtq(cxi_cq->evtq);
