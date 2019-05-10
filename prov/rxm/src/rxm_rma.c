@@ -74,11 +74,12 @@ rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t 
 
 	assert(msg->rma_iov_count <= rxm_ep->rxm_info->tx_attr->rma_iov_limit);
 
+	ofi_ep_lock_acquire(&rxm_ep->util_ep);
+
 	ret = rxm_ep_prepare_tx(rxm_ep, msg->addr, &rxm_conn);
 	if (OFI_UNLIKELY(ret))
-		return ret;
+		goto unlock;
 
-	ofi_ep_lock_acquire(&rxm_ep->util_ep);
 	rma_buf = rxm_rma_buf_alloc(rxm_ep);
 	if (OFI_UNLIKELY(!rma_buf)) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
@@ -207,13 +208,11 @@ rxm_ep_rma_emulate_inject_msg(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, 
 
 	assert(msg->rma_iov_count <= rxm_ep->rxm_info->tx_attr->rma_iov_limit);
 
-	ofi_ep_lock_acquire(&rxm_ep->util_ep);
 	rma_buf = rxm_rma_buf_alloc(rxm_ep);
 	if (OFI_UNLIKELY(!rma_buf)) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 			"Ran out of buffers from RMA buffer pool\n");
-		ret = -FI_ENOMEM;
-		goto unlock;
+		return -FI_ENOMEM;
 	}
 
 	rma_buf->pkt.hdr.size = total_size;
@@ -229,8 +228,6 @@ rxm_ep_rma_emulate_inject_msg(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, 
 			rxm_ep_do_progress(&rxm_ep->util_ep);
 		ofi_buf_free(rma_buf);
 	}
-unlock:
-	ofi_ep_lock_release(&rxm_ep->util_ep);
 	return ret;
 }
 
@@ -272,9 +269,11 @@ rxm_ep_rma_inject_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, ui
 
 	assert(total_size <= rxm_ep->rxm_info->tx_attr->inject_size);
 
+	ofi_ep_lock_acquire(&rxm_ep->util_ep);
+
 	ret = rxm_ep_prepare_tx(rxm_ep, msg->addr, &rxm_conn);
 	if (OFI_UNLIKELY(ret))
-		return ret;
+		goto unlock;
 
 	if ((total_size <= rxm_ep->msg_info->tx_attr->inject_size) &&
 	    !(flags & FI_COMPLETION) &&
@@ -299,12 +298,14 @@ rxm_ep_rma_inject_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, ui
 			       "fi_inject_write* for MSG provider failed with ret - %"
 			       PRId64"\n", ret);
 			if (OFI_LIKELY(ret == -FI_EAGAIN))
-				rxm_ep_progress(&rxm_ep->util_ep);
+				rxm_ep_do_progress(&rxm_ep->util_ep);
 		}
-		return ret;
 	} else {
-		return rxm_ep_rma_emulate_inject_msg(rxm_ep, rxm_conn, total_size, msg, flags);
+		ret = rxm_ep_rma_emulate_inject_msg(rxm_ep, rxm_conn, total_size, msg, flags);
 	}
+unlock:
+	ofi_ep_lock_release(&rxm_ep->util_ep);
+	return ret;
 }
 
 static inline ssize_t
@@ -424,9 +425,11 @@ static ssize_t rxm_ep_inject_write(struct fid_ep *ep_fid, const void *buf,
 	struct rxm_ep *rxm_ep = container_of(ep_fid, struct rxm_ep,
 					     util_ep.ep_fid.fid);
 
+	ofi_ep_lock_acquire(&rxm_ep->util_ep);
+
 	ret = rxm_ep_prepare_tx(rxm_ep, dest_addr, &rxm_conn);
 	if (OFI_UNLIKELY(ret))
-		return ret;
+		goto unlock;
 
 	if (len <= rxm_ep->msg_info->tx_attr->inject_size) {
 		ret = fi_inject_write(rxm_conn->msg_ep, buf, len,
@@ -438,13 +441,15 @@ static ssize_t rxm_ep_inject_write(struct fid_ep *ep_fid, const void *buf,
 			       "fi_inject_write for MSG provider failed with ret - %"
 			       PRId64"\n", ret);
 			if (OFI_LIKELY(ret == -FI_EAGAIN))
-				rxm_ep_progress(&rxm_ep->util_ep);
+				rxm_ep_do_progress(&rxm_ep->util_ep);
 		}
-		return ret;
 	} else {
-		return rxm_ep_rma_emulate_inject(rxm_ep, rxm_conn, buf, len,
-						 0, dest_addr, addr, key, FI_INJECT);
+		ret = rxm_ep_rma_emulate_inject(rxm_ep, rxm_conn, buf, len,
+						0, dest_addr, addr, key, FI_INJECT);
 	}
+unlock:
+	ofi_ep_lock_release(&rxm_ep->util_ep);
+	return ret;
 }
 
 static ssize_t rxm_ep_inject_writedata(struct fid_ep *ep_fid, const void *buf,
@@ -456,9 +461,11 @@ static ssize_t rxm_ep_inject_writedata(struct fid_ep *ep_fid, const void *buf,
 	struct rxm_conn *rxm_conn;
 	struct rxm_ep *rxm_ep = container_of(ep_fid, struct rxm_ep,
 					     util_ep.ep_fid.fid);
+	ofi_ep_lock_acquire(&rxm_ep->util_ep);
+
 	ret = rxm_ep_prepare_tx(rxm_ep, dest_addr, &rxm_conn);
 	if (OFI_UNLIKELY(ret))
-		return ret;
+		goto unlock;
 
 	if (len <= rxm_ep->msg_info->tx_attr->inject_size) {
 		ret = fi_inject_writedata(rxm_conn->msg_ep, buf, len,
@@ -470,14 +477,16 @@ static ssize_t rxm_ep_inject_writedata(struct fid_ep *ep_fid, const void *buf,
 			       "fi_inject_writedata for MSG provider failed with ret - %"
 			       PRId64"\n", ret);
 			if (OFI_LIKELY(ret == -FI_EAGAIN))
-				rxm_ep_progress(&rxm_ep->util_ep);
+				rxm_ep_do_progress(&rxm_ep->util_ep);
 		}
-		return ret;
 	} else {
-		return rxm_ep_rma_emulate_inject(rxm_ep, rxm_conn, buf, len,
+		ret = rxm_ep_rma_emulate_inject(rxm_ep, rxm_conn, buf, len,
 						 data, dest_addr, addr, key,
 						 FI_REMOTE_CQ_DATA | FI_INJECT);
 	}
+unlock:
+	ofi_ep_lock_release(&rxm_ep->util_ep);
+	return ret;
 }
 
 struct fi_ops_rma rxm_ops_rma = {

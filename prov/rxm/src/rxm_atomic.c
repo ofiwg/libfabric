@@ -135,14 +135,12 @@ rxm_ep_atomic_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		return -FI_EINVAL;
 	}
 
-	ofi_ep_lock_acquire(&rxm_ep->util_ep);
 	tx_buf = (struct rxm_tx_atomic_buf *)
 		 rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_ATOMIC);
 	if (OFI_UNLIKELY(!tx_buf)) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 			"Ran out of buffers from Atomic buffer pool\n");
-		ret = -FI_EAGAIN;
-		goto unlock;
+		return -FI_EAGAIN;
 	}
 
 	rxm_ep_format_atomic_pkt_hdr(rxm_conn, tx_buf, tot_len, op,
@@ -167,8 +165,6 @@ rxm_ep_atomic_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	ret = rxm_ep_send_atomic_req(rxm_ep, rxm_conn, tx_buf, tot_len);
 	if (ret)
 		ofi_buf_free(tx_buf);
-unlock:
-	ofi_ep_lock_release(&rxm_ep->util_ep);
 	return ret;
 }
 
@@ -179,12 +175,17 @@ rxm_ep_generic_atomic_writemsg(struct rxm_ep *rxm_ep, const struct fi_msg_atomic
 	int ret;
 	struct rxm_conn *rxm_conn;
 
+	ofi_ep_lock_acquire(&rxm_ep->util_ep);
+
 	ret = rxm_ep_prepare_tx(rxm_ep, msg->addr, &rxm_conn);
 	if (OFI_UNLIKELY(ret))
-		return ret;
+		goto unlock;
 
-	return rxm_ep_atomic_common(rxm_ep, rxm_conn, msg, NULL, NULL, 0,
-				    NULL, NULL, 0, ofi_op_atomic, flags);
+	ret = rxm_ep_atomic_common(rxm_ep, rxm_conn, msg, NULL, NULL, 0,
+				   NULL, NULL, 0, ofi_op_atomic, flags);
+unlock:
+	ofi_ep_lock_release(&rxm_ep->util_ep);
+	return ret;
 }
 
 static ssize_t
@@ -284,13 +285,18 @@ rxm_ep_generic_atomic_readwritemsg(struct rxm_ep *rxm_ep,
 	int ret;
 	struct rxm_conn *rxm_conn;
 
+	ofi_ep_lock_acquire(&rxm_ep->util_ep);
+
 	ret = rxm_ep_prepare_tx(rxm_ep, msg->addr, &rxm_conn);
 	if (OFI_UNLIKELY(ret))
-		return ret;
+		goto unlock;
 
-	return rxm_ep_atomic_common(rxm_ep, rxm_conn, msg, NULL, NULL, 0,
-				    resultv, result_desc, result_count,
-				    ofi_op_atomic_fetch, flags);
+	ret = rxm_ep_atomic_common(rxm_ep, rxm_conn, msg, NULL, NULL, 0,
+				   resultv, result_desc, result_count,
+				   ofi_op_atomic_fetch, flags);
+unlock:
+	ofi_ep_lock_release(&rxm_ep->util_ep);
+	return ret;
 }
 
 static ssize_t
@@ -373,14 +379,19 @@ rxm_ep_generic_atomic_compwritemsg(struct rxm_ep *rxm_ep,
 	int ret;
 	struct rxm_conn *rxm_conn;
 
+	ofi_ep_lock_acquire(&rxm_ep->util_ep);
+
 	ret = rxm_ep_prepare_tx(rxm_ep, msg->addr, &rxm_conn);
 	if (OFI_UNLIKELY(ret))
-		return ret;
+		goto unlock;
 
-	return rxm_ep_atomic_common(rxm_ep, rxm_conn, msg, comparev,
-				    compare_desc, compare_count, resultv,
-				    result_desc, result_count,
-				    ofi_op_atomic_compare, flags);
+	ret = rxm_ep_atomic_common(rxm_ep, rxm_conn, msg, comparev,
+				   compare_desc, compare_count, resultv,
+				   result_desc, result_count,
+				   ofi_op_atomic_compare, flags);
+unlock:
+	ofi_ep_lock_release(&rxm_ep->util_ep);
+	return ret;
 }
 
 static ssize_t
