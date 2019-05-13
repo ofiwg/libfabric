@@ -1081,9 +1081,10 @@ ParameterizedTest(struct multitudes_params *param, tagged, multitudes)
 #define RECV_INIT 0x77
 #define SEND_INIT ~RECV_INIT
 
-void do_tagged(uint8_t *send_buf, size_t send_len, uint64_t send_tag,
-	       uint8_t *recv_buf, size_t recv_len, uint64_t recv_tag,
-	       uint64_t recv_ignore, bool send_first, size_t buf_size)
+void do_msg(uint8_t *send_buf, size_t send_len, uint64_t send_tag,
+	    uint8_t *recv_buf, size_t recv_len, uint64_t recv_tag,
+	    uint64_t recv_ignore, bool send_first, size_t buf_size,
+	    bool tagged)
 {
 	int i, ret;
 	struct fi_cq_tagged_entry tx_cqe,
@@ -1107,9 +1108,17 @@ void do_tagged(uint8_t *send_buf, size_t send_len, uint64_t send_tag,
 
 	if (send_first) {
 		/* Send 64 bytes to self */
-		ret = fi_tsend(cxit_ep, send_buf, send_len, NULL,
-			       cxit_ep_fi_addr, send_tag, NULL);
-		cr_assert_eq(ret, FI_SUCCESS, "fi_tsend failed %d", ret);
+		if (tagged) {
+			ret = fi_tsend(cxit_ep, send_buf, send_len, NULL,
+				       cxit_ep_fi_addr, send_tag, NULL);
+			cr_assert_eq(ret, FI_SUCCESS, "fi_tsend failed %d",
+				     ret);
+		} else {
+			ret = fi_send(cxit_ep, send_buf, send_len, NULL,
+				      cxit_ep_fi_addr, NULL);
+			cr_assert_eq(ret, FI_SUCCESS, "fi_send failed %d",
+				     ret);
+		}
 
 		/* Progress send to ensure it arrives unexpected */
 		i = 0;
@@ -1120,20 +1129,34 @@ void do_tagged(uint8_t *send_buf, size_t send_len, uint64_t send_tag,
 				break;
 			}
 			cr_assert_eq(ret, -FI_EAGAIN,
-				     "fi_tsend failed %d", ret);
+				     "send failed %d", ret);
 		} while (i++ < 10000);
 	}
 
 	/* Post RX buffer */
-	ret = fi_trecv(cxit_ep, recv_buf, recv_len, NULL, FI_ADDR_UNSPEC,
-		       recv_tag, recv_ignore, NULL);
-	cr_assert_eq(ret, FI_SUCCESS, "fi_trecv failed %d", ret);
+
+	if (tagged) {
+		ret = fi_trecv(cxit_ep, recv_buf, recv_len, NULL,
+			       FI_ADDR_UNSPEC, recv_tag, recv_ignore, NULL);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_trecv failed %d", ret);
+	} else {
+		ret = fi_recv(cxit_ep, recv_buf, recv_len, NULL,
+			      FI_ADDR_UNSPEC, NULL);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_recv failed %d", ret);
+	}
 
 	if (!send_first) {
-		/* Send 64 bytes to self */
-		ret = fi_tsend(cxit_ep, send_buf, send_len, NULL,
-			       cxit_ep_fi_addr, send_tag, NULL);
-		cr_assert_eq(ret, FI_SUCCESS, "fi_tsend failed %d", ret);
+		if (tagged) {
+			ret = fi_tsend(cxit_ep, send_buf, send_len, NULL,
+				       cxit_ep_fi_addr, send_tag, NULL);
+			cr_assert_eq(ret, FI_SUCCESS, "fi_tsend failed %d",
+				     ret);
+		} else {
+			ret = fi_send(cxit_ep, send_buf, send_len, NULL,
+				      cxit_ep_fi_addr, NULL);
+			cr_assert_eq(ret, FI_SUCCESS, "fi_send failed %d",
+				     ret);
+		}
 	}
 
 	/* Gather both events, ensure progress on both sides. */
@@ -1167,7 +1190,8 @@ void do_tagged(uint8_t *send_buf, size_t send_len, uint64_t send_tag,
 	if (truncated) {
 		cr_assert(err_cqe.op_context == NULL,
 			  "Error RX CQE Context mismatch");
-		cr_assert(err_cqe.flags == (FI_TAGGED | FI_RECV),
+		cr_assert(err_cqe.flags ==
+			  ((tagged ? FI_TAGGED : FI_MSG) | FI_RECV),
 			  "Error RX CQE flags mismatch");
 		cr_assert(err_cqe.len == recv_len,
 			  "Invalid Error RX CQE length, got: %ld exp: %ld",
@@ -1188,7 +1212,8 @@ void do_tagged(uint8_t *send_buf, size_t send_len, uint64_t send_tag,
 	} else {
 		/* Validate RX event fields */
 		cr_assert(rx_cqe.op_context == NULL, "RX CQE Context mismatch");
-		cr_assert(rx_cqe.flags == (FI_TAGGED | FI_RECV),
+		cr_assert(rx_cqe.flags ==
+			  ((tagged ? FI_TAGGED : FI_MSG) | FI_RECV),
 			  "RX CQE flags mismatch");
 		cr_assert(rx_cqe.len == send_len, "Invalid RX CQE length");
 		cr_assert(rx_cqe.buf == 0, "Invalid RX CQE address");
@@ -1200,7 +1225,7 @@ void do_tagged(uint8_t *send_buf, size_t send_len, uint64_t send_tag,
 
 	/* Validate TX event fields */
 	cr_assert(tx_cqe.op_context == NULL, "TX CQE Context mismatch");
-	cr_assert(tx_cqe.flags == (FI_TAGGED | FI_SEND),
+	cr_assert(tx_cqe.flags == ((tagged ? FI_TAGGED : FI_MSG) | FI_SEND),
 		  "TX CQE flags mismatch");
 	cr_assert(tx_cqe.len == 0, "Invalid TX CQE length");
 	cr_assert(tx_cqe.buf == 0, "Invalid TX CQE address");
@@ -1236,6 +1261,7 @@ struct tagged_rx_params {
 	uint64_t recv_tag;
 	uint64_t ignore;
 	bool ux;
+	bool tagged;
 };
 
 static struct tagged_rx_params params[] = {
@@ -1246,7 +1272,8 @@ static struct tagged_rx_params params[] = {
 	 .recv_len_off = -8,
 	 .recv_tag = 0,
 	 .ignore = 0,
-	 .ux = false},
+	 .ux = false,
+	 .tagged = true},
 	{.buf_size = BUF_SIZE, /* truncate UX */
 	 .send_min = SEND_MIN,
 	 .send_inc = SEND_INC,
@@ -1254,7 +1281,8 @@ static struct tagged_rx_params params[] = {
 	 .recv_len_off = -8,
 	 .recv_tag = 0,
 	 .ignore = 0,
-	 .ux = true},
+	 .ux = true,
+	 .tagged = true},
 	{.buf_size = BUF_SIZE, /* truncate ignore */
 	 .send_min = SEND_MIN,
 	 .send_inc = SEND_INC,
@@ -1262,7 +1290,8 @@ static struct tagged_rx_params params[] = {
 	 .recv_len_off = -8,
 	 .recv_tag = ~TAG,
 	 .ignore = -1ULL,
-	 .ux = false},
+	 .ux = false,
+	 .tagged = true},
 	{.buf_size = BUF_SIZE, /* truncate ignore UX */
 	 .send_min = SEND_MIN,
 	 .send_inc = SEND_INC,
@@ -1270,7 +1299,8 @@ static struct tagged_rx_params params[] = {
 	 .recv_len_off = -8,
 	 .recv_tag = ~TAG,
 	 .ignore = -1ULL,
-	 .ux = true},
+	 .ux = true,
+	 .tagged = true},
 	{.buf_size = BUF_SIZE, /* equal length */
 	 .send_min = SEND_MIN,
 	 .send_inc = SEND_INC,
@@ -1278,7 +1308,8 @@ static struct tagged_rx_params params[] = {
 	 .recv_len_off = 0,
 	 .recv_tag = 0,
 	 .ignore = 0,
-	 .ux = false},
+	 .ux = false,
+	 .tagged = true},
 	{.buf_size = BUF_SIZE, /* equal length UX */
 	 .send_min = SEND_MIN,
 	 .send_inc = SEND_INC,
@@ -1286,7 +1317,8 @@ static struct tagged_rx_params params[] = {
 	 .recv_len_off = 0,
 	 .recv_tag = 0,
 	 .ignore = 0,
-	 .ux = true},
+	 .ux = true,
+	 .tagged = true},
 	{.buf_size = BUF_SIZE, /* equal length ignore */
 	 .send_min = SEND_MIN,
 	 .send_inc = SEND_INC,
@@ -1294,7 +1326,8 @@ static struct tagged_rx_params params[] = {
 	 .recv_len_off = 0,
 	 .recv_tag = ~TAG,
 	 .ignore = -1ULL,
-	 .ux = false},
+	 .ux = false,
+	 .tagged = true},
 	{.buf_size = BUF_SIZE, /* equal length ignore UX */
 	 .send_min = SEND_MIN,
 	 .send_inc = SEND_INC,
@@ -1302,7 +1335,8 @@ static struct tagged_rx_params params[] = {
 	 .recv_len_off = 0,
 	 .recv_tag = ~TAG,
 	 .ignore = -1ULL,
-	 .ux = true},
+	 .ux = true,
+	 .tagged = true},
 	{.buf_size = BUF_SIZE, /* excess */
 	 .send_min = SEND_MIN,
 	 .send_inc = SEND_INC,
@@ -1310,7 +1344,8 @@ static struct tagged_rx_params params[] = {
 	 .recv_len_off = 8,
 	 .recv_tag = 0,
 	 .ignore = 0,
-	 .ux = false},
+	 .ux = false,
+	 .tagged = true},
 	{.buf_size = BUF_SIZE, /* excess UX */
 	 .send_min = SEND_MIN,
 	 .send_inc = SEND_INC,
@@ -1318,7 +1353,8 @@ static struct tagged_rx_params params[] = {
 	 .recv_len_off = 8,
 	 .recv_tag = 0,
 	 .ignore = 0,
-	 .ux = true},
+	 .ux = true,
+	 .tagged = true},
 	{.buf_size = BUF_SIZE, /* excess ignore */
 	 .send_min = SEND_MIN,
 	 .send_inc = SEND_INC,
@@ -1326,7 +1362,8 @@ static struct tagged_rx_params params[] = {
 	 .recv_len_off = 8,
 	 .recv_tag = ~TAG,
 	 .ignore = -1ULL,
-	 .ux = false},
+	 .ux = false,
+	 .tagged = true},
 	{.buf_size = BUF_SIZE, /* excess ignore UX */
 	 .send_min = SEND_MIN,
 	 .send_inc = SEND_INC,
@@ -1334,7 +1371,119 @@ static struct tagged_rx_params params[] = {
 	 .recv_len_off = 8,
 	 .recv_tag = ~TAG,
 	 .ignore = -1ULL,
-	 .ux = true},
+	 .ux = true,
+	 .tagged = true},
+
+	/* Un-tagged variants */
+
+	{.buf_size = BUF_SIZE, /* truncate */
+	 .send_min = SEND_MIN,
+	 .send_inc = SEND_INC,
+	 .send_tag = 0,
+	 .recv_len_off = -8,
+	 .recv_tag = 0,
+	 .ignore = 0,
+	 .ux = false,
+	 .tagged = false},
+	{.buf_size = BUF_SIZE, /* truncate UX */
+	 .send_min = SEND_MIN,
+	 .send_inc = SEND_INC,
+	 .send_tag = 0,
+	 .recv_len_off = -8,
+	 .recv_tag = 0,
+	 .ignore = 0,
+	 .ux = true,
+	 .tagged = false},
+	{.buf_size = BUF_SIZE, /* truncate ignore */
+	 .send_min = SEND_MIN,
+	 .send_inc = SEND_INC,
+	 .send_tag = 0,
+	 .recv_len_off = -8,
+	 .recv_tag = ~TAG,
+	 .ignore = -1ULL,
+	 .ux = false,
+	 .tagged = true},
+	{.buf_size = BUF_SIZE, /* truncate ignore UX */
+	 .send_min = SEND_MIN,
+	 .send_inc = SEND_INC,
+	 .send_tag = 0,
+	 .recv_len_off = -8,
+	 .recv_tag = ~TAG,
+	 .ignore = -1ULL,
+	 .ux = true,
+	 .tagged = false},
+	{.buf_size = BUF_SIZE, /* equal length */
+	 .send_min = SEND_MIN,
+	 .send_inc = SEND_INC,
+	 .send_tag = 0,
+	 .recv_len_off = 0,
+	 .recv_tag = 0,
+	 .ignore = 0,
+	 .ux = false,
+	 .tagged = false},
+	{.buf_size = BUF_SIZE, /* equal length UX */
+	 .send_min = SEND_MIN,
+	 .send_inc = SEND_INC,
+	 .send_tag = 0,
+	 .recv_len_off = 0,
+	 .recv_tag = 0,
+	 .ignore = 0,
+	 .ux = true,
+	 .tagged = false},
+	{.buf_size = BUF_SIZE, /* equal length ignore */
+	 .send_min = SEND_MIN,
+	 .send_inc = SEND_INC,
+	 .send_tag = 0,
+	 .recv_len_off = 0,
+	 .recv_tag = ~TAG,
+	 .ignore = -1ULL,
+	 .ux = false,
+	 .tagged = false},
+	{.buf_size = BUF_SIZE, /* equal length ignore UX */
+	 .send_min = SEND_MIN,
+	 .send_inc = SEND_INC,
+	 .send_tag = 0,
+	 .recv_len_off = 0,
+	 .recv_tag = ~TAG,
+	 .ignore = -1ULL,
+	 .ux = true,
+	 .tagged = false},
+	{.buf_size = BUF_SIZE, /* excess */
+	 .send_min = SEND_MIN,
+	 .send_inc = SEND_INC,
+	 .send_tag = 0,
+	 .recv_len_off = 8,
+	 .recv_tag = 0,
+	 .ignore = 0,
+	 .ux = false,
+	 .tagged = false},
+	{.buf_size = BUF_SIZE, /* excess UX */
+	 .send_min = SEND_MIN,
+	 .send_inc = SEND_INC,
+	 .send_tag = 0,
+	 .recv_len_off = 8,
+	 .recv_tag = 0,
+	 .ignore = 0,
+	 .ux = true,
+	 .tagged = false},
+	{.buf_size = BUF_SIZE, /* excess ignore */
+	 .send_min = SEND_MIN,
+	 .send_inc = SEND_INC,
+	 .send_tag = 0,
+	 .recv_len_off = 8,
+	 .recv_tag = ~TAG,
+	 .ignore = -1ULL,
+	 .ux = false,
+	 .tagged = false},
+	{.buf_size = BUF_SIZE, /* excess ignore UX */
+	 .send_min = SEND_MIN,
+	 .send_inc = SEND_INC,
+	 .send_tag = 0,
+	 .recv_len_off = 8,
+	 .recv_tag = ~TAG,
+	 .ignore = -1ULL,
+	 .ux = true,
+	 .tagged = false},
 };
 
 ParameterizedTestParameters(tagged, rx)
@@ -1346,7 +1495,7 @@ ParameterizedTestParameters(tagged, rx)
 				   param_sz);
 }
 
-void do_tagged_rx(struct tagged_rx_params *param)
+ParameterizedTest(struct tagged_rx_params *param, tagged, rx)
 {
 	uint8_t *recv_buf,
 		*send_buf;
@@ -1361,19 +1510,14 @@ void do_tagged_rx(struct tagged_rx_params *param)
 	for (send_len = param->send_min;
 	     send_len <= param->buf_size;
 	     send_len += param->send_inc) {
-		do_tagged(send_buf, send_len, param->send_tag,
-			  recv_buf, send_len + param->recv_len_off,
-			  param->recv_tag, param->ignore, param->ux,
-			  param->buf_size);
+		do_msg(send_buf, send_len, param->send_tag,
+		       recv_buf, send_len + param->recv_len_off,
+		       param->recv_tag, param->ignore, param->ux,
+		       param->buf_size, param->tagged);
 	}
 
 	free(send_buf);
 	free(recv_buf);
-}
-
-ParameterizedTest(struct tagged_rx_params *param, tagged, rx)
-{
-	do_tagged_rx(param);
 }
 
 Test(tagged, oflow_replenish)
@@ -1390,9 +1534,9 @@ Test(tagged, oflow_replenish)
 	cr_assert(send_buf);
 
 	for (i = 0; i < 6*1024+1; i++) {
-		do_tagged(send_buf, send_len, 0,
-			  recv_buf, send_len, 0, 0,
-			  true, send_len);
+		do_msg(send_buf, send_len, 0,
+		       recv_buf, send_len, 0, 0,
+		       true, send_len, true);
 	}
 
 	free(send_buf);

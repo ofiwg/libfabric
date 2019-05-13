@@ -731,9 +731,13 @@ static int eager_buf_add(struct cxip_rxc *rxc)
 	struct cxip_req *req;
 	uint64_t min_free;
 
-	/* Match all tagged, eager sends */
-	union cxip_match_bits mb = { .tagged = 1, .sink = 0 };
-	union cxip_match_bits ib = { .rdzv_id_lo = ~0, .tag = ~0 };
+	/* Match all eager, long sends */
+	union cxip_match_bits mb = { .sink = 0 };
+	union cxip_match_bits ib = {
+		.tagged = 1,
+		.rdzv_id_lo = ~0,
+		.tag = ~0
+	};
 
 	dom = rxc->domain;
 
@@ -873,9 +877,13 @@ static int cxip_rxc_sink_init(struct cxip_rxc *rxc)
 	void *ux_buf;
 	struct cxip_md *md;
 
-	/* Match all tagged, rendezvous sends */
-	union cxip_match_bits mb = { .tagged = 1, .sink = 1 };
-	union cxip_match_bits ib = { .rdzv_id_lo = ~0, .tag = ~0 };
+	/* Match all eager, long sends */
+	union cxip_match_bits mb = { .sink = 1 };
+	union cxip_match_bits ib = {
+		.tagged = 1,
+		.rdzv_id_lo = ~0,
+		.tag = ~0
+	};
 
 	dom = rxc->domain;
 
@@ -1076,9 +1084,11 @@ static void cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 	switch (event->hdr.event_type) {
 	case C_EVENT_LINK:
 		/* TODO Handle append errors. */
+		assert(cxi_event_rc(event) == C_RC_OK);
 		return;
 	case C_EVENT_UNLINK:
 		/* TODO Handle unlink errors. */
+		assert(cxi_event_rc(event) == C_RC_OK);
 		return;
 	case C_EVENT_PUT_OVERFLOW:
 		/* We matched an unexpected header */
@@ -1228,9 +1238,11 @@ static void cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 	switch (event->hdr.event_type) {
 	case C_EVENT_LINK:
 		/* TODO Handle append errors. */
+		assert(cxi_event_rc(event) == C_RC_OK);
 		return;
 	case C_EVENT_UNLINK:
 		/* TODO Handle unlink errors. */
+		assert(cxi_event_rc(event) == C_RC_OK);
 		return;
 	case C_EVENT_PUT_OVERFLOW:
 		/* We matched an unexpected header */
@@ -1437,6 +1449,10 @@ static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
 		goto req_free;
 	}
+
+	CXIP_LOG_DBG("req: %p buf: %p len: %lu src_addr: %ld tag(%c): 0x%lx ignore: 0x%lx context: %p\n",
+		     req, buf, len, src_addr, tagged ? '*' : '-', tag, ignore,
+		     context);
 
 	return FI_SUCCESS;
 
@@ -1857,7 +1873,7 @@ static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 		return -FI_EINVAL;
 	}
 
-	long_send = tagged && len > txc->eager_threshold ? true : false;
+	long_send = len > txc->eager_threshold ? true : false;
 
 	dom = txc->domain;
 
@@ -1954,6 +1970,10 @@ static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 		if (ret)
 			goto send_freereq;
 	}
+
+	CXIP_LOG_DBG("req: %p buf: %p len: %lu dest_addr: %ld tag(%c): 0x%lx context %p\n",
+		     req, buf, len, dest_addr, tagged ? '*' : '-', tag,
+		     context);
 
 	return FI_SUCCESS;
 
