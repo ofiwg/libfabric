@@ -1,7 +1,8 @@
 /*
- * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2019 Cray Inc. All rights reserved.
  * Copyright (c) 2015-2018 Los Alamos National Security, LLC.
  *                         All rights reserved.
+ * Copyright (c) 2019 Triad National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -47,6 +48,7 @@
 #include "gnix_av.h"
 #include "gnix_rma.h"
 #include "gnix_atomic.h"
+#include "gnix_cm.h"
 
 #define INVALID_PEEK_FORMAT(fmt) \
 	((fmt) == FI_CQ_FORMAT_CONTEXT || (fmt) == FI_CQ_FORMAT_MSG)
@@ -401,15 +403,25 @@ static int __recv_completion_src(
 {
 	ssize_t rc;
 	char *buffer;
+	size_t buf_len;
 
 	GNIX_DBG_TRACE(FI_LOG_TRACE, "\n");
 
 	if ((req->msg.recv_flags & FI_COMPLETION) && ep->recv_cq) {
-		if (src_addr == FI_ADDR_NOTAVAIL &&
+		if ((src_addr == FI_ADDR_NOTAVAIL) &&
                     (req->msg.recv_flags & FI_SOURCE_ERR) != 0) {
-			buffer = malloc(GNIX_CQ_MAX_ERR_DATA_SIZE);
-			memcpy(buffer, req->vc->gnix_ep_name,
-				sizeof(struct gnix_ep_name));
+			if (ep->domain->addr_format == FI_ADDR_STR) {
+				buffer = malloc(GNIX_FI_ADDR_STR_LEN);
+				rc = _gnix_ep_name_to_str(req->vc->gnix_ep_name, (char **)&buffer);
+				assert(rc == FI_SUCCESS);
+				buf_len = GNIX_FI_ADDR_STR_LEN;
+			} else {
+				buffer = malloc(GNIX_CQ_MAX_ERR_DATA_SIZE);
+				assert(buffer != NULL);
+				memcpy(buffer, req->vc->gnix_ep_name,
+					sizeof(struct gnix_ep_name));
+				buf_len = sizeof(struct gnix_ep_name);
+			}
 			rc = _gnix_cq_add_error(ep->recv_cq,
 						req->user_context,
 						flags,
@@ -421,7 +433,7 @@ static int __recv_completion_src(
 						FI_EADDRNOTAVAIL,
 						0,
 						buffer,
-						sizeof(struct gnix_ep_name));
+						buf_len);
 		} else {
 			rc = _gnix_cq_add_event(ep->recv_cq,
 						ep,

@@ -126,6 +126,7 @@ nodist_prov_gni_test_gnitest_SOURCES = \
 	prov/gni/test/rdm_dgram_stx.c \
 	prov/gni/test/rdm_rx_overrun.c \
 	prov/gni/test/rdm_sr.c \
+	prov/gni/test/rdm_addr_str_sr.c \
 	prov/gni/test/rdm_multi_recv.c \
 	prov/gni/test/rdm_tagged_sr.c \
 	prov/gni/test/sep.c \
