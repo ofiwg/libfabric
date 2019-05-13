@@ -227,6 +227,14 @@ provider.  Example test configurations are at /test_configs.
   values and 2 having 3 possible values, ubertest will execute 576 total
   iterations of each test.
 
+### Config file options
+
+TODO: add all supported config options
+
+- *threading*
+  Specify a list of threading levels. This is a hints only config: ubertest
+  doesn't spawn multiple threads to verify functionality.
+
 # HOW TO RUN TESTS
 
 (1) Fabtests requires that libfabric be installed on the system, and at least one provider be usable.

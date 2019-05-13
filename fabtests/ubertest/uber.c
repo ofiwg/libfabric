@@ -211,6 +211,7 @@ static void ft_show_test_info(void)
 	printf(" cntr_%s, ", ft_wait_obj_str(test_info.cq_wait_obj));
 	ft_print_comp(&test_info);
 	printf(" %s,", fi_tostr(&test_info.progress, FI_TYPE_PROGRESS));
+	printf(" %s (only hints),", fi_tostr(&test_info.threading, FI_TYPE_THREADING));
 	printf(" [%s],", fi_tostr(&test_info.mr_mode, FI_TYPE_MR_MODE));
 	printf(" [%s],", fi_tostr(&test_info.mode, FI_TYPE_MODE));
 	printf(" [%s]]\n", fi_tostr(&test_info.caps, FI_TYPE_CAPS));
@@ -247,6 +248,7 @@ static void ft_fw_convert_info(struct fi_info *info, struct ft_info *test_info)
 	info->domain_attr->mr_mode = test_info->mr_mode;
 	info->domain_attr->av_type = test_info->av_type;
 	info->domain_attr->data_progress = test_info->progress;
+	info->domain_attr->threading = test_info->threading;
 
 	info->ep_attr->type = test_info->ep_type;
 	info->ep_attr->protocol = test_info->protocol;
@@ -291,8 +293,10 @@ ft_fw_update_info(struct ft_info *test_info, struct fi_info *info, int subindex)
 		}
 	}
 
-	if (info->domain_attr)
+	if (info->domain_attr) {
 		test_info->progress = info->domain_attr->data_progress;
+		test_info->threading = info->domain_attr->threading;
+	}
 
 	test_info->mode = info->mode;
 }
