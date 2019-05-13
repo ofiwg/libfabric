@@ -1376,6 +1376,29 @@ ParameterizedTest(struct tagged_rx_params *param, tagged, rx)
 	do_tagged_rx(param);
 }
 
+Test(tagged, oflow_replenish)
+{
+	uint8_t *recv_buf,
+		*send_buf;
+	size_t send_len = 1024;
+	int i;
+
+	recv_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	cr_assert(recv_buf);
+
+	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	cr_assert(send_buf);
+
+	for (i = 0; i < 6*1024+1; i++) {
+		do_tagged(send_buf, send_len, 0,
+			  recv_buf, send_len, 0, 0,
+			  true, send_len);
+	}
+
+	free(send_buf);
+	free(recv_buf);
+}
+
 /* Test UX cleanup */
 Test(tagged, ux_cleanup)
 {

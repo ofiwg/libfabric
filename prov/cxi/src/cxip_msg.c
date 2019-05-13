@@ -271,14 +271,13 @@ static void report_recv_completion(struct cxip_req *req)
 }
 
 /*
- * oflow_buf_free() - Free an overflow buffer.
+ * oflow_buf_free() - Free an Overflow buffer.
+ *
+ * Caller must hold rxc->rx_lock.
  */
 static void oflow_buf_free(struct cxip_oflow_buf *oflow_buf)
 {
-	fastlock_acquire(&oflow_buf->rxc->rx_lock);
 	dlist_remove(&oflow_buf->list);
-	fastlock_release(&oflow_buf->rxc->rx_lock);
-
 	ofi_atomic_dec32(&oflow_buf->rxc->oflow_bufs_in_use);
 
 	cxip_unmap(oflow_buf->md);
@@ -287,22 +286,18 @@ static void oflow_buf_free(struct cxip_oflow_buf *oflow_buf)
 }
 
 /*
- * oflow_buf_get() - Take a reference to the overflow buffer, preventing it
- * from being freed.
+ * oflow_req_put_bytes() - Consume bytes in the Overflow buffer.
+ *
+ * An Overflow buffer is freed when all bytes are consumed by the NIC.
+ *
+ * Caller must hold rxc->rx_lock.
  */
-static void oflow_buf_get(struct cxip_oflow_buf *oflow_buf)
+static void oflow_req_put_bytes(struct cxip_req *req, size_t bytes)
 {
-	ofi_atomic_inc32(&oflow_buf->ref);
-}
-
-/*
- * oflow_buf_put() - Put a reference to the overflow buffer. Overflow buffers
- * are automatically freed when they become unused.
- */
-static void oflow_buf_put(struct cxip_oflow_buf *oflow_buf)
-{
-	if (!ofi_atomic_dec32(&oflow_buf->ref)) {
-		oflow_buf_free(oflow_buf);
+	req->oflow.oflow_buf->min_bytes -= bytes;
+	if (req->oflow.oflow_buf->min_bytes < 0) {
+		oflow_buf_free(req->oflow.oflow_buf);
+		cxip_cq_req_free(req);
 	}
 }
 
@@ -414,33 +409,6 @@ recv_req_put_event(struct cxip_req *req, const union c_event *event)
 }
 
 /*
- * oflow_req_cleanup() - Clean up overflow buffer request.
- *
- * Free overflow buffer resources if the buffer is no longer in use.
- */
-static void oflow_req_cleanup(struct cxip_req *req)
-{
-	struct cxip_oflow_buf *oflow_buf;
-
-	oflow_buf = req->oflow.oflow_buf;
-	if (oflow_buf->exhausted) {
-		CXIP_LOG_DBG("Oflow buf exhausted, buf: %p\n",
-			     oflow_buf->buf);
-
-		/* This is the last event to the overflow buffer, drop a
-		 * reference to it. The buffer will be freed once all user data
-		 * is copied out.
-		 */
-		oflow_buf_put(oflow_buf);
-
-		/* No further events are expected, free the overflow buffer
-		 * request immediately.
-		 */
-		cxip_cq_req_free(req);
-	}
-}
-
-/*
  * cxip_oflow_sink_cb() - Process an Overflow buffer event the sink buffer.
  *
  * The sink buffer matches all unexpected long eager sends. The sink buffer
@@ -452,7 +420,6 @@ cxip_oflow_sink_cb(struct cxip_req *req, const union c_event *event)
 {
 	int ret;
 	struct cxip_rxc *rxc = req->oflow.rxc;
-	struct cxip_oflow_buf *oflow_buf = req->oflow.oflow_buf;
 	struct cxip_req *ux_recv;
 	struct cxip_ux_send *ux_send;
 
@@ -502,7 +469,7 @@ cxip_oflow_sink_cb(struct cxip_req *req, const union c_event *event)
 		}
 
 		/* Use start pointer for matching. */
-		ux_send->oflow_buf = oflow_buf;
+		ux_send->req = req;
 		ux_send->start = event->tgt_long.start;
 
 		dlist_insert_tail(&ux_send->ux_entry, &rxc->ux_sends);
@@ -574,17 +541,13 @@ cxip_oflow_rdzv_cb(struct cxip_req *req, const union c_event *event)
 		 * offloaded rendezvous operations.
 		 */
 		mb.raw = event->tgt_long.match_bits;
-		ux_send->oflow_buf = oflow_buf;
+		ux_send->req = req;
 		ux_send->start = event->tgt_long.start;
 		ux_send->initiator =
 				event->tgt_long.initiator.initiator.process;
 		ux_send->rdzv_id = RDZV_ID(event->tgt_long.rendezvous_id,
 					   mb.rdzv_id_lo);
-
-		/* Prevent the overflow buffer from being freed until the user
-		 * has copied out data.
-		 */
-		oflow_buf_get(oflow_buf);
+		ux_send->eager_bytes = event->tgt_long.mlength;
 
 		dlist_insert_tail(&ux_send->ux_entry, &rxc->ux_rdzv_sends);
 
@@ -594,8 +557,6 @@ cxip_oflow_rdzv_cb(struct cxip_req *req, const union c_event *event)
 
 		return;
 	}
-
-	fastlock_release(&rxc->rx_lock);
 
 	CXIP_LOG_DBG("Matched ux_recv, data: 0x%lx\n",
 		     ux_recv->recv.start);
@@ -607,8 +568,9 @@ cxip_oflow_rdzv_cb(struct cxip_req *req, const union c_event *event)
 	oflow_va = (void *)CXI_IOVA_TO_VA(oflow_buf->md->md,
 					  event->tgt_long.start);
 	memcpy(ux_recv->recv.recv_buf, oflow_va, event->tgt_long.mlength);
+	oflow_req_put_bytes(req, event->tgt_long.mlength);
 
-	oflow_req_cleanup(req);
+	fastlock_release(&rxc->rx_lock);
 }
 
 int cxip_rxc_eager_replenish(struct cxip_rxc *rxc);
@@ -678,23 +640,23 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 			     event->tgt_long.auto_unlinked ? "auto" : "manual",
 			     req);
 
+		fastlock_acquire(&rxc->rx_lock);
+
 		ofi_atomic_dec32(&rxc->oflow_bufs_submitted);
 		ofi_atomic_dec32(&rxc->oflow_bufs_linked);
 
 		if (!event->tgt_long.auto_unlinked) {
-			oflow_buf_put(oflow_buf);
-			cxip_cq_req_free(req);
-			return;
+			uint64_t bytes = rxc->oflow_buf_size -
+					(event->tgt_long.start -
+					 CXI_VA_TO_IOVA(oflow_buf->md->md,
+							oflow_buf->buf));
+			oflow_req_put_bytes(req, bytes);
+		} else {
+			/* Replace the eager overflow buffer */
+			cxip_rxc_eager_replenish(rxc);
 		}
 
-		/* Mark the overflow buffer exhausted. One more Put event is
-		 * expected. When the event for the Put which exhausted
-		 * resources arrives, drop a reference to the overflow buffer.
-		 */
-		oflow_buf->exhausted = 1;
-
-		/* Replace the eager overflow buffer */
-		cxip_rxc_eager_replenish(rxc);
+		fastlock_release(&rxc->rx_lock);
 
 		return;
 	case C_EVENT_PUT:
@@ -724,13 +686,9 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 		}
 
 		/* Use start pointer for matching. */
-		ux_send->oflow_buf = oflow_buf;
+		ux_send->req = req;
 		ux_send->start = event->tgt_long.start;
-
-		/* Prevent the overflow buffer from being freed until the user
-		 * has copied out data.
-		 */
-		oflow_buf_get(oflow_buf);
+		ux_send->eager_bytes = event->tgt_long.mlength;
 
 		dlist_insert_tail(&ux_send->ux_entry, &rxc->ux_sends);
 
@@ -740,8 +698,6 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 
 		return;
 	}
-
-	fastlock_release(&rxc->rx_lock);
 
 	/* A matching Put Overflow event arrived earlier. Data is
 	 * waiting in the overflow buffer.
@@ -754,10 +710,11 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 	oflow_va = (void *)CXI_IOVA_TO_VA(oflow_buf->md->md,
 					  event->tgt_long.start);
 	memcpy(ux_recv->recv.recv_buf, oflow_va, ux_recv->recv.mlength);
+	oflow_req_put_bytes(req, ux_recv->recv.mlength);
+
+	fastlock_release(&rxc->rx_lock);
 
 	recv_req_complete(ux_recv);
-
-	oflow_req_cleanup(req);
 }
 
 /*
@@ -832,8 +789,7 @@ static int eager_buf_add(struct cxip_rxc *rxc)
 	/* Initialize oflow_buf structure */
 	dlist_insert_tail(&oflow_buf->list, &rxc->oflow_bufs);
 	oflow_buf->rxc = rxc;
-	ofi_atomic_initialize32(&oflow_buf->ref, 1);
-	oflow_buf->exhausted = 0;
+	oflow_buf->min_bytes = rxc->oflow_buf_size - min_free;
 	oflow_buf->buffer_id = req->req_id;
 	oflow_buf->type = OFLOW_BUF_EAGER;
 
@@ -857,12 +813,12 @@ free_oflow:
 
 /*
  * cxip_rxc_eager_replenish() - Replenish RXC eager overflow buffers.
+ *
+ * Caller must hold rxc->rx_lock.
  */
 int cxip_rxc_eager_replenish(struct cxip_rxc *rxc)
 {
 	int ret = FI_SUCCESS;
-
-	fastlock_acquire(&rxc->rx_lock);
 
 	while (ofi_atomic_get32(&rxc->oflow_bufs_submitted) <
 	       rxc->oflow_bufs_max) {
@@ -873,8 +829,6 @@ int cxip_rxc_eager_replenish(struct cxip_rxc *rxc)
 			break;
 		}
 	}
-
-	fastlock_release(&rxc->rx_lock);
 
 	return ret;
 }
@@ -1041,6 +995,25 @@ void cxip_msg_oflow_fini(struct cxip_rxc *rxc)
 	struct dlist_entry *tmp;
 	int ux_sends = 0;
 
+	/* Clean up unexpected Put records. Overflow buffers are unlinked, so
+	 * no more events can be expected.
+	 */
+	dlist_foreach_container_safe(&rxc->ux_sends, struct cxip_ux_send,
+				     ux_send, ux_entry, tmp) {
+		/* Dropping the last reference will cause the oflow_buf to be
+		 * removed from the RXC list and freed.
+		 */
+		if (ux_send->req->oflow.oflow_buf->type == OFLOW_BUF_EAGER)
+			oflow_req_put_bytes(ux_send->req,
+					    ux_send->eager_bytes);
+
+		dlist_remove(&ux_send->ux_entry);
+		free(ux_send);
+		ux_sends++;
+	}
+
+	CXIP_LOG_DBG("Freed %d UX Send(s)\n", ux_sends);
+
 	ret = cxip_rxc_sink_fini(rxc);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_ERROR("cxip_rxc_sink_fini() returned: %d\n", ret);
@@ -1059,23 +1032,6 @@ void cxip_msg_oflow_fini(struct cxip_rxc *rxc)
 		cxip_cq_progress(rxc->comp.recv_cq);
 	} while (ofi_atomic_get32(&rxc->oflow_bufs_linked) ||
 		 ofi_atomic_get32(&rxc->ux_sink_linked));
-
-	/* Clean up unexpected Put records. Overflow buffers are unlinked, so
-	 * no more events can be expected.
-	 */
-	dlist_foreach_container_safe(&rxc->ux_sends, struct cxip_ux_send,
-				     ux_send, ux_entry, tmp) {
-		/* Dropping the last reference will cause the oflow_buf to be
-		 * removed from the RXC list and freed.
-		 */
-		oflow_buf_put(ux_send->oflow_buf);
-
-		dlist_remove(&ux_send->ux_entry);
-		free(ux_send);
-		ux_sends++;
-	}
-
-	CXIP_LOG_DBG("Freed %d UX Send(s)\n", ux_sends);
 
 	if (ofi_atomic_get32(&rxc->oflow_bufs_in_use))
 		CXIP_LOG_ERROR("Leaked %d overflow buffers\n",
@@ -1163,11 +1119,9 @@ static void cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 			return;
 		}
 
-		fastlock_release(&rxc->rx_lock);
-
 		CXIP_LOG_DBG("Matched ux_send: %p\n", ux_send);
 
-		oflow_buf = ux_send->oflow_buf;
+		oflow_buf = ux_send->req->oflow.oflow_buf;
 
 		/* Update request fields. */
 		recv_req_put_event(req, event);
@@ -1176,17 +1130,15 @@ static void cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 		oflow_va = (void *)CXI_IOVA_TO_VA(oflow_buf->md->md,
 						  ux_send->start);
 		memcpy(req->recv.recv_buf, oflow_va, event->tgt_long.mlength);
+		oflow_req_put_bytes(ux_send->req, event->tgt_long.mlength);
+
+		fastlock_release(&rxc->rx_lock);
 
 		/* Count the rendezvous event. */
 		rdzv_recv_req_event(req);
 
 		/* Release the unexpected Put event record */
 		free(ux_send);
-
-		/* Drop reference to the overflow buffer. It will be
-		 * freed once all user data is copied out.
-		 */
-		oflow_buf_put(oflow_buf);
 		return;
 	case C_EVENT_PUT:
 		/* Eager data was delivered directly to the user buffer. */
@@ -1307,8 +1259,6 @@ static void cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 			return;
 		}
 
-		fastlock_release(&rxc->rx_lock);
-
 		/* A matching unexpected-Put event arrived earlier. */
 
 		CXIP_LOG_DBG("Matched ux_send: %p\n", ux_send);
@@ -1316,9 +1266,11 @@ static void cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		/* Update request fields. */
 		recv_req_put_event(req, event);
 
-		oflow_buf = ux_send->oflow_buf;
+		oflow_buf = ux_send->req->oflow.oflow_buf;
 
 		if (oflow_buf->type == OFLOW_BUF_SINK) {
+			fastlock_release(&rxc->rx_lock);
+
 			/* For unexpected, long, eager messages, issue a Get to
 			 * retrieve data from the initiator.
 			 */
@@ -1333,18 +1285,15 @@ static void cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 				event->tgt_long.start);
 		memcpy(req->recv.recv_buf, oflow_va,
 		       req->recv.mlength);
+		oflow_req_put_bytes(ux_send->req, req->recv.mlength);
+
+		fastlock_release(&rxc->rx_lock);
 
 		/* Release the unexpected Put event record */
 		free(ux_send);
 
 		/* Complete receive request. */
 		recv_req_complete(req);
-
-		/* Drop reference to the overflow buffer. It will be
-		 * freed once all user data is copied out.
-		 */
-		oflow_buf_put(oflow_buf);
-
 		return;
 	case C_EVENT_PUT:
 		/* Data was delivered directly to the user buffer. Complete the

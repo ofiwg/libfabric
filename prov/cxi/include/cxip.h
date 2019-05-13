@@ -613,10 +613,11 @@ struct cxip_comp {
  */
 struct cxip_ux_send {
 	struct dlist_entry ux_entry;		// UX event list entry
-	struct cxip_oflow_buf *oflow_buf;
+	struct cxip_req *req;
 	uint64_t start;
 	uint32_t initiator;
 	uint32_t rdzv_id;
+	int eager_bytes;
 };
 
 enum oflow_buf_type {
@@ -637,8 +638,7 @@ struct cxip_oflow_buf {
 	struct cxip_rxc *rxc;
 	void *buf;
 	struct cxip_md *md;
-	ofi_atomic32_t ref;
-	int exhausted;
+	int min_bytes;
 	int buffer_id;
 };
 
