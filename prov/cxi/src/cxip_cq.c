@@ -149,6 +149,7 @@ void cxip_cq_progress(struct cxip_cq *cq)
 	const union c_event *event;
 	struct cxip_req *req;
 	int events = 0;
+	int ret;
 
 	fastlock_acquire(&cq->lock);
 
@@ -156,10 +157,16 @@ void cxip_cq_progress(struct cxip_cq *cq)
 		goto out;
 
 	/* TODO Limit the maximum number of events processed */
-	while ((event = cxi_eq_get_event(cq->evtq))) {
+	while ((event = cxi_eq_peek_event(cq->evtq))) {
 		req = cxip_cq_event_req(cq, event);
-		if (req)
-			req->cb(req, event);
+		if (req) {
+			ret = req->cb(req, event);
+			if (ret != FI_SUCCESS)
+				break;
+		}
+
+		/* Consume event. */
+		cxi_eq_get_event(cq->evtq);
 
 		events++;
 	}

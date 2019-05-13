@@ -251,7 +251,7 @@ static inline int _cxip_ep_valid(struct fid_ep *ep,
  * @param req AMO request structure
  * @param event resulting event
  */
-static void _cxip_amo_cb(struct cxip_req *req, const union c_event *event)
+static int _cxip_amo_cb(struct cxip_req *req, const union c_event *event)
 {
 	int ret;
 	int event_rc;
@@ -270,6 +270,8 @@ static void _cxip_amo_cb(struct cxip_req *req, const union c_event *event)
 	}
 
 	cxip_cq_req_free(req);
+
+	return FI_SUCCESS;
 }
 
 /**
@@ -278,7 +280,7 @@ static void _cxip_amo_cb(struct cxip_req *req, const union c_event *event)
  * @param req AMO request structure
  * @param event resulting event
  */
-static void _cxip_famo_cb(struct cxip_req *req, const union c_event *event)
+static int _cxip_famo_cb(struct cxip_req *req, const union c_event *event)
 {
 	/* Free the temporary result buffer, if allocated (free is NULL-safe) */
 	free(req->amo.result_buf);
@@ -286,6 +288,8 @@ static void _cxip_famo_cb(struct cxip_req *req, const union c_event *event)
 	cxip_unmap(req->amo.local_md);
 
 	_cxip_amo_cb(req, event);
+
+	return FI_SUCCESS;
 }
 
 /**

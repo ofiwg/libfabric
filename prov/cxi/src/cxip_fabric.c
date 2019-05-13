@@ -735,6 +735,8 @@ static int cxip_getinfo(uint32_t version, const char *node, const char *service,
 
 static void fi_cxip_fini(void)
 {
+	cxip_fault_inject_fini();
+
 	cxip_if_fini();
 
 	fastlock_destroy(&cxip_list_lock);
@@ -756,6 +758,8 @@ CXI_INI
 	dlist_init(&cxip_dom_list);
 
 	cxip_if_init();
+
+	cxip_fault_inject_init();
 
 	return &cxip_prov;
 }

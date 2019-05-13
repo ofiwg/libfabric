@@ -29,7 +29,7 @@ enum cxip_rma_op {
 	CXIP_RMA_WRITE,
 };
 
-static void cxip_rma_cb(struct cxip_req *req, const union c_event *event)
+static int cxip_rma_cb(struct cxip_req *req, const union c_event *event)
 {
 	int ret;
 	int event_rc;
@@ -50,6 +50,8 @@ static void cxip_rma_cb(struct cxip_req *req, const union c_event *event)
 	}
 
 	cxip_cq_req_free(req);
+
+	return FI_SUCCESS;
 }
 
 static ssize_t _cxip_rma_op(enum cxip_rma_op op, struct fid_ep *ep,

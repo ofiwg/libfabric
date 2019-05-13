@@ -137,10 +137,8 @@ match_ux_send(struct cxip_rxc *rxc, const union c_event *event)
 					struct cxip_ux_send, ux_send,
 					ux_entry) {
 			if ((ux_send->rdzv_id == ev_rdzv_id) &&
-			    (ux_send->initiator == process)) {
-				dlist_remove(&ux_send->ux_entry);
+			    (ux_send->initiator == process))
 				return ux_send;
-			}
 		}
 	} else {
 		/* All other events are correlated using start address.
@@ -150,10 +148,8 @@ match_ux_send(struct cxip_rxc *rxc, const union c_event *event)
 		 */
 		dlist_foreach_container(&rxc->ux_sends, struct cxip_ux_send,
 					ux_send, ux_entry) {
-			if (ux_send->start == event->tgt_long.start) {
-				dlist_remove(&ux_send->ux_entry);
+			if (ux_send->start == event->tgt_long.start)
 				return ux_send;
-			}
 		}
 	}
 
@@ -185,10 +181,8 @@ match_ux_recv(struct cxip_rxc *rxc, const union c_event *event)
 		dlist_foreach_container(&rxc->ux_rdzv_recvs, struct cxip_req,
 					req, recv.ux_entry) {
 			if ((req->recv.rdzv_id == ev_rdzv_id) &&
-			    (req->recv.initiator == process)) {
-				dlist_remove(&req->recv.ux_entry);
+			    (req->recv.initiator == process))
 				return req;
-			}
 		}
 	} else {
 		/* All other events are correlated using start address.
@@ -198,10 +192,8 @@ match_ux_recv(struct cxip_rxc *rxc, const union c_event *event)
 		 */
 		dlist_foreach_container(&rxc->ux_recvs, struct cxip_req, req,
 					recv.ux_entry) {
-			if (req->recv.start == event->tgt_long.start) {
-				dlist_remove(&req->recv.ux_entry);
+			if (req->recv.start == event->tgt_long.start)
 				return req;
-			}
 		}
 	}
 
@@ -355,7 +347,7 @@ static int issue_rdzv_get(struct cxip_req *req, const union c_event *event)
 	fastlock_acquire(&rxc->tx_cmdq->lock);
 
 	/* Issue Rendezvous Get command */
-	ret = cxi_cq_emit_dma(rxc->tx_cmdq->dev_cmdq, &cmd.full_dma);
+	ret = cxi_cq_emit_dma_f(rxc->tx_cmdq->dev_cmdq, &cmd.full_dma);
 	if (ret) {
 		CXIP_LOG_ERROR("Failed to queue GET command: %d\n", ret);
 
@@ -393,6 +385,13 @@ recv_req_put_event(struct cxip_req *req, const union c_event *event)
 {
 	union cxip_match_bits mb;
 
+	/* Only update request fields once. A Put event may be processed
+	 * multiple times if an error is seen.
+	 */
+	if (req->recv.put_event)
+		return;
+	req->recv.put_event = true;
+
 	if (event->tgt_long.rlength > req->recv.rlength) {
 		/* Send truncated. */
 		req->recv.mlength = req->recv.rlength;
@@ -415,7 +414,7 @@ recv_req_put_event(struct cxip_req *req, const union c_event *event)
  * truncates all send data and is never exhausted. See cxip_oflow_cb() for more
  * details about Overflow buffer event handling.
  */
-static void
+static int
 cxip_oflow_sink_cb(struct cxip_req *req, const union c_event *event)
 {
 	int ret;
@@ -429,7 +428,7 @@ cxip_oflow_sink_cb(struct cxip_req *req, const union c_event *event)
 		assert(cxi_event_rc(event) == C_RC_OK);
 
 		ofi_atomic_inc32(&rxc->ux_sink_linked);
-		return;
+		return FI_SUCCESS;
 	case C_EVENT_UNLINK:
 		/* TODO Handle append errors. */
 		assert(cxi_event_rc(event) == C_RC_OK);
@@ -441,14 +440,14 @@ cxip_oflow_sink_cb(struct cxip_req *req, const union c_event *event)
 		cxip_unmap(rxc->ux_sink_buf.md);
 		free(rxc->ux_sink_buf.buf);
 		cxip_cq_req_free(req);
-		return;
+		return FI_SUCCESS;
 	case C_EVENT_PUT:
 		/* Put event handling is complicated. Handle below. */
 		break;
 	default:
 		CXIP_LOG_ERROR("Unexpected event type: %d\n",
 			       event->hdr.event_type);
-		return;
+		return FI_SUCCESS;
 	}
 
 	/* Handle Put events */
@@ -462,10 +461,10 @@ cxip_oflow_sink_cb(struct cxip_req *req, const union c_event *event)
 		 */
 
 		/* TODO make fast allocator for ux_sends */
-		ux_send = malloc(sizeof(struct cxip_ux_send));
+		ux_send = malloc_f(sizeof(struct cxip_ux_send));
 		if (!ux_send) {
 			CXIP_LOG_ERROR("Failed to malloc ux_send\n");
-			abort();
+			goto err_put;
 		}
 
 		/* Use start pointer for matching. */
@@ -478,10 +477,8 @@ cxip_oflow_sink_cb(struct cxip_req *req, const union c_event *event)
 
 		CXIP_LOG_DBG("Queued ux_send: %p\n", ux_send);
 
-		return;
+		return FI_SUCCESS;
 	}
-
-	fastlock_release(&rxc->rx_lock);
 
 	CXIP_LOG_DBG("Matched ux_recv, data: 0x%lx\n",
 		     ux_recv->recv.start);
@@ -492,7 +489,18 @@ cxip_oflow_sink_cb(struct cxip_req *req, const union c_event *event)
 
 	ret = issue_rdzv_get(ux_recv, event);
 	if (ret != FI_SUCCESS)
-		abort();
+		goto err_put;
+
+	dlist_remove(&ux_recv->recv.ux_entry);
+
+	fastlock_release(&rxc->rx_lock);
+
+	return FI_SUCCESS;
+
+err_put:
+	fastlock_release(&rxc->rx_lock);
+
+	return -FI_EAGAIN;
 }
 
 /*
@@ -503,7 +511,7 @@ cxip_oflow_sink_cb(struct cxip_req *req, const union c_event *event)
  * buffer. See cxip_oflow_cb() for more details about Overflow buffer event
  * handling.
  */
-static void
+static int
 cxip_oflow_rdzv_cb(struct cxip_req *req, const union c_event *event)
 {
 	struct cxip_rxc *rxc = req->oflow.rxc;
@@ -515,7 +523,7 @@ cxip_oflow_rdzv_cb(struct cxip_req *req, const union c_event *event)
 	if (event->hdr.event_type != C_EVENT_PUT) {
 		CXIP_LOG_ERROR("Unexpected event type: %d\n",
 			       event->hdr.event_type);
-		return;
+		return FI_SUCCESS;
 	}
 
 	/* Handle Put events */
@@ -530,10 +538,10 @@ cxip_oflow_rdzv_cb(struct cxip_req *req, const union c_event *event)
 		union cxip_match_bits mb;
 
 		/* TODO make fast allocator for ux_sends */
-		ux_send = malloc(sizeof(struct cxip_ux_send));
+		ux_send = malloc_f(sizeof(struct cxip_ux_send));
 		if (!ux_send) {
 			CXIP_LOG_ERROR("Failed to malloc ux_send\n");
-			abort();
+			goto err_put;
 		}
 
 		/* Use initiator and rdzv_id for matching. Store start pointer
@@ -555,7 +563,7 @@ cxip_oflow_rdzv_cb(struct cxip_req *req, const union c_event *event)
 
 		CXIP_LOG_DBG("Queued ux_send: %p\n", ux_send);
 
-		return;
+		return FI_SUCCESS;
 	}
 
 	CXIP_LOG_DBG("Matched ux_recv, data: 0x%lx\n",
@@ -570,7 +578,16 @@ cxip_oflow_rdzv_cb(struct cxip_req *req, const union c_event *event)
 	memcpy(ux_recv->recv.recv_buf, oflow_va, event->tgt_long.mlength);
 	oflow_req_put_bytes(req, event->tgt_long.mlength);
 
+	dlist_remove(&ux_recv->recv.ux_entry);
+
 	fastlock_release(&rxc->rx_lock);
+
+	return FI_SUCCESS;
+
+err_put:
+	fastlock_release(&rxc->rx_lock);
+
+	return -FI_EAGAIN;
 }
 
 int cxip_rxc_eager_replenish(struct cxip_rxc *rxc);
@@ -611,7 +628,7 @@ int cxip_rxc_eager_replenish(struct cxip_rxc *rxc);
  * drop a reference to the Overflow buffer so it is automatically freed once
  * all user data is copied out.
  */
-static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
+static int cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 {
 	struct cxip_rxc *rxc = req->oflow.rxc;
 	struct cxip_oflow_buf *oflow_buf = req->oflow.oflow_buf;
@@ -619,10 +636,8 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 	struct cxip_ux_send *ux_send;
 	void *oflow_va;
 
-	if (event->tgt_long.rendezvous) {
-		cxip_oflow_rdzv_cb(req, event);
-		return;
-	}
+	if (event->tgt_long.rendezvous)
+		return cxip_oflow_rdzv_cb(req, event);
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_LINK:
@@ -631,7 +646,7 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 
 		CXIP_LOG_DBG("Eager buffer linked: %p\n", req);
 		ofi_atomic_inc32(&rxc->oflow_bufs_linked);
-		return;
+		return FI_SUCCESS;
 	case C_EVENT_UNLINK:
 		/* TODO Handle append errors. */
 		assert(cxi_event_rc(event) == C_RC_OK);
@@ -658,14 +673,14 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 
 		fastlock_release(&rxc->rx_lock);
 
-		return;
+		return FI_SUCCESS;
 	case C_EVENT_PUT:
 		/* Put event handling is complicated. Handle below. */
 		break;
 	default:
 		CXIP_LOG_ERROR("Unexpected event type: %d\n",
 			       event->hdr.event_type);
-		return;
+		return FI_SUCCESS;
 	}
 
 	/* Handle Put events */
@@ -679,10 +694,10 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 		 */
 
 		/* TODO make fast allocator for ux_sends */
-		ux_send = malloc(sizeof(struct cxip_ux_send));
+		ux_send = malloc_f(sizeof(struct cxip_ux_send));
 		if (!ux_send) {
 			CXIP_LOG_ERROR("Failed to malloc ux_send\n");
-			abort();
+			goto err_put;
 		}
 
 		/* Use start pointer for matching. */
@@ -696,7 +711,7 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 
 		CXIP_LOG_DBG("Queued ux_send: %p\n", ux_send);
 
-		return;
+		return FI_SUCCESS;
 	}
 
 	/* A matching Put Overflow event arrived earlier. Data is
@@ -712,9 +727,18 @@ static void cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 	memcpy(ux_recv->recv.recv_buf, oflow_va, ux_recv->recv.mlength);
 	oflow_req_put_bytes(req, ux_recv->recv.mlength);
 
+	dlist_remove(&ux_recv->recv.ux_entry);
+
 	fastlock_release(&rxc->rx_lock);
 
 	recv_req_complete(ux_recv);
+
+	return FI_SUCCESS;
+
+err_put:
+	fastlock_release(&rxc->rx_lock);
+
+	return -FI_EAGAIN;
 }
 
 /*
@@ -1073,7 +1097,7 @@ static void rdzv_recv_req_event(struct cxip_req *req)
  * Note that Reply events that were generated from a SW-issued Get will not
  * have the rendezvous bit set.
  */
-static void cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
+static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 {
 	struct cxip_rxc *rxc = req->recv.rxc;
 	struct cxip_ux_send *ux_send;
@@ -1085,11 +1109,11 @@ static void cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 	case C_EVENT_LINK:
 		/* TODO Handle append errors. */
 		assert(cxi_event_rc(event) == C_RC_OK);
-		return;
+		return FI_SUCCESS;
 	case C_EVENT_UNLINK:
 		/* TODO Handle unlink errors. */
 		assert(cxi_event_rc(event) == C_RC_OK);
-		return;
+		return FI_SUCCESS;
 	case C_EVENT_PUT_OVERFLOW:
 		/* We matched an unexpected header */
 
@@ -1126,7 +1150,7 @@ static void cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 			/* Count the rendezvous event. */
 			rdzv_recv_req_event(req);
 
-			return;
+			return FI_SUCCESS;
 		}
 
 		CXIP_LOG_DBG("Matched ux_send: %p\n", ux_send);
@@ -1142,43 +1166,46 @@ static void cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 		memcpy(req->recv.recv_buf, oflow_va, event->tgt_long.mlength);
 		oflow_req_put_bytes(ux_send->req, event->tgt_long.mlength);
 
+		dlist_remove(&ux_send->ux_entry);
+		free(ux_send);
+
 		fastlock_release(&rxc->rx_lock);
 
 		/* Count the rendezvous event. */
 		rdzv_recv_req_event(req);
 
-		/* Release the unexpected Put event record */
-		free(ux_send);
-		return;
+		return FI_SUCCESS;
 	case C_EVENT_PUT:
 		/* Eager data was delivered directly to the user buffer. */
 		recv_req_put_event(req, event);
 
 		/* Count the rendezvous event. */
 		rdzv_recv_req_event(req);
-		return;
+		return FI_SUCCESS;
 	case C_EVENT_RENDEZVOUS:
 		if (!event->tgt_long.get_issued) {
 			int ret = issue_rdzv_get(req, event);
 			if (ret != FI_SUCCESS)
-				abort();
+				return -FI_EAGAIN;
 			CXIP_LOG_DBG("Software issued Get, req: %p\n", req);
 		}
 
 		/* Count the rendezvous event. */
 		rdzv_recv_req_event(req);
-		return;
+		return FI_SUCCESS;
 	case C_EVENT_REPLY:
 		/* Rendezvous Get completed. Complete the request. */
 		req->recv.rc = cxi_init_event_rc(event);
 
 		/* Count the rendezvous event. */
 		rdzv_recv_req_event(req);
-		return;
+		return FI_SUCCESS;
 	default:
 		CXIP_LOG_ERROR("Unexpected event type: %d\n",
 			       event->hdr.event_type);
 	}
+
+	return FI_SUCCESS;
 }
 
 /*
@@ -1214,7 +1241,7 @@ static void cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
  *
  * Rendezvous receive events are handled by cxip_recv_rdzv_cb().
  */
-static void cxip_recv_cb(struct cxip_req *req, const union c_event *event)
+static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 {
 	int ret;
 	struct cxip_rxc *rxc = req->recv.rxc;
@@ -1230,20 +1257,18 @@ static void cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 	 * field is not set, but the rdzv_events count is elevated, this must
 	 * be a SW-issued Reply event.
 	 */
-	if (event->tgt_long.rendezvous || req->recv.rdzv_events) {
-		cxip_recv_rdzv_cb(req, event);
-		return;
-	}
+	if (event->tgt_long.rendezvous || req->recv.rdzv_events)
+		return cxip_recv_rdzv_cb(req, event);
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_LINK:
 		/* TODO Handle append errors. */
 		assert(cxi_event_rc(event) == C_RC_OK);
-		return;
+		return FI_SUCCESS;
 	case C_EVENT_UNLINK:
 		/* TODO Handle unlink errors. */
 		assert(cxi_event_rc(event) == C_RC_OK);
-		return;
+		return FI_SUCCESS;
 	case C_EVENT_PUT_OVERFLOW:
 		/* We matched an unexpected header */
 
@@ -1268,7 +1293,7 @@ static void cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 			/* Update request fields. */
 			recv_req_put_event(req, event);
 
-			return;
+			return FI_SUCCESS;
 		}
 
 		/* A matching unexpected-Put event arrived earlier. */
@@ -1281,15 +1306,20 @@ static void cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		oflow_buf = ux_send->req->oflow.oflow_buf;
 
 		if (oflow_buf->type == OFLOW_BUF_SINK) {
-			fastlock_release(&rxc->rx_lock);
-
 			/* For unexpected, long, eager messages, issue a Get to
 			 * retrieve data from the initiator.
 			 */
 			ret = issue_rdzv_get(req, event);
-			if (ret != FI_SUCCESS)
-				abort();
-			return;
+			if (ret == FI_SUCCESS) {
+				dlist_remove(&ux_send->ux_entry);
+				free(ux_send);
+
+				CXIP_LOG_DBG("Issued Get, req: %p\n", req);
+			}
+
+			fastlock_release(&rxc->rx_lock);
+
+			return ret;
 		}
 
 		/* Copy data out of overflow buffer. */
@@ -1299,14 +1329,14 @@ static void cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		       req->recv.mlength);
 		oflow_req_put_bytes(ux_send->req, req->recv.mlength);
 
-		fastlock_release(&rxc->rx_lock);
-
-		/* Release the unexpected Put event record */
+		dlist_remove(&ux_send->ux_entry);
 		free(ux_send);
+
+		fastlock_release(&rxc->rx_lock);
 
 		/* Complete receive request. */
 		recv_req_complete(req);
-		return;
+		return FI_SUCCESS;
 	case C_EVENT_PUT:
 		/* Data was delivered directly to the user buffer. Complete the
 		 * request.
@@ -1315,18 +1345,20 @@ static void cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 
 		/* Complete receive request. */
 		recv_req_complete(req);
-		return;
+		return FI_SUCCESS;
 	case C_EVENT_REPLY:
 		/* Long-send Get completed. Complete the request. */
 		req->recv.rc = cxi_init_event_rc(event);
 
 		/* Complete receive request. */
 		recv_req_complete(req);
-		return;
+		return FI_SUCCESS;
 	default:
 		CXIP_LOG_ERROR("Unexpected event type: %d\n",
 			       event->hdr.event_type);
 	}
+
+	return FI_SUCCESS;
 }
 
 /*
@@ -1439,6 +1471,7 @@ static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 
 	/* Count Put, Rendezvous, and Reply events during offloaded RPut. */
 	req->recv.rdzv_events = 0;
+	req->recv.put_event = false;
 
 	/* Issue Append command */
 	ret = issue_append_le(rxc->rx_pte->pte, buf, len, recv_md,
@@ -1486,7 +1519,7 @@ static void rdzv_send_req_free(struct cxip_req *req)
  *
  * Progress a long send operation to completion.
  */
-static void cxip_send_long_cb(struct cxip_req *req, const union c_event *event)
+static int cxip_send_long_cb(struct cxip_req *req, const union c_event *event)
 {
 	int ret;
 	int event_rc;
@@ -1507,7 +1540,7 @@ static void cxip_send_long_cb(struct cxip_req *req, const union c_event *event)
 					       ret);
 
 			rdzv_send_req_free(req);
-			return;
+			return FI_SUCCESS;
 		}
 
 		/* The send buffer LE is linked. Perform Put of the payload. */
@@ -1528,7 +1561,7 @@ static void cxip_send_long_cb(struct cxip_req *req, const union c_event *event)
 		fastlock_release(&txc->tx_cmdq->lock);
 
 		CXIP_LOG_DBG("Enqueued Put: %p\n", req);
-		return;
+		return FI_SUCCESS;
 	case C_EVENT_ACK:
 		/* The payload was delivered to the target. */
 		event_rc = cxi_init_event_rc(event);
@@ -1563,7 +1596,7 @@ rdzv_unlink_le:
 		}
 
 		/* Wait for the source buffer LE to be unlinked. */
-		return;
+		return FI_SUCCESS;
 	case C_EVENT_UNLINK:
 		/* Check if the unlink was caused by a previous failure. */
 		if (req->send.event_failure != C_RC_NO_EVENT)
@@ -1603,7 +1636,7 @@ rdzv_unlink_le:
 		/* A final Get event is expected indicating the source data has
 		 * been read.
 		 */
-		return;
+		return FI_SUCCESS;
 	case C_EVENT_GET:
 		event_rc = cxi_tgt_event_rc(event);
 		if (event_rc != C_RC_OK) {
@@ -1625,7 +1658,7 @@ rdzv_unlink_le:
 
 		rdzv_send_req_free(req);
 
-		return;
+		return FI_SUCCESS;
 	default:
 		CXIP_LOG_ERROR("Unexpected event received: %s\n",
 			       cxi_event_to_str(event));
@@ -1638,7 +1671,7 @@ rdzv_unlink_le:
 
 		rdzv_send_req_free(req);
 
-		return;
+		return FI_SUCCESS;
 	}
 }
 
@@ -1747,8 +1780,8 @@ unlock:
  * cxip_send_eager_cb() - Eager send callback. Used for both tagged and
  * untagged messages.
  */
-static void cxip_send_eager_cb(struct cxip_req *req,
-			       const union c_event *event)
+static int cxip_send_eager_cb(struct cxip_req *req,
+			      const union c_event *event)
 {
 	int ret;
 	int event_rc;
@@ -1773,6 +1806,8 @@ static void cxip_send_eager_cb(struct cxip_req *req,
 	}
 
 	cxip_cq_req_free(req);
+
+	return FI_SUCCESS;
 }
 
 /*

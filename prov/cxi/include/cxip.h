@@ -38,6 +38,7 @@
 #include <ofi_util.h>
 
 #include "libcxi/libcxi.h"
+#include "cxip_faults.h"
 
 #ifndef ARRAY_SIZE
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
@@ -434,6 +435,7 @@ struct cxip_req_recv {
 	uint32_t initiator;		// DMA initiator address
 	uint32_t rdzv_id;		// DMA initiator rendezvous ID
 	int rdzv_events;		// Processed rdzv event count
+	bool put_event;			// Put event received?
 };
 
 struct cxip_req_send {
@@ -472,7 +474,7 @@ struct cxip_req {
 	struct dlist_entry list;	// attaches to utility pool
 	struct cxip_cq *cq;		// request CQ
 	int req_id;			// fast lookup in index table
-	void (*cb)(struct cxip_req *req, const union c_event *evt);
+	int (*cb)(struct cxip_req *req, const union c_event *evt);
 					// completion event callback
 
 	/* CQ event fields, set according to fi_cq.3

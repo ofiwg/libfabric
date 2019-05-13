@@ -4,10 +4,10 @@ cd $(dirname $0)
 . ./virtualize.sh
 
 # Run unit tests.  $(CWD) should be writeable.
-./cxitest --verbose --tap=cxitest.tap
+DMA_FAULT_RATE=.1 MALLOC_FAULT_RATE=.1 FI_LOG_LEVEL=warn  ./cxitest --verbose --tap=cxitest.tap
 
 # Run tests again with RPut enabled
-RDZV_OFFLOAD=1 ./cxitest --verbose --tap=cxitest-rput.tap
+DMA_FAULT_RATE=.1 MALLOC_FAULT_RATE=.1 FI_LOG_LEVEL=warn RDZV_OFFLOAD=1 ./cxitest --verbose --tap=cxitest-rput.tap
 
 PYCXI="../../../../pycxi"
 CSRUTIL="$PYCXI/utils/csrutil"
@@ -16,7 +16,7 @@ CSRUTIL="$PYCXI/utils/csrutil"
 if [ -e $CSRUTIL ]; then
 	. $PYCXI/.venv/bin/activate
 	$CSRUTIL store csr get_ctrl get_en=0
-	RDZV_OFFLOAD=1 ./cxitest --verbose --filter=tagged/* --tap=cxitest-rput-swget.tap
+	DMA_FAULT_RATE=.1 MALLOC_FAULT_RATE=.1 FI_LOG_LEVEL=warn RDZV_OFFLOAD=1 ./cxitest --verbose --filter=tagged/* --tap=cxitest-rput-swget.tap
 	$CSRUTIL store csr get_ctrl get_en=1
 else
 	echo "No csrutil"
