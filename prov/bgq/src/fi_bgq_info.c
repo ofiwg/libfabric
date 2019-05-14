@@ -62,7 +62,8 @@ int fi_bgq_set_default_info()
 		.caps		= FI_RMA | FI_ATOMIC | FI_TRANSMIT_COMPLETE,
 		.mode		= FI_ASYNC_IOV,
 		.op_flags	= FI_TRANSMIT_COMPLETE,
-		.msg_order	= FI_ORDER_SAS | FI_ORDER_WAW | FI_ORDER_RAW | FI_ORDER_RAR,
+		.msg_order	= FI_ORDER_SAS | OFI_ORDER_WAW_SET |
+				  OFI_ORDER_RAW_SET | OFI_ORDER_RAR_SET,
 		.comp_order	= FI_ORDER_NONE,
 		.inject_size	= FI_BGQ_INJECT_SIZE,
 		.size		= FI_BGQ_TX_SIZE,

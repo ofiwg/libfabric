@@ -56,8 +56,8 @@
 
 #define VERBS_RX_MODE (FI_RX_CQ_DATA)
 
-#define VERBS_MSG_ORDER (FI_ORDER_RAR | FI_ORDER_RAW | FI_ORDER_RAS | \
-		FI_ORDER_WAW | FI_ORDER_WAS | FI_ORDER_SAW | FI_ORDER_SAS )
+#define VERBS_MSG_ORDER (OFI_ORDER_RAR_SET | OFI_ORDER_RAW_SET | FI_ORDER_RAS | \
+		OFI_ORDER_WAW_SET | FI_ORDER_WAS | FI_ORDER_SAW | FI_ORDER_SAS )
 
 #define VERBS_INFO_NODE_2_UD_ADDR(sybsys, node, svc, ib_ud_addr)			\
 	VERBS_INFO(sybsys, "'%s:%u' resolved to <gid <interface_id=%"PRIu64		\
