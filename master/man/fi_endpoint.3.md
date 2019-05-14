@@ -873,8 +873,8 @@ section.
 ## msg_order - Message Ordering
 
 Message ordering refers to the order in which transport layer headers
-(as viewed by the application) are processed.  Relaxed message order
-enables data transfers to be sent and received out of order, which may
+(as viewed by the application) are identified and processed.  Relaxed message
+order enables data transfers to be sent and received out of order, which may
 improve performance by utilizing multiple paths through the fabric
 from the initiating endpoint to a target endpoint.  Message order
 applies only between a single source and destination endpoint pair.
@@ -950,6 +950,54 @@ transfer operation in order to guarantee that ordering is met.
   sends, are transmitted in the order submitted relative to other
   message send.  If not set, message sends may be transmitted out of
   order from their submission.
+
+*FI_ORDER_RMA_RAR*
+: RMA read after read.  If set, RMA read operations are
+  transmitted in the order submitted relative to other
+  RMA read operations.  If not set, RMA reads
+  may be transmitted out of order from their submission.
+
+*FI_ORDER_RMA_RAW*
+: RMA read after write.  If set, RMA read operations are
+  transmitted in the order submitted relative to RMA write
+  operations.  If not set, RMA reads may be transmitted ahead
+  of RMA writes.
+
+*FI_ORDER_RMA_WAR*
+: RMA write after read.  If set, RMA write operations are
+  transmitted in the order submitted relative to RMA read
+  operations.  If not set, RMA writes may be transmitted
+  ahead of RMA reads.
+
+*FI_ORDER_RMA_WAW*
+: RMA write after write.  If set, RMA write operations are
+  transmitted in the order submitted relative to other RMA
+  write operations.  If not set, RMA writes may be
+  transmitted out of order from their submission.
+
+*FI_ORDER_ATOMIC_RAR*
+: Atomic read after read.  If set, atomic fetch operations are
+  transmitted in the order submitted relative to other
+  atomic fetch operations.  If not set, atomic fetches
+  may be transmitted out of order from their submission.
+
+*FI_ORDER_ATOMIC_RAW*
+: Atomic read after write.  If set, atomic fetch operations are
+  transmitted in the order submitted relative to atomic update
+  operations.  If not set, atomic fetches may be transmitted ahead
+  of atomic updates.
+
+*FI_ORDER_ATOMIC_WAR*
+: RMA write after read.  If set, atomic update operations are
+  transmitted in the order submitted relative to atomic fetch
+  operations.  If not set, atomic updates may be transmitted
+  ahead of atomic fetches.
+
+*FI_ORDER_ATOMIC_WAW*
+: RMA write after write.  If set, atomic update operations are
+  transmitted in the order submitted relative to other atomic
+  update operations.  If not atomic updates may be
+  transmitted out of order from their submission.
 
 ## comp_order - Completion Ordering
 
@@ -1059,12 +1107,18 @@ section.
 For a description of message ordering, see the msg_order field in
 the _Transmit Context Attribute_ section.  Receive context message
 ordering defines the order in which received transport message headers
-are processed when received by an endpoint.
+are processed when received by an endpoint.  When ordering is set, it
+indicates that message headers will be processed in order, based on
+how the transmit side has identified the messages. Typically, this means
+that messages will be handled in order based on a message level sequence
+number.
 
 The following ordering flags, as defined for transmit ordering, also
 apply to the processing of received operations: FI_ORDER_NONE,
 FI_ORDER_RAR, FI_ORDER_RAW, FI_ORDER_RAS, FI_ORDER_WAR, FI_ORDER_WAW,
-FI_ORDER_WAS, FI_ORDER_SAR, FI_ORDER_SAW, and FI_ORDER_SAS.
+FI_ORDER_WAS, FI_ORDER_SAR, FI_ORDER_SAW, FI_ORDER_SAS, FI_ORDER_RMA_RAR,
+FI_ORDER_RMA_RAW, FI_ORDER_RMA_WAR, FI_ORDER_RMA_WAW, FI_ORDER_ATOMIC_RAR,
+FI_ORDER_ATOMIC_RAW, FI_ORDER_ATOMIC_WAR, and FI_ORDER_ATOMIC_WAW.
 
 ## comp_order - Completion Ordering
 
