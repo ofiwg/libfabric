@@ -2,6 +2,7 @@
  * Copyright (c) 2015-2019 Cray Inc. All rights reserved.
  * Copyright (c) 2015-2018 Los Alamos National Security, LLC.
  *                         All rights reserved.
+ * Copyright (c) 2019 Triad National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -3092,7 +3093,7 @@ DIRECT_FN STATIC int gnix_ep_setopt(fid_t fid, int level, int optname,
 		if (optlen != sizeof(size_t))
 			return -FI_EINVAL;
 		/*
-		 * see issue 1120
+		 * see https://github.com/ofi-cray/libfabric-cray/issues/1120
 		 */
 		if (*(size_t *)optval == 0UL)
 			return -FI_EINVAL;
