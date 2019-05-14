@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2016-2017 Cray Inc. All rights reserved.
+ * Copyright (c) 2019 Triad National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -112,7 +113,7 @@ int cm_local_ip(struct sockaddr_in *sa)
 
 	ifa = ifap;
 	while (ifa) {
-		dbg_printf(stderr, "IF: %s, IP ADDR: %s\n",
+		dbg_printf("IF: %s, IP ADDR: %s\n",
 			   ifa->ifa_name,
 			   inet_ntoa(((struct sockaddr_in *)
 				      (ifa->ifa_addr))->sin_addr));
@@ -366,19 +367,25 @@ void cm_stop_client(void)
 	fi_freeinfo(cli_fi);
 }
 
-void cm_basic_send(void)
+void cm_basic_send(int trunc)
 {
-	int ret;
+	int ret,i;
+	int slen = 8, rlen;
 	int source_done = 0, dest_done = 0;
 	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_err_entry err_cqe = {0};
 	ssize_t sz;
 	uint64_t source = 0xa4321234a4321234,
-		 target = 0xb5678901b5678901;
+		 target = 0xb5678901b5678901,
+		 before = target;
+	uint8_t *s_ptr,*t_ptr;
 
-	sz = fi_send(cli_ep, &source, 8, 0, 0, &target);
+	rlen = trunc ? slen/2 : slen;
+
+	sz = fi_send(cli_ep, &source, slen, 0, 0, &target);
 	cr_assert_eq(sz, 0);
 
-	sz = fi_recv(srv_ep, &target, 8, 0, 0, &source);
+	sz = fi_recv(srv_ep, &target, rlen, 0, 0, &source);
 	cr_assert_eq(sz, 0);
 
 	/* need to progress both CQs simultaneously for rendezvous */
@@ -391,12 +398,39 @@ void cm_basic_send(void)
 
 		ret = fi_cq_read(srv_cq, &cqe, 1);
 		if (ret == 1) {
+			cr_assert(trunc == 0);
 			cr_assert_eq(cqe.op_context, &source);
+			cr_assert_eq(cqe.len, rlen);
 			dest_done = 1;
+		} else {
+			if (ret == -FI_EAVAIL) {
+				cr_assert(trunc != 0);
+				ret = fi_cq_readerr(srv_cq, &err_cqe, 0);
+				if (ret == 1) {
+					cr_assert(err_cqe.olen == (slen - rlen),
+						"Bad error olen");
+					cr_assert(err_cqe.err == FI_ETRUNC,
+						"Bad error errno");
+					cr_assert(err_cqe.prov_errno == FI_ETRUNC,
+						"Bad prov errno");
+					cr_assert(err_cqe.err_data == NULL,
+						"Bad error provider data");
+					dest_done = 1;
+				}
+			}
 		}
+
 	} while (!source_done || !dest_done);
 
-	cr_assert_eq(source, target);
+	s_ptr = (uint8_t *)&source;
+	t_ptr = (uint8_t *)&target;
+	for (i = 0; i < rlen; i++)
+		cr_assert_eq(s_ptr[i], t_ptr[i]);
+
+	s_ptr = (uint8_t *)&before;
+	for (i = rlen; i < slen; i++)
+		cr_assert_eq(s_ptr[i], t_ptr[i]);
+
 	dbg_printf("Basic send/recv complete! (0x%lx, 0x%lx)\n",
 		   source, target);
 }
@@ -430,10 +464,15 @@ Test(cm_basic, srv_setup, .disabled = false)
 		}
 	} while (!srv_connected || !cli_connected);
 
+	dbg_printf("testing cm_basic_send without trunc\n");
 	for (i = 0; i < 1000; i++) {
 		/* Perform basic send/recv. */
-		cm_basic_send();
+		cm_basic_send(0);
 	}
+
+	/* Perform basic send/recv with trunc*/
+	dbg_printf("testing cm_basic_send with trunc\n");
+	cm_basic_send(1);
 
 	cm_stop_server();
 	cm_stop_client();

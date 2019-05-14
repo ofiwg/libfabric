@@ -270,7 +270,7 @@ static void __gnix_msg_copy_data_to_recv_addr(struct gnix_fab_req *req,
 	switch(req->type) {
 	case GNIX_FAB_RQ_RECV:
 		memcpy((void *)req->msg.recv_info[0].recv_addr, data,
-		       req->msg.cum_send_len);
+		       req->msg.cum_recv_len);
 		break;
 
 	case GNIX_FAB_RQ_RECVV:
@@ -278,7 +278,7 @@ static void __gnix_msg_copy_data_to_recv_addr(struct gnix_fab_req *req,
 		__gnix_msg_unpack_data_into_iov(req->msg.recv_info,
 						req->msg.recv_iov_cnt,
 						(uint64_t) data,
-						req->msg.cum_send_len);
+						req->msg.cum_recv_len);
 		break;
 
 	default:
@@ -500,29 +500,50 @@ static inline int __gnix_msg_recv_completion(struct gnix_fid_ep *ep,
 
 	len = MIN(req->msg.cum_send_len, req->msg.cum_recv_len);
 
+
 	if (OFI_UNLIKELY(req->msg.recv_flags & FI_MULTI_RECV))
 		recv_addr = (void *)req->msg.recv_info[0].recv_addr;
 
-	if (OFI_LIKELY(!(ep->caps & FI_SOURCE))) {
-		ret = __recv_completion(ep,
-					 req,
-					 flags,
-					 len,
-					 recv_addr);
+	/*
+	 * Deal with possible truncation
+	 */
+	if (OFI_LIKELY(req->msg.cum_send_len <= req->msg.cum_recv_len)) {
+
+		if (OFI_LIKELY(!(ep->caps & FI_SOURCE))) {
+			ret = __recv_completion(ep,
+						 req,
+						 flags,
+						 len,
+						 recv_addr);
+		} else {
+			src_addr = _gnix_vc_peer_fi_addr(req->vc);
+			ret = __recv_completion_src(ep,
+						     req,
+						     flags,
+						     len,
+						     recv_addr,
+						     src_addr);
+		}
+
 	} else {
-		src_addr = _gnix_vc_peer_fi_addr(req->vc);
-		ret = __recv_completion_src(ep,
-					     req,
-					     flags,
-					     len,
-					     recv_addr,
-					     src_addr);
-	}
+
+		ret = __recv_err(ep,
+				 req->user_context,
+				 flags,
+				 len,
+				 recv_addr,
+				 req->msg.imm,
+				 req->msg.tag,
+				 req->msg.cum_send_len - req->msg.cum_recv_len,
+				 FI_ETRUNC,
+				 FI_ETRUNC, NULL, 0);
+	};
 
 	/*
 	 * if i'm child of a FI_MULTI_RECV request, decrement
 	 * ref count
 	 */
+
 	if (req->msg.parent != NULL) {
 		_gnix_ref_put(req->msg.parent);
 	}
@@ -1931,6 +1952,7 @@ static inline struct gnix_fab_req *
 	 */
 
 	req->type = GNIX_FAB_RQ_RECV;
+	ofi_atomic_initialize32(&req->msg.outstanding_txds, 0);
 	req->msg.recv_flags = mrecv_req->msg.recv_flags;
 	req->msg.recv_flags |= FI_MULTI_RECV;
 	req->msg.recv_info[0].recv_addr =
@@ -2177,7 +2199,7 @@ static int __smsg_rndzv_start(void *data, void *msg)
 		req->msg.send_info[0].send_len =
 			MIN(hdr->len, req->msg.cum_recv_len);
 		req->msg.send_info[0].mem_hndl = hdr->mdh;
-		req->msg.cum_send_len = req->msg.send_info[0].send_len;
+		req->msg.cum_send_len = hdr->len;
 		req->msg.send_iov_cnt = 1;
 		req->msg.send_flags = hdr->flags;
 		req->msg.tag = hdr->msg_tag;
@@ -2712,11 +2734,6 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
 				req->msg.recv_flags |= GNIX_MSG_GET_TAIL;
 			}
 
-			/* Send length is truncated to receive buffer size. */
-			req->msg.cum_send_len =
-				MIN(req->msg.cum_send_len,
-				    req->msg.recv_info[0].recv_len);
-
 			/* Initiate pull of source data. */
 			req->work_fn = req->msg.send_iov_cnt == 1 ?
 				__gnix_rndzv_req : __gnix_rndzv_iov_req_build;
@@ -2730,12 +2747,12 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
 			GNIX_DEBUG(FI_LOG_EP_DATA, "Matched recv, req: %p\n",
 				  req);
 
+			req->msg.cum_send_len = req->msg.send_info[0].send_len;
+
 			/* Send length is truncated to receive buffer size. */
 			req->msg.send_info[0].send_len =
 				MIN(req->msg.send_info[0].send_len,
 				    req->msg.recv_info[0].recv_len);
-
-			req->msg.cum_send_len = req->msg.send_info[0].send_len;
 
 			/* Copy data from unexpected eager receive buffer. */
 			memcpy((void *)buf, (void *)req->msg.send_info[0].send_addr,
