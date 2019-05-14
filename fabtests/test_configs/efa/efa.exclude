@@ -41,10 +41,8 @@ cq_data
 # Exclude all rdm prefix tests
 rdm.* -k
 
-# Exclude all RMA tests
-rma
 multi_mr
-rdm_rma_simple
+rdm_rma_trigger
 
 # Exclude all MSG tests
 msg
@@ -63,6 +61,7 @@ trigger
 atomic
 
 rdm_cntr_pingpong
+
 
 # This test requires ENA IPs for the OOB sync
 av_xfer

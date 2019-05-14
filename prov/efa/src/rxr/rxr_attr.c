@@ -37,8 +37,10 @@
 const uint32_t rxr_poison_value = 0xdeadbeef;
 #endif
 
-#define RXR_EP_CAPS (FI_MSG | FI_TAGGED | FI_RECV | FI_SEND \
-		     | FI_DIRECTED_RECV | FI_SOURCE | FI_MULTI_RECV)
+#define RXR_EP_CAPS (FI_MSG | FI_TAGGED | FI_RECV | FI_SEND | FI_READ \
+		     | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE \
+		     | FI_DIRECTED_RECV | FI_SOURCE | FI_MULTI_RECV \
+		     | FI_RMA)
 
 #define RXR_RX_OP_FLAGS (0)
 #define RXR_TX_OP_FLAGS (FI_INJECT | FI_TRANSMIT_COMPLETE)
@@ -79,7 +81,7 @@ struct fi_domain_attr rxr_domain_attr = {
 	.data_progress = FI_PROGRESS_AUTO,
 	.resource_mgmt = FI_RM_ENABLED,
 	.av_type = FI_AV_UNSPEC,
-	.mr_mode = FI_MR_BASIC,
+	.mr_mode = OFI_MR_BASIC_MAP | FI_MR_BASIC,
 	.mr_iov_limit = 1,
 	.mr_cnt = 65535,
 	/* Will be overwritten with core provider value in rxr_info_to_rxr() */

@@ -134,6 +134,13 @@ extern const uint32_t rxr_poison_value;
 #define RXR_MULTI_RECV_CONSUMER	BIT_ULL(5)
 
 /*
+ * for RMA
+ */
+#define RXR_WRITE		(1 << 6)
+#define RXR_READ_REQ		(1 << 7)
+#define RXR_READ_DATA		(1 << 8)
+
+/*
  * OFI flags
  * The 64-bit flag field is used as follows:
  * 1-grow up    common (usable with multiple operations)
@@ -181,6 +188,7 @@ enum rxr_pkt_type {
 	/* Large message types */
 	RXR_CTS_PKT,
 	RXR_DATA_PKT,
+	RXR_READ_RESPONSE_PKT,
 };
 
 /* pkt_entry types for rx pkts */
@@ -205,10 +213,21 @@ enum rxr_x_entry_type {
 enum rxr_tx_comm_type {
 	RXR_TX_FREE = 0,	/* tx_entry free state */
 	RXR_TX_RTS,		/* tx_entry sending RTS message */
-	RXR_TX_SEND,		/* tx_entry in progress */
+	RXR_TX_SEND,		/* tx_entry sending data in progress */
 	RXR_TX_QUEUED_RTS,	/* tx_entry was unable to send RTS */
 	RXR_TX_QUEUED_RTS_RNR,  /* tx_entry RNR sending RTS packet */
 	RXR_TX_QUEUED_DATA_RNR,	/* tx_entry RNR sending data packets */
+	RXR_TX_SENT_READ_RESPONSE, /* tx_entry (on remote EP) sent
+				    * read respone (FI_READ only)
+				    */
+	RXR_TX_QUEUED_READ_RESPONSE, /* tx_entry (on remote EP) was
+				      * unable to send read response
+				      * (FI_READ only)
+				      */
+	RXR_TX_WAIT_READ_FINISH, /* tx_entry (on initiating EP) wait
+				  * for rx_entry to finish receiving
+				  * (FI_READ only)
+				  */
 };
 
 enum rxr_rx_comm_type {
@@ -219,6 +238,7 @@ enum rxr_rx_comm_type {
 	RXR_RX_RECV,		/* rx_entry large msg recv data pkts */
 	RXR_RX_QUEUED_CTS,	/* rx_entry was unable to send CTS */
 	RXR_RX_QUEUED_CTS_RNR,	/* rx_entry RNR sending CTS */
+	RXR_RX_WAIT_READ_FINISH, /* rx_entry wait for send to finish, FI_READ */
 };
 
 enum rxr_peer_state {
@@ -285,6 +305,12 @@ struct rxr_rx_entry {
 	 */
 	uint32_t tx_id;
 	uint32_t rx_id;
+
+	/*
+	 * The following two varibales are for emulated RMA fi_read only
+	 */
+	uint32_t rma_loc_tx_id;
+	uint32_t rma_initiator_rx_id;
 
 	uint32_t msg_id;
 
@@ -366,6 +392,12 @@ struct rxr_tx_entry {
 	size_t iov_index;
 	size_t iov_offset;
 	struct iovec iov[RXR_IOV_LIMIT];
+
+	uint64_t rma_loc_rx_id;
+	uint64_t rma_window;
+	size_t rma_iov_count;
+	struct fi_rma_iov rma_iov[RXR_IOV_LIMIT];
+
 	/* Only used with mr threshold switch from memcpy */
 	size_t iov_mr_start;
 	struct fid_mr *mr[RXR_IOV_LIMIT];
@@ -551,8 +583,9 @@ struct rxr_rts_hdr {
 	uint16_t flags;
 	/* end of rxr_base_hdr */
 	/* TODO: need to add msg_id -> tx_id mapping to remove tx_id and pad */
-	uint8_t pad[3];
+	uint8_t pad[2];
 	uint8_t addrlen;
+	uint8_t rma_iov_count;
 	uint32_t tx_id;
 	uint32_t msg_id;
 	uint64_t tag;
@@ -603,6 +636,19 @@ struct rxr_data_hdr {
 
 #if defined(static_assert)
 static_assert(sizeof(struct rxr_data_hdr) == 24, "rxr_data_hdr check");
+#endif
+
+struct rxr_read_response_hdr {
+	uint8_t type;
+	uint8_t version;
+	uint16_t flags;
+	/* end of rxr_base_hdr */
+	uint32_t rx_id;
+	uint32_t tx_id;
+};
+
+#if defined(static_assert)
+static_assert(sizeof(struct rxr_read_response_hdr) == 12, "rxr_read_response_hdr check");
 #endif
 
 /*
@@ -697,11 +743,42 @@ DECLARE_FREESTACK(struct rxr_robuf, rxr_robuf_fs);
 
 #define RXR_DATA_HDR_SIZE		(sizeof(struct rxr_data_hdr))
 
+#define RXR_READ_RESPONSE_HDR_SIZE	(sizeof(struct rxr_read_response_hdr))
+
 static inline struct rxr_peer *rxr_ep_get_peer(struct rxr_ep *ep,
 					       fi_addr_t addr)
 {
 	return &ep->peer[addr];
 }
+
+struct rxr_rx_entry *rxr_ep_get_rx_entry(struct rxr_ep *ep,
+					 const struct iovec *iov,
+					 size_t iov_count, uint64_t tag,
+					 uint64_t ignore, void *context,
+					 fi_addr_t addr, uint32_t op,
+					 uint64_t flags);
+
+struct rxr_rx_entry *rxr_ep_rx_entry_init(struct rxr_ep *ep,
+					  struct rxr_rx_entry *rx_entry,
+					  const struct iovec *iov,
+					  size_t iov_count, uint64_t tag,
+					  uint64_t ignore, void *context,
+					  fi_addr_t addr, uint32_t op,
+					  uint64_t flags);
+
+struct rxr_tx_entry *rxr_ep_tx_entry_init(struct rxr_ep *rxr_ep,
+					  const struct iovec *iov,
+					  size_t iov_count,
+					  const struct fi_rma_iov *rma_iov,
+					  size_t rma_iov_count,
+					  fi_addr_t addr, uint64_t tag,
+					  uint64_t data, void *context,
+					  uint32_t op, uint64_t flags);
+
+ssize_t rxr_tx(struct fid_ep *ep, const struct iovec *iov, size_t iov_count,
+	       const struct fi_rma_iov *rma_iov, size_t rma_iov_count,
+	       fi_addr_t addr, uint64_t tag, uint64_t data, void *context,
+	       uint32_t op, uint64_t flags);
 
 static inline void
 rxr_copy_pkt_entry(struct rxr_ep *ep,
@@ -862,6 +939,11 @@ static inline struct rxr_cts_hdr *rxr_get_cts_hdr(void *pkt)
 	return (struct rxr_cts_hdr *)pkt;
 }
 
+static inline struct rxr_read_response_hdr *rxr_get_read_response_hdr(void *pkt)
+{
+	return (struct rxr_read_response_hdr *)pkt;
+}
+
 static inline struct rxr_ctrl_cq_pkt *rxr_get_ctrl_cq_pkt(void *pkt)
 {
 	return (struct rxr_ctrl_cq_pkt *)pkt;
@@ -896,6 +978,13 @@ static inline int rxr_match_tag(uint64_t tag, uint64_t ignore,
 static inline uint64_t rxr_get_rts_data_size(struct rxr_ep *ep,
 					     struct rxr_rts_hdr *rts_hdr)
 {
+	/*
+	 * for read request, rts packet contain no data
+	 * because data is on remote host
+	 */
+	if (rts_hdr->flags & RXR_READ_REQ)
+		return 0;
+
 	size_t max_payload_size;
 
 	if (rts_hdr->flags & RXR_REMOTE_CQ_DATA)
@@ -905,6 +994,10 @@ static inline uint64_t rxr_get_rts_data_size(struct rxr_ep *ep,
 
 	if (rts_hdr->flags & RXR_REMOTE_SRC_ADDR)
 		max_payload_size -= rts_hdr->addrlen;
+
+	if (rts_hdr->flags & RXR_WRITE)
+		max_payload_size -= rts_hdr->rma_iov_count *
+					sizeof(struct fi_rma_iov);
 
 	return (rts_hdr->data_len > max_payload_size)
 		? max_payload_size : rts_hdr->data_len;
@@ -963,15 +1056,20 @@ int rxr_ep_post_buf(struct rxr_ep *ep, uint64_t flags);
 ssize_t rxr_ep_send_msg(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 			const struct fi_msg *msg, uint64_t flags);
 ssize_t rxr_ep_post_data(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry);
+ssize_t rxr_ep_post_read_response(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry);
 void rxr_ep_init_connack_pkt_entry(struct rxr_ep *ep,
 				   struct rxr_pkt_entry *pkt_entry,
 				   fi_addr_t addr);
+void rxr_ep_calc_cts_window_credits(struct rxr_ep *ep, uint32_t max_window,
+				    uint64_t size, int *window, int *credits);
 void rxr_ep_init_cts_pkt_entry(struct rxr_ep *ep,
 			       struct rxr_rx_entry *rx_entry,
 			       struct rxr_pkt_entry *pkt_entry,
 			       uint32_t max_window,
 			       uint64_t size,
 			       int *credits);
+void rxr_ep_init_read_response_pkt_entry(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
+					 struct rxr_pkt_entry *pkt_entry);
 struct rxr_rx_entry *rxr_ep_get_new_unexp_rx_entry(struct rxr_ep *ep,
 						   struct rxr_pkt_entry *unexp_entry);
 struct rxr_rx_entry *rxr_ep_split_rx_entry(struct rxr_ep *ep,
@@ -994,18 +1092,26 @@ ssize_t rxr_cq_post_cts(struct rxr_ep *ep,
 			struct rxr_rx_entry *rx_entry,
 			uint32_t max_window,
 			uint64_t size);
-int rxr_cq_handle_completion(struct rxr_ep *ep,
-			     struct fi_cq_msg_entry *comp,
-			     struct rxr_pkt_entry *pkt_entry,
-			     struct rxr_rx_entry *rx_entry);
+
+int rxr_cq_handle_rx_completion(struct rxr_ep *ep,
+				struct fi_cq_msg_entry *comp,
+				struct rxr_pkt_entry *pkt_entry,
+				struct rxr_rx_entry *rx_entry);
+
+void rxr_cq_write_tx_completion(struct rxr_ep *ep,
+				struct fi_cq_msg_entry *comp,
+				struct rxr_tx_entry *tx_entry);
+
 void rxr_cq_recv_rts_data(struct rxr_ep *ep,
 			  struct rxr_rx_entry *rx_entry,
 			  struct rxr_rts_hdr *rts_hdr);
-void rxr_cq_handle_recv_completion(struct rxr_ep *ep,
-				   struct fi_cq_msg_entry *comp,
-				   fi_addr_t src_addr);
-void rxr_cq_handle_send_completion(struct rxr_ep *rxr_ep,
-				   struct fi_cq_msg_entry *comp);
+
+void rxr_cq_handle_pkt_recv_completion(struct rxr_ep *ep,
+				       struct fi_cq_msg_entry *comp,
+				       fi_addr_t src_addr);
+
+void rxr_cq_handle_pkt_send_completion(struct rxr_ep *rxr_ep,
+				       struct fi_cq_msg_entry *comp);
 
 /* Aborts if unable to write to the eq */
 static inline void rxr_eq_write_error(struct rxr_ep *ep, ssize_t err,

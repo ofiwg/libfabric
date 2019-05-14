@@ -37,6 +37,7 @@
 #include <ofi_iov.h>
 #include <ofi_recvwin.h>
 #include "rxr.h"
+#include "rxr_rma.h"
 #include "rxr_cntr.h"
 #include "efa.h"
 
@@ -148,7 +149,7 @@ int rxr_cq_handle_rx_error(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
 	 */
 	//rxr_release_rx_entry(ep, rx_entry);
 
-	rxr_cntr_report_error(ep, rx_entry->cq_entry.flags);
+	rxr_cntr_report_error(ep, err_entry.flags);
 	return ofi_cq_write_error(util_cq, &err_entry);
 }
 
@@ -541,17 +542,13 @@ release_pkt:
 	return ret;
 }
 
-int rxr_cq_handle_completion(struct rxr_ep *ep,
-			     struct fi_cq_msg_entry *comp,
-			     struct rxr_pkt_entry *pkt_entry,
-			     struct rxr_rx_entry *rx_entry)
+int rxr_cq_write_rx_completion(struct rxr_ep *ep,
+			       struct fi_cq_msg_entry *comp,
+			       struct rxr_pkt_entry *pkt_entry,
+			       struct rxr_rx_entry *rx_entry)
 {
 	struct util_cq *rx_cq = ep->util_ep.rx_cq;
-	int ret;
-
-	if (rx_entry->fi_flags & FI_MULTI_RECV)
-		rxr_cq_handle_multi_recv_completion(ep, rx_entry);
-
+	int ret = 0;
 	if (OFI_UNLIKELY(rx_entry->cq_entry.len < rx_entry->total_len)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"Message truncated: tag: %lx len: %lu total_len: %lu\n",
@@ -625,10 +622,89 @@ int rxr_cq_handle_completion(struct rxr_ep *ep,
 	rxr_cntr_report_rx_completion(ep, rx_entry);
 
 out:
+	return 0;
+}
+
+int rxr_cq_handle_rx_completion(struct rxr_ep *ep,
+				struct fi_cq_msg_entry *comp,
+				struct rxr_pkt_entry *pkt_entry,
+				struct rxr_rx_entry *rx_entry)
+{
+	int ret = 0;
+	struct rxr_tx_entry *tx_entry = NULL;
+
+	if (rx_entry->fi_flags & FI_MULTI_RECV)
+		rxr_cq_handle_multi_recv_completion(ep, rx_entry);
+
+	if (rx_entry->cq_entry.flags & FI_WRITE) {
+		/*
+		 * must be on the remote side, notify cq/counter
+		 * if FI_RMA_EVENT is requested or REMOTE_CQ_DATA is on
+		 */
+		if (rx_entry->cq_entry.flags & FI_REMOTE_CQ_DATA)
+			ret = rxr_cq_write_rx_completion(ep, comp, pkt_entry, rx_entry);
+		else if (ep->util_ep.caps & FI_RMA_EVENT)
+			rxr_cntr_report_rx_completion(ep, rx_entry);
+
+		if (pkt_entry->type == RXR_PKT_ENTRY_POSTED)
+			ep->rx_bufs_to_post++;
+		rxr_release_rx_pkt_entry(ep, pkt_entry);
+		return ret;
+	}
+
+	if (rx_entry->cq_entry.flags & FI_READ) {
+		/* Note for emulated FI_READ, there is an rx_entry on
+		 * both initiator side and on remote side.
+		 * However, only on the initiator side,
+		 * rxr_cq_handle_rx_completion() will be called.
+		 * The following shows the sequence of events that
+		 * is happening
+		 *
+		 * Initiator side                    Remote side
+		 * create tx_entry
+		 * create rx_entry
+		 * send rts(with rx_id)
+		 *                                receive rts
+		 *                                create rx_entry
+		 *                                create tx_entry
+		 *                                tx_entry sending data
+		 * rx_entry receiving data
+		 * receive completed              send completed
+		 * handle_rx_completion()         handle_pkt_send_completion()
+		 * |->write_tx_completion()       |-> if (FI_RMA_EVENT)
+		 *                                         write_rx_completion()
+		 *
+		 * As can be seen, although there is a rx_entry on remote side,
+		 * the entry will not enter into rxr_cq_handle_rx_completion
+		 * So at this point we must be on the initiator side, we
+		 *     1. find the corresponding tx_entry
+		 *     2. call rxr_cq_write_tx_completion()
+		 */
+		tx_entry = ofi_bufpool_get_ibuf(ep->tx_entry_pool, rx_entry->rma_loc_tx_id);
+		assert(tx_entry->state == RXR_TX_WAIT_READ_FINISH);
+		if (tx_entry->fi_flags & FI_COMPLETION) {
+			/* Note write_tx_completion() will release tx_entry */
+			rxr_cq_write_tx_completion(ep, comp, tx_entry);
+		} else {
+			rxr_cntr_report_tx_completion(ep, tx_entry);
+			rxr_release_tx_entry(ep, tx_entry);
+		}
+
+		/*
+		 * do not call rxr_release_rx_entry here because
+		 * caller will release
+		 */
+		if (pkt_entry->type == RXR_PKT_ENTRY_POSTED)
+			ep->rx_bufs_to_post++;
+		rxr_release_rx_pkt_entry(ep, pkt_entry);
+		return 0;
+	}
+
+	ret = rxr_cq_write_rx_completion(ep, comp, pkt_entry, rx_entry);
 	if (pkt_entry->type == RXR_PKT_ENTRY_POSTED)
 		ep->rx_bufs_to_post++;
 	rxr_release_rx_pkt_entry(ep, pkt_entry);
-	return 0;
+	return ret;
 }
 
 void rxr_cq_recv_rts_data(struct rxr_ep *ep,
@@ -636,6 +712,9 @@ void rxr_cq_recv_rts_data(struct rxr_ep *ep,
 			  struct rxr_rts_hdr *rts_hdr)
 {
 	char *data;
+	uint32_t emulated_rma_flags = 0;
+	int ret = 0;
+	struct fi_rma_iov *rma_iov = NULL;
 
 	/*
 	 * Use the correct header and grab CQ data and data, but ignore the
@@ -651,19 +730,54 @@ void rxr_cq_recv_rts_data(struct rxr_ep *ep,
 		data = rxr_get_ctrl_pkt(rts_hdr)->data + rts_hdr->addrlen;
 	}
 
+	if (rts_hdr->flags & (RXR_READ_REQ | RXR_WRITE)) {
+		rma_iov = (struct fi_rma_iov *)data;
+
+		if (rts_hdr->flags & RXR_READ_REQ) {
+			emulated_rma_flags = FI_SEND;
+			rx_entry->cq_entry.flags |= (FI_RMA | FI_READ);
+		} else {
+			assert(rts_hdr->flags | RXR_WRITE);
+			emulated_rma_flags = FI_RECV;
+			rx_entry->cq_entry.flags |= (FI_RMA | FI_WRITE);
+		}
+
+		assert(rx_entry->iov_count == 0);
+
+		rx_entry->iov_count = rts_hdr->rma_iov_count;
+		ret = rxr_rma_verified_copy_iov(ep, rma_iov, rts_hdr->rma_iov_count, emulated_rma_flags,
+						rx_entry->iov);
+		if (ret) {
+			FI_WARN(&rxr_prov, FI_LOG_CQ, "RMA address verify failed!\n");
+			rxr_cq_handle_cq_error(ep, -FI_EIO);
+		}
+
+		rx_entry->cq_entry.len = ofi_total_iov_len(&rx_entry->iov[0],
+							   rx_entry->iov_count);
+		rx_entry->cq_entry.buf = rx_entry->iov[0].iov_base;
+		data += rts_hdr->rma_iov_count * sizeof(struct fi_rma_iov);
+	}
+
 	/* we are sinking message for CANCEL/DISCARD entry */
 	if (OFI_UNLIKELY(rx_entry->rxr_flags & RXR_RECV_CANCEL)) {
 		rx_entry->bytes_done += rxr_get_rts_data_size(ep, rts_hdr);
 		return;
 	}
 
-	rx_entry->bytes_done += ofi_copy_to_iov(rx_entry->iov,
-						rx_entry->iov_count,
-						0, data,
-						rxr_get_rts_data_size(ep,
-								      rts_hdr));
-	assert(rx_entry->bytes_done == MIN(rx_entry->cq_entry.len,
-					   rxr_get_rts_data_size(ep, rts_hdr)));
+	if (rx_entry->cq_entry.flags & FI_READ)  {
+		uint64_t *ptr = (uint64_t *)data;
+
+		rx_entry->bytes_done = 0;
+		rx_entry->rma_initiator_rx_id = *ptr;
+		ptr += 1;
+		rx_entry->window = *ptr;
+		assert(rx_entry->window > 0);
+	} else {
+		rx_entry->bytes_done += ofi_copy_to_iov(rx_entry->iov, rx_entry->iov_count,
+							0, data, rxr_get_rts_data_size(ep, rts_hdr));
+
+		assert(rx_entry->bytes_done == MIN(rx_entry->cq_entry.len, rxr_get_rts_data_size(ep, rts_hdr)));
+	}
 }
 
 static int rxr_cq_process_rts(struct rxr_ep *ep,
@@ -672,19 +786,39 @@ static int rxr_cq_process_rts(struct rxr_ep *ep,
 	struct rxr_rts_hdr *rts_hdr;
 	struct dlist_entry *match;
 	struct rxr_rx_entry *rx_entry;
+	struct rxr_tx_entry *tx_entry;
 	uint64_t bytes_left;
-	int ret;
+	uint64_t tag = 0;
+	uint32_t op;
+	int ret = 0;
 
 	rts_hdr = rxr_get_rts_hdr(pkt_entry->pkt);
 
-	if (rts_hdr->flags & RXR_TAGGED)
+	if (rts_hdr->flags & RXR_TAGGED) {
 		match = dlist_find_first_match(&ep->rx_tagged_list,
 					       &rxr_cq_match_trecv,
 					       (void *)pkt_entry);
-	else
+	} else if (rts_hdr->flags & (RXR_READ_REQ | RXR_WRITE)) {
+		/*
+		 * rma is one sided operation, match is not expected
+		 * we need to create a rx entry upon receiving a rts
+		 */
+		tag = ~0; // RMA is not tagged
+		op = (rts_hdr->flags & RXR_READ_REQ) ? ofi_op_read_rsp : ofi_op_write_async;
+		rx_entry = rxr_ep_get_rx_entry(ep, NULL, 0, tag, 0, NULL, pkt_entry->addr, op, 0);
+		if (OFI_UNLIKELY(!rx_entry)) {
+			FI_WARN(&rxr_prov, FI_LOG_CQ,
+				"RX entries exhausted.\n");
+			rxr_eq_write_error(ep, FI_ENOBUFS, -FI_ENOBUFS);
+			return -FI_ENOBUFS;
+		}
+		dlist_insert_tail(&rx_entry->entry, &ep->rx_list);
+		match = &rx_entry->entry;
+	} else {
 		match = dlist_find_first_match(&ep->rx_list,
 					       &rxr_cq_match_recv,
 					       (void *)pkt_entry);
+	}
 
 	if (OFI_UNLIKELY(!match)) {
 		rx_entry = rxr_ep_get_new_unexp_rx_entry(ep, pkt_entry);
@@ -708,7 +842,9 @@ static int rxr_cq_process_rts(struct rxr_ep *ep,
 				return -FI_ENOBUFS;
 			}
 		}
+
 		rx_entry->state = RXR_RX_MATCHED;
+
 		if (!(rx_entry->fi_flags & FI_MULTI_RECV) ||
 		    !rxr_multi_recv_buffer_available(ep,
 						     rx_entry->master_entry))
@@ -728,25 +864,69 @@ static int rxr_cq_process_rts(struct rxr_ep *ep,
 	 * TODO: Change protocol to contact sender to stop sending when the
 	 * message is truncated instead of sinking the additional data.
 	 */
-	bytes_left = rx_entry->total_len - rxr_get_rts_data_size(ep, rts_hdr);
 
-	rx_entry->cq_entry.len = MIN(rx_entry->total_len,
-				     rx_entry->cq_entry.len);
 	rxr_cq_recv_rts_data(ep, rx_entry, rts_hdr);
 
+	if (rx_entry->cq_entry.flags & FI_READ) {
+		/*
+		 * create a tx_entry for sending data back to initiator
+		 * this tx_entry works similar to a send tx_entry thus its op was
+		 * set to ofi_op_msg. Note this tx_entry will not write a completion
+		 */
+		tx_entry = rxr_ep_tx_entry_init(ep, rx_entry->iov, rx_entry->iov_count,
+						NULL, 0, rx_entry->addr, rx_entry->tag,
+						0, NULL, ofi_op_msg, 0);
+		tx_entry->cq_entry.flags |= FI_READ;
+		/* rma_loc_rx_id is for later retrieve of rx_entry
+		 * to write rx_completion
+		 */
+		tx_entry->rma_loc_rx_id = rx_entry->rx_id;
+
+		/* the following is essentially handle CTS */
+		tx_entry->rx_id = rx_entry->rma_initiator_rx_id;
+		tx_entry->window = rx_entry->window;
+
+		/* this tx_entry will be added to tx_pending_list
+		 * after we receive the send completion of read
+		 * respponse packet.
+		 */
+		ret = rxr_ep_post_read_response(ep, tx_entry);
+		if (!ret) {
+			tx_entry->state = RXR_TX_SENT_READ_RESPONSE;
+		} else if (ret == -FI_EAGAIN) {
+			dlist_insert_tail(&tx_entry->queued_entry, &ep->tx_entry_queued_list);
+			tx_entry->state = RXR_TX_QUEUED_READ_RESPONSE;
+			ret = 0;
+		} else {
+			if (rxr_cq_handle_tx_error(ep, tx_entry, ret))
+				assert(0 && "failed to write err cq entry");
+		}
+
+		rx_entry->state = RXR_RX_WAIT_READ_FINISH;
+		if (pkt_entry->type == RXR_PKT_ENTRY_POSTED)
+			ep->rx_bufs_to_post++;
+		rxr_release_rx_pkt_entry(ep, pkt_entry);
+		return ret;
+	}
+
+	bytes_left = rx_entry->total_len - rxr_get_rts_data_size(ep, rts_hdr);
+	rx_entry->cq_entry.len = MIN(rx_entry->total_len,
+				     rx_entry->cq_entry.len);
+
 	if (!bytes_left) {
-		ret = rxr_cq_handle_completion(ep, NULL, pkt_entry, rx_entry);
+		ret = rxr_cq_handle_rx_completion(ep, NULL,
+						  pkt_entry, rx_entry);
 		rxr_multi_recv_free_posted_entry(ep, rx_entry);
 		if (!ret)
 			rxr_release_rx_entry(ep, rx_entry);
-		return 0;
+		return ret;
 	}
 
-	rx_entry->state = RXR_RX_RECV;
 #if ENABLE_DEBUG
 	dlist_insert_tail(&rx_entry->rx_pending_entry, &ep->rx_pending_list);
 	ep->rx_pending++;
 #endif
+	rx_entry->state = RXR_RX_RECV;
 	ret = rxr_ep_post_cts_or_queue(ep, rx_entry, bytes_left);
 	if (pkt_entry->type == RXR_PKT_ENTRY_POSTED)
 		ep->rx_bufs_to_post++;
@@ -952,6 +1132,20 @@ static void rxr_cq_handle_connack(struct rxr_ep *ep,
 	ep->rx_bufs_to_post++;
 }
 
+static void rxr_cq_handle_read_response(struct rxr_ep *ep,
+					struct fi_cq_msg_entry *comp,
+					struct rxr_pkt_entry *pkt_entry)
+{
+	struct rxr_read_response_hdr *read_response_hdr = NULL;
+	struct rxr_rx_entry *rx_entry = NULL;
+
+	read_response_hdr = (struct rxr_read_response_hdr *)pkt_entry->pkt;
+	rx_entry = ofi_bufpool_get_ibuf(ep->rx_entry_pool, read_response_hdr->rx_id);
+	rx_entry->tx_id = read_response_hdr->tx_id;
+	rxr_release_rx_pkt_entry(ep, pkt_entry);
+	ep->rx_bufs_to_post++;
+}
+
 static void rxr_cq_handle_cts(struct rxr_ep *ep,
 			      struct fi_cq_msg_entry *comp,
 			      struct rxr_pkt_entry *pkt_entry)
@@ -1012,9 +1206,11 @@ static void rxr_cq_handle_data(struct rxr_ep *ep,
 		dlist_remove(&rx_entry->rx_pending_entry);
 		ep->rx_pending--;
 #endif
-		ret = rxr_cq_handle_completion(ep, comp, pkt_entry, rx_entry);
+		ret = rxr_cq_handle_rx_completion(ep, comp,
+						  pkt_entry, rx_entry);
+
 		rxr_multi_recv_free_posted_entry(ep, rx_entry);
-		if (!ret)
+		if (OFI_LIKELY(!ret))
 			rxr_release_rx_entry(ep, rx_entry);
 		return;
 	}
@@ -1024,9 +1220,9 @@ static void rxr_cq_handle_data(struct rxr_ep *ep,
 	return;
 }
 
-static void rxr_cq_write_send_completion(struct rxr_ep *ep,
-					 struct fi_cq_msg_entry *comp,
-					 struct rxr_tx_entry *tx_entry)
+void rxr_cq_write_tx_completion(struct rxr_ep *ep,
+				struct fi_cq_msg_entry *comp,
+				struct rxr_tx_entry *tx_entry)
 {
 	struct util_cq *tx_cq = ep->util_ep.tx_cq;
 	int ret;
@@ -1076,9 +1272,9 @@ static void rxr_cq_write_send_completion(struct rxr_ep *ep,
 	return;
 }
 
-void rxr_cq_handle_recv_completion(struct rxr_ep *ep,
-				   struct fi_cq_msg_entry *cq_entry,
-				   fi_addr_t src_addr)
+void rxr_cq_handle_pkt_recv_completion(struct rxr_ep *ep,
+				       struct fi_cq_msg_entry *cq_entry,
+				       fi_addr_t src_addr)
 {
 	struct rxr_pkt_entry *pkt_entry;
 
@@ -1109,6 +1305,9 @@ void rxr_cq_handle_recv_completion(struct rxr_ep *ep,
 	case RXR_DATA_PKT:
 		rxr_cq_handle_data(ep, cq_entry, pkt_entry);
 		return;
+	case RXR_READ_RESPONSE_PKT:
+		rxr_cq_handle_read_response(ep, cq_entry, pkt_entry);
+		return;
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"invalid control pkt type %d\n",
@@ -1134,13 +1333,14 @@ static int rxr_send_completion_mr_dereg(struct rxr_tx_entry *tx_entry)
 	return ret;
 }
 
-void rxr_cq_handle_send_completion(struct rxr_ep *ep,
-				   struct fi_cq_msg_entry *comp)
+void rxr_cq_handle_pkt_send_completion(struct rxr_ep *ep, struct fi_cq_msg_entry *comp)
 {
 	struct rxr_pkt_entry *pkt_entry;
 	struct rxr_tx_entry *tx_entry = NULL;
 	uint32_t tx_id;
 	int ret;
+	struct rxr_rts_hdr *rts_hdr = NULL;
+	struct rxr_read_response_hdr *read_response_hdr = NULL;
 
 	pkt_entry = (struct rxr_pkt_entry *)comp->op_context;
 
@@ -1149,11 +1349,23 @@ void rxr_cq_handle_send_completion(struct rxr_ep *ep,
 
 	switch (rxr_get_base_hdr(pkt_entry->pkt)->type) {
 	case RXR_RTS_PKT:
-		tx_id = rxr_get_rts_hdr(pkt_entry->pkt)->tx_id;
-		tx_entry = ofi_bufpool_get_ibuf(ep->tx_entry_pool, tx_id);
-		tx_entry->bytes_acked +=
-			rxr_get_rts_data_size(ep,
-					      rxr_get_rts_hdr(pkt_entry->pkt));
+		/*
+		 * for FI_READ, it is possible (though does not happen very offen) that at the point
+		 * tx_entry has been released. The reason is, for FI_READ:
+		 *     1. only the initator side will send a RTS.
+		 *     2. the initator side will receive data packet. When all data was received,
+		 *        it will release the tx_entry
+		 * Therefore, if it so happens that all data was received before we got the send
+		 * completion notice, we will have a released tx_entry at this point.
+		 * Nonetheless, because for FI_READ tx_entry will be release in rxr_handle_rx_completion,
+		 * we will ignore it here.
+		 */
+		rts_hdr = rxr_get_rts_hdr(pkt_entry->pkt);
+		if (!(rts_hdr->flags & RXR_READ_REQ)) {
+			tx_id = rts_hdr->tx_id;
+			tx_entry = ofi_bufpool_get_ibuf(ep->tx_entry_pool, tx_id);
+			tx_entry->bytes_acked += rxr_get_rts_data_size(ep, rts_hdr);
+		}
 		break;
 	case RXR_CONNACK_PKT:
 		break;
@@ -1163,6 +1375,20 @@ void rxr_cq_handle_send_completion(struct rxr_ep *ep,
 		tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
 		tx_entry->bytes_acked +=
 			rxr_get_data_pkt(pkt_entry->pkt)->hdr.seg_size;
+		break;
+	case RXR_READ_RESPONSE_PKT:
+		read_response_hdr = rxr_get_read_response_hdr(pkt_entry->pkt);
+		tx_id = read_response_hdr->tx_id;
+		tx_entry = ofi_bufpool_get_ibuf(ep->tx_entry_pool, tx_id);
+		assert(tx_entry->cq_entry.flags & FI_READ);
+		assert(tx_entry->state == RXR_TX_SENT_READ_RESPONSE);
+		tx_entry->state = RXR_TX_SEND; /* ready to send */
+		tx_entry->bytes_sent = 0;
+		tx_entry->bytes_acked = 0;
+		tx_entry->msg_id = 0; /* this tx_entry does not send rts
+				       * therefore should not increase msg_id
+				       */
+		dlist_insert_tail(&tx_entry->entry, &ep->tx_pending_list);
 		break;
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
@@ -1185,7 +1411,38 @@ void rxr_cq_handle_send_completion(struct rxr_ep *ep,
 					fi_strerror(-ret));
 			}
 		}
-		rxr_cq_write_send_completion(ep, comp, tx_entry);
+
+		if (tx_entry->cq_entry.flags & FI_READ) {
+			/*
+			 * this must be on remote side
+			 * see explaination on rxr_cq_handle_rx_completion
+			 */
+			struct rxr_rx_entry *rx_entry = NULL;
+
+			rx_entry = ofi_bufpool_get_ibuf(ep->rx_entry_pool, tx_entry->rma_loc_rx_id);
+			assert(rx_entry);
+			assert(rx_entry->state == RXR_RX_WAIT_READ_FINISH);
+
+			if (ep->util_ep.caps & FI_RMA_EVENT) {
+				rx_entry->cq_entry.len = rx_entry->total_len;
+				rx_entry->bytes_done = rx_entry->total_len;
+				rxr_cntr_report_rx_completion(ep, rx_entry);
+			}
+
+			rxr_release_rx_entry(ep, rx_entry);
+			/* just release tx, do not write */
+			rxr_release_tx_entry(ep, tx_entry);
+		} else if (tx_entry->cq_entry.flags & FI_WRITE) {
+			if (tx_entry->fi_flags & FI_COMPLETION) {
+				rxr_cq_write_tx_completion(ep, comp, tx_entry);
+			} else {
+				rxr_cntr_report_tx_completion(ep, tx_entry);
+				rxr_release_tx_entry(ep, tx_entry);
+			}
+		} else {
+			assert(tx_entry->cq_entry.flags & FI_SEND);
+			rxr_cq_write_tx_completion(ep, comp, tx_entry);
+		}
 	}
 
 	rxr_release_tx_pkt_entry(ep, pkt_entry);

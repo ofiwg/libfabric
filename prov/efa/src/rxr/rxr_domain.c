@@ -114,33 +114,6 @@ static struct fi_ops rxr_mr_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-static int rxr_rma_verify_iov(struct rxr_ep *ep, struct ofi_rma_iov *rma,
-			      size_t count, uint32_t type, struct iovec *iov)
-{
-	struct util_domain *util_domain;
-	int i, ret;
-
-	util_domain = &rxr_ep_domain(ep)->util_domain;
-
-	for (i = 0; i < count; i++) {
-		ret = ofi_mr_verify(&util_domain->mr_map,
-				    rma[i].len,
-				    (uintptr_t *)(&rma[i].addr),
-				    rma[i].key,
-				    ofi_rx_mr_reg_flags(type, 0));
-		if (ret) {
-			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
-				"MR verification failed (%s)\n",
-				fi_strerror(-ret));
-			return -FI_EACCES;
-		}
-
-		iov[i].iov_base = (void *)rma[i].addr;
-		iov[i].iov_len = rma[i].len;
-	}
-	return 0;
-}
-
 int rxr_mr_regattr(struct fid *domain_fid, const struct fi_mr_attr *attr,
 		   uint64_t flags, struct fid_mr **mr)
 {

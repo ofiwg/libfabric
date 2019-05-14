@@ -260,6 +260,14 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 			rxr_env.enable_sas_ordering = 0;
 	}
 
+	/*
+	 *  For RMA, we only support PROGRESS_MANUAL
+	 */
+	if (hints && (hints->caps & FI_RMA)) {
+		info->domain_attr->control_progress = FI_PROGRESS_MANUAL;
+		info->domain_attr->data_progress = FI_PROGRESS_MANUAL;
+	}
+
 	rxr_set_rx_tx_size(info, core_info);
 	return 0;
 }
