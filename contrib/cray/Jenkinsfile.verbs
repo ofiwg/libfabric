@@ -99,10 +99,10 @@ pipeline {
                 stage('Functional Tests: RC') {
                     steps {
                         tee ('fabtests-rc.log') {
-                            sh 'srun -n 2 --ntasks-per-node=1 contrib/cray/bin/fabtest_wrapper.sh -p ${FABTEST_PATH}/bin -v -T 60'
+                            sh 'srun -n 2 --ntasks-per-node=1 contrib/cray/bin/fabtest_wrapper.sh -p ${FABTEST_PATH}/bin -v -T 120'
                         }
                         tee ('ubertests-rc.log') {
-                            sh 'srun -n 2 --ntasks-per-node=1 contrib/cray/bin/fabtest_wrapper.sh -p ${FABTEST_PATH}/bin -vvv -T 60 -t complex -u all'
+                            sh 'srun -n 2 --ntasks-per-node=1 contrib/cray/bin/fabtest_wrapper.sh -p ${FABTEST_PATH}/bin -vvv -T 120 -t complex -u all'
                         }
                     }
                     post {
@@ -126,10 +126,10 @@ pipeline {
                 stage('Functional Tests: XRC') {
                     steps {
                         tee ('fabtests-xrc.log') {
-                            sh 'srun -n 2 --ntasks-per-node=1 contrib/cray/bin/fabtest_wrapper.sh -p ${FABTEST_PATH}/bin -v -T 60 -e FI_VERBS_PREFER_XRC=1 -e FI_OFI_RXM_USE_SRX=1'
+                            sh 'srun -n 2 --ntasks-per-node=1 contrib/cray/bin/fabtest_wrapper.sh -p ${FABTEST_PATH}/bin -v -T 120 -e FI_VERBS_PREFER_XRC=1 -e FI_OFI_RXM_USE_SRX=1'
                         }
                         tee ('ubertests-xrc.log') {
-                            sh 'srun -n 2 --ntasks-per-node=1 contrib/cray/bin/fabtest_wrapper.sh -p ${FABTEST_PATH}/bin -vvv -T 60 -t complex -u all -e FI_VERBS_PREFER_XRC=1 -e FI_OFI_RXM_USE_SRX=1'
+                            sh 'srun -n 2 --ntasks-per-node=1 contrib/cray/bin/fabtest_wrapper.sh -p ${FABTEST_PATH}/bin -vvv -T 120 -t complex -u all -e FI_VERBS_PREFER_XRC=1 -e FI_OFI_RXM_USE_SRX=1'
                         }
                     }
                     post {
