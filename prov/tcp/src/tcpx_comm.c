@@ -166,12 +166,8 @@ int tcpx_recv_msg_data(struct tcpx_xfer_entry *rx_entry)
 	if (bytes_recvd <= 0)
 		return (bytes_recvd)? -ofi_sockerr(): -FI_ENOTCONN;
 
-	rx_entry->rem_len -= bytes_recvd;
-	if (rx_entry->rem_len) {
-		ofi_consume_iov(rx_entry->iov, &rx_entry->iov_cnt, bytes_recvd);
-		return -FI_EAGAIN;
-	}
-	return FI_SUCCESS;
+	ofi_consume_iov(rx_entry->iov, &rx_entry->iov_cnt, bytes_recvd);
+	return (rx_entry->iov[0].iov_len)? -FI_EAGAIN: FI_SUCCESS;
 }
 
 int tcpx_read_to_buffer(SOCKET sock, struct stage_buf *stage_buf)

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013-2019 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under the BSD license
  * below:
@@ -309,17 +309,131 @@ static int init_av(void)
 	return 0;
 }
 
+int start_server(void)
+{
+	int ret;
+
+	tx_seq = 0;
+	rx_seq = 0;
+	tx_cq_cntr = 0;
+	rx_cq_cntr = 0;
+
+
+	ret = ft_getinfo(hints, &fi_pep);
+	if (ret)
+		return ret;
+
+	// set FI_MULTI_RECV flag for all recv operations
+	fi_pep->rx_attr->op_flags = FI_MULTI_RECV;
+
+	ret = fi_fabric(fi_pep->fabric_attr, &fabric, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_fabric", ret);
+		return ret;
+	}
+
+	ret = fi_eq_open(fabric, &eq_attr, &eq, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_eq_open", ret);
+		return ret;
+	}
+
+	ret = fi_passive_ep(fabric, fi_pep, &pep, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_passive_ep", ret);
+		return ret;
+	}
+
+	ret = fi_pep_bind(pep, &eq->fid, 0);
+	if (ret) {
+		FT_PRINTERR("fi_pep_bind", ret);
+		return ret;
+	}
+
+	ret = fi_listen(pep);
+	if (ret) {
+		FT_PRINTERR("fi_listen", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+int server_connect(void)
+{
+	int ret;
+
+	ret = ft_retrieve_conn_req(eq, &fi);
+	if (ret)
+		goto err;
+
+	ret = fi_domain(fabric, fi, &domain, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_domain", ret);
+		goto err;
+	}
+
+	ret = alloc_ep_res(fi);
+	if (ret)
+		goto err;
+
+	ret = ft_enable_ep_recv();
+	if (ret)
+		goto err;
+
+	ret = fi_setopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_MIN_MULTI_RECV,
+			&tx_size, sizeof(tx_size));
+	if (ret)
+		goto err;
+
+	ret = post_multi_recv_buffer();
+	if (ret)
+		goto err;
+
+	ret = ft_accept_connection(ep, eq);
+	if (ret)
+		goto err;
+
+	return 0;
+err:
+	fi_reject(pep, fi->handle, NULL, 0);
+	return ret;
+}
+
+static int client_connect(void)
+{
+	int ret;
+
+	ret =  init_fabric();
+	if (ret)
+		return ret;
+
+	return ft_connect_ep(ep, eq, fi->dest_addr);
+}
+
 static int run(void)
 {
 	int ret = 0;
 
-	ret = init_fabric();
-	if (ret)
-		goto out;
+	if (hints->ep_attr->type == FI_EP_MSG) {
+		if (!opts.dst_addr) {
+			ret = start_server();
+			if (ret)
+				goto out;
+		}
 
-	ret = init_av();
-	if (ret)
-		goto out;
+		ret = opts.dst_addr ? client_connect() : server_connect();
+		if (ret)
+			goto out;
+	} else {
+		ret = init_fabric();
+		if (ret)
+			goto out;
+
+		ret = init_av();
+		if (ret)
+			goto out;
+	}
 
 	ret = run_test();
 
@@ -364,7 +478,6 @@ int main(int argc, char **argv)
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
 
-	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG | FI_MULTI_RECV;
 	hints->mode = FI_CONTEXT;
 	hints->domain_attr->mr_mode = opts.mr_mode;

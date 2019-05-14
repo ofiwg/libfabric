@@ -75,6 +75,8 @@
 #define MAX_EPOLL_EVENTS	100
 #define STAGE_BUF_SIZE		512
 
+#define TCPX_MIN_MULTI_RECV	16384
+
 #define TCPX_PORT_MAX_RANGE	(USHRT_MAX)
 
 extern struct fi_provider	tcpx_prov;
@@ -172,6 +174,7 @@ struct tcpx_rx_ctx {
 	struct fid_ep		rx_fid;
 	struct slist		rx_queue;
 	struct ofi_bufpool	*buf_pool;
+	uint64_t		op_flags;
 	fastlock_t		lock;
 };
 
@@ -205,12 +208,15 @@ struct tcpx_ep {
 	tcpx_get_rx_func_t	get_rx_entry[ofi_op_write + 1];
 	void (*hdr_bswap)(struct tcpx_base_hdr *hdr);
 	struct stage_buf	stage_buf;
+	size_t			min_multi_recv_size;
 	bool			send_ready_monitor;
 };
 
 struct tcpx_fabric {
 	struct util_fabric	util_fabric;
 };
+
+typedef void (*release_func_t)(struct tcpx_xfer_entry *xfer_entry);
 
 struct tcpx_xfer_entry {
 	struct slist_entry	entry;
@@ -225,6 +231,8 @@ struct tcpx_xfer_entry {
 	uint64_t		flags;
 	void			*context;
 	uint64_t		rem_len;
+	void			*mrecv_msg_start;
+	release_func_t		rx_msg_release_fn;
 };
 
 struct tcpx_domain {
@@ -280,10 +288,12 @@ void tcpx_xfer_entry_release(struct tcpx_cq *tcpx_cq,
 			     struct tcpx_xfer_entry *xfer_entry);
 void tcpx_srx_xfer_release(struct tcpx_rx_ctx *srx_ctx,
 			   struct tcpx_xfer_entry *xfer_entry);
-void tcpx_rx_msg_release(struct tcpx_xfer_entry *rx_entry);
-struct tcpx_xfer_entry *
-tcpx_srx_dequeue(struct tcpx_rx_ctx *srx_ctx);
 
+void tcpx_rx_msg_release(struct tcpx_xfer_entry *rx_entry);
+void tcpx_rx_multi_recv_release(struct tcpx_xfer_entry *rx_entry);
+struct tcpx_xfer_entry *
+tcpx_srx_next_xfer_entry(struct tcpx_rx_ctx *srx_ctx,
+			struct tcpx_ep *ep, size_t entry_size);
 
 void tcpx_progress(struct util_ep *util_ep);
 void tcpx_ep_progress(struct tcpx_ep *ep);

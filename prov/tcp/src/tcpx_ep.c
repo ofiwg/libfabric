@@ -325,6 +325,13 @@ static struct fi_ops_cm tcpx_cm_ops = {
 	.join = fi_no_join,
 };
 
+void tcpx_rx_multi_recv_release(struct tcpx_xfer_entry *rx_entry)
+{
+	assert(rx_entry->iov_cnt == 1);
+	rx_entry->ep->cur_rx_entry = NULL;
+	rx_entry->iov[0].iov_len = rx_entry->rem_len;
+}
+
 void tcpx_rx_msg_release(struct tcpx_xfer_entry *rx_entry)
 {
 	struct tcpx_cq *tcpx_cq;
@@ -447,10 +454,22 @@ static struct fi_ops tcpx_ep_fi_ops = {
 static int tcpx_ep_getopt(fid_t fid, int level, int optname,
 			  void *optval, size_t *optlen)
 {
+	struct tcpx_ep *ep;
+
 	if (level != FI_OPT_ENDPOINT)
 		return -ENOPROTOOPT;
 
 	switch (optname) {
+	case FI_OPT_MIN_MULTI_RECV:
+		if (*optlen < sizeof(size_t)) {
+			*optlen = sizeof(size_t);
+			return -FI_ETOOSMALL;
+		}
+		ep = container_of(fid, struct tcpx_ep,
+				  util_ep.ep_fid.fid);
+		*((size_t *) optval) = ep->min_multi_recv_size;
+		*optlen = sizeof(size_t);
+		break;
 	case FI_OPT_CM_DATA_SIZE:
 		if (*optlen < sizeof(size_t)) {
 			*optlen = sizeof(size_t);
@@ -465,11 +484,32 @@ static int tcpx_ep_getopt(fid_t fid, int level, int optname,
 	return FI_SUCCESS;
 }
 
+int tcpx_ep_setopt(fid_t fid, int level, int optname,
+		   const void *optval, size_t optlen)
+{
+	struct tcpx_ep *ep;
+
+	if (level != FI_OPT_ENDPOINT ||
+	    optname != FI_OPT_MIN_MULTI_RECV)
+		return -ENOPROTOOPT;
+
+	if (optlen != sizeof(size_t))
+		return -FI_EINVAL;
+
+	ep = container_of(fid, struct tcpx_ep, util_ep.ep_fid.fid);
+	ep->min_multi_recv_size = *(size_t *)optval;
+
+	FI_INFO(&tcpx_prov, FI_LOG_EP_CTRL,
+		"FI_OPT_MIN_MULTI_RECV set to %zu\n",
+		ep->min_multi_recv_size);
+	return FI_SUCCESS;
+}
+
 static struct fi_ops_ep tcpx_ep_ops = {
 	.size = sizeof(struct fi_ops_ep),
 	.cancel = fi_no_cancel,
 	.getopt = tcpx_ep_getopt,
-	.setopt = fi_no_setopt,
+	.setopt = tcpx_ep_setopt,
 	.tx_ctx = fi_no_tx_ctx,
 	.rx_ctx = fi_no_rx_ctx,
 	.rx_size_left = fi_no_rx_size_left,
@@ -545,6 +585,7 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	ep->rx_detect.done_len = 0;
 	ep->rx_detect.hdr_len = sizeof(ep->rx_detect.hdr.base_hdr);
+	ep->min_multi_recv_size = TCPX_MIN_MULTI_RECV;
 
 	*ep_fid = &ep->util_ep.ep_fid;
 	(*ep_fid)->fid.ops = &tcpx_ep_fi_ops;
@@ -780,7 +821,7 @@ int tcpx_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	_pep->cm_ctx.type = SERVER_SOCK_ACCEPT;
 	_pep->cm_ctx.cm_data_sz = 0;
 	_pep->sock = INVALID_SOCKET;
-	
+
 	*pep = &_pep->util_pep.pep_fid;
 
 	if (info->src_addr) {

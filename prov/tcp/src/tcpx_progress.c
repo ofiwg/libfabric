@@ -154,7 +154,8 @@ static int tcpx_prepare_rx_entry_resp(struct tcpx_xfer_entry *rx_entry)
 	resp_entry->ep->hdr_bswap(&resp_entry->hdr.base_hdr);
 	tcpx_tx_queue_insert(resp_entry->ep, resp_entry);
 	tcpx_cq_report_success(rx_entry->ep->util_ep.rx_cq, rx_entry);
-	tcpx_rx_msg_release(rx_entry);
+
+	rx_entry->rx_msg_release_fn(rx_entry);
 	return FI_SUCCESS;
 }
 
@@ -174,14 +175,15 @@ static int process_rx_entry(struct tcpx_xfer_entry *rx_entry)
 					&rx_entry->ep->util_ep.ep_fid.fid);
 		tcpx_cq_report_error(rx_entry->ep->util_ep.rx_cq,
 				     rx_entry, ret);
-		tcpx_rx_msg_release(rx_entry);
+		rx_entry->rx_msg_release_fn(rx_entry);
 	} else 	if (rx_entry->hdr.base_hdr.flags & OFI_DELIVERY_COMPLETE) {
 		if (tcpx_prepare_rx_entry_resp(rx_entry))
 			rx_entry->ep->cur_rx_proc_fn = tcpx_prepare_rx_entry_resp;
 	} else {
 		tcpx_cq_report_success(rx_entry->ep->util_ep.rx_cq,
 				       rx_entry);
-		tcpx_rx_msg_release(rx_entry);
+
+		rx_entry->rx_msg_release_fn(rx_entry);
 	}
 	return ret;
 }
@@ -414,6 +416,7 @@ int tcpx_get_rx_entry_op_msg(struct tcpx_ep *tcpx_ep)
 	struct tcpx_xfer_entry *tx_entry;
 	struct tcpx_cq *tcpx_cq;
 	struct tcpx_rx_detect *rx_detect = &tcpx_ep->rx_detect;
+	size_t msg_len;
 	int ret;
 
 	tcpx_cq = container_of(tcpx_ep->util_ep.rx_cq,
@@ -434,42 +437,57 @@ int tcpx_get_rx_entry_op_msg(struct tcpx_ep *tcpx_ep)
 		return -FI_EAGAIN;
 	}
 
+	msg_len = (tcpx_ep->rx_detect.hdr.base_hdr.size -
+		   tcpx_ep->rx_detect.hdr.base_hdr.payload_off);
+
 	if (tcpx_ep->srx_ctx){
-		rx_entry = tcpx_srx_dequeue(tcpx_ep->srx_ctx);
+		rx_entry = tcpx_srx_next_xfer_entry(tcpx_ep->srx_ctx,
+						    tcpx_ep, msg_len);
 		if (!rx_entry)
 			return -FI_EAGAIN;
 
+		rx_entry->flags |= tcpx_ep->util_ep.rx_op_flags & FI_COMPLETION;
 	} else {
 		if (slist_empty(&tcpx_ep->rx_queue))
 			return -FI_EAGAIN;
 
-		rx_entry = container_of(slist_remove_head(&tcpx_ep->rx_queue),
+		rx_entry = container_of(tcpx_ep->rx_queue.head,
 					struct tcpx_xfer_entry, entry);
+
+		rx_entry->rem_len =
+			ofi_total_iov_len(rx_entry->iov, rx_entry->iov_cnt)-
+			msg_len;
+
+		if (!(rx_entry->flags & FI_MULTI_RECV) ||
+		    rx_entry->rem_len < tcpx_ep->min_multi_recv_size) {
+			slist_remove_head(&tcpx_ep->rx_queue);
+			rx_entry->rx_msg_release_fn = tcpx_rx_msg_release;
+		} else {
+			rx_entry->rx_msg_release_fn = tcpx_rx_multi_recv_release;
+		}
 	}
-	tcpx_ep->cur_rx_proc_fn = process_rx_entry;
 
 	memcpy(&rx_entry->hdr, &tcpx_ep->rx_detect.hdr,
 	       (size_t) tcpx_ep->rx_detect.hdr.base_hdr.payload_off);
 	rx_entry->ep = tcpx_ep;
 	rx_entry->hdr.base_hdr.op_data = TCPX_OP_MSG_RECV;
-	rx_entry->rem_len = rx_entry->hdr.base_hdr.size - rx_detect->done_len;
-	if (tcpx_ep->srx_ctx)
-		rx_entry->flags |= tcpx_ep->util_ep.rx_op_flags & FI_COMPLETION;
-
-	if (rx_detect->hdr.base_hdr.flags & OFI_REMOTE_CQ_DATA)
-		rx_entry->flags |= FI_REMOTE_CQ_DATA;
+	rx_entry->mrecv_msg_start = rx_entry->iov[0].iov_base;
 
 	ret = ofi_truncate_iov(rx_entry->iov,
 			       &rx_entry->iov_cnt,
-			       rx_entry->rem_len);
+			       msg_len);
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,
 			"posted rx buffer size is not big enough\n");
 		tcpx_cq_report_error(rx_entry->ep->util_ep.rx_cq,
 				     rx_entry, -ret);
-		tcpx_rx_msg_release(rx_entry);
+		rx_entry->rx_msg_release_fn(rx_entry);
 		return ret;
 	}
+
+	tcpx_ep->cur_rx_proc_fn = process_rx_entry;
+	if (rx_detect->hdr.base_hdr.flags & OFI_REMOTE_CQ_DATA)
+		rx_entry->flags |= FI_REMOTE_CQ_DATA;
 
 	tcpx_rx_detect_init(rx_detect);
 	tcpx_ep->cur_rx_entry = rx_entry;

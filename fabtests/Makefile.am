@@ -39,7 +39,7 @@ bin_PROGRAMS = \
 	functional/fi_inj_complete \
 	functional/fi_resmgmt_test \
 	functional/fi_rdm_atomic \
-	functional/fi_rdm_multi_recv \
+	functional/fi_multi_recv \
 	benchmarks/fi_msg_pingpong \
 	benchmarks/fi_msg_bw \
 	benchmarks/fi_rma_bw \
@@ -232,9 +232,9 @@ functional_fi_rdm_atomic_SOURCES = \
 	functional/rdm_atomic.c
 functional_fi_rdm_atomic_LDADD = libfabtests.la
 
-functional_fi_rdm_multi_recv_SOURCES = \
-	functional/rdm_multi_recv.c
-functional_fi_rdm_multi_recv_LDADD = libfabtests.la
+functional_fi_multi_recv_SOURCES = \
+	functional/multi_recv.c
+functional_fi_multi_recv_LDADD = libfabtests.la
 
 benchmarks_fi_msg_pingpong_SOURCES = \
 	benchmarks/msg_pingpong.c \
@@ -352,7 +352,7 @@ dummy_man_pages = \
 	man/man1/fi_rdm_atomic.1 \
 	man/man1/fi_rdm_deferred_wq.1 \
 	man/man1/fi_rdm_multi_domain.1 \
-	man/man1/fi_rdm_multi_recv.1 \
+	man/man1/fi_multi_recv.1 \
 	man/man1/fi_rdm_rma_simple.1 \
 	man/man1/fi_rdm_rma_trigger.1 \
 	man/man1/fi_rdm_shared_av.1 \
