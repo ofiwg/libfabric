@@ -38,6 +38,8 @@
 
 #define RXM_DOMAIN_CAPS (FI_LOCAL_COMM | FI_REMOTE_COMM)
 
+// TODO have a separate "check info" against which app hints would be checked.
+
 /* Since we are a layering provider, the attributes for which we rely on the
  * core provider are set to full capability. This ensures that ofix_getinfo
  * check hints succeeds and the core provider can accept / reject any capability
@@ -45,6 +47,7 @@
 
 struct fi_tx_attr rxm_tx_attr = {
 	.caps = RXM_EP_CAPS,
+	.op_flags = RXM_PASSTHRU_TX_OP_FLAGS | RXM_TX_OP_FLAGS,
 	.msg_order = ~0x0ULL,
 	.comp_order = FI_ORDER_NONE,
 	.size = 1024,
@@ -54,6 +57,7 @@ struct fi_tx_attr rxm_tx_attr = {
 
 struct fi_rx_attr rxm_rx_attr = {
 	.caps = RXM_EP_CAPS | FI_MULTI_RECV,
+	.op_flags = RXM_PASSTHRU_RX_OP_FLAGS | RXM_RX_OP_FLAGS,
 	.msg_order = ~0x0ULL,
 	.comp_order = FI_ORDER_NONE,
 	.size = 1024,
