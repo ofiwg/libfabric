@@ -1,7 +1,10 @@
 #!/bin/bash
 
-export FABTESTS_PATH=/scratch/jenkins/builds/fabtests/stable
-export PATH=${FABTESTS_PATH}/bin:$PATH
+if [[ -z ${FABTEST_PATH} ]] ; then
+	export FABTEST_PATH=/scratch/jenkins/builds/fabtests/stable
+fi
+
+export PATH=${FABTEST_PATH}/bin:$PATH
 
 if [[ -z ${FABTEST_PROVIDER} ]] ; then
     FABTEST_PROVIDER='verbs;ofi_rxm'
