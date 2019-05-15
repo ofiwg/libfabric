@@ -427,6 +427,14 @@ void rxd_init_atom_hdr(void **ptr, enum fi_datatype datatype,
 		       enum fi_op atomic_op);
 size_t rxd_init_msg(void **ptr, const struct iovec *iov, size_t iov_count,
 		    size_t total_len, size_t avail_len);
+static inline void rxd_check_init_cq_data(void **ptr, struct rxd_x_entry *tx_entry,
+			      		  size_t *max_inline)
+{	
+	if (tx_entry->flags & RXD_REMOTE_CQ_DATA) {
+		rxd_init_data_hdr(ptr, tx_entry);
+		*max_inline -= sizeof(tx_entry->cq_entry.data);
+	}
+}
 
 /* Tx/Rx entry sub-functions */
 struct rxd_x_entry *rxd_tx_entry_init_common(struct rxd_ep *ep, fi_addr_t addr,
