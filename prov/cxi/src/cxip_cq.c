@@ -166,7 +166,7 @@ void cxip_cq_progress(struct cxip_cq *cq)
 		}
 
 		/* Consume event. */
-		cxi_eq_get_event(cq->evtq);
+		cxi_eq_next_event(cq->evtq);
 
 		events++;
 	}
