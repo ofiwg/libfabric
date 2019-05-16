@@ -715,22 +715,6 @@ static int rxd_ep_close(struct fid *fid)
 		ofi_buf_free(pkt_entry);
 	}
 
-	if (ep->util_ep.tx_cq) {
-		/* TODO: wait handling */
-		fid_list_remove(&ep->util_ep.tx_cq->ep_list,
-				&ep->util_ep.tx_cq->ep_list_lock,
-				&ep->util_ep.ep_fid.fid);
-	}
-
-	if (ep->util_ep.rx_cq) {
-		if (ep->util_ep.rx_cq != ep->util_ep.tx_cq) {
-			/* TODO: wait handling */
-			fid_list_remove(&ep->util_ep.rx_cq->ep_list,
-					&ep->util_ep.rx_cq->ep_list_lock,
-					&ep->util_ep.ep_fid.fid);
-		}
-	}
-
 	rxd_ep_free_res(ep);
 	ofi_endpoint_close(&ep->util_ep);
 	free(ep);
