@@ -421,12 +421,6 @@ ssize_t rxd_ep_post_data_pkts(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
 		if (!pkt_entry)
 			return -FI_ENOMEM;
 
-		if (tx_entry->op == RXD_DATA_READ && !tx_entry->bytes_done) {
-			tx_entry->start_seq = ep->peers[tx_entry->peer].tx_seq_no;
-			ep->peers[tx_entry->peer].tx_seq_no = tx_entry->start_seq +
-							      tx_entry->num_segs;
-		}
-
 		rxd_init_data_pkt(ep, tx_entry, pkt_entry);
 
 		data = (struct rxd_data_pkt *) (pkt_entry->pkt);
@@ -439,7 +433,7 @@ ssize_t rxd_ep_post_data_pkts(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
 		rxd_insert_unacked(ep, tx_entry->peer, pkt_entry);
 	}
 
-	return ep->peers[tx_entry->peer].unacked_cnt <
+	return ep->peers[tx_entry->peer].unacked_cnt >=
 	       ep->peers[tx_entry->peer].tx_window;
 }
 
