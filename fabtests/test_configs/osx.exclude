@@ -6,3 +6,4 @@ msg_epoll
 # Does not work with utility providers because of epoll limitations
 rdm_cntr_pingpong
 unexpected_msg
+rdm_tagged_peek
