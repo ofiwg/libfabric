@@ -409,6 +409,8 @@ static int fi_ibv_put_tgt_qp(struct fi_ibv_xrc_ep *ep)
 		return -errno;
 	}
 	ep->tgt_ibv_qp = NULL;
+	if (ep->tgt_id)
+		ep->tgt_id->qp = NULL;
 
 	return FI_SUCCESS;
 }
