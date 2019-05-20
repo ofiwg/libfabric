@@ -151,6 +151,7 @@ extern size_t rxm_def_univ_size;
 #define RXM_CMAP_IDX_BITS OFI_IDX_INDEX_BITS
 
 enum rxm_cmap_signal {
+	RXM_CMAP_UNSPEC,
 	RXM_CMAP_FREE,
 	RXM_CMAP_EXIT,
 };
@@ -240,8 +241,7 @@ int rxm_cmap_connect(struct rxm_ep *rxm_ep, fi_addr_t fi_addr,
 void rxm_cmap_del_handle_ts(struct rxm_cmap_handle *handle);
 void rxm_cmap_free(struct rxm_cmap *cmap);
 int rxm_cmap_alloc(struct rxm_ep *rxm_ep, struct rxm_cmap_attr *attr);
-/* Caller must hold cmap->lock */
-int rxm_cmap_move_handle_to_peer_list(struct rxm_cmap *cmap, int index);
+int rxm_cmap_remove(struct rxm_cmap *cmap, int index);
 int rxm_msg_eq_progress(struct rxm_ep *rxm_ep);
 
 static inline struct rxm_cmap_handle *
@@ -973,7 +973,7 @@ rxm_ep_prepare_tx(struct rxm_ep *rxm_ep, fi_addr_t dest_addr,
 	}
 
 	if (OFI_UNLIKELY(!dlist_empty(&(*rxm_conn)->deferred_tx_queue))) {
-		rxm_ep_progress(&rxm_ep->util_ep);
+		rxm_ep_do_progress(&rxm_ep->util_ep);
 		if (!dlist_empty(&(*rxm_conn)->deferred_tx_queue))
 			return -FI_EAGAIN;
 	}

@@ -37,29 +37,24 @@ static int rxm_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 {
 	struct util_av *av = container_of(av_fid, struct util_av, av_fid);
 	struct rxm_ep *rxm_ep;
-	int i, ret;
+	int i, ret = 0;
 
+	fastlock_acquire(&av->ep_list_lock);
 	/* This should be before ofi_ip_av_remove as we need to know
 	 * fi_addr -> addr mapping when moving handle to peer list. */
 	dlist_foreach_container(&av->ep_list, struct rxm_ep,
 				rxm_ep, util_ep.av_entry) {
+		ofi_ep_lock_acquire(&rxm_ep->util_ep);
 		for (i = 0; i < count; i++) {
-			if (!rxm_ep->cmap->handles_av[fi_addr[i]])
-				continue;
-			/* TODO this is not optimal. Replace this with something
-			 * more deterministic: delete handle if we know that peer
-			 * isn't actively communicating with us
-			 */
-			ret = rxm_cmap_move_handle_to_peer_list(rxm_ep->cmap, i);
-			if (ret) {
-				FI_WARN(&rxm_prov, FI_LOG_DOMAIN,
-					"Unable to move  handle to "
-					"peer list. Deleting it.\n");
-				rxm_cmap_del_handle_ts(rxm_ep->cmap->handles_av[i]);
-				return ret;
-			}
+			ret = rxm_cmap_remove(rxm_ep->cmap, *fi_addr + i);
+			if (ret)
+				FI_WARN(&rxm_prov, FI_LOG_AV,
+					"cmap remove failed for fi_addr: %"
+					PRIu64 "\n", *fi_addr + i);
 		}
+		ofi_ep_lock_release(&rxm_ep->util_ep);
 	}
+	fastlock_release(&av->ep_list_lock);
 
 	return ofi_ip_av_remove(av_fid, fi_addr, count, flags);
 }
@@ -75,23 +70,32 @@ rxm_av_insert_cmap(struct fid_av *av_fid, const void *addr, size_t count,
 	int ret = 0;
 	const void *cur_addr;
 
+	fastlock_acquire(&av->ep_list_lock);
 	dlist_foreach_container(&av->ep_list, struct rxm_ep,
 				rxm_ep, util_ep.av_entry) {
+		ofi_ep_lock_acquire(&rxm_ep->util_ep);
 		for (i = 0; i < count; i++) {
+			if (!rxm_ep->cmap)
+				break;
+
 			cur_addr = (const void *) ((char *) addr + i * av->addrlen);
 			fi_addr_tmp = (fi_addr ? fi_addr[i] :
-				       ofi_av_lookup_fi_addr(av, cur_addr));
+				       ofi_av_lookup_fi_addr_unsafe(av, cur_addr));
 			if (fi_addr_tmp == FI_ADDR_NOTAVAIL)
 				continue;
+
 			ret = rxm_cmap_update(rxm_ep->cmap, cur_addr, fi_addr_tmp);
 			if (OFI_UNLIKELY(ret)) {
 				FI_WARN(&rxm_prov, FI_LOG_AV,
-					"Unable to update CM for OFI endpoints\n");
-				return ret;
+					"cmap update failed for fi_addr: %"
+					PRIu64 "\n", fi_addr_tmp);
+				break;
 			}
 		}
+		ofi_ep_lock_release(&rxm_ep->util_ep);
 	}
-	return 0;
+	fastlock_release(&av->ep_list_lock);
+	return ret;
 }
 
 static int rxm_av_insert(struct fid_av *av_fid, const void *addr, size_t count,

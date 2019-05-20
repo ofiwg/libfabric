@@ -263,10 +263,18 @@ struct fi_ibv_eq_entry {
 
 typedef int (*fi_ibv_trywait_func)(struct fid *fid);
 
-/* The number of valid OFI indexer bits in the connection key used during
- * XRC connection establishment. Note that only the lower 32-bits of the
- * key are exchanged, so this value must be kept below 32-bits. */
-#define VERBS_TAG_INDEX_BITS	18
+/* An OFI indexer is used to maintain a unique connection request to
+ * endpoint mapping. The key is a 32-bit value (referred to as a
+ * connection tag) and is passed to the remote peer by the active side
+ * of a connection request. When the reciprocal XRC connection in the
+ * reverse direction is made, the key is passed back and used to map
+ * back to the original endpoint. A key is defined as a 32-bit value:
+ *
+ *     SSSSSSSS:SSSSSSII:IIIIIIII:IIIIIIII
+ *     |-- sequence -||--- unique key ---|
+ */
+#define VERBS_CONN_TAG_INDEX_BITS	18
+#define VERBS_CONN_TAG_INVALID		0xFFFFFFFF	/* Key is not valid */
 
 struct fi_ibv_eq {
 	struct fid_eq		eq_fid;
@@ -567,7 +575,12 @@ enum fi_ibv_xrc_ep_conn_state {
  * is established.
  */
 struct fi_ibv_xrc_ep_conn_setup {
+	/* The connection tag is used to associate the reciprocal
+	 * XRC INI/TGT QP connection request in the reverse direction
+	 * with the original request. The tag is created by the
+	 * original active side. */
 	uint32_t			conn_tag;
+	bool				created_conn_tag;
 
 	/* IB CM message stale/duplicate detection processing requires
 	 * that shared INI/TGT connections use unique QP numbers during
@@ -577,6 +590,10 @@ struct fi_ibv_xrc_ep_conn_setup {
 	struct ibv_qp			*rsvd_ini_qpn;
 	struct ibv_qp			*rsvd_tgt_qpn;
 
+	/* Temporary flags to indicate if the INI QP setup and the
+	 * TGT QP setup have completed. */
+	bool				ini_connected;
+	bool				tgt_connected;
 
 	/* Delivery of the FI_CONNECTED event is delayed until
 	 * bidirectional connectivity is established. */
@@ -615,6 +632,7 @@ struct fi_ibv_ep {
 	size_t				rx_size;
 };
 
+#define VERBS_XRC_EP_MAGIC		0x1F3D5B79
 struct fi_ibv_xrc_ep {
 	/* Must be first */
 	struct fi_ibv_ep		base_ep;
@@ -623,6 +641,7 @@ struct fi_ibv_xrc_ep {
 	struct rdma_cm_id		*tgt_id;
 	struct ibv_qp			*tgt_ibv_qp;
 	enum fi_ibv_xrc_ep_conn_state	conn_state;
+	uint32_t			magic;
 	uint32_t			srqn;
 	uint32_t			peer_srqn;
 
@@ -722,7 +741,7 @@ int fi_ibv_connect_xrc(struct fi_ibv_xrc_ep *ep, struct sockaddr *addr,
 		       int reciprocal, void *param, size_t paramlen);
 int fi_ibv_accept_xrc(struct fi_ibv_xrc_ep *ep, int reciprocal,
 		      void *param, size_t paramlen);
-void fi_ibv_free_xrc_conn_setup(struct fi_ibv_xrc_ep *ep);
+void fi_ibv_free_xrc_conn_setup(struct fi_ibv_xrc_ep *ep, int disconnect);
 void fi_ibv_add_pending_ini_conn(struct fi_ibv_xrc_ep *ep, int reciprocal,
 				 void *conn_param, size_t conn_paramlen);
 void fi_ibv_sched_ini_conn(struct fi_ibv_ini_shared_conn *ini_conn);

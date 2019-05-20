@@ -179,7 +179,8 @@ void fi_ibv_put_shared_ini_conn(struct fi_ibv_xrc_ep *ep)
 	ini_conn = ep->ini_conn;
 	ep->ini_conn = NULL;
 	ep->base_ep.ibv_qp = NULL;
-	ep->base_ep.id->qp = NULL;
+	if (ep->base_ep.id)
+		ep->base_ep.id->qp = NULL;
 
 	/* Tear down physical INI/TGT when no longer being used */
 	if (!ofi_atomic_dec32(&ini_conn->ref_cnt)) {
@@ -296,9 +297,6 @@ int fi_ibv_process_ini_conn(struct fi_ibv_xrc_ep *ep,int reciprocal,
 
 	assert(ep->base_ep.ibv_qp);
 
-	if (!reciprocal)
-		fi_ibv_eq_set_xrc_conn_tag(ep);
-
 	fi_ibv_set_xrc_cm_data(cm_data, reciprocal, ep->conn_setup->conn_tag,
 			       ep->base_ep.eq->xrc.pep_port,
 			       ep->ini_conn->tgt_qpn);
@@ -382,7 +380,7 @@ int fi_ibv_ep_create_tgt_qp(struct fi_ibv_xrc_ep *ep, uint32_t tgt_qpn)
 	attr_ex.xrcd = domain->xrc.xrcd;
 	if (rdma_create_qp_ex(ep->tgt_id, &attr_ex)) {
 		VERBS_INFO_ERRNO(FI_LOG_EP_CTRL,
-				 "Physical XRC TGT QP, rdma_create_ep_ex()",
+				 "Physical XRC TGT QP, rdma_create_qp_ex()",
 				 errno);
 		return -errno;
 	}

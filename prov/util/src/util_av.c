@@ -321,16 +321,22 @@ int ofi_av_remove_addr(struct util_av *av, fi_addr_t fi_addr)
 	return 0;
 }
 
-fi_addr_t ofi_av_lookup_fi_addr(struct util_av *av, const void *addr)
+fi_addr_t ofi_av_lookup_fi_addr_unsafe(struct util_av *av, const void *addr)
 {
 	struct util_av_entry *entry = NULL;
 
-	fastlock_acquire(&av->lock);
 	HASH_FIND(hh, av->hash, addr, av->addrlen, entry);
-	fastlock_release(&av->lock);
-
 	return entry ? util_get_buf_index(av->av_entry_pool, entry) :
 		       FI_ADDR_NOTAVAIL;
+}
+
+fi_addr_t ofi_av_lookup_fi_addr(struct util_av *av, const void *addr)
+{
+	fi_addr_t fi_addr;
+	fastlock_acquire(&av->lock);
+	fi_addr = ofi_av_lookup_fi_addr_unsafe(av, addr);
+	fastlock_release(&av->lock);
+	return fi_addr;
 }
 
 static void *
@@ -377,6 +383,8 @@ int ofi_av_close_lightweight(struct util_av *av)
 
 	if (av->eq)
 		ofi_atomic_dec32(&av->eq->ref);
+
+	fastlock_destroy(&av->ep_list_lock);
 
 	ofi_atomic_dec32(&av->domain->ref);
 	fastlock_destroy(&av->lock);
@@ -504,6 +512,7 @@ int ofi_av_init_lightweight(struct util_domain *domain, const struct fi_av_attr 
 	 */
 	av->context = context;
 	av->domain = domain;
+	fastlock_init(&av->ep_list_lock);
 	dlist_init(&av->ep_list);
 	ofi_atomic_inc32(&domain->ref);
 	return 0;

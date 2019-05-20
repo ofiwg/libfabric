@@ -362,6 +362,15 @@ fi_ibv_msg_xrc_ep_connect(struct fid_ep *ep, const void *addr,
 	if (ret)
 		return ret;
 
+	xrc_ep->conn_setup = calloc(1, sizeof(*xrc_ep->conn_setup));
+	if (!xrc_ep->conn_setup)
+		return -FI_ENOMEM;
+
+	fastlock_acquire(&xrc_ep->base_ep.eq->lock);
+	xrc_ep->conn_setup->conn_tag = VERBS_CONN_TAG_INVALID;
+	fi_ibv_eq_set_xrc_conn_tag(xrc_ep);
+	fastlock_release(&xrc_ep->base_ep.eq->lock);
+
 	dst_addr = rdma_get_peer_addr(_ep->id);
 	ret = fi_ibv_connect_xrc(xrc_ep, dst_addr, 0, adjusted_param, paramlen);
 	free(adjusted_param);
