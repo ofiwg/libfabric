@@ -444,9 +444,9 @@ struct cxip_req_send {
 	struct cxip_txc *txc;
 	size_t length;			// request length
 	int rdzv_id;			// SW RDZV ID for long messages
-	enum c_return_code event_failure;// SW RDZV Failure status on prev event
-	int complete_on_unlink;		// SW RDZV state for expected messages
-	union c_cmdu cmd;	// Rendezvous cmd to send after LE is linked
+	int rc;				// DMA return code
+	int long_send_events;		// Processed event count
+	union c_cmdu cmd;		// Rendezvous Put command
 };
 
 struct cxip_req_oflow {

@@ -253,7 +253,8 @@ static void report_recv_completion(struct cxip_req *req)
 				       ret);
 	} else {
 		err = truncated ? FI_EMSGSIZE : FI_EIO;
-		CXIP_LOG_DBG("Request error: %p (err: %d)\n", req, err);
+		CXIP_LOG_DBG("Request error: %p (err: %d, %d)\n", req, err,
+			     req->recv.rc);
 
 		ret = cxip_cq_report_error(req->cq, req, truncated, err,
 					   req->recv.rc, NULL, 0);
@@ -1054,7 +1055,7 @@ void cxip_msg_oflow_fini(struct cxip_rxc *rxc)
 
 	ret = cxip_rxc_eager_fini(rxc);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_ERROR("cxip_rxc_sink_fini() returned: %d\n", ret);
+		CXIP_LOG_ERROR("cxip_rxc_eager_fini() returned: %d\n", ret);
 		return;
 	}
 
@@ -1498,6 +1499,31 @@ recv_unmap:
 }
 
 /*
+ * report_send_completion() - Report the completion of a send operation.
+ */
+static void report_send_completion(struct cxip_req *req)
+{
+	int ret;
+
+	if (req->send.rc == C_RC_OK) {
+		CXIP_LOG_DBG("Request success: %p\n", req);
+
+		ret = req->cq->report_completion(req->cq, FI_ADDR_UNSPEC, req);
+		if (ret != req->cq->cq_entry_size)
+			CXIP_LOG_ERROR("Failed to report completion: %d\n",
+				       ret);
+	} else {
+		CXIP_LOG_DBG("Request error: %p (err: %d, %d)\n", req, FI_EIO,
+			     req->send.rc);
+
+		ret = cxip_cq_report_error(req->cq, req, 0, FI_EIO,
+					   req->send.rc, NULL, 0);
+		if (ret != FI_SUCCESS)
+			CXIP_LOG_ERROR("Failed to report error: %d\n", ret);
+	}
+}
+
+/*
  * rdzv_send_req_free() - Clean up a long send request.
  */
 static void rdzv_send_req_free(struct cxip_req *req)
@@ -1515,6 +1541,21 @@ static void rdzv_send_req_free(struct cxip_req *req)
 }
 
 /*
+ * long_send_req_event() - Count a long send event.
+ *
+ * Call for each initiator send event generated. After Ack, Unlink, and Get
+ * events are generated, the send is complete. The events could be generated in
+ * any order. As soon as three events are processed, the request is complete.
+ */
+static void long_send_req_event(struct cxip_req *req)
+{
+	if (++req->send.long_send_events == 3) {
+		report_send_completion(req);
+		rdzv_send_req_free(req);
+	}
+}
+
+/*
  * cxip_send_long_cb() - Long send callback.
  *
  * Progress a long send operation to completion.
@@ -1529,16 +1570,11 @@ static int cxip_send_long_cb(struct cxip_req *req, const union c_event *event)
 	case C_EVENT_LINK:
 		event_rc = cxi_tgt_event_rc(event);
 		if (event_rc != C_RC_OK) {
-			CXIP_LOG_ERROR("Link error: %d id: %d\n",
-				       event_rc,
-				       event->tgt_long.buffer_id);
+			CXIP_LOG_ERROR("Link error: %p, rc: %d\n",
+				       req, event_rc);
 
-			ret = cxip_cq_report_error(req->cq, req, 0, FI_EIO,
-						   event_rc, NULL, 0);
-			if (ret != FI_SUCCESS)
-				CXIP_LOG_ERROR("Failed to report error: %d\n",
-					       ret);
-
+			req->send.rc = event_rc;
+			report_send_completion(req);
 			rdzv_send_req_free(req);
 			return FI_SUCCESS;
 		}
@@ -1546,14 +1582,12 @@ static int cxip_send_long_cb(struct cxip_req *req, const union c_event *event)
 		/* The send buffer LE is linked. Perform Put of the payload. */
 		fastlock_acquire(&txc->tx_cmdq->lock);
 
-		ret = cxi_cq_emit_dma(txc->tx_cmdq->dev_cmdq,
-				      &req->send.cmd.full_dma);
+		ret = cxi_cq_emit_dma_f(txc->tx_cmdq->dev_cmdq,
+					&req->send.cmd.full_dma);
 		if (ret) {
-			CXIP_LOG_ERROR("Failed to enqueue PUT: %d\n", ret);
-
-			/* Save the error and clean up operation. */
-			req->send.event_failure = ret;
-			goto rdzv_unlink_le;
+			CXIP_LOG_ERROR("Failed to enqueue Put: %d\n", ret);
+			fastlock_release(&txc->tx_cmdq->lock);
+			return -FI_EAGAIN;
 		}
 
 		cxi_cq_ring(txc->tx_cmdq->dev_cmdq);
@@ -1563,114 +1597,94 @@ static int cxip_send_long_cb(struct cxip_req *req, const union c_event *event)
 		CXIP_LOG_DBG("Enqueued Put: %p\n", req);
 		return FI_SUCCESS;
 	case C_EVENT_ACK:
-		/* The payload was delivered to the target. */
+		/* The source Put completed. */
 		event_rc = cxi_init_event_rc(event);
 		if (event_rc != C_RC_OK) {
-			CXIP_LOG_ERROR("Ack error: %d\n", event_rc);
+			CXIP_LOG_ERROR("Ack error: %p rc: %d\n",
+				       req, event_rc);
 
-			/* Save the error and clean up operation. */
-			req->send.event_failure = event_rc;
-
-rdzv_unlink_le:
-			issue_unlink_le(txc->rdzv_pte->pte,
-					C_PTL_LIST_PRIORITY,
-					req->req_id,
-					txc->rx_cmdq);
-		} else if (event->init_short.ptl_list == C_PTL_LIST_PRIORITY) {
-			CXIP_LOG_DBG("Put Acked (Priority): %p\n", req);
-
-			/* The Put matched in the Priority list, the source
-			 * buffer LE is unneeded.
-			 */
-			if (!txc->ep_obj->rdzv_offload) {
-				issue_unlink_le(txc->rdzv_pte->pte,
+			ret = issue_unlink_le_f(txc->rdzv_pte->pte,
 						C_PTL_LIST_PRIORITY,
 						req->req_id,
 						txc->rx_cmdq);
-
-				/* Wait for the Unlink event */
-				req->send.complete_on_unlink = 1;
+			if (ret) {
+				CXIP_LOG_ERROR("Failed to enqueue Unlink: %d\n",
+					       ret);
+				return -FI_EAGAIN;
 			}
-		} else {
-			CXIP_LOG_DBG("Put Acked (Overflow): %p\n", req);
+
+			/* Save RC for when the Unlink is complete. */
+			req->send.rc = event_rc;
+			return FI_SUCCESS;
+		}
+
+		CXIP_LOG_DBG("Put Acked (%s): %p\n",
+			     cxi_ptl_list_to_str(event->init_short.ptl_list),
+			     req);
+
+		if (!txc->ep_obj->rdzv_offload &&
+		    event->init_short.ptl_list == C_PTL_LIST_PRIORITY) {
+			/* No Get is expected when a long eager Send matches in
+			 * the Priority list. Unlink the source LE manually.
+			 */
+			ret = issue_unlink_le_f(txc->rdzv_pte->pte,
+						C_PTL_LIST_PRIORITY,
+						req->req_id,
+						txc->rx_cmdq);
+			if (ret) {
+				CXIP_LOG_ERROR("Failed to enqueue Unlink: %d\n",
+					       ret);
+				return -FI_EAGAIN;
+			}
+			req->send.rc = event_rc;
+			return FI_SUCCESS;
 		}
 
 		/* Wait for the source buffer LE to be unlinked. */
+		long_send_req_event(req);
 		return FI_SUCCESS;
 	case C_EVENT_UNLINK:
-		/* Check if the unlink was caused by a previous failure. */
-		if (req->send.event_failure != C_RC_NO_EVENT)
-			event_rc = req->send.event_failure;
-		else
-			event_rc = cxi_tgt_event_rc(event);
-
+		event_rc = cxi_tgt_event_rc(event);
 		if (event_rc != C_RC_OK) {
-			CXIP_LOG_ERROR("Unlink error: %d\n", event_rc);
+			/* The LE was unlinked unexpectedly. */
+			CXIP_LOG_ERROR("Unlink error: %p rc: %d\n",
+				       req, event_rc);
 
-			ret = cxip_cq_report_error(req->cq, req, 0, FI_EIO,
-						   event_rc, NULL, 0);
-			if (ret != FI_SUCCESS)
-				CXIP_LOG_ERROR("Failed to report error: %d\n",
-					       ret);
-
+			req->send.rc = event_rc;
+			report_send_completion(req);
 			rdzv_send_req_free(req);
-		} else if (req->send.complete_on_unlink) {
-			/* The Ack event for the Put operation was received and
-			 * all data has already transferred because it was an
-			 * expected long Put operation. The data buffer has been
-			 * successfully unlinked. Report the completion of the
-			 * operation.
+		} else if (!event->tgt_long.auto_unlinked) {
+			/* Either the Put failed or a long Send matched in the
+			 * Priority list. In either case, no Get event is
+			 * expected, complete request. Use RC from the Ack.
 			 */
-			CXIP_LOG_DBG("Request success: %p\n", req);
-			ret = req->cq->report_completion(req->cq,
-							 FI_ADDR_UNSPEC, req);
-			if (ret != req->cq->cq_entry_size)
-				CXIP_LOG_ERROR("Failed to report completion: %d\n",
-					       ret);
+			CXIP_LOG_DBG("Manually unlinked:  %p\n", req);
 
+			report_send_completion(req);
 			rdzv_send_req_free(req);
 		} else {
-			CXIP_LOG_DBG("Source LE unlinked:  %p\n", req);
+			/* The source buffer was unlinked by a Get. */
+			CXIP_LOG_DBG("Auto-unlinked: %p\n", req);
+			long_send_req_event(req);
 		}
 
-		/* A final Get event is expected indicating the source data has
-		 * been read.
-		 */
 		return FI_SUCCESS;
 	case C_EVENT_GET:
 		event_rc = cxi_tgt_event_rc(event);
-		if (event_rc != C_RC_OK) {
-			CXIP_LOG_ERROR("Get error: %d\n", event_rc);
+		if (event_rc != C_RC_OK)
+			CXIP_LOG_ERROR("Get error: %p rc: %d\n",
+				       req, event_rc);
+		else
+			CXIP_LOG_DBG("Get received: %p rc: %d\n",
+				     req, event_rc);
 
-			ret = cxip_cq_report_error(req->cq, req, 0, FI_EIO,
-						   event_rc, NULL, 0);
-			if (ret != FI_SUCCESS)
-				CXIP_LOG_ERROR("Failed to report error: %d\n",
-					       ret);
-		} else {
-			CXIP_LOG_DBG("Request success: %p\n", req);
-			ret = req->cq->report_completion(req->cq,
-							 FI_ADDR_UNSPEC, req);
-			if (ret != req->cq->cq_entry_size)
-				CXIP_LOG_ERROR("Failed to report completion: %d\n",
-					       ret);
-		}
-
-		rdzv_send_req_free(req);
+		req->send.rc = event_rc;
+		long_send_req_event(req);
 
 		return FI_SUCCESS;
 	default:
 		CXIP_LOG_ERROR("Unexpected event received: %s\n",
 			       cxi_event_to_str(event));
-
-		ret = cxip_cq_report_error(req->cq, req, 0, FI_EIO, -FI_EOTHER,
-					   NULL, 0);
-		if (ret != FI_SUCCESS)
-			CXIP_LOG_ERROR("Failed to report error: %d\n",
-				       ret);
-
-		rdzv_send_req_free(req);
-
 		return FI_SUCCESS;
 	}
 }
@@ -1783,28 +1797,10 @@ unlock:
 static int cxip_send_eager_cb(struct cxip_req *req,
 			      const union c_event *event)
 {
-	int ret;
-	int event_rc;
-
 	cxip_unmap(req->send.send_md);
 
-	event_rc = cxi_init_event_rc(event);
-	if (event_rc == C_RC_OK) {
-		CXIP_LOG_DBG("Request success: %p\n", req);
-
-		ret = req->cq->report_completion(req->cq, FI_ADDR_UNSPEC, req);
-		if (ret != req->cq->cq_entry_size)
-			CXIP_LOG_ERROR("Failed to report completion: %d\n",
-				       ret);
-	} else {
-		CXIP_LOG_DBG("Request error: %p\n", req);
-
-		ret = cxip_cq_report_error(req->cq, req, 0, FI_EIO, event_rc,
-					   NULL, 0);
-		if (ret != FI_SUCCESS)
-			CXIP_LOG_ERROR("Failed to report error: %d\n", ret);
-	}
-
+	req->send.rc = cxi_init_event_rc(event);
+	report_send_completion(req);
 	cxip_cq_req_free(req);
 
 	return FI_SUCCESS;
@@ -1954,7 +1950,8 @@ static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 	req->send.buf = (void *)buf;
 	req->send.send_md = send_md;
 	req->send.length = len;
-	req->send.event_failure = C_RC_NO_EVENT;
+
+	req->send.long_send_events = 0;
 
 	/* Build Put command descriptor */
 	rx_id = CXIP_AV_ADDR_RXC(txc->ep_obj->av, dest_addr);
