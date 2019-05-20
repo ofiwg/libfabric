@@ -55,11 +55,17 @@ fi_ibv_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *entry,
 {
 	struct fi_ibv_eq *_eq =
 		container_of(eq, struct fi_ibv_eq, eq_fid.fid);
+	ssize_t rd = -FI_EAGAIN;
 	fastlock_acquire(&_eq->lock);
+	if (!_eq->err.err)
+		goto unlock;
+
 	ofi_eq_handle_err_entry(_eq->fab->util_fabric.fabric_fid.api_version,
 				flags, &_eq->err, entry);
+	rd = sizeof(*entry);
+unlock:
 	fastlock_release(&_eq->lock);
-	return sizeof(*entry);
+	return rd;
 }
 
 /* Caller must hold eq:lock */
@@ -709,6 +715,11 @@ static size_t fi_ibv_eq_read_event(struct fi_ibv_eq *eq, uint32_t *event,
 
 	fastlock_acquire(&eq->lock);
 
+	if (eq->err.err) {
+		ret = -FI_EAVAIL;
+		goto out;
+	}
+
 	if (dlistfd_empty(&eq->list_head))
 		goto out;
 
@@ -742,9 +753,6 @@ fi_ibv_eq_read(struct fid_eq *eq_fid, uint32_t *event,
 	int acked;
 
 	eq = container_of(eq_fid, struct fi_ibv_eq, eq_fid.fid);
-
-	if (eq->err.err)
-		return -FI_EAVAIL;
 
 	if ((ret = fi_ibv_eq_read_event(eq, event, buf, len, flags)))
 		return ret;
