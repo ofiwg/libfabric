@@ -2,6 +2,7 @@
  * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
  *                         All rights reserved.
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
+ * Copyright (c) 2019 Triad National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -450,6 +451,8 @@ void do_multirecv(int len)
 	bool *addr_recvd, found, got_fi_multi_cqe = false;
 	int sends_done = 0;
 
+	dbg_printf("do_multirecv_trunc_last() called with len = %d\n", len);
+
 	init_data(source, len, 0xab);
 	init_data(target, len, 0);
 
@@ -557,12 +560,12 @@ void do_multirecv(int len)
 	dbg_printf("got context events!\n");
 }
 
-Test(rdm_multi_r, multirecv, .disabled = true)
+Test(rdm_multi_r, multirecv, .disabled = false)
 {
 	xfer_for_each_size(do_multirecv, 1, BUF_SZ);
 }
 
-Test(rdm_multi_r, multirecv_retrans, .disabled = true)
+Test(rdm_multi_r, multirecv_retrans, .disabled = false)
 {
 	inject_enable();
 	xfer_for_each_size(do_multirecv, 1, BUF_SZ);
@@ -735,7 +738,7 @@ void do_multirecv_trunc_last(int len)
 	int i, j, ret;
 	ssize_t sz;
 	struct fi_cq_tagged_entry s_cqe, d_cqe;
-	struct fi_cq_err_entry err_cqe;
+	struct fi_cq_err_entry err_cqe = {0};
 	struct iovec iov;
 	struct fi_msg msg = {0};
 	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
@@ -849,32 +852,33 @@ void do_multirecv_trunc_last(int len)
 			s[0]++;
 		}
 
-		/* Should not return a CQ event */
+		/* Should return -FI_EAVAIL */
 		ret = fi_cq_read(msg_cq[dest_ep], &d_cqe, 1);
-		cr_assert_eq(ret, 0, "fi_cq_read should return 0");
+		if (ret == 1) {
+			r[dest_ep]++;  /* we're counting the buffer release as a receive */
+		}
 
-		ret = fi_cq_readerr(msg_cq[1], &err_cqe, 0);
+		if (ret == -FI_EAVAIL) {
+		ret = fi_cq_readerr(msg_cq[dest_ep], &err_cqe, 0);
 		if (ret == 1) {
 			cr_assert((uint64_t)err_cqe.op_context ==
-				  (uint64_t)target,
+				  (uint64_t)source,
 				  "Bad error context");
-			cr_assert(err_cqe.flags ==
-				  (FI_MSG | FI_SEND | FI_MULTI_RECV));
+			cr_assert(err_cqe.flags == (FI_MSG | FI_RECV));
 			cr_assert(err_cqe.len == min_multi_recv,
 				  "Bad error len");
 			cr_assert(err_cqe.buf == (void *) expected_addrs[1],
 				  "Bad error buf");
-			cr_assert(err_cqe.data == 0, "Bad error data");
-			cr_assert(err_cqe.tag == 0, "Bad error tag");
 			cr_assert(err_cqe.olen == 1, "Bad error olen");
 			cr_assert(err_cqe.err == FI_ETRUNC, "Bad error errno");
-			cr_assert(err_cqe.prov_errno == 0, "Bad prov errno");
+			cr_assert(err_cqe.prov_errno == FI_ETRUNC, "Bad prov errno");
 			cr_assert(err_cqe.err_data == NULL,
 				  "Bad error provider data");
-			s_e[0]++;
+			r_e[dest_ep]++;
+		}
 		}
 
-	} while (s[0] != 2 || r_e[dest_ep] != 1);
+	} while (s[0] != 2 || r_e[dest_ep] != 1 || r[dest_ep] != 2);
 
 	check_cntrs(s, r, s_e, r_e, false);
 
@@ -890,13 +894,13 @@ void do_multirecv_trunc_last(int len)
  * message size of 1 below might change depending on whether 0 is a
  * valid value for FI_OPT_MIN_MULTI_RECV (Github issue #1120)
  */
-Test(rdm_multi_r, multirecv_trunc_last, .disabled = true)
+Test(rdm_multi_r, multirecv_trunc_last, .disabled = false)
 {
-	xfer_for_each_size(do_multirecv_trunc_last, 1, BUF_SZ);
+	xfer_for_each_size(do_multirecv_trunc_last, 2, BUF_SZ);
 }
 
-Test(rdm_multi_r, multirecv_trunc_last_retrans, .disabled = true)
+Test(rdm_multi_r, multirecv_trunc_last_retrans, .disabled = false)
 {
 	inject_enable();
-	xfer_for_each_size(do_multirecv_trunc_last, 1, BUF_SZ);
+	xfer_for_each_size(do_multirecv_trunc_last, 2, BUF_SZ);
 }
