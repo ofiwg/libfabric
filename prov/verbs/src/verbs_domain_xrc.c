@@ -69,8 +69,8 @@ int fi_ibv_reserve_qpn(struct fi_ibv_xrc_ep *ep, struct ibv_qp **qp)
 	*qp = ibv_create_qp(domain->pd, &attr);
 	if (OFI_UNLIKELY(!*qp)) {
 		ret = -errno;
-		VERBS_INFO_ERRNO(FI_LOG_EP_CTRL,
-				 "Reservation QP create failed", -ret);
+		VERBS_WARN(FI_LOG_EP_CTRL,
+			   "Reservation QP create failed %d\n", -ret);
 		return ret;
 	}
 	return FI_SUCCESS;
@@ -93,8 +93,8 @@ static int fi_ibv_create_ini_qp(struct fi_ibv_xrc_ep *ep)
 	ret = rdma_create_qp_ex(ep->base_ep.id, &attr_ex);
 	if (ret) {
 		ret = -errno;
-		VERBS_INFO_ERRNO(FI_LOG_EP_CTRL,
-				 "XRC INI QP, rdma_create_qp_ex()", -ret);
+		VERBS_WARN(FI_LOG_EP_CTRL,
+			   "XRC INI QP rdma_create_qp_ex failed %d\n", -ret);
 		return ret;
 	}
 	return FI_SUCCESS;
@@ -150,7 +150,7 @@ int fi_ibv_get_shared_ini_conn(struct fi_ibv_xrc_ep *ep,
 			       (void *) &key, (void *) conn);
 	assert(ret != -FI_EALREADY);
 	if (ret) {
-		VERBS_WARN(FI_LOG_FABRIC, "INI QP RBTree insert failed %d\n",
+		VERBS_WARN(FI_LOG_EP_CTRL, "INI QP RBTree insert failed %d\n",
 			   ret);
 		goto insert_err;
 	}
@@ -186,7 +186,8 @@ void fi_ibv_put_shared_ini_conn(struct fi_ibv_xrc_ep *ep)
 	/* Tear down physical INI/TGT when no longer being used */
 	if (!ofi_atomic_dec32(&ini_conn->ref_cnt)) {
 		if (ini_conn->ini_qp && ibv_destroy_qp(ini_conn->ini_qp))
-			VERBS_WARN(FI_LOG_FABRIC, "destroy of QP error %d\n",
+			VERBS_WARN(FI_LOG_EP_CTRL,
+				   "Destroy of XRC physical INI QP failed %d\n",
 				   errno);
 
 		fi_ibv_set_ini_conn_key(ep, &key);
@@ -247,12 +248,12 @@ void fi_ibv_sched_ini_conn(struct fi_ibv_ini_shared_conn *ini_conn)
 		if (last_state == FI_IBV_INI_QP_UNCONNECTED) {
 			if (ep->ini_conn->ini_qp &&
 			    ibv_destroy_qp(ep->ini_conn->ini_qp)) {
-				VERBS_WARN(FI_LOG_FABRIC, "Failed to destroy "
+				VERBS_WARN(FI_LOG_EP_CTRL, "Failed to destroy "
 					   "physical INI QP %d\n", errno);
 			}
 			ret = fi_ibv_create_ini_qp(ep);
 			if (ret) {
-				VERBS_WARN(FI_LOG_FABRIC, "Failed to create "
+				VERBS_WARN(FI_LOG_EP_CTRL, "Failed to create "
 					   "physical INI QP %d\n", ret);
 				goto err;
 			}
@@ -263,8 +264,9 @@ void fi_ibv_sched_ini_conn(struct fi_ibv_ini_shared_conn *ini_conn)
 				ret = fi_ibv_reserve_qpn(ep,
 						 &ep->conn_setup->rsvd_ini_qpn);
 				if (ret) {
-					VERBS_WARN(FI_LOG_FABRIC, "rsvd_ini_qpn"
-						  " create err %d\n", ret);
+					VERBS_WARN(FI_LOG_EP_CTRL,
+						   "Failed to create rsvd INI "
+						   "QP %d\n", ret);
 					goto err;
 				}
 			}
@@ -323,7 +325,7 @@ int fi_ibv_process_ini_conn(struct fi_ibv_xrc_ep *ep,int reciprocal,
 	ret = rdma_connect(ep->base_ep.id, &conn_param) ? -errno : 0;
 	if (ret) {
 		ret = -errno;
-		VERBS_INFO_ERRNO(FI_LOG_FABRIC, "rdma_connect", errno);
+		VERBS_WARN(FI_LOG_EP_CTRL, "rdma_connect failed %d\n", -ret);
 		fi_ibv_prev_xrc_conn_state(ep);
 	}
 	return ret;
@@ -345,7 +347,7 @@ int fi_ibv_ep_create_tgt_qp(struct fi_ibv_xrc_ep *ep, uint32_t tgt_qpn)
 	if (tgt_qpn) {
 		ret = fi_ibv_reserve_qpn(ep, &rsvd_qpn);
 		if (!rsvd_qpn) {
-			VERBS_WARN(FI_LOG_FABRIC,
+			VERBS_WARN(FI_LOG_EP_CTRL,
 				   "Create of XRC reserved QPN failed %d\n",
 				   ret);
 			return ret;
@@ -362,10 +364,11 @@ int fi_ibv_ep_create_tgt_qp(struct fi_ibv_xrc_ep *ep, uint32_t tgt_qpn)
 
 		ep->tgt_ibv_qp = ibv_open_qp(domain->verbs, &open_attr);
 		if (!ep->tgt_ibv_qp) {
-			VERBS_INFO_ERRNO(FI_LOG_EP_CTRL,
-				   "XRC TGT QP, ibv_open_qp()", errno);
+			ret = -errno;
+			VERBS_WARN(FI_LOG_EP_CTRL,
+				   "XRC TGT QP ibv_open_qp failed %d\n", -ret);
 			ibv_destroy_qp(rsvd_qpn);
-			return -errno;
+			return ret;
 		}
 		ep->conn_setup->rsvd_tgt_qpn = rsvd_qpn;
 		return FI_SUCCESS;
@@ -381,10 +384,11 @@ int fi_ibv_ep_create_tgt_qp(struct fi_ibv_xrc_ep *ep, uint32_t tgt_qpn)
 	attr_ex.pd = domain->pd;
 	attr_ex.xrcd = domain->xrc.xrcd;
 	if (rdma_create_qp_ex(ep->tgt_id, &attr_ex)) {
-		VERBS_INFO_ERRNO(FI_LOG_EP_CTRL,
-				 "Physical XRC TGT QP, rdma_create_qp_ex()",
-				 errno);
-		return -errno;
+		ret = -errno;
+		VERBS_WARN(FI_LOG_EP_CTRL,
+			   "Physical XRC TGT QP rdma_create_qp_ex failed %d\n",
+			   -ret);
+		return ret;
 	}
 	ep->tgt_ibv_qp = ep->tgt_id->qp;
 
@@ -405,9 +409,11 @@ static int fi_ibv_put_tgt_qp(struct fi_ibv_xrc_ep *ep)
 	 * shared opens have called ibv_destroy_qp. */
 	ret = ibv_destroy_qp(ep->tgt_ibv_qp);
 	if (ret) {
-		VERBS_INFO_ERRNO(FI_LOG_EP_CTRL,
-				 "Close XRC TGT QP, ibv_destroy_qp()", errno);
-		return -errno;
+		ret = -errno;
+		VERBS_WARN(FI_LOG_EP_CTRL,
+			   "Close XRC TGT QP ibv_destroy_qp failed %d\n",
+			   -ret);
+		return ret;
 	}
 	ep->tgt_ibv_qp = NULL;
 	if (ep->tgt_id)
@@ -501,8 +507,8 @@ int fi_ibv_domain_xrc_init(struct fi_ibv_domain *domain)
 		domain->xrc.xrcd_fd = open(fi_ibv_gl_data.msg.xrcd_filename,
 				       O_CREAT, S_IWUSR | S_IRUSR);
 		if (domain->xrc.xrcd_fd < 0) {
-			VERBS_INFO_ERRNO(FI_LOG_DOMAIN,
-					 "XRCD file open", errno);
+			VERBS_WARN(FI_LOG_DOMAIN,
+				   "XRCD file open failed %d\n", errno);
 			return -errno;
 		}
 	}
@@ -557,7 +563,7 @@ int fi_ibv_domain_xrc_cleanup(struct fi_ibv_domain *domain)
 
 	ret = ibv_close_xrcd(domain->xrc.xrcd);
 	if (ret) {
-		VERBS_INFO_ERRNO(FI_LOG_DOMAIN, "ibv_close_xrcd", ret);
+		VERBS_WARN(FI_LOG_DOMAIN, "ibv_close_xrcd failed %d\n", ret);
 		return -ret;
 	}
 	if (domain->xrc.xrcd_fd >= 0) {
