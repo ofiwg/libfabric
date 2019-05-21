@@ -223,17 +223,17 @@ static inline int fi_ep_alias(struct fid_ep *ep, struct fid_ep **alias_ep,
 }
 
 static inline int
-fi_tx_context(struct fid_ep *ep, int index, struct fi_tx_attr *attr,
+fi_tx_context(struct fid_ep *ep, int idx, struct fi_tx_attr *attr,
 	      struct fid_ep **tx_ep, void *context)
 {
-	return ep->ops->tx_ctx(ep, index, attr, tx_ep, context);
+	return ep->ops->tx_ctx(ep, idx, attr, tx_ep, context);
 }
 
 static inline int
-fi_rx_context(struct fid_ep *ep, int index, struct fi_rx_attr *attr,
+fi_rx_context(struct fid_ep *ep, int idx, struct fi_rx_attr *attr,
 	      struct fid_ep **rx_ep, void *context)
 {
-	return ep->ops->rx_ctx(ep, index, attr, rx_ep, context);
+	return ep->ops->rx_ctx(ep, idx, attr, rx_ep, context);
 }
 
 static inline FI_DEPRECATED_FUNC ssize_t
