@@ -323,7 +323,7 @@ static int pp_ctrl_init_client(struct ct_pingpong *ct)
 	struct sockaddr_in in_addr = {0};
 	struct addrinfo *results;
 	struct addrinfo *rp;
-	int errno_save;
+	int errno_save = 0;
 	int ret;
 
 	ret = pp_getaddrinfo(ct->opts.dst_addr, ct->opts.dst_port, &results);
