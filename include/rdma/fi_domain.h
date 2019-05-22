@@ -267,20 +267,20 @@ fi_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,
 
 static inline int
 fi_mr_reg(struct fid_domain *domain, const void *buf, size_t len,
-	  uint64_t access, uint64_t offset, uint64_t requested_key,
+	  uint64_t acs, uint64_t offset, uint64_t requested_key,
 	  uint64_t flags, struct fid_mr **mr, void *context)
 {
-	return domain->mr->reg(&domain->fid, buf, len, access, offset,
+	return domain->mr->reg(&domain->fid, buf, len, acs, offset,
 			       requested_key, flags, mr, context);
 }
 
 static inline int
 fi_mr_regv(struct fid_domain *domain, const struct iovec *iov,
-			size_t count, uint64_t access,
+			size_t count, uint64_t acs,
 			uint64_t offset, uint64_t requested_key,
 			uint64_t flags, struct fid_mr **mr, void *context)
 {
-	return domain->mr->regv(&domain->fid, iov, count, access,
+	return domain->mr->regv(&domain->fid, iov, count, acs,
 			offset, requested_key, flags, mr, context);
 }
 
