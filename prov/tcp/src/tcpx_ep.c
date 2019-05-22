@@ -111,8 +111,8 @@ static ssize_t tcpx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	memcpy(&recv_entry->msg_data.iov[0], &msg->msg_iov[0],
 	       msg->iov_count * sizeof(struct iovec));
 
-	recv_entry->flags = ((tcpx_ep->util_ep.rx_op_flags & FI_COMPLETION) |
-			     flags | FI_MSG | FI_RECV);
+	recv_entry->flags = (tcpx_ep->util_ep.rx_msg_flags | flags |
+			     FI_MSG | FI_RECV);
 	recv_entry->context = msg->context;
 
 	tcpx_queue_recv(tcpx_ep, recv_entry);
@@ -255,7 +255,14 @@ static ssize_t tcpx_send(struct fid_ep *ep, const void *buf, size_t len, void *d
 	tx_entry->flags = ((tcpx_ep->util_ep.tx_op_flags & FI_COMPLETION) |
 			   FI_MSG | FI_SEND);
 
-	tx_entry->msg_hdr.hdr.flags = 0;
+
+	if (tcpx_ep->util_ep.tx_op_flags &
+	    (FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)) {
+		tx_entry->msg_hdr.hdr.flags |= htonl(OFI_DELIVERY_COMPLETE);
+	} else {
+		tx_entry->msg_hdr.hdr.flags = 0;
+	}
+
 	fastlock_acquire(&tcpx_ep->lock);
 	tcpx_tx_queue_insert(tcpx_ep, tx_entry);
 	fastlock_release(&tcpx_ep->lock);
@@ -284,10 +291,17 @@ static ssize_t tcpx_sendv(struct fid_ep *ep, const struct iovec *iov, void **des
 	memcpy(&tx_entry->msg_data.iov[1], &iov[0],
 	       count * sizeof(struct iovec));
 
-	tx_entry->msg_hdr.hdr.flags = 0;
+
 	tx_entry->context = context;
 	tx_entry->flags = ((tcpx_ep->util_ep.tx_op_flags & FI_COMPLETION) |
 			   FI_MSG | FI_SEND);
+
+	if (tcpx_ep->util_ep.tx_op_flags &
+	    (FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)) {
+		tx_entry->msg_hdr.hdr.flags |= htonl(OFI_DELIVERY_COMPLETE);
+	} else {
+		tx_entry->msg_hdr.hdr.flags = 0;
+	}
 
 	fastlock_acquire(&tcpx_ep->lock);
 	tcpx_tx_queue_insert(tcpx_ep, tx_entry);
@@ -351,6 +365,11 @@ static ssize_t tcpx_senddata(struct fid_ep *ep, const void *buf, size_t len, voi
 	tx_entry->context = context;
 	tx_entry->flags = ((tcpx_ep->util_ep.tx_op_flags & FI_COMPLETION) |
 			   FI_MSG | FI_SEND);
+
+	if (tcpx_ep->util_ep.tx_op_flags &
+	    (FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)) {
+		tx_entry->msg_hdr.hdr.flags |= htonl(OFI_DELIVERY_COMPLETE);
+	}
 
 	fastlock_acquire(&tcpx_ep->lock);
 	tcpx_tx_queue_insert(tcpx_ep, tx_entry);
@@ -994,12 +1013,6 @@ static struct fi_ops_cm tcpx_pep_cm_ops = {
 	.join = fi_no_join,
 };
 
-static int tcpx_verify_info(uint32_t version, struct fi_info *info)
-{
-	/* TODO: write me! */
-	return 0;
-}
-
 static int  tcpx_pep_getopt(fid_t fid, int level, int optname,
 			    void *optval, size_t *optlen)
 {
@@ -1039,7 +1052,8 @@ int tcpx_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 		return -FI_EINVAL;
 	}
 
-	ret = tcpx_verify_info(fabric->api_version, info);
+	ret = ofi_check_info(&tcpx_util_prov, tcpx_util_prov.info,
+			     fabric->api_version, info);
 	if (ret)
 		return ret;
 
