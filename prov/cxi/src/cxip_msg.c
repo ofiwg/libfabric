@@ -247,8 +247,8 @@ static void report_recv_completion(struct cxip_req *req)
 
 		src_addr = _rxc_event_src_addr(req->recv.rxc,
 					       req->recv.initiator);
-		ret = req->cq->report_completion(req->cq, src_addr, req);
-		if (ret != req->cq->cq_entry_size)
+		ret = cxip_cq_req_complete_addr(req, src_addr);
+		if (ret != FI_SUCCESS)
 			CXIP_LOG_ERROR("Failed to report completion: %d\n",
 				       ret);
 	} else {
@@ -256,8 +256,8 @@ static void report_recv_completion(struct cxip_req *req)
 		CXIP_LOG_DBG("Request error: %p (err: %d, %d)\n", req, err,
 			     req->recv.rc);
 
-		ret = cxip_cq_report_error(req->cq, req, truncated, err,
-					   req->recv.rc, NULL, 0);
+		ret = cxip_cq_req_error(req, truncated, err, req->recv.rc,
+					NULL, 0);
 		if (ret != FI_SUCCESS)
 			CXIP_LOG_ERROR("Failed to report error: %d\n", ret);
 	}
@@ -1508,16 +1508,15 @@ static void report_send_completion(struct cxip_req *req)
 	if (req->send.rc == C_RC_OK) {
 		CXIP_LOG_DBG("Request success: %p\n", req);
 
-		ret = req->cq->report_completion(req->cq, FI_ADDR_UNSPEC, req);
-		if (ret != req->cq->cq_entry_size)
+		ret = cxip_cq_req_complete(req);
+		if (ret != FI_SUCCESS)
 			CXIP_LOG_ERROR("Failed to report completion: %d\n",
 				       ret);
 	} else {
 		CXIP_LOG_DBG("Request error: %p (err: %d, %d)\n", req, FI_EIO,
 			     req->send.rc);
 
-		ret = cxip_cq_report_error(req->cq, req, 0, FI_EIO,
-					   req->send.rc, NULL, 0);
+		ret = cxip_cq_req_error(req, 0, FI_EIO, req->send.rc, NULL, 0);
 		if (ret != FI_SUCCESS)
 			CXIP_LOG_ERROR("Failed to report error: %d\n", ret);
 	}

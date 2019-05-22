@@ -223,7 +223,7 @@ static int cxip_ctx_bind_cq(struct fid *fid, struct fid *bfid, uint64_t flags)
 		CXIP_LOG_ERROR("Invalid cq flag\n");
 		return -FI_EINVAL;
 	}
-	cxi_cq = container_of(bfid, struct cxip_cq, cq_fid.fid);
+	cxi_cq = container_of(bfid, struct cxip_cq, util_cq.cq_fid.fid);
 	switch (fid->fclass) {
 	case FI_CLASS_TX_CTX:
 		txc = container_of(fid, struct cxip_txc, fid.ctx);
@@ -972,7 +972,7 @@ static int cxip_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		break;
 
 	case FI_CLASS_CQ:
-		cq = container_of(bfid, struct cxip_cq, cq_fid.fid);
+		cq = container_of(bfid, struct cxip_cq, util_cq.cq_fid.fid);
 		if (ep->ep_obj->domain != cq->domain)
 			return -FI_EINVAL;
 
@@ -1461,7 +1461,7 @@ int cxip_stx(struct fid_domain *domain, struct fi_tx_attr *attr,
 	if ((attr && cxip_verify_tx_attr(attr)) || !stx)
 		return -FI_EINVAL;
 
-	dom = container_of(domain, struct cxip_domain, dom_fid);
+	dom = container_of(domain, struct cxip_domain, util_domain.domain_fid);
 
 	txc = cxip_stx_alloc(attr ? attr : &cxip_stx_attr, context);
 	if (!txc)
@@ -1512,7 +1512,7 @@ int cxip_srx(struct fid_domain *domain, struct fi_rx_attr *attr,
 	if ((attr && cxip_verify_rx_attr(attr)) || !srx)
 		return -FI_EINVAL;
 
-	dom = container_of(domain, struct cxip_domain, dom_fid);
+	dom = container_of(domain, struct cxip_domain, util_domain.domain_fid);
 	rxc = cxip_rxc_alloc(attr ? attr : &cxip_srx_attr, context, 0);
 	if (!rxc)
 		return -FI_ENOMEM;
@@ -1554,7 +1554,9 @@ static void cxip_set_fabric_attr(void *src_addr,
 		attr->fabric = hint_attr->fabric;
 	} else {
 		fabric = cxip_fab_list_head();
-		attr->fabric = fabric ? &fabric->fab_fid : NULL;
+		attr->fabric = fabric ?
+				&fabric->util_fabric.fabric_fid :
+				NULL;
 	}
 
 	attr->name = cxip_get_fabric_name(src_addr);
@@ -1577,7 +1579,7 @@ static void cxip_set_domain_attr(uint32_t api_version, void *src_addr,
 	struct cxip_domain *domain;
 
 	domain = cxip_dom_list_head();
-	attr->domain = domain ? &domain->dom_fid : NULL;
+	attr->domain = domain ? &domain->util_domain.domain_fid : NULL;
 	if (!hint_attr) {
 		*attr = cxip_domain_attr;
 
@@ -1588,7 +1590,7 @@ static void cxip_set_domain_attr(uint32_t api_version, void *src_addr,
 
 	if (hint_attr->domain) {
 		domain = container_of(hint_attr->domain, struct cxip_domain,
-				      dom_fid);
+				      util_domain.domain_fid);
 		*attr = domain->attr;
 		attr->domain = hint_attr->domain;
 		goto out;
@@ -1763,10 +1765,12 @@ int cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 	uint32_t pid;
 
 	/* domain, info, info->ep_attr, and ep are != NULL */
-	cxi_dom = container_of(domain, struct cxip_domain, dom_fid);
+	cxi_dom = container_of(domain, struct cxip_domain,
+			       util_domain.domain_fid);
 
 	/* verify that hints are sane */
-	if (cxip_verify_info(cxi_dom->fab->fab_fid.api_version, hints)) {
+	if (cxip_verify_info(cxi_dom->fab->util_fabric.fabric_fid.api_version,
+			     hints)) {
 		CXIP_LOG_DBG("Cannot support requested options!\n");
 		ret = -FI_EINVAL;
 		goto err;

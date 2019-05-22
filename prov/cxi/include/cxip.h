@@ -347,8 +347,7 @@ struct cxip_cmdq {
  *
  */
 struct cxip_fabric {
-	struct fid_fabric fab_fid;
-	struct util_fabric util_fabric;		// fabric used for MR cache
+	struct util_fabric util_fabric;
 	ofi_atomic32_t ref;
 	struct dlist_entry service_list;	// contains services (TODO)
 	struct dlist_entry fab_list_entry;	// attaches to cxip_fab_list
@@ -363,9 +362,8 @@ struct cxip_fabric {
  * Created in cxip_domain().
  */
 struct cxip_domain {
-	struct fid_domain dom_fid;
+	struct util_domain util_domain;
 	struct fi_info info;		// copy of user-supplied domain info
-	struct util_domain util_domain; // domain used for MR cache
 	struct cxip_fabric *fab;	// parent cxip_fabric
 	fastlock_t lock;
 	ofi_atomic32_t ref;
@@ -500,23 +498,6 @@ struct cxip_req {
 };
 
 /**
- * cxip_cq completion report callback typedef
- */
-struct cxip_cq;
-typedef int (*cxip_cq_report_fn)(struct cxip_cq *cq, fi_addr_t addr,
-				 struct cxip_req *req);
-
-/**
- * cxip_cq completion event overflow list if ring buffer fills.
- */
-struct cxip_cq_overflow_entry_t {
-	size_t len;			// data length
-	fi_addr_t addr;			// data address
-	struct dlist_entry entry;	// attaches to cxip_cq
-	char cq_entry[0];		// data
-};
-
-/**
  * Completion Queue
  *
  * libfabric fi_cq implementation.
@@ -524,39 +505,21 @@ struct cxip_cq_overflow_entry_t {
  * Created in cxip_cq_open().
  */
 struct cxip_cq {
-	struct fid_cq cq_fid;
-	struct cxip_domain *domain;	// parent domain
-	ssize_t cq_entry_size;		// size of CQ entry (depends on type)
+	struct util_cq util_cq;
+	struct fi_cq_attr attr;
 	ofi_atomic32_t ref;
-	struct fi_cq_attr attr;		// copy of user or default attributes
 
-	/* Ring buffer */
-	struct ofi_ringbuf addr_rb;
-	struct ofi_ringbuffd cq_rbfd;
-	struct ofi_ringbuf cqerr_rb;
-	struct dlist_entry overflow_list; // slower: used when ring overfills
+	/* CXI specific fields. */
+	struct cxip_domain *domain;
 	fastlock_t lock;
-	fastlock_t rb_lock;
-
-	struct fid_wait *waitset;
-	int signal;
-	ofi_atomic32_t signaled;
-
-	struct dlist_entry ep_list;	// contains endpoints (not used yet)
-	struct dlist_entry rx_list;	// contains rx contexts
-	struct dlist_entry tx_list;	// contains tx contexts
-
-	cxip_cq_report_fn report_completion;
-					// callback function
-
 	int enabled;
-	struct cxi_evtq *evtq;		// set when enabled
+	struct cxi_evtq *evtq;
 	void *evtq_buf;
 	size_t evtq_buf_len;
 	struct cxi_md *evtq_buf_md;
 	fastlock_t req_lock;
-	struct ofi_bufpool *req_pool;	// utility pool for cxip_req
-	struct indexer req_table;	// fast lookup index table for cxip_req
+	struct ofi_bufpool *req_pool;
+	struct indexer req_table;
 };
 
 /**
@@ -1013,15 +976,17 @@ struct cxip_txc *cxip_txc_alloc(const struct fi_tx_attr *attr, void *context,
 struct cxip_txc *cxip_stx_alloc(const struct fi_tx_attr *attr, void *context);
 void cxip_txc_free(struct cxip_txc *txc);
 
+int cxip_cq_req_complete(struct cxip_req *req);
+int cxip_cq_req_complete_addr(struct cxip_req *req, fi_addr_t src);
+int cxip_cq_req_error(struct cxip_req *req, size_t olen,
+		      int err, int prov_errno, void *err_data,
+		      size_t err_data_size);
 struct cxip_req *cxip_cq_req_alloc(struct cxip_cq *cq, int remap);
 void cxip_cq_req_free(struct cxip_req *req);
 void cxip_cq_progress(struct cxip_cq *cq);
 int cxip_cq_enable(struct cxip_cq *cxi_cq);
 int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq, void *context);
-int cxip_cq_report_error(struct cxip_cq *cq, struct cxip_req *req, size_t olen,
-			 int err, int prov_errno, void *err_data,
-			 size_t err_data_size);
 
 void cxip_cntr_add_txc(struct cxip_cntr *cntr, struct cxip_txc *txc);
 void cxip_cntr_remove_txc(struct cxip_cntr *cntr, struct cxip_txc *txc);

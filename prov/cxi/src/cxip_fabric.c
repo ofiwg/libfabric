@@ -34,9 +34,6 @@ uint64_t CXIP_EP_RDM_SEC_CAP = CXIP_EP_RDM_SEC_CAP_BASE;
 uint64_t CXIP_EP_RDM_CAP = CXIP_EP_RDM_CAP_BASE;
 
 const struct fi_fabric_attr cxip_fabric_attr = {
-	.fabric = NULL,
-	.name = NULL,
-	.prov_name = NULL,
 	.prov_version = FI_VERSION(CXIP_MAJOR_VERSION, CXIP_MINOR_VERSION),
 };
 
@@ -278,7 +275,8 @@ int cxip_verify_info(uint32_t version, const struct fi_info *hints)
 
 	if (hints->domain_attr && hints->domain_attr->domain) {
 		domain = container_of(hints->domain_attr->domain,
-				      struct cxip_domain, dom_fid);
+				      struct cxip_domain,
+				      util_domain.domain_fid);
 		if (!cxip_dom_check_list(domain)) {
 			CXIP_LOG_DBG("no matching domain\n");
 			return -FI_ENODATA;
@@ -290,7 +288,8 @@ int cxip_verify_info(uint32_t version, const struct fi_info *hints)
 
 	if (hints->fabric_attr && hints->fabric_attr->fabric) {
 		fabric = container_of(hints->fabric_attr->fabric,
-				      struct cxip_fabric, fab_fid);
+				      struct cxip_fabric,
+				      util_fabric.fabric_fid);
 		if (!cxip_fab_check_list(fabric)) {
 			CXIP_LOG_DBG("no matching fabric\n");
 			return -FI_ENODATA;
@@ -321,7 +320,7 @@ static int cxip_fabric_close(fid_t fid)
 {
 	struct cxip_fabric *fab;
 
-	fab = container_of(fid, struct cxip_fabric, fab_fid);
+	fab = container_of(fid, struct cxip_fabric, util_fabric.fabric_fid);
 	if (ofi_atomic_get32(&fab->ref))
 		return -FI_EBUSY;
 
@@ -371,15 +370,14 @@ static int cxip_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 
 	fastlock_init(&fab->lock);
 	dlist_init(&fab->service_list);
-
-	fab->fab_fid.fid.fclass = FI_CLASS_FABRIC;
-	fab->fab_fid.fid.context = context;
-	fab->fab_fid.fid.ops = &cxip_fab_fi_ops;
-	fab->fab_fid.ops = &cxip_fab_ops;
-	*fabric = &fab->fab_fid;
 	ofi_atomic_initialize32(&fab->ref, 0);
 
+	fab->util_fabric.fabric_fid.fid.ops = &cxip_fab_fi_ops;
+	fab->util_fabric.fabric_fid.ops = &cxip_fab_ops;
+
 	cxip_fab_add_to_list(fab);
+
+	*fabric = &fab->util_fabric.fabric_fid;
 
 	return 0;
 

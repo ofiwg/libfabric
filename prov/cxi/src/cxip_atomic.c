@@ -258,13 +258,12 @@ static int _cxip_amo_cb(struct cxip_req *req, const union c_event *event)
 
 	event_rc = cxi_init_event_rc(event);
 	if (event_rc == C_RC_OK) {
-		ret = req->cq->report_completion(req->cq, FI_ADDR_UNSPEC, req);
-		if (ret != req->cq->cq_entry_size)
+		ret = cxip_cq_req_complete(req);
+		if (ret != FI_SUCCESS)
 			CXIP_LOG_ERROR("Failed to report completion: %d\n",
 				       ret);
 	} else {
-		ret = cxip_cq_report_error(req->cq, req, 0, FI_EIO, event_rc,
-					   NULL, 0);
+		ret = cxip_cq_req_error(req, 0, FI_EIO, event_rc, NULL, 0);
 		if (ret != FI_SUCCESS)
 			CXIP_LOG_ERROR("Failed to report error: %d\n", ret);
 	}

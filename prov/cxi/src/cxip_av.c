@@ -602,7 +602,7 @@ int cxip_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		return -FI_EINVAL;
 	}
 
-	dom = container_of(domain, struct cxip_domain, dom_fid);
+	dom = container_of(domain, struct cxip_domain, util_domain.domain_fid);
 	if (dom->attr.av_type != FI_AV_UNSPEC &&
 	    dom->attr.av_type != attr->type) {
 		CXIP_LOG_ERROR("Domain incompatible with CXI\n");

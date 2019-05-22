@@ -223,7 +223,8 @@ static int cxip_dom_close(struct fid *fid)
 {
 	struct cxip_domain *dom;
 
-	dom = container_of(fid, struct cxip_domain, dom_fid.fid);
+	dom = container_of(fid, struct cxip_domain,
+			   util_domain.domain_fid.fid);
 	if (ofi_atomic_get32(&dom->ref))
 		return -FI_EBUSY;
 
@@ -242,7 +243,7 @@ static int cxip_dom_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	struct cxip_domain *dom;
 	struct cxip_eq *eq;
 
-	dom = container_of(fid, struct cxip_domain, dom_fid.fid);
+	dom = container_of(fid, struct cxip_domain, util_domain.domain_fid);
 	eq = container_of(bfid, struct cxip_eq, eq.fid);
 
 	if (dom->eq)
@@ -327,7 +328,7 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 	struct cxip_addr *src_addr;
 	int ret;
 
-	fab = container_of(fabric, struct cxip_fabric, fab_fid);
+	fab = container_of(fabric, struct cxip_fabric, util_fabric.fabric_fid);
 	if (info && info->domain_attr) {
 		ret = cxip_verify_domain_attr(fabric->api_version, info);
 		if (ret)
@@ -353,11 +354,9 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 
 	cxi_domain->info = *info;
 
-	cxi_domain->dom_fid.fid.fclass = FI_CLASS_DOMAIN;
-	cxi_domain->dom_fid.fid.context = context;
-	cxi_domain->dom_fid.fid.ops = &cxip_dom_fi_ops;
-	cxi_domain->dom_fid.ops = &cxip_dom_ops;
-	cxi_domain->dom_fid.mr = &cxip_dom_mr_ops;
+	cxi_domain->util_domain.domain_fid.fid.ops = &cxip_dom_fi_ops;
+	cxi_domain->util_domain.domain_fid.ops = &cxip_dom_ops;
+	cxi_domain->util_domain.domain_fid.mr = &cxip_dom_mr_ops;
 
 	if (!info->domain_attr ||
 	    info->domain_attr->data_progress == FI_PROGRESS_UNSPEC)
@@ -370,14 +369,15 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 	src_addr = (struct cxip_addr *)info->src_addr;
 	cxi_domain->nic_addr = src_addr->nic;
 
-	*dom = &cxi_domain->dom_fid;
-
 	if (info->domain_attr)
 		cxi_domain->attr = *(info->domain_attr);
 	else
 		cxi_domain->attr = cxip_domain_attr;
 
 	cxip_dom_add_to_list(cxi_domain);
+
+	*dom = &cxi_domain->util_domain.domain_fid;
+
 	return 0;
 
 free_util_dom:

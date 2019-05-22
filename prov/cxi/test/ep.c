@@ -207,8 +207,8 @@ Test(ep, ep_bind_cq)
 
 	cxit_bind_cqs();
 
-	rx_cq = container_of(cxit_rx_cq, struct cxip_cq, cq_fid.fid);
-	tx_cq = container_of(cxit_tx_cq, struct cxip_cq, cq_fid.fid);
+	rx_cq = container_of(cxit_rx_cq, struct cxip_cq, util_cq.cq_fid.fid);
+	tx_cq = container_of(cxit_tx_cq, struct cxip_cq, util_cq.cq_fid.fid);
 	ep = container_of(cxit_ep, struct cxip_ep, ep.fid);
 
 	cr_assert_not_null(ep->ep_obj);
@@ -893,7 +893,8 @@ Test(ep, stx_ctx)
 	struct cxip_txc *txc;
 	int refs;
 
-	dom = container_of(cxit_domain, struct cxip_domain, dom_fid);
+	dom = container_of(cxit_domain, struct cxip_domain,
+			   util_domain.domain_fid);
 	refs = ofi_atomic_get32(&dom->ref);
 
 	ret = fi_stx_context(cxit_domain, attr, &stx, context);
@@ -937,7 +938,8 @@ Test(ep, srx_ctx)
 	struct cxip_rxc *rxc;
 	int refs;
 
-	dom = container_of(cxit_domain, struct cxip_domain, dom_fid);
+	dom = container_of(cxit_domain, struct cxip_domain,
+			   util_domain.domain_fid);
 	refs = ofi_atomic_get32(&dom->ref);
 
 	ret = fi_srx_context(cxit_domain, attr, &srx, context);

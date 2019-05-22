@@ -220,7 +220,7 @@ int cxip_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	struct cxip_fid_list *list_entry;
 	struct cxip_wait *wait;
 
-	dom = container_of(domain, struct cxip_domain, dom_fid);
+	dom = container_of(domain, struct cxip_domain, util_domain.domain_fid);
 	if (attr && cxip_cntr_verify_attr(attr))
 		return -FI_ENOSYS;
 
@@ -237,8 +237,8 @@ int cxip_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	case FI_WAIT_FD:
 		wait_attr.flags = 0;
 		wait_attr.wait_obj = FI_WAIT_FD;
-		ret = cxip_wait_open(&dom->fab->fab_fid, &wait_attr,
-				     &_cntr->waitset);
+		ret = cxip_wait_open(&dom->fab->util_fabric.fabric_fid,
+				     &wait_attr, &_cntr->waitset);
 		if (ret) {
 			ret = FI_EINVAL;
 			goto err;

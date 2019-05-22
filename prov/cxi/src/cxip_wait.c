@@ -104,10 +104,8 @@ static int cxip_wait_wait(struct fid_wait *wait_fid, int timeout)
 		switch (list_item->fid->fclass) {
 		case FI_CLASS_CQ:
 			cq = container_of(list_item->fid, struct cxip_cq,
-					  cq_fid);
+					  util_cq.cq_fid);
 			cxip_cq_progress(cq);
-			if (ofi_rbused(&cq->cqerr_rb))
-				return 1;
 			break;
 
 		case FI_CLASS_CNTR:
@@ -262,7 +260,7 @@ int cxip_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 	if (attr && cxip_verify_wait_attr(attr))
 		return -FI_EINVAL;
 
-	fab = container_of(fabric, struct cxip_fabric, fab_fid);
+	fab = container_of(fabric, struct cxip_fabric, util_fabric.fabric_fid);
 	if (!attr || attr->wait_obj == FI_WAIT_UNSPEC)
 		wait_obj_type = FI_WAIT_FD;
 	else

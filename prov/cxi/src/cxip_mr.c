@@ -285,7 +285,7 @@ static int cxip_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 	switch (bfid->fclass) {
 	case FI_CLASS_CQ:
-		cq = container_of(bfid, struct cxip_cq, cq_fid.fid);
+		cq = container_of(bfid, struct cxip_cq, util_cq.cq_fid.fid);
 		if (mr->domain != cq->domain) {
 			ret = -FI_EINVAL;
 			break;
@@ -389,7 +389,7 @@ static int cxip_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	if (attr->iov_count != 1)
 		return -FI_ENOSYS;
 
-	dom = container_of(fid, struct cxip_domain, dom_fid.fid);
+	dom = container_of(fid, struct cxip_domain, util_domain.domain_fid);
 	pid_granule = dom->dev_if->if_dev->info.pid_granule;
 
 	if (attr->requested_key >= CXIP_PID_MR_CNT(pid_granule))
