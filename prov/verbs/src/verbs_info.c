@@ -985,7 +985,6 @@ static int fi_ibv_set_info_addrs(struct fi_info *info,
 			if (ret)
 				return ret;
 		} else {
-			iter_info->addr_format = fmt;
 			if (src_addr) {
 				ret = fi_ibv_fill_addr_by_ep_name(src_addr, fmt,
 								  &iter_info->src_addr,
@@ -1000,6 +999,7 @@ static int fi_ibv_set_info_addrs(struct fi_info *info,
 				if (ret)
 					return ret;
 			}
+			iter_info->addr_format = FI_ADDR_IB_UD;
 		}
 	}
 
