@@ -42,6 +42,10 @@ struct rxd_env rxd_env = {
 	.max_unacked	= 128,
 };
 
+char *rxd_pkt_type_str[] = {
+	RXD_FOREACH_TYPE(OFI_STR)
+};
+
 static void rxd_init_env(void)
 {
 	fi_param_get_int(&rxd_prov, "spin_count", &rxd_env.spin_count);

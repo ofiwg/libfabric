@@ -396,10 +396,12 @@ static inline int slist_empty(struct slist *list)
 
 static inline void slist_insert_head(struct slist_entry *item, struct slist *list)
 {
-	if (slist_empty(list))
+	if (slist_empty(list)) {
 		list->tail = item;
-	else
+		item->next = NULL;
+	} else {
 		item->next = list->head;
+	}
 
 	list->head = item;
 }
@@ -411,6 +413,7 @@ static inline void slist_insert_tail(struct slist_entry *item, struct slist *lis
 	else
 		list->tail->next = item;
 
+	item->next = NULL;
 	list->tail = item;
 }
 
