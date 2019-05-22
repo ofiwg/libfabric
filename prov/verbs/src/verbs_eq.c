@@ -94,7 +94,8 @@ void fi_ibv_eq_clear_xrc_conn_tag(struct fi_ibv_xrc_ep *ep)
 	index = ofi_key2idx(&eq->xrc.conn_key_idx,
 			    (uint64_t)ep->conn_setup->conn_tag);
 	if (!ofi_idx_is_valid(eq->xrc.conn_key_map, index))
-	    VERBS_WARN(FI_LOG_EQ, "Invalid XRC connection connection tag\n");
+	    VERBS_WARN(FI_LOG_EP_CTRL,
+		       "Invalid XRC connection connection tag\n");
 	else
 		ofi_idx_remove(eq->xrc.conn_key_map, index);
 	ep->conn_setup->conn_tag = VERBS_CONN_TAG_INVALID;
@@ -110,7 +111,7 @@ struct fi_ibv_xrc_ep *fi_ibv_eq_xrc_conn_tag2ep(struct fi_ibv_eq *eq,
 	index = ofi_key2idx(&eq->xrc.conn_key_idx, (uint64_t)conn_tag);
 	ep = ofi_idx_lookup(eq->xrc.conn_key_map, index);
 	if (!ep || !ep->conn_setup || (ep->conn_setup->conn_tag != conn_tag)) {
-		VERBS_WARN(FI_LOG_FABRIC,
+		VERBS_WARN(FI_LOG_EP_CTRL,
 			   "Invalid/stale XRC connection tag\n");
 		return ep;
 	}
@@ -289,7 +290,7 @@ fi_ibv_eq_xrc_connreq_event(struct fi_ibv_eq *eq, struct fi_eq_cm_entry *entry,
 	 */
 	ep = fi_ibv_eq_xrc_conn_tag2ep(eq, connreq->xrc.conn_tag);
 	if (!ep) {
-		VERBS_WARN(FI_LOG_FABRIC,
+		VERBS_WARN(FI_LOG_EP_CTRL,
 			   "Reciprocal XRC connection tag not found\n");
 		goto done;
 	}
@@ -300,14 +301,14 @@ fi_ibv_eq_xrc_connreq_event(struct fi_ibv_eq *eq, struct fi_eq_cm_entry *entry,
 
 	ret = rdma_migrate_id(ep->tgt_id, ep->base_ep.eq->channel);
 	if (ret) {
-		VERBS_WARN(FI_LOG_FABRIC, "Could not migrate CM ID\n");
+		VERBS_WARN(FI_LOG_EP_CTRL, "Could not migrate CM ID\n");
 		goto send_reject;
 	}
 
 	ret = fi_ibv_accept_xrc(ep, FI_IBV_RECIP_CONN, &cm_data,
 				sizeof(cm_data));
 	if (ret) {
-		VERBS_WARN(FI_LOG_FABRIC,
+		VERBS_WARN(FI_LOG_EP_CTRL,
 			   "Reciprocal XRC Accept failed %d\n", ret);
 		goto send_reject;
 	}
@@ -319,7 +320,7 @@ done:
 
 send_reject:
 	if (rdma_reject(connreq->id, *priv_data, *priv_datalen))
-		VERBS_WARN(FI_LOG_FABRIC, "rdma_reject %d\n", -errno);
+		VERBS_WARN(FI_LOG_EP_CTRL, "rdma_reject %d\n", -errno);
 	fastlock_release(&eq->lock);
 
 	return -FI_EAGAIN;
@@ -391,7 +392,7 @@ fi_ibv_eq_xrc_recip_conn_event(struct fi_ibv_eq *eq,
 	if (cma_event->param.conn.private_data) {
 		ret = fi_ibv_eq_set_xrc_info(cma_event, &xrc_info);
 		if (ret) {
-			VERBS_WARN(FI_LOG_FABRIC,
+			VERBS_WARN(FI_LOG_EP_CTRL,
 				   "Reciprocal connection protocol mismatch\n");
 			eq->err.err = -ret;
 			eq->err.prov_errno = ret;
@@ -430,7 +431,7 @@ fi_ibv_eq_xrc_rej_event(struct fi_ibv_eq *eq, struct rdma_cm_event *cma_event)
 	state = ep->conn_state;
 
 	if (ep->base_ep.id != cma_event->id || state == FI_IBV_XRC_CONNECTED) {
-		VERBS_WARN(FI_LOG_FABRIC,
+		VERBS_WARN(FI_LOG_EP_CTRL,
 			   "Stale CM Reject %d received\n", cma_event->status);
 		return -FI_EAGAIN;
 	}
@@ -439,7 +440,7 @@ fi_ibv_eq_xrc_rej_event(struct fi_ibv_eq *eq, struct rdma_cm_event *cma_event)
 	if (cma_event->status == FI_IBV_CM_REJ_CONSUMER_DEFINED) {
 		if (cma_event->param.conn.private_data_len &&
 		    fi_ibv_eq_set_xrc_info(cma_event, &xrc_info)) {
-			VERBS_WARN(FI_LOG_FABRIC,
+			VERBS_WARN(FI_LOG_EP_CTRL,
 				   "CM REJ private data not valid\n");
 			return -FI_EAGAIN;
 		}
@@ -448,10 +449,10 @@ fi_ibv_eq_xrc_rej_event(struct fi_ibv_eq *eq, struct rdma_cm_event *cma_event)
 		return FI_SUCCESS;
 	}
 
-	VERBS_WARN(FI_LOG_FABRIC, "Non-application generated CM Reject %d\n",
+	VERBS_WARN(FI_LOG_EP_CTRL, "Non-application generated CM Reject %d\n",
 		   cma_event->status);
 	if (cma_event->param.conn.private_data_len)
-		VERBS_WARN(FI_LOG_FABRIC, "Unexpected CM Reject priv_data\n");
+		VERBS_WARN(FI_LOG_EP_CTRL, "Unexpected CM Reject priv_data\n");
 
 	fi_ibv_ep_ini_conn_rejected(ep);
 

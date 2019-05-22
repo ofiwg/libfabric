@@ -52,7 +52,7 @@ void fi_ibv_next_xrc_conn_state(struct fi_ibv_xrc_ep *ep)
 		break;
 	default:
 		assert(0);
-		VERBS_WARN(FI_LOG_FABRIC, "Unkown XRC connection state %d\n",
+		VERBS_WARN(FI_LOG_EP_CTRL, "Unkown XRC connection state %d\n",
 			   ep->conn_state);
 	}
 }
@@ -76,7 +76,7 @@ void fi_ibv_prev_xrc_conn_state(struct fi_ibv_xrc_ep *ep)
 		break;
 	default:
 		assert(0);
-		VERBS_WARN(FI_LOG_FABRIC, "Unkown XRC connection state %d\n",
+		VERBS_WARN(FI_LOG_EP_CTRL, "Unkown XRC connection state %d\n",
 			   ep->conn_state);
 	}
 }
@@ -226,7 +226,7 @@ int fi_ibv_connect_xrc(struct fi_ibv_xrc_ep *ep, struct sockaddr *addr,
 	fastlock_acquire(&domain->xrc.ini_mgmt_lock);
 	ret = fi_ibv_get_shared_ini_conn(ep, &ep->ini_conn);
 	if (ret) {
-		VERBS_WARN(FI_LOG_FABRIC,
+		VERBS_WARN(FI_LOG_EP_CTRL,
 			   "Get of shared XRC INI connection failed %d\n", ret);
 		fastlock_release(&domain->xrc.ini_mgmt_lock);
 		if (!reciprocal) {
@@ -349,8 +349,8 @@ int fi_ibv_accept_xrc(struct fi_ibv_xrc_ep *ep, int reciprocal,
 	ret = rdma_accept(ep->tgt_id, &conn_param);
 	if (OFI_UNLIKELY(ret)) {
 		ret = -errno;
-		VERBS_INFO_ERRNO(FI_LOG_EP_CTRL,
-				 "XRC TGT, rdma_accept", errno);
+		VERBS_WARN(FI_LOG_EP_CTRL,
+			   "XRC TGT, rdma_accept error %d\n", ret);
 		fi_ibv_prev_xrc_conn_state(ep);
 	} else
 		free(connreq);
