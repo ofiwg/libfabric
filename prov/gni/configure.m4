@@ -1,5 +1,5 @@
 dnl
-dnl Copyright (c) 2015-2016 Cray Inc. All rights reserved.
+dnl Copyright (c) 2015-2019 Cray Inc. All rights reserved.
 dnl Copyright (c) 2015-2018 Los Alamos National Security, LLC.
 dnl                         All rights reserved.
 dnl
@@ -119,12 +119,8 @@ AC_DEFUN([FI_GNI_CONFIGURE],[
                       [AC_DEFINE_UNQUOTED([HAVE_XPMEM], [0], [Define to 1 if xpmem available])
                       ])
 
-               gni_path_to_gni_pub=${CRAY_GNI_HEADERS_CFLAGS:2}
-dnl looks like we need to get rid of some white space
-               gni_path_to_gni_pub=${gni_path_to_gni_pub%?}/gni_pub.h
-               gni_path_to_gni_pub=${CRAY_GNI_HEADERS_CFLAGS:2}
-dnl looks like we need to get rid of some white space
-               gni_path_to_gni_pub=${gni_path_to_gni_pub%?}/gni_pub.h
+               gni_path_to_gni_pub=${CRAY_GNI_HEADERS_INCLUDE_OPTS:2}/gni_pub.h
+               dnl Trim the leading -I in order to provide a path
 
                AC_CHECK_TYPES([gni_ct_cqw_post_descriptor_t], [],
                               [AC_MSG_WARN([GNI provider requires CLE 5.2.UP04 or higher. Disabling gni provider.])
