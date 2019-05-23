@@ -37,6 +37,7 @@ static void req_populate(struct cxip_req *req, fi_addr_t *addr)
 	req->tag = 0xabcd5;
 	req->buf = 0xabcd6;
 	req->data_len = 0xabcd7;
+	req->discard = false;
 }
 
 Test(cq, read_fmt_context)

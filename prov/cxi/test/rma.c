@@ -483,3 +483,34 @@ Test(rma, write_spanning_page)
 	mr_destroy(&mem_window);
 	free(send_buf);
 }
+
+Test(rma, rma_cleanup)
+{
+	int ret;
+	long i;
+	uint8_t *send_buf;
+	int win_len = 0x1000;
+	int send_len = 8;
+	struct mem_region mem_window;
+	int key_val = 0x1f;
+	int writes = 50;
+
+	send_buf = calloc(1, win_len);
+	cr_assert_not_null(send_buf, "send_buf alloc failed");
+
+	for (i = 0; i < win_len; i++)
+		send_buf[i] = 0xb1 * i;
+
+	mr_create(win_len, FI_REMOTE_WRITE, 0xa0, key_val, &mem_window);
+
+	/* Send 8 bytes from send buffer data to RMA window 0 */
+	for (i = 0; i < writes; i++) {
+		ret = fi_write(cxit_ep, send_buf, send_len, NULL,
+				cxit_ep_fi_addr, 0, key_val, (void *)i);
+		cr_assert(ret == FI_SUCCESS);
+	}
+
+	mr_destroy(&mem_window);
+
+	/* Exit without gathering events. */
+}

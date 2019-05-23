@@ -1261,3 +1261,33 @@ ParameterizedTest(struct test_dcplx_parms *p, atomic, test_dcplx)
 	_cxit_destroy_mr(&mr);
 }
 
+Test(atomic, amo_cleanup)
+{
+	int ret;
+	long i;
+	uint8_t *send_buf;
+	int win_len = 0x1000;
+	int writes = 50;
+	struct mem_region mr;
+	uint64_t operand1 = 0;
+
+	send_buf = calloc(1, win_len);
+	cr_assert_not_null(send_buf, "send_buf alloc failed");
+
+	for (i = 0; i < win_len; i++)
+		send_buf[i] = 0xb1 * i;
+
+	_cxit_create_mr(&mr);
+
+	/* Send 8 bytes from send buffer data to RMA window 0 */
+	for (i = 0; i < writes; i++) {
+		ret = fi_atomic(cxit_ep, &operand1, 1, 0,
+				cxit_ep_fi_addr, 0, RMA_WIN_KEY,
+				FI_UINT64, FI_SUM, NULL);
+		cr_assert(ret == FI_SUCCESS);
+	}
+
+	_cxit_destroy_mr(&mr);
+
+	/* Exit without gathering events. */
+}

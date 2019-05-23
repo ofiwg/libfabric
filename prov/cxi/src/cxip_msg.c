@@ -252,7 +252,13 @@ static void report_recv_completion(struct cxip_req *req)
 			CXIP_LOG_ERROR("Failed to report completion: %d\n",
 				       ret);
 	} else {
-		err = truncated ? FI_EMSGSIZE : FI_EIO;
+		if (req->recv.rc == C_RC_CANCELED)
+			err = FI_ECANCELED;
+		else if (truncated)
+			err = FI_EMSGSIZE;
+		else
+			err = FI_EIO;
+
 		CXIP_LOG_DBG("Request error: %p (err: %d, %d)\n", req, err,
 			     req->recv.rc);
 
@@ -371,6 +377,7 @@ static void recv_req_complete(struct cxip_req *req)
 {
 	cxip_unmap(req->recv.recv_md);
 	report_recv_completion(req);
+	ofi_atomic_dec32(&req->recv.rxc->orx_reqs);
 	cxip_cq_req_free(req);
 }
 
@@ -790,7 +797,7 @@ static int eager_buf_add(struct cxip_rxc *rxc)
 	}
 
 	/* Populate request */
-	req = cxip_cq_req_alloc(rxc->comp.recv_cq, 1);
+	req = cxip_cq_req_alloc(rxc->comp.recv_cq, 1, NULL);
 	if (!req) {
 		CXIP_LOG_DBG("Failed to allocate request\n");
 		ret = -FI_ENOMEM;
@@ -927,7 +934,7 @@ static int cxip_rxc_sink_init(struct cxip_rxc *rxc)
 	}
 
 	/* Populate request */
-	req = cxip_cq_req_alloc(rxc->comp.recv_cq, 1);
+	req = cxip_cq_req_alloc(rxc->comp.recv_cq, 1, NULL);
 	if (!req) {
 		CXIP_LOG_DBG("Failed to allocate ux request\n");
 		ret = -FI_ENOMEM;
@@ -1028,8 +1035,8 @@ void cxip_msg_oflow_fini(struct cxip_rxc *rxc)
 	struct dlist_entry *tmp;
 	int ux_sends = 0;
 
-	/* Clean up unexpected Put records. Overflow buffers are unlinked, so
-	 * no more events can be expected.
+	/* Clean up unexpected Put records. The PtlTE is disabled, so no more
+	 * events can be expected.
 	 */
 	dlist_foreach_container_safe(&rxc->ux_sends, struct cxip_ux_send,
 				     ux_send, ux_entry, tmp) {
@@ -1045,7 +1052,8 @@ void cxip_msg_oflow_fini(struct cxip_rxc *rxc)
 		ux_sends++;
 	}
 
-	CXIP_LOG_DBG("Freed %d UX Send(s)\n", ux_sends);
+	if (ux_sends)
+		CXIP_LOG_DBG("Freed %d UX Send(s)\n", ux_sends);
 
 	ret = cxip_rxc_sink_fini(rxc);
 	if (ret != FI_SUCCESS) {
@@ -1113,6 +1121,10 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 		return FI_SUCCESS;
 	case C_EVENT_UNLINK:
 		/* TODO Handle unlink errors. */
+		assert(cxi_event_rc(event) == C_RC_OK);
+		return FI_SUCCESS;
+	case C_EVENT_SEND:
+		/* TODO Handle Send event errors. */
 		assert(cxi_event_rc(event) == C_RC_OK);
 		return FI_SUCCESS;
 	case C_EVENT_PUT_OVERFLOW:
@@ -1267,7 +1279,15 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		assert(cxi_event_rc(event) == C_RC_OK);
 		return FI_SUCCESS;
 	case C_EVENT_UNLINK:
-		/* TODO Handle unlink errors. */
+		if (!event->tgt_long.auto_unlinked) {
+			req->recv.rc = C_RC_CANCELED;
+			recv_req_complete(req);
+		} else {
+			assert(cxi_event_rc(event) == C_RC_OK);
+		}
+		return FI_SUCCESS;
+	case C_EVENT_SEND:
+		/* TODO Handle Send event errors. */
 		assert(cxi_event_rc(event) == C_RC_OK);
 		return FI_SUCCESS;
 	case C_EVENT_PUT_OVERFLOW:
@@ -1362,6 +1382,19 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 	return FI_SUCCESS;
 }
 
+int cxip_recv_cancel(struct cxip_req *req)
+{
+	int ret;
+	struct cxip_rxc *rxc = req->recv.rxc;
+
+	ret = issue_unlink_le(rxc->rx_pte->pte, C_PTL_LIST_PRIORITY,
+			      req->req_id, rxc->rx_cmdq);
+	if (ret == FI_SUCCESS)
+		req->recv.canceled = true;
+
+	return ret;
+}
+
 /*
  * _cxip_recv() - Common message receive function. Used for tagged and untagged
  * sends of all sizes.
@@ -1439,7 +1472,7 @@ static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	}
 
 	/* Populate request */
-	req = cxip_cq_req_alloc(rxc->comp.recv_cq, 1);
+	req = cxip_cq_req_alloc(rxc->comp.recv_cq, 1, rxc);
 	if (!req) {
 		CXIP_LOG_DBG("Failed to allocate request\n");
 		ret = -FI_ENOMEM;
@@ -1483,6 +1516,8 @@ static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
 		goto req_free;
 	}
+
+	ofi_atomic_inc32(&rxc->orx_reqs);
 
 	CXIP_LOG_DBG("req: %p buf: %p len: %lu src_addr: %ld tag(%c): 0x%lx ignore: 0x%lx context: %p\n",
 		     req, buf, len, src_addr, tagged ? '*' : '-', tag, ignore,
@@ -1535,6 +1570,8 @@ static void rdzv_send_req_free(struct cxip_req *req)
 	fastlock_release(&req->send.txc->lock);
 
 	cxip_unmap(req->send.send_md);
+
+	ofi_atomic_dec32(&req->send.txc->otx_reqs);
 
 	cxip_cq_req_free(req);
 }
@@ -1774,9 +1811,8 @@ static ssize_t _cxip_send_long(struct cxip_txc *txc, struct cxip_req *req)
 		goto free_id;
 	}
 
-	/* TODO take reference on EP or context for the outstanding
-	 * request
-	 */
+	ofi_atomic_inc32(&txc->otx_reqs);
+
 	fastlock_release(&txc->lock);
 
 	return FI_SUCCESS;
@@ -1800,6 +1836,7 @@ static int cxip_send_eager_cb(struct cxip_req *req,
 
 	req->send.rc = cxi_init_event_rc(event);
 	report_send_completion(req);
+	ofi_atomic_dec32(&req->send.txc->otx_reqs);
 	cxip_cq_req_free(req);
 
 	return FI_SUCCESS;
@@ -1826,9 +1863,8 @@ static ssize_t _cxip_send_eager(struct cxip_txc *txc, union c_cmdu *cmd)
 
 	cxi_cq_ring(txc->tx_cmdq->dev_cmdq);
 
-	/* TODO take reference on EP or context for the outstanding
-	 * request
-	 */
+	ofi_atomic_inc32(&txc->otx_reqs);
+
 	fastlock_release(&txc->tx_cmdq->lock);
 
 	return FI_SUCCESS;
@@ -1922,7 +1958,7 @@ static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 	}
 
 	/* Populate request */
-	req = cxip_cq_req_alloc(txc->comp.send_cq, long_send);
+	req = cxip_cq_req_alloc(txc->comp.send_cq, long_send, txc);
 	if (!req) {
 		CXIP_LOG_DBG("Failed to allocate request\n");
 		ret = -FI_ENOMEM;

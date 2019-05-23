@@ -704,22 +704,20 @@ static int cxip_ctx_setopt(fid_t fid, int level, int optname,
  *
  * Support TX/RX context cancel().
  *
- * Searches the RX queue for a pending operation async operations with the
- * specified 'context' flag, and cancels it if still pending.
- *
- * Async operations with no 'context' cannot be cancelled.
+ * Searches the RX queue for a pending async operation with the specified
+ * 'context', and cancels it if still pending.
  *
  * @param rxc : RX context to search
  * @param context : user context pointer to search for
  *
- * @return ssize_t : ??, -errno on failure
+ * @return ssize_t : 0 on success, -errno on failure
  */
 static ssize_t cxip_rxc_cancel(struct cxip_rxc *rxc, void *context)
 {
+	if (!rxc->enabled)
+		return -FI_EOPBADSTATE;
 
-	// TODO: implement
-
-	return -FI_ENOENT;
+	return cxip_cq_req_cancel(rxc->comp.recv_cq, rxc, context, true);
 }
 
 /**
@@ -730,15 +728,12 @@ static ssize_t cxip_rxc_cancel(struct cxip_rxc *rxc, void *context)
  * @param fid : EP, TX ctx, or RX ctx fid
  * @param context : user-specified context
  *
- * @return ssize_t : ??, -errno on failure
+ * @return ssize_t : 0 on success, -errno on failure
  */
 static ssize_t cxip_ep_cancel(fid_t fid, void *context)
 {
 	struct cxip_rxc *rxc = NULL;
 	struct cxip_ep *cxi_ep;
-
-	if (!context)
-		return -FI_EINVAL;
 
 	switch (fid->fclass) {
 	case FI_CLASS_EP:

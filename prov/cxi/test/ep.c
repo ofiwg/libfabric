@@ -299,12 +299,25 @@ Test(ep, cancel_ep)
 	cxit_create_ep();
 
 	ret = fi_cancel(&cxit_ep->fid, NULL);
-	cr_assert_eq(ret, -FI_EINVAL);
+	cr_assert_eq(ret, -FI_EOPBADSTATE);
+
+	cxit_create_cqs();
+	cxit_bind_cqs();
+	cxit_create_av();
+	cxit_bind_av();
+
+	ret = fi_enable(cxit_ep);
+	cr_assert(ret == FI_SUCCESS);
+
+	ret = fi_cancel(&cxit_ep->fid, NULL);
+	cr_assert_eq(ret, -FI_ENOENT);
 
 	ret = fi_cancel(&cxit_ep->fid, (void *)1);
 	cr_assert_eq(ret, -FI_ENOENT);
 
 	cxit_destroy_ep();
+	cxit_destroy_av();
+	cxit_destroy_cqs();
 }
 
 Test(ep, cancel_unhandled)

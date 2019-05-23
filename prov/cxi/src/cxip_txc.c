@@ -219,6 +219,36 @@ unlock:
 }
 
 /*
+ * txc_cleanup() - Attempt to free outstanding requests.
+ *
+ * Outstanding commands may be dropped when the TX Command Queue is freed.
+ * This leads to missing events. Attempt to gather all events before freeing
+ * the TX CQ. If events go missing, resources will be leaked until the
+ * Completion Queue is freed.
+ */
+static void txc_cleanup(struct cxip_txc *txc)
+{
+	uint64_t start;
+
+	if (!ofi_atomic_get32(&txc->otx_reqs))
+		return;
+
+	cxip_cq_req_discard(txc->comp.send_cq, txc);
+
+	start = fi_gettime_ms();
+	while (ofi_atomic_get32(&txc->otx_reqs)) {
+		sched_yield();
+		cxip_cq_progress(txc->comp.send_cq);
+
+		if (fi_gettime_ms() - start > CXIP_REQ_CLEANUP_TO) {
+			CXIP_LOG_ERROR(
+				"Timeout waiting for outstanding requests.");
+			break;
+		}
+	}
+}
+
+/*
  * cxip_txc_disable() - Disable a TX context.
  *
  * Free hardware resources allocated when the context was enabled. Called via
@@ -234,6 +264,10 @@ static void txc_disable(struct cxip_txc *txc)
 	if (!txc->enabled)
 		goto unlock;
 
+	txc->enabled = 0;
+
+	txc_cleanup(txc);
+
 	if ((txc->attr.caps & (FI_TAGGED | FI_SEND)) == (FI_TAGGED | FI_SEND)) {
 		ret = txc_msg_fini(txc);
 		if (ret)
@@ -244,8 +278,6 @@ static void txc_disable(struct cxip_txc *txc)
 	cxip_cmdq_free(txc->rx_cmdq);
 
 	cxip_cmdq_free(txc->tx_cmdq);
-
-	txc->enabled = 0;
 unlock:
 	fastlock_release(&txc->lock);
 }
@@ -266,6 +298,7 @@ static struct cxip_txc *txc_alloc(const struct fi_tx_attr *attr, void *context,
 
 	dlist_init(&txc->ep_list);
 	fastlock_init(&txc->lock);
+	ofi_atomic_initialize32(&txc->otx_reqs, 0);
 
 	switch (fclass) {
 	case FI_CLASS_TX_CTX:

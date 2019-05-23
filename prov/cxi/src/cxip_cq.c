@@ -26,10 +26,74 @@
 #define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_CQ, __VA_ARGS__)
 
 /*
+ * cxip_cq_req_cancel() - Cancel one request.
+ *
+ * Cancel one Receive request. If match is true, cancel the request with
+ * matching op_ctx. Only Receive requests should be in the request list.
+ */
+int cxip_cq_req_cancel(struct cxip_cq *cq, void *req_ctx, void *op_ctx,
+		       bool match)
+{
+	int ret = -FI_ENOENT;
+	struct cxip_req *req;
+
+	/* Serialize with event processing that could update request state. */
+	fastlock_acquire(&cq->lock);
+
+	dlist_foreach_container(&cq->req_list, struct cxip_req, req,
+				cq_entry) {
+		if (req->req_ctx == req_ctx &&
+		    !req->recv.canceled &&
+		    (!match || (void *)req->context == op_ctx)) {
+			ret = cxip_recv_cancel(req);
+			break;
+		}
+	}
+
+	fastlock_release(&cq->lock);
+
+	return ret;
+}
+
+/*
+ * cxip_cq_req_discard() - Discard all matching requests.
+ *
+ * Mark all requests on the Completion Queue to be discarded. When a marked
+ * request completes, it's completion event will be dropped. This is the
+ * behavior defined for requests belonging to a closed Endpoint.
+ */
+void cxip_cq_req_discard(struct cxip_cq *cq, void *req_ctx)
+{
+	struct cxip_req *req;
+	int discards = 0;
+
+	/* Serialize with event processing that could update request state. */
+	fastlock_acquire(&cq->lock);
+
+	dlist_foreach_container(&cq->req_list, struct cxip_req, req,
+				cq_entry) {
+		if (req->req_ctx == req_ctx) {
+			req->discard = true;
+			discards++;
+		}
+	}
+
+	if (discards)
+		CXIP_LOG_DBG("Marked %d requests\n", discards);
+
+	fastlock_release(&cq->lock);
+}
+
+/*
  * cxip_cq_req_complete() - Generate a completion event for the request.
  */
 int cxip_cq_req_complete(struct cxip_req *req)
 {
+	if (req->discard) {
+		CXIP_LOG_DBG("Event discarded: %p\n", req);
+		return FI_SUCCESS;
+	}
+
 	return ofi_cq_write(&req->cq->util_cq, (void *)req->context,
 			    req->flags, req->data_len, (void *)req->buf,
 			    req->data, req->tag);
@@ -41,6 +105,11 @@ int cxip_cq_req_complete(struct cxip_req *req)
  */
 int cxip_cq_req_complete_addr(struct cxip_req *req, fi_addr_t src)
 {
+	if (req->discard) {
+		CXIP_LOG_DBG("Event discarded: %p\n", req);
+		return FI_SUCCESS;
+	}
+
 	return ofi_cq_write_src(&req->cq->util_cq, (void *)req->context,
 				req->flags, req->data_len, (void *)req->buf,
 				req->data, req->tag, src);
@@ -54,6 +123,11 @@ int cxip_cq_req_error(struct cxip_req *req, size_t olen,
 		      size_t err_data_size)
 {
 	struct fi_cq_err_entry err_entry;
+
+	if (req->discard) {
+		CXIP_LOG_DBG("Event discarded: %p\n", req);
+		return FI_SUCCESS;
+	}
 
 	err_entry.err = err;
 	err_entry.olen = olen;
@@ -84,7 +158,8 @@ static struct cxip_req *cxip_cq_req_find(struct cxip_cq *cq, int id)
  * If remap is set, allocate a 16-bit request ID and map it to the new
  * request.
  */
-struct cxip_req *cxip_cq_req_alloc(struct cxip_cq *cq, int remap)
+struct cxip_req *cxip_cq_req_alloc(struct cxip_cq *cq, int remap,
+				   void *req_ctx)
 {
 	struct cxip_req *req;
 
@@ -113,6 +188,9 @@ struct cxip_req *cxip_cq_req_alloc(struct cxip_cq *cq, int remap)
 
 	CXIP_LOG_DBG("Allocated req: %p (ID: %d)\n", req, req->req_id);
 	req->cq = cq;
+	req->req_ctx = req_ctx;
+	req->discard = false;
+	dlist_insert_tail(&req->cq_entry, &cq->req_list);
 
 out:
 	fastlock_release(&cq->req_lock);
@@ -129,6 +207,8 @@ void cxip_cq_req_free(struct cxip_req *req)
 	struct cxip_cq *cq = req->cq;
 
 	fastlock_acquire(&cq->req_lock);
+
+	dlist_remove(&req->cq_entry);
 
 	if (req->req_id >= 0) {
 		table_req = (struct cxip_req *)ofi_idx_remove(
@@ -169,6 +249,7 @@ static struct cxip_req *cxip_cq_event_req(struct cxip_cq *cq,
 				       cxi_event_to_str(event));
 		break;
 	case C_EVENT_REPLY:
+	case C_EVENT_SEND:
 		if (!event->init_short.rendezvous) {
 			req = (struct cxip_req *)event->init_short.user_ptr;
 		} else {
@@ -315,6 +396,7 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq)
 
 	cxi_cq->enabled = 1;
 	fastlock_release(&cxi_cq->lock);
+	dlist_init(&cxi_cq->req_list);
 
 	CXIP_LOG_DBG("CQ enabled: %p (EQ: %d)\n", cxi_cq, cxi_cq->evtq->eqn);
 	return FI_SUCCESS;

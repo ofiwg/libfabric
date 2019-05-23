@@ -268,6 +268,7 @@ static int _cxip_amo_cb(struct cxip_req *req, const union c_event *event)
 			CXIP_LOG_ERROR("Failed to report error: %d\n", ret);
 	}
 
+	ofi_atomic_dec32(&req->amo.txc->otx_reqs);
 	cxip_cq_req_free(req);
 
 	return FI_SUCCESS;
@@ -553,7 +554,7 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 	}
 
 	/* Allocate a CQ request */
-	req = cxip_cq_req_alloc(txc->comp.send_cq, 0);
+	req = cxip_cq_req_alloc(txc->comp.send_cq, 0, txc);
 	if (!req) {
 		CXIP_LOG_DBG("Failed to allocate request\n");
 		ret = -FI_ENOMEM;
@@ -570,6 +571,7 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 	req->cb = (result) ? _cxip_famo_cb : _cxip_amo_cb;
 	req->amo.local_md = result_md;
 	req->amo.result_buf = local_result;
+	req->amo.txc = txc;
 
 	/* Build AMO command descriptor */
 	pid_idx = CXIP_MR_TO_IDX(key);
@@ -619,7 +621,8 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 
 	cxi_cq_ring(txc->tx_cmdq->dev_cmdq);
 
-	/* TODO take reference on EP or context for the outstanding request */
+	ofi_atomic_inc32(&txc->otx_reqs);
+
 	fastlock_release(&txc->tx_cmdq->lock);
 
 	return FI_SUCCESS;

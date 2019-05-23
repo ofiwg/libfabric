@@ -256,6 +256,47 @@ unlock:
 }
 
 /*
+ * rxc_cleanup() - Attempt to free outstanding requests.
+ *
+ * Outstanding commands may be dropped when the RX Command Queue is freed.
+ * This leads to missing events. Attempt to gather all events before freeing
+ * the RX CQ. If events go missing, resources will be leaked until the
+ * Completion Queue is freed.
+ */
+static void rxc_cleanup(struct cxip_rxc *rxc)
+{
+	int ret;
+	uint64_t start;
+	int canceled = 0;
+
+	if (!ofi_atomic_get32(&rxc->orx_reqs))
+		return;
+
+	cxip_cq_req_discard(rxc->comp.recv_cq, rxc);
+
+	do {
+		ret = cxip_cq_req_cancel(rxc->comp.recv_cq, rxc, 0, false);
+		if (ret == FI_SUCCESS)
+			canceled++;
+	} while (ret == FI_SUCCESS);
+
+	if (canceled)
+		CXIP_LOG_DBG("Canceled %d Receives: %p\n", canceled, rxc);
+
+	start = fi_gettime_ms();
+	while (ofi_atomic_get32(&rxc->orx_reqs)) {
+		sched_yield();
+		cxip_cq_progress(rxc->comp.recv_cq);
+
+		if (fi_gettime_ms() - start > CXIP_REQ_CLEANUP_TO) {
+			CXIP_LOG_ERROR(
+				"Timeout waiting for outstanding requests.");
+			break;
+		}
+	}
+}
+
+/*
  * cxip_rxc_disable() - Disable an RX context.
  *
  * Free hardware resources allocated when the context was enabled. Called via
@@ -271,10 +312,14 @@ static void rxc_disable(struct cxip_rxc *rxc)
 	if (!rxc->enabled)
 		goto unlock;
 
+	rxc->enabled = 0;
+
 	/* Stop accepting Puts. */
 	ret = rxc_msg_disable(rxc);
 	if (ret != FI_SUCCESS)
 		CXIP_LOG_DBG("rxc_msg_disable returned: %d\n", ret);
+
+	rxc_cleanup(rxc);
 
 	/* Clean up overflow buffers. */
 	cxip_msg_oflow_fini(rxc);
@@ -284,7 +329,6 @@ static void rxc_disable(struct cxip_rxc *rxc)
 	if (ret != FI_SUCCESS)
 		CXIP_LOG_ERROR("rxc_msg_fini returned: %d\n", ret);
 
-	rxc->enabled = 0;
 unlock:
 	fastlock_release(&rxc->lock);
 }
@@ -305,6 +349,7 @@ struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr, void *context,
 
 	dlist_init(&rxc->ep_list);
 	fastlock_init(&rxc->lock);
+	ofi_atomic_initialize32(&rxc->orx_reqs, 0);
 
 	rxc->ctx.fid.fclass = FI_CLASS_RX_CTX;
 	rxc->ctx.fid.context = context;

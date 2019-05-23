@@ -52,6 +52,8 @@
 #define CEILING(a, b) ((long long)(a) <= 0LL ? 0 : (FLOOR((a)-1, b) + (b)))
 #endif
 
+#define CXIP_REQ_CLEANUP_TO 3000
+
 #define CXIP_EP_MAX_MSG_SZ (1 << 23)
 #define CXIP_EP_MAX_INJECT_SZ ((1 << 8) - 1)
 #define CXIP_EP_MAX_BUFF_RECV (1 << 26)
@@ -413,10 +415,12 @@ struct cxip_eq {
  * Support structures, accumulated in a union.
  */
 struct cxip_req_rma {
+	struct cxip_txc *txc;
 	struct cxip_md *local_md;	// RMA target buffer
 };
 
 struct cxip_req_amo {
+	struct cxip_txc *txc;
 	struct cxip_md *local_md;	// RMA target buffer
 	void *result_buf;		// local buffer for fetch
 };
@@ -434,11 +438,12 @@ struct cxip_req_recv {
 	uint32_t rdzv_id;		// DMA initiator rendezvous ID
 	int rdzv_events;		// Processed rdzv event count
 	bool put_event;			// Put event received?
+	bool canceled;			// Request canceled?
 };
 
 struct cxip_req_send {
 	void *buf;			// local send buffer
-	struct cxip_md *send_md;		// message target buffer
+	struct cxip_md *send_md;	// send buffer memory descriptor
 	struct cxip_txc *txc;
 	size_t length;			// request length
 	int rdzv_id;			// SW RDZV ID for long messages
@@ -469,11 +474,13 @@ struct cxip_req_oflow {
  */
 struct cxip_req {
 	/* Control info */
-	struct dlist_entry list;	// attaches to utility pool
+	struct dlist_entry cq_entry;
+	void *req_ctx;
 	struct cxip_cq *cq;		// request CQ
 	int req_id;			// fast lookup in index table
 	int (*cb)(struct cxip_req *req, const union c_event *evt);
 					// completion event callback
+	bool discard;
 
 	/* CQ event fields, set according to fi_cq.3
 	 *   - set by provider
@@ -520,6 +527,7 @@ struct cxip_cq {
 	fastlock_t req_lock;
 	struct ofi_bufpool *req_pool;
 	struct indexer req_table;
+	struct dlist_entry req_list;
 };
 
 /**
@@ -641,6 +649,8 @@ struct cxip_rxc {
 	struct cxip_cmdq *rx_cmdq;	// RX CMDQ for posting receive buffers
 	struct cxip_cmdq *tx_cmdq;	// TX CMDQ for Message Gets
 
+	ofi_atomic32_t orx_reqs;	// outstanding receive requests
+
 	int eager_threshold;
 
 	/* Unexpected message handling */
@@ -700,6 +710,8 @@ struct cxip_txc {
 	struct fi_tx_attr attr;		// attributes
 
 	struct cxip_cmdq *tx_cmdq;	// added during cxip_txc_enable()
+
+	ofi_atomic32_t otx_reqs;	// outstanding transmit requests
 
 	/* Software Rendezvous related structures */
 	struct cxip_pte *rdzv_pte;	// PTE for SW Rendezvous commands
@@ -969,6 +981,8 @@ int cxip_txc_free_rdzv_id(struct cxip_txc *txc, int tag);
 int cxip_msg_oflow_init(struct cxip_rxc *rxc);
 void cxip_msg_oflow_fini(struct cxip_rxc *rxc);
 
+int cxip_recv_cancel(struct cxip_req *req);
+
 int cxip_rxc_enable(struct cxip_rxc *rxc);
 int cxip_txc_enable(struct cxip_txc *txc);
 struct cxip_txc *cxip_txc_alloc(const struct fi_tx_attr *attr, void *context,
@@ -976,12 +990,16 @@ struct cxip_txc *cxip_txc_alloc(const struct fi_tx_attr *attr, void *context,
 struct cxip_txc *cxip_stx_alloc(const struct fi_tx_attr *attr, void *context);
 void cxip_txc_free(struct cxip_txc *txc);
 
+int cxip_cq_req_cancel(struct cxip_cq *cq, void *req_ctx, void *op_ctx,
+		       bool match);
+void cxip_cq_req_discard(struct cxip_cq *cq, void *req_ctx);
 int cxip_cq_req_complete(struct cxip_req *req);
 int cxip_cq_req_complete_addr(struct cxip_req *req, fi_addr_t src);
 int cxip_cq_req_error(struct cxip_req *req, size_t olen,
 		      int err, int prov_errno, void *err_data,
 		      size_t err_data_size);
-struct cxip_req *cxip_cq_req_alloc(struct cxip_cq *cq, int remap);
+struct cxip_req *cxip_cq_req_alloc(struct cxip_cq *cq, int remap,
+				   void *req_ctx);
 void cxip_cq_req_free(struct cxip_req *req);
 void cxip_cq_progress(struct cxip_cq *cq);
 int cxip_cq_enable(struct cxip_cq *cxi_cq);

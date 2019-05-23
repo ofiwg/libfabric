@@ -49,6 +49,7 @@ static int cxip_rma_cb(struct cxip_req *req, const union c_event *event)
 			CXIP_LOG_ERROR("Failed to report error: %d\n", ret);
 	}
 
+	ofi_atomic_dec32(&req->rma.txc->otx_reqs);
 	cxip_cq_req_free(req);
 
 	return FI_SUCCESS;
@@ -126,7 +127,7 @@ static ssize_t _cxip_rma_op(enum cxip_rma_op op, struct fid_ep *ep,
 		return ret;
 	}
 
-	req = cxip_cq_req_alloc(txc->comp.send_cq, 0);
+	req = cxip_cq_req_alloc(txc->comp.send_cq, 0, txc);
 	if (!req) {
 		CXIP_LOG_DBG("Failed to allocate request\n");
 		ret = -FI_ENOMEM;
@@ -142,6 +143,7 @@ static ssize_t _cxip_rma_op(enum cxip_rma_op op, struct fid_ep *ep,
 	req->cb = cxip_rma_cb;
 	req->flags = FI_RMA | (op == CXIP_RMA_READ ? FI_READ : FI_WRITE);
 	req->rma.local_md = md;
+	req->rma.txc = txc;
 
 	/* Generate the destination fabric address */
 	pid_idx = CXIP_MR_TO_IDX(rma[0].key);
@@ -178,7 +180,8 @@ static ssize_t _cxip_rma_op(enum cxip_rma_op op, struct fid_ep *ep,
 
 	cxi_cq_ring(txc->tx_cmdq->dev_cmdq);
 
-	/* TODO take reference on EP or context for the outstanding request */
+	ofi_atomic_inc32(&txc->otx_reqs);
+
 	fastlock_release(&txc->tx_cmdq->lock);
 
 	return FI_SUCCESS;

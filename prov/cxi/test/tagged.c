@@ -1543,6 +1543,27 @@ Test(tagged, oflow_replenish)
 	free(recv_buf);
 }
 
+/* Test outstanding send cleanup */
+Test(tagged, cleanup_sends)
+{
+	int i, ret;
+	uint8_t *send_buf;
+	int send_len = 64;
+	int sends = 5;
+
+	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	cr_assert(send_buf);
+
+	/* Send 64 bytes to self */
+	for (i = 0; i < sends; i++) {
+		ret = fi_tsend(cxit_ep, send_buf, send_len, NULL,
+			       cxit_ep_fi_addr, 0, NULL);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_tsend failed %d", ret);
+	}
+
+	/* Close Endpoint with outstanding Sends */
+}
+
 /* Test UX cleanup */
 Test(tagged, ux_cleanup)
 {
@@ -1550,12 +1571,13 @@ Test(tagged, ux_cleanup)
 	uint8_t *send_buf;
 	int send_len = 64;
 	struct fi_cq_tagged_entry cqe;
+	int sends = 5;
 
 	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
 	cr_assert(send_buf);
 
 	/* Send 64 bytes to self */
-	for (i = 0; i < 3; i++) {
+	for (i = 0; i < sends; i++) {
 		ret = fi_tsend(cxit_ep, send_buf, send_len, NULL,
 			       cxit_ep_fi_addr, 0, NULL);
 		cr_assert_eq(ret, FI_SUCCESS, "fi_tsend failed %d", ret);
@@ -1580,5 +1602,96 @@ Test(tagged, ux_cleanup)
 
 	free(send_buf);
 
-	/* Close Endpoint with 3 UX sends on the RX Queue */
+	/* Close Endpoint with UX sends on the RX Queue */
+}
+
+/* Test outstanding recv cleanup */
+Test(tagged, cleanup_recvs)
+{
+	int i, ret;
+	uint8_t *recv_buf;
+	int recv_len = 64;
+	int recvs = 5;
+
+	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	cr_assert(recv_buf);
+
+	for (i = 0; i < recvs; i++) {
+		ret = fi_trecv(cxit_ep, recv_buf, recv_len, NULL,
+			       FI_ADDR_UNSPEC, 0x0, 0x0, NULL);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_tsend failed %d", ret);
+	}
+
+	/* Close Endpoint with outstanding Receives */
+}
+
+/* Test outstanding recv cancel */
+Test(tagged, cancel_recvs)
+{
+	int i, ret;
+	uint8_t *recv_buf;
+	int recv_len = 64;
+	int recvs = 5;
+
+	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	cr_assert(recv_buf);
+
+	for (i = 0; i < recvs; i++) {
+		ret = fi_trecv(cxit_ep, recv_buf, recv_len, NULL,
+			       FI_ADDR_UNSPEC, 0x0, 0x0, NULL);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_tsend failed %d", ret);
+	}
+
+	for (i = 0; i < recvs; i++) {
+		ret = fi_cancel(&cxit_ep->fid, NULL);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_cancel failed %d", ret);
+	}
+}
+
+/* Test outstanding recv cancel events */
+Test(tagged, cancel_recvs_sync)
+{
+	int i, ret;
+	uint8_t *recv_buf;
+	int recv_len = 64;
+	int recvs = 5;
+	struct fi_cq_tagged_entry rx_cqe;
+	struct fi_cq_err_entry err_cqe;
+
+	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	cr_assert(recv_buf);
+
+	for (i = 0; i < recvs; i++) {
+		ret = fi_trecv(cxit_ep, recv_buf, recv_len, NULL,
+			       FI_ADDR_UNSPEC, 0x0, 0x0, NULL);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_tsend failed %d", ret);
+	}
+
+	for (i = 0; i < recvs; i++) {
+		ret = fi_cancel(&cxit_ep->fid, NULL);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_cancel failed %d", ret);
+	}
+
+	for (i = 0; i < recvs; i++) {
+		do {
+			ret = fi_cq_read(cxit_rx_cq, &rx_cqe, 1);
+			if (ret == -FI_EAVAIL)
+				break;
+
+			cr_assert_eq(ret, -FI_EAGAIN,
+				     "unexpected event %d", ret);
+		} while (1);
+
+		ret = fi_cq_readerr(cxit_rx_cq, &err_cqe, 0);
+		cr_assert_eq(ret, 1);
+
+		cr_assert(err_cqe.op_context == NULL,
+			  "Error RX CQE Context mismatch");
+		cr_assert(err_cqe.flags == (FI_TAGGED | FI_RECV),
+			  "Error RX CQE flags mismatch");
+		cr_assert(err_cqe.err == FI_ECANCELED,
+			  "Invalid Error RX CQE code\n");
+		cr_assert(err_cqe.prov_errno == C_RC_CANCELED,
+			  "Invalid Error RX CQE errno");
+	}
 }
