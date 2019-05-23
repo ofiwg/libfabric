@@ -118,15 +118,7 @@ int hook_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	mycq->cq.fid.fclass = FI_CLASS_CQ;
 	mycq->cq.fid.context = context;
 	mycq->cq.fid.ops = &hook_fid_ops;
-
-	switch (dom->fabric->hclass) {
-	case HOOK_PERF:
-		mycq->cq.ops = &perf_cq_ops;
-		break;
-	default:
-		mycq->cq.ops = &hook_cq_ops;
-		break;
-	}
+	mycq->cq.ops = &hook_cq_ops;
 
 	hattr = *attr;
 	if (attr->wait_obj == FI_WAIT_SET)
@@ -134,9 +126,18 @@ int hook_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	ret = fi_cq_open(dom->hdomain, &hattr, &mycq->hcq, &mycq->cq.fid);
 	if (ret)
-		free(mycq);
-	else
-		*cq = &mycq->cq;
+		goto err1;
 
+	*cq = &mycq->cq;
+
+	ret = hook_ini_fid(dom->fabric->prov_ctx, &mycq->cq.fid);
+	if (ret)
+		goto err2;
+
+	return 0;
+err2:
+	fi_close(&mycq->hcq->fid);
+err1:
+	free(mycq);
 	return ret;
 }

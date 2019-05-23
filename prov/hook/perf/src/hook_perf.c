@@ -378,7 +378,7 @@ perf_msg_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 	return ret;
 }
 
-struct fi_ops_msg perf_msg_ops = {
+static struct fi_ops_msg perf_msg_ops = {
 	.size = sizeof(struct fi_ops_msg),
 	.recv = perf_msg_recv,
 	.recvv = perf_msg_recvv,
@@ -518,7 +518,7 @@ perf_rma_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 	return ret;
 }
 
-struct fi_ops_rma perf_rma_ops = {
+static struct fi_ops_rma perf_rma_ops = {
 	.size = sizeof(struct fi_ops_rma),
 	.read = perf_rma_read,
 	.readv = perf_rma_readv,
@@ -656,7 +656,7 @@ perf_tagged_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 	return ret;
 }
 
-struct fi_ops_tagged perf_tagged_ops = {
+static struct fi_ops_tagged perf_tagged_ops = {
 	.size = sizeof(struct fi_ops_tagged),
 	.recv = perf_tagged_recv,
 	.recvv = perf_tagged_recvv,
@@ -863,6 +863,8 @@ int hook_perf_destroy(struct fid *fid)
 	return FI_SUCCESS;
 }
 
+struct hook_prov_ctx hook_perf_ctx;
+
 static int hook_perf_fabric(struct fi_fabric_attr *attr,
 			    struct fid_fabric **fabric, void *context)
 {
@@ -882,23 +884,58 @@ static int hook_perf_fabric(struct fi_fabric_attr *attr,
 		return ret;
 	}
 
+	/*
+	 * TODO
+	 * comment from GitHub PR #5052:
+	 * "I think we want to try replacing HOOK_PERF with a
+	 * struct hook_provider * (now called struct hook_prov_ctx)."
+	 */
 	hook_fabric_init(&fab->fabric_hook, HOOK_PERF, attr->fabric, hprov,
-			 &perf_fabric_fid_ops);
+			 &perf_fabric_fid_ops, &hook_perf_ctx);
 	*fabric = &fab->fabric_hook.fabric;
 	return 0;
 }
 
-struct fi_provider hook_perf_prov = {
-	.version = FI_VERSION(1,0),
-	/* We're a pass-through provider, so the fi_version is always the latest */
-	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
-	.name = "ofi_hook_perf",
-	.getinfo = NULL,
-	.fabric = hook_perf_fabric,
-	.cleanup = NULL,
+struct hook_prov_ctx hook_perf_ctx = {
+	.prov = {
+		.version = FI_VERSION(1,0),
+		/* We're a pass-through provider, so the fi_version is always the latest */
+		.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+		.name = "ofi_hook_perf",
+		.getinfo = NULL,
+		.fabric = hook_perf_fabric,
+		.cleanup = NULL,
+	},
 };
+
+static int perf_cq_init(struct fid *fid)
+{
+	struct fid_cq *cq = container_of(fid, struct fid_cq, fid);
+	cq->ops = &perf_cq_ops;
+	return 0;
+}
+
+static int perf_cntr_init(struct fid *fid)
+{
+	struct fid_cntr *cntr = container_of(fid, struct fid_cntr, fid);
+	cntr->ops = &perf_cntr_ops;
+	return 0;
+}
+
+static int perf_endpoint_init(struct fid *fid)
+{
+	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
+	ep->msg = &perf_msg_ops;
+	ep->rma = &perf_rma_ops;
+	ep->tagged = &perf_tagged_ops;
+	return 0;
+}
+
 
 HOOK_PERF_INI
 {
-	return &hook_perf_prov;
+	hook_perf_ctx.ini_fid[FI_CLASS_CQ] = perf_cq_init;
+	hook_perf_ctx.ini_fid[FI_CLASS_CNTR] = perf_cntr_init;
+	hook_perf_ctx.ini_fid[FI_CLASS_EP] = perf_endpoint_init;
+	return &hook_perf_ctx.prov;
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Intel Corporation. All rights reserved.
+ * Copyright (c) 2018-2019 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -46,11 +46,14 @@
 
 #include <rdma/providers/fi_prov.h>
 
+/* This field needs to be updated whenever new FI class is added in fabric.h */
+#define HOOK_FI_CLASS_MAX (FI_CLASS_NIC + 1)
 
 /*
  * Hooks are installed from top down.
  * Values must start at 0 and increment by one.
  */
+// TODO figure out how to remove this now that we have ini/fini calls
 enum ofi_hook_class {
 	HOOK_NOOP,
 	HOOK_PERF,
@@ -67,18 +70,67 @@ extern struct fi_ops hook_fid_ops;
 struct fid *hook_to_hfid(const struct fid *fid);
 struct fid_wait *hook_to_hwait(const struct fid_wait *wait);
 
+/*
+ * TODO
+ * comment from GitHub PR #5052:
+ * "another option would be to store the ini/fini calls in a separate structure
+ * that we reference from struct fi_prov_context. We could even extend the
+ * definition of fi_prov_context with a union that is accessed based on the
+ * prov_type. That might work better if we want to support external hooks,
+ * without the external hook provider needing to implement everything"
+ */
+struct hook_prov_ctx {
+	struct fi_provider	prov;
+	/*
+	 * Hooking providers can override ini/fini calls of a specific fid class
+	 * to override any initializations that the common code may have done.
+	 * For example, this allows overriding any specific op and not having to
+	 * hook into every resource creation call until the point where the op
+	 * can be overridden. Refer to hook_perf for an example.
+	 *
+	 * Note: if a hooking provider overrides any of the resource creation calls
+	 * (e.g. fi_endpoint) directly, then these ini/fini calls won't be
+	 * invoked. */
+	int 			(*ini_fid[HOOK_FI_CLASS_MAX])(struct fid *fid);
+	int 			(*fini_fid[HOOK_FI_CLASS_MAX])(struct fid *fid);
+};
+
+/*
+ * TODO
+ * comment from GitHub PR #5052:
+ * "We could set all ini/fini calls to a no-op as part of hook initialization
+ * to avoid this check"
+ */
+static inline int hook_ini_fid(struct hook_prov_ctx *prov_ctx, struct fid *fid)
+{
+	return (prov_ctx->ini_fid[fid->fclass] ?
+		prov_ctx->ini_fid[fid->fclass](fid) : 0);
+}
+
+static inline int hook_fini_fid(struct hook_prov_ctx *prov_ctx, struct fid *fid)
+{
+	return (prov_ctx->fini_fid[fid->fclass] ?
+		prov_ctx->fini_fid[fid->fclass](fid) : 0);
+}
 
 struct hook_fabric {
 	struct fid_fabric	fabric;
 	struct fid_fabric	*hfabric;
 	enum ofi_hook_class	hclass;
-	struct fi_provider	*prov;
+	struct fi_provider	*hprov;
+	struct hook_prov_ctx	*prov_ctx;
 };
 
 void hook_fabric_init(struct hook_fabric *fabric, enum ofi_hook_class hclass,
 		      struct fid_fabric *hfabric, struct fi_provider *hprov,
-		      struct fi_ops *f_ops);
+		      struct fi_ops *f_ops, struct hook_prov_ctx *prov_ctx);
 
+struct hook_fabric *hook_to_fabric(const struct fid *fid);
+
+static inline struct hook_prov_ctx *hook_to_prov_ctx(const struct fid *fid)
+{
+	return (hook_to_fabric(fid))->prov_ctx;
+}
 
 struct hook_domain {
 	struct fid_domain domain;
@@ -135,6 +187,7 @@ struct hook_cq {
 	struct fid_cq cq;
 	struct fid_cq *hcq;
 	struct hook_domain *domain;
+	void *context;
 };
 
 int hook_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
@@ -158,6 +211,7 @@ struct hook_ep {
 	struct fid_ep ep;
 	struct fid_ep *hep;
 	struct hook_domain *domain;
+	void *context;
 };
 
 int hook_endpoint(struct fid_domain *domain, struct fi_info *info,
