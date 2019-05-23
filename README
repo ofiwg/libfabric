@@ -1,4 +1,7 @@
-fdfd
+Version @VERSION@
+Released on @DATE@
+
+
 Introduction
 ============
 Libfabric is a communication library that exports interfaces for
