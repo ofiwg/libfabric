@@ -190,7 +190,7 @@ void hook_fabric_init(struct hook_fabric *fabric, enum ofi_hook_class hclass,
 	hfabric->fid.context = fabric;
 }
 
-static int noop_hook_fabric(struct fi_fabric_attr *attr,
+static int hook_noop_fabric(struct fi_fabric_attr *attr,
 			    struct fid_fabric **fabric, void *context)
 {
 	struct fi_provider *hprov = context;
@@ -207,19 +207,19 @@ static int noop_hook_fabric(struct fi_fabric_attr *attr,
 	return 0;
 }
 
-struct fi_provider noop_hook_prov = {
+struct fi_provider hook_noop_prov = {
 	.version = FI_VERSION(1,0),
 	/* We're a pass-through provider, so the fi_version is always the latest */
 	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
-	.name = "ofi_noop_hook",
+	.name = "ofi_hook_noop",
 	.getinfo = NULL,
-	.fabric = noop_hook_fabric,
+	.fabric = hook_noop_fabric,
 	.cleanup = NULL,
 };
 
-NOOP_HOOK_INI
+HOOK_NOOP_INI
 {
-	return &noop_hook_prov;
+	return &hook_noop_prov;
 }
 
 /*

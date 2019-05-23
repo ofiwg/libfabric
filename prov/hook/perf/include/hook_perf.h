@@ -43,7 +43,7 @@ struct perf_fabric {
 	struct ofi_perfset perf_set;
 };
 
-int perf_hook_destroy(struct fid *fabric);
+int hook_perf_destroy(struct fid *fabric);
 
 
 #define HOOK_FOREACH(DECL)		\
