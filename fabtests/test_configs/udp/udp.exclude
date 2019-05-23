@@ -10,7 +10,6 @@ inj_complete -e dgram
 cm_data
 
 # Not supported by ofi_rxd provider
-rdm_tagged_peek
 scalable_ep
 shared_ctx
 shared_av
