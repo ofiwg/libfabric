@@ -405,7 +405,8 @@ static int __recv_completion_src(
 	GNIX_DBG_TRACE(FI_LOG_TRACE, "\n");
 
 	if ((req->msg.recv_flags & FI_COMPLETION) && ep->recv_cq) {
-		if (src_addr == FI_ADDR_NOTAVAIL) {
+		if (src_addr == FI_ADDR_NOTAVAIL &&
+                    (req->msg.recv_flags & FI_SOURCE_ERR) != 0) {
 			buffer = malloc(GNIX_CQ_MAX_ERR_DATA_SIZE);
 			memcpy(buffer, req->vc->gnix_ep_name,
 				sizeof(struct gnix_ep_name));

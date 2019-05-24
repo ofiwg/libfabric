@@ -323,7 +323,8 @@ The GNI provider sets the domain attribute *cq_cnt* to the CQ limit divided by 2
 The GNI provider sets the domain attribute *ep_cnt* to SIZE_MAX.
 
 Completion queue events may report unknown source address information when
-using *FI_SOURCE*. The source address information will be reported in the
+using *FI_SOURCE*. If *FI_SOURCE_ERR* is also specified, the source address
+information will be reported in the
 err_data member of the struct fi_cq_err_entry populated by fi_cq_readerr. The
 err_data member will contain the source address information in the FI_ADDR_GNI
 address format. In order to populate the remote peer's address vector
