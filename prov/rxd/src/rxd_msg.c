@@ -320,7 +320,7 @@ static struct rxd_x_entry *rxd_tx_entry_init_msg(struct rxd_ep *ep, fi_addr_t ad
 	struct rxd_base_hdr *base_hdr;
 	void *ptr;
 
-	tx_entry = rxd_tx_entry_init_common(ep, addr, RXD_MSG, iov, iov_count,
+	tx_entry = rxd_tx_entry_init_common(ep, addr, op, iov, iov_count,
 					    tag, data, flags, context);
 	if (!tx_entry)
 		return NULL;
