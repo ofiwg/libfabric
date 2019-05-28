@@ -2041,6 +2041,13 @@ void do_sendrecv_buf(void *p, void *t, int send_len, int recv_len)
 	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
 	uint64_t r_e[NUMEPS] = {0};
 
+	/*
+	 * this test can't handle truncated messages so skip if recv_len
+	 * isn't big enough to receive message
+	 */
+	if (send_len > recv_len)
+		return;
+
 	rdm_sr_init_data(p, send_len, 0xab);
 	rdm_sr_init_data(t, recv_len, 0);
 

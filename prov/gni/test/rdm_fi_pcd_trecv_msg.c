@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2015-2017 Los Alamos National Security, LLC. All rights reserved.
  * Copyright (c) 2015-2017 Cray Inc.  All rights reserved.
+ * Copyright (c) 2019 Triad National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -1811,8 +1812,6 @@ static void pdc_peek_event_present_small_buffer_provided(int len)
 	 * fetched with a peek, but the target buffer should remain untouched
 	 */
 	build_peek_message(&peek_msg, &msg);
-	peek_iov.iov_len /= 2;
-
 
 	start_test_timer();
 	do {
