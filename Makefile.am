@@ -197,7 +197,8 @@ nodist_rdmainclude_HEADERS = \
 	$(top_srcdir)/prov/$(PROVIDER_DIRECT)/include/rdma/fi_direct_atomic.h \
 	$(top_srcdir)/prov/$(PROVIDER_DIRECT)/include/rdma/fi_direct_cm.h \
 	$(top_srcdir)/prov/$(PROVIDER_DIRECT)/include/rdma/fi_direct_eq.h \
-	$(top_srcdir)/prov/$(PROVIDER_DIRECT)/include/rdma/fi_direct_trigger.h
+	$(top_srcdir)/prov/$(PROVIDER_DIRECT)/include/rdma/fi_direct_trigger.h \
+	$(top_srcdir)/prov/$(PROVIDER_DIRECT)/include/rdma/fi_direct_collective.h
 if FI_DIRECT_H_IN
 nodist_rdmainclude_HEADERS += $(top_builddir)/prov/$(PROVIDER_DIRECT)/include/rdma/fi_direct.h
 else
