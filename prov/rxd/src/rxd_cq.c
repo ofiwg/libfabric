@@ -1039,7 +1039,6 @@ static void rxd_handle_ack(struct rxd_ep *ep, struct rxd_pkt_entry *ack_entry)
 	if (ep->peers[peer].last_rx_ack == ack->base_hdr.seq_no)
 		return;
 
-	ep->peers[peer].retry_cnt = 0;
 	ep->peers[peer].last_rx_ack = ack->base_hdr.seq_no;
 
 	if (dlist_empty(&ep->peers[peer].unacked))
@@ -1062,6 +1061,7 @@ static void rxd_handle_ack(struct rxd_ep *ep, struct rxd_pkt_entry *ack_entry)
 		dlist_remove(&pkt_entry->d_entry);
 		ofi_buf_free(pkt_entry);
 	     	ep->peers[peer].unacked_cnt--;
+		ep->peers[peer].retry_cnt = 0;
 
 		pkt_entry = container_of((&ep->peers[peer].unacked)->next,
 					struct rxd_pkt_entry, d_entry);

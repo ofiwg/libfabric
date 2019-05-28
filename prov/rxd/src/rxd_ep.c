@@ -951,7 +951,7 @@ static void rxd_progress_pkt_list(struct rxd_ep *ep, struct rxd_peer *peer)
 				pkt_entry, d_entry) {
 		if (pkt_entry->flags & (RXD_PKT_IN_USE | RXD_PKT_ACKED) ||
 		    current < rxd_get_retry_time(pkt_entry->timestamp, peer->retry_cnt))
-			continue;
+			break;
 		retry = 1;
 		ret = rxd_ep_send_pkt(ep, pkt_entry);
 		if (ret)
