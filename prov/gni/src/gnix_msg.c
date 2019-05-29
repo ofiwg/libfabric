@@ -353,7 +353,7 @@ static int __gnix_msg_recv_err(struct gnix_fid_ep *ep, struct gnix_fab_req *req)
 	return __recv_err(ep, req->user_context, flags, req->msg.cum_recv_len,
 			  (void *)req->msg.recv_info[0].recv_addr, req->msg.imm,
 			  req->msg.tag, 0, FI_ECANCELED,
-			  GNI_RC_TRANSACTION_ERROR, NULL, 0);
+			  gnixu_to_fi_errno(GNI_RC_TRANSACTION_ERROR), NULL, 0);
 }
 
 static int __recv_completion(
@@ -560,7 +560,8 @@ static int __gnix_msg_send_err(struct gnix_fid_ep *ep, struct gnix_fab_req *req)
 	if (ep->send_cq) {
 		rc = _gnix_cq_add_error(ep->send_cq, req->user_context,
 					flags, 0, 0, 0, 0, 0, FI_ECANCELED,
-					GNI_RC_TRANSACTION_ERROR, NULL, 0);
+					gnixu_to_fi_errno(GNI_RC_TRANSACTION_ERROR),
+					NULL, 0);
 		if (rc != FI_SUCCESS)  {
 			GNIX_WARN(FI_LOG_EP_DATA,
 				   "_gnix_cq_add_error() returned %d\n",
