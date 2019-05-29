@@ -323,15 +323,15 @@ static struct ofi_prov *ofi_create_prov_entry(const char *prov_name)
 static void ofi_ordered_provs_init(void)
 {
 	char *ordered_prov_names[] = {
-		"psm2", "psm", "usnic", "mlx", "gni",
-		"bgq", "netdir", "ofi_rxm", "ofi_rxd", "verbs",
+		"psm2", "psm", "usnic", "gni", "bgq", "verbs",
+		"netdir", "ofi_rxm", "ofi_rxd", "shm", "mlx"
 		/* Initialize the socket based providers last of the
 		 * standard providers.  This will result in them being
 		 * the least preferred providers.
 		 */
 
 		/* Before you add ANYTHING here, read the comment above!!! */
-		"UDP", "sockets", "tcp", /* NOTHING GOES HERE! */
+		"UDP", "tcp", "sockets", /* NOTHING GOES HERE! */
 		/* Seriously, read it! */
 
 		/* These are hooking providers only.  Their order
