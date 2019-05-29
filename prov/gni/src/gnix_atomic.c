@@ -2,6 +2,7 @@
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
  *                         All rights reserved.
+ * Copyright (c) 2019 Triad National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -54,7 +55,8 @@ static int __gnix_amo_send_err(struct gnix_fid_ep *ep,
 	if (ep->send_cq) {
 		rc = _gnix_cq_add_error(ep->send_cq, req->user_context,
 					flags, 0, 0, 0, 0, 0, error,
-					GNI_RC_TRANSACTION_ERROR, NULL, 0);
+					gnixu_to_fi_errno(GNI_RC_TRANSACTION_ERROR),
+					NULL, 0);
 		if (rc) {
 			GNIX_WARN(FI_LOG_EP_DATA,
 				  "_gnix_cq_add_error() failed: %d\n", rc);

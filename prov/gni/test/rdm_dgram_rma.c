@@ -2,6 +2,7 @@
  * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
  *                         All rights reserved.
  * Copyright (c) 2015-2018 Cray Inc. All rights reserved.
+ * Copyright (c) 2019 Triad National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -2780,7 +2781,7 @@ void do_write_error(int len)
 	cr_assert(err_cqe.tag == 0, "Bad error tag");
 	cr_assert(err_cqe.olen == 0, "Bad error olen");
 	cr_assert(err_cqe.err == FI_ECANCELED, "Bad error errno");
-	cr_assert(err_cqe.prov_errno == GNI_RC_TRANSACTION_ERROR,
+	cr_assert(err_cqe.prov_errno == gnixu_to_fi_errno(GNI_RC_TRANSACTION_ERROR),
 		  "Bad prov errno");
 	cr_assert(err_cqe.err_data == NULL, "Bad error provider data");
 
@@ -2858,7 +2859,7 @@ void do_read_error(int len)
 	cr_assert(err_cqe.tag == 0, "Bad error tag");
 	cr_assert(err_cqe.olen == 0, "Bad error olen");
 	cr_assert(err_cqe.err == FI_ECANCELED, "Bad error errno");
-	cr_assert(err_cqe.prov_errno == GNI_RC_TRANSACTION_ERROR,
+	cr_assert(err_cqe.prov_errno == gnixu_to_fi_errno(GNI_RC_TRANSACTION_ERROR),
 		  "Bad prov errno");
 	cr_assert(err_cqe.err_data == NULL, "Bad error provider data");
 
