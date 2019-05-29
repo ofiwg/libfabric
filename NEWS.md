@@ -5,6 +5,74 @@ This file contains the main features as well as overviews of specific
 bug fixes (and other actions) for each version of Libfabric since
 version 1.0.
 
+v1.7.2, Fri Jun 21, 2019
+========================
+
+## Core
+
+- Rename variables that shadow global symbols
+- Set slist tail to NULL to handle iterators correctly
+- Add new locking to AV EP list to avoid potential deadlock
+- Add threadsafe AV implementation
+
+## GNI
+
+- Fix possible overrunning of receive buffers
+- Fix compile issue on CLE 7.0.UP01
+- Implement fi_getopt/fi_setopt for scalable endpoints
+- Only generate FI_EADDRNOTAVAIL if FI_SOURCE_ERR enabled
+
+## RxD
+
+- Align packet type declarations with debug prints
+- Track current unexpected messages per peer, rather than globally
+- Remove unneeded RXD_CANCELED flag
+- Remove unnecessary check of unexpected list
+- Support FI_CLAIM, FI_PEEK, and FI_DISCARD flags
+- Avoid double free on CQ error destruction path
+- Fix message windowing
+- Limit number of transfer entries that can be active
+- Use utility CQ calls to handle CQ overflow
+- Set correct opcde when completing read completions
+- Preset and fix tx and rx transfer flags
+- Fix segfault
+
+## RxM
+
+- Add missing serialization for RMA and atomics
+- Reject connection requests in shutdown state
+- Rework cmap and ep lock synchronization
+- Add CM events to improve debugging
+- Remove incorrect assertion
+- Progress EQ events from app thread to drive progress
+- Handle message segment ordering when buffering receives
+- Generate completions for claimed buffered messages
+- Minor other fixes and cleanups
+
+## TCP
+
+- Support FI_SELECTIVE_COMPLETION correctly
+- Fix transmit and delivery complete semantics
+- Verify fi_info when creating passive EP
+
+## Verbs
+
+- Remove XRC target QP from RDMA CM control
+- Fix XRC QP allocation failure return code
+- Fix EQ readerr locking
+- Add FI_ADDR_IB_UD to known address print format
+- Fix addressing return on fi_getifo for native IB addresses
+- Serialize access to EQ when destroying connections
+- Add serialization to XRC EQ/CM handling
+- Fix serialization between AV and cmap
+- Fix XRC connection tags
+- Remove racy fork support from provider
+- Minor other fixes
+
+## Fabtests
+
+- Exclude tests from OS X that require epoll support
+
 v1.7.1, Mon Apr 8, 2019
 ========================
 
