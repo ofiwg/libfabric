@@ -11,6 +11,10 @@ fi_sockets \- The Sockets Fabric Provider
 
 # OVERVIEW
 
+The sockets provider is being deprecated in favor of the tcp, udp, and
+utility providers.  Further work on the sockets provider will be minimal.
+Most applications should instead use the tcp provider instead.
+
 The sockets provider is a general purpose provider that can be used on any
 system that supports TCP sockets.  The provider is not intended to provide
 performance improvements over regular TCP sockets, but rather to allow
