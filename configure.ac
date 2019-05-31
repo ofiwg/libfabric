@@ -83,6 +83,14 @@ AC_ARG_ENABLE([direct],
 	[],
 	[enable_direct=no])
 
+
+AC_ARG_ENABLE([atomics],
+	[AS_HELP_STRING([--enable-atomics],
+		[Enable atomics support @<:@default=yes@:>@])
+	],
+	[],
+	[enable_atomics=yes])
+
 dnl Checks for programs
 AC_PROG_CC_C99
 AM_PROG_CC_C_O
@@ -193,83 +201,96 @@ AC_DEFINE_UNQUOTED(HAVE_LINUX_PERF_RDPMC, [$linux_perf_rdpmc],
 AM_CONDITIONAL([HAVE_LINUX_PERF_RDPMC], [test "x$linux_perf_rdpmc" = "x1"])
 
 dnl Check for gcc atomic intrinsics
-AC_MSG_CHECKING(compiler support for c11 atomics)
-AC_TRY_LINK([#include <stdatomic.h>],
-    [atomic_int a;
-     atomic_init(&a, 0);
-     #ifdef __STDC_NO_ATOMICS__
-       #error c11 atomics are not supported
-     #else
-       return 0;
-     #endif
-    ],
-    [
-	AC_MSG_RESULT(yes)
-        AC_DEFINE(HAVE_ATOMICS, 1, [Set to 1 to use c11 atomic functions])
-    ],
-    [AC_MSG_RESULT(no)])
-
-
-AC_MSG_CHECKING(compiler support for c11 atomic `least` types)
-AC_TRY_LINK([#include <stdatomic.h>],
-    [atomic_int_least32_t a;
-     atomic_int_least64_t b;
-    ],
-    [
+AS_IF([test x"$enable_atomics" != x"no"],
+    AC_MSG_CHECKING(compiler support for c11 atomics)
+    AC_TRY_LINK([#include <stdatomic.h>],
+        [atomic_int a;
+         atomic_init(&a, 0);
+         #ifdef __STDC_NO_ATOMICS__
+           #error c11 atomics are not supported
+         #else
+           return 0;
+         #endif
+        ],
+        [
         AC_MSG_RESULT(yes)
-        AC_DEFINE(HAVE_ATOMICS_LEAST_TYPES, 1,
-                  [Set to 1 to use c11 atomic `least` types])
-    ],
-    [
-        AC_MSG_RESULT(no)
-    ])
+            AC_DEFINE(HAVE_ATOMICS, 1, [Set to 1 to use c11 atomic functions])
+        ],
+        [AC_MSG_RESULT(no)])
+
+
+    AC_MSG_CHECKING(compiler support for c11 atomic `least` types)
+    AC_TRY_LINK([#include <stdatomic.h>],
+        [atomic_int_least32_t a;
+         atomic_int_least64_t b;
+        ],
+        [
+            AC_MSG_RESULT(yes)
+            AC_DEFINE(HAVE_ATOMICS_LEAST_TYPES, 1,
+                      [Set to 1 to use c11 atomic `least` types])
+        ],
+        [
+            AC_MSG_RESULT(no)
+        ]),
+[
+    AC_MSG_RESULT(configure: atomics support for c11 is disabled)
+])
 
 dnl Check for gcc built-in atomics
-AC_MSG_CHECKING(compiler support for built-in atomics)
-AC_TRY_LINK([#include <stdint.h>],
-    [int32_t a;
-     __sync_add_and_fetch(&a, 0);
-     __sync_sub_and_fetch(&a, 0);
-     #if defined(__PPC__) && !defined(__PPC64__)
-       #error compiler built-in atomics are not supported on PowerPC 32-bit
-     #else
-       return 0;
-     #endif
-    ],
-    [
-	AC_MSG_RESULT(yes)
-        AC_DEFINE(HAVE_BUILTIN_ATOMICS, 1, [Set to 1 to use built-in intrincics atomics])
-    ],
-    [AC_MSG_RESULT(no)])
+AS_IF([test x"$enable_atomics" != x"no"],
+    AC_MSG_CHECKING(compiler support for built-in atomics)
+    AC_TRY_LINK([#include <stdint.h>],
+        [int32_t a;
+         __sync_add_and_fetch(&a, 0);
+         __sync_sub_and_fetch(&a, 0);
+         #if defined(__PPC__) && !defined(__PPC64__)
+           #error compiler built-in atomics are not supported on PowerPC 32-bit
+         #else
+           return 0;
+         #endif
+        ],
+        [
+        AC_MSG_RESULT(yes)
+            AC_DEFINE(HAVE_BUILTIN_ATOMICS, 1, [Set to 1 to use built-in intrincics atomics])
+        ],
+        [AC_MSG_RESULT(no)]),
+[
+    AC_MSG_RESULT(configure: atomics support built-in is disabled)
+])
 
 dnl Check for gcc memory model aware built-in atomics
 dnl If supported check to see if not internal to compiler
 LIBS_save=$LIBS
 AC_SEARCH_LIBS([__atomic_load_8], [atomic])
-AC_MSG_CHECKING(compiler support for built-in memory model aware atomics)
-AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <stdint.h>]],
-    [[uint64_t d;
-     uint64_t s;
-     uint64_t c;
-     uint64_t r;
-      r = __atomic_fetch_add(&d, s, __ATOMIC_SEQ_CST);
-      r = __atomic_load_8(&d, __ATOMIC_SEQ_CST);
-      __atomic_exchange(&d, &s, &r, __ATOMIC_SEQ_CST);
-      __atomic_compare_exchange(&d,&c,&s,0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
-     #if defined(__PPC__) && !defined(__PPC64__)
-       #error compiler built-in memory model aware atomics are not supported on PowerPC 32-bit
-     #else
-       return 0;
-     #endif
-    ]])],
-    [
-        AC_MSG_RESULT(yes)
-        AC_DEFINE(HAVE_BUILTIN_MM_ATOMICS, 1, [Set to 1 to use built-in intrinsics memory model aware atomics])
-    ],
-    [
-        AC_MSG_RESULT(no)
-        LIBS=$LIBS_save
-    ])
+AS_IF([test x"$enable_atomics" != x"no"],
+    AC_MSG_CHECKING(compiler support for built-in memory model aware atomics)
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <stdint.h>]],
+        [[uint64_t d;
+         uint64_t s;
+         uint64_t c;
+         uint64_t r;
+          r = __atomic_fetch_add(&d, s, __ATOMIC_SEQ_CST);
+          r = __atomic_load_8(&d, __ATOMIC_SEQ_CST);
+          __atomic_exchange(&d, &s, &r, __ATOMIC_SEQ_CST);
+          __atomic_compare_exchange(&d,&c,&s,0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
+         #if defined(__PPC__) && !defined(__PPC64__)
+           #error compiler built-in memory model aware atomics are not supported on PowerPC 32-bit
+         #else
+           return 0;
+         #endif
+        ]])],
+        [
+            AC_MSG_RESULT(yes)
+            AC_DEFINE(HAVE_BUILTIN_MM_ATOMICS, 1, [Set to 1 to use built-in intrinsics memory model aware atomics])
+        ],
+        [
+            AC_MSG_RESULT(no)
+            LIBS=$LIBS_save
+        ]),
+[
+    AC_MSG_RESULT(configure: -latomic key is disabled)
+    LIBS=$LIBS_save
+])
 unset LIBS_save
 
 dnl Check for gcc cpuid intrinsics
