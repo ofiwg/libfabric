@@ -190,6 +190,8 @@ void cxit_create_fabric_info(void)
 			 cxit_node, cxit_service, cxit_flags, cxit_fi_hints,
 			 &cxit_fi);
 	cr_assert(ret == FI_SUCCESS, "fi_getinfo");
+	cxit_fi->ep_attr->tx_ctx_cnt = cxit_fi->domain_attr->tx_ctx_cnt;
+	cxit_fi->ep_attr->rx_ctx_cnt = cxit_fi->domain_attr->rx_ctx_cnt;
 }
 
 void cxit_destroy_fabric_info(void)
@@ -237,7 +239,7 @@ void cxit_create_ep(void)
 	int ret;
 
 	ret = fi_endpoint(cxit_domain, cxit_fi, &cxit_ep, NULL);
-	cr_assert(ret == FI_SUCCESS, "fi_domain");
+	cr_assert(ret == FI_SUCCESS, "fi_endpoint");
 	cr_assert_not_null(cxit_ep);
 }
 

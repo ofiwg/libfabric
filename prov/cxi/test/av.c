@@ -6,6 +6,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <netinet/ether.h>
 
 #include <criterion/criterion.h>
 
@@ -16,6 +17,17 @@ static struct cxip_addr *test_addrs;
 fi_addr_t *test_fi_addrs;
 #define AV_COUNT 1024
 int naddrs = AV_COUNT * 10;
+
+static char *nic_to_amac(uint32_t nic)
+{
+	struct ether_addr mac = {};
+
+	mac.ether_addr_octet[5] = nic;
+	mac.ether_addr_octet[4] = nic >> 8;
+	mac.ether_addr_octet[3] = nic >> 16;
+
+	return ether_ntoa(&mac);
+}
 
 /* This allocates memory for naddrs FSAs (test_addrs), and naddrs tokens
  * (test_fi_addrs), and initializes the FSAs to unique addresses.
@@ -621,4 +633,115 @@ Test(av, shmem_zero_size)
 	cr_assert(ret == -FI_EINVAL, "create shmem RO size 0 = %d", ret);
 }
 
+Test(av, insertsvc)
+{
+	int i, ret;
+	struct cxip_addr addr;
+	size_t addrlen;
+	char pid_str[256];
 
+	cxit_create_av();
+	test_addrs_init();
+
+	ret = fi_av_insertsvc(cxit_av, NULL, pid_str, &test_fi_addrs[0], 0,
+			      NULL);
+	cr_assert(ret == -FI_EINVAL);
+
+	ret = fi_av_insertsvc(cxit_av, nic_to_amac(test_addrs[0].nic), NULL,
+			      &test_fi_addrs[0], 0, NULL);
+	cr_assert(ret == -FI_EINVAL);
+
+	ret = fi_av_insertsvc(cxit_av, NULL, NULL, &test_fi_addrs[0], 0, NULL);
+	cr_assert(ret == -FI_EINVAL);
+
+	/* Insert addresses   */
+	for (i = 0; i < naddrs; i++) {
+		ret = sprintf(pid_str, "%d", test_addrs[i].pid);
+		cr_assert(ret > 0);
+
+		ret = fi_av_insertsvc(cxit_av, nic_to_amac(test_addrs[i].nic),
+				      pid_str, &test_fi_addrs[i], 0, NULL);
+		/* Should have inserted 1 item   */
+		cr_assert(ret == 1,
+			"fi_av_insertsvc() idx=%d, ret=%d\n",
+			i, ret);
+		/* Returned tokens should match insertion order   */
+		cr_assert(test_fi_addrs[i] == i,
+			"fi_av_insertsvc() idx=%d, fi_addr=%ld\n",
+			i, test_fi_addrs[i]);
+	}
+
+	/* Lookup addresses   */
+	for (i = 0; i < naddrs; i++) {
+		addrlen = sizeof(struct cxip_addr);
+		ret = fi_av_lookup(cxit_av, test_fi_addrs[i], &addr,
+			&addrlen);
+		/* Should succeed   */
+		cr_assert(ret == FI_SUCCESS,
+			"fi_av_lookup() idx=%d, ret=%d",
+			i, ret);
+		/* Address should match what we expect   */
+		cr_assert(addr.nic == test_addrs[i].nic,
+			"fi_av_lookup() naddrs=%d, i=%d, index=%ld, nic=%d, exp=%d",
+			naddrs, i, test_fi_addrs[i], addr.nic,
+			test_addrs[i].nic);
+		cr_assert(addr.pid == test_addrs[i].pid,
+			"fi_av_lookup() idx=%d, pid=%d",
+			i, addr.pid);
+	}
+
+	/* Spot-check. If we remove an arbitrary entry, and then insert
+	 * a new address, it should always fill the hole left by the
+	 * removal.
+	 */
+
+	/* Remove an arbitrary item in the middle   */
+	i = naddrs / 2;
+	ret = fi_av_remove(cxit_av, &test_fi_addrs[i], 1, 0);
+	cr_assert(ret == FI_SUCCESS,
+		"fi_av_remove() mid idx=%d, ret=%d\n",
+		i, ret);
+
+	/* Make sure that lookup fails   */
+	addrlen = sizeof(struct cxip_addr);
+	ret = fi_av_lookup(cxit_av, test_fi_addrs[i], &addr, &addrlen);
+	cr_assert(ret == -FI_EINVAL,
+		"fi_av_lookup() mid idx=%d, ret=%d\n",
+		i, ret);
+
+	/* Insert an address   */
+	ret = fi_av_insert(cxit_av, &test_addrs[i], 1,
+		&test_fi_addrs[i], 0, NULL);
+	cr_assert(ret == 1,
+		"fi_av_insert() mid idx=%d, ret=%d\n",
+		i, ret);
+	cr_assert(test_fi_addrs[i] == i,
+		"fi_av_insert() mid idx=%d, index=%ld\n",
+		i, test_fi_addrs[i]);
+
+	addrlen = sizeof(struct cxip_addr);
+	ret = fi_av_lookup(cxit_av, test_fi_addrs[i], &addr,
+		&addrlen);
+	cr_assert(ret == FI_SUCCESS,
+		"fi_av_lookup() mid idx=%d, ret=%d",
+		i, ret);
+	cr_assert(addr.nic == test_addrs[i].nic,
+		"fi_av_lookup() mid naddrs=%d, i=%d, index=%ld, nic=%d, exp=%d",
+		naddrs, i, test_fi_addrs[i], addr.nic,
+		test_addrs[i].nic);
+	cr_assert(addr.pid == test_addrs[i].pid,
+		"fi_av_lookup() mid idx=%d, pid=%d",
+		i, addr.pid);
+
+	/* Remove all of the entries   */
+	for (i = 0; i < naddrs; i++) {
+		ret = fi_av_remove(cxit_av, &test_fi_addrs[i], 1, 0);
+		/* Should succeed   */
+		cr_assert(ret == 0,
+			"fi_av_remove() idx=%d, ret=%d",
+			i, ret);
+	}
+
+	test_addrs_fini();
+	cxit_destroy_av();
+}

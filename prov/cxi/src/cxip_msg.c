@@ -1382,7 +1382,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 	return FI_SUCCESS;
 }
 
-int cxip_recv_cancel(struct cxip_req *req)
+int cxip_msg_recv_cancel(struct cxip_req *req)
 {
 	int ret;
 	struct cxip_rxc *rxc = req->recv.rxc;

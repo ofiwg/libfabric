@@ -88,7 +88,7 @@ struct sep_test_params {
 
 static struct sep_test_params sep_params[] = {
 	{.type = FI_EP_UNSPEC,
-		.retval = -FI_ENOPROTOOPT},
+		.retval = FI_SUCCESS},
 	{.type = FI_EP_MSG,
 		.retval = -FI_ENOPROTOOPT},
 	{.type = FI_EP_DGRAM,

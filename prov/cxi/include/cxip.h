@@ -54,67 +54,37 @@
 
 #define CXIP_REQ_CLEANUP_TO 3000
 
-#define CXIP_EP_MAX_MSG_SZ (1 << 23)
-#define CXIP_EP_MAX_INJECT_SZ ((1 << 8) - 1)
-#define CXIP_EP_MAX_BUFF_RECV (1 << 26)
-#define CXIP_EP_MAX_ORDER_RAW_SZ CXIP_EP_MAX_MSG_SZ
-#define CXIP_EP_MAX_ORDER_WAR_SZ CXIP_EP_MAX_MSG_SZ
-#define CXIP_EP_MAX_ORDER_WAW_SZ CXIP_EP_MAX_MSG_SZ
-#define CXIP_EP_MEM_TAG_FMT FI_TAG_GENERIC
-#define CXIP_EP_MAX_EP_CNT (128)
-#define CXIP_EP_MAX_CQ_CNT (32)
-#define CXIP_EP_MAX_CNTR_CNT (128)
-#define CXIP_EP_MAX_TX_CNT (16)
-#define CXIP_EP_MAX_RX_CNT (16)
-#define CXIP_EP_MAX_IOV_LIMIT (8)
-#define CXIP_EP_TX_SZ (256)
-#define CXIP_EP_RX_SZ (256)
-#define CXIP_EP_MIN_MULTI_RECV (64)
-#define CXIP_EP_MAX_ATOMIC_SZ (4096)
-#define CXIP_EP_MAX_CTX_BITS (4)
-#define CXIP_EP_MSG_PREFIX_SZ (0)
-#define CXIP_DOMAIN_MR_CNT (65535)
-#define CXIP_DOMAIN_CAPS_FLAGS (FI_LOCAL_COMM | FI_REMOTE_COMM)
+#define CXIP_EP_MAX_MSG_SZ		(1 << 30)
+#define CXIP_EP_MAX_INJECT_SZ		0
+#define CXIP_EP_MAX_TX_CNT		16
+#define CXIP_EP_MAX_RX_CNT		16
+#define CXIP_EP_MIN_MULTI_RECV		64
+#define CXIP_EP_MAX_CTX_BITS		4
+#define CXIP_RMA_MAX_IOV		1
+#define CXIP_AMO_MAX_IOV		1
+#define CXIP_EQ_DEF_SZ			(1 << 8)
+#define CXIP_CQ_DEF_SZ			(1 << 8)
+#define CXIP_AV_DEF_SZ			(1 << 8)
 
-#define CXIP_EQ_DEF_SZ (1 << 8)
-#define CXIP_CQ_DEF_SZ (1 << 8)
-#define CXIP_AV_DEF_SZ (1 << 8)
-#define CXIP_CMAP_DEF_SZ (1 << 10)
-#define CXIP_EPOLL_WAIT_EVENTS (32)
+#define CXIP_EAGER_THRESHOLD		2048
+#define CXIP_MAX_OFLOW_BUFS		3
+#define CXIP_MAX_OFLOW_MSGS		1024
+#define CXIP_UX_BUFFER_SIZE		(CXIP_EAGER_THRESHOLD * \
+					 CXIP_MAX_OFLOW_BUFS * \
+					 CXIP_MAX_OFLOW_MSGS)
 
-#define CXIP_CQ_DATA_SIZE (sizeof(uint64_t))
-#define CXIP_TAG_SIZE (sizeof(uint64_t))
-#define CXIP_MAX_NETWORK_ADDR_SZ (35)
-
-#define CXIP_PEP_LISTENER_TIMEOUT (10000)
-#define CXIP_CM_COMM_TIMEOUT (2000)
-#define CXIP_EP_MAX_RETRY (5)
-#define CXIP_EP_MAX_CM_DATA_SZ (256)
-
-#define CXIP_RMA_MAX_IOV (1)
-#define CXIP_AMO_MAX_IOV (1)
-
-#define CXIP_EP_RDM_PRI_CAP \
+#define CXIP_EP_PRI_CAPS \
 	(FI_RMA | FI_ATOMICS | FI_TAGGED | FI_RECV | FI_SEND | \
 	 FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE | \
 	 FI_DIRECTED_RECV | FI_MSG | FI_NAMED_RX_CTX)
-
-#define CXIP_EP_RDM_SEC_CAP_BASE \
+#define CXIP_EP_SEC_CAPS \
 	(FI_SOURCE | FI_SHARED_AV | FI_LOCAL_COMM | FI_REMOTE_COMM | \
-	 /* TODO FI_MULTI_RECV | FI_RMA_EVENT | FI_FENCE | FI_TRIGGER */ 0 \
-	)
-extern uint64_t CXIP_EP_RDM_SEC_CAP;
-
-#define CXIP_EP_RDM_CAP_BASE (CXIP_EP_RDM_PRI_CAP | CXIP_EP_RDM_SEC_CAP_BASE)
-extern uint64_t CXIP_EP_RDM_CAP;
-
+	 /* TODO FI_MULTI_RECV | FI_RMA_EVENT | FI_FENCE | FI_TRIGGER */ 0)
+#define CXIP_EP_CAPS (CXIP_EP_PRI_CAPS | CXIP_EP_SEC_CAPS)
 #define CXIP_EP_MSG_ORDER \
 	(FI_ORDER_RAR | FI_ORDER_RAW | FI_ORDER_RAS | FI_ORDER_WAR | \
 	 FI_ORDER_WAW | FI_ORDER_WAS | FI_ORDER_SAR | FI_ORDER_SAW | \
 	 FI_ORDER_SAS)
-
-#define CXIP_EP_COMP_ORDER (FI_ORDER_STRICT | FI_ORDER_DATA)
-#define CXIP_EP_DEFAULT_OP_FLAGS (FI_TRANSMIT_COMPLETE)
 
 #define CXIP_EP_CQ_FLAGS \
 	(FI_SEND | FI_TRANSMIT | FI_RECV | FI_SELECTIVE_COMPLETION)
@@ -122,41 +92,30 @@ extern uint64_t CXIP_EP_RDM_CAP;
 	(FI_SEND | FI_RECV | FI_READ | FI_WRITE | FI_REMOTE_READ | \
 	 FI_REMOTE_WRITE)
 
-#define CXIP_EP_SET_TX_OP_FLAGS(_flags) \
-	do { \
-		if (!((_flags) & FI_INJECT_COMPLETE)) \
-			(_flags) |= FI_TRANSMIT_COMPLETE; \
-	} while (0)
+#define CXIP_MAJOR_VERSION		0
+#define CXIP_MINOR_VERSION		0
+#define CXIP_PROV_VERSION		FI_VERSION(CXIP_MAJOR_VERSION, \
+						   CXIP_MINOR_VERSION)
+#define CXIP_FI_VERSION			FI_VERSION(1, 7)
+#define CXIP_WIRE_PROTO_VERSION		1
 
-#define CXIP_MODE (0)
 
-#define CXIP_MAX_ERR_CQ_EQ_DATA_SZ CXIP_EP_MAX_CM_DATA_SZ
-
-#define CXIP_MAJOR_VERSION 0
-#define CXIP_MINOR_VERSION 0
-
-#define CXIP_WIRE_PROTO_VERSION (1)
-
-#ifndef CXIP_EAGER_THRESHOLD
-#define CXIP_EAGER_THRESHOLD (2048)
-#endif
-
-#ifndef CXIP_MAX_OFLOW_BUFS
-#define CXIP_MAX_OFLOW_BUFS (3)
-#endif
-
-#ifndef CXIP_MAX_OFLOW_MSGS
-#define CXIP_MAX_OFLOW_MSGS (1024)
-#endif
-
-extern const char cxip_fab_fmt[];
-extern const char cxip_dom_fmt[];
-extern const char cxip_prov_name[];
+static const char cxip_dom_fmt[] = "cxi%d";
+extern char cxip_prov_name[];
 extern struct fi_provider cxip_prov;
+extern struct util_prov cxip_util_prov;
+
 extern int cxip_av_def_sz;
 extern int cxip_cq_def_sz;
 extern int cxip_eq_def_sz;
+
 extern struct slist cxip_if_list;
+
+extern struct fi_fabric_attr cxip_fabric_attr;
+extern struct fi_domain_attr cxip_domain_attr;
+extern struct fi_ep_attr cxip_ep_attr;
+extern struct fi_tx_attr cxip_tx_attr;
+extern struct fi_rx_attr cxip_rx_attr;
 
 /**
  * The CXI Provider Address format.
@@ -290,6 +249,7 @@ struct cxip_if {
 	uint32_t if_nic;		// cxil NIC identifier
 	uint32_t if_idx;		// cxil NIC index
 	uint32_t if_fabric;		// cxil NIC fabric address
+	struct cxil_devinfo if_info;	// cxil NIC DEV Info structure
 	struct cxil_dev *if_dev;	// cxil NIC DEV structure
 	struct cxil_lni *if_lni;	// cxil NIC LNI structure
 	struct cxi_cp *cps[16];		// Cassini communication profiles
@@ -351,9 +311,6 @@ struct cxip_cmdq {
 struct cxip_fabric {
 	struct util_fabric util_fabric;
 	ofi_atomic32_t ref;
-	struct dlist_entry service_list;	// contains services (TODO)
-	struct dlist_entry fab_list_entry;	// attaches to cxip_fab_list
-	fastlock_t lock;
 };
 
 /**
@@ -365,7 +322,6 @@ struct cxip_fabric {
  */
 struct cxip_domain {
 	struct util_domain util_domain;
-	struct fi_info info;		// copy of user-supplied domain info
 	struct cxip_fabric *fab;	// parent cxip_fabric
 	fastlock_t lock;
 	ofi_atomic32_t ref;
@@ -375,11 +331,6 @@ struct cxip_domain {
 	struct ofi_mr_cache iomm;	// IO Memory Map
 	struct ofi_mem_monitor iomm_mon;// IOMM monitor
 	fastlock_t iomm_lock;
-
-	enum fi_progress progress_mode;
-	struct dlist_entry dom_list_entry;
-					// attaches to global cxip_dom_list
-	struct fi_domain_attr attr;	// copy of user or default domain attr
 
 	uint32_t nic_addr;		// dev address of source NIC
 	int enabled;			// set when domain is enabled
@@ -751,7 +702,6 @@ struct cxip_ep_obj {
 	ofi_atomic32_t num_rxc;		// num RX contexts (>= 1)
 	ofi_atomic32_t num_txc;		// num TX contexts (>= 1)
 
-	struct fi_info info;		// TODO: use this properly
 	struct fi_ep_attr ep_attr;
 
 	int is_enabled;
@@ -912,26 +862,9 @@ int cxip_cmdq_alloc(struct cxip_if *dev_if, struct cxi_evtq *evtq,
 		    struct cxip_cmdq **cmdq);
 void cxip_cmdq_free(struct cxip_cmdq *cmdq);
 
-int cxip_parse_addr(const char *node, const char *service,
-		    struct cxip_addr *addr);
-
 int cxip_domain_enable(struct cxip_domain *dom);
 int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_domain **dom, void *context);
-
-char *cxip_get_fabric_name(struct cxip_addr *src_addr);
-char *cxip_get_domain_name(struct cxip_addr *src_addr);
-
-void cxip_dom_add_to_list(struct cxip_domain *domain);
-int cxip_dom_check_list(struct cxip_domain *domain);
-void cxip_dom_remove_from_list(struct cxip_domain *domain);
-struct cxip_domain *cxip_dom_list_head(void);
-int cxip_dom_check_manual_progress(struct cxip_fabric *fabric);
-
-void cxip_fab_add_to_list(struct cxip_fabric *fabric);
-int cxip_fab_check_list(struct cxip_fabric *fabric);
-void cxip_fab_remove_from_list(struct cxip_fabric *fabric);
-struct cxip_fabric *cxip_fab_list_head(void);
 
 fi_addr_t _cxip_av_reverse_lookup(struct cxip_av *av, uint32_t nic,
 				  uint32_t pid);
@@ -940,30 +873,13 @@ int _cxip_av_lookup(struct cxip_av *av, fi_addr_t fi_addr,
 int cxip_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		 struct fid_av **av, void *context);
 
-struct fi_info *cxip_fi_info(uint32_t version, enum fi_ep_type ep_type,
-			     const struct fi_info *hints, void *src_addr,
-			     void *dest_addr);
-int cxip_rdm_fi_info(uint32_t version, void *src_addr, void *dest_addr,
-		     const struct fi_info *hints, struct fi_info **info);
-int cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
-			struct cxip_ep **ep, void *context, size_t fclass);
-int cxip_rdm_ep(struct fid_domain *domain, struct fi_info *info,
-		struct fid_ep **ep, void *context);
-int cxip_rdm_sep(struct fid_domain *domain, struct fi_info *info,
-		 struct fid_ep **sep, void *context);
+int cxip_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
+		void *context);
 
-int cxip_verify_info(uint32_t version, const struct fi_info *hints);
-int cxip_verify_fabric_attr(const struct fi_fabric_attr *attr);
-int cxip_get_src_addr(struct cxip_addr *dest_addr, struct cxip_addr *src_addr);
-
-int cxip_rdm_verify_ep_attr(const struct fi_ep_attr *ep_attr,
-			    const struct fi_tx_attr *tx_attr,
-			    const struct fi_rx_attr *rx_attr);
-
-int cxip_verify_domain_attr(uint32_t version, const struct fi_info *info);
-
-int cxip_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
-		 struct fid_eq **eq, void *context);
+int cxip_endpoint(struct fid_domain *domain, struct fi_info *info,
+		  struct fid_ep **ep, void *context);
+int cxip_scalable_ep(struct fid_domain *domain, struct fi_info *info,
+		     struct fid_ep **sep, void *context);
 
 int cxip_wait_get_obj(struct fid_wait *fid, void *arg);
 void cxip_wait_signal(struct fid_wait *wait_fid);
@@ -971,24 +887,23 @@ int cxip_wait_close(fid_t fid);
 int cxip_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 		   struct fid_wait **waitset);
 
-struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr,
-				      void *context, int use_shared);
-void cxip_rxc_free(struct cxip_rxc *rxc);
-
 int cxip_txc_alloc_rdzv_id(struct cxip_txc *txc);
 int cxip_txc_free_rdzv_id(struct cxip_txc *txc, int tag);
 
 int cxip_msg_oflow_init(struct cxip_rxc *rxc);
 void cxip_msg_oflow_fini(struct cxip_rxc *rxc);
+int cxip_msg_recv_cancel(struct cxip_req *req);
 
-int cxip_recv_cancel(struct cxip_req *req);
-
-int cxip_rxc_enable(struct cxip_rxc *rxc);
-int cxip_txc_enable(struct cxip_txc *txc);
 struct cxip_txc *cxip_txc_alloc(const struct fi_tx_attr *attr, void *context,
 				int use_shared);
+int cxip_txc_enable(struct cxip_txc *txc);
 struct cxip_txc *cxip_stx_alloc(const struct fi_tx_attr *attr, void *context);
 void cxip_txc_free(struct cxip_txc *txc);
+
+struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr,
+				      void *context, int use_shared);
+int cxip_rxc_enable(struct cxip_rxc *rxc);
+void cxip_rxc_free(struct cxip_rxc *rxc);
 
 int cxip_cq_req_cancel(struct cxip_cq *cq, void *req_ctx, void *op_ctx,
 		       bool match);

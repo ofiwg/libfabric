@@ -19,6 +19,7 @@
 #include <sys/ipc.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <netinet/ether.h>
 
 #include "cxip.h"
 
@@ -68,6 +69,42 @@
 		(sizeof(struct cxip_av_table_hdr) +			\
 		 CXIP_AV_INDEX_SZ(count, shared) +			\
 		 (count * sizeof(struct cxip_addr)))
+
+/*
+ * cxip_parse_cxi_addr() - Parse node and service arguments representing a CXI
+ * address.
+ */
+static int cxip_parse_cxi_addr(const char *node, const char *service,
+			       struct cxip_addr *addr)
+{
+	struct ether_addr *mac;
+	uint32_t scan_nic;
+	uint32_t scan_pid;
+
+	if (!node)
+		return -FI_ENODATA;
+
+	mac = ether_aton(node);
+	if (mac) {
+		/* TODO where is NIC addr embedded in MAC? */
+		addr->nic = mac->ether_addr_octet[5] |
+			    (mac->ether_addr_octet[4] << 8) |
+			    ((mac->ether_addr_octet[3] & 0xF) << 16);
+	} else if (sscanf(node, "%i", &scan_nic) == 1) {
+		addr->nic = scan_nic;
+	} else {
+		return -FI_ENODATA;
+	}
+
+	if (!service)
+		addr->pid = C_PID_ANY;
+	else if (sscanf(service, "%i", &scan_pid) == 1)
+		addr->pid = scan_pid;
+	else
+		return -FI_ENODATA;
+
+	return FI_SUCCESS;
+}
 
 /**
  * Return a pointer to the 'table' portion of the AV data.
@@ -160,6 +197,7 @@ static int cxip_resize_av_table(struct cxip_av *av)
 			CXIP_LOG_ERROR("memory realloc: %s\n", strerror(errno));
 			return -FI_ENOMEM;
 		}
+		memset((uint8_t *)new_addr + old_sz, 0, new_sz - old_sz);
 
 		/* Not shared, idx_arr == NULL. */
 		av->table_hdr = new_addr;
@@ -306,13 +344,14 @@ static int cxip_av_insertsvc(struct fid_av *avfid, const char *node,
 	struct cxip_av *av;
 	struct cxip_addr addr;
 
-	_CHECKNULL(avfid && service, return -FI_EINVAL, "fid=%p, service=%p\n",
-		   avfid, service);
+	_CHECKNULL(avfid && node && service, return -FI_EINVAL,
+		   "fid=%p, node=%p, service=%p\n",
+		   avfid, node, service);
 
 	av = container_of(avfid, struct cxip_av, av_fid);
 
-	ret = cxip_parse_addr(node, service, &addr);
-	if (ret)
+	ret = cxip_parse_cxi_addr(node, service, &addr);
+	if (ret != FI_SUCCESS)
 		return ret;
 
 	ret = cxip_check_table_in(av, &addr, fi_addr, 1, flags, context);
@@ -603,13 +642,13 @@ int cxip_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	}
 
 	dom = container_of(domain, struct cxip_domain, util_domain.domain_fid);
-	if (dom->attr.av_type != FI_AV_UNSPEC &&
-	    dom->attr.av_type != attr->type) {
+	if (dom->util_domain.av_type != FI_AV_UNSPEC &&
+	    dom->util_domain.av_type != attr->type) {
 		CXIP_LOG_ERROR("Domain incompatible with CXI\n");
 		return -FI_EINVAL;
 	}
 
-	switch (dom->info.addr_format) {
+	switch (dom->util_domain.addr_format) {
 	case FI_ADDR_CXI:
 		addrlen = sizeof(struct cxip_addr);
 		break;

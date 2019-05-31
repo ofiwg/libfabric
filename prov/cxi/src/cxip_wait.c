@@ -28,8 +28,6 @@ int cxip_wait_get_obj(struct fid_wait *fid, void *arg)
 	struct cxip_wait *wait;
 
 	wait = container_of(fid, struct cxip_wait, wait_fid.fid);
-	if (cxip_dom_check_manual_progress(wait->fab))
-		return -FI_ENOSYS;
 
 	switch (wait->type) {
 	case FI_WAIT_FD:

@@ -120,9 +120,6 @@ static int cxip_cntr_control(struct fid *fid, int command, void *arg)
 
 	switch (command) {
 	case FI_GETWAIT:
-		if (cntr->domain->progress_mode == FI_PROGRESS_MANUAL)
-			return -FI_ENOSYS;
-
 		switch (cntr->attr.wait_obj) {
 		case FI_WAIT_SET:
 		case FI_WAIT_FD:

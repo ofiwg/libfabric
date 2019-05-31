@@ -20,155 +20,12 @@
 
 extern struct fi_ops_mr cxip_dom_mr_ops;
 
-const struct fi_domain_attr cxip_domain_attr = {
-	.name = NULL,
-	.threading = FI_THREAD_SAFE,
-	.control_progress = FI_PROGRESS_MANUAL,
-	.data_progress = FI_PROGRESS_MANUAL,
-	.resource_mgmt = FI_RM_ENABLED,
-	.mr_mode = FI_MR_SCALABLE,
-	.mr_key_size = sizeof(uint64_t),
-	.cq_data_size = sizeof(uint64_t),
-	.cq_cnt = CXIP_EP_MAX_CQ_CNT,
-	.ep_cnt = CXIP_EP_MAX_EP_CNT,
-	.tx_ctx_cnt = CXIP_EP_MAX_TX_CNT,
-	.rx_ctx_cnt = CXIP_EP_MAX_RX_CNT,
-	.max_ep_tx_ctx = CXIP_EP_MAX_TX_CNT,
-	.max_ep_rx_ctx = CXIP_EP_MAX_RX_CNT,
-	.max_ep_stx_ctx = CXIP_EP_MAX_EP_CNT,
-	.max_ep_srx_ctx = CXIP_EP_MAX_EP_CNT,
-	.cntr_cnt = CXIP_EP_MAX_CNTR_CNT,
-	.mr_iov_limit = CXIP_EP_MAX_IOV_LIMIT,
-	.max_err_data = CXIP_MAX_ERR_CQ_EQ_DATA_SZ,
-	.mr_cnt = CXIP_DOMAIN_MR_CNT,
-	.caps = CXIP_DOMAIN_CAPS_FLAGS,
-	.mode = 0,
-};
-
-int cxip_verify_domain_attr(uint32_t version, const struct fi_info *info)
-{
-	const struct fi_domain_attr *attr = info->domain_attr;
-
-	if (!attr)
-		return 0;
-
-	switch (attr->threading) {
-	case FI_THREAD_UNSPEC:
-	case FI_THREAD_SAFE:
-	case FI_THREAD_FID:
-	case FI_THREAD_DOMAIN:
-	case FI_THREAD_COMPLETION:
-	case FI_THREAD_ENDPOINT:
-		break;
-	default:
-		CXIP_LOG_DBG("Invalid threading model!\n");
-		return -FI_ENODATA;
-	}
-
-	switch (attr->control_progress) {
-	case FI_PROGRESS_UNSPEC:
-	case FI_PROGRESS_MANUAL:
-		break;
-
-	case FI_PROGRESS_AUTO:
-	default:
-		CXIP_LOG_DBG("Control progress mode not supported!\n");
-		return -FI_ENODATA;
-	}
-
-	switch (attr->data_progress) {
-	case FI_PROGRESS_UNSPEC:
-	case FI_PROGRESS_MANUAL:
-		break;
-
-	default:
-	case FI_PROGRESS_AUTO:
-		CXIP_LOG_DBG("Data progress mode not supported!\n");
-		return -FI_ENODATA;
-	}
-
-	switch (attr->resource_mgmt) {
-	case FI_RM_UNSPEC:
-	case FI_RM_DISABLED:
-	case FI_RM_ENABLED:
-		break;
-
-	default:
-		CXIP_LOG_DBG("Resource mgmt not supported!\n");
-		return -FI_ENODATA;
-	}
-
-	switch (attr->av_type) {
-	case FI_AV_UNSPEC:
-	case FI_AV_MAP:
-	case FI_AV_TABLE:
-		break;
-
-	default:
-		CXIP_LOG_DBG("AV type not supported!\n");
-		return -FI_ENODATA;
-	}
-
-	if (ofi_check_mr_mode(&cxip_prov, version, cxip_domain_attr.mr_mode,
-			      info)) {
-		FI_INFO(&cxip_prov, FI_LOG_CORE,
-			"Invalid memory registration mode\n");
-		return -FI_ENODATA;
-	}
-
-	if (attr->mr_key_size > cxip_domain_attr.mr_key_size) {
-		CXIP_LOG_DBG("MR key size not supported!\n");
-		return -FI_ENODATA;
-	}
-
-	if (attr->cq_data_size > cxip_domain_attr.cq_data_size) {
-		CXIP_LOG_DBG("CQ data size not supported!\n");
-		return -FI_ENODATA;
-	}
-
-	if (attr->cq_cnt > cxip_domain_attr.cq_cnt) {
-		CXIP_LOG_DBG("CQ count not supported!\n");
-		return -FI_ENODATA;
-	}
-
-	if (attr->ep_cnt > cxip_domain_attr.ep_cnt) {
-		CXIP_LOG_DBG("Endpoint count not supported!\n");
-		return -FI_ENODATA;
-	}
-
-	if (attr->max_ep_tx_ctx > cxip_domain_attr.max_ep_tx_ctx) {
-		CXIP_LOG_DBG("Max EP TX CTX not supported!\n");
-		return -FI_ENODATA;
-	}
-
-	if (attr->max_ep_rx_ctx > cxip_domain_attr.max_ep_rx_ctx) {
-		CXIP_LOG_DBG("Max EP RX CTX not supported!\n");
-		return -FI_ENODATA;
-	}
-
-	if (attr->cntr_cnt > cxip_domain_attr.cntr_cnt) {
-		CXIP_LOG_DBG("Counter count not supported!\n");
-		return -FI_ENODATA;
-	}
-
-	if (attr->mr_iov_limit > cxip_domain_attr.mr_iov_limit) {
-		CXIP_LOG_DBG("MR IOV limit not supported!\n");
-		return -FI_ENODATA;
-	}
-
-	if (attr->max_err_data > cxip_domain_attr.max_err_data) {
-		CXIP_LOG_DBG("MR error data not supported!\n");
-		return -FI_ENODATA;
-	}
-
-	if (attr->mr_cnt > cxip_domain_attr.mr_cnt) {
-		CXIP_LOG_DBG("MR count not supported!\n");
-		return -FI_ENODATA;
-	}
-
-	return 0;
-}
-
+/*
+ * cxip_domain_enable() - Enable an FI Domain for use.
+ *
+ * Allocate hardware resources and initialize software to prepare the Domain
+ * for use.
+ */
 int cxip_domain_enable(struct cxip_domain *dom)
 {
 	int ret;
@@ -203,6 +60,9 @@ unlock:
 	return ret;
 }
 
+/*
+ * cxip_domain_disable() - Disable an FI Domain.
+ */
 static void cxip_domain_disable(struct cxip_domain *dom)
 {
 	fastlock_acquire(&dom->lock);
@@ -219,6 +79,9 @@ unlock:
 	fastlock_release(&dom->lock);
 }
 
+/*
+ * cxip_dom_close() - Provider fi_close implementation for an FI Domain object.
+ */
 static int cxip_dom_close(struct fid *fid)
 {
 	struct cxip_domain *dom;
@@ -230,7 +93,6 @@ static int cxip_dom_close(struct fid *fid)
 
 	cxip_domain_disable(dom);
 
-	cxip_dom_remove_from_list(dom);
 	fastlock_destroy(&dom->lock);
 	ofi_domain_close(&dom->util_domain);
 	free(dom);
@@ -238,6 +100,9 @@ static int cxip_dom_close(struct fid *fid)
 	return 0;
 }
 
+/*
+ * cxip_dom_bind() - Provider fi_domain_bind implementation.
+ */
 static int cxip_dom_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct cxip_domain *dom;
@@ -254,49 +119,6 @@ static int cxip_dom_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		dom->mr_eq = eq;
 
 	return 0;
-}
-
-#if 0
-static int cxip_dom_ctrl(struct fid *fid, int command, void *arg)
-{
-	struct cxip_domain *dom;
-
-	dom = container_of(fid, struct cxip_domain, dom_fid.fid);
-	switch (command) {
-	case FI_QUEUE_WORK:
-		return cxip_queue_work(dom, arg);
-	default:
-		return -FI_ENOSYS;
-	}
-}
-#endif
-
-static int cxip_endpoint(struct fid_domain *domain, struct fi_info *info,
-			 struct fid_ep **ep, void *context)
-{
-	if (!ep || !info || !info->ep_attr)
-		return -FI_EINVAL;
-
-	switch (info->ep_attr->type) {
-	case FI_EP_RDM:
-		return cxip_rdm_ep(domain, info, ep, context);
-	default:
-		return -FI_ENOPROTOOPT;
-	}
-}
-
-static int cxip_scalable_ep(struct fid_domain *domain, struct fi_info *info,
-			    struct fid_ep **sep, void *context)
-{
-	if (!sep || !info || !info->ep_attr)
-		return -FI_EINVAL;
-
-	switch (info->ep_attr->type) {
-	case FI_EP_RDM:
-		return cxip_rdm_sep(domain, info, sep, context);
-	default:
-		return -FI_ENOPROTOOPT;
-	}
 }
 
 static struct fi_ops cxip_dom_fi_ops = {
@@ -320,6 +142,9 @@ static struct fi_ops_domain cxip_dom_ops = {
 	.query_atomic = fi_no_query_atomic,
 };
 
+/*
+ * cxip_domain() - Provider fi_domain() implementation.
+ */
 int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_domain **dom, void *context)
 {
@@ -328,12 +153,11 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 	struct cxip_addr *src_addr;
 	int ret;
 
+	ret = ofi_prov_check_info(&cxip_util_prov, CXIP_FI_VERSION, info);
+	if (ret != FI_SUCCESS)
+		return -FI_ENOPROTOOPT;
+
 	fab = container_of(fabric, struct cxip_fabric, util_fabric.fabric_fid);
-	if (info && info->domain_attr) {
-		ret = cxip_verify_domain_attr(fabric->api_version, info);
-		if (ret)
-			return -FI_EINVAL;
-	}
 
 	cxi_domain = calloc(1, sizeof(*cxi_domain));
 	if (!cxi_domain)
@@ -344,37 +168,20 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 	if (ret)
 		goto unlock;
 
-	fastlock_init(&cxi_domain->lock);
-	ofi_atomic_initialize32(&cxi_domain->ref, 0);
-
 	if (!info || !info->src_addr) {
 		CXIP_LOG_ERROR("Invalid fi_info\n");
 		goto free_util_dom;
 	}
-
-	cxi_domain->info = *info;
+	src_addr = (struct cxip_addr *)info->src_addr;
+	cxi_domain->nic_addr = src_addr->nic;
 
 	cxi_domain->util_domain.domain_fid.fid.ops = &cxip_dom_fi_ops;
 	cxi_domain->util_domain.domain_fid.ops = &cxip_dom_ops;
 	cxi_domain->util_domain.domain_fid.mr = &cxip_dom_mr_ops;
 
-	if (!info->domain_attr ||
-	    info->domain_attr->data_progress == FI_PROGRESS_UNSPEC)
-		cxi_domain->progress_mode = FI_PROGRESS_MANUAL;
-	else
-		cxi_domain->progress_mode = info->domain_attr->data_progress;
-
+	fastlock_init(&cxi_domain->lock);
+	ofi_atomic_initialize32(&cxi_domain->ref, 0);
 	cxi_domain->fab = fab;
-
-	src_addr = (struct cxip_addr *)info->src_addr;
-	cxi_domain->nic_addr = src_addr->nic;
-
-	if (info->domain_attr)
-		cxi_domain->attr = *(info->domain_attr);
-	else
-		cxi_domain->attr = cxip_domain_attr;
-
-	cxip_dom_add_to_list(cxi_domain);
 
 	*dom = &cxi_domain->util_domain.domain_fid;
 

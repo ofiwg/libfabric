@@ -30,39 +30,6 @@ extern struct fi_ops_ep cxip_ep_ops;
 extern struct fi_ops cxip_ep_fi_ops;
 extern struct fi_ops_ep cxip_ctx_ep_ops;
 
-extern const struct fi_domain_attr cxip_domain_attr;
-extern const struct fi_fabric_attr cxip_fabric_attr;
-
-/**
- * Default attributes for shared TX contexts.
- *
- */
-const struct fi_tx_attr cxip_stx_attr = {
-	.caps = CXIP_EP_RDM_CAP_BASE,
-	.mode = CXIP_MODE,
-	.op_flags = FI_TRANSMIT_COMPLETE,
-	.msg_order = CXIP_EP_MSG_ORDER,
-	.inject_size = CXIP_EP_MAX_INJECT_SZ,
-	.size = CXIP_EP_TX_SZ,
-	.iov_limit = CXIP_EP_MAX_IOV_LIMIT,
-	.rma_iov_limit = CXIP_EP_MAX_IOV_LIMIT,
-};
-
-/**
- * Default attributes for shared RX contexts.
- *
- */
-const struct fi_rx_attr cxip_srx_attr = {
-	.caps = CXIP_EP_RDM_CAP_BASE,
-	.mode = CXIP_MODE,
-	.op_flags = 0,
-	.msg_order = CXIP_EP_MSG_ORDER,
-	.comp_order = CXIP_EP_COMP_ORDER,
-	.total_buffered_recv = 0,
-	.size = CXIP_EP_MAX_MSG_SZ,
-	.iov_limit = CXIP_EP_MAX_IOV_LIMIT,
-};
-
 static int cxip_ep_cm_getname(fid_t fid, void *addr, size_t *addrlen)
 {
 	struct cxip_ep *cxip_ep;
@@ -1425,27 +1392,7 @@ struct fi_ops_ep cxip_ep_ops = {
 
 /*=======================================*/
 
-/* shared contexts */
-static int cxip_verify_tx_attr(const struct fi_tx_attr *attr)
-{
-	if (!attr)
-		return 0;
-
-	if (attr->inject_size > CXIP_EP_MAX_INJECT_SZ)
-		return -FI_ENODATA;
-
-	if (attr->size > CXIP_EP_TX_SZ)
-		return -FI_ENODATA;
-
-	if (attr->iov_limit > CXIP_EP_MAX_IOV_LIMIT)
-		return -FI_ENODATA;
-
-	if (attr->rma_iov_limit > CXIP_EP_MAX_IOV_LIMIT)
-		return -FI_ENODATA;
-
-	return 0;
-}
-
+#if 0
 /* shared contexts */
 int cxip_stx(struct fid_domain *domain, struct fi_tx_attr *attr,
 		 struct fid_stx **stx, void *context)
@@ -1469,30 +1416,6 @@ int cxip_stx(struct fid_domain *domain, struct fi_tx_attr *attr,
 	ofi_atomic_inc32(&dom->ref);
 
 	*stx = &txc->fid.stx;
-
-	return 0;
-}
-
-/* shared contexts */
-static int cxip_verify_rx_attr(const struct fi_rx_attr *attr)
-{
-	if (!attr)
-		return 0;
-
-	if ((attr->msg_order | CXIP_EP_MSG_ORDER) != CXIP_EP_MSG_ORDER)
-		return -FI_ENODATA;
-
-	if ((attr->comp_order | CXIP_EP_COMP_ORDER) != CXIP_EP_COMP_ORDER)
-		return -FI_ENODATA;
-
-	if (attr->total_buffered_recv > CXIP_EP_MAX_BUFF_RECV)
-		return -FI_ENODATA;
-
-	if (attr->size > CXIP_EP_TX_SZ)
-		return -FI_ENODATA;
-
-	if (attr->iov_limit > CXIP_EP_MAX_IOV_LIMIT)
-		return -FI_ENODATA;
 
 	return 0;
 }
@@ -1528,202 +1451,7 @@ int cxip_srx(struct fid_domain *domain, struct fi_rx_attr *attr,
 
 	return 0;
 }
-
-/**
- * Set fabric info.
- *
- * Support fi_info().
- *
- * @param src_addr : source address
- * @param hint_attr : hints (can be NULL)
- * @param attr : attributes to fill out
- */
-static void cxip_set_fabric_attr(void *src_addr,
-				 const struct fi_fabric_attr *hint_attr,
-				 struct fi_fabric_attr *attr)
-{
-	struct cxip_fabric *fabric;
-
-	*attr = cxip_fabric_attr;
-	if (hint_attr && hint_attr->fabric) {
-		attr->fabric = hint_attr->fabric;
-	} else {
-		fabric = cxip_fab_list_head();
-		attr->fabric = fabric ?
-				&fabric->util_fabric.fabric_fid :
-				NULL;
-	}
-
-	attr->name = cxip_get_fabric_name(src_addr);
-	attr->prov_name = NULL;
-}
-
-/**
- * Set domain info.
- *
- * Support fi_info().
- *
- * @param src_addr : source address
- * @param hint_attr : optional hints
- * @param attr : attributes to fill out
- */
-static void cxip_set_domain_attr(uint32_t api_version, void *src_addr,
-				 const struct fi_domain_attr *hint_attr,
-				 struct fi_domain_attr *attr)
-{
-	struct cxip_domain *domain;
-
-	domain = cxip_dom_list_head();
-	attr->domain = domain ? &domain->util_domain.domain_fid : NULL;
-	if (!hint_attr) {
-		*attr = cxip_domain_attr;
-
-		if (FI_VERSION_LT(api_version, FI_VERSION(1, 5)))
-			attr->mr_mode = FI_MR_SCALABLE;
-		goto out;
-	}
-
-	if (hint_attr->domain) {
-		domain = container_of(hint_attr->domain, struct cxip_domain,
-				      util_domain.domain_fid);
-		*attr = domain->attr;
-		attr->domain = hint_attr->domain;
-		goto out;
-	}
-
-	*attr = *hint_attr;
-	if (attr->threading == FI_THREAD_UNSPEC)
-		attr->threading = cxip_domain_attr.threading;
-	if (attr->control_progress == FI_PROGRESS_UNSPEC)
-		attr->control_progress = cxip_domain_attr.control_progress;
-	if (attr->data_progress == FI_PROGRESS_UNSPEC)
-		attr->data_progress = cxip_domain_attr.data_progress;
-	if (FI_VERSION_LT(api_version, FI_VERSION(1, 5))) {
-		if (attr->mr_mode == FI_MR_UNSPEC)
-			attr->mr_mode = FI_MR_SCALABLE;
-	} else {
-		if ((attr->mr_mode != FI_MR_BASIC) &&
-		    (attr->mr_mode != FI_MR_SCALABLE))
-			attr->mr_mode = 0;
-	}
-
-	if (attr->cq_cnt == 0)
-		attr->cq_cnt = cxip_domain_attr.cq_cnt;
-	if (attr->ep_cnt == 0)
-		attr->ep_cnt = cxip_domain_attr.ep_cnt;
-	if (attr->tx_ctx_cnt == 0)
-		attr->tx_ctx_cnt = cxip_domain_attr.tx_ctx_cnt;
-	if (attr->rx_ctx_cnt == 0)
-		attr->rx_ctx_cnt = cxip_domain_attr.rx_ctx_cnt;
-	if (attr->max_ep_tx_ctx == 0)
-		attr->max_ep_tx_ctx = cxip_domain_attr.max_ep_tx_ctx;
-	if (attr->max_ep_rx_ctx == 0)
-		attr->max_ep_rx_ctx = cxip_domain_attr.max_ep_rx_ctx;
-	if (attr->max_ep_stx_ctx == 0)
-		attr->max_ep_stx_ctx = cxip_domain_attr.max_ep_stx_ctx;
-	if (attr->max_ep_srx_ctx == 0)
-		attr->max_ep_srx_ctx = cxip_domain_attr.max_ep_srx_ctx;
-	if (attr->cntr_cnt == 0)
-		attr->cntr_cnt = cxip_domain_attr.cntr_cnt;
-	if (attr->mr_iov_limit == 0)
-		attr->mr_iov_limit = cxip_domain_attr.mr_iov_limit;
-
-	attr->mr_key_size = cxip_domain_attr.mr_key_size;
-	attr->cq_data_size = cxip_domain_attr.cq_data_size;
-	attr->resource_mgmt = cxip_domain_attr.resource_mgmt;
-out:
-	/* reverse lookup interface from node and assign it as domain name */
-	attr->name = cxip_get_domain_name(src_addr);
-}
-
-/**
- * Create fi_info structure for fi_info().
- *
- * Support fi_info().
- *
- * @param version : version requested
- * @param ep_type : endpoint type requested
- * @param hints : optional hints
- * @param src_addr : optional source address
- * @param dest_addr : optional destination address
- *
- * @return struct fi_info* : allocated fi_info structure
- */
-struct fi_info *cxip_fi_info(uint32_t version, enum fi_ep_type ep_type,
-			     const struct fi_info *hints, void *src_addr,
-			     void *dest_addr)
-{
-	struct fi_info *info;
-
-	/* Ends up at ofi_allocinfo_internal()
-	 *
-	 * Creates zeroed info structure, with (zeroed) fabric_attr,
-	 * domain_attr, ep_attr, tx_attr, rx_attr
-	 */
-	info = fi_allocinfo();
-	if (!info)
-		return NULL;
-
-	/* Overrides */
-	info->mode = CXIP_MODE;
-	info->addr_format = FI_ADDR_CXI;
-
-	/* Add src_addr, always present, use hints or supply default */
-	info->src_addr = calloc(1, sizeof(struct cxip_addr));
-	if (!info->src_addr)
-		goto err;
-
-	if (src_addr)
-		memcpy(info->src_addr, src_addr, sizeof(struct cxip_addr));
-	else
-		cxip_get_src_addr(NULL, info->src_addr);
-	info->src_addrlen = sizeof(struct cxip_addr);
-
-	/* dest_addr is optional */
-	if (dest_addr) {
-		info->dest_addr = calloc(1, sizeof(struct cxip_addr));
-		if (!info->dest_addr)
-			goto err;
-		info->dest_addrlen = sizeof(struct cxip_addr);
-		memcpy(info->dest_addr, dest_addr, sizeof(struct cxip_addr));
-	}
-
-	if (hints) {
-		/* RDM caller overrides this */
-		if (hints->caps)
-			info->caps = hints->caps;
-
-		/* RDM caller overrides this */
-		if (hints->ep_attr)
-			*(info->ep_attr) = *(hints->ep_attr);
-
-		/* RDM caller overrides this */
-		if (hints->tx_attr)
-			*(info->tx_attr) = *(hints->tx_attr);
-
-		/* RDM caller overrides this */
-		if (hints->rx_attr)
-			*(info->rx_attr) = *(hints->rx_attr);
-
-		if (hints->handle)
-			info->handle = hints->handle;
-
-		cxip_set_domain_attr(version, info->src_addr,
-				     hints->domain_attr, info->domain_attr);
-		cxip_set_fabric_attr(info->src_addr, hints->fabric_attr,
-				     info->fabric_attr);
-	} else {
-		cxip_set_domain_attr(version, info->src_addr, NULL,
-				     info->domain_attr);
-		cxip_set_fabric_attr(info->src_addr, NULL, info->fabric_attr);
-	}
-
-	info->ep_attr->type = ep_type;
-	return info;
-err:
-	fi_freeinfo(info);
-	return NULL;
-}
+#endif
 
 /**
  * Allocate endpoint.
@@ -1748,8 +1476,9 @@ err:
  *
  * @return int : 0 on success, -errno on failure
  */
-int cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
-			struct cxip_ep **ep, void *context, size_t fclass)
+static int
+cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
+		    struct cxip_ep **ep, void *context, size_t fclass)
 {
 	int ret;
 	struct cxip_domain *cxi_dom;
@@ -1759,23 +1488,19 @@ int cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 	uint32_t nic;
 	uint32_t pid;
 
+	if (!domain || !hints || !hints->ep_attr || !hints->tx_attr ||
+	    !hints->rx_attr) {
+		ret = -FI_EINVAL;
+		goto err;
+	}
+
+	ret = ofi_prov_check_info(&cxip_util_prov, CXIP_FI_VERSION, hints);
+	if (ret != FI_SUCCESS)
+		return -FI_ENOPROTOOPT;
+
 	/* domain, info, info->ep_attr, and ep are != NULL */
 	cxi_dom = container_of(domain, struct cxip_domain,
 			       util_domain.domain_fid);
-
-	/* verify that hints are sane */
-	if (cxip_verify_info(cxi_dom->fab->util_fabric.fabric_fid.api_version,
-			     hints)) {
-		CXIP_LOG_DBG("Cannot support requested options!\n");
-		ret = -FI_EINVAL;
-		goto err;
-	}
-
-	if (!hints->tx_attr || !hints->rx_attr) {
-		CXIP_LOG_DBG("Missing TX/RX hints\n");
-		ret = -FI_EINVAL;
-		goto err;
-	}
 
 	if (fclass == FI_CLASS_SEP && hints &&
 	    (hints->caps & (FI_TAGGED | FI_SEND)) == (FI_TAGGED | FI_SEND)) {
@@ -1795,8 +1520,7 @@ int cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 		}
 		pid = src->pid;
 	} else {
-		// TODO: pid = PID_AUTO;
-		pid = 0;
+		pid = C_PID_ANY;
 	}
 
 	/* Allocate memory for the EP */
@@ -1989,4 +1713,48 @@ err:
 	}
 	free(cxi_ep);
 	return ret;
+}
+
+/*
+ * cxip_endpoint() - Provider fi_endpoint() implementation.
+ */
+int cxip_endpoint(struct fid_domain *domain, struct fi_info *info,
+		  struct fid_ep **ep, void *context)
+{
+	int ret;
+	struct cxip_ep *cxip_ep;
+
+	if (!ep)
+		return -FI_EINVAL;
+
+	ret = cxip_alloc_endpoint(domain, info, &cxip_ep, context,
+				  FI_CLASS_EP);
+	if (ret)
+		return ret;
+
+	*ep = &cxip_ep->ep;
+
+	return FI_SUCCESS;
+}
+
+/*
+ * cxip_scalable_ep() - Provider fi_scalable_ep() implementation.
+ */
+int cxip_scalable_ep(struct fid_domain *domain, struct fi_info *info,
+		     struct fid_ep **sep, void *context)
+{
+	int ret;
+	struct cxip_ep *cxip_ep;
+
+	if (!sep)
+		return -FI_EINVAL;
+
+	ret = cxip_alloc_endpoint(domain, info, &cxip_ep, context,
+				  FI_CLASS_SEP);
+	if (ret)
+		return ret;
+
+	*sep = &cxip_ep->ep;
+
+	return FI_SUCCESS;
 }
