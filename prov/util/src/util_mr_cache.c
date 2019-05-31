@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2016-2017 Cray Inc. All rights reserved.
  * Copyright (c) 2017-2019 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2019 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -122,6 +123,17 @@ void ofi_mr_cache_notify(struct ofi_mr_cache *cache, const void *addr, size_t le
 		 */
 		assert(entry->cached);
 		util_mr_uncache_entry(cache, entry);
+
+		/* Due to merge region logic, it will identify adjacent
+		 * addresses as the same. We must ignore any adjacent
+		 * addresses, since they do not belong to the page fault.
+		 */
+		if (entry->use_cnt != 0 &&
+		    ((char *)entry->iov.iov_base +
+		    entry->iov.iov_len == addr ||
+		    (char *)addr + len == entry->iov.iov_base)) {
+			continue;
+		}
 
 		assert(entry->use_cnt == 0);
 		dlist_remove_init(&entry->lru_entry);
