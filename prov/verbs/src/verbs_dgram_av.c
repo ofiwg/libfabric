@@ -134,7 +134,7 @@ static int fi_ibv_dgram_av_insert(struct fid_av *av_fid, const void *addr,
 	}
 
 	VERBS_DBG(FI_LOG_AV,
-		  "%"PRIu64" addresses were inserted successfully\n", count);
+		  "%d addresses were inserted successfully\n", success_cnt);
 	return success_cnt;
 }
 
