@@ -55,6 +55,7 @@ struct fi_ibv_gl_data fi_ibv_gl_data = {
 	.use_odp		= 0,
 	.cqread_bunch_size	= 8,
 	.iface			= NULL,
+	.gid_idx		= 0,
 	.dgram			= {
 		.use_name_server	= 1,
 		.name_server_port	= 5678,
@@ -612,6 +613,15 @@ static int fi_ibv_read_params(void)
 	     fi_ibv_gl_data.dgram.name_server_port > 65535)) {
 		VERBS_WARN(FI_LOG_CORE,
 			   "Invalid value of dgram_name_server_port\n");
+		return -FI_EINVAL;
+	}
+	if (fi_ibv_get_param_int("gid_idx", "Set which gid index to use "
+				 "attribute (0 - 255)",
+				 &fi_ibv_gl_data.gid_idx) ||
+	    (fi_ibv_gl_data.gid_idx < 0 ||
+	     fi_ibv_gl_data.gid_idx > 255)) {
+		VERBS_WARN(FI_LOG_CORE,
+			   "Invalid value of gid index\n");
 		return -FI_EINVAL;
 	}
 

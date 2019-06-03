@@ -82,7 +82,7 @@ fi_ibv_dgram_av_insert_addr(struct fi_ibv_dgram_av *av, const void *addr,
 		ah_attr.is_global = 1;
 		ah_attr.grh.hop_limit = 64;
 		ah_attr.grh.dgid = ((struct ofi_ib_ud_ep_name *)addr)->gid;
-		ah_attr.grh.sgid_index = 0;
+		ah_attr.grh.sgid_index = fi_ibv_gl_data.gid_idx;
 	}
 
 	av_entry = calloc(1, sizeof(*av_entry));
