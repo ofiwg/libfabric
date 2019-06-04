@@ -122,22 +122,42 @@ static int cxip_info_alloc(struct cxip_if *nic_if, struct fi_info **info)
 		goto err;
 	}
 
-	/* TODO set real NIC attrs */
-	fi->nic->device_attr->name = strdup("cxi0");
-	fi->nic->device_attr->device_id = strdup("cxi1");
-	fi->nic->device_attr->device_version = strdup("cxi2");
-	fi->nic->device_attr->vendor_id = strdup("cxi3");
-	fi->nic->device_attr->driver = strdup("cxi4");
+	fi->nic->device_attr->name = strdup(nic_if->if_info.device_name);
+
+	ret = asprintf(&fi->nic->device_attr->device_id, "0x%x",
+		       nic_if->if_info.device_id);
+	if (ret < 0)
+		goto err;
+
+	ret = asprintf(&fi->nic->device_attr->device_version, "%u",
+		       nic_if->if_info.device_rev);
+	if (ret < 0)
+		goto err;
+
+	ret = asprintf(&fi->nic->device_attr->vendor_id, "0x%x",
+		       nic_if->if_info.vendor_id);
+	if (ret < 0)
+		goto err;
+
+	fi->nic->device_attr->driver = strdup(nic_if->if_info.driver_name);
+
 	fi->nic->bus_attr->bus_type = FI_BUS_PCI;
-	fi->nic->bus_attr->attr.pci.domain_id = 0;
-	fi->nic->bus_attr->attr.pci.bus_id = 1;
-	fi->nic->bus_attr->attr.pci.device_id = 2;
-	fi->nic->bus_attr->attr.pci.function_id = 3;
-	fi->nic->link_attr->address = strdup("0x0");
-	fi->nic->link_attr->mtu = 2*1024;
-	fi->nic->link_attr->speed = 200*1024*1024;
-	fi->nic->link_attr->state = FI_LINK_UP;
-	fi->nic->link_attr->network_type = strdup("Ethernet");
+	fi->nic->bus_attr->attr.pci.domain_id = nic_if->if_info.pci_domain;
+	fi->nic->bus_attr->attr.pci.bus_id = nic_if->if_info.pci_bus;
+	fi->nic->bus_attr->attr.pci.device_id = nic_if->if_info.pci_device;
+	fi->nic->bus_attr->attr.pci.function_id =
+			nic_if->if_info.pci_function;
+
+	ret = asprintf(&fi->nic->link_attr->address, "0x%x",
+		       nic_if->if_info.nic_addr);
+	if (ret < 0)
+		goto err;
+
+	fi->nic->link_attr->mtu = nic_if->if_info.link_mtu;
+	fi->nic->link_attr->speed = nic_if->if_info.link_speed * 1000 * 1000;
+	fi->nic->link_attr->state = nic_if->if_info.link_state ?
+			FI_LINK_UP : FI_LINK_DOWN;
+	fi->nic->link_attr->network_type = strdup("HPC Ethernet");
 
 	*info = fi;
 	return FI_SUCCESS;
