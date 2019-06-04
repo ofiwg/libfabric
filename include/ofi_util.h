@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2015-2017 Intel Corporation, Inc.  All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2019 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -75,6 +76,19 @@ extern "C" {
 #define UTIL_FLAG_OVERFLOW	(1ULL << 61)
 
 #define OFI_CNTR_ENABLED	(1ULL << 61)
+
+#define OFI_Q_STRERROR(prov, level, subsys, q, q_str, entry, q_strerror)	\
+	FI_LOG(prov, level, subsys, "fi_" q_str "_readerr: err: %s (%d), "	\
+	       "prov_err: %s (%d)\n", strerror((entry)->err), (entry)->err,	\
+	       q_strerror((q), -(entry)->prov_errno,				\
+			  (entry)->err_data, NULL, 0),				\
+	       -(entry)->prov_errno)
+
+#define OFI_CQ_STRERROR(prov, level, subsys, cq, entry) \
+	OFI_Q_STRERROR(prov, level, subsys, cq, "cq", entry, fi_cq_strerror)
+
+#define OFI_EQ_STRERROR(prov, level, subsys, eq, entry) \
+	OFI_Q_STRERROR(prov, level, subsys, eq, "eq", entry, fi_eq_strerror)
 
 #define FI_INFO_FIELD(provider, prov_attr, user_attr, prov_str, user_str, type)	\
 	do {										\

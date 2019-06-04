@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2013-2016 Intel Corporation. All rights reserved.
  * Copyright (c) 2018 Cray Inc. All rights reserved.
+ * Copyright (c) 2019 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -1249,10 +1250,10 @@ static void rxm_cq_read_write_error(struct rxm_ep *rxm_ep)
 	}
 
 	if (err_entry.err == FI_ECANCELED)
-		RXM_CQ_STRERROR(&rxm_prov, FI_LOG_DEBUG, FI_LOG_CQ,
+		OFI_CQ_STRERROR(&rxm_prov, FI_LOG_DEBUG, FI_LOG_CQ,
 				rxm_ep->msg_cq, &err_entry);
 	else
-		RXM_CQ_STRERROR(&rxm_prov, FI_LOG_WARN, FI_LOG_CQ,
+		OFI_CQ_STRERROR(&rxm_prov, FI_LOG_WARN, FI_LOG_CQ,
 				rxm_ep->msg_cq, &err_entry);
 
 	state = RXM_GET_PROTO_STATE(err_entry.op_context);

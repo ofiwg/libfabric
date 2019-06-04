@@ -1,6 +1,7 @@
 
 /*
  * Copyright (c) 2016 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2019 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -116,19 +117,6 @@ do {									\
 #define rxm_msg_id_2_tx_buf(rxm_ep, pool_type, msg_id)				\
 	((void *) rxm_buf_get_by_index(&(rxm_ep)->buf_pools[pool_type],		\
 				       (uint64_t) msg_id))
-
-#define RXM_Q_STRERROR(prov, level, subsys, q, q_str, entry, q_strerror)	\
-	FI_LOG(prov, level, subsys, "fi_" q_str "_readerr: err: %s (%d), "	\
-	       "prov_err: %s (%d)\n", strerror((entry)->err), (entry)->err,	\
-	       q_strerror((q), -(entry)->prov_errno,				\
-			  (entry)->err_data, NULL, 0),				\
-	       -(entry)->prov_errno)
-
-#define RXM_CQ_STRERROR(prov, level, subsys, cq, entry) \
-	RXM_Q_STRERROR(prov, level, subsys, cq, "cq", entry, fi_cq_strerror)
-
-#define RXM_EQ_STRERROR(prov, level, subsys, eq, entry) \
-	RXM_Q_STRERROR(prov, level, subsys, eq, "eq", entry, fi_eq_strerror)
 
 extern struct fi_provider rxm_prov;
 extern struct util_prov rxm_util_prov;
