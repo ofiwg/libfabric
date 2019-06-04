@@ -230,6 +230,9 @@ The verbs provider checks for the following environment variables.
 *FI_VERBS_NAME_SERVER_PORT*
 : The port on which Name Server thread listens incoming connections and requests (default: 5678)
 
+*FI_VERBS_GID_IDX*
+: The GID index to use (default: 0)
+
 ### Environment variables notes
 The fi_info utility would give the up-to-date information on environment variables:
 fi_info -p verbs -e

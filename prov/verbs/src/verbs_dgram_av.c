@@ -64,12 +64,6 @@ fi_ibv_dgram_av_insert_addr(struct fi_ibv_dgram_av *av, const void *addr,
 	struct fi_ibv_domain *domain =
 		container_of(av->util_av.domain, struct fi_ibv_domain, util_domain);
 
-	if (OFI_UNLIKELY(!fi_ibv_dgram_av_is_addr_valid(av, addr))) {
-		ret = -FI_EADDRNOTAVAIL;
-		VERBS_WARN(FI_LOG_AV, "Invalid address\n");
-		goto fn1;
-	}
-
 	struct ibv_ah_attr ah_attr = {
 		.is_global = 0,
 		.dlid = ((struct ofi_ib_ud_ep_name *)addr)->lid,
@@ -82,7 +76,11 @@ fi_ibv_dgram_av_insert_addr(struct fi_ibv_dgram_av *av, const void *addr,
 		ah_attr.is_global = 1;
 		ah_attr.grh.hop_limit = 64;
 		ah_attr.grh.dgid = ((struct ofi_ib_ud_ep_name *)addr)->gid;
-		ah_attr.grh.sgid_index = 0;
+		ah_attr.grh.sgid_index = fi_ibv_gl_data.gid_idx;
+	} else if (OFI_UNLIKELY(!fi_ibv_dgram_av_is_addr_valid(av, addr))) {
+		ret = -FI_EADDRNOTAVAIL;
+		VERBS_WARN(FI_LOG_AV, "Invalid address\n");
+		goto fn1;
 	}
 
 	av_entry = calloc(1, sizeof(*av_entry));
@@ -136,7 +134,7 @@ static int fi_ibv_dgram_av_insert(struct fid_av *av_fid, const void *addr,
 	}
 
 	VERBS_DBG(FI_LOG_AV,
-		  "%"PRIu64" addresses were inserted successfully\n", count);
+		  "%d addresses were inserted successfully\n", success_cnt);
 	return success_cnt;
 }
 

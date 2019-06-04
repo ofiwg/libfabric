@@ -423,7 +423,7 @@ static int fi_ibv_create_dgram_ep(struct fi_ibv_domain *domain, struct fi_ibv_ep
 		}
 	}
 
-	if (ibv_query_gid(domain->verbs, 1, 0, &gid)) {
+	if (ibv_query_gid(domain->verbs, 1, fi_ibv_gl_data.gid_idx, &gid)) {
 		VERBS_WARN(FI_LOG_EP_CTRL,
 			   "Unable to query GID, errno = %d",
 			   errno);

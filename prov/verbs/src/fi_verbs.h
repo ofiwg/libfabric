@@ -148,6 +148,7 @@ extern struct fi_ibv_gl_data {
 	int	use_odp;
 	int	cqread_bunch_size;
 	char	*iface;
+	int	gid_idx;
 
 	struct {
 		int	buffer_num;
