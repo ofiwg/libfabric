@@ -323,8 +323,8 @@ static struct ofi_prov *ofi_create_prov_entry(const char *prov_name)
 static void ofi_ordered_provs_init(void)
 {
 	char *ordered_prov_names[] = {
-		"psm2", "psm", "usnic", "gni", "bgq", "verbs",
-		"netdir", "ofi_rxm", "ofi_rxd", "shm", "mlx"
+		"psm2", "psm", "efa", "usnic", "gni", "bgq", "verbs",
+		"netdir", "ofi_rxm", "ofi_rxd", "shm", "mlx",
 		/* Initialize the socket based providers last of the
 		 * standard providers.  This will result in them being
 		 * the least preferred providers.
@@ -616,7 +616,7 @@ libdl_done:
 	/* ofi_register_provider(RSTREAM_INIT, NULL); - no support */
 	ofi_register_provider(MRAIL_INIT, NULL);
 	ofi_register_provider(RXD_INIT, NULL);
-
+	ofi_register_provider(EFA_INIT, NULL);
 	ofi_register_provider(UDP_INIT, NULL);
 	ofi_register_provider(SOCKETS_INIT, NULL);
 	ofi_register_provider(TCP_INIT, NULL);
