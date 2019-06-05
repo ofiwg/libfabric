@@ -53,12 +53,6 @@
 #define PSMX2_DEFAULT_UUID	"00FF00FF-0000-0000-0000-00FF00FF00FF"
 #define PROVIDER_INI		PSM2_INI
 
-/* Temporarily disable the use of psm2_mq_fp_msg due to instability */
-#ifdef HAVE_PSM2_MQ_FP_MSG
-#undef HAVE_PSM2_MQ_FP_MSG
-#endif
-#define HAVE_PSM2_MQ_FP_MSG	0
-
 #if HAVE_PSM2_MQ_REQ_USER
 
 #ifndef PSMX2_USE_REQ_CONTEXT
