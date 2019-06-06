@@ -221,6 +221,8 @@ struct ofi_mr_storage {
 
 	struct ofi_mr_entry *		(*find)(struct ofi_mr_storage *storage,
 						const struct iovec *key);
+	struct ofi_mr_entry *		(*overlap)(struct ofi_mr_storage *storage,
+						const struct iovec *key);
 	int				(*insert)(struct ofi_mr_storage *storage,
 						  struct iovec *key,
 						  struct ofi_mr_entry *entry);

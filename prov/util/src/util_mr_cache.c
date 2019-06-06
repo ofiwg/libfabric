@@ -115,20 +115,14 @@ void ofi_mr_cache_notify(struct ofi_mr_cache *cache, const void *addr, size_t le
 	iov.iov_base = (void *) addr;
 	iov.iov_len = len;
 
-	for (entry = cache->storage.find(&cache->storage, &iov); entry;
-	     entry = cache->storage.find(&cache->storage, &iov)) {
-
-		/* Notifications should only occur on regions that are not
-		 * actively being used, or the application is buggy.  And if
-		 * the entry is not in use but found here, then it must have
-		 * been cached.
-		 */
-		assert(entry->cached);
+	for (entry = cache->storage.overlap(&cache->storage, &iov); entry;
+	     entry = cache->storage.overlap(&cache->storage, &iov)) {
 		util_mr_uncache_entry(cache, entry);
 
-		assert(entry->use_cnt == 0);
-		dlist_remove_init(&entry->lru_entry);
-		util_mr_free_entry(cache, entry);
+		if (entry->use_cnt == 0) {
+			dlist_remove_init(&entry->lru_entry);
+			util_mr_free_entry(cache, entry);
+		}
 	}
 
 	/* See comment in util_mr_free_entry.  If we're not merging address
@@ -364,6 +358,19 @@ static struct ofi_mr_entry *ofi_mr_rbt_find(struct ofi_mr_storage *storage,
 	return node->data;
 }
 
+static struct ofi_mr_entry *ofi_mr_rbt_overlap(struct ofi_mr_storage *storage,
+					    const struct iovec *key)
+{
+	struct ofi_rbnode *node;
+
+	node = ofi_rbmap_search(storage->storage, (void *) key,
+				util_mr_find_overlap);
+	if (!node)
+		return NULL;
+
+	return node->data;
+}
+
 static int ofi_mr_rbt_insert(struct ofi_mr_storage *storage,
 			     struct iovec *key,
 			     struct ofi_mr_entry *entry)
@@ -391,6 +398,7 @@ static int ofi_mr_cache_init_rbt(struct ofi_mr_cache *cache)
 	if (!cache->storage.storage)
 		return -FI_ENOMEM;
 
+	cache->storage.overlap = ofi_mr_rbt_overlap;
 	cache->storage.destroy = ofi_mr_rbt_destroy;
 	cache->storage.find = ofi_mr_rbt_find;
 	cache->storage.insert = ofi_mr_rbt_insert;
@@ -408,7 +416,7 @@ static int ofi_mr_cache_init_storage(struct ofi_mr_cache *cache)
 		ret = ofi_mr_cache_init_rbt(cache);
 		break;
 	case OFI_MR_STORAGE_USER:
-		ret = (cache->storage.storage &&
+		ret = (cache->storage.storage && cache->storage.overlap &&
 		      cache->storage.destroy && cache->storage.find &&
 		      cache->storage.insert && cache->storage.erase) ?
 			0 : -FI_EINVAL;
