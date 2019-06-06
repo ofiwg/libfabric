@@ -44,8 +44,13 @@ TestSuite(sep, .init = cxit_setup_ep, .fini = cxit_teardown_ep,
 /* Test basic SEP creation */
 Test(sep, simple)
 {
+#if 0
+	char *info_str;
+	info_str = fi_tostr(cxit_fi, FI_TYPE_INFO);
+	printf(info_str);
+#endif
+
 	cxit_create_sep();
-	cxit_dump_attr(NULL);
 	cxit_destroy_sep();
 }
 

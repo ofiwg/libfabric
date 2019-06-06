@@ -87,27 +87,29 @@ Test(getinfo, fab_name)
 {
 	int infos = 0;
 	struct slist_entry *entry, *prev __attribute__ ((unused));
+	struct fi_info *fi;
 
 	slist_foreach(&cxip_if_list, entry, prev) {
 		infos = 0;
 
-		cxit_fi_hints->fabric_attr->name = cxip_prov_name;
+		cxit_fi_hints->fabric_attr->name = strdup(cxip_prov_name);
 
 		cxit_create_fabric_info();
 		cr_assert(cxit_fi != NULL);
 
+		fi = cxit_fi;
 		do {
 			/* Not all providers can be trusted to filter by fabric
 			 * name */
-			if (strcmp(cxit_fi->fabric_attr->prov_name,
+			if (strcmp(fi->fabric_attr->prov_name,
 				   cxip_prov_name))
 				continue;
 
-			cr_assert(!strcmp(cxit_fi->fabric_attr->name,
-					  cxit_fi_hints->fabric_attr->name));
+			cr_assert(!strcmp(fi->fabric_attr->name,
+					  fi->fabric_attr->name));
 
 			infos++;
-		} while ((cxit_fi = cxit_fi->next));
+		} while ((fi = fi->next));
 
 		cxit_destroy_fabric_info();
 	}
