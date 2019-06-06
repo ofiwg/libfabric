@@ -44,7 +44,7 @@
 #include <ofi_atom.h>
 #include <ofi_lock.h>
 #include <ofi_list.h>
-#include <rbtree.h>
+#include <ofi_tree.h>
 
 
 #define OFI_MR_BASIC_MAP (FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_VIRT_ADDR)
@@ -144,7 +144,7 @@ extern struct ofi_mem_monitor *uffd_monitor;
 
 struct ofi_mr_map {
 	const struct fi_provider *prov;
-	void			*rbtree;
+	struct ofi_rbmap	*rbtree;
 	uint64_t		key;
 	enum fi_mr_mode		mode;
 };
