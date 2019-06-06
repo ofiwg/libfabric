@@ -74,8 +74,6 @@ extern size_t rxm_eager_limit;
 
 #define RXM_IOV_LIMIT 4
 
-#define RXM_EQ_PROGRESS_SPIN_COUNT 10000
-
 #define RXM_MR_MODES	(OFI_MR_BASIC_MAP | FI_MR_LOCAL)
 #define RXM_MR_VIRT_ADDR(info) ((info->domain_attr->mr_mode == FI_MR_BASIC) ||\
 				info->domain_attr->mr_mode & FI_MR_VIRT_ADDR)
@@ -140,6 +138,7 @@ extern struct fi_ops_atomic rxm_ops_atomic;
 extern size_t rxm_msg_tx_size;
 extern size_t rxm_msg_rx_size;
 extern size_t rxm_def_univ_size;
+extern size_t rxm_cm_progress_interval;
 
 /*
  * Connection Map
@@ -657,7 +656,7 @@ struct rxm_ep {
 	struct fid_pep 		*msg_pep;
 	struct fid_eq 		*msg_eq;
 	struct fid_cq 		*msg_cq;
-	uint32_t		msg_cq_eagain_count;
+	uint64_t		msg_cq_last_poll;
 	struct fid_ep 		*srx_ctx;
 	size_t 			comp_per_progress;
 	int			msg_mr_local;

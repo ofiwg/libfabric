@@ -374,7 +374,7 @@ RXM_INI
 			"rendezvous protocol.", sizeof(struct rxm_pkt));
 
 	fi_param_define(&rxm_prov, "use_srx", FI_PARAM_BOOL,
-			"Set this enivronment variable to control the RxM "
+			"Set this environment variable to control the RxM "
 			"receive path. If this variable set to 1 (default: 0), "
 			"the RxM uses Shared Receive Context. This mode improves "
 			"memory consumption, but it may increase small message "
@@ -396,11 +396,21 @@ RXM_INI
 			"(default: 128). Setting this to 0 would get default "
 			"value defined by the MSG provider.");
 
+	fi_param_define(&rxm_prov, "cm_progress_interval", FI_PARAM_INT,
+			"Defines the number of microseconds to wait between "
+			"function calls to the connection management progression "
+			"functions during fi_cq_read calls. Higher values may "
+			"decrease noise during cq polling, but may result in "
+			"longer connection establishment times. (default: 10000).");
+
 	fi_param_get_size_t(&rxm_prov, "tx_size", &rxm_info.tx_attr->size);
 	fi_param_get_size_t(&rxm_prov, "rx_size", &rxm_info.rx_attr->size);
 	fi_param_get_size_t(&rxm_prov, "msg_tx_size", &rxm_msg_tx_size);
 	fi_param_get_size_t(&rxm_prov, "msg_rx_size", &rxm_msg_rx_size);
 	fi_param_get_size_t(NULL, "universe_size", &rxm_def_univ_size);
+	if (fi_param_get_int(&rxm_prov, "cm_progress_interval",
+				(int *) &rxm_cm_progress_interval))
+		rxm_cm_progress_interval = 10000;
 
 	if (rxm_init_info()) {
 		FI_WARN(&rxm_prov, FI_LOG_CORE, "Unable to initialize rxm_info\n");
