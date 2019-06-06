@@ -942,7 +942,7 @@ static void rxd_handle_data(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 		dlist_insert_order(&ep->peers[pkt->base_hdr.peer].buf_pkts,
 				   &rxd_comp_pkt_seq_no, &pkt_entry->d_entry);
 		return;
-	} else {
+	} else if (ep->peers[pkt->base_hdr.peer].peer_addr != FI_ADDR_UNSPEC) {
 		rxd_ep_send_ack(ep, pkt->base_hdr.peer);
 	}
 free:
