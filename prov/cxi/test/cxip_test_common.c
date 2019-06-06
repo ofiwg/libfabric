@@ -361,6 +361,7 @@ void cxit_setup_getinfo(void)
 
 		/* Always select CXI */
 		cxit_fi_hints->fabric_attr->prov_name = strdup(cxip_prov_name);
+		cxit_fi_hints->domain_attr->mr_mode = FI_MR_ENDPOINT;
 	}
 }
 

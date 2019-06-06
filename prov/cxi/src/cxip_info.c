@@ -26,7 +26,7 @@ struct fi_domain_attr cxip_domain_attr = {
 	.data_progress = FI_PROGRESS_MANUAL,
 	.resource_mgmt = FI_RM_ENABLED,
 	.av_type = FI_AV_UNSPEC,
-	.mr_mode = FI_MR_SCALABLE,
+	.mr_mode = FI_MR_ENDPOINT | FI_MR_SCALABLE,
 	.mr_key_size = sizeof(uint64_t),
 	.cq_cnt = 32,
 	.ep_cnt = 128,
@@ -231,7 +231,7 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 	int ret;
 
 	/* Find all matching domains, ignoring addresses. */
-	ret = util_getinfo(&cxip_util_prov, cxip_prov.version, NULL, NULL,
+	ret = util_getinfo(&cxip_util_prov, version, NULL, NULL,
 			   flags & ~FI_SOURCE, hints, info);
 
 	/* TODO refine info list with node and service. */
