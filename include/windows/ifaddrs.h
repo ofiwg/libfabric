@@ -27,6 +27,7 @@ struct ifaddrs {
 	struct sockaddr_in in_addr;
 	struct sockaddr_in in_netmask;
 	char		   ad_name[16];
+	size_t		   speed;
 };
 
 int getifaddrs(struct ifaddrs **ifap);
