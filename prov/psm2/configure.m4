@@ -149,15 +149,17 @@ AC_DEFUN([FI_PSM2_CONFIGURE],[
 		      ])
 	       ])
 	 AS_IF([test $psm2_happy -eq 1], [$1], [$2])
+	 AS_IF([test x"$enable_psm2_mq_fp_msg" != x"yes"], [have_psm2_mq_fp_msg=0])
+	 AS_IF([test x"$enable_psm2_mq_req_user" != x"yes"], [have_psm2_mq_req_user=0])
 	 AC_DEFINE_UNQUOTED([HAVE_PSM2_AM_REGISTER_HANDLERS_2],
 			    $have_psm2_am_register_handlers_2,
 			    [psm2_am_register_handlers_2 function is present])
 	 AC_DEFINE_UNQUOTED([HAVE_PSM2_MQ_FP_MSG],
 			    $have_psm2_mq_fp_msg,
-			    [psm2_mq_fp_msg function is present])
+			    [psm2_mq_fp_msg function is present and enabled])
 	 AC_DEFINE_UNQUOTED([HAVE_PSM2_MQ_REQ_USER],
 			    $have_psm2_mq_req_user,
-			    [psm2_mq_ipeek_dequeue_multi function is present])
+			    [psm2_mq_ipeek_dequeue_multi function is present and enabled])
 	 AC_DEFINE_UNQUOTED([HAVE_PSM2_INFO_QUERY],
 			    $have_psm2_info_query,
 			    [psm2_info_query function is present])
@@ -172,4 +174,12 @@ AC_ARG_WITH([numa],
 	    AC_HELP_STRING([--with-numa=DIR],
                            [Provide path to where the numactl-devel or libnuma-devel
 			    package is installed]))
+
+AC_ARG_ENABLE([psm2_mq_req_user],
+	      AS_HELP_STRING([--enable-psm2_mq_req_user],
+			     [Enable the use of psm2_mq_req_user if present]))
+
+AC_ARG_ENABLE([psm2_mq_fp_msg],
+	      AS_HELP_STRING([--enable-psm2_mq_fp_msg],
+			     [Enable the use of psm2_mq_fp_msg if present]))
 
