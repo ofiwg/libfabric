@@ -882,10 +882,7 @@ static inline int ofi_is_loopback_addr(struct sockaddr *addr) {
 		((struct sockaddr_in6 *)addr)->sin6_addr.u.Word[7] == ntohs(1));
 }
 
-static inline size_t ofi_ifaddr_get_speed(struct ifaddrs *ifa)
-{
-	return 0;
-}
+size_t ofi_ifaddr_get_speed(struct ifaddrs *ifa);
 
 /* complex operations implementation */
 
