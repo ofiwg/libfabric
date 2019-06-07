@@ -187,7 +187,6 @@ struct rxd_ep {
 	int do_local_mr;
 	int next_retry;
 	int dg_cq_fd;
-	size_t pending_cnt;
 	uint32_t tx_flags;
 	uint32_t rx_flags;
 

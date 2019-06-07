@@ -447,9 +447,6 @@ int rxd_ep_send_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 {
 	int ret;
 
-	if (ep->pending_cnt >= ep->tx_size)
-		return 1;
-
 	pkt_entry->timestamp = fi_gettime_ms();
 
 	ret = fi_send(ep->dg_ep, (const void *) rxd_pkt_start(pkt_entry),
@@ -459,12 +456,11 @@ int rxd_ep_send_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 	if (ret) {
 		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "error sending packet: %d (%s)\n",
 			ret, fi_strerror(-ret));
-	} else {
-		pkt_entry->flags |= RXD_PKT_IN_USE;
-		ep->pending_cnt++;
+		return ret;
 	}
+	pkt_entry->flags |= RXD_PKT_IN_USE;
 
-	return ret;
+	return 0;
 }
 
 static ssize_t rxd_ep_send_rts(struct rxd_ep *rxd_ep, fi_addr_t rxd_addr)
