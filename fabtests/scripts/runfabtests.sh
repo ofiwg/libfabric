@@ -4,6 +4,7 @@
 # Copyright (c) 2017-2019, Intel Corporation.  All rights reserved.
 # Copyright (c) 2016-2018, Cisco Systems, Inc. All rights reserved.
 # Copyright (c) 2016, Cray, Inc. All rights reserved.
+# Copyright (c) 2019 Amazon.com, Inc. or its affiliates. All rights reserved.
 #
 # This software is available to you under a choice of one of two
 # licenses.  You may choose to be licensed under the terms of the GNU
@@ -55,6 +56,8 @@ declare COMPLEX_CFG
 declare TIMEOUT_VAL="120"
 declare STRICT_MODE=0
 declare FORK=0
+declare C_ARGS=""
+declare S_ARGS=""
 
 declare cur_excludes=""
 declare file_excludes=""
@@ -402,12 +405,12 @@ function cs_test {
 
 	start_time=$(date '+%s')
 
-	s_cmd="${BIN_PATH}${test_exe} -s $S_INTERFACE"
+	s_cmd="${BIN_PATH}${test_exe} ${S_ARGS} -s $S_INTERFACE"
 	${SERVER_CMD} "${EXPORT_ENV} $s_cmd" &> $s_outp &
 	s_pid=$!
 	sleep 1
 
-	c_cmd="${BIN_PATH}${test_exe} -s $C_INTERFACE $S_INTERFACE"
+	c_cmd="${BIN_PATH}${test_exe} ${C_ARGS} -s $C_INTERFACE $S_INTERFACE"
 	${CLIENT_CMD} "${EXPORT_ENV} $c_cmd" &> $c_outp &
 	c_pid=$!
 
@@ -619,10 +622,12 @@ function usage {
 	errcho -e " -u\tconfigure option for complex tests"
 	errcho -e " -T\ttimeout value in seconds"
 	errcho -e " -S\tStrict mode: -FI_ENODATA, -FI_ENOSYS errors would be treated as failures instead of skipped/notrun"
+	errcho -e " -C\tAdditional client test arguments: Parameters to pass to client fabtests"
+	errcho -e " -L\tAdditional server test arguments: Parameters to pass to server fabtests"
 	exit 1
 }
 
-while getopts ":vt:p:g:e:f:c:s:u:T:NRSkE:" opt; do
+while getopts ":vt:p:g:e:f:c:s:u:T:C:L:NRSkE:" opt; do
 case ${opt} in
 	t) TEST_TYPE=$OPTARG
 	;;
@@ -652,6 +657,10 @@ case ${opt} in
 	S) STRICT_MODE=1
 	;;
 	k) FORK=1
+	;;
+	C) C_ARGS="${OPTARG}"
+	;;
+	L) S_ARGS="${OPTARG}"
 	;;
 	E)
 	delimiter="="
