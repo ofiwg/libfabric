@@ -26,11 +26,31 @@ The following features are supported
 datagram endpoint over TCP sockets can be achieved by layering RxM over
 tcp provider.
 
+: *FI_EP_RDM* is supported by layering ofi_rxm provider on top of the tcp provider.
+
 *Endpoint capabilities*
 : The tcp provider currently supports *FI_MSG*, *FI_RMA*
 
 *Progress*
 : Currently tcp provider supports only *FI_PROGRESS_MANUAL*
+
+*Shared Rx Context*
+: The tcp provider supports shared receive context
+
+*Multi recv buffers*
+: The tcp provider supports multi recv buffers
+
+
+# RUNTIME PARAMETERS
+
+The tcp provider check for the following enviroment variables -
+
+*FI_TCP_IFACE*
+: A specific can be requested with this variable
+
+*FI_TCP_PORT_LOW_RANGE/FI_TCP_PORT_HIGH_RANGE*
+: These variables are used to set the range of ports to be used by the tcp provider for its passive endpoint creation. This is useful where only a range of ports are allowed by firewall for tcp connections.
+
 
 # LIMITATIONS
 
