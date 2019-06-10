@@ -1254,59 +1254,6 @@ unlock:
 
 }
 
-static inline ssize_t
-rxm_ep_inject_send_common(struct rxm_ep *rxm_ep, const struct iovec *iov, size_t count,
-			  struct rxm_conn *rxm_conn, void *context, uint64_t data,
-			  uint64_t flags, uint64_t tag, uint8_t op, size_t data_len,
-			  size_t total_len, struct rxm_pkt *inject_pkt)
-{
-	int ret;
-
-	if (rxm_ep->util_ep.domain->threading != FI_THREAD_SAFE) {
-		assert((op == inject_pkt->hdr.op) &&
-		       ((flags & FI_REMOTE_CQ_DATA) == inject_pkt->hdr.flags));
-
-		inject_pkt->hdr.data = data;
-		inject_pkt->hdr.tag = tag;
-		inject_pkt->hdr.size = data_len;
-		ofi_copy_from_iov(inject_pkt->data, inject_pkt->hdr.size,
-				  iov, count, 0);
-
-		ret = rxm_ep_msg_inject_send(rxm_ep, rxm_conn, inject_pkt,
-					     total_len, rxm_ep->util_ep.tx_cntr_inc);
-	} else {
-		struct rxm_tx_base_buf *tx_buf = (struct rxm_tx_base_buf *)
-			rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_INJECT);
-		if (OFI_UNLIKELY(!tx_buf)) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
-				"Ran out of buffers from Eager Inject buffer pool\n");
-			return -FI_EAGAIN;
-		}
-		rxm_ep_format_tx_buf_pkt(rxm_conn, data_len, op, data, tag,
-				         flags, &tx_buf->pkt);
-		ofi_copy_from_iov(tx_buf->pkt.data, tx_buf->pkt.hdr.size,
-				  iov, count, 0);
-
-		ret = rxm_ep_msg_inject_send(rxm_ep, rxm_conn, &tx_buf->pkt,
-					     total_len, rxm_ep->util_ep.tx_cntr_inc);
-		ofi_buf_free(tx_buf);
-	}
-	if (OFI_UNLIKELY(ret))
-		return ret;
-
-	if (flags & FI_COMPLETION) {
-		ret = ofi_cq_write(rxm_ep->util_ep.tx_cq, context,
-				   ofi_tx_flags[op], 0, NULL, 0, 0);
-		if (OFI_UNLIKELY(ret)) {
-			FI_WARN(&rxm_prov, FI_LOG_CQ,
-				"Unable to report completion\n");
-			return ret;
-		}
-		rxm_cq_log_comp(ofi_tx_flags[op]);
-	}
-	return FI_SUCCESS;
-}
-
 static ssize_t
 rxm_ep_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		   const struct iovec *iov, void **desc, size_t count,
@@ -1322,11 +1269,7 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		(data_len > rxm_ep->rxm_info->tx_attr->inject_size)) ||
 	       (data_len <= rxm_ep->rxm_info->tx_attr->inject_size));
 
-	if (total_len <= rxm_ep->inject_limit) {
-		ret = rxm_ep_inject_send_common(rxm_ep, iov, count, rxm_conn,
-						context, data, flags, tag, op,
-						data_len, total_len, inject_pkt);
-	} else if (data_len <= rxm_eager_limit) {
+	if (data_len <= rxm_eager_limit) {
 		struct rxm_tx_eager_buf *tx_buf = (struct rxm_tx_eager_buf *)
 			rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX);
 
