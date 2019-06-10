@@ -109,7 +109,7 @@ static int rxm_finish_buf_recv(struct rxm_rx_buf *rx_buf)
 	uint64_t flags;
 	char *data;
 
-	if (rx_buf->pkt.ctrl_hdr.type == ofi_ctrl_seg_data &&
+	if (rx_buf->pkt.ctrl_hdr.type == rxm_ctrl_seg &&
 	    rxm_sar_get_seg_type(&rx_buf->pkt.ctrl_hdr) != RXM_SAR_SEG_FIRST) {
 		dlist_insert_tail(&rx_buf->unexp_msg.entry,
 				  &rx_buf->conn->sar_deferred_rx_msg_list);
@@ -127,10 +127,10 @@ static int rxm_finish_buf_recv(struct rxm_rx_buf *rx_buf)
 
 	flags = rxm_cq_get_rx_comp_and_op_flags(rx_buf);
 
-	if (rx_buf->pkt.ctrl_hdr.type != ofi_ctrl_data)
+	if (rx_buf->pkt.ctrl_hdr.type != rxm_ctrl_eager)
 		flags |= FI_MORE;
 
-	if (rx_buf->pkt.ctrl_hdr.type == ofi_ctrl_large_data)
+	if (rx_buf->pkt.ctrl_hdr.type == rxm_ctrl_rndv)
 		data = rxm_pkt_rndv_data(&rx_buf->pkt);
 	else
 		data = rx_buf->pkt.data;
@@ -484,7 +484,7 @@ rxm_cq_rndv_read_prepare_deferred(struct rxm_deferred_tx_entry **def_tx_entry, s
 }
 
 static inline
-ssize_t rxm_cq_handle_large_data(struct rxm_rx_buf *rx_buf)
+ssize_t rxm_cq_handle_rndv(struct rxm_rx_buf *rx_buf)
 {
 	size_t i, index = 0, offset = 0, count, total_recv_len;
 	struct iovec iov[RXM_IOV_LIMIT];
@@ -588,7 +588,7 @@ readv_err:
 }
 
 static inline
-ssize_t rxm_cq_handle_data(struct rxm_rx_buf *rx_buf)
+ssize_t rxm_cq_handle_eager(struct rxm_rx_buf *rx_buf)
 {
 	uint64_t done_len = ofi_copy_to_iov(rx_buf->recv_entry->rxm_iov.iov,
 					    rx_buf->recv_entry->rxm_iov.count,
@@ -600,11 +600,11 @@ ssize_t rxm_cq_handle_data(struct rxm_rx_buf *rx_buf)
 ssize_t rxm_cq_handle_rx_buf(struct rxm_rx_buf *rx_buf)
 {
 	switch (rx_buf->pkt.ctrl_hdr.type) {
-	case ofi_ctrl_data:
-		return rxm_cq_handle_data(rx_buf);
-	case ofi_ctrl_large_data:
-		return rxm_cq_handle_large_data(rx_buf);
-	case ofi_ctrl_seg_data:
+	case rxm_ctrl_eager:
+		return rxm_cq_handle_eager(rx_buf);
+	case rxm_ctrl_rndv:
+		return rxm_cq_handle_rndv(rx_buf);
+	case rxm_ctrl_seg:
 		return rxm_cq_handle_seg_data(rx_buf);
 	default:
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "Unknown message type\n");
@@ -734,7 +734,7 @@ static ssize_t rxm_rndv_send_ack(struct rxm_rx_buf *rx_buf)
 			"Ran out of buffers from ACK buffer pool\n");
 		return -FI_EAGAIN;
 	}
-	assert(rx_buf->recv_entry->rndv.tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_ack);
+	assert(rx_buf->recv_entry->rndv.tx_buf->pkt.ctrl_hdr.type == rxm_ctrl_rndv_ack);
 
 	assert(rx_buf->hdr.state == RXM_RNDV_READ);
 	RXM_UPDATE_STATE(FI_LOG_CQ, rx_buf, RXM_RNDV_ACK_SENT);
@@ -783,7 +783,7 @@ static ssize_t rxm_rndv_send_ack_fast(struct rxm_rx_buf *rx_buf)
 	pkt.hdr.op		= ofi_op_msg;
 	pkt.hdr.version		= OFI_OP_VERSION;
 	pkt.ctrl_hdr.version	= RXM_CTRL_VERSION;
-	pkt.ctrl_hdr.type	= ofi_ctrl_ack;
+	pkt.ctrl_hdr.type	= rxm_ctrl_rndv_ack;
 	pkt.ctrl_hdr.conn_id 	= rx_buf->conn->handle.remote_key;
 	pkt.ctrl_hdr.msg_id 	= rx_buf->pkt.ctrl_hdr.msg_id;
 
@@ -829,7 +829,7 @@ static inline void rxm_ep_format_atomic_resp_pkt_hdr(struct rxm_conn *rxm_conn,
 {
 	rxm_ep_format_tx_buf_pkt(rxm_conn, data_len, pkt_op, 0, 0, 0,
 				 &tx_buf->pkt);
-	tx_buf->pkt.ctrl_hdr.type = ofi_ctrl_atomic_resp;
+	tx_buf->pkt.ctrl_hdr.type = rxm_ctrl_atomic_resp;
 	tx_buf->pkt.hdr.op = pkt_op;
 	tx_buf->pkt.hdr.atomic.datatype = datatype;
 	tx_buf->pkt.hdr.atomic.op = atomic_op;
@@ -1105,16 +1105,16 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 		       (rx_buf->pkt.ctrl_hdr.version == RXM_CTRL_VERSION));
 
 		switch (rx_buf->pkt.ctrl_hdr.type) {
-		case ofi_ctrl_data:
-		case ofi_ctrl_large_data:
+		case rxm_ctrl_eager:
+		case rxm_ctrl_rndv:
 			return rxm_handle_recv_comp(rx_buf);
-		case ofi_ctrl_ack:
+		case rxm_ctrl_rndv_ack:
 			return rxm_rndv_handle_ack(rxm_ep, rx_buf);
-		case ofi_ctrl_seg_data:
+		case rxm_ctrl_seg:
 			return rxm_sar_handle_segment(rx_buf);
-		case ofi_ctrl_atomic:
+		case rxm_ctrl_atomic:
 			return rxm_handle_atomic_req(rxm_ep, rx_buf);
-		case ofi_ctrl_atomic_resp:
+		case rxm_ctrl_atomic_resp:
 			return rxm_handle_atomic_resp(rxm_ep, rx_buf);
 		default:
 			FI_WARN(&rxm_prov, FI_LOG_CQ, "Unknown message type\n");

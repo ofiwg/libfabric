@@ -63,7 +63,7 @@
 
 #define RXM_CM_DATA_VERSION	1
 #define RXM_OP_VERSION		3
-#define RXM_CTRL_VERSION	3
+#define RXM_CTRL_VERSION	4
 
 #define RXM_BUF_SIZE	16384
 extern size_t rxm_eager_limit;
@@ -355,6 +355,15 @@ enum rxm_proto_state {
 };
 
 extern char *rxm_proto_state_str[];
+
+enum {
+	rxm_ctrl_eager,
+	rxm_ctrl_seg,
+	rxm_ctrl_rndv,
+	rxm_ctrl_rndv_ack,
+	rxm_ctrl_atomic,
+	rxm_ctrl_atomic_resp,
+};
 
 struct rxm_pkt {
 	struct ofi_ctrl_hdr ctrl_hdr;
@@ -919,7 +928,7 @@ rxm_process_recv_entry(struct rxm_recv_queue *recv_queue,
 		dlist_remove(&rx_buf->unexp_msg.entry);
 		rx_buf->recv_entry = recv_entry;
 
-		if (rx_buf->pkt.ctrl_hdr.type != ofi_ctrl_seg_data) {
+		if (rx_buf->pkt.ctrl_hdr.type != rxm_ctrl_seg) {
 			return rxm_cq_handle_rx_buf(rx_buf);
 		} else {
 			struct dlist_entry *entry;
@@ -944,7 +953,7 @@ rxm_process_recv_entry(struct rxm_recv_queue *recv_queue,
 					continue;
 				/* Handle unordered completions from MSG provider */
 				if ((rx_buf->pkt.ctrl_hdr.msg_id != recv_entry->sar.msg_id) ||
-				    ((rx_buf->pkt.ctrl_hdr.type != ofi_ctrl_seg_data)))
+				    ((rx_buf->pkt.ctrl_hdr.type != rxm_ctrl_seg)))
 					continue;
 
 				if (!rx_buf->conn) {

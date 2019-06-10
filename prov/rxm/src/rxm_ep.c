@@ -169,7 +169,7 @@ static void rxm_buf_init(struct ofi_bufpool_region *region, void *buf)
 
 		rx_buf->hdr.desc = mr_desc;
 		pkt = NULL;
-		type = ofi_ctrl_data; /* This can be any value */
+		type = rxm_ctrl_eager; /* This can be any value */
 		break;
 	case RXM_BUF_POOL_TX:
 		tx_eager_buf = buf;
@@ -177,14 +177,14 @@ static void rxm_buf_init(struct ofi_bufpool_region *region, void *buf)
 
 		tx_eager_buf->hdr.desc = mr_desc;
 		pkt = &tx_eager_buf->pkt;
-		type = ofi_ctrl_data;
+		type = rxm_ctrl_eager;
 		break;
 	case RXM_BUF_POOL_TX_INJECT:
 		tx_base_buf = buf;
 		tx_base_buf->hdr.state = RXM_INJECT_TX;
 
 		pkt = &tx_base_buf->pkt;
-		type = ofi_ctrl_data;
+		type = rxm_ctrl_eager;
 		break;
 	case RXM_BUF_POOL_TX_SAR:
 		tx_sar_buf = buf;
@@ -192,21 +192,21 @@ static void rxm_buf_init(struct ofi_bufpool_region *region, void *buf)
 
 		tx_sar_buf->hdr.desc = mr_desc;
 		pkt = &tx_sar_buf->pkt;
-		type = ofi_ctrl_seg_data;
+		type = rxm_ctrl_seg;
 		break;
 	case RXM_BUF_POOL_TX_RNDV:
 		tx_rndv_buf = buf;
 
 		tx_rndv_buf->hdr.desc = mr_desc;
 		pkt = &tx_rndv_buf->pkt;
-		type = ofi_ctrl_large_data;
+		type = rxm_ctrl_rndv;
 		break;
 	case RXM_BUF_POOL_TX_ATOMIC:
 		tx_atomic_buf = buf;
 
 		tx_atomic_buf->hdr.desc = mr_desc;
 		pkt = &tx_atomic_buf->pkt;
-		type = ofi_ctrl_atomic;
+		type = rxm_ctrl_atomic;
 		break;
 	case RXM_BUF_POOL_TX_ACK:
 		tx_base_buf = buf;
@@ -214,7 +214,7 @@ static void rxm_buf_init(struct ofi_bufpool_region *region, void *buf)
 
 		tx_base_buf->hdr.desc = mr_desc;
 		pkt = &tx_base_buf->pkt;
-		type = ofi_ctrl_ack;
+		type = rxm_ctrl_rndv_ack;
 		break;
 	case RXM_BUF_POOL_RMA:
 		rma_buf = buf;
@@ -223,7 +223,7 @@ static void rxm_buf_init(struct ofi_bufpool_region *region, void *buf)
 
 		rma_buf->hdr.desc = mr_desc;
 		pkt = &rma_buf->pkt;
-		type = ofi_ctrl_data;
+		type = rxm_ctrl_eager;
 		break;
 	default:
 		assert(0);

@@ -221,7 +221,7 @@ rxm_conn_inject_pkt_alloc(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 	memset(inject_pkt, 0, rxm_ep->inject_limit + sizeof(*inject_pkt));
 	inject_pkt->ctrl_hdr.version = RXM_CTRL_VERSION;
-	inject_pkt->ctrl_hdr.type = ofi_ctrl_data;
+	inject_pkt->ctrl_hdr.type = rxm_ctrl_eager;
 	inject_pkt->hdr.version = OFI_OP_VERSION;
 	inject_pkt->hdr.op = op;
 	inject_pkt->hdr.flags = flags;
