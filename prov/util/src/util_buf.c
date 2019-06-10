@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2016 Intel Corporation. All rights reserved.
- * Copyright (c) 2018 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * Copyright (c) 2018-2019 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -161,7 +161,10 @@ err3:
 	if (pool->attr.free_hndlr)
 	    pool->attr.free_hndlr(pool->attr.ctx, buf_region->context);
 err2:
-	ofi_freealign(buf_region->mem_region);
+	if (pool->attr.is_mmap_region)
+		ofi_free_hugepage_buf(buf_region->mem_region, buf_region->size);
+	else
+		ofi_freealign(buf_region->mem_region);
 err1:
 	free(buf_region);
 	return -1;
