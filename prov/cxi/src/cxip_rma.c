@@ -104,6 +104,12 @@ static ssize_t _cxip_rma_op(enum cxip_rma_op op, struct fid_ep *ep,
 		return -FI_EINVAL;
 	}
 
+	if (!txc->enabled)
+		return -FI_EOPBADSTATE;
+
+	if (!ofi_rma_initiate_allowed(txc->attr.caps & ~FI_ATOMIC))
+		return -FI_ENOPROTOOPT;
+
 	dom = txc->domain;
 	pid_granule = dom->dev_if->if_dev->info.pid_granule;
 

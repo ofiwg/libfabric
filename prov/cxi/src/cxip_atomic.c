@@ -527,6 +527,12 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 		return -FI_EINVAL;
 	}
 
+	if (!txc->enabled)
+		return -FI_EOPBADSTATE;
+
+	if (!ofi_rma_initiate_allowed(txc->attr.caps & ~FI_RMA))
+		return -FI_ENOPROTOOPT;
+
 	dev_if = txc->domain->dev_if;
 	pid_granule = dev_if->if_dev->info.pid_granule;
 

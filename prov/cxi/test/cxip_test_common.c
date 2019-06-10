@@ -102,11 +102,10 @@ void cxit_create_sep(void)
 {
 	int ret;
 
-	/* Scalabled EPs do not support TAGGED|SEND capabilities at the same \
-	 * time. Disable TAGGED capability if SEND is requested
-	 */
-	if (cxit_fi->caps & FI_SEND)
-		cxit_fi->caps &= ~FI_TAGGED;
+	/* Scalable EPs do not support messaging. */
+	cxit_fi->tx_attr->caps &= ~(FI_TAGGED | FI_MSG);
+	cxit_fi->rx_attr->caps &= ~(FI_TAGGED | FI_MSG);
+
 	ret = fi_scalable_ep(cxit_domain, cxit_fi, &cxit_sep, NULL);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_scalable_ep");
 	cr_assert_not_null(cxit_sep);

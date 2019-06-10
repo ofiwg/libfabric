@@ -711,38 +711,39 @@ Test(tagged, expected_sw_rdzv)
 Test(tagged, rdzv_id)
 {
 	int rc;
-	struct cxip_txc txc = {};
+	struct cxip_ep *cxip_ep = container_of(cxit_ep, struct cxip_ep, ep);
+	struct cxip_ep_obj *ep_obj = cxip_ep->ep_obj;
 
-	/* Allocate all the IDs for the txc */
-	for (int i = 0; i < 128; i++) {
-		rc = cxip_txc_alloc_rdzv_id(&txc);
+	/* Allocate all the IDs  */
+	for (int i = 0; i < CXIP_RDZV_IDS; i++) {
+		rc = cxip_rdzv_id_alloc(ep_obj);
 		cr_assert_eq(rc, i, "Expected %d Got %d", i, rc);
 	}
 
 	/* Allocate one more expecting it to fail */
-	rc = cxip_txc_alloc_rdzv_id(&txc);
+	rc = cxip_rdzv_id_alloc(ep_obj);
 	cr_assert_eq(rc, -FI_ENOSPC, "Got rc %d", rc);
 
 	/* Put ID 67 back */
-	rc = cxip_txc_free_rdzv_id(&txc, 67);
+	rc = cxip_rdzv_id_free(ep_obj, 67);
 	cr_assert_eq(rc, FI_SUCCESS, "Got rc %d", rc);
 
 	/* Allocate one more expecting the one just put back */
-	rc = cxip_txc_alloc_rdzv_id(&txc);
+	rc = cxip_rdzv_id_alloc(ep_obj);
 	cr_assert_eq(rc, 67, "Got ID %d instead", rc);
 
 	/* Allocate one more expecting it to fail */
-	rc = cxip_txc_alloc_rdzv_id(&txc);
+	rc = cxip_rdzv_id_alloc(ep_obj);
 	cr_assert_eq(rc, -FI_ENOSPC, "Got rc %d", rc);
 
-	/* Allocate all the IDs for the txc */
-	for (int i = 0; i < 128; i++) {
-		rc = cxip_txc_free_rdzv_id(&txc, i);
+	/* Allocate all the IDs  */
+	for (int i = 0; i < CXIP_RDZV_IDS; i++) {
+		rc = cxip_rdzv_id_free(ep_obj, i);
 		cr_assert_eq(rc, FI_SUCCESS, "Got rc %d", rc);
 	}
 
 	/* Free out of bounds */
-	rc = cxip_txc_free_rdzv_id(&txc, 325);
+	rc = cxip_rdzv_id_free(ep_obj, CXIP_RDZV_IDS * 2);
 	cr_assert_eq(rc, -FI_EINVAL, "Got rc %d", rc);
 }
 

@@ -30,6 +30,55 @@ extern struct fi_ops_ep cxip_ep_ops;
 extern struct fi_ops cxip_ep_fi_ops;
 extern struct fi_ops_ep cxip_ctx_ep_ops;
 
+/*
+ * cxip_rdzv_id_alloc() - Allocate a rendezvous ID.
+ */
+int cxip_rdzv_id_alloc(struct cxip_ep_obj *ep_obj)
+{
+	unsigned int block;
+	int bit;
+	int id;
+
+	fastlock_acquire(&ep_obj->rdzv_id_lock);
+
+	/* TODO Start search at different cachelines based on TXC ID. */
+	for (block = 0; block < CXIP_RDZV_ID_BLOCKS; block++) {
+		if (ep_obj->rdzv_ids[block]) {
+			bit = ffsl(ep_obj->rdzv_ids[block]);
+			ep_obj->rdzv_ids[block] &= ~(1ULL << --bit);
+			fastlock_release(&ep_obj->rdzv_id_lock);
+
+			id = block * __BITS_PER_LONG + bit;
+			CXIP_LOG_DBG("Allocated ID: %d\n", id);
+			return id;
+		}
+	}
+
+	fastlock_release(&ep_obj->rdzv_id_lock);
+
+	return -FI_ENOSPC;
+}
+
+/*
+ * cxip_rdzv_id_free() - Free a rendezvous ID.
+ */
+int cxip_rdzv_id_free(struct cxip_ep_obj *ep_obj, int id)
+{
+	unsigned int block = id / __BITS_PER_LONG;
+	int bit = id % __BITS_PER_LONG;
+
+	if (id < 0 || id >= CXIP_RDZV_IDS)
+		return -FI_EINVAL;
+
+	fastlock_acquire(&ep_obj->rdzv_id_lock);
+	ep_obj->rdzv_ids[block] |= (1ULL << bit);
+	fastlock_release(&ep_obj->rdzv_id_lock);
+
+	CXIP_LOG_DBG("Freed ID: %d\n", id);
+
+	return FI_SUCCESS;
+}
+
 static int cxip_ep_cm_getname(fid_t fid, void *addr, size_t *addrlen)
 {
 	struct cxip_ep *cxip_ep;
@@ -41,7 +90,7 @@ static int cxip_ep_cm_getname(fid_t fid, void *addr, size_t *addrlen)
 	case FI_CLASS_EP:
 	case FI_CLASS_SEP:
 		cxip_ep = container_of(fid, struct cxip_ep, ep.fid);
-		if (!cxip_ep->ep_obj->is_enabled)
+		if (!cxip_ep->ep_obj->enabled)
 			return -FI_EOPBADSTATE;
 
 		CXIP_LOG_DBG("NIC: 0x%x PID: %u\n",
@@ -336,42 +385,39 @@ static int cxip_ctx_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
  *
  * @return int 0 on success, -errno on failure
  */
-static int _ep_enable(struct cxip_ep_obj *ep_obj)
+static int ep_enable(struct cxip_ep_obj *ep_obj)
 {
-	int ret;
+	int ret = FI_SUCCESS;
 
-	if (ep_obj->is_enabled)
-		return FI_SUCCESS;
+	fastlock_acquire(&ep_obj->lock);
+
+	if (ep_obj->enabled)
+		goto unlock;
 
 	if (!ep_obj->av) {
 		CXIP_LOG_DBG("enable EP without AV\n");
-		return -FI_ENOAV;
+		ret = -FI_ENOAV;
+		goto unlock;
 	}
 
-	/* First call allocates CXIL resources on the interface associated with
-	 * this domain, and takes a reference count. Subsequent calls simply
-	 * take a reference count on the interface. This is associated with
-	 * creating the EP, but is deferred until it is enabled.
-	 */
+	/* Assign resources to the libfabric domain. */
 	ret = cxip_domain_enable(ep_obj->domain);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("cxip_domain_enable returned: %d\n", ret);
-		return ret;
+		goto unlock;
 	}
 
-	/* First call allocates CXIL resources for this interface, VNI, and PID,
-	 * and takes a reference count. Subsequent calls simply take a reference
-	 * count. This is associated with enabling the EP.
-	 */
+	/* Get reference to a CXI domain. */
 	ret = cxip_get_if_domain(ep_obj->domain->dev_if,
 				 ep_obj->vni,
 				 ep_obj->src_addr.pid,
 				 &ep_obj->if_dom);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Failed to get IF Domain: %d\n", ret);
-		return ret;
+		goto unlock;
 	}
 
+	/* Store PID in case it was automatically assigned. */
 	CXIP_LOG_DBG("EP assigned PID: %u\n", ep_obj->if_dom->pid);
 	ep_obj->src_addr.pid = ep_obj->if_dom->pid;
 
@@ -380,9 +426,16 @@ static int _ep_enable(struct cxip_ep_obj *ep_obj)
 		fprintf(stderr, "Rendezvous offload enabled\n");
 	}
 
-	ep_obj->is_enabled = 1;
+	ep_obj->enabled = 1;
+
+	fastlock_release(&ep_obj->lock);
 
 	return FI_SUCCESS;
+
+unlock:
+	fastlock_release(&ep_obj->lock);
+
+	return ret;
 }
 
 /**
@@ -404,7 +457,7 @@ static int cxip_ctx_enable(struct fid_ep *ep)
 	case FI_CLASS_RX_CTX:
 		rxc = container_of(ep, struct cxip_rxc, ctx.fid);
 
-		ret = _ep_enable(rxc->ep_obj);
+		ret = ep_enable(rxc->ep_obj);
 		if (ret != FI_SUCCESS)
 			return ret;
 
@@ -414,13 +467,12 @@ static int cxip_ctx_enable(struct fid_ep *ep)
 				     ret);
 			return ret;
 		}
-		rxc->enabled = 1;
 		return 0;
 
 	case FI_CLASS_TX_CTX:
 		txc = container_of(ep, struct cxip_txc, fid.ctx.fid);
 
-		ret = _ep_enable(txc->ep_obj);
+		ret = ep_enable(txc->ep_obj);
 		if (ret != FI_SUCCESS)
 			return ret;
 
@@ -430,7 +482,6 @@ static int cxip_ctx_enable(struct fid_ep *ep)
 				     ret);
 			return ret;
 		}
-		txc->enabled = 1;
 		return 0;
 
 	default:
@@ -760,8 +811,6 @@ static int cxip_ep_enable(struct fid_ep *ep)
 	struct cxip_txc *txc;
 	struct cxip_rxc *rxc;
 
-	/* TODO add EP locking */
-
 	cxi_ep = container_of(ep, struct cxip_ep, ep);
 	txc = cxi_ep->ep_obj->txcs[0];
 	rxc = cxi_ep->ep_obj->rxcs[0];
@@ -777,7 +826,7 @@ static int cxip_ep_enable(struct fid_ep *ep)
 			return -FI_EINVAL;
 		}
 
-		ret = _ep_enable(cxi_ep->ep_obj);
+		ret = ep_enable(cxi_ep->ep_obj);
 		if (ret != FI_SUCCESS)
 			return ret;
 
@@ -794,12 +843,12 @@ static int cxip_ep_enable(struct fid_ep *ep)
 			return ret;
 		}
 	} else {
-		ret = _ep_enable(cxi_ep->ep_obj);
+		ret = ep_enable(cxi_ep->ep_obj);
 		if (ret != FI_SUCCESS)
 			return ret;
 	}
 
-	return 0;
+	return FI_SUCCESS;
 }
 
 /**
@@ -811,9 +860,9 @@ static int cxip_ep_enable(struct fid_ep *ep)
  */
 static void cxip_ep_disable(struct cxip_ep *cxi_ep)
 {
-	if (cxi_ep->ep_obj->is_enabled) {
+	if (cxi_ep->ep_obj->enabled) {
 		cxip_put_if_domain(cxi_ep->ep_obj->if_dom);
-		cxi_ep->ep_obj->is_enabled = 0;
+		cxi_ep->ep_obj->enabled = 0;
 	}
 }
 
@@ -1123,11 +1172,11 @@ static int cxip_ep_control(struct fid *fid, int command, void *arg)
 	case FI_ENABLE:
 		ep_fid = container_of(fid, struct fid_ep, fid);
 		return cxip_ep_enable(ep_fid);
-
 	default:
 		return -FI_EINVAL;
 	}
-	return 0;
+
+	return FI_SUCCESS;
 }
 
 struct fi_ops cxip_ep_fi_ops = {
@@ -1489,9 +1538,14 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 	uint32_t pid;
 
 	if (!domain || !hints || !hints->ep_attr || !hints->tx_attr ||
-	    !hints->rx_attr) {
-		ret = -FI_EINVAL;
-		goto err;
+	    !hints->rx_attr)
+		return -FI_EINVAL;
+
+	if (fclass == FI_CLASS_SEP &&
+	    (ofi_send_allowed(hints->tx_attr->caps) ||
+	     ofi_recv_allowed(hints->tx_attr->caps))) {
+		CXIP_LOG_ERROR("Scalable EPs do not support messaging.\n");
+		return -FI_ENOPROTOOPT;
 	}
 
 	ret = ofi_prov_check_info(&cxip_util_prov, CXIP_FI_VERSION, hints);
@@ -1501,14 +1555,6 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 	/* domain, info, info->ep_attr, and ep are != NULL */
 	cxi_dom = container_of(domain, struct cxip_domain,
 			       util_domain.domain_fid);
-
-	if (fclass == FI_CLASS_SEP && hints &&
-	    (hints->caps & (FI_TAGGED | FI_SEND)) == (FI_TAGGED | FI_SEND)) {
-		CXIP_LOG_ERROR(
-			"Scalable EPs do not support (FI_TAGGED | FI_SEND) capabilities\n");
-		ret = -FI_EINVAL;
-		goto err;
-	}
 
 	nic = cxi_dom->nic_addr;
 	if (hints->src_addr) {
@@ -1559,6 +1605,9 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 	cxi_ep->ep_obj->src_addr.pid = pid;
 	cxi_ep->ep_obj->src_addr.valid = 1;
 	cxi_ep->ep_obj->fi_addr = FI_ADDR_NOTAVAIL;
+	memset(cxi_ep->ep_obj->rdzv_ids, 0xFF,
+	       sizeof(cxi_ep->ep_obj->rdzv_ids));
+	fastlock_init(&cxi_ep->ep_obj->rdzv_id_lock);
 
 	switch (fclass) {
 	case FI_CLASS_EP:

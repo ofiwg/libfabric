@@ -316,7 +316,7 @@ static int cxip_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		 */
 		if (mr->ep ||
 		    mr->domain != ep->ep_obj->domain ||
-		    !ep->ep_obj->is_enabled) {
+		    !ep->ep_obj->enabled) {
 			ret = -FI_EINVAL;
 			break;
 		}

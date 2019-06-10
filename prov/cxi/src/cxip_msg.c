@@ -1436,6 +1436,12 @@ static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 		return -FI_EINVAL;
 	}
 
+	if (!rxc->enabled)
+		return -FI_EOPBADSTATE;
+
+	if (!ofi_recv_allowed(rxc->attr.caps))
+		return -FI_ENOPROTOOPT;
+
 	dom = rxc->domain;
 
 	/* If FI_DIRECTED_RECV and a src_addr is specified, encode the address
@@ -1564,7 +1570,7 @@ static void rdzv_send_req_free(struct cxip_req *req)
 {
 	fastlock_acquire(&req->send.txc->lock);
 
-	cxip_txc_free_rdzv_id(req->send.txc, req->send.rdzv_id);
+	cxip_rdzv_id_free(req->send.txc->ep_obj, req->send.rdzv_id);
 	CXIP_LOG_DBG("Freed RDZV ID: %d\n", req->send.rdzv_id);
 
 	fastlock_release(&req->send.txc->lock);
@@ -1764,12 +1770,9 @@ static ssize_t _cxip_send_long(struct cxip_txc *txc, struct cxip_req *req)
 	fastlock_acquire(&txc->lock);
 
 	/* Get Rendezvous ID */
-	rdzv_id = cxip_txc_alloc_rdzv_id(txc);
-	if (rdzv_id < 0) {
-		CXIP_LOG_DBG("Failed alloc RDZV ID\n");
+	rdzv_id = cxip_rdzv_id_alloc(txc->ep_obj);
+	if (rdzv_id < 0)
 		goto unlock;
-	}
-	CXIP_LOG_DBG("Alloced RDZV ID: %d\n", rdzv_id);
 
 	req->send.rdzv_id = rdzv_id;
 
@@ -1818,7 +1821,7 @@ static ssize_t _cxip_send_long(struct cxip_txc *txc, struct cxip_req *req)
 	return FI_SUCCESS;
 
 free_id:
-	cxip_txc_free_rdzv_id(txc, rdzv_id);
+	cxip_rdzv_id_free(txc->ep_obj, rdzv_id);
 unlock:
 	fastlock_release(&txc->lock);
 
@@ -1938,6 +1941,12 @@ static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 		CXIP_LOG_ERROR("Invalid EP type\n");
 		return -FI_EINVAL;
 	}
+
+	if (!txc->enabled)
+		return -FI_EOPBADSTATE;
+
+	if (!ofi_send_allowed(txc->attr.caps))
+		return -FI_ENOPROTOOPT;
 
 	long_send = len > txc->eager_threshold ? true : false;
 

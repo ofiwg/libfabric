@@ -217,24 +217,27 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 		goto unlock;
 	}
 
-	ret = rxc_msg_init(rxc);
-	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("rxc_msg_init returned: %d\n", ret);
-		ret = -FI_EDOMAIN;
-		goto unlock;
-	}
+	if (ofi_recv_allowed(rxc->attr.caps)) {
+		ret = rxc_msg_init(rxc);
+		if (ret != FI_SUCCESS) {
+			CXIP_LOG_DBG("rxc_msg_init returned: %d\n", ret);
+			ret = -FI_EDOMAIN;
+			goto unlock;
+		}
 
-	ret = cxip_msg_oflow_init(rxc);
-	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("cxip_msg_oflow_init returned: %d\n", ret);
-		goto msg_fini;
-	}
+		ret = cxip_msg_oflow_init(rxc);
+		if (ret != FI_SUCCESS) {
+			CXIP_LOG_DBG("cxip_msg_oflow_init returned: %d\n",
+				     ret);
+			goto msg_fini;
+		}
 
-	/* Start accepting Puts. */
-	ret = rxc_msg_enable(rxc);
-	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("rxc_msg_disable returned: %d\n", ret);
-		goto oflow_fini;
+		/* Start accepting Puts. */
+		ret = rxc_msg_enable(rxc);
+		if (ret != FI_SUCCESS) {
+			CXIP_LOG_DBG("rxc_msg_disable returned: %d\n", ret);
+			goto oflow_fini;
+		}
 	}
 
 	rxc->enabled = 1;
@@ -314,20 +317,22 @@ static void rxc_disable(struct cxip_rxc *rxc)
 
 	rxc->enabled = 0;
 
-	/* Stop accepting Puts. */
-	ret = rxc_msg_disable(rxc);
-	if (ret != FI_SUCCESS)
-		CXIP_LOG_DBG("rxc_msg_disable returned: %d\n", ret);
+	if (ofi_recv_allowed(rxc->attr.caps)) {
+		/* Stop accepting Puts. */
+		ret = rxc_msg_disable(rxc);
+		if (ret != FI_SUCCESS)
+			CXIP_LOG_DBG("rxc_msg_disable returned: %d\n", ret);
 
-	rxc_cleanup(rxc);
+		rxc_cleanup(rxc);
 
-	/* Clean up overflow buffers. */
-	cxip_msg_oflow_fini(rxc);
+		/* Clean up overflow buffers. */
+		cxip_msg_oflow_fini(rxc);
 
-	/* Free hardware resources. */
-	ret = rxc_msg_fini(rxc);
-	if (ret != FI_SUCCESS)
-		CXIP_LOG_ERROR("rxc_msg_fini returned: %d\n", ret);
+		/* Free hardware resources. */
+		ret = rxc_msg_fini(rxc);
+		if (ret != FI_SUCCESS)
+			CXIP_LOG_ERROR("rxc_msg_fini returned: %d\n", ret);
+	}
 
 unlock:
 	fastlock_release(&rxc->lock);

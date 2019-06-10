@@ -78,7 +78,7 @@ Test(sep, invalid_args)
 	info = *cxit_fi;
 	info.caps |= (FI_TAGGED | FI_SEND);
 	ret = fi_scalable_ep(cxit_domain, &info, &cxit_ep, NULL);
-	cr_assert_eq(ret, -FI_EINVAL);
+	cr_assert_eq(ret, -FI_ENOPROTOOPT);
 }
 
 /**
@@ -124,8 +124,10 @@ ParameterizedTest(struct sep_test_params *param, sep, fi_sep_types)
 	struct cxip_ep *cep;
 
 	cxit_fi->ep_attr->type = param->type;
-	cxit_fi->caps &= ~(FI_TAGGED | FI_SEND);
+	cxit_fi->tx_attr->caps &= ~(FI_TAGGED | FI_MSG);
+	cxit_fi->rx_attr->caps &= ~(FI_TAGGED | FI_MSG);
 	cxit_ep = NULL;
+
 	ret = fi_scalable_ep(cxit_domain, cxit_fi, &cxit_ep, param->context);
 	cr_assert_eq(ret, param->retval,
 		     "fi_endpoint() error for type %d. %d != %d",
@@ -344,8 +346,7 @@ void cxit_setup_sep(int ntx, int nrx, int nmr, int buf_size)
 
 	/* Request required capabilities for RMA */
 	cxit_setup_getinfo();
-	cxit_fi_hints->fabric_attr->prov_name = strdup(cxip_prov_name);
-	cxit_fi_hints->caps = FI_WRITE | FI_READ;
+
 	cxit_tx_cq_attr.format = FI_CQ_FORMAT_TAGGED;
 	cxit_av_attr.type = FI_AV_TABLE;
 
@@ -535,110 +536,6 @@ static int _cmpdata(uint8_t *rx, uint8_t *tx, int len)
 		if (rx[i] != (tx ? tx[i] : 0))
 			break;
 	return i;
-}
-
-/* Test basic SEP send/recv */
-Test(sep, simple_msg_send)
-{
-	int i, ret;
-	int txi, rxi, rxi2;
-	uint8_t *tx_buf;
-	struct fi_cq_tagged_entry tx_cqe;
-	struct fi_cq_tagged_entry rx_cqe;
-
-	cxit_setup_sep(16, 16, 0, 64);
-
-	/* We do one send at a time, reuse TX buffer */
-	tx_buf = malloc(cxit_sep_buf_size);
-	cr_assert(tx_buf);
-
-	/* O(N^2) loop over combinations of TX and RX */
-	for (txi = 0; txi < cxit_sep_tx_cnt; txi++) {
-		/* Unique initialization of TX for each TX */
-		for (i = 0; i < cxit_sep_buf_size; i++)
-			tx_buf[i] = (txi << 4) | i;
-
-		/* Send to each RX in turn */
-		for (rxi = 0; rxi < cxit_sep_rx_cnt; rxi++) {
-			ret = fi_tsend(cxit_sep_tx[txi], tx_buf,
-				       cxit_sep_buf_size,
-				       NULL, cxit_sep_rx_addr[rxi], 0, NULL);
-			cr_assert(ret == FI_SUCCESS);
-
-			/* Wait for async event indicating data received */
-			ret = cxit_await_completion(cxit_sep_rx_cq[rxi],
-						    &rx_cqe);
-			cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
-
-			/* Validate RX event fields */
-			cr_assert(rx_cqe.op_context == NULL,
-				  "RX CQE CTX mismatch[%d][%d]", txi, rxi);
-			cr_assert(rx_cqe.flags == (FI_TAGGED | FI_RECV),
-				  "RX CQE flags mismatch[%d][%d]", txi, rxi);
-			cr_assert(rx_cqe.len == cxit_sep_buf_size,
-				  "Invalid RX CQE length[%d][%d]", txi, rxi);
-			cr_assert(rx_cqe.buf == 0,
-				  "Invalid RX CQE addr[%d][%d]", txi, rxi);
-			cr_assert(rx_cqe.data == 0,
-				  "Invalid RX CQE data[%d][%d]", txi, rxi);
-			cr_assert(rx_cqe.tag == 0,
-				  "Invalid RX CQE tag[%d][%d]", txi, rxi);
-
-			/* Wait for async event indicating data sent */
-			ret = cxit_await_completion(cxit_sep_tx_cq[txi],
-						    &tx_cqe);
-			cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
-
-			/* Validate TX event fields */
-			cr_assert(tx_cqe.op_context == NULL,
-				  "TX CQE CTX mismatch[%d][%d]", txi, rxi);
-			cr_assert(tx_cqe.flags == (FI_TAGGED | FI_SEND),
-				  "TX CQE flags mismatch[%d][%d]", txi, rxi);
-			cr_assert(tx_cqe.len == 0,
-				  "Invalid TX CQE length[%d][%d]", txi, rxi);
-			cr_assert(tx_cqe.buf == 0,
-				  "Invalid TX CQE addr[%d][%d]", txi, rxi);
-			cr_assert(tx_cqe.data == 0,
-				  "Invalid TX CQE data[%d][%d]", txi, rxi);
-			cr_assert(tx_cqe.tag == 0,
-				  "Invalid TX CQE tag[%d][%d]", txi, rxi);
-
-			/* Test all of the receive buffers */
-			for (rxi2 = 0; rxi2 < cxit_sep_rx_cnt; rxi2++) {
-				ret = _cmpdata(cxit_sep_rx_buf[rxi2],
-					       (rxi2 == rxi) ? tx_buf : NULL,
-					       cxit_sep_buf_size);
-				cr_assert_eq(ret, cxit_sep_buf_size,
-					     "Byte compare[%d][%d|%d][%d] exp=%02x, saw=%02x",
-					     txi, rxi, rxi2, ret,
-					     (rxi2 == rxi) ? tx_buf[ret] : 0,
-					     cxit_sep_rx_buf[rxi2][ret]);
-			}
-
-			/* Clear buffer  */
-			memset(cxit_sep_rx_buf[rxi], 0, cxit_sep_buf_size);
-
-			/* Post buffer again, except on the last TX pass. This
-			 * is a workaround for the lack of fi_cancel()
-			 * implmentation: if we post this now, there's no way to
-			 * cleanly shut down.
-			 * TODO: remove after fi_cancel() implemented
-			 */
-			if (txi == cxit_sep_tx_cnt-1)
-				continue;
-
-			ret = fi_trecv(cxit_sep_rx[rxi], cxit_sep_rx_buf[rxi],
-				       cxit_sep_buf_size,
-				       NULL, FI_ADDR_UNSPEC, 0, 0, NULL);
-			cr_assert(ret == FI_SUCCESS,
-				  "bad RX post[%d][%d] = %d\n",
-				  txi, rxi, ret);
-		}
-	}
-
-	free(tx_buf);
-
-	cxit_teardown_sep();
 }
 
 Test(sep, simple_rma_write)

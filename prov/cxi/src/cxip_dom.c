@@ -28,9 +28,12 @@ extern struct fi_ops_mr cxip_dom_mr_ops;
  */
 int cxip_domain_enable(struct cxip_domain *dom)
 {
-	int ret;
+	int ret = FI_SUCCESS;
 
 	fastlock_acquire(&dom->lock);
+
+	if (dom->enabled)
+		goto unlock;
 
 	ret = cxip_get_if(dom->nic_addr, &dom->dev_if);
 	if (ret != FI_SUCCESS) {

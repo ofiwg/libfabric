@@ -623,11 +623,10 @@ struct cxip_rxc {
 	struct cxip_oflow_buf ux_sink_buf;	// Long UX sink buffer
 };
 
-#define CXIP_RDZV_BM_LEN (8)
-
-struct cxip_rdzv_ids {
-	uint16_t bitmap[CXIP_RDZV_BM_LEN];
-};
+#define CXIP_RDZV_IDS (1 << RDZV_ID_LO_WIDTH)
+#define CXIP_RDZV_ID_BLOCKS (CXIP_RDZV_IDS / __BITS_PER_LONG)
+_Static_assert(CXIP_RDZV_IDS <= (1 << RDZV_ID_LO_WIDTH),
+	       "CXIP_RDZV_IDS range exceeds RDZV ID field width.");
 
 /**
  * Transmit Context
@@ -668,7 +667,6 @@ struct cxip_txc {
 	struct cxip_pte *rdzv_pte;	// PTE for SW Rendezvous commands
 	int eager_threshold;		// Threshold for eager IOs
 	struct cxip_cmdq *rx_cmdq;	// Target cmdq for Rendezvous buffers
-	struct cxip_rdzv_ids rdzv_ids;	// Set of Rendezvous IDs to be used
 };
 
 /**
@@ -704,7 +702,7 @@ struct cxip_ep_obj {
 
 	struct fi_ep_attr ep_attr;
 
-	int is_enabled;
+	int enabled;
 	fastlock_t lock;
 
 	struct cxip_addr src_addr;	// address of this NIC
@@ -712,6 +710,9 @@ struct cxip_ep_obj {
 	uint32_t vni;			// VNI all EP addressing
 	struct cxip_if_domain *if_dom;
 	int rdzv_offload;
+
+	long rdzv_ids[CXIP_RDZV_ID_BLOCKS];
+	fastlock_t rdzv_id_lock;
 };
 
 /**
@@ -887,8 +888,8 @@ int cxip_wait_close(fid_t fid);
 int cxip_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 		   struct fid_wait **waitset);
 
-int cxip_txc_alloc_rdzv_id(struct cxip_txc *txc);
-int cxip_txc_free_rdzv_id(struct cxip_txc *txc, int tag);
+int cxip_rdzv_id_alloc(struct cxip_ep_obj *ep_obj);
+int cxip_rdzv_id_free(struct cxip_ep_obj *ep_obj, int id);
 
 int cxip_msg_oflow_init(struct cxip_rxc *rxc);
 void cxip_msg_oflow_fini(struct cxip_rxc *rxc);

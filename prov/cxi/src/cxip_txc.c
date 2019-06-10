@@ -18,54 +18,6 @@
 #define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_EP_CTRL, __VA_ARGS__)
 
 /*
- * cxip_txc_alloc_rdzv_id() - Allocate a rendezvous ID.
- *
- * Caller must hold txc->lock.
- */
-int cxip_txc_alloc_rdzv_id(struct cxip_txc *txc)
-{
-	int rc;
-
-	/* Find a bitmap with cleared bits */
-	for (int idx = 0; idx < CXIP_RDZV_BM_LEN; idx++) {
-		if (txc->rdzv_ids.bitmap[idx] != 0xFFFF)
-
-			/* Find the lowest cleared bit */
-			for (int bit = 0; bit < 16; bit++)
-				if (!(txc->rdzv_ids.bitmap[idx] & (1 << bit))) {
-
-					/* Set the bit and save the context */
-					txc->rdzv_ids.bitmap[idx] |= (1 << bit);
-					rc = (idx << 4) | bit;
-
-					return rc;
-				}
-	}
-
-	/* No bitmap has a cleared bit */
-	return -FI_ENOSPC;
-}
-
-/*
- * cxip_txc_free_rdzv_id() - Free a rendezvous ID.
- *
- * Caller must hold txc->lock.
- */
-int cxip_txc_free_rdzv_id(struct cxip_txc *txc, int tag)
-{
-	int idx = tag >> 4;
-	int bit = (tag & 0xF);
-	uint16_t clear_bitmask = 1 << bit;
-
-	if (idx >= CXIP_RDZV_BM_LEN || idx < 0)
-		return -FI_EINVAL;
-
-	txc->rdzv_ids.bitmap[idx] &= ~clear_bitmask;
-
-	return FI_SUCCESS;
-}
-
-/*
  * txc_msg_init() - Initialize an RX context for messaging.
  *
  * Allocates and initializes hardware resources used for transmitting messages.
@@ -76,28 +28,36 @@ static int txc_msg_init(struct cxip_txc *txc)
 {
 	int ret;
 	union c_cmdu cmd = {};
-	struct cxi_pt_alloc_opts opts = {
+	struct cxi_pt_alloc_opts pt_opts = {
 		.is_matching = 1,
 		.pe_num = CXI_PE_NUM_ANY,
 		.le_pool = CXI_LE_POOL_ANY
 	};
 	uint64_t pid_idx;
+	struct cxi_cq_alloc_opts cq_opts;
 
-	/* initialize the rendezvous ID structure */
-	memset(&txc->rdzv_ids, 0, sizeof(txc->rdzv_ids));
+	/* Allocate TGQ for posting source data */
+	cq_opts.count = 64;
+	cq_opts.is_transmit = 0;
+	ret = cxip_cmdq_alloc(txc->domain->dev_if, NULL, &cq_opts,
+			      &txc->rx_cmdq);
+	if (ret != FI_SUCCESS) {
+		CXIP_LOG_DBG("Unable to allocate TGQ, ret: %d\n", ret);
+		return -FI_EDOMAIN;
+	}
 
 	if (txc->ep_obj->av->attr.flags & FI_SYMMETRIC) {
 		CXIP_LOG_DBG("Using logical PTE matching\n");
-		opts.use_logical = 1;
+		pt_opts.use_logical = 1;
 	}
 
 	/* Reserve the Rendezvous Send PTE */
 	pid_idx = txc->domain->dev_if->if_dev->info.rdzv_get_idx;
 	ret = cxip_pte_alloc(txc->ep_obj->if_dom, txc->comp.send_cq->evtq,
-			     pid_idx, &opts, &txc->rdzv_pte);
+			     pid_idx, &pt_opts, &txc->rdzv_pte);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Failed to allocate RDZV PTE: %d\n", ret);
-		return ret;
+		goto free_rx_cmdq;
 	}
 
 	/* Enable the Rendezvous PTE */
@@ -124,6 +84,8 @@ static int txc_msg_init(struct cxip_txc *txc)
 
 free_rdzv_pte:
 	cxip_pte_free(txc->rdzv_pte);
+free_rx_cmdq:
+	cxip_cmdq_free(txc->rx_cmdq);
 
 	return ret;
 }
@@ -139,6 +101,7 @@ free_rdzv_pte:
 static int txc_msg_fini(struct cxip_txc *txc)
 {
 	cxip_pte_free(txc->rdzv_pte);
+	cxip_cmdq_free(txc->rx_cmdq);
 
 	return FI_SUCCESS;
 }
@@ -184,22 +147,11 @@ int cxip_txc_enable(struct cxip_txc *txc)
 		goto unlock;
 	}
 
-	/* Allocate a target-side cmdq for Rendezvous buffers */
-	opts.count = 64;
-	opts.is_transmit = 0;
-	ret = cxip_cmdq_alloc(txc->domain->dev_if, NULL, &opts,
-			      &txc->rx_cmdq);
-	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("Unable to allocate tgt_sd CMDQ, ret: %d\n", ret);
-		ret = -FI_EDOMAIN;
-		goto free_tx_cmdq;
-	}
-
-	if ((txc->attr.caps & (FI_TAGGED | FI_SEND)) == (FI_TAGGED | FI_SEND)) {
+	if (ofi_send_allowed(txc->attr.caps)) {
 		ret = txc_msg_init(txc);
 		if (ret != FI_SUCCESS) {
 			CXIP_LOG_DBG("Unable to init TX CTX, ret: %d\n", ret);
-			goto free_rx_cmdq;
+			goto free_tx_cmdq;
 		}
 	}
 
@@ -208,8 +160,6 @@ int cxip_txc_enable(struct cxip_txc *txc)
 
 	return FI_SUCCESS;
 
-free_rx_cmdq:
-	cxip_cmdq_free(txc->rx_cmdq);
 free_tx_cmdq:
 	cxip_cmdq_free(txc->tx_cmdq);
 unlock:
@@ -268,14 +218,12 @@ static void txc_disable(struct cxip_txc *txc)
 
 	txc_cleanup(txc);
 
-	if ((txc->attr.caps & (FI_TAGGED | FI_SEND)) == (FI_TAGGED | FI_SEND)) {
+	if (ofi_send_allowed(txc->attr.caps)) {
 		ret = txc_msg_fini(txc);
 		if (ret)
 			CXIP_LOG_ERROR("Unable to destroy TX CTX, ret: %d\n",
 				       ret);
 	}
-
-	cxip_cmdq_free(txc->rx_cmdq);
 
 	cxip_cmdq_free(txc->tx_cmdq);
 unlock:
