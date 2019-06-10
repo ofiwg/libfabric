@@ -294,6 +294,9 @@ static void rxm_recv_entry_init(struct rxm_recv_entry *entry, void *arg)
 	entry->recv_queue = recv_queue;
 	entry->sar.msg_id = RXM_SAR_RX_INIT;
 	entry->sar.total_recv_len = 0;
+	/* set it to NULL to differentiate between regular ACKs and those
+	 * sent with FI_INJECT */
+	entry->rndv.tx_buf = NULL;
 	entry->comp_flags = FI_RECV;
 
 	if (recv_queue->type == RXM_RECV_QUEUE_MSG)
@@ -681,6 +684,8 @@ rxm_ep_format_rx_res(struct rxm_ep *rxm_ep, const struct iovec *iov,
 	*recv_entry = rxm_recv_entry_get(recv_queue);
 	if (OFI_UNLIKELY(!*recv_entry))
 		return -FI_EAGAIN;
+
+	assert(!(*recv_entry)->rndv.tx_buf);
 
 	(*recv_entry)->rxm_iov.count 	= (uint8_t)count;
 	(*recv_entry)->addr 		= src_addr;
@@ -1424,8 +1429,11 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 				rxm_cq_write_error(def_tx_entry->rxm_ep->util_ep.rx_cq,
 						   def_tx_entry->rxm_ep->util_ep.rx_cntr,
 						   def_tx_entry->rndv_read.rx_buf->
-							recv_entry->context, ret);
+						   recv_entry->context, ret);
 			}
+			RXM_UPDATE_STATE(FI_LOG_EP_DATA,
+					 def_tx_entry->rndv_ack.rx_buf,
+					 RXM_RNDV_ACK_SENT);
 			rxm_ep_dequeue_deferred_tx_queue(def_tx_entry);
 			free(def_tx_entry);
 			break;

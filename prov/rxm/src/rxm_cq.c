@@ -323,8 +323,15 @@ static inline int rxm_finish_sar_segment_send(struct rxm_ep *rxm_ep, struct rxm_
 static inline int rxm_finish_send_rndv_ack(struct rxm_rx_buf *rx_buf)
 {
 	RXM_UPDATE_STATE(FI_LOG_CQ, rx_buf, RXM_RNDV_FINISH);
+
+	if (rx_buf->recv_entry->rndv.tx_buf) {
+		ofi_buf_free(rx_buf->recv_entry->rndv.tx_buf);
+		rx_buf->recv_entry->rndv.tx_buf = NULL;
+	}
+
 	if (!rx_buf->ep->rxm_mr_local)
 		rxm_ep_msg_mr_closev(rx_buf->mr, rx_buf->recv_entry->rxm_iov.count);
+
 	return rxm_finish_recv(rx_buf, rx_buf->recv_entry->total_len);
 }
 
@@ -721,62 +728,18 @@ ssize_t rxm_sar_handle_segment(struct rxm_rx_buf *rx_buf)
 	return rxm_cq_handle_seg_data(rx_buf);
 }
 
-static ssize_t rxm_rndv_send_ack(struct rxm_rx_buf *rx_buf)
-{
-	ssize_t ret;
-
-	assert(rx_buf->conn);
-
-	rx_buf->recv_entry->rndv.tx_buf = (struct rxm_tx_base_buf *)
-		rxm_tx_buf_alloc(rx_buf->ep, RXM_BUF_POOL_TX_ACK);
-	if (OFI_UNLIKELY(!rx_buf->recv_entry->rndv.tx_buf)) {
-		FI_WARN(&rxm_prov, FI_LOG_CQ,
-			"Ran out of buffers from ACK buffer pool\n");
-		return -FI_EAGAIN;
-	}
-	assert(rx_buf->recv_entry->rndv.tx_buf->pkt.ctrl_hdr.type == rxm_ctrl_rndv_ack);
-
-	assert(rx_buf->hdr.state == RXM_RNDV_READ);
-	RXM_UPDATE_STATE(FI_LOG_CQ, rx_buf, RXM_RNDV_ACK_SENT);
-
-	rx_buf->recv_entry->rndv.tx_buf->pkt.ctrl_hdr.conn_id =
-		rx_buf->conn->handle.remote_key;
-	rx_buf->recv_entry->rndv.tx_buf->pkt.ctrl_hdr.msg_id =
-		rx_buf->pkt.ctrl_hdr.msg_id;
-
-	ret = fi_send(rx_buf->conn->msg_ep, &rx_buf->recv_entry->rndv.tx_buf->pkt,
-		      sizeof(rx_buf->recv_entry->rndv.tx_buf->pkt),
-		      rx_buf->recv_entry->rndv.tx_buf->hdr.desc, 0, rx_buf);
-	if (OFI_UNLIKELY(ret)) {
-		FI_WARN(&rxm_prov, FI_LOG_CQ, "Unable to send ACK\n");
-		if (OFI_LIKELY(ret == -FI_EAGAIN)) {
-			struct rxm_deferred_tx_entry *def_tx_entry =
-				rxm_ep_alloc_deferred_tx_entry(rx_buf->ep, rx_buf->conn,
-							       RXM_DEFERRED_TX_RNDV_ACK);
-			if (OFI_UNLIKELY(!def_tx_entry)) {
-				FI_WARN(&rxm_prov, FI_LOG_CQ,
-					"Unable to allocate TX entry for deferred ACK\n");
-				ret = -FI_EAGAIN;
-				goto err;
-			}
-
-			def_tx_entry->rndv_ack.rx_buf = rx_buf;
-			rxm_ep_enqueue_deferred_tx_queue(def_tx_entry);
-
-			return 0;
-		}
-		goto err;
-	}
-	return 0;
-err:
-	ofi_buf_free(rx_buf->recv_entry->rndv.tx_buf);
-	return ret;
-}
-
-static ssize_t rxm_rndv_send_ack_fast(struct rxm_rx_buf *rx_buf)
+static ssize_t rxm_rndv_send_ack_inject(struct rxm_rx_buf *rx_buf)
 {
 	struct rxm_pkt pkt;
-	ssize_t ret;
+	struct iovec iov = {
+		.iov_base = &pkt,
+		.iov_len = sizeof(pkt),
+	};
+	struct fi_msg msg = {
+		.msg_iov = &iov,
+		.iov_count = 1,
+		.context = rx_buf,
+	};
 
 	assert(rx_buf->conn);
 
@@ -787,21 +750,77 @@ static ssize_t rxm_rndv_send_ack_fast(struct rxm_rx_buf *rx_buf)
 	pkt.ctrl_hdr.conn_id 	= rx_buf->conn->handle.remote_key;
 	pkt.ctrl_hdr.msg_id 	= rx_buf->pkt.ctrl_hdr.msg_id;
 
-	ret = fi_inject(rx_buf->conn->msg_ep, &pkt, sizeof(pkt), 0);
-	if (OFI_UNLIKELY(ret)) {
-		FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
-		       "fi_inject(ack pkt) for MSG provider failed\n");
-		if (OFI_LIKELY(ret == -FI_EAGAIN)) {
-			/* Issues the normal RNDV ACK sending to allocate the
-			 * TX entry, send it out or insert it to deferred
-			 * TX queue for the further processing */
-			return rxm_rndv_send_ack(rx_buf);
+	return fi_sendmsg(rx_buf->conn->msg_ep, &msg, FI_INJECT);
+}
+
+static ssize_t rxm_rndv_send_ack(struct rxm_rx_buf *rx_buf)
+{
+	ssize_t ret;
+
+	assert(rx_buf->conn);
+
+	if (sizeof(rx_buf->pkt) <= rx_buf->ep->inject_limit) {
+		ret = rxm_rndv_send_ack_inject(rx_buf);
+		if (!ret)
+			goto out;
+
+		if (OFI_UNLIKELY(ret != -FI_EAGAIN)) {
+			FI_WARN(&rxm_prov, FI_LOG_CQ,
+				"send ack via inject failed for MSG provider\n");
+			return ret;
 		}
-		return ret;
 	}
 
-	return rxm_finish_send_rndv_ack(rx_buf);
+	rx_buf->recv_entry->rndv.tx_buf = (struct rxm_tx_base_buf *)
+		rxm_tx_buf_alloc(rx_buf->ep, RXM_BUF_POOL_TX_ACK);
+	if (OFI_UNLIKELY(!rx_buf->recv_entry->rndv.tx_buf)) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ,
+			"ran out of buffers from ACK buffer pool\n");
+		return -FI_EAGAIN;
+	}
+	assert(rx_buf->recv_entry->rndv.tx_buf->pkt.ctrl_hdr.type == rxm_ctrl_rndv_ack);
+
+	assert(rx_buf->hdr.state == RXM_RNDV_READ);
+
+	rx_buf->recv_entry->rndv.tx_buf->pkt.ctrl_hdr.conn_id =
+		rx_buf->conn->handle.remote_key;
+	rx_buf->recv_entry->rndv.tx_buf->pkt.ctrl_hdr.msg_id =
+		rx_buf->pkt.ctrl_hdr.msg_id;
+
+	ret = fi_send(rx_buf->conn->msg_ep, &rx_buf->recv_entry->rndv.tx_buf->pkt,
+		      sizeof(rx_buf->recv_entry->rndv.tx_buf->pkt),
+		      rx_buf->recv_entry->rndv.tx_buf->hdr.desc, 0, rx_buf);
+	if (OFI_UNLIKELY(ret)) {
+		if (OFI_LIKELY(ret == -FI_EAGAIN)) {
+			struct rxm_deferred_tx_entry *def_tx_entry =
+				rxm_ep_alloc_deferred_tx_entry(
+					rx_buf->ep, rx_buf->conn,
+					RXM_DEFERRED_TX_RNDV_ACK);
+			if (OFI_UNLIKELY(!def_tx_entry)) {
+				FI_WARN(&rxm_prov, FI_LOG_CQ, "unable to "
+					"allocate TX entry for deferred ACK\n");
+				ret = -FI_EAGAIN;
+				goto err;
+			}
+
+			def_tx_entry->rndv_ack.rx_buf = rx_buf;
+			rxm_ep_enqueue_deferred_tx_queue(def_tx_entry);
+			return 0;
+		} else {
+			FI_WARN(&rxm_prov, FI_LOG_CQ,
+				"unable to send ACK: %zd\n", ret);
+		}
+		goto err;
+	}
+out:
+	RXM_UPDATE_STATE(FI_LOG_CQ, rx_buf, RXM_RNDV_ACK_SENT);
+	return 0;
+err:
+	ofi_buf_free(rx_buf->recv_entry->rndv.tx_buf);
+	return ret;
 }
+
+
 
 static int rxm_handle_remote_write(struct rxm_ep *rxm_ep,
 				   struct fi_cq_data_entry *comp)
@@ -1135,15 +1154,11 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 		assert(comp->flags & FI_READ);
 		if (++rx_buf->rndv_rma_index < rx_buf->rndv_hdr->count)
 			return 0;
-		else if (sizeof(rx_buf->pkt) <= rxm_ep->inject_limit)
-			return rxm_rndv_send_ack_fast(rx_buf);
 		else
 			return rxm_rndv_send_ack(rx_buf);
 	case RXM_RNDV_ACK_SENT:
-		rx_buf = comp->op_context;
 		assert(comp->flags & FI_SEND);
-		ofi_buf_free(rx_buf->recv_entry->rndv.tx_buf);
-		return rxm_finish_send_rndv_ack(rx_buf);
+		return rxm_finish_send_rndv_ack(comp->op_context);
 	case RXM_ATOMIC_RESP_SENT:
 		tx_atomic_buf = comp->op_context;
 		assert(comp->flags & FI_SEND);

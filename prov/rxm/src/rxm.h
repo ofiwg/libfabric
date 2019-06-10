@@ -599,20 +599,18 @@ struct rxm_recv_entry {
 		size_t	len;
 	} multi_recv;
 
-	union {
-		/* Used for SAR protocol */
-		struct {
-			struct dlist_entry entry;
-			size_t total_recv_len;
-			struct rxm_conn *conn;
-			uint64_t msg_id;
-		} sar;
-		/* Used for Rendezvous protocol */
-		struct {
-			/* This is used to send RNDV ACK */
-			struct rxm_tx_base_buf *tx_buf;
-		} rndv;
-	};
+	/* Used for SAR protocol */
+	struct {
+		struct dlist_entry entry;
+		size_t total_recv_len;
+		struct rxm_conn *conn;
+		uint64_t msg_id;
+	} sar;
+	/* Used for Rendezvous protocol */
+	struct {
+		/* This is used to send RNDV ACK */
+		struct rxm_tx_base_buf *tx_buf;
+	} rndv;
 };
 DECLARE_FREESTACK(struct rxm_recv_entry, rxm_recv_fs);
 
