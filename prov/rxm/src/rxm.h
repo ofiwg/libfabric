@@ -83,18 +83,14 @@ extern size_t rxm_eager_limit;
 #define RXM_MR_PROV_KEY(info) ((info->domain_attr->mr_mode == FI_MR_BASIC) ||\
 			       info->domain_attr->mr_mode & FI_MR_PROV_KEY)
 
-#define RXM_LOG_STATE(subsystem, pkt, prev_state, next_state) 			\
-	FI_DBG(&rxm_prov, subsystem, "[RNDV] msg_id: 0x%" PRIx64 " %s -> %s\n",	\
-	       pkt.ctrl_hdr.msg_id, rxm_proto_state_str[prev_state],		\
-	       rxm_proto_state_str[next_state])
-
-#define RXM_LOG_STATE_TX(subsystem, tx_buf, next_state)		\
-	RXM_LOG_STATE(subsystem, tx_buf->pkt, tx_buf->hdr.state,	\
-		      next_state)
-
-#define RXM_LOG_STATE_RX(subsystem, rx_buf, next_state)		\
-	RXM_LOG_STATE(subsystem, rx_buf->pkt, rx_buf->hdr.state,	\
-		      next_state)
+#define RXM_UPDATE_STATE(subsystem, buf, new_state)			\
+	do {								\
+		FI_DBG(&rxm_prov, subsystem, "[PROTO] msg_id: 0x%"	\
+		       PRIx64 " %s -> %s\n", (buf)->pkt.ctrl_hdr.msg_id,\
+		       rxm_proto_state_str[(buf)->hdr.state],		\
+		       rxm_proto_state_str[new_state]);			\
+		(buf)->hdr.state = new_state;				\
+	} while (0)
 
 #define RXM_DBG_ADDR_TAG(subsystem, log_str, addr, tag) 	\
 	FI_DBG(&rxm_prov, subsystem, log_str 			\

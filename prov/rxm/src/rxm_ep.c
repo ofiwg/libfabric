@@ -979,11 +979,9 @@ rxm_ep_rndv_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 {
 	ssize_t ret;
 
-	RXM_LOG_STATE(FI_LOG_EP_DATA, tx_buf->pkt, RXM_TX, RXM_RNDV_TX);
+	RXM_UPDATE_STATE(FI_LOG_EP_DATA, tx_buf, RXM_RNDV_TX);
 	if (pkt_size <= rxm_ep->inject_limit) {
-		RXM_LOG_STATE(FI_LOG_CQ, tx_buf->pkt, RXM_RNDV_TX, RXM_RNDV_ACK_WAIT);
-		tx_buf->hdr.state = RXM_RNDV_ACK_WAIT;
-
+		RXM_UPDATE_STATE(FI_LOG_EP_DATA, tx_buf, RXM_RNDV_ACK_WAIT);
 		ret = rxm_ep_msg_inject_send(rxm_ep, rxm_conn, &tx_buf->pkt,
 					     pkt_size, ofi_cntr_inc_noop);
 	} else {
