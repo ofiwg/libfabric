@@ -618,9 +618,9 @@ int ofi_str_toaddr(const char *str, uint32_t *addr_format,
 
 	switch (*addr_format) {
 	case FI_FORMAT_UNSPEC:
-		if (!ofi_hostname_toaddr(str, addr_format, addr, len))
-			return 0;
 		if (!ofi_ifname_toaddr(str, addr_format, addr, len))
+			return 0;
+		if (!ofi_hostname_toaddr(str, addr_format, addr, len))
 			return 0;
 		return -FI_EINVAL;
 	case FI_SOCKADDR_IN:
