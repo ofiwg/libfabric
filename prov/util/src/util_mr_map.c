@@ -208,8 +208,9 @@ int ofi_mr_close(struct fid *fid)
 static struct fi_ops ofi_mr_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = ofi_mr_close,
+	.bind = fi_no_bind,
 	.control = fi_no_control,
-	.ops_open = fi_no_ops_open,
+	.ops_open = fi_no_ops_open
 };
 
 int ofi_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
