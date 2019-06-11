@@ -248,7 +248,7 @@ util_mr_cache_merge(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
 		old_iov = &old_entry->iov;
 
 		iov.iov_len = ((uintptr_t)
-			MAX(ofi_iov_end(&iov), ofi_iov_end(old_iov))) -
+			MAX(ofi_iov_end(&iov), ofi_iov_end(old_iov))) + 1 -
 			((uintptr_t) MIN(iov.iov_base, old_iov->iov_base));
 		iov.iov_base = MIN(iov.iov_base, old_iov->iov_base);
 		FI_DBG(cache->domain->prov, FI_LOG_MR, "merged %p (len: %" PRIu64 ")\n",

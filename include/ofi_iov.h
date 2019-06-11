@@ -133,7 +133,7 @@ static inline void ofi_rma_ioc_to_iov(const struct fi_rma_ioc *ioc,
 static inline void *
 ofi_iov_end(const struct iovec *iov)
 {
-	return ((char *) iov->iov_base) + iov->iov_len;
+	return ((char *) iov->iov_base) + iov->iov_len - 1;
 }
 
 static inline bool
