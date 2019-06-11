@@ -942,7 +942,7 @@ static void rxd_handle_data(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 		dlist_insert_order(&ep->peers[pkt->base_hdr.peer].buf_pkts,
 				   &rxd_comp_pkt_seq_no, &pkt_entry->d_entry);
 		return;
-	} else {
+	} else if (ep->peers[pkt->base_hdr.peer].peer_addr != FI_ADDR_UNSPEC) {
 		rxd_ep_send_ack(ep, pkt->base_hdr.peer);
 	}
 free:
@@ -1039,7 +1039,6 @@ static void rxd_handle_ack(struct rxd_ep *ep, struct rxd_pkt_entry *ack_entry)
 	if (ep->peers[peer].last_rx_ack == ack->base_hdr.seq_no)
 		return;
 
-	ep->peers[peer].retry_cnt = 0;
 	ep->peers[peer].last_rx_ack = ack->base_hdr.seq_no;
 
 	if (dlist_empty(&ep->peers[peer].unacked))
@@ -1062,6 +1061,7 @@ static void rxd_handle_ack(struct rxd_ep *ep, struct rxd_pkt_entry *ack_entry)
 		dlist_remove(&pkt_entry->d_entry);
 		ofi_buf_free(pkt_entry);
 	     	ep->peers[peer].unacked_cnt--;
+		ep->peers[peer].retry_cnt = 0;
 
 		pkt_entry = container_of((&ep->peers[peer].unacked)->next,
 					struct rxd_pkt_entry, d_entry);
@@ -1076,7 +1076,7 @@ void rxd_handle_send_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp)
 		container_of(comp->op_context, struct rxd_pkt_entry, context);
 	fi_addr_t peer;
 
-	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL,
+	FI_DBG(&rxd_prov, FI_LOG_EP_DATA,
 	       "got send completion (type: %s)\n",
 	       rxd_pkt_type_str[(rxd_pkt_type(pkt_entry))]);
 
@@ -1097,7 +1097,6 @@ void rxd_handle_send_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp)
 			pkt_entry->flags &= ~RXD_PKT_IN_USE;
 		}
 	}
-	ep->pending_cnt--;
 }
 
 void rxd_handle_recv_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp)
@@ -1105,7 +1104,7 @@ void rxd_handle_recv_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp)
 	struct rxd_pkt_entry *pkt_entry =
 		container_of(comp->op_context, struct rxd_pkt_entry, context);
 
-	FI_DBG(&rxd_prov, FI_LOG_EP_CTRL,
+	FI_DBG(&rxd_prov, FI_LOG_EP_DATA,
 	       "got recv completion (type: %s)\n",
 	       rxd_pkt_type_str[(rxd_pkt_type(pkt_entry))]);
 
