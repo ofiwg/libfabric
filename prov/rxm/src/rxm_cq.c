@@ -41,6 +41,8 @@
 
 #include "rxm.h"
 
+size_t rxm_cm_progress_interval;
+
 static const char *rxm_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
 		const void *err_data, char *buf, size_t len)
 {
@@ -1367,6 +1369,7 @@ void rxm_ep_do_progress(struct util_ep *util_ep)
 	struct rxm_rx_buf *buf;
 	ssize_t ret;
 	size_t comp_read = 0;
+	uint64_t timestamp;
 
 	while (!dlist_empty(&rxm_ep->repost_ready_list)) {
 		dlist_pop_front(&rxm_ep->repost_ready_list, struct rxm_rx_buf,
@@ -1396,9 +1399,10 @@ void rxm_ep_do_progress(struct util_ep *util_ep)
 			else
 				rxm_cq_write_error_all(rxm_ep, ret);
 		} else {
-			if (++rxm_ep->msg_cq_eagain_count >
-			    RXM_EQ_PROGRESS_SPIN_COUNT) {
-				rxm_ep->msg_cq_eagain_count = 0;
+			timestamp = fi_gettime_us();
+			if (timestamp - rxm_ep->msg_cq_last_poll >
+				rxm_cm_progress_interval) {
+				rxm_ep->msg_cq_last_poll = timestamp;
 				rxm_msg_eq_progress(rxm_ep);
 			}
 		}

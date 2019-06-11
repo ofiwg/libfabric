@@ -150,6 +150,11 @@ The ofi_rxm provider checks for the following environment variables.
 : Defines the expected number of ranks / peers an endpoint would communicate
 with (default: 256).
 
+*FI_OFI_RXM_CM_PROGRESS_INTERVAL*
+: Defines the duration of time in microseconds between calls to RxM CM progression
+  functions when using manual progress. Higher values may provide less noise for 
+  calls to fi_cq read functions, but may increase connection setup time (default: 10000)
+
 # Tuning
 
 ## Bandwidth
