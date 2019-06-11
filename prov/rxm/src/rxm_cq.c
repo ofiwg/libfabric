@@ -198,7 +198,7 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 		size_t recv_size = rx_buf->pkt.hdr.size;
 		struct rxm_ep *rxm_ep = rx_buf->ep;
 
-		rxm_rx_buf_release(rxm_ep, rx_buf);
+		rxm_rx_buf_finish(rx_buf);
 
 		recv_entry->total_len -= recv_size;
 
@@ -235,7 +235,7 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 
 		return rxm_process_recv_entry(recv_entry->recv_queue, recv_entry);
 	} else {
-		rxm_rx_buf_release(rx_buf->ep, rx_buf);
+		rxm_rx_buf_finish(rx_buf);
 		rxm_recv_entry_release(recv_entry->recv_queue, recv_entry);
 	}
 
@@ -367,7 +367,7 @@ static int rxm_rndv_handle_ack(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_buf)
 
 	assert(tx_buf->pkt.ctrl_hdr.msg_id == rx_buf->pkt.ctrl_hdr.msg_id);
 
-	rxm_rx_buf_release(rxm_ep, rx_buf);
+	rxm_rx_buf_finish(rx_buf);
 
 	if (tx_buf->hdr.state == RXM_RNDV_ACK_WAIT) {
 		return rxm_rndv_tx_finish(rxm_ep, tx_buf);
@@ -424,7 +424,7 @@ ssize_t rxm_cq_copy_seg_data(struct rxm_rx_buf *rx_buf, int *done)
 
 		/* The RX buffer can be reposted for further re-use */
 		rx_buf->recv_entry = NULL;
-		rxm_rx_buf_release(rx_buf->ep, rx_buf);
+		rxm_rx_buf_finish(rx_buf);
 
 		*done = 0;
 		return FI_SUCCESS;
@@ -837,7 +837,7 @@ static int rxm_handle_remote_write(struct rxm_ep *rxm_ep,
 	}
 	ofi_ep_rem_wr_cntr_inc(&rxm_ep->util_ep);
 	if (comp->op_context)
-		rxm_rx_buf_release(rxm_ep, comp->op_context);
+		rxm_rx_buf_finish(comp->op_context);
 	return 0;
 }
 
@@ -909,7 +909,7 @@ static ssize_t rxm_atomic_send_resp(struct rxm_ep *rxm_ep,
 			ret = 0;
 		}
 	}
-	rxm_rx_buf_release(rxm_ep, rx_buf);
+	rxm_rx_buf_finish(rx_buf);
 
 	return ret;
 }
@@ -1077,7 +1077,7 @@ static inline ssize_t rxm_handle_atomic_resp(struct rxm_ep *rxm_ep,
 		assert(0);
 	}
 err:
-	rxm_rx_buf_release(rxm_ep, rx_buf);
+	rxm_rx_buf_finish(rx_buf);
 	ofi_buf_free(tx_buf);
 
 	return ret;
