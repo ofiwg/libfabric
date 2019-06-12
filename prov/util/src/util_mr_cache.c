@@ -37,31 +37,34 @@
 #include <ofi_iov.h>
 #include <ofi_mr.h>
 #include <ofi_list.h>
+#include <ofi_tree.h>
 
 
 struct ofi_mr_cache_params cache_params = {
 	.max_cnt = 1024,
 };
 
-static int util_mr_find_within(void *a, void *b)
+static int util_mr_find_within(struct ofi_rbmap *map, void *key, void *data)
 {
-	struct iovec *iov1 = a, *iov2 = b;
+	struct ofi_mr_entry *entry = data;
+	struct iovec *iov = key;
 
-	if (ofi_iov_shifted_left(iov1, iov2))
+	if (ofi_iov_shifted_left(iov, &entry->iov))
 		return -1;
-	else if (ofi_iov_shifted_right(iov1, iov2))
+	else if (ofi_iov_shifted_right(iov, &entry->iov))
 		return 1;
 	else
 		return 0;
 }
 
-static int util_mr_find_overlap(void *a, void *b)
+static int util_mr_find_overlap(struct ofi_rbmap *map, void *key, void *data)
 {
-	struct iovec *iov1 = a, *iov2 = b;
+	struct ofi_mr_entry *entry = data;
+	struct iovec *iov = key;
 
-	if (ofi_iov_left(iov1, iov2))
+	if (ofi_iov_left(iov, &entry->iov))
 		return -1;
-	else if (ofi_iov_right(iov1, iov2))
+	else if (ofi_iov_right(iov, &entry->iov))
 		return 1;
 	else
 		return 0;
@@ -112,20 +115,14 @@ void ofi_mr_cache_notify(struct ofi_mr_cache *cache, const void *addr, size_t le
 	iov.iov_base = (void *) addr;
 	iov.iov_len = len;
 
-	for (entry = cache->storage.find(&cache->storage, &iov); entry;
-	     entry = cache->storage.find(&cache->storage, &iov)) {
-
-		/* Notifications should only occur on regions that are not
-		 * actively being used, or the application is buggy.  And if
-		 * the entry is not in use but found here, then it must have
-		 * been cached.
-		 */
-		assert(entry->cached);
+	for (entry = cache->storage.overlap(&cache->storage, &iov); entry;
+	     entry = cache->storage.overlap(&cache->storage, &iov)) {
 		util_mr_uncache_entry(cache, entry);
 
-		assert(entry->use_cnt == 0);
-		dlist_remove_init(&entry->lru_entry);
-		util_mr_free_entry(cache, entry);
+		if (entry->use_cnt == 0) {
+			dlist_remove_init(&entry->lru_entry);
+			util_mr_free_entry(cache, entry);
+		}
 	}
 
 	/* See comment in util_mr_free_entry.  If we're not merging address
@@ -251,7 +248,7 @@ util_mr_cache_merge(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
 		old_iov = &old_entry->iov;
 
 		iov.iov_len = ((uintptr_t)
-			MAX(ofi_iov_end(&iov), ofi_iov_end(old_iov))) -
+			MAX(ofi_iov_end(&iov), ofi_iov_end(old_iov))) + 1 -
 			((uintptr_t) MIN(iov.iov_base, old_iov->iov_base));
 		iov.iov_base = MIN(iov.iov_base, old_iov->iov_base);
 		FI_DBG(cache->domain->prov, FI_LOG_MR, "merged %p (len: %" PRIu64 ")\n",
@@ -346,57 +343,62 @@ void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache)
 
 static void ofi_mr_rbt_destroy(struct ofi_mr_storage *storage)
 {
-	rbtDelete((RbtHandle) storage->storage);
+	ofi_rbmap_destroy(storage->storage);
 }
 
 static struct ofi_mr_entry *ofi_mr_rbt_find(struct ofi_mr_storage *storage,
 					    const struct iovec *key)
 {
-	struct ofi_mr_entry *entry;
-	RbtIterator iter = rbtFind((RbtHandle) storage->storage, (void *) key);
-	if (OFI_UNLIKELY(!iter))
-		return iter;
+	struct ofi_rbnode *node;
 
-	rbtKeyValue(storage->storage, iter, (void *) &key, (void *) &entry);
-	return entry;
+	node = ofi_rbmap_find(storage->storage, (void *) key);
+	if (!node)
+		return NULL;
+
+	return node->data;
+}
+
+static struct ofi_mr_entry *ofi_mr_rbt_overlap(struct ofi_mr_storage *storage,
+					    const struct iovec *key)
+{
+	struct ofi_rbnode *node;
+
+	node = ofi_rbmap_search(storage->storage, (void *) key,
+				util_mr_find_overlap);
+	if (!node)
+		return NULL;
+
+	return node->data;
 }
 
 static int ofi_mr_rbt_insert(struct ofi_mr_storage *storage,
 			     struct iovec *key,
 			     struct ofi_mr_entry *entry)
 {
-	int ret = rbtInsert((RbtHandle) storage->storage,
-			    (void *) &entry->iov, (void *) entry);
-	if (ret != RBT_STATUS_OK) {
-		switch (ret) {
-		case RBT_STATUS_MEM_EXHAUSTED:
-			return -FI_ENOMEM;
-		case RBT_STATUS_DUPLICATE_KEY:
-			return -FI_EALREADY;
-		default:
-			return -FI_EAVAIL;
-		}
-	}
-	return ret;
+	return ofi_rbmap_insert(storage->storage, (void *) &entry->iov,
+			        (void *) entry);
 }
 
 static int ofi_mr_rbt_erase(struct ofi_mr_storage *storage,
 			    struct ofi_mr_entry *entry)
 {
-	RbtIterator iter = rbtFind(storage->storage, &entry->iov);
-	assert(iter);
-	return (rbtErase((RbtHandle) storage->storage, iter) != RBT_STATUS_OK) ?
-	       -FI_EAVAIL : 0;
+	struct ofi_rbnode *node;
+
+	node = ofi_rbmap_find(storage->storage, &entry->iov);
+	assert(node);
+	ofi_rbmap_delete(storage->storage, node);
+	return 0;
 }
 
 static int ofi_mr_cache_init_rbt(struct ofi_mr_cache *cache)
 {
-	cache->storage.storage = rbtNew(cache_params.merge_regions ?
-					   util_mr_find_overlap :
-					   util_mr_find_within);
+	cache->storage.storage = ofi_rbmap_create(cache_params.merge_regions ?
+						  util_mr_find_overlap :
+						  util_mr_find_within);
 	if (!cache->storage.storage)
 		return -FI_ENOMEM;
 
+	cache->storage.overlap = ofi_mr_rbt_overlap;
 	cache->storage.destroy = ofi_mr_rbt_destroy;
 	cache->storage.find = ofi_mr_rbt_find;
 	cache->storage.insert = ofi_mr_rbt_insert;
@@ -414,7 +416,7 @@ static int ofi_mr_cache_init_storage(struct ofi_mr_cache *cache)
 		ret = ofi_mr_cache_init_rbt(cache);
 		break;
 	case OFI_MR_STORAGE_USER:
-		ret = (cache->storage.storage &&
+		ret = (cache->storage.storage && cache->storage.overlap &&
 		      cache->storage.destroy && cache->storage.find &&
 		      cache->storage.insert && cache->storage.erase) ?
 			0 : -FI_EINVAL;

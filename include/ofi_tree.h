@@ -82,6 +82,8 @@ void ofi_rbmap_init(struct ofi_rbmap *map,
 void ofi_rbmap_cleanup(struct ofi_rbmap *map);
 
 struct ofi_rbnode *ofi_rbmap_find(struct ofi_rbmap *map, void *key);
+struct ofi_rbnode *ofi_rbmap_search(struct ofi_rbmap *map, void *key,
+		int (*compare)(struct ofi_rbmap *map, void *key, void *data));
 int ofi_rbmap_insert(struct ofi_rbmap *map, void *key, void *data);
 void ofi_rbmap_delete(struct ofi_rbmap *map, struct ofi_rbnode *node);
 int ofi_rbmap_empty(struct ofi_rbmap *map);

@@ -341,3 +341,20 @@ struct ofi_rbnode *ofi_rbmap_find(struct ofi_rbmap *map, void *key)
 	}
 	return NULL;
 }
+
+struct ofi_rbnode *ofi_rbmap_search(struct ofi_rbmap *map, void *key,
+		int (*compare)(struct ofi_rbmap *map, void *key, void *data))
+{
+	struct ofi_rbnode *node;
+	int ret;
+
+	node = map->root;
+	while (node != &map->sentinel) {
+		ret = compare(map, key, node->data);
+		if (ret == 0)
+			return node;
+
+		node = (ret < 0) ? node->left : node->right;
+	}
+	return NULL;
+}
