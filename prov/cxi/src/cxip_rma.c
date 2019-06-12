@@ -24,11 +24,6 @@
 #define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_EP_DATA, __VA_ARGS__)
 #define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_EP_DATA, __VA_ARGS__)
 
-enum cxip_rma_op {
-	CXIP_RMA_READ,
-	CXIP_RMA_WRITE,
-};
-
 static int cxip_rma_cb(struct cxip_req *req, const union c_event *event)
 {
 	int ret;
@@ -55,7 +50,7 @@ static int cxip_rma_cb(struct cxip_req *req, const union c_event *event)
 	return FI_SUCCESS;
 }
 
-static ssize_t _cxip_rma_op(enum cxip_rma_op op, struct fid_ep *ep,
+static ssize_t _cxip_rma_op(enum fi_op_type op, struct fid_ep *ep,
 			   const struct iovec *iov, size_t iov_count,
 			   const struct fi_rma_iov *rma, size_t rma_count,
 			   fi_addr_t addr, void *desc, uint64_t data,
@@ -147,7 +142,7 @@ static ssize_t _cxip_rma_op(enum cxip_rma_op op, struct fid_ep *ep,
 	req->data = 0;
 	req->tag = 0;
 	req->cb = cxip_rma_cb;
-	req->flags = FI_RMA | (op == CXIP_RMA_READ ? FI_READ : FI_WRITE);
+	req->flags = FI_RMA | (op == FI_OP_READ ? FI_READ : FI_WRITE);
 	req->rma.local_md = md;
 	req->rma.txc = txc;
 
@@ -158,7 +153,7 @@ static ssize_t _cxip_rma_op(enum cxip_rma_op op, struct fid_ep *ep,
 
 	/* Populate command descriptor */
 	cmd.full_dma.command.opcode =
-		(op == CXIP_RMA_READ ? C_CMD_GET : C_CMD_PUT);
+		(op == FI_OP_READ ? C_CMD_GET : C_CMD_PUT);
 	cmd.full_dma.command.cmd_type = C_CMD_TYPE_DMA;
 	cmd.full_dma.index_ext = idx_ext;
 	cmd.full_dma.lac = md->md->lac;
@@ -190,6 +185,10 @@ static ssize_t _cxip_rma_op(enum cxip_rma_op op, struct fid_ep *ep,
 
 	fastlock_release(&txc->tx_cmdq->lock);
 
+	CXIP_LOG_DBG("req: %p op: %s buf: %p len: %lu dest_addr: %ld context %p\n",
+		     req, fi_tostr(&op, FI_TYPE_OP_TYPE),
+		     iov[0].iov_base, rma[0].len, addr, context);
+
 	return FI_SUCCESS;
 
 unlock_op:
@@ -215,7 +214,7 @@ static ssize_t cxip_rma_write(struct fid_ep *ep, const void *buf, size_t len,
 		.iov_len = len,
 	};
 
-	return _cxip_rma_op(CXIP_RMA_WRITE, ep, &iov, 1, &rma, 1, dest_addr,
+	return _cxip_rma_op(FI_OP_WRITE, ep, &iov, 1, &rma, 1, dest_addr,
 			    desc, 0, 0, context);
 }
 
@@ -238,7 +237,7 @@ static ssize_t cxip_rma_writev(struct fid_ep *ep, const struct iovec *iov,
 	for (size_t i = 0; i < count; i++)
 		rma.len += iov[i].iov_len;
 
-	return _cxip_rma_op(CXIP_RMA_WRITE, ep, iov, count, &rma, 1, dest_addr,
+	return _cxip_rma_op(FI_OP_WRITE, ep, iov, count, &rma, 1, dest_addr,
 			    write_desc, 0, 0, context);
 }
 
@@ -264,7 +263,7 @@ static ssize_t cxip_rma_writemsg(struct fid_ep *ep,
 
 	write_desc = (msg->desc ? msg->desc[0] : NULL);
 
-	return _cxip_rma_op(CXIP_RMA_WRITE, ep, msg->msg_iov, msg->iov_count,
+	return _cxip_rma_op(FI_OP_WRITE, ep, msg->msg_iov, msg->iov_count,
 			    msg->rma_iov, msg->rma_iov_count, msg->addr,
 			    write_desc, msg->data, flags, msg->context);
 }
@@ -283,7 +282,7 @@ static ssize_t cxip_rma_read(struct fid_ep *ep, void *buf, size_t len,
 		.iov_len = len,
 	};
 
-	return _cxip_rma_op(CXIP_RMA_READ, ep, &iov, 1, &rma, 1, src_addr, desc,
+	return _cxip_rma_op(FI_OP_READ, ep, &iov, 1, &rma, 1, src_addr, desc,
 			    0, 0, context);
 }
 
@@ -306,7 +305,7 @@ static ssize_t cxip_rma_readv(struct fid_ep *ep, const struct iovec *iov,
 	for (size_t i = 0; i < count; i++)
 		rma.len += iov[i].iov_len;
 
-	return _cxip_rma_op(CXIP_RMA_READ, ep, iov, count, &rma, 1, src_addr,
+	return _cxip_rma_op(FI_OP_READ, ep, iov, count, &rma, 1, src_addr,
 			    read_desc, 0, 0, context);
 }
 
@@ -330,7 +329,7 @@ static ssize_t cxip_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 
 	read_desc = (msg->desc ? msg->desc[0] : NULL);
 
-	return _cxip_rma_op(CXIP_RMA_READ, ep, msg->msg_iov, msg->iov_count,
+	return _cxip_rma_op(FI_OP_READ, ep, msg->msg_iov, msg->iov_count,
 			    msg->rma_iov, msg->rma_iov_count, msg->addr,
 			    read_desc, msg->data, flags, msg->context);
 }

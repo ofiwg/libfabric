@@ -639,6 +639,18 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 
 	fastlock_release(&txc->tx_cmdq->lock);
 
+#if ENABLE_DEBUG
+	/* TODO better expose tostr API to providers */
+	char op_str[32];
+	char *static_str = fi_tostr(&msg->op, FI_TYPE_ATOMIC_OP);
+
+	strcpy(op_str, static_str);
+	CXIP_LOG_DBG("req: %p op: %s type: %s buf: %p dest_addr: %ld context %p\n",
+		     req, op_str,
+		     fi_tostr(&msg->datatype, FI_TYPE_ATOMIC_TYPE),
+		     oper1, msg->addr, msg->context);
+#endif
+
 	return FI_SUCCESS;
 
 unlock_amo:
