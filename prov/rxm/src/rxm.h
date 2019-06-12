@@ -92,6 +92,14 @@ extern size_t rxm_eager_limit;
 		(buf)->hdr.state = new_state;				\
 	} while (0)
 
+#if ENABLE_DEBUG
+	#define RXM_UPDATE_STATE_DBG(subsystem, buf, new_state) \
+		RXM_UPDATE_STATE(subsystem, buf, new_state)
+#else
+	#define RXM_UPDATE_STATE_DBG(subsystem, buf, new_state)
+#endif
+
+
 #define RXM_DBG_ADDR_TAG(subsystem, log_str, addr, tag) 	\
 	FI_DBG(&rxm_prov, subsystem, log_str 			\
 	       " (fi_addr: 0x%" PRIx64 " tag: 0x%" PRIx64 ")\n",\
@@ -336,19 +344,27 @@ struct rxm_atomic_resp_hdr {
 
 /* RXM protocol states / tx/rx context */
 #define RXM_PROTO_STATES(FUNC)		\
-	FUNC(RXM_TX),			\
-	FUNC(RXM_INJECT_TX),		\
+	FUNC(RXM_PROTO_STATE_UNSPEC),	\
+	FUNC(RXM_EAGER)	,		\
+	FUNC(RXM_EAGER_INJECT),		\
+	FUNC(RXM_SAR),			\
+	FUNC(RXM_RNDV),			\
+	FUNC(RXM_RNDV_READ),		\
+	FUNC(RXM_ACK_SENT),		\
 	FUNC(RXM_RMA),			\
 	FUNC(RXM_RX),			\
-	FUNC(RXM_SAR_TX),		\
-	FUNC(RXM_RNDV_TX),		\
-	FUNC(RXM_RNDV_ACK_WAIT),	\
-	FUNC(RXM_RNDV_READ),		\
-	FUNC(RXM_RNDV_ACK_SENT),	\
-	FUNC(RXM_RNDV_ACK_RECVD),	\
-	FUNC(RXM_RNDV_FINISH),		\
 	FUNC(RXM_ATOMIC_RESP_WAIT),	\
-	FUNC(RXM_ATOMIC_RESP_SENT)
+	FUNC(RXM_ATOMIC_RESP_SENT),	\
+	/* for debug */			\
+	FUNC(RXM_EAGER_SEND_ACK),	\
+	FUNC(RXM_SAR_SEND_ACK),		\
+	FUNC(RXM_RNDV_SEND_ACK),	\
+	FUNC(RXM_EAGER_ACK_RECVD),	\
+	FUNC(RXM_SAR_ACK_RECVD),	\
+	FUNC(RXM_RNDV_ACK_RECVD)
+
+// TODO when adding write based rndv protocol we may need to use states like
+// RXM_RNDV_RTS, RXM_RNDV_CTS, RXM_RNDV_WRITE
 
 enum rxm_proto_state {
 	RXM_PROTO_STATES(OFI_ENUM_VAL)
@@ -356,11 +372,18 @@ enum rxm_proto_state {
 
 extern char *rxm_proto_state_str[];
 
+// TODO implement handling of NACKs
 enum {
 	rxm_ctrl_eager,
-	rxm_ctrl_seg,
+	rxm_ctrl_eager_inject,
+	rxm_ctrl_eager_ack,
+	rxm_ctrl_eager_nack,
+	rxm_ctrl_sar,
+	rxm_ctrl_sar_ack,
+	rxm_ctrl_sar_nack,
 	rxm_ctrl_rndv,
 	rxm_ctrl_rndv_ack,
+	rxm_ctrl_rndv_nack,
 	rxm_ctrl_atomic,
 	rxm_ctrl_atomic_resp,
 };
@@ -537,7 +560,7 @@ struct rxm_tx_atomic_buf {
 };
 
 enum rxm_deferred_tx_entry_type {
-	RXM_DEFERRED_TX_RNDV_ACK,
+	RXM_DEFERRED_TX_ACK,
 	RXM_DEFERRED_TX_RNDV_READ,
 	RXM_DEFERRED_TX_SAR_SEG,
 	RXM_DEFERRED_TX_ATOMIC_RESP,
@@ -552,7 +575,7 @@ struct rxm_deferred_tx_entry {
 	union {
 		struct {
 			struct rxm_rx_buf *rx_buf;
-		} rndv_ack;
+		} ack;
 		struct {
 			struct rxm_rx_buf *rx_buf;
 			struct fi_rma_iov rma_iov;
@@ -610,7 +633,7 @@ struct rxm_recv_entry {
 	struct {
 		/* This is used to send RNDV ACK */
 		struct rxm_tx_base_buf *tx_buf;
-	} rndv;
+	} ack;
 };
 DECLARE_FREESTACK(struct rxm_recv_entry, rxm_recv_fs);
 
@@ -926,7 +949,7 @@ rxm_process_recv_entry(struct rxm_recv_queue *recv_queue,
 		dlist_remove(&rx_buf->unexp_msg.entry);
 		rx_buf->recv_entry = recv_entry;
 
-		if (rx_buf->pkt.ctrl_hdr.type != rxm_ctrl_seg) {
+		if (rx_buf->pkt.ctrl_hdr.type != rxm_ctrl_sar) {
 			return rxm_cq_handle_rx_buf(rx_buf);
 		} else {
 			struct dlist_entry *entry;
@@ -951,7 +974,7 @@ rxm_process_recv_entry(struct rxm_recv_queue *recv_queue,
 					continue;
 				/* Handle unordered completions from MSG provider */
 				if ((rx_buf->pkt.ctrl_hdr.msg_id != recv_entry->sar.msg_id) ||
-				    ((rx_buf->pkt.ctrl_hdr.type != rxm_ctrl_seg)))
+				    ((rx_buf->pkt.ctrl_hdr.type != rxm_ctrl_sar)))
 					continue;
 
 				if (!rx_buf->conn) {

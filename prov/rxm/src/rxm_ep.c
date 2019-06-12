@@ -173,7 +173,7 @@ static void rxm_buf_init(struct ofi_bufpool_region *region, void *buf)
 		break;
 	case RXM_BUF_POOL_TX:
 		tx_eager_buf = buf;
-		tx_eager_buf->hdr.state = RXM_TX;
+		tx_eager_buf->hdr.state = RXM_EAGER;
 
 		tx_eager_buf->hdr.desc = mr_desc;
 		pkt = &tx_eager_buf->pkt;
@@ -181,21 +181,20 @@ static void rxm_buf_init(struct ofi_bufpool_region *region, void *buf)
 		break;
 	case RXM_BUF_POOL_TX_INJECT:
 		tx_base_buf = buf;
-		tx_base_buf->hdr.state = RXM_INJECT_TX;
-
 		pkt = &tx_base_buf->pkt;
-		type = rxm_ctrl_eager;
+		type = rxm_ctrl_eager_inject;
 		break;
 	case RXM_BUF_POOL_TX_SAR:
 		tx_sar_buf = buf;
-		tx_sar_buf->hdr.state = RXM_SAR_TX;
+		tx_sar_buf->hdr.state = RXM_SAR;
 
 		tx_sar_buf->hdr.desc = mr_desc;
 		pkt = &tx_sar_buf->pkt;
-		type = rxm_ctrl_seg;
+		type = rxm_ctrl_sar;
 		break;
 	case RXM_BUF_POOL_TX_RNDV:
 		tx_rndv_buf = buf;
+		tx_rndv_buf->hdr.state = RXM_RNDV;
 
 		tx_rndv_buf->hdr.desc = mr_desc;
 		pkt = &tx_rndv_buf->pkt;
@@ -214,7 +213,6 @@ static void rxm_buf_init(struct ofi_bufpool_region *region, void *buf)
 
 		tx_base_buf->hdr.desc = mr_desc;
 		pkt = &tx_base_buf->pkt;
-		type = rxm_ctrl_rndv_ack;
 		break;
 	case RXM_BUF_POOL_RMA:
 		rma_buf = buf;
@@ -296,7 +294,7 @@ static void rxm_recv_entry_init(struct rxm_recv_entry *entry, void *arg)
 	entry->sar.total_recv_len = 0;
 	/* set it to NULL to differentiate between regular ACKs and those
 	 * sent with FI_INJECT */
-	entry->rndv.tx_buf = NULL;
+	entry->ack.tx_buf = NULL;
 	entry->comp_flags = FI_RECV;
 
 	if (recv_queue->type == RXM_RECV_QUEUE_MSG)
@@ -685,7 +683,7 @@ rxm_ep_format_rx_res(struct rxm_ep *rxm_ep, const struct iovec *iov,
 	if (OFI_UNLIKELY(!*recv_entry))
 		return -FI_EAGAIN;
 
-	assert(!(*recv_entry)->rndv.tx_buf);
+	assert(!(*recv_entry)->ack.tx_buf);
 
 	(*recv_entry)->rxm_iov.count 	= (uint8_t)count;
 	(*recv_entry)->addr 		= src_addr;
@@ -950,6 +948,8 @@ rxm_ep_alloc_rndv_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void 
 	tx_buf->count = count;
 
 	if (!rxm_ep->rxm_mr_local) {
+		FI_DBG(&rxm_prov, FI_LOG_CQ, "registering mr for iov: %p, tx_buf: %p\n",
+		       iov->iov_base, tx_buf);
 		ret = rxm_ep_msg_mr_regv(rxm_ep, iov, tx_buf->count,
 					 FI_REMOTE_READ, tx_buf->mr);
 		if (ret)
@@ -984,23 +984,15 @@ rxm_ep_rndv_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 {
 	ssize_t ret;
 
-	RXM_UPDATE_STATE(FI_LOG_EP_DATA, tx_buf, RXM_RNDV_TX);
-	if (pkt_size <= rxm_ep->inject_limit) {
-		RXM_UPDATE_STATE(FI_LOG_EP_DATA, tx_buf, RXM_RNDV_ACK_WAIT);
-		ret = rxm_ep_msg_inject_send(rxm_ep, rxm_conn, &tx_buf->pkt,
-					     pkt_size, ofi_cntr_inc_noop);
-	} else {
-		tx_buf->hdr.state = RXM_RNDV_TX;
-
-		ret = rxm_ep_msg_normal_send(rxm_conn, &tx_buf->pkt, pkt_size,
-					     tx_buf->hdr.desc, tx_buf);
-	}
+	// TODO use fi_sendmsg + FI_INJECT if less than inject limit
+	ret = rxm_ep_msg_normal_send(rxm_conn, &tx_buf->pkt, pkt_size,
+				     tx_buf->hdr.desc, tx_buf);
 	if (OFI_UNLIKELY(ret))
 		goto err;
 	return FI_SUCCESS;
 err:
 	FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
-	       "Transmit for MSG provider failed\n");
+	       "transmit for MSG provider failed\n");
 	if (!rxm_ep->rxm_mr_local)
 		rxm_ep_msg_mr_closev(tx_buf->mr, tx_buf->count);
 	ofi_buf_free(tx_buf);
@@ -1186,6 +1178,7 @@ rxm_ep_emulate_inject(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	tx_buf->app_context = NULL;
 
 	rxm_ep_format_tx_buf_pkt(rxm_conn, len, op, data, tag, flags, &tx_buf->pkt);
+	tx_buf->pkt.ctrl_hdr.type = rxm_ctrl_eager_inject;
 	memcpy(tx_buf->pkt.data, buf, len);
 	tx_buf->flags = flags;
 
@@ -1277,13 +1270,15 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 		if (OFI_UNLIKELY(!tx_buf)) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
-				"Ran out of buffers from Eager buffer pool\n");
+				"ran out of buffers from eager buffer pool\n");
 			ret = -FI_EAGAIN;
 			goto unlock;
 		}
 
 		rxm_ep_format_tx_buf_pkt(rxm_conn, data_len, op, data, tag,
 					 flags, &tx_buf->pkt);
+		tx_buf->pkt.ctrl_hdr.msg_id = ofi_buf_index(tx_buf);
+
 		ofi_copy_from_iov(tx_buf->pkt.data, tx_buf->pkt.hdr.size,
 				  iov, count, 0);
 		tx_buf->app_context = context;
@@ -1414,15 +1409,15 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 		def_tx_entry = container_of(rxm_conn->deferred_tx_queue.next,
 					    struct rxm_deferred_tx_entry, entry);
 		switch (def_tx_entry->type) {
-		case RXM_DEFERRED_TX_RNDV_ACK:
+		case RXM_DEFERRED_TX_ACK:
 			ret = fi_send(def_tx_entry->rxm_conn->msg_ep,
-				      &def_tx_entry->rndv_ack.rx_buf->
-					recv_entry->rndv.tx_buf->pkt,
-				      sizeof(def_tx_entry->rndv_ack.rx_buf->
-					recv_entry->rndv.tx_buf->pkt),
-				      def_tx_entry->rndv_ack.rx_buf->recv_entry->
-					rndv.tx_buf->hdr.desc,
-				      0, def_tx_entry->rndv_ack.rx_buf);
+				      &def_tx_entry->ack.rx_buf->
+					recv_entry->ack.tx_buf->pkt,
+				      sizeof(def_tx_entry->ack.rx_buf->
+					recv_entry->ack.tx_buf->pkt),
+				      def_tx_entry->ack.rx_buf->recv_entry->
+					ack.tx_buf->hdr.desc,
+				      0, def_tx_entry->ack.rx_buf);
 			if (OFI_UNLIKELY(ret)) {
 				if (OFI_LIKELY(ret == -FI_EAGAIN))
 					break;
@@ -1432,8 +1427,8 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 						   recv_entry->context, ret);
 			}
 			RXM_UPDATE_STATE(FI_LOG_EP_DATA,
-					 def_tx_entry->rndv_ack.rx_buf,
-					 RXM_RNDV_ACK_SENT);
+					 def_tx_entry->ack.rx_buf,
+					 RXM_ACK_SENT);
 			rxm_ep_dequeue_deferred_tx_queue(def_tx_entry);
 			free(def_tx_entry);
 			break;

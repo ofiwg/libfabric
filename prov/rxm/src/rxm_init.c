@@ -124,6 +124,7 @@ int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 		core_info->ep_attr->rx_ctx_cnt = FI_SHARED_CONTEXT;
 	}
 
+	core_info->tx_attr->op_flags &= ~FI_DELIVERY_COMPLETE;
 	core_info->tx_attr->size = rxm_msg_tx_size;
 	core_info->rx_attr->size = rxm_msg_rx_size;
 
