@@ -134,6 +134,7 @@ struct fi_domain_attr {
 	size_t                auth_key_size;
 	size_t                max_err_data;
 	size_t                mr_cnt;
+	uint32_t              tclass;
 };
 ```
 
@@ -665,6 +666,136 @@ attributes of the domain, such as the supported memory registration modes.
 Applications can set the mr_cnt on input to fi_getinfo, in order to
 indicate their memory registration requirements.  Doing so may allow the
 provider to optimize any memory registration cache or lookup tables.
+
+## Traffic Class (tclass)
+
+The default traffic class associated with the domain and any endpoints
+created within the context of the domain.
+
+Applications can set the tclass in the domain, in order to indicate
+a request for a specific default traffic class. If the traffic class is not set,
+traffic is considered to be undifferentiated.
+
+Traffic classes can be any DSCP value, any of the following defined classes of
+traffic, or any provider-specific definitions.
+
+All values other than 0 and less than FI_TC_LABEL are treated as DSCP values in
+the traffic class field.
+
+** FI_TC_BEST_EFFORT **
+** FI_TC_LOW_LATENCY **
+** FI_TC_DEDICATED_ACCESS **
+** FI_TC_BULK_DATA **
+** FI_TC_SCAVENGER **
+** FI_TC_NETWORK_CTRL **
+** FI_TC_REALTIME_STREAM **
+
+The general behavior provided for each traffic class is provided below.
+
+*FI_TC_BEST_EFFORT*
+: This is the default in the absence of any other local or fabric configuration.
+  This class carries the traffic for a number of applications executing
+  concurrently over the same network infrastructure. Even though it is shared,
+  network capacity and resource allocation are distributed fairly across the
+  applications.
+
+*FI_TC_LOW_LATENCY*
+: This class supports low latency, low jitter data patterns typically caused by
+  transactional data exchanges, barrier synchronizations, and collective
+  operations that are typical of HPC applications. Specified maximum latencies
+  are requested by this class.  Fulfillment of such requests in this class will
+  typically require accompanying bandwidth caps and packet size limitations so
+  as not to consume excessive bandwidth at high priority.
+
+*FI_TC_DEDICATED_ACCESS*
+: This class operates at the highest priority, except the management class.
+  It carries a high bandwidth allocation, maximum latency targets, and the
+  highest scheduling and arbitration priority.
+
+*FI_TC_BULK_DATA*
+: This class is intended for large data transfers associated with I/O and
+  is present to separate sustained I/O transfers from other application
+  inter-process communications.
+
+*FI_TC_SCAVENGER*
+: This class is used for data that is desired but does not have strict delivery
+  requirements such as monitoring data especially for application-specific
+  monitoring such as with performance tools.  Global monitoring could also be
+  done this way for data that is too voluminous for out-of-band transport.
+  Using this class makes sure that such communication does not interfere with
+  communication doing “real” work.
+
+*FI_TC_NETWORK_CTRL*
+: This class is intended for traffic directly related to fabric (network)
+  management. It should not be used by standard user or kernel applications.
+
+*FI_TC_REALTIME_STREAM*
+: This class is used for data that requires dedicated bandwidth and little
+  jitter.
+
+### Example usage
+
+```c
+/* Example: request dedicated access traffic classes by default for
+   all endpoints */
+
+hints = fi_allocinfo();
+
+ret = fi_getinfo(FI_VERSION, node, service, flags, hints, &info);
+assert(ret == 0);
+
+ret = fi_fabric(info->fabric_attr, &fabric, context)
+assert(ret == 0);
+
+info->domain_attr.traffic_class = FI_TC_DEDICATED_ACCESS;
+
+ret = fi_domain(fabric, info, &domain, context);
+assert(ret == 0);```
+
+```c
+/* Example: request default priority traffic classes for all endpoints
+   and request high priority traffic class for a specific endpoint */
+
+hints = fi_allocinfo();
+
+ret = fi_getinfo(FI_VERSION, node, service, flags, hints, &info);
+assert(ret == 0);
+
+ret = fi_fabric(info->fabric_attr, &fabric, context)
+assert(ret == 0);
+
+info->domain_attr.traffic_class = FI_TC_BEST_EFFORT;
+
+ret = fi_domain(fabric, info, &domain, context);
+assert(ret == 0);
+
+/* create an endpoint with default traffic class */
+ret = fi_endpoint(domain, info, &default_ep, context);
+assert(ret == 0);
+
+/* create an endpoint with low latency traffic class */
+info->ep_attr->traffic_class = FI_TC_LOW_LATENCY;
+
+ret = fi_endpoint(domain, info, &high_prio_ep, context);
+assert(ret == 0);
+```
+
+```c
+/* Example: Request expedited forwarding DSCP value */
+int dscp_val = 0x2e; // 101110
+
+hints = fi_allocinfo();
+
+ret = fi_getinfo(FI_VERSION, node, service, flags, hints, &info);
+assert(ret == FI_SUCCESS);
+
+ret = fi_fabric(info->fabric_attr, &fabric, context)
+assert(ret == FI_SUCCESS);
+
+info->domain_attr.traffic_class = FI_TC_DSCP_SET(0x2e);
+ret = fi_domain(fabric, info, &domain, context);
+assert(ret == FI_SUCCESS);
+```
 
 # RETURN VALUE
 

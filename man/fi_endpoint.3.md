@@ -513,7 +513,6 @@ The following option levels and option names and parameters are defined.
   sized renedezvous protocol message usually results in better latency for the
   overall transfer of a large message.
 
-
 ## fi_rx_size_left (DEPRECATED)
 
 This function has been deprecated and will be removed in a future version
@@ -844,6 +843,7 @@ struct fi_tx_attr {
 	size_t    size;
 	size_t    iov_limit;
 	size_t    rma_iov_limit;
+	uint32_t  tclass;
 };
 {% endhighlight %}
 
@@ -1060,6 +1060,15 @@ fi_atomic.3, for additional details.  This limit applies to both the
 number of RMA IO vectors that may be specified when initiating an
 operation from the local endpoint, as well as the maximum number of
 IO vectors that may be carried in a single request from a remote endpoint.
+
+## Traffic Class (tclass)
+
+The traffic class associated with the transmit attributes.
+
+If the traffic class type is set to FI_TC_UNSPEC, the type and value
+of the traffic class will be inherited from the domain.
+
+See fi_domain.3 for additional information.
 
 # RECEIVE CONTEXT ATTRIBUTES
 
