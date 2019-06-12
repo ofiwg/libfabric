@@ -360,7 +360,7 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 	enum c_cswap_op swpcode;
 	enum c_atomic_type dtcode;
 	union c_cmdu cmd = {};
-	union c_cmdu state = {};
+	struct c_cstate_cmd c_state = {};
 	union c_fab_addr dfa;
 	uint8_t idx_ext;
 	uint32_t pid_granule;
@@ -584,12 +584,12 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 	cxi_build_dfa(caddr.nic, caddr.pid, pid_granule, pid_idx, &dfa,
 		      &idx_ext);
 
-	state.c_state.write_lac = result_lac;
-	state.c_state.event_send_disable = 1;
-	state.c_state.restricted = 1;
-	state.c_state.index_ext = idx_ext;
-	state.c_state.user_ptr = (uint64_t)req;
-	state.c_state.eq = txc->comp.send_cq->evtq->eqn;
+	c_state.write_lac = result_lac;
+	c_state.event_send_disable = 1;
+	c_state.restricted = 1;
+	c_state.index_ext = idx_ext;
+	c_state.user_ptr = (uint64_t)req;
+	c_state.eq = txc->comp.send_cq->evtq->eqn;
 
 	cmd.idc_amo.idc_header.dfa = dfa;
 	cmd.idc_amo.idc_header.remote_offset = off;
@@ -604,14 +604,22 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 
 	fastlock_acquire(&txc->tx_cmdq->lock);
 
-	/* Issue a CSTATE command */
-	ret = cxi_cq_emit_c_state(txc->tx_cmdq->dev_cmdq, &state.c_state);
-	if (ret) {
-		CXIP_LOG_DBG("Failed to issue CSTATE command: %d\n", ret);
+	if (memcmp(&txc->tx_cmdq->c_state, &c_state, sizeof(c_state))) {
+		/* Update TXQ C_STATE */
+		txc->tx_cmdq->c_state = c_state;
 
-		/* Return error according to Domain Resource Management */
-		ret = -FI_EAGAIN;
-		goto unlock_amo;
+		ret = cxi_cq_emit_c_state(txc->tx_cmdq->dev_cmdq, &c_state);
+		if (ret) {
+			CXIP_LOG_DBG("Failed to issue C_STATE command: %d\n",
+				     ret);
+
+			/* Return error according to Domain Resource Management
+			 */
+			ret = -FI_EAGAIN;
+			goto unlock_amo;
+		}
+
+		CXIP_LOG_DBG("Updated C_STATE: %p\n", req);
 	}
 
 	/* Issue IDC AMO command */

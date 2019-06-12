@@ -1291,3 +1291,44 @@ Test(atomic, amo_cleanup)
 
 	/* Exit without gathering events. */
 }
+
+/* Perform a batch of AMOs. A C_STATE update is required for each transaction
+ * since each transaction in the batch uses a unique internal request.
+ */
+Test(atomic, amo_batch)
+{
+	struct mem_region mr;
+	struct fi_cq_tagged_entry cqe;
+	uint64_t operand1;
+	int ret;
+	int i;
+
+	_cxit_create_mr(&mr);
+
+	ret = fi_atomic(cxit_ep, &operand1, 1, 0,
+			cxit_ep_fi_addr, 0, RMA_WIN_KEY,
+			FI_UINT64, FI_SUM, NULL);
+	cr_assert(ret == FI_SUCCESS, "Return code  = %d", ret);
+
+	ret = fi_atomic(cxit_ep, &operand1, 1, 0,
+			cxit_ep_fi_addr, 0, RMA_WIN_KEY,
+			FI_UINT64, FI_SUM, NULL);
+	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
+
+	ret = fi_atomic(cxit_ep, &operand1, 1, 0,
+			cxit_ep_fi_addr, 0, RMA_WIN_KEY,
+			FI_UINT64, FI_SUM, NULL);
+	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
+
+	ret = fi_atomic(cxit_ep, &operand1, 1, 0,
+			cxit_ep_fi_addr, 0, RMA_WIN_KEY,
+			FI_UINT64, FI_SUM, NULL);
+	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
+
+	for (i = 0; i < 4; i++) {
+		ret = cxit_await_completion(cxit_tx_cq, &cqe);
+		cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+	}
+
+	_cxit_destroy_mr(&mr);
+}

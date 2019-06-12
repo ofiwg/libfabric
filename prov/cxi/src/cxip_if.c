@@ -498,7 +498,7 @@ int cxip_cmdq_alloc(struct cxip_if *dev_if, struct cxi_evtq *evtq,
 	struct cxi_cmdq *dev_cmdq;
 	struct cxip_cmdq *new_cmdq;
 
-	new_cmdq = malloc(sizeof(*new_cmdq));
+	new_cmdq = calloc(1, sizeof(*new_cmdq));
 	if (!new_cmdq) {
 		CXIP_LOG_ERROR("Unable to allocate CMDQ structure\n");
 		return -FI_ENOMEM;

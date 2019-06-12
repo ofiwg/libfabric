@@ -295,6 +295,7 @@ struct cxip_pte {
 struct cxip_cmdq {
 	struct cxi_cmdq *dev_cmdq;
 	fastlock_t lock;
+	struct c_cstate_cmd c_state;
 };
 
 /**
