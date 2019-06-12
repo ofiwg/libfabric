@@ -262,8 +262,8 @@ static struct cxip_txc *txc_alloc(const struct fi_tx_attr *attr, void *context,
 	default:
 		goto err;
 	}
+
 	txc->attr = *attr;
-	txc->attr.op_flags |= FI_TRANSMIT_COMPLETE;
 	txc->eager_threshold = CXIP_EAGER_THRESHOLD;
 
 	return txc;

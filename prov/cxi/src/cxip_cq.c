@@ -345,6 +345,7 @@ void cxip_util_cq_progress(struct util_cq *util_cq)
 int cxip_cq_enable(struct cxip_cq *cxi_cq)
 {
 	struct cxi_eq_attr eq_attr = {};
+	struct ofi_bufpool_attr bp_attrs = {};
 	int ret = FI_SUCCESS;
 
 	fastlock_acquire(&cxi_cq->lock);
@@ -384,9 +385,12 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq)
 		goto unmap_evtq_buf;
 	}
 
-	/* TODO set buffer pool size with CQ attrs */
-	ret = ofi_bufpool_create(&cxi_cq->req_pool, sizeof(struct cxip_req),
-				 8, UINT16_MAX, 64);
+	bp_attrs.size = sizeof(struct cxip_req);
+	bp_attrs.alignment = 8;
+	bp_attrs.max_cnt = UINT16_MAX;
+	bp_attrs.chunk_cnt = 64;
+	bp_attrs.flags = OFI_BUFPOOL_NO_TRACK;
+	ret = ofi_bufpool_create_attr(&bp_attrs, &cxi_cq->req_pool);
 	if (ret) {
 		ret = -FI_ENOMEM;
 		goto free_evtq;

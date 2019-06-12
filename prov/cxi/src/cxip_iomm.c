@@ -108,7 +108,7 @@ void cxip_iomm_fini(struct cxip_domain *dom)
  * The IO memory map is searched for a IO mapping which covers buf. If no
  * mapping has been established, create one and cache it.
  */
-int cxip_map(struct cxip_domain *dom, void *buf, unsigned long len,
+int cxip_map(struct cxip_domain *dom, const void *buf, unsigned long len,
 	     struct cxip_md **md)
 {
 	int ret;

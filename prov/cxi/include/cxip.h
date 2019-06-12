@@ -55,12 +55,10 @@
 #define CXIP_REQ_CLEANUP_TO 3000
 
 #define CXIP_EP_MAX_MSG_SZ		(1 << 30)
-#define CXIP_EP_MAX_INJECT_SZ		0
 #define CXIP_EP_MAX_TX_CNT		16
 #define CXIP_EP_MAX_RX_CNT		16
 #define CXIP_EP_MIN_MULTI_RECV		64
 #define CXIP_EP_MAX_CTX_BITS		4
-#define CXIP_RMA_MAX_IOV		1
 #define CXIP_AMO_MAX_IOV		1
 #define CXIP_EQ_DEF_SZ			(1 << 8)
 #define CXIP_CQ_DEF_SZ			(1 << 8)
@@ -81,10 +79,7 @@
 	(FI_SOURCE | FI_SHARED_AV | FI_LOCAL_COMM | FI_REMOTE_COMM | \
 	 /* TODO FI_MULTI_RECV | FI_RMA_EVENT | FI_FENCE | FI_TRIGGER */ 0)
 #define CXIP_EP_CAPS (CXIP_EP_PRI_CAPS | CXIP_EP_SEC_CAPS)
-#define CXIP_EP_MSG_ORDER \
-	(FI_ORDER_RAR | FI_ORDER_RAW | FI_ORDER_RAS | FI_ORDER_WAR | \
-	 FI_ORDER_WAW | FI_ORDER_WAS | FI_ORDER_SAR | FI_ORDER_SAW | \
-	 FI_ORDER_SAS)
+#define CXIP_EP_MSG_ORDER FI_ORDER_SAS
 
 #define CXIP_EP_CQ_FLAGS \
 	(FI_SEND | FI_TRANSMIT | FI_RECV | FI_SELECTIVE_COMPLETION)
@@ -596,6 +591,7 @@ struct cxip_rxc {
 	struct dlist_entry ep_list;	// contains EPs using shared context
 
 	struct fi_rx_attr attr;
+	bool selective_completion;
 
 	struct cxip_pte *rx_pte;	// HW RX Queue
 	struct cxip_cmdq *rx_cmdq;	// RX CMDQ for posting receive buffers
@@ -659,10 +655,12 @@ struct cxip_txc {
 	fastlock_t lock;
 
 	struct fi_tx_attr attr;		// attributes
+	bool selective_completion;
 
 	struct cxip_cmdq *tx_cmdq;	// added during cxip_txc_enable()
 
 	ofi_atomic32_t otx_reqs;	// outstanding transmit requests
+	struct cxip_req *rma_inject_req;
 
 	/* Software Rendezvous related structures */
 	struct cxip_pte *rdzv_pte;	// PTE for SW Rendezvous commands
@@ -933,9 +931,37 @@ int cxip_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 
 int cxip_iomm_init(struct cxip_domain *dom);
 void cxip_iomm_fini(struct cxip_domain *dom);
-int cxip_map(struct cxip_domain *dom, void *buf, unsigned long len,
+int cxip_map(struct cxip_domain *dom, const void *buf, unsigned long len,
 	     struct cxip_md **md);
 void cxip_unmap(struct cxip_md *md);
+
+/*
+ * cxip_fid_to_txc() - Return TXC from FID provided to a transmit API.
+ */
+static inline int cxip_fid_to_txc(struct fid_ep *ep, struct cxip_txc **txc)
+{
+	struct cxip_ep *cxi_ep;
+
+	if (!ep)
+		return -FI_EINVAL;
+
+	/* The input FID could be a standard endpoint (containing a TX
+	 * context), or a TX context itself.
+	 */
+	switch (ep->fid.fclass) {
+	case FI_CLASS_EP:
+		cxi_ep = container_of(ep, struct cxip_ep, ep);
+		*txc = cxi_ep->ep_obj->txcs[0];
+		return FI_SUCCESS;
+
+	case FI_CLASS_TX_CTX:
+		*txc = container_of(ep, struct cxip_txc, fid.ctx);
+		return FI_SUCCESS;
+
+	default:
+		return -FI_EINVAL;
+	}
+}
 
 #define _CXIP_LOG_DBG(subsys, ...) FI_DBG(&cxip_prov, subsys, __VA_ARGS__)
 #define _CXIP_LOG_ERROR(subsys, ...) FI_WARN(&cxip_prov, subsys, __VA_ARGS__)

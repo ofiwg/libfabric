@@ -246,7 +246,7 @@ static int cxip_ctx_bind_cq(struct fid *fid, struct fid *bfid, uint64_t flags)
 		if (flags & FI_SEND) {
 			txc->comp.send_cq = cxi_cq;
 			if (flags & FI_SELECTIVE_COMPLETION)
-				txc->comp.send_cq_event = 1;
+				txc->selective_completion = 1;
 		}
 
 		ofi_atomic_inc32(&cxi_cq->ref);
@@ -257,7 +257,7 @@ static int cxip_ctx_bind_cq(struct fid *fid, struct fid *bfid, uint64_t flags)
 		if (flags & FI_RECV) {
 			rxc->comp.recv_cq = cxi_cq;
 			if (flags & FI_SELECTIVE_COMPLETION)
-				rxc->comp.recv_cq_event = 1;
+				rxc->selective_completion = 1;
 		}
 
 		ofi_atomic_inc32(&cxi_cq->ref);

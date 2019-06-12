@@ -47,15 +47,29 @@ static void mr_destroy(struct mem_region *mr)
 	free(mr->mem);
 }
 
+void validate_rma_event(struct fi_cq_tagged_entry *cqe, uint64_t flags,
+			void *context)
+{
+	cr_assert(cqe->op_context == context,
+		  "CQE Context mismatch: %lx != %lx",
+		  cqe->op_context, context);
+	cr_assert(cqe->flags == flags,
+		  "CQE flags mismatch: %lx != %lx", cqe->flags, flags);
+	cr_assert(cqe->len == 0, "Invalid CQE length");
+	cr_assert(cqe->buf == 0, "Invalid CQE address");
+	cr_assert(cqe->data == 0, "Invalid CQE data");
+	cr_assert(cqe->tag == 0, "Invalid CQE tag");
+}
+
 TestSuite(rma, .init = cxit_setup_rma, .fini = cxit_teardown_rma,
 	  .timeout = CXIT_DEFAULT_TIMEOUT);
 
-/* Test fi_write simple case */
+/* Test fi_write simple case. Test IDC sizes to multi-packe sizes. */
 Test(rma, simple_write)
 {
 	int ret;
 	uint8_t *send_buf;
-	int win_len = 0x1000;
+	int win_len = 16 * 1024;
 	int send_len = 8;
 	struct mem_region mem_window;
 	int key_val = 0x1f;
@@ -66,29 +80,23 @@ Test(rma, simple_write)
 
 	mr_create(win_len, FI_REMOTE_WRITE, 0xa0, key_val, &mem_window);
 
-	/* Send 8 bytes from send buffer data to RMA window 0 */
-	ret = fi_write(cxit_ep, send_buf, send_len, NULL, cxit_ep_fi_addr, 0,
-		       key_val, NULL);
-	cr_assert(ret == FI_SUCCESS);
+	for (send_len = 1; send_len <= win_len; send_len <<= 1) {
+		ret = fi_write(cxit_ep, send_buf, send_len, NULL,
+			       cxit_ep_fi_addr, 0, key_val, NULL);
+		cr_assert(ret == FI_SUCCESS);
 
-	/* Wait for async event indicating data has been sent */
-	ret = cxit_await_completion(cxit_tx_cq, &cqe);
-	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+		/* Wait for async event indicating data has been sent */
+		ret = cxit_await_completion(cxit_tx_cq, &cqe);
+		cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
 
-	/* Validate event fields */
-	cr_assert(cqe.op_context == NULL, "CQE Context mismatch");
-	cr_assert(cqe.flags == (FI_RMA | FI_WRITE), "CQE flags mismatch (%lx)",
-		  cqe.flags);
-	cr_assert(cqe.len == 0, "Invalid CQE length");
-	cr_assert(cqe.buf == 0, "Invalid CQE address");
-	cr_assert(cqe.data == 0, "Invalid CQE data");
-	cr_assert(cqe.tag == 0, "Invalid CQE tag");
+		validate_rma_event(&cqe, FI_RMA | FI_WRITE, NULL);
 
-	/* Validate sent data */
-	for (int i = 0; i < send_len; i++)
-		cr_assert_eq(mem_window.mem[i], send_buf[i],
-			     "data mismatch, element: (%d) %02x != %02x\n", i,
-			     mem_window.mem[i], send_buf[i]);
+		/* Validate sent data */
+		for (int i = 0; i < send_len; i++)
+			cr_assert_eq(mem_window.mem[i], send_buf[i],
+				     "data mismatch, element: (%d) %02x != %02x\n", i,
+				     mem_window.mem[i], send_buf[i]);
+	}
 
 	mr_destroy(&mem_window);
 	free(send_buf);
@@ -123,14 +131,7 @@ Test(rma, simple_writev)
 	ret = cxit_await_completion(cxit_tx_cq, &cqe);
 	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
 
-	/* Validate event fields */
-	cr_assert(cqe.op_context == NULL, "CQE Context mismatch");
-	cr_assert(cqe.flags == (FI_RMA | FI_WRITE), "CQE flags mismatch (%lx)",
-		  cqe.flags);
-	cr_assert(cqe.len == 0, "Invalid CQE length");
-	cr_assert(cqe.buf == 0, "Invalid CQE address");
-	cr_assert(cqe.data == 0, "Invalid CQE data");
-	cr_assert(cqe.tag == 0, "Invalid CQE tag");
+	validate_rma_event(&cqe, FI_RMA | FI_WRITE, NULL);
 
 	/* Validate sent data */
 	for (int i = 0; i < send_len; i++)
@@ -185,20 +186,108 @@ Test(rma, simple_writemsg)
 	ret = cxit_await_completion(cxit_tx_cq, &cqe);
 	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
 
-	/* Validate event fields */
-	cr_assert(cqe.op_context == NULL, "CQE Context mismatch");
-	cr_assert(cqe.flags == (FI_RMA | FI_WRITE), "CQE flags mismatch (%lx)",
-		  cqe.flags);
-	cr_assert(cqe.len == 0, "Invalid CQE length");
-	cr_assert(cqe.buf == 0, "Invalid CQE address");
-	cr_assert(cqe.data == 0, "Invalid CQE data");
-	cr_assert(cqe.tag == 0, "Invalid CQE tag");
+	validate_rma_event(&cqe, FI_RMA | FI_WRITE, NULL);
 
 	/* Validate sent data */
 	for (int i = 0; i < send_len; i++)
 		cr_assert_eq(mem_window.mem[i], send_buf[i],
 			     "data mismatch, element: (%d) %02x != %02x\n", i,
 			     mem_window.mem[i], send_buf[i]);
+
+	mr_destroy(&mem_window);
+	free(send_buf);
+}
+
+/* Test fi_writemsg with FI_INJECT flag */
+Test(rma, simple_writemsg_inject)
+{
+	int ret;
+	uint8_t *send_buf;
+	int win_len = 0x1000;
+	int send_len = 8;
+	struct mem_region mem_window;
+	int key_val = 0x1f;
+	struct fi_cq_tagged_entry cqe;
+	struct fi_msg_rma msg = {};
+	struct iovec iov[1];
+	struct fi_rma_iov rma[1];
+	uint64_t flags = FI_INJECT;
+
+	send_buf = calloc(1, win_len);
+	cr_assert_not_null(send_buf, "send_buf alloc failed");
+
+	mr_create(win_len, FI_REMOTE_WRITE, 0x44, key_val, &mem_window);
+
+	iov[0].iov_base = send_buf;
+	iov[0].iov_len = send_len;
+
+	rma[0].addr = 0;
+	rma[0].len = send_len;
+	rma[0].key = key_val;
+
+	msg.msg_iov = iov;
+	msg.iov_count = 1;
+	msg.rma_iov = rma;
+	msg.rma_iov_count = 1;
+	msg.addr = cxit_ep_fi_addr;
+
+	/* Send 8 bytes from send buffer data to RMA window 0 at FI address 0
+	 * (self)
+	 */
+	ret = fi_writemsg(cxit_ep, &msg, flags);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_writemsg failed %d", ret);
+
+	/* Wait for async event indicating data has been sent */
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+
+	validate_rma_event(&cqe, FI_RMA | FI_WRITE, NULL);
+
+	/* Validate sent data */
+	for (int i = 0; i < send_len; i++)
+		cr_assert_eq(mem_window.mem[i], send_buf[i],
+			     "data mismatch, element: (%d) %02x != %02x\n", i,
+			     mem_window.mem[i], send_buf[i]);
+
+	mr_destroy(&mem_window);
+	free(send_buf);
+}
+
+/* Test fi_inject_write simple case */
+Test(rma, simple_inject_write)
+{
+	int ret;
+	uint8_t *send_buf;
+	int win_len = 0x1000;
+	int send_len = 8;
+	struct mem_region mem_window;
+	int key_val = 0x1f;
+	struct fi_cq_tagged_entry cqe;
+
+	send_buf = calloc(1, win_len);
+	cr_assert_not_null(send_buf, "send_buf alloc failed");
+
+	mr_create(win_len, FI_REMOTE_WRITE, 0xa0, key_val, &mem_window);
+
+	/* Test invalid inject length */
+	ret = fi_inject_write(cxit_ep, send_buf,
+			      cxit_fi->tx_attr->inject_size + 100,
+			      cxit_ep_fi_addr, 0, key_val);
+	cr_assert(ret == -FI_EMSGSIZE);
+
+	/* Send 8 bytes from send buffer data to RMA window 0 */
+	ret = fi_inject_write(cxit_ep, send_buf, send_len, cxit_ep_fi_addr, 0,
+			      key_val);
+	cr_assert(ret == FI_SUCCESS);
+
+	/* Validate sent data */
+	for (int i = 0; i < send_len; i++)
+		while (mem_window.mem[i] != send_buf[i])
+			sched_yield();
+
+	/* Make sure an event wasn't delivered */
+	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	cr_assert(ret == -FI_EAGAIN);
 
 	mr_destroy(&mem_window);
 	free(send_buf);
@@ -229,14 +318,7 @@ Test(rma, simple_read)
 	ret = cxit_await_completion(cxit_tx_cq, &cqe);
 	cr_assert_eq(ret, 1, "fi_cq_read() failed (%d)", ret);
 
-	/* Validate event fields */
-	cr_assert_null(cqe.op_context, "CQE Context mismatch");
-	cr_assert_eq(cqe.flags, (FI_RMA | FI_READ), "CQE flags mismatch (%lx)",
-		     cqe.flags);
-	cr_assert_eq(cqe.len, 0UL, "Invalid CQE length (%lx)", cqe.len);
-	cr_assert_null(cqe.buf, "Invalid CQE address (%p)", cqe.buf);
-	cr_assert_eq(cqe.data, 0UL, "Invalid CQE data (%lx)", cqe.data);
-	cr_assert_eq(cqe.tag, 0UL, "Invalid CQE tag (%lx)", cqe.tag);
+	validate_rma_event(&cqe, FI_RMA | FI_READ, NULL);
 
 	/* Validate sent data */
 	for (int i = 0; i < local_len; i++)
@@ -277,14 +359,7 @@ Test(rma, simple_readv)
 	ret = cxit_await_completion(cxit_tx_cq, &cqe);
 	cr_assert_eq(ret, 1, "fi_cq_read() failed (%d)", ret);
 
-	/* Validate event fields */
-	cr_assert_null(cqe.op_context, "CQE Context mismatch");
-	cr_assert_eq(cqe.flags, (FI_RMA | FI_READ), "CQE flags mismatch (%lx)",
-		     cqe.flags);
-	cr_assert_eq(cqe.len, 0UL, "Invalid CQE length (%lx)", cqe.len);
-	cr_assert_null(cqe.buf, "Invalid CQE address (%p)", cqe.buf);
-	cr_assert_eq(cqe.data, 0UL, "Invalid CQE data (%lx)", cqe.data);
-	cr_assert_eq(cqe.tag, 0UL, "Invalid CQE tag (%lx)", cqe.tag);
+	validate_rma_event(&cqe, FI_RMA | FI_READ, NULL);
 
 	/* Validate sent data */
 	for (int i = 0; i < local_len; i++)
@@ -337,14 +412,7 @@ Test(rma, simple_readmsg)
 	ret = cxit_await_completion(cxit_tx_cq, &cqe);
 	cr_assert_eq(ret, 1, "fi_cq_read() failed (%d)", ret);
 
-	/* Validate event fields */
-	cr_assert_null(cqe.op_context, "CQE Context mismatch");
-	cr_assert_eq(cqe.flags, (FI_RMA | FI_READ), "CQE flags mismatch (%lx)",
-		     cqe.flags);
-	cr_assert_eq(cqe.len, 0UL, "Invalid CQE length (%lx)", cqe.len);
-	cr_assert_null(cqe.buf, "Invalid CQE address (%p)", cqe.buf);
-	cr_assert_eq(cqe.data, 0UL, "Invalid CQE data (%lx)", cqe.data);
-	cr_assert_eq(cqe.tag, 0UL, "Invalid CQE tag (%lx)", cqe.tag);
+	validate_rma_event(&cqe, FI_RMA | FI_READ, NULL);
 
 	/* Validate sent data */
 	for (int i = 0; i < local_len; i++)
@@ -360,8 +428,13 @@ Test(rma, simple_readmsg)
 Test(rma, readmsg_failures)
 {
 	int ret;
+	struct iovec iov[1];
+	struct fi_rma_iov rma[1];
 	struct fi_msg_rma msg = {
-		.iov_count = CXIP_RMA_MAX_IOV,
+		.msg_iov = iov,
+		.rma_iov = rma,
+		.iov_count = 1,
+		.rma_iov_count = 1,
 	};
 	uint64_t flags = 0;
 
@@ -369,45 +442,66 @@ Test(rma, readmsg_failures)
 	ret = fi_readmsg(cxit_ep, NULL, flags);
 	cr_assert_eq(ret, -FI_EINVAL, "NULL msg return %d", ret);
 
-	msg.iov_count = CXIP_RMA_MAX_IOV + 1; /* Invalid iov_count value */
+	msg.iov_count = cxit_fi->tx_attr->rma_iov_limit + 1;
 	ret = fi_readmsg(cxit_ep, &msg, flags);
 	cr_assert_eq(ret, -FI_EINVAL, "Invalid iov_count return %d", ret);
 
-	msg.iov_count = CXIP_RMA_MAX_IOV;
+	msg.iov_count = cxit_fi->tx_attr->rma_iov_limit;
 	flags = FI_DIRECTED_RECV; /* Invalid flag value */
 	ret = fi_readmsg(cxit_ep, &msg, flags);
-	cr_assert_eq(ret, -FI_EBADFLAGS, "NULL msg unexpected return %d", ret);
-
-	flags = FI_COMPLETION; /* Unsupported flag value */
-	ret = fi_readmsg(cxit_ep, &msg, flags);
-	cr_assert_eq(ret, -FI_EINVAL, "NULL msg unexpected return %d", ret);
+	cr_assert_eq(ret, -FI_EBADFLAGS, "Invalid flag unexpected return %d",
+		     ret);
 }
 
 /* Test fi_writemsg failure cases */
 Test(rma, writemsg_failures)
 {
 	int ret;
+	struct iovec iov[1];
+	struct fi_rma_iov rma[1];
 	struct fi_msg_rma msg = {
-		.iov_count = CXIP_RMA_MAX_IOV,
+		.msg_iov = iov,
+		.rma_iov = rma,
+		.iov_count = 1,
+		.rma_iov_count = 1,
 	};
 	uint64_t flags = 0;
+	size_t send_len = 10;
+	char send_buf[send_len];
 
 	/* Invalid msg value */
 	ret = fi_writemsg(cxit_ep, NULL, flags);
 	cr_assert_eq(ret, -FI_EINVAL, "NULL msg return %d", ret);
 
-	msg.iov_count = CXIP_RMA_MAX_IOV + 1; /* Invalid iov_count value */
+	msg.iov_count = cxit_fi->tx_attr->rma_iov_limit + 1;
 	ret = fi_writemsg(cxit_ep, &msg, flags);
 	cr_assert_eq(ret, -FI_EINVAL, "Invalid iov_count return %d", ret);
 
-	msg.iov_count = CXIP_RMA_MAX_IOV;
+	msg.iov_count = cxit_fi->tx_attr->rma_iov_limit;
 	flags = FI_DIRECTED_RECV; /* Invalid flag value */
 	ret = fi_writemsg(cxit_ep, &msg, flags);
 	cr_assert_eq(ret, -FI_EBADFLAGS, "Invalid flag return %d", ret);
 
-	flags = FI_COMPLETION; /* Unsupported flag value */
-	ret = fi_writemsg(cxit_ep, &msg, flags);
-	cr_assert_eq(ret, -FI_EINVAL, "Unsupported flag return %d", ret);
+	/* Invalid length */
+	iov[0].iov_base = send_buf;
+	iov[0].iov_len = 1024*1024*1024+1;
+
+	rma[0].addr = 0;
+	rma[0].len = send_len;
+	rma[0].key = 0xa;
+	msg.msg_iov = iov;
+	msg.iov_count = 1;
+	msg.rma_iov = rma;
+	msg.rma_iov_count = 1;
+
+	ret = fi_writemsg(cxit_ep, &msg, 0);
+	cr_assert_eq(ret, -FI_EMSGSIZE, "Invalid flag return %d", ret);
+
+	/* Invalid inject length */
+	iov[0].iov_len = C_MAX_IDC_PAYLOAD_RES+1;
+
+	ret = fi_writemsg(cxit_ep, &msg, FI_INJECT);
+	cr_assert_eq(ret, -FI_EMSGSIZE, "Invalid flag return %d", ret);
 }
 
 /* Test fi_readv failure cases */
@@ -417,7 +511,8 @@ Test(rma, readv_failures)
 	struct iovec iov = {};
 
 	 /* Invalid count value */
-	ret = fi_readv(cxit_ep, &iov, NULL, CXIP_RMA_MAX_IOV + 1,
+	ret = fi_readv(cxit_ep, &iov, NULL,
+		       cxit_fi->tx_attr->rma_iov_limit + 1,
 		       cxit_ep_fi_addr, 0, 0, NULL);
 	cr_assert_eq(ret, -FI_EINVAL, "Invalid count return %d", ret);
 }
@@ -429,7 +524,8 @@ Test(rma, writev_failures)
 	struct iovec iov = {};
 
 	 /* Invalid count value */
-	ret = fi_writev(cxit_ep, &iov, NULL, CXIP_RMA_MAX_IOV + 1,
+	ret = fi_writev(cxit_ep, &iov, NULL,
+			cxit_fi->tx_attr->rma_iov_limit + 1,
 			cxit_ep_fi_addr, 0, 0, NULL);
 	cr_assert_eq(ret, -FI_EINVAL, "Invalid count return %d", ret);
 }
@@ -451,7 +547,6 @@ Test(rma, write_spanning_page)
 
 	send_addr = (uint8_t *)FLOOR(send_buf + C_PAGE_SIZE, C_PAGE_SIZE) - 4;
 	memset(send_addr, 0xcc, send_len);
-	printf("buf: %p addr: %p\n", send_buf, send_addr);
 
 	mr_create(win_len, FI_REMOTE_WRITE, 0xa0, key_val, &mem_window);
 	memset(mem_window.mem, 0x33, win_len);
@@ -465,14 +560,7 @@ Test(rma, write_spanning_page)
 	ret = cxit_await_completion(cxit_tx_cq, &cqe);
 	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
 
-	/* Validate event fields */
-	cr_assert(cqe.op_context == NULL, "CQE Context mismatch");
-	cr_assert(cqe.flags == (FI_RMA | FI_WRITE), "CQE flags mismatch (%lx)",
-		  cqe.flags);
-	cr_assert(cqe.len == 0, "Invalid CQE length");
-	cr_assert(cqe.buf == 0, "Invalid CQE address");
-	cr_assert(cqe.data == 0, "Invalid CQE data");
-	cr_assert(cqe.tag == 0, "Invalid CQE tag");
+	validate_rma_event(&cqe, FI_RMA | FI_WRITE, NULL);
 
 	/* Validate sent data */
 	for (int i = 0; i < send_len; i++)
@@ -513,4 +601,224 @@ Test(rma, rma_cleanup)
 	mr_destroy(&mem_window);
 
 	/* Exit without gathering events. */
+}
+
+void cxit_setup_rma_selective_completion(void)
+{
+	cxit_tx_cq_bind_flags |= FI_SELECTIVE_COMPLETION;
+	cxit_fi_hints->tx_attr->op_flags = FI_COMPLETION;
+	cxit_setup_rma();
+}
+
+/* Test selective completion behavior with RMA. */
+Test(rma, selective_completion, .init = cxit_setup_rma_selective_completion)
+{
+	int ret;
+	uint8_t *send_buf;
+	int win_len = 0x1000;
+	int send_len = 8;
+	struct mem_region mem_window;
+	int key_val = 0x1f;
+	struct fi_cq_tagged_entry cqe;
+	struct fi_msg_rma msg = {};
+	struct iovec iov;
+	struct fi_rma_iov rma;
+
+	send_buf = calloc(1, win_len);
+	cr_assert_not_null(send_buf, "send_buf alloc failed");
+
+	mr_create(win_len, FI_REMOTE_WRITE, 0xa0, key_val, &mem_window);
+
+	iov.iov_base = send_buf;
+	iov.iov_len = send_len;
+
+	rma.addr = 0;
+	rma.key = key_val;
+
+	msg.msg_iov = &iov;
+	msg.iov_count = 1;
+	msg.rma_iov = &rma;
+	msg.rma_iov_count = 1;
+	msg.addr = cxit_ep_fi_addr;
+
+	/* Normal writes generate completions */
+	for (send_len = 1; send_len <= win_len; send_len <<= 1) {
+		ret = fi_write(cxit_ep, send_buf, send_len, NULL,
+			       cxit_ep_fi_addr, 0, key_val, NULL);
+		cr_assert(ret == FI_SUCCESS);
+
+		/* Wait for async event indicating data has been sent */
+		ret = cxit_await_completion(cxit_tx_cq, &cqe);
+		cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+
+		validate_rma_event(&cqe, FI_RMA | FI_WRITE, NULL);
+
+		/* Validate sent data */
+		for (int i = 0; i < send_len; i++)
+			cr_assert_eq(mem_window.mem[i], send_buf[i],
+				     "data mismatch, element: (%d) %02x != %02x\n", i,
+				     mem_window.mem[i], send_buf[i]);
+	}
+
+	/* Request completions from fi_writemsg */
+	for (send_len = 1; send_len <= win_len; send_len <<= 1) {
+		iov.iov_len = send_len;
+		ret = fi_writemsg(cxit_ep, &msg, FI_COMPLETION);
+		cr_assert(ret == FI_SUCCESS);
+
+		/* Wait for async event indicating data has been sent */
+		ret = cxit_await_completion(cxit_tx_cq, &cqe);
+		cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+
+		validate_rma_event(&cqe, FI_RMA | FI_WRITE, NULL);
+
+		/* Validate sent data */
+		for (int i = 0; i < send_len; i++)
+			cr_assert_eq(mem_window.mem[i], send_buf[i],
+				     "data mismatch, element: (%d) %02x != %02x\n", i,
+				     mem_window.mem[i], send_buf[i]);
+	}
+
+	/* Suppress completions using fi_writemsg */
+	for (send_len = 1; send_len <= win_len; send_len <<= 1) {
+		iov.iov_len = send_len;
+		ret = fi_writemsg(cxit_ep, &msg, 0);
+		cr_assert(ret == FI_SUCCESS);
+
+		/* Validate sent data */
+		for (int i = 0; i < send_len; i++)
+			while (mem_window.mem[i] != send_buf[i])
+				sched_yield();
+
+		/* Ensure no events were generated */
+		ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+		cr_assert(ret == -FI_EAGAIN);
+	}
+
+	/* Inject never generates an event */
+	send_len = 8;
+	ret = fi_inject_write(cxit_ep, send_buf, send_len, cxit_ep_fi_addr, 0,
+			      key_val);
+	cr_assert(ret == FI_SUCCESS);
+
+	/* Validate sent data */
+	for (int i = 0; i < send_len; i++)
+		while (mem_window.mem[i] != send_buf[i])
+			sched_yield();
+
+	/* Make sure an event wasn't delivered */
+	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	cr_assert(ret == -FI_EAGAIN);
+
+	mr_destroy(&mem_window);
+	free(send_buf);
+}
+
+void cxit_setup_rma_selective_completion_suppress(void)
+{
+	cxit_tx_cq_bind_flags |= FI_SELECTIVE_COMPLETION;
+	cxit_fi_hints->tx_attr->op_flags = 0;
+	cxit_setup_rma();
+}
+
+/* Test selective completion behavior with RMA. */
+Test(rma, selective_completion_suppress,
+     .init = cxit_setup_rma_selective_completion_suppress)
+{
+	int ret;
+	uint8_t *send_buf;
+	int win_len = 0x1000;
+	int send_len = 8;
+	struct mem_region mem_window;
+	int key_val = 0x1f;
+	struct fi_cq_tagged_entry cqe;
+	struct fi_msg_rma msg = {};
+	struct iovec iov;
+	struct fi_rma_iov rma;
+
+	send_buf = calloc(1, win_len);
+	cr_assert_not_null(send_buf, "send_buf alloc failed");
+
+	mr_create(win_len, FI_REMOTE_WRITE, 0xa0, key_val, &mem_window);
+
+	iov.iov_base = send_buf;
+	iov.iov_len = send_len;
+
+	rma.addr = 0;
+	rma.key = key_val;
+
+	msg.msg_iov = &iov;
+	msg.iov_count = 1;
+	msg.rma_iov = &rma;
+	msg.rma_iov_count = 1;
+	msg.addr = cxit_ep_fi_addr;
+
+	/* Normal writes do not generate completions */
+	for (send_len = 1; send_len <= win_len; send_len <<= 1) {
+		ret = fi_write(cxit_ep, send_buf, send_len, NULL,
+			       cxit_ep_fi_addr, 0, key_val, NULL);
+		cr_assert(ret == FI_SUCCESS);
+
+		/* Validate sent data */
+		for (int i = 0; i < send_len; i++)
+			while (mem_window.mem[i] != send_buf[i])
+				sched_yield();
+
+		/* Ensure no events were generated */
+		ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+		cr_assert(ret == -FI_EAGAIN);
+	}
+
+	/* Request completions from fi_writemsg */
+	for (send_len = 1; send_len <= win_len; send_len <<= 1) {
+		iov.iov_len = send_len;
+		ret = fi_writemsg(cxit_ep, &msg, FI_COMPLETION);
+		cr_assert(ret == FI_SUCCESS);
+
+		/* Wait for async event indicating data has been sent */
+		ret = cxit_await_completion(cxit_tx_cq, &cqe);
+		cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+
+		validate_rma_event(&cqe, FI_RMA | FI_WRITE, NULL);
+
+		/* Validate sent data */
+		for (int i = 0; i < send_len; i++)
+			cr_assert_eq(mem_window.mem[i], send_buf[i],
+				     "data mismatch, element: (%d) %02x != %02x\n", i,
+				     mem_window.mem[i], send_buf[i]);
+	}
+
+	/* Suppress completions using fi_writemsg */
+	for (send_len = 1; send_len <= win_len; send_len <<= 1) {
+		iov.iov_len = send_len;
+		ret = fi_writemsg(cxit_ep, &msg, 0);
+		cr_assert(ret == FI_SUCCESS);
+
+		/* Validate sent data */
+		for (int i = 0; i < send_len; i++)
+			while (mem_window.mem[i] != send_buf[i])
+				sched_yield();
+
+		/* Ensure no events were generated */
+		ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+		cr_assert(ret == -FI_EAGAIN);
+	}
+
+	/* Inject never generates an event */
+	send_len = 8;
+	ret = fi_inject_write(cxit_ep, send_buf, send_len, cxit_ep_fi_addr, 0,
+			      key_val);
+	cr_assert(ret == FI_SUCCESS);
+
+	/* Validate sent data */
+	for (int i = 0; i < send_len; i++)
+		while (mem_window.mem[i] != send_buf[i])
+			sched_yield();
+
+	/* Make sure an event wasn't delivered */
+	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	cr_assert(ret == -FI_EAGAIN);
+
+	mr_destroy(&mem_window);
+	free(send_buf);
 }

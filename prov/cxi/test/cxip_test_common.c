@@ -21,6 +21,8 @@ fi_addr_t cxit_ep_fi_addr;
 struct fid_ep *cxit_sep;
 struct fi_cq_attr cxit_tx_cq_attr = { .format = FI_CQ_FORMAT_TAGGED };
 struct fi_cq_attr cxit_rx_cq_attr = { .format = FI_CQ_FORMAT_TAGGED };
+uint64_t cxit_tx_cq_bind_flags = FI_TRANSMIT;
+uint64_t cxit_rx_cq_bind_flags = FI_RECV;
 struct fid_cq *cxit_tx_cq, *cxit_rx_cq;
 struct fi_av_attr cxit_av_attr;
 struct fid_av *cxit_av;
@@ -148,10 +150,10 @@ void cxit_bind_cqs(void)
 {
 	int ret;
 
-	ret = fi_ep_bind(cxit_ep, &cxit_tx_cq->fid, FI_TRANSMIT);
+	ret = fi_ep_bind(cxit_ep, &cxit_tx_cq->fid, cxit_tx_cq_bind_flags);
 	cr_assert(!ret, "fi_ep_bind TX CQ");
 
-	ret = fi_ep_bind(cxit_ep, &cxit_rx_cq->fid, FI_RECV);
+	ret = fi_ep_bind(cxit_ep, &cxit_rx_cq->fid, cxit_rx_cq_bind_flags);
 	cr_assert(!ret, "fi_ep_bind RX CQ");
 }
 

@@ -20,19 +20,14 @@ extern struct cxip_addr cxit_ep_addr;
 extern fi_addr_t cxit_ep_fi_addr;
 extern struct fid_ep *cxit_sep;
 extern struct fi_cq_attr cxit_tx_cq_attr, cxit_rx_cq_attr;
+extern uint64_t cxit_tx_cq_bind_flags;
+extern uint64_t cxit_rx_cq_bind_flags;
 extern struct fid_cq *cxit_tx_cq, *cxit_rx_cq;
 extern struct fi_av_attr cxit_av_attr;
 extern struct fid_av *cxit_av;
 extern char *cxit_node, *cxit_service;
 extern uint64_t cxit_flags;
 extern int cxit_n_ifs;
-
-void cxit_dump_tx_attr(struct fi_tx_attr *tx_attr);
-void cxit_dump_rx_attr(struct fi_rx_attr *rx_attr);
-void cxit_dump_ep_attr(struct fi_ep_attr *ep_attr);
-void cxit_dump_domain_attr(struct fi_domain_attr *dom_attr);
-void cxit_dump_fabric_attr(struct fi_fabric_attr *fab_attr);
-void cxit_dump_attr(struct fi_info *info);
 
 void cxit_create_fabric_info(void);
 void cxit_destroy_fabric_info(void);
