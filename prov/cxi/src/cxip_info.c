@@ -58,7 +58,7 @@ struct fi_tx_attr cxip_tx_attr = {
 	.op_flags = FI_TRANSMIT_COMPLETE,
 	.msg_order = CXIP_EP_MSG_ORDER,
 	.inject_size = CXIP_EP_MAX_INJECT_SZ,
-	.size = 256,
+	.size = 256,  /* 64k / 256b */
 	.iov_limit = 1,
 	.rma_iov_limit = 1,
 };
@@ -69,7 +69,7 @@ struct fi_rx_attr cxip_rx_attr = {
 	.msg_order = CXIP_EP_MSG_ORDER,
 	.comp_order = FI_ORDER_NONE,
 	.total_buffered_recv = CXIP_UX_BUFFER_SIZE,
-	.size = 256,
+	.size = 1024, /* 64k / 64b */
 	.iov_limit = 1,
 };
 

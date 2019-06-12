@@ -121,8 +121,7 @@ static int rxc_msg_init(struct cxip_rxc *rxc)
 	};
 	uint64_t pid_idx;
 
-	/* TODO set CMDQ size with RX attrs */
-	cq_opts.count = 64;
+	cq_opts.count = rxc->attr.size;
 	cq_opts.is_transmit = 0;
 	ret = cxip_cmdq_alloc(rxc->domain->dev_if, NULL, &cq_opts,
 			      &rxc->rx_cmdq);
@@ -131,8 +130,7 @@ static int rxc_msg_init(struct cxip_rxc *rxc)
 		return -FI_EDOMAIN;
 	}
 
-	/* TODO set CMDQ size with RX attrs */
-	cq_opts.count = 64;
+	cq_opts.count = rxc->attr.size;
 	cq_opts.is_transmit = 1;
 	cq_opts.lcid = rxc->domain->dev_if->cps[0]->lcid;
 	ret = cxip_cmdq_alloc(rxc->domain->dev_if, NULL, &cq_opts,

@@ -37,7 +37,7 @@ static int txc_msg_init(struct cxip_txc *txc)
 	uint64_t pid_idx;
 
 	/* Allocate TGQ for posting source data */
-	cq_opts.count = 64;
+	cq_opts.count = txc->attr.size;
 	cq_opts.is_transmit = 0;
 	ret = cxip_cmdq_alloc(txc->domain->dev_if, NULL, &cq_opts,
 			      &txc->rx_cmdq);
@@ -134,8 +134,8 @@ int cxip_txc_enable(struct cxip_txc *txc)
 		goto unlock;
 	}
 
-	/* TODO set CMDQ size with TX attrs */
-	cq_opts.count = 64;
+	/* An IDC command can use up to 4 64 byte slots. */
+	cq_opts.count = txc->attr.size * 4;
 	cq_opts.is_transmit = 1;
 	cq_opts.lcid = txc->domain->dev_if->cps[0]->lcid;
 	ret = cxip_cmdq_alloc(txc->domain->dev_if, NULL, &cq_opts,
