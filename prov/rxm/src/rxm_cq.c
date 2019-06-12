@@ -536,14 +536,14 @@ ssize_t rxm_cq_handle_rndv(struct rxm_rx_buf *rx_buf)
 		if (OFI_UNLIKELY(ret))
 			return ret;
 
-		for (i = 0; i < rx_buf->recv_entry->rxm_iov.count; i++)
+		for (i = 0; (i < rx_buf->recv_entry->rxm_iov.count &&
+			     rx_buf->mr[i]); i++)
 			rx_buf->recv_entry->rxm_iov.desc[i] =
 						fi_mr_desc(rx_buf->mr[i]);
 	} else {
-		for (i = 0; i < rx_buf->recv_entry->rxm_iov.count; i++) {
+		for (i = 0; i < rx_buf->recv_entry->rxm_iov.count; i++)
 			rx_buf->recv_entry->rxm_iov.desc[i] =
 				fi_mr_desc(rx_buf->recv_entry->rxm_iov.desc[i]);
-		}
 		total_recv_len = MIN(rx_buf->recv_entry->total_len,
 				     rx_buf->pkt.hdr.size);
 	}
