@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2013-2018 Intel Corporation. All rights reserved.
  * Copyright (c) 2016-2018 Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2019 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -95,6 +96,26 @@ extern "C" {
 #define ofi_div_ceil(a, b) ((a + b - 1) / b)
 
 #define OFI_MAGIC_64 (0x0F1C0DE0F1C0DE64)
+
+#ifndef BIT
+#define BIT(nr) (1UL << (nr))
+#endif
+
+#ifndef BIT_ULL
+#define BIT_ULL(nr) (1ULL << (nr))
+#endif
+
+#ifndef GENMASK
+#define GENMASK(h, l) (((1U << ((h) - (l) + 1)) - 1) << (l))
+#endif
+
+#ifndef GENMASK_ULL
+#define GENMASK_ULL(h, l) (((~0ULL) << (l)) & (~0ULL >> (64 - 1 - (h))))
+#endif
+
+#ifndef ARRAY_SIZE
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+#endif
 
 #define TAB "    "
 

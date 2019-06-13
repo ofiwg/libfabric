@@ -70,6 +70,17 @@ VERBS_INI ;
 #  define VERBS_INIT NULL
 #endif
 
+#if (HAVE_EFA) && (HAVE_EFA_DL)
+#  define EFA_INI FI_EXT_INI
+#  define EFA_INIT NULL
+#elif (HAVE_EFA)
+#  define EFA_INI INI_SIG(fi_efa_ini)
+#  define EFA_INIT fi_efa_ini()
+EFA_INI ;
+#else
+#  define EFA_INIT NULL
+#endif
+
 #if (HAVE_PSM) && (HAVE_PSM_DL)
 #  define PSM_INI FI_EXT_INI
 #  define PSM_INIT NULL

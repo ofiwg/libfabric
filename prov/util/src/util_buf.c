@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2016 Intel Corporation. All rights reserved.
- * Copyright (c) 2018 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * Copyright (c) 2018-2019 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -55,14 +55,11 @@ static void ofi_bufpool_set_region_size(struct ofi_bufpool *pool)
 	}
 
 	hp_size = ofi_get_hugepage_size();
-	if ((pool->attr.chunk_cnt + 1) * pool->entry_size >= hp_size) {
-		pool->attr.flags |= OFI_BUFPOOL_MMAPPED;
+	if (pool->attr.flags & OFI_BUFPOOL_MMAPPED)
 		pool->alloc_size = ofi_get_aligned_size((pool->attr.chunk_cnt + 1) *
 							pool->entry_size, hp_size);
-	} else {
-		pool->attr.flags &= ~OFI_BUFPOOL_MMAPPED;
+	else
 		pool->alloc_size = (pool->attr.chunk_cnt + 1) * pool->entry_size;
-	}
 	pool->region_size = pool->alloc_size - pool->entry_size;
 }
 
@@ -179,7 +176,10 @@ err3:
 	if (pool->attr.free_fn)
 	    pool->attr.free_fn(buf_region);
 err2:
-	ofi_freealign(buf_region->alloc_region);
+	if (pool->attr.flags & OFI_BUFPOOL_MMAPPED)
+		ofi_free_hugepage_buf(buf_region->alloc_region, pool->alloc_size);
+	else
+		ofi_freealign(buf_region->alloc_region);
 err1:
 	free(buf_region);
 	return ret;

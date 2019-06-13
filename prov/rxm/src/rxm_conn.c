@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2016 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2019 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -84,7 +85,7 @@ static inline ssize_t rxm_eq_readerr(struct rxm_ep *rxm_ep,
 		return -FI_ECONNREFUSED;
 	}
 
-	RXM_EQ_STRERROR(&rxm_prov, FI_LOG_WARN, FI_LOG_EP_CTRL,
+	OFI_EQ_STRERROR(&rxm_prov, FI_LOG_WARN, FI_LOG_EP_CTRL,
 			rxm_ep->msg_eq, &entry->err_entry);
 	return -entry->err_entry.err;
 }
@@ -1243,7 +1244,7 @@ rxm_conn_handle_event(struct rxm_ep *rxm_ep, struct rxm_msg_eq_entry *entry)
 			       "remote peer didn't accept the connection\n");
 			FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "connection reject: "
 			       "(reason: RXM_CMAP_REJECT_GENUINE)\n");
-			RXM_EQ_STRERROR(&rxm_prov, FI_LOG_WARN, FI_LOG_EP_CTRL,
+			OFI_EQ_STRERROR(&rxm_prov, FI_LOG_WARN, FI_LOG_EP_CTRL,
 					rxm_ep->msg_eq, &entry->err_entry);
 		} else if (reject_reason == RXM_CMAP_REJECT_SIMULT_CONN) {
 			FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "connection reject: "
