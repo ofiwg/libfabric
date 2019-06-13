@@ -1853,6 +1853,7 @@ static int pp_finalize(struct ct_pingpong *ct)
 	struct iovec iov;
 	int ret;
 	struct fi_context ctx[2];
+	void *mem_desc[1] = { fi_mr_desc(ct->mr) };
 	const char *fin_buf = "fin";
 	const size_t fin_buf_size = strlen(fin_buf) + 1;
 
@@ -1868,7 +1869,7 @@ static int pp_finalize(struct ct_pingpong *ct)
 		struct fi_msg msg = {
 			.msg_iov = &iov,
 			.iov_count = 1,
-			.desc = fi_mr_desc(ct->mr),
+			.desc = mem_desc,
 			.addr = ct->remote_fi_addr,
 			.context = ctx,
 		};
@@ -1882,7 +1883,7 @@ static int pp_finalize(struct ct_pingpong *ct)
 		struct fi_msg_tagged tmsg = {
 			.msg_iov = &iov,
 			.iov_count = 1,
-			.desc = fi_mr_desc(ct->mr),
+			.desc = mem_desc,
 			.addr = ct->remote_fi_addr,
 			.context = ctx,
 			.tag = TAG,
