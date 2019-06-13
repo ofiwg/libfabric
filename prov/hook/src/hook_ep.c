@@ -33,6 +33,7 @@
 #include <stdlib.h>
 #include <ofi_enosys.h>
 #include "hook_prov.h"
+#include "ofi_hook.h"
 
 
 static int hook_open_tx_ctx(struct fid_ep *sep, int index,
@@ -247,7 +248,7 @@ int hook_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 }
 
 int hook_endpoint_init(struct fid_domain *domain, struct fi_info *info,
-		       struct fid_ep **ep, struct hook_ep *myep, void *context)
+		       struct fid_ep **ep, void *context, struct hook_ep *myep)
 {
 	struct hook_domain *dom = container_of(domain, struct hook_domain, domain);
 	struct fid *saved_fid;
@@ -284,7 +285,7 @@ int hook_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (!myep)
 		return -FI_ENOMEM;
 
-	ret = hook_endpoint_init(domain, info, ep, myep, context);
+	ret = hook_endpoint_init(domain, info, ep, context, myep);
 	if (ret)
 		goto err1;
 

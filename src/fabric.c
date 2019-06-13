@@ -337,7 +337,7 @@ static void ofi_ordered_provs_init(void)
 		/* These are hooking providers only.  Their order
 		 * doesn't matter
 		 */
-		"ofi_hook_perf", "ofi_hook_noop",
+		"ofi_hook_perf", "ofi_hook_debug", "ofi_hook_noop",
 	};
 	int num_provs = sizeof(ordered_prov_names)/sizeof(ordered_prov_names[0]), i;
 
@@ -622,6 +622,7 @@ libdl_done:
 	ofi_register_provider(TCP_INIT, NULL);
 
 	ofi_register_provider(HOOK_PERF_INIT, NULL);
+	ofi_register_provider(HOOK_DEBUG_INIT, NULL);
 	ofi_register_provider(HOOK_NOOP_INIT, NULL);
 
 	ofi_init = 1;

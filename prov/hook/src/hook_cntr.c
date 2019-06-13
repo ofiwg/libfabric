@@ -83,7 +83,7 @@ static int hook_cntr_seterr(struct fid_cntr *cntr, uint64_t value)
 	return fi_cntr_seterr(mycntr->hcntr, value);
 }
 
-static struct fi_ops_cntr hook_cntr_ops = {
+struct fi_ops_cntr hook_cntr_ops = {
 	.size = sizeof(struct fi_ops_cntr),
 	.read = hook_cntr_read,
 	.readerr = hook_cntr_readerr,

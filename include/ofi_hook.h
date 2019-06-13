@@ -44,6 +44,7 @@
 #include <rdma/fi_rma.h>
 #include <rdma/fi_tagged.h>
 
+#include <ofi.h>
 #include <rdma/providers/fi_prov.h>
 
 /* This field needs to be updated whenever new FI class is added in fabric.h */
@@ -57,6 +58,7 @@
 enum ofi_hook_class {
 	HOOK_NOOP,
 	HOOK_PERF,
+	HOOK_DEBUG,
 	MAX_HOOKS
 };
 
@@ -132,6 +134,17 @@ static inline struct hook_prov_ctx *hook_to_prov_ctx(const struct fid *fid)
 	return (hook_to_fabric(fid))->prov_ctx;
 }
 
+static inline struct fi_provider *
+hook_fabric_to_hprov(const struct hook_fabric *fabric)
+{
+	return fabric->hprov;
+}
+
+static inline struct fi_provider *hook_to_hprov(const struct fid *fid)
+{
+	return hook_fabric_to_hprov(hook_to_fabric(fid));
+}
+
 struct hook_domain {
 	struct fid_domain domain;
 	struct fid_domain *hdomain;
@@ -190,12 +203,13 @@ struct hook_cq {
 	void *context;
 };
 
+int hook_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
+		 struct fid_cq **cq, void *context, struct hook_cq *mycq);
 int hook_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq, void *context);
 const char *
 hook_cq_strerror(struct fid_cq *cq, int prov_errno,
 		 const void *err_data, char *buf, size_t len);
-
 
 struct hook_cntr {
 	struct fid_cntr cntr;
@@ -214,6 +228,8 @@ struct hook_ep {
 	void *context;
 };
 
+int hook_endpoint_init(struct fid_domain *domain, struct fi_info *info,
+		       struct fid_ep **ep, void *context, struct hook_ep *myep);
 int hook_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep, void *context);
 int hook_scalable_ep(struct fid_domain *domain, struct fi_info *info,
@@ -221,6 +237,15 @@ int hook_scalable_ep(struct fid_domain *domain, struct fi_info *info,
 int hook_srx_ctx(struct fid_domain *domain,
 		 struct fi_rx_attr *attr, struct fid_ep **rx_ep,
 		 void *context);
+
+int hook_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
+		  enum fi_op op, struct fi_atomic_attr *attr, uint64_t flags);
+
+extern struct fi_ops hook_fabric_fid_ops;
+extern struct fi_ops_fabric hook_fabric_ops;
+extern struct fi_ops_domain hook_domain_ops;
+extern struct fi_ops_cq hook_cq_ops;
+extern struct fi_ops_cntr hook_cntr_ops;
 
 extern struct fi_ops_cm hook_cm_ops;
 extern struct fi_ops_msg hook_msg_ops;

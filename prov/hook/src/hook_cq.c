@@ -34,14 +34,14 @@
 #include "hook_prov.h"
 
 
-static ssize_t hook_cq_read(struct fid_cq *cq, void *buf, size_t count)
+ssize_t hook_cq_read(struct fid_cq *cq, void *buf, size_t count)
 {
 	struct hook_cq *mycq = container_of(cq, struct hook_cq, cq);
 
 	return fi_cq_read(mycq->hcq, buf, count);
 }
 
-static ssize_t
+ssize_t
 hook_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf, uint64_t flags)
 {
 	struct hook_cq *mycq = container_of(cq, struct hook_cq, cq);
@@ -49,7 +49,7 @@ hook_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf, uint64_t flags)
 	return fi_cq_readerr(mycq->hcq, buf, flags);
 }
 
-static ssize_t
+ssize_t
 hook_cq_readfrom(struct fid_cq *cq, void *buf, size_t count, fi_addr_t *src_addr)
 {
 	struct hook_cq *mycq = container_of(cq, struct hook_cq, cq);
@@ -57,7 +57,7 @@ hook_cq_readfrom(struct fid_cq *cq, void *buf, size_t count, fi_addr_t *src_addr
 	return fi_cq_readfrom(mycq->hcq, buf, count, src_addr);
 }
 
-static ssize_t
+ssize_t
 hook_cq_sread(struct fid_cq *cq, void *buf, size_t count,
 	      const void *cond, int timeout)
 {
@@ -66,7 +66,7 @@ hook_cq_sread(struct fid_cq *cq, void *buf, size_t count,
 	return fi_cq_sread(mycq->hcq, buf, count, cond, timeout);
 }
 
-static ssize_t
+ssize_t
 hook_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 		  fi_addr_t *src_addr, const void *cond, int timeout)
 {
@@ -75,7 +75,7 @@ hook_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 	return fi_cq_sreadfrom(mycq->hcq, buf, count, src_addr, cond, timeout);
 }
 
-static int hook_cq_signal(struct fid_cq *cq)
+int hook_cq_signal(struct fid_cq *cq)
 {
 	struct hook_cq *mycq = container_of(cq, struct hook_cq, cq);
 
@@ -91,7 +91,7 @@ hook_cq_strerror(struct fid_cq *cq, int prov_errno,
 	return fi_cq_strerror(mycq->hcq, prov_errno, err_data, buf,len);
 }
 
-static struct fi_ops_cq hook_cq_ops = {
+struct fi_ops_cq hook_cq_ops = {
 	.size = sizeof(struct fi_ops_cq),
 	.read = hook_cq_read,
 	.readfrom = hook_cq_readfrom,
@@ -102,17 +102,12 @@ static struct fi_ops_cq hook_cq_ops = {
 	.strerror = hook_cq_strerror,
 };
 
-int hook_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
-		 struct fid_cq **cq, void *context)
+int hook_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
+		 struct fid_cq **cq, void *context, struct hook_cq *mycq)
 {
 	struct hook_domain *dom = container_of(domain, struct hook_domain, domain);
-	struct hook_cq *mycq;
 	struct fi_cq_attr hattr;
 	int ret;
-
-	mycq = calloc(1, sizeof *mycq);
-	if (!mycq)
-		return -FI_ENOMEM;
 
 	mycq->domain = dom;
 	mycq->cq.fid.fclass = FI_CLASS_CQ;
@@ -126,9 +121,26 @@ int hook_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	ret = fi_cq_open(dom->hdomain, &hattr, &mycq->hcq, &mycq->cq.fid);
 	if (ret)
-		goto err1;
+		return ret;
 
 	*cq = &mycq->cq;
+	return 0;
+}
+
+int hook_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
+		 struct fid_cq **cq, void *context)
+{
+	struct hook_domain *dom = container_of(domain, struct hook_domain, domain);
+	struct hook_cq *mycq;
+	int ret;
+
+	mycq = calloc(1, sizeof *mycq);
+	if (!mycq)
+		return -FI_ENOMEM;
+
+	ret = hook_cq_init(domain, attr, cq, context, mycq);
+	if (ret)
+		goto err1;
 
 	ret = hook_ini_fid(dom->fabric->prov_ctx, &mycq->cq.fid);
 	if (ret)

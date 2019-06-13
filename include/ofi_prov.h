@@ -247,6 +247,14 @@ HOOK_PERF_INI ;
 #  define HOOK_PERF_INIT NULL
 #endif
 
+#if(HAVE_HOOK_DEBUG)
+#  define HOOK_DEBUG_INI INI_SIG(fi_debug_hook_ini)
+#  define HOOK_DEBUG_INIT fi_debug_hook_ini()
+HOOK_DEBUG_INI ;
+#else
+#  define HOOK_DEBUG_INIT NULL
+#endif
+
 #  define HOOK_NOOP_INI INI_SIG(fi_hook_noop_ini)
 #  define HOOK_NOOP_INIT fi_hook_noop_ini()
 HOOK_NOOP_INI ;

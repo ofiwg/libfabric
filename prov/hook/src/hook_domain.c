@@ -34,7 +34,6 @@
 #include <sys/uio.h>
 #include "ofi_hook.h"
 
-
 static int hook_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 			   uint64_t flags, struct fid_mr **mr)
 {
@@ -101,9 +100,7 @@ static struct fi_ops_mr hook_mr_ops = {
 	.regattr = hook_mr_regattr,
 };
 
-
-static int
-hook_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
+int hook_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 		  enum fi_op op, struct fi_atomic_attr *attr, uint64_t flags)
 {
 	struct hook_domain *dom = container_of(domain, struct hook_domain, domain);
@@ -111,7 +108,7 @@ hook_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 	return fi_query_atomic(dom->hdomain, datatype, op, attr, flags);
 }
 
-static struct fi_ops_domain hook_domain_ops = {
+struct fi_ops_domain hook_domain_ops = {
 	.size = sizeof(struct fi_ops_domain),
 	.av_open = hook_av_open,
 	.cq_open = hook_cq_open,

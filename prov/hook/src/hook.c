@@ -212,7 +212,7 @@ struct fi_ops hook_fid_ops = {
 	.ops_open = hook_ops_open,
 };
 
-static struct fi_ops hook_fabric_fid_ops = {
+struct fi_ops hook_fabric_fid_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = hook_close,
 	.bind = hook_bind,
@@ -220,7 +220,7 @@ static struct fi_ops hook_fabric_fid_ops = {
 	.ops_open = hook_ops_open,
 };
 
-static struct fi_ops_fabric hook_fabric_ops = {
+struct fi_ops_fabric hook_fabric_ops = {
 	.size = sizeof(struct fi_ops_fabric),
 	.domain = hook_domain,
 	.passive_ep = hook_passive_ep,
