@@ -28,13 +28,13 @@ static int txc_msg_init(struct cxip_txc *txc)
 {
 	int ret;
 	union c_cmdu cmd = {};
+	struct cxi_cq_alloc_opts cq_opts = {};
 	struct cxi_pt_alloc_opts pt_opts = {
 		.is_matching = 1,
 		.pe_num = CXI_PE_NUM_ANY,
 		.le_pool = CXI_LE_POOL_ANY
 	};
 	uint64_t pid_idx;
-	struct cxi_cq_alloc_opts cq_opts;
 
 	/* Allocate TGQ for posting source data */
 	cq_opts.count = 64;
@@ -115,7 +115,7 @@ static int txc_msg_fini(struct cxip_txc *txc)
 int cxip_txc_enable(struct cxip_txc *txc)
 {
 	int ret = FI_SUCCESS;
-	struct cxi_cq_alloc_opts opts;
+	struct cxi_cq_alloc_opts cq_opts = {};
 
 	fastlock_acquire(&txc->lock);
 
@@ -135,11 +135,10 @@ int cxip_txc_enable(struct cxip_txc *txc)
 	}
 
 	/* TODO set CMDQ size with TX attrs */
-	memset(&opts, 0, sizeof(opts));
-	opts.count = 64;
-	opts.is_transmit = 1;
-	opts.lcid = txc->domain->dev_if->cps[0]->lcid;
-	ret = cxip_cmdq_alloc(txc->domain->dev_if, NULL, &opts,
+	cq_opts.count = 64;
+	cq_opts.is_transmit = 1;
+	cq_opts.lcid = txc->domain->dev_if->cps[0]->lcid;
+	ret = cxip_cmdq_alloc(txc->domain->dev_if, NULL, &cq_opts,
 			      &txc->tx_cmdq);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Unable to allocate TX CMDQ, ret: %d\n", ret);
