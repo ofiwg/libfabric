@@ -135,7 +135,6 @@ int rxd_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 					sizeof(struct rxd_atom_hdr);
 	rxd_domain->max_seg_sz = rxd_domain->max_mtu_sz - sizeof(struct rxd_data_pkt) -
 				 dg_info->ep_attr->msg_prefix_size;
-	rxd_domain->mr_mode = dg_info->domain_attr->mr_mode;
 
 	ret = ofi_domain_init(fabric, info, &rxd_domain->util_domain, context);
 	if (ret) {
