@@ -96,7 +96,7 @@ int rstream_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	rstream_fabric = container_of(fabric, struct rstream_fabric,
 		util_fabric.fabric_fid);
 
-	ret = ofi_get_core_info(FI_VERSION(1, 7), NULL, NULL, 0,
+	ret = ofi_get_core_info(FI_VERSION(1, 8), NULL, NULL, 0,
 		&rstream_util_prov, info, rstream_info_to_core, &cinfo);
 	if (ret)
 		goto err1;

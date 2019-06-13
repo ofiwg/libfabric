@@ -69,7 +69,7 @@ struct fi_domain_attr rstream_domain_attr = {
 };
 
 struct fi_fabric_attr rstream_fabric_attr = {
-	.prov_version = FI_VERSION(1, 7),
+	.prov_version = FI_VERSION(1, 8),
 };
 
 struct fi_info rstream_info = {

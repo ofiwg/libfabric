@@ -121,7 +121,7 @@ static void udpx_fini(void)
 struct fi_provider udpx_prov = {
 	.name = "UDP",
 	.version = FI_VERSION(UDPX_MAJOR_VERSION, UDPX_MINOR_VERSION),
-	.fi_version = FI_VERSION(1, 7),
+	.fi_version = FI_VERSION(1, 8),
 	.getinfo = udpx_getinfo,
 	.fabric = udpx_fabric,
 	.cleanup = udpx_fini

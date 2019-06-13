@@ -5,6 +5,252 @@ This file contains the main features as well as overviews of specific
 bug fixes (and other actions) for each version of Libfabric since
 version 1.0.
 
+v1.8.0, Fri Jun 28, 2019
+========================
+
+## Core
+
+- Reworked memory registration cache to use userfaultfd
+- Allow disabling atomic support as build option
+- Updated default provider priority
+- Define new data ordering bits to separate atomic from RMA ordering
+- Improved support for huge page allocations
+- Convert all python scripts to version 3
+- Add logging to report atomic implementation in use
+
+## EFA
+
+- New core provider for Amazon EC2 Elastic Fabric Adapter (EFA)
+
+## GNI
+
+- Fix handling of incorrect fi_addr_t value
+- Fix problem with possible receive truncation
+
+## MRAIL
+
+- Several performance enhancements and optimizations
+
+## PSM2
+
+- Disable some optional psm2 features due to instabilities
+- Work around possibly long delays in getaddrinfo()
+
+## RxD
+
+- Ensure that peers are initialized before sending data packets
+- Maintain a full posting of receive buffers to the DGRAM EP
+- Minor bug fixes and cleanups
+- Verify protocol versions and reject incompatible versions
+- Update and simplify protocol headers
+- Optimize packet initialization
+- Various improvements handling protocol messages
+
+## RxM
+
+- Improved responsiveness to CM events with manual progress mode
+- Refactor how CQ and EQ errors are handled and reported
+- Minor code cleanups and bug fixes
+- Support atomic operations in auto progress mode
+
+## SHM
+
+## TCP
+
+- Enable multi-recv support
+- Allow restricting tcp to specific port range for firewall purposes
+
+## Verbs
+
+- Improved support for UD QPs over RoCE
+- Added CQ resource tracking to avoid CQ overrun on HFI1
+- Enable memory registration cache by default
+- Reduce unnecessary log message noise
+
+## Fabtests
+
+- Add new test to test memory registration caching correctness
+- Fix segfault with fi_pingpong
+- Allow specifying flags as command line arguments
+- Add threading level option to ubertest
+- Enable support for all endpoint types with multi_recv test
+- Add new AV insertion unit test
+- Allow for out-of-band address exchange with in-band test synchronization
+- Check for and use exclusion files by default if found
+- Use regular expressions for test exclusion files
+- Have test scripts use full test names
+- Replace socket provider with tcp and udp for default testing
+
+v1.7.2, Fri Jun 14, 2019
+========================
+
+## Core
+
+- Rename variables that shadow global symbols
+- Set slist tail to NULL to handle iterators correctly
+- Add new locking to AV EP list to avoid potential deadlock
+- Add threadsafe AV implementation
+
+## GNI
+
+- Fix possible overrunning of receive buffers
+- Fix compile issue on CLE 7.0.UP01
+- Implement fi_getopt/fi_setopt for scalable endpoints
+- Only generate FI_EADDRNOTAVAIL if FI_SOURCE_ERR enabled
+
+## RxD
+
+- Align packet type declarations with debug prints
+- Track current unexpected messages per peer, rather than globally
+- Remove unneeded RXD_CANCELED flag
+- Remove unnecessary check of unexpected list
+- Support FI_CLAIM, FI_PEEK, and FI_DISCARD flags
+- Avoid double free on CQ error destruction path
+- Fix message windowing
+- Limit number of transfer entries that can be active
+- Use utility CQ calls to handle CQ overflow
+- Set correct opcde when completing read completions
+- Preset and fix tx and rx transfer flags
+- Fix segfault
+
+## RxM
+
+- Add missing serialization for RMA and atomics
+- Reject connection requests in shutdown state
+- Rework cmap and ep lock synchronization
+- Add CM events to improve debugging
+- Remove incorrect assertion
+- Progress EQ events from app thread to drive progress
+- Handle message segment ordering when buffering receives
+- Generate completions for claimed buffered messages
+- Minor other fixes and cleanups
+
+## TCP
+
+- Support FI_SELECTIVE_COMPLETION correctly
+- Fix transmit and delivery complete semantics
+- Verify fi_info when creating passive EP
+
+## Verbs
+
+- Remove XRC target QP from RDMA CM control
+- Fix XRC QP allocation failure return code
+- Fix EQ readerr locking
+- Add FI_ADDR_IB_UD to known address print format
+- Fix addressing return on fi_getifo for native IB addresses
+- Serialize access to EQ when destroying connections
+- Add serialization to XRC EQ/CM handling
+- Fix serialization between AV and cmap
+- Fix XRC connection tags
+- Remove racy fork support from provider
+- Minor other fixes
+
+## Fabtests
+
+- Exclude tests from OS X that require epoll support
+
+v1.7.1, Mon Apr 8, 2019
+========================
+
+## Core
+
+- Support layered provider names with FI_PROVIDER filter
+- Minor cleanups to man pages
+- Add missing header for FreeBSD support
+- Fix built-in atomic tests
+- Do not overwrite CFLAGS during build
+
+## Fabtests
+
+- Fix memory leaks in fi_getinfo_test
+- Fix memory leak in fi_av_xfer error paths
+- Fix memory leaks in fi_cm_data
+- Fix memory leak in fi_poll
+- Add test configuration and exclude files for shm
+
+## GNI
+
+- Fix setting supported tag mask
+- Fall back to normal allocations when huge page support is unavailable
+
+## PSM2
+
+- Inline address translation function for performance
+- Create tagged ops specialization for FI_AV_MAP
+- Bring back true FI_AV_MAP support under certain conditions
+- Use psm2_epaddr_to_epid() for epaddr to epid conversion
+- Add runtime parameter for connection timeout
+
+## MXM
+
+- Disable provider by default as it is not actively maintained
+
+## RxD
+
+- Fix completion generation
+- Use correct flags for *msg APIs
+- Return correct error code if Tx is unable to be accepted
+- Add missing EP attributes
+- Fix use after free error opening an endpoint
+
+## RxM
+
+- Avoid unnecessary fi_getinfo calls to avoid possible failures
+- Discard Rx buffers for closed EPs to avoid segfaults
+- Repost receive buffers to avoid possible fabric deadlock
+- Fix crash accessing invalid Tx CQ
+- Use correct flags for *msg APIs
+- Report available inject size, rather than reducing value based on user hints
+- Fix endpoint configuration checks when enabling endpoint
+- Keep eager protocol limit separate from inject size
+- Increment correct atomic counter
+- Discard CQ entries generated by canceled receives
+- Initialize maximum atomic payload size
+- Add connection event progress
+- Fix SAR protocol truncation error
+- Fix setting FI_MSG and fi_RMA caps
+
+## TCP
+
+- Fix synchronization verifying MRs
+- Remove duplicate Rx queue removal
+- Return internal buffers to correct buffer pools to avoid data corruption
+- Free internal buffer pools and fix memory leaks
+- Handle peer socket disconnects properly
+- Pass signals through to application threads
+- Cleanup pending events when closing endpoints
+- Only adjust endianness when peers' endianness mismatches
+- Optimize header sizes based on message types to improve performance
+
+## Sockets
+
+- Fix acquiring the same lock twice
+- Fix accessing an uninitialized pointer handling CM events
+
+## SHM
+
+- Add support for selective completions
+- Fix addressing
+- Set MR key size
+- Fix memory corruption and memory leak
+
+## Verbs
+
+- Cleanup from use of memory registration cache
+- Do not update minimum RNR timer for XRC initiator QPs
+- Fix possible CQ overrun issues with hfi1 and qib devices
+- Fix synchronization issue accessing MR cache from multiple threads
+- Fix double free in XRC accept path
+- Add missing include file
+- Make fi_getinfo call thread safe
+- Fix CQ busy issue in MPI finalize when using XRC
+- Return correct attribute values when XRC is enabled
+- Fix sending atomic response protocol message
+- Report flushed receive operations (reverts to behavior in 1.4 and earlier)
+- Fix segfault reading CQ error entries
+- Fix double free of XRC connection request data
+- Set FI_RX_CQ_DATA mode bit correctly
+
 v1.7.0, Mon Jan 7, 2019
 =======================
 

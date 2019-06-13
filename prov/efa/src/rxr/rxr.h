@@ -65,7 +65,7 @@
 #define RXR_MAJOR_VERSION	(2)
 #define RXR_MINOR_VERSION	(0)
 #define RXR_PROTOCOL_VERSION	(2)
-#define RXR_FI_VERSION		FI_VERSION(1, 7)
+#define RXR_FI_VERSION		FI_VERSION(1, 8)
 
 #define RXR_IOV_LIMIT		(4)
 

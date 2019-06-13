@@ -60,7 +60,7 @@ int rstream_info_to_core(uint32_t version, const struct fi_info *irstream_info,
 	core_info->domain_attr->mr_mode = FI_MR_LOCAL | OFI_MR_BASIC_MAP;
 	core_info->tx_attr->op_flags = FI_COMPLETION;
 	core_info->rx_attr->op_flags = FI_COMPLETION;
-	core_info->fabric_attr->api_version =  FI_VERSION(1, 7);
+	core_info->fabric_attr->api_version =  FI_VERSION(1, 8);
 	core_info->fabric_attr->prov_version = FI_VERSION(1, 0);
 	(RSTREAM_USING_IWARP) ? rstream_iwarp_settings(core_info):
 		rstream_default_settings(core_info);
@@ -99,7 +99,7 @@ int rstream_info_to_rstream(uint32_t version, const struct fi_info *core_info,
 	*info->rx_attr = *rstream_info.rx_attr;
 	*info->domain_attr = *rstream_info.domain_attr;
 	*info->ep_attr = *rstream_info.ep_attr;
-	info->fabric_attr->api_version = FI_VERSION(1, 7);
+	info->fabric_attr->api_version = FI_VERSION(1, 8);
 	info->fabric_attr->prov_version = FI_VERSION(1, 0);
 	update_rstream_info(core_info);
 
@@ -163,7 +163,7 @@ static void rstream_fini(void)
 struct fi_provider rstream_prov = {
 	.name = OFI_UTIL_PREFIX "rstream",
 	.version = FI_VERSION(1 ,0),
-	.fi_version = FI_VERSION(1, 7),
+	.fi_version = FI_VERSION(1, 8),
 	.getinfo = rstream_getinfo,
 	.fabric = rstream_fabric_open,
 	.cleanup = rstream_fini

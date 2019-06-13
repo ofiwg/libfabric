@@ -188,6 +188,9 @@ See [`fi_rxm`(7)](fi_rxm.7.html) for more information.
 
 ***
 
+The sockets provider has been deprecated in favor of the tcp, udp, and
+utility providers, which provide improved performance and stability.
+
 The `sockets` provider is a general purpose provider that can be used on any
 system that supports TCP sockets.  The provider is not intended to provide
 performance improvements over regular TCP sockets, but rather to allow
