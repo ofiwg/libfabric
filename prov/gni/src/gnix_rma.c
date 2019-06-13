@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2019 Cray Inc. All rights reserved.
  * Copyright (c) 2015-2018 Los Alamos National Security, LLC.
  *                         All rights reserved.
  * Copyright (c) 2019 Triad National Security, LLC. All rights reserved.
@@ -1575,8 +1575,10 @@ ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 
 err_get_vc:
 	COND_RELEASE(ep->requires_lock, &ep->vc_lock);
-	if (flags & FI_LOCAL_MR)
+	if (flags & FI_LOCAL_MR) {
 		fi_close(&auto_mr->fid);
+		flags &= ~FI_LOCAL_MR;
+	}
 err_auto_reg:
 	_gnix_fr_free(req->vc->ep, req);
 	return rc;
