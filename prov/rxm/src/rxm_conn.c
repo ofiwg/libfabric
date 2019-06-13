@@ -222,7 +222,7 @@ rxm_conn_inject_pkt_alloc(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 	memset(inject_pkt, 0, rxm_ep->inject_limit + sizeof(*inject_pkt));
 	inject_pkt->ctrl_hdr.version = RXM_CTRL_VERSION;
-	inject_pkt->ctrl_hdr.type = ofi_ctrl_data;
+	inject_pkt->ctrl_hdr.type = rxm_ctrl_eager;
 	inject_pkt->hdr.version = OFI_OP_VERSION;
 	inject_pkt->hdr.op = op;
 	inject_pkt->hdr.flags = flags;
@@ -994,7 +994,7 @@ static int rxm_conn_reprocess_directed_recvs(struct rxm_recv_queue *recv_queue)
 			if (rx_buf->ep->util_ep.flags & OFI_CNTR_ENABLED)
 				rxm_cntr_incerr(rx_buf->ep->util_ep.rx_cntr);
 
-			rxm_rx_buf_release(recv_queue->rxm_ep, rx_buf);
+			rxm_rx_buf_finish(rx_buf);
 
 			if (!(rx_buf->recv_entry->flags & FI_MULTI_RECV))
 				rxm_recv_entry_release(recv_queue,
