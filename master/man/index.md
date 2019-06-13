@@ -18,6 +18,7 @@ You have been warned.
   * [fabric(7)](fabric.7.html)
   * [fi_bgq(7)](fi_bgq.7.html)
   * [fi_direct(7)](fi_direct.7.html)
+  * [fi_efa(7)](fi_efa.7.html)
   * [fi_gni(7)](fi_gni.7.html)
   * [fi_hook(7)](fi_hook.7.html)
   * [fi_mlx(7)](fi_mlx.7.html)
