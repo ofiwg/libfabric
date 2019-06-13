@@ -650,6 +650,7 @@ static ssize_t rxr_ep_peek_trecv(struct fid_ep *ep_fid,
 
 	fastlock_acquire(&ep->util_ep.lock);
 
+	__rxr_ep_progress(ep);
 	match_info.addr = msg->addr;
 	match_info.tag = msg->tag;
 	match_info.ignore = msg->ignore;
