@@ -50,7 +50,7 @@ struct rxr_match_info {
 	uint64_t ignore;
 };
 
-static void __rxr_ep_progress(struct rxr_ep *ep);
+static void rxr_ep_progress_internal(struct rxr_ep *ep);
 
 #if ENABLE_DEBUG
 static void rxr_ep_print_rts_pkt(struct rxr_ep *ep,
@@ -650,7 +650,7 @@ static ssize_t rxr_ep_peek_trecv(struct fid_ep *ep_fid,
 
 	fastlock_acquire(&ep->util_ep.lock);
 
-	__rxr_ep_progress(ep);
+	rxr_ep_progress_internal(ep);
 	match_info.addr = msg->addr;
 	match_info.tag = msg->tag;
 	match_info.ignore = msg->ignore;
@@ -742,7 +742,7 @@ static ssize_t rxr_multi_recv(struct rxr_ep *rxr_ep, const struct iovec *iov,
 					FI_DIRECTED_RECV) ? addr :
 				       FI_ADDR_UNSPEC, op, flags);
 	if (OFI_UNLIKELY(!rx_entry)) {
-		__rxr_ep_progress(rxr_ep);
+		rxr_ep_progress_internal(rxr_ep);
 		return -FI_EAGAIN;
 	}
 
@@ -860,7 +860,7 @@ static ssize_t rxr_recv(struct fid_ep *ep, const struct iovec *iov,
 
 	if (OFI_UNLIKELY(!rx_entry)) {
 		ret = -FI_EAGAIN;
-		__rxr_ep_progress(rxr_ep);
+		rxr_ep_progress_internal(rxr_ep);
 		goto out;
 	}
 
@@ -1541,7 +1541,7 @@ ssize_t rxr_tx(struct fid_ep *ep, const struct iovec *iov, size_t iov_count,
 
 	if (OFI_UNLIKELY(!tx_entry)) {
 		ret = -FI_EAGAIN;
-		__rxr_ep_progress(rxr_ep);
+		rxr_ep_progress_internal(rxr_ep);
 		goto out;
 	}
 
@@ -2492,7 +2492,7 @@ static inline void rxr_ep_check_peer_backoff_timer(struct rxr_ep *ep)
 	}
 }
 
-static void __rxr_ep_progress(struct rxr_ep *ep)
+static void rxr_ep_progress_internal(struct rxr_ep *ep)
 {
 	struct fi_cq_msg_entry cq_entry;
 	struct rxr_rx_entry *rx_entry;
@@ -2654,7 +2654,7 @@ void rxr_ep_progress(struct util_ep *util_ep)
 	ep = container_of(util_ep, struct rxr_ep, util_ep);
 
 	fastlock_acquire(&ep->util_ep.lock);
-	__rxr_ep_progress(ep);
+	rxr_ep_progress_internal(ep);
 	fastlock_release(&ep->util_ep.lock);
 }
 
