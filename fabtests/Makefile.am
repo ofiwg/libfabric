@@ -95,7 +95,8 @@ nobase_dist_config_DATA = \
 	test_configs/shm/all.test \
 	test_configs/shm/shm.exclude \
 	test_configs/shm/quick.test \
-	test_configs/shm/verify.test
+	test_configs/shm/verify.test \
+	test_configs/efa/efa.exclude
 
 noinst_LTLIBRARIES = libfabtests.la
 libfabtests_la_SOURCES = \
