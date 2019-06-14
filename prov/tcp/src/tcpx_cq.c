@@ -114,6 +114,9 @@ void tcpx_cq_report_success(struct util_cq *cq,
 	if (!(flags & FI_MULTI_RECV) && !(flags & FI_COMPLETION))
 		return;
 
+	len = xfer_entry->hdr.base_hdr.size -
+		xfer_entry->hdr.base_hdr.payload_off;
+
 	if (xfer_entry->hdr.base_hdr.flags & OFI_REMOTE_CQ_DATA) {
 		flags |= FI_REMOTE_CQ_DATA;
 		data = xfer_entry->hdr.cq_data_hdr.cq_data;
@@ -122,7 +125,6 @@ void tcpx_cq_report_success(struct util_cq *cq,
 	if ((flags & FI_MULTI_RECV) &&
 	    (xfer_entry->rem_len >= xfer_entry->ep->min_multi_recv_size)) {
 		buf = xfer_entry->mrecv_msg_start;
-		len = xfer_entry->hdr.base_hdr.size - xfer_entry->hdr.base_hdr.payload_off;
 	} else {
 		flags &= ~FI_MULTI_RECV;
 	}
