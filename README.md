@@ -368,6 +368,17 @@ See the `fi_shm(7)` man page for more details.
   kernel support for 'cross-memory attach' (CMA) data copies for large
   transfers.
 
+### efa
+
+***
+
+The `efa` provider enables the use of libfabric-enabled applications on [Amazon
+EC2 Elastic Fabric Adapter (EFA)](https://aws.amazon.com/hpc/efa/), a
+custom-built OS bypass hardware interface for inter-instance communication on
+EC2.
+
+See [`fi_efa`(7)](fi_efa.7.html) for more information.
+
 ## WINDOWS Instructions
 
 Even though windows isn't fully supported yet it is possible to compile and link your library.
