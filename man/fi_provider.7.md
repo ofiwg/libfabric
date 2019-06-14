@@ -58,6 +58,12 @@ This distribution of libfabric contains the following providers
 *Blue Gene/Q*
 : See [`fi_bgq`(7)](fi_bgq.7.html) for more information.
 
+*EFA*
+: A provider for the [Amazon EC2 Elastic Fabric Adapter
+  (EFA)](https://aws.amazon.com/hpc/efa/), a custom-built OS bypass
+  hardware interface for inter-instance communication on EC2.
+  See [`fi_efa`(7)](fi_efa.7.html) for more information.
+
 ## Utility providers
 
 *RxM*
