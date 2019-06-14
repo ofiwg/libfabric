@@ -46,7 +46,7 @@ rxm_ep_format_atomic_pkt_hdr(struct rxm_conn *rxm_conn,
 	atomic_hdr = (struct rxm_atomic_hdr *)tx_buf->pkt.data;
 	rxm_ep_format_tx_buf_pkt(rxm_conn, data_len, pkt_op, data, 0,
 				 flags, &tx_buf->pkt);
-	tx_buf->pkt.ctrl_hdr.type = ofi_ctrl_atomic;
+	tx_buf->pkt.ctrl_hdr.type = rxm_ctrl_atomic;
 	tx_buf->pkt.hdr.op = pkt_op;
 	tx_buf->pkt.hdr.atomic.datatype = datatype;
 	tx_buf->pkt.hdr.atomic.op = atomic_op;

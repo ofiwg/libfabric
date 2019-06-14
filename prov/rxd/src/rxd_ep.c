@@ -1147,7 +1147,7 @@ int rxd_endpoint(struct fid_domain *domain, struct fi_info *info,
 		goto err2;
 
 	memcpy(dg_info->src_addr, info->src_addr, info->src_addrlen);
-	rxd_ep->do_local_mr = (rxd_domain->mr_mode & FI_MR_LOCAL) ? 1 : 0;
+	rxd_ep->do_local_mr = ofi_mr_local(dg_info);
 
 	ret = fi_endpoint(rxd_domain->dg_domain, dg_info, &rxd_ep->dg_ep, rxd_ep);
 	if (ret)

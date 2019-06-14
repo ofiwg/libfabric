@@ -64,7 +64,7 @@
 
 #define RXM_CM_DATA_VERSION	1
 #define RXM_OP_VERSION		3
-#define RXM_CTRL_VERSION	3
+#define RXM_CTRL_VERSION	4
 
 #define RXM_BUF_SIZE	16384
 extern size_t rxm_eager_limit;
@@ -82,18 +82,14 @@ extern size_t rxm_eager_limit;
 #define RXM_MR_PROV_KEY(info) ((info->domain_attr->mr_mode == FI_MR_BASIC) ||\
 			       info->domain_attr->mr_mode & FI_MR_PROV_KEY)
 
-#define RXM_LOG_STATE(subsystem, pkt, prev_state, next_state) 			\
-	FI_DBG(&rxm_prov, subsystem, "[RNDV] msg_id: 0x%" PRIx64 " %s -> %s\n",	\
-	       pkt.ctrl_hdr.msg_id, rxm_proto_state_str[prev_state],		\
-	       rxm_proto_state_str[next_state])
-
-#define RXM_LOG_STATE_TX(subsystem, tx_buf, next_state)		\
-	RXM_LOG_STATE(subsystem, tx_buf->pkt, tx_buf->hdr.state,	\
-		      next_state)
-
-#define RXM_LOG_STATE_RX(subsystem, rx_buf, next_state)		\
-	RXM_LOG_STATE(subsystem, rx_buf->pkt, rx_buf->hdr.state,	\
-		      next_state)
+#define RXM_UPDATE_STATE(subsystem, buf, new_state)			\
+	do {								\
+		FI_DBG(&rxm_prov, subsystem, "[PROTO] msg_id: 0x%"	\
+		       PRIx64 " %s -> %s\n", (buf)->pkt.ctrl_hdr.msg_id,\
+		       rxm_proto_state_str[(buf)->hdr.state],		\
+		       rxm_proto_state_str[new_state]);			\
+		(buf)->hdr.state = new_state;				\
+	} while (0)
 
 #define RXM_DBG_ADDR_TAG(subsystem, log_str, addr, tag) 	\
 	FI_DBG(&rxm_prov, subsystem, log_str 			\
@@ -347,6 +343,15 @@ enum rxm_proto_state {
 
 extern char *rxm_proto_state_str[];
 
+enum {
+	rxm_ctrl_eager,
+	rxm_ctrl_seg,
+	rxm_ctrl_rndv,
+	rxm_ctrl_rndv_ack,
+	rxm_ctrl_atomic,
+	rxm_ctrl_atomic_resp,
+};
+
 struct rxm_pkt {
 	struct ofi_ctrl_hdr ctrl_hdr;
 	struct ofi_op_hdr hdr;
@@ -483,7 +488,6 @@ struct rxm_tx_rndv_buf {
 	uint64_t flags;
 	struct fid_mr *mr[RXM_IOV_LIMIT];
 	uint8_t count;
-	struct rxm_conn *conn;
 
 	/* Must stay at bottom */
 	struct rxm_pkt pkt;
@@ -582,20 +586,18 @@ struct rxm_recv_entry {
 		size_t	len;
 	} multi_recv;
 
-	union {
-		/* Used for SAR protocol */
-		struct {
-			struct dlist_entry entry;
-			size_t total_recv_len;
-			struct rxm_conn *conn;
-			uint64_t msg_id;
-		} sar;
-		/* Used for Rendezvous protocol */
-		struct {
-			/* This is used to send RNDV ACK */
-			struct rxm_tx_base_buf *tx_buf;
-		} rndv;
-	};
+	/* Used for SAR protocol */
+	struct {
+		struct dlist_entry entry;
+		size_t total_recv_len;
+		struct rxm_conn *conn;
+		uint64_t msg_id;
+	} sar;
+	/* Used for Rendezvous protocol */
+	struct {
+		/* This is used to send RNDV ACK */
+		struct rxm_tx_base_buf *tx_buf;
+	} rndv;
 };
 DECLARE_FREESTACK(struct rxm_recv_entry, rxm_recv_fs);
 
@@ -686,9 +688,6 @@ struct rxm_conn {
 	/* This is saved MSG EP fid, that hasn't been closed during
 	 * handling of CONN_RECV in RXM_CMAP_CONNREQ_SENT for passive side */
 	struct fid_ep *saved_msg_ep;
-
-	/* Limit RNDV sends based on peer rx queue size to avoid increased
-	 * memory usage at peer */
 	uint32_t rndv_tx_credits;
 };
 
@@ -914,7 +913,7 @@ rxm_process_recv_entry(struct rxm_recv_queue *recv_queue,
 		dlist_remove(&rx_buf->unexp_msg.entry);
 		rx_buf->recv_entry = recv_entry;
 
-		if (rx_buf->pkt.ctrl_hdr.type != ofi_ctrl_seg_data) {
+		if (rx_buf->pkt.ctrl_hdr.type != rxm_ctrl_seg) {
 			return rxm_cq_handle_rx_buf(rx_buf);
 		} else {
 			struct dlist_entry *entry;
@@ -939,7 +938,7 @@ rxm_process_recv_entry(struct rxm_recv_queue *recv_queue,
 					continue;
 				/* Handle unordered completions from MSG provider */
 				if ((rx_buf->pkt.ctrl_hdr.msg_id != recv_entry->sar.msg_id) ||
-				    ((rx_buf->pkt.ctrl_hdr.type != ofi_ctrl_seg_data)))
+				    ((rx_buf->pkt.ctrl_hdr.type != rxm_ctrl_seg)))
 					continue;
 
 				if (!rx_buf->conn) {
@@ -1038,7 +1037,7 @@ rxm_rx_buf_alloc(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep, uint8_t repost)
 }
 
 static inline void
-rxm_rx_buf_release(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_buf)
+rxm_rx_buf_finish(struct rxm_rx_buf *rx_buf)
 {
 	if (rx_buf->repost) {
 		dlist_insert_tail(&rx_buf->repost_entry,
