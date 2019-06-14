@@ -29,10 +29,10 @@ The following features are supported:
 
 *RDM Endpoint capabilities*
 : The following data transfer interfaces are supported via the *FI_EP_RDM*
-  endpoint: *FI_MSG* and *FI_TAGGED*. *FI_SEND*, *FI_RECV*, *FI_DIRECTED_RECV*,
-  *FI_MULTI_RECV*, and *FI_SOURCE* capabilities are supported. The endpoint
-  provides send-after-send guarantees for data operations. The *FI_EP_RDM*
-  endpoint does not have a maximum message size.
+  endpoint: *FI_MSG*, *FI_TAGGED*, and *FI_RMA*. *FI_SEND*, *FI_RECV*,
+  *FI_DIRECTED_RECV*, *FI_MULTI_RECV*, and *FI_SOURCE* capabilities are supported.
+  The endpoint provides send-after-send guarantees for data operations. The
+  *FI_EP_RDM* endpoint does not have a maximum message size.
 
 *DGRAM Endpoint capabilities*
 : The DGRAM endpoint only supports *FI_MSG* capability with a maximum
@@ -69,9 +69,10 @@ The following features are supported:
 
 # LIMITATIONS
 
-The provider does not support *FI_RMA*, or *FI_ATOMIC* interfaces. The
-DGRAM endpoint does not fully protect against resource overruns, so
-resource management is disabled for this endpoint (*FI_RM_DISABLED*).
+The provider does not support *FI_ATOMIC* interfaces. For RMA operations,
+completion events for RMA targets (*FI_RMA_EVENT*) is not supported. The DGRAM
+endpoint does not fully protect against resource overruns, so resource
+management is disabled for this endpoint (*FI_RM_DISABLED*).
 
 No support for selective completions.
 
