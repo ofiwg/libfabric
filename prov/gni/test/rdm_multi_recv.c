@@ -92,7 +92,6 @@ char *target2, *target2_base;
 char *source, *source_base;
 char *source2, *source2_base;
 struct fid_mr *rem_mr[NUMEPS], *loc_mr[NUMEPS];
-uint64_t mr_key[NUMEPS];
 
 static struct fid_cntr *send_cntr[NUMEPS], *recv_cntr[NUMEPS];
 static struct fi_cntr_attr cntr_attr = {
@@ -236,7 +235,6 @@ static void setup_common(void)
 				  BUF_SZ);
 		}
 
-		mr_key[i] = fi_mr_key(rem_mr[i]);
 	}
 }
 
@@ -264,6 +262,36 @@ void rdm_multi_r_setup(void)
 	setup_common();
 }
 
+void rdm_multi_r_setup_nr(void)
+{
+	int ret = 0, i = 0;
+
+	hints = fi_allocinfo();
+	cr_assert(hints, "fi_allocinfo");
+
+	hints->domain_attr->mr_mode = GNIX_DEFAULT_MR_MODE;
+	hints->domain_attr->cq_data_size = NUMEPS * 2;
+	hints->domain_attr->control_progress = FI_PROGRESS_AUTO;
+	hints->domain_attr->data_progress = FI_PROGRESS_AUTO;
+	hints->mode = mode_bits;
+	hints->caps = FI_SOURCE | FI_MSG;
+	hints->fabric_attr->prov_name = strdup("gni");
+
+	/* Get info about fabric services with the provided hints */
+	for (; i < NUMEPS; i++) {
+		ret = fi_getinfo(fi_version(), NULL, 0, 0, hints, &fi[i]);
+		cr_assert(!ret, "fi_getinfo");
+	}
+
+	setup_common_eps();
+
+	for (i = 0; i < NUMEPS; i++) {
+		rem_mr[i] = NULL;
+		loc_mr[i] = NULL;
+	}
+}
+
+
 static void rdm_multi_r_teardown(void)
 {
 	int ret = 0, i = 0;
@@ -272,8 +300,10 @@ static void rdm_multi_r_teardown(void)
 		fi_close(&recv_cntr[i]->fid);
 		fi_close(&send_cntr[i]->fid);
 
-		fi_close(&loc_mr[i]->fid);
-		fi_close(&rem_mr[i]->fid);
+		if (loc_mr[i] != NULL)
+			fi_close(&loc_mr[i]->fid);
+		if (rem_mr[i] != NULL)
+			fi_close(&rem_mr[i]->fid);
 
 		ret = fi_close(&ep[i]->fid);
 		cr_assert(!ret, "failure in closing ep.");
@@ -433,6 +463,11 @@ TestSuite(rdm_multi_r,
 	  .fini = rdm_multi_r_teardown,
 	  .disabled = false);
 
+TestSuite(rdm_multi_r_nr,
+	  .init = rdm_multi_r_setup_nr,
+	  .fini = rdm_multi_r_teardown,
+	  .disabled = false);
+
 void do_multirecv(int len)
 {
 	int i, j, ret;
@@ -571,6 +606,17 @@ Test(rdm_multi_r, multirecv_retrans, .disabled = false)
 	xfer_for_each_size(do_multirecv, 1, BUF_SZ);
 }
 
+Test(rdm_multi_r_nr, multirecv, .disabled = false)
+{
+	xfer_for_each_size(do_multirecv, 1, BUF_SZ);
+}
+
+Test(rdm_multi_r_nr, multirecv_retrans, .disabled = false)
+{
+	inject_enable();
+	xfer_for_each_size(do_multirecv, 1, BUF_SZ);
+}
+
 void do_multirecv_send_first(int len)
 {
 	int i, j, ret;
@@ -592,6 +638,8 @@ void do_multirecv_send_first(int len)
 
 	init_data(source, len, 0xab);
 	init_data(target, len, 0);
+
+	dbg_printf("do_multirecv_send_first() called with len = %d\n", len);
 
 	ret = fi_getopt(&ep[NUMEPS-1]->fid, FI_OPT_ENDPOINT,
 			FI_OPT_MIN_MULTI_RECV,
