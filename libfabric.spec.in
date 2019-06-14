@@ -64,6 +64,7 @@ module-whatis   \"This module adds Libfabric %{version} to the environment\"
 prepend-path PATH %{_prefix}/bin
 prepend-path LD_LIBRARY_PATH %{_libdir}
 prepend-path MANPATH %{_mandir}
+prepend-path PKG_CONFIG_PATH %{_libdir}/pkgconfig
 EOF
 %if %{install_default_module_version}
 cat <<EOF >%{buildroot}/%{modulefile_path}/%{name}/.version
@@ -90,12 +91,6 @@ rm -rf %{buildroot}
 %{_bindir}/fi_info
 %{_bindir}/fi_strerror
 %{_bindir}/fi_pingpong
-%if %{install_modulefile}
-%{modulefile_path}/%{name}/%{version}
-%if %{install_default_module_version}
-%{modulefile_path}/%{name}/.version
-%endif
-%endif
 %dir %{_libdir}/libfabric/
 %doc AUTHORS COPYING README
 
@@ -104,6 +99,13 @@ rm -rf %{buildroot}
 %{_libdir}/libfabric*.so
 %{_libdir}/*.a
 %{_libdir}/pkgconfig/libfabric.pc
+%if %{install_modulefile}
+%{modulefile_path}/%{name}/%{version}
+%if %{install_default_module_version}
+%{modulefile_path}/%{name}/.version
+%endif
+%dir %{modulefile_path}
+%endif
 %{_includedir}/*
 %{_mandir}/man1/*
 %{_mandir}/man3/*
