@@ -2327,8 +2327,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 	if (rxr_env.rx_copy_unexp) {
 		ret = ofi_bufpool_create(&ep->rx_unexp_pkt_pool, entry_sz,
 					 RXR_BUF_POOL_ALIGNMENT, 0,
-					 rxr_get_rx_pool_chunk_cnt(ep),
-					 NULL, NULL, NULL);
+					 rxr_get_rx_pool_chunk_cnt(ep));
 
 		if (ret)
 			goto err_free_rx_pool;
@@ -2337,8 +2336,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 	if (rxr_env.rx_copy_ooo) {
 		ret = ofi_bufpool_create(&ep->rx_ooo_pkt_pool, entry_sz,
 					 RXR_BUF_POOL_ALIGNMENT, 0,
-					 rxr_env.recvwin_size,
-					 NULL, NULL, NULL);
+					 rxr_env.recvwin_size);
 
 		if (ret)
 			goto err_free_rx_unexp_pool;
@@ -2347,8 +2345,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 	ret = ofi_bufpool_create(&ep->tx_entry_pool,
 				 sizeof(struct rxr_tx_entry),
 				 RXR_BUF_POOL_ALIGNMENT,
-				 ep->tx_size, ep->tx_size,
-				 NULL, NULL, NULL);
+				 ep->tx_size, ep->tx_size);
 	if (ret)
 		goto err_free_rx_ooo_pool;
 
@@ -2356,7 +2353,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 				 sizeof(struct rxr_rx_entry),
 				 RXR_BUF_POOL_ALIGNMENT,
 				 RXR_MAX_RX_QUEUE_SIZE,
-				 ep->rx_size, NULL, NULL, NULL);
+				 ep->rx_size);
 	if (ret)
 		goto err_free_tx_entry_pool;
 

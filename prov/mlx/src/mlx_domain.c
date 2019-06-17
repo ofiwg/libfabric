@@ -118,7 +118,7 @@ int mlx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	ofi_status = ofi_bufpool_create(&domain->fast_path_pool,
 					sizeof(struct mlx_request),
-					16, 0, 1024, NULL, NULL, NULL);
+					16, 0, 1024);
 	if (ofi_status)
 		goto cleanup_mlx;
 

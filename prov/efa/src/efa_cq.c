@@ -514,7 +514,7 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	}
 
 	ret = ofi_bufpool_create(&cq->wce_pool, sizeof(struct efa_wce), 16, 0,
-				 EFA_WCE_CNT, NULL, NULL, NULL);
+				 EFA_WCE_CNT);
 	if (ret) {
 		EFA_WARN(FI_LOG_CQ, "Failed to create wce_pool\n");
 		goto err_destroy_cq;
