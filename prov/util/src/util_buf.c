@@ -55,6 +55,9 @@ static void ofi_bufpool_set_region_size(struct ofi_bufpool *pool)
 	}
 
 	hp_size = ofi_get_hugepage_size();
+	if (hp_size <= 0)
+		pool->attr.flags &= ~OFI_BUFPOOL_MMAPPED;
+
 	if (pool->attr.flags & OFI_BUFPOOL_MMAPPED)
 		pool->alloc_size = ofi_get_aligned_size((pool->attr.chunk_cnt + 1) *
 							pool->entry_size, hp_size);
