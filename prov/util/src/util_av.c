@@ -431,7 +431,8 @@ static int util_av_init(struct util_av *av, const struct fi_av_attr *attr,
 		.max_cnt	= 0,
 		/* Don't use track of buffer, because user can close
 		 * the AV without prior deletion of addresses */
-		.flags		= OFI_BUFPOOL_NO_TRACK | OFI_BUFPOOL_INDEXED,
+		.flags		= OFI_BUFPOOL_NO_TRACK | OFI_BUFPOOL_INDEXED |
+				  OFI_BUFPOOL_HUGEPAGES,
 	};
 
 	/* TODO: Handle FI_READ */

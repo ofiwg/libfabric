@@ -273,7 +273,7 @@ static int rxm_buf_pool_create(struct rxm_ep *rxm_ep,
 		.free_fn	= rxm_buf_close,
 		.init_fn	= rxm_buf_init,
 		.context	= pool,
-		.flags		= OFI_BUFPOOL_NO_TRACK,
+		.flags		= OFI_BUFPOOL_NO_TRACK | OFI_BUFPOOL_HUGEPAGES,
 	};
 
 	pool->rxm_ep = rxm_ep;

@@ -1047,6 +1047,7 @@ int rxd_ep_init_res(struct rxd_ep *ep, struct fi_info *fi_info)
 	pkt_attr.alloc_fn = ep->do_local_mr ? rxd_buf_region_alloc_fn : NULL;
 	pkt_attr.free_fn = ep->do_local_mr ? rxd_buf_region_free_fn : NULL;
 	pkt_attr.context = rxd_domain;
+	pkt_attr.flags = OFI_BUFPOOL_HUGEPAGES;
 
 	ret = ofi_bufpool_create_attr(&pkt_attr, &ep->tx_pkt_pool);
 	if (ret)
@@ -1061,7 +1062,8 @@ int rxd_ep_init_res(struct rxd_ep *ep, struct fi_info *fi_info)
 	entry_attr.alignment = RXD_BUF_POOL_ALIGNMENT;
 	entry_attr.max_cnt = (size_t) ((uint16_t) (~0));
 	entry_attr.chunk_cnt = ep->tx_size;
-	entry_attr.flags = OFI_BUFPOOL_INDEXED | OFI_BUFPOOL_NO_TRACK;
+	entry_attr.flags = OFI_BUFPOOL_INDEXED | OFI_BUFPOOL_NO_TRACK |
+			   OFI_BUFPOOL_HUGEPAGES;
 
 	ret = ofi_bufpool_create_attr(&entry_attr, &ep->tx_entry_pool);
 	if (ret)

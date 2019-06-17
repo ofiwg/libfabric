@@ -268,7 +268,7 @@ struct psmx2_trx_ctxt *psmx2_trx_ctxt_alloc(struct psmx2_fid_domain *domain,
 
 	err = ofi_bufpool_create(&trx_ctxt->am_req_pool,
 				 sizeof(struct psmx2_am_request),
-				 sizeof(void *), 0, 64);
+				 sizeof(void *), 0, 64, 0);
 	if (err) {
 		FI_WARN(&psmx2_prov, FI_LOG_CORE,
 			"failed to allocate am_req_pool.\n");

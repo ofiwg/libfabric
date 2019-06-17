@@ -341,14 +341,14 @@ int ofi_bufpool_create_attr(struct ofi_bufpool_attr *attr,
 static inline int
 ofi_bufpool_create(struct ofi_bufpool **buf_pool,
 		   size_t size, size_t alignment,
-		   size_t max_cnt, size_t chunk_cnt)
+		   size_t max_cnt, size_t chunk_cnt, int flags)
 {
 	struct ofi_bufpool_attr attr = {
 		.size		= size,
 		.alignment 	= alignment,
 		.max_cnt	= max_cnt,
 		.chunk_cnt	= chunk_cnt,
-		.flags		= 0,
+		.flags		= flags,
 	};
 	return ofi_bufpool_create_attr(&attr, buf_pool);
 }
