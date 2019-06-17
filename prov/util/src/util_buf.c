@@ -192,15 +192,16 @@ int ofi_bufpool_create_attr(struct ofi_bufpool_attr *attr,
 	else
 		slist_init(&pool->free_list.entries);
 
+	pool->alloc_size = (pool->attr.chunk_cnt + 1) * pool->entry_size;
 	hp_size = ofi_get_hugepage_size();
-	if (hp_size <= 0)
+	if (hp_size <= 0 || pool->alloc_size < hp_size)
 		pool->attr.flags &= ~OFI_BUFPOOL_HUGEPAGES;
 
-	if (pool->attr.flags & OFI_BUFPOOL_HUGEPAGES)
-		pool->alloc_size = ofi_get_aligned_size((pool->attr.chunk_cnt + 1) *
-				   pool->entry_size, hp_size);
-	else
-		pool->alloc_size = (pool->attr.chunk_cnt + 1) * pool->entry_size;
+	if (pool->attr.flags & OFI_BUFPOOL_HUGEPAGES) {
+		pool->alloc_size = ofi_get_aligned_size(pool->alloc_size,
+							hp_size);
+	}
+
 	pool->region_size = pool->alloc_size - pool->entry_size;
 
 	*buf_pool = pool;
