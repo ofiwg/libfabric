@@ -49,11 +49,6 @@ static void ofi_bufpool_set_region_size(struct ofi_bufpool *pool)
 {
 	ssize_t hp_size;
 
-	if (pool->entry_cnt) {
-		assert(pool->alloc_size && pool->region_size);
-		return;
-	}
-
 	hp_size = ofi_get_hugepage_size();
 	if (hp_size <= 0)
 		pool->attr.flags &= ~OFI_BUFPOOL_MMAPPED;
@@ -77,7 +72,6 @@ int ofi_bufpool_grow(struct ofi_bufpool *pool)
 	if (pool->attr.max_cnt && pool->entry_cnt >= pool->attr.max_cnt)
 		return -FI_EINVAL;
 
-	ofi_bufpool_set_region_size(pool);
 	buf_region = calloc(1, sizeof(*buf_region));
 	if (!buf_region)
 		return -FI_ENOSPC;
@@ -212,6 +206,8 @@ int ofi_bufpool_create_attr(struct ofi_bufpool_attr *attr,
 		dlist_init(&(*buf_pool)->free_list.regions);
 	else
 		slist_init(&(*buf_pool)->free_list.entries);
+
+	ofi_bufpool_set_region_size(*buf_pool);
 
 	return FI_SUCCESS;
 }
