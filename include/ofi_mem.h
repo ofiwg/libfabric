@@ -280,7 +280,7 @@ static inline void name ## _free(struct name *fs)		\
 enum {
 	OFI_BUFPOOL_INDEXED		= 1 << 1,
 	OFI_BUFPOOL_NO_TRACK		= 1 << 2,
-	OFI_BUFPOOL_MMAPPED		= 1 << 3,
+	OFI_BUFPOOL_HUGEPAGES		= 1 << 3,
 };
 
 struct ofi_bufpool_region;

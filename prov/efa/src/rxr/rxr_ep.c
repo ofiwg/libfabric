@@ -2297,7 +2297,7 @@ static int rxr_create_pkt_pool(struct rxr_ep *ep, size_t size,
 					rxr_buf_region_free_hndlr : NULL,
 		.init_fn	= NULL,
 		.context	= rxr_ep_domain(ep),
-		.flags		= OFI_BUFPOOL_MMAPPED,
+		.flags		= OFI_BUFPOOL_HUGEPAGES,
 	};
 
 	return ofi_bufpool_create_attr(&attr, buf_pool);
