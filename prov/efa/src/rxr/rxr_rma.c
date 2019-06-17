@@ -65,6 +65,50 @@ int rxr_rma_verified_copy_iov(struct rxr_ep *ep, struct fi_rma_iov *rma,
 	return 0;
 }
 
+/* Upon receiving a read request, Remote EP call this function to create
+ * a tx entry for sending data back.
+ */
+struct rxr_tx_entry *rxr_readrsp_tx_entry_init(struct rxr_ep *rxr_ep,
+					       struct rxr_rx_entry *rx_entry)
+{
+	struct rxr_tx_entry *tx_entry;
+
+	tx_entry = ofi_buf_alloc(rxr_ep->readrsp_tx_entry_pool);
+	if (OFI_UNLIKELY(!tx_entry)) {
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "Read Response TX entries exhausted.\n");
+		return NULL;
+	}
+
+	assert(tx_entry);
+#if ENABLE_DEBUG
+	dlist_insert_tail(&tx_entry->tx_entry_entry, &rxr_ep->tx_entry_list);
+#endif
+
+	/*
+	 * this tx_entry works similar to a send tx_entry thus its op was
+	 * set to ofi_op_msg. Note this tx_entry will not write a completion
+	 */
+	rxr_generic_tx_entry_init(tx_entry, rx_entry->iov, rx_entry->iov_count,
+				  NULL, 0, rx_entry->addr, 0, 0, NULL,
+				  ofi_op_msg, 0);
+
+	tx_entry->cq_entry.flags |= FI_READ;
+	/* rma_loc_rx_id is for later retrieve of rx_entry
+	 * to write rx_completion
+	 */
+	tx_entry->rma_loc_rx_id = rx_entry->rx_id;
+
+	/* the following is essentially handle CTS */
+	tx_entry->rx_id = rx_entry->rma_initiator_rx_id;
+	tx_entry->window = rx_entry->window;
+
+	/* this tx_entry does not send rts
+	 * therefore should not increase msg_id
+	 */
+	tx_entry->msg_id = 0;
+	return tx_entry;
+}
+
 ssize_t rxr_generic_rma(struct fid_ep *ep,
 			const struct iovec *iov, size_t iov_count,
 			const struct fi_rma_iov *rma_iov, size_t rma_iov_count,
