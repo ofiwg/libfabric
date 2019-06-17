@@ -1562,6 +1562,7 @@ ssize_t rxr_tx(struct fid_ep *ep, const struct iovec *iov, size_t iov_count,
 					       ignore, context,
 					       addr, ofi_op_msg, 0);
 		if (!rx_entry) {
+			rxr_release_tx_entry(rxr_ep, tx_entry);
 			FI_WARN(&rxr_prov, FI_LOG_CQ,
 				"RX entries exhausted.\n");
 			rxr_eq_write_error(rxr_ep, FI_ENOBUFS, -FI_ENOBUFS);
@@ -1586,6 +1587,20 @@ ssize_t rxr_tx(struct fid_ep *ep, const struct iovec *iov, size_t iov_count,
 		 * meanwhile set rx_entry->state to RXR_RX_RECV so that
 		 * this rx_entry is ready to receive
 		 */
+
+		/* If there is no available buffer, we do not proceed.
+		 * It is important to decrease peer->next_msg_id by 1
+		 * in this case because this message was not sent.
+		 */
+		if (rxr_ep->available_data_bufs==0) {
+			rxr_release_tx_entry(rxr_ep, tx_entry);
+			rxr_release_rx_entry(rxr_ep, rx_entry);
+			peer->next_msg_id--;
+			ret = -FI_EAGAIN;
+			rxr_ep_progress_internal(rxr_ep);
+			goto out;
+		}
+
 		rxr_ep_calc_cts_window_credits(rxr_ep, rxr_env.rx_window_size,
 					       tx_entry->total_len, &window,
 					       &credits);
