@@ -212,25 +212,6 @@ int ofi_bufpool_create_attr(struct ofi_bufpool_attr *attr,
 	return FI_SUCCESS;
 }
 
-int ofi_bufpool_create_ex(struct ofi_bufpool **buf_pool,
-			    size_t size, size_t alignment,
-			    size_t max_cnt, size_t chunk_cnt,
-			    ofi_bufpool_alloc_fn alloc_fn,
-			    ofi_bufpool_free_fn free_fn,
-			    void *pool_ctx)
-{
-	struct ofi_bufpool_attr attr = {
-		.size		= size,
-		.alignment 	= alignment,
-		.max_cnt	= max_cnt,
-		.chunk_cnt	= chunk_cnt,
-		.alloc_fn	= alloc_fn,
-		.free_fn	= free_fn,
-		.context	= pool_ctx,
-	};
-	return ofi_bufpool_create_attr(&attr, buf_pool);
-}
-
 void ofi_bufpool_destroy(struct ofi_bufpool *pool)
 {
 	struct ofi_bufpool_region *buf_region;

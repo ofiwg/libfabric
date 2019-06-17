@@ -1045,7 +1045,7 @@ int rxd_ep_init_res(struct rxd_ep *ep, struct fi_info *fi_info)
 	};
 	int ret;
 
-	ret = ofi_bufpool_create_ex(&ep->tx_pkt_pool,
+	ret = ofi_bufpool_create(&ep->tx_pkt_pool,
 			rxd_domain->max_mtu_sz + sizeof(struct rxd_pkt_entry),
 			RXD_BUF_POOL_ALIGNMENT, 0, RXD_TX_POOL_CHUNK_CNT,
 			ep->do_local_mr ? rxd_buf_region_alloc_fn : NULL,
@@ -1054,7 +1054,7 @@ int rxd_ep_init_res(struct rxd_ep *ep, struct fi_info *fi_info)
 	if (ret)
 		return ret;
 
-	ret = ofi_bufpool_create_ex(&ep->rx_pkt_pool,
+	ret = ofi_bufpool_create(&ep->rx_pkt_pool,
 			rxd_domain->max_mtu_sz + sizeof (struct rxd_pkt_entry),
 			RXD_BUF_POOL_ALIGNMENT, 0, RXD_RX_POOL_CHUNK_CNT,
 			ep->do_local_mr ? rxd_buf_region_alloc_fn : NULL,
