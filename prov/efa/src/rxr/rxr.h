@@ -501,6 +501,8 @@ struct rxr_ep {
 	/* datastructure to maintain rxr send/recv states */
 	struct ofi_bufpool *tx_entry_pool;
 	struct ofi_bufpool *rx_entry_pool;
+	/* datastructure to maintain read response */
+	struct ofi_bufpool *readrsp_tx_entry_pool;
 
 	/* rx_entries with recv buf */
 	struct dlist_entry rx_list;
@@ -765,6 +767,15 @@ struct rxr_rx_entry *rxr_ep_rx_entry_init(struct rxr_ep *ep,
 					  uint64_t ignore, void *context,
 					  fi_addr_t addr, uint32_t op,
 					  uint64_t flags);
+
+void rxr_generic_tx_entry_init(struct rxr_tx_entry *tx_entry,
+			       const struct iovec *iov,
+			       size_t iov_count,
+			       const struct fi_rma_iov *rma_iov,
+			       size_t rma_iov_count,
+			       fi_addr_t addr, uint64_t tag,
+			       uint64_t data, void *context,
+			       uint32_t op, uint64_t flags);
 
 struct rxr_tx_entry *rxr_ep_tx_entry_init(struct rxr_ep *rxr_ep,
 					  const struct iovec *iov,

@@ -42,6 +42,9 @@
 int rxr_rma_verified_copy_iov(struct rxr_ep *ep, struct fi_rma_iov *rma,
 			      size_t count, uint32_t flags, struct iovec *iov);
 
+struct rxr_tx_entry *rxr_readrsp_tx_entry_init(struct rxr_ep *rxr_ep,
+					       struct rxr_rx_entry *rx_entry);
+
 ssize_t rxr_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
 		 fi_addr_t src_addr, uint64_t addr, uint64_t key,
 		 void *context);
