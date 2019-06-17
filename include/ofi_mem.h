@@ -285,20 +285,16 @@ enum {
 
 struct ofi_bufpool_region;
 
-typedef int (*ofi_bufpool_alloc_fn)(struct ofi_bufpool_region *region);
-typedef void (*ofi_bufpool_free_fn)(struct ofi_bufpool_region *region);
-typedef void (*ofi_bufpool_init_fn)(struct ofi_bufpool_region *region, void *buf);
-
 struct ofi_bufpool_attr {
-	size_t 				size;
-	size_t 				alignment;
-	size_t	 			max_cnt;
-	size_t 				chunk_cnt;
-	ofi_bufpool_alloc_fn 		alloc_fn;
-	ofi_bufpool_free_fn 		free_fn;
-	ofi_bufpool_init_fn 		init_fn;
-	void 				*context;
-	int				flags;
+	size_t 		size;
+	size_t 		alignment;
+	size_t	 	max_cnt;
+	size_t 		chunk_cnt;
+	int		(*alloc_fn)(struct ofi_bufpool_region *region);
+	void		(*free_fn)(struct ofi_bufpool_region *region);
+	void		(*init_fn)(struct ofi_bufpool_region *region, void *buf);
+	void 		*context;
+	int		flags;
 };
 
 struct ofi_bufpool {
