@@ -45,22 +45,6 @@ enum {
 };
 
 
-static void ofi_bufpool_set_region_size(struct ofi_bufpool *pool)
-{
-	ssize_t hp_size;
-
-	hp_size = ofi_get_hugepage_size();
-	if (hp_size <= 0)
-		pool->attr.flags &= ~OFI_BUFPOOL_HUGEPAGES;
-
-	if (pool->attr.flags & OFI_BUFPOOL_HUGEPAGES)
-		pool->alloc_size = ofi_get_aligned_size((pool->attr.chunk_cnt + 1) *
-							pool->entry_size, hp_size);
-	else
-		pool->alloc_size = (pool->attr.chunk_cnt + 1) * pool->entry_size;
-	pool->region_size = pool->alloc_size - pool->entry_size;
-}
-
 int ofi_bufpool_grow(struct ofi_bufpool *pool)
 {
 	struct ofi_bufpool_region *buf_region;
@@ -185,30 +169,41 @@ err1:
 int ofi_bufpool_create_attr(struct ofi_bufpool_attr *attr,
 			      struct ofi_bufpool **buf_pool)
 {
+	struct ofi_bufpool *pool;
 	size_t entry_sz;
+	ssize_t hp_size;
 
-	(*buf_pool) = calloc(1, sizeof(**buf_pool));
-	if (!*buf_pool)
+	pool = calloc(1, sizeof(**buf_pool));
+	if (!pool)
 		return -FI_ENOMEM;
 
-	(*buf_pool)->attr = *attr;
+	pool->attr = *attr;
 
 	entry_sz = (attr->size + sizeof(struct ofi_bufpool_hdr));
-	(*buf_pool)->entry_size = ofi_get_aligned_size(entry_sz, attr->alignment);
+	pool->entry_size = ofi_get_aligned_size(entry_sz, attr->alignment);
 
 	if (!attr->chunk_cnt) {
-		(*buf_pool)->attr.chunk_cnt =
-			((*buf_pool)->entry_size < page_sizes[OFI_PAGE_SIZE]) ?
-			64 : 16;
+		pool->attr.chunk_cnt =
+			pool->entry_size < page_sizes[OFI_PAGE_SIZE] ? 64 : 16;
 	}
 
-	if ((*buf_pool)->attr.flags & OFI_BUFPOOL_INDEXED)
-		dlist_init(&(*buf_pool)->free_list.regions);
+	if (pool->attr.flags & OFI_BUFPOOL_INDEXED)
+		dlist_init(&pool->free_list.regions);
 	else
-		slist_init(&(*buf_pool)->free_list.entries);
+		slist_init(&pool->free_list.entries);
 
-	ofi_bufpool_set_region_size(*buf_pool);
+	hp_size = ofi_get_hugepage_size();
+	if (hp_size <= 0)
+		pool->attr.flags &= ~OFI_BUFPOOL_HUGEPAGES;
 
+	if (pool->attr.flags & OFI_BUFPOOL_HUGEPAGES)
+		pool->alloc_size = ofi_get_aligned_size((pool->attr.chunk_cnt + 1) *
+				   pool->entry_size, hp_size);
+	else
+		pool->alloc_size = (pool->attr.chunk_cnt + 1) * pool->entry_size;
+	pool->region_size = pool->alloc_size - pool->entry_size;
+
+	*buf_pool = pool;
 	return FI_SUCCESS;
 }
 
