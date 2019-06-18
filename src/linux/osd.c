@@ -59,7 +59,7 @@ ssize_t ofi_get_hugepage_size(void)
 		return -errno;
 
 	while (getline(&line, &len, fd) != -1)
-		if (sscanf(line, "Hugepagesize: %lu kB", &val) == 1)
+		if (sscanf(line, "Hugepagesize: %zu kB", &val) == 1)
 			break;
 
 	free(line);
