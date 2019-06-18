@@ -163,7 +163,7 @@ static int fi_ibv_dgram_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 
 	for (i = count - 1; i >= 0; i--) {
 		struct fi_ibv_dgram_av_entry *av_entry =
-			(struct fi_ibv_dgram_av_entry *)fi_addr[i];
+			(struct fi_ibv_dgram_av_entry *) (uintptr_t) fi_addr[i];
 		fi_ibv_dgram_av_remove_addr(av_entry);
 	}
 	return FI_SUCCESS;
