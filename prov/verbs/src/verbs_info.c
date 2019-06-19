@@ -436,12 +436,23 @@ static inline int fi_ibv_get_qp_cap(struct ibv_context *ctx,
 
 	memset(&init_attr, 0, sizeof init_attr);
 	init_attr.send_cq = cq;
-	init_attr.cap.max_send_wr = fi_ibv_gl_data.def_tx_size;
-	init_attr.cap.max_send_sge = fi_ibv_gl_data.def_tx_iov_limit;
+
+	assert(info->tx_attr->size &&
+	       info->tx_attr->iov_limit &&
+	       info->rx_attr->size &&
+	       info->rx_attr->iov_limit);
+
+	init_attr.cap.max_send_wr = MIN(fi_ibv_gl_data.def_tx_size,
+					info->tx_attr->size);
+	init_attr.cap.max_send_sge = MIN(fi_ibv_gl_data.def_tx_iov_limit,
+					 info->tx_attr->iov_limit);
+
 	if (!fi_ibv_is_xrc_send_qp(qp_type)) {
 		init_attr.recv_cq = cq;
-		init_attr.cap.max_recv_wr = fi_ibv_gl_data.def_rx_size;
-		init_attr.cap.max_recv_sge = fi_ibv_gl_data.def_rx_iov_limit;
+		init_attr.cap.max_recv_wr = MIN(fi_ibv_gl_data.def_rx_size,
+						info->rx_attr->size);
+		init_attr.cap.max_recv_sge = MIN(fi_ibv_gl_data.def_rx_iov_limit,
+						 info->rx_attr->iov_limit);
 	}
 	init_attr.cap.max_inline_data = fi_ibv_find_max_inline(pd, ctx, qp_type);
 	init_attr.qp_type = qp_type;
@@ -600,6 +611,7 @@ static int fi_ibv_get_device_attrs(struct ibv_context *ctx,
 						  MIN(device_attr.max_qp_wr,
 						      device_attr.max_srq_wr) :
 						  device_attr.max_qp_wr;
+	// TODO set one of srq sge or regular sge based on hints?
 	info->rx_attr->iov_limit 		= device_attr.max_srq_sge ?
 						  MIN(device_attr.max_sge,
 						      device_attr.max_srq_sge) :
