@@ -264,10 +264,11 @@ static int rxm_conn_res_alloc(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn)
 		if (!rxm_conn->inject_pkt || !rxm_conn->inject_data_pkt ||
 		    !rxm_conn->tinject_pkt || !rxm_conn->tinject_data_pkt) {
 			rxm_conn_res_free(rxm_conn);
+			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "unable to allocate "
+				"inject pkt for connection\n");
 			return -FI_ENOMEM;
 		}
 	}
-
 	return 0;
 }
 
@@ -288,22 +289,18 @@ static void rxm_conn_free(struct rxm_cmap_handle *handle)
 		rxm_conn->saved_msg_ep = NULL;
 	}
 
-	if (!rxm_conn->msg_ep)
-		return;
-	/* Assuming fi_close also shuts down the connection gracefully if the
-	 * endpoint is in connected state */
-	if (fi_close(&rxm_conn->msg_ep->fid)) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-			"Unable to close msg_ep\n");
-	} else {
-		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
-		       "Closed msg_ep\n");
+	if (rxm_conn->msg_ep) {
+		if (fi_close(&rxm_conn->msg_ep->fid)) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+				"unable to close msg_ep\n");
+		} else {
+			FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
+			       "closed msg_ep\n");
+		}
+		rxm_conn->msg_ep = NULL;
 	}
-	rxm_conn->msg_ep = NULL;
-
 	rxm_conn_res_free(rxm_conn);
-
-	free(container_of(handle, struct rxm_conn, handle));
+	free(rxm_conn);
 }
 
 static int rxm_cmap_alloc_handle(struct rxm_cmap *cmap, fi_addr_t fi_addr,
@@ -593,6 +590,7 @@ int rxm_cmap_process_connreq(struct rxm_cmap *cmap, void *addr,
 							  &handle);
 			if (ret)
 				goto unlock;
+
 			assert(fi_addr != FI_ADDR_NOTAVAIL);
 			handle->fi_addr = fi_addr;
 		}
@@ -895,8 +893,6 @@ static void rxm_conn_close(struct rxm_cmap_handle *handle)
 		       "Saved MSG EP fid for further deletion in main thread\n");
 	}
 	rxm_conn->msg_ep = NULL;
-
-	rxm_conn_res_free(rxm_conn);
 }
 
 static void rxm_conn_save(struct rxm_cmap_handle *handle)
@@ -1022,10 +1018,16 @@ rxm_conn_av_updated_handler(struct rxm_cmap_handle *handle)
 
 static struct rxm_cmap_handle *rxm_conn_alloc(struct rxm_cmap *cmap)
 {
+	struct rxm_ep *rxm_ep = container_of(cmap->ep, struct rxm_ep, util_ep);
 	struct rxm_conn *rxm_conn = calloc(1, sizeof(*rxm_conn));
 
 	if (OFI_UNLIKELY(!rxm_conn))
 		return NULL;
+
+	if (rxm_conn_res_alloc(rxm_ep, rxm_conn)) {
+		free(rxm_conn);
+		return NULL;
+	}
 
 	return &rxm_conn->handle;
 }
@@ -1149,13 +1151,6 @@ rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 			"Unable to accept incoming connection\n");
-		goto err2;
-	}
-
-	ret = rxm_conn_res_alloc(rxm_ep, rxm_conn);
-	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-			"Unable to allocate TX/RX resources for connection\n");
 		goto err2;
 	}
 
@@ -1560,14 +1555,9 @@ rxm_conn_connect(struct util_ep *util_ep, struct rxm_cmap_handle *handle,
 	ret = fi_connect(rxm_conn->msg_ep, rxm_ep->msg_info->dest_addr,
 			 &cm_data, sizeof(cm_data));
 	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to connect msg_ep\n");
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "unable to connect msg_ep\n");
 		goto err;
 	}
-
-	ret = rxm_conn_res_alloc(rxm_ep, rxm_conn);
-	if (ret)
-		goto err;
-
 	return 0;
 err:
 	fi_close(&rxm_conn->msg_ep->fid);
