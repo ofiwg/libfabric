@@ -628,7 +628,7 @@ int fi_ibv_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	}
 
 	ret = ofi_bufpool_create(&cq->wce_pool, sizeof(struct fi_ibv_wce),
-				   16, 0, VERBS_WCE_CNT);
+				16, 0, VERBS_WCE_CNT, 0);
 	if (ret) {
 		VERBS_WARN(FI_LOG_CQ, "Failed to create wce_pool\n");
 		goto err5;

@@ -45,24 +45,6 @@ enum {
 };
 
 
-static void ofi_bufpool_set_region_size(struct ofi_bufpool *pool)
-{
-	ssize_t hp_size;
-
-	if (pool->entry_cnt) {
-		assert(pool->alloc_size && pool->region_size);
-		return;
-	}
-
-	hp_size = ofi_get_hugepage_size();
-	if (pool->attr.flags & OFI_BUFPOOL_MMAPPED)
-		pool->alloc_size = ofi_get_aligned_size((pool->attr.chunk_cnt + 1) *
-							pool->entry_size, hp_size);
-	else
-		pool->alloc_size = (pool->attr.chunk_cnt + 1) * pool->entry_size;
-	pool->region_size = pool->alloc_size - pool->entry_size;
-}
-
 int ofi_bufpool_grow(struct ofi_bufpool *pool)
 {
 	struct ofi_bufpool_region *buf_region;
@@ -74,7 +56,6 @@ int ofi_bufpool_grow(struct ofi_bufpool *pool)
 	if (pool->attr.max_cnt && pool->entry_cnt >= pool->attr.max_cnt)
 		return -FI_EINVAL;
 
-	ofi_bufpool_set_region_size(pool);
 	buf_region = calloc(1, sizeof(*buf_region));
 	if (!buf_region)
 		return -FI_ENOSPC;
@@ -82,14 +63,14 @@ int ofi_bufpool_grow(struct ofi_bufpool *pool)
 	buf_region->pool = pool;
 	dlist_init(&buf_region->free_list);
 
-	if (pool->attr.flags & OFI_BUFPOOL_MMAPPED) {
+	if (pool->attr.flags & OFI_BUFPOOL_HUGEPAGES) {
 		ret = ofi_alloc_hugepage_buf((void **) &buf_region->alloc_region,
 					     pool->alloc_size);
 		/* If we can't allocate huge pages, fall back to normal
 		 * allocations if this is the first allocation attempt.
 		 */
 		if (ret && !pool->entry_cnt) {
-			pool->attr.flags &= ~OFI_BUFPOOL_MMAPPED;
+			pool->attr.flags &= ~OFI_BUFPOOL_HUGEPAGES;
 			pool->alloc_size = (pool->attr.chunk_cnt + 1) *
 					   pool->entry_size;
 			pool->region_size = pool->alloc_size - pool->entry_size;
@@ -176,7 +157,7 @@ err3:
 	if (pool->attr.free_fn)
 	    pool->attr.free_fn(buf_region);
 err2:
-	if (pool->attr.flags & OFI_BUFPOOL_MMAPPED)
+	if (pool->attr.flags & OFI_BUFPOOL_HUGEPAGES)
 		ofi_free_hugepage_buf(buf_region->alloc_region, pool->alloc_size);
 	else
 		ofi_freealign(buf_region->alloc_region);
@@ -188,48 +169,43 @@ err1:
 int ofi_bufpool_create_attr(struct ofi_bufpool_attr *attr,
 			      struct ofi_bufpool **buf_pool)
 {
+	struct ofi_bufpool *pool;
 	size_t entry_sz;
+	ssize_t hp_size;
 
-	(*buf_pool) = calloc(1, sizeof(**buf_pool));
-	if (!*buf_pool)
+	pool = calloc(1, sizeof(**buf_pool));
+	if (!pool)
 		return -FI_ENOMEM;
 
-	(*buf_pool)->attr = *attr;
+	pool->attr = *attr;
 
 	entry_sz = (attr->size + sizeof(struct ofi_bufpool_hdr));
-	(*buf_pool)->entry_size = ofi_get_aligned_size(entry_sz, attr->alignment);
+	pool->entry_size = ofi_get_aligned_size(entry_sz, attr->alignment);
 
 	if (!attr->chunk_cnt) {
-		(*buf_pool)->attr.chunk_cnt =
-			((*buf_pool)->entry_size < page_sizes[OFI_PAGE_SIZE]) ?
-			64 : 16;
+		pool->attr.chunk_cnt =
+			pool->entry_size < page_sizes[OFI_PAGE_SIZE] ? 64 : 16;
 	}
 
-	if ((*buf_pool)->attr.flags & OFI_BUFPOOL_INDEXED)
-		dlist_init(&(*buf_pool)->free_list.regions);
+	if (pool->attr.flags & OFI_BUFPOOL_INDEXED)
+		dlist_init(&pool->free_list.regions);
 	else
-		slist_init(&(*buf_pool)->free_list.entries);
+		slist_init(&pool->free_list.entries);
 
+	pool->alloc_size = (pool->attr.chunk_cnt + 1) * pool->entry_size;
+	hp_size = ofi_get_hugepage_size();
+	if (hp_size <= 0 || pool->alloc_size < hp_size)
+		pool->attr.flags &= ~OFI_BUFPOOL_HUGEPAGES;
+
+	if (pool->attr.flags & OFI_BUFPOOL_HUGEPAGES) {
+		pool->alloc_size = ofi_get_aligned_size(pool->alloc_size,
+							hp_size);
+	}
+
+	pool->region_size = pool->alloc_size - pool->entry_size;
+
+	*buf_pool = pool;
 	return FI_SUCCESS;
-}
-
-int ofi_bufpool_create_ex(struct ofi_bufpool **buf_pool,
-			    size_t size, size_t alignment,
-			    size_t max_cnt, size_t chunk_cnt,
-			    ofi_bufpool_alloc_fn alloc_fn,
-			    ofi_bufpool_free_fn free_fn,
-			    void *pool_ctx)
-{
-	struct ofi_bufpool_attr attr = {
-		.size		= size,
-		.alignment 	= alignment,
-		.max_cnt	= max_cnt,
-		.chunk_cnt	= chunk_cnt,
-		.alloc_fn	= alloc_fn,
-		.free_fn	= free_fn,
-		.context	= pool_ctx,
-	};
-	return ofi_bufpool_create_attr(&attr, buf_pool);
 }
 
 void ofi_bufpool_destroy(struct ofi_bufpool *pool)
@@ -246,7 +222,7 @@ void ofi_bufpool_destroy(struct ofi_bufpool *pool)
 		if (pool->attr.free_fn)
 			pool->attr.free_fn(buf_region);
 
-		if (pool->attr.flags & OFI_BUFPOOL_MMAPPED) {
+		if (pool->attr.flags & OFI_BUFPOOL_HUGEPAGES) {
 			ret = ofi_free_hugepage_buf(buf_region->alloc_region,
 						    pool->alloc_size);
 			if (ret) {

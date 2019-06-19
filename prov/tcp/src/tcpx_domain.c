@@ -87,7 +87,8 @@ static int tcpx_srx_ctx(struct fid_domain *domain, struct fi_rx_attr *attr,
 		goto err1;
 
 	ret = ofi_bufpool_create(&srx_ctx->buf_pool,
-				 sizeof(struct tcpx_xfer_entry), 16, 0, 1024);
+				 sizeof(struct tcpx_xfer_entry), 16, 0, 1024,
+				 OFI_BUFPOOL_HUGEPAGES);
 	if (ret)
 		goto err2;
 

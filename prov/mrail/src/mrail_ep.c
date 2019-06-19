@@ -649,7 +649,7 @@ static int mrail_ep_alloc_bufs(struct mrail_ep *mrail_ep)
 
 	ret = ofi_bufpool_create(&mrail_ep->ooo_recv_pool,
 				 sizeof(struct mrail_ooo_recv),
-				 sizeof(void *), 0, 64);
+				 sizeof(void *), 0, 64, 0);
 	if (!mrail_ep->ooo_recv_pool)
 		goto err;
 
@@ -661,7 +661,7 @@ static int mrail_ep_alloc_bufs(struct mrail_ep *mrail_ep)
 		    (mrail_ep->num_eps * sizeof(struct mrail_subreq)));
 
 	ret = ofi_bufpool_create(&mrail_ep->req_pool, buf_size,
-				 sizeof(void *), 0, 64);
+				 sizeof(void *), 0, 64, OFI_BUFPOOL_HUGEPAGES);
 	if (ret)
 		goto err;
 	return 0;

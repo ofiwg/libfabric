@@ -1037,40 +1037,40 @@ static void rxd_buf_region_free_fn(struct ofi_bufpool_region *region)
 int rxd_ep_init_res(struct rxd_ep *ep, struct fi_info *fi_info)
 {
 	struct rxd_domain *rxd_domain = rxd_ep_domain(ep);
-	struct ofi_bufpool_attr entry_pool_attr = {
-		.size		= sizeof(struct rxd_x_entry),
-		.alignment	= RXD_BUF_POOL_ALIGNMENT,
-		.max_cnt	= (size_t) ((uint16_t) (~0)),
-		.flags		= OFI_BUFPOOL_INDEXED,
-	};
+	struct ofi_bufpool_attr pkt_attr = { 0 };
+	struct ofi_bufpool_attr entry_attr = { 0 };
 	int ret;
 
-	ret = ofi_bufpool_create_ex(&ep->tx_pkt_pool,
-			rxd_domain->max_mtu_sz + sizeof(struct rxd_pkt_entry),
-			RXD_BUF_POOL_ALIGNMENT, 0, RXD_TX_POOL_CHUNK_CNT,
-			ep->do_local_mr ? rxd_buf_region_alloc_fn : NULL,
-			ep->do_local_mr ? rxd_buf_region_free_fn : NULL,
-			rxd_domain);
+	pkt_attr.size = rxd_domain->max_mtu_sz + sizeof(struct rxd_pkt_entry);
+	pkt_attr.alignment = RXD_BUF_POOL_ALIGNMENT;
+	pkt_attr.chunk_cnt = RXD_TX_POOL_CHUNK_CNT;
+	pkt_attr.alloc_fn = ep->do_local_mr ? rxd_buf_region_alloc_fn : NULL;
+	pkt_attr.free_fn = ep->do_local_mr ? rxd_buf_region_free_fn : NULL;
+	pkt_attr.context = rxd_domain;
+	pkt_attr.flags = OFI_BUFPOOL_HUGEPAGES;
+
+	ret = ofi_bufpool_create_attr(&pkt_attr, &ep->tx_pkt_pool);
 	if (ret)
 		return ret;
 
-	ret = ofi_bufpool_create_ex(&ep->rx_pkt_pool,
-			rxd_domain->max_mtu_sz + sizeof (struct rxd_pkt_entry),
-			RXD_BUF_POOL_ALIGNMENT, 0, RXD_RX_POOL_CHUNK_CNT,
-			ep->do_local_mr ? rxd_buf_region_alloc_fn : NULL,
-			ep->do_local_mr ? rxd_buf_region_free_fn : NULL,
-			rxd_domain);
+	pkt_attr.chunk_cnt = RXD_RX_POOL_CHUNK_CNT;
+	ret = ofi_bufpool_create_attr(&pkt_attr, &ep->rx_pkt_pool);
 	if (ret)
 		goto err;
 
-	entry_pool_attr.flags |= OFI_BUFPOOL_NO_TRACK;
-	entry_pool_attr.chunk_cnt = ep->tx_size;
-	ret = ofi_bufpool_create_attr(&entry_pool_attr, &ep->tx_entry_pool);
+	entry_attr.size = sizeof(struct rxd_x_entry);
+	entry_attr.alignment = RXD_BUF_POOL_ALIGNMENT;
+	entry_attr.max_cnt = (size_t) ((uint16_t) (~0));
+	entry_attr.chunk_cnt = ep->tx_size;
+	entry_attr.flags = OFI_BUFPOOL_INDEXED | OFI_BUFPOOL_NO_TRACK |
+			   OFI_BUFPOOL_HUGEPAGES;
+
+	ret = ofi_bufpool_create_attr(&entry_attr, &ep->tx_entry_pool);
 	if (ret)
 		goto err;
 
-	entry_pool_attr.chunk_cnt = ep->rx_size;
-	ret = ofi_bufpool_create_attr(&entry_pool_attr, &ep->rx_entry_pool);
+	entry_attr.chunk_cnt = ep->rx_size;
+	ret = ofi_bufpool_create_attr(&entry_attr, &ep->rx_entry_pool);
 	if (ret)
 		goto err;
 
