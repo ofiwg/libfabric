@@ -56,28 +56,15 @@ Test(tagged, ping)
 	} while (ret == -FI_EAGAIN);
 	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
 
-	/* Validate RX event fields */
-	cr_assert(rx_cqe.op_context == NULL, "RX CQE Context mismatch");
-	cr_assert(rx_cqe.flags == (FI_TAGGED | FI_RECV),
-		  "RX CQE flags mismatch");
-	cr_assert(rx_cqe.len == send_len, "Invalid RX CQE length");
-	cr_assert(rx_cqe.buf == 0, "Invalid RX CQE address");
-	cr_assert(rx_cqe.data == 0, "Invalid RX CQE data");
-	cr_assert(rx_cqe.tag == 0, "Invalid RX CQE tag");
+	validate_rx_event(&rx_cqe, NULL, send_len, FI_TAGGED | FI_RECV, NULL,
+			  0, 0);
 	cr_assert(from == cxit_ep_fi_addr, "Invalid source address");
 
 	/* Wait for async event indicating data has been sent */
 	ret = cxit_await_completion(cxit_tx_cq, &tx_cqe);
 	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
 
-	/* Validate TX event fields */
-	cr_assert(tx_cqe.op_context == NULL, "TX CQE Context mismatch");
-	cr_assert(tx_cqe.flags == (FI_TAGGED | FI_SEND),
-		  "TX CQE flags mismatch");
-	cr_assert(tx_cqe.len == 0, "Invalid TX CQE length");
-	cr_assert(tx_cqe.buf == 0, "Invalid TX CQE address");
-	cr_assert(tx_cqe.data == 0, "Invalid TX CQE data");
-	cr_assert(tx_cqe.tag == 0, "Invalid TX CQE tag");
+	validate_tx_event(&tx_cqe, FI_TAGGED | FI_SEND, NULL);
 
 	/* Validate sent data */
 	for (i = 0; i < send_len; i++) {
@@ -134,28 +121,15 @@ Test(tagged, vping)
 	} while (ret == -FI_EAGAIN);
 	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
 
-	/* Validate RX event fields */
-	cr_assert(rx_cqe.op_context == NULL, "RX CQE Context mismatch");
-	cr_assert(rx_cqe.flags == (FI_TAGGED | FI_RECV),
-		  "RX CQE flags mismatch");
-	cr_assert(rx_cqe.len == send_len, "Invalid RX CQE length");
-	cr_assert(rx_cqe.buf == 0, "Invalid RX CQE address");
-	cr_assert(rx_cqe.data == 0, "Invalid RX CQE data");
-	cr_assert(rx_cqe.tag == 0, "Invalid RX CQE tag");
+	validate_rx_event(&rx_cqe, NULL, send_len, FI_TAGGED | FI_RECV, NULL,
+			  0, 0);
 	cr_assert(from == cxit_ep_fi_addr, "Invalid source address");
 
 	/* Wait for async event indicating data has been sent */
 	ret = cxit_await_completion(cxit_tx_cq, &tx_cqe);
 	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
 
-	/* Validate TX event fields */
-	cr_assert(tx_cqe.op_context == NULL, "TX CQE Context mismatch");
-	cr_assert(tx_cqe.flags == (FI_TAGGED | FI_SEND),
-		  "TX CQE flags mismatch");
-	cr_assert(tx_cqe.len == 0, "Invalid TX CQE length");
-	cr_assert(tx_cqe.buf == 0, "Invalid TX CQE address");
-	cr_assert(tx_cqe.data == 0, "Invalid TX CQE data");
-	cr_assert(tx_cqe.tag == 0, "Invalid TX CQE tag");
+	validate_tx_event(&tx_cqe, FI_TAGGED | FI_SEND, NULL);
 
 	/* Validate sent data */
 	for (i = 0; i < send_len; i++) {
@@ -228,28 +202,15 @@ Test(tagged, msgping)
 	} while (ret == -FI_EAGAIN);
 	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
 
-	/* Validate RX event fields */
-	cr_assert(rx_cqe.op_context == NULL, "RX CQE Context mismatch");
-	cr_assert(rx_cqe.flags == (FI_TAGGED | FI_RECV),
-		  "RX CQE flags mismatch");
-	cr_assert(rx_cqe.len == send_len, "Invalid RX CQE length");
-	cr_assert(rx_cqe.buf == 0, "Invalid RX CQE address");
-	cr_assert(rx_cqe.data == 0, "Invalid RX CQE data");
-	cr_assert(rx_cqe.tag == 0, "Invalid RX CQE tag");
+	validate_rx_event(&rx_cqe, NULL, send_len, FI_TAGGED | FI_RECV, NULL,
+			  0, 0);
 	cr_assert(from == cxit_ep_fi_addr, "Invalid source address");
 
 	/* Wait for async event indicating data has been sent */
 	ret = cxit_await_completion(cxit_tx_cq, &tx_cqe);
 	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
 
-	/* Validate TX event fields */
-	cr_assert(tx_cqe.op_context == NULL, "TX CQE Context mismatch");
-	cr_assert(tx_cqe.flags == (FI_TAGGED | FI_SEND),
-		  "TX CQE flags mismatch");
-	cr_assert(tx_cqe.len == 0, "Invalid TX CQE length");
-	cr_assert(tx_cqe.buf == 0, "Invalid TX CQE address");
-	cr_assert(tx_cqe.data == 0, "Invalid TX CQE data");
-	cr_assert(tx_cqe.tag == 0, "Invalid TX CQE tag");
+	validate_tx_event(&tx_cqe, FI_TAGGED | FI_SEND, NULL);
 
 	/* Validate sent data */
 	for (i = 0; i < send_len; i++) {
@@ -304,28 +265,15 @@ Test(tagged, ux_ping)
 	} while (ret == -FI_EAGAIN);
 	cr_assert(ret == 1);
 
-	/* Validate RX event fields */
-	cr_assert(rx_cqe.op_context == NULL, "RX CQE Context mismatch");
-	cr_assert(rx_cqe.flags == (FI_TAGGED | FI_RECV),
-		  "RX CQE flags mismatch");
-	cr_assert(rx_cqe.len == send_len, "Invalid RX CQE length");
-	cr_assert(rx_cqe.buf == 0, "Invalid RX CQE address");
-	cr_assert(rx_cqe.data == 0, "Invalid RX CQE data");
-	cr_assert(rx_cqe.tag == 0, "Invalid RX CQE tag");
+	validate_rx_event(&rx_cqe, NULL, send_len, FI_TAGGED | FI_RECV, NULL,
+			  0, 0);
 	cr_assert(from == cxit_ep_fi_addr, "Invalid source address");
 
 	/* Wait for async event indicating data has been sent */
 	ret = cxit_await_completion(cxit_tx_cq, &tx_cqe);
 	cr_assert(ret == 1);
 
-	/* Validate TX event fields */
-	cr_assert(tx_cqe.op_context == NULL, "TX CQE Context mismatch");
-	cr_assert(tx_cqe.flags == (FI_TAGGED | FI_SEND),
-		  "TX CQE flags mismatch");
-	cr_assert(tx_cqe.len == 0, "Invalid TX CQE length");
-	cr_assert(tx_cqe.buf == 0, "Invalid TX CQE address");
-	cr_assert(tx_cqe.data == 0, "Invalid TX CQE data");
-	cr_assert(tx_cqe.tag == 0, "Invalid TX CQE tag");
+	validate_tx_event(&tx_cqe, FI_TAGGED | FI_SEND, NULL);
 
 	/* Validate sent data */
 	for (i = 0; i < send_len; i++) {
@@ -409,14 +357,8 @@ void directed_recv(bool logical)
 	} while (ret == -FI_EAGAIN);
 	cr_assert(ret == 1);
 
-	/* Validate RX event fields */
-	cr_assert(rx_cqe.op_context == NULL, "RX CQE Context mismatch");
-	cr_assert(rx_cqe.flags == (FI_TAGGED | FI_RECV),
-		  "RX CQE flags mismatch");
-	cr_assert(rx_cqe.len == send_len, "Invalid RX CQE length");
-	cr_assert(rx_cqe.buf == 0, "Invalid RX CQE address");
-	cr_assert(rx_cqe.data == 0, "Invalid RX CQE data");
-	cr_assert(rx_cqe.tag == 0, "Invalid RX CQE tag");
+	validate_rx_event(&rx_cqe, NULL, send_len, FI_TAGGED | FI_RECV, NULL,
+			  0, 0);
 	cr_assert(from == 3, "Invalid source address");
 
 	/* Wait for async event indicating data has been sent */
@@ -425,14 +367,7 @@ void directed_recv(bool logical)
 	} while (ret == -FI_EAGAIN);
 	cr_assert(ret == 1);
 
-	/* Validate TX event fields */
-	cr_assert(tx_cqe.op_context == NULL, "TX CQE Context mismatch");
-	cr_assert(tx_cqe.flags == (FI_TAGGED | FI_SEND),
-		  "TX CQE flags mismatch");
-	cr_assert(tx_cqe.len == 0, "Invalid TX CQE length");
-	cr_assert(tx_cqe.buf == 0, "Invalid TX CQE address");
-	cr_assert(tx_cqe.data == 0, "Invalid TX CQE data");
-	cr_assert(tx_cqe.tag == 0, "Invalid TX CQE tag");
+	validate_tx_event(&tx_cqe, FI_TAGGED | FI_SEND, NULL);
 
 	/* Validate sent data */
 	for (i = 0; i < send_len; i++) {
@@ -453,14 +388,12 @@ void directed_recv(bool logical)
 	//cxit_teardown_tagged();
 }
 
-TestSuite(tagged_noinit, .timeout = CXIT_DEFAULT_TIMEOUT);
-
-Test(tagged_noinit, directed)
+Test(tagged, directed, .init = NULL)
 {
 	directed_recv(false);
 }
 
-Test(tagged_noinit, directed_logical)
+Test(tagged, directed_logical, .init = NULL)
 {
 	directed_recv(true);
 }
@@ -589,27 +522,9 @@ Test(tagged, ux_sw_rdzv)
 
 	/* Validate sent data */
 	cr_expect_arr_eq(recv_buf, send_buf, recv_len);
-
-	/* Validate TX event fields */
-	cr_assert_null(tx_cqe.op_context, "TX CQE Context mismatch");
-	cr_assert_null(tx_cqe.buf, "Invalid TX CQE address %p", tx_cqe.buf);
-	cr_assert_eq(tx_cqe.flags, (FI_TAGGED | FI_SEND),
-		     "TX CQE flags mismatch %lx", tx_cqe.flags);
-	cr_assert_eq(tx_cqe.len, 0, "Invalid TX CQE length %lx", tx_cqe.len);
-	cr_assert_eq(tx_cqe.data, 0, "Invalid TX CQE data %lx", tx_cqe.data);
-	cr_assert_eq(tx_cqe.tag, 0, "Invalid TX CQE tag %lx",
-		     tx_cqe.tag);
-
-	/* Validate RX event fields */
-	cr_assert_null(rx_cqe.op_context, "RX CQE Context mismatch");
-	cr_assert_null(rx_cqe.buf, "Invalid RX CQE address %p", rx_cqe.buf);
-	cr_assert_eq(rx_cqe.flags, (FI_TAGGED | FI_RECV),
-		    "RX CQE flags mismatch %lx", rx_cqe.flags);
-	cr_assert_eq(rx_cqe.len, recv_len, "Invalid RX CQE length %lx",
-		     rx_cqe.len);
-	cr_assert_eq(rx_cqe.data, 0, "Invalid RX CQE data %lx", rx_cqe.data);
-	cr_assert_eq(rx_cqe.tag, args[0].tag, "Invalid RX CQE tag %lx",
-		     rx_cqe.tag);
+	validate_tx_event(&tx_cqe, FI_TAGGED | FI_SEND, NULL);
+	validate_rx_event(&rx_cqe, NULL, recv_len, FI_TAGGED | FI_RECV, NULL,
+			  0, args[0].tag);
 	cr_assert_eq(args[1].src_addr, cxit_ep_fi_addr,
 		     "Invalid source address");
 
@@ -680,27 +595,9 @@ Test(tagged, expected_sw_rdzv)
 
 	/* Validate sent data */
 	cr_expect_arr_eq(recv_buf, send_buf, recv_len);
-
-	/* Validate TX event fields */
-	cr_assert_null(tx_cqe.op_context, "TX CQE Context mismatch");
-	cr_assert_null(tx_cqe.buf, "Invalid TX CQE address %p", tx_cqe.buf);
-	cr_assert_eq(tx_cqe.flags, (FI_TAGGED | FI_SEND),
-		     "TX CQE flags mismatch %lx", tx_cqe.flags);
-	cr_assert_eq(tx_cqe.len, 0, "Invalid TX CQE length %lx", tx_cqe.len);
-	cr_assert_eq(tx_cqe.data, 0, "Invalid TX CQE data %lx", tx_cqe.data);
-	cr_assert_eq(tx_cqe.tag, 0, "Invalid TX CQE tag %lx",
-		     tx_cqe.tag);
-
-	/* Validate RX event fields */
-	cr_assert_null(rx_cqe.op_context, "RX CQE Context mismatch");
-	cr_assert_null(rx_cqe.buf, "Invalid RX CQE address %p", rx_cqe.buf);
-	cr_assert_eq(rx_cqe.flags, (FI_TAGGED | FI_RECV),
-		    "RX CQE flags mismatch %lx", rx_cqe.flags);
-	cr_assert_eq(rx_cqe.len, recv_len, "Invalid RX CQE length %lx",
-		     rx_cqe.len);
-	cr_assert_eq(rx_cqe.data, 0, "Invalid RX CQE data %lx", rx_cqe.data);
-	cr_assert_eq(rx_cqe.tag, args[0].tag, "Invalid RX CQE tag %lx",
-		     rx_cqe.tag);
+	validate_tx_event(&tx_cqe, FI_TAGGED | FI_SEND, NULL);
+	validate_rx_event(&rx_cqe, NULL, recv_len, FI_TAGGED | FI_RECV, NULL,
+			  0, args[0].tag);
 	cr_assert_eq(args[1].src_addr, cxit_ep_fi_addr,
 		     "Invalid source address");
 
@@ -802,7 +699,7 @@ Test(tagged, multitudes_sw_rdzv)
 	/* Issue the Sends */
 	for (size_t tx_io = 0; tx_io < NUM_IOS; tx_io++) {
 		tx_args[tx_io].len = buf_len;
-		tx_args[tx_io].tag = RDZV_TAG + tx_io;
+		tx_args[tx_io].tag = tx_io;
 		tx_args[tx_io].buf = aligned_alloc(C_PAGE_SIZE, buf_len);
 		cr_assert_not_null(tx_args[tx_io].buf);
 		for (size_t i = 0; i < buf_len; i++)
@@ -825,7 +722,7 @@ Test(tagged, multitudes_sw_rdzv)
 	/* Issue the Receives */
 	for (size_t rx_io = 0; rx_io < NUM_IOS; rx_io++) {
 		rx_args[rx_io].len = buf_len;
-		rx_args[rx_io].tag = RDZV_TAG + rx_io;
+		rx_args[rx_io].tag = rx_io;
 		rx_args[rx_io].buf = aligned_alloc(C_PAGE_SIZE, buf_len);
 		cr_assert_not_null(rx_args[rx_io].buf);
 		memset(rx_args[rx_io].buf, 0, buf_len);
@@ -853,41 +750,10 @@ Test(tagged, multitudes_sw_rdzv)
 	for (size_t io = 0; io < NUM_IOS; io++) {
 		/* Validate sent data */
 		cr_expect_arr_eq(rx_args[io].buf, tx_args[io].buf, buf_len);
-
-		/* Validate TX event fields */
-		cr_expect_null(tx_cqe[io].op_context,
-			       "TX CQE %ld Context mismatch", io);
-		cr_expect_null(tx_cqe[io].buf, "Invalid TX CQE %ld address %p",
-			      io, tx_cqe[io].buf);
-		cr_expect_eq(tx_cqe[io].flags, (FI_TAGGED | FI_SEND),
-			     "TX CQE %ld flags mismatch %lx", io,
-			     tx_cqe[io].flags);
-		cr_expect_eq(tx_cqe[io].len, 0, "Invalid TX CQE %ld length %lx",
-			     io, buf_len);
-		cr_expect_eq(tx_cqe[io].data, 0, "Invalid TX CQE %ld data %lx",
-			     io, tx_cqe[io].data);
-		cr_expect_eq(tx_cqe[io].tag, 0, "Invalid TX CQE %ld tag %lx",
-			     io, tx_cqe[io].tag);
-
-		/* Validate RX event fields */
-		cr_expect_null(rx_cqe[io].op_context,
-			       "RX CQE %ld Context mismatch", io);
-		cr_expect_null(rx_cqe[io].buf, "Invalid RX CQE %ld address %p",
-			       io, rx_cqe[io].buf);
-		cr_expect_eq(rx_cqe[io].flags, (FI_TAGGED | FI_RECV),
-			     "RX CQE %ld flags mismatch %lx", io,
-			     rx_cqe[io].flags);
-		cr_expect_eq(rx_cqe[io].len, buf_len,
-			     "Invalid RX CQE %ld length %lx", io,
-			     rx_cqe[io].len);
-		cr_expect_eq(rx_cqe[io].data, 0, "Invalid RX CQE %ld data %lx",
-			     io, rx_cqe[io].data);
-#if 0
-		/* Tags are broken */
-		cr_expect_eq(rx_cqe[io].tag, tx_args[io].tag,
-			     "Invalid RX CQE %ld tag %lx",
-			     io, rx_cqe[io].tag);
-#endif
+		validate_tx_event(&tx_cqe[io], FI_TAGGED | FI_SEND, NULL);
+		validate_rx_event(&rx_cqe[io], NULL, buf_len,
+				  FI_TAGGED | FI_RECV, NULL,
+				  0, tx_args[rx_cqe[io].tag].tag);
 
 		free(tx_args[io].buf);
 		free(rx_args[io].buf);
@@ -981,7 +847,7 @@ ParameterizedTest(struct multitudes_params *param, tagged, multitudes)
 	/* Issue the Sends */
 	for (size_t tx_io = 0; tx_io < param->num_ios; tx_io++) {
 		tx_args[tx_io].len = buf_len;
-		tx_args[tx_io].tag = RDZV_TAG + tx_io;
+		tx_args[tx_io].tag = tx_io;
 		tx_args[tx_io].buf = aligned_alloc(C_PAGE_SIZE, buf_len);
 		cr_assert_not_null(tx_args[tx_io].buf);
 		for (size_t i = 0; i < buf_len; i++)
@@ -1004,7 +870,7 @@ ParameterizedTest(struct multitudes_params *param, tagged, multitudes)
 	/* Issue the Receives */
 	for (size_t rx_io = 0; rx_io < param->num_ios; rx_io++) {
 		rx_args[rx_io].len = buf_len;
-		rx_args[rx_io].tag = RDZV_TAG + rx_io;
+		rx_args[rx_io].tag = rx_io;
 		rx_args[rx_io].buf = aligned_alloc(C_PAGE_SIZE, buf_len);
 		cr_assert_not_null(rx_args[rx_io].buf);
 		memset(rx_args[rx_io].buf, 0, buf_len);
@@ -1033,40 +899,11 @@ ParameterizedTest(struct multitudes_params *param, tagged, multitudes)
 		/* Validate sent data */
 		cr_expect_arr_eq(rx_args[io].buf, tx_args[io].buf, buf_len);
 
-		/* Validate TX event fields */
-		cr_expect_null(tx_cqe[io].op_context,
-			       "TX CQE %ld Context mismatch", io);
-		cr_expect_null(tx_cqe[io].buf, "Invalid TX CQE %ld address %p",
-			      io, tx_cqe[io].buf);
-		cr_expect_eq(tx_cqe[io].flags, (FI_TAGGED | FI_SEND),
-			     "TX CQE %ld flags mismatch %lx", io,
-			     tx_cqe[io].flags);
-		cr_expect_eq(tx_cqe[io].len, 0, "Invalid TX CQE %ld length %lx",
-			     io, buf_len);
-		cr_expect_eq(tx_cqe[io].data, 0, "Invalid TX CQE %ld data %lx",
-			     io, tx_cqe[io].data);
-		cr_expect_eq(tx_cqe[io].tag, 0, "Invalid TX CQE %ld tag %lx",
-			     io, tx_cqe[io].tag);
+		validate_tx_event(&tx_cqe[io], FI_TAGGED | FI_SEND, NULL);
 
-		/* Validate RX event fields */
-		cr_expect_null(rx_cqe[io].op_context,
-			       "RX CQE %ld Context mismatch", io);
-		cr_expect_null(rx_cqe[io].buf, "Invalid RX CQE %ld address %p",
-			       io, rx_cqe[io].buf);
-		cr_expect_eq(rx_cqe[io].flags, (FI_TAGGED | FI_RECV),
-			     "RX CQE %ld flags mismatch %lx", io,
-			     rx_cqe[io].flags);
-		cr_expect_eq(rx_cqe[io].len, buf_len,
-			     "Invalid RX CQE %ld length %lx", io,
-			     rx_cqe[io].len);
-		cr_expect_eq(rx_cqe[io].data, 0, "Invalid RX CQE %ld data %lx",
-			     io, rx_cqe[io].data);
-#if 0
-		/* Tags are broken */
-		cr_expect_eq(rx_cqe[io].tag, tx_args[io].tag,
-			     "Invalid RX CQE %ld tag 0x%lx exp 0x%lx",
-			     io, rx_cqe[io].tag, tx_args[io].tag);
-#endif
+		validate_rx_event(&rx_cqe[io], NULL, buf_len,
+				  FI_TAGGED | FI_RECV, NULL,
+				  0, tx_args[rx_cqe[io].tag].tag);
 
 		free(tx_args[io].buf);
 		free(rx_args[io].buf);
@@ -1211,27 +1048,15 @@ void do_msg(uint8_t *send_buf, size_t send_len, uint64_t send_tag,
 		cr_assert(err_cqe.err_data_size == 0);
 		recved_len = err_cqe.len;
 	} else {
-		/* Validate RX event fields */
-		cr_assert(rx_cqe.op_context == NULL, "RX CQE Context mismatch");
-		cr_assert(rx_cqe.flags ==
-			  ((tagged ? FI_TAGGED : FI_MSG) | FI_RECV),
-			  "RX CQE flags mismatch");
-		cr_assert(rx_cqe.len == send_len, "Invalid RX CQE length");
-		cr_assert(rx_cqe.buf == 0, "Invalid RX CQE address");
-		cr_assert(rx_cqe.data == 0, "Invalid RX CQE data");
-		cr_assert(rx_cqe.tag == send_tag, "Invalid RX CQE tag");
+		validate_rx_event(&rx_cqe, NULL, send_len,
+				  (tagged ? FI_TAGGED : FI_MSG) | FI_RECV,
+				  NULL, 0, send_tag);
 		cr_assert(from == cxit_ep_fi_addr, "Invalid source address");
 		recved_len = rx_cqe.len;
 	}
 
-	/* Validate TX event fields */
-	cr_assert(tx_cqe.op_context == NULL, "TX CQE Context mismatch");
-	cr_assert(tx_cqe.flags == ((tagged ? FI_TAGGED : FI_MSG) | FI_SEND),
-		  "TX CQE flags mismatch");
-	cr_assert(tx_cqe.len == 0, "Invalid TX CQE length");
-	cr_assert(tx_cqe.buf == 0, "Invalid TX CQE address");
-	cr_assert(tx_cqe.data == 0, "Invalid TX CQE data");
-	cr_assert(tx_cqe.tag == 0, "Invalid TX CQE tag");
+	validate_tx_event(&tx_cqe, (tagged ? FI_TAGGED : FI_MSG) | FI_SEND,
+			  NULL);
 
 	/* Validate sent data */
 	for (i = 0; i < buf_size; i++) {
@@ -1588,14 +1413,7 @@ Test(tagged, ux_cleanup)
 		cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
 	}
 
-	/* Validate TX event fields */
-	cr_assert(cqe.op_context == NULL, "TX CQE Context mismatch");
-	cr_assert(cqe.flags == (FI_TAGGED | FI_SEND),
-		  "TX CQE flags mismatch");
-	cr_assert(cqe.len == 0, "Invalid TX CQE length");
-	cr_assert(cqe.buf == 0, "Invalid TX CQE address");
-	cr_assert(cqe.data == 0, "Invalid TX CQE data");
-	cr_assert(cqe.tag == 0, "Invalid TX CQE tag");
+	validate_tx_event(&cqe, FI_TAGGED | FI_SEND, NULL);
 
 	/* Wait for async event indicating data has been received */
 	for (i = 0 ; i < 1000; i++)

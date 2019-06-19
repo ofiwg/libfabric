@@ -325,4 +325,25 @@ int cxit_await_completion(struct fid_cq *cq, struct fi_cq_tagged_entry *cqe)
 	return ret;
 }
 
+void validate_tx_event(struct fi_cq_tagged_entry *cqe, uint64_t flags,
+		       void *context)
+{
+	cr_assert(cqe->op_context == context, "TX CQE Context mismatch");
+	cr_assert(cqe->flags == flags, "TX CQE flags mismatch");
+	cr_assert(cqe->len == 0, "Invalid TX CQE length");
+	cr_assert(cqe->buf == 0, "Invalid TX CQE address");
+	cr_assert(cqe->data == 0, "Invalid TX CQE data");
+	cr_assert(cqe->tag == 0, "Invalid TX CQE tag");
+}
 
+void validate_rx_event(struct fi_cq_tagged_entry *cqe, void *context,
+		       size_t len, uint64_t flags, void *buf, uint64_t data,
+		       uint64_t tag)
+{
+	cr_assert(cqe->op_context == context, "CQE Context mismatch");
+	cr_assert(cqe->len == len, "Invalid CQE length");
+	cr_assert(cqe->flags == flags, "CQE flags mismatch");
+	cr_assert(cqe->buf == buf, "Invalid CQE address");
+	cr_assert(cqe->data == data, "Invalid CQE data");
+	cr_assert(cqe->tag == tag, "Invalid CQE tag");
+}

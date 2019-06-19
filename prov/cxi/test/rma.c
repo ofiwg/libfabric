@@ -47,20 +47,6 @@ static void mr_destroy(struct mem_region *mr)
 	free(mr->mem);
 }
 
-void validate_rma_event(struct fi_cq_tagged_entry *cqe, uint64_t flags,
-			void *context)
-{
-	cr_assert(cqe->op_context == context,
-		  "CQE Context mismatch: %lx != %lx",
-		  cqe->op_context, context);
-	cr_assert(cqe->flags == flags,
-		  "CQE flags mismatch: %lx != %lx", cqe->flags, flags);
-	cr_assert(cqe->len == 0, "Invalid CQE length");
-	cr_assert(cqe->buf == 0, "Invalid CQE address");
-	cr_assert(cqe->data == 0, "Invalid CQE data");
-	cr_assert(cqe->tag == 0, "Invalid CQE tag");
-}
-
 TestSuite(rma, .init = cxit_setup_rma, .fini = cxit_teardown_rma,
 	  .timeout = CXIT_DEFAULT_TIMEOUT);
 
@@ -89,7 +75,7 @@ Test(rma, simple_write)
 		ret = cxit_await_completion(cxit_tx_cq, &cqe);
 		cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
 
-		validate_rma_event(&cqe, FI_RMA | FI_WRITE, NULL);
+		validate_tx_event(&cqe, FI_RMA | FI_WRITE, NULL);
 
 		/* Validate sent data */
 		for (int i = 0; i < send_len; i++)
@@ -131,7 +117,7 @@ Test(rma, simple_writev)
 	ret = cxit_await_completion(cxit_tx_cq, &cqe);
 	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
 
-	validate_rma_event(&cqe, FI_RMA | FI_WRITE, NULL);
+	validate_tx_event(&cqe, FI_RMA | FI_WRITE, NULL);
 
 	/* Validate sent data */
 	for (int i = 0; i < send_len; i++)
@@ -186,7 +172,7 @@ Test(rma, simple_writemsg)
 	ret = cxit_await_completion(cxit_tx_cq, &cqe);
 	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
 
-	validate_rma_event(&cqe, FI_RMA | FI_WRITE, NULL);
+	validate_tx_event(&cqe, FI_RMA | FI_WRITE, NULL);
 
 	/* Validate sent data */
 	for (int i = 0; i < send_len; i++)
@@ -241,7 +227,7 @@ Test(rma, simple_writemsg_inject)
 	ret = cxit_await_completion(cxit_tx_cq, &cqe);
 	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
 
-	validate_rma_event(&cqe, FI_RMA | FI_WRITE, NULL);
+	validate_tx_event(&cqe, FI_RMA | FI_WRITE, NULL);
 
 	/* Validate sent data */
 	for (int i = 0; i < send_len; i++)
@@ -318,7 +304,7 @@ Test(rma, simple_read)
 	ret = cxit_await_completion(cxit_tx_cq, &cqe);
 	cr_assert_eq(ret, 1, "fi_cq_read() failed (%d)", ret);
 
-	validate_rma_event(&cqe, FI_RMA | FI_READ, NULL);
+	validate_tx_event(&cqe, FI_RMA | FI_READ, NULL);
 
 	/* Validate sent data */
 	for (int i = 0; i < local_len; i++)
@@ -359,7 +345,7 @@ Test(rma, simple_readv)
 	ret = cxit_await_completion(cxit_tx_cq, &cqe);
 	cr_assert_eq(ret, 1, "fi_cq_read() failed (%d)", ret);
 
-	validate_rma_event(&cqe, FI_RMA | FI_READ, NULL);
+	validate_tx_event(&cqe, FI_RMA | FI_READ, NULL);
 
 	/* Validate sent data */
 	for (int i = 0; i < local_len; i++)
@@ -412,7 +398,7 @@ Test(rma, simple_readmsg)
 	ret = cxit_await_completion(cxit_tx_cq, &cqe);
 	cr_assert_eq(ret, 1, "fi_cq_read() failed (%d)", ret);
 
-	validate_rma_event(&cqe, FI_RMA | FI_READ, NULL);
+	validate_tx_event(&cqe, FI_RMA | FI_READ, NULL);
 
 	/* Validate sent data */
 	for (int i = 0; i < local_len; i++)
@@ -560,7 +546,7 @@ Test(rma, write_spanning_page)
 	ret = cxit_await_completion(cxit_tx_cq, &cqe);
 	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
 
-	validate_rma_event(&cqe, FI_RMA | FI_WRITE, NULL);
+	validate_tx_event(&cqe, FI_RMA | FI_WRITE, NULL);
 
 	/* Validate sent data */
 	for (int i = 0; i < send_len; i++)
@@ -651,7 +637,7 @@ Test(rma, selective_completion, .init = cxit_setup_rma_selective_completion)
 		ret = cxit_await_completion(cxit_tx_cq, &cqe);
 		cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
 
-		validate_rma_event(&cqe, FI_RMA | FI_WRITE, NULL);
+		validate_tx_event(&cqe, FI_RMA | FI_WRITE, NULL);
 
 		/* Validate sent data */
 		for (int i = 0; i < send_len; i++)
@@ -670,7 +656,7 @@ Test(rma, selective_completion, .init = cxit_setup_rma_selective_completion)
 		ret = cxit_await_completion(cxit_tx_cq, &cqe);
 		cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
 
-		validate_rma_event(&cqe, FI_RMA | FI_WRITE, NULL);
+		validate_tx_event(&cqe, FI_RMA | FI_WRITE, NULL);
 
 		/* Validate sent data */
 		for (int i = 0; i < send_len; i++)
@@ -779,7 +765,7 @@ Test(rma, selective_completion_suppress,
 		ret = cxit_await_completion(cxit_tx_cq, &cqe);
 		cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
 
-		validate_rma_event(&cqe, FI_RMA | FI_WRITE, NULL);
+		validate_tx_event(&cqe, FI_RMA | FI_WRITE, NULL);
 
 		/* Validate sent data */
 		for (int i = 0; i < send_len; i++)

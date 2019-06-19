@@ -66,5 +66,10 @@ void cxit_teardown_rma(void);
 #define cxit_teardown_tagged cxit_teardown_rma
 #define cxit_teardown_msg cxit_teardown_rma
 int cxit_await_completion(struct fid_cq *cq, struct fi_cq_tagged_entry *cqe);
+void validate_tx_event(struct fi_cq_tagged_entry *cqe, uint64_t flags,
+		       void *context);
+void validate_rx_event(struct fi_cq_tagged_entry *cqe, void *context,
+		       size_t len, uint64_t flags, void *buf, uint64_t data,
+		       uint64_t tag);
 
 #endif
