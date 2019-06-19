@@ -37,9 +37,13 @@
 #define RXD_TX_CAPS (FI_SEND | FI_WRITE | FI_READ)
 #define RXD_RX_CAPS (FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE)
 #define RXD_DOMAIN_CAPS (FI_LOCAL_COMM | FI_REMOTE_COMM)
+#define RXD_TX_OP_FLAGS (FI_INJECT | FI_INJECT_COMPLETE | FI_COMPLETION	|   \
+			 FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)
+#define RXD_RX_OP_FLAGS (FI_MULTI_RECV | FI_COMPLETION)
 
 struct fi_tx_attr rxd_tx_attr = {
 	.caps = RXD_EP_CAPS | RXD_TX_CAPS,
+	.op_flags = RXD_TX_OP_FLAGS,
 	.comp_order = FI_ORDER_NONE,
 	.msg_order = FI_ORDER_SAS,
 	.inject_size = RXD_MAX_MTU_SIZE - sizeof(struct rxd_base_hdr),
@@ -50,6 +54,7 @@ struct fi_tx_attr rxd_tx_attr = {
 
 struct fi_rx_attr rxd_rx_attr = {
 	.caps = RXD_EP_CAPS | RXD_RX_CAPS,
+	.op_flags = RXD_RX_OP_FLAGS,
 	.comp_order = FI_ORDER_NONE,
 	.msg_order = FI_ORDER_SAS,
 	.total_buffered_recv = 0,

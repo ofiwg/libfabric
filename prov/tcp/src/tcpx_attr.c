@@ -44,9 +44,15 @@
 			OFI_ORDER_WAW_SET | FI_ORDER_WAS | \
 			FI_ORDER_SAW | FI_ORDER_SAS)
 
+#define TCPX_TX_OP_FLAGS \
+	(FI_INJECT | FI_INJECT_COMPLETE | FI_TRANSMIT_COMPLETE | \
+	 FI_DELIVERY_COMPLETE | FI_COMMIT_COMPLETE | FI_COMPLETION)
+
+#define TCPX_RX_OP_FLAGS (FI_MULTI_RECV | FI_COMPLETION)
 
 static struct fi_tx_attr tcpx_tx_attr = {
 	.caps = TCPX_EP_CAPS | TCPX_TX_CAPS,
+	.op_flags = TCPX_TX_OP_FLAGS,
 	.comp_order = FI_ORDER_STRICT,
 	.msg_order = TCPX_MSG_ORDER,
 	.inject_size = 64,
@@ -57,6 +63,7 @@ static struct fi_tx_attr tcpx_tx_attr = {
 
 static struct fi_rx_attr tcpx_rx_attr = {
 	.caps = TCPX_EP_CAPS | TCPX_RX_CAPS,
+	.op_flags = TCPX_RX_OP_FLAGS,
 	.comp_order = FI_ORDER_STRICT,
 	.msg_order = TCPX_MSG_ORDER,
 	.total_buffered_recv = 0,

@@ -109,10 +109,14 @@ int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 			core_info->domain_attr->threading = hints->domain_attr->threading;
 		}
 		if (hints->tx_attr) {
+			core_info->tx_attr->op_flags =
+				hints->tx_attr->op_flags & RXM_PASSTHRU_TX_OP_FLAGS;
 			core_info->tx_attr->msg_order = hints->tx_attr->msg_order;
 			core_info->tx_attr->comp_order = hints->tx_attr->comp_order;
 		}
 		if (hints->rx_attr) {
+			core_info->rx_attr->op_flags =
+				hints->rx_attr->op_flags & RXM_PASSTHRU_RX_OP_FLAGS;
 			core_info->rx_attr->msg_order = hints->rx_attr->msg_order;
 			core_info->rx_attr->comp_order = hints->rx_attr->comp_order;
 		}
@@ -124,7 +128,10 @@ int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 		core_info->ep_attr->rx_ctx_cnt = FI_SHARED_CONTEXT;
 	}
 
+	core_info->tx_attr->op_flags &= ~RXM_TX_OP_FLAGS;
 	core_info->tx_attr->size = rxm_msg_tx_size;
+
+	core_info->rx_attr->op_flags &= ~FI_MULTI_RECV;
 	core_info->rx_attr->size = rxm_msg_rx_size;
 
 	return 0;

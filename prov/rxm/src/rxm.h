@@ -76,6 +76,15 @@ extern size_t rxm_eager_limit;
 #define RXM_IOV_LIMIT 4
 
 #define RXM_MR_MODES	(OFI_MR_BASIC_MAP | FI_MR_LOCAL)
+
+#define RXM_PASSTHRU_TX_OP_FLAGS (FI_TRANSMIT_COMPLETE)
+
+#define RXM_PASSTHRU_RX_OP_FLAGS 0ULL
+
+#define RXM_TX_OP_FLAGS (FI_INJECT | FI_INJECT_COMPLETE | \
+			 FI_DELIVERY_COMPLETE | FI_COMPLETION)
+#define RXM_RX_OP_FLAGS (FI_MULTI_RECV | FI_COMPLETION)
+
 #define RXM_MR_VIRT_ADDR(info) ((info->domain_attr->mr_mode == FI_MR_BASIC) ||\
 				info->domain_attr->mr_mode & FI_MR_VIRT_ADDR)
 

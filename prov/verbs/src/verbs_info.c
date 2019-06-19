@@ -51,8 +51,8 @@
 
 #define VERBS_DGRAM_RX_MODE (FI_MSG_PREFIX)
 
-#define VERBS_TX_OP_FLAGS (FI_INJECT | FI_COMPLETION | FI_TRANSMIT_COMPLETE)
-#define VERBS_TX_OP_FLAGS_IWARP (FI_INJECT | FI_COMPLETION)
+#define VERBS_TX_OP_FLAGS_IWARP (FI_INJECT | FI_INJECT_COMPLETE | FI_COMPLETION)
+#define VERBS_TX_OP_FLAGS (VERBS_TX_OP_FLAGS_IWARP | FI_TRANSMIT_COMPLETE)
 
 #define VERBS_RX_MODE (FI_RX_CQ_DATA)
 
@@ -100,6 +100,7 @@ const struct fi_ep_attr verbs_ep_attr = {
 
 const struct fi_rx_attr verbs_rx_attr = {
 	.mode			= VERBS_RX_MODE,
+	.op_flags		= FI_COMPLETION,
 	.msg_order		= VERBS_MSG_ORDER,
 	.comp_order		= FI_ORDER_STRICT | FI_ORDER_DATA,
 	.total_buffered_recv	= 0,
@@ -107,6 +108,7 @@ const struct fi_rx_attr verbs_rx_attr = {
 
 const struct fi_rx_attr verbs_dgram_rx_attr = {
 	.mode			= VERBS_DGRAM_RX_MODE | VERBS_RX_MODE,
+	.op_flags		= FI_COMPLETION,
 	.msg_order		= VERBS_MSG_ORDER,
 	.comp_order		= FI_ORDER_STRICT | FI_ORDER_DATA,
 	.total_buffered_recv	= 0,
