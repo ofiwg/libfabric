@@ -644,11 +644,10 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq,
 		if (priv_datalen) {
 			cm_hdr = priv_data;
 			eq->err.err_data = calloc(1, cm_hdr->size);
-			if (OFI_LIKELY(eq->err.err_data != NULL)) {
-				memcpy(eq->err.err_data, cm_hdr->data,
-				       cm_hdr->size);
-				eq->err.err_data_size = cm_hdr->size;
-			}
+			assert(eq->err.err_data);
+			memcpy(eq->err.err_data, cm_hdr->data,
+			       cm_hdr->size);
+			eq->err.err_data_size = cm_hdr->size;
 		}
 		goto err;
 	case RDMA_CM_EVENT_DEVICE_REMOVAL:
@@ -859,6 +858,8 @@ static int fi_ibv_eq_close(fid_t fid)
 
 	eq = container_of(fid, struct fi_ibv_eq, eq_fid.fid);
 	/* TODO: use util code, if possible, and add ref counting */
+
+	free(eq->err.err_data);
 
 	if (eq->channel)
 		rdma_destroy_event_channel(eq->channel);
