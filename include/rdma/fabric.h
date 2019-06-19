@@ -552,7 +552,7 @@ struct fid_nic {
 };
 
 #define FI_CHECK_OP(ops, opstype, op) \
-	((ops->size > offsetof(opstype, op)) && ops->op)
+	(ops && (ops->size > offsetof(opstype, op)) && ops->op)
 
 static inline int fi_close(struct fid *fid)
 {
