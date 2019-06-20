@@ -370,7 +370,6 @@ struct fi_ibv_cq {
 	int			signal_fd[2];
 	fi_ibv_cq_read_entry	read_entry;
 	struct slist		wcq;
-	fi_ibv_trywait_func	trywait;
 	ofi_atomic32_t		nevents;
 	struct ofi_bufpool	*wce_pool;
 
@@ -387,6 +386,7 @@ struct fi_ibv_cq {
 
 int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		   struct fid_cq **cq, void *context);
+int fi_ibv_cq_trywait(struct fi_ibv_cq *cq);
 
 struct fi_ibv_mem_desc {
 	struct fid_mr		mr_fid;
