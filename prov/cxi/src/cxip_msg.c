@@ -217,7 +217,8 @@ static fi_addr_t _rxc_event_src_addr(struct cxip_rxc *rxc,
 		uint32_t nic;
 		uint32_t pid;
 
-		if (rxc->ep_obj->av->attr.flags & FI_SYMMETRIC)
+		if (!rxc->ep_obj->rdzv_offload &&
+		    rxc->ep_obj->av->attr.flags & FI_SYMMETRIC)
 			return CXI_MATCH_ID_EP(pid_bits, process);
 
 		nic = CXI_MATCH_ID_EP(pid_bits, process);
@@ -1451,9 +1452,9 @@ static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	pid_bits = dom->dev_if->if_dev->info.pid_bits;
 	if (rxc->attr.caps & FI_DIRECTED_RECV &&
 	    src_addr != FI_ADDR_UNSPEC) {
-		if (rxc->ep_obj->av->attr.flags & FI_SYMMETRIC) {
-			/* TODO switch to C_PID_ANY */
-			match_id = CXI_MATCH_ID(pid_bits, 0x1ff, src_addr);
+		if (!rxc->ep_obj->rdzv_offload &&
+		    rxc->ep_obj->av->attr.flags & FI_SYMMETRIC) {
+			match_id = CXI_MATCH_ID(pid_bits, C_PID_ANY, src_addr);
 		} else {
 			ret = _cxip_av_lookup(rxc->ep_obj->av, src_addr,
 					      &caddr);
@@ -1466,8 +1467,7 @@ static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 			match_id = CXI_MATCH_ID(pid_bits, caddr.pid, caddr.nic);
 		}
 	} else {
-		/* TODO switch to C_PID_ANY */
-		match_id = CXI_MATCH_ID(pid_bits, 0x1ff, C_NID_ANY);
+		match_id = CXI_MATCH_ID(pid_bits, C_PID_ANY, C_NID_ANY);
 	}
 
 	/* Map local buffer */
@@ -1540,19 +1540,136 @@ recv_unmap:
 }
 
 /*
+ * cxip_txc_fi_addr() - Return the FI address of the TXC.
+ */
+static fi_addr_t _txc_fi_addr(struct cxip_txc *txc)
+{
+	if (txc->ep_obj->fi_addr == FI_ADDR_NOTAVAIL) {
+		txc->ep_obj->fi_addr =
+				_cxip_av_reverse_lookup(
+						txc->ep_obj->av,
+						txc->ep_obj->src_addr.nic,
+						txc->ep_obj->src_addr.pid);
+		CXIP_LOG_DBG("Found EP FI Addr: %lu\n", txc->ep_obj->fi_addr);
+	}
+
+	return txc->ep_obj->fi_addr;
+}
+
+/*
+ * cxip_msg_match_id() - Return the TXC's initiator address used to transmit a
+ * message.
+ *
+ * By default, the physical address of the TXC is returned. This address is
+ * sent along with message data and is used for source address matching at the
+ * target. When the target receives a message, the physical ID is translated to
+ * a logical FI address. Translation adds overhead to the receive path.
+ *
+ * As an optimization, if rendezvous offload is not being used and the process
+ * is part of a job with symmetric AVs, a logical FI address is returned. This
+ * way, there is no source address translation overhead involved in the
+ * receive.
+ */
+static uint32_t cxip_msg_match_id(struct cxip_txc *txc)
+{
+	int pid_bits = txc->domain->dev_if->if_dev->info.pid_bits;
+
+	if (!txc->ep_obj->rdzv_offload &&
+	    txc->ep_obj->av->attr.flags & FI_SYMMETRIC)
+		return CXI_MATCH_ID(pid_bits, txc->ep_obj->src_addr.pid,
+				    _txc_fi_addr(txc));
+
+	return CXI_MATCH_ID(pid_bits, txc->ep_obj->src_addr.pid,
+			    txc->ep_obj->src_addr.nic);
+}
+
+/*
+ * cxip_inject_cb() - Message inject event callback.
+ */
+static int cxip_inject_cb(struct cxip_req *req, const union c_event *event)
+{
+	return cxip_cq_req_error(req, 0, FI_EIO, cxi_event_rc(event), NULL, 0);
+}
+
+/*
+ * cxip_inject_req() - Return request state associated with all inject
+ * transactions on the transmit context.
+ *
+ * The request is freed when the TXC send CQ is closed.
+ */
+static struct cxip_req *cxip_inject_req(struct cxip_txc *txc)
+{
+	if (!txc->inject_req) {
+		struct cxip_req *req;
+
+		req = cxip_cq_req_alloc(txc->comp.send_cq, 0, txc);
+		if (!req)
+			return NULL;
+
+		req->cb = cxip_inject_cb;
+		req->context = (uint64_t)txc->fid.ctx.fid.context;
+		req->flags = FI_MSG | FI_SEND;
+		req->data_len = 0;
+		req->buf = 0;
+		req->data = 0;
+		req->tag = 0;
+		req->addr = FI_ADDR_UNSPEC;
+
+		txc->inject_req = req;
+	}
+
+	return txc->inject_req;
+}
+
+/*
+ * cxip_tinject_req() - Return request state associated with all tagged inject
+ * transactions on the transmit context.
+ *
+ * The request is freed when the TXC send CQ is closed.
+ */
+static struct cxip_req *cxip_tinject_req(struct cxip_txc *txc)
+{
+	if (!txc->tinject_req) {
+		struct cxip_req *req;
+
+		req = cxip_cq_req_alloc(txc->comp.send_cq, 0, txc);
+		if (!req)
+			return NULL;
+
+		req->cb = cxip_inject_cb;
+		req->context = (uint64_t)txc->fid.ctx.fid.context;
+		req->flags = FI_TAGGED | FI_SEND;
+		req->data_len = 0;
+		req->buf = 0;
+		req->data = 0;
+		req->tag = 0;
+		req->addr = FI_ADDR_UNSPEC;
+
+		txc->tinject_req = req;
+	}
+
+	return txc->tinject_req;
+}
+
+/*
  * report_send_completion() - Report the completion of a send operation.
  */
 static void report_send_completion(struct cxip_req *req)
 {
 	int ret;
+	int success_event = (req->flags & FI_COMPLETION);
+
+	req->flags &= (FI_MSG | FI_TAGGED | FI_SEND);
 
 	if (req->send.rc == C_RC_OK) {
 		CXIP_LOG_DBG("Request success: %p\n", req);
 
-		ret = cxip_cq_req_complete(req);
-		if (ret != FI_SUCCESS)
-			CXIP_LOG_ERROR("Failed to report completion: %d\n",
-				       ret);
+		if (success_event) {
+			ret = cxip_cq_req_complete(req);
+			if (ret != FI_SUCCESS)
+				CXIP_LOG_ERROR("Failed to report completion: %d\n",
+					       ret);
+		}
 	} else {
 		CXIP_LOG_DBG("Request error: %p (err: %d, %d)\n", req, FI_EIO,
 			     req->send.rc);
@@ -1568,12 +1685,7 @@ static void report_send_completion(struct cxip_req *req)
  */
 static void rdzv_send_req_free(struct cxip_req *req)
 {
-	fastlock_acquire(&req->send.txc->lock);
-
 	cxip_rdzv_id_free(req->send.txc->ep_obj, req->send.rdzv_id);
-	CXIP_LOG_DBG("Freed RDZV ID: %d\n", req->send.rdzv_id);
-
-	fastlock_release(&req->send.txc->lock);
 
 	cxip_unmap(req->send.send_md);
 
@@ -1625,7 +1737,7 @@ static int cxip_send_long_cb(struct cxip_req *req, const union c_event *event)
 		fastlock_acquire(&txc->tx_cmdq->lock);
 
 		ret = cxi_cq_emit_dma_f(txc->tx_cmdq->dev_cmdq,
-					&req->send.cmd.full_dma);
+					&req->send.cmd);
 		if (ret) {
 			CXIP_LOG_ERROR("Failed to enqueue Put: %d\n", ret);
 			fastlock_release(&txc->tx_cmdq->lock);
@@ -1759,196 +1871,26 @@ static int cxip_send_long_cb(struct cxip_req *req, const union c_event *event)
  * 3. Once the Put is matched to a user receive buffer (in the Priority list),
  *    a Get of the remaining source data is performed.
  */
-static ssize_t _cxip_send_long(struct cxip_txc *txc, struct cxip_req *req)
+static ssize_t _cxip_send_long(struct cxip_txc *txc, const void *buf,
+			       size_t len, void *desc, fi_addr_t dest_addr,
+			       uint64_t tag, void *context, uint64_t flags,
+			       bool tagged)
 {
-	int ret;
-	int rdzv_id;
-	union cxip_match_bits *put_mb;
-	union cxip_match_bits le_mb = {};
-	union cxip_match_bits le_ib = { .rdzv_id_lo = ~0 }; /* inverted */
-
-	fastlock_acquire(&txc->lock);
-
-	/* Get Rendezvous ID */
-	rdzv_id = cxip_rdzv_id_alloc(txc->ep_obj);
-	if (rdzv_id < 0)
-		goto unlock;
-
-	req->send.rdzv_id = rdzv_id;
-
-	put_mb = (union cxip_match_bits *)&req->send.cmd.full_dma.match_bits;
-	put_mb->rdzv_id_lo = RDZV_ID_LO(rdzv_id);
-	le_mb.rdzv_id_lo = RDZV_ID_LO(rdzv_id);
-
-	/* RDZV ID is split between match bits and 8-bit rendezvous_id field in
-	 * the Put command. The command bits are only supported by hardware
-	 * (not available for software rendezvous).
-	 */
-	if (txc->ep_obj->rdzv_offload) {
-		uint8_t pid = txc->ep_obj->src_addr.pid;
-		uint32_t pid_bits = txc->domain->dev_if->if_dev->info.pid_bits;
-		uint32_t nic_addr = txc->domain->dev_if->if_dev->info.nic_addr;
-
-		req->send.cmd.full_dma.command.opcode = C_CMD_RENDEZVOUS_PUT;
-		req->send.cmd.full_dma.eager_length = txc->eager_threshold;
-		req->send.cmd.full_dma.initiator = CXI_MATCH_ID(pid_bits, pid,
-								nic_addr);
-		req->send.cmd.full_dma.rendezvous_id = RDZV_ID_HI(rdzv_id);
-		le_mb.rdzv_id_hi = RDZV_ID_HI(rdzv_id);
-		le_ib.rdzv_id_hi = ~0;
-	} else {
-		assert(rdzv_id < (1 << RDZV_ID_LO_WIDTH));
-
-		/* Match sink buffer */
-		put_mb->sink = 1;
-	}
-
-	ret = issue_append_le(txc->rdzv_pte->pte, req->send.buf,
-			      req->send.length, req->send.send_md,
-			      C_PTL_LIST_PRIORITY, req->req_id,
-			      le_mb.raw, ~le_ib.raw, CXI_MATCH_ID_ANY, 0,
-			      false, true, false, true, false, true,
-			      txc->rx_cmdq);
-	if (ret) {
-		CXIP_LOG_DBG("Failed append source buffer: %d\n", ret);
-		goto free_id;
-	}
-
-	ofi_atomic_inc32(&txc->otx_reqs);
-
-	fastlock_release(&txc->lock);
-
-	return FI_SUCCESS;
-
-free_id:
-	cxip_rdzv_id_free(txc->ep_obj, rdzv_id);
-unlock:
-	fastlock_release(&txc->lock);
-
-	return FI_EAGAIN;
-}
-
-/*
- * cxip_send_eager_cb() - Eager send callback. Used for both tagged and
- * untagged messages.
- */
-static int cxip_send_eager_cb(struct cxip_req *req,
-			      const union c_event *event)
-{
-	cxip_unmap(req->send.send_md);
-
-	req->send.rc = cxi_init_event_rc(event);
-	report_send_completion(req);
-	ofi_atomic_dec32(&req->send.txc->otx_reqs);
-	cxip_cq_req_free(req);
-
-	return FI_SUCCESS;
-}
-
-/*
- * _cxip_send_eager() - Enqueue eager send command.
- */
-static ssize_t _cxip_send_eager(struct cxip_txc *txc, union c_cmdu *cmd)
-{
-	int ret;
-
-	fastlock_acquire(&txc->tx_cmdq->lock);
-
-	/* Issue Eager Put command */
-	ret = cxi_cq_emit_dma(txc->tx_cmdq->dev_cmdq, &cmd->full_dma);
-	if (ret) {
-		CXIP_LOG_DBG("Failed to write DMA command: %d\n", ret);
-
-		/* Return error according to Domain Resource Mgmt */
-		ret = -FI_EAGAIN;
-		goto unlock;
-	}
-
-	cxi_cq_ring(txc->tx_cmdq->dev_cmdq);
-
-	ofi_atomic_inc32(&txc->otx_reqs);
-
-	fastlock_release(&txc->tx_cmdq->lock);
-
-	return FI_SUCCESS;
-
-unlock:
-	fastlock_release(&txc->tx_cmdq->lock);
-
-	return ret;
-}
-
-/*
- * _txc_fi_addr() - Return the FI address of the TXC.
- */
-static fi_addr_t _txc_fi_addr(struct cxip_txc *txc)
-{
-	if (txc->ep_obj->fi_addr == FI_ADDR_NOTAVAIL) {
-		txc->ep_obj->fi_addr =
-				_cxip_av_reverse_lookup(
-						txc->ep_obj->av,
-						txc->ep_obj->src_addr.nic,
-						txc->ep_obj->src_addr.pid);
-		CXIP_LOG_DBG("Found EP FI Addr: %lu\n", txc->ep_obj->fi_addr);
-	}
-
-	return txc->ep_obj->fi_addr;
-}
-
-/*
- * _cxip_send() - Common message send function. Used for tagged and untagged
- * sends of all sizes.
- */
-static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
-			  void *desc, fi_addr_t dest_addr, uint64_t tag,
-			  void *context, uint64_t flags, bool tagged)
-{
-	struct cxip_ep *cxi_ep;
-	struct cxip_txc *txc;
 	struct cxip_domain *dom;
-	int ret;
 	struct cxip_md *send_md;
 	struct cxip_req *req;
-	union c_cmdu cmd = {};
 	struct cxip_addr caddr;
 	union c_fab_addr dfa;
 	uint8_t idx_ext;
 	uint32_t pid_granule;
 	uint32_t pid_idx;
 	uint64_t rx_id;
-	bool long_send;
-	uint32_t match_id;
-	uint32_t pid_bits;
-	union cxip_match_bits mb = {};
-
-	if (!ep || !buf)
-		return -FI_EINVAL;
-
-	/* The input FID could be a standard endpoint (containing a TX
-	 * context), or a TX context itself.
-	 */
-	switch (ep->fid.fclass) {
-	case FI_CLASS_EP:
-		cxi_ep = container_of(ep, struct cxip_ep, ep);
-		txc = cxi_ep->ep_obj->txcs[0];
-		break;
-
-	case FI_CLASS_TX_CTX:
-		txc = container_of(ep, struct cxip_txc, fid.ctx);
-		break;
-
-	default:
-		CXIP_LOG_ERROR("Invalid EP type\n");
-		return -FI_EINVAL;
-	}
-
-	if (!txc->enabled)
-		return -FI_EOPBADSTATE;
-
-	if (!ofi_send_allowed(txc->attr.caps))
-		return -FI_ENOPROTOOPT;
-
-	long_send = len > txc->eager_threshold ? true : false;
+	struct c_full_dma_cmd cmd = {};
+	union cxip_match_bits put_mb = {};
+	union cxip_match_bits le_mb = {};
+	union cxip_match_bits le_ib = { .rdzv_id_lo = ~0 }; /* inverted */
+	int rdzv_id;
+	int ret;
 
 	dom = txc->domain;
 
@@ -1966,21 +1908,21 @@ static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 		return ret;
 	}
 
-	/* Populate request */
-	req = cxip_cq_req_alloc(txc->comp.send_cq, long_send, txc);
+	/* Allocate and populate request */
+	req = cxip_cq_req_alloc(txc->comp.send_cq, true, txc);
 	if (!req) {
 		CXIP_LOG_DBG("Failed to allocate request\n");
 		ret = -FI_ENOMEM;
-		goto send_unmap;
+		goto err_unmap;
 	}
 
 	req->context = (uint64_t)context;
-	req->flags = FI_SEND;
+	req->flags = FI_SEND | (flags & FI_COMPLETION);
 
 	if (tagged) {
 		req->flags |= FI_TAGGED;
-		mb.tagged = 1;
-		mb.tag = tag;
+		put_mb.tagged = 1;
+		put_mb.tag = tag;
 	} else {
 		req->flags |= FI_MSG;
 	}
@@ -1994,8 +1936,185 @@ static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 	req->send.buf = (void *)buf;
 	req->send.send_md = send_md;
 	req->send.length = len;
+	req->cb = cxip_send_long_cb;
 
 	req->send.long_send_events = 0;
+
+	/* Calculate DFA */
+	rx_id = CXIP_AV_ADDR_RXC(txc->ep_obj->av, dest_addr);
+	pid_granule = dom->dev_if->if_dev->info.pid_granule;
+	pid_idx = CXIP_RXC_TO_IDX(rx_id);
+	cxi_build_dfa(caddr.nic, caddr.pid, pid_granule, pid_idx, &dfa,
+		      &idx_ext);
+
+	/* Allocate rendezvous ID */
+	rdzv_id = cxip_rdzv_id_alloc(txc->ep_obj);
+	if (rdzv_id < 0)
+		goto err_req_free;
+
+	req->send.rdzv_id = rdzv_id;
+	put_mb.rdzv_id_lo = RDZV_ID_LO(rdzv_id);
+	le_mb.rdzv_id_lo = RDZV_ID_LO(rdzv_id);
+
+	/* Build Put command descriptor */
+	cmd.command.cmd_type = C_CMD_TYPE_DMA;
+	cmd.index_ext = idx_ext;
+	cmd.lac = send_md->md->lac;
+	cmd.event_send_disable = 1;
+	cmd.restricted = 0;
+	cmd.dfa = dfa;
+	cmd.remote_offset = 0;
+	cmd.local_addr = CXI_VA_TO_IOVA(send_md->md, buf);
+	cmd.request_len = len;
+	cmd.eq = txc->comp.send_cq->evtq->eqn;
+	cmd.user_ptr = (uint64_t)req;
+	cmd.initiator = cxip_msg_match_id(txc);
+
+	if (txc->ep_obj->rdzv_offload) {
+		cmd.command.opcode = C_CMD_RENDEZVOUS_PUT;
+		cmd.eager_length = txc->eager_threshold;
+
+		/* Use rendezvous ID extension */
+		cmd.rendezvous_id = RDZV_ID_HI(rdzv_id);
+		le_mb.rdzv_id_hi = RDZV_ID_HI(rdzv_id);
+		le_ib.rdzv_id_hi = ~0;
+	} else {
+		cmd.command.opcode = C_CMD_PUT;
+
+		/* Ensure the full rdzv_id fits in match bits */
+		assert(rdzv_id < (1 << RDZV_ID_LO_WIDTH));
+
+		/* Match sink buffer */
+		put_mb.sink = 1;
+	}
+
+	cmd.match_bits = put_mb.raw;
+
+	/* Store DMA command for use once the source data becomes visible */
+	req->send.cmd = cmd;
+
+	ret = issue_append_le(txc->rdzv_pte->pte, req->send.buf,
+			      req->send.length, req->send.send_md,
+			      C_PTL_LIST_PRIORITY, req->req_id,
+			      le_mb.raw, ~le_ib.raw, CXI_MATCH_ID_ANY, 0,
+			      false, true, false, true, false, true,
+			      txc->rx_cmdq);
+	if (ret) {
+		CXIP_LOG_DBG("Failed append source buffer: %d\n", ret);
+		goto err_id_free;
+	}
+
+	ofi_atomic_inc32(&txc->otx_reqs);
+
+	CXIP_LOG_DBG("req: %p buf: %p len: %lu dest_addr: %ld tag(%c): 0x%lx context %p\n",
+		     req, buf, len, dest_addr, tagged ? '*' : '-', tag,
+		     context);
+
+	return FI_SUCCESS;
+
+err_id_free:
+	cxip_rdzv_id_free(txc->ep_obj, rdzv_id);
+err_req_free:
+	cxip_cq_req_free(req);
+err_unmap:
+	cxip_unmap(send_md);
+
+	return FI_EAGAIN;
+}
+
+/*
+ * cxip_send_eager_cb() - Eager send callback. Used for both tagged and
+ * untagged messages.
+ */
+static int cxip_send_eager_cb(struct cxip_req *req,
+			      const union c_event *event)
+{
+	/* IDCs don't have an MD */
+	if (req->send.send_md)
+		cxip_unmap(req->send.send_md);
+
+	req->send.rc = cxi_init_event_rc(event);
+	report_send_completion(req);
+	ofi_atomic_dec32(&req->send.txc->otx_reqs);
+	cxip_cq_req_free(req);
+
+	return FI_SUCCESS;
+}
+
+/*
+ * _cxip_send_eager() - Enqueue eager send command.
+ */
+static ssize_t _cxip_send_eager(struct cxip_txc *txc, const void *buf,
+				size_t len, void *desc, fi_addr_t dest_addr,
+				uint64_t tag, void *context, uint64_t flags,
+				bool tagged)
+{
+	struct cxip_domain *dom;
+	struct cxip_md *send_md = NULL;
+	struct cxip_req *req = NULL;
+	struct cxip_addr caddr;
+	union c_fab_addr dfa;
+	uint8_t idx_ext;
+	uint32_t pid_granule;
+	uint32_t pid_idx;
+	uint64_t rx_id;
+	union cxip_match_bits mb = {};
+	int idc;
+	int ret;
+
+	/* Always use IDCs when the payload fits */
+	idc = (len <= C_MAX_IDC_PAYLOAD_UNR);
+
+	dom = txc->domain;
+
+	/* Look up target CXI address */
+	ret = _cxip_av_lookup(txc->ep_obj->av, dest_addr, &caddr);
+	if (ret != FI_SUCCESS) {
+		CXIP_LOG_DBG("Failed to look up FI addr: %d\n", ret);
+		return ret;
+	}
+
+	/* Map local buffer */
+	if (!idc) {
+		ret = cxip_map(dom, (void *)buf, len, &send_md);
+		if (ret) {
+			CXIP_LOG_DBG("Failed to map send buffer: %d\n", ret);
+			return ret;
+		}
+	}
+
+	/* DMA commands must always be tracked. IDCs must be tracked if the
+	 * user requested a completion event.
+	 */
+	if (!idc || (flags & FI_COMPLETION)) {
+		req = cxip_cq_req_alloc(txc->comp.send_cq, false, txc);
+		if (!req) {
+			CXIP_LOG_DBG("Failed to allocate request\n");
+			ret = -FI_ENOMEM;
+			goto err_unmap;
+		}
+
+		req->context = (uint64_t)context;
+		req->flags = FI_SEND | (flags & FI_COMPLETION);
+
+		if (tagged)
+			req->flags |= FI_TAGGED;
+		else
+			req->flags |= FI_MSG;
+
+		req->data_len = 0;
+		req->buf = 0;
+		req->data = 0;
+		req->tag = 0;
+
+		req->send.txc = txc;
+		req->send.buf = (void *)buf;
+		req->send.send_md = send_md;
+		req->send.length = len;
+		req->cb = cxip_send_eager_cb;
+
+		req->send.long_send_events = 0;
+	}
 
 	/* Build Put command descriptor */
 	rx_id = CXIP_AV_ADDR_RXC(txc->ep_obj->av, dest_addr);
@@ -2004,48 +2123,113 @@ static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 	cxi_build_dfa(caddr.nic, caddr.pid, pid_granule, pid_idx, &dfa,
 		      &idx_ext);
 
-	/* Encode the local EP address in the command for matching. If
-	 * application AVs are symmetric, use my logical FI address for
-	 * matching. Otherwise, use physical address.
-	 */
-	pid_bits = dom->dev_if->if_dev->info.pid_bits;
-	if (txc->ep_obj->av->attr.flags & FI_SYMMETRIC) {
-		match_id = CXI_MATCH_ID(pid_bits, txc->ep_obj->src_addr.pid,
-					_txc_fi_addr(txc));
-	} else {
-		match_id = CXI_MATCH_ID(pid_bits, txc->ep_obj->src_addr.pid,
-					txc->ep_obj->src_addr.nic);
+	/* Build match bits */
+	if (tagged) {
+		mb.tagged = 1;
+		mb.tag = tag;
 	}
 
-	cmd.full_dma.command.cmd_type = C_CMD_TYPE_DMA;
-	cmd.full_dma.command.opcode = C_CMD_PUT;
-	cmd.full_dma.index_ext = idx_ext;
-	cmd.full_dma.lac = send_md->md->lac;
-	cmd.full_dma.event_send_disable = 1;
-	cmd.full_dma.restricted = 0;
-	cmd.full_dma.dfa = dfa;
-	cmd.full_dma.remote_offset = 0;
-	cmd.full_dma.local_addr = CXI_VA_TO_IOVA(send_md->md, buf);
-	cmd.full_dma.request_len = len;
-	cmd.full_dma.eq = txc->comp.send_cq->evtq->eqn;
-	cmd.full_dma.user_ptr = (uint64_t)req;
-	cmd.full_dma.initiator = match_id;
-	cmd.full_dma.match_bits = mb.raw;
+	fastlock_acquire(&txc->tx_cmdq->lock);
 
-	if (long_send) {
-		req->cb = cxip_send_long_cb;
-		req->send.cmd = cmd;
+	if (idc) {
+		union c_cmdu cmd = {};
 
-		ret = _cxip_send_long(txc, req);
-		if (ret)
-			goto send_freereq;
+		cmd.c_state.event_send_disable = 1;
+		cmd.c_state.index_ext = idx_ext;
+		cmd.c_state.eq = txc->comp.send_cq->evtq->eqn;
+		cmd.c_state.initiator = cxip_msg_match_id(txc);
+
+		if (!req)
+			cmd.c_state.event_success_disable = 1;
+
+		if (memcmp(&txc->tx_cmdq->c_state, &cmd.c_state,
+			   sizeof(cmd.c_state))) {
+			/* Update TXQ C_STATE */
+			txc->tx_cmdq->c_state = cmd.c_state;
+
+			ret = cxi_cq_emit_c_state(txc->tx_cmdq->dev_cmdq,
+						  &cmd.c_state);
+			if (ret) {
+				CXIP_LOG_DBG("Failed to issue C_STATE command: %d\n",
+					     ret);
+
+				/* Return error according to Domain Resource
+				 * Management
+				 */
+				ret = -FI_EAGAIN;
+				goto err_unlock;
+			}
+
+			CXIP_LOG_DBG("Updated C_STATE: %p\n", req);
+		}
+
+		memset(&cmd.idc_msg, 0, sizeof(cmd.idc_msg));
+		cmd.idc_msg.dfa = dfa;
+		cmd.idc_msg.match_bits = mb.raw;
+
+		if (req) {
+			cmd.idc_msg.user_ptr = (uint64_t)req;
+		} else {
+			void *inject_req;
+
+			if (tagged)
+				inject_req = cxip_tinject_req(txc);
+			else
+				inject_req = cxip_inject_req(txc);
+
+			if (!inject_req) {
+				ret = -FI_ENOMEM;
+				goto err_unlock;
+			}
+
+			cmd.idc_msg.user_ptr = (uint64_t)inject_req;
+		}
+
+		ret = cxi_cq_emit_idc_msg(txc->tx_cmdq->dev_cmdq, &cmd.idc_msg,
+					  buf, len);
+		if (ret) {
+			CXIP_LOG_DBG("Failed to write IDC: %d\n", ret);
+
+			/* Return error according to Domain Resource Management
+			 */
+			ret = -FI_EAGAIN;
+			goto err_unlock;
+		}
 	} else {
-		req->cb = cxip_send_eager_cb;
+		struct c_full_dma_cmd cmd = {};
 
-		ret = _cxip_send_eager(txc, &cmd);
-		if (ret)
-			goto send_freereq;
+		cmd.command.cmd_type = C_CMD_TYPE_DMA;
+		cmd.command.opcode = C_CMD_PUT;
+		cmd.index_ext = idx_ext;
+		cmd.lac = send_md->md->lac;
+		cmd.event_send_disable = 1;
+		cmd.restricted = 0;
+		cmd.dfa = dfa;
+		cmd.remote_offset = 0;
+		cmd.local_addr = CXI_VA_TO_IOVA(send_md->md, buf);
+		cmd.request_len = len;
+		cmd.eq = txc->comp.send_cq->evtq->eqn;
+		cmd.user_ptr = (uint64_t)req;
+		cmd.initiator = cxip_msg_match_id(txc);
+		cmd.match_bits = mb.raw;
+
+		/* Issue Eager Put command */
+		ret = cxi_cq_emit_dma(txc->tx_cmdq->dev_cmdq, &cmd);
+		if (ret) {
+			CXIP_LOG_DBG("Failed to write DMA command: %d\n", ret);
+
+			/* Return error according to Domain Resource Mgmt */
+			ret = -FI_EAGAIN;
+			goto err_unlock;
+		}
 	}
+
+	cxi_cq_ring(txc->tx_cmdq->dev_cmdq);
+
+	if (req)
+		ofi_atomic_inc32(&txc->otx_reqs);
+
+	fastlock_release(&txc->tx_cmdq->lock);
 
 	CXIP_LOG_DBG("req: %p buf: %p len: %lu dest_addr: %ld tag(%c): 0x%lx context %p\n",
 		     req, buf, len, dest_addr, tagged ? '*' : '-', tag,
@@ -2053,10 +2237,42 @@ static ssize_t _cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 
 	return FI_SUCCESS;
 
-send_freereq:
-	cxip_cq_req_free(req);
-send_unmap:
-	cxip_unmap(send_md);
+err_unlock:
+	fastlock_release(&txc->tx_cmdq->lock);
+	if (req)
+		cxip_cq_req_free(req);
+err_unmap:
+	if (!idc)
+		cxip_unmap(send_md);
+
+	return ret;
+}
+
+/*
+ * _cxip_send() - Common message send function. Used for tagged and untagged
+ * sends of all sizes.
+ */
+static ssize_t _cxip_send(struct cxip_txc *txc, const void *buf, size_t len,
+			  void *desc, fi_addr_t dest_addr, uint64_t tag,
+			  void *context, uint64_t flags, bool tagged)
+{
+	int ret;
+
+	if (!txc->enabled)
+		return -FI_EOPBADSTATE;
+
+	if (!ofi_send_allowed(txc->attr.caps))
+		return -FI_ENOPROTOOPT;
+
+	if (!buf)
+		return -FI_EINVAL;
+
+	if (len > txc->eager_threshold)
+		ret = _cxip_send_long(txc, buf, len, desc, dest_addr, tag,
+				      context, flags, tagged);
+	else
+		ret = _cxip_send_eager(txc, buf, len, desc, dest_addr, tag,
+				       context, flags, tagged);
 
 	return ret;
 }
@@ -2077,10 +2293,7 @@ static ssize_t cxip_trecvv(struct fid_ep *ep, const struct iovec *iov,
 			   void **desc, size_t count, fi_addr_t src_addr,
 			   uint64_t tag, uint64_t ignore, void *context)
 {
-	if (count != 1)
-		return -FI_EINVAL;
-
-	if (!iov)
+	if (!iov || count != 1)
 		return -FI_EINVAL;
 
 	return _cxip_recv(ep, iov[0].iov_base, iov[0].iov_len,
@@ -2091,10 +2304,7 @@ static ssize_t cxip_trecvv(struct fid_ep *ep, const struct iovec *iov,
 static ssize_t cxip_trecvmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 			     uint64_t flags)
 {
-	if (!msg || !msg->msg_iov)
-		return -FI_EINVAL;
-
-	if (msg->iov_count != 1)
+	if (!msg || !msg->msg_iov || msg->iov_count != 1)
 		return -FI_EINVAL;
 
 	return _cxip_recv(ep, msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len,
@@ -2106,36 +2316,79 @@ static ssize_t cxip_tsend(struct fid_ep *ep, const void *buf, size_t len,
 			  void *desc, fi_addr_t dest_addr, uint64_t tag,
 			  void *context)
 {
-	return _cxip_send(ep, buf, len, desc, dest_addr, tag, context, 0, true);
+	struct cxip_txc *txc;
+	uint64_t flags;
+
+	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
+		return -FI_EINVAL;
+
+	if (txc->selective_completion)
+		flags = txc->attr.op_flags & FI_COMPLETION;
+	else
+		flags = FI_COMPLETION;
+
+	return _cxip_send(txc, buf, len, desc, dest_addr, tag, context, flags,
+			  true);
 }
 
 static ssize_t cxip_tsendv(struct fid_ep *ep, const struct iovec *iov,
 			   void **desc, size_t count, fi_addr_t dest_addr,
 			   uint64_t tag, void *context)
 {
-	if (count != 1)
+	struct cxip_txc *txc;
+	uint64_t flags;
+
+	if (!iov || count != 1)
 		return -FI_EINVAL;
 
-	if (!iov)
+	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return _cxip_send(ep, iov[0].iov_base, iov[0].iov_len,
+	if (txc->selective_completion)
+		flags = txc->attr.op_flags & FI_COMPLETION;
+	else
+		flags = FI_COMPLETION;
+
+	return _cxip_send(txc, iov[0].iov_base, iov[0].iov_len,
 			  desc ? desc[0] : NULL,
-			  dest_addr, tag, context, 0, true);
+			  dest_addr, tag, context, flags, true);
 }
 
-static ssize_t cxip_tsendmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
-			    uint64_t flags)
+#define CXIP_TSENDMSG_ALLOWED_FLAGS (FI_INJECT | FI_COMPLETION)
+
+static ssize_t cxip_tsendmsg(struct fid_ep *ep,
+			     const struct fi_msg_tagged *msg, uint64_t flags)
 {
-	if (!msg || !msg->msg_iov)
+	struct cxip_txc *txc;
+
+	if (!msg || !msg->msg_iov || msg->iov_count != 1)
 		return -FI_EINVAL;
 
-	if (msg->iov_count != 1)
+	if (flags & ~CXIP_TSENDMSG_ALLOWED_FLAGS)
+		return -FI_EBADFLAGS;
+
+	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return _cxip_send(ep, msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len,
+	if (!txc->selective_completion)
+		flags |= FI_COMPLETION;
+
+	return _cxip_send(txc, msg->msg_iov[0].iov_base,
+			  msg->msg_iov[0].iov_len,
 			  msg->desc ? msg->desc[0] : NULL, msg->addr,
 			  msg->tag, msg->context, flags, true);
+}
+
+static ssize_t cxip_tinject(struct fid_ep *ep, const void *buf, size_t len,
+			    fi_addr_t dest_addr, uint64_t tag)
+{
+	struct cxip_txc *txc;
+
+	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
+		return -FI_EINVAL;
+
+	return _cxip_send(txc, buf, len, NULL, dest_addr, tag, NULL, FI_INJECT,
+			  true);
 }
 
 struct fi_ops_tagged cxip_ep_tagged_ops = {
@@ -2146,7 +2399,7 @@ struct fi_ops_tagged cxip_ep_tagged_ops = {
 	.send = cxip_tsend,
 	.sendv = cxip_tsendv,
 	.sendmsg = cxip_tsendmsg,
-	.inject = fi_no_tagged_inject,
+	.inject = cxip_tinject,
 	.senddata = fi_no_tagged_senddata,
 	.injectdata = fi_no_tagged_injectdata,
 };
@@ -2162,10 +2415,7 @@ static ssize_t cxip_recvv(struct fid_ep *ep, const struct iovec *iov,
 			  void **desc, size_t count, fi_addr_t src_addr,
 			  void *context)
 {
-	if (count != 1)
-		return -FI_EINVAL;
-
-	if (!iov)
+	if (!iov || count != 1)
 		return -FI_EINVAL;
 
 	return _cxip_recv(ep, iov[0].iov_base, iov[0].iov_len,
@@ -2176,10 +2426,7 @@ static ssize_t cxip_recvv(struct fid_ep *ep, const struct iovec *iov,
 static ssize_t cxip_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 			    uint64_t flags)
 {
-	if (!msg || !msg->msg_iov)
-		return -FI_EINVAL;
-
-	if (msg->iov_count != 1)
+	if (!msg || !msg->msg_iov || msg->iov_count != 1)
 		return -FI_EINVAL;
 
 	return _cxip_recv(ep, msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len,
@@ -2190,36 +2437,79 @@ static ssize_t cxip_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 static ssize_t cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 			 void *desc, fi_addr_t dest_addr, void *context)
 {
-	return _cxip_send(ep, buf, len, desc, dest_addr, 0, context, 0, false);
+	struct cxip_txc *txc;
+	uint64_t flags;
+
+	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
+		return -FI_EINVAL;
+
+	if (txc->selective_completion)
+		flags = txc->attr.op_flags & FI_COMPLETION;
+	else
+		flags = FI_COMPLETION;
+
+	return _cxip_send(txc, buf, len, desc, dest_addr, 0, context, flags,
+			  false);
 }
 
 static ssize_t cxip_sendv(struct fid_ep *ep, const struct iovec *iov,
 			  void **desc, size_t count, fi_addr_t dest_addr,
 			  void *context)
 {
-	if (count != 1)
+	struct cxip_txc *txc;
+	uint64_t flags;
+
+	if (!iov || count != 1)
 		return -FI_EINVAL;
 
-	if (!iov)
+	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return _cxip_send(ep, iov[0].iov_base, iov[0].iov_len,
-			  desc ? desc[0] : NULL, dest_addr, 0, context, 0,
+	if (txc->selective_completion)
+		flags = txc->attr.op_flags & FI_COMPLETION;
+	else
+		flags = FI_COMPLETION;
+
+	return _cxip_send(txc, iov[0].iov_base, iov[0].iov_len,
+			  desc ? desc[0] : NULL, dest_addr, 0, context, flags,
 			  false);
 }
+
+#define CXIP_SENDMSG_ALLOWED_FLAGS (FI_INJECT | FI_COMPLETION)
 
 static ssize_t cxip_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 			    uint64_t flags)
 {
-	if (!msg || !msg->msg_iov)
+	struct cxip_txc *txc;
+
+	if (!msg || !msg->msg_iov || msg->iov_count != 1)
 		return -FI_EINVAL;
 
-	if (msg->iov_count != 1)
+	if (flags & ~CXIP_SENDMSG_ALLOWED_FLAGS)
+		return -FI_EBADFLAGS;
+
+	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return _cxip_send(ep, msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len,
+	if (!txc->selective_completion)
+		flags |= FI_COMPLETION;
+
+	return _cxip_send(txc, msg->msg_iov[0].iov_base,
+			  msg->msg_iov[0].iov_len,
 			  msg->desc ? msg->desc[0] : NULL, msg->addr, 0,
 			  msg->context, flags, false);
+}
+
+static ssize_t cxip_inject(struct fid_ep *ep, const void *buf, size_t len,
+			   fi_addr_t dest_addr)
+{
+	struct cxip_txc *txc;
+
+	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
+		return -FI_EINVAL;
+
+	return _cxip_send(txc, buf, len, NULL, dest_addr, 0, NULL, FI_INJECT,
+			  false);
 }
 
 struct fi_ops_msg cxip_ep_msg_ops = {
@@ -2230,7 +2520,7 @@ struct fi_ops_msg cxip_ep_msg_ops = {
 	.send = cxip_send,
 	.sendv = cxip_sendv,
 	.sendmsg = cxip_sendmsg,
-	.inject = fi_no_msg_inject,
+	.inject = cxip_inject,
 	.senddata = fi_no_msg_senddata,
 	.injectdata = fi_no_msg_injectdata,
 };

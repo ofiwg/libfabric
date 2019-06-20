@@ -396,7 +396,7 @@ struct cxip_req_send {
 	int rdzv_id;			// SW RDZV ID for long messages
 	int rc;				// DMA return code
 	int long_send_events;		// Processed event count
-	union c_cmdu cmd;		// Rendezvous Put command
+	struct c_full_dma_cmd cmd;	// Rendezvous Put command
 };
 
 struct cxip_req_oflow {
@@ -660,6 +660,8 @@ struct cxip_txc {
 	struct cxip_cmdq *tx_cmdq;	// added during cxip_txc_enable()
 
 	ofi_atomic32_t otx_reqs;	// outstanding transmit requests
+	struct cxip_req *inject_req;
+	struct cxip_req *tinject_req;
 	struct cxip_req *rma_inject_req;
 
 	/* Software Rendezvous related structures */
