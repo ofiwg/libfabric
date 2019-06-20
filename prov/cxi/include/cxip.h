@@ -493,9 +493,7 @@ struct cxip_cntr {
 	struct fid_wait *waitset;
 	int signal;
 
-	struct dlist_entry rx_list;	// contains rx contexts
-	struct dlist_entry tx_list;	// contains tx contexts
-	fastlock_t list_lock;
+	fastlock_t lock;
 };
 
 /**
@@ -923,11 +921,6 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq);
 int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq, void *context);
 
-void cxip_cntr_add_txc(struct cxip_cntr *cntr, struct cxip_txc *txc);
-void cxip_cntr_remove_txc(struct cxip_cntr *cntr, struct cxip_txc *txc);
-void cxip_cntr_add_rxc(struct cxip_cntr *cntr, struct cxip_rxc *rxc);
-void cxip_cntr_remove_rxc(struct cxip_cntr *cntr, struct cxip_rxc *rxc);
-int cxip_cntr_progress(struct cxip_cntr *cntr);
 int cxip_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		   struct fid_cntr **cntr, void *context);
 

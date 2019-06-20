@@ -26,51 +26,6 @@ const struct fi_cntr_attr cxip_cntr_attr = {
 	.flags = 0,
 };
 
-void cxip_cntr_add_txc(struct cxip_cntr *cntr, struct cxip_txc *txc)
-{
-	int ret;
-	struct fid *fid = &txc->fid.ctx.fid;
-
-	ret = fid_list_insert(&cntr->tx_list, &cntr->list_lock, fid);
-	if (ret)
-		CXIP_LOG_ERROR("Error in adding ctx to progress list\n");
-	else
-		ofi_atomic_inc32(&cntr->ref);
-}
-
-void cxip_cntr_remove_txc(struct cxip_cntr *cntr, struct cxip_txc *txc)
-{
-	struct fid *fid = &txc->fid.ctx.fid;
-
-	fid_list_remove(&cntr->tx_list, &cntr->list_lock, fid);
-	ofi_atomic_dec32(&cntr->ref);
-}
-
-void cxip_cntr_add_rxc(struct cxip_cntr *cntr, struct cxip_rxc *rxc)
-{
-	int ret;
-	struct fid *fid = &rxc->ctx.fid;
-
-	ret = fid_list_insert(&cntr->rx_list, &cntr->list_lock, fid);
-	if (ret)
-		CXIP_LOG_ERROR("Error in adding ctx to progress list\n");
-	else
-		ofi_atomic_inc32(&cntr->ref);
-}
-
-void cxip_cntr_remove_rxc(struct cxip_cntr *cntr, struct cxip_rxc *rxc)
-{
-	struct fid *fid = &rxc->ctx.fid;
-
-	fid_list_remove(&cntr->rx_list, &cntr->list_lock, fid);
-	ofi_atomic_dec32(&cntr->ref);
-}
-
-int cxip_cntr_progress(struct cxip_cntr *cntr)
-{
-	return 0;
-}
-
 static uint64_t cxip_cntr_read(struct fid_cntr *fid_cntr)
 {
 	return 0;
@@ -158,7 +113,7 @@ static int cxip_cntr_close(struct fid *fid)
 	if (cntr->signal && cntr->attr.wait_obj == FI_WAIT_FD)
 		cxip_wait_close(&cntr->waitset->fid);
 
-	fastlock_destroy(&cntr->list_lock);
+	fastlock_destroy(&cntr->lock);
 
 	ofi_atomic_dec32(&cntr->domain->ref);
 	free(cntr);
@@ -268,9 +223,7 @@ int cxip_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 
 	ofi_atomic_initialize32(&_cntr->ref, 0);
 
-	dlist_init(&_cntr->tx_list);
-	dlist_init(&_cntr->rx_list);
-	fastlock_init(&_cntr->list_lock);
+	fastlock_init(&_cntr->lock);
 
 	_cntr->cntr_fid.fid.fclass = FI_CLASS_CNTR;
 	_cntr->cntr_fid.fid.context = context;

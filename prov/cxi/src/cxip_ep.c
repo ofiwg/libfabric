@@ -134,13 +134,13 @@ static void cxip_txc_close(struct cxip_txc *txc)
 		ofi_atomic_dec32(&txc->comp.send_cq->ref);
 
 	if (txc->comp.send_cntr)
-		cxip_cntr_remove_txc(txc->comp.send_cntr, txc);
+		ofi_atomic_dec32(&txc->comp.send_cntr->ref);
 
 	if (txc->comp.read_cntr)
-		cxip_cntr_remove_txc(txc->comp.read_cntr, txc);
+		ofi_atomic_dec32(&txc->comp.read_cntr->ref);
 
 	if (txc->comp.write_cntr)
-		cxip_cntr_remove_txc(txc->comp.write_cntr, txc);
+		ofi_atomic_dec32(&txc->comp.write_cntr->ref);
 }
 
 /**
@@ -156,13 +156,13 @@ static void cxip_rxc_close(struct cxip_rxc *rxc)
 		ofi_atomic_dec32(&rxc->comp.recv_cq->ref);
 
 	if (rxc->comp.recv_cntr)
-		cxip_cntr_remove_rxc(rxc->comp.recv_cntr, rxc);
+		ofi_atomic_dec32(&rxc->comp.recv_cntr->ref);
 
 	if (rxc->comp.rem_read_cntr)
-		cxip_cntr_remove_rxc(rxc->comp.rem_read_cntr, rxc);
+		ofi_atomic_dec32(&rxc->comp.rem_read_cntr->ref);
 
 	if (rxc->comp.rem_write_cntr)
-		cxip_cntr_remove_rxc(rxc->comp.rem_write_cntr, rxc);
+		ofi_atomic_dec32(&rxc->comp.rem_write_cntr->ref);
 }
 
 /**
@@ -299,17 +299,17 @@ static int cxip_ctx_bind_cntr(struct fid *fid, struct fid *bfid, uint64_t flags)
 		txc = container_of(fid, struct cxip_txc, fid.ctx.fid);
 		if (flags & FI_SEND) {
 			txc->comp.send_cntr = cntr;
-			cxip_cntr_add_txc(cntr, txc);
+			ofi_atomic_inc32(&cntr->ref);
 		}
 
 		if (flags & FI_READ) {
 			txc->comp.read_cntr = cntr;
-			cxip_cntr_add_txc(cntr, txc);
+			ofi_atomic_inc32(&cntr->ref);
 		}
 
 		if (flags & FI_WRITE) {
 			txc->comp.write_cntr = cntr;
-			cxip_cntr_add_txc(cntr, txc);
+			ofi_atomic_inc32(&cntr->ref);
 		}
 		break;
 
@@ -317,17 +317,17 @@ static int cxip_ctx_bind_cntr(struct fid *fid, struct fid *bfid, uint64_t flags)
 		rxc = container_of(fid, struct cxip_rxc, ctx.fid);
 		if (flags & FI_RECV) {
 			rxc->comp.recv_cntr = cntr;
-			cxip_cntr_add_rxc(cntr, rxc);
+			ofi_atomic_inc32(&cntr->ref);
 		}
 
 		if (flags & FI_REMOTE_READ) {
 			rxc->comp.rem_read_cntr = cntr;
-			cxip_cntr_add_rxc(cntr, rxc);
+			ofi_atomic_inc32(&cntr->ref);
 		}
 
 		if (flags & FI_REMOTE_WRITE) {
 			rxc->comp.rem_write_cntr = cntr;
-			cxip_cntr_add_rxc(cntr, rxc);
+			ofi_atomic_inc32(&cntr->ref);
 		}
 		break;
 

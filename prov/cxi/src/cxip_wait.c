@@ -83,7 +83,6 @@ static int cxip_wait_init(struct cxip_wait *wait, enum fi_wait_obj type)
 static int cxip_wait_wait(struct fid_wait *wait_fid, int timeout)
 {
 	struct cxip_cq *cq;
-	struct cxip_cntr *cntr;
 	struct cxip_wait *wait;
 	uint64_t start_ms = 0, end_ms = 0;
 	struct dlist_entry *p, *head;
@@ -104,12 +103,6 @@ static int cxip_wait_wait(struct fid_wait *wait_fid, int timeout)
 			cq = container_of(list_item->fid, struct cxip_cq,
 					  util_cq.cq_fid);
 			cxip_cq_progress(cq);
-			break;
-
-		case FI_CLASS_CNTR:
-			cntr = container_of(list_item->fid, struct cxip_cntr,
-					    cntr_fid);
-			cxip_cntr_progress(cntr);
 			break;
 		}
 	}
