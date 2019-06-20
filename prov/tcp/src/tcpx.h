@@ -250,6 +250,15 @@ struct tcpx_cq {
 	struct tcpx_buf_pool	buf_pools[TCPX_OP_CODE_MAX];
 };
 
+struct tcpx_eq {
+	struct util_eq		util_eq;
+	/*
+	  The following lock avoids race between ep close
+	  and connection management code.
+	 */
+	fastlock_t		close_lock;
+};
+
 int tcpx_create_fabric(struct fi_fabric_attr *attr,
 		       struct fid_fabric **fabric,
 		       void *context);
@@ -303,7 +312,6 @@ void tcpx_hdr_bswap(struct tcpx_base_hdr *hdr);
 
 int tcpx_ep_shutdown_report(struct tcpx_ep *ep, fid_t fid);
 int tcpx_cq_wait_ep_add(struct tcpx_ep *ep);
-void tcpx_cq_wait_ep_del(struct tcpx_ep *ep);
 void tcpx_tx_queue_insert(struct tcpx_ep *tcpx_ep,
 			  struct tcpx_xfer_entry *tx_entry);
 

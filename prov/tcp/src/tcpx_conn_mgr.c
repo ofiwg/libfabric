@@ -116,17 +116,14 @@ static int tcpx_ep_msg_xfer_enable(struct tcpx_ep *ep)
 	}
 	ep->progress_func = tcpx_ep_progress;
 	ret = fi_fd_nonblock(ep->conn_fd);
-	if (ret)
-		goto err;
-
-	ret = tcpx_cq_wait_ep_add(ep);
-	if (ret)
-		goto err;
-
+	if (ret) {
+		fastlock_release(&ep->lock);
+		return ret;
+	}
 	ep->cm_state = TCPX_EP_CONNECTED;
-err:
 	fastlock_release(&ep->lock);
-	return ret;
+
+	return tcpx_cq_wait_ep_add(ep);
 }
 
 static int proc_conn_resp(struct tcpx_cm_context *cm_ctx,
@@ -459,6 +456,7 @@ static void process_cm_ctx(struct util_wait *wait,
 void tcpx_conn_mgr_run(struct util_eq *eq)
 {
 	struct util_wait_fd *wait_fd;
+	struct tcpx_eq *tcpx_eq;
 	void *wait_contexts[MAX_EPOLL_EVENTS];
 	int num_fds = 0, i;
 
@@ -467,10 +465,14 @@ void tcpx_conn_mgr_run(struct util_eq *eq)
 	wait_fd = container_of(eq->wait, struct util_wait_fd,
 			       util_wait);
 
+	tcpx_eq = container_of(eq, struct tcpx_eq, util_eq);
+	fastlock_acquire(&tcpx_eq->close_lock);
 	num_fds = fi_epoll_wait(wait_fd->epoll_fd, wait_contexts,
 				MAX_EPOLL_EVENTS, 0);
-	if (num_fds < 0)
+	if (num_fds < 0) {
+		fastlock_release(&tcpx_eq->close_lock);
 		return;
+	}
 
 	for ( i = 0; i < num_fds; i++) {
 
@@ -482,4 +484,5 @@ void tcpx_conn_mgr_run(struct util_eq *eq)
 			       (struct tcpx_cm_context *)
 			       wait_contexts[i]);
 	}
+	fastlock_release(&tcpx_eq->close_lock);
 }

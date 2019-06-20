@@ -180,7 +180,7 @@ const char *ofi_eq_strerror(struct fid_eq *eq_fid, int prov_errno,
 			      fi_strerror(prov_errno);
 }
 
-static int util_eq_control(struct fid *fid, int command, void *arg)
+int ofi_eq_control(struct fid *fid, int command, void *arg)
 {
 	struct util_eq *eq;
 	int ret;
@@ -199,7 +199,7 @@ static int util_eq_control(struct fid *fid, int command, void *arg)
 	return ret;
 }
 
-static int util_eq_close(struct fid *fid)
+int ofi_eq_cleanup(struct fid *fid)
 {
 	struct util_eq *eq;
 	struct slist_entry *entry;
@@ -225,6 +225,20 @@ static int util_eq_close(struct fid *fid)
 	free(eq->saved_err_data);
 	fastlock_destroy(&eq->lock);
 	ofi_atomic_dec32(&eq->fabric->ref);
+	return 0;
+}
+
+static int util_eq_close(struct fid *fid)
+{
+	struct util_eq *eq;
+	int ret;
+
+	ret = ofi_eq_cleanup(fid);
+	if (ret)
+		return ret;
+
+	eq = container_of(fid, struct util_eq,
+			  eq_fid.fid);
 	free(eq);
 	return 0;
 }
@@ -242,7 +256,7 @@ static struct fi_ops util_eq_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = util_eq_close,
 	.bind = fi_no_bind,
-	.control = util_eq_control,
+	.control = ofi_eq_control,
 	.ops_open = fi_no_ops_open,
 };
 
@@ -365,8 +379,8 @@ static int util_verify_eq_attr(const struct fi_provider *prov,
 	return 0;
 }
 
-int ofi_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
-		 struct fid_eq **eq_fid, void *context)
+int ofi_eq_init(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
+		struct fid_eq *eq_fid, void *context)
 {
 	struct util_fabric *fabric;
 	struct util_eq *eq;
@@ -377,15 +391,11 @@ int ofi_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
 	if (ret)
 		return ret;
 
-	eq = calloc(1, sizeof(*eq));
-	if (!eq)
-		return -FI_ENOMEM;
-
+	eq = container_of(eq_fid, struct util_eq, eq_fid);
 	eq->fabric = fabric;
 	eq->prov = fabric->prov;
 	ret = util_eq_init(fabric_fid, eq, attr);
 	if (ret) {
-		free(eq);
 		return ret;
 	}
 
@@ -401,11 +411,29 @@ int ofi_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
 		ret = fi_poll_add(&eq->wait->pollset->poll_fid,
 				  &eq->eq_fid.fid, 0);
 		if (ret) {
-			util_eq_close(&eq->eq_fid.fid);
+			ofi_eq_cleanup(&eq->eq_fid.fid);
 			return ret;
 		}
 	}
 
+	return 0;
+}
+
+int ofi_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
+		  struct fid_eq **eq_fid, void *context)
+{
+	struct util_eq *eq;
+	int ret;
+
+	eq = calloc(1, sizeof(*eq));
+	if (!eq)
+		return -FI_ENOMEM;
+
+	ret = ofi_eq_init(fabric_fid, attr, &eq->eq_fid, context);
+	if (ret) {
+		free(eq);
+		return ret;
+	}
 	*eq_fid = &eq->eq_fid;
 	return 0;
 }

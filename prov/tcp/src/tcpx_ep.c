@@ -395,14 +395,25 @@ static void tcpx_ep_tx_rx_queues_release(struct tcpx_ep *ep)
 
 static int tcpx_ep_close(struct fid *fid)
 {
+	struct tcpx_eq *eq;
 	struct tcpx_ep *ep = container_of(fid, struct tcpx_ep,
 					  util_ep.ep_fid.fid);
 
+	eq = container_of(ep->util_ep.eq, struct tcpx_eq,
+			  util_eq);
+
 	tcpx_ep_tx_rx_queues_release(ep);
-	tcpx_cq_wait_ep_del(ep);
+
+	/* eq->close_lock protects from processing stale ep connection
+	   events*/
+	fastlock_acquire(&eq->close_lock);
+	if (ep->util_ep.rx_cq->wait)
+		ofi_wait_fd_del(ep->util_ep.rx_cq->wait,
+				ep->conn_fd);
+
 	if (ep->util_ep.eq->wait)
 		ofi_wait_fd_del(ep->util_ep.eq->wait, ep->conn_fd);
-
+	fastlock_release(&eq->close_lock);
 	ofi_eq_remove_fid_events(ep->util_ep.eq,
 				  &ep->util_ep.ep_fid.fid);
 	ofi_close_socket(ep->conn_fd);
