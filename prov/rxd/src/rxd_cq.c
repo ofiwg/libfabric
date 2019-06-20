@@ -1183,23 +1183,20 @@ ssize_t rxd_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 	struct fid_list_entry *fid_entry;
 	struct util_cq *cq;
 	struct rxd_ep *ep;
-	uint64_t start;
+	uint64_t endtime;
 	int ret, ep_retry;
 
 	cq = container_of(cq_fid, struct util_cq, cq_fid);
 	assert(cq->wait && cq->internal_wait);
-	start = (timeout >= 0) ? fi_gettime_ms() : 0;
+	endtime = ofi_timeout_time(timeout);
 
 	do {
 		ret = ofi_cq_readfrom(cq_fid, buf, count, src_addr);
 		if (ret != -FI_EAGAIN)
 			break;
 
-		if (timeout >= 0) {
-			timeout -= (int) (fi_gettime_ms() - start);
-			if (timeout <= 0)
-				return -FI_EAGAIN;
-		}
+		if (ofi_adjust_timeout(endtime, &timeout))
+			return -FI_ETIMEDOUT;
 
 		if (ofi_atomic_get32(&cq->signaled)) {
 			ofi_atomic_set32(&cq->signaled, 0);

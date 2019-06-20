@@ -257,23 +257,20 @@ static int util_wait_fd_try(struct util_wait *wait)
 static int util_wait_fd_run(struct fid_wait *wait_fid, int timeout)
 {
 	struct util_wait_fd *wait;
-	uint64_t start;
+	uint64_t endtime;
 	void *ep_context[1];
 	int ret;
 
 	wait = container_of(wait_fid, struct util_wait_fd, util_wait.wait_fid);
-	start = (timeout >= 0) ? fi_gettime_ms() : 0;
+	endtime = ofi_timeout_time(timeout);
 
 	while (1) {
 		ret = wait->util_wait.wait_try(&wait->util_wait);
 		if (ret)
 			return ret == -FI_EAGAIN ? 0 : ret;
 
-		if (timeout >= 0) {
-			timeout -= (int) (fi_gettime_ms() - start);
-			if (timeout <= 0)
-				return -FI_ETIMEDOUT;
-		}
+		if (ofi_adjust_timeout(endtime, &timeout))
+			return -FI_ETIMEDOUT;
 
 		ret = fi_epoll_wait(wait->epoll_fd, ep_context, 1, timeout);
 		if (ret < 0) {

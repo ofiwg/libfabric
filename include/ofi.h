@@ -247,6 +247,20 @@ int ofi_check_rx_mode(const struct fi_info *info, uint64_t flags);
 uint64_t fi_gettime_ms(void);
 uint64_t fi_gettime_us(void);
 
+static inline uint64_t ofi_timeout_time(int timeout)
+{
+	return (timeout >= 0) ? fi_gettime_ms() + timeout : 0;
+}
+
+static inline int ofi_adjust_timeout(uint64_t timeout_time, int *timeout)
+{
+	if (*timeout >= 0) {
+		*timeout = (int) (timeout_time - fi_gettime_ms());
+		return (*timeout <= 0) ? -FI_ETIMEDOUT : 0;
+	}
+	return 0;
+}
+
 #define OFI_ENUM_VAL(X) X
 #define OFI_STR(X) #X
 #define OFI_STR_INT(X) OFI_STR(X)
