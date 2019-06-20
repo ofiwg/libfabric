@@ -380,6 +380,7 @@ err1:
 static int fi_ibv_trywait(struct fid_fabric *fabric, struct fid **fids, int count)
 {
 	struct fi_ibv_cq *cq;
+	struct fi_ibv_eq *eq;
 	int ret, i;
 
 	for (i = 0; i < count; i++) {
@@ -391,9 +392,11 @@ static int fi_ibv_trywait(struct fid_fabric *fabric, struct fid **fids, int coun
 				return ret;
 			break;
 		case FI_CLASS_EQ:
-			/* We are always ready to wait on an EQ since
-			 * rdmacm EQ is based on an fd */
-			continue;
+			eq = container_of(fids[i], struct fi_ibv_eq, eq_fid.fid);
+			ret = fi_ibv_eq_trywait(eq);
+			if (ret)
+				return ret;
+			break;
 		case FI_CLASS_CNTR:
 		case FI_CLASS_WAIT:
 			return -FI_ENOSYS;

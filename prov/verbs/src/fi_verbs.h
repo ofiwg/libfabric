@@ -289,6 +289,7 @@ struct fi_ibv_eq {
 
 int fi_ibv_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		   struct fid_eq **eq, void *context);
+int fi_ibv_eq_trywait(struct fi_ibv_eq *eq);
 
 int fi_ibv_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		   struct fid_av **av, void *context);
