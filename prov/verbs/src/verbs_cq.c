@@ -191,7 +191,7 @@ fi_ibv_cq_sread(struct fid_cq *cq, void *buf, size_t count, const void *cond,
 		MIN((ssize_t) cond, count) : 1;
 
 	for (cur = 0; cur < threshold; ) {
-		if (_cq->trywait(&cq->fid) == FI_SUCCESS) {
+		if (fi_ibv_cq_trywait(_cq) == FI_SUCCESS) {
 			ret = fi_ibv_poll_events(_cq, timeout);
 			if (ret)
 				break;
@@ -377,14 +377,11 @@ int fi_ibv_cq_signal(struct fid_cq *cq)
 	return 0;
 }
 
-static int fi_ibv_cq_trywait(struct fid *fid)
+int fi_ibv_cq_trywait(struct fi_ibv_cq *cq)
 {
-	struct fi_ibv_cq *cq;
 	struct fi_ibv_wce *wce;
 	void *context;
 	int ret = -FI_EAGAIN, rc;
-
-	cq = container_of(fid, struct fi_ibv_cq, util_cq.cq_fid);
 
 	if (!cq->channel) {
 		VERBS_WARN(FI_LOG_CQ, "No wait object object associated with CQ\n");
@@ -664,7 +661,6 @@ int fi_ibv_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	dlist_init(&cq->xrc.srq_list);
 	fastlock_init(&cq->xrc.srq_list_lock);
 
-	cq->trywait = fi_ibv_cq_trywait;
 	ofi_atomic_initialize32(&cq->nevents, 0);
 
 	assert(size < INT32_MAX);

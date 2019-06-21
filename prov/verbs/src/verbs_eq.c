@@ -675,6 +675,15 @@ err:
 	return -FI_EAVAIL;
 }
 
+int fi_ibv_eq_trywait(struct fi_ibv_eq *eq)
+{
+	int ret;
+	fastlock_acquire(&eq->lock);
+	ret = dlistfd_empty(&eq->list_head);
+	fastlock_release(&eq->lock);
+	return ret ? 0 : -FI_EAGAIN;
+}
+
 ssize_t fi_ibv_eq_write_event(struct fi_ibv_eq *eq, uint32_t event,
 			      const void *buf, size_t len)
 {
