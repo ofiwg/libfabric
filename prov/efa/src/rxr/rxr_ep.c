@@ -920,35 +920,17 @@ static ssize_t rxr_ep_recvv(struct fid_ep *ep, const struct iovec *iov,
 	return rxr_ep_recvmsg(ep, &msg, 0);
 }
 
-/* create a new tx entry */
-struct rxr_tx_entry *rxr_ep_tx_entry_init(struct rxr_ep *rxr_ep, const struct iovec *iov, size_t iov_count,
-					  const struct fi_rma_iov *rma_iov, size_t rma_iov_count,
-					  fi_addr_t addr, uint64_t tag, uint64_t data, void *context,
-					  uint32_t op, uint64_t flags)
+
+void rxr_generic_tx_entry_init(struct rxr_tx_entry *tx_entry, const struct iovec *iov, size_t iov_count,
+			       const struct fi_rma_iov *rma_iov, size_t rma_iov_count,
+			       fi_addr_t addr, uint64_t tag, uint64_t data, void *context,
+			       uint32_t op, uint64_t flags)
 {
-	struct rxr_tx_entry *tx_entry;
-	uint64_t tx_op_flags;
-
-	tx_entry = ofi_buf_alloc(rxr_ep->tx_entry_pool);
-	if (OFI_UNLIKELY(!tx_entry)) {
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "TX entries exhausted.\n");
-		return NULL;
-	}
-
-#if ENABLE_DEBUG
-	dlist_insert_tail(&tx_entry->tx_entry_entry, &rxr_ep->tx_entry_list);
-#endif
 	tx_entry->type = RXR_TX_ENTRY;
 	tx_entry->tx_id = ofi_buf_index(tx_entry);
 	tx_entry->state = RXR_TX_RTS;
 	tx_entry->addr = addr;
 	tx_entry->tag = tag;
-
-	assert(rxr_ep->util_ep.tx_msg_flags == 0 || rxr_ep->util_ep.tx_msg_flags == FI_COMPLETION);
-	tx_op_flags = rxr_ep->util_ep.tx_op_flags;
-	if (rxr_ep->util_ep.tx_msg_flags == 0)
-		tx_op_flags &= ~FI_COMPLETION;
-	tx_entry->fi_flags = flags | tx_op_flags;
 
 	tx_entry->send_flags = 0;
 	tx_entry->bytes_acked = 0;
@@ -995,9 +977,40 @@ struct rxr_tx_entry *rxr_ep_tx_entry_init(struct rxr_ep *rxr_ep, const struct io
 	}
 
 	if (tx_entry->cq_entry.flags & FI_RMA) {
+		assert(rma_iov_count>0);
+		assert(rma_iov);
 		tx_entry->rma_iov_count = rma_iov_count;
 		memcpy(tx_entry->rma_iov, rma_iov, sizeof(struct fi_rma_iov) * rma_iov_count);
 	}
+}
+
+/* create a new tx entry */
+struct rxr_tx_entry *rxr_ep_tx_entry_init(struct rxr_ep *rxr_ep, const struct iovec *iov, size_t iov_count,
+					  const struct fi_rma_iov *rma_iov, size_t rma_iov_count,
+					  fi_addr_t addr, uint64_t tag, uint64_t data, void *context,
+					  uint32_t op, uint64_t flags)
+{
+	struct rxr_tx_entry *tx_entry;
+	uint64_t tx_op_flags;
+
+	tx_entry = ofi_buf_alloc(rxr_ep->tx_entry_pool);
+	if (OFI_UNLIKELY(!tx_entry)) {
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "TX entries exhausted.\n");
+		return NULL;
+	}
+
+#if ENABLE_DEBUG
+	dlist_insert_tail(&tx_entry->tx_entry_entry, &rxr_ep->tx_entry_list);
+#endif
+
+	rxr_generic_tx_entry_init(tx_entry, iov, iov_count, rma_iov, rma_iov_count,
+				  addr, tag, data, context, op, flags);
+
+	assert(rxr_ep->util_ep.tx_msg_flags == 0 || rxr_ep->util_ep.tx_msg_flags == FI_COMPLETION);
+	tx_op_flags = rxr_ep->util_ep.tx_op_flags;
+	if (rxr_ep->util_ep.tx_msg_flags == 0)
+		tx_op_flags &= ~FI_COMPLETION;
+	tx_entry->fi_flags = flags | tx_op_flags;
 
 	return tx_entry;
 }
@@ -1290,6 +1303,9 @@ void rxr_ep_init_cts_pkt_entry(struct rxr_ep *ep,
 	cts_hdr->version = RXR_PROTOCOL_VERSION;
 	cts_hdr->flags = 0;
 
+	if (rx_entry->cq_entry.flags & FI_READ)
+		cts_hdr->flags |= RXR_READ_REQ;
+
 	cts_hdr->tx_id = rx_entry->tx_id;
 	cts_hdr->rx_id = rx_entry->rx_id;
 
@@ -1562,6 +1578,7 @@ ssize_t rxr_tx(struct fid_ep *ep, const struct iovec *iov, size_t iov_count,
 					       ignore, context,
 					       addr, ofi_op_msg, 0);
 		if (!rx_entry) {
+			rxr_release_tx_entry(rxr_ep, tx_entry);
 			FI_WARN(&rxr_prov, FI_LOG_CQ,
 				"RX entries exhausted.\n");
 			rxr_eq_write_error(rxr_ep, FI_ENOBUFS, -FI_ENOBUFS);
@@ -1586,6 +1603,20 @@ ssize_t rxr_tx(struct fid_ep *ep, const struct iovec *iov, size_t iov_count,
 		 * meanwhile set rx_entry->state to RXR_RX_RECV so that
 		 * this rx_entry is ready to receive
 		 */
+
+		/* If there is no available buffer, we do not proceed.
+		 * It is important to decrease peer->next_msg_id by 1
+		 * in this case because this message was not sent.
+		 */
+		if (rxr_ep->available_data_bufs==0) {
+			rxr_release_tx_entry(rxr_ep, tx_entry);
+			rxr_release_rx_entry(rxr_ep, rx_entry);
+			peer->next_msg_id--;
+			ret = -FI_EAGAIN;
+			rxr_ep_progress_internal(rxr_ep);
+			goto out;
+		}
+
 		rxr_ep_calc_cts_window_credits(rxr_ep, rxr_env.rx_window_size,
 					       tx_entry->total_len, &window,
 					       &credits);
@@ -1987,6 +2018,9 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 	if (rxr_ep->tx_entry_pool)
 		ofi_bufpool_destroy(rxr_ep->tx_entry_pool);
 
+	if (rxr_ep->readrsp_tx_entry_pool)
+		ofi_bufpool_destroy(rxr_ep->readrsp_tx_entry_pool);
+
 	if (rxr_ep->rx_ooo_pkt_pool)
 		ofi_bufpool_destroy(rxr_ep->rx_ooo_pkt_pool);
 
@@ -2349,13 +2383,21 @@ int rxr_ep_init(struct rxr_ep *ep)
 	if (ret)
 		goto err_free_rx_ooo_pool;
 
+	ret = ofi_bufpool_create(&ep->readrsp_tx_entry_pool,
+				 sizeof(struct rxr_tx_entry),
+				 RXR_BUF_POOL_ALIGNMENT,
+				 RXR_MAX_RX_QUEUE_SIZE,
+				 ep->rx_size, 0);
+	if (ret)
+		goto err_free_tx_entry_pool;
+
 	ret = ofi_bufpool_create(&ep->rx_entry_pool,
 				 sizeof(struct rxr_rx_entry),
 				 RXR_BUF_POOL_ALIGNMENT,
 				 RXR_MAX_RX_QUEUE_SIZE,
 				 ep->rx_size, 0);
 	if (ret)
-		goto err_free_tx_entry_pool;
+		goto err_free_readrsp_tx_entry_pool;
 
 	/* Initialize entry list */
 	dlist_init(&ep->rx_list);
@@ -2377,6 +2419,9 @@ int rxr_ep_init(struct rxr_ep *ep)
 #endif
 
 	return 0;
+err_free_readrsp_tx_entry_pool:
+	if (ep->readrsp_tx_entry_pool)
+		ofi_bufpool_destroy(ep->readrsp_tx_entry_pool);
 err_free_tx_entry_pool:
 	if (ep->tx_entry_pool)
 		ofi_bufpool_destroy(ep->tx_entry_pool);
