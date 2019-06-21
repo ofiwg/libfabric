@@ -1135,11 +1135,11 @@ static inline void rxr_eq_write_error(struct rxr_ep *ep, ssize_t err,
 	}
 
 	FI_WARN(&rxr_prov, FI_LOG_EQ,
-		"Unable to write to EQ: %s. err: %s (%ld) prov_errno: %s (%ld)\n",
+		"Unable to write to EQ: %s. err: %s (%zd) prov_errno: %s (%zd)\n",
 		fi_strerror(-ret), fi_strerror(err), err,
 		fi_strerror(prov_errno), prov_errno);
 	fprintf(stderr,
-		"Unable to write to EQ: %s. err: %s (%ld) prov_errno: %s (%ld) %s:%d\n",
+		"Unable to write to EQ: %s. err: %s (%zd) prov_errno: %s (%zd) %s:%d\n",
 		fi_strerror(-ret), fi_strerror(err), err,
 		fi_strerror(prov_errno), prov_errno, __FILE__, __LINE__);
 	abort();
