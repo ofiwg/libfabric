@@ -62,8 +62,8 @@
 #ifndef _TCP_H_
 #define _TCP_H_
 
-#define TCPX_MAJOR_VERSION 	0
-#define TCPX_MINOR_VERSION 	1
+#define TCPX_MAJOR_VERSION 	1
+#define TCPX_MINOR_VERSION 	0
 
 #define TCPX_HDR_VERSION	3
 #define TCPX_CTRL_HDR_VERSION	3
