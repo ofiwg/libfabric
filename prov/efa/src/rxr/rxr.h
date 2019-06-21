@@ -570,7 +570,7 @@ struct rxr_base_hdr {
 	uint16_t flags;
 };
 
-#if defined(static_assert)
+#if defined(static_assert) && defined(__X86_64__)
 static_assert(sizeof(struct rxr_base_hdr) == 4, "rxr_base_hdr check");
 #endif
 
@@ -592,7 +592,7 @@ struct rxr_rts_hdr {
 	uint64_t data_len;
 }; /* 24 bytes without tx_id and padding for it */
 
-#if defined(static_assert)
+#if defined(static_assert) && defined(__X86_64__)
 static_assert(sizeof(struct rxr_rts_hdr) == 32, "rxr_rts_hdr check");
 #endif
 
@@ -603,7 +603,7 @@ struct rxr_connack_hdr {
 	/* end of rxr_base_hdr */
 }; /* 4 bytes */
 
-#if defined(static_assert)
+#if defined(static_assert) && defined(__X86_64__)
 static_assert(sizeof(struct rxr_base_hdr) == 4, "rxr_connack_hdr check");
 #endif
 
@@ -619,7 +619,7 @@ struct rxr_cts_hdr {
 	uint64_t window;
 };
 
-#if defined(static_assert)
+#if defined(static_assert) && defined(__X86_64__)
 static_assert(sizeof(struct rxr_cts_hdr) == 24, "rxr_cts_hdr check");
 #endif
 
@@ -634,7 +634,7 @@ struct rxr_data_hdr {
 	uint64_t seg_offset;
 };
 
-#if defined(static_assert)
+#if defined(static_assert) && defined(__X86_64__)
 static_assert(sizeof(struct rxr_data_hdr) == 24, "rxr_data_hdr check");
 #endif
 
@@ -647,7 +647,7 @@ struct rxr_read_response_hdr {
 	uint32_t tx_id;
 };
 
-#if defined(static_assert)
+#if defined(static_assert) && defined(__X86_64__)
 static_assert(sizeof(struct rxr_read_response_hdr) == 12, "rxr_read_response_hdr check");
 #endif
 
@@ -722,7 +722,7 @@ struct rxr_pkt_entry {
 #endif
 };
 
-#if defined(static_assert)
+#if defined(static_assert) && defined(__X86_64__)
 #if ENABLE_DEBUG
 static_assert(sizeof(struct rxr_pkt_entry) == 128, "rxr_pkt_entry check");
 #else
@@ -1135,11 +1135,11 @@ static inline void rxr_eq_write_error(struct rxr_ep *ep, ssize_t err,
 	}
 
 	FI_WARN(&rxr_prov, FI_LOG_EQ,
-		"Unable to write to EQ: %s. err: %s (%ld) prov_errno: %s (%ld)\n",
+		"Unable to write to EQ: %s. err: %s (%zd) prov_errno: %s (%zd)\n",
 		fi_strerror(-ret), fi_strerror(err), err,
 		fi_strerror(prov_errno), prov_errno);
 	fprintf(stderr,
-		"Unable to write to EQ: %s. err: %s (%ld) prov_errno: %s (%ld) %s:%d\n",
+		"Unable to write to EQ: %s. err: %s (%zd) prov_errno: %s (%zd) %s:%d\n",
 		fi_strerror(-ret), fi_strerror(err), err,
 		fi_strerror(prov_errno), prov_errno, __FILE__, __LINE__);
 	abort();

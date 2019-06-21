@@ -327,7 +327,7 @@ int rxr_cq_handle_cq_error(struct rxr_ep *ep, ssize_t err)
 			err_entry.prov_errno = ret;
 		} else {
 			FI_WARN(&rxr_prov, FI_LOG_CQ,
-				"fi_cq_readerr unexpected size %lu expected %lu\n",
+				"fi_cq_readerr unexpected size %zu expected %zu\n",
 				ret, sizeof(err_entry));
 			err_entry.prov_errno = -FI_EIO;
 		}
@@ -491,7 +491,7 @@ static void rxr_cq_post_connack(struct rxr_ep *ep,
 		if (ret == -FI_EAGAIN)
 			return;
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
-			"Failed to send a CONNACK packet: ret %ld\n", ret);
+			"Failed to send a CONNACK packet: ret %zd\n", ret);
 	} else {
 		peer->state = RXR_PEER_ACKED;
 	}
@@ -551,7 +551,7 @@ int rxr_cq_write_rx_completion(struct rxr_ep *ep,
 	int ret = 0;
 	if (OFI_UNLIKELY(rx_entry->cq_entry.len < rx_entry->total_len)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
-			"Message truncated: tag: %lx len: %lu total_len: %lu\n",
+			"Message truncated: tag: %"PRIu64" len: %"PRIu64" total_len: %zu\n",
 			rx_entry->cq_entry.tag,	rx_entry->total_len,
 			rx_entry->cq_entry.len);
 

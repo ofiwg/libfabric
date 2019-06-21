@@ -137,7 +137,7 @@ int rxr_mr_regattr(struct fid *domain_fid, const struct fi_mr_attr *attr,
 			    &rxr_mr->msg_mr);
 	if (ret) {
 		FI_WARN(&rxr_prov, FI_LOG_MR,
-			"Unable to register MR buf (%s): %p len: %lu\n",
+			"Unable to register MR buf (%s): %p len: %zu\n",
 			fi_strerror(-ret), attr->mr_iov->iov_base,
 			attr->mr_iov->iov_len);
 		goto err;
@@ -156,7 +156,7 @@ int rxr_mr_regattr(struct fid *domain_fid, const struct fi_mr_attr *attr,
 				&rxr_mr->mr_fid.key, mr);
 	if (ret) {
 		FI_WARN(&rxr_prov, FI_LOG_MR,
-			"Unable to add MR to map buf (%s): %p len: %lu\n",
+			"Unable to add MR to map buf (%s): %p len: %zu\n",
 			fi_strerror(-ret), attr->mr_iov->iov_base,
 			attr->mr_iov->iov_len);
 		goto err;

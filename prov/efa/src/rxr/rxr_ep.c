@@ -1258,7 +1258,7 @@ ssize_t rxr_ep_post_read_response(struct rxr_ep *ep, struct rxr_tx_entry *tx_ent
 	if (OFI_UNLIKELY(ret)) {
 		rxr_release_tx_pkt_entry(ep, pkt_entry);
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
-			"Failed to send a read response packet: ret %ld\n", ret);
+			"Failed to send a read response packet: ret %zd\n", ret);
 		return ret;
 	}
 
