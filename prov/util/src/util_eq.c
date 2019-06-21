@@ -162,6 +162,8 @@ ssize_t ofi_eq_sread(struct fid_eq *eq_fid, uint32_t *event, void *buf,
 		     size_t len, int timeout, uint64_t flags)
 {
 	struct util_eq *eq;
+	uint64_t endtime;
+	ssize_t ret;
 
 	eq = container_of(eq_fid, struct util_eq, eq_fid);
 	if (!eq->internal_wait) {
@@ -169,8 +171,19 @@ ssize_t ofi_eq_sread(struct fid_eq *eq_fid, uint32_t *event, void *buf,
 		return -FI_ENOSYS;
 	}
 
-	fi_wait(&eq->wait->wait_fid, timeout);
-	return fi_eq_read(eq_fid, event, buf, len, flags);
+	endtime = ofi_timeout_time(timeout);
+	do {
+		ret = fi_eq_read(eq_fid, event, buf, len, flags);
+		if (ret != -FI_EAGAIN)
+			break;
+
+		if (ofi_adjust_timeout(endtime, &timeout))
+			return -FI_EAGAIN;
+
+		ret = fi_wait(&eq->wait->wait_fid, timeout);
+	} while (!ret);
+
+	return ret == -FI_ETIMEDOUT ? -FI_EAGAIN : ret;
 }
 
 const char *ofi_eq_strerror(struct fid_eq *eq_fid, int prov_errno,

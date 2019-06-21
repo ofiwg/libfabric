@@ -392,7 +392,7 @@ ssize_t ofi_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 			break;
 
 		if (ofi_adjust_timeout(endtime, &timeout))
-			return -FI_ETIMEDOUT;
+			return -FI_EAGAIN;
 
 		if (ofi_atomic_get32(&cq->signaled)) {
 			ofi_atomic_set32(&cq->signaled, 0);
