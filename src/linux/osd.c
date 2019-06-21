@@ -59,7 +59,7 @@ ssize_t ofi_get_hugepage_size(void)
 		return -errno;
 
 	while (getline(&line, &len, fd) != -1)
-		if (sscanf(line, "Hugepagesize: %lu kB", &val) == 1)
+		if (sscanf(line, "Hugepagesize: %zu kB", &val) == 1)
 			break;
 
 	free(line);
@@ -121,6 +121,7 @@ size_t ofi_ifaddr_get_speed(struct ifaddrs *ifa)
 		return 0;
 
 	strncpy(ifr.ifr_name, ifa->ifa_name, IF_NAMESIZE);
+	ifr.ifr_name[IF_NAMESIZE - 1] = '\0';
 
 	ret = ioctl(fd, SIOCETHTOOL, &ifr);
 	if (ret) {

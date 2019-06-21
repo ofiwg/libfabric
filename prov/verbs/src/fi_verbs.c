@@ -289,10 +289,10 @@ static int fi_ibv_param_define(const char *param_name, const char *param_str,
 		goto fn;
 	}
 
-	strncat(param_help, param_str, param_str_sz);
-	strncat(param_help, begin_def_section, begin_def_section_sz);
-	strncat(param_help, param_default_str, param_default_sz);
-	strncat(param_help, end_def_section, end_def_section_sz);
+	strncat(param_help, param_str, param_str_sz + 1);
+	strncat(param_help, begin_def_section, begin_def_section_sz + 1);
+	strncat(param_help, param_default_str, param_default_sz + 1);
+	strncat(param_help, end_def_section, end_def_section_sz + 1);
 
 	param_help[len - 1] = '\0';
 

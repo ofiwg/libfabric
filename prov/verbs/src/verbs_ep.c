@@ -719,7 +719,7 @@ static int fi_ibv_dgram_ep_setname(fid_t ep_fid, void *addr, size_t addrlen)
 
 	if (addrlen < ep->info->src_addrlen) {
 		VERBS_INFO(FI_LOG_EP_CTRL,
-			   "addrlen expected: %"PRIu64", got: %"PRIu64"\n",
+			   "addrlen expected: %zu, got: %zu\n",
 			   ep->info->src_addrlen, addrlen);
 		return -FI_ETOOSMALL;
 	}
@@ -758,7 +758,7 @@ static int fi_ibv_dgram_ep_getname(fid_t ep_fid, void *addr, size_t *addrlen)
 	if (*addrlen < sizeof(ep->ep_name)) {
 		*addrlen = sizeof(ep->ep_name);
 		VERBS_INFO(FI_LOG_EP_CTRL,
-			   "addrlen expected: %"PRIu64", got: %"PRIu64"\n",
+			   "addrlen expected: %zu, got: %zu\n",
 			   sizeof(ep->ep_name), *addrlen);
 		return -FI_ETOOSMALL;
 	}

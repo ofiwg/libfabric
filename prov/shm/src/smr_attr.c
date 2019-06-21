@@ -35,9 +35,15 @@
 #define SMR_TX_CAPS (OFI_TX_MSG_CAPS | FI_TAGGED | OFI_TX_RMA_CAPS | FI_ATOMICS)
 #define SMR_RX_CAPS (FI_SOURCE | FI_RMA_EVENT | OFI_RX_MSG_CAPS | FI_TAGGED | \
 		     OFI_RX_RMA_CAPS | FI_ATOMICS)
+#define SMR_TX_OP_FLAGS (FI_REMOTE_CQ_DATA | FI_COMPLETION | \
+			 FI_INJECT_COMPLETE | FI_TRANSMIT_COMPLETE | \
+			 /* TODO: support for delivery complete */ \
+			 FI_DELIVERY_COMPLETE)
+#define SMR_RX_OP_FLAGS (FI_COMPLETION | FI_MULTI_RECV)
 
 struct fi_tx_attr smr_tx_attr = {
 	.caps = SMR_TX_CAPS,
+	.op_flags = SMR_TX_OP_FLAGS,
 	.comp_order = FI_ORDER_NONE,
 	.msg_order = SMR_RMA_ORDER | FI_ORDER_SAS,
 	.inject_size = SMR_INJECT_SIZE,
@@ -48,6 +54,7 @@ struct fi_tx_attr smr_tx_attr = {
 
 struct fi_rx_attr smr_rx_attr = {
 	.caps = SMR_RX_CAPS | FI_MULTI_RECV,
+	.op_flags = SMR_RX_OP_FLAGS,
 	.comp_order = FI_ORDER_STRICT,
 	.msg_order = SMR_RMA_ORDER | FI_ORDER_SAS,
 	.size = 1024,

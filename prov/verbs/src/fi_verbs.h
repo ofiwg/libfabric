@@ -781,7 +781,7 @@ struct fi_ibv_dgram_av_entry {
 static inline struct fi_ibv_dgram_av_entry*
 fi_ibv_dgram_av_lookup_av_entry(fi_addr_t fi_addr)
 {
-	return (struct fi_ibv_dgram_av_entry *)fi_addr;
+	return (struct fi_ibv_dgram_av_entry *) (uintptr_t) fi_addr;
 }
 
 /* NOTE:

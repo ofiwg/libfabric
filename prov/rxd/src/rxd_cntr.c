@@ -40,13 +40,13 @@ static int rxd_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int time
 	struct fid_list_entry *fid_entry;
 	struct util_cntr *cntr;
 	struct rxd_ep *ep;
-	uint64_t start, errcnt;
+	uint64_t endtime, errcnt;
 	int ret, ep_retry;
 
 	cntr = container_of(cntr_fid, struct util_cntr, cntr_fid);
 	assert(cntr->wait);
 	errcnt = ofi_atomic_get64(&cntr->err);
-	start = (timeout >= 0) ? fi_gettime_ms() : 0;
+	endtime = ofi_timeout_time(timeout);
 
 	do {
 		cntr->progress(cntr);
@@ -56,11 +56,8 @@ static int rxd_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int time
 		if (errcnt != ofi_atomic_get64(&cntr->err))
 			return -FI_EAVAIL;
 
-		if (timeout >= 0) {
-			timeout -= (int) (fi_gettime_ms() - start);
-			if (timeout <= 0)
-				return -FI_ETIMEDOUT;
-		}
+		if (ofi_adjust_timeout(endtime, &timeout))
+			return -FI_ETIMEDOUT;
 
 		ep_retry = -1;
 		fastlock_acquire(&cntr->ep_list_lock);

@@ -227,7 +227,7 @@ static int fi_ibv_msg_alloc_xrc_params(void **adjusted_param,
 	*adjusted_param = NULL;
 
 	if (cm_datalen > FI_IBV_CM_DATA_SIZE) {
-		VERBS_WARN(FI_LOG_EP_CTRL, "XRC CM data overflow %"PRIu64"\n",
+		VERBS_WARN(FI_LOG_EP_CTRL, "XRC CM data overflow %zu\n",
 			   cm_datalen);
 		return -FI_EINVAL;
 	}

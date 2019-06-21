@@ -748,7 +748,7 @@ static int sock_pe_process_rx_read(struct sock_pe *pe,
 					pe_entry->pe.rx.rx_iov[i].iov.len,
 					FI_REMOTE_READ);
 		if (!mr) {
-			SOCK_LOG_ERROR("Remote memory access error: %p, %lu, %" PRIu64 "\n",
+			SOCK_LOG_ERROR("Remote memory access error: %p, %zu, %" PRIu64 "\n",
 				       (void *) (uintptr_t) pe_entry->pe.rx.rx_iov[i].iov.addr,
 				       pe_entry->pe.rx.rx_iov[i].iov.len,
 				       pe_entry->pe.rx.rx_iov[i].iov.key);
@@ -802,7 +802,7 @@ static int sock_pe_process_rx_write(struct sock_pe *pe,
 					pe_entry->pe.rx.rx_iov[i].iov.len,
 					FI_REMOTE_WRITE);
 		if (!mr) {
-			SOCK_LOG_ERROR("Remote memory access error: %p, %lu, %" PRIu64 "\n",
+			SOCK_LOG_ERROR("Remote memory access error: %p, %zu, %" PRIu64 "\n",
 				       (void *) (uintptr_t) pe_entry->pe.rx.rx_iov[i].iov.addr,
 				       pe_entry->pe.rx.rx_iov[i].iov.len,
 				       pe_entry->pe.rx.rx_iov[i].iov.key);
@@ -958,7 +958,7 @@ static int sock_pe_process_rx_atomic(struct sock_pe *pe,
 					pe_entry->pe.rx.rx_iov[i].ioc.count * datatype_sz,
 					FI_REMOTE_WRITE);
 		if (!mr) {
-			SOCK_LOG_ERROR("Remote memory access error: %p, %lu, %" PRIu64 "\n",
+			SOCK_LOG_ERROR("Remote memory access error: %p, %zu, %" PRIu64 "\n",
 				       (void *) (uintptr_t) pe_entry->pe.rx.rx_iov[i].ioc.addr,
 				       pe_entry->pe.rx.rx_iov[i].ioc.count * datatype_sz,
 				       pe_entry->pe.rx.rx_iov[i].ioc.key);
