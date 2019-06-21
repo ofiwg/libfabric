@@ -17,28 +17,38 @@ transport and provides a translation of OFI calls to appropriate verbs API calls
 It uses librdmacm for communication management and libibverbs for other control
 and data transfer operations.
 
+# REQUIREMENTS
+
+To successfully build and install verbs provider as part of libfabric, it needs
+the following packages:
+ * libibverbs
+ * libibverbs-devel
+ * librdmacm
+ * librdmacm-devel
+
+You may also want to look into any OS specific instructions for enabling RDMA.
+e.g. RHEL has instructions on their documentation for enabling RDMA.
+
+The IPoIB interface should be configured with a valid IP address. This is a
+requirement from librdmacm.
+
 # SUPPORTED FEATURES
 
 The verbs provider supports a subset of OFI features.
 
 ### Endpoint types
-FI_EP_MSG, FI_EP_RDM
+FI_EP_MSG, FI_EP_DGRAM (beta), FI_EP_RDM.
 
-New change in libfabric v1.6:
-FI_EP_RDM is supported through the OFI RxM utility provider. This is done
-automatically when the app requests FI_EP_RDM endpoint. Please refer the
-man page for RxM provider to learn more. The provider's internal support
-for RDM endpoints is deprecated and would be removed from libfabric v1.7
-onwards. Till then apps can explicitly request the internal RDM support by
-disabling ofi_rxm provider through FI_PROVIDER env variable (FI_PROVIDER=^ofi_rxm).
+FI_EP_RDM is supported via OFI RxM and RxD utility providers which are layered
+on top of verbs. To the app, the provider name string would appear as
+"verbs;ofi_rxm" or "verbs;ofi_rxd". Please refer the man pages for RxM (fi_rxm.7)
+and RxD (fi_rxd.7) to know about the capabilities and limitations for the
+FI_EP_RDM endpoint.
 
 ### Endpoint capabilities and features
 
 #### MSG endpoints
 FI_MSG, FI_RMA, FI_ATOMIC and shared receive contexts.
-
-#### RDM endpoints (internal - deprecated)
-FI_MSG, FI_TAGGED, FI_RMA
 
 #### DGRAM endpoints
 FI_MSG
@@ -52,10 +62,6 @@ Verbs provider requires applications to support the following modes:
 
   * FI_RX_CQ_DATA for applications that want to use RMA. Applications must
     take responsibility of posting receives for any incoming CQ data.
-
-#### FI_EP_RDM endpoint type (internal - deprecated)
-
-  * FI_CONTEXT
 
 ### Addressing Formats
 Supported addressing formats include
@@ -101,12 +107,10 @@ the use of huge pages, it is recommended to set RDMAV_HUGEPAGES_SAFE.
 See ibv_fork_init(3) for additional details.
 
 ### Memory Registration Cache
-The verbs provider features a memory registration cache. This speeds up memory
-registration calls from applications by caching registrations of frequently used
-memory regions. The user can control the maximum combined size of all cache entries
-and the maximum number of cache entries with the environment variables
-FI_MR_CACHE_MAX_SIZE and FI_MR_CACHE_MAX_COUNT respectively. See fi_mr(3) for
-more details.
+The verbs provider uses the common memory registration cache functionality that's
+part of libfabric utility code. This speeds up memory registration calls from
+applications by caching registrations of frequently used memory regions. Please
+refer to fi_mr(3): Memory Registration Cache section for more details.
 
 # LIMITATIONS
 
@@ -136,15 +140,6 @@ Scalable endpoints, FABRIC_DIRECT
     shared TX context, cq_readfrom operations.
   * Completion flags are not reported if a request posted to an endpoint completes
     in error.
-
-#### Unsupported features specific to RDM (internal - deprecated) endpoints
-The RDM support for verbs have the following limitations:
-
-  * Supports iovs of only size 1.
-
-  * Wait objects are not supported.
-
-  * Not thread safe.
 
 ### Fork
 The support for fork in the provider has the following limitations:
@@ -197,29 +192,6 @@ The verbs provider checks for the following environment variables.
 *FI_VERBS_PREFER_XRC*
 : Prioritize XRC transport fi_info before RC transport fi_info (default: 0, RC fi_info will be before XRC fi_info)
 
-### Variables specific to RDM (internal - deprecated) endpoints
-
-*FI_VERBS_RDM_BUFFER_NUM*
-: The number of pre-registered buffers for buffered operations between the endpoints,
-  must be a power of 2 (default: 8).
-
-*FI_VERBS_RDM_BUFFER_SIZE*
-: The maximum size of a buffered operation (bytes) (default: platform specific).
-
-*FI_VERBS_RDM_RNDV_SEG_SIZE*
-: The segment size for zero copy protocols (bytes)(default: 1073741824).
-
-*FI_VERBS_RDM_THREAD_TIMEOUT*
-: The wake up timeout of the helper thread (usec) (default: 100).
-
-*FI_VERBS_RDM_EAGER_SEND_OPCODE*
-: The operation code that will be used for eager messaging. Only IBV_WR_SEND and
-  IBV_WR_RDMA_WRITE_WITH_IMM are supported. The last one is not applicable for iWarp.
-  (default: IBV_WR_SEND)
-
-*FI_VERBS_RDM_CM_THREAD_AFFINITY*
-: If specified, bind the CM thread to the indicated range(s) of Linux virtual processor ID(s). This option is currently not supported on OS X. Usage: id_start[-id_end[:stride]][,]
-
 ### Variables specific to DGRAM endpoints
 
 *FI_VERBS_DGRAM_USE_NAME_SERVER*
@@ -238,6 +210,29 @@ The fi_info utility would give the up-to-date information on environment variabl
 fi_info -p verbs -e
 
 # Troubleshooting / Known issues
+
+### fi_getinfo returns -FI_ENODATA
+
+- Set FI_LOG_LEVEL=info or FI_LOG_LEVEL=debug (if debug build of libfabric is
+  available) and check if there any errors because of incorrect input parameters
+  to fi_getinfo.
+- Check if "fi_info -p verbs" is successful. If that fails the following chkecklist
+  may help in ensuring that the RDMA verbs stack is functional:
+  - If libfabric was compiled, check if verbs provider was built. Building verbs
+   provider would be skipped if its dependencies (listed in requirements) aren't
+   available on the system.
+  - Verify verbs device is functional:
+    - Does ibv_rc_pingpong (available in libibverbs) test work?
+      - Does ibv_devinfo (available in libibverbs) show the device with PORT_ACTIVE
+        status?
+        - Check if Subnet Manager (SM) is running on the switch or on one of
+          the nodes in the cluster.
+        - Is the cable connected?
+  - Verify librdmacm is functional:
+    - Does ucmatose test (available in librdmacm) work?
+    - Is the IPoIB interface (e.g. ib0) up and configured with a valid IP address?
+
+### Other issues
 
 When running an app over verbs provider with Valgrind, there may be reports of
 memory leak in functions from dependent libraries (e.g. libibverbs, librdmacm).
