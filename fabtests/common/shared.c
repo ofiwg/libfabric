@@ -807,7 +807,8 @@ int ft_server_connect(void)
 	return 0;
 
 err:
-	fi_reject(pep, fi->handle, NULL, 0);
+	if (fi)
+		fi_reject(pep, fi->handle, NULL, 0);
 	return ret;
 }
 
