@@ -52,6 +52,23 @@ static ssize_t tcpx_eq_read(struct fid_eq *eq_fid, uint32_t *event,
 	return ofi_eq_read(eq_fid, event, buf, len, flags);
 }
 
+static int tcpx_eq_close(struct fid *fid)
+{
+	struct tcpx_eq *eq;
+	int ret;
+
+	ret = ofi_eq_cleanup(fid);
+	if (ret)
+		return ret;
+
+	eq = container_of(fid, struct tcpx_eq,
+			  util_eq.eq_fid.fid);
+
+	fastlock_destroy(&eq->close_lock);
+	free(eq);
+	return 0;
+}
+
 static struct fi_ops_eq tcpx_eq_ops = {
 	.size = sizeof(struct fi_ops_eq),
 	.read = tcpx_eq_read,
@@ -61,39 +78,60 @@ static struct fi_ops_eq tcpx_eq_ops = {
 	.strerror = ofi_eq_strerror,
 };
 
+static struct fi_ops tcpx_eq_fi_ops = {
+	.size = sizeof(struct fi_ops),
+	.close = tcpx_eq_close,
+	.bind = fi_no_bind,
+	.control = ofi_eq_control,
+	.ops_open = fi_no_ops_open,
+};
+
 int tcpx_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
 		   struct fid_eq **eq_fid, void *context)
 {
-	struct util_eq *eq;
+	struct tcpx_eq *eq;
 	struct fi_wait_attr wait_attr;
 	struct fid_wait *wait;
 	int ret;
 
-	ret = ofi_eq_create(fabric_fid, attr, eq_fid, context);
+	eq = calloc(1, sizeof(*eq));
+	if (!eq)
+		return -FI_ENOMEM;
+
+	ret = ofi_eq_init(fabric_fid, attr, &eq->util_eq.eq_fid, context);
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_EQ,
 			"EQ creation failed\n");
-		return ret;
+		goto err1;
 	}
 
-	eq = container_of(*eq_fid, struct util_eq, eq_fid);
-	eq->eq_fid.ops	= &tcpx_eq_ops;
+	ret = fastlock_init(&eq->close_lock);
+	if (ret)
+		goto err2;
 
-	if (!eq->wait) {
+	eq->util_eq.eq_fid.ops	= &tcpx_eq_ops;
+	eq->util_eq.eq_fid.fid.ops = &tcpx_eq_fi_ops;
+
+	if (!eq->util_eq.wait) {
 		memset(&wait_attr, 0, sizeof wait_attr);
 		wait_attr.wait_obj = FI_WAIT_FD;
 		ret = fi_wait_open(fabric_fid, &wait_attr, &wait);
 		if (ret) {
 			FI_WARN(&tcpx_prov, FI_LOG_EQ,
 				"opening wait failed\n");
-			goto err;
+			goto err3;
 		}
-		eq->internal_wait = 1;
-		eq->wait = container_of(wait, struct util_wait,
+		eq->util_eq.internal_wait = 1;
+		eq->util_eq.wait = container_of(wait, struct util_wait,
 					wait_fid);
 	}
+	*eq_fid = &eq->util_eq.eq_fid;
 	return 0;
-err:
-	fi_close(&eq->eq_fid.fid);
+err3:
+	fastlock_destroy(&eq->close_lock);
+err2:
+	ofi_eq_cleanup(&eq->util_eq.eq_fid.fid);
+err1:
+	free(eq);
 	return ret;
 }
