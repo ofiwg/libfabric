@@ -25,7 +25,12 @@ v1.8.0, Fri Jun 28, 2019
 ## GNI
 
 - Fix handling of incorrect fi_addr_t value
+- Fix several problems when using FI_ADDR_STR format
+- Fix several problems when using multi-receive buffers
 - Fix problem with possible receive truncation
+- Fix possible overrunning of receive buffers
+- Implement fi_getopt/fi_setopt for scalable endpoints
+- Only generate FI_EADDRNOTAVAIL if FI_SOURCE_ERR enabled
 
 ## MRAIL
 
