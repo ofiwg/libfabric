@@ -188,7 +188,7 @@ enum rxr_pkt_type {
 	/* Large message types */
 	RXR_CTS_PKT,
 	RXR_DATA_PKT,
-	RXR_READ_RESPONSE_PKT,
+	RXR_READRSP_PKT,
 };
 
 /* pkt_entry types for rx pkts */
@@ -217,13 +217,13 @@ enum rxr_tx_comm_type {
 	RXR_TX_QUEUED_RTS,	/* tx_entry was unable to send RTS */
 	RXR_TX_QUEUED_RTS_RNR,  /* tx_entry RNR sending RTS packet */
 	RXR_TX_QUEUED_DATA_RNR,	/* tx_entry RNR sending data packets */
-	RXR_TX_SENT_READ_RESPONSE, /* tx_entry (on remote EP) sent
-				    * read respone (FI_READ only)
-				    */
-	RXR_TX_QUEUED_READ_RESPONSE, /* tx_entry (on remote EP) was
-				      * unable to send read response
-				      * (FI_READ only)
-				      */
+	RXR_TX_SENT_READRSP,	/* tx_entry (on remote EP) sent
+				 * read response (FI_READ only)
+				 */
+	RXR_TX_QUEUED_READRSP, /* tx_entry (on remote EP) was
+				* unable to send read response
+				* (FI_READ only)
+				*/
 	RXR_TX_WAIT_READ_FINISH, /* tx_entry (on initiating EP) wait
 				  * for rx_entry to finish receiving
 				  * (FI_READ only)
@@ -318,7 +318,7 @@ struct rxr_rx_entry {
 	uint64_t ignore;
 
 	uint64_t bytes_done;
-	uint64_t window;
+	int64_t window;
 
 	uint64_t total_len;
 
@@ -380,7 +380,7 @@ struct rxr_tx_entry {
 
 	uint64_t bytes_acked;
 	uint64_t bytes_sent;
-	uint64_t window;
+	int64_t window;
 
 	uint64_t total_len;
 
@@ -640,17 +640,19 @@ struct rxr_data_hdr {
 static_assert(sizeof(struct rxr_data_hdr) == 24, "rxr_data_hdr check");
 #endif
 
-struct rxr_read_response_hdr {
+struct rxr_readrsp_hdr {
 	uint8_t type;
 	uint8_t version;
 	uint16_t flags;
 	/* end of rxr_base_hdr */
+	uint8_t pad[4];
 	uint32_t rx_id;
 	uint32_t tx_id;
+	uint64_t seg_size;
 };
 
 #if defined(static_assert) && defined(__X86_64__)
-static_assert(sizeof(struct rxr_read_response_hdr) == 12, "rxr_read_response_hdr check");
+static_assert(sizeof(struct rxr_readrsp_hdr) == sizeof(struct rxr_data_hdr), "rxr_readrsp_hdr check");
 #endif
 
 /*
@@ -704,6 +706,11 @@ struct rxr_data_pkt {
 	char data[];
 };
 
+struct rxr_readrsp_pkt {
+	struct rxr_readrsp_hdr hdr;
+	char data[];
+};
+
 struct rxr_pkt_entry {
 	/* for rx/tx_entry queued_pkts list */
 	struct dlist_entry entry;
@@ -745,7 +752,7 @@ DECLARE_FREESTACK(struct rxr_robuf, rxr_robuf_fs);
 
 #define RXR_DATA_HDR_SIZE		(sizeof(struct rxr_data_hdr))
 
-#define RXR_READ_RESPONSE_HDR_SIZE	(sizeof(struct rxr_read_response_hdr))
+#define RXR_READRSP_HDR_SIZE	(sizeof(struct rxr_readrsp_hdr))
 
 static inline struct rxr_peer *rxr_ep_get_peer(struct rxr_ep *ep,
 					       fi_addr_t addr)
@@ -950,9 +957,9 @@ static inline struct rxr_cts_hdr *rxr_get_cts_hdr(void *pkt)
 	return (struct rxr_cts_hdr *)pkt;
 }
 
-static inline struct rxr_read_response_hdr *rxr_get_read_response_hdr(void *pkt)
+static inline struct rxr_readrsp_hdr *rxr_get_readrsp_hdr(void *pkt)
 {
-	return (struct rxr_read_response_hdr *)pkt;
+	return (struct rxr_readrsp_hdr *)pkt;
 }
 
 static inline struct rxr_ctrl_cq_pkt *rxr_get_ctrl_cq_pkt(void *pkt)
@@ -1067,7 +1074,7 @@ int rxr_ep_post_buf(struct rxr_ep *ep, uint64_t flags);
 ssize_t rxr_ep_send_msg(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 			const struct fi_msg *msg, uint64_t flags);
 ssize_t rxr_ep_post_data(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry);
-ssize_t rxr_ep_post_read_response(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry);
+ssize_t rxr_ep_post_readrsp(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry);
 void rxr_ep_init_connack_pkt_entry(struct rxr_ep *ep,
 				   struct rxr_pkt_entry *pkt_entry,
 				   fi_addr_t addr);
@@ -1079,8 +1086,8 @@ void rxr_ep_init_cts_pkt_entry(struct rxr_ep *ep,
 			       uint32_t max_window,
 			       uint64_t size,
 			       int *credits);
-void rxr_ep_init_read_response_pkt_entry(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
-					 struct rxr_pkt_entry *pkt_entry);
+void rxr_ep_init_readrsp_pkt_entry(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
+				   struct rxr_pkt_entry *pkt_entry);
 struct rxr_rx_entry *rxr_ep_get_new_unexp_rx_entry(struct rxr_ep *ep,
 						   struct rxr_pkt_entry *unexp_entry);
 struct rxr_rx_entry *rxr_ep_split_rx_entry(struct rxr_ep *ep,
