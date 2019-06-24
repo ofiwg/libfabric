@@ -54,9 +54,6 @@ struct hook_debug_txrx_entry {
 	void 			*context;
 };
 
-DECLARE_FREESTACK(struct hook_debug_txrx_entry, hook_debug_tx_fs);
-DECLARE_FREESTACK(struct hook_debug_txrx_entry, hook_debug_rx_fs);
-
 struct hook_debug_cq {
 	struct hook_cq hook_cq;
 	enum fi_cq_format format;
@@ -68,8 +65,8 @@ struct hook_debug_ep {
 	struct hook_ep hook_ep;
 	uint64_t tx_op_flags;
 	uint64_t rx_op_flags;
-	struct hook_debug_tx_fs *tx_fs;
-	struct hook_debug_rx_fs *rx_fs;
+	struct ofi_bufpool *tx_pool;
+	struct ofi_bufpool *rx_pool;
 	size_t tx_outs;
 	size_t rx_outs;
 	size_t tx_eagain_count;

@@ -55,9 +55,8 @@ hook_debug_get_tx_entry(struct hook_debug_ep *myep, void *context,
 {
 	struct hook_debug_txrx_entry *tx_entry;
 
-	assert(!freestack_isempty(myep->tx_fs));
-
-	tx_entry = freestack_pop(myep->tx_fs);
+	tx_entry = ofi_buf_alloc(myep->tx_pool);
+	assert(tx_entry);
 	assert(tx_entry->magic == OFI_MAGIC_64);
 
 	tx_entry->op_flags = myep->tx_op_flags | flags;
@@ -71,9 +70,8 @@ hook_debug_get_rx_entry(struct hook_debug_ep *myep, void *context,
 {
 	struct hook_debug_txrx_entry *rx_entry;
 
-	assert(!freestack_isempty(myep->rx_fs));
-
-	rx_entry = freestack_pop(myep->rx_fs);
+	rx_entry = ofi_buf_alloc(myep->rx_pool);
+	assert(rx_entry);
 	assert(rx_entry->magic == OFI_MAGIC_64);
 
 	rx_entry->op_flags = myep->rx_op_flags | flags;
@@ -119,7 +117,7 @@ static void hook_debug_rx_end(struct hook_debug_ep *ep, char *fn,
 				 ep->hook_ep.hep, ep->rx_outs);
 		} else {
 			rx_entry = mycontext;
-			freestack_push(ep->rx_fs, rx_entry);
+			ofi_buf_free(rx_entry);
 		}
 	}
 }
@@ -215,7 +213,7 @@ static void hook_debug_tx_end(struct hook_debug_ep *ep, char *fn,
 				 ep->hook_ep.hep, ep->tx_outs);
 		} else {
 			tx_entry = mycontext;
-			freestack_push(ep->tx_fs, tx_entry);
+			ofi_buf_free(tx_entry);
 		}
 	}
 }
@@ -499,7 +497,7 @@ static void hook_debug_cq_process_entry(struct hook_debug_cq *mycq,
 					 FI_LOG_CQ, "ep: %p rx_outs: %zu\n",
 					 rx_entry->ep->hook_ep.hep,
 					 rx_entry->ep->rx_outs);
-				freestack_push(rx_entry->ep->rx_fs, rx_entry);
+				ofi_buf_free(rx_entry);
 			}
 		} else if (config.track_sends && (cq_entry->flags & FI_SEND)) {
 			tx_entry = cq_entry->op_context;
@@ -512,7 +510,7 @@ static void hook_debug_cq_process_entry(struct hook_debug_cq *mycq,
 				 FI_LOG_CQ, "ep: %p tx_outs: %zu\n",
 				 tx_entry->ep->hook_ep.hep,
 				 tx_entry->ep->tx_outs);
-			freestack_push(tx_entry->ep->tx_fs, tx_entry);
+			ofi_buf_free(tx_entry);
 		}
 	}
 }
@@ -614,10 +612,11 @@ int hook_debug_ep_close(struct fid *fid)
 		container_of(fid, struct hook_debug_ep, hook_ep.ep.fid);
 	int ret = 0;
 
-	if (myep->rx_fs)
-		hook_debug_rx_fs_free(myep->rx_fs);
-	if (myep->tx_fs)
-		hook_debug_tx_fs_free(myep->tx_fs);
+	if (myep->tx_pool)
+		ofi_bufpool_destroy(myep->tx_pool);
+
+	if (myep->rx_pool)
+		ofi_bufpool_destroy(myep->rx_pool);
 
 	if (myep->hook_ep.hep)
 		ret = fi_close(&myep->hook_ep.hep->fid);
@@ -647,10 +646,12 @@ int hook_debug_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	return hfid->ops->bind(hfid, hbfid, flags);
 }
 
-static void hook_debug_txrx_fs_init(struct hook_debug_txrx_entry *entry, void *arg)
+static void hook_debug_txrx_entry_init(struct ofi_bufpool_region *region,
+				       void *buf)
 {
+	struct hook_debug_txrx_entry *entry = buf;
 	entry->magic = OFI_MAGIC_64;
-	entry->ep = arg;
+	entry->ep = region->pool->attr.context;
 }
 
 struct fi_ops hook_debug_ep_fid_ops;
@@ -683,6 +684,13 @@ int hook_debug_endpoint(struct fid_domain *domain, struct fi_info *info,
 			struct fid_ep **ep, void *context)
 {
 	struct hook_debug_ep *myep;
+	struct ofi_bufpool_attr bufpool_attr = {
+		.size		= sizeof(struct hook_debug_txrx_entry),
+		.alignment	= 16,
+		.max_cnt	= 0,
+		.init_fn	= hook_debug_txrx_entry_init,
+	};
+
 	int ret = -FI_ENOMEM;
 
 	if (info->domain_attr->threading != FI_THREAD_DOMAIN) {
@@ -701,20 +709,21 @@ int hook_debug_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (!myep)
 		return ret;
 
-	// TODO this doesn't work for devices like hfi1 verbs as their TX
-	// can progress independent of whether CQ is being read. which means
-	// we'll run out of freestack buffers and return EAGAIN to app. Use a
-	// buffer pool instead
-	myep->tx_fs = hook_debug_tx_fs_create(info->tx_attr->size,
-					      hook_debug_txrx_fs_init, myep);
-	if (!myep->tx_fs)
-		goto err;
+	bufpool_attr.context = myep;
 
-	/* +1 because we don't want to return EAGAIN from hooking provider */
-	myep->rx_fs = hook_debug_rx_fs_create(info->rx_attr->size,
-					      hook_debug_txrx_fs_init, myep);
-	if (!myep->rx_fs)
-		goto err;
+	if (config.track_sends) {
+		bufpool_attr.chunk_cnt = info->tx_attr->size;
+		ret = ofi_bufpool_create_attr(&bufpool_attr, &myep->tx_pool);
+		if (ret)
+			goto err;
+	}
+
+	if (config.track_recvs) {
+		bufpool_attr.chunk_cnt = info->rx_attr->size;
+		ret = ofi_bufpool_create_attr(&bufpool_attr, &myep->rx_pool);
+		if (ret)
+			goto err;
+	}
 
 	ret = hook_endpoint_init(domain, info, ep, context, &myep->hook_ep);
 	if (ret)
