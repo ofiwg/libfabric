@@ -19,11 +19,6 @@
 
 #define	AMO_DISABLED	false
 
-struct mem_region {
-	uint8_t *mem;
-	struct fid_mr *mr;
-};
-
 #define RMA_WIN_LEN	64
 #define RMA_WIN_KEY	2
 #define RMA_WIN_ACCESS	(FI_REMOTE_READ | FI_REMOTE_WRITE)
@@ -447,6 +442,8 @@ Test(atomic, simple_fetch)
 	loc = calloc(1, RMA_WIN_LEN);
 	cr_assert_not_null(loc);
 
+	cr_assert(!fi_cntr_read(cxit_read_cntr));
+
 	operand1 = 1;
 	*loc = -1;
 	exp_result = exp_remote;
@@ -500,6 +497,9 @@ Test(atomic, simple_fetch)
 	cr_assert_eq(*loc, exp_result,
 		     "Fetch Result = %016lx, expected = %016lx",
 		     *loc, exp_result);
+
+	while (fi_cntr_read(cxit_read_cntr) != 3)
+		sched_yield();
 
 	free(loc);
 	_cxit_destroy_mr(&mr);
@@ -1305,6 +1305,8 @@ Test(atomic, amo_batch)
 
 	_cxit_create_mr(&mr);
 
+	cr_assert(!fi_cntr_read(cxit_write_cntr));
+
 	ret = fi_atomic(cxit_ep, &operand1, 1, 0,
 			cxit_ep_fi_addr, 0, RMA_WIN_KEY,
 			FI_UINT64, FI_SUM, NULL);
@@ -1324,6 +1326,9 @@ Test(atomic, amo_batch)
 			cxit_ep_fi_addr, 0, RMA_WIN_KEY,
 			FI_UINT64, FI_SUM, NULL);
 	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
+
+	while (fi_cntr_read(cxit_write_cntr) != 4)
+		sched_yield();
 
 	for (i = 0; i < 4; i++) {
 		ret = cxit_await_completion(cxit_tx_cq, &cqe);

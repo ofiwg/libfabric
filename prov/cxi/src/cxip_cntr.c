@@ -21,51 +21,221 @@
 
 const struct fi_cntr_attr cxip_cntr_attr = {
 	.events = FI_CNTR_EVENTS_COMP,
-	.wait_obj = FI_WAIT_MUTEX_COND,
+	.wait_obj = FI_WAIT_NONE,
 	.wait_set = NULL,
 	.flags = 0,
 };
 
+/*
+ * cxip_cntr_mod() - Modify counter value.
+ *
+ * Set or increment the success or failure value of a counter by 'value'.
+ */
+int cxip_cntr_mod(struct cxip_cntr *cxi_cntr, uint64_t value, bool set,
+		  bool err)
+{
+	struct c_ct_cmd cmd = {};
+	struct cxip_cmdq *cmdq = cxi_cntr->domain->trig_cmdq;
+	int ret;
+
+	fastlock_acquire(&cxi_cntr->lock);
+
+	if (!set) {
+		/* Doorbell supports counter increment */
+		if (err)
+			cxi_ct_inc_failure(cxi_cntr->ct, value);
+		else
+			cxi_ct_inc_success(cxi_cntr->ct, value);
+	} else {
+		/* Doorbell supports counter reset */
+		if (!value) {
+			if (err)
+				cxi_ct_reset_failure(cxi_cntr->ct);
+			else
+				cxi_ct_reset_success(cxi_cntr->ct);
+
+			/* Doorbell reset triggers a write-back */
+			cxi_cntr->wb_pending = true;
+		} else {
+			/* Use CQ to set a specific counter value */
+			cmd.ct = cxi_cntr->ct->ctn;
+			if (err) {
+				cmd.set_ct_failure = 1;
+				cmd.ct_failure = value;
+			} else {
+				cmd.set_ct_success = 1;
+				cmd.ct_success = value;
+			}
+
+			fastlock_acquire(&cmdq->lock);
+			ret = cxi_cq_emit_ct(cmdq->dev_cmdq,
+					     set ? C_CMD_CT_SET : C_CMD_CT_INC,
+					     &cmd);
+			if (ret) {
+				fastlock_release(&cmdq->lock);
+				fastlock_release(&cxi_cntr->lock);
+				return -FI_EAGAIN;
+			}
+			cxi_cq_ring(cmdq->dev_cmdq);
+			fastlock_release(&cmdq->lock);
+
+			/* Set commands will trigger a write-back */
+			if (set)
+				cxi_cntr->wb_pending = true;
+		}
+	}
+
+	fastlock_release(&cxi_cntr->lock);
+
+	return FI_SUCCESS;
+}
+
+/*
+ * cxip_cntr_get() - Schedule a counter write-back.
+ *
+ * Schedule hardware to write the value of a counter to memory. Avoid
+ * scheduling multiple write-backs at once. The counter value will appear in
+ * memory a small amount of time later.
+ */
+static int cxip_cntr_get(struct cxip_cntr *cxi_cntr)
+{
+	struct c_ct_cmd cmd = {};
+	struct cxip_cmdq *cmdq = cxi_cntr->domain->trig_cmdq;
+	int ret;
+
+	fastlock_acquire(&cxi_cntr->lock);
+
+	if (cxi_cntr->wb_pending) {
+		if (cxi_cntr->wb.ct_writeback) {
+			cxi_cntr->wb.ct_writeback = 0;
+			cxi_cntr->wb_pending = false;
+		}
+		fastlock_release(&cxi_cntr->lock);
+		return FI_SUCCESS;
+	}
+
+	/* Request a write-back */
+	cmd.ct = cxi_cntr->ct->ctn;
+
+	fastlock_acquire(&cmdq->lock);
+	ret = cxi_cq_emit_ct(cmdq->dev_cmdq, C_CMD_CT_GET, &cmd);
+	if (ret) {
+		fastlock_release(&cmdq->lock);
+		fastlock_release(&cxi_cntr->lock);
+		return -FI_EAGAIN;
+	}
+	cxi_cq_ring(cmdq->dev_cmdq);
+	fastlock_release(&cmdq->lock);
+
+	/* Only schedule one write-back at a time */
+	cxi_cntr->wb_pending = true;
+
+	fastlock_release(&cxi_cntr->lock);
+
+	return FI_SUCCESS;
+}
+
+/*
+ * cxip_cntr_read() - fi_cntr_read() implementation.
+ */
 static uint64_t cxip_cntr_read(struct fid_cntr *fid_cntr)
 {
-	return 0;
+	struct cxip_cntr *cxi_cntr;
+
+	cxi_cntr = container_of(fid_cntr, struct cxip_cntr, cntr_fid);
+
+	cxip_cntr_get(cxi_cntr);
+
+	return cxi_cntr->wb.ct_success;
 }
 
+/*
+ * cxip_cntr_readerr() - fi_cntr_readerr() implementation.
+ */
 static uint64_t cxip_cntr_readerr(struct fid_cntr *fid_cntr)
 {
-	return 0;
+	struct cxip_cntr *cxi_cntr;
+
+	cxi_cntr = container_of(fid_cntr, struct cxip_cntr, cntr_fid);
+
+	cxip_cntr_get(cxi_cntr);
+
+	return cxi_cntr->wb.ct_failure;
 }
 
-void cxip_cntr_inc(struct cxip_cntr *cntr)
-{
-}
-
+/*
+ * cxip_cntr_add() - fi_cntr_add() implementation.
+ */
 static int cxip_cntr_add(struct fid_cntr *fid_cntr, uint64_t value)
 {
-	return 0;
+	struct cxip_cntr *cxi_cntr;
+
+	if (value > CXIP_CNTR_SUCCESS_MAX)
+		return -FI_EINVAL;
+
+	cxi_cntr = container_of(fid_cntr, struct cxip_cntr, cntr_fid);
+
+	return cxip_cntr_mod(cxi_cntr, value, false, false);
 }
 
+/*
+ * cxip_cntr_set() - fi_cntr_set() implementation.
+ */
 static int cxip_cntr_set(struct fid_cntr *fid_cntr, uint64_t value)
 {
-	return 0;
+	struct cxip_cntr *cxi_cntr;
+
+	if (value > CXIP_CNTR_SUCCESS_MAX)
+		return -FI_EINVAL;
+
+	cxi_cntr = container_of(fid_cntr, struct cxip_cntr, cntr_fid);
+
+	return cxip_cntr_mod(cxi_cntr, value, true, false);
 }
 
+/*
+ * cxip_cntr_adderr() - fi_cntr_adderr() implementation.
+ */
 static int cxip_cntr_adderr(struct fid_cntr *fid_cntr, uint64_t value)
 {
-	return 0;
+	struct cxip_cntr *cxi_cntr;
+
+	if (value > CXIP_CNTR_FAILURE_MAX)
+		return -FI_EINVAL;
+
+	cxi_cntr = container_of(fid_cntr, struct cxip_cntr, cntr_fid);
+
+	return cxip_cntr_mod(cxi_cntr, value, false, true);
 }
 
+/*
+ * cxip_cntr_seterr() - fi_cntr_seterr() implementation.
+ */
 static int cxip_cntr_seterr(struct fid_cntr *fid_cntr, uint64_t value)
 {
-	return 0;
+	struct cxip_cntr *cxi_cntr;
+
+	if (value > CXIP_CNTR_FAILURE_MAX)
+		return -FI_EINVAL;
+
+	cxi_cntr = container_of(fid_cntr, struct cxip_cntr, cntr_fid);
+
+	return cxip_cntr_mod(cxi_cntr, value, true, true);
 }
 
+/*
+ * cxip_cntr_wait() - fi_cntr_wait() implementation.
+ */
+__attribute__((unused))
 static int cxip_cntr_wait(struct fid_cntr *fid_cntr, uint64_t threshold,
 			  int timeout)
 {
 	return 0;
 }
 
+/*
+ * cxip_cntr_control() - fi_control() implementation for counter objects.
+ */
 static int cxip_cntr_control(struct fid *fid, int command, void *arg)
 {
 	int ret = 0;
@@ -102,6 +272,68 @@ static int cxip_cntr_control(struct fid *fid, int command, void *arg)
 	return ret;
 }
 
+/*
+ * cxip_cntr_enable() - Assign hardware resources to the Counter.
+ */
+int cxip_cntr_enable(struct cxip_cntr *cxi_cntr)
+{
+	int ret;
+
+	fastlock_acquire(&cxi_cntr->lock);
+
+	if (cxi_cntr->enabled)
+		goto unlock;
+
+	ret = cxil_alloc_ct(cxi_cntr->domain->dev_if->if_lni,
+			    &cxi_cntr->wb, &cxi_cntr->ct);
+	if (ret) {
+		CXIP_LOG_DBG("Unable to allocate CT, ret: %d\n", ret);
+		ret = -FI_EDOMAIN;
+		goto unlock;
+	}
+
+	cxi_cntr->enabled = 1;
+
+	CXIP_LOG_DBG("Counter enabled: %p (CT: %d)\n",
+		     cxi_cntr, cxi_cntr->ct->ctn);
+
+	fastlock_release(&cxi_cntr->lock);
+
+	return FI_SUCCESS;
+
+unlock:
+	fastlock_release(&cxi_cntr->lock);
+
+	return ret;
+}
+
+/*
+ * cxip_cntr_disable() - Release hardware resources from the Counter.
+ */
+static void cxip_cntr_disable(struct cxip_cntr *cxi_cntr)
+{
+	int ret;
+
+	fastlock_acquire(&cxi_cntr->lock);
+
+	if (!cxi_cntr->enabled)
+		goto unlock;
+
+	ret = cxil_destroy_ct(cxi_cntr->ct);
+	if (ret)
+		CXIP_LOG_DBG("Failed to free CT, ret: %d\n", ret);
+
+	cxi_cntr->enabled = 0;
+
+	CXIP_LOG_DBG("Counter disabled: %p\n", cxi_cntr);
+
+unlock:
+	fastlock_release(&cxi_cntr->lock);
+}
+
+/*
+ * cxip_cntr_close() - fi_close() implementation for counter objects.
+ */
 static int cxip_cntr_close(struct fid *fid)
 {
 	struct cxip_cntr *cntr;
@@ -109,6 +341,8 @@ static int cxip_cntr_close(struct fid *fid)
 	cntr = container_of(fid, struct cxip_cntr, cntr_fid.fid);
 	if (ofi_atomic_get32(&cntr->ref))
 		return -FI_EBUSY;
+
+	cxip_cntr_disable(cntr);
 
 	if (cntr->signal && cntr->attr.wait_obj == FI_WAIT_FD)
 		cxip_wait_close(&cntr->waitset->fid);
@@ -126,7 +360,7 @@ static struct fi_ops_cntr cxip_cntr_ops = {
 	.read = cxip_cntr_read,
 	.add = cxip_cntr_add,
 	.set = cxip_cntr_set,
-	.wait = cxip_cntr_wait,
+	.wait = fi_no_cntr_wait, // TODO wait object support: cxip_cntr_wait
 	.adderr = cxip_cntr_adderr,
 	.seterr = cxip_cntr_seterr,
 };
@@ -139,6 +373,9 @@ static struct fi_ops cxip_cntr_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
+/*
+ * cxip_cntr_verify_attr() - Verify counter creation attributes.
+ */
 static int cxip_cntr_verify_attr(struct fi_cntr_attr *attr)
 {
 	switch (attr->events) {
@@ -150,10 +387,10 @@ static int cxip_cntr_verify_attr(struct fi_cntr_attr *attr)
 
 	switch (attr->wait_obj) {
 	case FI_WAIT_NONE:
+		break;
 	case FI_WAIT_UNSPEC:
 	case FI_WAIT_SET:
 	case FI_WAIT_FD:
-		break;
 	default:
 		return -FI_ENOSYS;
 	}
@@ -162,6 +399,9 @@ static int cxip_cntr_verify_attr(struct fi_cntr_attr *attr)
 	return 0;
 }
 
+/*
+ * cxip_cntr_open() - fi_cntr_open() implementation.
+ */
 int cxip_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		   struct fid_cntr **cntr, void *context)
 {
@@ -233,7 +473,8 @@ int cxip_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	ofi_atomic_inc32(&dom->ref);
 	_cntr->domain = dom;
 	*cntr = &_cntr->cntr_fid;
-	return 0;
+
+	return FI_SUCCESS;
 
 err:
 	free(_cntr);

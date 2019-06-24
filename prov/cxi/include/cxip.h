@@ -94,6 +94,8 @@
 #define CXIP_FI_VERSION			FI_VERSION(1, 7)
 #define CXIP_WIRE_PROTO_VERSION		1
 
+#define CXIP_CNTR_SUCCESS_MAX ((1ULL << C_CT_SUCCESS_BITS) - 1)
+#define CXIP_CNTR_FAILURE_MAX ((1ULL << C_CT_FAILURE_BITS) - 1)
 
 static const char cxip_dom_fmt[] = "cxi%d";
 extern char cxip_prov_name[];
@@ -326,6 +328,7 @@ struct cxip_domain {
 	struct cxip_eq *mr_eq;		// == eq || == NULL
 	struct ofi_mr_cache iomm;	// IO Memory Map
 	struct ofi_mem_monitor iomm_mon;// IOMM monitor
+	struct cxip_cmdq *trig_cmdq;
 	fastlock_t iomm_lock;
 
 	uint32_t nic_addr;		// dev address of source NIC
@@ -494,31 +497,11 @@ struct cxip_cntr {
 	int signal;
 
 	fastlock_t lock;
-};
+	int enabled;
 
-/**
- * TX/RX Completion
- *
- * Support structure.
- *
- * Initialized when binding TX/RX to EP.
- */
-struct cxip_comp {
-	uint8_t send_cq_event;
-	uint8_t recv_cq_event;
-	char reserved[2];
-
-	struct cxip_cq *send_cq;
-	struct cxip_cq *recv_cq;
-
-	struct cxip_cntr *send_cntr;
-	struct cxip_cntr *recv_cntr;
-	struct cxip_cntr *read_cntr;
-	struct cxip_cntr *write_cntr;
-	struct cxip_cntr *rem_read_cntr;
-	struct cxip_cntr *rem_write_cntr;
-
-	struct cxip_eq *eq;
+	struct cxi_ct *ct;
+	struct c_ct_writeback wb;
+	bool wb_pending;
 };
 
 /**
@@ -580,8 +563,10 @@ struct cxip_rxc {
 	size_t num_left;		// unused (?) (set, never referenced)
 	size_t min_multi_recv;
 	uint64_t addr;
-	struct cxip_comp comp;
 	struct cxip_rxc *srx;
+
+	struct cxip_cq *recv_cq;
+	struct cxip_cntr *recv_cntr;
 
 	struct cxip_ep_obj *ep_obj;	// parent EP object
 	struct cxip_domain *domain;	// parent domain
@@ -643,8 +628,12 @@ struct cxip_txc {
 	uint8_t progress;		// unused
 
 	int use_shared;
-	struct cxip_comp comp;
 	struct cxip_txc *stx;		// shared context (?)
+
+	struct cxip_cq *send_cq;
+	struct cxip_cntr *send_cntr;
+	struct cxip_cntr *read_cntr;
+	struct cxip_cntr *write_cntr;
 
 	struct cxip_ep_obj *ep_obj;	// parent EP object
 	struct cxip_domain *domain;	// parent domain
@@ -921,6 +910,9 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq);
 int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq, void *context);
 
+int cxip_cntr_mod(struct cxip_cntr *cxi_cntr, uint64_t value, bool set,
+		  bool err);
+int cxip_cntr_enable(struct cxip_cntr *cxi_cntr);
 int cxip_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		   struct fid_cntr **cntr, void *context);
 

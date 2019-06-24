@@ -28,6 +28,7 @@ extern struct fi_ops_mr cxip_dom_mr_ops;
  */
 int cxip_domain_enable(struct cxip_domain *dom)
 {
+	struct cxi_cq_alloc_opts cq_opts = {};
 	int ret = FI_SUCCESS;
 
 	fastlock_acquire(&dom->lock);
@@ -49,11 +50,24 @@ int cxip_domain_enable(struct cxip_domain *dom)
 		goto put_if;
 	}
 
+	cq_opts.count = 64;
+	cq_opts.is_transmit = 1;
+	cq_opts.with_trig_cmds = 1;
+
+	ret = cxip_cmdq_alloc(dom->dev_if, NULL, &cq_opts, &dom->trig_cmdq);
+	if (ret != FI_SUCCESS) {
+		CXIP_LOG_DBG("Failed to allocate trig_cmdq: %d\n", ret);
+		ret = -FI_EDOMAIN;
+		goto iomm_fini;
+	}
+
 	dom->enabled = 1;
 	fastlock_release(&dom->lock);
 
 	return FI_SUCCESS;
 
+iomm_fini:
+	cxip_iomm_fini(dom);
 put_if:
 	cxip_put_if(dom->dev_if);
 	dom->dev_if = NULL;
@@ -72,6 +86,8 @@ static void cxip_domain_disable(struct cxip_domain *dom)
 
 	if (!dom->enabled)
 		goto unlock;
+
+	cxip_cmdq_free(dom->trig_cmdq);
 
 	cxip_iomm_fini(dom);
 
@@ -138,7 +154,7 @@ static struct fi_ops_domain cxip_dom_ops = {
 	.cq_open = cxip_cq_open,
 	.endpoint = cxip_endpoint,
 	.scalable_ep = cxip_scalable_ep,
-	.cntr_open = fi_no_cntr_open,
+	.cntr_open = cxip_cntr_open,
 	.poll_open = fi_no_poll_open,
 	.stx_ctx = fi_no_stx_context,
 	.srx_ctx = fi_no_srx_context,

@@ -1073,6 +1073,9 @@ void do_msg(uint8_t *send_buf, size_t send_len, uint64_t send_tag,
 	     truncated = false;
 	struct fi_cq_err_entry err_cqe = {};
 	size_t recved_len;
+	static int send_cnt;
+	static int recv_cnt;
+	static int recv_errcnt;
 
 	memset(recv_buf, RECV_INIT, buf_size);
 
@@ -1210,10 +1213,31 @@ void do_msg(uint8_t *send_buf, size_t send_len, uint64_t send_tag,
 			break;
 	}
 	cr_assert_eq(err, 0, "%d data errors seen\n", err);
+
+	/* Check counters */
+	send_cnt++;
+
+	if (truncated)
+		recv_errcnt++;
+	else
+		recv_cnt++;
+
+	while (fi_cntr_read(cxit_send_cntr) != send_cnt)
+		sched_yield();
+	while (fi_cntr_read(cxit_recv_cntr) != recv_cnt)
+		sched_yield();
+	while (fi_cntr_readerr(cxit_recv_cntr) != recv_errcnt)
+		sched_yield();
+
+	/* Error count is 7 bits */
+	if (recv_errcnt == 127) {
+		recv_errcnt = 0;
+		fi_cntr_seterr(cxit_recv_cntr, 0);
+	}
 }
 
 #define BUF_SIZE (8*1024)
-#define SEND_MIN 1024
+#define SEND_MIN 64
 #define SEND_INC 64
 #define TAG 0x333333333333
 

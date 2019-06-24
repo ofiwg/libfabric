@@ -130,17 +130,17 @@ struct fi_ops_cm cxip_ep_cm_ops = {
  */
 static void cxip_txc_close(struct cxip_txc *txc)
 {
-	if (txc->comp.send_cq)
-		ofi_atomic_dec32(&txc->comp.send_cq->ref);
+	if (txc->send_cq)
+		ofi_atomic_dec32(&txc->send_cq->ref);
 
-	if (txc->comp.send_cntr)
-		ofi_atomic_dec32(&txc->comp.send_cntr->ref);
+	if (txc->send_cntr)
+		ofi_atomic_dec32(&txc->send_cntr->ref);
 
-	if (txc->comp.read_cntr)
-		ofi_atomic_dec32(&txc->comp.read_cntr->ref);
+	if (txc->read_cntr)
+		ofi_atomic_dec32(&txc->read_cntr->ref);
 
-	if (txc->comp.write_cntr)
-		ofi_atomic_dec32(&txc->comp.write_cntr->ref);
+	if (txc->write_cntr)
+		ofi_atomic_dec32(&txc->write_cntr->ref);
 }
 
 /**
@@ -152,17 +152,11 @@ static void cxip_txc_close(struct cxip_txc *txc)
  */
 static void cxip_rxc_close(struct cxip_rxc *rxc)
 {
-	if (rxc->comp.recv_cq)
-		ofi_atomic_dec32(&rxc->comp.recv_cq->ref);
+	if (rxc->recv_cq)
+		ofi_atomic_dec32(&rxc->recv_cq->ref);
 
-	if (rxc->comp.recv_cntr)
-		ofi_atomic_dec32(&rxc->comp.recv_cntr->ref);
-
-	if (rxc->comp.rem_read_cntr)
-		ofi_atomic_dec32(&rxc->comp.rem_read_cntr->ref);
-
-	if (rxc->comp.rem_write_cntr)
-		ofi_atomic_dec32(&rxc->comp.rem_write_cntr->ref);
+	if (rxc->recv_cntr)
+		ofi_atomic_dec32(&rxc->recv_cntr->ref);
 }
 
 /**
@@ -244,7 +238,7 @@ static int cxip_ctx_bind_cq(struct fid *fid, struct fid *bfid, uint64_t flags)
 	case FI_CLASS_TX_CTX:
 		txc = container_of(fid, struct cxip_txc, fid.ctx);
 		if (flags & FI_SEND) {
-			txc->comp.send_cq = cxi_cq;
+			txc->send_cq = cxi_cq;
 			if (flags & FI_SELECTIVE_COMPLETION)
 				txc->selective_completion = 1;
 		}
@@ -255,7 +249,7 @@ static int cxip_ctx_bind_cq(struct fid *fid, struct fid *bfid, uint64_t flags)
 	case FI_CLASS_RX_CTX:
 		rxc = container_of(fid, struct cxip_rxc, ctx.fid);
 		if (flags & FI_RECV) {
-			rxc->comp.recv_cq = cxi_cq;
+			rxc->recv_cq = cxi_cq;
 			if (flags & FI_SELECTIVE_COMPLETION)
 				rxc->selective_completion = 1;
 		}
@@ -298,17 +292,17 @@ static int cxip_ctx_bind_cntr(struct fid *fid, struct fid *bfid, uint64_t flags)
 	case FI_CLASS_TX_CTX:
 		txc = container_of(fid, struct cxip_txc, fid.ctx.fid);
 		if (flags & FI_SEND) {
-			txc->comp.send_cntr = cntr;
+			txc->send_cntr = cntr;
 			ofi_atomic_inc32(&cntr->ref);
 		}
 
 		if (flags & FI_READ) {
-			txc->comp.read_cntr = cntr;
+			txc->read_cntr = cntr;
 			ofi_atomic_inc32(&cntr->ref);
 		}
 
 		if (flags & FI_WRITE) {
-			txc->comp.write_cntr = cntr;
+			txc->write_cntr = cntr;
 			ofi_atomic_inc32(&cntr->ref);
 		}
 		break;
@@ -316,17 +310,7 @@ static int cxip_ctx_bind_cntr(struct fid *fid, struct fid *bfid, uint64_t flags)
 	case FI_CLASS_RX_CTX:
 		rxc = container_of(fid, struct cxip_rxc, ctx.fid);
 		if (flags & FI_RECV) {
-			rxc->comp.recv_cntr = cntr;
-			ofi_atomic_inc32(&cntr->ref);
-		}
-
-		if (flags & FI_REMOTE_READ) {
-			rxc->comp.rem_read_cntr = cntr;
-			ofi_atomic_inc32(&cntr->ref);
-		}
-
-		if (flags & FI_REMOTE_WRITE) {
-			rxc->comp.rem_write_cntr = cntr;
+			rxc->recv_cntr = cntr;
 			ofi_atomic_inc32(&cntr->ref);
 		}
 		break;
@@ -735,7 +719,7 @@ static ssize_t cxip_rxc_cancel(struct cxip_rxc *rxc, void *context)
 	if (!rxc->enabled)
 		return -FI_EOPBADSTATE;
 
-	return cxip_cq_req_cancel(rxc->comp.recv_cq, rxc, context, true);
+	return cxip_cq_req_cancel(rxc->recv_cq, rxc, context, true);
 }
 
 /**

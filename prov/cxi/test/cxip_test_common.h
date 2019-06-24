@@ -23,6 +23,10 @@ extern struct fi_cq_attr cxit_tx_cq_attr, cxit_rx_cq_attr;
 extern uint64_t cxit_tx_cq_bind_flags;
 extern uint64_t cxit_rx_cq_bind_flags;
 extern struct fid_cq *cxit_tx_cq, *cxit_rx_cq;
+extern struct fi_cntr_attr cxit_cntr_attr;
+extern struct fid_cntr *cxit_send_cntr, *cxit_recv_cntr;
+extern struct fid_cntr *cxit_read_cntr, *cxit_write_cntr;
+extern struct fid_cntr *cxit_rem_read_cntr, *cxit_rem_write_cntr;
 extern struct fi_av_attr cxit_av_attr;
 extern struct fid_av *cxit_av;
 extern char *cxit_node, *cxit_service;
@@ -41,10 +45,13 @@ void cxit_create_sep(void);
 void cxit_destroy_sep(void);
 void cxit_create_cqs(void);
 void cxit_destroy_cqs(void);
+void cxit_bind_cqs(void);
+void cxit_create_cntrs(void);
+void cxit_destroy_cntrs(void);
+void cxit_bind_cntrs(void);
 void cxit_create_av(void);
 void cxit_destroy_av(void);
 void cxit_bind_av(void);
-void cxit_bind_cqs(void);
 
 void cxit_setup_getinfo(void);
 void cxit_teardown_getinfo(void);
@@ -71,5 +78,14 @@ void validate_tx_event(struct fi_cq_tagged_entry *cqe, uint64_t flags,
 void validate_rx_event(struct fi_cq_tagged_entry *cqe, void *context,
 		       size_t len, uint64_t flags, void *buf, uint64_t data,
 		       uint64_t tag);
+
+struct mem_region {
+	uint8_t *mem;
+	struct fid_mr *mr;
+};
+
+void mr_create(size_t len, uint64_t access, uint8_t seed, uint64_t key,
+	       struct mem_region *mr);
+void mr_destroy(struct mem_region *mr);
 
 #endif

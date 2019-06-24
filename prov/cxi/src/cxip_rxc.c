@@ -52,7 +52,7 @@ static int rxc_msg_enable(struct cxip_rxc *rxc)
 	/* Wait for PTE state change */
 	do {
 		sched_yield();
-		cxip_cq_progress(rxc->comp.recv_cq);
+		cxip_cq_progress(rxc->recv_cq);
 	} while (rxc->rx_pte->state != C_PTLTE_ENABLED);
 
 	CXIP_LOG_DBG("RXC PtlTE enabled: %p\n", rxc);
@@ -94,7 +94,7 @@ static int rxc_msg_disable(struct cxip_rxc *rxc)
 	/* Wait for PTE state change */
 	do {
 		sched_yield();
-		cxip_cq_progress(rxc->comp.recv_cq);
+		cxip_cq_progress(rxc->recv_cq);
 	} while (rxc->rx_pte->state != C_PTLTE_DISABLED);
 
 	CXIP_LOG_DBG("RXC PtlTE disabled: %p\n", rxc);
@@ -152,7 +152,7 @@ static int rxc_msg_init(struct cxip_rxc *rxc)
 		pt_opts.use_logical = 1;
 	}
 
-	ret = cxip_pte_alloc(rxc->ep_obj->if_dom, rxc->comp.recv_cq->evtq,
+	ret = cxip_pte_alloc(rxc->ep_obj->if_dom, rxc->recv_cq->evtq,
 			     pid_idx, &pt_opts, &rxc->rx_pte);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Failed to allocate RX PTE: %d\n", ret);
@@ -203,13 +203,22 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 	if (rxc->enabled)
 		goto unlock;
 
-	if (!rxc->comp.recv_cq) {
+	if (!rxc->recv_cq) {
 		CXIP_LOG_DBG("Undefined recv CQ\n");
 		ret = -FI_ENOCQ;
 		goto unlock;
 	}
 
-	ret = cxip_cq_enable(rxc->comp.recv_cq);
+	if (rxc->recv_cntr) {
+		ret = cxip_cntr_enable(rxc->recv_cntr);
+		if (ret != FI_SUCCESS) {
+			CXIP_LOG_DBG("cxip_cntr_enable(FI_RECV) returned: %d\n",
+				     ret);
+			goto unlock;
+		}
+	}
+
+	ret = cxip_cq_enable(rxc->recv_cq);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("cxip_cq_enable returned: %d\n", ret);
 		goto unlock;
@@ -273,10 +282,10 @@ static void rxc_cleanup(struct cxip_rxc *rxc)
 	if (!ofi_atomic_get32(&rxc->orx_reqs))
 		return;
 
-	cxip_cq_req_discard(rxc->comp.recv_cq, rxc);
+	cxip_cq_req_discard(rxc->recv_cq, rxc);
 
 	do {
-		ret = cxip_cq_req_cancel(rxc->comp.recv_cq, rxc, 0, false);
+		ret = cxip_cq_req_cancel(rxc->recv_cq, rxc, 0, false);
 		if (ret == FI_SUCCESS)
 			canceled++;
 	} while (ret == FI_SUCCESS);
@@ -287,7 +296,7 @@ static void rxc_cleanup(struct cxip_rxc *rxc)
 	start = fi_gettime_ms();
 	while (ofi_atomic_get32(&rxc->orx_reqs)) {
 		sched_yield();
-		cxip_cq_progress(rxc->comp.recv_cq);
+		cxip_cq_progress(rxc->recv_cq);
 
 		if (fi_gettime_ms() - start > CXIP_REQ_CLEANUP_TO) {
 			CXIP_LOG_ERROR(

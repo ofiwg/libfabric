@@ -53,7 +53,7 @@ static int txc_msg_init(struct cxip_txc *txc)
 
 	/* Reserve the Rendezvous Send PTE */
 	pid_idx = txc->domain->dev_if->if_dev->info.rdzv_get_idx;
-	ret = cxip_pte_alloc(txc->ep_obj->if_dom, txc->comp.send_cq->evtq,
+	ret = cxip_pte_alloc(txc->ep_obj->if_dom, txc->send_cq->evtq,
 			     pid_idx, &pt_opts, &txc->rdzv_pte);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Failed to allocate RDZV PTE: %d\n", ret);
@@ -77,7 +77,7 @@ static int txc_msg_init(struct cxip_txc *txc)
 	/* Wait for Rendezvous PTE state changes */
 	do {
 		sched_yield();
-		cxip_cq_progress(txc->comp.send_cq);
+		cxip_cq_progress(txc->send_cq);
 	} while (txc->rdzv_pte->state != C_PTLTE_ENABLED);
 
 	return FI_SUCCESS;
@@ -122,16 +122,43 @@ int cxip_txc_enable(struct cxip_txc *txc)
 	if (txc->enabled)
 		goto unlock;
 
-	if (!txc->comp.send_cq) {
+	if (!txc->send_cq) {
 		CXIP_LOG_DBG("Undefined send CQ\n");
 		ret = -FI_ENOCQ;
 		goto unlock;
 	}
 
-	ret = cxip_cq_enable(txc->comp.send_cq);
+	ret = cxip_cq_enable(txc->send_cq);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("cxip_cq_enable returned: %d\n", ret);
 		goto unlock;
+	}
+
+	if (txc->send_cntr) {
+		ret = cxip_cntr_enable(txc->send_cntr);
+		if (ret != FI_SUCCESS) {
+			CXIP_LOG_DBG("cxip_cntr_enable(FI_SEND) returned: %d\n",
+				     ret);
+			goto unlock;
+		}
+	}
+
+	if (txc->write_cntr) {
+		ret = cxip_cntr_enable(txc->write_cntr);
+		if (ret != FI_SUCCESS) {
+			CXIP_LOG_DBG("cxip_cntr_enable(FI_WRITE) returned: %d\n",
+				     ret);
+			goto unlock;
+		}
+	}
+
+	if (txc->read_cntr) {
+		ret = cxip_cntr_enable(txc->read_cntr);
+		if (ret != FI_SUCCESS) {
+			CXIP_LOG_DBG("cxip_cntr_enable(FI_READ) returned: %d\n",
+				     ret);
+			goto unlock;
+		}
 	}
 
 	/* An IDC command can use up to 4 64 byte slots. */
@@ -182,12 +209,12 @@ static void txc_cleanup(struct cxip_txc *txc)
 	if (!ofi_atomic_get32(&txc->otx_reqs))
 		return;
 
-	cxip_cq_req_discard(txc->comp.send_cq, txc);
+	cxip_cq_req_discard(txc->send_cq, txc);
 
 	start = fi_gettime_ms();
 	while (ofi_atomic_get32(&txc->otx_reqs)) {
 		sched_yield();
-		cxip_cq_progress(txc->comp.send_cq);
+		cxip_cq_progress(txc->send_cq);
 
 		if (fi_gettime_ms() - start > CXIP_REQ_CLEANUP_TO) {
 			CXIP_LOG_ERROR(

@@ -560,7 +560,7 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 	}
 
 	/* Allocate a CQ request */
-	req = cxip_cq_req_alloc(txc->comp.send_cq, 0, txc);
+	req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
 	if (!req) {
 		CXIP_LOG_DBG("Failed to allocate request\n");
 		ret = -FI_ENOMEM;
@@ -589,7 +589,19 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct fid_ep *ep,
 	c_state.restricted = 1;
 	c_state.index_ext = idx_ext;
 	c_state.user_ptr = (uint64_t)req;
-	c_state.eq = txc->comp.send_cq->evtq->eqn;
+	c_state.eq = txc->send_cq->evtq->eqn;
+
+	if (result) {
+		if (txc->read_cntr) {
+			c_state.event_ct_reply = 1;
+			c_state.ct = txc->read_cntr->ct->ctn;
+		}
+	} else {
+		if (txc->write_cntr) {
+			c_state.event_ct_ack = 1;
+			c_state.ct = txc->write_cntr->ct->ctn;
+		}
+	}
 
 	cmd.idc_amo.idc_header.dfa = dfa;
 	cmd.idc_amo.idc_header.remote_offset = off;

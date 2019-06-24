@@ -220,7 +220,7 @@ Test(ep, ep_bind_cq)
 			continue;
 
 		cr_assert_eq(txc->fid.ctx.fid.fclass, FI_CLASS_TX_CTX);
-		cr_assert_eq(txc->comp.send_cq, tx_cq);
+		cr_assert_eq(txc->send_cq, tx_cq);
 		break;
 	}
 	cr_assert_not_null(txc);
@@ -232,7 +232,7 @@ Test(ep, ep_bind_cq)
 			continue;
 
 		cr_assert_eq(rxc->ctx.fid.fclass, FI_CLASS_RX_CTX);
-		cr_assert_eq(rxc->comp.recv_cq, rx_cq);
+		cr_assert_eq(rxc->recv_cq, rx_cq);
 		break;
 	}
 	cr_assert_not_null(rxc);
@@ -244,13 +244,24 @@ Test(ep, ep_bind_cq)
 Test(ep, ep_bind_cntr)
 {
 	int ret;
-	struct fi_cntr_attr *attr = NULL;
-	struct fid_cntr *cntr = NULL;
-	void *context = NULL;
 
-	ret = fi_cntr_open(cxit_domain, attr, &cntr, context);
-	cr_assert_eq(ret, -FI_ENOSYS,
-		     "TODO Add test for CNTRs binding to the endpoint when implemented");
+	cxit_create_ep();
+	cxit_create_cqs();
+	cxit_bind_cqs();
+	cxit_create_av();
+	cxit_bind_av();
+
+	cxit_create_cntrs();
+	cxit_bind_cntrs();
+
+	ret = fi_enable(cxit_ep);
+	cr_assert(ret == FI_SUCCESS);
+
+	cxit_destroy_ep();
+	cxit_destroy_cntrs();
+	cxit_destroy_av();
+	cxit_destroy_cqs();
+	cxit_teardown_ep();
 }
 
 Test(ep, ep_bind_stx_ctx)

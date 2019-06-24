@@ -43,7 +43,7 @@ static struct cxip_req *cxip_rma_inject_req(struct cxip_txc *txc)
 	if (!txc->rma_inject_req) {
 		struct cxip_req *req;
 
-		req = cxip_cq_req_alloc(txc->comp.send_cq, 0, txc);
+		req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
 		if (!req)
 			return NULL;
 
@@ -177,7 +177,7 @@ static ssize_t _cxip_rma_op(enum fi_op_type op, struct cxip_txc *txc,
 	 * user requested a completion event.
 	 */
 	if (!idc || (flags & FI_COMPLETION)) {
-		req = cxip_cq_req_alloc(txc->comp.send_cq, 0, txc);
+		req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
 		if (!req) {
 			CXIP_LOG_DBG("Failed to allocate request\n");
 			ret = -FI_ENOMEM;
@@ -212,7 +212,12 @@ static ssize_t _cxip_rma_op(enum fi_op_type op, struct cxip_txc *txc,
 		cmd.c_state.event_send_disable = 1;
 		cmd.c_state.restricted = 1;
 		cmd.c_state.index_ext = idx_ext;
-		cmd.c_state.eq = txc->comp.send_cq->evtq->eqn;
+		cmd.c_state.eq = txc->send_cq->evtq->eqn;
+
+		if (txc->write_cntr) {
+			cmd.c_state.event_ct_ack = 1;
+			cmd.c_state.ct = txc->write_cntr->ct->ctn;
+		}
 
 		if (req) {
 			cmd.c_state.user_ptr = (uint64_t)req;
@@ -276,8 +281,20 @@ static ssize_t _cxip_rma_op(enum fi_op_type op, struct cxip_txc *txc,
 		cmd.remote_offset = addr;
 		cmd.local_addr = CXI_VA_TO_IOVA(md->md, buf);
 		cmd.request_len = len;
-		cmd.eq = txc->comp.send_cq->evtq->eqn;
+		cmd.eq = txc->send_cq->evtq->eqn;
 		cmd.user_ptr = (uint64_t)req;
+
+		if (op == FI_OP_WRITE) {
+			if (txc->write_cntr) {
+				cmd.event_ct_ack = 1;
+				cmd.ct = txc->write_cntr->ct->ctn;
+			}
+		} else {
+			if (txc->read_cntr) {
+				cmd.event_ct_reply = 1;
+				cmd.ct = txc->read_cntr->ct->ctn;
+			}
+		}
 
 		ret = cxi_cq_emit_dma(txc->tx_cmdq->dev_cmdq, &cmd);
 		if (ret) {

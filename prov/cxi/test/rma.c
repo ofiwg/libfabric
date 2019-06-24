@@ -12,41 +12,6 @@
 #include "cxip.h"
 #include "cxip_test_common.h"
 
-struct mem_region {
-	uint8_t *mem;
-	struct fid_mr *mr;
-};
-
-static void mr_create(size_t len, uint64_t access, uint8_t seed, uint64_t key,
-		      struct mem_region *mr)
-{
-	int ret;
-
-	cr_assert_not_null(mr);
-
-	mr->mem = calloc(1, len);
-	cr_assert_not_null(mr->mem, "Error allocating memory window");
-
-	for (size_t i = 0; i < len; i++)
-		mr->mem[i] = i + seed;
-
-	ret = fi_mr_reg(cxit_domain, mr->mem, len, access, 0, key, 0, &mr->mr,
-			NULL);
-	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_reg failed %d", ret);
-
-	ret = fi_mr_bind(mr->mr, &cxit_ep->fid, 0);
-	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_bind failed %d", ret);
-
-	ret = fi_mr_enable(mr->mr);
-	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_enable failed %d", ret);
-}
-
-static void mr_destroy(struct mem_region *mr)
-{
-	fi_close(&mr->mr->fid);
-	free(mr->mem);
-}
-
 TestSuite(rma, .init = cxit_setup_rma, .fini = cxit_teardown_rma,
 	  .timeout = CXIT_DEFAULT_TIMEOUT);
 
@@ -255,6 +220,8 @@ Test(rma, simple_inject_write)
 
 	mr_create(win_len, FI_REMOTE_WRITE, 0xa0, key_val, &mem_window);
 
+	cr_assert(!fi_cntr_read(cxit_write_cntr));
+
 	/* Test invalid inject length */
 	ret = fi_inject_write(cxit_ep, send_buf,
 			      cxit_fi->tx_attr->inject_size + 100,
@@ -266,10 +233,14 @@ Test(rma, simple_inject_write)
 			      key_val);
 	cr_assert(ret == FI_SUCCESS);
 
+	while (fi_cntr_read(cxit_write_cntr) != 1)
+		sched_yield();
+
 	/* Validate sent data */
 	for (int i = 0; i < send_len; i++)
-		while (mem_window.mem[i] != send_buf[i])
-			sched_yield();
+		cr_assert_eq(mem_window.mem[i], send_buf[i],
+			     "data mismatch, element: (%d) %02x != %02x\n", i,
+			     mem_window.mem[i], send_buf[i]);
 
 	/* Make sure an event wasn't delivered */
 	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
@@ -295,10 +266,15 @@ Test(rma, simple_read)
 
 	mr_create(remote_len, FI_REMOTE_READ, 0xc0, key_val, &remote);
 
+	cr_assert(!fi_cntr_read(cxit_read_cntr));
+
 	/* Get 8 bytes from the source buffer to the receive buffer */
 	ret = fi_read(cxit_ep, local, local_len, NULL, cxit_ep_fi_addr, 0,
 		      key_val, NULL);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_read() failed (%d)", ret);
+
+	while (fi_cntr_read(cxit_read_cntr) != 1)
+		sched_yield();
 
 	/* Wait for async event indicating data has been sent */
 	ret = cxit_await_completion(cxit_tx_cq, &cqe);

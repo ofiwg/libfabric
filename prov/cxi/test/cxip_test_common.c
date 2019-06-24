@@ -24,6 +24,10 @@ struct fi_cq_attr cxit_rx_cq_attr = { .format = FI_CQ_FORMAT_TAGGED };
 uint64_t cxit_tx_cq_bind_flags = FI_TRANSMIT;
 uint64_t cxit_rx_cq_bind_flags = FI_RECV;
 struct fid_cq *cxit_tx_cq, *cxit_rx_cq;
+struct fi_cntr_attr cxit_cntr_attr = {};
+struct fid_cntr *cxit_send_cntr, *cxit_recv_cntr;
+struct fid_cntr *cxit_read_cntr, *cxit_write_cntr;
+struct fid_cntr *cxit_rem_read_cntr, *cxit_rem_write_cntr;
 struct fi_av_attr cxit_av_attr;
 struct fid_av *cxit_av;
 char *cxit_node, *cxit_service;
@@ -157,6 +161,81 @@ void cxit_bind_cqs(void)
 	cr_assert(!ret, "fi_ep_bind RX CQ");
 }
 
+void cxit_create_cntrs(void)
+{
+	int ret;
+
+	ret = fi_cntr_open(cxit_domain, NULL, &cxit_send_cntr,
+			   NULL);
+	cr_assert(ret == FI_SUCCESS, "fi_cntr_open (send)");
+
+	ret = fi_cntr_open(cxit_domain, NULL, &cxit_recv_cntr,
+			   NULL);
+	cr_assert(ret == FI_SUCCESS, "fi_cntr_open (recv)");
+
+	ret = fi_cntr_open(cxit_domain, NULL, &cxit_read_cntr,
+			   NULL);
+	cr_assert(ret == FI_SUCCESS, "fi_cntr_open (read)");
+
+	ret = fi_cntr_open(cxit_domain, NULL, &cxit_write_cntr,
+			   NULL);
+	cr_assert(ret == FI_SUCCESS, "fi_cntr_open (write)");
+
+	ret = fi_cntr_open(cxit_domain, NULL, &cxit_rem_read_cntr,
+			   NULL);
+	cr_assert(ret == FI_SUCCESS, "fi_cntr_open (rem_read)");
+
+	ret = fi_cntr_open(cxit_domain, NULL, &cxit_rem_write_cntr,
+			   NULL);
+	cr_assert(ret == FI_SUCCESS, "fi_cntr_open (rem_write)");
+}
+
+void cxit_destroy_cntrs(void)
+{
+	int ret;
+
+	ret = fi_close(&cxit_send_cntr->fid);
+	cr_assert(ret == FI_SUCCESS, "fi_close send_cntr");
+	cxit_send_cntr = NULL;
+
+	ret = fi_close(&cxit_recv_cntr->fid);
+	cr_assert(ret == FI_SUCCESS, "fi_close recv_cntr");
+	cxit_recv_cntr = NULL;
+
+	ret = fi_close(&cxit_read_cntr->fid);
+	cr_assert(ret == FI_SUCCESS, "fi_close read_cntr");
+	cxit_read_cntr = NULL;
+
+	ret = fi_close(&cxit_write_cntr->fid);
+	cr_assert(ret == FI_SUCCESS, "fi_close write_cntr");
+	cxit_write_cntr = NULL;
+
+	ret = fi_close(&cxit_rem_read_cntr->fid);
+	cr_assert(ret == FI_SUCCESS, "fi_close rem_read_cntr");
+	cxit_rem_read_cntr = NULL;
+
+	ret = fi_close(&cxit_rem_write_cntr->fid);
+	cr_assert(ret == FI_SUCCESS, "fi_close rem_write_cntr");
+	cxit_rem_write_cntr = NULL;
+}
+
+void cxit_bind_cntrs(void)
+{
+	int ret;
+
+	ret = fi_ep_bind(cxit_ep, &cxit_send_cntr->fid, FI_SEND);
+	cr_assert(!ret, "fi_ep_bind send_cntr");
+
+	ret = fi_ep_bind(cxit_ep, &cxit_recv_cntr->fid, FI_RECV);
+	cr_assert(!ret, "fi_ep_bind recv_cntr");
+
+	ret = fi_ep_bind(cxit_ep, &cxit_read_cntr->fid, FI_READ);
+	cr_assert(!ret, "fi_ep_bind read_cntr");
+
+	ret = fi_ep_bind(cxit_ep, &cxit_write_cntr->fid, FI_WRITE);
+	cr_assert(!ret, "fi_ep_bind write_cntr");
+}
+
 void cxit_create_av(void)
 {
 	int ret;
@@ -274,6 +353,8 @@ void cxit_setup_enabled_ep(void)
 	cxit_create_ep();
 	cxit_create_cqs();
 	cxit_bind_cqs();
+	cxit_create_cntrs();
+	cxit_bind_cntrs();
 	cxit_create_av();
 	cxit_bind_av();
 
@@ -309,6 +390,7 @@ void cxit_teardown_rma(void)
 	cxit_destroy_ep(); /* EP must be destroyed before bound objects */
 
 	cxit_destroy_av();
+	cxit_destroy_cntrs();
 	cxit_destroy_cqs();
 	cxit_teardown_ep();
 }
@@ -347,3 +429,34 @@ void validate_rx_event(struct fi_cq_tagged_entry *cqe, void *context,
 	cr_assert(cqe->data == data, "Invalid CQE data");
 	cr_assert(cqe->tag == tag, "Invalid CQE tag");
 }
+
+void mr_create(size_t len, uint64_t access, uint8_t seed, uint64_t key,
+	       struct mem_region *mr)
+{
+	int ret;
+
+	cr_assert_not_null(mr);
+
+	mr->mem = calloc(1, len);
+	cr_assert_not_null(mr->mem, "Error allocating memory window");
+
+	for (size_t i = 0; i < len; i++)
+		mr->mem[i] = i + seed;
+
+	ret = fi_mr_reg(cxit_domain, mr->mem, len, access, 0, key, 0, &mr->mr,
+			NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_reg failed %d", ret);
+
+	ret = fi_mr_bind(mr->mr, &cxit_ep->fid, 0);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_bind failed %d", ret);
+
+	ret = fi_mr_enable(mr->mr);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_enable failed %d", ret);
+}
+
+void mr_destroy(struct mem_region *mr)
+{
+	fi_close(&mr->mr->fid);
+	free(mr->mem);
+}
+

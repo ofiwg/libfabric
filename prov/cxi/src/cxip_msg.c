@@ -252,6 +252,14 @@ static void report_recv_completion(struct cxip_req *req)
 		if (ret != FI_SUCCESS)
 			CXIP_LOG_ERROR("Failed to report completion: %d\n",
 				       ret);
+
+		if (req->recv.rxc->recv_cntr) {
+			ret = cxip_cntr_mod(req->recv.rxc->recv_cntr, 1, false,
+					    false);
+			if (ret)
+				CXIP_LOG_ERROR("cxip_cntr_mod returned: %d\n",
+					       ret);
+		}
 	} else {
 		if (req->recv.rc == C_RC_CANCELED)
 			err = FI_ECANCELED;
@@ -267,6 +275,14 @@ static void report_recv_completion(struct cxip_req *req)
 					NULL, 0);
 		if (ret != FI_SUCCESS)
 			CXIP_LOG_ERROR("Failed to report error: %d\n", ret);
+
+		if (req->recv.rxc->recv_cntr) {
+			ret = cxip_cntr_mod(req->recv.rxc->recv_cntr, 1, false,
+					    true);
+			if (ret)
+				CXIP_LOG_ERROR("cxip_cntr_mod returned: %d\n",
+					       ret);
+		}
 	}
 }
 
@@ -321,7 +337,7 @@ static int issue_rdzv_get(struct cxip_req *req, const union c_event *event)
 	cmd.full_dma.command.opcode = C_CMD_GET;
 	cmd.full_dma.lac = req->recv.recv_md->md->lac;
 	cmd.full_dma.event_send_disable = 1;
-	cmd.full_dma.eq = rxc->comp.recv_cq->evtq->eqn;
+	cmd.full_dma.eq = rxc->recv_cq->evtq->eqn;
 	cmd.full_dma.initiator = CXI_MATCH_ID(pid_bits,
 					      rxc->ep_obj->src_addr.pid,
 					      rxc->ep_obj->src_addr.nic);
@@ -798,7 +814,7 @@ static int eager_buf_add(struct cxip_rxc *rxc)
 	}
 
 	/* Populate request */
-	req = cxip_cq_req_alloc(rxc->comp.recv_cq, 1, NULL);
+	req = cxip_cq_req_alloc(rxc->recv_cq, 1, NULL);
 	if (!req) {
 		CXIP_LOG_DBG("Failed to allocate request\n");
 		ret = -FI_ENOMEM;
@@ -935,7 +951,7 @@ static int cxip_rxc_sink_init(struct cxip_rxc *rxc)
 	}
 
 	/* Populate request */
-	req = cxip_cq_req_alloc(rxc->comp.recv_cq, 1, NULL);
+	req = cxip_cq_req_alloc(rxc->recv_cq, 1, NULL);
 	if (!req) {
 		CXIP_LOG_DBG("Failed to allocate ux request\n");
 		ret = -FI_ENOMEM;
@@ -1016,7 +1032,7 @@ int cxip_msg_oflow_init(struct cxip_rxc *rxc)
 	/* Wait for Overflow buffers to be linked. */
 	do {
 		sched_yield();
-		cxip_cq_progress(rxc->comp.recv_cq);
+		cxip_cq_progress(rxc->recv_cq);
 	} while (ofi_atomic_get32(&rxc->oflow_bufs_linked) <
 		 rxc->oflow_bufs_max ||
 		 !ofi_atomic_get32(&rxc->ux_sink_linked));
@@ -1071,7 +1087,7 @@ void cxip_msg_oflow_fini(struct cxip_rxc *rxc)
 	/* Wait for all overflow buffers to be unlinked */
 	do {
 		sched_yield();
-		cxip_cq_progress(rxc->comp.recv_cq);
+		cxip_cq_progress(rxc->recv_cq);
 	} while (ofi_atomic_get32(&rxc->oflow_bufs_linked) ||
 		 ofi_atomic_get32(&rxc->ux_sink_linked));
 
@@ -1478,7 +1494,7 @@ static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	}
 
 	/* Populate request */
-	req = cxip_cq_req_alloc(rxc->comp.recv_cq, 1, rxc);
+	req = cxip_cq_req_alloc(rxc->recv_cq, 1, rxc);
 	if (!req) {
 		CXIP_LOG_DBG("Failed to allocate request\n");
 		ret = -FI_ENOMEM;
@@ -1602,7 +1618,7 @@ static struct cxip_req *cxip_inject_req(struct cxip_txc *txc)
 	if (!txc->inject_req) {
 		struct cxip_req *req;
 
-		req = cxip_cq_req_alloc(txc->comp.send_cq, 0, txc);
+		req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
 		if (!req)
 			return NULL;
 
@@ -1632,7 +1648,7 @@ static struct cxip_req *cxip_tinject_req(struct cxip_txc *txc)
 	if (!txc->tinject_req) {
 		struct cxip_req *req;
 
-		req = cxip_cq_req_alloc(txc->comp.send_cq, 0, txc);
+		req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
 		if (!req)
 			return NULL;
 
@@ -1654,7 +1670,7 @@ static struct cxip_req *cxip_tinject_req(struct cxip_txc *txc)
 /*
  * report_send_completion() - Report the completion of a send operation.
  */
-static void report_send_completion(struct cxip_req *req)
+static void report_send_completion(struct cxip_req *req, bool sw_cntr)
 {
 	int ret;
 	int success_event = (req->flags & FI_COMPLETION);
@@ -1670,6 +1686,14 @@ static void report_send_completion(struct cxip_req *req)
 				CXIP_LOG_ERROR("Failed to report completion: %d\n",
 					       ret);
 		}
+
+		if (sw_cntr && req->send.txc->send_cntr) {
+			ret = cxip_cntr_mod(req->send.txc->send_cntr, 1, false,
+					    false);
+			if (ret)
+				CXIP_LOG_ERROR("cxip_cntr_mod returned: %d\n",
+					       ret);
+		}
 	} else {
 		CXIP_LOG_DBG("Request error: %p (err: %d, %d)\n", req, FI_EIO,
 			     req->send.rc);
@@ -1677,6 +1701,14 @@ static void report_send_completion(struct cxip_req *req)
 		ret = cxip_cq_req_error(req, 0, FI_EIO, req->send.rc, NULL, 0);
 		if (ret != FI_SUCCESS)
 			CXIP_LOG_ERROR("Failed to report error: %d\n", ret);
+
+		if (sw_cntr && req->send.txc->send_cntr) {
+			ret = cxip_cntr_mod(req->send.txc->send_cntr, 1, false,
+					    true);
+			if (ret)
+				CXIP_LOG_ERROR("cxip_cntr_mod returned: %d\n",
+					       ret);
+		}
 	}
 }
 
@@ -1704,7 +1736,7 @@ static void rdzv_send_req_free(struct cxip_req *req)
 static void long_send_req_event(struct cxip_req *req)
 {
 	if (++req->send.long_send_events == 3) {
-		report_send_completion(req);
+		report_send_completion(req, true);
 		rdzv_send_req_free(req);
 	}
 }
@@ -1728,7 +1760,7 @@ static int cxip_send_long_cb(struct cxip_req *req, const union c_event *event)
 				       req, event_rc);
 
 			req->send.rc = event_rc;
-			report_send_completion(req);
+			report_send_completion(req, true);
 			rdzv_send_req_free(req);
 			return FI_SUCCESS;
 		}
@@ -1805,7 +1837,7 @@ static int cxip_send_long_cb(struct cxip_req *req, const union c_event *event)
 				       req, event_rc);
 
 			req->send.rc = event_rc;
-			report_send_completion(req);
+			report_send_completion(req, true);
 			rdzv_send_req_free(req);
 		} else if (!event->tgt_long.auto_unlinked) {
 			/* Either the Put failed or a long Send matched in the
@@ -1814,7 +1846,7 @@ static int cxip_send_long_cb(struct cxip_req *req, const union c_event *event)
 			 */
 			CXIP_LOG_DBG("Manually unlinked:  %p\n", req);
 
-			report_send_completion(req);
+			report_send_completion(req, true);
 			rdzv_send_req_free(req);
 		} else {
 			/* The source buffer was unlinked by a Get. */
@@ -1909,7 +1941,7 @@ static ssize_t _cxip_send_long(struct cxip_txc *txc, const void *buf,
 	}
 
 	/* Allocate and populate request */
-	req = cxip_cq_req_alloc(txc->comp.send_cq, true, txc);
+	req = cxip_cq_req_alloc(txc->send_cq, true, txc);
 	if (!req) {
 		CXIP_LOG_DBG("Failed to allocate request\n");
 		ret = -FI_ENOMEM;
@@ -1966,7 +1998,7 @@ static ssize_t _cxip_send_long(struct cxip_txc *txc, const void *buf,
 	cmd.remote_offset = 0;
 	cmd.local_addr = CXI_VA_TO_IOVA(send_md->md, buf);
 	cmd.request_len = len;
-	cmd.eq = txc->comp.send_cq->evtq->eqn;
+	cmd.eq = txc->send_cq->evtq->eqn;
 	cmd.user_ptr = (uint64_t)req;
 	cmd.initiator = cxip_msg_match_id(txc);
 
@@ -2034,7 +2066,7 @@ static int cxip_send_eager_cb(struct cxip_req *req,
 		cxip_unmap(req->send.send_md);
 
 	req->send.rc = cxi_init_event_rc(event);
-	report_send_completion(req);
+	report_send_completion(req, false);
 	ofi_atomic_dec32(&req->send.txc->otx_reqs);
 	cxip_cq_req_free(req);
 
@@ -2087,7 +2119,7 @@ static ssize_t _cxip_send_eager(struct cxip_txc *txc, const void *buf,
 	 * user requested a completion event.
 	 */
 	if (!idc || (flags & FI_COMPLETION)) {
-		req = cxip_cq_req_alloc(txc->comp.send_cq, false, txc);
+		req = cxip_cq_req_alloc(txc->send_cq, false, txc);
 		if (!req) {
 			CXIP_LOG_DBG("Failed to allocate request\n");
 			ret = -FI_ENOMEM;
@@ -2136,11 +2168,16 @@ static ssize_t _cxip_send_eager(struct cxip_txc *txc, const void *buf,
 
 		cmd.c_state.event_send_disable = 1;
 		cmd.c_state.index_ext = idx_ext;
-		cmd.c_state.eq = txc->comp.send_cq->evtq->eqn;
+		cmd.c_state.eq = txc->send_cq->evtq->eqn;
 		cmd.c_state.initiator = cxip_msg_match_id(txc);
 
 		if (!req)
 			cmd.c_state.event_success_disable = 1;
+
+		if (txc->send_cntr) {
+			cmd.c_state.event_ct_ack = 1;
+			cmd.c_state.ct = txc->send_cntr->ct->ctn;
+		}
 
 		if (memcmp(&txc->tx_cmdq->c_state, &cmd.c_state,
 			   sizeof(cmd.c_state))) {
@@ -2208,10 +2245,15 @@ static ssize_t _cxip_send_eager(struct cxip_txc *txc, const void *buf,
 		cmd.remote_offset = 0;
 		cmd.local_addr = CXI_VA_TO_IOVA(send_md->md, buf);
 		cmd.request_len = len;
-		cmd.eq = txc->comp.send_cq->evtq->eqn;
+		cmd.eq = txc->send_cq->evtq->eqn;
 		cmd.user_ptr = (uint64_t)req;
 		cmd.initiator = cxip_msg_match_id(txc);
 		cmd.match_bits = mb.raw;
+
+		if (txc->send_cntr) {
+			cmd.event_ct_ack = 1;
+			cmd.ct = txc->send_cntr->ct->ctn;
+		}
 
 		/* Issue Eager Put command */
 		ret = cxi_cq_emit_dma(txc->tx_cmdq->dev_cmdq, &cmd);
