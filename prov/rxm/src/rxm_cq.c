@@ -1384,7 +1384,7 @@ void rxm_ep_do_progress(struct util_ep *util_ep)
 				buf, repost_entry);
 
 		/* Discard rx buffer if its msg_ep was closed */
-		if (!buf->conn->msg_ep) {
+		if (!rxm_ep->srx_ctx && !buf->conn->msg_ep) {
 			ofi_buf_free(&buf->hdr);
 			continue;
 		}
