@@ -296,10 +296,8 @@ struct psmx2_trx_ctxt *psmx2_trx_ctxt_alloc(struct psmx2_fid_domain *domain,
 	if (err != PSM2_OK) {
 		FI_WARN(&psmx2_prov, FI_LOG_CORE,
 			"psm2_ep_open returns %d, errno=%d\n", err, errno);
-		if (!should_retry) {
-			err = psmx2_errno(err);
+		if (!should_retry)
 			goto err_out_destroy_pool;
-		}
 
 		/* When round-robin fails, retry w/o explicit assignment */
 		opts.unit = -1;
@@ -308,7 +306,6 @@ struct psmx2_trx_ctxt *psmx2_trx_ctxt_alloc(struct psmx2_fid_domain *domain,
 		if (err != PSM2_OK) {
 			FI_WARN(&psmx2_prov, FI_LOG_CORE,
 				"psm2_ep_open retry returns %d, errno=%d\n", err, errno);
-			err = psmx2_errno(err);
 			goto err_out_destroy_pool;
 		}
 	}
@@ -322,7 +319,6 @@ struct psmx2_trx_ctxt *psmx2_trx_ctxt_alloc(struct psmx2_fid_domain *domain,
 	if (err != PSM2_OK) {
 		FI_WARN(&psmx2_prov, FI_LOG_CORE,
 			"psm2_mq_init returns %d, errno=%d\n", err, errno);
-		err = psmx2_errno(err);
 		goto err_out_close_ep;
 	}
 

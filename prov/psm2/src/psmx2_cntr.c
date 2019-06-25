@@ -357,7 +357,6 @@ int psmx2_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	uint64_t flags;
 	int err;
 
-	events = FI_CNTR_EVENTS_COMP;
 	flags = 0;
 	domain_priv = container_of(domain, struct psmx2_fid_domain,
 				   util_domain.domain_fid);
