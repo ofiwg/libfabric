@@ -419,9 +419,6 @@ int tcpx_get_rx_entry_op_msg(struct tcpx_ep *tcpx_ep)
 	size_t msg_len;
 	int ret;
 
-	tcpx_cq = container_of(tcpx_ep->util_ep.rx_cq,
-			       struct tcpx_cq, util_cq);
-
 	if (rx_detect->hdr.base_hdr.op_data == TCPX_OP_MSG_RESP) {
 		assert(!slist_empty(&tcpx_ep->tx_rsp_pend_queue));
 		tx_entry = container_of(tcpx_ep->tx_rsp_pend_queue.head,
