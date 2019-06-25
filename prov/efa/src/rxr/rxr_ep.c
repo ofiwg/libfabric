@@ -1101,7 +1101,6 @@ static ssize_t rxr_ep_send_data_pkt_entry(struct rxr_ep *ep,
 	payload_size = MIN(tx_entry->total_len - tx_entry->bytes_sent,
 			   ep->max_data_payload_size);
 	payload_size = MIN(payload_size, tx_entry->window);
-
 	data_pkt->hdr.seg_size = payload_size;
 
 	pkt_entry->pkt_size = ofi_copy_from_iov(data_pkt->data,
@@ -1257,16 +1256,17 @@ ssize_t rxr_ep_post_data(struct rxr_ep *rxr_ep,
 	return ret;
 }
 
-ssize_t rxr_ep_post_read_response(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
+ssize_t rxr_ep_post_readrsp(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 {
 	struct rxr_pkt_entry *pkt_entry;
 	ssize_t ret;
+	size_t data_len;
 
 	pkt_entry = rxr_get_pkt_entry(ep, ep->tx_pkt_pool);
 	if (OFI_UNLIKELY(!pkt_entry))
 		return -FI_EAGAIN;
 
-	rxr_ep_init_read_response_pkt_entry(ep, tx_entry, pkt_entry);
+	rxr_ep_init_readrsp_pkt_entry(ep, tx_entry, pkt_entry);
 	ret = rxr_ep_send_pkt(ep, pkt_entry, tx_entry->addr);
 	if (OFI_UNLIKELY(ret)) {
 		rxr_release_tx_pkt_entry(ep, pkt_entry);
@@ -1275,6 +1275,12 @@ ssize_t rxr_ep_post_read_response(struct rxr_ep *ep, struct rxr_tx_entry *tx_ent
 		return ret;
 	}
 
+	data_len = rxr_get_readrsp_hdr(pkt_entry->pkt)->seg_size;
+	tx_entry->bytes_sent += data_len;
+	tx_entry->window -= data_len;
+	assert(tx_entry->window >= 0);
+	assert(tx_entry->bytes_sent <= tx_entry->total_len);
+	assert(tx_entry->bytes_acked == 0);
 	return 0;
 }
 
@@ -1333,19 +1339,25 @@ void rxr_ep_init_connack_pkt_entry(struct rxr_ep *ep,
 	pkt_entry->addr = addr;
 }
 
-void rxr_ep_init_read_response_pkt_entry(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
-					 struct rxr_pkt_entry *pkt_entry)
+void rxr_ep_init_readrsp_pkt_entry(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
+				   struct rxr_pkt_entry *pkt_entry)
 {
-	struct rxr_read_response_hdr *read_response_hdr;
+	struct rxr_readrsp_pkt *readrsp_pkt;
+	struct rxr_readrsp_hdr *readrsp_hdr;
+	size_t mtu = ep->mtu_size;
 
-	read_response_hdr = (struct rxr_read_response_hdr *)pkt_entry->pkt;
-	read_response_hdr->type = RXR_READ_RESPONSE_PKT;
-	read_response_hdr->version = RXR_PROTOCOL_VERSION;
-	read_response_hdr->flags = 0;
-	read_response_hdr->tx_id = tx_entry->tx_id;
-	read_response_hdr->rx_id = tx_entry->rx_id;
-
-	pkt_entry->pkt_size = RXR_READ_RESPONSE_HDR_SIZE;
+	readrsp_pkt = (struct rxr_readrsp_pkt *)pkt_entry->pkt;
+	readrsp_hdr = &readrsp_pkt->hdr;
+	readrsp_hdr->type = RXR_READRSP_PKT;
+	readrsp_hdr->version = RXR_PROTOCOL_VERSION;
+	readrsp_hdr->flags = 0;
+	readrsp_hdr->tx_id = tx_entry->tx_id;
+	readrsp_hdr->rx_id = tx_entry->rx_id;
+	readrsp_hdr->seg_size = ofi_copy_from_iov(readrsp_pkt->data,
+						  mtu - RXR_READRSP_HDR_SIZE,
+						  tx_entry->iov,
+						  tx_entry->iov_count, 0);
+	pkt_entry->pkt_size = RXR_READRSP_HDR_SIZE + readrsp_hdr->seg_size;
 	pkt_entry->addr = tx_entry->addr;
 }
 
@@ -1590,7 +1602,7 @@ ssize_t rxr_tx(struct fid_ep *ep, const struct iovec *iov, size_t iov_count,
 		 * this rx_entry does not know its tx_id, because remote
 		 * tx_entry has not been created yet.
 		 * set tx_id to -1, and the correct one will be filled in
-		 * rxr_cq_handle_read_response()
+		 * rxr_cq_handle_readrsp()
 		 */
 		assert(rx_entry);
 		rx_entry->tx_id = -1;
@@ -1620,6 +1632,7 @@ ssize_t rxr_tx(struct fid_ep *ep, const struct iovec *iov, size_t iov_count,
 		rxr_ep_calc_cts_window_credits(rxr_ep, rxr_env.rx_window_size,
 					       tx_entry->total_len, &window,
 					       &credits);
+
 		rx_entry->window = window;
 		assert(rxr_ep->available_data_bufs >= credits);
 		rxr_ep->available_data_bufs -= credits;
@@ -2625,8 +2638,8 @@ static void rxr_ep_progress_internal(struct rxr_ep *ep)
 				     tx_entry, queued_entry, tmp) {
 		if (tx_entry->state == RXR_TX_QUEUED_RTS)
 			ret = rxr_ep_post_rts(ep, tx_entry);
-		else if (tx_entry->state == RXR_TX_QUEUED_READ_RESPONSE)
-			ret = rxr_ep_post_read_response(ep, tx_entry);
+		else if (tx_entry->state == RXR_TX_QUEUED_READRSP)
+			ret = rxr_ep_post_readrsp(ep, tx_entry);
 		else
 			ret = rxr_ep_send_queued_pkts(ep,
 						      &tx_entry->queued_pkts);
@@ -2641,8 +2654,13 @@ static void rxr_ep_progress_internal(struct rxr_ep *ep)
 		if (tx_entry->state == RXR_TX_QUEUED_RTS ||
 		    tx_entry->state == RXR_TX_QUEUED_RTS_RNR) {
 			tx_entry->state = RXR_TX_RTS;
-		} else if (tx_entry->state == RXR_TX_QUEUED_READ_RESPONSE) {
-			tx_entry->state = RXR_TX_SENT_READ_RESPONSE;
+		} else if (tx_entry->state == RXR_TX_QUEUED_READRSP) {
+			tx_entry->state = RXR_TX_SENT_READRSP;
+			if (tx_entry->bytes_sent < tx_entry->total_len) {
+				tx_entry->state = RXR_TX_SEND;
+				dlist_insert_tail(&tx_entry->entry,
+						  &ep->tx_pending_list);
+			}
 		} else if (tx_entry->state == RXR_TX_QUEUED_DATA_RNR) {
 			tx_entry->state = RXR_TX_SEND;
 			dlist_insert_tail(&tx_entry->entry,
