@@ -34,6 +34,7 @@
 
 struct fi_tx_attr mrail_tx_attr = {
 	.caps 		= ~0x0ULL,
+	.op_flags	= MRAIL_PASSTHRU_TX_OP_FLAGS | MRAIL_TX_OP_FLAGS,
 	.msg_order 	= ~0x0ULL,
 	.comp_order 	= ~0x0ULL,
 	.inject_size 	= SIZE_MAX,
@@ -44,6 +45,7 @@ struct fi_tx_attr mrail_tx_attr = {
 
 struct fi_rx_attr mrail_rx_attr = {
 	.caps 			= ~0x0ULL,
+	.op_flags		= MRAIL_PASSTHRU_RX_OP_FLAGS | MRAIL_RX_OP_FLAGS,
 	.msg_order 		= ~0x0ULL,
 	.comp_order 		= ~0x0ULL,
 	.total_buffered_recv 	= SIZE_MAX,
