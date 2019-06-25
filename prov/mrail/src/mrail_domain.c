@@ -38,11 +38,13 @@ static int mrail_domain_close(fid_t fid)
 		container_of(fid, struct mrail_domain, util_domain.domain_fid.fid);
 	int ret, retv = 0;
 
-	ret = mrail_close_fids((struct fid **)mrail_domain->domains,
-			       mrail_domain->num_domains);
-	if (ret)
-		retv = ret;
-	free(mrail_domain->domains);
+	if (mrail_domain->domains) {
+		ret = mrail_close_fids((struct fid **)mrail_domain->domains,
+				       mrail_domain->num_domains);
+		if (ret)
+			retv = ret;
+		free(mrail_domain->domains);
+	}
 
 	ret = ofi_domain_close(&mrail_domain->util_domain);
 	if (ret)
