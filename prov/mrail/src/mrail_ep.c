@@ -478,8 +478,8 @@ mrail_prepare_rndv_req(struct mrail_ep *mrail_ep, struct mrail_tx_buf *tx_buf,
 
 static ssize_t
 mrail_send_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
-		  size_t count, size_t len, fi_addr_t dest_addr, uint64_t data,
-		  void *context, uint64_t flags)
+		  size_t count, size_t len, fi_addr_t dest_addr, uint64_t tag,
+		  uint64_t data, void *context, uint64_t flags, uint64_t op)
 {
 	struct mrail_ep *mrail_ep = container_of(ep_fid, struct mrail_ep,
 						 util_ep.ep_fid.fid);
@@ -497,89 +497,7 @@ mrail_send_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	ofi_ep_lock_acquire(&mrail_ep->util_ep);
 
 	tx_buf = mrail_get_tx_buf(mrail_ep, context, peer_info->seq_no++,
-				  ofi_op_msg, flags | FI_MSG);
-	if (OFI_UNLIKELY(!tx_buf)) {
-		ret = -FI_ENOMEM;
-		goto err1;
-	}
-
-	if (policy == MRAIL_POLICY_STRIPING) {
-		ret = mrail_prepare_rndv_req(mrail_ep, tx_buf, iov, desc,
-					     count, len, iov_dest);
-		if (ret)
-			goto err2;
-
-		msg.msg_iov 	= iov_dest;
-		msg.desc    	= NULL;	/* it's fine since FI_MR_LOCAL is unsupported */
-		msg.iov_count	= 2;
-		msg.addr	= dest_addr;
-		msg.context	= tx_buf;
-		msg.data	= data;
-		total_len = iov_dest[0].iov_len + iov_dest[1].iov_len;
-	} else {
-		tx_buf->hdr.protocol = MRAIL_PROTO_EAGER;
-		mrail_copy_iov_hdr(&tx_buf->hdr, iov_dest, iov, count);
-
-		msg.msg_iov 	= iov_dest;
-		msg.desc    	= desc;	/* doesn't matter since FI_MR_LOCAL is unsupported */
-		msg.iov_count	= count + 1;
-		msg.addr	= dest_addr;
-		msg.context	= tx_buf;
-		msg.data	= data;
-		total_len = len + iov_dest[0].iov_len;
-	}
-
-	if (total_len < mrail_ep->rails[rail].info->tx_attr->inject_size)
-		flags |= FI_INJECT;
-
-	FI_DBG(&mrail_prov, FI_LOG_EP_DATA, "Posting send of length: %" PRIu64
-	       " dest_addr: 0x%" PRIx64 "  seq: %d on rail: %d\n",
-	       len, dest_addr, peer_info->seq_no - 1, rail);
-
-	ret = fi_sendmsg(mrail_ep->rails[rail].ep, &msg, flags | FI_COMPLETION);
-	if (ret) {
-		FI_WARN(&mrail_prov, FI_LOG_EP_DATA,
-			"Unable to fi_sendmsg on rail: %" PRIu32 "\n", rail);
-		goto err2;
-	} else if (!(flags & FI_COMPLETION)) {
-		ofi_ep_tx_cntr_inc(&mrail_ep->util_ep);
-	}
-	ofi_ep_lock_release(&mrail_ep->util_ep);
-	return ret;
-err2:
-	if (tx_buf->hdr.protocol == MRAIL_PROTO_RNDV) {
-		free(tx_buf->rndv_req);
-		fi_close(tx_buf->rndv_mr_fid);
-	}
-	ofi_buf_free(tx_buf);
-err1:
-	peer_info->seq_no--;
-	ofi_ep_lock_release(&mrail_ep->util_ep);
-	return ret;
-}
-
-static ssize_t
-mrail_tsend_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
-		   size_t count, size_t len, fi_addr_t dest_addr, uint64_t tag,
-		   uint64_t data, void *context, uint64_t flags)
-{
-	struct mrail_ep *mrail_ep = container_of(ep_fid, struct mrail_ep,
-						 util_ep.ep_fid.fid);
-	struct mrail_peer_info *peer_info;
-	struct iovec *iov_dest = alloca(sizeof(*iov_dest) * (count + 1));
-	struct mrail_tx_buf *tx_buf;
-	int policy = mrail_get_policy(len);
-	uint32_t rail = mrail_get_tx_rail(mrail_ep, policy);
-	struct fi_msg msg;
-	ssize_t ret;
-	size_t total_len;
-
-	peer_info = ofi_av_get_addr(mrail_ep->util_ep.av, (int) dest_addr);
-
-	ofi_ep_lock_acquire(&mrail_ep->util_ep);
-
-	tx_buf = mrail_get_tx_buf(mrail_ep, context, peer_info->seq_no++,
-				  ofi_op_tagged, flags | FI_TAGGED);
+				  ofi_op_tagged, flags | op);
 	if (OFI_UNLIKELY(!tx_buf)) {
 		ret = -FI_ENOMEM;
 		goto err1;
@@ -615,7 +533,7 @@ mrail_tsend_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	if (total_len < mrail_ep->rails[rail].info->tx_attr->inject_size)
 		flags |= FI_INJECT;
 
-	FI_DBG(&mrail_prov, FI_LOG_EP_DATA, "Posting tsend of length: %" PRIu64
+	FI_DBG(&mrail_prov, FI_LOG_EP_DATA, "Posting send of length: %" PRIu64
 	       " dest_addr: 0x%" PRIx64 " tag: 0x%" PRIx64 " seq: %d"
 	       " on rail: %d\n", len, dest_addr, tag, peer_info->seq_no - 1, rail);
 
@@ -646,8 +564,8 @@ static ssize_t mrail_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 {
 	return mrail_send_common(ep_fid, msg->msg_iov, msg->desc, msg->iov_count,
 				 ofi_total_iov_len(msg->msg_iov, msg->iov_count),
-				 msg->addr, msg->data, msg->context,
-				 flags | mrail_comp_flag(ep_fid));
+				 msg->addr, 0, msg->data, msg->context,
+				 flags | mrail_comp_flag(ep_fid), FI_MSG);
 }
 
 static ssize_t mrail_send(struct fid_ep *ep_fid, const void *buf, size_t len,
@@ -657,8 +575,8 @@ static ssize_t mrail_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 		.iov_base 	= (void *)buf,
 		.iov_len 	= len,
 	};
-	return mrail_send_common(ep_fid, &iov, &desc, 1, len, dest_addr, 0,
-				 context, mrail_comp_flag(ep_fid));
+	return mrail_send_common(ep_fid, &iov, &desc, 1, len, dest_addr, 0, 0,
+				 context, mrail_comp_flag(ep_fid), FI_MSG);
 }
 
 static ssize_t mrail_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
@@ -668,8 +586,8 @@ static ssize_t mrail_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
 		.iov_base 	= (void *)buf,
 		.iov_len 	= len,
 	};
-	return mrail_send_common(ep_fid, &iov, NULL, 1, len, dest_addr, 0,
-				 NULL, mrail_inject_flags(ep_fid));
+	return mrail_send_common(ep_fid, &iov, NULL, 1, len, dest_addr, 0, 0,
+				 NULL, mrail_inject_flags(ep_fid), FI_MSG);
 }
 
 static ssize_t mrail_injectdata(struct fid_ep *ep_fid, const void *buf,
@@ -679,19 +597,19 @@ static ssize_t mrail_injectdata(struct fid_ep *ep_fid, const void *buf,
 		.iov_base 	= (void *)buf,
 		.iov_len 	= len,
 	};
-	return mrail_send_common(ep_fid, &iov, NULL, 1, len, dest_addr, data,
+	return mrail_send_common(ep_fid, &iov, NULL, 1, len, dest_addr, 0, data,
 				 NULL, (mrail_inject_flags(ep_fid) |
-					FI_REMOTE_CQ_DATA));
+					FI_REMOTE_CQ_DATA), FI_MSG);
 }
 
 static ssize_t
 mrail_tsendmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 	       uint64_t flags)
 {
-	return mrail_tsend_common(ep_fid, msg->msg_iov, msg->desc, msg->iov_count,
-				  ofi_total_iov_len(msg->msg_iov, msg->iov_count),
-				  msg->addr, msg->tag, msg->data, msg->context,
-				  flags | mrail_comp_flag(ep_fid));
+	return mrail_send_common(ep_fid, msg->msg_iov, msg->desc, msg->iov_count,
+				 ofi_total_iov_len(msg->msg_iov, msg->iov_count),
+				 msg->addr, msg->tag, msg->data, msg->context,
+				 flags | mrail_comp_flag(ep_fid), FI_TAGGED);
 }
 
 static ssize_t mrail_tsend(struct fid_ep *ep_fid, const void *buf, size_t len,
@@ -702,8 +620,8 @@ static ssize_t mrail_tsend(struct fid_ep *ep_fid, const void *buf, size_t len,
 		.iov_base 	= (void *)buf,
 		.iov_len 	= len,
 	};
-	return mrail_tsend_common(ep_fid, &iov, &desc, 1, len, dest_addr, tag,
-				  0, context, mrail_comp_flag(ep_fid));
+	return mrail_send_common(ep_fid, &iov, &desc, 1, len, dest_addr, tag,
+				 0, context, mrail_comp_flag(ep_fid), FI_TAGGED);
 }
 
 static ssize_t mrail_tsenddata(struct fid_ep *ep_fid, const void *buf, size_t len,
@@ -714,9 +632,9 @@ static ssize_t mrail_tsenddata(struct fid_ep *ep_fid, const void *buf, size_t le
 		.iov_base 	= (void *)buf,
 		.iov_len 	= len,
 	};
-	return mrail_tsend_common(ep_fid, &iov, &desc, 1, len, dest_addr, tag,
-				  data, context, (mrail_comp_flag(ep_fid) |
-						  FI_REMOTE_CQ_DATA));
+	return mrail_send_common(ep_fid, &iov, &desc, 1, len, dest_addr, tag,
+				 data, context, (mrail_comp_flag(ep_fid) |
+						 FI_REMOTE_CQ_DATA), FI_TAGGED);
 }
 
 static ssize_t mrail_tinject(struct fid_ep *ep_fid, const void *buf, size_t len,
@@ -726,8 +644,8 @@ static ssize_t mrail_tinject(struct fid_ep *ep_fid, const void *buf, size_t len,
 		.iov_base 	= (void *)buf,
 		.iov_len 	= len,
 	};
-	return mrail_tsend_common(ep_fid, &iov, NULL, 1, len, dest_addr, tag,
-				  0, NULL, mrail_inject_flags(ep_fid));
+	return mrail_send_common(ep_fid, &iov, NULL, 1, len, dest_addr, tag,
+				 0, NULL, mrail_inject_flags(ep_fid), FI_TAGGED);
 }
 
 static ssize_t mrail_tinjectdata(struct fid_ep *ep_fid, const void *buf,
@@ -738,9 +656,9 @@ static ssize_t mrail_tinjectdata(struct fid_ep *ep_fid, const void *buf,
 		.iov_base 	= (void *)buf,
 		.iov_len 	= len,
 	};
-	return mrail_tsend_common(ep_fid, &iov, NULL, 1, len, dest_addr, tag,
-				  data, NULL, (mrail_inject_flags(ep_fid) |
-					       FI_REMOTE_CQ_DATA));
+	return mrail_send_common(ep_fid, &iov, NULL, 1, len, dest_addr, tag,
+				 data, NULL, (mrail_inject_flags(ep_fid) |
+					      FI_REMOTE_CQ_DATA), FI_TAGGED);
 }
 
 static struct mrail_unexp_msg_entry *
