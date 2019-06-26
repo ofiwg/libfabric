@@ -223,7 +223,10 @@ static inline void* smr_freestack_pop_impl(void *fs, void *next)
 
 	local = (char **) fs + ((char **) next -
 		(char **) freestack->base_addr);
-	next = *((void **) local);
+
+	freestack->next = *((void **)local);
+	freestack_init_next(local);
+
 	return freestack_get_user_buf(local);
 }
 
