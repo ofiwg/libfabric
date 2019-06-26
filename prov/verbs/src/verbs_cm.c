@@ -363,8 +363,10 @@ fi_ibv_msg_xrc_ep_connect(struct fid_ep *ep, const void *addr,
 		return ret;
 
 	xrc_ep->conn_setup = calloc(1, sizeof(*xrc_ep->conn_setup));
-	if (!xrc_ep->conn_setup)
+	if (!xrc_ep->conn_setup) {
+		free(adjusted_param);
 		return -FI_ENOMEM;
+	}
 
 	fastlock_acquire(&xrc_ep->base_ep.eq->lock);
 	xrc_ep->conn_setup->conn_tag = VERBS_CONN_TAG_INVALID;
