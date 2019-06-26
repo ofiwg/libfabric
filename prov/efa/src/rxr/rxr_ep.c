@@ -2770,6 +2770,9 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	cq_attr.size = MAX(rxr_ep->rx_size + rxr_ep->tx_size,
 			   rxr_env.cq_size);
 
+	if (info->tx_attr->op_flags & FI_DELIVERY_COMPLETE)
+		FI_INFO(&rxr_prov, FI_LOG_CQ, "FI_DELIVERY_COMPLETE unsupported\n");
+
 	assert(info->tx_attr->msg_order == info->rx_attr->msg_order);
 	rxr_ep->msg_order = info->rx_attr->msg_order;
 	rxr_ep->core_msg_order = rdm_info->rx_attr->msg_order;
