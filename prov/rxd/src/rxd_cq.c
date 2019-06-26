@@ -696,6 +696,9 @@ static int rxd_unpack_hdrs(size_t pkt_size, struct rxd_base_hdr *base_hdr,
 		rma_count = (*sar_hdr)->iov_count;
 		ptr += sizeof(**sar_hdr);
 	} else {
+		if (base_hdr->type == RXD_READ_REQ ||
+		    base_hdr->type == RXD_ATOMIC_FETCH)
+			goto err;
 		*sar_hdr = NULL;
 	}
 
@@ -714,17 +717,17 @@ static int rxd_unpack_hdrs(size_t pkt_size, struct rxd_base_hdr *base_hdr,
 		*atom_hdr = NULL;
 	}
 
-	if (pkt_size < (ptr - (char *) base_hdr)) {
-		FI_WARN(&rxd_prov, FI_LOG_CQ,
-			"Cannot process packet smaller than minimum header size\n");
-		*msg_size = 0;
-		return -FI_EINVAL;
-	}
+	if (pkt_size < (ptr - (char *) base_hdr))
+		goto err;
 
 	*msg = ptr;
 	*msg_size = pkt_size - (ptr - (char *) base_hdr);
 
 	return 0;
+
+err:
+	FI_WARN(&rxd_prov, FI_LOG_CQ, "Cannot process packet\n");
+	return -FI_EINVAL;
 }
 
 static int rxd_unpack_init_rx(struct rxd_ep *ep, struct rxd_x_entry **rx_entry,
