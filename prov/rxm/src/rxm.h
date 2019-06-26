@@ -509,14 +509,12 @@ struct rxm_rma_buf {
 	void *app_context;
 	uint64_t flags;
 
+	struct {
+		struct fid_mr *mr[RXM_IOV_LIMIT];
+		uint8_t count;
+	} mr;
 	/* Must stay at bottom */
- 	union {
-		struct rxm_pkt pkt;
-		struct {
-			struct fid_mr *mr[RXM_IOV_LIMIT];
-			uint8_t count;
-		} mr;
-	};
+	struct rxm_pkt pkt;
 };
 
 struct rxm_tx_atomic_buf {
