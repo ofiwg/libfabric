@@ -2143,6 +2143,8 @@ static int run_pingpong_dgram(struct ct_pingpong *ct)
 	 */
 	ret = fi_recv(ct->ep, ct->rx_buf, ct->rx_size, fi_mr_desc(ct->mr), 0,
 		      ct->rx_ctx_ptr);
+	if (ret)
+		return ret;
 
 	ret = run_suite_pingpong(ct);
 	if (ret)

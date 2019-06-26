@@ -230,7 +230,7 @@ int ofi_set_thread_affinity(const char *s)
 
 	a = strtok_r(dup_s, ",", &saveptra);
 	while (a) {
-		first = last = -1;
+		last = -1;
 		stride = 1;
 		b = strtok_r(a, "-", &saveptrb);
 		assert(b);
