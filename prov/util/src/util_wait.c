@@ -292,12 +292,8 @@ static int util_wait_fd_control(struct fid *fid, int command, void *arg)
 	wait = container_of(fid, struct util_wait_fd, util_wait.wait_fid.fid);
 	switch (command) {
 	case FI_GETWAIT:
-#ifdef HAVE_EPOLL
 		*(int *) arg = wait->epoll_fd;
 		ret = 0;
-#else
-		ret = -FI_ENOSYS;
-#endif
 		break;
 	default:
 		FI_INFO(wait->util_wait.prov, FI_LOG_FABRIC,
