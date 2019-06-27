@@ -258,8 +258,8 @@ static void rxm_buf_pool_destroy(struct rxm_buf_pool *pool)
 	}
 }
 
-static int rxm_buf_pool_create(struct rxm_ep *rxm_ep,
-			       size_t chunk_count, size_t size,
+static int rxm_buf_pool_create(struct rxm_ep *rxm_ep, size_t size,
+			       size_t max_cnt, size_t chunk_count,
 			       struct rxm_buf_pool *pool,
 			       enum rxm_buf_pool_type type)
 {
@@ -267,7 +267,7 @@ static int rxm_buf_pool_create(struct rxm_ep *rxm_ep,
 	struct ofi_bufpool_attr attr = {
 		.size		= size,
 		.alignment	= 16,
-		.max_cnt	= 0,
+		.max_cnt	= max_cnt,
 		.chunk_cnt	= chunk_count,
 		.alloc_fn	= rxm_buf_reg,
 		.free_fn	= rxm_buf_close,
@@ -389,7 +389,10 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 		    (rxm_ep->util_ep.domain->threading != FI_THREAD_SAFE))
 			continue;
 
-		ret = rxm_buf_pool_create(rxm_ep, queue_sizes[i], entry_sizes[i],
+		ret = rxm_buf_pool_create(rxm_ep, entry_sizes[i],
+					  (i == RXM_BUF_POOL_RX ? 0 :
+					   rxm_ep->rxm_info->tx_attr->size),
+					  queue_sizes[i],
 					  &rxm_ep->buf_pools[i], i);
 		if (ret)
 			goto err;
