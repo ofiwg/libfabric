@@ -242,6 +242,8 @@ struct ofi_mr_cache {
 
 	size_t				cached_cnt;
 	size_t				cached_size;
+	size_t				uncached_cnt;
+	size_t				uncached_size;
 	size_t				search_cnt;
 	size_t				delete_cnt;
 	size_t				hit_cnt;
