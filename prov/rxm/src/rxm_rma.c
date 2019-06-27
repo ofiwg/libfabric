@@ -83,9 +83,7 @@ rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t 
 
 	rma_buf = rxm_rma_buf_alloc(rxm_ep);
 	if (OFI_UNLIKELY(!rma_buf)) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
-			"Ran out of buffers from RMA buffer pool\n");
-		ret = -FI_ENOMEM;
+		ret = -FI_EAGAIN;
 		goto unlock;
 	}
 
@@ -210,11 +208,8 @@ rxm_ep_rma_emulate_inject_msg(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, 
 	assert(msg->rma_iov_count <= rxm_ep->rxm_info->tx_attr->rma_iov_limit);
 
 	rma_buf = rxm_rma_buf_alloc(rxm_ep);
-	if (OFI_UNLIKELY(!rma_buf)) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
-			"Ran out of buffers from RMA buffer pool\n");
-		return -FI_ENOMEM;
-	}
+	if (OFI_UNLIKELY(!rma_buf))
+		return -FI_EAGAIN;
 
 	rma_buf->pkt.hdr.size = total_size;
 	rma_buf->app_context = msg->context;
