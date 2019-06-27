@@ -231,6 +231,8 @@ int rxr_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	rxr_info.tx_attr->size = info->tx_attr->size;
 	rxr_info.rx_attr->size = info->rx_attr->size;
 
+	rxr_info.rx_attr->op_flags |= info->rx_attr->op_flags & FI_MULTI_RECV;
+
 	rxr_domain = calloc(1, sizeof(*rxr_domain));
 	if (!rxr_domain)
 		return -FI_ENOMEM;
