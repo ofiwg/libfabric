@@ -460,7 +460,7 @@ int ofi_mr_cache_init(struct util_domain *domain,
 	ret = ofi_bufpool_create(&cache->entry_pool,
 				 sizeof(struct ofi_mr_entry) +
 				 cache->entry_data_size,
-				 16, cache_params.max_cnt, 0, 0);
+				 16, 0, 0, 0);
 	if (ret)
 		goto del;
 
