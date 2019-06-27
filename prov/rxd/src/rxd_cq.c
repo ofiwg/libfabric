@@ -669,10 +669,10 @@ static struct rxd_x_entry *rxd_rx_atomic_fetch(struct rxd_ep *ep,
 	return rx_entry;
 }
 
-void rxd_unpack_hdrs(size_t pkt_size, struct rxd_base_hdr *base_hdr,
-		     struct rxd_sar_hdr **sar_hdr, struct rxd_tag_hdr **tag_hdr,
-		     struct rxd_data_hdr **data_hdr, struct rxd_rma_hdr **rma_hdr,
-		     struct rxd_atom_hdr **atom_hdr, void **msg, size_t *msg_size)
+static int rxd_unpack_hdrs(size_t pkt_size, struct rxd_base_hdr *base_hdr,
+			   struct rxd_sar_hdr **sar_hdr, struct rxd_tag_hdr **tag_hdr,
+			   struct rxd_data_hdr **data_hdr, struct rxd_rma_hdr **rma_hdr,
+			   struct rxd_atom_hdr **atom_hdr, void **msg, size_t *msg_size)
 {
 	char *ptr = (char *) base_hdr + sizeof(*base_hdr);
 	uint8_t rma_count = 1;
@@ -696,6 +696,9 @@ void rxd_unpack_hdrs(size_t pkt_size, struct rxd_base_hdr *base_hdr,
 		rma_count = (*sar_hdr)->iov_count;
 		ptr += sizeof(**sar_hdr);
 	} else {
+		if (base_hdr->type == RXD_READ_REQ ||
+		    base_hdr->type == RXD_ATOMIC_FETCH)
+			goto err;
 		*sar_hdr = NULL;
 	}
 
@@ -714,43 +717,54 @@ void rxd_unpack_hdrs(size_t pkt_size, struct rxd_base_hdr *base_hdr,
 		*atom_hdr = NULL;
 	}
 
-	if (pkt_size < (ptr - (char *) base_hdr)) {
-		FI_WARN(&rxd_prov, FI_LOG_CQ,
-			"Cannot process packet smaller than minimum header size\n");
-		*msg_size = 0;
-		return;
-	}
+	if (pkt_size < (ptr - (char *) base_hdr))
+		goto err;
 
 	*msg = ptr;
 	*msg_size = pkt_size - (ptr - (char *) base_hdr);
+
+	return 0;
+
+err:
+	FI_WARN(&rxd_prov, FI_LOG_CQ, "Cannot process packet\n");
+	return -FI_EINVAL;
 }
 
-static struct rxd_x_entry *rxd_unpack_init_rx(struct rxd_ep *ep,
-					      struct rxd_pkt_entry *pkt_entry,
-					      struct rxd_base_hdr *base_hdr,
-					      struct rxd_sar_hdr **sar_hdr,
-					      struct rxd_tag_hdr **tag_hdr,
-					      struct rxd_data_hdr **data_hdr,
-					      struct rxd_rma_hdr **rma_hdr,
-					      struct rxd_atom_hdr **atom_hdr,
-					      void **msg, size_t *msg_size)
+static int rxd_unpack_init_rx(struct rxd_ep *ep, struct rxd_x_entry **rx_entry,
+			      struct rxd_pkt_entry *pkt_entry,
+			      struct rxd_base_hdr *base_hdr,
+			      struct rxd_sar_hdr **sar_hdr,
+			      struct rxd_tag_hdr **tag_hdr,
+			      struct rxd_data_hdr **data_hdr,
+			      struct rxd_rma_hdr **rma_hdr,
+			      struct rxd_atom_hdr **atom_hdr,
+			      void **msg, size_t *msg_size)
 {
-	rxd_unpack_hdrs(pkt_entry->pkt_size - ep->rx_prefix_size, base_hdr, sar_hdr,
-			tag_hdr, data_hdr, rma_hdr, atom_hdr, msg, msg_size);
+	int ret;
+
+	ret = rxd_unpack_hdrs(pkt_entry->pkt_size - ep->rx_prefix_size, base_hdr, sar_hdr,
+			      tag_hdr, data_hdr, rma_hdr, atom_hdr, msg, msg_size);
+	if (ret)
+		return ret;
 
 	switch (base_hdr->type) {
 	case RXD_MSG:
 	case RXD_TAGGED:
-		return rxd_match_rx(ep, pkt_entry, base_hdr, *tag_hdr, *sar_hdr,
-				    *data_hdr, *msg, *msg_size);
+		*rx_entry = rxd_match_rx(ep, pkt_entry, base_hdr, *tag_hdr, *sar_hdr,
+					*data_hdr, *msg, *msg_size);
+		break;
 	case RXD_READ_REQ:
-		return rxd_rma_read_entry_init(ep, base_hdr, *sar_hdr, *rma_hdr);
+		*rx_entry = rxd_rma_read_entry_init(ep, base_hdr, *sar_hdr, *rma_hdr);
+		break;
 	case RXD_ATOMIC_FETCH:
 	case RXD_ATOMIC_COMPARE:
-		return rxd_rx_atomic_fetch(ep, base_hdr, *sar_hdr, *rma_hdr, *atom_hdr);
+		*rx_entry = rxd_rx_atomic_fetch(ep, base_hdr, *sar_hdr, *rma_hdr, *atom_hdr);
+		break;
 	default:
-		return rxd_rma_rx_entry_init(ep, base_hdr, *sar_hdr, *rma_hdr);
+		*rx_entry = rxd_rma_rx_entry_init(ep, base_hdr, *sar_hdr, *rma_hdr);
 	}
+
+	return 0;
 }
 
 void rxd_do_atomic(void *src, void *dst, void *cmp, enum fi_datatype datatype,
@@ -861,6 +875,7 @@ static struct rxd_x_entry *rxd_get_data_x_entry(struct rxd_ep *ep,
 
 static void rxd_progress_buf_pkts(struct rxd_ep *ep, fi_addr_t peer)
 {
+	struct fi_cq_err_entry err_entry;
 	struct rxd_pkt_entry *pkt_entry;
 	struct rxd_base_hdr *base_hdr;
 	struct rxd_sar_hdr *sar_hdr;
@@ -869,8 +884,9 @@ static void rxd_progress_buf_pkts(struct rxd_ep *ep, fi_addr_t peer)
 	struct rxd_rma_hdr *rma_hdr;
 	struct rxd_atom_hdr *atom_hdr;
 	void *msg;
+	int ret;
 	size_t msg_size;
-	struct rxd_x_entry *rx_entry;
+	struct rxd_x_entry *rx_entry = NULL;
 	struct rxd_data_pkt *data_pkt;
 
 	while (!dlist_empty(&ep->peers[peer].buf_pkts)) {
@@ -885,9 +901,23 @@ static void rxd_progress_buf_pkts(struct rxd_ep *ep, fi_addr_t peer)
 			rx_entry = rxd_get_data_x_entry(ep, data_pkt);
 			rxd_ep_recv_data(ep, rx_entry, data_pkt, pkt_entry->pkt_size);
 		} else {
-			rx_entry = rxd_unpack_init_rx(ep, pkt_entry, base_hdr, &sar_hdr,
+			ret = rxd_unpack_init_rx(ep, &rx_entry, pkt_entry, base_hdr, &sar_hdr,
 					      &tag_hdr, &data_hdr, &rma_hdr, &atom_hdr,
 					      &msg, &msg_size);
+			if (ret) {
+				memset(&err_entry, 0, sizeof(err_entry));
+				err_entry.err = FI_ETRUNC;
+				err_entry.prov_errno = 0;
+				ret = ofi_cq_write_error(&rxd_ep_rx_cq(ep)->util_cq,
+							 &err_entry);
+				if (ret)
+					FI_WARN(&rxd_prov, FI_LOG_EP_CTRL,
+						"could not write error entry\n");
+				ep->peers[base_hdr->peer].rx_seq_no++;
+				dlist_remove(&pkt_entry->d_entry);
+				rxd_release_repost_rx(ep, pkt_entry);
+				continue;
+			}
 			if (!rx_entry) {
 				if (base_hdr->type == RXD_MSG ||
 				    base_hdr->type == RXD_TAGGED) {
@@ -961,6 +991,7 @@ static void rxd_handle_op(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 	struct rxd_atom_hdr *atom_hdr;
 	void *msg;
 	size_t msg_size;
+	int ret;
 
 	if (base_hdr->seq_no != ep->peers[base_hdr->peer].rx_seq_no) {
 		if (!rxd_env.retry) {
@@ -978,9 +1009,12 @@ static void rxd_handle_op(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 	if (ep->peers[base_hdr->peer].peer_addr == FI_ADDR_UNSPEC)
 		goto release;
 
-	rx_entry = rxd_unpack_init_rx(ep, pkt_entry, base_hdr, &sar_hdr,
-				      &tag_hdr, &data_hdr, &rma_hdr, &atom_hdr,
-				      &msg, &msg_size);
+	ret = rxd_unpack_init_rx(ep, &rx_entry, pkt_entry, base_hdr, &sar_hdr,
+				 &tag_hdr, &data_hdr, &rma_hdr, &atom_hdr,
+				 &msg, &msg_size);
+	if (ret)
+		goto ack;
+
 	if (!rx_entry) {
 		if (base_hdr->type == RXD_MSG || base_hdr->type == RXD_TAGGED) {
 			if (!ep->peers[base_hdr->peer].curr_unexp)

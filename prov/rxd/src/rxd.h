@@ -409,10 +409,6 @@ ssize_t rxd_send_rts_if_needed(struct rxd_ep *rxd_ep, fi_addr_t rxd_addr);
 int rxd_start_xfer(struct rxd_ep *ep, struct rxd_x_entry *tx_entry);
 void rxd_init_data_pkt(struct rxd_ep *ep, struct rxd_x_entry *tx_entry,
 		       struct rxd_pkt_entry *pkt_entry);
-void rxd_unpack_hdrs(size_t pkt_size, struct rxd_base_hdr *base_hdr,
-		     struct rxd_sar_hdr **sar_hdr, struct rxd_tag_hdr **tag_hdr,
-		     struct rxd_data_hdr **data_hdr, struct rxd_rma_hdr **rma_hdr,
-		     struct rxd_atom_hdr **atom_hdr, void **msg, size_t *msg_size);
 void rxd_init_base_hdr(struct rxd_ep *rxd_ep, void **ptr,
 		       struct rxd_x_entry *tx_entry);
 void rxd_init_sar_hdr(void **ptr, struct rxd_x_entry *tx_entry,
