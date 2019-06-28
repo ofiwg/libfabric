@@ -17,6 +17,8 @@ v1.8.0, Fri Jun 28, 2019
 - Improved support for huge page allocations
 - Convert all python scripts to version 3
 - Add logging to report atomic implementation in use
+- Fix timeout calculation in util wait abstraction.
+- Fix hang when multiple threads wait on util counter.
 
 ## EFA
 
@@ -57,9 +59,12 @@ v1.8.0, Fri Jun 28, 2019
 ## RxM
 
 - Improved responsiveness to CM events with manual progress mode
+- Add proper versioning to CM data exchange protocol
 - Refactor how CQ and EQ errors are handled and reported
 - Minor code cleanups and bug fixes
 - Support atomic operations in auto progress mode
+- Fix high memory usage when a large number of RMA ops are posted without
+  FI_COMPLETION
 
 ## SHM
 
@@ -73,10 +78,12 @@ v1.8.0, Fri Jun 28, 2019
 
 ## Verbs
 
+- Add NIC info (fi_nic) in fi_info
 - Improved support for UD QPs over RoCE
 - Added CQ resource tracking to avoid CQ overrun on HFI1
 - Enable memory registration cache by default
 - Reduce unnecessary log message noise
+- Bug fixes for EQ trywait, QP creation attributes.
 
 ## Fabtests
 
