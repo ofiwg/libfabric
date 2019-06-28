@@ -89,11 +89,6 @@ static void util_mr_free_entry(struct ofi_mr_cache *cache,
 		entry->subscribed = 0;
 	}
 	cache->delete_region(cache, entry);
-	assert((cache->cached_cnt != 0) &&
-	       (((ssize_t)cache->cached_size - (ssize_t)entry->iov.iov_len) >= 0));
-	cache->cached_cnt--;
-	cache->cached_size -= entry->iov.iov_len;
-	
 	ofi_buf_free(entry);
 }
 
@@ -103,6 +98,8 @@ static void util_mr_uncache_entry(struct ofi_mr_cache *cache,
 	assert(entry->cached);
 	cache->storage.erase(&cache->storage, entry);
 	entry->cached = 0;
+	cache->cached_cnt--;
+	cache->cached_size -= entry->iov.iov_len;
 }
 
 /* Caller must hold ofi_mem_monitor lock */
@@ -172,6 +169,8 @@ void ofi_mr_cache_delete(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 		if (entry->cached) {
 			dlist_insert_tail(&entry->lru_entry, &cache->lru_list);
 		} else {
+			cache->uncached_cnt--;
+			cache->uncached_size -= entry->iov.iov_len;
 			util_mr_free_entry(cache, entry);
 		}
 	}
@@ -206,10 +205,11 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct iovec *iov,
 		}
 	}
 
-	cache->cached_size += iov->iov_len;
-	if ((++cache->cached_cnt > cache_params.max_cnt) ||
+	if ((cache->cached_cnt > cache_params.max_cnt) ||
 	    (cache->cached_size > cache_params.max_size)) {
 		(*entry)->cached = 0;
+		cache->uncached_cnt++;
+		cache->uncached_size += iov->iov_len;
 	} else {
 		if (cache->storage.insert(&cache->storage,
 					  &(*entry)->iov, *entry)) {
@@ -217,6 +217,8 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct iovec *iov,
 			goto err;
 		}
 		(*entry)->cached = 1;
+		cache->cached_cnt++;
+		cache->cached_size += iov->iov_len;
 
 		ret = ofi_monitor_subscribe(cache->monitor, iov->iov_base,
 					    iov->iov_len);
@@ -257,8 +259,7 @@ util_mr_cache_merge(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
 		/* New entry will expand range of subscription */
 		old_entry->subscribed = 0;
 
-		cache->storage.erase(&cache->storage, old_entry);
-		old_entry->cached = 0;
+		util_mr_uncache_entry(cache, old_entry);
 
 		if (old_entry->use_cnt == 0) {
 			dlist_remove_init(&old_entry->lru_entry);
@@ -339,6 +340,8 @@ void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache)
 	ofi_bufpool_destroy(cache->entry_pool);
 	assert(cache->cached_cnt == 0);
 	assert(cache->cached_size == 0);
+	assert(cache->uncached_cnt == 0);
+	assert(cache->uncached_size == 0);
 }
 
 static void ofi_mr_rbt_destroy(struct ofi_mr_storage *storage)
@@ -442,6 +445,8 @@ int ofi_mr_cache_init(struct util_domain *domain,
 	dlist_init(&cache->lru_list);
 	cache->cached_cnt = 0;
 	cache->cached_size = 0;
+	cache->uncached_cnt = 0;
+	cache->uncached_size = 0;
 	cache->search_cnt = 0;
 	cache->delete_cnt = 0;
 	cache->hit_cnt = 0;
