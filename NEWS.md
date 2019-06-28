@@ -50,6 +50,9 @@ v1.8.0, Fri Jun 28, 2019
 - Update and simplify protocol headers
 - Optimize packet initialization
 - Various improvements handling protocol messages
+- Remove pending_cnt tracking (moved to verbs provider)
+- Fix setting of mr_mode on getinfo
+- Handle error unpacking packet headers properly
 
 ## RxM
 
@@ -59,6 +62,9 @@ v1.8.0, Fri Jun 28, 2019
 - Support atomic operations in auto progress mode
 
 ## SHM
+
+- Fix possible segfault
+- Fix smr_freestack_pop to properly remove entry from stack
 
 ## TCP
 
