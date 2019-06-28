@@ -460,7 +460,8 @@ static int smr_progress_cmd_rma(struct smr_ep *ep, struct smr_cmd *cmd)
 	}
 	ret = smr_complete_rx(ep, (void *) cmd->msg.hdr.msg_id,
 			  cmd->msg.hdr.op, cmd->msg.hdr.op_flags,
-			  total_len, iov[0].iov_base, &cmd->msg.hdr.addr, 0,
+			  total_len, iov_count ? iov[0].iov_base : NULL,
+			  &cmd->msg.hdr.addr, 0,
 			  cmd->msg.hdr.data, err);
 	if (ret) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
@@ -533,7 +534,8 @@ static int smr_progress_cmd_atomic(struct smr_ep *ep, struct smr_cmd *cmd)
 			"error processing atomic op\n");
 
 	ret = smr_complete_rx(ep, NULL, cmd->msg.hdr.op, cmd->msg.hdr.op_flags,
-			      total_len, ioc[0].addr, &cmd->msg.hdr.addr, 0,
+			      total_len, ioc_count ? ioc[0].addr : NULL,
+			      &cmd->msg.hdr.addr, 0,
 			      cmd->msg.hdr.data, err);
 	if (ret)
 		return ret;
