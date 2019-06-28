@@ -60,6 +60,9 @@ v1.8.0, Fri Jun 28, 2019
 
 ## SHM
 
+- Fix possible segfault
+- Fix smr_freestack_pop to properly remove entry from stack
+
 ## TCP
 
 - Enable multi-recv support
