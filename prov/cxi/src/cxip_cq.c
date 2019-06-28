@@ -398,7 +398,7 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq)
 
 	memset(&cxi_cq->req_table, 0, sizeof(cxi_cq->req_table));
 
-	cxi_cq->enabled = 1;
+	cxi_cq->enabled = true;
 	fastlock_release(&cxi_cq->lock);
 	dlist_init(&cxi_cq->req_list);
 
@@ -445,7 +445,7 @@ static void cxip_cq_disable(struct cxip_cq *cxi_cq)
 
 	free(cxi_cq->evtq_buf);
 
-	cxi_cq->enabled = 0;
+	cxi_cq->enabled = false;
 
 	CXIP_LOG_DBG("CQ disabled: %p\n", cxi_cq);
 unlock:

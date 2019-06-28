@@ -332,7 +332,7 @@ struct cxip_domain {
 	fastlock_t iomm_lock;
 
 	uint32_t nic_addr;		// dev address of source NIC
-	int enabled;			// set when domain is enabled
+	bool enabled;			// set when domain is enabled
 	struct cxip_if *dev_if;		// looked when domain is enabled
 };
 
@@ -469,7 +469,7 @@ struct cxip_cq {
 	/* CXI specific fields. */
 	struct cxip_domain *domain;
 	fastlock_t lock;
-	int enabled;
+	bool enabled;
 	struct cxi_evtq *evtq;
 	void *evtq_buf;
 	size_t evtq_buf_len;
@@ -497,7 +497,7 @@ struct cxip_cntr {
 	int signal;
 
 	fastlock_t lock;
-	int enabled;
+	bool enabled;
 
 	struct cxi_ct *ct;
 	struct c_ct_writeback wb;
@@ -555,7 +555,7 @@ struct cxip_rxc {
 	fastlock_t lock;		// Control ops lock
 
 	uint16_t rx_id;			// SEP index
-	int enabled;
+	bool enabled;
 	int progress;			// unused
 	int recv_cq_event;		// unused
 	int use_shared;
@@ -624,7 +624,7 @@ struct cxip_txc {
 	size_t fclass;
 
 	uint16_t tx_id;			// SEP index
-	uint8_t enabled;
+	bool enabled;
 	uint8_t progress;		// unused
 
 	int use_shared;
@@ -690,7 +690,7 @@ struct cxip_ep_obj {
 
 	struct fi_ep_attr ep_attr;
 
-	int enabled;
+	bool enabled;
 	fastlock_t lock;
 
 	struct cxip_addr src_addr;	// address of this NIC
@@ -749,7 +749,7 @@ struct cxip_mr {
 	 */
 	uint32_t pid_idx;
 
-	int enabled;
+	bool enabled;
 	struct cxil_pte *pte;
 	unsigned int pte_hw_id;
 	struct cxil_pte_map *pte_map;

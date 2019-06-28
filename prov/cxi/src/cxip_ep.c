@@ -410,7 +410,7 @@ static int ep_enable(struct cxip_ep_obj *ep_obj)
 		fprintf(stderr, "Rendezvous offload enabled\n");
 	}
 
-	ep_obj->enabled = 1;
+	ep_obj->enabled = true;
 
 	fastlock_release(&ep_obj->lock);
 
@@ -846,7 +846,7 @@ static void cxip_ep_disable(struct cxip_ep *cxi_ep)
 {
 	if (cxi_ep->ep_obj->enabled) {
 		cxip_put_if_domain(cxi_ep->ep_obj->if_dom);
-		cxi_ep->ep_obj->enabled = 0;
+		cxi_ep->ep_obj->enabled = false;
 	}
 }
 
@@ -1475,7 +1475,7 @@ int cxip_srx(struct fid_domain *domain, struct fi_rx_attr *attr,
 	rxc->ctx.ops = &cxip_ctx_ep_ops;
 	rxc->ctx.msg = &cxip_ep_msg_ops;
 	rxc->ctx.tagged = &cxip_ep_tagged_ops;
-	rxc->enabled = 1;
+	rxc->enabled = true;
 
 	/* default config */
 	rxc->min_multi_recv = CXIP_EP_MIN_MULTI_RECV;

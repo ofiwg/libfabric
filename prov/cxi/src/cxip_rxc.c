@@ -247,7 +247,7 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 		}
 	}
 
-	rxc->enabled = 1;
+	rxc->enabled = true;
 
 	fastlock_release(&rxc->lock);
 
@@ -322,7 +322,7 @@ static void rxc_disable(struct cxip_rxc *rxc)
 	if (!rxc->enabled)
 		goto unlock;
 
-	rxc->enabled = 0;
+	rxc->enabled = false;
 
 	if (ofi_recv_allowed(rxc->attr.caps)) {
 		/* Stop accepting Puts. */

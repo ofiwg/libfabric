@@ -292,7 +292,7 @@ int cxip_cntr_enable(struct cxip_cntr *cxi_cntr)
 		goto unlock;
 	}
 
-	cxi_cntr->enabled = 1;
+	cxi_cntr->enabled = true;
 
 	CXIP_LOG_DBG("Counter enabled: %p (CT: %d)\n",
 		     cxi_cntr, cxi_cntr->ct->ctn);
@@ -323,7 +323,7 @@ static void cxip_cntr_disable(struct cxip_cntr *cxi_cntr)
 	if (ret)
 		CXIP_LOG_DBG("Failed to free CT, ret: %d\n", ret);
 
-	cxi_cntr->enabled = 0;
+	cxi_cntr->enabled = false;
 
 	CXIP_LOG_DBG("Counter disabled: %p\n", cxi_cntr);
 

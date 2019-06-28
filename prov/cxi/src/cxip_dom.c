@@ -61,7 +61,7 @@ int cxip_domain_enable(struct cxip_domain *dom)
 		goto iomm_fini;
 	}
 
-	dom->enabled = 1;
+	dom->enabled = true;
 	fastlock_release(&dom->lock);
 
 	return FI_SUCCESS;
@@ -93,7 +93,7 @@ static void cxip_domain_disable(struct cxip_domain *dom)
 
 	cxip_put_if(dom->dev_if);
 
-	dom->enabled = 0;
+	dom->enabled = false;
 unlock:
 	fastlock_release(&dom->lock);
 }

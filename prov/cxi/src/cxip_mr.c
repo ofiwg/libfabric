@@ -154,7 +154,7 @@ int cxip_mr_enable(struct cxip_mr *mr)
 
 	fastlock_release(&mr->domain->dev_if->lock);
 
-	mr->enabled = 1;
+	mr->enabled = true;
 
 	return FI_SUCCESS;
 
@@ -238,7 +238,7 @@ unlock:
 	if (ret)
 		CXIP_LOG_ERROR("Failed to free PTE: %d\n", ret);
 
-	mr->enabled = 0;
+	mr->enabled = false;
 
 	return FI_SUCCESS;
 }

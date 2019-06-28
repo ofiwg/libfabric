@@ -181,7 +181,7 @@ int cxip_txc_enable(struct cxip_txc *txc)
 		}
 	}
 
-	txc->enabled = 1;
+	txc->enabled = true;
 	fastlock_release(&txc->lock);
 
 	return FI_SUCCESS;
@@ -240,7 +240,7 @@ static void txc_disable(struct cxip_txc *txc)
 	if (!txc->enabled)
 		goto unlock;
 
-	txc->enabled = 0;
+	txc->enabled = false;
 
 	txc_cleanup(txc);
 
