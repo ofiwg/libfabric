@@ -18,6 +18,7 @@ v1.7.0](https://github.com/ofiwg/libfabric/releases/tag/v1.7.0).
 * Provider details
   * [fi_bgq(7)](fi_bgq.7.html)
   * [fi_gni(7)](fi_gni.7.html)
+  * [fi_hook(7)](fi_hook.7.html)
   * [fi_mlx(7)](fi_mlx.7.html)
   * [fi_netdir(7)](fi_netdir.7.html)
   * [fi_psm(7)](fi_psm.7.html)
@@ -45,6 +46,7 @@ v1.7.0](https://github.com/ofiwg/libfabric/releases/tag/v1.7.0).
   * [fi_getinfo(3)](fi_getinfo.3.html)
   * [fi_msg(3)](fi_msg.3.html)
   * [fi_mr(3)](fi_mr.3.html)
+  * [fi_nic(3)](fi_nic.3.html)
   * [fi_poll(3)](fi_poll.3.html)
   * [fi_rma(3)](fi_rma.3.html)
   * [fi_tagged(3)](fi_tagged.3.html)
