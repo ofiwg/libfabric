@@ -21,8 +21,25 @@ Test(cntr, mod)
 	int i;
 	uint64_t val = 0;
 	uint64_t errval = 0;
+	struct fid_cntr *tmp_cntr;
+
+	/* Try ops on a disabled counter */
+	ret = fi_cntr_open(cxit_domain, NULL, &tmp_cntr, NULL);
+	cr_assert(ret == FI_SUCCESS, "fi_cntr_open (send)");
+
+	ret = fi_cntr_add(tmp_cntr, 1);
+	cr_assert(ret == -FI_EOPBADSTATE);
+
+	ret = fi_cntr_read(tmp_cntr);
+	cr_assert(ret == 0);
+
+	fi_close(&tmp_cntr->fid);
 
 	cr_assert(!fi_cntr_read(cxit_write_cntr));
+
+	/* fi_cntr_wait() is unimplemented */
+	ret = fi_cntr_wait(cxit_write_cntr, 1, -1);
+	cr_assert(ret == -FI_ENOSYS);
 
 	/* Test invalid values */
 	ret = fi_cntr_add(cxit_write_cntr, CXIP_CNTR_SUCCESS_MAX + 1);

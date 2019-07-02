@@ -40,6 +40,12 @@ int cxip_cntr_mod(struct cxip_cntr *cxi_cntr, uint64_t value, bool set,
 
 	fastlock_acquire(&cxi_cntr->lock);
 
+	/* Modifications are invalid before a counter is in use */
+	if (!cxi_cntr->enabled) {
+		fastlock_release(&cxi_cntr->lock);
+		return -FI_EOPBADSTATE;
+	}
+
 	if (!set) {
 		/* Doorbell supports counter increment */
 		if (err)
@@ -104,6 +110,12 @@ static int cxip_cntr_get(struct cxip_cntr *cxi_cntr)
 	int ret;
 
 	fastlock_acquire(&cxi_cntr->lock);
+
+	/* Get is a NOP when counter is not in use */
+	if (!cxi_cntr->enabled) {
+		fastlock_release(&cxi_cntr->lock);
+		return -FI_EOPBADSTATE;
+	}
 
 	if (cxi_cntr->wb_pending) {
 		if (cxi_cntr->wb.ct_writeback) {
@@ -230,7 +242,7 @@ __attribute__((unused))
 static int cxip_cntr_wait(struct fid_cntr *fid_cntr, uint64_t threshold,
 			  int timeout)
 {
-	return 0;
+	return -FI_ENOSYS;
 }
 
 /*
