@@ -27,6 +27,8 @@ set functional_tests=^
 	"rdm_rma_simple"^
 	"rdm_rma_trigger"^
 	"rdm_tagged_peek"^
+	"bw -e rdm -v -T 1"^
+	"bw -e msg -v -T 1"^
 	"scalable_ep"
 rem	"msg_epoll"
 
