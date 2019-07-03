@@ -64,21 +64,7 @@ static inline struct ibv_mr *
 fi_ibv_mr_reg_wrapper(struct fi_ibv_domain *domain, void *buf,
 		      size_t len, int fi_ibv_access)
 {	
-#if defined HAVE_VERBS_EXP_H
-	struct ibv_exp_reg_mr_in in = {
-		.pd		= domain->pd,
-		.addr		= buf,
-		.length		= len,
-		.exp_access 	= fi_ibv_access,
-		.comp_mask	= 0,
-	};
-	if (domain->use_odp)
-		in.exp_access |= IBV_EXP_ACCESS_RELAXED |
-				 IBV_EXP_ACCESS_ON_DEMAND;
-	return ibv_exp_reg_mr(&in);
-#else /* HAVE_VERBS_EXP_H */
 	return ibv_reg_mr(domain->pd, buf, len, fi_ibv_access);
-#endif /* HAVE_VERBS_EXP_H */
 }
 
 static int fi_ibv_mr_close(fid_t fid)

@@ -193,26 +193,6 @@ static struct fi_ops_domain fi_ibv_dgram_domain_ops = {
 	.query_atomic = fi_no_query_atomic,
 };
 
-static void fi_ibv_domain_process_exp(struct fi_ibv_domain *domain)
-{
-#ifdef HAVE_VERBS_EXP_H
-	struct ibv_exp_device_attr exp_attr= {
-		.comp_mask = IBV_EXP_DEVICE_ATTR_ODP |
-			     IBV_EXP_DEVICE_ATTR_EXP_CAP_FLAGS,
-	};
-	domain->use_odp = (!ibv_exp_query_device(domain->verbs, &exp_attr) &&
-			   exp_attr.exp_device_cap_flags & IBV_EXP_DEVICE_ODP);
-#else /* HAVE_VERBS_EXP_H */
-	domain->use_odp = 0;
-#endif /* HAVE_VERBS_EXP_H */
-	if (!domain->use_odp && fi_ibv_gl_data.use_odp) {
-		VERBS_WARN(FI_LOG_CORE,
-			   "ODP is not supported on this configuration, ignore \n");
-		return;
-	}
-	domain->use_odp = fi_ibv_gl_data.use_odp;
-}
-
 static int
 fi_ibv_post_send_track_credits(struct ibv_qp *qp, struct ibv_send_wr *wr,
 			       struct ibv_send_wr **bad_wr)
@@ -298,8 +278,6 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	_domain->util_domain.domain_fid.fid.fclass = FI_CLASS_DOMAIN;
 	_domain->util_domain.domain_fid.fid.context = context;
 	_domain->util_domain.domain_fid.fid.ops = &fi_ibv_fid_ops;
-
-	fi_ibv_domain_process_exp(_domain);
 
 	_domain->cache.entry_data_size = sizeof(struct fi_ibv_mem_desc);
 	_domain->cache.add_region = fi_ibv_mr_cache_add_region;
