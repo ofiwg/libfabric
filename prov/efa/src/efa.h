@@ -106,6 +106,7 @@ struct efa_fabric {
 struct efa_ep_addr {
 	uint8_t			raw[16];
 	uint16_t		qpn;
+	struct efa_ep_addr	*next;
 };
 
 #define EFA_EP_ADDR_LEN sizeof(struct efa_ep_addr)

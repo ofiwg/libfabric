@@ -32,48 +32,117 @@
  */
 
 #include "rxr.h"
+#include "efa.h"
 #include <inttypes.h>
+
+/*
+ * Local/remote peer detection by comparing peer GID with stored local GIDs
+ */
+static bool rxr_is_local_peer(struct rxr_av *av, const void *addr)
+{
+	struct efa_ep_addr *cur_efa_addr = local_efa_addr;
+
+#if ENABLE_DEBUG
+	char peer_gid[INET6_ADDRSTRLEN] = { 0 };
+
+	if (!inet_ntop(AF_INET6, ((struct efa_ep_addr *)addr)->raw, peer_gid, INET6_ADDRSTRLEN)) {
+		FI_WARN(&rxr_prov, FI_LOG_AV, "Failed to get current EFA's GID, errno: %d\n", errno);
+		return 0;
+	}
+	FI_DBG(&rxr_prov, FI_LOG_AV, "The peer's GID is %s.\n", peer_gid);
+#endif
+	while (cur_efa_addr) {
+		if (!memcmp(((struct efa_ep_addr *)addr)->raw, cur_efa_addr->raw, 16)) {
+			FI_DBG(&rxr_prov, FI_LOG_AV, "The peer is local.\n");
+			return 1;
+		}
+		cur_efa_addr = cur_efa_addr->next;
+	}
+
+	return 0;
+}
 
 /*
  * Insert address translation in core av & in hash. Return 1 on successful
  * insertion regardless of whether it is in the hash table or not, 0 if the
  * lower layer av insert fails.
+ *
+ * If shm transfer is enabled and the addr comes from local peer,
+ * 1. convert addr to format 'gid_qpn', which will be set as shm's ep name later.
+ * 2. insert gid_qpn into shm's av
+ * 3. store returned fi_addr from shm into the hash table
  */
 int rxr_av_insert_rdm_addr(struct rxr_av *av, const void *addr,
 			   fi_addr_t *rdm_fiaddr, uint64_t flags,
 			   void *context)
 {
 	struct rxr_av_entry *av_entry;
+	fi_addr_t shm_fiaddr;
+	struct rxr_peer *peer;
+	struct rxr_ep *rxr_ep;
+	struct util_ep *util_ep;
+	struct dlist_entry *ep_list_entry;
+	char smr_name[RXR_MAX_NAME_LENGTH];
 	int ret = 1;
 
 	fastlock_acquire(&av->util_av.lock);
 
 	HASH_FIND(hh, av->av_map, addr, av->rdm_addrlen, av_entry);
 
-	if (!av_entry) {
-		ret = fi_av_insert(av->rdm_av, addr, 1,
-				   rdm_fiaddr, flags, context);
-		if (OFI_UNLIKELY(ret != 1)) {
-			FI_DBG(&rxr_prov, FI_LOG_AV,
-			       "Error in inserting address: %s\n", fi_strerror(-ret));
-			goto out;
-		} else {
-			av_entry = calloc(1, sizeof(*av_entry));
-			if (OFI_UNLIKELY(!av_entry)) {
-				ret = -FI_ENOMEM;
-				FI_WARN(&rxr_prov, FI_LOG_AV,
-					"Failed to allocate memory for av_entry\n");
-				goto out;
-			}
-			memcpy(av_entry->addr, addr, av->rdm_addrlen);
-			av_entry->rdm_addr = *(uint64_t *)rdm_fiaddr;
-			HASH_ADD(hh, av->av_map, addr,
-				 av->rdm_addrlen, av_entry);
-		}
-	} else {
+	if (av_entry) {
 		*rdm_fiaddr = (fi_addr_t)av_entry->rdm_addr;
+		goto find_out;
+	}
+	ret = fi_av_insert(av->rdm_av, addr, 1, rdm_fiaddr, flags, context);
+	if (OFI_UNLIKELY(ret != 1)) {
+		FI_DBG(&rxr_prov, FI_LOG_AV,
+		       "Error in inserting address: %s\n", fi_strerror(-ret));
+		goto out;
+	}
+	av_entry = calloc(1, sizeof(*av_entry));
+	if (OFI_UNLIKELY(!av_entry)) {
+		ret = -FI_ENOMEM;
+		FI_WARN(&rxr_prov, FI_LOG_AV,
+			"Failed to allocate memory for av_entry\n");
+		goto out;
+	}
+	memcpy(av_entry->addr, addr, av->rdm_addrlen);
+	av_entry->rdm_addr = *(uint64_t *)rdm_fiaddr;
+
+	/* If peer is local, insert the address into shm provider's av */
+	if (rxr_env.enable_shm_transfer && rxr_is_local_peer(av, addr)) {
+		ret = rxr_ep_efa_addr_to_str(addr, smr_name);
+		if (ret != FI_SUCCESS)
+			goto out;
+
+		ret = fi_av_insert(av->shm_rdm_av, smr_name, 1, &shm_fiaddr, flags, context);
+		if (OFI_UNLIKELY(ret != 1)) {
+			FI_DBG(&rxr_prov, FI_LOG_AV, "Failed to insert address to shm provider's av: %s\n",
+			       fi_strerror(-ret));
+			goto out;
+		}
+		FI_DBG(&rxr_prov, FI_LOG_AV,
+			"Insert %s to shm provider's av. addr = %" PRIu64 " rdm_fiaddr = %" PRIu64
+			" shm_rdm_fiaddr = %" PRIu64 "\n", smr_name, *(uint64_t *)addr, *rdm_fiaddr, shm_fiaddr);
+		av_entry->local_mapping = 1;
+		av_entry->shm_rdm_addr = shm_fiaddr;
+
+		/*
+		 * Walk through all the EPs that bound to the AV,
+		 * update is_local flag and shm fi_addr_t in corresponding peer structure
+		 */
+		dlist_foreach(&av->util_av.ep_list, ep_list_entry) {
+			util_ep = container_of(ep_list_entry, struct util_ep, av_entry);
+			rxr_ep = container_of(util_ep, struct rxr_ep, util_ep);
+			peer = rxr_ep_get_peer(rxr_ep, *rdm_fiaddr);
+			peer->shm_fiaddr = shm_fiaddr;
+			peer->is_local = 1;
+		}
 	}
 
+	HASH_ADD(hh, av->av_map, addr, av->rdm_addrlen, av_entry);
+
+find_out:
 	FI_DBG(&rxr_prov, FI_LOG_AV,
 	       "addr = %" PRIu64 " rdm_fiaddr =  %" PRIu64 "\n",
 	       *(uint64_t *)addr, *rdm_fiaddr);
@@ -185,6 +254,13 @@ static int rxr_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 
 		HASH_FIND(hh, av->av_map, addr, av->rdm_addrlen, av_entry);
 
+		/* remove an address from shm provider's av */
+		if (rxr_env.enable_shm_transfer && av_entry->local_mapping) {
+			ret = fi_av_remove(av->shm_rdm_av, &av_entry->shm_rdm_addr, 1, flags);
+			if (ret)
+				break;
+		}
+
 		if (av_entry) {
 			HASH_DEL(av->av_map, av_entry);
 			free(av_entry);
@@ -235,6 +311,13 @@ static int rxr_av_close(struct fid *fid)
 	ret = fi_close(&av->rdm_av->fid);
 	if (ret)
 		goto err;
+	if (rxr_env.enable_shm_transfer) {
+		ret = fi_close(&av->shm_rdm_av->fid);
+		if (ret) {
+			FI_WARN(&rxr_prov, FI_LOG_AV, "Failed to close shm av\n");
+			goto err;
+		}
+	}
 
 	ret = ofi_av_close(&av->util_av);
 	if (ret)
@@ -269,7 +352,7 @@ int rxr_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	struct rxr_domain *domain;
 	struct fi_av_attr av_attr;
 	struct util_av_attr util_attr;
-	int ret;
+	int ret, retv;
 
 	if (!attr)
 		return -FI_EINVAL;
@@ -320,6 +403,19 @@ int rxr_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	if (ret)
 		goto err;
 
+	if (rxr_env.enable_shm_transfer) {
+		/*
+		 * shm av supports maximum 256 entries
+		 * Reset the count to 128 to reduce memory footprint and satisfy
+		 * the need of the instances with more CPUs.
+		 */
+		assert(rxr_env.shm_av_size <= RXR_SHM_MAX_AV_COUNT);
+		av_attr.count = rxr_env.shm_av_size;
+		ret = fi_av_open(domain->shm_domain, &av_attr, &av->shm_rdm_av, context);
+		if (ret)
+			goto err_close_rdm_av;
+	}
+
 	av->rdm_addrlen = domain->addrlen;
 
 	*av_fid = &av->util_av.av_fid;
@@ -328,6 +424,11 @@ int rxr_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	(*av_fid)->ops = &rxr_av_ops;
 	return 0;
 
+err_close_rdm_av:
+	retv = fi_close(&av->rdm_av->fid);
+	if (retv)
+		FI_WARN(&rxr_prov, FI_LOG_AV,
+				"Unable to close rdm av: %s\n", fi_strerror(-retv));
 err:
 	free(av);
 	return ret;

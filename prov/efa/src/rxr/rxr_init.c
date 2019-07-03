@@ -37,7 +37,11 @@
 #include "rxr.h"
 #include "efa.h"
 
+struct fi_info *shm_info;
+
 struct fi_provider *lower_efa_prov;
+struct efa_ep_addr *local_efa_addr;
+
 
 struct rxr_env rxr_env = {
 	.rx_window_size	= RXR_DEF_MAX_RX_WINDOW,
@@ -45,6 +49,9 @@ struct rxr_env rxr_env = {
 	.tx_min_credits = RXR_DEF_MIN_TX_CREDITS,
 	.tx_queue_size = 0,
 	.enable_sas_ordering = 1,
+	.enable_shm_transfer = 1,
+	.shm_av_size = 128,
+	.shm_max_medium_size = 4096,
 	.recvwin_size = RXR_RECVWIN_SIZE,
 	.cq_size = RXR_DEF_CQ_SIZE,
 	.max_memcpy_size = 4096,
@@ -66,6 +73,9 @@ static void rxr_init_env(void)
 	fi_param_get_int(&rxr_prov, "tx_min_credits", &rxr_env.tx_min_credits);
 	fi_param_get_int(&rxr_prov, "tx_queue_size", &rxr_env.tx_queue_size);
 	fi_param_get_int(&rxr_prov, "enable_sas_ordering", &rxr_env.enable_sas_ordering);
+	fi_param_get_int(&rxr_prov, "enable_shm_transfer", &rxr_env.enable_shm_transfer);
+	fi_param_get_int(&rxr_prov, "shm_av_size", &rxr_env.shm_av_size);
+	fi_param_get_int(&rxr_prov, "shm_max_medium_size", &rxr_env.shm_max_medium_size);
 	fi_param_get_int(&rxr_prov, "recvwin_size", &rxr_env.recvwin_size);
 	fi_param_get_int(&rxr_prov, "cq_size", &rxr_env.cq_size);
 	fi_param_get_size_t(&rxr_prov, "max_memcpy_size",
@@ -91,6 +101,37 @@ static void rxr_init_env(void)
 	fi_param_get_int(&rxr_prov, "max_timeout", &rxr_env.max_timeout);
 	fi_param_get_int(&rxr_prov, "timeout_interval",
 			 &rxr_env.timeout_interval);
+}
+
+/*
+ * Stringify the void *addr to a string smr_name formatted as `gid_qpn`, which
+ * will be used to insert into shm provider's AV. Then shm uses smr_name as
+ * ep_name to create the shared memory region.
+ *
+ * The IPv6 address length is 46, but the max supported name length for shm is 32.
+ * The string `gid_qpn` could be truncated during snprintf.
+ * The current way works because the IPv6 addresses starting with FE in hexadecimals represent
+ * link local IPv6 addresses, which has reserved first 64 bits (FE80::/64).
+ * e.g., fe80:0000:0000:0000:0436:29ff:fe8e:ceaa -> fe80::436:29ff:fe8e:ceaa
+ * And the length of string `gid_qpn` (fe80::436:29ff:fe8e:ceaa_***) will not exceed 32.
+ * If the address is NOT link local, we need to think another reasonable way to
+ * generate the string.
+ */
+int rxr_ep_efa_addr_to_str(const void *addr, char *smr_name)
+{
+	char gid[INET6_ADDRSTRLEN] = { 0 };
+	uint16_t qpn;
+	int ret;
+
+	if (!inet_ntop(AF_INET6, ((struct efa_ep_addr *)addr)->raw, gid, INET6_ADDRSTRLEN)) {
+		printf("Failed to get current EFA's GID, errno: %d\n", errno);
+		return 0;
+	}
+	qpn = ((struct efa_ep_addr *)addr)->qpn;
+
+	ret = snprintf(smr_name, RXR_MAX_NAME_LENGTH, "%s_%d", gid, qpn);
+
+	return (ret <= 0) ? ret : FI_SUCCESS;
 }
 
 void rxr_info_to_core_mr_modes(uint32_t version,
@@ -180,6 +221,22 @@ static int rxr_info_to_core(uint32_t version, const struct fi_info *rxr_info,
 	if (ret)
 		fi_freeinfo(*core_info);
 	return ret;
+}
+
+/* Explicitly set all necessary bits before calling shm provider's getinfo function */
+void rxr_set_shm_hints(struct fi_info *shm_hints)
+{
+	shm_hints->caps = FI_MSG | FI_TAGGED | FI_RECV | FI_SEND | FI_READ
+			   | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE
+			   | FI_MULTI_RECV | FI_RMA;
+	shm_hints->domain_attr->av_type = FI_AV_TABLE;
+	shm_hints->domain_attr->mr_mode = FI_MR_VIRT_ADDR;
+	shm_hints->domain_attr->caps |= FI_LOCAL_COMM;
+	shm_hints->tx_attr->msg_order = FI_ORDER_SAS;
+	shm_hints->rx_attr->msg_order = FI_ORDER_SAS;
+	shm_hints->fabric_attr->name = strdup("shm");
+	shm_hints->fabric_attr->prov_name = strdup("shm");
+	shm_hints->ep_attr->type = FI_EP_RDM;
 }
 
 /* Pass tx/rx attr that user specifies down to core provider */
@@ -309,6 +366,49 @@ int rxr_get_lower_rdm_info(uint32_t version, const char *node,
 	return ret;
 }
 
+/*
+ * Call getinfo on lower efa provider to get all locally qualified fi_info
+ * structure, then store the corresponding efa nic GIDs
+ */
+int rxr_get_local_gids(struct fi_provider *lower_efa_prov)
+{
+	struct fi_info *core_info, *cur;
+	struct efa_ep_addr *cur_efa_addr;
+	int ret;
+
+	cur_efa_addr = local_efa_addr = NULL;
+	core_info = cur = NULL;
+
+	ret = lower_efa_prov->getinfo(rxr_prov.fi_version, NULL, NULL, 0, NULL, &core_info);
+	if (ret)
+		return ret;
+
+	local_efa_addr = (struct efa_ep_addr *)malloc(sizeof(struct efa_ep_addr));
+	if (!local_efa_addr) {
+		ret = -FI_ENOMEM;
+		goto out;
+	}
+	local_efa_addr->next = NULL;
+
+	cur_efa_addr = local_efa_addr;
+	for (cur = core_info; cur; cur = cur->next) {
+		memcpy(cur_efa_addr->raw, ((struct efa_ep_addr *)cur->src_addr)->raw, 16);
+		if (cur->next) {
+			cur_efa_addr->next = (struct efa_ep_addr *)malloc(sizeof(struct efa_ep_addr));
+			if (!cur_efa_addr->next) {
+				ret = -FI_ENOMEM;
+				goto out;
+			}
+			cur_efa_addr = cur_efa_addr->next;
+			cur_efa_addr->next = NULL;
+		}
+	}
+
+out:
+	fi_freeinfo(core_info);
+	return ret;
+}
+
 static int rxr_dgram_getinfo(uint32_t version, const char *node,
 			     const char *service, uint64_t flags,
 			     const struct fi_info *hints, struct fi_info **info,
@@ -360,6 +460,7 @@ static int rxr_getinfo(uint32_t version, const char *node,
 		       const struct fi_info *hints, struct fi_info **info)
 {
 	struct fi_info *core_info, *util_info, *cur, *tail;
+	struct fi_info *shm_hints;
 	int ret;
 
 	*info = tail = core_info = NULL;
@@ -410,6 +511,19 @@ dgram_info:
 	 */
 	if (ret == -FI_ENODATA && *info)
 		ret = 0;
+
+	if (rxr_env.enable_shm_transfer && !shm_info) {
+		shm_info = fi_allocinfo();
+		shm_hints = fi_allocinfo();
+		rxr_set_shm_hints(shm_hints);
+		ret = fi_getinfo(FI_VERSION(1, 8), NULL, NULL, 0, shm_hints, &shm_info);
+		fi_freeinfo(shm_hints);
+		if (ret) {
+			FI_WARN(&rxr_prov, FI_LOG_CORE, "Failed to get shm provider's info.\n");
+			goto out;
+		}
+		assert(!strcmp(shm_info->fabric_attr->name, "shm"));
+	}
 out:
 	fi_freeinfo(core_info);
 	return ret;
@@ -417,8 +531,21 @@ out:
 
 static void rxr_fini(void)
 {
+	struct efa_ep_addr *cur;
+
 	if (lower_efa_prov)
 		lower_efa_prov->cleanup();
+
+	if (rxr_env.enable_shm_transfer) {
+		/* Cleanup all local efa nic GIDs */
+		while (local_efa_addr) {
+			cur = local_efa_addr;
+			local_efa_addr = local_efa_addr->next;
+			free(cur);
+		}
+		if (shm_info)
+			fi_freeinfo(shm_info);
+	}
 }
 
 struct fi_provider rxr_prov = {
@@ -442,6 +569,12 @@ EFA_INI
 			"Defines the maximum number of unacknowledged sends with the NIC.");
 	fi_param_define(&rxr_prov, "enable_sas_ordering", FI_PARAM_INT,
 			"Enable packet reordering for the RDM endpoint. This is always enabled when FI_ORDER_SAS is requested by the application. (Default: 1)");
+	fi_param_define(&rxr_prov, "enable_shm_transfer", FI_PARAM_INT,
+			"Enable using SHM provider to provide the communication between processes on the same system. (Default: 1)");
+	fi_param_define(&rxr_prov, "shm_av_size", FI_PARAM_INT,
+			"Defines the maximum number of entries in SHM provider's address vector (Default 128).");
+	fi_param_define(&rxr_prov, "shm_max_medium_size", FI_PARAM_INT,
+			"Defines the switch point between small/medium message and large message. The message larger than this switch point will be transferred with large message protocol (Default 4096).");
 	fi_param_define(&rxr_prov, "recvwin_size", FI_PARAM_INT,
 			"Defines the size of sliding receive window. (Default: 16384)");
 	fi_param_define(&rxr_prov, "cq_size", FI_PARAM_INT,
@@ -478,6 +611,9 @@ EFA_INI
 
 	lower_efa_prov = init_lower_efa_prov();
 	if (!lower_efa_prov)
+		return NULL;
+
+	if (rxr_env.enable_shm_transfer && rxr_get_local_gids(lower_efa_prov))
 		return NULL;
 
 	return &rxr_prov;
