@@ -392,6 +392,7 @@ Test(atomic, simple_amo)
 	cr_assert(ret == FI_SUCCESS, "Return code  = %d", ret);
 	ret = cxit_await_completion(cxit_tx_cq, &cqe);
 	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+	validate_tx_event(&cqe, FI_ATOMIC | FI_WRITE, NULL);
 	cr_assert_eq(*rma, exp_remote,
 		     "Result = %ld, expected = %ld",
 		     *rma, exp_remote);
@@ -404,6 +405,7 @@ Test(atomic, simple_amo)
 	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
 	ret = cxit_await_completion(cxit_tx_cq, &cqe);
 	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+	validate_tx_event(&cqe, FI_ATOMIC | FI_WRITE, NULL);
 	cr_assert_eq(*rma, exp_remote,
 		     "Result = %ld, expected = %ld",
 		     *rma, exp_remote);
@@ -416,9 +418,72 @@ Test(atomic, simple_amo)
 	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
 	ret = cxit_await_completion(cxit_tx_cq, &cqe);
 	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+	validate_tx_event(&cqe, FI_ATOMIC | FI_WRITE, NULL);
 	cr_assert_eq(*rma, exp_remote,
 		     "Result = %ld, expected = %ld",
 		     *rma, exp_remote);
+
+	_cxit_destroy_mr(&mr);
+}
+
+/* Test atomic inject interface */
+Test(atomic, simple_inject)
+{
+	struct mem_region mr;
+	struct fi_cq_tagged_entry cqe;
+	uint64_t operand1;
+	uint64_t exp_remote = 0;
+	uint64_t *rma;
+	int ret;
+	int count = 0;
+
+	rma = _cxit_create_mr(&mr);
+	cr_assert_eq(*rma, exp_remote,
+		     "Result = %ld, expected = %ld",
+		     *rma, exp_remote);
+
+	operand1 = 1;
+	exp_remote += operand1;
+	ret = fi_inject_atomic(cxit_ep, &operand1, 1,
+			       cxit_ep_fi_addr, 0, RMA_WIN_KEY,
+			       FI_UINT64, FI_SUM);
+	cr_assert(ret == FI_SUCCESS, "Return code  = %d", ret);
+	count++;
+	while (fi_cntr_read(cxit_write_cntr) != count)
+		sched_yield();
+	cr_assert_eq(*rma, exp_remote,
+		     "Result = %ld, expected = %ld",
+		     *rma, exp_remote);
+
+	operand1 = 3;
+	exp_remote += operand1;
+	ret = fi_inject_atomic(cxit_ep, &operand1, 1,
+			       cxit_ep_fi_addr, 0, RMA_WIN_KEY,
+			       FI_UINT64, FI_SUM);
+	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
+	count++;
+	while (fi_cntr_read(cxit_write_cntr) != count)
+		sched_yield();
+	cr_assert_eq(*rma, exp_remote,
+		     "Result = %ld, expected = %ld",
+		     *rma, exp_remote);
+
+	operand1 = 9;
+	exp_remote += operand1;
+	ret = fi_inject_atomic(cxit_ep, &operand1, 1,
+			       cxit_ep_fi_addr, 0, RMA_WIN_KEY,
+			       FI_UINT64, FI_SUM);
+	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
+	count++;
+	while (fi_cntr_read(cxit_write_cntr) != count)
+		sched_yield();
+	cr_assert_eq(*rma, exp_remote,
+		     "Result = %ld, expected = %ld",
+		     *rma, exp_remote);
+
+	/* Make sure no events were delivered */
+	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	cr_assert(ret == -FI_EAGAIN);
 
 	_cxit_destroy_mr(&mr);
 }
@@ -455,6 +520,7 @@ Test(atomic, simple_fetch)
 	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
 	ret = cxit_await_completion(cxit_tx_cq, &cqe);
 	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+	validate_tx_event(&cqe, FI_ATOMIC | FI_READ, NULL);
 	cr_assert_eq(*rma, exp_remote,
 		     "Add Result = %ld, expected = %ld",
 		     *rma, exp_remote);
@@ -473,6 +539,7 @@ Test(atomic, simple_fetch)
 	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
 	ret = cxit_await_completion(cxit_tx_cq, &cqe);
 	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+	validate_tx_event(&cqe, FI_ATOMIC | FI_READ, NULL);
 	cr_assert_eq(*rma, exp_remote,
 		     "Add Result = %ld, expected = %ld",
 		     *rma, exp_remote);
@@ -491,6 +558,7 @@ Test(atomic, simple_fetch)
 	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
 	ret = cxit_await_completion(cxit_tx_cq, &cqe);
 	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+	validate_tx_event(&cqe, FI_ATOMIC | FI_READ, NULL);
 	cr_assert_eq(*rma, exp_remote,
 		     "Add Result = %ld, expected = %ld",
 		     *rma, exp_remote);
@@ -540,6 +608,7 @@ Test(atomic, simple_swap)
 	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
 	ret = cxit_await_completion(cxit_tx_cq, &cqe);
 	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+	validate_tx_event(&cqe, FI_ATOMIC | FI_READ, NULL);
 	cr_assert_eq(*rma, exp_remote,
 		     "Add Result = %ld, expected = %ld",
 		     *rma, exp_remote);
@@ -562,6 +631,7 @@ Test(atomic, simple_swap)
 	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
 	ret = cxit_await_completion(cxit_tx_cq, &cqe);
 	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+	validate_tx_event(&cqe, FI_ATOMIC | FI_READ, NULL);
 	cr_assert_eq(*rma, exp_remote,
 		     "Add Result = %ld, expected = %ld",
 		     *rma, exp_remote);
@@ -759,6 +829,7 @@ static void _test_amo(int index, enum fi_datatype dt, enum fi_op op, int err,
 
 	ret = cxit_await_completion(cxit_tx_cq, &cqe);
 	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+	validate_tx_event(&cqe, FI_ATOMIC | (loc ? FI_READ : FI_WRITE), NULL);
 
 	/* We expect the RMA effect to be as predicted */
 	cr_expect(_compare(rma, rma_exp, len, op, dt),
@@ -1333,7 +1404,224 @@ Test(atomic, amo_batch)
 	for (i = 0; i < 4; i++) {
 		ret = cxit_await_completion(cxit_tx_cq, &cqe);
 		cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+		validate_tx_event(&cqe, FI_ATOMIC | FI_WRITE, NULL);
 	}
+
+	_cxit_destroy_mr(&mr);
+}
+
+void cxit_setup_amo_selective_completion(void)
+{
+	cxit_tx_cq_bind_flags |= FI_SELECTIVE_COMPLETION;
+	cxit_fi_hints->tx_attr->op_flags = FI_COMPLETION;
+	cxit_setup_rma();
+}
+
+/* Test selective completion behavior with AMOs. */
+Test(atomic, selective_completion, .init = cxit_setup_amo_selective_completion)
+{
+	struct mem_region mr;
+	struct fi_cq_tagged_entry cqe;
+	uint64_t operand1;
+	uint64_t exp_remote = 0;
+	uint64_t *rma;
+	int ret;
+	struct fi_msg_atomic msg = {};
+	struct fi_ioc ioc;
+	struct fi_rma_ioc rma_ioc;
+	int count = 0;
+
+	rma = _cxit_create_mr(&mr);
+	cr_assert_eq(*rma, exp_remote,
+		     "Result = %ld, expected = %ld",
+		     *rma, exp_remote);
+
+	ioc.addr = &operand1;
+	ioc.count = 1;
+
+	rma_ioc.addr = 0;
+	rma_ioc.count = 1;
+	rma_ioc.key = RMA_WIN_KEY;
+
+	msg.msg_iov = &ioc;
+	msg.iov_count = 1;
+	msg.rma_iov = &rma_ioc;
+	msg.rma_iov_count = 1;
+	msg.addr = cxit_ep_fi_addr;
+	msg.datatype = FI_UINT64;
+	msg.op = FI_SUM;
+
+	/* Normal AMO generates a completion */
+	operand1 = 1;
+	exp_remote += operand1;
+	ret = fi_atomic(cxit_ep, &operand1, 1, 0,
+			cxit_ep_fi_addr, 0, RMA_WIN_KEY,
+			FI_UINT64, FI_SUM, NULL);
+	cr_assert(ret == FI_SUCCESS, "Return code  = %d", ret);
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+	validate_tx_event(&cqe, FI_ATOMIC | FI_WRITE, NULL);
+	cr_assert_eq(*rma, exp_remote,
+		     "Result = %ld, expected = %ld",
+		     *rma, exp_remote);
+	count++;
+
+	/* Request completion from fi_atomicmsg */
+	operand1 = 1;
+	exp_remote += operand1;
+	ret = fi_atomicmsg(cxit_ep, &msg, FI_COMPLETION);
+	cr_assert(ret == FI_SUCCESS, "Return code  = %d", ret);
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+	validate_tx_event(&cqe, FI_ATOMIC | FI_WRITE, NULL);
+	cr_assert_eq(*rma, exp_remote,
+		     "Result = %ld, expected = %ld",
+		     *rma, exp_remote);
+	count++;
+
+	/* Suppress completions using fi_atomicmsg */
+	operand1 = 1;
+	exp_remote += operand1;
+	ret = fi_atomicmsg(cxit_ep, &msg, 0);
+	cr_assert(ret == FI_SUCCESS, "Return code  = %d", ret);
+	count++;
+	while (fi_cntr_read(cxit_write_cntr) != count)
+		sched_yield();
+	cr_assert_eq(*rma, exp_remote,
+		     "Result = %ld, expected = %ld",
+		     *rma, exp_remote);
+
+	/* Make sure an event wasn't delivered */
+	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	cr_assert(ret == -FI_EAGAIN);
+
+	/* Inject never generates an event */
+	operand1 = 1;
+	exp_remote += operand1;
+	ret = fi_inject_atomic(cxit_ep, &operand1, 1,
+			       cxit_ep_fi_addr, 0, RMA_WIN_KEY,
+			       FI_UINT64, FI_SUM);
+	cr_assert(ret == FI_SUCCESS);
+	count++;
+	while (fi_cntr_read(cxit_write_cntr) != count)
+		sched_yield();
+	cr_assert_eq(*rma, exp_remote,
+		     "Result = %ld, expected = %ld",
+		     *rma, exp_remote);
+
+	/* Make sure an event wasn't delivered */
+	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	cr_assert(ret == -FI_EAGAIN);
+
+	_cxit_destroy_mr(&mr);
+}
+
+void cxit_setup_amo_selective_completion_suppress(void)
+{
+	cxit_tx_cq_bind_flags |= FI_SELECTIVE_COMPLETION;
+	cxit_fi_hints->tx_attr->op_flags = 0;
+	cxit_setup_rma();
+}
+
+/* Test selective completion behavior with RMA. */
+Test(atomic, selective_completion_suppress,
+     .init = cxit_setup_amo_selective_completion_suppress)
+{
+	struct mem_region mr;
+	struct fi_cq_tagged_entry cqe;
+	uint64_t operand1;
+	uint64_t exp_remote = 0;
+	uint64_t *rma;
+	int ret;
+	struct fi_msg_atomic msg = {};
+	struct fi_ioc ioc;
+	struct fi_rma_ioc rma_ioc;
+	int count = 0;
+
+	rma = _cxit_create_mr(&mr);
+	cr_assert_eq(*rma, exp_remote,
+		     "Result = %ld, expected = %ld",
+		     *rma, exp_remote);
+
+	ioc.addr = &operand1;
+	ioc.count = 1;
+
+	rma_ioc.addr = 0;
+	rma_ioc.count = 1;
+	rma_ioc.key = RMA_WIN_KEY;
+
+	msg.msg_iov = &ioc;
+	msg.iov_count = 1;
+	msg.rma_iov = &rma_ioc;
+	msg.rma_iov_count = 1;
+	msg.addr = cxit_ep_fi_addr;
+	msg.datatype = FI_UINT64;
+	msg.op = FI_SUM;
+
+	/* Normal AMO does not generate a completion */
+	operand1 = 1;
+	exp_remote += operand1;
+	ret = fi_atomic(cxit_ep, &operand1, 1, 0,
+			cxit_ep_fi_addr, 0, RMA_WIN_KEY,
+			FI_UINT64, FI_SUM, NULL);
+	cr_assert(ret == FI_SUCCESS, "Return code  = %d", ret);
+	count++;
+	while (fi_cntr_read(cxit_write_cntr) != count)
+		sched_yield();
+	cr_assert_eq(*rma, exp_remote,
+		     "Result = %ld, expected = %ld",
+		     *rma, exp_remote);
+
+	/* Make sure an event wasn't delivered */
+	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	cr_assert(ret == -FI_EAGAIN);
+
+	/* Request completion from fi_atomicmsg */
+	operand1 = 1;
+	exp_remote += operand1;
+	ret = fi_atomicmsg(cxit_ep, &msg, FI_COMPLETION);
+	cr_assert(ret == FI_SUCCESS, "Return code  = %d", ret);
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+	validate_tx_event(&cqe, FI_ATOMIC | FI_WRITE, NULL);
+	cr_assert_eq(*rma, exp_remote,
+		     "Result = %ld, expected = %ld",
+		     *rma, exp_remote);
+	count++;
+
+	/* Suppress completions using fi_atomicmsg */
+	operand1 = 1;
+	exp_remote += operand1;
+	ret = fi_atomicmsg(cxit_ep, &msg, 0);
+	cr_assert(ret == FI_SUCCESS, "Return code  = %d", ret);
+	count++;
+	while (fi_cntr_read(cxit_write_cntr) != count)
+		sched_yield();
+	cr_assert_eq(*rma, exp_remote,
+		     "Result = %ld, expected = %ld",
+		     *rma, exp_remote);
+
+	/* Make sure an event wasn't delivered */
+	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	cr_assert(ret == -FI_EAGAIN);
+
+	/* Inject never generates an event */
+	operand1 = 1;
+	exp_remote += operand1;
+	ret = fi_inject_atomic(cxit_ep, &operand1, 1,
+			       cxit_ep_fi_addr, 0, RMA_WIN_KEY,
+			       FI_UINT64, FI_SUM);
+	cr_assert(ret == FI_SUCCESS);
+	count++;
+	while (fi_cntr_read(cxit_write_cntr) != count)
+		sched_yield();
+	cr_assert_eq(*rma, exp_remote,
+		     "Result = %ld, expected = %ld",
+		     *rma, exp_remote);
+
+	/* Make sure an event wasn't delivered */
+	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	cr_assert(ret == -FI_EAGAIN);
 
 	_cxit_destroy_mr(&mr);
 }

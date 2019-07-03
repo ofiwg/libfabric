@@ -650,6 +650,7 @@ struct cxip_txc {
 	struct cxip_req *inject_req;
 	struct cxip_req *tinject_req;
 	struct cxip_req *rma_inject_req;
+	struct cxip_req *amo_inject_req;
 
 	/* Software Rendezvous related structures */
 	struct cxip_pte *rdzv_pte;	// PTE for SW Rendezvous commands
