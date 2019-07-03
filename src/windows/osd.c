@@ -43,7 +43,6 @@
 #include "ofi_file.h"
 #include "ofi_list.h"
 #include "ofi_util.h"
-
 #include "rdma/providers/fi_log.h"
 
 extern struct ofi_common_locks common_locks;
@@ -404,65 +403,86 @@ fn_nomem:
 
 int getifaddrs(struct ifaddrs **ifap)
 {
-	DWORD i;
-	MIB_IPADDRTABLE _iptbl;
-	MIB_IPADDRTABLE *iptbl = &_iptbl;
-	ULONG ips = 1;
-	ULONG res = GetIpAddrTable(iptbl, &ips, 0);
-	int ret = -1;
+	ULONG subnet = 0;
+	PULONG mask = &subnet;
+	DWORD size,res, i = 0;
+	int ret ;
+	PIP_ADAPTER_ADDRESSES adapter_addresses, aa;
+	PIP_ADAPTER_UNICAST_ADDRESS ua;
 	struct ifaddrs *head = NULL;
+	struct sockaddr_in *pInAddr = NULL;
+	SOCKADDR *pSockAddr = NULL;
+	struct ifaddrs *fa;
 
-	assert(ifap);
+	res = GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_INCLUDE_PREFIX,
+				   NULL, NULL, &size);
+	if (res != ERROR_BUFFER_OVERFLOW)
+		return -FI_ENOMEM;
 
-	if (res == ERROR_INSUFFICIENT_BUFFER) {
-		iptbl = malloc(ips);
-		if (!iptbl)
-			goto failed_no_mem;
-		res = GetIpAddrTable(iptbl, &ips, 0);
-		if (res != NO_ERROR)
-			goto failed_get_addr;
-	} else if (res != NO_ERROR) {
-		goto failed;
-	}
+	adapter_addresses = (PIP_ADAPTER_ADDRESSES)malloc(size);
+	res = GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_INCLUDE_PREFIX,
+				   NULL, adapter_addresses, &size);
+	if (res != ERROR_SUCCESS)
+		return -FI_ENOMEM;
 
-	for (i = 0; i < iptbl->dwNumEntries; i++) {
-		if (iptbl->table[i].dwAddr && iptbl->table[i].dwAddr != ntohl(INADDR_LOOPBACK)) {
-			struct ifaddrs *fa = calloc(sizeof(*fa), 1);
-			if (!fa)
-				goto failed_cant_allocate;
-			fa->ifa_flags = IFF_UP;
-			fa->ifa_addr = (struct sockaddr *)&fa->in_addr;
-			fa->ifa_netmask = (struct sockaddr *)&fa->in_netmask;
-			fa->ifa_name = fa->ad_name;
+	for (aa = adapter_addresses; aa != NULL; aa = aa->Next) {
+		if (aa->OperStatus != 1)
+			continue;
 
-			fa->in_addr.sin_family = fa->in_netmask.sin_family = AF_INET;
-			fa->in_addr.sin_addr.s_addr = iptbl->table[i].dwAddr;
-			fa->in_netmask.sin_addr.s_addr = iptbl->table[i].dwMask;
-			/* on Windows there is no Unix-like interface names,
-			   so, let's generate fake names */
-			sprintf_s(fa->ad_name, sizeof(fa->ad_name), "eth%d", i);
+		for (ua = aa->FirstUnicastAddress; ua != NULL; ua = ua->Next) {
+			pSockAddr = ua->Address.lpSockaddr;
+			if (pSockAddr->sa_family != AF_INET)
+				continue;
+
+			subnet = 0;
+			mask = &subnet;
+			if (ConvertLengthToIpv4Mask(ua->OnLinkPrefixLength, mask) !=
+			    NO_ERROR) {
+				ret = -FI_ENODATA;
+				goto out;
+			}
+
+			fa = calloc(sizeof(*fa), 1);
+			if (!fa) {
+				ret -FI_ENOMEM;
+				goto out;
+			}
 
 			fa->ifa_next = head;
 			head = fa;
+
+			fa->ifa_flags = IFF_UP;
+			if (aa->IfType == IF_TYPE_SOFTWARE_LOOPBACK)
+				fa->ifa_flags |= IFF_LOOPBACK;
+
+			fa->ifa_addr = (struct sockaddr *) &fa->in_addr;
+			fa->ifa_netmask = (struct sockaddr *) &fa->in_netmask;
+			fa->ifa_name = fa->ad_name;
+
+			fa->in_netmask.sin_family = pSockAddr->sa_family;
+			fa->in_addr.sin_family = pSockAddr->sa_family;
+			fa->in_netmask.sin_addr.S_un.S_addr = mask;
+			pInAddr = (struct sockaddr_in *) pSockAddr;
+			fa->in_addr.sin_addr = pInAddr->sin_addr;
+			fa->speed = aa->TransmitLinkSpeed;
+			/* Generate fake Unix-like device names */
+			sprintf_s(fa->ad_name, sizeof(fa->ad_name), "eth%d", i++);
 		}
 	}
-
-	if (iptbl != &_iptbl)
-		free(iptbl);
 	ret = 0;
-	if (ifap)
+out:
+	free(adapter_addresses);
+	if (ret && head)
+		free(head);
+	else if (ifap)
 		*ifap = head;
-complete:
-	return ret;
 
-failed_cant_allocate:
-	if(head)
-		freeifaddrs(head);
-failed_get_addr:
-	free(iptbl);
-failed_no_mem:
-failed:
-	goto complete;
+	return ret;
+}
+
+size_t ofi_ifaddr_get_speed(struct ifaddrs *ifa)
+{
+	return ifa->speed;
 }
 
 void freeifaddrs(struct ifaddrs *ifa)
