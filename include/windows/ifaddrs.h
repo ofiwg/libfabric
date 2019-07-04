@@ -24,8 +24,9 @@ struct ifaddrs {
 	struct sockaddr *ifa_addr;    /* Address of interface */
 	struct sockaddr *ifa_netmask; /* Netmask of interface */
 
-	struct sockaddr_in in_addr;
-	struct sockaddr_in in_netmask;
+	struct sockaddr_storage in_addrs;
+	struct sockaddr_storage in_netmasks;
+
 	char		   ad_name[16];
 	size_t		   speed;
 };

@@ -405,8 +405,8 @@ int getifaddrs(struct ifaddrs **ifap)
 {
 	ULONG subnet = 0;
 	PULONG mask = &subnet;
-	DWORD size,res, i = 0;
-	int ret ;
+	DWORD size, res, i = 0;
+	int ret;
 	PIP_ADAPTER_ADDRESSES adapter_addresses, aa;
 	PIP_ADAPTER_UNICAST_ADDRESS ua;
 	struct ifaddrs *head = NULL;
@@ -431,20 +431,12 @@ int getifaddrs(struct ifaddrs **ifap)
 
 		for (ua = aa->FirstUnicastAddress; ua != NULL; ua = ua->Next) {
 			pSockAddr = ua->Address.lpSockaddr;
-			if (pSockAddr->sa_family != AF_INET)
+			if (pSockAddr->sa_family != AF_INET &&
+				pSockAddr->sa_family != AF_INET6)
 				continue;
-
-			subnet = 0;
-			mask = &subnet;
-			if (ConvertLengthToIpv4Mask(ua->OnLinkPrefixLength, mask) !=
-			    NO_ERROR) {
-				ret = -FI_ENODATA;
-				goto out;
-			}
-
 			fa = calloc(sizeof(*fa), 1);
 			if (!fa) {
-				ret -FI_ENOMEM;
+				ret = -FI_ENOMEM;
 				goto out;
 			}
 
@@ -455,15 +447,32 @@ int getifaddrs(struct ifaddrs **ifap)
 			if (aa->IfType == IF_TYPE_SOFTWARE_LOOPBACK)
 				fa->ifa_flags |= IFF_LOOPBACK;
 
-			fa->ifa_addr = (struct sockaddr *) &fa->in_addr;
-			fa->ifa_netmask = (struct sockaddr *) &fa->in_netmask;
+			fa->ifa_addr = (struct sockaddr *) &fa->in_addrs;
+			fa->ifa_netmask = (struct sockaddr *) &fa->in_netmasks;
 			fa->ifa_name = fa->ad_name;
 
-			fa->in_netmask.sin_family = pSockAddr->sa_family;
-			fa->in_addr.sin_family = pSockAddr->sa_family;
-			fa->in_netmask.sin_addr.S_un.S_addr = mask;
-			pInAddr = (struct sockaddr_in *) pSockAddr;
-			fa->in_addr.sin_addr = pInAddr->sin_addr;
+			if (pSockAddr->sa_family == AF_INET) {
+				subnet = 0;
+				mask = &subnet;
+				if (ConvertLengthToIpv4Mask(ua->OnLinkPrefixLength, mask) !=
+					NO_ERROR) {
+					ret = -FI_ENODATA;
+					goto out;
+				}
+				struct sockaddr_in *addr4 = (struct sockaddr_in *)
+							    &fa->in_addrs;
+				struct sockaddr_in *netmask4 = (struct sockaddr_in *)
+								&fa->in_netmasks;
+				netmask4->sin_family = pSockAddr->sa_family;
+				addr4->sin_family = pSockAddr->sa_family;
+				netmask4->sin_addr.S_un.S_addr = mask;
+				pInAddr = (struct sockaddr_in *) pSockAddr;
+				addr4->sin_addr = pInAddr->sin_addr;
+			} else {
+				struct sockaddr_in6 *addr6 = (struct sockaddr_in6 *)
+							      &fa->in_addrs;
+				(*addr6) = *(struct sockaddr_in6 *) pSockAddr;
+			}
 			fa->speed = aa->TransmitLinkSpeed;
 			/* Generate fake Unix-like device names */
 			sprintf_s(fa->ad_name, sizeof(fa->ad_name), "eth%d", i++);
