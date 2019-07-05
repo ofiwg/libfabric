@@ -33,7 +33,7 @@
  */
 
 #include <ofi_mr.h>
-
+#include <ofi_mr_hooks.h>
 
 static struct ofi_uffd uffd;
 struct ofi_mem_monitor *uffd_monitor = &uffd.monitor;
@@ -88,11 +88,12 @@ int ofi_monitor_add_cache(struct ofi_mem_monitor *monitor,
 
 	fastlock_acquire(&monitor->lock);
 	if (dlist_empty(&monitor->list)) {
-		if (monitor == uffd_monitor)
+		if (monitor == uffd_monitor) {
 			ret = ofi_uffd_init();
-		else
+		} else {
+			
 			ret = -FI_ENOSYS;
-
+		}
 		if (ret)
 			goto out;
 	}

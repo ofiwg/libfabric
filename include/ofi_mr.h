@@ -45,7 +45,7 @@
 #include <ofi_lock.h>
 #include <ofi_list.h>
 #include <ofi_tree.h>
-
+#include <stdio.h>
 
 struct ofi_mr_info {
 	struct iovec iov;
@@ -139,6 +139,19 @@ void ofi_uffd_cleanup(void);
 
 extern struct ofi_mem_monitor *uffd_monitor;
 
+
+/*
+ * Hooks memory mechanism
+ */
+
+/* We should add a hooks memory mechanism  here
+ * in order to work with:
+ * 1. ofi_monitor_add_cache()
+ * 2. ofi_monitor_del_cache()
+ * 3. ofi_monitor_notify()
+ * 4. ofi_monitor_subscribe()
+ * 5. ofi_monitor_unsubscribe()
+ */
 
 /*
  * Used to store registered memory regions into a lookup map.  This
