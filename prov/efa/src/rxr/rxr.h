@@ -286,6 +286,7 @@ struct rxr_peer {
 	uint32_t next_msg_id;		/* sender's view of msg_id */
 	enum rxr_peer_state state;	/* state of CM protocol with peer */
 	unsigned int rnr_state;		/* tracks RNR backoff for peer */
+	size_t tx_pending;		/* tracks pending tx ops to this peer */
 	uint64_t rnr_ts;		/* timestamp for RNR backoff tracking */
 	int rnr_queued_pkt_cnt;		/* queued RNR packet count */
 	int timeout_interval;		/* initial RNR timeout value */
@@ -986,6 +987,28 @@ static inline int rxr_match_tag(uint64_t tag, uint64_t ignore,
 				uint64_t match_tag)
 {
 	return ((tag | ignore) == (match_tag | ignore));
+}
+
+static inline void rxr_ep_inc_tx_pending(struct rxr_ep *ep,
+					 struct rxr_peer *peer)
+{
+	ep->tx_pending++;
+	peer->tx_pending++;
+#if ENABLE_DEBUG
+	ep->sends++;
+#endif
+}
+
+static inline void rxr_ep_dec_tx_pending(struct rxr_ep *ep,
+					 struct rxr_peer *peer,
+					 int failed)
+{
+	ep->tx_pending--;
+	peer->tx_pending--;
+#if ENABLE_DEBUG
+	if (failed)
+		ep->failed_send_comps++;
+#endif
 }
 
 /*

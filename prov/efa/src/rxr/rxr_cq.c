@@ -300,6 +300,7 @@ int rxr_cq_handle_cq_error(struct rxr_ep *ep, ssize_t err)
 	struct rxr_pkt_entry *pkt_entry;
 	struct rxr_rx_entry *rx_entry;
 	struct rxr_tx_entry *tx_entry;
+	struct rxr_peer *peer;
 	ssize_t ret;
 
 	memset(&err_entry, 0, sizeof(err_entry));
@@ -339,6 +340,7 @@ int rxr_cq_handle_cq_error(struct rxr_ep *ep, ssize_t err)
 				&err_entry);
 
 	pkt_entry = (struct rxr_pkt_entry *)err_entry.op_context;
+	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 
 	/*
 	 * A connack send could fail at the core provider if the peer endpoint
@@ -355,10 +357,7 @@ int rxr_cq_handle_cq_error(struct rxr_ep *ep, ssize_t err)
 		 * the flags instead to determine if this is a send or recv.
 		 */
 		if (err_entry.flags & FI_SEND) {
-#if ENABLE_DEBUG
-			ep->failed_send_comps++;
-#endif
-			ep->tx_pending--;
+			rxr_ep_dec_tx_pending(ep, peer, 1);
 			rxr_release_tx_pkt_entry(ep, pkt_entry);
 		} else if (err_entry.flags & FI_RECV) {
 			rxr_release_rx_pkt_entry(ep, pkt_entry);
@@ -385,10 +384,7 @@ int rxr_cq_handle_cq_error(struct rxr_ep *ep, ssize_t err)
 	 * packet. Decrement the tx_pending counter and fall through to
 	 * the rx or tx entry handlers.
 	 */
-	ep->tx_pending--;
-#if ENABLE_DEBUG
-	ep->failed_send_comps++;
-#endif
+	rxr_ep_dec_tx_pending(ep, peer, 1);
 	if (RXR_GET_X_ENTRY_TYPE(pkt_entry) == RXR_TX_ENTRY) {
 		tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
 		if (err_entry.err != -FI_EAGAIN ||
@@ -1356,15 +1352,16 @@ void rxr_cq_handle_pkt_send_completion(struct rxr_ep *ep, struct fi_cq_msg_entry
 {
 	struct rxr_pkt_entry *pkt_entry;
 	struct rxr_tx_entry *tx_entry = NULL;
-	uint32_t tx_id;
-	int ret;
+	struct rxr_peer *peer;
 	struct rxr_rts_hdr *rts_hdr = NULL;
 	struct rxr_readrsp_hdr *readrsp_hdr = NULL;
+	uint32_t tx_id;
+	int ret;
 
 	pkt_entry = (struct rxr_pkt_entry *)comp->op_context;
-
 	assert(rxr_get_base_hdr(pkt_entry->pkt)->version ==
 	       RXR_PROTOCOL_VERSION);
+	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 
 	switch (rxr_get_base_hdr(pkt_entry->pkt)->type) {
 	case RXR_RTS_PKT:
@@ -1458,7 +1455,7 @@ void rxr_cq_handle_pkt_send_completion(struct rxr_ep *ep, struct fi_cq_msg_entry
 	}
 
 	rxr_release_tx_pkt_entry(ep, pkt_entry);
-	ep->tx_pending--;
+	rxr_ep_dec_tx_pending(ep, peer, 0);
 	return;
 }
 

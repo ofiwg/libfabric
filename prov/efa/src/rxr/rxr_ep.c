@@ -1081,12 +1081,8 @@ ssize_t rxr_ep_send_msg(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 #endif
 	ret = fi_sendmsg(ep->rdm_ep, msg, flags);
 
-	if (OFI_LIKELY(!ret)) {
-		ep->tx_pending++;
-#if ENABLE_DEBUG
-		ep->sends++;
-#endif
-	}
+	if (OFI_LIKELY(!ret))
+		rxr_ep_inc_tx_pending(ep, peer);
 
 	return ret;
 }
