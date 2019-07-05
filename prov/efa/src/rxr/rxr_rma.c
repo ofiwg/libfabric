@@ -88,9 +88,9 @@ struct rxr_tx_entry *rxr_readrsp_tx_entry_init(struct rxr_ep *rxr_ep,
 	 * this tx_entry works similar to a send tx_entry thus its op was
 	 * set to ofi_op_msg. Note this tx_entry will not write a completion
 	 */
-	rxr_generic_tx_entry_init(tx_entry, rx_entry->iov, rx_entry->iov_count,
-				  NULL, 0, rx_entry->addr, 0, 0, NULL,
-				  ofi_op_msg, 0);
+	rxr_generic_tx_entry_init(rxr_ep, tx_entry, rx_entry->iov,
+				  rx_entry->iov_count, NULL, 0, rx_entry->addr,
+				  0, 0, NULL, ofi_op_msg, 0);
 
 	tx_entry->cq_entry.flags |= FI_READ;
 	/* rma_loc_rx_id is for later retrieve of rx_entry
