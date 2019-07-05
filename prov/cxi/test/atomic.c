@@ -36,7 +36,10 @@ static void *_cxit_create_mr(struct mem_region *mr)
 	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_reg failed %d", ret);
 
 	ret = fi_mr_bind(mr->mr, &cxit_ep->fid, 0);
-	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_bind failed %d", ret);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_bind(ep) failed %d", ret);
+
+	ret = fi_mr_bind(mr->mr, &cxit_rem_cntr->fid, FI_REMOTE_WRITE);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_bind(cntr) failed %d", ret);
 
 	ret = fi_mr_enable(mr->mr);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_enable failed %d", ret);
@@ -1622,6 +1625,83 @@ Test(atomic, selective_completion_suppress,
 	/* Make sure an event wasn't delivered */
 	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
 	cr_assert(ret == -FI_EAGAIN);
+
+	_cxit_destroy_mr(&mr);
+}
+
+/* Test remote counter events with AMOs */
+Test(atomic, rem_cntr)
+{
+	struct mem_region mr;
+	struct fi_cq_tagged_entry cqe;
+	uint64_t operand1;
+	uint64_t exp_remote = 0;
+	uint64_t *rma;
+	int ret;
+	int count = 0;
+
+	rma = _cxit_create_mr(&mr);
+	cr_assert_eq(*rma, exp_remote,
+		     "Result = %ld, expected = %ld",
+		     *rma, exp_remote);
+
+	operand1 = 1;
+	exp_remote += operand1;
+	ret = fi_atomic(cxit_ep, &operand1, 1, 0,
+			cxit_ep_fi_addr, 0, RMA_WIN_KEY,
+			FI_UINT64, FI_SUM, NULL);
+	cr_assert(ret == FI_SUCCESS, "Return code  = %d", ret);
+
+	/* Wait for remote counter event, then check data */
+	count++;
+	while (fi_cntr_read(cxit_rem_cntr) != count)
+		sched_yield();
+
+	cr_assert_eq(*rma, exp_remote,
+		     "Result = %ld, expected = %ld",
+		     *rma, exp_remote);
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+	validate_tx_event(&cqe, FI_ATOMIC | FI_WRITE, NULL);
+
+	operand1 = 3;
+	exp_remote += operand1;
+	ret = fi_atomic(cxit_ep, &operand1, 1, 0,
+			cxit_ep_fi_addr, 0, RMA_WIN_KEY,
+			FI_UINT64, FI_SUM, NULL);
+	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
+
+	/* Wait for remote counter event, then check data */
+	count++;
+	while (fi_cntr_read(cxit_rem_cntr) != count)
+		sched_yield();
+
+	cr_assert_eq(*rma, exp_remote,
+		     "Result = %ld, expected = %ld",
+		     *rma, exp_remote);
+
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+	validate_tx_event(&cqe, FI_ATOMIC | FI_WRITE, NULL);
+
+	operand1 = 9;
+	exp_remote += operand1;
+	ret = fi_atomic(cxit_ep, &operand1, 1, 0,
+			cxit_ep_fi_addr, 0, RMA_WIN_KEY,
+			FI_UINT64, FI_SUM, NULL);
+	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
+
+	/* Wait for remote counter event, then check data */
+	count++;
+	while (fi_cntr_read(cxit_rem_cntr) != count)
+		sched_yield();
+
+	cr_assert_eq(*rma, exp_remote,
+		     "Result = %ld, expected = %ld",
+		     *rma, exp_remote);
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+	validate_tx_event(&cqe, FI_ATOMIC | FI_WRITE, NULL);
 
 	_cxit_destroy_mr(&mr);
 }

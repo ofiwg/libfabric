@@ -26,7 +26,7 @@ extern struct fid_cq *cxit_tx_cq, *cxit_rx_cq;
 extern struct fi_cntr_attr cxit_cntr_attr;
 extern struct fid_cntr *cxit_send_cntr, *cxit_recv_cntr;
 extern struct fid_cntr *cxit_read_cntr, *cxit_write_cntr;
-extern struct fid_cntr *cxit_rem_read_cntr, *cxit_rem_write_cntr;
+extern struct fid_cntr *cxit_rem_cntr;
 extern struct fi_av_attr cxit_av_attr;
 extern struct fid_av *cxit_av;
 extern char *cxit_node, *cxit_service;

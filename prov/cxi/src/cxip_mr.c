@@ -19,7 +19,11 @@
 
 #define MR_LINK_EVENT_ID 0x1e21
 
-/* Caller must hold mr->lock */
+/*
+ * cxip_mr_enable() - Assign HW resources to the MR.
+ *
+ * Caller must hold mr->lock.
+ */
 int cxip_mr_enable(struct cxip_mr *mr)
 {
 	int ret;
@@ -33,6 +37,15 @@ int cxip_mr_enable(struct cxip_mr *mr)
 
 	if (mr->enabled)
 		return FI_SUCCESS;
+
+	if (mr->cntr) {
+		ret = cxip_cntr_enable(mr->cntr);
+		if (ret != FI_SUCCESS) {
+			CXIP_LOG_DBG("cxip_cntr_enable() returned: %d\n",
+				     ret);
+			return ret;
+		}
+	}
 
 	/* Allocate a PTE */
 	ret = cxil_alloc_pte(mr->domain->dev_if->if_lni,
@@ -123,6 +136,11 @@ int cxip_mr_enable(struct cxip_mr *mr)
 	cmd.target.length      = mr->len;
 	cmd.target.match_bits  = 0;
 
+	if (mr->cntr) {
+		cmd.target.event_ct_comm = 1;
+		cmd.target.ct = mr->cntr->ct->ctn;
+	}
+
 	if (mr->attr.access & FI_REMOTE_WRITE)
 		cmd.target.op_put = 1;
 	if (mr->attr.access & FI_REMOTE_READ)
@@ -173,7 +191,11 @@ free_pte:
 	return ret;
 }
 
-/* Caller must hold mr->lock */
+/*
+ * cxip_mr_disable() - Free hardware resources from the MR.
+ *
+ * Caller must hold mr->lock.
+ */
 int cxip_mr_disable(struct cxip_mr *mr)
 {
 	int ret;
@@ -243,6 +265,9 @@ unlock:
 	return FI_SUCCESS;
 }
 
+/*
+ * cxip_mr_close() - fi_close implemented for MRs.
+ */
 static int cxip_mr_close(struct fid *fid)
 {
 	struct cxip_mr *mr;
@@ -262,6 +287,9 @@ static int cxip_mr_close(struct fid *fid)
 	if (mr->ep)
 		ofi_atomic_dec32(&mr->ep->ep_obj->ref);
 
+	if (mr->cntr)
+		ofi_atomic_dec32(&mr->cntr->ref);
+
 	ofi_atomic_dec32(&mr->domain->ref);
 
 	fastlock_release(&mr->lock);
@@ -271,11 +299,13 @@ static int cxip_mr_close(struct fid *fid)
 	return FI_SUCCESS;
 }
 
+/*
+ * cxip_mr_bind() - fi_bind() implementation for MRs.
+ */
 static int cxip_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct cxip_mr *mr;
 	struct cxip_cntr *cntr;
-	struct cxip_cq *cq;
 	struct cxip_ep *ep;
 	int ret = FI_SUCCESS;
 
@@ -284,39 +314,36 @@ static int cxip_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	fastlock_acquire(&mr->lock);
 
 	switch (bfid->fclass) {
-	case FI_CLASS_CQ:
-		cq = container_of(bfid, struct cxip_cq, util_cq.cq_fid.fid);
-		if (mr->domain != cq->domain) {
-			ret = -FI_EINVAL;
-			break;
-		}
-
-		if (flags & FI_REMOTE_WRITE)
-			mr->cq = cq;
-		break;
-
 	case FI_CLASS_CNTR:
 		cntr = container_of(bfid, struct cxip_cntr, cntr_fid.fid);
-		if (mr->domain != cntr->domain) {
+		if (mr->domain != cntr->domain || mr->enabled) {
 			ret = -FI_EINVAL;
 			break;
 		}
 
-		if (flags & FI_REMOTE_WRITE)
-			mr->cntr = cntr;
+		if (mr->cntr) {
+			ret = -FI_EINVAL;
+			break;
+		}
+
+		if (!(flags & FI_REMOTE_WRITE)) {
+			ret = -FI_EINVAL;
+			break;
+		}
+
+		mr->cntr = cntr;
+		ofi_atomic_inc32(&cntr->ref);
 		break;
 
 	case FI_CLASS_EP:
 	case FI_CLASS_SEP:
 		ep = container_of(bfid, struct cxip_ep, ep.fid);
+		if (mr->domain != ep->ep_obj->domain || mr->enabled) {
+			ret = -FI_EINVAL;
+			break;
+		}
 
-		/* -An MR may only be bound once.
-		 * -The EP and MR must be part of the same FI Domain.
-		 * -An EP must be enabled before being bound.
-		 */
-		if (mr->ep ||
-		    mr->domain != ep->ep_obj->domain ||
-		    !ep->ep_obj->enabled) {
+		if (mr->ep || !ep->ep_obj->enabled) {
 			ret = -FI_EINVAL;
 			break;
 		}
@@ -334,6 +361,9 @@ static int cxip_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	return ret;
 }
 
+/*
+ * cxip_mr_control() - fi_control() implementation for MRs.
+ */
 static int cxip_mr_control(struct fid *fid, int command, void *arg)
 {
 	struct cxip_mr *mr;
@@ -373,6 +403,10 @@ static struct fi_ops cxip_mr_fi_ops = {
 	.control = cxip_mr_control,
 	.ops_open = fi_no_ops_open,
 };
+
+/*
+ * Libfabric MR creation APIs
+ */
 
 static int cxip_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 			uint64_t flags, struct fid_mr **mr)

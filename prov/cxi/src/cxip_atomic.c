@@ -581,7 +581,8 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 
 	cmd.c_state.write_lac = result_lac;
 	cmd.c_state.event_send_disable = 1;
-	cmd.c_state.restricted = 1;
+	/* Reliable AMOs must use unrestricted commands. */
+	cmd.c_state.restricted = 0;
 	cmd.c_state.index_ext = idx_ext;
 	cmd.c_state.eq = txc->send_cq->evtq->eqn;
 

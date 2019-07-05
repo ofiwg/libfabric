@@ -210,9 +210,15 @@ static ssize_t _cxip_rma_op(enum fi_op_type op, struct cxip_txc *txc,
 		union c_cmdu cmd = {};
 
 		cmd.c_state.event_send_disable = 1;
-		cmd.c_state.restricted = 1;
 		cmd.c_state.index_ext = idx_ext;
 		cmd.c_state.eq = txc->send_cq->evtq->eqn;
+
+		/* Reliable, unordered Puts are optimally supported with
+		 * restricted commands. When ordering or remote events are
+		 * required, use unrestricted commands.
+		 */
+		if (!(txc->attr.caps & FI_RMA_EVENT))
+			cmd.c_state.restricted = 1;
 
 		if (txc->write_cntr) {
 			cmd.c_state.event_ct_ack = 1;
@@ -276,13 +282,19 @@ static ssize_t _cxip_rma_op(enum fi_op_type op, struct cxip_txc *txc,
 		cmd.index_ext = idx_ext;
 		cmd.lac = md->md->lac;
 		cmd.event_send_disable = 1;
-		cmd.restricted = 1;
 		cmd.dfa = dfa;
 		cmd.remote_offset = addr;
 		cmd.local_addr = CXI_VA_TO_IOVA(md->md, buf);
 		cmd.request_len = len;
 		cmd.eq = txc->send_cq->evtq->eqn;
 		cmd.user_ptr = (uint64_t)req;
+
+		/* Reliable, unordered Puts are optimally supported with
+		 * restricted commands. When ordering or remote events are
+		 * required, use unrestricted commands.
+		 */
+		if (!(txc->attr.caps & FI_RMA_EVENT))
+			cmd.restricted = 1;
 
 		if (op == FI_OP_WRITE) {
 			if (txc->write_cntr) {

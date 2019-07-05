@@ -27,7 +27,7 @@ struct fid_cq *cxit_tx_cq, *cxit_rx_cq;
 struct fi_cntr_attr cxit_cntr_attr = {};
 struct fid_cntr *cxit_send_cntr, *cxit_recv_cntr;
 struct fid_cntr *cxit_read_cntr, *cxit_write_cntr;
-struct fid_cntr *cxit_rem_read_cntr, *cxit_rem_write_cntr;
+struct fid_cntr *cxit_rem_cntr;
 struct fi_av_attr cxit_av_attr;
 struct fid_av *cxit_av;
 char *cxit_node, *cxit_service;
@@ -181,13 +181,8 @@ void cxit_create_cntrs(void)
 			   NULL);
 	cr_assert(ret == FI_SUCCESS, "fi_cntr_open (write)");
 
-	ret = fi_cntr_open(cxit_domain, NULL, &cxit_rem_read_cntr,
-			   NULL);
-	cr_assert(ret == FI_SUCCESS, "fi_cntr_open (rem_read)");
-
-	ret = fi_cntr_open(cxit_domain, NULL, &cxit_rem_write_cntr,
-			   NULL);
-	cr_assert(ret == FI_SUCCESS, "fi_cntr_open (rem_write)");
+	ret = fi_cntr_open(cxit_domain, NULL, &cxit_rem_cntr, NULL);
+	cr_assert(ret == FI_SUCCESS, "fi_cntr_open (rem)");
 }
 
 void cxit_destroy_cntrs(void)
@@ -210,13 +205,9 @@ void cxit_destroy_cntrs(void)
 	cr_assert(ret == FI_SUCCESS, "fi_close write_cntr");
 	cxit_write_cntr = NULL;
 
-	ret = fi_close(&cxit_rem_read_cntr->fid);
-	cr_assert(ret == FI_SUCCESS, "fi_close rem_read_cntr");
-	cxit_rem_read_cntr = NULL;
-
-	ret = fi_close(&cxit_rem_write_cntr->fid);
-	cr_assert(ret == FI_SUCCESS, "fi_close rem_write_cntr");
-	cxit_rem_write_cntr = NULL;
+	ret = fi_close(&cxit_rem_cntr->fid);
+	cr_assert(ret == FI_SUCCESS, "fi_close rem_cntr");
+	cxit_rem_cntr = NULL;
 }
 
 void cxit_bind_cntrs(void)
@@ -448,7 +439,10 @@ void mr_create(size_t len, uint64_t access, uint8_t seed, uint64_t key,
 	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_reg failed %d", ret);
 
 	ret = fi_mr_bind(mr->mr, &cxit_ep->fid, 0);
-	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_bind failed %d", ret);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_bind(ep) failed %d", ret);
+
+	ret = fi_mr_bind(mr->mr, &cxit_rem_cntr->fid, FI_REMOTE_WRITE);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_bind(cntr) failed %d", ret);
 
 	ret = fi_mr_enable(mr->mr);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_enable failed %d", ret);

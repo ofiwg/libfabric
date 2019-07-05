@@ -784,3 +784,47 @@ Test(rma, selective_completion_suppress,
 	mr_destroy(&mem_window);
 	free(send_buf);
 }
+
+/* Test remote counter events with RMA */
+Test(rma, rem_cntr)
+{
+	int ret;
+	uint8_t *send_buf;
+	int win_len = 16 * 1024;
+	int send_len = 8;
+	struct mem_region mem_window;
+	int key_val = 0x1f;
+	struct fi_cq_tagged_entry cqe;
+	int count = 0;
+
+	send_buf = calloc(1, win_len);
+	cr_assert_not_null(send_buf, "send_buf alloc failed");
+
+	mr_create(win_len, FI_REMOTE_WRITE, 0xa0, key_val, &mem_window);
+
+	for (send_len = 1; send_len <= win_len; send_len <<= 1) {
+		ret = fi_write(cxit_ep, send_buf, send_len, NULL,
+			       cxit_ep_fi_addr, 0, key_val, NULL);
+		cr_assert(ret == FI_SUCCESS);
+
+		/* Wait for remote counter event, then check data */
+		count++;
+		while (fi_cntr_read(cxit_rem_cntr) != count)
+			sched_yield();
+
+		/* Validate sent data */
+		for (int i = 0; i < send_len; i++)
+			cr_assert_eq(mem_window.mem[i], send_buf[i],
+				     "data mismatch, element: (%d) %02x != %02x\n", i,
+				     mem_window.mem[i], send_buf[i]);
+
+		/* Gather source completion after data */
+		ret = cxit_await_completion(cxit_tx_cq, &cqe);
+		cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+
+		validate_tx_event(&cqe, FI_RMA | FI_WRITE, NULL);
+	}
+
+	mr_destroy(&mem_window);
+	free(send_buf);
+}
