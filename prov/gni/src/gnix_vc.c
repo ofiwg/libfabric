@@ -2201,8 +2201,8 @@ fi_addr_t _gnix_vc_peer_fi_addr(struct gnix_vc *vc)
 					     &vc->peer_fi_addr);
 		if (rc != FI_SUCCESS)
 			GNIX_WARN(FI_LOG_EP_DATA,
-				  "_gnix_av_reverse_lookup() failed: %d\n",
-				  rc);
+				  "_gnix_av_reverse_lookup() failed: %d, %s\n",
+				  rc, fi_strerror(-rc));
 	}
 
 	return vc->peer_fi_addr;

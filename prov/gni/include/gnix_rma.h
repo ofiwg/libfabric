@@ -59,5 +59,10 @@ int _gnix_rma_post_irq(struct gnix_vc *vc);
 /* SMSG callback for RMA data control message. */
 int __smsg_rma_data(void *data, void *msg);
 
+/* Commit previously transferred data into persistent memory. */
+ssize_t _gnix_commit(struct gnix_fid_ep *ep, const struct fi_rma_iov *iov,
+                     size_t count, uint64_t dest_addr, uint64_t flags,
+                     void *context);
+
 #endif /* _GNIX_RMA_H_ */
 

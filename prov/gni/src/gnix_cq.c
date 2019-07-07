@@ -516,7 +516,7 @@ DIRECT_FN STATIC ssize_t gnix_cq_sread(struct fid_cq *cq, void *buf,
 	return __gnix_cq_sreadfrom(1, cq, buf, count, NULL, cond, timeout);
 }
 
-DIRECT_FN STATIC ssize_t gnix_cq_readfrom(struct fid_cq *cq, void *buf,
+DIRECT_FN ssize_t gnix_cq_readfrom(struct fid_cq *cq, void *buf,
 					  size_t count, fi_addr_t *src_addr)
 {
 	return __gnix_cq_sreadfrom(0, cq, buf, count, src_addr, NULL, 0);

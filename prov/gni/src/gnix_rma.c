@@ -45,6 +45,8 @@
 #include "gnix_cm_nic.h"
 #include "gnix_mbox_allocator.h"
 #include "gnix_cntr.h"
+#include "gnix_cq.h"
+#include "gnix_msg.h"
 
 #include <gni_pub.h>
 
@@ -1205,6 +1207,7 @@ int _gnix_rma_more_post_req(void *data)
 
 	return gnixu_to_fi_errno(status);
 }
+
 int _gnix_rma_post_req(void *data)
 {
 	struct gnix_fab_req *fab_req = (struct gnix_fab_req *)data;
@@ -1327,7 +1330,7 @@ int _gnix_rma_post_req(void *data)
  * @param loc_addr Local address for the RMA request.
  * @param len Length of the RMA request.
  * @param mdesc Local memory descriptor for the RMA request.
- * @param dest_addr Remote endpiont address for the RMA request.
+ * @param dest_addr Remote endpoint address for the RMA request.
  * @param rem_addr Remote address for the RMA request.
  * @param mkey Remote memory key for the RMA request.
  * @param context Event context for the RMA request.
@@ -1582,5 +1585,103 @@ err_get_vc:
 err_auto_reg:
 	_gnix_fr_free(req->vc->ep, req);
 	return rc;
+}
+
+/**
+ * @brief Force a commit of previously transferred data into remote persistent
+ *         memory
+ * TODO at the moment this is only a quick and dirty poc implementation.
+ *
+ * @param ep The endpiont to use for the RMA request.
+ * @param iov Memory regions to be flushed.
+ * @param count Number of elements in the iov.
+ * @param peer_addr Remote endpoint address for the RMA request.
+ * @param flags Flags for the RMA request
+ * @param context Event context for the RMA request.
+ *
+ * @return FI_SUCCESS on success.  FI_EINVAL for invalid parameter. TODO
+ */
+ssize_t _gnix_commit(struct gnix_fid_ep *ep, const struct fi_rma_iov *iov, size_t count, 
+                     uint64_t peer_addr, uint64_t cflags, void *context)
+{
+        struct fi_cq_tagged_entry buf = {0}; // TODO see __gnix_cq_readfrom for type/size
+        struct gnix_fid_ep *gnix_ep;
+        struct gnix_fid_cq *gnix_cq;
+        ssize_t rc = FI_SUCCESS;
+        uint64_t sendtag = 1L;
+        uint64_t recvtag = 2L;
+        uint64_t ignore = 0L;
+        int num_completions = 1;
+
+        if (!ep) {
+                return -FI_EINVAL;
+        }
+
+#ifdef DEMO
+        fprintf(stderr, "GNI provider: executing fi_commit()\n");
+#endif
+        GNIX_TRACE(FI_LOG_EP_DATA, "\n");
+
+        gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
+        assert(GNIX_EP_RDM_DGM_MSG(gnix_ep->type));
+        
+        /* Send tagged message with agreed upon (with TMM) commit request tag and no content. */
+        rc = _gnix_send(gnix_ep, (uint64_t)NULL, 0, NULL, peer_addr, context, 
+                        gnix_ep->op_flags | FI_INJECT | FI_TAGGED | GNIX_SUPPRESS_COMPLETION,
+                        0, sendtag);
+        if (rc != FI_SUCCESS) {
+                //fprintf(stderr, "Error occurred in _gnix_send(): %ld\n", rc);
+                GNIX_WARN(FI_LOG_EP_DATA, "_gnix_send() in _gnix_commit() failed: %d\n", rc);
+        }
+
+        //fprintf(stderr, "GNI provider: waiting for _gnix_recv in fi_commit()\n");
+
+        num_completions = 1;
+        /* Receive tagged empty message with agreed upon (with TMM) commit response tag. */
+        // Context is set to 500 for debugging purposes; consider eliminating later.
+        rc = _gnix_recv(gnix_ep, 0L, 0, NULL, peer_addr, (void *)500, 
+                        gnix_ep->op_flags | FI_TAGGED,
+                        recvtag, ignore, NULL);
+        if (rc != FI_SUCCESS) {
+                //fprintf(stderr, "Error occurred in _gnix_recv(): %ld\n", rc);
+                GNIX_WARN(FI_LOG_EP_DATA, "_gnix_recv() in _gnix_commit() failed: %d\n", rc);
+        }
+        
+        /* Wait for completion of recv. */
+        gnix_cq = gnix_ep->recv_cq;
+        while (num_completions > 0) {
+                rc = gnix_cq_readfrom(&gnix_cq->cq_fid, &buf, 1, &peer_addr);
+                if (rc > 0L) {
+#ifdef DEMO                        
+                        fprintf(stderr, "GNI provider: got cq entry w/ context %d\n", buf.op_context);
+#endif
+                        num_completions--;
+                }
+                /*
+                else if (rc == -FI_EAGAIN) {
+                        usleep(1000);
+                }
+                */
+                else if ((rc < 0) && (rc != -FI_EAGAIN)) {
+                        //fprintf(stderr, "ERROR: fi_cq_readfrom %ld \n", rc);
+                        GNIX_WARN(FI_LOG_EP_DATA,
+                                  "gnix_cq_readfrom() failed after recv: %d\n", rc);
+                        return rc;
+                }
+        }
+
+        /* This is a non-blocking function and an event needs to be created for the caller.
+           from __gnix_amo_send_completion: TODO
+        if ((req->flags & FI_COMPLETION) && ep->send_cq) {
+                rc = _gnix_cq_add_event(ep->send_cq, ep, req->user_context,
+                                        flags, 0, 0, 0, 0, FI_ADDR_NOTAVAIL);
+                if (rc) {
+                        GNIX_WARN(FI_LOG_EP_DATA,
+                                  "_gnix_cq_add_event() failed: %d\n", rc);
+                }
+        }
+        */
+
+        return rc;
 }
 

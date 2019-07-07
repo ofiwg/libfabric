@@ -975,6 +975,22 @@ gnix_ep_rma_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 			 NULL, flags, data);
 }
 
+DIRECT_FN STATIC ssize_t
+gnix_ep_commit(struct fid_ep *ep, const struct fi_rma_iov *iov, size_t count, 
+               uint64_t dest_addr, uint64_t flags, void *context)
+{
+        struct gnix_fid_ep *gnix_ep;
+
+        if (!ep) {
+                return -FI_EINVAL;
+        }
+
+        gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
+        assert(GNIX_EP_RDM_DGM_MSG(gnix_ep->type));
+
+        return _gnix_commit(gnix_ep, iov, count, dest_addr, flags, context);
+}
+
 /*******************************************************************************
  * EP Tag matching API function implementations.
  ******************************************************************************/
@@ -3267,6 +3283,7 @@ static struct fi_ops_rma gnix_ep_rma_ops = {
 	.inject = gnix_ep_rma_inject,
 	.writedata = gnix_ep_writedata,
 	.injectdata = gnix_ep_rma_injectdata,
+        .commit = gnix_ep_commit,
 };
 
 struct fi_ops_tagged gnix_ep_tagged_ops = {

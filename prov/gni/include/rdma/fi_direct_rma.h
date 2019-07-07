@@ -75,6 +75,10 @@ extern ssize_t gnix_ep_rma_injectdata(struct fid_ep *ep, const void *buf,
 				      fi_addr_t dest_addr, uint64_t addr,
 				      uint64_t key);
 
+extern ssize_t gnix_ep_commit(struct fid_ep *ep, const struct fi_rma_iov *iov, 
+                              size_t count, uint64_t dest_addr, uint64_t flags, 
+                              void *context);
+
 /*******************************************************************************
  * Libfabric API Functions
  ******************************************************************************/
@@ -142,6 +146,13 @@ static inline ssize_t fi_inject_writedata(struct fid_ep *ep, const void *buf,
 					  uint64_t key)
 {
 	return gnix_ep_rma_injectdata(ep, buf, len, data, dest_addr, addr, key);
+}
+
+static inline ssize_t fi_commit(struct fid_ep *ep, const struct fi_rma_iov *iov,
+                                size_t count, uint64_t dest_addr, uint64_t flags,
+                                void *context)
+{
+        return gnix_ep_commit(ep, iov, count, dest_addr, flags, context);
 }
 
 #endif /* _FI_DIRECT_RMA_H_ */

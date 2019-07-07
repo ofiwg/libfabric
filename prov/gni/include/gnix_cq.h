@@ -93,5 +93,7 @@ int _gnix_cq_poll_obj_add(struct gnix_fid_cq *cq, void *obj,
 			  int (*prog_fn)(void *data));
 int _gnix_cq_poll_obj_rem(struct gnix_fid_cq *cq, void *obj,
 			  int (*prog_fn)(void *data));
+ssize_t gnix_cq_readfrom(struct fid_cq *cq, void *buf,
+                                          size_t count, fi_addr_t *src_addr);
 
 #endif
