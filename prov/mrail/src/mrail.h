@@ -79,9 +79,11 @@ extern struct fi_fabric_attr mrail_fabric_attr;
 extern struct fi_info *mrail_info_vec[MRAIL_MAX_INFO];
 extern size_t mrail_num_info;
 
-#define MRAIL_POLICY_FIXED		0
-#define MRAIL_POLICY_ROUND_ROBIN	1
-#define MRAIL_POLICY_STRIPING		2
+enum {
+	MRAIL_POLICY_FIXED,
+	MRAIL_POLICY_ROUND_ROBIN,
+	MRAIL_POLICY_STRIPING
+};
 
 #define MRAIL_MAX_CONFIG		8
 
@@ -128,14 +130,43 @@ mrail_match_recv_handle_unexp(struct mrail_recv_queue *recv_queue, uint64_t tag,
 			      uint64_t addr, char *data, size_t len, void *context);
 
 /* mrail protocol */
-#define MRAIL_HDR_VERSION 1
+#define MRAIL_HDR_VERSION 2
+
+enum {
+	MRAIL_PROTO_EAGER,
+	MRAIL_PROTO_RNDV
+};
+
+enum {
+	MRAIL_RNDV_REQ,
+	MRAIL_RNDV_ACK
+};
 
 struct mrail_hdr {
 	uint8_t		version;
 	uint8_t		op;
-	uint8_t		padding[2];
+	uint8_t		protocol;
+	uint8_t		protocol_cmd;
 	uint32_t	seq;
 	uint64_t 	tag;
+};
+
+#define MRAIL_IOV_LIMIT		5
+
+/* bit 60~63 are provider defined */
+#define MRAIL_RNDV_FLAG		(1ULL << 60)
+
+struct mrail_rndv_hdr {
+	uint64_t		context;
+};
+
+struct mrail_rndv_req {
+	size_t			len;
+	size_t			count;
+	size_t			mr_count;
+	struct fi_rma_iov	rma_iov[MRAIL_IOV_LIMIT];
+	size_t			rawkey_size;
+	uint8_t			rawkey[]; /* rawkey + base_addr */
 };
 
 struct mrail_tx_buf {
@@ -147,6 +178,9 @@ struct mrail_tx_buf {
 	 * and completion flags (FI_MSG, FI_TAGGED, etc) */
 	uint64_t		flags;
 	struct mrail_hdr	hdr;
+	struct mrail_rndv_hdr	rndv_hdr;
+	struct mrail_rndv_req	*rndv_req;
+	fid_t			rndv_mr_fid;
 };
 
 struct mrail_pkt {
@@ -156,11 +190,17 @@ struct mrail_pkt {
 
 /* TX & RX processing */
 
-#define MRAIL_IOV_LIMIT	5
-
 struct mrail_rx_buf {
 	struct fid_ep		*rail_ep;
 	struct mrail_pkt	pkt;
+};
+
+struct mrail_rndv_recv {
+	void			*context;
+	uint64_t		flags;
+	uint64_t		tag;
+	uint64_t		data;
+	size_t			len;
 };
 
 struct mrail_recv {
@@ -176,6 +216,7 @@ struct mrail_recv {
 	fi_addr_t 		addr;
 	uint64_t 		tag;
 	uint64_t 		ignore;
+	struct mrail_rndv_recv	rndv;
 };
 DECLARE_FREESTACK(struct mrail_recv, mrail_recv_fs);
 
@@ -400,3 +441,8 @@ static inline void mrail_cntr_incerr(struct util_cntr *cntr)
                cntr->cntr_fid.ops->adderr(&cntr->cntr_fid, 1);
        }
 }
+
+int mrail_send_rndv_ack_blocking(struct mrail_ep *mrail_ep,
+				 struct mrail_cq *mrail_cq,
+				 fi_addr_t dest_addr,
+				 void *context);
