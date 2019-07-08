@@ -196,20 +196,14 @@ static int run_test()
 {
 	int ret, i;
 
-	if (!(tx_ctx_arr = calloc(ep_cnt, sizeof *tx_ctx_arr)))
-		return -FI_ENOMEM;
-
-	if (!(rx_ctx_arr = calloc(ep_cnt, sizeof *rx_ctx_arr)))
-		return -FI_ENOMEM;
-
 	/* Post recvs */
 	for (i = 0; i < ep_cnt; i++) {
 		if (rx_shared_ctx) {
 			fprintf(stdout, "Posting recv #%d for shared rx ctx\n", i);
-			ret = ft_post_rx(srx_ctx, rx_size, &rx_ctx_arr[i]);
+			ret = ft_post_rx(srx_ctx, rx_size, &rx_ctx_arr[i].context);
 		 } else {
 			fprintf(stdout, "Posting recv for endpoint #%d\n", i);
-			ret = ft_post_rx(ep_array[i], rx_size, &rx_ctx_arr[i]);
+			ret = ft_post_rx(ep_array[i], rx_size, &rx_ctx_arr[i].context);
 		 }
 		if (ret)
 			return ret;
@@ -222,7 +216,7 @@ static int run_test()
 				fprintf(stdout, "Posting send #%d to shared tx ctx\n", i);
 			else
 				fprintf(stdout, "Posting send to endpoint #%d\n", i);
-			ret = ft_tx(ep_array[i], addr_array[i], tx_size, &tx_ctx_arr[i]);
+			ret = ft_tx(ep_array[i], addr_array[i], tx_size, &tx_ctx_arr[i].context);
 			if (ret)
 				return ret;
 		}
@@ -240,7 +234,7 @@ static int run_test()
 				fprintf(stdout, "Posting send #%d to shared tx ctx\n", i);
 			else
 				fprintf(stdout, "Posting send to endpoint #%d\n", i);
-			ret = ft_tx(ep_array[i], addr_array[i], tx_size, &tx_ctx_arr[i]);
+			ret = ft_tx(ep_array[i], addr_array[i], tx_size, &tx_ctx_arr[i].context);
 			if (ret)
 				return ret;
 		}

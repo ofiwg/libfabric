@@ -138,7 +138,7 @@ static int run_test_loop(void)
 
 			ret = ft_post_tx_buf(ep, remote_fi_addr,
 					     opts.transfer_size,
-					     op_data, &tx_ctx_arr[j],
+					     op_data, &tx_ctx_arr[j].context,
 					     op_buf, mr_desc, op_tag);
 			if (ret) {
 				printf("ERROR send_msg returned %d\n", ret);
@@ -153,7 +153,7 @@ static int run_test_loop(void)
 		for (j = 0; j < concurrent_msgs; j++) {
 			op_buf = get_rx_buf(j);
 			ret = ft_post_rx_buf(ep, opts.transfer_size,
-					     &rx_ctx_arr[j], op_buf,
+					     &rx_ctx_arr[j].context, op_buf,
 					     mr_desc, op_tag);
 			if (ret) {
 				printf("ERROR recv_msg returned %d\n", ret);
