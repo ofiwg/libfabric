@@ -249,23 +249,24 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 	info->domain_attr->mr_key_size = core_info->domain_attr->mr_key_size;
 
 	/*
-	 * Adapt the info attributes to the application's hints.
-	 * `msg_order` is one such case where packet reordering decision is made
-	 * based on both the application's requirements and the lower-level's
-	 * capability, so it can not be set solely based on rxr_info or
-	 * core_info.
+	 * Handle user-provided hints and adapt the info object passed back up
+	 * based on EFA-specific constraints.
 	 */
-	if (hints && hints->tx_attr) {
-		if (!(hints->tx_attr->msg_order & FI_ORDER_SAS))
-			rxr_env.enable_sas_ordering = 0;
-	}
+	if (hints) {
+		/* Disable packet reordering if the app doesn't need it */
+		if (hints->tx_attr)
+			if (!(hints->tx_attr->msg_order & FI_ORDER_SAS))
+				rxr_env.enable_sas_ordering = 0;
 
-	/*
-	 *  For RMA, we only support PROGRESS_MANUAL
-	 */
-	if (hints && (hints->caps & FI_RMA)) {
-		info->domain_attr->control_progress = FI_PROGRESS_MANUAL;
-		info->domain_attr->data_progress = FI_PROGRESS_MANUAL;
+		/* We only support manual progress for RMA operations */
+		if (hints->caps & FI_RMA) {
+			info->domain_attr->control_progress = FI_PROGRESS_MANUAL;
+			info->domain_attr->data_progress = FI_PROGRESS_MANUAL;
+		}
+
+		/* Use a table for AV if the app has no strong requirement */
+		if (hints->domain_attr->av_type == FI_AV_UNSPEC)
+			info->domain_attr->av_type = FI_AV_TABLE;
 	}
 
 	rxr_set_rx_tx_size(info, core_info);
