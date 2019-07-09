@@ -29,12 +29,11 @@
 #ifndef _WINDOWS_OSD_H_
 #define _WINDOWS_OSD_H_
 
-#include <winsock2.h>
+#include <WinSock2.h>
 #include <ws2def.h>
 #include <windows.h>
 #include <assert.h>
-#include <inttypes.h>
-
+#include <stdint.h>
 #include <time.h>
 
 struct iovec
@@ -136,6 +135,18 @@ int socketpair(int af, int type, int protocol, int socks[2]);
 #define WEXITED		4	/* Report dead child. */
 #define WCONTINUED	8	/* Report continued child. */
 #define WNOWAIT		0x01000000	/* Don't reap, just poll status. */
+
+static inline ssize_t ft_send_socket(SOCKET fd, const void *buf, size_t count,
+				      int flags)
+{
+	return send(fd, (const char*)buf, (int)count, flags);
+}
+
+static inline ssize_t ft_recv_socket(SOCKET fd, void *buf, size_t count,
+				      int flags)
+{
+	return recv(fd, (char *)buf, (int)count, flags);
+}
 
 static pid_t waitpid(pid_t pid, int *status, int options)
 {

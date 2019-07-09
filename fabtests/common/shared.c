@@ -3039,7 +3039,7 @@ int ft_sock_send(int fd, void *msg, size_t len)
 {
 	int ret;
 
-	ret = send(fd, msg, len, 0);
+	ret = ft_send_socket(fd, msg, len, 0);
 	if (ret == len) {
 		return 0;
 	} else if (ret < 0) {
@@ -3055,7 +3055,7 @@ int ft_sock_recv(int fd, void *msg, size_t len)
 {
 	int ret;
 
-	ret = recv(fd, msg, len, MSG_WAITALL);
+	ret = ft_recv_socket(fd, msg, len, MSG_WAITALL);
 	if (ret == len) {
 		return 0;
 	} else if (ret == 0) {

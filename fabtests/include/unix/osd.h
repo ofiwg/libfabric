@@ -33,12 +33,30 @@
 #ifndef _FABTESTS_UNIX_OSD_H_
 #define _FABTESTS_UNIX_OSD_H_
 
+#include <sys/socket.h>
 #include <complex.h>
+
+#ifndef SOCKET
+#define SOCKET int
+#endif
 
 static inline int ft_startup(void)
 {
 	return 0;
 }
+
+static inline ssize_t ft_send_socket(unsigned int fd, void *buf, size_t count,
+				     int flags)
+{
+	return send(fd, (const char *) buf, (int) count, flags);
+}
+
+static inline ssize_t ft_recv_socket(unsigned int fd, void *buf, size_t count,
+				     int flags)
+{
+	return recv(fd, (char *) buf, (int) count, flags);
+}
+
 
 /* complex operations implementation */
 #define OFI_COMPLEX(name) ofi_##name##_complex
