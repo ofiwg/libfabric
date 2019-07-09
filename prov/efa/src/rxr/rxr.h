@@ -572,7 +572,7 @@ struct rxr_base_hdr {
 	uint16_t flags;
 };
 
-#if defined(static_assert) && defined(__X86_64__)
+#if defined(static_assert) && defined(__x86_64__)
 static_assert(sizeof(struct rxr_base_hdr) == 4, "rxr_base_hdr check");
 #endif
 
@@ -594,7 +594,7 @@ struct rxr_rts_hdr {
 	uint64_t data_len;
 }; /* 24 bytes without tx_id and padding for it */
 
-#if defined(static_assert) && defined(__X86_64__)
+#if defined(static_assert) && defined(__x86_64__)
 static_assert(sizeof(struct rxr_rts_hdr) == 32, "rxr_rts_hdr check");
 #endif
 
@@ -605,7 +605,7 @@ struct rxr_connack_hdr {
 	/* end of rxr_base_hdr */
 }; /* 4 bytes */
 
-#if defined(static_assert) && defined(__X86_64__)
+#if defined(static_assert) && defined(__x86_64__)
 static_assert(sizeof(struct rxr_base_hdr) == 4, "rxr_connack_hdr check");
 #endif
 
@@ -621,7 +621,7 @@ struct rxr_cts_hdr {
 	uint64_t window;
 };
 
-#if defined(static_assert) && defined(__X86_64__)
+#if defined(static_assert) && defined(__x86_64__)
 static_assert(sizeof(struct rxr_cts_hdr) == 24, "rxr_cts_hdr check");
 #endif
 
@@ -636,7 +636,7 @@ struct rxr_data_hdr {
 	uint64_t seg_offset;
 };
 
-#if defined(static_assert) && defined(__X86_64__)
+#if defined(static_assert) && defined(__x86_64__)
 static_assert(sizeof(struct rxr_data_hdr) == 24, "rxr_data_hdr check");
 #endif
 
@@ -651,7 +651,7 @@ struct rxr_readrsp_hdr {
 	uint64_t seg_size;
 };
 
-#if defined(static_assert) && defined(__X86_64__)
+#if defined(static_assert) && defined(__x86_64__)
 static_assert(sizeof(struct rxr_readrsp_hdr) == sizeof(struct rxr_data_hdr), "rxr_readrsp_hdr check");
 #endif
 
@@ -731,7 +731,7 @@ struct rxr_pkt_entry {
 #endif
 };
 
-#if defined(static_assert) && defined(__X86_64__)
+#if defined(static_assert) && defined(__x86_64__)
 #if ENABLE_DEBUG
 static_assert(sizeof(struct rxr_pkt_entry) == 128, "rxr_pkt_entry check");
 #else
