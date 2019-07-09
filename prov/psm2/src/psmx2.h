@@ -827,9 +827,6 @@ struct psmx2_env {
 	int	prog_interval;
 	char	*prog_affinity;
 	int	multi_ep;
-	int	max_trx_ctxt;
-	int	free_trx_ctxt;
-	int	num_devunits;
 	int	inject_size;
 	int	lock_level;
 	int	lazy_conn;
@@ -837,6 +834,19 @@ struct psmx2_env {
 #if (PSMX2_TAG_LAYOUT == PSMX2_TAG_LAYOUT_RUNTIME)
 	char	*tag_layout;
 #endif
+};
+
+#define PSMX2_MAX_UNITS	4
+struct psmx2_hfi_info {
+	int max_trx_ctxt;
+	int free_trx_ctxt;
+	int num_units;
+	int num_active_units;
+	int active_units[PSMX2_MAX_UNITS];
+	int unit_is_active[PSMX2_MAX_UNITS];
+	int unit_nctxts[PSMX2_MAX_UNITS];
+	int unit_nfreectxts[PSMX2_MAX_UNITS];
+	char default_domain_name[PSMX2_MAX_UNITS * 8]; /* hfi1_0;hfi1_1;...;hfi1_n */
 };
 
 extern struct fi_ops_mr		psmx2_mr_ops;
@@ -863,6 +873,7 @@ extern struct fi_ops_msg	psmx2_msg2_ops;
 extern struct fi_ops_rma	psmx2_rma_ops;
 extern struct fi_ops_atomic	psmx2_atomic_ops;
 extern struct psmx2_env		psmx2_env;
+extern struct psmx2_hfi_info	psmx2_hfi_info;
 extern struct psmx2_fid_fabric	*psmx2_active_fabric;
 
 /*
