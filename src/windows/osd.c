@@ -444,7 +444,7 @@ int getifaddrs(struct ifaddrs **ifap)
 
 			fa = calloc(sizeof(*fa), 1);
 			if (!fa) {
-				ret -FI_ENOMEM;
+				ret = -FI_ENOMEM;
 				goto out;
 			}
 
