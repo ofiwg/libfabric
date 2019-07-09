@@ -277,6 +277,7 @@ void rxd_progress_tx_list(struct rxd_ep *ep, struct rxd_peer *peer)
 	struct dlist_entry *tmp_entry;
 	struct rxd_x_entry *tx_entry;
 	uint64_t head_seq = peer->last_rx_ack;
+	int ret = 0, inc = 0;
 
 	if (!dlist_empty(&peer->unacked)) {
 		head_seq = rxd_get_base_hdr(container_of(
@@ -307,9 +308,25 @@ void rxd_progress_tx_list(struct rxd_ep *ep, struct rxd_peer *peer)
 			}
 			continue;
 		}
+				
+		if (tx_entry->op == RXD_DATA_READ && !tx_entry->bytes_done) {
+			if (ep->peers[tx_entry->peer].unacked_cnt >=
+		    	    ep->peers[tx_entry->peer].tx_window) {
+				break;
+			} 
+			tx_entry->start_seq = ep->peers[tx_entry->peer].tx_seq_no;
+			ep->peers[tx_entry->peer].tx_seq_no = tx_entry->start_seq +
+							      tx_entry->num_segs;
+			inc = 1;
+		}
 
-		if (!rxd_ep_post_data_pkts(ep, tx_entry))
+		ret = rxd_ep_post_data_pkts(ep, tx_entry);
+		if (ret) {
+			if (ret == -FI_ENOMEM && inc)
+				ep->peers[tx_entry->peer].tx_seq_no -=
+							  tx_entry->num_segs;
 			break;
+		}
 	}
 
 	if (dlist_empty(&peer->tx_list))
