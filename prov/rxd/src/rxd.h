@@ -291,6 +291,7 @@ struct rxd_pkt_entry {
 	uint64_t timestamp;
 	struct fi_context context;
 	struct fid_mr *mr;
+	void *desc;
 	fi_addr_t peer;
 	void *pkt;
 };

@@ -248,11 +248,6 @@ struct rxd_x_entry *rxd_rx_entry_init(struct rxd_ep *ep,
 	return rx_entry;
 }
 
-static inline void *rxd_mr_desc(struct fid_mr *mr, struct rxd_ep *ep)
-{
-	return (ep->do_local_mr) ? fi_mr_desc(mr) : NULL;
-}
-
 int rxd_ep_post_buf(struct rxd_ep *ep)
 {
 	struct rxd_pkt_entry *pkt_entry;
@@ -264,8 +259,8 @@ int rxd_ep_post_buf(struct rxd_ep *ep)
 
 	ret = fi_recv(ep->dg_ep, rxd_pkt_start(pkt_entry),
 		      rxd_ep_domain(ep)->max_mtu_sz,
-		      rxd_mr_desc(pkt_entry->mr, ep),
-		      FI_ADDR_UNSPEC, &pkt_entry->context);
+		      pkt_entry->desc, FI_ADDR_UNSPEC,
+		      &pkt_entry->context);
 	if (ret) {
 		ofi_buf_free(pkt_entry);
 		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "failed to repost\n");
@@ -444,7 +439,7 @@ int rxd_ep_send_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 	pkt_entry->timestamp = fi_gettime_ms();
 
 	ret = fi_send(ep->dg_ep, (const void *) rxd_pkt_start(pkt_entry),
-		      pkt_entry->pkt_size, rxd_mr_desc(pkt_entry->mr, ep),
+		      pkt_entry->pkt_size, pkt_entry->desc,
 		      rxd_ep_av(ep)->rxd_addr_table[pkt_entry->peer].dg_addr,
 		      &pkt_entry->context);
 	if (ret) {
@@ -1009,7 +1004,17 @@ out:
 
 	fastlock_release(&ep->util_ep.lock);
 }
+static void rxd_buf_region_init_fn(struct ofi_bufpool_region *region, void *buf)
+{
+	struct rxd_ep *rxd_ep = (struct rxd_ep *) buf;
+	struct rxd_pkt_entry *pkt_entry = (struct rxd_pkt_entry *) buf;
 
+	if (!rxd_ep->do_local_mr) {
+		pkt_entry->desc = fi_mr_desc((struct fid_mr *) region->context);
+	} else {
+		pkt_entry->desc = NULL;
+	}
+}
 static int rxd_buf_region_alloc_fn(struct ofi_bufpool_region *region)
 {
 	struct rxd_domain *domain = region->pool->attr.context;
@@ -1040,6 +1045,7 @@ int rxd_ep_init_res(struct rxd_ep *ep, struct fi_info *fi_info)
 	pkt_attr.chunk_cnt = RXD_TX_POOL_CHUNK_CNT;
 	pkt_attr.alloc_fn = ep->do_local_mr ? rxd_buf_region_alloc_fn : NULL;
 	pkt_attr.free_fn = ep->do_local_mr ? rxd_buf_region_free_fn : NULL;
+	pkt_attr.init_fn = rxd_buf_region_init_fn;
 	pkt_attr.context = rxd_domain;
 	pkt_attr.flags = OFI_BUFPOOL_HUGEPAGES;
 
