@@ -60,7 +60,7 @@ benchmarks: $(outdir)\msg_pingpong.exe $(outdir)\rdm_cntr_pingpong.exe \
 functional: $(outdir)\cq_data.exe $(outdir)\dgram.exe $(outdir)\dgram_waitset.exe $(outdir)\msg.exe \
 	$(outdir)\msg_epoll.exe $(outdir)\msg_sockets.exe \
 	$(outdir)\poll.exe $(outdir)\rdm.exe $(outdir)\rdm_rma_simple.exe $(outdir)\rdm_rma_trigger.exe \
-	$(outdir)\rdm_tagged_peek.exe $(outdir)\scalable_ep.exe $(outdir)\inj_complete.exe
+	$(outdir)\rdm_tagged_peek.exe $(outdir)\scalable_ep.exe $(outdir)\inj_complete.exe $(outdir)\bw.exe
 
 unit: $(outdir)\av_test.exe $(outdir)\dom_test.exe $(outdir)\eq_test.exe
 
@@ -104,6 +104,8 @@ $(outdir)\rdm_tagged_peek.exe: {functional}rdm_tagged_peek.c $(basedeps)
 $(outdir)\scalable_ep.exe: {functional}scalable_ep.c $(basedeps)
 
 $(outdir)\inj_complete.exe: {functional}inj_complete.c $(basedeps)
+
+$(outdir)\bw.exe: {functional}bw.c $(basedeps)
 
 $(outdir)\av_test.exe: {unit}av_test.c $(basedeps) {unit}common.c
 

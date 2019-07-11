@@ -135,6 +135,7 @@
     <ClCompile Include="functional\rdm_netdir.c" />
     <ClCompile Include="functional\scalable_ep.c" />
     <ClCompile Include="functional\inj_complete.c" />
+    <ClCompile Include="functional\bw.c" />
     <ClCompile Include="unit\av_test.c" />
     <ClCompile Include="unit\cntr_test.c" />
     <ClCompile Include="unit\common.c" />

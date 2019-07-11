@@ -70,16 +70,6 @@ void ft_benchmark_usage(void)
 			"# of iterations > window size");
 }
 
-int ft_bw_init(void)
-{
-	if (opts.window_size > 0) {
-		tx_ctx_arr = calloc(opts.window_size, sizeof(struct fi_context));
-		if (!tx_ctx_arr)
-			return -FI_ENOMEM;
-	}
-	return 0;
-}
-
 int pingpong(void)
 {
 	int ret, i;
@@ -177,7 +167,7 @@ int bandwidth(void)
 				ret = ft_inject(ep, remote_fi_addr, opts.transfer_size);
 			else
 				ret = ft_post_tx(ep, remote_fi_addr, opts.transfer_size,
-						 NO_CQ_DATA, &tx_ctx_arr[j]);
+						 NO_CQ_DATA, &tx_ctx_arr[j].context);
 			if (ret)
 				return ret;
 
@@ -196,7 +186,7 @@ int bandwidth(void)
 			if (i == opts.warmup_iterations)
 				ft_start();
 
-			ret = ft_post_rx(ep, opts.transfer_size, &tx_ctx_arr[j]);
+			ret = ft_post_rx(ep, opts.transfer_size, &rx_ctx_arr[j].context);
 			if (ret)
 				return ret;
 
@@ -260,13 +250,13 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 						opts.transfer_size, remote);
 			} else {
 				ret = ft_post_rma(rma_op, ep, opts.transfer_size,
-						remote,	&tx_ctx_arr[j]);
+						remote,	&tx_ctx_arr[j].context);
 			}
 			break;
 		case FT_RMA_WRITEDATA:
 			if (!opts.dst_addr) {
 				if (fi->rx_attr->mode & FI_RX_CQ_DATA)
-					ret = ft_post_rx(ep, 0, &tx_ctx_arr[j]);
+					ret = ft_post_rx(ep, 0, &rx_ctx_arr[j].context);
 				else
 					/* Just increment the seq # instead of
 					 * posting recv so that we wait for
@@ -284,13 +274,13 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 					ret = ft_post_rma(FT_RMA_WRITEDATA,
 							ep,
 							opts.transfer_size,
-							remote,	&tx_ctx_arr[j]);
+							remote,	&tx_ctx_arr[j].context);
 				}
 			}
 			break;
 		case FT_RMA_READ:
 			ret = ft_post_rma(FT_RMA_READ, ep, opts.transfer_size,
-					remote,	&tx_ctx_arr[j]);
+					remote,	&tx_ctx_arr[j].context);
 			break;
 		default:
 			FT_ERR("Unknown RMA op type\n");

@@ -66,7 +66,7 @@ struct fid_mc *mc;
 
 struct fid_mr no_mr;
 struct fi_context tx_ctx, rx_ctx;
-struct fi_context *tx_ctx_arr = NULL, *rx_ctx_arr = NULL;
+struct ft_context *tx_ctx_arr = NULL, *rx_ctx_arr = NULL;
 uint64_t remote_cq_data = 0;
 
 uint64_t tx_seq, rx_seq, tx_cq_cntr, rx_cq_cntr;
@@ -78,7 +78,8 @@ int ft_socket_pair[2];
 
 fi_addr_t remote_fi_addr = FI_ADDR_UNSPEC;
 char *buf, *tx_buf, *rx_buf;
-size_t buf_size, tx_size, rx_size;
+char **tx_mr_bufs = NULL, **rx_mr_bufs = NULL;
+size_t buf_size, tx_size, rx_size, tx_mr_size, rx_mr_size;
 int rx_fd = -1, tx_fd = -1;
 char default_port[8] = "9228";
 static char default_oob_port[8] = "3000";
@@ -349,6 +350,61 @@ void ft_free_bit_combo(uint64_t *combo)
 	free(combo);
 }
 
+static int ft_alloc_ctx_array(struct ft_context **mr_array, char ***mr_bufs,
+			      char *default_buf, size_t mr_size,
+			      uint64_t start_key)
+{
+	int i, ret;
+	uint64_t access = ft_info_to_mr_access(fi);
+	struct ft_context *context;
+
+	*mr_array = calloc(opts.window_size, sizeof(**mr_array));
+	if (!*mr_array)
+		return -FI_ENOMEM;
+
+	if (opts.options & FT_OPT_ALLOC_MULT_MR) {
+		*mr_bufs = calloc(opts.window_size, sizeof(**mr_bufs));
+		if (!mr_bufs)
+			return -FI_ENOMEM;
+	}
+
+	for (i = 0; i < opts.window_size; i++) {
+		context = &(*mr_array)[i];
+		if (!(opts.options & FT_OPT_ALLOC_MULT_MR)) {
+			context->buf = default_buf;
+			continue;
+		}
+		(*mr_bufs)[i] = calloc(1, mr_size);
+		context->buf = (*mr_bufs)[i];
+    		if (((fi->domain_attr->mr_mode & FI_MR_LOCAL) ||
+		     (fi->caps & (FI_RMA | FI_ATOMIC)))) {
+			ret = fi_mr_reg(domain, context->buf,
+					mr_size, access, 0,
+					start_key + i, 0,
+					&context->mr, NULL);
+			if (ret)
+				return ret;
+
+			context->desc = fi_mr_desc(context->mr);
+		} else {
+			context->mr =  NULL;
+			context->desc = NULL;
+		}
+	}
+
+	return 0;
+}
+
+static void ft_set_tx_rx_sizes(size_t *set_tx, size_t *set_rx)
+{
+	*set_tx = opts.options & FT_OPT_SIZE ?
+		  opts.transfer_size : test_size[TEST_CNT - 1].size;
+	if (*set_tx > fi->ep_attr->max_msg_size)
+		*set_tx = fi->ep_attr->max_msg_size;
+	*set_rx = *set_tx + ft_rx_prefix_size();
+	*set_tx += ft_tx_prefix_size();
+}
+
 /*
  * Include FI_MSG_PREFIX space in the allocated buffer, and ensure that the
  * buffer is large enough for a control message used to exchange addressing
@@ -362,13 +418,17 @@ static int ft_alloc_msgs(void)
 	if (ft_check_opts(FT_OPT_SKIP_MSG_ALLOC))
 		return 0;
 
-	tx_size = opts.options & FT_OPT_SIZE ?
-		  opts.transfer_size : test_size[TEST_CNT - 1].size;
-	if (tx_size > fi->ep_attr->max_msg_size)
-		tx_size = fi->ep_attr->max_msg_size;
-	rx_size = tx_size + ft_rx_prefix_size();
-	tx_size += ft_tx_prefix_size();
-	buf_size = MAX(tx_size, FT_MAX_CTRL_MSG) + MAX(rx_size, FT_MAX_CTRL_MSG);
+	if (opts.options & FT_OPT_ALLOC_MULT_MR) {
+		ft_set_tx_rx_sizes(&tx_mr_size, &rx_mr_size);
+		rx_size = FT_MAX_CTRL_MSG + ft_rx_prefix_size();
+		tx_size = FT_MAX_CTRL_MSG + ft_tx_prefix_size();
+		buf_size = rx_size + tx_size;
+	} else {
+		ft_set_tx_rx_sizes(&tx_size, &rx_size);
+		tx_mr_size = 0;
+		rx_mr_size = 0;		
+		buf_size = MAX(tx_size, FT_MAX_CTRL_MSG) + MAX(rx_size, FT_MAX_CTRL_MSG);
+	}
 
 	if (opts.options & FT_OPT_ALIGN) {
 		alignment = sysconf(_SC_PAGESIZE);
@@ -416,6 +476,16 @@ static int ft_alloc_msgs(void)
 		}
 		mr = &no_mr;
 	}
+
+	ret = ft_alloc_ctx_array(&tx_ctx_arr, &tx_mr_bufs, tx_buf,
+				 tx_mr_size, FT_TX_MR_KEY);
+	if (ret)
+		return -FI_ENOMEM;
+
+	ret = ft_alloc_ctx_array(&rx_ctx_arr, &rx_mr_bufs, rx_buf,
+				 rx_mr_size, FT_RX_MR_KEY);
+	if (ret)
+		return -FI_ENOMEM;
 
 	return 0;
 }
@@ -1350,6 +1420,19 @@ int ft_exchange_keys(struct fi_rma_iov *peer_iov)
 	return ret;
 }
 
+static void ft_cleanup_mr_array(struct ft_context *ctx_arr, char **mr_bufs)
+{
+	int i;
+
+	if (!mr_bufs)
+		return;
+
+	for (i = 0; i < opts.window_size; i++) {
+		FT_CLOSE_FID(ctx_arr[i].mr);
+		free(mr_bufs[i]);
+	}
+}
+
 static void ft_close_fids(void)
 {
 	if (mr != &no_mr)
@@ -1376,17 +1459,20 @@ static void ft_close_fids(void)
 
 void ft_free_res(void)
 {
-	ft_close_fids();
+	ft_cleanup_mr_array(tx_ctx_arr, tx_mr_bufs);
+	ft_cleanup_mr_array(rx_ctx_arr, rx_mr_bufs);
 
 	free(tx_ctx_arr);
 	free(rx_ctx_arr);
 	tx_ctx_arr = NULL;
 	rx_ctx_arr = NULL;
 
+	ft_close_fids();
+
 	if (buf) {
 		free(buf);
 		buf = rx_buf = tx_buf = NULL;
-		buf_size = rx_size = tx_size = 0;
+		buf_size = rx_size = tx_size = tx_mr_size = rx_mr_size = 0;
 	}
 	if (fi_pep) {
 		fi_freeinfo(fi_pep);
@@ -1623,7 +1709,7 @@ static int ft_progress(struct fid_cq *cq, uint64_t total, uint64_t *cq_cntr)
 	} while (0)
 
 ssize_t ft_post_tx_buf(struct fid_ep *ep, fi_addr_t fi_addr, size_t size,
-		       uint64_t data, struct fi_context* ctx,
+		       uint64_t data, void *ctx,
 		       void *op_buf, void *op_mr_desc, uint64_t op_tag)
 {
 	size += ft_tx_prefix_size();
@@ -1654,13 +1740,13 @@ ssize_t ft_post_tx_buf(struct fid_ep *ep, fi_addr_t fi_addr, size_t size,
 }
 
 ssize_t ft_post_tx(struct fid_ep *ep, fi_addr_t fi_addr, size_t size,
-		   uint64_t data, struct fi_context* ctx)
+		   uint64_t data, void *ctx)
 {
 	return ft_post_tx_buf(ep, fi_addr, size, data,
 			      ctx, tx_buf, mr_desc, ft_tag);
 }
 
-ssize_t ft_tx(struct fid_ep *ep, fi_addr_t fi_addr, size_t size, struct fi_context *ctx)
+ssize_t ft_tx(struct fid_ep *ep, fi_addr_t fi_addr, size_t size, void *ctx)
 {
 	ssize_t ret;
 
@@ -1885,7 +1971,7 @@ int check_compare_atomic_op(struct fid_ep *endpoint, enum fi_op op,
 	return check_atomic_attr(op, datatype, FI_COMPARE_ATOMIC);
 }
 
-ssize_t ft_post_rx_buf(struct fid_ep *ep, size_t size, struct fi_context* ctx,
+ssize_t ft_post_rx_buf(struct fid_ep *ep, size_t size, void *ctx,
 		       void *op_buf, void *op_mr_desc, uint64_t op_tag)
 {
 	size = MAX(size, FT_MAX_CTRL_MSG) + ft_rx_prefix_size();
@@ -1901,7 +1987,7 @@ ssize_t ft_post_rx_buf(struct fid_ep *ep, size_t size, struct fi_context* ctx,
 	return 0;
 }
 
-ssize_t ft_post_rx(struct fid_ep *ep, size_t size, struct fi_context* ctx)
+ssize_t ft_post_rx(struct fid_ep *ep, size_t size, void *ctx)
 {
 	return ft_post_rx_buf(ep, size, ctx, rx_buf, mr_desc, ft_tag);
 }
@@ -2165,7 +2251,7 @@ int ft_get_tx_comp(uint64_t total)
 }
 
 int ft_sendmsg(struct fid_ep *ep, fi_addr_t fi_addr,
-		size_t size, struct fi_context *ctx, int flags)
+		size_t size, void *ctx, int flags)
 {
 	int ret;
 	struct fi_msg msg;
@@ -2209,7 +2295,7 @@ int ft_sendmsg(struct fid_ep *ep, fi_addr_t fi_addr,
 }
 
 int ft_recvmsg(struct fid_ep *ep, fi_addr_t fi_addr,
-	       size_t size, struct fi_context *ctx, int flags)
+	       size_t size, void *ctx, int flags)
 {
 	int ret;
 	struct fi_msg msg;

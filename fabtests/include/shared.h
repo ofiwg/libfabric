@@ -118,6 +118,7 @@ enum {
 	FT_OPT_SKIP_MSG_ALLOC	= 1 << 12,
 	FT_OPT_SKIP_REG_MR	= 1 << 13,
 	FT_OPT_OOB_ADDR_EXCH	= 1 << 14,
+	FT_OPT_ALLOC_MULT_MR	= 1 << 15,
 	FT_OPT_OOB_CTRL		= FT_OPT_OOB_SYNC | FT_OPT_OOB_ADDR_EXCH,
 };
 
@@ -133,6 +134,13 @@ enum ft_atomic_opcodes {
 	FT_ATOMIC_BASE,
 	FT_ATOMIC_FETCH,
 	FT_ATOMIC_COMPARE,
+};
+
+struct ft_context {
+	char *buf;
+	void *desc;
+	struct fid_mr *mr;
+	struct fi_context2 context;
 };
 
 struct ft_opts {
@@ -180,12 +188,13 @@ extern struct fid_mc *mc;
 
 extern fi_addr_t remote_fi_addr;
 extern char *buf, *tx_buf, *rx_buf;
-extern size_t buf_size, tx_size, rx_size;
+extern struct ft_context *tx_ctx_arr, *rx_ctx_arr;
+extern char **tx_mr_bufs, **rx_mr_bufs;
+extern size_t buf_size, tx_size, rx_size, tx_mr_size, rx_mr_size;
 extern int tx_fd, rx_fd;
 extern int timeout;
 
 extern struct fi_context tx_ctx, rx_ctx;
-extern struct fi_context *tx_ctx_arr, *rx_ctx_arr;
 extern uint64_t remote_cq_data;
 
 extern uint64_t tx_seq, rx_seq, tx_cq_cntr, rx_cq_cntr;
@@ -256,6 +265,8 @@ extern char default_port[8];
 #define FT_STR_LEN 32
 #define FT_MAX_CTRL_MSG 64
 #define FT_MR_KEY 0xC0DE
+#define FT_TX_MR_KEY (FT_MR_KEY + 1)
+#define FT_RX_MR_KEY 0xFFFF 
 #define FT_MSG_MR_ACCESS (FI_SEND | FI_RECV)
 #define FT_RMA_MR_ACCESS (FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE)
 
@@ -409,16 +420,16 @@ int ft_finalize_ep(struct fid_ep *ep);
 
 size_t ft_rx_prefix_size(void);
 size_t ft_tx_prefix_size(void);
-ssize_t ft_post_rx(struct fid_ep *ep, size_t size, struct fi_context* ctx);
-ssize_t ft_post_rx_buf(struct fid_ep *ep, size_t size, struct fi_context* ctx,
+ssize_t ft_post_rx(struct fid_ep *ep, size_t size, void *ctx);
+ssize_t ft_post_rx_buf(struct fid_ep *ep, size_t size, void *ctx,
 		       void *op_buf, void *op_mr_desc, uint64_t op_tag);
 ssize_t ft_post_tx(struct fid_ep *ep, fi_addr_t fi_addr, size_t size,
-		uint64_t data, struct fi_context* ctx);
+		uint64_t data, void *ctx);
 ssize_t ft_post_tx_buf(struct fid_ep *ep, fi_addr_t fi_addr, size_t size,
-		       uint64_t data, struct fi_context* ctx,
+		       uint64_t data, void *ctx,
 		       void *op_buf, void *op_mr_desc, uint64_t op_tag);
 ssize_t ft_rx(struct fid_ep *ep, size_t size);
-ssize_t ft_tx(struct fid_ep *ep, fi_addr_t fi_addr, size_t size, struct fi_context *ctx);
+ssize_t ft_tx(struct fid_ep *ep, fi_addr_t fi_addr, size_t size, void *ctx);
 ssize_t ft_inject(struct fid_ep *ep, fi_addr_t fi_addr, size_t size);
 ssize_t ft_post_rma(enum ft_rma_opcodes op, struct fid_ep *ep, size_t size,
 		struct fi_rma_iov *remote, void *context);
@@ -444,9 +455,9 @@ int ft_cq_readerr(struct fid_cq *cq);
 int ft_get_rx_comp(uint64_t total);
 int ft_get_tx_comp(uint64_t total);
 int ft_recvmsg(struct fid_ep *ep, fi_addr_t fi_addr,
-		size_t size, struct fi_context *ctx, int flags);
+		size_t size, void *ctx, int flags);
 int ft_sendmsg(struct fid_ep *ep, fi_addr_t fi_addr,
-		size_t size, struct fi_context *ctx, int flags);
+		size_t size, void *ctx, int flags);
 int ft_cq_read_verify(struct fid_cq *cq, void *op_context);
 
 void eq_readerr(struct fid_eq *eq, const char *eq_str);

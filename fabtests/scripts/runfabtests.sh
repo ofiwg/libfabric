@@ -126,6 +126,8 @@ functional_tests=(
 	"fi_inj_complete -e msg -SR"
 	"fi_inj_complete -e rdm -SR"
 	"fi_inj_complete -e dgram -SR"
+	"fi_bw -e rdm -v -T 1"
+	"fi_bw -e msg -v -T 1"
 )
 
 short_tests=(

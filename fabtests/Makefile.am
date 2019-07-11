@@ -40,6 +40,7 @@ bin_PROGRAMS = \
 	functional/fi_resmgmt_test \
 	functional/fi_rdm_atomic \
 	functional/fi_multi_recv \
+	functional/fi_bw \
 	benchmarks/fi_msg_pingpong \
 	benchmarks/fi_msg_bw \
 	benchmarks/fi_rma_bw \
@@ -236,6 +237,10 @@ functional_fi_rdm_atomic_LDADD = libfabtests.la
 functional_fi_multi_recv_SOURCES = \
 	functional/multi_recv.c
 functional_fi_multi_recv_LDADD = libfabtests.la
+
+functional_fi_bw_SOURCES = \
+	functional/bw.c
+functional_fi_bw_LDADD = libfabtests.la
 
 benchmarks_fi_msg_pingpong_SOURCES = \
 	benchmarks/msg_pingpong.c \
