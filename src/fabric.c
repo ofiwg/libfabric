@@ -861,6 +861,7 @@ void fi_ini(void)
 	ofi_register_provider(PSM2_INIT, NULL);
 	ofi_register_provider(PSM_INIT, NULL);
 	ofi_register_provider(USNIC_INIT, NULL);
+	ofi_register_provider(MLX_INIT, NULL);
 	ofi_register_provider(GNI_INIT, NULL);
 	ofi_register_provider(BGQ_INIT, NULL);
 	ofi_register_provider(NETDIR_INIT, NULL);
