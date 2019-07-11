@@ -770,9 +770,9 @@ static ssize_t rxr_multi_recv(struct rxr_ep *rxr_ep, const struct iovec *iov,
 			 * long msg completion. Last msg completion will free
 			 * posted rx_entry.
 			 */
-			if (ret != -FI_ENOMSG || ret != 0)
-				return ret;
-			return 0;
+			if (ret == -FI_ENOMSG)
+				return 0;
+			return ret;
 		}
 
 		if (ret == -FI_ENOMSG) {
