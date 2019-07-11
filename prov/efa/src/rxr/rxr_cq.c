@@ -1073,7 +1073,8 @@ static void rxr_cq_handle_rts(struct rxr_ep *ep,
 
 	if (rxr_need_sas_ordering(ep)) {
 		ret = rxr_cq_reorder_msg(ep, peer, pkt_entry);
-		if (ret && ret != -FI_EALREADY) {
+		if (ret == 1) {
+			/* Packet was queued */
 			return;
 		} else if (OFI_UNLIKELY(ret == -FI_EALREADY)) {
 			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
@@ -1087,6 +1088,12 @@ static void rxr_cq_handle_rts(struct rxr_ep *ep,
 			return;
 		} else if (OFI_UNLIKELY(ret == -FI_ENOMEM)) {
 			rxr_eq_write_error(ep, FI_ENOBUFS, -FI_ENOBUFS);
+			return;
+		} else if (OFI_UNLIKELY(ret < 0)) {
+			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+				"Unknown error %d processing RTS packet msg_id: %"
+				PRIu32 "\n", ret, rts_hdr->msg_id);
+			rxr_eq_write_error(ep, FI_EIO, ret);
 			return;
 		}
 
