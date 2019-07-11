@@ -19,6 +19,7 @@ export GIT_DISCOVERY_ACROSS_FILESYSTEM=1
 TOP_DIR=${TOP_DIR:-$(realpath $(git rev-parse --show-toplevel)/../)}
 
 modprobe ptp
+modprobe amd_iommu_v2
 insmod $TOP_DIR/cxi-driver/cxi/cxicore.ko
 insmod $TOP_DIR/cxi-driver/cxi/cxi-user.ko
 
