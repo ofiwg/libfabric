@@ -2704,6 +2704,7 @@ void ft_usage(char *name, char *desc)
 	FT_PRINT_OPTS_USAGE("", "fi_unexpected_msg");
 	FT_PRINT_OPTS_USAGE("", "fi_resmgmt_test");
 	FT_PRINT_OPTS_USAGE("", "fi_inj_complete");
+	FT_PRINT_OPTS_USAGE("", "fi_bw");
 	FT_PRINT_OPTS_USAGE("-M <mode>", "Disable mode bit from test");
 	FT_PRINT_OPTS_USAGE("", "mr_local");
 	FT_PRINT_OPTS_USAGE("-a <address vector name>", "name of address vector");

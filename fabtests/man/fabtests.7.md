@@ -142,6 +142,11 @@ features of libfabric.
   buffer tries to remain the same.  This test is used to validate the
   correct behavior of memory registration caches.
 
+*fi_bw*
+: Performs a one-sided bandwidth test with an option for data verification.
+  A sleep time on the receiving side can be enabled in order to allow
+  the sender to get ahead of the receiver.
+
 # Benchmarks
 
 The client and the server exchange messages in either a ping-pong manner,

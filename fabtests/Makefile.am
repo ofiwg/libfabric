@@ -385,6 +385,7 @@ dummy_man_pages = \
 	man/man1/fi_getinfo_test.1 \
 	man/man1/fi_mr_test.1 \
 	man/man1/fi_resource_freeing.1 \
+	man/man1/fi_bw.1 \
 	man/man1/fi_ubertest.1
 
 nroff:
