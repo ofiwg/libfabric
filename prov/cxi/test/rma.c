@@ -576,23 +576,25 @@ void cxit_setup_rma_selective_completion(void)
 Test(rma, selective_completion, .init = cxit_setup_rma_selective_completion)
 {
 	int ret;
-	uint8_t *send_buf;
+	uint8_t *loc_buf;
 	int win_len = 0x1000;
-	int send_len = 8;
+	int loc_len = 8;
 	struct mem_region mem_window;
 	int key_val = 0x1f;
 	struct fi_cq_tagged_entry cqe;
 	struct fi_msg_rma msg = {};
 	struct iovec iov;
 	struct fi_rma_iov rma;
+	int count = 0;
 
-	send_buf = calloc(1, win_len);
-	cr_assert_not_null(send_buf, "send_buf alloc failed");
+	loc_buf = calloc(1, win_len);
+	cr_assert_not_null(loc_buf, "loc_buf alloc failed");
 
-	mr_create(win_len, FI_REMOTE_WRITE, 0xa0, key_val, &mem_window);
+	mr_create(win_len, FI_REMOTE_WRITE | FI_REMOTE_READ, 0xa0, key_val,
+		  &mem_window);
 
-	iov.iov_base = send_buf;
-	iov.iov_len = send_len;
+	iov.iov_base = loc_buf;
+	iov.iov_len = loc_len;
 
 	rma.addr = 0;
 	rma.key = key_val;
@@ -603,9 +605,11 @@ Test(rma, selective_completion, .init = cxit_setup_rma_selective_completion)
 	msg.rma_iov_count = 1;
 	msg.addr = cxit_ep_fi_addr;
 
-	/* Normal writes generate completions */
-	for (send_len = 1; send_len <= win_len; send_len <<= 1) {
-		ret = fi_write(cxit_ep, send_buf, send_len, NULL,
+	/* Puts */
+
+	/* Completion requested by default. */
+	for (loc_len = 1; loc_len <= win_len; loc_len <<= 1) {
+		ret = fi_write(cxit_ep, loc_buf, loc_len, NULL,
 			       cxit_ep_fi_addr, 0, key_val, NULL);
 		cr_assert(ret == FI_SUCCESS);
 
@@ -616,15 +620,15 @@ Test(rma, selective_completion, .init = cxit_setup_rma_selective_completion)
 		validate_tx_event(&cqe, FI_RMA | FI_WRITE, NULL);
 
 		/* Validate sent data */
-		for (int i = 0; i < send_len; i++)
-			cr_assert_eq(mem_window.mem[i], send_buf[i],
+		for (int i = 0; i < loc_len; i++)
+			cr_assert_eq(mem_window.mem[i], loc_buf[i],
 				     "data mismatch, element: (%d) %02x != %02x\n", i,
-				     mem_window.mem[i], send_buf[i]);
+				     mem_window.mem[i], loc_buf[i]);
 	}
 
-	/* Request completions from fi_writemsg */
-	for (send_len = 1; send_len <= win_len; send_len <<= 1) {
-		iov.iov_len = send_len;
+	/* Completion explicitly requested. */
+	for (loc_len = 1; loc_len <= win_len; loc_len <<= 1) {
+		iov.iov_len = loc_len;
 		ret = fi_writemsg(cxit_ep, &msg, FI_COMPLETION);
 		cr_assert(ret == FI_SUCCESS);
 
@@ -635,21 +639,21 @@ Test(rma, selective_completion, .init = cxit_setup_rma_selective_completion)
 		validate_tx_event(&cqe, FI_RMA | FI_WRITE, NULL);
 
 		/* Validate sent data */
-		for (int i = 0; i < send_len; i++)
-			cr_assert_eq(mem_window.mem[i], send_buf[i],
+		for (int i = 0; i < loc_len; i++)
+			cr_assert_eq(mem_window.mem[i], loc_buf[i],
 				     "data mismatch, element: (%d) %02x != %02x\n", i,
-				     mem_window.mem[i], send_buf[i]);
+				     mem_window.mem[i], loc_buf[i]);
 	}
 
-	/* Suppress completions using fi_writemsg */
-	for (send_len = 1; send_len <= win_len; send_len <<= 1) {
-		iov.iov_len = send_len;
+	/* Suppress completion. */
+	for (loc_len = 1; loc_len <= win_len; loc_len <<= 1) {
+		iov.iov_len = loc_len;
 		ret = fi_writemsg(cxit_ep, &msg, 0);
 		cr_assert(ret == FI_SUCCESS);
 
 		/* Validate sent data */
-		for (int i = 0; i < send_len; i++)
-			while (mem_window.mem[i] != send_buf[i])
+		for (int i = 0; i < loc_len; i++)
+			while (mem_window.mem[i] != loc_buf[i])
 				sched_yield();
 
 		/* Ensure no events were generated */
@@ -658,22 +662,87 @@ Test(rma, selective_completion, .init = cxit_setup_rma_selective_completion)
 	}
 
 	/* Inject never generates an event */
-	send_len = 8;
-	ret = fi_inject_write(cxit_ep, send_buf, send_len, cxit_ep_fi_addr, 0,
+	loc_len = 8;
+	ret = fi_inject_write(cxit_ep, loc_buf, loc_len, cxit_ep_fi_addr, 0,
 			      key_val);
 	cr_assert(ret == FI_SUCCESS);
 
 	/* Validate sent data */
-	for (int i = 0; i < send_len; i++)
-		while (mem_window.mem[i] != send_buf[i])
+	for (int i = 0; i < loc_len; i++)
+		while (mem_window.mem[i] != loc_buf[i])
 			sched_yield();
 
 	/* Make sure an event wasn't delivered */
 	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
 	cr_assert(ret == -FI_EAGAIN);
 
+	/* Gets */
+	memset(loc_buf, 0, win_len);
+	count = 0;
+
+	/* Completion requested by default. */
+	for (loc_len = 1; loc_len <= win_len; loc_len <<= 1) {
+		ret = fi_read(cxit_ep, loc_buf, loc_len, NULL,
+			      cxit_ep_fi_addr, 0, key_val, NULL);
+		cr_assert(ret == FI_SUCCESS);
+		count++;
+
+		/* Wait for async event indicating data has been sent */
+		ret = cxit_await_completion(cxit_tx_cq, &cqe);
+		cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+
+		validate_tx_event(&cqe, FI_RMA | FI_READ, NULL);
+
+		/* Validate sent data */
+		for (int i = 0; i < loc_len; i++)
+			cr_assert_eq(mem_window.mem[i], loc_buf[i],
+				     "data mismatch, element: (%d) %02x != %02x\n", i,
+				     mem_window.mem[i], loc_buf[i]);
+	}
+
+	/* Completion explicitly requested. */
+	for (loc_len = 1; loc_len <= win_len; loc_len <<= 1) {
+		iov.iov_len = loc_len;
+		ret = fi_readmsg(cxit_ep, &msg, FI_COMPLETION);
+		cr_assert(ret == FI_SUCCESS);
+		count++;
+
+		/* Wait for async event indicating data has been sent */
+		ret = cxit_await_completion(cxit_tx_cq, &cqe);
+		cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+
+		validate_tx_event(&cqe, FI_RMA | FI_READ, NULL);
+
+		/* Validate sent data */
+		for (int i = 0; i < loc_len; i++)
+			cr_assert_eq(mem_window.mem[i], loc_buf[i],
+				     "data mismatch, element: (%d) %02x != %02x\n", i,
+				     mem_window.mem[i], loc_buf[i]);
+	}
+
+	/* Suppress completion. */
+	for (loc_len = 1; loc_len <= win_len; loc_len <<= 1) {
+		iov.iov_len = loc_len;
+		ret = fi_readmsg(cxit_ep, &msg, 0);
+		cr_assert(ret == FI_SUCCESS);
+		count++;
+
+		while (fi_cntr_read(cxit_read_cntr) != count)
+			sched_yield();
+
+		/* Validate sent data */
+		for (int i = 0; i < loc_len; i++)
+			cr_assert_eq(mem_window.mem[i], loc_buf[i],
+				     "data mismatch, element: (%d) %02x != %02x\n", i,
+				     mem_window.mem[i], loc_buf[i]);
+
+		/* Ensure no events were generated */
+		ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+		cr_assert(ret == -FI_EAGAIN);
+	}
+
 	mr_destroy(&mem_window);
-	free(send_buf);
+	free(loc_buf);
 }
 
 void cxit_setup_rma_selective_completion_suppress(void)

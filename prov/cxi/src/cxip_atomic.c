@@ -293,15 +293,18 @@ static int _cxip_amo_cb(struct cxip_req *req, const union c_event *event)
 {
 	int ret;
 	int event_rc;
+	int success_event = (req->flags & FI_COMPLETION);
 
 	req->flags &= (FI_ATOMIC | FI_READ | FI_WRITE);
 
 	event_rc = cxi_init_event_rc(event);
 	if (event_rc == C_RC_OK) {
-		ret = cxip_cq_req_complete(req);
-		if (ret != FI_SUCCESS)
-			CXIP_LOG_ERROR("Failed to report completion: %d\n",
-				       ret);
+		if (success_event) {
+			ret = cxip_cq_req_complete(req);
+			if (ret != FI_SUCCESS)
+				CXIP_LOG_ERROR("Failed to report completion: %d\n",
+					       ret);
+		}
 	} else {
 		ret = cxip_cq_req_error(req, 0, FI_EIO, event_rc, NULL, 0);
 		if (ret != FI_SUCCESS)
@@ -552,7 +555,7 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	}
 
 	/* Allocate a CQ request */
-	if (flags & FI_COMPLETION) {
+	if (result || flags & FI_COMPLETION) {
 		req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
 		if (!req) {
 			CXIP_LOG_DBG("Failed to allocate request\n");
@@ -561,14 +564,18 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		}
 
 		/* Values set here are passed back to the user through the CQ */
-		req->context = (uint64_t)msg->context;
+		if (flags & FI_COMPLETION)
+			req->context = (uint64_t)msg->context;
+		else
+			req->context = (uint64_t)txc->fid.ctx.fid.context;
 		req->flags = FI_ATOMIC;
 		req->flags |= (req_type == CXIP_RQ_AMO ? FI_WRITE : FI_READ);
+		req->flags |= (flags & FI_COMPLETION);
 		req->data_len = 0;
 		req->buf = 0;
 		req->data = 0;
 		req->tag = 0;
-		req->cb = (result) ? _cxip_famo_cb : _cxip_amo_cb;
+		req->cb = (result ? _cxip_famo_cb : _cxip_amo_cb);
 		req->amo.local_md = result_md;
 		req->amo.result_buf = local_result;
 		req->amo.txc = txc;
@@ -599,15 +606,15 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		cmd.c_state.event_success_disable = 1;
 	}
 
-	if (result) {
-		if (txc->read_cntr) {
-			cmd.c_state.event_ct_reply = 1;
-			cmd.c_state.ct = txc->read_cntr->ct->ctn;
-		}
-	} else {
+	if (req_type == CXIP_RQ_AMO) {
 		if (txc->write_cntr) {
 			cmd.c_state.event_ct_ack = 1;
 			cmd.c_state.ct = txc->write_cntr->ct->ctn;
+		}
+	} else {
+		if (txc->read_cntr) {
+			cmd.c_state.event_ct_reply = 1;
+			cmd.c_state.ct = txc->read_cntr->ct->ctn;
 		}
 	}
 

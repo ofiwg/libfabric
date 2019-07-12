@@ -185,7 +185,10 @@ static ssize_t _cxip_rma_op(enum fi_op_type op, struct cxip_txc *txc,
 		}
 
 		/* Populate request */
-		req->context = (uint64_t)context;
+		if (flags & FI_COMPLETION)
+			req->context = (uint64_t)context;
+		else
+			req->context = (uint64_t)txc->fid.ctx.fid.context;
 		req->data_len = 0;
 		req->buf = 0;
 		req->data = 0;

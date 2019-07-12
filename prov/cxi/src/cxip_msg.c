@@ -1948,7 +1948,11 @@ static ssize_t _cxip_send_long(struct cxip_txc *txc, const void *buf,
 		goto err_unmap;
 	}
 
-	req->context = (uint64_t)context;
+	if (flags & FI_COMPLETION)
+		req->context = (uint64_t)context;
+	else
+		req->context = (uint64_t)txc->fid.ctx.fid.context;
+
 	req->flags = FI_SEND | (flags & FI_COMPLETION);
 
 	if (tagged) {
@@ -2126,7 +2130,11 @@ static ssize_t _cxip_send_eager(struct cxip_txc *txc, const void *buf,
 			goto err_unmap;
 		}
 
-		req->context = (uint64_t)context;
+		if (flags & FI_COMPLETION)
+			req->context = (uint64_t)context;
+		else
+			req->context = (uint64_t)txc->fid.ctx.fid.context;
+
 		req->flags = FI_SEND | (flags & FI_COMPLETION);
 
 		if (tagged)

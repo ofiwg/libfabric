@@ -128,13 +128,12 @@ int cxip_mr_enable(struct cxip_mr *mr)
 	cmd.command.opcode     = C_CMD_TGT_APPEND;
 	cmd.target.ptl_list    = C_PTL_LIST_PRIORITY;
 	cmd.target.ptlte_index = mr->pte->ptn;
-	cmd.target.no_truncate = 0;
-	cmd.target.unexpected_hdr_disable = 0;
 	cmd.target.buffer_id   = buffer_id;
 	cmd.target.lac         = mr->md->lac;
 	cmd.target.start       = CXI_VA_TO_IOVA(mr->md, mr->buf);
 	cmd.target.length      = mr->len;
-	cmd.target.match_bits  = 0;
+
+	cmd.target.event_comm_disable = 1;
 
 	if (mr->cntr) {
 		cmd.target.event_ct_comm = 1;
@@ -236,7 +235,10 @@ int cxip_mr_disable(struct cxip_mr *mr)
 	    event->tgt_long.return_code != C_RC_OK ||
 	    event->tgt_long.buffer_id != buffer_id) {
 		/* This is a device malfunction */
-		CXIP_LOG_ERROR("Invalid Unlink EQE\n");
+		CXIP_LOG_ERROR("Invalid Unlink EQE %s rc: %s (id: 0x%x)\n",
+			       cxi_event_to_str(event),
+			       cxi_rc_to_str(cxi_event_rc(event)),
+			       event->tgt_long.buffer_id);
 	}
 
 	cxi_eq_ack_events(mr->domain->dev_if->mr_evtq);
