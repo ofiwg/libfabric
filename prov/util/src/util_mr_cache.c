@@ -298,7 +298,10 @@ int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *att
 		goto unlock;
 	}
 
-	/* This branch is always false if the merging entries wasn't requested */
+	/* This branch may be taken even if user hasn't enabled merging regions.
+	 * e.g. a new region encloses previously cached smaller region. Cache
+	 * find function (util_mr_find_within) would match the enclosed region.
+	 */
 	if (!ofi_iov_within(attr->mr_iov, &(*entry)->iov)) {
 		ret = util_mr_cache_merge(cache, attr, *entry, entry);
 		goto unlock;
