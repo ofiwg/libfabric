@@ -64,7 +64,7 @@
 
 #define RXR_MAJOR_VERSION	(2)
 #define RXR_MINOR_VERSION	(0)
-#define RXR_PROTOCOL_VERSION	(3)
+#define RXR_PROTOCOL_VERSION	(2)
 #define RXR_FI_VERSION		FI_VERSION(1, 8)
 
 #define RXR_IOV_LIMIT		(4)
@@ -125,6 +125,7 @@ extern const uint32_t rxr_poison_value;
 #define RXR_TAGGED		BIT_ULL(0)
 #define RXR_REMOTE_CQ_DATA	BIT_ULL(1)
 #define RXR_REMOTE_SRC_ADDR	BIT_ULL(2)
+
 /*
  * TODO: In future we will send RECV_CANCEL signal to sender,
  * to stop transmitting large message, this flag is also
@@ -144,6 +145,12 @@ extern const uint32_t rxr_poison_value;
 #define RXR_WRITE		(1 << 6)
 #define RXR_READ_REQ		(1 << 7)
 #define RXR_READ_DATA		(1 << 8)
+
+/*
+ * Used to provide protocol compatibility across versions that include a
+ * credit request along with the RTS and those that do not
+ */
+#define RXR_CREDIT_REQUEST	BIT_ULL(9)
 
 /*
  * OFI flags
