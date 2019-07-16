@@ -300,6 +300,7 @@ int rxr_cq_handle_cq_error(struct rxr_ep *ep, ssize_t err)
 	struct rxr_pkt_entry *pkt_entry;
 	struct rxr_rx_entry *rx_entry;
 	struct rxr_tx_entry *tx_entry;
+	struct rxr_peer *peer;
 	ssize_t ret;
 
 	memset(&err_entry, 0, sizeof(err_entry));
@@ -339,6 +340,7 @@ int rxr_cq_handle_cq_error(struct rxr_ep *ep, ssize_t err)
 				&err_entry);
 
 	pkt_entry = (struct rxr_pkt_entry *)err_entry.op_context;
+	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 
 	/*
 	 * A connack send could fail at the core provider if the peer endpoint
@@ -355,10 +357,7 @@ int rxr_cq_handle_cq_error(struct rxr_ep *ep, ssize_t err)
 		 * the flags instead to determine if this is a send or recv.
 		 */
 		if (err_entry.flags & FI_SEND) {
-#if ENABLE_DEBUG
-			ep->failed_send_comps++;
-#endif
-			ep->tx_pending--;
+			rxr_ep_dec_tx_pending(ep, peer, 1);
 			rxr_release_tx_pkt_entry(ep, pkt_entry);
 		} else if (err_entry.flags & FI_RECV) {
 			rxr_release_rx_pkt_entry(ep, pkt_entry);
@@ -385,10 +384,7 @@ int rxr_cq_handle_cq_error(struct rxr_ep *ep, ssize_t err)
 	 * packet. Decrement the tx_pending counter and fall through to
 	 * the rx or tx entry handlers.
 	 */
-	ep->tx_pending--;
-#if ENABLE_DEBUG
-	ep->failed_send_comps++;
-#endif
+	rxr_ep_dec_tx_pending(ep, peer, 1);
 	if (RXR_GET_X_ENTRY_TYPE(pkt_entry) == RXR_TX_ENTRY) {
 		tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
 		if (err_entry.err != -FI_EAGAIN ||
@@ -501,7 +497,6 @@ static void rxr_cq_post_connack(struct rxr_ep *ep,
 
 ssize_t rxr_cq_post_cts(struct rxr_ep *ep,
 			struct rxr_rx_entry *rx_entry,
-			uint32_t max_window,
 			uint64_t size)
 {
 	ssize_t ret;
@@ -516,15 +511,13 @@ ssize_t rxr_cq_post_cts(struct rxr_ep *ep,
 	if (OFI_UNLIKELY(!pkt_entry))
 		return -FI_EAGAIN;
 
-	rxr_ep_init_cts_pkt_entry(ep, rx_entry, pkt_entry, max_window, size,
-				  &credits);
+	rxr_ep_init_cts_pkt_entry(ep, rx_entry, pkt_entry, size, &credits);
 
 	ret = rxr_ep_send_pkt(ep, pkt_entry, rx_entry->addr);
 	if (OFI_UNLIKELY(ret))
 		goto release_pkt;
 
 	rx_entry->window = rxr_get_cts_hdr(pkt_entry->pkt)->window;
-	assert(ep->available_data_bufs >= credits);
 	ep->available_data_bufs -= credits;
 
 	/*
@@ -927,6 +920,7 @@ static int rxr_cq_process_rts(struct rxr_ep *ep,
 	ep->rx_pending++;
 #endif
 	rx_entry->state = RXR_RX_RECV;
+	rx_entry->credit_request = rts_hdr->credit_request;
 	ret = rxr_ep_post_cts_or_queue(ep, rx_entry, bytes_left);
 	if (pkt_entry->type == RXR_PKT_ENTRY_POSTED)
 		ep->rx_bufs_to_post++;
@@ -945,15 +939,11 @@ static int rxr_cq_reorder_msg(struct rxr_ep *ep,
 	rts_hdr = rxr_get_rts_hdr(pkt_entry->pkt);
 
 	/*
-	 * TODO: Do it at the time of AV insertion w/dup detection.
+	 * TODO: Initialize peer state  at the time of AV insertion
+	 * where duplicate detection is available.
 	 */
-	if (!peer->robuf) {
-		peer->robuf = freestack_pop(ep->robuf_fs);
-		peer->robuf = ofi_recvwin_buf_alloc(peer->robuf,
-						    rxr_env.recvwin_size);
-		assert(peer->robuf);
-		dlist_insert_tail(&peer->entry, &ep->peer_list);
-	}
+	if (!peer->rx_init)
+		rxr_ep_peer_init(ep, peer);
 
 #if ENABLE_DEBUG
 	if (rts_hdr->msg_id != ofi_recvwin_next_exp_id(peer->robuf))
@@ -1139,9 +1129,12 @@ void rxr_cq_handle_pkt_with_data(struct rxr_ep *ep,
 				 char *data, size_t seg_offset,
 				 size_t seg_size)
 {
+	struct rxr_peer *peer;
 	uint64_t bytes;
 	ssize_t ret;
 
+	peer = rxr_ep_get_peer(ep, rx_entry->addr);
+	peer->rx_credits += ofi_div_ceil(seg_size, ep->max_data_payload_size);
 	rx_entry->window -= seg_size;
 
 	if (ep->available_data_bufs < rxr_get_rx_pool_chunk_cnt(ep))
@@ -1199,6 +1192,7 @@ static void rxr_cq_handle_cts(struct rxr_ep *ep,
 			      struct fi_cq_msg_entry *comp,
 			      struct rxr_pkt_entry *pkt_entry)
 {
+	struct rxr_peer *peer;
 	struct rxr_cts_hdr *cts_pkt;
 	struct rxr_tx_entry *tx_entry;
 
@@ -1210,6 +1204,12 @@ static void rxr_cq_handle_cts(struct rxr_ep *ep,
 
 	tx_entry->rx_id = cts_pkt->rx_id;
 	tx_entry->window = cts_pkt->window;
+
+	/* Return any excess tx_credits that were borrowed for the request */
+	peer = rxr_ep_get_peer(ep, tx_entry->addr);
+	tx_entry->credit_allocated = ofi_div_ceil(cts_pkt->window, ep->max_data_payload_size);
+	if (tx_entry->credit_allocated < tx_entry->credit_request)
+		peer->tx_credits += tx_entry->credit_request - tx_entry->credit_allocated;
 
 	rxr_release_rx_pkt_entry(ep, pkt_entry);
 	ep->rx_bufs_to_post++;
@@ -1356,15 +1356,16 @@ void rxr_cq_handle_pkt_send_completion(struct rxr_ep *ep, struct fi_cq_msg_entry
 {
 	struct rxr_pkt_entry *pkt_entry;
 	struct rxr_tx_entry *tx_entry = NULL;
-	uint32_t tx_id;
-	int ret;
+	struct rxr_peer *peer;
 	struct rxr_rts_hdr *rts_hdr = NULL;
 	struct rxr_readrsp_hdr *readrsp_hdr = NULL;
+	uint32_t tx_id;
+	int ret;
 
 	pkt_entry = (struct rxr_pkt_entry *)comp->op_context;
-
 	assert(rxr_get_base_hdr(pkt_entry->pkt)->version ==
 	       RXR_PROTOCOL_VERSION);
+	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 
 	switch (rxr_get_base_hdr(pkt_entry->pkt)->type) {
 	case RXR_RTS_PKT:
@@ -1424,6 +1425,8 @@ void rxr_cq_handle_pkt_send_completion(struct rxr_ep *ep, struct fi_cq_msg_entry
 			}
 		}
 
+		peer->tx_credits += tx_entry->credit_allocated;
+
 		if (tx_entry->cq_entry.flags & FI_READ) {
 			/*
 			 * this must be on remote side
@@ -1458,7 +1461,7 @@ void rxr_cq_handle_pkt_send_completion(struct rxr_ep *ep, struct fi_cq_msg_entry
 	}
 
 	rxr_release_tx_pkt_entry(ep, pkt_entry);
-	ep->tx_pending--;
+	rxr_ep_dec_tx_pending(ep, peer, 0);
 	return;
 }
 
