@@ -32,6 +32,7 @@ static int issue_append_le(struct cxil_pte *pte, const void *buf, size_t len,
 			   uint32_t buffer_id, uint64_t match_bits,
 			   uint64_t ignore_bits, uint32_t match_id,
 			   uint64_t min_free, bool event_success_disable,
+			   bool event_unlink_disable,
 			   bool use_once, bool manage_local, bool no_truncate,
 			   bool op_put, bool op_get, struct cxip_cmdq *cmdq)
 {
@@ -51,6 +52,7 @@ static int issue_append_le(struct cxil_pte *pte, const void *buf, size_t len,
 	cmd.target.start        = CXI_VA_TO_IOVA(md->md, buf);
 	cmd.target.length       = len;
 	cmd.target.event_success_disable = event_success_disable ? 1 : 0;
+	cmd.target.event_unlink_disable = event_unlink_disable ? 1 : 0;
 	cmd.target.use_once     = use_once ? 1 : 0;
 	cmd.target.match_bits   = match_bits;
 	cmd.target.ignore_bits  = ignore_bits;
@@ -832,8 +834,8 @@ static int eager_buf_add(struct cxip_rxc *rxc)
 	ret = issue_append_le(rxc->rx_pte->pte, oflow_buf->buf,
 			      rxc->oflow_buf_size, oflow_buf->md,
 			      C_PTL_LIST_OVERFLOW, req->req_id, mb.raw, ib.raw,
-			      CXI_MATCH_ID_ANY, min_free, false, false, true,
-			      true, true, false, rxc->rx_cmdq);
+			      CXI_MATCH_ID_ANY, min_free, false, false, false,
+			      true, true, true, false, rxc->rx_cmdq);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
 		goto oflow_req_free;
@@ -960,8 +962,8 @@ static int cxip_rxc_sink_init(struct cxip_rxc *rxc)
 
 	ret = issue_append_le(rxc->rx_pte->pte, ux_buf, 1, md, // TODO len 1?
 			      C_PTL_LIST_OVERFLOW, req->req_id, mb.raw, ib.raw,
-			      CXI_MATCH_ID_ANY, 0, false, false, true, false,
-			      true, false, rxc->rx_cmdq);
+			      CXI_MATCH_ID_ANY, 0, false, false, false, true,
+			      false, true, false, rxc->rx_cmdq);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to write UX Append command: %d\n", ret);
 		goto req_free;
@@ -1532,8 +1534,8 @@ static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	/* Issue Append command */
 	ret = issue_append_le(rxc->rx_pte->pte, buf, len, recv_md,
 			      C_PTL_LIST_PRIORITY, req->req_id, mb.raw, ib.raw,
-			      match_id, 0, false, true, false, false, true,
-			      false, rxc->rx_cmdq);
+			      match_id, 0, false, true, true, false, false,
+			      true, false, rxc->rx_cmdq);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
 		goto req_free;
@@ -2033,7 +2035,7 @@ static ssize_t _cxip_send_long(struct cxip_txc *txc, const void *buf,
 			      req->send.length, req->send.send_md,
 			      C_PTL_LIST_PRIORITY, req->req_id,
 			      le_mb.raw, ~le_ib.raw, CXI_MATCH_ID_ANY, 0,
-			      false, true, false, true, false, true,
+			      false, false, true, false, true, false, true,
 			      txc->rx_cmdq);
 	if (ret) {
 		CXIP_LOG_DBG("Failed append source buffer: %d\n", ret);
