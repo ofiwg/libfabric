@@ -269,7 +269,7 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 		}
 
 		/* Use a table for AV if the app has no strong requirement */
-		if (hints->domain_attr->av_type == FI_AV_UNSPEC)
+		if (!hints->domain_attr || hints->domain_attr->av_type == FI_AV_UNSPEC)
 			info->domain_attr->av_type = FI_AV_TABLE;
 	}
 
