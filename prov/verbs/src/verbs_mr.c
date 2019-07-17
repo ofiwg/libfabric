@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2017-2019 Intel Corporation, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -33,44 +33,32 @@
 #include <ofi_util.h>
 #include "fi_verbs.h"
 
-#define FI_IBV_DEFINE_MR_REG_OPS(type)							\
-											\
-static int										\
-fi_ibv_mr ## type ## regv(struct fid *fid, const struct iovec *iov,			\
-			  size_t count, uint64_t access, uint64_t offset,		\
-			  uint64_t requested_key, uint64_t flags,			\
-			  struct fid_mr **mr, void *context)				\
-{											\
-	const struct fi_mr_attr attr = {						\
-		.mr_iov		= iov,							\
-		.iov_count	= count,						\
-		.access		= access,						\
-		.offset		= offset,						\
-		.requested_key	= requested_key,					\
-		.context	= context,						\
-	};										\
-	return fi_ibv_mr ## type ## regattr(fid, &attr, flags, mr);			\
-}											\
-											\
-static int										\
-fi_ibv_mr ## type ## reg(struct fid *fid, const void *buf, size_t len,			\
-			 uint64_t access, uint64_t offset, uint64_t requested_key,	\
-			 uint64_t flags, struct fid_mr **mr, void *context)		\
-{											\
-	const struct iovec iov = {							\
-		.iov_base	= (void *)buf,						\
-		.iov_len	= len,							\
-	};										\
-	return fi_ibv_mr ## type ## regv(fid, &iov, 1, access, offset,			\
-					 requested_key, flags, mr, context);		\
-}											\
-											\
-struct fi_ops_mr fi_ibv_mr ##type## ops = {						\
-	.size = sizeof(struct fi_ops_mr),						\
-	.reg = fi_ibv_mr ## type ## reg,						\
-	.regv = fi_ibv_mr ## type ## regv,						\
-	.regattr = fi_ibv_mr ## type ## regattr,					\
-};
+
+static int
+fi_ibv_mr_regv(struct fid *fid, const struct iovec *iov,
+	       size_t count, uint64_t access, uint64_t offset,
+	       uint64_t requested_key, uint64_t flags,
+	       struct fid_mr **mr, void *context)
+{
+	struct fid_domain *domain = container_of(fid, struct fid_domain, fid);
+
+	if (OFI_UNLIKELY(count > 1))
+		return -FI_EINVAL;
+
+	return count ? fi_mr_reg(domain, (const void *) iov->iov_base,
+				 iov->iov_len, access, offset, requested_key,
+				 flags, mr, context) :
+		       fi_mr_reg(domain, NULL, 0, access, offset, requested_key,
+				 flags, mr, context);
+}
+
+static int fi_ibv_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
+			     uint64_t flags, struct fid_mr **mr)
+{
+	return fi_ibv_mr_regv(fid, attr->mr_iov, attr->iov_count, attr->access,
+			      attr->offset, attr->requested_key, flags, mr,
+			      attr->context);
+}
 
 static inline struct ibv_mr *
 fi_ibv_mr_reg_ibv_mr(struct fi_ibv_domain *domain, void *buf,
@@ -150,24 +138,6 @@ int fi_ibv_mr_reg_common(struct fi_ibv_mem_desc *md, int fi_ibv_access,
 	return FI_SUCCESS;
 }
 
-static inline
-int fi_ibv_mr_regattr_check_args(struct fid *fid,
-				 const struct fi_mr_attr *attr,
-				 uint64_t flags)
-{
-	if (OFI_UNLIKELY(flags))
-		return -FI_EBADFLAGS;
-	if (OFI_UNLIKELY(fid->fclass != FI_CLASS_DOMAIN))
-		return -FI_EINVAL;
-	if (OFI_UNLIKELY(attr->iov_count > VERBS_MR_IOV_LIMIT)) {
-		VERBS_WARN(FI_LOG_FABRIC,
-			   "iov count > %d not supported\n",
-			   VERBS_MR_IOV_LIMIT);
-		return -FI_EINVAL;
-	}
-	return FI_SUCCESS;
-}
-
 static inline int
 fi_ibv_mr_ofi2ibv_access(uint64_t ofi_access, struct fi_ibv_domain *domain)
 {
@@ -202,7 +172,7 @@ fi_ibv_mr_ofi2ibv_access(uint64_t ofi_access, struct fi_ibv_domain *domain)
 
 static inline struct fi_ibv_mem_desc *
 fi_ibv_mr_common_cache_reg(struct fi_ibv_domain *domain,
-			 struct fi_mr_attr *attr)
+			   struct fi_mr_attr *attr)
 {
 	struct fi_ibv_mem_desc *md;
 	struct ofi_mr_entry *entry;
@@ -224,15 +194,16 @@ void fi_ibv_common_cache_dereg(struct fi_ibv_mem_desc *md)
 	ofi_mr_cache_delete(&md->domain->cache, md->entry);
 }
 
-static int fi_ibv_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
-			     uint64_t flags, struct fid_mr **mr)
+static int
+fi_ibv_mr_reg(struct fid *fid, const void *buf, size_t len,
+	      uint64_t access, uint64_t offset, uint64_t requested_key,
+	      uint64_t flags, struct fid_mr **mr, void *context)
 {
 	struct fi_ibv_mem_desc *md;
 	int ret;
 
-	ret = fi_ibv_mr_regattr_check_args(fid, attr, flags);
-	if (OFI_UNLIKELY(ret))
-		return ret;
+	if (OFI_UNLIKELY(flags))
+		return -FI_EBADFLAGS;
 
 	md = calloc(1, sizeof(*md));
 	if (OFI_UNLIKELY(!md))
@@ -242,10 +213,8 @@ static int fi_ibv_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 				  util_domain.domain_fid.fid);
 	md->mr_fid.fid.ops = &fi_ibv_mr_fi_ops;
 
-	ret = fi_ibv_mr_reg_common(md, fi_ibv_mr_ofi2ibv_access(attr->access,
-								md->domain),
-				   attr->mr_iov[0].iov_base,
-				   attr->mr_iov[0].iov_len, attr->context);
+	ret = fi_ibv_mr_reg_common(md, fi_ibv_mr_ofi2ibv_access(access, md->domain),
+				   buf, len, context);
 	if (OFI_UNLIKELY(ret))
 		goto err;
 
@@ -256,8 +225,6 @@ err:
 	return ret;
 }
 
-FI_IBV_DEFINE_MR_REG_OPS(_)
-
 static int fi_ibv_mr_cache_close(fid_t fid)
 {
 	struct fi_ibv_mem_desc *md =
@@ -267,6 +234,13 @@ static int fi_ibv_mr_cache_close(fid_t fid)
 
 	return FI_SUCCESS;
 }
+
+struct fi_ops_mr fi_ibv_mr_ops = {
+	.size = sizeof(struct fi_ops_mr),
+	.reg = fi_ibv_mr_reg,
+	.regv = fi_ibv_mr_regv,
+	.regattr = fi_ibv_mr_regattr,
+};
 
 static struct fi_ops fi_ibv_mr_cache_fi_ops = {
 	.size = sizeof(struct fi_ops),
@@ -297,25 +271,43 @@ void fi_ibv_mr_cache_entry_dereg(struct ofi_mr_cache *cache,
 	(void)fi_ibv_mr_dereg_ibv_mr(md->mr);
 }
 
-static int fi_ibv_mr_cache_regattr(struct fid *fid, const struct fi_mr_attr *attr,
-				   uint64_t flags, struct fid_mr **mr)
+static int
+fi_ibv_mr_cache_reg(struct fid *fid, const void *buf, size_t len,
+		    uint64_t access, uint64_t offset, uint64_t requested_key,
+		    uint64_t flags, struct fid_mr **mr, void *context)
 {
 	struct fi_ibv_domain *domain;
 	struct fi_ibv_mem_desc *md;
-	int ret;
+	struct fi_mr_attr attr;
+	struct iovec iov;
 
-	ret = fi_ibv_mr_regattr_check_args(fid, attr, flags);
-	if (OFI_UNLIKELY(ret))
-		return ret;
+	if (OFI_UNLIKELY(flags))
+		return -FI_EBADFLAGS;
 
 	domain = container_of(fid, struct fi_ibv_domain,
 			      util_domain.domain_fid.fid);
 
-	md = fi_ibv_mr_common_cache_reg(domain, (struct fi_mr_attr *)attr);
+	attr.access = access;
+	attr.context = context;
+	attr.iov_count = 1;
+	iov.iov_base = (void *) buf;
+	iov.iov_len = len;
+	attr.mr_iov = &iov;
+	attr.offset = offset;
+	attr.requested_key = requested_key;
+	attr.auth_key_size = 0;
+
+	md = fi_ibv_mr_common_cache_reg(domain, &attr);
 	if (OFI_UNLIKELY(!md))
-		return -FI_EAVAIL;
+		return -FI_ENOMEM;
+
 	*mr = &md->mr_fid;
 	return FI_SUCCESS;
 }
 
-FI_IBV_DEFINE_MR_REG_OPS(_cache_)
+struct fi_ops_mr fi_ibv_mr_cache_ops = {
+	.size = sizeof(struct fi_ops_mr),
+	.reg = fi_ibv_mr_cache_reg,
+	.regv = fi_ibv_mr_regv,
+	.regattr = fi_ibv_mr_regattr,
+};
