@@ -49,6 +49,7 @@ extern "C" {
 
 #define FI_SYMMETRIC		(1ULL << 59)
 #define FI_SYNC_ERR		(1ULL << 58)
+#define FI_UNIVERSE		(1ULL << 57)
 
 
 struct fi_av_attr {
@@ -60,6 +61,18 @@ struct fi_av_attr {
 	void			*map_addr;
 	uint64_t		flags;
 };
+
+struct fi_av_set_attr {
+	size_t			count;
+	fi_addr_t		start_addr;
+	fi_addr_t		end_addr;
+	uint64_t		stride;
+	size_t			comm_key_size;
+	uint8_t			*comm_key;
+	uint64_t		flags;
+};
+
+struct fid_av_set;
 
 struct fi_ops_av {
 	size_t	size;
@@ -77,6 +90,8 @@ struct fi_ops_av {
 			size_t *addrlen);
 	const char * (*straddr)(struct fid_av *av, const void *addr,
 			char *buf, size_t *len);
+	int	(*av_set)(struct fid_av *av, struct fi_av_set_attr *attr,
+			struct fid_av_set **av_set, void *context);
 };
 
 struct fid_av {
@@ -119,6 +134,8 @@ struct fi_mr_modify {
 
 #ifndef FABRIC_DIRECT_ATOMIC_DEF
 
+#define FI_COLLECTIVE_OFFSET 256
+
 enum fi_datatype {
 	FI_INT8,
 	FI_UINT8,
@@ -134,7 +151,11 @@ enum fi_datatype {
 	FI_DOUBLE_COMPLEX,
 	FI_LONG_DOUBLE,
 	FI_LONG_DOUBLE_COMPLEX,
-	FI_DATATYPE_LAST
+	/* End of point to point atomic datatypes */
+	FI_DATATYPE_LAST,
+
+	/* Collective datatypes */
+	FI_VOID = FI_COLLECTIVE_OFFSET,
 };
 
 enum fi_op {
@@ -157,7 +178,14 @@ enum fi_op {
 	FI_CSWAP_GE,
 	FI_CSWAP_GT,
 	FI_MSWAP,
-	FI_ATOMIC_OP_LAST
+	/* End of point to point atomic ops */
+	FI_ATOMIC_OP_LAST,
+
+	/* Collective only ops */
+	FI_BARRIER = FI_COLLECTIVE_OFFSET,
+	FI_BROADCAST,
+	FI_ALLTOALL,
+	FI_ALLGATHER,
 };
 
 #endif
