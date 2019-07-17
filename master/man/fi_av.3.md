@@ -461,9 +461,6 @@ fabric errno on error.
 Fabric errno values are defined in
 `rdma/fi_errno.h`.
 
-# ERRORS
-
-
 # SEE ALSO
 
 [`fi_getinfo`(3)](fi_getinfo.3.html),

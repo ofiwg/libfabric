@@ -40,8 +40,10 @@ You have been warned.
 * API documentation
   * [fi_atomic(3)](fi_atomic.3.html)
   * [fi_av(3)](fi_av.3.html)
+  * [fi_av_set(3)](fi_av_set.3.html)
   * [fi_cm(3)](fi_cm.3.html)
   * [fi_cntr(3)](fi_cntr.3.html)
+  * [fi_collective(3)](fi_collective.3.html)
   * [fi_control(3)](fi_control.3.html)
   * [fi_cq(3)](fi_cq.3.html)
   * [fi_domain(3)](fi_domain.3.html)
