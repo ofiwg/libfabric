@@ -159,12 +159,6 @@ fi_ibv_mr_ofi2ibv_access(uint64_t ofi_access, struct fi_ibv_domain *domain)
 	return ibv_access;
 }
 
-static inline
-void fi_ibv_common_cache_dereg(struct fi_ibv_mem_desc *md)
-{
-	ofi_mr_cache_delete(&md->domain->cache, md->entry);
-}
-
 static int
 fi_ibv_mr_reg(struct fid *fid, const void *buf, size_t len,
 	      uint64_t access, uint64_t offset, uint64_t requested_key,
@@ -201,8 +195,7 @@ static int fi_ibv_mr_cache_close(fid_t fid)
 	struct fi_ibv_mem_desc *md =
 		container_of(fid, struct fi_ibv_mem_desc, mr_fid.fid);
 	
-	fi_ibv_common_cache_dereg(md);
-
+	ofi_mr_cache_delete(&md->domain->cache, md->entry);
 	return FI_SUCCESS;
 }
 
