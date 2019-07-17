@@ -250,8 +250,8 @@ static struct fi_ops fi_ibv_mr_cache_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-int fi_ibv_mr_cache_entry_reg(struct ofi_mr_cache *cache,
-			      struct ofi_mr_entry *entry)
+int fi_ibv_mr_cache_add_region(struct ofi_mr_cache *cache,
+			       struct ofi_mr_entry *entry)
 {
 	int fi_ibv_access = IBV_ACCESS_LOCAL_WRITE |
 			    IBV_ACCESS_REMOTE_WRITE |
@@ -264,8 +264,8 @@ int fi_ibv_mr_cache_entry_reg(struct ofi_mr_cache *cache,
 				    entry->iov.iov_len, NULL);
 }
 
-void fi_ibv_mr_cache_entry_dereg(struct ofi_mr_cache *cache,
-				 struct ofi_mr_entry *entry)
+void fi_ibv_mr_cache_delete_region(struct ofi_mr_cache *cache,
+				   struct ofi_mr_entry *entry)
 {
 	struct fi_ibv_mem_desc *md = (struct fi_ibv_mem_desc *)entry->data;
 	(void)fi_ibv_mr_dereg_ibv_mr(md->mr);
