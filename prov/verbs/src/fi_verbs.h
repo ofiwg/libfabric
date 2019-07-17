@@ -306,13 +306,6 @@ struct fi_ibv_pep {
 
 struct fi_ops_cm *fi_ibv_pep_ops_cm(struct fi_ibv_pep *pep);
 
-struct fi_ibv_mem_desc;
-struct fi_ibv_domain;
-typedef int(*fi_ibv_mr_reg_cb)(struct fi_ibv_domain *domain, void *buf,
-			       size_t len, uint64_t access,
-			       struct fi_ibv_mem_desc *md);
-typedef int(*fi_ibv_mr_dereg_cb)(struct fi_ibv_mem_desc *md);
-
 struct fi_ibv_domain {
 	struct util_domain		util_domain;
 	struct ibv_context		*verbs;
@@ -341,8 +334,6 @@ struct fi_ibv_domain {
 	/* MR stuff */
 	int				use_odp;
 	struct ofi_mr_cache		cache;
-	fi_ibv_mr_reg_cb		internal_mr_reg;
-	fi_ibv_mr_dereg_cb		internal_mr_dereg;
 	int 				(*post_send)(struct ibv_qp *qp,
 						     struct ibv_send_wr *wr,
 						     struct ibv_send_wr **bad_wr);
@@ -398,33 +389,13 @@ struct fi_ibv_mem_desc {
 	struct ofi_mr_entry	*entry;
 };
 
-static inline uint64_t
-fi_ibv_mr_internal_rkey(struct fi_ibv_mem_desc *md)
-{
-	return md->mr->rkey;
-}
+extern struct fi_ops_mr fi_ibv_mr_ops;
+extern struct fi_ops_mr fi_ibv_mr_cache_ops;
 
-static inline uint64_t
-fi_ibv_mr_internal_lkey(struct fi_ibv_mem_desc *md)
-{
-	return md->mr->lkey;
-}
-
-struct fi_ibv_mr_internal_ops {
-	struct fi_ops_mr	*fi_ops;
-	fi_ibv_mr_reg_cb	internal_mr_reg;
-	fi_ibv_mr_dereg_cb	internal_mr_dereg;
-};
-
-
-extern struct fi_ibv_mr_internal_ops fi_ibv_mr_internal_ops;
-extern struct fi_ibv_mr_internal_ops fi_ibv_mr_internal_cache_ops;
-extern struct fi_ibv_mr_internal_ops fi_ibv_mr_internal_ex_ops;
-
-int fi_ibv_mr_cache_entry_reg(struct ofi_mr_cache *cache,
-			      struct ofi_mr_entry *entry);
-void fi_ibv_mr_cache_entry_dereg(struct ofi_mr_cache *cache,
-				 struct ofi_mr_entry *entry);
+int fi_ibv_mr_cache_add_region(struct ofi_mr_cache *cache,
+			       struct ofi_mr_entry *entry);
+void fi_ibv_mr_cache_delete_region(struct ofi_mr_cache *cache,
+				   struct ofi_mr_entry *entry);
 
 /*
  * An XRC SRQ cannot be created until the associated RX CQ is known,

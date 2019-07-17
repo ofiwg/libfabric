@@ -302,19 +302,14 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	fi_ibv_domain_process_exp(_domain);
 
 	_domain->cache.entry_data_size = sizeof(struct fi_ibv_mem_desc);
-	_domain->cache.add_region = fi_ibv_mr_cache_entry_reg;
-	_domain->cache.delete_region = fi_ibv_mr_cache_entry_dereg;
+	_domain->cache.add_region = fi_ibv_mr_cache_add_region;
+	_domain->cache.delete_region = fi_ibv_mr_cache_delete_region;
 	ret = ofi_mr_cache_init(&_domain->util_domain, uffd_monitor,
 				&_domain->cache);
-	if (!ret) {
-		_domain->util_domain.domain_fid.mr = fi_ibv_mr_internal_cache_ops.fi_ops;
-		_domain->internal_mr_reg = fi_ibv_mr_internal_cache_ops.internal_mr_reg;
-		_domain->internal_mr_dereg = fi_ibv_mr_internal_cache_ops.internal_mr_dereg;
-	} else {
-		_domain->util_domain.domain_fid.mr = fi_ibv_mr_internal_ops.fi_ops;
-		_domain->internal_mr_reg = fi_ibv_mr_internal_ops.internal_mr_reg;
-		_domain->internal_mr_dereg = fi_ibv_mr_internal_ops.internal_mr_dereg;
-	}
+	if (!ret)
+		_domain->util_domain.domain_fid.mr = &fi_ibv_mr_cache_ops;
+	else
+		_domain->util_domain.domain_fid.mr = &fi_ibv_mr_ops;
 
 	switch (_domain->ep_type) {
 	case FI_EP_DGRAM:
