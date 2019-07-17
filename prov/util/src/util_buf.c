@@ -113,7 +113,8 @@ retry:
 	for (i = 0; i < pool->attr.chunk_cnt; i++) {
 		buf = (buf_region->mem_region + i * pool->entry_size);
 		buf_hdr = ofi_buf_hdr(buf);
-
+		buf_hdr->region = buf_region;
+		buf_hdr->index = pool->entry_cnt + i;
 		if (pool->attr.init_fn) {
 #if ENABLE_DEBUG
 			if (pool->attr.flags & OFI_BUFPOOL_INDEXED) {
@@ -135,9 +136,6 @@ retry:
 			pool->attr.init_fn(buf_region, buf);
 #endif
 		}
-
-		buf_hdr->region = buf_region;
-		buf_hdr->index = pool->entry_cnt + i;
 		if (pool->attr.flags & OFI_BUFPOOL_INDEXED) {
 			dlist_insert_tail(&buf_hdr->entry.dlist,
 					  &buf_region->free_list);
