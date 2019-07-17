@@ -392,10 +392,10 @@ struct fi_ibv_mem_desc {
 extern struct fi_ops_mr fi_ibv_mr_ops;
 extern struct fi_ops_mr fi_ibv_mr_cache_ops;
 
-int fi_ibv_mr_cache_entry_reg(struct ofi_mr_cache *cache,
-			      struct ofi_mr_entry *entry);
-void fi_ibv_mr_cache_entry_dereg(struct ofi_mr_cache *cache,
-				 struct ofi_mr_entry *entry);
+int fi_ibv_mr_cache_add_region(struct ofi_mr_cache *cache,
+			       struct ofi_mr_entry *entry);
+void fi_ibv_mr_cache_delete_region(struct ofi_mr_cache *cache,
+				   struct ofi_mr_entry *entry);
 
 /*
  * An XRC SRQ cannot be created until the associated RX CQ is known,
