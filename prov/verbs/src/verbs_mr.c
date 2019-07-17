@@ -224,15 +224,16 @@ static struct fi_ops fi_ibv_mr_cache_fi_ops = {
 int fi_ibv_mr_cache_add_region(struct ofi_mr_cache *cache,
 			       struct ofi_mr_entry *entry)
 {
-	int fi_ibv_access = IBV_ACCESS_LOCAL_WRITE |
-			    IBV_ACCESS_REMOTE_WRITE |
-			    IBV_ACCESS_REMOTE_ATOMIC |
-			    IBV_ACCESS_REMOTE_READ;
-	struct fi_ibv_mem_desc *md = (struct fi_ibv_mem_desc *)entry->data;
+	struct fi_ibv_mem_desc *md = (struct fi_ibv_mem_desc *) entry->data;
+
 	md->domain = container_of(cache->domain, struct fi_ibv_domain, util_domain);
 	md->mr_fid.fid.ops = &fi_ibv_mr_cache_fi_ops;
-	return fi_ibv_mr_reg_common(md, fi_ibv_access, entry->iov.iov_base,
-				    entry->iov.iov_len, NULL);
+	md->entry = entry;
+
+	return fi_ibv_mr_reg_common(md, IBV_ACCESS_LOCAL_WRITE |
+			IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_ATOMIC |
+			IBV_ACCESS_REMOTE_READ, entry->iov.iov_base,
+			entry->iov.iov_len, NULL);
 }
 
 void fi_ibv_mr_cache_delete_region(struct ofi_mr_cache *cache,
@@ -276,8 +277,6 @@ fi_ibv_mr_cache_reg(struct fid *fid, const void *buf, size_t len,
 		return ret;
 
 	md = (struct fi_ibv_mem_desc *) entry->data;
-	md->entry = entry;
-
 	*mr = &md->mr_fid;
 	return FI_SUCCESS;
 }
