@@ -66,7 +66,7 @@ common_srcs =				\
 	prov/util/src/util_ns.c		\
 	prov/util/src/util_shm.c	\
 	prov/util/src/util_mem_monitor.c\
-	prov/util/src/util_mr_hooks.c	\
+	prov/util/src/util_mem_hooks.c	\
 	prov/util/src/util_mr_cache.c
 
 
@@ -140,7 +140,7 @@ src_libfabric_la_SOURCES =			\
 	include/ofi_util.h			\
 	include/ofi_atomic.h			\
 	include/ofi_mr.h			\
-	include/ofi_mr_hooks.h			\
+	include/ofi_mem_hooks.h			\
 	include/ofi_net.h			\
 	include/ofi_perf.h			\
 	include/fasthash.h			\

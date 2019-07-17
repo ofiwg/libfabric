@@ -33,7 +33,7 @@
  */
 
 #include <ofi_mr.h>
-#include <ofi_mr_hooks.h>
+#include <ofi_mem_hooks.h>
 
 static struct ofi_uffd uffd;
 struct ofi_mem_monitor *uffd_monitor = &uffd.monitor;
