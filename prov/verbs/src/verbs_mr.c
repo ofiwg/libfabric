@@ -159,24 +159,6 @@ fi_ibv_mr_ofi2ibv_access(uint64_t ofi_access, struct fi_ibv_domain *domain)
 	return ibv_access;
 }
 
-static inline struct fi_ibv_mem_desc *
-fi_ibv_mr_common_cache_reg(struct fi_ibv_domain *domain,
-			   struct fi_mr_attr *attr)
-{
-	struct fi_ibv_mem_desc *md;
-	struct ofi_mr_entry *entry;
-	int ret;
-
-	ret = ofi_mr_cache_search(&domain->cache, attr, &entry);
-	if (OFI_UNLIKELY(ret))
-		return NULL;
-
-	md = (struct fi_ibv_mem_desc *)entry->data;
-	md->entry = entry;
-
-	return md;
-}
-
 static inline
 void fi_ibv_common_cache_dereg(struct fi_ibv_mem_desc *md)
 {
@@ -268,8 +250,10 @@ fi_ibv_mr_cache_reg(struct fid *fid, const void *buf, size_t len,
 {
 	struct fi_ibv_domain *domain;
 	struct fi_ibv_mem_desc *md;
+	struct ofi_mr_entry *entry;
 	struct fi_mr_attr attr;
 	struct iovec iov;
+	int ret;
 
 	if (OFI_UNLIKELY(flags))
 		return -FI_EBADFLAGS;
@@ -287,9 +271,12 @@ fi_ibv_mr_cache_reg(struct fid *fid, const void *buf, size_t len,
 	attr.requested_key = requested_key;
 	attr.auth_key_size = 0;
 
-	md = fi_ibv_mr_common_cache_reg(domain, &attr);
-	if (OFI_UNLIKELY(!md))
-		return -FI_ENOMEM;
+	ret = ofi_mr_cache_search(&domain->cache, &attr, &entry);
+	if (OFI_UNLIKELY(ret))
+		return ret;
+
+	md = (struct fi_ibv_mem_desc *) entry->data;
+	md->entry = entry;
 
 	*mr = &md->mr_fid;
 	return FI_SUCCESS;
