@@ -72,9 +72,14 @@
 extern "C" {
 #endif
 
+/* EQ / CQ flags
+ * ERROR: The added entry was the result of an error completion
+ * OVERFLOW: The CQ has overflowed, and events have been lost
+ */
 #define UTIL_FLAG_ERROR		(1ULL << 60)
 #define UTIL_FLAG_OVERFLOW	(1ULL << 61)
 
+/* Indicates that an EP has been bound to a counter */
 #define OFI_CNTR_ENABLED	(1ULL << 61)
 
 #define OFI_Q_STRERROR(prov, level, subsys, q, q_str, entry, q_strerror)	\

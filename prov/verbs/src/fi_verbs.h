@@ -72,11 +72,8 @@
 #include "ofi_tree.h"
 #include "ofi_indexer.h"
 
-#ifdef HAVE_VERBS_EXP_H
-#include <infiniband/verbs_exp.h>
-#endif /* HAVE_VERBS_EXP_H */
-
 #include "ofi_verbs_priv.h"
+
 
 #ifndef AF_IB
 #define AF_IB 27
@@ -145,7 +142,6 @@ extern struct fi_ibv_gl_data {
 	int	def_rx_iov_limit;
 	int	def_inline_size;
 	int	min_rnr_timer;
-	int	use_odp;
 	int	cqread_bunch_size;
 	char	*iface;
 	int	gid_idx;
@@ -332,7 +328,6 @@ struct fi_ibv_domain {
 	} xrc ;
 
 	/* MR stuff */
-	int				use_odp;
 	struct ofi_mr_cache		cache;
 	int 				(*post_send)(struct ibv_qp *qp,
 						     struct ibv_send_wr *wr,

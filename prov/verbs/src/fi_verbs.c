@@ -49,10 +49,6 @@ struct fi_ibv_gl_data fi_ibv_gl_data = {
 	.def_rx_iov_limit	= 4,
 	.def_inline_size	= 256,
 	.min_rnr_timer		= VERBS_DEFAULT_MIN_RNR_TIMER,
-	/* Disable by default. Because this feature may corrupt
-	 * data due to IBV_EXP_ACCESS_RELAXED flag. But usage
-	 * this feature w/o this flag leads to poor bandwidth */
-	.use_odp		= 0,
 	.cqread_bunch_size	= 8,
 	.iface			= NULL,
 	.gid_idx		= 0,
@@ -551,15 +547,6 @@ static int fi_ibv_read_params(void)
 	     (fi_ibv_gl_data.min_rnr_timer > 31))) {
 		VERBS_WARN(FI_LOG_CORE,
 			   "Invalid value of min_rnr_timer\n");
-		return -FI_EINVAL;
-	}
-
-	if (fi_ibv_get_param_bool("use_odp", "Enable on-demand paging experimental feature. "
-				  "Currently this feature may corrupt data. "
-				  "Use it on your own risk.",
-				  &fi_ibv_gl_data.use_odp)) {
-		VERBS_WARN(FI_LOG_CORE,
-			   "Invalid value of use_odp\n");
 		return -FI_EINVAL;
 	}
 
