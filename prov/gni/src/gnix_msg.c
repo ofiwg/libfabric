@@ -265,20 +265,22 @@ fn_exit:
 static void __gnix_msg_copy_data_to_recv_addr(struct gnix_fab_req *req,
 					      void *data)
 {
+	size_t	len;
+
 	GNIX_DBG_TRACE(FI_LOG_EP_DATA, "\n");
+
+	len = MIN(req->msg.cum_send_len, req->msg.cum_recv_len);
 
 	switch(req->type) {
 	case GNIX_FAB_RQ_RECV:
-		memcpy((void *)req->msg.recv_info[0].recv_addr, data,
-		       req->msg.cum_recv_len);
+		memcpy((void *)req->msg.recv_info[0].recv_addr, data, len);
 		break;
 
 	case GNIX_FAB_RQ_RECVV:
 	case GNIX_FAB_RQ_TRECVV:
 		__gnix_msg_unpack_data_into_iov(req->msg.recv_info,
 						req->msg.recv_iov_cnt,
-						(uint64_t) data,
-						req->msg.cum_recv_len);
+						(uint64_t) data, len);
 		break;
 
 	default:
