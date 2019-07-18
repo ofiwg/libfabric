@@ -38,6 +38,8 @@
 static struct ofi_uffd uffd;
 struct ofi_mem_monitor *uffd_monitor = &uffd.monitor;
 
+static struct ofi_patcher patcher;
+struct ofi_mem_monitor *patcher_monitor = &patcher.monitor;
 
 /*
  * Initialize all available memory monitors
@@ -46,6 +48,12 @@ void ofi_monitor_init(void)
 {
 	fastlock_init(&uffd_monitor->lock);
 	dlist_init(&uffd_monitor->list);
+
+	/*Patcher is a monitor. So, it is based on the same struct
+	as uffd_monitor that's why we should init patcher_monitor here.
+	Because this function is called at first. Then it is calling */
+	fastlock_init(&patcher_monitor->lock);
+	dlist_init(&patcher_monitor->list);
 
 	fi_param_define(NULL, "mr_cache_max_size", FI_PARAM_SIZE_T,
 			"Defines the total number of bytes for all memory"
@@ -79,6 +87,12 @@ void ofi_monitor_cleanup(void)
 {
 	assert(dlist_empty(&uffd_monitor->list));
 	fastlock_destroy(&uffd_monitor->lock);
+	/*
+	The same logic from above (in init).
+	We should make if-else here and init or #if-#endif.
+	*/
+	assert(dlist_empty(&patcher_monitor->list));
+	fastlock_destroy(&patcher_monitor->lock);
 }
 
 int ofi_monitor_add_cache(struct ofi_mem_monitor *monitor,
@@ -90,8 +104,11 @@ int ofi_monitor_add_cache(struct ofi_mem_monitor *monitor,
 	if (dlist_empty(&monitor->list)) {
 		if (monitor == uffd_monitor) {
 			ret = ofi_uffd_init();
-		} else {
-			
+		}
+		/*else if(monitor == patcher_monitor) {
+			ret = ofi_patcher_init();
+		}*/
+		else{
 			ret = -FI_ENOSYS;
 		}
 		if (ret)
@@ -116,6 +133,9 @@ void ofi_monitor_del_cache(struct ofi_mr_cache *cache)
 
 	if (dlist_empty(&monitor->list) && (monitor == uffd_monitor))
 		ofi_uffd_cleanup();
+	/*Here is we delete cache for patcher. But ofi_patcher_cleanup is empty. Ok?*/
+	/*if (dlist_empty(&monitor->list) && (monitor == patcher_monitor))
+		ofi_patcher_cleanup();*/
 	fastlock_release(&monitor->lock);
 }
 
@@ -342,3 +362,74 @@ void ofi_uffd_cleanup(void)
 }
 
 #endif /* HAVE_UFFD_UNMAP */
+
+/*Lets define what we define in order to launch configure.ac*/
+//#if
+
+static int ofi_patcher_register(const void *addr, size_t len, size_t page_size)
+{
+
+	int ret;
+	/*TODO*/
+	return 0;
+}
+
+static int ofi_patcher_subscribe(struct ofi_mem_monitor *monitor,
+			         const void *addr, size_t len)
+{
+	int i;
+
+	assert(monitor == &patcher.monitor);
+	for (i = 0; i < num_page_sizes; i++) {
+		if (!ofi_patcher_register(addr, len, page_sizes[i]))
+			return 0;
+	}
+	return -FI_EFAULT;
+}
+
+static int ofi_patcher_unregister(const void *addr, size_t len, size_t page_size)
+{
+	int ret;
+	/*TODO*/
+	return 0;
+}
+
+static void ofi_patcher_unsubscribe(struct ofi_mem_monitor *monitor,
+				    const void *addr, size_t len)
+{
+	int i;
+
+	assert(monitor == &patcher.monitor);
+	for (i = 0; i < num_page_sizes; i++) {
+		if (!ofi_patcher_unregister(addr, len, page_sizes[i]))
+			break;
+	}
+}
+
+int ofi_patcher_init(void)
+{
+	/*Here is the main init function of patcher:
+	1. define subscribe/unsubscribe functions like uffd does
+	2. calling patcher_handler
+	   what we do in handler?
+	   2.1 call patcher_patch_symbol - opendl
+	   2.2 handle SYS_mmap, SYS_munmap and etc. calls
+	 */
+	int ret;
+	patcher.monitor.subscribe = ofi_patcher_subscribe;
+	patcher.monitor.unsubscribe = ofi_patcher_unsubscribe;
+
+	if (!num_page_sizes)
+		return -FI_ENODATA;
+
+	ret = ofi_patcher_handler();
+	/*if (ret)
+		return -FI_ENODATA;*/
+	return 0;
+}
+
+void ofi_pacther_cleanup(void)
+{
+	/*TODO:*/
+}
+//#endif

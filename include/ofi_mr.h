@@ -144,14 +144,16 @@ extern struct ofi_mem_monitor *uffd_monitor;
  * Hooks memory mechanism
  */
 
-/* We should add a hooks memory mechanism  here
- * in order to work with:
- * 1. ofi_monitor_add_cache()
- * 2. ofi_monitor_del_cache()
- * 3. ofi_monitor_notify()
- * 4. ofi_monitor_subscribe()
- * 5. ofi_monitor_unsubscribe()
- */
+/*Added patcher init struct*/
+struct ofi_patcher {
+	struct ofi_mem_monitor          monitor;
+};
+
+int ofi_patcher_init(void);
+void ofi_patcher_cleanup(void);
+
+extern struct ofi_mem_monitor *patcher_monitor;
+
 
 /*
  * Used to store registered memory regions into a lookup map.  This

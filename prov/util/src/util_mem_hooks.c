@@ -13,6 +13,7 @@
  * Copied from OpenUCX
  */
 
+/*#if HAVE_PATCH_UNMAP*/
 #include <elf.h>
 #include <sys/auxv.h>
 #include <sys/mman.h>
@@ -26,19 +27,13 @@
 	Here is the main mechanism of patcher applying
 */
 
- struct ofi_patcher_dl_iter_context {
-	struct ofi_patcher_patch *patch;
-	bool remove;
-	int status;
-};
-
-struct ofi_patcher_base_module ofi_patcher_module = {
-	.patch_symbol 	= ofi_patcher_patch_symbol,
-};
 
 static void *(*orig_dlopen) (const char *, int);
 static void *ofi_patcher_dlopen(const char *filename, int flag);
 static int ofi_patcher_apply_patch (struct ofi_patcher_patch *patch);
+
+struct ofi_patcher_base_module	ofi_patcher_module;
+struct ofi_patcher_dl_iter_context ofi_patcher_dl_iter_context;
 
 static const ElfW(Phdr) *
 ofi_patcher_get_phdr_dynamic(const ElfW(Phdr) *phdr,
@@ -128,10 +123,12 @@ ofi_patcher_modify_got (ElfW(Addr) base, const ElfW(Phdr) *phdr,
 	long page_size = ofi_get_page_size();
 	void **entry, *page;
 	int ret;
-	dlist_init(&ctx->patch->patch_got_list);
+/*	dlist_init(&ctx->patch->patch_got_list);*/
+	struct dlist_entry *tmp;
+	struct dlist_entry *item;
 
 	entry = ofi_patcher_get_got_entry (base, phdr, phnum, phent,
-						 ctx->patch->super.patch_symbol);
+					   ctx->patch->super.patch_symbol);
 	if (entry == NULL) {
 		return FI_SUCCESS;
 	}
@@ -140,11 +137,9 @@ ofi_patcher_modify_got (ElfW(Addr) base, const ElfW(Phdr) *phdr,
 	ret = mprotect(page, page_size, PROT_READ|PROT_WRITE);
 	if (ret < 0) {
 		/* FI_DBG(&core_prov, FI_LOG_MR, "failed to modify GOT page");*/
-
 		return -FI_EOPNOTSUPP;
 	}
-	struct dlist_entry *tmp;
-	struct dlist_entry *item;
+
 	if (!ctx->remove) {
 		if (*entry != (void *) ctx->patch->super.patch_value) {
 			struct ofi_patcher_patch_got *patch_got = (struct ofi_patcher_patch_got *)
@@ -207,7 +202,7 @@ static int ofi_patcher_phdr_iterator(struct dl_phdr_info *info,
 	}
 }
 
-static int ofi_patcher_apply_patch (struct ofi_patcher_patch *patch)
+static int ofi_patcher_apply_patch(struct ofi_patcher_patch *patch)
 {
 	struct ofi_patcher_dl_iter_context ctx = {
 		.patch    = patch,
@@ -220,7 +215,7 @@ static int ofi_patcher_apply_patch (struct ofi_patcher_patch *patch)
 	return ctx.status;
 }
 
-static int ofi_patcher_remove_patch (struct ofi_patcher_patch *patch)
+static int ofi_patcher_remove_patch(struct ofi_patcher_patch *patch)
 {
 	struct ofi_patcher_dl_iter_context ctx = {
 		.patch    = patch,
@@ -257,7 +252,7 @@ static inline int ofi_patcher_get_orig(const char *symbol, void *replacement)
 }
 
 int ofi_patcher_patch_symbol(const char *symbol_name, 
-				   uintptr_t replacement, uintptr_t *orig)
+			     uintptr_t replacement, uintptr_t *orig)
 {
 	int ret;
 	struct ofi_patcher_patch* patch = (struct ofi_patcher_patch *)
@@ -275,6 +270,9 @@ int ofi_patcher_patch_symbol(const char *symbol_name,
 	patch->super.patch_value = replacement;
 	patch->super.patch_restore = (void*) ofi_patcher_remove_patch;
 
+	/* Take lock first to handle a possible race where dlopen() is called
+	 * from another thread and we may end up not patching it.
+	 */
 	fastlock_acquire(&ofi_patcher_module.patch_list_mutex);
 	
 	ret = ofi_patcher_apply_patch(patch);
@@ -302,7 +300,12 @@ unlock:
 *the main patcher initilization
 */
 
-#define memory_patcher_syscall __syscall
+/* calling __syscall is preferred on some systems when some arguments may be 64-bit. it also
+ * has the benefit of having an off_t return type */
+//#define memory_patcher_syscall __syscall
+//#else
+#define memory_patcher_syscall syscall
+//#endif
 
 /*SYS_MMAP*/
 #if defined (SYS_mmap)
@@ -313,7 +316,18 @@ static void *_intercept_mmap(void *start, size_t length,
 			     int prot, int flags, int fd, off_t offset)
 {
 	void *result = 0;
-	result = original_mmap (start, length, prot, flags, fd, offset);
+
+	/*not implemented yet*/
+	/*if ((flags & MAP_FIXED) && (start != NULL)) {
+		opal_mem_hooks_release_hook (start, length, true);
+	}*/
+	if (!original_mmap) {
+		result = (void*)(intptr_t) memory_patcher_syscall(SYS_mmap, start, length,
+								  prot, flags, fd, offset);
+	} else {
+			result = original_mmap (start, length, prot, flags, fd, offset);
+	}
+
 	return result;
 }
 
@@ -321,6 +335,7 @@ static void *intercept_mmap(void *start, size_t
 			    length, int prot, int flags, int fd, off_t offset)
 {
 	void *result = _intercept_mmap (start, length, prot, flags, fd, offset);
+
 	return result;
 }
 #endif
@@ -333,13 +348,22 @@ static int (*original_munmap) (void *, size_t);
 static int _intercept_munmap(void *start, size_t length)
 {
 	int result = 0;
-	result = original_munmap (start, length);
+	/* could be in a malloc implementation */
+	/* opal_mem_hooks_release_hook (start, length, true);*/
+
+	if (!original_munmap) {
+		result = memory_patcher_syscall(SYS_munmap, start, length);
+	} else {
+		result = original_munmap(start, length);
+	}
+
 	return result;
 }
 
 static int intercept_munmap(void *start, size_t length)
 {
 	int result = _intercept_munmap (start, length);
+
 	return result;
 }
 
@@ -408,8 +432,6 @@ static int intercept_madvise (void *start, size_t length, int advice)
 
 #endif
 
-
-
 /*HAS_SHMAT*/
 #if HAS_SHMAT && defined(__linux__)
 static void *(*original_shmat)(int shmid, const void *shmaddr, int shmflg);
@@ -470,34 +492,34 @@ static int intercept_brk (void *addr)
 }
 #endif
 
-int patcher_open (void)
+int ofi_patcher_handler(void)
 {	
 	int ret;
 
-	struct dlist_entry patch_list = patch_list;
-	fastlock_t patch_list_mutex = patch_list_mutex;
+	/*we'd understand what we init here*/
+	/*struct dlist_entry patch_list 	= patch_list;
+	fastlock_t patch_list_mutex 	= patch_list_mutex;
 
 	dlist_init(&patch_list);
-	fastlock_init(&patch_list_mutex);
+	fastlock_init(&patch_list_mutex);*/
 
-	ret = ofi_patcher_module.patch_symbol("dlopen", 
-					   (uintptr_t) ofi_patcher_dlopen,
-                                           (uintptr_t *) &orig_dlopen);
+	ret = ofi_patcher_patch_symbol("dlopen", (uintptr_t) ofi_patcher_dlopen,
+                                      (uintptr_t *) &orig_dlopen);
 	if (FI_SUCCESS != ret) {
 		return ret;
 	}
 
-#if defined (SYS_mmap)
-	rc = ofi_patcher_module.patch_symbol("mmap", (uintptr_t) intercept_mmap,
-					     (uintptr_t *) &original_mmap);
+/*#if defined (SYS_mmap)
+	rc = ofi_patcher_patch_symbol("mmap", (uintptr_t) intercept_mmap,
+				     (uintptr_t *) &original_mmap);
 	if (FI_SUCCESS != ret) {
 		return ret;
 	}
 #endif
 
 #if defined (SYS_munmap)
-	ret = ofi_patcher_module.patch_symbol("munmap", (uintptr_t)intercept_munmap,
-					    (uintptr_t *) &original_munmapp);
+	ret = ofi_patcher_patch_symbol("munmap", (uintptr_t)intercept_munmap,
+				      (uintptr_t *) &original_munmapp);
 	if (FI_SUCCESS != ret) {
 		return ret;
 	}
@@ -505,8 +527,8 @@ int patcher_open (void)
 
 
 #if defined (SYS_mremap)
-	ret = ofi_patcher_module.patch_symbol("mremap", (uintptr_t)intercept_mremap,
-					     (uintptr_t *) &original_mremap);
+	ret = ofi_patcher_patch_symbol("mremap", (uintptr_t)intercept_mremap,
+				      (uintptr_t *) &original_mremap);
 	if (FI_SUCCESS != ret) {
 		return ret;
 	}
@@ -514,36 +536,37 @@ int patcher_open (void)
 #endif
 
 #if defined (SYS_madvise)
-	ret = ofi_patcher_module.patch_symbol("madvise", (uintptr_t)intercept_madvise,
-					    (uintptr_t *) &original_madvise);
+	ret = ofi_patcher_patch_symbol("madvise", (uintptr_t)intercept_madvise,
+				      (uintptr_t *) &original_madvise);
 	if (FI_SUCCESS != ret) {
 		return ret;
 	}
 #endif
 
 #if HAS_SHMAT && defined(__linux__)
- 	ret = ofi_patcher_module.patch_symbol("shmat", (uintptr_t) intercept_shmat,
- 					     (uintptr_t *) &original_shmat);
+	ret = ofi_patcher_patch_symbol("shmat", (uintptr_t) intercept_shmat,
+				      (uintptr_t *) &original_shmat);
 	if (FI_SUCCESS != ret) {
 		return ret;
 	}
 #endif
 
 #if HAS_SHMDT && defined(__linux__)
-	ret = ofi_patcher_module.patch_symbol("shmdt", (uintptr_t) intercept_shmdt,
-					     (uintptr_t *) &original_shmdt);
+	ret = ofi_patcher_patch_symbol("shmdt", (uintptr_t) intercept_shmdt,
+				      (uintptr_t *) &original_shmdt);
 	if (FI_SUCCESS != ret) {
 		return ret;
 	}
 #endif
 
 #if defined (SYS_brk)
-	ret = ofi_patcher_module.patch_symbol("brk", (uintptr_t)intercept_brk,
-					     (uintptr_t *) &original_brk);
+	ret = ofi_patcher_patch_symbol("brk", (uintptr_t)intercept_brk,
+				      (uintptr_t *) &original_brk);
 	if (FI_SUCCESS != ret) {
 		return ret;
 	}
-#endif
+#endif*/
 
 	return ret;
 }
+/*#end //HAVE_PATCH_UNMAP*/

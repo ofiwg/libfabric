@@ -24,22 +24,20 @@
 #define OFI_BASE_PATCHER_MAX_PATCH 32
 
 struct ofi_patcher_base_patch {
-	struct dlist_entry super;
-	char		*patch_symbol;
-	uintptr_t	patch_value;
-	uintptr_t	patch_orig;
-	unsigned char	patch_data[OFI_BASE_PATCHER_MAX_PATCH];
-	unsigned char	patch_orig_data[OFI_BASE_PATCHER_MAX_PATCH];
-	unsigned	patch_data_size;
+	struct dlist_entry 		super;
+	char*				patch_symbol;
+	uintptr_t			patch_value;
+	uintptr_t			patch_orig;
+	unsigned char			patch_data[OFI_BASE_PATCHER_MAX_PATCH];
+	unsigned char			patch_orig_data[OFI_BASE_PATCHER_MAX_PATCH];
+	unsigned			patch_data_size;
 	void * (*patch_restore)(struct ofi_patcher_base_patch *);
 };
 
 struct ofi_patcher_base_module {
-	struct dlist_entry			patch_list;
-	fastlock_t				patch_list_mutex;
+	struct dlist_entry		patch_list;
+	fastlock_t			patch_list_mutex;
 	int * (*patch_finit)(void);
-	int * (*patch_symbol)(const char *func_symbol_name, uintptr_t func_new_addr,
-                                                   	    uintptr_t *func_old_addr);
 	int * (*patch_address)(uintptr_t func_addr, uintptr_t func_new_addr);
 };
 
@@ -49,11 +47,17 @@ struct ofi_patcher_patch {
 };
 
 struct ofi_patcher_patch_got {
-	struct dlist_entry super;
-	void **got_entry;
-	void *got_orig;
+	struct dlist_entry 		super;
+	void** 				got_entry;
+	void* 				got_orig;
+};
+
+struct ofi_patcher_dl_iter_context {
+	struct ofi_patcher_patch *patch;
+	bool remove;
+	int status;
 };
 
 int ofi_patcher_patch_symbol(const char *symbol_name,
 			     uintptr_t replacement, uintptr_t *orig);
-int patcher_open (void);
+int ofi_patcher_handler(void);
