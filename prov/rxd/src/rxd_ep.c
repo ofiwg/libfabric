@@ -588,10 +588,17 @@ void rxd_ep_send_ack(struct rxd_ep *rxd_ep, fi_addr_t peer)
 
 static void rxd_ep_free_res(struct rxd_ep *ep)
 {
-	ofi_bufpool_destroy(ep->tx_pkt_pool.pool);
-	ofi_bufpool_destroy(ep->rx_pkt_pool.pool);
-	ofi_bufpool_destroy(ep->tx_entry_pool.pool);
-	ofi_bufpool_destroy(ep->rx_entry_pool.pool);
+	if (ep->tx_pkt_pool.pool)
+		ofi_bufpool_destroy(ep->tx_pkt_pool.pool);
+
+	if (ep->rx_pkt_pool.pool)
+		ofi_bufpool_destroy(ep->rx_pkt_pool.pool);
+
+	if (ep->tx_entry_pool.pool)
+		ofi_bufpool_destroy(ep->tx_entry_pool.pool);
+
+	if (ep->rx_entry_pool.pool)
+		ofi_bufpool_destroy(ep->rx_entry_pool.pool);
 }
 
 static void rxd_close_peer(struct rxd_ep *ep, struct rxd_peer *peer)
@@ -1135,17 +1142,7 @@ int rxd_ep_init_res(struct rxd_ep *ep, struct fi_info *fi_info)
 
 	return 0;
 err:
-	if (ep->tx_pkt_pool.pool)
-		ofi_bufpool_destroy(ep->tx_pkt_pool.pool);
-
-	if (ep->rx_pkt_pool.pool)
-		ofi_bufpool_destroy(ep->rx_pkt_pool.pool);
-
-	if (ep->tx_entry_pool.pool)
-		ofi_bufpool_destroy(ep->tx_entry_pool.pool);
-
-	if (ep->rx_entry_pool.pool)
-		ofi_bufpool_destroy(ep->rx_entry_pool.pool);
+	rxd_ep_free_res(ep);
 
 	return ret;
 }
