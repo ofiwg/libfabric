@@ -414,7 +414,6 @@ static inline void ofi_ibuf_free(void *buf)
 
 static inline size_t ofi_buf_index(void *buf)
 {
-	assert(ofi_buf_region(buf)->use_cnt);
 	return ofi_buf_hdr(buf)->index;
 }
 

@@ -172,6 +172,17 @@ struct rxd_cq {
 	rxd_cq_write_fn write_fn;
 };
 
+enum rxd_pool_type {
+	RXD_BUF_POOL_RX,
+	RXD_BUF_POOL_TX,
+};
+
+struct rxd_buf_pool {
+	enum rxd_pool_type type;
+	struct ofi_bufpool *pool;
+	struct rxd_ep *rxd_ep;
+};
+
 struct rxd_ep {
 	struct util_ep util_ep;
 	struct fid_ep *dg_ep;
@@ -194,12 +205,12 @@ struct rxd_ep {
 	size_t tx_rma_avail;
 	size_t rx_rma_avail;
 
-	struct ofi_bufpool *tx_pkt_pool;
-	struct ofi_bufpool *rx_pkt_pool;
+	struct rxd_buf_pool tx_pkt_pool;
+	struct rxd_buf_pool rx_pkt_pool;
 	struct slist rx_pkt_list;
 
-	struct ofi_bufpool *tx_entry_pool;
-	struct ofi_bufpool *rx_entry_pool;
+	struct rxd_buf_pool tx_entry_pool;
+	struct rxd_buf_pool rx_entry_pool;
 
 	struct dlist_entry unexp_list;
 	struct dlist_entry unexp_tag_list;
@@ -291,6 +302,7 @@ struct rxd_pkt_entry {
 	uint64_t timestamp;
 	struct fi_context context;
 	struct fid_mr *mr;
+	void *desc;
 	fi_addr_t peer;
 	void *pkt;
 };
