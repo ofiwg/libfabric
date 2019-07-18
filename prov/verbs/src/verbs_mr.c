@@ -60,13 +60,6 @@ static int fi_ibv_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 			      attr->context);
 }
 
-static inline struct ibv_mr *
-fi_ibv_mr_reg_wrapper(struct fi_ibv_domain *domain, void *buf,
-		      size_t len, int fi_ibv_access)
-{	
-	return ibv_reg_mr(domain->pd, buf, len, fi_ibv_access);
-}
-
 static int fi_ibv_mr_close(fid_t fid)
 {
 	struct fi_ibv_mem_desc *mr;
@@ -98,8 +91,7 @@ int fi_ibv_mr_reg_common(struct fi_ibv_mem_desc *md, int fi_ibv_access,
 	md->mr_fid.fid.fclass = FI_CLASS_MR;
 	md->mr_fid.fid.context = context;
 
-	md->mr = fi_ibv_mr_reg_wrapper(md->domain, (void *)buf, len,
-				       fi_ibv_access);
+	md->mr = ibv_reg_mr(md->domain->pd, (void *) buf, len, fi_ibv_access);
 	if (!md->mr) {
 		if (len)
 			return -errno;
