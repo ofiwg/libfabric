@@ -1407,6 +1407,15 @@ void rxr_init_rts_pkt_entry(struct rxr_ep *ep,
 	rts_hdr->data_len = tx_entry->total_len;
 	rts_hdr->tx_id = tx_entry->tx_id;
 	rts_hdr->msg_id = tx_entry->msg_id;
+
+	/*
+	 * Even with protocol versions prior to v3 that did not include a
+	 * request in the RTS, the receiver can test for this flag and decide if
+	 * it should be used as a heuristic for credit calculation. If the
+	 * receiver is on <3 protocol version, the flag and the request just get
+	 * ignored.
+	 */
+	rts_hdr->flags |= RXR_CREDIT_REQUEST;
 	rts_hdr->credit_request = tx_entry->credit_request;
 
 	if (tx_entry->fi_flags & FI_REMOTE_CQ_DATA) {

@@ -920,7 +920,11 @@ static int rxr_cq_process_rts(struct rxr_ep *ep,
 	ep->rx_pending++;
 #endif
 	rx_entry->state = RXR_RX_RECV;
-	rx_entry->credit_request = rts_hdr->credit_request;
+	if (rts_hdr->flags & RXR_CREDIT_REQUEST)
+		rx_entry->credit_request = rts_hdr->credit_request;
+	else
+		rx_entry->credit_request = rxr_env.tx_min_credits;
+
 	ret = rxr_ep_post_cts_or_queue(ep, rx_entry, bytes_left);
 	if (pkt_entry->type == RXR_PKT_ENTRY_POSTED)
 		ep->rx_bufs_to_post++;
