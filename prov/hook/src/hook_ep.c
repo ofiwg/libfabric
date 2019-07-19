@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Intel Corporation. All rights reserved.
+ * Copyright (c) 2018-2019 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -33,6 +33,7 @@
 #include <stdlib.h>
 #include <ofi_enosys.h>
 #include "hook_prov.h"
+#include "ofi_hook.h"
 
 
 static int hook_open_tx_ctx(struct fid_ep *sep, int index,
@@ -94,19 +95,9 @@ static void hook_setup_ep(enum ofi_hook_class hclass, struct fid_ep *ep,
 	ep->fid.ops = &hook_fid_ops;
 	ep->ops = &hook_ep_ops;
 	ep->cm = &hook_cm_ops;
-
-	switch (hclass) {
-	case HOOK_PERF:
-		ep->msg = &perf_msg_ops;
-		ep->rma = &perf_rma_ops;
-		ep->tagged = &perf_tagged_ops;
-		break;
-	default:
-		ep->msg = &hook_msg_ops;
-		ep->rma = &hook_rma_ops;
-		ep->tagged = &hook_tagged_ops;
-		break;
-	}
+	ep->msg = &hook_msg_ops;
+	ep->rma = &hook_rma_ops;
+	ep->tagged = &hook_tagged_ops;
 	ep->atomic = &hook_atomic_ops;
 }
 
@@ -256,17 +247,12 @@ int hook_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	return ret;
 }
 
-int hook_endpoint(struct fid_domain *domain, struct fi_info *info,
-		  struct fid_ep **ep, void *context)
+int hook_endpoint_init(struct fid_domain *domain, struct fi_info *info,
+		       struct fid_ep **ep, void *context, struct hook_ep *myep)
 {
 	struct hook_domain *dom = container_of(domain, struct hook_domain, domain);
-	struct hook_ep *myep;
 	struct fid *saved_fid;
 	int ret;
-
-	myep = calloc(1, sizeof *myep);
-	if (!myep)
-		return -FI_ENOMEM;
 
 	saved_fid = info->handle;
 	if (saved_fid) {
@@ -275,13 +261,42 @@ int hook_endpoint(struct fid_domain *domain, struct fi_info *info,
 			info->handle = saved_fid;
 	}
 	myep->domain = dom;
-	hook_setup_ep(dom->fabric->hclass, &myep->ep, FI_CLASS_EP, context);
-	ret = fi_endpoint(dom->hdomain, info, &myep->hep, &myep->ep.fid);
-	if (ret)
-		free(myep);
-	else
-		*ep = &myep->ep;
 
+	hook_setup_ep(dom->fabric->hclass, &myep->ep, FI_CLASS_EP, context);
+
+	ret = fi_endpoint(dom->hdomain, info, &myep->hep, &myep->ep.fid);
 	info->handle = saved_fid;
+
+	if (ret)
+		return ret;
+
+	*ep = &myep->ep;
+	return 0;
+}
+
+int hook_endpoint(struct fid_domain *domain, struct fi_info *info,
+		  struct fid_ep **ep, void *context)
+{
+	struct hook_domain *dom = container_of(domain, struct hook_domain, domain);
+	struct hook_ep *myep;
+	int ret;
+
+	myep = calloc(1, sizeof *myep);
+	if (!myep)
+		return -FI_ENOMEM;
+
+	ret = hook_endpoint_init(domain, info, ep, context, myep);
+	if (ret)
+		goto err1;
+
+	ret = hook_ini_fid(dom->fabric->prov_ctx, &myep->ep.fid);
+	if (ret)
+		goto err2;
+
+	return 0;
+err2:
+	fi_close(&myep->hep->fid);
+err1:
+	free(myep);
 	return ret;
 }

@@ -43,7 +43,7 @@ struct perf_fabric {
 	struct ofi_perfset perf_set;
 };
 
-int perf_hook_destroy(struct fid *fabric);
+int hook_perf_destroy(struct fid *fabric);
 
 
 #define HOOK_FOREACH(DECL)		\
@@ -94,12 +94,5 @@ enum perf_counters {
 };
 
 extern const char *perf_counters_str[];
-
-extern struct fi_ops_msg perf_msg_ops;
-extern struct fi_ops_rma perf_rma_ops;
-extern struct fi_ops_tagged perf_tagged_ops;
-extern struct fi_ops_cq perf_cq_ops;
-extern struct fi_ops_cntr perf_cntr_ops;
-
 
 #endif /* _HOOK_PERF_H_ */

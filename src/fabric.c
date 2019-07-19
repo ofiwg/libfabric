@@ -250,7 +250,7 @@ struct fi_provider *ofi_get_hook(const char *name)
 
 	prov = ofi_getprov(name, strlen(name));
 	if (!prov) {
-		ret = asprintf(&try_name, "ofi_%s_hook", name);
+		ret = asprintf(&try_name, "ofi_hook_%s", name);
 		if (ret > 0)
 			prov = ofi_getprov(try_name, ret);
 		else
@@ -337,7 +337,7 @@ static void ofi_ordered_provs_init(void)
 		/* These are hooking providers only.  Their order
 		 * doesn't matter
 		 */
-		"ofi_perf_hook", "ofi_noop_hook",
+		"ofi_hook_perf", "ofi_hook_debug", "ofi_hook_noop",
 	};
 	int num_provs = sizeof(ordered_prov_names)/sizeof(ordered_prov_names[0]), i;
 
@@ -621,8 +621,9 @@ libdl_done:
 	ofi_register_provider(SOCKETS_INIT, NULL);
 	ofi_register_provider(TCP_INIT, NULL);
 
-	ofi_register_provider(PERF_HOOK_INIT, NULL);
-	ofi_register_provider(NOOP_HOOK_INIT, NULL);
+	ofi_register_provider(HOOK_PERF_INIT, NULL);
+	ofi_register_provider(HOOK_DEBUG_INIT, NULL);
+	ofi_register_provider(HOOK_NOOP_INIT, NULL);
 
 	ofi_init = 1;
 

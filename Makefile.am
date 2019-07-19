@@ -405,6 +405,7 @@ include prov/tcp/Makefile.include
 include prov/rstream/Makefile.include
 include prov/hook/Makefile.include
 include prov/hook/perf/Makefile.include
+include prov/hook/hook_debug/Makefile.include
 
 man_MANS = $(real_man_pages) $(prov_install_man_pages) $(dummy_man_pages)
 

@@ -28,7 +28,7 @@ usually identified by 'hook' appearing in the provider name.
 
 Known hooking providers include the following:
 
-*ofi_perf_hook*
+*ofi_hook_perf*
 : This hooks 'fast path' data operation calls.  Performance data is
   captured on call entrance and exit, in order to provide an average of
   how long each call takes to complete.  See the PERFORMANCE HOOKS section

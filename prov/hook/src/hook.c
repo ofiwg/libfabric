@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Intel Corporation. All rights reserved.
+ * Copyright (c) 2018-2019 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -43,6 +43,54 @@
 static char **hooks;
 static size_t hook_cnt;
 
+
+struct hook_fabric *hook_to_fabric(const struct fid *fid)
+{
+	switch (fid->fclass) {
+	case FI_CLASS_FABRIC:
+		return (container_of(fid, struct hook_fabric, fabric.fid));
+	case FI_CLASS_DOMAIN:
+		return (container_of(fid, struct hook_domain, domain.fid)->
+			fabric);
+	case FI_CLASS_AV:
+		return (container_of(fid, struct hook_av, av.fid)->
+			domain->fabric);
+	case FI_CLASS_WAIT:
+		return (container_of(fid, struct hook_wait, wait.fid)->
+			fabric);
+	case FI_CLASS_POLL:
+		return (container_of(fid, struct hook_poll, poll.fid)->
+			domain->fabric);
+	case FI_CLASS_EQ:
+		return (container_of(fid, struct hook_eq, eq.fid)->
+			fabric);
+	case FI_CLASS_CQ:
+		return (container_of(fid, struct hook_cq, cq.fid)->
+			domain->fabric);
+	case FI_CLASS_CNTR:
+		return (container_of(fid, struct hook_cntr, cntr.fid)->
+			domain->fabric);
+	case FI_CLASS_SEP:
+	case FI_CLASS_EP:
+	case FI_CLASS_RX_CTX:
+	case FI_CLASS_SRX_CTX:
+	case FI_CLASS_TX_CTX:
+		return (container_of(fid, struct hook_ep, ep.fid)->
+			domain->fabric);
+	case FI_CLASS_PEP:
+		return (container_of(fid, struct hook_pep, pep.fid)->
+			fabric);
+	case FI_CLASS_STX_CTX:
+		return (container_of(fid, struct hook_stx, stx.fid)->
+			domain->fabric);
+	case FI_CLASS_MR:
+		return (container_of(fid, struct hook_mr, mr.fid)->
+			domain->fabric);
+	default:
+		assert(0);
+		return NULL;
+	}
+}
 
 struct fid *hook_to_hfid(const struct fid *fid)
 {
@@ -136,11 +184,18 @@ int hook_ops_open(struct fid *fid, const char *name,
 int hook_close(struct fid *fid)
 {
 	struct fid *hfid;
+	struct hook_prov_ctx *prov_ctx;
 	int ret;
 
 	hfid = hook_to_hfid(fid);
 	if (!hfid)
 		return -FI_EINVAL;
+
+	prov_ctx = hook_to_prov_ctx(fid);
+	if (!prov_ctx)
+		return -FI_EINVAL;
+
+	hook_fini_fid(prov_ctx, fid);
 
 	ret = hfid->ops->close(hfid);
 	if (!ret)
@@ -157,7 +212,7 @@ struct fi_ops hook_fid_ops = {
 	.ops_open = hook_ops_open,
 };
 
-static struct fi_ops hook_fabric_fid_ops = {
+struct fi_ops hook_fabric_fid_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = hook_close,
 	.bind = hook_bind,
@@ -165,7 +220,7 @@ static struct fi_ops hook_fabric_fid_ops = {
 	.ops_open = hook_ops_open,
 };
 
-static struct fi_ops_fabric hook_fabric_ops = {
+struct fi_ops_fabric hook_fabric_ops = {
 	.size = sizeof(struct fi_ops_fabric),
 	.domain = hook_domain,
 	.passive_ep = hook_passive_ep,
@@ -176,11 +231,12 @@ static struct fi_ops_fabric hook_fabric_ops = {
 
 void hook_fabric_init(struct hook_fabric *fabric, enum ofi_hook_class hclass,
 		      struct fid_fabric *hfabric, struct fi_provider *hprov,
-		      struct fi_ops *f_ops)
+		      struct fi_ops *f_ops, struct hook_prov_ctx *prov_ctx)
 {
 	fabric->hclass = hclass;
 	fabric->hfabric = hfabric;
-	fabric->prov = hprov;
+	fabric->hprov = hprov;
+	fabric->prov_ctx = prov_ctx;
 	fabric->fabric.fid.fclass = FI_CLASS_FABRIC;
 	fabric->fabric.fid.context = hfabric->fid.context;
 	fabric->fabric.fid.ops = f_ops;
@@ -190,7 +246,9 @@ void hook_fabric_init(struct hook_fabric *fabric, enum ofi_hook_class hclass,
 	hfabric->fid.context = fabric;
 }
 
-static int noop_hook_fabric(struct fi_fabric_attr *attr,
+struct hook_prov_ctx hook_noop_ctx;
+
+static int hook_noop_fabric(struct fi_fabric_attr *attr,
 			    struct fid_fabric **fabric, void *context)
 {
 	struct fi_provider *hprov = context;
@@ -202,24 +260,26 @@ static int noop_hook_fabric(struct fi_fabric_attr *attr,
 		return -FI_ENOMEM;
 
 	hook_fabric_init(fab, HOOK_NOOP, attr->fabric, hprov,
-			 &hook_fabric_fid_ops);
+			 &hook_fabric_fid_ops, &hook_noop_ctx);
 	*fabric = &fab->fabric;
 	return 0;
 }
 
-struct fi_provider noop_hook_prov = {
-	.version = FI_VERSION(1,0),
-	/* We're a pass-through provider, so the fi_version is always the latest */
-	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
-	.name = "ofi_noop_hook",
-	.getinfo = NULL,
-	.fabric = noop_hook_fabric,
-	.cleanup = NULL,
+struct hook_prov_ctx hook_noop_ctx = {
+	.prov = {
+		.version = FI_VERSION(1,0),
+		/* We're a pass-through provider, so the fi_version is always the latest */
+		.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+		.name = "ofi_hook_noop",
+		.getinfo = NULL,
+		.fabric = hook_noop_fabric,
+		.cleanup = NULL,
+	},
 };
 
-NOOP_HOOK_INI
+HOOK_NOOP_INI
 {
-	return &noop_hook_prov;
+	return &hook_noop_ctx.prov;
 }
 
 /*

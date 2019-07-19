@@ -240,15 +240,23 @@ RSTREAM_INI ;
 #endif
 
 #if(HAVE_PERF)
-#  define PERF_HOOK_INI INI_SIG(fi_perf_hook_ini)
-#  define PERF_HOOK_INIT fi_perf_hook_ini()
-PERF_HOOK_INI ;
+#  define HOOK_PERF_INI INI_SIG(fi_hook_perf_ini)
+#  define HOOK_PERF_INIT fi_hook_perf_ini()
+HOOK_PERF_INI ;
 #else
-#  define PERF_HOOK_INIT NULL
+#  define HOOK_PERF_INIT NULL
 #endif
 
-#  define NOOP_HOOK_INI INI_SIG(fi_noop_hook_ini)
-#  define NOOP_HOOK_INIT fi_noop_hook_ini()
-NOOP_HOOK_INI ;
+#if(HAVE_HOOK_DEBUG)
+#  define HOOK_DEBUG_INI INI_SIG(fi_debug_hook_ini)
+#  define HOOK_DEBUG_INIT fi_debug_hook_ini()
+HOOK_DEBUG_INI ;
+#else
+#  define HOOK_DEBUG_INIT NULL
+#endif
+
+#  define HOOK_NOOP_INI INI_SIG(fi_hook_noop_ini)
+#  define HOOK_NOOP_INIT fi_hook_noop_ini()
+HOOK_NOOP_INI ;
 
 #endif /* _OFI_PROV_H_ */

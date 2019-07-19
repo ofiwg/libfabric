@@ -83,7 +83,7 @@ static int hook_cntr_seterr(struct fid_cntr *cntr, uint64_t value)
 	return fi_cntr_seterr(mycntr->hcntr, value);
 }
 
-static struct fi_ops_cntr hook_cntr_ops = {
+struct fi_ops_cntr hook_cntr_ops = {
 	.size = sizeof(struct fi_ops_cntr),
 	.read = hook_cntr_read,
 	.readerr = hook_cntr_readerr,
@@ -110,15 +110,7 @@ int hook_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	mycntr->cntr.fid.fclass = FI_CLASS_CNTR;
 	mycntr->cntr.fid.context = context;
 	mycntr->cntr.fid.ops = &hook_fid_ops;
-
-	switch (dom->fabric->hclass) {
-	case HOOK_PERF:
-		mycntr->cntr.ops = &perf_cntr_ops;
-		break;
-	default:
-		mycntr->cntr.ops = &hook_cntr_ops;
-		break;
-	}
+	mycntr->cntr.ops = &hook_cntr_ops;
 
 	hattr = *attr;
 	if (attr->wait_obj == FI_WAIT_SET)
@@ -127,9 +119,18 @@ int hook_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	ret = fi_cntr_open(dom->hdomain, &hattr, &mycntr->hcntr,
 			   &mycntr->cntr.fid);
 	if (ret)
-		free(mycntr);
-	else
-		*cntr = &mycntr->cntr;
+		goto err1;
 
+	*cntr = &mycntr->cntr;
+
+	ret = hook_ini_fid(dom->fabric->prov_ctx, &mycntr->cntr.fid);
+	if (ret)
+		goto err2;
+
+	return ret;
+err2:
+	fi_close(&mycntr->hcntr->fid);
+err1:
+	free(mycntr);
 	return ret;
 }
