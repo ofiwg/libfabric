@@ -92,7 +92,7 @@ AM_CONDITIONAL(HAVE_CLOCK_GETTIME, [test $have_clock_gettime -eq 1])
 AC_ARG_WITH([libfabric],
             AC_HELP_STRING([--with-libfabric], [Use non-default libfabric location - default NO]),
             [AS_IF([test -d $withval/lib64], [fab_libdir="lib64"], [fab_libdir="lib"])
-             CPPFLAGS="-I $withval/include $CPPFLAGS"
+             CPPFLAGS="-I$withval/include $CPPFLAGS"
              LDFLAGS="-L$withval/$fab_libdir $LDFLAGS"],
             [])
 
