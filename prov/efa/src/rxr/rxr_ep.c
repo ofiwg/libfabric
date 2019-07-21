@@ -223,7 +223,7 @@ struct rxr_rx_entry *rxr_ep_rx_entry_init(struct rxr_ep *ep,
 	case ofi_op_read_rsp:
 		rx_entry->cq_entry.flags = (FI_REMOTE_READ | FI_RMA);
 		break;
-	case ofi_op_write_async:
+	case ofi_op_write:
 		rx_entry->cq_entry.flags = (FI_REMOTE_WRITE | FI_RMA);
 		break;
 	default:
@@ -264,7 +264,7 @@ struct rxr_rx_entry *rxr_ep_get_rx_entry(struct rxr_ep *ep,
  * processing and put the rx_entry on the appropriate unexpected list.
  */
 struct rxr_rx_entry *rxr_ep_get_new_unexp_rx_entry(struct rxr_ep *ep,
-						   struct rxr_pkt_entry *pkt_entry, bool is_local)
+						   struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_rx_entry *rx_entry;
 	struct rxr_pkt_entry *unexp_entry;
@@ -473,11 +473,12 @@ static int rxr_ep_handle_unexp_match(struct rxr_ep *ep,
 				     void *context, fi_addr_t addr,
 				     uint32_t op, uint64_t flags)
 {
+	struct rxr_peer *peer;
 	struct rxr_pkt_entry *pkt_entry;
 	struct rxr_rts_hdr *rts_hdr;
-	uint64_t bytes_left, len;
-	bool is_local = 0;
-	int ret = 0;
+	uint64_t len;
+	char *data;
+	size_t data_size;
 
 	rx_entry->fi_flags = flags;
 	rx_entry->ignore = ignore;
@@ -485,7 +486,6 @@ static int rxr_ep_handle_unexp_match(struct rxr_ep *ep,
 
 	pkt_entry = rx_entry->unexp_rts_pkt;
 	rts_hdr = rxr_get_rts_hdr(pkt_entry->pkt);
-	is_local = rts_hdr->flags & RXR_SHM_HDR;
 
 	rx_entry->cq_entry.op_context = context;
 	/*
@@ -514,30 +514,18 @@ static int rxr_ep_handle_unexp_match(struct rxr_ep *ep,
 		rx_entry->ignore = ~0;
 	}
 
-	rxr_cq_recv_rts_data(ep, rx_entry, rts_hdr);
-
-	if (rx_entry->total_len - rx_entry->bytes_done == 0) {
-		rxr_cq_handle_rx_completion(ep, pkt_entry, rx_entry);
-		rxr_release_rx_entry(ep, rx_entry);
+	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+	data = rxr_cq_read_rts_hdr(ep, rx_entry, pkt_entry);
+	if (peer->is_local && !(rts_hdr->flags & RXR_SHM_HDR_DATA)) {
+		rxr_cq_process_shm_large_message(ep, rx_entry, rts_hdr, data);
+		rxr_release_rx_pkt_entry(ep, pkt_entry);
 		return 0;
 	}
 
-	rx_entry->state = RXR_RX_RECV;
-#if ENABLE_DEBUG
-	dlist_insert_tail(&rx_entry->rx_pending_entry, &ep->rx_pending_list);
-	ep->rx_pending++;
-#endif
-	if (rxr_env.enable_shm_transfer && is_local) {
-		goto shm_large_msg_out;
-	}
-	bytes_left = rx_entry->total_len - rx_entry->bytes_done;
-	if (!rx_entry->window && bytes_left > 0)
-		ret = rxr_ep_post_cts_or_queue(ep, rx_entry, bytes_left);
-
-
-shm_large_msg_out:
-	rxr_release_rx_pkt_entry(ep, pkt_entry);
-	return ret;
+	data_size = rxr_get_rts_data_size(ep, rts_hdr);
+	return rxr_cq_handle_rts_with_data(ep, rx_entry,
+					   pkt_entry, data,
+					   data_size);
 }
 
 /*
@@ -1483,6 +1471,7 @@ void rxr_init_rts_pkt_entry(struct rxr_ep *ep,
 	uint64_t data_len;
 	size_t mtu = ep->mtu_size;
 	int rmalen = 0;
+	struct rxr_rma_read_hdr *rma_read_hdr;
 
 	rts_hdr = (struct rxr_rts_hdr *)pkt_entry->pkt;
 	peer = rxr_ep_get_peer(ep, tx_entry->addr);
@@ -1553,12 +1542,11 @@ void rxr_init_rts_pkt_entry(struct rxr_ep *ep,
 	 */
 	if (rts_hdr->flags & RXR_READ_REQ) {
 		/* no data to send, but need to send rx_id and window */
-		memcpy(src, &tx_entry->rma_loc_rx_id, sizeof(uint64_t));
-		src += sizeof(uint64_t);
-		pkt_entry->pkt_size += sizeof(uint64_t);
-		memcpy(src, &tx_entry->rma_window, sizeof(uint64_t));
-		src += sizeof(uint64_t);
-		pkt_entry->pkt_size += sizeof(uint64_t);
+		rma_read_hdr = (struct rxr_rma_read_hdr *)src;
+		rma_read_hdr->rma_initiator_rx_id = tx_entry->rma_loc_rx_id;
+		rma_read_hdr->window = tx_entry->rma_window;
+		src += sizeof(struct rxr_rma_read_hdr);
+		pkt_entry->pkt_size += sizeof(struct rxr_rma_read_hdr);
 	} else {
 		data = src;
 		if (rxr_env.enable_shm_transfer && peer->is_local) {

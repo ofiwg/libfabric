@@ -39,8 +39,21 @@
 
 #include <rdma/fi_rma.h>
 
+struct rxr_rma_read_hdr {
+	uint64_t rma_initiator_rx_id;
+	uint64_t window;
+};
+
+#if defined(static_assert) && defined(__x86_64__)
+static_assert(sizeof(struct rxr_rma_read_hdr) == 16, "rxr_rma_read_hdr check");
+#endif
+
 int rxr_rma_verified_copy_iov(struct rxr_ep *ep, struct fi_rma_iov *rma,
 			      size_t count, uint32_t flags, struct iovec *iov);
+
+int rxr_rma_process_write_rts(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
+
+int rxr_rma_process_read_rts(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
 
 struct rxr_tx_entry *rxr_readrsp_tx_entry_init(struct rxr_ep *rxr_ep,
 					       struct rxr_rx_entry *rx_entry);

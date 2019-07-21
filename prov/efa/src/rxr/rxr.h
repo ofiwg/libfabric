@@ -1149,11 +1149,11 @@ static inline uint64_t rxr_get_rts_data_size(struct rxr_ep *ep,
 					     struct rxr_rts_hdr *rts_hdr)
 {
 	/*
-	 * for read request, rts packet contain no data
-	 * because data is on remote host
+	 * read RTS contain no data, because data is on remote EP.
 	 */
 	if (rts_hdr->flags & RXR_READ_REQ)
 		return 0;
+
 	if (rts_hdr->flags & RXR_SHM_HDR)
 		return (rts_hdr->flags & RXR_SHM_HDR_DATA) ? rts_hdr->data_len : 0;
 
@@ -1268,7 +1268,7 @@ void rxr_ep_init_cts_pkt_entry(struct rxr_ep *ep,
 void rxr_ep_init_readrsp_pkt_entry(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 				   struct rxr_pkt_entry *pkt_entry);
 struct rxr_rx_entry *rxr_ep_get_new_unexp_rx_entry(struct rxr_ep *ep,
-						   struct rxr_pkt_entry *unexp_entry, bool is_local);
+						   struct rxr_pkt_entry *unexp_entry);
 struct rxr_rx_entry *rxr_ep_split_rx_entry(struct rxr_ep *ep,
 					   struct rxr_rx_entry *posted_entry,
 					   struct rxr_rx_entry *consumer_entry,
@@ -1303,9 +1303,23 @@ void rxr_cq_write_tx_completion(struct rxr_ep *ep,
 
 ssize_t rxr_cq_recv_shm_large_message(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry);
 
-void rxr_cq_recv_rts_data(struct rxr_ep *ep,
+void rxr_cq_process_shm_large_message(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
+				      struct rxr_rts_hdr *rts_hdr, char *data);
+
+char *rxr_cq_read_rts_hdr(struct rxr_ep *ep,
 			  struct rxr_rx_entry *rx_entry,
-			  struct rxr_rts_hdr *rts_hdr);
+			  struct rxr_pkt_entry *pkt_entry);
+
+int rxr_cq_handle_rts_with_data(struct rxr_ep *ep,
+				struct rxr_rx_entry *rx_entry,
+				struct rxr_pkt_entry *pkt_entry,
+				char *data, size_t data_size);
+
+int rxr_cq_handle_pkt_with_data(struct rxr_ep *ep,
+				struct rxr_rx_entry *rx_entry,
+				struct rxr_pkt_entry *pkt_entry,
+				char *data, size_t seg_offset,
+				size_t seg_size);
 
 void rxr_cq_handle_pkt_recv_completion(struct rxr_ep *ep,
 				       struct fi_cq_data_entry *comp,

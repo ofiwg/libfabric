@@ -65,6 +65,140 @@ int rxr_rma_verified_copy_iov(struct rxr_ep *ep, struct fi_rma_iov *rma,
 	return 0;
 }
 
+char *rxr_rma_read_hdr(struct rxr_ep *ep,
+		       struct rxr_rx_entry *rx_entry,
+		       struct rxr_pkt_entry *pkt_entry,
+		       char *rma_hdr)
+{
+	uint32_t rma_access;
+	struct fi_rma_iov *rma_iov = NULL;
+	struct rxr_rts_hdr *rts_hdr;
+	int ret;
+
+	rma_iov = (struct fi_rma_iov *)rma_hdr;
+	rts_hdr = rxr_get_rts_hdr(pkt_entry->pkt);
+	if (rts_hdr->flags & RXR_READ_REQ) {
+		rma_access = FI_SEND;
+		rx_entry->cq_entry.flags |= (FI_RMA | FI_READ);
+	} else {
+		assert(rts_hdr->flags | RXR_WRITE);
+		rma_access = FI_RECV;
+		rx_entry->cq_entry.flags |= (FI_RMA | FI_WRITE);
+	}
+
+	assert(rx_entry->iov_count == 0);
+
+	rx_entry->iov_count = rts_hdr->rma_iov_count;
+	ret = rxr_rma_verified_copy_iov(ep, rma_iov, rts_hdr->rma_iov_count,
+					rma_access, rx_entry->iov);
+	if (ret) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ, "RMA address verify failed!\n");
+		rxr_cq_handle_cq_error(ep, -FI_EIO);
+	}
+
+	rx_entry->cq_entry.len = ofi_total_iov_len(&rx_entry->iov[0],
+						   rx_entry->iov_count);
+	rx_entry->cq_entry.buf = rx_entry->iov[0].iov_base;
+	return rma_hdr + rts_hdr->rma_iov_count * sizeof(struct fi_rma_iov);
+}
+
+int rxr_rma_process_write_rts(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
+{
+	struct rxr_rx_entry *rx_entry;
+	struct rxr_rts_hdr *rts_hdr;
+	uint64_t tag = ~0;
+	char *rma_hdr;
+	char *data;
+	size_t data_size;
+
+	/*
+	 * rma is one sided operation, match is not expected
+	 * we need to create a rx entry upon receiving a rts
+	 */
+	rx_entry = rxr_ep_get_rx_entry(ep, NULL, 0, tag, 0, NULL, pkt_entry->addr, ofi_op_write, 0);
+	if (OFI_UNLIKELY(!rx_entry)) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ,
+			"RX entries exhausted.\n");
+		rxr_eq_write_error(ep, FI_ENOBUFS, -FI_ENOBUFS);
+		return -FI_ENOBUFS;
+	}
+
+	rx_entry->bytes_done = 0;
+
+	rts_hdr = rxr_get_rts_hdr(pkt_entry->pkt);
+	rma_hdr = rxr_cq_read_rts_hdr(ep, rx_entry, pkt_entry);
+	data = rxr_rma_read_hdr(ep, rx_entry, pkt_entry, rma_hdr);
+	data_size = rxr_get_rts_data_size(ep, rts_hdr);
+	return rxr_cq_handle_rts_with_data(ep, rx_entry,
+					   pkt_entry, data,
+					   data_size);
+}
+
+int rxr_rma_process_read_rts(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
+{
+	struct rxr_rx_entry *rx_entry;
+	struct rxr_tx_entry *tx_entry;
+	uint64_t tag = ~0;
+	int ret = 0;
+	char *rma_hdr;
+	struct rxr_rma_read_hdr *rma_read_hdr;
+	/*
+	 * rma is one sided operation, match is not expected
+	 * we need to create a rx entry upon receiving a rts
+	 */
+	rx_entry = rxr_ep_get_rx_entry(ep, NULL, 0, tag, 0, NULL, pkt_entry->addr, ofi_op_read_rsp, 0);
+	if (OFI_UNLIKELY(!rx_entry)) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ,
+			"RX entries exhausted.\n");
+		rxr_eq_write_error(ep, FI_ENOBUFS, -FI_ENOBUFS);
+		return -FI_ENOBUFS;
+	}
+
+	rx_entry->bytes_done = 0;
+
+	rma_hdr = (char *)rxr_cq_read_rts_hdr(ep, rx_entry, pkt_entry);
+	rma_read_hdr = (struct rxr_rma_read_hdr *)rxr_rma_read_hdr(ep, rx_entry, pkt_entry, rma_hdr);
+
+	rx_entry->rma_initiator_rx_id = rma_read_hdr->rma_initiator_rx_id;
+	rx_entry->window = rma_read_hdr->window;
+	assert(rx_entry->window > 0);
+
+	tx_entry = rxr_readrsp_tx_entry_init(ep, rx_entry);
+	assert(tx_entry);
+	/* the only difference between a read response packet and
+	 * a data packet is that read response packet has remote EP tx_id
+	 * which initiator EP rx_entry need to send CTS back
+	 */
+
+	ret = rxr_ep_post_readrsp(ep, tx_entry);
+	if (!ret) {
+		tx_entry->state = RXR_TX_SENT_READRSP;
+		if (tx_entry->bytes_sent < tx_entry->total_len) {
+			/* as long as read response packet has been sent,
+			 * data packets are ready to be sent. it is OK that
+			 * data packets arrive before read response packet,
+			 * because tx_id is needed by the initator EP in order
+			 * to send CTS, which will not occur until
+			 * all data packets in current window are received, which
+			 * include the data in the read response packet.
+			 */
+			dlist_insert_tail(&tx_entry->entry, &ep->tx_pending_list);
+			tx_entry->state = RXR_TX_SEND;
+		}
+	} else if (ret == -FI_EAGAIN) {
+		dlist_insert_tail(&tx_entry->queued_entry, &ep->tx_entry_queued_list);
+		tx_entry->state = RXR_TX_QUEUED_READRSP;
+		ret = 0;
+	} else {
+		if (rxr_cq_handle_tx_error(ep, tx_entry, ret))
+			assert(0 && "failed to write err cq entry");
+	}
+
+	rx_entry->state = RXR_RX_WAIT_READ_FINISH;
+	rxr_release_rx_pkt_entry(ep, pkt_entry);
+	return ret;
+}
+
 /* Upon receiving a read request, Remote EP call this function to create
  * a tx entry for sending data back.
  */
