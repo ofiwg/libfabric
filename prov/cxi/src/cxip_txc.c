@@ -80,6 +80,8 @@ static int txc_msg_init(struct cxip_txc *txc)
 		cxip_cq_progress(txc->send_cq);
 	} while (txc->rdzv_pte->state != C_PTLTE_ENABLED);
 
+	CXIP_LOG_DBG("TXC RDZV PtlTE enabled: %p\n", txc);
+
 	return FI_SUCCESS;
 
 free_rdzv_pte:

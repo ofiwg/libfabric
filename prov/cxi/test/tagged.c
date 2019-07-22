@@ -522,9 +522,6 @@ void directed_recv(bool logical)
 	free(send_buf);
 	free(fake_recv_buf);
 	free(recv_buf);
-
-	/* TODO need RX request cleanup */
-	//cxit_teardown_tagged();
 }
 
 Test(tagged, directed, .init = NULL)
@@ -1509,7 +1506,7 @@ ParameterizedTest(struct tagged_rx_params *param, tagged, rx)
 	free(recv_buf);
 }
 
-Test(tagged, oflow_replenish)
+Test(tagged, oflow_replenish, .timeout=30)
 {
 	uint8_t *recv_buf,
 		*send_buf;

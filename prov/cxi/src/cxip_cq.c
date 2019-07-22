@@ -44,6 +44,7 @@ int cxip_cq_req_cancel(struct cxip_cq *cq, void *req_ctx, void *op_ctx,
 				cq_entry) {
 		if (req->req_ctx == req_ctx &&
 		    !req->recv.canceled &&
+		    !req->recv.parent &&
 		    (!match || (void *)req->context == op_ctx)) {
 			ret = cxip_msg_recv_cancel(req);
 			break;
@@ -206,6 +207,8 @@ void cxip_cq_req_free(struct cxip_req *req)
 	struct cxip_req *table_req;
 	struct cxip_cq *cq = req->cq;
 
+	CXIP_LOG_DBG("Freeing req: %p (ID: %d)\n", req, req->req_id);
+
 	fastlock_acquire(&cq->req_lock);
 
 	dlist_remove(&req->cq_entry);
@@ -214,7 +217,7 @@ void cxip_cq_req_free(struct cxip_req *req)
 		table_req = (struct cxip_req *)ofi_idx_remove(
 			&req->cq->req_table, req->req_id);
 		if (table_req != req)
-			CXIP_LOG_ERROR("Failed to free request\n");
+			CXIP_LOG_ERROR("Failed to unmap request: %p\n", req);
 	}
 
 	ofi_buf_free(req);

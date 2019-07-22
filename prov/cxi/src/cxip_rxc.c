@@ -115,6 +115,7 @@ static int rxc_msg_init(struct cxip_rxc *rxc)
 	int ret;
 	struct cxi_cq_alloc_opts cq_opts = {};
 	struct cxi_pt_alloc_opts pt_opts = {
+		.use_long_event = 1,
 		.is_matching = 1,
 		.pe_num = CXI_PE_NUM_ANY,
 		.le_pool = CXI_LE_POOL_ANY
@@ -365,7 +366,6 @@ struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr, void *context,
 
 	rxc->ctx.fid.fclass = FI_CLASS_RX_CTX;
 	rxc->ctx.fid.context = context;
-	rxc->num_left = attr->size;
 	rxc->attr = *attr;
 	rxc->use_shared = use_shared;
 
@@ -382,6 +382,7 @@ struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr, void *context,
 
 	/* TODO make configurable */
 	rxc->eager_threshold = CXIP_EAGER_THRESHOLD;
+	rxc->min_multi_recv = CXIP_EP_MIN_MULTI_RECV;
 	rxc->oflow_bufs_max = CXIP_MAX_OFLOW_BUFS;
 	rxc->oflow_msgs_max = CXIP_MAX_OFLOW_MSGS;
 	rxc->oflow_buf_size = CXIP_MAX_OFLOW_MSGS * CXIP_EAGER_THRESHOLD;

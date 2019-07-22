@@ -416,7 +416,8 @@ void validate_rx_event(struct fi_cq_tagged_entry *cqe, void *context,
 	cr_assert(cqe->op_context == context, "CQE Context mismatch");
 	cr_assert(cqe->len == len, "Invalid CQE length");
 	cr_assert(cqe->flags == flags, "CQE flags mismatch");
-	cr_assert(cqe->buf == buf, "Invalid CQE address");
+	cr_assert(cqe->buf == buf, "Invalid CQE address (%p %p)",
+		  cqe->buf, buf);
 	cr_assert(cqe->data == data, "Invalid CQE data");
 	cr_assert(cqe->tag == tag, "Invalid CQE tag");
 }

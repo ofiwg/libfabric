@@ -167,27 +167,21 @@ struct cxip_addr {
 	(av->rxc_bits ? ((uint64_t)fi_addr >> (64 - av->rxc_bits)) : 0)
 
 /* Messaging Match Bit layout */
-#define RDZV_ID_LO_WIDTH 14
-#define RDZV_ID_HI_WIDTH 8
-#define RDZV_ID_WIDTH (RDZV_ID_LO_WIDTH + RDIVS_ID_HI_WIDTH)
-#define RDZV_ID_LO(id) ((id) & ((1 << RDZV_ID_LO_WIDTH) - 1))
-#define RDZV_ID_HI(id) \
-	(((id) >> RDZV_ID_LO_WIDTH) & ((1 << RDZV_ID_HI_WIDTH) - 1))
+#define RDZV_ID_WIDTH 8
 
 union cxip_match_bits {
 	struct {
 		uint64_t tag        : 48; /* User tag value */
-		uint64_t rdzv_id_lo : RDZV_ID_LO_WIDTH;
+		uint64_t rdzv_id_hi : RDZV_ID_WIDTH;
+		uint64_t unused     : 6;
 		uint64_t sink       : 1;  /* Long eager protocol */
 		uint64_t tagged     : 1;  /* Tagged API */
 	};
 	struct {
-		uint64_t rdzv_id_hi : RDZV_ID_HI_WIDTH;
+		uint64_t rdzv_id_lo : RDZV_ID_WIDTH;
 	};
 	uint64_t raw;
 };
-
-#define RDZV_ID(hi, lo) (((hi) << RDZV_ID_LO_WIDTH) | (lo))
 
 // TODO: comments are not yet complete, and may not be entirely correct
 //       complete documentation and review thoroughly
@@ -382,14 +376,17 @@ struct cxip_req_recv {
 	void *recv_buf;			// local receive buffer
 	struct cxip_md *recv_md;	// local receive MD
 	int rc;				// DMA return code
-	uint32_t rlength;		// DMA requested length
-	uint32_t mlength;		// DMA manipulated length
-	uint64_t start;			// DMA Overflow buffer address
+	uint32_t ulen;			// User buffer length
+	uint32_t rlen;			// Send length
+	uint64_t oflow_start;		// Overflow buffer address
 	uint32_t initiator;		// DMA initiator address
 	uint32_t rdzv_id;		// DMA initiator rendezvous ID
 	int rdzv_events;		// Processed rdzv event count
-	bool put_event;			// Put event received?
 	bool canceled;			// Request canceled?
+	bool multi_recv;
+	uint64_t start_offset;
+	struct cxip_req *parent;
+	struct dlist_entry children;
 };
 
 struct cxip_req_send {
@@ -557,13 +554,8 @@ struct cxip_rxc {
 
 	uint16_t rx_id;			// SEP index
 	bool enabled;
-	int progress;			// unused
-	int recv_cq_event;		// unused
-	int use_shared;
 
-	size_t num_left;		// unused (?) (set, never referenced)
-	size_t min_multi_recv;
-	uint64_t addr;
+	int use_shared;
 	struct cxip_rxc *srx;
 
 	struct cxip_cq *recv_cq;
@@ -583,6 +575,7 @@ struct cxip_rxc {
 
 	ofi_atomic32_t orx_reqs;	// outstanding receive requests
 
+	int min_multi_recv;
 	int eager_threshold;
 
 	/* Unexpected message handling */
@@ -604,10 +597,8 @@ struct cxip_rxc {
 	struct cxip_oflow_buf ux_sink_buf;	// Long UX sink buffer
 };
 
-#define CXIP_RDZV_IDS (1 << RDZV_ID_LO_WIDTH)
+#define CXIP_RDZV_IDS (1 << RDZV_ID_WIDTH)
 #define CXIP_RDZV_ID_BLOCKS (CXIP_RDZV_IDS / __BITS_PER_LONG)
-_Static_assert(CXIP_RDZV_IDS <= (1 << RDZV_ID_LO_WIDTH),
-	       "CXIP_RDZV_IDS range exceeds RDZV ID field width.");
 
 /**
  * Transmit Context
@@ -626,7 +617,6 @@ struct cxip_txc {
 
 	uint16_t tx_id;			// SEP index
 	bool enabled;
-	uint8_t progress;		// unused
 
 	int use_shared;
 	struct cxip_txc *stx;		// shared context (?)

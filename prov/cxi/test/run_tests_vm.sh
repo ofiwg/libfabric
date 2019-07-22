@@ -16,7 +16,7 @@ CSRUTIL="$PYCXI/utils/csrutil"
 if [ -e $CSRUTIL ]; then
 	. $PYCXI/.venv/bin/activate
 	$CSRUTIL store csr get_ctrl get_en=0
-	DMA_FAULT_RATE=.1 MALLOC_FAULT_RATE=.1 FI_LOG_LEVEL=warn RDZV_OFFLOAD=1 ./cxitest --verbose --filter=tagged/* --tap=cxitest-rput-swget.tap
+	DMA_FAULT_RATE=.1 MALLOC_FAULT_RATE=.1 FI_LOG_LEVEL=warn RDZV_OFFLOAD=1 ./cxitest --verbose --filter="@(tagged|msg)/*" --tap=cxitest-rput-swget.tap
 	$CSRUTIL store csr get_ctrl get_en=1
 else
 	echo "No csrutil"
