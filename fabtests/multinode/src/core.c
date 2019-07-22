@@ -1,5 +1,9 @@
 /*
+<<<<<<< HEAD
  * Copyright (c) 2017-2019 Intel Corporation. All rights reserved.
+=======
+ * Copyright (c) 2017-2018 Intel Corporation. All rights reserved.
+>>>>>>> fabtests/multinode: Initial version of multinode sendrecv test
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -53,11 +57,40 @@
 #include <arpa/inet.h>
 
 struct pattern_ops *pattern;
+<<<<<<< HEAD
 struct multinode_xfer_state state;
 
 static int multinode_setup_fabric(int argc, char **argv)
 {
 	char my_name[FT_MAX_CTRL_MSG];
+=======
+
+struct multinode_xfer_state state =
+
+	(struct multinode_xfer_state) {
+	.recvs_posted = 0,
+	.sends_posted = 0,
+	.recvs_done = 0,
+	.sends_done = 0,
+
+	.tx_window = 0,
+	.rx_window = 0,
+
+	.cur_sender = PATTERN_NO_CURRENT,
+	.cur_receiver = PATTERN_NO_CURRENT,
+
+	.all_sends_done = false,
+	.all_recvs_done = false,
+	.all_completions_done =	false,
+
+	.tx_flags = 0,
+	.rx_flags = 0,
+};
+
+static int multinode_init_fabric(int argc, char **argv)
+{
+	void *my_name;
+>>>>>>> fabtests/multinode: Initial version of multinode sendrecv test
 	size_t len;
 	int ret;
 
@@ -83,15 +116,31 @@ static int multinode_setup_fabric(int argc, char **argv)
 	if (ret)
 		return ret;
 
+<<<<<<< HEAD
 	opts.av_size = pm_job.num_ranks;
+=======
+	opts.av_size = pm_job.ranks;
+>>>>>>> fabtests/multinode: Initial version of multinode sendrecv test
 	ret = ft_alloc_active_res(fi);
 	if (ret)
 		return ret;
 
+<<<<<<< HEAD
+=======
+	len = FT_MAX_CTRL_MSG;
+	my_name = calloc(len, 1);
+	if (!my_name) {
+		FT_ERR("allocating memory failed\n");
+		ret = -FI_ENOMEM;
+		goto err1;
+	}
+
+>>>>>>> fabtests/multinode: Initial version of multinode sendrecv test
 	ret = ft_enable_ep(ep, eq, av, txcq, rxcq, txcntr, rxcntr);
 	if (ret)
 		return ret;
 
+<<<<<<< HEAD
 	len = FT_MAX_CTRL_MSG;
 	ret = fi_getname(&ep->fid, (void *) my_name, &len);
 	if (ret) {
@@ -129,6 +178,51 @@ static int multinode_setup_fabric(int argc, char **argv)
 	}
 	return 0;
 err:
+=======
+	ret = fi_getname(&ep->fid, (void *) my_name, &len);
+	if (ret) {
+		FT_PRINTERR("error determining local endpoint name\n", ret);
+		goto err2;
+	}
+
+	pm_job.names = malloc(len * pm_job.ranks);
+	pm_job.name_len = len;
+
+	if (pm_job.names == NULL) {
+		FT_ERR("error allocating memory for address exchange\n");
+		ret = -FI_ENOMEM;
+		goto err2;
+	}
+
+	ret = pm_job.allgather(my_name, pm_job.names, pm_job.name_len);
+	if (ret) {
+		FT_PRINTERR("error exchanging addresses\n", ret);
+		goto err2;
+	}
+
+	pm_job.fi_addrs = calloc(pm_job.ranks, sizeof(*pm_job.fi_addrs));
+	ret = fi_av_insert(av, pm_job.names, pm_job.ranks,
+			   pm_job.fi_addrs, 0, NULL);
+	if (ret != pm_job.ranks) {
+		FT_ERR("unable to insert all addresses into AV table\n");
+		ret = -1;
+		goto err2;
+	} else {
+		ret = 0;
+	}
+
+
+	return 0;
+err2:
+	free(my_name);
+err1:
+	ft_free_res();
+	return ft_exit_code(ret);
+}
+
+static int multinode_close_fabric(int ret)
+{
+>>>>>>> fabtests/multinode: Initial version of multinode sendrecv test
 	ft_free_res();
 	return ft_exit_code(ret);
 }
@@ -139,9 +233,15 @@ static int multinode_post_rx()
 
 	/* post receives */
 	while (!state.all_recvs_done) {
+<<<<<<< HEAD
 		prev = state.cur_source;
 
 		ret = pattern->next_source(&state.cur_source);
+=======
+		prev = state.cur_sender;
+
+		ret = pattern->next_sender(&state.cur_sender);
+>>>>>>> fabtests/multinode: Initial version of multinode sendrecv test
 		if (ret == -ENODATA) {
 			state.all_recvs_done = true;
 			break;
@@ -150,14 +250,22 @@ static int multinode_post_rx()
 		}
 
 		if (state.rx_window == 0) {
+<<<<<<< HEAD
 			state.cur_source = prev;
+=======
+			state.cur_sender = prev;
+>>>>>>> fabtests/multinode: Initial version of multinode sendrecv test
 			break;
 		}
 
 		offset = state.recvs_posted % opts.window_size ;
 		/* find context and buff */
 		if (rx_ctx_arr[offset].state != OP_DONE) {
+<<<<<<< HEAD
 			state.cur_source = prev;
+=======
+			state.cur_sender = prev;
+>>>>>>> fabtests/multinode: Initial version of multinode sendrecv test
 			break;
 		}
 
@@ -168,7 +276,11 @@ static int multinode_post_rx()
 		if (ret)
 			return ret;
 
+<<<<<<< HEAD
 		rx_ctx_arr[offset].state = OP_PENDING;
+=======
+		rx_ctx_arr[offset].state = 20 + offset;
+>>>>>>> fabtests/multinode: Initial version of multinode sendrecv test
 		state.recvs_posted++;
 		state.rx_window--;
 	};
@@ -182,9 +294,15 @@ static int multinode_post_tx()
 
 	while (!state.all_sends_done) {
 
+<<<<<<< HEAD
 		prev = state.cur_target;
 
 		ret = pattern->next_target(&state.cur_target);
+=======
+		prev = state.cur_receiver;
+
+		ret = pattern->next_receiver(&state.cur_receiver);
+>>>>>>> fabtests/multinode: Initial version of multinode sendrecv test
 		if (ret == -ENODATA) {
 			state.all_sends_done = true;
 			break;
@@ -193,18 +311,30 @@ static int multinode_post_tx()
 		}
 
 		if (state.tx_window == 0) {
+<<<<<<< HEAD
 			state.cur_target = prev;
+=======
+			state.cur_receiver = prev;
+>>>>>>> fabtests/multinode: Initial version of multinode sendrecv test
 			break;
 		}
 
 		offset = state.sends_posted % opts.window_size;
 
 		if (tx_ctx_arr[offset].state != OP_DONE) {
+<<<<<<< HEAD
 			state.cur_target = prev;
 			break;
 		}
 		tx_ctx_arr[offset].buf[0] = offset;
 		dest = pm_job.fi_addrs[state.cur_target];
+=======
+			state.cur_receiver = prev;
+			break;
+		}
+		tx_ctx_arr[offset].buf[0] = offset;
+		dest = pm_job.fi_addrs[state.cur_receiver];
+>>>>>>> fabtests/multinode: Initial version of multinode sendrecv test
 		ret = ft_post_tx_buf(ep, dest, opts.transfer_size,
 				     NO_CQ_DATA,
 				     &tx_ctx_arr[offset],
@@ -244,6 +374,7 @@ static int multinode_wait_for_comp()
 	return 0;
 }
 
+<<<<<<< HEAD
 static inline void multinode_init_state()
 {
 	state.cur_source = PATTERN_NO_CURRENT;
@@ -265,6 +396,24 @@ static int multinode_run_test()
 	for (iter = 0; iter < opts.iterations; iter++) {
 
 		multinode_init_state();
+=======
+static int multinode_run_test()
+{
+	int ret;
+
+	for (state.iteration = 0;
+	     state.iteration < opts.iterations;
+	     state.iteration++) {
+		state.cur_sender = PATTERN_NO_CURRENT;
+		state.cur_receiver = PATTERN_NO_CURRENT;
+
+		state.all_completions_done = false;
+		state.all_recvs_done = false;
+		state.all_sends_done = false;
+
+		state.rx_window = opts.window_size;
+		state.tx_window = opts.window_size;
+>>>>>>> fabtests/multinode: Initial version of multinode sendrecv test
 
 		while (!state.all_completions_done ||
 				!state.all_recvs_done ||
@@ -282,6 +431,7 @@ static int multinode_run_test()
 				return ret;
 		}
 	}
+<<<<<<< HEAD
 	pm_barrier();
 	return 0;
 }
@@ -295,10 +445,17 @@ static void pm_job_free_res()
 	free(pm_job.fi_addrs);
 }
 
+=======
+	pm_job.barrier();
+	return 0;
+}
+
+>>>>>>> fabtests/multinode: Initial version of multinode sendrecv test
 int multinode_run_tests(int argc, char **argv)
 {
 	int ret = FI_SUCCESS;
 
+<<<<<<< HEAD
 	ret = multinode_setup_fabric(argc, argv);
 	if (ret)
 		return ret;
@@ -310,4 +467,16 @@ int multinode_run_tests(int argc, char **argv)
 	pm_job_free_res();
 	ft_free_res();
 	return ft_exit_code(ret);
+=======
+	ret = multinode_init_fabric(argc, argv);
+	if (ret)
+		return ret;
+
+	pattern = &all2all_ops;
+
+	ret = multinode_run_test();
+
+	multinode_close_fabric(ret);
+	return ret;
+>>>>>>> fabtests/multinode: Initial version of multinode sendrecv test
 }

@@ -342,6 +342,9 @@ ubertest_fi_ubertest_LDADD = libfabtests.la
 multinode_fi_multinode_SOURCES = \
 	multinode/src/harness.c \
 	multinode/src/pattern/full_mesh.c \
+	multinode/src/pattern/gather.c \
+	multinode/src/pattern/broadcast.c \
+	multinode/src/pattern/ring.c \
 	multinode/include/pattern.h \
 	multinode/src/core.c \
 	multinode/include/core.h

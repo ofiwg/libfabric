@@ -78,7 +78,11 @@ static inline int socket_recv(int sock, void *buf, size_t len, int flags)
 	return len;
 }
 
+<<<<<<< HEAD
 int pm_allgather(void *my_item, void *items, int item_size)
+=======
+static int pm_allgather(void *my_item, void *items, int item_size)
+>>>>>>> fabtests/multinode: Initial version of multinode sendrecv test
 
 {
 	int i, ret;
@@ -91,7 +95,11 @@ int pm_allgather(void *my_item, void *items, int item_size)
 			return errno == EPIPE ? -FI_ENOTCONN : -errno;
 
 		ret = socket_recv(pm_job.sock, items,
+<<<<<<< HEAD
 				  pm_job.num_ranks*item_size, 0);
+=======
+				  pm_job.ranks*item_size, 0);
+>>>>>>> fabtests/multinode: Initial version of multinode sendrecv test
 		if (ret <= 0)
 			return (ret)? -errno : -FI_ENOTCONN;
 
@@ -101,7 +109,11 @@ int pm_allgather(void *my_item, void *items, int item_size)
 	/* server */
 	memcpy(items, my_item, item_size);
 
+<<<<<<< HEAD
 	for (i = 0; i < pm_job.num_ranks-1; i++) {
+=======
+	for (i = 0; i < pm_job.ranks-1; i++) {
+>>>>>>> fabtests/multinode: Initial version of multinode sendrecv test
 		offset = (uint8_t *)items + item_size * (i+1);
 
 		ret = socket_recv(pm_job.clients[i], (void *)offset,
@@ -110,15 +122,22 @@ int pm_allgather(void *my_item, void *items, int item_size)
 			return ret;
 	}
 
+<<<<<<< HEAD
 	for (i = 0; i < pm_job.num_ranks-1; i++) {
 		ret = socket_send(pm_job.clients[i], items,
 				  pm_job.num_ranks*item_size, 0);
+=======
+	for (i = 0; i < pm_job.ranks-1; i++) {
+		ret = socket_send(pm_job.clients[i], items,
+				  pm_job.ranks*item_size, 0);
+>>>>>>> fabtests/multinode: Initial version of multinode sendrecv test
 		if (ret < 0)
 			return ret;
 	}
 	return 0;
 }
 
+<<<<<<< HEAD
 void pm_barrier()
 {
 	char ch;
@@ -142,11 +161,37 @@ static int server_connect()
 
 	for (i = 0; i < pm_job.num_ranks-1; i++){
 		new_sock = accept(pm_job.sock, NULL, NULL);
+=======
+static void pm_barrier()
+{
+	char ch;
+	char chs[pm_job.ranks];
+
+	pm_job.allgather(&ch, chs, 1);
+}
+
+static int server_init()
+{
+	int new_sock;
+	int ret, i = 0;
+
+	ret = listen(pm_job.sock, pm_job.ranks);
+	if (ret)
+		return ret;
+
+	pm_job.clients = calloc(pm_job.ranks, sizeof(int));
+	if (!pm_job.clients)
+		return -FI_ENOMEM;
+
+	while (i < pm_job.ranks-1 &&
+	       (new_sock = accept(pm_job.sock, NULL, NULL))) {
+>>>>>>> fabtests/multinode: Initial version of multinode sendrecv test
 		if (new_sock < 0) {
 			FT_ERR("error during server init\n");
 			goto err;
 		}
 		pm_job.clients[i] = new_sock;
+<<<<<<< HEAD
 		FT_DEBUG("connection established\n");
 	}
 	close(pm_job.sock);
@@ -155,10 +200,28 @@ err:
 	while (i--) {
 		close(pm_job.clients[i]);
 	}
+=======
+		i++;
+		FT_DEBUG("connection established\n");
+	}
+
+	close(pm_job.sock);
+	return 0;
+err:
+>>>>>>> fabtests/multinode: Initial version of multinode sendrecv test
 	free(pm_job.clients);
 	return new_sock;
 }
 
+<<<<<<< HEAD
+=======
+static inline int client_init()
+{
+	return  connect(pm_job.sock, pm_job.oob_server_addr,
+			sizeof(*pm_job.oob_server_addr));
+}
+
+>>>>>>> fabtests/multinode: Initial version of multinode sendrecv test
 static int pm_conn_setup()
 {
 	int sock,  ret;
@@ -177,20 +240,34 @@ static int pm_conn_setup()
 		return ret;
 	}
 
+<<<<<<< HEAD
 	ret = bind(sock, (struct sockaddr *)&pm_job.oob_server_addr,
 		   sizeof(pm_job.oob_server_addr));
 	if (ret == 0) {
 		ret = server_connect();
+=======
+	ret = bind(sock, pm_job.oob_server_addr,
+		   sizeof(*pm_job.oob_server_addr));
+	if (ret == 0) {
+		ret = server_init();
+>>>>>>> fabtests/multinode: Initial version of multinode sendrecv test
 	} else {
 		opts.dst_addr = opts.src_addr;
 		opts.dst_port = opts.src_port;
 		opts.src_addr = NULL;
 		opts.src_port = 0;
+<<<<<<< HEAD
 		ret = connect(pm_job.sock, (struct sockaddr *)&pm_job.oob_server_addr,
 			      sizeof(pm_job.oob_server_addr));
 	}
 	if (ret) {
 		FT_ERR("OOB conn failed - %s\n", strerror(errno));
+=======
+		ret = client_init();
+	}
+	if (ret) {
+		FT_ERR("OOB conn failed %s\n", strerror(errno));
+>>>>>>> fabtests/multinode: Initial version of multinode sendrecv test
 		return ret;
 	}
 
@@ -206,7 +283,11 @@ static void pm_finalize()
 		return;
 	}
 
+<<<<<<< HEAD
 	for (i = 0; i < pm_job.num_ranks-1; i++) {
+=======
+	for (i = 0; i < pm_job.ranks; i++) {
+>>>>>>> fabtests/multinode: Initial version of multinode sendrecv test
 		close(pm_job.clients[i]);
 	}
 	free(pm_job.clients);
@@ -214,15 +295,28 @@ static void pm_finalize()
 
 int main(int argc, char **argv)
 {
+<<<<<<< HEAD
 	struct sockaddr_in *sock_addr = (struct sockaddr_in *)&pm_job.oob_server_addr;
+=======
+	struct sockaddr_in sock_addr;
+>>>>>>> fabtests/multinode: Initial version of multinode sendrecv test
 	extern char *optarg;
 	int c, ret;
 
 	opts = INIT_OPTS;
 	opts.options |= (FT_OPT_SIZE | FT_OPT_ALLOC_MULT_MR);
 
+<<<<<<< HEAD
 	pm_job.clients = NULL;
 	sock_addr->sin_port = 8228;
+=======
+	pm_job.allgather = pm_allgather;
+	pm_job.barrier = pm_barrier;
+	pm_job.oob_server_addr = (struct sockaddr *) &sock_addr;
+	pm_job.clients = NULL;
+
+	sock_addr.sin_port = 8228;
+>>>>>>> fabtests/multinode: Initial version of multinode sendrecv test
 
 	while ((c = getopt(argc, argv, "n:h" ADDR_OPTS INFO_OPTS)) != -1) {
 		switch (c) {
@@ -232,7 +326,11 @@ int main(int argc, char **argv)
 			break;
 		case '?':
 		case 'n':
+<<<<<<< HEAD
 			pm_job.num_ranks = atoi(optarg);
+=======
+			pm_job.ranks = atoi(optarg);
+>>>>>>> fabtests/multinode: Initial version of multinode sendrecv test
 			break;
 		case 'h':
 			ft_usage(argv[0], "A simple multinode test");
@@ -240,20 +338,31 @@ int main(int argc, char **argv)
 		}
 	}
 
+<<<<<<< HEAD
 	sock_addr->sin_family = AF_INET;
 	if (inet_pton(AF_INET, opts.src_addr,
 		      (void *) &sock_addr->sin_addr) != 1)
+=======
+	sock_addr.sin_family = AF_INET;
+	if (inet_pton(AF_INET, opts.src_addr,
+		      (void *) &sock_addr.sin_addr) != 1)
+>>>>>>> fabtests/multinode: Initial version of multinode sendrecv test
 		return -1;
 
 	ret = pm_conn_setup();
 	if (ret)
+<<<<<<< HEAD
 		goto err1;
+=======
+		goto err;
+>>>>>>> fabtests/multinode: Initial version of multinode sendrecv test
 
 	FT_DEBUG("OOB job setup done\n");
 
 	ret = multinode_run_tests(argc, argv);
 	if (ret) {
 		FT_ERR( "Tests failed\n");
+<<<<<<< HEAD
 		goto err2;
 	}
 	FT_DEBUG("Tests Passed\n");
@@ -261,4 +370,12 @@ err2:
 	pm_finalize();
 err1:
 	return ret;
+=======
+		goto err;
+	}
+	FT_DEBUG("Tests Passed\n");
+err:
+	pm_finalize();
+	return FI_SUCCESS;
+>>>>>>> fabtests/multinode: Initial version of multinode sendrecv test
 }
