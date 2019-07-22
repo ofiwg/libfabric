@@ -136,9 +136,15 @@ enum ft_atomic_opcodes {
 	FT_ATOMIC_COMPARE,
 };
 
+enum op_state {
+	OP_DONE = 0,
+	OP_PENDING
+};
+
 struct ft_context {
 	char *buf;
 	void *desc;
+	enum op_state state;
 	struct fid_mr *mr;
 	struct fi_context2 context;
 };
@@ -266,7 +272,7 @@ extern char default_port[8];
 #define FT_MAX_CTRL_MSG 64
 #define FT_MR_KEY 0xC0DE
 #define FT_TX_MR_KEY (FT_MR_KEY + 1)
-#define FT_RX_MR_KEY 0xFFFF 
+#define FT_RX_MR_KEY 0xFFFF
 #define FT_MSG_MR_ACCESS (FI_SEND | FI_RECV)
 #define FT_RMA_MR_ACCESS (FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE)
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2018 Intel Corporation. All rights reserved.
+ * Copyright (c) 2017-2019 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,38 +30,14 @@
  * SOFTWARE.
  */
 
-#include <pattern/user.h>
-#include "util.h"
+#include <pattern.h>
+#include <core.h>
 
-#define PATTERN_API_VERSION_MAJOR 0
-#define PATTERN_API_VERSION_MINOR 0
-
-struct pattern_arguments {};
-
-static int parse_arguments(
-		const int argc,
-		char * const *argv,
-		struct pattern_arguments **arguments)
-{
-	*arguments = NULL;
-	return 0;
-}
-
-static void free_arguments(struct pattern_arguments *arguments)
-{
-	return;
-}
-
-static int pattern_next(
-		const struct pattern_arguments *arguments,
-		int my_rank,
-		int num_ranks,
-		int *cur,
-		int *threshold)
+static int pattern_next(int *cur)
 {
 	int next = *cur + 1;
 
-	if (next >= num_ranks)
+	if (next >= pm_job.num_ranks)
 		return -ENODATA;
 
 	*cur = next;
@@ -69,13 +45,8 @@ static int pattern_next(
 }
 
 
-struct pattern_api a2a_pattern_api(void)
-{
-	struct pattern_api pattern_api = {
-		.parse_arguments = &parse_arguments,
-		.free_arguments = &free_arguments,
-		.next_sender = &pattern_next,
-		.next_receiver = &pattern_next
-	};
-	return pattern_api;
-}
+struct pattern_ops full_mesh_ops = {
+	.name = "full_mesh",
+	.next_source = pattern_next,
+	.next_target = pattern_next,
+};

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Intel Corporation. All rights reserved.
+ * Copyright (c) 2017-2019 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,51 +30,21 @@
  * SOFTWARE.
  */
 
-#include <pattern/user.h>
-#include "util.h"
+#pragma once
 
-#define PATTERN_API_VERSION_MAJOR 0
-#define PATTERN_API_VERSION_MINOR 0
+#include <stdlib.h>
+#include <stdbool.h>
+#include <errno.h>
 
-struct pattern_arguments {};
+#include <rdma/fabric.h>
 
-static int parse_arguments(
-		const int argc,
-		char * const *argv,
-		struct pattern_arguments **arguments)
-{
-	*arguments = NULL;
-	return 0;
-}
+/* Initial value for iterator position. */
+#define PATTERN_NO_CURRENT (-1)
 
-static void free_arguments(struct pattern_arguments *arguments)
-{
-	return;
-}
+struct pattern_ops {
+	char *name;
+	int (*next_source)(int *cur);
+	int (*next_target) (int *cur);
+};
 
-static int self_pattern_next(
-		const struct pattern_arguments *arguments,
-		int my_rank,
-		int num_ranks,
-		int *cur,
-		int *threshold)
-{
-	if (*cur == PATTERN_NO_CURRENT) {
-		*cur = my_rank;
-		return 0;
-	}
-
-	return -ENODATA;
-}
-
-struct pattern_api
-self_pattern_api(void)
-{
-	struct pattern_api pattern_api = {
-		.parse_arguments = &parse_arguments,
-		.free_arguments = &free_arguments,
-		.next_sender = &self_pattern_next,
-		.next_receiver = &self_pattern_next
-	};
-	return pattern_api;
-}
+extern struct pattern_ops full_mesh_ops;
