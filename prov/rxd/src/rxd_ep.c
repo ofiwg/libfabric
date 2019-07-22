@@ -50,15 +50,6 @@ struct rxd_pkt_entry *rxd_get_tx_pkt(struct rxd_ep *ep)
 	return pkt_entry;
 }
 
-static struct rxd_pkt_entry *rxd_get_rx_pkt(struct rxd_ep *ep)
-{
-	struct rxd_pkt_entry *pkt_entry;
-
-	pkt_entry = ofi_buf_alloc(ep->rx_pkt_pool.pool);
-
-	return pkt_entry;
-}
-
 struct rxd_x_entry *rxd_get_tx_entry(struct rxd_ep *ep, uint32_t op)
 {
 	struct rxd_x_entry *tx_entry;
@@ -237,7 +228,7 @@ int rxd_ep_post_buf(struct rxd_ep *ep)
 	struct rxd_pkt_entry *pkt_entry;
 	ssize_t ret;
 
-	pkt_entry = rxd_get_rx_pkt(ep);
+	pkt_entry = ofi_buf_alloc(ep->rx_pkt_pool.pool);
 	if (!pkt_entry)
 		return -FI_ENOMEM;
 
