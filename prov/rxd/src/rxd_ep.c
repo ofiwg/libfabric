@@ -978,12 +978,6 @@ void rxd_ep_progress(struct util_ep *util_ep)
 	}
 
 out:
-	while (ep->posted_bufs < ep->rx_size) {
-		ret = rxd_ep_post_buf(ep);
-		if (ret)
-			break;
-	}
-
 	fastlock_release(&ep->util_ep.lock);
 }
 
