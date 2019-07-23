@@ -158,7 +158,8 @@ int rxd_av_insert_dg_addr(struct rxd_av *av, const void *addr,
 
 	*rxd_addr = rxd_set_rxd_addr(av, dg_addr);
 
-	ret = ofi_rbmap_insert(&av->rbmap, (void *) addr, (void *) (*rxd_addr));
+	ret = ofi_rbmap_insert(&av->rbmap, (void *) addr, (void *) (*rxd_addr),
+			       NULL);
 	if (ret) {
 		assert(ret != -FI_EALREADY);
 		fi_av_remove(av->dg_av, &dg_addr, 1, flags);

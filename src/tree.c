@@ -192,7 +192,8 @@ ofi_insert_rebalance(struct ofi_rbmap *map, struct ofi_rbnode *x)
 	map->root->color = BLACK;
 }
 
-int ofi_rbmap_insert(struct ofi_rbmap *map, void *key, void *data)
+int ofi_rbmap_insert(struct ofi_rbmap *map, void *key, void *data,
+		     struct ofi_rbnode **ret_node)
 {
 	struct ofi_rbnode *current, *parent, *node;
 	int ret;
@@ -229,6 +230,8 @@ int ofi_rbmap_insert(struct ofi_rbmap *map, void *key, void *data)
 	}
 
 	ofi_insert_rebalance(map, node);
+	if (ret_node)
+		*ret_node = node;
 	return 0;
 }
 

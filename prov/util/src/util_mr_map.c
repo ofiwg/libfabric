@@ -71,7 +71,7 @@ int ofi_mr_map_insert(struct ofi_mr_map *map, const struct fi_mr_attr *attr,
 	if (map->mode & FI_MR_PROV_KEY)
 		item->requested_key = map->key++;
 
-	ret = ofi_rbmap_insert(map->rbtree, &item->requested_key, item);
+	ret = ofi_rbmap_insert(map->rbtree, &item->requested_key, item, NULL);
 	if (ret) {
 		if (ret == -FI_EALREADY)
 			ret = -FI_ENOKEY;
