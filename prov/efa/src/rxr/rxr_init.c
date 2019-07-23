@@ -147,6 +147,11 @@ static int rxr_copy_attr(const struct fi_info *info, struct fi_info *dup)
 				return -FI_ENOMEM;
 		}
 	}
+	if (info->nic) {
+		dup->nic = ofi_nic_dup(info->nic);
+		if (!dup->nic)
+			return -FI_ENOMEM;
+	}
 	return 0;
 }
 
