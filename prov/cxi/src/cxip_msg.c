@@ -328,7 +328,6 @@ static int issue_rdzv_get(struct cxip_req *req, const union c_event *event)
 	const struct c_event_target_long *tev = &event->tgt_long;
 	union c_cmdu cmd = {};
 	struct cxip_rxc *rxc = req->recv.rxc;
-	uint32_t pid_granule = rxc->domain->dev_if->if_dev->info.pid_granule;
 	uint32_t pid_idx = rxc->domain->dev_if->if_dev->info.rdzv_get_idx;
 	uint32_t pid_bits = rxc->domain->dev_if->if_dev->info.pid_bits;
 	uint8_t idx_ext;
@@ -350,8 +349,7 @@ static int issue_rdzv_get(struct cxip_req *req, const union c_event *event)
 		/* TODO fix address format translation issues */
 		cmd.full_dma.dfa.unicast.nid = initiator >> 12;
 		cmd.full_dma.dfa.unicast.endpoint_defined = initiator & 0xFFF;
-		cmd.full_dma.index_ext =
-				PTL_INDEX_EXT(0, pid_granule, pid_idx);
+		cmd.full_dma.index_ext = cxi_build_dfa_ext(pid_idx);
 		cmd.full_dma.request_len = tev->rlength - tev->mlength;
 		cmd.full_dma.local_addr = tev->start;
 		cmd.full_dma.remote_offset = tev->remote_offset;
@@ -361,7 +359,7 @@ static int issue_rdzv_get(struct cxip_req *req, const union c_event *event)
 		uint32_t pid = CXI_MATCH_ID_PID(pid_bits, initiator);
 		union c_fab_addr dfa;
 
-		cxi_build_dfa(nic, pid, pid_granule, pid_idx, &dfa, &idx_ext);
+		cxi_build_dfa(nic, pid, pid_bits, pid_idx, &dfa, &idx_ext);
 		cmd.full_dma.dfa = dfa;
 		cmd.full_dma.index_ext = idx_ext;
 		cmd.full_dma.request_len = req->recv.mlength;
@@ -1916,7 +1914,7 @@ static ssize_t _cxip_send_long(struct cxip_txc *txc, const void *buf,
 	struct cxip_addr caddr;
 	union c_fab_addr dfa;
 	uint8_t idx_ext;
-	uint32_t pid_granule;
+	uint32_t pid_bits;
 	uint32_t pid_idx;
 	uint64_t rx_id;
 	struct c_full_dma_cmd cmd = {};
@@ -1980,9 +1978,9 @@ static ssize_t _cxip_send_long(struct cxip_txc *txc, const void *buf,
 
 	/* Calculate DFA */
 	rx_id = CXIP_AV_ADDR_RXC(txc->ep_obj->av, dest_addr);
-	pid_granule = dom->dev_if->if_dev->info.pid_granule;
+	pid_bits = dom->dev_if->if_dev->info.pid_bits;
 	pid_idx = CXIP_RXC_TO_IDX(rx_id);
-	cxi_build_dfa(caddr.nic, caddr.pid, pid_granule, pid_idx, &dfa,
+	cxi_build_dfa(caddr.nic, caddr.pid, pid_bits, pid_idx, &dfa,
 		      &idx_ext);
 
 	/* Allocate rendezvous ID */
@@ -2093,7 +2091,7 @@ static ssize_t _cxip_send_eager(struct cxip_txc *txc, const void *buf,
 	struct cxip_addr caddr;
 	union c_fab_addr dfa;
 	uint8_t idx_ext;
-	uint32_t pid_granule;
+	uint32_t pid_bits;
 	uint32_t pid_idx;
 	uint64_t rx_id;
 	union cxip_match_bits mb = {};
@@ -2160,9 +2158,9 @@ static ssize_t _cxip_send_eager(struct cxip_txc *txc, const void *buf,
 
 	/* Build Put command descriptor */
 	rx_id = CXIP_AV_ADDR_RXC(txc->ep_obj->av, dest_addr);
-	pid_granule = dom->dev_if->if_dev->info.pid_granule;
+	pid_bits = dom->dev_if->if_dev->info.pid_bits;
 	pid_idx = CXIP_RXC_TO_IDX(rx_id);
-	cxi_build_dfa(caddr.nic, caddr.pid, pid_granule, pid_idx, &dfa,
+	cxi_build_dfa(caddr.nic, caddr.pid, pid_bits, pid_idx, &dfa,
 		      &idx_ext);
 
 	/* Build match bits */

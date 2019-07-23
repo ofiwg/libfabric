@@ -130,7 +130,7 @@ static ssize_t _cxip_rma_op(enum fi_op_type op, struct cxip_txc *txc,
 	struct cxip_addr caddr;
 	union c_fab_addr dfa;
 	uint8_t idx_ext;
-	uint32_t pid_granule;
+	uint32_t pid_bits;
 	uint32_t pid_idx;
 	bool idc;
 
@@ -150,9 +150,9 @@ static ssize_t _cxip_rma_op(enum fi_op_type op, struct cxip_txc *txc,
 		return -FI_EMSGSIZE;
 
 	dom = txc->domain;
-	pid_granule = dom->dev_if->if_dev->info.pid_granule;
+	pid_bits = dom->dev_if->if_dev->info.pid_bits;
 
-	if (key >= CXIP_PID_MR_CNT(pid_granule)) {
+	if (key >= CXIP_PID_MR_CNT(dom->dev_if->if_dev->info.pid_granule)) {
 		CXIP_LOG_DBG("Invalid key: %lu\n", key);
 		return -FI_EINVAL;
 	}
@@ -202,7 +202,7 @@ static ssize_t _cxip_rma_op(enum fi_op_type op, struct cxip_txc *txc,
 
 	/* Generate the destination fabric address */
 	pid_idx = CXIP_MR_TO_IDX(key);
-	cxi_build_dfa(caddr.nic, caddr.pid, pid_granule, pid_idx, &dfa,
+	cxi_build_dfa(caddr.nic, caddr.pid, pid_bits, pid_idx, &dfa,
 		      &idx_ext);
 
 	/* Issue command */

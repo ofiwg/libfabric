@@ -404,7 +404,7 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	union c_cmdu cmd = {};
 	union c_fab_addr dfa;
 	uint8_t idx_ext;
-	uint32_t pid_granule;
+	uint32_t pid_bits;
 	uint32_t pid_idx;
 	uint32_t result_lac = 0;
 	uint64_t result_iova = 0;
@@ -529,10 +529,10 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	}
 
 	dev_if = txc->domain->dev_if;
-	pid_granule = dev_if->if_dev->info.pid_granule;
+	pid_bits = dev_if->if_dev->info.pid_bits;
 
 	/* Do not allow an invalid memory key */
-	if (key >= CXIP_PID_MR_CNT(pid_granule))
+	if (key >= CXIP_PID_MR_CNT(dev_if->if_dev->info.pid_granule))
 		return -FI_EINVAL;
 
 	/* Look up target CXI address */
@@ -583,7 +583,7 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 
 	/* Build AMO command descriptor */
 	pid_idx = CXIP_MR_TO_IDX(key);
-	cxi_build_dfa(caddr.nic, caddr.pid, pid_granule, pid_idx, &dfa,
+	cxi_build_dfa(caddr.nic, caddr.pid, pid_bits, pid_idx, &dfa,
 		      &idx_ext);
 
 	cmd.c_state.write_lac = result_lac;
