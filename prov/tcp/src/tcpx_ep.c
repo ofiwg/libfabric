@@ -66,20 +66,6 @@ void tcpx_hdr_bswap(struct tcpx_base_hdr *hdr)
 	}
 }
 
-static int tcpx_setup_socket_nodelay(SOCKET sock)
-{
-	int ret, optval = 1;
-
-	ret = setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (char *) &optval,
-			 sizeof(optval));
-	if (ret) {
-		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,"setsockopt nodelay failed\n");
-		return ret;
-	}
-
-	return ret;
-}
-
 static int tcpx_setup_socket(SOCKET sock)
 {
 	int ret, optval = 1;
@@ -253,20 +239,14 @@ static int tcpx_pep_sock_create(struct tcpx_pep *pep)
 			strerror(ofi_sockerr()));
 		return -FI_EIO;
 	}
-
+	ret = tcpx_setup_socket(pep->sock);
+	if (ret) {
+		goto err;
+	}
 	if (ofi_addr_get_port(pep->info->src_addr) != 0 || port_range.high == 0) {
-		ret = tcpx_setup_socket(pep->sock);
-		if (ret) {
-			goto err;
-		}
 		ret = bind(pep->sock, pep->info->src_addr,
-		      (socklen_t) pep->info->src_addrlen);
+			  (socklen_t) pep->info->src_addrlen);
 	} else {
-		ret = tcpx_setup_socket_nodelay(pep->sock);
-		if (ret) {
-			goto err;
-		}
-
 		ret = tcpx_bind_to_port_range(pep->sock, pep->info->src_addr,
 					      pep->info->src_addrlen);
 	}
