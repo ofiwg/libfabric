@@ -116,23 +116,12 @@ static struct fi_ops_eq hook_eq_ops = {
 	.strerror = hook_eq_strerror,
 };
 
-int hook_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
-		 struct fid_eq **eq, void *context)
+int hook_eq_init(struct fid_fabric *fabric, struct fi_eq_attr *attr,
+		 struct fid_eq **eq, void *context, struct hook_eq *myeq)
 {
 	struct hook_fabric *fab = container_of(fabric, struct hook_fabric, fabric);
-	struct hook_eq *myeq;
 	struct fi_eq_attr hattr;
 	int ret;
-
-	myeq = calloc(1, sizeof *myeq);
-	if (!myeq)
-		return -FI_ENOMEM;
-
-	myeq->fabric = fab;
-	myeq->eq.fid.fclass = FI_CLASS_EQ;
-	myeq->eq.fid.context = context;
-	myeq->eq.fid.ops = &hook_fid_ops;
-	myeq->eq.ops = &hook_eq_ops;
 
 	hattr = *attr;
 	if (attr->wait_obj == FI_WAIT_SET)
@@ -140,9 +129,27 @@ int hook_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 
 	ret = fi_eq_open(fab->hfabric, &hattr, &myeq->heq, &myeq->eq.fid);
 	if (ret)
-		free(myeq);
-	else
-		*eq = &myeq->eq;
+		return ret;
 
-	return ret;
+	*eq = &myeq->eq;
+
+	myeq->fabric = fab;
+	myeq->eq.fid.fclass = FI_CLASS_EQ;
+	myeq->eq.fid.context = context;
+	myeq->eq.fid.ops = &hook_fid_ops;
+	myeq->eq.ops = &hook_eq_ops;
+
+	return 0;
+}
+
+int hook_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
+		 struct fid_eq **eq, void *context)
+{
+	struct hook_eq *myeq;
+
+	myeq = calloc(1, sizeof *myeq);
+	if (!myeq)
+		return -FI_ENOMEM;
+
+	return hook_eq_init(fabric, attr, eq, context, myeq);
 }

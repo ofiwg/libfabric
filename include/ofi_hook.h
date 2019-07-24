@@ -192,6 +192,8 @@ struct hook_eq {
 	struct hook_fabric *fabric;
 };
 
+int hook_eq_init(struct fid_fabric *fabric, struct fi_eq_attr *attr,
+		 struct fid_eq **eq, void *context, struct hook_eq *myeq);
 int hook_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		 struct fid_eq **eq, void *context);
 
