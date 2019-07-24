@@ -1042,14 +1042,28 @@ static void rxd_buf_region_free_fn(struct ofi_bufpool_region *region)
 		fi_close(region->context);
 }
 
+static int rxd_pool_create_attrs(struct rxd_ep *ep, struct rxd_buf_pool *pool,
+					struct ofi_bufpool_attr attr,
+					enum rxd_pool_type type)
+{
+	int ret;
+	pool->rxd_ep = ep;
+	pool->type = type;
+
+	ret = ofi_bufpool_create_attr(&attr, &pool->pool);
+	if (ret)
+		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL,
+			"Unable to create buf pool\n");
+	return ret;
+}
+
 static int rxd_pkt_pool_create(struct rxd_ep *ep,
 			       size_t chunk_cnt, struct rxd_buf_pool *pool,
 			       enum rxd_pool_type type)
-
 {
-	int ret;
 	struct ofi_bufpool_attr attr = {
-		.size		= rxd_ep_domain(ep)->max_mtu_sz + sizeof(struct rxd_pkt_entry),
+		.size		= rxd_ep_domain(ep)->max_mtu_sz +
+				  sizeof(struct rxd_pkt_entry),
 		.alignment	= RXD_BUF_POOL_ALIGNMENT,
 		.max_cnt	= 0,
 		.chunk_cnt	= chunk_cnt,
@@ -1060,22 +1074,14 @@ static int rxd_pkt_pool_create(struct rxd_ep *ep,
 		.flags		= OFI_BUFPOOL_HUGEPAGES,
 	};
 
-	pool->rxd_ep = ep;
-	pool->type = type;
-	ret = ofi_bufpool_create_attr(&attr, &pool->pool);
-	if (ret)
-		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "Unable to create buf pool\n");
-
-	return ret;
+	return rxd_pool_create_attrs(ep, pool, attr, type);
 }
 
 
 static int rxd_entry_pool_create(struct rxd_ep *ep,
 				 size_t chunk_cnt, struct rxd_buf_pool *pool,
 				 enum rxd_pool_type type)
-
 {
-	int ret;
 	struct ofi_bufpool_attr attr = {
 		.size		= sizeof(struct rxd_x_entry),
 		.alignment	= RXD_BUF_POOL_ALIGNMENT,
@@ -1089,13 +1095,7 @@ static int rxd_entry_pool_create(struct rxd_ep *ep,
 				  OFI_BUFPOOL_HUGEPAGES,
 	};
 
-	pool->rxd_ep = ep;
-	pool->type = type;
-	ret = ofi_bufpool_create_attr(&attr, &pool->pool);
-	if (ret)
-		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "Unable to create buf pool\n");
-
-	return ret;
+	return rxd_pool_create_attrs(ep, pool, attr, type);
 }
 
 int rxd_ep_init_res(struct rxd_ep *ep, struct fi_info *fi_info)
