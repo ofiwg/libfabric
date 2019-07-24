@@ -47,34 +47,34 @@ struct ofi_mr_cache_params cache_params = {
 static int util_mr_find_within(struct ofi_rbmap *map, void *key, void *data)
 {
 	struct ofi_mr_entry *entry = data;
-	struct iovec *iov = key;
+	struct ofi_mr_info *info = key;
 
-	if (ofi_iov_shifted_left(iov, &entry->iov))
+	if (ofi_iov_shifted_left(&info->iov, &entry->info.iov))
 		return -1;
-	else if (ofi_iov_shifted_right(iov, &entry->iov))
+	if (ofi_iov_shifted_right(&info->iov, &entry->info.iov))
 		return 1;
-	else
-		return 0;
+
+	return 0;
 }
 
 static int util_mr_find_overlap(struct ofi_rbmap *map, void *key, void *data)
 {
 	struct ofi_mr_entry *entry = data;
-	struct iovec *iov = key;
+	struct ofi_mr_info *info = key;
 
-	if (ofi_iov_left(iov, &entry->iov))
+	if (ofi_iov_left(&info->iov, &entry->info.iov))
 		return -1;
-	else if (ofi_iov_right(iov, &entry->iov))
+	if (ofi_iov_right(&info->iov, &entry->info.iov))
 		return 1;
-	else
-		return 0;
+
+	return 0;
 }
 
 static void util_mr_free_entry(struct ofi_mr_cache *cache,
 			       struct ofi_mr_entry *entry)
 {
 	FI_DBG(cache->domain->prov, FI_LOG_MR, "free %p (len: %" PRIu64 ")\n",
-	       entry->iov.iov_base, entry->iov.iov_len);
+	       entry->info.iov.iov_base, entry->info.iov.iov_len);
 
 	assert(!entry->cached);
 	/* If regions are not being merged, then we can't safely
@@ -84,8 +84,8 @@ static void util_mr_free_entry(struct ofi_mr_cache *cache,
 	 * notification events, but is harmless to correct operation.
 	 */
 	if (entry->subscribed && cache_params.merge_regions) {
-		ofi_monitor_unsubscribe(cache->monitor, entry->iov.iov_base,
-					entry->iov.iov_len);
+		ofi_monitor_unsubscribe(cache->monitor, entry->info.iov.iov_base,
+					entry->info.iov.iov_len);
 		entry->subscribed = 0;
 	}
 	cache->delete_region(cache, entry);
@@ -99,7 +99,7 @@ static void util_mr_uncache_entry_storage(struct ofi_mr_cache *cache,
 	cache->storage.erase(&cache->storage, entry);
 	entry->cached = 0;
 	cache->cached_cnt--;
-	cache->cached_size -= entry->iov.iov_len;
+	cache->cached_size -= entry->info.iov.iov_len;
 }
 
 static void util_mr_uncache_entry(struct ofi_mr_cache *cache,
@@ -112,7 +112,7 @@ static void util_mr_uncache_entry(struct ofi_mr_cache *cache,
 		util_mr_free_entry(cache, entry);
 	} else {
 		cache->uncached_cnt++;
-		cache->uncached_size += entry->iov.iov_len;
+		cache->uncached_size += entry->info.iov.iov_len;
 	}
 }
 
@@ -148,7 +148,7 @@ static bool mr_cache_flush(struct ofi_mr_cache *cache)
 			entry, lru_entry);
 	dlist_init(&entry->lru_entry);
 	FI_DBG(cache->domain->prov, FI_LOG_MR, "flush %p (len: %" PRIu64 ")\n",
-	       entry->iov.iov_base, entry->iov.iov_len);
+	       entry->info.iov.iov_base, entry->info.iov.iov_len);
 
 	util_mr_uncache_entry_storage(cache, entry);
 	util_mr_free_entry(cache, entry);
@@ -168,7 +168,7 @@ bool ofi_mr_cache_flush(struct ofi_mr_cache *cache)
 void ofi_mr_cache_delete(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 {
 	FI_DBG(cache->domain->prov, FI_LOG_MR, "delete %p (len: %" PRIu64 ")\n",
-	       entry->iov.iov_base, entry->iov.iov_len);
+	       entry->info.iov.iov_base, entry->info.iov.iov_len);
 
 	fastlock_acquire(&cache->monitor->lock);
 	cache->delete_cnt++;
@@ -178,7 +178,7 @@ void ofi_mr_cache_delete(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 			dlist_insert_tail(&entry->lru_entry, &cache->lru_list);
 		} else {
 			cache->uncached_cnt--;
-			cache->uncached_size -= entry->iov.iov_len;
+			cache->uncached_size -= entry->info.iov.iov_len;
 			util_mr_free_entry(cache, entry);
 		}
 	}
@@ -198,7 +198,7 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct iovec *iov,
 	if (OFI_UNLIKELY(!*entry))
 		return -FI_ENOMEM;
 
-	(*entry)->iov = *iov;
+	(*entry)->info.iov = *iov;
 	(*entry)->use_cnt = 1;
 
 	ret = cache->add_region(cache, *entry);
@@ -220,7 +220,7 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct iovec *iov,
 		cache->uncached_size += iov->iov_len;
 	} else {
 		if (cache->storage.insert(&cache->storage,
-					  &(*entry)->iov, *entry)) {
+					  &(*entry)->info, *entry)) {
 			ret = -FI_ENOMEM;
 			goto err;
 		}
@@ -247,36 +247,37 @@ static int
 util_mr_cache_merge(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
 		    struct ofi_mr_entry *old_entry, struct ofi_mr_entry **entry)
 {
-	struct iovec iov, *old_iov;
+	struct ofi_mr_info info, *old_info;
 
-	iov = *attr->mr_iov;
+	info.iov = *attr->mr_iov;
 	do {
 		FI_DBG(cache->domain->prov, FI_LOG_MR,
 		       "merging %p (len: %" PRIu64 ") with %p (len: %" PRIu64 ")\n",
-		       iov.iov_base, iov.iov_len,
-		       old_entry->iov.iov_base, old_entry->iov.iov_len);
-		old_iov = &old_entry->iov;
+		       info.iov.iov_base, info.iov.iov_len,
+		       old_entry->info.iov.iov_base, old_entry->info.iov.iov_len);
+		old_info = &old_entry->info;
 
-		iov.iov_len = ((uintptr_t)
-			MAX(ofi_iov_end(&iov), ofi_iov_end(old_iov))) + 1 -
-			((uintptr_t) MIN(iov.iov_base, old_iov->iov_base));
-		iov.iov_base = MIN(iov.iov_base, old_iov->iov_base);
+		info.iov.iov_len = ((uintptr_t)
+			MAX(ofi_iov_end(&info.iov), ofi_iov_end(&old_info->iov))) + 1 -
+			((uintptr_t) MIN(info.iov.iov_base, old_info->iov.iov_base));
+		info.iov.iov_base = MIN(info.iov.iov_base, old_info->iov.iov_base);
 		FI_DBG(cache->domain->prov, FI_LOG_MR, "merged %p (len: %" PRIu64 ")\n",
-		       iov.iov_base, iov.iov_len);
+		       info.iov.iov_base, info.iov.iov_len);
 
 		/* New entry will expand range of subscription */
 		old_entry->subscribed = 0;
 
 		util_mr_uncache_entry(cache, old_entry);
 
-	} while ((old_entry = cache->storage.find(&cache->storage, &iov)));
+	} while ((old_entry = cache->storage.find(&cache->storage, &info)));
 
-	return util_mr_cache_create(cache, &iov, attr->access, entry);
+	return util_mr_cache_create(cache, &info.iov, attr->access, entry);
 }
 
 int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
 			struct ofi_mr_entry **entry)
 {
+	struct ofi_mr_info info;
 	int ret = 0;
 
 	assert(attr->iov_count == 1);
@@ -291,7 +292,8 @@ int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *att
 	       mr_cache_flush(cache))
 		;
 
-	*entry = cache->storage.find(&cache->storage, attr->mr_iov);
+	info.iov = *attr->mr_iov;
+	*entry = cache->storage.find(&cache->storage, &info);
 	if (!*entry) {
 		ret = util_mr_cache_create(cache, attr->mr_iov,
 					   attr->access, entry);
@@ -302,7 +304,7 @@ int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *att
 	 * e.g. a new region encloses previously cached smaller region. Cache
 	 * find function (util_mr_find_within) would match the enclosed region.
 	 */
-	if (!ofi_iov_within(attr->mr_iov, &(*entry)->iov)) {
+	if (!ofi_iov_within(attr->mr_iov, &(*entry)->info.iov)) {
 		ret = util_mr_cache_merge(cache, attr, *entry, entry);
 		goto unlock;
 	}
@@ -354,7 +356,7 @@ static void ofi_mr_rbt_destroy(struct ofi_mr_storage *storage)
 }
 
 static struct ofi_mr_entry *ofi_mr_rbt_find(struct ofi_mr_storage *storage,
-					    const struct iovec *key)
+					    const struct ofi_mr_info *key)
 {
 	struct ofi_rbnode *node;
 
@@ -366,7 +368,7 @@ static struct ofi_mr_entry *ofi_mr_rbt_find(struct ofi_mr_storage *storage,
 }
 
 static struct ofi_mr_entry *ofi_mr_rbt_overlap(struct ofi_mr_storage *storage,
-					    const struct iovec *key)
+					       const struct iovec *key)
 {
 	struct ofi_rbnode *node;
 
@@ -379,11 +381,10 @@ static struct ofi_mr_entry *ofi_mr_rbt_overlap(struct ofi_mr_storage *storage,
 }
 
 static int ofi_mr_rbt_insert(struct ofi_mr_storage *storage,
-			     struct iovec *key,
+			     struct ofi_mr_info *key,
 			     struct ofi_mr_entry *entry)
 {
-	return ofi_rbmap_insert(storage->storage, (void *) &entry->iov,
-			        (void *) entry);
+	return ofi_rbmap_insert(storage->storage, (void *) key, (void *) entry);
 }
 
 static int ofi_mr_rbt_erase(struct ofi_mr_storage *storage,
@@ -391,7 +392,7 @@ static int ofi_mr_rbt_erase(struct ofi_mr_storage *storage,
 {
 	struct ofi_rbnode *node;
 
-	node = ofi_rbmap_find(storage->storage, &entry->iov);
+	node = ofi_rbmap_find(storage->storage, &entry->info);
 	assert(node);
 	ofi_rbmap_delete(storage->storage, node);
 	return 0;
