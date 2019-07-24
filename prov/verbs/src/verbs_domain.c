@@ -288,6 +288,15 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 		_domain->util_domain.domain_fid.mr = &fi_ibv_mr_cache_ops;
 	else
 		_domain->util_domain.domain_fid.mr = &fi_ibv_mr_ops;
+	if (!ret) {
+		_domain->util_domain.domain_fid.mr = fi_ibv_mr_internal_cache_ops.fi_ops;
+		_domain->internal_mr_reg = fi_ibv_mr_internal_cache_ops.internal_mr_reg;
+		_domain->internal_mr_dereg = fi_ibv_mr_internal_cache_ops.internal_mr_dereg;
+	} else {
+		_domain->util_domain.domain_fid.mr = fi_ibv_mr_internal_ops.fi_ops;
+		_domain->internal_mr_reg = fi_ibv_mr_internal_ops.internal_mr_reg;
+		_domain->internal_mr_dereg = fi_ibv_mr_internal_ops.internal_mr_dereg;
+	}
 
 	switch (_domain->ep_type) {
 	case FI_EP_DGRAM:

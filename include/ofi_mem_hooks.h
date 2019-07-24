@@ -21,6 +21,7 @@
 /*
  * HOOKS  memory mechanism structs
  */
+
 #define OFI_BASE_PATCHER_MAX_PATCH 32
 
 struct ofi_patcher_base_patch {
@@ -48,8 +49,8 @@ struct ofi_patcher_patch {
 
 struct ofi_patcher_patch_got {
 	struct dlist_entry 		super;
-	void** 				got_entry;
-	void* 				got_orig;
+	void 				**got_entry;
+	void 				*got_orig;
 };
 
 struct ofi_patcher_dl_iter_context {
@@ -60,4 +61,5 @@ struct ofi_patcher_dl_iter_context {
 
 int ofi_patcher_patch_symbol(const char *symbol_name,
 			     uintptr_t replacement, uintptr_t *orig);
-int ofi_patcher_handler(void);
+void ofi_patcher_handler(const void *addr, size_t len);
+int ofi_patcher_open();

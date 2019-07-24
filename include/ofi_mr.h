@@ -141,19 +141,17 @@ extern struct ofi_mem_monitor *uffd_monitor;
 
 
 /*
- * Hooks memory mechanism
+ * Hooks memory monitor
  */
 
-/*Added patcher init struct*/
 struct ofi_patcher {
 	struct ofi_mem_monitor          monitor;
+	fastlock_t			lock;
 };
-
 int ofi_patcher_init(void);
 void ofi_patcher_cleanup(void);
 
 extern struct ofi_mem_monitor *patcher_monitor;
-
 
 /*
  * Used to store registered memory regions into a lookup map.  This
@@ -216,6 +214,7 @@ struct ofi_mr_cache_params {
 	size_t				max_cnt;
 	size_t				max_size;
 	int				merge_regions;
+	int				core_monitor;
 };
 
 extern struct ofi_mr_cache_params	cache_params;
