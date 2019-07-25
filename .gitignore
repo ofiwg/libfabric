@@ -26,10 +26,6 @@
 *.orig
 *.c~
 *.h~
-*.btr
-*.gz
-*.bz2
-
 stamp-h?
 Makefile
 Makefile.in
@@ -77,5 +73,3 @@ fabtests/benchmarks/fi_*
 fabtests/functional/fi_*
 fabtests/unit/fi_*
 pingpong/fi_*
-fabtests/multinode/fi_*
-fabtests/include
