@@ -863,7 +863,7 @@ static int __gnix_rndzv_req_complete(void *arg, gni_return_t tx_status)
 		if (!GNIX_EP_DGM(req->gnix_ep->type)) {
 			GNIX_WARN(FI_LOG_EP_DATA,
 				  "Dropping failed request: %p\n", req);
-			ret = __gnix_msg_send_err(req->gnix_ep,
+			ret = __gnix_msg_recv_err(req->gnix_ep,
 						  req);
 			if (ret != FI_SUCCESS)
 				GNIX_WARN(FI_LOG_EP_DATA,
