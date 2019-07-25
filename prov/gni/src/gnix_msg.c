@@ -3249,7 +3249,7 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 	ret = _gnix_vc_queue_tx_req(req);
 	connected = (vc->conn_state == GNIX_VC_CONNECTED);
 
-	COND_RELEASE(vc->ep->requires_lock, &vc->ep->vc_lock);
+	COND_RELEASE(ep->requires_lock, &ep->vc_lock);
 
 	/*
 	 * If a new VC was allocated, progress CM before returning.
@@ -3265,7 +3265,7 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 	return ret;
 
 err_get_vc:
-	COND_RELEASE(vc->ep->requires_lock, &vc->ep->vc_lock);
+	COND_RELEASE(ep->requires_lock, &ep->vc_lock);
 	_gnix_fr_free(ep, req);
 	if (flags & FI_LOCAL_MR)
 		fi_close(&auto_mr->fid);
