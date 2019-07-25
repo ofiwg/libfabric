@@ -62,7 +62,6 @@ static int broadcast_gather_current(int *cur)
 		return -FI_ENODATA;
 
 	*cur = next;
-	
 	return 0; 
 }
 
@@ -78,7 +77,6 @@ static int ring_next(int *cur)
 		*cur = pm_job.my_rank - 1;
 	return 0; 
 }
-
 static int ring_current(int *cur)
 {
 	if ((pm_job.my_rank + 1) % pm_job.num_ranks == *cur) 
