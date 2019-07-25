@@ -51,4 +51,3 @@ struct pattern_ops {
 
 extern struct pattern_ops patterns[];
 
-
