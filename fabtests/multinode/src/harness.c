@@ -172,24 +172,18 @@ static int pm_init_ranks()
 	int ret;
 	int send_rank, i;
 
-	if(pm_job.clients){
-		for(i = 0; i < pm_job.ranks-1; i++){
+	if (pm_job.clients){
+		for (i = 0; i < pm_job.ranks - 1; i++){
 			send_rank = i + 1;
-			ret = socket_send(pm_job.clients[i], &send_rank, sizeof(int), 0);
-			if(ret < 0){
+			ret = socket_send(pm_job.clients[i], &send_rank, sizeof(send_rank), 0);
+			if(ret < 0)
 				return ret;
-			}
 		}
 	}
 	else{
-		int recv; 
-		ret = socket_recv(pm_job.sock, &(recv), sizeof(int), 0);
-
-		pm_job.rank = recv;
-		if(ret < 0){
+		ret = socket_recv(pm_job.sock, &(pm_job.rank), sizeof(pm_job.rank), 0);
+		if (ret < 0)
 			return ret;
-		}
-
 	}
 
 	return ret;
