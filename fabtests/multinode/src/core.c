@@ -239,7 +239,7 @@ static int multinode_post_rx()
 		ret = pattern->next_source(&state.cur_source);
 =======
 		prev = state.cur_sender;
-
+		
 		ret = pattern->next_sender(&state.cur_sender);
 >>>>>>> fabtests/multinode: Initial version of multinode sendrecv test
 		if (ret == -ENODATA) {
@@ -332,6 +332,7 @@ static int multinode_post_tx()
 			state.cur_receiver = prev;
 			break;
 		}
+
 		tx_ctx_arr[offset].buf[0] = offset;
 		dest = pm_job.fi_addrs[state.cur_receiver];
 >>>>>>> fabtests/multinode: Initial version of multinode sendrecv test
@@ -401,9 +402,7 @@ static int multinode_run_test()
 {
 	int ret;
 
-	for (state.iteration = 0;
-	     state.iteration < opts.iterations;
-	     state.iteration++) {
+	for (state.iteration = 0; state.iteration < opts.iterations; state.iteration++) {
 		state.cur_sender = PATTERN_NO_CURRENT;
 		state.cur_receiver = PATTERN_NO_CURRENT;
 
@@ -415,9 +414,7 @@ static int multinode_run_test()
 		state.tx_window = opts.window_size;
 >>>>>>> fabtests/multinode: Initial version of multinode sendrecv test
 
-		while (!state.all_completions_done ||
-				!state.all_recvs_done ||
-				!state.all_sends_done) {
+		while (!state.all_completions_done || !state.all_recvs_done || !state.all_sends_done) {
 			ret = multinode_post_rx();
 			if (ret)
 				return ret;
@@ -472,9 +469,37 @@ int multinode_run_tests(int argc, char **argv)
 	if (ret)
 		return ret;
 
+	FT_DEBUG("all to all test\n");
 	pattern = &all2all_ops;
-
 	ret = multinode_run_test();
+	if (ret){
+		FT_ERR("all to all failed");
+		return ret;
+	}
+
+	FT_DEBUG("gather test\n");
+	pattern = &gather_ops;
+	ret = multinode_run_test();
+	if (ret){
+		FT_ERR("all to one failed");
+		return ret;
+	}
+
+	FT_DEBUG("broadcast test\n");
+	pattern = &broadcast_ops;
+	ret = multinode_run_test();
+	if (ret){
+		FT_ERR("broadcast failed");
+		return ret;
+	}
+
+	FT_DEBUG("ring test\n");
+	pattern = &ring_ops;
+	ret = multinode_run_test();
+	if (ret){
+		FT_ERR("ring test failed");
+		return ret;
+	}
 
 	multinode_close_fabric(ret);
 	return ret;
