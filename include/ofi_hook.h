@@ -185,6 +185,11 @@ struct hook_poll {
 int hook_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,
 		   struct fid_poll **pollset);
 
+/*
+ * EQ
+ */
+
+extern struct fi_ops_eq hook_eq_ops;
 
 struct hook_eq {
 	struct fid_eq eq;
@@ -192,11 +197,18 @@ struct hook_eq {
 	struct hook_fabric *fabric;
 };
 
+ssize_t hook_eq_read(struct fid_eq *eq, uint32_t *event,
+			    void *buf, size_t len, uint64_t flags);
+ssize_t hook_eq_sread(struct fid_eq *eq, uint32_t *event,
+			     void *buf, size_t len, int timeout, uint64_t flags);
 int hook_eq_init(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		 struct fid_eq **eq, void *context, struct hook_eq *myeq);
 int hook_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		 struct fid_eq **eq, void *context);
 
+/*
+ * CQ
+ */
 
 struct hook_cq {
 	struct fid_cq cq;

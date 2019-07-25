@@ -34,6 +34,7 @@
 
 #include "ofi.h"
 #include "ofi_prov.h"
+#include "ofi_hook.h"
 #include "hook_prov.h"
 #include "ofi_enosys.h"
 
@@ -606,7 +607,7 @@ err:
 	return ret;
 }
 
-int hook_debug_ep_close(struct fid *fid)
+static int hook_debug_ep_close(struct fid *fid)
 {
 	struct hook_debug_ep *myep =
 		container_of(fid, struct hook_debug_ep, hook_ep.ep.fid);
@@ -744,6 +745,90 @@ err:
 	return ret;
 }
 
+/*
+ * EQ
+ */
+
+static ssize_t hook_debug_eq_read(struct fid_eq *eq, uint32_t *event,
+				  void *buf, size_t len, uint64_t flags)
+{
+	struct hook_debug_eq *myeq = container_of(eq, struct hook_debug_eq,
+						  hook_eq.eq);
+	ssize_t ret;
+
+	ret = hook_eq_read(eq, event, buf, len, flags);
+	if (ret > 0)
+		ofi_atomic_inc64(&myeq->event_cntr[*event]);
+
+	return ret;
+}
+
+static ssize_t hook_debug_eq_sread(struct fid_eq *eq, uint32_t *event,
+				   void *buf, size_t len, int timeout,
+				   uint64_t flags)
+{
+	struct hook_debug_eq *myeq = container_of(eq, struct hook_debug_eq,
+						  hook_eq.eq);
+	ssize_t ret;
+
+	ret = hook_eq_sread(eq, event, buf, len, timeout, flags);
+	if (ret > 0)
+		ofi_atomic_inc64(&myeq->event_cntr[*event]);
+
+	return ret;
+}
+
+static int hook_debug_eq_close(struct fid *fid)
+{
+	struct hook_debug_eq *myeq = container_of(fid, struct hook_debug_eq,
+						  hook_eq.eq.fid);
+	int i, ret;
+
+	HOOK_DEBUG_TRACE(myeq->hook_eq.fabric, FI_LOG_EQ, "EQ events:\n");
+
+	for (i = 0; i < HOOK_DEBUG_EQ_EVENT_MAX; i++)
+		HOOK_DEBUG_TRACE(myeq->hook_eq.fabric, FI_LOG_EQ,
+				 "%-20s: %" PRIu64 "\n",
+				 fi_tostr(&i, FI_TYPE_EQ_EVENT),
+				 ofi_atomic_get64(&myeq->event_cntr[i]));
+
+	ret = fi_close(&myeq->hook_eq.heq->fid);
+	if (!ret)
+		free(myeq);
+
+	return ret;
+}
+
+static struct fi_ops_eq hook_debug_eq_ops;
+static struct fi_ops hook_debug_eq_fid_ops;
+
+int hook_debug_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
+		 struct fid_eq **eq, void *context)
+{
+	struct hook_debug_eq *myeq;
+	int i, ret;
+
+	myeq = calloc(1, sizeof *myeq);
+	if (!myeq)
+		return -FI_ENOMEM;
+
+	ret = hook_eq_init(fabric, attr, eq, context, &myeq->hook_eq);
+	if (ret)
+		free(myeq);
+
+	myeq->hook_eq.eq.ops = &hook_debug_eq_ops;
+	myeq->hook_eq.eq.fid.ops = &hook_debug_eq_fid_ops;
+
+	for (i = 0; i < HOOK_DEBUG_EQ_EVENT_MAX; i++)
+		ofi_atomic_initialize64(&myeq->event_cntr[i], 0);
+
+	return 0;
+}
+
+/*
+ * Fabric
+ */
+
 struct fi_ops hook_debug_fabric_fid_ops;
 static struct fi_ops_fabric hook_debug_fabric_ops;
 
@@ -831,6 +916,13 @@ HOOK_DEBUG_INI
 	// the ops to common ones. Then override here.
 	hook_debug_fabric_fid_ops = hook_fid_ops;
 	hook_debug_fabric_ops = hook_fabric_ops;
+	hook_debug_fabric_ops.eq_open = hook_debug_eq_open;
+
+	hook_debug_eq_fid_ops = hook_fid_ops;
+	hook_debug_eq_fid_ops.close = hook_debug_eq_close;
+	hook_debug_eq_ops = hook_eq_ops;
+	hook_debug_eq_ops.read = hook_debug_eq_read;
+	hook_debug_eq_ops.sread = hook_debug_eq_sread;
 
 	hook_debug_domain_ops = hook_domain_ops;
 	hook_debug_domain_ops.cq_open = hook_debug_cq_open;

@@ -51,7 +51,7 @@ static void hook_eq_map_fid(void *buf)
 	entry->fid = entry->fid->context;
 }
 
-static ssize_t hook_eq_read(struct fid_eq *eq, uint32_t *event,
+ssize_t hook_eq_read(struct fid_eq *eq, uint32_t *event,
 			    void *buf, size_t len, uint64_t flags)
 {
 	struct hook_eq *myeq = container_of(eq, struct hook_eq, eq);
@@ -85,7 +85,7 @@ static ssize_t hook_eq_write(struct fid_eq *eq, uint32_t event,
 	return fi_eq_write(myeq->heq, event, buf, len, flags);
 }
 
-static ssize_t hook_eq_sread(struct fid_eq *eq, uint32_t *event,
+ssize_t hook_eq_sread(struct fid_eq *eq, uint32_t *event,
 			     void *buf, size_t len, int timeout, uint64_t flags)
 {
 	struct hook_eq *myeq = container_of(eq, struct hook_eq, eq);
@@ -107,7 +107,7 @@ hook_eq_strerror(struct fid_eq *eq, int prov_errno,
 	return fi_eq_strerror(myeq->heq, prov_errno, err_data, buf, len);
 }
 
-static struct fi_ops_eq hook_eq_ops = {
+struct fi_ops_eq hook_eq_ops = {
 	.size = sizeof(struct fi_ops_eq),
 	.read = hook_eq_read,
 	.readerr = hook_eq_readerr,
