@@ -198,7 +198,7 @@ static int pm_conn_setup()
 	}
 
 	ret = bind(sock, (struct sockaddr *)&pm_job.oob_server_addr,
-		   sizeof(pm_job.oob_server_addr));
+		  sizeof(pm_job.oob_server_addr));
 	if (ret == 0) {
 		ret = server_connect();
 	} else {

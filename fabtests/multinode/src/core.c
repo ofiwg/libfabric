@@ -103,7 +103,7 @@ static int multinode_setup_fabric(int argc, char **argv)
 		ret = -FI_ENOMEM;
 		goto err;
 	}
-
+	
 	ret = pm_allgather(my_name, pm_job.names, pm_job.name_len);
 	if (ret) {
 		FT_PRINTERR("error exchanging addresses\n", ret);
@@ -250,7 +250,6 @@ static int multinode_run_test()
 	for (iter = 0; iter < opts.iterations; iter++) {
 
 		multinode_init_state();
-
 		while (!state.all_completions_done ||
 				!state.all_recvs_posted ||
 				!state.all_sends_posted) {
@@ -274,9 +273,9 @@ static int multinode_run_test()
 static void pm_job_free_res()
 {
 
-		free(pm_job.names);
+	free(pm_job.names);
 
-		free(pm_job.fi_addrs);
+	free(pm_job.fi_addrs);
 }
 
 int multinode_run_tests(int argc, char **argv)
@@ -296,7 +295,6 @@ int multinode_run_tests(int argc, char **argv)
 			printf("failed\n");
 		else 
 			printf("passed\n");
-		
 	}
 	
 	pm_job_free_res();

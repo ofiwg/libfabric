@@ -197,6 +197,10 @@ complex_tests=(
 	"fi_ubertest"
 )
 
+multinode_tests=(
+	"fi_multinode"
+)
+
 function errcho {
 	>&2 echo $*
 }
@@ -510,6 +514,58 @@ function complex_test {
 	fi
 }
 
+function multinode_test {
+	local test=$1
+	local s_ret=0
+	local c_ret=0
+	local num_procs=$2
+	local test_exe="${test} -n $num_procs -p \"${PROV}\"" 	
+	local start_time
+	local end_time
+	local test_time
+
+
+	is_excluded "$test" && return
+
+	start_time=$(date '+%s')
+
+	s_cmd="${BIN_PATH}${test_exe} ${S_ARGS} -s ${S_INTERFACE}"
+	${SERVER_CMD} "${EXPORT_ENV} $s_cmd" &> $s_outp &
+	s_pid=$!
+	sleep 1
+	
+	c_pid_arr=()	
+	for ((i=1; i<num_procs; i++))
+	do
+		c_cmd="${BIN_PATH}${test_exe} ${S_ARGS} -s ${S_INTERFACE}"
+		${CLIENT_CMD} "${EXPORT_ENV} $c_cmd" &> $c_outp & 
+		c_pid_arr+=($!)
+	done
+
+	[[ c_ret -ne 0 ]] && kill -9 $s_pid 2> /dev/null
+
+	wait $s_pid
+	s_ret=$?
+	
+	end_time=$(date '+%s')
+	test_time=$(compute_duration "$start_time" "$end_time")
+
+	if [[ $STRICT_MODE -eq 0 && $s_ret -eq $FI_ENODATA && $c_ret -eq $FI_ENODATA ]] ||
+	   [[ $STRICT_MODE -eq 0 && $s_ret -eq $FI_ENOSYS && $c_ret -eq $FI_ENOSYS ]]; then
+		print_results "$test_exe" "Notrun" "$test_time" "$s_outp" "$s_cmd" "$c_outp" "$c_cmd"
+		skip_count+=1
+	elif [ $s_ret -ne 0 -o $c_ret -ne 0 ]; then
+		print_results "$test_exe" "Fail" "$test_time" "$s_outp" "$s_cmd" "$c_outp" "$c_cmd"
+		if [ $s_ret -eq 124 -o $c_ret -eq 124 ]; then
+			cleanup
+		fi
+		fail_count+=1
+	else
+		print_results "$test_exe" "Pass" "$test_time" "$s_outp" "$s_cmd" "$c_outp" "$c_cmd"
+		pass_count+=1
+	fi
+}
+
 function main {
 	skip_count=0
 	pass_count=0
@@ -519,12 +575,12 @@ function main {
 	set_excludes
 
 	if [[ $1 == "quick" ]]; then
-		local -r tests="unit functional short"
+		local -r tests="unit functional short multinode"
 	elif [[ $1 == "verify" ]]; then
 		local -r tests="complex"
 		complex_cfg=$1
 	else
-		local -r tests=$(echo $1 | sed 's/all/unit,functional,standard,complex/g' | tr ',' ' ')
+		local -r tests=$(echo $1 | sed 's/all/unit,functional,standard,complex,multinode/g' | tr ',' ' ')
 		if [[ $1 == "all" ]]; then
 			complex_cfg=$1
 		fi
@@ -571,6 +627,11 @@ function main {
 			for test in "${complex_tests[@]}"; do
 				complex_test $test $complex_cfg
 
+			done
+		;;
+		multinode)
+			for test in "${multinode_tests[@]}"; do
+					multinode_test $test 4
 			done
 		;;
 		*)
