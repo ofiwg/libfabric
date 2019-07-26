@@ -451,25 +451,11 @@ AS_IF([test $have_uffd -eq 1],
 AC_DEFINE_UNQUOTED([HAVE_UFFD_UNMAP], [$have_uffd],
 	[Define to 1 if platform supports userfault fd unmap])
 
-#dnl Check for pacther support
-# AC_CANONICAL_HOST is needed to access the 'host_os' variable
-#	AC_CANONICAL_HOST
-#	build_patcher=0
-# Detect the target system
-#case "${host_os}" in
-#    linux*)
-#        build_patcher=yes
-#        ;;
-#		*)
-#        AC_MSG_ERROR(["OS $host_os is not supported"])
-#        ;;
-#esac
-#AM_CONDITIONAL([LINUX], [test "$build_linux" = "yes"])
-#if test $build_patcher = yes ; then
-#AC_CHECK_HEADERS([elf.h],[],[build_patcher=no])
-#AC_CHECK_HEADERS([dlfcn.h],[],[build_patcher=no])
-#fi
-
+dnl Check for memory hooks support
+AC_CHECK_HEADERS([elf.h sys/auxv.h dlfcn.h fcntl.h link.h],
+  [AC_DEFINE([HAVE_ELF_H], [1],
+    [Define to 1 if you have <elf.h>.])],
+  [AC_MSG_WARN([There is not elf.h])])
 
 dnl Provider-specific checks
 FI_PROVIDER_INIT

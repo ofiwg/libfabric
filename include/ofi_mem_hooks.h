@@ -18,6 +18,7 @@
 #include <ofi_list.h>
 #include <ofi_tree.h>
 
+#if HAVE_ELF_H
 /*
  * HOOKS  memory mechanism structs
  */
@@ -63,3 +64,5 @@ int ofi_patcher_patch_symbol(const char *symbol_name,
 			     uintptr_t replacement, uintptr_t *orig);
 void ofi_patcher_handler(const void *addr, size_t len);
 int ofi_patcher_open();
+
+#endif /* HAVE_ELF_H */

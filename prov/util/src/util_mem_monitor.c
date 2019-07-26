@@ -36,25 +36,27 @@
 #include <ofi_mem_hooks.h>
 
 static struct ofi_uffd uffd;
-struct ofi_mem_monitor *uffd_monitor = &uffd.monitor;
+struct ofi_patcher patcher;
 
-static struct ofi_patcher patcher;
+struct ofi_mem_monitor *uffd_monitor	= &uffd.monitor;
 struct ofi_mem_monitor *patcher_monitor = &patcher.monitor;
+
+#if HAVE_UFFD_UNMAP
+struct ofi_mem_monitor *default_monitor = &uffd.monitor;
+#else
+struct ofi_mem_monitor *default_monitor = &patcher.monitor;
+#endif
 
 /*
  * Initialize all available memory monitors
  */
 void ofi_monitor_init(void)
 {
-	if (cache_params.core_monitor == 0) {
-		fastlock_init(&uffd_monitor->lock);
-		dlist_init(&uffd_monitor->list);
-	}
+	fastlock_init(&patcher_monitor->lock);
+	dlist_init(&patcher_monitor->list);
 
-	if (cache_params.core_monitor == 1) {
-		fastlock_init(&patcher_monitor->lock);
-		dlist_init(&patcher_monitor->list);
-	}
+	fastlock_init(&uffd_monitor->lock);
+	dlist_init(&uffd_monitor->list);
 
 	fi_param_define(NULL, "mr_cache_max_size", FI_PARAM_SIZE_T,
 			"Defines the total number of bytes for all memory"
@@ -74,15 +76,17 @@ void ofi_monitor_init(void)
 			" region.  Merging regions can reduce the cache"
 			" memory footprint, but can negatively impact"
 			" performance in some situations.  (default: false)");
-
-	fi_param_define(NULL, "core_monitor", FI_PARAM_BOOL,
-			"TODO: Need the description here. Choose core monitor");
+	fi_param_define(NULL, "mr_core_monitor", FI_PARAM_STRING,
+			"Define a default memory registartion monitor."
+			"if set to: userfaultfd - chosing uffd as a default "
+			"monitor. In case it sets to: memoryhooks - using"
+			"memory hooks mechanism as a default monitor");
 
 	fi_param_get_size_t(NULL, "mr_cache_max_size", &cache_params.max_size);
 	fi_param_get_size_t(NULL, "mr_cache_max_count", &cache_params.max_cnt);
 	fi_param_get_bool(NULL, "mr_cache_merge_regions",
 			  &cache_params.merge_regions);
-	fi_param_get_bool(NULL, "core_monitor", &cache_params.core_monitor);
+	fi_param_get_str(NULL, "mr_core_monitor", &cache_params.core_monitor);
 
 	if (!cache_params.max_size)
 		cache_params.max_size = SIZE_MAX;
@@ -90,15 +94,11 @@ void ofi_monitor_init(void)
 
 void ofi_monitor_cleanup(void)
 {
-	if (cache_params.core_monitor == 0) {
-		assert(dlist_empty(&uffd_monitor->list));
-		fastlock_destroy(&uffd_monitor->lock);
-	}
-	if (cache_params.core_monitor == 1) {
-		/* We need to define the logic the choice.*/
-		assert(dlist_empty(&patcher_monitor->list));
-		fastlock_destroy(&patcher_monitor->lock);
-	}
+	assert(dlist_empty(&uffd_monitor->list));
+	fastlock_destroy(&uffd_monitor->lock);
+
+	assert(dlist_empty(&patcher_monitor->list));
+	fastlock_destroy(&patcher_monitor->lock);
 }
 
 int ofi_monitor_add_cache(struct ofi_mem_monitor *monitor,
@@ -108,20 +108,19 @@ int ofi_monitor_add_cache(struct ofi_mem_monitor *monitor,
 
 	fastlock_acquire(&monitor->lock);
 	if (dlist_empty(&monitor->list)) {
-
-		if(monitor == uffd_monitor)
+		if (monitor == uffd_monitor)
 			ret = ofi_uffd_init();
 		else
 			ret = -FI_ENOSYS;
 
-		if(monitor == patcher_monitor)
+		if (monitor == patcher_monitor)
 			ret = ofi_patcher_init();
 		else
 			ret = -FI_ENOSYS;
+
 		if (ret)
 			goto out;
 	}
-
 	cache->monitor = monitor;
 	dlist_insert_tail(&cache->notify_entry, &monitor->list);
 out:
@@ -139,16 +138,11 @@ void ofi_monitor_del_cache(struct ofi_mr_cache *cache)
 	fastlock_acquire(&monitor->lock);
 	dlist_remove(&cache->notify_entry);
 
-	if (cache_params.core_monitor == 0) {
-		if (dlist_empty(&monitor->list))
-			ofi_uffd_cleanup();
-	}
+	if (dlist_empty(&monitor->list))
+		ofi_uffd_cleanup();
 
-	if (cache_params.core_monitor == 1) {
-	/* Need to add cleanup patcher*/
-		if (dlist_empty(&monitor->list))
-			ofi_patcher_cleanup();
-	}
+	if (dlist_empty(&monitor->list))
+		ofi_patcher_cleanup();
 
 	fastlock_release(&monitor->lock);
 }
@@ -160,7 +154,7 @@ void ofi_monitor_notify(struct ofi_mem_monitor *monitor,
 	struct ofi_mr_cache *cache;
 
 	dlist_foreach_container(&monitor->list, struct ofi_mr_cache,
-			cache, notify_entry) {
+				cache, notify_entry) {
 		ofi_mr_cache_notify(cache, addr, len);
 	}
 }
@@ -377,21 +371,19 @@ void ofi_uffd_cleanup(void)
 
 #endif /* HAVE_UFFD_UNMAP */
 
-//#if /**/
+#if HAVE_ELF_H
 
 void ofi_patcher_handler(const void *addr, size_t len)
 {
-    fastlock_acquire(&patcher.lock);
-    ofi_monitor_notify(&patcher.monitor, addr, len);
-    fastlock_release(&patcher.lock);
+	fastlock_acquire(&patcher.lock);
+	ofi_monitor_notify(&patcher.monitor, addr, len);
+	fastlock_release(&patcher.lock);
 }
 
 static int ofi_patcher_subscribe(struct ofi_mem_monitor *monitor,
-			         const void *addr, size_t len)
+				 const void *addr, size_t len)
 {
-	/*It is normal to return 0 because
-	  of no-ops system of pathcer.*/
-	return 0;
+	return FI_SUCCESS;
 }
 
 static void ofi_patcher_unsubscribe(struct ofi_mem_monitor *monitor,
@@ -418,4 +410,15 @@ void ofi_patcher_cleanup(void)
 	/*TODO:*/
 	return;
 }
-//#endif /**/
+#else /* HAVE_ELF_H */
+
+ int ofi_patcher_init(void)
+{
+	return -FI_ENOSYS;
+}
+
+void ofi_patcher_cleanup(void)
+{
+}
+
+#endif /* HAVE_ELF_H */
