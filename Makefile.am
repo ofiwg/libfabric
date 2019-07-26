@@ -66,6 +66,7 @@ common_srcs =				\
 	prov/util/src/util_ns.c		\
 	prov/util/src/util_shm.c	\
 	prov/util/src/util_mem_monitor.c\
+	prov/util/src/util_mem_hooks.c	\
 	prov/util/src/util_mr_cache.c
 
 
