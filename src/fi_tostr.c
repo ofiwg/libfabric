@@ -639,6 +639,7 @@ static void ofi_tostr_eq_event(char *buf, int type)
 	CASEENUMSTR(FI_SHUTDOWN);
 	CASEENUMSTR(FI_MR_COMPLETE);
 	CASEENUMSTR(FI_AV_COMPLETE);
+	CASEENUMSTR(FI_JOIN_COMPLETE);
 	default:
 		ofi_strcatf(buf, "Unknown");
 		break;

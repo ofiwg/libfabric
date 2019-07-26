@@ -37,6 +37,7 @@
 #include "ofi.h"
 
 #define HOOK_DEBUG_EAGAIN_LOG 10000000
+#define HOOK_DEBUG_EQ_EVENT_MAX (FI_JOIN_COMPLETE + 1)
 
 extern struct hook_prov_ctx hook_debug_ctx;
 
@@ -47,11 +48,9 @@ struct hook_debug_config {
 	uint64_t track_recvs : 1;
 };
 
-struct hook_debug_txrx_entry {
-	uint64_t 		magic;
-	struct hook_debug_ep 	*ep;
-	uint64_t 		op_flags;
-	void 			*context;
+struct hook_debug_eq {
+	struct hook_eq hook_eq;
+	ofi_atomic64_t event_cntr[HOOK_DEBUG_EQ_EVENT_MAX];
 };
 
 struct hook_debug_cq {
@@ -59,6 +58,13 @@ struct hook_debug_cq {
 	enum fi_cq_format format;
 	size_t entry_size;
 	size_t eagain_count;
+};
+
+struct hook_debug_txrx_entry {
+	uint64_t 		magic;
+	struct hook_debug_ep 	*ep;
+	uint64_t 		op_flags;
+	void 			*context;
 };
 
 struct hook_debug_ep {
