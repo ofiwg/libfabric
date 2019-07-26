@@ -752,9 +752,76 @@ out:
 	return ret;
 }
 
+static int
+fi_ibv_read_async_event(struct fi_ibv_domain *domain,
+                        struct fi_ibv_eq *eq)
+{
+	struct ibv_async_event async_event;
+	int error = FI_SUCCESS;
+	int ret = 0;
+
+	if (ibv_get_async_event(domain->verbs, &async_event) != 0)
+		return 0;
+
+	switch (async_event.event_type) {
+	/* Errors should be reported */
+	case IBV_EVENT_CQ_ERR: /* CQ is in error (CQ overrun) */
+		error = FI_EOVERRUN;
+		break;
+
+	case IBV_EVENT_SRQ_ERR: /* Error occurred on an SRQ */
+	/* fallthrough */
+	case IBV_EVENT_PORT_ERR: /* Link became unavailable on a port */
+	/* fallthrough */
+	case IBV_EVENT_PATH_MIG_ERR: /* A connection failed to migrate to the alternate path */
+	/* fallthrough */
+	case IBV_EVENT_DEVICE_FATAL: /* CA is in FATAL state */
+		error = FI_EFAULT;
+		break;
+
+	/* Ignored events */
+	case IBV_EVENT_COMM_EST: /* Communication was established on a QP */
+	/* fallthrough */
+	case IBV_EVENT_SQ_DRAINED: /* Send Queue was drained of outstanding messages in progress */
+	/* fallthrough */
+	case IBV_EVENT_PATH_MIG: /* A connection has migrated to the alternate path */
+	/* fallthrough */
+	case IBV_EVENT_QP_LAST_WQE_REACHED: /* Last WQE Reached on a QP associated with an SRQ */
+	/* fallthrough */
+	case IBV_EVENT_SRQ_LIMIT_REACHED: /* SRQ limit was reached */
+	/* fallthrough */
+	case IBV_EVENT_PORT_ACTIVE: /* Link became active on a port */
+	/* fallthrough */
+	case IBV_EVENT_LID_CHANGE: /* LID was changed on a port */
+	/* fallthrough */
+	case IBV_EVENT_PKEY_CHANGE: /* P_Key table was changed on a port */
+	/* fallthrough */
+	case IBV_EVENT_SM_CHANGE: /* SM was changed on a port */
+	/* fallthrough */
+	case IBV_EVENT_CLIENT_REREGISTER: /* SM sent a CLIENT_REREGISTER request to a port */
+	/* fallthrough */
+	case IBV_EVENT_GID_CHANGE: /* GID table was changed on a port */
+	/* fallthrough */
+	default:
+		error = FI_SUCCESS;
+		break;
+	}
+
+	if (error != FI_SUCCESS) {
+		eq->err.fid = &domain->util_domain.domain_fid.fid;
+		eq->err.err = -error;
+		eq->err.prov_errno = async_event.event_type;
+		ret = 1;
+	}
+
+	ibv_ack_async_event(&async_event);
+
+	return ret;
+}
+
 static ssize_t
-fi_ibv_eq_read(struct fid_eq *eq_fid, uint32_t *event,
-	       void *buf, size_t len, uint64_t flags)
+fi_ibv_eq_read_internal(struct fid_eq *eq_fid, struct fi_ibv_domain *domain,
+               uint32_t *event, void *buf, size_t len, uint64_t flags)
 {
 	struct fi_ibv_eq *eq;
 	struct rdma_cm_event *cma_event;
@@ -765,6 +832,24 @@ fi_ibv_eq_read(struct fid_eq *eq_fid, uint32_t *event,
 
 	if ((ret = fi_ibv_eq_read_event(eq, event, buf, len, flags)))
 		return ret;
+
+	if (domain) {
+		/* Non-blocking call to retrieve IB async events */
+		if (fi_ibv_read_async_event(domain, eq)) {
+			return -FI_EAVAIL;
+		}
+	} else {
+		fastlock_acquire(&eq->lock);
+		dlist_foreach_container(&eq->domain_list, struct fi_ibv_domain,
+		                        domain, eq_dlentry) {
+			/* Non-blocking call to retrieve IB async events */
+			if (fi_ibv_read_async_event(domain, eq)) {
+				fastlock_release(&eq->lock);
+				return -FI_EAVAIL;
+			}
+		}
+		fastlock_release(&eq->lock);
+	}
 
 	if (eq->channel) {
 		fastlock_acquire(&eq->lock);
@@ -798,31 +883,41 @@ ack:
 }
 
 static ssize_t
+fi_ibv_eq_read(struct fid_eq *eq_fid, uint32_t *event, void *buf,
+               size_t len, uint64_t flags)
+{
+	return fi_ibv_eq_read_internal(eq_fid, NULL, event, buf, len, flags);
+}
+
+static ssize_t
 fi_ibv_eq_sread(struct fid_eq *eq_fid, uint32_t *event,
 		void *buf, size_t len, int timeout, uint64_t flags)
 {
 	struct fi_ibv_eq *eq;
-	struct epoll_event events[2];
+	struct epoll_event events;
+	struct fi_ibv_domain *domain = NULL;
 	ssize_t ret;
 
 	eq = container_of(eq_fid, struct fi_ibv_eq, eq_fid.fid);
 
 	while (1) {
-		ret = fi_ibv_eq_read(eq_fid, event, buf, len, flags);
+		ret = fi_ibv_eq_read_internal(eq_fid, domain, event, buf, len, flags);
 		if (ret && (ret != -FI_EAGAIN))
 			return ret;
 
-		ret = epoll_wait(eq->epfd, events, 2, timeout);
+		ret = epoll_wait(eq->epfd, &events, 1, timeout);
 		if (ret == 0)
 			return -FI_EAGAIN;
 		else if (ret < 0)
 			return -errno;
+
+		domain = events.data.ptr;
 	};
 }
 
 static const char *
 fi_ibv_eq_strerror(struct fid_eq *eq, int prov_errno, const void *err_data,
-		   char *buf, size_t len)
+                   char *buf, size_t len)
 {
 	if (buf && len)
 		strncpy(buf, strerror(prov_errno), len);
@@ -864,6 +959,8 @@ static int fi_ibv_eq_close(fid_t fid)
 {
 	struct fi_ibv_eq *eq;
 	struct fi_ibv_eq_entry *entry;
+	struct fi_ibv_domain *domain;
+	struct dlist_entry *tmp_entry;
 
 	eq = container_of(fid, struct fi_ibv_eq, eq_fid.fid);
 	/* TODO: use util code, if possible, and add ref counting */
@@ -883,6 +980,16 @@ static int fi_ibv_eq_close(fid_t fid)
 	}
 
 	dlistfd_head_free(&eq->list_head);
+
+	/* Detach all domains associated to the given EQ. No lock is needed since
+	   polling an EQ after it gets closed is prohibited. */
+	dlist_foreach_container_safe(&eq->domain_list, struct fi_ibv_domain,
+	                             domain, eq_dlentry, tmp_entry) {
+		/* The EQ that is closing should match the one in the domain. */
+		assert(domain->eq == eq);
+		fi_ibv_eq_dettach_domain(domain->eq, domain);
+		domain->eq = NULL;
+	}
 
 	ofi_idx_reset(eq->xrc.conn_key_map);
 	free(eq->xrc.conn_key_map);
@@ -967,6 +1074,7 @@ int fi_ibv_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		goto err1;
 	}
 
+	dlist_init(&_eq->domain_list);
 	_eq->flags = attr->flags;
 	_eq->eq_fid.fid.fclass = FI_CLASS_EQ;
 	_eq->eq_fid.fid.context = context;
@@ -990,3 +1098,40 @@ err0:
 	return ret;
 }
 
+int fi_ibv_eq_attach_domain(struct fi_ibv_eq *eq, struct fi_ibv_domain *domain)
+{
+	int async_fd = domain->verbs->async_fd;
+	struct epoll_event event;
+	int ret;
+
+	ret = fi_fd_nonblock(async_fd);
+	if (ret)
+		return ret;
+
+	memset(&event, 0, sizeof(event));
+	event.events = EPOLLIN;
+	event.data.ptr = domain;
+
+	if (epoll_ctl(eq->epfd, EPOLL_CTL_ADD, async_fd, &event))
+		return -errno;
+
+	fastlock_acquire(&eq->lock);
+	dlist_insert_tail(&domain->eq_dlentry, &eq->domain_list);
+	fastlock_release(&eq->lock);
+	return 0;
+}
+
+int fi_ibv_eq_dettach_domain(struct fi_ibv_eq *eq, struct fi_ibv_domain *domain)
+{
+	int async_fd = domain->verbs->async_fd;
+
+	/* Always remove the entry from the list */
+	fastlock_acquire(&eq->lock);
+	dlist_remove(&domain->eq_dlentry);
+	fastlock_release(&eq->lock);
+
+	if (epoll_ctl(eq->epfd, EPOLL_CTL_DEL, async_fd, NULL))
+		return -errno;
+
+	return 0;
+}

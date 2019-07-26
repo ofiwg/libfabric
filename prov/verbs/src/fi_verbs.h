@@ -263,6 +263,7 @@ struct fi_ibv_eq {
 	fastlock_t		lock;
 	struct dlistfd_head	list_head;
 	struct rdma_event_channel *channel;
+	struct dlist_entry	domain_list;
 	uint64_t		flags;
 	struct fi_eq_err_entry	err;
 	int			epfd;
@@ -312,6 +313,7 @@ struct fi_ibv_domain {
 	/* The EQ is utilized by verbs/MSG */
 	struct fi_ibv_eq		*eq;
 	uint64_t			eq_flags;
+	struct dlist_entry		eq_dlentry;
 
 	/* Indicates that MSG endpoints should use the XRC transport.
 	 * TODO: Move selection of XRC/RC to endpoint info from domain */
@@ -725,6 +727,9 @@ int fi_ibv_cq_signal(struct fid_cq *cq);
 
 ssize_t fi_ibv_eq_write_event(struct fi_ibv_eq *eq, uint32_t event,
 		const void *buf, size_t len);
+
+int fi_ibv_eq_attach_domain(struct fi_ibv_eq *eq, struct fi_ibv_domain *domain);
+int fi_ibv_eq_dettach_domain(struct fi_ibv_eq *eq, struct fi_ibv_domain *domain);
 
 int fi_ibv_query_atomic(struct fid_domain *domain_fid, enum fi_datatype datatype,
 			enum fi_op op, struct fi_atomic_attr *attr,

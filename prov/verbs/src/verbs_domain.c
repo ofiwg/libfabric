@@ -42,6 +42,7 @@ static int fi_ibv_domain_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct fi_ibv_domain *domain;
 	struct fi_ibv_eq *eq;
+	int ret;
 
 	domain = container_of(fid, struct fi_ibv_domain,
 			      util_domain.domain_fid.fid);
@@ -51,6 +52,10 @@ static int fi_ibv_domain_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		switch (domain->ep_type) {
 		case FI_EP_MSG:
 			eq = container_of(bfid, struct fi_ibv_eq, eq_fid);
+			ret = fi_ibv_eq_attach_domain(eq, domain);
+			if (ret)
+				return ret;
+
 			domain->eq = eq;
 			domain->eq_flags = flags;
 			break;
@@ -103,6 +108,12 @@ static int fi_ibv_domain_close(fid_t fid)
 	}
 
 	ofi_mr_cache_cleanup(&domain->cache);
+
+	if (domain->eq)
+	{
+		fi_ibv_eq_dettach_domain(domain->eq, domain);
+		domain->eq = NULL;
+	}
 
 	if (domain->pd) {
 		ret = ibv_dealloc_pd(domain->pd);
