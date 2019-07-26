@@ -107,12 +107,6 @@ static void rxd_remove_rx_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry
 	}
 }
 
-void rxd_release_repost_rx(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
-{
-	ofi_buf_free(pkt_entry);
-	rxd_ep_post_buf(ep);
-}
-
 static void rxd_complete_rx(struct rxd_ep *ep, struct rxd_x_entry *rx_entry)
 {
 	struct fi_cq_err_entry err_entry;
@@ -932,7 +926,7 @@ static void rxd_progress_buf_pkts(struct rxd_ep *ep, fi_addr_t peer)
 						"could not write error entry\n");
 				ep->peers[base_hdr->peer].rx_seq_no++;
 				dlist_remove(&pkt_entry->d_entry);
-				rxd_release_repost_rx(ep, pkt_entry);
+				ofi_buf_free(pkt_entry);
 				continue;
 			}
 			if (!rx_entry) {
@@ -951,7 +945,7 @@ static void rxd_progress_buf_pkts(struct rxd_ep *ep, fi_addr_t peer)
 
 		ep->peers[base_hdr->peer].rx_seq_no++;
 		dlist_remove(&pkt_entry->d_entry);
-		rxd_release_repost_rx(ep, pkt_entry);
+		ofi_buf_free(pkt_entry);
 	}
 }
 
@@ -994,7 +988,7 @@ static void rxd_handle_data(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 	}
 free:
 	rxd_remove_rx_pkt(ep, pkt_entry);
-	rxd_release_repost_rx(ep, pkt_entry);
+	ofi_buf_free(pkt_entry);
 }
 
 static void rxd_handle_op(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
@@ -1062,7 +1056,7 @@ ack:
 	rxd_ep_send_ack(ep, base_hdr->peer);
 release:
 	rxd_remove_rx_pkt(ep, pkt_entry);
-	rxd_release_repost_rx(ep, pkt_entry);
+	ofi_buf_free(pkt_entry);
 }
 
 static void rxd_handle_cts(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
@@ -1159,7 +1153,7 @@ void rxd_handle_recv_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp)
 	       "got recv completion (type: %s)\n",
 	       rxd_pkt_type_str[(rxd_pkt_type(pkt_entry))]);
 
-	ep->posted_bufs--;
+	rxd_ep_post_buf(ep);
 
 	pkt_entry->pkt_size = comp->len;
 	switch (rxd_pkt_type(pkt_entry)) {
@@ -1188,7 +1182,7 @@ void rxd_handle_recv_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp)
 	}
 
 	rxd_remove_rx_pkt(ep, pkt_entry);
-	rxd_release_repost_rx(ep, pkt_entry);
+	ofi_buf_free(pkt_entry);
 }
 
 void rxd_handle_error(struct rxd_ep *ep)
