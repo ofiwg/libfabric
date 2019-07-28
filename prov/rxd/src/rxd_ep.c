@@ -242,7 +242,6 @@ int rxd_ep_post_buf(struct rxd_ep *ep)
 		return ret;
 	}
 
-	ep->posted_bufs++;
 	slist_insert_tail(&pkt_entry->s_entry, &ep->rx_pkt_list);
 
 	return 0;

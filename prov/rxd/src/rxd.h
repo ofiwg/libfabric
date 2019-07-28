@@ -192,7 +192,6 @@ struct rxd_ep {
 	size_t tx_size;
 	size_t tx_prefix_size;
 	size_t rx_prefix_size;
-	uint32_t posted_bufs;
 	size_t min_multi_recv_size;
 	int do_local_mr;
 	int next_retry;
