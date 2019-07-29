@@ -428,11 +428,18 @@ fi_ibv_eq_xrc_rej_event(struct fi_ibv_eq *eq, struct rdma_cm_event *cma_event)
 	enum fi_ibv_xrc_ep_conn_state state;
 
 	ep = container_of(fid, struct fi_ibv_xrc_ep, base_ep.util_ep.ep_fid);
-	state = ep->conn_state;
-
-	if (ep->base_ep.id != cma_event->id || state == FI_IBV_XRC_CONNECTED) {
+	if (ep->magic != VERBS_XRC_EP_MAGIC) {
 		VERBS_WARN(FI_LOG_EP_CTRL,
-			   "Stale CM Reject %d received\n", cma_event->status);
+			   "CM ID context not valid\n");
+		return -FI_EAGAIN;
+	}
+
+	state = ep->conn_state;
+	if (ep->base_ep.id != cma_event->id ||
+	    (state != FI_IBV_XRC_ORIG_CONNECTING &&
+	     state != FI_IBV_XRC_RECIP_CONNECTING)) {
+		VERBS_WARN(FI_LOG_EP_CTRL,
+			   "Stale/invalid CM reject %d received\n", cma_event->status);
 		return -FI_EAGAIN;
 	}
 
@@ -457,6 +464,41 @@ fi_ibv_eq_xrc_rej_event(struct fi_ibv_eq *eq, struct rdma_cm_event *cma_event)
 	fi_ibv_ep_ini_conn_rejected(ep);
 
 	return state == FI_IBV_XRC_ORIG_CONNECTING ? FI_SUCCESS : -FI_EAGAIN;
+}
+
+/* Caller must hold eq:lock */                                                                                  
+static inline int
+fi_ibv_eq_xrc_cm_err_event(struct fi_ibv_eq *eq,
+                           struct rdma_cm_event *cma_event, int *acked)
+{
+	struct fi_ibv_xrc_ep *ep;
+	fid_t fid = cma_event->id->context;
+
+	ep = container_of(fid, struct fi_ibv_xrc_ep, base_ep.util_ep.ep_fid);
+	if (ep->magic != VERBS_XRC_EP_MAGIC) {
+		VERBS_WARN(FI_LOG_EP_CTRL, "CM ID context invalid\n");
+		return -FI_EAGAIN;
+	}
+
+	/* Connect errors can be reported on active or passive side, all other
+	 * errors considered are reported on the active side only */
+	if ((ep->base_ep.id != cma_event->id) &&
+	    (cma_event->event == RDMA_CM_EVENT_CONNECT_ERROR &&
+	     ep->tgt_id != cma_event->id)) {
+		VERBS_WARN(FI_LOG_EP_CTRL, "Event ID and EP ID mismatch\n");
+		return -FI_EAGAIN;
+	}
+
+	VERBS_WARN(FI_LOG_EP_CTRL, "CM error event %s, status %d\n",
+		   rdma_event_str(cma_event->event), cma_event->status);
+	if (ep->base_ep.info->src_addr)
+		ofi_straddr_log(&fi_ibv_prov, FI_LOG_WARN, FI_LOG_EP_CTRL,
+				"Src ", ep->base_ep.info->src_addr);
+	if (ep->base_ep.info->dest_addr)
+		ofi_straddr_log(&fi_ibv_prov, FI_LOG_WARN, FI_LOG_EP_CTRL,
+				"Dest ", ep->base_ep.info->dest_addr);
+        ep->conn_state = FI_IBV_XRC_ERROR;
+        return FI_SUCCESS;
 }
 
 /* Caller must hold eq:lock */
@@ -641,7 +683,22 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq,
 	case RDMA_CM_EVENT_CONNECT_ERROR:
 	case RDMA_CM_EVENT_UNREACHABLE:
 		fastlock_acquire(&eq->lock);
-		eq->err.err = -cma_event->status;
+		ep = container_of(fid, struct fi_ibv_ep, util_ep.ep_fid);
+		assert(ep->info);
+		if (fi_ibv_is_xrc(ep->info)) {
+			ret = fi_ibv_eq_xrc_cm_err_event(eq, cma_event, acked);
+			if (ret == -FI_EAGAIN) {
+				fastlock_release(&eq->lock);
+				return ret;
+			}
+		}
+		eq->err.err = ETIMEDOUT;
+		eq->err.prov_errno = -cma_event->status;
+		if (eq->err.err_data) {
+			free(eq->err.err_data);
+			eq->err.err_data = NULL;
+			eq->err.err_data_size = 0;
+		}
 		goto err;
 	case RDMA_CM_EVENT_REJECTED:
 		ep = container_of(fid, struct fi_ibv_ep, util_ep.ep_fid);

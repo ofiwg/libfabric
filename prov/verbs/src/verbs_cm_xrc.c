@@ -49,6 +49,7 @@ void fi_ibv_next_xrc_conn_state(struct fi_ibv_xrc_ep *ep)
 		ep->conn_state = FI_IBV_XRC_CONNECTED;
 		break;
 	case FI_IBV_XRC_CONNECTED:
+	case FI_IBV_XRC_ERROR:
 		break;
 	default:
 		assert(0);
@@ -73,6 +74,8 @@ void fi_ibv_prev_xrc_conn_state(struct fi_ibv_xrc_ep *ep)
 		break;
 	case FI_IBV_XRC_CONNECTED:
 		ep->conn_state = FI_IBV_XRC_RECIP_CONNECTING;
+		break;
+	case FI_IBV_XRC_ERROR:
 		break;
 	default:
 		assert(0);
@@ -283,6 +286,7 @@ void fi_ibv_ep_ini_conn_rejected(struct fi_ibv_xrc_ep *ep)
 	fastlock_acquire(&domain->xrc.ini_mgmt_lock);
 	fi_ibv_log_ep_conn(ep, "INI Connection Rejected");
 	fi_ibv_put_shared_ini_conn(ep);
+	ep->conn_state = FI_IBV_XRC_ERROR;
 	fastlock_release(&domain->xrc.ini_mgmt_lock);
 }
 
