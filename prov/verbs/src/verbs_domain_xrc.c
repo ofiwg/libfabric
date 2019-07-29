@@ -131,12 +131,17 @@ int fi_ibv_get_shared_ini_conn(struct fi_ibv_xrc_ep *ep,
 
 	*ini_conn = NULL;
 	conn = calloc(1, sizeof(*conn));
-	if (!conn)
+	if (!conn) {
+		VERBS_WARN(FI_LOG_EP_CTRL,
+			   "Unable to allocate INI connection memory\n");
 		return -FI_ENOMEM;
+	}
 
 	conn->tgt_qpn = FI_IBV_NO_INI_TGT_QPNUM;
 	conn->peer_addr = mem_dup(key.addr, ofi_sizeofaddr(key.addr));
 	if (!conn->peer_addr) {
+		VERBS_WARN(FI_LOG_EP_CTRL,
+			   "mem_dup of peer address failed\n");
 		free(conn);
 		return -FI_ENOMEM;
 	}

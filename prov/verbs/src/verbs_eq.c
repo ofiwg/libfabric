@@ -176,8 +176,10 @@ fi_ibv_eq_cm_getinfo(struct rdma_cm_event *event, struct fi_info *pep_info,
 	const char *devname = ibv_get_device_name(event->id->verbs->device);
 	int ret = -FI_ENOMEM;
 
-	if (!(hints = fi_dupinfo(pep_info)))
+	if (!(hints = fi_dupinfo(pep_info))) {
+		VERBS_WARN(FI_LOG_EP_CTRL, "dupinfo failure\n");
 		return -FI_ENOMEM;
+	}
 
 	/* Free src_addr info from pep to avoid addr reuse errors */
 	free(hints->src_addr);
@@ -226,8 +228,11 @@ fi_ibv_eq_cm_getinfo(struct rdma_cm_event *event, struct fi_info *pep_info,
 	ofi_straddr_dbg(&fi_ibv_prov, FI_LOG_EQ, "dst", (*info)->dest_addr);
 
 	connreq = calloc(1, sizeof *connreq);
-	if (!connreq)
+	if (!connreq) {
+		VERBS_WARN(FI_LOG_EP_CTRL,
+			   "Unable to allocate connreq memory\n");
 		goto err2;
+	}
 
 	connreq->handle.fclass = FI_CLASS_CONNREQ;
 	connreq->id = event->id;
@@ -304,6 +309,7 @@ fi_ibv_eq_xrc_connreq_event(struct fi_ibv_eq *eq, struct fi_eq_cm_entry *entry,
 			   connreq->xrc.conn_tag);
 		goto done;
 	}
+	assert(ep->conn_state == FI_IBV_XRC_ORIG_CONNECTED);
 
 	ep->tgt_id = connreq->id;
 	ep->tgt_id->context = &ep->base_ep.util_ep.ep_fid.fid;
@@ -347,7 +353,7 @@ fi_ibv_eq_xrc_conn_event(struct fi_ibv_xrc_ep *ep,
 	size_t priv_datalen = cma_event->param.conn.private_data_len;
 	int ret;
 
-	VERBS_DBG(FI_LOG_FABRIC, "EP %p INITIAL CONNECTION DONE state %d\n",
+	VERBS_DBG(FI_LOG_EP_CTRL, "EP %p INITIAL CONNECTION DONE state %d\n",
 		  ep, ep->conn_state);
 	fi_ibv_next_xrc_conn_state(ep);
 
@@ -395,7 +401,7 @@ fi_ibv_eq_xrc_recip_conn_event(struct fi_ibv_eq *eq,
 	int ret;
 
 	fi_ibv_next_xrc_conn_state(ep);
-	VERBS_DBG(FI_LOG_FABRIC, "EP %p RECIPROCAL CONNECTION DONE state %d\n",
+	VERBS_DBG(FI_LOG_EP_CTRL, "EP %p RECIPROCAL CONNECTION DONE state %d\n",
 		  ep, ep->conn_state);
 
 	/* If this is the reciprocal active side notification */
@@ -414,7 +420,7 @@ fi_ibv_eq_xrc_recip_conn_event(struct fi_ibv_eq *eq,
 		fi_ibv_ep_ini_conn_done(ep, xrc_info.conn_data,
 					xrc_info.conn_param.qp_num);
 	} else {
-			fi_ibv_ep_tgt_conn_done(ep);
+		fi_ibv_ep_tgt_conn_done(ep);
 	}
 
 	/* The internal reciprocal XRC connection has completed. Return the
@@ -495,7 +501,7 @@ fi_ibv_eq_xrc_cm_err_event(struct fi_ibv_eq *eq,
 	if ((ep->base_ep.id != cma_event->id) &&
 	    (cma_event->event == RDMA_CM_EVENT_CONNECT_ERROR &&
 	     ep->tgt_id != cma_event->id)) {
-		VERBS_WARN(FI_LOG_EP_CTRL, "Event ID and EP ID mismatch\n");
+		VERBS_WARN(FI_LOG_EP_CTRL, "CM error not valid for EP\n");
 		return -FI_EAGAIN;
 	}
 
@@ -777,8 +783,10 @@ ssize_t fi_ibv_eq_write_event(struct fi_ibv_eq *eq, uint32_t event,
 	struct fi_ibv_eq_entry *entry;
 
 	entry = calloc(1, sizeof(struct fi_ibv_eq_entry) + len);
-	if (!entry)
+	if (!entry) {
+		VERBS_WARN(FI_LOG_EP_CTRL, "Unable to allocate EQ entry\n");
 		return -FI_ENOMEM;
+	}
 
 	entry->event = event;
 	entry->len = len;

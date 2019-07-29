@@ -371,8 +371,11 @@ int fi_ibv_process_xrc_connreq(struct fi_ibv_ep *ep,
 	assert(ep->info->dest_addr);
 
 	xrc_ep->conn_setup = calloc(1, sizeof(*xrc_ep->conn_setup));
-	if (!xrc_ep->conn_setup)
+	if (!xrc_ep->conn_setup) {
+		VERBS_WARN(FI_LOG_EP_CTRL,
+			  "Unable to allocate connection setup memory\n");
 		return -FI_ENOMEM;
+	}
 
 	/* This endpoint was created on the passive side of a connection
 	 * request. The reciprocal connection request will go back to the

@@ -841,8 +841,11 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	}
 
 	ep = fi_ibv_alloc_init_ep(info, dom, context);
-	if (!ep)
+	if (!ep) {
+		VERBS_WARN(FI_LOG_EP_CTRL,
+			   "Unable to allocate/init EP memory\n");
 		return -FI_ENOMEM;
+	}
 
 	ep->inject_limit = ep->info->tx_attr->inject_size;
 

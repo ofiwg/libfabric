@@ -71,6 +71,7 @@ static int fi_ibv_msg_ep_setname(fid_t ep_fid, void *addr, size_t addrlen)
 
 	ep->info->src_addr = malloc(ep->info->src_addrlen);
 	if (!ep->info->src_addr) {
+		VERBS_WARN(FI_LOG_EP_CTRL, "memory allocation failure\n");
 		ret = -FI_ENOMEM;
 		goto err1;
 	}
@@ -363,6 +364,8 @@ fi_ibv_msg_xrc_ep_connect(struct fid_ep *ep, const void *addr,
 
 	xrc_ep->conn_setup = calloc(1, sizeof(*xrc_ep->conn_setup));
 	if (!xrc_ep->conn_setup) {
+		VERBS_WARN(FI_LOG_EP_CTRL,
+			   "Unable to allocate connection setup memory\n");
 		free(adjusted_param);
 		free(cm_hdr);
 		return -FI_ENOMEM;
