@@ -34,7 +34,6 @@
 
 #include <ofi_mr.h>
 
-
 static struct ofi_uffd uffd;
 struct ofi_mem_monitor *uffd_monitor = &uffd.monitor;
 
@@ -53,9 +52,9 @@ void ofi_monitor_init(void)
 	dlist_init(&memhooks_monitor->list);
 
 #if HAVE_UFFD_UNMAP
-struct ofi_mem_monitor *default_monitor = uffd_monitor;
+default_monitor = uffd_monitor;
 #else
-struct ofi_mem_monitor *default_monitor = memhooks_monitor;
+default_monitor = memhooks_monitor;
 #endif
 
 	fi_param_define(NULL, "mr_cache_max_size", FI_PARAM_SIZE_T,
@@ -93,6 +92,14 @@ struct ofi_mem_monitor *default_monitor = memhooks_monitor;
 
 	if (!cache_params.max_size)
 		cache_params.max_size = SIZE_MAX;
+
+	if(cache_params.monitor != NULL) {
+		if (!strcmp(cache_params.monitor, "userfaultfd") &&
+		    default_monitor == uffd_monitor) /* check that userfaultfd supported at all */
+			default_monitor = uffd_monitor;
+		else if (!strcmp(cache_params.monitor, "memhooks"))
+			default_monitor = memhooks_monitor;
+	}
 }
 
 void ofi_monitor_cleanup(void)
@@ -140,8 +147,10 @@ void ofi_monitor_del_cache(struct ofi_mr_cache *cache)
 	dlist_remove(&cache->notify_entry);
 
 	if (dlist_empty(&monitor->list)) {
-		ofi_uffd_cleanup();
-		ofi_memhooks_cleanup();
+		if (monitor == uffd_monitor)
+			ofi_uffd_cleanup();
+		else if (monitor == memhooks_monitor)
+			ofi_memhooks_cleanup();
 	}
 
 	fastlock_release(&monitor->lock);
