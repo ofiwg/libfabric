@@ -67,7 +67,8 @@ struct ofi_dl_intercept {
 enum {
 	OFI_INTERCEPT_DLOPEN,
 	OFI_INTERCEPT_MMAP,
-	OFI_INTERCEPT_MUNMAP
+	OFI_INTERCEPT_MUNMAP,
+	OFI_INTERCEPT_MAX
 };
 
 static void *ofi_intercept_dlopen(const char *filename, int flag);
@@ -283,28 +284,21 @@ static void ofi_restore_intercepts(void)
 {
 	struct ofi_intercept *intercept;
 
-	fastlock_acquire(&memhooks_monitor->lock);
 	dlist_foreach_container(&memhooks.intercept_list, struct ofi_intercept,
 		intercept, entry) {
 		dl_iterate_phdr(ofi_restore_phdr_handler, intercept);
 	}
-	fastlock_release(&memhooks_monitor->lock);
 }
 
 static int ofi_intercept_symbol(struct ofi_intercept *intercept, void **real_func)
 {
 	int ret;
 
-	/*
-	* Take lock first to handle a possible race where dlopen() is called
-	* from another thread and we may end up not patching it.
-	*/
 	FI_DBG(&core_prov, FI_LOG_MR,
 	       "intercepting symbol %s\n", intercept->symbol);
-	fastlock_acquire(&memhooks_monitor->lock);
 	ret = dl_iterate_phdr(ofi_intercept_phdr_handler, intercept);
 	if (ret)
-		goto unlock;
+		return ret;
 
 	*real_func = dlsym(RTLD_DEFAULT, intercept->symbol);
 	if (*real_func == intercept->our_func) {
@@ -316,11 +310,10 @@ static int ofi_intercept_symbol(struct ofi_intercept *intercept, void **real_fun
 		FI_DBG(&core_prov, FI_LOG_MR,
 		       "could not find symbol %s\n", intercept->symbol);
 		ret = -FI_ENOMEM;
-		goto unlock;
+		return ret;
 	}
-	dlist_insert_tail(&memhooks.intercept_list, &intercept->entry);
-unlock:
-	fastlock_release(&memhooks_monitor->lock);
+	dlist_insert_tail(&intercept->entry, &memhooks.intercept_list);
+
 	return ret;
 }
 
@@ -365,7 +358,7 @@ static void ofi_memhooks_unsubscribe(struct ofi_mem_monitor *monitor,
 
 int ofi_memhooks_init(void)
 {
-	int ret;
+	int i, ret;
 
 	/* TODO: remove once cleanup is written */
 	if (memhooks_monitor->subscribe == ofi_memhooks_subscribe)
@@ -374,6 +367,9 @@ int ofi_memhooks_init(void)
 	memhooks_monitor->subscribe = ofi_memhooks_subscribe;
 	memhooks_monitor->unsubscribe = ofi_memhooks_unsubscribe;
 	dlist_init(&memhooks.intercept_list);
+
+	for (i = 0; i < OFI_INTERCEPT_MAX; ++i)
+		dlist_init(&intercepts[i].dl_intercept_list);
 
 	ret = ofi_intercept_symbol(&intercepts[OFI_INTERCEPT_DLOPEN],
 				   (void **) &real_calls.dlopen);
