@@ -278,7 +278,6 @@ fi_ibv_msg_ep_reject(struct fid_pep *pep, fid_t handle,
 	if (connreq->is_xrc)
 		ret = fi_ibv_msg_xrc_ep_reject(connreq, cm_hdr,
 				(uint8_t)(sizeof(*cm_hdr) + paramlen));
-
 	else
 		ret = rdma_reject(connreq->id, cm_hdr,
 			(uint8_t)(sizeof(*cm_hdr) + paramlen)) ? -errno : 0;
@@ -372,10 +371,10 @@ fi_ibv_msg_xrc_ep_connect(struct fid_ep *ep, const void *addr,
 	fastlock_acquire(&xrc_ep->base_ep.eq->lock);
 	xrc_ep->conn_setup->conn_tag = VERBS_CONN_TAG_INVALID;
 	fi_ibv_eq_set_xrc_conn_tag(xrc_ep);
-	fastlock_release(&xrc_ep->base_ep.eq->lock);
-
 	dst_addr = rdma_get_peer_addr(_ep->id);
 	ret = fi_ibv_connect_xrc(xrc_ep, dst_addr, 0, adjusted_param, paramlen);
+	fastlock_release(&xrc_ep->base_ep.eq->lock);
+
 	free(adjusted_param);
 	free(cm_hdr);
 	return ret;
@@ -404,7 +403,10 @@ fi_ibv_msg_xrc_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 	if (ret)
 		return ret;
 
+	fastlock_acquire(&xrc_ep->base_ep.eq->lock);
 	ret = fi_ibv_accept_xrc(xrc_ep, 0, adjusted_param, paramlen);
+	fastlock_release(&xrc_ep->base_ep.eq->lock);
+
 	free(adjusted_param);
 	return ret;
 }
