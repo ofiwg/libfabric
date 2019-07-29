@@ -59,6 +59,7 @@ int ofi_mr_map_insert(struct ofi_mr_map *map, const struct fi_mr_attr *attr,
 		      uint64_t *key, void *context)
 {
 	struct fi_mr_attr *item;
+	int ret;
 
 	item = dup_mr_attr(attr);
 	if (!item)
@@ -67,20 +68,22 @@ int ofi_mr_map_insert(struct ofi_mr_map *map, const struct fi_mr_attr *attr,
 	if (!(map->mode & FI_MR_VIRT_ADDR))
 		item->offset = (uintptr_t) attr->mr_iov[0].iov_base;
 
-	if (!(map->mode & FI_MR_PROV_KEY)) {
-		if (ofi_rbmap_find(map->rbtree, &item->requested_key)) {
-			free(item);
-			return -FI_ENOKEY;
-		}
-	} else {
+	if (map->mode & FI_MR_PROV_KEY)
 		item->requested_key = map->key++;
-	}
 
-	ofi_rbmap_insert(map->rbtree, &item->requested_key, item);
+	ret = ofi_rbmap_insert(map->rbtree, &item->requested_key, item, NULL);
+	if (ret) {
+		if (ret == -FI_EALREADY)
+			ret = -FI_ENOKEY;
+		goto err;
+	}
 	*key = item->requested_key;
 	item->context = context;
 
 	return 0;
+err:
+	free(item);
+	return ret;
 }
 
 void *ofi_mr_map_get(struct ofi_mr_map *map, uint64_t key)
