@@ -35,31 +35,31 @@
 
 static int pattern_next(int *cur)
 {
-	if ((pm_job.rank == 0 ? pm_job.ranks - 1 : pm_job.rank - 1) == *cur){
+
+	if ((pm_job.my_rank == 0 ? pm_job.num_ranks - 1 : pm_job.my_rank - 1) == *cur){
 		return -ENODATA;
 	}
 	else{
-		if (pm_job.rank == 0)
-			*cur = pm_job.ranks - 1;
+		if (pm_job.my_rank == 0)
+			*cur = pm_job.num_ranks - 1;
 		else 			
-			*cur = pm_job.rank - 1;
-
+			*cur = pm_job.my_rank - 1;
 		return 0; 
 	}
 }
 
 static int pattern_current(int *cur)
 {
-	if ((pm_job.rank + 1) % pm_job.ranks == *cur){
+	if ((pm_job.my_rank + 1) % pm_job.num_ranks == *cur){
 		return -ENODATA;
 	} else {
-		*cur = (pm_job.rank + 1) % pm_job.ranks;
+		*cur = (pm_job.my_rank + 1) % pm_job.num_ranks;
 		return 0; 
 	}
 }
 
 struct pattern_ops ring_ops = {
 	.name = "ring",
-	.next_sender = pattern_next,
-	.next_receiver = pattern_current,	
+	.next_source = pattern_next,
+	.next_target = pattern_current,	
 };

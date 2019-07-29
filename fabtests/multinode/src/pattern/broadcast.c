@@ -35,10 +35,10 @@
 
 static int pattern_next(int *cur)
 {
-	if (pm_job.rank == 0){
+	if (pm_job.my_rank == 0){
 		int next = *cur + 1;
 
-		if (next >= pm_job.ranks)
+		if (next >= pm_job.num_ranks)
 			return -ENODATA;
 		else if (next == 0)
 			next = 1;
@@ -53,7 +53,7 @@ static int pattern_next(int *cur)
 
 static int pattern_current(int *cur)
 {
-	if (pm_job.rank == 0){
+	if (pm_job.my_rank == 0){
 		return -ENODATA;
 	} else {
 		int next = *cur + 1;
@@ -69,6 +69,6 @@ static int pattern_current(int *cur)
 //Broadcast pattern. Host does not send to itself. 
 struct pattern_ops broadcast_ops = {
 	.name = "broadcast",
-	.next_sender = pattern_current,
-	.next_receiver = pattern_next,	
+	.next_source = pattern_current,
+	.next_target = pattern_next,	
 };

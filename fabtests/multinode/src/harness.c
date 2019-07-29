@@ -79,6 +79,7 @@ static inline int socket_recv(int sock, void *buf, size_t len, int flags)
 }
 
 int pm_allgather(void *my_item, void *items, int item_size)
+
 {
 	int i, ret;
 	uint8_t *offset;
@@ -126,36 +127,6 @@ void pm_barrier()
 	pm_allgather(&ch, chs, 1);
 }
 
-static int server_connect()
-{
-	int new_sock;
-	int ret, i;
-
-	ret = listen(pm_job.sock, pm_job.num_ranks);
-	if (ret)
-		return ret;
-
-	pm_job.clients = calloc(pm_job.num_ranks, sizeof(int));
-	if (!pm_job.clients)
-		return -FI_ENOMEM;
-
-	for (i = 0; i < pm_job.num_ranks-1; i++){
-		new_sock = accept(pm_job.sock, NULL, NULL);
-		if (new_sock < 0) {	
-			FT_ERR("error during server init\n");
-			goto err;
-		}
-		pm_job.clients[i] = new_sock;
-		FT_DEBUG("connection established\n");
-		return 0;
-err:
-	while(i--){
-		cose(pm_job.clients[i]);
-	}
-	free(pm_job.clients);
-	return new_sock;
-}
-
 static int pm_init_ranks()
 {
 	int ret;
@@ -180,28 +151,27 @@ static int pm_init_ranks()
 	return ret;
 }
 
-static int server_init()
+static int server_connect()
 {
 	int new_sock;
-	int ret, i = 0;
+	int ret, i;
 
-	ret = listen(pm_job.sock, pm_job.ranks);
+	ret = listen(pm_job.sock, pm_job.num_ranks);
 	if (ret)
 		return ret;
 
-	pm_job.clients = calloc(pm_job.ranks, sizeof(int));
+	pm_job.clients = calloc(pm_job.num_ranks, sizeof(int));
 	if (!pm_job.clients)
 		return -FI_ENOMEM;
 
-	while (i < pm_job.ranks-1 &&
-	       (new_sock = accept(pm_job.sock, NULL, NULL))) {
+	for (i = 0; i < pm_job.num_ranks-1; i++){
+		new_sock = accept(pm_job.sock, NULL, NULL);
 		if (new_sock < 0) {
 			FT_ERR("error during server init\n");
 			goto err;
 		}
 		pm_job.clients[i] = new_sock;
-		i++;
-		FT_DEBUG("connection established\n");	
+		FT_DEBUG("connection established\n");
 	}
 	close(pm_job.sock);
 	return 0;
@@ -209,13 +179,8 @@ err:
 	while (i--) {
 		close(pm_job.clients[i]);
 	}
-}
-
-
-static inline int client_init()
-{
-	return connect(pm_job.sock, pm_job.oob_server_addr,
-			sizeof(*pm_job.oob_server_addr));
+	free(pm_job.clients);
+	return new_sock;
 }
 
 static int pm_conn_setup()
@@ -305,14 +270,14 @@ int main(int argc, char **argv)
 		return -1;
 
 	ret = pm_conn_setup();
-	if (ret
+	if (ret)
 		goto err1;
 
-	FT_DEBUG("OOB job setup done\n");
-
 	ret = pm_init_ranks();
-	if(ret < 0)
-		return ret;
+	if (ret < 0)
+		goto err2;
+
+	FT_DEBUG("OOB job setup done\n");
 
 	ret = multinode_run_tests(argc, argv);
 	if (ret) {
