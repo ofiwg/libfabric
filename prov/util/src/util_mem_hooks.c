@@ -40,7 +40,14 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/*#if HAVE_PATCH_UNMAP*/
+#include <ofi_mr.h>
+
+struct ofi_memhooks memhooks;
+struct ofi_mem_monitor *memhooks_monitor = &memhooks.monitor;
+
+
+#if defined(HAVE_ELF_H) && defined(HAVE_SYS_AUXV_H)
+
 #include <elf.h>
 #include <sys/auxv.h>
 #include <sys/mman.h>
@@ -48,7 +55,6 @@
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <link.h>
-#include <ofi_mr.h>
 
 
 struct ofi_intercept {
@@ -93,17 +99,16 @@ struct ofi_mem_calls {
 
 static struct ofi_mem_calls real_calls;
 
-struct ofi_memhooks memhooks;
-struct ofi_mem_monitor *memhooks_monitor = &memhooks.monitor;
-
 
 static const ElfW(Phdr) *
 ofi_get_phdr_dynamic(const ElfW(Phdr) *phdr, uint16_t phnum, int phent)
 {
-	for (uint16_t i = 0 ; i < phnum ; ++i,
-	     phdr = (ElfW(Phdr)*)((intptr_t) phdr + phent)) {
+	uint16_t i;
+
+	for (i = 0 ; i < phnum; i++) {
 		if (phdr->p_type == PT_DYNAMIC)
 			return phdr;
+		phdr = (ElfW(Phdr)*) ((intptr_t) phdr + phent);
 	}
 
 	return NULL;
@@ -112,8 +117,9 @@ ofi_get_phdr_dynamic(const ElfW(Phdr) *phdr, uint16_t phnum, int phent)
 static void *ofi_get_dynentry(ElfW(Addr) base, const ElfW(Phdr) *pdyn,
 			      ElfW(Sxword) type)
 {
-	for (ElfW(Dyn) *dyn = (ElfW(Dyn)*) (base + pdyn->p_vaddr);
-	     dyn->d_tag; ++dyn) {
+	ElfW(Dyn) *dyn;
+
+	for (dyn = (ElfW(Dyn)*) (base + pdyn->p_vaddr); dyn->d_tag; ++dyn) {
 		if (dyn->d_tag == type)
 			return (void *) (uintptr_t) dyn->d_un.d_val;
 	}
@@ -131,6 +137,7 @@ static void *ofi_dl_func_addr(ElfW(Addr) base, const ElfW(Phdr) *phdr,
 			      int16_t phnum, int phent, const char *symbol)
 {
 	const ElfW(Phdr) *dphdr;
+	ElfW(Rela) *reloc;
 	void *jmprel, *strtab;
 	char *elf_sym;
 	uint32_t relsymidx;
@@ -143,8 +150,8 @@ static void *ofi_dl_func_addr(ElfW(Addr) base, const ElfW(Phdr) *phdr,
 	strtab = ofi_get_dynentry (base, dphdr, DT_STRTAB);
 	pltrelsz = (uintptr_t) ofi_get_dynentry(base, dphdr, DT_PLTRELSZ);
 
-	for (ElfW(Rela) *reloc = jmprel;
-	     (intptr_t) reloc < (intptr_t) jmprel + pltrelsz; ++reloc) {
+	for (reloc = jmprel; (intptr_t) reloc < (intptr_t) jmprel + pltrelsz;
+	     reloc++) {
 		relsymidx = OFI_ELF_R_SYM(reloc->r_info);
 		elf_sym = (char *) strtab + symtab[relsymidx].st_name;
 		if (!strcmp(symbol, elf_sym))
@@ -402,3 +409,16 @@ void ofi_memhooks_cleanup(void)
 {
 	ofi_restore_intercepts();
 }
+
+#else
+
+int ofi_memhooks_init(void)
+{
+	return -FI_ENOSYS;
+}
+
+void ofi_memhooks_cleanup(void)
+{
+}
+
+#endif

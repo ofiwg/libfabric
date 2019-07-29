@@ -52,9 +52,9 @@ void ofi_monitor_init(void)
 	dlist_init(&memhooks_monitor->list);
 
 #if HAVE_UFFD_UNMAP
-default_monitor = uffd_monitor;
+	default_monitor = uffd_monitor;
 #else
-default_monitor = memhooks_monitor;
+	default_monitor = memhooks_monitor;
 #endif
 
 	fi_param_define(NULL, "mr_cache_max_size", FI_PARAM_SIZE_T,

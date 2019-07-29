@@ -451,6 +451,9 @@ AS_IF([test $have_uffd -eq 1],
 AC_DEFINE_UNQUOTED([HAVE_UFFD_UNMAP], [$have_uffd],
 	[Define to 1 if platform supports userfault fd unmap])
 
+dnl Check support to intercept syscalls
+AC_CHECK_HEADERS_ONCE(elf.h sys/auxv.h)
+
 dnl Provider-specific checks
 FI_PROVIDER_INIT
 FI_PROVIDER_SETUP([psm])
