@@ -110,11 +110,20 @@ struct fi_ibv_xrc_ep *fi_ibv_eq_xrc_conn_tag2ep(struct fi_ibv_eq *eq,
 
 	index = ofi_key2idx(&eq->xrc.conn_key_idx, (uint64_t)conn_tag);
 	ep = ofi_idx_lookup(eq->xrc.conn_key_map, index);
-	if (!ep || !ep->conn_setup || (ep->conn_setup->conn_tag != conn_tag)) {
-		VERBS_WARN(FI_LOG_EP_CTRL,
-			   "Invalid/stale XRC connection tag\n");
-		return ep;
+	if (!ep || ep->magic != VERBS_XRC_EP_MAGIC) {
+		VERBS_WARN(FI_LOG_EP_CTRL, "XRC EP is not valid\n");
+		return NULL;
 	}
+	if (!ep->conn_setup) {
+		VERBS_WARN(FI_LOG_EP_CTRL,
+			   "Bad state, no connection data\n");
+		return NULL;
+	}
+	if (ep->conn_setup->conn_tag != conn_tag) {
+		VERBS_WARN(FI_LOG_EP_CTRL, "Connection tag mismatch\n");
+		return NULL;
+	}
+
 	ofi_idx_remove(eq->xrc.conn_key_map, index);
 	ep->conn_setup->conn_tag = VERBS_CONN_TAG_INVALID;
 
@@ -291,7 +300,8 @@ fi_ibv_eq_xrc_connreq_event(struct fi_ibv_eq *eq, struct fi_eq_cm_entry *entry,
 	ep = fi_ibv_eq_xrc_conn_tag2ep(eq, connreq->xrc.conn_tag);
 	if (!ep) {
 		VERBS_WARN(FI_LOG_EP_CTRL,
-			   "Reciprocal XRC connection tag not found\n");
+			   "Reciprocal XRC connection tag 0x%x not found\n",
+			   connreq->xrc.conn_tag);
 		goto done;
 	}
 
