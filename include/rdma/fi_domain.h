@@ -33,6 +33,7 @@
 #ifndef FI_DOMAIN_H
 #define FI_DOMAIN_H
 
+#include <string.h>
 #include <rdma/fabric.h>
 #include <rdma/fi_eq.h>
 
@@ -369,7 +370,8 @@ static inline int
 fi_mr_refresh(struct fid_mr *mr, const struct iovec *iov, size_t count,
 	      uint64_t flags)
 {
-	struct fi_mr_modify modify = { 0 };
+	struct fi_mr_modify modify;
+	memset(&modify, 0, sizeof(modify));
 	modify.flags = flags;
 	modify.attr.mr_iov = iov;
 	modify.attr.iov_count = count;
