@@ -174,9 +174,7 @@ static int rxd_peek_recv(struct rxd_ep *rxd_ep, fi_addr_t addr, uint64_t tag,
 {
 	struct rxd_unexp_msg *unexp_msg;
 
-	fastlock_release(&rxd_ep->util_ep.lock);
 	rxd_ep_progress(&rxd_ep->util_ep);
-	fastlock_acquire(&rxd_ep->util_ep.lock);
 
 	unexp_msg = rxd_ep_check_unexp_list(unexp_list, addr, tag, ignore);
 	if (!unexp_msg) {
