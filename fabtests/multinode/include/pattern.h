@@ -47,9 +47,7 @@ struct pattern_ops {
 	int (*next_target) (int *cur);
 };
 
-
 extern struct pattern_ops full_mesh_ops;
 extern struct pattern_ops gather_ops;
 extern struct pattern_ops broadcast_ops;
 extern struct pattern_ops ring_ops;
-

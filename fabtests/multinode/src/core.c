@@ -51,6 +51,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <assert.h>
 
 struct pattern_ops *pattern;
 struct multinode_xfer_state state;
@@ -135,31 +136,24 @@ err:
 
 static int multinode_post_rx()
 {
-	int ret, prev, offset;
+	int ret, offset;
 
 	/* post receives */
-	while (!state.all_recvs_done) {
-		prev = state.cur_source;
+	while (!state.all_recvs_posted) {
+
+		if (state.rx_window == 0)
+			break;
 
 		ret = pattern->next_source(&state.cur_source);
 		if (ret == -ENODATA) {
-			state.all_recvs_done = true;
+			state.all_recvs_posted = true;
 			break;
 		} else if (ret < 0) {
 			return ret;
 		}
 
-		if (state.rx_window == 0) {
-			state.cur_source = prev;
-			break;
-		}
-
 		offset = state.recvs_posted % opts.window_size ;
-		/* find context and buff */
-		if (rx_ctx_arr[offset].state != OP_DONE) {
-			state.cur_source = prev;
-			break;
-		}
+		assert(rx_ctx_arr[offset].state == OP_DONE);
 
 		ret = ft_post_rx_buf(ep, opts.transfer_size,
 				     &rx_ctx_arr[offset],
@@ -177,32 +171,25 @@ static int multinode_post_rx()
 
 static int multinode_post_tx()
 {
-	int ret, prev, offset;
+	int ret, offset;
 	fi_addr_t dest;
 
-	while (!state.all_sends_done) {
+	while (!state.all_sends_posted) {
 
-		prev = state.cur_target;
+		if (state.tx_window == 0)
+			break;
 
 		ret = pattern->next_target(&state.cur_target);
 		if (ret == -ENODATA) {
-			state.all_sends_done = true;
+			state.all_sends_posted = true;
 			break;
 		} else if (ret < 0) {
 			return ret;
 		}
 
-		if (state.tx_window == 0) {
-			state.cur_target = prev;
-			break;
-		}
-
 		offset = state.sends_posted % opts.window_size;
+		assert(tx_ctx_arr[offset].state == OP_DONE);
 
-		if (tx_ctx_arr[offset].state != OP_DONE) {
-			state.cur_target = prev;
-			break;
-		}
 		tx_ctx_arr[offset].buf[0] = offset;
 		dest = pm_job.fi_addrs[state.cur_target];
 		ret = ft_post_tx_buf(ep, dest, opts.transfer_size,
@@ -240,7 +227,9 @@ static int multinode_wait_for_comp()
 	state.rx_window = opts.window_size;
 	state.tx_window = opts.window_size;
 
-	state.all_completions_done = true;
+	if (state.all_recvs_posted && state.all_sends_posted)
+		state.all_completions_done = true;
+
 	return 0;
 }
 
@@ -250,8 +239,8 @@ static inline void multinode_init_state()
 	state.cur_target = PATTERN_NO_CURRENT;
 
 	state.all_completions_done = false;
-	state.all_recvs_done = false;
-	state.all_sends_done = false;
+	state.all_recvs_posted = false;
+	state.all_sends_posted = false;
 
 	state.rx_window = opts.window_size;
 	state.tx_window = opts.window_size;
@@ -262,15 +251,13 @@ static int multinode_run_test()
 	int ret;
 	int iter;
 
-	opts.iterations = 1;
-
 	for (iter = 0; iter < opts.iterations; iter++) {
 
 		multinode_init_state();
 
 		while (!state.all_completions_done ||
-				!state.all_recvs_done ||
-				!state.all_sends_done) {
+				!state.all_recvs_posted ||
+				!state.all_sends_posted) {
 			ret = multinode_post_rx();
 			if (ret)
 				return ret;
@@ -339,5 +326,5 @@ int multinode_run_tests(int argc, char **argv)
 	
 	pm_job_free_res();
 	ft_free_res();
-	return ret;
+	return ft_exit_code(ret);
 }

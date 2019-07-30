@@ -40,6 +40,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <netdb.h>
 
 #include <core.h>
 struct pm_job_info pm_job;
@@ -236,9 +237,42 @@ static void pm_finalize()
 	free(pm_job.clients);
 }
 
+int pm_get_oob_server_addr()
+{
+	struct addrinfo *res;
+	struct sockaddr_in *in;
+	struct sockaddr_in6 *in6;
+        int ret;
+
+        ret = getaddrinfo(opts.src_addr, NULL, NULL, &res);
+        if (ret) {
+		FT_ERR( "getaddrinfo failed\n");
+                return ret;
+        }
+
+	memcpy(&pm_job.oob_server_addr, res->ai_addr, res->ai_addrlen);
+
+	switch (pm_job.oob_server_addr.ss_family) {
+	case AF_INET:
+		in = (struct sockaddr_in *) &pm_job.oob_server_addr;
+		in->sin_port = PM_DEFAULT_OOB_PORT;
+		break;
+	case AF_INET6:
+		in6 = (struct sockaddr_in6 *) &pm_job.oob_server_addr;
+		in6->sin6_port = PM_DEFAULT_OOB_PORT;
+		break;
+	default:
+		FT_ERR( "Unsupported Address family\n");
+		ret = -1;
+		break;
+	}
+
+	freeaddrinfo(res);
+        return ret;
+}
+
 int main(int argc, char **argv)
 {
-	struct sockaddr_in *sock_addr = (struct sockaddr_in *)&pm_job.oob_server_addr;
 	extern char *optarg;
 	int c, ret;
 
@@ -246,7 +280,6 @@ int main(int argc, char **argv)
 	opts.options |= (FT_OPT_SIZE | FT_OPT_ALLOC_MULT_MR);
 
 	pm_job.clients = NULL;
-	sock_addr->sin_port = 8228;
 
 	while ((c = getopt(argc, argv, "n:h" ADDR_OPTS INFO_OPTS)) != -1) {
 		switch (c) {
@@ -264,10 +297,9 @@ int main(int argc, char **argv)
 		}
 	}
 
-	sock_addr->sin_family = AF_INET;
-	if (inet_pton(AF_INET, opts.src_addr,
-		      (void *) &sock_addr->sin_addr) != 1)
-		return -1;
+	ret = pm_get_oob_server_addr();
+	if (ret)
+		goto err1;
 
 	ret = pm_conn_setup();
 	if (ret)
@@ -276,7 +308,7 @@ int main(int argc, char **argv)
 	ret = pm_init_ranks();
 	if (ret < 0)
 		goto err2;
-
+	
 	FT_DEBUG("OOB job setup done\n");
 
 	ret = multinode_run_tests(argc, argv);

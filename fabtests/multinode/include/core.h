@@ -42,6 +42,8 @@
 
 #include "pattern.h"
 
+#define PM_DEFAULT_OOB_PORT (8228)
+
 struct pm_job_info {
 	size_t		my_rank;
 	size_t		num_ranks;
@@ -66,8 +68,8 @@ struct multinode_xfer_state {
 	int			cur_source;
 	int			cur_target;
 
-	bool			all_recvs_done;
-	bool			all_sends_done;
+	bool			all_recvs_posted;
+	bool			all_sends_posted;
 	bool			all_completions_done;
 
 	uint64_t		tx_flags;
@@ -78,3 +80,4 @@ extern struct pm_job_info pm_job;
 int multinode_run_tests(int argc, char **argv);
 int pm_allgather(void *my_item, void *items, int item_size);
 void pm_barrier();
+
