@@ -34,9 +34,10 @@
 
 #include <ofi_mr.h>
 
-
 static struct ofi_uffd uffd;
 struct ofi_mem_monitor *uffd_monitor = &uffd.monitor;
+
+struct ofi_mem_monitor *default_monitor;
 
 
 /*
@@ -46,6 +47,17 @@ void ofi_monitor_init(void)
 {
 	fastlock_init(&uffd_monitor->lock);
 	dlist_init(&uffd_monitor->list);
+
+	fastlock_init(&memhooks_monitor->lock);
+	dlist_init(&memhooks_monitor->list);
+
+#if HAVE_UFFD_UNMAP
+        default_monitor = uffd_monitor;
+#elif defined(HAVE_ELF_H) && defined(HAVE_SYS_AUXV_H)
+        default_monitor = memhooks_monitor;
+#else
+        default_monitor = NULL;
+#endif
 
 	fi_param_define(NULL, "mr_cache_max_size", FI_PARAM_SIZE_T,
 			"Defines the total number of bytes for all memory"
@@ -65,20 +77,43 @@ void ofi_monitor_init(void)
 			" region.  Merging regions can reduce the cache"
 			" memory footprint, but can negatively impact"
 			" performance in some situations.  (default: false)");
+	fi_param_define(NULL, "mr_cache_monitor", FI_PARAM_STRING,
+			"Define a default memory registration monitor."
+			" The monitor checks for virtual to physical memory"
+			" address changes.  Options are: userfaultfd, memhooks"
+			" and disabled.  Userfaultfd is a Linux kernel feature."
+			" Memhooks operates by intercepting memory allocation"
+			" and free calls.  Userfaultfd is the default if"
+			" available on the system. 'disabled' option disables"
+			" memory caching.");
 
 	fi_param_get_size_t(NULL, "mr_cache_max_size", &cache_params.max_size);
 	fi_param_get_size_t(NULL, "mr_cache_max_count", &cache_params.max_cnt);
 	fi_param_get_bool(NULL, "mr_cache_merge_regions",
 			  &cache_params.merge_regions);
+	fi_param_get_str(NULL, "mr_cache_monitor", &cache_params.monitor);
 
 	if (!cache_params.max_size)
 		cache_params.max_size = SIZE_MAX;
+
+	if (cache_params.monitor != NULL) {
+		if (!strcmp(cache_params.monitor, "userfaultfd") &&
+		    default_monitor == uffd_monitor)
+			default_monitor = uffd_monitor;
+		else if (!strcmp(cache_params.monitor, "memhooks"))
+			default_monitor = memhooks_monitor;
+		else if (!strcmp(cache_params.monitor, "disabled"))
+			default_monitor = NULL;
+	}
 }
 
 void ofi_monitor_cleanup(void)
 {
 	assert(dlist_empty(&uffd_monitor->list));
 	fastlock_destroy(&uffd_monitor->lock);
+
+	assert(dlist_empty(&memhooks_monitor->list));
+	fastlock_destroy(&memhooks_monitor->lock);
 }
 
 int ofi_monitor_add_cache(struct ofi_mem_monitor *monitor,
@@ -86,10 +121,15 @@ int ofi_monitor_add_cache(struct ofi_mem_monitor *monitor,
 {
 	int ret = 0;
 
+	if (!monitor)
+		return -FI_ENOSYS;
+
 	fastlock_acquire(&monitor->lock);
 	if (dlist_empty(&monitor->list)) {
 		if (monitor == uffd_monitor)
 			ret = ofi_uffd_init();
+		else if (monitor == memhooks_monitor)
+			ret = ofi_memhooks_init();
 		else
 			ret = -FI_ENOSYS;
 
@@ -107,14 +147,17 @@ void ofi_monitor_del_cache(struct ofi_mr_cache *cache)
 {
 	struct ofi_mem_monitor *monitor = cache->monitor;
 
-	if (!monitor)
-		return;
-
+	assert(monitor);
 	fastlock_acquire(&monitor->lock);
 	dlist_remove(&cache->notify_entry);
 
-	if (dlist_empty(&monitor->list) && (monitor == uffd_monitor))
-		ofi_uffd_cleanup();
+	if (dlist_empty(&monitor->list)) {
+		if (monitor == uffd_monitor)
+			ofi_uffd_cleanup();
+		else if (monitor == memhooks_monitor)
+			ofi_memhooks_cleanup();
+	}
+
 	fastlock_release(&monitor->lock);
 }
 
@@ -125,7 +168,7 @@ void ofi_monitor_notify(struct ofi_mem_monitor *monitor,
 	struct ofi_mr_cache *cache;
 
 	dlist_foreach_container(&monitor->list, struct ofi_mr_cache,
-			cache, notify_entry) {
+				cache, notify_entry) {
 		ofi_mr_cache_notify(cache, addr, len);
 	}
 }

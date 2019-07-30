@@ -46,7 +46,6 @@
 #include <ofi_list.h>
 #include <ofi_tree.h>
 
-
 struct ofi_mr_info {
 	struct iovec iov;
 };
@@ -125,6 +124,8 @@ int ofi_monitor_subscribe(struct ofi_mem_monitor *monitor,
 void ofi_monitor_unsubscribe(struct ofi_mem_monitor *monitor,
 			     const void *addr, size_t len);
 
+extern struct ofi_mem_monitor *default_monitor;
+
 /*
  * Userfault fd memory monitor
  */
@@ -138,6 +139,19 @@ int ofi_uffd_init(void);
 void ofi_uffd_cleanup(void);
 
 extern struct ofi_mem_monitor *uffd_monitor;
+
+/*
+ * Memory intercept call memory monitor
+ */
+struct ofi_memhooks {
+	struct ofi_mem_monitor          monitor;
+	struct dlist_entry		intercept_list;
+};
+
+int ofi_memhooks_init(void);
+void ofi_memhooks_cleanup(void);
+
+extern struct ofi_mem_monitor *memhooks_monitor;
 
 
 /*
@@ -184,7 +198,7 @@ int ofi_mr_close(struct fid *fid);
 int ofi_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		   uint64_t flags, struct fid_mr **mr_fid);
 int ofi_mr_regv(struct fid *fid, const struct iovec *iov,
-	        size_t count, uint64_t access, uint64_t offset,
+		size_t count, uint64_t access, uint64_t offset,
 		uint64_t requested_key, uint64_t flags,
 		struct fid_mr **mr_fid, void *context);
 int ofi_mr_reg(struct fid *fid, const void *buf, size_t len,
@@ -201,6 +215,7 @@ struct ofi_mr_cache_params {
 	size_t				max_cnt;
 	size_t				max_size;
 	int				merge_regions;
+	char *				monitor;
 };
 
 extern struct ofi_mr_cache_params	cache_params;
