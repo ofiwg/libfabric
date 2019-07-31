@@ -370,16 +370,17 @@ fi_ibv_eq_xrc_conn_event(struct fi_ibv_xrc_ep *ep,
 			goto err;
 		}
 		ep->peer_srqn = xrc_info.conn_data;
-		fi_ibv_ep_ini_conn_done(ep, xrc_info.conn_data,
-					xrc_info.conn_param.qp_num);
 		fi_ibv_eq_skip_xrc_cm_data(&priv_data, &priv_datalen);
 		fi_ibv_save_priv_data(ep, priv_data, priv_datalen);
+		fi_ibv_ep_ini_conn_done(ep, xrc_info.conn_data,
+					xrc_info.conn_param.qp_num);
 	} else {
 		fi_ibv_ep_tgt_conn_done(ep);
 		ret = fi_ibv_connect_xrc(ep, NULL, FI_IBV_RECIP_CONN, &cm_data,
 					 sizeof(cm_data));
 		if (ret) {
 			fi_ibv_prev_xrc_conn_state(ep);
+			ep->tgt_id->qp = NULL;
 			rdma_disconnect(ep->tgt_id);
 			goto err;
 		}
@@ -521,8 +522,7 @@ fi_ibv_eq_xrc_cm_err_event(struct fi_ibv_eq *eq,
 static inline int
 fi_ibv_eq_xrc_connected_event(struct fi_ibv_eq *eq,
 			      struct rdma_cm_event *cma_event,
-			      struct fi_eq_cm_entry *entry, size_t len,
-			      int *acked)
+			      struct fi_eq_cm_entry *entry, size_t len)
 {
 	struct fi_ibv_xrc_ep *ep;
 	fid_t fid = cma_event->id->context;
@@ -538,11 +538,9 @@ fi_ibv_eq_xrc_connected_event(struct fi_ibv_eq *eq,
 
 	ret = fi_ibv_eq_xrc_recip_conn_event(eq, ep, cma_event, entry, len);
 
-	/* Bidirectional connection setup is complete, disconnect RDMA CM
-	 * ID(s) and release shared QP reservations/hardware resources
-	 * that were needed for shared connection setup only. */
-	*acked = 1;
-	rdma_ack_cm_event(cma_event);
+	/* Bidirectional connection setup is complete, release RDMA CM ID resources.
+	 * Note this will initiate release of shared QP reservation/hardware resources
+	 * that were needed for XRC shared connection setup as well. */
 	fi_ibv_free_xrc_conn_setup(ep, 1);
 
 	return ret;
@@ -559,23 +557,26 @@ fi_ibv_eq_xrc_timewait_event(struct fi_ibv_eq *eq,
 	assert(ep->magic == VERBS_XRC_EP_MAGIC);
 	assert(ep->conn_setup);
 
-	if (cma_event->id == ep->tgt_id && ep->conn_setup->rsvd_tgt_qpn) {
+	if (cma_event->id == ep->tgt_id) {
 		*acked = 1;
 		rdma_ack_cm_event(cma_event);
-		ibv_destroy_qp(ep->conn_setup->rsvd_tgt_qpn);
-		ep->conn_setup->rsvd_tgt_qpn = NULL;
+		if (ep->conn_setup->rsvd_tgt_qpn) {
+			ibv_destroy_qp(ep->conn_setup->rsvd_tgt_qpn);
+			ep->conn_setup->rsvd_tgt_qpn = NULL;
+		}
 		rdma_destroy_id(ep->tgt_id);
 		ep->tgt_id = NULL;
-	} else if (cma_event->id == ep->base_ep.id &&
-		   ep->conn_setup->rsvd_ini_qpn) {
+	} else if (cma_event->id == ep->base_ep.id) {
 		*acked = 1;
 		rdma_ack_cm_event(cma_event);
-		ibv_destroy_qp(ep->conn_setup->rsvd_ini_qpn);
-		ep->conn_setup->rsvd_ini_qpn = NULL;
+		if (ep->conn_setup->rsvd_ini_qpn) {
+			ibv_destroy_qp(ep->conn_setup->rsvd_ini_qpn);
+			ep->conn_setup->rsvd_ini_qpn = NULL;
+		}
 		rdma_destroy_id(ep->base_ep.id);
 		ep->base_ep.id = NULL;
 	}
-	if (!ep->conn_setup->rsvd_ini_qpn && !ep->conn_setup->rsvd_tgt_qpn)
+	if (!ep->base_ep.id && !ep->tgt_id)
 		fi_ibv_free_xrc_conn_setup(ep, 0);
 }
 
@@ -589,8 +590,7 @@ fi_ibv_eq_xrc_disconnect_event(struct fi_ibv_eq *eq,
 						base_ep.util_ep.ep_fid);
 	assert(ep->magic == VERBS_XRC_EP_MAGIC);
 
-	if (ep->conn_setup && cma_event->id == ep->base_ep.id &&
-	    ep->conn_setup->rsvd_ini_qpn) {
+	if (ep->conn_setup && cma_event->id == ep->base_ep.id) {
 		*acked = 1;
 		rdma_ack_cm_event(cma_event);
 		rdma_disconnect(ep->base_ep.id);
@@ -669,7 +669,7 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq,
 		if (fi_ibv_is_xrc(ep->info)) {
 			fastlock_acquire(&eq->lock);
 			ret = fi_ibv_eq_xrc_connected_event(eq, cma_event,
-							    entry, len, acked);
+							    entry, len);
 			fastlock_release(&eq->lock);
 			return ret;
 		}

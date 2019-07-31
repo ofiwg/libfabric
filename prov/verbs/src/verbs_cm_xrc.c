@@ -171,31 +171,27 @@ void fi_ibv_free_xrc_conn_setup(struct fi_ibv_xrc_ep *ep, int disconnect)
 {
 	assert(ep->conn_setup);
 
-	/* Free shared connection reserved QP number resources. If
-	 * a disconnect is requested and required then initiate a
-	 * disconnect sequence (the XRC INI QP side disconnect is
-	 * initiated when the remote target disconnect is received).
-	 * If disconnecting, the QP resources will be destroyed when
-	 * the timewait state has been exited or the EP is closed. */
+	/* If a disconnect is requested then the XRC bidirectional connection
+	 * has completed and a disconnect sequence is started (the XRC INI QP
+	 * side disconnect is initiated when the remote target disconnect is
+	 * received). XRC temporary QP resources will be released when the
+	 * timewait state is exited. */
 	if (ep->conn_setup->rsvd_ini_qpn && !disconnect) {
-		assert(ep->base_ep.id);
-		assert(!ep->base_ep.id->qp);
-
 		ibv_destroy_qp(ep->conn_setup->rsvd_ini_qpn);
 		ep->conn_setup->rsvd_ini_qpn = NULL;
 	}
 
-	if (ep->conn_setup->rsvd_tgt_qpn) {
+	if (disconnect) {
 		assert(ep->tgt_id);
 		assert(!ep->tgt_id->qp);
 
-		if (disconnect && ep->conn_setup->tgt_connected) {
+		if (ep->conn_setup->tgt_connected) {
 			rdma_disconnect(ep->tgt_id);
 			ep->conn_setup->tgt_connected = 0;
-		} else {
-			ibv_destroy_qp(ep->conn_setup->rsvd_tgt_qpn);
-			ep->conn_setup->rsvd_tgt_qpn = NULL;
 		}
+	} else if (ep->conn_setup->rsvd_tgt_qpn) {
+		ibv_destroy_qp(ep->conn_setup->rsvd_tgt_qpn);
+		ep->conn_setup->rsvd_tgt_qpn = NULL;
 	}
 
 	if (ep->conn_setup->conn_tag != VERBS_CONN_TAG_INVALID)
