@@ -641,6 +641,8 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq,
 
 		ret = fi_ibv_eq_cm_getinfo(cma_event, pep->info, &entry->info);
 		if (ret) {
+			VERBS_WARN(FI_LOG_EP_CTRL,
+				   "CM getinfo error %d\n", ret);
 			fastlock_acquire(&eq->lock);
 			rdma_destroy_id(cma_event->id);
 			eq->err.err = -ret;
