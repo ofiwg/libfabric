@@ -575,10 +575,8 @@ void rxd_ep_send_ack(struct rxd_ep *rxd_ep, fi_addr_t peer)
 	rxd_ep->peers[peer].last_tx_ack = ack->base_hdr.seq_no;
 
 	dlist_insert_tail(&pkt_entry->d_entry, &rxd_ep->ctrl_pkts);
-	if (rxd_ep_send_pkt(rxd_ep, pkt_entry)) {
-		dlist_remove(&pkt_entry->d_entry);
-		ofi_buf_free(pkt_entry);
-	}
+	if (rxd_ep_send_pkt(rxd_ep, pkt_entry))
+		rxd_pkt_remove(pkt_entry);
 }
 
 static void rxd_ep_free_res(struct rxd_ep *ep)
