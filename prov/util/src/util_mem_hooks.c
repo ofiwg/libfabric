@@ -81,6 +81,7 @@ enum {
 	OFI_INTERCEPT_MADVISE,
 	OFI_INTERCEPT_SHMAT,
 	OFI_INTERCEPT_SHMDT,
+	OFI_INTERCEPT_BRK,
 	OFI_INTERCEPT_MAX
 };
 
@@ -93,6 +94,7 @@ static void *ofi_intercept_mremap(void *old_address, size_t old_size,
 static int ofi_intercept_madvise(void *addr, size_t length, int advice);
 static void *ofi_intercept_shmat(int shmid, const void *shmaddr, int shmflg);
 static int ofi_intercept_shmdt(const void *shmaddr);
+static int ofi_intercept_brk(const void *brkaddr);
 
 static struct ofi_intercept intercepts[] = {
 	[OFI_INTERCEPT_DLOPEN] = { .symbol = "dlopen",
@@ -109,6 +111,8 @@ static struct ofi_intercept intercepts[] = {
 				.our_func = ofi_intercept_shmat},
 	[OFI_INTERCEPT_SHMDT] = { .symbol = "shmdt",
 				.our_func = ofi_intercept_shmdt},
+	[OFI_INTERCEPT_BRK] = { .symbol = "brk",
+				.our_func = ofi_intercept_brk},
 };
 
 struct ofi_mem_calls {
@@ -120,6 +124,7 @@ struct ofi_mem_calls {
 	int (*madvise)(void *addr, size_t length, int advice);
 	void *(*shmat)(int shmid, const void *shmaddr, int shmflg);
 	int (*shmdt)(const void *shmaddr);
+	int (*brk)(const void *brkaddr);
 };
 
 static struct ofi_mem_calls real_calls;
@@ -433,6 +438,23 @@ static int ofi_intercept_shmdt(const void *shmaddr)
 	return real_calls.shmdt(shmaddr);
 }
 
+static int ofi_intercept_brk(const void *brkaddr)
+{
+	void *old_addr;
+
+	FI_DBG(&core_prov, FI_LOG_MR,
+	      "intercepted brk addr %p\n", brkaddr);
+
+	old_addr = sbrk (0);
+
+	if(brkaddr > old_addr) {
+		ofi_intercept_handler(brkaddr, (intptr_t) brkaddr -
+							  (intptr_t) old_addr);
+	}
+
+	return real_calls.brk(brkaddr);
+}
+
 static int ofi_memhooks_subscribe(struct ofi_mem_monitor *monitor,
 				 const void *addr, size_t len)
 {
@@ -514,6 +536,14 @@ int ofi_memhooks_init(void)
 	if (ret) {
 		FI_WARN(&core_prov, FI_LOG_MR,
 		       "intercept shmdt failed %d %s\n", ret, fi_strerror(ret));
+		return ret;
+	}
+
+	ret = ofi_intercept_symbol(&intercepts[OFI_INTERCEPT_BRK],
+				   (void **) &real_calls.brk);
+	if (ret) {
+		FI_WARN(&core_prov, FI_LOG_MR,
+		       "intercept brk failed %d %s\n", ret, fi_strerror(ret));
 		return ret;
 	}
 
