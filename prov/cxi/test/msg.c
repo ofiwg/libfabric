@@ -713,9 +713,24 @@ Test(msg, tagged_interop)
 	free(recv_buf);
 }
 
+void validate_mr_rx_event(struct fi_cq_tagged_entry *cqe, void *context,
+			  size_t len, uint64_t flags, void *buf, uint64_t data,
+			  uint64_t tag)
+{
+	cr_assert(cqe->op_context == context, "CQE Context mismatch");
+	cr_assert(cqe->len == len, "Invalid CQE length");
+	cr_assert((cqe->flags & ~FI_MULTI_RECV) == flags,
+		  "CQE flags mismatch (%#lx %#lx)",
+		  (cqe->flags & ~FI_MULTI_RECV), flags);
+	cr_assert(cqe->buf == buf, "Invalid CQE address (%p %p)",
+		  cqe->buf, buf);
+	cr_assert(cqe->data == data, "Invalid CQE data");
+	cr_assert(cqe->tag == tag, "Invalid CQE tag");
+}
+
 void do_multi_recv(uint8_t *send_buf, size_t send_len,
 		   uint8_t *recv_buf, size_t recv_len,
-		   bool send_first)
+		   bool send_first, size_t sends, size_t olen)
 {
 	int i, j, ret;
 	int err = 0;
@@ -725,12 +740,17 @@ void do_multi_recv(uint8_t *send_buf, size_t send_len,
 	struct iovec riovec;
 	struct iovec siovec;
 	uint64_t rxe_flags;
-	int bytes_sent = 0;
-	int sends = recv_len / send_len;
-	int sent = 0;
-	int recved = 0;
-	struct fi_cq_tagged_entry tx_cqe[sends];
-	struct fi_cq_tagged_entry rx_cqe[sends];
+	size_t sent = 0;
+	size_t recved = 0;
+	size_t err_recved = 0;
+	struct fi_cq_tagged_entry tx_cqe;
+	struct fi_cq_tagged_entry rx_cqe;
+	struct fi_cq_err_entry err_cqe = {};
+	size_t recved_len = 0;
+	bool dequeued = false;
+
+	if (!sends)
+		sends = recv_len / send_len;
 
 	memset(recv_buf, 0, recv_len);
 
@@ -784,76 +804,170 @@ void do_multi_recv(uint8_t *send_buf, size_t send_len,
 		}
 	}
 
-	for (i = 0; i < sends; i++) {
-		/* Gather both events, ensure progress on both sides. */
-		do {
-			ret = fi_cq_readfrom(cxit_rx_cq, &rx_cqe[recved], 1,
-					     &from);
-			if (ret == 1) {
-				recved++;
-			} else {
-				cr_assert_eq(ret, -FI_EAGAIN,
-					     "fi_cq_read unexpected value %d",
-					     ret);
+	/* Gather both events, ensure progress on both sides. */
+	do {
+		ret = fi_cq_readfrom(cxit_rx_cq, &rx_cqe, 1, &from);
+		if (ret == 1) {
+			rxe_flags = FI_MSG | FI_RECV;
+
+			validate_mr_rx_event(&rx_cqe, NULL, send_len,
+					     rxe_flags,
+					     recv_buf + (recved * send_len),
+					     0, 0);
+			cr_assert(from == cxit_ep_fi_addr,
+				  "Invalid source address");
+
+			if (rx_cqe.flags & FI_MULTI_RECV) {
+				cr_assert(!dequeued);
+				dequeued = true;
 			}
 
-			ret = fi_cq_read(cxit_tx_cq, &tx_cqe[sent], 1);
-			if (ret == 1) {
-				sent++;
-			} else {
-				cr_assert_eq(ret, -FI_EAGAIN,
-					     "fi_cq_read unexpected value %d",
-					     ret);
+			recved_len = rx_cqe.len;
+
+			/* Validate sent data */
+			uint8_t *rbuf = rx_cqe.buf;
+
+			for (j = 0; j < recved_len; j++) {
+				cr_expect_eq(rbuf[j], send_buf[j],
+					     "data mismatch, element[%d], exp=%d saw=%d, err=%d\n",
+					     j, send_buf[j], rbuf[j],
+					     err++);
+				cr_assert(err < 10);
 			}
-		} while (!(sent == sends && recved == sends));
-	}
+			cr_assert_eq(err, 0, "Data errors seen\n");
 
-	for (i = 0; i < sends; i++) {
-		bytes_sent += send_len;
-		rxe_flags = FI_MSG | FI_RECV;
-		if (bytes_sent > (recv_len - CXIP_EP_MIN_MULTI_RECV))
-			rxe_flags |= FI_MULTI_RECV;
+			recved++;
+		} else if (ret == -FI_EAVAIL) {
+			ret = fi_cq_readerr(cxit_rx_cq, &err_cqe, 0);
+			cr_assert_eq(ret, 1);
 
-		validate_rx_event(&rx_cqe[i], NULL, send_len,
-				  rxe_flags,
-				  recv_buf + (i * send_len), 0, 0);
-		cr_assert(from == cxit_ep_fi_addr, "Invalid source address");
+			recved_len = err_cqe.len;
+			uint8_t *rbuf = recv_buf + ((sends-1) * send_len);
 
-		validate_tx_event(&tx_cqe[i], FI_MSG | FI_SEND, NULL);
+			/* The truncated transfer is always the last, which
+			 * dequeued the multi-recv buffer.
+			 */
+			rxe_flags = FI_MSG | FI_RECV;
 
-		/* Validate sent data */
-		uint8_t *rbuf = rx_cqe[i].buf;
-		for (j = 0; j < send_len; j++) {
-			cr_expect_eq(rbuf[j], send_buf[j],
-				  "data mismatch, element[%d], exp=%d saw=%d, err=%d\n",
-				  j, send_buf[j], rbuf[j], err++);
-			cr_assert(err < 10);
+			cr_assert(err_cqe.op_context == NULL,
+				  "Error RX CQE Context mismatch");
+			cr_assert((err_cqe.flags & ~FI_MULTI_RECV) == rxe_flags,
+				  "Error RX CQE flags mismatch");
+			cr_assert(err_cqe.len == send_len - olen,
+				  "Invalid Error RX CQE length, got: %ld exp: %ld",
+				  err_cqe.len, recv_len);
+			cr_assert(err_cqe.buf == rbuf,
+				  "Invalid Error RX CQE address (%p %p)",
+				  err_cqe.buf, rbuf);
+			cr_assert(err_cqe.data == 0,
+				  "Invalid Error RX CQE data");
+			cr_assert(err_cqe.tag == 0,
+				  "Invalid Error RX CQE tag");
+			cr_assert(err_cqe.olen == olen,
+				  "Invalid Error RX CQE olen, got: %ld exp: %ld",
+				  err_cqe.olen, olen);
+			cr_assert(err_cqe.err == FI_EMSGSIZE,
+				  "Invalid Error RX CQE code\n");
+			cr_assert(err_cqe.prov_errno == C_RC_OK,
+				  "Invalid Error RX CQE errno");
+			cr_assert(err_cqe.err_data == NULL);
+			cr_assert(err_cqe.err_data_size == 0);
+
+			if (rx_cqe.flags & FI_MULTI_RECV) {
+				cr_assert(!dequeued);
+				dequeued = true;
+			}
+
+			/* Validate sent data */
+			for (j = 0; j < recved_len; j++) {
+				cr_expect_eq(rbuf[j], send_buf[j],
+					     "data mismatch, element[%d], exp=%d saw=%d, err=%d\n",
+					     j, send_buf[j], rbuf[j],
+					     err++);
+				cr_assert(err < 10);
+			}
+			cr_assert_eq(err, 0, "Data errors seen\n");
+
+			err_recved++;
+		} else {
+			cr_assert_eq(ret, -FI_EAGAIN,
+				     "fi_cq_read unexpected value %d",
+				     ret);
 		}
-		cr_assert_eq(err, 0, "Data errors seen\n");
-	}
+
+		ret = fi_cq_read(cxit_tx_cq, &tx_cqe, 1);
+		if (ret == 1) {
+			sent++;
+			validate_tx_event(&tx_cqe, FI_MSG | FI_SEND, NULL);
+		} else {
+			cr_assert_eq(ret, -FI_EAGAIN,
+				     "fi_cq_read unexpected value %d",
+				     ret);
+		}
+	} while (sent < sends && (recved + err_recved) < sends);
 }
 
 struct msg_multi_recv_params {
 	size_t send_len;
 	size_t recv_len;
 	bool ux;
+	size_t sends;
+	size_t olen;
 };
 
+#define SHORT_SEND_LEN 128
+#define SHORT_SENDS 100
+#define LONG_SEND_LEN 4096
+#define LONG_SENDS 2
+#define SHORT_OLEN (3*1024)
+#define LONG_OLEN 1024
+
 static struct msg_multi_recv_params params[] = {
+#if 1
 	/* expected/unexp eager */
-	{.send_len = 64,
-	 .recv_len = 1024,
+	{.send_len = SHORT_SEND_LEN,
+	 .recv_len = SHORT_SENDS * SHORT_SEND_LEN,
 	 .ux = false},
-	{.send_len = 64,
-	 .recv_len = 1024,
+	{.send_len = SHORT_SEND_LEN,
+	 .recv_len = SHORT_SENDS * SHORT_SEND_LEN,
 	 .ux = true},
+
 	/* exp/unexp long */
-	{.send_len = 4096,
-	 .recv_len = 4*4096,
+	{.send_len = LONG_SEND_LEN,
+	 .recv_len = LONG_SENDS*LONG_SEND_LEN,
 	 .ux = false},
-	{.send_len = 4096,
-	 .recv_len = 4*4096,
+	{.send_len = LONG_SEND_LEN,
+	 .recv_len = LONG_SENDS*LONG_SEND_LEN,
 	 .ux = true},
+#endif
+
+#if 1
+	/* exp/unexp overflow */
+	{.send_len = LONG_SEND_LEN,
+	 .recv_len = LONG_SENDS*LONG_SEND_LEN + (LONG_SEND_LEN - LONG_OLEN),
+	 .ux = false,
+	 .sends = LONG_SENDS+1,
+	 .olen = LONG_OLEN},
+	{.send_len = LONG_SEND_LEN,
+	 .recv_len = LONG_SENDS*LONG_SEND_LEN + (LONG_SEND_LEN - LONG_OLEN),
+	 .ux = true,
+	 .sends = LONG_SENDS+1,
+	 .olen = LONG_OLEN},
+#endif
+
+#if 1
+	/* exp/unexp overflow */
+	{.send_len = LONG_SEND_LEN,
+	 .recv_len = LONG_SENDS*LONG_SEND_LEN + (LONG_SEND_LEN - SHORT_OLEN),
+	 .ux = false,
+	 .sends = LONG_SENDS+1,
+	 .olen = SHORT_OLEN},
+	{.send_len = LONG_SEND_LEN,
+	 .recv_len = LONG_SENDS*LONG_SEND_LEN + (LONG_SEND_LEN - SHORT_OLEN),
+	 .ux = true,
+	 .sends = LONG_SENDS+1,
+	 .olen = SHORT_OLEN},
+#endif
 };
 
 ParameterizedTestParameters(msg, multi_recv)
@@ -878,7 +992,8 @@ ParameterizedTest(struct msg_multi_recv_params *param, msg, multi_recv)
 	cr_assert(send_buf);
 
 	do_multi_recv(send_buf, param->send_len, recv_buf,
-		      param->recv_len, param->ux);
+		      param->recv_len, param->ux, param->sends,
+		      param->olen);
 
 	free(send_buf);
 	free(recv_buf);

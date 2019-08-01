@@ -231,6 +231,8 @@ static fi_addr_t recv_req_src_addr(struct cxip_req *req)
  */
 static void recv_req_complete(struct cxip_req *req)
 {
+	assert(dlist_empty(&req->recv.children));
+
 	cxip_unmap(req->recv.recv_md);
 	ofi_atomic_dec32(&req->recv.rxc->orx_reqs);
 	cxip_cq_req_free(req);
@@ -249,10 +251,15 @@ static void recv_req_report(struct cxip_req *req)
 	if (req->recv.parent) {
 		struct cxip_req *parent = req->recv.parent;
 
-		parent->recv.ulen -= req->data_len;
-		if (parent->recv.ulen < req->recv.rxc->min_multi_recv) {
-			req->flags |= FI_MULTI_RECV;
+		parent->recv.mrecv_bytes -= req->data_len;
+		CXIP_LOG_DBG("Putting %lu mrecv bytes (req: %p left: %lu addr: %#lx)\n",
+			      req->data_len, parent, parent->recv.mrecv_bytes,
+			      req->buf);
+		if (parent->recv.mrecv_bytes < req->recv.rxc->min_multi_recv) {
+			CXIP_LOG_DBG("Freeing parent: %p\n", req->recv.parent);
 			recv_req_complete(req->recv.parent);
+
+			req->flags |= FI_MULTI_RECV;
 		}
 	}
 
@@ -365,7 +372,6 @@ recv_req_put_event(struct cxip_req *req, const union c_event *event)
 		req->recv.initiator =
 				event->tgt_long.initiator.initiator.process;
 	}
-
 }
 
 /*
@@ -460,6 +466,11 @@ mrecv_req_event(struct cxip_req *mrecv_req, const union c_event *event,
 
 	/* Track the multi-recv buffer offset. */
 	mrecv_req->recv.start_offset += req->data_len;
+	mrecv_req->recv.ulen -= req->data_len;
+
+	CXIP_LOG_DBG("type: %s parent: %p child: %p buf: %p len: %lu\n",
+		     cxi_event_to_str(event), mrecv_req, req,
+		     req->recv.recv_buf, req->data_len);
 
 	return req;
 }
@@ -485,6 +496,9 @@ rdzv_mrecv_req_event(struct cxip_req *mrecv_req, const union c_event *event)
 
 		dlist_insert_tail(&req->recv.children,
 				  &mrecv_req->recv.children);
+	} else {
+		CXIP_LOG_DBG("type: %s parent: %p child: %p\n",
+			     cxi_event_to_str(event), mrecv_req, req);
 	}
 
 	/* Rendezvous events contain the wrong match bits. Make sure the tag is
@@ -513,9 +527,9 @@ static void rdzv_recv_req_event(struct cxip_req *req)
 {
 	if (++req->recv.rdzv_events == 3) {
 		if (req->recv.multi_recv) {
+			dlist_remove(&req->recv.children);
 			recv_req_report(req);
 			cxip_cq_req_free(req);
-			dlist_remove(&req->recv.children);
 		} else {
 			recv_req_report(req);
 			recv_req_complete(req);
@@ -547,7 +561,7 @@ static void oflow_buf_free(struct cxip_oflow_buf *oflow_buf)
  */
 static void oflow_req_put_bytes(struct cxip_req *req, size_t bytes)
 {
-	CXIP_LOG_DBG("putting %lu bytes: %p\n", bytes, req);
+	CXIP_LOG_DBG("Putting %lu bytes: %p\n", bytes, req);
 	req->oflow.oflow_buf->min_bytes -= bytes;
 	if (req->oflow.oflow_buf->min_bytes < 0) {
 		oflow_buf_free(req->oflow.oflow_buf);
@@ -585,8 +599,11 @@ static int issue_rdzv_get(struct cxip_req *req, const union c_event *event)
 		cmd.full_dma.dfa.unicast.nid = cxi_dfa_nid(init);
 		cmd.full_dma.dfa.unicast.endpoint_defined = cxi_dfa_ep(init);
 		cmd.full_dma.index_ext = cxi_build_dfa_ext(pid_idx);
-		cmd.full_dma.request_len = recv_req_event_len(req, event) -
-				tev->mlength;
+		cmd.full_dma.request_len = recv_req_event_len(req, event);
+		if (cmd.full_dma.request_len < tev->mlength)
+			cmd.full_dma.request_len = 0;
+		else
+			cmd.full_dma.request_len -= tev->mlength;
 		cmd.full_dma.local_addr = tev->start;
 		cmd.full_dma.remote_offset = tev->remote_offset;
 	} else {
@@ -948,7 +965,7 @@ static int cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 	oflow_va = (void *)CXI_IOVA_TO_VA(oflow_buf->md->md,
 					  event->tgt_long.start);
 	memcpy(ux_recv->recv.recv_buf, oflow_va, ux_recv->data_len);
-	oflow_req_put_bytes(req, ux_recv->data_len);
+	oflow_req_put_bytes(req, event->tgt_long.mlength);
 
 	dlist_remove(&ux_recv->recv.ux_entry);
 
@@ -1396,7 +1413,6 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 			req = rdzv_mrecv_req_event(req, event);
 			if (!req)
 				return -FI_EAGAIN;
-			CXIP_LOG_DBG("Mrecv req: %p\n", req);
 		} else {
 			recv_req_put_event(req, event);
 		}
@@ -1409,7 +1425,6 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 			req = rdzv_mrecv_req_event(req, event);
 			if (!req)
 				return -FI_EAGAIN;
-			CXIP_LOG_DBG("Mrecv req: %p\n", req);
 		}
 
 		if (!event->tgt_long.get_issued) {
@@ -1428,7 +1443,6 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 			req = rdzv_mrecv_req_event(req, event);
 			if (!req)
 				return -FI_EAGAIN;
-			CXIP_LOG_DBG("Mrecv req: %p\n", req);
 		}
 
 		/* Rendezvous Get completed. Complete the request. */
@@ -1592,7 +1606,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		user_va = (char *)req->recv.recv_buf + req->recv.start_offset;
 		oflow_bytes = recv_req_event_len(req, event);
 		memcpy(user_va, oflow_va, oflow_bytes);
-		oflow_req_put_bytes(ux_send->req, oflow_bytes);
+		oflow_req_put_bytes(ux_send->req, event->tgt_long.mlength);
 
 		dlist_remove(&ux_send->ux_entry);
 		free(ux_send);
@@ -1773,6 +1787,7 @@ static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	req->recv.ulen = len;
 	req->recv.start_offset = 0;
 	req->recv.multi_recv = (flags & FI_MULTI_RECV ? true : false);
+	req->recv.mrecv_bytes = len;
 	req->recv.parent = NULL;
 	dlist_init(&req->recv.children);
 

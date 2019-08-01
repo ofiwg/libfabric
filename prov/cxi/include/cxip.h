@@ -385,6 +385,7 @@ struct cxip_req_recv {
 	bool canceled;			// Request canceled?
 	bool multi_recv;
 	uint64_t start_offset;
+	uint64_t mrecv_bytes;
 	struct cxip_req *parent;
 	struct dlist_entry children;
 };

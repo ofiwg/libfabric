@@ -219,8 +219,7 @@ static void txc_cleanup(struct cxip_txc *txc)
 		cxip_cq_progress(txc->send_cq);
 
 		if (fi_gettime_ms() - start > CXIP_REQ_CLEANUP_TO) {
-			CXIP_LOG_ERROR(
-				"Timeout waiting for outstanding requests.");
+			CXIP_LOG_ERROR("Timeout waiting for outstanding requests.\n");
 			break;
 		}
 	}
