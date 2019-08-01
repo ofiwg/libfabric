@@ -584,10 +584,7 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 		   struct fid_ep **ep, void *context);
 int fi_ibv_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 		      struct fid_pep **pep, void *context);
-int fi_ibv_create_ep(const char *node, const char *service,
-		     uint64_t flags, const struct fi_info *hints,
-		     struct rdma_addrinfo **rai, struct rdma_cm_id **id);
-void fi_ibv_destroy_ep(struct rdma_addrinfo *rai, struct rdma_cm_id **id);
+int fi_ibv_create_ep(const struct fi_info *hints, struct rdma_cm_id **id);
 int fi_ibv_dgram_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 			 struct fid_av **av_fid, void *context);
 static inline
