@@ -2287,29 +2287,51 @@ static ssize_t rxr_ep_cancel_recv(struct rxr_ep *ep,
 	entry = dlist_remove_first_match(recv_list,
 					 &rxr_ep_cancel_match_recv,
 					 context);
-	if (entry) {
-		rx_entry = container_of(entry, struct rxr_rx_entry, entry);
-		rx_entry->rxr_flags |= RXR_RECV_CANCEL;
-		if (rx_entry->fi_flags & FI_MULTI_RECV)
-			rxr_cq_handle_multi_recv_completion(ep, rx_entry);
+	if (!entry) {
 		fastlock_release(&ep->util_ep.lock);
-		memset(&err_entry, 0, sizeof(err_entry));
-		err_entry.op_context = rx_entry->cq_entry.op_context;
-		err_entry.flags |= rx_entry->cq_entry.flags;
-		err_entry.tag = rx_entry->tag;
-		err_entry.err = FI_ECANCELED;
-		err_entry.prov_errno = -FI_ECANCELED;
-
-		domain = rxr_ep_domain(ep);
-		api_version =
-			 domain->util_domain.fabric->fabric_fid.api_version;
-		if (FI_VERSION_GE(api_version, FI_VERSION(1, 5)))
-			err_entry.err_data_size = 0;
-		return ofi_cq_write_error(ep->util_ep.rx_cq, &err_entry);
+		return 0;
 	}
 
+	rx_entry = container_of(entry, struct rxr_rx_entry, entry);
+	rx_entry->rxr_flags |= RXR_RECV_CANCEL;
+	if (rx_entry->fi_flags & FI_MULTI_RECV &&
+	    rx_entry->rxr_flags & RXR_MULTI_RECV_POSTED) {
+		if (dlist_empty(&rx_entry->multi_recv_consumers)) {
+			/*
+			 * No pending messages for the buffer,
+			 * release it back to the app.
+			 */
+			rx_entry->cq_entry.flags |= FI_MULTI_RECV;
+		} else {
+			rx_entry = container_of(rx_entry->multi_recv_consumers.next,
+						struct rxr_rx_entry,
+						multi_recv_entry);
+			rxr_cq_handle_multi_recv_completion(ep, rx_entry);
+		}
+	} else if (rx_entry->fi_flags & FI_MULTI_RECV &&
+		   rx_entry->rxr_flags & RXR_MULTI_RECV_CONSUMER) {
+			rxr_cq_handle_multi_recv_completion(ep, rx_entry);
+	}
 	fastlock_release(&ep->util_ep.lock);
-	return 0;
+	memset(&err_entry, 0, sizeof(err_entry));
+	err_entry.op_context = rx_entry->cq_entry.op_context;
+	err_entry.flags |= rx_entry->cq_entry.flags;
+	err_entry.tag = rx_entry->tag;
+	err_entry.err = FI_ECANCELED;
+	err_entry.prov_errno = -FI_ECANCELED;
+
+	domain = rxr_ep_domain(ep);
+	api_version =
+		 domain->util_domain.fabric->fabric_fid.api_version;
+	if (FI_VERSION_GE(api_version, FI_VERSION(1, 5)))
+		err_entry.err_data_size = 0;
+	/*
+	 * Other states are currently receiving data. Subsequent messages will
+	 * be sunk (via RXR_RECV_CANCEL flag) and the completion suppressed.
+	 */
+	if (rx_entry->state & (RXR_RX_INIT | RXR_RX_UNEXP | RXR_RX_MATCHED))
+		rxr_release_rx_entry(ep, rx_entry);
+	return ofi_cq_write_error(ep->util_ep.rx_cq, &err_entry);
 }
 
 static ssize_t rxr_ep_cancel(fid_t fid_ep, void *context)
