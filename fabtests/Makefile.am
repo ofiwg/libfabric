@@ -57,7 +57,8 @@ bin_PROGRAMS = \
 	unit/fi_dom_test \
 	unit/fi_getinfo_test \
 	unit/fi_resource_freeing \
-	ubertest/fi_ubertest
+	ubertest/fi_ubertest	\
+	multinode/fi_multinode
 
 dist_bin_SCRIPTS = \
 	scripts/runfabtests.sh \
@@ -100,6 +101,7 @@ nobase_dist_config_DATA = \
 	test_configs/efa/efa.exclude
 
 noinst_LTLIBRARIES = libfabtests.la
+
 libfabtests_la_SOURCES = \
 	common/shared.c \
 	common/jsmn.c \
@@ -336,6 +338,19 @@ ubertest_fi_ubertest_SOURCES = \
 	ubertest/verify.c \
 	ubertest/test_ctrl.c
 ubertest_fi_ubertest_LDADD = libfabtests.la
+
+multinode_fi_multinode_SOURCES = \
+	multinode/src/harness.c \
+	multinode/src/pattern/full_mesh.c \
+	multinode/include/pattern.h \
+	multinode/src/core.c \
+	multinode/include/core.h
+
+multinode_fi_multinode_LDADD = 	libfabtests.la
+
+multinode_fi_multinode_CFLAGS = \
+	$(AM_CFLAGS) \
+	-I$(srcdir)/multinode/include
 
 real_man_pages = \
 	 man/man7/fabtests.7

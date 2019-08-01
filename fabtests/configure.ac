@@ -122,4 +122,5 @@ AC_DEFINE_UNQUOTED([HAVE_EPOLL], [$have_epoll],
 		   [Defined to 1 if Linux epoll is available])
 
 AC_CONFIG_FILES([Makefile fabtests.spec])
+
 AC_OUTPUT
