@@ -872,7 +872,7 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 		}
 
 		if (!info->handle) {
-			ret = fi_ibv_create_ep(NULL, NULL, 0, info, NULL, &ep->id);
+			ret = fi_ibv_create_ep(info, &ep->id);
 			if (ret)
 				goto err1;
 		} else if (info->handle->fclass == FI_CLASS_CONNREQ) {
