@@ -271,19 +271,25 @@ void fi_ibv_cleanup_cq(struct fi_ibv_ep *ep)
 {
 	int ret;
 
-	ep->util_ep.rx_cq->cq_fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
-	do {
-		ret = fi_ibv_poll_outstanding_cq(ep, container_of(ep->util_ep.rx_cq,
-								  struct fi_ibv_cq, util_cq));
-	} while (ret > 0);
-	ep->util_ep.rx_cq->cq_fastlock_release(&ep->util_ep.rx_cq->cq_lock);
+	if (ep->util_ep.rx_cq) {
+		ep->util_ep.rx_cq->cq_fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
+		do {
+			ret = fi_ibv_poll_outstanding_cq(
+				ep, container_of(ep->util_ep.rx_cq,
+						 struct fi_ibv_cq, util_cq));
+		} while (ret > 0);
+		ep->util_ep.rx_cq->cq_fastlock_release(&ep->util_ep.rx_cq->cq_lock);
+	}
 
-	ep->util_ep.tx_cq->cq_fastlock_acquire(&ep->util_ep.tx_cq->cq_lock);
-	do {
-		ret = fi_ibv_poll_outstanding_cq(ep, container_of(ep->util_ep.tx_cq,
-								  struct fi_ibv_cq, util_cq));
-	} while (ret > 0);
-	ep->util_ep.tx_cq->cq_fastlock_release(&ep->util_ep.tx_cq->cq_lock);
+	if (ep->util_ep.tx_cq) {
+		ep->util_ep.tx_cq->cq_fastlock_acquire(&ep->util_ep.tx_cq->cq_lock);
+		do {
+			ret = fi_ibv_poll_outstanding_cq(ep,
+				container_of(ep->util_ep.tx_cq,
+					     struct fi_ibv_cq, util_cq));
+		} while (ret > 0);
+		ep->util_ep.tx_cq->cq_fastlock_release(&ep->util_ep.tx_cq->cq_lock);
+	}
 }
 
 /* Must call with cq->lock held */
