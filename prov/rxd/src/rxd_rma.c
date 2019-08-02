@@ -48,13 +48,9 @@ static struct rxd_x_entry *rxd_tx_entry_init_rma(struct rxd_ep *ep, fi_addr_t ad
 	void *ptr;
 
 	tx_entry = rxd_tx_entry_init_common(ep, addr, op, iov, iov_count, 0,
-					    data, flags, context);
+					    data, flags, context, &base_hdr, &ptr);
 	if (!tx_entry)
 		return NULL;
-
-	base_hdr = rxd_get_base_hdr(tx_entry->pkt);
-	ptr = (void *) base_hdr;
-	rxd_init_base_hdr(ep, &ptr, tx_entry);
 
 	if (tx_entry->cq_entry.flags & FI_READ) {
 		tx_entry->num_segs = ofi_div_ceil(tx_entry->cq_entry.len,

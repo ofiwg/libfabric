@@ -320,7 +320,8 @@ void rxd_init_data_pkt(struct rxd_ep *ep, struct rxd_x_entry *tx_entry,
 
 struct rxd_x_entry *rxd_tx_entry_init_common(struct rxd_ep *ep, fi_addr_t addr,
 			uint32_t op, const struct iovec *iov, size_t iov_count,
-			uint64_t tag, uint64_t data, uint32_t flags, void *context)
+			uint64_t tag, uint64_t data, uint32_t flags, void *context,
+			struct rxd_base_hdr **base_hdr, void **ptr)
 {
 	struct rxd_x_entry *tx_entry;
 
@@ -353,6 +354,10 @@ struct rxd_x_entry *rxd_tx_entry_init_common(struct rxd_ep *ep, fi_addr_t addr,
 	tx_entry->cq_entry.data = data;
 
 	tx_entry->pkt->peer = tx_entry->peer;
+
+	*base_hdr = rxd_get_base_hdr(tx_entry->pkt);
+	*ptr = (void *) *base_hdr;
+	rxd_init_base_hdr(ep, &(*ptr), tx_entry);
 
 	dlist_insert_tail(&tx_entry->entry,
 			  &ep->peers[tx_entry->peer].tx_list);

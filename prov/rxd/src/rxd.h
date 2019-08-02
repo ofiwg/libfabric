@@ -443,7 +443,8 @@ static inline void rxd_check_init_cq_data(void **ptr, struct rxd_x_entry *tx_ent
 /* Tx/Rx entry sub-functions */
 struct rxd_x_entry *rxd_tx_entry_init_common(struct rxd_ep *ep, fi_addr_t addr,
 			uint32_t op, const struct iovec *iov, size_t iov_count,
-			uint64_t tag, uint64_t data, uint32_t flags, void *context);
+			uint64_t tag, uint64_t data, uint32_t flags, void *context,
+			struct rxd_base_hdr **base_hdr, void **ptr);
 struct rxd_x_entry *rxd_rx_entry_init(struct rxd_ep *ep,
 			const struct iovec *iov, size_t iov_count, uint64_t tag,
 			uint64_t ignore, void *context, fi_addr_t addr,
