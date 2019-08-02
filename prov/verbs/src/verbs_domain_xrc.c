@@ -204,6 +204,7 @@ void fi_ibv_put_shared_ini_conn(struct fi_ibv_xrc_ep *ep)
 				   "Destroy of XRC physical INI QP failed %d\n",
 				   errno);
 
+		assert(dlist_empty(&ini_conn->pending_list));
 		fi_ibv_set_ini_conn_key(ep, &key);
 		node = ofi_rbmap_find(domain->xrc.ini_conn_rbmap, &key);
 		assert(node);
@@ -277,15 +278,15 @@ void fi_ibv_sched_ini_conn(struct fi_ibv_ini_shared_conn *ini_conn)
 			ep->ini_conn->state = FI_IBV_INI_QP_CONNECTING;
 			ep->ini_conn->phys_conn_id = ep->base_ep.id;
 		} else {
-			if (!ep->base_ep.id->qp) {
-				ret = fi_ibv_reserve_qpn(ep,
-						 &ep->conn_setup->rsvd_ini_qpn);
-				if (ret) {
-					VERBS_WARN(FI_LOG_EP_CTRL,
-						   "Failed to create rsvd INI "
-						   "QP %d\n", ret);
-					goto err;
-				}
+			assert(!ep->base_ep.id->qp);
+
+			ret = fi_ibv_reserve_qpn(ep,
+					&ep->conn_setup->rsvd_ini_qpn);
+			if (ret) {
+				VERBS_WARN(FI_LOG_EP_CTRL,
+					   "Failed to create rsvd INI "
+					   "QP %d\n", ret);
+				goto err;
 			}
 		}
 
