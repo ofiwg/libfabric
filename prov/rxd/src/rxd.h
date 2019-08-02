@@ -364,6 +364,12 @@ static inline void *rxd_pkt_start(struct rxd_pkt_entry *pkt_entry)
 	return (void *) ((char *) pkt_entry + sizeof(*pkt_entry));
 }
 
+static inline size_t rxd_pkt_size(struct rxd_ep *ep, struct rxd_base_hdr *base_hdr,
+				   void *ptr)
+{
+	return ((char *) ptr - (char *) base_hdr) + ep->tx_prefix_size;
+}
+
 struct rxd_match_attr {
 	fi_addr_t	peer;
 	uint64_t	tag;

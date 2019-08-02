@@ -94,8 +94,8 @@ static struct rxd_x_entry *rxd_tx_entry_init_atomic(struct rxd_ep *ep, fi_addr_t
 			assert(len == tx_entry->bytes_done);
 		}
 	}
-	tx_entry->pkt->pkt_size = ((char *) ptr - (char *) base_hdr) +
-				ep->tx_prefix_size;
+
+	tx_entry->pkt->pkt_size = rxd_pkt_size(ep, base_hdr, ptr);
 
 	return tx_entry;
 }

@@ -77,8 +77,8 @@ static struct rxd_x_entry *rxd_tx_entry_init_rma(struct rxd_ep *ep, fi_addr_t ad
 			tx_entry->iov_count, tx_entry->cq_entry.len,
 			max_inline);
 	}
-	tx_entry->pkt->pkt_size = ((char *) ptr - (char *) base_hdr) +
-				ep->tx_prefix_size;
+
+	tx_entry->pkt->pkt_size = rxd_pkt_size(ep, base_hdr, ptr);
 
 	return tx_entry;
 }
