@@ -47,23 +47,9 @@ int psmx2_trx_ctxt_cnt = 0;
  */
 
 struct disconnect_args {
-	psm2_ep_t	ep;
-	psm2_epaddr_t	epaddr;
+	struct psmx2_trx_ctxt	*trx_ctxt;
+	psm2_epaddr_t		epaddr;
 };
-
-static void *disconnect_func(void *args)
-{
-	struct disconnect_args *disconn = args;
-	psm2_error_t errors;
-
-	FI_INFO(&psmx2_prov, FI_LOG_CORE,
-		"psm2_ep: %p, epaddr: %p\n", disconn->ep, disconn->epaddr);
-
-	psm2_ep_disconnect2(disconn->ep, 1, &disconn->epaddr, NULL,
-			    &errors, PSM2_EP_DISCONNECT_FORCE, 0);
-	free(args);
-	return NULL;
-}
 
 static int psmx2_peer_match(struct dlist_entry *item, const void *arg)
 {
@@ -71,6 +57,28 @@ static int psmx2_peer_match(struct dlist_entry *item, const void *arg)
 
 	peer = container_of(item, struct psmx2_epaddr_context, entry);
 	return  (peer->epaddr == arg);
+}
+
+static void *disconnect_func(void *args)
+{
+	struct disconnect_args *disconn = args;
+	struct psmx2_trx_ctxt *trx_ctxt = disconn->trx_ctxt;
+	psm2_error_t errors;
+
+	FI_INFO(&psmx2_prov, FI_LOG_CORE,
+		"psm2_ep: %p, epaddr: %p\n", trx_ctxt->psm2_ep, disconn->epaddr);
+
+	trx_ctxt->domain->peer_lock_fn(&trx_ctxt->peer_lock, 2);
+	dlist_remove_first_match(&trx_ctxt->peer_list,
+				 psmx2_peer_match, disconn->epaddr);
+	trx_ctxt->domain->peer_unlock_fn(&trx_ctxt->peer_lock, 2);
+	if (trx_ctxt->ep && trx_ctxt->ep->av)
+		psmx2_av_remove_conn(trx_ctxt->ep->av, trx_ctxt, disconn->epaddr);
+
+	psm2_ep_disconnect2(trx_ctxt->psm2_ep, 1, &disconn->epaddr, NULL,
+			    &errors, PSM2_EP_DISCONNECT_FORCE, 0);
+	free(args);
+	return NULL;
 }
 
 int psmx2_am_trx_ctxt_handler(psm2_am_token_t token, psm2_amarg_t *args,
@@ -93,16 +101,14 @@ int psmx2_am_trx_ctxt_handler(psm2_am_token_t token, psm2_amarg_t *args,
 		 * we can't call psm2_ep_disconnect from the AM
 		 * handler. instead, create a thread to do the work.
 		 * the performance of this operation is not important.
+		 *
+		 * also put the av cleanup operations into the thread
+		 * to avoid deadlock because the AM handler may be
+		 * called with the av lock held.
 		 */
 		disconn = malloc(sizeof(*disconn));
 		if (disconn) {
-			trx_ctxt->domain->peer_lock_fn(&trx_ctxt->peer_lock, 2);
-			dlist_remove_first_match(&trx_ctxt->peer_list,
-						 psmx2_peer_match, epaddr);
-			trx_ctxt->domain->peer_unlock_fn(&trx_ctxt->peer_lock, 2);
-			if (trx_ctxt->ep && trx_ctxt->ep->av)
-				psmx2_av_remove_conn(trx_ctxt->ep->av, trx_ctxt, epaddr);
-			disconn->ep = trx_ctxt->psm2_ep;
+			disconn->trx_ctxt = trx_ctxt;
 			disconn->epaddr = epaddr;
 			pthread_create(&disconnect_thread, NULL,
 				       disconnect_func, disconn);
