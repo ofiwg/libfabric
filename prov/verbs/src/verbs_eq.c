@@ -486,7 +486,7 @@ fi_ibv_eq_xrc_rej_event(struct fi_ibv_eq *eq, struct rdma_cm_event *cma_event)
 /* Caller must hold eq:lock */                                                                                  
 static inline int
 fi_ibv_eq_xrc_cm_err_event(struct fi_ibv_eq *eq,
-                           struct rdma_cm_event *cma_event, int *acked)
+                           struct rdma_cm_event *cma_event)
 {
 	struct fi_ibv_xrc_ep *ep;
 	fid_t fid = cma_event->id->context;
@@ -704,7 +704,7 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq,
 		ep = container_of(fid, struct fi_ibv_ep, util_ep.ep_fid);
 		assert(ep->info);
 		if (fi_ibv_is_xrc(ep->info)) {
-			ret = fi_ibv_eq_xrc_cm_err_event(eq, cma_event, acked);
+			ret = fi_ibv_eq_xrc_cm_err_event(eq, cma_event);
 			if (ret == -FI_EAGAIN) {
 				fastlock_release(&eq->lock);
 				return ret;
