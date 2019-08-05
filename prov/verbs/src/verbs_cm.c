@@ -268,6 +268,8 @@ fi_ibv_msg_ep_reject(struct fid_pep *pep, fid_t handle,
 	struct fi_ibv_connreq *connreq =
 		container_of(handle, struct fi_ibv_connreq, handle);
 	struct fi_ibv_cm_data_hdr *cm_hdr;
+	struct fi_ibv_pep *_pep = container_of(pep, struct fi_ibv_pep,
+					       pep_fid);
 	int ret;
 
 	if (OFI_UNLIKELY(paramlen > VERBS_CM_DATA_SIZE))
@@ -276,12 +278,15 @@ fi_ibv_msg_ep_reject(struct fid_pep *pep, fid_t handle,
 	cm_hdr = alloca(sizeof(*cm_hdr) + paramlen);
 	fi_ibv_msg_ep_prepare_cm_data(param, paramlen, cm_hdr);
 
+	fastlock_acquire(&_pep->eq->lock);
 	if (connreq->is_xrc)
 		ret = fi_ibv_msg_xrc_ep_reject(connreq, cm_hdr,
 				(uint8_t)(sizeof(*cm_hdr) + paramlen));
 	else
 		ret = rdma_reject(connreq->id, cm_hdr,
 			(uint8_t)(sizeof(*cm_hdr) + paramlen)) ? -errno : 0;
+	fastlock_release(&_pep->eq->lock);
+
 	free(connreq);
 	return ret;
 }

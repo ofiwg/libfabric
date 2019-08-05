@@ -318,14 +318,23 @@ static int fi_ibv_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			break;
 		case FI_CLASS_EQ:
 			ep->eq = container_of(bfid, struct fi_ibv_eq, eq_fid.fid);
+
+			/* Make sure EQ channel is not polled during migrate */
+			fastlock_acquire(&ep->eq->lock);
 			ret = rdma_migrate_id(ep->id, ep->eq->channel);
-			if (ret)
+			if (ret)  {
+				fastlock_release(&ep->eq->lock);
 				return -errno;
+			}
 			if (fi_ibv_is_xrc(ep->info)) {
 				ret = fi_ibv_ep_xrc_set_tgt_chan(ep);
-				if (ret)
+				if (ret) {
+					fastlock_release(&ep->eq->lock);
 					return -errno;
+				}
 			}
+			fastlock_release(&ep->eq->lock);
+
 			break;
 		case FI_CLASS_SRX_CTX:
 			ep->srq_ep = container_of(bfid, struct fi_ibv_srq_ep, ep_fid.fid);
