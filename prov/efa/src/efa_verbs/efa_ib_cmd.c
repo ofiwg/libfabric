@@ -2,7 +2,7 @@
  * Copyright (c) 2005 Topspin Communications.  All rights reserved.
  * Copyright (c) 2005 PathScale, Inc.  All rights reserved.
  * Copyright (c) 2006 Cisco Systems, Inc.  All rights reserved.
- * Copyright (c) 2017-2018 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * Copyright (c) 2017-2019 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -270,12 +270,52 @@ int efa_ib_cmd_dealloc_pd(struct ibv_pd *pd)
 	return 0;
 }
 
+/* Madvise requires page aligned addresses and lengths */
+static int efa_madvise(void *addr, size_t length, int advice)
+{
+	int i;
+
+	for (i = 0; i < num_page_sizes; i++) {
+		if (!(madvise(ofi_get_page_start(addr, page_sizes[i]),
+			      ofi_get_page_bytes(addr, length, page_sizes[i]),
+			      advice))) {
+			return 0;
+		}
+	}
+
+	EFA_WARN_ERRNO(FI_LOG_MR, "Failed to set madvise", errno);
+	return -errno;
+}
+
 int efa_ib_cmd_reg_mr(struct ibv_pd *pd, void *addr, size_t length,
 		      uint64_t hca_va, int access,
 		      struct ibv_mr *mr, struct ibv_reg_mr *cmd,
 		      size_t cmd_size,
 		      struct ib_uverbs_reg_mr_resp *resp, size_t resp_size)
 {
+	int err;
+
+	/*
+	 * Linux copy-on-write semantics mean that following a fork() call,
+	 * parent and child processes will have page table entries pointing to
+	 * the same physical page. Since these pages are write protected, if
+	 * either the parent or child writes to the page, the hardware will
+	 * trap the event. The kernel will then allocate a new page and copy
+	 * the contents from the original page, breaking the virtual to physical
+	 * page link for that process.
+	 *
+	 * To prevent this case, marking pinned memory with MADV_DONTFORK
+	 * only allows the memory range to be seen by the parent process, and
+	 * the copy-on-write semantics no longer apply to this memory range.
+	 *
+	 * Since the rdma-core library already does all this work for us,
+	 * when we add rdma-core, we will move the logic down a layer and
+	 * remove it from here.
+	 */
+	err = efa_madvise(addr, length, MADV_DONTFORK);
+	if (err)
+		return err;
+
 	IBV_INIT_CMD_RESP(cmd, cmd_size, REG_MR, resp, resp_size);
 
 	cmd->ibcmd.start	  = (uintptr_t)addr;
@@ -284,8 +324,16 @@ int efa_ib_cmd_reg_mr(struct ibv_pd *pd, void *addr, size_t length,
 	cmd->ibcmd.pd_handle	  = pd->handle;
 	cmd->ibcmd.access_flags = access;
 
-	if (write(pd->context->cmd_fd, cmd, cmd_size) != cmd_size)
-		return -errno;
+	if (write(pd->context->cmd_fd, cmd, cmd_size) != cmd_size) {
+		err = -errno;
+		/*
+		 * We drop the efa madvise error after printing a warn
+		 * since we care more about the write error. Since
+		 * madvise will overwrite errno, we set it before hand.
+		 */
+		efa_madvise(addr, length, MADV_DOFORK);
+		return err;
+	}
 
 	VALGRIND_MAKE_MEM_DEFINED(resp, resp_size);
 
@@ -300,6 +348,7 @@ int efa_ib_cmd_reg_mr(struct ibv_pd *pd, void *addr, size_t length,
 int efa_ib_cmd_dereg_mr(struct ibv_mr *mr)
 {
 	struct ibv_dereg_mr cmd;
+	int err;
 
 	IBV_INIT_CMD(&cmd, sizeof(cmd), DEREG_MR);
 	cmd.ibcmd.mr_handle = mr->handle;
@@ -307,7 +356,15 @@ int efa_ib_cmd_dereg_mr(struct ibv_mr *mr)
 	if (write(mr->context->cmd_fd, &cmd, sizeof(cmd)) != sizeof(cmd))
 		return -errno;
 
-	return 0;
+	/*
+	 *  We want to reset the memory to allow default fork behavior
+	 *  after we have released it from pinning.
+	 *
+	 * This behavior will be removed with the switch to rdma-core.
+	 */
+	err = efa_madvise(mr->addr, mr->length, MADV_DOFORK);
+
+	return err;
 }
 
 int efa_ib_cmd_create_cq(struct ibv_context *context, int cqe,
