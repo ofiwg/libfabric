@@ -3,6 +3,12 @@
 
 @Library(['CrayNetworkCI@master', 'dst-shared@master']) _
 
+if (!isBuildable()) {
+    echo "build request is not valid, skipping build"
+    currentBuild.result = 'SUCCESS'
+    return
+}
+
 pipeline {
     options {
         // Generic build options
@@ -320,6 +326,7 @@ pipeline {
             when {
                 allOf {
                     expression { currentBuild.result == 'SUCCESS' } ;
+                    expression { isInternalBuild() } ;
                     anyOf {
                         expression { env.BRANCH_NAME == 'master' } ;
                         buildingTag()
