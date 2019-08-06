@@ -554,10 +554,30 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq,
 	struct fi_ibv_pep *pep =
 		container_of(fid, struct fi_ibv_pep, pep_fid);
 	struct fi_ibv_ep *ep;
+	struct fi_ibv_xrc_ep *xrc_ep;
+	struct fi_ibv_domain *domain;
 
 	*acked = 0;
 
 	switch (cma_event->event) {
+	case RDMA_CM_EVENT_ROUTE_RESOLVED:
+		ep = container_of(fid, struct fi_ibv_ep, util_ep.ep_fid);
+		if (rdma_connect(ep->id, &ep->conn_param)) {
+			ret = -errno;
+			FI_WARN(&fi_ibv_prov, FI_LOG_EP_CTRL,
+				"rdma_connect failed: %s (%d)\n",
+				strerror(-ret), -ret);
+			if (fi_ibv_is_xrc(ep->info)) {
+				xrc_ep = container_of(fid, struct fi_ibv_xrc_ep,
+						      base_ep.util_ep.ep_fid);
+				domain = fi_ibv_ep_to_domain(ep);
+				fastlock_acquire(&domain->xrc.ini_mgmt_lock);
+				fi_ibv_put_shared_ini_conn(xrc_ep);
+				fastlock_release(&domain->xrc.ini_mgmt_lock);
+			}
+			return ret;
+		}
+		return -FI_EAGAIN;
 	case RDMA_CM_EVENT_CONNECT_REQUEST:
 		*event = FI_CONNREQ;
 
