@@ -83,6 +83,8 @@
 #define RAI_FAMILY              0x00000008
 #endif
 
+#define VERBS_RESOLVE_TIMEOUT 2000	// ms
+
 #define VERBS_PROV_NAME "verbs"
 #define VERBS_PROV_VERS FI_VERSION(1,0)
 
@@ -550,6 +552,8 @@ struct fi_ibv_ep {
 		struct ibv_sge		sge;
 	} *wrs;
 	size_t				rx_size;
+	struct rdma_conn_param		conn_param;
+	struct fi_ibv_cm_data_hdr	*cm_hdr;
 };
 
 #define VERBS_XRC_EP_MAGIC		0x1F3D5B79
@@ -579,10 +583,7 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 		   struct fid_ep **ep, void *context);
 int fi_ibv_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 		      struct fid_pep **pep, void *context);
-int fi_ibv_create_ep(const char *node, const char *service,
-		     uint64_t flags, const struct fi_info *hints,
-		     struct rdma_addrinfo **rai, struct rdma_cm_id **id);
-void fi_ibv_destroy_ep(struct rdma_addrinfo *rai, struct rdma_cm_id **id);
+int fi_ibv_create_ep(const struct fi_info *hints, struct rdma_cm_id **id);
 int fi_ibv_dgram_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 			 struct fid_av **av_fid, void *context);
 static inline

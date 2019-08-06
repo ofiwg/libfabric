@@ -378,7 +378,7 @@ int fi_ibv_process_xrc_connreq(struct fi_ibv_ep *ep,
 	ofi_addr_set_port(ep->info->src_addr, 0);
 	ofi_addr_set_port(ep->info->dest_addr, connreq->xrc.port);
 
-	ret = fi_ibv_create_ep(NULL, NULL, 0, ep->info, NULL, &ep->id);
+	ret = fi_ibv_create_ep(ep->info, &ep->id);
 	if (ret) {
 		VERBS_WARN(FI_LOG_EP_CTRL,
 			   "Creation of INI cm_id failed %d\n", ret);

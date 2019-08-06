@@ -77,7 +77,7 @@ static int fi_ibv_msg_ep_setname(fid_t ep_fid, void *addr, size_t addrlen)
 
 	memcpy(ep->info->src_addr, addr, ep->info->src_addrlen);
 
-	ret = fi_ibv_create_ep(NULL, NULL, 0, ep->info, NULL, &id);
+	ret = fi_ibv_create_ep(ep->info, &id);
 	if (ret)
 		goto err2;
 
@@ -136,49 +136,44 @@ fi_ibv_ep_prepare_rdma_cm_param(struct rdma_conn_param *conn_param,
 }
 
 static int
-fi_ibv_msg_ep_connect(struct fid_ep *ep, const void *addr,
+fi_ibv_msg_ep_connect(struct fid_ep *ep_fid, const void *addr,
 		      const void *param, size_t paramlen)
 {
-	struct rdma_conn_param conn_param = { 0 };
-	struct sockaddr *src_addr, *dst_addr;
+	struct fi_ibv_ep *ep =
+		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	int ret;
-	struct fi_ibv_cm_data_hdr *cm_hdr;
-	struct fi_ibv_ep *_ep =
-		container_of(ep, struct fi_ibv_ep, util_ep.ep_fid);
 
 	if (OFI_UNLIKELY(paramlen > VERBS_CM_DATA_SIZE))
 		return -FI_EINVAL;
 
-	if (!_ep->id->qp) {
-		ret = fi_control(&ep->fid, FI_ENABLE, NULL);
+	if (!ep->id->qp) {
+		ret = fi_control(&ep_fid->fid, FI_ENABLE, NULL);
 		if (ret)
 			return ret;
 	}
 
-	cm_hdr = alloca(sizeof(*cm_hdr) + paramlen);
-	fi_ibv_msg_ep_prepare_cm_data(param, paramlen, cm_hdr);
-	fi_ibv_ep_prepare_rdma_cm_param(&conn_param, cm_hdr,
-					sizeof(*cm_hdr) + paramlen);
-	conn_param.retry_count = 15;
+	ep->cm_hdr = malloc(sizeof(*(ep->cm_hdr)) + paramlen);
+	if (!ep->cm_hdr)
+		return -FI_ENOMEM;
 
-	if (_ep->srq_ep)
-		conn_param.srq = 1;
+	fi_ibv_msg_ep_prepare_cm_data(param, paramlen, ep->cm_hdr);
+	fi_ibv_ep_prepare_rdma_cm_param(&ep->conn_param, ep->cm_hdr,
+					sizeof(*(ep->cm_hdr)) + paramlen);
+	ep->conn_param.retry_count = 15;
 
-	src_addr = rdma_get_local_addr(_ep->id);
-	if (src_addr) {
-		VERBS_INFO(FI_LOG_CORE, "src_addr: %s:%d\n",
-			   inet_ntoa(((struct sockaddr_in *)src_addr)->sin_addr),
-			   ntohs(((struct sockaddr_in *)src_addr)->sin_port));
+	if (ep->srq_ep)
+		ep->conn_param.srq = 1;
+
+	if (rdma_resolve_route(ep->id, VERBS_RESOLVE_TIMEOUT)) {
+		ret = -errno;
+		FI_WARN(&fi_ibv_prov, FI_LOG_EP_CTRL,
+			"rdma_resolve_route failed: %s (%d)\n",
+			strerror(-ret), -ret);
+		free(ep->cm_hdr);
+		ep->cm_hdr = NULL;
+		return ret;
 	}
-
-	dst_addr = rdma_get_peer_addr(_ep->id);
-	if (dst_addr) {
-		VERBS_INFO(FI_LOG_CORE, "dst_addr: %s:%d\n",
-			   inet_ntoa(((struct sockaddr_in *)dst_addr)->sin_addr),
-			   ntohs(((struct sockaddr_in *)dst_addr)->sin_port));
-	}
-
-	return rdma_connect(_ep->id, &conn_param) ? -errno : 0;
+	return 0;
 }
 
 static int
@@ -354,17 +349,23 @@ fi_ibv_msg_xrc_ep_connect(struct fid_ep *ep, const void *addr,
 	if (ret)
 		return ret;
 
-	cm_hdr = alloca(sizeof(*cm_hdr) + paramlen);
+	cm_hdr = malloc(sizeof(*cm_hdr) + paramlen);
+	if (!cm_hdr)
+		return -FI_ENOMEM;
+
 	fi_ibv_msg_ep_prepare_cm_data(param, paramlen, cm_hdr);
 	paramlen += sizeof(*cm_hdr);
 
 	ret = fi_ibv_msg_alloc_xrc_params(&adjusted_param, cm_hdr, &paramlen);
-	if (ret)
+	if (ret) {
+		free(cm_hdr);
 		return ret;
+	}
 
 	xrc_ep->conn_setup = calloc(1, sizeof(*xrc_ep->conn_setup));
 	if (!xrc_ep->conn_setup) {
 		free(adjusted_param);
+		free(cm_hdr);
 		return -FI_ENOMEM;
 	}
 
@@ -376,6 +377,7 @@ fi_ibv_msg_xrc_ep_connect(struct fid_ep *ep, const void *addr,
 	dst_addr = rdma_get_peer_addr(_ep->id);
 	ret = fi_ibv_connect_xrc(xrc_ep, dst_addr, 0, adjusted_param, paramlen);
 	free(adjusted_param);
+	free(cm_hdr);
 	return ret;
 }
 

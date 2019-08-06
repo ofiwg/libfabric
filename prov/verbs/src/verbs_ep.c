@@ -34,8 +34,6 @@
 
 #include "fi_verbs.h"
 
-#define VERBS_RESOLVE_TIMEOUT 2000	// ms
-
 static struct fi_ops_msg fi_ibv_srq_msg_ops;
 
 static inline int fi_ibv_msg_ep_cmdata_size(fid_t fid)
@@ -210,6 +208,7 @@ static int fi_ibv_close_free_ep(struct fi_ibv_ep *ep)
 
 	free(ep->util_ep.ep_fid.msg);
 	ep->util_ep.ep_fid.msg = NULL;
+	free(ep->cm_hdr);
 
 	ret = ofi_endpoint_close(&ep->util_ep);
 	if (ret)
@@ -872,7 +871,7 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 		}
 
 		if (!info->handle) {
-			ret = fi_ibv_create_ep(NULL, NULL, 0, info, NULL, &ep->id);
+			ret = fi_ibv_create_ep(info, &ep->id);
 			if (ret)
 				goto err1;
 		} else if (info->handle->fclass == FI_CLASS_CONNREQ) {
@@ -901,12 +900,6 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 					      VERBS_RESOLVE_TIMEOUT)) {
 				ret = -errno;
 				VERBS_INFO(FI_LOG_DOMAIN, "Unable to rdma_resolve_addr\n");
-				goto err2;
-			}
-
-			if (rdma_resolve_route(ep->id, VERBS_RESOLVE_TIMEOUT)) {
-				ret = -errno;
-				VERBS_INFO(FI_LOG_DOMAIN, "Unable to rdma_resolve_route\n");
 				goto err2;
 			}
 		} else {
