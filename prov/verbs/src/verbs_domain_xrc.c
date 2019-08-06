@@ -296,7 +296,6 @@ int fi_ibv_process_ini_conn(struct fi_ibv_xrc_ep *ep,int reciprocal,
 			    void *param, size_t paramlen)
 {
 	struct fi_ibv_xrc_cm_data *cm_data = param;
-	struct rdma_conn_param conn_param = { 0 };
 	int ret;
 
 	assert(ep->base_ep.ibv_qp);
@@ -304,30 +303,34 @@ int fi_ibv_process_ini_conn(struct fi_ibv_xrc_ep *ep,int reciprocal,
 	fi_ibv_set_xrc_cm_data(cm_data, reciprocal, ep->conn_setup->conn_tag,
 			       ep->base_ep.eq->xrc.pep_port,
 			       ep->ini_conn->tgt_qpn);
-	conn_param.private_data = cm_data;
-	conn_param.private_data_len = paramlen;
-	conn_param.responder_resources = RDMA_MAX_RESP_RES;
-	conn_param.initiator_depth = RDMA_MAX_INIT_DEPTH;
-	conn_param.flow_control = 1;
-	conn_param.retry_count = 15;
-	conn_param.rnr_retry_count = 7;
-	conn_param.srq = 1;
+	ep->base_ep.conn_param.private_data = cm_data;
+	ep->base_ep.conn_param.private_data_len = paramlen;
+	ep->base_ep.conn_param.responder_resources = RDMA_MAX_RESP_RES;
+	ep->base_ep.conn_param.initiator_depth = RDMA_MAX_INIT_DEPTH;
+	ep->base_ep.conn_param.flow_control = 1;
+	ep->base_ep.conn_param.retry_count = 15;
+	ep->base_ep.conn_param.rnr_retry_count = 7;
+	ep->base_ep.conn_param.srq = 1;
 
 	/* Shared connections use reserved temporary QP numbers to
 	 * avoid the appearance of stale/duplicate CM messages */
 	if (!ep->base_ep.id->qp)
-		conn_param.qp_num = ep->conn_setup->rsvd_ini_qpn->qp_num;
+		ep->base_ep.conn_param.qp_num =
+				ep->conn_setup->rsvd_ini_qpn->qp_num;
 
 	assert(ep->conn_state == FI_IBV_XRC_UNCONNECTED ||
 	       ep->conn_state == FI_IBV_XRC_ORIG_CONNECTED);
 	fi_ibv_next_xrc_conn_state(ep);
 
-	ret = rdma_connect(ep->base_ep.id, &conn_param) ? -errno : 0;
+	ret = rdma_resolve_route(ep->base_ep.id, VERBS_RESOLVE_TIMEOUT);
 	if (ret) {
 		ret = -errno;
-		VERBS_WARN(FI_LOG_EP_CTRL, "rdma_connect failed %d\n", -ret);
+		VERBS_WARN(FI_LOG_EP_CTRL,
+			   "rdma_resolve_route failed %s (%d)\n",
+			   strerror(-ret), -ret);
 		fi_ibv_prev_xrc_conn_state(ep);
 	}
+
 	return ret;
 }
 

@@ -83,6 +83,8 @@
 #define RAI_FAMILY              0x00000008
 #endif
 
+#define VERBS_RESOLVE_TIMEOUT 2000	// ms
+
 #define VERBS_PROV_NAME "verbs"
 #define VERBS_PROV_VERS FI_VERSION(1,0)
 
@@ -550,6 +552,8 @@ struct fi_ibv_ep {
 		struct ibv_sge		sge;
 	} *wrs;
 	size_t				rx_size;
+	struct rdma_conn_param		conn_param;
+	struct fi_ibv_cm_data_hdr	*cm_hdr;
 };
 
 #define VERBS_XRC_EP_MAGIC		0x1F3D5B79
