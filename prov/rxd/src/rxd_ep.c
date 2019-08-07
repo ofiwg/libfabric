@@ -628,21 +628,26 @@ static void rxd_close_peer(struct rxd_ep *ep, struct rxd_peer *peer)
 	peer->active = 0;
 }
 
-static void rxd_cleanup_unexp_msg(struct dlist_entry *list)
+void rxd_cleanup_unexp_msg(struct rxd_unexp_msg *unexp_msg)
+{
+	struct rxd_pkt_entry *pkt_entry;
+	while (!dlist_empty(&unexp_msg->pkt_list)) {
+		dlist_pop_front(&unexp_msg->pkt_list, struct rxd_pkt_entry,
+				pkt_entry, d_entry);
+		ofi_buf_free(pkt_entry);
+	}
+
+	rxd_free_unexp_msg(unexp_msg);
+}
+
+static void rxd_cleanup_unexp_msg_list(struct dlist_entry *list)
 {
 	struct rxd_unexp_msg *unexp_msg;
-	struct rxd_pkt_entry *pkt_entry;
 
 	while (!dlist_empty(list)) {
 		dlist_pop_front(list, struct rxd_unexp_msg,
 				unexp_msg, entry);
-		while (!dlist_empty(&unexp_msg->pkt_list)) {
-			dlist_pop_front(&unexp_msg->pkt_list, struct rxd_pkt_entry,
-					pkt_entry, d_entry);
-			ofi_buf_free(pkt_entry);
-		}
-		ofi_buf_free(unexp_msg->pkt_entry);
-		free(unexp_msg);
+		rxd_cleanup_unexp_msg(unexp_msg);
 	}
 }
 
@@ -675,8 +680,8 @@ static int rxd_ep_close(struct fid *fid)
 		ofi_buf_free(pkt_entry);
 	}
 
-	rxd_cleanup_unexp_msg(&ep->unexp_list);
-	rxd_cleanup_unexp_msg(&ep->unexp_tag_list);
+	rxd_cleanup_unexp_msg_list(&ep->unexp_list);
+	rxd_cleanup_unexp_msg_list(&ep->unexp_tag_list);
 
 	while (!dlist_empty(&ep->ctrl_pkts)) {
 		dlist_pop_front(&ep->ctrl_pkts, struct rxd_pkt_entry,
