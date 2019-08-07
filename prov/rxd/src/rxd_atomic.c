@@ -54,13 +54,9 @@ static struct rxd_x_entry *rxd_tx_entry_init_atomic(struct rxd_ep *ep, fi_addr_t
 	OFI_UNUSED(len);
 
 	tx_entry = rxd_tx_entry_init_common(ep, addr, op, iov, iov_count, 0,
-					    data, flags, context);
+					    data, flags, context, &base_hdr, &ptr);
 	if (!tx_entry)
 		return NULL;
-
-	base_hdr = rxd_get_base_hdr(tx_entry->pkt);
-	ptr = (void *) base_hdr;
-	rxd_init_base_hdr(ep, &ptr, tx_entry);
 
 	if (res_count) {
 		tx_entry->res_count = res_count;
@@ -98,8 +94,8 @@ static struct rxd_x_entry *rxd_tx_entry_init_atomic(struct rxd_ep *ep, fi_addr_t
 			assert(len == tx_entry->bytes_done);
 		}
 	}
-	tx_entry->pkt->pkt_size = ((char *) ptr - (char *) base_hdr) +
-				ep->tx_prefix_size;
+
+	tx_entry->pkt->pkt_size = rxd_pkt_size(ep, base_hdr, ptr);
 
 	return tx_entry;
 }

@@ -364,6 +364,12 @@ static inline void *rxd_pkt_start(struct rxd_pkt_entry *pkt_entry)
 	return (void *) ((char *) pkt_entry + sizeof(*pkt_entry));
 }
 
+static inline size_t rxd_pkt_size(struct rxd_ep *ep, struct rxd_base_hdr *base_hdr,
+				   void *ptr)
+{
+	return ((char *) ptr - (char *) base_hdr) + ep->tx_prefix_size;
+}
+
 struct rxd_match_attr {
 	fi_addr_t	peer;
 	uint64_t	tag;
@@ -443,7 +449,8 @@ static inline void rxd_check_init_cq_data(void **ptr, struct rxd_x_entry *tx_ent
 /* Tx/Rx entry sub-functions */
 struct rxd_x_entry *rxd_tx_entry_init_common(struct rxd_ep *ep, fi_addr_t addr,
 			uint32_t op, const struct iovec *iov, size_t iov_count,
-			uint64_t tag, uint64_t data, uint32_t flags, void *context);
+			uint64_t tag, uint64_t data, uint32_t flags, void *context,
+			struct rxd_base_hdr **base_hdr, void **ptr);
 struct rxd_x_entry *rxd_rx_entry_init(struct rxd_ep *ep,
 			const struct iovec *iov, size_t iov_count, uint64_t tag,
 			uint64_t ignore, void *context, fi_addr_t addr,
