@@ -1079,8 +1079,8 @@ static void rxr_cq_handle_rts(struct rxr_ep *ep,
 		} else if (OFI_UNLIKELY(ret == -FI_EALREADY)) {
 			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 				"Duplicate RTS packet msg_id: %" PRIu32
-				" next_msg_id: %" PRIu32 "\n",
-			       rts_hdr->msg_id, peer->next_msg_id);
+				" robuf->exp_msg_id: %" PRIu64 "\n",
+			       rts_hdr->msg_id, peer->robuf->exp_msg_id);
 			if (!rts_hdr->addrlen)
 				rxr_eq_write_error(ep, FI_EIO, ret);
 			rxr_release_rx_pkt_entry(ep, pkt_entry);
