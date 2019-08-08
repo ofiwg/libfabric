@@ -257,6 +257,10 @@ int main(int argc, char **argv)
 
 	pm_job.clients = NULL;
 
+	hints = fi_allocinfo();
+	if (!hints)
+		return EXIT_FAILURE;
+
 	while ((c = getopt(argc, argv, "n:h" ADDR_OPTS INFO_OPTS)) != -1) {
 		switch (c) {
 		default:
