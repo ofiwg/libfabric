@@ -576,7 +576,7 @@ void rxd_ep_send_ack(struct rxd_ep *rxd_ep, fi_addr_t peer)
 
 	dlist_insert_tail(&pkt_entry->d_entry, &rxd_ep->ctrl_pkts);
 	if (rxd_ep_send_pkt(rxd_ep, pkt_entry))
-		rxd_pkt_remove(pkt_entry);
+		rxd_remove_free_pkt_entry(pkt_entry);
 }
 
 static void rxd_ep_free_res(struct rxd_ep *ep)
