@@ -90,7 +90,12 @@ extern const uint32_t rxr_poison_value;
 /* bounds for random RNR backoff timeout */
 #define RXR_RAND_MIN_TIMEOUT		(40)
 #define RXR_RAND_MAX_TIMEOUT		(120)
-#define RXR_DEF_MAX_RX_WINDOW		(16)
+
+/* bounds for flow control */
+#define RXR_DEF_MAX_RX_WINDOW		(128)
+#define RXR_DEF_MAX_TX_CREDITS		(64)
+#define RXR_DEF_MIN_TX_CREDITS		(32)
+
 /*
  * maximum time (microseconds) we will allow available_bufs for large msgs to
  * be exhausted
@@ -120,6 +125,7 @@ extern const uint32_t rxr_poison_value;
 #define RXR_TAGGED		BIT_ULL(0)
 #define RXR_REMOTE_CQ_DATA	BIT_ULL(1)
 #define RXR_REMOTE_SRC_ADDR	BIT_ULL(2)
+
 /*
  * TODO: In future we will send RECV_CANCEL signal to sender,
  * to stop transmitting large message, this flag is also
@@ -139,6 +145,12 @@ extern const uint32_t rxr_poison_value;
 #define RXR_WRITE		(1 << 6)
 #define RXR_READ_REQ		(1 << 7)
 #define RXR_READ_DATA		(1 << 8)
+
+/*
+ * Used to provide protocol compatibility across versions that include a
+ * credit request along with the RTS and those that do not
+ */
+#define RXR_CREDIT_REQUEST	BIT_ULL(9)
 
 /*
  * OFI flags
@@ -166,6 +178,8 @@ extern struct util_prov rxr_util_prov;
 
 struct rxr_env {
 	int rx_window_size;
+	int tx_min_credits;
+	int tx_max_credits;
 	int tx_queue_size;
 	int enable_sas_ordering;
 	int recvwin_size;
@@ -282,10 +296,15 @@ struct rxr_av {
 };
 
 struct rxr_peer {
+	bool tx_init;			/* tracks initialization of tx state */
+	bool rx_init;			/* tracks initialization of rx state */
 	struct rxr_robuf *robuf;	/* tracks expected msg_id on rx */
 	uint32_t next_msg_id;		/* sender's view of msg_id */
 	enum rxr_peer_state state;	/* state of CM protocol with peer */
 	unsigned int rnr_state;		/* tracks RNR backoff for peer */
+	size_t tx_pending;		/* tracks pending tx ops to this peer */
+	uint16_t tx_credits;		/* available send credits */
+	uint16_t rx_credits;		/* available credits to allocate */
 	uint64_t rnr_ts;		/* timestamp for RNR backoff tracking */
 	int rnr_queued_pkt_cnt;		/* queued RNR packet count */
 	int timeout_interval;		/* initial RNR timeout value */
@@ -319,6 +338,7 @@ struct rxr_rx_entry {
 
 	uint64_t bytes_done;
 	int64_t window;
+	uint16_t credit_request;
 
 	uint64_t total_len;
 
@@ -381,6 +401,8 @@ struct rxr_tx_entry {
 	uint64_t bytes_acked;
 	uint64_t bytes_sent;
 	int64_t window;
+	uint16_t credit_request;
+	uint16_t credit_allocated;
 
 	uint64_t total_len;
 
@@ -584,15 +606,15 @@ struct rxr_rts_hdr {
 	uint8_t version;
 	uint16_t flags;
 	/* end of rxr_base_hdr */
-	/* TODO: need to add msg_id -> tx_id mapping to remove tx_id and pad */
-	uint8_t pad[2];
+	/* TODO: need to add msg_id -> tx_id mapping to remove tx_id */
+	uint16_t credit_request;
 	uint8_t addrlen;
 	uint8_t rma_iov_count;
 	uint32_t tx_id;
 	uint32_t msg_id;
 	uint64_t tag;
 	uint64_t data_len;
-}; /* 24 bytes without tx_id and padding for it */
+};
 
 #if defined(static_assert) && defined(__x86_64__)
 static_assert(sizeof(struct rxr_rts_hdr) == 32, "rxr_rts_hdr check");
@@ -760,6 +782,27 @@ static inline struct rxr_peer *rxr_ep_get_peer(struct rxr_ep *ep,
 	return &ep->peer[addr];
 }
 
+static inline void rxr_ep_peer_init(struct rxr_ep *ep, struct rxr_peer *peer)
+{
+	assert(!peer->rx_init);
+	peer->robuf = freestack_pop(ep->robuf_fs);
+	peer->robuf = ofi_recvwin_buf_alloc(peer->robuf,
+					    rxr_env.recvwin_size);
+	assert(peer->robuf);
+	dlist_insert_tail(&peer->entry, &ep->peer_list);
+	peer->rx_credits = rxr_env.rx_window_size;
+	peer->rx_init = 1;
+
+	/*
+	 * If the endpoint has never sent a message to this peer thus far,
+	 * initialize tx state as well.
+	 */
+	if (!peer->tx_init) {
+		peer->tx_credits = rxr_env.tx_max_credits;
+		peer->tx_init = 1;
+	}
+}
+
 struct rxr_rx_entry *rxr_ep_get_rx_entry(struct rxr_ep *ep,
 					 const struct iovec *iov,
 					 size_t iov_count, uint64_t tag,
@@ -775,7 +818,8 @@ struct rxr_rx_entry *rxr_ep_rx_entry_init(struct rxr_ep *ep,
 					  fi_addr_t addr, uint32_t op,
 					  uint64_t flags);
 
-void rxr_generic_tx_entry_init(struct rxr_tx_entry *tx_entry,
+void rxr_generic_tx_entry_init(struct rxr_ep *ep,
+			       struct rxr_tx_entry *tx_entry,
 			       const struct iovec *iov,
 			       size_t iov_count,
 			       const struct fi_rma_iov *rma_iov,
@@ -988,6 +1032,28 @@ static inline int rxr_match_tag(uint64_t tag, uint64_t ignore,
 	return ((tag | ignore) == (match_tag | ignore));
 }
 
+static inline void rxr_ep_inc_tx_pending(struct rxr_ep *ep,
+					 struct rxr_peer *peer)
+{
+	ep->tx_pending++;
+	peer->tx_pending++;
+#if ENABLE_DEBUG
+	ep->sends++;
+#endif
+}
+
+static inline void rxr_ep_dec_tx_pending(struct rxr_ep *ep,
+					 struct rxr_peer *peer,
+					 int failed)
+{
+	ep->tx_pending--;
+	peer->tx_pending--;
+#if ENABLE_DEBUG
+	if (failed)
+		ep->failed_send_comps++;
+#endif
+}
+
 /*
  * Helper function to compute the maximum payload of the RTS header based on
  * the RTS header flags. The header may have a length greater than the possible
@@ -1078,12 +1144,12 @@ ssize_t rxr_ep_post_readrsp(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry
 void rxr_ep_init_connack_pkt_entry(struct rxr_ep *ep,
 				   struct rxr_pkt_entry *pkt_entry,
 				   fi_addr_t addr);
-void rxr_ep_calc_cts_window_credits(struct rxr_ep *ep, uint32_t max_window,
-				    uint64_t size, int *window, int *credits);
+void rxr_ep_calc_cts_window_credits(struct rxr_ep *ep, struct rxr_peer *peer,
+				    uint64_t size, int request,
+				    int *window, int *credits);
 void rxr_ep_init_cts_pkt_entry(struct rxr_ep *ep,
 			       struct rxr_rx_entry *rx_entry,
 			       struct rxr_pkt_entry *pkt_entry,
-			       uint32_t max_window,
 			       uint64_t size,
 			       int *credits);
 void rxr_ep_init_readrsp_pkt_entry(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
@@ -1108,7 +1174,6 @@ int rxr_cq_handle_tx_error(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 int rxr_cq_handle_cq_error(struct rxr_ep *ep, ssize_t err);
 ssize_t rxr_cq_post_cts(struct rxr_ep *ep,
 			struct rxr_rx_entry *rx_entry,
-			uint32_t max_window,
 			uint64_t size);
 
 int rxr_cq_handle_rx_completion(struct rxr_ep *ep,
@@ -1265,8 +1330,7 @@ static inline int rxr_ep_post_cts_or_queue(struct rxr_ep *ep,
 	if (rx_entry->state == RXR_RX_QUEUED_CTS)
 		return 0;
 
-	ret = rxr_cq_post_cts(ep, rx_entry, rxr_env.rx_window_size,
-			      bytes_left);
+	ret = rxr_cq_post_cts(ep, rx_entry, bytes_left);
 	if (OFI_UNLIKELY(ret)) {
 		if (ret == -FI_EAGAIN) {
 			rx_entry->state = RXR_RX_QUEUED_CTS;

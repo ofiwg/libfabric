@@ -770,9 +770,9 @@ static ssize_t rxr_multi_recv(struct rxr_ep *rxr_ep, const struct iovec *iov,
 			 * long msg completion. Last msg completion will free
 			 * posted rx_entry.
 			 */
-			if (ret != -FI_ENOMSG || ret != 0)
-				return ret;
-			return 0;
+			if (ret == -FI_ENOMSG)
+				return 0;
+			return ret;
 		}
 
 		if (ret == -FI_ENOMSG) {
@@ -921,9 +921,11 @@ static ssize_t rxr_ep_recvv(struct fid_ep *ep, const struct iovec *iov,
 }
 
 
-void rxr_generic_tx_entry_init(struct rxr_tx_entry *tx_entry, const struct iovec *iov, size_t iov_count,
-			       const struct fi_rma_iov *rma_iov, size_t rma_iov_count,
-			       fi_addr_t addr, uint64_t tag, uint64_t data, void *context,
+void rxr_generic_tx_entry_init(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
+			       const struct iovec *iov, size_t iov_count,
+			       const struct fi_rma_iov *rma_iov,
+			       size_t rma_iov_count, fi_addr_t addr,
+			       uint64_t tag, uint64_t data, void *context,
 			       uint32_t op, uint64_t flags)
 {
 	tx_entry->type = RXR_TX_ENTRY;
@@ -1003,8 +1005,9 @@ struct rxr_tx_entry *rxr_ep_tx_entry_init(struct rxr_ep *rxr_ep, const struct io
 	dlist_insert_tail(&tx_entry->tx_entry_entry, &rxr_ep->tx_entry_list);
 #endif
 
-	rxr_generic_tx_entry_init(tx_entry, iov, iov_count, rma_iov, rma_iov_count,
-				  addr, tag, data, context, op, flags);
+	rxr_generic_tx_entry_init(rxr_ep, tx_entry, iov, iov_count, rma_iov,
+				  rma_iov_count, addr, tag, data, context,
+				  op, flags);
 
 	assert(rxr_ep->util_ep.tx_msg_flags == 0 || rxr_ep->util_ep.tx_msg_flags == FI_COMPLETION);
 	tx_op_flags = rxr_ep->util_ep.tx_op_flags;
@@ -1081,12 +1084,8 @@ ssize_t rxr_ep_send_msg(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 #endif
 	ret = fi_sendmsg(ep->rdm_ep, msg, flags);
 
-	if (OFI_LIKELY(!ret)) {
-		ep->tx_pending++;
-#if ENABLE_DEBUG
-		ep->sends++;
-#endif
-	}
+	if (OFI_LIKELY(!ret))
+		rxr_ep_inc_tx_pending(ep, peer);
 
 	return ret;
 }
@@ -1284,24 +1283,47 @@ ssize_t rxr_ep_post_readrsp(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 	return 0;
 }
 
-void rxr_ep_calc_cts_window_credits(struct rxr_ep *ep, uint32_t max_window, uint64_t size,
+void rxr_ep_calc_cts_window_credits(struct rxr_ep *ep, struct rxr_peer *peer,
+				    uint64_t size, int request,
 				    int *window, int *credits)
 {
-	*credits = ofi_div_ceil(size, ep->max_data_payload_size);
+	struct rxr_av *av;
+	int num_peers;
+
+	/*
+	 * Adjust the peer credit pool based on the current AV size, which could
+	 * have grown since the time this peer was initialized.
+	 */
+	av = rxr_ep_av(ep);
+	num_peers = av->rdm_av_used - 1;
+	if (num_peers && ofi_div_ceil(rxr_env.rx_window_size, num_peers) < peer->rx_credits)
+		peer->rx_credits = ofi_div_ceil(peer->rx_credits, num_peers);
+
+	/*
+	 * Allocate credits for this transfer based on the request, the number
+	 * of available data buffers, and the number of outstanding peers this
+	 * endpoint is actively tracking in the AV. Also ensure that a minimum
+	 * number of credits are allocated to the transfer so the sender can
+	 * make progress.
+	 */
 	*credits = MIN(MIN(ep->available_data_bufs, ep->posted_bufs),
-		       MIN(*credits, max_window));
+		       peer->rx_credits);
+	*credits = MIN(request, *credits);
+	*credits = MAX(*credits, rxr_env.tx_min_credits);
 	*window = MIN(size, *credits * ep->max_data_payload_size);
+	if (peer->rx_credits > ofi_div_ceil(*window, ep->max_data_payload_size))
+		peer->rx_credits -= ofi_div_ceil(*window, ep->max_data_payload_size);
 }
 
 void rxr_ep_init_cts_pkt_entry(struct rxr_ep *ep,
 			       struct rxr_rx_entry *rx_entry,
 			       struct rxr_pkt_entry *pkt_entry,
-			       uint32_t max_window,
 			       uint64_t size,
 			       int *credits)
 {
 	int window = 0;
 	struct rxr_cts_hdr *cts_hdr;
+	struct rxr_peer *peer;
 
 	cts_hdr = (struct rxr_cts_hdr *)pkt_entry->pkt;
 
@@ -1315,7 +1337,9 @@ void rxr_ep_init_cts_pkt_entry(struct rxr_ep *ep,
 	cts_hdr->tx_id = rx_entry->tx_id;
 	cts_hdr->rx_id = rx_entry->rx_id;
 
-	rxr_ep_calc_cts_window_credits(ep, max_window, size, &window, credits);
+	peer = rxr_ep_get_peer(ep, rx_entry->addr);
+	rxr_ep_calc_cts_window_credits(ep, peer, size, rx_entry->credit_request,
+				       &window, credits);
 	cts_hdr->window = window;
 
 	pkt_entry->pkt_size = RXR_CTS_HDR_SIZE;
@@ -1383,6 +1407,16 @@ void rxr_init_rts_pkt_entry(struct rxr_ep *ep,
 	rts_hdr->data_len = tx_entry->total_len;
 	rts_hdr->tx_id = tx_entry->tx_id;
 	rts_hdr->msg_id = tx_entry->msg_id;
+
+	/*
+	 * Even with protocol versions prior to v3 that did not include a
+	 * request in the RTS, the receiver can test for this flag and decide if
+	 * it should be used as a heuristic for credit calculation. If the
+	 * receiver is on <3 protocol version, the flag and the request just get
+	 * ignored.
+	 */
+	rts_hdr->flags |= RXR_CREDIT_REQUEST;
+	rts_hdr->credit_request = tx_entry->credit_request;
 
 	if (tx_entry->fi_flags & FI_REMOTE_CQ_DATA) {
 		rts_hdr->flags = RXR_REMOTE_CQ_DATA;
@@ -1482,6 +1516,8 @@ static void rxr_inline_mr_reg(struct rxr_domain *rxr_domain,
 static size_t rxr_ep_post_rts(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 {
 	struct rxr_pkt_entry *pkt_entry;
+	struct rxr_peer *peer;
+	size_t pending = 0;
 	ssize_t ret;
 	uint64_t data_sent, offset;
 	int i;
@@ -1489,6 +1525,35 @@ static size_t rxr_ep_post_rts(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_ent
 	pkt_entry = rxr_get_pkt_entry(rxr_ep, rxr_ep->tx_pkt_pool);
 
 	if (OFI_UNLIKELY(!pkt_entry))
+		return -FI_EAGAIN;
+
+	/*
+	 * Init tx state for this peer. The rx state and reorder buffers will be
+	 * initialized on the first recv so as to not allocate resources unless
+	 * necessary.
+	 */
+	peer = rxr_ep_get_peer(rxr_ep, tx_entry->addr);
+	if (!peer->tx_init) {
+		peer->tx_credits = rxr_env.tx_max_credits;
+		peer->tx_init = 1;
+	}
+
+	/*
+	 * Divy up available credits to outstanding transfers and request the
+	 * minimum of that and the amount required to finish the current long
+	 * message.
+	 */
+	pending = peer->tx_pending + 1;
+	tx_entry->credit_request = MIN(ofi_div_ceil(peer->tx_credits, pending),
+				       ofi_div_ceil(tx_entry->total_len,
+						    rxr_ep->max_data_payload_size));
+	tx_entry->credit_request = MAX(tx_entry->credit_request,
+				       rxr_env.tx_min_credits);
+	if (peer->tx_credits >= tx_entry->credit_request)
+		peer->tx_credits -= tx_entry->credit_request;
+
+	/* Queue this RTS for later if there are too many outstanding packets */
+	if (!tx_entry->credit_request)
 		return -FI_EAGAIN;
 
 	rxr_init_rts_pkt_entry(rxr_ep, tx_entry, pkt_entry);
@@ -1629,12 +1694,13 @@ ssize_t rxr_tx(struct fid_ep *ep, const struct iovec *iov, size_t iov_count,
 			goto out;
 		}
 
-		rxr_ep_calc_cts_window_credits(rxr_ep, rxr_env.rx_window_size,
-					       tx_entry->total_len, &window,
+		rxr_ep_calc_cts_window_credits(rxr_ep, peer,
+					       tx_entry->total_len,
+					       tx_entry->credit_request,
+					       &window,
 					       &credits);
 
 		rx_entry->window = window;
-		assert(rxr_ep->available_data_bufs >= credits);
 		rxr_ep->available_data_bufs -= credits;
 
 		rx_entry->state = RXR_RX_RECV;
@@ -2221,29 +2287,51 @@ static ssize_t rxr_ep_cancel_recv(struct rxr_ep *ep,
 	entry = dlist_remove_first_match(recv_list,
 					 &rxr_ep_cancel_match_recv,
 					 context);
-	if (entry) {
-		rx_entry = container_of(entry, struct rxr_rx_entry, entry);
-		rx_entry->rxr_flags |= RXR_RECV_CANCEL;
-		if (rx_entry->fi_flags & FI_MULTI_RECV)
-			rxr_cq_handle_multi_recv_completion(ep, rx_entry);
+	if (!entry) {
 		fastlock_release(&ep->util_ep.lock);
-		memset(&err_entry, 0, sizeof(err_entry));
-		err_entry.op_context = rx_entry->cq_entry.op_context;
-		err_entry.flags |= rx_entry->cq_entry.flags;
-		err_entry.tag = rx_entry->tag;
-		err_entry.err = FI_ECANCELED;
-		err_entry.prov_errno = -FI_ECANCELED;
-
-		domain = rxr_ep_domain(ep);
-		api_version =
-			 domain->util_domain.fabric->fabric_fid.api_version;
-		if (FI_VERSION_GE(api_version, FI_VERSION(1, 5)))
-			err_entry.err_data_size = 0;
-		return ofi_cq_write_error(ep->util_ep.rx_cq, &err_entry);
+		return 0;
 	}
 
+	rx_entry = container_of(entry, struct rxr_rx_entry, entry);
+	rx_entry->rxr_flags |= RXR_RECV_CANCEL;
+	if (rx_entry->fi_flags & FI_MULTI_RECV &&
+	    rx_entry->rxr_flags & RXR_MULTI_RECV_POSTED) {
+		if (dlist_empty(&rx_entry->multi_recv_consumers)) {
+			/*
+			 * No pending messages for the buffer,
+			 * release it back to the app.
+			 */
+			rx_entry->cq_entry.flags |= FI_MULTI_RECV;
+		} else {
+			rx_entry = container_of(rx_entry->multi_recv_consumers.next,
+						struct rxr_rx_entry,
+						multi_recv_entry);
+			rxr_cq_handle_multi_recv_completion(ep, rx_entry);
+		}
+	} else if (rx_entry->fi_flags & FI_MULTI_RECV &&
+		   rx_entry->rxr_flags & RXR_MULTI_RECV_CONSUMER) {
+			rxr_cq_handle_multi_recv_completion(ep, rx_entry);
+	}
 	fastlock_release(&ep->util_ep.lock);
-	return 0;
+	memset(&err_entry, 0, sizeof(err_entry));
+	err_entry.op_context = rx_entry->cq_entry.op_context;
+	err_entry.flags |= rx_entry->cq_entry.flags;
+	err_entry.tag = rx_entry->tag;
+	err_entry.err = FI_ECANCELED;
+	err_entry.prov_errno = -FI_ECANCELED;
+
+	domain = rxr_ep_domain(ep);
+	api_version =
+		 domain->util_domain.fabric->fabric_fid.api_version;
+	if (FI_VERSION_GE(api_version, FI_VERSION(1, 5)))
+		err_entry.err_data_size = 0;
+	/*
+	 * Other states are currently receiving data. Subsequent messages will
+	 * be sunk (via RXR_RECV_CANCEL flag) and the completion suppressed.
+	 */
+	if (rx_entry->state & (RXR_RX_INIT | RXR_RX_UNEXP | RXR_RX_MATCHED))
+		rxr_release_rx_entry(ep, rx_entry);
+	return ofi_cq_write_error(ep->util_ep.rx_cq, &err_entry);
 }
 
 static ssize_t rxr_ep_cancel(fid_t fid_ep, void *context)
@@ -2618,7 +2706,6 @@ static void rxr_ep_progress_internal(struct rxr_ep *ep)
 				     rx_entry, queued_entry, tmp) {
 		if (rx_entry->state == RXR_RX_QUEUED_CTS)
 			ret = rxr_cq_post_cts(ep, rx_entry,
-					      rxr_env.rx_window_size,
 					      rx_entry->total_len -
 					      rx_entry->bytes_done);
 		else

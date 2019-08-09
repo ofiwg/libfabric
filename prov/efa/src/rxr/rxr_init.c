@@ -41,6 +41,8 @@ struct fi_provider *lower_efa_prov;
 
 struct rxr_env rxr_env = {
 	.rx_window_size	= RXR_DEF_MAX_RX_WINDOW,
+	.tx_max_credits = RXR_DEF_MAX_TX_CREDITS,
+	.tx_min_credits = RXR_DEF_MIN_TX_CREDITS,
 	.tx_queue_size = 0,
 	.enable_sas_ordering = 1,
 	.recvwin_size = RXR_RECVWIN_SIZE,
@@ -60,6 +62,8 @@ struct rxr_env rxr_env = {
 static void rxr_init_env(void)
 {
 	fi_param_get_int(&rxr_prov, "rx_window_size", &rxr_env.rx_window_size);
+	fi_param_get_int(&rxr_prov, "tx_max_credits", &rxr_env.tx_max_credits);
+	fi_param_get_int(&rxr_prov, "tx_min_credits", &rxr_env.tx_min_credits);
 	fi_param_get_int(&rxr_prov, "tx_queue_size", &rxr_env.tx_queue_size);
 	fi_param_get_int(&rxr_prov, "enable_sas_ordering", &rxr_env.enable_sas_ordering);
 	fi_param_get_int(&rxr_prov, "recvwin_size", &rxr_env.recvwin_size);
@@ -142,6 +146,11 @@ static int rxr_copy_attr(const struct fi_info *info, struct fi_info *dup)
 			if (!dup->domain_attr->name)
 				return -FI_ENOMEM;
 		}
+	}
+	if (info->nic) {
+		dup->nic = ofi_nic_dup(info->nic);
+		if (!dup->nic)
+			return -FI_ENOMEM;
 	}
 	return 0;
 }
@@ -424,7 +433,11 @@ struct fi_provider rxr_prov = {
 EFA_INI
 {
 	fi_param_define(&rxr_prov, "rx_window_size", FI_PARAM_INT,
-			"Defines the maximum window size that a receiver will return for matched large messages. Defaults to the number of available posted receive buffers when the clear to send message is sent (Default: 16).");
+			"Defines the maximum window size that a receiver will return for matched large messages. (Default: 128).");
+	fi_param_define(&rxr_prov, "tx_max_credits", FI_PARAM_INT,
+			"Defines the maximum number of credits a sender requests from a receiver (Default: 64).");
+	fi_param_define(&rxr_prov, "tx_min_credits", FI_PARAM_INT,
+			"Defines the minimum number of credits a sender requests from a receiver (Default: 32).");
 	fi_param_define(&rxr_prov, "tx_queue_size", FI_PARAM_INT,
 			"Defines the maximum number of unacknowledged sends with the NIC.");
 	fi_param_define(&rxr_prov, "enable_sas_ordering", FI_PARAM_INT,
