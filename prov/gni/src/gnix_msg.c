@@ -409,7 +409,7 @@ static int __recv_completion_src(
 
 	if ((req->msg.recv_flags & FI_COMPLETION) && ep->recv_cq) {
 		if ((src_addr == FI_ADDR_NOTAVAIL) &&
-                    (req->msg.recv_flags & FI_SOURCE_ERR) != 0) {
+                    (ep->caps & FI_SOURCE_ERR) != 0) {
 			if (ep->domain->addr_format == FI_ADDR_STR) {
 				buffer = malloc(GNIX_FI_ADDR_STR_LEN);
 				rc = _gnix_ep_name_to_str(req->vc->gnix_ep_name, (char **)&buffer);
