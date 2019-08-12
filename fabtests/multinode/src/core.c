@@ -62,10 +62,6 @@ static int multinode_setup_fabric(int argc, char **argv)
 	size_t len;
 	int ret;
 
-	hints = fi_allocinfo();
-	if (!hints)
-		return EXIT_FAILURE;
-
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG;
 	hints->mode = FI_CONTEXT;
