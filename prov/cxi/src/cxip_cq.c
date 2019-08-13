@@ -171,6 +171,7 @@ struct cxip_req *cxip_cq_req_alloc(struct cxip_cq *cq, int remap,
 		CXIP_LOG_ERROR("Failed to allocate request\n");
 		goto out;
 	}
+	memset(req, 0, sizeof(*req));
 
 	if (remap) {
 		req->req_id = ofi_idx_insert(&cq->req_table, req);

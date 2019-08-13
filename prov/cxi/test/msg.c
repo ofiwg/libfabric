@@ -714,16 +714,14 @@ Test(msg, tagged_interop)
 }
 
 void validate_mr_rx_event(struct fi_cq_tagged_entry *cqe, void *context,
-			  size_t len, uint64_t flags, void *buf, uint64_t data,
+			  size_t len, uint64_t flags, uint64_t data,
 			  uint64_t tag)
 {
 	cr_assert(cqe->op_context == context, "CQE Context mismatch");
 	cr_assert(cqe->len == len, "Invalid CQE length");
 	cr_assert((cqe->flags & ~FI_MULTI_RECV) == flags,
-		  "CQE flags mismatch (%#lx %#lx)",
+		  "CQE flags mismatch (%#llx %#lx)",
 		  (cqe->flags & ~FI_MULTI_RECV), flags);
-	cr_assert(cqe->buf == buf, "Invalid CQE address (%p %p)",
-		  cqe->buf, buf);
 	cr_assert(cqe->data == data, "Invalid CQE data");
 	cr_assert(cqe->tag == tag, "Invalid CQE tag");
 }
@@ -811,9 +809,7 @@ void do_multi_recv(uint8_t *send_buf, size_t send_len,
 			rxe_flags = FI_MSG | FI_RECV;
 
 			validate_mr_rx_event(&rx_cqe, NULL, send_len,
-					     rxe_flags,
-					     recv_buf + (recved * send_len),
-					     0, 0);
+					     rxe_flags, 0, 0);
 			cr_assert(from == cxit_ep_fi_addr,
 				  "Invalid source address");
 
@@ -873,7 +869,7 @@ void do_multi_recv(uint8_t *send_buf, size_t send_len,
 			cr_assert(err_cqe.err_data == NULL);
 			cr_assert(err_cqe.err_data_size == 0);
 
-			if (rx_cqe.flags & FI_MULTI_RECV) {
+			if (err_cqe.flags & FI_MULTI_RECV) {
 				cr_assert(!dequeued);
 				dequeued = true;
 			}
@@ -904,7 +900,7 @@ void do_multi_recv(uint8_t *send_buf, size_t send_len,
 				     "fi_cq_read unexpected value %d",
 				     ret);
 		}
-	} while (sent < sends && (recved + err_recved) < sends);
+	} while (sent < sends || (recved + err_recved) < sends);
 }
 
 struct msg_multi_recv_params {
@@ -916,9 +912,9 @@ struct msg_multi_recv_params {
 };
 
 #define SHORT_SEND_LEN 128
-#define SHORT_SENDS 100
+#define SHORT_SENDS 200
 #define LONG_SEND_LEN 4096
-#define LONG_SENDS 2
+#define LONG_SENDS 20
 #define SHORT_OLEN (3*1024)
 #define LONG_OLEN 1024
 

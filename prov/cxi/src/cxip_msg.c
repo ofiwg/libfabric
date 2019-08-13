@@ -310,26 +310,10 @@ static void recv_req_report(struct cxip_req *req)
 }
 
 /*
- * recv_req_event_len() - Return the length of the transaction given a receive
- * request and a Put or Put Overflow event.
+ * recv_req_put_event() - Update common receive request fields
  *
- * Don't use event mlength as it may only represent the eager portion of the
- * transaction.
- */
-static uint64_t
-recv_req_event_len(struct cxip_req *req, const union c_event *event)
-{
-	if (event->tgt_long.rlength > req->recv.ulen)
-		return req->recv.ulen;
-	return event->tgt_long.rlength;
-}
-
-/*
- * recv_req_put_event() - Update receive request using the received Put event.
- *
- * Use rlength, match_bits, initiator, and return_code in Put event to update
- * receive request state. This information is available in all Put and Put
- * Overflow events.
+ * Populate a receive request with information found in all receive event
+ * types.
  */
 static void
 recv_req_put_event(struct cxip_req *req, const union c_event *event)
@@ -338,14 +322,12 @@ recv_req_put_event(struct cxip_req *req, const union c_event *event)
 		.raw = event->tgt_long.match_bits
 	};
 
-	/* data_len is used in completion events. */
-	req->data_len = recv_req_event_len(req, event);
+	assert(event->hdr.event_type == C_EVENT_PUT ||
+	       event->hdr.event_type == C_EVENT_PUT_OVERFLOW ||
+	       event->hdr.event_type == C_EVENT_RENDEZVOUS);
 
 	/* rlen is used to detect truncation. */
 	req->recv.rlen = event->tgt_long.rlength;
-
-	/* oflow_start is used to correlate Put and Put Overflow events. */
-	req->recv.oflow_start = event->tgt_long.start;
 
 	/* RC is used when generating completion events. */
 	req->recv.rc = cxi_tgt_event_rc(event);
@@ -354,12 +336,13 @@ recv_req_put_event(struct cxip_req *req, const union c_event *event)
 	req->tag = mb.tag;
 
 	/* rdzv_id is used to correlate Put and Put Overflow events when using
-	 * offloaded RPut.
+	 * offloaded RPut. Otherwise, Overflow buffer start address is used to
+	 * correlate events.
 	 */
 	if (event->tgt_long.rendezvous)
 		req->recv.rdzv_id = event->tgt_long.rendezvous_id;
 	else
-		req->recv.rdzv_id = mb.rdzv_id_hi;
+		req->recv.oflow_start = event->tgt_long.start;
 
 	/* Initiator is provided in completion events. */
 	if (event->hdr.event_type == C_EVENT_RENDEZVOUS) {
@@ -372,6 +355,8 @@ recv_req_put_event(struct cxip_req *req, const union c_event *event)
 		req->recv.initiator =
 				event->tgt_long.initiator.initiator.process;
 	}
+
+	/* data_len must be set uniquely for each protocol! */
 }
 
 /*
@@ -431,46 +416,32 @@ static struct cxip_req *rdzv_mrecv_req_lookup(struct cxip_req *req,
 }
 
 /*
- * mrecv_req_event() - Create a new request using an event targeting a
+ * mrecv_req_dup() - Create a new request using an event targeting a
  * multi-recv buffer.
  *
- * mrecv_req is a prevoiusly posted multi-recv buffer request. event is a Put
- * or Put Overflow event associated with mrecv_req. put_req is a new request.
- * If put_req is null, a new request is allocated. Some callers only need
- * request information to generate a completion. In this case, the stack is
- * used to hold request information.
+ * @mrecv_req: A previously posted multi-recv buffer request.
+ * @event: A Put, Put Overflow or Rendezvous event associated with mrecv_req.
  */
 static struct cxip_req *
-mrecv_req_event(struct cxip_req *mrecv_req, const union c_event *event,
-		struct cxip_req *put_req)
+mrecv_req_dup(struct cxip_req *mrecv_req, const union c_event *event)
 {
 	struct cxip_rxc *rxc = mrecv_req->recv.rxc;
-	struct cxip_req *req = put_req;
+	struct cxip_req *req;
 
-	if (!req) {
-		req = cxip_cq_req_alloc(rxc->recv_cq, 0, rxc);
-		if (!req)
-			return NULL;
-	}
+	req = cxip_cq_req_alloc(rxc->recv_cq, 0, rxc);
+	if (!req)
+		return NULL;
 
-	/* Create new, updated request for this mrecv Put. */
-	*req = *mrecv_req;
-	req->req_id = -1;
+	/* Duplicate the parent request. */
+	req->cb = mrecv_req->cb;
+	req->flags = mrecv_req->flags;
+	req->recv = mrecv_req->recv;
+
+	/* Update fields specific to this Send */
 	recv_req_put_event(req, event);
-
-	req->recv.recv_buf = (char *)mrecv_req->recv.recv_buf +
-			mrecv_req->recv.start_offset;
-	req->buf = (uint64_t)req->recv.recv_buf;
-
 	req->recv.parent = mrecv_req;
 
-	/* Track the multi-recv buffer offset. */
-	mrecv_req->recv.start_offset += req->data_len;
-	mrecv_req->recv.ulen -= req->data_len;
-
-	CXIP_LOG_DBG("type: %s parent: %p child: %p buf: %p len: %lu\n",
-		     cxi_event_to_str(event), mrecv_req, req,
-		     req->recv.recv_buf, req->data_len);
+	/* Start pointer and data_len must be set elsewhere! */
 
 	return req;
 }
@@ -481,7 +452,7 @@ mrecv_req_event(struct cxip_req *mrecv_req, const union c_event *event,
  *
  * Each rendezvous Put transaction targeting a multi-receive buffer is tracked
  * using a separate child request. A child request is uniquely identified by
- * rendezvous ID and source address. Return a reference to the child request
+ * rendezvous ID and source address. Return a reference to a child request
  * which matches the event. Allocate a new child request, if necessary.
  */
 static struct cxip_req *
@@ -490,15 +461,18 @@ rdzv_mrecv_req_event(struct cxip_req *mrecv_req, const union c_event *event)
 	struct cxip_req *req = rdzv_mrecv_req_lookup(mrecv_req, event);
 
 	if (!req) {
-		req = mrecv_req_event(mrecv_req, event, NULL);
+		req = mrecv_req_dup(mrecv_req, event);
 		if (!req)
 			return NULL;
 
 		dlist_insert_tail(&req->recv.children,
 				  &mrecv_req->recv.children);
+
+		CXIP_LOG_DBG("New child: %p parent: %p event: %s\n",
+			     req, mrecv_req, cxi_event_to_str(event));
 	} else {
-		CXIP_LOG_DBG("type: %s parent: %p child: %p\n",
-			     cxi_event_to_str(event), mrecv_req, req);
+		CXIP_LOG_DBG("Found child: %p parent: %p event: %s\n",
+			     req, mrecv_req, cxi_event_to_str(event));
 	}
 
 	/* Rendezvous events contain the wrong match bits. Make sure the tag is
@@ -599,11 +573,11 @@ static int issue_rdzv_get(struct cxip_req *req, const union c_event *event)
 		cmd.full_dma.dfa.unicast.nid = cxi_dfa_nid(init);
 		cmd.full_dma.dfa.unicast.endpoint_defined = cxi_dfa_ep(init);
 		cmd.full_dma.index_ext = cxi_build_dfa_ext(pid_idx);
-		cmd.full_dma.request_len = recv_req_event_len(req, event);
-		if (cmd.full_dma.request_len < tev->mlength)
+		if (req->data_len < tev->mlength)
 			cmd.full_dma.request_len = 0;
 		else
-			cmd.full_dma.request_len -= tev->mlength;
+			cmd.full_dma.request_len =
+				req->data_len - tev->mlength;
 		cmd.full_dma.local_addr = tev->start;
 		cmd.full_dma.remote_offset = tev->remote_offset;
 	} else {
@@ -615,7 +589,7 @@ static int issue_rdzv_get(struct cxip_req *req, const union c_event *event)
 		cxi_build_dfa(nic, pid, pid_bits, pid_idx, &dfa, &idx_ext);
 		cmd.full_dma.dfa = dfa;
 		cmd.full_dma.index_ext = idx_ext;
-		cmd.full_dma.request_len = recv_req_event_len(req, event);
+		cmd.full_dma.request_len = req->data_len;
 		cmd.full_dma.local_addr = CXI_VA_TO_IOVA(req->recv.recv_md->md,
 							 req->recv.recv_buf);
 		cmd.full_dma.remote_offset = 0;
@@ -728,6 +702,8 @@ cxip_oflow_sink_cb(struct cxip_req *req, const union c_event *event)
 
 	fastlock_release(&rxc->rx_lock);
 
+	CXIP_LOG_ERROR("Overflow beat Put event: %p\n", req);
+
 	return FI_SUCCESS;
 
 err_put:
@@ -802,7 +778,7 @@ cxip_oflow_rdzv_cb(struct cxip_req *req, const union c_event *event)
 
 	if (ux_recv->recv.multi_recv) {
 		ux_recv = rdzv_mrecv_req_event(ux_recv, event);
-		if (!req) {
+		if (!ux_recv) {
 			fastlock_release(&rxc->rx_lock);
 			return -FI_EAGAIN;
 		}
@@ -814,13 +790,15 @@ cxip_oflow_rdzv_cb(struct cxip_req *req, const union c_event *event)
 
 	oflow_va = (void *)CXI_IOVA_TO_VA(oflow_buf->md->md,
 					  event->tgt_long.start);
-	oflow_bytes = MIN(event->tgt_long.mlength, req->data_len);
-	memcpy(req->recv.recv_buf, oflow_va, oflow_bytes);
+	oflow_bytes = MIN(event->tgt_long.mlength, ux_recv->data_len);
+	memcpy(ux_recv->recv.recv_buf, oflow_va, oflow_bytes);
 	oflow_req_put_bytes(req, event->tgt_long.mlength);
 
 	dlist_remove(&ux_recv->recv.ux_entry);
 
 	fastlock_release(&rxc->rx_lock);
+
+	CXIP_LOG_ERROR("Overflow beat Put event: %p\n", ux_recv);
 
 	return FI_SUCCESS;
 
@@ -971,8 +949,14 @@ static int cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 
 	fastlock_release(&rxc->rx_lock);
 
+	CXIP_LOG_ERROR("Overflow beat Put event: %p\n", ux_recv);
+
 	recv_req_report(ux_recv);
-	recv_req_complete(ux_recv);
+
+	if (ux_recv->recv.multi_recv)
+		cxip_cq_req_free(ux_recv);
+	else
+		recv_req_complete(ux_recv);
 
 	return FI_SUCCESS;
 
@@ -1174,7 +1158,7 @@ static int cxip_rxc_sink_init(struct cxip_rxc *rxc)
 		goto unmap_ux;
 	}
 
-	ret = issue_append_le(rxc->rx_pte->pte, ux_buf, 1, md, // TODO len 1?
+	ret = issue_append_le(rxc->rx_pte->pte, ux_buf, 0, md,
 			      C_PTL_LIST_OVERFLOW, req->req_id, mb.raw, ib.raw,
 			      CXI_MATCH_ID_ANY, 0, false, false, false, true,
 			      false, true, false, rxc->rx_cmdq);
@@ -1313,6 +1297,38 @@ void cxip_msg_oflow_fini(struct cxip_rxc *rxc)
 }
 
 /*
+ * mrecv_req_oflow_event() - Set start and length uniquely for an unexpected
+ * mrecv request.
+ *
+ * Overflow buffer events contain a start address representing the offset into
+ * the Overflow buffer where data was written. When a unexpected header is
+ * later matched to a multi-receive buffer in the priority list, The Put
+ * Overflow event does not contain the offset into the Priority list buffer
+ * where data should be copied. Software must track the the Priority list
+ * buffer offset using ordered Put Overflow events.
+ */
+static void
+mrecv_req_oflow_event(struct cxip_req *req, const union c_event *event)
+{
+	struct cxip_req *parent = req->recv.parent;
+	uintptr_t rtail;
+	uintptr_t mrecv_tail;
+
+	req->recv.recv_buf = (uint8_t *)parent->recv.recv_buf +
+			parent->recv.start_offset;
+	req->buf = (uint64_t)req->recv.recv_buf;
+
+	rtail = req->buf + event->tgt_long.rlength;
+	mrecv_tail = (uint64_t)parent->recv.recv_buf + parent->recv.ulen;
+
+	req->data_len = event->tgt_long.rlength;
+	if (rtail > mrecv_tail)
+		req->data_len -= rtail - mrecv_tail;
+
+	parent->recv.start_offset += req->data_len;
+}
+
+/*
  * cxip_recv_rdzv_cb() - Progress rendezvous receive events.
  *
  * Handle rendezvous target events. All target events which are related to an
@@ -1320,6 +1336,27 @@ void cxip_msg_oflow_fini(struct cxip_rxc *rxc)
  *
  * Note that Reply events that were generated from a SW-issued Get will not
  * have the rendezvous bit set.
+ *
+ * There is some complexity in how the receive buffer start pointer (for
+ * multi-receives) and receive length are set when using the rendezvous
+ * protocol. The method for calculating these for each scenario is below.
+ *
+ * Expected Receives:
+ *	Calculate receive length using Rendezvous event. It needs to be
+ *	available for SW issued Gets.
+ *
+ * Unexpected Receives:
+ *	Calculate receive length using Put Overflow event. It needs to be
+ *	available for copying eager data into the user buffer. Note that
+ *	receive length is set twice for a UX receive using both Rendezvous and
+ *	Put Overflow events.
+ *
+ * Expected Multi-Receives:
+ *	Use start, mlength and rlength in the Rendezvous event.
+ *
+ * Unexpected Multi-Receives:
+ *	Track user buffer offset in software using the order of Put Overflow
+ *	events.
  */
 static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 {
@@ -1360,8 +1397,17 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 					fastlock_release(&rxc->rx_lock);
 					return -FI_EAGAIN;
 				}
+
+				/* Set start and length uniquely for an
+				 * unexpected mrecv request.
+				 */
+				mrecv_req_oflow_event(req, event);
 			} else {
 				recv_req_put_event(req, event);
+
+				req->data_len = event->tgt_long.rlength;
+				if (req->data_len > req->recv.ulen)
+					req->data_len = req->recv.ulen;
 			}
 			dlist_insert_tail(&req->recv.ux_entry,
 					  &rxc->ux_rdzv_recvs);
@@ -1385,8 +1431,17 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 				fastlock_release(&rxc->rx_lock);
 				return -FI_EAGAIN;
 			}
+
+			/* Set start and length uniquely for an unexpected
+			 * mrecv request.
+			 */
+			mrecv_req_oflow_event(req, event);
 		} else {
 			recv_req_put_event(req, event);
+
+			req->data_len = event->tgt_long.rlength;
+			if (req->data_len > req->recv.ulen)
+				req->data_len = req->recv.ulen;
 		}
 
 		oflow_buf = ux_send->req->oflow.oflow_buf;
@@ -1413,6 +1468,11 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 			req = rdzv_mrecv_req_event(req, event);
 			if (!req)
 				return -FI_EAGAIN;
+
+			/* Set start pointer and data_len using Rendezvous or
+			 * Put Overflow event (depending on if message was
+			 * unexpected).
+			 */
 		} else {
 			recv_req_put_event(req, event);
 		}
@@ -1425,12 +1485,43 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 			req = rdzv_mrecv_req_event(req, event);
 			if (!req)
 				return -FI_EAGAIN;
+
+			/* Use Rendezvous event to set start pointer and
+			 * data_len for expected Sends.
+			 */
+			struct cxip_req *parent = req->recv.parent;
+			uintptr_t rtail;
+			uintptr_t mrecv_tail;
+
+			req->buf = (uint64_t)(CXI_IOVA_TO_VA(
+						parent->recv.recv_md->md,
+						event->tgt_long.start) -
+					event->tgt_long.mlength);
+			rtail = req->buf + event->tgt_long.rlength;
+			mrecv_tail = (uint64_t)parent->recv.recv_buf +
+				parent->recv.ulen;
+
+			req->data_len = event->tgt_long.rlength;
+			if (rtail > mrecv_tail)
+				req->data_len -= rtail - mrecv_tail;
+		} else {
+			req->data_len = event->tgt_long.rlength;
+			if (req->data_len > req->recv.ulen)
+				req->data_len = req->recv.ulen;
 		}
 
 		if (!event->tgt_long.get_issued) {
 			int ret = issue_rdzv_get(req, event);
-			if (ret != FI_SUCCESS)
+			if (ret != FI_SUCCESS) {
+				/* Undo multi-recv event processing. */
+				if (req->recv.multi_recv &&
+				    !req->recv.rdzv_events) {
+					dlist_remove(&req->recv.children);
+					cxip_cq_req_free(req);
+				}
 				return -FI_EAGAIN;
+			}
+
 			CXIP_LOG_DBG("Software issued Get, req: %p\n", req);
 		}
 
@@ -1499,8 +1590,6 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 	struct cxip_ux_send *ux_send;
 	struct cxip_oflow_buf *oflow_buf;
 	void *oflow_va;
-	void *user_va;
-	size_t oflow_bytes;
 	bool rdzv = false;
 
 	/* All events related to an offloaded rendezvous receive will be
@@ -1550,13 +1639,23 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 			 * event arrives.
 			 */
 			if (req->recv.multi_recv) {
-				req = mrecv_req_event(req, event, NULL);
+				req = mrecv_req_dup(req, event);
 				if (!req) {
 					fastlock_release(&rxc->rx_lock);
 					return -FI_EAGAIN;
 				}
+
+				/* Set start and length uniquely for an
+				 * unexpected mrecv request.
+				 */
+				mrecv_req_oflow_event(req, event);
 			} else {
 				recv_req_put_event(req, event);
+
+				if (event->tgt_long.mlength > req->recv.ulen)
+					req->data_len = req->recv.ulen;
+				else
+					req->data_len = event->tgt_long.mlength;
 			}
 			dlist_insert_tail(&req->recv.ux_entry, &rxc->ux_recvs);
 
@@ -1576,13 +1675,23 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 
 		if (oflow_buf->type == OFLOW_BUF_SINK) {
 			if (req->recv.multi_recv) {
-				req = mrecv_req_event(req, event, NULL);
+				req = mrecv_req_dup(req, event);
 				if (!req) {
 					fastlock_release(&rxc->rx_lock);
 					return -FI_EAGAIN;
 				}
+
+				/* Set start and length uniquely for an
+				 * unexpected mrecv request.
+				 */
+				mrecv_req_oflow_event(req, event);
 			} else {
 				recv_req_put_event(req, event);
+
+				if (event->tgt_long.rlength > req->recv.ulen)
+					req->data_len = req->recv.ulen;
+				else
+					req->data_len = event->tgt_long.rlength;
 			}
 
 			/* For unexpected, long, eager messages, issue a Get to
@@ -1594,18 +1703,37 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 				free(ux_send);
 
 				CXIP_LOG_DBG("Issued Get, req: %p\n", req);
+			} else if (req->recv.multi_recv) {
+				/* Undo multi-recv event processing. */
+				req->recv.parent->recv.start_offset -=
+						req->data_len;
+				cxip_cq_req_free(req);
 			}
 
 			fastlock_release(&rxc->rx_lock);
 			return ret;
 		}
 
+		if (req->recv.multi_recv) {
+			req = mrecv_req_dup(req, event);
+			if (!req)
+				return -FI_EAGAIN;
+
+			/* Set start and length uniquely for an unexpected
+			 * mrecv request.
+			 */
+			mrecv_req_oflow_event(req, event);
+		} else {
+			if (event->tgt_long.mlength > req->recv.ulen)
+				req->data_len = req->recv.ulen;
+			else
+				req->data_len = event->tgt_long.mlength;
+		}
+
 		/* Copy data out of overflow buffer. */
 		oflow_va = (void *)CXI_IOVA_TO_VA(oflow_buf->md->md,
 				event->tgt_long.start);
-		user_va = (char *)req->recv.recv_buf + req->recv.start_offset;
-		oflow_bytes = recv_req_event_len(req, event);
-		memcpy(user_va, oflow_va, oflow_bytes);
+		memcpy(req->recv.recv_buf, oflow_va, req->data_len);
 		oflow_req_put_bytes(ux_send->req, event->tgt_long.mlength);
 
 		dlist_remove(&ux_send->ux_entry);
@@ -1614,10 +1742,8 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		fastlock_release(&rxc->rx_lock);
 
 		if (req->recv.multi_recv) {
-			struct cxip_req put_req;
-
-			mrecv_req_event(req, event, &put_req);
-			recv_req_report(&put_req);
+			recv_req_report(req);
+			cxip_cq_req_free(req);
 		} else {
 			recv_req_put_event(req, event);
 			recv_req_report(req);
@@ -1629,11 +1755,19 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		 * request.
 		 */
 		if (req->recv.multi_recv) {
-			struct cxip_req put_req;
+			req = mrecv_req_dup(req, event);
+			if (!req)
+				return -FI_EAGAIN;
 
-			mrecv_req_event(req, event, &put_req);
-			recv_req_report(&put_req);
+			req->buf = (uint64_t)(CXI_IOVA_TO_VA(
+					req->recv.recv_md->md,
+					event->tgt_long.start));
+			req->data_len = event->tgt_long.mlength;
+
+			recv_req_report(req);
+			cxip_cq_req_free(req);
 		} else {
+			req->data_len = event->tgt_long.mlength;
 			recv_req_put_event(req, event);
 			recv_req_report(req);
 			recv_req_complete(req);
