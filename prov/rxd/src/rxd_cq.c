@@ -1031,7 +1031,6 @@ static void rxd_handle_op(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 			rxd_ep_send_ack(ep, base_hdr->peer);
 			return;
 		}
-		ep->peers[base_hdr->peer].rx_window = 0;
 		goto ack;
 	}
 
