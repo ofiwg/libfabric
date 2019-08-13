@@ -110,11 +110,20 @@ struct fi_ibv_xrc_ep *fi_ibv_eq_xrc_conn_tag2ep(struct fi_ibv_eq *eq,
 
 	index = ofi_key2idx(&eq->xrc.conn_key_idx, (uint64_t)conn_tag);
 	ep = ofi_idx_lookup(eq->xrc.conn_key_map, index);
-	if (!ep || !ep->conn_setup || (ep->conn_setup->conn_tag != conn_tag)) {
-		VERBS_WARN(FI_LOG_EP_CTRL,
-			   "Invalid/stale XRC connection tag\n");
-		return ep;
+	if (!ep || ep->magic != VERBS_XRC_EP_MAGIC) {
+		VERBS_WARN(FI_LOG_EP_CTRL, "XRC EP is not valid\n");
+		return NULL;
 	}
+	if (!ep->conn_setup) {
+		VERBS_WARN(FI_LOG_EP_CTRL,
+			   "Bad state, no connection data\n");
+		return NULL;
+	}
+	if (ep->conn_setup->conn_tag != conn_tag) {
+		VERBS_WARN(FI_LOG_EP_CTRL, "Connection tag mismatch\n");
+		return NULL;
+	}
+
 	ofi_idx_remove(eq->xrc.conn_key_map, index);
 	ep->conn_setup->conn_tag = VERBS_CONN_TAG_INVALID;
 
@@ -167,8 +176,10 @@ fi_ibv_eq_cm_getinfo(struct rdma_cm_event *event, struct fi_info *pep_info,
 	const char *devname = ibv_get_device_name(event->id->verbs->device);
 	int ret = -FI_ENOMEM;
 
-	if (!(hints = fi_dupinfo(pep_info)))
+	if (!(hints = fi_dupinfo(pep_info))) {
+		VERBS_WARN(FI_LOG_EP_CTRL, "dupinfo failure\n");
 		return -FI_ENOMEM;
+	}
 
 	/* Free src_addr info from pep to avoid addr reuse errors */
 	free(hints->src_addr);
@@ -217,8 +228,11 @@ fi_ibv_eq_cm_getinfo(struct rdma_cm_event *event, struct fi_info *pep_info,
 	ofi_straddr_dbg(&fi_ibv_prov, FI_LOG_EQ, "dst", (*info)->dest_addr);
 
 	connreq = calloc(1, sizeof *connreq);
-	if (!connreq)
+	if (!connreq) {
+		VERBS_WARN(FI_LOG_EP_CTRL,
+			   "Unable to allocate connreq memory\n");
 		goto err2;
+	}
 
 	connreq->handle.fclass = FI_CLASS_CONNREQ;
 	connreq->id = event->id;
@@ -291,9 +305,11 @@ fi_ibv_eq_xrc_connreq_event(struct fi_ibv_eq *eq, struct fi_eq_cm_entry *entry,
 	ep = fi_ibv_eq_xrc_conn_tag2ep(eq, connreq->xrc.conn_tag);
 	if (!ep) {
 		VERBS_WARN(FI_LOG_EP_CTRL,
-			   "Reciprocal XRC connection tag not found\n");
+			   "Reciprocal XRC connection tag 0x%x not found\n",
+			   connreq->xrc.conn_tag);
 		goto done;
 	}
+	assert(ep->conn_state == FI_IBV_XRC_ORIG_CONNECTED);
 
 	ep->tgt_id = connreq->id;
 	ep->tgt_id->context = &ep->base_ep.util_ep.ep_fid.fid;
@@ -337,7 +353,7 @@ fi_ibv_eq_xrc_conn_event(struct fi_ibv_xrc_ep *ep,
 	size_t priv_datalen = cma_event->param.conn.private_data_len;
 	int ret;
 
-	VERBS_DBG(FI_LOG_FABRIC, "EP %p INITIAL CONNECTION DONE state %d\n",
+	VERBS_DBG(FI_LOG_EP_CTRL, "EP %p INITIAL CONNECTION DONE state %d\n",
 		  ep, ep->conn_state);
 	fi_ibv_next_xrc_conn_state(ep);
 
@@ -354,16 +370,17 @@ fi_ibv_eq_xrc_conn_event(struct fi_ibv_xrc_ep *ep,
 			goto err;
 		}
 		ep->peer_srqn = xrc_info.conn_data;
-		fi_ibv_ep_ini_conn_done(ep, xrc_info.conn_data,
-					xrc_info.conn_param.qp_num);
 		fi_ibv_eq_skip_xrc_cm_data(&priv_data, &priv_datalen);
 		fi_ibv_save_priv_data(ep, priv_data, priv_datalen);
+		fi_ibv_ep_ini_conn_done(ep, xrc_info.conn_data,
+					xrc_info.conn_param.qp_num);
 	} else {
 		fi_ibv_ep_tgt_conn_done(ep);
 		ret = fi_ibv_connect_xrc(ep, NULL, FI_IBV_RECIP_CONN, &cm_data,
 					 sizeof(cm_data));
 		if (ret) {
 			fi_ibv_prev_xrc_conn_state(ep);
+			ep->tgt_id->qp = NULL;
 			rdma_disconnect(ep->tgt_id);
 			goto err;
 		}
@@ -385,7 +402,7 @@ fi_ibv_eq_xrc_recip_conn_event(struct fi_ibv_eq *eq,
 	int ret;
 
 	fi_ibv_next_xrc_conn_state(ep);
-	VERBS_DBG(FI_LOG_FABRIC, "EP %p RECIPROCAL CONNECTION DONE state %d\n",
+	VERBS_DBG(FI_LOG_EP_CTRL, "EP %p RECIPROCAL CONNECTION DONE state %d\n",
 		  ep, ep->conn_state);
 
 	/* If this is the reciprocal active side notification */
@@ -404,7 +421,7 @@ fi_ibv_eq_xrc_recip_conn_event(struct fi_ibv_eq *eq,
 		fi_ibv_ep_ini_conn_done(ep, xrc_info.conn_data,
 					xrc_info.conn_param.qp_num);
 	} else {
-			fi_ibv_ep_tgt_conn_done(ep);
+		fi_ibv_ep_tgt_conn_done(ep);
 	}
 
 	/* The internal reciprocal XRC connection has completed. Return the
@@ -428,11 +445,18 @@ fi_ibv_eq_xrc_rej_event(struct fi_ibv_eq *eq, struct rdma_cm_event *cma_event)
 	enum fi_ibv_xrc_ep_conn_state state;
 
 	ep = container_of(fid, struct fi_ibv_xrc_ep, base_ep.util_ep.ep_fid);
-	state = ep->conn_state;
-
-	if (ep->base_ep.id != cma_event->id || state == FI_IBV_XRC_CONNECTED) {
+	if (ep->magic != VERBS_XRC_EP_MAGIC) {
 		VERBS_WARN(FI_LOG_EP_CTRL,
-			   "Stale CM Reject %d received\n", cma_event->status);
+			   "CM ID context not valid\n");
+		return -FI_EAGAIN;
+	}
+
+	state = ep->conn_state;
+	if (ep->base_ep.id != cma_event->id ||
+	    (state != FI_IBV_XRC_ORIG_CONNECTING &&
+	     state != FI_IBV_XRC_RECIP_CONNECTING)) {
+		VERBS_WARN(FI_LOG_EP_CTRL,
+			   "Stale/invalid CM reject %d received\n", cma_event->status);
 		return -FI_EAGAIN;
 	}
 
@@ -459,12 +483,46 @@ fi_ibv_eq_xrc_rej_event(struct fi_ibv_eq *eq, struct rdma_cm_event *cma_event)
 	return state == FI_IBV_XRC_ORIG_CONNECTING ? FI_SUCCESS : -FI_EAGAIN;
 }
 
+/* Caller must hold eq:lock */                                                                                  
+static inline int
+fi_ibv_eq_xrc_cm_err_event(struct fi_ibv_eq *eq,
+                           struct rdma_cm_event *cma_event)
+{
+	struct fi_ibv_xrc_ep *ep;
+	fid_t fid = cma_event->id->context;
+
+	ep = container_of(fid, struct fi_ibv_xrc_ep, base_ep.util_ep.ep_fid);
+	if (ep->magic != VERBS_XRC_EP_MAGIC) {
+		VERBS_WARN(FI_LOG_EP_CTRL, "CM ID context invalid\n");
+		return -FI_EAGAIN;
+	}
+
+	/* Connect errors can be reported on active or passive side, all other
+	 * errors considered are reported on the active side only */
+	if ((ep->base_ep.id != cma_event->id) &&
+	    (cma_event->event == RDMA_CM_EVENT_CONNECT_ERROR &&
+	     ep->tgt_id != cma_event->id)) {
+		VERBS_WARN(FI_LOG_EP_CTRL, "CM error not valid for EP\n");
+		return -FI_EAGAIN;
+	}
+
+	VERBS_WARN(FI_LOG_EP_CTRL, "CM error event %s, status %d\n",
+		   rdma_event_str(cma_event->event), cma_event->status);
+	if (ep->base_ep.info->src_addr)
+		ofi_straddr_log(&fi_ibv_prov, FI_LOG_WARN, FI_LOG_EP_CTRL,
+				"Src ", ep->base_ep.info->src_addr);
+	if (ep->base_ep.info->dest_addr)
+		ofi_straddr_log(&fi_ibv_prov, FI_LOG_WARN, FI_LOG_EP_CTRL,
+				"Dest ", ep->base_ep.info->dest_addr);
+        ep->conn_state = FI_IBV_XRC_ERROR;
+        return FI_SUCCESS;
+}
+
 /* Caller must hold eq:lock */
 static inline int
 fi_ibv_eq_xrc_connected_event(struct fi_ibv_eq *eq,
 			      struct rdma_cm_event *cma_event,
-			      struct fi_eq_cm_entry *entry, size_t len,
-			      int *acked)
+			      struct fi_eq_cm_entry *entry, size_t len)
 {
 	struct fi_ibv_xrc_ep *ep;
 	fid_t fid = cma_event->id->context;
@@ -480,11 +538,9 @@ fi_ibv_eq_xrc_connected_event(struct fi_ibv_eq *eq,
 
 	ret = fi_ibv_eq_xrc_recip_conn_event(eq, ep, cma_event, entry, len);
 
-	/* Bidirectional connection setup is complete, disconnect RDMA CM
-	 * ID(s) and release shared QP reservations/hardware resources
-	 * that were needed for shared connection setup only. */
-	*acked = 1;
-	rdma_ack_cm_event(cma_event);
+	/* Bidirectional connection setup is complete, release RDMA CM ID resources.
+	 * Note this will initiate release of shared QP reservation/hardware resources
+	 * that were needed for XRC shared connection setup as well. */
 	fi_ibv_free_xrc_conn_setup(ep, 1);
 
 	return ret;
@@ -501,23 +557,26 @@ fi_ibv_eq_xrc_timewait_event(struct fi_ibv_eq *eq,
 	assert(ep->magic == VERBS_XRC_EP_MAGIC);
 	assert(ep->conn_setup);
 
-	if (cma_event->id == ep->tgt_id && ep->conn_setup->rsvd_tgt_qpn) {
+	if (cma_event->id == ep->tgt_id) {
 		*acked = 1;
 		rdma_ack_cm_event(cma_event);
-		ibv_destroy_qp(ep->conn_setup->rsvd_tgt_qpn);
-		ep->conn_setup->rsvd_tgt_qpn = NULL;
+		if (ep->conn_setup->rsvd_tgt_qpn) {
+			ibv_destroy_qp(ep->conn_setup->rsvd_tgt_qpn);
+			ep->conn_setup->rsvd_tgt_qpn = NULL;
+		}
 		rdma_destroy_id(ep->tgt_id);
 		ep->tgt_id = NULL;
-	} else if (cma_event->id == ep->base_ep.id &&
-		   ep->conn_setup->rsvd_ini_qpn) {
+	} else if (cma_event->id == ep->base_ep.id) {
 		*acked = 1;
 		rdma_ack_cm_event(cma_event);
-		ibv_destroy_qp(ep->conn_setup->rsvd_ini_qpn);
-		ep->conn_setup->rsvd_ini_qpn = NULL;
+		if (ep->conn_setup->rsvd_ini_qpn) {
+			ibv_destroy_qp(ep->conn_setup->rsvd_ini_qpn);
+			ep->conn_setup->rsvd_ini_qpn = NULL;
+		}
 		rdma_destroy_id(ep->base_ep.id);
 		ep->base_ep.id = NULL;
 	}
-	if (!ep->conn_setup->rsvd_ini_qpn && !ep->conn_setup->rsvd_tgt_qpn)
+	if (!ep->base_ep.id && !ep->tgt_id)
 		fi_ibv_free_xrc_conn_setup(ep, 0);
 }
 
@@ -531,8 +590,7 @@ fi_ibv_eq_xrc_disconnect_event(struct fi_ibv_eq *eq,
 						base_ep.util_ep.ep_fid);
 	assert(ep->magic == VERBS_XRC_EP_MAGIC);
 
-	if (ep->conn_setup && cma_event->id == ep->base_ep.id &&
-	    ep->conn_setup->rsvd_ini_qpn) {
+	if (ep->conn_setup && cma_event->id == ep->base_ep.id) {
 		*acked = 1;
 		rdma_ack_cm_event(cma_event);
 		rdma_disconnect(ep->base_ep.id);
@@ -583,6 +641,8 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq,
 
 		ret = fi_ibv_eq_cm_getinfo(cma_event, pep->info, &entry->info);
 		if (ret) {
+			VERBS_WARN(FI_LOG_EP_CTRL,
+				   "CM getinfo error %d\n", ret);
 			fastlock_acquire(&eq->lock);
 			rdma_destroy_id(cma_event->id);
 			eq->err.err = -ret;
@@ -611,7 +671,7 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq,
 		if (fi_ibv_is_xrc(ep->info)) {
 			fastlock_acquire(&eq->lock);
 			ret = fi_ibv_eq_xrc_connected_event(eq, cma_event,
-							    entry, len, acked);
+							    entry, len);
 			fastlock_release(&eq->lock);
 			return ret;
 		}
@@ -641,7 +701,22 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq,
 	case RDMA_CM_EVENT_CONNECT_ERROR:
 	case RDMA_CM_EVENT_UNREACHABLE:
 		fastlock_acquire(&eq->lock);
-		eq->err.err = -cma_event->status;
+		ep = container_of(fid, struct fi_ibv_ep, util_ep.ep_fid);
+		assert(ep->info);
+		if (fi_ibv_is_xrc(ep->info)) {
+			ret = fi_ibv_eq_xrc_cm_err_event(eq, cma_event);
+			if (ret == -FI_EAGAIN) {
+				fastlock_release(&eq->lock);
+				return ret;
+			}
+		}
+		eq->err.err = ETIMEDOUT;
+		eq->err.prov_errno = -cma_event->status;
+		if (eq->err.err_data) {
+			free(eq->err.err_data);
+			eq->err.err_data = NULL;
+			eq->err.err_data_size = 0;
+		}
 		goto err;
 	case RDMA_CM_EVENT_REJECTED:
 		ep = container_of(fid, struct fi_ibv_ep, util_ep.ep_fid);
@@ -710,8 +785,10 @@ ssize_t fi_ibv_eq_write_event(struct fi_ibv_eq *eq, uint32_t event,
 	struct fi_ibv_eq_entry *entry;
 
 	entry = calloc(1, sizeof(struct fi_ibv_eq_entry) + len);
-	if (!entry)
+	if (!entry) {
+		VERBS_WARN(FI_LOG_EP_CTRL, "Unable to allocate EQ entry\n");
 		return -FI_ENOMEM;
+	}
 
 	entry->event = event;
 	entry->len = len;

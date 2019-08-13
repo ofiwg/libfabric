@@ -1536,8 +1536,11 @@ rxm_conn_connect(struct util_ep *util_ep, struct rxm_cmap_handle *handle,
 	rxm_ep->msg_info->dest_addrlen = rxm_ep->msg_info->src_addrlen;
 
 	rxm_ep->msg_info->dest_addr = mem_dup(addr, rxm_ep->msg_info->dest_addrlen);
-	if (!rxm_ep->msg_info->dest_addr)
+	if (!rxm_ep->msg_info->dest_addr) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "mem_dup failed, len %zu\n",
+			rxm_ep->msg_info->dest_addrlen);
 		return -FI_ENOMEM;
+	}
 
 	ret = rxm_msg_ep_open(rxm_ep, rxm_ep->msg_info, rxm_conn, &rxm_conn->handle);
 	if (ret)

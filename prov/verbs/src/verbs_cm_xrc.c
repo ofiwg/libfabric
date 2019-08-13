@@ -49,6 +49,7 @@ void fi_ibv_next_xrc_conn_state(struct fi_ibv_xrc_ep *ep)
 		ep->conn_state = FI_IBV_XRC_CONNECTED;
 		break;
 	case FI_IBV_XRC_CONNECTED:
+	case FI_IBV_XRC_ERROR:
 		break;
 	default:
 		assert(0);
@@ -73,6 +74,8 @@ void fi_ibv_prev_xrc_conn_state(struct fi_ibv_xrc_ep *ep)
 		break;
 	case FI_IBV_XRC_CONNECTED:
 		ep->conn_state = FI_IBV_XRC_RECIP_CONNECTING;
+		break;
+	case FI_IBV_XRC_ERROR:
 		break;
 	default:
 		assert(0);
@@ -168,31 +171,27 @@ void fi_ibv_free_xrc_conn_setup(struct fi_ibv_xrc_ep *ep, int disconnect)
 {
 	assert(ep->conn_setup);
 
-	/* Free shared connection reserved QP number resources. If
-	 * a disconnect is requested and required then initiate a
-	 * disconnect sequence (the XRC INI QP side disconnect is
-	 * initiated when the remote target disconnect is received).
-	 * If disconnecting, the QP resources will be destroyed when
-	 * the timewait state has been exited or the EP is closed. */
+	/* If a disconnect is requested then the XRC bidirectional connection
+	 * has completed and a disconnect sequence is started (the XRC INI QP
+	 * side disconnect is initiated when the remote target disconnect is
+	 * received). XRC temporary QP resources will be released when the
+	 * timewait state is exited. */
 	if (ep->conn_setup->rsvd_ini_qpn && !disconnect) {
-		assert(ep->base_ep.id);
-		assert(!ep->base_ep.id->qp);
-
 		ibv_destroy_qp(ep->conn_setup->rsvd_ini_qpn);
 		ep->conn_setup->rsvd_ini_qpn = NULL;
 	}
 
-	if (ep->conn_setup->rsvd_tgt_qpn) {
+	if (disconnect) {
 		assert(ep->tgt_id);
 		assert(!ep->tgt_id->qp);
 
-		if (disconnect && ep->conn_setup->tgt_connected) {
+		if (ep->conn_setup->tgt_connected) {
 			rdma_disconnect(ep->tgt_id);
 			ep->conn_setup->tgt_connected = 0;
-		} else {
-			ibv_destroy_qp(ep->conn_setup->rsvd_tgt_qpn);
-			ep->conn_setup->rsvd_tgt_qpn = NULL;
 		}
+	} else if (ep->conn_setup->rsvd_tgt_qpn) {
+		ibv_destroy_qp(ep->conn_setup->rsvd_tgt_qpn);
+		ep->conn_setup->rsvd_tgt_qpn = NULL;
 	}
 
 	if (ep->conn_setup->conn_tag != VERBS_CONN_TAG_INVALID)
@@ -257,7 +256,8 @@ void fi_ibv_ep_ini_conn_done(struct fi_ibv_xrc_ep *ep, uint32_t peer_srqn,
 	/* If this was a physical INI/TGT QP connection, remove the QP
 	 * from control of the RDMA CM. We don't want the shared INI QP
 	 * to be destroyed if this endpoint closes. */
-	if (ep->base_ep.id->qp) {
+	if (ep->base_ep.id == ep->ini_conn->phys_conn_id) {
+		ep->ini_conn->phys_conn_id = NULL;
 		ep->ini_conn->state = FI_IBV_INI_QP_CONNECTED;
 		ep->ini_conn->tgt_qpn = tgt_qpn;
 		ep->base_ep.id->qp = NULL;
@@ -281,10 +281,8 @@ void fi_ibv_ep_ini_conn_rejected(struct fi_ibv_xrc_ep *ep)
 
 	fastlock_acquire(&domain->xrc.ini_mgmt_lock);
 	fi_ibv_log_ep_conn(ep, "INI Connection Rejected");
-
-	if (ep->ini_conn->state == FI_IBV_INI_QP_CONNECTING)
-		ep->ini_conn->state = FI_IBV_INI_QP_UNCONNECTED;
 	fi_ibv_put_shared_ini_conn(ep);
+	ep->conn_state = FI_IBV_XRC_ERROR;
 	fastlock_release(&domain->xrc.ini_mgmt_lock);
 }
 
@@ -369,8 +367,11 @@ int fi_ibv_process_xrc_connreq(struct fi_ibv_ep *ep,
 	assert(ep->info->dest_addr);
 
 	xrc_ep->conn_setup = calloc(1, sizeof(*xrc_ep->conn_setup));
-	if (!xrc_ep->conn_setup)
+	if (!xrc_ep->conn_setup) {
+		VERBS_WARN(FI_LOG_EP_CTRL,
+			  "Unable to allocate connection setup memory\n");
 		return -FI_ENOMEM;
+	}
 
 	/* This endpoint was created on the passive side of a connection
 	 * request. The reciprocal connection request will go back to the
