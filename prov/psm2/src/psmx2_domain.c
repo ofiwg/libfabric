@@ -396,9 +396,9 @@ int psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 			/*
 			 * If FI_RMA or FI_ATOMIC caps are enabled, then locks are
-			 * required for the CQ, am_req_poll, & rma_queue
+			 * required for the CQ, am_req_pool, & rma_queue
 			 * due to the PSM2 Recv thread.
-			 * NOTE: am_req_poll & rma_queue are only used when FI_RMA
+			 * NOTE: am_req_pool & rma_queue are only used when FI_RMA
 			 * and FI_ATOMIC capabilities are enabled.
 			 */
 			if ((info->caps & FI_RMA) || (info->caps & FI_ATOMIC)) {
@@ -408,6 +408,32 @@ int psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 				domain_priv->cq_unlock_fn = psmx2_unlock_enabled;
 				domain_priv->am_req_pool_unlock_fn = psmx2_unlock_enabled;
 				domain_priv->rma_queue_unlock_fn = psmx2_unlock_enabled;
+			}
+
+			/*
+			 * Locks accessed by the progress thread are required because
+			 * they are outside the scope of domain access serialization
+			 * implied by FI_THREAD_DOMAIN.
+			 */
+			if (domain_priv->progress_thread_enabled) {
+				domain_priv->trx_ctxt_lock_fn = psmx2_lock_enabled;
+				domain_priv->poll_trylock_fn = psmx2_trylock_enabled;
+				domain_priv->cq_lock_fn = psmx2_lock_enabled;
+				domain_priv->trx_ctxt_unlock_fn = psmx2_unlock_enabled;
+				domain_priv->poll_unlock_fn = psmx2_unlock_enabled;
+				domain_priv->cq_unlock_fn = psmx2_unlock_enabled;
+				if (info->caps & FI_TRIGGER) {
+					domain_priv->trigger_queue_lock_fn = psmx2_lock_enabled;
+					domain_priv->trigger_lock_fn = psmx2_lock_enabled;
+					domain_priv->av_lock_fn = psmx2_lock_enabled;
+					domain_priv->mr_lock_fn = psmx2_lock_enabled;
+					domain_priv->context_lock_fn = psmx2_lock_enabled;
+					domain_priv->trigger_queue_unlock_fn = psmx2_unlock_enabled;
+					domain_priv->trigger_unlock_fn = psmx2_unlock_enabled;
+					domain_priv->av_unlock_fn = psmx2_unlock_enabled;
+					domain_priv->mr_unlock_fn = psmx2_unlock_enabled;
+					domain_priv->context_unlock_fn = psmx2_unlock_enabled;
+				}
 			}
 			break;
 		default:
