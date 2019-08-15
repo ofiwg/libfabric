@@ -376,6 +376,13 @@ static inline void rxd_remove_free_pkt_entry(struct rxd_pkt_entry *pkt_entry)
 	ofi_buf_free(pkt_entry);
 }
 
+static inline void rxd_free_unexp_msg(struct rxd_unexp_msg *unexp_msg)
+{
+	ofi_buf_free(unexp_msg->pkt_entry);
+	dlist_remove(&unexp_msg->entry);
+	free(unexp_msg);
+}
+
 struct rxd_match_attr {
 	fi_addr_t	peer;
 	uint64_t	tag;
@@ -501,6 +508,7 @@ struct rxd_x_entry *rxd_progress_multi_recv(struct rxd_ep *ep,
 					    struct rxd_x_entry *rx_entry,
 					    size_t total_size);
 void rxd_ep_progress(struct util_ep *util_ep);
+void rxd_cleanup_unexp_msg(struct rxd_unexp_msg *unexp_msg);
 
 /* CQ sub-functions */
 void rxd_cq_report_error(struct rxd_cq *cq, struct fi_cq_err_entry *err_entry);
