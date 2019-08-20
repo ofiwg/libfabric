@@ -2399,8 +2399,8 @@ static int rxr_buf_region_alloc_hndlr(struct ofi_bufpool_region *region)
 	struct fid_mr *mr;
 	struct rxr_domain *domain = region->pool->attr.context;
 
-	ret = fi_mr_reg(domain->rdm_domain, region->mem_region,
-			region->pool->region_size,
+	ret = fi_mr_reg(domain->rdm_domain, region->alloc_region,
+			region->pool->alloc_size,
 			FI_SEND | FI_RECV, 0, 0, 0, &mr, NULL);
 
 	region->context = mr;
