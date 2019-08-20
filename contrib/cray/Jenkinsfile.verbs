@@ -275,37 +275,49 @@ pipeline {
             }
             post {
                 always {
-                    step ([$class: 'XUnitBuilder',
+                    step ([$class: 'XUnitPublisher',
                        thresholds: [
                             [$class: 'FailedThreshold', unstableThreshold: '0']],
                             tools: [[$class: 'JUnitType', pattern: "smoketests.xml"]]])
-                    step ([$class: 'XUnitBuilder',
+                    step ([$class: 'XUnitPublisher',
                        thresholds: [
                             [$class: 'FailedThreshold', unstableThreshold: '0']],
                             tools: [[$class: 'JUnitType', pattern: "*-rc.xml"]]])
-                    step ([$class: 'XUnitBuilder',
+                    step ([$class: 'XUnitPublisher',
                        thresholds: [
                             [$class: 'FailedThreshold', unstableThreshold: '0']],
                             tools: [[$class: 'JUnitType', pattern: "*-xrc.xml"]]])
-                    step ([$class: 'XUnitBuilder',
+                    step ([$class: 'XUnitPublisher',
                        thresholds: [
                             [$class: 'FailedThreshold', unstableThreshold: '0']],
                             tools: [[$class: 'JUnitType', pattern: "sft_test_results/RC/sft_*_test_results.xml"]]])
-                    step ([$class: 'XUnitBuilder',
+                    step ([$class: 'XUnitPublisher',
                        thresholds: [
                             [$class: 'FailedThreshold', unstableThreshold: '0']],
                             tools: [[$class: 'JUnitType', pattern: "sft_test_results/XRC/sft_*_test_results.xml"]]])
-                    step ([$class: 'XUnitBuilder',
+                    step ([$class: 'XUnitPublisher',
                        thresholds: [
                             [$class: 'FailedThreshold', unstableThreshold: '0']],
                             tools: [[$class: 'JUnitType', pattern: "mpi.xml"]]])
+                }
+                cleanup {
+                    echo "*** Test: Post: Cleanup: env.BRANCH_NAME: ${BRANCH_NAME} ***"
+                    script {
+                        if ( isInternalBuild() ) {
+                            echo "*** Test: Post: Cleanup: isInternalBuild: TRUE ***"
+                        } else {
+                            echo "*** Test: Post: Cleanup: isInternalBuild: FALSE ***"
+                        }
+                    }
+                    echo "*** Test: Post: Cleanup: currentBuild.currentResult: ${currentBuild.currentResult} ***"
                 }
             }
         }
         stage("Install Libfabric Build") {
             when {
                 allOf {
-                    expression { currentBuild.result == 'SUCCESS' } ;
+                    expression { currentBuild.currentResult == 'SUCCESS' } ;
+                    expression { isInternalBuild() } ;
                     anyOf {
                         expression { env.BRANCH_NAME == 'master' } ;
                         buildingTag() ;
@@ -325,7 +337,7 @@ pipeline {
         stage("Deploy") {
             when {
                 allOf {
-                    expression { currentBuild.result == 'SUCCESS' } ;
+                    expression { currentBuild.currentResult == 'SUCCESS' } ;
                     expression { isInternalBuild() } ;
                     anyOf {
                         expression { env.BRANCH_NAME == 'master' } ;
