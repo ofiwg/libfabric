@@ -419,6 +419,7 @@ static int tcpx_ep_ctrl(struct fid *fid, int command, void *arg)
 	}
 	return 0;
 }
+
 static int tcpx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct tcpx_ep *tcpx_ep;
@@ -442,6 +443,7 @@ static struct fi_ops tcpx_ep_fi_ops = {
 	.control = tcpx_ep_ctrl,
 	.ops_open = fi_no_ops_open,
 };
+
 static int tcpx_ep_getopt(fid_t fid, int level, int optname,
 			  void *optval, size_t *optlen)
 {
@@ -661,7 +663,6 @@ static int tcpx_pep_setname(fid_t fid, void *addr, size_t addrlen)
 		tcpx_pep->info->src_addrlen = 0;
 	}
 
-
 	tcpx_pep->info->src_addr = mem_dup(addr, addrlen);
 	if (!tcpx_pep->info->src_addr)
 		return -FI_ENOMEM;
@@ -774,7 +775,6 @@ static struct fi_ops_ep tcpx_pep_ops = {
 	.rx_size_left = fi_no_rx_size_left,
 	.tx_size_left = fi_no_tx_size_left,
 };
-
 
 int tcpx_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 		    struct fid_pep **pep, void *context)
