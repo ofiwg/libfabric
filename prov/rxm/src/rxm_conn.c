@@ -157,7 +157,11 @@ static int rxm_cmap_match_peer(struct dlist_entry *entry, const void *addr)
 	struct rxm_cmap_peer *peer;
 
 	peer = container_of(entry, struct rxm_cmap_peer, entry);
-	return !memcmp(peer->addr, addr, peer->handle->cmap->av->addrlen);
+
+	size_t addrlen = ((struct sockaddr *) addr)->sa_family == AF_INET ?
+		sizeof(struct sockaddr_in) :
+		sizeof(struct sockaddr_in6);
+	return !memcmp(peer->addr, addr, MIN(addrlen, peer->handle->cmap->av->addrlen));
 }
 
 static int rxm_cmap_del_handle(struct rxm_cmap_handle *handle)

@@ -270,7 +270,10 @@ int ofi_av_insert_addr(struct util_av *av, const void *addr, fi_addr_t *fi_addr)
 {
 	struct util_av_entry *entry = NULL;
 
-	HASH_FIND(hh, av->hash, addr, av->addrlen, entry);
+	size_t addrlen = ((struct sockaddr *) addr)->sa_family == AF_INET ?
+		sizeof(struct sockaddr_in) :
+	 	sizeof(struct sockaddr_in6);
+	HASH_FIND(hh, av->hash, addr, MIN(addrlen, av->addrlen), entry);
 	if (entry) {
 		if (fi_addr)
 			*fi_addr = ofi_buf_index(entry);
@@ -282,9 +285,14 @@ int ofi_av_insert_addr(struct util_av *av, const void *addr, fi_addr_t *fi_addr)
 			return -FI_ENOMEM;
 		if (fi_addr)
 			*fi_addr = ofi_buf_index(entry);
-		memcpy(entry->addr, addr, av->addrlen);
+
+		// If inserting IPv4 into IPv6 table, clear remainder.
+		memcpy(entry->addr, addr, MIN(addrlen, av->addrlen));
+		if (addrlen < av->addrlen) {
+			memset((char *) entry->addr + addrlen, 0, av->addrlen - addrlen);
+		}
 		ofi_atomic_initialize32(&entry->use_cnt, 1);
-		HASH_ADD(hh, av->hash, addr, av->addrlen, entry);
+		HASH_ADD(hh, av->hash, addr, MIN(addrlen, av->addrlen), entry);
 	}
 	return 0;
 }
@@ -326,7 +334,10 @@ fi_addr_t ofi_av_lookup_fi_addr_unsafe(struct util_av *av, const void *addr)
 {
 	struct util_av_entry *entry = NULL;
 
-	HASH_FIND(hh, av->hash, addr, av->addrlen, entry);
+	size_t addrlen = ((struct sockaddr *) addr)->sa_family == AF_INET ?
+		sizeof(struct sockaddr_in) :
+		sizeof(struct sockaddr_in6);
+	HASH_FIND(hh, av->hash, addr, MIN(addrlen, av->addrlen), entry);
 	return entry ? ofi_buf_index(entry) : FI_ADDR_NOTAVAIL;
 }
 

@@ -78,7 +78,10 @@ rxm_av_insert_cmap(struct fid_av *av_fid, const void *addr, size_t count,
 			if (!rxm_ep->cmap)
 				break;
 
-			cur_addr = (const void *) ((char *) addr + i * av->addrlen);
+			size_t addrlen = ((struct sockaddr *) addr)->sa_family == AF_INET ?
+				sizeof(struct sockaddr_in) :
+				sizeof(struct sockaddr_in6);
+			cur_addr = (const void *) ((char *) addr + i * MIN(addrlen, av->addrlen));
 			fi_addr_tmp = (fi_addr ? fi_addr[i] :
 				       ofi_av_lookup_fi_addr_unsafe(av, cur_addr));
 			if (fi_addr_tmp == FI_ADDR_NOTAVAIL)
