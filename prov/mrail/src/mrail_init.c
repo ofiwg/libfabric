@@ -105,13 +105,15 @@ static int mrail_parse_env_vars(void)
 			" addresses of format FI_ADDR_STR delimited by comma");
 	ret = fi_param_get_str(&mrail_prov, "addr_strc", &addr_strc);
 	if (ret) {
-		FI_WARN(&mrail_prov, FI_LOG_CORE, "Unable to read "
+		FI_INFO(&mrail_prov, FI_LOG_CORE, "unable to read "
 			"OFI_MRAIL_ADDR_STRC env variable\n");
 		return ret;
 	}
 	mrail_addr_strv = mrail_split_addr_strc(addr_strc);
-	if (!mrail_addr_strv)
+	if (!mrail_addr_strv) {
+		FI_WARN(&mrail_prov, FI_LOG_CORE, "unable to alloc memory\n");
 		return -FI_ENOMEM;
+	}
 
 	/*
 	 * Local rank is used to set the default tx rail when fixed mapping
@@ -271,10 +273,13 @@ static int mrail_get_core_info(uint32_t version, const char *node, const char *s
 	size_t i;
 	int ret = 0;
 	int num_rails;
+	enum fi_log_level level = ((hints && hints->fabric_attr &&
+				    hints->fabric_attr->prov_name) ?
+				   FI_LOG_WARN : FI_LOG_INFO);
 
 	if (!mrail_addr_strv) {
-		FI_WARN(&mrail_prov, FI_LOG_FABRIC,
-			"OFI_MRAIL_ADDR_STRC env variable not set!\n");
+		FI_LOG(&mrail_prov, level, FI_LOG_FABRIC,
+		       "OFI_MRAIL_ADDR_STRC env variable not set!\n");
 		return -FI_ENODATA;
 	}
 
