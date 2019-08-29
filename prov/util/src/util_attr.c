@@ -619,14 +619,14 @@ int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
 	return 0;
 }
 
-static int ofi_check_ep_type(const struct fi_provider *prov,
-			     const struct fi_ep_attr *prov_attr,
-			     const struct fi_ep_attr *user_attr)
+int ofi_check_ep_type(const struct fi_provider *prov,
+		      const struct fi_ep_attr *prov_attr,
+		      const struct fi_ep_attr *user_attr)
 {
 	if ((user_attr->type != FI_EP_UNSPEC) &&
 	    (prov_attr->type != FI_EP_UNSPEC) &&
 	    (user_attr->type != prov_attr->type)) {
-		FI_INFO(prov, FI_LOG_CORE, "Unsupported endpoint type\n");
+		FI_INFO(prov, FI_LOG_CORE, "unsupported endpoint type\n");
 		FI_INFO_CHECK(prov, prov_attr, user_attr, type, FI_TYPE_EP_TYPE);
 		return -FI_ENODATA;
 	}

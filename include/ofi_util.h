@@ -811,6 +811,9 @@ const char *ofi_eq_strerror(struct fid_eq *eq_fid, int prov_errno,
 #define OFI_TX_RMA_CAPS (FI_RMA | FI_READ | FI_WRITE)
 #define OFI_RX_RMA_CAPS (FI_RMA | FI_REMOTE_READ | FI_REMOTE_WRITE)
 
+int ofi_check_ep_type(const struct fi_provider *prov,
+		      const struct fi_ep_attr *prov_attr,
+		      const struct fi_ep_attr *user_attr);
 int ofi_check_mr_mode(const struct fi_provider *prov, uint32_t api_version,
 		      int prov_mode, const struct fi_info *user_info);
 int ofi_check_fabric_attr(const struct fi_provider *prov,
