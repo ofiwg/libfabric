@@ -1221,13 +1221,8 @@ done:
 static int fi_ibv_set_default_attr(struct fi_info *info, size_t *attr,
 				   size_t default_attr, char *attr_str)
 {
-	if (default_attr > *attr) {
-		VERBS_INFO(FI_LOG_FABRIC, "Ignoring provider default value "
-			   "for %s as it is greater than the value supported "
-			   "by domain: %s\n", attr_str, info->domain_attr->name);
-	} else {
+	if (default_attr <= *attr)
 		*attr = default_attr;
-	}
 	return 0;
 }
 
@@ -1309,16 +1304,25 @@ static int fi_ibv_get_matching_info(uint32_t version,
 {
 	const struct fi_info *check_info = verbs_info;
 	struct fi_info *fi, *tail;
-	int ret;
+	int ret, i;
 	uint8_t got_passive_info = 0;
 
 	*info = tail = NULL;
 
-	for ( ; check_info; check_info = check_info->next) {
-		VERBS_DBG(FI_LOG_FABRIC, "Checking domain: %s\n",
-			  check_info->domain_attr->name);
-
+	for (i = 1; check_info; check_info = check_info->next, i++) {
 		if (hints) {
+			FI_INFO(&fi_ibv_prov, FI_LOG_FABRIC,
+				"checking domain: #%d %s\n",
+				i, check_info->domain_attr->name);
+
+			if (hints->ep_attr) {
+				/* check EP type first to avoid other unnecessary checks */
+				ret = ofi_check_ep_type(
+					&fi_ibv_prov, check_info->ep_attr, hints->ep_attr);
+				if (ret)
+					continue;
+			}
+
 			if ((check_info->ep_attr->protocol ==
 			     FI_PROTO_RDMA_CM_IB_XRC) &&
 			    (!hints->ep_attr ||
@@ -1365,8 +1369,8 @@ static int fi_ibv_get_matching_info(uint32_t version,
 			}
 		}
 
-		VERBS_DBG(FI_LOG_FABRIC, "Adding fi_info for domain: %s\n",
-			  fi->domain_attr->name);
+		FI_INFO(&fi_ibv_prov, FI_LOG_FABRIC,
+			"adding fi_info for domain: %s\n", fi->domain_attr->name);
 		if (!*info)
 			*info = fi;
 		else
