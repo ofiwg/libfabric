@@ -577,6 +577,8 @@ static int fi_ibv_get_device_attrs(struct ibv_context *ctx,
 	size_t max_sup_size;
 	int ret = 0, mtu_size;
 	uint8_t port_num;
+	enum fi_log_level level =
+		fi_ibv_gl_data.msg.prefer_xrc ? FI_LOG_WARN : FI_LOG_INFO;
 
 	ret = ibv_query_device(ctx, &device_attr);
 	if (ret) {
@@ -587,7 +589,9 @@ static int fi_ibv_get_device_attrs(struct ibv_context *ctx,
 
 	if (protocol == FI_PROTO_RDMA_CM_IB_XRC) {
 		if (!(device_attr.device_cap_flags & IBV_DEVICE_XRC)) {
-			VERBS_WARN(FI_LOG_FABRIC, "XRC not supported\n");
+			FI_LOG(&fi_ibv_prov, level, FI_LOG_FABRIC,
+			       "XRC support unavailable in device: %s\n",
+			       ibv_get_device_name(ctx->device));
 			return -FI_EINVAL;
 		}
 	}
@@ -1170,22 +1174,28 @@ int fi_ibv_init_info(const struct fi_info **all_infos)
 	struct ibv_context **ctx_list;
 	struct fi_info *fi = NULL, *tail = NULL;
 	const struct verbs_ep_domain *ep_type[VERBS_NUM_DOMAIN_TYPES];
-	int ret = 0, i, j, num_devices;
+	int ret = 0, i, j, num_devices, dom_count = 0;
 
 	*all_infos = NULL;
 
 	/* List XRC MSG_EP domain before default RC MSG_EP if requested */
 	if (fi_ibv_gl_data.msg.prefer_xrc) {
-		ep_type[0] = &verbs_msg_xrc_domain;
-		ep_type[1] = &verbs_msg_domain;
+		if (VERBS_HAVE_XRC)
+			ep_type[dom_count++] = &verbs_msg_xrc_domain;
+		else
+			FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC,
+				"XRC not built into provider, skip allocating "
+				"fi_info for XRC FI_EP_MSG endpoints\n");
+		ep_type[dom_count++] = &verbs_msg_domain;
 	} else {
-		ep_type[0] = &verbs_msg_domain;
-		ep_type[1] = &verbs_msg_xrc_domain;
+		ep_type[dom_count++] = &verbs_msg_domain;
+		if (VERBS_HAVE_XRC)
+			ep_type[dom_count++] = &verbs_msg_xrc_domain;
 	}
-	ep_type[2] = &verbs_dgram_domain;
+	ep_type[dom_count++] = &verbs_dgram_domain;
 
 	if (!fi_ibv_have_device()) {
-		VERBS_INFO(FI_LOG_FABRIC, "No RDMA devices found\n");
+		VERBS_INFO(FI_LOG_FABRIC, "no RDMA devices found\n");
 		ret = -FI_ENODATA;
 		goto done;
 	}
@@ -1198,7 +1208,7 @@ int fi_ibv_init_info(const struct fi_info **all_infos)
 	}
 
 	for (i = 0; i < num_devices; i++) {
-		for (j = 0; j < VERBS_NUM_DOMAIN_TYPES; j++) {
+		for (j = 0; j < dom_count; j++) {
 			ret = fi_ibv_alloc_info(ctx_list[i], &fi, ep_type[j]);
 			if (!ret) {
 				if (!*all_infos)
@@ -1306,6 +1316,8 @@ static int fi_ibv_get_matching_info(uint32_t version,
 	struct fi_info *fi, *tail;
 	int ret, i;
 	uint8_t got_passive_info = 0;
+	enum fi_log_level level =
+		fi_ibv_gl_data.msg.prefer_xrc ? FI_LOG_WARN : FI_LOG_INFO;
 
 	*info = tail = NULL;
 
@@ -1323,29 +1335,21 @@ static int fi_ibv_get_matching_info(uint32_t version,
 					continue;
 			}
 
-			if ((check_info->ep_attr->protocol ==
-			     FI_PROTO_RDMA_CM_IB_XRC) &&
-			    (!hints->ep_attr ||
-			     (hints->ep_attr->rx_ctx_cnt != FI_SHARED_CONTEXT))) {
-				VERBS_INFO(FI_LOG_FABRIC,
-					   "hints->ep_attr->rx_ctx_cnt != "
-					   "FI_SHARED_CONTEXT. Skipping "
-					   "XRC FI_EP_MSG endpoints\n");
-				continue;
-			}
-			if ((check_info->ep_attr->protocol ==
-			    FI_PROTO_RDMA_CM_IB_XRC) && !VERBS_HAVE_XRC) {
-				VERBS_INFO(FI_LOG_FABRIC,
-					   "XRC not built into provider, "
-					   "skipping XRC FI_EP_MSG "
-					   "endpoints\n");
-				continue;
-			}
-
 			ret = fi_ibv_check_hints(version, hints,
 						 check_info);
 			if (ret)
 				continue;
+
+			if ((check_info->ep_attr->protocol ==
+			     FI_PROTO_RDMA_CM_IB_XRC) &&
+			    (!hints->ep_attr ||
+			     (hints->ep_attr->rx_ctx_cnt != FI_SHARED_CONTEXT))) {
+				FI_LOG(&fi_ibv_prov, level, FI_LOG_FABRIC,
+				       "hints->ep_attr->rx_ctx_cnt != "
+				       "FI_SHARED_CONTEXT. Skipping "
+				       "XRC FI_EP_MSG endpoints\n");
+				continue;
+			}
 		}
 
 		if ((check_info->ep_attr->type == FI_EP_MSG) && passive) {
