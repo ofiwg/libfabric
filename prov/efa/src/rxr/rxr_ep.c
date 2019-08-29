@@ -1732,6 +1732,7 @@ ssize_t rxr_tx(struct fid_ep *ep, const struct iovec *iov, size_t iov_count,
 					  &rxr_ep->tx_entry_queued_list);
 			ret = 0;
 		} else {
+			rxr_release_tx_entry(rxr_ep, tx_entry);
 			peer = rxr_ep_get_peer(rxr_ep, addr);
 			peer->next_msg_id--;
 		}
