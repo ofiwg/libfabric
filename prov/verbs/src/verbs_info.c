@@ -1023,7 +1023,6 @@ err1:
 static int fi_ibv_get_srcaddr_devs(struct fi_info **info)
 {
 	struct fi_info *fi, *add_info;
-	struct fi_info *fi_unconf = NULL, *fi_prev = NULL;
 	struct verbs_dev_info *dev;
 	struct verbs_addr *addr;
 	int ret = 0;
@@ -1065,41 +1064,6 @@ static int fi_ibv_get_srcaddr_devs(struct fi_info **info)
 				}
 				break;
 			}
-	}
-
-        /* re-order info: move info without src_addr to tail */
-	for (fi = *info; fi;) {
-		if (!fi->src_addr) {
-			/* re-link list - exclude current element */
-			if (fi == *info) {
-				*info = fi->next;
-				fi->next = fi_unconf;
-				fi_unconf = fi;
-				fi = *info;
-			} else {
-				assert(fi_prev);
-				fi_prev->next = fi->next;
-				fi->next = fi_unconf;
-				fi_unconf = fi;
-				fi = fi_prev->next;
-			}
-		} else {
-			fi_prev = fi;
-			fi = fi->next;
-		}
-	}
-
-	/* append excluded elements to tail of list */
-	if (fi_unconf) {
-		if (fi_prev) {
-			assert(!fi_prev->next);
-			fi_prev->next = fi_unconf;
-		} else if (*info) {
-			assert(!(*info)->next);
-			(*info)->next = fi_unconf;
-		} else /* !(*info) */ {
-			(*info) = fi_unconf;
-		}
 	}
 
 out:
@@ -1556,9 +1520,9 @@ static void fi_ibv_remove_nosrc_info(struct fi_info **info)
 	struct fi_info **fi = info, *next;
 	while (*fi && ((*fi)->ep_attr->type == FI_EP_MSG)) {
 		if (!(*fi)->src_addr) {
-			VERBS_INFO(FI_LOG_FABRIC, "Not reporting fi_info "
+			VERBS_INFO(FI_LOG_FABRIC, "not reporting fi_info "
 				   "corresponding to domain: %s as it has no IP"
-				   "address configured\n",
+				   "address configured for its IPoIB interface\n",
 				   (*fi)->domain_attr->name);
 			next = (*fi)->next;
 			(*fi)->next = NULL;
