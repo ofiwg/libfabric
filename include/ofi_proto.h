@@ -136,6 +136,7 @@ enum {
 #define OFI_TRANSMIT_COMPLETE	(1 << 1)
 #define OFI_DELIVERY_COMPLETE	(1 << 2)
 #define OFI_COMMIT_COMPLETE	(1 << 3)
+#define OFI_COLLECTIVE_MSG	(1 << 4)
 
 /*
  * Common command header
