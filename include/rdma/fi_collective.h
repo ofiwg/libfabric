@@ -149,7 +149,7 @@ fi_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 	struct fi_collective_addr addr;
 
 	addr.set = set;
-	addr.join_addr = coll_addr;
+	addr.coll_addr = coll_addr;
 	return fi_join(ep, &addr, flags | FI_COLLECTIVE, mc, context);
 }
 
