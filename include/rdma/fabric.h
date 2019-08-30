@@ -486,6 +486,7 @@ enum {
 	FI_CLASS_CONNREQ,
 	FI_CLASS_MC,
 	FI_CLASS_NIC,
+	FI_CLASS_AV_SET,
 };
 
 struct fi_eq_attr;
