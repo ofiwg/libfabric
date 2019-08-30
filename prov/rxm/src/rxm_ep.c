@@ -431,7 +431,15 @@ static int rxm_ep_rx_queue_init(struct rxm_ep *rxm_ep)
 	if (ret)
 		goto err_recv_tag;
 
+	ret = rxm_recv_queue_init(rxm_ep, &rxm_ep->coll_trecv_queue,
+				  rxm_ep->rxm_info->rx_attr->size,
+				  RXM_RECV_QUEUE_TAGGED);
+	if (ret)
+		goto err_recv_coll;
+
 	return FI_SUCCESS;
+err_recv_coll:
+	rxm_recv_queue_close(&rxm_ep->trecv_queue);
 err_recv_tag:
 	rxm_recv_queue_close(&rxm_ep->recv_queue);
 	return ret;
@@ -439,6 +447,7 @@ err_recv_tag:
 
 static void rxm_ep_rx_queue_close(struct rxm_ep *rxm_ep)
 {
+	rxm_recv_queue_close(&rxm_ep->coll_trecv_queue);
 	rxm_recv_queue_close(&rxm_ep->trecv_queue);
 	rxm_recv_queue_close(&rxm_ep->recv_queue);
 }
@@ -523,6 +532,9 @@ static ssize_t rxm_ep_cancel(fid_t fid_ep, void *context)
 	if (ret)
 		return ret;
 
+	ret = rxm_ep_cancel_recv(rxm_ep, &rxm_ep->coll_trecv_queue, context);
+	if (ret)
+		return ret;
 	return 0;
 }
 
@@ -924,7 +936,9 @@ rxm_ep_msg_normal_send(struct rxm_conn *rxm_conn, struct rxm_pkt *tx_pkt,
 	FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Posting send with length: %" PRIu64
 	       " tag: 0x%" PRIx64 "\n", pkt_size, tx_pkt->hdr.tag);
 
-	assert((tx_pkt->hdr.flags & FI_REMOTE_CQ_DATA) || !tx_pkt->hdr.flags);
+	assert((tx_pkt->hdr.flags & FI_REMOTE_CQ_DATA) ||
+	       (tx_pkt->hdr.flags & OFI_COLLECTIVE_MSG) ||
+	       !tx_pkt->hdr.flags);
 
 	return fi_send(rxm_conn->msg_ep, tx_pkt, pkt_size, desc, 0, context);
 }
@@ -1291,6 +1305,12 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 				  iov, count, 0);
 		tx_buf->app_context = context;
 		tx_buf->flags = flags;
+
+		if (flags & FI_COLLECTIVE) {
+			tx_buf->pkt.hdr.flags |= OFI_COLLECTIVE_MSG;
+		}else {
+			tx_buf->pkt.hdr.flags &= OFI_COLLECTIVE_MSG;
+		}
 
 		ret = rxm_ep_msg_normal_send(rxm_conn, &tx_buf->pkt, total_len,
 					     tx_buf->hdr.desc, tx_buf);
@@ -1685,7 +1705,8 @@ static ssize_t rxm_ep_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged
 	return rxm_ep_recv_common_flags(rxm_ep, msg->msg_iov, msg->desc, msg->iov_count,
 					msg->addr, msg->tag, msg->ignore, msg->context,
 					flags | rxm_ep->util_ep.rx_msg_flags,
-					&rxm_ep->trecv_queue);
+					(flags & FI_COLLECTIVE)?
+					&rxm_ep->coll_trecv_queue : &rxm_ep->trecv_queue);
 }
 
 static ssize_t rxm_ep_trecv(struct fid_ep *ep_fid, void *buf, size_t len,

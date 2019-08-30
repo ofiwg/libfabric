@@ -607,8 +607,28 @@ ssize_t rxm_cq_handle_eager(struct rxm_rx_buf *rx_buf)
 	return rxm_finish_recv(rx_buf, done_len);
 }
 
+static inline
+ssize_t rxm_cq_handle_coll(struct rxm_rx_buf *rx_buf)
+{
+	//TODO: call utility function to handle collective completion
+	return FI_SUCCESS;
+}
+
+static inline
+ssize_t rxm_cq_tx_handle_coll(struct rxm_tx_eager_buf *eager_buf)
+{
+	//TODO: call utility function to handle collective completion
+	return FI_SUCCESS;
+
+}
+
 ssize_t rxm_cq_handle_rx_buf(struct rxm_rx_buf *rx_buf)
 {
+
+	if (rx_buf->pkt.hdr.flags & OFI_COLLECTIVE_MSG) {
+		return rxm_cq_handle_coll(rx_buf);
+	}
+
 	switch (rx_buf->pkt.ctrl_hdr.type) {
 	case rxm_ctrl_eager:
 		return rxm_cq_handle_eager(rx_buf);
@@ -690,6 +710,12 @@ static inline ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 		return rxm_cq_match_rx_buf(rx_buf, &rx_buf->ep->recv_queue,
 					   &match_attr);
 	case ofi_op_tagged:
+		if (rx_buf->pkt.hdr.flags & OFI_COLLECTIVE_MSG) {
+			FI_DBG(&rxm_prov, FI_LOG_CQ, "Got collective TAGGED op\n");
+			match_attr.tag = rx_buf->pkt.hdr.tag;
+			return rxm_cq_match_rx_buf(rx_buf, &rx_buf->ep->coll_trecv_queue,
+						   &match_attr);
+		}
 		FI_DBG(&rxm_prov, FI_LOG_CQ, "Got TAGGED op\n");
 		match_attr.tag = rx_buf->pkt.hdr.tag;
 		return rxm_cq_match_rx_buf(rx_buf, &rx_buf->ep->trecv_queue,
@@ -1108,7 +1134,10 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 	case RXM_TX:
 		tx_eager_buf = comp->op_context;
 		assert(comp->flags & FI_SEND);
-		ret = rxm_finish_eager_send(rxm_ep, tx_eager_buf);
+		if (tx_eager_buf->pkt.hdr.flags & OFI_COLLECTIVE_MSG)
+			ret = rxm_cq_tx_handle_coll(tx_eager_buf);
+		else
+			ret = rxm_finish_eager_send(rxm_ep, tx_eager_buf);
 		ofi_buf_free(tx_eager_buf);
 		return ret;
 	case RXM_SAR_TX:

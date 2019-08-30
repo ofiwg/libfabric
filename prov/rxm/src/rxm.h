@@ -673,6 +673,8 @@ struct rxm_ep {
 
 	struct rxm_recv_queue	recv_queue;
 	struct rxm_recv_queue	trecv_queue;
+	/* for collective operations */
+	struct rxm_recv_queue	coll_trecv_queue;
 };
 
 struct rxm_conn {
