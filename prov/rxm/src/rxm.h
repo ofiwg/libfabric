@@ -53,6 +53,7 @@
 #include <ofi_list.h>
 #include <ofi_proto.h>
 #include <ofi_iov.h>
+#include <ofi_coll.h>
 
 #ifndef _RXM_H_
 #define _RXM_H_

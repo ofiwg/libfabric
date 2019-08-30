@@ -150,6 +150,5 @@ ssize_t ofi_ep_writeread(struct fid_ep *ep, const void *buf, size_t count,
 ssize_t ofi_ep_writereadmsg(struct fid_ep *ep, const struct fi_msg_collective *msg,
 			struct fi_ioc *resultv, void **result_desc,
 			size_t result_count, uint64_t flags);
-
-
+void util_coll_handle_comp(uint64_t tag, void *ctx);
 #endif // _OFI_COLL_H_

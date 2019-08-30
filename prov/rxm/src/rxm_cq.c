@@ -598,36 +598,40 @@ readv_err:
 }
 
 static inline
-ssize_t rxm_cq_handle_eager(struct rxm_rx_buf *rx_buf)
-{
-	uint64_t done_len = ofi_copy_to_iov(rx_buf->recv_entry->rxm_iov.iov,
-					    rx_buf->recv_entry->rxm_iov.count,
-					    0, rx_buf->pkt.data,
-					    rx_buf->pkt.hdr.size);
-	return rxm_finish_recv(rx_buf, done_len);
-}
-
-static inline
 ssize_t rxm_cq_handle_coll(struct rxm_rx_buf *rx_buf)
 {
-	//TODO: call utility function to handle collective completion
+	util_coll_handle_comp(rx_buf->pkt.hdr.tag,
+			      rx_buf->recv_entry->context);
+	rxm_recv_entry_release(rx_buf->recv_entry->recv_queue,
+			       rx_buf->recv_entry);
 	return FI_SUCCESS;
 }
 
 static inline
 ssize_t rxm_cq_tx_handle_coll(struct rxm_tx_eager_buf *eager_buf)
 {
-	//TODO: call utility function to handle collective completion
+	util_coll_handle_comp(eager_buf->pkt.hdr.tag,
+			      eager_buf->app_context);
 	return FI_SUCCESS;
 
 }
 
-ssize_t rxm_cq_handle_rx_buf(struct rxm_rx_buf *rx_buf)
+static inline
+ssize_t rxm_cq_handle_eager(struct rxm_rx_buf *rx_buf)
 {
+	uint64_t done_len = ofi_copy_to_iov(rx_buf->recv_entry->rxm_iov.iov,
+					    rx_buf->recv_entry->rxm_iov.count,
+					    0, rx_buf->pkt.data,
+					    rx_buf->pkt.hdr.size);
 
 	if (rx_buf->pkt.hdr.flags & OFI_COLLECTIVE_MSG) {
 		return rxm_cq_handle_coll(rx_buf);
 	}
+	return rxm_finish_recv(rx_buf, done_len);
+}
+
+ssize_t rxm_cq_handle_rx_buf(struct rxm_rx_buf *rx_buf)
+{
 
 	switch (rx_buf->pkt.ctrl_hdr.type) {
 	case rxm_ctrl_eager:

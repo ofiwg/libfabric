@@ -34,8 +34,10 @@
 #include <math.h>
 
 #include <rdma/fabric.h>
+#include <rdma/fi_collective.h>
 #include "ofi.h"
 #include <ofi_util.h>
+#include <ofi_coll.h>
 
 #include "rxm.h"
 
@@ -477,6 +479,20 @@ static int rxm_getname(fid_t fid, void *addr, size_t *addrlen)
 	return fi_getname(&rxm_ep->msg_pep->fid, addr, addrlen);
 }
 
+static int rxm_join(struct fid_ep *ep, const void *addr, uint64_t flags,
+		    struct fid_mc **mc, void *context)
+{
+	struct fi_collective_addr *c_addr =
+		(struct fi_collective_addr *) addr;
+
+	if (flags & FI_COLLECTIVE)
+		return ofi_join_collective(ep, c_addr->coll_addr,
+					   c_addr->set, flags, mc,
+					   context);
+	else
+		return -FI_ENOSYS;
+}
+
 static struct fi_ops_cm rxm_ops_cm = {
 	.size = sizeof(struct fi_ops_cm),
 	.setname = rxm_setname,
@@ -487,7 +503,7 @@ static struct fi_ops_cm rxm_ops_cm = {
 	.accept = fi_no_accept,
 	.reject = fi_no_reject,
 	.shutdown = fi_no_shutdown,
-	.join = fi_no_join,
+	.join = rxm_join,
 };
 
 static int rxm_ep_cancel_recv(struct rxm_ep *rxm_ep,
@@ -1939,6 +1955,13 @@ static struct fi_ops_tagged rxm_ops_tagged_thread_unsafe = {
 	.injectdata = rxm_ep_tinjectdata_fast,
 };
 
+static struct fi_ops_collective rxm_ops_collective = {
+	.size = sizeof(struct fi_ops_collective),
+	.barrier = ofi_ep_barrier,
+	.writeread = ofi_ep_writeread,
+	.writereadmsg = ofi_ep_writereadmsg,
+};
+
 static int rxm_ep_msg_res_close(struct rxm_ep *rxm_ep)
 {
 	int ret, retv = 0;
@@ -2466,6 +2489,7 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (rxm_ep->rxm_info->caps & FI_ATOMIC)
 		(*ep_fid)->atomic = &rxm_ops_atomic;
 
+	(*ep_fid)->collective = &rxm_ops_collective;
 	return 0;
 err2:
 	ofi_endpoint_close(&rxm_ep->util_ep);
