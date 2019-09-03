@@ -577,6 +577,8 @@ static int fi_ibv_get_device_attrs(struct ibv_context *ctx,
 	size_t max_sup_size;
 	int ret = 0, mtu_size;
 	uint8_t port_num;
+	enum fi_log_level level =
+		fi_ibv_gl_data.msg.prefer_xrc ? FI_LOG_WARN : FI_LOG_INFO;
 
 	ret = ibv_query_device(ctx, &device_attr);
 	if (ret) {
@@ -587,7 +589,9 @@ static int fi_ibv_get_device_attrs(struct ibv_context *ctx,
 
 	if (protocol == FI_PROTO_RDMA_CM_IB_XRC) {
 		if (!(device_attr.device_cap_flags & IBV_DEVICE_XRC)) {
-			VERBS_WARN(FI_LOG_FABRIC, "XRC not supported\n");
+			FI_LOG(&fi_ibv_prov, level, FI_LOG_FABRIC,
+			       "XRC support unavailable in device: %s\n",
+			       ibv_get_device_name(ctx->device));
 			return -FI_EINVAL;
 		}
 	}
@@ -1023,7 +1027,6 @@ err1:
 static int fi_ibv_get_srcaddr_devs(struct fi_info **info)
 {
 	struct fi_info *fi, *add_info;
-	struct fi_info *fi_unconf = NULL, *fi_prev = NULL;
 	struct verbs_dev_info *dev;
 	struct verbs_addr *addr;
 	int ret = 0;
@@ -1065,41 +1068,6 @@ static int fi_ibv_get_srcaddr_devs(struct fi_info **info)
 				}
 				break;
 			}
-	}
-
-        /* re-order info: move info without src_addr to tail */
-	for (fi = *info; fi;) {
-		if (!fi->src_addr) {
-			/* re-link list - exclude current element */
-			if (fi == *info) {
-				*info = fi->next;
-				fi->next = fi_unconf;
-				fi_unconf = fi;
-				fi = *info;
-			} else {
-				assert(fi_prev);
-				fi_prev->next = fi->next;
-				fi->next = fi_unconf;
-				fi_unconf = fi;
-				fi = fi_prev->next;
-			}
-		} else {
-			fi_prev = fi;
-			fi = fi->next;
-		}
-	}
-
-	/* append excluded elements to tail of list */
-	if (fi_unconf) {
-		if (fi_prev) {
-			assert(!fi_prev->next);
-			fi_prev->next = fi_unconf;
-		} else if (*info) {
-			assert(!(*info)->next);
-			(*info)->next = fi_unconf;
-		} else /* !(*info) */ {
-			(*info) = fi_unconf;
-		}
 	}
 
 out:
@@ -1206,22 +1174,28 @@ int fi_ibv_init_info(const struct fi_info **all_infos)
 	struct ibv_context **ctx_list;
 	struct fi_info *fi = NULL, *tail = NULL;
 	const struct verbs_ep_domain *ep_type[VERBS_NUM_DOMAIN_TYPES];
-	int ret = 0, i, j, num_devices;
+	int ret = 0, i, j, num_devices, dom_count = 0;
 
 	*all_infos = NULL;
 
 	/* List XRC MSG_EP domain before default RC MSG_EP if requested */
 	if (fi_ibv_gl_data.msg.prefer_xrc) {
-		ep_type[0] = &verbs_msg_xrc_domain;
-		ep_type[1] = &verbs_msg_domain;
+		if (VERBS_HAVE_XRC)
+			ep_type[dom_count++] = &verbs_msg_xrc_domain;
+		else
+			FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC,
+				"XRC not built into provider, skip allocating "
+				"fi_info for XRC FI_EP_MSG endpoints\n");
+		ep_type[dom_count++] = &verbs_msg_domain;
 	} else {
-		ep_type[0] = &verbs_msg_domain;
-		ep_type[1] = &verbs_msg_xrc_domain;
+		ep_type[dom_count++] = &verbs_msg_domain;
+		if (VERBS_HAVE_XRC)
+			ep_type[dom_count++] = &verbs_msg_xrc_domain;
 	}
-	ep_type[2] = &verbs_dgram_domain;
+	ep_type[dom_count++] = &verbs_dgram_domain;
 
 	if (!fi_ibv_have_device()) {
-		VERBS_INFO(FI_LOG_FABRIC, "No RDMA devices found\n");
+		VERBS_INFO(FI_LOG_FABRIC, "no RDMA devices found\n");
 		ret = -FI_ENODATA;
 		goto done;
 	}
@@ -1234,7 +1208,7 @@ int fi_ibv_init_info(const struct fi_info **all_infos)
 	}
 
 	for (i = 0; i < num_devices; i++) {
-		for (j = 0; j < VERBS_NUM_DOMAIN_TYPES; j++) {
+		for (j = 0; j < dom_count; j++) {
 			ret = fi_ibv_alloc_info(ctx_list[i], &fi, ep_type[j]);
 			if (!ret) {
 				if (!*all_infos)
@@ -1257,13 +1231,8 @@ done:
 static int fi_ibv_set_default_attr(struct fi_info *info, size_t *attr,
 				   size_t default_attr, char *attr_str)
 {
-	if (default_attr > *attr) {
-		VERBS_INFO(FI_LOG_FABRIC, "Ignoring provider default value "
-			   "for %s as it is greater than the value supported "
-			   "by domain: %s\n", attr_str, info->domain_attr->name);
-	} else {
+	if (default_attr <= *attr)
 		*attr = default_attr;
-	}
 	return 0;
 }
 
@@ -1345,39 +1314,42 @@ static int fi_ibv_get_matching_info(uint32_t version,
 {
 	const struct fi_info *check_info = verbs_info;
 	struct fi_info *fi, *tail;
-	int ret;
+	int ret, i;
 	uint8_t got_passive_info = 0;
+	enum fi_log_level level =
+		fi_ibv_gl_data.msg.prefer_xrc ? FI_LOG_WARN : FI_LOG_INFO;
 
 	*info = tail = NULL;
 
-	for ( ; check_info; check_info = check_info->next) {
-		VERBS_DBG(FI_LOG_FABRIC, "Checking domain: %s\n",
-			  check_info->domain_attr->name);
-
+	for (i = 1; check_info; check_info = check_info->next, i++) {
 		if (hints) {
-			if ((check_info->ep_attr->protocol ==
-			     FI_PROTO_RDMA_CM_IB_XRC) &&
-			    (!hints->ep_attr ||
-			     (hints->ep_attr->rx_ctx_cnt != FI_SHARED_CONTEXT))) {
-				VERBS_INFO(FI_LOG_FABRIC,
-					   "hints->ep_attr->rx_ctx_cnt != "
-					   "FI_SHARED_CONTEXT. Skipping "
-					   "XRC FI_EP_MSG endpoints\n");
-				continue;
-			}
-			if ((check_info->ep_attr->protocol ==
-			    FI_PROTO_RDMA_CM_IB_XRC) && !VERBS_HAVE_XRC) {
-				VERBS_INFO(FI_LOG_FABRIC,
-					   "XRC not built into provider, "
-					   "skipping XRC FI_EP_MSG "
-					   "endpoints\n");
-				continue;
+			FI_INFO(&fi_ibv_prov, FI_LOG_FABRIC,
+				"checking domain: #%d %s\n",
+				i, check_info->domain_attr->name);
+
+			if (hints->ep_attr) {
+				/* check EP type first to avoid other unnecessary checks */
+				ret = ofi_check_ep_type(
+					&fi_ibv_prov, check_info->ep_attr, hints->ep_attr);
+				if (ret)
+					continue;
 			}
 
 			ret = fi_ibv_check_hints(version, hints,
 						 check_info);
 			if (ret)
 				continue;
+
+			if ((check_info->ep_attr->protocol ==
+			     FI_PROTO_RDMA_CM_IB_XRC) &&
+			    (!hints->ep_attr ||
+			     (hints->ep_attr->rx_ctx_cnt != FI_SHARED_CONTEXT))) {
+				FI_LOG(&fi_ibv_prov, level, FI_LOG_FABRIC,
+				       "hints->ep_attr->rx_ctx_cnt != "
+				       "FI_SHARED_CONTEXT. Skipping "
+				       "XRC FI_EP_MSG endpoints\n");
+				continue;
+			}
 		}
 
 		if ((check_info->ep_attr->type == FI_EP_MSG) && passive) {
@@ -1401,8 +1373,8 @@ static int fi_ibv_get_matching_info(uint32_t version,
 			}
 		}
 
-		VERBS_DBG(FI_LOG_FABRIC, "Adding fi_info for domain: %s\n",
-			  fi->domain_attr->name);
+		FI_INFO(&fi_ibv_prov, FI_LOG_FABRIC,
+			"adding fi_info for domain: %s\n", fi->domain_attr->name);
 		if (!*info)
 			*info = fi;
 		else
@@ -1556,9 +1528,9 @@ static void fi_ibv_remove_nosrc_info(struct fi_info **info)
 	struct fi_info **fi = info, *next;
 	while (*fi && ((*fi)->ep_attr->type == FI_EP_MSG)) {
 		if (!(*fi)->src_addr) {
-			VERBS_INFO(FI_LOG_FABRIC, "Not reporting fi_info "
+			VERBS_INFO(FI_LOG_FABRIC, "not reporting fi_info "
 				   "corresponding to domain: %s as it has no IP"
-				   "address configured\n",
+				   "address configured for its IPoIB interface\n",
 				   (*fi)->domain_attr->name);
 			next = (*fi)->next;
 			(*fi)->next = NULL;

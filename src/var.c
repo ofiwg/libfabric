@@ -228,7 +228,7 @@ int DEFAULT_SYMVER_PRE(fi_param_define)(const struct fi_provider *provider,
 
 	dlist_insert_tail(&v->entry, &param_list);
 
-	FI_INFO(provider, FI_LOG_CORE, "registered var %s\n", param_name);
+	FI_DBG(provider, FI_LOG_CORE, "registered var %s\n", param_name);
 	return FI_SUCCESS;
 }
 DEFAULT_SYMVER(fi_param_define_, fi_param_define, FABRIC_1.0);

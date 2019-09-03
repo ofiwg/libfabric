@@ -363,8 +363,8 @@ static int ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 	int ret;
 
 	if (!provider || !provider->name) {
-		FI_WARN(&core_prov, FI_LOG_CORE,
-			"no provider structure or name\n");
+		FI_DBG(&core_prov, FI_LOG_CORE,
+		       "no provider structure or name\n");
 		ret = -FI_EINVAL;
 		goto cleanup;
 	}
@@ -840,6 +840,7 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 	struct fi_info *tail, *cur;
 	char **prov_vec = NULL;
 	size_t count = 0;
+	enum fi_log_level level;
 	int ret;
 
 	if (!ofi_init)
@@ -885,7 +886,11 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 		ret = prov->provider->getinfo(version, node, service, flags,
 					      hints, &cur);
 		if (ret) {
-			FI_WARN(&core_prov, FI_LOG_CORE,
+			level = ((hints && hints->fabric_attr &&
+				  hints->fabric_attr->prov_name) ?
+				 FI_LOG_WARN : FI_LOG_INFO);
+
+			FI_LOG(&core_prov, level, FI_LOG_CORE,
 			       "fi_getinfo: provider %s returned -%d (%s)\n",
 			       prov->provider->name, -ret, fi_strerror(-ret));
 			continue;
@@ -897,6 +902,9 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 				prov->provider->name);
 			continue;
 		}
+
+		FI_DBG(&core_prov, FI_LOG_CORE, "fi_getinfo: provider %s "
+		       "returned success\n", prov->provider->name);
 
 		if (!*info)
 			*info = cur;
