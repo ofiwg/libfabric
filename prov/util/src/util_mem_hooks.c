@@ -472,7 +472,6 @@ int ofi_memhooks_init(void)
 {
 	int i, ret;
 
-	/* TODO: remove once cleanup is written */
 	if (memhooks_monitor->subscribe == ofi_memhooks_subscribe)
 		return 0;
 
@@ -553,6 +552,8 @@ int ofi_memhooks_init(void)
 void ofi_memhooks_cleanup(void)
 {
 	ofi_restore_intercepts();
+	memhooks_monitor->subscribe = NULL;
+	memhooks_monitor->unsubscribe = NULL;
 }
 
 #else
