@@ -102,13 +102,34 @@ out:
 		*eagain_count = 0;
 }
 
+static void
+hook_debug_trace_exit_cq(struct hook_debug_cq *cq, const char *fn, ssize_t ret)
+{
+	hook_debug_trace_exit(&cq->hook_cq.cq.fid, &cq->hook_cq.hcq->fid,
+			      FI_LOG_CQ, fn, ret, &cq->eagain_count);
+}
+
+static void
+hook_debug_trace_exit_cntr(struct hook_cntr *cntr, const char *fn, ssize_t ret)
+{
+	hook_debug_trace_exit(&cntr->cntr.fid, &cntr->hcntr->fid,
+			      FI_LOG_CNTR, fn, ret, NULL);
+}
+
+static void
+hook_debug_trace_exit_ep(struct hook_debug_ep *ep, const char *fn, ssize_t ret,
+			 size_t *eagain_count)
+{
+	hook_debug_trace_exit(&ep->hook_ep.ep.fid, &ep->hook_ep.hep->fid,
+			      FI_LOG_EP_DATA, fn, ret, eagain_count);
+}
+
 static void hook_debug_rx_end(struct hook_debug_ep *ep, char *fn,
 			      ssize_t ret, void *mycontext)
 {
 	struct hook_debug_txrx_entry *rx_entry;
 
-	hook_debug_trace_exit(&ep->hook_ep.ep.fid, &ep->hook_ep.hep->fid,
-			      FI_LOG_EP_DATA, fn, ret, &ep->rx_eagain_count);
+	hook_debug_trace_exit_ep(ep, fn, ret, &ep->rx_eagain_count);
 
 	if (config.track_recvs) {
 		if (!ret) {
@@ -203,8 +224,7 @@ static void hook_debug_tx_end(struct hook_debug_ep *ep, char *fn,
 {
 	struct hook_debug_txrx_entry *tx_entry;
 
-	hook_debug_trace_exit(&ep->hook_ep.ep.fid, &ep->hook_ep.hep->fid,
-			      FI_LOG_EP_DATA, fn, ret, &ep->tx_eagain_count);
+	hook_debug_trace_exit_ep(ep, fn, ret, &ep->tx_eagain_count);
 
 	if (mycontext && config.track_sends) {
 		if (!ret) {
@@ -478,8 +498,7 @@ static void hook_debug_cq_process_entry(struct hook_debug_cq *mycq,
 	struct fi_cq_tagged_entry *cq_entry;
 	int i;
 
-	hook_debug_trace_exit(&mycq->hook_cq.cq.fid, &mycq->hook_cq.hcq->fid,
-			      FI_LOG_CQ, fn, ret, &mycq->eagain_count);
+	hook_debug_trace_exit_cq(mycq, fn, ret);
 
 	for (i = 0; i < ret; i++, buf += mycq->entry_size) {
 		cq_entry = (struct fi_cq_tagged_entry *)buf;
@@ -868,8 +887,7 @@ static uint64_t hook_debug_cntr_read(struct fid_cntr *cntr)
 	uint64_t ret;
 
 	ret = fi_cntr_read(mycntr->hcntr);
-	hook_debug_trace_exit(&mycntr->cntr.fid, &mycntr->hcntr->fid,
-			      FI_LOG_CNTR, "fi_cntr_read", (ssize_t)ret, NULL);
+	hook_debug_trace_exit_cntr(mycntr, "fi_cntr_read", (ssize_t)ret);
 	return ret;
 }
 
@@ -885,8 +903,7 @@ static int hook_debug_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int t
 
 	ret = fi_cntr_wait(mycntr->hcntr, threshold, timeout);
 
-	hook_debug_trace_exit(&mycntr->cntr.fid, &mycntr->hcntr->fid,
-			      FI_LOG_CNTR, "fi_cntr_wait", (ssize_t)ret, NULL);
+	hook_debug_trace_exit_cntr(mycntr, "fi_cntr_wait", (ssize_t)ret);
 	return ret;
 }
 
