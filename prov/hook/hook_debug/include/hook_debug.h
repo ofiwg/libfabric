@@ -51,6 +51,7 @@ struct hook_debug_config {
 struct hook_debug_eq {
 	struct hook_eq hook_eq;
 	ofi_atomic64_t event_cntr[HOOK_DEBUG_EQ_EVENT_MAX];
+	size_t eagain_count;
 };
 
 struct hook_debug_cq {

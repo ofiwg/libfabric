@@ -103,6 +103,13 @@ out:
 }
 
 static void
+hook_debug_trace_exit_eq(struct hook_debug_eq *eq, const char *fn, ssize_t ret)
+{
+	return hook_debug_trace_exit(&eq->hook_eq.eq.fid, &eq->hook_eq.heq->fid,
+				     FI_LOG_EQ, fn, ret, &eq->eagain_count);
+}
+
+static void
 hook_debug_trace_exit_cq(struct hook_debug_cq *cq, const char *fn, ssize_t ret)
 {
 	hook_debug_trace_exit(&cq->hook_cq.cq.fid, &cq->hook_cq.hcq->fid,
@@ -546,6 +553,18 @@ static ssize_t hook_debug_cq_read(struct fid_cq *cq, void *buf, size_t count)
 	return ret;
 }
 
+static ssize_t hook_debug_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
+				      fi_addr_t *src_addr)
+{
+	struct hook_debug_cq *mycq = container_of(cq, struct hook_debug_cq,
+						  hook_cq.cq);
+	ssize_t ret;
+
+	ret = fi_cq_readfrom(mycq->hook_cq.hcq, buf, count, src_addr);
+	hook_debug_cq_process_entry(mycq, "fi_cq_readfrom", ret, buf);
+	return ret;
+}
+
 int hook_debug_cq_close(struct fid *fid)
 {
 	struct hook_debug_cq *mycq =
@@ -613,6 +632,9 @@ int hook_debug_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	if (ret)
 		goto err;
 
+	FI_TRACE(hook_fabric_to_hprov(mycq->hook_cq.domain->fabric), FI_LOG_CQ,
+		 "cq opened, fid: %p\n", &mycq->hook_cq.hcq->fid);
+
 	mycq->hook_cq.cq.fid.ops = &hook_debug_cq_fid_ops;
 	mycq->hook_cq.cq.ops = &hook_debug_cq_ops;
 	mycq->format = attr->format;
@@ -649,6 +671,7 @@ int hook_debug_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct fid *hfid, *hbfid;
 	struct hook_cntr *cntr;
+	struct hook_cq *cq;
 
 	hfid = hook_to_hfid(fid);
 	hbfid = hook_to_hfid(bfid);
@@ -656,6 +679,12 @@ int hook_debug_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		return -FI_EINVAL;
 
 	switch (bfid->fclass) {
+	case FI_CLASS_CQ:
+		cq = container_of(bfid, struct hook_cq, cq.fid);
+		HOOK_DEBUG_TRACE(cq->domain->fabric, FI_LOG_EP_CTRL,
+				 "cq: %p bind flags: %s\n", cq->hcq,
+				 fi_tostr(&flags, FI_TYPE_CAPS));
+		break;
 	case FI_CLASS_CNTR:
 		cntr = container_of(bfid, struct hook_cntr, cntr.fid);
 		HOOK_DEBUG_TRACE(cntr->domain->fabric, FI_LOG_EP_CTRL,
@@ -779,6 +808,7 @@ static ssize_t hook_debug_eq_read(struct fid_eq *eq, uint32_t *event,
 	if (ret > 0)
 		ofi_atomic_inc64(&myeq->event_cntr[*event]);
 
+	hook_debug_trace_exit_eq(myeq, "fi_eq_read", (ssize_t)ret);
 	return ret;
 }
 
@@ -794,6 +824,7 @@ static ssize_t hook_debug_eq_sread(struct fid_eq *eq, uint32_t *event,
 	if (ret > 0)
 		ofi_atomic_inc64(&myeq->event_cntr[*event]);
 
+	hook_debug_trace_exit_eq(myeq, "fi_eq_sread", (ssize_t)ret);
 	return ret;
 }
 
@@ -950,7 +981,7 @@ HOOK_DEBUG_INI
 
 	hook_debug_cq_ops = hook_cq_ops;
 	hook_debug_cq_ops.read = hook_debug_cq_read;
-	hook_debug_cq_ops.readfrom = fi_no_cq_readfrom;
+	hook_debug_cq_ops.readfrom = hook_debug_cq_readfrom;
 	hook_debug_cq_ops.sread = fi_no_cq_sread;
 	hook_debug_cq_ops.sreadfrom = fi_no_cq_sreadfrom;
 
