@@ -72,9 +72,9 @@ static struct fi_ep_attr psmx2_ep_attr = {
 	.type			= FI_EP_RDM, /* FI_EP_DGRAM */
 	.protocol		= FI_PROTO_PSMX2,
 	.protocol_version	= PSM2_VERNO,
-	.max_msg_size		= PSMX2_MAX_MSG_SIZE,
+	.max_msg_size		= PSMX2_MAX_MSG_SIZE & ~0x0FFF,
 	.msg_prefix_size	= 0,
-	.max_order_raw_size	= PSMX2_MAX_MSG_SIZE,
+	.max_order_raw_size	= PSMX2_RMA_ORDER_SIZE,
 	.max_order_war_size	= PSMX2_RMA_ORDER_SIZE,
 	.max_order_waw_size	= PSMX2_RMA_ORDER_SIZE,
 	.mem_tag_format		= FI_TAG_GENERIC, /* >>= 4 */
