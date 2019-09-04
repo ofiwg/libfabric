@@ -86,6 +86,18 @@ ofi_recvwin_queue_msg(struct name *recvq, entrytype * msg, uint64_t id)	\
 	ofi_cirque_commit(recvq->pending);				\
 	return 0;							\
 }									\
+				                                        \
+static inline entrytype *						\
+ofi_recvwin_get_msg(struct name *recvq, uint64_t id)	   		\
+{		                                           		\
+	int read_idx;							\
+									\
+	assert(ofi_recvwin_is_allowed(recvq, id));			\
+	read_idx = (ofi_cirque_rindex(recvq->pending)			\
+		    + (id - recvq->exp_msg_id))				\
+		    & recvq->pending->size_mask;			\
+	return &recvq->pending->buf[read_idx];				\
+}									\
 									\
 static inline entrytype *						\
 ofi_recvwin_get_next_msg(struct name *recvq)				\
