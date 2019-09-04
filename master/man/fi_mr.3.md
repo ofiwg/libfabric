@@ -251,11 +251,13 @@ The following apply to memory registration.
   1.4 or earlier).  The behavior of basic registration is equivalent
   to setting the following mr_mode bits to one: FI_MR_VIRT_ADDR,
   FI_MR_ALLOCATED, and FI_MR_PROV_KEY.  Additionally, providers that
-  support basic registration usually required FI_MR_LOCAL.  FI_MR_BASIC 
-  must either be set alone, or in conjunction with FI_MR_LOCAL.  Other
-  mr_mode bit pairings are invalid.  Unlike other mr_mode bits, if
-  FI_MR_BASIC is set on input to fi_getinfo(),  it will not be cleared
-  by the provider.  That is, setting FI_MR_BASIC
+  support basic registration usually required the fi_info mode bit FI_LOCAL_MR.
+  As a result, it is recommended that applications migrating from libfabric 1.4
+  or earlier or wanting to support basic memory registration set the mr_mode
+  to FI_MR_VIRT_ADDR | FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_LOCAL.
+  FI_MR_BASIC must be set alone.  Other mr_mode bit pairings are invalid.
+  Unlike other mr_mode bits, if FI_MR_BASIC is set on input to fi_getinfo(),
+  it will not be cleared by the provider.  That is, setting FI_MR_BASIC
   to one requests basic registration.
 
 The registrations functions -- fi_mr_reg, fi_mr_regv, and
