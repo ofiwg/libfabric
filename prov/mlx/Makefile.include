@@ -3,6 +3,8 @@ _mlx_files = prov/mlx/src/mlx.h \
     prov/mlx/src/mlx_av.c \
     prov/mlx/src/mlx_cm.c \
     prov/mlx/src/mlx_cq.c \
+    prov/mlx/src/mlx_cntr.c \
+    prov/mlx/src/mlx_rma.c \
     prov/mlx/src/mlx_domain.c \
     prov/mlx/src/mlx_ep.c \
     prov/mlx/src/mlx_init.c \

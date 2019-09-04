@@ -48,9 +48,56 @@ static int mlx_domain_close(fid_t fid)
 	return status;
 }
 
+int mlx_dom_control(struct fid *fid, int command, void *arg)
+{
+	ucs_status_t status;
+	struct mlx_domain *domain = container_of(fid, struct mlx_domain,
+			u_domain.domain_fid.fid);
+	struct mlx_mr_key_descr *mr_dsc = (struct mlx_mr_key_descr*)arg;
+	struct mlx_mr_rkey *rkey;
+
+	if (command == FI_MLX_MR_ADD_KEY) {
+		rkey = malloc(sizeof(struct mlx_mr_rkey));
+		status = ucp_ep_rkey_unpack((ucp_ep_h)mr_dsc->owner_addr,
+				mr_dsc->pkey, &(rkey->rkey));
+		if (status != UCS_OK) {
+			free (rkey);
+			return MLX_TRANSLATE_ERRCODE(status);
+		}
+
+		rkey->id.owner_addr = mr_dsc->owner_addr;
+		rkey->id.key = mr_dsc->mr_key;
+		HASH_ADD(hh, domain->remote_keys, id, sizeof(rkey->id), rkey);
+
+		FI_DBG( &mlx_prov,FI_LOG_DEBUG,
+			"MLX/RMA: added key {%llu:%llu}\n",
+			rkey->id.owner_addr,
+			rkey->id.key);
+		return FI_SUCCESS;
+	} else if (command == FI_MLX_MR_DEL_KEY) {
+		struct mlx_mr_rkey tmp_rkey;
+		tmp_rkey.id.owner_addr = mr_dsc->owner_addr;
+		tmp_rkey.id.key = mr_dsc->mr_key;
+		HASH_FIND(hh, domain->remote_keys, &tmp_rkey.id, sizeof(tmp_rkey.id),
+				rkey);
+		if (rkey) {
+			FI_DBG( &mlx_prov,FI_LOG_DEBUG,
+				"MLX/RMA: removed key {%llu:%llu}\n",
+				tmp_rkey.id.owner_addr,
+				tmp_rkey.id.key);
+			HASH_DEL(domain->remote_keys, rkey);
+			ucp_rkey_destroy(rkey->rkey);
+			free(rkey);
+		}
+		return FI_SUCCESS;
+	}
+	return -FI_ENOSYS;
+}
+
 static struct fi_ops mlx_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = mlx_domain_close,
+	.control = mlx_dom_control,
 };
 
 struct fi_ops_domain mlx_domain_ops = {
@@ -58,7 +105,12 @@ struct fi_ops_domain mlx_domain_ops = {
 	.av_open = mlx_av_open,
 	.cq_open = mlx_cq_open,
 	.endpoint = mlx_ep_open,
+	.scalable_ep = fi_no_scalable_ep,
+	.cntr_open = mlx_cntr_open,
 	.poll_open = fi_poll_create,
+	.stx_ctx = fi_no_stx_context,
+	.srx_ctx = fi_no_srx_context,
+	.query_atomic = fi_no_query_atomic,
 };
 
 
@@ -88,13 +140,44 @@ int mlx_mr_close(struct fid *fid)
 	return MLX_TRANSLATE_ERRCODE(status);
 }
 
+int mlx_mr_control(struct fid *fid, int command, void *arg)
+{
+	if (command == FI_MLX_MR_GET_KEY) {
+		ucs_status_t status;
+		void * tmp = NULL;
+		size_t tmp_size = 0;
+		struct mlx_domain *domain;
+		struct mlx_mr_key_descr *mr_dsc = (struct mlx_mr_key_descr*)arg;
+		struct mlx_mr *mlx_mr = container_of(fid, struct mlx_mr, omr.mr_fid.fid);
+
+		domain = container_of(mlx_mr->omr.domain, struct mlx_domain, u_domain);
+		status = ucp_rkey_pack(domain->context,
+					mlx_mr->memh,
+					&tmp,
+					&tmp_size);
+		if (status != UCS_OK)
+			return MLX_TRANSLATE_ERRCODE(status);
+		if (mr_dsc->pkey_size < tmp_size) {
+			FI_WARN( &mlx_prov, FI_LOG_MR,
+				"Rkey buffer is too small: expected %lu, provided %lu\n",
+				mr_dsc->pkey_size, tmp_size);
+			return -FI_ENOMEM;
+		}
+
+		memcpy(mr_dsc->pkey, tmp, tmp_size);
+		mr_dsc->pkey_size = tmp_size;
+		ucp_rkey_buffer_release(tmp);
+		return FI_SUCCESS;
+	}
+	return -FI_ENOSYS;
+}
+
 static struct fi_ops mlx_mr_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = mlx_mr_close,
-	.control = fi_no_control,
+	.control = mlx_mr_control,
 	.ops_open = fi_no_ops_open,
 };
-
 
 int mlx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		   uint64_t flags, struct fid_mr **mr_fid)
@@ -209,7 +292,7 @@ int mlx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	struct mlx_domain* domain;
 	size_t univ_size;
 	ucp_params_t params = {
-		.features = UCP_FEATURE_TAG,
+		.features = UCP_FEATURE_TAG | UCP_FEATURE_RMA,
 		.request_size = sizeof(struct mlx_request),
 		.request_init = mlx_req_reset,
 		.field_mask = UCP_PARAM_FIELD_FEATURES |
@@ -245,7 +328,7 @@ int mlx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		goto domain_free;
 	}
 
-	status = ucp_init_version(1, 5, &params, mlx_descriptor.config,
+	status = ucp_init_version(1, 4, &params, mlx_descriptor.config,
 			  &(domain->context));
 	if (status != UCS_OK) {
 		ofi_status = MLX_TRANSLATE_ERRCODE(status);

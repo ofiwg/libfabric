@@ -137,6 +137,10 @@ void mlx_multi_recv_callback(void *request,
 			|| (mlx_req->status != UCS_OK)
 			|| ((mctx->remain - mlx_req->last_recvd) < ep->ep_opts.mrecv_min_size)) {
 		status = mlx_generate_completion(mlx_req);
+		if (status == FI_SUCCESS) {
+			mlx_req_release((struct mlx_request*)mlx_req);
+			return;
+		}
 	}
 	mctx->head = (void*)((char*)(mctx->head) + info->length);
 	mctx->remain -= info->length;

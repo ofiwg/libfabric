@@ -123,6 +123,7 @@ static int mlx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct mlx_ep *ep;
 	struct util_cq *cq;
+	struct util_cntr *cntr;
 
 	ep = container_of(fid, struct mlx_ep, ep.ep_fid.fid);
 	int status = FI_SUCCESS;
@@ -131,6 +132,10 @@ static int mlx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	case FI_CLASS_CQ:
 		cq = container_of(bfid, struct util_cq, cq_fid.fid);
 		status = ofi_ep_bind_cq(&ep->ep, cq, flags);
+		break;
+	case FI_CLASS_CNTR:
+		cntr = container_of(bfid, struct util_cntr, cntr_fid.fid);
+		status = ofi_ep_bind_cntr(&ep->ep, cntr, flags);
 		break;
 	case FI_CLASS_AV:
 		if (ep->av) {
@@ -162,6 +167,9 @@ static int mlx_ep_control(fid_t fid, int command, void *arg)
 			return -FI_ENOCQ;
 		if (!ep->av)
 			return -FI_EOPBADSTATE; /* TODO: Add FI_ENOAV */
+		break;
+	case FI_MLX_FLUSH:
+		ucp_worker_flush(ep->worker);
 		break;
 	default:
 		return -FI_ENOSYS;
@@ -244,6 +252,7 @@ int mlx_ep_open( struct fid_domain *domain, struct fi_info *info,
 	ep->ep.ep_fid.cm = &mlx_cm_ops;
 	ep->ep.ep_fid.tagged = &mlx_tagged_ops;
 	ep->ep.ep_fid.msg = &mlx_msg_ops;
+	ep->ep.ep_fid.rma = &mlx_rma_ops;
 	ep->ep.flags = info->mode;
 	ep->ep.caps = u_domain->u_domain.info_domain_caps;
 	dlist_init(&(ep->claimed_list));

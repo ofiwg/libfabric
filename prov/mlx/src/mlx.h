@@ -40,7 +40,6 @@ extern "C" {
 
 #include "config.h"
 #include <ucp/api/ucp.h>
-#include <ucm/api/ucm.h>
 
 #include <errno.h>
 #include <stdio.h>
@@ -71,6 +70,19 @@ extern "C" {
 #include <sys/socket.h>
 #include <ifaddrs.h>
 
+#define FI_MLX_MR_GET_KEY ((int)0xFF)
+#define FI_MLX_MR_ADD_KEY ((int)0xFE)
+#define FI_MLX_MR_DEL_KEY ((int)0xFD)
+#define FI_MLX_FLUSH ((int)0xFC)
+
+struct mlx_mr_key_descr {
+	fi_addr_t owner_addr;
+	uint64_t mr_key;
+	size_t pkey_size;
+	void *pkey;
+};
+
+
 #define FI_MLX_FABRIC_NAME "mlx"
 #define FI_MLX_DEFAULT_INJECT_SIZE 1024
 #define FI_MLX_DEFAULT_NS_PORT 12345
@@ -83,9 +95,10 @@ extern "C" {
 
 #define FI_MLX_RKEY_MAX_LEN (256)
 
-#define FI_MLX_MAX_NAME_LEN (512)
+#define FI_MLX_MAX_NAME_LEN (1024)
 
-#define FI_MLX_CAPS (FI_SEND | FI_RECV | FI_TAGGED | FI_MSG | FI_MULTI_RECV)
+#define FI_MLX_RMA_CAPS (FI_RMA | FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE)
+#define FI_MLX_CAPS (FI_SEND | FI_RECV | FI_TAGGED | FI_MSG | FI_MULTI_RECV | FI_MLX_RMA_CAPS)
 #define FI_MLX_MODE_REQUIRED (0ULL)
 #define FI_MLX_MODE_SUPPORTED (FI_CONTEXT | FI_ASYNC_IOV)
 #define FI_MLX_OP_FLAGS (FI_COMPLETION)
@@ -108,9 +121,20 @@ struct mlx_mr {
 	ucp_mem_h memh;
 };
 
+
+struct mlx_mr_rkey {
+	struct {
+		fi_addr_t owner_addr;
+		uint64_t key;
+	} id;
+	ucp_rkey_h rkey;
+	UT_hash_handle hh;
+};
+
 struct mlx_domain {
 	struct util_domain u_domain;
 	ucp_context_h context;
+	struct mlx_mr_rkey *remote_keys;
 };
 
 
@@ -140,6 +164,8 @@ struct mlx_av {
 
 typedef enum mlx_req_type {
 	MLX_FI_REQ_UNINITIALIZED = 0,
+	MLX_FI_REQ_READ = 0x01,
+	MLX_FI_REQ_WRITE = 0x02,
 	MLX_FI_REQ_MULTIRECV = 0xAA,
 	MLX_FI_REQ_MULTIRECV_UNEXP = 0xAB,
 	MLX_FI_REQ_REGULAR = 0xFD,
@@ -204,6 +230,7 @@ extern struct fi_ops_cm mlx_cm_ops;
 extern struct fi_ops_tagged mlx_tagged_ops;
 extern struct fi_ops_msg mlx_msg_ops;
 extern struct fi_ops_mr mlx_mr_ops;
+extern struct fi_ops_rma mlx_rma_ops;
 extern struct fi_fabric_attr mlx_fabric_attrs;
 
 int mlx_fabric_open(
@@ -226,6 +253,9 @@ int mlx_cq_open(
 int mlx_av_open(
 		struct fid_domain *domain, struct fi_av_attr *attr,
 		struct fid_av **av, void *context);
+
+int mlx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
+		  struct fid_cntr **cntr_fid, void *context);
 
 int mlx_ns_is_service_wildcard(void *svc);
 int mlx_ns_service_cmp(void *svc1, void *svc2);

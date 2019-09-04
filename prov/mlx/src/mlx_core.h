@@ -49,8 +49,10 @@ static struct mlx_claimed_msg *mlx_dequeue_claimed(struct mlx_ep *u_ep,
 
 	dlist_foreach((&u_ep->claimed_list), dentry) {
 		cmsg = (struct mlx_claimed_msg *) dentry;
-		if ((cmsg->tag & msg->ignore) == (msg->tag & msg->ignore))
+		if ((cmsg->tag & ~msg->ignore) == (msg->tag & ~msg->ignore)) {
+			dlist_remove(&cmsg->dentry);
 			return cmsg;
+		}
 	}
 	return NULL;
 }
@@ -227,6 +229,7 @@ static inline ssize_t mlx_do_recvmsg(struct fid_ep *ep, const struct fi_msg_tagg
 					 recv_cnt,
 					 recv_dt,
 					 cmsg->ucp_msg, cbf);
+		free(cmsg);
 	} else {
 		cbf = ((!(u_ep->ep.rx_op_flags & FI_SELECTIVE_COMPLETION)) 
 				|| (flags & FI_COMPLETION)) ? 

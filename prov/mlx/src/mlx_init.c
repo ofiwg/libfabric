@@ -109,7 +109,7 @@ struct fi_tx_attr mlx_tx_attrs = {
 	.inject_size = FI_MLX_DEFAULT_INJECT_SIZE, /*Should be setup after init*/
 	.size = UINT64_MAX,
 	.iov_limit = 1,
-	.rma_iov_limit = 0
+	.rma_iov_limit = 1,
 };
 
 struct fi_fabric_attr mlx_fabric_attrs = {
@@ -149,6 +149,19 @@ struct util_prov mlx_util_prov = {
 	.flags = 0,
 };
 
+static inline int mlx_do_extra_checks() {
+	uint32_t bx, cx, dx;
+	asm volatile(
+			"xor %%eax, %%eax;"
+			"cpuid;"
+		: "=b" (bx),
+		  "=c" (cx),
+		  "=d" (dx));
+	return ((bx == 0x756E6547)
+			&& (cx == 0x6C65746E)
+			&& (dx == 0x49656E69))
+		? FI_SUCCESS : -ENODATA;
+}
 
 static int mlx_getinfo (
 			uint32_t version, const char *node,
@@ -161,14 +174,19 @@ static int mlx_getinfo (
 	mlx_descriptor.config = NULL;
 	size_t use_cache = 1;
 
+	if (mlx_do_extra_checks() != FI_SUCCESS) {
+		return -ENODATA;
+	}
+
 	status = fi_param_get( &mlx_prov,
-				"tinject_limit",
+				"inject_limit",
 				&inject_thresh);
 	if (status != FI_SUCCESS)
 		inject_thresh = FI_MLX_DEFAULT_INJECT_SIZE;
 
 	FI_INFO( &mlx_prov, FI_LOG_CORE,
 		"used inject size = %d \n", inject_thresh);
+	mlx_tx_attrs.inject_size = inject_thresh;
 
 	status = fi_param_get( &mlx_prov, "config", &configfile_name);
 	if (status != FI_SUCCESS) {
@@ -185,14 +203,6 @@ static int mlx_getinfo (
 			&mlx_descriptor.ns_port);
 	if (status != FI_SUCCESS) {
 		mlx_descriptor.ns_port = FI_MLX_DEFAULT_NS_PORT;
-	}
-
-	status = fi_param_get( &mlx_prov, "mr_cache",
-			&use_cache);
-	if ((status == FI_SUCCESS) && !use_cache) {
-		ucm_global_opts.enable_events = 0;
-		ucm_global_opts.enable_malloc_hooks = 0;
-		ucm_global_opts.enable_malloc_reloc = 0;
 	}
 
 	status = fi_param_get( &mlx_prov, "ep_flush",
@@ -290,8 +300,8 @@ MLX_INI
 			"MLX configuration file name");
 
 	fi_param_define(&mlx_prov,
-			"tinject_limit", FI_PARAM_INT,
-			"Maximal tinject message size");
+			"inject_limit", FI_PARAM_INT,
+			"Maximal tinject/inject message size");
 
 	fi_param_define(&mlx_prov,
 			"ns_port", FI_PARAM_INT,
@@ -300,10 +310,6 @@ MLX_INI
 	fi_param_define(&mlx_prov,
 			"ns_enable",FI_PARAM_BOOL,
 			"Enforce usage of name server for MLX provider");
-
-	fi_param_define(&mlx_prov,
-			"mr_cache",FI_PARAM_BOOL,
-			"Enable memory cache (enabled by default)");
 
 	fi_param_define(&mlx_prov,
 			"ep_flush",FI_PARAM_BOOL,
