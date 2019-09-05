@@ -33,12 +33,29 @@
  */
 
 #include <ofi_mr.h>
+#include <unistd.h>
 
 static struct ofi_uffd uffd;
 struct ofi_mem_monitor *uffd_monitor = &uffd.monitor;
 
 struct ofi_mem_monitor *default_monitor;
 
+
+static size_t ofi_default_cache_size(void)
+{
+	long cpu_cnt;
+	size_t cache_size;
+
+	cpu_cnt = ofi_sysconf(_SC_NPROCESSORS_ONLN);
+	/* disable cache on error */
+	if (cpu_cnt <= 0)
+		return 0;
+
+	cache_size = ofi_get_mem_size() / (size_t) cpu_cnt / 2;
+	FI_INFO(&core_prov, FI_LOG_MR,
+		"default cache size=%zu\n", cache_size);
+	return cache_size;
+}
 
 /*
  * Initialize all available memory monitors
@@ -64,7 +81,7 @@ void ofi_monitor_init(void)
 			" regions that may be tracked by the MR cache."
 			" Setting this will reduce the amount of memory"
 			" not actively in use that may be registered."
-			" (default: 0 no limit is enforced)");
+			" (default: total memory / number of cpu cores / 2)");
 	fi_param_define(NULL, "mr_cache_max_count", FI_PARAM_SIZE_T,
 			"Defines the total number of memory regions that"
 			" may be store in the cache.  Setting this will"
@@ -94,7 +111,7 @@ void ofi_monitor_init(void)
 	fi_param_get_str(NULL, "mr_cache_monitor", &cache_params.monitor);
 
 	if (!cache_params.max_size)
-		cache_params.max_size = SIZE_MAX;
+		cache_params.max_size = ofi_default_cache_size();
 
 	if (cache_params.monitor != NULL) {
 		if (!strcmp(cache_params.monitor, "userfaultfd") &&
