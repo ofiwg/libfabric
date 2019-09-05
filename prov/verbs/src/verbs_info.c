@@ -896,19 +896,17 @@ static void fi_ibv_verbs_devs_free(struct dlist_entry *verbs_devs)
 	}
 }
 
-static int fi_ibv_add_rai(struct dlist_entry *verbs_devs, struct rdma_cm_id *id,
-		struct rdma_addrinfo *rai)
+static int fi_ibv_add_rai(struct dlist_entry *verbs_devs, char *dev_name,
+			  struct rdma_addrinfo *rai)
 {
 	struct verbs_dev_info *dev;
 	struct verbs_addr *addr;
-	const char *dev_name;
 
 	if (!(addr = malloc(sizeof(*addr))))
 		return -FI_ENOMEM;
 
 	addr->rai = rai;
 
-	dev_name = ibv_get_device_name(id->verbs->device);
 	dlist_foreach_container(verbs_devs, struct verbs_dev_info, dev, entry)
 		if (!strcmp(dev_name, dev->name))
 			goto add_rai;
@@ -916,29 +914,83 @@ static int fi_ibv_add_rai(struct dlist_entry *verbs_devs, struct rdma_cm_id *id,
 	if (!(dev = malloc(sizeof(*dev))))
 		goto err1;
 
-	if (!(dev->name = strdup(dev_name)))
-		goto err2;
-
+	dev->name = dev_name;
 	dlist_init(&dev->addrs);
 	dlist_insert_tail(&dev->entry, verbs_devs);
 add_rai:
 	dlist_insert_tail(&addr->entry, &dev->addrs);
 	return 0;
-err2:
-	free(dev);
 err1:
 	free(addr);
 	return -FI_ENOMEM;
+}
+
+static int fi_ibv_ifa_rdma_info(const struct ifaddrs *ifa, char **dev_name,
+				struct rdma_addrinfo **rai)
+{
+	char name[INET6_ADDRSTRLEN];
+	struct rdma_addrinfo rai_hints = {
+		.ai_flags = RAI_PASSIVE | RAI_NUMERICHOST,
+	}, *rai_;
+	struct rdma_cm_id *id;
+	int ret;
+
+	if (!inet_ntop(ifa->ifa_addr->sa_family, ofi_get_ipaddr(ifa->ifa_addr),
+		       name, INET6_ADDRSTRLEN))
+		return -errno;
+
+	ret = rdma_create_id(NULL, &id, NULL, RDMA_PS_TCP);
+	if (ret)
+		return ret;
+
+	ret = rdma_getaddrinfo((char *) name, NULL, &rai_hints, &rai_);
+	if (ret) {
+		ret = -errno;
+		FI_DBG(&fi_ibv_prov, FI_LOG_FABRIC, "rdma_getaddrinfo failed "
+		       "with error code: %d (%s) for interface %s with address:"
+		       " %s\n", -ret, strerror(-ret), ifa->ifa_name, name);
+		goto err1;
+	}
+
+	ret = rdma_bind_addr(id, rai_->ai_src_addr);
+	if (ret) {
+		ret = -errno;
+		FI_DBG(&fi_ibv_prov, FI_LOG_FABRIC, "rdma_bind_addr failed "
+		       "with error code: %d (%s) for interface %s with address:"
+		       " %s\n", -ret, strerror(-ret), ifa->ifa_name, name);
+		goto err2;
+	}
+
+	if (!id->verbs) {
+		ret = -FI_EINVAL;
+		goto err2;
+	}
+
+	*dev_name = strdup(ibv_get_device_name(id->verbs->device));
+	if (!(*dev_name)) {
+		ret = -FI_ENOMEM;
+		goto err2;
+	}
+
+	FI_INFO(&fi_ibv_prov, FI_LOG_FABRIC, "found active IPoIB interface for "
+		"verbs device: %s with address: %s\n", *dev_name, name);
+
+	rdma_destroy_id(id);
+	*rai = rai_;
+	return 0;
+err2:
+	rdma_freeaddrinfo(rai_);
+err1:
+	rdma_destroy_id(id);
+	return ret;
 }
 
 /* Builds a list of interfaces that correspond to active verbs devices */
 static int fi_ibv_getifaddrs(struct dlist_entry *verbs_devs)
 {
 	struct ifaddrs *ifaddr, *ifa;
-	char name[INET6_ADDRSTRLEN];
 	struct rdma_addrinfo *rai;
-	struct rdma_cm_id *id;
-	const char *ret_ptr;
+	char *dev_name;
 	char *iface = fi_ibv_gl_data.iface;
 	int ret, num_verbs_ifs = 0;
 	size_t iface_len = 0;
@@ -979,49 +1031,20 @@ static int fi_ibv_getifaddrs(struct dlist_entry *verbs_devs)
 			}
 		}
 
-		switch (ifa->ifa_addr->sa_family) {
-		case AF_INET:
-			ret_ptr = inet_ntop(AF_INET, &ofi_sin_addr(ifa->ifa_addr),
-				name, INET6_ADDRSTRLEN);
-			break;
-		case AF_INET6:
-			ret_ptr = inet_ntop(AF_INET6, &ofi_sin6_addr(ifa->ifa_addr),
-				name, INET6_ADDRSTRLEN);
-			break;
-		default:
-			continue;
-		}
-		if (!ret_ptr) {
-			VERBS_WARN(FI_LOG_FABRIC,
-				   "inet_ntop failed: %s(%d)\n",
-				   strerror(errno), errno);
-			ret = -errno;
-			goto err1;
-		}
-
-		ret = fi_ibv_get_rai_id(name, NULL, FI_NUMERICHOST | FI_SOURCE,
-					NULL, &rai, &id);
+		ret = fi_ibv_ifa_rdma_info(ifa, &dev_name, &rai);
 		if (ret)
 			continue;
 
-		ret = fi_ibv_add_rai(verbs_devs, id, rai);
+		ret = fi_ibv_add_rai(verbs_devs, dev_name, rai);
 		if (ret) {
+			free(dev_name);
 			rdma_freeaddrinfo(rai);
-			rdma_destroy_id(id);
-			goto err1;
+			continue;
 		}
-		VERBS_DBG(FI_LOG_FABRIC, "Found active interface for verbs device: "
-			  "%s with address: %s\n",
-			  ibv_get_device_name(id->verbs->device), name);
-		rdma_destroy_id(id);
 		num_verbs_ifs++;
 	}
 	freeifaddrs(ifaddr);
 	return num_verbs_ifs ? 0 : -FI_ENODATA;
-err1:
-	fi_ibv_verbs_devs_free(verbs_devs);
-	freeifaddrs(ifaddr);
-	return ret;
 }
 
 static int fi_ibv_get_srcaddr_devs(struct fi_info **info)
@@ -1038,8 +1061,9 @@ static int fi_ibv_get_srcaddr_devs(struct fi_info **info)
 		return ret;
 
 	if (dlist_empty(&verbs_devs)) {
-		VERBS_WARN(FI_LOG_CORE, "No interface address found\n");
-		return 0;
+		FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC,
+			"no valid IPoIB interfaces found\n");
+		return -FI_ENODATA;
 	}
 
 	for (fi = *info; fi; fi = fi->next) {
