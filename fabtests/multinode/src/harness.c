@@ -80,7 +80,6 @@ static inline int socket_recv(int sock, void *buf, size_t len, int flags)
 }
 
 int pm_allgather(void *my_item, void *items, int item_size)
-
 {
 	int i, ret;
 	uint8_t *offset;
@@ -128,6 +127,26 @@ void pm_barrier()
 	pm_allgather(&ch, chs, 1);
 }
 
+static int pm_init_ranks()
+{
+	int ret;
+	int i;
+	size_t send_rank;
+
+	if (pm_job.clients) {
+		for(i = 0; i < pm_job.num_ranks-1; i++) {
+			send_rank = i + 1;
+			ret = socket_send(pm_job.clients[i], &send_rank, sizeof(send_rank), 0);
+			if (ret < 0)
+				return ret;
+		}
+	} else {
+		ret = socket_recv(pm_job.sock, &(pm_job.my_rank), sizeof(pm_job.my_rank), 0);
+	}
+
+	return ret;
+}
+
 static int server_connect()
 {
 	int new_sock;
@@ -141,7 +160,7 @@ static int server_connect()
 	if (!pm_job.clients)
 		return -FI_ENOMEM;
 
-	for (i = 0; i < pm_job.num_ranks-1; i++){
+	for (i = 0; i < pm_job.num_ranks-1; i++) {
 		new_sock = accept(pm_job.sock, NULL, NULL);
 		if (new_sock < 0) {
 			FT_ERR("error during server init\n");
@@ -218,13 +237,13 @@ int pm_get_oob_server_addr()
 	struct addrinfo *res;
 	struct sockaddr_in *in;
 	struct sockaddr_in6 *in6;
-        int ret;
+	int ret;
 
-        ret = getaddrinfo(opts.src_addr, NULL, NULL, &res);
-        if (ret) {
+	ret = getaddrinfo(opts.src_addr, NULL, NULL, &res);
+	if (ret) {
 		FT_ERR( "getaddrinfo failed\n");
-                return ret;
-        }
+		return ret;
+	}
 
 	memcpy(&pm_job.oob_server_addr, res->ai_addr, res->ai_addrlen);
 
@@ -244,7 +263,7 @@ int pm_get_oob_server_addr()
 	}
 
 	freeaddrinfo(res);
-        return ret;
+	return ret;
 }
 
 int main(int argc, char **argv)
@@ -282,8 +301,16 @@ int main(int argc, char **argv)
 		goto err1;
 
 	ret = pm_conn_setup();
-	if (ret)
+	if (ret) {
+		FT_ERR("connection setup failed\n");
 		goto err1;
+	}
+	
+	ret = pm_init_ranks();
+	if (ret < 0) {
+		FT_ERR("rank initialization failed\n");
+		goto err2;
+	}
 
 	FT_DEBUG("OOB job setup done\n");
 

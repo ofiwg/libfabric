@@ -49,6 +49,7 @@ struct pm_job_info {
 	size_t		num_ranks;
 	int		sock;
 	int		*clients; //only valid for server
+	
 	struct sockaddr_storage oob_server_addr;
 	void		*names;
 	size_t		name_len;

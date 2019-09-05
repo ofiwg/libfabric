@@ -35,11 +35,13 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <errno.h>
-
 #include <rdma/fabric.h>
 
 /* Initial value for iterator position. */
 #define PATTERN_NO_CURRENT (-1)
+
+/* Number of patterns to test */
+extern const int NUM_TESTS;
 
 struct pattern_ops {
 	char *name;
@@ -47,4 +49,6 @@ struct pattern_ops {
 	int (*next_target) (int *cur);
 };
 
-extern struct pattern_ops full_mesh_ops;
+extern struct pattern_ops patterns[];
+
+
