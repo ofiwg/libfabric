@@ -153,6 +153,9 @@ const struct verbs_ep_domain verbs_dgram_domain = {
 	.caps			= VERBS_DGRAM_CAPS,
 };
 
+/* The list (not thread safe) is populated once when the provider is initialized */
+DEFINE_LIST(verbs_devs);
+
 int fi_ibv_check_ep_attr(const struct fi_info *hints,
 			 const struct fi_info *info)
 {
@@ -880,24 +883,34 @@ err:
 	return ret;
 }
 
-static void fi_ibv_verbs_devs_free(struct dlist_entry *verbs_devs)
+static void verbs_devs_print(void)
 {
 	struct verbs_dev_info *dev;
 	struct verbs_addr *addr;
+	char addr_str[INET6_ADDRSTRLEN];
+	int i = 0;
 
-	while (!dlist_empty(verbs_devs)) {
-		dlist_pop_front(verbs_devs, struct verbs_dev_info, dev, entry);
-		while (!dlist_empty(&dev->addrs)) {
-			dlist_pop_front(&dev->addrs, struct verbs_addr, addr, entry);
-			rdma_freeaddrinfo(addr->rai);
-			free(addr);
+	FI_INFO(&fi_ibv_prov, FI_LOG_FABRIC,
+		"list of verbs devices found for FI_EP_MSG:\n");
+	dlist_foreach_container(&verbs_devs, struct verbs_dev_info,
+				dev, entry) {
+		FI_INFO(&fi_ibv_prov, FI_LOG_FABRIC,
+			"#%d %s - IPoIB addresses:\n", ++i, dev->name);
+		dlist_foreach_container(&dev->addrs, struct verbs_addr,
+					addr, entry) {
+			if (!inet_ntop(addr->rai->ai_family,
+				       ofi_get_ipaddr(addr->rai->ai_src_addr),
+				       addr_str, INET6_ADDRSTRLEN))
+				FI_INFO(&fi_ibv_prov, FI_LOG_FABRIC,
+					"unable to convert address to string\n");
+			else
+				FI_INFO(&fi_ibv_prov, FI_LOG_FABRIC,
+					"\t%s\n", addr_str);
 		}
-		free(dev->name);
-		free(dev);
 	}
 }
 
-static int fi_ibv_add_rai(struct dlist_entry *verbs_devs, char *dev_name,
+static int verbs_devs_add(struct dlist_entry *verbs_devs, char *dev_name,
 			  struct rdma_addrinfo *rai)
 {
 	struct verbs_dev_info *dev;
@@ -973,9 +986,6 @@ static int fi_ibv_ifa_rdma_info(const struct ifaddrs *ifa, char **dev_name,
 		goto err2;
 	}
 
-	FI_INFO(&fi_ibv_prov, FI_LOG_FABRIC, "found active IPoIB interface for "
-		"verbs device: %s with address: %s\n", *dev_name, name);
-
 	rdma_destroy_id(id);
 	*rai = rai_;
 	return 0;
@@ -990,7 +1000,7 @@ err1:
 static int fi_ibv_getifaddrs(struct dlist_entry *verbs_devs)
 {
 	struct ifaddrs *ifaddr, *ifa;
-	struct rdma_addrinfo *rai;
+	struct rdma_addrinfo *rai = NULL;
 	char *dev_name;
 	char *iface = fi_ibv_gl_data.iface;
 	int ret, num_verbs_ifs = 0;
@@ -1000,7 +1010,7 @@ static int fi_ibv_getifaddrs(struct dlist_entry *verbs_devs)
 	ret = ofi_getifaddrs(&ifaddr);
 	if (ret) {
 		VERBS_WARN(FI_LOG_FABRIC,
-			   "Unable to get interface addresses\n");
+			   "unable to get interface addresses\n");
 		return ret;
 	}
 
@@ -1008,9 +1018,8 @@ static int fi_ibv_getifaddrs(struct dlist_entry *verbs_devs)
 	if (iface) {
 		iface_len = strlen(iface);
 		if (iface_len > IFNAMSIZ) {
-			VERBS_INFO(FI_LOG_EP_CTRL,
-				   "Too long iface name: %s, max: %d\n",
-				   iface, IFNAMSIZ);
+			VERBS_INFO(FI_LOG_FABRIC, "iface name: %s, too long "
+				   "max: %d\n", iface, IFNAMSIZ);
 
 		}
 		for (ifa = ifaddr; ifa && !exact_match; ifa = ifa->ifa_next)
@@ -1024,11 +1033,21 @@ static int fi_ibv_getifaddrs(struct dlist_entry *verbs_devs)
 
 		if (iface) {
 			if (exact_match) {
-				if (strcmp(ifa->ifa_name, iface))
+				if (strcmp(ifa->ifa_name, iface)) {
+					FI_INFO(&fi_ibv_prov, FI_LOG_FABRIC,
+						"skipping interface: %s for FI_EP_MSG"
+						" as it doesn't match filter: %s\n",
+						ifa->ifa_name, iface);
 					continue;
+				}
 			} else {
-				if (strncmp(ifa->ifa_name, iface, iface_len))
+				if (strncmp(ifa->ifa_name, iface, iface_len)) {
+					FI_INFO(&fi_ibv_prov, FI_LOG_FABRIC,
+						"skipping interface: %s for FI_EP_MSG"
+						" as it doesn't match filter: %s\n",
+						ifa->ifa_name, iface);
 					continue;
+				}
 			}
 		}
 
@@ -1036,7 +1055,7 @@ static int fi_ibv_getifaddrs(struct dlist_entry *verbs_devs)
 		if (ret)
 			continue;
 
-		ret = fi_ibv_add_rai(verbs_devs, dev_name, rai);
+		ret = verbs_devs_add(verbs_devs, dev_name, rai);
 		if (ret) {
 			free(dev_name);
 			rdma_freeaddrinfo(rai);
@@ -1044,60 +1063,63 @@ static int fi_ibv_getifaddrs(struct dlist_entry *verbs_devs)
 		}
 		num_verbs_ifs++;
 	}
+
+	verbs_devs_print();
+
 	freeifaddrs(ifaddr);
 	return num_verbs_ifs ? 0 : -FI_ENODATA;
 }
 
+static int
+fi_ibv_info_add_dev_addr(struct fi_info **info, struct verbs_dev_info *dev)
+{
+	struct fi_info *add_info;
+	struct verbs_addr *addr;
+	int ret;
+
+	dlist_foreach_container(&dev->addrs, struct verbs_addr, addr, entry) {
+		/* When a device has multiple interfaces/addresses configured
+		 * duplicate fi_info and add the address info. fi->src_addr
+		 * would have been set in the previous iteration */
+		if ((*info)->src_addr) {
+			if (!(add_info = fi_dupinfo(*info)))
+				return -FI_ENOMEM;
+
+			add_info->next = (*info)->next;
+			(*info)->next = add_info;
+			*info = add_info;
+		}
+
+		ret = fi_ibv_rai_to_fi(addr->rai, *info);
+		if (ret)
+			return ret;
+	}
+	return 0;
+}
+
 static int fi_ibv_get_srcaddr_devs(struct fi_info **info)
 {
-	struct fi_info *fi, *add_info;
 	struct verbs_dev_info *dev;
-	struct verbs_addr *addr;
-	int ret = 0;
-
-	DEFINE_LIST(verbs_devs);
-
-	ret = fi_ibv_getifaddrs(&verbs_devs);
-	if (ret)
-		return ret;
-
-	if (dlist_empty(&verbs_devs)) {
-		FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC,
-			"no valid IPoIB interfaces found\n");
-		return -FI_ENODATA;
-	}
+	struct fi_info *fi;
+	int ret;
 
 	for (fi = *info; fi; fi = fi->next) {
 		if (fi->ep_attr->type == FI_EP_DGRAM)
 			continue;
-		dlist_foreach_container(&verbs_devs, struct verbs_dev_info, dev, entry)
-			if (!strncmp(fi->domain_attr->name, dev->name, strlen(dev->name))) {
-				dlist_foreach_container(&dev->addrs, struct verbs_addr, addr, entry) {
-					/* When a device has multiple interfaces/addresses configured
-					 * duplicate fi_info and add the address info. fi->src_addr
-					 * would have been set in the previous iteration */
-					if (fi->src_addr) {
-						if (!(add_info = fi_dupinfo(fi))) {
-							ret = -FI_ENOMEM;
-							goto out;
-						}
-
-						add_info->next = fi->next;
-						fi->next = add_info;
-						fi = add_info;
-					}
-
-					ret = fi_ibv_rai_to_fi(addr->rai, fi);
-					if (ret)
-						goto out;
-				}
+		dlist_foreach_container(&verbs_devs, struct verbs_dev_info,
+					dev, entry) {
+			/* strncmp because we want to process XRC fi_info as
+			 * well which have a "-xrc" suffix in domain name */
+			if (!strncmp(fi->domain_attr->name, dev->name,
+				     strlen(dev->name))) {
+				ret = fi_ibv_info_add_dev_addr(&fi, dev);
+				if (ret)
+					return ret;
 				break;
 			}
+		}
 	}
-
-out:
-	fi_ibv_verbs_devs_free(&verbs_devs);
-	return ret;
+	return 0;
 }
 
 static void fi_ibv_sockaddr_set_port(struct sockaddr *sa, uint16_t port)
@@ -1192,6 +1214,17 @@ rai_to_fi:
 				     NULL, NULL);
 }
 
+static int fi_ibv_device_has_ipoib_addr(const char *dev_name)
+{
+	struct verbs_dev_info *dev;
+
+	dlist_foreach_container(&verbs_devs, struct verbs_dev_info, dev, entry) {
+		if (!strcmp(dev_name, dev->name))
+			return 1;
+	}
+	return 0;
+}
+
 #define VERBS_NUM_DOMAIN_TYPES		3
 
 int fi_ibv_init_info(const struct fi_info **all_infos)
@@ -1203,6 +1236,12 @@ int fi_ibv_init_info(const struct fi_info **all_infos)
 
 	*all_infos = NULL;
 
+	if (!fi_ibv_have_device()) {
+		VERBS_INFO(FI_LOG_FABRIC, "no RDMA devices found\n");
+		ret = -FI_ENODATA;
+		goto done;
+	}
+
 	/* List XRC MSG_EP domain before default RC MSG_EP if requested */
 	if (fi_ibv_gl_data.msg.prefer_xrc) {
 		if (VERBS_HAVE_XRC)
@@ -1211,19 +1250,21 @@ int fi_ibv_init_info(const struct fi_info **all_infos)
 			FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC,
 				"XRC not built into provider, skip allocating "
 				"fi_info for XRC FI_EP_MSG endpoints\n");
-		ep_type[dom_count++] = &verbs_msg_domain;
-	} else {
-		ep_type[dom_count++] = &verbs_msg_domain;
-		if (VERBS_HAVE_XRC)
-			ep_type[dom_count++] = &verbs_msg_xrc_domain;
 	}
-	ep_type[dom_count++] = &verbs_dgram_domain;
 
-	if (!fi_ibv_have_device()) {
-		VERBS_INFO(FI_LOG_FABRIC, "no RDMA devices found\n");
-		ret = -FI_ENODATA;
-		goto done;
-	}
+	fi_ibv_getifaddrs(&verbs_devs);
+
+	if (dlist_empty(&verbs_devs))
+		FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC,
+			"no valid IPoIB interfaces found, FI_EP_MSG endpoint "
+			"type would not be available\n");
+	else
+		ep_type[dom_count++] = &verbs_msg_domain;
+
+	if (!fi_ibv_gl_data.msg.prefer_xrc && VERBS_HAVE_XRC)
+		ep_type[dom_count++] = &verbs_msg_xrc_domain;
+
+	ep_type[dom_count++] = &verbs_dgram_domain;
 
 	ctx_list = rdma_get_devices(&num_devices);
 	if (!num_devices) {
@@ -1234,6 +1275,17 @@ int fi_ibv_init_info(const struct fi_info **all_infos)
 
 	for (i = 0; i < num_devices; i++) {
 		for (j = 0; j < dom_count; j++) {
+			if (ep_type[j]->type == FI_EP_MSG &&
+			    !fi_ibv_device_has_ipoib_addr(ctx_list[i]->device->name)) {
+				FI_INFO(&fi_ibv_prov, FI_LOG_FABRIC,
+					"skipping device: %s for FI_EP_MSG, "
+					"it may have a filtered IPoIB interface"
+					" (FI_VERBS_IFACE) or it may not have a"
+					" valid IP address configured\n",
+					ctx_list[i]->device->name);
+				continue;
+			}
+
 			ret = fi_ibv_alloc_info(ctx_list[i], &fi, ep_type[j]);
 			if (!ret) {
 				if (!*all_infos)
