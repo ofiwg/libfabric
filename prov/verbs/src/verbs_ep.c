@@ -34,8 +34,6 @@
 
 #include "fi_verbs.h"
 
-#define VERBS_RESOLVE_TIMEOUT 2000	// ms
-
 static struct fi_ops_msg fi_ibv_srq_msg_ops;
 
 static inline int fi_ibv_msg_ep_cmdata_size(fid_t fid)
@@ -210,6 +208,7 @@ static int fi_ibv_close_free_ep(struct fi_ibv_ep *ep)
 
 	free(ep->util_ep.ep_fid.msg);
 	ep->util_ep.ep_fid.msg = NULL;
+	free(ep->cm_hdr);
 
 	ret = ofi_endpoint_close(&ep->util_ep);
 	if (ret)
@@ -319,14 +318,23 @@ static int fi_ibv_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			break;
 		case FI_CLASS_EQ:
 			ep->eq = container_of(bfid, struct fi_ibv_eq, eq_fid.fid);
+
+			/* Make sure EQ channel is not polled during migrate */
+			fastlock_acquire(&ep->eq->lock);
 			ret = rdma_migrate_id(ep->id, ep->eq->channel);
-			if (ret)
+			if (ret)  {
+				fastlock_release(&ep->eq->lock);
 				return -errno;
+			}
 			if (fi_ibv_is_xrc(ep->info)) {
 				ret = fi_ibv_ep_xrc_set_tgt_chan(ep);
-				if (ret)
+				if (ret) {
+					fastlock_release(&ep->eq->lock);
 					return -errno;
+				}
 			}
+			fastlock_release(&ep->eq->lock);
+
 			break;
 		case FI_CLASS_SRX_CTX:
 			ep->srq_ep = container_of(bfid, struct fi_ibv_srq_ep, ep_fid.fid);
@@ -872,7 +880,7 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 		}
 
 		if (!info->handle) {
-			ret = fi_ibv_create_ep(NULL, NULL, 0, info, NULL, &ep->id);
+			ret = fi_ibv_create_ep(info, &ep->id);
 			if (ret)
 				goto err1;
 		} else if (info->handle->fclass == FI_CLASS_CONNREQ) {
@@ -901,12 +909,6 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 					      VERBS_RESOLVE_TIMEOUT)) {
 				ret = -errno;
 				VERBS_INFO(FI_LOG_DOMAIN, "Unable to rdma_resolve_addr\n");
-				goto err2;
-			}
-
-			if (rdma_resolve_route(ep->id, VERBS_RESOLVE_TIMEOUT)) {
-				ret = -errno;
-				VERBS_INFO(FI_LOG_DOMAIN, "Unable to rdma_resolve_route\n");
 				goto err2;
 			}
 		} else {

@@ -203,42 +203,44 @@ err1:
 	return ret;
 }
 
-int fi_ibv_create_ep(const char *node, const char *service,
-		     uint64_t flags, const struct fi_info *hints,
-		     struct rdma_addrinfo **rai, struct rdma_cm_id **id)
+int fi_ibv_create_ep(const struct fi_info *hints, struct rdma_cm_id **id)
 {
-	struct rdma_addrinfo *_rai = NULL;
+	struct rdma_addrinfo *rai = NULL;
 	int ret;
 
-	ret = fi_ibv_get_rdma_rai(node, service, flags, hints, &_rai);
+	ret = fi_ibv_get_rdma_rai(NULL, NULL, 0, hints, &rai);
 	if (ret) {
 		return ret;
 	}
 
-	ret = rdma_create_ep(id, _rai, NULL, NULL);
-	if (ret) {
-		VERBS_INFO_ERRNO(FI_LOG_FABRIC, "rdma_create_ep", errno);
+	if (rdma_create_id(NULL, id, NULL, RDMA_PS_TCP)) {
 		ret = -errno;
+		FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC, "rdma_create_id failed: "
+			"%s (%d)\n", strerror(-ret), -ret);
 		goto err1;
 	}
 
-	if (rai) {
-		*rai = _rai;
-	} else {
-		rdma_freeaddrinfo(_rai);
+	/* TODO convert this call to non-blocking (use event channel) as well:
+	 * This may likely be needed for better scaling when running large
+	 * MPI jobs.
+	 * Making this non-blocking would mean we can't create QP at EP enable
+	 * time. We need to wait for RDMA_CM_EVENT_ADDR_RESOLVED event before
+	 * creating the QP using rdma_create_qp. It would also require a SW
+	 * receive queue to store recvs posted by app after enabling the EP.
+	 */
+	if (rdma_resolve_addr(*id, rai->ai_src_addr, rai->ai_dst_addr,
+			      VERBS_RESOLVE_TIMEOUT)) {
+		ret = -errno;
+		FI_WARN(&fi_ibv_prov, FI_LOG_EP_CTRL, "rdma_resolve_addr failed: %s (%d)\n",
+			strerror(-ret), -ret);
+		goto err2;
 	}
-
-	return ret;
+	return 0;
+err2:
+	rdma_destroy_id(*id);
 err1:
-	rdma_freeaddrinfo(_rai);
-
-	return ret;
-}
-
-void fi_ibv_destroy_ep(struct rdma_addrinfo *rai, struct rdma_cm_id **id)
-{
 	rdma_freeaddrinfo(rai);
-	rdma_destroy_ep(*id);
+	return ret;
 }
 
 static int fi_ibv_param_define(const char *param_name, const char *param_str,

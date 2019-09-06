@@ -448,7 +448,6 @@ void rxm_cmap_process_shutdown(struct rxm_cmap *cmap,
 			"Invalid handle on shutdown event\n");
 	} else if (handle->state != RXM_CMAP_SHUTDOWN) {
 		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "Got remote shutdown\n");
-		rxm_cmap_del_handle(handle);
 	} else {
 		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "Got local shutdown\n");
 	}
