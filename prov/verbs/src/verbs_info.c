@@ -579,6 +579,7 @@ static int fi_ibv_get_device_attrs(struct ibv_context *ctx,
 	uint8_t port_num;
 	enum fi_log_level level =
 		fi_ibv_gl_data.msg.prefer_xrc ? FI_LOG_WARN : FI_LOG_INFO;
+	const char *dev_name = ibv_get_device_name(ctx->device);
 
 	ret = ibv_query_device(ctx, &device_attr);
 	if (ret) {
@@ -591,7 +592,7 @@ static int fi_ibv_get_device_attrs(struct ibv_context *ctx,
 		if (!(device_attr.device_cap_flags & IBV_DEVICE_XRC)) {
 			FI_LOG(&fi_ibv_prov, level, FI_LOG_FABRIC,
 			       "XRC support unavailable in device: %s\n",
-			       ibv_get_device_name(ctx->device));
+			       dev_name);
 			return -FI_EINVAL;
 		}
 	}
@@ -641,21 +642,20 @@ static int fi_ibv_get_device_attrs(struct ibv_context *ctx,
 	}
 
 	if (port_num == device_attr.phys_port_cnt + 1) {
-		VERBS_INFO(FI_LOG_FABRIC, "There are no active ports\n");
+		FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC, "device %s: there are no "
+			"active ports\n", dev_name);
 		return -FI_ENODATA;
 	} else {
-		VERBS_INFO(FI_LOG_FABRIC,
-			   "The first found active port is %"PRIu8"\n",
-			   port_num);
+		VERBS_INFO(FI_LOG_FABRIC, "device %s: first found active port "
+			   "is %"PRIu8"\n", dev_name, port_num);
 	}
 
 	if (info->ep_attr->type == FI_EP_DGRAM) {
 		ret = fi_ibv_mtu_type_to_len(port_attr.active_mtu);
 		if (ret < 0) {
-			VERBS_WARN(FI_LOG_FABRIC, "Device %s (port: %d) reports"
+			VERBS_WARN(FI_LOG_FABRIC, "device %s (port: %d) reports"
 				   " an unrecognized MTU (%d) \n",
-				   ibv_get_device_name(ctx->device), port_num,
-				   port_attr.active_mtu);
+				   dev_name, port_num, port_attr.active_mtu);
 			return ret;
 		}
 		max_sup_size = MIN(ret, port_attr.max_msg_sz);
@@ -753,6 +753,7 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 	struct fi_info *fi;
 	union ibv_gid gid;
 	size_t name_len;
+	const char *dev_name = ibv_get_device_name(ctx->device);
 	int ret;
 
 	if ((ctx->device->transport_type != IBV_TRANSPORT_IB) &&
@@ -798,7 +799,7 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 		goto err;
 	}
 
-	fi->nic->device_attr->name = strdup(ibv_get_device_name(ctx->device));
+	fi->nic->device_attr->name = strdup(dev_name);
 	if (!fi->nic->device_attr->name) {
 		ret = -FI_ENOMEM;
 		goto err;
@@ -861,7 +862,7 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 		goto err;
 	}
 
-	name_len = strlen(ibv_get_device_name(ctx->device)) + strlen(ep_dom->suffix);
+	name_len = strlen(dev_name) + strlen(ep_dom->suffix);
 	fi->domain_attr->name = calloc(1, name_len + 2);
 	if (!fi->domain_attr->name) {
 		ret = -FI_ENOMEM;
