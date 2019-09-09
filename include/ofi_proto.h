@@ -137,6 +137,12 @@ enum {
 #define OFI_DELIVERY_COMPLETE	(1 << 2)
 #define OFI_COMMIT_COMPLETE	(1 << 3)
 
+/* TODO: As an alternative, we can reserve a tag bit for internal
+ * use when collective support is requested.  This may simplify
+ * the code paths
+ */
+#define OFI_COLLECTIVE_MSG	(1 << 4)
+
 /*
  * Common command header
  *
