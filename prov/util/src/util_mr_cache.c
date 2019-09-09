@@ -205,8 +205,8 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct iovec *iov,
 		}
 	}
 
-	if ((cache->cached_cnt > cache_params.max_cnt) ||
-	    (cache->cached_size > cache_params.max_size)) {
+	if ((cache->cached_cnt >= cache_params.max_cnt) ||
+	    (cache->cached_size >= cache_params.max_size)) {
 		(*entry)->cached = 0;
 		cache->uncached_cnt++;
 		cache->uncached_size += iov->iov_len;
