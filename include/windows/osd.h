@@ -213,9 +213,6 @@ extern "C" {
 #define SHUT_RDWR	SD_BOTH
 #endif
 
-#ifndef _SC_PAGESIZE
-#define _SC_PAGESIZE	0
-#endif
 
 #define FI_DESTRUCTOR(func) void func
 
@@ -831,15 +828,33 @@ static inline char * strndup(char const *src, size_t n)
 	return dst;
 }
 
+#ifndef _SC_PAGESIZE
+#define _SC_PAGESIZE	0
+#endif
+
+#ifndef _SC_NPROCESSORS_ONLN
+#define _SC_NPROCESSORS_ONLN 1
+#endif
+
+#ifndef _SC_PHYS_PAGES
+#define _SC_PHYS_PAGES 2
+#endif
+
 static inline long ofi_sysconf(int name)
 {
 	SYSTEM_INFO si;
+	ULONGLONG mem_size = 0;
 
 	GetSystemInfo(&si);
 
 	switch (name) {
 	case _SC_PAGESIZE:
 		return si.dwPageSize;
+	case _SC_NPROCESSORS_ONLN:
+		return si.dwNumberOfProcessors;
+	case _SC_PHYS_PAGES:
+		GetPhysicallyInstalledSystemMemory(&mem_size);
+		return mem_size / si.dwPageSize;
 	default:
 		errno = EINVAL;
 		return -1;

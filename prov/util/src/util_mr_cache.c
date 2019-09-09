@@ -439,7 +439,7 @@ int ofi_mr_cache_init(struct util_domain *domain,
 	int ret;
 
 	assert(cache->add_region && cache->delete_region);
-	if (!cache_params.max_cnt)
+	if (!cache_params.max_cnt || !cache_params.max_size)
 		return -FI_ENOSPC;
 
 	dlist_init(&cache->lru_list);

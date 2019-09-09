@@ -72,6 +72,8 @@ static inline long ofi_get_page_size()
 }
 ssize_t ofi_get_hugepage_size(void);
 
+size_t ofi_get_mem_size(void);
+
 
 /* We implement memdup to avoid external library dependency */
 static inline void *mem_dup(const void *src, size_t size)
