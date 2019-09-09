@@ -1337,7 +1337,7 @@ int _gnix_rma_post_req(void *data)
  * @param flags Flags for the RMA request
  * @param data Remote event data for the RMA request.
  *
- * @return FI_SUCCESS on success.  FI_EINVAL for invalid parameter.  -FI_ENOSPC
+ * @return FI_SUCCESS on success.  -FI_EINVAL for invalid parameter.  -FI_ENOSPC
  *         for low memory.
  */
 ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
@@ -1590,27 +1590,29 @@ err_auto_reg:
 /**
  * @brief Force a commit of previously transferred data into remote persistent
  *         memory
- * TODO at the moment this is only a quick and dirty poc implementation.
  *
- * @param ep The endpiont to use for the RMA request.
- * @param iov Memory regions to be flushed.
- * @param count Number of elements in the iov.
+ * @param ep Endpoint to use for the RMA request.
+ * @param iov Memory regions to be flushed - currently parameter is ignored.
+ * @param count Number of elements in the iov - currently parameter is ignored.
  * @param peer_addr Remote endpoint address for the RMA request.
- * @param flags Flags for the RMA request
+ * @param flags Flags for the RMA request.
  * @param context Event context for the RMA request.
  *
- * @return FI_SUCCESS on success.  FI_EINVAL for invalid parameter. TODO
+ * @return FI_SUCCESS on success
+ *        -FI_EINVAL for invalid parameter
+ *        other return values from lower level functions
  */
 ssize_t _gnix_commit(struct gnix_fid_ep *ep, const struct fi_rma_iov *iov, size_t count, 
                      uint64_t peer_addr, uint64_t cflags, void *context)
 {
         struct fi_cq_tagged_entry buf = {0}; // TODO see __gnix_cq_readfrom for type/size
-        struct gnix_fid_ep *gnix_ep;
-        struct gnix_fid_cq *gnix_cq;
+        struct gnix_fid_ep *gnix_ep = NULL;
+        struct gnix_fid_cq *gnix_cq = NULL;
         ssize_t rc = FI_SUCCESS;
         uint64_t sendtag = 1L;
         uint64_t recvtag = 2L;
         uint64_t ignore = 0L;
+	uint64_t flags = 0L;
         int num_completions = 1;
 
         if (!ep) {
@@ -1625,6 +1627,11 @@ ssize_t _gnix_commit(struct gnix_fid_ep *ep, const struct fi_rma_iov *iov, size_
         gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
         assert(GNIX_EP_RDM_DGM_MSG(gnix_ep->type));
         
+	/* This is a simple, proof-of-concept only, implementation of a fi_commit. It is based 
+	 * on a tagged send targeting the Target Memory Manager, followed by a tagged receive,
+	 * followed by a CQE creation for the caller. Future supported implementations in 
+	 * different providers should be more elegant and efficient. */
+
         /* Send tagged message with agreed upon (with TMM) commit request tag and no content. */
         rc = _gnix_send(gnix_ep, (uint64_t)NULL, 0, NULL, peer_addr, context, 
                         gnix_ep->op_flags | FI_INJECT | FI_TAGGED | GNIX_SUPPRESS_COMPLETION,
@@ -1632,55 +1639,53 @@ ssize_t _gnix_commit(struct gnix_fid_ep *ep, const struct fi_rma_iov *iov, size_
         if (rc != FI_SUCCESS) {
                 //fprintf(stderr, "Error occurred in _gnix_send(): %ld\n", rc);
                 GNIX_WARN(FI_LOG_EP_DATA, "_gnix_send() in _gnix_commit() failed: %d\n", rc);
+		return rc;
         }
 
-        //fprintf(stderr, "GNI provider: waiting for _gnix_recv in fi_commit()\n");
-
-        num_completions = 1;
-        /* Receive tagged empty message with agreed upon (with TMM) commit response tag. */
-        // Context is set to 500 for debugging purposes; consider eliminating later.
+        /* Receive tagged empty message with agreed upon (with TMM) commit response tag.
+           Context is set to 500 for debugging purposes; consider eliminating later. */
         rc = _gnix_recv(gnix_ep, 0L, 0, NULL, peer_addr, (void *)500, 
-                        gnix_ep->op_flags | FI_TAGGED,
-                        recvtag, ignore, NULL);
+                        gnix_ep->op_flags | FI_TAGGED, recvtag, ignore, NULL);
         if (rc != FI_SUCCESS) {
-                //fprintf(stderr, "Error occurred in _gnix_recv(): %ld\n", rc);
+                fprintf(stderr, "Error occurred in _gnix_recv(): %ld\n", rc);
                 GNIX_WARN(FI_LOG_EP_DATA, "_gnix_recv() in _gnix_commit() failed: %d\n", rc);
+		//return rc;
         }
         
-        /* Wait for completion of recv. */
+        /* Wait for completion of recv. Strictly, libfabric has no blocking data transfer
+	   interfaces. However, we cannot create the commit CQE unless we know that data has
+	   been committed. Thus, under the covers we wait for the recv CQE after all. */
+        num_completions = 1;
         gnix_cq = gnix_ep->recv_cq;
         while (num_completions > 0) {
                 rc = gnix_cq_readfrom(&gnix_cq->cq_fid, &buf, 1, &peer_addr);
                 if (rc > 0L) {
 #ifdef DEMO                        
-                        fprintf(stderr, "GNI provider: got cq entry w/ context %d\n", buf.op_context);
+                        //fprintf(stderr, "GNI provider: got cq entry w/ context %p\n", buf.op_context);
 #endif
                         num_completions--;
                 }
-                /*
+		/*
                 else if (rc == -FI_EAGAIN) {
                         usleep(1000);
                 }
-                */
+		*/
                 else if ((rc < 0) && (rc != -FI_EAGAIN)) {
-                        //fprintf(stderr, "ERROR: fi_cq_readfrom %ld \n", rc);
+                        fprintf(stderr, "ERROR: fi_cq_readfrom %ld \n", rc);
                         GNIX_WARN(FI_LOG_EP_DATA,
                                   "gnix_cq_readfrom() failed after recv: %d\n", rc);
                         return rc;
                 }
         }
 
-        /* This is a non-blocking function and an event needs to be created for the caller.
-           from __gnix_amo_send_completion: TODO
-        if ((req->flags & FI_COMPLETION) && ep->send_cq) {
-                rc = _gnix_cq_add_event(ep->send_cq, ep, req->user_context,
-                                        flags, 0, 0, 0, 0, FI_ADDR_NOTAVAIL);
-                if (rc) {
-                        GNIX_WARN(FI_LOG_EP_DATA,
-                                  "_gnix_cq_add_event() failed: %d\n", rc);
-                }
+	/* Generate CQE for the issuer of the command. This makes the interface appear as
+	   if it is non-blocking. This also may negatively impact latency. */
+	rc = _gnix_cq_add_event(gnix_ep->send_cq, gnix_ep, context,
+                                flags, 0, 0, 0, 0, FI_ADDR_NOTAVAIL);
+        if (rc) {
+            GNIX_WARN(FI_LOG_EP_DATA, "_gnix_cq_add_event() failed: %d\n", rc);
+	    return rc;
         }
-        */
 
         return rc;
 }
