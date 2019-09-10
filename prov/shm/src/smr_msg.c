@@ -50,7 +50,8 @@ static inline uint16_t smr_convert_rx_flags(uint64_t fi_flags)
 	return flags;
 }
 
-static inline struct smr_ep_entry *smr_get_recv_entry(struct smr_ep *ep, uint64_t flags)
+static inline struct smr_ep_entry *smr_get_recv_entry(struct smr_ep *ep,
+		fi_addr_t addr, uint64_t flags)
 {
 	struct smr_ep_entry *entry;
 
@@ -63,6 +64,7 @@ static inline struct smr_ep_entry *smr_get_recv_entry(struct smr_ep *ep, uint64_
 	entry->ignore = 0; /* does this need to be set? */
 	entry->err = 0;
 	entry->flags = smr_convert_rx_flags(flags);
+	entry->addr = ep->util_ep.caps & FI_DIRECTED_RECV ? addr : FI_ADDR_UNSPEC;
 
 	return entry;
 }
@@ -79,7 +81,7 @@ ssize_t smr_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 	fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
-	entry = smr_get_recv_entry(ep, flags | ep->util_ep.rx_msg_flags);
+	entry = smr_get_recv_entry(ep, msg->addr, flags | ep->util_ep.rx_msg_flags);
 	if (!entry) {
 		ret = -FI_EAGAIN;
 		goto out;
@@ -89,7 +91,6 @@ ssize_t smr_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	memcpy(&entry->iov, msg->msg_iov, sizeof(*msg->msg_iov) * msg->iov_count);
 
 	entry->context = msg->context;
-	entry->addr = msg->addr;
 
 	dlist_insert_tail(&entry->entry, &ep->recv_queue.list);
 out:
@@ -109,7 +110,7 @@ ssize_t smr_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	assert(!(smr_ep_rx_flags(ep) & FI_MULTI_RECV) || count == 1);
 
 	fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
-	entry = smr_get_recv_entry(ep, smr_ep_rx_flags(ep));
+	entry = smr_get_recv_entry(ep, src_addr, smr_ep_rx_flags(ep));
 	if (!entry) {
 		ret = -FI_EAGAIN;
 		goto out;
@@ -119,7 +120,6 @@ ssize_t smr_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	memcpy(&entry->iov, iov, sizeof(*iov) * count);
 
 	entry->context = context;
-	entry->addr = src_addr;
 
 	dlist_insert_tail(&entry->entry, &ep->recv_queue.list);
 out:
@@ -136,7 +136,7 @@ ssize_t smr_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 	fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
-	entry = smr_get_recv_entry(ep, smr_ep_rx_flags(ep));
+	entry = smr_get_recv_entry(ep, src_addr, smr_ep_rx_flags(ep));
 	if (!entry) {
 		ret = -FI_EAGAIN;
 		goto out;
@@ -147,7 +147,6 @@ ssize_t smr_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 	entry->iov[0].iov_len = len;
 
 	entry->context = context;
-	entry->addr = src_addr;
 
 	dlist_insert_tail(&entry->entry, &ep->recv_queue.list);
 out:
