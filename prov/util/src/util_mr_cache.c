@@ -92,14 +92,28 @@ static void util_mr_free_entry(struct ofi_mr_cache *cache,
 	ofi_buf_free(entry);
 }
 
-static void util_mr_uncache_entry(struct ofi_mr_cache *cache,
-				  struct ofi_mr_entry *entry)
+static void util_mr_uncache_entry_storage(struct ofi_mr_cache *cache,
+					  struct ofi_mr_entry *entry)
 {
 	assert(entry->cached);
 	cache->storage.erase(&cache->storage, entry);
 	entry->cached = 0;
 	cache->cached_cnt--;
 	cache->cached_size -= entry->iov.iov_len;
+}
+
+static void util_mr_uncache_entry(struct ofi_mr_cache *cache,
+				  struct ofi_mr_entry *entry)
+{
+	util_mr_uncache_entry_storage(cache, entry);
+
+	if (entry->use_cnt == 0) {
+		dlist_remove_init(&entry->lru_entry);
+		util_mr_free_entry(cache, entry);
+	} else {
+		cache->uncached_cnt++;
+		cache->uncached_size += entry->iov.iov_len;
+	}
 }
 
 /* Caller must hold ofi_mem_monitor lock */
@@ -113,14 +127,8 @@ void ofi_mr_cache_notify(struct ofi_mr_cache *cache, const void *addr, size_t le
 	iov.iov_len = len;
 
 	for (entry = cache->storage.overlap(&cache->storage, &iov); entry;
-	     entry = cache->storage.overlap(&cache->storage, &iov)) {
+	     entry = cache->storage.overlap(&cache->storage, &iov))
 		util_mr_uncache_entry(cache, entry);
-
-		if (entry->use_cnt == 0) {
-			dlist_remove_init(&entry->lru_entry);
-			util_mr_free_entry(cache, entry);
-		}
-	}
 
 	/* See comment in util_mr_free_entry.  If we're not merging address
 	 * ranges, we can only safely unsubscribe for the reported range.
@@ -142,7 +150,7 @@ static bool mr_cache_flush(struct ofi_mr_cache *cache)
 	FI_DBG(cache->domain->prov, FI_LOG_MR, "flush %p (len: %" PRIu64 ")\n",
 	       entry->iov.iov_base, entry->iov.iov_len);
 
-	util_mr_uncache_entry(cache, entry);
+	util_mr_uncache_entry_storage(cache, entry);
 	util_mr_free_entry(cache, entry);
 	return true;
 }
@@ -261,11 +269,6 @@ util_mr_cache_merge(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
 
 		util_mr_uncache_entry(cache, old_entry);
 
-		if (old_entry->use_cnt == 0) {
-			dlist_remove_init(&old_entry->lru_entry);
-			util_mr_free_entry(cache, old_entry); 
-		}
-
 	} while ((old_entry = cache->storage.find(&cache->storage, &iov)));
 
 	return util_mr_cache_create(cache, &iov, attr->access, entry);
@@ -329,8 +332,6 @@ void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache)
 				     entry, lru_entry, tmp) {
 		assert(entry->use_cnt == 0);
 		util_mr_uncache_entry(cache, entry);
-		dlist_remove_init(&entry->lru_entry);
-		util_mr_free_entry(cache, entry);
 	}
 	fastlock_release(&cache->monitor->lock);
 

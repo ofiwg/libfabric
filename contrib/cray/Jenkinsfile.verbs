@@ -3,6 +3,12 @@
 
 @Library(['CrayNetworkCI@master', 'dst-shared@master']) _
 
+if (!isBuildable()) {
+    echo "build request is not valid, skipping build"
+    currentBuild.result = 'SUCCESS'
+    return
+}
+
 pipeline {
     options {
         // Generic build options
@@ -269,37 +275,49 @@ pipeline {
             }
             post {
                 always {
-                    step ([$class: 'XUnitBuilder',
+                    step ([$class: 'XUnitPublisher',
                        thresholds: [
                             [$class: 'FailedThreshold', unstableThreshold: '0']],
                             tools: [[$class: 'JUnitType', pattern: "smoketests.xml"]]])
-                    step ([$class: 'XUnitBuilder',
+                    step ([$class: 'XUnitPublisher',
                        thresholds: [
                             [$class: 'FailedThreshold', unstableThreshold: '0']],
                             tools: [[$class: 'JUnitType', pattern: "*-rc.xml"]]])
-                    step ([$class: 'XUnitBuilder',
+                    step ([$class: 'XUnitPublisher',
                        thresholds: [
                             [$class: 'FailedThreshold', unstableThreshold: '0']],
                             tools: [[$class: 'JUnitType', pattern: "*-xrc.xml"]]])
-                    step ([$class: 'XUnitBuilder',
+                    step ([$class: 'XUnitPublisher',
                        thresholds: [
                             [$class: 'FailedThreshold', unstableThreshold: '0']],
                             tools: [[$class: 'JUnitType', pattern: "sft_test_results/RC/sft_*_test_results.xml"]]])
-                    step ([$class: 'XUnitBuilder',
+                    step ([$class: 'XUnitPublisher',
                        thresholds: [
                             [$class: 'FailedThreshold', unstableThreshold: '0']],
                             tools: [[$class: 'JUnitType', pattern: "sft_test_results/XRC/sft_*_test_results.xml"]]])
-                    step ([$class: 'XUnitBuilder',
+                    step ([$class: 'XUnitPublisher',
                        thresholds: [
                             [$class: 'FailedThreshold', unstableThreshold: '0']],
                             tools: [[$class: 'JUnitType', pattern: "mpi.xml"]]])
+                }
+                cleanup {
+                    echo "*** Test: Post: Cleanup: env.BRANCH_NAME: ${BRANCH_NAME} ***"
+                    script {
+                        if ( isInternalBuild() ) {
+                            echo "*** Test: Post: Cleanup: isInternalBuild: TRUE ***"
+                        } else {
+                            echo "*** Test: Post: Cleanup: isInternalBuild: FALSE ***"
+                        }
+                    }
+                    echo "*** Test: Post: Cleanup: currentBuild.currentResult: ${currentBuild.currentResult} ***"
                 }
             }
         }
         stage("Install Libfabric Build") {
             when {
                 allOf {
-                    expression { currentBuild.result == 'SUCCESS' } ;
+                    expression { currentBuild.currentResult == 'SUCCESS' } ;
+                    expression { isInternalBuild() } ;
                     anyOf {
                         expression { env.BRANCH_NAME == 'master' } ;
                         buildingTag() ;
@@ -319,7 +337,8 @@ pipeline {
         stage("Deploy") {
             when {
                 allOf {
-                    expression { currentBuild.result == 'SUCCESS' } ;
+                    expression { currentBuild.currentResult == 'SUCCESS' } ;
+                    expression { isInternalBuild() } ;
                     anyOf {
                         expression { env.BRANCH_NAME == 'master' } ;
                         buildingTag()
@@ -356,65 +375,10 @@ pipeline {
                         }
                     }
                 }
-                stage("Create RPMs") {
-                    steps {
-                        sh 'make dist-bzip2'
-                        sh '''$WORKSPACE/contrib/buildrpm/buildrpmLibfabric.sh \
-                                -i verbs \
-                                -i sockets \
-                                -smv \
-                                -r '--define "_prefix /opt/cray/libfabric/$version"' \
-                                -r '--define "modulefile_path /opt/cray/modulefiles"' \
-                                $(ls libfabric-*.tar.bz2)'''
-                    }
-                    post {
-                        success {
-                            stash name: 'rpms', includes: 'rpmbuild/RPMS/**/*'
-                            stash name: 'sources',  includes: 'rpmbuild/SOURCES/*'
-                        }
-                    }
-                }
-            }
-        }
-        stage('Publish') {
-            when {
-                allOf {
-                    expression { currentBuild.result == 'SUCCESS' } ;
-                    expression { return isRelease("${env.GIT_BRANCH}") }
-                }
-            }
-            agent {
-                node {
-                    label 'utility_pod'
-                }
-            }
-            steps {
-                container('utility') {
-                    sh 'tar -cvzf /tmp/libfabric-source.tar.gz --exclude "*.log" .'
-
-                    // publishes the source RPM to DST's Artifactory instance
-                    transfer(artifactName: '/tmp/libfabric-source.tar.gz')
-
-                    // Sends event to message bus to notify other builds
-                    publishEvents(["os-networking-libfabric-verbs-publish"])
-                }
             }
         }
     }
     post {
-        success {
-            script {
-                try {
-                    unstash 'rpms'
-                    unstash 'sources'
-                    archiveArtifacts 'rpmbuild/SOURCES/*'
-                    archiveArtifacts 'rpmbuild/RPMS/**/*'
-                }
-                catch (Exception e) {
-                    echo 'No rpms to archive'
-                }
-            }
-        }
         changed {
             script {
                 // send email when the state of the pipeline changes

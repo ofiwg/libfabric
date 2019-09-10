@@ -265,20 +265,22 @@ fn_exit:
 static void __gnix_msg_copy_data_to_recv_addr(struct gnix_fab_req *req,
 					      void *data)
 {
+	size_t	len;
+
 	GNIX_DBG_TRACE(FI_LOG_EP_DATA, "\n");
+
+	len = MIN(req->msg.cum_send_len, req->msg.cum_recv_len);
 
 	switch(req->type) {
 	case GNIX_FAB_RQ_RECV:
-		memcpy((void *)req->msg.recv_info[0].recv_addr, data,
-		       req->msg.cum_recv_len);
+		memcpy((void *)req->msg.recv_info[0].recv_addr, data, len);
 		break;
 
 	case GNIX_FAB_RQ_RECVV:
 	case GNIX_FAB_RQ_TRECVV:
 		__gnix_msg_unpack_data_into_iov(req->msg.recv_info,
 						req->msg.recv_iov_cnt,
-						(uint64_t) data,
-						req->msg.cum_recv_len);
+						(uint64_t) data, len);
 		break;
 
 	default:
@@ -409,7 +411,7 @@ static int __recv_completion_src(
 
 	if ((req->msg.recv_flags & FI_COMPLETION) && ep->recv_cq) {
 		if ((src_addr == FI_ADDR_NOTAVAIL) &&
-                    (req->msg.recv_flags & FI_SOURCE_ERR) != 0) {
+                    (ep->caps & FI_SOURCE_ERR) != 0) {
 			if (ep->domain->addr_format == FI_ADDR_STR) {
 				buffer = malloc(GNIX_FI_ADDR_STR_LEN);
 				rc = _gnix_ep_name_to_str(req->vc->gnix_ep_name, (char **)&buffer);
@@ -863,7 +865,7 @@ static int __gnix_rndzv_req_complete(void *arg, gni_return_t tx_status)
 		if (!GNIX_EP_DGM(req->gnix_ep->type)) {
 			GNIX_WARN(FI_LOG_EP_DATA,
 				  "Dropping failed request: %p\n", req);
-			ret = __gnix_msg_send_err(req->gnix_ep,
+			ret = __gnix_msg_recv_err(req->gnix_ep,
 						  req);
 			if (ret != FI_SUCCESS)
 				GNIX_WARN(FI_LOG_EP_DATA,
@@ -3284,7 +3286,7 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 	ret = _gnix_vc_queue_tx_req(req);
 	connected = (vc->conn_state == GNIX_VC_CONNECTED);
 
-	COND_RELEASE(vc->ep->requires_lock, &vc->ep->vc_lock);
+	COND_RELEASE(ep->requires_lock, &ep->vc_lock);
 
 	/*
 	 * If a new VC was allocated, progress CM before returning.
@@ -3300,7 +3302,7 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 	return ret;
 
 err_get_vc:
-	COND_RELEASE(vc->ep->requires_lock, &vc->ep->vc_lock);
+	COND_RELEASE(ep->requires_lock, &ep->vc_lock);
 	_gnix_fr_free(ep, req);
 	if (flags & FI_LOCAL_MR)
 		fi_close(&auto_mr->fid);

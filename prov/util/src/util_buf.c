@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 Intel Corporation. All rights reserved.
+ * Copyright (c) 2016-2019 Intel Corporation. All rights reserved.
  * Copyright (c) 2018-2019 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -54,11 +54,11 @@ int ofi_bufpool_grow(struct ofi_bufpool *pool)
 	size_t i;
 
 	if (pool->attr.max_cnt && pool->entry_cnt >= pool->attr.max_cnt)
-		return -FI_EINVAL;
+		return -FI_ENOMEM;
 
 	buf_region = calloc(1, sizeof(*buf_region));
 	if (!buf_region)
-		return -FI_ENOSPC;
+		return -FI_ENOMEM;
 
 	buf_region->pool = pool;
 	dlist_init(&buf_region->free_list);

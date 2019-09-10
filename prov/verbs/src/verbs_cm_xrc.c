@@ -257,7 +257,8 @@ void fi_ibv_ep_ini_conn_done(struct fi_ibv_xrc_ep *ep, uint32_t peer_srqn,
 	/* If this was a physical INI/TGT QP connection, remove the QP
 	 * from control of the RDMA CM. We don't want the shared INI QP
 	 * to be destroyed if this endpoint closes. */
-	if (ep->base_ep.id->qp) {
+	if (ep->base_ep.id == ep->ini_conn->phys_conn_id) {
+		ep->ini_conn->phys_conn_id = NULL;
 		ep->ini_conn->state = FI_IBV_INI_QP_CONNECTED;
 		ep->ini_conn->tgt_qpn = tgt_qpn;
 		ep->base_ep.id->qp = NULL;
@@ -281,9 +282,6 @@ void fi_ibv_ep_ini_conn_rejected(struct fi_ibv_xrc_ep *ep)
 
 	fastlock_acquire(&domain->xrc.ini_mgmt_lock);
 	fi_ibv_log_ep_conn(ep, "INI Connection Rejected");
-
-	if (ep->ini_conn->state == FI_IBV_INI_QP_CONNECTING)
-		ep->ini_conn->state = FI_IBV_INI_QP_UNCONNECTED;
 	fi_ibv_put_shared_ini_conn(ep);
 	fastlock_release(&domain->xrc.ini_mgmt_lock);
 }
