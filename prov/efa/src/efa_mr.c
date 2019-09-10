@@ -247,6 +247,9 @@ static int efa_mr_reg(struct fid *fid, const void *buf, size_t len,
 	if (access & FI_RECV)
 		fi_ibv_access |= IBV_ACCESS_LOCAL_WRITE;
 
+	if (access & FI_REMOTE_READ)
+		fi_ibv_access |= IBV_ACCESS_REMOTE_READ;
+
 	md->mr = ibv_reg_mr(md->domain->ibv_pd, (void *)buf, len,
 			    fi_ibv_access);
 	if (!md->mr) {

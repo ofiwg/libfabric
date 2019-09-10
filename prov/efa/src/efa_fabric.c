@@ -476,6 +476,9 @@ static int efa_get_device_attrs(struct efa_context *ctx, struct fi_info *info)
 	struct ibv_port_attr port_attr;
 	int ret;
 
+	memset(&efadv_attr, 0, sizeof(efadv_attr));
+	memset(&device_attr, 0, sizeof(device_attr));
+
 	base_attr = &device_attr.ibv_attr;
 	ret = -ibv_query_device(ctx->ibv_ctx, base_attr);
 	if (ret) {
@@ -483,13 +486,23 @@ static int efa_get_device_attrs(struct efa_context *ctx, struct fi_info *info)
 		return ret;
 	}
 
-	ret = -efadv_query_device(ctx->ibv_ctx, &efadv_attr, sizeof(efadv_attr));
+	ret = -efadv_query_device(ctx->ibv_ctx, &efadv_attr,
+				  sizeof(efadv_attr));
 	if (ret) {
 		EFA_INFO_ERRNO(FI_LOG_FABRIC, "efadv_query_device", ret);
 		return ret;
 	}
 
 	ctx->inline_buf_size = efadv_attr.inline_buf_size;
+	ctx->max_wr_rdma_sge = base_attr->max_sge_rd;
+
+#ifdef HAVE_RDMA_SIZE
+	ctx->max_rdma_size = efadv_attr.max_rdma_size;
+	ctx->device_caps = efadv_attr.device_caps;
+#else
+	ctx->max_rdma_size = 0;
+	ctx->device_caps = 0;
+#endif
 
 	ctx->max_mr_size			= base_attr->max_mr_size;
 	info->domain_attr->cq_cnt		= base_attr->max_cq;
