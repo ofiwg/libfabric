@@ -252,12 +252,12 @@ static void *ofi_intercept_dlopen(const char *filename, int flag)
 	if (!handle)
 		return NULL;
 
-	fastlock_acquire(&memhooks_monitor->lock);
+	pthread_mutex_lock(&memhooks_monitor->lock);
 	dlist_foreach_container(&memhooks.intercept_list, struct ofi_intercept,
 		intercept, entry) {
 		dl_iterate_phdr(ofi_intercept_phdr_handler, intercept);
 	}
-	fastlock_release(&memhooks_monitor->lock);
+	pthread_mutex_unlock(&memhooks_monitor->lock);
 	return handle;
 }
 
@@ -356,9 +356,9 @@ static int ofi_intercept_symbol(struct ofi_intercept *intercept, void **real_fun
 
 void ofi_intercept_handler(const void *addr, size_t len)
 {
-	fastlock_acquire(&memhooks_monitor->lock);
+	pthread_mutex_lock(&memhooks_monitor->lock);
 	ofi_monitor_notify(memhooks_monitor, addr, len);
-	fastlock_release(&memhooks_monitor->lock);
+	pthread_mutex_unlock(&memhooks_monitor->lock);
 }
 
 static void *ofi_intercept_mmap(void *start, size_t length,

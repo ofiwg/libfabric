@@ -102,7 +102,7 @@ static inline uint64_t ofi_mr_get_prov_mode(uint32_t version,
 struct ofi_mr_cache;
 
 struct ofi_mem_monitor {
-	fastlock_t			lock;
+	pthread_mutex_t 		lock;
 	struct dlist_entry		list;
 
 	int (*subscribe)(struct ofi_mem_monitor *notifier,
