@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2018, Intel Corporation
+ * Copyright 2014-2019, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -102,6 +102,24 @@ free_list:
 void ofi_mem_fini(void)
 {
 	free(page_sizes);
+}
+
+size_t ofi_get_mem_size(void)
+{
+	long page_cnt, page_size;
+	size_t mem_size;
+
+	page_cnt = ofi_sysconf(_SC_PHYS_PAGES);
+	page_size = ofi_get_page_size();
+
+	if (page_cnt <= 0 || page_size <= 0)
+		return 0;
+
+	mem_size = (size_t) page_cnt * (size_t) page_size;
+	if (mem_size < page_cnt || mem_size < page_size)
+		return 0;
+
+	return mem_size;
 }
 
 
