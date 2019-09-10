@@ -416,17 +416,17 @@ Test(msg, sizes)
 	for (i = 0; i < send_len; i++)
 		send_buf[i] = i + 0xa0;
 
-	for (i = 1; i <= recv_len; i <<= 1) {
+	for (i = 0; i <= recv_len; i = (i ? i << 1 : 1)) {
 		recved = sent = false;
 
 		/* Post RX buffer */
-		ret = fi_recv(cxit_ep, recv_buf, i, NULL, FI_ADDR_UNSPEC,
-			      NULL);
+		ret = fi_recv(cxit_ep, i ? recv_buf : NULL, i, NULL,
+			      FI_ADDR_UNSPEC, NULL);
 		cr_assert_eq(ret, FI_SUCCESS, "fi_recv failed %d", ret);
 
-		/* Send 64 bytes to self */
-		ret = fi_send(cxit_ep, send_buf, i, NULL, cxit_ep_fi_addr,
-			      NULL);
+		/* Send to self */
+		ret = fi_send(cxit_ep, i ? send_buf : NULL, i, NULL,
+			      cxit_ep_fi_addr, NULL);
 		cr_assert_eq(ret, FI_SUCCESS, "fi_send failed %d", ret);
 
 		/* Gather both events, ensure progress on both sides. */

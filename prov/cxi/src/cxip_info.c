@@ -12,7 +12,7 @@
 #define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_FABRIC, __VA_ARGS__)
 #define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_FABRIC, __VA_ARGS__)
 
-char cxip_prov_name[] = "CXI";
+char cxip_prov_name[] = "cxi";
 
 struct fi_fabric_attr cxip_fabric_attr = {
 	.prov_version = CXIP_PROV_VERSION,

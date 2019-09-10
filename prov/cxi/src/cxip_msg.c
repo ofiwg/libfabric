@@ -48,8 +48,8 @@ static int issue_append_le(struct cxil_pte *pte, const void *buf, size_t len,
 	cmd.target.no_truncate  = no_truncate ? 1 : 0;
 	cmd.target.unexpected_hdr_disable = 0;
 	cmd.target.buffer_id    = buffer_id;
-	cmd.target.lac          = md->md->lac;
-	cmd.target.start        = CXI_VA_TO_IOVA(md->md, buf);
+	cmd.target.lac          = md ? md->md->lac : 0;
+	cmd.target.start        = md ? CXI_VA_TO_IOVA(md->md, buf) : 0;
 	cmd.target.length       = len;
 	cmd.target.event_success_disable = event_success_disable ? 1 : 0;
 	cmd.target.event_unlink_disable = event_unlink_disable ? 1 : 0;
@@ -233,7 +233,8 @@ static void recv_req_complete(struct cxip_req *req)
 {
 	assert(dlist_empty(&req->recv.children));
 
-	cxip_unmap(req->recv.recv_md);
+	if (req->recv.recv_md)
+		cxip_unmap(req->recv.recv_md);
 	ofi_atomic_dec32(&req->recv.rxc->orx_reqs);
 	cxip_cq_req_free(req);
 }
@@ -1819,7 +1820,7 @@ static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	struct cxip_rxc *rxc;
 	struct cxip_domain *dom;
 	int ret;
-	struct cxip_md *recv_md;
+	struct cxip_md *recv_md = NULL;
 	struct cxip_req *req;
 	struct cxip_addr caddr;
 	uint32_t match_id;
@@ -1827,7 +1828,7 @@ static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	union cxip_match_bits mb = {};
 	union cxip_match_bits ib = { .sink = ~0, .rdzv_id_hi = ~0 };
 
-	if (!ep || !buf)
+	if (!ep || (len && !buf))
 		return -FI_EINVAL;
 
 	/* The input FID could be a standard endpoint (containing a RX
@@ -1882,10 +1883,12 @@ static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	}
 
 	/* Map local buffer */
-	ret = cxip_map(dom, (void *)buf, len, &recv_md);
-	if (ret) {
-		CXIP_LOG_DBG("Failed to map recv buffer: %d\n", ret);
-		return ret;
+	if (len) {
+		ret = cxip_map(dom, (void *)buf, len, &recv_md);
+		if (ret) {
+			CXIP_LOG_DBG("Failed to map recv buffer: %d\n", ret);
+			return ret;
+		}
 	}
 
 	/* Populate request */
@@ -1953,7 +1956,8 @@ static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 req_free:
 	cxip_cq_req_free(req);
 recv_unmap:
-	cxip_unmap(recv_md);
+	if (recv_md)
+		cxip_unmap(recv_md);
 
 	return ret;
 }
@@ -2718,7 +2722,7 @@ static ssize_t _cxip_send(struct cxip_txc *txc, const void *buf, size_t len,
 	if (!ofi_send_allowed(txc->attr.caps))
 		return -FI_ENOPROTOOPT;
 
-	if (!buf)
+	if (len && !buf)
 		return -FI_EINVAL;
 
 	if (len > txc->eager_threshold)
@@ -2763,8 +2767,10 @@ static ssize_t cxip_trecvmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 	if (!msg || !msg->msg_iov || msg->iov_count != 1)
 		return -FI_EINVAL;
 
+#ifdef CXIP_STRICT_PARAM_CHECK
 	if (flags & ~CXIP_TRECVMSG_ALLOWED_FLAGS)
 		return -FI_EBADFLAGS;
+#endif
 
 	return _cxip_recv(ep, msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len,
 			  msg->desc ? msg->desc[0] : NULL, msg->addr,
@@ -2823,8 +2829,10 @@ static ssize_t cxip_tsendmsg(struct fid_ep *ep,
 	if (!msg || !msg->msg_iov || msg->iov_count != 1)
 		return -FI_EINVAL;
 
+#ifdef CXIP_STRICT_PARAM_CHECK
 	if (flags & ~CXIP_TSENDMSG_ALLOWED_FLAGS)
 		return -FI_EBADFLAGS;
+#endif
 
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
@@ -2890,8 +2898,10 @@ static ssize_t cxip_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	if (!msg || !msg->msg_iov || msg->iov_count != 1)
 		return -FI_EINVAL;
 
+#ifdef CXIP_STRICT_PARAM_CHECK
 	if (flags & ~CXIP_RECVMSG_ALLOWED_FLAGS)
 		return -FI_EBADFLAGS;
+#endif
 
 	return _cxip_recv(ep, msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len,
 			  msg->desc ? msg->desc[0] : NULL, msg->addr, 0, 0,
@@ -2949,8 +2959,10 @@ static ssize_t cxip_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	if (!msg || !msg->msg_iov || msg->iov_count != 1)
 		return -FI_EINVAL;
 
+#ifdef CXIP_STRICT_PARAM_CHECK
 	if (flags & ~CXIP_SENDMSG_ALLOWED_FLAGS)
 		return -FI_EBADFLAGS;
+#endif
 
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
