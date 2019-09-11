@@ -660,6 +660,7 @@ struct util_av {
 	struct util_av_entry	*hash;
 	struct ofi_bufpool	*av_entry_pool;
 
+	struct util_coll_mc	*coll_mc;
 	void			*context;
 	uint64_t		flags;
 	size_t			count;

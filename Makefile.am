@@ -67,7 +67,8 @@ common_srcs =				\
 	prov/util/src/util_shm.c	\
 	prov/util/src/util_mem_monitor.c\
 	prov/util/src/util_mem_hooks.c	\
-	prov/util/src/util_mr_cache.c
+	prov/util/src/util_mr_cache.c	\
+	prov/util/src/util_coll.c
 
 
 if MACOS
@@ -142,6 +143,7 @@ src_libfabric_la_SOURCES =			\
 	include/ofi_mr.h			\
 	include/ofi_net.h			\
 	include/ofi_perf.h			\
+	include/ofi_coll.h			\
 	include/fasthash.h			\
 	include/rbtree.h			\
 	include/uthash.h			\
@@ -180,6 +182,7 @@ rdmainclude_HEADERS += \
 	$(top_srcdir)/include/rdma/fabric.h \
 	$(top_srcdir)/include/rdma/fi_atomic.h \
 	$(top_srcdir)/include/rdma/fi_cm.h \
+	$(top_srcdir)/include/rdma/fi_collective.h \
 	$(top_srcdir)/include/rdma/fi_domain.h \
 	$(top_srcdir)/include/rdma/fi_eq.h \
 	$(top_srcdir)/include/rdma/fi_rma.h \
