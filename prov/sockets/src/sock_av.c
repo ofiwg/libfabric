@@ -160,6 +160,7 @@ static int sock_resize_av_table(struct sock_av *av)
 		new_addr = realloc(av->table_hdr, table_sz);
 		if (!new_addr)
 			return -1;
+		memset((char *) new_addr + old_sz, 0, table_sz - old_sz);
 	}
 
 	av->table_hdr = new_addr;
