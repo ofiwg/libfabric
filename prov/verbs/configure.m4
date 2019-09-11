@@ -58,6 +58,17 @@ AC_DEFUN([FI_VERBS_CONFIGURE],[
 	AC_DEFINE_UNQUOTED([VERBS_HAVE_XRC],[$VERBS_HAVE_XRC],
 		[Whether infiniband/verbs.h has XRC support or not])
 
+	#See if we have rdma-core rdma_establish support
+	VERBS_HAVE_RDMA_ESTABLISH=0
+	AS_IF([test $verbs_ibverbs_happy -eq 1 && \
+	       test $verbs_rdmacm_ex_happy -eq 1],[
+		AC_CHECK_DECL([rdma_establish],
+			[VERBS_HAVE_RDMA_ESTABLISH=1],[],
+			[#include <rdma/rdma_cma.h>])
+		])
+	AC_DEFINE_UNQUOTED([VERBS_HAVE_RDMA_ESTABLISH],[$VERBS_HAVE_RDMA_ESTABLISH],
+		[Whether rdma/rdma_cma.h has rdma_establish() support or not])
+
 	# Technically, verbs_ibverbs_CPPFLAGS and
 	# verbs_rdmacm_CPPFLAGS could be different, but it is highly
 	# unlikely that they ever will be.  So only list
