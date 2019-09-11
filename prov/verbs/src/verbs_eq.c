@@ -342,6 +342,16 @@ send_reject:
 	return -FI_EAGAIN;
 }
 
+static void
+fi_ibv_eq_xrc_establish(struct rdma_cm_event *cma_event)
+{
+	/* For newer rdma-core, active side  must complete the
+	 * connect if rdma_cm is not managing the QP */
+	if (cma_event->event == RDMA_CM_EVENT_CONNECT_RESPONSE &&
+	    !cma_event->id->qp)
+		rdma_establish(cma_event->id);
+}
+
 static int
 fi_ibv_eq_xrc_conn_event(struct fi_ibv_xrc_ep *ep,
 			 struct rdma_cm_event *cma_event,
@@ -374,6 +384,7 @@ fi_ibv_eq_xrc_conn_event(struct fi_ibv_xrc_ep *ep,
 		fi_ibv_save_priv_data(ep, priv_data, priv_datalen);
 		fi_ibv_ep_ini_conn_done(ep, xrc_info.conn_data,
 					xrc_info.conn_param.qp_num);
+		fi_ibv_eq_xrc_establish(cma_event);
 	} else {
 		fi_ibv_ep_tgt_conn_done(ep);
 		ret = fi_ibv_connect_xrc(ep, NULL, FI_IBV_RECIP_CONN, &cm_data,
@@ -420,6 +431,7 @@ fi_ibv_eq_xrc_recip_conn_event(struct fi_ibv_eq *eq,
 		ep->peer_srqn = xrc_info.conn_data;
 		fi_ibv_ep_ini_conn_done(ep, xrc_info.conn_data,
 					xrc_info.conn_param.qp_num);
+		fi_ibv_eq_xrc_establish(cma_event);
 	} else {
 		fi_ibv_ep_tgt_conn_done(ep);
 	}
@@ -657,6 +669,7 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq,
 				return ret;
 		}
 		break;
+	case RDMA_CM_EVENT_CONNECT_RESPONSE:
 	case RDMA_CM_EVENT_ESTABLISHED:
 		*event = FI_CONNECTED;
 

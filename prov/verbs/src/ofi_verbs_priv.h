@@ -60,4 +60,9 @@
 #define FI_VERBS_XRC_ONLY
 #endif /* VERBS_HAVE_XRC */
 
+#if !VERBS_HAVE_RDMA_ESTABLISH
+/* If older rdma-core this function does not exist/is not needed */
+#define rdma_establish(id) do { } while (0)
+#endif
+
 #endif /* OFI_VERBS_PRIV_H */
