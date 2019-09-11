@@ -34,7 +34,7 @@
 
 #define SMR_TX_CAPS (OFI_TX_MSG_CAPS | FI_TAGGED | OFI_TX_RMA_CAPS | FI_ATOMICS)
 #define SMR_RX_CAPS (FI_SOURCE | FI_RMA_EVENT | OFI_RX_MSG_CAPS | FI_TAGGED | \
-		     OFI_RX_RMA_CAPS | FI_ATOMICS)
+		     OFI_RX_RMA_CAPS | FI_ATOMICS | FI_DIRECTED_RECV)
 #define SMR_TX_OP_FLAGS (FI_REMOTE_CQ_DATA | FI_COMPLETION | \
 			 FI_INJECT_COMPLETE | FI_TRANSMIT_COMPLETE | \
 			 /* TODO: support for delivery complete */ \
@@ -81,7 +81,7 @@ struct fi_domain_attr smr_domain_attr = {
 	.data_progress = FI_PROGRESS_MANUAL,
 	.resource_mgmt = FI_RM_ENABLED,
 	.av_type = FI_AV_UNSPEC,
-	.mr_mode = FI_MR_SCALABLE,
+	.mr_mode = FI_MR_BASIC | FI_MR_SCALABLE,
 	.mr_key_size = sizeof_field(struct fi_rma_iov, key),
 	.cq_data_size = sizeof_field(struct smr_msg_hdr, data),
 	.cq_cnt = (1 << 10),
