@@ -489,11 +489,9 @@ static int fi_ibv_pep_listen(struct fid_pep *pep_fid)
 	pep = container_of(pep_fid, struct fi_ibv_pep, pep_fid);
 
 	addr = rdma_get_local_addr(pep->id);
-	if (addr) {
-		VERBS_INFO(FI_LOG_CORE, "Listening on %s:%d\n",
-			   inet_ntoa(((struct sockaddr_in *)addr)->sin_addr),
-			   ntohs(((struct sockaddr_in *)addr)->sin_port));
-	}
+	if (addr)
+		ofi_straddr_log(&fi_ibv_prov, FI_LOG_INFO,
+				FI_LOG_EP_CTRL, "listening on", addr);
 
 	return rdma_listen(pep->id, pep->backlog) ? -errno : 0;
 }
