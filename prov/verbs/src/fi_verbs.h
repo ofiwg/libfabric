@@ -136,6 +136,7 @@
 
 extern struct fi_provider fi_ibv_prov;
 extern struct util_prov fi_ibv_util_prov;
+extern struct dlist_entry verbs_devs;
 
 extern struct fi_ibv_gl_data {
 	int	def_tx_size;
