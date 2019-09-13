@@ -62,10 +62,10 @@ static size_t ofi_default_cache_size(void)
  */
 void ofi_monitor_init(void)
 {
-	fastlock_init(&uffd_monitor->lock);
+	pthread_mutex_init(&uffd_monitor->lock, NULL);
 	dlist_init(&uffd_monitor->list);
 
-	fastlock_init(&memhooks_monitor->lock);
+	pthread_mutex_init(&memhooks_monitor->lock, NULL);
 	dlist_init(&memhooks_monitor->list);
 
 #if HAVE_UFFD_UNMAP
@@ -127,10 +127,10 @@ void ofi_monitor_init(void)
 void ofi_monitor_cleanup(void)
 {
 	assert(dlist_empty(&uffd_monitor->list));
-	fastlock_destroy(&uffd_monitor->lock);
+	pthread_mutex_destroy(&uffd_monitor->lock);
 
 	assert(dlist_empty(&memhooks_monitor->list));
-	fastlock_destroy(&memhooks_monitor->lock);
+	pthread_mutex_destroy(&memhooks_monitor->lock);
 }
 
 int ofi_monitor_add_cache(struct ofi_mem_monitor *monitor,
@@ -141,7 +141,7 @@ int ofi_monitor_add_cache(struct ofi_mem_monitor *monitor,
 	if (!monitor)
 		return -FI_ENOSYS;
 
-	fastlock_acquire(&monitor->lock);
+	pthread_mutex_lock(&monitor->lock);
 	if (dlist_empty(&monitor->list)) {
 		if (monitor == uffd_monitor)
 			ret = ofi_uffd_init();
@@ -156,7 +156,7 @@ int ofi_monitor_add_cache(struct ofi_mem_monitor *monitor,
 	cache->monitor = monitor;
 	dlist_insert_tail(&cache->notify_entry, &monitor->list);
 out:
-	fastlock_release(&monitor->lock);
+	pthread_mutex_unlock(&monitor->lock);
 	return ret;
 }
 
@@ -165,7 +165,7 @@ void ofi_monitor_del_cache(struct ofi_mr_cache *cache)
 	struct ofi_mem_monitor *monitor = cache->monitor;
 
 	assert(monitor);
-	fastlock_acquire(&monitor->lock);
+	pthread_mutex_lock(&monitor->lock);
 	dlist_remove(&cache->notify_entry);
 
 	if (dlist_empty(&monitor->list)) {
@@ -175,7 +175,7 @@ void ofi_monitor_del_cache(struct ofi_mr_cache *cache)
 			ofi_memhooks_cleanup();
 	}
 
-	fastlock_release(&monitor->lock);
+	pthread_mutex_unlock(&monitor->lock);
 }
 
 /* Must be called holding monitor lock */
@@ -236,10 +236,10 @@ static void *ofi_uffd_handler(void *arg)
 		if (ret != 1)
 			break;
 
-		fastlock_acquire(&uffd.monitor.lock);
+		pthread_mutex_lock(&uffd.monitor.lock);
 		ret = read(uffd.fd, &msg, sizeof(msg));
 		if (ret != sizeof(msg)) {
-			fastlock_release(&uffd.monitor.lock);
+			pthread_mutex_unlock(&uffd.monitor.lock);
 			if (errno != EAGAIN)
 				break;
 			continue;
@@ -263,7 +263,7 @@ static void *ofi_uffd_handler(void *arg)
 				"Unhandled uffd event %d\n", msg.event);
 			break;
 		}
-		fastlock_release(&uffd.monitor.lock);
+		pthread_mutex_unlock(&uffd.monitor.lock);
 	}
 	return NULL;
 }

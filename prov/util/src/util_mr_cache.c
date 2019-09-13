@@ -159,9 +159,9 @@ bool ofi_mr_cache_flush(struct ofi_mr_cache *cache)
 {
 	bool empty;
 
-	fastlock_acquire(&cache->monitor->lock);
+	pthread_mutex_lock(&cache->monitor->lock);
 	empty = mr_cache_flush(cache);
-	fastlock_release(&cache->monitor->lock);
+	pthread_mutex_unlock(&cache->monitor->lock);
 	return empty;
 }
 
@@ -170,7 +170,7 @@ void ofi_mr_cache_delete(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 	FI_DBG(cache->domain->prov, FI_LOG_MR, "delete %p (len: %" PRIu64 ")\n",
 	       entry->info.iov.iov_base, entry->info.iov.iov_len);
 
-	fastlock_acquire(&cache->monitor->lock);
+	pthread_mutex_lock(&cache->monitor->lock);
 	cache->delete_cnt++;
 
 	if (--entry->use_cnt == 0) {
@@ -182,7 +182,7 @@ void ofi_mr_cache_delete(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 			util_mr_free_entry(cache, entry);
 		}
 	}
-	fastlock_release(&cache->monitor->lock);
+	pthread_mutex_unlock(&cache->monitor->lock);
 }
 
 static int
@@ -284,7 +284,7 @@ int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *att
 	FI_DBG(cache->domain->prov, FI_LOG_MR, "search %p (len: %" PRIu64 ")\n",
 	       attr->mr_iov->iov_base, attr->mr_iov->iov_len);
 
-	fastlock_acquire(&cache->monitor->lock);
+	pthread_mutex_lock(&cache->monitor->lock);
 	cache->search_cnt++;
 
 	while (((cache->cached_cnt >= cache_params.max_cnt) ||
@@ -314,7 +314,7 @@ int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *att
 		dlist_remove_init(&(*entry)->lru_entry);
 
 unlock:
-	fastlock_release(&cache->monitor->lock);
+	pthread_mutex_unlock(&cache->monitor->lock);
 	return ret;
 }
 
@@ -332,13 +332,13 @@ void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache)
 		cache->search_cnt, cache->delete_cnt, cache->hit_cnt,
 		cache->notify_cnt);
 
-	fastlock_acquire(&cache->monitor->lock);
+	pthread_mutex_lock(&cache->monitor->lock);
 	dlist_foreach_container_safe(&cache->lru_list, struct ofi_mr_entry,
 				     entry, lru_entry, tmp) {
 		assert(entry->use_cnt == 0);
 		util_mr_uncache_entry(cache, entry);
 	}
-	fastlock_release(&cache->monitor->lock);
+	pthread_mutex_unlock(&cache->monitor->lock);
 
 	ofi_monitor_del_cache(cache);
 	cache->storage.destroy(&cache->storage);
