@@ -545,6 +545,7 @@
     <ClCompile Include="prov\util\src\util_av.c" />
     <ClCompile Include="prov\util\src\util_buf.c" />
     <ClCompile Include="prov\util\src\util_cntr.c" />
+    <ClCompile Include="prov\util\src\util_coll.c" />
     <ClCompile Include="prov\util\src\util_cq.c" />
     <ClCompile Include="prov\util\src\util_domain.c" />
     <ClCompile Include="prov\util\src\util_ep.c" />
@@ -587,6 +588,7 @@
     <ClInclude Include="include\ofi_hook.h" />
     <ClInclude Include="include\ofi_mr.h" />
     <ClInclude Include="include\ofi_net.h" />
+    <ClInclude Include="include\ofi_coll.h" />
     <ClInclude Include="include\ofi_enosys.h" />
     <ClInclude Include="include\ofi_file.h" />
     <ClInclude Include="include\ofi_iov.h" />
