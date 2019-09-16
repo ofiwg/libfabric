@@ -14,6 +14,12 @@ v1.8.1, Fri Sep 27, 2019
 
 ## PSM2
 
+- Fix incorrect value of max_order_raw_size
+- Report page aligned max_msg_size
+- Always enable the lock accessed by the disconnection thread
+- Fix race condition with progress thread and FI_THREAD_DOMAIN
+- Avoid a potential deadlock in disconnection protocol
+
 ## RxD
 
 ## RxM
