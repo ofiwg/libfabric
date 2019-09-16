@@ -1012,7 +1012,7 @@ static int fi_ibv_getifaddrs(struct dlist_entry *verbs_devs)
 {
 	struct ifaddrs *ifaddr, *ifa;
 	struct rdma_addrinfo *rai = NULL;
-	char *dev_name;
+	char *dev_name = NULL;
 	char *iface = fi_ibv_gl_data.iface;
 	int ret, num_verbs_ifs = 0;
 	size_t iface_len = 0;
