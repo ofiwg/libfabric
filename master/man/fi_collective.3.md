@@ -285,9 +285,11 @@ different entries in an integer array.
    All to all
    /   |   \
 [1]   [5]   [9]
-[5]   [6]   [7]
-[9]  [10]  [11]
+[2]   [6]  [10]
+[3]   [7]  [11]
 ```
+
+Each peer sends a piece of its data to the other peers.
 
 All to all operations may be performed on any non-void datatype.  However,
 all to all does not perform an operation on the data itself, so no operation
