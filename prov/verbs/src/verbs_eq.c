@@ -767,7 +767,9 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq,
 		eq->err.err = EADDRNOTAVAIL;
 		goto err;
 	default:
-		return 0;
+		VERBS_WARN(FI_LOG_EP_CTRL, "unknown rdmacm event received: %d\n",
+			   cma_event->event);
+		return -FI_EAGAIN;
 	}
 
 	entry->fid = fid;

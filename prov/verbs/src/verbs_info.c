@@ -939,6 +939,8 @@ err1:
 	return -FI_ENOMEM;
 }
 
+#define IPV6_LINK_LOCAL_ADDR_PREFIX_STR "fe80"
+
 static int fi_ibv_ifa_rdma_info(const struct ifaddrs *ifa, char **dev_name,
 				struct rdma_addrinfo **rai)
 {
@@ -956,6 +958,15 @@ static int fi_ibv_ifa_rdma_info(const struct ifaddrs *ifa, char **dev_name,
 	ret = rdma_create_id(NULL, &id, NULL, RDMA_PS_TCP);
 	if (ret)
 		return ret;
+
+	/* Detect if the IPv6 address is link local.
+	 * TODO should we do something similar for IPv4? */
+	if (!strncmp(name, IPV6_LINK_LOCAL_ADDR_PREFIX_STR,
+		     strlen(IPV6_LINK_LOCAL_ADDR_PREFIX_STR))) {
+		assert(strlen(name) + strlen(ifa->ifa_name) < INET6_ADDRSTRLEN);
+		strcat(name, "%");
+		strcat(name, ifa->ifa_name);
+	}
 
 	ret = rdma_getaddrinfo((char *) name, NULL, &rai_hints, &rai_);
 	if (ret) {
@@ -1001,7 +1012,7 @@ static int fi_ibv_getifaddrs(struct dlist_entry *verbs_devs)
 {
 	struct ifaddrs *ifaddr, *ifa;
 	struct rdma_addrinfo *rai = NULL;
-	char *dev_name;
+	char *dev_name = NULL;
 	char *iface = fi_ibv_gl_data.iface;
 	int ret, num_verbs_ifs = 0;
 	size_t iface_len = 0;
