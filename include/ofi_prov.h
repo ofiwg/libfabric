@@ -125,17 +125,6 @@ USNIC_INI ;
 #  define USNIC_INIT NULL
 #endif
 
-#if (HAVE_MLX) && (HAVE_MLX_DL)
-#  define MLX_INI FI_EXT_INI
-#  define MLX_INIT NULL
-#elif (HAVE_MLX)
-#  define MLX_INI INI_SIG(fi_mlx_ini)
-#  define MLX_INIT fi_mlx_ini()
-MLX_INI ;
-#else
-#  define MLX_INIT NULL
-#endif
-
 #if (HAVE_UDP) && (HAVE_UDP_DL)
 #  define UDP_INI FI_EXT_INI
 #  define UDP_INIT NULL
