@@ -241,7 +241,7 @@ fi_ibv_mr_cache_reg(struct fid *fid, const void *buf, size_t len,
 	struct iovec iov;
 	int ret;
 
-	if (OFI_UNLIKELY(flags))
+	if (flags & ~OFI_MR_NOCACHE)
 		return -FI_EBADFLAGS;
 
 	domain = container_of(fid, struct fi_ibv_domain,
@@ -257,7 +257,9 @@ fi_ibv_mr_cache_reg(struct fid *fid, const void *buf, size_t len,
 	attr.requested_key = requested_key;
 	attr.auth_key_size = 0;
 
-	ret = ofi_mr_cache_search(&domain->cache, &attr, &entry);
+	ret = (flags & OFI_MR_NOCACHE) ?
+	      ofi_mr_cache_reg(&domain->cache, &attr, &entry) :
+	      ofi_mr_cache_search(&domain->cache, &attr, &entry);
 	if (OFI_UNLIKELY(ret))
 		return ret;
 

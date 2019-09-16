@@ -82,6 +82,9 @@ extern "C" {
 /* Indicates that an EP has been bound to a counter */
 #define OFI_CNTR_ENABLED	(1ULL << 61)
 
+/* Memory registration should not be cached */
+#define OFI_MR_NOCACHE		BIT_ULL(60)
+
 #define OFI_Q_STRERROR(prov, level, subsys, q, q_str, entry, q_strerror)	\
 	FI_LOG(prov, level, subsys, "fi_" q_str "_readerr: err: %s (%d), "	\
 	       "prov_err: %s (%d)\n", strerror((entry)->err), (entry)->err,	\
