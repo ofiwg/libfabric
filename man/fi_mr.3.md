@@ -32,7 +32,7 @@ fi_mr_unmap_key
 : Releases a previously mapped raw memory region key.
 
 fi_mr_bind
-: Associate a registered memory region with a completion counter.
+: Associate a registered memory region with a completion counter or an endpoint.
 
 fi_mr_refresh
 : Updates the memory pages associated with a memory region.
