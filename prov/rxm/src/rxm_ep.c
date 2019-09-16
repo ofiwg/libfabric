@@ -118,7 +118,7 @@ rxm_mr_buf_reg(struct rxm_ep *rxm_ep, void *addr, size_t len, void **context)
 
 		ret = fi_mr_reg(msg_domain, addr, len,
 				FI_SEND | FI_RECV | FI_READ | FI_WRITE,
-				0, 0, 0, &mr, NULL);
+				0, 0, OFI_MR_NOCACHE, &mr, NULL);
 		*context = mr;
 	}
 
