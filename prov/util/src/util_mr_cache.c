@@ -318,6 +318,46 @@ unlock:
 	return ret;
 }
 
+int ofi_mr_cache_reg(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
+		     struct ofi_mr_entry **entry)
+{
+	int ret;
+
+	assert(attr->iov_count == 1);
+	FI_DBG(cache->domain->prov, FI_LOG_MR, "reg %p (len: %" PRIu64 ")\n",
+	       attr->mr_iov->iov_base, attr->mr_iov->iov_len);
+
+	pthread_mutex_lock(&cache->monitor->lock);
+	*entry = ofi_buf_alloc(cache->entry_pool);
+	if (*entry) {
+		cache->uncached_cnt++;
+		cache->uncached_size += attr->mr_iov->iov_len;
+	} else {
+		ret = -FI_ENOMEM;
+		goto unlock;
+	}
+	pthread_mutex_unlock(&cache->monitor->lock);
+
+	(*entry)->info.iov = *attr->mr_iov;
+	(*entry)->use_cnt = 1;
+	(*entry)->cached = 0;
+
+	ret = cache->add_region(cache, *entry);
+	if (ret)
+		goto buf_free;
+
+	return 0;
+
+buf_free:
+	pthread_mutex_lock(&cache->monitor->lock);
+	ofi_buf_free(*entry);
+	cache->uncached_cnt--;
+	cache->uncached_size -= attr->mr_iov->iov_len;
+unlock:
+	pthread_mutex_unlock(&cache->monitor->lock);
+	return ret;
+}
+
 void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache)
 {
 	struct ofi_mr_entry *entry;
