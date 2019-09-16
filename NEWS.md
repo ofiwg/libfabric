@@ -12,6 +12,16 @@ v1.8.1, Fri Sep 27, 2019
 
 ## EFA
 
+- Fixes to fi_cancel() when used with multi-recv buffers
+- Fixes to registered memory handling after a fork()
+- Fixes to the long message flow-control protocol
+- Use FI_AV_TABLE as the preferred AV type
+- Fixes to the bufpool allocation handlers
+- Fixes to RTS handler
+- Fix to use correct arch detection preprocessor macro
+- Expose fid_nic information
+- Fix memory leaks
+
 ## PSM2
 
 - Fix incorrect value of max_order_raw_size
