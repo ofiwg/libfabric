@@ -370,7 +370,7 @@ static int ft_skip_info(struct fi_info *hints, struct fi_info *info)
 
 	//check needed to skip utility providers, unless requested
 	skip = (!ft_util_name(hints->fabric_attr->prov_name, &len) &&
-		strcmp(hints->fabric_attr->prov_name,
+		strcasecmp(hints->fabric_attr->prov_name,
 		info->fabric_attr->prov_name));
 
 	ret = ft_exchange_uint32(skip, &remote_skip);
