@@ -229,12 +229,12 @@ static inline long ofi_sysconf(int name)
 
 static inline int ofi_is_loopback_addr(struct sockaddr *addr) {
 	return (addr->sa_family == AF_INET &&
-		((struct sockaddr_in *)addr)->sin_addr.s_addr == ntohl(INADDR_LOOPBACK)) ||
+		((struct sockaddr_in *)addr)->sin_addr.s_addr == htonl(INADDR_LOOPBACK)) ||
 		(addr->sa_family == AF_INET6 &&
 		((struct sockaddr_in6 *)addr)->sin6_addr.s6_addr32[0] == 0 &&
 		((struct sockaddr_in6 *)addr)->sin6_addr.s6_addr32[1] == 0 &&
 		((struct sockaddr_in6 *)addr)->sin6_addr.s6_addr32[2] == 0 &&
-		((struct sockaddr_in6 *)addr)->sin6_addr.s6_addr32[3] == ntohl(1));
+		((struct sockaddr_in6 *)addr)->sin6_addr.s6_addr32[3] == htonl(1));
 }
 
 

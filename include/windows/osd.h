@@ -885,7 +885,7 @@ static inline int ofi_hugepage_enabled(void)
 
 static inline int ofi_is_loopback_addr(struct sockaddr *addr) {
 	return (addr->sa_family == AF_INET &&
-		((struct sockaddr_in *)addr)->sin_addr.s_addr == ntohl(INADDR_LOOPBACK)) ||
+		((struct sockaddr_in *)addr)->sin_addr.s_addr == htonl(INADDR_LOOPBACK)) ||
 		(addr->sa_family == AF_INET6 &&
 		((struct sockaddr_in6 *)addr)->sin6_addr.u.Word[0] == 0 &&
 		((struct sockaddr_in6 *)addr)->sin6_addr.u.Word[1] == 0 &&
@@ -894,7 +894,7 @@ static inline int ofi_is_loopback_addr(struct sockaddr *addr) {
 		((struct sockaddr_in6 *)addr)->sin6_addr.u.Word[4] == 0 &&
 		((struct sockaddr_in6 *)addr)->sin6_addr.u.Word[5] == 0 &&
 		((struct sockaddr_in6 *)addr)->sin6_addr.u.Word[6] == 0 &&
-		((struct sockaddr_in6 *)addr)->sin6_addr.u.Word[7] == ntohs(1));
+		((struct sockaddr_in6 *)addr)->sin6_addr.u.Word[7] == htons(1));
 }
 
 size_t ofi_ifaddr_get_speed(struct ifaddrs *ifa);
