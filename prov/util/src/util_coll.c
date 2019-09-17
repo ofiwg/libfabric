@@ -202,17 +202,6 @@ static inline int util_coll_mc_alloc(struct util_coll_mc **coll_mc)
 	return FI_SUCCESS;
 }
 
-/* TODO: see ofi.h for power of 2 helper */
-static inline int util_coll_pof2(int num)
-{
-	int pof2 = 1;
-
-	while (pof2 <= num)
-		pof2 <<= 1;
-
-	return (pof2 >> 1);
-}
-
 static int util_coll_sched_send(struct util_coll_mc *coll_mc, int dest,
 				void *buf, int count, enum fi_datatype datatype,
 				uint64_t tag, int is_barrier)
@@ -345,7 +334,7 @@ static int util_coll_allreduce(struct util_coll_mc *coll_mc, void *send_buf,
 	int mask = 1;
 
 	tag = util_coll_get_next_tag(coll_mc);
-	pof2 = util_coll_pof2(coll_mc->av_set->fi_addr_count);
+	pof2 = rounddown_power_of_two(coll_mc->av_set->fi_addr_count);
 	rem = coll_mc->av_set->fi_addr_count - pof2;
 
 	if (coll_mc->my_rank < 2 * rem) {
