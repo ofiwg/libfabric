@@ -324,7 +324,7 @@ static void ofi_ordered_provs_init(void)
 {
 	char *ordered_prov_names[] = {
 		"psm2", "psm", "efa", "usnic", "gni", "bgq", "verbs",
-		"netdir", "ofi_rxm", "ofi_rxd", "shm", "mlx",
+		"netdir", "ofi_rxm", "ofi_rxd", "shm",
 		/* Initialize the socket based providers last of the
 		 * standard providers.  This will result in them being
 		 * the least preferred providers.
@@ -606,7 +606,6 @@ libdl_done:
 	ofi_register_provider(PSM2_INIT, NULL);
 	ofi_register_provider(PSM_INIT, NULL);
 	ofi_register_provider(USNIC_INIT, NULL);
-	ofi_register_provider(MLX_INIT, NULL);
 	ofi_register_provider(GNI_INIT, NULL);
 	ofi_register_provider(BGQ_INIT, NULL);
 	ofi_register_provider(NETDIR_INIT, NULL);

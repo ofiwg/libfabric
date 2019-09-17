@@ -94,12 +94,10 @@ struct fi_trigger_threshold {
   they will be triggered in the order in which they were submitted to
   the endpoint.
 
-# EXPERIMENTAL DEFERRED WORK QUEUES
+# DEFERRED WORK QUEUES
 
 The following feature and description are enhancements to triggered
-operation support, but should be considered experimental.  Until the
-experimental tag is removed, the interfaces, semantics, and data
-structures defined below may change between library versions.
+operation support.
 
 The deferred work queue interface is designed as primitive constructs
 that can be used to implement application-level collective operations.
