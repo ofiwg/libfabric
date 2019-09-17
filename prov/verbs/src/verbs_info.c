@@ -927,6 +927,8 @@ err1:
 	return -FI_ENOMEM;
 }
 
+#define IPV6_LINK_LOCAL_ADDR_PREFIX_STR "fe80"
+
 /* Builds a list of interfaces that correspond to active verbs devices */
 static int fi_ibv_getifaddrs(struct dlist_entry *verbs_devs)
 {
@@ -983,6 +985,16 @@ static int fi_ibv_getifaddrs(struct dlist_entry *verbs_devs)
 		case AF_INET6:
 			ret_ptr = inet_ntop(AF_INET6, &ofi_sin6_addr(ifa->ifa_addr),
 				name, INET6_ADDRSTRLEN);
+
+			/* Detect if the IPv6 address is link local */
+			if (ret_ptr &&
+			    !strncmp(name, IPV6_LINK_LOCAL_ADDR_PREFIX_STR,
+				     strlen(IPV6_LINK_LOCAL_ADDR_PREFIX_STR))) {
+				assert(strlen(name) +
+				       strlen(ifa->ifa_name) < INET6_ADDRSTRLEN);
+				strcat(name, "%");
+				strcat(name, ifa->ifa_name);
+			}
 			break;
 		default:
 			continue;
