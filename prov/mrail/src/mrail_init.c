@@ -101,12 +101,19 @@ static int mrail_parse_env_vars(void)
 		mrail_num_config = i;
 	}
 
-	fi_param_define(&mrail_prov, "addr_strc", FI_PARAM_STRING, "List of rail"
-			" addresses of format FI_ADDR_STR delimited by comma");
-	ret = fi_param_get_str(&mrail_prov, "addr_strc", &addr_strc);
+	fi_param_define(&mrail_prov, "addr_strc", FI_PARAM_STRING, "Deprecated. "
+			"Replaced by FI_OFI_MRAIL_ADDR.");
+
+	fi_param_define(&mrail_prov, "addr", FI_PARAM_STRING, "Comma separated list "
+			"of rail addresses (FI_ADDR_STR, host name, IP address, or "
+			"netdev interface name)");
+
+	ret = fi_param_get_str(&mrail_prov, "addr", &addr_strc);
+	if (ret)
+		ret = fi_param_get_str(&mrail_prov, "addr_strc", &addr_strc);
 	if (ret) {
 		FI_INFO(&mrail_prov, FI_LOG_CORE, "unable to read "
-			"OFI_MRAIL_ADDR_STRC env variable\n");
+			"FI_OFI_MRAIL_ADDR env variable\n");
 		return ret;
 	}
 	mrail_addr_strv = mrail_split_addr_strc(addr_strc);
