@@ -240,6 +240,8 @@ int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_pr
 		ep->lock_acquire = ofi_fastlock_acquire;
 		ep->lock_release = ofi_fastlock_release;
 	}
+	dlist_init(&ep->coll_state_list);
+	fastlock_init(&ep->coll_state_lock);
 	return 0;
 }
 
