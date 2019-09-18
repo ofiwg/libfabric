@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2017-2019 Intel Corporation, Inc. All rights reserved.
+ * Copyright (c) 2019 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -285,6 +286,22 @@ void ofi_mr_cache_notify(struct ofi_mr_cache *cache, const void *addr, size_t le
 bool ofi_mr_cache_flush(struct ofi_mr_cache *cache);
 int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
 			struct ofi_mr_entry **entry);
+/**
+ * Given an attr (with an iov range), if the iov range is already registered,
+ * return the corresponding ofi_mr_entry. Otherwise, return NULL.
+ * The caller must call ofi_mr_cache_delete on the entry before cleanup if
+ * the returned entry is not NULL.
+ *
+ * @param[in]	cache		The cache the entry belongs to
+ * @param[in]	attr		Information about the region to search
+ *
+ * @returns	entry		The registered entry corresponding to the
+ *				region described in attr
+ * @returns	NULL		The region described in attr is not registered
+ *				with the cache.
+ */
+struct ofi_mr_entry *ofi_mr_cache_find(struct ofi_mr_cache *cache,
+				       const struct fi_mr_attr *attr);
 int ofi_mr_cache_reg(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
 		     struct ofi_mr_entry **entry);
 void ofi_mr_cache_delete(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry);

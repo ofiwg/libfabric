@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2016-2017 Cray Inc. All rights reserved.
  * Copyright (c) 2017-2019 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2019 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -316,6 +317,39 @@ int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *att
 unlock:
 	pthread_mutex_unlock(&cache->monitor->lock);
 	return ret;
+}
+
+struct ofi_mr_entry *ofi_mr_cache_find(struct ofi_mr_cache *cache,
+				       const struct fi_mr_attr *attr)
+{
+	struct ofi_mr_info info;
+	struct ofi_mr_entry *entry;
+
+	assert(attr->iov_count == 1);
+	FI_DBG(cache->domain->prov, FI_LOG_MR, "find %p (len: %" PRIu64 ")\n",
+	       attr->mr_iov->iov_base, attr->mr_iov->iov_len);
+
+	pthread_mutex_lock(&cache->monitor->lock);
+	cache->search_cnt++;
+
+	info.iov = *attr->mr_iov;
+	entry = cache->storage.find(&cache->storage, &info);
+	if (!entry) {
+		goto unlock;
+	}
+
+	if (!ofi_iov_within(attr->mr_iov, &entry->info.iov)) {
+		entry = NULL;
+		goto unlock;
+	}
+
+	cache->hit_cnt++;
+	if ((entry)->use_cnt++ == 0)
+		dlist_remove_init(&(entry)->lru_entry);
+
+unlock:
+	pthread_mutex_unlock(&cache->monitor->lock);
+	return entry;
 }
 
 int ofi_mr_cache_reg(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
