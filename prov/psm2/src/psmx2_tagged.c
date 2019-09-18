@@ -32,6 +32,7 @@
 
 #include "psmx2.h"
 #include "psmx2_trigger.h"
+#include "unistd.h"
 
 static ssize_t psmx2_tagged_peek_generic(struct fid_ep *ep,
 					 void *buf, size_t len,
@@ -582,6 +583,11 @@ ssize_t psmx2_tagged_send_generic(struct fid_ep *ep,
 		PSMX2_CTXT_EP(fi_context) = ep_priv;
 	}
 
+	if (OFI_UNLIKELY(len >= 1ULL << sizeof(uint32_t) * 8)) {
+		fprintf(stderr,"MWHEINZ: A\n");
+		return -FI_EMSGSIZE;
+	}
+
 	err = psm2_mq_isend2(ep_priv->tx->psm2_mq, psm2_epaddr, 0,
 			     &psm2_tag, buf, len, (void*)fi_context,
 			     &psm2_req);
@@ -634,6 +640,11 @@ psmx2_tagged_send_specialized(struct fid_ep *ep, const void *buf,
 		PSMX2_CTXT_EP(fi_context) = ep_priv;
 	} else {
 		fi_context = &ep_priv->nocomp_tsend_context;
+	}
+
+	if (OFI_UNLIKELY(len >= 1ULL << sizeof(uint32_t) * 8)) {
+		fprintf(stderr,"MWHEINZ: B.\n");
+		return -FI_EMSGSIZE;
 	}
 
 	err = psm2_mq_isend2(ep_priv->tx->psm2_mq, psm2_epaddr, 0,
@@ -759,6 +770,11 @@ psmx2_tagged_inject_specialized(struct fid_ep *ep, const void *buf,
 		PSMX2_SET_TAG(psm2_tag, tag, data, PSMX2_TYPE_TAGGED | PSMX2_IMM_BIT);
 	else
 		PSMX2_SET_TAG(psm2_tag, tag, 0, PSMX2_TYPE_TAGGED);
+
+	if (OFI_UNLIKELY(len >= 1ULL << sizeof(uint32_t) * 8)) {
+		fprintf(stderr,"MWHEINZ: C\n");
+		return -FI_EMSGSIZE;
+	}
 
 	err = psm2_mq_send2(ep_priv->tx->psm2_mq, psm2_epaddr, 0,
 			    &psm2_tag, buf, len);
@@ -946,6 +962,11 @@ ssize_t psmx2_tagged_sendv_generic(struct fid_ep *ep,
 	PSMX2_CTXT_TYPE(fi_context) = PSMX2_SENDV_CONTEXT;
 	PSMX2_CTXT_USER(fi_context) = req;
 	PSMX2_CTXT_EP(fi_context) = ep_priv;
+
+	if (OFI_UNLIKELY(len >= 1ULL << sizeof(uint32_t) * 8)) {
+		fprintf(stderr,"MWHEINZ: D\n");
+		return -FI_EMSGSIZE;
+	}
 
 	err = psm2_mq_isend2(ep_priv->tx->psm2_mq, psm2_epaddr,
 			     send_flag, &psm2_tag, req->buf, len,

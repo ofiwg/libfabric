@@ -201,6 +201,9 @@ ssize_t psmx2_send_generic(struct fid_ep *ep, const void *buf, size_t len,
 	struct psmx2_cq_event *event;
 	int have_data = (flags & FI_REMOTE_CQ_DATA) > 0;
 
+	if (len >= 1ULL << sizeof(uint32_t) * 8)
+		return -FI_EMSGSIZE;
+
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
 	if (flags & FI_TRIGGER)
@@ -257,6 +260,9 @@ ssize_t psmx2_send_generic(struct fid_ep *ep, const void *buf, size_t len,
 		PSMX2_CTXT_USER(fi_context) = (void *)buf;
 		PSMX2_CTXT_EP(fi_context) = ep_priv;
 	}
+
+	if (len >= 1ULL << sizeof(uint32_t) * 8)
+		return -FI_EMSGSIZE;
 
 	err = psm2_mq_isend2(ep_priv->tx->psm2_mq, psm2_epaddr,
 			     send_flag, &psm2_tag, buf, len,
@@ -405,6 +411,9 @@ ssize_t psmx2_sendv_generic(struct fid_ep *ep, const struct iovec *iov,
 	PSMX2_CTXT_TYPE(fi_context) = PSMX2_SENDV_CONTEXT;
 	PSMX2_CTXT_USER(fi_context) = req;
 	PSMX2_CTXT_EP(fi_context) = ep_priv;
+
+	if (len >= 1ULL << sizeof(uint32_t) * 8)
+		return -FI_EMSGSIZE;
 
 	err = psm2_mq_isend2(ep_priv->tx->psm2_mq, psm2_epaddr,
 			     send_flag, &psm2_tag, req->buf, len,
