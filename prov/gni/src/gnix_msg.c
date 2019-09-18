@@ -2012,7 +2012,6 @@ static int __smsg_eager_msg_w_data(void *data, void *msg)
 	struct gnix_tag_storage *unexp_queue;
 	struct gnix_tag_storage *posted_queue;
 	int tagged;
-	bool multi_recv = false;
 
 	GNIX_DBG_TRACE(FI_LOG_EP_DATA, "\n");
 
@@ -2033,7 +2032,6 @@ static int __smsg_eager_msg_w_data(void *data, void *msg)
 			if (req == NULL) {
 				return -FI_ENOMEM;
 			}
-			multi_recv = true;
 		}
 
 		req->addr = vc->peer_addr;
@@ -2057,14 +2055,10 @@ static int __smsg_eager_msg_w_data(void *data, void *msg)
 		GNIX_DEBUG(FI_LOG_EP_DATA, "Freeing req: %p\n", req);
 
 		/*
-		 * Dequeue and free the request if not
-		 * matching a FI_MULTI_RECV buffer.
+		 * Dequeue and free the request.
 		 */
-		if (multi_recv == false) {
-			_gnix_remove_tag(posted_queue, req);
-			_gnix_fr_free(ep, req);
-		}
-
+		_gnix_remove_tag(posted_queue, req);
+		_gnix_fr_free(ep, req);
 	} else {
 		/* Add new unexpected receive request. */
 		req = _gnix_fr_alloc(ep);
@@ -2178,7 +2172,6 @@ static int __smsg_rndzv_start(void *data, void *msg)
 	struct gnix_tag_storage *unexp_queue;
 	struct gnix_tag_storage *posted_queue;
 	int tagged;
-	bool multi_recv = false;
 
 	GNIX_DBG_TRACE(FI_LOG_EP_DATA, "\n");
 
@@ -2198,7 +2191,6 @@ static int __smsg_rndzv_start(void *data, void *msg)
 			if (req == NULL) {
 				return -FI_ENOMEM;
 			}
-			multi_recv = true;
 		}
 
 		req->addr = vc->peer_addr;
@@ -2246,8 +2238,7 @@ static int __smsg_rndzv_start(void *data, void *msg)
 			  req, req->msg.recv_info[0].recv_addr,
 			  req->msg.send_info[0].send_len);
 
-		if (multi_recv == false)
-			_gnix_remove_tag(posted_queue, req);
+		_gnix_remove_tag(posted_queue, req);
 
 		/* Queue request to initiate pull of source data. */
 		ret = _gnix_vc_queue_work_req(req);
