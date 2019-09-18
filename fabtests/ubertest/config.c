@@ -458,10 +458,12 @@ static int ft_parse_num(char *str, int len, struct key_t *key, void *buf)
 	} else if (!strncmp(key->str, "tx_op_flags", strlen("tx_op_flags"))) {
 		TEST_ENUM_SET_N_RETURN(str, len, FI_COMPLETION, uint64_t, buf);
 		FT_ERR("Unknown tx_op_flags");
-	} else {
+	} else if (!strncmp(key->str, "comp_type", strlen("comp_type"))) {
 		TEST_ENUM_SET_N_RETURN(str, len, FT_COMP_QUEUE, enum ft_comp_type, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FT_COMP_CNTR, enum ft_comp_type, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FT_COMP_ALL, enum ft_comp_type, buf);
+		FT_ERR("Unknown comp_type");
+	} else {
 		TEST_SET_N_RETURN(str, len, "FT_MODE_ALL", FT_MODE_ALL, uint64_t, buf);
 		TEST_SET_N_RETURN(str, len, "FT_MODE_NONE", FT_MODE_NONE, uint64_t, buf);
 		TEST_SET_N_RETURN(str, len, "FT_FLAG_QUICKTEST", FT_FLAG_QUICKTEST, uint64_t, buf);
