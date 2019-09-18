@@ -1087,7 +1087,7 @@ void ofi_insert_loopback_addr(struct fi_provider *prov, struct slist *addr_list)
 		return;
 
 	addr_entry->ipaddr.sin.sin_family = AF_INET;
-	addr_entry->ipaddr.sin.sin_addr.s_addr = INADDR_LOOPBACK;
+	addr_entry->ipaddr.sin.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 	ofi_straddr_log(prov, FI_LOG_INFO, FI_LOG_CORE,
 			"available addr: ", &addr_entry->ipaddr);
 
@@ -1246,7 +1246,7 @@ void ofi_get_list_of_addr(struct fi_provider *prov, const char *env_name,
 
 	for (i = 0; i < iptbl->dwNumEntries; i++) {
 		if (iptbl->table[i].dwAddr &&
-		    (iptbl->table[i].dwAddr != ntohl(INADDR_LOOPBACK))) {
+		    (iptbl->table[i].dwAddr != htonl(INADDR_LOOPBACK))) {
 			addr_entry = calloc(1, sizeof(*addr_entry));
 			if (!addr_entry)
 				break;
