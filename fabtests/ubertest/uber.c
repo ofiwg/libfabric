@@ -68,8 +68,6 @@ enum {
 
 static int results[FT_MAX_RESULT];
 static char *filename = NULL;
-static char *provname = NULL;
-static char *testname = NULL;
 
 
 static int ft_nullstr(char *str)
@@ -769,17 +767,14 @@ static void ft_fw_usage(char *program)
 {
 	fprintf(stderr, "Usage:\n");
 	fprintf(stderr, "  %s [OPTIONS] \t\t\tstart server\n", program);
-	fprintf(stderr, "  %s [OPTIONS] <server_node> \tconnect to server\n", program);
+	fprintf(stderr, "  %s [OPTIONS] -u config_file <server_node> \tconnect to server\n", program);
 	fprintf(stderr, "\nOptions:\n");
 	FT_PRINT_OPTS_USAGE("-q <service_port>", "Management port for test");
 	FT_PRINT_OPTS_USAGE("-h", "display this help output");
 	fprintf(stderr, "\nServer only options:\n");
 	FT_PRINT_OPTS_USAGE("-x", "exit after test run");
 	fprintf(stderr, "\nClient only options:\n");
-	FT_PRINT_OPTS_USAGE("-u <test_config_file>", "test configuration file "
-		"(Either config file or both provider and test name are required)");
-	FT_PRINT_OPTS_USAGE("-p <provider_name>", " provider name");
-	FT_PRINT_OPTS_USAGE("-t <test_name>", "test name");
+	FT_PRINT_OPTS_USAGE("-u <test_config_file>", "test configuration file ");
 	FT_PRINT_OPTS_USAGE("-y <start_test_index>", "");
 	FT_PRINT_OPTS_USAGE("-z <end_test_index>", "");
 	FT_PRINT_OPTS_USAGE("-s <address>", "source address");
@@ -792,77 +787,6 @@ void ft_free()
 {
 	if (filename)
 		free(filename);
-	if (testname)
-		free(testname);
-	if (provname)
-		free(provname);
-}
-
-static int ft_get_config_file(char *provname, char *testname, char **filename)
-{
-	char **prov_vec, **path_vec, *str;
-	size_t i, prov_count, path_count, len;
-	int ret = -FI_ENOMEM;
-
-	// TODO use macro for ";"
-	prov_vec = ft_split_and_alloc(provname, ";", &prov_count);
-	if (!prov_vec) {
-		FT_ERR("Unable to split provname\n");
-		return -FI_EINVAL;
-	}
-
-	/* prov_count + count_of(CONFIG_PATH, "test_configs", "testname", ".test") */
-	path_count = prov_count + 4;
-	path_vec = calloc(path_count, sizeof(*path_vec));
-	if (!path_vec)
-		goto err1;
-
-	path_vec[0] = CONFIG_PATH;
-	path_vec[1] = "test_configs";
-
-	/* Path for "prov1;prov2;prov3;..." is ".../prov3/prov2/prov1" */
-	for (i = 0; i < prov_count; i++)
-		path_vec[i + 2] = prov_vec[prov_count - i - 1];
-
-	path_vec[prov_count + 2] = testname;
-	path_vec[prov_count + 3] = "test";
-
-	for (i = 0, len = 0; i < path_count; i++)
-		len += strlen(path_vec[i]) + 1;
-
-	// NULL char at the end
-	len++;
-
-	*filename = calloc(1, len);
-	if (!*filename)
-		goto err2;
-
-	for (i = 0, str = *filename; i < path_count; i++) {
-		if (i < path_count - 1)
-			ret = snprintf(str, len, "/%s", path_vec[i]);
-		else
-			ret = snprintf(str, len, ".%s", path_vec[i]);
-		if (ret < 0)
-			goto err3;
-
-		if (ret >= (int)len) {
-			ret = -FI_ETRUNC;
-			goto err3;
-		}
-		str += ret;
-		len -= ret;
-	}
-	free(path_vec);
-	ft_free_string_array(prov_vec);
-	return 0;
-err3:
-	free(*filename);
-	*filename = NULL;
-err2:
-	free(path_vec);
-err1:
-	ft_free_string_array(prov_vec);
-	return ret;
 }
 
 int main(int argc, char **argv)
@@ -871,16 +795,10 @@ int main(int argc, char **argv)
 	opts = INIT_OPTS;
 	int ret, op;
 
-	while ((op = getopt(argc, argv, "p:u:t:q:xy:z:hf" ADDR_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "u:q:xy:z:hf" ADDR_OPTS)) != -1) {
 		switch (op) {
 		case 'u':
 			filename = strdup(optarg);
-			break;
-		case 'p':
-			provname = strdup(optarg);
-			break;
-		case 't':
-			testname = strdup(optarg);
 			break;
 		case 'q':
 			service = optarg;
@@ -919,21 +837,9 @@ int main(int argc, char **argv)
 		if (!opts.dst_port)
 			opts.dst_port = default_port;
 		if (!filename) {
-			if (!testname || !provname) {
-				ft_fw_usage(argv[0]);
-				ft_free();
-				exit(1);
-			} else {
-				ret = ft_get_config_file(provname, testname,
-							 &filename);
-				if (ret < 0) {
-					ft_free();
-					exit(1);
-				}
-			}
-		} else {
-			testname = NULL;
-			provname = NULL;
+			ft_fw_usage(argv[0]);
+			ft_free();
+			exit(1);
 		}
 		series = fts_load(filename);
 		if (!series) {
