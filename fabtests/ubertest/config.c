@@ -38,8 +38,6 @@
 #define FT_CAP_RMA	FI_RMA | FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE
 #define FT_CAP_ATOMIC	FI_ATOMICS | FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE
 
-#define FT_MODE_ALL	FI_CONTEXT | FI_LOCAL_MR | FI_RX_CQ_DATA /*| FI_MSG_PREFIX*/
-#define FT_MODE_NONE	~0ULL
 
 struct key_t {
 	char *str;
@@ -463,11 +461,13 @@ static int ft_parse_num(char *str, int len, struct key_t *key, void *buf)
 		TEST_ENUM_SET_N_RETURN(str, len, FT_COMP_CNTR, enum ft_comp_type, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FT_COMP_ALL, enum ft_comp_type, buf);
 		FT_ERR("Unknown comp_type");
+	} else if (!strncmp(key->str, "mode", strlen("mode"))) {
+		TEST_ENUM_SET_N_RETURN(str, len, FI_CONTEXT, uint64_t, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_RX_CQ_DATA, uint64_t, buf);
+		FT_ERR("Unsupported mode bit");
 	} else {
-		TEST_SET_N_RETURN(str, len, "FT_MODE_ALL", FT_MODE_ALL, uint64_t, buf);
-		TEST_SET_N_RETURN(str, len, "FT_MODE_NONE", FT_MODE_NONE, uint64_t, buf);
 		TEST_SET_N_RETURN(str, len, "FT_FLAG_QUICKTEST", FT_FLAG_QUICKTEST, uint64_t, buf);
-		FT_ERR("Unknown comp_type/mode/test_flags");
+		FT_ERR("Unknown stand-alone value");
 	}
 
 	return -1;
@@ -896,8 +896,11 @@ void fts_cur_info(struct ft_series *series, struct ft_info *info)
 		while (set->tx_op_flags[i])
 			info->tx_op_flags |= set->tx_op_flags[i++];
 	}
-	info->mode = !set->mode[series->cur_mode] ?
-			FT_MODE_ALL : set->mode[series->cur_mode];
+	if (set->mode[0]) {
+		i = 0;
+		while (set->mode[i])
+			info->mode |= set->mode[i++];
+	}
 
 	info->ep_type = set->ep_type[series->cur_ep];
 	info->av_type = set->av_type[series->cur_av];
