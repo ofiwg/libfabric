@@ -1,6 +1,6 @@
-#: "Tests different wait objects for EQ and CQ across sockets and verbs providers"
+#: "Tests different wait objects for EQ and CQ across tcp and verbs providers"
 {
-	prov_name: sockets,
+	prov_name: tcp,
 	test_type: [
 		FT_TEST_LATENCY,
 	],
@@ -34,7 +34,7 @@
 	test_flags: FT_FLAG_QUICKTEST
 },
 {
-	prov_name: sockets,
+	prov_name: tcp,
 	test_type: [
 		FT_TEST_LATENCY,
 		FT_TEST_BANDWIDTH,

@@ -18,9 +18,8 @@
 	comp_type: [
 		FT_COMP_QUEUE
 	],
-	mode: [
-		FT_MODE_ALL
-	],
+	mr_mode: [ FI_MR_LOCAL, FI_MR_VIRT_ADDR, FI_MR_ALLOCATED, FI_MR_PROV_KEY ],
+	mode: [ FI_CONTEXT, FI_RX_CQ_DATA ],
 	test_class: [
 		FT_CAP_MSG,
 	],
@@ -48,9 +47,8 @@
 	cq_wait_obj: [
 		FI_WAIT_NONE
 	],
-	mode: [
-		FT_MODE_ALL
-	],
+	mr_mode: [ FI_MR_LOCAL, FI_MR_VIRT_ADDR, FI_MR_ALLOCATED, FI_MR_PROV_KEY ],
+	mode: [ FI_CONTEXT, FI_RX_CQ_DATA ],
 	test_class: [
 		FT_CAP_MSG,
 	],
@@ -79,9 +77,8 @@
 		FI_WAIT_UNSPEC,
 		FI_WAIT_FD,
 	],
-	mode: [
-		FT_MODE_ALL
-	],
+	mr_mode: [ FI_MR_LOCAL, FI_MR_VIRT_ADDR, FI_MR_ALLOCATED, FI_MR_PROV_KEY ],
+	mode: [ FI_CONTEXT, FI_RX_CQ_DATA ],
 	test_class: [
 		FT_CAP_MSG,
 	],

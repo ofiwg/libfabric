@@ -16,9 +16,6 @@
 	comp_type: [
 		FT_COMP_QUEUE,
 	],
-	mode: [
-		FT_MODE_ALL,
-	],
 	test_class: [
 		FT_CAP_MSG,
 		FT_CAP_TAGGED,

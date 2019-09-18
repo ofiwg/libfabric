@@ -14,9 +14,6 @@
 	ep_type: [
 		FI_EP_RDM,
 	],
-	mode: [
-		FT_MODE_ALL,
-	],
 	test_class: [
 		FT_CAP_MSG,
 		FT_CAP_TAGGED,
@@ -48,9 +45,6 @@
 	ep_type: [
 		FI_EP_RDM,
 	],
-	mode: [
-		FT_MODE_ALL,
-	],
 	test_class: [
 		FT_CAP_RMA,
 	],
@@ -81,9 +75,6 @@
 	ep_type: [
 		FI_EP_RDM,
 	],
-	mode: [
-		FT_MODE_ALL,
-	],
 	test_class: [
 		FT_CAP_RMA,
 	],
@@ -141,9 +132,6 @@
 	comp_type: [
 		FT_COMP_QUEUE,
 	],
-	mode: [
-		FT_MODE_ALL,
-	],
 	test_class: [
 		FT_CAP_ATOMIC,
 	],
@@ -186,9 +174,6 @@
 	],
 	comp_type: [
 		FT_COMP_QUEUE,
-	],
-	mode: [
-		FT_MODE_ALL,
 	],
 	test_class: [
 		FT_CAP_ATOMIC,
@@ -238,9 +223,6 @@
 	],
 	comp_type: [
 		FT_COMP_QUEUE,
-	],
-	mode: [
-		FT_MODE_ALL,
 	],
 	test_class: [
 		FT_CAP_ATOMIC,
@@ -299,9 +281,6 @@
 	comp_type: [
 		FT_COMP_QUEUE,
 	],
-	mode: [
-		FT_MODE_ALL,
-	],
 	test_class: [
 		FT_CAP_ATOMIC,
 	],
@@ -341,9 +320,6 @@
 	],
 	comp_type: [
 		FT_COMP_QUEUE,
-	],
-	mode: [
-		FT_MODE_ALL,
 	],
 	test_class: [
 		FT_CAP_ATOMIC,
@@ -390,9 +366,6 @@
 	],
 	comp_type: [
 		FT_COMP_QUEUE,
-	],
-	mode: [
-		FT_MODE_ALL,
 	],
 	test_class: [
 		FT_CAP_ATOMIC,
