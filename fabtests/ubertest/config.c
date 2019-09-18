@@ -403,9 +403,10 @@ static int ft_parse_num(char *str, int len, struct key_t *key, void *buf)
 		TEST_ENUM_SET_N_RETURN(str, len, FI_CONTEXT, uint64_t, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FI_RX_CQ_DATA, uint64_t, buf);
 		FT_ERR("Unsupported mode bit");
-	} else {
+	} else if (!strncmp(key->str, "test_flags", strlen("test_flags"))) {
 		TEST_SET_N_RETURN(str, len, "FT_FLAG_QUICKTEST", FT_FLAG_QUICKTEST, uint64_t, buf);
-		FT_ERR("Unknown stand-alone value");
+	} else {
+		FT_ERR("Unknown test configuration key");
 	}
 
 	return -1;
