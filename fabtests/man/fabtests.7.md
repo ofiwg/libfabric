@@ -221,7 +221,7 @@ result, a full ubertest run can take a significant amount of time.  Because
 ubertest iterates over input variables, it relies on a test configuration
 file for control, rather than extensive command line options that are used
 by other fabtests.  A configuration file must be constructured for each
-provider.  Example test configurations are at /test_configs.
+provider.  Example test configurations are at test_configs.
 
 *fi_ubertest*
 : This test takes a configure file as input.  The file contains a list of
@@ -234,11 +234,94 @@ provider.  Example test configurations are at /test_configs.
 
 ### Config file options
 
-TODO: add all supported config options
+The following keys and respective key values may be used in the config file.
 
-- *threading*
-  Specify a list of threading levels. This is a hints only config: ubertest
-  doesn't spawn multiple threads to verify functionality.
+*prov_name*
+: Identify the provider(s) to test.  E.g. udp, tcp, verbs,
+  ofi_rxm;verbs; ofi_rxd;udp.
+
+*test_type*
+: FT_TEST_LATENCY, FT_TEST_BANDWIDTH, FT_TEST_UNIT
+
+*test_class*
+: FT_CAP_MSG, FT_CAP_TAGGED, FT_CAP_RMA, FT_CAP_ATOMIC
+
+*class_function*
+: For FT_CAP_MSG and FT_CAP_TAGGED: FT_FUNC_SEND, FT_FUNC_SENDV, FT_FUNC_SENDMSG,
+  FT_FUNC_INJECT, FT_FUNC_INJECTDATA, FT_FUNC_SENDDATA
+
+  For FT_CAP_RMA: FT_FUNC_WRITE, FT_FUNC_WRITEV, FT_FUNC_WRITEMSG,
+  FT_FUNC_WRITEDATA, FT_FUNC_INJECT_WRITE, FT_FUNC_INJECT_WRITEDATA
+  FT_FUNC_READ, FT_FUNC_READV, FT_FUNC_READMSG
+
+  For FT_CAP_ATOMIC: FT_FUNC_ATOMIC, FT_FUNC_ATOMICV, FT_FUNC_ATOMICMSG,
+  FT_FUNC_INJECT_ATOMIC, FT_FUNC_FETCH_ATOMIC, FT_FUNC_FETCH_ATOMICV,
+  FT_FUNC_FETCH_ATOMICMSG, FT_FUNC_COMPARE_ATOMIC, FT_FUNC_COMPARE_ATOMICV,
+  FT_FUNC_COMPARE_ATOMICMSG
+
+*constant_caps - values OR'ed together*
+: FI_RMA, FI_MSG, FI_SEND, FI_RECV, FI_READ,
+  FI_WRITE, FI_REMOTE_READ, FI_REMOTE_WRITE, FI_TAGGED, FI_DIRECTED_RECV
+
+*mode - values OR'ed together*
+: FI_CONTEXT, FI_RX_CQ_DATA
+
+*ep_type*
+: FI_EP_MSG, FI_EP_DGRAM, FI_EP_RDM
+
+*comp_type*
+: FT_COMP_QUEUE, FT_COMP_CNTR, FT_COMP_ALL
+
+*av_type*
+: FI_AV_MAP, FI_AV_TABLE
+
+*eq_wait_obj*
+: FI_WAIT_NONE, FI_WAIT_UNSPEC, FI_WAIT_FD, FI_WAIT_MUTEX_COND
+
+*cq_wait_obj*
+: FI_WAIT_NONE, FI_WAIT_UNSPEC, FI_WAIT_FD, FI_WAIT_MUTEX_COND
+
+*cntr_wait_obj*
+: FI_WAIT_NONE, FI_WAIT_UNSPEC, FI_WAIT_FD, FI_WAIT_MUTEX_COND
+
+*threading*
+: FI_THREAD_UNSPEC, FI_THREAD_SAFE, FI_THREAD_FID, FI_THREAD_DOMAIN,
+  FI_THREAD_COMPLETION, FI_THREAD_ENDPOINT
+
+*progress*
+: FI_PROGRESS_MANUAL, FI_PROGRESS_AUTO, FI_PROGRESS_UNSPEC
+
+*mr_mode*
+: (Values OR'ed together) FI_MR_LOCAL, FI_MR_VIRT_ADDR, FI_MR_ALLOCATED,
+  FI_MR_PROV_KEY
+
+*op*
+: For FT_CAP_ATOMIC: FI_MIN, FI_MAX, FI_SUM, FI_PROD, FI_LOR, FI_LAND, FI_BOR,
+  FI_BAND, FI_LXOR, FI_BXOR, FI_ATOMIC_READ, FI_ATOMIC_WRITE, FI_CSWAP,
+  FI_CSWAP_NE, FI_CSWAP_LE, FI_CSWAP_LT, FI_CSWAP_GE, FI_CSWAP_GT, FI_MSWAP
+
+*datatype*
+: For FT_CAP_ATOMIC: FI_INT8, FI_UINT8, FI_INT16, FI_UINT16, FI_INT32,
+  FI_UINT32, FI_INT64, FI_UINT64, FI_FLOAT, FI_DOUBLE, FI_FLOAT_COMPLEX,
+  FI_DOUBLE_COMPLEX, FI_LONG_DOUBLE, FI_LONG_DOUBLE_COMPLE
+
+*msg_flags - values OR'ed together*
+: For FT_FUNC_XXXMSG: FI_REMOTE_CQ_DATA, FI_COMPLETION
+
+*rx_cq_bind_flags - values OR'ed together*
+: FI_SELECTIVE_COMPLETION
+
+*tx_cq_bind_flags - values OR'ed together*
+: FI_SELECTIVE_COMPLETION
+
+*rx_op_flags - values OR'ed together*
+: FI_COMPLETION
+
+*tx_op_flags - values OR'ed together*
+: FI_COMPLETION
+
+*test_flags - values OR'ed together*
+: FT_FLAG_QUICKTEST
 
 # HOW TO RUN TESTS
 
