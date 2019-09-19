@@ -110,7 +110,7 @@ struct util_coll_comp_item;
 typedef void (*util_coll_comp_t)(struct util_coll_mc *coll_mc,
 				 struct util_coll_comp_item *comp);
 
-struct util_coll_join_comp_data {
+struct util_coll_comp_data {
 	uint64_t		cid_buf[OFI_CONTEXT_ID_SIZE];
 	uint64_t		tmp_cid_buf[OFI_CONTEXT_ID_SIZE];
 };
@@ -118,6 +118,7 @@ struct util_coll_join_comp_data {
 struct util_coll_comp_item {
 	struct util_coll_hdr	hdr;
 	enum util_coll_op_type	op_type;
+	void			*op_context;
 	void			*data;
 	util_coll_comp_t	comp_fn;
 };

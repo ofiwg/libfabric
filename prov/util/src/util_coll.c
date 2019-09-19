@@ -293,7 +293,7 @@ static int util_coll_sched_copy(struct util_coll_mc *coll_mc, void *in_buf,
 }
 
 static int util_coll_sched_comp(struct util_coll_mc *coll_mc,
-				enum util_coll_op_type op_type,
+				enum util_coll_op_type op_type, void *ctx,
 				void *data, util_coll_comp_t comp_fn)
 {
 	struct util_coll_comp_item *comp_item;
@@ -306,6 +306,7 @@ static int util_coll_sched_comp(struct util_coll_mc *coll_mc,
 	comp_item->hdr.is_barrier = 0;
 
 	comp_item->op_type = op_type;
+	comp_item->op_context = ctx;
 	comp_item->data = data;
 	comp_item->comp_fn = comp_fn;
 
@@ -474,13 +475,13 @@ void util_coll_join_comp(struct util_coll_mc *coll_mc,
 			 struct util_coll_comp_item *comp)
 {
 	struct fi_eq_err_entry entry;
-	struct util_coll_join_comp_data *comp_data;
+	struct util_coll_comp_data *comp_data;
 	struct util_ep *ep;
 	ssize_t bytes;
 	uint64_t tmp;
 	int iter, lsb_set_pos = 0, pos;
 
-	comp_data = (struct util_coll_join_comp_data *)comp->data;
+	comp_data = (struct util_coll_comp_data *)comp->data;
 
 	for (iter = 0; iter < OFI_CONTEXT_ID_SIZE; iter++) {
 
@@ -520,23 +521,17 @@ void util_coll_join_comp(struct util_coll_mc *coll_mc,
 void util_coll_barrier_comp(struct util_coll_mc *coll_mc,
 			    struct util_coll_comp_item *comp)
 {
-/* TODO: We should write a completion to the CQ, not the EQ
-	struct fi_eq_err_entry entry;
 	struct util_ep *ep;
-	ssize_t bytes;
 
-	memset(&entry, 0, sizeof(entry));
-	entry.fid = &coll_mc->mc_fid.fid;
-	entry.context = coll_mc->mc_fid.fid.context;
-	bytes = sizeof(struct fi_eq_entry);
-	free(comp->data);
+	ep = container_of(coll_mc->ep, struct util_ep, ep_fid);
 
-	ep  = container_of(coll_mc->ep, struct util_ep, ep_fid);
-	if (ofi_eq_write(&ep->eq->eq_fid, FI_COLL,
-			 &entry, (size_t) bytes, FI_COLLECTIVE) < 0)
+	if (ofi_cq_write(ep->tx_cq, comp->op_context, FI_COLLECTIVE,
+			 sizeof(struct util_coll_comp_data), comp->data, 0,
+			 comp->hdr.tag)) {
 		FI_WARN(ep->domain->fabric->prov, FI_LOG_DOMAIN,
-			"barrier collective - eq write failed\n");
-*/
+			"barrier collective - cq write failed\n");
+	}
+	free(comp->data);
 }
 
 static int util_coll_proc_reduce_item(struct util_coll_mc *coll_mc,
@@ -661,7 +656,7 @@ int ofi_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 	struct util_coll_mc *new_coll_mc;
 	struct util_av_set *av_set;
 	struct util_coll_mc *coll_mc;
-	struct util_coll_join_comp_data *comp_data;
+	struct util_coll_comp_data *comp_data;
 	int ret;
 
 	av_set = container_of(set, struct util_av_set, av_set_fid);
@@ -715,8 +710,8 @@ int ofi_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 	if (ret)
 		goto err2;
 
-	ret = util_coll_sched_comp(coll_mc, UTIL_COLL_JOIN_OP,
-			     comp_data, util_coll_join_comp);
+	ret = util_coll_sched_comp(coll_mc, UTIL_COLL_JOIN_OP, context,
+				   comp_data, util_coll_join_comp);
 	if (ret)
 		goto err2;
 
@@ -856,28 +851,28 @@ err1:
 
 ssize_t ofi_ep_barrier(struct fid_ep *ep, fi_addr_t coll_addr, void *context)
 {
-	struct util_coll_mc *coll_mc = (struct util_coll_mc *) coll_addr;
+	struct util_coll_mc *coll_mc;
 	struct util_coll_comp_item *comp_item;
 	int ret;
 
+	coll_mc = (struct util_coll_mc*) ((uintptr_t) coll_addr);
 	comp_item = calloc(1, sizeof(*comp_item));
 	if (!comp_item)
 		return -FI_ENOMEM;
 
-	comp_item->data = (void *) calloc(1, sizeof(uint32_t));
+	comp_item->data = calloc(1, sizeof(uint32_t));
 	if (!comp_item->data) {
 		ret = -FI_ENOMEM;
 		goto err1;
 	}
 
-	ret = util_coll_allreduce(coll_mc, comp_item->data,
-				  comp_item->data, 1, FI_UINT32,
-				  FI_BAND);
+	ret = util_coll_allreduce(coll_mc, comp_item->data, comp_item->data, 1,
+				  FI_UINT32, FI_BAND);
 	if (ret)
 		goto err2;
 
-	util_coll_sched_comp(coll_mc, UTIL_COLL_BARRIER_OP,
-			     NULL, util_coll_barrier_comp);
+	util_coll_sched_comp(coll_mc, UTIL_COLL_BARRIER_OP, context, NULL,
+			     util_coll_barrier_comp);
 
 	util_coll_schedule(coll_mc);
 	return FI_SUCCESS;
