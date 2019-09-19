@@ -229,7 +229,7 @@ static int util_coll_sched_recv(struct util_coll_mc *coll_mc, int src,
 				uint64_t tag, int is_barrier)
 {
 	struct util_coll_xfer_item *xfer_item;
-	uint64_t recv_tag = src;
+	uint64_t src_rank = src;
 
 	xfer_item = calloc(1, sizeof(*xfer_item));
 	if (!xfer_item)
@@ -238,7 +238,7 @@ static int util_coll_sched_recv(struct util_coll_mc *coll_mc, int src,
 	xfer_item->hdr.type = UTIL_COLL_RECV;
 	xfer_item->hdr.is_barrier = is_barrier;
 
-	xfer_item->hdr.tag = (recv_tag << 32) | (tag & 0xffffffff);
+	xfer_item->hdr.tag = (src_rank << 32) | (tag & (0xffffffff | OFI_TAG_COLL));
 	xfer_item->buf = buf;
 	xfer_item->count = count;
 	xfer_item->datatype = datatype;
@@ -319,7 +319,7 @@ static inline uint64_t util_coll_get_next_tag(struct util_coll_mc *coll_mc)
 
 	tag = tag << 16 | coll_mc->cid;
 	tag = tag << 16 | coll_mc->tag_seq++;
-	return tag;
+	return tag | OFI_TAG_COLL;
 }
 
 /* TODO: when this fails, clean up the already scheduled work in this function */

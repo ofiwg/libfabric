@@ -37,6 +37,7 @@
 
 #define OFI_WORLD_CONTEXT_ID 0
 #define OFI_CONTEXT_ID_SIZE 4
+#define OFI_TAG_COLL (1ULL << 63)
 
 enum barrier_type {
 	NO_BARRIER,
