@@ -879,6 +879,7 @@ fi_ibv_eq_read(struct fid_eq *eq_fid, uint32_t *event,
 		return ret;
 
 	if (eq->channel) {
+next_event:
 		fastlock_acquire(&eq->lock);
 		ret = rdma_get_cm_event(eq->channel, &cma_event);
 		fastlock_release(&eq->lock);
@@ -902,6 +903,11 @@ fi_ibv_eq_read(struct fid_eq *eq_fid, uint32_t *event,
 ack:
 		if (!acked)
 			rdma_ack_cm_event(cma_event);
+
+		/* If the CM event was handled internally (e.g. XRC), continue
+		 * to process events. */
+		if (ret == -FI_EAGAIN)
+			goto next_event;
 
 		return ret;
 	}
