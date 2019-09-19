@@ -30,6 +30,8 @@
  * SOFTWARE.
  */
 
+#include <ofi_coll.h>
+
 #include "rxm.h"
 
 static int rxm_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
@@ -190,6 +192,7 @@ static struct fi_ops_av rxm_av_ops = {
 	.remove = rxm_av_remove,
 	.lookup = rxm_av_lookup,
 	.straddr = rxm_av_straddr,
+	.av_set = ofi_av_set
 };
 
 int rxm_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,

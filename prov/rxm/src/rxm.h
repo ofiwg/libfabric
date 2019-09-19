@@ -368,7 +368,7 @@ union rxm_sar_ctrl_data {
 		enum rxm_sar_seg_type {
 			RXM_SAR_SEG_FIRST	= 1,
 			RXM_SAR_SEG_MIDDLE	= 2,
-			RXM_SAR_SEG_LAST	= 3,	
+			RXM_SAR_SEG_LAST	= 3,
 		} seg_type : 2;
 		uint32_t offset;
 	};
@@ -641,6 +641,14 @@ struct rxm_msg_eq_entry {
 #define RXM_CM_ENTRY_SZ (sizeof(struct fi_eq_cm_entry) + \
 			 sizeof(union rxm_cm_data))
 
+struct rxm_handle_txrx_ops {
+	int (*comp_eager_tx)(struct rxm_ep *rxm_ep,
+				    struct rxm_tx_eager_buf *tx_eager_buf);
+	ssize_t (*handle_eager_rx)(struct rxm_rx_buf *rx_buf);
+	ssize_t (*handle_rndv_rx)(struct rxm_rx_buf *rx_buf);
+	ssize_t (*handle_seg_data_rx)(struct rxm_rx_buf *rx_buf);
+};
+
 struct rxm_ep {
 	struct util_ep 		util_ep;
 	struct fi_info 		*rxm_info;
@@ -670,6 +678,8 @@ struct rxm_ep {
 
 	struct rxm_recv_queue	recv_queue;
 	struct rxm_recv_queue	trecv_queue;
+
+	struct rxm_handle_txrx_ops *txrx_ops;
 };
 
 struct rxm_conn {
@@ -721,7 +731,15 @@ int rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep);
 void rxm_cq_write_error(struct util_cq *cq, struct util_cntr *cntr,
 			void *op_context, int err);
 void rxm_ep_progress(struct util_ep *util_ep);
+void rxm_ep_progress_coll(struct util_ep *util_ep);
 void rxm_ep_do_progress(struct util_ep *util_ep);
+
+ssize_t rxm_cq_handle_eager(struct rxm_rx_buf *rx_buf);
+ssize_t rxm_cq_handle_coll_eager(struct rxm_rx_buf *rx_buf);
+ssize_t rxm_cq_handle_rndv(struct rxm_rx_buf *rx_buf);
+ssize_t rxm_cq_handle_seg_data(struct rxm_rx_buf *rx_buf);
+int rxm_finish_eager_send(struct rxm_ep *rxm_ep, struct rxm_tx_eager_buf *tx_eager_buf);
+int rxm_finish_coll_eager_send(struct rxm_ep *rxm_ep, struct rxm_tx_eager_buf *tx_eager_buf);
 
 int rxm_msg_ep_prepost_recv(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep);
 
@@ -818,7 +836,7 @@ rxm_ep_msg_mr_regv(struct rxm_ep *rxm_ep, const struct iovec *iov, size_t count,
 	size_t i;
 	struct rxm_domain *rxm_domain =
 		container_of(rxm_ep->util_ep.domain, struct rxm_domain, util_domain);
- 
+
 	for (i = 0; i < count; i++) {
 		ret = fi_mr_reg(rxm_domain->msg_domain, iov[i].iov_base,
 				iov[i].iov_len, access, 0, 0, 0, &mr[i], NULL);
@@ -839,7 +857,7 @@ rxm_ep_msg_mr_regv_lim(struct rxm_ep *rxm_ep, const struct iovec *iov, size_t co
 	size_t i;
 	struct rxm_domain *rxm_domain =
 		container_of(rxm_ep->util_ep.domain, struct rxm_domain, util_domain);
- 
+
 	for (i = 0; i < count && total_reg_len; i++) {
 		size_t len = MIN(iov[i].iov_len, total_reg_len);
 		ret = fi_mr_reg(rxm_domain->msg_domain, iov[i].iov_base,
