@@ -39,6 +39,7 @@
 #include "ofi.h"
 #include "ofi_iov.h"
 #include "ofi_atomic.h"
+#include <ofi_coll.h>
 
 #include "rxm.h"
 
@@ -598,12 +599,32 @@ readv_err:
 }
 
 static inline
+void rxm_cq_handle_coll(struct rxm_rx_buf *rx_buf)
+{
+	ofi_coll_handle_comp(rx_buf->pkt.hdr.tag,
+			      rx_buf->recv_entry->context);
+	rxm_recv_entry_release(rx_buf->recv_entry->recv_queue,
+			       rx_buf->recv_entry);
+}
+
+static inline
+void rxm_cq_tx_handle_coll(struct rxm_tx_eager_buf *eager_buf)
+{
+	ofi_coll_handle_comp(eager_buf->pkt.hdr.tag,
+			      eager_buf->app_context);
+}
+
+static inline
 ssize_t rxm_cq_handle_eager(struct rxm_rx_buf *rx_buf)
 {
 	uint64_t done_len = ofi_copy_to_iov(rx_buf->recv_entry->rxm_iov.iov,
 					    rx_buf->recv_entry->rxm_iov.count,
 					    0, rx_buf->pkt.data,
 					    rx_buf->pkt.hdr.size);
+	if(rx_buf->pkt.hdr.tag & OFI_TAG_COLL) {
+		rxm_cq_handle_coll(rx_buf);
+		return FI_SUCCESS;
+	}
 	return rxm_finish_recv(rx_buf, done_len);
 }
 
@@ -1108,7 +1129,12 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 	case RXM_TX:
 		tx_eager_buf = comp->op_context;
 		assert(comp->flags & FI_SEND);
-		ret = rxm_finish_eager_send(rxm_ep, tx_eager_buf);
+		if (tx_eager_buf->pkt.hdr.tag & OFI_TAG_COLL) {
+			rxm_cq_tx_handle_coll(tx_eager_buf);
+			ret = FI_SUCCESS;
+		} else {
+			ret = rxm_finish_eager_send(rxm_ep, tx_eager_buf);
+		}
 		ofi_buf_free(tx_eager_buf);
 		return ret;
 	case RXM_SAR_TX:
@@ -1429,6 +1455,8 @@ void rxm_ep_do_progress(struct util_ep *util_ep)
 					     deferred_conn_entry, conn_entry_tmp)
 			rxm_ep_progress_deferred_queue(rxm_ep, rxm_conn);
 	}
+
+	ofi_coll_ep_progress(&util_ep->ep_fid);
 }
 
 void rxm_ep_progress(struct util_ep *util_ep)
@@ -1436,6 +1464,8 @@ void rxm_ep_progress(struct util_ep *util_ep)
 	ofi_ep_lock_acquire(util_ep);
 	rxm_ep_do_progress(util_ep);
 	ofi_ep_lock_release(util_ep);
+
+	ofi_coll_process_pending(&util_ep->ep_fid);
 }
 
 static int rxm_cq_close(struct fid *fid)

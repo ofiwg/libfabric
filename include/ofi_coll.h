@@ -35,6 +35,9 @@
 
 #include <rdma/fi_collective.h>
 
+#include <ofi_list.h>
+#include <ofi_atom.h>
+
 #define OFI_WORLD_CONTEXT_ID 0
 #define OFI_CONTEXT_ID_SIZE 4
 #define OFI_TAG_COLL (1ULL << 63)
@@ -105,6 +108,19 @@ struct util_coll_reduce_item {
 	enum fi_op		op;
 };
 
+struct util_coll_mc {
+	struct fid_mc		mc_fid;
+	struct fid_ep		*ep;
+	struct util_av_set	*av_set;
+	struct slist		barrier_list;
+	struct slist		deferred_list;
+	struct slist		pending_xfer_list;
+	int			my_rank;
+	uint16_t		cid;
+	uint16_t		tag_seq;
+	ofi_atomic32_t		ref;
+};
+
 struct util_coll_comp_item;
 
 typedef void (*util_coll_comp_t)(struct util_coll_mc *coll_mc,
@@ -128,19 +144,6 @@ struct util_coll_comp_item {
 	void			*op_context;
 	void			*data;
 	util_coll_comp_t	comp_fn;
-};
-
-struct util_coll_mc {
-	struct fid_mc		mc_fid;
-	struct fid_ep		*ep;
-	struct util_av_set	*av_set;
-	struct slist		barrier_list;
-	struct slist		deferred_list;
-	struct slist		pending_xfer_list;
-	int			my_rank;
-	uint16_t		cid;
-	uint16_t		tag_seq;
-	ofi_atomic32_t		ref;
 };
 
 int ofi_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,

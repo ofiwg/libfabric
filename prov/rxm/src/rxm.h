@@ -372,7 +372,7 @@ union rxm_sar_ctrl_data {
 		enum rxm_sar_seg_type {
 			RXM_SAR_SEG_FIRST	= 1,
 			RXM_SAR_SEG_MIDDLE	= 2,
-			RXM_SAR_SEG_LAST	= 3,	
+			RXM_SAR_SEG_LAST	= 3,
 		} seg_type : 2;
 		uint32_t offset;
 	};
@@ -824,7 +824,7 @@ rxm_ep_msg_mr_regv(struct rxm_ep *rxm_ep, const struct iovec *iov, size_t count,
 	size_t i;
 	struct rxm_domain *rxm_domain =
 		container_of(rxm_ep->util_ep.domain, struct rxm_domain, util_domain);
- 
+
 	for (i = 0; i < count; i++) {
 		ret = fi_mr_reg(rxm_domain->msg_domain, iov[i].iov_base,
 				iov[i].iov_len, access, 0, 0, 0, &mr[i], NULL);
@@ -845,7 +845,7 @@ rxm_ep_msg_mr_regv_lim(struct rxm_ep *rxm_ep, const struct iovec *iov, size_t co
 	size_t i;
 	struct rxm_domain *rxm_domain =
 		container_of(rxm_ep->util_ep.domain, struct rxm_domain, util_domain);
- 
+
 	for (i = 0; i < count && total_reg_len; i++) {
 		size_t len = MIN(iov[i].iov_len, total_reg_len);
 		ret = fi_mr_reg(rxm_domain->msg_domain, iov[i].iov_base,

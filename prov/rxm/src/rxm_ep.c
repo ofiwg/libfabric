@@ -34,8 +34,10 @@
 #include <math.h>
 
 #include <rdma/fabric.h>
+#include <rdma/fi_collective.h>
 #include "ofi.h"
 #include <ofi_util.h>
+#include <ofi_coll.h>
 
 #include "rxm.h"
 
@@ -359,7 +361,7 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 		[RXM_BUF_POOL_TX_SAR] = rxm_ep->msg_info->tx_attr->size,
 		[RXM_BUF_POOL_RMA] = rxm_ep->msg_info->tx_attr->size,
 	};
-	size_t entry_sizes[] = {		
+	size_t entry_sizes[] = {
 		[RXM_BUF_POOL_RX] = rxm_eager_limit +
 				    sizeof(struct rxm_rx_buf),
 		[RXM_BUF_POOL_TX] = rxm_eager_limit +
@@ -468,6 +470,18 @@ static int rxm_getname(fid_t fid, void *addr, size_t *addrlen)
 	return fi_getname(&rxm_ep->msg_pep->fid, addr, addrlen);
 }
 
+static int rxm_join(struct fid_ep *ep, const void *addr, uint64_t flags,
+		    struct fid_mc **mc, void *context)
+{
+	if (~flags & FI_COLLECTIVE) {
+		return -FI_ENOSYS;
+	}
+
+	struct fi_collective_addr *c_addr = (struct fi_collective_addr *) addr;
+	return ofi_join_collective(ep, c_addr->coll_addr, c_addr->set, flags,
+				   mc, context);
+}
+
 static struct fi_ops_cm rxm_ops_cm = {
 	.size = sizeof(struct fi_ops_cm),
 	.setname = rxm_setname,
@@ -478,7 +492,7 @@ static struct fi_ops_cm rxm_ops_cm = {
 	.accept = fi_no_accept,
 	.reject = fi_no_reject,
 	.shutdown = fi_no_shutdown,
-	.join = fi_no_join,
+	.join = rxm_join,
 };
 
 static int rxm_ep_cancel_recv(struct rxm_ep *rxm_ep,
@@ -1105,7 +1119,7 @@ rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	struct rxm_deferred_tx_entry *def_tx_entry;
 	uint64_t msg_id = 0;
 
-	assert(segs_cnt >= 2);	
+	assert(segs_cnt >= 2);
 
 	first_tx_buf = rxm_ep_sar_tx_prepare_segment(rxm_ep, rxm_conn, context, data_len,
 						     rxm_eager_limit, 0, data, flags,
@@ -1918,6 +1932,13 @@ static struct fi_ops_tagged rxm_ops_tagged_thread_unsafe = {
 	.injectdata = rxm_ep_tinjectdata_fast,
 };
 
+static struct fi_ops_collective rxm_ops_collective = {
+	.size = sizeof(struct fi_ops_collective),
+	.barrier = ofi_ep_barrier,
+	.writeread = ofi_ep_writeread,
+	.writereadmsg = ofi_ep_writereadmsg,
+};
+
 static int rxm_ep_msg_res_close(struct rxm_ep *rxm_ep)
 {
 	int ret, retv = 0;
@@ -2445,6 +2466,7 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (rxm_ep->rxm_info->caps & FI_ATOMIC)
 		(*ep_fid)->atomic = &rxm_ops_atomic;
 
+	(*ep_fid)->collective = &rxm_ops_collective;
 	return 0;
 err2:
 	ofi_endpoint_close(&rxm_ep->util_ep);
