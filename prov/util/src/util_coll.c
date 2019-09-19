@@ -539,114 +539,19 @@ void util_coll_barrier_comp(struct util_coll_mc *coll_mc,
 */
 }
 
-/* TODO: We can probably use the atomic defines for these, rather than
- * duplicate the definitions here
- */
-#define UTIL_COLL_REDUCE_FUNC(src,dst,cnt,OP,TYPE)	\
-		do { \
-			int i; \
-			TYPE *d = (dst); \
-			TYPE *s = (src); \
-			for (i=0; i<(cnt); i++) {\
-				OP(d[i],s[i]); \
-			} \
-		} while (0)
-
-#define SWITCH_REDUCE(type,FUNC,src,dst,cnt,OP)		\
-switch (type) {							 \
-		case FI_INT8:	FUNC(src,dst,cnt,OP,int8_t); break; \
-		case FI_UINT8:	FUNC(src,dst,cnt,OP,uint8_t); break; \
-		case FI_INT16:	FUNC(src,dst,cnt,OP,int16_t); break; \
-		case FI_UINT16: FUNC(src,dst,cnt,OP,uint16_t); break; \
-		case FI_INT32:	FUNC(src,dst,cnt,OP,int32_t); break; \
-		case FI_UINT32: FUNC(src,dst,cnt,OP,uint32_t); break; \
-		case FI_INT64:	FUNC(src,dst,cnt,OP,int64_t); break; \
-		case FI_UINT64: FUNC(src,dst,cnt,OP,uint64_t); break; \
-		default: return -FI_EOPNOTSUPP; \
-		}
-
-#define UTIL_COLL_MIN(dst,src)	if ((dst) > (src)) (dst) = (src)
-#define UTIL_COLL_MAX(dst,src)	if ((dst) < (src)) (dst) = (src)
-#define UTIL_COLL_SUM(dst,src)	(dst) += (src)
-#define UTIL_COLL_PROD(dst,src)	(dst) *= (src)
-#define UTIL_COLL_LOR(dst,src)	(dst) = (dst) || (src)
-#define UTIL_COLL_LAND(dst,src)	(dst) = (dst) && (src)
-#define UTIL_COLL_BOR(dst,src)	(dst) |= (src)
-#define UTIL_COLL_BAND(dst,src)	(dst) &= (src)
-#define UTIL_COLL_LXOR(dst,src)	(dst) = ((dst) && !(src)) || (!(dst) && (src))
-#define UTIL_COLL_BXOR(dst,src)	(dst) ^= (src)
-
 static int util_coll_proc_reduce_item(struct util_coll_mc *coll_mc,
 				      struct util_coll_reduce_item *reduce_item)
 {
-	switch (reduce_item->op) {
-	case FI_MIN:
-		SWITCH_REDUCE(reduce_item->datatype, UTIL_COLL_REDUCE_FUNC,
-			      reduce_item->in_buf, reduce_item->inout_buf,
-			      reduce_item->count, UTIL_COLL_MIN);
-		break;
-	case FI_MAX:
-		SWITCH_REDUCE(reduce_item->datatype, UTIL_COLL_REDUCE_FUNC,
-			      reduce_item->in_buf, reduce_item->inout_buf,
-			      reduce_item->count, UTIL_COLL_MAX);
-		break;
-	case FI_SUM:
-		SWITCH_REDUCE(reduce_item->datatype, UTIL_COLL_REDUCE_FUNC,
-			      reduce_item->in_buf, reduce_item->inout_buf,
-			      reduce_item->count, UTIL_COLL_SUM);
-		break;
-	case FI_PROD:
-		SWITCH_REDUCE(reduce_item->datatype, UTIL_COLL_REDUCE_FUNC,
-			      reduce_item->in_buf, reduce_item->inout_buf,
-			      reduce_item->count, UTIL_COLL_PROD);
-		break;
-	case FI_LOR:
-		SWITCH_REDUCE(reduce_item->datatype, UTIL_COLL_REDUCE_FUNC,
-			      reduce_item->in_buf, reduce_item->inout_buf,
-			      reduce_item->count, UTIL_COLL_LOR);
-		break;
-	case FI_LAND:
-		SWITCH_REDUCE(reduce_item->datatype, UTIL_COLL_REDUCE_FUNC,
-			      reduce_item->in_buf, reduce_item->inout_buf,
-			      reduce_item->count, UTIL_COLL_LAND);
-		break;
-	case FI_BOR:
-		SWITCH_REDUCE(reduce_item->datatype, UTIL_COLL_REDUCE_FUNC,
-			      reduce_item->in_buf, reduce_item->inout_buf,
-			      reduce_item->count, UTIL_COLL_BOR);
-		break;
-	case FI_BAND:
-		SWITCH_REDUCE(reduce_item->datatype, UTIL_COLL_REDUCE_FUNC,
-			      reduce_item->in_buf, reduce_item->inout_buf,
-			      reduce_item->count, UTIL_COLL_BAND);
-		break;
-	case FI_LXOR:
-		SWITCH_REDUCE(reduce_item->datatype, UTIL_COLL_REDUCE_FUNC,
-			      reduce_item->in_buf, reduce_item->inout_buf,
-			      reduce_item->count, UTIL_COLL_LXOR);
-		break;
-	case FI_BXOR:
-		SWITCH_REDUCE(reduce_item->datatype, UTIL_COLL_REDUCE_FUNC,
-			      reduce_item->in_buf, reduce_item->inout_buf,
-			      reduce_item->count, UTIL_COLL_BXOR);
-		break;
-	case FI_ATOMIC_READ:
-	case FI_ATOMIC_WRITE:
-	case FI_CSWAP:
-	case FI_CSWAP_NE:
-	case FI_CSWAP_LE:
-	case FI_CSWAP_LT:
-	case FI_CSWAP_GE:
-	case FI_CSWAP_GT:
-	case FI_MSWAP:
-	case FI_ATOMIC_OP_LAST:
-	case FI_BARRIER:
-	case FI_BROADCAST:
-	case FI_ALLTOALL:
-	case FI_ALLGATHER:
-	default:
+	if (FI_MIN <= reduce_item->op && FI_BXOR >= reduce_item->op) {
+		ofi_atomic_write_handlers[reduce_item->op]
+					 [reduce_item->datatype](
+						 reduce_item->inout_buf,
+						 reduce_item->in_buf,
+						 reduce_item->count);
+	} else {
 		return -FI_ENOSYS;
-	};
+	}
+
 	return FI_SUCCESS;
 }
 
