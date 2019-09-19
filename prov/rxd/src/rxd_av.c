@@ -374,8 +374,9 @@ int rxd_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	if (attr->name)
 		return -FI_ENOSYS;
 
+	//TODO implement dynamic AV sizing
 	attr->count = roundup_power_of_two(attr->count ?
-					   attr->count : RXD_DEFAULT_AV_SIZE);
+					   attr->count : rxd_env.max_peers);
 	domain = container_of(domain_fid, struct rxd_domain, util_domain.domain_fid);
 	av = calloc(1, sizeof(*av));
 	if (!av)
