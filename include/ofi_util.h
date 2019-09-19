@@ -294,6 +294,9 @@ struct util_ep {
 	fastlock_t		lock;
 	ofi_fastlock_acquire_t	lock_acquire;
 	ofi_fastlock_release_t	lock_release;
+
+	struct dlist_entry	coll_state_list;
+	fastlock_t		coll_state_lock;
 };
 
 int ofi_ep_bind_av(struct util_ep *util_ep, struct util_av *av);

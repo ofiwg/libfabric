@@ -115,8 +115,15 @@ struct util_coll_comp_data {
 	uint64_t		tmp_cid_buf[OFI_CONTEXT_ID_SIZE];
 };
 
+struct util_coll_state {
+	struct dlist_entry	entry;
+	struct util_coll_mc	*coll_mc;
+	int			complete;
+};
+
 struct util_coll_comp_item {
 	struct util_coll_hdr	hdr;
+	struct util_coll_state	*state;
 	enum util_coll_op_type	op_type;
 	void			*op_context;
 	void			*data;
@@ -126,10 +133,11 @@ struct util_coll_comp_item {
 struct util_coll_mc {
 	struct fid_mc		mc_fid;
 	struct fid_ep		*ep;
-	struct util_av_set 	*av_set;
+	struct util_av_set	*av_set;
 	struct slist		barrier_list;
 	struct slist		deferred_list;
-	int 			my_rank;
+	struct slist		pending_xfer_list;
+	int			my_rank;
 	uint16_t		cid;
 	uint16_t		tag_seq;
 	ofi_atomic32_t		ref;
@@ -140,18 +148,25 @@ int ofi_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 			struct fid_mc **mc, void *context);
 
 int ofi_av_set(struct fid_av *av, struct fi_av_set_attr *attr,
-	       struct fid_av_set **av_set_fid, void * context);
+	       struct fid_av_set **av_set_fid, void *context);
 
 ssize_t ofi_ep_barrier(struct fid_ep *ep, fi_addr_t coll_addr, void *context);
 
 ssize_t ofi_ep_writeread(struct fid_ep *ep, const void *buf, size_t count,
-		     void *desc, void *result, void *result_desc,
-		     fi_addr_t coll_addr, enum fi_datatype datatype,
-		     enum fi_op op, uint64_t flags, void *context);
+			 void *desc, void *result, void *result_desc,
+			 fi_addr_t coll_addr, enum fi_datatype datatype,
+			 enum fi_op op, uint64_t flags, void *context);
 
-ssize_t ofi_ep_writereadmsg(struct fid_ep *ep, const struct fi_msg_collective *msg,
-			struct fi_ioc *resultv, void **result_desc,
-			size_t result_count, uint64_t flags);
+ssize_t ofi_ep_writereadmsg(struct fid_ep *ep,
+			    const struct fi_msg_collective *msg,
+			    struct fi_ioc *resultv, void **result_desc,
+			    size_t result_count, uint64_t flags);
+
+int ofi_coll_process_pending(struct fid_ep *ep);
+
+int ofi_coll_ep_progress(struct fid_ep *ep);
+
+void ofi_coll_handle_comp(uint64_t tag, void *ctx);
 
 
 #endif // _OFI_COLL_H_
