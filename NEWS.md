@@ -34,11 +34,22 @@ v1.8.1, Fri Sep 27, 2019
 
 ## RxM
 
+- Fix connection handle shutdown/CQ processing race
+- Fix RMA ordering bits for FI_ATOMIC
+
 ## SHM
 
 ## TCP
 
 ## Verbs
+
+- Allow zero length memory registrations
+- Improve connection scale up by removing synchronous calls in fi_getinfo
+- Fix missing serialization to event channel during CM ID migration
+- Protect XRC EQ processing from EP API connect/accept calls
+- Fix XRC connection tag to EP return value in error case
+- return EAGAIN to user if an unhandled rdmacm event is received
+- handle IPv6 link local addresses correctly
 
 
 v1.8.0, Fri Jun 28, 2019
