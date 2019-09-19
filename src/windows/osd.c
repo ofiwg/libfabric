@@ -465,7 +465,7 @@ int getifaddrs(struct ifaddrs **ifap)
 								&fa->in_netmasks;
 				netmask4->sin_family = pSockAddr->sa_family;
 				addr4->sin_family = pSockAddr->sa_family;
-				netmask4->sin_addr.S_un.S_addr = mask;
+				netmask4->sin_addr.S_un.S_addr = *mask;
 				pInAddr = (struct sockaddr_in *) pSockAddr;
 				addr4->sin_addr = pInAddr->sin_addr;
 			} else {
