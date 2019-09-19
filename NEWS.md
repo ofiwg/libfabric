@@ -31,10 +31,13 @@ v1.8.1, Fri Sep 27, 2019
 - Avoid a potential deadlock in disconnection protocol
 
 ## RxD
+- Fix default AV count with environment variable FI_OFI_RXD_MAX_PEERS
 
 ## RxM
 
 ## SHM
+- Add correct reporting of FI_MR_BASIC
+- Add correct reporting and proper support of FI_DIRECTED_RECV
 
 ## TCP
 
