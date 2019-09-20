@@ -255,7 +255,6 @@ static int rxd_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr, size_t count
 	fi_addr_t rxd_addr;
 	struct rxd_av *av;
 	uint8_t addr[RXD_NAME_LENGTH];
-	struct ofi_rbnode *node;
 
 	av = container_of(av_fid, struct rxd_av, util_av.av_fid);
 	fastlock_acquire(&av->util_av.lock);
@@ -268,11 +267,9 @@ static int rxd_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr, size_t count
 		if (ret)
 			goto err;
 		
-		node = ofi_rbmap_find(&av->rbmap, (void *) addr);
-		if (!node)
+		ret = ofi_rbmap_find_delete(&av->rbmap, (void *) addr);
+		if (ret)
 			goto err;
-
-		ofi_rbmap_delete(&av->rbmap, node);
 
 		ret = fi_av_remove(av->dg_av, &av->rxd_addr_table[rxd_addr].dg_addr,
 				   1, flags);

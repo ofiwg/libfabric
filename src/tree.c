@@ -345,6 +345,18 @@ struct ofi_rbnode *ofi_rbmap_find(struct ofi_rbmap *map, void *key)
 	return NULL;
 }
 
+int ofi_rbmap_find_delete(struct ofi_rbmap *map, void *key)
+{
+	struct ofi_rbnode *node;
+
+	node = ofi_rbmap_find(map, key);
+	if (!node)
+		return -FI_ENODATA;
+
+	ofi_rbmap_delete(map, node);
+	return 0;
+}
+
 struct ofi_rbnode *ofi_rbmap_search(struct ofi_rbmap *map, void *key,
 		int (*compare)(struct ofi_rbmap *map, void *key, void *data))
 {
