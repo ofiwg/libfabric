@@ -159,7 +159,7 @@ fi_ibv_mr_reg(struct fid *fid, const void *buf, size_t len,
 	struct fi_ibv_mem_desc *md;
 	int ret;
 
-	if (OFI_UNLIKELY(flags))
+	if (OFI_UNLIKELY(flags & ~OFI_MR_NOCACHE))
 		return -FI_EBADFLAGS;
 
 	md = calloc(1, sizeof(*md));
