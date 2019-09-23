@@ -377,6 +377,7 @@ struct sock_av {
 	int    shared;
 	struct dlist_entry ep_list;
 	fastlock_t list_lock;
+	fastlock_t table_lock;
 };
 
 struct sock_fid_list {
