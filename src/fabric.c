@@ -922,6 +922,7 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 	if (!(flags & (OFI_CORE_PROV_ONLY | OFI_GETINFO_INTERNAL)))
 		ofi_filter_info(info);
 
+
 	return *info ? 0 : -FI_ENODATA;
 }
 CURRENT_SYMVER(fi_getinfo_, fi_getinfo);
