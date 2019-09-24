@@ -665,7 +665,7 @@ int ofi_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 		assert(av_set->av->coll_mc != NULL);
 		coll_mc = av_set->av->coll_mc;
 	} else {
-		coll_mc = (struct util_coll_mc *) coll_addr;
+		coll_mc = (struct util_coll_mc*) ((uintptr_t) coll_addr);
 	}
 
 	ret = util_coll_mc_alloc(&new_coll_mc);
@@ -697,8 +697,12 @@ int ofi_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 	}
 
 	if (new_coll_mc->my_rank != FI_ADDR_NOTAVAIL) {
-		memcpy(comp_data->cid_buf, util_coll_cid,
-		       OFI_CONTEXT_ID_SIZE * sizeof(uint64_t));
+		ret = util_coll_sched_copy(
+			coll_mc, util_coll_cid, comp_data->cid_buf,
+			OFI_CONTEXT_ID_SIZE * sizeof(uint64_t), FI_UINT8,
+			NO_BARRIER);
+		if (ret)
+			goto err2;
 	} else {
 		util_coll_init_cid(comp_data->cid_buf);
 	}
