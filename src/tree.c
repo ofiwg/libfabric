@@ -293,22 +293,43 @@ static void ofi_delete_rebalance(struct ofi_rbmap *map, struct ofi_rbnode *node)
 	node->color = BLACK;
 }
 
+static void ofi_rbmap_replace_node_ptr(struct ofi_rbmap *map,
+		struct ofi_rbnode *old_node, struct ofi_rbnode *new_node)
+{
+	if (new_node == old_node)
+		return;
+
+	*new_node = *old_node;
+
+	if (!old_node->parent)
+		map->root = new_node;
+	else if (old_node == old_node->parent->left)
+		old_node->parent->left = new_node;
+	else
+		old_node->parent->right = new_node;
+
+	if (old_node->left != &map->sentinel)
+		old_node->left->parent = new_node;
+	if (old_node->right != &map->sentinel)
+		old_node->right->parent = new_node;
+}
+
 void ofi_rbmap_delete(struct ofi_rbmap *map, struct ofi_rbnode *node)
 {
 	struct ofi_rbnode *x, *y;
 
-	if (node->left == &map->sentinel || node->right == &map->sentinel) {
+	if (node->left == &map->sentinel) {
 		y = node;
+		x = y->right;
+	} else if (node->right == &map->sentinel) {
+		y = node;
+		x = y->left;
 	} else {
 		y = node->right;
 		while (y->left != &map->sentinel)
 			y = y->left;
-	}
-
-	if (y->left != &map->sentinel)
-		x = y->left;
-	else
 		x = y->right;
+	}
 
 	x->parent = y->parent;
 	if (y->parent) {
@@ -326,7 +347,9 @@ void ofi_rbmap_delete(struct ofi_rbmap *map, struct ofi_rbnode *node)
 	if (y->color == BLACK)
 		ofi_delete_rebalance(map, x);
 
-	free (y);
+	/* swap y in for node, so we can free node */
+	ofi_rbmap_replace_node_ptr(map, node, y);
+	free(node);
 }
 
 struct ofi_rbnode *ofi_rbmap_find(struct ofi_rbmap *map, void *key)
