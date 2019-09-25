@@ -38,76 +38,12 @@
 #define FT_CAP_RMA	FI_RMA | FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE
 #define FT_CAP_ATOMIC	FI_ATOMICS | FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE
 
-#define FT_MODE_ALL	FI_CONTEXT | FI_LOCAL_MR | FI_RX_CQ_DATA /*| FI_MSG_PREFIX*/
-#define FT_MODE_NONE	~0ULL
 
 struct key_t {
 	char *str;
 	size_t offset;
 	enum { VAL_STRING, VAL_NUM } val_type;
 	int val_size;
-};
-
-static struct ft_set test_sets_default[] = {
-	{
-		.prov_name = "sockets",
-		.test_type = {
-			FT_TEST_LATENCY,
-			FT_TEST_BANDWIDTH
-		},
-		.class_function = {
-			FT_FUNC_SEND,
-			FT_FUNC_SENDV,
-			FT_FUNC_SENDMSG
-		},
-		.ep_type = {
-			FI_EP_MSG,
-			FI_EP_DGRAM,
-			FI_EP_RDM
-		},
-		.av_type = {
-			FI_AV_TABLE,
-			FI_AV_MAP
-		},
-		.comp_type = {
-			FT_COMP_QUEUE
-		},
-		.mode = {
-			FT_MODE_ALL
-		},
-		.test_class = {
-			FT_CAP_MSG,
-			FT_CAP_TAGGED,
-//			FT_CAP_RMA,
-//			FT_CAP_ATOMIC
-		},
-		.test_flags = FT_FLAG_QUICKTEST
-	},
-	{
-		.prov_name = "verbs",
-		.test_type = {
-			FT_TEST_LATENCY,
-			FT_TEST_BANDWIDTH
-		},
-		.class_function = {
-			FT_FUNC_SEND,
-			FT_FUNC_SENDV,
-			FT_FUNC_SENDMSG
-		},
-		.ep_type = {
-			FI_EP_MSG,
-		},
-		.comp_type = {
-			FT_COMP_QUEUE
-		},
-		.mode = {
-			FT_MODE_ALL
-		},
-		.test_class = {
-			FT_CAP_MSG,
-		},
-		.test_flags = FT_FLAG_QUICKTEST
-	},
 };
 
 static struct ft_series test_series;
@@ -458,14 +394,19 @@ static int ft_parse_num(char *str, int len, struct key_t *key, void *buf)
 	} else if (!strncmp(key->str, "tx_op_flags", strlen("tx_op_flags"))) {
 		TEST_ENUM_SET_N_RETURN(str, len, FI_COMPLETION, uint64_t, buf);
 		FT_ERR("Unknown tx_op_flags");
-	} else {
+	} else if (!strncmp(key->str, "comp_type", strlen("comp_type"))) {
 		TEST_ENUM_SET_N_RETURN(str, len, FT_COMP_QUEUE, enum ft_comp_type, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FT_COMP_CNTR, enum ft_comp_type, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FT_COMP_ALL, enum ft_comp_type, buf);
-		TEST_SET_N_RETURN(str, len, "FT_MODE_ALL", FT_MODE_ALL, uint64_t, buf);
-		TEST_SET_N_RETURN(str, len, "FT_MODE_NONE", FT_MODE_NONE, uint64_t, buf);
+		FT_ERR("Unknown comp_type");
+	} else if (!strncmp(key->str, "mode", strlen("mode"))) {
+		TEST_ENUM_SET_N_RETURN(str, len, FI_CONTEXT, uint64_t, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_RX_CQ_DATA, uint64_t, buf);
+		FT_ERR("Unsupported mode bit");
+	} else if (!strncmp(key->str, "test_flags", strlen("test_flags"))) {
 		TEST_SET_N_RETURN(str, len, "FT_FLAG_QUICKTEST", FT_FLAG_QUICKTEST, uint64_t, buf);
-		FT_ERR("Unknown comp_type/mode/test_flags");
+	} else {
+		FT_ERR("Unknown test configuration key");
 	}
 
 	return -1;
@@ -682,9 +623,8 @@ struct ft_series *fts_load(char *filename)
 		free(config);
 		fclose(fp);
 	} else {
-		printf("No config file given. Using default tests.\n");
-		test_series.sets = test_sets_default;
-		test_series.nsets = sizeof(test_sets_default) / sizeof(test_sets_default[0]);
+		printf("Test config file required.\n");
+		exit(1);
 	}
 
 	for (fts_start(&test_series, 0); !fts_end(&test_series, 0);
@@ -704,8 +644,7 @@ err1:
 
 void fts_close(struct ft_series *series)
 {
-	if (series->sets != test_sets_default)
-		free(series->sets);
+	free(series->sets);
 }
 
 void fts_start(struct ft_series *series, int index)
@@ -894,8 +833,11 @@ void fts_cur_info(struct ft_series *series, struct ft_info *info)
 		while (set->tx_op_flags[i])
 			info->tx_op_flags |= set->tx_op_flags[i++];
 	}
-	info->mode = !set->mode[series->cur_mode] ?
-			FT_MODE_ALL : set->mode[series->cur_mode];
+	if (set->mode[0]) {
+		i = 0;
+		while (set->mode[i])
+			info->mode |= set->mode[i++];
+	}
 
 	info->ep_type = set->ep_type[series->cur_ep];
 	info->av_type = set->av_type[series->cur_av];

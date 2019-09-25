@@ -32,7 +32,7 @@
 		FI_WAIT_UNSPEC,
 	],
 	mode: [
-		FT_MODE_ALL,
+		FI_CONTEXT, FI_RX_CQ_DATA,
 	],
 	test_class: [
 		FT_CAP_MSG,

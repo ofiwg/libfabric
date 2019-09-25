@@ -20,9 +20,6 @@
 	comp_type: [
 		FT_COMP_QUEUE
 	],
-	mode: [
-		FT_MODE_NONE
-	],
 	test_class: [
 		FT_CAP_MSG,
 	],
@@ -49,9 +46,6 @@
 	],
 	comp_type: [
 		FT_COMP_QUEUE
-	],
-	mode: [
-		FT_MODE_NONE
 	],
 	test_class: [
 		FT_CAP_RMA,

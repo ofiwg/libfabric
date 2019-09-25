@@ -19,7 +19,7 @@
 		FT_COMP_QUEUE,
 	],
 	mode: [
-		FT_MODE_ALL,
+		FI_CONTEXT,
 	],
 	test_class: [
 		FT_CAP_MSG,
@@ -46,7 +46,7 @@
 		FT_COMP_QUEUE,
 	],
 	mode: [
-		FT_MODE_ALL,
+		FI_CONTEXT,
 	],
 	test_class: [
 		FT_CAP_MSG,
@@ -78,7 +78,7 @@
 		FT_COMP_QUEUE,
 	],
 	mode: [
-		FT_MODE_ALL,
+		FI_CONTEXT,
 	],
 	test_class: [
 		FT_CAP_RMA,
@@ -138,7 +138,7 @@
 		FT_COMP_QUEUE,
 	],
 	mode: [
-		FT_MODE_ALL,
+		FI_CONTEXT,
 	],
 	test_class: [
 		FT_CAP_ATOMIC,
@@ -185,7 +185,7 @@
 		FT_COMP_CNTR,
 	],
 	mode: [
-		FT_MODE_ALL,
+		FI_CONTEXT,
 	],
 	test_class: [
 		FT_CAP_ATOMIC,
@@ -237,7 +237,7 @@
 		FT_COMP_QUEUE,
 	],
 	mode: [
-		FT_MODE_ALL,
+		FI_CONTEXT,
 	],
 	test_class: [
 		FT_CAP_ATOMIC,

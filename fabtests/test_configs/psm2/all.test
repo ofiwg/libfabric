@@ -21,7 +21,7 @@
 		FT_COMP_QUEUE,
 	],
 	mode: [
-		FT_MODE_ALL,
+		FI_CONTEXT,
 	],
 	test_class: [
 		FT_CAP_MSG,
@@ -50,7 +50,7 @@
 		FT_COMP_QUEUE,
 	],
 	mode: [
-		FT_MODE_ALL,
+		FI_CONTEXT,
 	],
 	test_class: [
 		FT_CAP_MSG,
@@ -84,7 +84,7 @@
 		FT_COMP_QUEUE,
 	],
 	mode: [
-		FT_MODE_ALL,
+		FI_CONTEXT,
 	],
 	test_class: [
 		FT_CAP_RMA,

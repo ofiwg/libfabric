@@ -31,9 +31,6 @@
 		FI_WAIT_UNSPEC,
 		FI_WAIT_FD,
 	],
-	mode: [
-		FT_MODE_ALL,
-	],
 	test_class: [
 		FT_CAP_MSG,
 	],

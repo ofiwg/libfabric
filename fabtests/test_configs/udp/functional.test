@@ -22,9 +22,6 @@
 	cq_wait_obj: [
 		FI_WAIT_NONE,
 	],
-	mode: [
-		FT_MODE_ALL,
-	],
 	test_class: [
 		FT_CAP_MSG,
 	],

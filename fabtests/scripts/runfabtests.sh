@@ -446,6 +446,7 @@ function cs_test {
 function complex_test {
 	local test=$1
 	local config=$2
+	local path=${PROV/;/\/}
 	local test_exe="${test}"
 	local s_ret=0
 	local c_ret=0
@@ -468,7 +469,7 @@ function complex_test {
 	s_pid=$!
 	sleep 1
 
-	c_cmd="${BIN_PATH}${test_exe} -p \"${PROV}\" -t $config $S_INTERFACE $opts"
+	c_cmd="${BIN_PATH}${test_exe} -u "test_configs/${path}/${config}.test" $S_INTERFACE $opts"
 	FI_LOG_LEVEL=error ${CLIENT_CMD} "${EXPORT_ENV} $c_cmd" &> $c_outp &
 	c_pid=$!
 
