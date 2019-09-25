@@ -61,7 +61,7 @@ static size_t ofi_default_cache_size(void)
  */
 void ofi_monitor_init(void)
 {
-	fastlock_init(&uffd_monitor->lock);
+	pthread_mutex_init(&uffd_monitor->lock, NULL);
 	dlist_init(&uffd_monitor->list);
 
 	fi_param_define(NULL, "mr_cache_max_size", FI_PARAM_SIZE_T,
@@ -95,7 +95,7 @@ void ofi_monitor_init(void)
 void ofi_monitor_cleanup(void)
 {
 	assert(dlist_empty(&uffd_monitor->list));
-	fastlock_destroy(&uffd_monitor->lock);
+	pthread_mutex_destroy(&uffd_monitor->lock);
 }
 
 int ofi_monitor_add_cache(struct ofi_mem_monitor *monitor,
@@ -103,7 +103,7 @@ int ofi_monitor_add_cache(struct ofi_mem_monitor *monitor,
 {
 	int ret = 0;
 
-	fastlock_acquire(&monitor->lock);
+	pthread_mutex_lock(&monitor->lock);
 	if (dlist_empty(&monitor->list)) {
 		if (monitor == uffd_monitor)
 			ret = ofi_uffd_init();
@@ -116,7 +116,7 @@ int ofi_monitor_add_cache(struct ofi_mem_monitor *monitor,
 	cache->monitor = monitor;
 	dlist_insert_tail(&cache->notify_entry, &monitor->list);
 out:
-	fastlock_release(&monitor->lock);
+	pthread_mutex_unlock(&monitor->lock);
 	return ret;
 }
 
@@ -127,12 +127,12 @@ void ofi_monitor_del_cache(struct ofi_mr_cache *cache)
 	if (!monitor)
 		return;
 
-	fastlock_acquire(&monitor->lock);
+	pthread_mutex_lock(&monitor->lock);
 	dlist_remove(&cache->notify_entry);
 
 	if (dlist_empty(&monitor->list) && (monitor == uffd_monitor))
 		ofi_uffd_cleanup();
-	fastlock_release(&monitor->lock);
+	pthread_mutex_unlock(&monitor->lock);
 }
 
 /* Must be called holding monitor lock */
@@ -193,10 +193,10 @@ static void *ofi_uffd_handler(void *arg)
 		if (ret != 1)
 			break;
 
-		fastlock_acquire(&uffd.monitor.lock);
+		pthread_mutex_lock(&uffd.monitor.lock);
 		ret = read(uffd.fd, &msg, sizeof(msg));
 		if (ret != sizeof(msg)) {
-			fastlock_release(&uffd.monitor.lock);
+			pthread_mutex_unlock(&uffd.monitor.lock);
 			if (errno != EAGAIN)
 				break;
 			continue;
@@ -220,7 +220,7 @@ static void *ofi_uffd_handler(void *arg)
 				"Unhandled uffd event %d\n", msg.event);
 			break;
 		}
-		fastlock_release(&uffd.monitor.lock);
+		pthread_mutex_unlock(&uffd.monitor.lock);
 	}
 	return NULL;
 }
