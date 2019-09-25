@@ -420,6 +420,10 @@ additional optimizations.
   are any messages larger than an endpoint configurable size.  This
   flag requires that FI_MSG and/or FI_TAGGED be set.
 
+*FI_HMEM*
+: Specifies that the endpoint should support transfers to and from
+  device memory. 
+
 Capabilities may be grouped into two general categories: primary and
 secondary.  Primary capabilities must explicitly be requested by an
 application, and a provider must enable support for only those primary
@@ -431,7 +435,7 @@ would not compromise performance or security.
 
 Primary capabilities: FI_MSG, FI_RMA, FI_TAGGED, FI_ATOMIC, FI_MULTICAST,
 FI_NAMED_RX_CTX, FI_DIRECTED_RECV, FI_READ, FI_WRITE, FI_RECV, FI_SEND,
-FI_REMOTE_READ, FI_REMOTE_WRITE, and FI_VARIABLE_MSG.
+FI_REMOTE_READ, FI_REMOTE_WRITE, FI_VARIABLE_MSG, FI_HMEM.
 
 Secondary capabilities: FI_MULTI_RECV, FI_SOURCE, FI_RMA_EVENT, FI_SHARED_AV,
 FI_TRIGGER, FI_FENCE, FI_LOCAL_COMM, FI_REMOTE_COMM, FI_SOURCE_ERR, FI_RMA_PMEM.
