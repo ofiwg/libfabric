@@ -112,6 +112,11 @@ struct fid_mr {
 	uint64_t		key;
 };
 
+enum fi_hmem_iface {
+	FI_HMEM_SYSTEM	= 0,
+	FI_HMEM_CUDA,
+};
+
 struct fi_mr_attr {
 	const struct iovec	*mr_iov;
 	size_t			iov_count;
@@ -121,6 +126,11 @@ struct fi_mr_attr {
 	void			*context;
 	size_t			auth_key_size;
 	uint8_t			*auth_key;
+	enum fi_hmem_iface	iface;
+	union {
+		uint64_t	reserved;
+		int		cuda;
+	} device;
 };
 
 struct fi_mr_modify {

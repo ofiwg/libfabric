@@ -162,6 +162,7 @@ typedef struct fid *fid_t;
 #define FI_COMMIT_COMPLETE	(1ULL << 30)
 #define FI_MATCH_COMPLETE	(1ULL << 31)
 
+#define FI_HMEM			(1ULL << 47)
 #define FI_VARIABLE_MSG		(1ULL << 48)
 #define FI_RMA_PMEM		(1ULL << 49)
 #define FI_SOURCE_ERR		(1ULL << 50)
@@ -231,6 +232,7 @@ enum fi_mr_mode {
 #define FI_MR_MMU_NOTIFY	(1 << 7)
 #define FI_MR_RMA_EVENT		(1 << 8)
 #define FI_MR_ENDPOINT		(1 << 9)
+#define FI_MR_HMEM		(1 << 10)
 
 enum fi_progress {
 	FI_PROGRESS_UNSPEC,

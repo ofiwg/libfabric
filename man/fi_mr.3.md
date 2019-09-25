@@ -245,6 +245,20 @@ The following apply to memory registration.
   MR with an endpoint, the application must use fi_mr_bind().  To
   enable the memory region, the application must call fi_mr_enable().
 
+*FI_MR_HMEM*
+: If FI_MR_HMEM is set, the application must register buffers that
+  were allocated using a device call and provide a valid desc
+  parameter into applicable data transfer operations even if they are
+  only used for local operations (e.g. send and receive data buffers).
+
+  If FI_MR_HMEM is set, but FI_MR_LOCAL is unset, only device buffers
+  should be registered - when input addresses reference (un-registered)
+  local, non-device memory buffers, the desc parameter must be NULL.
+  Similarly if FI_MR_LOCAL is set but FI_MR_HMEM is unset, only local,
+  non-device memory buffers should be registered - when input addresses
+  reference (un-registered) device memory buffers, the desc paramter
+  must be NULL.
+
 *Basic Memory Registration*
 : Basic memory registration is indicated by the FI_MR_BASIC mr_mode bit.
   FI_MR_BASIC is maintained for backwards compatibility (libfabric version
@@ -454,6 +468,11 @@ struct fi_mr_attr {
 	void               *context;
 	size_t             auth_key_size;
 	uint8_t            *auth_key;
+	enum fi_hmem_iface  iface;
+	union {
+		uint64_t	reserved;
+		int		cuda;
+	} device;
 };
 ```
 ## mr_iov
@@ -545,6 +564,26 @@ that are programmed to use the same authorization key may access the memory
 region.  The domain authorization key will be used if the auth_key_size 
 provided is 0.  This field is ignored unless the fabric is opened with API 
 version 1.5 or greater.
+
+## iface
+Indicates the software interfaces used by the application to allocate and
+manage the memory region. This field is ignored unless the application has
+requested the FI_HMEM capability.
+
+*FI_HMEM_SYSTEM*
+: Uses standard operating system calls and libraries, such as malloc,
+  calloc, realloc, mmap, and free.
+
+*FI_HMEM_CUDA*
+: Uses Nvidia CUDA interfaces such as cuMemAlloc, cuMemAllocHost,
+  cuMemAllocManaged, cuMemFree, cudaMalloc, cudaFree.
+
+## device
+Reserved 64 bits for device identifier if using non-standard HMEM interface.
+This field is ignore unless the iface field is valid.
+
+*cuda*
+: For FI_HMEM_CUDA, this is equivalent to CUdevice (int).
 
 # NOTES
 
