@@ -1861,8 +1861,11 @@ int sock_ep_get_conn(struct sock_ep_attr *attr, struct sock_tx_ctx *tx_ctx,
 
 	if (attr->ep_type == FI_EP_MSG)
 		addr = attr->dest_addr;
-	else
+	else {
+		fastlock_acquire(&attr->av->table_lock);
 		addr = &attr->av->table[av_index].addr;
+		fastlock_release(&attr->av->table_lock);
+	}
 
 	fastlock_acquire(&attr->cmap.lock);
 	conn = sock_ep_lookup_conn(attr, av_index, addr);
