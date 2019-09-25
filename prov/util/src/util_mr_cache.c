@@ -76,7 +76,7 @@ static void util_mr_free_entry(struct ofi_mr_cache *cache,
 	FI_DBG(cache->domain->prov, FI_LOG_MR, "free %p (len: %" PRIu64 ")\n",
 	       entry->iov.iov_base, entry->iov.iov_len);
 
-	assert(!entry->cached);
+	assert(!entry->storage_context);
 	/* If regions are not being merged, then we can't safely
 	 * unsubscribe this region from the monitor.  Otherwise, we
 	 * might unsubscribe an address range in use by another region.
@@ -95,9 +95,7 @@ static void util_mr_free_entry(struct ofi_mr_cache *cache,
 static void util_mr_uncache_entry_storage(struct ofi_mr_cache *cache,
 					  struct ofi_mr_entry *entry)
 {
-	assert(entry->cached);
 	cache->storage.erase(&cache->storage, entry);
-	entry->cached = 0;
 	cache->cached_cnt--;
 	cache->cached_size -= entry->iov.iov_len;
 }
@@ -174,7 +172,7 @@ void ofi_mr_cache_delete(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 	cache->delete_cnt++;
 
 	if (--entry->use_cnt == 0) {
-		if (entry->cached) {
+		if (entry->storage_context) {
 			dlist_insert_tail(&entry->lru_entry, &cache->lru_list);
 		} else {
 			cache->uncached_cnt--;
@@ -198,6 +196,7 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct iovec *iov,
 	if (OFI_UNLIKELY(!*entry))
 		return -FI_ENOMEM;
 
+	(*entry)->storage_context = NULL;
 	(*entry)->iov = *iov;
 	(*entry)->use_cnt = 1;
 
@@ -215,7 +214,6 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct iovec *iov,
 
 	if ((cache->cached_cnt >= cache_params.max_cnt) ||
 	    (cache->cached_size >= cache_params.max_size)) {
-		(*entry)->cached = 0;
 		cache->uncached_cnt++;
 		cache->uncached_size += iov->iov_len;
 	} else {
@@ -224,7 +222,6 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct iovec *iov,
 			ret = -FI_ENOMEM;
 			goto err;
 		}
-		(*entry)->cached = 1;
 		cache->cached_cnt++;
 		cache->cached_size += iov->iov_len;
 
@@ -379,18 +376,18 @@ static int ofi_mr_rbt_insert(struct ofi_mr_storage *storage,
 			     struct iovec *key,
 			     struct ofi_mr_entry *entry)
 {
+	assert(!entry->storage_context);
 	return ofi_rbmap_insert(storage->storage, (void *) key, (void *) entry,
-				NULL);
+				(struct ofi_rbnode **) &entry->storage_context);
 }
 
 static int ofi_mr_rbt_erase(struct ofi_mr_storage *storage,
 			    struct ofi_mr_entry *entry)
 {
-	struct ofi_rbnode *node;
-
-	node = ofi_rbmap_find(storage->storage, &entry->iov);
-	assert(node);
-	ofi_rbmap_delete(storage->storage, node);
+	assert(entry->storage_context);
+	ofi_rbmap_delete(storage->storage,
+			 (struct ofi_rbnode *) entry->storage_context);
+	entry->storage_context = NULL;
 	return 0;
 }
 

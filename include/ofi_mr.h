@@ -202,7 +202,7 @@ extern struct ofi_mr_cache_params	cache_params;
 
 struct ofi_mr_entry {
 	struct iovec			iov;
-	unsigned int			cached:1;
+	void				*storage_context;
 	unsigned int			subscribed:1;
 	int				use_cnt;
 	struct dlist_entry		lru_entry;
