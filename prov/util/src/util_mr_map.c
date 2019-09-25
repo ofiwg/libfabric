@@ -76,7 +76,7 @@ int ofi_mr_map_insert(struct ofi_mr_map *map, const struct fi_mr_attr *attr,
 		item->requested_key = map->key++;
 	}
 
-	ofi_rbmap_insert(map->rbtree, &item->requested_key, item);
+	ofi_rbmap_insert(map->rbtree, &item->requested_key, item, NULL);
 	*key = item->requested_key;
 	item->context = context;
 

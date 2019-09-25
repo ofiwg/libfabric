@@ -379,8 +379,8 @@ static int ofi_mr_rbt_insert(struct ofi_mr_storage *storage,
 			     struct iovec *key,
 			     struct ofi_mr_entry *entry)
 {
-	return ofi_rbmap_insert(storage->storage, (void *) &entry->iov,
-			        (void *) entry);
+	return ofi_rbmap_insert(storage->storage, (void *) key, (void *) entry,
+				NULL);
 }
 
 static int ofi_mr_rbt_erase(struct ofi_mr_storage *storage,
