@@ -723,6 +723,7 @@ The operational flags for the described completion levels are defined below.
   claiming the message or results.  As a result, match complete may involve
   additional provider level acknowledgements or lengthy delays.  However, this
   completion model enables peer applications to synchronize their execution.
+  Many providers may not support this semantic.
 
 *FI_COMMIT_COMPLETE*
 : Indicates that a completion should not be generated (locally or at the
@@ -734,6 +735,26 @@ The operational flags for the described completion levels are defined below.
   memory regions over reliable endpoints.  This completion mode is
   experimental.
 
+*FI_FENCE*
+: This is not a completion level, but plays a role in the completion
+  ordering between operations that would not normally be ordered.  An
+  operation that is marked with the FI_FENCE flag and all
+  operations posted after the fenced operation are deferred until all
+  previous operations targeting the same peer endpoint have completed.
+  Additionally, the completion of the fenced operation indicates that
+  prior operations have met the same completion level as the fenced
+  operation.  For example, if an operation is posted as
+  FI_DELIVERY_COMPLETE | FI_FENCE, then its completion indicates prior
+  operations have met the semantic required for FI_DELIVERY_COMPLETE.
+  This is true even if the prior operation was posted with a lower
+  completion level, such as FI_TRANSMIT_COMPLETE or FI_INJECT_COMPLETE.
+
+  Note that a completion generated for an operation posted prior to
+  the fenced operation only guarantees that the completion level
+  that was originally requested has been met.  It is the completion
+  of the fenced operation that guarantees that the additional
+  semantics have been met.
+ 
 # NOTES
 
 A completion queue must be bound to at least one enabled endpoint before any
