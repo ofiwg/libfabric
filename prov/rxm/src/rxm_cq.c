@@ -930,6 +930,8 @@ static inline void rxm_do_atomic(struct rxm_pkt *pkt, void *dst, void *src,
 							    count);
 		break;
 	case ofi_op_atomic_compare:
+		assert(op >= OFI_SWAP_OP_START &&
+		       op < OFI_SWAP_OP_START + OFI_SWAP_OP_LAST);
 		ofi_atomic_swap_handlers[op - OFI_SWAP_OP_START][datatype](dst,
 						src, cmp, res, count);
 		break;
