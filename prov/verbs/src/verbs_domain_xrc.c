@@ -147,7 +147,7 @@ int fi_ibv_get_shared_ini_conn(struct fi_ibv_xrc_ep *ep,
 	ofi_atomic_initialize32(&conn->ref_cnt, 1);
 
 	ret = ofi_rbmap_insert(domain->xrc.ini_conn_rbmap,
-			       (void *) &key, (void *) conn);
+			       (void *) &key, (void *) conn, NULL);
 	assert(ret != -FI_EALREADY);
 	if (ret) {
 		VERBS_WARN(FI_LOG_EP_CTRL, "INI QP RBTree insert failed %d\n",

@@ -501,7 +501,9 @@ int sock_ep_connect(struct sock_ep_attr *ep_attr, fi_addr_t index,
 		addr = *ep_attr->dest_addr;
 		ofi_addr_set_port(&addr.sa, ep_attr->msg_dest_port);
 	} else {
+		fastlock_acquire(&ep_attr->av->table_lock);
 		addr = ep_attr->av->table[index].addr;
+		fastlock_release(&ep_attr->av->table_lock);
 	}
 
 do_connect:

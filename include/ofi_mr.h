@@ -98,7 +98,7 @@ static inline uint64_t ofi_mr_get_prov_mode(uint32_t version,
 struct ofi_mr_cache;
 
 struct ofi_mem_monitor {
-	fastlock_t			lock;
+	pthread_mutex_t 		lock;
 	struct dlist_entry		list;
 
 	int (*subscribe)(struct ofi_mem_monitor *notifier,
@@ -202,7 +202,7 @@ extern struct ofi_mr_cache_params	cache_params;
 
 struct ofi_mr_entry {
 	struct iovec			iov;
-	unsigned int			cached:1;
+	void				*storage_context;
 	unsigned int			subscribed:1;
 	int				use_cnt;
 	struct dlist_entry		lru_entry;
