@@ -81,7 +81,7 @@ static void udpx_getinfo_ifs(struct fi_info **info)
 			continue;
 		}
 
-		cur->src_addr = mem_dup(&addr_entry->ipaddr.sa, addrlen);
+		cur->src_addr = mem_dup(&addr_entry->ipaddr, addrlen);
 		if (cur->src_addr) {
 			cur->src_addrlen = addrlen;
 			cur->addr_format = addr_format;
