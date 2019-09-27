@@ -152,7 +152,7 @@ static int multinode_post_rx()
 		assert(rx_ctx_arr[offset].state == OP_DONE);
 
 		ret = ft_post_rx_buf(ep, opts.transfer_size,
-				     &rx_ctx_arr[offset],
+				     &rx_ctx_arr[offset].context,
 				     rx_ctx_arr[offset].buf,
 				     rx_ctx_arr[offset].desc, 0);
 		if (ret)
@@ -190,7 +190,7 @@ static int multinode_post_tx()
 		dest = pm_job.fi_addrs[state.cur_target];
 		ret = ft_post_tx_buf(ep, dest, opts.transfer_size,
 				     NO_CQ_DATA,
-				     &tx_ctx_arr[offset],
+				     &tx_ctx_arr[offset].context,
 				     tx_ctx_arr[offset].buf,
 				     tx_ctx_arr[offset].desc, 0);
 		if (ret)
