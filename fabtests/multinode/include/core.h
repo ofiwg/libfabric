@@ -51,6 +51,7 @@ struct pm_job_info {
 	int		*clients; //only valid for server
 	
 	struct sockaddr_storage oob_server_addr;
+	size_t 		server_addr_len;
 	void		*names;
 	size_t		name_len;
 	fi_addr_t	*fi_addrs;

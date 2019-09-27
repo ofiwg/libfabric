@@ -198,7 +198,7 @@ static int pm_conn_setup()
 	}
 
 	ret = bind(sock, (struct sockaddr *)&pm_job.oob_server_addr,
-		  sizeof(pm_job.oob_server_addr));
+		  pm_job.server_addr_len);
 	if (ret == 0) {
 		ret = server_connect();
 	} else {
@@ -207,7 +207,7 @@ static int pm_conn_setup()
 		opts.src_addr = NULL;
 		opts.src_port = 0;
 		ret = connect(pm_job.sock, (struct sockaddr *)&pm_job.oob_server_addr,
-			      sizeof(pm_job.oob_server_addr));
+			      pm_job.server_addr_len);
 	}
 	if (ret) {
 		FT_ERR("OOB conn failed - %s\n", strerror(errno));
@@ -246,6 +246,7 @@ int pm_get_oob_server_addr()
 	}
 
 	memcpy(&pm_job.oob_server_addr, res->ai_addr, res->ai_addrlen);
+	pm_job.server_addr_len = res->ai_addrlen;
 
 	switch (pm_job.oob_server_addr.ss_family) {
 	case AF_INET:
