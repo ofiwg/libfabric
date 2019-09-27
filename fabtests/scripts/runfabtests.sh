@@ -631,7 +631,7 @@ function main {
 		;;
 		multinode)
 			for test in "${multinode_tests[@]}"; do
-					multinode_test $test 4
+					multinode_test $test 3
 			done
 		;;
 		*)
