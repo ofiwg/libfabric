@@ -718,13 +718,7 @@ static int fi_ibv_dgram_ep_setname(fid_t ep_fid, void *addr, size_t addrlen)
 	void *save_addr;
 	int ret = FI_SUCCESS;
 
-	if (ep_fid->fclass != FI_CLASS_EP)
-		return -FI_EINVAL;
-
 	ep = container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid.fid);
-	if (!ep)
-		return -FI_EINVAL;
-
 	if (addrlen < ep->info->src_addrlen) {
 		VERBS_INFO(FI_LOG_EP_CTRL,
 			   "addrlen expected: %zu, got: %zu\n",
@@ -756,13 +750,7 @@ static int fi_ibv_dgram_ep_getname(fid_t ep_fid, void *addr, size_t *addrlen)
 {
 	struct fi_ibv_ep *ep;
 
-	if (ep_fid->fclass != FI_CLASS_EP)
-		return -FI_EINVAL;
-
 	ep = container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid.fid);
-	if (!ep)
-		return -FI_EINVAL;
-
 	if (*addrlen < sizeof(ep->ep_name)) {
 		*addrlen = sizeof(ep->ep_name);
 		VERBS_INFO(FI_LOG_EP_CTRL,
