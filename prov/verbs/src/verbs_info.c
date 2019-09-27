@@ -1316,53 +1316,33 @@ done:
 	return ret;
 }
 
-static int fi_ibv_set_default_attr(struct fi_info *info, size_t *attr,
-				   size_t default_attr, char *attr_str)
+static void fi_ibv_set_default_attr(size_t *attr, size_t default_attr)
 {
 	if (default_attr <= *attr)
 		*attr = default_attr;
-	return 0;
 }
 
 /* Set default values for attributes. ofi_alter_info would change them if the
  * user has asked for a different value in hints */
-static int fi_ibv_set_default_info(struct fi_info *info)
+static void fi_ibv_set_default_info(struct fi_info *info)
 {
-	int ret;
+	fi_ibv_set_default_attr(&info->tx_attr->size,
+				fi_ibv_gl_data.def_tx_size);
 
-	ret = fi_ibv_set_default_attr(info, &info->tx_attr->size,
-				      fi_ibv_gl_data.def_tx_size,
-				      "tx context size");
-	if (ret)
-		return ret;
+	fi_ibv_set_default_attr(&info->rx_attr->size,
+				fi_ibv_gl_data.def_rx_size);
 
-	ret = fi_ibv_set_default_attr(info, &info->rx_attr->size,
-				      fi_ibv_gl_data.def_rx_size,
-				      "rx context size");
-	if (ret)
-		return ret;
-	ret = fi_ibv_set_default_attr(info, &info->tx_attr->iov_limit,
-				      fi_ibv_gl_data.def_tx_iov_limit,
-				      "tx iov_limit");
-	if (ret)
-		return ret;
-
-	ret = fi_ibv_set_default_attr(info, &info->rx_attr->iov_limit,
-				      fi_ibv_gl_data.def_rx_iov_limit,
-				      "rx iov_limit");
-	if (ret)
-		return ret;
+	fi_ibv_set_default_attr(&info->tx_attr->iov_limit,
+				fi_ibv_gl_data.def_tx_iov_limit);
+	fi_ibv_set_default_attr(&info->rx_attr->iov_limit,
+				fi_ibv_gl_data.def_rx_iov_limit);
 
 	if (info->ep_attr->type == FI_EP_MSG) {
 		/* For verbs iov limit is same for
 		 * both regular messages and RMA */
-		ret = fi_ibv_set_default_attr(info, &info->tx_attr->rma_iov_limit,
-					      fi_ibv_gl_data.def_tx_iov_limit,
-				"tx rma_iov_limit");
-		if (ret)
-			return ret;
+		fi_ibv_set_default_attr(&info->tx_attr->rma_iov_limit,
+					fi_ibv_gl_data.def_tx_iov_limit);
 	}
-	return 0;
 }
 
 static struct fi_info *fi_ibv_get_passive_info(const struct fi_info *prov_info,
@@ -1454,11 +1434,7 @@ static int fi_ibv_get_matching_info(uint32_t version,
 				ret = -FI_ENOMEM;
 				goto err;
 			}
-			ret = fi_ibv_set_default_info(fi);
-			if (ret) {
-				fi_freeinfo(fi);
-				continue;
-			}
+			fi_ibv_set_default_info(fi);
 		}
 
 		FI_INFO(&fi_ibv_prov, FI_LOG_FABRIC,
