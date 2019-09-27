@@ -164,11 +164,13 @@ The following apply to memory registration.
 *FI_MR_LOCAL*
 : When the FI_MR_LOCAL mode bit is set, applications must register all
   data buffers that will be accessed by the local hardware and provide
-  a valid mem_desc parameter into applicable data transfer operations.
+  a valid desc parameter into applicable data transfer operations.
   When FI_MR_LOCAL is zero, applications are not required to register
   data buffers before using them for local operations (e.g. send and
-  receive data buffers), and the mem_desc parameter into data transfer
-  operations is ignored.
+  receive data buffers).  The desc parameter into data transfer
+  operations will be ignored in this case, unless otherwise required
+  (e.g. se  FI_MR_HMEM).  It is recommended that applications pass in
+  NULL for desc when not required.
 
   A provider may hide local registration requirements from applications
   by making use of an internal registration cache or similar mechanisms.
@@ -246,18 +248,19 @@ The following apply to memory registration.
   enable the memory region, the application must call fi_mr_enable().
 
 *FI_MR_HMEM*
-: If FI_MR_HMEM is set, the application must register buffers that
+: This mode bit is associated with the FI_HMEM capability.
+  If FI_MR_HMEM is set, the application must register buffers that
   were allocated using a device call and provide a valid desc
   parameter into applicable data transfer operations even if they are
   only used for local operations (e.g. send and receive data buffers).
+  Device memory must be registered using the fi_mr_regattr call, with
+  the iface and device fields filled out.
 
   If FI_MR_HMEM is set, but FI_MR_LOCAL is unset, only device buffers
-  should be registered - when input addresses reference (un-registered)
-  local, non-device memory buffers, the desc parameter must be NULL.
-  Similarly if FI_MR_LOCAL is set but FI_MR_HMEM is unset, only local,
-  non-device memory buffers should be registered - when input addresses
-  reference (un-registered) device memory buffers, the desc paramter
-  must be NULL.
+  must be registered when used locally.  In this case, the desc parameter
+  passed into data transfer operations must either be valid or NULL.
+  Similarly, if FI_MR_LOCAL is set, but FI_MR_HMEM is not, the desc
+  parameter must either be valid or NULL.
 
 *Basic Memory Registration*
 : Basic memory registration is indicated by the FI_MR_BASIC mr_mode bit.

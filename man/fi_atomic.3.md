@@ -130,7 +130,7 @@ int fi_query_atomic(struct fid_domain *domain,
 
 *desc / compare_desc / result_desc*
 : Data descriptor associated with the local data buffer, local compare
-  buffer, and local result buffer, respectively.
+  buffer, and local result buffer, respectively.  See [`fi_mr`(3)](fi_mr.3.html).
 
 *dest_addr*
 : Destination address for connectionless atomic operations.  Ignored for

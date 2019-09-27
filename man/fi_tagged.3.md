@@ -75,7 +75,8 @@ ssize_t fi_tinjectdata(struct fid_ep *ep, const void *buf, size_t len,
 : Mask of bits to ignore applied to the tag for receive operations.
 
 *desc*
-: Memory descriptor associated with the data buffer
+: Memory descriptor associated with the data buffer.
+  See [`fi_mr`(3)](fi_mr.3.html).
 
 *data*
 : Remote CQ data to transfer with the sent data.
