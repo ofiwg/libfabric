@@ -122,7 +122,7 @@ struct tcpx_port_range port_range = {
 	.high = 0,
 };
 
-static int tcpx_init_env(void)
+static void tcpx_init_env(void)
 {
 	srand(getpid());
 
@@ -139,7 +139,6 @@ static int tcpx_init_env(void)
 		port_range.low  = 0;
 		port_range.high = 0;
 	}
-	return 0;
 }
 
 static void fi_tcp_fini(void)
@@ -170,9 +169,6 @@ TCP_INI
 	fi_param_define(&tcpx_prov,"port_high_range", FI_PARAM_INT,
 			"define port high range");
 
-	if (tcpx_init_env()) {
-		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,"Invalid info\n");
-		return NULL;
-	}
+	tcpx_init_env();
 	return &tcpx_prov;
 }
