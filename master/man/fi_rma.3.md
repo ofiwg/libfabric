@@ -82,6 +82,7 @@ ssize_t fi_inject_writedata(struct fid_ep *ep, const void *buf, size_t len,
 
 *desc*
 : Descriptor associated with the local data buffer
+  See [`fi_mr`(3)](fi_mr.3.html).
 
 *data*
 : Remote CQ data to transfer with the operation.
