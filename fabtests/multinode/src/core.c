@@ -72,6 +72,9 @@ static int multinode_setup_fabric(int argc, char **argv)
 	tx_cq_cntr = 0;
 	rx_cq_cntr = 0;
 
+	if (pm_job.my_rank != 0)
+		pm_barrier();
+
 	ret = ft_getinfo(hints, &fi);
 	if (ret)
 		return ret;
@@ -103,7 +106,10 @@ static int multinode_setup_fabric(int argc, char **argv)
 		ret = -FI_ENOMEM;
 		goto err;
 	}
-	
+
+	if (pm_job.my_rank == 0)
+		pm_barrier();
+
 	ret = pm_allgather(my_name, pm_job.names, pm_job.name_len);
 	if (ret) {
 		FT_PRINTERR("error exchanging addresses\n", ret);
@@ -264,9 +270,10 @@ static int multinode_run_test()
 			ret = multinode_wait_for_comp();
 			if (ret)
 				return ret;
+
+			pm_barrier();
 		}
 	}
-	pm_barrier();
 	return 0;
 }
 
