@@ -158,7 +158,7 @@ static void smr_post_fetch_resp(struct smr_ep *ep, struct smr_cmd *cmd,
 	assert(!ofi_cirque_isfull(smr_resp_queue(ep->region)));
 	resp = ofi_cirque_tail(smr_resp_queue(ep->region));
 
-	cmd->msg.hdr.data = (uint64_t) ((char **) resp -
+	cmd->msg.hdr.data = (uintptr_t) ((char **) resp -
 			    (char **) ep->region);
 
 	pend = freestack_pop(ep->pend_fs);

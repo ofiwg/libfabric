@@ -288,7 +288,7 @@ void smr_format_iov(struct smr_cmd *cmd, fi_addr_t peer_id,
 {
 	smr_generic_format(cmd, peer_id, op, tag, 0, 0, data, op_flags);
 	cmd->msg.hdr.op_src = smr_src_iov;
-	cmd->msg.hdr.src_data = (uint64_t) ((char **) resp - (char **) smr);
+	cmd->msg.hdr.src_data = (uintptr_t) ((char **) resp - (char **) smr);
 	cmd->msg.data.iov_count = count;
 	cmd->msg.hdr.size = total_len;
 	cmd->msg.hdr.msg_id = (uint64_t) (uintptr_t) context;
