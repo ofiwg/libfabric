@@ -58,7 +58,8 @@ bin_PROGRAMS = \
 	unit/fi_getinfo_test \
 	unit/fi_resource_freeing \
 	ubertest/fi_ubertest	\
-	multinode/fi_multinode
+	multinode/fi_multinode	\
+	multinode/fi_multinode_coll
 
 dist_bin_SCRIPTS = \
 	scripts/runfabtests.sh \
@@ -351,6 +352,17 @@ multinode_fi_multinode_SOURCES = \
 multinode_fi_multinode_LDADD = 	libfabtests.la
 
 multinode_fi_multinode_CFLAGS = \
+	$(AM_CFLAGS) \
+	-I$(srcdir)/multinode/include
+
+multinode_fi_multinode_coll_SOURCES = \
+	multinode/src/harness.c \
+	multinode/src/core_coll.c \
+	multinode/include/core.h
+
+multinode_fi_multinode_coll_LDADD = 	libfabtests.la
+
+multinode_fi_multinode_coll_CFLAGS = \
 	$(AM_CFLAGS) \
 	-I$(srcdir)/multinode/include
 

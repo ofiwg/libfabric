@@ -298,12 +298,12 @@ int multinode_run_tests(int argc, char **argv)
 		printf("starting %s... ", patterns[i].name);
 		pattern = &patterns[i];
 		ret = multinode_run_test();
-		if (ret) 
+		if (ret)
 			printf("failed\n");
-		else 
+		else
 			printf("passed\n");
 	}
-	
+
 	pm_job_free_res();
 	ft_free_res();
 	return ft_exit_code(ret);
