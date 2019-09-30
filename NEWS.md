@@ -5,10 +5,13 @@ This file contains the main features as well as overviews of specific
 bug fixes (and other actions) for each version of Libfabric since
 version 1.0.
 
-v1.8.1, Fri Sep 27, 2019
+v1.8.1, Mon Sep 30, 2019
 ========================
 
 ## Core
+
+- Limit default size of memory registration cache
+- Verify that correct entry is removed from MR cache
 
 ## EFA
 
@@ -41,8 +44,6 @@ v1.8.1, Fri Sep 27, 2019
 ## SHM
 - Add correct reporting of FI_MR_BASIC
 - Add correct reporting and proper support of FI_DIRECTED_RECV
-
-## TCP
 
 ## Verbs
 
