@@ -1082,6 +1082,9 @@ static inline ssize_t rxm_handle_atomic_resp(struct rxm_ep *rxm_ep,
 err:
 	rxm_rx_buf_finish(rx_buf);
 	ofi_buf_free(tx_buf);
+	ofi_atomic_inc32(&rxm_ep->atomic_tx_credits);
+	assert(ofi_atomic_get32(&rxm_ep->atomic_tx_credits) <=
+				rxm_ep->rxm_info->tx_attr->size);
 
 	return ret;
 }
