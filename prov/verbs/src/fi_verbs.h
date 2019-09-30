@@ -887,24 +887,20 @@ static inline int fi_ibv_poll_reap_unsig_cq(struct fi_ibv_ep *ep)
 						    util_domain);
 
 	cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
-	/* TODO: retrieve WCs as much as possible in a single
-	 * ibv_poll_cq call */
 	while (1) {
 		ret = domain->poll_cq(cq->cq, 10, wc);
-		if (ret <= 0) {
-			cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
-			return ret;
-		}
+		if (ret <= 0)
+			break;
+
 		for (i = 0; i < ret; i++) {
-			if (!fi_ibv_process_wc(cq, &wc[i]))
-				continue;
-			if (OFI_LIKELY(!fi_ibv_wc_2_wce(cq, &wc[i], &wce)))
+			if (fi_ibv_process_wc(cq, &wc[i]) &&
+			    (!fi_ibv_wc_2_wce(cq, &wc[i], &wce)))
 				slist_insert_tail(&wce->entry, &cq->wcq);
 		}
 	}
 
 	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
-	return FI_SUCCESS;
+	return ret;
 }
 
 /* WR must be filled out by now except for context */

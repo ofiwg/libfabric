@@ -121,6 +121,7 @@ struct udpx_mc {
 	struct fid_mc		mc_fid;
 	union {
 		struct sockaddr_in	sin;
+		struct sockaddr_in6	sin6;
 	} addr;
 	struct udpx_ep		*ep;
 };
