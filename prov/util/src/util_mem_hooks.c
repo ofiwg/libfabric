@@ -129,6 +129,9 @@ enum {
 	OFI_INTERCEPT_MAX
 };
 
+typedef unsigned long getauxval_func_t(unsigned long);
+getauxval_func_t* func = NULL;
+
 static void *ofi_intercept_mmap(void *start, size_t length,
 				int prot, int flags, int fd, off_t offset);
 static int ofi_intercept_munmap(void *start, size_t length);
@@ -596,6 +599,26 @@ static int ofi_memhooks_start(struct ofi_mem_monitor *monitor)
 	memhooks_monitor->unsubscribe = ofi_memhooks_unsubscribe;
 	memhooks_monitor->valid = ofi_memhooks_valid;
 	dlist_init(&memhooks.intercept_list);
+
+#ifdef I_MPI
+	void* libc_handle = NULL;
+	dlerror();
+
+	libc_handle = dlopen("libc.so.6", RTLD_LAZY);
+	if (!libc_handle) {
+		FI_DBG(&core_prov, FI_LOG_MR,
+		       "Could not dlopen() C library: %s\n", dlerror());
+		return -FI_ENOMEM;
+	}
+
+	func = (getauxval_func_t*)dlsym(libc_handle, "getauxval");
+	if (!func){
+		FI_DBG(&core_prov, FI_LOG_MR,
+		       "Could not find getauxval() in C library\n");
+		return -FI_ENOMEM;
+	}
+	dlclose(libc_handle);
+#endif /* I_MPI */
 
 	for (i = 0; i < OFI_INTERCEPT_MAX; ++i)
 		dlist_init(&intercepts[i].dl_intercept_list);

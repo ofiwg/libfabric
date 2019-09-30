@@ -505,11 +505,24 @@ AS_IF([test $have_uffd -eq 1],
 	[AC_MSG_RESULT([no])
 		have_uffd=0])])
 
+have_uffd=1
 AC_DEFINE_UNQUOTED([HAVE_UFFD_UNMAP], [$have_uffd],
 	[Define to 1 if platform supports userfault fd unmap])
 
 dnl Check support to intercept syscalls
-AC_CHECK_HEADERS_ONCE(elf.h sys/auxv.h)
+AC_CHECK_HEADERS_ONCE(elf.h)
+AC_DEFINE_UNQUOTED([HAVE_SYS_AUXV_H], 1,
+                   [Define HAVE_SYS_AUXV_H to 1])
+
+AC_ARG_ENABLE([impi],
+  [AS_HELP_STRING([--enable-impi],
+    [Enable atomics support @<:@default=no@:>@])
+  ],
+  [AC_DEFINE_UNQUOTED([I_MPI], 1,
+                   [Define I_MPI to 1])
+  ],
+  [])
+
 
 dnl Check support to clock_gettime
 have_clock_gettime=0
