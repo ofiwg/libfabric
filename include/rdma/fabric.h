@@ -330,7 +330,6 @@ enum {
 	FI_TC_BULK_DATA,
 	FI_TC_SCAVENGER,
 	FI_TC_NETWORK_CTRL,
-	FI_TC_REALTIME_STREAM, /* TODO: pending description @shefty */
 };
 
 /* Mode bits */
@@ -382,7 +381,6 @@ struct fi_ep_attr {
 	size_t			rx_ctx_cnt;
 	size_t			auth_key_size;
 	uint8_t			*auth_key;
-	uint32_t		tclass;
 };
 
 struct fi_domain_attr {
