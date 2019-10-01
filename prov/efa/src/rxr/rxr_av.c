@@ -298,6 +298,12 @@ int rxr_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 
 	util_attr.addrlen = sizeof(fi_addr_t);
 	util_attr.flags = 0;
+	if (attr->type == FI_AV_UNSPEC){
+		if (domain->util_domain.av_type != FI_AV_UNSPEC)
+			attr->type = domain->util_domain.av_type;
+		else
+			attr->type = FI_AV_TABLE;
+	}
 	ret = ofi_av_init(&domain->util_domain, attr, &util_attr,
 			  &av->util_av, context);
 	if (ret)
