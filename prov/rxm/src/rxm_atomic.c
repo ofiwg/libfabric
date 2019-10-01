@@ -135,12 +135,18 @@ rxm_ep_atomic_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		return -FI_EINVAL;
 	}
 
+	if (ofi_atomic_dec32(&rxm_ep->atomic_tx_credits) < 0) {
+		ret = -FI_EAGAIN;
+		goto restore_credit;
+	}
+
 	tx_buf = (struct rxm_tx_atomic_buf *)
 		 rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_ATOMIC);
 	if (OFI_UNLIKELY(!tx_buf)) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 			"Ran out of buffers from Atomic buffer pool\n");
-		return -FI_EAGAIN;
+		ret = -FI_EAGAIN;
+		goto restore_credit;
 	}
 
 	rxm_ep_format_atomic_pkt_hdr(rxm_conn, tx_buf, tot_len, op,
@@ -163,8 +169,12 @@ rxm_ep_atomic_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 			       datatype_sz);
 
 	ret = rxm_ep_send_atomic_req(rxm_ep, rxm_conn, tx_buf, tot_len);
-	if (ret)
-		ofi_buf_free(tx_buf);
+	if (OFI_LIKELY(!ret))
+		return ret;
+
+	ofi_buf_free(tx_buf);
+restore_credit:
+	ofi_atomic_inc32(&rxm_ep->atomic_tx_credits);
 	return ret;
 }
 

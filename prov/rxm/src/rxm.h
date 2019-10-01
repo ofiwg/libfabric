@@ -656,6 +656,7 @@ struct rxm_ep {
 	uint64_t		msg_cq_last_poll;
 	struct fid_ep 		*srx_ctx;
 	size_t 			comp_per_progress;
+	ofi_atomic32_t		atomic_tx_credits;
 	int			msg_mr_local;
 	int			rxm_mr_local;
 	size_t			min_multi_recv_size;
