@@ -203,10 +203,10 @@ void fi_ibv_free_xrc_conn_setup(struct fi_ibv_xrc_ep *ep, int disconnect)
 	}
 }
 
+/* Caller must hold the eq:lock */
 int fi_ibv_connect_xrc(struct fi_ibv_xrc_ep *ep, struct sockaddr *addr,
 		       int reciprocal, void *param, size_t paramlen)
 {
-	struct fi_ibv_domain *domain = fi_ibv_ep_to_domain(&ep->base_ep);
 	struct sockaddr *peer_addr;
 	int ret;
 
@@ -222,12 +222,10 @@ int fi_ibv_connect_xrc(struct fi_ibv_xrc_ep *ep, struct sockaddr *addr,
 		ofi_straddr_dbg(&fi_ibv_prov, FI_LOG_FABRIC,
 				"XRC connect dest_addr", peer_addr);
 
-	fastlock_acquire(&domain->xrc.ini_mgmt_lock);
 	ret = fi_ibv_get_shared_ini_conn(ep, &ep->ini_conn);
 	if (ret) {
 		VERBS_WARN(FI_LOG_EP_CTRL,
 			   "Get of shared XRC INI connection failed %d\n", ret);
-		fastlock_release(&domain->xrc.ini_mgmt_lock);
 		if (!reciprocal) {
 			free(ep->conn_setup);
 			ep->conn_setup = NULL;
@@ -236,19 +234,15 @@ int fi_ibv_connect_xrc(struct fi_ibv_xrc_ep *ep, struct sockaddr *addr,
 	}
 	fi_ibv_add_pending_ini_conn(ep, reciprocal, param, paramlen);
 	fi_ibv_sched_ini_conn(ep->ini_conn);
-	fastlock_release(&domain->xrc.ini_mgmt_lock);
 
 	return FI_SUCCESS;
 }
 
+/* Caller must hold the eq:lock */
 void fi_ibv_ep_ini_conn_done(struct fi_ibv_xrc_ep *ep, uint32_t peer_srqn,
 			     uint32_t tgt_qpn)
 {
-	struct fi_ibv_domain *domain = fi_ibv_ep_to_domain(&ep->base_ep);
-
 	assert(ep->base_ep.id && ep->ini_conn);
-
-	fastlock_acquire(&domain->xrc.ini_mgmt_lock);
 
 	assert(ep->ini_conn->state == FI_IBV_INI_QP_CONNECTING ||
 	       ep->ini_conn->state == FI_IBV_INI_QP_CONNECTED);
@@ -270,20 +264,16 @@ void fi_ibv_ep_ini_conn_done(struct fi_ibv_xrc_ep *ep, uint32_t peer_srqn,
 	ep->conn_setup->ini_connected = 1;
 	fi_ibv_log_ep_conn(ep, "INI Connection Done");
 	fi_ibv_sched_ini_conn(ep->ini_conn);
-	fastlock_release(&domain->xrc.ini_mgmt_lock);
 }
 
+/* Caller must hold the eq:lock */
 void fi_ibv_ep_ini_conn_rejected(struct fi_ibv_xrc_ep *ep)
 {
-	struct fi_ibv_domain *domain = fi_ibv_ep_to_domain(&ep->base_ep);
-
 	assert(ep->base_ep.id && ep->ini_conn);
 
-	fastlock_acquire(&domain->xrc.ini_mgmt_lock);
 	fi_ibv_log_ep_conn(ep, "INI Connection Rejected");
 	fi_ibv_put_shared_ini_conn(ep);
 	ep->conn_state = FI_IBV_XRC_ERROR;
-	fastlock_release(&domain->xrc.ini_mgmt_lock);
 }
 
 void fi_ibv_ep_tgt_conn_done(struct fi_ibv_xrc_ep *ep)
@@ -297,6 +287,7 @@ void fi_ibv_ep_tgt_conn_done(struct fi_ibv_xrc_ep *ep)
 	ep->conn_setup->tgt_connected = 1;
 }
 
+/* Caller must hold the eq:lock */
 int fi_ibv_accept_xrc(struct fi_ibv_xrc_ep *ep, int reciprocal,
 		      void *param, size_t paramlen)
 {

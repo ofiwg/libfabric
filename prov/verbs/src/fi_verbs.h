@@ -325,8 +325,9 @@ struct fi_ibv_domain {
 
 		/* The domain maintains a RBTree for mapping an endpoint
 		 * destination addresses to physical XRC INI QP connected
-		 * to that host. */
-		fastlock_t		ini_mgmt_lock;
+		 * to that host. The map is protected using the EQ lock
+		 * bound to the domain to avoid the need for additional
+		 * locking. */
 		struct ofi_rbmap	*ini_conn_rbmap;
 	} xrc ;
 
@@ -463,7 +464,7 @@ enum fi_ibv_ini_qp_state {
  * An XRC transport INI QP connection can be shared within a process to
  * communicate with all the ranks on the same remote node. This structure is
  * only accessed during connection setup and tear down and should be
- * done while holding the domain:xrc:ini_mgmt_lock.
+ * done while holding the domain:eq:lock.
  */
 struct fi_ibv_ini_shared_conn {
 	/* To share, EP must have same remote peer host addr and TX CQ */
