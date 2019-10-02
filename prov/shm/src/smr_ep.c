@@ -138,7 +138,7 @@ static int smr_ep_cancel_recv(struct smr_ep *ep, struct smr_queue *queue,
 		recv_entry = container_of(entry, struct smr_ep_entry, entry);
 		ret = smr_complete_rx(ep, (void *) recv_entry->context, ofi_op_msg,
 				  recv_entry->flags, 0,
-				  NULL, (void *) recv_entry->addr,
+				  NULL, recv_entry->addr,
 				  recv_entry->tag, 0, FI_ECANCELED);
 		freestack_push(ep->recv_fs, recv_entry);
 		ret = ret ? ret : 1;

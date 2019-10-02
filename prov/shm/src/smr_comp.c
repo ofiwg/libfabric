@@ -89,7 +89,7 @@ int smr_tx_comp_signal(struct smr_ep *ep, void *context, uint32_t op,
 }
 
 int smr_complete_rx(struct smr_ep *ep, void *context, uint32_t op, uint16_t flags,
-		    size_t len, void *buf, void *addr, uint64_t tag, uint64_t data,
+		    size_t len, void *buf, fi_addr_t addr, uint64_t tag, uint64_t data,
 		    uint64_t err)
 {
 	ofi_ep_rx_cntr_inc_func(&ep->util_ep, op);
@@ -102,7 +102,7 @@ int smr_complete_rx(struct smr_ep *ep, void *context, uint32_t op, uint16_t flag
 }
 
 int smr_rx_comp(struct smr_ep *ep, void *context, uint32_t op,
-		uint16_t flags, size_t len, void *buf, void *addr,
+		uint16_t flags, size_t len, void *buf, fi_addr_t addr,
 		uint64_t tag, uint64_t data, uint64_t err)
 {
 	struct fi_cq_tagged_entry *comp;
@@ -133,17 +133,16 @@ int smr_rx_comp(struct smr_ep *ep, void *context, uint32_t op,
 }
 
 int smr_rx_src_comp(struct smr_ep *ep, void *context, uint32_t op,
-		    uint16_t flags, size_t len, void *buf, void *addr,
+		    uint16_t flags, size_t len, void *buf, fi_addr_t addr,
 		    uint64_t tag, uint64_t data, uint64_t err)
 {
-	ep->util_ep.rx_cq->src[ofi_cirque_windex(ep->util_ep.rx_cq->cirq)] =
-		(uint32_t) (uintptr_t) addr;
+	ep->util_ep.rx_cq->src[ofi_cirque_windex(ep->util_ep.rx_cq->cirq)] = addr;
 	return smr_rx_comp(ep, context, op, flags, len, buf, addr, tag,
 			   data, err);
 }
 
 int smr_rx_comp_signal(struct smr_ep *ep, void *context, uint32_t op,
-		       uint16_t flags, size_t len, void *buf, void *addr,
+		       uint16_t flags, size_t len, void *buf, fi_addr_t addr,
 		       uint64_t tag, uint64_t data, uint64_t err)
 {
 	int ret;
@@ -156,7 +155,7 @@ int smr_rx_comp_signal(struct smr_ep *ep, void *context, uint32_t op,
 }
 
 int smr_rx_src_comp_signal(struct smr_ep *ep, void *context, uint32_t op,
-			   uint16_t flags, size_t len, void *buf, void *addr,
+			   uint16_t flags, size_t len, void *buf, fi_addr_t addr,
 			   uint64_t tag, uint64_t data, uint64_t err)
 {
 	int ret;
