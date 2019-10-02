@@ -198,12 +198,12 @@ will report that the join has completed.  Application managed collective
 memberships are an exception.  With application managed memberships, the
 fi_join_collective call may be completed locally without fabric communication.
 For provider managed memberships, the join collective call requires as
-input a coll_addr that refers to an existing collective group.  The
-fi_join_collective call will create a new collective subgroup.  If there is
-no existing collective group (e.g. this is the first group being created),
-or if application managed memberships are used, coll_addr should be set to
-FI_ADDR_UNAVAIL.  For provider managed memberships, this will result in
-using all entries in the associated AV as the base.
+input a coll_addr that refers to either an address associated with an
+AV set (see fi_av_set_addr) or an existing collective group (obtained through
+a previous call to fi_join_collective).  The
+fi_join_collective call will create a new collective subgroup.
+If application managed memberships are used, coll_addr should be set to
+FI_ADDR_UNAVAIL.
 
 Applications must call fi_close on the collective group to disconnect the
 endpoint from the group.  After a join operation has completed, the
