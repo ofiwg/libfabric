@@ -9,17 +9,47 @@ tagline: Libfabric Programmer's Manual
 
 fi_av_set \- Address vector set operations
 
-fi_av_open / fi_close
-: Open or close an address vector
+fi_av_set / fi_close
+: Open or close an address vector set
+
+fi_av_set_union
+: Perform a set union operation on two AV sets
+
+fi_av_set_intersect
+: Perform a set intersect operation on two AV sets
+
+fi_av_set_diff
+: Perform a set difference operation on two AV sets
+
+fi_av_set_insert
+: Add an address to an AV set
+
+fi_av_set_remove
+: Remove an address from an AV set
+
+fi_av_set_addr
+: Obtain a collective address for current addresses in an AV set
 
 
 # SYNOPSIS
 
 ```c
-#include <rdma/fi_av_set.h>
+#include <rdma/fi_collective.h>
 
-int fi_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
-    struct fid_av **av, void *context);
+int fi_av_set(struct fid_av *av, struct fi_av_set_attr *attr,
+	  struct fid_av_set **set, void * context);
+
+int fi_av_set_union(struct fid_av_set *dst,	const struct fid_av_set *src);
+
+int fi_av_set_intersect(struct fid_av_set *dst, const struct fid_av_set *src);
+
+int fi_av_set_diff(struct fid_av_set *dst, const struct fid_av_set *src);
+
+int fi_av_set_insert(struct fid_av_set *set, fi_addr_t addr);
+
+int fi_av_set_remove(struct fid_av_set *set, fi_addr_t addr);
+
+int fi_av_set_addr(struct fid_av_set *set, fi_addr_t *coll_addr);
 
 int fi_close(struct fid *av_set);
 ```
@@ -29,6 +59,15 @@ int fi_close(struct fid *av_set);
 *av*
 : Address vector
 
+*set*
+: Address vector set
+
+*dst*
+: Address vector set updated by set operation
+
+*src*
+: Address vector set providing input to a set operation
+
 *attr*
 : Address vector set attributes
 
@@ -37,6 +76,12 @@ int fi_close(struct fid *av_set);
 
 *flags*
 : Additional flags to apply to the operation.
+
+*addr*
+: Destination address to insert to remove from AV set.
+
+*coll_addr*
+: Address identifying collective group.
 
 # DESCRIPTION
 
@@ -138,6 +183,15 @@ The AV set insert call appends the specified address to the end of the AV set.
 
 The AV set remove call removes the specified address from the given AV set.
 The order of the remaining addresses in the AV set is unchanged.
+
+## fi_av_set_addr
+
+Returns an address that may be used to communicate with all current members
+of an AV set.  This is a local operation only that does not involve network
+communication.  The returned address may be used as input into
+fi_join_collective.  Note that attempting to use the address returned from
+fi_av_set_addr (e.g. passing it to fi_join_collective) while simultaneously
+modifying the addresses stored in an AV set results in undefined behavior.
 
 # NOTES
 

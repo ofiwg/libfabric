@@ -52,6 +52,7 @@ struct fi_ops_av_set {
 	int	(*diff)(struct fid_av_set *dst, const struct fid_av_set *src);
 	int	(*insert)(struct fid_av_set *set, fi_addr_t addr);
 	int	(*remove)(struct fid_av_set *set, fi_addr_t addr);
+	int	(*addr)(struct fid_av_set *set, fi_addr_t *coll_addr);
 };
 
 struct fid_av_set {
@@ -105,10 +106,10 @@ struct fi_ops_collective {
 
 static inline int
 fi_av_set(struct fid_av *av, struct fi_av_set_attr *attr,
-	  struct fid_av_set **av_set, void * context)
+	  struct fid_av_set **set, void * context)
 {
 	return FI_CHECK_OP(av->ops, struct fi_ops_av, av_set) ?
-		av->ops->av_set(av, attr, av_set, context) : -FI_ENOSYS;
+		av->ops->av_set(av, attr, set, context) : -FI_ENOSYS;
 }
 
 static inline int
@@ -139,6 +140,12 @@ static inline int
 fi_av_set_remove(struct fid_av_set *set, fi_addr_t addr)
 {
 	return set->ops->remove(set, addr);
+}
+
+static inline int
+fi_av_set_addr(struct fid_av_set *set, fi_addr_t *coll_addr)
+{
+	return set->ops->addr(set, coll_addr);
 }
 
 static inline int
