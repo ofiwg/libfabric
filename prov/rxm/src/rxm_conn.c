@@ -780,7 +780,8 @@ int rxm_cmap_alloc(struct rxm_ep *rxm_ep, struct rxm_cmap_attr *attr)
 
 	rxm_ep->cmap = cmap;
 
-	if (ep->domain->data_progress == FI_PROGRESS_AUTO) {
+	if (ep->domain->data_progress == FI_PROGRESS_AUTO || force_auto_progress) {
+		assert(ep->domain->threading == FI_THREAD_SAFE);
 		if (pthread_create(&cmap->cm_thread, 0,
 				   rxm_ep->rxm_info->caps & FI_ATOMIC ?
 				   rxm_conn_atomic_progress :
