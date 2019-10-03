@@ -111,7 +111,7 @@ static inline void fi_ibv_set_ini_conn_key(struct fi_ibv_xrc_ep *ep,
 				  struct fi_ibv_cq, util_cq);
 }
 
-/* Caller must hold domain:xrc:ini_mgmt_lock */
+/* Caller must hold domain:eq:lock */
 int fi_ibv_get_shared_ini_conn(struct fi_ibv_xrc_ep *ep,
 			       struct fi_ibv_ini_shared_conn **ini_conn) {
 	struct fi_ibv_domain *domain = fi_ibv_ep_to_domain(&ep->base_ep);
@@ -168,7 +168,7 @@ insert_err:
 	return ret;
 }
 
-/* Caller must hold domain:xrc:ini_mgmt_lock */
+/* Caller must hold domain:eq:lock */
 void fi_ibv_put_shared_ini_conn(struct fi_ibv_xrc_ep *ep)
 {
 	struct fi_ibv_domain *domain = fi_ibv_ep_to_domain(&ep->base_ep);
@@ -213,7 +213,7 @@ void fi_ibv_put_shared_ini_conn(struct fi_ibv_xrc_ep *ep)
 	}
 }
 
-/* Caller must hold domain:xrc:ini_mgmt_lock */
+/* Caller must hold domain:eq:lock */
 void fi_ibv_add_pending_ini_conn(struct fi_ibv_xrc_ep *ep, int reciprocal,
 				 void *conn_param, size_t conn_paramlen)
 {
@@ -235,7 +235,7 @@ static void fi_ibv_create_shutdown_event(struct fi_ibv_xrc_ep *ep)
 			      &entry, sizeof(entry));
 }
 
-/* Caller must hold domain:xrc:ini_mgmt_lock */
+/* Caller must hold domain:eq:lock */
 void fi_ibv_sched_ini_conn(struct fi_ibv_ini_shared_conn *ini_conn)
 {
 	struct fi_ibv_xrc_ep *ep;
@@ -306,7 +306,7 @@ err:
 	}
 }
 
-/* Caller must hold domain:xrc:ini_mgmt_lock */
+/* Caller must hold domain:xrc:eq:lock */
 int fi_ibv_process_ini_conn(struct fi_ibv_xrc_ep *ep,int reciprocal,
 			    void *param, size_t paramlen)
 {
@@ -440,14 +440,11 @@ static int fi_ibv_put_tgt_qp(struct fi_ibv_xrc_ep *ep)
 	return FI_SUCCESS;
 }
 
+/* Caller must hold eq:lock */
 int fi_ibv_ep_destroy_xrc_qp(struct fi_ibv_xrc_ep *ep)
 {
-	struct fi_ibv_domain *domain = fi_ibv_ep_to_domain(&ep->base_ep);
-
 	if (ep->base_ep.ibv_qp) {
-		fastlock_acquire(&domain->xrc.ini_mgmt_lock);
 		fi_ibv_put_shared_ini_conn(ep);
-		fastlock_release(&domain->xrc.ini_mgmt_lock);
 	}
 	if (ep->base_ep.id) {
 		rdma_destroy_id(ep->base_ep.id);
@@ -541,8 +538,6 @@ int fi_ibv_domain_xrc_init(struct fi_ibv_domain *domain)
 		goto xrcd_err;
 	}
 
-	fastlock_init(&domain->xrc.ini_mgmt_lock);
-
 	domain->xrc.ini_conn_rbmap = ofi_rbmap_create(fi_ibv_ini_conn_compare);
 	if (!domain->xrc.ini_conn_rbmap) {
 		ret = -ENOMEM;
@@ -590,7 +585,6 @@ int fi_ibv_domain_xrc_cleanup(struct fi_ibv_domain *domain)
 	}
 
 	ofi_rbmap_destroy(domain->xrc.ini_conn_rbmap);
-	fastlock_destroy(&domain->xrc.ini_mgmt_lock);
 #endif /* VERBS_HAVE_XRC */
 	return 0;
 }
