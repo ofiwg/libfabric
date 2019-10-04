@@ -61,6 +61,30 @@ static void smr_resolve_addr(const char *node, const char *service,
 	*addrlen = strlen(*addr);
 }
 
+static int smr_get_ptrace_scope(void)
+{
+	FILE *file;
+	int scope, ret;
+
+	scope = 0;
+	file = fopen("/proc/sys/kernel/yama/ptrace_scope", "r");
+	if (file) {
+		ret = fscanf(file, "%d", &scope);
+		if (ret != 1) {
+			FI_WARN(&smr_prov, FI_LOG_CORE,
+				"Error getting value from ptrace_scope\n");
+			return -FI_EINVAL;
+		}
+		ret = fclose(file);
+		if (ret) {
+			FI_WARN(&smr_prov, FI_LOG_CORE,
+				"Error closing ptrace_scope file\n");
+			return -FI_EINVAL;
+		}
+	}
+	return scope;
+}
+
 static int smr_getinfo(uint32_t version, const char *node, const char *service,
 		       uint64_t flags, const struct fi_info *hints,
 		       struct fi_info **info)
@@ -68,7 +92,7 @@ static int smr_getinfo(uint32_t version, const char *node, const char *service,
 	struct fi_info *cur;
 	uint64_t mr_mode, msg_order;
 	int fast_rma;
-	int ret;
+	int ptrace_scope, ret;
 
 	mr_mode = hints && hints->domain_attr ? hints->domain_attr->mr_mode :
 						FI_MR_VIRT_ADDR;
@@ -79,6 +103,8 @@ static int smr_getinfo(uint32_t version, const char *node, const char *service,
 			   hints, info);
 	if (ret)
 		return ret;
+
+	ptrace_scope = smr_get_ptrace_scope();
 
 	for (cur = *info; cur; cur = cur->next) {
 		if (!(flags & FI_SOURCE) && !cur->dest_addr)
@@ -100,6 +126,8 @@ static int smr_getinfo(uint32_t version, const char *node, const char *service,
 			cur->ep_attr->max_order_waw_size = 0;
 			cur->ep_attr->max_order_war_size = 0;
 		}
+		if (ptrace_scope != 0)
+			cur->ep_attr->max_msg_size = SMR_INJECT_SIZE;
 	}
 	return 0;
 }
