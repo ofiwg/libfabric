@@ -134,6 +134,7 @@ struct fi_domain_attr {
 	size_t                auth_key_size;
 	size_t                max_err_data;
 	size_t                mr_cnt;
+	uint32_t              tclass;
 };
 ```
 
@@ -665,6 +666,12 @@ attributes of the domain, such as the supported memory registration modes.
 Applications can set the mr_cnt on input to fi_getinfo, in order to
 indicate their memory registration requirements.  Doing so may allow the
 provider to optimize any memory registration cache or lookup tables.
+
+## Traffic Class (tclass)
+
+This specifies the default traffic class that will be associated any endpoints
+created within the domain.  See [`fi_endpoint`(3)](fi_endpoint.3.html
+for additional information.
 
 # RETURN VALUE
 
