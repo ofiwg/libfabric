@@ -281,10 +281,6 @@ struct rxr_rx_entry *rxr_ep_get_new_unexp_rx_entry(struct rxr_ep *ep,
 		rxr_copy_pkt_entry(ep, unexp_entry, pkt_entry,
 				   RXR_PKT_ENTRY_UNEXP);
 		rxr_release_rx_pkt_entry(ep, pkt_entry);
-		if (is_local)
-			ep->rx_bufs_shm_to_post++;
-		else
-			ep->rx_bufs_to_post++;
 	} else {
 		unexp_entry = pkt_entry;
 	}
@@ -438,7 +434,7 @@ int rxr_ep_post_buf(struct rxr_ep *ep, uint64_t flags, enum rxr_lower_ep_type lo
 				fi_strerror(-ret));
 			return ret;
 		}
-		ep->posted_bufs++;
+		ep->posted_bufs_efa++;
 		break;
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
@@ -541,16 +537,12 @@ static int rxr_ep_handle_unexp_match(struct rxr_ep *ep,
 	ep->rx_pending++;
 #endif
 	if (rxr_env.enable_shm_transfer && is_local) {
-		if (pkt_entry->type == RXR_PKT_ENTRY_POSTED)
-			ep->rx_bufs_shm_to_post++;
 		goto shm_large_msg_out;
 	}
 	bytes_left = rx_entry->total_len - rx_entry->bytes_done;
 	if (!rx_entry->window && bytes_left > 0)
 		ret = rxr_ep_post_cts_or_queue(ep, rx_entry, bytes_left);
 
-	if (pkt_entry->type == RXR_PKT_ENTRY_POSTED)
-		ep->rx_bufs_to_post++;
 
 shm_large_msg_out:
 	rxr_release_rx_pkt_entry(ep, pkt_entry);
@@ -1362,7 +1354,7 @@ void rxr_ep_calc_cts_window_credits(struct rxr_ep *ep, struct rxr_peer *peer,
 	 * number of credits are allocated to the transfer so the sender can
 	 * make progress.
 	 */
-	*credits = MIN(MIN(ep->available_data_bufs, ep->posted_bufs),
+	*credits = MIN(MIN(ep->available_data_bufs, ep->posted_bufs_efa),
 		       peer->rx_credits);
 	*credits = MIN(request, *credits);
 	*credits = MAX(*credits, rxr_env.tx_min_credits);
@@ -2903,12 +2895,12 @@ static inline int rxr_ep_bulk_post_recv(struct rxr_ep *ep)
 	uint64_t flags = FI_MORE;
 	int ret;
 
-	while (ep->rx_bufs_to_post) {
-		if (ep->rx_bufs_to_post == 1)
+	while (ep->rx_bufs_efa_to_post) {
+		if (ep->rx_bufs_efa_to_post == 1)
 			flags = 0;
 		ret = rxr_ep_post_buf(ep, flags, EFA_EP);
 		if (OFI_LIKELY(!ret))
-			ep->rx_bufs_to_post--;
+			ep->rx_bufs_efa_to_post--;
 		else
 			return ret;
 	}
@@ -3007,15 +2999,16 @@ static inline void rxr_ep_poll_cq(struct rxr_ep *ep,
 		if (OFI_UNLIKELY(ret == 0))
 			return;
 
-		if (cq_entry.flags & (FI_SEND | FI_READ | FI_WRITE)) {
+		if (is_shm_cq && (cq_entry.flags & FI_REMOTE_CQ_DATA)) {
+			rxr_cq_handle_shm_rma_write_data(ep, &cq_entry, src_addr);
+		} else if (cq_entry.flags & (FI_SEND | FI_READ | FI_WRITE)) {
 #if ENABLE_DEBUG
 			if (!is_shm_cq)
 				ep->send_comps++;
 #endif
 			rxr_cq_handle_pkt_send_completion(ep, &cq_entry);
 		} else if (cq_entry.flags & (FI_RECV | FI_REMOTE_CQ_DATA)) {
-			rxr_cq_handle_pkt_recv_completion(ep, &cq_entry,
-			                                  src_addr, is_shm_cq);
+			rxr_cq_handle_pkt_recv_completion(ep, &cq_entry, src_addr);
 #if ENABLE_DEBUG
 			if (!is_shm_cq)
 				ep->recv_comps++;
@@ -3269,8 +3262,8 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	rxr_ep->posted_bufs_shm = 0;
 	rxr_ep->rx_bufs_shm_to_post = 0;
-	rxr_ep->posted_bufs = 0;
-	rxr_ep->rx_bufs_to_post = 0;
+	rxr_ep->posted_bufs_efa = 0;
+	rxr_ep->rx_bufs_efa_to_post = 0;
 	rxr_ep->tx_pending = 0;
 	rxr_ep->available_data_bufs_ts = 0;
 
