@@ -107,7 +107,7 @@ struct smr_ep_entry {
 
 struct smr_ep;
 typedef int (*smr_rx_comp_func)(struct smr_ep *ep, void *context, uint32_t op,
-		uint16_t flags, size_t len, void *buf, void *addr,
+		uint16_t flags, size_t len, void *buf, fi_addr_t addr,
 		uint64_t tag, uint64_t data, uint64_t err);
 typedef int (*smr_tx_comp_func)(struct smr_ep *ep, void *context, uint32_t op,
 		uint16_t flags, uint64_t err);
@@ -227,19 +227,19 @@ int smr_tx_comp(struct smr_ep *ep, void *context, uint32_t op,
 int smr_tx_comp_signal(struct smr_ep *ep, void *context, uint32_t op,
 		uint16_t flags, uint64_t err);
 int smr_complete_rx(struct smr_ep *ep, void *context, uint32_t op,
-		uint16_t flags, size_t len, void *buf, void *addr,
+		uint16_t flags, size_t len, void *buf, fi_addr_t addr,
 		uint64_t tag, uint64_t data, uint64_t err);
 int smr_rx_comp(struct smr_ep *ep, void *context, uint32_t op,
-		uint16_t flags, size_t len, void *buf, void *addr,
+		uint16_t flags, size_t len, void *buf, fi_addr_t addr,
 		uint64_t tag, uint64_t data, uint64_t err);
 int smr_rx_src_comp(struct smr_ep *ep, void *context, uint32_t op,
-		uint16_t flags, size_t len, void *buf, void *addr,
+		uint16_t flags, size_t len, void *buf, fi_addr_t addr,
 		uint64_t tag, uint64_t data, uint64_t err);
 int smr_rx_comp_signal(struct smr_ep *ep, void *context, uint32_t op,
-		uint16_t flags, size_t len, void *buf, void *addr,
+		uint16_t flags, size_t len, void *buf, fi_addr_t addr,
 		uint64_t tag, uint64_t data, uint64_t err);
 int smr_rx_src_comp_signal(struct smr_ep *ep, void *context, uint32_t op,
-		uint16_t flags, size_t len, void *buf, void *addr,
+		uint16_t flags, size_t len, void *buf, fi_addr_t addr,
 		uint64_t tag, uint64_t data, uint64_t err);
 
 uint64_t smr_rx_cq_flags(uint32_t op, uint16_t op_flags);

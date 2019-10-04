@@ -208,8 +208,8 @@ static int smr_progress_multi_recv(struct smr_ep *ep, struct smr_queue *queue,
 	left = entry->iov[0].iov_len - len;
 	if (left < ep->min_multi_recv_size) {
 		ret = smr_complete_rx(ep, entry->context, ofi_op_msg,
-				      SMR_MULTI_RECV |entry->flags, 0, 0,
-				      &entry->addr, 0, 0, 0);
+				      SMR_MULTI_RECV | entry->flags, 0, 0,
+				      entry->addr, 0, 0, 0);
 		freestack_push(ep->recv_fs, entry);
 		return ret;
 	}
@@ -328,7 +328,6 @@ static int smr_progress_cmd_msg(struct smr_ep *ep, struct smr_cmd *cmd)
 	struct dlist_entry *dlist_entry;
 	struct smr_ep_entry *entry;
 	struct smr_unexp_msg *unexp;
-	fi_addr_t addr;
 	size_t total_len = 0;
 	int err, ret = 0;
 
@@ -383,9 +382,9 @@ static int smr_progress_cmd_msg(struct smr_ep *ep, struct smr_cmd *cmd)
 		err = -FI_EINVAL;
 	}
 	ret = smr_complete_rx(ep, entry->context, cmd->msg.hdr.op,
-			  cmd->msg.hdr.op_flags | (entry->flags & ~SMR_MULTI_RECV),
-			  total_len, entry->iov[0].iov_base, &addr, cmd->msg.hdr.tag,
-			  cmd->msg.hdr.data, err);
+			cmd->msg.hdr.op_flags | (entry->flags & ~SMR_MULTI_RECV),
+			total_len, entry->iov[0].iov_base, cmd->msg.hdr.addr,
+			cmd->msg.hdr.tag, cmd->msg.hdr.data, err);
 	if (ret) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"unable to process rx completion\n");
@@ -459,10 +458,9 @@ static int smr_progress_cmd_rma(struct smr_ep *ep, struct smr_cmd *cmd)
 		err = -FI_EINVAL;
 	}
 	ret = smr_complete_rx(ep, (void *) cmd->msg.hdr.msg_id,
-			  cmd->msg.hdr.op, cmd->msg.hdr.op_flags,
-			  total_len, iov_count ? iov[0].iov_base : NULL,
-			  &cmd->msg.hdr.addr, 0,
-			  cmd->msg.hdr.data, err);
+			cmd->msg.hdr.op, cmd->msg.hdr.op_flags,
+			total_len, iov_count ? iov[0].iov_base : NULL,
+			cmd->msg.hdr.addr, 0, cmd->msg.hdr.data, err);
 	if (ret) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"unable to process rx completion\n");
@@ -535,8 +533,7 @@ static int smr_progress_cmd_atomic(struct smr_ep *ep, struct smr_cmd *cmd)
 
 	ret = smr_complete_rx(ep, NULL, cmd->msg.hdr.op, cmd->msg.hdr.op_flags,
 			      total_len, ioc_count ? ioc[0].addr : NULL,
-			      &cmd->msg.hdr.addr, 0,
-			      cmd->msg.hdr.data, err);
+			      cmd->msg.hdr.addr, 0, cmd->msg.hdr.data, err);
 	if (ret)
 		return ret;
 
@@ -650,9 +647,10 @@ int smr_progress_unexp(struct smr_ep *ep, struct smr_ep_entry *entry)
 	}
 
 	ret = smr_complete_rx(ep, entry->context, unexp_msg->cmd.msg.hdr.op,
-			  unexp_msg->cmd.msg.hdr.op_flags | entry->flags,
-			  total_len, entry->iov[0].iov_base, &entry->addr, entry->tag,
-			  unexp_msg->cmd.msg.hdr.data, entry->err);
+			unexp_msg->cmd.msg.hdr.op_flags | entry->flags,
+			total_len, entry->iov[0].iov_base,
+			unexp_msg->cmd.msg.hdr.addr, entry->tag,
+			unexp_msg->cmd.msg.hdr.data, entry->err);
 	if (ret) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"unable to process rx completion\n");
