@@ -64,6 +64,12 @@ static int rxr_fabric_close(fid_t fid)
 	if (ret)
 		return ret;
 
+	if (rxr_env.enable_shm_transfer) {
+		ret = fi_close(&rxr_fabric->shm_fabric->fid);
+		if (ret)
+			return ret;
+	}
+
 	ret = ofi_fabric_close(&rxr_fabric->util_fabric);
 	if (ret)
 		return ret;
@@ -122,7 +128,17 @@ int rxr_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 	ret = lower_efa_prov->fabric(rdm_info->fabric_attr,
 				     &rxr_fabric->lower_fabric, context);
 	if (ret)
-		goto err_free_info;
+		goto err_free_rdm_info;
+
+	/* Open shm provider's fabric domain */
+	if (rxr_env.enable_shm_transfer) {
+		assert(!strcmp(shm_info->fabric_attr->name, "shm"));
+		ret = fi_fabric(shm_info->fabric_attr,
+				       &rxr_fabric->shm_fabric, context);
+		if (ret)
+			goto err_close_rdm_fabric;
+	}
+
 
 #ifdef RXR_PERF_ENABLED
 	ret = ofi_perfset_create(&rxr_prov, &rxr_fabric->perf_set,
@@ -142,7 +158,14 @@ int rxr_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 	free(hints.fabric_attr);
 	fi_freeinfo(rdm_info);
 	return 0;
-err_free_info:
+
+err_close_rdm_fabric:
+	retv = fi_close(&rxr_fabric->lower_fabric->fid);
+	if (retv)
+		FI_WARN(&rxr_prov, FI_LOG_FABRIC,
+			"Unable to close lower rdm fabric: %s\n",
+			fi_strerror(-retv));
+err_free_rdm_info:
 	fi_freeinfo(rdm_info);
 err_free_hints:
 	free(hints.fabric_attr);
