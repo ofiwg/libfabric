@@ -82,13 +82,6 @@ extern const unsigned int test_cnt;
 #define FT_ENABLE_ALL		(~0)
 #define FT_DEFAULT_SIZE		(1 << 0)
 
-static inline int ft_use_size(int index, int enable_flags)
-{
-	return (enable_flags == FT_ENABLE_ALL) ||
-		(enable_flags & test_size[index].enable_flags);
-}
-
-
 enum precision {
 	NANO = 1,
 	MICRO = 1000,
@@ -283,6 +276,13 @@ char *size_str(char str[FT_STR_LEN], long long size);
 char *cnt_str(char str[FT_STR_LEN], long long cnt);
 int size_to_count(int size);
 size_t datatype_to_size(enum fi_datatype datatype);
+
+static inline int ft_use_size(int index, int enable_flags)
+{
+	return test_size[index].size <= fi->ep_attr->max_msg_size &&
+		((enable_flags == FT_ENABLE_ALL) ||
+		(enable_flags & test_size[index].enable_flags));
+}
 
 #define FT_PRINTERR(call, retv) \
 	do { fprintf(stderr, call "(): %s:%d, ret=%d (%s)\n", __FILE__, __LINE__, \

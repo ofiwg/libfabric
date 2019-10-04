@@ -59,11 +59,7 @@ static int run(void)
 		for (i = 0; i < TEST_CNT; i++) {
 			if (!ft_use_size(i, opts.sizes_enabled))
 				continue;
-
 			opts.transfer_size = test_size[i].size;
-			if (opts.transfer_size > fi->ep_attr->max_msg_size)
-				continue;
-
 			init_test(&opts, test_name, sizeof(test_name));
 			ret = pingpong();
 			if (ret)
