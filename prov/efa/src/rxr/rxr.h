@@ -929,26 +929,20 @@ struct rxr_rx_entry *rxr_ep_rx_entry_init(struct rxr_ep *ep,
 
 void rxr_generic_tx_entry_init(struct rxr_ep *ep,
 			       struct rxr_tx_entry *tx_entry,
-			       const struct iovec *iov,
-			       size_t iov_count,
+			       const struct fi_msg *msg, uint64_t tag,
 			       const struct fi_rma_iov *rma_iov,
 			       size_t rma_iov_count,
-			       fi_addr_t addr, uint64_t tag,
-			       uint64_t data, void *context,
 			       uint32_t op, uint64_t flags);
 
 struct rxr_tx_entry *rxr_ep_tx_entry_init(struct rxr_ep *rxr_ep,
-					  const struct iovec *iov,
-					  size_t iov_count,
+					  const struct fi_msg *msg,
+					  uint64_t tag,
 					  const struct fi_rma_iov *rma_iov,
 					  size_t rma_iov_count,
-					  fi_addr_t addr, uint64_t tag,
-					  uint64_t data, void *context,
 					  uint32_t op, uint64_t flags);
 
-ssize_t rxr_tx(struct fid_ep *ep, const struct iovec *iov, size_t iov_count,
+ssize_t rxr_tx(struct fid_ep *ep, const struct fi_msg *msg, uint64_t tag,
 	       const struct fi_rma_iov *rma_iov, size_t rma_iov_count,
-	       fi_addr_t addr, uint64_t tag, uint64_t data, void *context,
 	       uint32_t op, uint64_t flags);
 
 static inline void
