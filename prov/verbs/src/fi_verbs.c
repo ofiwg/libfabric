@@ -184,7 +184,7 @@ int fi_ibv_get_rai_id(const char *node, const char *service, uint64_t flags,
 	}
 
 	ret = rdma_resolve_addr(*id, (*rai)->ai_src_addr,
-				(*rai)->ai_dst_addr, 2000);
+				(*rai)->ai_dst_addr, VERBS_RESOLVE_TIMEOUT);
 	if (ret) {
 		VERBS_INFO_ERRNO(FI_LOG_FABRIC, "rdma_resolve_addr", errno);
 		ret = -errno;
