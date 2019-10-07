@@ -258,10 +258,11 @@ static void cxit_init(void)
 	int ret;
 
 	/* Force provider init */
-	ret = fi_getinfo(FI_VERSION(-1U, -1U),
-			 NULL, NULL, 0, NULL,
-			 NULL);
-	cr_assert(ret == -FI_ENOSYS);
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+			 cxit_node, cxit_service, cxit_flags, cxit_fi_hints,
+			 &cxit_fi);
+	cr_assert(ret == FI_SUCCESS);
+	fi_freeinfo(cxit_fi);
 
 	slist_foreach(&cxip_if_list, entry, prev) {
 		cxit_n_ifs++;

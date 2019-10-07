@@ -92,7 +92,7 @@
 #define CXIP_MINOR_VERSION		0
 #define CXIP_PROV_VERSION		FI_VERSION(CXIP_MAJOR_VERSION, \
 						   CXIP_MINOR_VERSION)
-#define CXIP_FI_VERSION			FI_VERSION(1, 7)
+#define CXIP_FI_VERSION			FI_VERSION(1, 9)
 #define CXIP_WIRE_PROTO_VERSION		1
 
 #define CXIP_CNTR_SUCCESS_MAX ((1ULL << C_CT_SUCCESS_BITS) - 1)
@@ -323,7 +323,6 @@ struct cxip_domain {
 	struct cxip_eq *eq;		// linked during cxip_dom_bind()
 	struct cxip_eq *mr_eq;		// == eq || == NULL
 	struct ofi_mr_cache iomm;	// IO Memory Map
-	struct ofi_mem_monitor iomm_mon;// IOMM monitor
 	struct cxip_cmdq *trig_cmdq;
 	fastlock_t iomm_lock;
 
