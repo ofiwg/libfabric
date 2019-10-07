@@ -1112,7 +1112,7 @@ rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 	};
 	struct rxm_cmap_handle *handle;
 	struct sockaddr_storage remote_pep_addr;
-	int ret, rv;
+	int ret;
 
 	assert(sizeof(uint32_t) == sizeof(cm_data.accept.rx_size));
 	assert(msg_info->rx_attr->size <= (uint32_t)-1);
@@ -1159,14 +1159,10 @@ err2:
 	rxm_cmap_del_handle(&rxm_conn->handle);
 err1:
 	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
-	       "Rejecting incoming connection request (reject reason: %d)\n",
+	       "rejecting incoming connection request (reject reason: %d)\n",
 	       (enum rxm_cmap_reject_reason)reject_cm_data.reject.reason);
-	rv = fi_reject(rxm_ep->msg_pep, msg_info->handle,
-		      &reject_cm_data.reject, sizeof(reject_cm_data.reject));
-	if (rv)
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-			"Unable to reject incoming connection: %s (%d)\n",
-			fi_strerror(-rv), -rv);
+	fi_reject(rxm_ep->msg_pep, msg_info->handle,
+		  &reject_cm_data.reject, sizeof(reject_cm_data.reject));
 	return ret;
 }
 
