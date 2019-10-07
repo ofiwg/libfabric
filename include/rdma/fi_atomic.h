@@ -44,7 +44,6 @@ extern "C" {
 
 
 /* Atomic flags */
-#define FI_SCATTER		(1ULL << 57)
 #define FI_FETCH_ATOMIC		(1ULL << 58)
 #define FI_COMPARE_ATOMIC	(1ULL << 59)
 

@@ -651,10 +651,6 @@ static int util_coll_proc_reduce_item(struct util_coll_mc *coll_mc,
 	case FI_CSWAP_GT:
 	case FI_MSWAP:
 	case FI_ATOMIC_OP_LAST:
-	case FI_BARRIER:
-	case FI_BROADCAST:
-	case FI_ALLTOALL:
-	case FI_ALLGATHER:
 	default:
 		return -FI_ENOSYS;
 	};
