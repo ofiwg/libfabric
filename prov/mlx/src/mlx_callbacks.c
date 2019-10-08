@@ -52,7 +52,7 @@ void mlx_send_callback(void *request,
 		MLX_PUSH_ERROR_COMPLETION(cq,
 				tc->op_context, tc->flags,
 				(int)status, -MLX_TRANSLATE_ERRCODE(status),
-				0, ret);
+				0, ret, tc->tag);
 	} else {
 		ofi_cq_write(cq, tc->op_context, tc->flags,
 				tc->len, tc->buf, 0, tc->tag);
@@ -98,7 +98,7 @@ void mlx_recv_callback(void *request,
 				tc->op_context,
 				tc->flags,
 				(int)status, -MLX_TRANSLATE_ERRCODE(status),
-				olen, ret);
+				olen, ret, tc->tag);
 	} else {
 		ofi_cq_write(cq, tc->op_context, tc->flags,
 				tc->len, tc->buf, 0, tc->tag);
@@ -137,17 +137,15 @@ void mlx_multi_recv_callback(void *request,
 			|| (mlx_req->status != UCS_OK)
 			|| ((mctx->remain - mlx_req->last_recvd) < ep->ep_opts.mrecv_min_size)) {
 		status = mlx_generate_completion(mlx_req);
-		if (status == FI_SUCCESS) {
-			mlx_req_release((struct mlx_request*)mlx_req);
-			return;
-		}
 	}
 	mctx->head = (void*)((char*)(mctx->head) + info->length);
 	mctx->remain -= info->length;
 	mlx_req_release((struct mlx_request*)mlx_req);
 
-	while(status == -FI_EAGAIN) {
-		status = mlx_mrecv_multipost(ep, mctx);
-	};
+	if (status == FI_SUCCESS) {
+		dlist_insert_head(&(mctx->list), &(ep->mctx_freelist));
+	} else {
+		dlist_insert_tail(&(mctx->list), &(ep->mctx_repost));
+	}
 }
 

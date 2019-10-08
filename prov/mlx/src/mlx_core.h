@@ -32,7 +32,6 @@
 #include "mlx.h"
 
 
-#define __mlx_get_dstep_from_fi_addr(EP, ADDR) ((ucp_ep_h)(ADDR))
 
 
 struct mlx_claimed_msg {
@@ -79,7 +78,7 @@ static inline ssize_t mlx_generate_completion(struct mlx_mrecv_request *req) {
 				FI_RECV | FI_MSG, (int)req->status,
 				-MLX_TRANSLATE_ERRCODE(req->status),
 				(req->last_recvd - mctx->remain),
-				ret);
+				ret, mctx->tag);
 		ret = -MLX_TRANSLATE_ERRCODE(req->status);
 	} else {
 		uint64_t flags = FI_RECV | FI_MSG;
@@ -90,7 +89,6 @@ static inline ssize_t mlx_generate_completion(struct mlx_mrecv_request *req) {
 		ofi_cq_write(cq, mctx->context, flags,  req->last_recvd,
 				mctx->head, 0, 0);
 		if (buff_is_full) {
-			free(mctx);
 			ret = FI_SUCCESS;
 		}
 	}
@@ -102,86 +100,9 @@ static inline ssize_t mlx_generate_completion(struct mlx_mrecv_request *req) {
 }
 
 
-static inline ssize_t mlx_mrecv_multipost(struct mlx_ep *ep, struct mlx_mrecv_ctx *mctx)
-{
-	ssize_t ret = -FI_EAGAIN;
-	ucs_status_ptr_t status = NULL;
-	struct mlx_mrecv_request *req;
-	struct fi_context* _ctx;
 
-	status = ucp_tag_recv_nb(ep->worker,
-				 mctx->head,
-				 mctx->remain,
-				 ucp_dt_make_contig(1),
-				 mctx->tag,
-				 mctx->ignore,
-				 mlx_multi_recv_callback);
-	if (UCS_PTR_IS_ERR(status)) {
-		FI_DBG( &mlx_prov,FI_LOG_CORE,
-			"Send operation returns error: %s",
-			ucs_status_string(*(ucs_status_t*)status));
-		return MLX_TRANSLATE_ERRCODE(*(ucs_status_t*)status);
-	}
-
-	_ctx = (struct fi_context*)(mctx->context);
-	_ctx->internal[0] = status;
-
-	req = (struct mlx_mrecv_request *)status;
-	req->mrecv_ctx = mctx;
-	if (req->type == MLX_FI_REQ_UNINITIALIZED) {
-		req->type = MLX_FI_REQ_MULTIRECV;
-		req->cq = ep->ep.rx_cq;
-		req->ep = ep;
-		return FI_SUCCESS;
-	}
-
-	if( !(ep->ep.rx_op_flags & FI_SELECTIVE_COMPLETION)
-			|| (mctx->flags & FI_COMPLETION)
-			|| (req->status != UCS_OK)
-			|| ((mctx->remain - req->last_recvd) < ep->ep_opts.mrecv_min_size)) {
-		ret = mlx_generate_completion(req);
-	}
-
-	mctx->remain -= req->last_recvd;
-	mctx->head = (void*)((char*)(mctx->head) + req->last_recvd);
-	mlx_req_release((struct mlx_request*)req);
-
-	return ret;
-}
-
-
-static inline ssize_t mlx_do_mrecv(struct fid_ep *ep, const struct fi_msg_tagged *msg, uint64_t flags, uint64_t tag, uint64_t ignore)
-{
-	ssize_t status;
-	struct mlx_mrecv_ctx *mrecv_ctx;
-	struct mlx_ep *u_ep;
-
-	if (msg->iov_count > 1) {
-		return -FI_EINVAL;
-	}
-
-	mrecv_ctx = (struct mlx_mrecv_ctx*) calloc(1, sizeof(struct mlx_mrecv_ctx));
-	if (!mrecv_ctx) {
-		return -FI_ENOMEM;
-	}
-
-	mrecv_ctx->head = msg->msg_iov[0].iov_base;
-	mrecv_ctx->remain = msg->msg_iov[0].iov_len;
-
-	mrecv_ctx->tag = tag;
-	mrecv_ctx->ignore = ignore;
-	mrecv_ctx->flags = flags;
-	mrecv_ctx->context = msg->context;
-
-	u_ep = container_of(ep, struct mlx_ep, ep.ep_fid);
-	do {
-		status = mlx_mrecv_multipost(u_ep, mrecv_ctx);
-	} while(status == -FI_EAGAIN);
-
-	return status;
-}
-
-static inline ssize_t mlx_do_recvmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg, uint64_t flags, uint64_t tag, uint64_t ignore, int is_msg_mode)
+static inline ssize_t mlx_do_recvmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg, const uint64_t flags,
+		uint64_t tag, uint64_t ignore, const mlx_comm_mode_t mode)
 {
 	ucs_status_ptr_t status = NULL;
 	ucp_tag_recv_callback_t cbf;
@@ -211,11 +132,11 @@ static inline ssize_t mlx_do_recvmsg(struct fid_ep *ep, const struct fi_msg_tagg
 			posted_size += msg->msg_iov[i].iov_len;
 	}
 
-	if ( is_msg_mode && (flags & FI_MULTI_RECV)) {
-		return mlx_do_mrecv(ep, msg, flags, tag, ignore);
+	if (mode != MLX_TAGGED) {
+		return -FI_EINVAL;
 	}
 
-	if ((!is_msg_mode) && (flags & FI_CLAIM)) {
+	if (flags & FI_CLAIM) {
 		struct mlx_claimed_msg *cmsg = mlx_dequeue_claimed(u_ep, msg);
 		if (!cmsg)
 			return -FI_EINVAL;
@@ -255,10 +176,11 @@ static inline ssize_t mlx_do_recvmsg(struct fid_ep *ep, const struct fi_msg_tagg
 		struct fi_context *_ctx =
 			((struct fi_context *)(msg->context));
 		_ctx->internal[0] = (void*)req;
+		_ctx->internal[1] = NULL;
 	}
 
 	req->completion.tagged.op_context = msg->context;
-	req->completion.tagged.flags = FI_RECV | (is_msg_mode ? FI_MSG : FI_TAGGED);
+	req->completion.tagged.flags = FI_RECV | ((mode == MLX_MSG) ? FI_MSG : FI_TAGGED);
 	req->completion.tagged.buf = msg->msg_iov[0].iov_base;
 	req->completion.tagged.data = 0;
 
@@ -277,7 +199,7 @@ static inline ssize_t mlx_do_recvmsg(struct fid_ep *ep, const struct fi_msg_tagg
 			tc->flags,
 			(int)req->status, -MLX_TRANSLATE_ERRCODE((int)req->status) ,
 			(tc->len - req->posted_size),
-			ret);
+			ret, tc->tag);
 	} else if ((!(u_ep->ep.rx_op_flags & FI_SELECTIVE_COMPLETION))
 				|| (flags & FI_COMPLETION)
 				|| (req->type == MLX_FI_REQ_UNEXPECTED_ERR)) {
@@ -298,7 +220,7 @@ static inline ssize_t mlx_do_inject(
 	ucs_status_t ret;
 
 	u_ep = container_of(ep, struct mlx_ep, ep.ep_fid);
-	dst_ep = __mlx_get_dstep_from_fi_addr(u_ep, dest_addr);
+	dst_ep = MLX_GET_UCP_EP(u_ep, dest_addr);
 
 	status = ucp_tag_send_nb(dst_ep, buf, len,
 				 ucp_dt_make_contig(1),
@@ -323,7 +245,7 @@ static inline ssize_t mlx_do_inject(
 static inline  ssize_t mlx_do_sendmsg(
 				struct fid_ep *ep,
 				const struct fi_msg_tagged *msg,
-				uint64_t flags, uint64_t tag, int msg_mode)
+				uint64_t flags, uint64_t tag, const mlx_comm_mode_t mode)
 {
 	struct mlx_ep* u_ep;
 	ucp_send_callback_t cbf;
@@ -333,27 +255,45 @@ static inline  ssize_t mlx_do_sendmsg(
 	ucs_status_t cstatus = UCS_OK;
 
 	u_ep = container_of(ep, struct mlx_ep, ep.ep_fid);
-	dst_ep = __mlx_get_dstep_from_fi_addr(u_ep, msg->addr);
+	dst_ep = MLX_GET_UCP_EP(u_ep, msg->addr);
 	cq = u_ep->ep.tx_cq;
 
 	cbf = ((!(u_ep->ep.tx_op_flags & FI_SELECTIVE_COMPLETION)) 
 			|| (flags & FI_COMPLETION)) ? 
 				mlx_send_callback : mlx_send_callback_no_compl;
 
-	if (msg->iov_count < 2) {
-		status = ucp_tag_send_nb(
-					dst_ep,
-					msg->msg_iov[0].iov_base,
-					msg->msg_iov[0].iov_len,
-					ucp_dt_make_contig(1),
-					tag, cbf);
+	if (OFI_UNLIKELY(flags & FI_MATCH_COMPLETE)) {
+		if (msg->iov_count < 2) {
+			status = ucp_tag_send_sync_nb(
+						dst_ep,
+						msg->msg_iov[0].iov_base,
+						msg->msg_iov[0].iov_len,
+						ucp_dt_make_contig(1),
+						tag, cbf);
+		} else {
+			status = ucp_tag_send_sync_nb(
+						dst_ep,
+						msg->msg_iov,
+						msg->iov_count,
+						ucp_dt_make_iov(),
+						tag, cbf);
+		}
 	} else {
-		status = ucp_tag_send_nb(
-					dst_ep,
-					msg->msg_iov,
-					msg->iov_count,
-					ucp_dt_make_iov(),
-					tag, cbf);
+		if (msg->iov_count < 2) {
+			status = ucp_tag_send_nb(
+						dst_ep,
+						msg->msg_iov[0].iov_base,
+						msg->msg_iov[0].iov_len,
+						ucp_dt_make_contig(1),
+						tag, cbf);
+		} else {
+			status = ucp_tag_send_nb(
+						dst_ep,
+						msg->msg_iov,
+						msg->iov_count,
+						ucp_dt_make_iov(),
+						tag, cbf);
+		}
 	}
 
 	if (UCS_PTR_IS_ERR(status)) {
@@ -380,12 +320,13 @@ static inline  ssize_t mlx_do_sendmsg(
 		struct fi_context* _ctx =
 			((struct fi_context*)(msg->context));
 		_ctx->internal[0] = status;
+		_ctx->internal[1] = NULL;
 	}
 
 	if (UCS_PTR_STATUS(status) != UCS_OK) {
 		struct mlx_request *req = (struct mlx_request *)status;
 		req->completion.tagged.op_context = msg->context;
-		req->completion.tagged.flags = FI_SEND | (msg_mode ? FI_MSG : FI_TAGGED);
+		req->completion.tagged.flags = FI_SEND | ((mode == MLX_MSG) ? FI_MSG : FI_TAGGED);
 		req->completion.tagged.len = msg->msg_iov[0].iov_len;
 		req->completion.tagged.buf = msg->msg_iov[0].iov_base;
 		req->completion.tagged.tag = msg->tag;
@@ -393,7 +334,7 @@ static inline  ssize_t mlx_do_sendmsg(
 		req->cq = cq;
 	} else {
 		ofi_cq_write(cq,  msg->context,
-				FI_SEND | (msg_mode ? FI_MSG : FI_TAGGED),
+				FI_SEND | ((mode == MLX_MSG) ? FI_MSG : FI_TAGGED),
 				msg->msg_iov[0].iov_len,
 				msg->msg_iov[0].iov_base,
 				0, msg->tag);

@@ -34,7 +34,6 @@
 
 #define MLX_DO_READ 0
 #define MLX_DO_WRITE 1
-#define __mlx_get_dstep_from_fi_addr(EP, ADDR) ((ucp_ep_h)(ADDR))
 
 static ssize_t mlx_proc_rma_msg(struct fid_ep *ep,
 			const struct fi_msg_rma *msg,
@@ -186,7 +185,7 @@ void mlx_rma_callback(void *request,
 					mlx_req->completion.tagged.op_context,
 					mlx_req->completion.tagged.flags,
 					status, -MLX_TRANSLATE_ERRCODE(status),
-					0, ret);
+					0, ret, mlx_req->completion.tagged.tag);
 		}
 	}
 	mlx_req_release(request);
@@ -205,7 +204,7 @@ static ssize_t mlx_proc_rma_msg(struct fid_ep *ep,
 	struct mlx_request * req;
 
 	u_ep = container_of(ep, struct mlx_ep, ep.ep_fid);
-	dst_ep = __mlx_get_dstep_from_fi_addr(u_ep, msg->addr);
+	dst_ep = MLX_GET_UCP_EP(u_ep, msg->addr);
 
 	if (msg->rma_iov_count > 1 || msg->iov_count > 1) {
 		FI_DBG( &mlx_prov,FI_LOG_CORE,
@@ -281,7 +280,7 @@ ssize_t mlx_inject_write(struct fid_ep *ep, const void *buf, size_t len,
 	struct mlx_mr_rkey *rkey;
 
 	u_ep = container_of(ep, struct mlx_ep, ep.ep_fid);
-	dst_ep = __mlx_get_dstep_from_fi_addr(u_ep, dest_addr);
+	dst_ep = MLX_GET_UCP_EP(u_ep, dest_addr);
 	domain = container_of(u_ep->ep.domain ,struct mlx_domain, u_domain);
 
 	tmp_rkey.id.owner_addr = dest_addr;

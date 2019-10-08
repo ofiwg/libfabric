@@ -39,6 +39,7 @@ static int mlx_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int time
 	struct mlx_ep *ep;
 	uint64_t start, errcnt;
 	int ret, ep_retry;
+	ret = 0;
 
 	cntr = container_of(cntr_fid, struct util_cntr, cntr_fid);
 	assert(cntr->wait);

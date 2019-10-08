@@ -85,12 +85,12 @@ struct mlx_mr_key_descr {
 
 #define FI_MLX_FABRIC_NAME "mlx"
 #define FI_MLX_DEFAULT_INJECT_SIZE 1024
-#define FI_MLX_DEFAULT_NS_PORT 12345
 #define FI_MLX_DEF_CQ_SIZE (1024)
 #define FI_MLX_DEF_MR_CNT (1 << 16)
 
-#define FI_MLX_VERSION_MINOR 5
+#define FI_MLX_VERSION_MINOR 4
 #define FI_MLX_VERSION_MAJOR 1
+
 #define FI_MLX_VERSION (FI_VERSION(FI_MLX_VERSION_MAJOR, FI_MLX_VERSION_MINOR))
 
 #define FI_MLX_RKEY_MAX_LEN (256)
@@ -105,11 +105,8 @@ struct mlx_mr_key_descr {
 #define FI_MLX_ANY_SERVICE (0)
 struct mlx_global_descriptor{
 	ucp_config_t *config;
-	int use_ns;
-	int ns_port;
-	struct util_ns name_serv;
-	char *localhost;
 	int ep_flush;
+	int enable_spawn;
 };
 
 struct mlx_fabric {
@@ -137,7 +134,6 @@ struct mlx_domain {
 	struct mlx_mr_rkey *remote_keys;
 };
 
-
 struct mlx_ep {
 	struct util_ep ep;
 	struct mlx_av *av; /*until AV is not implemented via utils*/
@@ -149,6 +145,18 @@ struct mlx_ep {
 	struct {
 		size_t mrecv_min_size;
 	} ep_opts;
+	struct dlist_entry mctx_freelist;
+	struct dlist_entry mctx_repost;
+};
+
+struct mlx_ave {
+	ucp_ep_h uep;
+	void *addr;
+};
+
+struct mlx_avblock {
+	struct mlx_avblock * next;
+	char payload[0];
 };
 
 struct mlx_av {
@@ -160,7 +168,16 @@ struct mlx_av {
 	int async;
 	size_t count;
 	size_t addr_len;
+	struct mlx_avblock *addr_blocks;
+	struct mlx_avblock *ep_block;
 };
+
+#define MLX_GET_UCP_EP(EP, ADDR) (((struct mlx_ave*)(ADDR))->uep)
+
+typedef enum mlx_comm_mode {
+	MLX_MSG,
+	MLX_TAGGED,
+} mlx_comm_mode_t;
 
 typedef enum mlx_req_type {
 	MLX_FI_REQ_UNINITIALIZED = 0,
@@ -174,6 +191,7 @@ typedef enum mlx_req_type {
 } mlx_req_type_t;
 
 struct mlx_mrecv_ctx {
+	struct dlist_entry list;
 	/* user buffer state */
 	ssize_t remain;
 	void *head;
@@ -272,7 +290,7 @@ void mlx_multi_recv_callback(void *request,
 
 /* Completion utils */
 
-#define MLX_PUSH_ERROR_COMPLETION(CQ, CTX, FLAGS, PROV_ERR, ERR, OLEN, STATUS) \
+#define MLX_PUSH_ERROR_COMPLETION(CQ, CTX, FLAGS, PROV_ERR, ERR, OLEN, STATUS, TAG) \
 do {									\
 	struct fi_cq_err_entry _ee = {0};	\
 	_ee.op_context = (CTX);				\
@@ -280,6 +298,7 @@ do {									\
 	_ee.olen = (OLEN);					\
 	_ee.err = (ERR);					\
 	_ee.prov_errno = (PROV_ERR);		\
+	_ee.tag = (TAG);		\
 	(STATUS) = ofi_cq_write_error((CQ), &_ee); \
 } while (0)
 

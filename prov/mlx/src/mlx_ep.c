@@ -31,11 +31,25 @@
  */
 #include "mlx.h"
 
+
 static void mlx_ep_progress( struct util_ep *util_ep)
 {
 	struct mlx_ep *ep;
+	DEFINE_LIST(newhead);
+
 	ep = container_of(util_ep, struct mlx_ep, ep);
 	ucp_worker_progress(ep->worker);
+
+	if (!dlist_empty(&ep->mctx_repost)) {
+		dlist_insert_after(&newhead, &ep->mctx_repost);
+		dlist_remove_init(&ep->mctx_repost);
+		while (!dlist_empty(&newhead)){
+			struct mlx_mrecv_ctx *mctx;
+			dlist_pop_front(&newhead, struct mlx_mrecv_ctx, mctx, list);
+			dlist_init(&mctx->list);
+			mlx_mrecv_repost(ep, mctx);
+		}
+	}
 }
 
 
@@ -53,6 +67,15 @@ static ssize_t mlx_ep_cancel( fid_t fid, void *ctx)
 		return -FI_EINVAL;
 
 	ucp_request_cancel(ep->worker, context->internal[0]);
+	/* in case  of mrecv we have to release mrecv_ctx */
+	if (context->internal[1] != NULL) {
+		struct mlx_mrecv_ctx *mctx = (struct mlx_mrecv_ctx *)
+							(context->internal[1]);
+		if (!dlist_empty(&mctx->list)) {
+			dlist_remove(&mctx->list);
+		}
+		free(mctx);
+	}
 	return FI_SUCCESS;
 }
 
@@ -93,26 +116,21 @@ static int mlx_ep_close(fid_t fid)
 	size_t addr_len_local;
 
 	ep = container_of(fid, struct mlx_ep, ep.ep_fid.fid);
-
-	if (mlx_descriptor.use_ns) {
-		status = ucp_worker_get_address( ep->worker,
-						(ucp_address_t **)&addr_local,
-						(size_t*) &addr_len_local );
-		if (status != UCS_OK)
-			return MLX_TRANSLATE_ERRCODE(status);
-
-		ofi_ns_del_local_name(&mlx_descriptor.name_serv,
-					  &ep->service, addr_local);
-
-		ucp_worker_release_address(
-					ep->worker,
-					(ucp_address_t *)addr_local);
-	}
-
 	if (mlx_descriptor.ep_flush) {
 		ucp_worker_flush(ep->worker);
 	}
+
 	ucp_worker_destroy(ep->worker);
+	while(!dlist_empty(&ep->mctx_freelist)) {
+		dlist_pop_front(&ep->mctx_freelist,
+					struct mlx_mrecv_ctx, mrecv_ctx, list);
+		free(mrecv_ctx);
+	};
+	while(!dlist_empty(&ep->mctx_repost)) {
+		dlist_pop_front(&ep->mctx_repost,
+					struct mlx_mrecv_ctx, mrecv_ctx, list);
+		free(mrecv_ctx);
+	};
 
 	ofi_endpoint_close(&ep->ep);
 	free(ep);
@@ -227,26 +245,6 @@ int mlx_ep_open( struct fid_domain *domain, struct fi_info *info,
 		goto free_ep;
 	}
 
-	if (mlx_descriptor.use_ns) {
-		char tmpb [FI_MLX_MAX_NAME_LEN]={0};
-		status = ucp_worker_get_address( ep->worker,
-			(ucp_address_t **)&addr_local,
-			(size_t*) &addr_len_local );
-		if (status != UCS_OK)
-			return MLX_TRANSLATE_ERRCODE(status);
-		ep->service = (short)((getpid() & 0xFFFF ));
-		memcpy(tmpb,addr_local,addr_len_local);
-		FI_INFO(&mlx_prov, FI_LOG_CORE,
-			"PUBLISHED UCP address(size=%zd): [%hu] %s\n",
-			addr_len_local,ep->service,(char*)(addr_local));
-
-		ofi_ns_add_local_name(&mlx_descriptor.name_serv,
-			&ep->service, tmpb);
-
-		ucp_worker_release_address( ep->worker,
-			(ucp_address_t *)addr_local);
-	}
-
 	ep->ep.ep_fid.fid.ops = &mlx_fi_ops;
 	ep->ep.ep_fid.ops = &mlx_ep_ops;
 	ep->ep.ep_fid.cm = &mlx_cm_ops;
@@ -256,6 +254,8 @@ int mlx_ep_open( struct fid_domain *domain, struct fi_info *info,
 	ep->ep.flags = info->mode;
 	ep->ep.caps = u_domain->u_domain.info_domain_caps;
 	dlist_init(&(ep->claimed_list));
+	dlist_init(&(ep->mctx_freelist));
+	dlist_init(&(ep->mctx_repost));
 	*fid = &(ep->ep.ep_fid);
 	ep->ep_opts.mrecv_min_size = 0;
 

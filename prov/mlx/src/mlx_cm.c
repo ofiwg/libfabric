@@ -32,7 +32,7 @@
 #include "mlx.h"
 #include <inttypes.h>
 
-static int mlx_cm_getname_mlx_format(
+static int mlx_cm_getname(
 			fid_t fid,
 			void *addr,
 			size_t *addrlen)
@@ -69,8 +69,8 @@ static int mlx_cm_getname_mlx_format(
 		ofi_status = -FI_ETOOSMALL;
 	}
 	FI_INFO(&mlx_prov, FI_LOG_CORE, 
-		"Loaded UCP address: [%"PRIu64"]%s\n",
-		addr_len_local, (char *)addr_local);
+		"Loaded UCP address: [%"PRIu64"]...\n",
+		addr_len_local);
 
 	if (addr_local != NULL)
 		memcpy(addr, addr_local, (((*addrlen) < addr_len_local) ?

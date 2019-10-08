@@ -57,8 +57,9 @@ int mlx_dom_control(struct fid *fid, int command, void *arg)
 	struct mlx_mr_rkey *rkey;
 
 	if (command == FI_MLX_MR_ADD_KEY) {
+		struct mlx_ave *ep_ave = (struct mlx_ave *)mr_dsc->owner_addr;
 		rkey = malloc(sizeof(struct mlx_mr_rkey));
-		status = ucp_ep_rkey_unpack((ucp_ep_h)mr_dsc->owner_addr,
+		status = ucp_ep_rkey_unpack(ep_ave->uep,
 				mr_dsc->pkey, &(rkey->rkey));
 		if (status != UCS_OK) {
 			free (rkey);
@@ -328,8 +329,9 @@ int mlx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		goto domain_free;
 	}
 
-	status = ucp_init_version(1, 4, &params, mlx_descriptor.config,
-			  &(domain->context));
+	status = ucp_init_version(FI_MLX_VERSION_MAJOR, FI_MLX_VERSION_MINOR,
+			&params, mlx_descriptor.config,
+			 &(domain->context));
 	if (status != UCS_OK) {
 		ofi_status = MLX_TRANSLATE_ERRCODE(status);
 		goto destroy_domain;

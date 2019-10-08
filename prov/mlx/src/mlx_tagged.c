@@ -47,6 +47,7 @@ static ssize_t mlx_tagged_peek(
 
 	u_ep = container_of(ep, struct mlx_ep, ep.ep_fid);
 	cq = u_ep->ep.rx_cq;
+	ucp_worker_progress(u_ep->worker);
 	pmsg = ucp_tag_probe_nb(u_ep->worker,
 				(msg->tag & MLX_USER_TAG_MASK),
 				(~(msg->ignore & MLX_USER_TAG_MASK)),
@@ -61,6 +62,15 @@ static ssize_t mlx_tagged_peek(
 					r_info.length, NULL, 0, r_info.sender_tag);
 		if (flags & FI_CLAIM) {
 			mlx_enqueue_claimed(u_ep, &r_info, pmsg);
+		} else if (flags & FI_DISCARD) {
+			char tmp;
+			ucs_status_ptr_t status = NULL;
+			status = ucp_tag_msg_recv_nb(u_ep->worker, &tmp, 1, ucp_dt_make_contig(1),
+					pmsg, mlx_recv_callback_no_compl);
+			if (!UCS_PTR_IS_ERR(status)) {
+				while (ucp_request_check_status(status) == UCS_INPROGRESS)
+					ucp_worker_progress(u_ep->worker);
+			}
 		}
 	}
 	return retval;
@@ -87,7 +97,7 @@ static ssize_t mlx_tagged_recvmsg(
 		return mlx_tagged_peek(ep, msg, flags);
 	}
 
-	return mlx_do_recvmsg(ep, msg, flags, msg->tag, ~(msg->ignore), 0);
+	return mlx_do_recvmsg(ep, msg, flags, msg->tag, ~(msg->ignore), MLX_TAGGED);
 }
 
 static ssize_t mlx_tagged_sendmsg(
@@ -106,7 +116,7 @@ static ssize_t mlx_tagged_sendmsg(
 	}
 #endif /* ENABLE_DEBUG */
 
-	return mlx_do_sendmsg(ep, msg, flags, msg->tag, 0);
+	return mlx_do_sendmsg(ep, msg, flags, msg->tag, MLX_TAGGED);
 }
 
 
@@ -145,7 +155,7 @@ static ssize_t mlx_tagged_send(
 		.context = context,
 	};
 
-	return mlx_do_sendmsg(ep, &msg, 0, msg.tag, 0);
+	return mlx_do_sendmsg(ep, &msg, 0, msg.tag, MLX_TAGGED);
 }
 
 static ssize_t mlx_tagged_sendv(
@@ -163,7 +173,7 @@ static ssize_t mlx_tagged_sendv(
 		.context = context,
 	};
 
-	return mlx_do_sendmsg(ep, &msg, 0, msg.tag, 0);
+	return mlx_do_sendmsg(ep, &msg, 0, msg.tag, MLX_TAGGED);
 }
 
 static ssize_t mlx_tagged_recvv(
@@ -180,7 +190,7 @@ static ssize_t mlx_tagged_recvv(
 		.ignore = ignore,
 		.context = context,
 	};
-	return mlx_do_recvmsg(ep, &msg, 0, tag, ~ignore, 0);
+	return mlx_do_recvmsg(ep, &msg, 0, tag, ~ignore, MLX_TAGGED);
 }
 
 static ssize_t mlx_tagged_recv(
@@ -204,7 +214,7 @@ static ssize_t mlx_tagged_recv(
 		.ignore = ignore,
 		.context = context,
 	};
-	return mlx_do_recvmsg(ep, &msg, 0, tag, ~ignore, 0);
+	return mlx_do_recvmsg(ep, &msg, 0, tag, ~ignore, MLX_TAGGED);
 }
 
 struct fi_ops_tagged mlx_tagged_ops = {

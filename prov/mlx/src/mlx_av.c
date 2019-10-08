@@ -64,6 +64,7 @@ static int mlx_av_remove(
 			uint64_t flags)
 {
 	struct mlx_av *av;
+	struct mlx_ave *ep_ave;
 	int i;
 
 	av = container_of(fi_av, struct mlx_av, av);
@@ -72,11 +73,11 @@ static int mlx_av_remove(
 	}
 
 	for (i = 0; i < count; ++i) {
-		ucp_ep_destroy((ucp_ep_h)(fi_addr[i]));
+		ep_ave = (struct mlx_ave *)fi_addr[i];
+		ucp_ep_destroy((ucp_ep_h)(ep_ave->uep));
 	}
 	return FI_SUCCESS;
 }
-
 
 static inline int mlx_av_resolve_if_addr(
 		const struct sockaddr *saddr,
@@ -118,6 +119,8 @@ static int mlx_av_insert(
 {
 	struct mlx_av *av;
 	struct mlx_ep *ep;
+	struct mlx_avblock *avb_eps;
+	struct mlx_avblock *avb_addrs;
 	size_t i;
 	ucs_status_t status = UCS_OK;
 	int added = 0;
@@ -129,7 +132,26 @@ static int mlx_av_insert(
 		return -FI_ENOEQ;
 	}
 
+	avb_eps = malloc(sizeof(struct mlx_ave) * count + sizeof(struct mlx_avblock));
+	if (!avb_eps) {
+		free(avb_eps);
+		return - FI_ENOMEM;
+	}
+	avb_eps->next = av->ep_block;
+	av->ep_block = avb_eps;
+
+	if (mlx_descriptor.enable_spawn) {
+		avb_addrs = malloc(av->addr_len * count + sizeof(struct mlx_avblock));
+		if (!avb_addrs) {
+			free(avb_addrs);
+			return - FI_ENOMEM;
+		}
+		avb_addrs->next = av->addr_blocks;
+		av->addr_blocks = avb_addrs;
+	}
+
 	for (i = 0; i < count ; ++i) {
+		struct mlx_ave *ep_ave;
 		ucp_ep_params_t ep_params = { 0 };
 
 		if (mlx_descriptor.use_ns) {
@@ -146,15 +168,17 @@ static int mlx_av_insert(
 		ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
 		FI_WARN(&mlx_prov, FI_LOG_CORE,
 			"Try to insert address #%zd, offset=%zd (size=%zd)"
-			" fi_addr=%p \naddr = %s\n",
+			" fi_addr=%p \n",
 			i, i * av->addr_len, count,
-			fi_addr, &(((const char *) addr)[i * av->addr_len]));
+			fi_addr);
+		ep_ave = &(((struct mlx_ave *)(avb_eps->payload))[i]);
+
+		ep_ave->addr = (mlx_descriptor.enable_spawn) ?
+			(&avb_addrs->payload[i * av->addr_len]) : NULL;
+		fi_addr[i] = (fi_addr_t)ep_ave;
 
 		status = ucp_ep_create(ep->worker, &ep_params,
-				       (ucp_ep_h *)(&(fi_addr[i])));
-		if (mlx_descriptor.use_ns) {
-			free((void *) ep_params.address);
-		}
+						&(ep_ave->uep));
 		if (status == UCS_OK) {
 			FI_WARN(&mlx_prov, FI_LOG_CORE, "address inserted\n");
 			added++;
@@ -177,12 +201,25 @@ static int mlx_av_insert(
 	return count;
 }
 
+static inline void mlx_del_avb_list(struct mlx_avblock *avb)
+{
+	struct mlx_avblock *avb_tmp;
+	if (!avb)
+		return;
+	do {
+		avb_tmp = avb->next;
+		free(avb);
+		avb = avb_tmp;
+	} while (avb);
+}
 
 static int mlx_av_close(fid_t fid)
 {
-	struct mlx_av *fid_av;
-	fid_av = container_of(fid, struct mlx_av, av);
-	free (fid_av);
+	struct mlx_av *av;
+	av = container_of(fid, struct mlx_av, av);
+	mlx_del_avb_list(av->addr_blocks);
+	mlx_del_avb_list(av->ep_block);
+	free (av);
 	return FI_SUCCESS;
 }
 
@@ -203,6 +240,21 @@ static int mlx_av_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	return FI_SUCCESS;
 }
 
+static int mlx_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
+			size_t *addrlen)
+{
+	struct mlx_ave *ave;
+	struct mlx_av *mav;
+	size_t realsz;
+
+	ave = (struct mlx_ave*) fi_addr;
+	mav = container_of(av, struct mlx_av, av.fid);
+	realsz = MIN(*addrlen, mav->addr_len);
+	memcpy(addr, ave->addr, realsz);
+	*addrlen = mav->addr_len;
+	return FI_SUCCESS;
+}
+
 static struct fi_ops mlx_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = mlx_av_close,
@@ -213,6 +265,7 @@ static struct fi_ops_av mlx_av_ops = {
 	.size = sizeof(struct fi_ops_av),
 	.insert = mlx_av_insert,
 	.remove = mlx_av_remove,
+	.lookup = mlx_av_lookup,
 };
 
 int mlx_av_open(

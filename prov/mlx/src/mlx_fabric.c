@@ -35,10 +35,6 @@
 int mlx_fabric_close(struct fid *fid)
 {
 	int status;
-
-	if (mlx_descriptor.use_ns)
-		ofi_ns_stop_server (&mlx_descriptor.name_serv);
-
 	status = ofi_fabric_close(
 			container_of(fid, struct util_fabric, fabric_fid.fid));
 	return status;
@@ -61,106 +57,6 @@ static struct fi_ops_fabric mlx_fabric_ops = {
 	.trywait = fi_no_trywait,
 };
 
-int mlx_ns_service_cmp(void *svc1, void *svc2)
-{
-	int service1 = *(int *)svc1, service2 = *(int *)svc2;
-	if (service1 == FI_MLX_ANY_SERVICE ||
-	    service2 == FI_MLX_ANY_SERVICE)
-		return 0;
-	return (service1 < service2) ?
-		-1 : (service1 > service2);
-}
-
-int mlx_ns_is_service_wildcard(void *svc)
-{
-	return (*(int *)svc == FI_MLX_ANY_SERVICE);
-}
-
-#define MLX_IGNORED_LO_ADDR "127.0.0.1"
-static char* mlx_local_host_resolve()
-{
-	int status;
-	struct ifaddrs *ifaddr, *ifa;
-	char host[NI_MAXHOST];
-	char *iface = NULL;
-	char *result = NULL;
-
-	status = fi_param_get( &mlx_prov, "ns_iface",
-		&iface);
-	if (!status) {
-		iface = NULL;
-	}
-
-	if (-1 == getifaddrs(&ifaddr)) {
-		FI_WARN( &mlx_prov, FI_LOG_CORE,
-			"Unable to resolve local host address");
-		return NULL;
-	}
-
-	for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
-		/*Ignore not IPv$ ifaces*/
-		if ((ifa->ifa_addr == NULL) ||
-				(ifa->ifa_addr->sa_family != AF_INET)) {
-			continue;
-		}
-
-		if (getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in),
-				host, NI_MAXHOST,
-				NULL, 0, NI_NUMERICHOST) != 0) {
-			host[0] = '\0';
-			continue;
-		}
-
-		/*Skip loopback device*/
-		if (strncmp(host, MLX_IGNORED_LO_ADDR,
-				strlen(MLX_IGNORED_LO_ADDR))==0) {
-			host[0] = '\0';
-			continue;
-		}
-
-		/* If iface name is specified */
-		if (iface && strcmp(iface, ifa->ifa_name)!=0) {
-			host[0] = '\0';
-			continue;
-		}
-
-		result = strdup(host);
-		break;
-	}
-	if (result == NULL) {
-		FI_WARN( &mlx_prov, FI_LOG_CORE,
-			"No IPv4-compatible interface was found. (match mask:%s)",
-			iface?iface:"*");
-	}
-	freeifaddrs(ifaddr);
-	return result;
-}
-
-int mlx_ns_start ()
-{
-	if (!mlx_descriptor.localhost)
-		mlx_descriptor.localhost = mlx_local_host_resolve();
-
-	if (!mlx_descriptor.localhost) {
-		FI_INFO(&mlx_prov, FI_LOG_CORE,
-			"Unable to resolve local host address:\n"
-			"\t - unable to start NS\n"
-			"\t - Please try MLX-address format");
-		return -FI_EINVAL;
-	}
-
-	mlx_descriptor.name_serv.hostname = mlx_descriptor.localhost;
-	mlx_descriptor.name_serv.port = (int) mlx_descriptor.ns_port;
-	mlx_descriptor.name_serv.name_len = FI_MLX_MAX_NAME_LEN;
-	mlx_descriptor.name_serv.service_len = sizeof(short);
-	mlx_descriptor.name_serv.service_cmp = mlx_ns_service_cmp;
-	mlx_descriptor.name_serv.is_service_wildcard = mlx_ns_is_service_wildcard;
-
-	ofi_ns_init(&mlx_descriptor.name_serv);
-	ofi_ns_start_server(&mlx_descriptor.name_serv);
-
-	return FI_SUCCESS;
-}
 
 int mlx_fabric_open(
 		struct fi_fabric_attr *attr,
@@ -192,13 +88,6 @@ int mlx_fabric_open(
 	fabric_priv->u_fabric.fabric_fid.fid.ops = &mlx_fabric_fi_ops;
 	fabric_priv->u_fabric.fabric_fid.ops = &mlx_fabric_ops;
 	*fabric = &(fabric_priv->u_fabric.fabric_fid);
-
-	if (mlx_descriptor.use_ns) {
-		if(mlx_ns_start() != FI_SUCCESS) {
-			free(fabric_priv);
-			return status;
-		}
-	}
 
 	return FI_SUCCESS;
 }
