@@ -192,7 +192,7 @@ fi_ibv_eq_cm_getinfo(struct rdma_cm_event *event, struct fi_info *pep_info,
 			goto err1;
 	} else {
 		if (fi_ibv_pep_dev_domain_match(hints, devname)) {
-			VERBS_WARN(FI_LOG_EQ, "Passive endpoint domain: %s does"
+			VERBS_WARN(FI_LOG_EQ, "passive endpoint domain: %s does"
 				   " not match device: %s where we got a "
 				   "connection request\n",
 				   hints->domain_attr->name, devname);
@@ -206,11 +206,15 @@ fi_ibv_eq_cm_getinfo(struct rdma_cm_event *event, struct fi_info *pep_info,
 		hints->fabric_attr->name = NULL;
 	}
 
-	if (fi_ibv_getinfo(hints->fabric_attr->api_version, NULL, NULL, 0,
-			   hints, info))
+	ret = fi_ibv_get_matching_info(hints->fabric_attr->api_version, hints,
+				       info, fi_ibv_util_prov.info, 0);
+	if (ret)
 		goto err1;
 
 	assert(!(*info)->dest_addr);
+
+	ofi_alter_info(*info, hints, hints->fabric_attr->api_version);
+	fi_ibv_alter_info(hints, *info);
 
 	free((*info)->src_addr);
 
