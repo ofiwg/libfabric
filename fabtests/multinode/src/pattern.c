@@ -77,7 +77,6 @@ static int ring_next(int *cur)
 	else 			
 		*cur = pm_job.my_rank - 1;
 	return 0; 
-	
 }
 
 static int ring_current(int *cur)
@@ -124,4 +123,4 @@ struct pattern_ops patterns[] = {
 	},
 };
 
- const int NUM_TESTS = ARRAY_SIZE(patterns);
+const int NUM_TESTS = ARRAY_SIZE(patterns);
