@@ -41,6 +41,9 @@ fi_getopt / fi_setopt
 fi_rx_context / fi_tx_context / fi_srx_context  / fi_stx_context
 :   Open a transmit or receive context.
 
+fi_tc_dscp_set / fi_tc_dscp_get
+:   Convert between a DSCP value and a network traffic class
+
 fi_rx_size_left / fi_tx_size_left (DEPRECATED)
 :   Query the lower bound on how many RX/TX operations may be posted without
     an operation returning -FI_EAGAIN.  This functions have been deprecated
@@ -99,6 +102,10 @@ int fi_getopt(struct fid *ep, int level, int optname,
 
 int fi_setopt(struct fid *ep, int level, int optname,
     const void *optval, size_t optlen);
+
+uint32_t fi_tc_dscp_set(uint8_t dscp);
+
+uint8_t fi_tc_dscp_get(uint32_t tclass);
 
 DEPRECATED ssize_t fi_rx_size_left(struct fid_ep *ep);
 
@@ -513,6 +520,16 @@ The following option levels and option names and parameters are defined.
   sized renedezvous protocol message usually results in better latency for the
   overall transfer of a large message.
 
+## fi_tc_dscp_set
+
+This call converts a DSCP defined value into a libfabric traffic class value.
+It should be used when assigning a DSCP value when setting the tclass field
+in either domain or endpoint attributes
+
+## fi_tc_dscp_get
+
+This call returns the DSCP value associated with the tclass field for the
+domain or endpoint attributes.
 
 ## fi_rx_size_left (DEPRECATED)
 
@@ -844,6 +861,7 @@ struct fi_tx_attr {
 	size_t    size;
 	size_t    iov_limit;
 	size_t    rma_iov_limit;
+	uint32_t  tclass;
 };
 {% endhighlight %}
 
@@ -1060,6 +1078,57 @@ fi_atomic.3, for additional details.  This limit applies to both the
 number of RMA IO vectors that may be specified when initiating an
 operation from the local endpoint, as well as the maximum number of
 IO vectors that may be carried in a single request from a remote endpoint.
+
+## Traffic Class (tclass)
+
+Traffic classes can be a differentiated services
+code point (DSCP) value, one of the following defined labels, or a
+provider-specific definition.  If tclass is unset or set to FI_TC_UNSPEC,
+the endpoint will use the default traffic class associated with the
+domain.
+
+*FI_TC_BEST_EFFORT*
+: This is the default in the absence of any other local or fabric configuration.
+  This class carries the traffic for a number of applications executing
+  concurrently over the same network infrastructure. Even though it is shared,
+  network capacity and resource allocation are distributed fairly across the
+  applications.
+
+*FI_TC_LOW_LATENCY*
+: This class supports low latency, low jitter data patterns typically caused by
+  transactional data exchanges, barrier synchronizations, and collective
+  operations that are typical of HPC applications. This class often requires
+  maximum tolerable latencies that data transfers must achieve for correct or
+  performance operations.  Fulfillment of such requests in this class will
+  typically require accompanying bandwidth and message size limitations so
+  as not to consume excessive bandwidth at high priority.
+
+*FI_TC_DEDICATED_ACCESS*
+: This class operates at the highest priority, except the management class.
+  It carries a high bandwidth allocation, minimum latency targets, and the
+  highest scheduling and arbitration priority.
+
+*FI_TC_BULK_DATA*
+: This class is intended for large data transfers associated with I/O and
+  is present to separate sustained I/O transfers from other application
+  inter-process communications.
+
+*FI_TC_SCAVENGER*
+: This class is used for data that is desired but does not have strict delivery
+  requirements, such as in-band network or application level monitoring data.
+  Use of this class indicates that the traffic is considered lower priority
+  and should not interfere with higher priority workflows.
+
+*FI_TC_NETWORK_CTRL*
+: This class is intended for traffic directly related to fabric (network)
+  management, which is critical to the correct operation of the network.
+  Its use is typically restricted to privileged network management applications.
+
+*fi_tc_dscp_set / fi_tc_dscp_get*
+: DSCP values are supported via the DSCP get and set functions.  The
+  definitions for DSCP values are outside the scope of libfabric.  See
+  the fi_tc_dscp_set and fi_tc_dscp_get function definitions for details
+  on their use.
 
 # RECEIVE CONTEXT ATTRIBUTES
 
