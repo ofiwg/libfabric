@@ -177,6 +177,8 @@ int fi_ibv_get_rai_id(const char *node, const char *service, uint64_t flags,
 		ret = rdma_bind_addr(*id, (*rai)->ai_src_addr);
 		if (ret) {
 			VERBS_INFO_ERRNO(FI_LOG_FABRIC, "rdma_bind_addr", errno);
+			ofi_straddr_log(&fi_ibv_prov, FI_LOG_INFO, FI_LOG_FABRIC,
+					"bind addr", (*rai)->ai_src_addr);
 			ret = -errno;
 			goto err2;
 		}
@@ -187,6 +189,10 @@ int fi_ibv_get_rai_id(const char *node, const char *service, uint64_t flags,
 				(*rai)->ai_dst_addr, VERBS_RESOLVE_TIMEOUT);
 	if (ret) {
 		VERBS_INFO_ERRNO(FI_LOG_FABRIC, "rdma_resolve_addr", errno);
+		ofi_straddr_log(&fi_ibv_prov, FI_LOG_INFO, FI_LOG_FABRIC,
+				"src addr", (*rai)->ai_src_addr);
+		ofi_straddr_log(&fi_ibv_prov, FI_LOG_INFO, FI_LOG_FABRIC,
+				"dst addr", (*rai)->ai_dst_addr);
 		ret = -errno;
 		goto err2;
 	}
@@ -227,8 +233,12 @@ int fi_ibv_create_ep(const struct fi_info *hints, struct rdma_cm_id **id)
 	if (rdma_resolve_addr(*id, rai->ai_src_addr, rai->ai_dst_addr,
 			      VERBS_RESOLVE_TIMEOUT)) {
 		ret = -errno;
-		FI_WARN(&fi_ibv_prov, FI_LOG_EP_CTRL, "rdma_resolve_addr failed: %s (%d)\n",
-			strerror(-ret), -ret);
+		FI_WARN(&fi_ibv_prov, FI_LOG_EP_CTRL, "rdma_resolve_addr failed: "
+			"%s (%d)\n", strerror(-ret), -ret);
+		ofi_straddr_log(&fi_ibv_prov, FI_LOG_WARN, FI_LOG_EP_CTRL,
+				"src addr", rai->ai_src_addr);
+		ofi_straddr_log(&fi_ibv_prov, FI_LOG_WARN, FI_LOG_EP_CTRL,
+				"dst addr", rai->ai_dst_addr);
 		goto err2;
 	}
 	return 0;
