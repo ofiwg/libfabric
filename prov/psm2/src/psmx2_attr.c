@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2018 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2019 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -97,11 +97,11 @@ static struct fi_domain_attr psmx2_domain_attr = {
 	.cq_data_size		= 0, /* 4, 8 */
 	.cq_cnt			= 65535,
 	.ep_cnt			= 65535,
-	.tx_ctx_cnt		= 1, /* psmx2_env.free_trx_ctxt */
-	.rx_ctx_cnt		= 1, /* psmx2_env.free_trx_ctxt */
-	.max_ep_tx_ctx		= 1, /* psmx2_env.max_trx_ctxt */
-	.max_ep_rx_ctx		= 1, /* psmx2_env.max_trx_ctxt */
-	.max_ep_stx_ctx		= 1, /* psmx2_env.max_trx_ctxt */
+	.tx_ctx_cnt		= 1, /* psmx2_hfi_info.free_trx_ctxt */
+	.rx_ctx_cnt		= 1, /* psmx2_hfi_info.free_trx_ctxt */
+	.max_ep_tx_ctx		= 1, /* psmx2_hfi_info.max_trx_ctxt */
+	.max_ep_rx_ctx		= 1, /* psmx2_hfi_info.max_trx_ctxt */
+	.max_ep_stx_ctx		= 1, /* psmx2_hfi_info.max_trx_ctxt */
 	.max_ep_srx_ctx		= 0,
 	.cntr_cnt		= 65535,
 	.mr_iov_limit		= 65535,
@@ -182,7 +182,7 @@ int psmx2_init_prov_info(const struct fi_info *hints, struct fi_info **info)
 	}
 
 	if (hints->domain_attr && hints->domain_attr->name &&
-	    strcasecmp(hints->domain_attr->name, domain_attr->name)) {
+	    strncasecmp(hints->domain_attr->name, domain_attr->name, strlen(PSMX2_DOMAIN_NAME))) {
 		FI_INFO(&psmx2_prov, FI_LOG_CORE, "Unknown domain name\n");
 		FI_INFO_NAME(&psmx2_prov, domain_attr, hints->domain_attr);
 		return -FI_ENODATA;
@@ -304,22 +304,78 @@ static void psmx2_dup_addr(int format, struct psmx2_ep_name *addr,
 	}
 }
 
+static void psmx2_expand_default_unit(struct fi_info *info)
+{
+	struct fi_info *p, *next;
+	struct psmx2_ep_name *src_addr;
+	int i;
+
+	p = info;
+	while (p) {
+		next = p->next;
+		src_addr = p->src_addr;
+		if (src_addr->unit == PSMX2_DEFAULT_UNIT) {
+			if (psmx2_hfi_info.num_active_units == 1) {
+				src_addr->unit = psmx2_hfi_info.active_units[0];
+			} else {
+				for (i = 0; i < psmx2_hfi_info.num_active_units; i++) {
+					p->next = fi_dupinfo(p);
+					if (!p->next) {
+						FI_WARN(&psmx2_prov, FI_LOG_CORE,
+							"Failed to duplicate info for HFI unit %d\n",
+							psmx2_hfi_info.active_units[i]);
+						break;
+					}
+					p = p->next;
+					src_addr = p->src_addr;
+					src_addr->unit = psmx2_hfi_info.active_units[i];
+				}
+			}
+		}
+		p->next = next;
+		p = next;
+	}
+}
+
 void psmx2_update_prov_info(struct fi_info *info,
 			    struct psmx2_ep_name *src_addr,
 			    struct psmx2_ep_name *dest_addr)
 {
-	for ( ; info; info = info->next) {
-		psmx2_dup_addr(info->addr_format, src_addr,
-			       &info->src_addr, &info->src_addrlen);
-		psmx2_dup_addr(info->addr_format, dest_addr,
-			       &info->dest_addr, &info->dest_addrlen);
+	struct fi_info *p;
 
-		info->domain_attr->tx_ctx_cnt = psmx2_env.free_trx_ctxt;
-		info->domain_attr->rx_ctx_cnt = psmx2_env.free_trx_ctxt;
-		info->domain_attr->max_ep_tx_ctx = psmx2_env.max_trx_ctxt;
-		info->domain_attr->max_ep_rx_ctx = psmx2_env.max_trx_ctxt;
-		info->domain_attr->max_ep_stx_ctx = psmx2_env.max_trx_ctxt;
-		info->tx_attr->inject_size = psmx2_env.inject_size;
+	for (p = info; p; p = p->next) {
+		psmx2_dup_addr(p->addr_format, src_addr,
+			       &p->src_addr, &p->src_addrlen);
+		psmx2_dup_addr(p->addr_format, dest_addr,
+			       &p->dest_addr, &p->dest_addrlen);
+	}
+
+	psmx2_expand_default_unit(info);
+
+	for (p = info; p; p = p->next) {
+		int unit = ((struct psmx2_ep_name *)p->src_addr)->unit;
+
+		if (unit == PSMX2_DEFAULT_UNIT || !psmx2_env.multi_ep) {
+			p->domain_attr->tx_ctx_cnt = psmx2_hfi_info.free_trx_ctxt;
+			p->domain_attr->rx_ctx_cnt = psmx2_hfi_info.free_trx_ctxt;
+			p->domain_attr->max_ep_tx_ctx = psmx2_hfi_info.max_trx_ctxt;
+			p->domain_attr->max_ep_rx_ctx = psmx2_hfi_info.max_trx_ctxt;
+			p->domain_attr->max_ep_stx_ctx = psmx2_hfi_info.max_trx_ctxt;
+		} else {
+			p->domain_attr->tx_ctx_cnt = psmx2_hfi_info.unit_nfreectxts[unit];
+			p->domain_attr->rx_ctx_cnt = psmx2_hfi_info.unit_nfreectxts[unit];
+			p->domain_attr->max_ep_tx_ctx = psmx2_hfi_info.unit_nctxts[unit];
+			p->domain_attr->max_ep_rx_ctx = psmx2_hfi_info.unit_nctxts[unit];
+			p->domain_attr->max_ep_stx_ctx = psmx2_hfi_info.unit_nctxts[unit];
+		}
+
+		free(p->domain_attr->name);
+		if (unit == PSMX2_DEFAULT_UNIT)
+			p->domain_attr->name = strdup(psmx2_hfi_info.default_domain_name);
+		else
+			asprintf(&p->domain_attr->name, "hfi1_%d", unit);
+
+		p->tx_attr->inject_size = psmx2_env.inject_size;
 	}
 }
 

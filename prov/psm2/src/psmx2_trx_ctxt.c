@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2018 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2019 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -258,10 +258,10 @@ struct psmx2_trx_ctxt *psmx2_trx_ctxt_alloc(struct psmx2_fid_domain *domain,
 		domain->trx_ctxt_unlock_fn(&domain->trx_ctxt_lock, 1);
 	}
 
-	if (psmx2_trx_ctxt_cnt >= psmx2_env.max_trx_ctxt) {
+	if (psmx2_trx_ctxt_cnt >= psmx2_hfi_info.max_trx_ctxt) {
 		FI_WARN(&psmx2_prov, FI_LOG_CORE,
 			"number of Tx/Rx contexts exceeds limit (%d).\n",
-			psmx2_env.max_trx_ctxt);
+			psmx2_hfi_info.max_trx_ctxt);
 		return NULL;
 	}
 

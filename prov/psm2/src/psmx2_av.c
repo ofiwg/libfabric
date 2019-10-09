@@ -1036,7 +1036,7 @@ int psmx2_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	if (av_type == FI_AV_MAP)
 		conn_size = 0;
 	else
-		conn_size = psmx2_env.max_trx_ctxt * sizeof(struct psmx2_av_conn);
+		conn_size = psmx2_hfi_info.max_trx_ctxt * sizeof(struct psmx2_av_conn);
 
 	av_priv = (struct psmx2_fid_av *) calloc(1, sizeof(*av_priv) + conn_size);
 	if (!av_priv)
@@ -1099,7 +1099,7 @@ init_lock:
 	av_priv->count = count;
 	av_priv->flags = flags;
 	av_priv->rx_ctx_bits = rx_ctx_bits;
-	av_priv->max_trx_ctxt = psmx2_env.max_trx_ctxt;
+	av_priv->max_trx_ctxt = psmx2_hfi_info.max_trx_ctxt;
 	av_priv->addr_format = domain_priv->addr_format;
 	av_priv->type = av_type;
 

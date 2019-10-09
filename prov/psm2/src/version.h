@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2018 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2019 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -47,7 +47,7 @@
 #endif
 
 #define PSMX2_PROV_NAME		"psm2"
-#define PSMX2_DOMAIN_NAME	"psm2"
+#define PSMX2_DOMAIN_NAME	"hfi1"
 #define PSMX2_FABRIC_NAME	"psm2"
 
 #define PSMX2_DEFAULT_UUID	"00FF00FF-0000-0000-0000-00FF00FF00FF"
