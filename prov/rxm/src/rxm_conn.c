@@ -1304,6 +1304,11 @@ static ssize_t rxm_eq_sread(struct rxm_ep *rxm_ep, size_t len,
 	int once = 1;
 
 	do {
+		/* TODO convert this to poll + fi_eq_read so that we can grab
+		 * rxm_ep lock before reading the EQ. This is needed to avoid
+		 * processing events / error entries from closed MSG EPs. This
+		 * can be done only for non-Windows OSes as Windows doesn't
+		 * have poll for a generic file descriptor. */
 		rd = fi_eq_sread(rxm_ep->msg_eq, &entry->event, &entry->cm_entry,
 				 len, -1, 0);
 		if (rd >= 0)
@@ -1321,7 +1326,10 @@ static ssize_t rxm_eq_sread(struct rxm_ep *rxm_ep, size_t len,
 		return rd;
 	}
 
-	return rxm_eq_readerr(rxm_ep, entry);
+	ofi_ep_lock_acquire(&rxm_ep->util_ep);
+	rd = rxm_eq_readerr(rxm_ep, entry);
+	ofi_ep_lock_release(&rxm_ep->util_ep);
+	return rd;
 }
 
 static inline int rxm_conn_eq_event(struct rxm_ep *rxm_ep,
@@ -1372,7 +1380,11 @@ rxm_conn_auto_progress_eq(struct rxm_ep *rxm_ep, struct rxm_msg_eq_entry *entry)
 {
 	while (1) {
 		memset(entry, 0, RXM_MSG_EQ_ENTRY_SZ);
+
+		ofi_ep_lock_acquire(&rxm_ep->util_ep);
 		entry->rd = rxm_eq_read(rxm_ep, RXM_CM_ENTRY_SZ, entry);
+		ofi_ep_lock_release(&rxm_ep->util_ep);
+
 		if (OFI_UNLIKELY(!entry->rd || entry->rd == -FI_EAGAIN))
 			return FI_SUCCESS;
 		if (entry->rd < 0 &&
