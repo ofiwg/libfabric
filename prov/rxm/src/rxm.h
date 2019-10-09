@@ -150,7 +150,6 @@ enum rxm_cmap_signal {
 	FUNC(RXM_CMAP_IDLE),		\
 	FUNC(RXM_CMAP_CONNREQ_SENT),	\
 	FUNC(RXM_CMAP_CONNREQ_RECV),	\
-	FUNC(RXM_CMAP_CONNECTED_NOTIFY),\
 	FUNC(RXM_CMAP_CONNECTED),	\
 	FUNC(RXM_CMAP_SHUTDOWN),	\
 
@@ -190,8 +189,6 @@ struct rxm_cmap_peer {
 
 struct rxm_cmap_attr {
 	void 				*name;
-	/* user guarantee for serializing access to cmap objects */
-	uint8_t				serial_access;
 };
 
 struct rxm_cmap {
@@ -251,8 +248,6 @@ union rxm_cm_data {
 struct rxm_cmap_handle *rxm_cmap_key2handle(struct rxm_cmap *cmap, uint64_t key);
 int rxm_cmap_update(struct rxm_cmap *cmap, const void *addr, fi_addr_t fi_addr);
 
-void rxm_cmap_process_conn_notify(struct rxm_cmap *cmap,
-				  struct rxm_cmap_handle *handle);
 void rxm_cmap_process_reject(struct rxm_cmap *cmap,
 			     struct rxm_cmap_handle *handle,
 			     enum rxm_cmap_reject_reason cm_reject_reason);
@@ -694,9 +689,6 @@ struct rxm_conn {
 	struct dlist_entry sar_rx_msg_list;
 	struct dlist_entry sar_deferred_rx_msg_list;
 
-	/* This is saved MSG EP fid, that hasn't been closed during
-	 * handling of CONN_RECV in RXM_CMAP_CONNREQ_SENT for passive side */
-	struct fid_ep *saved_msg_ep;
 	uint32_t rndv_tx_credits;
 };
 
