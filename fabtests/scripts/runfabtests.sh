@@ -576,12 +576,12 @@ function main {
 	set_excludes
 
 	if [[ $1 == "quick" ]]; then
-		local -r tests="unit functional short multinode"
+		local -r tests="unit functional short"
 	elif [[ $1 == "verify" ]]; then
 		local -r tests="complex"
 		complex_cfg=$1
 	else
-		local -r tests=$(echo $1 | sed 's/all/unit,functional,standard,complex,multinode/g' | tr ',' ' ')
+		local -r tests=$(echo $1 | sed 's/all/unit,functional,standard,complex/g' | tr ',' ' ')
 		if [[ $1 == "all" ]]; then
 			complex_cfg=$1
 		fi
