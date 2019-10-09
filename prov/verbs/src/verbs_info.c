@@ -1374,11 +1374,9 @@ static struct fi_info *fi_ibv_get_passive_info(const struct fi_info *prov_info,
 	return info;
 }
 
-static int fi_ibv_get_matching_info(uint32_t version,
-				    const struct fi_info *hints,
-				    struct fi_info **info,
-				    const struct fi_info *verbs_info,
-				    uint8_t passive)
+int fi_ibv_get_matching_info(uint32_t version, const struct fi_info *hints,
+			     struct fi_info **info, const struct fi_info *verbs_info,
+			     uint8_t passive)
 {
 	const struct fi_info *check_info = verbs_info;
 	struct fi_info *fi, *tail;
@@ -1663,7 +1661,7 @@ static int fi_ibv_get_match_infos(uint32_t version, const char *node,
 	return FI_SUCCESS;
 }
 
-static void fi_ibv_alter_info(const struct fi_info *hints, struct fi_info *info)
+void fi_ibv_alter_info(const struct fi_info *hints, struct fi_info *info)
 {
 	struct fi_info *cur;
 

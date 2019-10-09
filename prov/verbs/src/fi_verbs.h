@@ -703,6 +703,11 @@ int fi_ibv_fi_to_rai(const struct fi_info *fi, uint64_t flags,
 		     struct rdma_addrinfo *rai);
 int fi_ibv_get_rdma_rai(const char *node, const char *service, uint64_t flags,
 			const struct fi_info *hints, struct rdma_addrinfo **rai);
+int fi_ibv_get_matching_info(uint32_t version, const struct fi_info *hints,
+			     struct fi_info **info, const struct fi_info *verbs_info,
+			     uint8_t passive);
+void fi_ibv_alter_info(const struct fi_info *hints, struct fi_info *info);
+
 struct verbs_ep_domain {
 	char			*suffix;
 	enum fi_ep_type		type;
