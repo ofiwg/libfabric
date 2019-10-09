@@ -1316,7 +1316,8 @@ static ssize_t rxm_eq_sread(struct rxm_ep *rxm_ep, size_t len,
 
 	if (rd != -FI_EAVAIL) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-			"Unable to fi_eq_sread: %zu\n", rd);
+			"unable to fi_eq_sread: %s (%zd)\n",
+			fi_strerror(-rd), -rd);
 		return rd;
 	}
 
