@@ -242,7 +242,11 @@ struct fi_ibv_eq_entry {
 	struct dlist_entry	item;
 	uint32_t		event;
 	size_t			len;
-	char 			eq_entry[0];
+	union {
+		char 			entry[0];
+		struct fi_eq_entry 	*eq_entry;
+		struct fi_eq_cm_entry	*cm_entry;
+	};
 };
 
 typedef int (*fi_ibv_trywait_func)(struct fid *fid);
@@ -290,6 +294,7 @@ struct fi_ibv_eq {
 int fi_ibv_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		   struct fid_eq **eq, void *context);
 int fi_ibv_eq_trywait(struct fi_ibv_eq *eq);
+void fi_ibv_eq_remove_events(struct fi_ibv_eq *eq, struct fid *fid);
 
 int fi_ibv_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		   struct fid_av **av, void *context);
