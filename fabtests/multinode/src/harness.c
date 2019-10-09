@@ -184,7 +184,7 @@ static int pm_conn_setup()
 	int sock,  ret;
 	int optval = 1;
 
-	sock = socket(AF_INET, SOCK_STREAM, 0);
+	sock = socket(pm_job.oob_server_addr.ss_family, SOCK_STREAM, 0);
 	if (sock < 0)
 		return -1;
 
