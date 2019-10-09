@@ -712,4 +712,15 @@ static inline int dlistfd_wait_avail(struct dlistfd_head *head, int timeout)
 	return ret ? ret : !dlistfd_empty(head);
 }
 
+static inline struct dlist_entry *
+dlistfd_remove_first_match(struct dlistfd_head *head, dlist_func_t *match,
+			   const void *arg)
+{
+	struct dlist_entry *entry =
+		dlist_remove_first_match(&head->list, match, arg);
+	if (entry)
+		dlistfd_reset(head);
+	return entry;
+}
+
 #endif /* _OFI_LIST_H_ */
