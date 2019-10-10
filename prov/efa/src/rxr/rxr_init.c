@@ -583,21 +583,21 @@ EFA_INI
 			"Enables using the mr cache and in-line registration instead of a bounce buffer for iov's larger than max_memcpy_size. Defaults to true. When disabled, only uses a bounce buffer.");
 	fi_param_define(&rxr_prov, "mr_cache_merge_regions", FI_PARAM_BOOL,
 			"Enables merging overlapping and adjacent memory registration regions. Defaults to true.");
-	fi_param_define(&rxr_prov, "mr_max_cached_count", FI_PARAM_INT,
+	fi_param_define(&rxr_prov, "mr_max_cached_count", FI_PARAM_SIZE_T,
 			"Sets the maximum number of memory registrations that can be cached at any time.");
-	fi_param_define(&rxr_prov, "mr_max_cached_size", FI_PARAM_INT,
+	fi_param_define(&rxr_prov, "mr_max_cached_size", FI_PARAM_SIZE_T,
 			"Sets the maximum amount of memory that cached memory registrations can hold onto at any time.");
-	fi_param_define(&rxr_prov, "max_memcpy_size", FI_PARAM_INT,
+	fi_param_define(&rxr_prov, "max_memcpy_size", FI_PARAM_SIZE_T,
 			"Threshold size switch between using memory copy into a pre-registered bounce buffer and memory registration on the user buffer. (Default: 4096)");
-	fi_param_define(&rxr_prov, "mtu_size", FI_PARAM_INT,
+	fi_param_define(&rxr_prov, "mtu_size", FI_PARAM_SIZE_T,
 			"Override the MTU size of the device.");
-	fi_param_define(&rxr_prov, "tx_size", FI_PARAM_INT,
+	fi_param_define(&rxr_prov, "tx_size", FI_PARAM_SIZE_T,
 			"Set the maximum number of transmit operations before the provider returns -FI_EAGAIN. For only the RDM endpoint, this parameter will cause transmit operations to be queued when this value is set higher than the default and the transmit queue is full.");
-	fi_param_define(&rxr_prov, "rx_size", FI_PARAM_INT,
+	fi_param_define(&rxr_prov, "rx_size", FI_PARAM_SIZE_T,
 			"Set the maximum number of receive operations before the provider returns -FI_EAGAIN.");
-	fi_param_define(&rxr_prov, "tx_iov_limit", FI_PARAM_INT,
+	fi_param_define(&rxr_prov, "tx_iov_limit", FI_PARAM_SIZE_T,
 			"Maximum transmit iov_limit.");
-	fi_param_define(&rxr_prov, "rx_iov_limit", FI_PARAM_INT,
+	fi_param_define(&rxr_prov, "rx_iov_limit", FI_PARAM_SIZE_T,
 			"Maximum receive iov_limit.");
 	fi_param_define(&rxr_prov, "rx_copy_unexp", FI_PARAM_BOOL,
 			"Enables the use of a separate pool of bounce-buffers to copy unexpected messages out of the pre-posted receive buffers. (Default: 1)");
