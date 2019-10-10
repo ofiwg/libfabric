@@ -47,6 +47,8 @@
 #include <rdma/fi_domain.h>
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_trigger.h>
+#include <rdma/fi_collective.h>
+
 
 /* Print fi_info and related structs, enums, OR_able flags, addresses.
  *
@@ -585,7 +587,6 @@ static void ofi_tostr_atomic_type(char *buf, enum fi_datatype type)
 	CASEENUMSTR(FI_DOUBLE_COMPLEX);
 	CASEENUMSTR(FI_LONG_DOUBLE);
 	CASEENUMSTR(FI_LONG_DOUBLE_COMPLEX);
-	CASEENUMSTR(FI_VOID);
 	default:
 		ofi_strcatf(buf, "Unknown");
 		break;
@@ -614,10 +615,24 @@ static void ofi_tostr_atomic_op(char *buf, enum fi_op op)
 	CASEENUMSTR(FI_CSWAP_GE);
 	CASEENUMSTR(FI_CSWAP_GT);
 	CASEENUMSTR(FI_MSWAP);
+	default:
+		ofi_strcatf(buf, "Unknown");
+		break;
+	}
+}
+
+static void ofi_tostr_collective_op(char *buf, enum fi_collective_op op)
+{
+	switch (op) {
 	CASEENUMSTR(FI_BARRIER);
 	CASEENUMSTR(FI_BROADCAST);
 	CASEENUMSTR(FI_ALLTOALL);
+	CASEENUMSTR(FI_ALLREDUCE);
 	CASEENUMSTR(FI_ALLGATHER);
+	CASEENUMSTR(FI_REDUCE_SCATTER);
+	CASEENUMSTR(FI_REDUCE);
+	CASEENUMSTR(FI_SCATTER);
+	CASEENUMSTR(FI_GATHER);
 	default:
 		ofi_strcatf(buf, "Unknown");
 		break;
@@ -760,6 +775,9 @@ char *DEFAULT_SYMVER_PRE(fi_tostr)(const void *data, enum fi_type datatype)
 		break;
 	case FI_TYPE_FID:
 		ofi_tostr_fid("fid: ", buf, data);
+		break;
+	case FI_TYPE_COLLECTIVE_OP:
+		ofi_tostr_collective_op(buf, *enumval);
 		break;
 	default:
 		ofi_strcatf(buf, "Unknown type");
