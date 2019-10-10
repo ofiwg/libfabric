@@ -101,6 +101,32 @@ static int ofi_find_core_name(char **names, const char *name)
 	return -1;
 }
 
+static void ofi_closest_prov_names(char *prov_name, char* miss_prov_name, int n)
+{
+	if (strncasecmp( prov_name, miss_prov_name, n ) == 0 ) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Instead misspelled provider: %s, you may want: %s?\n",
+			miss_prov_name, prov_name);
+	}
+}
+
+static void ofi_suggest_prov_names(char *name_to_match)
+{
+	struct ofi_prov *prov;
+	for (prov = prov_head; prov; prov = prov->next) {
+		if (strlen(prov->prov_name) != strlen(name_to_match)
+		    && !strncasecmp(prov->prov_name, name_to_match,
+				    strlen(name_to_match))) {
+			if (strlen(name_to_match) > 5)
+				ofi_closest_prov_names(prov->prov_name,
+						       name_to_match, 5);
+			else
+				ofi_closest_prov_names(prov->prov_name,
+						       name_to_match, 2);
+		}
+	}
+}
+
 static enum ofi_prov_type ofi_prov_type(const struct fi_provider *provider)
 {
 	const struct fi_prov_context *ctx;
@@ -469,6 +495,32 @@ static int lib_filter(const struct dirent *entry)
 }
 #endif
 
+static int verify_filter_names(char **names)
+{
+	int i, j;
+	char** split_names;
+	for (i = 0; names[i]; i++) {
+		split_names = ofi_split_and_alloc(names[i], ";", NULL);
+		if (!split_names) {
+			FI_WARN(&core_prov, FI_LOG_CORE,
+				"unable to parse given filter string\n");
+			return -FI_ENODATA;
+		}
+
+		for(j = 0; split_names[j]; j++) {
+			if(!ofi_getprov(split_names[j], strlen(split_names[j]))) {
+				FI_WARN(&core_prov, FI_LOG_CORE,
+					"provider %s is unknown, misspelled"
+					" or DL provider?\n", split_names[j]);
+				ofi_suggest_prov_names(split_names[j]);
+			}
+		}
+		ofi_free_string_array(split_names);
+	}
+
+	return FI_SUCCESS;
+}
+
 void ofi_free_filter(struct fi_filter *filter)
 {
 	ofi_free_string_array(filter->names);
@@ -485,10 +537,14 @@ void ofi_create_filter(struct fi_filter *filter, const char *raw_filter)
 		++raw_filter;
 	}
 
-	filter->names= ofi_split_and_alloc(raw_filter, ",", NULL);
+	filter->names = ofi_split_and_alloc(raw_filter, ",", NULL);
 	if (!filter->names)
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"unable to parse filter from: %s\n", raw_filter);
+
+	if(verify_filter_names(filter->names))
+		FI_WARN(&core_prov, FI_LOG_CORE,
+		        "unable to verify filter name\n");
 }
 
 #ifdef HAVE_LIBDL
