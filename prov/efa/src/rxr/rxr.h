@@ -1299,13 +1299,14 @@ ssize_t rxr_cq_post_cts(struct rxr_ep *ep,
 			struct rxr_rx_entry *rx_entry,
 			uint64_t size);
 
-int rxr_cq_handle_rx_completion(struct rxr_ep *ep,
-				struct fi_cq_data_entry *comp,
-				struct rxr_pkt_entry *pkt_entry,
-				struct rxr_rx_entry *rx_entry, bool is_local);
+void rxr_cq_write_rx_completion(struct rxr_ep *ep,
+				struct rxr_rx_entry *rx_entry);
+
+void rxr_cq_handle_rx_completion(struct rxr_ep *ep,
+				 struct rxr_pkt_entry *pkt_entry,
+				 struct rxr_rx_entry *rx_entry);
 
 void rxr_cq_write_tx_completion(struct rxr_ep *ep,
-				struct fi_cq_data_entry *comp,
 				struct rxr_tx_entry *tx_entry);
 
 ssize_t rxr_cq_recv_shm_large_message(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry);

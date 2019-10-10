@@ -516,18 +516,9 @@ static int rxr_ep_handle_unexp_match(struct rxr_ep *ep,
 
 	rxr_cq_recv_rts_data(ep, rx_entry, rts_hdr);
 
-	/*
-	 * TODO: Unsure how to handle fi_cq_msg_entry when writing completion
-	 * events in the unexpected path. Right now this field is unused. If
-	 * that changes we'll need to parse the flags as we get completion
-	 * events from the provider in the recv path and save the flags in the
-	 * rx_entry for the unexp message path to use when the app calls recv.
-	 */
 	if (rx_entry->total_len - rx_entry->bytes_done == 0) {
-		ret = rxr_cq_handle_rx_completion(ep, NULL,
-						  pkt_entry, rx_entry, is_local);
-		if (!ret)
-			rxr_release_rx_entry(ep, rx_entry);
+		rxr_cq_handle_rx_completion(ep, pkt_entry, rx_entry);
+		rxr_release_rx_entry(ep, rx_entry);
 		return 0;
 	}
 
