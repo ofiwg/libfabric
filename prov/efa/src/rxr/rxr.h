@@ -208,6 +208,8 @@ struct rxr_env {
 	int rx_copy_ooo;
 	int max_timeout;
 	int timeout_interval;
+	size_t efa_cq_read_size;
+	size_t shm_cq_read_size;
 };
 
 enum rxr_lower_ep_type {

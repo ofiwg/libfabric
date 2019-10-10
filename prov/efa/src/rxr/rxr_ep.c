@@ -3031,11 +3031,11 @@ static void rxr_ep_progress_internal(struct rxr_ep *ep)
 	VALGRIND_MAKE_MEM_DEFINED(&cq_entry, sizeof(struct fi_cq_data_entry));
 
 	// Poll the EFA completion queue
-	rxr_ep_poll_cq(ep, ep->rdm_cq, 50, 0);
+	rxr_ep_poll_cq(ep, ep->rdm_cq, rxr_env.efa_cq_read_size, 0);
 
 	// Poll the SHM completion queue if enabled
 	if (rxr_env.enable_shm_transfer)
-		rxr_ep_poll_cq(ep, ep->rdm_cq, 50, 1);
+		rxr_ep_poll_cq(ep, ep->shm_cq, rxr_env.shm_cq_read_size, 1);
 
 	ret = rxr_ep_bulk_post_recv(ep);
 
