@@ -496,7 +496,7 @@ fi_ibv_eq_xrc_rej_event(struct fi_ibv_eq *eq, struct rdma_cm_event *cma_event)
 	return state == FI_IBV_XRC_ORIG_CONNECTING ? FI_SUCCESS : -FI_EAGAIN;
 }
 
-/* Caller must hold eq:lock */
+/* Caller must hold eq:lock */                                                                                  
 static inline int
 fi_ibv_eq_xrc_cm_err_event(struct fi_ibv_eq *eq,
                            struct rdma_cm_event *cma_event)
@@ -852,85 +852,11 @@ out:
 	return ret;
 }
 
-static int
-fi_ibv_read_async_event(struct fi_ibv_domain *domain,
-                        struct fi_ibv_eq *eq)
-{
-	struct ibv_async_event async_event;
-	int ret = 0;
-	int error = 0;
-
-	if (ibv_get_async_event(domain->verbs, &async_event) != 0)
-		return 0;
-
-	switch (async_event.event_type) {
-	/* Errors should be reported */
-	case IBV_EVENT_CQ_ERR: /* CQ is in error (CQ overrun) */
-		error = -FI_EOVERRUN;
-		break;
-
-	case IBV_EVENT_SRQ_ERR: /* Error occurred on an SRQ */
-	/* fallthrough */
-	case IBV_EVENT_PORT_ERR: /* Link became unavailable on a port */
-	/* fallthrough */
-	case IBV_EVENT_PATH_MIG_ERR: /* A connection failed to migrate to the alternate path */
-	/* fallthrough */
-	case IBV_EVENT_DEVICE_FATAL: /* CA is in FATAL state */
-		error = -FI_EFAULT;
-		break;
-
-	/* Ignored events */
-	case IBV_EVENT_COMM_EST: /* Communication was established on a QP */
-	/* fallthrough */
-	case IBV_EVENT_SQ_DRAINED: /* Send Queue was drained of outstanding messages in progress */
-	/* fallthrough */
-	case IBV_EVENT_PATH_MIG: /* A connection has migrated to the alternate path */
-	/* fallthrough */
-	case IBV_EVENT_QP_LAST_WQE_REACHED: /* Last WQE Reached on a QP associated with an SRQ */
-	/* fallthrough */
-	case IBV_EVENT_SRQ_LIMIT_REACHED: /* SRQ limit was reached */
-	/* fallthrough */
-	case IBV_EVENT_PORT_ACTIVE: /* Link became active on a port */
-	/* fallthrough */
-	case IBV_EVENT_LID_CHANGE: /* LID was changed on a port */
-	/* fallthrough */
-	case IBV_EVENT_PKEY_CHANGE: /* P_Key table was changed on a port */
-	/* fallthrough */
-	case IBV_EVENT_SM_CHANGE: /* SM was changed on a port */
-	/* fallthrough */
-	case IBV_EVENT_CLIENT_REREGISTER: /* SM sent a CLIENT_REREGISTER request to a port */
-	/* fallthrough */
-	case IBV_EVENT_GID_CHANGE: /* GID table was changed on a port */
-	/* fallthrough */
-	default:
-		ret = 0;
-		goto ack_async_event;
-	}
-
-	VERBS_DBG(FI_LOG_EQ, "Reporting async event to EQ: %s\n",
-	          ibv_event_type_str(async_event.event_type));
-
-	fastlock_acquire(&eq->lock);
-	eq->err.err = error;
-	eq->err.fid = &domain->util_domain.domain_fid.fid;
-	eq->err.prov_errno = async_event.event_type;
-	fastlock_release(&eq->lock);
-
-	ret = 1;
-
-ack_async_event:
-	ibv_ack_async_event(&async_event);
-
-	return ret;
-}
-
 static ssize_t
-fi_ibv_eq_read_internal(struct fid_eq *eq_fid, int timeout,
-               uint32_t *event, void *buf, size_t len, uint64_t flags)
+fi_ibv_eq_read(struct fid_eq *eq_fid, uint32_t *event,
+	       void *buf, size_t len, uint64_t flags)
 {
-	struct fi_ibv_domain *domain = NULL;
 	struct fi_ibv_eq *eq;
-	struct epoll_event events;
 	struct rdma_cm_event *cma_event;
 	ssize_t ret = 0;
 
@@ -942,75 +868,59 @@ fi_ibv_eq_read_internal(struct fid_eq *eq_fid, int timeout,
 	if ((ret = fi_ibv_eq_read_event(eq, event, buf, len, flags)))
 		return ret;
 
-	while (1) {
-		/* Non-blocking call to retrieve IB async events */
-		if (domain && fi_ibv_read_async_event(domain, eq)) {
-			return -FI_EAVAIL;
-		}
-
-		if (eq->channel) {
+	if (eq->channel) {
 next_event:
-			fastlock_acquire(&eq->lock);
-			ret = rdma_get_cm_event(eq->channel, &cma_event);
-			if (ret) {
-				fastlock_release(&eq->lock);
-
-				if (-errno == -FI_EAGAIN)
-					goto epoll_wait;
-				else
-					return -errno;
-			}
-
-			ret = fi_ibv_eq_cm_process_event(eq, cma_event, event,
-							 (struct fi_eq_cm_entry *)buf,
-							 len);
+		fastlock_acquire(&eq->lock);
+		ret = rdma_get_cm_event(eq->channel, &cma_event);
+		if (ret) {
 			fastlock_release(&eq->lock);
-			/* If the CM event was handled internally (e.g. XRC), continue
-			 * to process events. */
-			if (ret == -FI_EAGAIN)
-				goto next_event;
-
-			if (flags & FI_PEEK)
-				ret = fi_ibv_eq_write_event(eq, *event, buf, ret);
-
-			return ret;
-		}
-
-epoll_wait:
-		ret = epoll_wait(eq->epfd, &events, 1, timeout);
-		if (ret == 0)
-			return -FI_EAGAIN;
-		else if (ret < 0)
 			return -errno;
-
-		assert(ret > 0);
-		if (events.data.ptr) {
-			if (!domain) {
-				/* Update the domain before retrying if it's not yet set */
-				domain = events.data.ptr;
-			} else
-				assert(domain == events.data.ptr);
 		}
-	}
-}
 
-static ssize_t
-fi_ibv_eq_read(struct fid_eq *eq_fid, uint32_t *event, void *buf,
-               size_t len, uint64_t flags)
-{
-	return fi_ibv_eq_read_internal(eq_fid, 0, event, buf, len, flags);
+		ret = fi_ibv_eq_cm_process_event(eq, cma_event, event,
+						 (struct fi_eq_cm_entry *)buf,
+						 len);
+		fastlock_release(&eq->lock);
+		/* If the CM event was handled internally (e.g. XRC), continue
+		 * to process events. */
+		if (ret == -FI_EAGAIN)
+			goto next_event;
+
+		if (flags & FI_PEEK)
+			ret = fi_ibv_eq_write_event(eq, *event, buf, ret);
+
+		return ret;
+	}
+
+	return -FI_EAGAIN;
 }
 
 static ssize_t
 fi_ibv_eq_sread(struct fid_eq *eq_fid, uint32_t *event,
 		void *buf, size_t len, int timeout, uint64_t flags)
 {
-	return fi_ibv_eq_read_internal(eq_fid, timeout, event, buf, len, flags);
+	struct fi_ibv_eq *eq;
+	struct epoll_event events[2];
+	ssize_t ret;
+
+	eq = container_of(eq_fid, struct fi_ibv_eq, eq_fid.fid);
+
+	while (1) {
+		ret = fi_ibv_eq_read(eq_fid, event, buf, len, flags);
+		if (ret && (ret != -FI_EAGAIN))
+			return ret;
+
+		ret = epoll_wait(eq->epfd, events, 2, timeout);
+		if (ret == 0)
+			return -FI_EAGAIN;
+		else if (ret < 0)
+			return -errno;
+	};
 }
 
 static const char *
 fi_ibv_eq_strerror(struct fid_eq *eq, int prov_errno, const void *err_data,
-                   char *buf, size_t len)
+		   char *buf, size_t len)
 {
 	if (buf && len)
 		strncpy(buf, strerror(prov_errno), len);
@@ -1055,8 +965,6 @@ static int fi_ibv_eq_close(fid_t fid)
 
 	eq = container_of(fid, struct fi_ibv_eq, eq_fid.fid);
 	/* TODO: use util code, if possible, and add ref counting */
-	if (ofi_atomic_get32(&eq->ref))
-		return -FI_EBUSY;
 
 	free(eq->err.err_data);
 
@@ -1101,7 +1009,6 @@ int fi_ibv_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	if (!_eq)
 		return -ENOMEM;
 
-	ofi_atomic_initialize32(&_eq->ref, 0);
 	_eq->fab = container_of(fabric, struct fi_ibv_fabric,
 				util_fabric.fabric_fid);
 
@@ -1181,38 +1088,3 @@ err0:
 	return ret;
 }
 
-int fi_ibv_eq_attach_domain(struct fi_ibv_eq *eq, struct fi_ibv_domain *domain)
-{
-	int async_fd = domain->verbs->async_fd;
-	struct epoll_event event;
-	int ret;
-
-	ret = fi_fd_nonblock(async_fd);
-	if (ret)
-		return ret;
-
-	memset(&event, 0, sizeof(event));
-	event.events = EPOLLIN;
-	event.data.ptr = domain;
-
-	if (epoll_ctl(eq->epfd, EPOLL_CTL_ADD, async_fd, &event))
-		return -errno;
-
-	domain->eq = eq;
-	ofi_atomic_inc32(&eq->ref);
-	return 0;
-}
-
-int fi_ibv_eq_detach_domain(struct fi_ibv_domain *domain)
-{
-	int async_fd = domain->verbs->async_fd;
-	struct fi_ibv_eq *eq = domain->eq;
-
-	if (epoll_ctl(eq->epfd, EPOLL_CTL_DEL, async_fd, NULL))
-		return -errno;
-
-	domain->eq = NULL;
-	ofi_atomic_dec32(&eq->ref);
-
-	return 0;
-}
