@@ -2396,7 +2396,12 @@ static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 	struct rxr_av *av;
 	struct util_cntr *cntr;
 	struct util_eq *eq;
+	struct dlist_entry *ep_list_first_entry;
+	struct util_ep *util_ep;
+	struct rxr_ep *rxr_first_ep;
+	struct rxr_peer *first_ep_peer, *peer;
 	int ret = 0;
+	size_t i;
 
 	switch (bfid->fclass) {
 	case FI_CLASS_AV:
@@ -2411,13 +2416,6 @@ static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		if (ret)
 			return ret;
 
-		/* Bind shm provider endpoint & shm av */
-		if (rxr_env.enable_shm_transfer) {
-			ret = fi_ep_bind(rxr_ep->shm_ep, &av->shm_rdm_av->fid, flags);
-			if (ret)
-				return ret;
-		}
-
 		rxr_ep->peer = calloc(av->util_av.count,
 				      sizeof(struct rxr_peer));
 		if (!rxr_ep->peer)
@@ -2428,6 +2426,36 @@ static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		if (!rxr_ep->robuf_fs)
 			return -FI_ENOMEM;
 
+		/* Bind shm provider endpoint & shm av */
+		if (rxr_env.enable_shm_transfer) {
+			ret = fi_ep_bind(rxr_ep->shm_ep, &av->shm_rdm_av->fid, flags);
+			if (ret)
+				return ret;
+
+			/*
+			 * We always update the new added EP's local information with the first
+			 * bound EP. The if (ep_list_first_entry->next) check here is to skip the
+			 * update for the first bound EP.
+			 */
+			ep_list_first_entry = av->util_av.ep_list.next;
+			if (ep_list_first_entry->next) {
+				util_ep = container_of(ep_list_first_entry, struct util_ep, av_entry);
+				rxr_first_ep = container_of(util_ep, struct rxr_ep, util_ep);
+
+				/*
+				 * Copy the entire peer array, because we may not be able to make the
+				 * assumption that insertions are always indexed in order in the future.
+				 */
+				for (i = 0; i <= av->util_av.count; i++) {
+					first_ep_peer = rxr_ep_get_peer(rxr_first_ep, i);
+					if (first_ep_peer->is_local) {
+						peer = rxr_ep_get_peer(rxr_ep, i);
+						peer->shm_fiaddr = first_ep_peer->shm_fiaddr;
+						peer->is_local = 1;
+					}
+				}
+			}
+		}
 		break;
 	case FI_CLASS_CQ:
 		cq = container_of(bfid, struct util_cq, cq_fid.fid);
