@@ -2971,34 +2971,23 @@ static inline void rxr_ep_check_peer_backoff_timer(struct rxr_ep *ep)
 	}
 }
 
-static void rxr_ep_progress_internal(struct rxr_ep *ep)
+static inline void rxr_ep_poll_cq(struct rxr_ep *ep,
+                                  struct fid_cq *cq,
+                                  size_t cqe_to_process,
+                                  bool is_shm_cq)
 {
-	struct fi_cq_data_entry cq_entry, shm_cq_entry;
-	struct rxr_rx_entry *rx_entry;
-	struct rxr_tx_entry *tx_entry;
-	struct dlist_entry *tmp;
+	struct fi_cq_data_entry cq_entry;
 	fi_addr_t src_addr;
-	fi_addr_t shm_src_addr;
-	ssize_t ret = 1, shm_ret = 1;
+	ssize_t ret;
 	int i;
 
-	rxr_ep_check_available_data_bufs_timer(ep);
-
-	VALGRIND_MAKE_MEM_DEFINED(&cq_entry, sizeof(struct fi_cq_data_entry));
-	VALGRIND_MAKE_MEM_DEFINED(&shm_cq_entry, sizeof(struct fi_cq_data_entry));
-
-	for (i = 0; rxr_env.enable_shm_transfer ? (ret > 0 || shm_ret > 0) : (ret > 0) && i < 100; i++) {
-		if (ep->core_caps & FI_SOURCE) {
-			ret = fi_cq_readfrom(ep->rdm_cq, &cq_entry, 1, &src_addr);
-		} else {
-			ret = fi_cq_read(ep->rdm_cq, &cq_entry, 1);
-			src_addr = FI_ADDR_NOTAVAIL;
-		}
+	for (i = 0; i < cqe_to_process; i++) {
+		ret = fi_cq_readfrom(cq, &cq_entry, 1, &src_addr);
 
 		if (ret == -FI_EAGAIN)
-			goto poll_shm_cq;
+			return;
 
-		if (OFI_UNLIKELY(ret < 0 && ret != -FI_EAGAIN)) {
+		if (OFI_UNLIKELY(ret < 0)) {
 			if (rxr_cq_handle_cq_error(ep, ret))
 				assert(0 &&
 				       "error writing error cq entry after reading from cq");
@@ -3006,53 +2995,47 @@ static void rxr_ep_progress_internal(struct rxr_ep *ep)
 			return;
 		}
 
-		if (ret > 0) {
-			if (cq_entry.flags & FI_SEND) {
+		if (OFI_UNLIKELY(ret == 0))
+			return;
+
+		if (cq_entry.flags & (FI_SEND | FI_READ | FI_WRITE)) {
 #if ENABLE_DEBUG
+			if (!is_shm_cq)
 				ep->send_comps++;
 #endif
-				rxr_cq_handle_pkt_send_completion(ep, &cq_entry);
-			} else if (cq_entry.flags & FI_RECV) {
-				rxr_cq_handle_pkt_recv_completion(ep, &cq_entry, src_addr, 0);
+			rxr_cq_handle_pkt_send_completion(ep, &cq_entry);
+		} else if (cq_entry.flags & (FI_RECV | FI_REMOTE_CQ_DATA)) {
+			rxr_cq_handle_pkt_recv_completion(ep, &cq_entry,
+			                                  src_addr, is_shm_cq);
 #if ENABLE_DEBUG
+			if (!is_shm_cq)
 				ep->recv_comps++;
 #endif
-			} else {
-				FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
-					"Unhandled cq type\n");
-				assert(0 && "Unhandled cq type");
-			}
-		}
-
-poll_shm_cq:
-		if (rxr_env.enable_shm_transfer) {
-			shm_ret = fi_cq_readfrom(ep->shm_cq, &shm_cq_entry, 1, &shm_src_addr);
-			shm_src_addr = FI_ADDR_NOTAVAIL;
-
-			if (ret == -FI_EAGAIN && shm_ret == -FI_EAGAIN)
-				break;
-
-			if (OFI_UNLIKELY(shm_ret < 0 && shm_ret != -FI_EAGAIN)) {
-				if (rxr_cq_handle_cq_error(ep, shm_ret))
-					assert(0 &&
-					       "error writing error cq entry after reading from shm cq");
-				rxr_ep_bulk_post_recv(ep);
-				return;
-			}
-
-			if (shm_ret > 0) {
-				if (shm_cq_entry.flags & (FI_SEND | FI_READ | FI_WRITE))
-					rxr_cq_handle_pkt_send_completion(ep, &shm_cq_entry);
-				else if (shm_cq_entry.flags & (FI_RECV | FI_REMOTE_CQ_DATA)) {
-					rxr_cq_handle_pkt_recv_completion(ep, &shm_cq_entry, shm_src_addr, 1);
-				} else {
-					FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
-						"Unhandled shm cq type\n");
-					assert(0 && "Unhandled shm cq type");
-				}
-			}
+		} else {
+			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+				"Unhandled cq type\n");
+			assert(0 && "Unhandled cq type");
 		}
 	}
+}
+
+static void rxr_ep_progress_internal(struct rxr_ep *ep)
+{
+	struct rxr_rx_entry *rx_entry;
+	struct rxr_tx_entry *tx_entry;
+	struct dlist_entry *tmp;
+	ssize_t ret;
+
+	rxr_ep_check_available_data_bufs_timer(ep);
+
+	VALGRIND_MAKE_MEM_DEFINED(&cq_entry, sizeof(struct fi_cq_data_entry));
+
+	// Poll the EFA completion queue
+	rxr_ep_poll_cq(ep, ep->rdm_cq, 50, 0);
+
+	// Poll the SHM completion queue if enabled
+	if (rxr_env.enable_shm_transfer)
+		rxr_ep_poll_cq(ep, ep->rdm_cq, 50, 1);
 
 	ret = rxr_ep_bulk_post_recv(ep);
 
