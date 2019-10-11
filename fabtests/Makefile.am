@@ -83,17 +83,19 @@ nobase_dist_config_DATA = \
         test_configs/tcp/tcp.exclude \
         test_configs/verbs/all.test \
         test_configs/verbs/quick.test \
-	test_configs/verbs/exclude \
+	test_configs/verbs/verbs.exclude \
 	test_configs/usnic/all.test \
 	test_configs/usnic/quick.test \
 	test_configs/psm/all.test \
 	test_configs/psm2/all.test \
 	test_configs/psm2/verify.test \
 	test_configs/psm2/psm2.exclude \
-	test_configs/ofi_rxm/verbs/all.test \
-	test_configs/ofi_rxm/verbs/exclude \
-	test_configs/ofi_rxd/ofi_rxd.exclude \
+	test_configs/ofi_rxm/tcp.test \
+	test_configs/ofi_rxm/verbs.test \
+	test_configs/ofi_rxm/ofi_rxm.exclude \
 	test_configs/ofi_rxd/udp.test \
+	test_configs/ofi_rxd/verbs.test \
+	test_configs/ofi_rxd/ofi_rxd.exclude \
 	test_configs/shm/all.test \
 	test_configs/shm/shm.exclude \
 	test_configs/shm/quick.test \
