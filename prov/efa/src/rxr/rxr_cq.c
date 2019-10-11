@@ -693,8 +693,8 @@ ssize_t rxr_cq_recv_shm_large_message(struct rxr_ep *ep, struct rxr_rx_entry *rx
 	struct rxr_pkt_entry *pkt_entry;
 	struct rxr_rma_context_pkt *rma_context_pkt;
 	struct fi_msg_rma msg;
-	struct iovec *msg_iov;
-	struct fi_rma_iov *rma_iov;
+	struct iovec msg_iov[RXR_IOV_LIMIT];
+	struct fi_rma_iov rma_iov[RXR_IOV_LIMIT];
 	fi_addr_t src_shm_fiaddr;
 	uint64_t remain_len;
 	struct rxr_peer *peer;
@@ -719,8 +719,6 @@ ssize_t rxr_cq_recv_shm_large_message(struct rxr_ep *ep, struct rxr_rx_entry *rx
 
 	memset(&msg, 0, sizeof(msg));
 
-	msg_iov = (struct iovec *)malloc(rx_entry->iov_count * sizeof(struct iovec));
-	rma_iov = (struct fi_rma_iov *)malloc(sizeof(struct fi_rma_iov) * rx_entry->rma_iov_count);
 	remain_len = rx_entry->total_len;
 
 	for (i = 0; i < rx_entry->rma_iov_count; i++) {

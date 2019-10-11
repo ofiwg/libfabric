@@ -58,7 +58,6 @@ static int rxr_domain_close(fid_t fid)
 {
 	int ret;
 	struct rxr_domain *rxr_domain;
-	struct rxr_mr_key_entry *curr_mr_key_entry, *tmp;
 
 	rxr_domain = container_of(fid, struct rxr_domain,
 				  util_domain.domain_fid.fid);
@@ -75,11 +74,6 @@ static int rxr_domain_close(fid_t fid)
 		ret = fi_close(&rxr_domain->shm_domain->fid);
 		if (ret)
 			return ret;
-
-		HASH_ITER(hh, rxr_domain->mr_key_map, curr_mr_key_entry, tmp) {
-			HASH_DEL(rxr_domain->mr_key_map, curr_mr_key_entry);
-			free(curr_mr_key_entry);
-		}
 	}
 
 	free(rxr_domain);
@@ -133,6 +127,10 @@ static struct fi_ops rxr_mr_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
+/*
+ * The mr key generated in lower EFA registration will be used in SHM
+ * registration and mr_map in an unified way
+ */
 int rxr_mr_regattr(struct fid *domain_fid, const struct fi_mr_attr *attr,
 		   uint64_t flags, struct fid_mr **mr)
 {
@@ -140,8 +138,7 @@ int rxr_mr_regattr(struct fid *domain_fid, const struct fi_mr_attr *attr,
 	struct fi_mr_attr *core_attr;
 	struct fi_mr_attr *shm_attr;
 	struct rxr_mr *rxr_mr;
-	struct rxr_mr_key_entry *mr_key_entry;
-	uint64_t user_attr_access;
+	uint64_t user_attr_access, core_attr_access;
 	int ret;
 
 	rxr_domain = container_of(domain_fid, struct rxr_domain,
@@ -157,7 +154,8 @@ int rxr_mr_regattr(struct fid *domain_fid, const struct fi_mr_attr *attr,
 
 	/* discard const qualifier to override access registered with EFA */
 	core_attr = (struct fi_mr_attr *)attr;
-	core_attr->access = FI_SEND | FI_RECV;
+	core_attr_access = FI_SEND | FI_RECV;
+	core_attr->access = core_attr_access;
 
 	ret = fi_mr_regattr(rxr_domain->rdm_domain, core_attr, flags,
 			    &rxr_mr->msg_mr);
@@ -177,20 +175,10 @@ int rxr_mr_regattr(struct fid *domain_fid, const struct fi_mr_attr *attr,
 	rxr_mr->domain = rxr_domain;
 	*mr = &rxr_mr->mr_fid;
 
-	assert(rxr_mr->mr_fid.key != FI_KEY_NOTAVAIL);
-	ret = ofi_mr_map_insert(&rxr_domain->util_domain.mr_map, attr,
-				&rxr_mr->mr_fid.key, mr);
-	if (ret) {
-		FI_WARN(&rxr_prov, FI_LOG_MR,
-			"Unable to add MR to map buf (%s): %p len: %zu\n",
-			fi_strerror(-ret), attr->mr_iov->iov_base,
-			attr->mr_iov->iov_len);
-		goto err;
-	}
-
-	/*call shm provider to register memory */
+	/* Call shm provider to register memory */
 	if (rxr_env.enable_shm_transfer) {
 		shm_attr->access = user_attr_access;
+		shm_attr->requested_key = rxr_mr->mr_fid.key;
 		ret = fi_mr_regattr(rxr_domain->shm_domain, shm_attr, flags,
 				    &rxr_mr->shm_msg_mr);
 		if (ret) {
@@ -198,16 +186,22 @@ int rxr_mr_regattr(struct fid *domain_fid, const struct fi_mr_attr *attr,
 				"Unable to register shm MR buf (%s): %p len: %zu\n",
 				fi_strerror(-ret), attr->mr_iov->iov_base,
 				attr->mr_iov->iov_len);
+			fi_close(&rxr_mr->msg_mr->fid);
 			goto err;
 		}
+	}
 
-		HASH_FIND(hh, rxr_domain->mr_key_map, &rxr_mr->mr_fid.key, sizeof(uint64_t), mr_key_entry);
-		if (!mr_key_entry) {
-			mr_key_entry = calloc(1, sizeof(*mr_key_entry));
-			mr_key_entry->rdm_mr_key = rxr_mr->mr_fid.key;
-			mr_key_entry->shm_mr_key = rxr_mr->shm_msg_mr->key;
-			HASH_ADD(hh, rxr_domain->mr_key_map, rdm_mr_key, sizeof(uint64_t), mr_key_entry);
-		}
+	assert(rxr_mr->mr_fid.key != FI_KEY_NOTAVAIL);
+	core_attr->requested_key = rxr_mr->mr_fid.key;
+	core_attr->access = core_attr_access;
+	ret = ofi_mr_map_insert(&rxr_domain->util_domain.mr_map, core_attr,
+				&rxr_mr->mr_fid.key, mr);
+	if (ret) {
+		FI_WARN(&rxr_prov, FI_LOG_MR,
+			"Unable to add MR to map buf (%s): %p len: %zu\n",
+			fi_strerror(-ret), attr->mr_iov->iov_base,
+			attr->mr_iov->iov_len);
+		goto err;
 	}
 
 	return 0;
@@ -319,14 +313,11 @@ int rxr_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	rxr_domain->do_progress = 0;
 
 	/*
-	 * ofi_domain_init() would have stored the RxR mr_modes in the map, but
-	 * we need the rbtree insertions and lookups to use the lower-provider
-	 * specific key, since the latter can not support application keys
-	 * (FI_MR_PROV_KEY only). Storing the lower provider's mode in the map
-	 * instead.
+	 * ofi_domain_init() would have stored the RxR mr_modes in the mr_map, but
+	 * we need the rbtree insertions and lookups to use EFA provider's
+	 * specific key, so unset the FI_MR_PROV_KEY bit for mr_map.
 	 */
-	rxr_domain->util_domain.mr_map.mode |=
-				OFI_MR_BASIC_MAP | FI_MR_LOCAL | FI_MR_BASIC;
+	rxr_domain->util_domain.mr_map.mode &= ~FI_MR_PROV_KEY;
 
 	*domain = &rxr_domain->util_domain.domain_fid;
 	(*domain)->fid.ops = &rxr_domain_fi_ops;

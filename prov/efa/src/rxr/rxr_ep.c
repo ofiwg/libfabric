@@ -1576,24 +1576,11 @@ static size_t rxr_ep_post_shm_rma(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx
 	struct rxr_pkt_entry *pkt_entry;
 	struct fi_msg_rma msg;
 	struct rxr_rma_context_pkt *rma_context_pkt;
-	struct rxr_domain *rxr_domain;
-	struct rxr_mr_key_entry *mr_key_entry;
 	struct rxr_peer *peer;
 	fi_addr_t shm_fiaddr;
-	int ret, i;
+	int ret;
 
 	tx_entry->state = RXR_TX_SHM_RMA;
-	rxr_domain = rxr_ep_domain(rxr_ep);
-	for (i = 0; i < tx_entry->rma_iov_count; i++) {
-		HASH_FIND(hh, rxr_domain->mr_key_map, &tx_entry->rma_iov[i].key, sizeof(uint64_t), mr_key_entry);
-		if (mr_key_entry) {
-			tx_entry->rma_iov[i].key = mr_key_entry->shm_mr_key;
-		} else {
-			FI_WARN(&rxr_prov, FI_LOG_MR, "Unable to find shm MR key corresponding to efa MR key (%ld)\n",
-				tx_entry->rma_iov[i].key);
-			return -FI_EINVAL;
-		}
-	}
 
 	peer = rxr_ep_get_peer(rxr_ep, tx_entry->addr);
 	shm_fiaddr = peer->shm_fiaddr;
