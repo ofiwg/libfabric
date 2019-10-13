@@ -1730,7 +1730,8 @@ shm_rts:
 
 	tx_entry->bytes_sent += data_sent;
 
-	if (!(efa_mr_cache_enable && tx_entry->total_len > data_sent))
+	if ((rxr_env.enable_shm_transfer && peer->is_local) ||
+	    !(efa_mr_cache_enable && tx_entry->total_len > data_sent))
 		return ret;
 
 	/* Set the iov index and iov offset from bytes sent */
