@@ -103,7 +103,7 @@ int rxr_cq_handle_rx_error(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
 		dlist_remove(&rx_entry->rx_pending_entry);
 #endif
 		break;
-	case RXR_RX_QUEUED_CTS:
+	case RXR_RX_QUEUED_CTRL:
 	case RXR_RX_QUEUED_CTS_RNR:
 	case RXR_RX_QUEUED_SHM_LARGE_READ:
 	case RXR_RX_QUEUED_EOR:
@@ -187,7 +187,7 @@ int rxr_cq_handle_tx_error(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	case RXR_TX_SEND:
 		dlist_remove(&tx_entry->entry);
 		break;
-	case RXR_TX_QUEUED_RTS:
+	case RXR_TX_QUEUED_CTRL:
 	case RXR_TX_QUEUED_SHM_RMA:
 	case RXR_TX_QUEUED_RTS_RNR:
 	case RXR_TX_QUEUED_DATA_RNR:
@@ -497,46 +497,6 @@ static void rxr_cq_post_connack(struct rxr_ep *ep,
 	}
 
 	return;
-}
-
-ssize_t rxr_cq_post_cts(struct rxr_ep *ep,
-			struct rxr_rx_entry *rx_entry,
-			uint64_t size)
-{
-	ssize_t ret;
-	struct rxr_pkt_entry *pkt_entry;
-	int credits;
-
-	if (OFI_UNLIKELY(ep->posted_bufs_efa == 0 || ep->available_data_bufs == 0))
-		return -FI_EAGAIN;
-
-	pkt_entry = rxr_get_pkt_entry(ep, ep->tx_pkt_efa_pool);
-
-	if (OFI_UNLIKELY(!pkt_entry))
-		return -FI_EAGAIN;
-
-	rxr_ep_init_cts_pkt_entry(ep, rx_entry, pkt_entry, size, &credits);
-
-	ret = rxr_ep_send_pkt(ep, pkt_entry, rx_entry->addr);
-	if (OFI_UNLIKELY(ret))
-		goto release_pkt;
-
-	rx_entry->window = rxr_get_cts_hdr(pkt_entry->pkt)->window;
-	ep->available_data_bufs -= credits;
-
-	/*
-	 * Set a timer if available_bufs is exhausted. We may encounter a
-	 * scenario where a peer has stopped responding so we need a fallback
-	 * to replenish the credits.
-	 */
-	if (OFI_UNLIKELY(ep->available_data_bufs == 0))
-		ep->available_data_bufs_ts = fi_gettime_us();
-
-	return ret;
-
-release_pkt:
-	rxr_release_tx_pkt_entry(ep, pkt_entry);
-	return ret;
 }
 
 void rxr_cq_write_rx_completion(struct rxr_ep *ep,
@@ -901,10 +861,10 @@ static int rxr_cq_process_rts(struct rxr_ep *ep,
 	rts_hdr = rxr_get_rts_hdr(pkt_entry->pkt);
 
 	if (rts_hdr->flags & RXR_READ_REQ)
-		return rxr_rma_process_read_rts(ep, pkt_entry);
+		return rxr_rma_proc_read_rts(ep, pkt_entry);
 
 	if (rts_hdr->flags & RXR_WRITE)
-		return rxr_rma_process_write_rts(ep, pkt_entry);
+		return rxr_rma_proc_write_rts(ep, pkt_entry);
 
 	return rxr_cq_process_msg_rts(ep, pkt_entry);
 }
@@ -993,7 +953,6 @@ void rxr_cq_handle_shm_rma_write_data(struct rxr_ep *ep, struct fi_cq_data_entry
 	int ret;
 
 	struct util_cq *rx_cq = ep->util_ep.rx_cq;
-
 	rx_entry = rxr_ep_get_rx_entry(ep, NULL, 0, 0, 0, NULL, src_addr, 0, 0);
 	rxr_copy_shm_cq_entry(&rx_entry->cq_entry, shm_comp);
 
@@ -1183,7 +1142,7 @@ int rxr_cq_handle_rts_with_data(struct rxr_ep *ep,
 		rx_entry->credit_request = rts_hdr->credit_request;
 	else
 		rx_entry->credit_request = rxr_env.tx_min_credits;
-	ret = rxr_ep_post_cts_or_queue(ep, rx_entry, bytes_left);
+	ret = rxr_ep_post_ctrl_or_queue(ep, RXR_RX_ENTRY, rx_entry, RXR_CTS_PKT, 0);
 	rxr_release_rx_pkt_entry(ep, pkt_entry);
 	return ret;
 }
@@ -1197,6 +1156,7 @@ int rxr_cq_handle_pkt_with_data(struct rxr_ep *ep,
 	struct rxr_peer *peer;
 	int64_t bytes_left, bytes_copied;
 	ssize_t ret = 0;
+
 #if ENABLE_DEBUG
 	int pkt_type = rxr_get_base_hdr(pkt_entry->pkt)->type;
 	assert(pkt_type == RXR_DATA_PKT || pkt_type == RXR_READRSP_PKT);
@@ -1206,7 +1166,12 @@ int rxr_cq_handle_pkt_with_data(struct rxr_ep *ep,
 	    rx_entry->cq_entry.len > seg_offset) {
 		bytes_copied = ofi_copy_to_iov(rx_entry->iov, rx_entry->iov_count,
 					       seg_offset, data, seg_size);
-		assert(bytes_copied == MIN(seg_size, rx_entry->cq_entry.len - seg_offset));
+		if (bytes_copied != MIN(seg_size, rx_entry->cq_entry.len - seg_offset)) {
+			FI_WARN(&rxr_prov, FI_LOG_CQ, "wrong size! bytes_copied: %ld\n",
+				bytes_copied);
+			if (rxr_cq_handle_rx_error(ep, rx_entry, -FI_EINVAL))
+				assert(0 && "error writing error cq entry for EOR\n");
+		}
 	}
 
 	rx_entry->bytes_done += seg_size;
@@ -1240,7 +1205,7 @@ int rxr_cq_handle_pkt_with_data(struct rxr_ep *ep,
 
 	if (!rx_entry->window) {
 		assert(rx_entry->state == RXR_RX_RECV);
-		ret = rxr_ep_post_cts_or_queue(ep, rx_entry, bytes_left);
+		ret = rxr_ep_post_ctrl_or_queue(ep, RXR_RX_ENTRY, rx_entry, RXR_CTS_PKT, 0);
 	}
 
 	rxr_release_rx_pkt_entry(ep, pkt_entry);
@@ -1525,18 +1490,10 @@ void rxr_cq_handle_rma_context_pkt(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_
 		rx_entry->cq_entry.len = rx_entry->total_len;
 		rx_entry->bytes_done = rx_entry->total_len;
 
-		ret = rxr_ep_post_shm_eor(ep, rx_entry);
-		if (OFI_UNLIKELY(ret)) {
-			if (ret == -FI_EAGAIN) {
-				rx_entry->state = RXR_RX_QUEUED_EOR;
-				dlist_insert_tail(&rx_entry->queued_entry,
-						  &ep->rx_entry_queued_list);
-				return;
-			}
-			FI_WARN(&rxr_prov, FI_LOG_CQ,
-				"A large message RMA READ failed over shm provider.\n");
+		ret = rxr_ep_post_ctrl_or_queue(ep, RXR_TX_ENTRY, rx_entry, RXR_EOR_PKT, 1);
+		if (ret) {
 			if (rxr_cq_handle_rx_error(ep, rx_entry, ret))
-				assert(0 && "failed to write err cq entry");
+				assert(0 && "error writing error cq entry for EOR\n");
 		}
 
 		if (rx_entry->fi_flags & FI_MULTI_RECV)
