@@ -79,7 +79,7 @@ static int multinode_setup_fabric(int argc, char **argv)
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG | FI_RMA;
 	hints->mode = FI_CONTEXT;
-	hints->domain_attr->mr_mode = opts.mr_mode;
+	hints->domain_attr->mr_mode = opts.mr_mode & ~FI_MR_VIRT_ADDR;
 
 	tx_seq = 0;
 	rx_seq = 0;
@@ -331,7 +331,7 @@ static int multinode_rma_write()
 		
 		snprintf((char*) loc_iov->iov_base, tx_size,
 				"Hello World! from %zu to %i on the %zuth iteration, %s test", 
-				pm_job.my_rank, state.cur_target, tx_seq, pattern->name);
+				pm_job.my_rank, state.cur_target, (size_t) tx_seq, pattern->name);
 
 		message->rma_iov = &pm_job.fi_iovs[state.cur_target];
 		message->addr = pm_job.fi_addrs[state.cur_target];
@@ -362,8 +362,7 @@ static int multinode_rma_wait()
 {
 	int ret;
 	
-	ret = ft_get_tx_comp(tx_seq);
-	
+	ret = ft_get_tx_comp(tx_seq);	
 	if (ret)
 		return ret;
 	
@@ -376,11 +375,11 @@ static int multinode_rma_wait()
 
 	if (state.all_recvs_posted && state.all_sends_posted)
 		state.all_completions_done = true;	
-
+	
 	ret = send_recv_barrier();
 	if (ret)
 		return ret;
-
+	
 	return 0;
 }
 
@@ -407,8 +406,6 @@ static int multinode_run_test(struct multinode_xfer_method method)
 			ret = method.wait();
 			if (ret)
 				return ret;
-
-			send_recv_barrier();
 		}
 	}
 	return 0;
