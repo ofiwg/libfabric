@@ -46,6 +46,8 @@ trap cleanup_and_exit SIGINT
 #
 declare BIN_PATH
 declare PROV=""
+declare CORE=""
+declare UTIL=""
 declare TEST_TYPE="quick"
 declare SERVER="127.0.0.1"
 declare CLIENT="127.0.0.1"
@@ -302,12 +304,17 @@ function read_exclude_file {
 
 function auto_exclude {
 	local excl_file
+	local name=$UTIL
 
-	excl_file="./fabtests/test_configs/${PROV}/${PROV}.exclude"
+	if [ -z $UTIL ]; then
+		name=$CORE
+	fi
+
+	excl_file="./fabtests/test_configs/${name}/${name}.exclude"
 	if [[ ! -f "$excl_file" ]]; then
-		excl_file="./test_configs/${PROV}/${PROV}.exclude"
+		excl_file="./test_configs/${name}/${name}.exclude"
 		if [[ ! -f "$excl_file" ]]; then
-			excl_file="../test_configs/${PROV}/${PROV}.exclude"
+			excl_file="../test_configs/${name}/${name}.exclude"
 			if [[ ! -f "$excl_file" ]]; then
 				return
 			fi
@@ -447,6 +454,27 @@ function cs_test {
 	fi
 }
 
+function set_cfg_file {
+	local cfg_file
+	local parent=$UTIL
+	local name=$CORE
+
+	if [ -z $UTIL ]; then
+		parent=$CORE
+		name=$1
+	fi
+
+	cfg_file="${PWD}/fabtests/test_configs/${parent}/${name}.test"
+	if [[ ! -f "$cfg_file" ]]; then
+		cfg_file="${PWD}/test_configs/${parent}/${name}.test"
+		if [[ ! -f "$cfg_file" ]]; then
+			return
+		fi
+	fi
+
+	COMPLEX_CFG=${cfg_file}
+}
+
 function complex_test {
 	local test=$1
 	local config=$2
@@ -459,6 +487,9 @@ function complex_test {
 	local test_time
 
 	is_excluded "$test" && return
+	if [[ -z "$COMPLEX_CFG" ]]; then
+		set_cfg_file $config
+	fi
 
 	start_time=$(date '+%s')
 
@@ -473,7 +504,7 @@ function complex_test {
 	s_pid=$!
 	sleep 1
 
-	c_cmd="${BIN_PATH}${test_exe} -u "test_configs/${path}/${config}.test" $S_INTERFACE $opts"
+	c_cmd="${BIN_PATH}${test_exe} -u "${COMPLEX_CFG}" $S_INTERFACE $opts"
 	FI_LOG_LEVEL=error ${CLIENT_CMD} "${EXPORT_ENV} $c_cmd" &> $c_outp &
 	c_pid=$!
 
@@ -567,28 +598,38 @@ function multinode_test {
 	fi
 }
 
+function set_core_util {
+	prov_arr=$(echo $PROV | tr ";" " ")
+	CORE=""
+	UTIL=""
+	for p in $prov_arr; do
+		if [[ -z $CORE ]]; then
+			CORE=$p
+		else
+			UTIL=$p
+		fi
+	done
+}
+
 function main {
 	skip_count=0
 	pass_count=0
 	fail_count=0
-	local complex_cfg="quick"
+	local complex_type="quick"
 
+	set_core_util
 	set_excludes
 
 	if [[ $1 == "quick" ]]; then
 		local -r tests="unit functional short"
 	elif [[ $1 == "verify" ]]; then
 		local -r tests="complex"
-		complex_cfg=$1
+		complex_type=$1
 	else
 		local -r tests=$(echo $1 | sed 's/all/unit,functional,standard,complex/g' | tr ',' ' ')
-		if [[ $1 == "all" ]]; then
-			complex_cfg=$1
+		if [[ $1 == "all" || $1 == "complex" ]]; then
+			complex_type="all"
 		fi
-	fi
-
-	if [[ -n "$COMPLEX_CFG" ]]; then
-		complex_cfg="$COMPLEX_CFG"
 	fi
 
 	if [ $VERBOSE -eq 0 ] ; then
@@ -626,7 +667,7 @@ function main {
 		;;
 		complex)
 			for test in "${complex_tests[@]}"; do
-				complex_test $test $complex_cfg
+				complex_test $test $complex_type
 
 			done
 		;;
