@@ -78,6 +78,13 @@ static void util_mr_free_entry(struct ofi_mr_cache *cache,
 	       entry->info.iov.iov_base, entry->info.iov.iov_len);
 
 	assert(!entry->storage_context);
+	cache->delete_region(cache, entry);
+	ofi_buf_free(entry);
+}
+
+static void util_mr_uncache_entry_storage(struct ofi_mr_cache *cache,
+					  struct ofi_mr_entry *entry)
+{
 	/* If regions are not being merged, then we can't safely
 	 * unsubscribe this region from the monitor.  Otherwise, we
 	 * might unsubscribe an address range in use by another region.
@@ -89,13 +96,7 @@ static void util_mr_free_entry(struct ofi_mr_cache *cache,
 					entry->info.iov.iov_len);
 		entry->subscribed = 0;
 	}
-	cache->delete_region(cache, entry);
-	ofi_buf_free(entry);
-}
 
-static void util_mr_uncache_entry_storage(struct ofi_mr_cache *cache,
-					  struct ofi_mr_entry *entry)
-{
 	cache->storage.erase(&cache->storage, entry);
 	cache->cached_cnt--;
 	cache->cached_size -= entry->info.iov.iov_len;
