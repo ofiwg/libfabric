@@ -64,6 +64,8 @@ struct rxr_env rxr_env = {
 	.rx_copy_ooo = 1,
 	.max_timeout = RXR_DEF_RNR_MAX_TIMEOUT,
 	.timeout_interval = 0, /* 0 is random timeout */
+	.efa_cq_read_size = 50,
+	.shm_cq_read_size = 50,
 };
 
 static void rxr_init_env(void)
@@ -101,6 +103,10 @@ static void rxr_init_env(void)
 	fi_param_get_int(&rxr_prov, "max_timeout", &rxr_env.max_timeout);
 	fi_param_get_int(&rxr_prov, "timeout_interval",
 			 &rxr_env.timeout_interval);
+	fi_param_get_size_t(&rxr_prov, "efa_cq_read_size",
+			 &rxr_env.efa_cq_read_size);
+	fi_param_get_size_t(&rxr_prov, "shm_cq_read_size",
+			 &rxr_env.shm_cq_read_size);
 }
 
 /*
@@ -607,6 +613,10 @@ EFA_INI
 			"Set the maximum timeout (us) for backoff to a peer after a receiver not ready error. (Default: 1000000)");
 	fi_param_define(&rxr_prov, "timeout_interval", FI_PARAM_INT,
 			"Set the time interval (us) for the base timeout to use for exponential backoff to a peer after a receiver not ready error. (Default: 0 [random])");
+	fi_param_define(&rxr_prov, "efa_cq_read_size", FI_PARAM_SIZE_T,
+			"Set the number of EFA completion entries to read for one loop for one iteration of the progress engine. (Default: 50)");
+	fi_param_define(&rxr_prov, "shm_cq_read_size", FI_PARAM_SIZE_T,
+			"Set the number of SHM completion entries to read for one loop for one iteration of the progress engine. (Default: 50)");
 	rxr_init_env();
 
 	lower_efa_prov = init_lower_efa_prov();
