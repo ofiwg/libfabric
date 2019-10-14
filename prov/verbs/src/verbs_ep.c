@@ -242,8 +242,19 @@ static int fi_ibv_ep_close(fid_t fid)
 
 	switch (ep->util_ep.type) {
 	case FI_EP_MSG:
-		if (ep->eq)
+		if (ep->eq) {
 			fastlock_acquire(&ep->eq->lock);
+			if (ep->eq->err.err && ep->eq->err.fid == fid) {
+				if (ep->eq->err.err_data) {
+					free(ep->eq->err.err_data);
+					ep->eq->err.err_data = NULL;
+					ep->eq->err.err_data_size = 0;
+				}
+				ep->eq->err.err = 0;
+				ep->eq->err.prov_errno = 0;
+			}
+			fi_ibv_eq_remove_events(ep->eq, fid);
+		}
 
 		if (fi_ibv_is_xrc(ep->info))
 			fi_ibv_ep_xrc_close(ep);

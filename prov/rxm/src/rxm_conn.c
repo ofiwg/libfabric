@@ -40,10 +40,7 @@
 #include "rxm.h"
 
 static struct rxm_cmap_handle *rxm_conn_alloc(struct rxm_cmap *cmap);
-static void rxm_conn_connected_handler(struct rxm_cmap_handle *handle);
-static void rxm_conn_close_saved(struct rxm_cmap_handle *handle);
 static void rxm_conn_close(struct rxm_cmap_handle *handle);
-static void rxm_conn_save(struct rxm_cmap_handle *handle);
 static int
 rxm_conn_connect(struct util_ep *util_ep, struct rxm_cmap_handle *handle,
 		 const void *addr);
@@ -277,18 +274,6 @@ static void rxm_conn_free(struct rxm_cmap_handle *handle)
 	struct rxm_conn *rxm_conn =
 		container_of(handle, struct rxm_conn, handle);
 
-	/* This handles case when saved_msg_ep wasn't closed */
-	if (rxm_conn->saved_msg_ep) {
-		if (fi_close(&rxm_conn->saved_msg_ep->fid)) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-				"Unable to close saved msg_ep\n");
-		} else {
-			FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
-			       "Closed saved msg_ep\n");
-		}
-		rxm_conn->saved_msg_ep = NULL;
-	}
-
 	if (rxm_conn->msg_ep) {
 		if (fi_close(&rxm_conn->msg_ep->fid)) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
@@ -453,15 +438,6 @@ void rxm_cmap_process_shutdown(struct rxm_cmap *cmap,
 	}
 }
 
-void rxm_cmap_process_conn_notify(struct rxm_cmap *cmap,
-				  struct rxm_cmap_handle *handle)
-{
-	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
-	       "Processing connection notification for handle: %p.\n", handle);
-	RXM_CM_UPDATE_STATE(handle, RXM_CMAP_CONNECTED);
-	rxm_conn_connected_handler(handle);
-}
-
 void rxm_cmap_process_connect(struct rxm_cmap *cmap,
 			      struct rxm_cmap_handle *handle,
 			      union rxm_cm_data *cm_data)
@@ -469,7 +445,7 @@ void rxm_cmap_process_connect(struct rxm_cmap *cmap,
 	struct rxm_conn *rxm_conn = container_of(handle, struct rxm_conn, handle);
 
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
-	       "Processing connect for handle: %p\n", handle);
+	       "processing FI_CONNECTED event for handle: %p\n", handle);
 	if (cm_data) {
 		assert(handle->state == RXM_CMAP_CONNREQ_SENT);
 		handle->remote_key = cm_data->accept.server_conn_id;
@@ -477,7 +453,7 @@ void rxm_cmap_process_connect(struct rxm_cmap *cmap,
 	} else {
 		assert(handle->state == RXM_CMAP_CONNREQ_RECV);
 	}
-	RXM_CM_UPDATE_STATE(handle, RXM_CMAP_CONNECTED_NOTIFY);
+	RXM_CM_UPDATE_STATE(handle, RXM_CMAP_CONNECTED);
 
 	/* Set the remote key to the inject packets */
 	if (cmap->ep->domain->threading != FI_THREAD_SAFE) {
@@ -497,11 +473,7 @@ void rxm_cmap_process_reject(struct rxm_cmap *cmap,
 	switch (handle->state) {
 	case RXM_CMAP_CONNREQ_RECV:
 	case RXM_CMAP_CONNECTED:
-	case RXM_CMAP_CONNECTED_NOTIFY:
 		/* Handle is being re-used for incoming connection request */
-		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
-			"Connection handle is being re-used. Close saved connection\n");
-		rxm_conn_close_saved(handle);
 		break;
 	case RXM_CMAP_CONNREQ_SENT:
 		if (reject_reason == RXM_CMAP_REJECT_GENUINE) {
@@ -555,7 +527,6 @@ int rxm_cmap_process_connreq(struct rxm_cmap *cmap, void *addr,
 	}
 
 	switch (handle->state) {
-	case RXM_CMAP_CONNECTED_NOTIFY:
 	case RXM_CMAP_CONNECTED:
 		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 			"Connection already present.\n");
@@ -580,7 +551,7 @@ int rxm_cmap_process_connreq(struct rxm_cmap *cmap, void *addr,
 				"Re-using handle: %p to accept remote "
 				"connection\n", handle);
 			*reject_reason = RXM_CMAP_REJECT_GENUINE;
-			rxm_conn_save(handle);
+			rxm_conn_close(handle);
 		} else {
 			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 				"Endpoint connects to itself\n");
@@ -647,9 +618,6 @@ int rxm_cmap_connect(struct rxm_ep *rxm_ep, fi_addr_t fi_addr,
 	int ret = FI_SUCCESS;
 
 	switch (handle->state) {
-	case RXM_CMAP_CONNECTED_NOTIFY:
-		rxm_cmap_process_conn_notify(rxm_ep->cmap, handle);
-		break;
 	case RXM_CMAP_IDLE:
 		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "initiating MSG_EP connect "
 		       "for fi_addr: %" PRIu64 "\n", fi_addr);
@@ -879,71 +847,14 @@ static void rxm_conn_close(struct rxm_cmap_handle *handle)
 	if (!rxm_conn->msg_ep)
 		return;
 
-	if (handle->cmap->attr.serial_access) {
-		if (fi_close(&rxm_conn->msg_ep->fid)) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-				"Unable to close msg_ep\n");
-		} else {
-			FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
-			       "Closed msg_ep\n");
-		}
+	if (fi_close(&rxm_conn->msg_ep->fid)) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+			"unable to close msg_ep\n");
 	} else {
-		rxm_conn->saved_msg_ep = rxm_conn->msg_ep;
 		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
-		       "Saved MSG EP fid for further deletion in main thread\n");
+		       "closed msg_ep\n");
 	}
 	rxm_conn->msg_ep = NULL;
-}
-
-static void rxm_conn_save(struct rxm_cmap_handle *handle)
-{
-	struct rxm_conn *rxm_conn =
-		container_of(handle, struct rxm_conn, handle);
-
-	if (!rxm_conn->msg_ep)
-		return;
-
-	rxm_conn->saved_msg_ep = rxm_conn->msg_ep;
-	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
-	       "Saved MSG EP fid for further deletion\n");
-	rxm_conn->msg_ep = NULL;
-}
-
-static void rxm_conn_close_saved(struct rxm_cmap_handle *handle)
-{
-	struct rxm_conn *rxm_conn =
-		container_of(handle, struct rxm_conn, handle);
-
-	if (!rxm_conn->saved_msg_ep)
-		return;
-
-	/* If user doesn't guarantee for serializing access to cmap
-	 * objects, postpone the closing of the saved MSG EP for
-	 * further deletion in main thread  */
-	if (handle->cmap->attr.serial_access) {
-		if (fi_close(&rxm_conn->saved_msg_ep->fid)) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-				"Unable to close saved msg_ep\n");
-		} else {
-			FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
-			       "Closed saved msg_ep\n");
-		}
-		rxm_conn->saved_msg_ep = NULL;
-	}
-}
-
-static void rxm_conn_connected_handler(struct rxm_cmap_handle *handle)
-{
-	struct rxm_conn *rxm_conn = container_of(handle, struct rxm_conn, handle);
-
-	if (!rxm_conn->saved_msg_ep)
-		return;
-	/* Assuming fi_close also shuts down the connection gracefully if the
-	 * endpoint is in connected state */
-	if (fi_close(&rxm_conn->saved_msg_ep->fid))
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to close saved msg_ep\n");
-	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Closed saved msg_ep\n");
-	rxm_conn->saved_msg_ep = NULL;
 }
 
 static int rxm_conn_reprocess_directed_recvs(struct rxm_recv_queue *recv_queue)
@@ -1273,7 +1184,7 @@ rxm_conn_handle_event(struct rxm_ep *rxm_ep, struct rxm_msg_eq_entry *entry)
 	case FI_CONNECTED:
 		assert(entry->cm_entry.fid->context);
 		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
-		       "Connection successful\n");
+		       "connection successful\n");
 		cm_data = (void *)entry->cm_entry.data;
 		rxm_cmap_process_connect(rxm_ep->cmap,
 					 entry->cm_entry.fid->context,
@@ -1304,6 +1215,11 @@ static ssize_t rxm_eq_sread(struct rxm_ep *rxm_ep, size_t len,
 	int once = 1;
 
 	do {
+		/* TODO convert this to poll + fi_eq_read so that we can grab
+		 * rxm_ep lock before reading the EQ. This is needed to avoid
+		 * processing events / error entries from closed MSG EPs. This
+		 * can be done only for non-Windows OSes as Windows doesn't
+		 * have poll for a generic file descriptor. */
 		rd = fi_eq_sread(rxm_ep->msg_eq, &entry->event, &entry->cm_entry,
 				 len, -1, 0);
 		if (rd >= 0)
@@ -1316,11 +1232,15 @@ static ssize_t rxm_eq_sread(struct rxm_ep *rxm_ep, size_t len,
 
 	if (rd != -FI_EAVAIL) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-			"Unable to fi_eq_sread: %zu\n", rd);
+			"unable to fi_eq_sread: %s (%zd)\n",
+			fi_strerror(-rd), -rd);
 		return rd;
 	}
 
-	return rxm_eq_readerr(rxm_ep, entry);
+	ofi_ep_lock_acquire(&rxm_ep->util_ep);
+	rd = rxm_eq_readerr(rxm_ep, entry);
+	ofi_ep_lock_release(&rxm_ep->util_ep);
+	return rd;
 }
 
 static inline int rxm_conn_eq_event(struct rxm_ep *rxm_ep,
@@ -1371,7 +1291,11 @@ rxm_conn_auto_progress_eq(struct rxm_ep *rxm_ep, struct rxm_msg_eq_entry *entry)
 {
 	while (1) {
 		memset(entry, 0, RXM_MSG_EQ_ENTRY_SZ);
+
+		ofi_ep_lock_acquire(&rxm_ep->util_ep);
 		entry->rd = rxm_eq_read(rxm_ep, RXM_CM_ENTRY_SZ, entry);
+		ofi_ep_lock_release(&rxm_ep->util_ep);
+
 		if (OFI_UNLIKELY(!entry->rd || entry->rd == -FI_EAGAIN))
 			return FI_SUCCESS;
 		if (entry->rd < 0 &&
@@ -1605,12 +1529,6 @@ int rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep)
 	ofi_straddr_dbg(&rxm_prov, FI_LOG_EP_CTRL, "local_name", name);
 
 	attr.name		= name;
-
-	if (rxm_ep->util_ep.domain->threading == FI_THREAD_DOMAIN &&
-	    rxm_ep->util_ep.domain->data_progress == FI_PROGRESS_MANUAL)
-		attr.serial_access = 1;
-	else
-		attr.serial_access = 0;
 
 	ret = rxm_cmap_alloc(rxm_ep, &attr);
 	if (ret)

@@ -782,6 +782,30 @@ int fi_ibv_eq_trywait(struct fi_ibv_eq *eq)
 	return ret ? 0 : -FI_EAGAIN;
 }
 
+int fi_ibv_eq_match_event(struct dlist_entry *item, const void *arg)
+{
+	struct fi_ibv_eq_entry *entry =
+		container_of(item, struct fi_ibv_eq_entry, item);
+	const struct fid *fid = arg;
+	return entry->eq_entry->fid == fid;
+}
+
+/* Caller must hold eq->lock */
+void fi_ibv_eq_remove_events(struct fi_ibv_eq *eq, struct fid *fid)
+{
+	struct dlist_entry *item;
+	struct fi_ibv_eq_entry *entry;
+
+	while ((item =
+		dlistfd_remove_first_match(&eq->list_head,
+					   fi_ibv_eq_match_event, fid))) {
+		entry = container_of(item, struct fi_ibv_eq_entry, item);
+		if (entry->event == FI_CONNREQ)
+			fi_freeinfo(entry->cm_entry->info);
+		free(entry);
+	}
+}
+
 ssize_t fi_ibv_eq_write_event(struct fi_ibv_eq *eq, uint32_t event,
 			      const void *buf, size_t len)
 {
@@ -795,7 +819,7 @@ ssize_t fi_ibv_eq_write_event(struct fi_ibv_eq *eq, uint32_t event,
 
 	entry->event = event;
 	entry->len = len;
-	memcpy(entry->eq_entry, buf, len);
+	memcpy(entry->entry, buf, len);
 
 	fastlock_acquire(&eq->lock);
 	dlistfd_insert_tail(&entry->item, &eq->list_head);
@@ -840,7 +864,7 @@ static size_t fi_ibv_eq_read_event(struct fi_ibv_eq *eq, uint32_t *event,
 
 	ret = entry->len;
 	*event = entry->event;
-	memcpy(buf, entry->eq_entry, entry->len);
+	memcpy(buf, entry->entry, entry->len);
 
 	if (!(flags & FI_PEEK)) {
 		dlistfd_remove(eq->list_head.list.next, &eq->list_head);
