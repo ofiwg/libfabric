@@ -128,12 +128,6 @@ void ofi_mr_cache_notify(struct ofi_mr_cache *cache, const void *addr, size_t le
 	for (entry = cache->storage.overlap(&cache->storage, &iov); entry;
 	     entry = cache->storage.overlap(&cache->storage, &iov))
 		util_mr_uncache_entry(cache, entry);
-
-	/* See comment in util_mr_free_entry.  If we're not merging address
-	 * ranges, we can only safely unsubscribe for the reported range.
-	 */
-	if (!cache_params.merge_regions)
-		ofi_monitor_unsubscribe(cache->monitor, addr, len);
 }
 
 static bool mr_cache_flush(struct ofi_mr_cache *cache)

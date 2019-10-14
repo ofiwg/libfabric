@@ -247,6 +247,11 @@ static void *ofi_uffd_handler(void *arg)
 
 		switch (msg.event) {
 		case UFFD_EVENT_REMOVE:
+			ofi_monitor_unsubscribe(&uffd.monitor,
+				(void *) (uintptr_t) msg.arg.remove.start,
+				(size_t) (msg.arg.remove.end -
+					  msg.arg.remove.start));
+			/* fall through */
 		case UFFD_EVENT_UNMAP:
 			ofi_monitor_notify(&uffd.monitor,
 				(void *) (uintptr_t) msg.arg.remove.start,
