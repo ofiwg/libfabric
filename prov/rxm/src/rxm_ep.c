@@ -1604,7 +1604,7 @@ static ssize_t rxm_ep_senddata(struct fid_ep *ep_fid, const void *buf, size_t le
 	if (OFI_UNLIKELY(ret))
 		goto unlock;
 
-	ret = rxm_ep_send_common(rxm_ep, rxm_conn, &iov, desc, 1, context, data,
+	ret = rxm_ep_send_common(rxm_ep, rxm_conn, &iov, &desc, 1, context, data,
 				  rxm_ep_tx_flags(rxm_ep) | FI_REMOTE_CQ_DATA,
 				  0, ofi_op_msg, rxm_conn->inject_data_pkt);
 unlock:
@@ -1845,7 +1845,7 @@ static ssize_t rxm_ep_tsenddata(struct fid_ep *ep_fid, const void *buf, size_t l
 	if (OFI_UNLIKELY(ret))
 		goto unlock;
 
-	ret = rxm_ep_send_common(rxm_ep, rxm_conn, &iov, desc, 1, context, data,
+	ret = rxm_ep_send_common(rxm_ep, rxm_conn, &iov, &desc, 1, context, data,
 				  rxm_ep_tx_flags(rxm_ep) | FI_REMOTE_CQ_DATA,
 				  tag, ofi_op_tagged, rxm_conn->tinject_data_pkt);
 unlock:
