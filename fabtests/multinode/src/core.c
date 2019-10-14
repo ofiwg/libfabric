@@ -306,7 +306,7 @@ static int multinode_rma_write()
 	struct fi_msg_rma *message = (struct fi_msg_rma *) malloc(sizeof(struct fi_msg_rma));
 	struct iovec *loc_iov = (struct iovec *) malloc(sizeof(struct iovec));
 
-	message->desc = mr_desc;
+	message->desc = &mr_desc;
 	message->context = NULL;
 	message->rma_iov_count = 1;
 	message->iov_count = 1;
@@ -335,6 +335,7 @@ static int multinode_rma_write()
 
 		message->rma_iov = &pm_job.fi_iovs[state.cur_target];
 		message->addr = pm_job.fi_addrs[state.cur_target];
+		message->context = &tx_ctx_arr[state.tx_window].context;
 	
 		do {
 			ret = fi_writemsg(ep, message, FI_DELIVERY_COMPLETE);
