@@ -995,6 +995,8 @@ void rxr_generic_tx_entry_init(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	dlist_init(&tx_entry->queued_pkts);
 
 	memcpy(&tx_entry->iov[0], msg->msg_iov, sizeof(*msg->msg_iov) * msg->iov_count);
+	if (msg->desc)
+		memcpy(&tx_entry->desc[0], msg->desc, sizeof(*msg->desc) * msg->iov_count);
 
 	/* cq_entry on completion */
 	tx_entry->cq_entry.op_context = msg->context;
@@ -1179,7 +1181,7 @@ static ssize_t rxr_ep_mr_send_data_pkt_entry(struct rxr_ep *ep,
 	 * and corresponding fid_mrs
 	 */
 	struct iovec iov[ep->core_iov_limit];
-	struct fid_mr *mr[ep->core_iov_limit];
+	void *desc[ep->core_iov_limit];
 	/* Constructed iov's total size */
 	uint64_t payload_size = 0;
 	/* pkt_entry offset to write data into */
@@ -1196,7 +1198,7 @@ static ssize_t rxr_ep_mr_send_data_pkt_entry(struct rxr_ep *ep,
 	/* Assign packet header in constructed iov */
 	iov[i].iov_base = rxr_pkt_start(pkt_entry);
 	iov[i].iov_len = RXR_DATA_HDR_SIZE;
-	mr[i] = rxr_ep_mr_local(ep) ? fi_mr_desc(pkt_entry->mr) : NULL;
+	desc[i] = rxr_ep_mr_local(ep) ? fi_mr_desc(pkt_entry->mr) : NULL;
 	i++;
 
 	/*
@@ -1207,15 +1209,18 @@ static ssize_t rxr_ep_mr_send_data_pkt_entry(struct rxr_ep *ep,
 	 */
 	while (tx_entry->iov_index < tx_entry->iov_count &&
 	       remaining_len > 0 && i < ep->core_iov_limit) {
-		/* If the iov was pre registered after the RTS */
 		if (!rxr_ep_mr_local(ep) ||
-		    tx_entry->mr[tx_entry->iov_index]) {
+		    /* from the inline registration post-RTS */
+		    tx_entry->mr[tx_entry->iov_index] ||
+		    /* from application-provided descriptor */
+		    tx_entry->desc[tx_entry->iov_index]) {
 			iov[i].iov_base =
 				(char *)tx_iov[tx_entry->iov_index].iov_base +
 				tx_entry->iov_offset;
-			mr[i] = rxr_ep_mr_local(ep) ?
-				fi_mr_desc(tx_entry->mr[tx_entry->iov_index]) :
-				NULL;
+			if (rxr_ep_mr_local(ep))
+				desc[i] = tx_entry->desc[tx_entry->iov_index] ?
+					  tx_entry->desc[tx_entry->iov_index] :
+					  fi_mr_desc(tx_entry->mr[tx_entry->iov_index]);
 
 			len = tx_iov[tx_entry->iov_index].iov_len
 			      - tx_entry->iov_offset;
@@ -1239,7 +1244,7 @@ static ssize_t rxr_ep_mr_send_data_pkt_entry(struct rxr_ep *ep,
 
 			iov[i].iov_base = (char *)data_pkt->data + pkt_used;
 			iov[i].iov_len = len;
-			mr[i] = fi_mr_desc(pkt_entry->mr);
+			desc[i] = fi_mr_desc(pkt_entry->mr);
 			pkt_used += len;
 		}
 		payload_size += len;
@@ -1255,7 +1260,7 @@ static ssize_t rxr_ep_mr_send_data_pkt_entry(struct rxr_ep *ep,
 	       i, payload_size);
 	ret = rxr_ep_sendv_pkt(ep, pkt_entry, tx_entry->addr,
 			       (const struct iovec *)iov,
-			       (void **)mr, i, tx_entry->send_flags);
+			       desc, i, tx_entry->send_flags);
 	return ret;
 }
 
@@ -1757,7 +1762,11 @@ shm_rts:
 		}
 	}
 
-	if (rxr_ep_mr_local(rxr_ep))
+	/*
+	 * Register the data buffers inline only if the application did not
+	 * provide a descriptor with the tx op
+	 */
+	if (rxr_ep_mr_local(rxr_ep) && !tx_entry->desc[i])
 		rxr_inline_mr_reg(rxr_ep_domain(rxr_ep), tx_entry, i);
 
 	return 0;

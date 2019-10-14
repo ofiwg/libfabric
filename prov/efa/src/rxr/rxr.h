@@ -469,6 +469,9 @@ struct rxr_tx_entry {
 	size_t rma_iov_count;
 	struct fi_rma_iov rma_iov[RXR_IOV_LIMIT];
 
+	/* App-provided reg descriptor */
+	void *desc[RXR_IOV_LIMIT];
+
 	/* Only used with mr threshold switch from memcpy */
 	size_t iov_mr_start;
 	struct fid_mr *mr[RXR_IOV_LIMIT];
