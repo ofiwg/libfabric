@@ -40,7 +40,7 @@
 #
 
 trap cleanup_and_exit SIGINT
-
+set -ex
 #
 # Default behavior with no args will use sockets provider with loopback
 #
@@ -55,7 +55,7 @@ declare GOOD_ADDR=""
 declare -i VERBOSE=0
 declare -i SKIP_NEG=0
 declare COMPLEX_CFG
-declare TIMEOUT_VAL="120"
+declare TIMEOUT_VAL="1200"
 declare STRICT_MODE=0
 declare FORK=0
 declare C_ARGS=""
@@ -621,7 +621,7 @@ function main {
 	set_excludes
 
 	if [[ $1 == "quick" ]]; then
-		local -r tests="unit functional short multinode"
+		local -r tests="multinode"
 	elif [[ $1 == "verify" ]]; then
 		local -r tests="complex"
 		complex_type=$1
