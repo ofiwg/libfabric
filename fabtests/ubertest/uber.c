@@ -600,7 +600,7 @@ static int ft_server_child()
 		 * iterating over all interfaces / addresses.
 		 * TODO: Remove iteration from ft_fw_process_list_server.
 		 */
-		if (info->next) {
+		if (info && info->next) {
 			fi_freeinfo(info->next);
 			info->next = NULL;
 		}
