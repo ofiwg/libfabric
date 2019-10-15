@@ -72,7 +72,7 @@
 
 #define EFA_NO_DEFAULT -1
 
-#define EFA_DEF_MR_CACHE_ENABLE 0
+#define EFA_DEF_MR_CACHE_ENABLE 1
 #define EFA_DEF_MR_CACHE_MERGE_REGIONS 1
 
 int efa_mr_cache_enable		= EFA_DEF_MR_CACHE_ENABLE;
