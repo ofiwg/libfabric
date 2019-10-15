@@ -314,8 +314,6 @@ void rxr_rma_handle_readrsp_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_en
 {
 	struct rxr_tx_entry *tx_entry;
 	size_t data_len;
-	size_t offset;
-	int i;
 
 	tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
 	data_len = rxr_get_readrsp_hdr(pkt_entry->pkt)->seg_size;
@@ -324,25 +322,12 @@ void rxr_rma_handle_readrsp_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_en
 	tx_entry->window -= data_len;
 	assert(tx_entry->window >= 0);
 	if (tx_entry->bytes_sent < tx_entry->total_len) {
+		if (efa_mr_cache_enable && rxr_ep_mr_local(ep))
+			rxr_inline_mr_reg(rxr_ep_domain(ep), tx_entry);
+
 		tx_entry->state = RXR_TX_SEND;
 		dlist_insert_tail(&tx_entry->entry,
 				  &ep->tx_pending_list);
-
-		if (efa_mr_cache_enable && rxr_ep_mr_local(ep)) {
-			/* Set the iov index and iov offset from bytes sent */
-			offset = tx_entry->bytes_sent;
-			for (i = 0; i < tx_entry->iov_count; i++) {
-				if (offset >= tx_entry->iov[i].iov_len) {
-					offset -= tx_entry->iov[i].iov_len;
-				} else {
-					tx_entry->iov_index = i;
-					tx_entry->iov_offset = offset;
-					break;
-				}
-			}
-
-			rxr_inline_mr_reg(rxr_ep_domain(ep), tx_entry, i);
-		}
 	}
 }
 

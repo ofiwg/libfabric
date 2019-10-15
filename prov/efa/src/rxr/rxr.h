@@ -1231,8 +1231,7 @@ int rxr_ep_set_tx_credit_request(struct rxr_ep *rxr_ep,
 				 struct rxr_tx_entry *tx_entry);
 
 void rxr_inline_mr_reg(struct rxr_domain *rxr_domain,
-		       struct rxr_tx_entry *tx_entry,
-		       size_t index);
+		       struct rxr_tx_entry *tx_entry);
 
 char *rxr_ep_init_rts_hdr(struct rxr_ep *ep,
 			  struct rxr_tx_entry *tx_entry,

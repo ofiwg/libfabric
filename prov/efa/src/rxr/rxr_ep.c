@@ -1275,10 +1275,23 @@ ssize_t rxr_ep_post_data(struct rxr_ep *rxr_ep,
 }
 
 void rxr_inline_mr_reg(struct rxr_domain *rxr_domain,
-		       struct rxr_tx_entry *tx_entry,
-		       size_t index)
+		       struct rxr_tx_entry *tx_entry)
 {
 	ssize_t ret;
+	size_t offset;
+	int index;
+
+	/* Set the iov index and iov offset from bytes sent */
+	offset = tx_entry->bytes_sent;
+	for (index = 0; index < tx_entry->iov_count; ++index) {
+		if (offset >= tx_entry->iov[index].iov_len) {
+			offset -= tx_entry->iov[index].iov_len;
+		} else {
+			tx_entry->iov_index = index;
+			tx_entry->iov_offset = offset;
+			break;
+		}
+	}
 
 	tx_entry->iov_mr_start = index;
 	while (index < tx_entry->iov_count) {
@@ -1514,8 +1527,7 @@ void rxr_ep_handle_rts_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_peer *peer;
 	struct rxr_tx_entry *tx_entry;
-	size_t data_sent, offset;
-	int i;
+	size_t data_sent;
 
 	tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
 
@@ -1535,24 +1547,12 @@ void rxr_ep_handle_rts_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 	    !(efa_mr_cache_enable && tx_entry->total_len > data_sent))
 		return;
 
-	/* Set the iov index and iov offset from bytes sent */
-	offset = data_sent;
-	for (i = 0; i < tx_entry->iov_count; i++) {
-		if (offset >= tx_entry->iov[i].iov_len) {
-			offset -= tx_entry->iov[i].iov_len;
-		} else {
-			tx_entry->iov_index = i;
-			tx_entry->iov_offset = offset;
-			break;
-		}
-	}
-
 	/*
 	 * Register the data buffers inline only if the application did not
 	 * provide a descriptor with the tx op
 	 */
-	if (rxr_ep_mr_local(ep) && !tx_entry->desc[i])
-		rxr_inline_mr_reg(rxr_ep_domain(ep), tx_entry, i);
+	if (rxr_ep_mr_local(ep) && !tx_entry->desc[0])
+		rxr_inline_mr_reg(rxr_ep_domain(ep), tx_entry);
 
 	return;
 }
