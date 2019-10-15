@@ -573,11 +573,16 @@ function multinode_test {
 		${CLIENT_CMD} "${EXPORT_ENV} $c_cmd" &> $c_outp & 
 		c_pid_arr+=($!)
 	done
-
+	
+	for pid in ${c_pid_arr[*]}; do
+		wait $pid
+	done
+	
 	[[ c_ret -ne 0 ]] && kill -9 $s_pid 2> /dev/null
-
+	
 	wait $s_pid
 	s_ret=$?
+
 	
 	end_time=$(date '+%s')
 	test_time=$(compute_duration "$start_time" "$end_time")
