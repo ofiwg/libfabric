@@ -30,7 +30,7 @@ pipeline {
             steps {
                 // creating git short hash
                 script {
-                    GIT_SHORT_COMMIT = sh(returnStdout: true, script: "git log -n 1 --pretty=format:'%h'").trim()
+                    GIT_DESCRIPTION = sh(returnStdout: true, script: "git describe").trim()
                     LIBFABRIC_INSTALL = pwd tmp: true
                 }
 
@@ -325,7 +325,7 @@ pipeline {
                 }
             }
             environment {
-                LIBFABRIC_INSTALL_PATH="${LIBFABRIC_BUILD_PATH + '/' + GIT_SHORT_COMMIT}"
+                LIBFABRIC_INSTALL_PATH="${LIBFABRIC_BUILD_PATH + '/' + GIT_DESCRIPTION}"
             }
             steps {
                 sh './autogen.sh'
@@ -360,7 +360,7 @@ pipeline {
                     steps {
                         dir (env.TAG_DIRECTORY) {
                             sh "rm -f nightly || true"
-                            sh "ln -s ../$GIT_SHORT_COMMIT nightly"
+                            sh "ln -s ../$GIT_DESCRIPTION nightly"
                         }
                     }
                 }
@@ -371,7 +371,7 @@ pipeline {
                     steps {
                         dir (env.TAG_DIRECTORY) {
                             sh "rm -f $BRANCH_NAME || true"
-                            sh "ln -s ../$GIT_SHORT_COMMIT $BRANCH_NAME"
+                            sh "ln -s ../$GIT_DESCRIPTION $BRANCH_NAME"
                         }
                     }
                 }
