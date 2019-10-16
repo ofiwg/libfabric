@@ -596,6 +596,15 @@ static int ft_server_child()
 	if (ret && ret != -FI_ENODATA) {
 		FT_PRINTERR("fi_getinfo", ret);
 	} else {
+		/* Temporary fix to run one set of tests, rather than
+		 * iterating over all interfaces / addresses.
+		 * TODO: Remove iteration from ft_fw_process_list_server.
+		 */
+		if (info->next) {
+			fi_freeinfo(info->next);
+			info->next = NULL;
+		}
+
 		ret = ft_fw_process_list_server(hints, info);
 		if (ret != -FI_ENODATA)
 			fi_freeinfo(info);
@@ -680,8 +689,16 @@ static int ft_client_child(void)
 
 		result = fi_getinfo(FT_FIVERSION, ft_strptr(test_info.node),
 				 ft_strptr(test_info.service), 0, hints, &info);
-		if (result) {
+		if (result)
 			FT_PRINTERR("fi_getinfo", result);
+
+		/* Temporary fix to run one set of tests, rather than
+		 * iterating over all interfaces / addresses.
+		 * TODO: Remove iteration from ft_fw_process_list_client.
+		 */
+		if (info && info->next) {
+			fi_freeinfo(info->next);
+			info->next = NULL;
 		}
 
 		ret = ft_fw_process_list_client(hints, info);

@@ -78,6 +78,13 @@ static void util_mr_free_entry(struct ofi_mr_cache *cache,
 	       entry->info.iov.iov_base, entry->info.iov.iov_len);
 
 	assert(!entry->storage_context);
+	cache->delete_region(cache, entry);
+	ofi_buf_free(entry);
+}
+
+static void util_mr_uncache_entry_storage(struct ofi_mr_cache *cache,
+					  struct ofi_mr_entry *entry)
+{
 	/* If regions are not being merged, then we can't safely
 	 * unsubscribe this region from the monitor.  Otherwise, we
 	 * might unsubscribe an address range in use by another region.
@@ -89,13 +96,7 @@ static void util_mr_free_entry(struct ofi_mr_cache *cache,
 					entry->info.iov.iov_len);
 		entry->subscribed = 0;
 	}
-	cache->delete_region(cache, entry);
-	ofi_buf_free(entry);
-}
 
-static void util_mr_uncache_entry_storage(struct ofi_mr_cache *cache,
-					  struct ofi_mr_entry *entry)
-{
 	cache->storage.erase(&cache->storage, entry);
 	cache->cached_cnt--;
 	cache->cached_size -= entry->info.iov.iov_len;
@@ -128,12 +129,6 @@ void ofi_mr_cache_notify(struct ofi_mr_cache *cache, const void *addr, size_t le
 	for (entry = cache->storage.overlap(&cache->storage, &iov); entry;
 	     entry = cache->storage.overlap(&cache->storage, &iov))
 		util_mr_uncache_entry(cache, entry);
-
-	/* See comment in util_mr_free_entry.  If we're not merging address
-	 * ranges, we can only safely unsubscribe for the reported range.
-	 */
-	if (!cache_params.merge_regions)
-		ofi_monitor_unsubscribe(cache->monitor, addr, len);
 }
 
 static bool mr_cache_flush(struct ofi_mr_cache *cache)
