@@ -512,3 +512,64 @@ void rxr_pkt_handle_eor_recv(struct rxr_ep *ep,
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
 }
 
+
+/* atomrsp packet related functions: init, handle_sent, handle_send_completion and recv
+ *
+ * initialize atomic response packet by creating a packet that hold original data
+ * in rx_entry->iov. rx_entry->iov will then be changed by atomic operation.
+ * release that packet entry until it is sent.
+ */
+int rxr_pkt_init_atomrsp(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
+			 struct rxr_pkt_entry *pkt_entry)
+{
+	size_t pkt_size;
+
+	assert(rx_entry->atomrsp_pkt);
+	pkt_size = rx_entry->atomrsp_pkt->pkt_size;
+	pkt_entry->pkt_size = pkt_size;
+	pkt_entry->addr = rx_entry->addr;
+	pkt_entry->x_entry = rx_entry;
+	memcpy(pkt_entry->pkt, rx_entry->atomrsp_pkt->pkt, pkt_size);
+	return 0;
+}
+
+void rxr_pkt_handle_atomrsp_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
+{
+}
+
+void rxr_pkt_handle_atomrsp_send_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
+{
+	struct rxr_rx_entry *rx_entry;
+	
+	rx_entry = (struct rxr_rx_entry *)pkt_entry->x_entry;
+	rxr_pkt_entry_release_tx(ep, rx_entry->atomrsp_pkt);
+	rxr_release_rx_entry(ep, rx_entry);
+}
+
+void rxr_pkt_handle_atomrsp_recv(struct rxr_ep *ep,
+				 struct rxr_pkt_entry *pkt_entry)
+{
+	struct rxr_atomrsp_pkt *atomrsp_pkt = NULL;
+	struct rxr_atomrsp_hdr *atomrsp_hdr = NULL;
+	struct rxr_tx_entry *tx_entry = NULL;
+
+	atomrsp_pkt = (struct rxr_atomrsp_pkt *)pkt_entry->pkt;
+	atomrsp_hdr = &atomrsp_pkt->hdr;
+	tx_entry = ofi_bufpool_get_ibuf(ep->tx_entry_pool, atomrsp_hdr->tx_id);
+
+	ofi_copy_to_iov(tx_entry->atomic_ex.resp_iov,
+			tx_entry->atomic_ex.resp_iov_count,
+			0, atomrsp_pkt->data,
+			atomrsp_hdr->seg_size);
+
+	if (tx_entry->fi_flags & FI_COMPLETION) {
+		/* Note write_tx_completion() will release tx_entry */
+		rxr_cq_write_tx_completion(ep, tx_entry);
+	} else {
+		efa_cntr_report_tx_completion(&ep->util_ep, tx_entry->cq_entry.flags);
+		rxr_release_tx_entry(ep, tx_entry);
+	}
+
+	rxr_pkt_entry_release_rx(ep, pkt_entry);
+}
+

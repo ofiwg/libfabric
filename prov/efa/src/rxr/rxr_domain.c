@@ -41,6 +41,7 @@
 #include "efa.h"
 #include "rxr.h"
 #include "rxr_cntr.h"
+#include "rxr_atomic.h"
 
 static struct fi_ops_domain rxr_domain_ops = {
 	.size = sizeof(struct fi_ops_domain),
@@ -52,7 +53,7 @@ static struct fi_ops_domain rxr_domain_ops = {
 	.poll_open = fi_poll_create,
 	.stx_ctx = fi_no_stx_context,
 	.srx_ctx = fi_no_srx_context,
-	.query_atomic = fi_no_query_atomic,
+	.query_atomic = rxr_query_atomic,
 	.query_collective = fi_no_query_collective,
 };
 
@@ -309,6 +310,7 @@ int rxr_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	}
 
 	rxr_domain->rdm_mode = rdm_info->mode;
+	rxr_domain->mtu_size = rdm_info->ep_attr->max_msg_size;
 	rxr_domain->addrlen = (info->src_addr) ?
 				info->src_addrlen : info->dest_addrlen;
 	rxr_domain->cq_size = MAX(info->rx_attr->size + info->tx_attr->size,

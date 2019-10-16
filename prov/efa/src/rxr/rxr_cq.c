@@ -40,6 +40,7 @@
 #include "rxr_rma.h"
 #include "rxr_msg.h"
 #include "rxr_cntr.h"
+#include "rxr_atomic.h"
 #include "efa.h"
 
 static const char *rxr_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
@@ -193,6 +194,9 @@ int rxr_cq_handle_tx_error(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	case RXR_TX_QUEUED_RTS_RNR:
 	case RXR_TX_QUEUED_DATA_RNR:
 		dlist_remove(&tx_entry->queued_entry);
+		break;
+	case RXR_TX_SENT_READRSP:
+	case RXR_TX_WAIT_READ_FINISH:
 		break;
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "tx_entry unknown state %d\n",
@@ -601,7 +605,7 @@ int rxr_cq_reorder_msg(struct rxr_ep *ep,
 		msg_id = rts_hdr->msg_id;
 	} else {
 		assert(base_hdr->type >= RXR_REQ_PKT_BEGIN);
-		msg_id = rxr_pkt_rtm_msg_id(pkt_entry);
+		msg_id = rxr_pkt_msg_id(pkt_entry);
 	}
 	/*
 	 * TODO: Initialize peer state  at the time of AV insertion
@@ -663,11 +667,11 @@ void rxr_cq_proc_pending_items_in_recvwin(struct rxr_ep *ep,
 			/* rxr_pkt_proc_rts will write error cq entry if needed */
 			ret = rxr_pkt_proc_rts(ep, pending_pkt);
 		} else {
-			msg_id = rxr_pkt_rtm_msg_id(pending_pkt);
+			msg_id = rxr_pkt_msg_id(pending_pkt);
 			FI_DBG(&rxr_prov, FI_LOG_EP_CTRL,
 			       "Processing msg_id %d from robuf\n", msg_id);
-			/* rxr_pkt_proc_rtm will write error cq entry if needed */
-			ret = rxr_pkt_proc_rtm(ep, pending_pkt);
+			/* rxr_pkt_proc_rtm_rta() will write error cq entry if needed */
+			ret = rxr_pkt_proc_rtm_rta(ep, pending_pkt);
 		}
 
 		*ofi_recvwin_get_next_msg(peer->robuf) = NULL;
@@ -683,44 +687,50 @@ void rxr_cq_proc_pending_items_in_recvwin(struct rxr_ep *ep,
 }
 
 /* Handle RMA writes with immediate data at remote endpoint, write a completion */
-void rxr_cq_handle_shm_rma_write_data(struct rxr_ep *ep, struct fi_cq_data_entry *shm_comp, fi_addr_t src_addr)
+void rxr_cq_handle_shm_completion(struct rxr_ep *ep, struct fi_cq_data_entry *cq_entry, fi_addr_t src_addr)
 {
-	struct rxr_rx_entry *rx_entry;
+	struct util_cq *target_cq;
 	int ret;
 
-	struct util_cq *rx_cq = ep->util_ep.rx_cq;
-	rx_entry = rxr_ep_get_rx_entry(ep, NULL, 0, 0, 0, NULL, src_addr, 0, 0);
-	rxr_copy_shm_cq_entry(&rx_entry->cq_entry, shm_comp);
+	if (cq_entry->flags & FI_ATOMIC) {
+		target_cq = ep->util_ep.tx_cq;
+	} else {
+		assert(cq_entry->flags & FI_REMOTE_CQ_DATA);
+		target_cq = ep->util_ep.rx_cq;
+	}
 
 	if (ep->util_ep.caps & FI_SOURCE)
-		ret = ofi_cq_write_src(rx_cq,
-				       rx_entry->cq_entry.op_context,
-				       rx_entry->cq_entry.flags,
-				       rx_entry->cq_entry.len,
-				       rx_entry->cq_entry.buf,
-				       rx_entry->cq_entry.data,
-				       rx_entry->cq_entry.tag,
+		ret = ofi_cq_write_src(target_cq,
+				       cq_entry->op_context,
+				       cq_entry->flags,
+				       cq_entry->len,
+				       cq_entry->buf,
+				       cq_entry->data,
+				       0,
 				       src_addr);
 	else
-		ret = ofi_cq_write(rx_cq,
-				       rx_entry->cq_entry.op_context,
-				       rx_entry->cq_entry.flags,
-				       rx_entry->cq_entry.len,
-				       rx_entry->cq_entry.buf,
-				       rx_entry->cq_entry.data,
-				       rx_entry->cq_entry.tag);
+		ret = ofi_cq_write(target_cq,
+				   cq_entry->op_context,
+				   cq_entry->flags,
+				   cq_entry->len,
+				   cq_entry->buf,
+				   cq_entry->data,
+				   0);
 
-	rxr_rm_rx_cq_check(ep, rx_cq);
+	rxr_rm_rx_cq_check(ep, target_cq);
 
 	if (OFI_UNLIKELY(ret)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
-			"Unable to deliver immediate data of shm provider's RMA write operation: %s\n",
+			"Unable to write a cq entry for shm operation: %s\n",
 			fi_strerror(-ret));
-		if (rxr_cq_handle_rx_error(ep, rx_entry, ret))
-			assert(0 && "failed to write err cq entry");
 	}
-	efa_cntr_report_rx_completion(&ep->util_ep, rx_entry->cq_entry.flags);
-	rxr_release_rx_entry(ep, rx_entry);
+
+	if (cq_entry->flags & FI_ATOMIC) {
+		efa_cntr_report_tx_completion(&ep->util_ep, cq_entry->flags);
+	} else {
+		assert(cq_entry->flags & FI_REMOTE_CQ_DATA);
+		efa_cntr_report_rx_completion(&ep->util_ep, cq_entry->flags);
+	}
 }
 
 void rxr_cq_write_tx_completion(struct rxr_ep *ep,

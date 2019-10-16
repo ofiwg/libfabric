@@ -269,6 +269,7 @@ enum rxr_rx_comm_type {
 	RXR_RX_QUEUED_EOR,	/* rx_entry was unable to send EOR over shm */
 	RXR_RX_QUEUED_CTS_RNR,	/* rx_entry RNR sending CTS */
 	RXR_RX_WAIT_READ_FINISH, /* rx_entry wait for send to finish, FI_READ */
+	RXR_RX_WAIT_ATOMRSP_SENT, /* rx_entry wait for atomrsp packet sent completion */
 };
 
 enum rxr_peer_state {
@@ -323,6 +324,24 @@ struct rxr_queued_ctrl_info {
 	int inject;
 };
 
+struct rxr_atomic_hdr {
+	/* atomic_op is different from tx_op */
+	uint32_t atomic_op;
+	uint32_t datatype;
+};
+
+/* extra information that is not included in fi_msg_atomic
+ * used by fetch atomic and compare atomic.
+ *     resp stands for response
+ *     comp stands for compare
+ */
+struct rxr_atomic_ex {
+	struct iovec resp_iov[RXR_IOV_LIMIT];
+	int resp_iov_count;
+	struct iovec comp_iov[RXR_IOV_LIMIT];
+	int comp_iov_count;
+};
+
 struct rxr_rx_entry {
 	/* Must remain at the top */
 	enum rxr_x_entry_type type;
@@ -341,6 +360,8 @@ struct rxr_rx_entry {
 	 */
 	uint32_t rma_loc_tx_id;
 	uint32_t rma_initiator_rx_id;
+
+	struct rxr_atomic_hdr atomic_hdr;
 
 	uint32_t msg_id;
 
@@ -390,6 +411,7 @@ struct rxr_rx_entry {
 	struct rxr_rx_entry *master_entry;
 
 	struct rxr_pkt_entry *unexp_pkt;
+	struct rxr_pkt_entry *atomrsp_pkt;
 
 #if ENABLE_DEBUG
 	/* linked with rx_pending_list in rxr_ep */
@@ -442,6 +464,10 @@ struct rxr_tx_entry {
 	/* App-provided reg descriptor */
 	void *desc[RXR_IOV_LIMIT];
 
+	/* atomic related variables */
+	struct rxr_atomic_hdr atomic_hdr;
+	struct rxr_atomic_ex atomic_ex;
+
 	/* Only used with mr threshold switch from memcpy */
 	size_t iov_mr_start;
 	struct fid_mr *mr[RXR_IOV_LIMIT];
@@ -471,7 +497,7 @@ struct rxr_domain {
 	struct util_domain util_domain;
 	struct fid_domain *rdm_domain;
 	struct fid_domain *shm_domain;
-
+	size_t mtu_size;
 	size_t addrlen;
 	uint8_t mr_local;
 	uint64_t rdm_mode;
@@ -689,6 +715,8 @@ struct rxr_tx_entry *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
 					   uint64_t tag,
 					   uint64_t flags);
 
+
+
 static inline void rxr_release_tx_entry(struct rxr_ep *ep,
 					struct rxr_tx_entry *tx_entry)
 {
@@ -850,6 +878,10 @@ void rxr_cq_write_tx_completion(struct rxr_ep *ep,
 
 void rxr_cq_handle_tx_completion(struct rxr_ep *ep,
 				 struct rxr_tx_entry *tx_entry);
+
+void rxr_cq_handle_shm_completion(struct rxr_ep *ep,
+				  struct fi_cq_data_entry *cq_entry,
+				  fi_addr_t src_addr);
 
 int rxr_cq_reorder_msg(struct rxr_ep *ep,
 		       struct rxr_peer *peer,

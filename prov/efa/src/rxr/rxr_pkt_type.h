@@ -65,10 +65,11 @@
 #define RXR_READRSP_PKT		5
 #define RXR_RMA_CONTEXT_PKT	6
 #define RXR_EOR_PKT		7
+#define RXR_ATOMRSP_PKT         8
 /*
  * The following packet types are part of protocol version 4
  */
-#define RXR_HANDSHAKE_PKT	8
+#define RXR_HANDSHAKE_PKT	9
 
 #define RXR_REQ_PKT_BEGIN		64
 #define RXR_BASELINE_REQ_PKT_BEGIN	64
@@ -83,14 +84,15 @@
 #define RXR_SHORT_RTR_PKT		72
 #define RXR_LONG_RTR_PKT		73
 #define RXR_WRITE_RTA_PKT		74
-#define RXR_READFETCH_RTA_PKT		75
-#define RXR_BASELINE_REQ_PKT_END	76
+#define RXR_FETCH_RTA_PKT		75
+#define RXR_COMPARE_RTA_PKT		76
+#define RXR_BASELINE_REQ_PKT_END	77
 
-#define RXR_EXTRA_REQ_PKT_BEGIN		76
-#define RXR_READ_MSGRTM_PKT		76
-#define RXR_READ_TAGRTM_PKT		77
-#define RXR_READ_RTW_PKT		78
-#define RXR_READ_RTR_PKT		79
+#define RXR_EXTRA_REQ_PKT_BEGIN		77
+#define RXR_READ_MSGRTM_PKT		77
+#define RXR_READ_TAGRTM_PKT		78
+#define RXR_READ_RTW_PKT		79
+#define RXR_READ_RTR_PKT		80
 
 /*
  *  Packet fields common to all rxr packets. The other packet headers below must
@@ -449,5 +451,43 @@ struct rxr_ctrl_cq_pkt {
 };
 
 #endif
+
+/* atomrsp types */
+struct rxr_atomrsp_hdr {
+	uint8_t type;
+	uint8_t version;
+	uint16_t flags;
+	/* end of rxr_base_hdr */
+	uint8_t pad[4];
+	uint32_t rx_id;
+	uint32_t tx_id;
+	uint64_t seg_size;
+};
+
+#if defined(static_assert) && defined(__x86_64__)
+static_assert(sizeof(struct rxr_atomrsp_hdr) == sizeof(struct rxr_data_hdr), "rxr_atomrsp_hdr check");
+#endif
+
+#define RXR_ATOMRSP_HDR_SIZE	(sizeof(struct rxr_atomrsp_hdr))
+
+struct rxr_atomrsp_pkt {
+	struct rxr_atomrsp_hdr hdr;
+	char data[];
+};
+
+static inline struct rxr_atomrsp_hdr *rxr_get_atomrsp_hdr(void *pkt)
+{
+	return (struct rxr_atomrsp_hdr *)pkt;
+}
+
+/* atomrsp functions: init, handle_sent, handle_send_completion, recv */
+int rxr_pkt_init_atomrsp(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
+			 struct rxr_pkt_entry *pkt_entry);
+
+void rxr_pkt_handle_atomrsp_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
+
+void rxr_pkt_handle_atomrsp_send_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
+
+void rxr_pkt_handle_atomrsp_recv(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
 
 #include "rxr_pkt_type_req.h"

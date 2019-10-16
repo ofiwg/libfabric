@@ -44,6 +44,7 @@
 #include "rxr_rma.h"
 #include "rxr_pkt_cmd.h"
 #include "rxr_rdma.h"
+#include "rxr_atomic.h"
 
 struct rxr_rx_entry *rxr_ep_rx_entry_init(struct rxr_ep *ep,
 					  struct rxr_rx_entry *rx_entry,
@@ -62,6 +63,7 @@ struct rxr_rx_entry *rxr_ep_rx_entry_init(struct rxr_ep *ep,
 	rx_entry->window = 0;
 	rx_entry->iov_count = iov_count;
 	rx_entry->tag = tag;
+	rx_entry->op = op;
 	rx_entry->ignore = ignore;
 	rx_entry->unexp_pkt = NULL;
 	rx_entry->rma_iov_count = 0;
@@ -94,6 +96,13 @@ struct rxr_rx_entry *rxr_ep_rx_entry_init(struct rxr_ep *ep,
 		break;
 	case ofi_op_write:
 		rx_entry->cq_entry.flags = (FI_REMOTE_WRITE | FI_RMA);
+		break;
+	case ofi_op_atomic:
+		rx_entry->cq_entry.flags = (FI_REMOTE_WRITE | FI_RMA | FI_ATOMIC);
+		break;
+	case ofi_op_atomic_fetch:
+	case ofi_op_atomic_compare:
+		rx_entry->cq_entry.flags = (FI_REMOTE_READ | FI_RMA | FI_ATOMIC);
 		break;
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
@@ -463,6 +472,13 @@ void rxr_tx_entry_init(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 		break;
 	case ofi_op_msg:
 		tx_entry->cq_entry.flags = FI_TRANSMIT | FI_MSG;
+		break;
+	case ofi_op_atomic:
+		tx_entry->cq_entry.flags = (FI_WRITE | FI_RMA | FI_ATOMIC);
+		break;
+	case ofi_op_atomic_fetch:
+	case ofi_op_atomic_compare:
+		tx_entry->cq_entry.flags = (FI_READ | FI_RMA | FI_ATOMIC);
 		break;
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "invalid operation type\n");
@@ -1401,8 +1417,8 @@ static inline void rxr_ep_poll_cq(struct rxr_ep *ep,
 			src_addr = efa_av->shm_rdm_addr_map[src_addr];
 		}
 
-		if (is_shm_cq && (cq_entry.flags & FI_REMOTE_CQ_DATA)) {
-			rxr_cq_handle_shm_rma_write_data(ep, &cq_entry, src_addr);
+		if (is_shm_cq && (cq_entry.flags & (FI_ATOMIC | FI_REMOTE_CQ_DATA))) {
+			rxr_cq_handle_shm_completion(ep, &cq_entry, src_addr);
 		} else if (cq_entry.flags & (FI_SEND | FI_READ | FI_WRITE)) {
 #if ENABLE_DEBUG
 			if (!is_shm_cq)
@@ -1702,6 +1718,7 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	*ep = &rxr_ep->util_ep.ep_fid;
 	(*ep)->msg = &rxr_ops_msg;
 	(*ep)->rma = &rxr_ops_rma;
+	(*ep)->atomic = &rxr_ops_atomic;
 	(*ep)->tagged = &rxr_ops_tagged;
 	(*ep)->fid.ops = &rxr_ep_fi_ops;
 	(*ep)->ops = &rxr_ops_ep;
