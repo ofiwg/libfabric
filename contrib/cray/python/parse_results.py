@@ -86,6 +86,8 @@ def fabtests_testcase_parser(log, classname_prefix):
                 result = 'pass'
             elif data[1] == 'Notrun':
                 result = 'skip'
+            elif data[1] == 'Excluded':
+                result = 'skip'
             else:
                 result = 'fail'
         elif line.startswith('  time:'):
