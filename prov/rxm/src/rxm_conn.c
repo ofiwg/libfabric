@@ -1366,7 +1366,7 @@ static int rxm_conn_atomic_progress_eq_cq(struct rxm_ep *rxm_ep,
 				goto exit;
 		}
 		if (again || fds[1].revents & POLLIN)
-			rxm_ep_progress(&rxm_ep->util_ep);
+			rxm_ep->util_ep.progress(&rxm_ep->util_ep);
 	}
 exit:
 	return -1;

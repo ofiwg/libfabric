@@ -103,7 +103,7 @@ struct fi_fabric_attr rxm_fabric_attr = {
 };
 
 struct fi_info rxm_info = {
-	.caps = RXM_EP_CAPS | RXM_DOMAIN_CAPS | FI_MULTI_RECV,
+	.caps = RXM_EP_CAPS | RXM_DOMAIN_CAPS | FI_MULTI_RECV | FI_COLLECTIVE,
 	.addr_format = FI_SOCKADDR,
 	.tx_attr = &rxm_tx_attr,
 	.rx_attr = &rxm_rx_attr,

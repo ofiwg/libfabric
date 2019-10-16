@@ -205,6 +205,12 @@ static inline uint64_t roundup_power_of_two(uint64_t n)
 	return n;
 }
 
+static inline uint64_t rounddown_power_of_two(uint64_t n)
+{
+	uint64_t pof2 = roundup_power_of_two(n);
+	return (pof2 > n) ? (pof2 >> 1) : pof2;
+}
+
 static inline size_t ofi_get_aligned_size(size_t size, size_t alignment)
 {
 	return ((size % alignment) == 0) ?

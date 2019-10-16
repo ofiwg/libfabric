@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2019 Intel Corporation. All rights reserved.
+ * Copyright (c) 2019-2019 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -29,56 +29,17 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-
 #pragma once
 
-#include <stdlib.h>
-#include <stdbool.h>
 
-#include <rdma/fabric.h>
-#include <rdma/fi_trigger.h>
-#include <sys/uio.h>
-#include <sys/socket.h>
 
-#include "pattern.h"
+typedef int (*coll_test_setup_t)();
+typedef int (*coll_test_run_t)();
+typedef void (*coll_test_teardown_t)();
 
-#define PM_DEFAULT_OOB_PORT (8228)
-
-struct pm_job_info {
-	size_t		my_rank;
-	size_t		num_ranks;
-	int		sock;
-	int		*clients; //only valid for server
-
-	struct sockaddr_storage oob_server_addr;
-	size_t 		server_addr_len;
-	void		*names;
-	size_t		name_len;
-	fi_addr_t	*fi_addrs;
+struct coll_test {
+        char *name;
+        coll_test_setup_t setup;
+        coll_test_run_t run;
+        coll_test_teardown_t teardown;
 };
-
-
-struct multinode_xfer_state {
-	int 			iteration;
-	size_t			recvs_posted;
-	size_t			sends_posted;
-
-	size_t			tx_window;
-	size_t			rx_window;
-
-	/* pattern iterator state */
-	int			cur_source;
-	int			cur_target;
-
-	bool			all_recvs_posted;
-	bool			all_sends_posted;
-	bool			all_completions_done;
-
-	uint64_t		tx_flags;
-	uint64_t		rx_flags;
-};
-
-extern struct pm_job_info pm_job;
-int multinode_run_tests(int argc, char **argv);
-int pm_allgather(void *my_item, void *items, int item_size);
-void pm_barrier();

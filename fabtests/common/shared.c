@@ -46,6 +46,7 @@
 #include <rdma/fi_rma.h>
 #include <rdma/fi_tagged.h>
 #include <rdma/fi_atomic.h>
+#include <rdma/fi_collective.h>
 
 #include <shared.h>
 
@@ -426,7 +427,7 @@ static int ft_alloc_msgs(void)
 	} else {
 		ft_set_tx_rx_sizes(&tx_size, &rx_size);
 		tx_mr_size = 0;
-		rx_mr_size = 0;		
+		rx_mr_size = 0;
 		buf_size = MAX(tx_size, FT_MAX_CTRL_MSG) + MAX(rx_size, FT_MAX_CTRL_MSG);
 	}
 
@@ -995,7 +996,8 @@ int ft_enable_ep(struct fid_ep *ep, struct fid_eq *eq, struct fid_av *av,
 	uint64_t flags;
 	int ret;
 
-	if (fi->ep_attr->type == FI_EP_MSG || fi->caps & FI_MULTICAST)
+	if (fi->ep_attr->type == FI_EP_MSG || fi->caps & FI_MULTICAST ||
+	    fi->caps & FI_COLLECTIVE)
 		FT_EP_BIND(ep, eq, 0);
 
 	FT_EP_BIND(ep, av, 0);
@@ -1143,7 +1145,7 @@ int ft_exchange_addresses_oob(struct fid_av *av_ptr, struct fid_ep *ep_ptr,
 
 	ret = ft_av_insert(av_ptr, buf, 1, remote_addr, 0, NULL);
 	if (ret)
-		return ret;	
+		return ret;
 
 	return 0;
 }
@@ -1855,7 +1857,7 @@ ssize_t ft_post_rma_inject(enum ft_rma_opcodes op, struct fid_ep *ep, size_t siz
 	switch (op) {
 	case FT_RMA_WRITE:
 		FT_POST(fi_inject_write, ft_progress, txcq, tx_seq, &tx_cq_cntr,
-			"fi_inject_write", ep, tx_buf, opts.transfer_size, 
+			"fi_inject_write", ep, tx_buf, opts.transfer_size,
 			remote_fi_addr, remote->addr, remote->key);
 		break;
 	case FT_RMA_WRITEDATA:
