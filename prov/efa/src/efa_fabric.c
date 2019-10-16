@@ -889,7 +889,7 @@ static void fi_efa_fini(void)
 struct fi_provider efa_prov = {
 	.name = EFA_PROV_NAME,
 	.version = EFA_PROV_VERS,
-	.fi_version = FI_VERSION(1, 8),
+	.fi_version = OFI_VERSION_LATEST,
 	.getinfo = efa_getinfo,
 	.fabric = efa_fabric,
 	.cleanup = fi_efa_fini

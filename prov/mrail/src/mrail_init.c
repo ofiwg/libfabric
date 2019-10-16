@@ -497,7 +497,7 @@ static void mrail_fini(void)
 struct fi_provider mrail_prov = {
 	.name = OFI_UTIL_PREFIX "mrail",
 	.version = FI_VERSION(MRAIL_MAJOR_VERSION, MRAIL_MINOR_VERSION),
-	.fi_version = FI_VERSION(1, 8),
+	.fi_version = OFI_VERSION_LATEST,
 	.getinfo = mrail_getinfo,
 	.fabric = mrail_fabric_open,
 	.cleanup = mrail_fini

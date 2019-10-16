@@ -65,6 +65,9 @@
 extern "C" {
 #endif
 
+/* For in-tree providers */
+#define OFI_VERSION_LATEST	FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION)
+
 #define OFI_GETINFO_INTERNAL	(1ULL << 58)
 #define OFI_CORE_PROV_ONLY	(1ULL << 59)
 

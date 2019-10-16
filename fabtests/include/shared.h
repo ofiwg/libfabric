@@ -49,7 +49,7 @@ extern "C" {
 #endif
 
 #ifndef FT_FIVERSION
-#define FT_FIVERSION FI_VERSION(1,5)
+#define FT_FIVERSION FI_VERSION(1,9)
 #endif
 
 #include "ft_osd.h"

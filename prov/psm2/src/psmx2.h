@@ -83,7 +83,7 @@ extern "C" {
 
 extern struct fi_provider psmx2_prov;
 
-#define PSMX2_VERSION	(FI_VERSION(1, 8))
+#define PSMX2_VERSION	(OFI_VERSION_LATEST)
 
 #define PSMX2_OP_FLAGS	(FI_INJECT | FI_MULTI_RECV | FI_COMPLETION | \
 			 FI_TRIGGER | FI_INJECT_COMPLETE | \

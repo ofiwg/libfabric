@@ -140,7 +140,7 @@ static void smr_fini(void)
 struct fi_provider smr_prov = {
 	.name = "shm",
 	.version = FI_VERSION(SMR_MAJOR_VERSION, SMR_MINOR_VERSION),
-	.fi_version = FI_VERSION(1, 8),
+	.fi_version = OFI_VERSION_LATEST,
 	.getinfo = smr_getinfo,
 	.fabric = smr_fabric,
 	.cleanup = smr_fini

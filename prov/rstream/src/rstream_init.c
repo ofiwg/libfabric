@@ -163,7 +163,7 @@ static void rstream_fini(void)
 struct fi_provider rstream_prov = {
 	.name = OFI_UTIL_PREFIX "rstream",
 	.version = FI_VERSION(1 ,0),
-	.fi_version = FI_VERSION(1, 8),
+	.fi_version = OFI_VERSION_LATEST,
 	.getinfo = rstream_getinfo,
 	.fabric = rstream_fabric_open,
 	.cleanup = rstream_fini

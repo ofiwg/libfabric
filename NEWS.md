@@ -5,6 +5,81 @@ This file contains the main features as well as overviews of specific
 bug fixes (and other actions) for each version of Libfabric since
 version 1.0.
 
+v1.9.0, Fri Nov 22, 2019
+========================
+
+## Core
+
+## EFA
+
+## GNI
+
+## MRail
+
+## PSM2
+
+## RxD
+
+## RxM
+
+## SHM
+
+## TCP
+
+## Verbs
+
+
+v1.8.1, Mon Sep 30, 2019
+========================
+
+## Core
+
+- Limit default size of memory registration cache
+- Verify that correct entry is removed from MR cache
+
+## EFA
+
+- Fixes to fi_cancel() when used with multi-recv buffers
+- Fixes to registered memory handling after a fork()
+- Fixes to the long message flow-control protocol
+- Use FI_AV_TABLE as the preferred AV type
+- Fixes to the bufpool allocation handlers
+- Fixes to RTS handler
+- Fix to use correct arch detection preprocessor macro
+- Expose fid_nic information
+- Fix memory leaks
+
+## PSM2
+
+- Fix incorrect value of max_order_raw_size
+- Report page aligned max_msg_size
+- Always enable the lock accessed by the disconnection thread
+- Fix race condition with progress thread and FI_THREAD_DOMAIN
+- Avoid a potential deadlock in disconnection protocol
+
+## RxD
+- Fix default AV count with environment variable FI_OFI_RXD_MAX_PEERS
+
+## RxM
+
+- Fix connection handle shutdown/CQ processing race
+- Fix RMA ordering bits for FI_ATOMIC
+
+## SHM
+- Add correct reporting of FI_MR_BASIC
+- Add correct reporting and proper support of FI_DIRECTED_RECV
+
+## Verbs
+
+- Allow zero length memory registrations
+- Improve connection scale up by removing synchronous calls in fi_getinfo
+- Fix missing serialization to event channel during CM ID migration
+- Protect XRC EQ processing from EP API connect/accept calls
+- Fix XRC connection tag to EP return value in error case
+- return EAGAIN to user if an unhandled rdmacm event is received
+- handle IPv6 link local addresses correctly
+
+
 v1.8.0, Fri Jun 28, 2019
 ========================
 

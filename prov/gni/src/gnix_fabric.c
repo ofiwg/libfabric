@@ -724,7 +724,7 @@ static void gnix_fini(void)
 struct fi_provider gnix_prov = {
 	.name = gnix_prov_name,
 	.version = FI_VERSION(GNI_MAJOR_VERSION, GNI_MINOR_VERSION),
-	.fi_version = FI_VERSION(1, 8),
+	.fi_version = OFI_VERSION_LATEST,
 	.getinfo = gnix_getinfo,
 	.fabric = gnix_fabric_open,
 	.cleanup = gnix_fini

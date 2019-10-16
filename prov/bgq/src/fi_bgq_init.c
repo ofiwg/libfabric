@@ -330,7 +330,7 @@ static void fi_bgq_fini()
 static struct fi_provider fi_bgq_provider = {
 	.name 		= FI_BGQ_PROVIDER_NAME,
 	.version 	= FI_VERSION(0, 1),
-	.fi_version 	= FI_VERSION(1, 6),
+	.fi_version 	= OFI_VERSION_LATEST,
 	.getinfo	= fi_bgq_getinfo,
 	.fabric		= fi_bgq_fabric,
 	.cleanup	= fi_bgq_fini
