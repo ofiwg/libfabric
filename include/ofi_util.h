@@ -64,6 +64,7 @@
 #include <ofi_indexer.h>
 #include <ofi_epoll.h>
 #include <ofi_proto.h>
+#include <ofi_bitmask.h>
 
 #include "rbtree.h"
 #include "uthash.h"
@@ -295,6 +296,7 @@ struct util_ep {
 	ofi_fastlock_acquire_t	lock_acquire;
 	ofi_fastlock_release_t	lock_release;
 
+	struct bitmask		*coll_cid_mask;
 	struct dlist_entry	coll_state_list;
 	fastlock_t		coll_state_lock;
 };

@@ -56,13 +56,6 @@
 #include <ofi_coll.h>
 #include <ofi_osd.h>
 
-static uint64_t util_coll_cid[OFI_CONTEXT_ID_SIZE];
-/* TODO: if collective support is requested, initialize up front
- * when opening the domain or EP
- */
-static bool util_coll_cid_initialized = 0;
-
-
 int ofi_av_set_union(struct fid_av_set *dst, const struct fid_av_set *src)
 {
 	struct util_av_set *src_av_set;
@@ -188,18 +181,6 @@ int ofi_av_set_addr(struct fid_av_set *set, fi_addr_t *coll_addr)
 	return FI_SUCCESS;
 }
 
-static inline void util_coll_init_cid(uint64_t *cid)
-{
-	int i;
-
-	for (i = 0; i < OFI_CONTEXT_ID_SIZE; i++) {
-		cid[i] = -1;
-	}
-
-	/* reserving the first bit in context id to whole av set */
-	cid[0] &= ~0x1ULL;
-}
-
 static inline int util_coll_mc_alloc(struct util_coll_mc **coll_mc)
 {
 
@@ -226,7 +207,7 @@ static inline uint64_t util_coll_form_tag(uint32_t coll_id, uint32_t rank)
 
 static inline uint32_t util_coll_get_next_id(struct util_coll_mc *coll_mc)
 {
-	uint32_t cid = coll_mc->cid;
+	uint32_t cid = coll_mc->group_id;
 	return cid << 16 | coll_mc->seq++;
 }
 
@@ -488,44 +469,31 @@ static int util_coll_find_my_rank(struct fid_ep *ep,
 void util_coll_join_comp(struct util_coll_state *state)
 {
 	struct fi_eq_err_entry entry;
-	struct util_ep *ep;
-	ssize_t bytes;
-	uint64_t tmp;
-	int iter, lsb_set_pos = 0, pos;
+	struct util_ep *ep = container_of(state->mc->ep, struct util_ep, ep_fid);
 
-	for (iter = 0; iter < OFI_CONTEXT_ID_SIZE; iter++) {
-		if (state->data.cid_buf[iter]) {
-			tmp = state->data.cid_buf[iter];
-			pos = 0;
-			while (!(tmp & 0x1)) {
-				tmp >>= 1;
-				pos++;
-			}
+	struct bitmask mask = {
+		.bytes = state->comp_data,
+		.size = state->comp_data_size * 8
+	};
 
-			/* clear the bit from global cid space */
-			util_coll_cid[iter] ^= (1 << pos);
-			lsb_set_pos += pos;
-		} else {
-			lsb_set_pos += sizeof(state->data.cid_buf[0]) * 8;
-		}
-	}
-	assert(lsb_set_pos < OFI_CONTEXT_ID_SIZE * 8);
-	state->mc->cid = lsb_set_pos;
 	state->mc->seq = 0;
+	state->mc->group_id = ofi_bitmask_get_lsbset(mask);
+
+	// mark the local mask bit
+	ofi_bitmask_unset(ep->coll_cid_mask, state->mc->group_id);
 
 	/* write to the eq  */
 	memset(&entry, 0, sizeof(entry));
 	entry.fid = &state->mc->mc_fid.fid;
 	entry.context = state->mc->mc_fid.fid.context;
-	bytes = sizeof(struct fi_eq_entry);
 
-	ep  = container_of(state->mc->ep, struct util_ep, ep_fid);
-	if (ofi_eq_write(&ep->eq->eq_fid, FI_JOIN_COMPLETE,
-			 &entry, (size_t) bytes, FI_COLLECTIVE) < 0)
+	if (ofi_eq_write(&ep->eq->eq_fid, FI_JOIN_COMPLETE, &entry,
+			 sizeof(struct fi_eq_entry), FI_COLLECTIVE) < 0)
 		FI_WARN(ep->domain->fabric->prov, FI_LOG_DOMAIN,
 			"join collective - eq write failed\n");
 
 	dlist_remove(&state->entry);
+	free(state->comp_data);
 	free(state);
 }
 
@@ -536,7 +504,7 @@ void util_coll_barrier_comp(struct util_coll_state *state)
 	ep = container_of(state->mc->ep, struct util_ep, ep_fid);
 
 	if (ofi_cq_write(ep->tx_cq, state->context, FI_COLLECTIVE,
-			 sizeof(state->data), &state->data, 0, state->hdr.tag)) {
+			 state->comp_data_size, state->comp_data, 0, state->hdr.tag)) {
 		FI_WARN(ep->domain->fabric->prov, FI_LOG_DOMAIN,
 			"barrier collective - cq write failed\n");
 	}
@@ -762,7 +730,8 @@ int ofi_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 	struct util_av_set *av_set;
 	struct util_coll_mc *coll_mc;
 	struct util_coll_state *join_state;
-
+	struct util_ep *util_ep;
+	struct bitmask *join_mask;
 	int ret;
 
 	av_set = container_of(set, struct util_av_set, av_set_fid);
@@ -778,10 +747,7 @@ int ofi_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 	if (ret)
 		return ret;
 
-	if (util_coll_cid_initialized == 0) {
-		util_coll_init_cid(util_coll_cid);
-		util_coll_cid_initialized = 1;
-	}
+	util_ep = container_of(ep, struct util_ep, ep_fid);
 
 	// set up the new mc for future collectives
 	new_coll_mc->mc_fid.fid.fclass = FI_CLASS_MC;
@@ -801,31 +767,55 @@ int ofi_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 	util_coll_find_my_rank(ep, new_coll_mc);
 	util_coll_find_my_rank(ep, coll_mc);
 
+	join_mask = calloc(1, sizeof(join_mask));
+	if(!join_mask) {
+		ret = -FI_ENOMEM;
+		goto err1;
+	}
+
+	ret = ofi_bitmask_create(join_mask, OFI_MAX_GROUP_ID);
+	if(ret)
+		goto err2;
+
+	join_state->comp_data = join_mask->bytes;
+	join_state->comp_data_size = join_mask->size / 8;
+
 	if (new_coll_mc->my_rank != FI_ADDR_NOTAVAIL) {
-		ret = util_coll_sched_copy(coll_mc, util_coll_cid, &join_state->data.cid_buf,
-					   OFI_CONTEXT_ID_SIZE * sizeof(uint64_t),
+		ret = ofi_bitmask_create(join_mask, OFI_MAX_GROUP_ID);
+		if(ret)
+			goto err2;
+
+		join_state->comp_data = join_mask->bytes;
+		join_state->comp_data_size = join_mask->size / 8;
+
+		ret = util_coll_sched_copy(coll_mc, util_ep->coll_cid_mask->bytes,
+					   join_state->comp_data,
+					   join_state->comp_data_size,
 					   FI_UINT8, NO_BARRIER);
 		if (ret) {
 			goto err2;
 		}
 	} else {
-		util_coll_init_cid(join_state->data.cid_buf);
+		ofi_bitmask_set_all(join_mask);
 	}
 
-	ret = util_coll_allreduce(coll_mc, &join_state->data.cid_buf, &join_state->data.tmp_cid_buf,
-				  OFI_CONTEXT_ID_SIZE, FI_INT64, FI_BAND);
+	free(join_mask);
+
+	ret = util_coll_allreduce(coll_mc, join_state->comp_data,join_state->comp_data,
+				  join_state->comp_data_size, FI_UINT8, FI_BAND);
 	if (ret)
-		goto err2;
+		goto err3;
 
 	ret = util_coll_sched_comp(coll_mc, UTIL_COLL_JOIN_OP, context,
 				   join_state, util_coll_join_comp);
 	if (ret)
-		goto err2;
+		goto err3;
 
 	*mc = &new_coll_mc->mc_fid;
 	util_coll_schedule(coll_mc);
 	return FI_SUCCESS;
-
+err3:
+	free(join_state->comp_data);
 err2:
 	free(join_state);
 err1:
@@ -857,11 +847,6 @@ static int util_coll_av_init(struct util_av *av)
 	int ret;
 
 	assert(!av->coll_mc);
-
-	if (util_coll_cid_initialized == 0) {
-		util_coll_init_cid(util_coll_cid);
-		util_coll_cid_initialized = 1;
-	}
 
 	ret = util_coll_mc_alloc(&coll_mc);
 	if (ret)
@@ -964,19 +949,29 @@ ssize_t ofi_ep_barrier(struct fid_ep *ep, fi_addr_t coll_addr, void *context)
 	coll_mc = (struct util_coll_mc*) ((uintptr_t) coll_addr);
 
 	util_coll_state_init(coll_mc, &barrier_state);
+	barrier_state->comp_data_size = sizeof(uint64_t);
+	barrier_state->comp_data = calloc(1, barrier_state->comp_data_size);
+	if (!barrier_state->comp_data) {
+		ret = -FI_ENOMEM;
+		goto err1;
+	}
 
-	ret = util_coll_allreduce(coll_mc, &barrier_state->data.cid_buf,
-				  &barrier_state->data.cid_buf, 1,
-				  FI_UINT64, FI_BAND);
+	ret = util_coll_allreduce(coll_mc, barrier_state->comp_data,
+				  barrier_state->comp_data, barrier_state->comp_data_size,
+				  FI_UINT8, FI_BAND);
 	if (ret)
-		goto err;
+		goto err2;
 
-	util_coll_sched_comp(coll_mc, UTIL_COLL_BARRIER_OP, context,
+	ret = util_coll_sched_comp(coll_mc, UTIL_COLL_BARRIER_OP, context,
 			     barrier_state, util_coll_barrier_comp);
+	if (ret)
+		goto err2;
 
 	util_coll_schedule(coll_mc);
 	return FI_SUCCESS;
-err:
+err2:
+	free(barrier_state->comp_data);
+err1:
 	free(barrier_state);
 	return ret;
 }

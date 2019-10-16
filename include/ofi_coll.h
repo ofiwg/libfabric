@@ -37,9 +37,10 @@
 
 #include <ofi_list.h>
 #include <ofi_atom.h>
+#include <ofi_bitmask.h>
 
-#define OFI_WORLD_CONTEXT_ID 0
-#define OFI_CONTEXT_ID_SIZE 4
+#define OFI_WORLD_GROUP_ID 0
+#define OFI_MAX_GROUP_ID 256
 #define OFI_COLL_TAG_FLAG (1ULL << 63)
 
 enum barrier_type {
@@ -117,7 +118,7 @@ struct util_coll_mc {
 	struct slist		deferred_list;
 	struct slist		pending_xfer_list;
 	int			my_rank;
-	uint16_t		cid;
+	uint16_t		group_id;
 	uint16_t		seq;
 	ofi_atomic32_t		ref;
 };
@@ -126,18 +127,15 @@ struct util_coll_state;
 
 typedef void (*util_coll_comp_fn_t)(struct util_coll_state *state);
 
-struct util_coll_cid_data {
-	uint64_t	cid_buf[OFI_CONTEXT_ID_SIZE];
-	uint64_t	tmp_cid_buf[OFI_CONTEXT_ID_SIZE];
-};
-
 struct util_coll_state {
 	struct util_coll_hdr	hdr;
 	struct dlist_entry	entry;
 	enum util_coll_op_type	type;
 	void			*context;
 	struct util_coll_mc	*mc;
-	struct util_coll_cid_data data;
+	struct slist		work_queue;
+	void			*comp_data;
+	size_t			comp_data_size;
 	util_coll_comp_fn_t	comp_fn;
 };
 

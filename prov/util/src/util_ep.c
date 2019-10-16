@@ -35,6 +35,7 @@
 
 #include <ofi_enosys.h>
 #include <ofi_util.h>
+#include <ofi_coll.h>
 
 int ofi_ep_bind_cq(struct util_ep *ep, struct util_cq *cq, uint64_t flags)
 {
@@ -190,6 +191,20 @@ int ofi_ep_bind(struct util_ep *util_ep, struct fid *fid, uint64_t flags)
 	return -FI_EINVAL;
 }
 
+static inline int util_coll_init_cid_mask(struct bitmask *mask)
+{
+	int err = ofi_bitmask_create(mask, OFI_MAX_GROUP_ID);
+	if (err)
+		return err;
+
+	ofi_bitmask_set_all(mask);
+
+	/* reserving the first bit in context id to whole av set */
+	ofi_bitmask_unset(mask, OFI_WORLD_GROUP_ID);
+
+	return FI_SUCCESS;
+}
+
 int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_prov,
 		      struct fi_info *info, struct util_ep *ep, void *context,
 		      ofi_ep_progress_func progress)
@@ -239,6 +254,14 @@ int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_pr
 	} else {
 		ep->lock_acquire = ofi_fastlock_acquire;
 		ep->lock_release = ofi_fastlock_release;
+	}
+	if (ep->caps & FI_COLLECTIVE) {
+		ep->coll_cid_mask = calloc(1, sizeof(*ep->coll_cid_mask));
+		if (!ep->coll_cid_mask)
+			return -FI_ENOMEM;
+		util_coll_init_cid_mask(ep->coll_cid_mask);
+	} else {
+		ep->coll_cid_mask = NULL;
 	}
 	dlist_init(&ep->coll_state_list);
 	fastlock_init(&ep->coll_state_lock);
@@ -309,6 +332,11 @@ int ofi_endpoint_close(struct util_ep *util_ep)
 		fastlock_release(&util_ep->av->ep_list_lock);
 
 		ofi_atomic_dec32(&util_ep->av->ref);
+	}
+
+	if (util_ep->coll_cid_mask) {
+		ofi_bitmask_free(util_ep->coll_cid_mask);
+		free(util_ep->coll_cid_mask);
 	}
 
 	if (util_ep->eq)
