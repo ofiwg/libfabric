@@ -66,6 +66,7 @@
 #define RXR_REQ_MSG			BIT_ULL(2)
 #define RXR_REQ_TAGGED			BIT_ULL(3)
 #define RXR_REQ_RMA			BIT_ULL(4)
+#define RXR_REQ_ATOMIC			BIT_ULL(5)
 
 /*
  *     Utility struct and functions for
@@ -115,12 +116,13 @@ struct rxr_rtm_base_hdr *rxr_get_rtm_base_hdr(void *pkt)
 }
 
 static inline
-uint32_t rxr_pkt_rtm_msg_id(struct rxr_pkt_entry *pkt_entry)
+uint32_t rxr_pkt_msg_id(struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_rtm_base_hdr *rtm_hdr;
 
 	rtm_hdr = rxr_get_rtm_base_hdr(pkt_entry->pkt);
-	assert(rtm_hdr->flags & RXR_REQ_MSG);
+	/* only msg and atomic request has msg_id */
+	assert(rtm_hdr->flags & (RXR_REQ_MSG | RXR_REQ_ATOMIC));
 	return rtm_hdr->msg_id;
 }
 
@@ -316,14 +318,14 @@ ssize_t rxr_pkt_proc_matched_rtm(struct rxr_ep *ep,
 				 struct rxr_rx_entry *rx_entry,
 				 struct rxr_pkt_entry *pkt_entry);
 
-ssize_t rxr_pkt_proc_rtm(struct rxr_ep *ep,
-			 struct rxr_pkt_entry *pkt_entry);
+ssize_t rxr_pkt_proc_rtm_rta(struct rxr_ep *ep,
+			     struct rxr_pkt_entry *pkt_entry);
 /*
  *         This function is shared by all RTM packet types which handle
  *         reordering
  */
-void rxr_pkt_handle_rtm_recv(struct rxr_ep *ep,
-			     struct rxr_pkt_entry *pkt_entry);
+void rxr_pkt_handle_rtm_rta_recv(struct rxr_ep *ep,
+				 struct rxr_pkt_entry *pkt_entry);
 
 /* Structs and functions for RTW packet types
  * There are 3 write protocols
@@ -501,4 +503,58 @@ void rxr_pkt_handle_rtr_send_completion(struct rxr_ep *ep,
 void rxr_pkt_handle_rtr_recv(struct rxr_ep *ep,
 			     struct rxr_pkt_entry *pkt_entry);
 
+/* Structs and functions for RTW packet types
+ * There are 2 atomic protocols
+ *         write atomic protocol and, 
+ *         read/compare atomic protocol and
+ * Each protocol correspond to a packet type
+ */
+struct rxr_rta_hdr {
+	uint8_t type;
+	uint8_t version;
+	uint16_t flags;
+	uint32_t msg_id;
+	/* end of rtm_base_hdr, atomic packet need msg_id for reordering */
+	uint32_t rma_iov_count;
+	uint32_t atomic_datatype;
+	uint32_t atomic_op;
+	uint32_t tx_id;
+	struct fi_rma_iov rma_iov[0];
+};
+
+static inline
+struct rxr_rta_hdr *rxr_get_rta_hdr(void *pkt)
+{
+	return (struct rxr_rta_hdr *)pkt;
+}
+
+ssize_t rxr_pkt_init_write_rta(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry, struct rxr_pkt_entry *pkt_entry);
+
+ssize_t rxr_pkt_init_fetch_rta(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry, struct rxr_pkt_entry *pkt_entry);
+
+ssize_t rxr_pkt_init_compare_rta(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry, struct rxr_pkt_entry *pkt_entry);
+
+static inline
+void rxr_pkt_handle_rta_sent(struct rxr_ep *ep,
+			     struct rxr_pkt_entry *pkt_entry)
+{
+}
+
+void rxr_pkt_handle_write_rta_send_completion(struct rxr_ep *ep,
+					      struct rxr_pkt_entry *pkt_entry);
+
+/* no action to be taken for compare_rta and fetch rta's send completion therefore
+ * there are not functions named rxr_pkt_handle_compare/fetch_rta_send_completion()
+ */
+
+int rxr_pkt_proc_write_rta(struct rxr_ep *ep,
+			   struct rxr_pkt_entry *pkt_entry);
+
+int rxr_pkt_proc_fetch_rta(struct rxr_ep *ep,
+			   struct rxr_pkt_entry *pkt_entry);
+
+int rxr_pkt_proc_compare_rta(struct rxr_ep *ep,
+			     struct rxr_pkt_entry *pkt_entry);
+
+void rxr_pkt_handle_rta_recv(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
 #endif

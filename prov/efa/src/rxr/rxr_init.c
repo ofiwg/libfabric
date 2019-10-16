@@ -49,6 +49,7 @@ struct rxr_env rxr_env = {
 	.tx_min_credits = RXR_DEF_MIN_TX_CREDITS,
 	.tx_queue_size = 0,
 	.enable_sas_ordering = 1,
+	.enable_atomic_ordering = 1,
 	.enable_shm_transfer = 1,
 	.shm_av_size = 128,
 	.shm_max_medium_size = 4096,
@@ -311,6 +312,8 @@ static int rxr_dgram_info_to_rxr(uint32_t version,
 static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 			   struct fi_info *info, const struct fi_info *hints)
 {
+	uint64_t atomic_ordering;
+
 	info->caps = rxr_info.caps;
 	info->mode = rxr_info.mode;
 
@@ -335,10 +338,20 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 	 * based on EFA-specific constraints.
 	 */
 	if (hints) {
-		/* Disable packet reordering if the app doesn't need it */
-		if (hints->tx_attr)
+		if (hints->tx_attr) {
+
+			/* Disable packet reordering if the app doesn't need it */
 			if (!(hints->tx_attr->msg_order & FI_ORDER_SAS))
 				rxr_env.enable_sas_ordering = 0;
+
+			/* Disable atomic ordering if the app doesn't need it */
+
+			atomic_ordering = FI_ORDER_ATOMIC_RAR | FI_ORDER_ATOMIC_RAW |
+					  FI_ORDER_ATOMIC_WAR | FI_ORDER_ATOMIC_WAW;
+
+			if (!(hints->tx_attr->msg_order & atomic_ordering))
+				rxr_env.enable_atomic_ordering = 0;
+		}
 
 		/* We only support manual progress for RMA operations */
 		if (hints->caps & FI_RMA) {
@@ -636,6 +649,8 @@ EFA_INI
 			"Defines the maximum number of unacknowledged sends with the NIC.");
 	fi_param_define(&rxr_prov, "enable_sas_ordering", FI_PARAM_INT,
 			"Enable packet reordering for the RDM endpoint. This is always enabled when FI_ORDER_SAS is requested by the application. (Default: 1)");
+	fi_param_define(&rxr_prov, "enable_atomic_ordering", FI_PARAM_INT,
+			"Enable atomic reordering for the RDM endpoint. This is always enabled when FI_ORDER_ATOMIC_RAW or FI_ORDER_ATOMIC_RAR or FI_ORDER_ATOMIC_WAR or FI_ORDER_ATOMIC_WAW is requested by the application. (Default: 1)");
 	fi_param_define(&rxr_prov, "enable_shm_transfer", FI_PARAM_INT,
 			"Enable using SHM provider to provide the communication between processes on the same system. (Default: 1)");
 	fi_param_define(&rxr_prov, "shm_av_size", FI_PARAM_INT,

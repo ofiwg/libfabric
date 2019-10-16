@@ -56,7 +56,8 @@ _efa_files = \
 	prov/efa/src/rxr/rxr_pkt_type_data.c \
 	prov/efa/src/rxr/rxr_pkt_type_misc.c \
 	prov/efa/src/rxr/rxr_pkt_cmd.c \
-	prov/efa/src/rxr/rxr_read.c
+	prov/efa/src/rxr/rxr_read.c \
+	prov/efa/src/rxr/rxr_atomic.c
 
 _efa_headers = \
 	prov/efa/src/efa.h \
@@ -66,7 +67,9 @@ _efa_headers = \
 	prov/efa/src/rxr/rxr_msg.h \
 	prov/efa/src/rxr/rxr_pkt_entry.h \
 	prov/efa/src/rxr/rxr_pkt_type.h \
-	prov/efa/src/rxr/rxr_read.h
+	prov/efa/src/rxr/rxr_pkt_cmd.h \
+	prov/efa/src/rxr/rxr_read.h \
+	prov/efa/src/rxr/rxr_atomic.h
 
 efa_CPPFLAGS += \
 	-I$(top_srcdir)/prov/efa/src/ \
