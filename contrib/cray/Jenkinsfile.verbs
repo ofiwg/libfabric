@@ -67,7 +67,7 @@ pipeline {
                 LIBFABRIC_INSTALL_PATH = "$LIBFABRIC_INSTALL"
                 SFT_BIN = "${SFT_INSTALL_PATH + '/bin'}"
                 SFT_MAX_JOB_TIME = '3'
-                SFT_NUM_JOBS = '4'
+                SFT_NUM_JOBS = '6'
                 SFT_PROVIDER = 'verbs;ofi_rxm'
                 SFT_BASELINE_DIR = "contrib/cray"
                 SFT_BASELINE_RESULTS_FILE = 'sft_test_results_baseline.txt'
