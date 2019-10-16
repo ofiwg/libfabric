@@ -642,8 +642,8 @@ struct rxr_ep {
 	size_t rx_bufs_shm_to_post;
 
 	/* number of posted buffers */
-	size_t posted_bufs;
-	size_t rx_bufs_to_post;
+	size_t posted_bufs_efa;
+	size_t rx_bufs_efa_to_post;
 	/* number of buffers available for large messages */
 	size_t available_data_bufs;
 	/* Timestamp of when available_data_bufs was exhausted. */
@@ -1038,20 +1038,6 @@ static inline void rxr_release_tx_pkt_entry(struct rxr_ep *ep,
 	ofi_buf_free(pkt);
 }
 
-static inline void rxr_release_rx_pkt_entry(struct rxr_ep *ep,
-					    struct rxr_pkt_entry *pkt)
-{
-#if ENABLE_DEBUG
-	dlist_remove(&pkt->dbg_entry);
-#endif
-#ifdef ENABLE_EFA_POISONING
-	/* the same pool size is used for all types of rx pkt_entries */
-	rxr_poison_mem_region((uint32_t *)pkt, ep->rx_pkt_pool_entry_sz);
-#endif
-	pkt->state = RXR_PKT_ENTRY_FREE;
-	ofi_buf_free(pkt);
-}
-
 static inline void rxr_release_tx_entry(struct rxr_ep *ep,
 					struct rxr_tx_entry *tx_entry)
 {
@@ -1219,6 +1205,30 @@ static inline int rxr_need_sas_ordering(struct rxr_ep *ep)
 		rxr_env.enable_sas_ordering);
 }
 
+static inline void rxr_release_rx_pkt_entry(struct rxr_ep *ep,
+					    struct rxr_pkt_entry *pkt_entry)
+{
+	if (pkt_entry->type == RXR_PKT_ENTRY_POSTED) {
+		struct rxr_peer *peer;
+
+		peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+		assert(peer);
+		if (peer->is_local)
+			ep->rx_bufs_shm_to_post++;
+		else
+			ep->rx_bufs_efa_to_post++;
+	}
+#if ENABLE_DEBUG
+	dlist_remove(&pkt_entry->dbg_entry);
+#endif
+#ifdef ENABLE_EFA_POISONING
+	/* the same pool size is used for all types of rx pkt_entries */
+	rxr_poison_mem_region((uint32_t *)pkt, ep->rx_pkt_pool_entry_sz);
+#endif
+	pkt_entry->state = RXR_PKT_ENTRY_FREE;
+	ofi_buf_free(pkt_entry);
+}
+
 /* Initialization functions */
 void rxr_reset_rx_tx_to_core(const struct fi_info *user_info,
 			     struct fi_info *core_info);
@@ -1289,13 +1299,14 @@ ssize_t rxr_cq_post_cts(struct rxr_ep *ep,
 			struct rxr_rx_entry *rx_entry,
 			uint64_t size);
 
-int rxr_cq_handle_rx_completion(struct rxr_ep *ep,
-				struct fi_cq_data_entry *comp,
-				struct rxr_pkt_entry *pkt_entry,
-				struct rxr_rx_entry *rx_entry, bool is_local);
+void rxr_cq_write_rx_completion(struct rxr_ep *ep,
+				struct rxr_rx_entry *rx_entry);
+
+void rxr_cq_handle_rx_completion(struct rxr_ep *ep,
+				 struct rxr_pkt_entry *pkt_entry,
+				 struct rxr_rx_entry *rx_entry);
 
 void rxr_cq_write_tx_completion(struct rxr_ep *ep,
-				struct fi_cq_data_entry *comp,
 				struct rxr_tx_entry *tx_entry);
 
 ssize_t rxr_cq_recv_shm_large_message(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry);
@@ -1306,10 +1317,14 @@ void rxr_cq_recv_rts_data(struct rxr_ep *ep,
 
 void rxr_cq_handle_pkt_recv_completion(struct rxr_ep *ep,
 				       struct fi_cq_data_entry *comp,
-				       fi_addr_t src_addr, bool is_local);
+				       fi_addr_t src_addr);
 
 void rxr_cq_handle_pkt_send_completion(struct rxr_ep *rxr_ep,
 				       struct fi_cq_data_entry *comp);
+
+void rxr_cq_handle_shm_rma_write_data(struct rxr_ep *ep,
+				      struct fi_cq_data_entry *shm_comp,
+				      fi_addr_t src_addr);
 
 /* Aborts if unable to write to the eq */
 static inline void rxr_eq_write_error(struct rxr_ep *ep, ssize_t err,

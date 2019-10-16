@@ -121,8 +121,6 @@ int rxr_cq_handle_rx_error(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
 		rxr_release_tx_pkt_entry(ep, pkt_entry);
 
 	if (rx_entry->unexp_rts_pkt) {
-		if (rx_entry->unexp_rts_pkt->type == RXR_PKT_ENTRY_POSTED)
-			ep->rx_bufs_to_post++;
 		rxr_release_rx_pkt_entry(ep, rx_entry->unexp_rts_pkt);
 		rx_entry->unexp_rts_pkt = NULL;
 	}
@@ -365,7 +363,6 @@ int rxr_cq_handle_cq_error(struct rxr_ep *ep, ssize_t err)
 			rxr_release_tx_pkt_entry(ep, pkt_entry);
 		} else if (err_entry.flags & FI_RECV) {
 			rxr_release_rx_pkt_entry(ep, pkt_entry);
-			ep->rx_bufs_to_post++;
 		} else {
 			assert(0 && "unknown err_entry flags in CONNACK packet");
 		}
@@ -379,7 +376,6 @@ int rxr_cq_handle_cq_error(struct rxr_ep *ep, ssize_t err)
 		 * we will write to the eq instead.
 		 */
 		rxr_release_rx_pkt_entry(ep, pkt_entry);
-		ep->rx_bufs_to_post++;
 		goto write_err;
 	}
 
@@ -511,7 +507,7 @@ ssize_t rxr_cq_post_cts(struct rxr_ep *ep,
 	struct rxr_pkt_entry *pkt_entry;
 	int credits;
 
-	if (OFI_UNLIKELY(ep->posted_bufs == 0 || ep->available_data_bufs == 0))
+	if (OFI_UNLIKELY(ep->posted_bufs_efa == 0 || ep->available_data_bufs == 0))
 		return -FI_EAGAIN;
 
 	pkt_entry = rxr_get_pkt_entry(ep, ep->tx_pkt_efa_pool);
@@ -543,10 +539,8 @@ release_pkt:
 	return ret;
 }
 
-int rxr_cq_write_rx_completion(struct rxr_ep *ep,
-			       struct fi_cq_data_entry *comp,
-			       struct rxr_pkt_entry *pkt_entry,
-			       struct rxr_rx_entry *rx_entry, bool is_local)
+void rxr_cq_write_rx_completion(struct rxr_ep *ep,
+				struct rxr_rx_entry *rx_entry)
 {
 	struct util_cq *rx_cq = ep->util_ep.rx_cq;
 	int ret = 0;
@@ -574,7 +568,7 @@ int rxr_cq_write_rx_completion(struct rxr_ep *ep,
 				fi_strerror(-ret));
 
 		rxr_cntr_report_error(ep, rx_entry->cq_entry.flags);
-		goto out;
+		return;
 	}
 
 	if (!(rx_entry->rxr_flags & RXR_RECV_CANCEL) &&
@@ -584,7 +578,7 @@ int rxr_cq_write_rx_completion(struct rxr_ep *ep,
 		       "Writing recv completion for rx_entry from peer: %"
 		       PRIu64 " rx_id: %" PRIu32 " msg_id: %" PRIu32
 		       " tag: %lx total_len: %" PRIu64 "\n",
-		       pkt_entry->addr, rx_entry->rx_id, rx_entry->msg_id,
+		       rx_entry->addr, rx_entry->rx_id, rx_entry->msg_id,
 		       rx_entry->cq_entry.tag, rx_entry->total_len);
 
 		if (ep->util_ep.caps & FI_SOURCE)
@@ -613,33 +607,18 @@ int rxr_cq_write_rx_completion(struct rxr_ep *ep,
 				fi_strerror(-ret));
 			if (rxr_cq_handle_rx_error(ep, rx_entry, ret))
 				assert(0 && "failed to write err cq entry");
-			if (pkt_entry->type == RXR_PKT_ENTRY_POSTED) {
-				if (is_local)
-					ep->rx_bufs_shm_to_post++;
-				else
-					ep->rx_bufs_to_post++;
-			}
-			rxr_release_rx_pkt_entry(ep, pkt_entry);
-			return ret;
+			return;
 		}
 	}
 
 	rxr_cntr_report_rx_completion(ep, rx_entry);
-
-out:
-	return 0;
 }
 
-int rxr_cq_handle_rx_completion(struct rxr_ep *ep,
-				struct fi_cq_data_entry *comp,
-				struct rxr_pkt_entry *pkt_entry,
-				struct rxr_rx_entry *rx_entry, bool is_local)
+void rxr_cq_handle_rx_completion(struct rxr_ep *ep,
+				 struct rxr_pkt_entry *pkt_entry,
+				 struct rxr_rx_entry *rx_entry)
 {
-	int ret = 0;
 	struct rxr_tx_entry *tx_entry = NULL;
-
-	if (rx_entry->fi_flags & FI_MULTI_RECV)
-		rxr_cq_handle_multi_recv_completion(ep, rx_entry);
 
 	if (rx_entry->cq_entry.flags & FI_WRITE) {
 		/*
@@ -647,14 +626,12 @@ int rxr_cq_handle_rx_completion(struct rxr_ep *ep,
 		 * if FI_RMA_EVENT is requested or REMOTE_CQ_DATA is on
 		 */
 		if (rx_entry->cq_entry.flags & FI_REMOTE_CQ_DATA)
-			ret = rxr_cq_write_rx_completion(ep, comp, pkt_entry, rx_entry, is_local);
+			rxr_cq_write_rx_completion(ep, rx_entry);
 		else if (ep->util_ep.caps & FI_RMA_EVENT)
 			rxr_cntr_report_rx_completion(ep, rx_entry);
 
-		if (pkt_entry->type == RXR_PKT_ENTRY_POSTED)
-			ep->rx_bufs_to_post++;
 		rxr_release_rx_pkt_entry(ep, pkt_entry);
-		return ret;
+		return;
 	}
 
 	if (rx_entry->cq_entry.flags & FI_READ) {
@@ -689,7 +666,7 @@ int rxr_cq_handle_rx_completion(struct rxr_ep *ep,
 		assert(tx_entry->state == RXR_TX_WAIT_READ_FINISH);
 		if (tx_entry->fi_flags & FI_COMPLETION) {
 			/* Note write_tx_completion() will release tx_entry */
-			rxr_cq_write_tx_completion(ep, comp, tx_entry);
+			rxr_cq_write_tx_completion(ep, tx_entry);
 		} else {
 			rxr_cntr_report_tx_completion(ep, tx_entry);
 			rxr_release_tx_entry(ep, tx_entry);
@@ -699,21 +676,16 @@ int rxr_cq_handle_rx_completion(struct rxr_ep *ep,
 		 * do not call rxr_release_rx_entry here because
 		 * caller will release
 		 */
-		if (pkt_entry->type == RXR_PKT_ENTRY_POSTED)
-			ep->rx_bufs_to_post++;
 		rxr_release_rx_pkt_entry(ep, pkt_entry);
-		return 0;
+		return;
 	}
 
-	ret = rxr_cq_write_rx_completion(ep, comp, pkt_entry, rx_entry, is_local);
-	if (pkt_entry->type == RXR_PKT_ENTRY_POSTED) {
-		if (is_local)
-			ep->rx_bufs_shm_to_post++;
-		else
-			ep->rx_bufs_to_post++;
-	}
+	if (rx_entry->fi_flags & FI_MULTI_RECV)
+		rxr_cq_handle_multi_recv_completion(ep, rx_entry);
+
+	rxr_cq_write_rx_completion(ep, rx_entry);
 	rxr_release_rx_pkt_entry(ep, pkt_entry);
-	return ret;
+	return;
 }
 
 ssize_t rxr_cq_recv_shm_large_message(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry)
@@ -1023,8 +995,6 @@ static int rxr_cq_process_rts(struct rxr_ep *ep,
 		}
 
 		rx_entry->state = RXR_RX_WAIT_READ_FINISH;
-		if (pkt_entry->type == RXR_PKT_ENTRY_POSTED)
-			ep->rx_bufs_to_post++;
 		rxr_release_rx_pkt_entry(ep, pkt_entry);
 		return ret;
 	}
@@ -1034,8 +1004,7 @@ static int rxr_cq_process_rts(struct rxr_ep *ep,
 				     rx_entry->cq_entry.len);
 
 	if (!bytes_left) {
-		ret = rxr_cq_handle_rx_completion(ep, NULL,
-						  pkt_entry, rx_entry, is_local);
+		rxr_cq_handle_rx_completion(ep, pkt_entry, rx_entry);
 		rxr_multi_recv_free_posted_entry(ep, rx_entry);
 		if (!ret)
 			rxr_release_rx_entry(ep, rx_entry);
@@ -1043,10 +1012,10 @@ static int rxr_cq_process_rts(struct rxr_ep *ep,
 	}
 
 	if (is_local) {
-		if (pkt_entry->type == RXR_PKT_ENTRY_POSTED)
-			ep->rx_bufs_shm_to_post++;
-		goto shm_large_msg_out;
+		rxr_release_rx_pkt_entry(ep, pkt_entry);
+		return ret;
 	}
+
 #if ENABLE_DEBUG
 	dlist_insert_tail(&rx_entry->rx_pending_entry, &ep->rx_pending_list);
 	ep->rx_pending++;
@@ -1060,12 +1029,7 @@ static int rxr_cq_process_rts(struct rxr_ep *ep,
 
 	ret = rxr_ep_post_cts_or_queue(ep, rx_entry, bytes_left);
 
-	if (pkt_entry->type == RXR_PKT_ENTRY_POSTED)
-		ep->rx_bufs_to_post++;
-
-shm_large_msg_out:
 	rxr_release_rx_pkt_entry(ep, pkt_entry);
-
 	return ret;
 }
 
@@ -1108,7 +1072,6 @@ static int rxr_cq_reorder_msg(struct rxr_ep *ep,
 		rxr_copy_pkt_entry(ep, ooo_entry, pkt_entry, RXR_PKT_ENTRY_OOO);
 		rts_hdr = rxr_get_rts_hdr(ooo_entry->pkt);
 		rxr_release_rx_pkt_entry(ep, pkt_entry);
-		ep->rx_bufs_to_post++;
 	} else {
 		ooo_entry = pkt_entry;
 	}
@@ -1148,7 +1111,7 @@ static void rxr_cq_proc_pending_items_in_recvwin(struct rxr_ep *ep,
 }
 
 /* Handle RMA writes with immediate data at remote endpoint, write a completion */
-static void rxr_cq_handle_shm_rma_write_data(struct rxr_ep *ep, struct fi_cq_data_entry *shm_comp, fi_addr_t src_addr)
+void rxr_cq_handle_shm_rma_write_data(struct rxr_ep *ep, struct fi_cq_data_entry *shm_comp, fi_addr_t src_addr)
 {
 	struct rxr_rx_entry *rx_entry;
 	int ret;
@@ -1203,103 +1166,61 @@ static void rxr_cq_handle_eor(struct rxr_ep *ep,
 
 	/* pre-post buf used here, so can NOT track back to tx_entry with x_entry */
 	tx_entry = ofi_bufpool_get_ibuf(ep->tx_entry_pool, shm_eor->tx_id);
-	rxr_cq_write_tx_completion(ep, NULL, tx_entry);
-	if (pkt_entry->type == RXR_PKT_ENTRY_POSTED)
-		ep->rx_bufs_shm_to_post++;
+	rxr_cq_write_tx_completion(ep, tx_entry);
 	rxr_release_rx_pkt_entry(ep, pkt_entry);
 }
 
 static void rxr_cq_handle_rts(struct rxr_ep *ep,
 			      struct fi_cq_data_entry *comp,
-			      struct rxr_pkt_entry *pkt_entry,
-			      fi_addr_t src_addr, bool is_local)
+			      struct rxr_pkt_entry *pkt_entry)
 {
-	fi_addr_t rdm_addr;
 	struct rxr_rts_hdr *rts_hdr;
-	struct rxr_av *av;
 	struct rxr_peer *peer;
-	void *raw_address;
-	int i, ret;
-
-
-	rts_hdr = rxr_get_rts_hdr(pkt_entry->pkt);
-	av = rxr_ep_av(ep);
-
-	if (OFI_UNLIKELY(src_addr == FI_ADDR_NOTAVAIL)) {
-		assert(rts_hdr->flags & RXR_REMOTE_SRC_ADDR);
-		assert(rts_hdr->addrlen > 0);
-		if (rxr_get_base_hdr(pkt_entry->pkt)->version !=
-		    RXR_PROTOCOL_VERSION) {
-			char buffer[ep->core_addrlen * 3];
-			int length = 0;
-
-			for (i = 0; i < ep->core_addrlen; i++)
-				length += sprintf(&buffer[length], "%02x ",
-						  ep->core_addr[i]);
-			FI_WARN(&rxr_prov, FI_LOG_CQ,
-				"Host %s:Invalid protocol version %d. Expected protocol version %d.\n",
-				buffer,
-				rxr_get_base_hdr(pkt_entry->pkt)->version,
-				RXR_PROTOCOL_VERSION);
-			rxr_eq_write_error(ep, FI_EIO, -FI_EINVAL);
-			fprintf(stderr, "Invalid protocol version %d. Expected protocol version %d. %s:%d\n",
-				rxr_get_base_hdr(pkt_entry->pkt)->version,
-				RXR_PROTOCOL_VERSION, __FILE__, __LINE__);
-			abort();
-		}
-		raw_address = (rts_hdr->flags & RXR_REMOTE_CQ_DATA) ?
-			      rxr_get_ctrl_cq_pkt(rts_hdr)->data
-			      : rxr_get_ctrl_pkt(rts_hdr)->data;
-
-		ret = rxr_av_insert_rdm_addr(av,
-					     (void *)raw_address,
-					     &rdm_addr, 0, NULL);
-		if (OFI_UNLIKELY(ret != 1)) {
-			rxr_eq_write_error(ep, FI_EINVAL, ret);
-			return;
-		}
-
-		pkt_entry->addr = rdm_addr;
-	} else {
-		pkt_entry->addr = src_addr;
-	}
+	int ret;
 
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 	assert(peer);
 
-	if (!is_local) {
-		if (ep->core_caps & FI_SOURCE)
-			rxr_cq_post_connack(ep, peer, pkt_entry->addr);
+	if (peer->is_local) {
+		/* no need to reorder msg for shm_ep
+		 * rxr_cq_process_rts will write error cq entry if needed
+		 */
+		rxr_cq_process_rts(ep, pkt_entry);
+		return;
+	}
 
-		if (rxr_need_sas_ordering(ep)) {
-			ret = rxr_cq_reorder_msg(ep, peer, pkt_entry);
-			if (ret == 1) {
-				/* Packet was queued */
-				return;
-			} else if (OFI_UNLIKELY(ret == -FI_EALREADY)) {
-				FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
-					"Duplicate RTS packet msg_id: %" PRIu32
-					" robuf->exp_msg_id: %" PRIu64 "\n",
-				       rts_hdr->msg_id, peer->robuf->exp_msg_id);
-				if (!rts_hdr->addrlen)
-					rxr_eq_write_error(ep, FI_EIO, ret);
-				rxr_release_rx_pkt_entry(ep, pkt_entry);
-				ep->rx_bufs_to_post++;
-				return;
-			} else if (OFI_UNLIKELY(ret == -FI_ENOMEM)) {
-				rxr_eq_write_error(ep, FI_ENOBUFS, -FI_ENOBUFS);
-				return;
-			} else if (OFI_UNLIKELY(ret < 0)) {
-				FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
-					"Unknown error %d processing RTS packet msg_id: %"
-					PRIu32 "\n", ret, rts_hdr->msg_id);
+	rts_hdr = rxr_get_rts_hdr(pkt_entry->pkt);
+
+	if (ep->core_caps & FI_SOURCE)
+		rxr_cq_post_connack(ep, peer, pkt_entry->addr);
+
+	if (rxr_need_sas_ordering(ep)) {
+		ret = rxr_cq_reorder_msg(ep, peer, pkt_entry);
+		if (ret == 1) {
+			/* Packet was queued */
+			return;
+		} else if (OFI_UNLIKELY(ret == -FI_EALREADY)) {
+			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+				"Duplicate RTS packet msg_id: %" PRIu32
+				" robuf->exp_msg_id: %" PRIu64 "\n",
+			       rts_hdr->msg_id, peer->robuf->exp_msg_id);
+			if (!rts_hdr->addrlen)
 				rxr_eq_write_error(ep, FI_EIO, ret);
-				return;
-			}
-
-			/* processing the expected packet */
-			ofi_recvwin_slide(peer->robuf);
+			rxr_release_rx_pkt_entry(ep, pkt_entry);
+			return;
+		} else if (OFI_UNLIKELY(ret == -FI_ENOMEM)) {
+			rxr_eq_write_error(ep, FI_ENOBUFS, -FI_ENOBUFS);
+			return;
+		} else if (OFI_UNLIKELY(ret < 0)) {
+			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+				"Unknown error %d processing RTS packet msg_id: %"
+				PRIu32 "\n", ret, rts_hdr->msg_id);
+			rxr_eq_write_error(ep, FI_EIO, ret);
+			return;
 		}
+
+		/* processing the expected packet */
+		ofi_recvwin_slide(peer->robuf);
 	}
 
 	/* rxr_cq_process_rts will write error cq entry if needed */
@@ -1307,13 +1228,9 @@ static void rxr_cq_handle_rts(struct rxr_ep *ep,
 	if (OFI_UNLIKELY(ret))
 		return;
 
-	if (!peer->is_local) {
-		/* process pending items in reorder buff */
-		if (rxr_need_sas_ordering(ep))
-			rxr_cq_proc_pending_items_in_recvwin(ep, peer);
-	}
-
-	return;
+	/* process pending items in reorder buff */
+	if (rxr_need_sas_ordering(ep))
+		rxr_cq_proc_pending_items_in_recvwin(ep, peer);
 }
 
 static void rxr_cq_handle_connack(struct rxr_ep *ep,
@@ -1333,7 +1250,6 @@ static void rxr_cq_handle_connack(struct rxr_ep *ep,
 	FI_DBG(&rxr_prov, FI_LOG_CQ,
 	       "CONNACK received from %" PRIu64 "\n", src_addr);
 	rxr_release_rx_pkt_entry(ep, pkt_entry);
-	ep->rx_bufs_to_post++;
 }
 
 void rxr_cq_handle_pkt_with_data(struct rxr_ep *ep,
@@ -1345,7 +1261,6 @@ void rxr_cq_handle_pkt_with_data(struct rxr_ep *ep,
 {
 	struct rxr_peer *peer;
 	uint64_t bytes;
-	ssize_t ret;
 
 	peer = rxr_ep_get_peer(ep, rx_entry->addr);
 	peer->rx_credits += ofi_div_ceil(seg_size, ep->max_data_payload_size);
@@ -1372,17 +1287,14 @@ void rxr_cq_handle_pkt_with_data(struct rxr_ep *ep,
 		dlist_remove(&rx_entry->rx_pending_entry);
 		ep->rx_pending--;
 #endif
-		ret = rxr_cq_handle_rx_completion(ep, comp,
-						  pkt_entry, rx_entry, 0);
+		rxr_cq_handle_rx_completion(ep, pkt_entry, rx_entry);
 
 		rxr_multi_recv_free_posted_entry(ep, rx_entry);
-		if (OFI_LIKELY(!ret))
-			rxr_release_rx_entry(ep, rx_entry);
+		rxr_release_rx_entry(ep, rx_entry);
 		return;
 	}
 
 	rxr_release_rx_pkt_entry(ep, pkt_entry);
-	ep->rx_bufs_to_post++;
 }
 
 static void rxr_cq_handle_readrsp(struct rxr_ep *ep,
@@ -1426,7 +1338,6 @@ static void rxr_cq_handle_cts(struct rxr_ep *ep,
 		peer->tx_credits += tx_entry->credit_request - tx_entry->credit_allocated;
 
 	rxr_release_rx_pkt_entry(ep, pkt_entry);
-	ep->rx_bufs_to_post++;
 
 	if (tx_entry->state != RXR_TX_SEND) {
 		tx_entry->state = RXR_TX_SEND;
@@ -1454,7 +1365,6 @@ static void rxr_cq_handle_data(struct rxr_ep *ep,
 }
 
 void rxr_cq_write_tx_completion(struct rxr_ep *ep,
-				struct fi_cq_data_entry *comp,
 				struct rxr_tx_entry *tx_entry)
 {
 	struct util_cq *tx_cq = ep->util_ep.tx_cq;
@@ -1505,23 +1415,61 @@ void rxr_cq_write_tx_completion(struct rxr_ep *ep,
 	return;
 }
 
+fi_addr_t rxr_cq_insert_addr_from_rts(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
+{
+	int i, ret;
+	void *raw_address;
+	fi_addr_t rdm_addr;
+	struct rxr_av *av;
+	struct rxr_rts_hdr *rts_hdr;
+
+	assert(rxr_get_base_hdr(pkt_entry->pkt)->type == RXR_RTS_PKT);
+
+	av = rxr_ep_av(ep);
+	rts_hdr = rxr_get_rts_hdr(pkt_entry->pkt);
+	assert(rts_hdr->flags & RXR_REMOTE_SRC_ADDR);
+	assert(rts_hdr->addrlen > 0);
+	if (rxr_get_base_hdr(pkt_entry->pkt)->version !=
+	    RXR_PROTOCOL_VERSION) {
+		char buffer[ep->core_addrlen * 3];
+		int length = 0;
+
+		for (i = 0; i < ep->core_addrlen; i++)
+			length += sprintf(&buffer[length], "%02x ",
+					  ep->core_addr[i]);
+		FI_WARN(&rxr_prov, FI_LOG_CQ,
+			"Host %s:Invalid protocol version %d. Expected protocol version %d.\n",
+			buffer,
+			rxr_get_base_hdr(pkt_entry->pkt)->version,
+			RXR_PROTOCOL_VERSION);
+		rxr_eq_write_error(ep, FI_EIO, -FI_EINVAL);
+		fprintf(stderr, "Invalid protocol version %d. Expected protocol version %d. %s:%d\n",
+			rxr_get_base_hdr(pkt_entry->pkt)->version,
+			RXR_PROTOCOL_VERSION, __FILE__, __LINE__);
+		abort();
+	}
+
+	raw_address = (rts_hdr->flags & RXR_REMOTE_CQ_DATA) ?
+		      rxr_get_ctrl_cq_pkt(rts_hdr)->data
+		      : rxr_get_ctrl_pkt(rts_hdr)->data;
+
+	ret = rxr_av_insert_rdm_addr(av, (void *)raw_address, &rdm_addr, 0, NULL);
+	if (OFI_UNLIKELY(ret != 1)) {
+		rxr_eq_write_error(ep, FI_EINVAL, ret);
+		return -1;
+	}
+
+	return rdm_addr;
+}
+
 void rxr_cq_handle_pkt_recv_completion(struct rxr_ep *ep,
 				       struct fi_cq_data_entry *cq_entry,
-				       fi_addr_t src_addr, bool is_local)
+				       fi_addr_t src_addr)
 {
+	struct rxr_peer *peer;
 	struct rxr_pkt_entry *pkt_entry;
 
 	pkt_entry = (struct rxr_pkt_entry *)cq_entry->op_context;
-
-	if (cq_entry->flags & FI_REMOTE_CQ_DATA) {
-		if (is_local) {
-			rxr_cq_handle_shm_rma_write_data(ep, cq_entry, src_addr);
-			return;
-		} /* Leave else case for non-shm case */
-	}
-
-	assert(rxr_get_base_hdr(pkt_entry->pkt)->version ==
-	       RXR_PROTOCOL_VERSION);
 
 #if ENABLE_DEBUG
 	dlist_remove(&pkt_entry->dbg_entry);
@@ -1530,36 +1478,38 @@ void rxr_cq_handle_pkt_recv_completion(struct rxr_ep *ep,
 	rxr_ep_print_pkt("Received", ep, (struct rxr_base_hdr *)pkt_entry->pkt);
 #endif
 #endif
+	if (OFI_UNLIKELY(src_addr == FI_ADDR_NOTAVAIL))
+		pkt_entry->addr = rxr_cq_insert_addr_from_rts(ep, pkt_entry);
+	else
+		pkt_entry->addr = src_addr;
+
+	assert(rxr_get_base_hdr(pkt_entry->pkt)->version ==
+	       RXR_PROTOCOL_VERSION);
+
+	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+
+	if (peer->is_local)
+		ep->posted_bufs_shm--;
+	else
+		ep->posted_bufs_efa--;
 
 	switch (rxr_get_base_hdr(pkt_entry->pkt)->type) {
 	case RXR_RTS_PKT:
-		if (is_local)
-			ep->posted_bufs_shm--;
-		else
-			ep->posted_bufs--;
-		rxr_cq_handle_rts(ep, cq_entry, pkt_entry, src_addr, is_local);
+		rxr_cq_handle_rts(ep, cq_entry, pkt_entry);
 		return;
 	case RXR_EOR_PKT:
-		if (is_local)
-			ep->posted_bufs_shm--;
-		else
-			ep->posted_bufs--;
 		rxr_cq_handle_eor(ep, cq_entry, pkt_entry);
 		return;
 	case RXR_CONNACK_PKT:
-		ep->posted_bufs--;
 		rxr_cq_handle_connack(ep, cq_entry, pkt_entry, src_addr);
 		return;
 	case RXR_CTS_PKT:
-		ep->posted_bufs--;
 		rxr_cq_handle_cts(ep, cq_entry, pkt_entry);
 		return;
 	case RXR_DATA_PKT:
-		ep->posted_bufs--;
 		rxr_cq_handle_data(ep, cq_entry, pkt_entry);
 		return;
 	case RXR_READRSP_PKT:
-		ep->posted_bufs--;
 		rxr_cq_handle_readrsp(ep, cq_entry, pkt_entry);
 		return;
 	default:
@@ -1605,7 +1555,7 @@ void rxr_cq_handle_rma_context_pkt(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_
 		tx_entry = pkt_entry->x_entry;
 
 		if (tx_entry->fi_flags & FI_COMPLETION) {
-			rxr_cq_write_tx_completion(ep, NULL, tx_entry);
+			rxr_cq_write_tx_completion(ep, tx_entry);
 		} else {
 			rxr_cntr_report_tx_completion(ep, tx_entry);
 			rxr_release_tx_entry(ep, tx_entry);
@@ -1640,12 +1590,10 @@ void rxr_cq_handle_rma_context_pkt(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_
 
 		if (rx_entry->fi_flags & FI_MULTI_RECV)
 			rxr_cq_handle_multi_recv_completion(ep, rx_entry);
-		ret = rxr_cq_write_rx_completion(ep, NULL, pkt_entry, rx_entry, 1);
+		rxr_cq_write_rx_completion(ep, rx_entry);
 		rxr_multi_recv_free_posted_entry(ep, rx_entry);
 		if (OFI_LIKELY(!ret))
 			rxr_release_rx_entry(ep, rx_entry);
-		if (pkt_entry->type == RXR_PKT_ENTRY_POSTED)
-			ep->rx_bufs_shm_to_post++;
 		rxr_release_rx_pkt_entry(ep, pkt_entry);
 		break;
 	default:
@@ -1758,14 +1706,14 @@ void rxr_cq_handle_pkt_send_completion(struct rxr_ep *ep, struct fi_cq_data_entr
 			rxr_release_tx_entry(ep, tx_entry);
 		} else if (tx_entry->cq_entry.flags & FI_WRITE) {
 			if (tx_entry->fi_flags & FI_COMPLETION) {
-				rxr_cq_write_tx_completion(ep, comp, tx_entry);
+				rxr_cq_write_tx_completion(ep, tx_entry);
 			} else {
 				rxr_cntr_report_tx_completion(ep, tx_entry);
 				rxr_release_tx_entry(ep, tx_entry);
 			}
 		} else {
 			assert(tx_entry->cq_entry.flags & FI_SEND);
-			rxr_cq_write_tx_completion(ep, comp, tx_entry);
+			rxr_cq_write_tx_completion(ep, tx_entry);
 		}
 	}
 
