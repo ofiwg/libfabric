@@ -358,6 +358,7 @@ multinode_fi_multinode_CFLAGS = \
 multinode_fi_multinode_coll_SOURCES = \
 	multinode/src/harness.c \
 	multinode/src/core_coll.c \
+	multinode/include/coll_test.h \
 	multinode/include/core.h
 
 multinode_fi_multinode_coll_LDADD = 	libfabtests.la
