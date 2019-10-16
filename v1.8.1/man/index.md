@@ -15,23 +15,6 @@ v1.8.1](https://github.com/ofiwg/libfabric/releases/tag/v1.8.1).
   * [fi_direct(7)](fi_direct.7.html)
   * [fi_provider(7)](fi_provider.7.html)
 
-* Provider details
-  * [fi_bgq(7)](fi_bgq.7.html)
-  * [fi_efa(7)](fi_efa.7.html)
-  * [fi_gni(7)](fi_gni.7.html)
-  * [fi_hook(7)](fi_hook.7.html)
-  * [fi_mlx(7)](fi_mlx.7.html)
-  * [fi_netdir(7)](fi_netdir.7.html)
-  * [fi_psm(7)](fi_psm.7.html)
-  * [fi_psm2(7)](fi_psm2.7.html)
-  * [fi_sockets(7)](fi_sockets.7.html)
-  * [fi_rxd(7)](fi_rxd.7.html)
-  * [fi_rxm(7)](fi_rxm.7.html)
-  * [fi_shm(7)](fi_shm.7.html)
-  * [fi_udp(7)](fi_udp.7.html)
-  * [fi_usnic(7)](fi_usnic.7.html)
-  * [fi_verbs(7)](fi_verbs.7.html)
-
 * API documentation
   * [fi_atomic(3)](fi_atomic.3.html)
   * [fi_av(3)](fi_av.3.html)
@@ -53,6 +36,25 @@ v1.8.1](https://github.com/ofiwg/libfabric/releases/tag/v1.8.1).
   * [fi_tagged(3)](fi_tagged.3.html)
   * [fi_trigger(3)](fi_trigger.3.html)
   * [fi_version(3)](fi_version.3.html)
+
+* Provider details
+  * [fi_bgq(7)](fi_bgq.7.html)
+  * [fi_efa(7)](fi_efa.7.html)
+  * [fi_gni(7)](fi_gni.7.html)
+  * [fi_hook(7)](fi_hook.7.html)
+  * [fi_mlx(7)](fi_mlx.7.html)
+  * [fi_mrail(7)](fi_mrail.7.html)
+  * [fi_netdir(7)](fi_netdir.7.html)
+  * [fi_psm(7)](fi_psm.7.html)
+  * [fi_psm2(7)](fi_psm2.7.html)
+  * [fi_rxd(7)](fi_rxd.7.html)
+  * [fi_rxm(7)](fi_rxm.7.html)
+  * [fi_shm(7)](fi_shm.7.html)
+  * [fi_sockets(7)](fi_shm.7.html)
+  * [fi_tcp(7)](fi_shm.7.html)
+  * [fi_udp(7)](fi_udp.7.html)
+  * [fi_usnic(7)](fi_usnic.7.html)
+  * [fi_verbs(7)](fi_verbs.7.html)
 
 * Utilities
   * [fi_info(1)](fi_info.1.html)
