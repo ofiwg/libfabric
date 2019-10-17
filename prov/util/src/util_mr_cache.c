@@ -85,17 +85,11 @@ static void util_mr_free_entry(struct ofi_mr_cache *cache,
 static void util_mr_uncache_entry_storage(struct ofi_mr_cache *cache,
 					  struct ofi_mr_entry *entry)
 {
-	/* If regions are not being merged, then we can't safely
-	 * unsubscribe this region from the monitor.  Otherwise, we
-	 * might unsubscribe an address range in use by another region.
-	 * As a result, we remain subscribed.  This may result in extra
+	/* Without subscription context, we might unsubscribe from
+	 * an address range in use by another region. As a result,
+	 * we remain subscribed. This may result in extra
 	 * notification events, but is harmless to correct operation.
 	 */
-	if (entry->subscribed && cache_params.merge_regions) {
-		ofi_monitor_unsubscribe(cache->monitor, entry->info.iov.iov_base,
-					entry->info.iov.iov_len);
-		entry->subscribed = 0;
-	}
 
 	cache->storage.erase(&cache->storage, entry);
 	cache->cached_cnt--;
@@ -116,7 +110,7 @@ static void util_mr_uncache_entry(struct ofi_mr_cache *cache,
 	}
 }
 
-/* Caller must hold ofi_mem_monitor lock */
+/* Caller must hold ofi_mem_monitor lock as well as unsubscribe from the region */
 void ofi_mr_cache_notify(struct ofi_mr_cache *cache, const void *addr, size_t len)
 {
 	struct ofi_mr_entry *entry;
