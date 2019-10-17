@@ -223,6 +223,7 @@ static void ofi_tostr_caps(char *buf, uint64_t caps)
 	IFFLAGSTR(caps, FI_SOURCE);
 	IFFLAGSTR(caps, FI_NAMED_RX_CTX);
 	IFFLAGSTR(caps, FI_DIRECTED_RECV);
+	IFFLAGSTR(caps, FI_HMEM);
 
 	ofi_remove_comma(buf);
 }
@@ -437,6 +438,7 @@ static void ofi_tostr_mr_mode(char *buf, int mr_mode)
 	IFFLAGSTR(mr_mode, FI_MR_MMU_NOTIFY);
 	IFFLAGSTR(mr_mode, FI_MR_RMA_EVENT);
 	IFFLAGSTR(mr_mode, FI_MR_ENDPOINT);
+	IFFLAGSTR(mr_mode, FI_MR_HMEM);
 
 	ofi_remove_comma(buf);
 }
