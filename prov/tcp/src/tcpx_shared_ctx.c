@@ -76,10 +76,8 @@ tcpx_srx_next_xfer_entry(struct tcpx_rx_ctx *srx_ctx,
 
 	xfer_entry = container_of(srx_ctx->rx_queue.head,
 				  struct tcpx_xfer_entry, entry);
-	xfer_entry->rem_len =
-		ofi_total_iov_len(xfer_entry->iov, xfer_entry->iov_cnt)-
-		entry_size;
-
+	xfer_entry->rem_len = ofi_total_iov_len(xfer_entry->iov,
+						xfer_entry->iov_cnt) - entry_size;
 	if (!(xfer_entry->flags & FI_MULTI_RECV) &&
 	    xfer_entry->rem_len < ep->min_multi_recv_size) {
 		slist_remove_head(&srx_ctx->rx_queue);

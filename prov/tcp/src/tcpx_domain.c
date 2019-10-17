@@ -130,7 +130,7 @@ static int tcpx_domain_close(fid_t fid)
 		return ret;
 
 	free(tcpx_domain);
-	return 0;
+	return FI_SUCCESS;
 }
 
 static struct fi_ops tcpx_domain_fi_ops = {
@@ -171,7 +171,7 @@ int tcpx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	(*domain)->ops = &tcpx_domain_ops;
 	(*domain)->mr = &tcpx_domain_fi_ops_mr;
 
-	return 0;
+	return FI_SUCCESS;
 err:
 	free(tcpx_domain);
 	return ret;

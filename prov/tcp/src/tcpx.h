@@ -68,7 +68,7 @@
 #define TCPX_HDR_VERSION	3
 #define TCPX_CTRL_HDR_VERSION	3
 
-#define TCPX_MAX_CM_DATA_SIZE	(1<<8)
+#define TCPX_MAX_CM_DATA_SIZE	(1 << 8)
 #define TCPX_IOV_LIMIT		(4)
 #define TCPX_MAX_INJECT_SZ	(64)
 

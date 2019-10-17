@@ -42,7 +42,10 @@
 extern struct fi_ops_rma tcpx_rma_ops;
 extern struct fi_ops_msg tcpx_msg_ops;
 
-void tcpx_hdr_none(struct tcpx_base_hdr *hdr) {}
+void tcpx_hdr_none(struct tcpx_base_hdr *hdr)
+{
+	/* no-op */
+}
 
 void tcpx_hdr_bswap(struct tcpx_base_hdr *hdr)
 {
@@ -179,9 +182,8 @@ static int tcpx_ep_shutdown(struct fid_ep *ep, uint64_t flags)
 	fastlock_acquire(&tcpx_ep->lock);
 	ret = tcpx_ep_shutdown_report(tcpx_ep, &ep->fid);
 	fastlock_release(&tcpx_ep->lock);
-	if (ret) {
+	if (ret)
 		FI_WARN(&tcpx_prov, FI_LOG_EP_DATA, "Error writing to EQ\n");
-	}
 
 	return ret;
 }
@@ -193,25 +195,22 @@ static int tcpx_bind_to_port_range(SOCKET sock, void* src_addr, size_t addrlen)
 	rand_port_number = rand() % (port_range.high + 1 - port_range.low) +
 			   port_range.low;
 
-	for (i = port_range.low; i <= port_range.high;
-	     i++, rand_port_number++) {
-		if (rand_port_number > port_range.high) {
+	for (i = port_range.low; i <= port_range.high; i++, rand_port_number++) {
+		if (rand_port_number > port_range.high)
 			rand_port_number = port_range.low;
-		}
+
 		ofi_addr_set_port(src_addr, rand_port_number);
 		ret = bind(sock, src_addr, (socklen_t) addrlen);
 		if (ret) {
-			if (errno == EADDRINUSE) {
+			if (errno == EADDRINUSE)
 				continue;
-			} else {
-				FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-					"failed to bind listener: %s\n",
-					strerror(ofi_sockerr()));
-				return -errno;
-			}
-		} else {
-			break;
+
+			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+				"failed to bind listener: %s\n",
+				strerror(ofi_sockerr()));
+			return -errno;
 		}
+		break;
 	}
 	return (i <= port_range.high) ? FI_SUCCESS : -FI_EADDRNOTAVAIL;
 }
@@ -243,13 +242,12 @@ static int tcpx_pep_sock_create(struct tcpx_pep *pep)
 	if (ret) {
 		goto err;
 	}
-	if (ofi_addr_get_port(pep->info->src_addr) != 0 || port_range.high == 0) {
+	if (ofi_addr_get_port(pep->info->src_addr) != 0 || port_range.high == 0)
 		ret = bind(pep->sock, pep->info->src_addr,
 			  (socklen_t) pep->info->src_addrlen);
-	} else {
+	else
 		ret = tcpx_bind_to_port_range(pep->sock, pep->info->src_addr,
 					      pep->info->src_addrlen);
-	}
 
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
@@ -289,7 +287,7 @@ static int tcpx_ep_getpeer(struct fid_ep *ep, void *addr, size_t *addrlen)
 	if (ret)
 		return -ofi_sockerr();
 
-	return (addrlen_in < *addrlen)? -FI_ETOOSMALL: FI_SUCCESS;
+	return (addrlen_in < *addrlen) ? -FI_ETOOSMALL: FI_SUCCESS;
 }
 
 static struct fi_ops_cm tcpx_cm_ops = {
@@ -384,18 +382,16 @@ static int tcpx_ep_close(struct fid *fid)
 
 	tcpx_ep_tx_rx_queues_release(ep);
 
-	/* eq->close_lock protects from processing stale ep connection
-	   events*/
+	/* eq->close_lock protects from processing stale connection events */
 	fastlock_acquire(&eq->close_lock);
 	if (ep->util_ep.rx_cq->wait)
-		ofi_wait_fd_del(ep->util_ep.rx_cq->wait,
-				ep->conn_fd);
+		ofi_wait_fd_del(ep->util_ep.rx_cq->wait, ep->conn_fd);
 
 	if (ep->util_ep.eq->wait)
 		ofi_wait_fd_del(ep->util_ep.eq->wait, ep->conn_fd);
+
 	fastlock_release(&eq->close_lock);
-	ofi_eq_remove_fid_events(ep->util_ep.eq,
-				  &ep->util_ep.ep_fid.fid);
+	ofi_eq_remove_fid_events(ep->util_ep.eq, &ep->util_ep.ep_fid.fid);
 	ofi_close_socket(ep->conn_fd);
 	ofi_endpoint_close(&ep->util_ep);
 	fastlock_destroy(&ep->lock);
@@ -417,7 +413,7 @@ static int tcpx_ep_ctrl(struct fid *fid, int command, void *arg)
 	default:
 		return -FI_ENOSYS;
 	}
-	return 0;
+	return FI_SUCCESS;
 }
 
 static int tcpx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
@@ -490,11 +486,10 @@ int tcpx_ep_setopt(fid_t fid, int level, int optname,
 		return -FI_EINVAL;
 
 	ep = container_of(fid, struct tcpx_ep, util_ep.ep_fid.fid);
-	ep->min_multi_recv_size = *(size_t *)optval;
+	ep->min_multi_recv_size = *(size_t *) optval;
 
 	FI_INFO(&tcpx_prov, FI_LOG_EP_CTRL,
-		"FI_OPT_MIN_MULTI_RECV set to %zu\n",
-		ep->min_multi_recv_size);
+		"FI_OPT_MIN_MULTI_RECV set to %zu\n", ep->min_multi_recv_size);
 	return FI_SUCCESS;
 }
 
@@ -511,6 +506,7 @@ static struct fi_ops_ep tcpx_ep_ops = {
 
 static void tcpx_empty_progress(struct tcpx_ep *ep)
 {
+	/* no-op */
 }
 
 int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
@@ -682,7 +678,7 @@ static int tcpx_pep_getname(fid_t fid, void *addr, size_t *addrlen)
 	if (ret)
 		return -ofi_sockerr();
 
-	return (addrlen_in < *addrlen)? -FI_ETOOSMALL: FI_SUCCESS;
+	return (addrlen_in < *addrlen) ? -FI_ETOOSMALL: FI_SUCCESS;
 }
 
 static int tcpx_pep_listen(struct fid_pep *pep)
