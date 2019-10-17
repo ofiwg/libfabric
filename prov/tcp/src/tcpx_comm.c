@@ -152,6 +152,9 @@ int tcpx_recv_msg_data(struct tcpx_xfer_entry *rx_entry)
 {
 	ssize_t bytes_recvd;
 
+	if (!rx_entry->iov_cnt || !rx_entry->iov[0].iov_len)
+		return FI_SUCCESS;
+
 	if (rx_entry->ep->stage_buf.len != rx_entry->ep->stage_buf.off)
 		bytes_recvd = tcpx_readv_from_buffer(&rx_entry->ep->stage_buf,
 						     rx_entry->iov,
