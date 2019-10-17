@@ -1576,24 +1576,11 @@ static size_t rxr_ep_post_shm_rma(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx
 	struct rxr_pkt_entry *pkt_entry;
 	struct fi_msg_rma msg;
 	struct rxr_rma_context_pkt *rma_context_pkt;
-	struct rxr_domain *rxr_domain;
-	struct rxr_mr_key_entry *mr_key_entry;
 	struct rxr_peer *peer;
 	fi_addr_t shm_fiaddr;
-	int ret, i;
+	int ret;
 
 	tx_entry->state = RXR_TX_SHM_RMA;
-	rxr_domain = rxr_ep_domain(rxr_ep);
-	for (i = 0; i < tx_entry->rma_iov_count; i++) {
-		HASH_FIND(hh, rxr_domain->mr_key_map, &tx_entry->rma_iov[i].key, sizeof(uint64_t), mr_key_entry);
-		if (mr_key_entry) {
-			tx_entry->rma_iov[i].key = mr_key_entry->shm_mr_key;
-		} else {
-			FI_WARN(&rxr_prov, FI_LOG_MR, "Unable to find shm MR key corresponding to efa MR key (%ld)\n",
-				tx_entry->rma_iov[i].key);
-			return -FI_EINVAL;
-		}
-	}
 
 	peer = rxr_ep_get_peer(rxr_ep, tx_entry->addr);
 	shm_fiaddr = peer->shm_fiaddr;
@@ -2396,7 +2383,12 @@ static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 	struct rxr_av *av;
 	struct util_cntr *cntr;
 	struct util_eq *eq;
+	struct dlist_entry *ep_list_first_entry;
+	struct util_ep *util_ep;
+	struct rxr_ep *rxr_first_ep;
+	struct rxr_peer *first_ep_peer, *peer;
 	int ret = 0;
+	size_t i;
 
 	switch (bfid->fclass) {
 	case FI_CLASS_AV:
@@ -2411,13 +2403,6 @@ static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		if (ret)
 			return ret;
 
-		/* Bind shm provider endpoint & shm av */
-		if (rxr_env.enable_shm_transfer) {
-			ret = fi_ep_bind(rxr_ep->shm_ep, &av->shm_rdm_av->fid, flags);
-			if (ret)
-				return ret;
-		}
-
 		rxr_ep->peer = calloc(av->util_av.count,
 				      sizeof(struct rxr_peer));
 		if (!rxr_ep->peer)
@@ -2428,6 +2413,36 @@ static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		if (!rxr_ep->robuf_fs)
 			return -FI_ENOMEM;
 
+		/* Bind shm provider endpoint & shm av */
+		if (rxr_env.enable_shm_transfer) {
+			ret = fi_ep_bind(rxr_ep->shm_ep, &av->shm_rdm_av->fid, flags);
+			if (ret)
+				return ret;
+
+			/*
+			 * We always update the new added EP's local information with the first
+			 * bound EP. The if (ep_list_first_entry->next) check here is to skip the
+			 * update for the first bound EP.
+			 */
+			ep_list_first_entry = av->util_av.ep_list.next;
+			if (ep_list_first_entry->next) {
+				util_ep = container_of(ep_list_first_entry, struct util_ep, av_entry);
+				rxr_first_ep = container_of(util_ep, struct rxr_ep, util_ep);
+
+				/*
+				 * Copy the entire peer array, because we may not be able to make the
+				 * assumption that insertions are always indexed in order in the future.
+				 */
+				for (i = 0; i <= av->util_av.count; i++) {
+					first_ep_peer = rxr_ep_get_peer(rxr_first_ep, i);
+					if (first_ep_peer->is_local) {
+						peer = rxr_ep_get_peer(rxr_ep, i);
+						peer->shm_fiaddr = first_ep_peer->shm_fiaddr;
+						peer->is_local = 1;
+					}
+				}
+			}
+		}
 		break;
 	case FI_CLASS_CQ:
 		cq = container_of(bfid, struct util_cq, cq_fid.fid);

@@ -315,13 +315,6 @@ struct rxr_mr {
 	struct rxr_domain *domain;
 };
 
-/* mapping efa MR key to shm MR key */
-struct rxr_mr_key_entry {
-	uint64_t rdm_mr_key;
-	uint64_t shm_mr_key;
-	UT_hash_handle hh;
-};
-
 struct rxr_av_entry {
 	uint8_t addr[RXR_MAX_NAME_LENGTH];
 	fi_addr_t rdm_addr;
@@ -504,7 +497,6 @@ struct rxr_domain {
 	struct fid_domain *rdm_domain;
 	struct fid_domain *shm_domain;
 
-	struct rxr_mr_key_entry *mr_key_map;
 	size_t addrlen;
 	uint8_t mr_local;
 	uint64_t rdm_mode;
