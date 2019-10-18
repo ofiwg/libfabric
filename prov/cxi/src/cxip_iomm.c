@@ -11,7 +11,7 @@
 
 size_t iomm_max_cached_cnt = 4*1024ULL;
 size_t iomm_max_cached_size = 256*1024*1024*1024ULL;
-int iomm_merge_regions = 1;
+int iomm_merge_regions;
 
 /**
  * cxip_do_map() - IO map a buffer.
