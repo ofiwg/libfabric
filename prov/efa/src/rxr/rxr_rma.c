@@ -88,7 +88,7 @@ struct rxr_tx_entry *rxr_readrsp_tx_entry_init(struct rxr_ep *rxr_ep,
 	msg.msg_iov = rx_entry->iov;
 	msg.iov_count = rx_entry->iov_count;
 	msg.addr = rx_entry->addr;
-
+	msg.desc = NULL;
 	/*
 	 * this tx_entry works similar to a send tx_entry thus its op was
 	 * set to ofi_op_msg. Note this tx_entry will not write a completion
