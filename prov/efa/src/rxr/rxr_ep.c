@@ -980,6 +980,8 @@ void rxr_generic_tx_entry_init(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	memcpy(&tx_entry->iov[0], msg->msg_iov, sizeof(*msg->msg_iov) * msg->iov_count);
 	if (msg->desc)
 		memcpy(&tx_entry->desc[0], msg->desc, sizeof(*msg->desc) * msg->iov_count);
+	else
+		memset(&tx_entry->desc[0], 0, sizeof(*msg->desc) * msg->iov_count);
 
 	/* cq_entry on completion */
 	tx_entry->cq_entry.op_context = msg->context;
@@ -1294,11 +1296,35 @@ ssize_t rxr_ep_post_data(struct rxr_ep *rxr_ep,
 	return ret;
 }
 
+static void rxr_inline_mr_reg(struct rxr_domain *rxr_domain,
+			      struct rxr_tx_entry *tx_entry,
+			      size_t index)
+{
+	ssize_t ret;
+
+	tx_entry->iov_mr_start = index;
+	while (index < tx_entry->iov_count) {
+		if (tx_entry->iov[index].iov_len > rxr_env.max_memcpy_size) {
+			ret = fi_mr_reg(rxr_domain->rdm_domain,
+					tx_entry->iov[index].iov_base,
+					tx_entry->iov[index].iov_len,
+					FI_SEND, 0, 0, 0,
+					&tx_entry->mr[index], NULL);
+			if (ret)
+				tx_entry->mr[index] = NULL;
+		}
+		index++;
+	}
+
+	return;
+}
+
 ssize_t rxr_ep_post_readrsp(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 {
 	struct rxr_pkt_entry *pkt_entry;
 	ssize_t ret;
-	size_t data_len;
+	size_t data_len, offset;
+	int i;
 
 	pkt_entry = rxr_get_pkt_entry(ep, ep->tx_pkt_efa_pool);
 	if (OFI_UNLIKELY(!pkt_entry))
@@ -1319,6 +1345,28 @@ ssize_t rxr_ep_post_readrsp(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 	assert(tx_entry->window >= 0);
 	assert(tx_entry->bytes_sent <= tx_entry->total_len);
 	assert(tx_entry->bytes_acked == 0);
+
+	if (efa_mr_cache_enable && tx_entry->total_len > data_len) {
+		/* Set the iov index and iov offset from bytes sent */
+		offset = data_len;
+		for (i = 0; i < tx_entry->iov_count; i++) {
+			if (offset >= tx_entry->iov[i].iov_len) {
+				offset -= tx_entry->iov[i].iov_len;
+			} else {
+				tx_entry->iov_index = i;
+				tx_entry->iov_offset = offset;
+				break;
+			}
+		}
+
+		/*
+		 * Register the data buffers inline only if the application did not
+		 * provide a descriptor with the tx op
+		 */
+		if (rxr_ep_mr_local(ep) && !tx_entry->desc[i])
+			rxr_inline_mr_reg(rxr_ep_domain(ep), tx_entry, i);
+	}
+
 	return 0;
 }
 
@@ -1545,29 +1593,6 @@ void rxr_init_rts_pkt_entry(struct rxr_ep *ep,
 
 	if (tx_entry->cq_entry.flags & FI_TAGGED)
 		rts_hdr->flags |= RXR_TAGGED;
-}
-
-static void rxr_inline_mr_reg(struct rxr_domain *rxr_domain,
-			      struct rxr_tx_entry *tx_entry,
-			      size_t index)
-{
-	ssize_t ret;
-
-	tx_entry->iov_mr_start = index;
-	while (index < tx_entry->iov_count) {
-		if (tx_entry->iov[index].iov_len > rxr_env.max_memcpy_size) {
-			ret = fi_mr_reg(rxr_domain->rdm_domain,
-					tx_entry->iov[index].iov_base,
-					tx_entry->iov[index].iov_len,
-					FI_SEND, 0, 0, 0,
-					&tx_entry->mr[index], NULL);
-			if (ret)
-				tx_entry->mr[index] = NULL;
-		}
-		index++;
-	}
-
-	return;
 }
 
 /* Issue RMA read or write operation over shm provider */
