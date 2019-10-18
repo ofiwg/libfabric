@@ -183,14 +183,10 @@ int ofi_av_set_addr(struct fid_av_set *set, fi_addr_t *coll_addr)
 
 static inline int util_coll_mc_alloc(struct util_coll_mc **coll_mc)
 {
-
 	*coll_mc = calloc(1, sizeof(**coll_mc));
 	if (!*coll_mc)
 		return -FI_ENOMEM;
 
-	slist_init(&(*coll_mc)->barrier_list);
-	slist_init(&(*coll_mc)->deferred_list);
-	slist_init(&(*coll_mc)->pending_xfer_list);
 	return FI_SUCCESS;
 }
 
@@ -211,9 +207,92 @@ static inline uint32_t util_coll_get_next_id(struct util_coll_mc *coll_mc)
 	return cid << 16 | coll_mc->seq++;
 }
 
-static int util_coll_sched_send(struct util_coll_mc *coll_mc, uint32_t dest,
+static inline int util_coll_op_create(struct util_coll_operation **coll_op,
+				    struct util_coll_mc *coll_mc,
+				    enum util_coll_op_type type, void *context,
+				    util_coll_comp_fn_t comp_fn)
+{
+	*coll_op = calloc(1, sizeof(**coll_op));
+	if (!(*coll_op))
+		return -FI_ENOMEM;
+
+	(*coll_op)->cid = util_coll_get_next_id(coll_mc);
+	(*coll_op)->mc = coll_mc;
+	(*coll_op)->type = type;
+	(*coll_op)->context = context;
+	(*coll_op)->comp_fn = comp_fn;
+	dlist_init(&(*coll_op)->work_queue);
+
+	return FI_SUCCESS;
+}
+
+static inline void util_coll_op_progress_work(struct util_ep *util_ep,
+				      struct util_coll_operation *coll_op)
+{
+	struct util_coll_work_item *next_ready = NULL;
+	struct util_coll_work_item *cur_item = NULL;
+	struct util_coll_work_item *prev_item = NULL;
+	struct dlist_entry *tmp = NULL;
+	int previous_is_head;
+
+	// clean up any completed items while searching for the next ready
+	dlist_foreach_container_safe(&coll_op->work_queue, struct util_coll_work_item,
+				     cur_item, waiting_entry, tmp)
+	{
+		previous_is_head = cur_item->waiting_entry.prev == &cur_item->coll_op->work_queue;
+		if (!previous_is_head) {
+			prev_item = container_of(cur_item->waiting_entry.prev,
+							struct util_coll_work_item,
+							waiting_entry);
+		}
+
+		if (cur_item->state == UTIL_COLL_COMPLETE) {
+			// if there is work before cur and cur is fencing, we can't complete
+			if (cur_item->fence && !previous_is_head)
+				continue;
+
+			dlist_remove(&cur_item->waiting_entry);
+			free(cur_item);
+
+			// if the work queue is empty, we're done
+			if (dlist_empty(&coll_op->work_queue)) {
+				free(coll_op);
+				return;
+			}
+			continue;
+		}
+
+		// we can't progress if prior work is fencing
+		if (!previous_is_head && prev_item && prev_item->fence) {
+			continue;
+		}
+
+		// if the current item isn't waiting, it's not the next ready item
+		if (cur_item->state != UTIL_COLL_WAITING) {
+			continue;
+		}
+
+		next_ready = cur_item;
+		break;
+	}
+
+	if (!next_ready)
+		return;
+
+	next_ready->state = UTIL_COLL_PROCESSING;
+	slist_insert_tail(&next_ready->ready_entry, &util_ep->coll_ready_queue);
+}
+
+static inline void util_coll_op_bind_work(struct util_coll_operation *coll_op,
+					  struct util_coll_work_item *item)
+{
+	item->coll_op = coll_op;
+	dlist_insert_tail(&item->waiting_entry, &coll_op->work_queue);
+}
+
+static int util_coll_sched_send(struct util_coll_operation *coll_op, uint32_t dest,
 				void *buf, int count, enum fi_datatype datatype,
-				uint32_t coll_id, int is_barrier)
+				int fence)
 {
 	struct util_coll_xfer_item *xfer_item;
 
@@ -222,20 +301,21 @@ static int util_coll_sched_send(struct util_coll_mc *coll_mc, uint32_t dest,
 		return -FI_ENOMEM;
 
 	xfer_item->hdr.type = UTIL_COLL_SEND;
-	xfer_item->hdr.is_barrier = is_barrier;
-	xfer_item->hdr.tag = util_coll_form_tag(coll_id, coll_mc->my_rank);
+	xfer_item->hdr.state = UTIL_COLL_WAITING;
+	xfer_item->hdr.fence = fence;
+	xfer_item->tag = util_coll_form_tag(coll_op->cid, coll_op->mc->local_rank);
 	xfer_item->buf = buf;
 	xfer_item->count = count;
 	xfer_item->datatype = datatype;
-	xfer_item->dest_rank = dest;
+	xfer_item->remote_rank = dest;
 
-	slist_insert_tail(&xfer_item->hdr.entry, &coll_mc->deferred_list);
+	util_coll_op_bind_work(coll_op, &xfer_item->hdr);
 	return FI_SUCCESS;
 }
 
-static int util_coll_sched_recv(struct util_coll_mc *coll_mc, uint32_t src,
+static int util_coll_sched_recv(struct util_coll_operation *coll_op, uint32_t src,
 				void *buf, int count, enum fi_datatype datatype,
-				uint32_t coll_id, int is_barrier)
+				int fence)
 {
 	struct util_coll_xfer_item *xfer_item;
 
@@ -244,22 +324,21 @@ static int util_coll_sched_recv(struct util_coll_mc *coll_mc, uint32_t src,
 		return -FI_ENOMEM;
 
 	xfer_item->hdr.type = UTIL_COLL_RECV;
-	xfer_item->hdr.is_barrier = is_barrier;
-
-	xfer_item->hdr.tag = util_coll_form_tag(coll_id, src);
+	xfer_item->hdr.state = UTIL_COLL_WAITING;
+	xfer_item->hdr.fence = fence;
+	xfer_item->tag = util_coll_form_tag(coll_op->cid, src);
 	xfer_item->buf = buf;
 	xfer_item->count = count;
 	xfer_item->datatype = datatype;
-	xfer_item->src_rank = src;
+	xfer_item->remote_rank = src;
 
-	slist_insert_tail(&xfer_item->hdr.entry, &coll_mc->deferred_list);
+	util_coll_op_bind_work(coll_op, &xfer_item->hdr);
 	return FI_SUCCESS;
 }
 
-static int util_coll_sched_reduce(struct util_coll_mc *coll_mc, void *in_buf,
-				  void *inout_buf, int count,
-				  enum fi_datatype datatype, enum fi_op op,
-				  int is_barrier)
+static int util_coll_sched_reduce(struct util_coll_operation *coll_op, void *in_buf,
+				  void *inout_buf, int count, enum fi_datatype datatype,
+				  enum fi_op op, int fence)
 {
 	struct util_coll_reduce_item *reduce_item;
 
@@ -268,20 +347,21 @@ static int util_coll_sched_reduce(struct util_coll_mc *coll_mc, void *in_buf,
 		return -FI_ENOMEM;
 
 	reduce_item->hdr.type = UTIL_COLL_REDUCE;
-	reduce_item->hdr.is_barrier = is_barrier;
+	reduce_item->hdr.state = UTIL_COLL_WAITING;
+	reduce_item->hdr.fence = fence;
 	reduce_item->in_buf = in_buf;
 	reduce_item->inout_buf = inout_buf;
 	reduce_item->count = count;
 	reduce_item->datatype = datatype;
 	reduce_item->op = op;
 
-	slist_insert_tail(&reduce_item->hdr.entry, &coll_mc->deferred_list);
+	util_coll_op_bind_work(coll_op, &reduce_item->hdr);
 	return FI_SUCCESS;
 }
 
-static int util_coll_sched_copy(struct util_coll_mc *coll_mc, void *in_buf,
-				void *out_buf, int count,
-				enum fi_datatype datatype, int is_barrier)
+static int util_coll_sched_copy(struct util_coll_operation *coll_op, void *in_buf,
+				void *out_buf, int count, enum fi_datatype datatype,
+				int fence)
 {
 	struct util_coll_copy_item *copy_item;
 
@@ -290,103 +370,102 @@ static int util_coll_sched_copy(struct util_coll_mc *coll_mc, void *in_buf,
 		return -FI_ENOMEM;
 
 	copy_item->hdr.type = UTIL_COLL_COPY;
-	copy_item->hdr.is_barrier = is_barrier;
+	copy_item->hdr.state = UTIL_COLL_WAITING;
+	copy_item->hdr.fence = fence;
 	copy_item->in_buf = in_buf;
 	copy_item->out_buf = out_buf;
 	copy_item->count = count;
 	copy_item->datatype = datatype;
 
-	slist_insert_tail(&copy_item->hdr.entry, &coll_mc->deferred_list);
+	util_coll_op_bind_work(coll_op, &copy_item->hdr);
 	return FI_SUCCESS;
 }
 
-static int util_coll_sched_comp(struct util_coll_mc *coll_mc,
-				enum util_coll_op_type op_type, void *ctx,
-				struct util_coll_state *state,
-				util_coll_comp_fn_t comp_fn)
+static int util_coll_sched_comp(struct util_coll_operation *coll_op)
 {
-	state->hdr.type = UTIL_COLL_COMP;
-	state->hdr.is_barrier = 0;
+	struct util_coll_work_item *comp_item;
 
-	state->type = op_type;
-	state->context = ctx;
-	state->comp_fn = comp_fn;
+	comp_item = calloc(1, sizeof(*comp_item));
+	if (!comp_item)
+		return -FI_ENOMEM;
 
-	slist_insert_tail(&state->hdr.entry, &coll_mc->deferred_list);
+	comp_item->type = UTIL_COLL_COMP;
+	comp_item->state = UTIL_COLL_WAITING;
+	comp_item->fence = 1;
+
+	util_coll_op_bind_work(coll_op, comp_item);
 	return FI_SUCCESS;
 }
 
 /* TODO: when this fails, clean up the already scheduled work in this function */
-static int util_coll_allreduce(struct util_coll_mc *coll_mc, void *send_buf,
+static int util_coll_allreduce(struct util_coll_operation *coll_op, void *send_buf,
 			void *recv_buf, int count, enum fi_datatype datatype,
 			enum fi_op op)
 {
-	uint32_t coll_id;
-	int rem, pof2, my_new_id;
-	int dest, new_dest;
+	uint64_t rem, pof2, my_new_id;
+	uint64_t local, remote, next_remote;
 	int ret;
-	int mask = 1;
+	uint64_t mask = 1;
 
-	coll_id = util_coll_get_next_id(coll_mc);
-	pof2 = rounddown_power_of_two(coll_mc->av_set->fi_addr_count);
-	rem = coll_mc->av_set->fi_addr_count - pof2;
+	pof2 = rounddown_power_of_two(coll_op->mc->av_set->fi_addr_count);
+	rem = coll_op->mc->av_set->fi_addr_count - pof2;
+	local = coll_op->mc->local_rank;
 
-	if (coll_mc->my_rank < 2 * rem) {
-		if (coll_mc->my_rank % 2 == 0) {
-			ret = util_coll_sched_send(coll_mc, coll_mc->my_rank + 1,
-						   send_buf, count, datatype,
-						   coll_id, BARRIER);
+	if (local < 2 * rem) {
+		if (local % 2 == 0) {
+			ret = util_coll_sched_send(coll_op, local + 1, send_buf, count,
+						   datatype, 1);
 			if (ret)
 				return ret;
 
 			my_new_id = -1;
 		} else {
-			ret = util_coll_sched_recv(coll_mc, coll_mc->my_rank - 1,
-						   recv_buf, count, datatype,
-						   coll_id, BARRIER);
+			ret = util_coll_sched_recv(coll_op, local - 1,
+						   recv_buf, count, datatype, 1);
 			if (ret)
 				return ret;
 
-			my_new_id = coll_mc->my_rank / 2;
+			my_new_id = local / 2;
 
-			ret = util_coll_sched_reduce(coll_mc, recv_buf, send_buf,
-						     count, datatype, op, BARRIER);
+			ret = util_coll_sched_reduce(coll_op, recv_buf, send_buf,
+						     count, datatype, op, 1);
 			if (ret)
 				return ret;
 		}
 	} else {
-		my_new_id = coll_mc->my_rank - rem;
+		my_new_id = local - rem;
 	}
 
 	if (my_new_id != -1) {
 		while (mask < pof2) {
-			new_dest = my_new_id ^ mask;
-			dest = (new_dest < rem) ? new_dest * 2 + 1 :
-				new_dest + rem;
+			next_remote = my_new_id ^ mask;
+			remote = (next_remote < rem) ? next_remote * 2 + 1 :
+				next_remote + rem;
 
-			ret = util_coll_sched_recv(coll_mc, dest, recv_buf,
-						   count, datatype, coll_id, NO_BARRIER);
-			if (ret)
-				return ret;
-			ret = util_coll_sched_send(coll_mc, dest, send_buf,
-						   count, datatype, coll_id, BARRIER);
+			ret = util_coll_sched_recv(coll_op, remote, recv_buf, count,
+						   datatype, 0);
 			if (ret)
 				return ret;
 
-			if (dest < coll_mc->my_rank) {
-				ret = util_coll_sched_reduce(coll_mc, recv_buf, send_buf,
-							     count, datatype, op, BARRIER);
+			ret = util_coll_sched_send(coll_op, remote, send_buf, count,
+						   datatype, 1);
+			if (ret)
+				return ret;
+
+			if (remote < local) {
+				ret = util_coll_sched_reduce(coll_op, recv_buf, send_buf,
+							     count, datatype, op, 1);
 				if (ret)
 					return ret;
 
 			} else {
-				ret = util_coll_sched_reduce(coll_mc, send_buf, recv_buf,
-							     count, datatype, op, BARRIER);
+				ret = util_coll_sched_reduce(coll_op, send_buf, recv_buf,
+							     count, datatype, op, 1);
 				if (ret)
 					return ret;
 
-				ret = util_coll_sched_copy(coll_mc, recv_buf, send_buf,
-							   count, datatype, BARRIER);
+				ret = util_coll_sched_copy(coll_op, recv_buf, send_buf,
+							   count, datatype, 1);
 				if (ret)
 					return ret;
 			}
@@ -394,17 +473,15 @@ static int util_coll_allreduce(struct util_coll_mc *coll_mc, void *send_buf,
 		}
 	}
 
-	if (coll_mc->my_rank < 2 * rem) {
-		if (coll_mc->my_rank % 2) {
-			ret = util_coll_sched_send(coll_mc, coll_mc->my_rank - 1,
-						   send_buf, count, datatype,
-						   coll_id, BARRIER);
+	if (local < 2 * rem) {
+		if (local % 2) {
+			ret = util_coll_sched_send(coll_op, local - 1, send_buf, count,
+						   datatype, 1);
 			if (ret)
 				return ret;
 		} else {
-			ret = util_coll_sched_recv(coll_mc, coll_mc->my_rank + 1,
-						   send_buf, count, datatype,
-						   coll_id, BARRIER);
+			ret = util_coll_sched_recv(coll_op, local + 1, send_buf, count,
+						   datatype, 1);
 			if (ret)
 				return ret;
 		}
@@ -434,7 +511,7 @@ static struct fi_ops util_coll_fi_ops = {
  * e.g. require local address to be in AV?
  * Determine best way to handle first join request
  */
-static int util_coll_find_my_rank(struct fid_ep *ep,
+static int util_coll_find_local_rank(struct fid_ep *ep,
 				  struct util_coll_mc *coll_mc)
 {
 	size_t addrlen;
@@ -458,7 +535,7 @@ static int util_coll_find_my_rank(struct fid_ep *ep,
 		free(addr);
 		return ret;
 	}
-	coll_mc->my_rank =
+	coll_mc->local_rank =
 		ofi_av_lookup_fi_addr(coll_mc->av_set->av, addr);
 
 	free(addr);
@@ -466,55 +543,52 @@ static int util_coll_find_my_rank(struct fid_ep *ep,
 	return FI_SUCCESS;
 }
 
-void util_coll_join_comp(struct util_coll_state *state)
+void util_coll_join_comp(struct util_coll_operation *coll_op)
 {
 	struct fi_eq_err_entry entry;
-	struct util_ep *ep = container_of(state->mc->ep, struct util_ep, ep_fid);
+	struct util_ep *ep = container_of(coll_op->mc->ep, struct util_ep, ep_fid);
 
 	struct bitmask mask = {
-		.bytes = state->comp_data,
-		.size = state->comp_data_size * 8
+		.bytes = coll_op->comp_data,
+		.size = coll_op->comp_data_size
 	};
 
-	state->mc->seq = 0;
-	state->mc->group_id = ofi_bitmask_get_lsbset(mask);
-
+	coll_op->mc->seq = 0;
+	coll_op->mc->group_id = ofi_bitmask_get_lsbset(mask);
 	// mark the local mask bit
-	ofi_bitmask_unset(ep->coll_cid_mask, state->mc->group_id);
+	ofi_bitmask_unset(ep->coll_cid_mask, coll_op->mc->group_id);
 
 	/* write to the eq  */
 	memset(&entry, 0, sizeof(entry));
-	entry.fid = &state->mc->mc_fid.fid;
-	entry.context = state->mc->mc_fid.fid.context;
+	entry.fid = &coll_op->mc->mc_fid.fid;
+	entry.context = coll_op->mc->mc_fid.fid.context;
 
 	if (ofi_eq_write(&ep->eq->eq_fid, FI_JOIN_COMPLETE, &entry,
 			 sizeof(struct fi_eq_entry), FI_COLLECTIVE) < 0)
 		FI_WARN(ep->domain->fabric->prov, FI_LOG_DOMAIN,
 			"join collective - eq write failed\n");
 
-	dlist_remove(&state->entry);
-	free(state->comp_data);
-	free(state);
+	free(coll_op->comp_data);
 }
 
-void util_coll_barrier_comp(struct util_coll_state *state)
+void util_coll_barrier_comp(struct util_coll_operation *coll_op)
 {
 	struct util_ep *ep;
 
-	ep = container_of(state->mc->ep, struct util_ep, ep_fid);
+	ep = container_of(coll_op->mc->ep, struct util_ep, ep_fid);
 
-	if (ofi_cq_write(ep->tx_cq, state->context, FI_COLLECTIVE,
-			 state->comp_data_size, state->comp_data, 0, state->hdr.tag)) {
+	if (ofi_cq_write(ep->tx_cq, coll_op->context, FI_COLLECTIVE,
+			 coll_op->comp_data_size, coll_op->comp_data, 0, 0))
 		FI_WARN(ep->domain->fabric->prov, FI_LOG_DOMAIN,
 			"barrier collective - cq write failed\n");
-	}
 
-	dlist_remove(&state->entry);
-	free(state);
+	// barrier data is transparent to the caller.
+	// other collectives will have buffers managed
+	// by the caller
+	free(coll_op->comp_data);
 }
 
-static int util_coll_proc_reduce_item(struct util_coll_mc *coll_mc,
-				      struct util_coll_reduce_item *reduce_item)
+static int util_coll_proc_reduce_item(struct util_coll_reduce_item *reduce_item)
 {
 	if (FI_MIN <= reduce_item->op && FI_BXOR >= reduce_item->op) {
 		ofi_atomic_write_handlers[reduce_item->op]
@@ -525,201 +599,101 @@ static int util_coll_proc_reduce_item(struct util_coll_mc *coll_mc,
 	} else {
 		return -FI_ENOSYS;
 	}
-
 	return FI_SUCCESS;
 }
 
-int util_coll_process_pending(struct util_coll_mc *coll_mc)
-{
-	struct slist_entry *entry;
-	struct util_coll_hdr *hdr;
-	struct util_coll_xfer_item *xfer_item;
+int util_coll_process_xfer_item(struct util_coll_xfer_item *item) {
 	struct iovec iov;
 	struct fi_msg_tagged msg;
-	int err;
-	int is_barrier;
+	struct util_coll_mc *mc = item->hdr.coll_op->mc;
 
 	msg.msg_iov = &iov;
 	msg.desc = NULL;
 	msg.iov_count = 1;
 	msg.ignore = 0;
-	msg.context = coll_mc;
+	msg.context = item;
 	msg.data = 0;
+	msg.tag = item->tag;
+	msg.addr = mc->av_set->fi_addr_array[item->remote_rank];
 
-	while (!slist_empty(&coll_mc->pending_xfer_list)) {
-		entry = slist_remove_head(&coll_mc->pending_xfer_list);
-		hdr = container_of(entry, struct util_coll_hdr, entry);
-		is_barrier = hdr->is_barrier;
-		switch (hdr->type) {
-		case UTIL_COLL_SEND:
-			xfer_item = container_of(
-				hdr, struct util_coll_xfer_item, hdr);
-			iov.iov_base = xfer_item->buf;
-			iov.iov_len = (xfer_item->count *
-				       ofi_datatype_size(xfer_item->datatype));
-			msg.tag = hdr->tag;
-			msg.addr = coll_mc->av_set->fi_addr_array[xfer_item->dest_rank];
-			err = fi_tsendmsg(coll_mc->ep, &msg, FI_COLLECTIVE);
-			if (err) {
-				slist_insert_head(entry, &coll_mc->pending_xfer_list);
-				return err;
-			}
-			break;
-		case UTIL_COLL_RECV:
-			xfer_item = container_of(
-				hdr, struct util_coll_xfer_item, hdr);
-			iov.iov_base = xfer_item->buf;
-			iov.iov_len = (xfer_item->count *
-				       ofi_datatype_size(xfer_item->datatype));
-			msg.tag = hdr->tag;
-			msg.addr = coll_mc->av_set->fi_addr_array[xfer_item->src_rank];
-			err = fi_trecvmsg(coll_mc->ep, &msg, FI_COLLECTIVE);
-			if (err)
-				return err;
-			break;
-		default:
-			break;
-		}
+	iov.iov_base = item->buf;
+	iov.iov_len = (item->count * ofi_datatype_size(item->datatype));
 
-		if (is_barrier)
-			break;
+	if (item->hdr.type == UTIL_COLL_SEND) {
+		return fi_tsendmsg(mc->ep, &msg, FI_COLLECTIVE);
+	} else if (item->hdr.type == UTIL_COLL_RECV) {
+		return fi_trecvmsg(mc->ep, &msg, FI_COLLECTIVE);
 	}
 
-	return FI_SUCCESS;
-}
-
-static int util_coll_process_work_items(struct util_coll_mc *coll_mc)
-{
-	struct util_coll_hdr *hdr;
-	struct util_coll_reduce_item *reduce_item;
-	struct util_coll_copy_item *copy_item;
-	struct util_coll_state *state;
-	struct slist_entry *entry;
-	int ret;
-	int is_barrier;
-
-	while (!slist_empty(&coll_mc->deferred_list)) {
-		entry = slist_remove_head(&coll_mc->deferred_list);
-		hdr = container_of(entry, struct util_coll_hdr, entry);
-		is_barrier = hdr->is_barrier;
-		switch (hdr->type) {
-		case UTIL_COLL_SEND:
-			slist_insert_tail(&hdr->entry, &coll_mc->pending_xfer_list);
-			slist_insert_tail(&hdr->barrier_entry, &coll_mc->barrier_list);
-			break;
-		case UTIL_COLL_RECV:
-			slist_insert_tail(&hdr->entry, &coll_mc->pending_xfer_list);
-			slist_insert_tail(&hdr->barrier_entry, &coll_mc->barrier_list);
-			break;
-		case UTIL_COLL_REDUCE:
-			reduce_item = (struct util_coll_reduce_item *) hdr;
-			ret = util_coll_proc_reduce_item(coll_mc, reduce_item);
-			free(reduce_item);
-			if (ret)
-				return ret;
-			break;
-		case UTIL_COLL_COPY:
-			copy_item = (struct util_coll_copy_item *) hdr;
-			memcpy(copy_item->out_buf, copy_item->in_buf,
-			       copy_item->count *
-				       ofi_datatype_size(copy_item->datatype));
-			free(copy_item);
-			break;
-		case UTIL_COLL_COMP:
-			state = container_of(hdr, struct util_coll_state, hdr);
-			if (state->comp_fn)
-				state->comp_fn(state);
-			break;
-		default:
-			break;
-		}
-
-		if (is_barrier)
-			break;
-	}
-	return FI_SUCCESS;
-}
-
-static int util_coll_schedule(struct util_coll_mc *coll_mc)
-{
-	int ret;
-
-	if (slist_empty(&coll_mc->barrier_list)) {
-		ret = util_coll_process_work_items(coll_mc);
-		if (ret)
-			return ret;
-	}
-	return FI_SUCCESS;
+	return -FI_ENOSYS;
 }
 
 int ofi_coll_ep_progress(struct fid_ep *ep)
 {
-	int ret;
-	struct util_coll_state *state;
-	struct dlist_entry *cur;
+	struct util_coll_work_item *work_item;
+	struct util_coll_reduce_item *reduce_item;
+	struct util_coll_copy_item *copy_item;
+	struct util_coll_xfer_item *xfer_item;
+	struct util_coll_operation *coll_op;
 	struct util_ep *util_ep;
+	int ret;
 
 	util_ep  = container_of(ep, struct util_ep, ep_fid);
 
-	ofi_fastlock_acquire(&util_ep->coll_state_lock);
+	while (!slist_empty(&util_ep->coll_ready_queue)) {
+		slist_remove_head_container(&util_ep->coll_ready_queue,
+					    struct util_coll_work_item, work_item,
+					    ready_entry);
+		coll_op = work_item->coll_op;
+		switch (work_item->type) {
+		case UTIL_COLL_SEND:
+			xfer_item = container_of(work_item, struct util_coll_xfer_item, hdr);
+			ret = util_coll_process_xfer_item(xfer_item);
+			if (ret && ret == -FI_EAGAIN) {
+				slist_insert_tail(&work_item->ready_entry,
+						  &util_ep->coll_ready_queue);
+				goto out;
+			}
+			break;
+		case UTIL_COLL_RECV:
+			xfer_item = container_of(work_item, struct util_coll_xfer_item, hdr);
+			ret = util_coll_process_xfer_item(xfer_item);
+			if (ret)
+				goto out;
+			break;
+		case UTIL_COLL_REDUCE:
+			reduce_item = container_of(work_item, struct util_coll_reduce_item, hdr);
+			ret = util_coll_proc_reduce_item(reduce_item);
+			if (ret)
+				goto out;
 
-	dlist_foreach(&util_ep->coll_state_list, cur) {
-		state = container_of(cur, struct util_coll_state, entry);
-		ret = util_coll_schedule(state->mc);
-		if(ret)
-			goto err;
+			reduce_item->hdr.state = UTIL_COLL_COMPLETE;
+			break;
+		case UTIL_COLL_COPY:
+			copy_item = container_of(work_item, struct util_coll_copy_item, hdr);
+			memcpy(copy_item->out_buf, copy_item->in_buf,
+			       copy_item->count * ofi_datatype_size(copy_item->datatype));
+
+			copy_item->hdr.state = UTIL_COLL_COMPLETE;
+			break;
+		case UTIL_COLL_COMP:
+			if (work_item->coll_op->comp_fn)
+				work_item->coll_op->comp_fn(work_item->coll_op);
+
+			work_item->state = UTIL_COLL_COMPLETE;
+			break;
+		default:
+			ret = FI_ENOSYS;
+			goto out;
+		}
+
+		util_coll_op_progress_work(util_ep, coll_op);
 	}
+
 	ret = FI_SUCCESS;
 
-err:
-	ofi_fastlock_release(&util_ep->coll_state_lock);
-
+out:
 	return ret;
-}
-
-int ofi_coll_process_pending(struct fid_ep *ep)
-{
-	int ret;
-	struct util_coll_state *state;
-	struct dlist_entry *cur;
-	struct util_ep *util_ep;
-
-	util_ep  = container_of(ep, struct util_ep, ep_fid);
-
-	ofi_fastlock_acquire(&util_ep->coll_state_lock);
-
-	dlist_foreach(&util_ep->coll_state_list, cur) {
-		state = container_of(cur, struct util_coll_state, entry);
-		ret = util_coll_process_pending(state->mc);
-		if(ret)
-			goto err;
-	}
-	ret = FI_SUCCESS;
-
-err:
-	ofi_fastlock_release(&util_ep->coll_state_lock);
-
-	return ret;
-}
-
-static inline
-int util_coll_state_init(struct util_coll_mc *coll_mc,
-			 struct util_coll_state **state)
-{
-	struct util_ep *util_ep  = container_of(coll_mc->ep, struct util_ep, ep_fid);
-
-	*state = calloc(1, sizeof(struct util_coll_state));
-	if (!(*state))
-		return -FI_ENOMEM;
-
-	(*state)->mc = coll_mc;
-	(*state)->comp_fn = NULL;
-
-	ofi_fastlock_acquire(&util_ep->coll_state_lock);
-	dlist_insert_tail(&(*state)->entry, &util_ep->coll_state_list);
-	ofi_fastlock_release(&util_ep->coll_state_lock);
-
-	return FI_SUCCESS;
 }
 
 int ofi_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
@@ -729,7 +703,7 @@ int ofi_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 	struct util_coll_mc *new_coll_mc;
 	struct util_av_set *av_set;
 	struct util_coll_mc *coll_mc;
-	struct util_coll_state *join_state;
+	struct util_coll_operation *join_op;
 	struct util_ep *util_ep;
 	struct bitmask *join_mask;
 	int ret;
@@ -759,65 +733,55 @@ int ofi_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 
 	coll_mc->ep = ep;
 
-	ret = util_coll_state_init(coll_mc, &join_state);
+	/* get the rank */
+	util_coll_find_local_rank(ep, new_coll_mc);
+	util_coll_find_local_rank(ep, coll_mc);
+
+	ret = util_coll_op_create(&join_op, coll_mc, UTIL_COLL_JOIN_OP, context,
+				util_coll_join_comp);
 	if (ret)
 		goto err1;
 
-	/* get the rank */
-	util_coll_find_my_rank(ep, new_coll_mc);
-	util_coll_find_my_rank(ep, coll_mc);
+	join_mask = calloc(1, sizeof(*join_mask));
+	if (!join_mask)
+		return -FI_ENOMEM;
 
-	join_mask = calloc(1, sizeof(join_mask));
-	if(!join_mask) {
-		ret = -FI_ENOMEM;
-		goto err1;
-	}
-
-	ret = ofi_bitmask_create(join_mask, OFI_MAX_GROUP_ID);
-	if(ret)
-		goto err2;
-
-	join_state->comp_data = join_mask->bytes;
-	join_state->comp_data_size = join_mask->size / 8;
-
-	if (new_coll_mc->my_rank != FI_ADDR_NOTAVAIL) {
+	if (new_coll_mc->local_rank != FI_ADDR_NOTAVAIL) {
 		ret = ofi_bitmask_create(join_mask, OFI_MAX_GROUP_ID);
-		if(ret)
+		if (ret)
 			goto err2;
 
-		join_state->comp_data = join_mask->bytes;
-		join_state->comp_data_size = join_mask->size / 8;
+		join_op->comp_data = join_mask->bytes;
+		join_op->comp_data_size = join_mask->size / 8;
+		free(join_mask);
 
-		ret = util_coll_sched_copy(coll_mc, util_ep->coll_cid_mask->bytes,
-					   join_state->comp_data,
-					   join_state->comp_data_size,
-					   FI_UINT8, NO_BARRIER);
+		ret = util_coll_sched_copy(join_op, util_ep->coll_cid_mask->bytes,
+					   join_op->comp_data, join_op->comp_data_size,
+					   FI_UINT8, 1);
 		if (ret) {
-			goto err2;
+			goto err3;
 		}
 	} else {
 		ofi_bitmask_set_all(join_mask);
 	}
 
-	free(join_mask);
-
-	ret = util_coll_allreduce(coll_mc, join_state->comp_data,join_state->comp_data,
-				  join_state->comp_data_size, FI_UINT8, FI_BAND);
+	ret = util_coll_allreduce(join_op, join_op->comp_data, join_op->comp_data,
+				  join_op->comp_data_size, FI_UINT8, FI_BAND);
 	if (ret)
 		goto err3;
 
-	ret = util_coll_sched_comp(coll_mc, UTIL_COLL_JOIN_OP, context,
-				   join_state, util_coll_join_comp);
+	ret = util_coll_sched_comp(join_op);
 	if (ret)
 		goto err3;
+
+	util_coll_op_progress_work(util_ep, join_op);
 
 	*mc = &new_coll_mc->mc_fid;
-	util_coll_schedule(coll_mc);
 	return FI_SUCCESS;
 err3:
-	free(join_state->comp_data);
+	free(join_op->comp_data);
 err2:
-	free(join_state);
+	free(join_op);
 err1:
 	free(new_coll_mc);
 	return ret;
@@ -943,66 +907,49 @@ err1:
 ssize_t ofi_ep_barrier(struct fid_ep *ep, fi_addr_t coll_addr, void *context)
 {
 	struct util_coll_mc *coll_mc;
-	struct util_coll_state *barrier_state;
+	struct util_coll_operation *barrier_op;
+	struct util_ep *util_ep;
 	int ret;
 
 	coll_mc = (struct util_coll_mc*) ((uintptr_t) coll_addr);
 
-	util_coll_state_init(coll_mc, &barrier_state);
-	barrier_state->comp_data_size = sizeof(uint64_t);
-	barrier_state->comp_data = calloc(1, barrier_state->comp_data_size);
-	if (!barrier_state->comp_data) {
+	util_coll_op_create(&barrier_op, coll_mc, UTIL_COLL_BARRIER_OP, context,
+			  util_coll_barrier_comp);
+	barrier_op->comp_data_size = sizeof(uint64_t);
+	barrier_op->comp_data = calloc(1, barrier_op->comp_data_size);
+	if (!barrier_op->comp_data) {
 		ret = -FI_ENOMEM;
 		goto err1;
 	}
+	*((uint64_t*)barrier_op->comp_data) = ~barrier_op->mc->local_rank;
 
-	ret = util_coll_allreduce(coll_mc, barrier_state->comp_data,
-				  barrier_state->comp_data, barrier_state->comp_data_size,
+	ret = util_coll_allreduce(barrier_op, barrier_op->comp_data,
+				  barrier_op->comp_data, barrier_op->comp_data_size,
 				  FI_UINT8, FI_BAND);
 	if (ret)
 		goto err2;
 
-	ret = util_coll_sched_comp(coll_mc, UTIL_COLL_BARRIER_OP, context,
-			     barrier_state, util_coll_barrier_comp);
+	ret = util_coll_sched_comp(barrier_op);
 	if (ret)
 		goto err2;
 
-	util_coll_schedule(coll_mc);
+	util_ep = container_of(ep, struct util_ep, ep_fid);
+	util_coll_op_progress_work(util_ep, barrier_op);
+
 	return FI_SUCCESS;
 err2:
-	free(barrier_state->comp_data);
+	free(barrier_op->comp_data);
 err1:
-	free(barrier_state);
+	free(barrier_op);
 	return ret;
 }
 
-static int util_coll_match_barrier_tag(struct slist_entry *entry, const void *arg)
+void ofi_coll_handle_xfer_comp(uint64_t tag, void *ctx)
 {
-	struct util_coll_xfer_item *item;
-	uint64_t *tag_ptr = (uint64_t *) arg;
+	struct util_ep *util_ep;
+	struct util_coll_xfer_item *xfer_item = (struct util_coll_xfer_item *) ctx;
+	xfer_item->hdr.state = UTIL_COLL_COMPLETE;
 
-	item = container_of(entry, struct util_coll_xfer_item, hdr.barrier_entry);
-	if (item->hdr.tag == *tag_ptr)
-		return 1;
-
-	return 0;
-}
-
-void ofi_coll_handle_comp(uint64_t tag, void *ctx)
-{
-	struct util_coll_mc *coll_mc = (struct util_coll_mc *) ctx;
-	struct util_coll_xfer_item *item;
-	struct slist_entry *entry;
-	uint64_t *tag_ptr = &tag;
-
-	entry = slist_remove_first_match(&coll_mc->barrier_list,
-					 util_coll_match_barrier_tag,
-					 (void *) tag_ptr);
-	if (entry) {
-		item = container_of(entry, struct util_coll_xfer_item,
-				    hdr.barrier_entry);
-		free(item);
-	}
-
-	util_coll_schedule(coll_mc);
+	util_ep = container_of(xfer_item->hdr.coll_op->mc->ep, struct util_ep, ep_fid);
+	util_coll_op_progress_work(util_ep, xfer_item->hdr.coll_op);
 }

@@ -612,7 +612,7 @@ ssize_t rxm_cq_handle_coll_eager(struct rxm_rx_buf *rx_buf)
 					    0, rx_buf->pkt.data,
 					    rx_buf->pkt.hdr.size);
 	if(rx_buf->pkt.hdr.tag & OFI_COLL_TAG_FLAG) {
-		ofi_coll_handle_comp(rx_buf->pkt.hdr.tag,
+		ofi_coll_handle_xfer_comp(rx_buf->pkt.hdr.tag,
 				rx_buf->recv_entry->context);
 		rxm_recv_entry_release(rx_buf->recv_entry->recv_queue,
 				rx_buf->recv_entry);
@@ -1110,7 +1110,7 @@ int rxm_finish_coll_eager_send(struct rxm_ep *rxm_ep, struct rxm_tx_eager_buf *t
 	int ret;
 
 	if (tx_eager_buf->pkt.hdr.tag & OFI_COLL_TAG_FLAG) {
-		ofi_coll_handle_comp(tx_eager_buf->pkt.hdr.tag,
+		ofi_coll_handle_xfer_comp(tx_eager_buf->pkt.hdr.tag,
 				tx_eager_buf->app_context);
 		ret = FI_SUCCESS;
 	} else {
@@ -1475,10 +1475,9 @@ void rxm_ep_progress_coll(struct util_ep *util_ep)
 {
 	ofi_ep_lock_acquire(util_ep);
 	rxm_ep_do_progress(util_ep);
-	ofi_coll_ep_progress(&util_ep->ep_fid);
 	ofi_ep_lock_release(util_ep);
 
-	ofi_coll_process_pending(&util_ep->ep_fid);
+	ofi_coll_ep_progress(&util_ep->ep_fid);
 }
 
 static int rxm_cq_close(struct fid *fid)

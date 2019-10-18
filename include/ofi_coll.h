@@ -43,11 +43,6 @@
 #define OFI_MAX_GROUP_ID 256
 #define OFI_COLL_TAG_FLAG (1ULL << 63)
 
-enum barrier_type {
-	NO_BARRIER,
-	BARRIER,
-};
-
 enum util_coll_op_type {
 	UTIL_COLL_JOIN_OP,
 	UTIL_COLL_BARRIER_OP,
@@ -73,67 +68,66 @@ enum coll_work_type {
 	UTIL_COLL_COMP,
 };
 
-struct util_coll_hdr {
-	struct slist_entry	entry;
-	struct slist_entry	barrier_entry;
-	enum coll_work_type	type;
-	/* only valid for xfer_item*/
-	uint64_t		tag;
-	int 			is_barrier;
+enum coll_state {
+	UTIL_COLL_WAITING,
+	UTIL_COLL_PROCESSING,
+	UTIL_COLL_COMPLETE
+};
+
+struct util_coll_operation;
+
+struct util_coll_work_item {
+	struct slist_entry		ready_entry;
+	struct dlist_entry		waiting_entry;
+	struct util_coll_operation 	*coll_op;
+	enum coll_work_type		type;
+	enum coll_state			state;
+	int				fence;
 };
 
 struct util_coll_xfer_item {
-	struct util_coll_hdr	hdr;
-	void 			*buf;
-	int			count;
-	union {
-		int		src_rank;
-		int		dest_rank;
-	};
-	enum fi_datatype	datatype;
+	struct util_coll_work_item	hdr;
+	void 				*buf;
+	int				count;
+	enum fi_datatype		datatype;
+	uint64_t			tag;
+	int				remote_rank;
 };
 
 struct util_coll_copy_item {
-	struct util_coll_hdr	hdr;
-	void 			*in_buf;
-	void			*out_buf;
-	int			count;
-	enum fi_datatype	datatype;
+	struct util_coll_work_item	hdr;
+	void 				*in_buf;
+	void				*out_buf;
+	int				count;
+	enum fi_datatype		datatype;
 };
 
 struct util_coll_reduce_item {
-	struct util_coll_hdr	hdr;
-	void 			*in_buf;
-	void 			*inout_buf;
-	int			count;
-	enum fi_datatype	datatype;
-	enum fi_op		op;
+	struct util_coll_work_item	hdr;
+	void 				*in_buf;
+	void 				*inout_buf;
+	int				count;
+	enum fi_datatype		datatype;
+	enum fi_op			op;
 };
 
 struct util_coll_mc {
 	struct fid_mc		mc_fid;
 	struct fid_ep		*ep;
 	struct util_av_set	*av_set;
-	struct slist		barrier_list;
-	struct slist		deferred_list;
-	struct slist		pending_xfer_list;
-	int			my_rank;
+	uint64_t		local_rank;
 	uint16_t		group_id;
 	uint16_t		seq;
 	ofi_atomic32_t		ref;
 };
 
-struct util_coll_state;
-
-typedef void (*util_coll_comp_fn_t)(struct util_coll_state *state);
-
-struct util_coll_state {
-	struct util_coll_hdr	hdr;
-	struct dlist_entry	entry;
+typedef void (*util_coll_comp_fn_t)(struct util_coll_operation *coll_op);
+struct util_coll_operation {
 	enum util_coll_op_type	type;
+	uint32_t		cid;
 	void			*context;
 	struct util_coll_mc	*mc;
-	struct slist		work_queue;
+	struct dlist_entry	work_queue;
 	void			*comp_data;
 	size_t			comp_data_size;
 	util_coll_comp_fn_t	comp_fn;
@@ -148,11 +142,9 @@ int ofi_av_set(struct fid_av *av, struct fi_av_set_attr *attr,
 
 ssize_t ofi_ep_barrier(struct fid_ep *ep, fi_addr_t coll_addr, void *context);
 
-int ofi_coll_process_pending(struct fid_ep *ep);
-
 int ofi_coll_ep_progress(struct fid_ep *ep);
 
-void ofi_coll_handle_comp(uint64_t tag, void *ctx);
+void ofi_coll_handle_xfer_comp(uint64_t tag, void *ctx);
 
 
 #endif // _OFI_COLL_H_

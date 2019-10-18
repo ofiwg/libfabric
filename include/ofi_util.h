@@ -297,8 +297,7 @@ struct util_ep {
 	ofi_fastlock_release_t	lock_release;
 
 	struct bitmask		*coll_cid_mask;
-	struct dlist_entry	coll_state_list;
-	fastlock_t		coll_state_lock;
+	struct slist		coll_ready_queue;
 };
 
 int ofi_ep_bind_av(struct util_ep *util_ep, struct util_av *av);

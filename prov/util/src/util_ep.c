@@ -263,8 +263,7 @@ int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_pr
 	} else {
 		ep->coll_cid_mask = NULL;
 	}
-	dlist_init(&ep->coll_state_list);
-	fastlock_init(&ep->coll_state_lock);
+	slist_init(&ep->coll_ready_queue);
 	return 0;
 }
 
