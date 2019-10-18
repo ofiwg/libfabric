@@ -1115,7 +1115,7 @@ ssize_t rxr_ep_send_msg(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 	rxr_ep_print_pkt("Sent", ep, (struct rxr_base_hdr *)pkt_entry->pkt);
 #endif
 #endif
-	if (peer->is_local) {
+	if (rxr_env.enable_shm_transfer && peer->is_local) {
 		ret = fi_sendmsg(ep->shm_ep, msg, flags);
 	} else {
 		ret = fi_sendmsg(ep->rdm_ep, msg, flags);
@@ -2935,7 +2935,8 @@ static inline int rxr_ep_send_queued_pkts(struct rxr_ep *ep,
 
 	dlist_foreach_container_safe(pkts, struct rxr_pkt_entry,
 				     pkt_entry, entry, tmp) {
-		if (rxr_ep_get_peer(ep, pkt_entry->addr)->is_local) {
+		if (rxr_env.enable_shm_transfer &&
+				rxr_ep_get_peer(ep, pkt_entry->addr)->is_local) {
 			dlist_remove(&pkt_entry->entry);
 			continue;
 		}

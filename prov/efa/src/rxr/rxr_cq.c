@@ -1009,7 +1009,7 @@ static int rxr_cq_process_rts(struct rxr_ep *ep,
 		return ret;
 	}
 
-	if (is_local) {
+	if (rxr_env.enable_shm_transfer && is_local) {
 		rxr_release_rx_pkt_entry(ep, pkt_entry);
 		return ret;
 	}
@@ -1180,7 +1180,7 @@ static void rxr_cq_handle_rts(struct rxr_ep *ep,
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 	assert(peer);
 
-	if (peer->is_local) {
+	if (rxr_env.enable_shm_transfer && peer->is_local) {
 		/* no need to reorder msg for shm_ep
 		 * rxr_cq_process_rts will write error cq entry if needed
 		 */
@@ -1487,7 +1487,7 @@ void rxr_cq_handle_pkt_recv_completion(struct rxr_ep *ep,
 
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 
-	if (peer->is_local)
+	if (rxr_env.enable_shm_transfer && peer->is_local)
 		ep->posted_bufs_shm--;
 	else
 		ep->posted_bufs_efa--;
