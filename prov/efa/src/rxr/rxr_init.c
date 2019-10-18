@@ -135,7 +135,7 @@ int rxr_ep_efa_addr_to_str(const void *addr, char *smr_name)
 	}
 	qpn = ((struct efa_ep_addr *)addr)->qpn;
 
-	ret = snprintf(smr_name, RXR_MAX_NAME_LENGTH, "%s_%d", gid, qpn);
+	ret = snprintf(smr_name, NAME_MAX, "/%ld_%s_%d", (size_t) getuid(), gid, qpn);
 
 	return (ret <= 0) ? ret : FI_SUCCESS;
 }
