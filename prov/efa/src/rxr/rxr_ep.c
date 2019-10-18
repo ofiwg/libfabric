@@ -221,10 +221,10 @@ struct rxr_rx_entry *rxr_ep_rx_entry_init(struct rxr_ep *ep,
 		rx_entry->cq_entry.flags = (FI_RECV | FI_MSG);
 		break;
 	case ofi_op_read_rsp:
-		rx_entry->cq_entry.flags = (FI_REMOTE_READ | FI_MSG);
+		rx_entry->cq_entry.flags = (FI_REMOTE_READ | FI_RMA);
 		break;
 	case ofi_op_write_async:
-		rx_entry->cq_entry.flags = (FI_REMOTE_WRITE | FI_MSG);
+		rx_entry->cq_entry.flags = (FI_REMOTE_WRITE | FI_RMA);
 		break;
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
