@@ -48,7 +48,8 @@ nodist_prov_cxi_test_cxitest_SOURCES = \
 	prov/cxi/test/tagged.c \
 	prov/cxi/test/msg.c \
 	prov/cxi/test/atomic.c \
-	prov/cxi/test/cntr.c
+	prov/cxi/test/cntr.c \
+	prov/cxi/test/tagged_stress.c
 
 prov_cxi_test_cxitest_CPPFLAGS = $(AM_CPPFLAGS) $(cxi_CPPFLAGS) \
 	$(cxitest_CPPFLAGS) $(PTHREAD_CFLAGS)
