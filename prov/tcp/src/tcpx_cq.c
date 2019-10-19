@@ -86,9 +86,8 @@ struct tcpx_xfer_entry *tcpx_xfer_entry_alloc(struct tcpx_cq *tcpx_cq,
 void tcpx_xfer_entry_release(struct tcpx_cq *tcpx_cq,
 			     struct tcpx_xfer_entry *xfer_entry)
 {
-	if (xfer_entry->ep->cur_rx_entry == xfer_entry) {
+	if (xfer_entry->ep->cur_rx_entry == xfer_entry)
 		xfer_entry->ep->cur_rx_entry = NULL;
-	}
 
 	xfer_entry->hdr.base_hdr.flags = 0;
 
@@ -179,13 +178,12 @@ static int tcpx_cq_control(struct fid *fid, int command, void *arg)
 
 		ret = fi_control(&cq->wait->wait_fid.fid,
 				 command, arg);
-		if (ret)
-			return ret;
-
-		return FI_SUCCESS;
+		break;
 	default:
 		return -FI_ENOSYS;
 	}
+
+	return ret;
 }
 
 static struct fi_ops tcpx_cq_fi_ops = {

@@ -57,7 +57,7 @@ static void tcpx_rma_read_send_entry_fill(struct tcpx_xfer_entry *send_entry,
 	size_t offset;
 
 	offset = sizeof(send_entry->hdr.base_hdr);
-	rma_iov = (struct ofi_rma_iov *)((uint8_t *)&send_entry->hdr + offset);
+	rma_iov = (struct ofi_rma_iov *) ((uint8_t *) &send_entry->hdr + offset);
 
 	send_entry->hdr.base_hdr.rma_iov_cnt = msg->rma_iov_count;
 	memcpy(rma_iov, msg->rma_iov,
@@ -185,7 +185,6 @@ static ssize_t tcpx_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg
 	uint64_t *cq_data;
 	size_t offset;
 
-
 	tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
 	tcpx_cq = container_of(tcpx_ep->util_ep.tx_cq, struct tcpx_cq,
 			       util_cq);
@@ -214,8 +213,7 @@ static ssize_t tcpx_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg
 	       msg->rma_iov_count * sizeof(msg->rma_iov[0]));
 	send_entry->hdr.base_hdr.rma_iov_cnt = msg->rma_iov_count;
 
-	offset += (send_entry->hdr.base_hdr.rma_iov_cnt *
-		   sizeof(*rma_iov));
+	offset += (send_entry->hdr.base_hdr.rma_iov_cnt * sizeof(*rma_iov));
 
 	send_entry->hdr.base_hdr.payload_off = (uint8_t)offset;
 	send_entry->hdr.base_hdr.size = data_len + offset;
@@ -235,16 +233,14 @@ static ssize_t tcpx_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg
 	send_entry->iov[0].iov_base = (void *) &send_entry->hdr;
 	send_entry->iov[0].iov_len = offset;
 
-	send_entry->flags = ((tcpx_ep->util_ep.tx_op_flags & FI_COMPLETION) |
-			     flags | FI_RMA | FI_WRITE);
+	send_entry->flags = (tcpx_ep->util_ep.tx_op_flags & FI_COMPLETION) |
+			     flags | FI_RMA | FI_WRITE;
 
-	if (flags & (FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)) {
+	if (flags & (FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE))
 		send_entry->hdr.base_hdr.flags |= OFI_DELIVERY_COMPLETE;
-	}
 
-	if (flags & FI_COMMIT_COMPLETE) {
+	if (flags & FI_COMMIT_COMPLETE)
 		send_entry->hdr.base_hdr.flags |= OFI_COMMIT_COMPLETE;
-	}
 
 	send_entry->ep = tcpx_ep;
 	send_entry->context = msg->context;
@@ -397,11 +393,12 @@ static ssize_t tcpx_rma_inject(struct fid_ep *ep, const void *buf, size_t len,
 				      0, addr, key, FI_INJECT);
 }
 
-static ssize_t tcpx_rma_injectdata(struct fid_ep *ep, const void *buf, size_t len,
-				   uint64_t data, fi_addr_t dest_addr, uint64_t addr, uint64_t key)
+static ssize_t
+tcpx_rma_injectdata(struct fid_ep *ep, const void *buf, size_t len,
+		    uint64_t data, fi_addr_t dest_addr, uint64_t addr,
+		    uint64_t key)
 {
-	return tcpx_rma_inject_common(ep, buf, len, dest_addr,
-				      data, addr, key,
+	return tcpx_rma_inject_common(ep, buf, len, dest_addr, data, addr, key,
 				      FI_INJECT | FI_REMOTE_CQ_DATA);
 }
 

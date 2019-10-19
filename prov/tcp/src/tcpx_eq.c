@@ -61,8 +61,7 @@ static int tcpx_eq_close(struct fid *fid)
 	if (ret)
 		return ret;
 
-	eq = container_of(fid, struct tcpx_eq,
-			  util_eq.eq_fid.fid);
+	eq = container_of(fid, struct tcpx_eq, util_eq.eq_fid.fid);
 
 	fastlock_destroy(&eq->close_lock);
 	free(eq);
