@@ -197,7 +197,7 @@ void smr_map_to_endpoint(struct smr_region *region, int index)
 	local_peers = smr_peer_addr(region);
 
 	strncpy(smr_peer_addr(region)[index].name,
-		region->map->peers[index].peer.name, SMR_NAME_SIZE);
+		region->map->peers[index].peer.name, SMR_NAME_SIZE - 1);
 	smr_peer_addr(region)[index].name[SMR_NAME_SIZE - 1] = '\0';
 	if (region->map->peers[index].peer.addr == FI_ADDR_UNSPEC)
 		return;
