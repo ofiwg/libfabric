@@ -30,7 +30,8 @@ pipeline {
             steps {
                 // creating git short hash
                 script {
-                    GIT_DESCRIPTION = sh(returnStdout: true, script: "git describe").trim()
+		    sh("git fetch --tags")
+                    GIT_DESCRIPTION = sh(returnStdout: true, script: "git describe --tags").trim()
                     LIBFABRIC_INSTALL = pwd tmp: true
                 }
 
@@ -409,7 +410,7 @@ pipeline {
         FABTEST_PATH = "${WORKSPACE + '/installs/fabtests'}"
         LIBFABRIC_BUILD_PATH = "${ROOT_BUILD_PATH + '/libfabric'}"
         OMB_BUILD_PATH = "${ROOT_BUILD_PATH + '/osu-micro-benchmarks/5.4.2/libexec/osu-micro-benchmarks/mpi'}"
-        MPICH_PATH = "${ROOT_BUILD_PATH + '/mpich/3.3b3'}"
+        MPICH_PATH = "${ROOT_BUILD_PATH + '/mpich/3.3'}"
         SFT_INSTALL_PATH = "${ROOT_BUILD_PATH + '/libfabric-sft/stable'}"
         BATS_INSTALL_PATH = "${ROOT_BUILD_PATH + '/bats/stable/bin'}"
     }
