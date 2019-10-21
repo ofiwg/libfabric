@@ -55,7 +55,6 @@
 #include <assert.h>
 
 struct fid_av_set *av_set;
-struct fid_mc *mc;
 
 int no_setup()
 {
@@ -91,15 +90,16 @@ int coll_setup()
 
 void coll_teardown()
 {
-	fi->dest_addr = NULL;
+	free(av_set);
 }
 
 int join_test_run()
 {
 	int ret;
 	uint32_t event;
-	struct fi_cq_err_entry comp;
+	struct fi_cq_err_entry comp = {0};
 	fi_addr_t world_addr;
+	struct fid_mc *coll_mc;
 
 	ret = fi_av_set_addr(av_set, &world_addr);
 	if (ret) {
@@ -107,7 +107,7 @@ int join_test_run()
 		return ret;
 	}
 
-	ret = fi_join_collective(ep, world_addr, av_set, 0, &mc, NULL);
+	ret = fi_join_collective(ep, world_addr, av_set, 0, &coll_mc, NULL);
 	if (ret) {
 		FT_DEBUG("collective join failed ret = %d\n", ret);
 		return ret;
@@ -124,16 +124,18 @@ int join_test_run()
 			return ret;
 		}
 
-		ret = fi_cq_read(rxcq, (void *) &comp, 1);
+		ret = fi_cq_read(rxcq, &comp, 1);
 		if(ret < 0 && ret != -EAGAIN) {
 			return ret;
 		}
 
-		ret = fi_cq_read(txcq, (void *) &comp, 1);
+		ret = fi_cq_read(txcq, &comp, 1);
 		if(ret < 0 && ret != -EAGAIN) {
 			return ret;
 		}
 	}
+
+	fi_close(&coll_mc->fid);
 }
 
 int barrier_test_run()
@@ -141,9 +143,10 @@ int barrier_test_run()
 	int ret;
 	uint32_t event;
 	struct fi_cq_err_entry comp = {0};
-	uint64_t barrier = 0x0ba221e20150600d;
+	uint64_t done_flag;
 	fi_addr_t world_addr;
 	fi_addr_t barrier_addr;
+	struct fid_mc *coll_mc;
 
 	ret = fi_av_set_addr(av_set, &world_addr);
 	if (ret) {
@@ -151,7 +154,7 @@ int barrier_test_run()
 		return ret;
 	}
 
-	ret = fi_join_collective(ep, world_addr, av_set, 0, &mc, NULL);
+	ret = fi_join_collective(ep, world_addr, av_set, 0, &coll_mc, NULL);
 	if (ret) {
 		FT_DEBUG("collective join failed ret = %d\n", ret);
 		return ret;
@@ -162,8 +165,8 @@ int barrier_test_run()
 		if (ret >= 0) {
 			FT_DEBUG("found eq entry ret %d\n", event);
 			if (event == FI_JOIN_COMPLETE) {
-				barrier_addr = fi_mc_addr(mc);
-				ret = fi_barrier(ep, barrier_addr, &barrier);
+				barrier_addr = fi_mc_addr(coll_mc);
+				ret = fi_barrier(ep, barrier_addr, &done_flag);
 				if (ret) {
 					FT_DEBUG("collective barrier failed ret = %d\n", ret);
 					return ret;
@@ -173,24 +176,26 @@ int barrier_test_run()
 			return ret;
 		}
 
-		ret = fi_cq_read(rxcq, (void *) &comp, 1);
+		ret = fi_cq_read(rxcq, &comp, 1);
 		if(ret < 0 && ret != -EAGAIN) {
 			return ret;
 		}
 
-		if(comp.op_context && (*((uint64_t*)comp.op_context) == barrier)) {
+		if(comp.op_context && comp.op_context == &done_flag) {
 			return FI_SUCCESS;
 		}
 
-		ret = fi_cq_read(txcq, (void *) &comp, 1);
+		ret = fi_cq_read(txcq, &comp, 1);
 		if(ret < 0 && ret != -EAGAIN) {
 			return ret;
 		}
 
-		if(comp.op_context && (*((uint64_t*)comp.op_context) == barrier)) {
+		if(comp.op_context && comp.op_context == &done_flag) {
 			return FI_SUCCESS;
 		}
 	}
+
+	fi_close(&coll_mc->fid);
 }
 
 struct coll_test tests[] = {
