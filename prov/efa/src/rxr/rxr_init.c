@@ -552,6 +552,11 @@ static void rxr_fini(void)
 		if (shm_info)
 			fi_freeinfo(shm_info);
 	}
+
+#if HAVE_EFA_DL
+	ofi_monitor_cleanup();
+	ofi_mem_fini();
+#endif
 }
 
 struct fi_provider rxr_prov = {
@@ -618,6 +623,11 @@ EFA_INI
 	fi_param_define(&rxr_prov, "shm_cq_read_size", FI_PARAM_SIZE_T,
 			"Set the number of SHM completion entries to read for one loop for one iteration of the progress engine. (Default: 50)");
 	rxr_init_env();
+
+#if HAVE_EFA_DL
+	ofi_mem_init();
+	ofi_monitor_init();
+#endif
 
 	lower_efa_prov = init_lower_efa_prov();
 	if (!lower_efa_prov)
