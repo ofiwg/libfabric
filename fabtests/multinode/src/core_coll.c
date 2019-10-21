@@ -198,6 +198,85 @@ int barrier_test_run()
 	fi_close(&coll_mc->fid);
 }
 
+int sum_all_reduce_test_run()
+{
+	int ret;
+	uint32_t event;
+	struct fi_cq_err_entry comp = {0};
+	uint64_t done_flag;
+	fi_addr_t world_addr;
+	fi_addr_t allreduce_addr;
+	struct fid_mc *coll_mc;
+	uint64_t result = 0;
+	uint64_t expect_result = 0;
+	uint64_t data = pm_job.my_rank;
+	size_t count = 1;
+	uint64_t i;
+
+	for(i = 0; i < pm_job.num_ranks; i++) {
+		expect_result += i;
+	}
+
+	ret = fi_av_set_addr(av_set, &world_addr);
+	if (ret) {
+		FT_DEBUG("failed to get collective addr = %d\n", ret);
+		return ret;
+	}
+
+	ret = fi_join_collective(ep, world_addr, av_set, 0, &coll_mc, NULL);
+	if (ret) {
+		FT_DEBUG("collective join failed ret = %d\n", ret);
+		return ret;
+	}
+
+	while (1) {
+		ret = fi_eq_read(eq, &event, NULL, 0, 0);
+		if (ret >= 0) {
+			FT_DEBUG("found eq entry ret %d\n", event);
+			if (event == FI_JOIN_COMPLETE) {
+				allreduce_addr = fi_mc_addr(coll_mc);
+				ret = fi_allreduce(ep, &data, count, NULL, &result, NULL,
+						   allreduce_addr, FI_UINT64, FI_SUM, 0,
+						   &done_flag);
+				if (ret) {
+					FT_DEBUG("collective allreduce failed ret = %d\n", ret);
+					return ret;
+				}
+			}
+		} else if(ret != -EAGAIN) {
+			return ret;
+		}
+
+		ret = fi_cq_read(rxcq, &comp, 1);
+		if(ret < 0 && ret != -EAGAIN) {
+			return ret;
+		}
+
+		if(comp.op_context && comp.op_context == &done_flag) {
+			if(result == expect_result)
+				return FI_SUCCESS;
+			FT_DEBUG("allreduce failed; expect: %ld, actual: %ld\n", expect_result, result);
+
+			return FI_ENOEQ;
+		}
+
+		ret = fi_cq_read(txcq, &comp, 1);
+		if(ret < 0 && ret != -EAGAIN) {
+			return ret;
+		}
+
+		if(comp.op_context && comp.op_context == &done_flag) {
+			if(result == expect_result)
+				return FI_SUCCESS;
+			FT_DEBUG("allreduce failed; expect: %ld, actual: %ld\n", expect_result, result);
+
+			return FI_ENOEQ;
+		}
+	}
+
+	fi_close(&coll_mc->fid);
+}
+
 struct coll_test tests[] = {
 	{
 		.name = "join_test",
@@ -209,6 +288,12 @@ struct coll_test tests[] = {
 		.name = "barrier_test",
 		.setup = coll_setup,
 		.run = barrier_test_run,
+		.teardown = coll_teardown
+	},
+	{
+		.name = "sum_all_reduce_test",
+		.setup = coll_setup,
+		.run = sum_all_reduce_test_run,
 		.teardown = coll_teardown
 	},
 };

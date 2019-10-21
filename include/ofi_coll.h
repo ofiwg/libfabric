@@ -131,6 +131,11 @@ struct barrier_data {
 	uint64_t tmp;
 };
 
+struct allreduce_data {
+	void	*data;
+	size_t	size;
+};
+
 struct util_coll_operation;
 
 typedef void (*util_coll_comp_fn_t)(struct util_coll_operation *coll_op);
@@ -143,6 +148,7 @@ struct util_coll_operation {
 	union {
 		struct join_data	join;
 		struct barrier_data	barrier;
+		struct allreduce_data	allreduce;
 	} data;
 	util_coll_comp_fn_t		comp_fn;
 };
@@ -155,6 +161,11 @@ int ofi_av_set(struct fid_av *av, struct fi_av_set_attr *attr,
 	       struct fid_av_set **av_set_fid, void *context);
 
 ssize_t ofi_ep_barrier(struct fid_ep *ep, fi_addr_t coll_addr, void *context);
+
+ssize_t ofi_ep_allreduce(struct fid_ep *ep, const void *buf, size_t count,
+	void *desc, void *result, void *result_desc,
+	fi_addr_t coll_addr, enum fi_datatype datatype, enum fi_op op,
+	uint64_t flags, void *context);
 
 int ofi_coll_ep_progress(struct fid_ep *ep);
 

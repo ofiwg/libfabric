@@ -574,7 +574,7 @@ void util_coll_join_comp(struct util_coll_operation *coll_op)
 	ofi_bitmask_free(&coll_op->data.join.tmp);
 }
 
-void util_coll_barrier_comp(struct util_coll_operation *coll_op)
+void util_coll_collective_comp(struct util_coll_operation *coll_op)
 {
 	struct util_ep *ep;
 
@@ -584,6 +584,8 @@ void util_coll_barrier_comp(struct util_coll_operation *coll_op)
 		FI_WARN(ep->domain->fabric->prov, FI_LOG_DOMAIN,
 			"barrier collective - cq write failed\n");
 
+	if(coll_op->type == UTIL_COLL_ALLREDUCE_OP)
+		free(coll_op->data.allreduce.data);
 }
 
 static int util_coll_proc_reduce_item(struct util_coll_reduce_item *reduce_item)
@@ -930,21 +932,45 @@ err1:
 	return ret;
 }
 
+ssize_t ofi_ep_allreduce(struct fid_ep *ep, const void *buf, size_t count, void *desc,
+			 void *result, void *result_desc, fi_addr_t coll_addr,
+			 enum fi_datatype datatype, enum fi_op op, uint64_t flags,
+			 void *context)
+{
+	struct util_coll_mc *coll_mc;
+	struct util_coll_operation *allreduce_op;
+	struct util_ep *util_ep;
+	int ret;
+
+	coll_mc = (struct util_coll_mc *) ((uintptr_t) coll_addr);
+	ret = util_coll_op_create(&allreduce_op, coll_mc, UTIL_COLL_ALLREDUCE_OP, context,
+				  util_coll_collective_comp);
+	if (ret)
+		return ret;
+
+
+	allreduce_op->data.allreduce.size = count * ofi_datatype_size(datatype);
+	allreduce_op->data.allreduce.data = calloc(count, ofi_datatype_size(datatype));
+	if (!allreduce_op->data.allreduce.data)
+		goto err1;
+
+	ret = util_coll_allreduce(allreduce_op, buf, result, allreduce_op->data.allreduce.data, count,
+				  datatype, op);
 	if (ret)
 		goto err2;
 
-	ret = util_coll_sched_comp(barrier_op);
+	ret = util_coll_sched_comp(allreduce_op);
 	if (ret)
 		goto err2;
 
 	util_ep = container_of(ep, struct util_ep, ep_fid);
-	util_coll_op_progress_work(util_ep, barrier_op);
+	util_coll_op_progress_work(util_ep, allreduce_op);
 
 	return FI_SUCCESS;
 err2:
-	free(barrier_op->comp_data);
+	free(allreduce_op->data.allreduce.data);
 err1:
-	free(barrier_op);
+	free(allreduce_op);
 	return ret;
 }
 
