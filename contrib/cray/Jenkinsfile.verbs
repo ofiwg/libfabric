@@ -30,7 +30,6 @@ pipeline {
             steps {
                 // creating git short hash
                 script {
-		    sh("git fetch --tags")
                     GIT_DESCRIPTION = sh(returnStdout: true, script: "git describe --tags").trim()
                     LIBFABRIC_INSTALL = pwd tmp: true
                 }
