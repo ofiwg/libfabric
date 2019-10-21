@@ -398,7 +398,7 @@ static int sock_av_insertsym(struct fid_av *av, const char *node, size_t nodecnt
 					err_code = ret;
 			} else {
 				SOCK_LOG_ERROR("Node/service value is not valid\n");
-				err_code = FI_ETOOSMALL;
+				err_code = -FI_ETOOSMALL;
 			}
 		}
 	}
