@@ -264,7 +264,7 @@ static inline void util_coll_op_progress_work(struct util_ep *util_ep,
 
 		// we can't progress if prior work is fencing
 		if (!previous_is_head && prev_item && prev_item->fence) {
-			continue;
+			return;
 		}
 
 		// if the current item isn't waiting, it's not the next ready item
