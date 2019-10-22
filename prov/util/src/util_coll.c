@@ -264,7 +264,7 @@ static inline void util_coll_op_progress_work(struct util_ep *util_ep,
 
 		// we can't progress if prior work is fencing
 		if (!previous_is_head && prev_item && prev_item->fence) {
-			continue;
+			return;
 		}
 
 		// if the current item isn't waiting, it's not the next ready item
@@ -398,8 +398,8 @@ static int util_coll_sched_comp(struct util_coll_operation *coll_op)
 }
 
 /* TODO: when this fails, clean up the already scheduled work in this function */
-static int util_coll_allreduce(struct util_coll_operation *coll_op, void *send_buf,
-			void *recv_buf, int count, enum fi_datatype datatype,
+static int util_coll_allreduce(struct util_coll_operation *coll_op, const void *send_buf,
+			void *result, void* tmp_buf, int count, enum fi_datatype datatype,
 			enum fi_op op)
 {
 	uint64_t rem, pof2, my_new_id;
@@ -411,9 +411,12 @@ static int util_coll_allreduce(struct util_coll_operation *coll_op, void *send_b
 	rem = coll_op->mc->av_set->fi_addr_count - pof2;
 	local = coll_op->mc->local_rank;
 
+	// copy initial send data to result
+	memcpy(result, send_buf, count * ofi_datatype_size(datatype));
+
 	if (local < 2 * rem) {
 		if (local % 2 == 0) {
-			ret = util_coll_sched_send(coll_op, local + 1, send_buf, count,
+			ret = util_coll_sched_send(coll_op, local + 1, result, count,
 						   datatype, 1);
 			if (ret)
 				return ret;
@@ -421,13 +424,13 @@ static int util_coll_allreduce(struct util_coll_operation *coll_op, void *send_b
 			my_new_id = -1;
 		} else {
 			ret = util_coll_sched_recv(coll_op, local - 1,
-						   recv_buf, count, datatype, 1);
+						   tmp_buf, count, datatype, 1);
 			if (ret)
 				return ret;
 
 			my_new_id = local / 2;
 
-			ret = util_coll_sched_reduce(coll_op, recv_buf, send_buf,
+			ret = util_coll_sched_reduce(coll_op, tmp_buf, result,
 						     count, datatype, op, 1);
 			if (ret)
 				return ret;
@@ -442,29 +445,33 @@ static int util_coll_allreduce(struct util_coll_operation *coll_op, void *send_b
 			remote = (next_remote < rem) ? next_remote * 2 + 1 :
 				next_remote + rem;
 
-			ret = util_coll_sched_recv(coll_op, remote, recv_buf, count,
+			// receive remote data into tmp buf
+			ret = util_coll_sched_recv(coll_op, remote, tmp_buf, count,
 						   datatype, 0);
 			if (ret)
 				return ret;
 
-			ret = util_coll_sched_send(coll_op, remote, send_buf, count,
+			// send result buf, which has the current total
+			ret = util_coll_sched_send(coll_op, remote, result, count,
 						   datatype, 1);
 			if (ret)
 				return ret;
 
 			if (remote < local) {
-				ret = util_coll_sched_reduce(coll_op, recv_buf, send_buf,
+				// reduce received remote into result buf
+				ret = util_coll_sched_reduce(coll_op, tmp_buf, result,
 							     count, datatype, op, 1);
 				if (ret)
 					return ret;
-
 			} else {
-				ret = util_coll_sched_reduce(coll_op, send_buf, recv_buf,
+				// reduce local result into received data
+				ret = util_coll_sched_reduce(coll_op, result, tmp_buf,
 							     count, datatype, op, 1);
 				if (ret)
 					return ret;
 
-				ret = util_coll_sched_copy(coll_op, recv_buf, send_buf,
+				// copy total into result
+				ret = util_coll_sched_copy(coll_op, tmp_buf, result,
 							   count, datatype, 1);
 				if (ret)
 					return ret;
@@ -475,12 +482,12 @@ static int util_coll_allreduce(struct util_coll_operation *coll_op, void *send_b
 
 	if (local < 2 * rem) {
 		if (local % 2) {
-			ret = util_coll_sched_send(coll_op, local - 1, send_buf, count,
+			ret = util_coll_sched_send(coll_op, local - 1, result, count,
 						   datatype, 1);
 			if (ret)
 				return ret;
 		} else {
-			ret = util_coll_sched_recv(coll_op, local + 1, send_buf, count,
+			ret = util_coll_sched_recv(coll_op, local + 1, result, count,
 						   datatype, 1);
 			if (ret)
 				return ret;
@@ -548,13 +555,8 @@ void util_coll_join_comp(struct util_coll_operation *coll_op)
 	struct fi_eq_err_entry entry;
 	struct util_ep *ep = container_of(coll_op->mc->ep, struct util_ep, ep_fid);
 
-	struct bitmask mask = {
-		.bytes = coll_op->comp_data,
-		.size = coll_op->comp_data_size
-	};
-
 	coll_op->mc->seq = 0;
-	coll_op->mc->group_id = ofi_bitmask_get_lsbset(mask);
+	coll_op->mc->group_id = ofi_bitmask_get_lsbset(coll_op->data.join.data);
 	// mark the local mask bit
 	ofi_bitmask_unset(ep->coll_cid_mask, coll_op->mc->group_id);
 
@@ -568,24 +570,22 @@ void util_coll_join_comp(struct util_coll_operation *coll_op)
 		FI_WARN(ep->domain->fabric->prov, FI_LOG_DOMAIN,
 			"join collective - eq write failed\n");
 
-	free(coll_op->comp_data);
+	ofi_bitmask_free(&coll_op->data.join.data);
+	ofi_bitmask_free(&coll_op->data.join.tmp);
 }
 
-void util_coll_barrier_comp(struct util_coll_operation *coll_op)
+void util_coll_collective_comp(struct util_coll_operation *coll_op)
 {
 	struct util_ep *ep;
 
 	ep = container_of(coll_op->mc->ep, struct util_ep, ep_fid);
 
-	if (ofi_cq_write(ep->tx_cq, coll_op->context, FI_COLLECTIVE,
-			 coll_op->comp_data_size, coll_op->comp_data, 0, 0))
+	if (ofi_cq_write(ep->tx_cq, coll_op->context, FI_COLLECTIVE, 0, 0, 0, 0))
 		FI_WARN(ep->domain->fabric->prov, FI_LOG_DOMAIN,
 			"barrier collective - cq write failed\n");
 
-	// barrier data is transparent to the caller.
-	// other collectives will have buffers managed
-	// by the caller
-	free(coll_op->comp_data);
+	if(coll_op->type == UTIL_COLL_ALLREDUCE_OP)
+		free(coll_op->data.allreduce.data);
 }
 
 static int util_coll_proc_reduce_item(struct util_coll_reduce_item *reduce_item)
@@ -705,7 +705,6 @@ int ofi_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 	struct util_coll_mc *coll_mc;
 	struct util_coll_operation *join_op;
 	struct util_ep *util_ep;
-	struct bitmask *join_mask;
 	int ret;
 
 	av_set = container_of(set, struct util_av_set, av_set_fid);
@@ -742,44 +741,39 @@ int ofi_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 	if (ret)
 		goto err1;
 
-	join_mask = calloc(1, sizeof(*join_mask));
-	if (!join_mask)
-		return -FI_ENOMEM;
-
 	if (new_coll_mc->local_rank != FI_ADDR_NOTAVAIL) {
-		ret = ofi_bitmask_create(join_mask, OFI_MAX_GROUP_ID);
+		ret = ofi_bitmask_create(&join_op->data.join.data, OFI_MAX_GROUP_ID);
 		if (ret)
 			goto err2;
 
-		join_op->comp_data = join_mask->bytes;
-		join_op->comp_data_size = join_mask->size / 8;
-		free(join_mask);
-
-		ret = util_coll_sched_copy(join_op, util_ep->coll_cid_mask->bytes,
-					   join_op->comp_data, join_op->comp_data_size,
-					   FI_UINT8, 1);
-		if (ret) {
+		ret = ofi_bitmask_create(&join_op->data.join.tmp, OFI_MAX_GROUP_ID);
+		if (ret)
 			goto err3;
-		}
+
 	} else {
-		ofi_bitmask_set_all(join_mask);
+		ofi_bitmask_set_all(&join_op->data.join.data);
 	}
 
-	ret = util_coll_allreduce(join_op, join_op->comp_data, join_op->comp_data,
-				  join_op->comp_data_size, FI_UINT8, FI_BAND);
+	ret = util_coll_allreduce(join_op, util_ep->coll_cid_mask->bytes,
+				  join_op->data.join.data.bytes,
+				  join_op->data.join.tmp.bytes,
+				  ofi_bitmask_bytesize(util_ep->coll_cid_mask),
+				  FI_UINT8, FI_BAND);
 	if (ret)
-		goto err3;
+		goto err4;
 
 	ret = util_coll_sched_comp(join_op);
 	if (ret)
-		goto err3;
+		goto err4;
 
 	util_coll_op_progress_work(util_ep, join_op);
 
 	*mc = &new_coll_mc->mc_fid;
 	return FI_SUCCESS;
+err4:
+	ofi_bitmask_free(&join_op->data.join.tmp);
 err3:
-	free(join_op->comp_data);
+	ofi_bitmask_free(&join_op->data.join.data);
 err2:
 	free(join_op);
 err1:
@@ -909,38 +903,74 @@ ssize_t ofi_ep_barrier(struct fid_ep *ep, fi_addr_t coll_addr, void *context)
 	struct util_coll_mc *coll_mc;
 	struct util_coll_operation *barrier_op;
 	struct util_ep *util_ep;
+	uint64_t send;
 	int ret;
 
 	coll_mc = (struct util_coll_mc*) ((uintptr_t) coll_addr);
 
-	util_coll_op_create(&barrier_op, coll_mc, UTIL_COLL_BARRIER_OP, context,
-			  util_coll_barrier_comp);
-	barrier_op->comp_data_size = sizeof(uint64_t);
-	barrier_op->comp_data = calloc(1, barrier_op->comp_data_size);
-	if (!barrier_op->comp_data) {
-		ret = -FI_ENOMEM;
-		goto err1;
-	}
-	*((uint64_t*)barrier_op->comp_data) = ~barrier_op->mc->local_rank;
-
-	ret = util_coll_allreduce(barrier_op, barrier_op->comp_data,
-				  barrier_op->comp_data, barrier_op->comp_data_size,
-				  FI_UINT8, FI_BAND);
+	ret = util_coll_op_create(&barrier_op, coll_mc, UTIL_COLL_BARRIER_OP, context,
+			  util_coll_collective_comp);
 	if (ret)
-		goto err2;
+		return ret;
+
+	send = ~barrier_op->mc->local_rank;
+	ret = util_coll_allreduce(barrier_op, &send, &barrier_op->data.barrier.data,
+				  &barrier_op->data.barrier.tmp, 1, FI_UINT64, FI_BAND);
+	if (ret)
+		goto err1;
 
 	ret = util_coll_sched_comp(barrier_op);
 	if (ret)
-		goto err2;
+		goto err1;
 
 	util_ep = container_of(ep, struct util_ep, ep_fid);
 	util_coll_op_progress_work(util_ep, barrier_op);
 
 	return FI_SUCCESS;
-err2:
-	free(barrier_op->comp_data);
 err1:
 	free(barrier_op);
+	return ret;
+}
+
+ssize_t ofi_ep_allreduce(struct fid_ep *ep, const void *buf, size_t count, void *desc,
+			 void *result, void *result_desc, fi_addr_t coll_addr,
+			 enum fi_datatype datatype, enum fi_op op, uint64_t flags,
+			 void *context)
+{
+	struct util_coll_mc *coll_mc;
+	struct util_coll_operation *allreduce_op;
+	struct util_ep *util_ep;
+	int ret;
+
+	coll_mc = (struct util_coll_mc *) ((uintptr_t) coll_addr);
+	ret = util_coll_op_create(&allreduce_op, coll_mc, UTIL_COLL_ALLREDUCE_OP, context,
+				  util_coll_collective_comp);
+	if (ret)
+		return ret;
+
+
+	allreduce_op->data.allreduce.size = count * ofi_datatype_size(datatype);
+	allreduce_op->data.allreduce.data = calloc(count, ofi_datatype_size(datatype));
+	if (!allreduce_op->data.allreduce.data)
+		goto err1;
+
+	ret = util_coll_allreduce(allreduce_op, buf, result, allreduce_op->data.allreduce.data, count,
+				  datatype, op);
+	if (ret)
+		goto err2;
+
+	ret = util_coll_sched_comp(allreduce_op);
+	if (ret)
+		goto err2;
+
+	util_ep = container_of(ep, struct util_ep, ep_fid);
+	util_coll_op_progress_work(util_ep, allreduce_op);
+
+	return FI_SUCCESS;
+err2:
+	free(allreduce_op->data.allreduce.data);
+err1:
+	free(allreduce_op);
 	return ret;
 }
 
