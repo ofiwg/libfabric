@@ -277,7 +277,7 @@ static int psmx2_unit_active(int unit)
 
 static int psmx2_update_hfi_info(void)
 {
-	int i;
+	unsigned short i;
 	int nctxts = 0;
 	int nfreectxts = 0;
 	int hfi_unit = -1;
@@ -285,11 +285,11 @@ static int psmx2_update_hfi_info(void)
 	char *s;
 	char unit_name[8];
 	uint32_t cnt = 0;
+	int tmp_nctxts, tmp_nfreectxts;
 
 #if HAVE_PSM2_INFO_QUERY
 	int unit_active;
 	int ret;
-	int tmp_nctxts, tmp_nfreectxts;
 	psm2_info_query_arg_t args[1];
 #endif
 
@@ -387,7 +387,7 @@ static int psmx2_update_hfi_info(void)
 		psmx2_hfi_info.unit_nfreectxts[i] = tmp_nfreectxts;
 		psmx2_hfi_info.active_units[psmx2_hfi_info.num_active_units++] = i;
 
-		sprintf(unit_name, "hfi1_%d", i);
+		sprintf(unit_name, "hfi1_%hu", i);
 		if (psmx2_hfi_info.num_active_units > 1)
 			strcat(psmx2_hfi_info.default_domain_name, ";");
 		strcat(psmx2_hfi_info.default_domain_name, unit_name);
