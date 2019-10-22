@@ -430,7 +430,7 @@ static int smr_endpoint_name(char *name, char *addr, size_t addrlen,
 
 	start = smr_no_prefix((const char *) addr);
 	if (strstr(addr, SMR_PREFIX) || dom_idx || ep_idx)
-		snprintf(name, SMR_NAME_SIZE, "%s:%d:%d", start, dom_idx,
+		snprintf(name, SMR_NAME_SIZE, "%s:%d:%d:%d", start, getuid(), dom_idx,
 			 ep_idx);
 	else
 		snprintf(name, SMR_NAME_SIZE, "%s", start);
