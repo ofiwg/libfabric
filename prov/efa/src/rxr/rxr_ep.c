@@ -3015,6 +3015,8 @@ static inline void rxr_ep_poll_cq(struct rxr_ep *ep,
 	ssize_t ret;
 	int i;
 
+	VALGRIND_MAKE_MEM_DEFINED(&cq_entry, sizeof(struct fi_cq_data_entry));
+
 	for (i = 0; i < cqe_to_process; i++) {
 		ret = fi_cq_readfrom(cq, &cq_entry, 1, &src_addr);
 
@@ -3062,8 +3064,6 @@ static void rxr_ep_progress_internal(struct rxr_ep *ep)
 	ssize_t ret;
 
 	rxr_ep_check_available_data_bufs_timer(ep);
-
-	VALGRIND_MAKE_MEM_DEFINED(&cq_entry, sizeof(struct fi_cq_data_entry));
 
 	// Poll the EFA completion queue
 	rxr_ep_poll_cq(ep, ep->rdm_cq, rxr_env.efa_cq_read_size, 0);
