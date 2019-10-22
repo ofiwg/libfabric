@@ -82,7 +82,7 @@ int rxr_av_insert_rdm_addr(struct rxr_av *av, const void *addr,
 	struct rxr_ep *rxr_ep;
 	struct util_ep *util_ep;
 	struct dlist_entry *ep_list_entry;
-	char smr_name[RXR_MAX_NAME_LENGTH];
+	char smr_name[NAME_MAX];
 	int ret = 1;
 
 	fastlock_acquire(&av->util_av.lock);

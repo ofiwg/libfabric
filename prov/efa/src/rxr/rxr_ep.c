@@ -2505,7 +2505,7 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 	struct rxr_ep *ep;
 	uint64_t flags = FI_MORE;
 	size_t rx_size, shm_rx_size;
-	char shm_ep_name[RXR_MAX_NAME_LENGTH];
+	char shm_ep_name[NAME_MAX];
 
 	switch (command) {
 	case FI_ENABLE:

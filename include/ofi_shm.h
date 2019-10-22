@@ -149,7 +149,7 @@ struct smr_cmd {
 #define SMR_INJECT_SIZE		4096
 #define SMR_COMP_INJECT_SIZE	(SMR_INJECT_SIZE / 2)
 
-#define SMR_NAME_SIZE	32
+#define SMR_NAME_SIZE	NAME_MAX
 struct smr_addr {
 	char		name[SMR_NAME_SIZE];
 	fi_addr_t	addr;
