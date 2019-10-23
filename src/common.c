@@ -756,6 +756,8 @@ int ofi_is_wildcard_listen_addr(const char *node, const char *service,
 	/* else it's okay to call getaddrinfo, proceed with processing */
 
 	if (node) {
+		if (!(flags & FI_SOURCE))
+			return 0;
 		ret = getaddrinfo(node, service, NULL, &res);
 		if (ret) {
 			FI_WARN(&core_prov, FI_LOG_CORE,

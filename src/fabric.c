@@ -872,9 +872,13 @@ static int ofi_layering_ok(const struct fi_provider *provider,
 			FI_INFO(&core_prov, FI_LOG_CORE,
 				"Sockets requested, skipping util layering\n");
 			return 0;
-		} else {
-			return 1;
 		}
+		if (!strcasecmp(prov_vec[0], "shm")) {
+			FI_INFO(&core_prov, FI_LOG_CORE,
+				"Shm requested, skipping util layering\n");
+			return 0;
+		}
+		return 1;
 	}
 
 	if ((count == 2) && ofi_has_util_prefix(prov_vec[0]) &&

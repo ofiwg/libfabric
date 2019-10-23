@@ -74,7 +74,7 @@ of operations.
   provided (and in the case of setting the src address without FI_SOURCE and
   no hints), the process ID will be used as a default address.
   On endpoint creation, if the src_addr has the "fi_shm://" prefix, the provider
-  will append ":[dom_idx]:[ep_idx]" as a unique endpoint name (essentially,
+  will append ":[uid]:[dom_idx]:[ep_idx]" as a unique endpoint name (essentially,
   in place of a service).  In the case of the "fi_ns://" prefix (or any other
   prefix if one was provided by the application), no supplemental information
   is required to make it unique and it will remain with only the
