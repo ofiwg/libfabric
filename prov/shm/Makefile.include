@@ -13,6 +13,7 @@ _shm_files = \
 	prov/shm/src/smr_fabric.c	\
 	prov/shm/src/smr_init.c		\
 	prov/shm/src/smr_av.c		\
+	prov/shm/src/smr_signal.h	\
 	prov/shm/src/smr.h
 
 if HAVE_SHM_DL

@@ -34,6 +34,7 @@
 
 #include <ofi_prov.h>
 #include "smr.h"
+#include "smr_signal.h"
 
 
 static void smr_resolve_addr(const char *node, const char *service,
@@ -154,5 +155,11 @@ struct util_prov smr_util_prov = {
 
 SHM_INI
 {
+	/* Signal handlers to cleanup tmpfs files on an unclean shutdown */
+	smr_reg_sig_hander(SIGBUS);
+	smr_reg_sig_hander(SIGSEGV);
+	smr_reg_sig_hander(SIGTERM);
+	smr_reg_sig_hander(SIGINT);
+
 	return &smr_prov;
 }
