@@ -39,43 +39,84 @@
 
 #include <rdma/fi_rma.h>
 
+struct rxr_readrsp_hdr {
+	uint8_t type;
+	uint8_t version;
+	uint16_t flags;
+	/* end of rxr_base_hdr */
+	uint8_t pad[4];
+	uint32_t rx_id;
+	uint32_t tx_id;
+	uint64_t seg_size;
+};
+
+struct rxr_readrsp_pkt {
+	struct rxr_readrsp_hdr hdr;
+	char data[];
+};
+
+static inline struct rxr_readrsp_hdr *rxr_get_readrsp_hdr(void *pkt)
+{
+	return (struct rxr_readrsp_hdr *)pkt;
+}
+
+#define RXR_READRSP_HDR_SIZE	(sizeof(struct rxr_readrsp_hdr))
+
+#if defined(static_assert) && defined(__x86_64__)
+static_assert(sizeof(struct rxr_readrsp_hdr) == sizeof(struct rxr_data_hdr), "rxr_readrsp_hdr check");
+#endif
+
+struct rxr_rma_read_info {
+	uint64_t rma_initiator_rx_id;
+	uint64_t window;
+};
+
+#if defined(static_assert) && defined(__x86_64__)
+static_assert(sizeof(struct rxr_rma_read_info) == 16, "rxr_rma_read_hdr check");
+#endif
+
+char *rxr_rma_init_rts_hdr(struct rxr_ep *ep,
+			   struct rxr_tx_entry *tx_entry,
+			   struct rxr_pkt_entry *pkt_entry,
+			   char *hdr);
+
 int rxr_rma_verified_copy_iov(struct rxr_ep *ep, struct fi_rma_iov *rma,
 			      size_t count, uint32_t flags, struct iovec *iov);
 
-struct rxr_tx_entry *rxr_readrsp_tx_entry_init(struct rxr_ep *rxr_ep,
-					       struct rxr_rx_entry *rx_entry);
+char *rxr_rma_read_rts_hdr(struct rxr_ep *ep,
+			   struct rxr_rx_entry *rx_entry,
+			   struct rxr_pkt_entry *pkt_entry,
+			   char *hdr);
 
-ssize_t rxr_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
-		 fi_addr_t src_addr, uint64_t addr, uint64_t key,
-		 void *context);
+int rxr_rma_proc_write_rts(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
 
-ssize_t rxr_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
-		  size_t iov_count, fi_addr_t src_addr, uint64_t addr,
-		  uint64_t key, void *context);
+int rxr_rma_init_read_rts(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
+			  struct rxr_pkt_entry *pkt_entry);
 
-ssize_t rxr_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_t flags);
+int rxr_rma_proc_read_rts(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
 
-ssize_t rxr_write(struct fid_ep *ep, const void *buf, size_t len, void *desc,
-		  fi_addr_t dest_addr, uint64_t addr, uint64_t key,
-		  void *context);
+/* read response related functions */
+struct rxr_tx_entry *
+rxr_rma_alloc_readrsp_tx_entry(struct rxr_ep *rxr_ep,
+			       struct rxr_rx_entry *rx_entry);
 
-ssize_t rxr_writev(struct fid_ep *ep, const struct iovec *iov, void **desc,
-		   size_t iov_count, fi_addr_t dest_addr, uint64_t addr,
-		   uint64_t key, void *context);
+int rxr_rma_init_readrsp_pkt(struct rxr_ep *ep,
+			     struct rxr_tx_entry *tx_entry,
+			     struct rxr_pkt_entry *pkt_entry);
 
-ssize_t rxr_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
-		     uint64_t flags);
+void rxr_rma_handle_readrsp_sent(struct rxr_ep *ep,
+				 struct rxr_pkt_entry *pkt_entry);
 
-ssize_t rxr_writedata(struct fid_ep *ep, const void *buf, size_t len,
-		      void *desc, uint64_t data, fi_addr_t dest_addr,
-		      uint64_t addr, uint64_t key, void *context);
+/* EOR related functions */
+int rxr_rma_init_eor_pkt(struct rxr_ep *ep,
+			 struct rxr_rx_entry *rx_entry,
+			 struct rxr_pkt_entry *pkt_entry);
 
-ssize_t rxr_inject(struct fid_ep *ep, const void *buf, size_t len,
-		   fi_addr_t dest_addr, uint64_t addr, uint64_t key);
+void rxr_rma_handle_eor_sent(struct rxr_ep *ep,
+			     struct rxr_pkt_entry *pkt_entry);
 
-ssize_t rxr_inject_data(struct fid_ep *ep, const void *buf, size_t len,
-			uint64_t data, fi_addr_t dest_addr, uint64_t addr,
-			uint64_t key);
+size_t rxr_rma_post_shm_rma(struct rxr_ep *rxr_ep,
+			    struct rxr_tx_entry *tx_entry);
 
 extern struct fi_ops_rma rxr_ops_rma;
 

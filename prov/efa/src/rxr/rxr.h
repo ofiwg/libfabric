@@ -259,7 +259,7 @@ enum rxr_tx_comm_type {
 	RXR_TX_RTS,		/* tx_entry sending RTS message */
 	RXR_TX_SEND,		/* tx_entry sending data in progress */
 	RXR_TX_QUEUED_SHM_RMA,	/* tx_entry was unable to send RMA operations over shm provider */
-	RXR_TX_QUEUED_RTS,	/* tx_entry was unable to send RTS */
+	RXR_TX_QUEUED_CTRL,	/* tx_entry was unable to send ctrl packet */
 	RXR_TX_QUEUED_RTS_RNR,  /* tx_entry RNR sending RTS packet */
 	RXR_TX_QUEUED_DATA_RNR,	/* tx_entry RNR sending data packets */
 	RXR_TX_SENT_READRSP,	/* tx_entry (on remote EP) sent
@@ -281,7 +281,7 @@ enum rxr_rx_comm_type {
 	RXR_RX_UNEXP,		/* rx_entry unexp msg waiting for post recv */
 	RXR_RX_MATCHED,		/* rx_entry matched with RTS msg */
 	RXR_RX_RECV,		/* rx_entry large msg recv data pkts */
-	RXR_RX_QUEUED_CTS,	/* rx_entry was unable to send CTS */
+	RXR_RX_QUEUED_CTRL,	/* rx_entry was unable to send ctrl packet */
 	RXR_RX_QUEUED_SHM_LARGE_READ,	/* rx_entry was unable to issue RMA Read for large message over shm */
 	RXR_RX_QUEUED_EOR,	/* rx_entry was unable to send EOR over shm */
 	RXR_RX_QUEUED_CTS_RNR,	/* rx_entry RNR sending CTS */
@@ -353,6 +353,11 @@ struct rxr_peer {
 	struct dlist_entry entry;	/* linked to rxr_ep peer_list */
 };
 
+struct rxr_queued_ctrl_info {
+	int type;
+	int inject;
+};
+
 struct rxr_rx_entry {
 	/* Must remain at the top */
 	enum rxr_x_entry_type type;
@@ -379,10 +384,12 @@ struct rxr_rx_entry {
 	uint64_t bytes_done;
 	int64_t window;
 	uint16_t credit_request;
+	int credit_cts;
 
 	uint64_t total_len;
 
 	enum rxr_rx_comm_type state;
+	struct rxr_queued_ctrl_info queued_ctrl;
 
 	uint64_t fi_flags;
 	uint16_t rxr_flags;
@@ -430,6 +437,7 @@ struct rxr_tx_entry {
 	/* Must remain at the top */
 	enum rxr_x_entry_type type;
 
+	uint32_t op;
 	fi_addr_t addr;
 
 	/*
@@ -451,6 +459,7 @@ struct rxr_tx_entry {
 	uint64_t total_len;
 
 	enum rxr_tx_comm_type state;
+	struct rxr_queued_ctrl_info queued_ctrl;
 
 	uint64_t fi_flags;
 	uint64_t send_flags;
@@ -744,21 +753,6 @@ struct rxr_data_hdr {
 static_assert(sizeof(struct rxr_data_hdr) == 24, "rxr_data_hdr check");
 #endif
 
-struct rxr_readrsp_hdr {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
-	/* end of rxr_base_hdr */
-	uint8_t pad[4];
-	uint32_t rx_id;
-	uint32_t tx_id;
-	uint64_t seg_size;
-};
-
-#if defined(static_assert) && defined(__x86_64__)
-static_assert(sizeof(struct rxr_readrsp_hdr) == sizeof(struct rxr_data_hdr), "rxr_readrsp_hdr check");
-#endif
-
 /*
  * Control header without completion data. We will send more data with the RTS
  * packet if RXR_REMOTE_CQ_DATA is not set.
@@ -807,11 +801,6 @@ struct rxr_ctrl_pkt {
 
 struct rxr_data_pkt {
 	struct rxr_data_hdr hdr;
-	char data[];
-};
-
-struct rxr_readrsp_pkt {
-	struct rxr_readrsp_hdr hdr;
 	char data[];
 };
 
@@ -869,8 +858,6 @@ DECLARE_FREESTACK(struct rxr_robuf, rxr_robuf_fs);
 
 #define RXR_DATA_HDR_SIZE		(sizeof(struct rxr_data_hdr))
 
-#define RXR_READRSP_HDR_SIZE	(sizeof(struct rxr_readrsp_hdr))
-
 static inline void rxr_copy_shm_cq_entry(struct fi_cq_tagged_entry *cq_tagged_entry,
 					 struct fi_cq_data_entry *shm_cq_entry)
 {
@@ -924,23 +911,8 @@ struct rxr_rx_entry *rxr_ep_rx_entry_init(struct rxr_ep *ep,
 					  fi_addr_t addr, uint32_t op,
 					  uint64_t flags);
 
-void rxr_generic_tx_entry_init(struct rxr_ep *ep,
-			       struct rxr_tx_entry *tx_entry,
-			       const struct fi_msg *msg, uint64_t tag,
-			       const struct fi_rma_iov *rma_iov,
-			       size_t rma_iov_count,
-			       uint32_t op, uint64_t flags);
-
-struct rxr_tx_entry *rxr_ep_tx_entry_init(struct rxr_ep *rxr_ep,
-					  const struct fi_msg *msg,
-					  uint64_t tag,
-					  const struct fi_rma_iov *rma_iov,
-					  size_t rma_iov_count,
-					  uint32_t op, uint64_t flags);
-
-ssize_t rxr_tx(struct fid_ep *ep, const struct fi_msg *msg, uint64_t tag,
-	       const struct fi_rma_iov *rma_iov, size_t rma_iov_count,
-	       uint32_t op, uint64_t flags);
+void rxr_tx_entry_init(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry,
+		       const struct fi_msg *msg, uint32_t op, uint64_t flags);
 
 static inline void
 rxr_copy_pkt_entry(struct rxr_ep *ep,
@@ -1087,11 +1059,6 @@ static inline struct rxr_cts_hdr *rxr_get_cts_hdr(void *pkt)
 	return (struct rxr_cts_hdr *)pkt;
 }
 
-static inline struct rxr_readrsp_hdr *rxr_get_readrsp_hdr(void *pkt)
-{
-	return (struct rxr_readrsp_hdr *)pkt;
-}
-
 static inline struct rxr_ctrl_cq_pkt *rxr_get_ctrl_cq_pkt(void *pkt)
 {
 	return (struct rxr_ctrl_cq_pkt *)pkt;
@@ -1149,11 +1116,11 @@ static inline uint64_t rxr_get_rts_data_size(struct rxr_ep *ep,
 					     struct rxr_rts_hdr *rts_hdr)
 {
 	/*
-	 * for read request, rts packet contain no data
-	 * because data is on remote host
+	 * read RTS contain no data, because data is on remote EP.
 	 */
 	if (rts_hdr->flags & RXR_READ_REQ)
 		return 0;
+
 	if (rts_hdr->flags & RXR_SHM_HDR)
 		return (rts_hdr->flags & RXR_SHM_HDR_DATA) ? rts_hdr->data_len : 0;
 
@@ -1246,34 +1213,45 @@ int rxr_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 
 /* EP sub-functions */
 void rxr_ep_progress(struct util_ep *util_ep);
+void rxr_ep_progress_internal(struct rxr_ep *rxr_ep);
 struct rxr_pkt_entry *rxr_ep_get_pkt_entry(struct rxr_ep *rxr_ep,
 					   struct ofi_bufpool *pkt_pool);
 int rxr_ep_post_buf(struct rxr_ep *ep, uint64_t flags, enum rxr_lower_ep_type lower_ep);
 ssize_t rxr_ep_send_msg(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 			const struct fi_msg *msg, uint64_t flags);
 ssize_t rxr_ep_post_data(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry);
-ssize_t rxr_ep_post_readrsp(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry);
-ssize_t  rxr_ep_post_shm_eor(struct rxr_ep *rxr_ep, struct rxr_rx_entry *rx_entry);
 void rxr_ep_init_connack_pkt_entry(struct rxr_ep *ep,
 				   struct rxr_pkt_entry *pkt_entry,
 				   fi_addr_t addr);
 void rxr_ep_calc_cts_window_credits(struct rxr_ep *ep, struct rxr_peer *peer,
 				    uint64_t size, int request,
 				    int *window, int *credits);
+
+int rxr_ep_set_tx_credit_request(struct rxr_ep *rxr_ep,
+				 struct rxr_tx_entry *tx_entry);
+
+void rxr_inline_mr_reg(struct rxr_domain *rxr_domain,
+		       struct rxr_tx_entry *tx_entry);
+
+char *rxr_ep_init_rts_hdr(struct rxr_ep *ep,
+			  struct rxr_tx_entry *tx_entry,
+			  struct rxr_pkt_entry *pkt_entry);
+
 void rxr_ep_init_cts_pkt_entry(struct rxr_ep *ep,
 			       struct rxr_rx_entry *rx_entry,
 			       struct rxr_pkt_entry *pkt_entry,
 			       uint64_t size,
 			       int *credits);
-void rxr_ep_init_readrsp_pkt_entry(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
-				   struct rxr_pkt_entry *pkt_entry);
 struct rxr_rx_entry *rxr_ep_get_new_unexp_rx_entry(struct rxr_ep *ep,
-						   struct rxr_pkt_entry *unexp_entry, bool is_local);
+						   struct rxr_pkt_entry *unexp_entry);
 struct rxr_rx_entry *rxr_ep_split_rx_entry(struct rxr_ep *ep,
 					   struct rxr_rx_entry *posted_entry,
 					   struct rxr_rx_entry *consumer_entry,
 					   struct rxr_pkt_entry *pkt_entry);
 int rxr_ep_efa_addr_to_str(const void *addr, char *temp_name);
+
+int rxr_ep_post_ctrl_or_queue(struct rxr_ep *ep, int entry_type, void *x_entry,
+			      int ctrl_type, bool inject);
 
 #if ENABLE_DEBUG
 void rxr_ep_print_pkt(char *prefix,
@@ -1302,10 +1280,26 @@ void rxr_cq_write_tx_completion(struct rxr_ep *ep,
 				struct rxr_tx_entry *tx_entry);
 
 ssize_t rxr_cq_recv_shm_large_message(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry);
+void rxr_cq_process_shm_large_message(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
+				      struct rxr_rts_hdr *rts_hdr, char *data);
 
-void rxr_cq_recv_rts_data(struct rxr_ep *ep,
+void rxr_cq_process_shm_large_message(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
+				      struct rxr_rts_hdr *rts_hdr, char *data);
+
+char *rxr_cq_read_rts_hdr(struct rxr_ep *ep,
 			  struct rxr_rx_entry *rx_entry,
-			  struct rxr_rts_hdr *rts_hdr);
+			  struct rxr_pkt_entry *pkt_entry);
+
+int rxr_cq_handle_rts_with_data(struct rxr_ep *ep,
+				struct rxr_rx_entry *rx_entry,
+				struct rxr_pkt_entry *pkt_entry,
+				char *data, size_t data_size);
+
+int rxr_cq_handle_pkt_with_data(struct rxr_ep *ep,
+				struct rxr_rx_entry *rx_entry,
+				struct rxr_pkt_entry *pkt_entry,
+				char *data, size_t seg_offset,
+				size_t seg_size);
 
 void rxr_cq_handle_pkt_recv_completion(struct rxr_ep *ep,
 				       struct fi_cq_data_entry *comp,
@@ -1441,35 +1435,25 @@ static inline ssize_t rxr_ep_send_pkt_flags(struct rxr_ep *ep,
 	return rxr_ep_sendv_pkt(ep, pkt_entry, addr, &iov, &desc, 1, flags);
 }
 
+static inline ssize_t rxr_ep_inject_pkt(struct rxr_ep *ep,
+					struct rxr_pkt_entry *pkt_entry,
+					fi_addr_t addr)
+{
+	struct rxr_peer *peer;
+
+	/* currently only EOR packet is injected using shm ep */
+	peer = rxr_ep_get_peer(ep, addr);
+	assert(peer);
+	assert(rxr_env.enable_shm_transfer && peer->is_local);
+	return fi_inject(ep->shm_ep, rxr_pkt_start(pkt_entry), pkt_entry->pkt_size,
+			 peer->shm_fiaddr);
+}
+
 static inline ssize_t rxr_ep_send_pkt(struct rxr_ep *ep,
 				      struct rxr_pkt_entry *pkt_entry,
 				      fi_addr_t addr)
 {
 	return rxr_ep_send_pkt_flags(ep, pkt_entry, addr, 0);
-}
-
-static inline int rxr_ep_post_cts_or_queue(struct rxr_ep *ep,
-					   struct rxr_rx_entry *rx_entry,
-					   uint64_t bytes_left)
-{
-	int ret;
-
-	if (rx_entry->state == RXR_RX_QUEUED_CTS)
-		return 0;
-
-	ret = rxr_cq_post_cts(ep, rx_entry, bytes_left);
-	if (OFI_UNLIKELY(ret)) {
-		if (ret == -FI_EAGAIN) {
-			rx_entry->state = RXR_RX_QUEUED_CTS;
-			dlist_insert_tail(&rx_entry->queued_entry,
-					  &ep->rx_entry_queued_list);
-			ret = 0;
-		} else {
-			if (rxr_cq_handle_rx_error(ep, rx_entry, ret))
-				assert(0 && "failed to write err cq entry");
-		}
-	}
-	return ret;
 }
 
 static inline bool rxr_peer_timeout_expired(struct rxr_ep *ep,
