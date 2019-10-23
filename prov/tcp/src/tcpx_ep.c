@@ -325,49 +325,32 @@ void tcpx_rx_msg_release(struct tcpx_xfer_entry *rx_entry)
 	}
 }
 
+static void tcpx_ep_release_queue(struct slist *queue,
+				  struct tcpx_cq *tcpx_cq)
+{
+	struct tcpx_xfer_entry *xfer_entry;
+
+	while (!slist_empty(queue)) {
+		xfer_entry = container_of(queue->head, struct tcpx_xfer_entry,
+					  entry);
+		slist_remove_head(queue);
+		tcpx_cq_report_error(&tcpx_cq->util_cq, xfer_entry, FI_ECANCELED);
+		tcpx_xfer_entry_release(tcpx_cq, xfer_entry);
+	}
+}
+
 static void tcpx_ep_tx_rx_queues_release(struct tcpx_ep *ep)
 {
-	struct slist_entry *entry;
-	struct tcpx_xfer_entry *xfer_entry;
 	struct tcpx_cq *tcpx_cq;
 
 	fastlock_acquire(&ep->lock);
-	while (!slist_empty(&ep->tx_queue)) {
-		entry = ep->tx_queue.head;
-		xfer_entry = container_of(entry, struct tcpx_xfer_entry, entry);
-		slist_remove_head(&ep->tx_queue);
-		tcpx_cq = container_of(xfer_entry->ep->util_ep.tx_cq,
-				       struct tcpx_cq, util_cq);
-		tcpx_xfer_entry_release(tcpx_cq, xfer_entry);
-	}
+	tcpx_cq = container_of(ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
+	tcpx_ep_release_queue(&ep->tx_queue, tcpx_cq);
+	tcpx_ep_release_queue(&ep->rma_read_queue, tcpx_cq);
+	tcpx_ep_release_queue(&ep->tx_rsp_pend_queue, tcpx_cq);
 
-	while (!slist_empty(&ep->rx_queue)) {
-		entry = ep->rx_queue.head;
-		xfer_entry = container_of(entry, struct tcpx_xfer_entry, entry);
-		slist_remove_head(&ep->rx_queue);
-		tcpx_cq = container_of(xfer_entry->ep->util_ep.rx_cq,
-				       struct tcpx_cq, util_cq);
-		tcpx_xfer_entry_release(tcpx_cq, xfer_entry);
-	}
-
-	while (!slist_empty(&ep->rma_read_queue)) {
-		entry = ep->rma_read_queue.head;
-		xfer_entry = container_of(entry, struct tcpx_xfer_entry, entry);
-		slist_remove_head(&ep->rma_read_queue);
-		tcpx_cq = container_of(xfer_entry->ep->util_ep.tx_cq,
-				       struct tcpx_cq, util_cq);
-		tcpx_xfer_entry_release(tcpx_cq, xfer_entry);
-	}
-
-	while (!slist_empty(&ep->tx_rsp_pend_queue)) {
-		entry = ep->tx_rsp_pend_queue.head;
-		xfer_entry = container_of(entry, struct tcpx_xfer_entry, entry);
-		slist_remove_head(&ep->tx_rsp_pend_queue);
-		tcpx_cq = container_of(xfer_entry->ep->util_ep.tx_cq,
-				       struct tcpx_cq, util_cq);
-		tcpx_xfer_entry_release(tcpx_cq, xfer_entry);
-	}
-
+	tcpx_cq = container_of(ep->util_ep.rx_cq, struct tcpx_cq, util_cq);
+	tcpx_ep_release_queue(&ep->rx_queue, tcpx_cq);
 	fastlock_release(&ep->lock);
 }
 
