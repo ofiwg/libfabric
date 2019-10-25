@@ -212,6 +212,15 @@ testing scope is limited.
 *fi_resource_freeing*
 : Allocates and closes fabric resources to check for proper cleanup.
 
+# Multinode
+
+This test runs a series of tests over multiple formats and patterns to help
+validate at scale. The patterns are an all to all, one to all, all to one and
+a ring. The tests also run accross multiple capabilites, such as messages, rma,
+atomics, and tagged messages. Currently, there is no option to run these 
+capabilities and patterns independently, however the test is short enough to be
+all run at once.   
+
 # Ubertest
 
 This is a comprehensive latency, bandwidth, and functionality test that can
@@ -439,6 +448,14 @@ This will run "fi_rdm_atomic" for all atomic operations with
 	- 1000 iterations
 	- 1024 bytes message size
 	- server node as 123.168.0.123
+
+## Run multinode tests
+
+	server and clients are invoked with the same command: 
+		fi_multinode -n <number of processes> -s <server_addr> 
+	
+	a process on the server must be started before any of the clients can be started 
+	succesfully. 
 
 ## Run fi_ubertest
 

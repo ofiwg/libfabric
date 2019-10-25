@@ -575,6 +575,11 @@ function multinode_test {
 		c_pid_arr+=($!)
 	done
 
+	for pid in ${c_pid_arr[*]}; do
+		wait $pid
+	done
+	
+
 	[[ c_ret -ne 0 ]] && kill -9 $s_pid 2> /dev/null
 
 	wait $s_pid
