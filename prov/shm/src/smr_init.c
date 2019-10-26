@@ -39,21 +39,21 @@
 static void smr_resolve_addr(const char *node, const char *service,
 			     char **addr, size_t *addrlen)
 {
-	char temp_name[SMR_NAME_SIZE];
+	char temp_name[NAME_MAX];
 
 	if (service) {
 		if (node)
-			snprintf(temp_name, SMR_NAME_SIZE, "%s%s:%s",
+			snprintf(temp_name, NAME_MAX, "%s%s:%s",
 				 SMR_PREFIX_NS, node, service);
 		else
-			snprintf(temp_name, SMR_NAME_SIZE, "%s%s",
+			snprintf(temp_name, NAME_MAX, "%s%s",
 				 SMR_PREFIX_NS, service);
 	} else {
 		if (node)
-			snprintf(temp_name, SMR_NAME_SIZE, "%s%s",
+			snprintf(temp_name, NAME_MAX, "%s%s",
 				 SMR_PREFIX, node);
 		else
-			snprintf(temp_name, SMR_NAME_SIZE, "%s%d",
+			snprintf(temp_name, NAME_MAX, "%s%d",
 				 SMR_PREFIX, getpid());
 	}
 
