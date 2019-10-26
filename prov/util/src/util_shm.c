@@ -53,6 +53,7 @@ static void smr_peer_addr_init(struct smr_addr *peer)
 int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	       const struct smr_attr *attr, struct smr_region **smr)
 {
+	struct smr_ep_name *ep_name;
 	size_t total_size, cmd_queue_offset, peer_addr_offset;
 	size_t resp_queue_offset, inject_pool_offset, name_offset;
 	int fd, ret, i;
@@ -78,6 +79,14 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 		FI_WARN(prov, FI_LOG_EP_CTRL, "shm_open error\n");
 		goto err1;
 	}
+
+	ep_name = calloc(1, sizeof(*ep_name));
+	if (!ep_name) {
+		FI_WARN(prov, FI_LOG_EP_CTRL, "calloc error\n");
+		return -FI_ENOMEM;
+	}
+	strncpy(ep_name->name, (char *)attr->name, NAME_MAX);
+	dlist_insert_tail(&ep_name->entry, &ep_name_list);
 
 	ret = ftruncate(fd, total_size);
 	if (ret < 0) {

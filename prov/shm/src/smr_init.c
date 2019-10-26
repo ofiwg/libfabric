@@ -135,7 +135,13 @@ static int smr_getinfo(uint32_t version, const char *node, const char *service,
 
 static void smr_fini(void)
 {
-	/* yawn */
+	struct smr_ep_name *ep_name;
+	struct dlist_entry *tmp;
+
+	dlist_foreach_container_safe(&ep_name_list, struct smr_ep_name,
+				     ep_name, entry, tmp) {
+		free(ep_name);
+	}
 }
 
 struct fi_provider smr_prov = {
@@ -155,6 +161,8 @@ struct util_prov smr_util_prov = {
 
 SHM_INI
 {
+	dlist_init(&ep_name_list);
+
 	/* Signal handlers to cleanup tmpfs files on an unclean shutdown */
 	smr_reg_sig_hander(SIGBUS);
 	smr_reg_sig_hander(SIGSEGV);

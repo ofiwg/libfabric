@@ -154,6 +154,14 @@ struct smr_addr {
 	fi_addr_t	addr;
 };
 
+
+struct smr_ep_name {
+	char name[NAME_MAX];
+	struct dlist_entry entry;
+};
+
+struct dlist_entry ep_name_list;
+
 struct smr_region;
 
 struct smr_peer {
