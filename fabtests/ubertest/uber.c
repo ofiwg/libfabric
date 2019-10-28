@@ -327,13 +327,48 @@ static int ft_recv_test_info(void)
 	return 0;
 }
 
+static int ft_send_result(int err, struct fi_info *info)
+{
+	int ret;
+	ret = ft_sock_send(sock, &err, sizeof err);
+	if (ret) {
+		FT_PRINTERR("ft_sock_send", ret);
+		return ret;
+	}
+	if (err) {
+		printf("Ending test %d, result: %s\n", test_info.test_index,
+			fi_strerror(-err));
+		return err;
+	}
+
+	return 0;
+}
+
+static int ft_recv_result(struct fi_info *info)
+{
+	int ret, err = 0;
+	ret = ft_sock_recv(sock, &err, sizeof err);
+	if (ret) {
+		FT_PRINTERR("ft_sock_recv", ret);
+		return ret;
+	}
+	if (err) {
+		printf("Ending test %d, result: %s\n", test_info.test_index,
+			fi_strerror(-err));
+	}
+
+	return err;
+}
+
 static int ft_server_setup(struct fi_info *hints, struct fi_info *info)
 {
 	int ret = 0;
 
 	hints = fi_allocinfo();
-	if (!hints) 
+	if (!hints) {
+		ft_send_result(-FI_ENOMEM, info);
 		return -FI_ENOMEM;
+	}
 
 	ft_fw_convert_info(hints, &test_info);
 
@@ -341,18 +376,22 @@ static int ft_server_setup(struct fi_info *hints, struct fi_info *info)
 			 ft_strptr(test_info.service), FI_SOURCE, hints, &info);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
+		ft_send_result(ret, info);
 		return ret;
 	}
 
 	fabric_info = info;
 
 	ret = ft_check_info(hints, fabric_info);
-	if (ret) 
+	if (ret) {
+		ft_send_result(ret, info);
 		return ret;
+	}
 
 	ret = ft_open_res();
 	if (ret) {
 		FT_PRINTERR("ft_open_res", ret);
+		ft_send_result(ret, info);
 		return ret;
 	}
 	
@@ -372,6 +411,10 @@ static int ft_server_child()
 	ret = ft_server_setup(hints, info);
 	if (ret)
 		return ret;	
+
+	ret = ft_send_result(0, info);
+	if (ret)
+		return ret;
 	
 	ret = ft_sock_send(sock, &test_info, sizeof test_info);
 	if (ret) {
@@ -379,6 +422,9 @@ static int ft_server_child()
 		return ret;
 	}
 	
+	ret = ft_recv_result(info);
+	if (ret)
+		return ret;
 
 	ret = ft_init_test();
 	if (ret)
@@ -393,6 +439,7 @@ static int ft_server_child()
 		FT_PRINTERR("ft_sock_send", ret);
 		return ret;
 	}
+
 
 	fi_freeinfo(hints);
 	ft_cleanup();
@@ -445,12 +492,16 @@ static int ft_client_setup(struct fi_info *hints, struct fi_info *info)
 	}
 
 	hints = fi_allocinfo();
-	if (!hints) 
+	if (!hints) {
+		ft_send_result(-FI_ENOMEM, info);
 		return -FI_ENOMEM;
+	}
 
 	ret = ft_getsrcaddr(opts.src_addr, opts.src_port, hints);
-	if (ret) 
+	if (ret) {
+		ft_send_result(ret, info);
 		return ret;
+	}
 
 	ft_fw_convert_info(hints, &test_info);
 
@@ -460,20 +511,24 @@ static int ft_client_setup(struct fi_info *hints, struct fi_info *info)
 			 ft_strptr(test_info.service), 0, hints, &info);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
+		ft_send_result(ret, info);
 		return ret;
 	}
 
 	fabric_info = info;
 		
 	ret = ft_check_info(hints, fabric_info);
-	if (ret) 
+	if (ret) {
+		ft_send_result(ret, info);
 		return ret;
+	}
 
 	ft_fw_update_info(&test_info, fabric_info);
 
 	ret = ft_open_res();
 	if (ret) {
 		FT_PRINTERR("ft_open_res", ret);
+		ft_send_result(ret, info);	
 		return ret;
 	}
 	return ret;
@@ -494,7 +549,15 @@ static int ft_client_child(void)
 	printf("Starting test %d / %d:\n", test_info.test_index,
 		series->test_count);
 
+	ret = ft_recv_result(info);
+	if (ret)
+		return ret;
+
 	ret = ft_client_setup(hints, info);
+	if (ret)
+		return ret;
+
+	ret = ft_send_result(0, info);
 	if (ret)
 		return ret;
 
