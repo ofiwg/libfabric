@@ -984,7 +984,12 @@ static int fi_ibv_pep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 	if (ret)
 		return -errno;
 
-	return 0;
+	if (fi_ibv_is_xrc(pep->info)) {
+		ret = rdma_migrate_id(pep->xrc_ps_udp_id, pep->eq->channel);
+		if (ret)
+			return -errno;
+	}
+	return FI_SUCCESS;
 }
 
 static int fi_ibv_pep_control(struct fid *fid, int command, void *arg)
@@ -1021,6 +1026,8 @@ static int fi_ibv_pep_close(fid_t fid)
 	pep = container_of(fid, struct fi_ibv_pep, pep_fid.fid);
 	if (pep->id)
 		rdma_destroy_ep(pep->id);
+	if (pep->xrc_ps_udp_id)
+		rdma_destroy_ep(pep->xrc_ps_udp_id);
 
 	fi_freeinfo(pep->info);
 	free(pep);
@@ -1068,7 +1075,7 @@ int fi_ibv_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 
 	ret = rdma_create_id(NULL, &_pep->id, &_pep->pep_fid.fid, RDMA_PS_TCP);
 	if (ret) {
-		VERBS_INFO(FI_LOG_DOMAIN, "Unable to create rdma_cm_id\n");
+		VERBS_INFO(FI_LOG_DOMAIN, "Unable to create PEP rdma_cm_id\n");
 		goto err2;
 	}
 
@@ -1079,6 +1086,27 @@ int fi_ibv_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 			goto err3;
 		}
 		_pep->bound = 1;
+	}
+
+	/* XRC listens on both RDMA_PS_TCP and RDMA_PS_UDP */
+	if (fi_ibv_is_xrc(info)) {
+		ret = rdma_create_id(NULL, &_pep->xrc_ps_udp_id,
+				     &_pep->pep_fid.fid, RDMA_PS_UDP);
+		if (ret) {
+			VERBS_INFO(FI_LOG_DOMAIN,
+				   "Unable to create PEP PS_UDP rdma_cm_id\n");
+			goto err3;
+		}
+		/* Currently both listens must be bound to same port number */
+		ofi_addr_set_port(_pep->info->src_addr,
+				  ntohs(rdma_get_src_port(_pep->id)));
+		ret = rdma_bind_addr(_pep->xrc_ps_udp_id,
+				     (struct sockaddr *)_pep->info->src_addr);
+		if (ret) {
+			VERBS_INFO(FI_LOG_DOMAIN,
+				   "Unable to bind address to PS_UDP rdma_cm_id\n");
+			goto err4;
+		}
 	}
 
 	_pep->pep_fid.fid.fclass = FI_CLASS_PEP;
@@ -1092,6 +1120,9 @@ int fi_ibv_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	*pep = &_pep->pep_fid;
 	return 0;
 
+err4:
+	/* Only possible for XRC code path */
+	rdma_destroy_id(_pep->xrc_ps_udp_id);
 err3:
 	rdma_destroy_id(_pep->id);
 err2:

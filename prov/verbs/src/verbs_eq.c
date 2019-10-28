@@ -627,6 +627,11 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq,
 	struct fi_ibv_ep *ep;
 	struct fi_ibv_xrc_ep *xrc_ep;
 
+	if (cma_event->id->ps == RDMA_PS_UDP) {
+		VERBS_DBG(FI_LOG_EQ, "PS_UDP not supported\n");
+		return -FI_EAGAIN;
+	}
+
 	switch (cma_event->event) {
 	case RDMA_CM_EVENT_ROUTE_RESOLVED:
 		ep = container_of(fid, struct fi_ibv_ep, util_ep.ep_fid);

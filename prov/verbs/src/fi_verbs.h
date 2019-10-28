@@ -303,6 +303,12 @@ struct fi_ibv_pep {
 	struct fid_pep		pep_fid;
 	struct fi_ibv_eq	*eq;
 	struct rdma_cm_id	*id;
+
+	/* XRC uses SIDR based RDMA CM exchanges for setting up
+	 * shared QP connections. This ID is bound to the same
+	 * port number as "id", but the RDMA_PS_UDP port space. */
+	struct rdma_cm_id	*xrc_ps_udp_id;
+
 	int			backlog;
 	int			bound;
 	size_t			src_addrlen;

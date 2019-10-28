@@ -485,6 +485,7 @@ static int fi_ibv_pep_listen(struct fid_pep *pep_fid)
 {
 	struct fi_ibv_pep *pep;
 	struct sockaddr *addr;
+	int ret;
 
 	pep = container_of(pep_fid, struct fi_ibv_pep, pep_fid);
 
@@ -493,7 +494,16 @@ static int fi_ibv_pep_listen(struct fid_pep *pep_fid)
 		ofi_straddr_log(&fi_ibv_prov, FI_LOG_INFO,
 				FI_LOG_EP_CTRL, "listening on", addr);
 
-	return rdma_listen(pep->id, pep->backlog) ? -errno : 0;
+	ret = rdma_listen(pep->id, pep->backlog);
+	if (ret)
+		return -errno;
+
+	if (fi_ibv_is_xrc(pep->info)) {
+		ret = rdma_listen(pep->xrc_ps_udp_id, pep->backlog);
+		if (ret)
+			ret = -errno;
+	}
+	return ret;
 }
 
 static struct fi_ops_cm fi_ibv_pep_cm_ops = {
