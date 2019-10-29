@@ -119,7 +119,6 @@ int fi_ibv_get_shared_ini_conn(struct fi_ibv_xrc_ep *ep,
 	struct fi_ibv_ini_shared_conn *conn;
 	struct ofi_rbnode *node;
 	int ret;
-	assert(ep->base_ep.id);
 
 	fi_ibv_set_ini_conn_key(ep, &key);
 	node = ofi_rbmap_find(domain->xrc.ini_conn_rbmap, &key);
@@ -243,6 +242,7 @@ void fi_ibv_sched_ini_conn(struct fi_ibv_ini_shared_conn *ini_conn)
 {
 	struct fi_ibv_xrc_ep *ep;
 	enum fi_ibv_ini_qp_state last_state;
+	struct sockaddr *addr;
 	int ret;
 
 	/* Continue to schedule shared connections if the physical connection
@@ -260,6 +260,16 @@ void fi_ibv_sched_ini_conn(struct fi_ibv_ini_shared_conn *ini_conn)
 		dlist_insert_tail(&ep->ini_conn_entry,
 				  &ep->ini_conn->active_list);
 		last_state = ep->ini_conn->state;
+
+		/* TODO: Select RDMA_PS_TCP/UDP based on last_state (i.e. physical) */
+		ret = fi_ibv_create_ep(ep->base_ep.info, &ep->base_ep.id);
+		if (ret) {
+			VERBS_WARN(FI_LOG_EP_CTRL,
+				   "Failed to create active CM ID %d\n",
+				   ret);
+			goto err;
+		}
+
 		if (last_state == FI_IBV_INI_QP_UNCONNECTED) {
 			assert(!ep->ini_conn->phys_conn_id && ep->base_ep.id);
 
@@ -291,6 +301,23 @@ void fi_ibv_sched_ini_conn(struct fi_ibv_ini_shared_conn *ini_conn)
 		}
 
 		assert(ep->ini_conn->ini_qp);
+		ep->base_ep.id->context = &ep->base_ep.util_ep.ep_fid.fid;
+		ret = rdma_migrate_id(ep->base_ep.id,
+				      ep->base_ep.eq->channel);
+		if (ret) {
+			VERBS_WARN(FI_LOG_EP_CTRL,
+				   "Failed to migreate active CM ID %d\n", ret);
+			goto err;
+		}
+
+		addr = rdma_get_local_addr(ep->base_ep.id);
+		if (addr)
+			ofi_straddr_dbg(&fi_ibv_prov, FI_LOG_EP_CTRL,
+					"XRC connect src_addr", addr);
+		addr = rdma_get_peer_addr(ep->base_ep.id);
+		if (addr)
+			ofi_straddr_dbg(&fi_ibv_prov, FI_LOG_EP_CTRL,
+					"XRC connect dest_addr", addr);
 
 		ep->base_ep.ibv_qp = ep->ini_conn->ini_qp;
 		ret = fi_ibv_process_ini_conn(ep, ep->conn_setup->pending_recip,

@@ -130,39 +130,44 @@ void fi_ibv_log_ep_conn(struct fi_ibv_xrc_ep *ep, char *desc)
 	if (!fi_log_enabled(&fi_ibv_prov, FI_LOG_INFO, FI_LOG_FABRIC))
 		return;
 
-	VERBS_INFO(FI_LOG_FABRIC, "EP %p, %s\n", ep, desc);
-	VERBS_INFO(FI_LOG_FABRIC,
+	VERBS_INFO(FI_LOG_EP_CTRL, "EP %p, %s\n", ep, desc);
+	VERBS_INFO(FI_LOG_EP_CTRL,
 		  "EP %p, CM ID %p, TGT CM ID %p, SRQN %d Peer SRQN %d\n",
 		  ep, ep->base_ep.id, ep->tgt_id, ep->srqn, ep->peer_srqn);
 
-	assert(ep->base_ep.id);
 
-	addr = rdma_get_local_addr(ep->base_ep.id);
-	if (addr) {
-		ofi_straddr(buf, &len, ep->base_ep.info->addr_format, addr);
-		VERBS_INFO(FI_LOG_FABRIC, "EP %p src_addr: %s\n", ep, buf);
-	}
-	addr = rdma_get_peer_addr(ep->base_ep.id);
-	if (addr) {
-		len = sizeof(buf);
-		ofi_straddr(buf, &len, ep->base_ep.info->addr_format, addr);
-		VERBS_INFO(FI_LOG_FABRIC, "EP %p dst_addr: %s\n", ep, buf);
+	if (ep->base_ep.id) {
+		addr = rdma_get_local_addr(ep->base_ep.id);
+		if (addr) {
+			ofi_straddr(buf, &len, ep->base_ep.info->addr_format,
+				    addr);
+			VERBS_INFO(FI_LOG_EP_CTRL, "EP %p src_addr: %s\n",
+				   ep, buf);
+		}
+		addr = rdma_get_peer_addr(ep->base_ep.id);
+		if (addr) {
+			len = sizeof(buf);
+			ofi_straddr(buf, &len, ep->base_ep.info->addr_format,
+				    addr);
+			VERBS_INFO(FI_LOG_EP_CTRL, "EP %p dst_addr: %s\n",
+				   ep, buf);
+		}
 	}
 
 	if (ep->base_ep.ibv_qp) {
-		VERBS_INFO(FI_LOG_FABRIC, "EP %p, INI QP Num %d\n",
+		VERBS_INFO(FI_LOG_EP_CTRL, "EP %p, INI QP Num %d\n",
 			  ep, ep->base_ep.ibv_qp->qp_num);
-		VERBS_INFO(FI_LOG_FABRIC, "EP %p, Remote TGT QP Num %d\n", ep,
+		VERBS_INFO(FI_LOG_EP_CTRL, "EP %p, Remote TGT QP Num %d\n", ep,
 			  ep->ini_conn->tgt_qpn);
 	}
 	if (ep->tgt_ibv_qp)
-		VERBS_INFO(FI_LOG_FABRIC, "EP %p, TGT QP Num %d\n",
+		VERBS_INFO(FI_LOG_EP_CTRL, "EP %p, TGT QP Num %d\n",
 			  ep, ep->tgt_ibv_qp->qp_num);
 	if (ep->conn_setup && ep->conn_setup->rsvd_ini_qpn)
-		VERBS_INFO(FI_LOG_FABRIC, "EP %p, Reserved INI QPN %d\n",
+		VERBS_INFO(FI_LOG_EP_CTRL, "EP %p, Reserved INI QPN %d\n",
 			  ep, ep->conn_setup->rsvd_ini_qpn->qp_num);
 	if (ep->conn_setup && ep->conn_setup->rsvd_tgt_qpn)
-		VERBS_INFO(FI_LOG_FABRIC, "EP %p, Reserved TGT QPN %d\n",
+		VERBS_INFO(FI_LOG_EP_CTRL, "EP %p, Reserved TGT QPN %d\n",
 			  ep, ep->conn_setup->rsvd_tgt_qpn->qp_num);
 }
 
@@ -207,20 +212,9 @@ void fi_ibv_free_xrc_conn_setup(struct fi_ibv_xrc_ep *ep, int disconnect)
 int fi_ibv_connect_xrc(struct fi_ibv_xrc_ep *ep, struct sockaddr *addr,
 		       int reciprocal, void *param, size_t paramlen)
 {
-	struct sockaddr *peer_addr;
 	int ret;
 
-	assert(ep->base_ep.id && !ep->base_ep.ibv_qp && !ep->ini_conn);
-
-	peer_addr = rdma_get_local_addr(ep->base_ep.id);
-	if (peer_addr)
-		ofi_straddr_dbg(&fi_ibv_prov, FI_LOG_FABRIC,
-				"XRC connect src_addr", peer_addr);
-
-	peer_addr = rdma_get_peer_addr(ep->base_ep.id);
-	if (peer_addr)
-		ofi_straddr_dbg(&fi_ibv_prov, FI_LOG_FABRIC,
-				"XRC connect dest_addr", peer_addr);
+	assert(!ep->base_ep.id && !ep->base_ep.ibv_qp && !ep->ini_conn);
 
 	ret = fi_ibv_get_shared_ini_conn(ep, &ep->ini_conn);
 	if (ret) {
@@ -352,7 +346,6 @@ int fi_ibv_process_xrc_connreq(struct fi_ibv_ep *ep,
 {
 	struct fi_ibv_xrc_ep *xrc_ep = container_of(ep, struct fi_ibv_xrc_ep,
 						    base_ep);
-	int ret;
 
 	assert(ep->info->src_addr);
 	assert(ep->info->dest_addr);
@@ -369,19 +362,8 @@ int fi_ibv_process_xrc_connreq(struct fi_ibv_ep *ep,
 	 * passive port indicated by the active side */
 	ofi_addr_set_port(ep->info->src_addr, 0);
 	ofi_addr_set_port(ep->info->dest_addr, connreq->xrc.port);
-
-	ret = fi_ibv_create_ep(ep->info, &ep->id);
-	if (ret) {
-		VERBS_WARN(FI_LOG_EP_CTRL,
-			   "Creation of INI cm_id failed %d\n", ret);
-		goto create_err;
-	}
 	xrc_ep->tgt_id = connreq->id;
 	xrc_ep->tgt_id->context = &ep->util_ep.ep_fid.fid;
 
 	return FI_SUCCESS;
-
-create_err:
-	free(xrc_ep->conn_setup);
-	return ret;
 }

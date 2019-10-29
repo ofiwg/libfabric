@@ -332,19 +332,14 @@ static int fi_ibv_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 			/* Make sure EQ channel is not polled during migrate */
 			fastlock_acquire(&ep->eq->lock);
-			ret = rdma_migrate_id(ep->id, ep->eq->channel);
-			if (ret)  {
-				fastlock_release(&ep->eq->lock);
-				return -errno;
-			}
-			if (fi_ibv_is_xrc(ep->info)) {
+			if (fi_ibv_is_xrc(ep->info))
 				ret = fi_ibv_ep_xrc_set_tgt_chan(ep);
-				if (ret) {
-					fastlock_release(&ep->eq->lock);
-					return -errno;
-				}
-			}
+			else
+				ret = rdma_migrate_id(ep->id, ep->eq->channel);
 			fastlock_release(&ep->eq->lock);
+
+			if (ret)
+				return -errno;
 
 			break;
 		case FI_CLASS_SRX_CTX:
@@ -882,9 +877,13 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 		}
 
 		if (!info->handle) {
-			ret = fi_ibv_create_ep(info, &ep->id);
-			if (ret)
-				goto err1;
+			/* Only RC, XRC active RDMA CM ID is created at connect */
+			if (!(dom->flags & VRB_USE_XRC)) {
+				ret = fi_ibv_create_ep(info, &ep->id);
+				if (ret)
+					goto err1;
+				ep->id->context = &ep->util_ep.ep_fid.fid;
+			}
 		} else if (info->handle->fclass == FI_CLASS_CONNREQ) {
 			connreq = container_of(info->handle,
 					       struct fi_ibv_connreq, handle);
@@ -900,6 +899,7 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 			} else {
 				ep->id = connreq->id;
 				ep->ibv_qp = ep->id->qp;
+				ep->id->context = &ep->util_ep.ep_fid.fid;
 			}
 		} else if (info->handle->fclass == FI_CLASS_PEP) {
 			pep = container_of(info->handle, struct fi_ibv_pep, pep_fid.fid);
@@ -913,11 +913,11 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 				VERBS_INFO(FI_LOG_DOMAIN, "Unable to rdma_resolve_addr\n");
 				goto err2;
 			}
+			ep->id->context = &ep->util_ep.ep_fid.fid;
 		} else {
 			ret = -FI_ENOSYS;
 			goto err1;
 		}
-		ep->id->context = &ep->util_ep.ep_fid.fid;
 		break;
 	case FI_EP_DGRAM:
 		ep->service = (info->src_addr) ?
@@ -948,7 +948,8 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	return FI_SUCCESS;
 err2:
 	ep->ibv_qp = NULL;
-	rdma_destroy_ep(ep->id);
+	if (ep->id)
+		rdma_destroy_ep(ep->id);
 err1:
 	fi_ibv_close_free_ep(ep);
 	return ret;

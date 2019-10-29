@@ -341,7 +341,6 @@ static int
 fi_ibv_msg_xrc_ep_connect(struct fid_ep *ep, const void *addr,
 		   const void *param, size_t paramlen)
 {
-	struct sockaddr *dst_addr;
 	void *adjusted_param;
 	struct fi_ibv_ep *_ep = container_of(ep, struct fi_ibv_ep,
 					     util_ep.ep_fid);
@@ -379,8 +378,7 @@ fi_ibv_msg_xrc_ep_connect(struct fid_ep *ep, const void *addr,
 	fastlock_acquire(&xrc_ep->base_ep.eq->lock);
 	xrc_ep->conn_setup->conn_tag = VERBS_CONN_TAG_INVALID;
 	fi_ibv_eq_set_xrc_conn_tag(xrc_ep);
-	dst_addr = rdma_get_peer_addr(_ep->id);
-	ret = fi_ibv_connect_xrc(xrc_ep, dst_addr, 0, adjusted_param, paramlen);
+	ret = fi_ibv_connect_xrc(xrc_ep, NULL, 0, adjusted_param, paramlen);
 	fastlock_release(&xrc_ep->base_ep.eq->lock);
 
 	free(adjusted_param);
