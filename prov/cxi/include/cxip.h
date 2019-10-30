@@ -329,6 +329,8 @@ struct cxip_domain {
 	uint32_t nic_addr;		// dev address of source NIC
 	bool enabled;			// set when domain is enabled
 	struct cxip_if *dev_if;		// looked when domain is enabled
+
+	bool odp;
 };
 
 /* CXI Provider Memory Descriptor */

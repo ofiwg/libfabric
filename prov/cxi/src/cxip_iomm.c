@@ -22,9 +22,14 @@ static int cxip_do_map(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 	struct cxip_md *md = (struct cxip_md *)entry->data;
 	struct cxip_domain *dom;
 	uint32_t map_flags = CXI_MAP_READ | CXI_MAP_WRITE |
-			     CXI_MAP_PIN | CXI_MAP_NTA;
+			     CXI_MAP_NTA;
 
 	dom = container_of(cache, struct cxip_domain, iomm);
+
+	if (dom->odp)
+		map_flags |= CXI_MAP_ODP;
+	else
+		map_flags |= CXI_MAP_PIN;
 
 	ret = cxil_map(dom->dev_if->if_lni, entry->iov.iov_base,
 		       entry->iov.iov_len, map_flags, NULL, &md->md);

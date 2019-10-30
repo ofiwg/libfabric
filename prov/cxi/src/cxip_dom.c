@@ -202,6 +202,11 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 	ofi_atomic_initialize32(&cxi_domain->ref, 0);
 	cxi_domain->fab = fab;
 
+	if (getenv("CXIP_ODP_ENABLE")) {
+		cxi_domain->odp = true;
+		fprintf(stderr, "ODP enabled\n");
+	}
+
 	*dom = &cxi_domain->util_domain.domain_fid;
 
 	return 0;
