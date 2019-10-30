@@ -529,6 +529,13 @@ dgram_info:
 			goto out;
 		}
 		assert(!strcmp(shm_info->fabric_attr->name, "shm"));
+		if (shm_info->ep_attr->max_msg_size != SIZE_MAX) {
+			fprintf(stderr, "SHM transfer will be disabled because of ptrace protection.\n"
+				"To enable SHM transfer, please refer to the man page fi_efa.7 for more information.\n"
+				"Also note that turning off ptrace protection has security implications. If you cannot\n"
+				"turn it off, you can suppress this message by setting FI_EFA_ENABLE_SHM_TRANSFER=0\n");
+			rxr_env.enable_shm_transfer = 0;
+		}
 	}
 out:
 	fi_freeinfo(core_info);
