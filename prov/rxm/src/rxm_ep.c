@@ -963,8 +963,8 @@ rxm_ep_alloc_rndv_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void 
 	tx_buf->count = count;
 
 	if (!rxm_ep->rxm_mr_local) {
-		ret = rxm_ep_msg_mr_regv(rxm_ep, iov, tx_buf->count,
-					 FI_REMOTE_READ, tx_buf->mr);
+		ret = rxm_msg_mr_regv(rxm_ep, iov, tx_buf->count, data_len,
+				      FI_REMOTE_READ, tx_buf->mr);
 		if (ret)
 			goto err;
 		mr_iov = tx_buf->mr;
@@ -1015,7 +1015,7 @@ err:
 	FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
 	       "Transmit for MSG provider failed\n");
 	if (!rxm_ep->rxm_mr_local)
-		rxm_ep_msg_mr_closev(tx_buf->mr, tx_buf->count);
+		rxm_msg_mr_closev(tx_buf->mr, tx_buf->count);
 	ofi_buf_free(tx_buf);
 	return ret;
 }

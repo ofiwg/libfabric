@@ -158,6 +158,47 @@ static struct fi_ops rxm_mr_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
+void rxm_msg_mr_closev(struct fid_mr **mr, size_t count)
+{
+	int ret;
+	size_t i;
+
+	for (i = 0; i < count; i++) {
+		if (mr[i]) {
+			ret = fi_close(&mr[i]->fid);
+			if (ret)
+				FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+					"Unable to close msg mr: %zu\n", i);
+			mr[i] = NULL;
+		}
+	}
+}
+
+int rxm_msg_mr_regv(struct rxm_ep *rxm_ep, const struct iovec *iov,
+		    size_t count, size_t reg_limit, uint64_t access,
+		    struct fid_mr **mr)
+{
+	struct rxm_domain *rxm_domain;
+	size_t i;
+	int ret;
+
+	rxm_domain = container_of(rxm_ep->util_ep.domain, struct rxm_domain,
+				  util_domain);
+
+	for (i = 0; i < count && reg_limit; i++) {
+		size_t len = MIN(iov[i].iov_len, reg_limit);
+		ret = fi_mr_reg(rxm_domain->msg_domain, iov[i].iov_base,
+				len, access, 0, 0, 0, &mr[i], NULL);
+		if (ret)
+			goto err;
+		reg_limit -= len;
+	}
+	return 0;
+err:
+	rxm_msg_mr_closev(mr, count);
+	return ret;
+}
+
 static uint64_t
 rxm_mr_get_msg_access(struct rxm_domain *rxm_domain, uint64_t access)
 {

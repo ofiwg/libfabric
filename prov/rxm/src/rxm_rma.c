@@ -40,16 +40,14 @@ rxm_ep_rma_reg_iov(struct rxm_ep *rxm_ep, const struct iovec *msg_iov,
 		   void **desc, void **desc_storage, size_t iov_count,
 		   uint64_t comp_flags, struct rxm_rma_buf *rma_buf)
 {
-	size_t i;
+	size_t i, ret;
 
 	if (!rxm_ep->msg_mr_local)
 		return FI_SUCCESS;
 
 	if (!rxm_ep->rxm_mr_local) {
-		ssize_t ret =
-			rxm_ep_msg_mr_regv(rxm_ep, msg_iov, iov_count,
-					   comp_flags & (FI_WRITE | FI_READ),
-					   rma_buf->mr.mr);
+		ret = rxm_msg_mr_regv(rxm_ep, msg_iov, iov_count, SIZE_MAX,
+				      comp_flags, rma_buf->mr.mr);
 		if (OFI_UNLIKELY(ret))
 			return ret;
 
@@ -104,7 +102,7 @@ rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t 
 		goto unlock;
 
 	if ((rxm_ep->msg_mr_local) && (!rxm_ep->rxm_mr_local))
-		rxm_ep_msg_mr_closev(rma_buf->mr.mr, rma_buf->mr.count);
+		rxm_msg_mr_closev(rma_buf->mr.mr, rma_buf->mr.count);
 release:
 	ofi_buf_free(rma_buf);
 unlock:
