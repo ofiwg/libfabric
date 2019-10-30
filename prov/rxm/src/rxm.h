@@ -277,6 +277,7 @@ struct rxm_domain {
 	struct util_domain util_domain;
 	struct fid_domain *msg_domain;
 	size_t max_atomic_size;
+	uint64_t mr_key;
 	uint8_t mr_local;
 };
 
@@ -816,6 +817,9 @@ void rxm_msg_mr_closev(struct fid_mr **mr, size_t count);
 int rxm_msg_mr_regv(struct rxm_ep *rxm_ep, const struct iovec *iov,
 		    size_t count, size_t reg_limit, uint64_t access,
 		    struct fid_mr **mr);
+int rxm_msg_mr_reg_internal(struct rxm_domain *rxm_domain, const void *buf,
+			    size_t len, uint64_t acs, uint64_t flags,
+			    struct fid_mr **mr);
 
 static inline void rxm_cntr_incerr(struct util_cntr *cntr)
 {

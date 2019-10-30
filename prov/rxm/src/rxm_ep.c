@@ -117,10 +117,11 @@ static int rxm_buf_reg(struct ofi_bufpool_region *region)
 
 	rxm_domain = container_of(pool->rxm_ep->util_ep.domain,
 				  struct rxm_domain, util_domain);
-	ret = fi_mr_reg(rxm_domain->msg_domain, region->mem_region,
-			region->pool->region_size,
-			FI_SEND | FI_RECV | FI_READ | FI_WRITE, 0, 0,
-			OFI_MR_NOCACHE, (struct fid_mr **) &region->context, NULL);
+	ret = rxm_msg_mr_reg_internal(rxm_domain, region->mem_region,
+				      region->pool->region_size,
+				      FI_SEND | FI_RECV | FI_READ | FI_WRITE,
+				      OFI_MR_NOCACHE,
+				      (struct fid_mr **) &region->context);
 
 	return ret;
 }
