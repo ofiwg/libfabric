@@ -105,41 +105,22 @@ static int rxm_match_unexp_msg_tag_addr(struct dlist_entry *item, const void *ar
 		ofi_match_tag(attr->tag, attr->ignore, unexp_msg->tag);
 }
 
-static inline int
-rxm_mr_buf_reg(struct rxm_ep *rxm_ep, void *addr, size_t len, void **context)
-{
-	int ret = FI_SUCCESS;
-	struct fid_mr *mr;
-	struct rxm_domain *rxm_domain = container_of(rxm_ep->util_ep.domain,
-						     struct rxm_domain, util_domain);
-
-	*context = NULL;
-	if (rxm_ep->msg_mr_local) {
-		struct fid_domain *msg_domain =
-			(struct fid_domain *)rxm_domain->msg_domain;
-
-		ret = fi_mr_reg(msg_domain, addr, len,
-				FI_SEND | FI_RECV | FI_READ | FI_WRITE,
-				0, 0, OFI_MR_NOCACHE, &mr, NULL);
-		*context = mr;
-	}
-
-	return ret;
-}
-
 static int rxm_buf_reg(struct ofi_bufpool_region *region)
 {
 	struct rxm_buf_pool *pool = region->pool->attr.context;
+	struct rxm_domain *rxm_domain;
 	int ret;
 
-	if ((pool->type != RXM_BUF_POOL_TX_INJECT) &&
-	    pool->rxm_ep->msg_mr_local) {
-		ret = rxm_mr_buf_reg(pool->rxm_ep, region->mem_region,
-				     region->pool->region_size,
-				     &region->context);
-	} else {
-		ret = 0;
-	}
+	if ((pool->type == RXM_BUF_POOL_TX_INJECT) ||
+	    !pool->rxm_ep->msg_mr_local)
+		return 0;
+
+	rxm_domain = container_of(pool->rxm_ep->util_ep.domain,
+				  struct rxm_domain, util_domain);
+	ret = fi_mr_reg(rxm_domain->msg_domain, region->mem_region,
+			region->pool->region_size,
+			FI_SEND | FI_RECV | FI_READ | FI_WRITE, 0, 0,
+			OFI_MR_NOCACHE, (struct fid_mr **) &region->context, NULL);
 
 	return ret;
 }
