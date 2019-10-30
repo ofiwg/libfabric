@@ -879,7 +879,8 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 		if (!info->handle) {
 			/* Only RC, XRC active RDMA CM ID is created at connect */
 			if (!(dom->flags & VRB_USE_XRC)) {
-				ret = fi_ibv_create_ep(info, &ep->id);
+				ret = fi_ibv_create_ep(info, RDMA_PS_TCP,
+						       &ep->id);
 				if (ret)
 					goto err1;
 				ep->id->context = &ep->util_ep.ep_fid.fid;

@@ -262,7 +262,8 @@ void fi_ibv_sched_ini_conn(struct fi_ibv_ini_shared_conn *ini_conn)
 		last_state = ep->ini_conn->state;
 
 		/* TODO: Select RDMA_PS_TCP/UDP based on last_state (i.e. physical) */
-		ret = fi_ibv_create_ep(ep->base_ep.info, &ep->base_ep.id);
+		ret = fi_ibv_create_ep(ep->base_ep.info, RDMA_PS_TCP,
+				       &ep->base_ep.id);
 		if (ret) {
 			VERBS_WARN(FI_LOG_EP_CTRL,
 				   "Failed to create active CM ID %d\n",

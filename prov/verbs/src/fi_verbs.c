@@ -206,7 +206,8 @@ err1:
 	return ret;
 }
 
-int fi_ibv_create_ep(const struct fi_info *hints, struct rdma_cm_id **id)
+int fi_ibv_create_ep(const struct fi_info *hints, enum rdma_port_space ps,
+		     struct rdma_cm_id **id)
 {
 	struct rdma_addrinfo *rai = NULL;
 	int ret;
@@ -216,7 +217,7 @@ int fi_ibv_create_ep(const struct fi_info *hints, struct rdma_cm_id **id)
 		return ret;
 	}
 
-	if (rdma_create_id(NULL, id, NULL, RDMA_PS_TCP)) {
+	if (rdma_create_id(NULL, id, NULL, ps)) {
 		ret = -errno;
 		FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC, "rdma_create_id failed: "
 			"%s (%d)\n", strerror(-ret), -ret);

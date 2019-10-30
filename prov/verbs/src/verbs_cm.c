@@ -78,7 +78,7 @@ static int fi_ibv_msg_ep_setname(fid_t ep_fid, void *addr, size_t addrlen)
 
 	memcpy(ep->info->src_addr, addr, ep->info->src_addrlen);
 
-	ret = fi_ibv_create_ep(ep->info, &id);
+	ret = fi_ibv_create_ep(ep->info, RDMA_PS_TCP, &id);
 	if (ret)
 		goto err2;
 
