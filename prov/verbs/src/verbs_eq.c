@@ -560,7 +560,8 @@ fi_ibv_eq_xrc_cm_err_event(struct fi_ibv_eq *eq,
 static inline int
 fi_ibv_eq_xrc_connected_event(struct fi_ibv_eq *eq,
 			      struct rdma_cm_event *cma_event,
-			      struct fi_eq_cm_entry *entry, size_t len)
+			      struct fi_eq_cm_entry *entry, size_t len,
+			      int *acked)
 {
 	struct fi_ibv_xrc_ep *ep;
 	fid_t fid = cma_event->id->context;
@@ -576,9 +577,10 @@ fi_ibv_eq_xrc_connected_event(struct fi_ibv_eq *eq,
 
 	ret = fi_ibv_eq_xrc_recip_conn_event(eq, ep, cma_event, entry, len);
 
-	/* Bidirectional connection setup is complete, release RDMA CM ID resources.
-	 * Note this will initiate release of shared QP reservation/hardware resources
-	 * that were needed for XRC shared connection setup as well. */
+	/* Bidirectional connection setup is complete, release RDMA CM ID
+	 * resources. */
+	rdma_ack_cm_event(cma_event);
+	*acked = 1;
 	fi_ibv_free_xrc_conn_setup(ep, 1);
 
 	return ret;
@@ -598,19 +600,11 @@ fi_ibv_eq_xrc_timewait_event(struct fi_ibv_eq *eq,
 	if (cma_event->id == ep->tgt_id) {
 		*acked = 1;
 		rdma_ack_cm_event(cma_event);
-		if (ep->conn_setup->rsvd_tgt_qpn) {
-			ibv_destroy_qp(ep->conn_setup->rsvd_tgt_qpn);
-			ep->conn_setup->rsvd_tgt_qpn = NULL;
-		}
 		rdma_destroy_id(ep->tgt_id);
 		ep->tgt_id = NULL;
 	} else if (cma_event->id == ep->base_ep.id) {
 		*acked = 1;
 		rdma_ack_cm_event(cma_event);
-		if (ep->conn_setup->rsvd_ini_qpn) {
-			ibv_destroy_qp(ep->conn_setup->rsvd_ini_qpn);
-			ep->conn_setup->rsvd_ini_qpn = NULL;
-		}
 		rdma_destroy_id(ep->base_ep.id);
 		ep->base_ep.id = NULL;
 	}
@@ -703,7 +697,7 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq,
 		ep = container_of(fid, struct fi_ibv_ep, util_ep.ep_fid);
 		if (fi_ibv_is_xrc(ep->info)) {
 			ret = fi_ibv_eq_xrc_connected_event(eq, cma_event,
-							    entry, len);
+							    entry, len, &acked);
 			goto ack;
 		}
 		entry->info = NULL;

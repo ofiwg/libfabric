@@ -535,14 +535,6 @@ struct fi_ibv_xrc_ep_conn_setup {
 	uint32_t			conn_tag;
 	bool				created_conn_tag;
 
-	/* IB CM message stale/duplicate detection processing requires
-	 * that shared INI/TGT connections use unique QP numbers during
-	 * RDMA CM connection setup. To avoid conflicts with actual HCA
-	 * QP number space, we allocate minimal QP that are left in the
-	 * reset state and closed once the setup process completes. */
-	struct ibv_qp			*rsvd_ini_qpn;
-	struct ibv_qp			*rsvd_tgt_qpn;
-
 	/* Temporary flags to indicate if the INI QP setup and the
 	 * TGT QP setup have completed. */
 	bool				ini_connected;

@@ -291,15 +291,8 @@ void fi_ibv_sched_ini_conn(struct fi_ibv_ini_shared_conn *ini_conn)
 			ep->ini_conn->phys_conn_id = ep->base_ep.id;
 		} else {
 			assert(!ep->base_ep.id->qp);
-
-			ret = fi_ibv_reserve_qpn(ep,
-					&ep->conn_setup->rsvd_ini_qpn);
-			if (ret) {
-				VERBS_WARN(FI_LOG_EP_CTRL,
-					   "Failed to create rsvd INI "
-					   "QP %d\n", ret);
-				goto err;
-			}
+			VERBS_DBG(FI_LOG_EP_CTRL, "Sharing XRC INI QPN %d\n",
+				  ep->ini_conn->ini_qp->qp_num);
 		}
 
 		assert(ep->ini_conn->ini_qp);
@@ -385,7 +378,6 @@ int fi_ibv_ep_create_tgt_qp(struct fi_ibv_xrc_ep *ep, uint32_t tgt_qpn)
 	struct ibv_qp_open_attr open_attr;
 	struct ibv_qp_init_attr_ex attr_ex;
 	struct fi_ibv_domain *domain = fi_ibv_ep_to_domain(&ep->base_ep);
-	struct ibv_qp *rsvd_qpn;
 	int ret;
 
 	assert(ep->tgt_id && !ep->tgt_id->qp);
@@ -393,14 +385,6 @@ int fi_ibv_ep_create_tgt_qp(struct fi_ibv_xrc_ep *ep, uint32_t tgt_qpn)
 	/* If a target QP number was specified then open that existing
 	 * QP for sharing. */
 	if (tgt_qpn) {
-		ret = fi_ibv_reserve_qpn(ep, &rsvd_qpn);
-		if (!rsvd_qpn) {
-			VERBS_WARN(FI_LOG_EP_CTRL,
-				   "Create of XRC reserved QPN failed %d\n",
-				   ret);
-			return ret;
-		}
-
 		memset(&open_attr, 0, sizeof(open_attr));
 		open_attr.qp_num = tgt_qpn;
 		open_attr.comp_mask = IBV_QP_OPEN_ATTR_NUM |
@@ -415,10 +399,8 @@ int fi_ibv_ep_create_tgt_qp(struct fi_ibv_xrc_ep *ep, uint32_t tgt_qpn)
 			ret = -errno;
 			VERBS_WARN(FI_LOG_EP_CTRL,
 				   "XRC TGT QP ibv_open_qp failed %d\n", -ret);
-			ibv_destroy_qp(rsvd_qpn);
 			return ret;
 		}
-		ep->conn_setup->rsvd_tgt_qpn = rsvd_qpn;
 		return FI_SUCCESS;
 	}
 
