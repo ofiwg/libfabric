@@ -1222,6 +1222,14 @@ static inline void psmx2_am_poll(struct psmx2_trx_ctxt *trx_ctxt)
 	}
 }
 
+static inline int psmx2_peer_match(struct dlist_entry *item, const void *arg)
+{
+	struct psmx2_epaddr_context *peer;
+
+	peer = container_of(item, struct psmx2_epaddr_context, entry);
+	return  (peer->epaddr == arg);
+}
+
 #ifdef __cplusplus
 }
 #endif

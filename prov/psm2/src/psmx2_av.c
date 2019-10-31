@@ -169,12 +169,14 @@ static void psmx2_set_epaddr_context(struct psmx2_trx_ctxt *trx_ctxt,
 				     psm2_epid_t epid, psm2_epaddr_t epaddr)
 {
 	struct psmx2_epaddr_context *context;
+	struct psmx2_epaddr_context *old_context = NULL;
 
 	context = (void *)psm2_epaddr_getctxt(epaddr);
 	if (context) {
 		if (context->trx_ctxt != trx_ctxt || context->epid != epid) {
 			FI_WARN(&psmx2_prov, FI_LOG_AV,
 				"trx_ctxt or epid doesn't match\n");
+			old_context = context;
 			context = NULL;
 		}
 	}
@@ -193,6 +195,7 @@ static void psmx2_set_epaddr_context(struct psmx2_trx_ctxt *trx_ctxt,
 	context->epid = epid;
 	context->epaddr = epaddr;
 	psm2_epaddr_setctxt(epaddr, context);
+	free(old_context);
 
 	trx_ctxt->domain->peer_lock_fn(&trx_ctxt->peer_lock, 2);
 	dlist_insert_before(&context->entry, &trx_ctxt->peer_list);
@@ -620,6 +623,7 @@ static int psmx2_av_disconnect_addr(int trx_ctxt_id, psm2_epid_t epid,
 				    psm2_epaddr_t epaddr)
 {
 	struct psmx2_epaddr_context *epaddr_context;
+	struct psmx2_trx_ctxt *trx_ctxt;
 	psm2_error_t errors;
 	int err;
 
@@ -633,15 +637,24 @@ static int psmx2_av_disconnect_addr(int trx_ctxt_id, psm2_epid_t epid,
 	if (!epaddr_context)
 		return -FI_EINVAL;
 
-	if (trx_ctxt_id != epaddr_context->trx_ctxt->id)
+	trx_ctxt = epaddr_context->trx_ctxt;
+	if (trx_ctxt_id != trx_ctxt->id)
 		return -FI_EINVAL;
 
 	if (epid != epaddr_context->epid)
 		return -FI_EINVAL;
 
-	err = psm2_ep_disconnect2(epaddr_context->trx_ctxt->psm2_ep, 1, &epaddr,
+	trx_ctxt->domain->peer_lock_fn(&trx_ctxt->peer_lock, 2);
+	dlist_remove_first_match(&trx_ctxt->peer_list,
+				 psmx2_peer_match, epaddr);
+	trx_ctxt->domain->peer_unlock_fn(&trx_ctxt->peer_lock, 2);
+
+	psm2_epaddr_setctxt(epaddr, NULL);
+
+	err = psm2_ep_disconnect2(trx_ctxt->psm2_ep, 1, &epaddr,
 				  NULL, &errors, PSM2_EP_DISCONNECT_FORCE, 0);
 
+	free(epaddr_context);
 	return psmx2_errno(err);
 }
 
@@ -919,6 +932,7 @@ static int psmx2_av_close(fid_t fid)
 		free(av->hdr);
 	}
 
+	free(av->sep_info);
 out:
 	free(av);
 	return 0;
