@@ -127,7 +127,7 @@ void fi_ibv_log_ep_conn(struct fi_ibv_xrc_ep *ep, char *desc)
 	char buf[OFI_ADDRSTRLEN];
 	size_t len = sizeof(buf);
 
-	if (!fi_log_enabled(&fi_ibv_prov, FI_LOG_INFO, FI_LOG_FABRIC))
+	if (!fi_log_enabled(&fi_ibv_prov, FI_LOG_INFO, FI_LOG_EP_CTRL))
 		return;
 
 	VERBS_INFO(FI_LOG_EP_CTRL, "EP %p, %s\n", ep, desc);
@@ -289,6 +289,7 @@ int fi_ibv_accept_xrc(struct fi_ibv_xrc_ep *ep, int reciprocal,
 	struct fi_ibv_connreq *connreq;
 	struct rdma_conn_param conn_param = { 0 };
 	struct fi_ibv_xrc_cm_data *cm_data = param;
+	struct fi_ibv_xrc_cm_data connect_cm_data;
 	int ret;
 
 	addr = rdma_get_local_addr(ep->tgt_id);
@@ -317,10 +318,8 @@ int fi_ibv_accept_xrc(struct fi_ibv_xrc_ep *ep, int reciprocal,
 	if (ep->base_ep.srq_ep)
 		conn_param.srq = 1;
 
-	/* Shared INI/TGT QP connection use a temporarily reserved QP number
-	 * avoid the appearance of being a stale/duplicate IB CM message */
 	if (!ep->tgt_id->qp)
-		conn_param.qp_num = ep->conn_setup->rsvd_tgt_qpn->qp_num;
+		conn_param.qp_num = ep->tgt_ibv_qp->qp_num;
 
 	if (!connreq->xrc.is_reciprocal)
 		ep->conn_setup->conn_tag = connreq->xrc.conn_tag;
@@ -337,6 +336,22 @@ int fi_ibv_accept_xrc(struct fi_ibv_xrc_ep *ep, int reciprocal,
 		fi_ibv_prev_xrc_conn_state(ep);
 	} else
 		free(connreq);
+
+	/* The passive side of the initial shared connection using
+	 * SIDR is complete, initiate reciprocal connection */
+	if (ep->tgt_id->ps == RDMA_PS_UDP &&
+	    ep->conn_state == FI_IBV_XRC_ORIG_CONNECTING) {
+		fi_ibv_next_xrc_conn_state(ep);
+		fi_ibv_ep_tgt_conn_done(ep);
+		ret = fi_ibv_connect_xrc(ep, NULL, FI_IBV_RECIP_CONN,
+					 &connect_cm_data,
+					 sizeof(connect_cm_data));
+		if (ret) {
+			fi_ibv_prev_xrc_conn_state(ep);
+			ep->tgt_id->qp = NULL;
+			rdma_disconnect(ep->tgt_id);
+		}
+	}
 
 	return ret;
 }

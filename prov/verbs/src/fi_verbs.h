@@ -118,6 +118,7 @@
 				 sizeof(struct fi_ibv_cm_data_hdr))
 
 #define FI_IBV_CM_REJ_CONSUMER_DEFINED	28
+#define FI_IBV_CM_REJ_SIDR_CONSUMER_DEFINED	2
 
 #define VERBS_DGRAM_MSG_PREFIX_SIZE	(40)
 

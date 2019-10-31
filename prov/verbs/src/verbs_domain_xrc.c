@@ -261,8 +261,9 @@ void fi_ibv_sched_ini_conn(struct fi_ibv_ini_shared_conn *ini_conn)
 				  &ep->ini_conn->active_list);
 		last_state = ep->ini_conn->state;
 
-		/* TODO: Select RDMA_PS_TCP/UDP based on last_state (i.e. physical) */
-		ret = fi_ibv_create_ep(ep->base_ep.info, RDMA_PS_TCP,
+		ret = fi_ibv_create_ep(ep->base_ep.info,
+				       last_state == FI_IBV_INI_QP_UNCONNECTED ?
+				       RDMA_PS_TCP : RDMA_PS_UDP,
 				       &ep->base_ep.id);
 		if (ret) {
 			VERBS_WARN(FI_LOG_EP_CTRL,
@@ -307,7 +308,7 @@ void fi_ibv_sched_ini_conn(struct fi_ibv_ini_shared_conn *ini_conn)
 				      ep->base_ep.eq->channel);
 		if (ret) {
 			VERBS_WARN(FI_LOG_EP_CTRL,
-				   "Failed to migreate active CM ID %d\n", ret);
+				   "Failed to migrate active CM ID %d\n", ret);
 			goto err;
 		}
 
@@ -358,11 +359,9 @@ int fi_ibv_process_ini_conn(struct fi_ibv_xrc_ep *ep,int reciprocal,
 	ep->base_ep.conn_param.rnr_retry_count = 7;
 	ep->base_ep.conn_param.srq = 1;
 
-	/* Shared connections use reserved temporary QP numbers to
-	 * avoid the appearance of stale/duplicate CM messages */
 	if (!ep->base_ep.id->qp)
 		ep->base_ep.conn_param.qp_num =
-				ep->conn_setup->rsvd_ini_qpn->qp_num;
+				ep->ini_conn->ini_qp->qp_num;
 
 	assert(ep->conn_state == FI_IBV_XRC_UNCONNECTED ||
 	       ep->conn_state == FI_IBV_XRC_ORIG_CONNECTED);

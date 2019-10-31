@@ -287,6 +287,7 @@ static void fi_ibv_eq_skip_xrc_cm_data(const void **priv_data,
 
 static int
 fi_ibv_eq_xrc_connreq_event(struct fi_ibv_eq *eq, struct fi_eq_cm_entry *entry,
+			    size_t len, uint32_t *event,
 			    const void **priv_data, size_t *priv_datalen)
 {
 	struct fi_ibv_connreq *connreq = container_of(entry->info->handle,
@@ -294,6 +295,16 @@ fi_ibv_eq_xrc_connreq_event(struct fi_ibv_eq *eq, struct fi_eq_cm_entry *entry,
 	struct fi_ibv_xrc_ep *ep;
 	struct fi_ibv_xrc_cm_data cm_data;
 	int ret;
+	enum rdma_port_space ps;
+
+	/*
+	 * We can make the SIDR shared connection mechanism more robust
+	 * by maintaining a mapping of SIDR connections, such that if a
+	 * SIDR accept response is lost and we receive a retry SIDR request,
+	 * we can take appropriate action resending the accept. For a lost
+	 * SIDR reject response it is OK for the upper layer to reject the
+	 * request again.
+	 */
 
 	if (!connreq->xrc.is_reciprocal) {
 		fi_ibv_eq_skip_xrc_cm_data(priv_data, priv_datalen);
@@ -310,7 +321,7 @@ fi_ibv_eq_xrc_connreq_event(struct fi_ibv_eq *eq, struct fi_eq_cm_entry *entry,
 		VERBS_WARN(FI_LOG_EP_CTRL,
 			   "Reciprocal XRC connection tag 0x%x not found\n",
 			   connreq->xrc.conn_tag);
-		goto done;
+		return -FI_EAGAIN;
 	}
 	assert(ep->conn_state == FI_IBV_XRC_ORIG_CONNECTED);
 
@@ -324,6 +335,7 @@ fi_ibv_eq_xrc_connreq_event(struct fi_ibv_eq *eq, struct fi_eq_cm_entry *entry,
 		goto send_reject;
 	}
 
+	ps = ep->tgt_id->ps;
 	ret = fi_ibv_accept_xrc(ep, FI_IBV_RECIP_CONN, &cm_data,
 				sizeof(cm_data));
 	if (ret) {
@@ -331,7 +343,19 @@ fi_ibv_eq_xrc_connreq_event(struct fi_ibv_eq *eq, struct fi_eq_cm_entry *entry,
 			   "Reciprocal XRC Accept failed %d\n", ret);
 		goto send_reject;
 	}
-done:
+
+	/* SIDR based shared reciprocal connections are complete at
+	 * this point, generate the connection established event. */
+	if (ps == RDMA_PS_UDP) {
+		fi_ibv_next_xrc_conn_state(ep);
+		fi_ibv_ep_tgt_conn_done(ep);
+		entry->fid = &ep->base_ep.util_ep.ep_fid.fid;
+		*event = FI_CONNECTED;
+		len = fi_ibv_eq_copy_event_data(entry, len,
+						ep->conn_setup->event_data,
+						ep->conn_setup->event_len);
+		return sizeof(*entry) + len;
+	}
 
 	/* Event is handled internally and not passed to the application */
 	return -FI_EAGAIN;
@@ -364,8 +388,8 @@ fi_ibv_eq_xrc_conn_event(struct fi_ibv_xrc_ep *ep,
 	size_t priv_datalen = cma_event->param.conn.private_data_len;
 	int ret;
 
-	VERBS_DBG(FI_LOG_EP_CTRL, "EP %p INITIAL CONNECTION DONE state %d\n",
-		  ep, ep->conn_state);
+	VERBS_DBG(FI_LOG_EP_CTRL, "EP %p INITIAL CONNECTION DONE state %d, ps %d\n",
+		  ep, ep->conn_state, cma_event->id->ps);
 	fi_ibv_next_xrc_conn_state(ep);
 
 	/*
@@ -474,7 +498,8 @@ fi_ibv_eq_xrc_rej_event(struct fi_ibv_eq *eq, struct rdma_cm_event *cma_event)
 	}
 
 	/* If reject comes from remote provider peer */
-	if (cma_event->status == FI_IBV_CM_REJ_CONSUMER_DEFINED) {
+	if (cma_event->status == FI_IBV_CM_REJ_CONSUMER_DEFINED ||
+	    cma_event->status == FI_IBV_CM_REJ_SIDR_CONSUMER_DEFINED) {
 		if (cma_event->param.conn.private_data_len &&
 		    fi_ibv_eq_set_xrc_info(cma_event, &xrc_info)) {
 			VERBS_WARN(FI_LOG_EP_CTRL,
@@ -496,7 +521,7 @@ fi_ibv_eq_xrc_rej_event(struct fi_ibv_eq *eq, struct rdma_cm_event *cma_event)
 	return state == FI_IBV_XRC_ORIG_CONNECTING ? FI_SUCCESS : -FI_EAGAIN;
 }
 
-/* Caller must hold eq:lock */                                                                                  
+/* Caller must hold eq:lock */
 static inline int
 fi_ibv_eq_xrc_cm_err_event(struct fi_ibv_eq *eq,
                            struct rdma_cm_event *cma_event)
@@ -627,11 +652,6 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq,
 	struct fi_ibv_ep *ep;
 	struct fi_ibv_xrc_ep *xrc_ep;
 
-	if (cma_event->id->ps == RDMA_PS_UDP) {
-		VERBS_DBG(FI_LOG_EQ, "PS_UDP not supported\n");
-		return -FI_EAGAIN;
-	}
-
 	switch (cma_event->event) {
 	case RDMA_CM_EVENT_ROUTE_RESOLVED:
 		ep = container_of(fid, struct fi_ibv_ep, util_ep.ep_fid);
@@ -663,9 +683,9 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq,
 		}
 
 		if (fi_ibv_is_xrc(entry->info)) {
-			ret = fi_ibv_eq_xrc_connreq_event(eq, entry, &priv_data,
-							  &priv_datalen);
-			if (ret == -FI_EAGAIN)
+			ret = fi_ibv_eq_xrc_connreq_event(eq, entry, len, event,
+							  &priv_data, &priv_datalen);
+			if (ret == -FI_EAGAIN || *event == FI_CONNECTED)
 				goto ack;
 		}
 		break;
@@ -711,6 +731,11 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq,
 		ep = container_of(fid, struct fi_ibv_ep, util_ep.ep_fid);
 		assert(ep->info);
 		if (fi_ibv_is_xrc(ep->info)) {
+			/* SIDR Reject is reported as UNREACHABLE */
+			if (cma_event->id->ps == RDMA_PS_UDP &&
+			    cma_event->event == RDMA_CM_EVENT_UNREACHABLE)
+				goto xrc_shared_reject;
+
 			ret = fi_ibv_eq_xrc_cm_err_event(eq, cma_event);
 			if (ret == -FI_EAGAIN)
 				goto ack;
@@ -726,6 +751,7 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq,
 	case RDMA_CM_EVENT_REJECTED:
 		ep = container_of(fid, struct fi_ibv_ep, util_ep.ep_fid);
 		if (fi_ibv_is_xrc(ep->info)) {
+xrc_shared_reject:
 			ret = fi_ibv_eq_xrc_rej_event(eq, cma_event);
 			if (ret == -FI_EAGAIN)
 				goto ack;
