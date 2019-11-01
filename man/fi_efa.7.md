@@ -165,7 +165,8 @@ These OFI runtime parameters apply only to the RDM endpoint.
 : Defines the maximum number of entries in SHM provider's address vector.
 
 *FI_EFA_SHM_MAX_MEDIUM_SIZE*
-Defines the switch point between small/medium message and large message. The message larger than this switch pointe will be transferred with large message protocol
+: Defines the switch point between small/medium message and large message. The message
+  larger than this switch point will be transferred with large message protocol.
 
 # SEE ALSO
 
