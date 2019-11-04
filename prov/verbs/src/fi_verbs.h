@@ -310,6 +310,10 @@ struct fi_ibv_pep {
 
 struct fi_ops_cm *fi_ibv_pep_ops_cm(struct fi_ibv_pep *pep);
 
+enum {
+	VRB_USE_XRC = BIT(0),
+};
+
 struct fi_ibv_domain {
 	struct util_domain		util_domain;
 	struct ibv_context		*verbs;
@@ -323,7 +327,7 @@ struct fi_ibv_domain {
 
 	/* Indicates that MSG endpoints should use the XRC transport.
 	 * TODO: Move selection of XRC/RC to endpoint info from domain */
-	int				use_xrc;
+	int				flags;
 	struct {
 		int			xrcd_fd;
 		struct ibv_xrcd		*xrcd;
@@ -444,8 +448,8 @@ int fi_ibv_srq_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 
 static inline int fi_ibv_is_xrc(struct fi_info *info)
 {
-	return  (FI_IBV_EP_TYPE(info) == FI_EP_MSG) &&
-		(FI_IBV_EP_PROTO(info) == FI_PROTO_RDMA_CM_IB_XRC);
+	return (FI_IBV_EP_TYPE(info) == FI_EP_MSG) &&
+	       (FI_IBV_EP_PROTO(info) == FI_PROTO_RDMA_CM_IB_XRC);
 }
 
 static inline int fi_ibv_is_xrc_send_qp(enum ibv_qp_type qp_type)

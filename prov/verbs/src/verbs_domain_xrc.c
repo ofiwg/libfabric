@@ -545,7 +545,7 @@ int fi_ibv_domain_xrc_init(struct fi_ibv_domain *domain)
 		goto rbmap_err;
 	}
 
-	domain->use_xrc = 1;
+	domain->flags |= VRB_USE_XRC;
 	return FI_SUCCESS;
 
 rbmap_err:
