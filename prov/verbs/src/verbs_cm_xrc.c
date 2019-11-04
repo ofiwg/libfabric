@@ -194,9 +194,7 @@ void fi_ibv_free_xrc_conn_setup(struct fi_ibv_xrc_ep *ep, int disconnect)
 		}
 	}
 
-	if (ep->conn_setup->conn_tag != VERBS_CONN_TAG_INVALID)
-		fi_ibv_eq_clear_xrc_conn_tag(ep);
-
+	fi_ibv_eq_clear_xrc_conn_tag(ep);
 	if (!disconnect) {
 		free(ep->conn_setup);
 		ep->conn_setup = NULL;
@@ -221,6 +219,8 @@ int fi_ibv_connect_xrc(struct fi_ibv_xrc_ep *ep, struct sockaddr *addr,
 		}
 		return ret;
 	}
+
+	fi_ibv_eq_set_xrc_conn_tag(ep);
 	fi_ibv_add_pending_ini_conn(ep, reciprocal, param, paramlen);
 	fi_ibv_sched_ini_conn(ep->ini_conn);
 
@@ -316,8 +316,7 @@ int fi_ibv_accept_xrc(struct fi_ibv_xrc_ep *ep, int reciprocal,
 	if (!ep->tgt_id->qp)
 		conn_param.qp_num = ep->tgt_ibv_qp->qp_num;
 
-	if (!connreq->xrc.is_reciprocal)
-		ep->conn_setup->conn_tag = connreq->xrc.conn_tag;
+	ep->conn_setup->remote_conn_tag = connreq->xrc.conn_tag;
 
 	assert(ep->conn_state == FI_IBV_XRC_UNCONNECTED ||
 	       ep->conn_state == FI_IBV_XRC_ORIG_CONNECTED);
@@ -366,6 +365,7 @@ int fi_ibv_process_xrc_connreq(struct fi_ibv_ep *ep,
 			  "Unable to allocate connection setup memory\n");
 		return -FI_ENOMEM;
 	}
+	xrc_ep->conn_setup->conn_tag = VERBS_CONN_TAG_INVALID;
 
 	/* This endpoint was created on the passive side of a connection
 	 * request. The reciprocal connection request will go back to the

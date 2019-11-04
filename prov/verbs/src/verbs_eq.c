@@ -78,7 +78,6 @@ void fi_ibv_eq_set_xrc_conn_tag(struct fi_ibv_xrc_ep *ep)
 	ep->conn_setup->conn_tag =
 		(uint32_t)ofi_idx2key(&eq->xrc.conn_key_idx,
 				ofi_idx_insert(eq->xrc.conn_key_map, ep));
-	ep->conn_setup->created_conn_tag = true;
 }
 
 /* Caller must hold eq:lock */
@@ -88,7 +87,7 @@ void fi_ibv_eq_clear_xrc_conn_tag(struct fi_ibv_xrc_ep *ep)
 	int index;
 
 	assert(ep->conn_setup);
-	if (!ep->conn_setup->created_conn_tag)
+	if (ep->conn_setup->conn_tag == VERBS_CONN_TAG_INVALID)
 		return;
 
 	index = ofi_key2idx(&eq->xrc.conn_key_idx,

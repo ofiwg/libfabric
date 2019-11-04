@@ -533,7 +533,7 @@ struct fi_ibv_xrc_ep_conn_setup {
 	 * with the original request. The tag is created by the
 	 * original active side. */
 	uint32_t			conn_tag;
-	bool				created_conn_tag;
+	uint32_t			remote_conn_tag;
 
 	/* Temporary flags to indicate if the INI QP setup and the
 	 * TGT QP setup have completed. */

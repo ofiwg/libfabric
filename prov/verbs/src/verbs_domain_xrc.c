@@ -340,9 +340,12 @@ int fi_ibv_process_ini_conn(struct fi_ibv_xrc_ep *ep,int reciprocal,
 
 	assert(ep->base_ep.ibv_qp);
 
-	fi_ibv_set_xrc_cm_data(cm_data, reciprocal, ep->conn_setup->conn_tag,
+	fi_ibv_set_xrc_cm_data(cm_data, reciprocal, reciprocal ?
+			       ep->conn_setup->remote_conn_tag :
+			       ep->conn_setup->conn_tag,
 			       ep->base_ep.eq->xrc.pep_port,
 			       ep->ini_conn->tgt_qpn);
+
 	ep->base_ep.conn_param.private_data = cm_data;
 	ep->base_ep.conn_param.private_data_len = paramlen;
 	ep->base_ep.conn_param.responder_resources = RDMA_MAX_RESP_RES;
