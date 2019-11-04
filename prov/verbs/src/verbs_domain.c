@@ -323,13 +323,13 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 		goto err4;
 	}
 
-	if (!strncmp(info->domain_attr->name, "hfi1", strlen("hfi1")) ||
-	    !strncmp(info->domain_attr->name, "qib", strlen("qib"))) {
-		_domain->post_send = fi_ibv_post_send_track_credits;
-		_domain->poll_cq = fi_ibv_poll_cq_track_credits;
-	} else {
+	if (fi->nic && fi->nic->device_attr &&
+	    !strncmp(fi->nic->device_attr->vendor_id, "0x02c9", 6)) {
 		_domain->post_send = ibv_post_send;
 		_domain->poll_cq = ibv_poll_cq;
+	} else {
+		_domain->post_send = fi_ibv_post_send_track_credits;
+		_domain->poll_cq = fi_ibv_poll_cq_track_credits;
 	}
 
 	*domain = &_domain->util_domain.domain_fid;
