@@ -38,6 +38,31 @@
 #include <malloc.h>
 
 
+#if VERBS_HAVE_QUERY_EX
+static int fi_ibv_odp_flag(struct ibv_context *verbs)
+{
+	struct ibv_query_device_ex_input input = {0};
+	struct ibv_device_attr_ex attr;
+	int ret;
+
+	if (!fi_ibv_gl_data.use_odp)
+		return 0;
+
+	ret = ibv_query_device_ex(verbs, &input, &attr);
+	if (ret)
+		return 0;
+
+	return attr.odp_caps.general_caps & IBV_ODP_SUPPORT ?
+	       VRB_USE_ODP : 0;
+}
+#else
+static int fi_ibv_odp_flag(struct ibv_context *verbs)
+{
+	return 0;
+}
+#endif /* VERBS_HAVE_QUERY_EX */
+
+
 static int fi_ibv_domain_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct fi_ibv_domain *domain;
@@ -275,6 +300,7 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 		goto err3;
 	}
 
+	_domain->flags |= fi_ibv_odp_flag(_domain->verbs);
 	_domain->util_domain.domain_fid.fid.fclass = FI_CLASS_DOMAIN;
 	_domain->util_domain.domain_fid.fid.context = context;
 	_domain->util_domain.domain_fid.fid.ops = &fi_ibv_fid_ops;

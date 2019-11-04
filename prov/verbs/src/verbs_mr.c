@@ -91,6 +91,9 @@ int fi_ibv_mr_reg_common(struct fi_ibv_mem_desc *md, int fi_ibv_access,
 	md->mr_fid.fid.fclass = FI_CLASS_MR;
 	md->mr_fid.fid.context = context;
 
+	if (md->domain->flags & VRB_USE_ODP)
+		fi_ibv_access |= VRB_ACCESS_ON_DEMAND;
+
 	md->mr = ibv_reg_mr(md->domain->pd, (void *) buf, len, fi_ibv_access);
 	if (!md->mr) {
 		if (len)

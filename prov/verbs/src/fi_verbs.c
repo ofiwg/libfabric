@@ -49,6 +49,7 @@ struct fi_ibv_gl_data fi_ibv_gl_data = {
 	.def_rx_iov_limit	= 4,
 	.def_inline_size	= 256,
 	.min_rnr_timer		= VERBS_DEFAULT_MIN_RNR_TIMER,
+	.use_odp		= 0,
 	.cqread_bunch_size	= 8,
 	.iface			= NULL,
 	.gid_idx		= 0,
@@ -559,6 +560,14 @@ static int fi_ibv_read_params(void)
 	     (fi_ibv_gl_data.min_rnr_timer > 31))) {
 		VERBS_WARN(FI_LOG_CORE,
 			   "Invalid value of min_rnr_timer\n");
+		return -FI_EINVAL;
+	}
+
+	if (fi_ibv_get_param_bool("use_odp", "Enable on-demand paging memory "
+	    "registrations, if supported.  This is currently required to "
+	    "register DAX file system mmapped memory.", &fi_ibv_gl_data.use_odp)) {
+		VERBS_WARN(FI_LOG_CORE,
+			   "Invalid value of use_odp\n");
 		return -FI_EINVAL;
 	}
 

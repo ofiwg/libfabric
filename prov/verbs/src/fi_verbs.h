@@ -146,6 +146,7 @@ extern struct fi_ibv_gl_data {
 	int	def_inline_size;
 	int	min_rnr_timer;
 	int	cqread_bunch_size;
+	int	use_odp;
 	char	*iface;
 	int	gid_idx;
 
@@ -310,8 +311,16 @@ struct fi_ibv_pep {
 
 struct fi_ops_cm *fi_ibv_pep_ops_cm(struct fi_ibv_pep *pep);
 
+
+#if VERBS_HAVE_QUERY_EX
+#define VRB_ACCESS_ON_DEMAND IBV_ACCESS_ON_DEMAND
+#else
+#define VRB_ACCESS_ON_DEMAND 0
+#endif
+
 enum {
 	VRB_USE_XRC = BIT(0),
+	VRB_USE_ODP = BIT(1),
 };
 
 struct fi_ibv_domain {
