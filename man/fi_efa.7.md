@@ -157,12 +157,16 @@ These OFI runtime parameters apply only to the RDM endpoint.
 
 *FI_EFA_ENABLE_SHM_TRANSFER*
 : Enable SHM provider to provide the communication across all intra-node processes.
+  SHM transfer will be disabled in the case where
+  [`ptrace protection`](https://wiki.ubuntu.com/SecurityTeam/Roadmap/KernelHardening#ptrace_Protection)
+  is turned on. You can turn it off to enable shm transfer.
 
 *FI_EFA_SHM_AV_SIZE*
 : Defines the maximum number of entries in SHM provider's address vector.
 
 *FI_EFA_SHM_MAX_MEDIUM_SIZE*
-Defines the switch point between small/medium message and large message. The message larger than this switch pointe will be transferred with large message protocol
+: Defines the switch point between small/medium message and large message. The message
+  larger than this switch point will be transferred with large message protocol.
 
 # SEE ALSO
 
