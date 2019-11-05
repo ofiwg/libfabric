@@ -35,6 +35,10 @@
 #include "efa.h"
 #include "efa_verbs.h"
 
+static int efa_mr_reg(struct fid *fid, const void *buf, size_t len,
+		      uint64_t access, uint64_t offset, uint64_t requested_key,
+		      uint64_t flags, struct fid_mr **mr_fid, void *context);
+
 static int efa_mr_cache_close(fid_t fid)
 {
 	struct efa_mem_desc *mr = container_of(fid, struct efa_mem_desc,
@@ -113,6 +117,12 @@ static int efa_mr_cache_reg(struct fid *fid, const void *buf, size_t len,
 		.context	= context,
 	};
 
+	if (flags & OFI_MR_NOCACHE) {
+		ret = efa_mr_reg(fid, buf, len, access, offset, requested_key,
+				flags, mr_fid, context);
+		return ret;
+	}
+
 	if (access & ~EFA_MR_SUPPORTED_PERMISSIONS) {
 		EFA_WARN(FI_LOG_MR,
 			 "Unsupported access permissions. requested[0x%" PRIx64 "] supported[0x%" PRIx64 "]\n",
@@ -189,27 +199,41 @@ static int efa_mr_reg(struct fid *fid, const void *buf, size_t len,
 		      uint64_t flags, struct fid_mr **mr_fid, void *context)
 {
 	struct fid_domain *domain_fid;
-	struct efa_mem_desc *md;
+	struct efa_mem_desc *md = NULL;
 	int fi_ibv_access = 0;
+	int ret;
 
-	if (flags)
-		return -FI_EBADFLAGS;
+	if (flags && flags != OFI_MR_NOCACHE) {
+		EFA_WARN(FI_LOG_MR, "Unsupported flag type. requested[0x%" PRIx64 "] supported[0x%" PRIx64 "]\n",
+				flags, (uint64_t) OFI_MR_NOCACHE);
+		ret = -FI_EBADFLAGS;
+		goto err;
+	}
 
-	if (fid->fclass != FI_CLASS_DOMAIN)
-		return -FI_EINVAL;
+	if (fid->fclass != FI_CLASS_DOMAIN) {
+		EFA_WARN(FI_LOG_MR,
+			 "Unsupported domain. requested[0x%" PRIx64 "] supported[0x%" PRIx64 "]\n",
+			 fid->fclass, (uint64_t) FI_CLASS_DOMAIN);
+                ret = -FI_EINVAL;
+                goto err;
+        }
 
 	if (access & ~EFA_MR_SUPPORTED_PERMISSIONS) {
 		EFA_WARN(FI_LOG_MR,
 			 "Unsupported access permissions. requested[0x%" PRIx64 "] supported[0x%" PRIx64 "]\n",
 			 access, (uint64_t)EFA_MR_SUPPORTED_PERMISSIONS);
-		return -FI_EINVAL;
+		ret = -FI_EINVAL;
+		goto err;
 	}
 
 	domain_fid = container_of(fid, struct fid_domain, fid);
 
 	md = calloc(1, sizeof(*md));
-	if (!md)
-		return -FI_ENOMEM;
+	if (!md) {
+		EFA_WARN(FI_LOG_MR, "Unable to initialize md");
+		ret = -FI_ENOMEM;
+		goto err;
+	}
 
 	md->domain = container_of(domain_fid, struct efa_domain,
 				  util_domain.domain_fid);
@@ -224,6 +248,7 @@ static int efa_mr_reg(struct fid *fid, const void *buf, size_t len,
 	md->mr = efa_cmd_reg_mr(md->domain->pd, (void *)buf, len, fi_ibv_access);
 	if (!md->mr) {
 		EFA_WARN_ERRNO(FI_LOG_MR, "efa_cmd_reg_mr", errno);
+		ret = -errno;
 		goto err;
 	}
 
@@ -234,8 +259,11 @@ static int efa_mr_reg(struct fid *fid, const void *buf, size_t len,
 	return 0;
 
 err:
-	free(md);
-	return -errno;
+	EFA_WARN(FI_LOG_MR, "Unable to register MR: %s\n",
+			fi_strerror(-ret));
+	if (md)
+		free(md);
+	return ret;
 }
 
 static int efa_mr_regv(struct fid *fid, const struct iovec *iov,
