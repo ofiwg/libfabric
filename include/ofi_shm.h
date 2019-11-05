@@ -149,11 +149,18 @@ struct smr_cmd {
 #define SMR_INJECT_SIZE		4096
 #define SMR_COMP_INJECT_SIZE	(SMR_INJECT_SIZE / 2)
 
-#define SMR_NAME_SIZE	NAME_MAX
 struct smr_addr {
-	char		name[SMR_NAME_SIZE];
+	char		name[NAME_MAX];
 	fi_addr_t	addr;
 };
+
+
+struct smr_ep_name {
+	char name[NAME_MAX];
+	struct dlist_entry entry;
+};
+
+struct dlist_entry ep_name_list;
 
 struct smr_region;
 

@@ -34,26 +34,27 @@
 
 #include <ofi_prov.h>
 #include "smr.h"
+#include "smr_signal.h"
 
 
 static void smr_resolve_addr(const char *node, const char *service,
 			     char **addr, size_t *addrlen)
 {
-	char temp_name[SMR_NAME_SIZE];
+	char temp_name[NAME_MAX];
 
 	if (service) {
 		if (node)
-			snprintf(temp_name, SMR_NAME_SIZE, "%s%s:%s",
+			snprintf(temp_name, NAME_MAX, "%s%s:%s",
 				 SMR_PREFIX_NS, node, service);
 		else
-			snprintf(temp_name, SMR_NAME_SIZE, "%s%s",
+			snprintf(temp_name, NAME_MAX, "%s%s",
 				 SMR_PREFIX_NS, service);
 	} else {
 		if (node)
-			snprintf(temp_name, SMR_NAME_SIZE, "%s%s",
+			snprintf(temp_name, NAME_MAX, "%s%s",
 				 SMR_PREFIX, node);
 		else
-			snprintf(temp_name, SMR_NAME_SIZE, "%s%d",
+			snprintf(temp_name, NAME_MAX, "%s%d",
 				 SMR_PREFIX, getpid());
 	}
 
@@ -134,7 +135,13 @@ static int smr_getinfo(uint32_t version, const char *node, const char *service,
 
 static void smr_fini(void)
 {
-	/* yawn */
+	struct smr_ep_name *ep_name;
+	struct dlist_entry *tmp;
+
+	dlist_foreach_container_safe(&ep_name_list, struct smr_ep_name,
+				     ep_name, entry, tmp) {
+		free(ep_name);
+	}
 }
 
 struct fi_provider smr_prov = {
@@ -154,5 +161,13 @@ struct util_prov smr_util_prov = {
 
 SHM_INI
 {
+	dlist_init(&ep_name_list);
+
+	/* Signal handlers to cleanup tmpfs files on an unclean shutdown */
+	smr_reg_sig_hander(SIGBUS);
+	smr_reg_sig_hander(SIGSEGV);
+	smr_reg_sig_hander(SIGTERM);
+	smr_reg_sig_hander(SIGINT);
+
 	return &smr_prov;
 }
