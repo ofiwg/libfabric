@@ -1820,6 +1820,12 @@ static int psmx2_cq_close(fid_t fid)
 		free(item);
 	}
 
+	while (!slist_empty(&cq->event_queue)) {
+		entry = slist_remove_head(&cq->event_queue);
+		item = container_of(entry, struct psmx2_cq_event, list_entry);
+		free(item);
+	}
+
 	fastlock_destroy(&cq->lock);
 
 	if (cq->wait) {

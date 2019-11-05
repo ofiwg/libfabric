@@ -615,6 +615,8 @@ static int psmx2_getinfo(uint32_t api_version, const char *node,
 	psmx2_update_hfi_nic_info(prov_info);
 
 	*info = prov_info;
+	free(src_addr);
+	free(dest_addr);
 	return 0;
 
 err_out:
