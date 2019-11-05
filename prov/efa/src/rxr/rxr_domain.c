@@ -38,6 +38,7 @@
 #include <ofi_util.h>
 #include <ofi_recvwin.h>
 
+#include "efa.h"
 #include "rxr.h"
 #include "rxr_cntr.h"
 
@@ -99,7 +100,7 @@ static int rxr_mr_close(fid_t fid)
 
 	ret = ofi_mr_map_remove(&rxr_domain->util_domain.mr_map,
 				rxr_mr->mr_fid.key);
-	if (ret)
+	if (ret && ret != -FI_ENOKEY)
 		FI_WARN(&rxr_prov, FI_LOG_MR,
 			"Unable to remove MR entry from util map (%s)\n",
 			fi_strerror(-ret));
@@ -109,7 +110,7 @@ static int rxr_mr_close(fid_t fid)
 		FI_WARN(&rxr_prov, FI_LOG_MR,
 			"Unable to close MR\n");
 
-	if (rxr_env.enable_shm_transfer) {
+	if (rxr_env.enable_shm_transfer && rxr_mr->shm_msg_mr) {
 		ret = fi_close(&rxr_mr->shm_msg_mr->fid);
 		if (ret)
 			FI_WARN(&rxr_prov, FI_LOG_MR,
@@ -140,6 +141,7 @@ int rxr_mr_regattr(struct fid *domain_fid, const struct fi_mr_attr *attr,
 	struct rxr_mr *rxr_mr;
 	uint64_t user_attr_access, core_attr_access;
 	int ret;
+	bool key_exists;
 
 	rxr_domain = container_of(domain_fid, struct rxr_domain,
 				  util_domain.domain_fid.fid);
@@ -175,8 +177,26 @@ int rxr_mr_regattr(struct fid *domain_fid, const struct fi_mr_attr *attr,
 	rxr_mr->domain = rxr_domain;
 	*mr = &rxr_mr->mr_fid;
 
+	assert(rxr_mr->mr_fid.key != FI_KEY_NOTAVAIL);
+	key_exists = false;
+	core_attr->requested_key = rxr_mr->mr_fid.key;
+	core_attr->access = core_attr_access;
+	ret = ofi_mr_map_insert(&rxr_domain->util_domain.mr_map, core_attr,
+				&rxr_mr->mr_fid.key, mr);
+	if (ret) {
+		if (efa_mr_cache_enable && ret == -FI_ENOKEY) {
+			key_exists = true;
+		} else {
+			FI_WARN(&rxr_prov, FI_LOG_MR,
+				"Unable to add MR to map buf (%s): %p len: %zu\n",
+				fi_strerror(-ret), attr->mr_iov->iov_base,
+				attr->mr_iov->iov_len);
+			goto err;
+		}
+	}
+
 	/* Call shm provider to register memory */
-	if (rxr_env.enable_shm_transfer) {
+	if (rxr_env.enable_shm_transfer && !key_exists) {
 		shm_attr->access = user_attr_access;
 		shm_attr->requested_key = rxr_mr->mr_fid.key;
 		ret = fi_mr_regattr(rxr_domain->shm_domain, shm_attr, flags,
@@ -187,21 +207,10 @@ int rxr_mr_regattr(struct fid *domain_fid, const struct fi_mr_attr *attr,
 				fi_strerror(-ret), attr->mr_iov->iov_base,
 				attr->mr_iov->iov_len);
 			fi_close(&rxr_mr->msg_mr->fid);
+			ofi_mr_map_remove(&rxr_domain->util_domain.mr_map,
+					  rxr_mr->mr_fid.key);
 			goto err;
 		}
-	}
-
-	assert(rxr_mr->mr_fid.key != FI_KEY_NOTAVAIL);
-	core_attr->requested_key = rxr_mr->mr_fid.key;
-	core_attr->access = core_attr_access;
-	ret = ofi_mr_map_insert(&rxr_domain->util_domain.mr_map, core_attr,
-				&rxr_mr->mr_fid.key, mr);
-	if (ret) {
-		FI_WARN(&rxr_prov, FI_LOG_MR,
-			"Unable to add MR to map buf (%s): %p len: %zu\n",
-			fi_strerror(-ret), attr->mr_iov->iov_base,
-			attr->mr_iov->iov_len);
-		goto err;
 	}
 
 	return 0;
