@@ -1998,8 +1998,7 @@ ssize_t rxr_ep_tsend(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	msg_iov.iov_base = (void *)buf;
 	msg_iov.iov_len = len;
-
-	return rxr_ep_tsendv(ep_fid, &msg_iov, desc, 1, dest_addr, tag,
+	return rxr_ep_tsendv(ep_fid, &msg_iov, &desc, 1, dest_addr, tag,
 			     context);
 }
 
