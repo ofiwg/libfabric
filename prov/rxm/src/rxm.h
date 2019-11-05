@@ -986,7 +986,7 @@ rxm_process_recv_entry(struct rxm_recv_queue *recv_queue,
 
 static inline ssize_t
 rxm_ep_prepare_tx(struct rxm_ep *rxm_ep, fi_addr_t dest_addr,
-		 struct rxm_conn **rxm_conn)
+		  struct rxm_conn **rxm_conn)
 {
 	ssize_t ret;
 
