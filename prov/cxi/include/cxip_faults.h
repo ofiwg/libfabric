@@ -29,9 +29,9 @@ void cxip_fault_inject_init(void);
 	(INJECT_FAULT(dma_fault) ? -ENOSPC :	\
 	 cxi_cq_emit_dma(__VA_ARGS__))
 
-#define issue_unlink_le_f(...)			\
+#define cxip_pte_unlink_f(...)			\
 	(INJECT_FAULT(dma_fault) ? -FI_EAGAIN :	\
-	 issue_unlink_le(__VA_ARGS__))
+	 cxip_pte_unlink(__VA_ARGS__))
 
 #define malloc_f(...)				\
 	(INJECT_FAULT(malloc_fault) ? NULL :	\

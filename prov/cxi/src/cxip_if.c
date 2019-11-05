@@ -383,6 +383,93 @@ int cxip_if_domain_lep_free(struct cxip_if_domain *if_dom, uint64_t pid_idx)
 	return FI_SUCCESS;
 }
 
+/*
+ * cxip_pte_append() - Append a buffer to a PtlTE.
+ */
+int cxip_pte_append(struct cxil_pte *pte, uint64_t iova, size_t len,
+		    unsigned int lac, enum c_ptl_list list,
+		    uint32_t buffer_id, uint64_t match_bits,
+		    uint64_t ignore_bits, uint32_t match_id,
+		    uint64_t min_free, bool event_success_disable,
+		    bool event_unlink_disable,
+		    bool use_once, bool manage_local, bool no_truncate,
+		    bool op_put, bool op_get, struct cxip_cmdq *cmdq)
+{
+	union c_cmdu cmd = {};
+	int rc;
+
+	cmd.command.opcode      = C_CMD_TGT_APPEND;
+	cmd.target.ptl_list     = list;
+	cmd.target.ptlte_index  = pte->ptn;
+	cmd.target.op_put       = op_put ? 1 : 0;
+	cmd.target.op_get       = op_get ? 1 : 0;
+	cmd.target.manage_local = manage_local ? 1 : 0;
+	cmd.target.no_truncate  = no_truncate ? 1 : 0;
+	cmd.target.unexpected_hdr_disable = 0;
+	cmd.target.buffer_id    = buffer_id;
+	cmd.target.lac          = lac;
+	cmd.target.start        = iova;
+	cmd.target.length       = len;
+	cmd.target.event_success_disable = event_success_disable ? 1 : 0;
+	cmd.target.event_unlink_disable = event_unlink_disable ? 1 : 0;
+	cmd.target.use_once     = use_once ? 1 : 0;
+	cmd.target.match_bits   = match_bits;
+	cmd.target.ignore_bits  = ignore_bits;
+	cmd.target.match_id     = match_id;
+	cmd.target.min_free     = min_free;
+
+	fastlock_acquire(&cmdq->lock);
+
+	rc = cxi_cq_emit_target(cmdq->dev_cmdq, &cmd);
+	if (rc) {
+		CXIP_LOG_DBG("Failed to write Append command: %d\n", rc);
+
+		fastlock_release(&cmdq->lock);
+
+		/* Return error according to Domain Resource Management */
+		return -FI_EAGAIN;
+	}
+
+	cxi_cq_ring(cmdq->dev_cmdq);
+
+	fastlock_release(&cmdq->lock);
+
+	return FI_SUCCESS;
+}
+
+/*
+ * cxip_pte_unlink() - Unlink a buffer from a PtlTE.
+ */
+int cxip_pte_unlink(struct cxil_pte *pte, enum c_ptl_list list,
+		    int buffer_id, struct cxip_cmdq *cmdq)
+{
+	union c_cmdu cmd = {};
+	int rc;
+
+	cmd.command.opcode = C_CMD_TGT_UNLINK;
+	cmd.target.ptl_list = list;
+	cmd.target.ptlte_index  = pte->ptn;
+	cmd.target.buffer_id = buffer_id;
+
+	fastlock_acquire(&cmdq->lock);
+
+	rc = cxi_cq_emit_target(cmdq->dev_cmdq, &cmd);
+	if (rc) {
+		CXIP_LOG_DBG("Failed to write Append command: %d\n", rc);
+
+		fastlock_release(&cmdq->lock);
+
+		/* Return error according to Domain Resource Management */
+		return -FI_EAGAIN;
+	}
+
+	cxi_cq_ring(cmdq->dev_cmdq);
+
+	fastlock_release(&cmdq->lock);
+
+	return FI_SUCCESS;
+}
+
 int cxip_pte_alloc(struct cxip_if_domain *if_dom, struct cxi_evtq *evtq,
 		   uint64_t pid_idx, struct cxi_pt_alloc_opts *opts,
 		   struct cxip_pte **pte)

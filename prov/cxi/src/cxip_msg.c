@@ -23,97 +23,6 @@
 #define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_EP_DATA, __VA_ARGS__)
 
 /*
- * issue_append_le() - Append a buffer to a PtlTE.
- *
- * TODO: Make common.
- */
-static int issue_append_le(struct cxil_pte *pte, const void *buf, size_t len,
-			   struct cxip_md *md, enum c_ptl_list list,
-			   uint32_t buffer_id, uint64_t match_bits,
-			   uint64_t ignore_bits, uint32_t match_id,
-			   uint64_t min_free, bool event_success_disable,
-			   bool event_unlink_disable,
-			   bool use_once, bool manage_local, bool no_truncate,
-			   bool op_put, bool op_get, struct cxip_cmdq *cmdq)
-{
-	union c_cmdu cmd = {};
-	int rc;
-
-	cmd.command.opcode      = C_CMD_TGT_APPEND;
-	cmd.target.ptl_list     = list;
-	cmd.target.ptlte_index  = pte->ptn;
-	cmd.target.op_put       = op_put ? 1 : 0;
-	cmd.target.op_get       = op_get ? 1 : 0;
-	cmd.target.manage_local = manage_local ? 1 : 0;
-	cmd.target.no_truncate  = no_truncate ? 1 : 0;
-	cmd.target.unexpected_hdr_disable = 0;
-	cmd.target.buffer_id    = buffer_id;
-	cmd.target.lac          = md ? md->md->lac : 0;
-	cmd.target.start        = md ? CXI_VA_TO_IOVA(md->md, buf) : 0;
-	cmd.target.length       = len;
-	cmd.target.event_success_disable = event_success_disable ? 1 : 0;
-	cmd.target.event_unlink_disable = event_unlink_disable ? 1 : 0;
-	cmd.target.use_once     = use_once ? 1 : 0;
-	cmd.target.match_bits   = match_bits;
-	cmd.target.ignore_bits  = ignore_bits;
-	cmd.target.match_id     = match_id;
-	cmd.target.min_free     = min_free;
-
-	fastlock_acquire(&cmdq->lock);
-
-	rc = cxi_cq_emit_target(cmdq->dev_cmdq, &cmd);
-	if (rc) {
-		CXIP_LOG_DBG("Failed to write Append command: %d\n", rc);
-
-		fastlock_release(&cmdq->lock);
-
-		/* Return error according to Domain Resource Management */
-		return -FI_EAGAIN;
-	}
-
-	cxi_cq_ring(cmdq->dev_cmdq);
-
-	fastlock_release(&cmdq->lock);
-
-	return FI_SUCCESS;
-}
-
-/*
- * issue_unlink_le() - Unlink a buffer from a PtlTE.
- *
- * TODO: Make common.
- */
-static int issue_unlink_le(struct cxil_pte *pte, enum c_ptl_list list,
-			   int buffer_id, struct cxip_cmdq *cmdq)
-{
-	union c_cmdu cmd = {};
-	int rc;
-
-	cmd.command.opcode = C_CMD_TGT_UNLINK;
-	cmd.target.ptl_list = list;
-	cmd.target.ptlte_index  = pte->ptn;
-	cmd.target.buffer_id = buffer_id;
-
-	fastlock_acquire(&cmdq->lock);
-
-	rc = cxi_cq_emit_target(cmdq->dev_cmdq, &cmd);
-	if (rc) {
-		CXIP_LOG_DBG("Failed to write Append command: %d\n", rc);
-
-		fastlock_release(&cmdq->lock);
-
-		/* Return error according to Domain Resource Management */
-		return -FI_EAGAIN;
-	}
-
-	cxi_cq_ring(cmdq->dev_cmdq);
-
-	fastlock_release(&cmdq->lock);
-
-	return FI_SUCCESS;
-}
-
-/*
  * match_ux_send() - Search for an unexpected Put that matches a Put Overflow
  * event.
  *
@@ -1030,8 +939,10 @@ static int eager_buf_add(struct cxip_rxc *rxc)
 			dom->dev_if->if_dev->info.min_free_shift);
 
 	/* Issue Append command */
-	ret = issue_append_le(rxc->rx_pte->pte, oflow_buf->buf,
-			      rxc->oflow_buf_size, oflow_buf->md,
+	ret = cxip_pte_append(rxc->rx_pte->pte,
+			      CXI_VA_TO_IOVA(oflow_buf->md->md,
+					     oflow_buf->buf),
+			      rxc->oflow_buf_size, oflow_buf->md->md->lac,
 			      C_PTL_LIST_OVERFLOW, req->req_id, mb.raw, ib.raw,
 			      CXI_MATCH_ID_ANY, min_free, false, false, false,
 			      true, true, true, false, rxc->rx_cmdq);
@@ -1098,7 +1009,7 @@ static int cxip_rxc_eager_fini(struct cxip_rxc *rxc)
 	/* Manually unlink each overflow buffer */
 	dlist_foreach_container(&rxc->oflow_bufs, struct cxip_oflow_buf,
 				oflow_buf, list) {
-		ret = issue_unlink_le(rxc->rx_pte->pte, C_PTL_LIST_OVERFLOW,
+		ret = cxip_pte_unlink(rxc->rx_pte->pte, C_PTL_LIST_OVERFLOW,
 				      oflow_buf->buffer_id, rxc->rx_cmdq);
 		if (ret != FI_SUCCESS) {
 			/* TODO handle error */
@@ -1159,7 +1070,8 @@ static int cxip_rxc_sink_init(struct cxip_rxc *rxc)
 		goto unmap_ux;
 	}
 
-	ret = issue_append_le(rxc->rx_pte->pte, ux_buf, 0, md,
+	ret = cxip_pte_append(rxc->rx_pte->pte,
+			      CXI_VA_TO_IOVA(md->md, ux_buf), 1, md->md->lac,
 			      C_PTL_LIST_OVERFLOW, req->req_id, mb.raw, ib.raw,
 			      CXI_MATCH_ID_ANY, 0, false, false, false, true,
 			      false, true, false, rxc->rx_cmdq);
@@ -1198,7 +1110,7 @@ static int cxip_rxc_sink_fini(struct cxip_rxc *rxc)
 {
 	int ret;
 
-	ret = issue_unlink_le(rxc->rx_pte->pte, C_PTL_LIST_OVERFLOW,
+	ret = cxip_pte_unlink(rxc->rx_pte->pte, C_PTL_LIST_OVERFLOW,
 			      rxc->ux_sink_buf.buffer_id, rxc->rx_cmdq);
 	if (ret) {
 		/* TODO handle error */
@@ -1800,7 +1712,7 @@ int cxip_msg_recv_cancel(struct cxip_req *req)
 	int ret;
 	struct cxip_rxc *rxc = req->recv.rxc;
 
-	ret = issue_unlink_le(rxc->rx_pte->pte, C_PTL_LIST_PRIORITY,
+	ret = cxip_pte_unlink(rxc->rx_pte->pte, C_PTL_LIST_PRIORITY,
 			      req->req_id, rxc->rx_cmdq);
 	if (ret == FI_SUCCESS)
 		req->recv.canceled = true;
@@ -1826,7 +1738,11 @@ static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	uint32_t match_id;
 	uint32_t pid_bits;
 	union cxip_match_bits mb = {};
-	union cxip_match_bits ib = { .sink = ~0, .rdzv_id_hi = ~0 };
+	union cxip_match_bits ib = {
+		.sink = ~0,
+		.rdzv_id_hi = ~0,
+		.rdzv_lac = ~0
+	};
 
 	if (!ep || (len && !buf))
 		return -FI_EINVAL;
@@ -1932,7 +1848,10 @@ static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	req->recv.rdzv_events = 0;
 
 	/* Issue Append command */
-	ret = issue_append_le(rxc->rx_pte->pte, buf, len, recv_md,
+	ret = cxip_pte_append(rxc->rx_pte->pte,
+			      recv_md ? CXI_VA_TO_IOVA(recv_md->md, buf) : 0,
+			      len,
+			      recv_md ? recv_md->md->lac : 0,
 			      C_PTL_LIST_PRIORITY, req->req_id,
 			      mb.raw, ib.raw, match_id,
 			      rxc->min_multi_recv, false, true,
@@ -2136,13 +2055,23 @@ static void rdzv_send_req_free(struct cxip_req *req)
 /*
  * long_send_req_event() - Count a long send event.
  *
- * Call for each initiator send event generated. After Ack, Unlink, and Get
- * events are generated, the send is complete. The events could be generated in
- * any order. As soon as three events are processed, the request is complete.
+ * Call for each initiator event. The events could be generated in any order.
+ * Once all expected events are received, complete the request.
+ *
+ * A successful, offloaded Send generates two events: Ack and Get. The long
+ * eager protocol generates three events: Ack, Unlink, and Get.
  */
 static void long_send_req_event(struct cxip_req *req)
 {
-	if (++req->send.long_send_events == 3) {
+	int expected_events;
+	struct cxip_txc *txc = req->send.txc;
+
+	if (txc->ep_obj->rdzv_offload)
+		expected_events = 2;
+	else
+		expected_events = 3;
+
+	if (++req->send.long_send_events == expected_events) {
 		report_send_completion(req, true);
 		rdzv_send_req_free(req);
 	}
@@ -2158,9 +2087,13 @@ static int cxip_send_long_cb(struct cxip_req *req, const union c_event *event)
 	int ret;
 	int event_rc;
 	struct cxip_txc *txc = req->send.txc;
+	bool offload = txc->ep_obj->rdzv_offload;
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_LINK:
+		/* Long eager protocol source buffer linked. */
+		assert(!offload);
+
 		event_rc = cxi_tgt_event_rc(event);
 		if (event_rc != C_RC_OK) {
 			CXIP_LOG_ERROR("Link error: %p, rc: %s\n",
@@ -2196,14 +2129,16 @@ static int cxip_send_long_cb(struct cxip_req *req, const union c_event *event)
 			CXIP_LOG_ERROR("Ack error: %p rc: %s\n",
 				       req, cxi_rc_to_str(event_rc));
 
-			ret = issue_unlink_le_f(txc->rdzv_pte->pte,
-						C_PTL_LIST_PRIORITY,
-						req->req_id,
-						txc->rx_cmdq);
-			if (ret) {
-				CXIP_LOG_ERROR("Failed to enqueue Unlink: %d\n",
-					       ret);
-				return -FI_EAGAIN;
+			if (!offload) {
+				ret = cxip_pte_unlink_f(txc->rdzv_pte->pte,
+							C_PTL_LIST_PRIORITY,
+							req->req_id,
+							txc->rx_cmdq);
+				if (ret) {
+					CXIP_LOG_ERROR("Failed to enqueue Unlink: %d\n",
+						       ret);
+					return -FI_EAGAIN;
+				}
 			}
 
 			/* Save RC for when the Unlink is complete. */
@@ -2215,12 +2150,12 @@ static int cxip_send_long_cb(struct cxip_req *req, const union c_event *event)
 			     cxi_ptl_list_to_str(event->init_short.ptl_list),
 			     req);
 
-		if (!txc->ep_obj->rdzv_offload &&
+		if (!offload &&
 		    event->init_short.ptl_list == C_PTL_LIST_PRIORITY) {
 			/* No Get is expected when a long eager Send matches in
 			 * the Priority list. Unlink the source LE manually.
 			 */
-			ret = issue_unlink_le_f(txc->rdzv_pte->pte,
+			ret = cxip_pte_unlink_f(txc->rdzv_pte->pte,
 						C_PTL_LIST_PRIORITY,
 						req->req_id,
 						txc->rx_cmdq);
@@ -2237,6 +2172,9 @@ static int cxip_send_long_cb(struct cxip_req *req, const union c_event *event)
 		long_send_req_event(req);
 		return FI_SUCCESS;
 	case C_EVENT_UNLINK:
+		/* Long eager protocol source buffer unlinked. */
+		assert(!offload);
+
 		event_rc = cxi_tgt_event_rc(event);
 		if (event_rc != C_RC_OK) {
 			/* The LE was unlinked unexpectedly. */
@@ -2282,6 +2220,98 @@ static int cxip_send_long_cb(struct cxip_req *req, const union c_event *event)
 	}
 }
 
+static int rdzv_src_cb(struct cxip_req *req, const union c_event *event)
+{
+	struct cxip_txc *txc = req->rdzv_src.txc;
+	struct cxip_req *get_req;
+	union cxip_match_bits mb;
+	int event_rc = cxi_tgt_event_rc(event);
+
+	switch (event->hdr.event_type) {
+	case C_EVENT_LINK:
+		if (event_rc != C_RC_OK)
+			CXIP_LOG_ERROR("%s error: %p rc: %s\n",
+				       cxi_event_to_str(event), req,
+				       cxi_rc_to_str(event_rc));
+		else
+			CXIP_LOG_ERROR("%s received: %p rc: %s\n",
+				       cxi_event_to_str(event), req,
+				       cxi_rc_to_str(event_rc));
+
+		req->rdzv_src.rc = cxi_tgt_event_rc(event);
+		return FI_SUCCESS;
+	case C_EVENT_UNLINK:
+		/* TODO cleanup rdzv source LEs. */
+		assert(0);
+	case C_EVENT_GET:
+		mb.raw = event->tgt_long.match_bits;
+		get_req = cxip_rdzv_id_lookup(txc->ep_obj, mb.rdzv_id_lo);
+		if (!get_req) {
+			CXIP_LOG_ERROR("Failed to find RDZV ID: %d\n",
+					mb.rdzv_id_lo);
+			return FI_SUCCESS;
+		}
+
+		event_rc = cxi_tgt_event_rc(event);
+		if (event_rc != C_RC_OK)
+			CXIP_LOG_ERROR("Get error: %p rc: %s\n",
+					get_req, cxi_rc_to_str(event_rc));
+		else
+			CXIP_LOG_DBG("Get received: %p rc: %s\n",
+					get_req, cxi_rc_to_str(event_rc));
+
+		get_req->send.rc = event_rc;
+		long_send_req_event(get_req);
+
+		return FI_SUCCESS;
+	default:
+		CXIP_LOG_ERROR("Unexpected event received: %s\n",
+			       cxi_event_to_str(event));
+		return FI_SUCCESS;
+	}
+}
+
+int cxip_txc_prep_rdzv_src(struct cxip_txc *txc, unsigned int lac)
+{
+	int ret;
+	struct cxip_req *req;
+	union cxip_match_bits mb = {};
+	union cxip_match_bits ib = { .raw = ~0 };
+
+	if (txc->rdzv_src_lacs & (1 << lac))
+		return FI_SUCCESS;
+
+	req = cxip_cq_req_alloc(txc->send_cq, 1, txc);
+	if (!req)
+		return -FI_EAGAIN;
+
+	req->cb = rdzv_src_cb;
+	req->rdzv_src.txc = txc;
+	req->rdzv_src.rc = 0;
+
+	mb.rdzv_lac = lac;
+	ib.rdzv_lac = 0;
+	ret = cxip_pte_append(txc->rdzv_pte->pte, 0, -1ULL, lac,
+			      C_PTL_LIST_PRIORITY, req->req_id,
+			      mb.raw, ib.raw, CXI_MATCH_ID_ANY, 0,
+			      false, false, false, false, false, false, true,
+			      txc->rx_cmdq);
+	if (ret != FI_SUCCESS)
+		return -FI_EAGAIN;
+
+	do {
+		sched_yield();
+		cxip_cq_progress(txc->send_cq);
+	} while (!req->rdzv_src.rc);
+
+	if (req->rdzv_src.rc == C_RC_OK) {
+		txc->rdzv_src_lacs |= (1 << lac);
+		CXIP_LOG_DBG("RDZV source window linked (LAC: %u)\n", lac);
+	}
+
+	return ret;
+}
+
 /*
  * _cxip_send_long() - Initiate a long send operation.
  *
@@ -2304,10 +2334,9 @@ static int cxip_send_long_cb(struct cxip_req *req, const union c_event *event)
  *
  * The rendezvous protocol works as follows:
  *
- * 1. The Initiator prepares an LE describing the source buffer.
- * 2. The Initiator performs a Rendezvous Put command which includes a portion
+ * 1. The Initiator performs a Rendezvous Put command which includes a portion
  *    of the source buffer data.
- * 3. Once the Put is matched to a user receive buffer (in the Priority list),
+ * 2. Once the Put is matched to a user receive buffer (in the Priority list),
  *    a Get of the remaining source data is performed.
  */
 static ssize_t _cxip_send_long(struct cxip_txc *txc, const void *buf,
@@ -2345,6 +2374,15 @@ static ssize_t _cxip_send_long(struct cxip_txc *txc, const void *buf,
 	if (ret) {
 		CXIP_LOG_DBG("Failed to map send buffer: %d\n", ret);
 		return ret;
+	}
+
+	if (txc->ep_obj->rdzv_offload) {
+		ret = cxip_txc_prep_rdzv_src(txc, send_md->md->lac);
+		if (ret != FI_SUCCESS) {
+			CXIP_LOG_DBG("Failed to prepare source window: %d\n",
+				     ret);
+			goto err_unmap;
+		}
 	}
 
 	/* Allocate and populate request */
@@ -2391,7 +2429,7 @@ static ssize_t _cxip_send_long(struct cxip_txc *txc, const void *buf,
 		      &idx_ext);
 
 	/* Allocate rendezvous ID */
-	rdzv_id = cxip_rdzv_id_alloc(txc->ep_obj);
+	rdzv_id = cxip_rdzv_id_alloc(txc->ep_obj, req);
 	if (rdzv_id < 0)
 		goto err_req_free;
 
@@ -2414,12 +2452,26 @@ static ssize_t _cxip_send_long(struct cxip_txc *txc, const void *buf,
 	if (txc->ep_obj->rdzv_offload) {
 		cmd.command.opcode = C_CMD_RENDEZVOUS_PUT;
 		cmd.eager_length = txc->eager_threshold;
+		cmd.remote_offset = CXI_VA_TO_IOVA(send_md->md, buf);
+		cmd.use_offset_for_get = 1;
 
-		/* Use command for rdzv_id */
-		le_mb.rdzv_id_lo = rdzv_id;
-		le_ib.rdzv_id_lo = ~0;
+		put_mb.rdzv_lac = send_md->md->lac;
+		cmd.match_bits = put_mb.raw;
 
+		/* RPut rdzv ID goes in command */
 		cmd.rendezvous_id = rdzv_id;
+
+		fastlock_acquire(&txc->tx_cmdq->lock);
+		ret = cxi_cq_emit_dma(txc->tx_cmdq->dev_cmdq, &cmd);
+		if (ret) {
+			CXIP_LOG_ERROR("Failed to enqueue Put: %d\n", ret);
+			fastlock_release(&txc->tx_cmdq->lock);
+			goto err_id_free;
+		}
+
+		cxi_cq_ring(txc->tx_cmdq->dev_cmdq);
+
+		fastlock_release(&txc->tx_cmdq->lock);
 	} else {
 		cmd.command.opcode = C_CMD_PUT;
 
@@ -2430,22 +2482,26 @@ static ssize_t _cxip_send_long(struct cxip_txc *txc, const void *buf,
 		put_mb.rdzv_id_hi = rdzv_id;
 		le_mb.rdzv_id_hi = rdzv_id;
 		le_ib.rdzv_id_hi = ~0;
-	}
 
-	cmd.match_bits = put_mb.raw;
+		cmd.match_bits = put_mb.raw;
 
-	/* Store DMA command for use once the source data becomes visible */
-	req->send.cmd = cmd;
+		/* Store DMA command for use once the source data becomes
+		 * visible.
+		 */
+		req->send.cmd = cmd;
 
-	ret = issue_append_le(txc->rdzv_pte->pte, req->send.buf,
-			      req->send.length, req->send.send_md,
-			      C_PTL_LIST_PRIORITY, req->req_id,
-			      le_mb.raw, ~le_ib.raw, CXI_MATCH_ID_ANY, 0,
-			      false, false, true, false, true, false, true,
-			      txc->rx_cmdq);
-	if (ret) {
-		CXIP_LOG_DBG("Failed append source buffer: %d\n", ret);
-		goto err_id_free;
+		ret = cxip_pte_append(txc->rdzv_pte->pte,
+				      CXI_VA_TO_IOVA(send_md->md, buf),
+				      req->send.length,
+				      req->send.send_md->md->lac,
+				      C_PTL_LIST_PRIORITY, req->req_id,
+				      le_mb.raw, ~le_ib.raw, CXI_MATCH_ID_ANY,
+				      0, false, false, true, false, true,
+				      false, true, txc->rx_cmdq);
+		if (ret) {
+			CXIP_LOG_DBG("Failed append source buffer: %d\n", ret);
+			goto err_id_free;
+		}
 	}
 
 	ofi_atomic_inc32(&txc->otx_reqs);

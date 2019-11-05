@@ -33,30 +33,27 @@ extern struct fi_ops_ep cxip_ctx_ep_ops;
 /*
  * cxip_rdzv_id_alloc() - Allocate a rendezvous ID.
  */
-int cxip_rdzv_id_alloc(struct cxip_ep_obj *ep_obj)
+int cxip_rdzv_id_alloc(struct cxip_ep_obj *ep_obj, void *ctx)
 {
-	unsigned int block;
-	int bit;
 	int id;
 
 	fastlock_acquire(&ep_obj->rdzv_id_lock);
 
-	/* TODO Start search at different cachelines based on TXC ID. */
-	for (block = 0; block < CXIP_RDZV_ID_BLOCKS; block++) {
-		if (ep_obj->rdzv_ids[block]) {
-			bit = ffsl(ep_obj->rdzv_ids[block]);
-			ep_obj->rdzv_ids[block] &= ~(1ULL << --bit);
-			fastlock_release(&ep_obj->rdzv_id_lock);
+	id = ofi_idx_insert(&ep_obj->rdzv_ids, ctx);
 
-			id = block * __BITS_PER_LONG + bit;
-			CXIP_LOG_DBG("Allocated ID: %d\n", id);
-			return id;
-		}
+	if (id < 0 || id >= CXIP_RDZV_IDS) {
+		CXIP_LOG_ERROR("Failed to allocate ID: %d\n", id);
+		if (id > 0)
+			ofi_idx_remove(&ep_obj->rdzv_ids, id);
+		fastlock_release(&ep_obj->rdzv_id_lock);
+		return -FI_ENOSPC;
 	}
 
 	fastlock_release(&ep_obj->rdzv_id_lock);
 
-	return -FI_ENOSPC;
+	CXIP_LOG_DBG("Allocated ID: %d\n", id);
+
+	return id;
 }
 
 /*
@@ -64,19 +61,21 @@ int cxip_rdzv_id_alloc(struct cxip_ep_obj *ep_obj)
  */
 int cxip_rdzv_id_free(struct cxip_ep_obj *ep_obj, int id)
 {
-	unsigned int block = id / __BITS_PER_LONG;
-	int bit = id % __BITS_PER_LONG;
-
 	if (id < 0 || id >= CXIP_RDZV_IDS)
 		return -FI_EINVAL;
 
 	fastlock_acquire(&ep_obj->rdzv_id_lock);
-	ep_obj->rdzv_ids[block] |= (1ULL << bit);
+	ofi_idx_remove(&ep_obj->rdzv_ids, id);
 	fastlock_release(&ep_obj->rdzv_id_lock);
 
 	CXIP_LOG_DBG("Freed ID: %d\n", id);
 
 	return FI_SUCCESS;
+}
+
+void *cxip_rdzv_id_lookup(struct cxip_ep_obj *ep_obj, int id)
+{
+	return ofi_idx_at(&ep_obj->rdzv_ids, id);
 }
 
 static int cxip_ep_cm_getname(fid_t fid, void *addr, size_t *addrlen)
@@ -914,6 +913,7 @@ static int cxip_ep_close(struct fid *fid)
 
 	ofi_atomic_dec32(&cxi_ep->ep_obj->domain->ref);
 	fastlock_destroy(&cxi_ep->ep_obj->lock);
+	ofi_idx_reset(&cxi_ep->ep_obj->rdzv_ids);
 	free(cxi_ep->ep_obj);
 	free(cxi_ep);
 
@@ -1589,8 +1589,7 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 	cxi_ep->ep_obj->src_addr.pid = pid;
 	cxi_ep->ep_obj->src_addr.valid = 1;
 	cxi_ep->ep_obj->fi_addr = FI_ADDR_NOTAVAIL;
-	memset(cxi_ep->ep_obj->rdzv_ids, 0xFF,
-	       sizeof(cxi_ep->ep_obj->rdzv_ids));
+	memset(&cxi_ep->ep_obj->rdzv_ids, 0, sizeof(cxi_ep->ep_obj->rdzv_ids));
 	fastlock_init(&cxi_ep->ep_obj->rdzv_id_lock);
 
 	switch (fclass) {

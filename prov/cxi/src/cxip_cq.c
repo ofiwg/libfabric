@@ -180,6 +180,8 @@ struct cxip_req *cxip_cq_req_alloc(struct cxip_cq *cq, int remap,
 		if (req->req_id < 0 || req->req_id >= (1 << 16)) {
 			CXIP_LOG_ERROR("Failed to map request: %d\n",
 				       req->req_id);
+			if (req->req_id > 0)
+				ofi_idx_remove(&cq->req_table, req->req_id);
 			ofi_buf_free(req);
 			req = NULL;
 			goto out;

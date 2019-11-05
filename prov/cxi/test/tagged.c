@@ -741,45 +741,6 @@ Test(tagged, expected_sw_rdzv)
 	free(recv_buf);
 }
 
-Test(tagged, rdzv_id)
-{
-	int rc;
-	struct cxip_ep *cxip_ep = container_of(cxit_ep, struct cxip_ep, ep);
-	struct cxip_ep_obj *ep_obj = cxip_ep->ep_obj;
-
-	/* Allocate all the IDs  */
-	for (int i = 0; i < CXIP_RDZV_IDS; i++) {
-		rc = cxip_rdzv_id_alloc(ep_obj);
-		cr_assert_eq(rc, i, "Expected %d Got %d", i, rc);
-	}
-
-	/* Allocate one more expecting it to fail */
-	rc = cxip_rdzv_id_alloc(ep_obj);
-	cr_assert_eq(rc, -FI_ENOSPC, "Got rc %d", rc);
-
-	/* Put ID 67 back */
-	rc = cxip_rdzv_id_free(ep_obj, 67);
-	cr_assert_eq(rc, FI_SUCCESS, "Got rc %d", rc);
-
-	/* Allocate one more expecting the one just put back */
-	rc = cxip_rdzv_id_alloc(ep_obj);
-	cr_assert_eq(rc, 67, "Got ID %d instead", rc);
-
-	/* Allocate one more expecting it to fail */
-	rc = cxip_rdzv_id_alloc(ep_obj);
-	cr_assert_eq(rc, -FI_ENOSPC, "Got rc %d", rc);
-
-	/* Allocate all the IDs  */
-	for (int i = 0; i < CXIP_RDZV_IDS; i++) {
-		rc = cxip_rdzv_id_free(ep_obj, i);
-		cr_assert_eq(rc, FI_SUCCESS, "Got rc %d", rc);
-	}
-
-	/* Free out of bounds */
-	rc = cxip_rdzv_id_free(ep_obj, CXIP_RDZV_IDS * 2);
-	cr_assert_eq(rc, -FI_EINVAL, "Got rc %d", rc);
-}
-
 #define NUM_IOS (12)
 
 struct tagged_event_args {

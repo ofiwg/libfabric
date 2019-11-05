@@ -173,9 +173,10 @@ union cxip_match_bits {
 	struct {
 		uint64_t tag        : 48; /* User tag value */
 		uint64_t rdzv_id_hi : RDZV_ID_WIDTH;
-		uint64_t unused     : 6;
+		uint64_t rdzv_lac   : 4;  /* Rendezvous Get LAC */
 		uint64_t sink       : 1;  /* Long eager protocol */
 		uint64_t tagged     : 1;  /* Tagged API */
+		uint64_t unused     : 2;
 	};
 	struct {
 		uint64_t rdzv_id_lo : RDZV_ID_WIDTH;
@@ -408,6 +409,11 @@ struct cxip_req_oflow {
 	struct cxip_oflow_buf *oflow_buf;
 };
 
+struct cxip_req_rdzv_src {
+	struct cxip_txc *txc;
+	int rc;
+};
+
 /**
  * Async Request
  *
@@ -452,6 +458,7 @@ struct cxip_req {
 		struct cxip_req_oflow oflow;
 		struct cxip_req_recv recv;
 		struct cxip_req_send send;
+		struct cxip_req_rdzv_src rdzv_src;
 	};
 };
 
@@ -601,7 +608,6 @@ struct cxip_rxc {
 };
 
 #define CXIP_RDZV_IDS (1 << RDZV_ID_WIDTH)
-#define CXIP_RDZV_ID_BLOCKS (CXIP_RDZV_IDS / __BITS_PER_LONG)
 
 /**
  * Transmit Context
@@ -650,6 +656,7 @@ struct cxip_txc {
 	struct cxip_pte *rdzv_pte;	// PTE for SW Rendezvous commands
 	int eager_threshold;		// Threshold for eager IOs
 	struct cxip_cmdq *rx_cmdq;	// Target cmdq for Rendezvous buffers
+	unsigned int rdzv_src_lacs;
 };
 
 /**
@@ -694,7 +701,7 @@ struct cxip_ep_obj {
 	struct cxip_if_domain *if_dom;
 	int rdzv_offload;
 
-	long rdzv_ids[CXIP_RDZV_ID_BLOCKS];
+	struct indexer rdzv_ids;
 	fastlock_t rdzv_id_lock;
 };
 
@@ -834,6 +841,16 @@ int cxip_if_domain_lep_free(struct cxip_if_domain *if_dom, uint64_t pid_idx);
 void cxip_if_init(void);
 void cxip_if_fini(void);
 
+int cxip_pte_append(struct cxil_pte *pte, uint64_t iova, size_t len,
+		    unsigned int lac, enum c_ptl_list list,
+		    uint32_t buffer_id, uint64_t match_bits,
+		    uint64_t ignore_bits, uint32_t match_id,
+		    uint64_t min_free, bool event_success_disable,
+		    bool event_unlink_disable,
+		    bool use_once, bool manage_local, bool no_truncate,
+		    bool op_put, bool op_get, struct cxip_cmdq *cmdq);
+int cxip_pte_unlink(struct cxil_pte *pte, enum c_ptl_list list,
+		    int buffer_id, struct cxip_cmdq *cmdq);
 int cxip_pte_alloc(struct cxip_if_domain *if_dom, struct cxi_evtq *evtq,
 		   uint64_t pid_idx, struct cxi_pt_alloc_opts *opts,
 		   struct cxip_pte **pte);
@@ -871,8 +888,9 @@ int cxip_wait_close(fid_t fid);
 int cxip_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 		   struct fid_wait **waitset);
 
-int cxip_rdzv_id_alloc(struct cxip_ep_obj *ep_obj);
+int cxip_rdzv_id_alloc(struct cxip_ep_obj *ep_obj, void *ctx);
 int cxip_rdzv_id_free(struct cxip_ep_obj *ep_obj, int id);
+void *cxip_rdzv_id_lookup(struct cxip_ep_obj *ep_obj, int id);
 
 int cxip_msg_oflow_init(struct cxip_rxc *rxc);
 void cxip_msg_oflow_fini(struct cxip_rxc *rxc);
