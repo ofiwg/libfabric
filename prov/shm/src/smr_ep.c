@@ -70,7 +70,7 @@ int smr_getname(fid_t fid, void *addr, size_t *addrlen)
 	if (!addr || *addrlen == 0 ||
 	    snprintf(addr, *addrlen, "%s", ep->name) >= *addrlen)
 		ret = -FI_ETOOSMALL;
-	*addrlen = NAME_MAX;
+	*addrlen = strlen(ep->name);
 	return ret;
 }
 
