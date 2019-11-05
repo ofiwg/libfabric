@@ -68,7 +68,7 @@ class Fabtest(Test):
         super().__init__(branchname, buildno, testname, core_prov, fabric,
                          hosts, ofi_build_mode, util_prov)
         self.fabtestpath = "{}/bin".format(self.libfab_installpath) 
-    
+        self.fabtestconfigpath = "{}/share/fabtests".format(self.libfab_installpath)
     def get_exclude_file(self):
         path = self.libfab_installpath
         efile_path = "{}/share/fabtests/test_configs".format(path)
@@ -98,7 +98,7 @@ class Fabtest(Test):
      
     @property
     def options(self):
-        opts = "-vvv -p {} -S ".format(self.fabtestpath)
+        opts = "-T 300 -vvv -p {} -S ".format(self.fabtestpath)
         if (self.core_prov == "verbs" and self.nw_interface):
             opts = "{} -s {} ".format(opts, common.get_node_name(self.server, 
                     self.nw_interface)) # include common.py
@@ -138,14 +138,17 @@ class Fabtest(Test):
    
     @property
     def execute_condn(self):
-        # fabtests works for shmem prov only for libfabirc debug builds.
+        # fabtests works for shmem prov only for libfabric debug builds.
         return True if (self.core_prov != 'shm' or \
                         self.ofi_build_mode == 'dbg') else False
 
     def execute_cmd(self):
+        curdir = os.getcwd()
+        os.chdir(self.fabtestconfigpath)
         command = self.cmd + self.options
         outputcmd = shlex.split(command)
-        common.run_command(outputcmd)       
+        common.run_command(outputcmd)
+        os.chdir(curdir) 
 
 class MpiTests(Test):
     def __init__(self, branchname, buildno, testname, core_prov, fabric,
