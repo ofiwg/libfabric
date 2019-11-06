@@ -25,9 +25,6 @@
 	cq_wait_obj: [
 		FI_WAIT_NONE,
 	],
-	mode: [
-		FT_MODE_ALL,
-	],
 	test_class: [
 		FT_CAP_MSG,
 	],
@@ -61,9 +58,6 @@
 		FI_WAIT_FD,
 		FI_WAIT_MUTEX_COND,
 	],
-	mode: [
-		FT_MODE_ALL,
-	],
 	test_class: [
 		FT_CAP_MSG,
 	],
@@ -90,9 +84,6 @@
 	],
 	cq_wait_obj: [
 		FI_WAIT_NONE,
-	],
-	mode: [
-		FT_MODE_ALL,
 	],
 	test_class: [
 		FT_CAP_MSG,
@@ -121,9 +112,6 @@
 		FI_WAIT_NONE,
 		FI_WAIT_UNSPEC,
 		FI_WAIT_FD,
-	],
-	mode: [
-		FT_MODE_ALL,
 	],
 	test_class: [
 		FT_CAP_MSG,
