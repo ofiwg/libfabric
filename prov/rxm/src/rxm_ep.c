@@ -916,15 +916,8 @@ rxm_ep_msg_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	assert(pkt_size <= rxm_ep->inject_limit);
 
 	ssize_t ret = fi_inject(rxm_conn->msg_ep, tx_pkt, pkt_size, 0);
-	if (OFI_LIKELY(!ret)) {
-		cntr_inc_func(rxm_ep->util_ep.tx_cntr);
-	} else {
-		FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
-		       "fi_inject for MSG provider failed with ret - %" PRId64"\n",
-		       ret);
-		if (OFI_LIKELY(ret == -FI_EAGAIN))
-			rxm_ep_do_progress(&rxm_ep->util_ep);
-	}
+	if (ret == -FI_EAGAIN)
+		rxm_ep_do_progress(&rxm_ep->util_ep);
 	return ret;
 }
 
@@ -1222,7 +1215,8 @@ rxm_ep_inject_send_fast(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 	assert(len <= rxm_ep->rxm_info->tx_attr->inject_size);
 
-	if (pkt_size <= rxm_ep->inject_limit) {
+	if (pkt_size <= rxm_ep->inject_limit &&
+	    !rxm_ep->util_ep.tx_cntr) {
 		inject_pkt->hdr.size = len;
 		memcpy(inject_pkt->data, buf, len);
 		ret = rxm_ep_msg_inject_send(rxm_ep, rxm_conn, inject_pkt,
@@ -1245,7 +1239,8 @@ rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 	assert(len <= rxm_ep->rxm_info->tx_attr->inject_size);
 
-	if (pkt_size <= rxm_ep->inject_limit) {
+	if (pkt_size <= rxm_ep->inject_limit &&
+	    !rxm_ep->util_ep.tx_cntr) {
 		struct rxm_tx_base_buf *tx_buf = (struct rxm_tx_base_buf *)
 			rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_INJECT);
 		if (OFI_UNLIKELY(!tx_buf)) {
