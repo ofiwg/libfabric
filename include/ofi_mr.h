@@ -166,7 +166,7 @@ struct ofi_mr_map {
 	const struct fi_provider *prov;
 	struct ofi_rbmap	*rbtree;
 	uint64_t		key;
-	enum fi_mr_mode		mode;
+	int			mode;
 };
 
 int ofi_mr_map_init(const struct fi_provider *in_prov, int mode,

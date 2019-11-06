@@ -277,8 +277,9 @@ static inline int rxm_finish_rma(struct rxm_ep *rxm_ep, struct rxm_rma_buf *rma_
 	else
 		ofi_ep_rd_cntr_inc(&rxm_ep->util_ep);
 
-	if (!(rma_buf->flags & FI_INJECT) && !rxm_ep->rxm_mr_local && rxm_ep->msg_mr_local) {
-		rxm_ep_msg_mr_closev(rma_buf->mr.mr, rma_buf->mr.count);
+	if (!(rma_buf->flags & FI_INJECT) && !rxm_ep->rxm_mr_local &&
+	    rxm_ep->msg_mr_local) {
+		rxm_msg_mr_closev(rma_buf->mr.mr, rma_buf->mr.count);
 	}
 
 	ofi_buf_free(rma_buf);
@@ -334,7 +335,7 @@ static inline int rxm_finish_send_rndv_ack(struct rxm_rx_buf *rx_buf)
 	}
 
 	if (!rx_buf->ep->rxm_mr_local)
-		rxm_ep_msg_mr_closev(rx_buf->mr, rx_buf->recv_entry->rxm_iov.count);
+		rxm_msg_mr_closev(rx_buf->mr, rx_buf->recv_entry->rxm_iov.count);
 
 	return rxm_finish_recv(rx_buf, rx_buf->recv_entry->total_len);
 }
@@ -346,7 +347,7 @@ static int rxm_rndv_tx_finish(struct rxm_ep *rxm_ep, struct rxm_tx_rndv_buf *tx_
 	RXM_UPDATE_STATE(FI_LOG_CQ, tx_buf, RXM_RNDV_FINISH);
 
 	if (!rxm_ep->rxm_mr_local)
-		rxm_ep_msg_mr_closev(tx_buf->mr, tx_buf->count);
+		rxm_msg_mr_closev(tx_buf->mr, tx_buf->count);
 
 	ret = rxm_cq_tx_comp_write(rxm_ep, ofi_tx_cq_flags(tx_buf->pkt.hdr.op),
 				   tx_buf->app_context, tx_buf->flags);
@@ -530,11 +531,10 @@ ssize_t rxm_cq_handle_rndv(struct rxm_rx_buf *rx_buf)
 	if (!rx_buf->ep->rxm_mr_local) {
 		total_recv_len = MIN(rx_buf->recv_entry->total_len,
 				     rx_buf->pkt.hdr.size);
-		ret = rxm_ep_msg_mr_regv_lim(rx_buf->ep,
-					     rx_buf->recv_entry->rxm_iov.iov,
-					     rx_buf->recv_entry->rxm_iov.count,
-					     total_recv_len,
-					     FI_READ, rx_buf->mr);
+		ret = rxm_msg_mr_regv(rx_buf->ep,
+				      rx_buf->recv_entry->rxm_iov.iov,
+				      rx_buf->recv_entry->rxm_iov.count,
+				      total_recv_len, FI_READ, rx_buf->mr);
 		if (OFI_UNLIKELY(ret))
 			return ret;
 
