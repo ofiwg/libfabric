@@ -333,17 +333,17 @@ int fi_ibv_accept_xrc(struct fi_ibv_xrc_ep *ep, int reciprocal,
 
 	/* The passive side of the initial shared connection using
 	 * SIDR is complete, initiate reciprocal connection */
-	if (ep->tgt_id->ps == RDMA_PS_UDP &&
-	    ep->conn_state == FI_IBV_XRC_ORIG_CONNECTING) {
+	if (ep->tgt_id->ps == RDMA_PS_UDP && !reciprocal) {
 		fi_ibv_next_xrc_conn_state(ep);
 		fi_ibv_ep_tgt_conn_done(ep);
 		ret = fi_ibv_connect_xrc(ep, NULL, FI_IBV_RECIP_CONN,
 					 &connect_cm_data,
 					 sizeof(connect_cm_data));
 		if (ret) {
+			VERBS_WARN(FI_LOG_EP_CTRL,
+				   "XRC reciprocal connect error %d\n", ret);
 			fi_ibv_prev_xrc_conn_state(ep);
 			ep->tgt_id->qp = NULL;
-			rdma_disconnect(ep->tgt_id);
 		}
 	}
 

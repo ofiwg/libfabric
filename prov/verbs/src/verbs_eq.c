@@ -285,16 +285,55 @@ static void fi_ibv_eq_skip_xrc_cm_data(const void **priv_data,
 }
 
 static int
+fi_ibv_eq_accept_recip_conn(struct fi_ibv_xrc_ep *ep,
+			    struct fi_eq_cm_entry *entry, size_t len,
+			    uint32_t *event, struct rdma_cm_event *cma_event,
+			    int *acked)
+{
+	struct fi_ibv_xrc_cm_data cm_data;
+	int ret;
+
+	assert(ep->conn_state == FI_IBV_XRC_ORIG_CONNECTED);
+
+	ret = fi_ibv_accept_xrc(ep, FI_IBV_RECIP_CONN, &cm_data,
+				sizeof(cm_data));
+	if (ret) {
+		VERBS_WARN(FI_LOG_EP_CTRL,
+			   "Reciprocal XRC Accept failed %d\n", ret);
+		return ret;
+	}
+
+	/* SIDR based shared reciprocal connections are complete at
+	 * this point, generate the connection established event. */
+	if (ep->tgt_id->ps == RDMA_PS_UDP) {
+		fi_ibv_next_xrc_conn_state(ep);
+		fi_ibv_ep_tgt_conn_done(ep);
+		entry->fid = &ep->base_ep.util_ep.ep_fid.fid;
+		*event = FI_CONNECTED;
+		len = fi_ibv_eq_copy_event_data(entry, len,
+						ep->conn_setup->event_data,
+						ep->conn_setup->event_len);
+		*acked = 1;
+		rdma_ack_cm_event(cma_event);
+		fi_ibv_free_xrc_conn_setup(ep, 1);
+
+		return sizeof(*entry) + len;
+	}
+
+	/* Event is handled internally and not passed to the application */
+	return -FI_EAGAIN;
+}
+
+static int
 fi_ibv_eq_xrc_connreq_event(struct fi_ibv_eq *eq, struct fi_eq_cm_entry *entry,
 			    size_t len, uint32_t *event,
+			    struct rdma_cm_event *cma_event, int *acked,
 			    const void **priv_data, size_t *priv_datalen)
 {
 	struct fi_ibv_connreq *connreq = container_of(entry->info->handle,
 						struct fi_ibv_connreq, handle);
 	struct fi_ibv_xrc_ep *ep;
-	struct fi_ibv_xrc_cm_data cm_data;
 	int ret;
-	enum rdma_port_space ps;
 
 	/*
 	 * We can make the SIDR shared connection mechanism more robust
@@ -322,7 +361,10 @@ fi_ibv_eq_xrc_connreq_event(struct fi_ibv_eq *eq, struct fi_eq_cm_entry *entry,
 			   connreq->xrc.conn_tag);
 		return -FI_EAGAIN;
 	}
-	assert(ep->conn_state == FI_IBV_XRC_ORIG_CONNECTED);
+	ep->recip_req_received = 1;
+
+	assert(ep->conn_state == FI_IBV_XRC_ORIG_CONNECTED ||
+	       ep->conn_state == FI_IBV_XRC_ORIG_CONNECTING);
 
 	ep->tgt_id = connreq->id;
 	ep->tgt_id->context = &ep->base_ep.util_ep.ep_fid.fid;
@@ -334,29 +376,12 @@ fi_ibv_eq_xrc_connreq_event(struct fi_ibv_eq *eq, struct fi_eq_cm_entry *entry,
 		goto send_reject;
 	}
 
-	ps = ep->tgt_id->ps;
-	ret = fi_ibv_accept_xrc(ep, FI_IBV_RECIP_CONN, &cm_data,
-				sizeof(cm_data));
-	if (ret) {
-		VERBS_WARN(FI_LOG_EP_CTRL,
-			   "Reciprocal XRC Accept failed %d\n", ret);
-		goto send_reject;
-	}
+	/* If the initial connection has completed proceed with accepting
+	 * the reciprocal; otherwise wait until it has before proceeding */
+	if (ep->conn_state == FI_IBV_XRC_ORIG_CONNECTED)
+		return fi_ibv_eq_accept_recip_conn(ep, entry, len, event,
+						   cma_event, acked);
 
-	/* SIDR based shared reciprocal connections are complete at
-	 * this point, generate the connection established event. */
-	if (ps == RDMA_PS_UDP) {
-		fi_ibv_next_xrc_conn_state(ep);
-		fi_ibv_ep_tgt_conn_done(ep);
-		entry->fid = &ep->base_ep.util_ep.ep_fid.fid;
-		*event = FI_CONNECTED;
-		len = fi_ibv_eq_copy_event_data(entry, len,
-						ep->conn_setup->event_data,
-						ep->conn_setup->event_len);
-		return sizeof(*entry) + len;
-	}
-
-	/* Event is handled internally and not passed to the application */
 	return -FI_EAGAIN;
 
 send_reject:
@@ -378,8 +403,9 @@ fi_ibv_eq_xrc_establish(struct rdma_cm_event *cma_event)
 
 static int
 fi_ibv_eq_xrc_conn_event(struct fi_ibv_xrc_ep *ep,
-			 struct rdma_cm_event *cma_event,
-			 struct fi_eq_cm_entry *entry)
+			 struct rdma_cm_event *cma_event, int *acked,
+			 struct fi_eq_cm_entry *entry, size_t len,
+			 uint32_t *event)
 {
 	struct fi_ibv_xrc_conn_info xrc_info;
 	struct fi_ibv_xrc_cm_data cm_data;
@@ -409,6 +435,13 @@ fi_ibv_eq_xrc_conn_event(struct fi_ibv_xrc_ep *ep,
 		fi_ibv_ep_ini_conn_done(ep, xrc_info.conn_data,
 					xrc_info.conn_param.qp_num);
 		fi_ibv_eq_xrc_establish(cma_event);
+
+		/* If we have received the reciprocal connect request,
+		 * process it now */
+		if (ep->recip_req_received)
+			return fi_ibv_eq_accept_recip_conn(ep, entry,
+							   len, event,
+							   cma_event, acked);
 	} else {
 		fi_ibv_ep_tgt_conn_done(ep);
 		ret = fi_ibv_connect_xrc(ep, NULL, FI_IBV_RECIP_CONN, &cm_data,
@@ -558,9 +591,9 @@ fi_ibv_eq_xrc_cm_err_event(struct fi_ibv_eq *eq,
 /* Caller must hold eq:lock */
 static inline int
 fi_ibv_eq_xrc_connected_event(struct fi_ibv_eq *eq,
-			      struct rdma_cm_event *cma_event,
+			      struct rdma_cm_event *cma_event, int *acked,
 			      struct fi_eq_cm_entry *entry, size_t len,
-			      int *acked)
+			      uint32_t *event)
 {
 	struct fi_ibv_xrc_ep *ep;
 	fid_t fid = cma_event->id->context;
@@ -572,14 +605,15 @@ fi_ibv_eq_xrc_connected_event(struct fi_ibv_eq *eq,
 	       ep->conn_state == FI_IBV_XRC_RECIP_CONNECTING);
 
 	if (ep->conn_state == FI_IBV_XRC_ORIG_CONNECTING)
-		return fi_ibv_eq_xrc_conn_event(ep, cma_event, entry);
+		return fi_ibv_eq_xrc_conn_event(ep, cma_event, acked,
+						entry, len, event);
 
 	ret = fi_ibv_eq_xrc_recip_conn_event(eq, ep, cma_event, entry, len);
 
 	/* Bidirectional connection setup is complete, release RDMA CM ID
 	 * resources. */
-	rdma_ack_cm_event(cma_event);
 	*acked = 1;
+	rdma_ack_cm_event(cma_event);
 	fi_ibv_free_xrc_conn_setup(ep, 1);
 
 	return ret;
@@ -677,6 +711,7 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq,
 
 		if (fi_ibv_is_xrc(entry->info)) {
 			ret = fi_ibv_eq_xrc_connreq_event(eq, entry, len, event,
+							  cma_event, &acked,
 							  &priv_data, &priv_datalen);
 			if (ret == -FI_EAGAIN || *event == FI_CONNECTED)
 				goto ack;
@@ -696,7 +731,8 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq,
 		ep = container_of(fid, struct fi_ibv_ep, util_ep.ep_fid);
 		if (fi_ibv_is_xrc(ep->info)) {
 			ret = fi_ibv_eq_xrc_connected_event(eq, cma_event,
-							    entry, len, &acked);
+							    &acked, entry, len,
+							    event);
 			goto ack;
 		}
 		entry->info = NULL;

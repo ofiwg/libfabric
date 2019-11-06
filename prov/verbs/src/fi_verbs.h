@@ -588,6 +588,7 @@ struct fi_ibv_xrc_ep {
 	struct rdma_cm_id		*tgt_id;
 	struct ibv_qp			*tgt_ibv_qp;
 	enum fi_ibv_xrc_ep_conn_state	conn_state;
+	bool				recip_req_received;
 	uint32_t			magic;
 	uint32_t			srqn;
 	uint32_t			peer_srqn;
