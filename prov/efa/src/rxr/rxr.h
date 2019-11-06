@@ -84,7 +84,7 @@ extern const uint32_t rxr_poison_value;
 #define RXR_RECVWIN_SIZE		(16384)
 #define RXR_DEF_CQ_SIZE			(8192)
 #define RXR_REMOTE_CQ_DATA_LEN		(8)
-#define RXR_MIN_AV_SIZE			(8192)
+#define RXR_MIN_AV_SIZE			(16384)
 /* maximum timeout for RNR backoff (microseconds) */
 #define RXR_DEF_RNR_MAX_TIMEOUT		(1000000)
 /* bounds for random RNR backoff timeout */
