@@ -14,7 +14,6 @@
 	],
 	ep_type: [
 		FI_EP_MSG,
-		FI_EP_DGRAM,
 		FI_EP_RDM,
 	],
 	av_type: [
@@ -70,7 +69,6 @@
 	],
 	ep_type: [
 		FI_EP_MSG,
-		FI_EP_DGRAM,
 	],
 	av_type: [
 		FI_AV_TABLE,
