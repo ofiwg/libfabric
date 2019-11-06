@@ -2300,7 +2300,7 @@ static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		if (!rxr_ep->peer)
 			return -FI_ENOMEM;
 
-		rxr_ep->robuf_fs = rxr_robuf_fs_create(rxr_ep->rx_size,
+		rxr_ep->robuf_fs = rxr_robuf_fs_create(av->util_av.count,
 						       NULL, NULL);
 		if (!rxr_ep->robuf_fs)
 			return -FI_ENOMEM;

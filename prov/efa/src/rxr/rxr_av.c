@@ -352,6 +352,7 @@ int rxr_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	struct rxr_domain *domain;
 	struct fi_av_attr av_attr;
 	struct util_av_attr util_attr;
+	size_t universe_size;
 	int ret, retv;
 
 	if (!attr)
@@ -378,6 +379,10 @@ int rxr_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		attr->count = RXR_MIN_AV_SIZE;
 	else
 		attr->count = MAX(attr->count, RXR_MIN_AV_SIZE);
+
+	if (fi_param_get_size_t(NULL, "universe_size",
+				&universe_size) == FI_SUCCESS)
+		attr->count = MAX(attr->count, universe_size);
 
 	util_attr.addrlen = sizeof(fi_addr_t);
 	util_attr.flags = 0;
