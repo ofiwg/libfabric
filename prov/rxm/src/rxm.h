@@ -731,6 +731,9 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 int rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep);
 void rxm_cq_write_error(struct util_cq *cq, struct util_cntr *cntr,
 			void *op_context, int err);
+void rxm_cq_write_error_all(struct rxm_ep *rxm_ep, int err);
+void rxm_cq_read_write_error(struct rxm_ep *rxm_ep);
+ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp);
 void rxm_ep_progress(struct util_ep *util_ep);
 void rxm_ep_progress_coll(struct util_ep *util_ep);
 void rxm_ep_do_progress(struct util_ep *util_ep);

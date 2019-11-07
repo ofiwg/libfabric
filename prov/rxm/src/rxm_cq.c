@@ -1120,8 +1120,7 @@ int rxm_finish_coll_eager_send(struct rxm_ep *rxm_ep, struct rxm_tx_eager_buf *t
 	return ret;
 };
 
-static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
-				  struct fi_cq_data_entry *comp)
+ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 {
 	ssize_t ret;
 	struct rxm_rx_buf *rx_buf;
@@ -1228,7 +1227,7 @@ void rxm_cq_write_error(struct util_cq *cq, struct util_cntr *cntr,
 	}
 }
 
-static void rxm_cq_write_error_all(struct rxm_ep *rxm_ep, int err)
+void rxm_cq_write_error_all(struct rxm_ep *rxm_ep, int err)
 {
 	struct fi_cq_err_entry err_entry = {0};
 	ssize_t ret = 0;
@@ -1269,7 +1268,7 @@ static void rxm_cq_write_error_all(struct rxm_ep *rxm_ep, int err)
 	 (state == RXM_TX) ||		\
 	 (state == RXM_RNDV_TX))
 
-static void rxm_cq_read_write_error(struct rxm_ep *rxm_ep)
+void rxm_cq_read_write_error(struct rxm_ep *rxm_ep)
 {
 	struct rxm_tx_eager_buf *eager_buf;
 	struct rxm_tx_sar_buf *sar_buf;
