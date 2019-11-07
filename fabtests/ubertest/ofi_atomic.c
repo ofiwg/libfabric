@@ -55,12 +55,12 @@
 #define OFI_OP_READ(type,dst,src)  /* src unused, dst is written to result */
 #define OFI_OP_WRITE(type,dst,src) (dst) = (src)
 
-#define OFI_OP_CSWAP_EQ(type,dst,src,cmp) if ((dst) == (cmp)) (dst) = (src)
-#define OFI_OP_CSWAP_NE(type,dst,src,cmp) if ((dst) != (cmp)) (dst) = (src)
-#define OFI_OP_CSWAP_LE(type,dst,src,cmp) if ((dst) <= (cmp)) (dst) = (src)
-#define OFI_OP_CSWAP_LT(type,dst,src,cmp) if ((dst) <  (cmp)) (dst) = (src)
-#define OFI_OP_CSWAP_GE(type,dst,src,cmp) if ((dst) >= (cmp)) (dst) = (src)
-#define OFI_OP_CSWAP_GT(type,dst,src,cmp) if ((dst) >  (cmp)) (dst) = (src)
+#define OFI_OP_CSWAP_EQ(type,dst,src,cmp) if ((cmp) == (dst)) (dst) = (src)
+#define OFI_OP_CSWAP_NE(type,dst,src,cmp) if ((cmp) != (dst)) (dst) = (src)
+#define OFI_OP_CSWAP_LE(type,dst,src,cmp) if ((cmp) <= (dst)) (dst) = (src)
+#define OFI_OP_CSWAP_LT(type,dst,src,cmp) if ((cmp) <  (dst)) (dst) = (src)
+#define OFI_OP_CSWAP_GE(type,dst,src,cmp) if ((cmp) >= (dst)) (dst) = (src)
+#define OFI_OP_CSWAP_GT(type,dst,src,cmp) if ((cmp) >  (dst)) (dst) = (src)
 #define OFI_OP_MSWAP(type,dst,src,cmp)    (dst) = (((src) & (cmp)) | \
 						   ((dst) & ~(cmp)))
 

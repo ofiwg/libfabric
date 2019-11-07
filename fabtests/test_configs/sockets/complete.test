@@ -15,7 +15,6 @@
 	],
 	ep_type: [
 		FI_EP_MSG,
-		FI_EP_DGRAM,
 		FI_EP_RDM,
 	],
 	av_type: [
@@ -25,10 +24,6 @@
 	comp_type: [
 		FT_COMP_QUEUE,
 		FT_COMP_CNTR,
-	],
-	mode: [
-		FT_MODE_ALL,
-		FT_MODE_NONE,
 	],
 	test_class: [
 		FT_CAP_MSG,
@@ -60,10 +55,6 @@
 		FI_WAIT_FD,
 		FI_WAIT_MUTEX_COND,
 	],
-	mode: [
-		FT_MODE_ALL,
-		FT_MODE_NONE,
-	],
 	test_class: [
 		FT_CAP_MSG,
 	],
@@ -80,7 +71,6 @@
 	],
 	ep_type: [
 		FI_EP_MSG,
-		FI_EP_DGRAM,
 	],
 	av_type: [
 		FI_AV_TABLE,
@@ -97,10 +87,6 @@
 		FI_WAIT_FD,
 		FI_WAIT_MUTEX_COND,
 	],
-	mode: [
-		FT_MODE_ALL,
-		FT_MODE_NONE,
-	],
 	test_class: [
 		FT_CAP_MSG,
 	],
@@ -117,7 +103,6 @@
 	],
 	ep_type: [
 		FI_EP_MSG,
-		FI_EP_DGRAM,
 	],
 	av_type: [
 		FI_AV_TABLE,
@@ -133,10 +118,6 @@
 		FI_WAIT_UNSPEC,
 		FI_WAIT_FD,
 		FI_WAIT_MUTEX_COND,
-	],
-	mode: [
-		FT_MODE_ALL,
-		FT_MODE_NONE,
 	],
 	test_class: [
 		FT_CAP_MSG,
@@ -170,10 +151,6 @@
 	comp_type: [
 		FT_COMP_QUEUE,
 		FT_COMP_CNTR,
-	],
-	mode: [
-		FT_MODE_ALL,
-		FT_MODE_NONE,
 	],
 	test_class: [
 		FT_CAP_RMA,
@@ -235,10 +212,6 @@
 		FT_COMP_QUEUE,
 		FT_COMP_CNTR,
 	],
-	mode: [
-		FT_MODE_ALL,
-		FT_MODE_NONE,
-	],
 	test_class: [
 		FT_CAP_ATOMIC,
 	],
@@ -284,10 +257,6 @@
 	comp_type: [
 		FT_COMP_QUEUE,
 		FT_COMP_CNTR,
-	],
-	mode: [
-		FT_MODE_ALL,
-		FT_MODE_NONE,
 	],
 	test_class: [
 		FT_CAP_ATOMIC,
@@ -341,10 +310,6 @@
 		FT_COMP_QUEUE,
 		FT_COMP_CNTR,
 	],
-	mode: [
-		FT_MODE_ALL,
-		FT_MODE_NONE,
-	],
 	test_class: [
 		FT_CAP_ATOMIC,
 	],
@@ -367,9 +332,6 @@
 	],
 	comp_type: [
 		FT_COMP_CNTR,
-	],
-	mode: [
-		FT_MODE_ALL,
 	],
 	test_class: [
 		FT_CAP_MSG,
@@ -403,9 +365,6 @@
 	],
 	comp_type: [
 		FT_COMP_CNTR,
-	],
-	mode: [
-		FT_MODE_ALL,
 	],
 	test_class: [
 		FT_CAP_MSG,
@@ -441,9 +400,6 @@
 	comp_type: [
 		FT_COMP_CNTR,
 	],
-	mode: [
-		FT_MODE_ALL,
-	],
 	test_class: [
 		FT_CAP_MSG,
 		FT_CAP_TAGGED,
@@ -475,9 +431,6 @@
 		FT_COMP_QUEUE,
 		FT_COMP_CNTR,
 	],
-	mode: [
-		FT_MODE_ALL,
-	],
 	test_class: [
 		FT_CAP_MSG,
 		FT_CAP_TAGGED,
@@ -508,9 +461,6 @@
 	comp_type: [
 		FT_COMP_QUEUE,
 		FT_COMP_CNTR,
-	],
-	mode: [
-		FT_MODE_ALL,
 	],
 	test_class: [
 		FT_CAP_MSG,

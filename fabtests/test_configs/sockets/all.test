@@ -14,7 +14,6 @@
 	],
 	ep_type: [
 		FI_EP_MSG,
-		FI_EP_DGRAM,
 		FI_EP_RDM,
 	],
 	av_type: [
@@ -23,9 +22,6 @@
 	],
 	comp_type: [
 		FT_COMP_QUEUE,
-	],
-	mode: [
-		FT_MODE_ALL,
 	],
 	test_class: [
 		FT_CAP_MSG,
@@ -58,9 +54,6 @@
 	cq_wait_obj: [
 		FI_WAIT_NONE,
 	],
-	mode: [
-		FT_MODE_ALL,
-	],
 	test_class: [
 		FT_CAP_MSG,
 	],
@@ -76,7 +69,6 @@
 	],
 	ep_type: [
 		FI_EP_MSG,
-		FI_EP_DGRAM,
 	],
 	av_type: [
 		FI_AV_TABLE,
@@ -92,9 +84,6 @@
 		FI_WAIT_UNSPEC,
 		FI_WAIT_FD,
 		FI_WAIT_MUTEX_COND,
-	],
-	mode: [
-		FT_MODE_ALL,
 	],
 	test_class: [
 		FT_CAP_MSG,
