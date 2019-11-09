@@ -159,19 +159,19 @@
 #define PACKAGE_BUGREPORT "ofiwg@lists.openfabrics.org"
 
 /* Define to the full name of this package. */
-#define PACKAGE_NAME "libfabric"
-
-/* Define to the full name and version of this package. */
-#define PACKAGE_STRING "libfabric 1.9.0rc1"
+#define PACKAGE_NAME PACKAGE
 
 /* Define to the one symbol short name of this package. */
-#define PACKAGE_TARNAME "libfabric"
+#define PACKAGE_TARNAME PACKAGE
+
+/* Define to the version of this package. */
+#define PACKAGE_VERSION "1.9.0rc2"
+
+/* Define to the full name and version of this package. */
+#define PACKAGE_STRING PACKAGE_NAME " " PACKAGE_VERSION
 
 /* Define to the home page for this package. */
 #define PACKAGE_URL ""
-
-/* Define to the version of this package. */
-#define PACKAGE_VERSION "1.9.0rc1"
 
 /* Define to 1 if pthread_spin_init is available. */
 /* #undef PT_LOCK_SPIN */
