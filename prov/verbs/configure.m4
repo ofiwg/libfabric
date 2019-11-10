@@ -47,6 +47,16 @@ AC_DEFUN([FI_VERBS_CONFIGURE],[
 	AS_IF([test $verbs_ibverbs_happy -eq 1 && \
 	       test $verbs_rdmacm_happy -eq 1], [$1], [$2])
 
+	#See if we have extended verbs calls
+	VERBS_HAVE_QUERY_EX=0
+	AS_IF([test $verbs_ibverbs_happy -eq 1],[
+		AC_CHECK_DECL([ibv_query_device_ex],
+			[VERBS_HAVE_QUERY_EX=1],[],
+			[#include <infiniband/verbs.h>])
+		])
+	AC_DEFINE_UNQUOTED([VERBS_HAVE_QUERY_EX],[$VERBS_HAVE_QUERY_EX],
+		[Whether infiniband/verbs.h has ibv_query_device_ex() support or not])
+
 	#See if we have XRC support
 	VERBS_HAVE_XRC=0
 	AS_IF([test $verbs_ibverbs_happy -eq 1 && \

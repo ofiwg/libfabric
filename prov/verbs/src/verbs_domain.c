@@ -38,6 +38,31 @@
 #include <malloc.h>
 
 
+#if VERBS_HAVE_QUERY_EX
+static int fi_ibv_odp_flag(struct ibv_context *verbs)
+{
+	struct ibv_query_device_ex_input input = {0};
+	struct ibv_device_attr_ex attr;
+	int ret;
+
+	if (!fi_ibv_gl_data.use_odp)
+		return 0;
+
+	ret = ibv_query_device_ex(verbs, &input, &attr);
+	if (ret)
+		return 0;
+
+	return attr.odp_caps.general_caps & IBV_ODP_SUPPORT ?
+	       VRB_USE_ODP : 0;
+}
+#else
+static int fi_ibv_odp_flag(struct ibv_context *verbs)
+{
+	return 0;
+}
+#endif /* VERBS_HAVE_QUERY_EX */
+
+
 static int fi_ibv_domain_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct fi_ibv_domain *domain;
@@ -90,7 +115,7 @@ static int fi_ibv_domain_close(fid_t fid)
 			ofi_ns_stop_server(&fab->name_server);
 		break;
 	case FI_EP_MSG:
-		if (domain->use_xrc) {
+		if (domain->flags & VRB_USE_XRC) {
 			ret = fi_ibv_domain_xrc_cleanup(domain);
 			if (ret)
 				return ret;
@@ -136,7 +161,7 @@ static int fi_ibv_open_device_by_name(struct fi_ibv_domain *domain, const char *
 		const char *rdma_name = ibv_get_device_name(dev_list[i]->device);
 		switch (domain->ep_type) {
 		case FI_EP_MSG:
-			ret = domain->use_xrc ?
+			ret = domain->flags & VRB_USE_XRC ?
 				fi_ibv_cmp_xrc_domain_name(name, rdma_name) :
 				strcmp(name, rdma_name);
 			break;
@@ -263,7 +288,7 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 		goto err2;
 
 	_domain->ep_type = FI_IBV_EP_TYPE(info);
-	_domain->use_xrc = fi_ibv_is_xrc(info);
+	_domain->flags |= fi_ibv_is_xrc(info) ? VRB_USE_XRC : 0;
 
 	ret = fi_ibv_open_device_by_name(_domain, info->domain_attr->name);
 	if (ret)
@@ -275,6 +300,7 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 		goto err3;
 	}
 
+	_domain->flags |= fi_ibv_odp_flag(_domain->verbs);
 	_domain->util_domain.domain_fid.fid.fclass = FI_CLASS_DOMAIN;
 	_domain->util_domain.domain_fid.fid.context = context;
 	_domain->util_domain.domain_fid.fid.ops = &fi_ibv_fid_ops;
@@ -309,7 +335,7 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 		_domain->util_domain.domain_fid.ops = &fi_ibv_dgram_domain_ops;
 		break;
 	case FI_EP_MSG:
-		if (_domain->use_xrc) {
+		if (_domain->flags & VRB_USE_XRC) {
 			ret = fi_ibv_domain_xrc_init(_domain);
 			if (ret)
 				goto err4;
@@ -323,13 +349,13 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 		goto err4;
 	}
 
-	if (!strncmp(info->domain_attr->name, "hfi1", strlen("hfi1")) ||
-	    !strncmp(info->domain_attr->name, "qib", strlen("qib"))) {
-		_domain->post_send = fi_ibv_post_send_track_credits;
-		_domain->poll_cq = fi_ibv_poll_cq_track_credits;
-	} else {
+	if (fi->nic && fi->nic->device_attr &&
+	    !strncmp(fi->nic->device_attr->vendor_id, "0x02c9", 6)) {
 		_domain->post_send = ibv_post_send;
 		_domain->poll_cq = ibv_poll_cq;
+	} else {
+		_domain->post_send = fi_ibv_post_send_track_credits;
+		_domain->poll_cq = fi_ibv_poll_cq_track_credits;
 	}
 
 	*domain = &_domain->util_domain.domain_fid;
