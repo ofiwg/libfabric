@@ -126,11 +126,11 @@ retry:
 				assert((buf_hdr->entry.dlist.next == (void *) OFI_MAGIC_64) &&
 				       (buf_hdr->entry.dlist.prev == (void *) OFI_MAGIC_64));
 			} else {
-				buf_hdr->entry.slist.next = (void *) OFI_MAGIC_64;
+				buf_hdr->entry.dlist.next = (void *) OFI_MAGIC_64;
 
 				pool->attr.init_fn(buf_region, buf);
 
-				assert(buf_hdr->entry.slist.next == (void *) OFI_MAGIC_64);
+				assert(buf_hdr->entry.dlist.next == (void *) OFI_MAGIC_64);
 			}
 #else
 			pool->attr.init_fn(buf_region, buf);
@@ -140,7 +140,7 @@ retry:
 			dlist_insert_tail(&buf_hdr->entry.dlist,
 					  &buf_region->free_list);
 		} else {
-			slist_insert_tail(&buf_hdr->entry.slist,
+			dlist_insert_tail(&buf_hdr->entry.dlist,
 					  &pool->free_list.entries);
 		}
 	}
@@ -175,6 +175,7 @@ int ofi_bufpool_create_attr(struct ofi_bufpool_attr *attr,
 	if (!pool)
 		return -FI_ENOMEM;
 
+	pool->region_to_free = NULL;
 	pool->attr = *attr;
 
 	entry_sz = (attr->size + sizeof(struct ofi_bufpool_hdr));
@@ -188,7 +189,7 @@ int ofi_bufpool_create_attr(struct ofi_bufpool_attr *attr,
 	if (pool->attr.flags & OFI_BUFPOOL_INDEXED)
 		dlist_init(&pool->free_list.regions);
 	else
-		slist_init(&pool->free_list.entries);
+		dlist_init(&pool->free_list.entries);
 
 	pool->alloc_size = (pool->attr.chunk_cnt + 1) * pool->entry_size;
 	hp_size = ofi_get_hugepage_size();
@@ -214,23 +215,20 @@ void ofi_bufpool_destroy(struct ofi_bufpool *pool)
 
 	for (i = 0; i < pool->region_cnt; i++) {
 		buf_region = pool->region_table[i];
+		if (!buf_region)
+			continue;
 
 		assert((pool->attr.flags & OFI_BUFPOOL_NO_TRACK) ||
 			(buf_region->use_cnt == 0));
 		if (pool->attr.free_fn)
 			pool->attr.free_fn(buf_region);
 
-		if (pool->attr.flags & OFI_BUFPOOL_HUGEPAGES) {
-			ret = ofi_free_hugepage_buf(buf_region->alloc_region,
-						    pool->alloc_size);
-			if (ret) {
-				FI_DBG(&core_prov, FI_LOG_CORE,
-				       "Huge page free failed: %s\n",
-				       fi_strerror(-ret));
-				assert(0);
-			}
-		} else {
-			ofi_freealign(buf_region->alloc_region);
+		ret = ofi_region_free(pool, buf_region);
+		if (ret) {
+			FI_DBG(&core_prov, FI_LOG_CORE,
+			       "Huge page free failed: %s\n",
+			       fi_strerror(-ret));
+			assert(0);
 		}
 
 		free(buf_region);
