@@ -354,6 +354,8 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 		_domain->post_send = ibv_post_send;
 		_domain->poll_cq = ibv_poll_cq;
 	} else {
+		assert(!(_domain->flags & VRB_USE_XRC));
+
 		_domain->post_send = fi_ibv_post_send_track_credits;
 		_domain->poll_cq = fi_ibv_poll_cq_track_credits;
 	}

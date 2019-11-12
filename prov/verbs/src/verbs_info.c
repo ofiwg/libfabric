@@ -670,7 +670,7 @@ static int fi_ibv_get_device_attrs(struct ibv_context *ctx,
 	info->ep_attr->max_order_raw_size 	= max_sup_size;
 	info->ep_attr->max_order_waw_size	= max_sup_size;
 
-	ret = asprintf(&info->nic->device_attr->device_id, "%"PRIu32,
+	ret = asprintf(&info->nic->device_attr->device_id, "0x%04x",
 		       device_attr.vendor_part_id);
 	if (ret < 0) {
 		info->nic->device_attr->device_id = NULL;
@@ -679,7 +679,7 @@ static int fi_ibv_get_device_attrs(struct ibv_context *ctx,
 		return -FI_ENOMEM;
 	}
 
-	ret = asprintf(&info->nic->device_attr->vendor_id, "%"PRIu32,
+	ret = asprintf(&info->nic->device_attr->vendor_id, "0x%04x",
 		       device_attr.vendor_id);
 	if (ret < 0) {
 		info->nic->device_attr->vendor_id = NULL;
