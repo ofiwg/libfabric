@@ -10,23 +10,97 @@ v1.9.0, Fri Nov 22, 2019
 
 ## Core
 
+- Add generic implementation for collective operations
+- Add support for traffic class selection
+- Fixes and enhancements to memory registration cache
+- Add support for older kernels to the MR cache (hook malloc related calls)
+- Fix setting loopback address byte ordering
+- Fix MR cache locking from spinlock to a mutex to avoid starvation
+- Add API enhancements for heterogeneous memory (e.g. GPUs)
+- Limit default size of MR cache to avoid out of memory errors
+- Fix g++ compile error
+- Enhanced the hooking provider infrastructure
+- Enhanced windows support for IPv6 and NIC selection
+- Fix timeout calculation in wait operations
+- Add simple spell checker for FI_PROVIDER
+- Fix red-black tree possible use after free issue
+- Fix segfault running libfabric within a linux container
+- Minor cleanups and bug fixes
+- Work-around possible long delay in getaddrinfo()
+
 ## EFA
 
 ## GNI
 
 ## MRail
 
+- Renamed address control environment variable
+- Implement large message striping using rendezvous
+- Properly set tx/rx op flags
+
 ## PSM2
+
+- Fix memory leaks
+- Add fi_nic support
+- Report correct value for max_order_raw_size
+- Report max_msg_size as a page aligned value
+- Fix potential multi-threaded race condition
+- Avoid potentia deadlock in disconnect protocol
 
 ## RxD
 
+- Fix default AV count
+- Minor cleanups and optimizations
+- Handle errors unpacking packets
+
 ## RxM
+
+- Fix inject completion semantics
+- Fix MR key handling when mismatched with core provider
+- Add basic support for some collective operations
+- Fix senddata desc parameter mismatch
+- Serialize EQ processing to avoid use after free issue
+- Minor cleanup and optimizations
+- Remove atomic buffer limitations
+- Provide mechanism to force auto-progress for poorly designed apps
+- Fix high memory usage when using RMA
+- Fix segfault handling memory deregistration
+- Discard canceled receive buffers when closing msg ep
+- Fix memory leaks in connection management
 
 ## SHM
 
+- Cleanup tmpfs after unclean shutdown
+- Increase the size of endpoint names
+- Align endpoint count attribute with maximum supported peer count
+- Add user ID to shared memory name
+- Only support small transfers if ptrace is restricted
+- Fix incorrect reporting of completion buffer
+
 ## TCP
 
+- Report aborted requests as canceled
+- Fixed support for 0-length transfers
+- Return positive error code for CQ entries
+- Bind ports using SO_REUSEADDR
+- Properly check for correct recv completion length
+- Fix potential deadlock due to lock ordering issue
+
 ## Verbs
+
+- Enable on-demand paging memory registration option
+- Enable send queue overflow optimization for mlx devices
+- Cleanup EQ when closing an associated endpoint
+- Minor optimizations and code restructuring
+- Avoid potential deadlock accessing EQ and EP
+- Speedup XRC connection setup
+- Handle IPv6 link local address scope id
+- Updates to support new versions of rdma-core libraries
+- XRC connection optimizations, cleanups, and error handling improvements
+- Fix possible segfault in error handling path
+- Remove support for vendor specific and experimental verbs
+- Handle 0-length memory registrations
+- Fix EQ trywait behavior to check for software events
 
 
 v1.8.1, Mon Sep 30, 2019
