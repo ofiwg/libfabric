@@ -518,11 +518,15 @@ of these fields are the same for all CQ entry structure formats.
   on converting this error value into a human readable string.
 
 *err_data*
-: On an error, err_data may reference a provider specific amount of data
-  associated with an error.  The use of this field and its meaning is
+: The err_data field is used to return provider specific information, if
+  available, about the error.  On input, err_data should reference a data
+  buffer of size err_data_size.  On output, the provider will fill in this
+  buffer with any provider specific data which may help identify the cause
+  of the error.  The contents of the err_data field and its meaning is
   provider specific.  It is intended to be used as a debugging aid.  See
   fi_cq_strerror for additional details on converting this error data into
-  a human readable string.
+  a human readable string.  See the compatibility note below on how this
+  field is used for older libfabric releases.
 
 *err_data_size*
 : On input, err_data_size indicates the size of the err_data buffer in bytes.
@@ -530,9 +534,12 @@ of these fields are the same for all CQ entry structure formats.
   err_data buffer.  The err_data information is typically used with
   fi_cq_strerror to provide details about the type of error that occurred.
 
-  For compatibility purposes, if err_data_size is 0 on input, or the fabric
-  was opened with release < 1.5, err_data will be set to a data buffer
-  owned by the provider.  The contents of the buffer will remain valid until a
+  For compatibility purposes, the behavior of the err_data and err_data_size
+  fields is may be modified from that listed above.  If err_data_size is 0
+  on input, or the fabric was opened with release < 1.5, then any buffer
+  referenced by err_data will be ignored on input.  In this situation, on
+  output err_data will be set to a data buffer owned by the provider.
+  The contents of the buffer will remain valid until a
   subsequent read call against the CQ.  Applications must serialize access
   to the CQ when processing errors to ensure that the buffer referenced by
   err_data does not change.
