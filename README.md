@@ -182,7 +182,7 @@ See the `fi_psm2(7)` man page for more details.
 The `ofi_rxm` provider is an utility provider that supports RDM endpoints emulated
 over MSG endpoints of a core provider.
 
-See [`fi_rxm`(7)](fi_rxm.7.html) for more information.
+See [`fi_rxm`(7)](https://ofiwg.github.io/libfabric/master/man/fi_rxm.7.html) for more information.
 
 ### sockets
 
@@ -380,7 +380,7 @@ EC2 Elastic Fabric Adapter (EFA)](https://aws.amazon.com/hpc/efa/), a
 custom-built OS bypass hardware interface for inter-instance communication on
 EC2.
 
-See [`fi_efa`(7)](fi_efa.7.html) for more information.
+See [`fi_efa`(7)](https://ofiwg.github.io/libfabric/master/man/fi_efa.7.html) for more information.
 
 ## WINDOWS Instructions
 
