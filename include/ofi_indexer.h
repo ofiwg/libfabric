@@ -60,7 +60,7 @@ struct ofi_idx_entry {
 	int   next;
 };
 
-#define OFI_IDX_INDEX_BITS 16
+#define OFI_IDX_INDEX_BITS 20
 #define OFI_IDX_ENTRY_BITS 10
 #define OFI_IDX_ENTRY_SIZE (1 << OFI_IDX_ENTRY_BITS)
 #define OFI_IDX_ARRAY_SIZE (1 << (OFI_IDX_INDEX_BITS - OFI_IDX_ENTRY_BITS))
