@@ -30,6 +30,26 @@ v1.9.0, Fri Nov 22, 2019
 
 ## EFA
 
+- Introduce support for shared-memory communication using shm provider
+- Enable Memory Registration caching by default
+- Refactor TX and CQ handling functions to reduce branching
+- Use application-provided MR descriptors when available
+- Optimize progress engine polling loop for shm and EFA completions
+- Enable inline registration for emulated RMA reads
+- Inherit FI_UNIVERSE_SIZE for AV sizing
+- Increase default min AV size to 16K
+- Fix uninitialized objects with DSO build of the provider
+- Fix handling of FI_AV_UNSPEC
+- Fix crash and resource leak with fi_cancel() implementation
+- Fix issues with EFA's registration cache under efa;ofi_rxd
+- Fix MR allocation handlers to use correct pointer and size
+- Fix error handling in multi-recv completion code
+- Fix compilation errors when built with valgrind annotations
+- Fix compilation errors when packet poisoning was enabled
+- Fix incorrect parameter definitions
+- Fix leaks of internal resources
+- Miscellaneous cleanups and bug fixes
+
 ## GNI
 
 ## MRail
