@@ -7,14 +7,17 @@ import run
 import common
 
 parser = argparse.ArgumentParser()
+
 parser.add_argument("--prov", help="core provider", choices=["psm2", "verbs", \
                      "tcp", "udp", "sockets", "shm"])
+parser.add_argument("--util", help="utility provider", choices=["rxd", "rxm"])
 parser.add_argument("--ofi_build_mode", help="specify the build configuration", \
                      choices = ["dbg", "dl"])
 
 args = parser.parse_args()
-args_prov = args.prov
+args_core = args.prov
 
+args_util = args.util
 
 if (args.ofi_build_mode):
     ofi_build_mode = args.ofi_build_mode
@@ -34,29 +37,27 @@ mpilist = ['impi', 'mpich', 'ompi']
 
 os.chdir('/tmp/')
 
-if(args_prov):
+if(args_core):
     for host in ci_site_config.node_map[node]:
         hosts.append(host)
 
-    for prov in common.prov_list:
-        if (prov.core == args_prov):
-            if (prov.util == None):
-                run.fi_info_test(prov.core, hosts, ofi_build_mode)
-                run.fabtests(prov.core, hosts, ofi_build_mode)
-                for mpi in mpilist:
-                    run.intel_mpi_benchmark(prov.core, hosts, mpi, ofi_build_mode)   
-                    run.mpistress_benchmark(prov.core, hosts, mpi, ofi_build_mode)
-                    run.osu_benchmark(prov.core, hosts, mpi, ofi_build_mode)  
-            else:
-                run.fi_info_test(prov.core, hosts, ofi_build_mode, util=prov.util)
-                run.fabtests(prov.core, hosts, ofi_build_mode, util=prov.util)
-                for mpi in mpilist:
-                    run.intel_mpi_benchmark(prov.core, hosts, mpi, ofi_build_mode, \
-                                           util=prov.util,)
-                    run.mpistress_benchmark(prov.core, hosts, mpi, ofi_build_mode, \
-                                            util=prov.util)
-                    run.osu_benchmark(prov.core, hosts, mpi, ofi_build_mode, \
-                                             util=prov.util)
+    if (args_util == None):
+        run.fi_info_test(args_core, hosts, ofi_build_mode)
+        run.fabtests(args_core, hosts, ofi_build_mode)
+        for mpi in mpilist:
+            run.intel_mpi_benchmark(args_core, hosts, mpi, ofi_build_mode)   
+            run.mpistress_benchmark(args_core, hosts, mpi, ofi_build_mode)
+            run.osu_benchmark(args_core, hosts, mpi, ofi_build_mode)  
+    else:
+        run.fi_info_test(args_core, hosts, ofi_build_mode, util=args_util)
+        run.fabtests(args_core, hosts, ofi_build_mode, util=args_util)
+        for mpi in mpilist:
+            run.intel_mpi_benchmark(args_core, hosts, mpi, ofi_build_mode, \
+                                        util=args_util,)
+            run.mpistress_benchmark(args_core, hosts, mpi, ofi_build_mode, \
+                                            util=args_util)
+            run.osu_benchmark(args_core, hosts, mpi, ofi_build_mode, \
+                                             util=args_util)
 else:
     print("Error : Specify a core provider to run tests")
     
