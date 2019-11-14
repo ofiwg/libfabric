@@ -1105,7 +1105,8 @@ err:
 	return ret;
 }
 
-int rxm_finish_coll_eager_send(struct rxm_ep *rxm_ep, struct rxm_tx_eager_buf *tx_eager_buf)
+int rxm_finish_coll_eager_send(struct rxm_ep *rxm_ep,
+			         struct rxm_tx_eager_buf *tx_eager_buf)
 {
 	int ret;
 
@@ -1117,13 +1118,13 @@ int rxm_finish_coll_eager_send(struct rxm_ep *rxm_ep, struct rxm_tx_eager_buf *t
 		ret = rxm_finish_eager_send(rxm_ep, tx_eager_buf);
 	}
 
+	ofi_buf_free(tx_eager_buf);
 	return ret;
 };
 
 static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
-				  struct fi_cq_data_entry *comp)
+				    struct fi_cq_data_entry *comp)
 {
-	ssize_t ret;
 	struct rxm_rx_buf *rx_buf;
 	struct rxm_tx_sar_buf *tx_sar_buf;
 	struct rxm_tx_eager_buf *tx_eager_buf;
@@ -1141,9 +1142,7 @@ static ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep,
 	switch (RXM_GET_PROTO_STATE(comp->op_context)) {
 	case RXM_TX:
 		tx_eager_buf = comp->op_context;
-		ret = rxm_ep->txrx_ops->comp_eager_tx(rxm_ep, tx_eager_buf);
-		ofi_buf_free(tx_eager_buf);
-		return ret;
+		return rxm_ep->txrx_ops->comp_eager_tx(rxm_ep, tx_eager_buf);
 	case RXM_SAR_TX:
 		tx_sar_buf = comp->op_context;
 		assert(comp->flags & FI_SEND);
