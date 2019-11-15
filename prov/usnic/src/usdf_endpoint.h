@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2019, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -39,12 +39,6 @@
 int usdf_ep_port_bind(struct usdf_ep *ep, struct fi_info *info);
 int usdf_ep_dgram_open(struct fid_domain *domain, struct fi_info *info,
 		struct fid_ep **ep, void *context);
-int usdf_ep_msg_open(struct fid_domain *domain, struct fi_info *info,
-		struct fid_ep **ep, void *context);
-int usdf_ep_rdm_open(struct fid_domain *domain, struct fi_info *info,
-		struct fid_ep **ep, void *context);
-int usdf_ep_msg_get_queues(struct usdf_ep *ep);
-void usdf_ep_msg_release_queues(struct usdf_ep *ep);
 int usdf_msg_upd_lcl_addr(struct usdf_ep *ep);
 
 int usdf_ep_getopt_connected(fid_t fid, int level, int optname, void *optval,
