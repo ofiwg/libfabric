@@ -288,37 +288,50 @@ fail:
 	return ret;
 }
 
+/* In pre-1.4, the domain name was NULL.
+ *
+ * There used to be elaborate schemes to try to preserve this pre-1.4
+ * behavior.  In Nov 2019 discussions, however, it was determined that
+ * we could rationalize classifying this as buggy behavior.
+ * Specifically: we should just now always return a domain name --
+ * even if the requested version is <1.4.
+ *
+ * This greatly simplifies the logic here, and also greatly simplifies
+ * layering with the rxd provider.
+ */
 int usdf_domain_getname(uint32_t version, struct usd_device_attrs *dap,
 			char **name)
 {
 	int ret = FI_SUCCESS;
 	char *buf = NULL;
 
-	if (FI_VERSION_GE(version, FI_VERSION(1, 4))) {
-		buf = strdup(dap->uda_devname);
-		if (!buf) {
-			ret = -errno;
-			USDF_DBG("strdup failed while creating domain name\n");
-		}
+	buf = strdup(dap->uda_devname);
+	if (NULL == buf) {
+		ret = -errno;
+		USDF_DBG("strdup failed while creating domain name\n");
+	} else {
+		*name = buf;
 	}
 
-	*name = buf;
 	return ret;
 }
 
-/* In pre-1.4 the domain name was NULL. This is unfortunate as it makes it
- * difficult to tell whether providing a name was intended. In this case, it can
- * be broken into 4 cases:
+/* Check to see if the name supplied in a hint matches the name of our
+ * current domain.
  *
- * 1. Version is greater than or equal to 1.4 and a non-NULL hint is provided.
- *    Just do a string compare.
- * 2. Version is greater than or equal to 1.4 and provided hint is NULL.  Treat
- *    this as _valid_ as it could be an application requesting a 1.4 domain name
- *    but not providing an explicit hint.
- * 3. Version is less than 1.4 and a name hint is provided.  This should always
- *    be _invalid_.
- * 4. Version is less than 1.4 and name hint is NULL. This will always be
- *    _valid_.
+ * In pre-1.4, the domain name was NULL.
+ *
+ * There used to be elaborate schemes to try to preserve this pre-1.4
+ * behavior.  In Nov 2019 discussions, however, it was determined that
+ * we could rationalize classifying this as buggy behavior.
+ * Specifically: we should just now always return a domain name --
+ * even if the requested version is <1.4.
+ *
+ * This greatly simplifies the logic here, and also greatly simplifies
+ * layering with the rxd provider.
+ *
+ * Hence, if a hint was provided, check the domain name (that we now
+ * always have) against the hint.
  */
 bool usdf_domain_checkname(uint32_t version, struct usd_device_attrs *dap,
 			   const char *hint)
@@ -327,46 +340,27 @@ bool usdf_domain_checkname(uint32_t version, struct usd_device_attrs *dap,
 	bool valid;
 	int ret;
 
-	USDF_DBG("checking domain name: version=%d, domain name='%s'\n",
-		 version, hint);
-
-	if (version) {
-		valid = false;
-
-		ret = usdf_domain_getname(version, dap, &reference);
-		if (ret < 0)
-			return false;
-
-		/* If the reference name exists, then this is version 1.4 or
-		 * greater.
-		 */
-		if (reference) {
-			if (hint) {
-				/* Case 1 */
-				valid = (strcmp(reference, hint) == 0);
-			} else {
-				/* Case 2 */
-				valid = true;
-			}
-		} else {
-			/* Case 3 & 4 */
-			valid = (hint == NULL);
-		}
-
-		if (!valid)
-			USDF_DBG("given hint %s does not match %s -- invalid\n",
-				 hint, reference);
-
-		free(reference);
-		return valid;
+        /* If no hint was provided, then by definition, we agree with
+	 * the hint. */
+	if (NULL == hint) {
+		return true;
 	}
 
-	/* If hint is non-NULL then assume the version is 1.4 if not provided.
-	 */
-	if (hint)
-		return usdf_domain_checkname(FI_VERSION(1, 4), dap, hint);
+	USDF_DBG("checking domain name: domain name='%s'\n", hint);
 
-	return usdf_domain_checkname(FI_VERSION(1, 3), dap, hint);
+	ret = usdf_domain_getname(version, dap, &reference);
+	if (ret < 0) {
+		return false;
+	}
+
+	valid = (strcmp(reference, hint) == 0);
+	if (!valid) {
+		USDF_DBG("given hint %s does not match %s -- invalid\n",
+			hint, reference);
+	}
+
+	free(reference);
+	return valid;
 }
 
 /* Query domain's atomic capability.
