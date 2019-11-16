@@ -355,6 +355,7 @@ static struct fi_ops_domain mrail_domain_ops = {
 	.stx_ctx = fi_no_stx_context,
 	.srx_ctx = fi_no_srx_context,
 	.query_atomic = fi_no_query_atomic,
+	.query_collective = fi_no_query_collective,
 };
 
 int mrail_domain_open(struct fid_fabric *fabric, struct fi_info *info,

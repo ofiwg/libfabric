@@ -147,6 +147,16 @@ int barrier_test_run()
 	fi_addr_t world_addr;
 	fi_addr_t barrier_addr;
 	struct fid_mc *coll_mc;
+	struct fi_collective_attr attr;
+
+	attr.op = FI_VOID;
+	attr.datatype = FI_VOID;
+	attr.mode = 0;
+	ret = fi_query_collective(domain, FI_BARRIER, &attr, 0);
+	if (ret) {
+		FT_DEBUG("barrier collective not supported: %d (%s)\n", ret, fi_strerror(ret));
+		return ret;
+	}
 
 	ret = fi_av_set_addr(av_set, &world_addr);
 	if (ret) {
@@ -212,6 +222,16 @@ int sum_all_reduce_test_run()
 	uint64_t data = pm_job.my_rank;
 	size_t count = 1;
 	uint64_t i;
+	struct fi_collective_attr attr;
+
+	attr.op = FI_SUM;
+	attr.datatype = FI_UINT64;
+	attr.mode = 0;
+	ret = fi_query_collective(domain, FI_ALLREDUCE, &attr, 0);
+	if (ret) {
+		FT_DEBUG("SUM AllReduce collective not supported: %d (%s)\n", ret, fi_strerror(ret));
+		return ret;
+	}
 
 	for(i = 0; i < pm_job.num_ranks; i++) {
 		expect_result += i;

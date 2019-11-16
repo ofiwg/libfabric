@@ -80,12 +80,12 @@ struct fid_av_set {
 	struct fi_ops_av_set	*ops;
 };
 
-
 struct fi_collective_attr {
-	struct fi_atomic_attr	datatype_attr;
-	size_t			max_members;
-	uint64_t		mode;
-	enum fi_collective_op	coll;
+	enum fi_op 		op;
+	enum fi_datatype 	datatype;
+	struct fi_atomic_attr 	datatype_attr;
+	size_t 			max_members;
+	uint64_t 		mode;
 };
 
 struct fi_collective_addr {
@@ -302,12 +302,13 @@ fi_gather(struct fid_ep *ep, const void *buf, size_t count, void *desc,
 		coll_addr, root_addr, datatype, flags, context);
 }
 
-static inline int
-fi_query_collective(struct fid_domain *domain, struct fi_collective_attr *attr,
-		    enum fi_datatype datatype, enum fi_op op, uint64_t flags)
+static inline
+int fi_query_collective(struct fid_domain *domain, enum fi_collective_op coll,
+			struct fi_collective_attr *attr, uint64_t flags)
 {
-	return fi_query_atomic(domain, datatype, op, &attr->datatype_attr,
-			       flags | FI_COLLECTIVE);
+	return FI_CHECK_OP(domain->ops, struct fi_ops_domain, query_collective) ?
+		       domain->ops->query_collective(domain, coll, attr, flags) :
+		       -FI_ENOSYS;
 }
 
 #endif

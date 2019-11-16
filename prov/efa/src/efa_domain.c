@@ -116,6 +116,7 @@ static struct fi_ops_domain efa_domain_ops = {
 	.stx_ctx = fi_no_stx_context,
 	.srx_ctx = fi_no_srx_context,
 	.query_atomic = fi_no_query_atomic,
+	.query_collective = fi_no_query_collective,
 };
 
 int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
