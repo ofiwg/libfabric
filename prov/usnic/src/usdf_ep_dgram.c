@@ -565,6 +565,14 @@ int usdf_dgram_fill_dom_attr(uint32_t version, const struct fi_info *hints,
 		return -FI_ENODATA;
 	}
 
+	switch (hints->domain_attr->av_type) {
+	case FI_AV_UNSPEC:
+	case FI_AV_MAP:
+		break;
+	default:
+		return -FI_ENODATA;
+	}
+
 	if (ofi_check_mr_mode(&usdf_ops, version, defaults.mr_mode, hints))
 		return -FI_ENODATA;
 
