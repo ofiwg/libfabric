@@ -149,7 +149,7 @@ int barrier_test_run()
 	struct fid_mc *coll_mc;
 	struct fi_collective_attr attr;
 
-	attr.op = FI_VOID;
+	attr.op = FI_NOOP;
 	attr.datatype = FI_VOID;
 	attr.mode = 0;
 	ret = fi_query_collective(domain, FI_BARRIER, &attr, 0);

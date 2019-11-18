@@ -191,6 +191,9 @@ enum fi_op {
 	FI_MSWAP,
 	/* End of point to point atomic ops */
 	FI_ATOMIC_OP_LAST,
+
+	/* Collective datatypes */
+	FI_NOOP = FI_COLLECTIVE_OFFSET,
 };
 
 #endif
