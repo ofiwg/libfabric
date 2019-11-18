@@ -543,6 +543,24 @@ static int check_ctrl_auto(struct fi_info *info)
 
 
 /*
+ * Local and remote comm checks
+ */
+static int init_comm_both(struct fi_info *hints)
+{
+	hints->caps |= FI_LOCAL_COMM | FI_REMOTE_COMM;
+	return 0;
+}
+
+static int check_comm_both(struct fi_info *info)
+{
+	return (info->caps & FI_LOCAL_COMM) && (info->caps & FI_REMOTE_COMM) &&
+	       (info->domain_attr->caps & FI_LOCAL_COMM) &&
+	       (info->domain_attr->caps & FI_REMOTE_COMM) ?
+		0 : EXIT_FAILURE;
+}
+
+
+/*
  * getinfo test
  */
 static int getinfo_unit_test(char *node, char *service, uint64_t flags,
@@ -724,6 +742,11 @@ getinfo_test(progress, 4, "Test ctrl auto progress", NULL, NULL, 0,
 	     hints, init_ctrl_auto, NULL, check_ctrl_auto, 0)
 
 
+/* Cap local and remote comm tests */
+getinfo_test(comm, 1, "Test local and remote comm support", NULL, NULL, 0,
+	     hints, init_comm_both, NULL, check_comm_both, 0)
+
+
 static void usage(void)
 {
 	ft_unit_usage("getinfo_test", "Unit tests for fi_getinfo");
@@ -800,6 +823,7 @@ int main(int argc, char **argv)
 		TEST_ENTRY_GETINFO(progress2),
 		TEST_ENTRY_GETINFO(progress3),
 		TEST_ENTRY_GETINFO(progress4),
+		TEST_ENTRY_GETINFO(comm1),
 		{ NULL, "" }
 	};
 
