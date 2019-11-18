@@ -204,6 +204,7 @@ static struct fi_ops_domain fi_ibv_msg_domain_ops = {
 	.stx_ctx = fi_no_stx_context,
 	.srx_ctx = fi_ibv_srq_context,
 	.query_atomic = fi_ibv_query_atomic,
+	.query_collective = fi_no_query_collective,
 };
 
 static struct fi_ops_domain fi_ibv_dgram_domain_ops = {
@@ -216,6 +217,7 @@ static struct fi_ops_domain fi_ibv_dgram_domain_ops = {
 	.stx_ctx = fi_no_stx_context,
 	.srx_ctx = fi_no_srx_context,
 	.query_atomic = fi_no_query_atomic,
+	.query_collective = fi_no_query_collective,
 };
 
 static int
