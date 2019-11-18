@@ -59,6 +59,7 @@ struct fi_ep_attr udpx_ep_attr = {
 };
 
 struct fi_domain_attr udpx_domain_attr = {
+	.caps = FI_LOCAL_COMM | FI_REMOTE_COMM,
 	.name = "udp",
 	.threading = FI_THREAD_SAFE,
 	.control_progress = FI_PROGRESS_AUTO,
@@ -80,7 +81,8 @@ struct fi_fabric_attr udpx_fabric_attr = {
 };
 
 struct fi_info udpx_info = {
-	.caps = FI_MSG | FI_SEND | FI_RECV | FI_SOURCE | FI_MULTICAST,
+	.caps = FI_MSG | FI_SEND | FI_RECV | FI_SOURCE | FI_MULTICAST |
+		FI_LOCAL_COMM | FI_REMOTE_COMM,
 	.addr_format = FI_SOCKADDR,
 	.tx_attr = &udpx_tx_attr,
 	.rx_attr = &udpx_rx_attr,
