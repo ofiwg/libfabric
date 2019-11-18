@@ -112,6 +112,7 @@ enum {
 	FT_OPT_SKIP_REG_MR	= 1 << 13,
 	FT_OPT_OOB_ADDR_EXCH	= 1 << 14,
 	FT_OPT_ALLOC_MULT_MR	= 1 << 15,
+	FT_OPT_SERVER_PERSIST	= 1 << 16,
 	FT_OPT_OOB_CTRL		= FT_OPT_OOB_SYNC | FT_OPT_OOB_ADDR_EXCH,
 };
 
@@ -163,6 +164,7 @@ struct ft_opts {
 	enum ft_rma_opcodes rma_op;
 	char *oob_port;
 	int argc;
+	int num_connections;
 
 	uint64_t mr_mode;
 	/* Fail if the selected provider does not support FI_MSG_PREFIX.  */
@@ -236,7 +238,7 @@ extern int ft_parent_proc;
 extern int ft_socket_pair[2];
 extern int sock;
 extern int listen_sock;
-#define ADDR_OPTS "B:P:s:a:b::E::"
+#define ADDR_OPTS "B:P:s:a:b::E::C:"
 #define FAB_OPTS "f:d:p:"
 #define INFO_OPTS FAB_OPTS "e:M:"
 #define CS_OPTS ADDR_OPTS "I:S:mc:t:w:l"
@@ -478,6 +480,8 @@ void show_perf_mr(size_t tsize, int iters, struct timespec *start,
 int ft_send_recv_greeting(struct fid_ep *ep);
 int ft_send_greeting(struct fid_ep *ep);
 int ft_recv_greeting(struct fid_ep *ep);
+
+int ft_accept_next_client();
 
 int check_recv_msg(const char *message);
 uint64_t ft_info_to_mr_access(struct fi_info *info);

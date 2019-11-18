@@ -698,6 +698,19 @@ free:
 	return ret;
 }
 
+int ft_accept_next_client() {
+	int ret;
+
+	if (!ft_check_opts(FT_OPT_SKIP_MSG_ALLOC) && (fi->caps & (FI_MSG | FI_TAGGED))) {
+		/* Initial receive will get remote address for unconnected EPs */
+		ret = ft_post_rx(ep, MAX(rx_size, FT_MAX_CTRL_MSG), &rx_ctx);
+		if (ret)
+			return ret;
+	}
+
+	return ft_init_av();
+}
+
 int ft_getinfo(struct fi_info *hints, struct fi_info **info)
 {
 	char *node, *service;
@@ -2680,6 +2693,8 @@ void ft_addr_usage()
 			"synchronization over the, optional, port");
 	FT_PRINT_OPTS_USAGE("-E[=<oob_port>]", "enable out-of-band address exchange only "
 			"over the, optional, port");
+	FT_PRINT_OPTS_USAGE("-C <number>", "number of connections to accept before "
+			"cleaning up a server");
 }
 
 void ft_usage(char *name, char *desc)
@@ -2826,6 +2841,9 @@ void ft_parse_addr_opts(int op, char *optarg, struct ft_opts *opts)
 		else
 			opts->oob_port = default_oob_port;
 		break;
+	case 'C':
+		opts->options |= FT_OPT_SERVER_PERSIST;
+		opts->num_connections = atoi(optarg);
 	default:
 		/* let getopt handle unknown opts*/
 		break;
