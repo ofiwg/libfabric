@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2017, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2019, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -71,8 +71,6 @@
 #include "usdf_progress.h"
 #include "usdf_timer.h"
 #include "usdf_dgram.h"
-#include "usdf_msg.h"
-#include "usdf_rdm.h"
 #include "usdf_cm.h"
 
 struct usdf_usnic_info *__usdf_devinfo;
@@ -514,190 +512,6 @@ fail:
 	return ret;
 }
 
-static int usdf_fill_info_msg(
-	uint32_t version,
-	const struct fi_info *hints,
-	void *src,
-	void *dest,
-	struct usd_device_attrs *dap,
-	struct fi_info **fi_first,
-	struct fi_info **fi_last)
-{
-	struct fi_info *fi;
-	struct fi_fabric_attr *fattrp;
-	uint32_t addr_format;
-	int ret;
-
-	fi = fi_allocinfo();
-	if (fi == NULL) {
-		ret = -FI_ENOMEM;
-		goto fail;
-	}
-
-	fi->caps = USDF_MSG_CAPS;
-
-	ret = validate_modebits(version, hints,
-				  USDF_MSG_SUPP_MODE, &fi->mode);
-	if (ret)
-		goto fail;
-
-	if (hints != NULL) {
-		addr_format = hints->addr_format;
-
-		/* check that we are capable of what's requested */
-		if ((hints->caps & ~USDF_MSG_CAPS) != 0) {
-			ret = -FI_ENODATA;
-			goto fail;
-		}
-
-		fi->handle = hints->handle;
-	} else {
-		addr_format = FI_FORMAT_UNSPEC;
-	}
-
-	fi->ep_attr->type = FI_EP_MSG;
-
-	ret = usdf_fill_addr_info(fi, addr_format, src, dest, dap);
-	if (ret != 0) {
-		goto fail;
-	}
-
-	/* fabric attrs */
-	fattrp = fi->fabric_attr;
-	ret = usdf_fabric_getname(version, dap, &fattrp->name);
-	if (ret < 0 || fattrp->name == NULL) {
-		ret = -FI_ENOMEM;
-		goto fail;
-	}
-
-	ret = usdf_msg_fill_ep_attr(hints, fi, dap);
-	if (ret)
-		goto fail;
-
-	ret = usdf_msg_fill_dom_attr(version, hints, fi, dap);
-	if (ret)
-		goto fail;
-
-	ret = usdf_msg_fill_tx_attr(version, hints, fi);
-	if (ret)
-		goto fail;
-
-	ret = usdf_msg_fill_rx_attr(version, hints, fi);
-	if (ret)
-		goto fail;
-
-	ret = usdf_alloc_fid_nic(fi, dap);
-	if (ret)
-		goto fail;
-
-	/* add to tail of list */
-	if (*fi_first == NULL) {
-		*fi_first = fi;
-	} else {
-		(*fi_last)->next = fi;
-	}
-	*fi_last = fi;
-
-	return 0;
-
-fail:
-	if (fi != NULL) {
-		fi_freeinfo(fi);
-	}
-	return ret;
-}
-
-static int usdf_fill_info_rdm(
-	uint32_t version,
-	const struct fi_info *hints,
-	void *src,
-	void *dest,
-	struct usd_device_attrs *dap,
-	struct fi_info **fi_first,
-	struct fi_info **fi_last)
-{
-	struct fi_info *fi;
-	struct fi_fabric_attr *fattrp;
-	uint32_t addr_format;
-	int ret;
-
-	fi = fi_allocinfo();
-	if (fi == NULL) {
-		ret = -FI_ENOMEM;
-		goto fail;
-	}
-
-	fi->caps = USDF_RDM_CAPS;
-
-	ret = validate_modebits(version, hints,
-				  USDF_RDM_SUPP_MODE, &fi->mode);
-	if (ret)
-		goto fail;
-
-	if (hints != NULL) {
-		addr_format = hints->addr_format;
-		/* check that we are capable of what's requested */
-		if ((hints->caps & ~USDF_RDM_CAPS) != 0) {
-			ret = -FI_ENODATA;
-			goto fail;
-		}
-
-		fi->handle = hints->handle;
-	} else {
-		addr_format = FI_FORMAT_UNSPEC;
-	}
-	fi->ep_attr->type = FI_EP_RDM;
-
-	ret = usdf_fill_addr_info(fi, addr_format, src, dest, dap);
-	if (ret != 0) {
-		goto fail;
-	}
-
-	/* fabric attrs */
-	fattrp = fi->fabric_attr;
-	ret = usdf_fabric_getname(version, dap, &fattrp->name);
-	if (ret < 0 || fattrp->name == NULL) {
-		ret = -FI_ENOMEM;
-		goto fail;
-	}
-
-	ret = usdf_rdm_fill_ep_attr(hints, fi, dap);
-	if (ret)
-		goto fail;
-
-	ret = usdf_rdm_fill_dom_attr(version, hints, fi, dap);
-	if (ret)
-		goto fail;
-
-	ret = usdf_rdm_fill_tx_attr(version, hints, fi);
-	if (ret)
-		goto fail;
-
-	ret = usdf_rdm_fill_rx_attr(version, hints, fi);
-	if (ret)
-		goto fail;
-
-	ret = usdf_alloc_fid_nic(fi, dap);
-	if (ret)
-		goto fail;
-
-	/* add to tail of list */
-	if (*fi_first == NULL) {
-		*fi_first = fi;
-	} else {
-		(*fi_last)->next = fi;
-	}
-	*fi_last = fi;
-
-	return 0;
-
-fail:
-	if (fi != NULL) {
-		fi_freeinfo(fi);
-	}
-	return ret;
-}
-
 static int
 usdf_get_devinfo(void)
 {
@@ -1010,22 +824,6 @@ usdf_getinfo(uint32_t version, const char *node, const char *service,
 
 		if (ep_type == FI_EP_DGRAM || ep_type == FI_EP_UNSPEC) {
 			ret = usdf_fill_info_dgram(version, hints, src, dest,
-					dap, &fi_first, &fi_last);
-			if (ret != 0 && ret != -FI_ENODATA) {
-				goto fail;
-			}
-		}
-
-		if (ep_type == FI_EP_MSG || ep_type == FI_EP_UNSPEC) {
-			ret = usdf_fill_info_msg(version, hints, src, dest,
-					dap, &fi_first, &fi_last);
-			if (ret != 0 && ret != -FI_ENODATA) {
-				goto fail;
-			}
-		}
-
-		if (ep_type == FI_EP_RDM || ep_type == FI_EP_UNSPEC) {
-			ret = usdf_fill_info_rdm(version, hints, src, dest,
 					dap, &fi_first, &fi_last);
 			if (ret != 0 && ret != -FI_ENODATA) {
 				goto fail;

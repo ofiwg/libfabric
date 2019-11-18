@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2018, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2019, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -55,7 +55,6 @@
 
 #include "usnic_direct.h"
 #include "usdf.h"
-#include "usdf_rdm.h"
 #include "usdf_timer.h"
 #include "usdf_poll.h"
 #include "usdf_cm.h"
@@ -90,81 +89,6 @@ usdf_domain_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
         return 0;
 }
 
-static void
-usdf_dom_rdc_free_data(struct usdf_domain *udp)
-{
-	struct usdf_rdm_connection *rdc;
-	int i;
-
-	if (udp->dom_rdc_hashtab != NULL) {
-
-		pthread_spin_lock(&udp->dom_progress_lock);
-		for (i = 0; i < USDF_RDM_HASH_SIZE; ++i) {
-			rdc = udp->dom_rdc_hashtab[i];
-			while (rdc != NULL) {
-				usdf_timer_reset(udp->dom_fabric,
-						rdc->dc_timer, 0);
-				rdc = rdc->dc_hash_next;
-			}
-		}
-		pthread_spin_unlock(&udp->dom_progress_lock);
-
-		/* XXX probably want a timeout here... */
-		while (ofi_atomic_get32(&udp->dom_rdc_free_cnt) <
-		       (int)udp->dom_rdc_total) {
-			pthread_yield();
-		}
-
-		free(udp->dom_rdc_hashtab);
-		udp->dom_rdc_hashtab = NULL;
-	}
-
-	while (!SLIST_EMPTY(&udp->dom_rdc_free)) {
-		rdc = SLIST_FIRST(&udp->dom_rdc_free);
-		SLIST_REMOVE_HEAD(&udp->dom_rdc_free, dc_addr_link);
-		usdf_timer_free(udp->dom_fabric, rdc->dc_timer);
-		free(rdc);
-	}
-}
-
-static int
-usdf_dom_rdc_alloc_data(struct usdf_domain *udp)
-{
-	struct usdf_rdm_connection *rdc;
-	int ret;
-	int i;
-
-	udp->dom_rdc_hashtab = calloc(USDF_RDM_HASH_SIZE,
-			sizeof(*udp->dom_rdc_hashtab));
-	if (udp->dom_rdc_hashtab == NULL) {
-		return -FI_ENOMEM;
-	}
-	SLIST_INIT(&udp->dom_rdc_free);
-	ofi_atomic_initialize32(&udp->dom_rdc_free_cnt, 0);
-	for (i = 0; i < USDF_RDM_FREE_BLOCK; ++i) {
-		rdc = calloc(1, sizeof(*rdc));
-		if (rdc == NULL) {
-			return -FI_ENOMEM;
-		}
-		ret = usdf_timer_alloc(usdf_rdm_rdc_timeout, rdc,
-				&rdc->dc_timer);
-		if (ret != 0) {
-			free(rdc);
-			return ret;
-		}
-		rdc->dc_flags = USDF_DCS_UNCONNECTED | USDF_DCF_NEW_RX;
-		rdc->dc_next_rx_seq = 0;
-		rdc->dc_next_tx_seq = 0;
-		rdc->dc_last_rx_ack = rdc->dc_next_tx_seq - 1;
-		TAILQ_INIT(&rdc->dc_wqe_posted);
-		TAILQ_INIT(&rdc->dc_wqe_sent);
-		SLIST_INSERT_HEAD(&udp->dom_rdc_free, rdc, dc_addr_link);
-		ofi_atomic_inc32(&udp->dom_rdc_free_cnt);
-	}
-	udp->dom_rdc_total = USDF_RDM_FREE_BLOCK;
-	return 0;
-}
-
 static int
 usdf_domain_close(fid_t fid)
 {
@@ -184,7 +108,6 @@ usdf_domain_close(fid_t fid)
 			return ret;
 		}
 	}
-	usdf_dom_rdc_free_data(udp);
 
 	if (udp->dom_eq != NULL) {
 		ofi_atomic_dec32(&udp->dom_eq->eq_refcnt);
@@ -344,11 +267,6 @@ skip_size_check:
 		udp->dom_info->dest_addr = NULL;
 	}
 
-	ret = usdf_dom_rdc_alloc_data(udp);
-	if (ret != 0) {
-		goto fail;
-	}
-
 	udp->dom_fabric = fp;
 	LIST_INSERT_HEAD(&fp->fab_domain_list, udp, dom_link);
 	ofi_atomic_initialize32(&udp->dom_refcnt, 0);
@@ -365,43 +283,55 @@ fail:
 		if (udp->dom_dev != NULL) {
 			usd_close(udp->dom_dev);
 		}
-		usdf_dom_rdc_free_data(udp);
 		free(udp);
 	}
 	return ret;
 }
 
+/* In pre-1.4, the domain name was NULL.
+ *
+ * There used to be elaborate schemes to try to preserve this pre-1.4
+ * behavior.  In Nov 2019 discussions, however, it was determined that
+ * we could rationalize classifying this as buggy behavior.
+ * Specifically: we should just now always return a domain name --
+ * even if the requested version is <1.4.
+ *
+ * This greatly simplifies the logic here, and also greatly simplifies
+ * layering with the rxd provider.
+ */
 int usdf_domain_getname(uint32_t version, struct usd_device_attrs *dap,
 			char **name)
 {
 	int ret = FI_SUCCESS;
 	char *buf = NULL;
 
-	if (FI_VERSION_GE(version, FI_VERSION(1, 4))) {
-		buf = strdup(dap->uda_devname);
-		if (!buf) {
-			ret = -errno;
-			USDF_DBG("strdup failed while creating domain name\n");
-		}
+	buf = strdup(dap->uda_devname);
+	if (NULL == buf) {
+		ret = -errno;
+		USDF_DBG("strdup failed while creating domain name\n");
+	} else {
+		*name = buf;
 	}
 
-	*name = buf;
 	return ret;
 }
 
-/* In pre-1.4 the domain name was NULL. This is unfortunate as it makes it
- * difficult to tell whether providing a name was intended. In this case, it can
- * be broken into 4 cases:
+/* Check to see if the name supplied in a hint matches the name of our
+ * current domain.
  *
- * 1. Version is greater than or equal to 1.4 and a non-NULL hint is provided.
- *    Just do a string compare.
- * 2. Version is greater than or equal to 1.4 and provided hint is NULL.  Treat
- *    this as _valid_ as it could be an application requesting a 1.4 domain name
- *    but not providing an explicit hint.
- * 3. Version is less than 1.4 and a name hint is provided.  This should always
- *    be _invalid_.
- * 4. Version is less than 1.4 and name hint is NULL. This will always be
- *    _valid_.
+ * In pre-1.4, the domain name was NULL.
+ *
+ * There used to be elaborate schemes to try to preserve this pre-1.4
+ * behavior.  In Nov 2019 discussions, however, it was determined that
+ * we could rationalize classifying this as buggy behavior.
+ * Specifically: we should just now always return a domain name --
+ * even if the requested version is <1.4.
+ *
+ * This greatly simplifies the logic here, and also greatly simplifies
+ * layering with the rxd provider.
+ *
+ * Hence, if a hint was provided, check the domain name (that we now
+ * always have) against the hint.
  */
 bool usdf_domain_checkname(uint32_t version, struct usd_device_attrs *dap,
 			   const char *hint)
@@ -410,46 +340,27 @@ bool usdf_domain_checkname(uint32_t version, struct usd_device_attrs *dap,
 	bool valid;
 	int ret;
 
-	USDF_DBG("checking domain name: version=%d, domain name='%s'\n",
-		 version, hint);
-
-	if (version) {
-		valid = false;
-
-		ret = usdf_domain_getname(version, dap, &reference);
-		if (ret < 0)
-			return false;
-
-		/* If the reference name exists, then this is version 1.4 or
-		 * greater.
-		 */
-		if (reference) {
-			if (hint) {
-				/* Case 1 */
-				valid = (strcmp(reference, hint) == 0);
-			} else {
-				/* Case 2 */
-				valid = true;
-			}
-		} else {
-			/* Case 3 & 4 */
-			valid = (hint == NULL);
-		}
-
-		if (!valid)
-			USDF_DBG("given hint %s does not match %s -- invalid\n",
-				 hint, reference);
-
-		free(reference);
-		return valid;
+        /* If no hint was provided, then by definition, we agree with
+	 * the hint. */
+	if (NULL == hint) {
+		return true;
 	}
 
-	/* If hint is non-NULL then assume the version is 1.4 if not provided.
-	 */
-	if (hint)
-		return usdf_domain_checkname(FI_VERSION(1, 4), dap, hint);
+	USDF_DBG("checking domain name: domain name='%s'\n", hint);
 
-	return usdf_domain_checkname(FI_VERSION(1, 3), dap, hint);
+	ret = usdf_domain_getname(version, dap, &reference);
+	if (ret < 0) {
+		return false;
+	}
+
+	valid = (strcmp(reference, hint) == 0);
+	if (!valid) {
+		USDF_DBG("given hint %s does not match %s -- invalid\n",
+			hint, reference);
+	}
+
+	free(reference);
+	return valid;
 }
 
 /* Query domain's atomic capability.

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2017, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2019, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -65,7 +65,6 @@
 #include "usdf.h"
 #include "usdf_endpoint.h"
 #include "usdf_cm.h"
-#include "usdf_msg.h"
 
 static int
 usdf_pep_bind(fid_t fid, fid_t bfid, uint64_t flags)
@@ -401,9 +400,6 @@ static int usdf_pep_reject_async(void *vreq)
 	crp->cr_resid -= ret;
 	crp->cr_ptr += ret;
 
-	if (crp->cr_resid == 0)
-		usdf_cm_msg_connreq_cleanup(crp);
-
 	return FI_SUCCESS;
 }
 
@@ -701,10 +697,6 @@ usdf_pep_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	if (info->ep_attr->type != FI_EP_MSG) {
 		return -FI_ENODEV;
-	}
-
-	if ((info->caps & ~USDF_MSG_CAPS) != 0) {
-		return -FI_EBADF;
 	}
 
 	switch (info->addr_format) {
