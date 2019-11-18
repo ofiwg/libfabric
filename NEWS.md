@@ -72,6 +72,8 @@ v1.9.0, Fri Nov 22, 2019
 - Fix default AV count
 - Minor cleanups and optimizations
 - Handle errors unpacking packets
+- Report all failures when inserting addresses into AV
+- Remove unneeded posted buffer tracking
 
 ## RxM
 
@@ -96,6 +98,9 @@ v1.9.0, Fri Nov 22, 2019
 - Add user ID to shared memory name
 - Only support small transfers if ptrace is restricted
 - Fix incorrect reporting of completion buffer
+- Return correct addrlen on fi_getname
+- Round tx/rx sizes up in case sizes are not already a power of two
+- Skip utility providers for shm provider
 
 ## TCP
 
