@@ -852,6 +852,14 @@ int ofi_prov_check_dup_info(const struct util_prov *util_prov,
 			    uint32_t api_version,
 			    const struct fi_info *user_info,
 			    struct fi_info **info);
+static inline uint64_t
+ofi_pick_core_flags(uint64_t all_util_flags, uint64_t all_core_flags,
+		    uint64_t use_core_flags)
+{
+	return (all_util_flags & ~use_core_flags) |
+	       (all_core_flags & use_core_flags);
+}
+
 int ofi_check_info(const struct util_prov *util_prov,
 		   const struct fi_info *prov_info, uint32_t api_version,
 		   const struct fi_info *user_info);
