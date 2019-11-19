@@ -461,7 +461,7 @@ static int rxm_getname(fid_t fid, void *addr, size_t *addrlen)
 }
 
 static int rxm_join_coll(struct fid_ep *ep, const void *addr, uint64_t flags,
-		    struct fid_mc **mc, void *context)
+			  struct fid_mc **mc, void *context)
 {
 	if((flags & FI_COLLECTIVE) == 0) {
 		return -FI_ENOSYS;

@@ -1105,7 +1105,8 @@ err:
 	return ret;
 }
 
-int rxm_finish_coll_eager_send(struct rxm_ep *rxm_ep, struct rxm_tx_eager_buf *tx_eager_buf)
+int rxm_finish_coll_eager_send(struct rxm_ep *rxm_ep,
+				  struct rxm_tx_eager_buf *tx_eager_buf)
 {
 	int ret;
 
