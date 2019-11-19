@@ -99,8 +99,7 @@ ssize_t fi_gather(struct fid_ep *ep, const void *buf, size_t count,
 	uint64_t flags, void *context);
 
 int fi_query_collective(struct fid_domain *domain,
-	enum fi_datatype datatype, enum fi_op op,
-	struct fi_collective_attr *attr, uint64_t flags);
+	fi_collective_op coll, struct fi_collective_attr *attr, uint64_t flags);
 ```
 
 # ARGUMENTS
@@ -444,35 +443,47 @@ by the provider must be implemented by the application.  The query
 call checks whether a provider supports a specific collective operation
 for a given datatype and operation, if applicable.
 
-The datatype and operation of the collective are provided as input
-into fi_query_collective.  For operations that do not exchange
-application data, such as fi_barrier, the datatype should be set to
-FI_VOID.  The op parameter may reference one of these atomic opcodes:
-FI_MIN, FI_MAX, FI_SUM, FI_PROD, FI_LOR, FI_LAND, FI_BOR, FI_BAND,
-FI_LXOR, FI_BXOR, or a collective operation: FI_BARRIER, FI_BROADCAST,
-FI_ALLTOALL, FI_ALLGATHER.  The use of an atomic opcode will indicate
-if the provider supports the fi_allreduce() call for the given
-operation and datatype, unless the FI_SCATTER flag has been specified.  If
-FI_SCATTER has been set, query will return if the provider supports the
-fi_reduce_scatter() call for the given operation and datatype.
-Specifying a collective operation for the op parameter queries support
-for the corresponding collective.
+The name of the collective, as well as the datatype and associated
+operation, if applicable, and are provided as input
+into fi_query_collective.
 
-On success, fi_query_collective will provide information about
-the supported limits through the struct fi_collective_attr parameter.
+The coll parameter may reference one of these collectives:
+FI_BARRIER, FI_BROADCAST, FI_ALLTOALL, FI_ALLREDUCE, FI_ALLGATHER,
+FI_REDUCE_SCATTER, FI_REDUCE, FI_SCATTER, or FI_GATHER.  Additional
+details on the collective operation is specified through the struct
+fi_collective_attr parameter.  For collectives that act on data, the
+operation and related data type must be specified through the given
+attributes.
 
 {% highlight c %}
 struct fi_collective_attr {
+    enum fi_op op;
+    enum fi_datatype datatype;
 	struct fi_atomic_attr datatype_attr;
 	size_t max_members;
 	uint64_t mode;
-	enum fi_collective_op coll;
 };
 {% endhighlight %}
 
 For a description of struct fi_atomic_attr, see
 [`fi_atomic`(3)](fi_atomic.3.html).
 
+*op*
+: On input, this specifies the atomic operation involved with the collective
+  call.  This should be set to one of the following values: FI_MIN, FI_MAX,
+  FI_SUM, FI_PROD, FI_LOR, FI_LAND, FI_BOR, FI_BAND, FI_LXOR, FI_BXOR,
+  FI_ATOMIC_READ, FI_ATOMIC_WRITE, of FI_NOOP.  For collectives that do
+  not exchange application data (fi_barrier), this should be set to FI_NOOP.
+
+*datatype*
+: On onput, specifies the datatype of the data being modified by the
+  collective.  This should be set to one of the following values:
+  FI_INT8, FI_UINT8, FI_INT16, FI_UINT16, FI_INT32, FI_UINT32, FI_INT64,
+  FI_UINT64, FI_FLOAT, FI_DOUBLE, FI_FLOAT_COMPLEX, FI_DOUBLE_COMPLEX,
+  FI_LONG_DOUBLE, FI_LONG_DOUBLE_COMPLEX, or FI_VOID.  For collectives
+  that do not exchange application data (fi_barrier), this should be set
+  to FI_VOID.
+  
 *datatype_attr.count*
 : The maximum number of elements that may be used with the collective.
 
@@ -488,13 +499,7 @@ For a description of struct fi_atomic_attr, see
 *mode*
 : This field is reserved and should be 0.
 
-*coll*
-: Specifies the collective operation for which information is being
-  requested. Valid values are FI_BARRIER, FI_BROADCAST, FI_ALLTOALL,
-  FI_ALLREDUCE, FI_ALLGATHER, FI_REDUCE_SCATTER, FI_REDUCE, FI_SCATTER,
-  and FI_GATHER.
-
-If a collective operation is supported, the query call will return 0,
+If a collective operation is supported, the query call will return FI_SUCCESS,
 along with attributes on the limits for using that collective operation
 through the provider.
 
