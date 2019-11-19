@@ -323,11 +323,18 @@ static int rxm_recv_queue_init(struct rxm_ep *rxm_ep,  struct rxm_recv_queue *re
 
 static void rxm_recv_queue_close(struct rxm_recv_queue *recv_queue)
 {
+	struct rxm_rx_buf *rx_buf;
+
 	/* It indicates that the recv_queue were allocated */
 	if (recv_queue->fs) {
 		rxm_recv_fs_free(recv_queue->fs);
 	}
-	// TODO cleanup recv_list and unexp msg list
+
+	while (!dlist_empty(&recv_queue->unexp_msg_list)) {
+		dlist_pop_front(&recv_queue->unexp_msg_list,
+				struct rxm_rx_buf, rx_buf, unexp_msg.entry);
+		ofi_buf_free(rx_buf);
+	}
 }
 
 static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
