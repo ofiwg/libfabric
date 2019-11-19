@@ -970,6 +970,7 @@ static void fi_epoll_process_work_item_list(struct fi_epoll *ep)
 		case EPOLL_CTL_ADD:
 			ep->fds[ep->nfds].fd = item->fd;
 			ep->fds[ep->nfds].events = item->events;
+			ep->fds[ep->nfds].revents = 0;
 			ep->context[ep->nfds] = item->context;
 			ep->nfds++;
 			break;
