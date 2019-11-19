@@ -379,7 +379,7 @@ static int ft_alloc_ctx_array(struct ft_context **mr_array, char ***mr_bufs,
 	for (i = 0; i < opts.window_size; i++) {
 		context = &(*mr_array)[i];
 		if (!(opts.options & FT_OPT_ALLOC_MULT_MR)) {
-			context->buf = default_buf;
+			context->buf = default_buf + mr_size * i;
 			continue;
 		}
 		(*mr_bufs)[i] = calloc(1, mr_size);
@@ -435,7 +435,8 @@ static int ft_alloc_msgs(void)
 		ft_set_tx_rx_sizes(&tx_size, &rx_size);
 		tx_mr_size = 0;
 		rx_mr_size = 0;
-		buf_size = MAX(tx_size, FT_MAX_CTRL_MSG) + MAX(rx_size, FT_MAX_CTRL_MSG);
+		buf_size = MAX(tx_size, FT_MAX_CTRL_MSG) * opts.window_size + 
+			   MAX(rx_size, FT_MAX_CTRL_MSG) * opts.window_size;
 	}
 
 	if (opts.options & FT_OPT_ALIGN) {
@@ -459,9 +460,11 @@ static int ft_alloc_msgs(void)
 	}
 	memset(buf, 0, buf_size);
 	rx_buf = buf;
-	tx_buf = (char *) buf + MAX(rx_size, FT_MAX_CTRL_MSG);
-	tx_buf = (void *) (((uintptr_t) tx_buf + alignment - 1) &
-			   ~(alignment - 1));
+
+	if (opts.options & FT_OPT_ALLOC_MULT_MR)
+		tx_buf = (char *) buf + MAX(rx_size, FT_MAX_CTRL_MSG);
+	else
+		tx_buf = (char *) buf + MAX(rx_size, FT_MAX_CTRL_MSG) * opts.window_size;
 
 	remote_cq_data = ft_init_cq_data(fi);
 
