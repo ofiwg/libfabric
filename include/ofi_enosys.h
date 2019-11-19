@@ -191,6 +191,7 @@ static struct fi_ops_domain X = {
 	.stx_ctx = fi_no_stx_context,
 	.srx_ctx = fi_no_srx_context,
 	.query_atomic = fi_no_query_atomic,
+	.query_collective = fi_no_query_collective,
 };
 */
 int fi_no_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
@@ -211,7 +212,8 @@ int fi_no_srx_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 		struct fid_ep **rx_ep, void *context);
 int fi_no_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 		enum fi_op op, struct fi_atomic_attr *attr, uint64_t flags);
-
+int fi_no_query_collective(struct fid_domain *domain, enum fi_collective_op coll,
+			   struct fi_collective_attr *attr, uint64_t flags);
 
 /*
 static struct fi_ops_mr X = {

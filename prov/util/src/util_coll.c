@@ -983,3 +983,49 @@ void ofi_coll_handle_xfer_comp(uint64_t tag, void *ctx)
 	util_ep = container_of(xfer_item->hdr.coll_op->mc->ep, struct util_ep, ep_fid);
 	util_coll_op_progress_work(util_ep, xfer_item->hdr.coll_op);
 }
+
+int ofi_query_collective(struct fid_domain *domain, enum fi_collective_op coll,
+				struct fi_collective_attr *attr, uint64_t flags)
+{
+	int ret;
+
+	if (!attr || attr->mode != 0)
+		return -FI_EINVAL;
+
+	switch (coll) {
+	case FI_BARRIER:
+		ret = FI_SUCCESS;
+		break;
+	case FI_ALLREDUCE:
+		if (FI_MIN <= attr->op && FI_BXOR >= attr->op)
+			ret = fi_query_atomic(domain, attr->datatype, attr->op,
+					      &attr->datatype_attr, flags);
+		else
+			return -FI_ENOSYS;
+		break;
+	case FI_BROADCAST:
+	case FI_ALLTOALL:
+	case FI_ALLGATHER:
+	case FI_REDUCE_SCATTER:
+	case FI_REDUCE:
+	case FI_SCATTER:
+	case FI_GATHER:
+	default:
+		return -FI_ENOSYS;
+	}
+
+	if (ret)
+		return ret;
+
+	// with the currently implemented software based collective operations
+	// the only restriction is the number of ranks we can address, as limited
+	// by the size of the rank portion of the collective tag, which is 31 bits.
+	// future collectives may impose further restrictions which will need to update
+	// the calculation.  For example, operations which require dedicated space in
+	// the recieve buffer for each rank would limit the number of members by buffer
+	// size and value type (8kB buffer / 64B value = 128 member max).
+	// hardware may impose further restrictions
+	attr->max_members = ~(0x80000000);
+
+	return FI_SUCCESS;
+}

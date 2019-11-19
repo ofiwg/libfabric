@@ -272,6 +272,7 @@ static struct fi_ops_domain sock_dom_ops = {
 	.stx_ctx = sock_stx_ctx,
 	.srx_ctx = sock_srx_ctx,
 	.query_atomic = sock_query_atomic,
+	.query_collective = fi_no_query_collective,
 };
 
 int sock_domain(struct fid_fabric *fabric, struct fi_info *info,

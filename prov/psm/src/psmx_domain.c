@@ -246,6 +246,7 @@ static struct fi_ops_domain psmx_domain_ops = {
 	.stx_ctx = psmx_stx_ctx,
 	.srx_ctx = fi_no_srx_context,
 	.query_atomic = psmx_query_atomic,
+	.query_collective = fi_no_query_collective,
 };
 
 static int psmx_key_compare(void *key1, void *key2)

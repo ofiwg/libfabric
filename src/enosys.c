@@ -270,6 +270,11 @@ int fi_no_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 {
 	return -FI_ENOSYS;
 }
+int fi_no_query_collective(struct fid_domain *domain, enum fi_collective_op coll,
+			   struct fi_collective_attr *attr, uint64_t flags)
+{
+	return -FI_ENOSYS;
+}
 
 /*
  * struct fi_ops_mr

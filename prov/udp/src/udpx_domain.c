@@ -47,6 +47,7 @@ static struct fi_ops_domain udpx_domain_ops = {
 	.stx_ctx = fi_no_stx_context,
 	.srx_ctx = fi_no_srx_context,
 	.query_atomic = fi_no_query_atomic,
+	.query_collective = fi_no_query_collective,
 };
 
 static int udpx_domain_close(fid_t fid)

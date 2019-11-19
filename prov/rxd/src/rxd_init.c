@@ -90,7 +90,8 @@ int rxd_info_to_core(uint32_t version, const struct fi_info *rxd_info,
 int rxd_info_to_rxd(uint32_t version, const struct fi_info *core_info,
 		    struct fi_info *info)
 {
-	info->caps = rxd_info.caps;
+	info->caps = ofi_pick_core_flags(rxd_info.caps, core_info->caps,
+					 FI_LOCAL_COMM | FI_REMOTE_COMM);
 	info->mode = rxd_info.mode;
 
 	*info->tx_attr = *rxd_info.tx_attr;
@@ -103,6 +104,9 @@ int rxd_info_to_rxd(uint32_t version, const struct fi_info *core_info,
 	*info->rx_attr = *rxd_info.rx_attr;
 	*info->ep_attr = *rxd_info.ep_attr;
 	*info->domain_attr = *rxd_info.domain_attr;
+	info->domain_attr->caps = ofi_pick_core_flags(rxd_info.domain_attr->caps,
+						core_info->domain_attr->caps,
+						FI_LOCAL_COMM | FI_REMOTE_COMM);
 	if (core_info->nic) {
 		info->nic = ofi_nic_dup(core_info->nic);
 		if (!info->nic)
