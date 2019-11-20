@@ -70,6 +70,13 @@ static struct fi_ops udpx_domain_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
+static struct fi_ops_mr udpx_mr_ops = {
+	.size = sizeof(struct fi_ops_mr),
+	.reg = ofi_mr_reg,
+	.regv = ofi_mr_regv,
+	.regattr = ofi_mr_regattr,
+};
+
 int udpx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_domain **domain, void *context)
 {
@@ -93,5 +100,6 @@ int udpx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	*domain = &util_domain->domain_fid;
 	(*domain)->fid.ops = &udpx_domain_fi_ops;
 	(*domain)->ops = &udpx_domain_ops;
+	(*domain)->mr = &udpx_mr_ops;
 	return 0;
 }
