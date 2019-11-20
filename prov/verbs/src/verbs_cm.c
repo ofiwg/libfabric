@@ -254,7 +254,7 @@ fi_ibv_msg_xrc_ep_reject(struct fi_ibv_connreq *connreq,
 		return ret;
 
 	fi_ibv_set_xrc_cm_data(cm_data, connreq->xrc.is_reciprocal,
-			       connreq->xrc.conn_tag, connreq->xrc.port, 0);
+			       connreq->xrc.conn_tag, connreq->xrc.port, 0, 0);
 	ret = rdma_reject(connreq->id, cm_data,
 			  (uint8_t) paramlen) ? -errno : 0;
 	free(cm_data);

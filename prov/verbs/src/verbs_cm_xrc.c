@@ -93,13 +93,15 @@ void fi_ibv_save_priv_data(struct fi_ibv_xrc_ep *ep, const void *data,
 }
 
 void fi_ibv_set_xrc_cm_data(struct fi_ibv_xrc_cm_data *local, int reciprocal,
-			    uint32_t conn_tag, uint16_t port, uint32_t param)
+			    uint32_t conn_tag, uint16_t port, uint32_t tgt_qpn,
+			    uint32_t srqn)
 {
 	local->version = FI_IBV_XRC_VERSION;
 	local->reciprocal = reciprocal ? 1 : 0;
 	local->port = htons(port);
 	local->conn_tag = htonl(conn_tag);
-	local->param = htonl(param);
+	local->tgt_qpn = htonl(tgt_qpn);
+	local->srqn = htonl(srqn);
 }
 
 int fi_ibv_verify_xrc_cm_data(struct fi_ibv_xrc_cm_data *remote,
@@ -228,8 +230,7 @@ int fi_ibv_connect_xrc(struct fi_ibv_xrc_ep *ep, struct sockaddr *addr,
 }
 
 /* Caller must hold the eq:lock */
-void fi_ibv_ep_ini_conn_done(struct fi_ibv_xrc_ep *ep, uint32_t peer_srqn,
-			     uint32_t tgt_qpn)
+void fi_ibv_ep_ini_conn_done(struct fi_ibv_xrc_ep *ep, uint32_t tgt_qpn)
 {
 	assert(ep->base_ep.id && ep->ini_conn);
 
@@ -297,13 +298,14 @@ int fi_ibv_accept_xrc(struct fi_ibv_xrc_ep *ep, int reciprocal,
 
 	connreq = container_of(ep->base_ep.info->handle,
 			       struct fi_ibv_connreq, handle);
-	ret = fi_ibv_ep_create_tgt_qp(ep, connreq->xrc.conn_data);
+	ret = fi_ibv_ep_create_tgt_qp(ep, connreq->xrc.tgt_qpn);
 	if (ret)
 		return ret;
 
+	ep->peer_srqn = connreq->xrc.peer_srqn;
 	fi_ibv_set_xrc_cm_data(cm_data, connreq->xrc.is_reciprocal,
 			       connreq->xrc.conn_tag, connreq->xrc.port,
-			       ep->srqn);
+			       0, ep->srqn);
 	conn_param.private_data = cm_data;
 	conn_param.private_data_len = paramlen;
 	conn_param.responder_resources = RDMA_MAX_RESP_RES;

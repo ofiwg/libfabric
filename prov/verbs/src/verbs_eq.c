@@ -144,7 +144,8 @@ static int fi_ibv_eq_set_xrc_info(struct rdma_cm_event *event,
 	info->is_reciprocal = remote->reciprocal;
 	info->conn_tag = ntohl(remote->conn_tag);
 	info->port = ntohs(remote->port);
-	info->conn_data = ntohl(remote->param);
+	info->tgt_qpn = ntohl(remote->tgt_qpn);
+	info->peer_srqn = ntohl(remote->srqn);
 	info->conn_param = event->param.conn;
 	info->conn_param.private_data = NULL;
 	info->conn_param.private_data_len = 0;
@@ -429,11 +430,10 @@ fi_ibv_eq_xrc_conn_event(struct fi_ibv_xrc_ep *ep,
 			rdma_disconnect(ep->base_ep.id);
 			goto err;
 		}
-		ep->peer_srqn = xrc_info.conn_data;
+		ep->peer_srqn = xrc_info.peer_srqn;
 		fi_ibv_eq_skip_xrc_cm_data(&priv_data, &priv_datalen);
 		fi_ibv_save_priv_data(ep, priv_data, priv_datalen);
-		fi_ibv_ep_ini_conn_done(ep, xrc_info.conn_data,
-					xrc_info.conn_param.qp_num);
+		fi_ibv_ep_ini_conn_done(ep, xrc_info.conn_param.qp_num);
 		fi_ibv_eq_xrc_establish(cma_event);
 
 		/* If we have received the reciprocal connect request,
@@ -485,9 +485,8 @@ fi_ibv_eq_xrc_recip_conn_event(struct fi_ibv_eq *eq,
 			return -FI_EAVAIL;
 		}
 
-		ep->peer_srqn = xrc_info.conn_data;
-		fi_ibv_ep_ini_conn_done(ep, xrc_info.conn_data,
-					xrc_info.conn_param.qp_num);
+		ep->peer_srqn = xrc_info.peer_srqn;
+		fi_ibv_ep_ini_conn_done(ep, xrc_info.conn_param.qp_num);
 		fi_ibv_eq_xrc_establish(cma_event);
 	} else {
 		fi_ibv_ep_tgt_conn_done(ep);

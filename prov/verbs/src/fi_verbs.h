@@ -634,13 +634,14 @@ struct fi_ops_rma fi_ibv_msg_ep_rma_ops;
 struct fi_ops_rma fi_ibv_msg_xrc_ep_rma_ops_ts;
 struct fi_ops_rma fi_ibv_msg_xrc_ep_rma_ops;
 
-#define FI_IBV_XRC_VERSION	1
+#define FI_IBV_XRC_VERSION	2
 
 struct fi_ibv_xrc_cm_data {
 	uint8_t		version;
 	uint8_t		reciprocal;
 	uint16_t	port;
-	uint32_t	param;
+	uint32_t	tgt_qpn;
+	uint32_t	srqn;
 	uint32_t	conn_tag;
 };
 
@@ -648,7 +649,8 @@ struct fi_ibv_xrc_conn_info {
 	uint32_t		conn_tag;
 	uint32_t		is_reciprocal;
 	uint32_t		ini_qpn;
-	uint32_t		conn_data;
+	uint32_t		tgt_qpn;
+	uint32_t		peer_srqn;
 	uint16_t		port;
 	struct rdma_conn_param	conn_param;
 };
@@ -680,7 +682,8 @@ void fi_ibv_eq_clear_xrc_conn_tag(struct fi_ibv_xrc_ep *ep);
 struct fi_ibv_xrc_ep *fi_ibv_eq_xrc_conn_tag2ep(struct fi_ibv_eq *eq,
 						uint32_t conn_tag);
 void fi_ibv_set_xrc_cm_data(struct fi_ibv_xrc_cm_data *local, int reciprocal,
-			    uint32_t conn_tag, uint16_t port, uint32_t param);
+			    uint32_t conn_tag, uint16_t port, uint32_t tgt_qpn,
+			    uint32_t srqn);
 int fi_ibv_verify_xrc_cm_data(struct fi_ibv_xrc_cm_data *remote,
 			      int private_data_len);
 int fi_ibv_connect_xrc(struct fi_ibv_xrc_ep *ep, struct sockaddr *addr,
@@ -700,8 +703,7 @@ void fi_ibv_save_priv_data(struct fi_ibv_xrc_ep *ep, const void *data,
 			   size_t len);
 int fi_ibv_ep_create_ini_qp(struct fi_ibv_xrc_ep *ep, void *dst_addr,
 			    uint32_t *peer_tgt_qpn);
-void fi_ibv_ep_ini_conn_done(struct fi_ibv_xrc_ep *ep, uint32_t peer_srqn,
-			    uint32_t peer_tgt_qpn);
+void fi_ibv_ep_ini_conn_done(struct fi_ibv_xrc_ep *ep, uint32_t peer_tgt_qpn);
 void fi_ibv_ep_ini_conn_rejected(struct fi_ibv_xrc_ep *ep);
 int fi_ibv_ep_create_tgt_qp(struct fi_ibv_xrc_ep *ep, uint32_t tgt_qpn);
 void fi_ibv_ep_tgt_conn_done(struct fi_ibv_xrc_ep *qp);

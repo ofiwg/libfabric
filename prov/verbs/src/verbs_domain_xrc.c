@@ -344,7 +344,7 @@ int fi_ibv_process_ini_conn(struct fi_ibv_xrc_ep *ep,int reciprocal,
 			       ep->conn_setup->remote_conn_tag :
 			       ep->conn_setup->conn_tag,
 			       ep->base_ep.eq->xrc.pep_port,
-			       ep->ini_conn->tgt_qpn);
+			       ep->ini_conn->tgt_qpn, ep->srqn);
 
 	ep->base_ep.conn_param.private_data = cm_data;
 	ep->base_ep.conn_param.private_data_len = paramlen;
