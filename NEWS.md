@@ -50,8 +50,6 @@ v1.9.0, Fri Nov 22, 2019
 - Fix leaks of internal resources
 - Miscellaneous cleanups and bug fixes
 
-## GNI
-
 ## MRail
 
 - Renamed address control environment variable
