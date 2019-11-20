@@ -377,7 +377,7 @@ RXM_INI
 	fi_param_define(&rxm_prov, "sar_limit", FI_PARAM_SIZE_T,
 			"Set this environment variable to enable and control "
 			"RxM SAR (Segmentation And Reassembly) protocol "
-			"(default: 256 KB). This value should be set greater than "
+			"(default: 128 KB). This value should be set greater than "
 			" eager limit (FI_OFI_RXM_BUFFER_SIZE - RxM protocol "
 			"header size (%zu B)) for SAR to take effect. Messages "
 			"of size greater than this would be transmitted via "

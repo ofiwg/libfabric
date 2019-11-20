@@ -133,7 +133,7 @@ The ofi_rxm provider checks for the following environment variables.
 
 *FI_OFI_RXM_SAR_LIMIT*
 : Set this environment variable to control the RxM SAR (Segmentation And Reassembly)
-  protocol. Messages of size greater than this (default: 256 Kb) would be transmitted
+  protocol. Messages of size greater than this (default: 128 Kb) would be transmitted
   via rendezvous protocol.
 
 *FI_OFI_RXM_USE_SRX*
