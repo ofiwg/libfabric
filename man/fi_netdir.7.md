@@ -64,9 +64,6 @@ libfabric API:
 
 # LIMITATIONS
 
-The Network Direct is an experimental provider. The full support of the Network
-Direct provider will be added to 1.6 release version of libfabric.
-
 *Memory Regions*
 : Only FI_MR_BASIC mode is supported. Adding regions via s/g list is
   supported only up to a s/g list size of 1. No support for binding memory
