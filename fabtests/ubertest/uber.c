@@ -301,12 +301,14 @@ static int ft_fw_result_index(int fi_errno)
 	switch (fi_errno) {
 	case 0:
 		return FT_SUCCESS;
-	case FI_ENODATA:
+	case -FI_ENODATA:
 		return FT_ENODATA;
-	case FI_ENOSYS:
+	case -FI_ENOSYS:
 		return FT_ENOSYS;
-	case FI_EIO:
+	case -FI_EIO:
 		return FT_EIO;
+	case -FT_SKIP:
+		return FT_SKIP;
 	default:
 		return FT_ERROR;
 	}
@@ -394,9 +396,9 @@ static int ft_server_setup(struct fi_info *hints, struct fi_info *info)
 		ft_send_result(ret, info);
 		return ret;
 	}
-	
+
 	ft_fw_update_info(&test_info, fabric_info);
-	
+
 	return ret;
 }
 
@@ -407,21 +409,21 @@ static int ft_server_child()
 	int ret, result;
 
 	printf("Starting test %d:\n", test_info.test_index);
-	
+
 	ret = ft_server_setup(hints, info);
 	if (ret)
-		return ret;	
+		return ret;
 
 	ret = ft_send_result(0, info);
 	if (ret)
 		return ret;
-	
+
 	ret = ft_sock_send(sock, &test_info, sizeof test_info);
 	if (ret) {
 		FT_PRINTERR("ft_sock_send", ret);
 		return ret;
 	}
-	
+
 	ret = ft_recv_result(info);
 	if (ret)
 		return ret;
@@ -478,7 +480,7 @@ static int ft_fw_server(void)
 
 		results[ft_fw_result_index(ret)]++;
 
-	} while (!ret || ret == FI_EIO || ret == FI_ENODATA || ret == FT_SKIP);
+	} while (!ret || ret == -FI_EIO || ret == -FI_ENODATA || ret == -FT_SKIP);
 
 	return ret;
 }
@@ -506,7 +508,7 @@ static int ft_client_setup(struct fi_info *hints, struct fi_info *info)
 	ft_fw_convert_info(hints, &test_info);
 
 	ft_show_test_info();
-	
+
 	ret = fi_getinfo(FT_FIVERSION, ft_strptr(test_info.node),
 			 ft_strptr(test_info.service), 0, hints, &info);
 	if (ret) {
@@ -516,7 +518,7 @@ static int ft_client_setup(struct fi_info *hints, struct fi_info *info)
 	}
 
 	fabric_info = info;
-		
+
 	ret = ft_check_info(hints, fabric_info);
 	if (ret) {
 		ft_send_result(ret, info);
@@ -528,7 +530,7 @@ static int ft_client_setup(struct fi_info *hints, struct fi_info *info)
 	ret = ft_open_res();
 	if (ret) {
 		FT_PRINTERR("ft_open_res", ret);
-		ft_send_result(ret, info);	
+		ft_send_result(ret, info);
 		return ret;
 	}
 	return ret;
@@ -539,7 +541,7 @@ static int ft_client_child(void)
 	struct fi_info  *info = NULL;
 	int ret, result, sresult = 0;
 	result = -FI_ENODATA;
-	
+
 	ret = ft_sock_send(sock, &test_info, sizeof test_info);
 	if (ret) {
 		FT_PRINTERR("ft_sock_send", ret);
@@ -564,7 +566,7 @@ static int ft_client_child(void)
 	result = ft_init_test();
 	if (result)
 		return result;
-	
+
 	result = ft_run_test();
 	ret = ft_sock_recv(sock, &sresult, sizeof sresult);
 	if (result && result != -FI_EIO) {
@@ -588,7 +590,7 @@ static int ft_client_child(void)
 
 	fi_freeinfo(hints);
 	ft_cleanup();
-	
+
 	return result;
 }
 
@@ -607,7 +609,7 @@ static int ft_fw_client(void)
 			ft_show_test_info();
 			results[FT_SKIP]++;
 			continue;
-		}	
+		}
 
 		if (do_fork) {
 			pid = fork();
