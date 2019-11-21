@@ -55,29 +55,78 @@
 #include <assert.h>
 
 struct fid_av_set *av_set;
+fi_addr_t world_addr;
+fi_addr_t coll_addr;
+struct fid_mc *coll_mc;
 
-int no_setup()
+
+static int wait_for_event(uint32_t event)
 {
-	return FI_SUCCESS;
+	uint32_t ev;
+	int err;
+	struct fi_cq_err_entry comp = { 0 };
+
+	do {
+		err = fi_eq_read(eq, &ev, NULL, 0, 0);
+		if (err >= 0) {
+			FT_DEBUG("found eq entry %d\n", event);
+			if (ev == event) {
+				return FI_SUCCESS;
+			}
+		} else if (err != -EAGAIN) {
+			return err;
+		}
+
+		err = fi_cq_read(rxcq, &comp, 1);
+		if (err < 0 && err != -EAGAIN) {
+			return err;
+		}
+
+		err = fi_cq_read(txcq, &comp, 1);
+		if (err < 0 && err != -EAGAIN) {
+			return err;
+		}
+	} while (err == -FI_EAGAIN);
+
+	return err;
 }
 
-int no_run()
+static int wait_for_comp(void *ctx)
 {
-	return FI_SUCCESS;
+	int err;
+	struct fi_cq_err_entry comp = { 0 };
+
+	do {
+		err = fi_cq_read(rxcq, &comp, 1);
+		if (err < 0 && err != -EAGAIN) {
+			return err;
+		}
+
+		if (comp.op_context && comp.op_context == ctx) {
+			return FI_SUCCESS;
+		}
+
+		err = fi_cq_read(txcq, &comp, 1);
+		if (err < 0 && err != -EAGAIN) {
+			return err;
+		}
+
+		if (comp.op_context && comp.op_context == ctx) {
+			return FI_SUCCESS;
+		}
+	} while (err == -FI_EAGAIN);
+
+	return err;
 }
 
-void no_teardown()
-{
-}
-
-int coll_setup()
+static int coll_setup()
 {
 	int err;
 	struct fi_av_set_attr av_set_attr;
 
 	av_set_attr.count = pm_job.num_ranks;
 	av_set_attr.start_addr = 0;
-	av_set_attr.end_addr = pm_job.num_ranks-1;
+	av_set_attr.end_addr = pm_job.num_ranks - 1;
 	av_set_attr.stride = 1;
 
 	err = fi_av_set(av, &av_set_attr, &av_set, NULL);
@@ -85,138 +134,63 @@ int coll_setup()
 		FT_DEBUG("av_set creation failed ret = %d\n", err);
 	}
 
-	return err;
+	err = fi_av_set_addr(av_set, &world_addr);
+	if (err) {
+		FT_DEBUG("failed to get collective addr = %d (%s)\n", err,
+			 fi_strerror(err));
+		return err;
+	}
+
+	err = fi_join_collective(ep, world_addr, av_set, 0, &coll_mc, NULL);
+	if (err) {
+		FT_DEBUG("collective join failed ret = %d (%s)\n", err, fi_strerror(err));
+		return err;
+	}
+
+	return wait_for_event(FI_JOIN_COMPLETE);
 }
 
-void coll_teardown()
+static void coll_teardown()
 {
+	fi_close(&coll_mc->fid);
 	free(av_set);
 }
 
-int join_test_run()
+static int join_test_run()
 {
-	int ret;
-	uint32_t event;
-	struct fi_cq_err_entry comp = {0};
-	fi_addr_t world_addr;
-	struct fid_mc *coll_mc;
-
-	ret = fi_av_set_addr(av_set, &world_addr);
-	if (ret) {
-		FT_DEBUG("failed to get collective addr = %d\n", ret);
-		return ret;
-	}
-
-	ret = fi_join_collective(ep, world_addr, av_set, 0, &coll_mc, NULL);
-	if (ret) {
-		FT_DEBUG("collective join failed ret = %d\n", ret);
-		return ret;
-	}
-
-	while (1) {
-		ret = fi_eq_read(eq, &event, NULL, 0, 0);
-		if (ret >= 0) {
-			FT_DEBUG("found eq entry ret %d\n", event);
-			if (event == FI_JOIN_COMPLETE) {
-				return FI_SUCCESS;
-			}
-		} else if(ret != -EAGAIN) {
-			return ret;
-		}
-
-		ret = fi_cq_read(rxcq, &comp, 1);
-		if(ret < 0 && ret != -EAGAIN) {
-			return ret;
-		}
-
-		ret = fi_cq_read(txcq, &comp, 1);
-		if(ret < 0 && ret != -EAGAIN) {
-			return ret;
-		}
-	}
-
-	fi_close(&coll_mc->fid);
+	return FI_SUCCESS;
 }
 
-int barrier_test_run()
+static int barrier_test_run()
 {
-	int ret;
-	uint32_t event;
-	struct fi_cq_err_entry comp = {0};
+	int err;
 	uint64_t done_flag;
-	fi_addr_t world_addr;
-	fi_addr_t barrier_addr;
-	struct fid_mc *coll_mc;
 	struct fi_collective_attr attr;
 
 	attr.op = FI_NOOP;
 	attr.datatype = FI_VOID;
 	attr.mode = 0;
-	ret = fi_query_collective(domain, FI_BARRIER, &attr, 0);
-	if (ret) {
-		FT_DEBUG("barrier collective not supported: %d (%s)\n", ret, fi_strerror(ret));
-		return ret;
+	err = fi_query_collective(domain, FI_BARRIER, &attr, 0);
+	if (err) {
+		FT_DEBUG("barrier collective not supported: %d (%s)\n", err,
+			 fi_strerror(err));
+		return err;
 	}
 
-	ret = fi_av_set_addr(av_set, &world_addr);
-	if (ret) {
-		FT_DEBUG("failed to get collective addr = %d\n", ret);
-		return ret;
+	coll_addr = fi_mc_addr(coll_mc);
+	err = fi_barrier(ep, coll_addr, &done_flag);
+	if (err) {
+		FT_DEBUG("collective barrier failed: %d (%s)\n", err, fi_strerror(err));
+		return err;
 	}
 
-	ret = fi_join_collective(ep, world_addr, av_set, 0, &coll_mc, NULL);
-	if (ret) {
-		FT_DEBUG("collective join failed ret = %d\n", ret);
-		return ret;
-	}
-
-	while (1) {
-		ret = fi_eq_read(eq, &event, NULL, 0, 0);
-		if (ret >= 0) {
-			FT_DEBUG("found eq entry ret %d\n", event);
-			if (event == FI_JOIN_COMPLETE) {
-				barrier_addr = fi_mc_addr(coll_mc);
-				ret = fi_barrier(ep, barrier_addr, &done_flag);
-				if (ret) {
-					FT_DEBUG("collective barrier failed ret = %d\n", ret);
-					return ret;
-				}
-			}
-		} else if(ret != -EAGAIN) {
-			return ret;
-		}
-
-		ret = fi_cq_read(rxcq, &comp, 1);
-		if(ret < 0 && ret != -EAGAIN) {
-			return ret;
-		}
-
-		if(comp.op_context && comp.op_context == &done_flag) {
-			return FI_SUCCESS;
-		}
-
-		ret = fi_cq_read(txcq, &comp, 1);
-		if(ret < 0 && ret != -EAGAIN) {
-			return ret;
-		}
-
-		if(comp.op_context && comp.op_context == &done_flag) {
-			return FI_SUCCESS;
-		}
-	}
-
-	fi_close(&coll_mc->fid);
+	return wait_for_comp(&done_flag);
 }
 
-int sum_all_reduce_test_run()
+static int sum_all_reduce_test_run()
 {
-	int ret;
-	uint32_t event;
-	struct fi_cq_err_entry comp = {0};
+	int err;
 	uint64_t done_flag;
-	fi_addr_t world_addr;
-	fi_addr_t allreduce_addr;
-	struct fid_mc *coll_mc;
 	uint64_t result = 0;
 	uint64_t expect_result = 0;
 	uint64_t data = pm_job.my_rank;
@@ -227,74 +201,34 @@ int sum_all_reduce_test_run()
 	attr.op = FI_SUM;
 	attr.datatype = FI_UINT64;
 	attr.mode = 0;
-	ret = fi_query_collective(domain, FI_ALLREDUCE, &attr, 0);
-	if (ret) {
-		FT_DEBUG("SUM AllReduce collective not supported: %d (%s)\n", ret, fi_strerror(ret));
-		return ret;
+	err = fi_query_collective(domain, FI_ALLREDUCE, &attr, 0);
+	if (err) {
+		FT_DEBUG("SUM AllReduce collective not supported: %d (%s)\n", err,
+			 fi_strerror(err));
+		return err;
 	}
 
-	for(i = 0; i < pm_job.num_ranks; i++) {
+	for (i = 0; i < pm_job.num_ranks; i++) {
 		expect_result += i;
 	}
 
-	ret = fi_av_set_addr(av_set, &world_addr);
-	if (ret) {
-		FT_DEBUG("failed to get collective addr = %d\n", ret);
-		return ret;
+	coll_addr = fi_mc_addr(coll_mc);
+	err = fi_allreduce(ep, &data, count, NULL, &result, NULL, coll_addr, FI_UINT64,
+			   FI_SUM, 0, &done_flag);
+	if (err) {
+		FT_DEBUG("collective allreduce failed: %d (%s)\n", err, fi_strerror(err));
+		return err;
 	}
 
-	ret = fi_join_collective(ep, world_addr, av_set, 0, &coll_mc, NULL);
-	if (ret) {
-		FT_DEBUG("collective join failed ret = %d\n", ret);
-		return ret;
-	}
+	err = wait_for_comp(&done_flag);
+	if (err)
+		return err;
 
-	while (1) {
-		ret = fi_eq_read(eq, &event, NULL, 0, 0);
-		if (ret >= 0) {
-			FT_DEBUG("found eq entry ret %d\n", event);
-			if (event == FI_JOIN_COMPLETE) {
-				allreduce_addr = fi_mc_addr(coll_mc);
-				ret = fi_allreduce(ep, &data, count, NULL, &result, NULL,
-						   allreduce_addr, FI_UINT64, FI_SUM, 0,
-						   &done_flag);
-				if (ret) {
-					FT_DEBUG("collective allreduce failed ret = %d\n", ret);
-					return ret;
-				}
-			}
-		} else if(ret != -EAGAIN) {
-			return ret;
-		}
+	if (result == expect_result)
+		return FI_SUCCESS;
 
-		ret = fi_cq_read(rxcq, &comp, 1);
-		if(ret < 0 && ret != -EAGAIN) {
-			return ret;
-		}
-
-		if(comp.op_context && comp.op_context == &done_flag) {
-			if(result == expect_result)
-				return FI_SUCCESS;
-			FT_DEBUG("allreduce failed; expect: %ld, actual: %ld\n", expect_result, result);
-
-			return FI_ENOEQ;
-		}
-
-		ret = fi_cq_read(txcq, &comp, 1);
-		if(ret < 0 && ret != -EAGAIN) {
-			return ret;
-		}
-
-		if(comp.op_context && comp.op_context == &done_flag) {
-			if(result == expect_result)
-				return FI_SUCCESS;
-			FT_DEBUG("allreduce failed; expect: %ld, actual: %ld\n", expect_result, result);
-
-			return FI_ENOEQ;
-		}
-	}
-
-	fi_close(&coll_mc->fid);
+	FT_DEBUG("allreduce failed; expect: %ld, actual: %ld\n", expect_result, result);
+	return -FI_ENOEQ;
 }
 
 struct coll_test tests[] = {
@@ -320,15 +254,14 @@ struct coll_test tests[] = {
 
 const int NUM_TESTS = ARRAY_SIZE(tests);
 
-static inline
-int setup_hints()
+static inline int setup_hints()
 {
-	hints->ep_attr->type			= FI_EP_RDM;
-	hints->caps				= FI_MSG | FI_COLLECTIVE;
-	hints->mode				= FI_CONTEXT;
-	hints->domain_attr->control_progress	= FI_PROGRESS_MANUAL;
-	hints->domain_attr->data_progress	= FI_PROGRESS_MANUAL;
-	hints->fabric_attr->prov_name		= strdup("tcp");
+	hints->ep_attr->type = FI_EP_RDM;
+	hints->caps = FI_MSG | FI_COLLECTIVE;
+	hints->mode = FI_CONTEXT;
+	hints->domain_attr->control_progress = FI_PROGRESS_MANUAL;
+	hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
+	hints->fabric_attr->prov_name = strdup("tcp");
 	return FI_SUCCESS;
 }
 
@@ -336,73 +269,72 @@ static int multinode_setup_fabric(int argc, char **argv)
 {
 	char my_name[FT_MAX_CTRL_MSG];
 	size_t len;
-	int ret;
+	int err;
 
 	setup_hints();
 
-	ret = ft_getinfo(hints, &fi);
-	if (ret)
-		return ret;
+	err = ft_getinfo(hints, &fi);
+	if (err)
+		return err;
 
-	ret = ft_open_fabric_res();
-	if (ret)
-		return ret;
+	err = ft_open_fabric_res();
+	if (err)
+		return err;
 
 	opts.av_size = pm_job.num_ranks;
 
 	av_attr.type = FI_AV_TABLE;
-	ret = ft_alloc_active_res(fi);
-	if (ret)
-		return ret;
+	err = ft_alloc_active_res(fi);
+	if (err)
+		return err;
 
-	ret = ft_enable_ep(ep, eq, av, txcq, rxcq, txcntr, rxcntr);
-	if (ret)
-		return ret;
+	err = ft_enable_ep(ep, eq, av, txcq, rxcq, txcntr, rxcntr);
+	if (err)
+		return err;
 
 	len = FT_MAX_CTRL_MSG;
-	ret = fi_getname(&ep->fid, (void *) my_name, &len);
-	if (ret) {
-		FT_PRINTERR("error determining local endpoint name\n", ret);
-		goto err;
+	err = fi_getname(&ep->fid, (void *) my_name, &len);
+	if (err) {
+		FT_PRINTERR("error determining local endpoint name", err);
+		goto errout;
 	}
 
 	pm_job.name_len = len;
 	pm_job.names = malloc(len * pm_job.num_ranks);
 	if (!pm_job.names) {
 		FT_ERR("error allocating memory for address exchange\n");
-		ret = -FI_ENOMEM;
-		goto err;
+		err = -FI_ENOMEM;
+		goto errout;
 	}
 
-	ret = pm_allgather(my_name, pm_job.names, pm_job.name_len);
-	if (ret) {
-		FT_PRINTERR("error exchanging addresses\n", ret);
-		goto err;
+	err = pm_allgather(my_name, pm_job.names, pm_job.name_len);
+	if (err) {
+		FT_PRINTERR("error exchanging addresses", err);
+		goto errout;
 	}
 
 	pm_job.fi_addrs = calloc(pm_job.num_ranks, sizeof(*pm_job.fi_addrs));
 	if (!pm_job.fi_addrs) {
 		FT_ERR("error allocating memory for av fi addrs\n");
-		ret = -FI_ENOMEM;
-		goto err;
+		err = -FI_ENOMEM;
+		goto errout;
 	}
 
-	ret = fi_av_insert(av, pm_job.names, pm_job.num_ranks,
-			   pm_job.fi_addrs, 0, NULL);
-	if (ret != pm_job.num_ranks) {
-		FT_ERR("unable to insert all addresses into AV table\n");
-		ret = -1;
-		goto err;
+	err = fi_av_insert(av, pm_job.names, pm_job.num_ranks, pm_job.fi_addrs, 0, NULL);
+	if (err != pm_job.num_ranks) {
+		FT_ERR("unable to insert all addresses into AV table: %d (%s)\n", err,
+		       fi_strerror(err));
+		err = -1;
+		goto errout;
 	}
 	return 0;
-err:
+errout:
 	ft_free_res();
-	return ft_exit_code(ret);
+	return ft_exit_code(err);
 }
 
 static void pm_job_free_res()
 {
-
 	free(pm_job.names);
 
 	free(pm_job.fi_addrs);
@@ -430,7 +362,6 @@ int multinode_run_tests(int argc, char **argv)
 		FT_DEBUG("Run Complete...\n");
 		if (ret)
 			goto out;
-
 
 		pm_barrier();
 		FT_DEBUG("Test Complete: %s \n", tests[i].name);
