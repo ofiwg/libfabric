@@ -337,7 +337,7 @@ int usdf_domain_getname(uint32_t version, struct usd_device_attrs *dap,
 bool usdf_domain_checkname(uint32_t version, struct usd_device_attrs *dap,
 			   const char *hint)
 {
-	char *reference;
+	char *reference = NULL;
 	bool valid;
 	int ret;
 
