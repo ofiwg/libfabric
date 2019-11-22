@@ -185,7 +185,7 @@ out_err:
 
 static ssize_t efa_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
 {
-	struct efa_ep *ep = container_of(ep_fid, struct efa_ep, ep_fid);
+	struct efa_ep *ep = container_of(ep_fid, struct efa_ep, util_ep.ep_fid);
 
 	return efa_post_recv(ep, msg, flags);
 }
@@ -193,7 +193,7 @@ static ssize_t efa_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, u
 static ssize_t efa_ep_recv(struct fid_ep *ep_fid, void *buf, size_t len,
 			   void *desc, fi_addr_t src_addr, void *context)
 {
-	struct efa_ep *ep = container_of(ep_fid, struct efa_ep, ep_fid);
+	struct efa_ep *ep = container_of(ep_fid, struct efa_ep, util_ep.ep_fid);
 	struct iovec iov;
 	struct fi_msg msg;
 
@@ -206,7 +206,7 @@ static ssize_t efa_ep_recv(struct fid_ep *ep_fid, void *buf, size_t len,
 static ssize_t efa_ep_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 			    size_t count, fi_addr_t src_addr, void *context)
 {
-	struct efa_ep *ep = container_of(ep_fid, struct efa_ep, ep_fid);
+	struct efa_ep *ep = container_of(ep_fid, struct efa_ep, util_ep.ep_fid);
 	struct fi_msg msg;
 
 	EFA_SETUP_MSG(msg, iov, desc, count, src_addr, context, 0);
@@ -340,7 +340,7 @@ out_err:
 
 static ssize_t efa_ep_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
 {
-	struct efa_ep *ep = container_of(ep_fid, struct efa_ep, ep_fid);
+	struct efa_ep *ep = container_of(ep_fid, struct efa_ep, util_ep.ep_fid);
 
 	return efa_post_send(ep, msg, flags);
 }
@@ -348,7 +348,7 @@ static ssize_t efa_ep_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, u
 static ssize_t efa_ep_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 			   void *desc, fi_addr_t dest_addr, void *context)
 {
-	struct efa_ep *ep = container_of(ep_fid, struct efa_ep, ep_fid);
+	struct efa_ep *ep = container_of(ep_fid, struct efa_ep, util_ep.ep_fid);
 	struct fi_msg msg;
 	struct iovec iov;
 	uint64_t flags;
@@ -363,7 +363,7 @@ static ssize_t efa_ep_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 static ssize_t efa_ep_senddata(struct fid_ep *ep_fid, const void *buf, size_t len,
 			       void *desc, uint64_t data, fi_addr_t dest_addr, void *context)
 {
-	struct efa_ep *ep = container_of(ep_fid, struct efa_ep, ep_fid);
+	struct efa_ep *ep = container_of(ep_fid, struct efa_ep, util_ep.ep_fid);
 	struct fi_msg msg;
 	struct iovec iov;
 	uint64_t flags;
@@ -379,7 +379,7 @@ static ssize_t efa_ep_senddata(struct fid_ep *ep_fid, const void *buf, size_t le
 static ssize_t efa_ep_sendv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 			    size_t count, fi_addr_t dest_addr, void *context)
 {
-	struct efa_ep *ep = container_of(ep_fid, struct efa_ep, ep_fid);
+	struct efa_ep *ep = container_of(ep_fid, struct efa_ep, util_ep.ep_fid);
 	struct fi_msg msg;
 	uint64_t flags;
 

@@ -1341,7 +1341,7 @@ fi_addr_t rxr_cq_insert_addr_from_rts(struct rxr_ep *ep, struct rxr_pkt_entry *p
 
 	assert(rxr_get_base_hdr(pkt_entry->pkt)->type == RXR_RTS_PKT);
 
-	efa_ep = container_of(ep->rdm_ep, struct efa_ep, ep_fid);
+	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
 	rts_hdr = rxr_get_rts_hdr(pkt_entry->pkt);
 	assert(rts_hdr->flags & RXR_REMOTE_SRC_ADDR);
 	assert(rts_hdr->addrlen > 0);

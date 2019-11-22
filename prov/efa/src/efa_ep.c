@@ -36,6 +36,7 @@
 #include "efa.h"
 
 #include <infiniband/efadv.h>
+#define EFA_CQ_PROGRESS_ENTRIES 500
 
 static int efa_ep_destroy_qp(struct efa_qp *qp)
 {
@@ -191,6 +192,8 @@ static void efa_ep_destroy(struct efa_ep *ep)
 	efa_ep_destroy_qp(ep->qp);
 	fi_freeinfo(ep->info);
 	free(ep->src_addr);
+	if (ofi_endpoint_close(&ep->util_ep))
+		FI_WARN(&efa_prov, FI_LOG_EP_CTRL, "Unable to close util EP\n");
 	free(ep);
 }
 
@@ -198,7 +201,7 @@ static int efa_ep_close(fid_t fid)
 {
 	struct efa_ep *ep;
 
-	ep = container_of(fid, struct efa_ep, ep_fid.fid);
+	ep = container_of(fid, struct efa_ep, util_ep.ep_fid.fid);
 
 	ofi_bufpool_destroy(ep->recv_wr_pool);
 	ofi_bufpool_destroy(ep->send_wr_pool);
@@ -214,7 +217,7 @@ static int efa_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	struct efa_av *av;
 	int ret;
 
-	ep = container_of(fid, struct efa_ep, ep_fid.fid);
+	ep = container_of(fid, struct efa_ep, util_ep.ep_fid.fid);
 	ret = ofi_ep_bind_valid(&efa_prov, bfid, flags);
 	if (ret)
 		return ret;
@@ -271,7 +274,7 @@ static int efa_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 static int efa_ep_getflags(struct fid_ep *ep_fid, uint64_t *flags)
 {
-	struct efa_ep *ep = container_of(ep_fid, struct efa_ep, ep_fid);
+	struct efa_ep *ep = container_of(ep_fid, struct efa_ep, util_ep.ep_fid);
 	struct fi_tx_attr *tx_attr = ep->info->tx_attr;
 	struct fi_rx_attr *rx_attr = ep->info->rx_attr;
 
@@ -291,7 +294,7 @@ static int efa_ep_getflags(struct fid_ep *ep_fid, uint64_t *flags)
 
 static int efa_ep_setflags(struct fid_ep *ep_fid, uint64_t flags)
 {
-	struct efa_ep *ep = container_of(ep_fid, struct efa_ep, ep_fid);
+	struct efa_ep *ep = container_of(ep_fid, struct efa_ep, util_ep.ep_fid);
 	struct fi_tx_attr *tx_attr = ep->info->tx_attr;
 	struct fi_rx_attr *rx_attr = ep->info->rx_attr;
 
@@ -319,7 +322,7 @@ static int efa_ep_enable(struct fid_ep *ep_fid)
 	struct ibv_pd *ibv_pd;
 	struct efa_ep *ep;
 
-	ep = container_of(ep_fid, struct efa_ep, ep_fid);
+	ep = container_of(ep_fid, struct efa_ep, util_ep.ep_fid);
 
 	if (!ep->scq && !ep->rcq) {
 		EFA_WARN(FI_LOG_EP_CTRL,
@@ -402,6 +405,112 @@ static struct fi_ops efa_ep_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
+static void efa_ep_progress_internal(struct efa_cq *efa_cq, uint64_t flags)
+{
+	struct util_cq *cq = &efa_cq->util_cq;
+	int i;
+	ssize_t ret;
+	struct fi_cq_tagged_entry cq_entry[EFA_CQ_PROGRESS_ENTRIES];
+	struct fi_cq_tagged_entry *temp_cq_entry;
+	struct fi_cq_err_entry cq_err_entry;
+	fi_addr_t src_addr[EFA_CQ_PROGRESS_ENTRIES];
+
+	VALGRIND_MAKE_MEM_DEFINED(&cq_entry, sizeof(cq_entry));
+
+	ret = efa_cq_readfrom(&cq->cq_fid, cq_entry, EFA_CQ_PROGRESS_ENTRIES,
+			      (flags & FI_SOURCE) ? src_addr : NULL);
+	if (ret == -FI_EAGAIN)
+		goto err_cq;
+
+	if (OFI_UNLIKELY(ret < 0)) {
+		ret = (ret == FI_EAVAIL) ?
+			efa_cq_readerr(&cq->cq_fid, &cq_err_entry, flags) :
+			-FI_EAVAIL;
+		if (OFI_UNLIKELY(ret < 0)) {
+			if (OFI_UNLIKELY(ret != -FI_EAGAIN))
+				EFA_WARN(FI_LOG_CQ,
+					 "failed to read cq error: %ld\n", ret);
+			goto err_cq;
+		}
+		ofi_cq_write_error(cq, &cq_err_entry);
+		goto err_cq;
+	}
+
+	temp_cq_entry = (struct fi_cq_tagged_entry *)cq_entry;
+	for (i = 0; i < ret; i++) {
+		(flags & FI_SOURCE) ?
+			ofi_cq_write_src(cq, temp_cq_entry->op_context,
+					 temp_cq_entry->flags,
+					 temp_cq_entry->len,
+					 temp_cq_entry->buf,
+					 temp_cq_entry->data,
+					 temp_cq_entry->tag,
+					 src_addr[i]) :
+			ofi_cq_write(cq, temp_cq_entry->op_context,
+				     temp_cq_entry->flags,
+				     temp_cq_entry->len,
+				     temp_cq_entry->buf,
+				     temp_cq_entry->data,
+				     temp_cq_entry->tag);
+
+		temp_cq_entry = (struct fi_cq_tagged_entry *)
+				((uint8_t *)temp_cq_entry + efa_cq->entry_size);
+	}
+err_cq:
+	return;
+}
+
+void efa_ep_progress(struct util_ep *ep)
+{
+	struct efa_ep *efa_ep;
+	struct efa_cq *rcq;
+	struct efa_cq *scq;
+
+	efa_ep = container_of(ep, struct efa_ep, util_ep);
+	rcq = efa_ep->rcq;
+	scq = efa_ep->scq;
+
+	fastlock_acquire(&ep->lock);
+
+	if (rcq)
+		efa_ep_progress_internal(rcq, ep->caps);
+
+	if (scq && scq != rcq)
+		efa_ep_progress_internal(scq, ep->caps);
+
+	fastlock_release(&ep->lock);
+}
+
+static struct fi_ops_rma efa_ep_rma_ops = {
+	.size = sizeof(struct fi_ops_rma),
+	.read = fi_no_rma_read,
+	.readv = fi_no_rma_readv,
+	.readmsg = fi_no_rma_readmsg,
+	.write = fi_no_rma_write,
+	.writev = fi_no_rma_writev,
+	.writemsg = fi_no_rma_writemsg,
+	.inject = fi_no_rma_inject,
+	.writedata = fi_no_rma_writedata,
+	.injectdata = fi_no_rma_injectdata,
+};
+
+static struct fi_ops_atomic efa_ep_atomic_ops = {
+	.size = sizeof(struct fi_ops_atomic),
+	.write = fi_no_atomic_write,
+	.writev = fi_no_atomic_writev,
+	.writemsg = fi_no_atomic_writemsg,
+	.inject = fi_no_atomic_inject,
+	.readwrite = fi_no_atomic_readwrite,
+	.readwritev = fi_no_atomic_readwritev,
+	.readwritemsg = fi_no_atomic_readwritemsg,
+	.compwrite = fi_no_atomic_compwrite,
+	.compwritev = fi_no_atomic_compwritev,
+	.compwritemsg = fi_no_atomic_compwritemsg,
+	.writevalid = fi_no_atomic_writevalid,
+	.readwritevalid = fi_no_atomic_readwritevalid,
+	.compwritevalid = fi_no_atomic_compwritevalid,
+};
+
 int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *info,
 		struct fid_ep **ep_fid, void *context)
 {
@@ -449,6 +558,11 @@ int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *info,
 	if (!ep)
 		return -FI_ENOMEM;
 
+	ret = ofi_endpoint_init(domain_fid, &efa_util_prov, info, &ep->util_ep,
+				context, efa_ep_progress);
+	if (ret)
+		goto err_ep_destroy;
+
 	ret = ofi_bufpool_create(&ep->send_wr_pool,
 		sizeof(struct efa_send_wr) +
 		info->tx_attr->iov_limit * sizeof(struct ibv_sge),
@@ -466,14 +580,6 @@ int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *info,
 	ep->domain = domain;
 	ep->xmit_more_wr_tail = &ep->xmit_more_wr_head;
 	ep->recv_more_wr_tail = &ep->recv_more_wr_head;
-	ep->ep_fid.fid.fclass = FI_CLASS_EP;
-	ep->ep_fid.fid.context = context;
-	ep->ep_fid.fid.ops = &efa_ep_ops;
-	ep->ep_fid.ops = &efa_ep_base_ops;
-	ep->ep_fid.msg = &efa_ep_msg_ops;
-	ep->ep_fid.cm = &efa_ep_cm_ops;
-	ep->ep_fid.rma = NULL;
-	ep->ep_fid.atomic = NULL;
 
 	if (info->src_addr) {
 		ep->src_addr = (void *)calloc(1, EFA_EP_ADDR_LEN);
@@ -484,7 +590,15 @@ int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *info,
 		memcpy(ep->src_addr, info->src_addr, info->src_addrlen);
 	}
 
-	*ep_fid = &ep->ep_fid;
+	*ep_fid = &ep->util_ep.ep_fid;
+	(*ep_fid)->fid.fclass = FI_CLASS_EP;
+	(*ep_fid)->fid.context = context;
+	(*ep_fid)->fid.ops = &efa_ep_ops;
+	(*ep_fid)->ops = &efa_ep_base_ops;
+	(*ep_fid)->msg = &efa_ep_msg_ops;
+	(*ep_fid)->cm = &efa_ep_cm_ops;
+	(*ep_fid)->rma = &efa_ep_rma_ops;
+	(*ep_fid)->atomic = &efa_ep_atomic_ops;
 
 	return 0;
 

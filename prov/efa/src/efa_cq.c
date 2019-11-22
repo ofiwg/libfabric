@@ -50,8 +50,8 @@ static uint64_t efa_cq_wc_to_fi_flags(struct efa_wc *wc)
 	}
 }
 
-static ssize_t efa_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
-			      uint64_t flags)
+ssize_t efa_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
+		       uint64_t flags)
 {
 	struct efa_cq *cq;
 	struct efa_wce *wce;
@@ -117,8 +117,8 @@ static void efa_cq_read_data_entry(struct efa_wc *wc, int i, void *buf)
 	entry[i].len = 0;
 }
 
-static ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
-			       fi_addr_t *src_addr)
+ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
+			fi_addr_t *src_addr)
 {
 	struct efa_cq *cq;
 	struct efa_wce *wce;

@@ -50,7 +50,7 @@ static int efa_ep_getname(fid_t ep_fid, void *addr, size_t *addrlen)
 	struct efa_ep *ep;
 	char str[INET6_ADDRSTRLEN] = {};
 
-	ep = container_of(ep_fid, struct efa_ep, ep_fid);
+	ep = container_of(ep_fid, struct efa_ep, util_ep.ep_fid);
 
 	ep_addr = (struct efa_ep_addr *)ep->src_addr;
 	ep_addr->qpn = ep->qp->qp_num;
