@@ -35,6 +35,7 @@
 
 #include <ofi_util.h>
 #include "efa.h"
+#include "rxr_cntr.h"
 
 static int efa_domain_close(fid_t fid)
 {
@@ -111,7 +112,7 @@ static struct fi_ops_domain efa_domain_ops = {
 	.cq_open = efa_cq_open,
 	.endpoint = efa_ep_open,
 	.scalable_ep = fi_no_scalable_ep,
-	.cntr_open = fi_no_cntr_open,
+	.cntr_open = efa_cntr_open,
 	.poll_open = fi_no_poll_open,
 	.stx_ctx = fi_no_stx_context,
 	.srx_ctx = fi_no_srx_context,
