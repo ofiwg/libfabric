@@ -792,13 +792,13 @@ int tcpx_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	_pep->cm_ctx.cm_data_sz = 0;
 	_pep->sock = INVALID_SOCKET;
 
-	*pep = &_pep->util_pep.pep_fid;
-
 	if (info->src_addr) {
 		ret = tcpx_pep_sock_create(_pep);
 		if (ret)
 			goto err3;
 	}
+
+	*pep = &_pep->util_pep.pep_fid;
 	return FI_SUCCESS;
 err3:
 	fi_freeinfo(_pep->info);
