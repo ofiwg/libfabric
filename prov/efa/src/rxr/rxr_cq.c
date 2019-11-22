@@ -431,7 +431,7 @@ int rxr_cq_handle_cq_error(struct rxr_ep *ep, ssize_t err)
 		__func__, RXR_GET_X_ENTRY_TYPE(pkt_entry));
 	assert(0 && "unknown x_entry state");
 write_err:
-	rxr_eq_write_error(ep, err_entry.err, err_entry.prov_errno);
+	efa_eq_write_error(&ep->util_ep, err_entry.err, err_entry.prov_errno);
 	return 0;
 }
 
@@ -806,7 +806,7 @@ int rxr_cq_process_msg_rts(struct rxr_ep *ep,
 		if (!rx_entry) {
 			FI_WARN(&rxr_prov, FI_LOG_CQ,
 				"RX entries exhausted.\n");
-			rxr_eq_write_error(ep, FI_ENOBUFS, -FI_ENOBUFS);
+			efa_eq_write_error(&ep->util_ep, FI_ENOBUFS, -FI_ENOBUFS);
 			return -FI_ENOBUFS;
 		}
 
@@ -826,7 +826,7 @@ int rxr_cq_process_msg_rts(struct rxr_ep *ep,
 		if (OFI_UNLIKELY(!rx_entry)) {
 			FI_WARN(&rxr_prov, FI_LOG_CQ,
 				"RX entries exhausted.\n");
-			rxr_eq_write_error(ep, FI_ENOBUFS, -FI_ENOBUFS);
+			efa_eq_write_error(&ep->util_ep, FI_ENOBUFS, -FI_ENOBUFS);
 			return -FI_ENOBUFS;
 		}
 	}
@@ -1041,17 +1041,17 @@ static void rxr_cq_handle_rts(struct rxr_ep *ep,
 				" robuf->exp_msg_id: %" PRIu32 "\n",
 			       rts_hdr->msg_id, peer->robuf->exp_msg_id);
 			if (!rts_hdr->addrlen)
-				rxr_eq_write_error(ep, FI_EIO, ret);
+				efa_eq_write_error(&ep->util_ep, FI_EIO, ret);
 			rxr_release_rx_pkt_entry(ep, pkt_entry);
 			return;
 		} else if (OFI_UNLIKELY(ret == -FI_ENOMEM)) {
-			rxr_eq_write_error(ep, FI_ENOBUFS, -FI_ENOBUFS);
+			efa_eq_write_error(&ep->util_ep, FI_ENOBUFS, -FI_ENOBUFS);
 			return;
 		} else if (OFI_UNLIKELY(ret < 0)) {
 			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 				"Unknown error %d processing RTS packet msg_id: %"
 				PRIu32 "\n", ret, rts_hdr->msg_id);
-			rxr_eq_write_error(ep, FI_EIO, ret);
+			efa_eq_write_error(&ep->util_ep, FI_EIO, ret);
 			return;
 		}
 
@@ -1358,7 +1358,7 @@ fi_addr_t rxr_cq_insert_addr_from_rts(struct rxr_ep *ep, struct rxr_pkt_entry *p
 			buffer,
 			rxr_get_base_hdr(pkt_entry->pkt)->version,
 			RXR_PROTOCOL_VERSION);
-		rxr_eq_write_error(ep, FI_EIO, -FI_EINVAL);
+		efa_eq_write_error(&ep->util_ep, FI_EIO, -FI_EINVAL);
 		fprintf(stderr, "Invalid protocol version %d. Expected protocol version %d. %s:%d\n",
 			rxr_get_base_hdr(pkt_entry->pkt)->version,
 			RXR_PROTOCOL_VERSION, __FILE__, __LINE__);
@@ -1372,7 +1372,7 @@ fi_addr_t rxr_cq_insert_addr_from_rts(struct rxr_ep *ep, struct rxr_pkt_entry *p
 	ret = efa_av_insert_addr(efa_ep->av, (struct efa_ep_addr *)raw_address,
 				&rdm_addr, 0, NULL);
 	if (OFI_UNLIKELY(ret != 0)) {
-		rxr_eq_write_error(ep, FI_EINVAL, ret);
+		efa_eq_write_error(&ep->util_ep, FI_EINVAL, ret);
 		return -1;
 	}
 

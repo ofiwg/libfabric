@@ -215,6 +215,7 @@ static int efa_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	struct efa_ep *ep;
 	struct efa_cq *cq;
 	struct efa_av *av;
+	struct util_eq *eq;
 	int ret;
 
 	ep = container_of(fid, struct efa_ep, util_ep.ep_fid.fid);
@@ -268,6 +269,13 @@ static int efa_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		ep->av = av;
 
 		ep->av->ep = ep;
+		break;
+	case FI_CLASS_EQ:
+		eq = container_of(bfid, struct util_eq, eq_fid.fid);
+
+		ret = ofi_ep_bind_eq(&ep->util_ep, eq);
+		if (ret)
+			return ret;
 		break;
 	default:
 		return -EINVAL;
