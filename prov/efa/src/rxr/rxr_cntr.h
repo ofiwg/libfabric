@@ -38,14 +38,14 @@
 #ifndef _RXR_CNTR_H_
 #define _RXR_CNTR_H_
 
-int rxr_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
+int efa_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		  struct fid_cntr **cntr_fid, void *context);
 
-void rxr_cntr_report_tx_completion(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry);
+void efa_cntr_report_tx_completion(struct util_ep *ep, uint64_t flags);
 
-void rxr_cntr_report_rx_completion(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry);
+void efa_cntr_report_rx_completion(struct util_ep *ep, uint64_t flags);
 
-void rxr_cntr_report_error(struct rxr_ep *ep, uint64_t flags);
+void efa_cntr_report_error(struct util_ep *ep, uint64_t flags);
 
 #endif
 
