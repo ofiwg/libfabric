@@ -168,7 +168,6 @@ struct efa_wce {
 typedef void (*efa_cq_read_entry)(struct efa_wc *wc, int index, void *buf);
 
 struct efa_cq {
-	struct fid_cq		cq_fid;
 	struct util_cq		util_cq;
 	struct efa_domain	*domain;
 	size_t			entry_size;

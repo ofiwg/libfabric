@@ -234,9 +234,13 @@ static int efa_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		if (!(flags & (FI_RECV | FI_TRANSMIT)))
 			return -FI_EBADFLAGS;
 
-		cq = container_of(bfid, struct efa_cq, cq_fid);
+		cq = container_of(bfid, struct efa_cq, util_cq.cq_fid);
 		if (ep->domain != cq->domain)
 			return -FI_EINVAL;
+
+		ret = ofi_ep_bind_cq(&ep->util_ep, &cq->util_cq, flags);
+		if (ret)
+			return ret;
 
 		if (flags & FI_RECV) {
 			if (ep->rcq)
