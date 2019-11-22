@@ -44,6 +44,7 @@ if(args_core):
     if (args_util == None):
         run.fi_info_test(args_core, hosts, ofi_build_mode)
         run.fabtests(args_core, hosts, ofi_build_mode)
+        run.shmemtest(args_core, hosts, ofi_build_mode)
         for mpi in mpilist:
             run.intel_mpi_benchmark(args_core, hosts, mpi, ofi_build_mode)   
             run.mpistress_benchmark(args_core, hosts, mpi, ofi_build_mode)
@@ -51,6 +52,7 @@ if(args_core):
     else:
         run.fi_info_test(args_core, hosts, ofi_build_mode, util=args_util)
         run.fabtests(args_core, hosts, ofi_build_mode, util=args_util)
+        run.shmemtest(args_core, hosts, ofi_build_mode, util=args_util)
         for mpi in mpilist:
             run.intel_mpi_benchmark(args_core, hosts, mpi, ofi_build_mode, \
                                         util=args_util,)

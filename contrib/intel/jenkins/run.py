@@ -26,17 +26,35 @@ def fi_info_test(core, hosts, mode,util=None):
 #runfabtests
 def fabtests(core, hosts, mode, util=None):
        
-       runfabtest = tests.Fabtest(branchname=brname,buildno=bno,\
-                    testname="runfabtests", core_prov=core, fabric=fab,\
-                         hosts=hosts, ofi_build_mode=mode, util_prov=util)
+    runfabtest = tests.Fabtest(branchname=brname,buildno=bno,\
+                 testname="runfabtests", core_prov=core, fabric=fab,\
+                 hosts=hosts, ofi_build_mode=mode, util_prov=util)
 
-       if (runfabtest.execute_condn):
-            print("running fabtests for {}-{}-{}".format(core, util, fab))
-            runfabtest.execute_cmd()
-       else:
-            print("skipping {} as execute condition fails"\
-                  .format(runfabtest.testname))
-       print("----------------------------------------------------------------------------------------\n")
+    if (runfabtest.execute_condn):
+        print("running fabtests for {}-{}-{}".format(core, util, fab))
+        runfabtest.execute_cmd()
+    else:
+        print("skipping {} as execute condition fails"\
+              .format(runfabtest.testname))
+    print("----------------------------------------------------------------------------------------\n")
+    
+def shmemtest(core, hosts, mode, util=None):
+    runshmemtest = tests.ShmemTest(branchname=brname,buildno=bno,\
+                 testname="shmem test", core_prov=core, fabric=fab,\
+                 hosts=hosts, ofi_build_mode=mode, util_prov=util)
+    if (runshmemtest.execute_condn):
+        print("running shmem unit test for {}-{}-{}".format(core, util, fab))
+        runshmemtest.execute_cmd("unit")
+        print("running shmem PRK test for {}-{}-{}".format(core, util, fab))
+        runshmemtest.execute_cmd("prk")
+        print("running shmem ISx test for {}-{}-{}".format(core, util, fab))
+        runshmemtest.execute_cmd("isx")
+        print("running shmem uh test for {}-{}-{}".format(core, util, fab))
+        runshmemtest.execute_cmd("uh")
+    else:
+        print("skipping {} as execute condition fails"\
+              .format(runshmemtest.testname))
+    print("----------------------------------------------------------------------------------------\n")
     
 
 #imb-tests

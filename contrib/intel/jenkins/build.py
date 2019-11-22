@@ -57,6 +57,69 @@ def build_fabtests(libfab_install_path, mode):
     common.run_command(['make'])
     common.run_command(['make', 'install'])
 
+def build_shmem(shmem_dir, libfab_install_path):
+
+    shmem_tar = ci_site_config.shmem_tar
+    if(os.path.exists(shmem_dir)):
+        os.rmdir(shmem_dir)
+    
+    os.makedirs(shmem_dir)
+    os.chdir(shmem_dir)
+    
+    os.makedirs('SOS')
+    common.run_command(['tar', '-xf', shmem_tar, '-C', 'SOS', '--strip-components=1'])
+    os.chdir('SOS')
+
+    common.run_command(['./autogen.sh'])
+
+    config_cmd = ['./configure', '--prefix={}'.format(shmem_dir), '--disable-fortran', \
+                  '--enable-remote-virtual-addressing', '--disable-aslr-check', \
+                  '--enable-pmi-simple', '--with-ofi={}'.format(libfab_install_path), \
+                  'LDFLAGS=-fno-pie']
+
+    common.run_command(config_cmd)
+   
+    common.run_command(['make','-j4'])
+    common.run_command(['make', 'check', 'TESTS='])
+    common.run_command(['make', 'install'])
+
+
+def build_ISx(shmem_dir):
+    
+    oshcc = '{}/bin/oshcc'.format(shmem_dir)
+    
+    os.chdir(shmem_dir)
+    git_cmd = ['git', 'clone', '--depth', '1', 'https://github.com/ParRes/ISx.git', 'ISx']
+    
+    common.run_command(git_cmd) 
+    os.chdir('ISx/SHMEM')
+    common.run_command(['make', 'CC={}'.format(oshcc), 'LDLIBS=-lm']) 
+                  
+    
+def build_PRK(shmem_dir):
+    
+    oshcc = '{}/bin/oshcc'.format(shmem_dir)
+    shmem_src = '{}/SOS'.format(shmem_dir)
+    os.chdir(shmem_dir)
+    git_cmd = ['git', 'clone', '--depth', ' 1', 'https://github.com/ParRes/Kernels.git', 'PRK']
+    common.run_command(git_cmd)
+    os.chdir('PRK')
+    with open('common/make.defs','w') as f:
+        f.write('SHMEMCC={} -std=c99\nSHMEMTOP={}\n'.format(oshcc,shmem_src))
+
+    common.run_command(['make', 'allshmem'])
+
+def build_uh(shmem_dir):
+    oshcc_bin = "{}/bin".format(shmem_dir)
+    os.environ["PATH"] += os.pathsep + oshcc_bin
+   
+   
+    os.chdir(shmem_dir) 
+    git_cmd = ['git', 'clone', '--depth', '1', 'https://github.com/openshmem-org/tests-uh.git', 'tests-uh'] 
+    common.run_command(git_cmd)
+    os.chdir('tests-uh')
+    common.run_command(['make', '-j4', 'C_feature_tests'])
+    
 
 def build_mpi(mpi, mpisrc, mpi_install_path, libfab_install_path,  ofi_build_mode):
    
@@ -183,8 +246,13 @@ if __name__ == "__main__":
         # run stress and osu benchmarks for all mpitypes
         build_stress_bm(mpi, mpi_install_path, install_path)
         build_osu_bm(mpi, mpi_install_path, install_path)
-    else:
-        pass
-        #todo: build-shmem here
+    elif (build_item == 'shmem'):
+        # build shmem
+        shmem_dir = "{}/shmem".format(install_path)
+        build_shmem(shmem_dir, install_path)
+        build_ISx(shmem_dir)
+        build_PRK(shmem_dir)
+        build_uh(shmem_dir)
+    
 
 
