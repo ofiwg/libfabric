@@ -109,7 +109,7 @@ static void process_tx_entry(struct tcpx_xfer_entry *tx_entry)
 		tcpx_ep_shutdown_report(tx_entry->ep,
 					&tx_entry->ep->util_ep.ep_fid.fid);
 		tcpx_cq_report_error(tx_entry->ep->util_ep.tx_cq,
-				     tx_entry, ret);
+				     tx_entry, -ret);
 	} else {
 		if (tx_entry->hdr.base_hdr.flags &
 		    (OFI_DELIVERY_COMPLETE | OFI_COMMIT_COMPLETE)) {
@@ -174,7 +174,7 @@ static int process_rx_entry(struct tcpx_xfer_entry *rx_entry)
 		tcpx_ep_shutdown_report(rx_entry->ep,
 					&rx_entry->ep->util_ep.ep_fid.fid);
 		tcpx_cq_report_error(rx_entry->ep->util_ep.rx_cq,
-				     rx_entry, ret);
+				     rx_entry, -ret);
 		rx_entry->rx_msg_release_fn(rx_entry);
 	} else 	if (rx_entry->hdr.base_hdr.flags & OFI_DELIVERY_COMPLETE) {
 		if (tcpx_prepare_rx_entry_resp(rx_entry))
@@ -265,7 +265,7 @@ static int process_rx_remote_write_entry(struct tcpx_xfer_entry *rx_entry)
 		tcpx_ep_shutdown_report(rx_entry->ep,
 					&rx_entry->ep->util_ep.ep_fid.fid);
 		tcpx_cq_report_error(rx_entry->ep->util_ep.rx_cq,
-				     rx_entry, ret);
+				     rx_entry, -ret);
 		tcpx_cq = container_of(rx_entry->ep->util_ep.rx_cq,
 				       struct tcpx_cq, util_cq);
 		tcpx_xfer_entry_release(tcpx_cq, rx_entry);
@@ -303,7 +303,7 @@ static int process_rx_read_entry(struct tcpx_xfer_entry *rx_entry)
 		tcpx_ep_shutdown_report(rx_entry->ep,
 					&rx_entry->ep->util_ep.ep_fid.fid);
 		tcpx_cq_report_error(rx_entry->ep->util_ep.tx_cq, rx_entry,
-				     ret);
+				     -ret);
 	} else {
 		tcpx_cq_report_success(rx_entry->ep->util_ep.tx_cq, rx_entry);
 	}
