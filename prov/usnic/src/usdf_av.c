@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2017, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2019, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -65,7 +65,6 @@
 #include "usdf_av.h"
 #include "usdf_cm.h"
 #include "usdf_timer.h"
-#include "usdf_rdm.h"
 
 #include "fi_ext_usnic.h"
 
@@ -77,27 +76,13 @@ static int usdf_av_alloc_dest(struct usdf_dest **dest_o)
 	if (dest == NULL)
 		return -errno;
 
-	SLIST_INIT(&dest->ds_rdm_rdc_list);
-
 	*dest_o = dest;
 	return 0;
 }
 
 static void usdf_av_free_dest(struct usdf_dest *dest)
 {
-	struct usdf_rdm_connection *rdc = NULL;
-
 	LIST_REMOVE(dest, ds_addresses_entry);
-
-	while (!SLIST_EMPTY(&dest->ds_rdm_rdc_list)) {
-		rdc = SLIST_FIRST(&dest->ds_rdm_rdc_list);
-		rdc->dc_dest = NULL;
-
-		SLIST_REMOVE(&dest->ds_rdm_rdc_list, rdc, usdf_rdm_connection,
-			     dc_addr_link);
-		if (rdc)
-			rdc->dc_dest = NULL;
-	}
 
 	free(dest);
 }
