@@ -591,7 +591,7 @@ unlock:
 int rxm_msg_eq_progress(struct rxm_ep *rxm_ep)
 {
 	struct rxm_msg_eq_entry *entry;
-       int ret;
+	int ret;
 
 	entry = alloca(RXM_MSG_EQ_ENTRY_SZ);
 	if (!entry) {
@@ -607,8 +607,11 @@ int rxm_msg_eq_progress(struct rxm_ep *rxm_ep)
 			break;
 		}
 		ret = rxm_conn_handle_event(rxm_ep, entry);
-		if (ret)
+		if (ret) {
+			FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
+			       "invalid connection handle event: %d\n", ret);
 			break;
+		}
 	}
 	return ret;
 }
