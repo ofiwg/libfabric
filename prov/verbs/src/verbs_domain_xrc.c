@@ -458,9 +458,8 @@ static int fi_ibv_put_tgt_qp(struct fi_ibv_xrc_ep *ep)
 /* Caller must hold eq:lock */
 int fi_ibv_ep_destroy_xrc_qp(struct fi_ibv_xrc_ep *ep)
 {
-	if (ep->base_ep.ibv_qp) {
-		fi_ibv_put_shared_ini_conn(ep);
-	}
+	fi_ibv_put_shared_ini_conn(ep);
+
 	if (ep->base_ep.id) {
 		rdma_destroy_id(ep->base_ep.id);
 		ep->base_ep.id = NULL;
