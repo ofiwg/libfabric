@@ -40,7 +40,7 @@ const uint32_t rxr_poison_value = 0xdeadbeef;
 #define RXR_EP_CAPS (FI_MSG | FI_TAGGED | FI_RECV | FI_SEND | FI_READ \
 		     | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE \
 		     | FI_DIRECTED_RECV | FI_SOURCE | FI_MULTI_RECV \
-		     | FI_RMA)
+		     | FI_RMA | FI_LOCAL_COMM | FI_REMOTE_COMM)
 
 /* TODO: Add support for true FI_DELIVERY_COMPLETE */
 #define RXR_TX_OP_FLAGS (FI_INJECT | FI_COMPLETION | FI_TRANSMIT_COMPLETE | \
@@ -94,7 +94,8 @@ struct fi_domain_attr rxr_domain_attr = {
 	.rx_ctx_cnt = 1,
 	.max_ep_tx_ctx = 1,
 	.max_ep_rx_ctx = 1,
-	.cq_data_size = RXR_CQ_DATA_SIZE
+	.cq_data_size = RXR_CQ_DATA_SIZE,
+	.caps = FI_LOCAL_COMM | FI_REMOTE_COMM
 };
 
 struct fi_fabric_attr rxr_fabric_attr = {
