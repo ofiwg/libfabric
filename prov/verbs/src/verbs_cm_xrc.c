@@ -180,14 +180,11 @@ void fi_ibv_free_xrc_conn_setup(struct fi_ibv_xrc_ep *ep, int disconnect)
 		assert(ep->tgt_id);
 		assert(!ep->tgt_id->qp);
 
-		if (ep->conn_setup->tgt_connected) {
-			if (ep->tgt_id->ps == RDMA_PS_UDP) {
-				rdma_destroy_id(ep->tgt_id);
-				ep->tgt_id = NULL;
-			} else {
-				rdma_disconnect(ep->tgt_id);
-			}
-			ep->conn_setup->tgt_connected = 0;
+		if (ep->tgt_id->ps == RDMA_PS_UDP) {
+			rdma_destroy_id(ep->tgt_id);
+			ep->tgt_id = NULL;
+		} else {
+			rdma_disconnect(ep->tgt_id);
 		}
 
 		if (ep->base_ep.id->ps == RDMA_PS_UDP) {
@@ -251,7 +248,6 @@ void fi_ibv_ep_ini_conn_done(struct fi_ibv_xrc_ep *ep, uint32_t tgt_qpn)
 			  ep->ini_conn->tgt_qpn);
 	}
 
-	ep->conn_setup->ini_connected = 1;
 	fi_ibv_log_ep_conn(ep, "INI Connection Done");
 	fi_ibv_sched_ini_conn(ep->ini_conn);
 }
@@ -274,7 +270,6 @@ void fi_ibv_ep_tgt_conn_done(struct fi_ibv_xrc_ep *ep)
 		assert(ep->tgt_ibv_qp == ep->tgt_id->qp);
 		ep->tgt_id->qp = NULL;
 	}
-	ep->conn_setup->tgt_connected = 1;
 }
 
 /* Caller must hold the eq:lock */

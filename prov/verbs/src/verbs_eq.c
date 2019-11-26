@@ -658,7 +658,6 @@ fi_ibv_eq_xrc_disconnect_event(struct fi_ibv_eq *eq,
 		*acked = 1;
 		rdma_ack_cm_event(cma_event);
 		rdma_disconnect(ep->base_ep.id);
-		ep->conn_setup->ini_connected = 0;
 	}
 }
 
