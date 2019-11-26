@@ -468,6 +468,13 @@ pipeline {
   }
   
   post {
+    failure {
+                 mail from: 'notification@jenkins-ci.org', 
+                 to: "${env.mailrecepient}",
+                 subject: "${env.JOB_NAME} - Build # ${env.BUILD_NUMBER} - ${currentBuild.result}!",
+                 body: " Check console output at ${env.BUILD_URL} to view the results."
+
+            }
     cleanup {
         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
             sh "rm -rf '/mpibuilddir/mpich-build-dir/${env.BRANCH_NAME}/${env.BUILD_NUMBER}'"
