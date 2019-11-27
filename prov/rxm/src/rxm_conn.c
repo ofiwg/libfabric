@@ -603,7 +603,7 @@ int rxm_msg_eq_progress(struct rxm_ep *rxm_ep)
 	while (1) {
 		entry->rd = rxm_eq_read(rxm_ep, RXM_MSG_EQ_ENTRY_SZ, entry);
 		if (entry->rd < 0 && entry->rd != -FI_ECONNREFUSED) {
-			ret = (int)entry->rd;
+			ret = (int) entry->rd;
 			break;
 		}
 		ret = rxm_conn_handle_event(rxm_ep, entry);
@@ -1151,57 +1151,58 @@ static void rxm_conn_wake_up_wait_obj(struct rxm_ep *rxm_ep)
 }
 
 static int
-rxm_conn_handle_event(struct rxm_ep *rxm_ep, struct rxm_msg_eq_entry *entry)
+rxm_conn_handle_reject(struct rxm_ep *rxm_ep, struct rxm_msg_eq_entry *entry)
 {
 	union rxm_cm_data *cm_data = entry->err_entry.err_data;
-	enum rxm_cmap_reject_reason reject_reason;
 
-	if (entry->rd == -FI_ECONNREFUSED) {
-		if (OFI_UNLIKELY(entry->err_entry.err_data_size !=
-				 sizeof(cm_data->reject))) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "connection reject: "
-				"no reject error data (cm_data) was found "
-				"(data length expected: %zu found: %zu)\n",
-				sizeof(cm_data->reject),
-				entry->err_entry.err_data_size);
-			goto err;
-		}
-
-		assert(cm_data);
-		if (cm_data->reject.version != RXM_CM_DATA_VERSION) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "connection reject: "
-				"cm data version mismatch (local: %" PRIu8
-				", remote:  %" PRIu8 ")\n",
-				(uint8_t) RXM_CM_DATA_VERSION,
-				cm_data->reject.version);
-			goto err;
-		}
-		reject_reason = cm_data->reject.reason;
-
-		if (reject_reason == RXM_CMAP_REJECT_GENUINE) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "connection reject: "
-			       "remote peer didn't accept the connection\n");
-			FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "connection reject: "
-			       "(reason: RXM_CMAP_REJECT_GENUINE)\n");
-			OFI_EQ_STRERROR(&rxm_prov, FI_LOG_WARN, FI_LOG_EP_CTRL,
-					rxm_ep->msg_eq, &entry->err_entry);
-		} else if (reject_reason == RXM_CMAP_REJECT_SIMULT_CONN) {
-			FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "connection reject: "
-			       "(reason: RXM_CMAP_REJECT_SIMULT_CONN)\n");
-		} else {
-			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "connection reject: "
-			        "received unknown reject reason: %d\n",
-				reject_reason);
-		}
-		rxm_cmap_process_reject(rxm_ep->cmap, entry->context,
-					reject_reason);
-		return 0;
+	if (!cm_data || entry->err_entry.err_data_size != sizeof(cm_data->reject)) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "connection reject: "
+			"no reject error data (cm_data) was found "
+			"(data length expected: %zu found: %zu)\n",
+			sizeof(cm_data->reject),
+			entry->err_entry.err_data_size);
+		return -FI_EOTHER;
 	}
+
+	if (cm_data->reject.version != RXM_CM_DATA_VERSION) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "connection reject: "
+			"cm data version mismatch (local: %" PRIu8
+			", remote:  %" PRIu8 ")\n",
+			(uint8_t) RXM_CM_DATA_VERSION,
+			cm_data->reject.version);
+		return -FI_EOTHER;
+	}
+
+	if (cm_data->reject.reason == RXM_CMAP_REJECT_GENUINE) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "connection reject: "
+		       "remote peer didn't accept the connection\n");
+		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "connection reject: "
+		       "(reason: RXM_CMAP_REJECT_GENUINE)\n");
+		OFI_EQ_STRERROR(&rxm_prov, FI_LOG_WARN, FI_LOG_EP_CTRL,
+				rxm_ep->msg_eq, &entry->err_entry);
+	} else if (cm_data->reject.reason == RXM_CMAP_REJECT_SIMULT_CONN) {
+		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "connection reject: "
+		       "(reason: RXM_CMAP_REJECT_SIMULT_CONN)\n");
+	} else {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "connection reject: "
+		        "received unknown reject reason: %d\n",
+			cm_data->reject.reason);
+	}
+	rxm_cmap_process_reject(rxm_ep->cmap, entry->context,
+				cm_data->reject.reason);
+	return 0;
+}
+
+static int
+rxm_conn_handle_event(struct rxm_ep *rxm_ep, struct rxm_msg_eq_entry *entry)
+{
+	if (entry->rd == -FI_ECONNREFUSED)
+		return rxm_conn_handle_reject(rxm_ep, entry);
 
 	switch(entry->event) {
 	case FI_NOTIFY:
-		if (rxm_conn_handle_notify((struct fi_eq_entry *)&entry->cm_entry))
-			goto err;
+		if (rxm_conn_handle_notify((struct fi_eq_entry *) &entry->cm_entry))
+			return -FI_EOTHER;
 		break;
 	case FI_CONNREQ:
 		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Got new connection\n");
@@ -1212,21 +1213,20 @@ rxm_conn_handle_event(struct rxm_ep *rxm_ep, struct rxm_msg_eq_entry *entry)
 			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Received CM entry "
 				"size (%zd) not matching expected (%zu)\n",
 				entry->rd, RXM_CM_ENTRY_SZ);
-			goto err;
+			return -FI_EOTHER;
 		}
 		rxm_msg_process_connreq(rxm_ep, entry->cm_entry.info,
-					(union rxm_cm_data *)entry->cm_entry.data);
+					(union rxm_cm_data *) entry->cm_entry.data);
 		fi_freeinfo(entry->cm_entry.info);
 		break;
 	case FI_CONNECTED:
 		assert(entry->cm_entry.fid->context);
 		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
 		       "connection successful\n");
-		cm_data = (void *)entry->cm_entry.data;
 		rxm_cmap_process_connect(rxm_ep->cmap,
-					 entry->cm_entry.fid->context,
-					 ((entry->rd - sizeof(entry->cm_entry)) ?
-					  cm_data : NULL));
+			entry->cm_entry.fid->context,
+			entry->rd - sizeof(entry->cm_entry) > 0 ?
+			(union rxm_cm_data *) entry->cm_entry.data : NULL);
 		rxm_conn_wake_up_wait_obj(rxm_ep);
 		break;
 	case FI_SHUTDOWN:
@@ -1238,11 +1238,9 @@ rxm_conn_handle_event(struct rxm_ep *rxm_ep, struct rxm_msg_eq_entry *entry)
 	default:
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 			"Unknown event: %u\n", entry->event);
-		goto err;
+		return -FI_EOTHER;
 	}
 	return 0;
-err:
-	return -FI_EOTHER;
 }
 
 static ssize_t rxm_eq_sread(struct rxm_ep *rxm_ep, size_t len,
