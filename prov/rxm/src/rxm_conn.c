@@ -1199,11 +1199,10 @@ rxm_conn_handle_event(struct rxm_ep *rxm_ep, struct rxm_msg_eq_entry *entry)
 	if (entry->rd == -FI_ECONNREFUSED)
 		return rxm_conn_handle_reject(rxm_ep, entry);
 
-	switch(entry->event) {
+	switch (entry->event) {
 	case FI_NOTIFY:
-		if (rxm_conn_handle_notify((struct fi_eq_entry *) &entry->cm_entry))
-			return -FI_EOTHER;
-		break;
+		return rxm_conn_handle_notify((struct fi_eq_entry *)
+					      &entry->cm_entry);
 	case FI_CONNREQ:
 		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Got new connection\n");
 		if ((size_t)entry->rd != RXM_CM_ENTRY_SZ) {
