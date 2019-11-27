@@ -1288,10 +1288,7 @@ void rxm_cq_read_write_error(struct rxm_ep *rxm_ep)
 		return;
 	}
 
-	if (err_entry.err == FI_ECANCELED)
-		OFI_CQ_STRERROR(&rxm_prov, FI_LOG_DEBUG, FI_LOG_CQ,
-				rxm_ep->msg_cq, &err_entry);
-	else
+	if (err_entry.err != FI_ECANCELED)
 		OFI_CQ_STRERROR(&rxm_prov, FI_LOG_WARN, FI_LOG_CQ,
 				rxm_ep->msg_cq, &err_entry);
 
