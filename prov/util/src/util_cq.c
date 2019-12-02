@@ -405,6 +405,33 @@ ssize_t ofi_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 	return ret == -FI_ETIMEDOUT ? -FI_EAGAIN : ret;
 }
 
+ssize_t ofi_cq_spin_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
+			      fi_addr_t *src_addr, const void *cond, int timeout)
+{
+	uint64_t endtime;
+	int ret, left = count;
+
+	endtime = ofi_timeout_time(timeout);
+	do {
+		ret = ofi_cq_readfrom(cq_fid, buf, left, src_addr);
+		if (ret >= 0)
+			left -= ret;			
+		else if (ret != -FI_EAGAIN)
+			return ret;
+
+		if (ofi_adjust_timeout(endtime, &timeout))
+			return -FI_ETIMEDOUT;
+	} while (left);
+
+	return count;
+}
+
+ssize_t ofi_cq_spin_sread(struct fid_cq *cq_fid, void *buf, size_t count,
+			  const void *cond, int timeout)
+{
+	return ofi_cq_spin_sreadfrom(cq_fid, buf, count, NULL, cond, timeout);
+}
+
 ssize_t ofi_cq_sread(struct fid_cq *cq_fid, void *buf, size_t count,
 		const void *cond, int timeout)
 {
@@ -419,8 +446,8 @@ int ofi_cq_signal(struct fid_cq *cq_fid)
 	return 0;
 }
 
-static const char *util_cq_strerror(struct fid_cq *cq, int prov_errno,
-				    const void *err_data, char *buf, size_t len)
+const char *util_cq_strerror(struct fid_cq *cq, int prov_errno,
+			     const void *err_data, char *buf, size_t len)
 {
 	return fi_strerror(prov_errno);
 }
