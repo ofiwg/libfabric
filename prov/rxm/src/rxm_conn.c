@@ -653,7 +653,8 @@ static int rxm_cmap_cm_thread_close(struct rxm_cmap *cmap)
 {
 	int ret;
 
-	if (cmap->ep->domain->data_progress != FI_PROGRESS_AUTO)
+	FI_INFO(&rxm_prov, FI_LOG_EP_CTRL, "stopping CM thread\n");
+	if (!cmap->cm_thread)
 		return 0;
 
 	ret = rxm_conn_signal(cmap->ep, NULL, RXM_CMAP_EXIT);
@@ -677,9 +678,9 @@ void rxm_cmap_free(struct rxm_cmap *cmap)
 	struct dlist_entry *entry;
 	size_t i;
 
+	FI_INFO(cmap->av->prov, FI_LOG_EP_CTRL, "Closing cmap\n");
 	rxm_cmap_cm_thread_close(cmap);
 
-	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "Closing cmap\n");
 	for (i = 0; i < cmap->num_allocated; i++) {
 		if (cmap->handles_av[i]) {
 			rxm_cmap_clear_key(cmap->handles_av[i]);
@@ -687,6 +688,7 @@ void rxm_cmap_free(struct rxm_cmap *cmap)
 			cmap->handles_av[i] = 0;
 		}
 	}
+
 	while(!dlist_empty(&cmap->peer_list)) {
 		entry = cmap->peer_list.next;
 		peer = container_of(entry, struct rxm_cmap_peer, entry);
@@ -1133,7 +1135,8 @@ static int rxm_conn_handle_notify(struct fi_eq_entry *eq_entry)
 		rxm_conn_free(handle);
 		return 0;
 	} else {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "unknown cmap signal\n");
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "unhandled cmap state %" PRIu64 "\n",
+			eq_entry->data);
 		assert(0);
 		return -FI_EOTHER;
 	}
