@@ -35,16 +35,30 @@
 
 #include "smr.h"
 
+static struct fi_ops_cq smr_cq_ops = {
+	.size = sizeof(struct fi_ops_cq),
+	.read = ofi_cq_read,
+	.readfrom = ofi_cq_readfrom,
+	.readerr = ofi_cq_readerr,
+	.sread = ofi_cq_spin_sread,
+	.sreadfrom = ofi_cq_spin_sreadfrom,
+	.signal = fi_no_cq_signal,
+	.strerror = util_cq_strerror,
+};
+
 int smr_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		struct fid_cq **cq_fid, void *context)
 {
 	struct util_cq *util_cq;
 	int ret;
 
-	if (attr->wait_obj != FI_WAIT_NONE) {
-		FI_INFO(&smr_prov, FI_LOG_CQ, "CQ wait not yet supported\n");
+	if (attr->wait_obj != FI_WAIT_NONE &&
+	    attr->wait_obj != FI_WAIT_UNSPEC) {
+		FI_INFO(&smr_prov, FI_LOG_CQ,
+			"CQ wait objects not yet supported\n");
 		return -FI_ENOSYS;
 	}
+	attr->wait_obj = FI_WAIT_NONE;
 
 	util_cq = calloc(1, sizeof(*util_cq));
 	if (!util_cq)
@@ -54,6 +68,7 @@ int smr_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	if (ret)
 		goto free;
 
+	util_cq->cq_fid.ops = &smr_cq_ops;
 	(*cq_fid) = &util_cq->cq_fid;
 	return 0;
 
