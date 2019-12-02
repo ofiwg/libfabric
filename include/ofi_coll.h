@@ -122,6 +122,7 @@ struct util_coll_mc {
 };
 
 struct join_data {
+	struct util_coll_mc *new_mc;
 	struct bitmask data;
 	struct bitmask tmp;
 };

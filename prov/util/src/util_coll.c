@@ -555,10 +555,10 @@ void util_coll_join_comp(struct util_coll_operation *coll_op)
 	struct fi_eq_err_entry entry;
 	struct util_ep *ep = container_of(coll_op->mc->ep, struct util_ep, ep_fid);
 
-	coll_op->mc->seq = 0;
-	coll_op->mc->group_id = ofi_bitmask_get_lsbset(coll_op->data.join.data);
+	coll_op->data.join.new_mc->seq = 0;
+	coll_op->data.join.new_mc->group_id = ofi_bitmask_get_lsbset(coll_op->data.join.data);
 	// mark the local mask bit
-	ofi_bitmask_unset(ep->coll_cid_mask, coll_op->mc->group_id);
+	ofi_bitmask_unset(ep->coll_cid_mask, coll_op->data.join.new_mc->group_id);
 
 	/* write to the eq  */
 	memset(&entry, 0, sizeof(entry));
@@ -740,6 +740,8 @@ int ofi_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 				util_coll_join_comp);
 	if (ret)
 		goto err1;
+
+	join_op->data.join.new_mc = new_coll_mc;
 
 	if (new_coll_mc->local_rank != FI_ADDR_NOTAVAIL) {
 		ret = ofi_bitmask_create(&join_op->data.join.data, OFI_MAX_GROUP_ID);
