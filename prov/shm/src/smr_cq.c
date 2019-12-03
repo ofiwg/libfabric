@@ -64,7 +64,8 @@ int smr_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	if (!util_cq)
 		return -FI_ENOMEM;
 
-	ret = ofi_cq_init(&smr_prov, domain, attr, util_cq, ofi_cq_progress, context);
+	ret = ofi_cq_init(&smr_prov, domain, attr, util_cq,
+			  &ofi_cq_progress, context);
 	if (ret)
 		goto free;
 
