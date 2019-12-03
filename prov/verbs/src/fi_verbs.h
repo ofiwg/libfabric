@@ -753,6 +753,8 @@ static inline int fi_ibv_cmp_xrc_domain_name(const char *domain_name,
 
 int fi_ibv_cq_signal(struct fid_cq *cq);
 
+struct fi_ibv_eq_entry *fi_ibv_eq_alloc_entry(uint32_t event,
+					      const void *buf, size_t len);
 ssize_t fi_ibv_eq_write_event(struct fi_ibv_eq *eq, uint32_t event,
 		const void *buf, size_t len);
 
