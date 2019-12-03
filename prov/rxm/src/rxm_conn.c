@@ -40,18 +40,15 @@
 #include "rxm.h"
 
 static struct rxm_cmap_handle *rxm_conn_alloc(struct rxm_cmap *cmap);
-static void rxm_conn_close(struct rxm_cmap_handle *handle);
-static int
-rxm_conn_connect(struct util_ep *util_ep, struct rxm_cmap_handle *handle,
-		 const void *addr);
+static int rxm_conn_connect(struct util_ep *util_ep,
+			    struct rxm_cmap_handle *handle, const void *addr);
 static int rxm_conn_signal(struct util_ep *util_ep, void *context,
 			   enum rxm_cmap_signal signal);
-static void
-rxm_conn_av_updated_handler(struct rxm_cmap_handle *handle);
+static void rxm_conn_av_updated_handler(struct rxm_cmap_handle *handle);
 static void *rxm_conn_progress(void *arg);
 static void *rxm_conn_atomic_progress(void *arg);
-static int
-rxm_conn_handle_event(struct rxm_ep *rxm_ep, struct rxm_msg_eq_entry *entry);
+static int rxm_conn_handle_event(struct rxm_ep *rxm_ep,
+				 struct rxm_msg_eq_entry *entry);
 
 
 /*
@@ -226,6 +223,7 @@ rxm_conn_inject_pkt_alloc(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 	return inject_pkt;
 }
+
 static void rxm_conn_res_free(struct rxm_conn *rxm_conn)
 {
 	ofi_freealign(rxm_conn->inject_pkt);
@@ -237,6 +235,7 @@ static void rxm_conn_res_free(struct rxm_conn *rxm_conn)
 	ofi_freealign(rxm_conn->tinject_data_pkt);
 	rxm_conn->tinject_data_pkt = NULL;
 }
+
 static int rxm_conn_res_alloc(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn)
 {
 	dlist_init(&rxm_conn->deferred_conn_entry);
@@ -269,21 +268,25 @@ static int rxm_conn_res_alloc(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn)
 	return 0;
 }
 
+static void rxm_conn_close(struct rxm_cmap_handle *handle)
+{
+	struct rxm_conn *rxm_conn = container_of(handle, struct rxm_conn, handle);
+
+	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "closing msg ep\n");
+	if (!rxm_conn->msg_ep)
+		return;
+
+	if (fi_close(&rxm_conn->msg_ep->fid))
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "unable to close msg_ep\n");
+
+	rxm_conn->msg_ep = NULL;
+}
+
 static void rxm_conn_free(struct rxm_cmap_handle *handle)
 {
-	struct rxm_conn *rxm_conn =
-		container_of(handle, struct rxm_conn, handle);
+	struct rxm_conn *rxm_conn = container_of(handle, struct rxm_conn, handle);
 
-	if (rxm_conn->msg_ep) {
-		if (fi_close(&rxm_conn->msg_ep->fid)) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-				"unable to close msg_ep\n");
-		} else {
-			FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
-			       "closed msg_ep\n");
-		}
-		rxm_conn->msg_ep = NULL;
-	}
+	rxm_conn_close(handle);
 	rxm_conn_res_free(rxm_conn);
 	free(rxm_conn);
 }
@@ -843,24 +846,6 @@ static int rxm_msg_ep_open(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 err:
 	fi_close(&msg_ep->fid);
 	return ret;
-}
-
-static void rxm_conn_close(struct rxm_cmap_handle *handle)
-{
-	struct rxm_conn *rxm_conn =
-		container_of(handle, struct rxm_conn, handle);
-
-	if (!rxm_conn->msg_ep)
-		return;
-
-	if (fi_close(&rxm_conn->msg_ep->fid)) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-			"unable to close msg_ep\n");
-	} else {
-		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
-		       "closed msg_ep\n");
-	}
-	rxm_conn->msg_ep = NULL;
 }
 
 static int rxm_conn_reprocess_directed_recvs(struct rxm_recv_queue *recv_queue)
