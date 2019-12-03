@@ -49,11 +49,11 @@
 #include <ofi.h>
 #include <ofi_rbuf.h>
 
-#define OFI_DECL_RECVWIN_BUF(entrytype, name)				\
+#define OFI_DECL_RECVWIN_BUF(entrytype, name, id_type)			\
 OFI_DECLARE_CIRQUE(entrytype, recvwin_cirq);				\
 struct name {								\
-	uint64_t exp_msg_id;						\
-	unsigned int win_size;						\
+	id_type exp_msg_id;						\
+	id_type win_size;						\
 	struct recvwin_cirq *pending;					\
 };									\
 									\
@@ -74,9 +74,9 @@ ofi_recvwin_free(struct name *recvq)					\
 }									\
 									\
 static inline int							\
-ofi_recvwin_queue_msg(struct name *recvq, entrytype * msg, uint64_t id)	\
+ofi_recvwin_queue_msg(struct name *recvq, entrytype * msg, id_type id)	\
 {									\
-	int write_idx;							\
+	size_t write_idx;						\
 									\
 	assert(ofi_recvwin_is_allowed(recvq, id));			\
 	write_idx = (ofi_cirque_rindex(recvq->pending)			\
@@ -88,9 +88,9 @@ ofi_recvwin_queue_msg(struct name *recvq, entrytype * msg, uint64_t id)	\
 }									\
 				                                        \
 static inline entrytype *						\
-ofi_recvwin_get_msg(struct name *recvq, uint64_t id)	   		\
+ofi_recvwin_get_msg(struct name *recvq, id_type id)			\
 {		                                           		\
-	int read_idx;							\
+	size_t read_idx;						\
 									\
 	assert(ofi_recvwin_is_allowed(recvq, id));			\
 	read_idx = (ofi_cirque_rindex(recvq->pending)			\
