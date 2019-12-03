@@ -32,16 +32,30 @@
 
 #include "smr.h"
 
+static struct fi_ops_cntr smr_cntr_ops = {
+	.size = sizeof(struct fi_ops_cntr),
+	.read = ofi_cntr_read,
+	.readerr = ofi_cntr_readerr,
+	.add = ofi_cntr_add,
+	.adderr = ofi_cntr_adderr,
+	.set = ofi_cntr_set,
+	.seterr = ofi_cntr_seterr,
+	.wait = ofi_cntr_spin_wait
+};
+
 int smr_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		  struct fid_cntr **cntr_fid, void *context)
 {
 	int ret;
 	struct util_cntr *cntr;
 
-	if (attr->wait_obj != FI_WAIT_NONE) {
-		FI_INFO(&smr_prov, FI_LOG_CNTR, "cntr wait not yet supported\n");
+	if (attr->wait_obj != FI_WAIT_NONE &&
+	    attr->wait_obj != FI_WAIT_UNSPEC) {
+		FI_INFO(&smr_prov, FI_LOG_CNTR,
+			"cntr wait objects not yet supported\n");
 		return -FI_ENOSYS;
 	}
+	attr->wait_obj = FI_WAIT_NONE;
 
 	cntr = calloc(1, sizeof(*cntr));
 	if (!cntr)
@@ -52,6 +66,7 @@ int smr_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	if (ret)
 		goto free;
 
+	cntr->cntr_fid.ops = &smr_cntr_ops;
 	*cntr_fid = &cntr->cntr_fid;
 	return FI_SUCCESS;
 
