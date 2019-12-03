@@ -225,7 +225,7 @@ err:
 	free(cm_ctx);
 
 	/* `err_entry.err_data` must live until it is passed to user */
-	ret = fi_eq_write(&ep->util_ep.eq->eq_fid, FI_NOTIFY,
+	ret = fi_eq_write(&ep->util_ep.eq->eq_fid, FI_SHUTDOWN,
 			  &err_entry, sizeof(err_entry), UTIL_FLAG_ERROR);
 	if (ret < 0)
 		free(err_entry.err_data);
@@ -274,7 +274,7 @@ err:
 	err_entry.err = -ret;
 
 	free(cm_ctx);
-	fi_eq_write(&ep->util_ep.eq->eq_fid, FI_NOTIFY,
+	fi_eq_write(&ep->util_ep.eq->eq_fid, FI_SHUTDOWN,
 		    &err_entry, sizeof(err_entry), UTIL_FLAG_ERROR);
 }
 
@@ -385,7 +385,7 @@ err:
 	err_entry.err = -ret;
 
 	free(cm_ctx);
-	fi_eq_write(&ep->util_ep.eq->eq_fid, FI_NOTIFY,
+	fi_eq_write(&ep->util_ep.eq->eq_fid, FI_SHUTDOWN,
 		    &err_entry, sizeof(err_entry), UTIL_FLAG_ERROR);
 }
 
