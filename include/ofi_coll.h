@@ -48,6 +48,7 @@ enum util_coll_op_type {
 	UTIL_COLL_BARRIER_OP,
 	UTIL_COLL_ALLREDUCE_OP,
 	UTIL_COLL_BROADCAST_OP,
+	UTIL_COLL_ALLGATHER_OP,
 };
 
 struct util_av_set {
@@ -166,10 +167,14 @@ int ofi_av_set(struct fid_av *av, struct fi_av_set_attr *attr,
 
 ssize_t ofi_ep_barrier(struct fid_ep *ep, fi_addr_t coll_addr, void *context);
 
-ssize_t ofi_ep_allreduce(struct fid_ep *ep, const void *buf, size_t count,
-	void *desc, void *result, void *result_desc,
-	fi_addr_t coll_addr, enum fi_datatype datatype, enum fi_op op,
-	uint64_t flags, void *context);
+ssize_t ofi_ep_allreduce(struct fid_ep *ep, const void *buf, size_t count, void *desc,
+			 void *result, void *result_desc, fi_addr_t coll_addr,
+			 enum fi_datatype datatype, enum fi_op op, uint64_t flags,
+			 void *context);
+
+ssize_t ofi_ep_allgather(struct fid_ep *ep, const void *buf, size_t count, void *desc,
+			 void *result, void *result_desc, fi_addr_t coll_addr,
+			 enum fi_datatype datatype, uint64_t flags, void *context);
 
 int ofi_coll_ep_progress(struct fid_ep *ep);
 

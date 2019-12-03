@@ -231,6 +231,61 @@ static int sum_all_reduce_test_run()
 	return -FI_ENOEQ;
 }
 
+static int all_gather_test_run()
+{
+	int err;
+	uint64_t done_flag;
+	uint64_t *result;
+	uint64_t *expect_result;
+	uint64_t data = pm_job.my_rank;
+	size_t count = 1;
+	uint64_t i;
+	struct fi_collective_attr attr;
+
+	attr.op = FI_NOOP;
+	attr.datatype = FI_UINT64;
+	attr.mode = 0;
+	err = fi_query_collective(domain, FI_ALLGATHER, &attr, 0);
+	if (err) {
+		FT_DEBUG("SUM AllReduce collective not supported: %d (%s)\n", err,
+			 fi_strerror(err));
+		return err;
+	}
+
+	result = malloc(pm_job.num_ranks * sizeof(*expect_result));
+	expect_result = malloc(pm_job.num_ranks * sizeof(*expect_result));
+	for (i = 0; i < pm_job.num_ranks; i++) {
+		expect_result[i] = i;
+	}
+
+	coll_addr = fi_mc_addr(coll_mc);
+	err = fi_allgather(ep, &data, count, NULL, result, NULL, coll_addr, FI_UINT64, 0,
+			   &done_flag);
+	if (err) {
+		FT_DEBUG("collective allreduce failed: %d (%s)\n", err, fi_strerror(err));
+		goto errout;
+	}
+
+	err = wait_for_comp(&done_flag);
+	if (err)
+		goto errout;
+
+	for (i = 0; i < pm_job.num_ranks; i++) {
+		if ((expect_result[i]) != result[i]) {
+			FT_DEBUG("allgather failed; expect[%ld]: %ld, actual[%ld]: %ld\n",
+				 i, expect_result[i], i, result[i]);
+			err = -1;
+			goto errout;
+		}
+	}
+	return FI_SUCCESS;
+
+errout:
+	free(expect_result);
+	free(result);
+	return err;
+}
+
 struct coll_test tests[] = {
 	{
 		.name = "join_test",
@@ -248,6 +303,12 @@ struct coll_test tests[] = {
 		.name = "sum_all_reduce_test",
 		.setup = coll_setup,
 		.run = sum_all_reduce_test_run,
+		.teardown = coll_teardown
+	},
+	{
+		.name = "all_gather_test",
+		.setup = coll_setup,
+		.run = all_gather_test_run,
 		.teardown = coll_teardown
 	},
 };

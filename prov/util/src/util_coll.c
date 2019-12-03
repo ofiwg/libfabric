@@ -496,6 +496,53 @@ static int util_coll_allreduce(struct util_coll_operation *coll_op, const void *
 	return FI_SUCCESS;
 }
 
+static int util_coll_allgather(struct util_coll_operation *coll_op, const void *send_buf,
+			       void *result, int count, enum fi_datatype datatype)
+{
+	// allgather implemented using ring algorithm
+	int64_t ret, i, cur_offset, next_offset;
+	size_t nbytes, numranks;
+	uint64_t local_rank, left_rank, right_rank;
+
+	local_rank = coll_op->mc->local_rank;
+	nbytes = ofi_datatype_size(datatype) * count;
+	numranks = coll_op->mc->av_set->fi_addr_count;
+
+	// copy the local value to the appropriate place in result buffer
+	ret = util_coll_sched_copy(coll_op, (void *) send_buf,
+				   (char *) result + (local_rank * nbytes), count,
+				   datatype, 1);
+	if (ret)
+		return ret;
+
+	// send to right, recv from left
+	left_rank = (numranks + local_rank - 1) % numranks;
+	right_rank = (local_rank + 1) % numranks;
+
+	cur_offset = local_rank;
+	next_offset = left_rank;
+
+	// fill in result with data going right to left
+	for (i = 1; i < numranks; i++) {
+		ret = util_coll_sched_send(coll_op, right_rank,
+					   (char *) result + (cur_offset * nbytes), count,
+					   datatype, 0);
+		if (ret)
+			return ret;
+
+		ret = util_coll_sched_recv(coll_op, left_rank,
+					   (char *) result + (next_offset * nbytes),
+					   count, datatype, 1);
+		if (ret)
+			return ret;
+
+		cur_offset = next_offset;
+		next_offset = (numranks + next_offset - 1) % numranks;
+	}
+
+	return FI_SUCCESS;
+}
+
 static int util_coll_close(struct fid *fid)
 {
 	struct util_coll_mc *coll_mc;
@@ -976,6 +1023,38 @@ err1:
 	return ret;
 }
 
+ssize_t ofi_ep_allgather(struct fid_ep *ep, const void *buf, size_t count, void *desc,
+			 void *result, void *result_desc, fi_addr_t coll_addr,
+			 enum fi_datatype datatype, uint64_t flags, void *context)
+{
+	struct util_coll_mc *coll_mc;
+	struct util_coll_operation *allgather_op;
+	struct util_ep *util_ep;
+	int ret;
+
+	coll_mc = (struct util_coll_mc *) ((uintptr_t) coll_addr);
+	ret = util_coll_op_create(&allgather_op, coll_mc, UTIL_COLL_ALLGATHER_OP, context,
+				  util_coll_collective_comp);
+	if (ret)
+		return ret;
+
+	ret = util_coll_allgather(allgather_op, buf, result, count, datatype);
+	if (ret)
+		goto err;
+
+	ret = util_coll_sched_comp(allgather_op);
+	if (ret)
+		goto err;
+
+	util_ep = container_of(ep, struct util_ep, ep_fid);
+	util_coll_op_progress_work(util_ep, allgather_op);
+
+	return FI_SUCCESS;
+err:
+	free(allgather_op);
+	return ret;
+}
+
 void ofi_coll_handle_xfer_comp(uint64_t tag, void *ctx)
 {
 	struct util_ep *util_ep;
@@ -996,6 +1075,7 @@ int ofi_query_collective(struct fid_domain *domain, enum fi_collective_op coll,
 
 	switch (coll) {
 	case FI_BARRIER:
+	case FI_ALLGATHER:
 		ret = FI_SUCCESS;
 		break;
 	case FI_ALLREDUCE:
@@ -1007,7 +1087,6 @@ int ofi_query_collective(struct fid_domain *domain, enum fi_collective_op coll,
 		break;
 	case FI_BROADCAST:
 	case FI_ALLTOALL:
-	case FI_ALLGATHER:
 	case FI_REDUCE_SCATTER:
 	case FI_REDUCE:
 	case FI_SCATTER:
