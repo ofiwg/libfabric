@@ -315,6 +315,17 @@ static int smr_ep_close(struct fid *fid)
 	return 0;
 }
 
+static int smr_ep_trywait(void *arg)
+{
+	struct smr_ep *ep;
+
+	ep = container_of(arg, struct smr_ep, util_ep.ep_fid.fid);
+
+	smr_ep_progress(&ep->util_ep);
+
+	return FI_SUCCESS;
+}
+
 static int smr_ep_bind_cq(struct smr_ep *ep, struct util_cq *cq, uint64_t flags)
 {
 	int ret;
@@ -338,11 +349,36 @@ static int smr_ep_bind_cq(struct smr_ep *ep, struct util_cq *cq, uint64_t flags)
 		}
 	}
 
+	if (cq->wait) {
+		ret = ofi_wait_fid_add(cq->wait, smr_ep_trywait,
+				       &ep->util_ep.ep_fid.fid);
+		if (ret)
+			return ret;
+	}
+
 	ret = fid_list_insert(&cq->ep_list,
 			      &cq->ep_list_lock,
 			      &ep->util_ep.ep_fid.fid);
 
 	return ret;
+}
+
+static int smr_ep_bind_cntr(struct smr_ep *ep, struct util_cntr *cntr, uint64_t flags)
+{
+	int ret;
+
+	ret = ofi_ep_bind_cntr(&ep->util_ep, cntr, flags);
+	if (ret)
+		return ret;
+
+	if (cntr->wait) {	
+		ret = ofi_wait_fid_add(cntr->wait, smr_ep_trywait,
+				       &ep->util_ep.ep_fid.fid);
+		if (ret)
+			return ret;
+	}
+
+	return FI_SUCCESS;
 }
 
 static int smr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
@@ -369,7 +405,7 @@ static int smr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 	case FI_CLASS_EQ:
 		break;
 	case FI_CLASS_CNTR:
-		ret = ofi_ep_bind_cntr(&ep->util_ep, container_of(bfid,
+		ret = smr_ep_bind_cntr(ep, container_of(bfid,
 				struct util_cntr, cntr_fid.fid), flags);
 		break;
 	default:
