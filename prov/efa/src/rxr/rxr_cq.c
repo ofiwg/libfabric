@@ -953,7 +953,7 @@ static int rxr_cq_reorder_msg(struct rxr_ep *ep,
 	if (rts_hdr->msg_id != ofi_recvwin_next_exp_id(peer->robuf))
 		FI_DBG(&rxr_prov, FI_LOG_EP_CTRL,
 		       "msg OOO rts_hdr->msg_id: %" PRIu32 " expected: %"
-		       PRIu64 "\n", rts_hdr->msg_id,
+		       PRIu32 "\n", rts_hdr->msg_id,
 		       ofi_recvwin_next_exp_id(peer->robuf));
 #endif
 	if (ofi_recvwin_is_exp(peer->robuf, rts_hdr->msg_id))
