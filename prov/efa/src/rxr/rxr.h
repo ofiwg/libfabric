@@ -956,7 +956,6 @@ static inline void rxr_release_tx_entry(struct rxr_ep *ep,
 			      sizeof(struct rxr_tx_entry));
 #endif
 	tx_entry->state = RXR_TX_FREE;
-	tx_entry->msg_id = ~0;
 	ofi_buf_free(tx_entry);
 }
 
@@ -972,7 +971,6 @@ static inline void rxr_release_rx_entry(struct rxr_ep *ep,
 			      sizeof(struct rxr_rx_entry));
 #endif
 	rx_entry->state = RXR_RX_FREE;
-	rx_entry->msg_id = ~0;
 	ofi_buf_free(rx_entry);
 }
 
