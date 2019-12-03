@@ -68,7 +68,7 @@ static void tcpx_report_error(struct tcpx_ep *tcpx_ep, int err)
 	err_entry.context = tcpx_ep->util_ep.ep_fid.fid.context;
 	err_entry.err = -err;
 
-	fi_eq_write(&tcpx_ep->util_ep.eq->eq_fid, FI_NOTIFY,
+	fi_eq_write(&tcpx_ep->util_ep.eq->eq_fid, FI_SHUTDOWN,
 		    &err_entry, sizeof(err_entry), UTIL_FLAG_ERROR);
 }
 
