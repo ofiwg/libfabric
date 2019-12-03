@@ -894,7 +894,7 @@ static int rxr_cq_reorder_msg(struct rxr_ep *ep,
 #endif
 	if (ofi_recvwin_is_exp(peer->robuf, rts_hdr->msg_id))
 		return 0;
-	else if (ofi_recvwin_is_delayed(peer->robuf, rts_hdr->msg_id))
+	else if (!ofi_recvwin_id_valid(peer->robuf, rts_hdr->msg_id))
 		return -FI_EALREADY;
 
 	if (OFI_LIKELY(rxr_env.rx_copy_ooo)) {
@@ -1037,7 +1037,7 @@ static void rxr_cq_handle_rts(struct rxr_ep *ep,
 			return;
 		} else if (OFI_UNLIKELY(ret == -FI_EALREADY)) {
 			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
-				"Duplicate RTS packet msg_id: %" PRIu32
+				"Invalid msg_id: %" PRIu32
 				" robuf->exp_msg_id: %" PRIu32 "\n",
 			       rts_hdr->msg_id, peer->robuf->exp_msg_id);
 			if (!rts_hdr->addrlen)
