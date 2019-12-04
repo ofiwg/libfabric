@@ -95,6 +95,27 @@ extern "C" {
 
 #define ofi_div_ceil(a, b) ((a + b - 1) / b)
 
+static inline int ofi_val64_gt(uint64_t x, uint64_t y) {
+	return ((int64_t) (x - y)) > 0;
+}
+static inline int ofi_val64_ge(uint64_t x, uint64_t y) {
+	return ((int64_t) (x - y)) >= 0;
+}
+#define ofi_val64_lt(x, y) ofi_val64_gt(y, x)
+
+static inline int ofi_val32_gt(uint32_t x, uint32_t y) {
+	return ((int32_t) (x - y)) > 0;
+}
+static inline int ofi_val32_ge(uint32_t x, uint32_t y) {
+	return ((int32_t) (x - y)) >= 0;
+}
+#define ofi_val32_lt(x, y) ofi_val32_gt(y, x)
+
+#define ofi_val32_inrange(start, length, value) \
+    ofi_val32_ge(value, start) && ofi_val32_lt(value, start + length)
+#define ofi_val64_inrange(start, length, value) \
+    ofi_val64_ge(value, start) && ofi_val64_lt(value, start + length)
+
 #define OFI_MAGIC_64 (0x0F1C0DE0F1C0DE64)
 
 #ifndef BIT
