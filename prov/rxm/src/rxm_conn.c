@@ -40,9 +40,9 @@
 #include "rxm.h"
 
 static struct rxm_cmap_handle *rxm_conn_alloc(struct rxm_cmap *cmap);
-static int rxm_conn_connect(struct util_ep *util_ep,
+static int rxm_conn_connect(struct rxm_ep *ep,
 			    struct rxm_cmap_handle *handle, const void *addr);
-static int rxm_conn_signal(struct util_ep *util_ep, void *context,
+static int rxm_conn_signal(struct rxm_ep *ep, void *context,
 			   enum rxm_cmap_signal signal);
 static void rxm_conn_av_updated_handler(struct rxm_cmap_handle *handle);
 static void *rxm_conn_progress(void *arg);
@@ -460,7 +460,7 @@ void rxm_cmap_process_connect(struct rxm_cmap *cmap,
 	RXM_CM_UPDATE_STATE(handle, RXM_CMAP_CONNECTED);
 
 	/* Set the remote key to the inject packets */
-	if (cmap->ep->domain->threading != FI_THREAD_SAFE) {
+	if (cmap->ep->util_ep.domain->threading != FI_THREAD_SAFE) {
 		rxm_conn->inject_pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
 		rxm_conn->inject_data_pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
 		rxm_conn->tinject_pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
@@ -625,9 +625,8 @@ int rxm_cmap_connect(struct rxm_ep *rxm_ep, fi_addr_t fi_addr,
 	case RXM_CMAP_IDLE:
 		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "initiating MSG_EP connect "
 		       "for fi_addr: %" PRIu64 "\n", fi_addr);
-		ret = rxm_conn_connect(rxm_ep->cmap->ep, handle,
-				       ofi_av_get_addr(rxm_ep->cmap->av,
-						       fi_addr));
+		ret = rxm_conn_connect(rxm_ep, handle,
+				       ofi_av_get_addr(rxm_ep->cmap->av, fi_addr));
 		if (ret) {
 			rxm_cmap_del_handle(handle);
 		} else {
@@ -730,7 +729,7 @@ int rxm_cmap_alloc(struct rxm_ep *rxm_ep, struct rxm_cmap_attr *attr)
 	if (!cmap)
 		return -FI_ENOMEM;
 
-	cmap->ep = ep;
+	cmap->ep = rxm_ep;
 	cmap->av = ep->av;
 
 	cmap->handles_av = calloc(cmap->av->count, sizeof(*cmap->handles_av));
@@ -903,12 +902,12 @@ static int rxm_conn_reprocess_directed_recvs(struct rxm_recv_queue *recv_queue)
 static void
 rxm_conn_av_updated_handler(struct rxm_cmap_handle *handle)
 {
-	struct rxm_ep *rxm_ep = container_of(handle->cmap->ep, struct rxm_ep, util_ep);
+	struct rxm_ep *ep = handle->cmap->ep;
 	int count = 0;
 
-	if (rxm_ep->rxm_info->caps & FI_DIRECTED_RECV) {
-		count += rxm_conn_reprocess_directed_recvs(&rxm_ep->recv_queue);
-		count += rxm_conn_reprocess_directed_recvs(&rxm_ep->trecv_queue);
+	if (ep->rxm_info->caps & FI_DIRECTED_RECV) {
+		count += rxm_conn_reprocess_directed_recvs(&ep->recv_queue);
+		count += rxm_conn_reprocess_directed_recvs(&ep->trecv_queue);
 
 		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
 		       "Reprocessed directed recvs - %d\n", count);
@@ -917,13 +916,12 @@ rxm_conn_av_updated_handler(struct rxm_cmap_handle *handle)
 
 static struct rxm_cmap_handle *rxm_conn_alloc(struct rxm_cmap *cmap)
 {
-	struct rxm_ep *rxm_ep = container_of(cmap->ep, struct rxm_ep, util_ep);
 	struct rxm_conn *rxm_conn = calloc(1, sizeof(*rxm_conn));
 
 	if (OFI_UNLIKELY(!rxm_conn))
 		return NULL;
 
-	if (rxm_conn_res_alloc(rxm_ep, rxm_conn)) {
+	if (rxm_conn_res_alloc(cmap->ep, rxm_conn)) {
 		free(rxm_conn);
 		return NULL;
 	}
@@ -1091,7 +1089,6 @@ static int rxm_conn_handle_notify(struct fi_eq_entry *eq_entry)
 {
 	struct rxm_cmap *cmap;
 	struct rxm_cmap_handle *handle;
-	struct rxm_ep *rxm_ep;
 
 	assert((enum rxm_cmap_signal) eq_entry->data);
 
@@ -1100,7 +1097,6 @@ static int rxm_conn_handle_notify(struct fi_eq_entry *eq_entry)
 		assert(handle->state == RXM_CMAP_SHUTDOWN);
 		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "freeing handle: %p\n", handle);
 		cmap = handle->cmap;
-		rxm_ep = container_of(cmap->ep, struct rxm_ep, util_ep);
 
 		rxm_conn_close(handle);
 
@@ -1108,7 +1104,7 @@ static int rxm_conn_handle_notify(struct fi_eq_entry *eq_entry)
 		// handle from msg_cq entries that have not been cleaned up yet, otherwise we
 		// could run into problems during CQ cleanup.  these entries will be errored so
 		// keep reading through EAVAIL.
-		rxm_flush_msg_cq(rxm_ep);
+		rxm_flush_msg_cq(cmap->ep);
 
 		if (handle->peer) {
 			dlist_remove(&handle->peer->entry);
@@ -1448,76 +1444,73 @@ static int rxm_prepare_cm_data(struct fid_pep *pep, struct rxm_cmap_handle *hand
 }
 
 static int
-rxm_conn_connect(struct util_ep *util_ep, struct rxm_cmap_handle *handle,
+rxm_conn_connect(struct rxm_ep *ep, struct rxm_cmap_handle *handle,
 		 const void *addr)
 {
 	int ret;
-	struct rxm_ep *rxm_ep =
-		container_of(util_ep, struct rxm_ep, util_ep);
-	struct rxm_conn *rxm_conn =
-		container_of(handle, struct rxm_conn, handle);
+	struct rxm_conn *rxm_conn = container_of(handle, struct rxm_conn, handle);
 	union rxm_cm_data cm_data = {
 		.connect = {
 			.version = RXM_CM_DATA_VERSION,
 			.ctrl_version = RXM_CTRL_VERSION,
 			.op_version = RXM_OP_VERSION,
 			.endianness = ofi_detect_endianness(),
-			.eager_size = rxm_ep->rxm_info->tx_attr->inject_size,
+			.eager_size = ep->rxm_info->tx_attr->inject_size,
 		},
 	};
 
 	assert(sizeof(uint32_t) == sizeof(cm_data.connect.eager_size));
 	assert(sizeof(uint32_t) == sizeof(cm_data.connect.rx_size));
-	assert(rxm_ep->rxm_info->tx_attr->inject_size <= (uint32_t)-1);
-	assert(rxm_ep->msg_info->rx_attr->size <= (uint32_t)-1);
+	assert(ep->rxm_info->tx_attr->inject_size <= (uint32_t) -1);
+	assert(ep->msg_info->rx_attr->size <= (uint32_t) -1);
 
-	free(rxm_ep->msg_info->dest_addr);
-	rxm_ep->msg_info->dest_addrlen = rxm_ep->msg_info->src_addrlen;
+	free(ep->msg_info->dest_addr);
+	ep->msg_info->dest_addrlen = ep->msg_info->src_addrlen;
 
-	rxm_ep->msg_info->dest_addr = mem_dup(addr, rxm_ep->msg_info->dest_addrlen);
-	if (!rxm_ep->msg_info->dest_addr) {
+	ep->msg_info->dest_addr = mem_dup(addr, ep->msg_info->dest_addrlen);
+	if (!ep->msg_info->dest_addr) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "mem_dup failed, len %zu\n",
-			rxm_ep->msg_info->dest_addrlen);
+			ep->msg_info->dest_addrlen);
 		return -FI_ENOMEM;
 	}
 
-	ret = rxm_msg_ep_open(rxm_ep, rxm_ep->msg_info, rxm_conn, &rxm_conn->handle);
+	ret = rxm_msg_ep_open(ep, ep->msg_info, rxm_conn, &rxm_conn->handle);
 	if (ret)
 		return ret;
 
 	/* We have to send passive endpoint's address to the server since the
 	 * address from which connection request would be sent would have a
 	 * different port. */
-	ret = rxm_prepare_cm_data(rxm_ep->msg_pep, &rxm_conn->handle, &cm_data);
+	ret = rxm_prepare_cm_data(ep->msg_pep, &rxm_conn->handle, &cm_data);
 	if (ret)
 		goto err;
 
-	cm_data.connect.rx_size = rxm_conn_get_rx_size(rxm_ep, rxm_ep->msg_info);
+	cm_data.connect.rx_size = rxm_conn_get_rx_size(ep, ep->msg_info);
 
-	ret = fi_connect(rxm_conn->msg_ep, rxm_ep->msg_info->dest_addr,
+	ret = fi_connect(rxm_conn->msg_ep, ep->msg_info->dest_addr,
 			 &cm_data, sizeof(cm_data));
 	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "unable to connect msg_ep\n");
 		goto err;
 	}
 	return 0;
+
 err:
 	fi_close(&rxm_conn->msg_ep->fid);
 	rxm_conn->msg_ep = NULL;
 	return ret;
 }
 
-static int rxm_conn_signal(struct util_ep *util_ep, void *context,
+static int rxm_conn_signal(struct rxm_ep *ep, void *context,
 			   enum rxm_cmap_signal signal)
 {
-	struct rxm_ep *rxm_ep = container_of(util_ep, struct rxm_ep, util_ep);
 	struct fi_eq_entry entry = {0};
 	ssize_t rd;
 
 	entry.context = context;
-	entry.data = (uint64_t)signal;
+	entry.data = (uint64_t) signal;
 
-	rd = fi_eq_write(rxm_ep->msg_eq, FI_NOTIFY, &entry, sizeof(entry), 0);
+	rd = fi_eq_write(ep->msg_eq, FI_NOTIFY, &entry, sizeof(entry), 0);
 	if (rd != sizeof(entry)) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to signal\n");
 		return (int)rd;
