@@ -48,6 +48,8 @@ pipeline {
               withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin']) {
                 sh """
                 python3.7  contrib/intel/jenkins/build.py 'shmem'
+                python3.7  contrib/intel/jenkins/build.py 'shmem' --ofi_build_mode='dbg'
+                python3.7  contrib/intel/jenkins/build.py 'shmem' --ofi_build_mode='dl'
                 echo 'shmem benchmarks built successfully'
                 """
                 }
