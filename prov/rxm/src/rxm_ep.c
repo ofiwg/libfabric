@@ -956,7 +956,7 @@ rxm_ep_alloc_rndv_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void 
 	tx_buf->flags = flags;
 	tx_buf->count = count;
 
-	if (!rxm_ep->rxm_mr_local) {
+	if (!rxm_ep->rdm_mr_local) {
 		ret = rxm_msg_mr_regv(rxm_ep, iov, tx_buf->count, data_len,
 				      FI_REMOTE_READ, tx_buf->mr);
 		if (ret)
@@ -1008,7 +1008,7 @@ rxm_ep_rndv_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 err:
 	FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
 	       "Transmit for MSG provider failed\n");
-	if (!rxm_ep->rxm_mr_local)
+	if (!rxm_ep->rdm_mr_local)
 		rxm_msg_mr_closev(tx_buf->mr, tx_buf->count);
 	ofi_buf_free(tx_buf);
 	return ret;
@@ -2193,7 +2193,7 @@ static void rxm_ep_settings_init(struct rxm_ep *rxm_ep)
 				rxm_ep->rxm_info->tx_attr->size);
 
 	rxm_ep->msg_mr_local = ofi_mr_local(rxm_ep->msg_info);
-	rxm_ep->rxm_mr_local = ofi_mr_local(rxm_ep->rxm_info);
+	rxm_ep->rdm_mr_local = ofi_mr_local(rxm_ep->rxm_info);
 
 	rxm_ep->inject_limit = rxm_ep->msg_info->tx_attr->inject_size;
 
@@ -2225,7 +2225,7 @@ static void rxm_ep_settings_init(struct rxm_ep *rxm_ep)
 	        "\t\t rxm inject size: %zu\n"
 		"\t\t Protocol limits: Eager: %zu, "
 				      "SAR: %zu\n",
-		rxm_ep->msg_mr_local, rxm_ep->rxm_mr_local,
+		rxm_ep->msg_mr_local, rxm_ep->rdm_mr_local,
 		rxm_ep->comp_per_progress, rxm_ep->buffered_min,
 		rxm_ep->min_multi_recv_size, rxm_ep->inject_limit,
 		rxm_ep->rxm_info->tx_attr->inject_size,

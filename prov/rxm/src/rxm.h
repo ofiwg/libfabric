@@ -662,12 +662,12 @@ struct rxm_ep {
 	struct fid_ep 		*srx_ctx;
 	size_t 			comp_per_progress;
 	ofi_atomic32_t		atomic_tx_credits;
-	int			msg_mr_local;
-	int			rxm_mr_local;
+	bool			msg_mr_local;
+	bool			rdm_mr_local;
+
 	size_t			min_multi_recv_size;
 	size_t			buffered_min;
 	size_t			buffered_limit;
-
 	size_t			inject_limit;
 	size_t			eager_limit;
 	size_t			sar_limit;
