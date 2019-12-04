@@ -198,12 +198,27 @@ enum fi_op {
 
 #endif
 
+#ifndef FABRIC_DIRECT_COLLECTIVE_DEF
+
+enum fi_collective_op {
+	FI_BARRIER,
+	FI_BROADCAST,
+	FI_ALLTOALL,
+	FI_ALLREDUCE,
+	FI_ALLGATHER,
+	FI_REDUCE_SCATTER,
+	FI_REDUCE,
+	FI_SCATTER,
+	FI_GATHER,
+};
+
+#endif
+
 
 struct fi_atomic_attr;
 struct fi_cq_attr;
 struct fi_cntr_attr;
 struct fi_collective_attr;
-enum   fi_collective_op;
 
 struct fi_ops_domain {
 	size_t	size;
