@@ -655,6 +655,7 @@ static int rxm_cmap_cm_thread_close(struct rxm_cmap *cmap)
 	if (!cmap->cm_thread)
 		return 0;
 
+	cmap->ep->do_progress = false;
 	ret = rxm_conn_signal(cmap->ep, NULL, RXM_CMAP_EXIT);
 	if (ret) {
 		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL,
@@ -750,7 +751,9 @@ int rxm_cmap_alloc(struct rxm_ep *rxm_ep, struct rxm_cmap_attr *attr)
 	rxm_ep->cmap = cmap;
 
 	if (ep->domain->data_progress == FI_PROGRESS_AUTO || force_auto_progress) {
+
 		assert(ep->domain->threading == FI_THREAD_SAFE);
+		rxm_ep->do_progress = true;
 		if (pthread_create(&cmap->cm_thread, 0,
 				   rxm_ep->rxm_info->caps & FI_ATOMIC ?
 				   rxm_conn_atomic_progress :
@@ -1086,37 +1089,34 @@ static int rxm_conn_handle_notify(struct fi_eq_entry *eq_entry)
 	struct rxm_cmap *cmap;
 	struct rxm_cmap_handle *handle;
 
-	assert((enum rxm_cmap_signal) eq_entry->data);
+	FI_INFO(&rxm_prov, FI_LOG_EP_CTRL, "notify event %" PRIu64 "\n",
+		eq_entry->data);
 
-	if ((enum rxm_cmap_signal) eq_entry->data == RXM_CMAP_FREE) {
-		handle = eq_entry->context;
-		assert(handle->state == RXM_CMAP_SHUTDOWN);
-		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "freeing handle: %p\n", handle);
-		cmap = handle->cmap;
-
-		rxm_conn_close(handle);
-
-		// after closing the connection, we need to flush any dangling references to the
-		// handle from msg_cq entries that have not been cleaned up yet, otherwise we
-		// could run into problems during CQ cleanup.  these entries will be errored so
-		// keep reading through EAVAIL.
-		rxm_flush_msg_cq(cmap->ep);
-
-		if (handle->peer) {
-			dlist_remove(&handle->peer->entry);
-			free(handle->peer);
-			handle->peer = NULL;
-		} else {
-			cmap->handles_av[handle->fi_addr] = 0;
-		}
-		rxm_conn_free(handle);
-		return 0;
-	} else {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "unhandled cmap state %" PRIu64 "\n",
-			eq_entry->data);
-		assert(0);
+	if ((enum rxm_cmap_signal) eq_entry->data != RXM_CMAP_FREE)
 		return -FI_EOTHER;
+
+	handle = eq_entry->context;
+	assert(handle->state == RXM_CMAP_SHUTDOWN);
+	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "freeing handle: %p\n", handle);
+	cmap = handle->cmap;
+
+	rxm_conn_close(handle);
+
+	// after closing the connection, we need to flush any dangling references to the
+	// handle from msg_cq entries that have not been cleaned up yet, otherwise we
+	// could run into problems during CQ cleanup.  these entries will be errored so
+	// keep reading through EAVAIL.
+	rxm_flush_msg_cq(cmap->ep);
+
+	if (handle->peer) {
+		dlist_remove(&handle->peer->entry);
+		free(handle->peer);
+		handle->peer = NULL;
+	} else {
+		cmap->handles_av[handle->fi_addr] = 0;
 	}
+	rxm_conn_free(handle);
+	return 0;
 }
 
 static void rxm_conn_wake_up_wait_obj(struct rxm_ep *rxm_ep)
@@ -1259,11 +1259,6 @@ static inline int rxm_conn_eq_event(struct rxm_ep *rxm_ep,
 {
 	int ret;
 
-	if (entry->event == FI_NOTIFY && (enum rxm_cmap_signal)
-	    ((struct fi_eq_entry *) &entry->cm_entry)->data == RXM_CMAP_EXIT) {
-		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Closing CM thread\n");
-		return -1;
-	}
 	ofi_ep_lock_acquire(&rxm_ep->util_ep);
 	ret = rxm_conn_handle_event(rxm_ep, entry) ? -1 : 0;
 	ofi_ep_lock_release(&rxm_ep->util_ep);
@@ -1282,7 +1277,7 @@ static void *rxm_conn_progress(void *arg)
 
 	FI_INFO(&rxm_prov, FI_LOG_EP_CTRL, "Starting auto-progress thread\n");
 
-	while (1) {
+	while (ep->do_progress) {
 		memset(entry, 0, RXM_MSG_EQ_ENTRY_SZ);
 		entry->rd = rxm_eq_sread(ep, RXM_CM_ENTRY_SZ, entry);
 		if (entry->rd < 0 && entry->rd != -FI_ECONNREFUSED)
@@ -1349,7 +1344,7 @@ static void *rxm_conn_atomic_progress(void *arg)
 	}
 
 	FI_INFO(&rxm_prov, FI_LOG_EP_CTRL, "Starting auto-progress thread\n");
-	while (1) {
+	while (ep->do_progress) {
 		/* TODO: Remove this lock, it can't protect anything */
 		ofi_ep_lock_acquire(&ep->util_ep);
 		ret = fi_trywait(fabric->msg_fabric, fids, 2);
