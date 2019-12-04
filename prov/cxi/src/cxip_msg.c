@@ -245,6 +245,9 @@ recv_req_put_event(struct cxip_req *req, const union c_event *event)
 	/* Tag is provided in completion events. */
 	req->tag = mb.tag;
 
+	/* Header data is provided in all completion events. */
+	req->data = event->tgt_long.header_data;
+
 	/* rdzv_id is used to correlate Put and Put Overflow events when using
 	 * offloaded RPut. Otherwise, Overflow buffer start address is used to
 	 * correlate events.
@@ -2342,9 +2345,9 @@ int cxip_txc_prep_rdzv_src(struct cxip_txc *txc, unsigned int lac)
  *    a Get of the remaining source data is performed.
  */
 static ssize_t _cxip_send_long(struct cxip_txc *txc, const void *buf,
-			       size_t len, void *desc, fi_addr_t dest_addr,
-			       uint64_t tag, void *context, uint64_t flags,
-			       bool tagged)
+			       size_t len, void *desc, uint64_t data,
+			       fi_addr_t dest_addr, uint64_t tag,
+			       void *context, uint64_t flags, bool tagged)
 {
 	struct cxip_domain *dom;
 	struct cxip_md *send_md;
@@ -2450,6 +2453,7 @@ static ssize_t _cxip_send_long(struct cxip_txc *txc, const void *buf,
 	cmd.eq = txc->send_cq->evtq->eqn;
 	cmd.user_ptr = (uint64_t)req;
 	cmd.initiator = cxip_msg_match_id(txc);
+	cmd.header_data = data;
 
 	if (txc->ep_obj->rdzv_offload) {
 		cmd.command.opcode = C_CMD_RENDEZVOUS_PUT;
@@ -2547,9 +2551,9 @@ static int cxip_send_eager_cb(struct cxip_req *req,
  * _cxip_send_eager() - Enqueue eager send command.
  */
 static ssize_t _cxip_send_eager(struct cxip_txc *txc, const void *buf,
-				size_t len, void *desc, fi_addr_t dest_addr,
-				uint64_t tag, void *context, uint64_t flags,
-				bool tagged)
+				size_t len, void *desc, uint64_t data,
+				fi_addr_t dest_addr, uint64_t tag,
+				void *context, uint64_t flags, bool tagged)
 {
 	struct cxip_domain *dom;
 	struct cxip_md *send_md = NULL;
@@ -2677,6 +2681,7 @@ static ssize_t _cxip_send_eager(struct cxip_txc *txc, const void *buf,
 		memset(&cmd.idc_msg, 0, sizeof(cmd.idc_msg));
 		cmd.idc_msg.dfa = dfa;
 		cmd.idc_msg.match_bits = mb.raw;
+		cmd.idc_msg.header_data = data;
 
 		if (req) {
 			cmd.idc_msg.user_ptr = (uint64_t)req;
@@ -2723,6 +2728,7 @@ static ssize_t _cxip_send_eager(struct cxip_txc *txc, const void *buf,
 		cmd.user_ptr = (uint64_t)req;
 		cmd.initiator = cxip_msg_match_id(txc);
 		cmd.match_bits = mb.raw;
+		cmd.header_data = data;
 
 		if (txc->send_cntr) {
 			cmd.event_ct_ack = 1;
@@ -2769,8 +2775,9 @@ err_unmap:
  * sends of all sizes.
  */
 static ssize_t _cxip_send(struct cxip_txc *txc, const void *buf, size_t len,
-			  void *desc, fi_addr_t dest_addr, uint64_t tag,
-			  void *context, uint64_t flags, bool tagged)
+			  void *desc, uint64_t data, fi_addr_t dest_addr,
+			  uint64_t tag, void *context, uint64_t flags,
+			  bool tagged)
 {
 	int ret;
 
@@ -2784,11 +2791,11 @@ static ssize_t _cxip_send(struct cxip_txc *txc, const void *buf, size_t len,
 		return -FI_EINVAL;
 
 	if (len > txc->eager_threshold)
-		ret = _cxip_send_long(txc, buf, len, desc, dest_addr, tag,
-				      context, flags, tagged);
+		ret = _cxip_send_long(txc, buf, len, desc, data, dest_addr,
+				      tag, context, flags, tagged);
 	else
-		ret = _cxip_send_eager(txc, buf, len, desc, dest_addr, tag,
-				       context, flags, tagged);
+		ret = _cxip_send_eager(txc, buf, len, desc, data, dest_addr,
+				       tag, context, flags, tagged);
 
 	return ret;
 }
@@ -2850,8 +2857,8 @@ static ssize_t cxip_tsend(struct fid_ep *ep, const void *buf, size_t len,
 	else
 		flags = FI_COMPLETION;
 
-	return _cxip_send(txc, buf, len, desc, dest_addr, tag, context, flags,
-			  true);
+	return _cxip_send(txc, buf, len, desc, 0, dest_addr, tag, context,
+			  flags, true);
 }
 
 static ssize_t cxip_tsendv(struct fid_ep *ep, const struct iovec *iov,
@@ -2873,7 +2880,7 @@ static ssize_t cxip_tsendv(struct fid_ep *ep, const struct iovec *iov,
 		flags = FI_COMPLETION;
 
 	return _cxip_send(txc, iov[0].iov_base, iov[0].iov_len,
-			  desc ? desc[0] : NULL,
+			  desc ? desc[0] : NULL, 0,
 			  dest_addr, tag, context, flags, true);
 }
 
@@ -2900,8 +2907,8 @@ static ssize_t cxip_tsendmsg(struct fid_ep *ep,
 
 	return _cxip_send(txc, msg->msg_iov[0].iov_base,
 			  msg->msg_iov[0].iov_len,
-			  msg->desc ? msg->desc[0] : NULL, msg->addr,
-			  msg->tag, msg->context, flags, true);
+			  msg->desc ? msg->desc[0] : NULL, msg->data,
+			  msg->addr, msg->tag, msg->context, flags, true);
 }
 
 static ssize_t cxip_tinject(struct fid_ep *ep, const void *buf, size_t len,
@@ -2912,8 +2919,40 @@ static ssize_t cxip_tinject(struct fid_ep *ep, const void *buf, size_t len,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return _cxip_send(txc, buf, len, NULL, dest_addr, tag, NULL, FI_INJECT,
-			  true);
+	return _cxip_send(txc, buf, len, NULL, 0, dest_addr, tag, NULL,
+			  FI_INJECT, true);
+}
+
+static ssize_t cxip_tsenddata(struct fid_ep *ep, const void *buf, size_t len,
+			      void *desc, uint64_t data, fi_addr_t dest_addr,
+			      uint64_t tag, void *context)
+{
+	struct cxip_txc *txc;
+	uint64_t flags;
+
+	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
+		return -FI_EINVAL;
+
+	if (txc->selective_completion)
+		flags = txc->attr.op_flags & FI_COMPLETION;
+	else
+		flags = FI_COMPLETION;
+
+	return _cxip_send(txc, buf, len, desc, data, dest_addr, tag, context,
+			  flags, true);
+}
+
+static ssize_t cxip_tinjectdata(struct fid_ep *ep, const void *buf, size_t len,
+				uint64_t data, fi_addr_t dest_addr,
+				uint64_t tag)
+{
+	struct cxip_txc *txc;
+
+	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
+		return -FI_EINVAL;
+
+	return _cxip_send(txc, buf, len, NULL, data, dest_addr, tag, NULL,
+			  FI_INJECT, true);
 }
 
 struct fi_ops_tagged cxip_ep_tagged_ops = {
@@ -2925,8 +2964,8 @@ struct fi_ops_tagged cxip_ep_tagged_ops = {
 	.sendv = cxip_tsendv,
 	.sendmsg = cxip_tsendmsg,
 	.inject = cxip_tinject,
-	.senddata = fi_no_tagged_senddata,
-	.injectdata = fi_no_tagged_injectdata,
+	.senddata = cxip_tsenddata,
+	.injectdata = cxip_tinjectdata,
 };
 
 static ssize_t cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
@@ -2980,7 +3019,7 @@ static ssize_t cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 	else
 		flags = FI_COMPLETION;
 
-	return _cxip_send(txc, buf, len, desc, dest_addr, 0, context, flags,
+	return _cxip_send(txc, buf, len, desc, 0, dest_addr, 0, context, flags,
 			  false);
 }
 
@@ -3003,8 +3042,8 @@ static ssize_t cxip_sendv(struct fid_ep *ep, const struct iovec *iov,
 		flags = FI_COMPLETION;
 
 	return _cxip_send(txc, iov[0].iov_base, iov[0].iov_len,
-			  desc ? desc[0] : NULL, dest_addr, 0, context, flags,
-			  false);
+			  desc ? desc[0] : NULL, 0, dest_addr, 0, context,
+			  flags, false);
 }
 
 #define CXIP_SENDMSG_ALLOWED_FLAGS (FI_INJECT | FI_COMPLETION)
@@ -3030,8 +3069,8 @@ static ssize_t cxip_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 
 	return _cxip_send(txc, msg->msg_iov[0].iov_base,
 			  msg->msg_iov[0].iov_len,
-			  msg->desc ? msg->desc[0] : NULL, msg->addr, 0,
-			  msg->context, flags, false);
+			  msg->desc ? msg->desc[0] : NULL, msg->data,
+			  msg->addr, 0, msg->context, flags, false);
 }
 
 static ssize_t cxip_inject(struct fid_ep *ep, const void *buf, size_t len,
@@ -3042,8 +3081,39 @@ static ssize_t cxip_inject(struct fid_ep *ep, const void *buf, size_t len,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return _cxip_send(txc, buf, len, NULL, dest_addr, 0, NULL, FI_INJECT,
-			  false);
+	return _cxip_send(txc, buf, len, NULL, 0, dest_addr, 0, NULL,
+			  FI_INJECT, false);
+}
+
+static ssize_t cxip_senddata(struct fid_ep *ep, const void *buf, size_t len,
+			     void *desc, uint64_t data, fi_addr_t dest_addr,
+			     void *context)
+{
+	struct cxip_txc *txc;
+	uint64_t flags;
+
+	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
+		return -FI_EINVAL;
+
+	if (txc->selective_completion)
+		flags = txc->attr.op_flags & FI_COMPLETION;
+	else
+		flags = FI_COMPLETION;
+
+	return _cxip_send(txc, buf, len, desc, data, dest_addr, 0, context,
+			  flags, false);
+}
+
+static ssize_t cxip_injectdata(struct fid_ep *ep, const void *buf, size_t len,
+			       uint64_t data, fi_addr_t dest_addr)
+{
+	struct cxip_txc *txc;
+
+	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
+		return -FI_EINVAL;
+
+	return _cxip_send(txc, buf, len, NULL, data, dest_addr, 0, NULL,
+			  FI_INJECT, false);
 }
 
 struct fi_ops_msg cxip_ep_msg_ops = {
@@ -3055,7 +3125,7 @@ struct fi_ops_msg cxip_ep_msg_ops = {
 	.sendv = cxip_sendv,
 	.sendmsg = cxip_sendmsg,
 	.inject = cxip_inject,
-	.senddata = fi_no_msg_senddata,
-	.injectdata = fi_no_msg_injectdata,
+	.senddata = cxip_senddata,
+	.injectdata = cxip_injectdata,
 };
 

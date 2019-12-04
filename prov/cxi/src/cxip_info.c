@@ -28,6 +28,7 @@ struct fi_domain_attr cxip_domain_attr = {
 	.av_type = FI_AV_UNSPEC,
 	.mr_mode = FI_MR_ENDPOINT | FI_MR_SCALABLE,
 	.mr_key_size = sizeof(uint64_t),
+	.cq_data_size = 8,
 	.cq_cnt = 32,
 	.ep_cnt = 128,
 	.tx_ctx_cnt = 16,

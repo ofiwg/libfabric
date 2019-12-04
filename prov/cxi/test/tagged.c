@@ -78,6 +78,68 @@ Test(tagged, ping)
 	free(recv_buf);
 }
 
+/* Test basic send/recv w/data */
+Test(tagged, pingdata)
+{
+	int i, ret;
+	uint8_t *recv_buf,
+		*send_buf;
+	int recv_len = 64;
+	int send_len = 64;
+	struct fi_cq_tagged_entry tx_cqe,
+				  rx_cqe;
+	int err = 0;
+	fi_addr_t from;
+	uint64_t data = 0xabcdabcdabcdabcd;
+
+	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	cr_assert(recv_buf);
+	memset(recv_buf, 0, recv_len);
+
+	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	cr_assert(send_buf);
+
+	for (i = 0; i < send_len; i++)
+		send_buf[i] = i + 0xa0;
+
+	/* Post RX buffer */
+	ret = fi_trecv(cxit_ep, recv_buf, recv_len, NULL, FI_ADDR_UNSPEC, 0,
+		       0, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_trecv failed %d", ret);
+
+	/* Send 64 bytes to self */
+	ret = fi_tsenddata(cxit_ep, send_buf, send_len, NULL, data,
+			   cxit_ep_fi_addr, 0, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_tsenddata failed %d", ret);
+
+	/* Wait for async event indicating data has been received */
+	do {
+		ret = fi_cq_readfrom(cxit_rx_cq, &rx_cqe, 1, &from);
+	} while (ret == -FI_EAGAIN);
+	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
+
+	validate_rx_event(&rx_cqe, NULL, send_len, FI_TAGGED | FI_RECV, NULL,
+			  data, 0);
+	cr_assert(from == cxit_ep_fi_addr, "Invalid source address");
+
+	/* Wait for async event indicating data has been sent */
+	ret = cxit_await_completion(cxit_tx_cq, &tx_cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
+
+	validate_tx_event(&tx_cqe, FI_TAGGED | FI_SEND, NULL);
+
+	/* Validate sent data */
+	for (i = 0; i < send_len; i++) {
+		cr_expect_eq(recv_buf[i], send_buf[i],
+			  "data mismatch, element[%d], exp=%d saw=%d, err=%d\n",
+			  i, send_buf[i], recv_buf[i], err++);
+	}
+	cr_assert_eq(err, 0, "Data errors seen\n");
+
+	free(send_buf);
+	free(recv_buf);
+}
+
 /* Test basic inject send */
 Test(tagged, inject_ping)
 {
@@ -118,6 +180,66 @@ Test(tagged, inject_ping)
 
 	validate_rx_event(&rx_cqe, NULL, send_len, FI_TAGGED | FI_RECV, NULL,
 			  0, 0);
+	cr_assert(from == cxit_ep_fi_addr, "Invalid source address");
+
+	/* Validate sent data */
+	for (i = 0; i < send_len; i++) {
+		cr_expect_eq(recv_buf[i], send_buf[i],
+			  "data mismatch, element[%d], exp=%d saw=%d, err=%d\n",
+			  i, send_buf[i], recv_buf[i], err++);
+	}
+	cr_assert_eq(err, 0, "Data errors seen\n");
+
+	/* Make sure a TX event wasn't delivered */
+	ret = fi_cq_read(cxit_tx_cq, &tx_cqe, 1);
+	cr_assert(ret == -FI_EAGAIN);
+
+	free(send_buf);
+	free(recv_buf);
+}
+
+/* Test basic injectdata */
+Test(tagged, injectdata_ping)
+{
+	int i, ret;
+	uint8_t *recv_buf,
+		*send_buf;
+	int recv_len = 64;
+	int send_len = 64;
+	struct fi_cq_tagged_entry tx_cqe,
+				  rx_cqe;
+	int err = 0;
+	fi_addr_t from;
+	uint64_t data = 0xabcdabcdabcdabcd;
+
+	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	cr_assert(recv_buf);
+	memset(recv_buf, 0, recv_len);
+
+	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	cr_assert(send_buf);
+
+	for (i = 0; i < send_len; i++)
+		send_buf[i] = i + 0xa0;
+
+	/* Post RX buffer */
+	ret = fi_trecv(cxit_ep, recv_buf, recv_len, NULL, FI_ADDR_UNSPEC, 0,
+		       0, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_trecv failed %d", ret);
+
+	/* Send 64 bytes to self */
+	ret = fi_tinjectdata(cxit_ep, send_buf, send_len, data,
+			     cxit_ep_fi_addr, 0);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_tinject failed %d", ret);
+
+	/* Wait for async event indicating data has been received */
+	do {
+		ret = fi_cq_readfrom(cxit_rx_cq, &rx_cqe, 1, &from);
+	} while (ret == -FI_EAGAIN);
+	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
+
+	validate_rx_event(&rx_cqe, NULL, send_len, FI_TAGGED | FI_RECV, NULL,
+			  data, 0);
 	cr_assert(from == cxit_ep_fi_addr, "Invalid source address");
 
 	/* Validate sent data */
@@ -262,6 +384,89 @@ Test(tagged, msgping)
 
 	validate_rx_event(&rx_cqe, NULL, send_len, FI_TAGGED | FI_RECV, NULL,
 			  0, 0);
+	cr_assert(from == cxit_ep_fi_addr, "Invalid source address");
+
+	/* Wait for async event indicating data has been sent */
+	ret = cxit_await_completion(cxit_tx_cq, &tx_cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
+
+	validate_tx_event(&tx_cqe, FI_TAGGED | FI_SEND, NULL);
+
+	/* Validate sent data */
+	for (i = 0; i < send_len; i++) {
+		cr_expect_eq(recv_buf[i], send_buf[i],
+			  "data mismatch, element[%d], exp=%d saw=%d, err=%d\n",
+			  i, send_buf[i], recv_buf[i], err++);
+	}
+	cr_assert_eq(err, 0, "Data errors seen\n");
+
+	free(send_buf);
+	free(recv_buf);
+}
+
+/* Test basic sendmsg/recvmsg with data */
+Test(tagged, msgping_wdata)
+{
+	int i, ret;
+	uint8_t *recv_buf,
+		*send_buf;
+	int recv_len = 64;
+	int send_len = 64;
+	struct fi_cq_tagged_entry tx_cqe,
+				  rx_cqe;
+	int err = 0;
+	fi_addr_t from;
+	struct fi_msg_tagged rmsg = {};
+	struct fi_msg_tagged smsg = {};
+	struct iovec riovec;
+	struct iovec siovec;
+	uint64_t data = 0xabcdabcdabcdabcd;
+
+	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	cr_assert(recv_buf);
+	memset(recv_buf, 0, recv_len);
+
+	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	cr_assert(send_buf);
+
+	for (i = 0; i < send_len; i++)
+		send_buf[i] = i + 0xa0;
+
+	/* Post RX buffer */
+	riovec.iov_base = recv_buf;
+	riovec.iov_len = recv_len;
+	rmsg.msg_iov = &riovec;
+	rmsg.iov_count = 1;
+	rmsg.addr = FI_ADDR_UNSPEC;
+	rmsg.tag = 0;
+	rmsg.ignore = 0;
+	rmsg.context = NULL;
+
+	ret = fi_trecvmsg(cxit_ep, &rmsg, 0);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_trecvmsg failed %d", ret);
+
+	/* Send 64 bytes to self */
+	siovec.iov_base = send_buf;
+	siovec.iov_len = send_len;
+	smsg.msg_iov = &siovec;
+	smsg.iov_count = 1;
+	smsg.addr = cxit_ep_fi_addr;
+	smsg.tag = 0;
+	smsg.ignore = 0;
+	smsg.context = NULL;
+	smsg.data = data;
+
+	ret = fi_tsendmsg(cxit_ep, &smsg, 0);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_tsendmsg failed %d", ret);
+
+	/* Wait for async event indicating data has been received */
+	do {
+		ret = fi_cq_readfrom(cxit_rx_cq, &rx_cqe, 1, &from);
+	} while (ret == -FI_EAGAIN);
+	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
+
+	validate_rx_event(&rx_cqe, NULL, send_len, FI_TAGGED | FI_RECV, NULL,
+			  data, 0);
 	cr_assert(from == cxit_ep_fi_addr, "Invalid source address");
 
 	/* Wait for async event indicating data has been sent */
@@ -1019,7 +1224,7 @@ ParameterizedTest(struct multitudes_params *param, tagged, multitudes)
 void do_msg(uint8_t *send_buf, size_t send_len, uint64_t send_tag,
 	    uint8_t *recv_buf, size_t recv_len, uint64_t recv_tag,
 	    uint64_t recv_ignore, bool send_first, size_t buf_size,
-	    bool tagged)
+	    bool tagged, bool wdata, uint64_t data)
 {
 	int i, ret;
 	struct fi_cq_tagged_entry tx_cqe,
@@ -1047,15 +1252,32 @@ void do_msg(uint8_t *send_buf, size_t send_len, uint64_t send_tag,
 	if (send_first) {
 		/* Send 64 bytes to self */
 		if (tagged) {
-			ret = fi_tsend(cxit_ep, send_buf, send_len, NULL,
-				       cxit_ep_fi_addr, send_tag, NULL);
-			cr_assert_eq(ret, FI_SUCCESS, "fi_tsend failed %d",
-				     ret);
+			if (wdata) {
+				ret = fi_tsenddata(cxit_ep, send_buf, send_len,
+						   NULL, data, cxit_ep_fi_addr,
+						   send_tag, NULL);
+				cr_assert_eq(ret, FI_SUCCESS,
+					     "fi_tsenddata failed %d", ret);
+			} else {
+				ret = fi_tsend(cxit_ep, send_buf, send_len,
+					       NULL, cxit_ep_fi_addr, send_tag,
+					       NULL);
+				cr_assert_eq(ret, FI_SUCCESS,
+					     "fi_tsend failed %d", ret);
+			}
 		} else {
-			ret = fi_send(cxit_ep, send_buf, send_len, NULL,
-				      cxit_ep_fi_addr, NULL);
-			cr_assert_eq(ret, FI_SUCCESS, "fi_send failed %d",
-				     ret);
+			if (wdata) {
+				ret = fi_senddata(cxit_ep, send_buf, send_len,
+						  NULL, data, cxit_ep_fi_addr,
+						  NULL);
+				cr_assert_eq(ret, FI_SUCCESS,
+					     "fi_send failed %d", ret);
+			} else {
+				ret = fi_send(cxit_ep, send_buf, send_len,
+					      NULL, cxit_ep_fi_addr, NULL);
+				cr_assert_eq(ret, FI_SUCCESS,
+					     "fi_send failed %d", ret);
+			}
 		}
 
 		/* Progress send to ensure it arrives unexpected */
@@ -1085,15 +1307,32 @@ void do_msg(uint8_t *send_buf, size_t send_len, uint64_t send_tag,
 
 	if (!send_first) {
 		if (tagged) {
-			ret = fi_tsend(cxit_ep, send_buf, send_len, NULL,
-				       cxit_ep_fi_addr, send_tag, NULL);
-			cr_assert_eq(ret, FI_SUCCESS, "fi_tsend failed %d",
-				     ret);
+			if (wdata) {
+				ret = fi_tsenddata(cxit_ep, send_buf, send_len,
+						   NULL, data, cxit_ep_fi_addr,
+						   send_tag, NULL);
+				cr_assert_eq(ret, FI_SUCCESS,
+					     "fi_tsenddata failed %d", ret);
+			} else {
+				ret = fi_tsend(cxit_ep, send_buf, send_len,
+					       NULL, cxit_ep_fi_addr, send_tag,
+					       NULL);
+				cr_assert_eq(ret, FI_SUCCESS,
+					     "fi_tsend failed %d", ret);
+			}
 		} else {
-			ret = fi_send(cxit_ep, send_buf, send_len, NULL,
-				      cxit_ep_fi_addr, NULL);
-			cr_assert_eq(ret, FI_SUCCESS, "fi_send failed %d",
-				     ret);
+			if (wdata) {
+				ret = fi_senddata(cxit_ep, send_buf, send_len,
+						  NULL, data, cxit_ep_fi_addr,
+						  NULL);
+				cr_assert_eq(ret, FI_SUCCESS,
+					     "fi_send failed %d", ret);
+			} else {
+				ret = fi_send(cxit_ep, send_buf, send_len,
+					      NULL, cxit_ep_fi_addr, NULL);
+				cr_assert_eq(ret, FI_SUCCESS,
+					     "fi_send failed %d", ret);
+			}
 		}
 	}
 
@@ -1135,7 +1374,7 @@ void do_msg(uint8_t *send_buf, size_t send_len, uint64_t send_tag,
 			  "Invalid Error RX CQE length, got: %ld exp: %ld",
 			  err_cqe.len, recv_len);
 		cr_assert(err_cqe.buf == 0, "Invalid Error RX CQE address");
-		cr_assert(err_cqe.data == 0, "Invalid Error RX CQE data");
+		cr_assert(err_cqe.data == data, "Invalid Error RX CQE data");
 		cr_assert(err_cqe.tag == send_tag, "Invalid Error RX CQE tag");
 		cr_assert(err_cqe.olen == (send_len - recv_len),
 			  "Invalid Error RX CQE olen, got: %ld exp: %ld",
@@ -1150,7 +1389,7 @@ void do_msg(uint8_t *send_buf, size_t send_len, uint64_t send_tag,
 	} else {
 		validate_rx_event(&rx_cqe, NULL, send_len,
 				  (tagged ? FI_TAGGED : FI_MSG) | FI_RECV,
-				  NULL, 0, send_tag);
+				  NULL, data, send_tag);
 		cr_assert(from == cxit_ep_fi_addr, "Invalid source address");
 		recved_len = rx_cqe.len;
 	}
@@ -1198,6 +1437,7 @@ void do_msg(uint8_t *send_buf, size_t send_len, uint64_t send_tag,
 #define SEND_MIN 64
 #define SEND_INC 64
 #define TAG 0x333333333333
+#define HDR_DATA 0xabcdabcdabcdabcd
 
 struct tagged_rx_params {
 	size_t buf_size;
@@ -1209,9 +1449,23 @@ struct tagged_rx_params {
 	uint64_t ignore;
 	bool ux;
 	bool tagged;
+	bool wdata;
+	uint64_t data;
 };
 
 static struct tagged_rx_params params[] = {
+	{.buf_size = BUF_SIZE, /* equal length no data */
+	 .send_min = SEND_MIN,
+	 .send_inc = SEND_INC,
+	 .send_tag = 0,
+	 .recv_len_off = 0,
+	 .recv_tag = 0,
+	 .ignore = 0,
+	 .ux = false,
+	 .tagged = true},
+
+	/* Use CQ data */
+
 	{.buf_size = BUF_SIZE, /* truncate */
 	 .send_min = SEND_MIN,
 	 .send_inc = SEND_INC,
@@ -1220,7 +1474,9 @@ static struct tagged_rx_params params[] = {
 	 .recv_tag = 0,
 	 .ignore = 0,
 	 .ux = false,
-	 .tagged = true},
+	 .tagged = true,
+	 .wdata = true,
+	 .data = HDR_DATA},
 	{.buf_size = BUF_SIZE, /* truncate UX */
 	 .send_min = SEND_MIN,
 	 .send_inc = SEND_INC,
@@ -1229,7 +1485,9 @@ static struct tagged_rx_params params[] = {
 	 .recv_tag = 0,
 	 .ignore = 0,
 	 .ux = true,
-	 .tagged = true},
+	 .tagged = true,
+	 .wdata = true,
+	 .data = HDR_DATA},
 	{.buf_size = BUF_SIZE, /* truncate ignore */
 	 .send_min = SEND_MIN,
 	 .send_inc = SEND_INC,
@@ -1238,7 +1496,9 @@ static struct tagged_rx_params params[] = {
 	 .recv_tag = ~TAG,
 	 .ignore = -1ULL,
 	 .ux = false,
-	 .tagged = true},
+	 .tagged = true,
+	 .wdata = true,
+	 .data = HDR_DATA},
 	{.buf_size = BUF_SIZE, /* truncate ignore UX */
 	 .send_min = SEND_MIN,
 	 .send_inc = SEND_INC,
@@ -1247,7 +1507,9 @@ static struct tagged_rx_params params[] = {
 	 .recv_tag = ~TAG,
 	 .ignore = -1ULL,
 	 .ux = true,
-	 .tagged = true},
+	 .tagged = true,
+	 .wdata = true,
+	 .data = HDR_DATA},
 	{.buf_size = BUF_SIZE, /* equal length */
 	 .send_min = SEND_MIN,
 	 .send_inc = SEND_INC,
@@ -1256,7 +1518,9 @@ static struct tagged_rx_params params[] = {
 	 .recv_tag = 0,
 	 .ignore = 0,
 	 .ux = false,
-	 .tagged = true},
+	 .tagged = true,
+	 .wdata = true,
+	 .data = HDR_DATA},
 	{.buf_size = BUF_SIZE, /* equal length UX */
 	 .send_min = SEND_MIN,
 	 .send_inc = SEND_INC,
@@ -1265,7 +1529,9 @@ static struct tagged_rx_params params[] = {
 	 .recv_tag = 0,
 	 .ignore = 0,
 	 .ux = true,
-	 .tagged = true},
+	 .tagged = true,
+	 .wdata = true,
+	 .data = HDR_DATA},
 	{.buf_size = BUF_SIZE, /* equal length ignore */
 	 .send_min = SEND_MIN,
 	 .send_inc = SEND_INC,
@@ -1274,7 +1540,9 @@ static struct tagged_rx_params params[] = {
 	 .recv_tag = ~TAG,
 	 .ignore = -1ULL,
 	 .ux = false,
-	 .tagged = true},
+	 .tagged = true,
+	 .wdata = true,
+	 .data = HDR_DATA},
 	{.buf_size = BUF_SIZE, /* equal length ignore UX */
 	 .send_min = SEND_MIN,
 	 .send_inc = SEND_INC,
@@ -1292,7 +1560,9 @@ static struct tagged_rx_params params[] = {
 	 .recv_tag = 0,
 	 .ignore = 0,
 	 .ux = false,
-	 .tagged = true},
+	 .tagged = true,
+	 .wdata = true,
+	 .data = HDR_DATA},
 	{.buf_size = BUF_SIZE, /* excess UX */
 	 .send_min = SEND_MIN,
 	 .send_inc = SEND_INC,
@@ -1301,7 +1571,9 @@ static struct tagged_rx_params params[] = {
 	 .recv_tag = 0,
 	 .ignore = 0,
 	 .ux = true,
-	 .tagged = true},
+	 .tagged = true,
+	 .wdata = true,
+	 .data = HDR_DATA},
 	{.buf_size = BUF_SIZE, /* excess ignore */
 	 .send_min = SEND_MIN,
 	 .send_inc = SEND_INC,
@@ -1310,7 +1582,9 @@ static struct tagged_rx_params params[] = {
 	 .recv_tag = ~TAG,
 	 .ignore = -1ULL,
 	 .ux = false,
-	 .tagged = true},
+	 .tagged = true,
+	 .wdata = true,
+	 .data = HDR_DATA},
 	{.buf_size = BUF_SIZE, /* excess ignore UX */
 	 .send_min = SEND_MIN,
 	 .send_inc = SEND_INC,
@@ -1319,10 +1593,24 @@ static struct tagged_rx_params params[] = {
 	 .recv_tag = ~TAG,
 	 .ignore = -1ULL,
 	 .ux = true,
-	 .tagged = true},
+	 .tagged = true,
+	 .wdata = true,
+	 .data = HDR_DATA},
 
 	/* Un-tagged variants */
 
+	{.buf_size = BUF_SIZE, /* equal length no data */
+	 .send_min = SEND_MIN,
+	 .send_inc = SEND_INC,
+	 .send_tag = 0,
+	 .recv_len_off = 0,
+	 .recv_tag = 0,
+	 .ignore = 0,
+	 .ux = false,
+	 .tagged = false},
+
+	/* Use CQ data */
+
 	{.buf_size = BUF_SIZE, /* truncate */
 	 .send_min = SEND_MIN,
 	 .send_inc = SEND_INC,
@@ -1331,7 +1619,9 @@ static struct tagged_rx_params params[] = {
 	 .recv_tag = 0,
 	 .ignore = 0,
 	 .ux = false,
-	 .tagged = false},
+	 .tagged = false,
+	 .wdata = true,
+	 .data = HDR_DATA},
 	{.buf_size = BUF_SIZE, /* truncate UX */
 	 .send_min = SEND_MIN,
 	 .send_inc = SEND_INC,
@@ -1340,7 +1630,9 @@ static struct tagged_rx_params params[] = {
 	 .recv_tag = 0,
 	 .ignore = 0,
 	 .ux = true,
-	 .tagged = false},
+	 .tagged = false,
+	 .wdata = true,
+	 .data = HDR_DATA},
 	{.buf_size = BUF_SIZE, /* truncate ignore */
 	 .send_min = SEND_MIN,
 	 .send_inc = SEND_INC,
@@ -1349,7 +1641,9 @@ static struct tagged_rx_params params[] = {
 	 .recv_tag = ~TAG,
 	 .ignore = -1ULL,
 	 .ux = false,
-	 .tagged = true},
+	 .tagged = true,
+	 .wdata = true,
+	 .data = HDR_DATA},
 	{.buf_size = BUF_SIZE, /* truncate ignore UX */
 	 .send_min = SEND_MIN,
 	 .send_inc = SEND_INC,
@@ -1358,7 +1652,9 @@ static struct tagged_rx_params params[] = {
 	 .recv_tag = ~TAG,
 	 .ignore = -1ULL,
 	 .ux = true,
-	 .tagged = false},
+	 .tagged = false,
+	 .wdata = true,
+	 .data = HDR_DATA},
 	{.buf_size = BUF_SIZE, /* equal length */
 	 .send_min = SEND_MIN,
 	 .send_inc = SEND_INC,
@@ -1367,7 +1663,9 @@ static struct tagged_rx_params params[] = {
 	 .recv_tag = 0,
 	 .ignore = 0,
 	 .ux = false,
-	 .tagged = false},
+	 .tagged = false,
+	 .wdata = true,
+	 .data = HDR_DATA},
 	{.buf_size = BUF_SIZE, /* equal length UX */
 	 .send_min = SEND_MIN,
 	 .send_inc = SEND_INC,
@@ -1376,7 +1674,9 @@ static struct tagged_rx_params params[] = {
 	 .recv_tag = 0,
 	 .ignore = 0,
 	 .ux = true,
-	 .tagged = false},
+	 .tagged = false,
+	 .wdata = true,
+	 .data = HDR_DATA},
 	{.buf_size = BUF_SIZE, /* equal length ignore */
 	 .send_min = SEND_MIN,
 	 .send_inc = SEND_INC,
@@ -1385,7 +1685,9 @@ static struct tagged_rx_params params[] = {
 	 .recv_tag = ~TAG,
 	 .ignore = -1ULL,
 	 .ux = false,
-	 .tagged = false},
+	 .tagged = false,
+	 .wdata = true,
+	 .data = HDR_DATA},
 	{.buf_size = BUF_SIZE, /* equal length ignore UX */
 	 .send_min = SEND_MIN,
 	 .send_inc = SEND_INC,
@@ -1394,7 +1696,9 @@ static struct tagged_rx_params params[] = {
 	 .recv_tag = ~TAG,
 	 .ignore = -1ULL,
 	 .ux = true,
-	 .tagged = false},
+	 .tagged = false,
+	 .wdata = true,
+	 .data = HDR_DATA},
 	{.buf_size = BUF_SIZE, /* excess */
 	 .send_min = SEND_MIN,
 	 .send_inc = SEND_INC,
@@ -1403,7 +1707,9 @@ static struct tagged_rx_params params[] = {
 	 .recv_tag = 0,
 	 .ignore = 0,
 	 .ux = false,
-	 .tagged = false},
+	 .tagged = false,
+	 .wdata = true,
+	 .data = HDR_DATA},
 	{.buf_size = BUF_SIZE, /* excess UX */
 	 .send_min = SEND_MIN,
 	 .send_inc = SEND_INC,
@@ -1412,7 +1718,9 @@ static struct tagged_rx_params params[] = {
 	 .recv_tag = 0,
 	 .ignore = 0,
 	 .ux = true,
-	 .tagged = false},
+	 .tagged = false,
+	 .wdata = true,
+	 .data = HDR_DATA},
 	{.buf_size = BUF_SIZE, /* excess ignore */
 	 .send_min = SEND_MIN,
 	 .send_inc = SEND_INC,
@@ -1421,7 +1729,9 @@ static struct tagged_rx_params params[] = {
 	 .recv_tag = ~TAG,
 	 .ignore = -1ULL,
 	 .ux = false,
-	 .tagged = false},
+	 .tagged = false,
+	 .wdata = true,
+	 .data = HDR_DATA},
 	{.buf_size = BUF_SIZE, /* excess ignore UX */
 	 .send_min = SEND_MIN,
 	 .send_inc = SEND_INC,
@@ -1430,7 +1740,9 @@ static struct tagged_rx_params params[] = {
 	 .recv_tag = ~TAG,
 	 .ignore = -1ULL,
 	 .ux = true,
-	 .tagged = false},
+	 .tagged = false,
+	 .wdata = true,
+	 .data = HDR_DATA},
 };
 
 ParameterizedTestParameters(tagged, rx)
@@ -1460,7 +1772,8 @@ ParameterizedTest(struct tagged_rx_params *param, tagged, rx)
 		do_msg(send_buf, send_len, param->send_tag,
 		       recv_buf, send_len + param->recv_len_off,
 		       param->recv_tag, param->ignore, param->ux,
-		       param->buf_size, param->tagged);
+		       param->buf_size, param->tagged,
+		       param->wdata, param->data);
 	}
 
 	free(send_buf);
@@ -1483,7 +1796,7 @@ Test(tagged, oflow_replenish, .timeout=30)
 	for (i = 0; i < 6*1024+1; i++) {
 		do_msg(send_buf, send_len, 0,
 		       recv_buf, send_len, 0, 0,
-		       true, send_len, true);
+		       true, send_len, true, false, 0);
 	}
 
 	free(send_buf);
