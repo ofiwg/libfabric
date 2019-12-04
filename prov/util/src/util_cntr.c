@@ -193,6 +193,17 @@ static struct fi_ops_cntr util_cntr_ops = {
 	.wait = ofi_cntr_wait
 };
 
+static struct fi_ops_cntr util_cntr_no_wait_ops = {
+	.size = sizeof(struct fi_ops_cntr),
+	.read = ofi_cntr_read,
+	.readerr = ofi_cntr_readerr,
+	.add = ofi_cntr_add,
+	.adderr = ofi_cntr_adderr,
+	.set = ofi_cntr_set,
+	.seterr = ofi_cntr_seterr,
+	.wait = fi_no_cntr_wait,
+};
+
 int ofi_cntr_cleanup(struct util_cntr *cntr)
 {
 	if (ofi_atomic_get32(&cntr->ref))
@@ -223,6 +234,14 @@ static int util_cntr_close(struct fid *fid)
 	return 0;
 }
 
+static struct fi_ops util_cntr_fi_ops = {
+	.size = sizeof(util_cntr_fi_ops),
+	.close = util_cntr_close,
+	.bind = fi_no_bind,
+	.control = fi_no_control,
+	.ops_open = fi_no_ops_open,
+};
+
 static int fi_cntr_init(struct fid_domain *domain, struct fi_cntr_attr *attr,
 			struct util_cntr *cntr, void *context)
 {
@@ -239,11 +258,13 @@ static int fi_cntr_init(struct fid_domain *domain, struct fi_cntr_attr *attr,
 
 	cntr->cntr_fid.fid.fclass = FI_CLASS_CNTR;
 	cntr->cntr_fid.fid.context = context;
+	cntr->cntr_fid.fid.ops = &util_cntr_fi_ops;
+	cntr->cntr_fid.ops = &util_cntr_ops;
 
 	switch (attr->wait_obj) {
 	case FI_WAIT_NONE:
 		wait = NULL;
-		cntr->cntr_fid.ops->wait = fi_no_cntr_wait;
+		cntr->cntr_fid.ops = &util_cntr_no_wait_ops;
 		break;
 	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
@@ -286,14 +307,6 @@ void ofi_cntr_progress(struct util_cntr *cntr)
 	fastlock_release(&cntr->ep_list_lock);
 }
 
-static struct fi_ops util_cntr_fi_ops = {
-	.size = sizeof(util_cntr_fi_ops),
-	.close = util_cntr_close,
-	.bind = fi_no_bind,
-	.control = fi_no_control,
-	.ops_open = fi_no_ops_open,
-};
-
 int ofi_cntr_init(const struct fi_provider *prov, struct fid_domain *domain,
 		  struct fi_cntr_attr *attr, struct util_cntr *cntr,
 		  ofi_cntr_progress_func progress, void *context)
@@ -305,8 +318,6 @@ int ofi_cntr_init(const struct fi_provider *prov, struct fid_domain *domain,
 	if (ret)
 		return ret;
 
-	cntr->cntr_fid.fid.ops = &util_cntr_fi_ops;
-	cntr->cntr_fid.ops = &util_cntr_ops;
 	cntr->progress = progress;
 
 	ret = fi_cntr_init(domain, attr, cntr, context);
