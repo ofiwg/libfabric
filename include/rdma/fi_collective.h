@@ -46,22 +46,6 @@ extern "C" {
 #include <rdma/fi_direct_collective_def.h>
 #endif /* FABRIC_DIRECT */
 
-#ifndef FABRIC_DIRECT_COLLECTIVE_DEF
-
-enum fi_collective_op {
-	FI_BARRIER,
-	FI_BROADCAST,
-	FI_ALLTOALL,
-	FI_ALLREDUCE,
-	FI_ALLGATHER,
-	FI_REDUCE_SCATTER,
-	FI_REDUCE,
-	FI_SCATTER,
-	FI_GATHER,
-};
-
-#endif
-
 
 struct fi_ops_av_set {
 	size_t	size;
