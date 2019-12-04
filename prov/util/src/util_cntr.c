@@ -234,6 +234,21 @@ static int util_cntr_close(struct fid *fid)
 	return 0;
 }
 
+void ofi_cntr_progress(struct util_cntr *cntr)
+{
+	struct util_ep *ep;
+	struct fid_list_entry *fid_entry;
+	struct dlist_entry *item;
+
+	fastlock_acquire(&cntr->ep_list_lock);
+	dlist_foreach(&cntr->ep_list, item) {
+		fid_entry = container_of(item, struct fid_list_entry, entry);
+		ep = container_of(fid_entry->fid, struct util_ep, ep_fid.fid);
+		ep->progress(ep);
+	}
+	fastlock_release(&cntr->ep_list_lock);
+}
+
 static struct fi_ops util_cntr_fi_ops = {
 	.size = sizeof(util_cntr_fi_ops),
 	.close = util_cntr_close,
@@ -242,19 +257,25 @@ static struct fi_ops util_cntr_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-static int fi_cntr_init(struct fid_domain *domain, struct fi_cntr_attr *attr,
-			struct util_cntr *cntr, void *context)
+int ofi_cntr_init(const struct fi_provider *prov, struct fid_domain *domain,
+		  struct fi_cntr_attr *attr, struct util_cntr *cntr,
+		  ofi_cntr_progress_func progress, void *context)
 {
+	int ret;
 	struct fi_wait_attr wait_attr;
 	struct fid_wait *wait;
-	int ret;
 
+	assert(progress);
+	ret = ofi_check_cntr_attr(prov, attr);
+	if (ret)
+		return ret;
+
+	cntr->progress = progress;
 	cntr->domain = container_of(domain, struct util_domain, domain_fid);
 	ofi_atomic_initialize32(&cntr->ref, 0);
 	ofi_atomic_initialize64(&cntr->cnt, 0);
 	ofi_atomic_initialize64(&cntr->err, 0);
 	dlist_init(&cntr->ep_list);
-	fastlock_init(&cntr->ep_list_lock);
 
 	cntr->cntr_fid.fid.fclass = FI_CLASS_CNTR;
 	cntr->cntr_fid.fid.context = context;
@@ -285,47 +306,12 @@ static int fi_cntr_init(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		return -FI_EINVAL;
 	}
 
-	if (wait)
-		cntr->wait = container_of(wait, struct util_wait, wait_fid);
-
+	fastlock_init(&cntr->ep_list_lock);
 	ofi_atomic_inc32(&cntr->domain->ref);
-	return 0;
-}
-
-void ofi_cntr_progress(struct util_cntr *cntr)
-{
-	struct util_ep *ep;
-	struct fid_list_entry *fid_entry;
-	struct dlist_entry *item;
-
-	fastlock_acquire(&cntr->ep_list_lock);
-	dlist_foreach(&cntr->ep_list, item) {
-		fid_entry = container_of(item, struct fid_list_entry, entry);
-		ep = container_of(fid_entry->fid, struct util_ep, ep_fid.fid);
-		ep->progress(ep);
-	}
-	fastlock_release(&cntr->ep_list_lock);
-}
-
-int ofi_cntr_init(const struct fi_provider *prov, struct fid_domain *domain,
-		  struct fi_cntr_attr *attr, struct util_cntr *cntr,
-		  ofi_cntr_progress_func progress, void *context)
-{
-	int ret;
-
-	assert(progress);
-	ret = ofi_check_cntr_attr(prov, attr);
-	if (ret)
-		return ret;
-
-	cntr->progress = progress;
-
-	ret = fi_cntr_init(domain, attr, cntr, context);
-	if (ret)
-		return ret;
 
 	/* CNTR must be fully operational before adding to wait set */
-	if (cntr->wait) {
+	if (wait) {
+		cntr->wait = container_of(wait, struct util_wait, wait_fid);
 		ret = fi_poll_add(&cntr->wait->pollset->poll_fid,
 				  &cntr->cntr_fid.fid, 0);
 		if (ret) {
