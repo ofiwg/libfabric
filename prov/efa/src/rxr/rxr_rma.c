@@ -520,8 +520,8 @@ ssize_t rxr_rma_post_efa_read(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 	 */
 	tx_entry->rma_loc_rx_id = rx_entry->rx_id;
 	tx_entry->rma_window = rx_entry->window;
-	tx_entry->msg_id = (peer->next_msg_id != ~0) ?
-			    peer->next_msg_id++ : ++peer->next_msg_id;
+
+	tx_entry->msg_id = peer->next_msg_id++;
 
 	err = rxr_ep_post_ctrl_or_queue(ep, RXR_TX_ENTRY, tx_entry, RXR_RTS_PKT, 0);
 	if (OFI_UNLIKELY(err)) {
@@ -654,8 +654,7 @@ ssize_t rxr_rma_writemsg(struct fid_ep *ep,
 			goto out;
 		}
 
-		tx_entry->msg_id = (peer->next_msg_id != ~0) ?
-				    peer->next_msg_id++ : ++peer->next_msg_id;
+		tx_entry->msg_id = peer->next_msg_id++;
 
 		err = rxr_ep_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry, RXR_RTS_PKT, 0);
 		if (OFI_UNLIKELY(err)) {

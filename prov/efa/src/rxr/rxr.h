@@ -845,7 +845,7 @@ static_assert(sizeof(struct rxr_pkt_entry) == 64, "rxr_pkt_entry check");
 #endif
 #endif
 
-OFI_DECL_RECVWIN_BUF(struct rxr_pkt_entry*, rxr_robuf);
+OFI_DECL_RECVWIN_BUF(struct rxr_pkt_entry*, rxr_robuf, uint32_t);
 DECLARE_FREESTACK(struct rxr_robuf, rxr_robuf_fs);
 
 #define RXR_CTRL_HDR_SIZE		(sizeof(struct rxr_ctrl_cq_hdr))
@@ -1014,7 +1014,6 @@ static inline void rxr_release_tx_entry(struct rxr_ep *ep,
 			      sizeof(struct rxr_tx_entry));
 #endif
 	tx_entry->state = RXR_TX_FREE;
-	tx_entry->msg_id = ~0;
 	ofi_buf_free(tx_entry);
 }
 
@@ -1030,7 +1029,6 @@ static inline void rxr_release_rx_entry(struct rxr_ep *ep,
 			      sizeof(struct rxr_rx_entry));
 #endif
 	rx_entry->state = RXR_RX_FREE;
-	rx_entry->msg_id = ~0;
 	ofi_buf_free(rx_entry);
 }
 
