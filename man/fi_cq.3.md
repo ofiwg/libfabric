@@ -252,10 +252,6 @@ struct fi_cq_tagged_entry {
 : Specifies that the CQ should use a pthread mutex and cond variable
   as a wait object.
 
-- *FI_WAIT_CRITSEC_COND*
-: Windows specific.  Specifies that the CQ should use a critical
-  section and condition variable as a wait object.
-
 *signaling_vector*
 : If the FI_AFFINITY flag is set, this indicates the logical cpu number
   (0..max cpu - 1) that interrupts associated with the CQ should target.
