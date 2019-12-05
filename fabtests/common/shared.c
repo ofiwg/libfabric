@@ -638,7 +638,7 @@ static void ft_init(void)
 	rx_cq_cntr = 0;
 }
 
-static int ft_init_oob(void)
+int ft_init_oob(void)
 {
 	int ret, op, err;
 	struct addrinfo *ai = NULL;
@@ -1562,7 +1562,7 @@ int ft_read_addr_opts(char **node, char **service, struct fi_info *hints,
 {
 	int ret;
 
-	if (opts->dst_addr) {
+	if (opts->dst_addr && (opts->src_addr || !opts->oob_port)){
 		if (!opts->dst_port)
 			opts->dst_port = default_port;
 

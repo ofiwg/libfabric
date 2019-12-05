@@ -355,6 +355,7 @@ int ft_alloc_bufs();
 int ft_open_fabric_res();
 int ft_getinfo(struct fi_info *hints, struct fi_info **info);
 int ft_init_fabric();
+int ft_init_oob();
 int ft_start_server();
 int ft_server_connect();
 int ft_client_connect();

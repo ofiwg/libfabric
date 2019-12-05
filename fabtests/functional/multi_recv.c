@@ -426,11 +426,16 @@ static int run(void)
 		if (ret)
 			goto out;
 	} else {
+		ret = ft_init_oob();
+		if (ret)
+			goto out;
+
 		ret = init_fabric();
 		if (ret)
 			goto out;
 
-		ret = init_av();
+		ret = (opts.options & (FT_OPT_OOB_SYNC | FT_OPT_OOB_CTRL)) ?
+			ft_init_av() : init_av();
 		if (ret)
 			goto out;
 	}
