@@ -686,14 +686,6 @@ cxip_oflow_rdzv_cb(struct cxip_req *req, const union c_event *event)
 	CXIP_LOG_DBG("Matched ux_recv, data: 0x%lx\n",
 		     ux_recv->recv.oflow_start);
 
-	if (ux_recv->recv.multi_recv) {
-		ux_recv = rdzv_mrecv_req_event(ux_recv, event);
-		if (!ux_recv) {
-			fastlock_release(&rxc->rx_lock);
-			return -FI_EAGAIN;
-		}
-	}
-
 	/* A matching Put Overflow event arrived earlier. Data is
 	 * waiting in the overflow buffer.
 	 */
@@ -1315,6 +1307,11 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 				 * unexpected mrecv request.
 				 */
 				mrecv_req_oflow_event(req, event);
+
+				/* The Child request is placed on the
+				 * ux_rdzv_recvs list. Don't look up a child
+				 * request when the Put event arrives.
+				 */
 			} else {
 				recv_req_put_event(req, event);
 
@@ -1562,6 +1559,11 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 				 * unexpected mrecv request.
 				 */
 				mrecv_req_oflow_event(req, event);
+
+				/* The Child request is placed on the ux_recvs
+				 * list. Don't look up a child request when the
+				 * Put event arrives.
+				 */
 			} else {
 				recv_req_put_event(req, event);
 
