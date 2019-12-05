@@ -58,7 +58,8 @@ enum fi_wait_obj {
 	FI_WAIT_UNSPEC,
 	FI_WAIT_SET,
 	FI_WAIT_FD,
-	FI_WAIT_MUTEX_COND	/* pthread mutex & cond */
+	FI_WAIT_MUTEX_COND,	/* pthread mutex & cond */
+	FI_WAIT_YIELD,
 };
 
 struct fi_wait_attr {
