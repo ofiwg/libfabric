@@ -132,7 +132,7 @@ class Fabtest(Test):
                     core=self.core_prov)
         
         if (self.core_prov == "shm"):
-            opts += "{} {} ".format(self.client, self.server)
+            opts += "{} {} ".format(self.server, self.server)
         else:
             opts += "{} {} ".format(self.server, self.client)
              
