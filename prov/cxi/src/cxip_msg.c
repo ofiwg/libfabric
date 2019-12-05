@@ -2365,6 +2365,9 @@ static ssize_t _cxip_send_long(struct cxip_txc *txc, const void *buf,
 	int rdzv_id;
 	int ret;
 
+	if (flags & FI_INJECT)
+		return -FI_EMSGSIZE;
+
 	dom = txc->domain;
 
 	/* Look up target CXI address */
@@ -2570,6 +2573,9 @@ static ssize_t _cxip_send_eager(struct cxip_txc *txc, const void *buf,
 
 	/* Always use IDCs when the payload fits */
 	idc = (len <= C_MAX_IDC_PAYLOAD_UNR);
+
+	if ((flags & FI_INJECT) && !idc)
+		return -FI_EMSGSIZE;
 
 	dom = txc->domain;
 
@@ -2789,6 +2795,9 @@ static ssize_t _cxip_send(struct cxip_txc *txc, const void *buf, size_t len,
 
 	if (len && !buf)
 		return -FI_EINVAL;
+
+	if (len > CXIP_EP_MAX_MSG_SZ)
+		return -FI_EMSGSIZE;
 
 	if (len > txc->eager_threshold)
 		ret = _cxip_send_long(txc, buf, len, desc, data, dest_addr,

@@ -74,6 +74,11 @@ Test(tagged, ping)
 	}
 	cr_assert_eq(err, 0, "Data errors seen\n");
 
+	/* Try invalid lengths */
+	ret = fi_tsend(cxit_ep, send_buf, cxit_fi->ep_attr->max_msg_size+1,
+		       NULL, cxit_ep_fi_addr, 0, NULL);
+	cr_assert_eq(ret, -FI_EMSGSIZE, "fi_tsend failed %d", ret);
+
 	free(send_buf);
 	free(recv_buf);
 }
@@ -193,6 +198,19 @@ Test(tagged, inject_ping)
 	/* Make sure a TX event wasn't delivered */
 	ret = fi_cq_read(cxit_tx_cq, &tx_cqe, 1);
 	cr_assert(ret == -FI_EAGAIN);
+
+	/* Try invalid lengths */
+	ret = fi_tinject(cxit_ep, send_buf, cxit_fi->tx_attr->inject_size+1,
+			 cxit_ep_fi_addr, 0);
+	cr_assert_eq(ret, -FI_EMSGSIZE, "fi_tinject failed %d", ret);
+
+	ret = fi_tinject(cxit_ep, send_buf, 4*1024*1024,
+			 cxit_ep_fi_addr, 0);
+	cr_assert_eq(ret, -FI_EMSGSIZE, "fi_tinject failed %d", ret);
+
+	ret = fi_tinject(cxit_ep, send_buf, cxit_fi->ep_attr->max_msg_size+1,
+			 cxit_ep_fi_addr, 0);
+	cr_assert_eq(ret, -FI_EMSGSIZE, "fi_tinject failed %d", ret);
 
 	free(send_buf);
 	free(recv_buf);
