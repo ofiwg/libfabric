@@ -1071,7 +1071,7 @@ static int cxip_rxc_sink_init(struct cxip_rxc *rxc)
 	}
 
 	ret = cxip_pte_append(rxc->rx_pte->pte,
-			      CXI_VA_TO_IOVA(md->md, ux_buf), 1, md->md->lac,
+			      CXI_VA_TO_IOVA(md->md, ux_buf), 0, md->md->lac,
 			      C_PTL_LIST_OVERFLOW, req->req_id, mb.raw, ib.raw,
 			      CXI_MATCH_ID_ANY, 0, false, false, false, true,
 			      false, true, false, rxc->rx_cmdq);
