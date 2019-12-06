@@ -49,11 +49,11 @@
 #include <ofi.h>
 #include <ofi_rbuf.h>
 
-#define OFI_DECL_RECVWIN_BUF(entrytype, name)				\
+#define OFI_DECL_RECVWIN_BUF(entrytype, name, id_type)			\
 OFI_DECLARE_CIRQUE(entrytype, recvwin_cirq);				\
 struct name {								\
-	uint64_t exp_msg_id;						\
-	unsigned int win_size;						\
+	id_type exp_msg_id;						\
+	id_type win_size;						\
 	struct recvwin_cirq *pending;					\
 };									\
 									\
@@ -74,11 +74,17 @@ ofi_recvwin_free(struct name *recvq)					\
 }									\
 									\
 static inline int							\
-ofi_recvwin_queue_msg(struct name *recvq, entrytype * msg, uint64_t id)	\
+ofi_recvwin_id_valid(struct name *recvq, id_type id)			\
 {									\
-	int write_idx;							\
+	return ofi_recvwin_id_valid_ ## id_type (recvq, id);		\
+}									\
 									\
-	assert(ofi_recvwin_is_allowed(recvq, id));			\
+static inline int							\
+ofi_recvwin_queue_msg(struct name *recvq, entrytype * msg, id_type id)	\
+{									\
+	size_t write_idx;						\
+									\
+	assert(ofi_recvwin_id_valid(recvq, id));			\
 	write_idx = (ofi_cirque_rindex(recvq->pending)			\
 		    + (id - recvq->exp_msg_id))				\
 		    & recvq->pending->size_mask;			\
@@ -111,8 +117,14 @@ ofi_recvwin_slide(struct name *recvq)					\
 #define ofi_recvwin_exp_inc(rq)		((rq)->exp_msg_id++)
 #define ofi_recvwin_is_exp(rq, id)	((rq)->exp_msg_id == id)
 #define ofi_recvwin_next_exp_id(rq)	((rq)->exp_msg_id)
-#define ofi_recvwin_is_delayed(rq, id)	((rq)->exp_msg_id > id)
-#define ofi_recvwin_is_allowed(rq, id)	(id >= rq->exp_msg_id \
-					&& id < (rq->win_size + rq->exp_msg_id))
+/*
+ * When exp_msg_id on the receiver has not wrapped around but the sender ID has
+ * we need to allow the IDs starting from 0 that are valid. These macros use
+ * the overflow of exp_msg_id to validate that.
+ */
+#define ofi_recvwin_id_valid_uint32_t(rq, id) \
+	ofi_val32_inrange(rq->exp_msg_id, rq->win_size, id)
+#define ofi_recvwin_id_valid_uint64_t(rq, id) \
+	ofi_val64_inrange(rq->exp_msg_id, rq->win_size, id)
 
 #endif /* FI_RECVWIN_H */

@@ -943,7 +943,7 @@ void rxr_generic_tx_entry_init(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	tx_entry->iov_index = 0;
 	tx_entry->iov_mr_start = 0;
 	tx_entry->iov_offset = 0;
-	tx_entry->msg_id = ~0;
+	tx_entry->msg_id = 0;
 	dlist_init(&tx_entry->queued_pkts);
 
 	memcpy(&tx_entry->iov[0], iov, sizeof(*iov) * iov_count);
@@ -1639,8 +1639,7 @@ ssize_t rxr_tx(struct fid_ep *ep, const struct iovec *iov, size_t iov_count,
 	}
 
 	peer = rxr_ep_get_peer(rxr_ep, addr);
-	tx_entry->msg_id = (peer->next_msg_id != ~0) ?
-			    peer->next_msg_id++ : ++peer->next_msg_id;
+	tx_entry->msg_id = peer->next_msg_id++;
 
 	if (op == ofi_op_read_req) {
 		int ignore = ~0;
