@@ -110,8 +110,8 @@ int fi_wait_cleanup(struct util_wait *wait)
 	return 0;
 }
 
-int fi_wait_init(struct util_fabric *fabric, struct fi_wait_attr *attr,
-		 struct util_wait *wait)
+int ofi_wait_init(struct util_fabric *fabric, struct fi_wait_attr *attr,
+		  struct util_wait *wait)
 {
 	struct fid_poll *poll_fid;
 	struct fi_poll_attr poll_attr;
@@ -386,7 +386,7 @@ int ofi_wait_fd_open(struct fid_fabric *fabric_fid, struct fi_wait_attr *attr,
 	if (!wait)
 		return -FI_ENOMEM;
 
-	ret = fi_wait_init(fabric, attr, &wait->util_wait);
+	ret = ofi_wait_init(fabric, attr, &wait->util_wait);
 	if (ret)
 		goto err1;
 

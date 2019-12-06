@@ -408,8 +408,8 @@ struct util_wait {
 	fi_wait_try_func	wait_try;
 };
 
-int fi_wait_init(struct util_fabric *fabric, struct fi_wait_attr *attr,
-		 struct util_wait *wait);
+int ofi_wait_init(struct util_fabric *fabric, struct fi_wait_attr *attr,
+		  struct util_wait *wait);
 int fi_wait_cleanup(struct util_wait *wait);
 
 struct util_wait_fd {
