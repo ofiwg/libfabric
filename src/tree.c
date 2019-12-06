@@ -47,6 +47,7 @@
 #include <assert.h>
 
 #include <ofi_tree.h>
+#include <ofi_osd.h>
 #include <rdma/fi_errno.h>
 
 
