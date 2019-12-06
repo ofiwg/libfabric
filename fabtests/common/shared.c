@@ -201,6 +201,10 @@ static void ft_cq_set_wait_attr(void)
 		cq_attr.wait_obj = FI_WAIT_FD;
 		cq_attr.wait_cond = FI_CQ_COND_NONE;
 		break;
+	case FT_COMP_YIELD:
+		cq_attr.wait_obj = FI_WAIT_YIELD;
+		cq_attr.wait_cond = FI_CQ_COND_NONE;
+		break;
 	default:
 		cq_attr.wait_obj = FI_WAIT_NONE;
 		break;
@@ -219,6 +223,9 @@ static void ft_cntr_set_wait_attr(void)
 		break;
 	case FT_COMP_WAIT_FD:
 		cntr_attr.wait_obj = FI_WAIT_FD;
+		break;
+	case FT_COMP_YIELD:
+		cntr_attr.wait_obj = FI_WAIT_YIELD;
 		break;
 	default:
 		cntr_attr.wait_obj = FI_WAIT_NONE;
@@ -2155,6 +2162,7 @@ static int ft_get_cq_comp(struct fid_cq *cq, uint64_t *cur,
 
 	switch (opts.comp_method) {
 	case FT_COMP_SREAD:
+	case FT_COMP_YIELD:
 		ret = ft_wait_for_comp(cq, cur, total, timeout);
 		break;
 	case FT_COMP_WAIT_FD:
@@ -2222,6 +2230,7 @@ static int ft_get_cntr_comp(struct fid_cntr *cntr, uint64_t total, int timeout)
 	case FT_COMP_SREAD:
 	case FT_COMP_WAITSET:
 	case FT_COMP_WAIT_FD:
+	case FT_COMP_YIELD:
 		ret = ft_wait_for_cntr(cntr, total, timeout);
 		break;
 	default:
@@ -2760,7 +2769,7 @@ void ft_csusage(char *name, char *desc)
 	FT_PRINT_OPTS_USAGE("-l", "align transmit and receive buffers to page size");
 	FT_PRINT_OPTS_USAGE("-m", "machine readable output");
 	FT_PRINT_OPTS_USAGE("-t <type>", "completion type [queue, counter]");
-	FT_PRINT_OPTS_USAGE("-c <method>", "completion method [spin, sread, fd]");
+	FT_PRINT_OPTS_USAGE("-c <method>", "completion method [spin, sread, fd, yield]");
 	FT_PRINT_OPTS_USAGE("-h", "display this help output");
 
 	return;
@@ -2875,6 +2884,8 @@ void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts)
 			opts->comp_method = FT_COMP_SREAD;
 		else if (!strncasecmp("fd", optarg, 2))
 			opts->comp_method = FT_COMP_WAIT_FD;
+		else if (!strncasecmp("yield", optarg, 5))
+			opts->comp_method = FT_COMP_YIELD;
 		break;
 	case 't':
 		if (!strncasecmp("counter", optarg, 7)) {
