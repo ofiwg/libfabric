@@ -64,7 +64,7 @@ fi_ibv_dgram_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 
 	fi_ibv_set_sge_iov(wr.sg_list, msg->msg_iov, msg->iov_count, msg->desc);
 
-	return fi_ibv_handle_post(ibv_post_recv(ep->ibv_qp, &wr, &bad_wr));
+	return vrb_convert_ret(ibv_post_recv(ep->ibv_qp, &wr, &bad_wr));
 }
 
 static inline ssize_t
