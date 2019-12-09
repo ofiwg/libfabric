@@ -947,29 +947,7 @@ static inline int fi_ibv_poll_reap_unsig_cq(struct fi_ibv_ep *ep)
 	return ret;
 }
 
-/* WR must be filled out by now except for context */
-static inline ssize_t
-fi_ibv_send_poll_cq_if_needed(struct fi_ibv_ep *ep, struct ibv_send_wr *wr)
-{
-	struct ibv_send_wr *bad_wr;
-	struct fi_ibv_domain *domain =
-		container_of(ep->util_ep.domain, struct fi_ibv_domain, util_domain);
-	int ret;
-
-	ret = domain->post_send(ep->ibv_qp, wr, &bad_wr);
-	if (OFI_UNLIKELY(ret)) {
-		ret = vrb_convert_ret(ret);
-		if (OFI_LIKELY(ret == -FI_EAGAIN)) {
-			ret = fi_ibv_poll_reap_unsig_cq(ep);
-			if (OFI_UNLIKELY(ret))
-				return -FI_EAGAIN;
-			/* Try again and return control to a caller */
-			ret = vrb_convert_ret(
-				domain->post_send(ep->ibv_qp, wr, &bad_wr));
-		}
-	}
-	return ret;
-}
+ssize_t vrb_post_send(struct fi_ibv_ep *ep, struct ibv_send_wr *wr);
 
 static inline ssize_t
 fi_ibv_send_buf(struct fi_ibv_ep *ep, struct ibv_send_wr *wr,
@@ -982,7 +960,7 @@ fi_ibv_send_buf(struct fi_ibv_ep *ep, struct ibv_send_wr *wr,
 	wr->sg_list = &sge;
 	wr->num_sge = 1;
 
-	return fi_ibv_send_poll_cq_if_needed(ep, wr);
+	return vrb_post_send(ep, wr);
 }
 
 static inline ssize_t
@@ -996,7 +974,7 @@ fi_ibv_send_buf_inline(struct fi_ibv_ep *ep, struct ibv_send_wr *wr,
 	wr->sg_list = &sge;
 	wr->num_sge = 1;
 
-	return fi_ibv_send_poll_cq_if_needed(ep, wr);
+	return vrb_post_send(ep, wr);
 }
 
 static inline ssize_t
@@ -1018,7 +996,7 @@ fi_ibv_send_iov_flags(struct fi_ibv_ep *ep, struct ibv_send_wr *wr,
 	if (flags & FI_FENCE)
 		wr->send_flags |= IBV_SEND_FENCE;
 
-	return fi_ibv_send_poll_cq_if_needed(ep, wr);
+	return vrb_post_send(ep, wr);
 }
 
 int fi_ibv_get_rai_id(const char *node, const char *service, uint64_t flags,

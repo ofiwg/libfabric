@@ -36,6 +36,30 @@
 
 static struct fi_ops_msg fi_ibv_srq_msg_ops;
 
+
+/* WR must be filled out by now except for context */
+ssize_t vrb_post_send(struct fi_ibv_ep *ep, struct ibv_send_wr *wr)
+{
+	struct ibv_send_wr *bad_wr;
+	struct fi_ibv_domain *domain;
+	int ret;
+
+	domain = container_of(ep->util_ep.domain, struct fi_ibv_domain, util_domain);
+	ret = domain->post_send(ep->ibv_qp, wr, &bad_wr);
+	if (!ret)
+		return 0;
+
+	ret = vrb_convert_ret(ret);
+	if (ret != -FI_EAGAIN)
+		return ret;
+
+	ret = fi_ibv_poll_reap_unsig_cq(ep);
+	if (ret)
+		return -FI_EAGAIN;
+
+	return vrb_convert_ret(domain->post_send(ep->ibv_qp, wr, &bad_wr));
+}
+
 static inline int fi_ibv_msg_ep_cmdata_size(fid_t fid)
 {
 	struct fi_ibv_pep *pep;
