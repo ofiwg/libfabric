@@ -366,12 +366,6 @@ struct fi_ibv_domain {
 
 	/* MR stuff */
 	struct ofi_mr_cache		cache;
-	int 				(*post_send)(struct ibv_qp *qp,
-						     struct ibv_send_wr *wr,
-						     struct ibv_send_wr **bad_wr);
-	int				(*poll_cq)(struct ibv_cq *cq,
-						   int num_entries,
-						   struct ibv_wc *wc);
 };
 
 struct fi_ibv_cq;
@@ -832,18 +826,18 @@ fi_ibv_process_wc(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 	return (wc->wr_id == VERBS_NO_COMP_FLAG) ? 0 : 1;
 }
 
+int fi_ibv_poll_cq_track_credits(struct ibv_cq *cq, int num_entries,
+				 struct ibv_wc *wc);
+
 /* Returns 0 and tries read new completions if it processes
  * WR entry for which user doesn't request the completion */
 static inline int
 fi_ibv_process_wc_poll_new(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 {
-	struct fi_ibv_domain *domain = container_of(cq->util_cq.domain,
-						    struct fi_ibv_domain,
-						    util_domain);
 	if (wc->wr_id == VERBS_NO_COMP_FLAG) {
 		int ret;
 
-		while ((ret = domain->poll_cq(cq->cq, 1, wc)) > 0) {
+		while ((ret = fi_ibv_poll_cq_track_credits(cq->cq, 1, wc)) > 0) {
 			if (wc->wr_id != VERBS_NO_COMP_FLAG)
 				return 1;
 		}
@@ -926,13 +920,10 @@ static inline int fi_ibv_poll_reap_unsig_cq(struct fi_ibv_ep *ep)
 	int ret, i;
 	struct fi_ibv_cq *cq =
 		container_of(ep->util_ep.tx_cq, struct fi_ibv_cq, util_cq);
-	struct fi_ibv_domain *domain = container_of(cq->util_cq.domain,
-						    struct fi_ibv_domain,
-						    util_domain);
 
 	cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
 	while (1) {
-		ret = domain->poll_cq(cq->cq, 10, wc);
+		ret = fi_ibv_poll_cq_track_credits(cq->cq, 10, wc);
 		if (ret <= 0)
 			break;
 

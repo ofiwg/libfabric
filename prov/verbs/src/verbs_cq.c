@@ -238,14 +238,11 @@ static void fi_ibv_cq_read_data_entry(struct ibv_wc *wc, void *buf)
 static inline int fi_ibv_poll_outstanding_cq(struct fi_ibv_ep *ep,
 					     struct fi_ibv_cq *cq)
 {
-	struct fi_ibv_domain *domain = container_of(cq->util_cq.domain,
-						    struct fi_ibv_domain,
-						    util_domain);
 	struct fi_ibv_wce *wce;
 	struct ibv_wc wc;
 	ssize_t ret;
 
-	ret = domain->poll_cq(cq->cq, 1, &wc);
+	ret = fi_ibv_poll_cq_track_credits(cq->cq, 1, &wc);
 	if (ret <= 0)
 		return ret;
 
@@ -296,12 +293,9 @@ void fi_ibv_cleanup_cq(struct fi_ibv_ep *ep)
 static inline
 ssize_t fi_ibv_poll_cq_process_wc(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 {
-	struct fi_ibv_domain *domain = container_of(cq->util_cq.domain,
-						    struct fi_ibv_domain,
-						    util_domain);
 	ssize_t ret;
 
-	ret = domain->poll_cq(cq->cq, 1, wc);
+	ret = fi_ibv_poll_cq_track_credits(cq->cq, 1, wc);
 	if (ret <= 0)
 		return ret;
 
