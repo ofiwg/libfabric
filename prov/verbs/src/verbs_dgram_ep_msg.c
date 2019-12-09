@@ -210,7 +210,7 @@ fi_ibv_dgram_ep_injectdata_fast(struct fid_ep *ep_fid, const void *buf, size_t l
 	if (fi_ibv_dgram_ep_set_addr(ep, dest_addr, &ep->wrs->msg_wr))
 		return -FI_ENOENT;
 
-	ret = fi_ibv_send_poll_cq_if_needed(ep, &ep->wrs->msg_wr);
+	ret = vrb_post_send(ep, &ep->wrs->msg_wr);
 	ep->wrs->msg_wr.opcode = IBV_WR_SEND;
 	return ret;
 }
@@ -246,7 +246,7 @@ fi_ibv_dgram_ep_inject_fast(struct fid_ep *ep_fid, const void *buf, size_t len,
 	if (fi_ibv_dgram_ep_set_addr(ep, dest_addr, &ep->wrs->msg_wr))
 		return -FI_ENOENT;
 
-	return fi_ibv_send_poll_cq_if_needed(ep, &ep->wrs->msg_wr);
+	return vrb_post_send(ep, &ep->wrs->msg_wr);
 }
 
 const struct fi_ops_msg fi_ibv_dgram_msg_ops = {
