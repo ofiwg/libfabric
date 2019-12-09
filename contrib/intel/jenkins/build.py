@@ -123,7 +123,7 @@ def build_uh(shmem_dir):
 
 def build_mpi(mpi, mpisrc, mpi_install_path, libfab_install_path,  ofi_build_mode):
    
-    build_mpi_path ="/mpibuilddir/{}-build-dir/{}/{}/{}".format(mpi, branchname, buildno, ofi_build_mode)
+    build_mpi_path ="/mpibuilddir/{}-build-dir/{}/{}/{}".format(mpi, jobname, buildno, ofi_build_mode)
     if (os.path.exists(build_mpi_path) == False):
         os.makedirs(build_mpi_path)
 
@@ -197,8 +197,11 @@ def build_osu_bm(mpi, mpi_install_path, libfab_install_path):
 
 
 if __name__ == "__main__":
-#read environment variables
-    branchname = os.environ['BRANCH_NAME']
+#read Jenkins environment variables
+    # In Jenkins,  JOB_NAME  = 'ofi_libfabric/master' vs BRANCH_NAME = 'master' 
+    # job name is better to use to distinguish between builds of different
+    # jobs but with same branch name.
+    jobname = os.environ['JOB_NAME']
     buildno = os.environ['BUILD_NUMBER']
     workspace = os.environ['WORKSPACE']
 
@@ -221,9 +224,9 @@ if __name__ == "__main__":
 
 
 
-    install_path = "{installdir}/{brname}/{bno}/{bmode}" \
+    install_path = "{installdir}/{jbname}/{bno}/{bmode}" \
                      .format(installdir=ci_site_config.install_dir,
-                            brname=branchname, bno=buildno,bmode=ofi_build_mode)
+                            jbname=jobname, bno=buildno,bmode=ofi_build_mode)
 
     p = re.compile('mpi*')
 

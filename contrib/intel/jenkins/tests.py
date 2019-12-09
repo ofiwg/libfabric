@@ -10,10 +10,12 @@ import ci_site_config
 import common
 import shlex
 
+# A Jenkins env variable for job name is composed of the name of the jenkins job and the branch name
+# it is building for. for e.g. in our case jobname = 'ofi_libfabric/master'
 class Test:
-    def __init__ (self, branchname, buildno, testname, core_prov, fabric,
+    def __init__ (self, jobname, buildno, testname, core_prov, fabric,
                   hosts, ofi_build_mode, util_prov=None):
-        self.branchname = branchname
+        self.jobname = jobname
         self.buildno = buildno
         self.testname = testname
         self.core_prov = core_prov
@@ -27,16 +29,16 @@ class Test:
        
         self.nw_interface = ci_site_config.interface_map[self.fabric]
         self.libfab_installpath = "{}/{}/{}/{}".format(ci_site_config.install_dir,
-                                  self.branchname, self.buildno, self.ofi_build_mode)
+                                  self.jobname, self.buildno, self.ofi_build_mode)
  
         self.env = [("FI_VERBS_MR_CACHE_ENABLE", "1"),\
                     ("FI_VERBS_INLINE_SIZE", "256")] \
                     if self.core_prov == "verbs" else []
 class FiInfoTest(Test):
-    def __init__(self, branchname, buildno, testname, core_prov, fabric,
+    def __init__(self, jobname, buildno, testname, core_prov, fabric,
                  hosts, ofi_build_mode, util_prov=None):
 
-        super().__init__(branchname, buildno, testname, core_prov, fabric,
+        super().__init__(jobname, buildno, testname, core_prov, fabric,
                      hosts, ofi_build_mode, util_prov)
      
         self.fi_info_testpath =  "{}/bin".format(self.libfab_installpath) 
@@ -62,10 +64,10 @@ class FiInfoTest(Test):
 
 class Fabtest(Test):
     
-    def __init__(self, branchname, buildno, testname, core_prov, fabric,
+    def __init__(self, jobname, buildno, testname, core_prov, fabric,
                  hosts, ofi_build_mode, util_prov=None):
         
-        super().__init__(branchname, buildno, testname, core_prov, fabric,
+        super().__init__(jobname, buildno, testname, core_prov, fabric,
                          hosts, ofi_build_mode, util_prov)
         self.fabtestpath = "{}/bin".format(self.libfab_installpath) 
         self.fabtestconfigpath = "{}/share/fabtests".format(self.libfab_installpath)
@@ -151,10 +153,10 @@ class Fabtest(Test):
         os.chdir(curdir)
 
 class ShmemTest(Test):
-    def __init__(self, branchname, buildno, testname, core_prov, fabric,
+    def __init__(self, jobname, buildno, testname, core_prov, fabric,
                  hosts, ofi_build_mode, util_prov=None):
         
-        super().__init__(branchname, buildno, testname, core_prov, fabric,
+        super().__init__(jobname, buildno, testname, core_prov, fabric,
                          hosts, ofi_build_mode, util_prov)
      
         #self.n - number of hosts * number of processes per host
@@ -197,10 +199,10 @@ class ShmemTest(Test):
     
 
 class MpiTests(Test):
-    def __init__(self, branchname, buildno, testname, core_prov, fabric,
+    def __init__(self, jobname, buildno, testname, core_prov, fabric,
                  mpitype, hosts, ofi_build_mode, util_prov=None):
        
-        super().__init__(branchname, buildno, testname, core_prov, 
+        super().__init__(jobname, buildno, testname, core_prov, 
                          fabric, hosts, ofi_build_mode, util_prov)
         self.mpi = mpitype
 
@@ -273,9 +275,9 @@ class MpiTests(Test):
 
 class MpiTestIMB(MpiTests):
 
-    def __init__(self, branchname, buildno, testname, core_prov, fabric,
+    def __init__(self, jobname, buildno, testname, core_prov, fabric,
                  mpitype, hosts, ofi_build_mode, util_prov=None):
-        super().__init__(branchname, buildno, testname, core_prov, fabric,
+        super().__init__(jobname, buildno, testname, core_prov, fabric,
                          mpitype, hosts, ofi_build_mode, util_prov)
         self.additional_tests = [ 
                                    "Biband",
@@ -305,9 +307,9 @@ class MpiTestIMB(MpiTests):
         
 class MpiTestStress(MpiTests):
      
-    def __init__(self, branchname, buildno, testname, core_prov, fabric, 
+    def __init__(self, jobname, buildno, testname, core_prov, fabric, 
                  mpitype, hosts, ofi_build_mode, util_prov=None):
-        super().__init__(branchname, buildno, testname, core_prov, fabric, 
+        super().__init__(jobname, buildno, testname, core_prov, fabric, 
                          mpitype,  hosts, ofi_build_mode, util_prov)
         
          
@@ -342,9 +344,9 @@ class MpiTestStress(MpiTests):
       
 class MpiTestOSU(MpiTests):
 
-    def __init__(self, branchname, buildno, testname, core_prov, fabric,
+    def __init__(self, jobname, buildno, testname, core_prov, fabric,
                  mpitype, hosts, ofi_build_mode, util_prov=None):
-        super().__init__(branchname, buildno, testname, core_prov, fabric,
+        super().__init__(jobname, buildno, testname, core_prov, fabric,
                          mpitype, hosts, ofi_build_mode, util_prov)
         
         self.n = 4 
