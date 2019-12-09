@@ -192,7 +192,7 @@ fi_ibv_msg_inject_fast(struct fid_ep *ep_fid, const void *buf, size_t len,
 	ep->wrs->sge.addr = (uintptr_t) buf;
 	ep->wrs->sge.length = (uint32_t) len;
 
-	return fi_ibv_send_poll_cq_if_needed(ep, &ep->wrs->msg_wr);
+	return vrb_post_send(ep, &ep->wrs->msg_wr);
 }
 
 static ssize_t fi_ibv_msg_ep_injectdata_fast(struct fid_ep *ep_fid, const void *buf, size_t len,
@@ -208,7 +208,7 @@ static ssize_t fi_ibv_msg_ep_injectdata_fast(struct fid_ep *ep_fid, const void *
 	ep->wrs->sge.addr = (uintptr_t) buf;
 	ep->wrs->sge.length = (uint32_t) len;
 
-	ret = fi_ibv_send_poll_cq_if_needed(ep, &ep->wrs->msg_wr);
+	ret = vrb_post_send(ep, &ep->wrs->msg_wr);
 	ep->wrs->msg_wr.opcode = IBV_WR_SEND;
 	return ret;
 }
