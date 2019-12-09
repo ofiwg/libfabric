@@ -888,28 +888,6 @@ static inline int fi_ibv_wc_2_wce(struct fi_ibv_cq *cq,
 			      (msg)->iov_count, flags)
 
 
-static inline int fi_ibv_poll_reap_unsig_cq(struct fi_ibv_ep *ep)
-{
-	struct fi_ibv_wce *wce;
-	struct ibv_wc wc;
-	int ret;
-	struct fi_ibv_cq *cq;
-
-	cq = container_of(ep->util_ep.tx_cq, struct fi_ibv_cq, util_cq);
-	cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
-	while (1) {
-		ret = vrb_poll_cq(cq, &wc);
-		if (ret <= 0)
-			break;
-
-		if (fi_ibv_process_wc(cq, &wc) && (!fi_ibv_wc_2_wce(cq, &wc, &wce)))
-			slist_insert_tail(&wce->entry, &cq->wcq);
-	}
-	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
-
-	return ret;
-}
-
 ssize_t vrb_post_send(struct fi_ibv_ep *ep, struct ibv_send_wr *wr);
 
 static inline ssize_t
