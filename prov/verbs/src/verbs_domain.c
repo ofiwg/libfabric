@@ -221,21 +221,6 @@ static struct fi_ops_domain fi_ibv_dgram_domain_ops = {
 };
 
 
-int fi_ibv_poll_cq_track_credits(struct ibv_cq *cq, int num_entries,
-				 struct ibv_wc *wc)
-{
-	struct fi_ibv_cq *verbs_cq = (struct fi_ibv_cq *)cq->cq_context;
-	int i, ret;
-
-	ret = ibv_poll_cq(cq, num_entries, wc);
-	for (i = 0; i < ret; i++) {
-		if (!(wc[i].opcode & IBV_WC_RECV))
-			ofi_atomic_inc32(&verbs_cq->credits);
-	}
-	return ret;
-}
-
-
 static int
 fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	      struct fid_domain **domain, void *context)

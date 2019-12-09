@@ -234,6 +234,18 @@ static void fi_ibv_cq_read_data_entry(struct ibv_wc *wc, void *buf)
 	fi_ibv_handle_wc(wc, &entry->flags, &entry->len, &entry->data);
 }
 
+int vrb_poll_cq(struct fi_ibv_cq *cq, struct ibv_wc *wc)
+{
+	int ret;
+
+	ret = ibv_poll_cq(cq->cq, 1, wc);
+	if (ret > 0 && !(wc->opcode & IBV_WC_RECV))
+		ofi_atomic_inc32(&cq->credits);
+
+	return ret;
+}
+
+
 /* Must call with cq->lock held */
 static inline int fi_ibv_poll_outstanding_cq(struct fi_ibv_ep *ep,
 					     struct fi_ibv_cq *cq)
@@ -242,7 +254,7 @@ static inline int fi_ibv_poll_outstanding_cq(struct fi_ibv_ep *ep,
 	struct ibv_wc wc;
 	ssize_t ret;
 
-	ret = fi_ibv_poll_cq_track_credits(cq->cq, 1, &wc);
+	ret = vrb_poll_cq(cq, &wc);
 	if (ret <= 0)
 		return ret;
 
@@ -295,7 +307,7 @@ ssize_t fi_ibv_poll_cq_process_wc(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 {
 	ssize_t ret;
 
-	ret = fi_ibv_poll_cq_track_credits(cq->cq, 1, wc);
+	ret = vrb_poll_cq(cq, wc);
 	if (ret <= 0)
 		return ret;
 
