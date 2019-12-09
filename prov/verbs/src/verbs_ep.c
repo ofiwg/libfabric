@@ -1207,7 +1207,7 @@ fi_ibv_srq_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t 
 
 	fi_ibv_set_sge_iov(wr.sg_list, msg->msg_iov, msg->iov_count, msg->desc);
 
-	return fi_ibv_handle_post(ibv_post_srq_recv(ep->srq, &wr, &bad_wr));
+	return vrb_convert_ret(ibv_post_srq_recv(ep->srq, &wr, &bad_wr));
 }
 
 static ssize_t
@@ -1225,7 +1225,7 @@ fi_ibv_srq_ep_recv(struct fid_ep *ep_fid, void *buf, size_t len,
 	};
 	struct ibv_recv_wr *bad_wr;
 
-	return fi_ibv_handle_post(ibv_post_srq_recv(ep->srq, &wr, &bad_wr));
+	return vrb_convert_ret(ibv_post_srq_recv(ep->srq, &wr, &bad_wr));
 }
 
 static ssize_t
@@ -1278,7 +1278,7 @@ fi_ibv_xrc_srq_ep_prepost_recv(struct fid_ep *ep_fid, void *buf, size_t len,
 	 * receive message function is swapped out. */
 	if (ep->srq) {
 		fastlock_release(&ep->xrc.prepost_lock);
-		return fi_ibv_handle_post(fi_recv(ep_fid, buf, len, desc,
+		return vrb_convert_ret(fi_recv(ep_fid, buf, len, desc,
 						 src_addr, context));
 	}
 

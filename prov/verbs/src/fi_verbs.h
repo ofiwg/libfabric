@@ -812,22 +812,16 @@ fi_ibv_dgram_av_lookup_av_entry(fi_addr_t fi_addr)
  * Deal with non-compliant libibverbs drivers which set errno
  * instead of directly returning the error value
  */
-static inline ssize_t fi_ibv_handle_post(int ret)
+static inline ssize_t vrb_convert_ret(int ret)
 {
-	switch (ret) {
-		case -ENOMEM:
-		case ENOMEM:
-			ret = -FI_EAGAIN;
-			break;
-		case -1:
-			ret = (errno == ENOMEM) ? -FI_EAGAIN :
-						  -errno;
-			break;
-		default:
-			ret = -abs(ret);
-			break;
-	}
-	return ret;
+	if (!ret)
+		return 0;
+	else if (ret == -ENOMEM || ret == ENOMEM)
+		return -FI_EAGAIN;
+	else if (ret == -1)
+		return (errno == ENOMEM) ? -FI_EAGAIN : -errno;
+	else
+		return -abs(ret);
 }
 
 /* Returns 0 if it processes WR entry for which user
@@ -964,13 +958,13 @@ fi_ibv_send_poll_cq_if_needed(struct fi_ibv_ep *ep, struct ibv_send_wr *wr)
 
 	ret = domain->post_send(ep->ibv_qp, wr, &bad_wr);
 	if (OFI_UNLIKELY(ret)) {
-		ret = fi_ibv_handle_post(ret);
+		ret = vrb_convert_ret(ret);
 		if (OFI_LIKELY(ret == -FI_EAGAIN)) {
 			ret = fi_ibv_poll_reap_unsig_cq(ep);
 			if (OFI_UNLIKELY(ret))
 				return -FI_EAGAIN;
 			/* Try again and return control to a caller */
-			ret = fi_ibv_handle_post(
+			ret = vrb_convert_ret(
 				domain->post_send(ep->ibv_qp, wr, &bad_wr));
 		}
 	}
