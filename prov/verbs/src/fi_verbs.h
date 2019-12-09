@@ -826,8 +826,7 @@ fi_ibv_process_wc(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 	return (wc->wr_id == VERBS_NO_COMP_FLAG) ? 0 : 1;
 }
 
-int fi_ibv_poll_cq_track_credits(struct ibv_cq *cq, int num_entries,
-				 struct ibv_wc *wc);
+int vrb_poll_cq(struct fi_ibv_cq *cq, struct ibv_wc *wc);
 
 /* Returns 0 and tries read new completions if it processes
  * WR entry for which user doesn't request the completion */
@@ -837,7 +836,7 @@ fi_ibv_process_wc_poll_new(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 	if (wc->wr_id == VERBS_NO_COMP_FLAG) {
 		int ret;
 
-		while ((ret = fi_ibv_poll_cq_track_credits(cq->cq, 1, wc)) > 0) {
+		while ((ret = vrb_poll_cq(cq, wc)) > 0) {
 			if (wc->wr_id != VERBS_NO_COMP_FLAG)
 				return 1;
 		}
@@ -916,25 +915,22 @@ static inline int fi_ibv_wc_2_wce(struct fi_ibv_cq *cq,
 static inline int fi_ibv_poll_reap_unsig_cq(struct fi_ibv_ep *ep)
 {
 	struct fi_ibv_wce *wce;
-	struct ibv_wc wc[10];
-	int ret, i;
-	struct fi_ibv_cq *cq =
-		container_of(ep->util_ep.tx_cq, struct fi_ibv_cq, util_cq);
+	struct ibv_wc wc;
+	int ret;
+	struct fi_ibv_cq *cq;
 
+	cq = container_of(ep->util_ep.tx_cq, struct fi_ibv_cq, util_cq);
 	cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
 	while (1) {
-		ret = fi_ibv_poll_cq_track_credits(cq->cq, 10, wc);
+		ret = vrb_poll_cq(cq, &wc);
 		if (ret <= 0)
 			break;
 
-		for (i = 0; i < ret; i++) {
-			if (fi_ibv_process_wc(cq, &wc[i]) &&
-			    (!fi_ibv_wc_2_wce(cq, &wc[i], &wce)))
-				slist_insert_tail(&wce->entry, &cq->wcq);
-		}
+		if (fi_ibv_process_wc(cq, &wc) && (!fi_ibv_wc_2_wce(cq, &wc, &wce)))
+			slist_insert_tail(&wce->entry, &cq->wcq);
 	}
-
 	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
+
 	return ret;
 }
 
