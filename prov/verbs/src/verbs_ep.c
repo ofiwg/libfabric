@@ -41,25 +41,34 @@ ssize_t vrb_post_send(struct fi_ibv_ep *ep, struct ibv_send_wr *wr)
 {
 	struct fi_ibv_cq *cq;
 	struct ibv_send_wr *bad_wr;
+	struct fi_ibv_wce *wce;
+	struct ibv_wc wc;
 	int ret, retry = 1;
 
 	cq = container_of(ep->util_ep.tx_cq, struct fi_ibv_cq, util_cq);
 retry:
 	if (ofi_atomic_dec32(&cq->credits) < 0)
-		goto try_polling;
+		goto free_cq_space;
 
 	ret = ibv_post_send(ep->ibv_qp, wr, &bad_wr);
 	if (ret)
-		goto try_polling;
+		goto free_cq_space;
 
 	return 0;
 
-try_polling:
+free_cq_space:
 	ofi_atomic_inc32(&cq->credits);
 	if (retry) {
 		retry = 0;
-		ret = fi_ibv_poll_reap_unsig_cq(ep);
-		if (!ret)
+
+		cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
+		ret = vrb_poll_cq(cq, &wc);
+		if (ret > 0 && fi_ibv_process_wc(cq, &wc) &&
+		    !fi_ibv_wc_2_wce(cq, &wc, &wce))
+			slist_insert_tail(&wce->entry, &cq->wcq);
+		cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
+
+		if (ret > 0)
 			goto retry;
 	}
 	return -FI_EAGAIN;
