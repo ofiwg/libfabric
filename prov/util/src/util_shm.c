@@ -85,7 +85,8 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 		FI_WARN(prov, FI_LOG_EP_CTRL, "calloc error\n");
 		return -FI_ENOMEM;
 	}
-	strncpy(ep_name->name, (char *)attr->name, NAME_MAX);
+	strncpy(ep_name->name, (char *)attr->name, NAME_MAX - 1);
+	ep_name->name[NAME_MAX - 1] = '\0';
 	dlist_insert_tail(&ep_name->entry, &ep_name_list);
 
 	ret = ftruncate(fd, total_size);
