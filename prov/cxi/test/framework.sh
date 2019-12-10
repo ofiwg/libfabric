@@ -23,7 +23,7 @@ function startvm {
 	shift 1
 
 	# -M q35 = Standard PC (Q35 + ICH9, 2009) (alias of pc-q35-2.10)
-	QEMU_OPTS="--qemu-opts -smp cores=2 -device ccn -machine q35,kernel-irqchip=split -device intel-iommu,intremap=on,caching-mode=on -m 1024"
+	QEMU_OPTS="--qemu-opts -smp cores=2 -device ccn -machine q35,kernel-irqchip=split -device intel-iommu,intremap=on,caching-mode=on -m 4G"
 	KERN_OPTS="--kopt iommu=pt --kopt intel_iommu=on --kopt iomem=relaxed"
 
 	# --script-sh can take arguments in script, but --init-sh cannot

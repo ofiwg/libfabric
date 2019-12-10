@@ -1798,6 +1798,37 @@ ParameterizedTest(struct tagged_rx_params *param, tagged, rx)
 	free(recv_buf);
 }
 
+#define GB 1024*1024*1024
+Test(tagged, rput_abort, .disabled=true)
+{
+	size_t recv_len = GB;
+	size_t send_len = GB;
+	void *recv_buf;
+	void *send_buf;
+	int ret;
+	uint64_t val __attribute__((unused));
+
+	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	cr_assert(recv_buf);
+
+	ret = fi_trecv(cxit_ep, recv_buf, recv_len, NULL,
+		       FI_ADDR_UNSPEC, 0, 0, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_trecv failed %d", ret);
+	sleep(1);
+
+	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	cr_assert(send_buf);
+
+	ret = fi_tsend(cxit_ep, send_buf, send_len,
+		       NULL, cxit_ep_fi_addr, 0, NULL);
+	cr_assert_eq(ret, FI_SUCCESS,
+		     "fi_tsend failed %d", ret);
+
+	sleep(1);
+	val = *(uint64_t *)0;
+}
+
+
 Test(tagged, oflow_replenish, .timeout=30)
 {
 	uint8_t *recv_buf,
