@@ -239,10 +239,25 @@ int vrb_poll_cq(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 	return ret;
 }
 
+/* Must be called with CQ lock held. */
+int vrb_save_wc(struct fi_ibv_cq *cq, struct ibv_wc *wc)
+{
+	struct vrb_wc_entry *wce;
+
+	wce = ofi_buf_alloc(cq->wce_pool);
+	if (!wce) {
+		FI_WARN(&fi_ibv_prov, FI_LOG_CQ,
+			"Unable to save completion, completion lost!\n");
+		return -FI_ENOMEM;
+	}
+
+	wce->wc = *wc;
+	slist_insert_tail(&wce->entry, &cq->saved_wc_list);
+	return FI_SUCCESS;
+}
 
 static void vrb_flush_cq(struct fi_ibv_cq *cq)
 {
-	struct vrb_wc_entry *wce;
 	struct ibv_wc wc;
 	ssize_t ret;
 
@@ -252,11 +267,7 @@ static void vrb_flush_cq(struct fi_ibv_cq *cq)
 		if (ret <= 0)
 			break;
 
-		ret = fi_ibv_wc_2_wce(cq, &wc, &wce);
-		if (ret)
-			break;
-
-		slist_insert_tail(&wce->entry, &cq->saved_wc_list);
+		vrb_save_wc(cq, &wc);
 	};
 
 	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
@@ -351,7 +362,7 @@ int fi_ibv_cq_signal(struct fid_cq *cq)
 
 int fi_ibv_cq_trywait(struct fi_ibv_cq *cq)
 {
-	struct vrb_wc_entry *wce;
+	struct ibv_wc wc;
 	void *context;
 	int ret = -FI_EAGAIN, rc;
 
@@ -364,19 +375,11 @@ int fi_ibv_cq_trywait(struct fi_ibv_cq *cq)
 	if (!slist_empty(&cq->saved_wc_list))
 		goto out;
 
-	wce = ofi_buf_alloc(cq->wce_pool);
-	if (!wce) {
-		ret = -FI_ENOMEM;
+	rc = vrb_poll_cq(cq, &wc);
+	if (rc) {
+		if (rc > 0)
+			vrb_save_wc(cq, &wc);
 		goto out;
-	}
-	memset(wce, 0, sizeof(*wce));
-
-	rc = vrb_poll_cq(cq, &wce->wc);
-	if (rc > 0) {
-		slist_insert_tail(&wce->entry, &cq->saved_wc_list);
-		goto out;
-	} else if (rc < 0) {
-		goto err;
 	}
 
 	while (!ibv_get_cq_event(cq->channel, &cq->cq, &context))
@@ -386,22 +389,19 @@ int fi_ibv_cq_trywait(struct fi_ibv_cq *cq)
 	if (rc) {
 		VERBS_WARN(FI_LOG_CQ, "ibv_req_notify_cq error: %d\n", ret);
 		ret = -errno;
-		goto err;
+		goto out;
 	}
 
 	/* Read again to fetch any completions that we might have missed
 	 * while rearming */
-	rc = vrb_poll_cq(cq, &wce->wc);
-	if (rc > 0) {
-		slist_insert_tail(&wce->entry, &cq->saved_wc_list);
+	rc = vrb_poll_cq(cq, &wc);
+	if (rc) {
+		if (rc > 0)
+			vrb_save_wc(cq, &wc);
 		goto out;
-	} else if (rc < 0) {
-		goto err;
 	}
 
 	ret = FI_SUCCESS;
-err:
-	ofi_buf_free(wce);
 out:
 	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
 	return ret;
