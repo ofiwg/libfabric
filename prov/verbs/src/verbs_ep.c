@@ -63,7 +63,7 @@ free_cq_space:
 
 		cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
 		ret = vrb_poll_cq(cq, &wc);
-		if (ret > 0 && fi_ibv_process_wc(cq, &wc) &&
+		if (ret > 0 && (wc.wr_id != VERBS_NO_COMP_FLAG) &&
 		    !fi_ibv_wc_2_wce(cq, &wc, &wce))
 			slist_insert_tail(&wce->entry, &cq->wcq);
 		cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
