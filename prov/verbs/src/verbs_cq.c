@@ -230,9 +230,11 @@ int vrb_poll_cq(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 {
 	int ret;
 
-	ret = ibv_poll_cq(cq->cq, 1, wc);
-	if (ret > 0 && !(wc->opcode & IBV_WC_RECV))
-		ofi_atomic_inc32(&cq->credits);
+	do {
+		ret = ibv_poll_cq(cq->cq, 1, wc);
+		if (ret > 0 && !(wc->opcode & IBV_WC_RECV))
+			ofi_atomic_inc32(&cq->credits);
+	} while (ret > 0 && wc->wr_id == VERBS_NO_COMP_FLAG);
 
 	return ret;
 }
@@ -249,9 +251,6 @@ static void vrb_flush_cq(struct fi_ibv_cq *cq)
 		ret = vrb_poll_cq(cq, &wc);
 		if (ret <= 0)
 			break;
-
-		if (wc.wr_id == VERBS_NO_COMP_FLAG)
-			continue;
 
 		ret = fi_ibv_wc_2_wce(cq, &wc, &wce);
 		if (ret)
@@ -273,20 +272,6 @@ void fi_ibv_cleanup_cq(struct fi_ibv_ep *ep)
 		vrb_flush_cq(container_of(ep->util_ep.tx_cq,
 					  struct fi_ibv_cq, util_cq));
 	}
-}
-
-/* Must call with cq->lock held */
-static ssize_t vrb_get_user_comp(struct fi_ibv_cq *cq, struct ibv_wc *wc)
-{
-	int ret;
-
-	do {
-		ret = vrb_poll_cq(cq, wc);
-		if (ret <= 0)
-			return ret;
-	} while (wc->wr_id == VERBS_NO_COMP_FLAG);
-
-	return 1;
 }
 
 static ssize_t fi_ibv_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
@@ -316,7 +301,7 @@ static ssize_t fi_ibv_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 			continue;
 		}
 
-		ret = vrb_get_user_comp(cq, &wc);
+		ret = vrb_poll_cq(cq, &wc);
 		if (ret <= 0)
 			break;
 
@@ -386,7 +371,7 @@ int fi_ibv_cq_trywait(struct fi_ibv_cq *cq)
 	}
 	memset(wce, 0, sizeof(*wce));
 
-	rc = vrb_get_user_comp(cq, &wce->wc);
+	rc = vrb_poll_cq(cq, &wce->wc);
 	if (rc > 0) {
 		slist_insert_tail(&wce->entry, &cq->saved_wc_list);
 		goto out;
@@ -406,7 +391,7 @@ int fi_ibv_cq_trywait(struct fi_ibv_cq *cq)
 
 	/* Read again to fetch any completions that we might have missed
 	 * while rearming */
-	rc = vrb_get_user_comp(cq, &wce->wc);
+	rc = vrb_poll_cq(cq, &wce->wc);
 	if (rc > 0) {
 		slist_insert_tail(&wce->entry, &cq->saved_wc_list);
 		goto out;
