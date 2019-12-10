@@ -84,26 +84,26 @@ fi_ibv_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
 		  uint64_t flags)
 {
 	struct fi_ibv_cq *cq;
-	struct fi_ibv_wce *wce;
+	struct vrb_wc_entry *wce;
 	struct slist_entry *slist_entry;
 	uint32_t api_version;
 
 	cq = container_of(cq_fid, struct fi_ibv_cq, util_cq.cq_fid);
 
 	cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
-	if (slist_empty(&cq->wcq))
+	if (slist_empty(&cq->saved_wc_list))
 		goto err;
 
-	wce = container_of(cq->wcq.head, struct fi_ibv_wce, entry);
+	wce = container_of(cq->saved_wc_list.head, struct vrb_wc_entry, entry);
 	if (!wce->wc.status)
 		goto err;
 
 	api_version = cq->util_cq.domain->fabric->fabric_fid.api_version;
 
-	slist_entry = slist_remove_head(&cq->wcq);
+	slist_entry = slist_remove_head(&cq->saved_wc_list);
 	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
 
-	wce = container_of(slist_entry, struct fi_ibv_wce, entry);
+	wce = container_of(slist_entry, struct vrb_wc_entry, entry);
 
 	entry->op_context = (void *)(uintptr_t)wce->wc.wr_id;
 	entry->prov_errno = wce->wc.status;
@@ -250,7 +250,7 @@ int vrb_poll_cq(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 static inline int fi_ibv_poll_outstanding_cq(struct fi_ibv_ep *ep,
 					     struct fi_ibv_cq *cq)
 {
-	struct fi_ibv_wce *wce;
+	struct vrb_wc_entry *wce;
 	struct ibv_wc wc;
 	ssize_t ret;
 
@@ -269,7 +269,7 @@ static inline int fi_ibv_poll_outstanding_cq(struct fi_ibv_ep *ep,
 		ret = -FI_EAGAIN;
 		goto fn;
 	}
-	slist_insert_tail(&wce->entry, &cq->wcq);
+	slist_insert_tail(&wce->entry, &cq->saved_wc_list);
 	ret = 1;
 fn:
 
@@ -318,7 +318,7 @@ static ssize_t vrb_get_user_comp(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 static ssize_t fi_ibv_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 {
 	struct fi_ibv_cq *cq;
-	struct fi_ibv_wce *wce;
+	struct vrb_wc_entry *wce;
 	struct slist_entry *entry;
 	struct ibv_wc wc;
 	ssize_t ret = 0, i;
@@ -328,15 +328,16 @@ static ssize_t fi_ibv_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 	cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
 
 	for (i = 0; i < count; i++) {
-		if (!slist_empty(&cq->wcq)) {
-			wce = container_of(cq->wcq.head, struct fi_ibv_wce, entry);
+		if (!slist_empty(&cq->saved_wc_list)) {
+			wce = container_of(cq->saved_wc_list.head,
+					   struct vrb_wc_entry, entry);
 			if (wce->wc.status) {
 				ret = -FI_EAVAIL;
 				break;
 			}
-			entry = slist_remove_head(&cq->wcq);
-			wce = container_of(entry, struct fi_ibv_wce, entry);
-			cq->read_entry(&wce->wc, (char *)buf + i * cq->entry_size);
+			entry = slist_remove_head(&cq->saved_wc_list);
+			wce = container_of(entry, struct vrb_wc_entry, entry);
+			cq->read_entry(&wce->wc, (char *) buf + i * cq->entry_size);
 			ofi_buf_free(wce);
 			continue;
 		}
@@ -345,8 +346,7 @@ static ssize_t fi_ibv_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 		if (ret <= 0)
 			break;
 
-		/* Insert error entry into wcq */
-		if (OFI_UNLIKELY(wc.status)) {
+		if (wc.status) {
 			wce = ofi_buf_alloc(cq->wce_pool);
 			if (!wce) {
 				cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
@@ -354,7 +354,7 @@ static ssize_t fi_ibv_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 			}
 			memset(wce, 0, sizeof(*wce));
 			memcpy(&wce->wc, &wc, sizeof wc);
-			slist_insert_tail(&wce->entry, &cq->wcq);
+			slist_insert_tail(&wce->entry, &cq->saved_wc_list);
 			ret = -FI_EAVAIL;
 			break;
 		}
@@ -392,7 +392,7 @@ int fi_ibv_cq_signal(struct fid_cq *cq)
 
 int fi_ibv_cq_trywait(struct fi_ibv_cq *cq)
 {
-	struct fi_ibv_wce *wce;
+	struct vrb_wc_entry *wce;
 	void *context;
 	int ret = -FI_EAGAIN, rc;
 
@@ -402,7 +402,7 @@ int fi_ibv_cq_trywait(struct fi_ibv_cq *cq)
 	}
 
 	cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
-	if (!slist_empty(&cq->wcq))
+	if (!slist_empty(&cq->saved_wc_list))
 		goto out;
 
 	wce = ofi_buf_alloc(cq->wce_pool);
@@ -414,7 +414,7 @@ int fi_ibv_cq_trywait(struct fi_ibv_cq *cq)
 
 	rc = vrb_get_user_comp(cq, &wce->wc);
 	if (rc > 0) {
-		slist_insert_tail(&wce->entry, &cq->wcq);
+		slist_insert_tail(&wce->entry, &cq->saved_wc_list);
 		goto out;
 	} else if (rc < 0) {
 		goto err;
@@ -434,7 +434,7 @@ int fi_ibv_cq_trywait(struct fi_ibv_cq *cq)
 	 * while rearming */
 	rc = vrb_get_user_comp(cq, &wce->wc);
 	if (rc > 0) {
-		slist_insert_tail(&wce->entry, &cq->wcq);
+		slist_insert_tail(&wce->entry, &cq->saved_wc_list);
 		goto out;
 	} else if (rc < 0) {
 		goto err;
@@ -483,7 +483,7 @@ static int fi_ibv_cq_control(fid_t fid, int command, void *arg)
 
 static int fi_ibv_cq_close(fid_t fid)
 {
-	struct fi_ibv_wce *wce;
+	struct vrb_wc_entry *wce;
 	struct slist_entry *entry;
 	int ret;
 	struct fi_ibv_cq *cq =
@@ -509,9 +509,9 @@ static int fi_ibv_cq_close(fid_t fid)
 	fastlock_release(&cq->xrc.srq_list_lock);
 
 	cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
-	while (!slist_empty(&cq->wcq)) {
-		entry = slist_remove_head(&cq->wcq);
-		wce = container_of(entry, struct fi_ibv_wce, entry);
+	while (!slist_empty(&cq->saved_wc_list)) {
+		entry = slist_remove_head(&cq->saved_wc_list);
+		wce = container_of(entry, struct vrb_wc_entry, entry);
 		ofi_buf_free(wce);
 	}
 	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
@@ -637,7 +637,7 @@ int fi_ibv_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 		}
 	}
 
-	ret = ofi_bufpool_create(&cq->wce_pool, sizeof(struct fi_ibv_wce),
+	ret = ofi_bufpool_create(&cq->wce_pool, sizeof(struct vrb_wc_entry),
 				16, 0, VERBS_WCE_CNT, 0);
 	if (ret) {
 		VERBS_WARN(FI_LOG_CQ, "Failed to create wce_pool\n");
@@ -670,7 +670,7 @@ int fi_ibv_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 		goto err6;
 	}
 
-	slist_init(&cq->wcq);
+	slist_init(&cq->saved_wc_list);
 	dlist_init(&cq->xrc.srq_list);
 	fastlock_init(&cq->xrc.srq_list_lock);
 

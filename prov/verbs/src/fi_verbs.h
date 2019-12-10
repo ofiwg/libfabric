@@ -371,7 +371,7 @@ struct fi_ibv_domain {
 struct fi_ibv_cq;
 typedef void (*fi_ibv_cq_read_entry)(struct ibv_wc *wc, void *buf);
 
-struct fi_ibv_wce {
+struct vrb_wc_entry {
 	struct slist_entry	entry;
 	struct ibv_wc		wc;
 };
@@ -387,7 +387,7 @@ struct fi_ibv_cq {
 	struct ibv_wc		wc;
 	int			signal_fd[2];
 	fi_ibv_cq_read_entry	read_entry;
-	struct slist		wcq;
+	struct slist		saved_wc_list;
 	ofi_atomic32_t		nevents;
 	struct ofi_bufpool	*wce_pool;
 
@@ -823,7 +823,7 @@ int vrb_poll_cq(struct fi_ibv_cq *cq, struct ibv_wc *wc);
 
 static inline int fi_ibv_wc_2_wce(struct fi_ibv_cq *cq,
 				  struct ibv_wc *wc,
-				  struct fi_ibv_wce **wce)
+				  struct vrb_wc_entry **wce)
 
 {
 	*wce = ofi_buf_alloc(cq->wce_pool);
