@@ -302,16 +302,17 @@ void fi_ibv_cleanup_cq(struct fi_ibv_ep *ep)
 }
 
 /* Must call with cq->lock held */
-static inline
-ssize_t fi_ibv_poll_cq_process_wc(struct fi_ibv_cq *cq, struct ibv_wc *wc)
+static ssize_t fi_ibv_poll_cq_process_wc(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 {
-	ssize_t ret;
+	int ret;
 
-	ret = vrb_poll_cq(cq, wc);
-	if (ret <= 0)
-		return ret;
+	do {
+		ret = vrb_poll_cq(cq, wc);
+		if (ret <= 0)
+			return ret;
+	} while (wc->wr_id == VERBS_NO_COMP_FLAG);
 
-	return fi_ibv_process_wc_poll_new(cq, wc);
+	return 1;
 }
 
 static ssize_t fi_ibv_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
