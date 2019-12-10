@@ -326,8 +326,12 @@ class MpiTestStress(MpiTests):
     def execute_condn(self):
         # Todo : run stress test for ompi with libfabirc-dbg builds if it works
         # in Jenkins for buildbot these ompi did not build with libfabric-dbg 
-        return True if (self.mpi != 'ompi' or \
-                        self.ofi_build_mode != 'dbg') else  False
+
+        # Due to an mpich issue when the correct mpich options are enabled during
+        # mpich builds, sttress test is failing. disabling mpich + stress tests
+        # untill the mpich team fixes the issue. 
+        return True if (self.mpi != 'mpich' and (self.mpi != 'ompi' or \
+                        self.ofi_build_mode != 'dbg')) else  False
     
     def execute_cmd(self):
         command = self.cmd + self.options + self.stress_cmd
