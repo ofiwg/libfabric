@@ -818,13 +818,6 @@ static inline ssize_t vrb_convert_ret(int ret)
 		return -abs(ret);
 }
 
-/* Returns 0 if it processes WR entry for which user
- * doesn't request the completion */
-static inline int
-fi_ibv_process_wc(struct fi_ibv_cq *cq, struct ibv_wc *wc)
-{
-	return (wc->wr_id == VERBS_NO_COMP_FLAG) ? 0 : 1;
-}
 
 int vrb_poll_cq(struct fi_ibv_cq *cq, struct ibv_wc *wc);
 
