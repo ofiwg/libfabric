@@ -138,6 +138,12 @@ static inline pthread_t pthread_self(void)
 	return (pthread_t) ENOSYS;
 }
 
+static inline int pthread_yield(void)
+{
+	(void) SwitchToThread();
+	return 0;
+}
+
 /*
  * TODO: temporary solution
  * Need to re-implement
