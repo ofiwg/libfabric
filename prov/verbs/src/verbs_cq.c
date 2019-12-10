@@ -302,7 +302,7 @@ void fi_ibv_cleanup_cq(struct fi_ibv_ep *ep)
 }
 
 /* Must call with cq->lock held */
-static ssize_t fi_ibv_poll_cq_process_wc(struct fi_ibv_cq *cq, struct ibv_wc *wc)
+static ssize_t vrb_get_user_comp(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 {
 	int ret;
 
@@ -341,7 +341,7 @@ static ssize_t fi_ibv_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 			continue;
 		}
 
-		ret = fi_ibv_poll_cq_process_wc(cq, &wc);
+		ret = vrb_get_user_comp(cq, &wc);
 		if (ret <= 0)
 			break;
 
@@ -412,7 +412,7 @@ int fi_ibv_cq_trywait(struct fi_ibv_cq *cq)
 	}
 	memset(wce, 0, sizeof(*wce));
 
-	rc = fi_ibv_poll_cq_process_wc(cq, &wce->wc);
+	rc = vrb_get_user_comp(cq, &wce->wc);
 	if (rc > 0) {
 		slist_insert_tail(&wce->entry, &cq->wcq);
 		goto out;
@@ -432,7 +432,7 @@ int fi_ibv_cq_trywait(struct fi_ibv_cq *cq)
 
 	/* Read again to fetch any completions that we might have missed
 	 * while rearming */
-	rc = fi_ibv_poll_cq_process_wc(cq, &wce->wc);
+	rc = vrb_get_user_comp(cq, &wce->wc);
 	if (rc > 0) {
 		slist_insert_tail(&wce->entry, &cq->wcq);
 		goto out;
