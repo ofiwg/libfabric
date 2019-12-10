@@ -37,45 +37,58 @@
 
 #include "fi_verbs.h"
 
-static inline void fi_ibv_handle_wc(struct ibv_wc *wc, uint64_t *flags,
-				    size_t *len, uint64_t *data)
+static void fi_ibv_cq_read_context_entry(struct ibv_wc *wc, void *buf)
 {
+	struct fi_cq_entry *entry = buf;
+
+	entry->op_context = (void *) (uintptr_t) wc->wr_id;
+}
+
+static void fi_ibv_cq_read_msg_entry(struct ibv_wc *wc, void *buf)
+{
+	struct fi_cq_msg_entry *entry = buf;
+
+	entry->op_context = (void *) (uintptr_t) wc->wr_id;
+
 	switch (wc->opcode) {
 	case IBV_WC_SEND:
-		*flags = (FI_SEND | FI_MSG);
+		entry->flags = (FI_SEND | FI_MSG);
 		break;
 	case IBV_WC_RDMA_WRITE:
-		*flags = (FI_RMA | FI_WRITE);
+		entry->flags = (FI_RMA | FI_WRITE);
 		break;
 	case IBV_WC_RDMA_READ:
-		*flags = (FI_RMA | FI_READ);
+		entry->flags = (FI_RMA | FI_READ);
 		break;
 	case IBV_WC_COMP_SWAP:
-		*flags = FI_ATOMIC;
+		entry->flags = FI_ATOMIC;
 		break;
 	case IBV_WC_FETCH_ADD:
-		*flags = FI_ATOMIC;
+		entry->flags = FI_ATOMIC;
 		break;
 	case IBV_WC_RECV:
-		*len = wc->byte_len;
-		*flags = (FI_RECV | FI_MSG);
-		if (wc->wc_flags & IBV_WC_WITH_IMM) {
-			if (data)
-				*data = ntohl(wc->imm_data);
-			*flags |= FI_REMOTE_CQ_DATA;
-		}
+		entry->len = wc->byte_len;
+		entry->flags = (FI_RECV | FI_MSG);
 		break;
 	case IBV_WC_RECV_RDMA_WITH_IMM:
-		*len = wc->byte_len;
-		*flags = (FI_RMA | FI_REMOTE_WRITE);
-		if (wc->wc_flags & IBV_WC_WITH_IMM) {
-			if (data)
-				*data = ntohl(wc->imm_data);
-			*flags |= FI_REMOTE_CQ_DATA;
-		}
+		entry->len = wc->byte_len;
+		entry->flags = (FI_RMA | FI_REMOTE_WRITE);
 		break;
 	default:
 		break;
+	}
+}
+
+static void fi_ibv_cq_read_data_entry(struct ibv_wc *wc, void *buf)
+{
+	struct fi_cq_data_entry *entry = buf;
+
+	/* fi_cq_data_entry can cast to fi_cq_msg_entry */
+	fi_ibv_cq_read_msg_entry(wc, buf);
+	if ((wc->wc_flags & IBV_WC_WITH_IMM) &&
+	    (wc->opcode & IBV_WC_RECV)) {
+		entry->data = ntohl(wc->imm_data);
+		entry->flags |= FI_REMOTE_CQ_DATA;
 	}
 }
 
@@ -111,7 +124,9 @@ fi_ibv_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
 		entry->err = FI_ECANCELED;
 	else
 		entry->err = EIO;
-	fi_ibv_handle_wc(&wce->wc, &entry->flags, &entry->len, &entry->data);
+
+	/* fi_cq_err_entry can cast to fi_cq_data_entry */
+	fi_ibv_cq_read_data_entry(&wce->wc, (void *) entry);
 
 	if ((FI_VERSION_GE(api_version, FI_VERSION(1, 5))) &&
 		entry->err_data && entry->err_data_size) {
@@ -209,29 +224,6 @@ fi_ibv_cq_sread(struct fid_cq *cq, void *buf, size_t count, const void *cond,
 	}
 
 	return cur ? cur : ret;
-}
-
-static void fi_ibv_cq_read_context_entry(struct ibv_wc *wc, void *buf)
-{
-	struct fi_cq_entry *entry = buf;
-
-	entry->op_context = (void *)(uintptr_t)wc->wr_id;
-}
-
-static void fi_ibv_cq_read_msg_entry(struct ibv_wc *wc, void *buf)
-{
-	struct fi_cq_msg_entry *entry = buf;
-
-	entry->op_context = (void *)(uintptr_t)wc->wr_id;
-	fi_ibv_handle_wc(wc, &entry->flags, &entry->len, NULL);
-}
-
-static void fi_ibv_cq_read_data_entry(struct ibv_wc *wc, void *buf)
-{
-	struct fi_cq_data_entry *entry = buf;
-
-	entry->op_context = (void *)(uintptr_t)wc->wr_id;
-	fi_ibv_handle_wc(wc, &entry->flags, &entry->len, &entry->data);
 }
 
 int vrb_poll_cq(struct fi_ibv_cq *cq, struct ibv_wc *wc)
