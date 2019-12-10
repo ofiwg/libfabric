@@ -238,58 +238,40 @@ int vrb_poll_cq(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 }
 
 
-/* Must call with cq->lock held */
-static inline int fi_ibv_poll_outstanding_cq(struct fi_ibv_ep *ep,
-					     struct fi_ibv_cq *cq)
+static void vrb_flush_cq(struct fi_ibv_cq *cq)
 {
 	struct vrb_wc_entry *wce;
 	struct ibv_wc wc;
 	ssize_t ret;
 
-	ret = vrb_poll_cq(cq, &wc);
-	if (ret <= 0)
-		return ret;
+	cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
+	while (1) {
+		ret = vrb_poll_cq(cq, &wc);
+		if (ret <= 0)
+			break;
 
-	/* Handle WR entry when user doesn't request the completion */
-	if (wc.wr_id == VERBS_NO_COMP_FLAG) {
-		/* To ensure the new iteration */
-		return 1;
-	}
+		if (wc.wr_id == VERBS_NO_COMP_FLAG)
+			continue;
 
-	ret = fi_ibv_wc_2_wce(cq, &wc, &wce);
-	if (OFI_UNLIKELY(ret)) {
-		ret = -FI_EAGAIN;
-		goto fn;
-	}
-	slist_insert_tail(&wce->entry, &cq->saved_wc_list);
-	ret = 1;
-fn:
+		ret = fi_ibv_wc_2_wce(cq, &wc, &wce);
+		if (ret)
+			break;
 
-	return ret;
+		slist_insert_tail(&wce->entry, &cq->saved_wc_list);
+	};
+
+	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
 }
 
 void fi_ibv_cleanup_cq(struct fi_ibv_ep *ep)
 {
-	int ret;
-
 	if (ep->util_ep.rx_cq) {
-		ep->util_ep.rx_cq->cq_fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
-		do {
-			ret = fi_ibv_poll_outstanding_cq(
-				ep, container_of(ep->util_ep.rx_cq,
-						 struct fi_ibv_cq, util_cq));
-		} while (ret > 0);
-		ep->util_ep.rx_cq->cq_fastlock_release(&ep->util_ep.rx_cq->cq_lock);
+		vrb_flush_cq(container_of(ep->util_ep.rx_cq,
+					  struct fi_ibv_cq, util_cq));
 	}
-
 	if (ep->util_ep.tx_cq) {
-		ep->util_ep.tx_cq->cq_fastlock_acquire(&ep->util_ep.tx_cq->cq_lock);
-		do {
-			ret = fi_ibv_poll_outstanding_cq(ep,
-				container_of(ep->util_ep.tx_cq,
-					     struct fi_ibv_cq, util_cq));
-		} while (ret > 0);
-		ep->util_ep.tx_cq->cq_fastlock_release(&ep->util_ep.tx_cq->cq_lock);
+		vrb_flush_cq(container_of(ep->util_ep.tx_cq,
+					  struct fi_ibv_cq, util_cq));
 	}
 }
 
