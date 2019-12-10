@@ -41,7 +41,6 @@ ssize_t vrb_post_send(struct fi_ibv_ep *ep, struct ibv_send_wr *wr)
 {
 	struct fi_ibv_cq *cq;
 	struct ibv_send_wr *bad_wr;
-	struct vrb_wc_entry *wce;
 	struct ibv_wc wc;
 	int ret, retry = 1;
 
@@ -63,9 +62,8 @@ free_cq_space:
 
 		cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
 		ret = vrb_poll_cq(cq, &wc);
-		if (ret > 0 && (wc.wr_id != VERBS_NO_COMP_FLAG) &&
-		    !fi_ibv_wc_2_wce(cq, &wc, &wce))
-			slist_insert_tail(&wce->entry, &cq->saved_wc_list);
+		if (ret > 0)
+			vrb_save_wc(cq, &wc);
 		cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
 
 		if (ret > 0)

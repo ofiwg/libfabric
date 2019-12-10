@@ -820,20 +820,7 @@ static inline ssize_t vrb_convert_ret(int ret)
 
 
 int vrb_poll_cq(struct fi_ibv_cq *cq, struct ibv_wc *wc);
-
-static inline int fi_ibv_wc_2_wce(struct fi_ibv_cq *cq,
-				  struct ibv_wc *wc,
-				  struct vrb_wc_entry **wce)
-
-{
-	*wce = ofi_buf_alloc(cq->wce_pool);
-	if (OFI_UNLIKELY(!*wce))
-		return -FI_ENOMEM;
-	memset(*wce, 0, sizeof(**wce));
-	(*wce)->wc = *wc;
-
-	return FI_SUCCESS;
-}
+int vrb_save_wc(struct fi_ibv_cq *cq, struct ibv_wc *wc);
 
 #define fi_ibv_init_sge(buf, len, desc) (struct ibv_sge)		\
 	{ .addr = (uintptr_t)buf,					\
