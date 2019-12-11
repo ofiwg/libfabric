@@ -36,6 +36,13 @@
 #include <ofi_util.h>
 #include "fi_verbs.h"
 
+/* XRC SIDR connection map RBTree key */
+struct fi_ibv_sidr_conn_key {
+	struct sockaddr		*addr;
+	uint16_t		pep_port;
+	bool			recip;
+};
+
 const struct fi_info *
 fi_ibv_get_verbs_info(const struct fi_info *ilist, const char *domain_name)
 {
@@ -285,6 +292,118 @@ static void fi_ibv_eq_skip_xrc_cm_data(const void **priv_data,
 	}
 }
 
+static inline void fi_ibv_set_sidr_conn_key(struct sockaddr *addr,
+					    uint16_t pep_port, bool recip,
+					    struct fi_ibv_sidr_conn_key *key)
+{
+	key->addr = addr;
+	key->pep_port = pep_port;
+	key->recip = recip;
+}
+
+static int fi_ibv_sidr_conn_compare(struct ofi_rbmap *map,
+				    void *key, void *data)
+{
+	struct fi_ibv_sidr_conn_key *_key = key;
+	struct fi_ibv_xrc_ep *ep = data;
+	int ret;
+
+	assert(_key->addr->sa_family ==
+	       ofi_sa_family(ep->base_ep.info->dest_addr));
+
+	/* The interface address and the passive endpoint port define
+	 * the unique connection to a peer */
+	switch(_key->addr->sa_family) {
+	case AF_INET:
+		ret = memcmp(&ofi_sin_addr(_key->addr),
+			     &ofi_sin_addr(ep->base_ep.info->dest_addr),
+			     sizeof(ofi_sin_addr(_key->addr)));
+		break;
+	case AF_INET6:
+		ret = memcmp(&ofi_sin6_addr(_key->addr),
+			     &ofi_sin6_addr(ep->base_ep.info->dest_addr),
+			     sizeof(ofi_sin6_addr(_key->addr)));
+		break;
+	default:
+		VERBS_WARN(FI_LOG_EP_CTRL, "Unsuuported address format\n");
+		assert(0);
+		ret = -FI_EINVAL;
+	}
+
+	if (ret)
+		return ret;
+
+	if (_key->pep_port != ep->remote_pep_port)
+		return _key->pep_port < ep->remote_pep_port ? -1 : 1;
+
+	return _key->recip < ep->recip_accept ?
+		-1 : _key->recip > ep->recip_accept;
+}
+
+/* Caller must hold eq:lock */
+struct fi_ibv_xrc_ep *fi_ibv_eq_get_sidr_conn(struct fi_ibv_eq *eq,
+					      struct sockaddr *peer,
+					      uint16_t pep_port, bool recip)
+{
+	struct ofi_rbnode *node;
+	struct fi_ibv_sidr_conn_key key;
+
+	fi_ibv_set_sidr_conn_key(peer, pep_port, recip, &key);
+	node = ofi_rbmap_find(&eq->xrc.sidr_conn_rbmap, &key);
+	if (OFI_LIKELY(!node))
+		return NULL;
+
+	return (struct fi_ibv_xrc_ep *) node->data;
+}
+
+/* Caller must hold eq:lock */
+int fi_ibv_eq_add_sidr_conn(struct fi_ibv_xrc_ep *ep,
+			    void *param_data, size_t param_len)
+{
+	int ret;
+	struct fi_ibv_sidr_conn_key key;
+
+	assert(!ep->accept_param_data);
+	assert(param_len);
+	assert(ep->tgt_id && ep->tgt_id->ps == RDMA_PS_UDP);
+
+	fi_ibv_set_sidr_conn_key(ep->base_ep.info->dest_addr,
+				 ep->remote_pep_port, ep->recip_accept, &key);
+	ep->accept_param_data = calloc(1, param_len);
+	if (!ep->accept_param_data) {
+		VERBS_WARN(FI_LOG_EP_CTRL,
+			   "SIDR alloc conn param memory failure\n");
+		return -FI_ENOMEM;
+	}
+	memcpy(ep->accept_param_data, param_data, param_len);
+	ep->accept_param_len = param_len;
+
+	ret = ofi_rbmap_insert(&ep->base_ep.eq->xrc.sidr_conn_rbmap,
+			       &key, (void *) ep, &ep->conn_map_node);
+	assert(ret != -FI_EALREADY);
+	if (OFI_UNLIKELY(ret)) {
+		VERBS_WARN(FI_LOG_EP_CTRL,
+			   "SIDR conn map entry insert error %d\n", ret);
+		free(ep->accept_param_data);
+		ep->accept_param_data = NULL;
+		return ret;
+	}
+
+	return FI_SUCCESS;
+}
+
+/* Caller must hold eq:lock */
+void fi_ibv_eq_remove_sidr_conn(struct fi_ibv_xrc_ep *ep)
+{
+	assert(ep->conn_map_node);
+
+	ofi_rbmap_delete(&ep->base_ep.eq->xrc.sidr_conn_rbmap,
+			 ep->conn_map_node);
+	ep->conn_map_node = NULL;
+	free(ep->accept_param_data);
+	ep->accept_param_data = NULL;
+}
+
 static int
 fi_ibv_eq_accept_recip_conn(struct fi_ibv_xrc_ep *ep,
 			    struct fi_eq_cm_entry *entry, size_t len,
@@ -337,13 +456,31 @@ fi_ibv_eq_xrc_connreq_event(struct fi_ibv_eq *eq, struct fi_eq_cm_entry *entry,
 	int ret;
 
 	/*
-	 * We can make the SIDR shared connection mechanism more robust
-	 * by maintaining a mapping of SIDR connections, such that if a
-	 * SIDR accept response is lost and we receive a retry SIDR request,
-	 * we can take appropriate action resending the accept. For a lost
-	 * SIDR reject response it is OK for the upper layer to reject the
-	 * request again.
+	 * If this is a retransmitted SIDR request for a previously accepted
+	 * connection then the shared SIDR response message was lost and must
+	 * be retransmitted. Note that a lost SIDR reject response message will
+	 * be rejected again by the application.
 	 */
+	assert(entry->info->dest_addr);
+	if (cma_event->id->ps == RDMA_PS_UDP) {
+		ep = fi_ibv_eq_get_sidr_conn(eq, entry->info->dest_addr,
+					     connreq->xrc.port,
+					     connreq->xrc.is_reciprocal);
+		if (ep) {
+			VERBS_DBG(FI_LOG_EP_CTRL,
+				  "SIDR %s request retry received\n",
+				  connreq->xrc.is_reciprocal ?
+				  "reciprocal" : "original");
+			ret = fi_ibv_resend_shared_accept_xrc(ep, connreq,
+							      cma_event->id);
+			if (ret)
+				VERBS_WARN(FI_LOG_EP_CTRL,
+					   "SIDR accept resend failure %d\n",
+					   -errno);
+			rdma_destroy_id(cma_event->id);
+			return -FI_EAGAIN;
+		}
+	}
 
 	if (!connreq->xrc.is_reciprocal) {
 		fi_ibv_eq_skip_xrc_cm_data(priv_data, priv_datalen);
@@ -1060,6 +1197,9 @@ static int fi_ibv_eq_close(fid_t fid)
 	eq = container_of(fid, struct fi_ibv_eq, eq_fid.fid);
 	/* TODO: use util code, if possible, and add ref counting */
 
+	if (!ofi_rbmap_empty(&eq->xrc.sidr_conn_rbmap))
+		VERBS_WARN(FI_LOG_EP_CTRL, "SIDR connection RBmap not empty\n");
+
 	free(eq->err.err_data);
 
 	if (eq->channel)
@@ -1076,6 +1216,7 @@ static int fi_ibv_eq_close(fid_t fid)
 
 	dlistfd_head_free(&eq->list_head);
 
+	ofi_rbmap_cleanup(&eq->xrc.sidr_conn_rbmap);
 	ofi_idx_reset(eq->xrc.conn_key_map);
 	free(eq->xrc.conn_key_map);
 	fastlock_destroy(&eq->lock);
@@ -1112,6 +1253,8 @@ int fi_ibv_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		ret = -ENOMEM;
 		goto err0;
 	}
+	ofi_rbmap_init(&_eq->xrc.sidr_conn_rbmap, fi_ibv_sidr_conn_compare);
+
 	fastlock_init(&_eq->lock);
 	ret = dlistfd_head_init(&_eq->list_head);
 	if (ret) {

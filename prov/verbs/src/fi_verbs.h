@@ -289,6 +289,14 @@ struct fi_ibv_eq {
 		 * consider using an internal PEP listener for handling the
 		 * internally processed reciprocal connections. */
 		uint16_t		pep_port;
+
+		/* SIDR request/responses are a two-way handshake; therefore,
+		 * we maintain an RB tree of SIDR accept responses, so that if
+		 * a response is lost, the subsequent retried request can be
+		 * detected and the original accept response resent. Note, that
+		 * rejected requests can be passed to RXM and will be rejected
+		 * a second time. */
+		struct ofi_rbmap	sidr_conn_rbmap;
 	} xrc;
 };
 
@@ -354,7 +362,7 @@ struct fi_ibv_domain {
 		 * bound to the domain to avoid the need for additional
 		 * locking. */
 		struct ofi_rbmap	*ini_conn_rbmap;
-	} xrc ;
+	} xrc;
 
 	/* MR stuff */
 	struct ofi_mr_cache		cache;
@@ -593,6 +601,14 @@ struct fi_ibv_xrc_ep {
 	struct fi_ibv_ini_shared_conn	*ini_conn;
 	struct dlist_entry		ini_conn_entry;
 
+	/* The following is used for resending lost SIDR accept response
+	 * messages when a retransmit SIDR connect request is received. */
+	void				*accept_param_data;
+	size_t				accept_param_len;
+	uint16_t			remote_pep_port;
+	bool				recip_accept;
+	struct ofi_rbnode		*conn_map_node;
+
 	/* The following state is allocated during XRC bidirectional setup and
 	 * freed once the connection is established. */
 	struct fi_ibv_xrc_ep_conn_setup	*conn_setup;
@@ -665,6 +681,13 @@ struct fi_ibv_cm_data_hdr {
 	char	data[];
 };
 
+int fi_ibv_eq_add_sidr_conn(struct fi_ibv_xrc_ep *ep,
+			    void *param_data, size_t param_len);
+void fi_ibv_eq_remove_sidr_conn(struct fi_ibv_xrc_ep *ep);
+struct fi_ibv_xrc_ep *fi_ibv_eq_get_sidr_conn(struct fi_ibv_eq *eq,
+					      struct sockaddr *peer,
+					      uint16_t pep_port, bool recip);
+
 void fi_ibv_msg_ep_get_qp_attr(struct fi_ibv_ep *ep,
 			       struct ibv_qp_init_attr *attr);
 int fi_ibv_process_xrc_connreq(struct fi_ibv_ep *ep,
@@ -685,6 +708,9 @@ int fi_ibv_connect_xrc(struct fi_ibv_xrc_ep *ep, struct sockaddr *addr,
 		       int reciprocal, void *param, size_t paramlen);
 int fi_ibv_accept_xrc(struct fi_ibv_xrc_ep *ep, int reciprocal,
 		      void *param, size_t paramlen);
+int fi_ibv_resend_shared_accept_xrc(struct fi_ibv_xrc_ep *ep,
+				    struct fi_ibv_connreq *connreq,
+				    struct rdma_cm_id *id);
 void fi_ibv_free_xrc_conn_setup(struct fi_ibv_xrc_ep *ep, int disconnect);
 void fi_ibv_add_pending_ini_conn(struct fi_ibv_xrc_ep *ep, int reciprocal,
 				 void *conn_param, size_t conn_paramlen);

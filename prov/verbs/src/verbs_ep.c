@@ -229,6 +229,9 @@ static inline void fi_ibv_ep_xrc_close(struct fi_ibv_ep *ep)
 
 	if (xrc_ep->conn_setup)
 		fi_ibv_free_xrc_conn_setup(xrc_ep, 0);
+
+	if (xrc_ep->conn_map_node)
+		fi_ibv_eq_remove_sidr_conn(xrc_ep);
 	fi_ibv_ep_destroy_xrc_qp(xrc_ep);
 	xrc_ep->magic = 0;
 }

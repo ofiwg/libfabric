@@ -273,6 +273,35 @@ void fi_ibv_ep_tgt_conn_done(struct fi_ibv_xrc_ep *ep)
 }
 
 /* Caller must hold the eq:lock */
+int fi_ibv_resend_shared_accept_xrc(struct fi_ibv_xrc_ep *ep,
+				    struct fi_ibv_connreq *connreq,
+				    struct rdma_cm_id *id)
+{
+	struct rdma_conn_param conn_param = { 0 };
+	struct fi_ibv_xrc_cm_data *cm_data = ep->accept_param_data;
+
+	assert(cm_data && ep->tgt_ibv_qp);
+	assert(ep->tgt_ibv_qp->qp_num == connreq->xrc.tgt_qpn);
+	assert(ep->peer_srqn == connreq->xrc.peer_srqn);
+
+	fi_ibv_set_xrc_cm_data(cm_data, connreq->xrc.is_reciprocal,
+			       connreq->xrc.conn_tag, connreq->xrc.port,
+			       0, ep->srqn);
+	conn_param.private_data = cm_data;
+	conn_param.private_data_len = ep->accept_param_len;
+
+	conn_param.responder_resources = RDMA_MAX_RESP_RES;
+	conn_param.initiator_depth = RDMA_MAX_INIT_DEPTH;
+	conn_param.flow_control = 1;
+	conn_param.rnr_retry_count = 7;
+	if (ep->base_ep.srq_ep)
+		conn_param.srq = 1;
+	conn_param.qp_num = ep->tgt_ibv_qp->qp_num;
+
+	return rdma_accept(id, &conn_param);
+}
+
+/* Caller must hold the eq:lock */
 int fi_ibv_accept_xrc(struct fi_ibv_xrc_ep *ep, int reciprocal,
 		      void *param, size_t paramlen)
 {
@@ -298,6 +327,8 @@ int fi_ibv_accept_xrc(struct fi_ibv_xrc_ep *ep, int reciprocal,
 		return ret;
 
 	ep->peer_srqn = connreq->xrc.peer_srqn;
+	ep->remote_pep_port = connreq->xrc.port;
+	ep->recip_accept = connreq->xrc.is_reciprocal;
 	fi_ibv_set_xrc_cm_data(cm_data, connreq->xrc.is_reciprocal,
 			       connreq->xrc.conn_tag, connreq->xrc.port,
 			       0, ep->srqn);
@@ -325,8 +356,14 @@ int fi_ibv_accept_xrc(struct fi_ibv_xrc_ep *ep, int reciprocal,
 		VERBS_WARN(FI_LOG_EP_CTRL,
 			   "XRC TGT, rdma_accept error %d\n", ret);
 		fi_ibv_prev_xrc_conn_state(ep);
-	} else
-		free(connreq);
+		return ret;
+	}
+	free(connreq);
+
+	if (ep->tgt_id->ps == RDMA_PS_UDP &&
+	    fi_ibv_eq_add_sidr_conn(ep, cm_data, paramlen))
+		VERBS_WARN(FI_LOG_EP_CTRL,
+			   "SIDR connection accept not added to map\n");
 
 	/* The passive side of the initial shared connection using
 	 * SIDR is complete, initiate reciprocal connection */
