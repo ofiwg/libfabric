@@ -44,22 +44,23 @@ static void smr_resolve_addr(const char *node, const char *service,
 
 	if (service) {
 		if (node)
-			snprintf(temp_name, NAME_MAX, "%s%s:%s",
+			snprintf(temp_name, NAME_MAX - 1, "%s%s:%s",
 				 SMR_PREFIX_NS, node, service);
 		else
-			snprintf(temp_name, NAME_MAX, "%s%s",
+			snprintf(temp_name, NAME_MAX - 1, "%s%s",
 				 SMR_PREFIX_NS, service);
 	} else {
 		if (node)
-			snprintf(temp_name, NAME_MAX, "%s%s",
+			snprintf(temp_name, NAME_MAX - 1, "%s%s",
 				 SMR_PREFIX, node);
 		else
-			snprintf(temp_name, NAME_MAX, "%s%d",
+			snprintf(temp_name, NAME_MAX - 1, "%s%d",
 				 SMR_PREFIX, getpid());
 	}
 
 	*addr = strdup(temp_name);
-	*addrlen = strlen(*addr);
+	*addrlen = strlen(*addr) + 1;
+	(*addr)[*addrlen - 1]  = '\0';
 }
 
 static int smr_get_ptrace_scope(void)
