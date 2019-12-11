@@ -8,15 +8,19 @@ import common
 sys.path.append(os.environ['CI_SITE_CONFIG'])
 import ci_site_config
 
+# read Jenkins environment variables
+# In Jenkins, JOB_NAME = 'ofi_libfabric/master' vs BRANCH_NAME = 'master'
+# job name is better to use to distinguish between builds of different
+# jobs but with the same branch name.
 fab = os.environ['FABRIC']#args.fabric
-brname = os.environ['BRANCH_NAME']#args.branchname
+jbname = os.environ['JOB_NAME']#args.jobname
 bno = os.environ['BUILD_NUMBER']#args.buildno
 
 
 #run fi_info test
 def fi_info_test(core, hosts, mode,util=None):
     
-    fi_info_test = tests.FiInfoTest(branchname=brname,buildno=bno,\
+    fi_info_test = tests.FiInfoTest(jobname=jbname,buildno=bno,\
                     testname="fi_info", core_prov=core, fabric=fab,\
                          hosts=hosts, ofi_build_mode=mode, util_prov=util)
     print("running fi_info test for {}-{}-{}".format(core, util, fab))
@@ -26,7 +30,7 @@ def fi_info_test(core, hosts, mode,util=None):
 #runfabtests
 def fabtests(core, hosts, mode, util=None):
        
-    runfabtest = tests.Fabtest(branchname=brname,buildno=bno,\
+    runfabtest = tests.Fabtest(jobname=jbname,buildno=bno,\
                  testname="runfabtests", core_prov=core, fabric=fab,\
                  hosts=hosts, ofi_build_mode=mode, util_prov=util)
 
@@ -39,7 +43,7 @@ def fabtests(core, hosts, mode, util=None):
     print("----------------------------------------------------------------------------------------\n")
     
 def shmemtest(core, hosts, mode, util=None):
-    runshmemtest = tests.ShmemTest(branchname=brname,buildno=bno,\
+    runshmemtest = tests.ShmemTest(jobname=jbname,buildno=bno,\
                  testname="shmem test", core_prov=core, fabric=fab,\
                  hosts=hosts, ofi_build_mode=mode, util_prov=util)
     if (runshmemtest.execute_condn):
@@ -60,7 +64,7 @@ def shmemtest(core, hosts, mode, util=None):
 #imb-tests
 def intel_mpi_benchmark(core, hosts, mpi, mode, util=None):
 
-    imb_test = tests.MpiTestIMB(branchname=brname,buildno=bno,\
+    imb_test = tests.MpiTestIMB(jobname=jbname,buildno=bno,\
                testname="IntelMPIbenchmark",core_prov=core, fabric=fab,\
                hosts=hosts, mpitype=mpi, ofi_build_mode=mode, util_prov=util)
     
@@ -75,7 +79,7 @@ def intel_mpi_benchmark(core, hosts, mpi, mode, util=None):
 #mpi_stress benchmark tests
 def mpistress_benchmark(core, hosts, mpi, mode, util=None):
 
-    stress_test = tests.MpiTestStress(branchname=brname,buildno=bno,\
+    stress_test = tests.MpiTestStress(jobname=jbname,buildno=bno,\
                   testname="stress",core_prov=core, fabric=fab, mpitype=mpi,\
                   hosts=hosts, ofi_build_mode=mode, util_prov=util)
  
@@ -90,7 +94,7 @@ def mpistress_benchmark(core, hosts, mpi, mode, util=None):
 #osu benchmark tests    
 def osu_benchmark(core, hosts, mpi, mode, util=None):
 
-    osu_test = tests.MpiTestOSU(branchname=brname, buildno=bno, \
+    osu_test = tests.MpiTestOSU(jobname=jbname, buildno=bno, \
                testname="osu-benchmarks",core_prov=core, fabric=fab, mpitype=mpi, \
                hosts=hosts, ofi_build_mode=mode, util_prov=util)
     
