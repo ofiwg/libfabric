@@ -229,13 +229,21 @@ fi_ibv_cq_sread(struct fid_cq *cq, void *buf, size_t count, const void *cond,
 /* Must be called with CQ lock held. */
 int vrb_poll_cq(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 {
+	struct vrb_context *ctx;
 	int ret;
 
 	do {
 		ret = ibv_poll_cq(cq->cq, 1, wc);
-		if (ret > 0 && !(wc->opcode & IBV_WC_RECV))
-			cq->credits++;
-	} while (ret > 0 && wc->wr_id == VERBS_NO_COMP_FLAG);
+		if (ret <= 0 || (wc->opcode & IBV_WC_RECV))
+			break;
+
+		ctx = (struct vrb_context *) (uintptr_t) wc->wr_id;
+		cq->credits++;
+		ctx->ep->tx_credits++;
+		wc->wr_id = (uintptr_t) ctx->user_ctx;
+		ofi_buf_free(ctx);
+
+	} while (wc->wr_id == VERBS_NO_COMP_FLAG);
 
 	return ret;
 }
@@ -334,7 +342,7 @@ static ssize_t fi_ibv_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 	}
 
 	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
-	return i ? i : (ret ? ret : -FI_EAGAIN);
+	return i ? i : (ret < 0 ? ret : -FI_EAGAIN);
 }
 
 static const char *
@@ -477,6 +485,7 @@ static int fi_ibv_cq_close(fid_t fid)
 	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
 
 	ofi_bufpool_destroy(cq->wce_pool);
+	ofi_bufpool_destroy(cq->ctx_pool);
 
 	if (cq->cq) {
 		ret = ibv_destroy_cq(cq->cq);
@@ -629,6 +638,11 @@ int fi_ibv_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 		ret = -FI_ENOSYS;
 		goto err6;
 	}
+
+	ret = ofi_bufpool_create(&cq->ctx_pool, sizeof(struct fi_context),
+				 16, size, fi_ibv_gl_data.def_tx_size, 0);
+	if (ret)
+		goto err6;
 
 	slist_init(&cq->saved_wc_list);
 	dlist_init(&cq->xrc.srq_list);

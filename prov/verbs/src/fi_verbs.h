@@ -398,6 +398,10 @@ struct fi_ibv_cq {
 	} xrc;
 
 	size_t			credits;
+	/* As a future optimization, we can use the app's context
+	 * if they set FI_CONTEXT.
+	 */
+	struct ofi_bufpool	*ctx_pool;
 };
 
 int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
@@ -545,6 +549,10 @@ struct fi_ibv_xrc_ep_conn_setup {
 struct fi_ibv_ep {
 	struct util_ep			util_ep;
 	struct ibv_qp			*ibv_qp;
+
+	/* Protected by send CQ lock */
+	size_t				tx_credits;
+
 	union {
 		struct rdma_cm_id		*id;
 		struct {
@@ -568,6 +576,14 @@ struct fi_ibv_ep {
 	struct rdma_conn_param		conn_param;
 	struct fi_ibv_cm_data_hdr	*cm_hdr;
 };
+
+
+/* Must be cast-able to struct fi_context */
+struct vrb_context {
+	struct fi_ibv_ep		*ep;
+	void				*user_ctx;
+};
+
 
 #define VERBS_XRC_EP_MAGIC		0x1F3D5B79
 struct fi_ibv_xrc_ep {
