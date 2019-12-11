@@ -226,6 +226,7 @@ fi_ibv_cq_sread(struct fid_cq *cq, void *buf, size_t count, const void *cond,
 	return cur ? cur : ret;
 }
 
+/* Must be called with CQ lock held. */
 int vrb_poll_cq(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 {
 	int ret;
@@ -233,7 +234,7 @@ int vrb_poll_cq(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 	do {
 		ret = ibv_poll_cq(cq->cq, 1, wc);
 		if (ret > 0 && !(wc->opcode & IBV_WC_RECV))
-			ofi_atomic_inc32(&cq->credits);
+			cq->credits++;
 	} while (ret > 0 && wc->wr_id == VERBS_NO_COMP_FLAG);
 
 	return ret;
@@ -635,8 +636,7 @@ int fi_ibv_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 
 	ofi_atomic_initialize32(&cq->nevents, 0);
 
-	assert(size < INT32_MAX);
-	ofi_atomic_initialize32(&cq->credits, size);
+	cq->credits = size;
 
 	*cq_fid = &cq->util_cq.cq_fid;
 	return 0;

@@ -45,30 +45,35 @@ ssize_t vrb_post_send(struct fi_ibv_ep *ep, struct ibv_send_wr *wr)
 	int ret, retry = 1;
 
 	cq = container_of(ep->util_ep.tx_cq, struct fi_ibv_cq, util_cq);
+	cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
 retry:
-	if (ofi_atomic_dec32(&cq->credits) < 0)
+	if (cq->credits == 0)
 		goto free_cq_space;
 
+	cq->credits--;
+	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
+
 	ret = ibv_post_send(ep->ibv_qp, wr, &bad_wr);
-	if (ret)
+	if (ret) {
+		cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
+		cq->credits++;
 		goto free_cq_space;
+	}
 
 	return 0;
 
 free_cq_space:
-	ofi_atomic_inc32(&cq->credits);
 	if (retry) {
 		retry = 0;
 
-		cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
 		ret = vrb_poll_cq(cq, &wc);
 		if (ret > 0)
 			vrb_save_wc(cq, &wc);
-		cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
 
 		if (ret > 0)
 			goto retry;
 	}
+	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
 	return -FI_EAGAIN;
 }
 
@@ -249,7 +254,9 @@ static int fi_ibv_close_free_ep(struct fi_ibv_ep *ep)
 
 	if (ep->util_ep.rx_cq) {
 		cq = container_of(ep->util_ep.rx_cq, struct fi_ibv_cq, util_cq);
-		ofi_atomic_add32(&cq->credits, (int32_t) ep->rx_size);
+		cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
+		cq->credits += ep->rx_size;
+		cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
 	}
 	ret = ofi_endpoint_close(&ep->util_ep);
 	if (ret)
@@ -364,22 +371,24 @@ static int fi_ibv_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	case FI_CLASS_CQ:
 		/* Reserve space for receives */
 		if (flags & FI_RECV) {
-			/* This check isn't thread safe, but we'll change the
-			 * locking in a follow on patch.
-			 */
-			if (ofi_atomic_get32(&cq->credits) < ep->rx_size) {
+			cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
+			if (cq->credits < ep->rx_size) {
+				cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
 				VERBS_WARN(FI_LOG_DOMAIN,
 					   "CQ is fully reserved\n");
 				return -FI_ENOCQ;
 			}
+			cq->credits -= ep->rx_size;
+			cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
 		}
 
 		ret = ofi_ep_bind_cq(&ep->util_ep, &cq->util_cq, flags);
-		if (ret)
+		if (ret) {
+			cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
+			cq->credits += ep->rx_size;
+			cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
 			return ret;
-
-		if (flags & FI_RECV)
-			ofi_atomic_sub32(&cq->credits, (int32_t) ep->rx_size);
+		}
 		break;
 	case FI_CLASS_EQ:
 		if (ep->util_ep.type != FI_EP_MSG)

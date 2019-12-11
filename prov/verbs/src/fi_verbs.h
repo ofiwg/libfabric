@@ -381,10 +381,8 @@ struct fi_ibv_cq {
 		fastlock_t		srq_list_lock;
 		struct dlist_entry	srq_list;
 	} xrc;
-	/* Track tx credits for verbs devices that can free-up send queue
-	 * space after processing WRs even if the app hasn't read the CQ.
-	 * Without this tracking we might overrun the CQ */
-	ofi_atomic32_t		credits;
+
+	size_t			credits;
 };
 
 int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
