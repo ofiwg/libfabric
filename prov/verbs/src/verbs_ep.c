@@ -240,12 +240,17 @@ err1:
 
 static int fi_ibv_close_free_ep(struct fi_ibv_ep *ep)
 {
+	struct fi_ibv_cq *cq;
 	int ret;
 
 	free(ep->util_ep.ep_fid.msg);
 	ep->util_ep.ep_fid.msg = NULL;
 	free(ep->cm_hdr);
 
+	if (ep->util_ep.rx_cq) {
+		cq = container_of(ep->util_ep.rx_cq, struct fi_ibv_cq, util_cq);
+		ofi_atomic_add32(&cq->credits, (int32_t) ep->rx_size);
+	}
 	ret = ofi_endpoint_close(&ep->util_ep);
 	if (ret)
 		return ret;
@@ -358,62 +363,61 @@ static int fi_ibv_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	if (ret)
 		return ret;
 
-	switch (ep->util_ep.type) {
-	case FI_EP_MSG:
-		switch (bfid->fclass) {
-		case FI_CLASS_CQ:
-			ret = ofi_ep_bind_cq(&ep->util_ep, &cq->util_cq, flags);
-			if (ret)
-				return ret;
-			break;
-		case FI_CLASS_EQ:
-			ep->eq = container_of(bfid, struct fi_ibv_eq, eq_fid.fid);
-
-			/* Make sure EQ channel is not polled during migrate */
-			fastlock_acquire(&ep->eq->lock);
-			if (fi_ibv_is_xrc(ep->info))
-				ret = fi_ibv_ep_xrc_set_tgt_chan(ep);
-			else
-				ret = rdma_migrate_id(ep->id, ep->eq->channel);
-			fastlock_release(&ep->eq->lock);
-
-			if (ret)
-				return -errno;
-
-			break;
-		case FI_CLASS_SRX_CTX:
-			ep->srq_ep = container_of(bfid, struct fi_ibv_srq_ep, ep_fid.fid);
-			break;
-		default:
-			return -FI_EINVAL;
+	switch (bfid->fclass) {
+	case FI_CLASS_CQ:
+		/* Reserve space for receives */
+		if (flags & FI_RECV) {
+			/* This check isn't thread safe, but we'll change the
+			 * locking in a follow on patch.
+			 */
+			if (ofi_atomic_get32(&cq->credits) < ep->rx_size) {
+				VERBS_WARN(FI_LOG_DOMAIN,
+					   "CQ is fully reserved\n");
+				return -FI_ENOCQ;
+			}
 		}
+
+		ret = ofi_ep_bind_cq(&ep->util_ep, &cq->util_cq, flags);
+		if (ret)
+			return ret;
+
+		if (flags & FI_RECV)
+			ofi_atomic_sub32(&cq->credits, (int32_t) ep->rx_size);
 		break;
-	case FI_EP_DGRAM:
-		switch (bfid->fclass) {
-		case FI_CLASS_CQ:
-			ret = ofi_ep_bind_cq(&ep->util_ep, &cq->util_cq, flags);
-			if (ret)
-				return ret;
-			break;
-		case FI_CLASS_AV:
-			av = container_of(bfid, struct fi_ibv_dgram_av,
-					  util_av.av_fid.fid);
-			return ofi_ep_bind_av(&ep->util_ep, &av->util_av);
-		default:
+	case FI_CLASS_EQ:
+		if (ep->util_ep.type != FI_EP_MSG)
 			return -FI_EINVAL;
-		}
+
+		ep->eq = container_of(bfid, struct fi_ibv_eq, eq_fid.fid);
+
+		/* Make sure EQ channel is not polled during migrate */
+		fastlock_acquire(&ep->eq->lock);
+		if (fi_ibv_is_xrc(ep->info))
+			ret = fi_ibv_ep_xrc_set_tgt_chan(ep);
+		else
+			ret = rdma_migrate_id(ep->id, ep->eq->channel);
+		fastlock_release(&ep->eq->lock);
+		if (ret)
+			return -errno;
+
 		break;
+	case FI_CLASS_SRX_CTX:
+		if (ep->util_ep.type != FI_EP_MSG)
+			return -FI_EINVAL;
+
+		ep->srq_ep = container_of(bfid, struct fi_ibv_srq_ep, ep_fid.fid);
+		break;
+	case FI_CLASS_AV:
+		if (ep->util_ep.type != FI_EP_DGRAM)
+			return -FI_EINVAL;
+
+		av = container_of(bfid, struct fi_ibv_dgram_av,
+				  util_av.av_fid.fid);
+		return ofi_ep_bind_av(&ep->util_ep, &av->util_av);
 	default:
-		VERBS_INFO(FI_LOG_DOMAIN, "Unknown EP type\n");
-		assert(0);
 		return -FI_EINVAL;
 	}
 
-	/* Reserve space for receives */
-	if ((bfid->fclass == FI_CLASS_CQ) && (flags & FI_RECV)) {
-		assert(ep->rx_size < INT32_MAX);
-		ofi_atomic_sub32(&cq->credits, (int32_t)ep->rx_size);
-	}
 	return 0;
 }
 
@@ -979,7 +983,9 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 		goto err1;
 	}
 
-	ep->rx_size = info->rx_attr->size;
+	if (info->ep_attr->rx_ctx_cnt == 0 || 
+	    info->ep_attr->rx_ctx_cnt == 1)
+		ep->rx_size = info->rx_attr->size;
 
 	*ep_fid = &ep->util_ep.ep_fid;
 	ep->util_ep.ep_fid.fid.ops = &fi_ibv_ep_ops;
