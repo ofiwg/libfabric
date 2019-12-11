@@ -395,7 +395,7 @@ int fi_ibv_find_max_inline(struct ibv_pd *pd, struct ibv_context *context,
 	qp_attr.qp_type = qp_type;
 	qp_attr.cap.max_send_wr = 1;
 	qp_attr.cap.max_send_sge = 1;
-	if (!fi_ibv_is_xrc_send_qp(qp_type)) {
+	if (qp_type != IBV_QPT_XRC_SEND) {
 		qp_attr.recv_cq = cq;
 		qp_attr.cap.max_recv_wr = 1;
 		qp_attr.cap.max_recv_sge = 1;

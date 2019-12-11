@@ -455,11 +455,6 @@ static inline int fi_ibv_is_xrc(struct fi_info *info)
 	       (FI_IBV_EP_PROTO(info) == FI_PROTO_RDMA_CM_IB_XRC);
 }
 
-static inline int fi_ibv_is_xrc_send_qp(enum ibv_qp_type qp_type)
-{
-	return qp_type == IBV_QPT_XRC_SEND;
-}
-
 int fi_ibv_domain_xrc_init(struct fi_ibv_domain *domain);
 int fi_ibv_domain_xrc_cleanup(struct fi_ibv_domain *domain);
 
