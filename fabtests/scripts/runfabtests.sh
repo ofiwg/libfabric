@@ -58,6 +58,7 @@ declare COMPLEX_CFG
 declare TIMEOUT_VAL="120"
 declare STRICT_MODE=0
 declare FORK=0
+declare OOB=0
 declare C_ARGS=""
 declare S_ARGS=""
 
@@ -364,8 +365,12 @@ function unit_test {
 	local test=$1
 	local is_neg=$2
 	local ret1=0
+	local s_interface=$(eval "if [ $OOB -eq 1 ]; \
+		then echo $GOOD_ADDR; \
+		else echo $S_INTERFACE; \
+		fi")
 	local test_exe=$(echo "${test} -p \"$PROV\"" | \
-	    sed -e "s/GOOD_ADDR/$GOOD_ADDR/g" -e "s/SERVER_ADDR/${S_INTERFACE}/g")
+	    sed -e "s/GOOD_ADDR/$GOOD_ADDR/g" -e "s/SERVER_ADDR/$s_interface/g")
 	local start_time
 	local end_time
 	local test_time
@@ -419,12 +424,22 @@ function cs_test {
 
 	start_time=$(date '+%s')
 
-	s_cmd="${BIN_PATH}${test_exe} ${S_ARGS} -s $S_INTERFACE"
+	if [[ $OOB -eq 1 ]]; then
+		s_arg="-E"
+	else
+		s_arg="-s $S_INTERFACE"
+	fi
+	s_cmd="${BIN_PATH}${test_exe} ${S_ARGS} $s_arg"
 	${SERVER_CMD} "${EXPORT_ENV} $s_cmd" &> $s_outp &
 	s_pid=$!
 	sleep 1
 
-	c_cmd="${BIN_PATH}${test_exe} ${C_ARGS} -s $C_INTERFACE $S_INTERFACE"
+	if [[ $OOB -eq 1 ]]; then
+		c_arg="-E $S_INTERFACE"
+	else
+		c_arg="-s $C_INTERFACE $S_INTERFACE"
+	fi
+	c_cmd="${BIN_PATH}${test_exe} ${C_ARGS} $c_arg"
 	${CLIENT_CMD} "${EXPORT_ENV} $c_cmd" &> $c_outp &
 	c_pid=$!
 
@@ -498,6 +513,10 @@ function complex_test {
 		opts="-f"
 	else
 		opts=""
+	fi
+
+	if [[ $OOB -eq 1 ]]; then
+		opts+=" -E"
 	fi
 
 	s_cmd="${BIN_PATH}${test_exe} -x $opts"
@@ -735,10 +754,11 @@ function usage {
 	errcho -e " -S\tStrict mode: -FI_ENODATA, -FI_ENOSYS errors would be treated as failures instead of skipped/notrun"
 	errcho -e " -C\tAdditional client test arguments: Parameters to pass to client fabtests"
 	errcho -e " -L\tAdditional server test arguments: Parameters to pass to server fabtests"
+	errcho -e " -b\tenable out-of-band address exchange over the default port"
 	exit 1
 }
 
-while getopts ":vt:p:g:e:f:c:s:u:T:C:L:NRSkE:" opt; do
+while getopts ":vt:p:g:e:f:c:s:u:T:C:L:NRSbkE:" opt; do
 case ${opt} in
 	t) TEST_TYPE=$OPTARG
 	;;
@@ -766,6 +786,8 @@ case ${opt} in
 	R)
 	;;
 	S) STRICT_MODE=1
+	;;
+	b) OOB=1
 	;;
 	k) FORK=1
 	;;
