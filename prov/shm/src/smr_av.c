@@ -57,7 +57,6 @@ static int smr_av_close(struct fid *fid)
 static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 			 fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
-	struct smr_addr *smr_names = (void *)addr;
 	struct util_av *util_av;
 	struct util_ep *util_ep;
 	struct smr_av *smr_av;
@@ -71,8 +70,8 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 	util_av = container_of(av_fid, struct util_av, av_fid);
 	smr_av = container_of(util_av, struct smr_av, util_av);
 
-	for (i = 0; i < count; i++) {
-		ep_name = smr_no_prefix((const char *) smr_names[i].name);
+	for (i = 0; i < count; i++, addr = (char *) addr + strlen(addr) + 1) {
+		ep_name = smr_no_prefix(addr);
 		ret = ofi_av_insert_addr(util_av, ep_name, &index);
 		if (ret) {
 			if (util_av->eq)
