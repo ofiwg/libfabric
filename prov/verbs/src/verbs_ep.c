@@ -39,40 +39,51 @@ static struct fi_ops_msg fi_ibv_srq_msg_ops;
 
 ssize_t vrb_post_send(struct fi_ibv_ep *ep, struct ibv_send_wr *wr)
 {
+	struct vrb_context *ctx;
 	struct fi_ibv_cq *cq;
 	struct ibv_send_wr *bad_wr;
 	struct ibv_wc wc;
-	int ret, retry = 1;
+	int ret;
 
 	cq = container_of(ep->util_ep.tx_cq, struct fi_ibv_cq, util_cq);
 	cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
-retry:
-	if (cq->credits == 0)
-		goto free_cq_space;
+	ctx = ofi_buf_alloc(cq->ctx_pool);
+	if (!ctx)
+		goto unlock;
 
-	cq->credits--;
-	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
-
-	ret = ibv_post_send(ep->ibv_qp, wr, &bad_wr);
-	if (ret) {
-		cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
-		cq->credits++;
-		goto free_cq_space;
-	}
-
-	return 0;
-
-free_cq_space:
-	if (retry) {
-		retry = 0;
-
+	if (!cq->credits || !ep->tx_credits) {
 		ret = vrb_poll_cq(cq, &wc);
 		if (ret > 0)
 			vrb_save_wc(cq, &wc);
 
-		if (ret > 0)
-			goto retry;
+		if (!cq->credits || !ep->tx_credits)
+			goto freebuf;
 	}
+
+	cq->credits--;
+	ep->tx_credits--;
+
+	ctx->ep = ep;
+	ctx->user_ctx = (void *) (uintptr_t) wr->wr_id;
+	wr->wr_id = (uintptr_t) ctx;
+
+	ret = ibv_post_send(ep->ibv_qp, wr, &bad_wr);
+	wr->wr_id = (uintptr_t) ctx->user_ctx;
+	if (ret) {
+		VERBS_WARN(FI_LOG_EP_DATA,
+			   "Post send failed - %zd\n", vrb_convert_ret(ret));
+		goto credits;
+	}
+	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
+
+	return 0;
+
+credits:
+	cq->credits++;
+	ep->tx_credits++;
+freebuf:
+	ofi_buf_free(ctx);
+unlock:
 	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
 	return -FI_EAGAIN;
 }
@@ -992,6 +1003,10 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	if (info->ep_attr->rx_ctx_cnt == 0 || 
 	    info->ep_attr->rx_ctx_cnt == 1)
 		ep->rx_size = info->rx_attr->size;
+	
+	if (info->ep_attr->tx_ctx_cnt == 0 || 
+	    info->ep_attr->tx_ctx_cnt == 1)
+		ep->tx_credits = info->tx_attr->size;
 
 	*ep_fid = &ep->util_ep.ep_fid;
 	ep->util_ep.ep_fid.fid.ops = &fi_ibv_ep_ops;
