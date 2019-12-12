@@ -543,6 +543,135 @@ static int util_coll_allgather(struct util_coll_operation *coll_op, const void *
 	return FI_SUCCESS;
 }
 
+static size_t util_binomial_tree_values_to_recv(uint64_t rank, size_t numranks)
+{
+	size_t nvalues = 0x1 << (ofi_lsb(rank) - 1);
+	if (numranks < rank + nvalues)
+		nvalues = numranks - rank;
+
+	return nvalues;
+}
+
+static int util_coll_scatter(struct util_coll_operation *coll_op, const void *data,
+			     void *result, void **temp, size_t count, uint64_t root,
+			     enum fi_datatype datatype)
+{
+	// scatter implemented with binomial tree algorithm
+	uint64_t local_rank, relative_rank;
+	size_t nbytes, numranks, send_cnt, cur_cnt;
+	int ret, mask, remote_rank;
+	void *send_data;
+
+	local_rank = coll_op->mc->local_rank;
+	numranks = coll_op->mc->av_set->fi_addr_count;
+	relative_rank = (local_rank >= root) ? local_rank - root : local_rank - root + numranks;
+	nbytes = count * ofi_datatype_size(datatype);
+
+	// check if we need to participate
+	if (count == 0)
+		return FI_SUCCESS;
+
+	// non-root even nodes get a temp buffer for receiving data
+	// these nodes may need to send part of what they receive
+	if (relative_rank && !(relative_rank % 2)) {
+		cur_cnt = count * util_binomial_tree_values_to_recv(relative_rank, numranks);
+		*temp = malloc(cur_cnt * ofi_datatype_size(datatype));
+		if (!*temp)
+			return -FI_ENOMEM;
+	}
+
+	if (local_rank == root) {
+		cur_cnt = count * numranks;
+		if (root != 0) {
+			// if we're root but not rank 0, we need to reorder the send buffer
+			// according to destination rank. if we're rank 3, data intended for
+			// ranks 0-2 will be moved to the end
+			*temp = malloc(cur_cnt * ofi_datatype_size(datatype));
+			if (!temp)
+				return -FI_ENOMEM;
+			ret = util_coll_sched_copy(coll_op,
+						   (char *) data + nbytes * local_rank, *temp,
+						   (numranks - local_rank) * count, datatype,
+						   1);
+			if (ret)
+				return ret;
+
+			ret = util_coll_sched_copy(coll_op, (char *) data,
+						   (char *) *temp +
+							   (numranks - local_rank) * nbytes,
+						   local_rank * count, datatype, 1);
+			if (ret)
+				return ret;
+		}
+	}
+
+	// set up all receives
+	mask = 0x1;
+	while (mask < numranks) {
+		if (relative_rank & mask) {
+			remote_rank = local_rank - mask;
+			if (remote_rank < 0)
+				remote_rank += numranks;
+
+			if (relative_rank % 2) {
+				// leaf node, we're receiving the actual data
+				ret = util_coll_sched_recv(coll_op, remote_rank, result, count,
+							   datatype, 1);
+				if (ret)
+					return ret;
+			} else {
+				// branch node, we're receiving data which we've got to forward
+				ret = util_coll_sched_recv(coll_op, remote_rank, *temp,
+							   cur_cnt, datatype, 1);
+				if (ret)
+					return ret;
+			}
+			break;
+		}
+		mask <<= 1;
+	}
+
+	// set up all sends
+	send_data = root == local_rank && root == 0 ? (void *) data : *temp;
+	mask >>= 1;
+	while (mask > 0) {
+		if (relative_rank + mask < numranks) {
+			// to this point, cur_cnt has represented the number of values
+			// to expect to store in our data buf
+			// from here on, cur_cnt is the number of values we have left to
+			// forward from the data buf
+			send_cnt = cur_cnt - count * mask;
+
+			remote_rank = local_rank + mask;
+			if (remote_rank >= numranks)
+				remote_rank -= numranks;
+
+			FI_DBG(coll_op->mc->av_set->av->prov, FI_LOG_CQ,
+			       "MASK: 0x%0x CUR_CNT: %ld SENDING: %ld TO: %d\n", mask, cur_cnt, send_cnt, remote_rank);
+
+			assert(send_cnt > 0);
+
+			ret = util_coll_sched_send(coll_op, remote_rank,
+							(char *) send_data +
+								nbytes * mask,
+							send_cnt, datatype, 1);
+			if (ret)
+				return ret;
+
+			cur_cnt -= send_cnt;
+		}
+		mask >>= 1;
+	}
+
+	if (!(relative_rank % 2)) {
+		// for the root and all even nodes, we've got to copy
+		// our local data to the result buffer
+		ret = util_coll_sched_copy(coll_op, send_data, result, count, datatype, 1);
+	}
+
+	return FI_SUCCESS;
+}
+
 static int util_coll_close(struct fid *fid)
 {
 	struct util_coll_mc *coll_mc;
@@ -565,8 +694,7 @@ static struct fi_ops util_coll_fi_ops = {
  * e.g. require local address to be in AV?
  * Determine best way to handle first join request
  */
-static int util_coll_find_local_rank(struct fid_ep *ep,
-				  struct util_coll_mc *coll_mc)
+static int util_coll_find_local_rank(struct fid_ep *ep, struct util_coll_mc *coll_mc)
 {
 	size_t addrlen;
 	char *addr;
@@ -631,8 +759,20 @@ void util_coll_collective_comp(struct util_coll_operation *coll_op)
 		FI_WARN(ep->domain->fabric->prov, FI_LOG_DOMAIN,
 			"barrier collective - cq write failed\n");
 
-	if(coll_op->type == UTIL_COLL_ALLREDUCE_OP)
+	switch (coll_op->type) {
+	case UTIL_COLL_ALLREDUCE_OP:
 		free(coll_op->data.allreduce.data);
+		break;
+	case UTIL_COLL_SCATTER_OP:
+		free(coll_op->data.scatter);
+		break;
+	case UTIL_COLL_JOIN_OP:
+	case UTIL_COLL_BARRIER_OP:
+	case UTIL_COLL_ALLGATHER_OP:
+	default:
+		//nothing to clean up
+		break;
+	}
 }
 
 static int util_coll_proc_reduce_item(struct util_coll_reduce_item *reduce_item)
@@ -1055,6 +1195,39 @@ err:
 	return ret;
 }
 
+ssize_t ofi_ep_scatter(struct fid_ep *ep, const void *buf, size_t count, void *desc,
+		       void *result, void *result_desc, fi_addr_t coll_addr,
+		       fi_addr_t root_addr, enum fi_datatype datatype, uint64_t flags,
+		       void *context)
+{
+	struct util_coll_mc *coll_mc;
+	struct util_coll_operation *scatter_op;
+	struct util_ep *util_ep;
+	int ret;
+
+	coll_mc = (struct util_coll_mc *) ((uintptr_t) coll_addr);
+	ret = util_coll_op_create(&scatter_op, coll_mc, UTIL_COLL_SCATTER_OP, context,
+				  util_coll_collective_comp);
+	if (ret)
+		return ret;
+
+	ret = util_coll_scatter(scatter_op, buf, result, &scatter_op->data.scatter, count, root_addr, datatype);
+	if (ret)
+		goto err;
+
+	ret = util_coll_sched_comp(scatter_op);
+	if (ret)
+		goto err;
+
+	util_ep = container_of(ep, struct util_ep, ep_fid);
+	util_coll_op_progress_work(util_ep, scatter_op);
+
+	return FI_SUCCESS;
+err:
+	free(scatter_op);
+	return ret;
+}
+
 void ofi_coll_handle_xfer_comp(uint64_t tag, void *ctx)
 {
 	struct util_ep *util_ep;
@@ -1076,6 +1249,7 @@ int ofi_query_collective(struct fid_domain *domain, enum fi_collective_op coll,
 	switch (coll) {
 	case FI_BARRIER:
 	case FI_ALLGATHER:
+	case FI_SCATTER:
 		ret = FI_SUCCESS;
 		break;
 	case FI_ALLREDUCE:
@@ -1089,7 +1263,6 @@ int ofi_query_collective(struct fid_domain *domain, enum fi_collective_op coll,
 	case FI_ALLTOALL:
 	case FI_REDUCE_SCATTER:
 	case FI_REDUCE:
-	case FI_SCATTER:
 	case FI_GATHER:
 	default:
 		return -FI_ENOSYS;

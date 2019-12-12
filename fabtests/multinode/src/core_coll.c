@@ -286,6 +286,65 @@ errout:
 	return err;
 }
 
+static int scatter_test_run()
+{
+	int err;
+	uint64_t done_flag;
+	uint64_t result;
+	uint64_t *data;
+	uint64_t i;
+	struct fi_collective_attr attr;
+	fi_addr_t root = 0;
+	size_t data_size = pm_job.num_ranks * sizeof(*data);
+
+	attr.op = FI_NOOP;
+	attr.datatype = FI_UINT64;
+	attr.mode = 0;
+	err = fi_query_collective(domain, FI_SCATTER, &attr, 0);
+	if (err) {
+		FT_DEBUG("Scatter collective not supported: %d (%s)\n", err,
+			 fi_strerror(err));
+		return err;
+	}
+
+	data = malloc(data_size);
+	if (!data)
+		return -FI_ENOMEM;
+
+	for (i = 0; i < pm_job.num_ranks; i++) {
+		data[i] = i;
+	}
+
+	coll_addr = fi_mc_addr(coll_mc);
+	if (pm_job.my_rank == root)
+		err = fi_scatter(ep, data, 1, NULL, &result, NULL, coll_addr, root,
+				 FI_UINT64, 0, &done_flag);
+	else
+		err = fi_scatter(ep, NULL, 1, NULL, &result, NULL, coll_addr, root,
+				 FI_UINT64, 0, &done_flag);
+
+	if (err) {
+		FT_DEBUG("collective scatter failed: %d (%s)\n", err, fi_strerror(err));
+		goto errout;
+	}
+
+	err = wait_for_comp(&done_flag);
+	if (err)
+		goto errout;
+
+	if (data[pm_job.my_rank] != result) {
+		FT_DEBUG("scatter failed; expect: %ld, actual: %ld\n",
+			 data[pm_job.my_rank], result);
+		err = -1;
+		goto errout;
+	}
+	return FI_SUCCESS;
+
+errout:
+	free(data);
+	return err;
+}
+
 struct coll_test tests[] = {
 	{
 		.name = "join_test",
@@ -309,6 +368,12 @@ struct coll_test tests[] = {
 		.name = "all_gather_test",
 		.setup = coll_setup,
 		.run = all_gather_test_run,
+		.teardown = coll_teardown
+	},
+	{
+		.name = "scatter_test",
+		.setup = coll_setup,
+		.run = scatter_test_run,
 		.teardown = coll_teardown
 	},
 };

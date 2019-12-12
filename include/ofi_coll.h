@@ -49,6 +49,7 @@ enum util_coll_op_type {
 	UTIL_COLL_ALLREDUCE_OP,
 	UTIL_COLL_BROADCAST_OP,
 	UTIL_COLL_ALLGATHER_OP,
+	UTIL_COLL_SCATTER_OP,
 };
 
 struct util_av_set {
@@ -151,6 +152,7 @@ struct util_coll_operation {
 		struct join_data	join;
 		struct barrier_data	barrier;
 		struct allreduce_data	allreduce;
+		void			*scatter;
 	} data;
 	util_coll_comp_fn_t		comp_fn;
 };
@@ -175,6 +177,11 @@ ssize_t ofi_ep_allreduce(struct fid_ep *ep, const void *buf, size_t count, void 
 ssize_t ofi_ep_allgather(struct fid_ep *ep, const void *buf, size_t count, void *desc,
 			 void *result, void *result_desc, fi_addr_t coll_addr,
 			 enum fi_datatype datatype, uint64_t flags, void *context);
+
+ssize_t ofi_ep_scatter(struct fid_ep *ep, const void *buf, size_t count, void *desc,
+		       void *result, void *result_desc, fi_addr_t coll_addr,
+		       fi_addr_t root_addr, enum fi_datatype datatype, uint64_t flags,
+		       void *context);
 
 int ofi_coll_ep_progress(struct fid_ep *ep);
 

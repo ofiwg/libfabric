@@ -1934,7 +1934,7 @@ static struct fi_ops_collective rxm_ops_collective = {
 	.allgather = ofi_ep_allgather,
 	.reduce_scatter = fi_coll_no_reduce_scatter,
 	.reduce = fi_coll_no_reduce,
-	.scatter = fi_coll_no_scatter,
+	.scatter = ofi_ep_scatter,
 	.gather = fi_coll_no_gather,
 	.msg = fi_coll_no_msg,
 };
