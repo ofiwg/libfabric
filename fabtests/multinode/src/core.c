@@ -53,6 +53,11 @@
 #include <arpa/inet.h>
 #include <assert.h>
 
+char *tx_barrier;
+char *rx_barrier;
+struct fid_mr *mr_barrier;
+struct fi_context2 *barrier_tx_ctx, *barrier_rx_ctx;
+
 struct pattern_ops *pattern;
 struct multinode_xfer_state state;
 struct multi_xfer_method method;
@@ -372,6 +377,35 @@ int multi_rma_wait()
 	return 0;
 }
 
+int send_recv_barrier(int sync)
+{
+	int ret, i;
+
+	for (i = 0; i < pm_job.num_ranks; i++) {
+		ret = ft_post_tx_buf(ep, pm_job.fi_addrs[i], 0, 
+				     NO_CQ_DATA, &barrier_tx_ctx[i],
+		                     tx_buf, mr_desc, 0);
+		if (ret)
+			return ret;
+	}
+	for(i = 0; i < pm_job.num_ranks; i++) {
+
+		ret = ft_post_rx_buf(ep, opts.transfer_size,
+			     &barrier_rx_ctx[i],
+			     rx_buf, mr_desc, 0);
+		if (ret)
+			return ret;
+	}
+
+	ret = ft_get_tx_comp(tx_seq);
+	if (ret)
+		return ret;
+
+	ret = ft_get_rx_comp(rx_seq);	
+
+	return ret;
+}
+
 static inline void multi_init_state()
 {
 	state.cur_source = PATTERN_NO_CURRENT;
@@ -407,20 +441,25 @@ static int multi_run_test()
 			ret = method.wait();
 			if (ret)
 				return ret;
-
-			pm_barrier();
 		}
+
+		ret = send_recv_barrier(iter);
+		if (ret)
+			return ret;
 	}
 	return 0;
 }
 
 static void pm_job_free_res()
 {
-
 	free(pm_job.names);
-
 	free(pm_job.fi_addrs);
 	free(pm_job.multi_iovs);
+
+	free(barrier_tx_ctx);
+	free(barrier_rx_ctx);
+
+	FT_CLOSE_FID(mr_barrier);
 }
 
 int multinode_run_tests(int argc, char **argv)
@@ -428,9 +467,19 @@ int multinode_run_tests(int argc, char **argv)
 	int ret = FI_SUCCESS;
 	int i;
 
+
+	barrier_tx_ctx = malloc(sizeof(*barrier_tx_ctx) * pm_job.num_ranks);
+	if (!barrier_tx_ctx)
+		return -FI_ENOMEM;
+
+	barrier_rx_ctx = malloc(sizeof(*barrier_rx_ctx) * pm_job.num_ranks);
+	if (!barrier_rx_ctx)
+		return -FI_ENOMEM;
+
 	ret = multi_setup_fabric(argc, argv);
 	if (ret)
 		return ret;
+	
 
 	for (i = 0; i < NUM_TESTS && !ret; i++) {
 		printf("starting %s... ", patterns[i].name);
@@ -440,9 +489,12 @@ int multinode_run_tests(int argc, char **argv)
 			printf("failed\n");
 		else
 			printf("passed\n");
+
+		fflush(stdout);
 	}
 
 	pm_job_free_res();
 	ft_free_res();
 	return ft_exit_code(ret);
 }
+
