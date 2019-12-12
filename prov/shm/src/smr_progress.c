@@ -340,12 +340,6 @@ static int smr_progress_cmd_msg(struct smr_ep *ep, struct smr_cmd *cmd)
 	recv_queue = (cmd->msg.hdr.op == ofi_op_tagged) ?
 		      &ep->trecv_queue : &ep->recv_queue;
 
-	if (dlist_empty(&recv_queue->list)) {
-		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-			"no recv entry available\n");
-		return -FI_ENOMSG;
-	}
-
 	match_attr.addr = cmd->msg.hdr.addr;
 	match_attr.tag = cmd->msg.hdr.tag;
 
