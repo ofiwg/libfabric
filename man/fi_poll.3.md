@@ -174,7 +174,8 @@ struct fi_wait_attr {
   allow applications to block until the wait object is signaled,
   indicating that an event is available to be read.  The following
   values may be used to specify the type of wait object associated
-  with a wait set: FI_WAIT_UNSPEC, FI_WAIT_FD, and FI_WAIT_MUTEX_COND.
+  with a wait set: FI_WAIT_UNSPEC, FI_WAIT_FD, FI_WAIT_MUTEX_COND,
+  and FI_WAIT_YIELD.
 
 - *FI_WAIT_UNSPEC*
 : Specifies that the user will only wait on the wait set using
@@ -197,9 +198,9 @@ struct fi_wait_attr {
 : Specifies that the wait set should use a pthread mutex and cond
   variable as a wait object.
 
-- *FI_WAIT_CRITSEC_COND*
-: Windows specific.  Specifies that the EQ should use a critical
-  section and condition variable as a wait object.
+- *FI_WAIT_YIELD*
+: Indicates that the wait set will wait without a wait object but instead
+  yield on every wait.
 
 *flags*
 : Flags that set the default operation of the wait set.  The use of

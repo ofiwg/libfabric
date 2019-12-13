@@ -38,8 +38,15 @@ int smr_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	int ret;
 	struct util_cntr *cntr;
 
-	if (attr->wait_obj != FI_WAIT_NONE) {
-		FI_INFO(&smr_prov, FI_LOG_CNTR, "cntr wait not yet supported\n");
+	switch (attr->wait_obj) {
+	case FI_WAIT_UNSPEC:
+		attr->wait_obj = FI_WAIT_YIELD;
+		/* fall through */
+	case FI_WAIT_NONE:
+	case FI_WAIT_YIELD:
+		break;
+	default:
+		FI_INFO(&smr_prov, FI_LOG_CQ, "cntr wait not yet supported\n");
 		return -FI_ENOSYS;
 	}
 

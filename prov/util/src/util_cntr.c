@@ -49,6 +49,7 @@ static int ofi_check_cntr_attr(const struct fi_provider *prov,
 
 	switch (attr->wait_obj) {
 	case FI_WAIT_NONE:
+	case FI_WAIT_YIELD:
 		break;
 	case FI_WAIT_SET:
 		if (!attr->wait_set) {
@@ -290,6 +291,7 @@ int ofi_cntr_init(const struct fi_provider *prov, struct fid_domain *domain,
 	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
 	case FI_WAIT_MUTEX_COND:
+	case FI_WAIT_YIELD:
 		memset(&wait_attr, 0, sizeof wait_attr);
 		wait_attr.wait_obj = attr->wait_obj;
 		cntr->internal_wait = 1;

@@ -92,7 +92,8 @@ enum ft_comp_method {
 	FT_COMP_SPIN = 0,
 	FT_COMP_SREAD,
 	FT_COMP_WAITSET,
-	FT_COMP_WAIT_FD
+	FT_COMP_WAIT_FD,
+	FT_COMP_YIELD,
 };
 
 enum {

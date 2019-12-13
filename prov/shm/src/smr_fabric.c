@@ -41,7 +41,7 @@ static struct fi_ops_fabric smr_fabric_ops = {
 	.domain = smr_domain_open,
 	.passive_ep = fi_no_passive_ep,
 	.eq_open = ofi_eq_create,
-	.wait_open = ofi_wait_fd_open,
+	.wait_open = ofi_wait_yield_open,
 	.trywait = ofi_trywait
 };
 

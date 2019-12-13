@@ -176,9 +176,9 @@ struct fi_eq_attr {
 : Specifies that the EQ should use a pthread mutex and cond variable
   as a wait object.
 
-- *FI_WAIT_CRITSEC_COND*
-: Windows specific.  Specifies that the EQ should use a critical
-  section and condition variable as a wait object.
+- *FI_WAIT_YIELD*
+: Indicates that the EQ will wait without a wait object but instead
+  yield on every wait. Allows usage of fi_eq_sread through a spin.
 
 *signaling_vector*
 : If the FI_AFFINITY flag is set, this indicates the logical cpu number

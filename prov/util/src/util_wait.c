@@ -81,6 +81,7 @@ int ofi_check_wait_attr(const struct fi_provider *prov,
 	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
 	case FI_WAIT_MUTEX_COND:
+	case FI_WAIT_YIELD:
 		break;
 	default:
 		FI_WARN(prov, FI_LOG_FABRIC, "invalid wait object type\n");
@@ -110,8 +111,8 @@ int fi_wait_cleanup(struct util_wait *wait)
 	return 0;
 }
 
-int fi_wait_init(struct util_fabric *fabric, struct fi_wait_attr *attr,
-		 struct util_wait *wait)
+int ofi_wait_init(struct util_fabric *fabric, struct fi_wait_attr *attr,
+		  struct util_wait *wait)
 {
 	struct fid_poll *poll_fid;
 	struct fi_poll_attr poll_attr;
@@ -128,6 +129,9 @@ int fi_wait_init(struct util_fabric *fabric, struct fi_wait_attr *attr,
 		break;
 	case FI_WAIT_MUTEX_COND:
 		wait->wait_obj = FI_WAIT_MUTEX_COND;
+		break;
+	case FI_WAIT_YIELD:
+		wait->wait_obj = FI_WAIT_YIELD;
 		break;
 	default:
 		assert(0);
@@ -182,7 +186,7 @@ out:
 }
 
 int ofi_wait_fd_add(struct util_wait *wait, int fd, uint32_t events,
-		    ofi_wait_fd_try_func wait_try, void *arg, void *context)
+		    ofi_wait_try_func wait_try, void *arg, void *context)
 {
 	struct ofi_wait_fd_entry *fd_entry;
 	struct dlist_entry *entry;
@@ -386,7 +390,7 @@ int ofi_wait_fd_open(struct fid_fabric *fabric_fid, struct fi_wait_attr *attr,
 	if (!wait)
 		return -FI_ENOMEM;
 
-	ret = fi_wait_init(fabric, attr, &wait->util_wait);
+	ret = ofi_wait_init(fabric, attr, &wait->util_wait);
 	if (ret)
 		goto err1;
 
@@ -422,5 +426,211 @@ err2:
 	fi_wait_cleanup(&wait->util_wait);
 err1:
 	free(wait);
+	return ret;
+}
+
+static void util_wait_yield_signal(struct util_wait *util_wait)
+{
+	struct util_wait_yield *wait_yield;
+
+	wait_yield = container_of(util_wait, struct util_wait_yield, util_wait);
+
+	fastlock_acquire(&wait_yield->signal_lock);
+	wait_yield->signal = 1;
+	fastlock_release(&wait_yield->signal_lock);
+}
+
+static int util_wait_yield_run(struct fid_wait *wait_fid, int timeout)
+{
+	struct util_wait_yield *wait = container_of(wait_fid,
+			struct util_wait_yield, util_wait.wait_fid);
+	struct ofi_wait_fid_entry *fid_entry;
+	int ret = 0;
+
+	while (!wait->signal) {
+		fastlock_acquire(&wait->wait_lock);
+		dlist_foreach_container(&wait->fid_list,
+					struct ofi_wait_fid_entry,
+					fid_entry, entry) {
+			ret = fid_entry->wait_try(fid_entry->fid);
+			if (ret)
+				return ret;
+		}
+		fastlock_release(&wait->wait_lock);
+		pthread_yield();
+	}
+
+	fastlock_acquire(&wait->signal_lock);
+	wait->signal = 0;
+	fastlock_release(&wait->signal_lock);
+
+	return FI_SUCCESS;
+}
+
+static int util_wait_yield_close(struct fid *fid)
+{
+	struct util_wait_yield *wait;
+	struct ofi_wait_fid_entry *fid_entry;
+	int ret;
+
+	wait = container_of(fid, struct util_wait_yield, util_wait.wait_fid.fid);
+	ret = fi_wait_cleanup(&wait->util_wait);
+	if (ret)
+		return ret;
+
+	while (!dlist_empty(&wait->fid_list)) {
+		dlist_pop_front(&wait->fid_list, struct ofi_wait_fid_entry,
+				fid_entry, entry);
+		free(fid_entry);
+	}
+
+	fastlock_destroy(&wait->wait_lock);
+	fastlock_destroy(&wait->signal_lock);
+	free(wait);
+	return 0;
+}
+
+static struct fi_ops_wait util_wait_yield_ops = {
+	.size = sizeof(struct fi_ops_wait),
+	.wait = util_wait_yield_run,
+};
+
+static struct fi_ops util_wait_yield_fi_ops = {
+	.size = sizeof(struct fi_ops),
+	.close = util_wait_yield_close,
+	.bind = fi_no_bind,
+	.control = fi_no_control,
+	.ops_open = fi_no_ops_open,
+};
+
+static int util_verify_wait_yield_attr(const struct fi_provider *prov,
+				       const struct fi_wait_attr *attr)
+{
+	int ret;
+
+	ret = ofi_check_wait_attr(prov, attr);
+	if (ret)
+		return ret;
+
+	switch (attr->wait_obj) {
+	case FI_WAIT_UNSPEC:
+	case FI_WAIT_YIELD:
+		break;
+	default:
+		FI_WARN(prov, FI_LOG_FABRIC, "unsupported wait object\n");
+		return -FI_EINVAL;
+	}
+
+	return 0;
+}
+
+int ofi_wait_yield_open(struct fid_fabric *fabric_fid, struct fi_wait_attr *attr,
+			struct fid_wait **waitset)
+{
+	struct util_fabric *fabric;
+	struct util_wait_yield *wait;
+	int ret;
+
+	fabric = container_of(fabric_fid, struct util_fabric, fabric_fid);
+	ret = util_verify_wait_yield_attr(fabric->prov, attr);
+	if (ret)
+		return ret;
+
+	attr->wait_obj = FI_WAIT_YIELD;
+	wait = calloc(1, sizeof(*wait));
+	if (!wait)
+		return -FI_ENOMEM;
+
+	ret = ofi_wait_init(fabric, attr, &wait->util_wait);
+	if (ret) {
+		free(wait);
+		return ret;
+	}
+
+	wait->util_wait.signal = util_wait_yield_signal;
+	wait->signal = 0;
+
+	wait->util_wait.wait_fid.fid.ops = &util_wait_yield_fi_ops;
+	wait->util_wait.wait_fid.ops = &util_wait_yield_ops;
+
+	fastlock_init(&wait->wait_lock);
+	fastlock_init(&wait->signal_lock);
+	dlist_init(&wait->fid_list);
+
+	*waitset = &wait->util_wait.wait_fid;
+
+	return 0;
+}
+
+static int ofi_wait_fid_match(struct dlist_entry *item, const void *arg)
+{
+	struct ofi_wait_fid_entry *fid_entry;
+
+	fid_entry = container_of(item, struct ofi_wait_fid_entry, entry);
+	return fid_entry->fid == arg;
+}
+
+int ofi_wait_fid_del(struct util_wait *wait, void *fid)
+{
+	int ret = 0;
+	struct ofi_wait_fid_entry *fid_entry;
+	struct dlist_entry *entry;
+	struct util_wait_yield *wait_yield = container_of(wait,
+						struct util_wait_yield,
+						util_wait);
+
+	fastlock_acquire(&wait_yield->wait_lock);
+	entry = dlist_find_first_match(&wait_yield->fid_list, ofi_wait_fid_match,
+				       fid);
+	if (!entry) {
+		FI_INFO(wait->prov, FI_LOG_FABRIC,
+			"Given fid (%p) not found in wait list - %p\n",
+			fid, wait_yield);
+		ret = -FI_EINVAL;
+		goto out;
+	}
+	fid_entry = container_of(entry, struct ofi_wait_fid_entry, entry);
+	if (ofi_atomic_dec32(&fid_entry->ref))
+		goto out;
+	dlist_remove(&fid_entry->entry);
+	free(fid_entry);
+out:
+	fastlock_release(&wait_yield->wait_lock);
+	return ret;
+}
+
+int ofi_wait_fid_add(struct util_wait *wait, ofi_wait_try_func wait_try,
+		     void *fid)
+{
+	struct ofi_wait_fid_entry *fid_entry;
+	struct dlist_entry *entry;
+	struct util_wait_yield *wait_yield = container_of(wait,
+					struct util_wait_yield, util_wait);
+	int ret = 0;
+
+	fastlock_acquire(&wait_yield->wait_lock);
+	entry = dlist_find_first_match(&wait_yield->fid_list, ofi_wait_fid_match,
+				       fid);
+	if (entry) {
+		FI_DBG(wait->prov, FI_LOG_EP_CTRL,
+		       "Given fid (%p) already added to wait list - %p \n",
+		       fid, wait_yield);
+		fid_entry = container_of(entry, struct ofi_wait_fid_entry, entry);
+		ofi_atomic_inc32(&fid_entry->ref);
+		goto out;
+	}
+
+	fid_entry = calloc(1, sizeof *fid_entry);
+	if (!fid_entry) {
+		ret = -FI_ENOMEM;
+		goto out;
+	}
+
+	fid_entry->fid = fid;
+	fid_entry->wait_try = wait_try;
+	ofi_atomic_initialize32(&fid_entry->ref, 1);
+	dlist_insert_tail(&fid_entry->entry, &wait_yield->fid_list);
+out:
+	fastlock_release(&wait_yield->wait_lock);
 	return ret;
 }

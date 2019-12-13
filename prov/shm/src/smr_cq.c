@@ -41,7 +41,14 @@ int smr_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	struct util_cq *util_cq;
 	int ret;
 
-	if (attr->wait_obj != FI_WAIT_NONE) {
+	switch (attr->wait_obj) {
+	case FI_WAIT_UNSPEC:
+		attr->wait_obj = FI_WAIT_YIELD;
+		/* fall through */
+	case FI_WAIT_NONE:
+	case FI_WAIT_YIELD:
+		break;
+	default:
 		FI_INFO(&smr_prov, FI_LOG_CQ, "CQ wait not yet supported\n");
 		return -FI_ENOSYS;
 	}

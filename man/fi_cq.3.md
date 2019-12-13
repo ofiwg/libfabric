@@ -221,8 +221,8 @@ struct fi_cq_tagged_entry {
   fi_control to retrieve the underlying wait object associated with a
   CQ, in order to use it in other system calls.  The following values
   may be used to specify the type of wait object associated with a
-  CQ: FI_WAIT_NONE, FI_WAIT_UNSPEC, FI_WAIT_SET, FI_WAIT_FD, and
-  FI_WAIT_MUTEX_COND.  The default is FI_WAIT_NONE.
+  CQ: FI_WAIT_NONE, FI_WAIT_UNSPEC, FI_WAIT_SET, FI_WAIT_FD,
+  FI_WAIT_MUTEX_COND, and FI_WAIT_YIELD.  The default is FI_WAIT_NONE.
 
 - *FI_WAIT_NONE*
 : Used to indicate that the user will not block (wait) for completions
@@ -252,9 +252,10 @@ struct fi_cq_tagged_entry {
 : Specifies that the CQ should use a pthread mutex and cond variable
   as a wait object.
 
-- *FI_WAIT_CRITSEC_COND*
-: Windows specific.  Specifies that the CQ should use a critical
-  section and condition variable as a wait object.
+- *FI_WAIT_YIELD*
+: Indicates that the CQ will wait without a wait object but instead
+  yield on every wait. Allows usage of fi_cq_sread and fi_cq_sreadfrom
+  through a spin.
 
 *signaling_vector*
 : If the FI_AFFINITY flag is set, this indicates the logical cpu number
