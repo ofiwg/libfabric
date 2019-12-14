@@ -477,11 +477,13 @@ STATIC int psmx2_av_insert(struct fid_av *av, const void *addr,
 			av_priv->table[idx].type = ep_name->type;
 			av_priv->table[idx].epid = ep_name->epid;
 			av_priv->table[idx].sep_id = ep_name->sep_id;
+			av_priv->table[idx].valid = 1;
 			free(ep_name);
 		} else {
 			av_priv->table[idx].type = names[i].type;
 			av_priv->table[idx].epid = names[i].epid;
 			av_priv->table[idx].sep_id = names[i].sep_id;
+			av_priv->table[idx].valid = 1;
 		}
 		av_priv->sep_info[idx].ctxt_cnt = 1;
 		av_priv->sep_info[idx].epids = NULL;
@@ -690,6 +692,7 @@ STATIC int psmx2_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 				if (!err)
 					av_priv->conn_info[j].epaddrs[idx] = NULL;
 			}
+			av_priv->table[idx].epid = 0;
 		} else {
 			if (!av_priv->sep_info[idx].epids)
 				continue;
@@ -709,7 +712,10 @@ STATIC int psmx2_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 						av_priv->conn_info[j].sepaddrs[idx][k] = NULL;
 				}
 			}
+			free(av_priv->sep_info[idx].epids);
+			av_priv->sep_info[idx].epids = NULL;
 		}
+		av_priv->table[idx].valid = 0;
 	}
 
 	av_priv->domain->av_unlock_fn(&av_priv->lock, 1);
@@ -764,6 +770,11 @@ STATIC int psmx2_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 	av_priv->domain->av_lock_fn(&av_priv->lock, 1);
 
 	if (idx >= av_priv->hdr->last) {
+		err = -FI_EINVAL;
+		goto out;
+	}
+
+	if (!av_priv->table[idx].valid) {
 		err = -FI_EINVAL;
 		goto out;
 	}
@@ -826,6 +837,9 @@ fi_addr_t psmx2_av_translate_source(struct psmx2_fid_av *av, psm2_epaddr_t sourc
 	ret = FI_ADDR_NOTAVAIL;
 	found = 0;
 	for (i = av->hdr->last - 1; i >= 0 && !found; i--) {
+		if (!av->table[i].valid)
+			continue;
+
 		if (av->table[i].type == PSMX2_EP_REGULAR) {
 			if (av->table[i].epid == epid) {
 				ret = (fi_addr_t)i;
@@ -873,6 +887,8 @@ void psmx2_av_remove_conn(struct psmx2_fid_av *av,
 	av->domain->av_lock_fn(&av->lock, 1);
 
 	for (i = 0; i < av->hdr->last; i++) {
+		if (!av->table[i].valid)
+			continue;
 		if (av->table[i].type == PSMX2_EP_REGULAR) {
 			if (av->table[i].epid == epid &&
 			    av->conn_info[trx_ctxt->id].epaddrs[i] == epaddr)
