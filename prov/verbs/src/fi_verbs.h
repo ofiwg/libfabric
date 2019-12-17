@@ -118,6 +118,7 @@
 				 sizeof(struct fi_ibv_cm_data_hdr))
 
 #define FI_IBV_CM_REJ_CONSUMER_DEFINED	28
+#define FI_IBV_CM_REJ_SIDR_CONSUMER_DEFINED	2
 
 #define VERBS_DGRAM_MSG_PREFIX_SIZE	(40)
 
@@ -288,6 +289,14 @@ struct fi_ibv_eq {
 		 * consider using an internal PEP listener for handling the
 		 * internally processed reciprocal connections. */
 		uint16_t		pep_port;
+
+		/* SIDR request/responses are a two-way handshake; therefore,
+		 * we maintain an RB tree of SIDR accept responses, so that if
+		 * a response is lost, the subsequent retried request can be
+		 * detected and the original accept response resent. Note, that
+		 * rejected requests can be passed to RXM and will be rejected
+		 * a second time. */
+		struct ofi_rbmap	sidr_conn_rbmap;
 	} xrc;
 };
 
@@ -303,6 +312,12 @@ struct fi_ibv_pep {
 	struct fid_pep		pep_fid;
 	struct fi_ibv_eq	*eq;
 	struct rdma_cm_id	*id;
+
+	/* XRC uses SIDR based RDMA CM exchanges for setting up
+	 * shared QP connections. This ID is bound to the same
+	 * port number as "id", but the RDMA_PS_UDP port space. */
+	struct rdma_cm_id	*xrc_ps_udp_id;
+
 	int			backlog;
 	int			bound;
 	size_t			src_addrlen;
@@ -347,7 +362,7 @@ struct fi_ibv_domain {
 		 * bound to the domain to avoid the need for additional
 		 * locking. */
 		struct ofi_rbmap	*ini_conn_rbmap;
-	} xrc ;
+	} xrc;
 
 	/* MR stuff */
 	struct ofi_mr_cache		cache;
@@ -526,20 +541,7 @@ struct fi_ibv_xrc_ep_conn_setup {
 	 * with the original request. The tag is created by the
 	 * original active side. */
 	uint32_t			conn_tag;
-	bool				created_conn_tag;
-
-	/* IB CM message stale/duplicate detection processing requires
-	 * that shared INI/TGT connections use unique QP numbers during
-	 * RDMA CM connection setup. To avoid conflicts with actual HCA
-	 * QP number space, we allocate minimal QP that are left in the
-	 * reset state and closed once the setup process completes. */
-	struct ibv_qp			*rsvd_ini_qpn;
-	struct ibv_qp			*rsvd_tgt_qpn;
-
-	/* Temporary flags to indicate if the INI QP setup and the
-	 * TGT QP setup have completed. */
-	bool				ini_connected;
-	bool				tgt_connected;
+	uint32_t			remote_conn_tag;
 
 	/* Delivery of the FI_CONNECTED event is delayed until
 	 * bidirectional connectivity is established. */
@@ -589,6 +591,7 @@ struct fi_ibv_xrc_ep {
 	struct rdma_cm_id		*tgt_id;
 	struct ibv_qp			*tgt_ibv_qp;
 	enum fi_ibv_xrc_ep_conn_state	conn_state;
+	bool				recip_req_received;
 	uint32_t			magic;
 	uint32_t			srqn;
 	uint32_t			peer_srqn;
@@ -597,6 +600,14 @@ struct fi_ibv_xrc_ep {
 	 * to the destination node. */
 	struct fi_ibv_ini_shared_conn	*ini_conn;
 	struct dlist_entry		ini_conn_entry;
+
+	/* The following is used for resending lost SIDR accept response
+	 * messages when a retransmit SIDR connect request is received. */
+	void				*accept_param_data;
+	size_t				accept_param_len;
+	uint16_t			remote_pep_port;
+	bool				recip_accept;
+	struct ofi_rbnode		*conn_map_node;
 
 	/* The following state is allocated during XRC bidirectional setup and
 	 * freed once the connection is established. */
@@ -607,7 +618,8 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 		   struct fid_ep **ep, void *context);
 int fi_ibv_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 		      struct fid_pep **pep, void *context);
-int fi_ibv_create_ep(const struct fi_info *hints, struct rdma_cm_id **id);
+int fi_ibv_create_ep(const struct fi_info *hints, enum rdma_port_space ps,
+		     struct rdma_cm_id **id);
 int fi_ibv_dgram_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 			 struct fid_av **av_fid, void *context);
 static inline
@@ -633,13 +645,14 @@ struct fi_ops_rma fi_ibv_msg_ep_rma_ops;
 struct fi_ops_rma fi_ibv_msg_xrc_ep_rma_ops_ts;
 struct fi_ops_rma fi_ibv_msg_xrc_ep_rma_ops;
 
-#define FI_IBV_XRC_VERSION	1
+#define FI_IBV_XRC_VERSION	2
 
 struct fi_ibv_xrc_cm_data {
 	uint8_t		version;
 	uint8_t		reciprocal;
 	uint16_t	port;
-	uint32_t	param;
+	uint32_t	tgt_qpn;
+	uint32_t	srqn;
 	uint32_t	conn_tag;
 };
 
@@ -647,7 +660,8 @@ struct fi_ibv_xrc_conn_info {
 	uint32_t		conn_tag;
 	uint32_t		is_reciprocal;
 	uint32_t		ini_qpn;
-	uint32_t		conn_data;
+	uint32_t		tgt_qpn;
+	uint32_t		peer_srqn;
 	uint16_t		port;
 	struct rdma_conn_param	conn_param;
 };
@@ -667,6 +681,13 @@ struct fi_ibv_cm_data_hdr {
 	char	data[];
 };
 
+int fi_ibv_eq_add_sidr_conn(struct fi_ibv_xrc_ep *ep,
+			    void *param_data, size_t param_len);
+void fi_ibv_eq_remove_sidr_conn(struct fi_ibv_xrc_ep *ep);
+struct fi_ibv_xrc_ep *fi_ibv_eq_get_sidr_conn(struct fi_ibv_eq *eq,
+					      struct sockaddr *peer,
+					      uint16_t pep_port, bool recip);
+
 void fi_ibv_msg_ep_get_qp_attr(struct fi_ibv_ep *ep,
 			       struct ibv_qp_init_attr *attr);
 int fi_ibv_process_xrc_connreq(struct fi_ibv_ep *ep,
@@ -679,13 +700,17 @@ void fi_ibv_eq_clear_xrc_conn_tag(struct fi_ibv_xrc_ep *ep);
 struct fi_ibv_xrc_ep *fi_ibv_eq_xrc_conn_tag2ep(struct fi_ibv_eq *eq,
 						uint32_t conn_tag);
 void fi_ibv_set_xrc_cm_data(struct fi_ibv_xrc_cm_data *local, int reciprocal,
-			    uint32_t conn_tag, uint16_t port, uint32_t param);
+			    uint32_t conn_tag, uint16_t port, uint32_t tgt_qpn,
+			    uint32_t srqn);
 int fi_ibv_verify_xrc_cm_data(struct fi_ibv_xrc_cm_data *remote,
 			      int private_data_len);
 int fi_ibv_connect_xrc(struct fi_ibv_xrc_ep *ep, struct sockaddr *addr,
 		       int reciprocal, void *param, size_t paramlen);
 int fi_ibv_accept_xrc(struct fi_ibv_xrc_ep *ep, int reciprocal,
 		      void *param, size_t paramlen);
+int fi_ibv_resend_shared_accept_xrc(struct fi_ibv_xrc_ep *ep,
+				    struct fi_ibv_connreq *connreq,
+				    struct rdma_cm_id *id);
 void fi_ibv_free_xrc_conn_setup(struct fi_ibv_xrc_ep *ep, int disconnect);
 void fi_ibv_add_pending_ini_conn(struct fi_ibv_xrc_ep *ep, int reciprocal,
 				 void *conn_param, size_t conn_paramlen);
@@ -699,8 +724,7 @@ void fi_ibv_save_priv_data(struct fi_ibv_xrc_ep *ep, const void *data,
 			   size_t len);
 int fi_ibv_ep_create_ini_qp(struct fi_ibv_xrc_ep *ep, void *dst_addr,
 			    uint32_t *peer_tgt_qpn);
-void fi_ibv_ep_ini_conn_done(struct fi_ibv_xrc_ep *ep, uint32_t peer_srqn,
-			    uint32_t peer_tgt_qpn);
+void fi_ibv_ep_ini_conn_done(struct fi_ibv_xrc_ep *ep, uint32_t peer_tgt_qpn);
 void fi_ibv_ep_ini_conn_rejected(struct fi_ibv_xrc_ep *ep);
 int fi_ibv_ep_create_tgt_qp(struct fi_ibv_xrc_ep *ep, uint32_t tgt_qpn);
 void fi_ibv_ep_tgt_conn_done(struct fi_ibv_xrc_ep *qp);

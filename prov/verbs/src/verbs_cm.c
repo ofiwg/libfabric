@@ -78,7 +78,7 @@ static int fi_ibv_msg_ep_setname(fid_t ep_fid, void *addr, size_t addrlen)
 
 	memcpy(ep->info->src_addr, addr, ep->info->src_addrlen);
 
-	ret = fi_ibv_create_ep(ep->info, &id);
+	ret = fi_ibv_create_ep(ep->info, RDMA_PS_TCP, &id);
 	if (ret)
 		goto err2;
 
@@ -254,7 +254,7 @@ fi_ibv_msg_xrc_ep_reject(struct fi_ibv_connreq *connreq,
 		return ret;
 
 	fi_ibv_set_xrc_cm_data(cm_data, connreq->xrc.is_reciprocal,
-			       connreq->xrc.conn_tag, connreq->xrc.port, 0);
+			       connreq->xrc.conn_tag, connreq->xrc.port, 0, 0);
 	ret = rdma_reject(connreq->id, cm_data,
 			  (uint8_t) paramlen) ? -errno : 0;
 	free(cm_data);
@@ -341,7 +341,6 @@ static int
 fi_ibv_msg_xrc_ep_connect(struct fid_ep *ep, const void *addr,
 		   const void *param, size_t paramlen)
 {
-	struct sockaddr *dst_addr;
 	void *adjusted_param;
 	struct fi_ibv_ep *_ep = container_of(ep, struct fi_ibv_ep,
 					     util_ep.ep_fid);
@@ -375,12 +374,10 @@ fi_ibv_msg_xrc_ep_connect(struct fid_ep *ep, const void *addr,
 		free(cm_hdr);
 		return -FI_ENOMEM;
 	}
+	xrc_ep->conn_setup->conn_tag = VERBS_CONN_TAG_INVALID;
 
 	fastlock_acquire(&xrc_ep->base_ep.eq->lock);
-	xrc_ep->conn_setup->conn_tag = VERBS_CONN_TAG_INVALID;
-	fi_ibv_eq_set_xrc_conn_tag(xrc_ep);
-	dst_addr = rdma_get_peer_addr(_ep->id);
-	ret = fi_ibv_connect_xrc(xrc_ep, dst_addr, 0, adjusted_param, paramlen);
+	ret = fi_ibv_connect_xrc(xrc_ep, NULL, 0, adjusted_param, paramlen);
 	fastlock_release(&xrc_ep->base_ep.eq->lock);
 
 	free(adjusted_param);
@@ -485,6 +482,7 @@ static int fi_ibv_pep_listen(struct fid_pep *pep_fid)
 {
 	struct fi_ibv_pep *pep;
 	struct sockaddr *addr;
+	int ret;
 
 	pep = container_of(pep_fid, struct fi_ibv_pep, pep_fid);
 
@@ -493,7 +491,16 @@ static int fi_ibv_pep_listen(struct fid_pep *pep_fid)
 		ofi_straddr_log(&fi_ibv_prov, FI_LOG_INFO,
 				FI_LOG_EP_CTRL, "listening on", addr);
 
-	return rdma_listen(pep->id, pep->backlog) ? -errno : 0;
+	ret = rdma_listen(pep->id, pep->backlog);
+	if (ret)
+		return -errno;
+
+	if (fi_ibv_is_xrc(pep->info)) {
+		ret = rdma_listen(pep->xrc_ps_udp_id, pep->backlog);
+		if (ret)
+			ret = -errno;
+	}
+	return ret;
 }
 
 static struct fi_ops_cm fi_ibv_pep_cm_ops = {

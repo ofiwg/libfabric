@@ -119,7 +119,6 @@ int fi_ibv_get_shared_ini_conn(struct fi_ibv_xrc_ep *ep,
 	struct fi_ibv_ini_shared_conn *conn;
 	struct ofi_rbnode *node;
 	int ret;
-	assert(ep->base_ep.id);
 
 	fi_ibv_set_ini_conn_key(ep, &key);
 	node = ofi_rbmap_find(domain->xrc.ini_conn_rbmap, &key);
@@ -243,6 +242,7 @@ void fi_ibv_sched_ini_conn(struct fi_ibv_ini_shared_conn *ini_conn)
 {
 	struct fi_ibv_xrc_ep *ep;
 	enum fi_ibv_ini_qp_state last_state;
+	struct sockaddr *addr;
 	int ret;
 
 	/* Continue to schedule shared connections if the physical connection
@@ -260,6 +260,18 @@ void fi_ibv_sched_ini_conn(struct fi_ibv_ini_shared_conn *ini_conn)
 		dlist_insert_tail(&ep->ini_conn_entry,
 				  &ep->ini_conn->active_list);
 		last_state = ep->ini_conn->state;
+
+		ret = fi_ibv_create_ep(ep->base_ep.info,
+				       last_state == FI_IBV_INI_QP_UNCONNECTED ?
+				       RDMA_PS_TCP : RDMA_PS_UDP,
+				       &ep->base_ep.id);
+		if (ret) {
+			VERBS_WARN(FI_LOG_EP_CTRL,
+				   "Failed to create active CM ID %d\n",
+				   ret);
+			goto err;
+		}
+
 		if (last_state == FI_IBV_INI_QP_UNCONNECTED) {
 			assert(!ep->ini_conn->phys_conn_id && ep->base_ep.id);
 
@@ -279,18 +291,28 @@ void fi_ibv_sched_ini_conn(struct fi_ibv_ini_shared_conn *ini_conn)
 			ep->ini_conn->phys_conn_id = ep->base_ep.id;
 		} else {
 			assert(!ep->base_ep.id->qp);
-
-			ret = fi_ibv_reserve_qpn(ep,
-					&ep->conn_setup->rsvd_ini_qpn);
-			if (ret) {
-				VERBS_WARN(FI_LOG_EP_CTRL,
-					   "Failed to create rsvd INI "
-					   "QP %d\n", ret);
-				goto err;
-			}
+			VERBS_DBG(FI_LOG_EP_CTRL, "Sharing XRC INI QPN %d\n",
+				  ep->ini_conn->ini_qp->qp_num);
 		}
 
 		assert(ep->ini_conn->ini_qp);
+		ep->base_ep.id->context = &ep->base_ep.util_ep.ep_fid.fid;
+		ret = rdma_migrate_id(ep->base_ep.id,
+				      ep->base_ep.eq->channel);
+		if (ret) {
+			VERBS_WARN(FI_LOG_EP_CTRL,
+				   "Failed to migrate active CM ID %d\n", ret);
+			goto err;
+		}
+
+		addr = rdma_get_local_addr(ep->base_ep.id);
+		if (addr)
+			ofi_straddr_dbg(&fi_ibv_prov, FI_LOG_EP_CTRL,
+					"XRC connect src_addr", addr);
+		addr = rdma_get_peer_addr(ep->base_ep.id);
+		if (addr)
+			ofi_straddr_dbg(&fi_ibv_prov, FI_LOG_EP_CTRL,
+					"XRC connect dest_addr", addr);
 
 		ep->base_ep.ibv_qp = ep->ini_conn->ini_qp;
 		ret = fi_ibv_process_ini_conn(ep, ep->conn_setup->pending_recip,
@@ -318,9 +340,12 @@ int fi_ibv_process_ini_conn(struct fi_ibv_xrc_ep *ep,int reciprocal,
 
 	assert(ep->base_ep.ibv_qp);
 
-	fi_ibv_set_xrc_cm_data(cm_data, reciprocal, ep->conn_setup->conn_tag,
+	fi_ibv_set_xrc_cm_data(cm_data, reciprocal, reciprocal ?
+			       ep->conn_setup->remote_conn_tag :
+			       ep->conn_setup->conn_tag,
 			       ep->base_ep.eq->xrc.pep_port,
-			       ep->ini_conn->tgt_qpn);
+			       ep->ini_conn->tgt_qpn, ep->srqn);
+
 	ep->base_ep.conn_param.private_data = cm_data;
 	ep->base_ep.conn_param.private_data_len = paramlen;
 	ep->base_ep.conn_param.responder_resources = RDMA_MAX_RESP_RES;
@@ -330,11 +355,9 @@ int fi_ibv_process_ini_conn(struct fi_ibv_xrc_ep *ep,int reciprocal,
 	ep->base_ep.conn_param.rnr_retry_count = 7;
 	ep->base_ep.conn_param.srq = 1;
 
-	/* Shared connections use reserved temporary QP numbers to
-	 * avoid the appearance of stale/duplicate CM messages */
 	if (!ep->base_ep.id->qp)
 		ep->base_ep.conn_param.qp_num =
-				ep->conn_setup->rsvd_ini_qpn->qp_num;
+				ep->ini_conn->ini_qp->qp_num;
 
 	assert(ep->conn_state == FI_IBV_XRC_UNCONNECTED ||
 	       ep->conn_state == FI_IBV_XRC_ORIG_CONNECTED);
@@ -358,7 +381,6 @@ int fi_ibv_ep_create_tgt_qp(struct fi_ibv_xrc_ep *ep, uint32_t tgt_qpn)
 	struct ibv_qp_open_attr open_attr;
 	struct ibv_qp_init_attr_ex attr_ex;
 	struct fi_ibv_domain *domain = fi_ibv_ep_to_domain(&ep->base_ep);
-	struct ibv_qp *rsvd_qpn;
 	int ret;
 
 	assert(ep->tgt_id && !ep->tgt_id->qp);
@@ -366,14 +388,6 @@ int fi_ibv_ep_create_tgt_qp(struct fi_ibv_xrc_ep *ep, uint32_t tgt_qpn)
 	/* If a target QP number was specified then open that existing
 	 * QP for sharing. */
 	if (tgt_qpn) {
-		ret = fi_ibv_reserve_qpn(ep, &rsvd_qpn);
-		if (!rsvd_qpn) {
-			VERBS_WARN(FI_LOG_EP_CTRL,
-				   "Create of XRC reserved QPN failed %d\n",
-				   ret);
-			return ret;
-		}
-
 		memset(&open_attr, 0, sizeof(open_attr));
 		open_attr.qp_num = tgt_qpn;
 		open_attr.comp_mask = IBV_QP_OPEN_ATTR_NUM |
@@ -388,10 +402,8 @@ int fi_ibv_ep_create_tgt_qp(struct fi_ibv_xrc_ep *ep, uint32_t tgt_qpn)
 			ret = -errno;
 			VERBS_WARN(FI_LOG_EP_CTRL,
 				   "XRC TGT QP ibv_open_qp failed %d\n", -ret);
-			ibv_destroy_qp(rsvd_qpn);
 			return ret;
 		}
-		ep->conn_setup->rsvd_tgt_qpn = rsvd_qpn;
 		return FI_SUCCESS;
 	}
 
@@ -446,9 +458,8 @@ static int fi_ibv_put_tgt_qp(struct fi_ibv_xrc_ep *ep)
 /* Caller must hold eq:lock */
 int fi_ibv_ep_destroy_xrc_qp(struct fi_ibv_xrc_ep *ep)
 {
-	if (ep->base_ep.ibv_qp) {
-		fi_ibv_put_shared_ini_conn(ep);
-	}
+	fi_ibv_put_shared_ini_conn(ep);
+
 	if (ep->base_ep.id) {
 		rdma_destroy_id(ep->base_ep.id);
 		ep->base_ep.id = NULL;
