@@ -38,6 +38,7 @@
 #include <pthread.h>
 #include <stdint.h>
 #include <stddef.h>
+#include <sys/wait.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_atomic.h>
