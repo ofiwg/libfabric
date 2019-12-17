@@ -8,7 +8,7 @@ def get_node_name(host, interface):
    return "%s-%s" % (host, interface)
 
 def run_command(command):
-    print(command)
+    print(" ".join(command))
     p = subprocess.Popen(command, stdout=subprocess.PIPE, text=True)
     print(p.returncode)
     while True:
