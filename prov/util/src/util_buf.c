@@ -79,7 +79,8 @@ int ofi_bufpool_grow(struct ofi_bufpool *pool)
 	} else {
 retry:
 		ret = ofi_memalign((void **) &buf_region->alloc_region,
-				   pool->attr.alignment, pool->alloc_size);
+				   roundup_power_of_two(pool->attr.alignment),
+				   pool->alloc_size);
 	}
 	if (ret) {
 		FI_DBG(&core_prov, FI_LOG_CORE, "Allocation failed: %s\n",
