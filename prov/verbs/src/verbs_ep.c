@@ -37,6 +37,17 @@
 static struct fi_ops_msg fi_ibv_srq_msg_ops;
 
 
+/* Receive CQ credits are pre-allocated */
+ssize_t vrb_post_recv(struct fi_ibv_ep *ep, struct ibv_recv_wr *wr)
+{
+	struct ibv_recv_wr *bad_wr;
+	int ret;
+
+	assert(ep->util_ep.rx_cq);
+	ret = ibv_post_recv(ep->ibv_qp, wr, &bad_wr);
+	return vrb_convert_ret(ret);
+}
+
 ssize_t vrb_post_send(struct fi_ibv_ep *ep, struct ibv_send_wr *wr)
 {
 	struct vrb_context *ctx;

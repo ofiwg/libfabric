@@ -885,6 +885,7 @@ int vrb_save_wc(struct fi_ibv_cq *cq, struct ibv_wc *wc);
 
 
 ssize_t vrb_post_send(struct fi_ibv_ep *ep, struct ibv_send_wr *wr);
+ssize_t vrb_post_recv(struct fi_ibv_ep *ep, struct ibv_recv_wr *wr);
 
 static inline ssize_t
 fi_ibv_send_buf(struct fi_ibv_ep *ep, struct ibv_send_wr *wr,
