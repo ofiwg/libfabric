@@ -1786,13 +1786,16 @@ static int pp_init_fabric(struct ct_pingpong *ct)
 				   NULL);
 		if (ret)
 			return ret;
-		ret = pp_av_insert(ct->av, ct->local_name, 1, &(ct->local_fi_addr), 0,
-				   NULL);
+		if (ct->fi->domain_attr->caps & FI_LOCAL_COMM)
+			ret = pp_av_insert(ct->av, ct->local_name, 1,
+					&(ct->local_fi_addr), 0, NULL);
 	} else {
-		ret = pp_av_insert(ct->av, ct->local_name, 1, &(ct->local_fi_addr), 0,
-				   NULL);
-		if (ret)
-			return ret;
+		if (ct->fi->domain_attr->caps & FI_LOCAL_COMM) {
+			ret = pp_av_insert(ct->av, ct->local_name, 1,
+					&(ct->local_fi_addr), 0, NULL);
+			if (ret)
+				return ret;
+		}
 		ret = pp_av_insert(ct->av, ct->rem_name, 1, &(ct->remote_fi_addr), 0,
 				   NULL);
 	}
