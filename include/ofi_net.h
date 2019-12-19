@@ -163,7 +163,7 @@ static inline size_t ofi_sizeofaddr(const struct sockaddr *addr)
 	case AF_INET6:
 		return sizeof(struct sockaddr_in6);
 	default:
-		FI_WARN(&core_prov, FI_LOG_CORE, "Unknown address format");
+		FI_WARN(&core_prov, FI_LOG_CORE, "Unknown address format\n");
 		return 0;
 	}
 }
@@ -176,7 +176,7 @@ static inline size_t ofi_sizeofip(const struct sockaddr *addr)
 	case AF_INET6:
 		return sizeof(struct in6_addr);
 	default:
-		FI_WARN(&core_prov, FI_LOG_CORE, "Unknown address format");
+		FI_WARN(&core_prov, FI_LOG_CORE, "Unknown address format\n");
 		return 0;
 	}
 }
