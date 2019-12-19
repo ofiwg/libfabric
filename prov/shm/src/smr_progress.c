@@ -601,6 +601,7 @@ int smr_progress_unexp(struct smr_ep *ep, struct smr_ep_entry *entry)
 	size_t total_len = 0;
 	int ret = 0;
 
+	fastlock_acquire(&ep->region->lock);
 	if (ofi_cirque_isfull(ep->util_ep.rx_cq->cirq)) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"rx cq full\n");
@@ -614,8 +615,10 @@ int smr_progress_unexp(struct smr_ep *ep, struct smr_ep_entry *entry)
 	dlist_entry = dlist_remove_first_match(&ep->unexp_queue.list,
 					       ep->unexp_queue.match_func,
 					       &match_attr);
-	if (!dlist_entry)
-		return -FI_ENOMSG;
+	if (!dlist_entry) {
+		ret = -FI_ENOMSG;
+		goto out;
+	}
 
 	unexp_msg = container_of(dlist_entry, struct smr_unexp_msg, entry);
 
@@ -656,10 +659,13 @@ int smr_progress_unexp(struct smr_ep *ep, struct smr_ep_entry *entry)
 	if (entry->flags & SMR_MULTI_RECV) {
 		ret = smr_progress_multi_recv(ep, &ep->trecv_queue, entry,
 					      total_len);
-		return ret ? ret : -FI_ENOMSG;
+		ret = ret ? ret : -FI_ENOMSG;
+		goto out;
 	}
 
 push_entry:
 	freestack_push(ep->recv_fs, entry);
+out:
+	fastlock_release(&ep->region->lock);
 	return ret;
 }
