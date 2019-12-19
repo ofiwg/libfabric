@@ -49,6 +49,7 @@ bin_PROGRAMS = \
 	benchmarks/fi_rdm_pingpong \
 	benchmarks/fi_rdm_tagged_pingpong \
 	benchmarks/fi_rdm_tagged_bw \
+	unit/fi_ep_test \
 	unit/fi_eq_test \
 	unit/fi_cq_test \
 	unit/fi_mr_test \
@@ -287,6 +288,11 @@ benchmarks_fi_rdm_tagged_bw_SOURCES = \
 	$(benchmarks_srcs)
 benchmarks_fi_rdm_tagged_bw_LDADD = libfabtests.la
 
+
+unit_fi_ep_test_SOURCES = \
+	unit/ep_test.c \
+	$(unit_srcs)
+unit_fi_ep_test_LDADD = libfabtests.la
 
 unit_fi_eq_test_SOURCES = \
 	unit/eq_test.c \
