@@ -62,6 +62,8 @@
 #include <ofi_recvwin.h>
 #include <ofi_perf.h>
 
+#include <sys/wait.h>
+
 #define RXR_MAJOR_VERSION	(2)
 #define RXR_MINOR_VERSION	(0)
 #define RXR_PROTOCOL_VERSION	(3)
