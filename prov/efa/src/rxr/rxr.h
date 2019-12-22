@@ -897,6 +897,12 @@ struct rxr_rx_entry *rxr_ep_rx_entry_init(struct rxr_ep *ep,
 void rxr_tx_entry_init(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry,
 		       const struct fi_msg *msg, uint32_t op, uint64_t flags);
 
+struct rxr_tx_entry *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
+					   const struct fi_msg *msg,
+					   uint32_t op,
+					   uint64_t tag,
+					   uint64_t flags);
+
 static inline void
 rxr_copy_pkt_entry(struct rxr_ep *ep,
 		   struct rxr_pkt_entry *dest,
@@ -1434,58 +1440,6 @@ static inline bool rxr_peer_timeout_expired(struct rxr_ep *ep,
 					  (1 << peer->rnr_timeout_exp))));
 }
 
-static inline bool
-rxr_multi_recv_buffer_available(struct rxr_ep *ep,
-				struct rxr_rx_entry *rx_entry)
-{
-	assert(rx_entry->fi_flags & FI_MULTI_RECV);
-	assert(rx_entry->rxr_flags & RXR_MULTI_RECV_POSTED);
-
-	return (ofi_total_iov_len(rx_entry->iov, rx_entry->iov_count)
-		>= ep->min_multi_recv_size);
-}
-
-static inline bool
-rxr_multi_recv_buffer_complete(struct rxr_ep *ep,
-			       struct rxr_rx_entry *rx_entry)
-{
-	assert(rx_entry->fi_flags & FI_MULTI_RECV);
-	assert(rx_entry->rxr_flags & RXR_MULTI_RECV_POSTED);
-
-	return (!rxr_multi_recv_buffer_available(ep, rx_entry) &&
-		dlist_empty(&rx_entry->multi_recv_consumers));
-}
-
-static inline void
-rxr_multi_recv_free_posted_entry(struct rxr_ep *ep,
-				 struct rxr_rx_entry *rx_entry)
-{
-	assert(!(rx_entry->rxr_flags & RXR_MULTI_RECV_POSTED));
-
-	if ((rx_entry->rxr_flags & RXR_MULTI_RECV_CONSUMER) &&
-	    rxr_multi_recv_buffer_complete(ep, rx_entry->master_entry))
-		rxr_release_rx_entry(ep, rx_entry->master_entry);
-}
-
-static inline void
-rxr_cq_handle_multi_recv_completion(struct rxr_ep *ep,
-				    struct rxr_rx_entry *rx_entry)
-{
-	assert(!(rx_entry->rxr_flags & RXR_MULTI_RECV_POSTED) &&
-	       (rx_entry->rxr_flags & RXR_MULTI_RECV_CONSUMER));
-
-	dlist_remove(&rx_entry->multi_recv_entry);
-	rx_entry->rxr_flags &= ~RXR_MULTI_RECV_CONSUMER;
-
-	if (!rxr_multi_recv_buffer_complete(ep, rx_entry->master_entry))
-		return;
-
-	/*
-	 * Buffer is consumed and all messages have been received. Update the
-	 * last message to release the application buffer.
-	 */
-	rx_entry->cq_entry.flags |= FI_MULTI_RECV;
-}
 
 /* Performance counter declarations */
 #ifdef RXR_PERF_ENABLED
