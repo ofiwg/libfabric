@@ -9,6 +9,7 @@ import re
 import ci_site_config
 import common
 import shlex
+from abc import ABC, abstractmethod # abstract base class for creating abstract classes in python
 
 # A Jenkins env variable for job name is composed of the name of the jenkins job and the branch name
 # it is building for. for e.g. in our case jobname = 'ofi_libfabric/master'
@@ -273,36 +274,89 @@ class MpiTests(Test):
                        self.util_prov == "ofi_rxm" or \
                        self.util_prov == "ofi_rxd")) else False
 
+# IMBtests serves as an abstract class for different
+# types of intel MPI benchmarks. Currently we have
+# the mpi1 and rma tests enabled which are encapsulated 
+# in the IMB_mpi1 and IMB_rma classes below. 
+
+class IMBtests(ABC):
+    """
+    This is an abstract class for IMB tests. 
+    currently IMB-MPI1 and IMB-RMA tests are 
+    supported. In future there could be more.
+    All abstract  methods must be implemented. 
+    """
+
+    @property
+    @abstractmethod
+    def imb_cmd(self):
+        pass
+
+    @property
+    @abstractmethod
+    def execute_condn(self):
+        pass
+
+class IMBmpi1(IMBtests):
+    
+    def __init__(self):
+        self.additional_tests = [ 
+                                   "Biband",
+                                   "Uniband",
+                                   "PingPongAnySource",
+                                   "PingPingAnySource",
+                                   "PingPongSpecificSource",
+                                   "PingPingSpecificSource"
+        ]
+
+    @property
+    def imb_cmd(self):
+        return "{}/intel64/bin/IMB-MPI1 -include {}".format(ci_site_config.impi_root, \
+                ','.join(self.additional_tests))
+
+    @property
+    def execute_condn(self):
+        return True
+
+class IMBrma(IMBtests):
+    def __init__(self, core_prov):
+        self.core_prov =  core_prov
+
+    @property
+    def imb_cmd(self):
+        return "{}/intel64/bin/IMB-RMA".format(ci_site_config.impi_root)
+
+    @property
+    def execute_condn(self):
+        return True if (self.core_prov != "verbs") else False
+ 
+# MpiTestIMB class inherits from the MPITests class.
+# It uses the same options method and class variables as all MPI tests. 
+# It creates IMB_xxx test objects for each kind of IMB test.
 class MpiTestIMB(MpiTests):
 
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
                  mpitype, hosts, ofi_build_mode, util_prov=None):
         super().__init__(jobname, buildno, testname, core_prov, fabric,
                          mpitype, hosts, ofi_build_mode, util_prov)
-        self.additional_tests = [ 
-                                   "Biband",
-                                   "Uniband",
-                                   "PingPingAnySource",
-                                   "PingPingAnySource",
-                                   "PingPongSpecificSource",
-                                   "PingPongSpecificSource"
-        ]
+       
         self.n = 4
-        self.ppn = 2
+        self.ppn = 1
+        self.mpi1 = IMBmpi1()
+        self.rma = IMBrma(self.core_prov) 
 
-  
-    @property
-    def imb_cmd(self): 
-        return "{}/intel64/bin/IMB-MPI1 -include {}".format(ci_site_config.impi_root,
-                ','.join(self.additional_tests))
     @property
     def execute_condn(self):
         return True if (self.mpi == "impi") else False
-        
+       
     def execute_cmd(self):
-        command = self.cmd + self.options + self.imb_cmd
-        outputcmd = shlex.split(command)
-        common.run_command(outputcmd) 
+        command = self.cmd + self.options 
+        if(self.mpi1.execute_condn):
+            outputcmd = shlex.split(command +  self.mpi1.imb_cmd)
+            common.run_command(outputcmd)
+        if (self.rma.execute_condn):
+            outputcmd = shlex.split(command + self.rma.imb_cmd)
+            common.run_command(outputcmd)
 
         
 class MpiTestStress(MpiTests):

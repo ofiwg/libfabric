@@ -69,7 +69,7 @@ def intel_mpi_benchmark(core, hosts, mpi, mode, util=None):
                hosts=hosts, mpitype=mpi, ofi_build_mode=mode, util_prov=util)
     
     if (imb_test.execute_condn == True  and imb_test.mpi_gen_execute_condn == True):
-        print("running imb-test for {}-{}-{}-{}".format(core, util, fab, mpi))
+        print("running imb-tests for {}-{}-{}-{}".format(core, util, fab, mpi))
         imb_test.execute_cmd()
     else:
         print("skipping {} as execute condition fails"\
