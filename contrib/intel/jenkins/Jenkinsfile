@@ -86,22 +86,7 @@ pipeline {
             }
         }
    stage('parallel-tests') {
-            parallel {
-                 stage('eth-sockets-dbg') {
-                    agent {node {label 'eth'}}
-                    steps{
-                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
-                        {
-                          sh """
-                            env
-                            (
-                               cd  ${env.WORKSPACE}/contrib/intel/jenkins/
-                               python3.7 runtests.py --prov=sockets --ofi_build_mode='dbg'
-                            )
-                          """
-                        }
-                     }
-                 }
+            parallel { 
                  stage('eth-tcp-dbg') {
                     agent {node {label 'eth'}}
                     steps{
