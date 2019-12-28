@@ -236,74 +236,28 @@ ssize_t rxr_pkt_post_ctrl_or_queue(struct rxr_ep *ep, int entry_type, void *x_en
 /*
  *   Functions used to handle packet send completion
  */
-static
-int rxr_send_completion_mr_dereg(struct rxr_tx_entry *tx_entry)
-{
-	int i, ret = 0;
-
-	for (i = tx_entry->iov_mr_start; i < tx_entry->iov_count; i++) {
-		if (tx_entry->mr[i]) {
-			ret = fi_close((struct fid *)tx_entry->mr[i]);
-			if (OFI_UNLIKELY(ret))
-				return ret;
-		}
-	}
-	return ret;
-}
-
 void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct fi_cq_data_entry *comp)
 {
 	struct rxr_pkt_entry *pkt_entry;
-	struct rxr_tx_entry *tx_entry = NULL;
 	struct rxr_peer *peer;
-	struct rxr_rts_hdr *rts_hdr = NULL;
-	struct rxr_readrsp_hdr *readrsp_hdr = NULL;
-	uint32_t tx_id;
-	int ret;
 
 	pkt_entry = (struct rxr_pkt_entry *)comp->op_context;
 	assert(rxr_get_base_hdr(pkt_entry->pkt)->version ==
 	       RXR_PROTOCOL_VERSION);
-	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 
 	switch (rxr_get_base_hdr(pkt_entry->pkt)->type) {
 	case RXR_RTS_PKT:
-		/*
-		 * for FI_READ, it is possible (though does not happen very offen) that at the point
-		 * tx_entry has been released. The reason is, for FI_READ:
-		 *     1. only the initator side will send a RTS.
-		 *     2. the initator side will receive data packet. When all data was received,
-		 *        it will release the tx_entry
-		 * Therefore, if it so happens that all data was received before we got the send
-		 * completion notice, we will have a released tx_entry at this point.
-		 * Nonetheless, because for FI_READ tx_entry will be release in rxr_handle_rx_completion,
-		 * we will ignore it here.
-		 *
-		 * For shm provider, we will write completion for small & medium  message, as data has
-		 * been sent in the RTS packet; for large message, will wait for the EOR packet
-		 */
-		rts_hdr = rxr_get_rts_hdr(pkt_entry->pkt);
-		if (!(rts_hdr->flags & RXR_READ_REQ)) {
-			tx_id = rts_hdr->tx_id;
-			tx_entry = ofi_bufpool_get_ibuf(ep->tx_entry_pool, tx_id);
-			tx_entry->bytes_acked += rxr_get_rts_data_size(ep, rts_hdr);
-		}
+		rxr_pkt_handle_rts_send_completion(ep, pkt_entry);
 		break;
 	case RXR_CONNACK_PKT:
 		break;
 	case RXR_CTS_PKT:
 		break;
 	case RXR_DATA_PKT:
-		tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
-		tx_entry->bytes_acked +=
-			rxr_get_data_pkt(pkt_entry->pkt)->hdr.seg_size;
+		rxr_pkt_handle_data_send_completion(ep, pkt_entry);
 		break;
 	case RXR_READRSP_PKT:
-		readrsp_hdr = rxr_get_readrsp_hdr(pkt_entry->pkt);
-		tx_id = readrsp_hdr->tx_id;
-		tx_entry = ofi_bufpool_get_ibuf(ep->readrsp_tx_entry_pool, tx_id);
-		assert(tx_entry->cq_entry.flags & FI_READ);
-		tx_entry->bytes_acked += readrsp_hdr->seg_size;
+		rxr_pkt_handle_readrsp_send_completion(ep, pkt_entry);
 		break;
 	case RXR_RMA_CONTEXT_PKT:
 		rxr_pkt_handle_rma_context_send_completion(ep, pkt_entry);
@@ -316,56 +270,8 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct fi_cq_data_entry *
 		rxr_cq_handle_cq_error(ep, -FI_EIO);
 		return;
 	}
-
-	if (tx_entry && tx_entry->total_len == tx_entry->bytes_acked) {
-		if (tx_entry->state == RXR_TX_SEND)
-			dlist_remove(&tx_entry->entry);
-		if (tx_entry->state == RXR_TX_SEND &&
-		    efa_mr_cache_enable && rxr_ep_mr_local(ep)) {
-			ret = rxr_send_completion_mr_dereg(tx_entry);
-			if (OFI_UNLIKELY(ret)) {
-				FI_WARN(&rxr_prov, FI_LOG_MR,
-					"In-line memory deregistration failed with error: %s.\n",
-					fi_strerror(-ret));
-			}
-		}
-
-		peer->tx_credits += tx_entry->credit_allocated;
-
-		if (tx_entry->cq_entry.flags & FI_READ) {
-			/*
-			 * this must be on remote side
-			 * see explaination on rxr_cq_handle_rx_completion
-			 */
-			struct rxr_rx_entry *rx_entry = NULL;
-
-			rx_entry = ofi_bufpool_get_ibuf(ep->rx_entry_pool, tx_entry->rma_loc_rx_id);
-			assert(rx_entry);
-			assert(rx_entry->state == RXR_RX_WAIT_READ_FINISH);
-
-			if (ep->util_ep.caps & FI_RMA_EVENT) {
-				rx_entry->cq_entry.len = rx_entry->total_len;
-				rx_entry->bytes_done = rx_entry->total_len;
-				efa_cntr_report_rx_completion(&ep->util_ep, rx_entry->cq_entry.flags);
-			}
-
-			rxr_release_rx_entry(ep, rx_entry);
-			/* just release tx, do not write completion */
-			rxr_release_tx_entry(ep, tx_entry);
-		} else if (tx_entry->cq_entry.flags & FI_WRITE) {
-			if (tx_entry->fi_flags & FI_COMPLETION) {
-				rxr_cq_write_tx_completion(ep, tx_entry);
-			} else {
-				efa_cntr_report_tx_completion(&ep->util_ep, tx_entry->cq_entry.flags);
-				rxr_release_tx_entry(ep, tx_entry);
-			}
-		} else {
-			assert(tx_entry->cq_entry.flags & FI_SEND);
-			rxr_cq_write_tx_completion(ep, tx_entry);
-		}
-	}
-
 	rxr_pkt_entry_release_tx(ep, pkt_entry);
+	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 	if (!peer->is_local)
 		rxr_ep_dec_tx_pending(ep, peer, 0);
 }

@@ -754,6 +754,74 @@ void rxr_cq_write_tx_completion(struct rxr_ep *ep,
 	return;
 }
 
+int rxr_send_completion_mr_dereg(struct rxr_tx_entry *tx_entry)
+{
+	int i, ret = 0;
+
+	for (i = tx_entry->iov_mr_start; i < tx_entry->iov_count; i++) {
+		if (tx_entry->mr[i]) {
+			ret = fi_close((struct fid *)tx_entry->mr[i]);
+			if (OFI_UNLIKELY(ret))
+				return ret;
+		}
+	}
+	return ret;
+}
+
+void rxr_cq_handle_tx_completion(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
+{
+	int ret;
+	struct rxr_peer *peer;
+
+	if (tx_entry->state == RXR_TX_SEND)
+		dlist_remove(&tx_entry->entry);
+
+	if (tx_entry->state == RXR_TX_SEND &&
+	    efa_mr_cache_enable && rxr_ep_mr_local(ep)) {
+		ret = rxr_send_completion_mr_dereg(tx_entry);
+		if (OFI_UNLIKELY(ret)) {
+			FI_WARN(&rxr_prov, FI_LOG_MR,
+				"In-line memory deregistration failed with error: %s.\n",
+				fi_strerror(-ret));
+		}
+	}
+
+	peer = rxr_ep_get_peer(ep, tx_entry->addr);
+	peer->tx_credits += tx_entry->credit_allocated;
+
+	if (tx_entry->cq_entry.flags & FI_READ) {
+		/*
+		 * this must be on remote side
+		 * see explaination on rxr_cq_handle_rx_completion
+		 */
+		struct rxr_rx_entry *rx_entry = NULL;
+
+		rx_entry = ofi_bufpool_get_ibuf(ep->rx_entry_pool, tx_entry->rma_loc_rx_id);
+		assert(rx_entry);
+		assert(rx_entry->state == RXR_RX_WAIT_READ_FINISH);
+
+		if (ep->util_ep.caps & FI_RMA_EVENT) {
+			rx_entry->cq_entry.len = rx_entry->total_len;
+			rx_entry->bytes_done = rx_entry->total_len;
+			efa_cntr_report_rx_completion(&ep->util_ep, rx_entry->cq_entry.flags);
+		}
+
+		rxr_release_rx_entry(ep, rx_entry);
+		/* just release tx, do not write completion */
+		rxr_release_tx_entry(ep, tx_entry);
+	} else if (tx_entry->cq_entry.flags & FI_WRITE) {
+		if (tx_entry->fi_flags & FI_COMPLETION) {
+			rxr_cq_write_tx_completion(ep, tx_entry);
+		} else {
+			efa_cntr_report_tx_completion(&ep->util_ep, tx_entry->cq_entry.flags);
+			rxr_release_tx_entry(ep, tx_entry);
+		}
+	} else {
+		assert(tx_entry->cq_entry.flags & FI_SEND);
+		rxr_cq_write_tx_completion(ep, tx_entry);
+	}
+}
+
 static int rxr_cq_close(struct fid *fid)
 {
 	int ret;
