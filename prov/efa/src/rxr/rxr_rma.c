@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 Amazon.com, Inc. or its affiliates.
+ * Copyright (c) 2019-2020 Amazon.com, Inc. or its affiliates.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -39,6 +39,8 @@
 #include "rxr.h"
 #include "rxr_rma.h"
 #include "rxr_pkt_cmd.h"
+#include "rxr_cntr.h"
+#include "rxr_rdma.h"
 
 int rxr_rma_verified_copy_iov(struct rxr_ep *ep, struct fi_rma_iov *rma,
 			      size_t count, uint32_t flags, struct iovec *iov)
@@ -110,7 +112,7 @@ rxr_rma_alloc_readrsp_tx_entry(struct rxr_ep *rxr_ep,
 	tx_entry->rx_id = rx_entry->rma_initiator_rx_id;
 	tx_entry->window = rx_entry->window;
 
-	/* this tx_entry does not send rts
+	/* this tx_entry does not send request
 	 * therefore should not increase msg_id
 	 */
 	tx_entry->msg_id = 0;
@@ -152,61 +154,32 @@ rxr_rma_alloc_tx_entry(struct rxr_ep *rxr_ep,
 	return tx_entry;
 }
 
-size_t rxr_rma_post_shm_rma(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
+size_t rxr_rma_post_shm_write(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 {
 	struct rxr_pkt_entry *pkt_entry;
 	struct fi_msg_rma msg;
-	struct rxr_rma_context_pkt *rma_context_pkt;
 	struct rxr_peer *peer;
-	fi_addr_t shm_fiaddr;
-	int ret;
 
-	tx_entry->state = RXR_TX_SHM_RMA;
-
+	assert(tx_entry->op == ofi_op_write);
 	peer = rxr_ep_get_peer(rxr_ep, tx_entry->addr);
-	shm_fiaddr = peer->shm_fiaddr;
 	pkt_entry = rxr_pkt_entry_alloc(rxr_ep, rxr_ep->tx_pkt_shm_pool);
 	if (OFI_UNLIKELY(!pkt_entry))
 		return -FI_EAGAIN;
 
-	pkt_entry->x_entry = (void *)tx_entry;
-	rma_context_pkt = (struct rxr_rma_context_pkt *)pkt_entry->pkt;
-	rma_context_pkt->type = RXR_RMA_CONTEXT_PKT;
-	rma_context_pkt->version = RXR_PROTOCOL_VERSION;
-	rma_context_pkt->tx_id = tx_entry->tx_id;
+	rxr_pkt_init_write_context(tx_entry, pkt_entry);
 
 	msg.msg_iov = tx_entry->iov;
 	msg.iov_count = tx_entry->iov_count;
-	msg.addr = shm_fiaddr;
+	msg.addr = peer->shm_fiaddr;
 	msg.rma_iov = tx_entry->rma_iov;
 	msg.rma_iov_count = tx_entry->rma_iov_count;
 	msg.context = pkt_entry;
-
-	if (tx_entry->cq_entry.flags & FI_READ) {
-		rma_context_pkt->rma_context_type = RXR_SHM_RMA_READ;
-		msg.data = 0;
-		ret = fi_readmsg(rxr_ep->shm_ep, &msg, tx_entry->fi_flags);
-	} else {
-		rma_context_pkt->rma_context_type = RXR_SHM_RMA_WRITE;
-		msg.data = tx_entry->cq_entry.data;
-		ret = fi_writemsg(rxr_ep->shm_ep, &msg, tx_entry->fi_flags);
-	}
-
-	if (OFI_UNLIKELY(ret)) {
-		if (ret == -FI_EAGAIN) {
-			tx_entry->state = RXR_TX_QUEUED_SHM_RMA;
-			dlist_insert_tail(&tx_entry->queued_entry,
-					  &rxr_ep->tx_entry_queued_list);
-			return 0;
-		}
-		rxr_release_tx_entry(rxr_ep, tx_entry);
-	}
-
-	return ret;
+	msg.data = tx_entry->cq_entry.data;
+	return fi_writemsg(rxr_ep->shm_ep, &msg, tx_entry->fi_flags);
 }
 
 /* rma_read functions */
-ssize_t rxr_rma_post_efa_read(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
+ssize_t rxr_rma_post_efa_emulated_read(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 {
 	int err, window, credits;
 	struct rxr_peer *peer;
@@ -241,7 +214,7 @@ ssize_t rxr_rma_post_efa_read(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 
 	/*
 	 * there will not be a CTS for fi_read, we calculate CTS
-	 * window here, and send it via RTS.
+	 * window here, and send it via REQ.
 	 * meanwhile set rx_entry->state to RXR_RX_RECV so that
 	 * this rx_entry is ready to receive.
 	 */
@@ -281,19 +254,16 @@ ssize_t rxr_rma_post_efa_read(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 	 * this tx_entry does not need a rx_id, because it does not
 	 * send any data.
 	 * the rma_loc_rx_id and rma_window will be sent to remote EP
-	 * via RTS
+	 * via REQ
 	 */
 	tx_entry->rma_loc_rx_id = rx_entry->rx_id;
 	tx_entry->rma_window = rx_entry->window;
-
 	tx_entry->msg_id = peer->next_msg_id++;
-
 	err = rxr_pkt_post_ctrl_or_queue(ep, RXR_TX_ENTRY, tx_entry, RXR_RTS_PKT, 0);
 	if (OFI_UNLIKELY(err)) {
 		rxr_release_tx_entry(ep, tx_entry);
 		peer->next_msg_id--;
 	}
-
 	return err;
 }
 
@@ -303,6 +273,9 @@ ssize_t rxr_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_
 	struct rxr_ep *rxr_ep;
 	struct rxr_peer *peer;
 	struct rxr_tx_entry *tx_entry;
+	struct rxr_rdma_entry *rdma_entry;
+	bool use_lower_ep_read;
+	enum rxr_lower_ep_type lower_ep_type;
 
 	FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
 	       "read iov_len: %lu flags: %lx\n",
@@ -327,8 +300,32 @@ ssize_t rxr_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_
 
 	peer = rxr_ep_get_peer(rxr_ep, msg->addr);
 	assert(peer);
+
+	use_lower_ep_read = false;
 	if (rxr_env.enable_shm_transfer && peer->is_local) {
-		err = rxr_rma_post_shm_rma(rxr_ep, tx_entry);
+		use_lower_ep_read = true;
+		lower_ep_type = SHM_EP;
+	} else if (efa_support_rdma_read(rxr_ep->rdm_ep) &&
+		   tx_entry->total_len >= rxr_env.efa_max_emulated_read_size) {
+		use_lower_ep_read = true;
+		lower_ep_type = EFA_EP;
+	}
+
+	if (use_lower_ep_read) {
+		rdma_entry = rxr_rdma_alloc_entry(rxr_ep, RXR_TX_ENTRY, tx_entry,
+						  lower_ep_type);
+		if (!rdma_entry) {
+			rxr_release_tx_entry(rxr_ep, tx_entry);
+			err = -FI_EAGAIN;
+			rxr_ep_progress_internal(rxr_ep);
+			goto out;
+		}
+
+		err = rxr_rdma_post_read_or_queue(rxr_ep, rdma_entry);
+		if (OFI_UNLIKELY(err)) {
+			rxr_rdma_release_entry(rxr_ep, rdma_entry);
+			rxr_release_tx_entry(rxr_ep, tx_entry);
+		}
 	} else {
 		err = rxr_ep_set_tx_credit_request(rxr_ep, tx_entry);
 		if (OFI_UNLIKELY(err)) {
@@ -336,7 +333,7 @@ ssize_t rxr_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_
 			goto out;
 		}
 
-		err = rxr_rma_post_efa_read(rxr_ep, tx_entry);
+		err = rxr_rma_post_efa_emulated_read(rxr_ep, tx_entry);
 	}
 
 out:
@@ -411,7 +408,9 @@ ssize_t rxr_rma_writemsg(struct fid_ep *ep,
 	}
 
 	if (rxr_env.enable_shm_transfer && peer->is_local) {
-		err = rxr_rma_post_shm_rma(rxr_ep, tx_entry);
+		err = rxr_rma_post_shm_write(rxr_ep, tx_entry);
+		if (OFI_UNLIKELY(err))
+			rxr_release_tx_entry(rxr_ep, tx_entry);
 	}  else {
 		err = rxr_ep_set_tx_credit_request(rxr_ep, tx_entry);
 		if (OFI_UNLIKELY(err)) {
@@ -419,13 +418,9 @@ ssize_t rxr_rma_writemsg(struct fid_ep *ep,
 			goto out;
 		}
 
-		tx_entry->msg_id = peer->next_msg_id++;
-
 		err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry, RXR_RTS_PKT, 0);
-		if (OFI_UNLIKELY(err)) {
+		if (OFI_UNLIKELY(err))
 			rxr_release_tx_entry(rxr_ep, tx_entry);
-			peer->next_msg_id--;
-		}
 	}
 
 out:
@@ -556,3 +551,4 @@ struct fi_ops_rma rxr_ops_rma = {
 	.writedata = rxr_rma_writedata,
 	.injectdata = rxr_rma_inject_writedata,
 };
+

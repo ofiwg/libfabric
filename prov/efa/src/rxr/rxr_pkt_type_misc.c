@@ -36,6 +36,7 @@
 #include "rxr_msg.h"
 #include "rxr_cntr.h"
 #include "rxr_pkt_cmd.h"
+#include "rxr_rdma.h"
 
 /* This file define functons for the following packet type:
  *       CONNACK
@@ -312,63 +313,123 @@ void rxr_pkt_handle_readrsp_recv(struct rxr_ep *ep,
 }
 
 /*  RMA_CONTEXT packet functions */
-void rxr_pkt_handle_rma_context_send_completion(struct rxr_ep *ep,
-						struct rxr_pkt_entry *pkt_entry)
+void rxr_pkt_init_write_context(struct rxr_tx_entry *tx_entry,
+				struct rxr_pkt_entry *pkt_entry)
+{
+	struct rxr_rma_context_pkt *rma_context_pkt;
+
+	pkt_entry->x_entry = (void *)tx_entry;
+	rma_context_pkt = (struct rxr_rma_context_pkt *)pkt_entry->pkt;
+	rma_context_pkt->type = RXR_RMA_CONTEXT_PKT;
+	rma_context_pkt->version = RXR_PROTOCOL_VERSION;
+	rma_context_pkt->context_type = RXR_WRITE_CONTEXT;
+	rma_context_pkt->tx_id = tx_entry->tx_id;
+}
+
+void rxr_pkt_init_read_context(struct rxr_ep *rxr_ep,
+			       struct rxr_rdma_entry *rdma_entry,
+			       size_t seg_size,
+			       struct rxr_pkt_entry *pkt_entry)
+{
+	struct rxr_rma_context_pkt *ctx_pkt;
+
+	pkt_entry->x_entry = rdma_entry;
+	pkt_entry->addr = rdma_entry->addr;
+	pkt_entry->pkt_size = sizeof(struct rxr_rma_context_pkt);
+
+	ctx_pkt = (struct rxr_rma_context_pkt *)pkt_entry->pkt;
+	ctx_pkt->type = RXR_RMA_CONTEXT_PKT;
+	ctx_pkt->flags = 0;
+	ctx_pkt->version = RXR_PROTOCOL_VERSION;
+	ctx_pkt->context_type = RXR_READ_CONTEXT;
+	ctx_pkt->rdma_id = rdma_entry->rdma_id;
+	ctx_pkt->seg_size = seg_size;
+}
+
+static
+void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
+					struct rxr_pkt_entry *context_pkt_entry)
+{
+	struct rxr_tx_entry *tx_entry;
+	struct rxr_rx_entry *rx_entry;
+	struct rxr_rdma_entry *rdma_entry;
+	struct rxr_rma_context_pkt *rma_context_pkt;
+	int inject;
+	ssize_t ret;
+
+	rma_context_pkt = (struct rxr_rma_context_pkt *)context_pkt_entry->pkt;
+	assert(rma_context_pkt->type == RXR_RMA_CONTEXT_PKT);
+	assert(rma_context_pkt->context_type == RXR_READ_CONTEXT);
+
+	rdma_entry = (struct rxr_rdma_entry *)context_pkt_entry->x_entry;
+	rdma_entry->bytes_finished += rma_context_pkt->seg_size;
+	assert(rdma_entry->bytes_finished <= rdma_entry->total_len);
+
+	if (rdma_entry->bytes_finished == rdma_entry->total_len) {
+		if (rdma_entry->src_type == RXR_TX_ENTRY) {
+			tx_entry = ofi_bufpool_get_ibuf(ep->tx_entry_pool, rdma_entry->src_id);
+			assert(tx_entry && tx_entry->cq_entry.flags & FI_READ);
+			rxr_cq_write_tx_completion(ep, tx_entry);
+		} else {
+			inject = (rdma_entry->lower_ep_type == SHM_EP);
+			rx_entry = ofi_bufpool_get_ibuf(ep->rx_entry_pool, rdma_entry->src_id);
+			ret = rxr_pkt_post_ctrl_or_queue(ep, RXR_RX_ENTRY, rx_entry, RXR_EOR_PKT, inject);
+			if (OFI_UNLIKELY(ret)) {
+				if (rxr_cq_handle_rx_error(ep, rx_entry, ret))
+					assert(0 && "failed to write err cq entry");
+				rxr_release_rx_entry(ep, rx_entry);
+			}
+
+			if (inject) {
+				/* inject will not generate a completion, so we write rx completion here,
+				 * otherwise, rx completion is write in rxr_pkt_handle_eor_send_completion
+				 */
+				if (rx_entry->op == ofi_op_msg || rx_entry->op == ofi_op_tagged) {
+					rxr_cq_write_rx_completion(ep, rx_entry);
+				} else {
+					assert(rx_entry->op == ofi_op_write);
+					if (rx_entry->cq_entry.flags & FI_REMOTE_CQ_DATA)
+						rxr_cq_write_rx_completion(ep, rx_entry);
+				}
+
+				rxr_release_rx_entry(ep, rx_entry);
+			}
+		}
+
+		rxr_rdma_release_entry(ep, rdma_entry);
+	}
+}
+
+void rxr_pkt_handle_rma_completion(struct rxr_ep *ep,
+				   struct rxr_pkt_entry *context_pkt_entry)
 {
 	struct rxr_tx_entry *tx_entry = NULL;
-	struct rxr_rx_entry *rx_entry = NULL;
 	struct rxr_rma_context_pkt *rma_context_pkt;
-	int ret;
 
-	assert(rxr_get_base_hdr(pkt_entry->pkt)->version == RXR_PROTOCOL_VERSION);
+	assert(rxr_get_base_hdr(context_pkt_entry->pkt)->version == RXR_PROTOCOL_VERSION);
 
-	rma_context_pkt = (struct rxr_rma_context_pkt *)pkt_entry->pkt;
+	rma_context_pkt = (struct rxr_rma_context_pkt *)context_pkt_entry->pkt;
 
-	switch (rma_context_pkt->rma_context_type) {
-	case RXR_SHM_RMA_READ:
-	case RXR_SHM_RMA_WRITE:
-		/* Completion of RMA READ/WRTITE operations that apps call */
-		tx_entry = pkt_entry->x_entry;
-
+	switch (rma_context_pkt->context_type) {
+	case RXR_WRITE_CONTEXT:
+		tx_entry = (struct rxr_tx_entry *)context_pkt_entry->x_entry;
 		if (tx_entry->fi_flags & FI_COMPLETION) {
 			rxr_cq_write_tx_completion(ep, tx_entry);
 		} else {
 			efa_cntr_report_tx_completion(&ep->util_ep, tx_entry->cq_entry.flags);
 			rxr_release_tx_entry(ep, tx_entry);
 		}
-		rxr_pkt_entry_release_tx(ep, pkt_entry);
 		break;
-	case RXR_SHM_LARGE_READ:
-		/*
-		 * This must be on the receiver (remote) side of two-sided message
-		 * transfer, which is also the initiator of RMA READ.
-		 * We get RMA READ completion for previously issued
-		 * fi_read operation over shm provider, which means
-		 * receiver side has received all data from sender
-		 */
-		rx_entry = pkt_entry->x_entry;
-		rx_entry->cq_entry.len = rx_entry->total_len;
-		rx_entry->bytes_done = rx_entry->total_len;
-
-		ret = rxr_pkt_post_ctrl_or_queue(ep, RXR_TX_ENTRY, rx_entry, RXR_EOR_PKT, 1);
-		if (ret) {
-			if (rxr_cq_handle_rx_error(ep, rx_entry, ret))
-				assert(0 && "error writing error cq entry for EOR\n");
-		}
-
-		if (rx_entry->fi_flags & FI_MULTI_RECV)
-			rxr_msg_multi_recv_handle_completion(ep, rx_entry);
-		rxr_cq_write_rx_completion(ep, rx_entry);
-		rxr_msg_multi_recv_free_posted_entry(ep, rx_entry);
-		if (OFI_LIKELY(!ret))
-			rxr_release_rx_entry(ep, rx_entry);
-		rxr_pkt_entry_release_rx(ep, pkt_entry);
+	case RXR_READ_CONTEXT:
+		rxr_pkt_handle_rma_read_completion(ep, context_pkt_entry);
 		break;
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "invalid rma_context_type in RXR_RMA_CONTEXT_PKT %d\n",
-			rma_context_pkt->rma_context_type);
+			rma_context_pkt->context_type);
 		assert(0 && "invalid RXR_RMA_CONTEXT_PKT rma_context_type\n");
 	}
+
+	rxr_pkt_entry_release_tx(ep, context_pkt_entry);
 }
 
 /*  EOR packet related functions */
@@ -386,6 +447,28 @@ int rxr_pkt_init_eor(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry, struct rx
 	pkt_entry->addr = rx_entry->addr;
 	pkt_entry->x_entry = rx_entry;
 	return 0;
+}
+
+void rxr_pkt_handle_eor_send_completion(struct rxr_ep *ep,
+					struct rxr_pkt_entry *pkt_entry)
+{
+	struct rxr_eor_hdr *eor_hdr;
+	struct rxr_rx_entry *rx_entry;
+
+	eor_hdr = (struct rxr_eor_hdr *)pkt_entry->pkt;
+
+	rx_entry = ofi_bufpool_get_ibuf(ep->rx_entry_pool, eor_hdr->rx_id);
+	assert(rx_entry && rx_entry->rx_id == eor_hdr->rx_id);
+
+	if (rx_entry->op == ofi_op_msg || rx_entry->op == ofi_op_tagged) {
+		rxr_cq_write_rx_completion(ep, rx_entry);
+	} else {
+		assert(rx_entry->op == ofi_op_write);
+		if (rx_entry->cq_entry.flags & FI_REMOTE_CQ_DATA)
+			rxr_cq_write_rx_completion(ep, rx_entry);
+	}
+
+	rxr_release_rx_entry(ep, rx_entry);
 }
 
 /*

@@ -87,6 +87,7 @@ struct rxr_ep;
 struct rxr_peer;
 struct rxr_tx_entry;
 struct rxr_rx_entry;
+struct rxr_rdma_entry;
 
 /*
  *  RTS packet data structures and functions. the implementation of
@@ -323,12 +324,27 @@ struct rxr_rma_context_pkt {
 	uint8_t version;
 	uint16_t flags;
 	/* end of rxr_base_hdr */
-	uint32_t tx_id;
-	uint8_t rma_context_type;
+	uint32_t context_type;
+	uint32_t tx_id; /* used by write context */
+	uint32_t rdma_id; /* used by read context */
+	size_t seg_size; /* used by read context */
 };
 
-void rxr_pkt_handle_rma_context_send_completion(struct rxr_ep *ep,
-						struct rxr_pkt_entry *pkt_entry);
+enum rxr_rma_context_pkt_type {
+	RXR_READ_CONTEXT = 1,
+	RXR_WRITE_CONTEXT,
+};
+
+void rxr_pkt_init_write_context(struct rxr_tx_entry *tx_entry,
+				struct rxr_pkt_entry *pkt_entry);
+
+void rxr_pkt_init_read_context(struct rxr_ep *rxr_ep,
+			       struct rxr_rdma_entry *rdma_entry,
+			       size_t seg_size,
+			       struct rxr_pkt_entry *pkt_entry);
+
+void rxr_pkt_handle_rma_completion(struct rxr_ep *ep,
+				   struct rxr_pkt_entry *pkt_entry);
 
 /*
  *  EOR packet, used to acknowledge the sender that large message
@@ -356,6 +372,9 @@ static inline
 void rxr_pkt_handle_eor_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
 }
+
+void rxr_pkt_handle_eor_send_completion(struct rxr_ep *ep,
+					struct rxr_pkt_entry *pkt_entry);
 
 void rxr_pkt_handle_eor_recv(struct rxr_ep *ep,
 			     struct rxr_pkt_entry *pkt_entry);

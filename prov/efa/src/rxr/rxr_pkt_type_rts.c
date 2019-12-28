@@ -36,6 +36,7 @@
 #include "rxr_msg.h"
 #include "rxr_rma.h"
 #include "rxr_pkt_cmd.h"
+#include "rxr_rdma.h"
 
 /* This file contains RTS packet related functions.
  * RTS is used to post send, emulated read and emulated
@@ -477,77 +478,22 @@ int rxr_pkt_proc_rts_data(struct rxr_ep *ep,
 	return ret;
 }
 
-ssize_t rxr_pkt_post_shm_rndzv_read(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry)
-{
-	struct rxr_pkt_entry *pkt_entry;
-	struct rxr_rma_context_pkt *rma_context_pkt;
-	struct fi_msg_rma msg;
-	struct iovec msg_iov[RXR_IOV_LIMIT];
-	struct fi_rma_iov rma_iov[RXR_IOV_LIMIT];
-	fi_addr_t src_shm_fiaddr;
-	uint64_t remain_len;
-	struct rxr_peer *peer;
-	int ret, i;
-
-	if (rx_entry->state == RXR_RX_QUEUED_SHM_LARGE_READ)
-		return 0;
-
-	pkt_entry = rxr_pkt_entry_alloc(ep, ep->tx_pkt_shm_pool);
-	assert(pkt_entry);
-
-	pkt_entry->x_entry = (void *)rx_entry;
-	pkt_entry->addr = rx_entry->addr;
-	rma_context_pkt = (struct rxr_rma_context_pkt *)pkt_entry->pkt;
-	rma_context_pkt->type = RXR_RMA_CONTEXT_PKT;
-	rma_context_pkt->version = RXR_PROTOCOL_VERSION;
-	rma_context_pkt->rma_context_type = RXR_SHM_LARGE_READ;
-	rma_context_pkt->tx_id = rx_entry->tx_id;
-
-	peer = rxr_ep_get_peer(ep, rx_entry->addr);
-	src_shm_fiaddr = peer->shm_fiaddr;
-
-	memset(&msg, 0, sizeof(msg));
-
-	remain_len = rx_entry->total_len;
-
-	for (i = 0; i < rx_entry->rma_iov_count; i++) {
-		rma_iov[i].addr = rx_entry->rma_iov[i].addr;
-		rma_iov[i].len = rx_entry->rma_iov[i].len;
-		rma_iov[i].key = 0;
-	}
-
-	/*
-	 * shm provider will compare #bytes CMA copied with total length of recv buffer
-	 * (msg_iov here). If they are not equal, an error is returned when reading shm
-	 * provider's cq. So shrink the total length of recv buffer if applicable
-	 */
-	for (i = 0; i < rx_entry->iov_count; i++) {
-		msg_iov[i].iov_base = (void *)rx_entry->iov[i].iov_base;
-		msg_iov[i].iov_len = (remain_len < rx_entry->iov[i].iov_len) ?
-					remain_len : rx_entry->iov[i].iov_len;
-		remain_len -= msg_iov[i].iov_len;
-		if (remain_len == 0)
-			break;
-	}
-
-	msg.msg_iov = msg_iov;
-	msg.iov_count = rx_entry->iov_count;
-	msg.desc = NULL;
-	msg.addr = src_shm_fiaddr;
-	msg.context = pkt_entry;
-	msg.rma_iov = rma_iov;
-	msg.rma_iov_count = rx_entry->rma_iov_count;
-
-	ret = fi_readmsg(ep->shm_ep, &msg, 0);
-
-	return ret;
-}
-
-void rxr_pkt_proc_shm_long_msg_rts(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
-				   struct rxr_rts_hdr *rts_hdr, char *data)
+void rxr_pkt_proc_shm_long_msg_rts(struct rxr_ep *ep,
+				   struct rxr_rx_entry *rx_entry,
+				   char *data)
 {
 	struct iovec *iovec_ptr;
-	int ret, i;
+	struct rxr_rdma_entry *rdma_entry;
+	int err, i;
+
+
+	/* rx_entry->cq_entry.len is total recv buffer size.
+	 * rx_entry->total_len is from rts_hdr and is total send buffer size.
+	 * if send buffer size < recv buffer size, we adjust value of rx_entry->cq_entry.len.
+	 * if send buffer size > recv buffer size, we have a truncated message.
+	 */
+	if (rx_entry->cq_entry.len > rx_entry->total_len)
+		rx_entry->cq_entry.len = rx_entry->total_len;
 
 	/* get iov_count of sender first */
 	memcpy(&rx_entry->rma_iov_count, data, sizeof(size_t));
@@ -561,19 +507,26 @@ void rxr_pkt_proc_shm_long_msg_rts(struct rxr_ep *ep, struct rxr_rx_entry *rx_en
 		rx_entry->rma_iov[i].key = 0;
 	}
 
-	ret = rxr_pkt_post_shm_rndzv_read(ep, rx_entry);
-
-	if (OFI_UNLIKELY(ret)) {
-		if (ret == -FI_EAGAIN) {
-			rx_entry->state = RXR_RX_QUEUED_SHM_LARGE_READ;
-			dlist_insert_tail(&rx_entry->queued_entry,  &ep->rx_entry_queued_list);
-			return;
-		}
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
-			"A large message RMA READ failed over shm provider.\n");
-		if (rxr_cq_handle_rx_error(ep, rx_entry, ret))
-			assert(0 && "failed to write err cq entry");
+	rdma_entry = rxr_rdma_alloc_entry(ep, RXR_RX_ENTRY, rx_entry,
+					  SHM_EP);
+	if (!rdma_entry) {
+		err = -FI_ENOMEM;
+		goto err;
 	}
+
+	err = rxr_rdma_post_read_or_queue(ep, rdma_entry);
+	if (OFI_UNLIKELY(err)) {
+		rxr_rdma_release_entry(ep, rdma_entry);
+		goto err;
+	}
+
+	return;
+
+err:
+	FI_WARN(&rxr_prov, FI_LOG_CQ,
+		"A large message RMA READ failed over shm provider.\n");
+	if (rxr_cq_handle_rx_error(ep, rx_entry, err))
+		assert(0 && "failed to write err cq entry");
 }
 
 ssize_t rxr_pkt_proc_matched_msg_rts(struct rxr_ep *ep,
@@ -591,7 +544,7 @@ ssize_t rxr_pkt_proc_matched_msg_rts(struct rxr_ep *ep,
 	rts_hdr = rxr_get_rts_hdr(pkt_entry->pkt);
 	data = rxr_pkt_proc_rts_base_hdr(ep, rx_entry, pkt_entry);
 	if (peer->is_local && !(rts_hdr->flags & RXR_SHM_HDR_DATA)) {
-		rxr_pkt_proc_shm_long_msg_rts(ep, rx_entry, rts_hdr, data);
+		rxr_pkt_proc_shm_long_msg_rts(ep, rx_entry, data);
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return 0;
 	}

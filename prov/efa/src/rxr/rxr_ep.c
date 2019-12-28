@@ -43,6 +43,7 @@
 #include "rxr_msg.h"
 #include "rxr_rma.h"
 #include "rxr_pkt_cmd.h"
+#include "rxr_rdma.h"
 
 struct rxr_rx_entry *rxr_ep_rx_entry_init(struct rxr_ep *ep,
 					  struct rxr_rx_entry *rx_entry,
@@ -124,6 +125,7 @@ struct rxr_rx_entry *rxr_ep_get_rx_entry(struct rxr_ep *ep,
 	rx_entry = rxr_ep_rx_entry_init(ep, rx_entry, iov, iov_count, tag,
 					ignore, context, addr, op, flags);
 	rx_entry->state = RXR_RX_INIT;
+	rx_entry->op = op;
 	return rx_entry;
 }
 
@@ -583,6 +585,9 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 
 	if (rxr_ep->tx_entry_pool)
 		ofi_bufpool_destroy(rxr_ep->tx_entry_pool);
+
+	if (rxr_ep->rdma_entry_pool)
+		ofi_bufpool_destroy(rxr_ep->rdma_entry_pool);
 
 	if (rxr_ep->readrsp_tx_entry_pool)
 		ofi_bufpool_destroy(rxr_ep->readrsp_tx_entry_pool);
@@ -1059,13 +1064,20 @@ int rxr_ep_init(struct rxr_ep *ep)
 	if (ret)
 		goto err_free_rx_ooo_pool;
 
+	ret = ofi_bufpool_create(&ep->rdma_entry_pool,
+				 sizeof(struct rxr_rdma_entry),
+				 RXR_BUF_POOL_ALIGNMENT,
+				 ep->tx_size + ep->rx_size, ep->tx_size + ep->rx_size, 0);
+	if (ret)
+		goto err_free_tx_entry_pool;
+
 	ret = ofi_bufpool_create(&ep->readrsp_tx_entry_pool,
 				 sizeof(struct rxr_tx_entry),
 				 RXR_BUF_POOL_ALIGNMENT,
 				 RXR_MAX_RX_QUEUE_SIZE,
 				 ep->rx_size, 0);
 	if (ret)
-		goto err_free_tx_entry_pool;
+		goto err_free_rdma_entry_pool;
 
 	ret = ofi_bufpool_create(&ep->rx_entry_pool,
 				 sizeof(struct rxr_rx_entry),
@@ -1105,6 +1117,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 	dlist_init(&ep->rx_entry_queued_list);
 	dlist_init(&ep->tx_entry_queued_list);
 	dlist_init(&ep->tx_pending_list);
+	dlist_init(&ep->rdma_pending_list);
 	dlist_init(&ep->peer_backoff_list);
 	dlist_init(&ep->peer_list);
 #if ENABLE_DEBUG
@@ -1126,6 +1139,9 @@ err_free_rx_entry_pool:
 err_free_readrsp_tx_entry_pool:
 	if (ep->readrsp_tx_entry_pool)
 		ofi_bufpool_destroy(ep->readrsp_tx_entry_pool);
+err_free_rdma_entry_pool:
+	if (ep->rdma_entry_pool)
+		ofi_bufpool_destroy(ep->rdma_entry_pool);
 err_free_tx_entry_pool:
 	if (ep->tx_entry_pool)
 		ofi_bufpool_destroy(ep->tx_entry_pool);
@@ -1322,6 +1338,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 {
 	struct rxr_rx_entry *rx_entry;
 	struct rxr_tx_entry *tx_entry;
+	struct rxr_rdma_entry *rdma_entry;
 	struct dlist_entry *tmp;
 	ssize_t ret;
 
@@ -1346,8 +1363,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	rxr_ep_check_peer_backoff_timer(ep);
 
 	/*
-	 * Send any queued RTS/CTS packets.
-	 * Send any queued large message RMA Read and EOR for shm
+	 * Send any queued ctrl packets.
 	 */
 	dlist_foreach_container_safe(&ep->rx_entry_queued_list,
 				     struct rxr_rx_entry,
@@ -1356,8 +1372,6 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 			ret = rxr_pkt_post_ctrl(ep, RXR_RX_ENTRY, rx_entry,
 						rx_entry->queued_ctrl.type,
 						rx_entry->queued_ctrl.inject);
-		else if (rx_entry->state == RXR_RX_QUEUED_SHM_LARGE_READ)
-			ret = rxr_pkt_post_shm_rndzv_read(ep, rx_entry);
 		else
 			ret = rxr_ep_send_queued_pkts(ep,
 						      &rx_entry->queued_pkts);
@@ -1377,8 +1391,6 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 			ret = rxr_pkt_post_ctrl(ep, RXR_TX_ENTRY, tx_entry,
 						tx_entry->queued_ctrl.type,
 						tx_entry->queued_ctrl.inject);
-		else if (tx_entry->state == RXR_TX_QUEUED_SHM_RMA)
-			ret = rxr_rma_post_shm_rma(ep, tx_entry);
 		else
 			ret = rxr_ep_send_queued_pkts(ep,
 						      &tx_entry->queued_pkts);
@@ -1392,8 +1404,6 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 
 		if (tx_entry->state == RXR_TX_QUEUED_RTS_RNR)
 			tx_entry->state = RXR_TX_RTS;
-		else if (tx_entry->state == RXR_TX_QUEUED_SHM_RMA)
-			tx_entry->state = RXR_TX_SHM_RMA;
 		else if (tx_entry->state == RXR_TX_QUEUED_DATA_RNR) {
 			tx_entry->state = RXR_TX_SEND;
 			dlist_insert_tail(&tx_entry->entry,
@@ -1429,6 +1439,21 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 		}
 	}
 
+	/*
+	 * Send read requests until finish or error encoutered
+	 */
+	dlist_foreach_container_safe(&ep->rdma_pending_list, struct rxr_rdma_entry,
+				     rdma_entry, pending_entry, tmp) {
+		ret = rxr_rdma_post_read(ep, rdma_entry);
+		if (ret == -FI_EAGAIN)
+			break;
+
+		if (OFI_UNLIKELY(ret))
+			goto rdma_err;
+
+		dlist_remove(&rdma_entry->pending_entry);
+	}
+
 out:
 	return;
 rx_err:
@@ -1440,6 +1465,12 @@ tx_err:
 	if (rxr_cq_handle_tx_error(ep, tx_entry, ret))
 		assert(0 &&
 		       "error writing error cq entry when handling TX error");
+	return;
+
+rdma_err:
+	if (rxr_rdma_handle_error(ep, rdma_entry, ret))
+		assert(0 &&
+		       "error writing err cq entry while handling RDMA error");
 	return;
 }
 

@@ -220,18 +220,15 @@ struct rxr_env {
 	int timeout_interval;
 	size_t efa_cq_read_size;
 	size_t shm_cq_read_size;
+	size_t efa_max_long_msg_size;
+	size_t efa_max_emulated_read_size;
+	size_t efa_max_emulated_write_size;
+	size_t efa_rdma_read_segment_size;
 };
 
 enum rxr_lower_ep_type {
 	EFA_EP = 1,
 	SHM_EP,
-};
-
-/* RMA context packet types which are used only on local EP */
-enum rxr_rma_context_pkt_type {
-	RXR_SHM_RMA_READ = 1,
-	RXR_SHM_RMA_WRITE,
-	RXR_SHM_LARGE_READ,
 };
 
 enum rxr_x_entry_type {
@@ -337,6 +334,7 @@ struct rxr_rx_entry {
 	 */
 	uint32_t tx_id;
 	uint32_t rx_id;
+	uint32_t op;
 
 	/*
 	 * The following two varibales are for emulated RMA fi_read only
@@ -561,6 +559,8 @@ struct rxr_ep {
 	struct ofi_bufpool *rx_entry_pool;
 	/* datastructure to maintain read response */
 	struct ofi_bufpool *readrsp_tx_entry_pool;
+	/* data structure to maintail RDMA */
+	struct ofi_bufpool *rdma_entry_pool;
 
 	/* rx_entries with recv buf */
 	struct dlist_entry rx_list;
@@ -580,6 +580,8 @@ struct rxr_ep {
 	struct dlist_entry rx_entry_queued_list;
 	/* tx_entries with data to be sent (large messages) */
 	struct dlist_entry tx_pending_list;
+	/* rdma_entries with data to be read */
+	struct dlist_entry rdma_pending_list;
 	/* rxr_peer entries that are in backoff due to RNR */
 	struct dlist_entry peer_backoff_list;
 	/* rxr_peer entries with an allocated robuf */

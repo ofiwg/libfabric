@@ -66,6 +66,10 @@ struct rxr_env rxr_env = {
 	.timeout_interval = 0, /* 0 is random timeout */
 	.efa_cq_read_size = 50,
 	.shm_cq_read_size = 50,
+	.efa_max_long_msg_size = 131072,
+	.efa_max_emulated_read_size = 0,
+	.efa_max_emulated_write_size = 65536,
+	.efa_rdma_read_segment_size = 16777216
 };
 
 static void rxr_init_env(void)
@@ -107,6 +111,14 @@ static void rxr_init_env(void)
 			 &rxr_env.efa_cq_read_size);
 	fi_param_get_size_t(&rxr_prov, "shm_cq_read_size",
 			 &rxr_env.shm_cq_read_size);
+	fi_param_get_size_t(&rxr_prov, "inter_max_long_msg_size",
+			    &rxr_env.efa_max_long_msg_size);
+	fi_param_get_size_t(&rxr_prov, "inter_max_emulated_read_size",
+			    &rxr_env.efa_max_emulated_read_size);
+	fi_param_get_size_t(&rxr_prov, "inter_max_emulated_write_size",
+			    &rxr_env.efa_max_emulated_write_size);
+	fi_param_get_size_t(&rxr_prov, "rdma_read_segment_size",
+			    &rxr_env.efa_rdma_read_segment_size);
 }
 
 /*
@@ -668,6 +680,14 @@ EFA_INI
 			"Set the number of EFA completion entries to read for one loop for one iteration of the progress engine. (Default: 50)");
 	fi_param_define(&rxr_prov, "shm_cq_read_size", FI_PARAM_SIZE_T,
 			"Set the number of SHM completion entries to read for one loop for one iteration of the progress engine. (Default: 50)");
+	fi_param_define(&rxr_prov, "inter_max_long_msg_size", FI_PARAM_INT,
+			"The maximum size for inter EFA (non shm) long message protocol. Messages whose size is larger than this value will be sent/received via the read message protocol (message by rdma read).");
+	fi_param_define(&rxr_prov, "inter_max_emulated_read_size", FI_PARAM_INT,
+			"The maximum size for inter EFA (non shm) emulated read protocol. Read requests whose size is larger than this value will be implemented via RDMA read (if firmware support), (Default 0 [RDMA read is always used]).");
+	fi_param_define(&rxr_prov, "inter_max_emulated_write_size", FI_PARAM_INT,
+			"The maximum size for inter EFA (non shm) emulated write protocol. Write requests whose size is larger than this value will be implemented via read write protocol (write by rdma read).");
+	fi_param_define(&rxr_prov, "efa_rdma_read_size", FI_PARAM_INT,
+			"Calls to RDMA read is segmented using this value.");
 	rxr_init_env();
 
 #if HAVE_EFA_DL
