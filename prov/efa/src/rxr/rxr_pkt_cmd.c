@@ -259,8 +259,11 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct fi_cq_data_entry *
 	case RXR_READRSP_PKT:
 		rxr_pkt_handle_readrsp_send_completion(ep, pkt_entry);
 		break;
+	case RXR_EOR_PKT:
+		rxr_pkt_handle_eor_send_completion(ep, pkt_entry);
+		break;
 	case RXR_RMA_CONTEXT_PKT:
-		rxr_pkt_handle_rma_context_send_completion(ep, pkt_entry);
+		rxr_pkt_handle_rma_completion(ep, pkt_entry);
 		return;
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
