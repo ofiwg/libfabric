@@ -81,6 +81,10 @@ static int cq_open_close_simultaneous(void)
 	for (opened = 0; opened < count && !ret; opened++) {
 		ret = create_cq(&cq_array[opened], 0, 0, FI_CQ_FORMAT_UNSPEC,
 				FI_WAIT_UNSPEC);
+		if (ret) {
+			ret = create_cq(&cq_array[opened], 0, 0,
+					FI_CQ_FORMAT_UNSPEC, FI_WAIT_NONE);
+		}
 	}
 	if (ret) {
 		FT_WARN("fi_cq_open failed after %d (cq_cnt: %zu): %s",
@@ -114,6 +118,11 @@ cq_open_close_sizes()
 		size = (i < 0) ? 0 : 1 << i;
 
 		ret = create_cq(&cq, size, 0, FI_CQ_FORMAT_UNSPEC, FI_WAIT_UNSPEC);
+		if (ret != 0) {
+			ret = create_cq(&cq, size, 0, FI_CQ_FORMAT_UNSPEC,
+					FI_WAIT_NONE);
+		}
+
 		if (ret == -FI_EINVAL) {
 			FT_WARN("\nSuccessfully completed %d iterations up to "
 				"size %d before the provider returned "
@@ -123,8 +132,7 @@ cq_open_close_sizes()
 			goto pass;
 		}
 		if (ret != 0) {
-			sprintf(err_buf, "fi_cq_open(%d, 0, FI_CQ_FORMAT_UNSPEC, "
-					"FI_WAIT_UNSPEC) = %d, %s",
+			sprintf(err_buf, "fi_cq_open with size %d returned %d, %s",
 					size, ret, fi_strerror(-ret));
 			goto fail;
 		}
