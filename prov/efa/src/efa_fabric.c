@@ -820,6 +820,7 @@ static int efa_fabric_close(fid_t fid)
 	struct efa_fabric *fab;
 	int ret;
 
+	unsetenv("RDMAV_HUGEPAGES_SAFE");
 	fab = container_of(fid, struct efa_fabric, util_fabric.fabric_fid.fid);
 	ret = ofi_fabric_close(&fab->util_fabric);
 	if (ret)
@@ -852,6 +853,29 @@ int efa_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric_fid,
 	const struct fi_info *info;
 	struct efa_fabric *fab;
 	int ret = 0;
+
+	/*
+	 * Enable rdma-core fork support and huge page support. We want call
+	 * this only when the EFA provider is selected. It is safe to call this
+	 * function again if multiple EFA fabrics are opened or if the fabric
+	 * is closed and opened again.
+	 *
+	 * TODO: allow users to disable this once the fork() to check ptrace
+	 * permissions is removed.
+	 */
+	ret = setenv("RDMAV_HUGEPAGES_SAFE", "1", 1);
+	if (ret)
+		return -errno;
+
+	ret = ibv_fork_init();
+	if (ret) {
+		EFA_WARN(FI_LOG_FABRIC, "Failed to initialize libibverbs "
+					"fork support. Please check your "
+					"application to ensure it is not "
+					"making verbs calls before "
+					"initializing EFA.\n");
+		return -ret;
+	}
 
 	fab = calloc(1, sizeof(*fab));
 	if (!fab)
