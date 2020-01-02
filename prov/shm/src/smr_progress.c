@@ -352,7 +352,13 @@ static int smr_progress_cmd_msg(struct smr_ep *ep, struct smr_cmd *cmd)
 		unexp = freestack_pop(ep->unexp_fs);
 		memcpy(&unexp->cmd, cmd, sizeof(*cmd));
 		ofi_cirque_discard(smr_cmd_queue(ep->region));
-		dlist_insert_tail(&unexp->entry, &ep->unexp_queue.list);
+		if (cmd->msg.hdr.op == ofi_op_msg) {
+			dlist_insert_tail(&unexp->entry, &ep->unexp_msg_queue.list);
+		} else {
+			assert(cmd->msg.hdr.op == ofi_op_tagged);
+			dlist_insert_tail(&unexp->entry, &ep->unexp_tagged_queue.list);
+		}
+
 		return ret;
 	}
 	entry = container_of(dlist_entry, struct smr_ep_entry, entry);
@@ -593,7 +599,9 @@ void smr_ep_progress(struct util_ep *util_ep)
 	smr_progress_cmd(ep);
 }
 
-int smr_progress_unexp(struct smr_ep *ep, struct smr_ep_entry *entry)
+int smr_progress_unexp(struct smr_ep *ep,
+		       struct smr_ep_entry *entry,
+		       struct smr_queue *unexp_queue)
 {
 	struct smr_match_attr match_attr;
 	struct smr_unexp_msg *unexp_msg;
@@ -612,8 +620,8 @@ int smr_progress_unexp(struct smr_ep *ep, struct smr_ep_entry *entry)
 	match_attr.addr = entry->addr;
 	match_attr.ignore = entry->ignore;
 	match_attr.tag = entry->tag;
-	dlist_entry = dlist_remove_first_match(&ep->unexp_queue.list,
-					       ep->unexp_queue.match_func,
+	dlist_entry = dlist_remove_first_match(&unexp_queue->list,
+					       unexp_queue->match_func,
 					       &match_attr);
 	if (!dlist_entry) {
 		ret = -FI_ENOMSG;
