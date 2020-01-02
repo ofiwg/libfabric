@@ -69,6 +69,19 @@ static inline struct smr_ep_entry *smr_get_recv_entry(struct smr_ep *ep,
 	return entry;
 }
 
+static inline ssize_t
+smr_process_recv_post(struct smr_ep *ep, struct smr_ep_entry *entry)
+{
+	ssize_t ret;
+
+	ret = smr_progress_unexp(ep, entry, &ep->unexp_msg_queue);
+	if (!ret || ret == -FI_EAGAIN)
+		return ret;
+
+	dlist_insert_tail(&entry->entry, &ep->recv_queue.list);
+	return 0;
+}
+
 ssize_t smr_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 		    uint64_t flags)
 {
@@ -92,7 +105,7 @@ ssize_t smr_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 
 	entry->context = msg->context;
 
-	dlist_insert_tail(&entry->entry, &ep->recv_queue.list);
+	ret = smr_process_recv_post(ep, entry);
 out:
 	fastlock_release(&ep->util_ep.rx_cq->cq_lock);
 	return ret;
@@ -121,7 +134,7 @@ ssize_t smr_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 
 	entry->context = context;
 
-	dlist_insert_tail(&entry->entry, &ep->recv_queue.list);
+	ret = smr_process_recv_post(ep, entry);
 out:
 	fastlock_release(&ep->util_ep.rx_cq->cq_lock);
 	return ret;
@@ -148,7 +161,7 @@ ssize_t smr_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 
 	entry->context = context;
 
-	dlist_insert_tail(&entry->entry, &ep->recv_queue.list);
+	ret = smr_process_recv_post(ep, entry);
 out:
 	fastlock_release(&ep->util_ep.rx_cq->cq_lock);
 	return ret;
@@ -383,7 +396,7 @@ smr_proccess_trecv_post(struct smr_ep *ep, struct smr_ep_entry *entry)
 {
 	ssize_t ret;
 
-	ret = smr_progress_unexp(ep, entry);
+	ret = smr_progress_unexp(ep, entry, &ep->unexp_tagged_queue);
 	if (!ret || ret == -FI_EAGAIN)
 		return ret;
 
