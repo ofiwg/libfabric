@@ -1570,10 +1570,9 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 			} else {
 				recv_req_put_event(req, event);
 
-				if (event->tgt_long.mlength > req->recv.ulen)
+				req->data_len = event->tgt_long.rlength;
+				if (req->data_len > req->recv.ulen)
 					req->data_len = req->recv.ulen;
-				else
-					req->data_len = event->tgt_long.mlength;
 			}
 			dlist_insert_tail(&req->recv.ux_entry, &rxc->ux_recvs);
 
