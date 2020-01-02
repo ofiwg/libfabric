@@ -570,7 +570,7 @@ struct fi_ibv_ep {
 		struct ibv_send_wr	msg_wr;
 		struct ibv_sge		sge;
 	} *wrs;
-	size_t				rx_size;
+	size_t				rx_cq_size;
 	struct rdma_conn_param		conn_param;
 	struct fi_ibv_cm_data_hdr	*cm_hdr;
 };

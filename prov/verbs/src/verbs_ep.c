@@ -277,7 +277,7 @@ static int fi_ibv_close_free_ep(struct fi_ibv_ep *ep)
 	if (ep->util_ep.rx_cq) {
 		cq = container_of(ep->util_ep.rx_cq, struct fi_ibv_cq, util_cq);
 		cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
-		cq->credits += ep->rx_size;
+		cq->credits += ep->rx_cq_size;
 		cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
 	}
 	ret = ofi_endpoint_close(&ep->util_ep);
@@ -394,20 +394,19 @@ static int fi_ibv_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		/* Reserve space for receives */
 		if (flags & FI_RECV) {
 			cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
-			if (cq->credits < ep->rx_size) {
-				cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
+			if (cq->credits < ep->rx_cq_size) {
 				VERBS_WARN(FI_LOG_DOMAIN,
-					   "CQ is fully reserved\n");
-				return -FI_ENOCQ;
-			}
-			cq->credits -= ep->rx_size;
+					   "Rx CQ is fully reserved\n");
+				ep->rx_cq_size = 0;
+			} 
+			cq->credits -= ep->rx_cq_size;
 			cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
 		}
 
 		ret = ofi_ep_bind_cq(&ep->util_ep, &cq->util_cq, flags);
 		if (ret) {
 			cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
-			cq->credits += ep->rx_size;
+			cq->credits += ep->rx_cq_size;
 			cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
 			return ret;
 		}
@@ -1013,7 +1012,7 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 
 	if (info->ep_attr->rx_ctx_cnt == 0 || 
 	    info->ep_attr->rx_ctx_cnt == 1)
-		ep->rx_size = info->rx_attr->size;
+		ep->rx_cq_size = info->rx_attr->size;
 	
 	if (info->ep_attr->tx_ctx_cnt == 0 || 
 	    info->ep_attr->tx_ctx_cnt == 1)
