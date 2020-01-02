@@ -1672,6 +1672,7 @@ int rxr_ep_post_ctrl_or_queue(struct rxr_ep *ep, int entry_type, void *x_entry, 
 			tx_entry = (struct rxr_tx_entry *)x_entry;
 			tx_entry->state = RXR_TX_QUEUED_CTRL;
 			tx_entry->queued_ctrl.type = ctrl_type;
+			tx_entry->queued_ctrl.inject = inject;
 			dlist_insert_tail(&tx_entry->queued_entry,
 					  &ep->tx_entry_queued_list);
 		} else {
