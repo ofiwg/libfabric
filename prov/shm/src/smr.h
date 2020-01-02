@@ -186,7 +186,8 @@ struct smr_ep {
 	struct smr_queue	trecv_queue;
 	struct smr_unexp_fs	*unexp_fs;
 	struct smr_pend_fs	*pend_fs;
-	struct smr_queue	unexp_queue;
+	struct smr_queue	unexp_msg_queue;
+	struct smr_queue	unexp_tagged_queue;
 };
 
 #define smr_ep_rx_flags(smr_ep) ((smr_ep)->util_ep.rx_op_flags)
@@ -245,6 +246,9 @@ int smr_rx_src_comp_signal(struct smr_ep *ep, void *context, uint32_t op,
 uint64_t smr_rx_cq_flags(uint32_t op, uint16_t op_flags);
 
 void smr_ep_progress(struct util_ep *util_ep);
-int smr_progress_unexp(struct smr_ep *ep, struct smr_ep_entry *entry);
+
+int smr_progress_unexp(struct smr_ep *ep,
+		       struct smr_ep_entry *entry,
+		       struct smr_queue *unexp_queue);
 
 #endif
