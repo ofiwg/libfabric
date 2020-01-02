@@ -640,7 +640,8 @@ int fi_ibv_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	}
 
 	ret = ofi_bufpool_create(&cq->ctx_pool, sizeof(struct fi_context),
-				 16, size, fi_ibv_gl_data.def_tx_size, 0);
+				 16, size, fi_ibv_gl_data.def_tx_size,
+				 OFI_BUFPOOL_NO_TRACK);
 	if (ret)
 		goto err6;
 
