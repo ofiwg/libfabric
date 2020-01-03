@@ -210,12 +210,26 @@ static int smr_match_tagged(struct dlist_entry *item, const void *args)
 	       smr_match_tag(recv_entry->tag, recv_entry->ignore, attr->tag); 
 } 
 
-static int smr_match_unexp(struct dlist_entry *item, const void *args)
+static int smr_match_unexp_msg(struct dlist_entry *item, const void *args)
 {
 	struct smr_match_attr *attr = (struct smr_match_attr *)args;
 	struct smr_unexp_msg *unexp_msg;
 
 	unexp_msg = container_of(item, struct smr_unexp_msg, entry);
+	assert(unexp_msg->cmd.msg.hdr.op == ofi_op_msg);
+	return smr_match_addr(unexp_msg->cmd.msg.hdr.addr, attr->addr);
+}
+
+static int smr_match_unexp_tagged(struct dlist_entry *item, const void *args)
+{
+	struct smr_match_attr *attr = (struct smr_match_attr *)args;
+	struct smr_unexp_msg *unexp_msg;
+
+	unexp_msg = container_of(item, struct smr_unexp_msg, entry);
+	if (unexp_msg->cmd.msg.hdr.op == ofi_op_msg)
+		return smr_match_addr(unexp_msg->cmd.msg.hdr.addr, attr->addr);
+
+	assert(unexp_msg->cmd.msg.hdr.op == ofi_op_tagged);
 	return smr_match_addr(unexp_msg->cmd.msg.hdr.addr, attr->addr) &&
 	       smr_match_tag(unexp_msg->cmd.msg.hdr.tag, attr->ignore,
 			     attr->tag);
@@ -517,7 +531,8 @@ int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	ep->pend_fs = smr_pend_fs_create(info->tx_attr->size, NULL, NULL);
 	smr_init_queue(&ep->recv_queue, smr_match_msg);
 	smr_init_queue(&ep->trecv_queue, smr_match_tagged);
-	smr_init_queue(&ep->unexp_queue, smr_match_unexp);
+	smr_init_queue(&ep->unexp_msg_queue, smr_match_unexp_msg);
+	smr_init_queue(&ep->unexp_tagged_queue, smr_match_unexp_tagged);
 
 	ep->min_multi_recv_size = SMR_INJECT_SIZE;
 
