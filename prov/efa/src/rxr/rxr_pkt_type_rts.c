@@ -443,7 +443,7 @@ int rxr_pkt_proc_rts_data(struct rxr_ep *ep,
 	if (OFI_UNLIKELY(bytes_copied < data_size)) {
 		/* recv buffer is not big enough to hold rts, this must be a truncated message */
 		assert(bytes_copied == rx_entry->cq_entry.len &&
-		       rx_entry->cq_entry.len < rx_entry->total_len);
+		       rx_entry->cq_entry.len <= rx_entry->total_len);
 		rx_entry->bytes_done = bytes_copied;
 		bytes_left = 0;
 	} else {
@@ -576,7 +576,7 @@ int rxr_pkt_proc_msg_rts(struct rxr_ep *ep,
 	}
 
 	if (OFI_UNLIKELY(!match)) {
-		rx_entry = rxr_ep_get_new_unexp_rx_entry(ep, pkt_entry);
+		rx_entry = rxr_ep_alloc_unexp_rx_entry_for_rts(ep, pkt_entry);
 		if (!rx_entry) {
 			FI_WARN(&rxr_prov, FI_LOG_CQ,
 				"RX entries exhausted.\n");
@@ -587,7 +587,7 @@ int rxr_pkt_proc_msg_rts(struct rxr_ep *ep,
 		/* we are not releasing pkt_entry here because it will be
 		 * processed later
 		 */
-		pkt_entry = rx_entry->unexp_rts_pkt;
+		pkt_entry = rx_entry->unexp_pkt;
 		rts_hdr = rxr_get_rts_hdr(pkt_entry->pkt);
 		rxr_pkt_proc_rts_base_hdr(ep, rx_entry, pkt_entry);
 		return 0;

@@ -54,15 +54,43 @@
  *     rxr_pkt_handle_recv_completion().
  */
 
-enum rxr_pkt_type {
-	RXR_RTS_PKT = 1,
-	RXR_CONNACK_PKT,
-	RXR_CTS_PKT,
-	RXR_DATA_PKT,
-	RXR_READRSP_PKT,
-	RXR_RMA_CONTEXT_PKT,
-	RXR_EOR_PKT,
-};
+/* ID of each packet type. Changing ID would break inter
+ * operability thus is strictly prohibited.
+ */
+
+#define RXR_RTS_PKT		1
+#define RXR_CONNACK_PKT		2
+#define RXR_CTS_PKT		3
+#define RXR_DATA_PKT		4
+#define RXR_READRSP_PKT		5
+#define RXR_RMA_CONTEXT_PKT	6
+#define RXR_EOR_PKT		7
+/*
+ * The following packet types are part of protocol version 4
+ */
+#define RXR_HANDSHAKE_PKT	8
+
+#define RXR_REQ_PKT_BEGIN		64
+#define RXR_BASELINE_REQ_PKT_BEGIN	64
+#define RXR_EAGER_MSGRTM_PKT		64
+#define RXR_EAGER_TAGRTM_PKT		65
+#define RXR_MEDIUM_MSGRTM_PKT		66
+#define RXR_MEDIUM_TAGRTM_PKT		67
+#define RXR_LONG_MSGRTM_PKT		68
+#define RXR_LONG_TAGRTM_PKT		69
+#define RXR_EAGER_RTW_PKT		70
+#define RXR_LONG_RTW_PKT		71
+#define RXR_SHORT_RTR_PKT		72
+#define RXR_LONG_RTR_PKT		73
+#define RXR_WRITE_RTA_PKT		74
+#define RXR_READFETCH_RTA_PKT		75
+#define RXR_BASELINE_REQ_PKT_END	76
+
+#define RXR_EXTRA_REQ_PKT_BEGIN		76
+#define RXR_READ_MSGRTM_PKT		76
+#define RXR_READ_TAGRTM_PKT		77
+#define RXR_READ_RTW_PKT		78
+#define RXR_READ_RTR_PKT		79
 
 /*
  *  Packet fields common to all rxr packets. The other packet headers below must
@@ -422,3 +450,4 @@ struct rxr_ctrl_cq_pkt {
 
 #endif
 
+#include "rxr_pkt_type_req.h"

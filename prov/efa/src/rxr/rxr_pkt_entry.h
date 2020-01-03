@@ -58,24 +58,25 @@ struct rxr_pkt_entry {
 	struct dlist_entry dbg_entry;
 #endif
 	void *x_entry; /* pointer to rxr rx/tx entry */
+	size_t pkt_type;
 	size_t pkt_size;
+	size_t hdr_size;
 	struct fid_mr *mr;
 	fi_addr_t addr;
 	void *pkt; /* rxr_ctrl_*_pkt, or rxr_data_pkt */
 	enum rxr_pkt_entry_type type;
 	enum rxr_pkt_entry_state state;
+	struct rxr_pkt_entry *next;
 #if ENABLE_DEBUG
 /* pad to cache line size of 64 bytes */
-	uint8_t pad[48];
+	uint8_t pad[24];
+#else
+	uint8_t pad[40];
 #endif
 };
 
 #if defined(static_assert) && defined(__x86_64__)
-#if ENABLE_DEBUG
 static_assert(sizeof(struct rxr_pkt_entry) == 128, "rxr_pkt_entry check");
-#else
-static_assert(sizeof(struct rxr_pkt_entry) == 64, "rxr_pkt_entry check");
-#endif
 #endif
 
 OFI_DECL_RECVWIN_BUF(struct rxr_pkt_entry*, rxr_robuf, uint32_t);

@@ -220,7 +220,6 @@ struct rxr_env {
 	int timeout_interval;
 	size_t efa_cq_read_size;
 	size_t shm_cq_read_size;
-	size_t efa_max_long_msg_size;
 	size_t efa_max_emulated_read_size;
 	size_t efa_max_emulated_write_size;
 	size_t efa_read_segment_size;
@@ -389,7 +388,7 @@ struct rxr_rx_entry {
 	struct dlist_entry multi_recv_entry;
 	struct rxr_rx_entry *master_entry;
 
-	struct rxr_pkt_entry *unexp_rts_pkt;
+	struct rxr_pkt_entry *unexp_pkt;
 
 #if ENABLE_DEBUG
 	/* linked with rx_pending_list in rxr_ep */
@@ -816,8 +815,15 @@ int rxr_ep_set_tx_credit_request(struct rxr_ep *rxr_ep,
 void rxr_inline_mr_reg(struct rxr_domain *rxr_domain,
 		       struct rxr_tx_entry *tx_entry);
 
-struct rxr_rx_entry *rxr_ep_get_new_unexp_rx_entry(struct rxr_ep *ep,
-						   struct rxr_pkt_entry *unexp_entry);
+struct rxr_rx_entry *rxr_ep_alloc_unexp_rx_entry_for_rts(struct rxr_ep *ep,
+							 struct rxr_pkt_entry *pkt_entry);
+
+struct rxr_rx_entry *rxr_ep_alloc_unexp_rx_entry_for_msgrtm(struct rxr_ep *ep,
+							    struct rxr_pkt_entry **pkt_entry);
+
+struct rxr_rx_entry *rxr_ep_alloc_unexp_rx_entry_for_tagrtm(struct rxr_ep *ep,
+							    struct rxr_pkt_entry **pkt_entry);
+
 struct rxr_rx_entry *rxr_ep_split_rx_entry(struct rxr_ep *ep,
 					   struct rxr_rx_entry *posted_entry,
 					   struct rxr_rx_entry *consumer_entry,
