@@ -63,7 +63,7 @@ struct rxr_rx_entry *rxr_ep_rx_entry_init(struct rxr_ep *ep,
 	rx_entry->iov_count = iov_count;
 	rx_entry->tag = tag;
 	rx_entry->ignore = ignore;
-	rx_entry->unexp_rts_pkt = NULL;
+	rx_entry->unexp_pkt = NULL;
 	rx_entry->rma_iov_count = 0;
 	dlist_init(&rx_entry->queued_pkts);
 
@@ -133,50 +133,120 @@ struct rxr_rx_entry *rxr_ep_get_rx_entry(struct rxr_ep *ep,
  * Create a new rx_entry for an unexpected message. Store the packet for later
  * processing and put the rx_entry on the appropriate unexpected list.
  */
-struct rxr_rx_entry *rxr_ep_get_new_unexp_rx_entry(struct rxr_ep *ep,
-						   struct rxr_pkt_entry *pkt_entry)
+
+struct rxr_pkt_entry *rxr_ep_get_unexp_pkt_entry(struct rxr_ep *ep,
+						 struct rxr_pkt_entry *pkt_entry)
 {
-	struct rxr_rx_entry *rx_entry;
-	struct rxr_pkt_entry *unexp_entry;
-	struct rxr_rts_hdr *rts_pkt;
-	uint32_t op;
+	struct rxr_pkt_entry *unexp_pkt_entry;
 
 	if (rxr_env.rx_copy_unexp && pkt_entry->type == RXR_PKT_ENTRY_POSTED) {
-		unexp_entry = rxr_pkt_entry_alloc(ep, ep->rx_unexp_pkt_pool);
-		if (OFI_UNLIKELY(!unexp_entry)) {
+		unexp_pkt_entry = rxr_pkt_entry_alloc(ep, ep->rx_unexp_pkt_pool);
+		if (OFI_UNLIKELY(!unexp_pkt_entry)) {
 			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 				"Unable to allocate rx_pkt_entry for unexp msg\n");
 			return NULL;
 		}
-		rxr_pkt_entry_copy(ep, unexp_entry, pkt_entry,
+		rxr_pkt_entry_copy(ep, unexp_pkt_entry, pkt_entry,
 				   RXR_PKT_ENTRY_UNEXP);
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
 	} else {
-		unexp_entry = pkt_entry;
+		unexp_pkt_entry = pkt_entry;
 	}
 
-	rts_pkt = rxr_get_rts_hdr(unexp_entry->pkt);
+	return unexp_pkt_entry;
+}
 
-	if (rts_pkt->flags & RXR_TAGGED)
-		op = ofi_op_tagged;
-	else
-		op = ofi_op_msg;
+struct rxr_rx_entry *rxr_ep_alloc_unexp_rx_entry_for_rts(struct rxr_ep *ep,
+							 struct rxr_pkt_entry *pkt_entry)
+{
+	struct rxr_rx_entry *rx_entry;
+	struct rxr_pkt_entry *unexp_entry;
+	struct rxr_rts_hdr *rts_hdr;
 
-	rx_entry = rxr_ep_get_rx_entry(ep, NULL, 0, rts_pkt->tag, ~0, NULL,
-				       unexp_entry->addr, op, 0);
+	unexp_entry = rxr_ep_get_unexp_pkt_entry(ep, pkt_entry);
+	if (OFI_UNLIKELY(!unexp_entry))
+		return NULL;
+
+	rx_entry = rxr_ep_get_rx_entry(ep, NULL, 0, 0, ~0, NULL,
+				       unexp_entry->addr, ofi_op_msg, 0);
 	if (OFI_UNLIKELY(!rx_entry))
 		return NULL;
 
-	rx_entry->state = RXR_RX_UNEXP;
-	rx_entry->total_len = rts_pkt->data_len;
-	rx_entry->rxr_flags = rts_pkt->flags;
-	rx_entry->unexp_rts_pkt = unexp_entry;
+	rts_hdr = rxr_get_rts_hdr(unexp_entry->pkt);
+	if (rts_hdr->flags & RXR_TAGGED)
+		rx_entry->op = ofi_op_tagged;
+	else
+		rx_entry->op = ofi_op_msg;
 
-	if (op == ofi_op_tagged)
+	rx_entry->tag = rts_hdr->tag;
+	rx_entry->rxr_flags = rts_hdr->flags;
+	rx_entry->total_len = rts_hdr->data_len;
+	if (rx_entry->op == ofi_op_tagged)
 		dlist_insert_tail(&rx_entry->entry, &ep->rx_unexp_tagged_list);
 	else
 		dlist_insert_tail(&rx_entry->entry, &ep->rx_unexp_list);
 
+	rx_entry->state = RXR_RX_UNEXP;
+	rx_entry->unexp_pkt = unexp_entry;
+
+	return rx_entry;
+}
+
+struct rxr_rx_entry *rxr_ep_alloc_unexp_rx_entry_for_msgrtm(struct rxr_ep *ep,
+							    struct rxr_pkt_entry **pkt_entry)
+{
+	struct rxr_rx_entry *rx_entry;
+	struct rxr_pkt_entry *unexp_pkt_entry;
+
+	unexp_pkt_entry = rxr_ep_get_unexp_pkt_entry(ep, *pkt_entry);
+	if (OFI_UNLIKELY(!unexp_pkt_entry))
+		return NULL;
+
+	if (unexp_pkt_entry != *pkt_entry)
+		*pkt_entry = unexp_pkt_entry;
+
+	rx_entry = rxr_ep_get_rx_entry(ep, NULL, 0, 0, ~0, NULL,
+				       unexp_pkt_entry->addr, ofi_op_msg, 0);
+	if (OFI_UNLIKELY(!rx_entry)) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ,
+			"RX entries exhausted.\n");
+		efa_eq_write_error(&ep->util_ep, FI_ENOBUFS, -FI_ENOBUFS);
+		return NULL;
+	}
+
+	rx_entry->rxr_flags = 0;
+	rxr_pkt_read_req_hdr(*pkt_entry, rx_entry);
+	rx_entry->state = RXR_RX_UNEXP;
+	rx_entry->unexp_pkt = unexp_pkt_entry;
+	dlist_insert_tail(&rx_entry->entry, &ep->rx_unexp_list);
+	return rx_entry;
+}
+
+struct rxr_rx_entry *rxr_ep_alloc_unexp_rx_entry_for_tagrtm(struct rxr_ep *ep,
+							    struct rxr_pkt_entry **pkt_entry)
+{
+	uint64_t tag;
+	struct rxr_rx_entry *rx_entry;
+	struct rxr_pkt_entry *unexp_pkt_entry;
+
+	unexp_pkt_entry = rxr_ep_get_unexp_pkt_entry(ep, *pkt_entry);
+	if (OFI_UNLIKELY(!unexp_pkt_entry))
+		return NULL;
+
+	if (unexp_pkt_entry != *pkt_entry)
+		*pkt_entry = unexp_pkt_entry;
+
+	tag = rxr_pkt_rtm_tag(*pkt_entry);
+	rx_entry = rxr_ep_get_rx_entry(ep, NULL, 0, tag, ~0, NULL,
+				       unexp_pkt_entry->addr, ofi_op_tagged, 0);
+	if (OFI_UNLIKELY(!rx_entry))
+		return NULL;
+
+	rx_entry->rxr_flags = 0;
+	rxr_pkt_read_req_hdr(*pkt_entry, rx_entry);
+	rx_entry->state = RXR_RX_UNEXP;
+	rx_entry->unexp_pkt = unexp_pkt_entry;
+	dlist_insert_tail(&rx_entry->entry, &ep->rx_unexp_tagged_list);
 	return rx_entry;
 }
 
@@ -186,13 +256,26 @@ struct rxr_rx_entry *rxr_ep_split_rx_entry(struct rxr_ep *ep,
 					   struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_rx_entry *rx_entry;
-	struct rxr_rts_hdr *rts_pkt = NULL;
-	size_t buf_len, consumed_len;
+	size_t buf_len, consumed_len, data_len;
+	uint64_t tag;
+	struct rxr_base_hdr *base_hdr;
 
-	rts_pkt = rxr_get_rts_hdr(pkt_entry->pkt);
+	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
+	if (base_hdr->type == RXR_RTS_PKT) {
+		struct rxr_rts_hdr *rts_hdr = NULL;
+
+		rts_hdr = rxr_get_rts_hdr(pkt_entry->pkt);
+		tag = rts_hdr->tag;
+		data_len = rts_hdr->data_len;
+	} else {
+		assert(base_hdr->type >= RXR_REQ_PKT_BEGIN);
+		tag = 0;
+		data_len = 0;
+	}
+
 	if (!consumer_entry) {
 		rx_entry = rxr_ep_get_rx_entry(ep, posted_entry->iov,
-					       posted_entry->iov_count, rts_pkt->tag,
+					       posted_entry->iov_count, tag,
 					       0, NULL, pkt_entry->addr, ofi_op_msg,
 					       posted_entry->fi_flags);
 		if (OFI_UNLIKELY(!rx_entry))
@@ -209,11 +292,17 @@ struct rxr_rx_entry *rxr_ep_split_rx_entry(struct rxr_ep *ep,
 		rx_entry->iov_count = posted_entry->iov_count;
 	}
 
+	if (base_hdr->type >= RXR_REQ_PKT_BEGIN) {
+		rxr_pkt_read_req_hdr(pkt_entry, rx_entry);
+		data_len = rx_entry->total_len;
+	}
+
 	buf_len = ofi_total_iov_len(rx_entry->iov,
 				    rx_entry->iov_count);
-	consumed_len = MIN(buf_len, rts_pkt->data_len);
+	consumed_len = MIN(buf_len, data_len);
 
 	rx_entry->rxr_flags |= RXR_MULTI_RECV_CONSUMER;
+	rx_entry->total_len = data_len;
 	rx_entry->fi_flags |= FI_MULTI_RECV;
 	rx_entry->master_entry = posted_entry;
 	rx_entry->cq_entry.len = consumed_len;
@@ -522,12 +611,12 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 
 	dlist_foreach(&rxr_ep->rx_unexp_list, entry) {
 		rx_entry = container_of(entry, struct rxr_rx_entry, entry);
-		rxr_pkt_entry_release_rx(rxr_ep, rx_entry->unexp_rts_pkt);
+		rxr_pkt_entry_release_rx(rxr_ep, rx_entry->unexp_pkt);
 	}
 
 	dlist_foreach(&rxr_ep->rx_unexp_tagged_list, entry) {
 		rx_entry = container_of(entry, struct rxr_rx_entry, entry);
-		rxr_pkt_entry_release_rx(rxr_ep, rx_entry->unexp_rts_pkt);
+		rxr_pkt_entry_release_rx(rxr_ep, rx_entry->unexp_pkt);
 	}
 
 	dlist_foreach(&rxr_ep->rx_entry_queued_list, entry) {
@@ -1414,8 +1503,8 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	/*
 	 * Send data packets until window or tx queue is exhausted.
 	 */
-	dlist_foreach_container(&ep->tx_pending_list, struct rxr_tx_entry,
-				tx_entry, entry) {
+	dlist_foreach_container_safe(&ep->tx_pending_list, struct rxr_tx_entry,
+				     tx_entry, entry, tmp) {
 		if (tx_entry->window > 0)
 			tx_entry->send_flags |= FI_MORE;
 		else

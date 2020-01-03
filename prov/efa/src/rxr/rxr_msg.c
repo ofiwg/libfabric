@@ -105,7 +105,25 @@ ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 	    rxr_need_sas_ordering(rxr_ep))
 		tx_entry->msg_id = peer->next_msg_id++;
 
-	err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry, RXR_RTS_PKT, 0);
+	int eager_pkt_type = (op == ofi_op_tagged) ? RXR_EAGER_TAGRTM_PKT : RXR_EAGER_MSGRTM_PKT;
+	int long_pkt_type = (op == ofi_op_tagged) ? RXR_LONG_TAGRTM_PKT : RXR_LONG_MSGRTM_PKT;
+
+	size_t max_pkt_data_size = rxr_pkt_req_max_data_size(rxr_ep,
+							    tx_entry->addr,
+							    RXR_EAGER_TAGRTM_PKT);
+
+	if (tx_entry->total_len <= max_pkt_data_size) {
+		err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
+						 eager_pkt_type, 0);
+	} else if (peer->is_local) {
+		err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
+						 RXR_RTS_PKT, 0);
+
+	} else {
+		err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
+						 long_pkt_type, 0);
+	}
+
 	if (OFI_UNLIKELY(err)) {
 		rxr_release_tx_entry(rxr_ep, tx_entry);
 		if (!(rxr_env.enable_shm_transfer && peer->is_local) &&
@@ -416,16 +434,19 @@ int rxr_msg_handle_unexp_match(struct rxr_ep *ep,
 			       void *context, fi_addr_t addr,
 			       uint32_t op, uint64_t flags)
 {
-	struct rxr_rts_hdr *rts_hdr;
+	struct rxr_base_hdr *base_hdr;
 	struct rxr_pkt_entry *pkt_entry;
-	uint64_t len;
+	uint64_t data_len;
 
 	rx_entry->fi_flags = flags;
 	rx_entry->ignore = ignore;
 	rx_entry->state = RXR_RX_MATCHED;
 
-	pkt_entry = rx_entry->unexp_rts_pkt;
-	rts_hdr = rxr_get_rts_hdr(pkt_entry->pkt);
+	pkt_entry = rx_entry->unexp_pkt;
+	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
+	data_len = (base_hdr->type == RXR_RTS_PKT) ?
+			rxr_get_rts_hdr(pkt_entry->pkt)->data_len :
+			rxr_pkt_req_total_len(pkt_entry);
 
 	rx_entry->cq_entry.op_context = context;
 	/*
@@ -434,13 +455,12 @@ int rxr_msg_handle_unexp_match(struct rxr_ep *ep,
 	 */
 	if (OFI_UNLIKELY(flags & FI_DISCARD)) {
 		rx_entry->cq_entry.buf = NULL;
-		rx_entry->cq_entry.len = rts_hdr->data_len;
+		rx_entry->cq_entry.len = data_len;
 	} else {
 		rx_entry->cq_entry.buf = rx_entry->iov[0].iov_base;
-		len = MIN(rx_entry->total_len,
-			  ofi_total_iov_len(rx_entry->iov,
-					    rx_entry->iov_count));
-		rx_entry->cq_entry.len = len;
+		data_len = MIN(rx_entry->total_len,
+			       ofi_total_iov_len(rx_entry->iov, rx_entry->iov_count));
+		rx_entry->cq_entry.len = data_len;
 	}
 
 	rx_entry->cq_entry.flags = (FI_RECV | FI_MSG);
@@ -454,7 +474,10 @@ int rxr_msg_handle_unexp_match(struct rxr_ep *ep,
 		rx_entry->ignore = ~0;
 	}
 
-	return rxr_pkt_proc_matched_msg_rts(ep, rx_entry, pkt_entry);
+	if (base_hdr->type == RXR_RTS_PKT)
+		return rxr_pkt_proc_matched_msg_rts(ep, rx_entry, pkt_entry);
+
+	return rxr_pkt_proc_matched_rtm(ep, rx_entry, pkt_entry);
 }
 
 /*
@@ -503,7 +526,7 @@ int rxr_msg_proc_unexp_msg_list(struct rxr_ep *ep,
 		 * rxr_ep_split_rx_entry will setup rx_entry iov and count
 		 */
 		rx_entry = rxr_ep_split_rx_entry(ep, posted_entry, rx_entry,
-						 rx_entry->unexp_rts_pkt);
+						 rx_entry->unexp_pkt);
 		if (OFI_UNLIKELY(!rx_entry)) {
 			FI_WARN(&rxr_prov, FI_LOG_CQ,
 				"RX entries exhausted.\n");
@@ -807,7 +830,9 @@ ssize_t rxr_msg_peek_trecv(struct fid_ep *ep_fid,
 	struct rxr_rx_entry *rx_entry;
 	struct fi_context *context;
 	struct rxr_pkt_entry *pkt_entry;
-	struct rxr_rts_hdr *rts_hdr;
+	struct rxr_base_hdr *base_hdr;
+	size_t data_len;
+	int64_t tag;
 
 	ep = container_of(ep_fid, struct rxr_ep, util_ep.ep_fid.fid);
 
@@ -855,26 +880,38 @@ ssize_t rxr_msg_peek_trecv(struct fid_ep *ep_fid,
 		goto out;
 	}
 
-	pkt_entry = rx_entry->unexp_rts_pkt;
-	rts_hdr = rxr_get_rts_hdr(pkt_entry->pkt);
+	pkt_entry = rx_entry->unexp_pkt;
+	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
+	if (base_hdr->type == RXR_RTS_PKT) {
+		struct rxr_rts_hdr *rts_hdr;
 
-	if (rts_hdr->flags & RXR_REMOTE_CQ_DATA) {
-		rx_entry->cq_entry.data =
-			rxr_get_ctrl_cq_pkt(rts_hdr)->hdr.cq_data;
-		rx_entry->cq_entry.flags |= FI_REMOTE_CQ_DATA;
+		rts_hdr = rxr_get_rts_hdr(pkt_entry->pkt);
+		if (rts_hdr->flags & RXR_REMOTE_CQ_DATA) {
+			rx_entry->cq_entry.data =
+				rxr_get_ctrl_cq_pkt(rts_hdr)->hdr.cq_data;
+			rx_entry->cq_entry.flags |= FI_REMOTE_CQ_DATA;
+		}
+
+		data_len = rts_hdr->data_len;
+		tag = rts_hdr->tag;
+
+	} else {
+		assert(base_hdr->type == RXR_EAGER_TAGRTM_PKT);
+		data_len = rxr_pkt_req_total_len(pkt_entry);
+		tag = rxr_pkt_rtm_tag(pkt_entry);
 	}
 
 	if (ep->util_ep.caps & FI_SOURCE)
 		ret = ofi_cq_write_src(ep->util_ep.rx_cq, context,
 				       FI_TAGGED | FI_RECV,
-				       rts_hdr->data_len, NULL,
-				       rx_entry->cq_entry.data, rts_hdr->tag,
+				       data_len, NULL,
+				       rx_entry->cq_entry.data, tag,
 				       rx_entry->addr);
 	else
 		ret = ofi_cq_write(ep->util_ep.rx_cq, context,
 				   FI_TAGGED | FI_RECV,
-				   rts_hdr->data_len, NULL,
-				   rx_entry->cq_entry.data, rts_hdr->tag);
+				   data_len, NULL,
+				   rx_entry->cq_entry.data, tag);
 	rxr_rm_rx_cq_check(ep, ep->util_ep.rx_cq);
 out:
 	fastlock_release(&ep->util_ep.lock);
