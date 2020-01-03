@@ -1644,19 +1644,21 @@ static size_t rxr_ep_post_ctrl(struct rxr_ep *rxr_ep, int entry_type, void *x_en
 	 * if inject, there will not be completion, therefore tx_pkt_entry has to be
 	 * released here
 	 */
-	if (inject) {
+	if (inject)
 		err = rxr_ep_inject_pkt(rxr_ep, pkt_entry, addr);
-		rxr_release_tx_pkt_entry(rxr_ep, pkt_entry);
-	} else {
+	else
 		err = rxr_ep_send_pkt(rxr_ep, pkt_entry, addr);
-		if (OFI_UNLIKELY(err))
-			rxr_release_tx_pkt_entry(rxr_ep, pkt_entry);
+
+	if (OFI_UNLIKELY(err)) {
+		rxr_release_tx_pkt_entry(rxr_ep, pkt_entry);
+		return err;
 	}
 
-	if (OFI_UNLIKELY(err))
-		return err;
-
 	rxr_ep_handle_ctrl_sent(rxr_ep, pkt_entry);
+
+	if (inject)
+		rxr_release_tx_pkt_entry(rxr_ep, pkt_entry);
+
 	return 0;
 }
 
@@ -1672,6 +1674,7 @@ int rxr_ep_post_ctrl_or_queue(struct rxr_ep *ep, int entry_type, void *x_entry, 
 			tx_entry = (struct rxr_tx_entry *)x_entry;
 			tx_entry->state = RXR_TX_QUEUED_CTRL;
 			tx_entry->queued_ctrl.type = ctrl_type;
+			tx_entry->queued_ctrl.inject = inject;
 			dlist_insert_tail(&tx_entry->queued_entry,
 					  &ep->tx_entry_queued_list);
 		} else {
