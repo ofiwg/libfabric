@@ -186,9 +186,6 @@ static int efa_find_sysfs_devs(struct ibv_sysfs_dev **sysfs_dev_list)
 
 		sysfs_dev->ibdev_name[sizeof(sysfs_dev->ibdev_name) - 1] = '\0';
 
-		if (strncmp(sysfs_dev->ibdev_name, "efa_", 4) != 0)
-			continue;
-
 		if (!check_snprintf(sysfs_dev->ibdev_path,
 				    sizeof(sysfs_dev->ibdev_path),
 				    "%s/class/infiniband/%s", sysfs_path,
