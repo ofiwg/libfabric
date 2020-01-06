@@ -345,6 +345,76 @@ errout:
 	return err;
 }
 
+static int broadcast_test_run()
+{
+	int err;
+	uint64_t done_flag;
+	uint64_t *result, *data;
+	uint64_t i;
+	struct fi_collective_attr attr;
+	fi_addr_t root = 0;
+	size_t data_cnt = pm_job.num_ranks;
+
+	attr.op = FI_NOOP;
+	attr.datatype = FI_UINT64;
+	attr.mode = 0;
+	err = fi_query_collective(domain, FI_BROADCAST, &attr, 0);
+	if (err) {
+		FT_DEBUG("Broadcast collective not supported: %d (%s)\n", err,
+			 fi_strerror(err));
+		return err;
+	}
+
+	result = malloc(data_cnt * sizeof(*result));
+	if (!result)
+		return -FI_ENOMEM;
+
+	data = malloc(data_cnt * sizeof(*data));
+	if (!data)
+		return -FI_ENOMEM;
+
+	for (i = 0; i < pm_job.num_ranks; ++i) {
+		data[i] = pm_job.num_ranks - 1 - i;
+	}
+
+	coll_addr = fi_mc_addr(coll_mc);
+	if (pm_job.my_rank == root)
+		err = fi_broadcast(ep, data, data_cnt, NULL, coll_addr, root, FI_UINT64,
+				   0, &done_flag);
+	else
+		err = fi_broadcast(ep, result, data_cnt, NULL, coll_addr, root, FI_UINT64,
+				   0, &done_flag);
+
+	if (err) {
+		FT_DEBUG("broadcast scatter failed: %d (%s)\n", err, fi_strerror(err));
+		goto out;
+	}
+
+	err = wait_for_comp(&done_flag);
+	if (err)
+		goto out;
+
+	if (pm_job.my_rank == root) {
+		err = FI_SUCCESS;
+		goto out;
+	}
+
+	for (i = 0; i < data_cnt; i++) {
+		if (result[i] != data[i]) {
+			FT_DEBUG("broadcast failed; expect: %ld, actual: %ld\n", data[i],
+				 result[i]);
+			err = -1;
+			goto out;
+		}
+	}
+	err = FI_SUCCESS;
+
+out:
+	free(data);
+	free(result);
+	return err;
+}
+
 struct coll_test tests[] = {
 	{
 		.name = "join_test",
@@ -375,6 +445,12 @@ struct coll_test tests[] = {
 		.setup = coll_setup,
 		.run = scatter_test_run,
 		.teardown = coll_teardown
+	},
+	{
+		.name = "broadcast_test",
+		.setup = coll_setup,
+		.run = broadcast_test_run,
+		.teardown = coll_teardown,
 	},
 };
 

@@ -139,6 +139,12 @@ struct allreduce_data {
 	size_t	size;
 };
 
+struct broadcast_data {
+	void	*chunk;
+	size_t	size;
+	void	*scatter;
+};
+
 struct util_coll_operation;
 
 typedef void (*util_coll_comp_fn_t)(struct util_coll_operation *coll_op);
@@ -153,6 +159,7 @@ struct util_coll_operation {
 		struct barrier_data	barrier;
 		struct allreduce_data	allreduce;
 		void			*scatter;
+		struct broadcast_data	broadcast;
 	} data;
 	util_coll_comp_fn_t		comp_fn;
 };
@@ -182,6 +189,10 @@ ssize_t ofi_ep_scatter(struct fid_ep *ep, const void *buf, size_t count, void *d
 		       void *result, void *result_desc, fi_addr_t coll_addr,
 		       fi_addr_t root_addr, enum fi_datatype datatype, uint64_t flags,
 		       void *context);
+
+ssize_t ofi_ep_broadcast(struct fid_ep *ep, void *buf, size_t count, void *desc,
+			 fi_addr_t coll_addr, fi_addr_t root_addr,
+			 enum fi_datatype datatype, uint64_t flags, void *context);
 
 int ofi_coll_ep_progress(struct fid_ep *ep);
 

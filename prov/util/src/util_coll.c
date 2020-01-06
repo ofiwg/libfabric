@@ -766,6 +766,10 @@ void util_coll_collective_comp(struct util_coll_operation *coll_op)
 	case UTIL_COLL_SCATTER_OP:
 		free(coll_op->data.scatter);
 		break;
+	case UTIL_COLL_BROADCAST_OP:
+		free(coll_op->data.broadcast.chunk);
+		free(coll_op->data.broadcast.scatter);
+		break;
 	case UTIL_COLL_JOIN_OP:
 	case UTIL_COLL_BARRIER_OP:
 	case UTIL_COLL_ALLGATHER_OP:
@@ -1228,6 +1232,59 @@ err:
 	return ret;
 }
 
+ssize_t ofi_ep_broadcast(struct fid_ep *ep, void *buf, size_t count, void *desc,
+			 fi_addr_t coll_addr, fi_addr_t root_addr,
+			 enum fi_datatype datatype, uint64_t flags, void *context)
+{
+	struct util_coll_mc *coll_mc;
+	struct util_coll_operation *broadcast_op;
+	struct util_ep *util_ep;
+	int ret, chunk_cnt, numranks, local;
+
+	coll_mc = (struct util_coll_mc *) ((uintptr_t) coll_addr);
+	ret = util_coll_op_create(&broadcast_op, coll_mc, UTIL_COLL_BROADCAST_OP, context,
+				  util_coll_collective_comp);
+	if (ret)
+		return ret;
+
+	local = broadcast_op->mc->local_rank;
+	numranks = broadcast_op->mc->av_set->fi_addr_count;
+	chunk_cnt = (count + numranks - 1) / numranks;
+	if (chunk_cnt * local > count && chunk_cnt * local - (int) count > chunk_cnt)
+		chunk_cnt = 0;
+
+	broadcast_op->data.broadcast.chunk = malloc(chunk_cnt * ofi_datatype_size(datatype));
+	if (!broadcast_op->data.broadcast.chunk) {
+		ret = -FI_ENOMEM;
+		goto err1;
+	}
+
+	ret = util_coll_scatter(broadcast_op, buf, broadcast_op->data.broadcast.chunk,
+				&broadcast_op->data.broadcast.scatter, chunk_cnt,
+				root_addr, datatype);
+	if (ret)
+		goto err2;
+
+	ret = util_coll_allgather(broadcast_op, broadcast_op->data.broadcast.chunk, buf,
+				  chunk_cnt, datatype);
+	if (ret)
+		goto err2;
+
+	ret = util_coll_sched_comp(broadcast_op);
+	if (ret)
+		goto err2;
+
+	util_ep = container_of(ep, struct util_ep, ep_fid);
+	util_coll_op_progress_work(util_ep, broadcast_op);
+
+	return FI_SUCCESS;
+err2:
+	free(broadcast_op->data.broadcast.chunk);
+err1:
+	free(broadcast_op);
+	return ret;
+}
+
 void ofi_coll_handle_xfer_comp(uint64_t tag, void *ctx)
 {
 	struct util_ep *util_ep;
@@ -1250,6 +1307,7 @@ int ofi_query_collective(struct fid_domain *domain, enum fi_collective_op coll,
 	case FI_BARRIER:
 	case FI_ALLGATHER:
 	case FI_SCATTER:
+	case FI_BROADCAST:
 		ret = FI_SUCCESS;
 		break;
 	case FI_ALLREDUCE:
@@ -1259,7 +1317,6 @@ int ofi_query_collective(struct fid_domain *domain, enum fi_collective_op coll,
 		else
 			return -FI_ENOSYS;
 		break;
-	case FI_BROADCAST:
 	case FI_ALLTOALL:
 	case FI_REDUCE_SCATTER:
 	case FI_REDUCE:
