@@ -36,6 +36,69 @@
 
 static struct fi_ops_msg fi_ibv_srq_msg_ops;
 
+
+/* Receive CQ credits are pre-allocated */
+ssize_t vrb_post_recv(struct fi_ibv_ep *ep, struct ibv_recv_wr *wr)
+{
+	struct ibv_recv_wr *bad_wr;
+	int ret;
+
+	assert(ep->util_ep.rx_cq);
+	ret = ibv_post_recv(ep->ibv_qp, wr, &bad_wr);
+	return vrb_convert_ret(ret);
+}
+
+ssize_t vrb_post_send(struct fi_ibv_ep *ep, struct ibv_send_wr *wr)
+{
+	struct vrb_context *ctx;
+	struct fi_ibv_cq *cq;
+	struct ibv_send_wr *bad_wr;
+	struct ibv_wc wc;
+	int ret;
+
+	cq = container_of(ep->util_ep.tx_cq, struct fi_ibv_cq, util_cq);
+	cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
+	ctx = ofi_buf_alloc(cq->ctx_pool);
+	if (!ctx)
+		goto unlock;
+
+	if (!cq->credits || !ep->tx_credits) {
+		ret = vrb_poll_cq(cq, &wc);
+		if (ret > 0)
+			vrb_save_wc(cq, &wc);
+
+		if (!cq->credits || !ep->tx_credits)
+			goto freebuf;
+	}
+
+	cq->credits--;
+	ep->tx_credits--;
+
+	ctx->ep = ep;
+	ctx->user_ctx = (void *) (uintptr_t) wr->wr_id;
+	wr->wr_id = (uintptr_t) ctx;
+
+	ret = ibv_post_send(ep->ibv_qp, wr, &bad_wr);
+	wr->wr_id = (uintptr_t) ctx->user_ctx;
+	if (ret) {
+		VERBS_WARN(FI_LOG_EP_DATA,
+			   "Post send failed - %zd\n", vrb_convert_ret(ret));
+		goto credits;
+	}
+	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
+
+	return 0;
+
+credits:
+	cq->credits++;
+	ep->tx_credits++;
+freebuf:
+	ofi_buf_free(ctx);
+unlock:
+	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
+	return -FI_EAGAIN;
+}
+
 static inline int fi_ibv_msg_ep_cmdata_size(fid_t fid)
 {
 	struct fi_ibv_pep *pep;
@@ -204,12 +267,19 @@ err1:
 
 static int fi_ibv_close_free_ep(struct fi_ibv_ep *ep)
 {
+	struct fi_ibv_cq *cq;
 	int ret;
 
 	free(ep->util_ep.ep_fid.msg);
 	ep->util_ep.ep_fid.msg = NULL;
 	free(ep->cm_hdr);
 
+	if (ep->util_ep.rx_cq) {
+		cq = container_of(ep->util_ep.rx_cq, struct fi_ibv_cq, util_cq);
+		cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
+		cq->credits += ep->rx_cq_size;
+		cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
+	}
 	ret = ofi_endpoint_close(&ep->util_ep);
 	if (ret)
 		return ret;
@@ -322,62 +392,62 @@ static int fi_ibv_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	if (ret)
 		return ret;
 
-	switch (ep->util_ep.type) {
-	case FI_EP_MSG:
-		switch (bfid->fclass) {
-		case FI_CLASS_CQ:
-			ret = ofi_ep_bind_cq(&ep->util_ep, &cq->util_cq, flags);
-			if (ret)
-				return ret;
-			break;
-		case FI_CLASS_EQ:
-			ep->eq = container_of(bfid, struct fi_ibv_eq, eq_fid.fid);
+	switch (bfid->fclass) {
+	case FI_CLASS_CQ:
+		/* Reserve space for receives */
+		if (flags & FI_RECV) {
+			cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
+			if (cq->credits < ep->rx_cq_size) {
+				VERBS_WARN(FI_LOG_DOMAIN,
+					   "Rx CQ is fully reserved\n");
+				ep->rx_cq_size = 0;
+			} 
+			cq->credits -= ep->rx_cq_size;
+			cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
+		}
 
-			/* Make sure EQ channel is not polled during migrate */
-			fastlock_acquire(&ep->eq->lock);
-			if (fi_ibv_is_xrc(ep->info))
-				ret = fi_ibv_ep_xrc_set_tgt_chan(ep);
-			else
-				ret = rdma_migrate_id(ep->id, ep->eq->channel);
-			fastlock_release(&ep->eq->lock);
-
-			if (ret)
-				return -errno;
-
-			break;
-		case FI_CLASS_SRX_CTX:
-			ep->srq_ep = container_of(bfid, struct fi_ibv_srq_ep, ep_fid.fid);
-			break;
-		default:
-			return -FI_EINVAL;
+		ret = ofi_ep_bind_cq(&ep->util_ep, &cq->util_cq, flags);
+		if (ret) {
+			cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
+			cq->credits += ep->rx_cq_size;
+			cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
+			return ret;
 		}
 		break;
-	case FI_EP_DGRAM:
-		switch (bfid->fclass) {
-		case FI_CLASS_CQ:
-			ret = ofi_ep_bind_cq(&ep->util_ep, &cq->util_cq, flags);
-			if (ret)
-				return ret;
-			break;
-		case FI_CLASS_AV:
-			av = container_of(bfid, struct fi_ibv_dgram_av,
-					  util_av.av_fid.fid);
-			return ofi_ep_bind_av(&ep->util_ep, &av->util_av);
-		default:
+	case FI_CLASS_EQ:
+		if (ep->util_ep.type != FI_EP_MSG)
 			return -FI_EINVAL;
-		}
+
+		ep->eq = container_of(bfid, struct fi_ibv_eq, eq_fid.fid);
+
+		/* Make sure EQ channel is not polled during migrate */
+		fastlock_acquire(&ep->eq->lock);
+		if (fi_ibv_is_xrc(ep->info))
+			ret = fi_ibv_ep_xrc_set_tgt_chan(ep);
+		else
+			ret = rdma_migrate_id(ep->id, ep->eq->channel);
+		fastlock_release(&ep->eq->lock);
+		if (ret)
+			return -errno;
+
 		break;
+	case FI_CLASS_SRX_CTX:
+		if (ep->util_ep.type != FI_EP_MSG)
+			return -FI_EINVAL;
+
+		ep->srq_ep = container_of(bfid, struct fi_ibv_srq_ep, ep_fid.fid);
+		break;
+	case FI_CLASS_AV:
+		if (ep->util_ep.type != FI_EP_DGRAM)
+			return -FI_EINVAL;
+
+		av = container_of(bfid, struct fi_ibv_dgram_av,
+				  util_av.av_fid.fid);
+		return ofi_ep_bind_av(&ep->util_ep, &av->util_av);
 	default:
-		VERBS_INFO(FI_LOG_DOMAIN, "Unknown EP type\n");
-		assert(0);
 		return -FI_EINVAL;
 	}
 
-	/* Reserve space for receives */
-	if ((bfid->fclass == FI_CLASS_CQ) && (flags & FI_RECV)) {
-		assert(ep->rx_size < INT32_MAX);
-		ofi_atomic_sub32(&cq->credits, (int32_t)ep->rx_size);
-	}
 	return 0;
 }
 
@@ -943,7 +1013,13 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 		goto err1;
 	}
 
-	ep->rx_size = info->rx_attr->size;
+	if (info->ep_attr->rx_ctx_cnt == 0 || 
+	    info->ep_attr->rx_ctx_cnt == 1)
+		ep->rx_cq_size = info->rx_attr->size;
+	
+	if (info->ep_attr->tx_ctx_cnt == 0 || 
+	    info->ep_attr->tx_ctx_cnt == 1)
+		ep->tx_credits = info->tx_attr->size;
 
 	*ep_fid = &ep->util_ep.ep_fid;
 	ep->util_ep.ep_fid.fid.ops = &fi_ibv_ep_ops;
@@ -1207,7 +1283,7 @@ fi_ibv_srq_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t 
 
 	fi_ibv_set_sge_iov(wr.sg_list, msg->msg_iov, msg->iov_count, msg->desc);
 
-	return fi_ibv_handle_post(ibv_post_srq_recv(ep->srq, &wr, &bad_wr));
+	return vrb_convert_ret(ibv_post_srq_recv(ep->srq, &wr, &bad_wr));
 }
 
 static ssize_t
@@ -1225,7 +1301,7 @@ fi_ibv_srq_ep_recv(struct fid_ep *ep_fid, void *buf, size_t len,
 	};
 	struct ibv_recv_wr *bad_wr;
 
-	return fi_ibv_handle_post(ibv_post_srq_recv(ep->srq, &wr, &bad_wr));
+	return vrb_convert_ret(ibv_post_srq_recv(ep->srq, &wr, &bad_wr));
 }
 
 static ssize_t
@@ -1278,7 +1354,7 @@ fi_ibv_xrc_srq_ep_prepost_recv(struct fid_ep *ep_fid, void *buf, size_t len,
 	 * receive message function is swapped out. */
 	if (ep->srq) {
 		fastlock_release(&ep->xrc.prepost_lock);
-		return fi_ibv_handle_post(fi_recv(ep_fid, buf, len, desc,
+		return vrb_convert_ret(fi_recv(ep_fid, buf, len, desc,
 						 src_addr, context));
 	}
 

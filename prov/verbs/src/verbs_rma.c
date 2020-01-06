@@ -134,7 +134,7 @@ fi_ibv_msg_ep_rma_readv(struct fid_ep *ep_fid, const struct iovec *iov, void **d
 
 	fi_ibv_set_sge_iov(wr.sg_list, iov, count, desc);
 
-	return fi_ibv_send_poll_cq_if_needed(ep, &wr);
+	return vrb_post_send(ep, &wr);
 }
 
 static ssize_t
@@ -153,7 +153,7 @@ fi_ibv_msg_ep_rma_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 
 	fi_ibv_set_sge_iov(wr.sg_list, msg->msg_iov, msg->iov_count, msg->desc);
 
-	return fi_ibv_send_poll_cq_if_needed(ep, &wr);
+	return vrb_post_send(ep, &wr);
 }
 
 static ssize_t
@@ -206,7 +206,7 @@ fi_ibv_rma_write_fast(struct fid_ep *ep_fid, const void *buf, size_t len,
 	ep->wrs->sge.addr = (uintptr_t) buf;
 	ep->wrs->sge.length = (uint32_t) len;
 
-	return fi_ibv_send_poll_cq_if_needed(ep, &ep->wrs->rma_wr);
+	return vrb_post_send(ep, &ep->wrs->rma_wr);
 }
 
 static ssize_t
@@ -245,7 +245,7 @@ fi_ibv_msg_ep_rma_inject_writedata_fast(struct fid_ep *ep_fid, const void *buf, 
 	ep->wrs->sge.addr = (uintptr_t) buf;
 	ep->wrs->sge.length = (uint32_t) len;
 
-	ret = fi_ibv_send_poll_cq_if_needed(ep, &ep->wrs->rma_wr);
+	ret = vrb_post_send(ep, &ep->wrs->rma_wr);
 	ep->wrs->rma_wr.opcode = IBV_WR_RDMA_WRITE;
 	return ret;
 }
@@ -377,7 +377,7 @@ fi_ibv_msg_xrc_ep_rma_readv(struct fid_ep *ep_fid, const struct iovec *iov,
 
 	fi_ibv_set_sge_iov(wr.sg_list, iov, count, desc);
 
-	return fi_ibv_send_poll_cq_if_needed(&ep->base_ep, &wr);
+	return vrb_post_send(&ep->base_ep, &wr);
 }
 
 static ssize_t
@@ -399,7 +399,7 @@ fi_ibv_msg_xrc_ep_rma_readmsg(struct fid_ep *ep_fid,
 
 	fi_ibv_set_sge_iov(wr.sg_list, msg->msg_iov, msg->iov_count, msg->desc);
 
-	return fi_ibv_send_poll_cq_if_needed(&ep->base_ep, &wr);
+	return vrb_post_send(&ep->base_ep, &wr);
 }
 
 static ssize_t
@@ -456,8 +456,7 @@ fi_ibv_xrc_rma_write_fast(struct fid_ep *ep_fid, const void *buf,
 	ep->base_ep.wrs->sge.addr = (uintptr_t) buf;
 	ep->base_ep.wrs->sge.length = (uint32_t) len;
 
-	return fi_ibv_send_poll_cq_if_needed(&ep->base_ep,
-					     &ep->base_ep.wrs->rma_wr);
+	return vrb_post_send(&ep->base_ep, &ep->base_ep.wrs->rma_wr);
 }
 
 static ssize_t
@@ -500,8 +499,7 @@ fi_ibv_msg_xrc_ep_rma_inject_writedata_fast(struct fid_ep *ep_fid,
 	ep->base_ep.wrs->sge.addr = (uintptr_t) buf;
 	ep->base_ep.wrs->sge.length = (uint32_t) len;
 
-	ret = fi_ibv_send_poll_cq_if_needed(&ep->base_ep,
-					    &ep->base_ep.wrs->rma_wr);
+	ret = vrb_post_send(&ep->base_ep, &ep->base_ep.wrs->rma_wr);
 	ep->base_ep.wrs->rma_wr.opcode = IBV_WR_RDMA_WRITE;
 	return ret;
 }
