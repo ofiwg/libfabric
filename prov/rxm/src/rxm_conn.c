@@ -1284,9 +1284,9 @@ static void *rxm_conn_progress(void *arg)
 		memset(entry, 0, RXM_MSG_EQ_ENTRY_SZ);
 		entry->rd = rxm_eq_sread(ep, RXM_CM_ENTRY_SZ, entry);
 		if (entry->rd < 0 && entry->rd != -FI_ECONNREFUSED)
-			break;
-		if (rxm_conn_eq_event(ep, entry))
-			break;
+			continue;
+
+		rxm_conn_eq_event(ep, entry);
 	}
 
 	FI_INFO(&rxm_prov, FI_LOG_EP_CTRL, "Stopping auto-progress thread\n");
