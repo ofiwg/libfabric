@@ -57,17 +57,6 @@ static int util_match_fabric(struct dlist_entry *item, const void *arg)
 		!strcmp(fabric->name, fabric_info->name);
 }
 
-struct util_fabric *ofi_fabric_find(struct util_fabric_info *fabric_info)
-{
-	struct dlist_entry *item;
-
-	pthread_mutex_lock(&common_locks.util_fabric_lock);
-	item = dlist_find_first_match(&fabric_list, util_match_fabric, fabric_info);
-	pthread_mutex_unlock(&common_locks.util_fabric_lock);
-
-	return item ? container_of(item, struct util_fabric, list_entry) : NULL;
-}
-
 void ofi_fabric_remove(struct util_fabric *fabric)
 {
 	pthread_mutex_lock(&common_locks.util_fabric_lock);
@@ -171,8 +160,11 @@ int util_getinfo(const struct util_prov *util_prov, uint32_t version,
 		fabric_info.name = (*info)->fabric_attr->name;
 		fabric_info.prov = util_prov->prov;
 
-		fabric = ofi_fabric_find(&fabric_info);
-		if (fabric) {
+		pthread_mutex_lock(&common_locks.util_fabric_lock);
+		item = dlist_find_first_match(&fabric_list, util_match_fabric,
+					      &fabric_info);
+		if (item) {
+			fabric = container_of(item, struct util_fabric, list_entry);
 			FI_DBG(prov, FI_LOG_CORE, "Found opened fabric\n");
 			(*info)->fabric_attr->fabric = &fabric->fabric_fid;
 
@@ -190,6 +182,7 @@ int util_getinfo(const struct util_prov *util_prov, uint32_t version,
 			fastlock_release(&fabric->lock);
 
 		}
+		pthread_mutex_unlock(&common_locks.util_fabric_lock);
 
 		if (flags & FI_SOURCE) {
 			ret = ofi_get_addr(&(*info)->addr_format, flags,
