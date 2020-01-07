@@ -700,6 +700,7 @@ struct psmx2_av_addr {
 	psm2_epid_t		epid;
 	uint8_t			type;
 	uint8_t			sep_id;
+	uint8_t			valid;
 };
 
 struct psmx2_av_sep {
@@ -1052,7 +1053,7 @@ psm2_epaddr_t psmx2_av_translate_addr(struct psmx2_fid_av *av,
 	av->domain->av_lock_fn(&av->lock, 1);
 
 	idx = PSMX2_ADDR_IDX(addr);
-	assert(idx < av->hdr->last);
+	assert(idx < av->hdr->last && av->table[idx].valid);
 
 	if (OFI_UNLIKELY(av->table[idx].type == PSMX2_EP_SCALABLE)) {
 		if (OFI_UNLIKELY(!av->sep_info[idx].epids)) {
