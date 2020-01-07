@@ -45,7 +45,7 @@ rxm_ep_rma_reg_iov(struct rxm_ep *rxm_ep, const struct iovec *msg_iov,
 	if (!rxm_ep->msg_mr_local)
 		return FI_SUCCESS;
 
-	if (!rxm_ep->rxm_mr_local) {
+	if (!rxm_ep->rdm_mr_local) {
 		ret = rxm_msg_mr_regv(rxm_ep, msg_iov, iov_count, SIZE_MAX,
 				      comp_flags, rma_buf->mr.mr);
 		if (OFI_UNLIKELY(ret))
@@ -101,7 +101,7 @@ rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, uint64_t 
 	if (OFI_LIKELY(!ret))
 		goto unlock;
 
-	if ((rxm_ep->msg_mr_local) && (!rxm_ep->rxm_mr_local))
+	if ((rxm_ep->msg_mr_local) && (!rxm_ep->rdm_mr_local))
 		rxm_msg_mr_closev(rma_buf->mr.mr, rma_buf->mr.count);
 release:
 	ofi_buf_free(rma_buf);

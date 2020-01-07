@@ -39,43 +39,56 @@
 #include <ofi_util.h>
 
 
-static int read_cm_data(SOCKET fd, struct tcpx_cm_context *cm_ctx,
-			struct ofi_ctrl_hdr *hdr)
-{
-	size_t data_sz;
-	ssize_t ret;
-
-	cm_ctx->cm_data_sz = ntohs(hdr->seg_size);
-	if (cm_ctx->cm_data_sz) {
-		data_sz = MIN(cm_ctx->cm_data_sz, TCPX_MAX_CM_DATA_SIZE);
-		ret = ofi_recv_socket(fd, cm_ctx->cm_data, data_sz, MSG_WAITALL);
-		if ((size_t) ret != data_sz)
-			return -FI_EIO;
-
-		cm_ctx->cm_data_sz = data_sz;
-
-		if (OFI_UNLIKELY(cm_ctx->cm_data_sz > TCPX_MAX_CM_DATA_SIZE))
-			ofi_discard_socket(fd, cm_ctx->cm_data_sz -
-					   TCPX_MAX_CM_DATA_SIZE);
-	}
-	return FI_SUCCESS;
-}
-
 static int rx_cm_data(SOCKET fd, struct ofi_ctrl_hdr *hdr,
 		      int type, struct tcpx_cm_context *cm_ctx)
 {
+	size_t data_size = 0;
 	ssize_t ret;
 
 	ret = ofi_recv_socket(fd, hdr, sizeof(*hdr), MSG_WAITALL);
-	if (ret != sizeof(*hdr))
-		return -FI_EIO;
+	if (ret != sizeof(*hdr)) {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+			"Failed to read cm header\n");
+		ret = ofi_sockerr() ? -ofi_sockerr() : -FI_EIO;
+		goto out;
+	}
 
-	if (hdr->version != TCPX_CTRL_HDR_VERSION)
-		return -FI_ENOPROTOOPT;
+	if (hdr->version != TCPX_CTRL_HDR_VERSION) {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+			"cm protocol version mismatch\n");
+		ret = -FI_ENOPROTOOPT;
+		goto out;
+	}
 
-	ret = read_cm_data(fd, cm_ctx, hdr);
-	if (hdr->type != type)
+	if (hdr->type != type) {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+			"unexpected cm message type\n");
 		ret = -FI_ECONNREFUSED;
+		goto out;
+	}
+
+	data_size = MIN(ntohs(hdr->seg_size), TCPX_MAX_CM_DATA_SIZE);
+	if (data_size) {
+		ret = ofi_recv_socket(fd, cm_ctx->cm_data, data_size,
+				      MSG_WAITALL);
+		if ((size_t) ret != data_size) {
+			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+				"Failed to read cm data\n");
+			ret = ofi_sockerr() ? -ofi_sockerr() : -FI_EIO;
+			data_size = 0;
+			goto out;
+		}
+
+		if (ntohs(hdr->seg_size) > TCPX_MAX_CM_DATA_SIZE) {
+			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+				"Discarding unexpected cm data\n");
+			ofi_discard_socket(fd, ntohs(hdr->seg_size) -
+					   TCPX_MAX_CM_DATA_SIZE);
+		}
+	}
+	ret = 0;
+out:
+	cm_ctx->cm_data_sz = data_size;
 	return ret;
 }
 
@@ -92,13 +105,13 @@ static int tx_cm_data(SOCKET fd, uint8_t type, struct tcpx_cm_context *cm_ctx)
 
 	ret = ofi_send_socket(fd, &hdr, sizeof(hdr), MSG_NOSIGNAL);
 	if (ret != sizeof(hdr))
-		return -FI_EIO;
+		return ofi_sockerr() ? -ofi_sockerr() : -FI_EIO;
 
 	if (cm_ctx->cm_data_sz) {
 		ret = ofi_send_socket(fd, cm_ctx->cm_data,
 				      cm_ctx->cm_data_sz, MSG_NOSIGNAL);
 		if ((size_t) ret != cm_ctx->cm_data_sz)
-			return -FI_EIO;
+			return ofi_sockerr() ? -ofi_sockerr() : -FI_EIO;
 	}
 	return FI_SUCCESS;
 }
@@ -110,12 +123,16 @@ static int tcpx_ep_msg_xfer_enable(struct tcpx_ep *ep)
 	fastlock_acquire(&ep->lock);
 	if (ep->cm_state != TCPX_EP_CONNECTING) {
 		fastlock_release(&ep->lock);
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+			"ep is in invalid state\n");
 		return -FI_EINVAL;
 	}
 	ep->progress_func = tcpx_ep_progress;
 	ret = fi_fd_nonblock(ep->conn_fd);
 	if (ret) {
 		fastlock_release(&ep->lock);
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+			"failed to set socket to nonblocking\n");
 		return ret;
 	}
 	ep->cm_state = TCPX_EP_CONNECTED;
@@ -133,8 +150,11 @@ static int proc_conn_resp(struct tcpx_cm_context *cm_ctx,
 	int ret = FI_SUCCESS;
 
 	ret = rx_cm_data(ep->conn_fd, &conn_resp, ofi_ctrl_connresp, cm_ctx);
-	if (ret)
+	if (ret) {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+			"Failed to receive connect response\n");
 		return ret;
+	}
 
 	cm_entry = calloc(1, sizeof(*cm_entry) + cm_ctx->cm_data_sz);
 	if (!cm_entry)
@@ -152,10 +172,9 @@ static int proc_conn_resp(struct tcpx_cm_context *cm_ctx,
 
 	len = fi_eq_write(&ep->util_ep.eq->eq_fid, FI_CONNECTED, cm_entry,
 			  sizeof(*cm_entry) + cm_ctx->cm_data_sz, 0);
-	if (len < 0) {
+	if (len < 0)
 		ret = (int) len;
-		goto err;
-	}
+
 err:
 	free(cm_entry);
 	return ret;
@@ -169,10 +188,11 @@ int tcpx_eq_wait_try_func(void *arg)
 static void client_recv_connresp(struct util_wait *wait,
 				 struct tcpx_cm_context *cm_ctx)
 {
-	struct fi_eq_err_entry err_entry = { 0 };
+	struct fi_eq_err_entry err_entry;
 	struct tcpx_ep *ep;
 	ssize_t ret;
 
+	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "Handling accept from server\n");
 	assert(cm_ctx->fid->fclass == FI_CLASS_EP);
 	ep = container_of(cm_ctx->fid, struct tcpx_ep, util_ep.ep_fid.fid);
 
@@ -187,29 +207,27 @@ static void client_recv_connresp(struct util_wait *wait,
 	if (ret)
 		goto err;
 
-	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "Received Accept from server\n");
 	free(cm_ctx);
 	return;
 err:
+	memset(&err_entry, 0, sizeof err_entry);
 	err_entry.fid = cm_ctx->fid;
 	err_entry.context = cm_ctx->fid->context;
 	err_entry.err = -ret;
 	if (cm_ctx->cm_data_sz) {
 		err_entry.err_data = calloc(1, cm_ctx->cm_data_sz);
-		if (OFI_LIKELY(err_entry.err_data != NULL)) {
+		if (err_entry.err_data) {
 			memcpy(err_entry.err_data, cm_ctx->cm_data,
 			       cm_ctx->cm_data_sz);
 			err_entry.err_data_size = cm_ctx->cm_data_sz;
 		}
 	}
-	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL,
-	       "fi_eq_write the conn refused %"PRId64"\n", ret);
 	free(cm_ctx);
 
 	/* `err_entry.err_data` must live until it is passed to user */
-	ret = fi_eq_write(&ep->util_ep.eq->eq_fid, FI_NOTIFY,
+	ret = fi_eq_write(&ep->util_ep.eq->eq_fid, FI_SHUTDOWN,
 			  &err_entry, sizeof(err_entry), UTIL_FLAG_ERROR);
-	if (OFI_UNLIKELY(ret < 0))
+	if (ret < 0)
 		free(err_entry.err_data);
 }
 
@@ -224,6 +242,7 @@ static void server_send_cm_accept(struct util_wait *wait,
 	assert(cm_ctx->fid->fclass == FI_CLASS_EP);
 	ep = container_of(cm_ctx->fid, struct tcpx_ep, util_ep.ep_fid.fid);
 
+	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "Send connect (accept) response\n");
 	ret = tx_cm_data(ep->conn_fd, ofi_ctrl_connresp, cm_ctx);
 	if (ret)
 		goto err;
@@ -255,7 +274,7 @@ err:
 	err_entry.err = -ret;
 
 	free(cm_ctx);
-	fi_eq_write(&ep->util_ep.eq->eq_fid, FI_NOTIFY,
+	fi_eq_write(&ep->util_ep.eq->eq_fid, FI_SHUTDOWN,
 		    &err_entry, sizeof(err_entry), UTIL_FLAG_ERROR);
 }
 
@@ -271,6 +290,7 @@ static void server_recv_connreq(struct util_wait *wait,
 	assert(cm_ctx->fid->fclass == FI_CLASS_CONNREQ);
 	handle  = container_of(cm_ctx->fid, struct tcpx_conn_handle, handle);
 
+	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "Server receive connect request\n");
 	ret = rx_cm_data(handle->conn_fd, &conn_req, ofi_ctrl_connreq, cm_ctx);
 	if (ret)
 		goto err1;
@@ -365,7 +385,7 @@ err:
 	err_entry.err = -ret;
 
 	free(cm_ctx);
-	fi_eq_write(&ep->util_ep.eq->eq_fid, FI_NOTIFY,
+	fi_eq_write(&ep->util_ep.eq->eq_fid, FI_SHUTDOWN,
 		    &err_entry, sizeof(err_entry), UTIL_FLAG_ERROR);
 }
 

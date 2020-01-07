@@ -89,9 +89,9 @@ extern "C" {
 #define OFI_Q_STRERROR(prov, level, subsys, q, q_str, entry, q_strerror)	\
 	FI_LOG(prov, level, subsys, "fi_" q_str "_readerr: err: %s (%d), "	\
 	       "prov_err: %s (%d)\n", strerror((entry)->err), (entry)->err,	\
-	       q_strerror((q), -(entry)->prov_errno,				\
+	       q_strerror((q), (entry)->prov_errno,				\
 			  (entry)->err_data, NULL, 0),				\
-	       -(entry)->prov_errno)
+	       (entry)->prov_errno)
 
 #define OFI_CQ_STRERROR(prov, level, subsys, cq, entry) \
 	OFI_Q_STRERROR(prov, level, subsys, cq, "cq", entry, fi_cq_strerror)
