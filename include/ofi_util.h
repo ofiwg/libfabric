@@ -883,7 +883,6 @@ void fid_list_remove(struct dlist_entry *fid_list, fastlock_t *lock,
 		     struct fid *fid);
 
 void ofi_fabric_insert(struct util_fabric *fabric);
-struct util_fabric *ofi_fabric_find(struct util_fabric_info *fabric_info);
 void ofi_fabric_remove(struct util_fabric *fabric);
 
 /*

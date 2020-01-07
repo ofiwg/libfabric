@@ -176,6 +176,10 @@ fi_getinfo, if no fabric was specified, but the user has an opened
 instance of the named fabric, this will reference the first opened
 instance.  If no instance has been opened, this field will be NULL.
 
+The fabric instance returned by fi_getinfo should only be considered
+valid if the application does not close any fabric instances from
+another thread while fi_getinfo is being processed.
+
 ## name
 
 A fabric identifier.
