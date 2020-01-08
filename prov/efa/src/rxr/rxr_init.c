@@ -518,17 +518,20 @@ dgram_info:
 	if (ret == -FI_ENODATA && *info)
 		ret = 0;
 
-	if (rxr_env.enable_shm_transfer && !shm_info) {
+	if (!ret && rxr_env.enable_shm_transfer && !shm_info) {
 		shm_info = fi_allocinfo();
 		shm_hints = fi_allocinfo();
 		rxr_set_shm_hints(shm_hints);
 		ret = fi_getinfo(FI_VERSION(1, 8), NULL, NULL, 0, shm_hints, &shm_info);
 		fi_freeinfo(shm_hints);
 		if (ret) {
-			FI_WARN(&rxr_prov, FI_LOG_CORE, "Failed to get shm provider's info.\n");
-			goto out;
+			FI_WARN(&rxr_prov, FI_LOG_CORE, "Disabling EFA shared memory support; failed to get shm provider's info: %s\n",
+				fi_strerror(-ret));
+			rxr_env.enable_shm_transfer = 0;
+			ret = 0;
+		} else {
+			assert(!strcmp(shm_info->fabric_attr->name, "shm"));
 		}
-		assert(!strcmp(shm_info->fabric_attr->name, "shm"));
 	}
 out:
 	fi_freeinfo(core_info);
