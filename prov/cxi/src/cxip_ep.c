@@ -242,6 +242,12 @@ static int cxip_ctx_bind_cq(struct fid *fid, struct fid *bfid, uint64_t flags)
 				txc->selective_completion = 1;
 		}
 
+		/* If selective completion is not requested, always generate
+		 * completions.
+		 */
+		if (!txc->selective_completion)
+			txc->attr.op_flags |= FI_COMPLETION;
+
 		ofi_atomic_inc32(&cxi_cq->ref);
 		break;
 

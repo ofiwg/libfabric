@@ -1925,3 +1925,57 @@ Test(atomic, rem_cntr)
 
 	_cxit_destroy_mr(&mr);
 }
+
+/* Perform an AMO that uses a flushing ZBR at the target. Validate flush with
+ * pycxi:
+ *
+ *    $ pycxi/utils/csrutil dump csr ixe_cntr | grep dmawr_flush_reqs
+ */
+Test(atomic, flush)
+{
+	struct mem_region mr;
+	struct fi_cq_tagged_entry cqe;
+	uint64_t operand1;
+	uint64_t exp_remote = 0;
+	uint64_t *rma;
+	int ret;
+	struct fi_msg_atomic msg = {};
+	struct fi_ioc ioc;
+	struct fi_rma_ioc rma_ioc;
+	int count = 0;
+
+	rma = _cxit_create_mr(&mr);
+	cr_assert_eq(*rma, exp_remote,
+		     "Result = %ld, expected = %ld",
+		     *rma, exp_remote);
+
+	ioc.addr = &operand1;
+	ioc.count = 1;
+
+	rma_ioc.addr = 0;
+	rma_ioc.count = 1;
+	rma_ioc.key = RMA_WIN_KEY;
+
+	msg.msg_iov = &ioc;
+	msg.iov_count = 1;
+	msg.rma_iov = &rma_ioc;
+	msg.rma_iov_count = 1;
+	msg.addr = cxit_ep_fi_addr;
+	msg.datatype = FI_UINT64;
+	msg.op = FI_SUM;
+
+	operand1 = 1;
+	exp_remote += operand1;
+	ret = fi_atomicmsg(cxit_ep, &msg, FI_DELIVERY_COMPLETE);
+	cr_assert(ret == FI_SUCCESS, "Return code  = %d", ret);
+	count++;
+
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+	validate_tx_event(&cqe, FI_ATOMIC | FI_WRITE, NULL);
+	cr_assert_eq(*rma, exp_remote,
+		     "Result = %ld, expected = %ld",
+		     *rma, exp_remote);
+
+	_cxit_destroy_mr(&mr);
+}

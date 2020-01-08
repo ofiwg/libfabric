@@ -56,7 +56,7 @@ struct fi_ep_attr cxip_ep_attr = {
 
 struct fi_tx_attr cxip_tx_attr = {
 	.caps = CXIP_EP_CAPS,
-	.op_flags = FI_TRANSMIT_COMPLETE | FI_COMPLETION,
+	.op_flags = CXIP_TX_COMP_MODES | FI_COMPLETION,
 	.msg_order = CXIP_EP_MSG_ORDER,
 	.inject_size = C_MAX_IDC_PAYLOAD_UNR,
 	.size = 256,  /* 64k / 256b */

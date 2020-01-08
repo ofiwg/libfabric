@@ -216,6 +216,10 @@ static ssize_t _cxip_rma_op(enum fi_op_type op, struct cxip_txc *txc,
 		cmd.c_state.index_ext = idx_ext;
 		cmd.c_state.eq = txc->send_cq->evtq->eqn;
 
+		if ((flags & FI_COMPLETION) &&
+		    (flags & (FI_DELIVERY_COMPLETE | FI_MATCH_COMPLETE)))
+			cmd.c_state.flush = 1;
+
 		/* Reliable, unordered Puts are optimally supported with
 		 * restricted commands. When ordering or remote events are
 		 * required, use unrestricted commands.
@@ -292,6 +296,10 @@ static ssize_t _cxip_rma_op(enum fi_op_type op, struct cxip_txc *txc,
 		cmd.eq = txc->send_cq->evtq->eqn;
 		cmd.user_ptr = (uint64_t)req;
 
+		if ((op == FI_OP_WRITE) && (flags & FI_COMPLETION) &&
+		    (flags & (FI_DELIVERY_COMPLETE | FI_MATCH_COMPLETE)))
+			cmd.flush = 1;
+
 		/* Reliable, unordered Puts are optimally supported with
 		 * restricted commands. When ordering or remote events are
 		 * required, use unrestricted commands.
@@ -355,18 +363,12 @@ static ssize_t cxip_rma_write(struct fid_ep *ep, const void *buf, size_t len,
 			      uint64_t key, void *context)
 {
 	struct cxip_txc *txc;
-	uint64_t flags;
 
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	if (txc->selective_completion)
-		flags = txc->attr.op_flags & FI_COMPLETION;
-	else
-		flags = FI_COMPLETION;
-
 	return _cxip_rma_op(FI_OP_WRITE, txc, buf, len, desc, dest_addr, addr,
-			    key, 0, flags, context);
+			    key, 0, txc->attr.op_flags, context);
 }
 
 static ssize_t cxip_rma_writev(struct fid_ep *ep, const struct iovec *iov,
@@ -374,7 +376,6 @@ static ssize_t cxip_rma_writev(struct fid_ep *ep, const struct iovec *iov,
 			       uint64_t addr, uint64_t key, void *context)
 {
 	struct cxip_txc *txc;
-	uint64_t flags;
 
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
@@ -382,17 +383,13 @@ static ssize_t cxip_rma_writev(struct fid_ep *ep, const struct iovec *iov,
 	if (!iov || count != 1)
 		return -FI_EINVAL;
 
-	if (txc->selective_completion)
-		flags = txc->attr.op_flags & FI_COMPLETION;
-	else
-		flags = FI_COMPLETION;
-
 	return _cxip_rma_op(FI_OP_WRITE, txc, iov[0].iov_base, iov[0].iov_len,
 			    desc ? desc[0] : NULL, dest_addr, addr, key, 0,
-			    flags, context);
+			    txc->attr.op_flags, context);
 }
 
-#define CXIP_WRITEMSG_ALLOWED_FLAGS (FI_INJECT | FI_COMPLETION)
+#define CXIP_WRITEMSG_ALLOWED_FLAGS (FI_INJECT | FI_COMPLETION | \
+				     CXIP_TX_COMP_MODES)
 
 static ssize_t cxip_rma_writemsg(struct fid_ep *ep,
 				 const struct fi_msg_rma *msg, uint64_t flags)
@@ -409,6 +406,9 @@ static ssize_t cxip_rma_writemsg(struct fid_ep *ep,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
+	/* If selective completion is not requested, always generate
+	 * completions.
+	 */
 	if (!txc->selective_completion)
 		flags |= FI_COMPLETION;
 
@@ -436,18 +436,12 @@ static ssize_t cxip_rma_read(struct fid_ep *ep, void *buf, size_t len,
 			     uint64_t key, void *context)
 {
 	struct cxip_txc *txc;
-	uint64_t flags;
 
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	if (txc->selective_completion)
-		flags = txc->attr.op_flags & FI_COMPLETION;
-	else
-		flags = FI_COMPLETION;
-
 	return _cxip_rma_op(FI_OP_READ, txc, buf, len, desc, src_addr, addr,
-			    key, 0, flags, context);
+			    key, 0, txc->attr.op_flags, context);
 }
 
 static ssize_t cxip_rma_readv(struct fid_ep *ep, const struct iovec *iov,
@@ -455,7 +449,6 @@ static ssize_t cxip_rma_readv(struct fid_ep *ep, const struct iovec *iov,
 			      uint64_t addr, uint64_t key, void *context)
 {
 	struct cxip_txc *txc;
-	uint64_t flags;
 
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
@@ -463,17 +456,12 @@ static ssize_t cxip_rma_readv(struct fid_ep *ep, const struct iovec *iov,
 	if (!iov || count != 1)
 		return -FI_EINVAL;
 
-	if (txc->selective_completion)
-		flags = txc->attr.op_flags & FI_COMPLETION;
-	else
-		flags = FI_COMPLETION;
-
 	return _cxip_rma_op(FI_OP_READ, txc, iov[0].iov_base, iov[0].iov_len,
 			    desc ? desc[0] : NULL, src_addr, addr, key, 0,
-			    flags, context);
+			    txc->attr.op_flags, context);
 }
 
-#define CXIP_READMSG_ALLOWED_FLAGS (FI_COMPLETION)
+#define CXIP_READMSG_ALLOWED_FLAGS (FI_COMPLETION | CXIP_TX_COMP_MODES)
 
 static ssize_t cxip_rma_readmsg(struct fid_ep *ep,
 				const struct fi_msg_rma *msg, uint64_t flags)
@@ -490,6 +478,9 @@ static ssize_t cxip_rma_readmsg(struct fid_ep *ep,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
+	/* If selective completion is not requested, always generate
+	 * completions.
+	 */
 	if (!txc->selective_completion)
 		flags |= FI_COMPLETION;
 

@@ -618,6 +618,10 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		}
 	}
 
+	if ((flags & FI_COMPLETION) &&
+	    (flags & (FI_DELIVERY_COMPLETE | FI_MATCH_COMPLETE)))
+		cmd.c_state.flush = 1;
+
 	fastlock_acquire(&txc->tx_cmdq->lock);
 
 	if (memcmp(&txc->tx_cmdq->c_state, &cmd.c_state,
@@ -706,7 +710,6 @@ static ssize_t cxip_ep_atomic_write(struct fid_ep *ep, const void *buf,
 				    enum fi_op op, void *context)
 {
 	struct cxip_txc *txc;
-	uint64_t flags;
 
 	struct fi_ioc oper1 = {
 		.addr = (void *)buf,
@@ -732,15 +735,10 @@ static ssize_t cxip_ep_atomic_write(struct fid_ep *ep, const void *buf,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	if (txc->selective_completion)
-		flags = txc->attr.op_flags & FI_COMPLETION;
-	else
-		flags = FI_COMPLETION;
-
 	return _cxip_idc_amo(CXIP_RQ_AMO, txc, &msg,
 			     NULL, NULL, 0,
 			     NULL, NULL, 0,
-			     flags);
+			     txc->attr.op_flags);
 }
 
 static ssize_t cxip_ep_atomic_writev(struct fid_ep *ep,
@@ -751,7 +749,6 @@ static ssize_t cxip_ep_atomic_writev(struct fid_ep *ep,
 				     void *context)
 {
 	struct cxip_txc *txc;
-	uint64_t flags;
 
 	struct fi_rma_ioc rma = {
 		.addr = addr,
@@ -773,18 +770,14 @@ static ssize_t cxip_ep_atomic_writev(struct fid_ep *ep,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	if (txc->selective_completion)
-		flags = txc->attr.op_flags & FI_COMPLETION;
-	else
-		flags = FI_COMPLETION;
-
 	return _cxip_idc_amo(CXIP_RQ_AMO, txc, &msg,
 			     NULL, NULL, 0,
 			     NULL, NULL, 0,
-			     flags);
+			     txc->attr.op_flags);
 }
 
-#define CXIP_ATOMIC_WRITEMSG_ALLOWED_FLAGS (FI_INJECT | FI_COMPLETION)
+#define CXIP_ATOMIC_WRITEMSG_ALLOWED_FLAGS (FI_INJECT | FI_COMPLETION | \
+					    CXIP_TX_COMP_MODES)
 
 static ssize_t cxip_ep_atomic_writemsg(struct fid_ep *ep,
 				       const struct fi_msg_atomic *msg,
@@ -798,6 +791,9 @@ static ssize_t cxip_ep_atomic_writemsg(struct fid_ep *ep,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
+	/* If selective completion is not requested, always generate
+	 * completions.
+	 */
 	if (!txc->selective_completion)
 		flags |= FI_COMPLETION;
 
@@ -855,7 +851,6 @@ static ssize_t cxip_ep_atomic_readwrite(struct fid_ep *ep, const void *buf,
 					enum fi_op op, void *context)
 {
 	struct cxip_txc *txc;
-	uint64_t flags;
 
 	struct fi_ioc oper1 = {
 		.addr = (void *)buf,
@@ -885,15 +880,10 @@ static ssize_t cxip_ep_atomic_readwrite(struct fid_ep *ep, const void *buf,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	if (txc->selective_completion)
-		flags = txc->attr.op_flags & FI_COMPLETION;
-	else
-		flags = FI_COMPLETION;
-
 	return _cxip_idc_amo(CXIP_RQ_AMO_FETCH, txc, &msg,
 			     NULL, NULL, 0,
 			     &resultv, &result_desc, 1,
-			     flags);
+			     txc->attr.op_flags);
 }
 
 static ssize_t cxip_ep_atomic_readwritev(struct fid_ep *ep,
@@ -908,7 +898,6 @@ static ssize_t cxip_ep_atomic_readwritev(struct fid_ep *ep,
 					 enum fi_op op, void *context)
 {
 	struct cxip_txc *txc;
-	uint64_t flags;
 
 	struct fi_rma_ioc rma = {
 		.addr = addr,
@@ -930,18 +919,13 @@ static ssize_t cxip_ep_atomic_readwritev(struct fid_ep *ep,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	if (txc->selective_completion)
-		flags = txc->attr.op_flags & FI_COMPLETION;
-	else
-		flags = FI_COMPLETION;
-
 	return _cxip_idc_amo(CXIP_RQ_AMO_FETCH, txc, &msg,
 			     NULL, NULL, 0,
 			     resultv, result_desc, result_count,
-			     flags);
+			     txc->attr.op_flags);
 }
 
-#define CXIP_ATOMIC_READMSG_ALLOWED_FLAGS (FI_COMPLETION)
+#define CXIP_ATOMIC_READMSG_ALLOWED_FLAGS (FI_COMPLETION | CXIP_TX_COMP_MODES)
 
 static ssize_t cxip_ep_atomic_readwritemsg(struct fid_ep *ep,
 					   const struct fi_msg_atomic *msg,
@@ -957,6 +941,9 @@ static ssize_t cxip_ep_atomic_readwritemsg(struct fid_ep *ep,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
+	/* If selective completion is not requested, always generate
+	 * completions.
+	 */
 	if (!txc->selective_completion)
 		flags |= FI_COMPLETION;
 
@@ -975,7 +962,6 @@ static ssize_t cxip_ep_atomic_compwrite(struct fid_ep *ep, const void *buf,
 					enum fi_op op, void *context)
 {
 	struct cxip_txc *txc;
-	uint64_t flags;
 
 	struct fi_ioc oper1 = {
 		.addr = (void *)buf,
@@ -1009,15 +995,10 @@ static ssize_t cxip_ep_atomic_compwrite(struct fid_ep *ep, const void *buf,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	if (txc->selective_completion)
-		flags = txc->attr.op_flags & FI_COMPLETION;
-	else
-		flags = FI_COMPLETION;
-
 	return _cxip_idc_amo(CXIP_RQ_AMO_SWAP, txc, &msg,
 			     &comparev, &result_desc, 1,
 			     &resultv, &result_desc, 1,
-			     flags);
+			     txc->attr.op_flags);
 }
 
 static ssize_t cxip_ep_atomic_compwritev(struct fid_ep *ep,
@@ -1035,7 +1016,6 @@ static ssize_t cxip_ep_atomic_compwritev(struct fid_ep *ep,
 					 enum fi_op op, void *context)
 {
 	struct cxip_txc *txc;
-	uint64_t flags;
 
 	struct fi_rma_ioc rma = {
 		.addr = addr,
@@ -1057,18 +1037,13 @@ static ssize_t cxip_ep_atomic_compwritev(struct fid_ep *ep,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	if (txc->selective_completion)
-		flags = txc->attr.op_flags & FI_COMPLETION;
-	else
-		flags = FI_COMPLETION;
-
 	return _cxip_idc_amo(CXIP_RQ_AMO_SWAP, txc, &msg,
 			     comparev, compare_desc, compare_count,
 			     resultv, result_desc, result_count,
-			     flags);
+			     txc->attr.op_flags);
 }
 
-#define CXIP_ATOMIC_COMPMSG_ALLOWED_FLAGS (FI_COMPLETION)
+#define CXIP_ATOMIC_COMPMSG_ALLOWED_FLAGS (FI_COMPLETION | CXIP_TX_COMP_MODES)
 
 static ssize_t
 cxip_ep_atomic_compwritemsg(struct fid_ep *ep, const struct fi_msg_atomic *msg,
@@ -1085,6 +1060,9 @@ cxip_ep_atomic_compwritemsg(struct fid_ep *ep, const struct fi_msg_atomic *msg,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
+	/* If selective completion is not requested, always generate
+	 * completions.
+	 */
 	if (!txc->selective_completion)
 		flags |= FI_COMPLETION;
 
