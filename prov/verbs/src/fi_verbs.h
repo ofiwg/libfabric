@@ -632,21 +632,21 @@ struct fi_ibv_domain *fi_ibv_ep_to_domain(struct fi_ibv_ep *ep)
 			    util_domain);
 }
 
-struct fi_ops_atomic fi_ibv_msg_ep_atomic_ops;
-struct fi_ops_atomic fi_ibv_msg_xrc_ep_atomic_ops;
-struct fi_ops_cm fi_ibv_msg_ep_cm_ops;
-struct fi_ops_cm fi_ibv_msg_xrc_ep_cm_ops;
-const struct fi_ops_msg fi_ibv_msg_ep_msg_ops_ts;
-const struct fi_ops_msg fi_ibv_msg_ep_msg_ops;
-const struct fi_ops_msg fi_ibv_dgram_msg_ops_ts;
-const struct fi_ops_msg fi_ibv_dgram_msg_ops;
-const struct fi_ops_msg fi_ibv_msg_xrc_ep_msg_ops;
-const struct fi_ops_msg fi_ibv_msg_xrc_ep_msg_ops_ts;
-const struct fi_ops_msg fi_ibv_msg_srq_xrc_ep_msg_ops;
-struct fi_ops_rma fi_ibv_msg_ep_rma_ops_ts;
-struct fi_ops_rma fi_ibv_msg_ep_rma_ops;
-struct fi_ops_rma fi_ibv_msg_xrc_ep_rma_ops_ts;
-struct fi_ops_rma fi_ibv_msg_xrc_ep_rma_ops;
+extern struct fi_ops_atomic fi_ibv_msg_ep_atomic_ops;
+extern struct fi_ops_atomic fi_ibv_msg_xrc_ep_atomic_ops;
+extern struct fi_ops_cm fi_ibv_msg_ep_cm_ops;
+extern struct fi_ops_cm fi_ibv_msg_xrc_ep_cm_ops;
+extern const struct fi_ops_msg fi_ibv_msg_ep_msg_ops_ts;
+extern const struct fi_ops_msg fi_ibv_msg_ep_msg_ops;
+extern const struct fi_ops_msg fi_ibv_dgram_msg_ops_ts;
+extern const struct fi_ops_msg fi_ibv_dgram_msg_ops;
+extern const struct fi_ops_msg fi_ibv_msg_xrc_ep_msg_ops;
+extern const struct fi_ops_msg fi_ibv_msg_xrc_ep_msg_ops_ts;
+extern const struct fi_ops_msg fi_ibv_msg_srq_xrc_ep_msg_ops;
+extern struct fi_ops_rma fi_ibv_msg_ep_rma_ops_ts;
+extern struct fi_ops_rma fi_ibv_msg_ep_rma_ops;
+extern struct fi_ops_rma fi_ibv_msg_xrc_ep_rma_ops_ts;
+extern struct fi_ops_rma fi_ibv_msg_xrc_ep_rma_ops;
 
 #define FI_IBV_XRC_VERSION	2
 

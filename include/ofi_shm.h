@@ -160,7 +160,7 @@ struct smr_ep_name {
 	struct dlist_entry entry;
 };
 
-struct dlist_entry ep_name_list;
+extern struct dlist_entry ep_name_list;
 
 struct smr_region;
 
