@@ -245,9 +245,9 @@ struct fi_ibv_eq_entry {
 	uint32_t		event;
 	size_t			len;
 	union {
-		char 			entry[0];
 		struct fi_eq_entry 	*eq_entry;
 		struct fi_eq_cm_entry	*cm_entry;
+		uint8_t 		data[0];
 	};
 };
 
