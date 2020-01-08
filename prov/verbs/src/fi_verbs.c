@@ -36,13 +36,13 @@
 
 #include "fi_verbs.h"
 
-static void fi_ibv_fini(void);
+static void vrb_fini(void);
 
 static const char *local_node = "localhost";
 
 #define VERBS_DEFAULT_MIN_RNR_TIMER 12
 
-struct fi_ibv_gl_data fi_ibv_gl_data = {
+struct vrb_gl_data vrb_gl_data = {
 	.def_tx_size		= 384,
 	.def_rx_size		= 384,
 	.def_tx_iov_limit	= 4,
@@ -66,7 +66,7 @@ struct fi_ibv_gl_data fi_ibv_gl_data = {
 	},
 };
 
-struct fi_ibv_dev_preset {
+struct vrb_dev_preset {
 	int		max_inline_data;
 	const char	*dev_name_prefix;
 } verbs_dev_presets[] = {
@@ -76,24 +76,24 @@ struct fi_ibv_dev_preset {
 	},
 };
 
-struct fi_provider fi_ibv_prov = {
+struct fi_provider vrb_prov = {
 	.name = VERBS_PROV_NAME,
 	.version = VERBS_PROV_VERS,
 	.fi_version = OFI_VERSION_LATEST,
-	.getinfo = fi_ibv_getinfo,
-	.fabric = fi_ibv_fabric,
-	.cleanup = fi_ibv_fini
+	.getinfo = vrb_getinfo,
+	.fabric = vrb_fabric,
+	.cleanup = vrb_fini
 };
 
-struct util_prov fi_ibv_util_prov = {
-	.prov = &fi_ibv_prov,
+struct util_prov vrb_util_prov = {
+	.prov = &vrb_prov,
 	.info = NULL,
 	/* The support of the shared recieve contexts
 	 * is dynamically calculated */
 	.flags = 0,
 };
 
-int fi_ibv_sockaddr_len(struct sockaddr *addr)
+int vrb_sockaddr_len(struct sockaddr *addr)
 {
 	if (addr->sa_family == AF_IB)
 		return sizeof(struct sockaddr_ib);
@@ -101,12 +101,12 @@ int fi_ibv_sockaddr_len(struct sockaddr *addr)
 		return ofi_sizeofaddr(addr);
 }
 
-int fi_ibv_get_rdma_rai(const char *node, const char *service, uint64_t flags,
+int vrb_get_rdma_rai(const char *node, const char *service, uint64_t flags,
 		   const struct fi_info *hints, struct rdma_addrinfo **rai)
 {
 	struct rdma_addrinfo rai_hints, *_rai;
 	struct rdma_addrinfo **rai_current;
-	int ret = fi_ibv_fi_to_rai(hints, flags, &rai_hints);
+	int ret = vrb_fi_to_rai(hints, flags, &rai_hints);
 
 	if (ret)
 		goto out;
@@ -156,14 +156,14 @@ out:
 	return ret;
 }
 
-int fi_ibv_get_rai_id(const char *node, const char *service, uint64_t flags,
+int vrb_get_rai_id(const char *node, const char *service, uint64_t flags,
 		      const struct fi_info *hints, struct rdma_addrinfo **rai,
 		      struct rdma_cm_id **id)
 {
 	int ret;
 
 	// TODO create a similar function that won't require pruning ib_rai
-	ret = fi_ibv_get_rdma_rai(node, service, flags, hints, rai);
+	ret = vrb_get_rdma_rai(node, service, flags, hints, rai);
 	if (ret)
 		return ret;
 
@@ -178,7 +178,7 @@ int fi_ibv_get_rai_id(const char *node, const char *service, uint64_t flags,
 		ret = rdma_bind_addr(*id, (*rai)->ai_src_addr);
 		if (ret) {
 			VERBS_INFO_ERRNO(FI_LOG_FABRIC, "rdma_bind_addr", errno);
-			ofi_straddr_log(&fi_ibv_prov, FI_LOG_INFO, FI_LOG_FABRIC,
+			ofi_straddr_log(&vrb_prov, FI_LOG_INFO, FI_LOG_FABRIC,
 					"bind addr", (*rai)->ai_src_addr);
 			ret = -errno;
 			goto err2;
@@ -190,9 +190,9 @@ int fi_ibv_get_rai_id(const char *node, const char *service, uint64_t flags,
 				(*rai)->ai_dst_addr, VERBS_RESOLVE_TIMEOUT);
 	if (ret) {
 		VERBS_INFO_ERRNO(FI_LOG_FABRIC, "rdma_resolve_addr", errno);
-		ofi_straddr_log(&fi_ibv_prov, FI_LOG_INFO, FI_LOG_FABRIC,
+		ofi_straddr_log(&vrb_prov, FI_LOG_INFO, FI_LOG_FABRIC,
 				"src addr", (*rai)->ai_src_addr);
-		ofi_straddr_log(&fi_ibv_prov, FI_LOG_INFO, FI_LOG_FABRIC,
+		ofi_straddr_log(&vrb_prov, FI_LOG_INFO, FI_LOG_FABRIC,
 				"dst addr", (*rai)->ai_dst_addr);
 		ret = -errno;
 		goto err2;
@@ -206,20 +206,20 @@ err1:
 	return ret;
 }
 
-int fi_ibv_create_ep(const struct fi_info *hints, enum rdma_port_space ps,
+int vrb_create_ep(const struct fi_info *hints, enum rdma_port_space ps,
 		     struct rdma_cm_id **id)
 {
 	struct rdma_addrinfo *rai = NULL;
 	int ret;
 
-	ret = fi_ibv_get_rdma_rai(NULL, NULL, 0, hints, &rai);
+	ret = vrb_get_rdma_rai(NULL, NULL, 0, hints, &rai);
 	if (ret) {
 		return ret;
 	}
 
 	if (rdma_create_id(NULL, id, NULL, ps)) {
 		ret = -errno;
-		FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC, "rdma_create_id failed: "
+		FI_WARN(&vrb_prov, FI_LOG_FABRIC, "rdma_create_id failed: "
 			"%s (%d)\n", strerror(-ret), -ret);
 		goto err1;
 	}
@@ -235,11 +235,11 @@ int fi_ibv_create_ep(const struct fi_info *hints, enum rdma_port_space ps,
 	if (rdma_resolve_addr(*id, rai->ai_src_addr, rai->ai_dst_addr,
 			      VERBS_RESOLVE_TIMEOUT)) {
 		ret = -errno;
-		FI_WARN(&fi_ibv_prov, FI_LOG_EP_CTRL, "rdma_resolve_addr failed: "
+		FI_WARN(&vrb_prov, FI_LOG_EP_CTRL, "rdma_resolve_addr failed: "
 			"%s (%d)\n", strerror(-ret), -ret);
-		ofi_straddr_log(&fi_ibv_prov, FI_LOG_WARN, FI_LOG_EP_CTRL,
+		ofi_straddr_log(&vrb_prov, FI_LOG_WARN, FI_LOG_EP_CTRL,
 				"src addr", rai->ai_src_addr);
-		ofi_straddr_log(&fi_ibv_prov, FI_LOG_WARN, FI_LOG_EP_CTRL,
+		ofi_straddr_log(&vrb_prov, FI_LOG_WARN, FI_LOG_EP_CTRL,
 				"dst addr", rai->ai_dst_addr);
 		goto err2;
 	}
@@ -251,7 +251,7 @@ err1:
 	return ret;
 }
 
-static int fi_ibv_param_define(const char *param_name, const char *param_str,
+static int vrb_param_define(const char *param_name, const char *param_str,
 			       enum fi_param_type type, void *param_default)
 {
 	char *param_help, param_default_str[256] = { 0 };
@@ -306,7 +306,7 @@ static int fi_ibv_param_define(const char *param_name, const char *param_str,
 
 	param_help[len - 1] = '\0';
 
-	fi_param_define(&fi_ibv_prov, param_name, type, param_help);
+	fi_param_define(&vrb_prov, param_name, type, param_help);
 
 	free(param_help);
 fn:
@@ -314,7 +314,7 @@ fn:
 }
 
 #if ENABLE_DEBUG
-static int fi_ibv_dbg_query_qp_attr(struct ibv_qp *qp)
+static int vrb_dbg_query_qp_attr(struct ibv_qp *qp)
 {
 	struct ibv_qp_init_attr attr = { 0 };
 	struct ibv_qp_attr qp_attr = { 0 };
@@ -326,7 +326,7 @@ static int fi_ibv_dbg_query_qp_attr(struct ibv_qp *qp)
 		VERBS_WARN(FI_LOG_EP_CTRL, "Unable to query QP\n");
 		return ret;
 	}
-	FI_DBG(&fi_ibv_prov, FI_LOG_EP_CTRL, "QP attributes: "
+	FI_DBG(&vrb_prov, FI_LOG_EP_CTRL, "QP attributes: "
 	       "min_rnr_timer"	": %" PRIu8 ", "
 	       "timeout"	": %" PRIu8 ", "
 	       "retry_cnt"	": %" PRIu8 ", "
@@ -336,24 +336,24 @@ static int fi_ibv_dbg_query_qp_attr(struct ibv_qp *qp)
 	return 0;
 }
 #else
-static int fi_ibv_dbg_query_qp_attr(struct ibv_qp *qp)
+static int vrb_dbg_query_qp_attr(struct ibv_qp *qp)
 {
 	return 0;
 }
 #endif
 
-int fi_ibv_set_rnr_timer(struct ibv_qp *qp)
+int vrb_set_rnr_timer(struct ibv_qp *qp)
 {
 	struct ibv_qp_attr attr = { 0 };
 	int ret;
 
-	if (fi_ibv_gl_data.min_rnr_timer > 31) {
+	if (vrb_gl_data.min_rnr_timer > 31) {
 		VERBS_WARN(FI_LOG_EQ, "min_rnr_timer value out of valid range; "
 			   "using default value of %d\n",
 			   VERBS_DEFAULT_MIN_RNR_TIMER);
 		attr.min_rnr_timer = VERBS_DEFAULT_MIN_RNR_TIMER;
 	} else {
-		attr.min_rnr_timer = fi_ibv_gl_data.min_rnr_timer;
+		attr.min_rnr_timer = vrb_gl_data.min_rnr_timer;
 	}
 
 	/* XRC initiator QP do not have responder logic */
@@ -365,13 +365,13 @@ int fi_ibv_set_rnr_timer(struct ibv_qp *qp)
 		VERBS_WARN(FI_LOG_EQ, "Unable to modify QP attribute\n");
 		return ret;
 	}
-	ret = fi_ibv_dbg_query_qp_attr(qp);
+	ret = vrb_dbg_query_qp_attr(qp);
 	if (ret)
 		return ret;
 	return 0;
 }
 
-int fi_ibv_find_max_inline(struct ibv_pd *pd, struct ibv_context *context,
+int vrb_find_max_inline(struct ibv_pd *pd, struct ibv_context *context,
 			   enum ibv_qp_type qp_type)
 {
 	struct ibv_qp_init_attr qp_attr;
@@ -457,37 +457,37 @@ int fi_ibv_find_max_inline(struct ibv_pd *pd, struct ibv_context *context,
 	return rst;
 }
 
-static int fi_ibv_get_param_int(const char *param_name,
+static int vrb_get_param_int(const char *param_name,
 				const char *param_str,
 				int *param_default)
 {
 	int param, ret;
 
-	ret = fi_ibv_param_define(param_name, param_str,
+	ret = vrb_param_define(param_name, param_str,
 				  FI_PARAM_INT,
 				  param_default);
 	if (ret)
 		return ret;
 
-	if (!fi_param_get_int(&fi_ibv_prov, param_name, &param))
+	if (!fi_param_get_int(&vrb_prov, param_name, &param))
 		*param_default = param;
 
 	return 0;
 }
 
-static int fi_ibv_get_param_bool(const char *param_name,
+static int vrb_get_param_bool(const char *param_name,
 				 const char *param_str,
 				 int *param_default)
 {
 	int param, ret;
 
-	ret = fi_ibv_param_define(param_name, param_str,
+	ret = vrb_param_define(param_name, param_str,
 				  FI_PARAM_BOOL,
 				  param_default);
 	if (ret)
 		return ret;
 
-	if (!fi_param_get_bool(&fi_ibv_prov, param_name, &param)) {
+	if (!fi_param_get_bool(&vrb_prov, param_name, &param)) {
 		*param_default = param;
 		if ((*param_default != 1) && (*param_default != 0))
 			return -FI_EINVAL;
@@ -496,108 +496,108 @@ static int fi_ibv_get_param_bool(const char *param_name,
 	return 0;
 }
 
-static int fi_ibv_get_param_str(const char *param_name,
+static int vrb_get_param_str(const char *param_name,
 				const char *param_str,
 				char **param_default)
 {
 	char *param;
 	int ret;
 
-	ret = fi_ibv_param_define(param_name, param_str,
+	ret = vrb_param_define(param_name, param_str,
 				  FI_PARAM_STRING,
 				  param_default);
 	if (ret)
 		return ret;
 
-	if (!fi_param_get_str(&fi_ibv_prov, param_name, &param))
+	if (!fi_param_get_str(&vrb_prov, param_name, &param))
 		*param_default = param;
 
 	return 0;
 }
 
-static int fi_ibv_read_params(void)
+static int vrb_read_params(void)
 {
 	/* Common parameters */
-	if (fi_ibv_get_param_int("tx_size", "Default maximum tx context size",
-				 &fi_ibv_gl_data.def_tx_size) ||
-	    (fi_ibv_gl_data.def_tx_size < 0)) {
+	if (vrb_get_param_int("tx_size", "Default maximum tx context size",
+				 &vrb_gl_data.def_tx_size) ||
+	    (vrb_gl_data.def_tx_size < 0)) {
 		VERBS_WARN(FI_LOG_CORE,
 			   "Invalid value of tx_size\n");
 		return -FI_EINVAL;
 	}
-	if (fi_ibv_get_param_int("rx_size", "Default maximum rx context size",
-				 &fi_ibv_gl_data.def_rx_size) ||
-	    (fi_ibv_gl_data.def_rx_size < 0)) {
+	if (vrb_get_param_int("rx_size", "Default maximum rx context size",
+				 &vrb_gl_data.def_rx_size) ||
+	    (vrb_gl_data.def_rx_size < 0)) {
 		VERBS_WARN(FI_LOG_CORE,
 			   "Invalid value of rx_size\n");
 		return -FI_EINVAL;
 	}
-	if (fi_ibv_get_param_int("tx_iov_limit", "Default maximum tx iov_limit",
-				 &fi_ibv_gl_data.def_tx_iov_limit) ||
-	    (fi_ibv_gl_data.def_tx_iov_limit < 0)) {
+	if (vrb_get_param_int("tx_iov_limit", "Default maximum tx iov_limit",
+				 &vrb_gl_data.def_tx_iov_limit) ||
+	    (vrb_gl_data.def_tx_iov_limit < 0)) {
 		VERBS_WARN(FI_LOG_CORE,
 			   "Invalid value of tx_iov_limit\n");
 		return -FI_EINVAL;
 	}
-	if (fi_ibv_get_param_int("rx_iov_limit", "Default maximum rx iov_limit",
-				 &fi_ibv_gl_data.def_rx_iov_limit) ||
-	    (fi_ibv_gl_data.def_rx_iov_limit < 0)) {
+	if (vrb_get_param_int("rx_iov_limit", "Default maximum rx iov_limit",
+				 &vrb_gl_data.def_rx_iov_limit) ||
+	    (vrb_gl_data.def_rx_iov_limit < 0)) {
 		VERBS_WARN(FI_LOG_CORE,
 			   "Invalid value of rx_iov_limit\n");
 		return -FI_EINVAL;
 	}
-	if (fi_ibv_get_param_int("inline_size", "Default maximum inline size. "
+	if (vrb_get_param_int("inline_size", "Default maximum inline size. "
 				 "Actual inject size returned in fi_info may be "
-				 "greater", &fi_ibv_gl_data.def_inline_size) ||
-	    (fi_ibv_gl_data.def_inline_size < 0)) {
+				 "greater", &vrb_gl_data.def_inline_size) ||
+	    (vrb_gl_data.def_inline_size < 0)) {
 		VERBS_WARN(FI_LOG_CORE,
 			   "Invalid value of inline_size\n");
 		return -FI_EINVAL;
 	}
-	if (fi_ibv_get_param_int("min_rnr_timer", "Set min_rnr_timer QP "
+	if (vrb_get_param_int("min_rnr_timer", "Set min_rnr_timer QP "
 				 "attribute (0 - 31)",
-				 &fi_ibv_gl_data.min_rnr_timer) ||
-	    ((fi_ibv_gl_data.min_rnr_timer < 0) ||
-	     (fi_ibv_gl_data.min_rnr_timer > 31))) {
+				 &vrb_gl_data.min_rnr_timer) ||
+	    ((vrb_gl_data.min_rnr_timer < 0) ||
+	     (vrb_gl_data.min_rnr_timer > 31))) {
 		VERBS_WARN(FI_LOG_CORE,
 			   "Invalid value of min_rnr_timer\n");
 		return -FI_EINVAL;
 	}
 
-	if (fi_ibv_get_param_bool("use_odp", "Enable on-demand paging memory "
+	if (vrb_get_param_bool("use_odp", "Enable on-demand paging memory "
 	    "registrations, if supported.  This is currently required to "
-	    "register DAX file system mmapped memory.", &fi_ibv_gl_data.use_odp)) {
+	    "register DAX file system mmapped memory.", &vrb_gl_data.use_odp)) {
 		VERBS_WARN(FI_LOG_CORE,
 			   "Invalid value of use_odp\n");
 		return -FI_EINVAL;
 	}
 
-	if (fi_ibv_get_param_bool("prefer_xrc", "Order XRC transport fi_infos"
+	if (vrb_get_param_bool("prefer_xrc", "Order XRC transport fi_infos"
 				  "ahead of RC. Default orders RC first.",
-				  &fi_ibv_gl_data.msg.prefer_xrc)) {
+				  &vrb_gl_data.msg.prefer_xrc)) {
 		VERBS_WARN(FI_LOG_CORE,
 			   "Invalid value of prefer_xrc\n");
 		return -FI_EINVAL;
 	}
 
-	if (fi_ibv_get_param_str("xrcd_filename", "A file to "
+	if (vrb_get_param_str("xrcd_filename", "A file to "
 				 "associate with the XRC domain.",
-				 &fi_ibv_gl_data.msg.xrcd_filename)) {
+				 &vrb_gl_data.msg.xrcd_filename)) {
 		VERBS_WARN(FI_LOG_CORE,
 			   "Invalid value of xrcd_filename\n");
 		return -FI_EINVAL;
 	}
-	if (fi_ibv_get_param_int("cqread_bunch_size", "The number of entries to "
+	if (vrb_get_param_int("cqread_bunch_size", "The number of entries to "
 				 "be read from the verbs completion queue at a time",
-				 &fi_ibv_gl_data.cqread_bunch_size) ||
-	    (fi_ibv_gl_data.cqread_bunch_size <= 0)) {
+				 &vrb_gl_data.cqread_bunch_size) ||
+	    (vrb_gl_data.cqread_bunch_size <= 0)) {
 		VERBS_WARN(FI_LOG_CORE,
 			   "Invalid value of cqread_bunch_size\n");
 		return -FI_EINVAL;
 	}
-	if (fi_ibv_get_param_str("iface", "The prefix or the full name of the "
+	if (vrb_get_param_str("iface", "The prefix or the full name of the "
 				 "network interface associated with the verbs device",
-				 &fi_ibv_gl_data.iface)) {
+				 &vrb_gl_data.iface)) {
 		VERBS_WARN(FI_LOG_CORE,
 			   "Invalid value of iface\n");
 		return -FI_EINVAL;
@@ -605,30 +605,30 @@ static int fi_ibv_read_params(void)
 
 	/* DGRAM-specific parameters */
 	if (getenv("OMPI_COMM_WORLD_RANK") || getenv("PMI_RANK"))
-		fi_ibv_gl_data.dgram.use_name_server = 0;
-	if (fi_ibv_get_param_bool("dgram_use_name_server", "The option that "
+		vrb_gl_data.dgram.use_name_server = 0;
+	if (vrb_get_param_bool("dgram_use_name_server", "The option that "
 				  "enables/disables OFI Name Server thread that is used "
 				  "to resolve IP-addresses to provider specific "
 				  "addresses. If MPI is used, the NS is disabled "
-				  "by default.", &fi_ibv_gl_data.dgram.use_name_server)) {
+				  "by default.", &vrb_gl_data.dgram.use_name_server)) {
 		VERBS_WARN(FI_LOG_CORE,
 			   "Invalid value of dgram_use_name_server\n");
 		return -FI_EINVAL;
 	}
-	if (fi_ibv_get_param_int("dgram_name_server_port", "The port on which Name Server "
+	if (vrb_get_param_int("dgram_name_server_port", "The port on which Name Server "
 				 "thread listens incoming connections and requestes.",
-				 &fi_ibv_gl_data.dgram.name_server_port) ||
-	    (fi_ibv_gl_data.dgram.name_server_port < 0 ||
-	     fi_ibv_gl_data.dgram.name_server_port > 65535)) {
+				 &vrb_gl_data.dgram.name_server_port) ||
+	    (vrb_gl_data.dgram.name_server_port < 0 ||
+	     vrb_gl_data.dgram.name_server_port > 65535)) {
 		VERBS_WARN(FI_LOG_CORE,
 			   "Invalid value of dgram_name_server_port\n");
 		return -FI_EINVAL;
 	}
-	if (fi_ibv_get_param_int("gid_idx", "Set which gid index to use "
+	if (vrb_get_param_int("gid_idx", "Set which gid index to use "
 				 "attribute (0 - 255)",
-				 &fi_ibv_gl_data.gid_idx) ||
-	    (fi_ibv_gl_data.gid_idx < 0 ||
-	     fi_ibv_gl_data.gid_idx > 255)) {
+				 &vrb_gl_data.gid_idx) ||
+	    (vrb_gl_data.gid_idx < 0 ||
+	     vrb_gl_data.gid_idx > 255)) {
 		VERBS_WARN(FI_LOG_CORE,
 			   "Invalid value of gid index\n");
 		return -FI_EINVAL;
@@ -654,15 +654,15 @@ static void verbs_devs_free(void)
 	}
 }
 
-static void fi_ibv_fini(void)
+static void vrb_fini(void)
 {
 #if HAVE_VERBS_DL
 	ofi_monitor_cleanup();
 	ofi_mem_fini();
 #endif
-	fi_freeinfo((void *)fi_ibv_util_prov.info);
+	fi_freeinfo((void *)vrb_util_prov.info);
 	verbs_devs_free();
-	fi_ibv_util_prov.info = NULL;
+	vrb_util_prov.info = NULL;
 }
 
 VERBS_INI
@@ -671,7 +671,7 @@ VERBS_INI
 	ofi_mem_init();
 	ofi_monitor_init();
 #endif
-	if (fi_ibv_read_params()|| fi_ibv_init_info(&fi_ibv_util_prov.info))
+	if (vrb_read_params()|| vrb_init_info(&vrb_util_prov.info))
 		return NULL;
-	return &fi_ibv_prov;
+	return &vrb_prov;
 }

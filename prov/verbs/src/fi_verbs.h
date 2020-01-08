@@ -88,11 +88,11 @@
 #define VERBS_PROV_NAME "verbs"
 #define VERBS_PROV_VERS FI_VERSION(1,0)
 
-#define VERBS_DBG(subsys, ...) FI_DBG(&fi_ibv_prov, subsys, __VA_ARGS__)
-#define VERBS_INFO(subsys, ...) FI_INFO(&fi_ibv_prov, subsys, __VA_ARGS__)
+#define VERBS_DBG(subsys, ...) FI_DBG(&vrb_prov, subsys, __VA_ARGS__)
+#define VERBS_INFO(subsys, ...) FI_INFO(&vrb_prov, subsys, __VA_ARGS__)
 #define VERBS_INFO_ERRNO(subsys, fn, errno) VERBS_INFO(subsys, fn ": %s(%d)\n",	\
 		strerror(errno), errno)
-#define VERBS_WARN(subsys, ...) FI_WARN(&fi_ibv_prov, subsys, __VA_ARGS__)
+#define VERBS_WARN(subsys, ...) FI_WARN(&vrb_prov, subsys, __VA_ARGS__)
 
 
 #define VERBS_INJECT_FLAGS(ep, len, flags) ((((flags) & FI_INJECT) || \
@@ -113,33 +113,33 @@
 
 #define VERBS_NO_COMP_FLAG	((uint64_t)-1)
 
-#define FI_IBV_CM_DATA_SIZE	(56)
-#define VERBS_CM_DATA_SIZE	(FI_IBV_CM_DATA_SIZE -		\
-				 sizeof(struct fi_ibv_cm_data_hdr))
+#define VRB_CM_DATA_SIZE	(56)
+#define VERBS_CM_DATA_SIZE	(VRB_CM_DATA_SIZE -		\
+				 sizeof(struct vrb_cm_data_hdr))
 
-#define FI_IBV_CM_REJ_CONSUMER_DEFINED	28
-#define FI_IBV_CM_REJ_SIDR_CONSUMER_DEFINED	2
+#define VRB_CM_REJ_CONSUMER_DEFINED	28
+#define VRB_CM_REJ_SIDR_CONSUMER_DEFINED	2
 
 #define VERBS_DGRAM_MSG_PREFIX_SIZE	(40)
 
-#define FI_IBV_EP_TYPE(info)						\
+#define VRB_EP_TYPE(info)						\
 	((info && info->ep_attr) ? info->ep_attr->type : FI_EP_MSG)
-#define FI_IBV_EP_PROTO(info)						\
+#define VRB_EP_PROTO(info)						\
 	(((info) && (info)->ep_attr) ? (info)->ep_attr->protocol :	\
 					FI_PROTO_UNSPEC)
 
-#define FI_IBV_MEM_ALIGNMENT (64)
-#define FI_IBV_BUF_ALIGNMENT (4096) /* TODO: Page or MTU size */
-#define FI_IBV_POOL_BUF_CNT (100)
+#define VRB_MEM_ALIGNMENT (64)
+#define VRB_BUF_ALIGNMENT (4096) /* TODO: Page or MTU size */
+#define VRB_POOL_BUF_CNT (100)
 
 #define VERBS_ANY_DOMAIN "verbs_any_domain"
 #define VERBS_ANY_FABRIC "verbs_any_fabric"
 
-extern struct fi_provider fi_ibv_prov;
-extern struct util_prov fi_ibv_util_prov;
+extern struct fi_provider vrb_prov;
+extern struct util_prov vrb_util_prov;
 extern struct dlist_entry verbs_devs;
 
-extern struct fi_ibv_gl_data {
+extern struct vrb_gl_data {
 	int	def_tx_size;
 	int	def_rx_size;
 	int	def_tx_iov_limit;
@@ -169,7 +169,7 @@ extern struct fi_ibv_gl_data {
 		int	prefer_xrc;
 		char	*xrcd_filename;
 	} msg;
-} fi_ibv_gl_data;
+} vrb_gl_data;
 
 struct verbs_addr {
 	struct dlist_entry entry;
@@ -207,18 +207,18 @@ struct ofi_ib_ud_ep_name {
 #define VERBS_IB_UD_NS_ANY_SERVICE	0
 
 static inline
-int fi_ibv_dgram_ns_is_service_wildcard(void *svc)
+int vrb_dgram_ns_is_service_wildcard(void *svc)
 {
 	return (*(int *)svc == VERBS_IB_UD_NS_ANY_SERVICE);
 }
 
 static inline
-int fi_ibv_dgram_ns_service_cmp(void *svc1, void *svc2)
+int vrb_dgram_ns_service_cmp(void *svc1, void *svc2)
 {
 	int service1 = *(int *)svc1, service2 = *(int *)svc2;
 
-	if (fi_ibv_dgram_ns_is_service_wildcard(svc1) ||
-	    fi_ibv_dgram_ns_is_service_wildcard(svc2))
+	if (vrb_dgram_ns_is_service_wildcard(svc1) ||
+	    vrb_dgram_ns_is_service_wildcard(svc2))
 		return 0;
 	return (service1 < service2) ? -1 : (service1 > service2);
 }
@@ -230,17 +230,17 @@ struct verbs_dev_info {
 };
 
 
-struct fi_ibv_fabric {
+struct vrb_fabric {
 	struct util_fabric	util_fabric;
 	const struct fi_info	*info;
 	struct util_ns		name_server;
 };
 
-int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
+int vrb_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 		  void *context);
-int fi_ibv_find_fabric(const struct fi_fabric_attr *attr);
+int vrb_find_fabric(const struct fi_fabric_attr *attr);
 
-struct fi_ibv_eq_entry {
+struct vrb_eq_entry {
 	struct dlist_entry	item;
 	uint32_t		event;
 	size_t			len;
@@ -251,7 +251,7 @@ struct fi_ibv_eq_entry {
 	};
 };
 
-typedef int (*fi_ibv_trywait_func)(struct fid *fid);
+typedef int (*vrb_trywait_func)(struct fid *fid);
 
 /* An OFI indexer is used to maintain a unique connection request to
  * endpoint mapping. The key is a 32-bit value (referred to as a
@@ -266,9 +266,9 @@ typedef int (*fi_ibv_trywait_func)(struct fid *fid);
 #define VERBS_CONN_TAG_INDEX_BITS	18
 #define VERBS_CONN_TAG_INVALID		0xFFFFFFFF	/* Key is not valid */
 
-struct fi_ibv_eq {
+struct vrb_eq {
 	struct fid_eq		eq_fid;
-	struct fi_ibv_fabric	*fab;
+	struct vrb_fabric	*fab;
 	fastlock_t		lock;
 	struct dlistfd_head	list_head;
 	struct rdma_event_channel *channel;
@@ -300,17 +300,17 @@ struct fi_ibv_eq {
 	} xrc;
 };
 
-int fi_ibv_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
+int vrb_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		   struct fid_eq **eq, void *context);
-int fi_ibv_eq_trywait(struct fi_ibv_eq *eq);
-void fi_ibv_eq_remove_events(struct fi_ibv_eq *eq, struct fid *fid);
+int vrb_eq_trywait(struct vrb_eq *eq);
+void vrb_eq_remove_events(struct vrb_eq *eq, struct fid *fid);
 
-int fi_ibv_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
+int vrb_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		   struct fid_av **av, void *context);
 
-struct fi_ibv_pep {
+struct vrb_pep {
 	struct fid_pep		pep_fid;
-	struct fi_ibv_eq	*eq;
+	struct vrb_eq	*eq;
 	struct rdma_cm_id	*id;
 
 	/* XRC uses SIDR based RDMA CM exchanges for setting up
@@ -324,7 +324,7 @@ struct fi_ibv_pep {
 	struct fi_info		*info;
 };
 
-struct fi_ops_cm *fi_ibv_pep_ops_cm(struct fi_ibv_pep *pep);
+struct fi_ops_cm *vrb_pep_ops_cm(struct vrb_pep *pep);
 
 
 #if VERBS_HAVE_QUERY_EX
@@ -338,7 +338,7 @@ enum {
 	VRB_USE_ODP = BIT(1),
 };
 
-struct fi_ibv_domain {
+struct vrb_domain {
 	struct util_domain		util_domain;
 	struct ibv_context		*verbs;
 	struct ibv_pd			*pd;
@@ -346,7 +346,7 @@ struct fi_ibv_domain {
 	enum fi_ep_type			ep_type;
 	struct fi_info			*info;
 	/* The EQ is utilized by verbs/MSG */
-	struct fi_ibv_eq		*eq;
+	struct vrb_eq		*eq;
 	uint64_t			eq_flags;
 
 	/* Indicates that MSG endpoints should use the XRC transport.
@@ -368,16 +368,16 @@ struct fi_ibv_domain {
 	struct ofi_mr_cache		cache;
 };
 
-struct fi_ibv_cq;
-typedef void (*fi_ibv_cq_read_entry)(struct ibv_wc *wc, void *buf);
+struct vrb_cq;
+typedef void (*vrb_cq_read_entry)(struct ibv_wc *wc, void *buf);
 
 struct vrb_wc_entry {
 	struct slist_entry	entry;
 	struct ibv_wc		wc;
 };
 
-struct fi_ibv_srq_ep;
-struct fi_ibv_cq {
+struct vrb_srq_ep;
+struct vrb_cq {
 	struct util_cq		util_cq;
 	struct ibv_comp_channel	*channel;
 	struct ibv_cq		*cq;
@@ -386,7 +386,7 @@ struct fi_ibv_cq {
 	enum fi_cq_wait_cond	wait_cond;
 	struct ibv_wc		wc;
 	int			signal_fd[2];
-	fi_ibv_cq_read_entry	read_entry;
+	vrb_cq_read_entry	read_entry;
 	struct slist		saved_wc_list;
 	ofi_atomic32_t		nevents;
 	struct ofi_bufpool	*wce_pool;
@@ -404,25 +404,25 @@ struct fi_ibv_cq {
 	struct ofi_bufpool	*ctx_pool;
 };
 
-int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
+int vrb_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		   struct fid_cq **cq, void *context);
-int fi_ibv_cq_trywait(struct fi_ibv_cq *cq);
+int vrb_cq_trywait(struct vrb_cq *cq);
 
-struct fi_ibv_mem_desc {
+struct vrb_mem_desc {
 	struct fid_mr		mr_fid;
 	struct ibv_mr		*mr;
-	struct fi_ibv_domain	*domain;
+	struct vrb_domain	*domain;
 	size_t			len;
 	/* this field is used only by MR cache operations */
 	struct ofi_mr_entry	*entry;
 };
 
-extern struct fi_ops_mr fi_ibv_mr_ops;
-extern struct fi_ops_mr fi_ibv_mr_cache_ops;
+extern struct fi_ops_mr vrb_mr_ops;
+extern struct fi_ops_mr vrb_mr_cache_ops;
 
-int fi_ibv_mr_cache_add_region(struct ofi_mr_cache *cache,
+int vrb_mr_cache_add_region(struct ofi_mr_cache *cache,
 			       struct ofi_mr_entry *entry);
-void fi_ibv_mr_cache_delete_region(struct ofi_mr_cache *cache,
+void vrb_mr_cache_delete_region(struct ofi_mr_cache *cache,
 				   struct ofi_mr_entry *entry);
 
 /*
@@ -430,7 +430,7 @@ void fi_ibv_mr_cache_delete_region(struct ofi_mr_cache *cache,
  * maintain a list of validated pre-posted receives to post once
  * the SRQ is created.
  */
-struct fi_ibv_xrc_srx_prepost {
+struct vrb_xrc_srx_prepost {
 	struct slist_entry	prepost_entry;
 	void			*buf;
 	void			*desc;
@@ -439,10 +439,10 @@ struct fi_ibv_xrc_srx_prepost {
 	fi_addr_t		src_addr;
 };
 
-struct fi_ibv_srq_ep {
+struct vrb_srq_ep {
 	struct fid_ep		ep_fid;
 	struct ibv_srq		*srq;
-	struct fi_ibv_domain	*domain;
+	struct vrb_domain	*domain;
 
 	/* For XRC SRQ only */
 	struct {
@@ -456,33 +456,33 @@ struct fi_ibv_srq_ep {
 		/* The RX CQ associated with this XRC SRQ. This field
 		 * and the srq_entry should only be modified while holding
 		 * the associted cq::xrc.srq_list_lock. */
-		struct fi_ibv_cq	*cq;
+		struct vrb_cq	*cq;
 
 		/* The CQ maintains a list of XRC SRQ associated with it */
 		struct dlist_entry	srq_entry;
 	} xrc;
 };
 
-int fi_ibv_srq_context(struct fid_domain *domain, struct fi_rx_attr *attr,
+int vrb_srq_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 		       struct fid_ep **rx_ep, void *context);
 
-static inline int fi_ibv_is_xrc(struct fi_info *info)
+static inline int vrb_is_xrc(struct fi_info *info)
 {
-	return (FI_IBV_EP_TYPE(info) == FI_EP_MSG) &&
-	       (FI_IBV_EP_PROTO(info) == FI_PROTO_RDMA_CM_IB_XRC);
+	return (VRB_EP_TYPE(info) == FI_EP_MSG) &&
+	       (VRB_EP_PROTO(info) == FI_PROTO_RDMA_CM_IB_XRC);
 }
 
-int fi_ibv_domain_xrc_init(struct fi_ibv_domain *domain);
-int fi_ibv_domain_xrc_cleanup(struct fi_ibv_domain *domain);
+int vrb_domain_xrc_init(struct vrb_domain *domain);
+int vrb_domain_xrc_cleanup(struct vrb_domain *domain);
 
-enum fi_ibv_ini_qp_state {
-	FI_IBV_INI_QP_UNCONNECTED,
-	FI_IBV_INI_QP_CONNECTING,
-	FI_IBV_INI_QP_CONNECTED
+enum vrb_ini_qp_state {
+	VRB_INI_QP_UNCONNECTED,
+	VRB_INI_QP_CONNECTING,
+	VRB_INI_QP_CONNECTED
 };
 
-#define FI_IBV_NO_INI_TGT_QPNUM 0
-#define FI_IBV_RECIP_CONN	1
+#define VRB_NO_INI_TGT_QPNUM 0
+#define VRB_RECIP_CONN	1
 
 /*
  * An XRC transport INI QP connection can be shared within a process to
@@ -490,17 +490,17 @@ enum fi_ibv_ini_qp_state {
  * only accessed during connection setup and tear down and should be
  * done while holding the domain:eq:lock.
  */
-struct fi_ibv_ini_shared_conn {
+struct vrb_ini_shared_conn {
 	/* To share, EP must have same remote peer host addr and TX CQ */
 	struct sockaddr			*peer_addr;
-	struct fi_ibv_cq		*tx_cq;
+	struct vrb_cq		*tx_cq;
 
 	/* The physical INI/TGT QPN connection. Virtual connections to the
 	 * same remote peer and TGT QPN will share this connection, with
 	 * the remote end opening the specified XRC TGT QPN for sharing
 	 * During the physical connection setup, phys_conn_id identifies
 	 * the RDMA CM ID (and MSG_EP) associated with the operation. */
-	enum fi_ibv_ini_qp_state	state;
+	enum vrb_ini_qp_state	state;
 	struct rdma_cm_id		*phys_conn_id;
 	struct ibv_qp			*ini_qp;
 	uint32_t			tgt_qpn;
@@ -512,13 +512,13 @@ struct fi_ibv_ini_shared_conn {
 	ofi_atomic32_t			ref_cnt;
 };
 
-enum fi_ibv_xrc_ep_conn_state {
-	FI_IBV_XRC_UNCONNECTED,
-	FI_IBV_XRC_ORIG_CONNECTING,
-	FI_IBV_XRC_ORIG_CONNECTED,
-	FI_IBV_XRC_RECIP_CONNECTING,
-	FI_IBV_XRC_CONNECTED,
-	FI_IBV_XRC_ERROR
+enum vrb_xrc_ep_conn_state {
+	VRB_XRC_UNCONNECTED,
+	VRB_XRC_ORIG_CONNECTING,
+	VRB_XRC_ORIG_CONNECTED,
+	VRB_XRC_RECIP_CONNECTING,
+	VRB_XRC_CONNECTED,
+	VRB_XRC_ERROR
 };
 
 /*
@@ -526,7 +526,7 @@ enum fi_ibv_xrc_ep_conn_state {
  * establishment and can be freed once bidirectional connectivity
  * is established.
  */
-struct fi_ibv_xrc_ep_conn_setup {
+struct vrb_xrc_ep_conn_setup {
 	/* The connection tag is used to associate the reciprocal
 	 * XRC INI/TGT QP connection request in the reverse direction
 	 * with the original request. The tag is created by the
@@ -537,16 +537,16 @@ struct fi_ibv_xrc_ep_conn_setup {
 	/* Delivery of the FI_CONNECTED event is delayed until
 	 * bidirectional connectivity is established. */
 	size_t				event_len;
-	uint8_t				event_data[FI_IBV_CM_DATA_SIZE];
+	uint8_t				event_data[VRB_CM_DATA_SIZE];
 
 	/* Connection request may have to queue waiting for the
 	 * physical XRC INI/TGT QP connection to complete. */
 	int				pending_recip;
 	size_t				pending_paramlen;
-	uint8_t				pending_param[FI_IBV_CM_DATA_SIZE];
+	uint8_t				pending_param[VRB_CM_DATA_SIZE];
 };
 
-struct fi_ibv_ep {
+struct vrb_ep {
 	struct util_ep			util_ep;
 	struct ibv_qp			*ibv_qp;
 
@@ -563,8 +563,8 @@ struct fi_ibv_ep {
 
 	size_t				inject_limit;
 
-	struct fi_ibv_eq		*eq;
-	struct fi_ibv_srq_ep		*srq_ep;
+	struct vrb_eq		*eq;
+	struct vrb_srq_ep		*srq_ep;
 	struct fi_info			*info;
 
 	struct {
@@ -574,26 +574,26 @@ struct fi_ibv_ep {
 	} *wrs;
 	size_t				rx_cq_size;
 	struct rdma_conn_param		conn_param;
-	struct fi_ibv_cm_data_hdr	*cm_hdr;
+	struct vrb_cm_data_hdr	*cm_hdr;
 };
 
 
 /* Must be cast-able to struct fi_context */
 struct vrb_context {
-	struct fi_ibv_ep		*ep;
+	struct vrb_ep		*ep;
 	void				*user_ctx;
 };
 
 
 #define VERBS_XRC_EP_MAGIC		0x1F3D5B79
-struct fi_ibv_xrc_ep {
+struct vrb_xrc_ep {
 	/* Must be first */
-	struct fi_ibv_ep		base_ep;
+	struct vrb_ep		base_ep;
 
 	/* XRC only fields */
 	struct rdma_cm_id		*tgt_id;
 	struct ibv_qp			*tgt_ibv_qp;
-	enum fi_ibv_xrc_ep_conn_state	conn_state;
+	enum vrb_xrc_ep_conn_state	conn_state;
 	bool				recip_req_received;
 	uint32_t			magic;
 	uint32_t			srqn;
@@ -601,7 +601,7 @@ struct fi_ibv_xrc_ep {
 
 	/* A reference is held to a shared physical XRC INI/TGT QP connecting
 	 * to the destination node. */
-	struct fi_ibv_ini_shared_conn	*ini_conn;
+	struct vrb_ini_shared_conn	*ini_conn;
 	struct dlist_entry		ini_conn_entry;
 
 	/* The following is used for resending lost SIDR accept response
@@ -614,43 +614,43 @@ struct fi_ibv_xrc_ep {
 
 	/* The following state is allocated during XRC bidirectional setup and
 	 * freed once the connection is established. */
-	struct fi_ibv_xrc_ep_conn_setup	*conn_setup;
+	struct vrb_xrc_ep_conn_setup	*conn_setup;
 };
 
-int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
+int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 		   struct fid_ep **ep, void *context);
-int fi_ibv_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
+int vrb_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 		      struct fid_pep **pep, void *context);
-int fi_ibv_create_ep(const struct fi_info *hints, enum rdma_port_space ps,
+int vrb_create_ep(const struct fi_info *hints, enum rdma_port_space ps,
 		     struct rdma_cm_id **id);
-int fi_ibv_dgram_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
+int vrb_dgram_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 			 struct fid_av **av_fid, void *context);
 static inline
-struct fi_ibv_domain *fi_ibv_ep_to_domain(struct fi_ibv_ep *ep)
+struct vrb_domain *vrb_ep_to_domain(struct vrb_ep *ep)
 {
-	return container_of(ep->util_ep.domain, struct fi_ibv_domain,
+	return container_of(ep->util_ep.domain, struct vrb_domain,
 			    util_domain);
 }
 
-extern struct fi_ops_atomic fi_ibv_msg_ep_atomic_ops;
-extern struct fi_ops_atomic fi_ibv_msg_xrc_ep_atomic_ops;
-extern struct fi_ops_cm fi_ibv_msg_ep_cm_ops;
-extern struct fi_ops_cm fi_ibv_msg_xrc_ep_cm_ops;
-extern const struct fi_ops_msg fi_ibv_msg_ep_msg_ops_ts;
-extern const struct fi_ops_msg fi_ibv_msg_ep_msg_ops;
-extern const struct fi_ops_msg fi_ibv_dgram_msg_ops_ts;
-extern const struct fi_ops_msg fi_ibv_dgram_msg_ops;
-extern const struct fi_ops_msg fi_ibv_msg_xrc_ep_msg_ops;
-extern const struct fi_ops_msg fi_ibv_msg_xrc_ep_msg_ops_ts;
-extern const struct fi_ops_msg fi_ibv_msg_srq_xrc_ep_msg_ops;
-extern struct fi_ops_rma fi_ibv_msg_ep_rma_ops_ts;
-extern struct fi_ops_rma fi_ibv_msg_ep_rma_ops;
-extern struct fi_ops_rma fi_ibv_msg_xrc_ep_rma_ops_ts;
-extern struct fi_ops_rma fi_ibv_msg_xrc_ep_rma_ops;
+extern struct fi_ops_atomic vrb_msg_ep_atomic_ops;
+extern struct fi_ops_atomic vrb_msg_xrc_ep_atomic_ops;
+extern struct fi_ops_cm vrb_msg_ep_cm_ops;
+extern struct fi_ops_cm vrb_msg_xrc_ep_cm_ops;
+extern const struct fi_ops_msg vrb_msg_ep_msg_ops_ts;
+extern const struct fi_ops_msg vrb_msg_ep_msg_ops;
+extern const struct fi_ops_msg vrb_dgram_msg_ops_ts;
+extern const struct fi_ops_msg vrb_dgram_msg_ops;
+extern const struct fi_ops_msg vrb_msg_xrc_ep_msg_ops;
+extern const struct fi_ops_msg vrb_msg_xrc_ep_msg_ops_ts;
+extern const struct fi_ops_msg vrb_msg_srq_xrc_ep_msg_ops;
+extern struct fi_ops_rma vrb_msg_ep_rma_ops_ts;
+extern struct fi_ops_rma vrb_msg_ep_rma_ops;
+extern struct fi_ops_rma vrb_msg_xrc_ep_rma_ops_ts;
+extern struct fi_ops_rma vrb_msg_xrc_ep_rma_ops;
 
-#define FI_IBV_XRC_VERSION	2
+#define VRB_XRC_VERSION	2
 
-struct fi_ibv_xrc_cm_data {
+struct vrb_xrc_cm_data {
 	uint8_t		version;
 	uint8_t		reciprocal;
 	uint16_t	port;
@@ -659,7 +659,7 @@ struct fi_ibv_xrc_cm_data {
 	uint32_t	conn_tag;
 };
 
-struct fi_ibv_xrc_conn_info {
+struct vrb_xrc_conn_info {
 	uint32_t		conn_tag;
 	uint32_t		is_reciprocal;
 	uint32_t		ini_qpn;
@@ -669,88 +669,88 @@ struct fi_ibv_xrc_conn_info {
 	struct rdma_conn_param	conn_param;
 };
 
-struct fi_ibv_connreq {
+struct vrb_connreq {
 	struct fid			handle;
 	struct rdma_cm_id		*id;
 
 	/* Support for XRC bidirectional connections, and
 	 * non-RDMA CM managed QP. */
 	int				is_xrc;
-	struct fi_ibv_xrc_conn_info	xrc;
+	struct vrb_xrc_conn_info	xrc;
 };
 
-struct fi_ibv_cm_data_hdr {
+struct vrb_cm_data_hdr {
 	uint8_t	size;
 	char	data[];
 };
 
-int fi_ibv_eq_add_sidr_conn(struct fi_ibv_xrc_ep *ep,
+int vrb_eq_add_sidr_conn(struct vrb_xrc_ep *ep,
 			    void *param_data, size_t param_len);
-void fi_ibv_eq_remove_sidr_conn(struct fi_ibv_xrc_ep *ep);
-struct fi_ibv_xrc_ep *fi_ibv_eq_get_sidr_conn(struct fi_ibv_eq *eq,
+void vrb_eq_remove_sidr_conn(struct vrb_xrc_ep *ep);
+struct vrb_xrc_ep *vrb_eq_get_sidr_conn(struct vrb_eq *eq,
 					      struct sockaddr *peer,
 					      uint16_t pep_port, bool recip);
 
-void fi_ibv_msg_ep_get_qp_attr(struct fi_ibv_ep *ep,
+void vrb_msg_ep_get_qp_attr(struct vrb_ep *ep,
 			       struct ibv_qp_init_attr *attr);
-int fi_ibv_process_xrc_connreq(struct fi_ibv_ep *ep,
-			       struct fi_ibv_connreq *connreq);
+int vrb_process_xrc_connreq(struct vrb_ep *ep,
+			       struct vrb_connreq *connreq);
 
-void fi_ibv_next_xrc_conn_state(struct fi_ibv_xrc_ep *ep);
-void fi_ibv_prev_xrc_conn_state(struct fi_ibv_xrc_ep *ep);
-void fi_ibv_eq_set_xrc_conn_tag(struct fi_ibv_xrc_ep *ep);
-void fi_ibv_eq_clear_xrc_conn_tag(struct fi_ibv_xrc_ep *ep);
-struct fi_ibv_xrc_ep *fi_ibv_eq_xrc_conn_tag2ep(struct fi_ibv_eq *eq,
+void vrb_next_xrc_conn_state(struct vrb_xrc_ep *ep);
+void vrb_prev_xrc_conn_state(struct vrb_xrc_ep *ep);
+void vrb_eq_set_xrc_conn_tag(struct vrb_xrc_ep *ep);
+void vrb_eq_clear_xrc_conn_tag(struct vrb_xrc_ep *ep);
+struct vrb_xrc_ep *vrb_eq_xrc_conn_tag2ep(struct vrb_eq *eq,
 						uint32_t conn_tag);
-void fi_ibv_set_xrc_cm_data(struct fi_ibv_xrc_cm_data *local, int reciprocal,
+void vrb_set_xrc_cm_data(struct vrb_xrc_cm_data *local, int reciprocal,
 			    uint32_t conn_tag, uint16_t port, uint32_t tgt_qpn,
 			    uint32_t srqn);
-int fi_ibv_verify_xrc_cm_data(struct fi_ibv_xrc_cm_data *remote,
+int vrb_verify_xrc_cm_data(struct vrb_xrc_cm_data *remote,
 			      int private_data_len);
-int fi_ibv_connect_xrc(struct fi_ibv_xrc_ep *ep, struct sockaddr *addr,
+int vrb_connect_xrc(struct vrb_xrc_ep *ep, struct sockaddr *addr,
 		       int reciprocal, void *param, size_t paramlen);
-int fi_ibv_accept_xrc(struct fi_ibv_xrc_ep *ep, int reciprocal,
+int vrb_accept_xrc(struct vrb_xrc_ep *ep, int reciprocal,
 		      void *param, size_t paramlen);
-int fi_ibv_resend_shared_accept_xrc(struct fi_ibv_xrc_ep *ep,
-				    struct fi_ibv_connreq *connreq,
+int vrb_resend_shared_accept_xrc(struct vrb_xrc_ep *ep,
+				    struct vrb_connreq *connreq,
 				    struct rdma_cm_id *id);
-void fi_ibv_free_xrc_conn_setup(struct fi_ibv_xrc_ep *ep, int disconnect);
-void fi_ibv_add_pending_ini_conn(struct fi_ibv_xrc_ep *ep, int reciprocal,
+void vrb_free_xrc_conn_setup(struct vrb_xrc_ep *ep, int disconnect);
+void vrb_add_pending_ini_conn(struct vrb_xrc_ep *ep, int reciprocal,
 				 void *conn_param, size_t conn_paramlen);
-void fi_ibv_sched_ini_conn(struct fi_ibv_ini_shared_conn *ini_conn);
-int fi_ibv_get_shared_ini_conn(struct fi_ibv_xrc_ep *ep,
-			       struct fi_ibv_ini_shared_conn **ini_conn);
-void fi_ibv_put_shared_ini_conn(struct fi_ibv_xrc_ep *ep);
-int fi_ibv_reserve_qpn(struct fi_ibv_xrc_ep *ep, struct ibv_qp **qp);
+void vrb_sched_ini_conn(struct vrb_ini_shared_conn *ini_conn);
+int vrb_get_shared_ini_conn(struct vrb_xrc_ep *ep,
+			       struct vrb_ini_shared_conn **ini_conn);
+void vrb_put_shared_ini_conn(struct vrb_xrc_ep *ep);
+int vrb_reserve_qpn(struct vrb_xrc_ep *ep, struct ibv_qp **qp);
 
-void fi_ibv_save_priv_data(struct fi_ibv_xrc_ep *ep, const void *data,
+void vrb_save_priv_data(struct vrb_xrc_ep *ep, const void *data,
 			   size_t len);
-int fi_ibv_ep_create_ini_qp(struct fi_ibv_xrc_ep *ep, void *dst_addr,
+int vrb_ep_create_ini_qp(struct vrb_xrc_ep *ep, void *dst_addr,
 			    uint32_t *peer_tgt_qpn);
-void fi_ibv_ep_ini_conn_done(struct fi_ibv_xrc_ep *ep, uint32_t peer_tgt_qpn);
-void fi_ibv_ep_ini_conn_rejected(struct fi_ibv_xrc_ep *ep);
-int fi_ibv_ep_create_tgt_qp(struct fi_ibv_xrc_ep *ep, uint32_t tgt_qpn);
-void fi_ibv_ep_tgt_conn_done(struct fi_ibv_xrc_ep *qp);
-int fi_ibv_ep_destroy_xrc_qp(struct fi_ibv_xrc_ep *ep);
+void vrb_ep_ini_conn_done(struct vrb_xrc_ep *ep, uint32_t peer_tgt_qpn);
+void vrb_ep_ini_conn_rejected(struct vrb_xrc_ep *ep);
+int vrb_ep_create_tgt_qp(struct vrb_xrc_ep *ep, uint32_t tgt_qpn);
+void vrb_ep_tgt_conn_done(struct vrb_xrc_ep *qp);
+int vrb_ep_destroy_xrc_qp(struct vrb_xrc_ep *ep);
 
-int fi_ibv_xrc_close_srq(struct fi_ibv_srq_ep *srq_ep);
-int fi_ibv_sockaddr_len(struct sockaddr *addr);
+int vrb_xrc_close_srq(struct vrb_srq_ep *srq_ep);
+int vrb_sockaddr_len(struct sockaddr *addr);
 
 
-int fi_ibv_init_info(const struct fi_info **all_infos);
-int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
+int vrb_init_info(const struct fi_info **all_infos);
+int vrb_getinfo(uint32_t version, const char *node, const char *service,
 		   uint64_t flags, const struct fi_info *hints,
 		   struct fi_info **info);
-const struct fi_info *fi_ibv_get_verbs_info(const struct fi_info *ilist,
+const struct fi_info *vrb_get_verbs_info(const struct fi_info *ilist,
 					    const char *domain_name);
-int fi_ibv_fi_to_rai(const struct fi_info *fi, uint64_t flags,
+int vrb_fi_to_rai(const struct fi_info *fi, uint64_t flags,
 		     struct rdma_addrinfo *rai);
-int fi_ibv_get_rdma_rai(const char *node, const char *service, uint64_t flags,
+int vrb_get_rdma_rai(const char *node, const char *service, uint64_t flags,
 			const struct fi_info *hints, struct rdma_addrinfo **rai);
-int fi_ibv_get_matching_info(uint32_t version, const struct fi_info *hints,
+int vrb_get_matching_info(uint32_t version, const struct fi_info *hints,
 			     struct fi_info **info, const struct fi_info *verbs_info,
 			     uint8_t passive);
-void fi_ibv_alter_info(const struct fi_info *hints, struct fi_info *info);
+void vrb_alter_info(const struct fi_info *hints, struct fi_info *info);
 
 struct verbs_ep_domain {
 	char			*suffix;
@@ -762,13 +762,13 @@ struct verbs_ep_domain {
 extern const struct verbs_ep_domain verbs_dgram_domain;
 extern const struct verbs_ep_domain verbs_msg_xrc_domain;
 
-int fi_ibv_check_ep_attr(const struct fi_info *hints,
+int vrb_check_ep_attr(const struct fi_info *hints,
 			 const struct fi_info *info);
-int fi_ibv_check_rx_attr(const struct fi_rx_attr *attr,
+int vrb_check_rx_attr(const struct fi_rx_attr *attr,
 			 const struct fi_info *hints,
 			 const struct fi_info *info);
 
-static inline int fi_ibv_cmp_xrc_domain_name(const char *domain_name,
+static inline int vrb_cmp_xrc_domain_name(const char *domain_name,
 					     const char *rdma_name)
 {
 	size_t domain_len = strlen(domain_name);
@@ -778,36 +778,36 @@ static inline int fi_ibv_cmp_xrc_domain_name(const char *domain_name,
 						 domain_len - suffix_len) : -1;
 }
 
-int fi_ibv_cq_signal(struct fid_cq *cq);
+int vrb_cq_signal(struct fid_cq *cq);
 
-struct fi_ibv_eq_entry *fi_ibv_eq_alloc_entry(uint32_t event,
+struct vrb_eq_entry *vrb_eq_alloc_entry(uint32_t event,
 					      const void *buf, size_t len);
-ssize_t fi_ibv_eq_write_event(struct fi_ibv_eq *eq, uint32_t event,
+ssize_t vrb_eq_write_event(struct vrb_eq *eq, uint32_t event,
 		const void *buf, size_t len);
 
-int fi_ibv_query_atomic(struct fid_domain *domain_fid, enum fi_datatype datatype,
+int vrb_query_atomic(struct fid_domain *domain_fid, enum fi_datatype datatype,
 			enum fi_op op, struct fi_atomic_attr *attr,
 			uint64_t flags);
-int fi_ibv_set_rnr_timer(struct ibv_qp *qp);
-void fi_ibv_cleanup_cq(struct fi_ibv_ep *cur_ep);
-int fi_ibv_find_max_inline(struct ibv_pd *pd, struct ibv_context *context,
+int vrb_set_rnr_timer(struct ibv_qp *qp);
+void vrb_cleanup_cq(struct vrb_ep *cur_ep);
+int vrb_find_max_inline(struct ibv_pd *pd, struct ibv_context *context,
 			   enum ibv_qp_type qp_type);
 
-struct fi_ibv_dgram_av {
+struct vrb_dgram_av {
 	struct util_av util_av;
 	struct dlist_entry av_entry_list;
 };
 
-struct fi_ibv_dgram_av_entry {
+struct vrb_dgram_av_entry {
 	struct dlist_entry list_entry;
 	struct ofi_ib_ud_ep_name addr;
 	struct ibv_ah *ah;
 };
 
-static inline struct fi_ibv_dgram_av_entry*
-fi_ibv_dgram_av_lookup_av_entry(fi_addr_t fi_addr)
+static inline struct vrb_dgram_av_entry*
+vrb_dgram_av_lookup_av_entry(fi_addr_t fi_addr)
 {
-	return (struct fi_ibv_dgram_av_entry *) (uintptr_t) fi_addr;
+	return (struct vrb_dgram_av_entry *) (uintptr_t) fi_addr;
 }
 
 /* NOTE:
@@ -828,32 +828,32 @@ static inline ssize_t vrb_convert_ret(int ret)
 }
 
 
-int vrb_poll_cq(struct fi_ibv_cq *cq, struct ibv_wc *wc);
-int vrb_save_wc(struct fi_ibv_cq *cq, struct ibv_wc *wc);
+int vrb_poll_cq(struct vrb_cq *cq, struct ibv_wc *wc);
+int vrb_save_wc(struct vrb_cq *cq, struct ibv_wc *wc);
 
-#define fi_ibv_init_sge(buf, len, desc) (struct ibv_sge)		\
+#define vrb_init_sge(buf, len, desc) (struct ibv_sge)		\
 	{ .addr = (uintptr_t)buf,					\
 	  .length = (uint32_t)len,					\
 	  .lkey = (uint32_t)(uintptr_t)desc }
 
-#define fi_ibv_set_sge_iov(sg_list, iov, count, desc)	\
+#define vrb_set_sge_iov(sg_list, iov, count, desc)	\
 ({							\
 	size_t i;					\
 	sg_list = alloca(sizeof(*sg_list) * count);	\
 	for (i = 0; i < count; i++) {			\
-		sg_list[i] = fi_ibv_init_sge(		\
+		sg_list[i] = vrb_init_sge(		\
 				iov[i].iov_base,	\
 				iov[i].iov_len,		\
 				desc[i]);		\
 	}						\
 })
 
-#define fi_ibv_set_sge_iov_count_len(sg_list, iov, count, desc, len)	\
+#define vrb_set_sge_iov_count_len(sg_list, iov, count, desc, len)	\
 ({									\
 	size_t i;							\
 	sg_list = alloca(sizeof(*sg_list) * count);			\
 	for (i = 0; i < count; i++) {					\
-		sg_list[i] = fi_ibv_init_sge(				\
+		sg_list[i] = vrb_init_sge(				\
 				iov[i].iov_base,			\
 				iov[i].iov_len,				\
 				desc[i]);				\
@@ -861,37 +861,37 @@ int vrb_save_wc(struct fi_ibv_cq *cq, struct ibv_wc *wc);
 	}								\
 })
 
-#define fi_ibv_init_sge_inline(buf, len) fi_ibv_init_sge(buf, len, NULL)
+#define vrb_init_sge_inline(buf, len) vrb_init_sge(buf, len, NULL)
 
-#define fi_ibv_set_sge_iov_inline(sg_list, iov, count, len)	\
+#define vrb_set_sge_iov_inline(sg_list, iov, count, len)	\
 ({								\
 	size_t i;						\
 	sg_list = alloca(sizeof(*sg_list) * count);		\
 	for (i = 0; i < count; i++) {				\
-		sg_list[i] = fi_ibv_init_sge_inline(		\
+		sg_list[i] = vrb_init_sge_inline(		\
 					iov[i].iov_base,	\
 					iov[i].iov_len);	\
 		len += iov[i].iov_len;				\
 	}							\
 })
 
-#define fi_ibv_send_iov(ep, wr, iov, desc, count)		\
-	fi_ibv_send_iov_flags(ep, wr, iov, desc, count,		\
+#define vrb_send_iov(ep, wr, iov, desc, count)		\
+	vrb_send_iov_flags(ep, wr, iov, desc, count,		\
 			      (ep)->info->tx_attr->op_flags)
 
-#define fi_ibv_send_msg(ep, wr, msg, flags)				\
-	fi_ibv_send_iov_flags(ep, wr, (msg)->msg_iov, (msg)->desc,	\
+#define vrb_send_msg(ep, wr, msg, flags)				\
+	vrb_send_iov_flags(ep, wr, (msg)->msg_iov, (msg)->desc,	\
 			      (msg)->iov_count, flags)
 
 
-ssize_t vrb_post_send(struct fi_ibv_ep *ep, struct ibv_send_wr *wr);
-ssize_t vrb_post_recv(struct fi_ibv_ep *ep, struct ibv_recv_wr *wr);
+ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr);
+ssize_t vrb_post_recv(struct vrb_ep *ep, struct ibv_recv_wr *wr);
 
 static inline ssize_t
-fi_ibv_send_buf(struct fi_ibv_ep *ep, struct ibv_send_wr *wr,
+vrb_send_buf(struct vrb_ep *ep, struct ibv_send_wr *wr,
 		const void *buf, size_t len, void *desc)
 {
-	struct ibv_sge sge = fi_ibv_init_sge(buf, len, desc);
+	struct ibv_sge sge = vrb_init_sge(buf, len, desc);
 
 	assert(wr->wr_id != VERBS_NO_COMP_FLAG);
 
@@ -902,10 +902,10 @@ fi_ibv_send_buf(struct fi_ibv_ep *ep, struct ibv_send_wr *wr,
 }
 
 static inline ssize_t
-fi_ibv_send_buf_inline(struct fi_ibv_ep *ep, struct ibv_send_wr *wr,
+vrb_send_buf_inline(struct vrb_ep *ep, struct ibv_send_wr *wr,
 		       const void *buf, size_t len)
 {
-	struct ibv_sge sge = fi_ibv_init_sge_inline(buf, len);
+	struct ibv_sge sge = vrb_init_sge_inline(buf, len);
 
 	assert(wr->wr_id == VERBS_NO_COMP_FLAG);
 
@@ -916,16 +916,16 @@ fi_ibv_send_buf_inline(struct fi_ibv_ep *ep, struct ibv_send_wr *wr,
 }
 
 static inline ssize_t
-fi_ibv_send_iov_flags(struct fi_ibv_ep *ep, struct ibv_send_wr *wr,
+vrb_send_iov_flags(struct vrb_ep *ep, struct ibv_send_wr *wr,
 		      const struct iovec *iov, void **desc, int count,
 		      uint64_t flags)
 {
 	size_t len = 0;
 
 	if (!desc)
-		fi_ibv_set_sge_iov_inline(wr->sg_list, iov, count, len);
+		vrb_set_sge_iov_inline(wr->sg_list, iov, count, len);
 	else
-		fi_ibv_set_sge_iov_count_len(wr->sg_list, iov, count, desc, len);
+		vrb_set_sge_iov_count_len(wr->sg_list, iov, count, desc, len);
 
 	wr->num_sge = count;
 	wr->send_flags = VERBS_INJECT_FLAGS(ep, len, flags);
@@ -937,7 +937,7 @@ fi_ibv_send_iov_flags(struct fi_ibv_ep *ep, struct ibv_send_wr *wr,
 	return vrb_post_send(ep, wr);
 }
 
-int fi_ibv_get_rai_id(const char *node, const char *service, uint64_t flags,
+int vrb_get_rai_id(const char *node, const char *service, uint64_t flags,
 		      const struct fi_info *hints, struct rdma_addrinfo **rai,
 		      struct rdma_cm_id **id);
 

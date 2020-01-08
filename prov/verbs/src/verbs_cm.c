@@ -35,9 +35,9 @@
 #include "fi_verbs.h"
 
 
-static int fi_ibv_copy_addr(void *dst_addr, size_t *dst_addrlen, void *src_addr)
+static int vrb_copy_addr(void *dst_addr, size_t *dst_addrlen, void *src_addr)
 {
-	size_t src_addrlen = fi_ibv_sockaddr_len(src_addr);
+	size_t src_addrlen = vrb_sockaddr_len(src_addr);
 
 	if (*dst_addrlen == 0) {
 		*dst_addrlen = src_addrlen;
@@ -53,13 +53,13 @@ static int fi_ibv_copy_addr(void *dst_addr, size_t *dst_addrlen, void *src_addr)
 	return 0;
 }
 
-static int fi_ibv_msg_ep_setname(fid_t ep_fid, void *addr, size_t addrlen)
+static int vrb_msg_ep_setname(fid_t ep_fid, void *addr, size_t addrlen)
 {
 	void *save_addr;
 	struct rdma_cm_id *id;
 	int ret;
-	struct fi_ibv_ep *ep =
-		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
+	struct vrb_ep *ep =
+		container_of(ep_fid, struct vrb_ep, util_ep.ep_fid);
 
 	if (addrlen != ep->info->src_addrlen) {
 		VERBS_INFO(FI_LOG_EP_CTRL,"addrlen expected: %zu, got: %zu.\n",
@@ -78,7 +78,7 @@ static int fi_ibv_msg_ep_setname(fid_t ep_fid, void *addr, size_t addrlen)
 
 	memcpy(ep->info->src_addr, addr, ep->info->src_addrlen);
 
-	ret = fi_ibv_create_ep(ep->info, RDMA_PS_TCP, &id);
+	ret = vrb_create_ep(ep->info, RDMA_PS_TCP, &id);
 	if (ret)
 		goto err2;
 
@@ -97,35 +97,35 @@ err1:
 	return ret;
 }
 
-static int fi_ibv_msg_ep_getname(fid_t ep, void *addr, size_t *addrlen)
+static int vrb_msg_ep_getname(fid_t ep, void *addr, size_t *addrlen)
 {
 	struct sockaddr *sa;
-	struct fi_ibv_ep *_ep =
-		container_of(ep, struct fi_ibv_ep, util_ep.ep_fid);
+	struct vrb_ep *_ep =
+		container_of(ep, struct vrb_ep, util_ep.ep_fid);
 	sa = rdma_get_local_addr(_ep->id);
-	return fi_ibv_copy_addr(addr, addrlen, sa);
+	return vrb_copy_addr(addr, addrlen, sa);
 }
 
-static int fi_ibv_msg_ep_getpeer(struct fid_ep *ep, void *addr, size_t *addrlen)
+static int vrb_msg_ep_getpeer(struct fid_ep *ep, void *addr, size_t *addrlen)
 {
 	struct sockaddr *sa;
-	struct fi_ibv_ep *_ep =
-		container_of(ep, struct fi_ibv_ep, util_ep.ep_fid);
+	struct vrb_ep *_ep =
+		container_of(ep, struct vrb_ep, util_ep.ep_fid);
 	sa = rdma_get_peer_addr(_ep->id);
-	return fi_ibv_copy_addr(addr, addrlen, sa);
+	return vrb_copy_addr(addr, addrlen, sa);
 }
 
 static inline void
-fi_ibv_msg_ep_prepare_cm_data(const void *param, size_t param_size,
-			      struct fi_ibv_cm_data_hdr *cm_hdr)
+vrb_msg_ep_prepare_cm_data(const void *param, size_t param_size,
+			      struct vrb_cm_data_hdr *cm_hdr)
 {
 	cm_hdr->size = (uint8_t)param_size;
 	memcpy(cm_hdr->data, param, cm_hdr->size);
 }
 
 static inline void
-fi_ibv_ep_prepare_rdma_cm_param(struct rdma_conn_param *conn_param,
-				struct fi_ibv_cm_data_hdr *cm_hdr,
+vrb_ep_prepare_rdma_cm_param(struct rdma_conn_param *conn_param,
+				struct vrb_cm_data_hdr *cm_hdr,
 				size_t cm_hdr_data_size)
 {
 	conn_param->private_data = cm_hdr;
@@ -137,11 +137,11 @@ fi_ibv_ep_prepare_rdma_cm_param(struct rdma_conn_param *conn_param,
 }
 
 static int
-fi_ibv_msg_ep_connect(struct fid_ep *ep_fid, const void *addr,
+vrb_msg_ep_connect(struct fid_ep *ep_fid, const void *addr,
 		      const void *param, size_t paramlen)
 {
-	struct fi_ibv_ep *ep =
-		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
+	struct vrb_ep *ep =
+		container_of(ep_fid, struct vrb_ep, util_ep.ep_fid);
 	int ret;
 
 	if (OFI_UNLIKELY(paramlen > VERBS_CM_DATA_SIZE))
@@ -157,8 +157,8 @@ fi_ibv_msg_ep_connect(struct fid_ep *ep_fid, const void *addr,
 	if (!ep->cm_hdr)
 		return -FI_ENOMEM;
 
-	fi_ibv_msg_ep_prepare_cm_data(param, paramlen, ep->cm_hdr);
-	fi_ibv_ep_prepare_rdma_cm_param(&ep->conn_param, ep->cm_hdr,
+	vrb_msg_ep_prepare_cm_data(param, paramlen, ep->cm_hdr);
+	vrb_ep_prepare_rdma_cm_param(&ep->conn_param, ep->cm_hdr,
 					sizeof(*(ep->cm_hdr)) + paramlen);
 	ep->conn_param.retry_count = 15;
 
@@ -167,7 +167,7 @@ fi_ibv_msg_ep_connect(struct fid_ep *ep_fid, const void *addr,
 
 	if (rdma_resolve_route(ep->id, VERBS_RESOLVE_TIMEOUT)) {
 		ret = -errno;
-		FI_WARN(&fi_ibv_prov, FI_LOG_EP_CTRL,
+		FI_WARN(&vrb_prov, FI_LOG_EP_CTRL,
 			"rdma_resolve_route failed: %s (%d)\n",
 			strerror(-ret), -ret);
 		free(ep->cm_hdr);
@@ -178,14 +178,14 @@ fi_ibv_msg_ep_connect(struct fid_ep *ep_fid, const void *addr,
 }
 
 static int
-fi_ibv_msg_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
+vrb_msg_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 {
 	struct rdma_conn_param conn_param;
-	struct fi_ibv_connreq *connreq;
+	struct vrb_connreq *connreq;
 	int ret;
-	struct fi_ibv_cm_data_hdr *cm_hdr;
-	struct fi_ibv_ep *_ep =
-		container_of(ep, struct fi_ibv_ep, util_ep.ep_fid);
+	struct vrb_cm_data_hdr *cm_hdr;
+	struct vrb_ep *_ep =
+		container_of(ep, struct vrb_ep, util_ep.ep_fid);
 
 	if (OFI_UNLIKELY(paramlen > VERBS_CM_DATA_SIZE))
 		return -FI_EINVAL;
@@ -197,8 +197,8 @@ fi_ibv_msg_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 	}
 
 	cm_hdr = alloca(sizeof(*cm_hdr) + paramlen);
-	fi_ibv_msg_ep_prepare_cm_data(param, paramlen, cm_hdr);
-	fi_ibv_ep_prepare_rdma_cm_param(&conn_param, cm_hdr,
+	vrb_msg_ep_prepare_cm_data(param, paramlen, cm_hdr);
+	vrb_ep_prepare_rdma_cm_param(&conn_param, cm_hdr,
 					sizeof(*cm_hdr) + paramlen);
 
 	if (_ep->srq_ep)
@@ -208,21 +208,21 @@ fi_ibv_msg_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 	if (ret)
 		return -errno;
 
-	connreq = container_of(_ep->info->handle, struct fi_ibv_connreq, handle);
+	connreq = container_of(_ep->info->handle, struct vrb_connreq, handle);
 	free(connreq);
 
 	return 0;
 }
 
-static int fi_ibv_msg_alloc_xrc_params(void **adjusted_param,
+static int vrb_msg_alloc_xrc_params(void **adjusted_param,
 				       const void *param, size_t *paramlen)
 {
-	struct fi_ibv_xrc_cm_data *cm_data;
+	struct vrb_xrc_cm_data *cm_data;
 	size_t cm_datalen = sizeof(*cm_data) + *paramlen;
 
 	*adjusted_param = NULL;
 
-	if (cm_datalen > FI_IBV_CM_DATA_SIZE) {
+	if (cm_datalen > VRB_CM_DATA_SIZE) {
 		VERBS_WARN(FI_LOG_EP_CTRL, "XRC CM data overflow %zu\n",
 			   cm_datalen);
 		return -FI_EINVAL;
@@ -243,17 +243,17 @@ static int fi_ibv_msg_alloc_xrc_params(void **adjusted_param,
 }
 
 static int
-fi_ibv_msg_xrc_ep_reject(struct fi_ibv_connreq *connreq,
+vrb_msg_xrc_ep_reject(struct vrb_connreq *connreq,
 			 const void *param, size_t paramlen)
 {
-	struct fi_ibv_xrc_cm_data *cm_data;
+	struct vrb_xrc_cm_data *cm_data;
 	int ret;
 
-	ret = fi_ibv_msg_alloc_xrc_params((void **)&cm_data, param, &paramlen);
+	ret = vrb_msg_alloc_xrc_params((void **)&cm_data, param, &paramlen);
 	if (ret)
 		return ret;
 
-	fi_ibv_set_xrc_cm_data(cm_data, connreq->xrc.is_reciprocal,
+	vrb_set_xrc_cm_data(cm_data, connreq->xrc.is_reciprocal,
 			       connreq->xrc.conn_tag, connreq->xrc.port, 0, 0);
 	ret = rdma_reject(connreq->id, cm_data,
 			  (uint8_t) paramlen) ? -errno : 0;
@@ -262,13 +262,13 @@ fi_ibv_msg_xrc_ep_reject(struct fi_ibv_connreq *connreq,
 }
 
 static int
-fi_ibv_msg_ep_reject(struct fid_pep *pep, fid_t handle,
+vrb_msg_ep_reject(struct fid_pep *pep, fid_t handle,
 		     const void *param, size_t paramlen)
 {
-	struct fi_ibv_connreq *connreq =
-		container_of(handle, struct fi_ibv_connreq, handle);
-	struct fi_ibv_cm_data_hdr *cm_hdr;
-	struct fi_ibv_pep *_pep = container_of(pep, struct fi_ibv_pep,
+	struct vrb_connreq *connreq =
+		container_of(handle, struct vrb_connreq, handle);
+	struct vrb_cm_data_hdr *cm_hdr;
+	struct vrb_pep *_pep = container_of(pep, struct vrb_pep,
 					       pep_fid);
 	int ret;
 
@@ -276,11 +276,11 @@ fi_ibv_msg_ep_reject(struct fid_pep *pep, fid_t handle,
 		return -FI_EINVAL;
 
 	cm_hdr = alloca(sizeof(*cm_hdr) + paramlen);
-	fi_ibv_msg_ep_prepare_cm_data(param, paramlen, cm_hdr);
+	vrb_msg_ep_prepare_cm_data(param, paramlen, cm_hdr);
 
 	fastlock_acquire(&_pep->eq->lock);
 	if (connreq->is_xrc)
-		ret = fi_ibv_msg_xrc_ep_reject(connreq, cm_hdr,
+		ret = vrb_msg_xrc_ep_reject(connreq, cm_hdr,
 				(uint8_t)(sizeof(*cm_hdr) + paramlen));
 	else
 		ret = rdma_reject(connreq->id, cm_hdr,
@@ -291,34 +291,34 @@ fi_ibv_msg_ep_reject(struct fid_pep *pep, fid_t handle,
 	return ret;
 }
 
-static int fi_ibv_msg_ep_shutdown(struct fid_ep *ep, uint64_t flags)
+static int vrb_msg_ep_shutdown(struct fid_ep *ep, uint64_t flags)
 {
-	struct fi_ibv_ep *_ep =
-		container_of(ep, struct fi_ibv_ep, util_ep.ep_fid);
+	struct vrb_ep *_ep =
+		container_of(ep, struct vrb_ep, util_ep.ep_fid);
 	if (_ep->id)
 		return rdma_disconnect(_ep->id) ? -errno : 0;
 	return 0;
 }
 
-struct fi_ops_cm fi_ibv_msg_ep_cm_ops = {
+struct fi_ops_cm vrb_msg_ep_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
-	.setname = fi_ibv_msg_ep_setname,
-	.getname = fi_ibv_msg_ep_getname,
-	.getpeer = fi_ibv_msg_ep_getpeer,
-	.connect = fi_ibv_msg_ep_connect,
+	.setname = vrb_msg_ep_setname,
+	.getname = vrb_msg_ep_getname,
+	.getpeer = vrb_msg_ep_getpeer,
+	.connect = vrb_msg_ep_connect,
 	.listen = fi_no_listen,
-	.accept = fi_ibv_msg_ep_accept,
+	.accept = vrb_msg_ep_accept,
 	.reject = fi_no_reject,
-	.shutdown = fi_ibv_msg_ep_shutdown,
+	.shutdown = vrb_msg_ep_shutdown,
 	.join = fi_no_join,
 };
 
 static int
-fi_ibv_msg_xrc_cm_common_verify(struct fi_ibv_xrc_ep *ep, size_t paramlen)
+vrb_msg_xrc_cm_common_verify(struct vrb_xrc_ep *ep, size_t paramlen)
 {
 	int ret;
 
-	if (!fi_ibv_is_xrc(ep->base_ep.info)) {
+	if (!vrb_is_xrc(ep->base_ep.info)) {
 		VERBS_WARN(FI_LOG_EP_CTRL, "EP is not using XRC\n");
 		return -FI_EINVAL;
 	}
@@ -331,25 +331,25 @@ fi_ibv_msg_xrc_cm_common_verify(struct fi_ibv_xrc_ep *ep, size_t paramlen)
 	}
 
 	if (OFI_UNLIKELY(paramlen > VERBS_CM_DATA_SIZE -
-			 sizeof(struct fi_ibv_xrc_cm_data)))
+			 sizeof(struct vrb_xrc_cm_data)))
 		return -FI_EINVAL;
 
 	return FI_SUCCESS;
 }
 
 static int
-fi_ibv_msg_xrc_ep_connect(struct fid_ep *ep, const void *addr,
+vrb_msg_xrc_ep_connect(struct fid_ep *ep, const void *addr,
 		   const void *param, size_t paramlen)
 {
 	void *adjusted_param;
-	struct fi_ibv_ep *_ep = container_of(ep, struct fi_ibv_ep,
+	struct vrb_ep *_ep = container_of(ep, struct vrb_ep,
 					     util_ep.ep_fid);
-	struct fi_ibv_xrc_ep *xrc_ep = container_of(_ep, struct fi_ibv_xrc_ep,
+	struct vrb_xrc_ep *xrc_ep = container_of(_ep, struct vrb_xrc_ep,
 						    base_ep);
 	int ret;
-	struct fi_ibv_cm_data_hdr *cm_hdr;
+	struct vrb_cm_data_hdr *cm_hdr;
 
-	ret = fi_ibv_msg_xrc_cm_common_verify(xrc_ep, paramlen);
+	ret = vrb_msg_xrc_cm_common_verify(xrc_ep, paramlen);
 	if (ret)
 		return ret;
 
@@ -357,10 +357,10 @@ fi_ibv_msg_xrc_ep_connect(struct fid_ep *ep, const void *addr,
 	if (!cm_hdr)
 		return -FI_ENOMEM;
 
-	fi_ibv_msg_ep_prepare_cm_data(param, paramlen, cm_hdr);
+	vrb_msg_ep_prepare_cm_data(param, paramlen, cm_hdr);
 	paramlen += sizeof(*cm_hdr);
 
-	ret = fi_ibv_msg_alloc_xrc_params(&adjusted_param, cm_hdr, &paramlen);
+	ret = vrb_msg_alloc_xrc_params(&adjusted_param, cm_hdr, &paramlen);
 	if (ret) {
 		free(cm_hdr);
 		return ret;
@@ -377,7 +377,7 @@ fi_ibv_msg_xrc_ep_connect(struct fid_ep *ep, const void *addr,
 	xrc_ep->conn_setup->conn_tag = VERBS_CONN_TAG_INVALID;
 
 	fastlock_acquire(&xrc_ep->base_ep.eq->lock);
-	ret = fi_ibv_connect_xrc(xrc_ep, NULL, 0, adjusted_param, paramlen);
+	ret = vrb_connect_xrc(xrc_ep, NULL, 0, adjusted_param, paramlen);
 	fastlock_release(&xrc_ep->base_ep.eq->lock);
 
 	free(adjusted_param);
@@ -386,55 +386,55 @@ fi_ibv_msg_xrc_ep_connect(struct fid_ep *ep, const void *addr,
 }
 
 static int
-fi_ibv_msg_xrc_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
+vrb_msg_xrc_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 {
 	void *adjusted_param;
-	struct fi_ibv_ep *_ep =
-		container_of(ep, struct fi_ibv_ep, util_ep.ep_fid);
-	struct fi_ibv_xrc_ep *xrc_ep = container_of(_ep, struct fi_ibv_xrc_ep,
+	struct vrb_ep *_ep =
+		container_of(ep, struct vrb_ep, util_ep.ep_fid);
+	struct vrb_xrc_ep *xrc_ep = container_of(_ep, struct vrb_xrc_ep,
 						    base_ep);
 	int ret;
-	struct fi_ibv_cm_data_hdr *cm_hdr;
+	struct vrb_cm_data_hdr *cm_hdr;
 
-	ret = fi_ibv_msg_xrc_cm_common_verify(xrc_ep, paramlen);
+	ret = vrb_msg_xrc_cm_common_verify(xrc_ep, paramlen);
 	if (ret)
 		return ret;
 
 	cm_hdr = alloca(sizeof(*cm_hdr) + paramlen);
-	fi_ibv_msg_ep_prepare_cm_data(param, paramlen, cm_hdr);
+	vrb_msg_ep_prepare_cm_data(param, paramlen, cm_hdr);
 	paramlen += sizeof(*cm_hdr);
 
-	ret = fi_ibv_msg_alloc_xrc_params(&adjusted_param, cm_hdr, &paramlen);
+	ret = vrb_msg_alloc_xrc_params(&adjusted_param, cm_hdr, &paramlen);
 	if (ret)
 		return ret;
 
 	fastlock_acquire(&xrc_ep->base_ep.eq->lock);
-	ret = fi_ibv_accept_xrc(xrc_ep, 0, adjusted_param, paramlen);
+	ret = vrb_accept_xrc(xrc_ep, 0, adjusted_param, paramlen);
 	fastlock_release(&xrc_ep->base_ep.eq->lock);
 
 	free(adjusted_param);
 	return ret;
 }
 
-struct fi_ops_cm fi_ibv_msg_xrc_ep_cm_ops = {
+struct fi_ops_cm vrb_msg_xrc_ep_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
-	.setname = fi_ibv_msg_ep_setname,
-	.getname = fi_ibv_msg_ep_getname,
-	.getpeer = fi_ibv_msg_ep_getpeer,
-	.connect = fi_ibv_msg_xrc_ep_connect,
+	.setname = vrb_msg_ep_setname,
+	.getname = vrb_msg_ep_getname,
+	.getpeer = vrb_msg_ep_getpeer,
+	.connect = vrb_msg_xrc_ep_connect,
 	.listen = fi_no_listen,
-	.accept = fi_ibv_msg_xrc_ep_accept,
+	.accept = vrb_msg_xrc_ep_accept,
 	.reject = fi_no_reject,
-	.shutdown = fi_ibv_msg_ep_shutdown,
+	.shutdown = vrb_msg_ep_shutdown,
 	.join = fi_no_join,
 };
 
-static int fi_ibv_pep_setname(fid_t pep_fid, void *addr, size_t addrlen)
+static int vrb_pep_setname(fid_t pep_fid, void *addr, size_t addrlen)
 {
-	struct fi_ibv_pep *pep;
+	struct vrb_pep *pep;
 	int ret;
 
-	pep = container_of(pep_fid, struct fi_ibv_pep, pep_fid);
+	pep = container_of(pep_fid, struct vrb_pep, pep_fid);
 
 	if (pep->src_addrlen && (addrlen != pep->src_addrlen)) {
 		VERBS_INFO(FI_LOG_FABRIC, "addrlen expected: %zu, got: %zu.\n",
@@ -468,34 +468,34 @@ static int fi_ibv_pep_setname(fid_t pep_fid, void *addr, size_t addrlen)
 	return 0;
 }
 
-static int fi_ibv_pep_getname(fid_t pep, void *addr, size_t *addrlen)
+static int vrb_pep_getname(fid_t pep, void *addr, size_t *addrlen)
 {
-	struct fi_ibv_pep *_pep;
+	struct vrb_pep *_pep;
 	struct sockaddr *sa;
 
-	_pep = container_of(pep, struct fi_ibv_pep, pep_fid);
+	_pep = container_of(pep, struct vrb_pep, pep_fid);
 	sa = rdma_get_local_addr(_pep->id);
-	return fi_ibv_copy_addr(addr, addrlen, sa);
+	return vrb_copy_addr(addr, addrlen, sa);
 }
 
-static int fi_ibv_pep_listen(struct fid_pep *pep_fid)
+static int vrb_pep_listen(struct fid_pep *pep_fid)
 {
-	struct fi_ibv_pep *pep;
+	struct vrb_pep *pep;
 	struct sockaddr *addr;
 	int ret;
 
-	pep = container_of(pep_fid, struct fi_ibv_pep, pep_fid);
+	pep = container_of(pep_fid, struct vrb_pep, pep_fid);
 
 	addr = rdma_get_local_addr(pep->id);
 	if (addr)
-		ofi_straddr_log(&fi_ibv_prov, FI_LOG_INFO,
+		ofi_straddr_log(&vrb_prov, FI_LOG_INFO,
 				FI_LOG_EP_CTRL, "listening on", addr);
 
 	ret = rdma_listen(pep->id, pep->backlog);
 	if (ret)
 		return -errno;
 
-	if (fi_ibv_is_xrc(pep->info)) {
+	if (vrb_is_xrc(pep->info)) {
 		ret = rdma_listen(pep->xrc_ps_udp_id, pep->backlog);
 		if (ret)
 			ret = -errno;
@@ -503,20 +503,20 @@ static int fi_ibv_pep_listen(struct fid_pep *pep_fid)
 	return ret;
 }
 
-static struct fi_ops_cm fi_ibv_pep_cm_ops = {
+static struct fi_ops_cm vrb_pep_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
-	.setname = fi_ibv_pep_setname,
-	.getname = fi_ibv_pep_getname,
+	.setname = vrb_pep_setname,
+	.getname = vrb_pep_getname,
 	.getpeer = fi_no_getpeer,
 	.connect = fi_no_connect,
-	.listen = fi_ibv_pep_listen,
+	.listen = vrb_pep_listen,
 	.accept = fi_no_accept,
-	.reject = fi_ibv_msg_ep_reject,
+	.reject = vrb_msg_ep_reject,
 	.shutdown = fi_no_shutdown,
 	.join = fi_no_join,
 };
 
-struct fi_ops_cm *fi_ibv_pep_ops_cm(struct fi_ibv_pep *pep)
+struct fi_ops_cm *vrb_pep_ops_cm(struct vrb_pep *pep)
 {
-	return &fi_ibv_pep_cm_ops;
+	return &vrb_pep_cm_ops;
 }
