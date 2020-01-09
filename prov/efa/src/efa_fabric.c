@@ -884,6 +884,9 @@ static void fi_efa_fini(void)
 		efa_dealloc_ctx(ctx_list[i]);
 	efa_device_free_context_list(ctx_list);
 	efa_device_free();
+#if HAVE_EFA_DL
+	smr_cleanup();
+#endif 
 }
 
 struct fi_provider efa_prov = {
