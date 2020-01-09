@@ -44,6 +44,18 @@
 
 struct dlist_entry ep_name_list;
 
+DEFINE_LIST(ep_name_list);
+
+void smr_cleanup(void)
+{
+	struct smr_ep_name *ep_name;
+	struct dlist_entry *tmp;
+
+	dlist_foreach_container_safe(&ep_name_list, struct smr_ep_name,
+				     ep_name, entry, tmp)
+		free(ep_name);
+}
+
 static void smr_peer_addr_init(struct smr_addr *peer)
 {
 	memset(peer->name, 0, NAME_MAX);
