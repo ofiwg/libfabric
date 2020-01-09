@@ -1416,12 +1416,16 @@ Test(atomic, amo_batch)
 void cxit_setup_amo_selective_completion(void)
 {
 	cxit_tx_cq_bind_flags |= FI_SELECTIVE_COMPLETION;
+
+	cxit_setup_getinfo();
 	cxit_fi_hints->tx_attr->op_flags = FI_COMPLETION;
 	cxit_setup_rma();
 }
 
 /* Test selective completion behavior with AMOs. */
-Test(atomic, selective_completion, .init = cxit_setup_amo_selective_completion)
+Test(atomic_sel, selective_completion,
+     .init = cxit_setup_amo_selective_completion,
+     .fini = cxit_teardown_rma)
 {
 	struct mem_region mr;
 	struct fi_cq_tagged_entry cqe;
@@ -1629,13 +1633,16 @@ Test(atomic, selective_completion, .init = cxit_setup_amo_selective_completion)
 void cxit_setup_amo_selective_completion_suppress(void)
 {
 	cxit_tx_cq_bind_flags |= FI_SELECTIVE_COMPLETION;
+
+	cxit_setup_getinfo();
 	cxit_fi_hints->tx_attr->op_flags = 0;
 	cxit_setup_rma();
 }
 
 /* Test selective completion behavior with RMA. */
-Test(atomic, selective_completion_suppress,
-     .init = cxit_setup_amo_selective_completion_suppress)
+Test(atomic_sel, selective_completion_suppress,
+     .init = cxit_setup_amo_selective_completion_suppress,
+     .fini = cxit_teardown_rma)
 {
 	struct mem_region mr;
 	struct fi_cq_tagged_entry cqe;

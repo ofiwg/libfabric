@@ -627,12 +627,16 @@ Test(rma, rma_cleanup)
 void cxit_setup_rma_selective_completion(void)
 {
 	cxit_tx_cq_bind_flags |= FI_SELECTIVE_COMPLETION;
+
+	cxit_setup_getinfo();
 	cxit_fi_hints->tx_attr->op_flags = FI_COMPLETION;
 	cxit_setup_rma();
 }
 
 /* Test selective completion behavior with RMA. */
-Test(rma, selective_completion, .init = cxit_setup_rma_selective_completion)
+Test(rma_sel, selective_completion,
+     .init = cxit_setup_rma_selective_completion,
+     .fini = cxit_teardown_rma)
 {
 	int ret;
 	uint8_t *loc_buf;
@@ -807,13 +811,16 @@ Test(rma, selective_completion, .init = cxit_setup_rma_selective_completion)
 void cxit_setup_rma_selective_completion_suppress(void)
 {
 	cxit_tx_cq_bind_flags |= FI_SELECTIVE_COMPLETION;
+
+	cxit_setup_getinfo();
 	cxit_fi_hints->tx_attr->op_flags = 0;
 	cxit_setup_rma();
 }
 
 /* Test selective completion behavior with RMA. */
-Test(rma, selective_completion_suppress,
-     .init = cxit_setup_rma_selective_completion_suppress)
+Test(rma_sel, selective_completion_suppress,
+     .init = cxit_setup_rma_selective_completion_suppress,
+     .fini = cxit_teardown_rma)
 {
 	int ret;
 	uint8_t *send_buf;

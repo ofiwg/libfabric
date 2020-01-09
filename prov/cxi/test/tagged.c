@@ -745,14 +745,16 @@ void directed_recv(bool logical)
 	free(send_buf);
 	free(fake_recv_buf);
 	free(recv_buf);
+
+	cxit_teardown_tagged();
 }
 
-Test(tagged, directed, .init = NULL)
+Test(tagged_directed, directed)
 {
 	directed_recv(false);
 }
 
-Test(tagged, directed_logical, .init = NULL)
+Test(tagged_directed, directed_logical)
 {
 	directed_recv(true);
 }
@@ -2001,12 +2003,16 @@ Test(tagged, cancel_recvs_sync)
 void cxit_setup_selective_completion(void)
 {
 	cxit_tx_cq_bind_flags |= FI_SELECTIVE_COMPLETION;
+
+	cxit_setup_getinfo();
 	cxit_fi_hints->tx_attr->op_flags = FI_COMPLETION;
 	cxit_setup_tagged();
 }
 
 /* Test selective completion behavior with RMA. */
-Test(tagged, selective_completion, .init = cxit_setup_selective_completion)
+Test(tagged_sel, selective_completion,
+     .init = cxit_setup_selective_completion,
+     .fini = cxit_teardown_tagged)
 {
 	int i, ret;
 	uint8_t *recv_buf,
@@ -2208,13 +2214,16 @@ Test(tagged, selective_completion, .init = cxit_setup_selective_completion)
 void cxit_setup_selective_completion_suppress(void)
 {
 	cxit_tx_cq_bind_flags |= FI_SELECTIVE_COMPLETION;
+
+	cxit_setup_getinfo();
 	cxit_fi_hints->tx_attr->op_flags = 0;
 	cxit_setup_tagged();
 }
 
 /* Test selective completion behavior with RMA. */
-Test(tagged, selective_completion_suppress,
-     .init = cxit_setup_selective_completion_suppress)
+Test(tagged_sel, selective_completion_suppress,
+     .init = cxit_setup_selective_completion_suppress,
+     .fini = cxit_teardown_tagged)
 {
 	int i, ret;
 	uint8_t *recv_buf,
