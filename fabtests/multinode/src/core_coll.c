@@ -560,12 +560,12 @@ int multinode_run_tests(int argc, char **argv)
 			goto out;
 
 		ret = tests[i].run();
-		tests[i].teardown();
-		FT_DEBUG("Run Complete...\n");
 		if (ret)
 			goto out;
 
 		pm_barrier();
+		tests[i].teardown();
+		FT_DEBUG("Run Complete...\n");
 		FT_DEBUG("Test Complete: %s \n", tests[i].name);
 	}
 
