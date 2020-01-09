@@ -226,6 +226,68 @@ static inline int util_coll_op_create(struct util_coll_operation **coll_op,
 	return FI_SUCCESS;
 }
 
+static inline void util_coll_op_log_work(struct util_coll_operation *coll_op)
+{
+#if ENABLE_DEBUG
+	struct util_coll_work_item *cur_item = NULL;
+	struct util_coll_xfer_item *xfer_item;
+	struct dlist_entry *tmp = NULL;
+	size_t count = 0;
+	FI_DBG(coll_op->mc->av_set->av->prov, FI_LOG_CQ, "Remaining Work for %s:\n",
+	       log_util_coll_op_type[coll_op->type]);
+	dlist_foreach_container_safe(&coll_op->work_queue, struct util_coll_work_item,
+				     cur_item, waiting_entry, tmp)
+	{
+		switch (cur_item->type) {
+		case UTIL_COLL_SEND:
+			xfer_item =
+				container_of(cur_item, struct util_coll_xfer_item, hdr);
+			FI_DBG(coll_op->mc->av_set->av->prov, FI_LOG_CQ,
+			       "\t%ld: { %p [%s] SEND TO: 0x%02x FROM: 0x%02lx "
+			       "cnt: %d typesize: %ld tag: 0x%02lx }\n",
+			       count, cur_item, log_util_coll_state[cur_item->state],
+			       xfer_item->remote_rank, coll_op->mc->local_rank,
+			       xfer_item->count, ofi_datatype_size(xfer_item->datatype),
+			       xfer_item->tag);
+			break;
+		case UTIL_COLL_RECV:
+			xfer_item =
+				container_of(cur_item, struct util_coll_xfer_item, hdr);
+			FI_DBG(coll_op->mc->av_set->av->prov, FI_LOG_CQ,
+			       "\t%ld: { %p [%s] RECV FROM: 0x%02x TO: 0x%02lx "
+			       "cnt: %d typesize: %ld tag: 0x%02lx }\n",
+			       count, cur_item, log_util_coll_state[cur_item->state],
+			       xfer_item->remote_rank, coll_op->mc->local_rank,
+			       xfer_item->count, ofi_datatype_size(xfer_item->datatype),
+			       xfer_item->tag);
+			break;
+		case UTIL_COLL_REDUCE:
+			//reduce_item = container_of(cur_item, struct util_coll_reduce_item, hdr);
+			FI_DBG(coll_op->mc->av_set->av->prov, FI_LOG_CQ,
+			       "\t%ld: { %p [%s] REDUCTION }\n", count, cur_item,
+			       log_util_coll_state[cur_item->state]);
+			break;
+		case UTIL_COLL_COPY:
+			FI_DBG(coll_op->mc->av_set->av->prov, FI_LOG_CQ,
+			       "\t%ld: { %p [%s] COPY }\n", count, cur_item,
+			       log_util_coll_state[cur_item->state]);
+			break;
+		case UTIL_COLL_COMP:
+			FI_DBG(coll_op->mc->av_set->av->prov, FI_LOG_CQ,
+			       "\t%ld: { %p [%s] COMPLETION }\n", count, cur_item,
+			       log_util_coll_state[cur_item->state]);
+			break;
+		default:
+			FI_DBG(coll_op->mc->av_set->av->prov, FI_LOG_CQ,
+			       "\t%ld: { %p [%s] UNKNOWN }\n", count, cur_item,
+			       log_util_coll_state[cur_item->state]);
+			break;
+		}
+		count++;
+	}
+#endif
+}
+
 static inline void util_coll_op_progress_work(struct util_ep *util_ep,
 				      struct util_coll_operation *coll_op)
 {
@@ -242,8 +304,8 @@ static inline void util_coll_op_progress_work(struct util_ep *util_ep,
 		previous_is_head = cur_item->waiting_entry.prev == &cur_item->coll_op->work_queue;
 		if (!previous_is_head) {
 			prev_item = container_of(cur_item->waiting_entry.prev,
-							struct util_coll_work_item,
-							waiting_entry);
+						 struct util_coll_work_item,
+						 waiting_entry);
 		}
 
 		if (cur_item->state == UTIL_COLL_COMPLETE) {
@@ -251,6 +313,8 @@ static inline void util_coll_op_progress_work(struct util_ep *util_ep,
 			if (cur_item->fence && !previous_is_head)
 				continue;
 
+			FI_DBG(coll_op->mc->av_set->av->prov, FI_LOG_CQ,
+			       "Removing Completed Work item: %p \n", cur_item);
 			dlist_remove(&cur_item->waiting_entry);
 			free(cur_item);
 
@@ -264,20 +328,29 @@ static inline void util_coll_op_progress_work(struct util_ep *util_ep,
 
 		// we can't progress if prior work is fencing
 		if (!previous_is_head && prev_item && prev_item->fence) {
+			FI_DBG(coll_op->mc->av_set->av->prov, FI_LOG_CQ,
+			       "%p fenced by: %p \n", cur_item, prev_item);
 			return;
 		}
 
 		// if the current item isn't waiting, it's not the next ready item
 		if (cur_item->state != UTIL_COLL_WAITING) {
+			FI_DBG(coll_op->mc->av_set->av->prov, FI_LOG_CQ,
+			       "Work item not waiting: %p [%s]\n", cur_item,
+			       log_util_coll_state[cur_item->state]);
 			continue;
 		}
 
+		FI_DBG(coll_op->mc->av_set->av->prov, FI_LOG_CQ, "Ready item: %p \n",
+		       cur_item);
 		next_ready = cur_item;
 		break;
 	}
 
 	if (!next_ready)
 		return;
+
+	util_coll_op_log_work(coll_op);
 
 	next_ready->state = UTIL_COLL_PROCESSING;
 	slist_insert_tail(&next_ready->ready_entry, &util_ep->coll_ready_queue);
@@ -647,7 +720,8 @@ static int util_coll_scatter(struct util_coll_operation *coll_op, const void *da
 				remote_rank -= numranks;
 
 			FI_DBG(coll_op->mc->av_set->av->prov, FI_LOG_CQ,
-			       "MASK: 0x%0x CUR_CNT: %ld SENDING: %ld TO: %d\n", mask, cur_cnt, send_cnt, remote_rank);
+			       "MASK: 0x%0x CUR_CNT: %ld SENDING: %ld TO: %d\n", mask,
+			       cur_cnt, send_cnt, remote_rank);
 
 			assert(send_cnt > 0);
 
@@ -797,6 +871,7 @@ int util_coll_process_xfer_item(struct util_coll_xfer_item *item) {
 	struct iovec iov;
 	struct fi_msg_tagged msg;
 	struct util_coll_mc *mc = item->hdr.coll_op->mc;
+	int ret;
 
 	msg.msg_iov = &iov;
 	msg.desc = NULL;
@@ -811,9 +886,23 @@ int util_coll_process_xfer_item(struct util_coll_xfer_item *item) {
 	iov.iov_len = (item->count * ofi_datatype_size(item->datatype));
 
 	if (item->hdr.type == UTIL_COLL_SEND) {
-		return fi_tsendmsg(mc->ep, &msg, FI_COLLECTIVE);
+		ret = fi_tsendmsg(mc->ep, &msg, FI_COLLECTIVE);
+		if (!ret)
+			FI_DBG(mc->av_set->av->prov, FI_LOG_CQ,
+			       "%p SEND [0x%02lx] -> [0x%02x] cnt: %d sz: %ld\n", item,
+			       item->hdr.coll_op->mc->local_rank, item->remote_rank,
+			       item->count,
+			       item->count * ofi_datatype_size(item->datatype));
+		return ret;
 	} else if (item->hdr.type == UTIL_COLL_RECV) {
-		return fi_trecvmsg(mc->ep, &msg, FI_COLLECTIVE);
+		ret = fi_trecvmsg(mc->ep, &msg, FI_COLLECTIVE);
+		if (!ret)
+			FI_DBG(mc->av_set->av->prov, FI_LOG_CQ,
+			       "%p RECV [0x%02lx] <- [0x%02x] cnt: %d sz: %ld\n", item,
+			       item->hdr.coll_op->mc->local_rank, item->remote_rank,
+			       item->count,
+			       item->count * ofi_datatype_size(item->datatype));
+		return ret;
 	}
 
 	return -FI_ENOSYS;
@@ -1291,6 +1380,11 @@ void ofi_coll_handle_xfer_comp(uint64_t tag, void *ctx)
 	struct util_coll_xfer_item *xfer_item = (struct util_coll_xfer_item *) ctx;
 	xfer_item->hdr.state = UTIL_COLL_COMPLETE;
 
+	FI_DBG(xfer_item->hdr.coll_op->mc->av_set->av->prov, FI_LOG_CQ,
+	       "\tXfer complete: { %p %s Remote: 0x%02x Local: 0x%02lx cnt: %d typesize: %ld }\n",
+	       xfer_item, xfer_item->hdr.type == UTIL_COLL_SEND ? "SEND" : "RECV",
+	       xfer_item->remote_rank, xfer_item->hdr.coll_op->mc->local_rank,
+	       xfer_item->count, ofi_datatype_size(xfer_item->datatype));
 	util_ep = container_of(xfer_item->hdr.coll_op->mc->ep, struct util_ep, ep_fid);
 	util_coll_op_progress_work(util_ep, xfer_item->hdr.coll_op);
 }

@@ -52,6 +52,15 @@ enum util_coll_op_type {
 	UTIL_COLL_SCATTER_OP,
 };
 
+static const char * const log_util_coll_op_type[] = {
+	[UTIL_COLL_JOIN_OP] = "COLL_JOIN",
+	[UTIL_COLL_BARRIER_OP] = "COLL_BARRIER",
+	[UTIL_COLL_ALLREDUCE_OP] = "COLL_ALLREDUCE",
+	[UTIL_COLL_BROADCAST_OP] = "COLL_BROADCAST",
+	[UTIL_COLL_ALLGATHER_OP] = "COLL_ALLGATHER",
+	[UTIL_COLL_SCATTER_OP] = "COLL_SCATTER"
+};
+
 struct util_av_set {
 	struct fid_av_set	av_set_fid;
 	struct util_av		*av;
@@ -74,6 +83,12 @@ enum coll_state {
 	UTIL_COLL_WAITING,
 	UTIL_COLL_PROCESSING,
 	UTIL_COLL_COMPLETE
+};
+
+static const char * const log_util_coll_state[] = {
+	[UTIL_COLL_WAITING] = "COLL_WAITING",
+	[UTIL_COLL_PROCESSING] = "COLL_PROCESSING",
+	[UTIL_COLL_COMPLETE] = "COLL_COMPLETE"
 };
 
 struct util_coll_operation;
