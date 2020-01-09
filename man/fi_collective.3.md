@@ -255,11 +255,9 @@ completed prior to them calling barrier has finished.
 ## Broadcast (fi_broadcast)
 
 fi_broadcast transfers an array of data from a single sender to all other
-members of the collective group.  The sender of the broadcast data must
-specify the FI_SEND flag, while receivers use the FI_RECV flag.  The input
-buf parameter is treated as either the transmit buffer, if FI_SEND is set, or
-the receive buffer, if FI_RECV is set.  Either the FI_SEND or FI_RECV flag
-must be set.  The broadcast operation acts as an atomic write or read to a
+members of the collective group.  The input buf parameter is treated as the
+transmit buffer if the local rank is the root, otherwise it is the receive
+buffer.  The broadcast operation acts as an atomic write or read to a
 data array.  As a result, the format of the data in buf is specified through
 the datatype parameter.  Any non-void datatype may be broadcast.
 
@@ -489,7 +487,7 @@ For a description of struct fi_atomic_attr, see
   FI_LONG_DOUBLE, FI_LONG_DOUBLE_COMPLEX, or FI_VOID.  For collectives
   that do not exchange application data (fi_barrier), this should be set
   to FI_VOID.
-  
+
 *datatype_attr.count*
 : The maximum number of elements that may be used with the collective.
 
@@ -520,15 +518,6 @@ point atomic operations.
 # FLAGS
 
 The following flags are defined for the specified operations.
-
-*FI_SEND*
-: Applies to fi_broadcast() operations.  This indicates that the caller
-  is the transmitter of the broadcast data.  There should only be a single
-  transmitter for each broadcast collective operation.
-
-*FI_RECV*
-: Applies to fi_broadcast() operation.  This indicates that the caller
-  is the receiver of broadcase data.
 
 *FI_SCATTER*
 : Applies to fi_query_collective.  When set, requests attribute information
