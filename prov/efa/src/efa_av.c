@@ -113,7 +113,8 @@ static int efa_av_resize(struct efa_av *av, size_t new_av_count)
 }
 
 /* Inserts a single AH to AV. */
-static int efa_av_insert_ah(struct efa_av *av, struct efa_ep_addr *addr, fi_addr_t *fi_addr)
+static int efa_av_insert_ah(struct efa_av *av, struct efa_ep_addr *addr,
+				fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
 	struct efa_pd *pd = container_of(av->domain->pd, struct efa_pd, ibv_pd);
 	struct ibv_ah_attr ah_attr;
@@ -123,11 +124,18 @@ static int efa_av_insert_ah(struct efa_av *av, struct efa_ep_addr *addr, fi_addr
 	struct efa_conn *conn;
 	int err;
 
+	if (av->util_av.flags & FI_EVENT)
+		return -FI_ENOEQ;
+	if ((flags & FI_SYNC_ERR) && (!context || (flags & FI_EVENT)))
+		return -FI_EINVAL;
+	else if (flags & FI_SYNC_ERR)
+		memset(context, 0, sizeof(int));
+
 	memset(&ah_attr, 0, sizeof(struct ibv_ah_attr));
 	inet_ntop(AF_INET6, addr->raw, str, INET6_ADDRSTRLEN);
 	EFA_INFO(FI_LOG_AV, "Insert address: GID[%s] QP[%u]\n", str, addr->qpn);
 	if (!efa_av_is_valid_address(addr)) {
-		EFA_INFO(FI_LOG_AV, "Failed to insert bad addr");
+		EFA_WARN(FI_LOG_AV, "Failed to insert bad addr");
 		err = -FI_EADDRNOTAVAIL;
 		goto err_invalid;
 	}
@@ -209,14 +217,6 @@ static int efa_av_insert(struct fid_av *av_fid, const void *addr,
 	size_t i;
 	int err;
 
-	if (av->util_av.flags & FI_EVENT)
-		return -FI_ENOEQ;
-
-	if ((flags & FI_SYNC_ERR) && (!context || (flags & FI_EVENT)))
-		return -FI_EINVAL;
-	else if (flags & FI_SYNC_ERR)
-		memset(context, 0, sizeof(int) * count);
-
 	if (av->used + count > av->util_av.count) {
 		err = efa_av_resize(av, av->used + count);
 		if (err)
@@ -226,7 +226,8 @@ static int efa_av_insert(struct fid_av *av_fid, const void *addr,
 	failed = 0;
 	for (i = 0; i < count; i++) {
 		addr_i = (struct efa_ep_addr *)((uint8_t *)addr + i * EFA_EP_ADDR_LEN);
-		err = efa_av_insert_ah(av, addr_i, &fi_addr_res);
+		err = efa_av_insert_ah(av, addr_i, &fi_addr_res,
+					flags, context);
 		if (err)
 			failed++;
 		if (flags & FI_SYNC_ERR)
@@ -306,13 +307,13 @@ static int efa_av_lookup(struct fid_av *av_fid, fi_addr_t fi_addr,
 	if (av->type == FI_AV_MAP) {
 		conn = (struct efa_conn *)fi_addr;
 	} else { /* (av->type == FI_AV_TABLE) */
-			return -EINVAL;
 		if (fi_addr >= av->util_av.count)
+			return -FI_EINVAL;
 
 		conn = av->conn_table[fi_addr];
 	}
 	if (!conn)
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	memcpy(addr, (void *)&conn->ep_addr, MIN(sizeof(conn->ep_addr), *addrlen));
 	*addrlen = sizeof(conn->ep_addr);
@@ -354,10 +355,15 @@ static int efa_av_close(struct fid *fid)
 	return 0;
 }
 
+static int efa_av_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
+{
+	return ofi_av_bind(fid, bfid, flags);
+}
+
 static struct fi_ops efa_av_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = efa_av_close,
-	.bind = fi_no_bind,
+	.bind = efa_av_bind,
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
 };
@@ -386,7 +392,7 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		break;
 	case FI_AV_MAP:
 	default:
-		return -EINVAL;
+		return -FI_EINVAL;
 	}
 
 	if (attr->count)
@@ -394,7 +400,7 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 
 	av = calloc(1, sizeof(*av));
 	if (!av)
-		return -ENOMEM;
+		return -FI_ENOMEM;
 
 	av->domain = domain;
 	av->type = attr->type;
@@ -405,7 +411,7 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	if (av->type == FI_AV_TABLE && av->util_av.count > 0) {
 		av->conn_table = calloc(av->util_av.count, sizeof(*av->conn_table));
 		if (!av->conn_table) {
-			err = -ENOMEM;
+			err = -FI_ENOMEM;
 			goto err_free_av;
 		}
 	}
