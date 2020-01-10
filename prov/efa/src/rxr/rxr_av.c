@@ -38,7 +38,7 @@
 /*
  * Local/remote peer detection by comparing peer GID with stored local GIDs
  */
-static bool rxr_is_local_peer(struct rxr_av *av, const void *addr)
+static bool efa_is_local_peer(struct rxr_av *av, const void *addr)
 {
 	struct efa_ep_addr *cur_efa_addr = local_efa_addr;
 
@@ -46,14 +46,14 @@ static bool rxr_is_local_peer(struct rxr_av *av, const void *addr)
 	char peer_gid[INET6_ADDRSTRLEN] = { 0 };
 
 	if (!inet_ntop(AF_INET6, ((struct efa_ep_addr *)addr)->raw, peer_gid, INET6_ADDRSTRLEN)) {
-		FI_WARN(&rxr_prov, FI_LOG_AV, "Failed to get current EFA's GID, errno: %d\n", errno);
+		EFA_WARN(FI_LOG_AV, "Failed to get current EFA's GID, errno: %d\n", errno);
 		return 0;
 	}
-	FI_DBG(&rxr_prov, FI_LOG_AV, "The peer's GID is %s.\n", peer_gid);
+	EFA_INFO(FI_LOG_AV, "The peer's GID is %s.\n", peer_gid);
 #endif
 	while (cur_efa_addr) {
 		if (!memcmp(((struct efa_ep_addr *)addr)->raw, cur_efa_addr->raw, 16)) {
-			FI_DBG(&rxr_prov, FI_LOG_AV, "The peer is local.\n");
+			EFA_INFO(FI_LOG_AV, "The peer is local.\n");
 			return 1;
 		}
 		cur_efa_addr = cur_efa_addr->next;
@@ -72,11 +72,11 @@ static bool rxr_is_local_peer(struct rxr_av *av, const void *addr)
  * 2. insert gid_qpn into shm's av
  * 3. store returned fi_addr from shm into the hash table
  */
-int rxr_av_insert_rdm_addr(struct rxr_av *av, const void *addr,
+int efa_av_insert_addr(struct rxr_av *av, const void *addr,
 			   fi_addr_t *rdm_fiaddr, uint64_t flags,
 			   void *context)
 {
-	struct rxr_av_entry *av_entry;
+	struct efa_av_entry *av_entry;
 	fi_addr_t shm_fiaddr;
 	struct rxr_peer *peer;
 	struct rxr_ep *rxr_ep;
@@ -106,11 +106,11 @@ int rxr_av_insert_rdm_addr(struct rxr_av *av, const void *addr,
 			"Failed to allocate memory for av_entry\n");
 		goto out;
 	}
-	memcpy(av_entry->addr, addr, av->rdm_addrlen);
+	memcpy(av_entry->ep_addr, addr, av->rdm_addrlen);
 	av_entry->rdm_addr = *(uint64_t *)rdm_fiaddr;
 
 	/* If peer is local, insert the address into shm provider's av */
-	if (rxr_env.enable_shm_transfer && rxr_is_local_peer(av, addr)) {
+	if (rxr_env.enable_shm_transfer && efa_is_local_peer(av, addr)) {
 		ret = rxr_ep_efa_addr_to_str(addr, smr_name);
 		if (ret != FI_SUCCESS)
 			goto out;
@@ -140,7 +140,7 @@ int rxr_av_insert_rdm_addr(struct rxr_av *av, const void *addr,
 		}
 	}
 
-	HASH_ADD(hh, av->av_map, addr, av->rdm_addrlen, av_entry);
+	HASH_ADD(hh, av->av_map, ep_addr, av->rdm_addrlen, av_entry);
 
 find_out:
 	FI_DBG(&rxr_prov, FI_LOG_AV,
@@ -170,17 +170,17 @@ static int rxr_av_insert(struct fid_av *av_fid, const void *addr,
 
 	av = container_of(av_fid, struct rxr_av, util_av.av_fid);
 
-	if (av->util_av.count < av->rdm_av_used + count) {
+	if (av->util_av.count < av->used + count) {
 		FI_WARN(&rxr_prov, FI_LOG_AV,
 			"AV insert failed. Expect inserting %zu AV entries, but only %zu available\n",
-			count, av->util_av.count - av->rdm_av_used);
+			count, av->util_av.count - av->used);
 		if (av->util_av.eq)
 			ofi_av_write_event(&av->util_av, i, FI_ENOMEM, context);
 		goto out;
 	}
 
 	for (; i < count; i++, addr = (uint8_t *)addr + av->rdm_addrlen) {
-		ret = rxr_av_insert_rdm_addr(av, addr, &fi_addr_res,
+		ret = efa_av_insert_addr(av, addr, &fi_addr_res,
 					     flags, context);
 		if (ret != 1)
 			break;
@@ -191,7 +191,7 @@ static int rxr_av_insert(struct fid_av *av_fid, const void *addr,
 		success_cnt++;
 	}
 
-	av->rdm_av_used += success_cnt;
+	av->used += success_cnt;
 
 out:
 	/* cancel remaining request and log to event queue */
@@ -230,7 +230,7 @@ static int rxr_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 	int ret = 0;
 	size_t i;
 	struct rxr_av *av;
-	struct rxr_av_entry *av_entry;
+	struct efa_av_entry *av_entry;
 	void *addr;
 
 	av = container_of(av_fid, struct rxr_av, util_av.av_fid);
@@ -266,7 +266,7 @@ static int rxr_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 			free(av_entry);
 		}
 
-		av->rdm_av_used--;
+		av->used--;
 	}
 	fastlock_release(&av->util_av.lock);
 	free(addr);
@@ -304,7 +304,7 @@ static struct fi_ops_av rxr_av_ops = {
 static int rxr_av_close(struct fid *fid)
 {
 	struct rxr_av *av;
-	struct rxr_av_entry *curr_av_entry, *tmp;
+	struct efa_av_entry *curr_av_entry, *tmp;
 	int ret = 0;
 
 	av = container_of(fid, struct rxr_av, util_av.av_fid);

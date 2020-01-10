@@ -1322,7 +1322,7 @@ void rxr_ep_calc_cts_window_credits(struct rxr_ep *ep, struct rxr_peer *peer,
 	 * have grown since the time this peer was initialized.
 	 */
 	av = rxr_ep_av(ep);
-	num_peers = av->rdm_av_used - 1;
+	num_peers = av->used - 1;
 	if (num_peers && ofi_div_ceil(rxr_env.rx_window_size, num_peers) < peer->rx_credits)
 		peer->rx_credits = ofi_div_ceil(peer->rx_credits, num_peers);
 
