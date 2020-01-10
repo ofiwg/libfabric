@@ -188,7 +188,7 @@ static void ft_print_comp(struct ft_info *test)
 	printf(", rx: ");
 	ft_print_comp_flag(test->rx_cq_bind_flags, test->rx_op_flags);
 	printf(", ");
-} 
+}
 
 static void ft_show_test_info(void)
 {
@@ -270,11 +270,8 @@ static void ft_fw_convert_info(struct fi_info *info, struct ft_info *test_info)
 		info->domain_attr->cq_data_size = 4;
 }
 
-static void
-ft_fw_update_info(struct ft_info *test_info, struct fi_info *info, int subindex)
+static void ft_fw_update_info(struct ft_info *test_info, struct fi_info *info)
 {
-	test_info->test_subindex = subindex;
-
 	if (info->ep_attr) {
 		test_info->protocol = info->ep_attr->protocol;
 		test_info->protocol_version = info->ep_attr->protocol_version;
@@ -304,12 +301,14 @@ static int ft_fw_result_index(int fi_errno)
 	switch (fi_errno) {
 	case 0:
 		return FT_SUCCESS;
-	case FI_ENODATA:
+	case -FI_ENODATA:
 		return FT_ENODATA;
-	case FI_ENOSYS:
+	case -FI_ENOSYS:
 		return FT_ENOSYS;
-	case FI_EIO:
+	case -FI_EIO:
 		return FT_EIO;
+	case -FT_SKIP:
+		return FT_SKIP;
 	default:
 		return FT_ERROR;
 	}
@@ -330,298 +329,125 @@ static int ft_recv_test_info(void)
 	return 0;
 }
 
-static int ft_exchange_uint32(uint32_t local, uint32_t *remote)
+static int ft_send_result(int err, struct fi_info *info)
 {
-	uint32_t local_net = htonl(local);
 	int ret;
-
-	ret = ft_sock_send(sock, &local_net, sizeof local);
+	ret = ft_sock_send(sock, &err, sizeof err);
 	if (ret) {
 		FT_PRINTERR("ft_sock_send", ret);
 		return ret;
 	}
-
-	ret = ft_sock_recv(sock, remote, sizeof *remote);
-	if (ret) {
-		FT_PRINTERR("ft_sock_recv", ret);
-		return ret;
-	}
-
-	*remote = ntohl(*remote);
-
-	return 0;
-}
-
-static int ft_skip_info(struct fi_info *hints, struct fi_info *info)
-{
-	uint32_t remote_protocol, skip, remote_skip;
-	size_t len;
-	int ret;
-
-	//make sure remote side is using the same protocol
-	ret = ft_exchange_uint32(info->ep_attr->protocol, &remote_protocol);
-	if (ret)
-		return ret;
-
-	if (info->ep_attr->protocol != remote_protocol)
-		return 1;
-
-	//check needed to skip utility providers, unless requested
-	skip = (!ft_util_name(hints->fabric_attr->prov_name, &len) &&
-		strcasecmp(hints->fabric_attr->prov_name,
-		info->fabric_attr->prov_name));
-
-	ret = ft_exchange_uint32(skip, &remote_skip);
-	if (ret)
-		return ret;
-
-	return skip || remote_skip;
-}
-
-static int ft_transfer_subindex(int subindex, int *remote_idx)
-{
-	int ret;
-
-	ret = ft_sock_send(sock, &subindex, sizeof subindex);
-	if (ret) {
-		FT_PRINTERR("ft_sock_send", ret);
-		return ret;
-	}
-
-	ret = ft_sock_recv(sock, remote_idx, sizeof *remote_idx);
-	if (ret) {
-		FT_PRINTERR("ft_sock_recv", ret);
-		return ret;
+	if (err) {
+		printf("Ending test %d, result: %s\n", test_info.test_index,
+			fi_strerror(-err));
+		return err;
 	}
 
 	return 0;
 }
 
-static int ft_fw_process_list_server(struct fi_info *hints, struct fi_info *info)
+static int ft_recv_result(struct fi_info *info)
 {
-	int ret, subindex, remote_idx = 0, result = -FI_ENODATA, end_test = 0;
-	int server_ready = 0;
-	struct fi_info *open_res_info;
-
-	ret = ft_sock_send(sock, &test_info, sizeof test_info);
+	int ret, err = 0;
+	ret = ft_sock_recv(sock, &err, sizeof err);
 	if (ret) {
-		FT_PRINTERR("ft_sock_send", ret);
+		FT_PRINTERR("ft_sock_recv", ret);
 		return ret;
 	}
-
-	for (subindex = 1, fabric_info = info; fabric_info;
-	     fabric_info = fabric_info->next, subindex++) {
-
-		ret = ft_check_info(hints, fabric_info);
-		if (ret)
-			return ret;
-
-		/* Stores the fabric_info into a tmp variable, resolves an issue caused
-		*  by ft_accept with FI_EP_MSG which overwrites the fabric_info.
-		*/
-		open_res_info = fabric_info;
-		while (1) {
-			fabric_info = open_res_info;
-			ret = ft_open_res();
-			if (ret) {
-				FT_PRINTERR("ft_open_res", ret);
-				return ret;
-			}
-
-			if (!server_ready) {
-				server_ready = 1;
-				ret = ft_sock_send(sock, &server_ready, sizeof server_ready);
-				if (ret) {
-					FT_PRINTERR("ft_sock_send", ret);
-					return ret;
-				}
-			}
-
-			ret = ft_sock_recv(sock, &end_test, sizeof end_test);
-			if (ret) {
-				FT_PRINTERR("ft_sock_recv", ret);
-				return ret;
-			}
-			if (end_test) {
-				ft_cleanup();
-				break;
-			}
-
-			if (ft_skip_info(hints, fabric_info)) {
-				ft_cleanup();
-				continue;
-			}
-
-			ret = ft_transfer_subindex(subindex, &remote_idx);
-			if (ret)
-				return ret;
-
-			ft_fw_update_info(&test_info, fabric_info, subindex);
-
-			printf("Starting test %d-%d-%d: ", test_info.test_index,
-				subindex, remote_idx);
-			ft_show_test_info();
-
-			result = ft_init_test();
-			if (result)
-				continue;
-
-			result = ft_run_test();
-
-			ret = ft_sock_send(sock, &result, sizeof result);
-			if (result) {
-				FT_PRINTERR("ft_run_test", result);
-			} else if (ret) {
-				FT_PRINTERR("ft_sock_send", ret);
-				return ret;
-			}
-		}
-
-		end_test = (fabric_info->next == NULL);
-		ret = ft_sock_send(sock, &end_test, sizeof end_test);
-		if (ret) {
-			FT_PRINTERR("ft_sock_send", ret);
-			return ret;
-		}
+	if (err) {
+		printf("Ending test %d, result: %s\n", test_info.test_index,
+			fi_strerror(-err));
 	}
 
-	test_info.prov_name[0] = '\0';
-	ret = ft_sock_send(sock, &test_info, sizeof test_info);
-	if (ret) {
-		FT_PRINTERR("ft_sock_send", ret);
-		return ret;
-	}
-
-	if (subindex == 1)
-		return -FI_ENODATA;
-
-	return result;
+	return err;
 }
 
-static int ft_fw_process_list_client(struct fi_info *hints, struct fi_info *info)
+static int ft_server_setup(struct fi_info *hints, struct fi_info *info)
 {
-	int ret, subindex, remote_idx = 0, result = -FI_ENODATA, sresult, end_test = 0;
+	int ret = 0;
 
-	while (!end_test) {
-		for (subindex = 1, fabric_info = info; fabric_info;
-			 fabric_info = fabric_info->next, subindex++) {
-
-			end_test = 0;
-			ret = ft_sock_send(sock, &end_test, sizeof end_test);
-			if (ret) {
-				FT_PRINTERR("ft_sock_send", ret);
-				return ret;
-			}
-
-			if (ft_skip_info(hints, fabric_info))
-				continue;
-
-			ret = ft_transfer_subindex(subindex, &remote_idx);
-			if (ret)
-				return ret;
-
-			ret = ft_check_info(hints, fabric_info);
-			if (ret)
-				return ret;
-
-			ft_fw_update_info(&test_info, fabric_info, subindex);
-			printf("Starting test %d-%d-%d: ", test_info.test_index,
-				subindex, remote_idx);
-			ft_show_test_info();
-
-			ret = ft_open_res();
-			if (ret) {
-				FT_PRINTERR("ft_open_res", ret);
-				return ret;
-			}
-
-			result = ft_init_test();
-			if (result)
-				continue;
-
-			result = ft_run_test();
-
-			ret = ft_sock_recv(sock, &sresult, sizeof sresult);
-			if (result && result != -FI_EIO) {
-				FT_PRINTERR("ft_run_test", result);
-				fprintf(stderr, "Node: %s\nService: %s \n",
-					test_info.node, test_info.service);
-				fprintf(stderr, "%s\n", fi_tostr(hints, FI_TYPE_INFO));
-				return -FI_EOTHER;
-			} else if (ret) {
-				FT_PRINTERR("ft_sock_recv", ret);
-				result = ret;
-				return -FI_EOTHER;
-			} else if (sresult) {
-				result = sresult;
-				if (sresult != -FI_EIO)
-					return -FI_EOTHER;
-			}
-		}
-		end_test = 1;
-		ret = ft_sock_send(sock, &end_test, sizeof end_test);
-		if (ret) {
-			FT_PRINTERR("ft_sock_send", ret);
-			return ret;
-		}
-
-		ret = ft_sock_recv(sock, &end_test, sizeof end_test);
-		if (ret) {
-			FT_PRINTERR("ft_sock_recv", ret);
-			return ret;
-		}
+	hints = fi_allocinfo();
+	if (!hints) {
+		ret = -FI_ENOMEM;
+		goto err;
 	}
 
-	if (subindex == 1)
-		return -FI_ENODATA;
+	ft_fw_convert_info(hints, &test_info);
 
-	return result;
+	ret = fi_getinfo(FT_FIVERSION, ft_strptr(test_info.node),
+			 ft_strptr(test_info.service), FI_SOURCE, hints, &info);
+	if (ret) {
+		FT_PRINTERR("fi_getinfo", ret);
+		goto err;
+	}
+
+	fabric_info = info;
+
+	ret = ft_check_info(hints, fabric_info);
+	if (ret)
+		goto err;
+
+	ret = ft_open_res();
+	if (ret)
+		goto err;
+
+	ft_fw_update_info(&test_info, fabric_info);
+
+	return 0;
+err:
+	ft_send_result(ret, info);
+	return ret;
 }
 
 static int ft_server_child()
 {
-	struct fi_info *hints, *info;
-	int ret;
+	struct fi_info *hints = NULL;
+	struct fi_info *info  = NULL;
+	int ret, result;
 
-	hints = fi_allocinfo();
-	if (!hints)
-		return -FI_ENOMEM;
-
-	ft_fw_convert_info(hints, &test_info);
 	printf("Starting test %d:\n", test_info.test_index);
 
-	ret = fi_getinfo(FT_FIVERSION, ft_strptr(test_info.node),
-			 ft_strptr(test_info.service), FI_SOURCE,
-			 hints, &info);
-	if (ret && ret != -FI_ENODATA) {
-		FT_PRINTERR("fi_getinfo", ret);
-	} else {
-		/* Temporary fix to run one set of tests, rather than
-		 * iterating over all interfaces / addresses.
-		 * TODO: Remove iteration from ft_fw_process_list_server.
-		 */
-		if (info && info->next) {
-			fi_freeinfo(info->next);
-			info->next = NULL;
-		}
+	ret = ft_server_setup(hints, info);
+	if (ret)
+		return ret;
 
-		ret = ft_fw_process_list_server(hints, info);
-		if (ret != -FI_ENODATA)
-			fi_freeinfo(info);
+	ret = ft_send_result(0, info);
+	if (ret)
+		return ret;
 
-		if (ret && ret != -FI_EIO) {
-			FT_PRINTERR("ft_fw_process_list", ret);
-			printf("Node: %s\nService: %s\n",
-				test_info.node, test_info.service);
-			printf("%s\n", fi_tostr(hints, FI_TYPE_INFO));
-		}
+	ret = ft_sock_send(sock, &test_info, sizeof test_info);
+	if (ret) {
+		FT_PRINTERR("ft_sock_send", ret);
+		return ret;
 	}
+
+	ret = ft_recv_result(info);
+	if (ret)
+		return ret;
+
+	ret = ft_init_test();
+	if (ret)
+		return ret;
+
+	result = ft_run_test();
+
+	ret = ft_sock_send(sock, &result, sizeof result);
+	if (result) {
+		FT_PRINTERR("ft_run_test", result);
+	}
+
 	fi_freeinfo(hints);
+	ft_cleanup();
+
+	if (ret) {
+		FT_PRINTERR("ft_sock_send", ret);
+		return ret;
+	}
 
 	printf("Ending test %d, result: %s\n", test_info.test_index,
 		fi_strerror(-ret));
 
-	return ret;
+	return result;
 }
 
 static int ft_fw_server(void)
@@ -652,81 +478,117 @@ static int ft_fw_server(void)
 
 		results[ft_fw_result_index(ret)]++;
 
-	} while (!ret || ret == FI_EIO || ret == FI_ENODATA);
+	} while (!ret || ret == -FI_EIO || ret == -FI_ENODATA || ret == -FT_SKIP);
 
 	return ret;
 }
-
-static int ft_client_child(void)
+static int ft_client_setup(struct fi_info *hints, struct fi_info *info)
 {
-	struct fi_info *hints, *info;
-	int ret, result, server_ready = 0;
+	int ret;
+	ret = ft_recv_test_info();
+	if (ret)
+		goto err;
 
-	result = -FI_ENODATA;
 	hints = fi_allocinfo();
-	if (!hints)
-		return -FI_ENOMEM;
+	if (!hints) {
+		ret = -FI_ENOMEM;
+		goto err;
+	}
 
 	ret = ft_getsrcaddr(opts.src_addr, opts.src_port, hints);
 	if (ret)
-		return ret;
+		goto err;
 
 	ft_fw_convert_info(hints, &test_info);
 
+	ft_show_test_info();
+
+	ret = fi_getinfo(FT_FIVERSION, ft_strptr(test_info.node),
+			 ft_strptr(test_info.service), 0, hints, &info);
+	if (ret)
+		goto err;
+
+	fabric_info = info;
+
+	ret = ft_check_info(hints, fabric_info);
+	if (ret)
+		goto err;
+
+	ft_fw_update_info(&test_info, fabric_info);
+
+	ret = ft_open_res();
+	
+	return 0;
+	
+err:
+	ft_send_result(ret, info);
+	return ret;
+}
+static int ft_client_child(void)
+{
+	struct fi_info *hints = NULL;
+	struct fi_info  *info = NULL;
+	int ret, result, sresult = 0;
+	result = -FI_ENODATA;
+
+	ret = ft_sock_send(sock, &test_info, sizeof test_info);
+	if (ret)
+		goto err;
+
 	printf("Starting test %d / %d:\n", test_info.test_index,
 		series->test_count);
-	while (!ft_nullstr(test_info.prov_name)) {
-		printf("Starting test %d-%d: ", test_info.test_index,
-			test_info.test_subindex);
-		ft_show_test_info();
 
-		ret = ft_sock_recv(sock, &server_ready, sizeof server_ready);
-		if (ret)
-			return ret;
+	ret = ft_recv_result(info);
+	if (ret)
+		return ret;
 
-		if (!server_ready)
-			return -FI_EOTHER;
+	ret = ft_client_setup(hints, info);
+	if (ret)
+		return ret;
 
-		result = fi_getinfo(FT_FIVERSION, ft_strptr(test_info.node),
-				 ft_strptr(test_info.service), 0, hints, &info);
-		if (result)
-			FT_PRINTERR("fi_getinfo", result);
+	ret = ft_send_result(0, info);
+	if (ret)
+		return ret;
 
-		/* Temporary fix to run one set of tests, rather than
-		 * iterating over all interfaces / addresses.
-		 * TODO: Remove iteration from ft_fw_process_list_client.
-		 */
-		if (info && info->next) {
-			fi_freeinfo(info->next);
-			info->next = NULL;
-		}
+	result = ft_init_test();
+	if (result)
+		return result;
 
-		ret = ft_fw_process_list_client(hints, info);
-		if (ret != -FI_ENODATA)
-			fi_freeinfo(info);
-		else
-			goto out;
-
-		ret = ft_recv_test_info();
-		if (ret) {
-			FT_PRINTERR("ft_recv_test_info", ret);
-			goto out;
-		}
-		ft_fw_convert_info(hints, &test_info);
+	result = ft_run_test();
+	ret = ft_sock_recv(sock, &sresult, sizeof sresult);
+	if (result && result != -FI_EIO) {
+		FT_PRINTERR("ft_run_test", result);
+		fprintf(stderr, "Node: %s\nService: %s \n",
+			test_info.node, test_info.service);
+		fprintf(stderr, "%s\n", fi_tostr(hints, FI_TYPE_INFO));
+		ret = -FI_EOTHER;
+	} else if (ret) {
+		FT_PRINTERR("ft_sock_recv", ret);
+		result = ret;
+		ret = -FI_EOTHER;
+	} else if (sresult) {
+		result = sresult;
+		if (sresult != -FI_EIO)
+			ret = -FI_EOTHER;
 	}
 
 	printf("Ending test %d / %d, result: %s\n", test_info.test_index,
 		series->test_count, fi_strerror(-result));
-out:
+
 	fi_freeinfo(hints);
+	ft_cleanup();
+
+	return 0;
+
+err:
+	ft_send_result(ret, info);
 	return result;
 }
 
 static int ft_fw_client(void)
 {
-	int ret, result;
+	int result;
 	pid_t pid;
-
 
 	for (fts_start(series, test_start_index);
 	     !fts_end(series, test_end_index);
@@ -738,18 +600,6 @@ static int ft_fw_client(void)
 			ft_show_test_info();
 			results[FT_SKIP]++;
 			continue;
-		}
-
-		ret = ft_sock_send(sock, &test_info, sizeof test_info);
-		if (ret) {
-			FT_PRINTERR("ft_sock_send", ret);
-			return ret;
-		}
-
-		ret = ft_recv_test_info();
-		if (ret) {
-			FT_PRINTERR("ft_recv_test_info", ret);
-			return ret;
 		}
 
 		if (do_fork) {
