@@ -257,6 +257,7 @@ struct smr_attr {
 	size_t		tx_count;
 };
 
+void	smr_cleanup(void);
 int	smr_map_create(const struct fi_provider *prov, int peer_count,
 		       struct smr_map **map);
 int	smr_map_to_region(const struct fi_provider *prov,
