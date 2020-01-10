@@ -376,9 +376,9 @@ int rxr_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	 * size.
 	 */
 	if (!attr->count)
-		attr->count = RXR_MIN_AV_SIZE;
+		attr->count = EFA_MIN_AV_SIZE;
 	else
-		attr->count = MAX(attr->count, RXR_MIN_AV_SIZE);
+		attr->count = MAX(attr->count, EFA_MIN_AV_SIZE);
 
 	if (fi_param_get_size_t(NULL, "universe_size",
 				&universe_size) == FI_SUCCESS)
@@ -414,7 +414,7 @@ int rxr_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		 * Reset the count to 128 to reduce memory footprint and satisfy
 		 * the need of the instances with more CPUs.
 		 */
-		assert(rxr_env.shm_av_size <= RXR_SHM_MAX_AV_COUNT);
+		assert(rxr_env.shm_av_size <= EFA_SHM_MAX_AV_COUNT);
 		av_attr.count = rxr_env.shm_av_size;
 		ret = fi_av_open(domain->shm_domain, &av_attr, &av->shm_rdm_av, context);
 		if (ret)

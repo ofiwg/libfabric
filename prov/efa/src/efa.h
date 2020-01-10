@@ -64,6 +64,7 @@
 #include "ofi_util.h"
 #include "ofi_file.h"
 
+#include "rxr.h"
 #define EFA_PROV_NAME "efa"
 #define EFA_PROV_VERS FI_VERSION(3, 0)
 
@@ -94,6 +95,13 @@
  * to allow processes added to a running job to bootstrap.
  */
 #define EFA_MR_CACHE_LIMIT_MULT (.9)
+
+#define EFA_MIN_AV_SIZE (16384)
+
+/*
+ * Specific flags and attributes for shm provider
+ */
+#define EFA_SHM_MAX_AV_COUNT       (256)
 
 extern int efa_mr_cache_enable;
 extern size_t efa_mr_max_cached_count;
@@ -375,6 +383,11 @@ static inline uint32_t align_up_queue_size(uint32_t req)
 	req |= req >> 16;
 	req++;
 	return req;
+}
+
+static inline struct rxr_av *rxr_ep_av(struct rxr_ep *ep)
+{
+	return container_of(ep->util_ep.av, struct rxr_av, util_av);
 }
 
 #define is_power_of_2(x) (!(x == 0) && !(x & (x - 1)))

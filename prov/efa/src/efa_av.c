@@ -35,6 +35,7 @@
 #include <malloc.h>
 #include <stdio.h>
 
+#include "rxr.h"
 #include <ofi_enosys.h>
 #include "efa.h"
 #include "efa_verbs.h"
