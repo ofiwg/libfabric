@@ -316,16 +316,6 @@ struct rxr_mr {
 	struct rxr_domain *domain;
 };
 
-struct rxr_av {
-	struct util_av util_av;
-	struct fid_av *rdm_av;
-	struct fid_av *shm_rdm_av;
-	struct efa_av_entry *av_map;
-
-	int used;
-	size_t rdm_addrlen;
-};
-
 struct rxr_peer {
 	bool tx_init;			/* tracks initialization of tx state */
 	bool rx_init;			/* tracks initialization of rx state */
@@ -1194,10 +1184,6 @@ int rxr_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		struct fid_cq **cq_fid, void *context);
 int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		 struct fid_ep **ep, void *context);
-
-/* AV sub-functions */
-int rxr_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
-		struct fid_av **av_fid, void *context);
 
 /* EP sub-functions */
 void rxr_ep_progress(struct util_ep *util_ep);
