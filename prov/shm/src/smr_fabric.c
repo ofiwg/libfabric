@@ -35,13 +35,27 @@
 
 #include "smr.h"
 
+static int smr_wait_open(struct fid_fabric *fabric_fid,
+			 struct fi_wait_attr *attr,
+			 struct fid_wait **waitset)
+{
+	switch (attr->wait_obj) {
+	case FI_WAIT_UNSPEC:
+	case FI_WAIT_YIELD:
+		return ofi_wait_yield_open(fabric_fid, attr, waitset);
+	case FI_WAIT_FD:
+		return ofi_wait_fd_open(fabric_fid, attr, waitset);
+	default:
+		return -FI_ENOSYS;
+	}
+}
 
 static struct fi_ops_fabric smr_fabric_ops = {
 	.size = sizeof(struct fi_ops_fabric),
 	.domain = smr_domain_open,
 	.passive_ep = fi_no_passive_ep,
 	.eq_open = ofi_eq_create,
-	.wait_open = ofi_wait_yield_open,
+	.wait_open = smr_wait_open,
 	.trywait = ofi_trywait
 };
 
