@@ -42,6 +42,7 @@
 
 #include <ofi_shm.h>
 
+struct dlist_entry ep_name_list;
 
 static void smr_peer_addr_init(struct smr_addr *peer)
 {
