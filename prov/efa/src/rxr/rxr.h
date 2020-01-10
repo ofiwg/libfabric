@@ -316,21 +316,13 @@ struct rxr_mr {
 	struct rxr_domain *domain;
 };
 
-struct rxr_av_entry {
-	uint8_t addr[RXR_MAX_NAME_LENGTH];
-	fi_addr_t rdm_addr;
-	fi_addr_t shm_rdm_addr;
-	bool local_mapping;
-	UT_hash_handle hh;
-};
-
 struct rxr_av {
 	struct util_av util_av;
 	struct fid_av *rdm_av;
 	struct fid_av *shm_rdm_av;
-	struct rxr_av_entry *av_map;
+	struct efa_av_entry *av_map;
 
-	int rdm_av_used;
+	int used;
 	size_t rdm_addrlen;
 };
 
@@ -1204,7 +1196,7 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		 struct fid_ep **ep, void *context);
 
 /* AV sub-functions */
-int rxr_av_insert_rdm_addr(struct rxr_av *av, const void *addr,
+int efa_av_insert_addr(struct rxr_av *av, const void *addr,
 			   fi_addr_t *rdm_fiaddr, uint64_t flags,
 			   void *context);
 int rxr_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,

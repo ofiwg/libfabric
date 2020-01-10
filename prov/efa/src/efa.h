@@ -311,6 +311,14 @@ struct efa_av {
 	struct efa_conn 	**conn_table;
 };
 
+struct efa_av_entry {
+	uint8_t			ep_addr[EFA_EP_ADDR_LEN];
+	fi_addr_t		rdm_addr;
+	fi_addr_t		shm_rdm_addr;
+	bool			local_mapping;
+	UT_hash_handle		hh;
+};
+
 struct efa_ah_qpn {
 	uint16_t efa_ah;
 	uint16_t qpn;
