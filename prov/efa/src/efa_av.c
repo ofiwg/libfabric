@@ -83,7 +83,7 @@ static size_t efa_av_tbl_find_first_empty(struct efa_av *av, size_t hint)
 	assert(av->type == FI_AV_TABLE);
 
 	conn_table = av->conn_table;
-	for (; hint < av->count; hint++) {
+	for (; hint < av->util_av.count; hint++) {
 		if (!conn_table[hint])
 			return hint;
 	}
@@ -103,11 +103,11 @@ static int efa_av_resize(struct efa_av *av, size_t new_av_count)
 		else
 			return -FI_ENOMEM;
 
-		memset(av->conn_table + av->count, 0,
-		       (new_av_count - av->count) * sizeof(*av->conn_table));
+		memset(av->conn_table + av->util_av.count, 0,
+		       (new_av_count - av->util_av.count) * sizeof(*av->conn_table));
 	}
 
-	av->count = new_av_count;
+	av->util_av.count = new_av_count;
 
 	return 0;
 }
@@ -201,7 +201,7 @@ static int efa_av_insert(struct fid_av *av_fid, const void *addr,
 			 size_t count, fi_addr_t *fi_addr,
 			 uint64_t flags, void *context)
 {
-	struct efa_av *av = container_of(av_fid, struct efa_av, av_fid);
+	struct efa_av *av = container_of(av_fid, struct efa_av, util_av.av_fid);
 	struct efa_ep_addr *addr_i;
 	int *fi_errors = context;
 	fi_addr_t fi_addr_res = FI_ADDR_UNSPEC;
@@ -209,7 +209,7 @@ static int efa_av_insert(struct fid_av *av_fid, const void *addr,
 	size_t i;
 	int err;
 
-	if (av->flags & FI_EVENT)
+	if (av->util_av.flags & FI_EVENT)
 		return -FI_ENOEQ;
 
 	if ((flags & FI_SYNC_ERR) && (!context || (flags & FI_EVENT)))
@@ -217,7 +217,7 @@ static int efa_av_insert(struct fid_av *av_fid, const void *addr,
 	else if (flags & FI_SYNC_ERR)
 		memset(context, 0, sizeof(int) * count);
 
-	if (av->used + count > av->count) {
+	if (av->used + count > av->util_av.count) {
 		err = efa_av_resize(av, av->used + count);
 		if (err)
 			return err;
@@ -241,7 +241,7 @@ static int efa_av_insert(struct fid_av *av_fid, const void *addr,
 static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 			 size_t count, uint64_t flags)
 {
-	struct efa_av *av = container_of(av_fid, struct efa_av, av_fid);
+	struct efa_av *av = container_of(av_fid, struct efa_av, util_av.av_fid);
 	struct efa_conn *conn = NULL;
 	char str[INET6_ADDRSTRLEN];
 	int ret = 0;
@@ -291,9 +291,10 @@ static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 }
 
 static int efa_av_lookup(struct fid_av *av_fid, fi_addr_t fi_addr,
+
 			 void *addr, size_t *addrlen)
 {
-	struct efa_av *av = container_of(av_fid, struct efa_av, av_fid);
+	struct efa_av *av = container_of(av_fid, struct efa_av, util_av.av_fid);
 	struct efa_conn *conn = NULL;
 
 	if (av->type != FI_AV_MAP && av->type != FI_AV_TABLE)
@@ -305,8 +306,8 @@ static int efa_av_lookup(struct fid_av *av_fid, fi_addr_t fi_addr,
 	if (av->type == FI_AV_MAP) {
 		conn = (struct efa_conn *)fi_addr;
 	} else { /* (av->type == FI_AV_TABLE) */
-		if (fi_addr >= av->count)
 			return -EINVAL;
+		if (fi_addr >= av->util_av.count)
 
 		conn = av->conn_table[fi_addr];
 	}
@@ -340,11 +341,11 @@ static int efa_av_close(struct fid *fid)
 	int ret = 0;
 	int i;
 
-	av = container_of(fid, struct efa_av, av_fid.fid);
-	for (i = 0; i < av->count; i++) {
+	av = container_of(fid, struct efa_av, util_av.av_fid.fid);
+	for (i = 0; i < av->util_av.count; i++) {
 		fi_addr_t addr = i;
 
-		ret = efa_av_remove(&av->av_fid, &addr, 1, 0);
+		ret = efa_av_remove(&av->util_av.av_fid, &addr, 1, 0);
 		if (ret)
 			return ret;
 	}
@@ -397,12 +398,12 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 
 	av->domain = domain;
 	av->type = attr->type;
-	av->count = count;
+	av->util_av.count = count;
 	av->used = 0;
 	av->next = 0;
 
-	if (av->type == FI_AV_TABLE && av->count > 0) {
-		av->conn_table = calloc(av->count, sizeof(*av->conn_table));
+	if (av->type == FI_AV_TABLE && av->util_av.count > 0) {
+		av->conn_table = calloc(av->util_av.count, sizeof(*av->conn_table));
 		if (!av->conn_table) {
 			err = -ENOMEM;
 			goto err_free_av;
@@ -414,13 +415,13 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	else /* if (av->type == FI_AV_TABLE) */
 		av->addr_to_conn = efa_av_tbl_idx_to_conn;
 
-	av->av_fid.fid.fclass = FI_CLASS_AV;
-	av->av_fid.fid.context = context;
-	av->av_fid.fid.ops = &efa_av_fi_ops;
+	av->util_av.av_fid.fid.fclass = FI_CLASS_AV;
+	av->util_av.av_fid.fid.context = context;
+	av->util_av.av_fid.fid.ops = &efa_av_fi_ops;
 
-	av->av_fid.ops = &efa_av_ops;
+	av->util_av.av_fid.ops = &efa_av_ops;
 
-	*av_fid = &av->av_fid;
+	*av_fid = &av->util_av.av_fid;
 	return 0;
 
 err_free_av:
