@@ -86,7 +86,7 @@ extern const uint32_t rxr_poison_value;
 #define RXR_RECVWIN_SIZE		(16384)
 #define RXR_DEF_CQ_SIZE			(8192)
 #define RXR_REMOTE_CQ_DATA_LEN		(8)
-#define RXR_MIN_AV_SIZE			(16384)
+
 /* maximum timeout for RNR backoff (microseconds) */
 #define RXR_DEF_RNR_MAX_TIMEOUT		(1000000)
 /* bounds for random RNR backoff timeout */
@@ -177,7 +177,6 @@ extern const uint32_t rxr_poison_value;
  */
 #define RXR_SHM_HDR		BIT_ULL(10)
 #define RXR_SHM_HDR_DATA	BIT_ULL(11)
-#define RXR_SHM_MAX_AV_COUNT       (256)
 
 extern struct fi_info *shm_info;
 
@@ -1342,11 +1341,6 @@ static inline void rxr_eq_write_error(struct rxr_ep *ep, ssize_t err,
 		fi_strerror(-ret), fi_strerror(err), err,
 		fi_strerror(prov_errno), prov_errno, __FILE__, __LINE__);
 	abort();
-}
-
-static inline struct rxr_av *rxr_ep_av(struct rxr_ep *ep)
-{
-	return container_of(ep->util_ep.av, struct rxr_av, util_av);
 }
 
 static inline struct rxr_domain *rxr_ep_domain(struct rxr_ep *ep)
