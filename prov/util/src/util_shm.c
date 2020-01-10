@@ -42,7 +42,6 @@
 
 #include <ofi_shm.h>
 
-
 static void smr_peer_addr_init(struct smr_addr *peer)
 {
 	memset(peer->name, 0, SMR_NAME_SIZE);

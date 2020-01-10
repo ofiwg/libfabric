@@ -125,8 +125,8 @@ struct efa_domain {
 	struct ofi_mr_cache	cache;
 };
 
-struct fi_ops_mr efa_domain_mr_ops;
-struct fi_ops_mr efa_domain_mr_cache_ops;
+extern struct fi_ops_mr efa_domain_mr_ops;
+extern struct fi_ops_mr efa_domain_mr_cache_ops;
 int efa_mr_cache_entry_reg(struct ofi_mr_cache *cache,
 			   struct ofi_mr_entry *entry);
 void efa_mr_cache_entry_dereg(struct ofi_mr_cache *cache,
@@ -384,8 +384,8 @@ static inline uint32_t align_up_queue_size(uint32_t req)
 extern const struct efa_ep_domain efa_rdm_domain;
 extern const struct efa_ep_domain efa_dgrm_domain;
 
-struct fi_ops_cm efa_ep_cm_ops;
-struct fi_ops_msg efa_ep_msg_ops;
+extern struct fi_ops_cm efa_ep_cm_ops;
+extern struct fi_ops_msg efa_ep_msg_ops;
 
 const struct fi_info *efa_get_efa_info(const char *domain_name);
 int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
