@@ -1314,7 +1314,7 @@ void rxr_ep_calc_cts_window_credits(struct rxr_ep *ep, struct rxr_peer *peer,
 				    uint64_t size, int request,
 				    int *window, int *credits)
 {
-	struct rxr_av *av;
+	struct efa_av *av;
 	int num_peers;
 
 	/*
@@ -2274,7 +2274,7 @@ static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 	struct rxr_ep *rxr_ep =
 		container_of(ep_fid, struct rxr_ep, util_ep.ep_fid.fid);
 	struct util_cq *cq;
-	struct rxr_av *av;
+	struct efa_av *av;
 	struct util_cntr *cntr;
 	struct util_eq *eq;
 	struct dlist_entry *ep_list_first_entry;
@@ -2286,14 +2286,13 @@ static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 
 	switch (bfid->fclass) {
 	case FI_CLASS_AV:
-		av = container_of(bfid, struct rxr_av, util_av.av_fid.fid);
+		av = container_of(bfid, struct efa_av, util_av.av_fid.fid);
 		/* Bind util provider endpoint and av */
 		ret = ofi_ep_bind_av(&rxr_ep->util_ep, &av->util_av);
 		if (ret)
 			return ret;
 
-		/* Bind core provider endpoint & av */
-		ret = fi_ep_bind(rxr_ep->rdm_ep, &av->rdm_av->fid, flags);
+		ret = fi_ep_bind(rxr_ep->rdm_ep, &av->util_av.av_fid.fid, flags);
 		if (ret)
 			return ret;
 

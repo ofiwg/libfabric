@@ -1196,9 +1196,6 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		 struct fid_ep **ep, void *context);
 
 /* AV sub-functions */
-int efa_av_insert_addr(struct rxr_av *av, const void *addr,
-			   fi_addr_t *rdm_fiaddr, uint64_t flags,
-			   void *context);
 int rxr_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		struct fid_av **av_fid, void *context);
 
