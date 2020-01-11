@@ -2,6 +2,7 @@
  * Copyright (c) 2016-2017 Cray Inc. All rights reserved.
  * Copyright (c) 2017-2019 Intel Corporation, Inc.  All rights reserved.
  * Copyright (c) 2019 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * Copyright (c) 2020 Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -74,7 +75,7 @@ static int util_mr_find_overlap(struct ofi_rbmap *map, void *key, void *data)
 static void util_mr_free_entry(struct ofi_mr_cache *cache,
 			       struct ofi_mr_entry *entry)
 {
-	FI_DBG(cache->domain->prov, FI_LOG_MR, "free %p (len: %" PRIu64 ")\n",
+	FI_DBG(cache->domain->prov, FI_LOG_MR, "free %p (len: %zu)\n",
 	       entry->info.iov.iov_base, entry->info.iov.iov_len);
 
 	assert(!entry->storage_context);
@@ -135,7 +136,7 @@ static bool mr_cache_flush(struct ofi_mr_cache *cache)
 	dlist_pop_front(&cache->lru_list, struct ofi_mr_entry,
 			entry, lru_entry);
 	dlist_init(&entry->lru_entry);
-	FI_DBG(cache->domain->prov, FI_LOG_MR, "flush %p (len: %" PRIu64 ")\n",
+	FI_DBG(cache->domain->prov, FI_LOG_MR, "flush %p (len: %zu)\n",
 	       entry->info.iov.iov_base, entry->info.iov.iov_len);
 
 	util_mr_uncache_entry_storage(cache, entry);
@@ -155,7 +156,7 @@ bool ofi_mr_cache_flush(struct ofi_mr_cache *cache)
 
 void ofi_mr_cache_delete(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 {
-	FI_DBG(cache->domain->prov, FI_LOG_MR, "delete %p (len: %" PRIu64 ")\n",
+	FI_DBG(cache->domain->prov, FI_LOG_MR, "delete %p (len: %zu)\n",
 	       entry->info.iov.iov_base, entry->info.iov.iov_len);
 
 	pthread_mutex_lock(&cache->monitor->lock);
@@ -179,7 +180,7 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct iovec *iov,
 {
 	int ret;
 
-	FI_DBG(cache->domain->prov, FI_LOG_MR, "create %p (len: %" PRIu64 ")\n",
+	FI_DBG(cache->domain->prov, FI_LOG_MR, "create %p (len: %zu)\n",
 	       iov->iov_base, iov->iov_len);
 
 	*entry = ofi_buf_alloc(cache->entry_pool);
@@ -239,7 +240,7 @@ util_mr_cache_merge(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
 	info.iov = *attr->mr_iov;
 	do {
 		FI_DBG(cache->domain->prov, FI_LOG_MR,
-		       "merging %p (len: %" PRIu64 ") with %p (len: %" PRIu64 ")\n",
+		       "merging %p (len: %zu) with %p (len: %zu)\n",
 		       info.iov.iov_base, info.iov.iov_len,
 		       old_entry->info.iov.iov_base, old_entry->info.iov.iov_len);
 		old_info = &old_entry->info;
@@ -248,7 +249,7 @@ util_mr_cache_merge(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
 			MAX(ofi_iov_end(&info.iov), ofi_iov_end(&old_info->iov))) + 1 -
 			((uintptr_t) MIN(info.iov.iov_base, old_info->iov.iov_base));
 		info.iov.iov_base = MIN(info.iov.iov_base, old_info->iov.iov_base);
-		FI_DBG(cache->domain->prov, FI_LOG_MR, "merged %p (len: %" PRIu64 ")\n",
+		FI_DBG(cache->domain->prov, FI_LOG_MR, "merged %p (len: %zu)\n",
 		       info.iov.iov_base, info.iov.iov_len);
 
 		/* New entry will expand range of subscription */
@@ -268,7 +269,7 @@ int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *att
 	int ret = 0;
 
 	assert(attr->iov_count == 1);
-	FI_DBG(cache->domain->prov, FI_LOG_MR, "search %p (len: %" PRIu64 ")\n",
+	FI_DBG(cache->domain->prov, FI_LOG_MR, "search %p (len: %zu)\n",
 	       attr->mr_iov->iov_base, attr->mr_iov->iov_len);
 
 	pthread_mutex_lock(&cache->monitor->lock);
@@ -312,7 +313,7 @@ struct ofi_mr_entry *ofi_mr_cache_find(struct ofi_mr_cache *cache,
 	struct ofi_mr_entry *entry;
 
 	assert(attr->iov_count == 1);
-	FI_DBG(cache->domain->prov, FI_LOG_MR, "find %p (len: %" PRIu64 ")\n",
+	FI_DBG(cache->domain->prov, FI_LOG_MR, "find %p (len: %zu)\n",
 	       attr->mr_iov->iov_base, attr->mr_iov->iov_len);
 
 	pthread_mutex_lock(&cache->monitor->lock);
@@ -344,7 +345,7 @@ int ofi_mr_cache_reg(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
 	int ret;
 
 	assert(attr->iov_count == 1);
-	FI_DBG(cache->domain->prov, FI_LOG_MR, "reg %p (len: %" PRIu64 ")\n",
+	FI_DBG(cache->domain->prov, FI_LOG_MR, "reg %p (len: %zu)\n",
 	       attr->mr_iov->iov_base, attr->mr_iov->iov_len);
 
 	pthread_mutex_lock(&cache->monitor->lock);

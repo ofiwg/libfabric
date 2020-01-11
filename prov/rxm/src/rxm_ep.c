@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2016 Intel Corporation. All rights reserved.
+ * Copyright (c) 2020 Cisco Systems, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -909,7 +910,7 @@ rxm_ep_msg_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		       struct rxm_pkt *tx_pkt, size_t pkt_size,
 		       ofi_cntr_inc_func cntr_inc_func)
 {
-	FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Posting inject with length: %" PRIu64
+	FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Posting inject with length: %zu"
 	       " tag: 0x%" PRIx64 "\n", pkt_size, tx_pkt->hdr.tag);
 
 	assert((tx_pkt->hdr.flags & FI_REMOTE_CQ_DATA) || !tx_pkt->hdr.flags);
@@ -925,7 +926,7 @@ static inline ssize_t
 rxm_ep_msg_normal_send(struct rxm_conn *rxm_conn, struct rxm_pkt *tx_pkt,
 		       size_t pkt_size, void *desc, void *context)
 {
-	FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Posting send with length: %" PRIu64
+	FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Posting send with length: %zu"
 	       " tag: 0x%" PRIx64 "\n", pkt_size, tx_pkt->hdr.tag);
 
 	assert((tx_pkt->hdr.flags & FI_REMOTE_CQ_DATA) || !tx_pkt->hdr.flags);
