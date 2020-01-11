@@ -446,7 +446,7 @@ int rxr_msg_handle_unexp_match(struct rxr_ep *ep,
 	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
 	data_len = (base_hdr->type == RXR_RTS_PKT) ?
 			rxr_get_rts_hdr(pkt_entry->pkt)->data_len :
-			rxr_pkt_req_total_len(pkt_entry);
+			rxr_pkt_rtm_total_len(pkt_entry);
 
 	rx_entry->cq_entry.op_context = context;
 	/*
@@ -897,7 +897,7 @@ ssize_t rxr_msg_peek_trecv(struct fid_ep *ep_fid,
 
 	} else {
 		assert(base_hdr->type == RXR_EAGER_TAGRTM_PKT);
-		data_len = rxr_pkt_req_total_len(pkt_entry);
+		data_len = rxr_pkt_rtm_total_len(pkt_entry);
 		tag = rxr_pkt_rtm_tag(pkt_entry);
 	}
 
