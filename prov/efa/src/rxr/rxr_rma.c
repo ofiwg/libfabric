@@ -58,8 +58,8 @@ int rxr_rma_verified_copy_iov(struct rxr_ep *ep, struct fi_rma_iov *rma,
 				    flags);
 		if (ret) {
 			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
-				"MR verification failed (%s)\n",
-				fi_strerror(-ret));
+				"MR verification failed (%s), addr: %lx key: %ld\n",
+				fi_strerror(-ret), rma[i].addr, rma[i].key);
 			return -FI_EACCES;
 		}
 
@@ -411,14 +411,18 @@ ssize_t rxr_rma_writemsg(struct fid_ep *ep,
 		err = rxr_rma_post_shm_write(rxr_ep, tx_entry);
 		if (OFI_UNLIKELY(err))
 			rxr_release_tx_entry(rxr_ep, tx_entry);
-	}  else {
+	}  else if (tx_entry->total_len < rxr_pkt_req_max_data_size(rxr_ep, tx_entry->addr, RXR_EAGER_RTW_PKT)) {
+		err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry, RXR_EAGER_RTW_PKT, 0);
+		if (OFI_UNLIKELY(err))
+			rxr_release_tx_entry(rxr_ep, tx_entry);
+	} else {
 		err = rxr_ep_set_tx_credit_request(rxr_ep, tx_entry);
 		if (OFI_UNLIKELY(err)) {
 			rxr_release_tx_entry(rxr_ep, tx_entry);
 			goto out;
 		}
 
-		err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry, RXR_RTS_PKT, 0);
+		err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry, RXR_LONG_RTW_PKT, 0);
 		if (OFI_UNLIKELY(err))
 			rxr_release_tx_entry(rxr_ep, tx_entry);
 	}

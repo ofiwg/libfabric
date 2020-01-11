@@ -124,6 +124,12 @@ int rxr_pkt_init_ctrl(struct rxr_ep *rxr_ep, int entry_type, void *x_entry,
 	case RXR_LONG_TAGRTM_PKT:
 		ret = rxr_pkt_init_long_tagrtm(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
 		break;
+	case RXR_EAGER_RTW_PKT:
+		ret = rxr_pkt_init_eager_rtw(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
+		break;
+	case RXR_LONG_RTW_PKT:
+		ret = rxr_pkt_init_long_rtw(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
+		break;
 	default:
 		ret = -FI_EINVAL;
 		assert(0 && "unknown pkt type to init");
@@ -161,6 +167,12 @@ void rxr_pkt_handle_ctrl_sent(struct rxr_ep *rxr_ep, struct rxr_pkt_entry *pkt_e
 	case RXR_LONG_MSGRTM_PKT:
 	case RXR_LONG_TAGRTM_PKT:
 		rxr_pkt_handle_long_rtm_sent(rxr_ep, pkt_entry);
+		break;
+	case RXR_EAGER_RTW_PKT:
+		rxr_pkt_handle_eager_rtw_sent(rxr_ep, pkt_entry);
+		break;
+	case RXR_LONG_RTW_PKT:
+		rxr_pkt_handle_long_rtw_sent(rxr_ep, pkt_entry);
 		break;
 	default:
 		assert(0 && "Unknown packet type to handle sent");
@@ -294,6 +306,12 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct fi_cq_data_entry *
 	case RXR_LONG_TAGRTM_PKT:
 		rxr_pkt_handle_long_rtm_send_completion(ep, pkt_entry);
 		break;
+	case RXR_EAGER_RTW_PKT:
+		rxr_pkt_handle_eager_rtw_send_completion(ep, pkt_entry);
+		break;
+	case RXR_LONG_RTW_PKT:
+		rxr_pkt_handle_long_rtw_send_completion(ep, pkt_entry);
+		break;
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"invalid control pkt type %d\n",
@@ -352,14 +370,8 @@ fi_addr_t rxr_pkt_insert_addr(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 			      rxr_get_ctrl_cq_pkt(rts_hdr)->data
 			      : rxr_get_ctrl_pkt(rts_hdr)->data;
 	} else {
-		char *opt_hdr;
-		struct rxr_req_opt_raw_addr_hdr *raw_addr_hdr;
-
 		assert(base_hdr->type >= RXR_REQ_PKT_BEGIN);
-		assert(base_hdr->flags & RXR_REQ_OPT_RAW_ADDR_HDR);
-		opt_hdr = (char *)pkt_entry->pkt + RXR_REQ_HDR_SIZE_LIST[base_hdr->type];
-		raw_addr_hdr = (struct rxr_req_opt_raw_addr_hdr *)opt_hdr;
-		raw_addr = raw_addr_hdr->raw_addr;
+		raw_addr = pkt_entry->raw_addr;
 	}
 
 	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
@@ -378,11 +390,18 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 				    fi_addr_t src_addr)
 {
 	struct rxr_peer *peer;
+	struct rxr_base_hdr *base_hdr;
 	struct rxr_pkt_entry *pkt_entry;
 
 	pkt_entry = (struct rxr_pkt_entry *)cq_entry->op_context;
 	pkt_entry->pkt_size = cq_entry->len;
 	assert(pkt_entry->pkt_size > 0);
+
+	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
+	if (base_hdr->type >= RXR_REQ_PKT_BEGIN) {
+		rxr_pkt_proc_req_common_hdr(pkt_entry);
+		assert(pkt_entry->hdr_size > 0);
+	}
 
 #if ENABLE_DEBUG
 	dlist_remove(&pkt_entry->dbg_entry);
@@ -406,7 +425,7 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 	else
 		ep->posted_bufs_efa--;
 
-	switch (rxr_get_base_hdr(pkt_entry->pkt)->type) {
+	switch (base_hdr->type) {
 	case RXR_RTS_PKT:
 		rxr_pkt_handle_rts_recv(ep, pkt_entry);
 		return;
@@ -430,6 +449,12 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 	case RXR_LONG_MSGRTM_PKT:
 	case RXR_LONG_TAGRTM_PKT:
 		rxr_pkt_handle_rtm_recv(ep, pkt_entry);
+		return;
+	case RXR_EAGER_RTW_PKT:
+		rxr_pkt_handle_eager_rtw_recv(ep, pkt_entry);
+		return;
+	case RXR_LONG_RTW_PKT:
+		rxr_pkt_handle_long_rtw_recv(ep, pkt_entry);
 		return;
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
