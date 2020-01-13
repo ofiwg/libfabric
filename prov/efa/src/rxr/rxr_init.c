@@ -522,7 +522,8 @@ dgram_info:
 		shm_info = fi_allocinfo();
 		shm_hints = fi_allocinfo();
 		rxr_set_shm_hints(shm_hints);
-		ret = fi_getinfo(FI_VERSION(1, 8), NULL, NULL, 0, shm_hints, &shm_info);
+		ret = fi_getinfo(FI_VERSION(1, 8), NULL, NULL,
+		                 OFI_GETINFO_HIDDEN, shm_hints, &shm_info);
 		fi_freeinfo(shm_hints);
 		if (ret) {
 			FI_WARN(&rxr_prov, FI_LOG_CORE, "Disabling EFA shared memory support; failed to get shm provider's info: %s\n",
