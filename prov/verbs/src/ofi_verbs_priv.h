@@ -45,14 +45,14 @@
 #define IBV_SRQ_INIT_ATTR_CQ 3ull
 
 #define IBV_SRQT_XRC 1ull
-#define FI_IBV_SET_REMOTE_SRQN(var, val) do { } while (0)
+#define VRB_SET_REMOTE_SRQN(var, val) do { } while (0)
 #define FI_VERBS_XRC_ONLY __attribute__((unused))
 
 #define ibv_get_srq_num(srq, srqn) do { } while (0)
 #define ibv_create_srq_ex(context, attr) (NULL)
 #else /* !VERBS_HAVE_XRC */
 
-#define FI_IBV_SET_REMOTE_SRQN(var, val) \
+#define VRB_SET_REMOTE_SRQN(var, val) \
 	do { \
 		(var).qp_type.xrc.remote_srqn = (val); \
 	} while (0)

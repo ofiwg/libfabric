@@ -32,7 +32,7 @@
 
 #include "fi_verbs.h"
 
-static inline int fi_ibv_dgram_av_is_addr_valid(struct fi_ibv_dgram_av *av,
+static inline int vrb_dgram_av_is_addr_valid(struct vrb_dgram_av *av,
 						const void *addr)
 {
 	const struct ofi_ib_ud_ep_name *check_name = addr;
@@ -40,7 +40,7 @@ static inline int fi_ibv_dgram_av_is_addr_valid(struct fi_ibv_dgram_av *av,
 }
 
 static inline int
-fi_ibv_dgram_verify_av_flags(struct util_av *av, uint64_t flags)
+vrb_dgram_verify_av_flags(struct util_av *av, uint64_t flags)
 {
 	if ((av->flags & FI_EVENT) && !av->eq) {
 		VERBS_WARN(FI_LOG_AV, "No EQ bound to AV\n");
@@ -56,13 +56,13 @@ fi_ibv_dgram_verify_av_flags(struct util_av *av, uint64_t flags)
 }
 
 static int
-fi_ibv_dgram_av_insert_addr(struct fi_ibv_dgram_av *av, const void *addr,
+vrb_dgram_av_insert_addr(struct vrb_dgram_av *av, const void *addr,
 			    fi_addr_t *fi_addr, void *context)
 {
 	int ret;
-	struct fi_ibv_dgram_av_entry *av_entry;
-	struct fi_ibv_domain *domain =
-		container_of(av->util_av.domain, struct fi_ibv_domain, util_domain);
+	struct vrb_dgram_av_entry *av_entry;
+	struct vrb_domain *domain =
+		container_of(av->util_av.domain, struct vrb_domain, util_domain);
 
 	struct ibv_ah_attr ah_attr = {
 		.is_global = 0,
@@ -76,8 +76,8 @@ fi_ibv_dgram_av_insert_addr(struct fi_ibv_dgram_av *av, const void *addr,
 		ah_attr.is_global = 1;
 		ah_attr.grh.hop_limit = 64;
 		ah_attr.grh.dgid = ((struct ofi_ib_ud_ep_name *)addr)->gid;
-		ah_attr.grh.sgid_index = fi_ibv_gl_data.gid_idx;
-	} else if (OFI_UNLIKELY(!fi_ibv_dgram_av_is_addr_valid(av, addr))) {
+		ah_attr.grh.sgid_index = vrb_gl_data.gid_idx;
+	} else if (OFI_UNLIKELY(!vrb_dgram_av_is_addr_valid(av, addr))) {
 		ret = -FI_EADDRNOTAVAIL;
 		VERBS_WARN(FI_LOG_AV, "Invalid address\n");
 		goto fn1;
@@ -111,22 +111,22 @@ fn1:
 	return ret;
 }
 
-static int fi_ibv_dgram_av_insert(struct fid_av *av_fid, const void *addr,
+static int vrb_dgram_av_insert(struct fid_av *av_fid, const void *addr,
 				  size_t count, fi_addr_t *fi_addr,
 				  uint64_t flags, void *context)
 {
 	int ret, success_cnt = 0;
 	size_t i;
-	struct fi_ibv_dgram_av *av =
-		 container_of(av_fid, struct fi_ibv_dgram_av, util_av.av_fid);
+	struct vrb_dgram_av *av =
+		 container_of(av_fid, struct vrb_dgram_av, util_av.av_fid);
 
-	ret = fi_ibv_dgram_verify_av_flags(&av->util_av, flags);
+	ret = vrb_dgram_verify_av_flags(&av->util_av, flags);
 	if (ret)
 		return ret;
 
 	VERBS_DBG(FI_LOG_AV, "Inserting %"PRIu64" addresses\n", count);
 	for (i = 0; i < count; i++) {
-		ret = fi_ibv_dgram_av_insert_addr(
+		ret = vrb_dgram_av_insert_addr(
 				av, (struct ofi_ib_ud_ep_name *)addr + i,
 				fi_addr ? &fi_addr[i] : NULL, context);
 		if (!ret)
@@ -139,7 +139,7 @@ static int fi_ibv_dgram_av_insert(struct fid_av *av_fid, const void *addr,
 }
 
 static inline void
-fi_ibv_dgram_av_remove_addr(struct fi_ibv_dgram_av_entry *av_entry)
+vrb_dgram_av_remove_addr(struct vrb_dgram_av_entry *av_entry)
 {
 	int ret = ibv_destroy_ah(av_entry->ah);
 	if (ret)
@@ -150,32 +150,32 @@ fi_ibv_dgram_av_remove_addr(struct fi_ibv_dgram_av_entry *av_entry)
 	free(av_entry);
 }
 
-static int fi_ibv_dgram_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
+static int vrb_dgram_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 				  size_t count, uint64_t flags)
 {
 	int i, ret;
-	struct fi_ibv_dgram_av *av =
-		container_of(av_fid, struct fi_ibv_dgram_av, util_av.av_fid);
+	struct vrb_dgram_av *av =
+		container_of(av_fid, struct vrb_dgram_av, util_av.av_fid);
 
-	ret = fi_ibv_dgram_verify_av_flags(&av->util_av, flags);
+	ret = vrb_dgram_verify_av_flags(&av->util_av, flags);
 	if (ret)
 		return ret;
 
 	for (i = count - 1; i >= 0; i--) {
-		struct fi_ibv_dgram_av_entry *av_entry =
-			(struct fi_ibv_dgram_av_entry *) (uintptr_t) fi_addr[i];
-		fi_ibv_dgram_av_remove_addr(av_entry);
+		struct vrb_dgram_av_entry *av_entry =
+			(struct vrb_dgram_av_entry *) (uintptr_t) fi_addr[i];
+		vrb_dgram_av_remove_addr(av_entry);
 	}
 	return FI_SUCCESS;
 }
 
 static inline
-int fi_ibv_dgram_av_lookup(struct fid_av *av_fid, fi_addr_t fi_addr,
+int vrb_dgram_av_lookup(struct fid_av *av_fid, fi_addr_t fi_addr,
 			   void *addr, size_t *addrlen)
 {
-	struct fi_ibv_dgram_av_entry *av_entry;
+	struct vrb_dgram_av_entry *av_entry;
 
-	av_entry = fi_ibv_dgram_av_lookup_av_entry(fi_addr);
+	av_entry = vrb_dgram_av_lookup_av_entry(fi_addr);
 	if (!av_entry)
 		return -FI_ENOENT;
 
@@ -185,56 +185,56 @@ int fi_ibv_dgram_av_lookup(struct fid_av *av_fid, fi_addr_t fi_addr,
 }
 
 static inline const char *
-fi_ibv_dgram_av_straddr(struct fid_av *av, const void *addr, char *buf, size_t *len)
+vrb_dgram_av_straddr(struct fid_av *av, const void *addr, char *buf, size_t *len)
 {
 	return ofi_straddr(buf, len, FI_ADDR_IB_UD, addr);
 }
 
-static int fi_ibv_dgram_av_close(struct fid *av_fid)
+static int vrb_dgram_av_close(struct fid *av_fid)
 {
-	struct fi_ibv_dgram_av_entry *av_entry;
-	struct fi_ibv_dgram_av *av =
-		container_of(av_fid, struct fi_ibv_dgram_av, util_av.av_fid.fid);
+	struct vrb_dgram_av_entry *av_entry;
+	struct vrb_dgram_av *av =
+		container_of(av_fid, struct vrb_dgram_av, util_av.av_fid.fid);
 	int ret = ofi_av_close_lightweight(&av->util_av);
 	if (ret)
 		return ret;
 
 	while (!dlist_empty(&av->av_entry_list)) {
 		av_entry = container_of(av->av_entry_list.next,
-					struct fi_ibv_dgram_av_entry,
+					struct vrb_dgram_av_entry,
 					list_entry);
-		fi_ibv_dgram_av_remove_addr(av_entry);
+		vrb_dgram_av_remove_addr(av_entry);
 	}
 
 	free(av);
 	return FI_SUCCESS;
 }
 
-static struct fi_ops fi_ibv_dgram_fi_ops = {
-	.size		= sizeof(fi_ibv_dgram_fi_ops),
-	.close		= fi_ibv_dgram_av_close,
+static struct fi_ops vrb_dgram_fi_ops = {
+	.size		= sizeof(vrb_dgram_fi_ops),
+	.close		= vrb_dgram_av_close,
 	.bind		= ofi_av_bind,
 	.control	= fi_no_control,
 	.ops_open	= fi_no_ops_open,
 };
 
-static struct fi_ops_av fi_ibv_dgram_av_ops = {
-	.size		= sizeof(fi_ibv_dgram_av_ops),
-	.insert		= fi_ibv_dgram_av_insert,
+static struct fi_ops_av vrb_dgram_av_ops = {
+	.size		= sizeof(vrb_dgram_av_ops),
+	.insert		= vrb_dgram_av_insert,
 	.insertsvc	= fi_no_av_insertsvc,
 	.insertsym	= fi_no_av_insertsym,
-	.remove		= fi_ibv_dgram_av_remove,
-	.lookup		= fi_ibv_dgram_av_lookup,
-	.straddr	= fi_ibv_dgram_av_straddr,
+	.remove		= vrb_dgram_av_remove,
+	.lookup		= vrb_dgram_av_lookup,
+	.straddr	= vrb_dgram_av_straddr,
 };
 
-int fi_ibv_dgram_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
+int vrb_dgram_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 			 struct fid_av **av_fid, void *context)
 {
-	struct fi_ibv_domain *domain =
-		container_of(domain_fid, struct fi_ibv_domain,
+	struct vrb_domain *domain =
+		container_of(domain_fid, struct vrb_domain,
 			     util_domain.domain_fid);
-	struct fi_ibv_dgram_av *av;
+	struct vrb_dgram_av *av;
 	int ret;
 
 	av = calloc(1, sizeof(*av));
@@ -250,8 +250,8 @@ int fi_ibv_dgram_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		goto err_av_init;
 	dlist_init(&av->av_entry_list);
 
-	av->util_av.av_fid.fid.ops = &fi_ibv_dgram_fi_ops;
-	av->util_av.av_fid.ops = &fi_ibv_dgram_av_ops;
+	av->util_av.av_fid.fid.ops = &vrb_dgram_fi_ops;
+	av->util_av.av_fid.ops = &vrb_dgram_av_ops;
 	*av_fid = &av->util_av.av_fid;
 
 	return FI_SUCCESS;
