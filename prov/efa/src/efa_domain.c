@@ -176,11 +176,11 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 
 	if (efa_mr_cache_enable) {
 		if (!efa_mr_max_cached_count)
-			efa_mr_max_cached_count = info->domain_attr->mr_cnt /
-						  EFA_DEF_NUM_MR_CACHE;
+			efa_mr_max_cached_count = info->domain_attr->mr_cnt *
+			                          EFA_MR_CACHE_LIMIT_MULT;
 		if (!efa_mr_max_cached_size)
-			efa_mr_max_cached_size = domain->ctx->max_mr_size /
-						 EFA_DEF_NUM_MR_CACHE;
+			efa_mr_max_cached_size = domain->ctx->max_mr_size *
+			                         EFA_MR_CACHE_LIMIT_MULT;
 		cache_params.max_cnt = efa_mr_max_cached_count;
 		cache_params.max_size = efa_mr_max_cached_size;
 		cache_params.merge_regions = efa_mr_cache_merge_regions;
@@ -191,6 +191,9 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 					&domain->cache);
 		if (!ret) {
 			domain->util_domain.domain_fid.mr = &efa_domain_mr_cache_ops;
+			EFA_INFO(FI_LOG_DOMAIN, "EFA MR cache enabled, max_cnt: %zu max_size: %zu merge_regions: %d\n",
+			         cache_params.max_cnt, cache_params.max_size,
+			         cache_params.merge_regions);
 			return 0;
 		}
 	}
