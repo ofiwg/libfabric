@@ -93,6 +93,9 @@ AC_ARG_ENABLE([atomics],
 
 dnl Checks for programs
 AC_PROG_CC_C99
+AS_IF([test "$ac_cv_prog_cc_c99" = "no"],
+      [AC_MSG_WARN([Libfabric requires a C99-compliant compiler])
+       AC_MSG_ERROR([Cannot continue])])
 AM_PROG_CC_C_O
 AC_PROG_CPP
 
