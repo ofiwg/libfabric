@@ -80,6 +80,12 @@ static int txc_msg_init(struct cxip_txc *txc)
 		cxip_cq_progress(txc->send_cq);
 	} while (txc->rdzv_pte->state != C_PTLTE_ENABLED);
 
+	ret = cxip_msg_zbp_init(txc);
+	if (ret) {
+		CXIP_LOG_ERROR("Failed to initialize ZBP: %d\n", ret);
+		goto free_rdzv_pte;
+	}
+
 	CXIP_LOG_DBG("TXC RDZV PtlTE enabled: %p\n", txc);
 
 	return FI_SUCCESS;
@@ -102,6 +108,7 @@ free_rx_cmdq:
  */
 static int txc_msg_fini(struct cxip_txc *txc)
 {
+	cxip_msg_zbp_fini(txc);
 	cxip_pte_free(txc->rdzv_pte);
 	cxip_cmdq_free(txc->rx_cmdq);
 
@@ -274,6 +281,7 @@ static struct cxip_txc *txc_alloc(const struct fi_tx_attr *attr, void *context,
 	dlist_init(&txc->ep_list);
 	fastlock_init(&txc->lock);
 	ofi_atomic_initialize32(&txc->otx_reqs, 0);
+	ofi_atomic_initialize32(&txc->zbp_le_linked, 0);
 
 	switch (fclass) {
 	case FI_CLASS_TX_CTX:

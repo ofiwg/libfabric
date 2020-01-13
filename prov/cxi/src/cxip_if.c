@@ -391,32 +391,38 @@ int cxip_pte_append(struct cxil_pte *pte, uint64_t iova, size_t len,
 		    uint32_t buffer_id, uint64_t match_bits,
 		    uint64_t ignore_bits, uint32_t match_id,
 		    uint64_t min_free, bool event_success_disable,
-		    bool event_unlink_disable,
+		    bool event_link_disable, bool event_unlink_disable,
 		    bool use_once, bool manage_local, bool no_truncate,
+		    bool unexpected_hdr_disable,
+		    bool unrestricted_body_ro,
+		    bool unrestricted_end_ro,
 		    bool op_put, bool op_get, struct cxip_cmdq *cmdq)
 {
 	union c_cmdu cmd = {};
 	int rc;
 
-	cmd.command.opcode      = C_CMD_TGT_APPEND;
-	cmd.target.ptl_list     = list;
-	cmd.target.ptlte_index  = pte->ptn;
-	cmd.target.op_put       = op_put ? 1 : 0;
-	cmd.target.op_get       = op_get ? 1 : 0;
-	cmd.target.manage_local = manage_local ? 1 : 0;
-	cmd.target.no_truncate  = no_truncate ? 1 : 0;
-	cmd.target.unexpected_hdr_disable = 0;
-	cmd.target.buffer_id    = buffer_id;
-	cmd.target.lac          = lac;
-	cmd.target.start        = iova;
-	cmd.target.length       = len;
-	cmd.target.event_success_disable = event_success_disable ? 1 : 0;
-	cmd.target.event_unlink_disable = event_unlink_disable ? 1 : 0;
-	cmd.target.use_once     = use_once ? 1 : 0;
-	cmd.target.match_bits   = match_bits;
-	cmd.target.ignore_bits  = ignore_bits;
-	cmd.target.match_id     = match_id;
-	cmd.target.min_free     = min_free;
+	cmd.command.opcode                = C_CMD_TGT_APPEND;
+	cmd.target.ptl_list               = list;
+	cmd.target.ptlte_index            = pte->ptn;
+	cmd.target.op_put                 = op_put;
+	cmd.target.op_get                 = op_get;
+	cmd.target.manage_local           = manage_local;
+	cmd.target.no_truncate            = no_truncate;
+	cmd.target.unexpected_hdr_disable = unexpected_hdr_disable;
+	cmd.target.unrestricted_body_ro   = unrestricted_body_ro;
+	cmd.target.unrestricted_end_ro    = unrestricted_end_ro;
+	cmd.target.buffer_id              = buffer_id;
+	cmd.target.lac                    = lac;
+	cmd.target.start                  = iova;
+	cmd.target.length                 = len;
+	cmd.target.event_success_disable  = event_success_disable;
+	cmd.target.event_link_disable     = event_link_disable;
+	cmd.target.event_unlink_disable   = event_unlink_disable;
+	cmd.target.use_once               = use_once;
+	cmd.target.match_bits             = match_bits;
+	cmd.target.ignore_bits            = ignore_bits;
+	cmd.target.match_id               = match_id;
+	cmd.target.min_free               = min_free;
 
 	fastlock_acquire(&cmdq->lock);
 

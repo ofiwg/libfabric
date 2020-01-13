@@ -195,14 +195,17 @@ static void recv_req_report(struct cxip_req *req)
 			err = FI_ECANCELED;
 			if (req->recv.multi_recv)
 				req->flags |= FI_MULTI_RECV;
+			CXIP_LOG_DBG("Request cancelled: %p (err: %d, %s)\n",
+				     req, err, cxi_rc_to_str(req->recv.rc));
 		} else if (truncated) {
 			err = FI_EMSGSIZE;
+			CXIP_LOG_DBG("Request truncated: %p (err: %d, %s)\n",
+				     req, err, cxi_rc_to_str(req->recv.rc));
 		} else {
 			err = FI_EIO;
+			CXIP_LOG_ERROR("Request error: %p (err: %d, %s)\n",
+				       req, err, cxi_rc_to_str(req->recv.rc));
 		}
-
-		CXIP_LOG_ERROR("Request error: %p (err: %d, %s)\n", req, err,
-			       cxi_rc_to_str(req->recv.rc));
 
 		ret = cxip_cq_req_error(req, truncated, err, req->recv.rc,
 					NULL, 0);
@@ -528,6 +531,114 @@ unlock:
 }
 
 /*
+ * cxip_notify_match_cb() - Callback function for match complete notifiction
+ * Ack events.
+ */
+static int
+cxip_notify_match_cb(struct cxip_req *req, const union c_event *event)
+{
+	CXIP_LOG_DBG("Match complete: %p\n", req);
+
+	recv_req_report(req);
+
+	if (req->recv.multi_recv)
+		cxip_cq_req_free(req);
+	else
+		recv_req_complete(req);
+
+	return FI_SUCCESS;
+}
+
+/*
+ * cxip_notify_match() - Notify the initiator of a Send that the match is
+ * complete at the target.
+ *
+ * A transaction ID corresponding to the matched Send request is sent back to
+ * the initiator in the match_bits field of a zero-byte Put.
+ */
+static int cxip_notify_match(struct cxip_req *req, const union c_event *event)
+{
+	struct cxip_rxc *rxc = req->recv.rxc;
+	uint32_t pid_bits = rxc->domain->dev_if->if_dev->info.pid_bits;
+	uint32_t pid_idx = rxc->domain->dev_if->if_dev->info.rdzv_get_idx;
+	uint32_t init = event->tgt_long.initiator.initiator.process;
+	uint32_t nic = CXI_MATCH_ID_EP(pid_bits, init);
+	uint32_t pid = CXI_MATCH_ID_PID(pid_bits, init);
+	union c_fab_addr dfa;
+	uint8_t idx_ext;
+	union cxip_match_bits mb = {
+		.le_type = CXIP_LE_TYPE_ZBP,
+	};
+	union cxip_match_bits event_mb;
+	union c_cmdu cmd = {};
+	int ret;
+
+	event_mb.raw = event->tgt_long.match_bits;
+	mb.tx_id = event_mb.tx_id;
+
+	cxi_build_dfa(nic, pid, pid_bits, pid_idx, &dfa, &idx_ext);
+
+	cmd.c_state.event_send_disable = 1;
+	cmd.c_state.index_ext = idx_ext;
+	cmd.c_state.eq = rxc->recv_cq->evtq->eqn;
+
+	fastlock_acquire(&rxc->tx_cmdq->lock);
+
+	if (memcmp(&rxc->tx_cmdq->c_state, &cmd.c_state,
+		   sizeof(cmd.c_state))) {
+		/* Update TXQ C_STATE */
+		rxc->tx_cmdq->c_state = cmd.c_state;
+
+		ret = cxi_cq_emit_c_state(rxc->tx_cmdq->dev_cmdq,
+					  &cmd.c_state);
+		if (ret) {
+			CXIP_LOG_DBG("Failed to issue C_STATE command: %d\n",
+				     ret);
+
+			/* Return error according to Domain Resource
+			 * Management
+			 */
+			ret = -FI_EAGAIN;
+			goto err_unlock;
+		}
+
+		CXIP_LOG_DBG("Updated C_STATE: %p\n", req);
+	}
+
+	memset(&cmd.idc_msg, 0, sizeof(cmd.idc_msg));
+	cmd.idc_msg.dfa = dfa;
+	cmd.idc_msg.match_bits = mb.raw;
+
+	cmd.idc_msg.user_ptr = (uint64_t)req;
+
+	ret = cxi_cq_emit_idc_msg(rxc->tx_cmdq->dev_cmdq, &cmd.idc_msg,
+				  NULL, 0);
+	if (ret) {
+		CXIP_LOG_DBG("Failed to write IDC: %d\n", ret);
+
+		/* Return error according to Domain Resource Management
+		 */
+		ret = -FI_EAGAIN;
+		goto err_unlock;
+	}
+
+	cxi_cq_ring(rxc->tx_cmdq->dev_cmdq);
+
+	fastlock_release(&rxc->tx_cmdq->lock);
+
+	req->cb = cxip_notify_match_cb;
+
+	CXIP_LOG_DBG("Queued match completion message: %p\n", req);
+
+	return FI_SUCCESS;
+
+err_unlock:
+	fastlock_release(&rxc->tx_cmdq->lock);
+
+	return ret;
+}
+
+/*
  * cxip_oflow_sink_cb() - Process an Overflow buffer event the sink buffer.
  *
  * The sink buffer matches all unexpected long eager sends. The sink buffer
@@ -547,18 +658,16 @@ cxip_oflow_sink_cb(struct cxip_req *req, const union c_event *event)
 		/* TODO Handle append errors. */
 		assert(cxi_event_rc(event) == C_RC_OK);
 
-		ofi_atomic_inc32(&rxc->ux_sink_linked);
+		ofi_atomic_inc32(&rxc->sink_le_linked);
 		return FI_SUCCESS;
 	case C_EVENT_UNLINK:
 		/* TODO Handle append errors. */
 		assert(cxi_event_rc(event) == C_RC_OK);
 
 		/* Long sink buffer was manually unlinked. */
-		ofi_atomic_dec32(&rxc->ux_sink_linked);
+		ofi_atomic_dec32(&rxc->sink_le_linked);
 
 		/* Clean up overflow buffers */
-		cxip_unmap(rxc->ux_sink_buf.md);
-		free(rxc->ux_sink_buf.buf);
 		cxip_cq_req_free(req);
 		return FI_SUCCESS;
 	case C_EVENT_PUT:
@@ -758,6 +867,8 @@ static int cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 	struct cxip_req *ux_recv;
 	struct cxip_ux_send *ux_send;
 	void *oflow_va;
+	union cxip_match_bits mb;
+	int ret;
 
 	if (event->tgt_long.rendezvous)
 		return cxip_oflow_rdzv_cb(req, event);
@@ -856,6 +967,20 @@ static int cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 
 	CXIP_LOG_ERROR("Overflow beat Put event: %p\n", ux_recv);
 
+	/* Check if the initiator requires match completion guarantees.
+	 * If so, notify the initiator that the match is now complete.
+	 * Delay the Receive event until the notification is complete.
+	 * This only applies to unexpected eager messages.
+	 */
+	mb.raw = event->tgt_long.match_bits;
+	if (mb.match_comp) {
+		ret = cxip_notify_match(ux_recv, event);
+		if (ret != FI_SUCCESS)
+			return -FI_EAGAIN;
+
+		return FI_SUCCESS;
+	}
+
 	recv_req_report(ux_recv);
 
 	if (ux_recv->recv.multi_recv)
@@ -886,11 +1011,14 @@ static int eager_buf_add(struct cxip_rxc *rxc)
 	uint64_t min_free;
 
 	/* Match all eager, long sends */
-	union cxip_match_bits mb = { .sink = 0 };
+	union cxip_match_bits mb = {
+		.le_type = CXIP_LE_TYPE_RX
+	};
 	union cxip_match_bits ib = {
+		.tag = ~0,
+		.tx_id = ~0,
 		.tagged = 1,
-		.rdzv_id_hi = ~0,
-		.tag = ~0
+		.match_comp = 1,
 	};
 
 	dom = rxc->domain;
@@ -939,8 +1067,9 @@ static int eager_buf_add(struct cxip_rxc *rxc)
 					     oflow_buf->buf),
 			      rxc->oflow_buf_size, oflow_buf->md->md->lac,
 			      C_PTL_LIST_OVERFLOW, req->req_id, mb.raw, ib.raw,
-			      CXI_MATCH_ID_ANY, min_free, false, false, false,
-			      true, true, true, false, rxc->rx_cmdq);
+			      CXI_MATCH_ID_ANY, min_free, false, false,
+			      false, false, true, true, false, true, true,
+			      true, false, rxc->rx_cmdq);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
 		goto oflow_req_free;
@@ -951,7 +1080,7 @@ static int eager_buf_add(struct cxip_rxc *rxc)
 	oflow_buf->rxc = rxc;
 	oflow_buf->min_bytes = rxc->oflow_buf_size - min_free;
 	oflow_buf->buffer_id = req->req_id;
-	oflow_buf->type = OFLOW_BUF_EAGER;
+	oflow_buf->type = CXIP_LE_TYPE_RX;
 
 	ofi_atomic_inc32(&rxc->oflow_bufs_submitted);
 	ofi_atomic_inc32(&rxc->oflow_bufs_in_use);
@@ -1027,73 +1156,50 @@ static int cxip_rxc_eager_fini(struct cxip_rxc *rxc)
  */
 static int cxip_rxc_sink_init(struct cxip_rxc *rxc)
 {
-	struct cxip_domain *dom;
 	int ret;
 	struct cxip_req *req;
-	void *ux_buf;
-	struct cxip_md *md;
 
 	/* Match all eager, long sends */
-	union cxip_match_bits mb = { .sink = 1 };
-	union cxip_match_bits ib = {
-		.tagged = 1,
-		.rdzv_id_hi = ~0,
-		.tag = ~0
+	union cxip_match_bits mb = {
+		.le_type = CXIP_LE_TYPE_SINK,
 	};
-
-	dom = rxc->domain;
-
-	/* Allocate a small data buffer */
-	ux_buf = calloc(1, 1);
-	if (!ux_buf) {
-		CXIP_LOG_ERROR("Unable to allocate ux buffer\n");
-		return -FI_ENOMEM;
-	}
-
-	/* Map overflow data buffer */
-	ret = cxip_map(dom, ux_buf, 1, &md);
-	if (ret) {
-		CXIP_LOG_DBG("Failed to map ux buffer: %d\n", ret);
-		goto free_ux_buf;
-	}
+	union cxip_match_bits ib = {
+		.tag = ~0,
+		.tx_id = ~0,
+		.tagged = 1,
+		.match_comp = 1,
+	};
 
 	/* Populate request */
 	req = cxip_cq_req_alloc(rxc->recv_cq, 1, NULL);
 	if (!req) {
 		CXIP_LOG_DBG("Failed to allocate ux request\n");
-		ret = -FI_ENOMEM;
-		goto unmap_ux;
+		return -FI_ENOMEM;
 	}
 
-	ret = cxip_pte_append(rxc->rx_pte->pte,
-			      CXI_VA_TO_IOVA(md->md, ux_buf), 0, md->md->lac,
+	ret = cxip_pte_append(rxc->rx_pte->pte, 0, 0, 0,
 			      C_PTL_LIST_OVERFLOW, req->req_id, mb.raw, ib.raw,
-			      CXI_MATCH_ID_ANY, 0, false, false, false, true,
-			      false, true, false, rxc->rx_cmdq);
+			      CXI_MATCH_ID_ANY, 0, false, false, false, false,
+			      true, false, false, true, true,
+			      true, false, rxc->rx_cmdq);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to write UX Append command: %d\n", ret);
 		goto req_free;
 	}
 
 	/* Initialize oflow_buf structure */
-	rxc->ux_sink_buf.type = OFLOW_BUF_SINK;
-	rxc->ux_sink_buf.buf = ux_buf;
-	rxc->ux_sink_buf.md = md;
-	rxc->ux_sink_buf.rxc = rxc;
-	rxc->ux_sink_buf.buffer_id = req->req_id;
+	rxc->sink_le.type = CXIP_LE_TYPE_SINK;
+	rxc->sink_le.rxc = rxc;
+	rxc->sink_le.buffer_id = req->req_id;
 
 	req->oflow.rxc = rxc;
-	req->oflow.oflow_buf = &rxc->ux_sink_buf;
+	req->oflow.oflow_buf = &rxc->sink_le;
 	req->cb = cxip_oflow_sink_cb;
 
 	return FI_SUCCESS;
 
 req_free:
 	cxip_cq_req_free(req);
-unmap_ux:
-	cxip_unmap(md);
-free_ux_buf:
-	free(ux_buf);
 
 	return ret;
 }
@@ -1106,11 +1212,168 @@ static int cxip_rxc_sink_fini(struct cxip_rxc *rxc)
 	int ret;
 
 	ret = cxip_pte_unlink(rxc->rx_pte->pte, C_PTL_LIST_OVERFLOW,
-			      rxc->ux_sink_buf.buffer_id, rxc->rx_cmdq);
+			      rxc->sink_le.buffer_id, rxc->rx_cmdq);
 	if (ret) {
 		/* TODO handle error */
 		CXIP_LOG_ERROR("Failed to enqueue Unlink: %d\n", ret);
 	}
+
+	return ret;
+}
+
+static void report_send_completion(struct cxip_req *req, bool sw_cntr);
+
+/*
+ * cxip_zbp_cb() - Process zero-byte Put events.
+ *
+ * Zero-byte Puts (ZBP) are used to transfer small messages without consuming
+ * buffers outside of the EQ. ZBPs are currently only used for match complete
+ * messages.
+ */
+static int
+cxip_zbp_cb(struct cxip_req *req, const union c_event *event)
+{
+	struct cxip_txc *txc = req->oflow.txc;
+	struct cxip_req *put_req;
+	union cxip_match_bits mb;
+	int event_rc;
+
+	switch (event->hdr.event_type) {
+	case C_EVENT_LINK:
+		/* TODO Handle append errors. */
+		assert(cxi_event_rc(event) == C_RC_OK);
+
+		ofi_atomic_inc32(&txc->zbp_le_linked);
+		return FI_SUCCESS;
+	case C_EVENT_UNLINK:
+		/* TODO Handle append errors. */
+		assert(cxi_event_rc(event) == C_RC_OK);
+
+		/* Zero-byte Put LE was manually unlinked. */
+		ofi_atomic_dec32(&txc->zbp_le_linked);
+
+		/* Clean up overflow buffers */
+		cxip_cq_req_free(req);
+		return FI_SUCCESS;
+	case C_EVENT_PUT:
+		mb.raw = event->tgt_long.match_bits;
+		put_req = cxip_tx_id_lookup(txc->ep_obj, mb.tx_id);
+		if (!put_req) {
+			CXIP_LOG_ERROR("Failed to find TX ID: %d\n",
+					mb.tx_id);
+			return FI_SUCCESS;
+		}
+
+		event_rc = cxi_tgt_event_rc(event);
+		if (event_rc != C_RC_OK)
+			CXIP_LOG_ERROR("ZBP error: %p rc: %s\n",
+				       put_req, cxi_rc_to_str(event_rc));
+		else
+			CXIP_LOG_DBG("ZBP received: %p rc: %s\n",
+				     put_req, cxi_rc_to_str(event_rc));
+
+		cxip_tx_id_free(txc->ep_obj, mb.tx_id);
+
+		/* The unexpected message has been matched. Generate a
+		 * completion event. The ZBP event is guaranteed to arrive
+		 * after the eager Send Ack, so the transfer is always done at
+		 * this point.
+		 *
+		 * If MATCH_COMPLETE was requested, software must manage
+		 * counters.
+		 */
+		report_send_completion(put_req, true);
+		ofi_atomic_dec32(&put_req->send.txc->otx_reqs);
+		cxip_cq_req_free(put_req);
+
+		return FI_SUCCESS;
+	default:
+		CXIP_LOG_ERROR("Unexpected event type: %d\n",
+			       event->hdr.event_type);
+		return FI_SUCCESS;
+	}
+}
+
+/*
+ * cxip_msg_zbp_init() - Initialize zero-byte Put LE.
+ */
+int cxip_msg_zbp_init(struct cxip_txc *txc)
+{
+	int ret;
+	struct cxip_req *req;
+	union cxip_match_bits mb = {
+		.le_type = CXIP_LE_TYPE_ZBP,
+	};
+	union cxip_match_bits ib = {
+		.tag = ~0,
+		.tx_id = ~0,
+		.tagged = 1,
+		.match_comp = 1,
+	};
+
+	/* Populate request */
+	req = cxip_cq_req_alloc(txc->send_cq, 1, NULL);
+	if (!req) {
+		CXIP_LOG_DBG("Failed to allocate request\n");
+		return -FI_ENOMEM;
+	}
+
+	ret = cxip_pte_append(txc->rdzv_pte->pte, 0, 0, 0,
+			      C_PTL_LIST_PRIORITY, req->req_id, mb.raw, ib.raw,
+			      CXI_MATCH_ID_ANY, 0, false, false, false, false,
+			      false, false, false, true, true,
+			      true, false, txc->rx_cmdq);
+	if (ret) {
+		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
+		goto req_free;
+	}
+
+	/* Initialize oflow_buf structure */
+	txc->zbp_le.type = CXIP_LE_TYPE_ZBP;
+	txc->zbp_le.txc = txc;
+	txc->zbp_le.buffer_id = req->req_id;
+
+	req->oflow.txc = txc;
+	req->oflow.oflow_buf = &txc->zbp_le;
+	req->cb = cxip_zbp_cb;
+
+	/* Wait for link */
+	do {
+		sched_yield();
+		cxip_cq_progress(txc->send_cq);
+	} while (!ofi_atomic_get32(&txc->zbp_le_linked));
+
+	CXIP_LOG_DBG("ZBP LE linked: %p\n", txc);
+
+	return FI_SUCCESS;
+
+req_free:
+	cxip_cq_req_free(req);
+
+	return ret;
+}
+
+/*
+ * cxip_msg_zbp_fini() - Tear down zero-byte Put LE.
+ */
+int cxip_msg_zbp_fini(struct cxip_txc *txc)
+{
+	int ret;
+
+	ret = cxip_pte_unlink(txc->rdzv_pte->pte, C_PTL_LIST_PRIORITY,
+			      txc->zbp_le.buffer_id, txc->rx_cmdq);
+	if (ret) {
+		/* TODO handle error */
+		CXIP_LOG_ERROR("Failed to enqueue Unlink: %d\n", ret);
+	}
+
+	/* Wait for unlink */
+	do {
+		sched_yield();
+		cxip_cq_progress(txc->send_cq);
+	} while (ofi_atomic_get32(&txc->zbp_le_linked));
+
+	CXIP_LOG_DBG("ZBP LE unlinked: %p\n", txc);
 
 	return ret;
 }
@@ -1143,7 +1406,7 @@ int cxip_msg_oflow_init(struct cxip_rxc *rxc)
 		cxip_cq_progress(rxc->recv_cq);
 	} while (ofi_atomic_get32(&rxc->oflow_bufs_linked) <
 		 rxc->oflow_bufs_max ||
-		 !ofi_atomic_get32(&rxc->ux_sink_linked));
+		 !ofi_atomic_get32(&rxc->sink_le_linked));
 
 	return FI_SUCCESS;
 }
@@ -1168,7 +1431,7 @@ void cxip_msg_oflow_fini(struct cxip_rxc *rxc)
 		/* Dropping the last reference will cause the oflow_buf to be
 		 * removed from the RXC list and freed.
 		 */
-		if (ux_send->req->oflow.oflow_buf->type == OFLOW_BUF_EAGER)
+		if (ux_send->req->oflow.oflow_buf->type == CXIP_LE_TYPE_RX)
 			oflow_req_put_bytes(ux_send->req,
 					    ux_send->eager_bytes);
 
@@ -1197,7 +1460,7 @@ void cxip_msg_oflow_fini(struct cxip_rxc *rxc)
 		sched_yield();
 		cxip_cq_progress(rxc->recv_cq);
 	} while (ofi_atomic_get32(&rxc->oflow_bufs_linked) ||
-		 ofi_atomic_get32(&rxc->ux_sink_linked));
+		 ofi_atomic_get32(&rxc->sink_le_linked));
 
 	if (ofi_atomic_get32(&rxc->oflow_bufs_in_use))
 		CXIP_LOG_ERROR("Leaked %d overflow buffers\n",
@@ -1504,6 +1767,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 	struct cxip_oflow_buf *oflow_buf;
 	void *oflow_va;
 	bool rdzv = false;
+	union cxip_match_bits mb;
 
 	/* All events related to an offloaded rendezvous receive will be
 	 * handled by cxip_recv_rdzv_cb(). Those events are identified by the
@@ -1590,7 +1854,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 
 		oflow_buf = ux_send->req->oflow.oflow_buf;
 
-		if (oflow_buf->type == OFLOW_BUF_SINK) {
+		if (oflow_buf->type == CXIP_LE_TYPE_SINK) {
 			if (req->recv.multi_recv) {
 				req = mrecv_req_dup(req, event);
 				if (!req) {
@@ -1641,6 +1905,8 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 			 */
 			mrecv_req_oflow_event(req, event);
 		} else {
+			recv_req_put_event(req, event);
+
 			if (event->tgt_long.mlength > req->recv.ulen)
 				req->data_len = req->recv.ulen;
 			else
@@ -1658,14 +1924,30 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 
 		fastlock_release(&rxc->rx_lock);
 
-		if (req->recv.multi_recv) {
-			recv_req_report(req);
-			cxip_cq_req_free(req);
-		} else {
-			recv_req_put_event(req, event);
-			recv_req_report(req);
-			recv_req_complete(req);
+		/* Check if the initiator requires match completion guarantees.
+		 * If so, notify the initiator that the match is now complete.
+		 * Delay the Receive event until the notification is complete.
+		 */
+		mb.raw = event->tgt_long.match_bits;
+		if (mb.match_comp) {
+			ret = cxip_notify_match(req, event);
+			if (ret != FI_SUCCESS) {
+				if (req->recv.multi_recv)
+					cxip_cq_req_free(req);
+
+				return -FI_EAGAIN;
+			}
+
+			return FI_SUCCESS;
 		}
+
+		recv_req_report(req);
+
+		if (req->recv.multi_recv)
+			cxip_cq_req_free(req);
+		else
+			recv_req_complete(req);
+
 		return FI_SUCCESS;
 	case C_EVENT_PUT:
 		/* Data was delivered directly to the user buffer. Complete the
@@ -1743,9 +2025,9 @@ static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	uint32_t pid_bits;
 	union cxip_match_bits mb = {};
 	union cxip_match_bits ib = {
-		.sink = ~0,
-		.rdzv_id_hi = ~0,
-		.rdzv_lac = ~0
+		.tx_id = ~0,
+		.match_comp = 1,
+		.le_type = ~0,
 	};
 
 	if (!ep || (len && !buf))
@@ -1858,10 +2140,10 @@ static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 			      recv_md ? recv_md->md->lac : 0,
 			      C_PTL_LIST_PRIORITY, req->req_id,
 			      mb.raw, ib.raw, match_id,
-			      rxc->min_multi_recv, false, true,
+			      rxc->min_multi_recv, false, true, true,
 			      !req->recv.multi_recv,
 			      req->recv.multi_recv,
-			      false, true, false,
+			      false, false, true, true, true, false,
 			      rxc->rx_cmdq);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
@@ -2298,7 +2580,8 @@ int cxip_txc_prep_rdzv_src(struct cxip_txc *txc, unsigned int lac)
 	ret = cxip_pte_append(txc->rdzv_pte->pte, 0, -1ULL, lac,
 			      C_PTL_LIST_PRIORITY, req->req_id,
 			      mb.raw, ib.raw, CXI_MATCH_ID_ANY, 0,
-			      false, false, false, false, false, false, true,
+			      false, false, false, false, false, false,
+			      false, true, true, false, true,
 			      txc->rx_cmdq);
 	if (ret != FI_SUCCESS)
 		return -FI_EAGAIN;
@@ -2464,6 +2747,7 @@ static ssize_t _cxip_send_long(struct cxip_txc *txc, const void *buf,
 		cmd.use_offset_for_get = 1;
 
 		put_mb.rdzv_lac = send_md->md->lac;
+		put_mb.le_type = CXIP_LE_TYPE_RX;
 		cmd.match_bits = put_mb.raw;
 
 		/* RPut rdzv ID goes in command */
@@ -2484,7 +2768,7 @@ static ssize_t _cxip_send_long(struct cxip_txc *txc, const void *buf,
 		cmd.command.opcode = C_CMD_PUT;
 
 		/* Match sink buffer */
-		put_mb.sink = 1;
+		put_mb.le_type = CXIP_LE_TYPE_SINK;
 
 		/* Use match bits for rdzv_id */
 		put_mb.rdzv_id_hi = rdzv_id;
@@ -2504,8 +2788,9 @@ static ssize_t _cxip_send_long(struct cxip_txc *txc, const void *buf,
 				      req->send.send_md->md->lac,
 				      C_PTL_LIST_PRIORITY, req->req_id,
 				      le_mb.raw, ~le_ib.raw, CXI_MATCH_ID_ANY,
-				      0, false, false, true, false, true,
-				      false, true, txc->rx_cmdq);
+				      0, false, false, false, true, false,
+				      true, false, true, true, false, true,
+				      txc->rx_cmdq);
 		if (ret) {
 			CXIP_LOG_DBG("Failed append source buffer: %d\n", ret);
 			goto err_id_free;
@@ -2537,12 +2822,31 @@ err_unmap:
 static int cxip_send_eager_cb(struct cxip_req *req,
 			      const union c_event *event)
 {
+	int match_complete = req->flags & FI_MATCH_COMPLETE;
+
 	/* IDCs don't have an MD */
 	if (req->send.send_md)
 		cxip_unmap(req->send.send_md);
 
 	req->send.rc = cxi_init_event_rc(event);
-	report_send_completion(req, false);
+
+	/* If MATCH_COMPLETE was requested and the the Put did not match a user
+	 * buffer, do not generate a completion event until the target notifies
+	 * the initiator that the match is complete.
+	 */
+	if (match_complete) {
+		if (req->send.rc == C_RC_OK &&
+		    event->init_short.ptl_list != C_PTL_LIST_PRIORITY) {
+			CXIP_LOG_DBG("Waiting for match complete: %p\n", req);
+			return FI_SUCCESS;
+		}
+
+		CXIP_LOG_DBG("Match complete with Ack: %p\n", req);
+		cxip_tx_id_free(req->send.txc->ep_obj, req->send.tx_id);
+	}
+
+	/* If MATCH_COMPLETE was requested, software must manage counters. */
+	report_send_completion(req, match_complete);
 	ofi_atomic_dec32(&req->send.txc->otx_reqs);
 	cxip_cq_req_free(req);
 
@@ -2566,9 +2870,13 @@ static ssize_t _cxip_send_eager(struct cxip_txc *txc, const void *buf,
 	uint32_t pid_bits;
 	uint32_t pid_idx;
 	uint64_t rx_id;
-	union cxip_match_bits mb = {};
+	union cxip_match_bits mb = {
+		.le_type = CXIP_LE_TYPE_RX
+	};
 	int idc;
 	int ret;
+	int match_complete = flags & FI_MATCH_COMPLETE;
+	int tx_id;
 
 	/* Always use IDCs when the payload fits */
 	idc = (len <= C_MAX_IDC_PAYLOAD_UNR);
@@ -2610,7 +2918,8 @@ static ssize_t _cxip_send_eager(struct cxip_txc *txc, const void *buf,
 		else
 			req->context = (uint64_t)txc->fid.ctx.fid.context;
 
-		req->flags = FI_SEND | (flags & FI_COMPLETION);
+		req->flags = FI_SEND | (flags & (FI_COMPLETION |
+						 FI_MATCH_COMPLETE));
 
 		if (tagged)
 			req->flags |= FI_TAGGED;
@@ -2644,6 +2953,17 @@ static ssize_t _cxip_send_eager(struct cxip_txc *txc, const void *buf,
 		mb.tag = tag;
 	}
 
+	if (req && match_complete) {
+		tx_id = cxip_tx_id_alloc(txc->ep_obj, req);
+		if (tx_id < 0)
+			goto err_req_free;
+
+		req->send.tx_id = tx_id;
+
+		mb.match_comp = 1;
+		mb.tx_id = tx_id;
+	}
+
 	fastlock_acquire(&txc->tx_cmdq->lock);
 
 	if (idc) {
@@ -2657,7 +2977,10 @@ static ssize_t _cxip_send_eager(struct cxip_txc *txc, const void *buf,
 		if (!req)
 			cmd.c_state.event_success_disable = 1;
 
-		if (txc->send_cntr) {
+		/* If MATCH_COMPLETE was requested, software must manage
+		 * counters.
+		 */
+		if (txc->send_cntr && !match_complete) {
 			cmd.c_state.event_ct_ack = 1;
 			cmd.c_state.ct = txc->send_cntr->ct->ctn;
 		}
@@ -2735,7 +3058,10 @@ static ssize_t _cxip_send_eager(struct cxip_txc *txc, const void *buf,
 		cmd.match_bits = mb.raw;
 		cmd.header_data = data;
 
-		if (txc->send_cntr) {
+		/* If MATCH_COMPLETE was requested, software must manage
+		 * counters.
+		 */
+		if (txc->send_cntr && !match_complete) {
 			cmd.event_ct_ack = 1;
 			cmd.ct = txc->send_cntr->ct->ctn;
 		}
@@ -2766,6 +3092,9 @@ static ssize_t _cxip_send_eager(struct cxip_txc *txc, const void *buf,
 
 err_unlock:
 	fastlock_release(&txc->tx_cmdq->lock);
+	if (req && match_complete)
+		cxip_tx_id_free(txc->ep_obj, req->send.tx_id);
+err_req_free:
 	if (req)
 		cxip_cq_req_free(req);
 err_unmap:
@@ -2840,10 +3169,8 @@ static ssize_t cxip_trecvmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 	if (!msg || !msg->msg_iov || msg->iov_count != 1)
 		return -FI_EINVAL;
 
-#ifdef CXIP_STRICT_PARAM_CHECK
 	if (flags & ~CXIP_TRECVMSG_ALLOWED_FLAGS)
 		return -FI_EBADFLAGS;
-#endif
 
 	return _cxip_recv(ep, msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len,
 			  msg->desc ? msg->desc[0] : NULL, msg->addr,
@@ -2855,18 +3182,12 @@ static ssize_t cxip_tsend(struct fid_ep *ep, const void *buf, size_t len,
 			  void *context)
 {
 	struct cxip_txc *txc;
-	uint64_t flags;
 
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	if (txc->selective_completion)
-		flags = txc->attr.op_flags & FI_COMPLETION;
-	else
-		flags = FI_COMPLETION;
-
 	return _cxip_send(txc, buf, len, desc, 0, dest_addr, tag, context,
-			  flags, true);
+			  txc->attr.op_flags, true);
 }
 
 static ssize_t cxip_tsendv(struct fid_ep *ep, const struct iovec *iov,
@@ -2874,7 +3195,6 @@ static ssize_t cxip_tsendv(struct fid_ep *ep, const struct iovec *iov,
 			   uint64_t tag, void *context)
 {
 	struct cxip_txc *txc;
-	uint64_t flags;
 
 	if (!iov || count != 1)
 		return -FI_EINVAL;
@@ -2882,17 +3202,13 @@ static ssize_t cxip_tsendv(struct fid_ep *ep, const struct iovec *iov,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	if (txc->selective_completion)
-		flags = txc->attr.op_flags & FI_COMPLETION;
-	else
-		flags = FI_COMPLETION;
-
 	return _cxip_send(txc, iov[0].iov_base, iov[0].iov_len,
 			  desc ? desc[0] : NULL, 0,
-			  dest_addr, tag, context, flags, true);
+			  dest_addr, tag, context, txc->attr.op_flags, true);
 }
 
-#define CXIP_TSENDMSG_ALLOWED_FLAGS (FI_INJECT | FI_COMPLETION)
+#define CXIP_TSENDMSG_ALLOWED_FLAGS (FI_INJECT | FI_COMPLETION | \
+				     CXIP_TX_COMP_MODES | FI_REMOTE_CQ_DATA)
 
 static ssize_t cxip_tsendmsg(struct fid_ep *ep,
 			     const struct fi_msg_tagged *msg, uint64_t flags)
@@ -2902,14 +3218,15 @@ static ssize_t cxip_tsendmsg(struct fid_ep *ep,
 	if (!msg || !msg->msg_iov || msg->iov_count != 1)
 		return -FI_EINVAL;
 
-#ifdef CXIP_STRICT_PARAM_CHECK
 	if (flags & ~CXIP_TSENDMSG_ALLOWED_FLAGS)
 		return -FI_EBADFLAGS;
-#endif
 
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
+	/* If selective completion is not requested, always generate
+	 * completions.
+	 */
 	if (!txc->selective_completion)
 		flags |= FI_COMPLETION;
 
@@ -2936,18 +3253,12 @@ static ssize_t cxip_tsenddata(struct fid_ep *ep, const void *buf, size_t len,
 			      uint64_t tag, void *context)
 {
 	struct cxip_txc *txc;
-	uint64_t flags;
 
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	if (txc->selective_completion)
-		flags = txc->attr.op_flags & FI_COMPLETION;
-	else
-		flags = FI_COMPLETION;
-
 	return _cxip_send(txc, buf, len, desc, data, dest_addr, tag, context,
-			  flags, true);
+			  txc->attr.op_flags, true);
 }
 
 static ssize_t cxip_tinjectdata(struct fid_ep *ep, const void *buf, size_t len,
@@ -3003,10 +3314,8 @@ static ssize_t cxip_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	if (!msg || !msg->msg_iov || msg->iov_count != 1)
 		return -FI_EINVAL;
 
-#ifdef CXIP_STRICT_PARAM_CHECK
 	if (flags & ~CXIP_RECVMSG_ALLOWED_FLAGS)
 		return -FI_EBADFLAGS;
-#endif
 
 	return _cxip_recv(ep, msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len,
 			  msg->desc ? msg->desc[0] : NULL, msg->addr, 0, 0,
@@ -3017,18 +3326,12 @@ static ssize_t cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 			 void *desc, fi_addr_t dest_addr, void *context)
 {
 	struct cxip_txc *txc;
-	uint64_t flags;
 
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	if (txc->selective_completion)
-		flags = txc->attr.op_flags & FI_COMPLETION;
-	else
-		flags = FI_COMPLETION;
-
-	return _cxip_send(txc, buf, len, desc, 0, dest_addr, 0, context, flags,
-			  false);
+	return _cxip_send(txc, buf, len, desc, 0, dest_addr, 0, context,
+			  txc->attr.op_flags, false);
 }
 
 static ssize_t cxip_sendv(struct fid_ep *ep, const struct iovec *iov,
@@ -3036,7 +3339,6 @@ static ssize_t cxip_sendv(struct fid_ep *ep, const struct iovec *iov,
 			  void *context)
 {
 	struct cxip_txc *txc;
-	uint64_t flags;
 
 	if (!iov || count != 1)
 		return -FI_EINVAL;
@@ -3044,17 +3346,13 @@ static ssize_t cxip_sendv(struct fid_ep *ep, const struct iovec *iov,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	if (txc->selective_completion)
-		flags = txc->attr.op_flags & FI_COMPLETION;
-	else
-		flags = FI_COMPLETION;
-
 	return _cxip_send(txc, iov[0].iov_base, iov[0].iov_len,
 			  desc ? desc[0] : NULL, 0, dest_addr, 0, context,
-			  flags, false);
+			  txc->attr.op_flags, false);
 }
 
-#define CXIP_SENDMSG_ALLOWED_FLAGS (FI_INJECT | FI_COMPLETION)
+#define CXIP_SENDMSG_ALLOWED_FLAGS (FI_INJECT | FI_COMPLETION | \
+				    CXIP_TX_COMP_MODES | FI_REMOTE_CQ_DATA)
 
 static ssize_t cxip_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 			    uint64_t flags)
@@ -3064,14 +3362,15 @@ static ssize_t cxip_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	if (!msg || !msg->msg_iov || msg->iov_count != 1)
 		return -FI_EINVAL;
 
-#ifdef CXIP_STRICT_PARAM_CHECK
 	if (flags & ~CXIP_SENDMSG_ALLOWED_FLAGS)
 		return -FI_EBADFLAGS;
-#endif
 
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
+	/* If selective completion is not requested, always generate
+	 * completions.
+	 */
 	if (!txc->selective_completion)
 		flags |= FI_COMPLETION;
 
@@ -3098,18 +3397,12 @@ static ssize_t cxip_senddata(struct fid_ep *ep, const void *buf, size_t len,
 			     void *context)
 {
 	struct cxip_txc *txc;
-	uint64_t flags;
 
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	if (txc->selective_completion)
-		flags = txc->attr.op_flags & FI_COMPLETION;
-	else
-		flags = FI_COMPLETION;
-
 	return _cxip_send(txc, buf, len, desc, data, dest_addr, 0, context,
-			  flags, false);
+			  txc->attr.op_flags, false);
 }
 
 static ssize_t cxip_injectdata(struct fid_ep *ep, const void *buf, size_t len,

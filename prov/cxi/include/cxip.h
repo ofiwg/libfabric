@@ -171,19 +171,37 @@ struct cxip_addr {
 	(av->rxc_bits ? ((uint64_t)fi_addr >> (64 - av->rxc_bits)) : 0)
 
 /* Messaging Match Bit layout */
-#define RDZV_ID_WIDTH 8
+#define CXIP_TAG_WIDTH		48
+#define CXIP_RDZV_ID_WIDTH	8
+#define CXIP_TX_ID_WIDTH	12
+
+/* Define several types of LEs */
+enum cxip_le_type {
+	CXIP_LE_TYPE_RX = 0,	/* RX data LE */
+	CXIP_LE_TYPE_SINK,	/* Truncating RX LE */
+	CXIP_LE_TYPE_ZBP,	/* Zero-byte Put control message LE. Used to
+				 * exchange data in the EQ header_data and
+				 * match_bits fields. Unexpected headers are
+				 * disabled.
+				 */
+};
 
 union cxip_match_bits {
 	struct {
-		uint64_t tag        : 48; /* User tag value */
-		uint64_t rdzv_id_hi : RDZV_ID_WIDTH;
-		uint64_t rdzv_lac   : 4;  /* Rendezvous Get LAC */
-		uint64_t sink       : 1;  /* Long eager protocol */
+		uint64_t tag        : CXIP_TAG_WIDTH; /* User tag value */
+		uint64_t tx_id      : CXIP_TX_ID_WIDTH; /* Prov. tracked ID */
 		uint64_t tagged     : 1;  /* Tagged API */
-		uint64_t unused     : 2;
+		uint64_t match_comp : 1;  /* Notify initiator on match */
+		uint64_t le_type    : 2;
+	};
+	/* Split TX ID for rendezvous operations. */
+	struct {
+		uint64_t pad0       : CXIP_TAG_WIDTH; /* User tag value */
+		uint64_t rdzv_id_hi : CXIP_RDZV_ID_WIDTH;
+		uint64_t rdzv_lac   : 4;  /* Rendezvous Get LAC */
 	};
 	struct {
-		uint64_t rdzv_id_lo : RDZV_ID_WIDTH;
+		uint64_t rdzv_id_lo : CXIP_RDZV_ID_WIDTH;
 	};
 	uint64_t raw;
 };
@@ -401,14 +419,20 @@ struct cxip_req_send {
 	struct cxip_md *send_md;	// send buffer memory descriptor
 	struct cxip_txc *txc;
 	size_t length;			// request length
-	int rdzv_id;			// SW RDZV ID for long messages
+	union {
+		int rdzv_id;		// SW RDZV ID for long messages
+		int tx_id;
+	};
 	int rc;				// DMA return code
 	int long_send_events;		// Processed event count
 	struct c_full_dma_cmd cmd;	// Rendezvous Put command
 };
 
 struct cxip_req_oflow {
-	struct cxip_rxc *rxc;
+	union {
+		struct cxip_txc *txc;
+		struct cxip_rxc *rxc;
+	};
 	struct cxip_oflow_buf *oflow_buf;
 };
 
@@ -532,13 +556,6 @@ struct cxip_ux_send {
 	int eager_bytes;
 };
 
-enum oflow_buf_type {
-	OFLOW_BUF_EAGER = 1, /* Locally-managed eager data overflow buffer */
-	OFLOW_BUF_SINK,      /* Truncating overflow buffer for long eager
-			      * protocol
-			      */
-};
-
 /**
  * Overflow buffer
  *
@@ -546,8 +563,11 @@ enum oflow_buf_type {
  */
 struct cxip_oflow_buf {
 	struct dlist_entry list;
-	enum oflow_buf_type type;
-	struct cxip_rxc *rxc;
+	enum cxip_le_type type;
+	union {
+		struct cxip_txc *txc;
+		struct cxip_rxc *rxc;
+	};
 	void *buf;
 	struct cxip_md *md;
 	int min_bytes;
@@ -606,11 +626,12 @@ struct cxip_rxc {
 	struct dlist_entry ux_rdzv_recvs;	// UX RDZV recv records
 
 	/* Long eager send handling */
-	ofi_atomic32_t ux_sink_linked;
-	struct cxip_oflow_buf ux_sink_buf;	// Long UX sink buffer
+	ofi_atomic32_t sink_le_linked;
+	struct cxip_oflow_buf sink_le;		// Long UX sink buffer
 };
 
-#define CXIP_RDZV_IDS (1 << RDZV_ID_WIDTH)
+#define CXIP_RDZV_IDS	(1 << CXIP_RDZV_ID_WIDTH)
+#define CXIP_TX_IDS	(1 << CXIP_TX_ID_WIDTH)
 
 /**
  * Transmit Context
@@ -660,6 +681,10 @@ struct cxip_txc {
 	int eager_threshold;		// Threshold for eager IOs
 	struct cxip_cmdq *rx_cmdq;	// Target cmdq for Rendezvous buffers
 	unsigned int rdzv_src_lacs;
+
+	/* Header message handling */
+	ofi_atomic32_t zbp_le_linked;
+	struct cxip_oflow_buf zbp_le;	// Zero-byte Put LE
 };
 
 /**
@@ -706,6 +731,9 @@ struct cxip_ep_obj {
 
 	struct indexer rdzv_ids;
 	fastlock_t rdzv_id_lock;
+
+	struct indexer tx_ids;
+	fastlock_t tx_id_lock;
 };
 
 /**
@@ -849,8 +877,11 @@ int cxip_pte_append(struct cxil_pte *pte, uint64_t iova, size_t len,
 		    uint32_t buffer_id, uint64_t match_bits,
 		    uint64_t ignore_bits, uint32_t match_id,
 		    uint64_t min_free, bool event_success_disable,
-		    bool event_unlink_disable,
+		    bool event_link_disable, bool event_unlink_disable,
 		    bool use_once, bool manage_local, bool no_truncate,
+		    bool unexpected_hdr_disable,
+		    bool unrestricted_body_ro,
+		    bool unrestricted_end_ro,
 		    bool op_put, bool op_get, struct cxip_cmdq *cmdq);
 int cxip_pte_unlink(struct cxil_pte *pte, enum c_ptl_list list,
 		    int buffer_id, struct cxip_cmdq *cmdq);
@@ -891,6 +922,10 @@ int cxip_wait_close(fid_t fid);
 int cxip_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 		   struct fid_wait **waitset);
 
+int cxip_tx_id_alloc(struct cxip_ep_obj *ep_obj, void *ctx);
+int cxip_tx_id_free(struct cxip_ep_obj *ep_obj, int id);
+void *cxip_tx_id_lookup(struct cxip_ep_obj *ep_obj, int id);
+
 int cxip_rdzv_id_alloc(struct cxip_ep_obj *ep_obj, void *ctx);
 int cxip_rdzv_id_free(struct cxip_ep_obj *ep_obj, int id);
 void *cxip_rdzv_id_lookup(struct cxip_ep_obj *ep_obj, int id);
@@ -898,6 +933,9 @@ void *cxip_rdzv_id_lookup(struct cxip_ep_obj *ep_obj, int id);
 int cxip_msg_oflow_init(struct cxip_rxc *rxc);
 void cxip_msg_oflow_fini(struct cxip_rxc *rxc);
 int cxip_msg_recv_cancel(struct cxip_req *req);
+
+int cxip_msg_zbp_init(struct cxip_txc *txc);
+int cxip_msg_zbp_fini(struct cxip_txc *txc);
 
 struct cxip_txc *cxip_txc_alloc(const struct fi_tx_attr *attr, void *context,
 				int use_shared);
