@@ -56,6 +56,7 @@ struct ofi_prov {
 	char			*prov_name;
 	struct fi_provider	*provider;
 	void			*dlhandle;
+	bool			hidden;
 };
 
 static struct ofi_prov *prov_head, *prov_tail;
@@ -339,6 +340,8 @@ static struct ofi_prov *ofi_create_prov_entry(const char *prov_name)
 		prov_head = prov;
 	prov_tail = prov;
 
+	prov->hidden = false;
+
 	return prov;
 }
 
@@ -386,6 +389,7 @@ static int ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 {
 	struct fi_prov_context *ctx;
 	struct ofi_prov *prov = NULL;
+	bool hidden = false;
 	int ret;
 
 	if (!provider || !provider->name) {
@@ -430,7 +434,7 @@ static int ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 			"\"%s\" filtered by provider include/exclude "
 			"list, skipping\n", provider->name);
 		ret = -FI_ENODEV;
-		goto cleanup;
+		hidden = true;
 	}
 
 	if (ofi_apply_filter(&prov_log_filter, provider->name))
@@ -471,6 +475,9 @@ static int ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 			goto cleanup;
 		}
 	}
+
+	if (hidden)
+		prov->hidden = true;
 
 update_prov_registry:
 	prov->dlhandle = dlhandle;
@@ -929,6 +936,9 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 		if (!prov->provider || !prov->provider->getinfo)
 			continue;
 
+		if (prov->hidden && !(flags & OFI_GETINFO_HIDDEN))
+			continue;
+
 		if (!ofi_layering_ok(prov->provider, prov_vec, count, flags))
 			continue;
 
@@ -979,7 +989,8 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 	}
 	ofi_free_string_array(prov_vec);
 
-	if (!(flags & (OFI_CORE_PROV_ONLY | OFI_GETINFO_INTERNAL)))
+	if (!(flags & (OFI_CORE_PROV_ONLY | OFI_GETINFO_INTERNAL |
+	               OFI_GETINFO_HIDDEN)))
 		ofi_filter_info(info);
 
 	return *info ? 0 : -FI_ENODATA;

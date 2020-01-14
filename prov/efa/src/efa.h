@@ -89,7 +89,11 @@
 #define EFA_MR_IOV_LIMIT 1
 #define EFA_MR_SUPPORTED_PERMISSIONS (FI_SEND | FI_RECV)
 
-#define EFA_DEF_NUM_MR_CACHE 36
+/*
+ * Multiplier to give some room in the device memory registration limits
+ * to allow processes added to a running job to bootstrap.
+ */
+#define EFA_MR_CACHE_LIMIT_MULT (.9)
 
 extern int efa_mr_cache_enable;
 extern size_t efa_mr_max_cached_count;
