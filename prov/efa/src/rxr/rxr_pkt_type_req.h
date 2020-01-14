@@ -356,4 +356,62 @@ void rxr_pkt_handle_eager_rtw_recv(struct rxr_ep *ep,
 
 void rxr_pkt_handle_long_rtw_recv(struct rxr_ep *ep,
 				  struct rxr_pkt_entry *pkt_entry);
+
+/* Structs and functions for RTR packet types
+ * There are 3 read protocols
+ *         Short protocol,
+ *         Long read protocol and
+ *         RDMA read protocol
+ * Each protocol correspond to a packet type
+ */
+
+/*
+ *     Header structs
+ */
+struct rxr_rtr_hdr {
+	uint8_t type;
+	uint8_t version;
+	uint16_t flags;
+	/* end of rxr_base_hdr */
+	uint32_t rma_iov_count;
+	uint64_t data_len;
+	uint32_t read_req_rx_id;
+	uint32_t read_req_window;
+	struct fi_rma_iov rma_iov[0];
+};
+
+static inline
+struct rxr_rtr_hdr *rxr_get_rtr_hdr(void *pkt)
+{
+	return (struct rxr_rtr_hdr *)pkt;
+}
+
+/*
+ *     init() functions for each RTW packet types
+ */
+ssize_t rxr_pkt_init_short_rtr(struct rxr_ep *ep,
+			       struct rxr_tx_entry *tx_entry,
+			       struct rxr_pkt_entry *pkt_entry);
+
+ssize_t rxr_pkt_init_long_rtr(struct rxr_ep *ep,
+			      struct rxr_tx_entry *tx_entry,
+			      struct rxr_pkt_entry *pkt_entry);
+
+/*
+ *     handle_sent() functions
+ */
+void rxr_pkt_handle_rtr_sent(struct rxr_ep *ep,
+			     struct rxr_pkt_entry *pkt_entry);
+
+/*
+ *     handle_send_completion() functions
+ */
+void rxr_pkt_handle_rtr_send_completion(struct rxr_ep *ep,
+					struct rxr_pkt_entry *pkt_entry);
+/*
+ *     handle_recv() functions
+ */
+void rxr_pkt_handle_rtr_recv(struct rxr_ep *ep,
+			     struct rxr_pkt_entry *pkt_entry);
+
 #endif
