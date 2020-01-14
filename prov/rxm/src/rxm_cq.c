@@ -611,9 +611,10 @@ ssize_t rxm_cq_handle_coll_eager(struct rxm_rx_buf *rx_buf)
 					    rx_buf->recv_entry->rxm_iov.count,
 					    0, rx_buf->pkt.data,
 					    rx_buf->pkt.hdr.size);
-	if(rx_buf->pkt.hdr.tag & OFI_COLL_TAG_FLAG) {
+	if (rx_buf->pkt.hdr.tag & OFI_COLL_TAG_FLAG) {
 		ofi_coll_handle_xfer_comp(rx_buf->pkt.hdr.tag,
 				rx_buf->recv_entry->context);
+		rxm_rx_buf_finish(rx_buf);
 		rxm_recv_entry_release(rx_buf->recv_entry->recv_queue,
 				rx_buf->recv_entry);
 		return FI_SUCCESS;
