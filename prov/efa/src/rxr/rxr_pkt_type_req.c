@@ -48,6 +48,8 @@ static const size_t REQ_HDR_SIZE_LIST[] = {
 	[RXR_LONG_TAGRTM_PKT] = sizeof(struct rxr_long_tagrtm_hdr),
 	[RXR_EAGER_RTW_PKT] = sizeof(struct rxr_eager_rtw_hdr),
 	[RXR_LONG_RTW_PKT] = sizeof(struct rxr_long_rtw_hdr),
+	[RXR_SHORT_RTR_PKT] = sizeof(struct rxr_rtr_hdr),
+	[RXR_LONG_RTR_PKT] = sizeof(struct rxr_rtr_hdr),
 };
 
 size_t rxr_pkt_req_data_size(struct rxr_pkt_entry *pkt_entry)
@@ -121,6 +123,9 @@ size_t rxr_pkt_req_base_hdr_size(struct rxr_pkt_entry *pkt_entry)
 	if (base_hdr->type == RXR_EAGER_RTW_PKT ||
 	    base_hdr->type == RXR_LONG_RTW_PKT)
 		hdr_size += rxr_get_rtw_base_hdr(pkt_entry->pkt)->rma_iov_count * sizeof(struct fi_rma_iov);
+	else if (base_hdr->type == RXR_SHORT_RTR_PKT ||
+		 base_hdr->type == RXR_LONG_RTR_PKT)
+		hdr_size += rxr_get_rtr_hdr(pkt_entry->pkt)->rma_iov_count * sizeof(struct fi_rma_iov);
 
 	return hdr_size;
 }
@@ -904,5 +909,144 @@ void rxr_pkt_handle_long_rtw_recv(struct rxr_ep *ep,
 		rxr_cq_handle_rx_error(ep, rx_entry, err);
 		rxr_release_rx_entry(ep, rx_entry);
 	}
+	rxr_pkt_entry_release_rx(ep, pkt_entry);
+}
+
+/*
+ * RTR packet functions
+ *     init() functions for RTR packets
+ */
+void rxr_pkt_init_rtr(struct rxr_ep *ep,
+		      struct rxr_tx_entry *tx_entry,
+		      int pkt_type, int window,
+		      struct rxr_pkt_entry *pkt_entry)
+{
+	struct rxr_rtr_hdr *rtr_hdr;
+	int i;
+
+	assert(tx_entry->op == ofi_op_read_req);
+	rtr_hdr = (struct rxr_rtr_hdr *)pkt_entry->pkt;
+	rtr_hdr->rma_iov_count = tx_entry->rma_iov_count;
+	rxr_pkt_init_req_hdr(ep, tx_entry, pkt_type, pkt_entry);
+	rtr_hdr->data_len = tx_entry->total_len;
+	rtr_hdr->read_req_rx_id = tx_entry->rma_loc_rx_id;
+	rtr_hdr->read_req_window = window;
+	for (i = 0; i < tx_entry->rma_iov_count; ++i) {
+		rtr_hdr->rma_iov[i].addr = tx_entry->rma_iov[i].addr;
+		rtr_hdr->rma_iov[i].len = tx_entry->rma_iov[i].len;
+		rtr_hdr->rma_iov[i].key = tx_entry->rma_iov[i].key;
+	}
+
+	pkt_entry->pkt_size = pkt_entry->hdr_size;
+	pkt_entry->x_entry = tx_entry;
+}
+
+ssize_t rxr_pkt_init_short_rtr(struct rxr_ep *ep,
+			       struct rxr_tx_entry *tx_entry,
+			       struct rxr_pkt_entry *pkt_entry)
+{
+	rxr_pkt_init_rtr(ep, tx_entry, RXR_SHORT_RTR_PKT, tx_entry->total_len, pkt_entry);
+	return 0;
+}
+
+ssize_t rxr_pkt_init_long_rtr(struct rxr_ep *ep,
+			      struct rxr_tx_entry *tx_entry,
+			      struct rxr_pkt_entry *pkt_entry)
+{
+	rxr_pkt_init_rtr(ep, tx_entry, RXR_LONG_RTR_PKT, tx_entry->rma_window, pkt_entry);
+	return 0;
+}
+
+/*
+ *     handle_sent() functions for RTR packet types
+ */
+void rxr_pkt_handle_rtr_sent(struct rxr_ep *ep,
+			     struct rxr_pkt_entry *pkt_entry)
+{
+	struct rxr_tx_entry *tx_entry;
+
+	tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
+	tx_entry->bytes_sent = 0;
+	tx_entry->state = RXR_TX_WAIT_READ_FINISH;
+}
+
+/*
+ *     handle_send_completion() funciton for RTR packet
+ */
+void rxr_pkt_handle_rtr_send_completion(struct rxr_ep *ep,
+					struct rxr_pkt_entry *pkt_entry)
+{
+	/*
+	 * Unlike other protocol, for emulated read, tx_entry
+	 * is release in rxr_cq_handle_rx_completion().
+	 * therefore there is nothing to be done here.
+	 */
+	return;
+}
+
+/*
+ *     handle_recv() functions for RTR packet
+ */
+void rxr_pkt_handle_rtr_recv(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
+{
+	struct rxr_rtr_hdr *rtr_hdr;
+	struct rxr_rx_entry *rx_entry;
+	struct rxr_tx_entry *tx_entry;
+	ssize_t err;
+	uint64_t tag = 0; /* RMA is not tagged */
+
+	if (ep->core_caps & FI_SOURCE)
+		rxr_pkt_post_connack(ep, rxr_ep_get_peer(ep, pkt_entry->addr),
+				     pkt_entry->addr);
+
+	rx_entry = rxr_ep_get_rx_entry(ep, NULL, 0, tag, 0, NULL, pkt_entry->addr, ofi_op_read_rsp, 0);
+	if (OFI_UNLIKELY(!rx_entry)) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ,
+			"RX entries exhausted.\n");
+		efa_eq_write_error(&ep->util_ep, FI_ENOBUFS, -FI_ENOBUFS);
+		return;
+	}
+
+	rx_entry->addr = pkt_entry->addr;
+	rx_entry->bytes_done = 0;
+	rx_entry->cq_entry.flags |= (FI_RMA | FI_READ);
+	rx_entry->cq_entry.len = ofi_total_iov_len(rx_entry->iov, rx_entry->iov_count);
+	rx_entry->cq_entry.buf = rx_entry->iov[0].iov_base;
+	rx_entry->total_len = rx_entry->cq_entry.len;
+
+	rtr_hdr = (struct rxr_rtr_hdr *)pkt_entry->pkt;
+	rx_entry->rma_initiator_rx_id = rtr_hdr->read_req_rx_id;
+	rx_entry->window = rtr_hdr->read_req_window;
+	rx_entry->iov_count = rtr_hdr->rma_iov_count;
+	err = rxr_rma_verified_copy_iov(ep, rtr_hdr->rma_iov, rtr_hdr->rma_iov_count,
+					FI_SEND, rx_entry->iov);
+	if (OFI_UNLIKELY(err)) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ, "RMA address verification failed!\n");
+		efa_eq_write_error(&ep->util_ep, FI_EINVAL, -FI_EINVAL);
+		rxr_release_rx_entry(ep, rx_entry);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
+		return;
+	}
+
+	tx_entry = rxr_rma_alloc_readrsp_tx_entry(ep, rx_entry);
+	if (OFI_UNLIKELY(!tx_entry)) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ, "Readrsp tx entry exhausted!\n");
+		efa_eq_write_error(&ep->util_ep, FI_EINVAL, -FI_EINVAL);
+		rxr_release_rx_entry(ep, rx_entry);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
+		return;
+	}
+
+	err = rxr_pkt_post_ctrl_or_queue(ep, RXR_TX_ENTRY, tx_entry, RXR_READRSP_PKT, 0);
+	if (OFI_UNLIKELY(err)) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ, "Posting of readrsp packet failed! err=%ld\n", err);
+		efa_eq_write_error(&ep->util_ep, FI_EIO, -FI_EIO);
+		rxr_release_tx_entry(ep, tx_entry);
+		rxr_release_rx_entry(ep, rx_entry);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
+		return;
+	}
+
+	rx_entry->state = RXR_RX_WAIT_READ_FINISH;
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
 }

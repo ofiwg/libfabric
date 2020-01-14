@@ -229,17 +229,6 @@ ssize_t rxr_rma_post_efa_emulated_read(struct rxr_ep *ep, struct rxr_tx_entry *t
 		return -FI_EAGAIN;
 	}
 
-	peer = rxr_ep_get_peer(ep, tx_entry->addr);
-	assert(peer);
-	rxr_pkt_calc_cts_window_credits(ep, peer,
-					tx_entry->total_len,
-					tx_entry->credit_request,
-					&window,
-					&credits);
-
-	rx_entry->window = window;
-	rx_entry->credit_cts = credits;
-
 	rx_entry->state = RXR_RX_RECV;
 	/* rma_loc_tx_id is used in rxr_cq_handle_rx_completion()
 	 * to locate the tx_entry for tx completion.
@@ -257,13 +246,24 @@ ssize_t rxr_rma_post_efa_emulated_read(struct rxr_ep *ep, struct rxr_tx_entry *t
 	 * via REQ
 	 */
 	tx_entry->rma_loc_rx_id = rx_entry->rx_id;
-	tx_entry->rma_window = rx_entry->window;
-	tx_entry->msg_id = peer->next_msg_id++;
-	err = rxr_pkt_post_ctrl_or_queue(ep, RXR_TX_ENTRY, tx_entry, RXR_RTS_PKT, 0);
-	if (OFI_UNLIKELY(err)) {
-		rxr_release_tx_entry(ep, tx_entry);
-		peer->next_msg_id--;
+
+	if (tx_entry->total_len < ep->mtu_size - sizeof(struct rxr_readrsp_hdr)) {
+		err = rxr_pkt_post_ctrl_or_queue(ep, RXR_TX_ENTRY, tx_entry, RXR_SHORT_RTR_PKT, 0);
+	} else {
+		peer = rxr_ep_get_peer(ep, tx_entry->addr);
+		assert(peer);
+		rxr_pkt_calc_cts_window_credits(ep, peer,
+						tx_entry->total_len,
+						tx_entry->credit_request,
+						&window,
+						&credits);
+
+		rx_entry->window = window;
+		rx_entry->credit_cts = credits;
+		tx_entry->rma_window = rx_entry->window;
+		err = rxr_pkt_post_ctrl_or_queue(ep, RXR_TX_ENTRY, tx_entry, RXR_LONG_RTR_PKT, 0);
 	}
+
 	return err;
 }
 
