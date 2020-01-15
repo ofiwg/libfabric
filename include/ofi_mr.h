@@ -260,6 +260,7 @@ struct ofi_mr_cache {
 
 	struct ofi_mr_storage		storage;
 	struct dlist_entry		lru_list;
+	pthread_mutex_t 		lock;
 
 	size_t				cached_cnt;
 	size_t				cached_size;

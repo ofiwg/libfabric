@@ -72,6 +72,24 @@ static int util_mr_find_overlap(struct ofi_rbmap *map, void *key, void *data)
 	return 0;
 }
 
+static struct ofi_mr_entry *util_mr_entry_alloc(struct ofi_mr_cache *cache)
+{
+	struct ofi_mr_entry *entry;
+
+	pthread_mutex_lock(&cache->lock);
+	entry = ofi_buf_alloc(cache->entry_pool);
+	pthread_mutex_unlock(&cache->lock);
+	return entry;
+}
+
+static void util_mr_entry_free(struct ofi_mr_cache *cache,
+			       struct ofi_mr_entry *entry)
+{
+	pthread_mutex_lock(&cache->lock);
+	ofi_buf_free(entry);
+	pthread_mutex_unlock(&cache->lock);
+}
+
 static void util_mr_free_entry(struct ofi_mr_cache *cache,
 			       struct ofi_mr_entry *entry)
 {
@@ -80,7 +98,7 @@ static void util_mr_free_entry(struct ofi_mr_cache *cache,
 
 	assert(!entry->storage_context);
 	cache->delete_region(cache, entry);
-	ofi_buf_free(entry);
+	util_mr_entry_free(cache, entry);
 }
 
 static void util_mr_uncache_entry_storage(struct ofi_mr_cache *cache,
@@ -183,8 +201,8 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct iovec *iov,
 	FI_DBG(cache->domain->prov, FI_LOG_MR, "create %p (len: %zu)\n",
 	       iov->iov_base, iov->iov_len);
 
-	*entry = ofi_buf_alloc(cache->entry_pool);
-	if (OFI_UNLIKELY(!*entry))
+	*entry = util_mr_entry_alloc(cache);
+	if (!*entry)
 		return -FI_ENOMEM;
 
 	(*entry)->storage_context = NULL;
@@ -198,7 +216,7 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct iovec *iov,
 		}
 		if (ret) {
 			assert(!mr_cache_flush(cache));
-			ofi_buf_free(*entry);
+			util_mr_entry_free(cache, *entry);
 			return ret;
 		}
 	}
@@ -348,15 +366,13 @@ int ofi_mr_cache_reg(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
 	FI_DBG(cache->domain->prov, FI_LOG_MR, "reg %p (len: %zu)\n",
 	       attr->mr_iov->iov_base, attr->mr_iov->iov_len);
 
+	*entry = util_mr_entry_alloc(cache);
+	if (!*entry)
+		return -FI_ENOMEM;
+
 	pthread_mutex_lock(&cache->monitor->lock);
-	*entry = ofi_buf_alloc(cache->entry_pool);
-	if (*entry) {
-		cache->uncached_cnt++;
-		cache->uncached_size += attr->mr_iov->iov_len;
-	} else {
-		ret = -FI_ENOMEM;
-		goto unlock;
-	}
+	cache->uncached_cnt++;
+	cache->uncached_size += attr->mr_iov->iov_len;
 	pthread_mutex_unlock(&cache->monitor->lock);
 
 	(*entry)->info.iov = *attr->mr_iov;
@@ -370,11 +386,10 @@ int ofi_mr_cache_reg(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
 	return 0;
 
 buf_free:
+	util_mr_entry_free(cache, *entry);
 	pthread_mutex_lock(&cache->monitor->lock);
-	ofi_buf_free(*entry);
 	cache->uncached_cnt--;
 	cache->uncached_size -= attr->mr_iov->iov_len;
-unlock:
 	pthread_mutex_unlock(&cache->monitor->lock);
 	return ret;
 }
@@ -401,6 +416,7 @@ void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache)
 	}
 	pthread_mutex_unlock(&cache->monitor->lock);
 
+	pthread_mutex_destroy(&cache->lock);
 	ofi_monitor_del_cache(cache);
 	cache->storage.destroy(&cache->storage);
 	ofi_atomic_dec32(&cache->domain->ref);
@@ -509,6 +525,7 @@ int ofi_mr_cache_init(struct util_domain *domain,
 	if (!cache_params.max_cnt || !cache_params.max_size)
 		return -FI_ENOSPC;
 
+	pthread_mutex_init(&cache->lock, NULL);
 	dlist_init(&cache->lru_list);
 	cache->cached_cnt = 0;
 	cache->cached_size = 0;
