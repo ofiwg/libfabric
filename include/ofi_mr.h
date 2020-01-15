@@ -227,6 +227,7 @@ struct ofi_mr_entry {
 	unsigned int			subscribed:1;
 	int				use_cnt;
 	struct dlist_entry		lru_entry;
+	struct dlist_entry		stale_entry;
 	uint8_t				data[];
 };
 
@@ -260,6 +261,8 @@ struct ofi_mr_cache {
 
 	struct ofi_mr_storage		storage;
 	struct dlist_entry		lru_list;
+	struct dlist_entry              stale_list;
+	pthread_mutex_t                 stale_lock;
 
 	size_t				cached_cnt;
 	size_t				cached_size;

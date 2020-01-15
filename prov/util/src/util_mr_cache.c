@@ -111,6 +111,35 @@ static void util_mr_uncache_entry(struct ofi_mr_cache *cache,
 	}
 }
 
+static void util_mr_process_stale_entries(struct ofi_mr_cache *cache)
+{
+	struct ofi_mr_entry *entry;
+	struct dlist_entry *tmp;
+	DEFINE_LIST(tmp_list);
+
+	pthread_mutex_lock(&cache->stale_lock);
+	if (dlist_empty(&cache->stale_list)) {
+		pthread_mutex_unlock(&cache->stale_lock);
+		return;
+	}
+
+	dlist_splice_head(&tmp_list, &cache->stale_list);
+	pthread_mutex_unlock(&cache->stale_lock);
+
+	dlist_foreach_container_safe(&cache->stale_list, struct ofi_mr_entry, entry, stale_entry, tmp) {
+		util_mr_uncache_entry(cache, entry);
+		dlist_remove(&entry->stale_entry);
+	}
+}
+
+static void util_mr_mark_stale_entry(struct ofi_mr_cache *cache,
+                                     struct ofi_mr_entry *entry)
+{
+	// queue entry if not already queued
+	if (!dlist_empty(&entry->stale_entry))
+		dlist_insert_tail(&entry->stale_entry, &cache->stale_list);
+}
+
 /* Caller must hold ofi_mem_monitor lock as well as unsubscribe from the region */
 void ofi_mr_cache_notify(struct ofi_mr_cache *cache, const void *addr, size_t len)
 {
@@ -121,9 +150,11 @@ void ofi_mr_cache_notify(struct ofi_mr_cache *cache, const void *addr, size_t le
 	iov.iov_base = (void *) addr;
 	iov.iov_len = len;
 
+	pthread_mutex_lock(&cache->stale_lock);
 	for (entry = cache->storage.overlap(&cache->storage, &iov); entry;
 	     entry = cache->storage.overlap(&cache->storage, &iov))
-		util_mr_uncache_entry(cache, entry);
+		util_mr_mark_stale_entry(cache, entry);
+	pthread_mutex_unlock(&cache->stale_lock);
 }
 
 static bool mr_cache_flush(struct ofi_mr_cache *cache)
@@ -136,6 +167,7 @@ static bool mr_cache_flush(struct ofi_mr_cache *cache)
 	dlist_pop_front(&cache->lru_list, struct ofi_mr_entry,
 			entry, lru_entry);
 	dlist_init(&entry->lru_entry);
+	dlist_init(&entry->stale_entry);
 	FI_DBG(cache->domain->prov, FI_LOG_MR, "flush %p (len: %zu)\n",
 	       entry->info.iov.iov_base, entry->info.iov.iov_len);
 
@@ -149,6 +181,7 @@ bool ofi_mr_cache_flush(struct ofi_mr_cache *cache)
 	bool empty;
 
 	pthread_mutex_lock(&cache->monitor->lock);
+	util_mr_process_stale_entries(cache);
 	empty = mr_cache_flush(cache);
 	pthread_mutex_unlock(&cache->monitor->lock);
 	return empty;
@@ -160,6 +193,7 @@ void ofi_mr_cache_delete(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 	       entry->info.iov.iov_base, entry->info.iov.iov_len);
 
 	pthread_mutex_lock(&cache->monitor->lock);
+	util_mr_process_stale_entries(cache);
 	cache->delete_cnt++;
 
 	if (--entry->use_cnt == 0) {
@@ -273,6 +307,7 @@ int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *att
 	       attr->mr_iov->iov_base, attr->mr_iov->iov_len);
 
 	pthread_mutex_lock(&cache->monitor->lock);
+	util_mr_process_stale_entries(cache);
 	cache->search_cnt++;
 
 	while (((cache->cached_cnt >= cache_params.max_cnt) ||
@@ -317,6 +352,7 @@ struct ofi_mr_entry *ofi_mr_cache_find(struct ofi_mr_cache *cache,
 	       attr->mr_iov->iov_base, attr->mr_iov->iov_len);
 
 	pthread_mutex_lock(&cache->monitor->lock);
+	util_mr_process_stale_entries(cache);
 	cache->search_cnt++;
 
 	info.iov = *attr->mr_iov;
@@ -349,6 +385,7 @@ int ofi_mr_cache_reg(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
 	       attr->mr_iov->iov_base, attr->mr_iov->iov_len);
 
 	pthread_mutex_lock(&cache->monitor->lock);
+	util_mr_process_stale_entries(cache);
 	*entry = ofi_buf_alloc(cache->entry_pool);
 	if (*entry) {
 		cache->uncached_cnt++;
@@ -394,6 +431,7 @@ void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache)
 		cache->notify_cnt);
 
 	pthread_mutex_lock(&cache->monitor->lock);
+	util_mr_process_stale_entries(cache);
 	dlist_foreach_container_safe(&cache->lru_list, struct ofi_mr_entry,
 				     entry, lru_entry, tmp) {
 		assert(entry->use_cnt == 0);
@@ -509,6 +547,8 @@ int ofi_mr_cache_init(struct util_domain *domain,
 	if (!cache_params.max_cnt || !cache_params.max_size)
 		return -FI_ENOSPC;
 
+	pthread_mutex_init(&cache->stale_lock, NULL);
+	dlist_init(&cache->stale_list);
 	dlist_init(&cache->lru_list);
 	cache->cached_cnt = 0;
 	cache->cached_size = 0;
