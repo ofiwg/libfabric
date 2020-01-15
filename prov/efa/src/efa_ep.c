@@ -456,7 +456,7 @@ static int efa_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		}
 		break;
 	case FI_CLASS_AV:
-		av = container_of(bfid, struct efa_av, av_fid.fid);
+		av = container_of(bfid, struct efa_av, util_av.av_fid.fid);
 		if (ep->domain != av->domain) {
 			EFA_WARN(FI_LOG_EP_CTRL,
 				 "Address vector doesn't belong to same domain as EP.\n");

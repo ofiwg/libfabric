@@ -212,7 +212,7 @@ int rxr_cq_handle_tx_error(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	if (FI_VERSION_GE(api_version, FI_VERSION(1, 5)))
 		err_entry.err_data_size = 0;
 
-        FI_WARN(&rxr_prov, FI_LOG_CQ,
+	FI_WARN(&rxr_prov, FI_LOG_CQ,
 		"rxr_cq_handle_tx_error: err: %d, prov_err: %s (%d)\n",
 		err_entry.err, fi_strerror(-err_entry.prov_errno),
 		err_entry.prov_errno);
@@ -1336,12 +1336,12 @@ fi_addr_t rxr_cq_insert_addr_from_rts(struct rxr_ep *ep, struct rxr_pkt_entry *p
 	int i, ret;
 	void *raw_address;
 	fi_addr_t rdm_addr;
-	struct rxr_av *av;
 	struct rxr_rts_hdr *rts_hdr;
+	struct efa_ep *efa_ep;
 
 	assert(rxr_get_base_hdr(pkt_entry->pkt)->type == RXR_RTS_PKT);
 
-	av = rxr_ep_av(ep);
+	efa_ep = container_of(ep->rdm_ep, struct efa_ep, ep_fid);
 	rts_hdr = rxr_get_rts_hdr(pkt_entry->pkt);
 	assert(rts_hdr->flags & RXR_REMOTE_SRC_ADDR);
 	assert(rts_hdr->addrlen > 0);
@@ -1369,8 +1369,9 @@ fi_addr_t rxr_cq_insert_addr_from_rts(struct rxr_ep *ep, struct rxr_pkt_entry *p
 		      rxr_get_ctrl_cq_pkt(rts_hdr)->data
 		      : rxr_get_ctrl_pkt(rts_hdr)->data;
 
-	ret = rxr_av_insert_rdm_addr(av, (void *)raw_address, &rdm_addr, 0, NULL);
-	if (OFI_UNLIKELY(ret != 1)) {
+	ret = efa_av_insert_addr(efa_ep->av, (struct efa_ep_addr *)raw_address,
+				&rdm_addr, 0, NULL);
+	if (OFI_UNLIKELY(ret != 0)) {
 		rxr_eq_write_error(ep, FI_EINVAL, ret);
 		return -1;
 	}

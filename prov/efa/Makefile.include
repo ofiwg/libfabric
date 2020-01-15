@@ -49,7 +49,6 @@ _efa_files = \
 	prov/efa/src/rxr/rxr_domain.c	\
 	prov/efa/src/rxr/rxr_cq.c	\
 	prov/efa/src/rxr/rxr_ep.c	\
-	prov/efa/src/rxr/rxr_av.c	\
 	prov/efa/src/rxr/rxr_cntr.c	\
 	prov/efa/src/rxr/rxr_rma.c
 

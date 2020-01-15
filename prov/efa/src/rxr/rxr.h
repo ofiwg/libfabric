@@ -86,7 +86,7 @@ extern const uint32_t rxr_poison_value;
 #define RXR_RECVWIN_SIZE		(16384)
 #define RXR_DEF_CQ_SIZE			(8192)
 #define RXR_REMOTE_CQ_DATA_LEN		(8)
-#define RXR_MIN_AV_SIZE			(16384)
+
 /* maximum timeout for RNR backoff (microseconds) */
 #define RXR_DEF_RNR_MAX_TIMEOUT		(1000000)
 /* bounds for random RNR backoff timeout */
@@ -177,7 +177,6 @@ extern const uint32_t rxr_poison_value;
  */
 #define RXR_SHM_HDR		BIT_ULL(10)
 #define RXR_SHM_HDR_DATA	BIT_ULL(11)
-#define RXR_SHM_MAX_AV_COUNT       (256)
 
 extern struct fi_info *shm_info;
 
@@ -315,24 +314,6 @@ struct rxr_mr {
 	struct fid_mr *msg_mr;
 	struct fid_mr *shm_msg_mr;
 	struct rxr_domain *domain;
-};
-
-struct rxr_av_entry {
-	uint8_t addr[RXR_MAX_NAME_LENGTH];
-	fi_addr_t rdm_addr;
-	fi_addr_t shm_rdm_addr;
-	bool local_mapping;
-	UT_hash_handle hh;
-};
-
-struct rxr_av {
-	struct util_av util_av;
-	struct fid_av *rdm_av;
-	struct fid_av *shm_rdm_av;
-	struct rxr_av_entry *av_map;
-
-	int rdm_av_used;
-	size_t rdm_addrlen;
 };
 
 struct rxr_peer {
@@ -1204,13 +1185,6 @@ int rxr_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		 struct fid_ep **ep, void *context);
 
-/* AV sub-functions */
-int rxr_av_insert_rdm_addr(struct rxr_av *av, const void *addr,
-			   fi_addr_t *rdm_fiaddr, uint64_t flags,
-			   void *context);
-int rxr_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
-		struct fid_av **av_fid, void *context);
-
 /* EP sub-functions */
 void rxr_ep_progress(struct util_ep *util_ep);
 void rxr_ep_progress_internal(struct rxr_ep *rxr_ep);
@@ -1342,11 +1316,6 @@ static inline void rxr_eq_write_error(struct rxr_ep *ep, ssize_t err,
 		fi_strerror(-ret), fi_strerror(err), err,
 		fi_strerror(prov_errno), prov_errno, __FILE__, __LINE__);
 	abort();
-}
-
-static inline struct rxr_av *rxr_ep_av(struct rxr_ep *ep)
-{
-	return container_of(ep->util_ep.av, struct rxr_av, util_av);
 }
 
 static inline struct rxr_domain *rxr_ep_domain(struct rxr_ep *ep)
