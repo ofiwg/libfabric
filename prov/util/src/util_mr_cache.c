@@ -90,6 +90,12 @@ static void util_mr_entry_free(struct ofi_mr_cache *cache,
 	pthread_mutex_unlock(&cache->lock);
 }
 
+/* We cannot hold the monitor lock when freeing an entry.  This call
+ * will result in freeing memory, which can generate a uffd event
+ * (e.g. UNMAP).  If we hold the monitor lock, the uffd thread will
+ * hang trying to acquire it in order to read the event, and this thread
+ * will itself be blocked until the uffd event is read.
+ */
 static void util_mr_free_entry(struct ofi_mr_cache *cache,
 			       struct ofi_mr_entry *entry)
 {
@@ -144,12 +150,15 @@ void ofi_mr_cache_notify(struct ofi_mr_cache *cache, const void *addr, size_t le
 		util_mr_uncache_entry(cache, entry);
 }
 
-static bool mr_cache_flush(struct ofi_mr_cache *cache)
+bool ofi_mr_cache_flush(struct ofi_mr_cache *cache)
 {
 	struct ofi_mr_entry *entry;
 
-	if (dlist_empty(&cache->lru_list))
+	pthread_mutex_lock(&cache->monitor->lock);
+	if (dlist_empty(&cache->lru_list)) {
+		pthread_mutex_unlock(&cache->monitor->lock);
 		return false;
+	}
 
 	do {
 		dlist_pop_front(&cache->lru_list, struct ofi_mr_entry,
@@ -159,21 +168,17 @@ static bool mr_cache_flush(struct ofi_mr_cache *cache)
 		       entry->info.iov.iov_base, entry->info.iov.iov_len);
 
 		util_mr_uncache_entry_storage(cache, entry);
+		pthread_mutex_unlock(&cache->monitor->lock);
+
 		util_mr_free_entry(cache, entry);
+		pthread_mutex_lock(&cache->monitor->lock);
+
 	} while (!dlist_empty(&cache->lru_list) &&
 		 ((cache->cached_cnt >= cache_params.max_cnt) ||
 		  (cache->cached_size >= cache_params.max_size)));
-	return true;
-}
-
-bool ofi_mr_cache_flush(struct ofi_mr_cache *cache)
-{
-	bool empty;
-
-	pthread_mutex_lock(&cache->monitor->lock);
-	empty = mr_cache_flush(cache);
 	pthread_mutex_unlock(&cache->monitor->lock);
-	return empty;
+
+	return true;
 }
 
 void ofi_mr_cache_delete(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
@@ -291,16 +296,26 @@ int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *att
 	cache->search_cnt++;
 
 	if ((cache->cached_cnt >= cache_params.max_cnt) ||
-	    (cache->cached_size >= cache_params.max_size))
-		mr_cache_flush(cache);
+	    (cache->cached_size >= cache_params.max_size)) {
+		pthread_mutex_unlock(&cache->monitor->lock);
+		ofi_mr_cache_flush(cache);
+		pthread_mutex_lock(&cache->monitor->lock);
+	}
 
 	info.iov = *attr->mr_iov;
+retry:
 	*entry = cache->storage.find(&cache->storage, &info);
 	if (!*entry) {
-		do {
-			ret = util_mr_cache_create(cache, attr->mr_iov,
-						   attr->access, entry);
-		} while (ret && mr_cache_flush(cache));
+		ret = util_mr_cache_create(cache, attr->mr_iov,
+					   attr->access, entry);
+		if (ret) {
+			pthread_mutex_unlock(&cache->monitor->lock);
+			if (!ofi_mr_cache_flush(cache))
+				return ret;
+
+			pthread_mutex_lock(&cache->monitor->lock);
+			goto retry;
+		}
 		goto unlock;
 	}
 
