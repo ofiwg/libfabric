@@ -151,14 +151,18 @@ static bool mr_cache_flush(struct ofi_mr_cache *cache)
 	if (dlist_empty(&cache->lru_list))
 		return false;
 
-	dlist_pop_front(&cache->lru_list, struct ofi_mr_entry,
-			entry, lru_entry);
-	dlist_init(&entry->lru_entry);
-	FI_DBG(cache->domain->prov, FI_LOG_MR, "flush %p (len: %zu)\n",
-	       entry->info.iov.iov_base, entry->info.iov.iov_len);
+	do {
+		dlist_pop_front(&cache->lru_list, struct ofi_mr_entry,
+				entry, lru_entry);
+		dlist_init(&entry->lru_entry);
+		FI_DBG(cache->domain->prov, FI_LOG_MR, "flush %p (len: %zu)\n",
+		       entry->info.iov.iov_base, entry->info.iov.iov_len);
 
-	util_mr_uncache_entry_storage(cache, entry);
-	util_mr_free_entry(cache, entry);
+		util_mr_uncache_entry_storage(cache, entry);
+		util_mr_free_entry(cache, entry);
+	} while (!dlist_empty(&cache->lru_list) &&
+		 ((cache->cached_cnt >= cache_params.max_cnt) ||
+		  (cache->cached_size >= cache_params.max_size)));
 	return true;
 }
 
@@ -286,10 +290,9 @@ int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *att
 	pthread_mutex_lock(&cache->monitor->lock);
 	cache->search_cnt++;
 
-	while (((cache->cached_cnt >= cache_params.max_cnt) ||
-		(cache->cached_size >= cache_params.max_size)) &&
-	       mr_cache_flush(cache))
-		;
+	if ((cache->cached_cnt >= cache_params.max_cnt) ||
+	    (cache->cached_size >= cache_params.max_size))
+		mr_cache_flush(cache);
 
 	info.iov = *attr->mr_iov;
 	*entry = cache->storage.find(&cache->storage, &info);
