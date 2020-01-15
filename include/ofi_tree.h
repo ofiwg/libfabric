@@ -64,6 +64,7 @@ struct ofi_rbnode {
 struct ofi_rbmap {
 	struct ofi_rbnode	*root;
 	struct ofi_rbnode	sentinel;
+	struct ofi_rbnode	*free_list;
 
 	/* compare()
 	 *	= 0: a == b
