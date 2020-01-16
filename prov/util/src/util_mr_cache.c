@@ -211,16 +211,8 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct iovec *iov,
 	(*entry)->use_cnt = 1;
 
 	ret = cache->add_region(cache, *entry);
-	if (ret) {
-		while (ret && mr_cache_flush(cache)) {
-			ret = cache->add_region(cache, *entry);
-		}
-		if (ret) {
-			assert(!mr_cache_flush(cache));
-			util_mr_entry_free(cache, *entry);
-			return ret;
-		}
-	}
+	if (ret)
+		goto err;
 
 	if ((cache->cached_cnt >= cache_params.max_cnt) ||
 	    (cache->cached_size >= cache_params.max_size)) {
@@ -302,8 +294,10 @@ int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *att
 	info.iov = *attr->mr_iov;
 	*entry = cache->storage.find(&cache->storage, &info);
 	if (!*entry) {
-		ret = util_mr_cache_create(cache, attr->mr_iov,
-					   attr->access, entry);
+		do {
+			ret = util_mr_cache_create(cache, attr->mr_iov,
+						   attr->access, entry);
+		} while (ret && mr_cache_flush(cache));
 		goto unlock;
 	}
 
