@@ -48,6 +48,17 @@ enum util_coll_op_type {
 	UTIL_COLL_BARRIER_OP,
 	UTIL_COLL_ALLREDUCE_OP,
 	UTIL_COLL_BROADCAST_OP,
+	UTIL_COLL_ALLGATHER_OP,
+	UTIL_COLL_SCATTER_OP,
+};
+
+static const char * const log_util_coll_op_type[] = {
+	[UTIL_COLL_JOIN_OP] = "COLL_JOIN",
+	[UTIL_COLL_BARRIER_OP] = "COLL_BARRIER",
+	[UTIL_COLL_ALLREDUCE_OP] = "COLL_ALLREDUCE",
+	[UTIL_COLL_BROADCAST_OP] = "COLL_BROADCAST",
+	[UTIL_COLL_ALLGATHER_OP] = "COLL_ALLGATHER",
+	[UTIL_COLL_SCATTER_OP] = "COLL_SCATTER"
 };
 
 struct util_av_set {
@@ -72,6 +83,12 @@ enum coll_state {
 	UTIL_COLL_WAITING,
 	UTIL_COLL_PROCESSING,
 	UTIL_COLL_COMPLETE
+};
+
+static const char * const log_util_coll_state[] = {
+	[UTIL_COLL_WAITING] = "COLL_WAITING",
+	[UTIL_COLL_PROCESSING] = "COLL_PROCESSING",
+	[UTIL_COLL_COMPLETE] = "COLL_COMPLETE"
 };
 
 struct util_coll_operation;
@@ -137,6 +154,12 @@ struct allreduce_data {
 	size_t	size;
 };
 
+struct broadcast_data {
+	void	*chunk;
+	size_t	size;
+	void	*scatter;
+};
+
 struct util_coll_operation;
 
 typedef void (*util_coll_comp_fn_t)(struct util_coll_operation *coll_op);
@@ -150,6 +173,8 @@ struct util_coll_operation {
 		struct join_data	join;
 		struct barrier_data	barrier;
 		struct allreduce_data	allreduce;
+		void			*scatter;
+		struct broadcast_data	broadcast;
 	} data;
 	util_coll_comp_fn_t		comp_fn;
 };
@@ -166,10 +191,23 @@ int ofi_av_set(struct fid_av *av, struct fi_av_set_attr *attr,
 
 ssize_t ofi_ep_barrier(struct fid_ep *ep, fi_addr_t coll_addr, void *context);
 
-ssize_t ofi_ep_allreduce(struct fid_ep *ep, const void *buf, size_t count,
-	void *desc, void *result, void *result_desc,
-	fi_addr_t coll_addr, enum fi_datatype datatype, enum fi_op op,
-	uint64_t flags, void *context);
+ssize_t ofi_ep_allreduce(struct fid_ep *ep, const void *buf, size_t count, void *desc,
+			 void *result, void *result_desc, fi_addr_t coll_addr,
+			 enum fi_datatype datatype, enum fi_op op, uint64_t flags,
+			 void *context);
+
+ssize_t ofi_ep_allgather(struct fid_ep *ep, const void *buf, size_t count, void *desc,
+			 void *result, void *result_desc, fi_addr_t coll_addr,
+			 enum fi_datatype datatype, uint64_t flags, void *context);
+
+ssize_t ofi_ep_scatter(struct fid_ep *ep, const void *buf, size_t count, void *desc,
+		       void *result, void *result_desc, fi_addr_t coll_addr,
+		       fi_addr_t root_addr, enum fi_datatype datatype, uint64_t flags,
+		       void *context);
+
+ssize_t ofi_ep_broadcast(struct fid_ep *ep, void *buf, size_t count, void *desc,
+			 fi_addr_t coll_addr, fi_addr_t root_addr,
+			 enum fi_datatype datatype, uint64_t flags, void *context);
 
 int ofi_coll_ep_progress(struct fid_ep *ep);
 

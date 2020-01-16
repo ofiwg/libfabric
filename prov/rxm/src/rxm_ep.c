@@ -1928,13 +1928,13 @@ static struct fi_ops_tagged rxm_ops_tagged_thread_unsafe = {
 static struct fi_ops_collective rxm_ops_collective = {
 	.size = sizeof(struct fi_ops_collective),
 	.barrier = ofi_ep_barrier,
-	.broadcast = fi_coll_no_broadcast,
+	.broadcast = ofi_ep_broadcast,
 	.alltoall = fi_coll_no_alltoall,
 	.allreduce = ofi_ep_allreduce,
-	.allgather = fi_coll_no_allgather,
+	.allgather = ofi_ep_allgather,
 	.reduce_scatter = fi_coll_no_reduce_scatter,
 	.reduce = fi_coll_no_reduce,
-	.scatter = fi_coll_no_scatter,
+	.scatter = ofi_ep_scatter,
 	.gather = fi_coll_no_gather,
 	.msg = fi_coll_no_msg,
 };

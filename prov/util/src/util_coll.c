@@ -226,6 +226,68 @@ static inline int util_coll_op_create(struct util_coll_operation **coll_op,
 	return FI_SUCCESS;
 }
 
+static inline void util_coll_op_log_work(struct util_coll_operation *coll_op)
+{
+#if ENABLE_DEBUG
+	struct util_coll_work_item *cur_item = NULL;
+	struct util_coll_xfer_item *xfer_item;
+	struct dlist_entry *tmp = NULL;
+	size_t count = 0;
+	FI_DBG(coll_op->mc->av_set->av->prov, FI_LOG_CQ, "Remaining Work for %s:\n",
+	       log_util_coll_op_type[coll_op->type]);
+	dlist_foreach_container_safe(&coll_op->work_queue, struct util_coll_work_item,
+				     cur_item, waiting_entry, tmp)
+	{
+		switch (cur_item->type) {
+		case UTIL_COLL_SEND:
+			xfer_item =
+				container_of(cur_item, struct util_coll_xfer_item, hdr);
+			FI_DBG(coll_op->mc->av_set->av->prov, FI_LOG_CQ,
+			       "\t%ld: { %p [%s] SEND TO: 0x%02x FROM: 0x%02lx "
+			       "cnt: %d typesize: %ld tag: 0x%02lx }\n",
+			       count, cur_item, log_util_coll_state[cur_item->state],
+			       xfer_item->remote_rank, coll_op->mc->local_rank,
+			       xfer_item->count, ofi_datatype_size(xfer_item->datatype),
+			       xfer_item->tag);
+			break;
+		case UTIL_COLL_RECV:
+			xfer_item =
+				container_of(cur_item, struct util_coll_xfer_item, hdr);
+			FI_DBG(coll_op->mc->av_set->av->prov, FI_LOG_CQ,
+			       "\t%ld: { %p [%s] RECV FROM: 0x%02x TO: 0x%02lx "
+			       "cnt: %d typesize: %ld tag: 0x%02lx }\n",
+			       count, cur_item, log_util_coll_state[cur_item->state],
+			       xfer_item->remote_rank, coll_op->mc->local_rank,
+			       xfer_item->count, ofi_datatype_size(xfer_item->datatype),
+			       xfer_item->tag);
+			break;
+		case UTIL_COLL_REDUCE:
+			//reduce_item = container_of(cur_item, struct util_coll_reduce_item, hdr);
+			FI_DBG(coll_op->mc->av_set->av->prov, FI_LOG_CQ,
+			       "\t%ld: { %p [%s] REDUCTION }\n", count, cur_item,
+			       log_util_coll_state[cur_item->state]);
+			break;
+		case UTIL_COLL_COPY:
+			FI_DBG(coll_op->mc->av_set->av->prov, FI_LOG_CQ,
+			       "\t%ld: { %p [%s] COPY }\n", count, cur_item,
+			       log_util_coll_state[cur_item->state]);
+			break;
+		case UTIL_COLL_COMP:
+			FI_DBG(coll_op->mc->av_set->av->prov, FI_LOG_CQ,
+			       "\t%ld: { %p [%s] COMPLETION }\n", count, cur_item,
+			       log_util_coll_state[cur_item->state]);
+			break;
+		default:
+			FI_DBG(coll_op->mc->av_set->av->prov, FI_LOG_CQ,
+			       "\t%ld: { %p [%s] UNKNOWN }\n", count, cur_item,
+			       log_util_coll_state[cur_item->state]);
+			break;
+		}
+		count++;
+	}
+#endif
+}
+
 static inline void util_coll_op_progress_work(struct util_ep *util_ep,
 				      struct util_coll_operation *coll_op)
 {
@@ -242,8 +304,8 @@ static inline void util_coll_op_progress_work(struct util_ep *util_ep,
 		previous_is_head = cur_item->waiting_entry.prev == &cur_item->coll_op->work_queue;
 		if (!previous_is_head) {
 			prev_item = container_of(cur_item->waiting_entry.prev,
-							struct util_coll_work_item,
-							waiting_entry);
+						 struct util_coll_work_item,
+						 waiting_entry);
 		}
 
 		if (cur_item->state == UTIL_COLL_COMPLETE) {
@@ -251,6 +313,8 @@ static inline void util_coll_op_progress_work(struct util_ep *util_ep,
 			if (cur_item->fence && !previous_is_head)
 				continue;
 
+			FI_DBG(coll_op->mc->av_set->av->prov, FI_LOG_CQ,
+			       "Removing Completed Work item: %p \n", cur_item);
 			dlist_remove(&cur_item->waiting_entry);
 			free(cur_item);
 
@@ -264,20 +328,29 @@ static inline void util_coll_op_progress_work(struct util_ep *util_ep,
 
 		// we can't progress if prior work is fencing
 		if (!previous_is_head && prev_item && prev_item->fence) {
+			FI_DBG(coll_op->mc->av_set->av->prov, FI_LOG_CQ,
+			       "%p fenced by: %p \n", cur_item, prev_item);
 			return;
 		}
 
 		// if the current item isn't waiting, it's not the next ready item
 		if (cur_item->state != UTIL_COLL_WAITING) {
+			FI_DBG(coll_op->mc->av_set->av->prov, FI_LOG_CQ,
+			       "Work item not waiting: %p [%s]\n", cur_item,
+			       log_util_coll_state[cur_item->state]);
 			continue;
 		}
 
+		FI_DBG(coll_op->mc->av_set->av->prov, FI_LOG_CQ, "Ready item: %p \n",
+		       cur_item);
 		next_ready = cur_item;
 		break;
 	}
 
 	if (!next_ready)
 		return;
+
+	util_coll_op_log_work(coll_op);
 
 	next_ready->state = UTIL_COLL_PROCESSING;
 	slist_insert_tail(&next_ready->ready_entry, &util_ep->coll_ready_queue);
@@ -496,6 +569,183 @@ static int util_coll_allreduce(struct util_coll_operation *coll_op, const void *
 	return FI_SUCCESS;
 }
 
+static int util_coll_allgather(struct util_coll_operation *coll_op, const void *send_buf,
+			       void *result, int count, enum fi_datatype datatype)
+{
+	// allgather implemented using ring algorithm
+	int64_t ret, i, cur_offset, next_offset;
+	size_t nbytes, numranks;
+	uint64_t local_rank, left_rank, right_rank;
+
+	local_rank = coll_op->mc->local_rank;
+	nbytes = ofi_datatype_size(datatype) * count;
+	numranks = coll_op->mc->av_set->fi_addr_count;
+
+	// copy the local value to the appropriate place in result buffer
+	ret = util_coll_sched_copy(coll_op, (void *) send_buf,
+				   (char *) result + (local_rank * nbytes), count,
+				   datatype, 1);
+	if (ret)
+		return ret;
+
+	// send to right, recv from left
+	left_rank = (numranks + local_rank - 1) % numranks;
+	right_rank = (local_rank + 1) % numranks;
+
+	cur_offset = local_rank;
+	next_offset = left_rank;
+
+	// fill in result with data going right to left
+	for (i = 1; i < numranks; i++) {
+		ret = util_coll_sched_send(coll_op, right_rank,
+					   (char *) result + (cur_offset * nbytes), count,
+					   datatype, 0);
+		if (ret)
+			return ret;
+
+		ret = util_coll_sched_recv(coll_op, left_rank,
+					   (char *) result + (next_offset * nbytes),
+					   count, datatype, 1);
+		if (ret)
+			return ret;
+
+		cur_offset = next_offset;
+		next_offset = (numranks + next_offset - 1) % numranks;
+	}
+
+	return FI_SUCCESS;
+}
+
+static size_t util_binomial_tree_values_to_recv(uint64_t rank, size_t numranks)
+{
+	size_t nvalues = 0x1 << (ofi_lsb(rank) - 1);
+	if (numranks < rank + nvalues)
+		nvalues = numranks - rank;
+
+	return nvalues;
+}
+
+static int util_coll_scatter(struct util_coll_operation *coll_op, const void *data,
+			     void *result, void **temp, size_t count, uint64_t root,
+			     enum fi_datatype datatype)
+{
+	// scatter implemented with binomial tree algorithm
+	uint64_t local_rank, relative_rank;
+	size_t nbytes, numranks, send_cnt, cur_cnt;
+	int ret, mask, remote_rank;
+	void *send_data;
+
+	local_rank = coll_op->mc->local_rank;
+	numranks = coll_op->mc->av_set->fi_addr_count;
+	relative_rank = (local_rank >= root) ? local_rank - root : local_rank - root + numranks;
+	nbytes = count * ofi_datatype_size(datatype);
+
+	// check if we need to participate
+	if (count == 0)
+		return FI_SUCCESS;
+
+	// non-root even nodes get a temp buffer for receiving data
+	// these nodes may need to send part of what they receive
+	if (relative_rank && !(relative_rank % 2)) {
+		cur_cnt = count * util_binomial_tree_values_to_recv(relative_rank, numranks);
+		*temp = malloc(cur_cnt * ofi_datatype_size(datatype));
+		if (!*temp)
+			return -FI_ENOMEM;
+	}
+
+	if (local_rank == root) {
+		cur_cnt = count * numranks;
+		if (root != 0) {
+			// if we're root but not rank 0, we need to reorder the send buffer
+			// according to destination rank. if we're rank 3, data intended for
+			// ranks 0-2 will be moved to the end
+			*temp = malloc(cur_cnt * ofi_datatype_size(datatype));
+			if (!temp)
+				return -FI_ENOMEM;
+			ret = util_coll_sched_copy(coll_op,
+						   (char *) data + nbytes * local_rank, *temp,
+						   (numranks - local_rank) * count, datatype,
+						   1);
+			if (ret)
+				return ret;
+
+			ret = util_coll_sched_copy(coll_op, (char *) data,
+						   (char *) *temp +
+							   (numranks - local_rank) * nbytes,
+						   local_rank * count, datatype, 1);
+			if (ret)
+				return ret;
+		}
+	}
+
+	// set up all receives
+	mask = 0x1;
+	while (mask < numranks) {
+		if (relative_rank & mask) {
+			remote_rank = local_rank - mask;
+			if (remote_rank < 0)
+				remote_rank += numranks;
+
+			if (relative_rank % 2) {
+				// leaf node, we're receiving the actual data
+				ret = util_coll_sched_recv(coll_op, remote_rank, result, count,
+							   datatype, 1);
+				if (ret)
+					return ret;
+			} else {
+				// branch node, we're receiving data which we've got to forward
+				ret = util_coll_sched_recv(coll_op, remote_rank, *temp,
+							   cur_cnt, datatype, 1);
+				if (ret)
+					return ret;
+			}
+			break;
+		}
+		mask <<= 1;
+	}
+
+	// set up all sends
+	send_data = root == local_rank && root == 0 ? (void *) data : *temp;
+	mask >>= 1;
+	while (mask > 0) {
+		if (relative_rank + mask < numranks) {
+			// to this point, cur_cnt has represented the number of values
+			// to expect to store in our data buf
+			// from here on, cur_cnt is the number of values we have left to
+			// forward from the data buf
+			send_cnt = cur_cnt - count * mask;
+
+			remote_rank = local_rank + mask;
+			if (remote_rank >= numranks)
+				remote_rank -= numranks;
+
+			FI_DBG(coll_op->mc->av_set->av->prov, FI_LOG_CQ,
+			       "MASK: 0x%0x CUR_CNT: %ld SENDING: %ld TO: %d\n", mask,
+			       cur_cnt, send_cnt, remote_rank);
+
+			assert(send_cnt > 0);
+
+			ret = util_coll_sched_send(coll_op, remote_rank,
+							(char *) send_data +
+								nbytes * mask,
+							send_cnt, datatype, 1);
+			if (ret)
+				return ret;
+
+			cur_cnt -= send_cnt;
+		}
+		mask >>= 1;
+	}
+
+	if (!(relative_rank % 2)) {
+		// for the root and all even nodes, we've got to copy
+		// our local data to the result buffer
+		ret = util_coll_sched_copy(coll_op, send_data, result, count, datatype, 1);
+	}
+
+	return FI_SUCCESS;
+}
+
 static int util_coll_close(struct fid *fid)
 {
 	struct util_coll_mc *coll_mc;
@@ -518,8 +768,7 @@ static struct fi_ops util_coll_fi_ops = {
  * e.g. require local address to be in AV?
  * Determine best way to handle first join request
  */
-static int util_coll_find_local_rank(struct fid_ep *ep,
-				  struct util_coll_mc *coll_mc)
+static int util_coll_find_local_rank(struct fid_ep *ep, struct util_coll_mc *coll_mc)
 {
 	size_t addrlen;
 	char *addr;
@@ -584,8 +833,24 @@ void util_coll_collective_comp(struct util_coll_operation *coll_op)
 		FI_WARN(ep->domain->fabric->prov, FI_LOG_DOMAIN,
 			"barrier collective - cq write failed\n");
 
-	if(coll_op->type == UTIL_COLL_ALLREDUCE_OP)
+	switch (coll_op->type) {
+	case UTIL_COLL_ALLREDUCE_OP:
 		free(coll_op->data.allreduce.data);
+		break;
+	case UTIL_COLL_SCATTER_OP:
+		free(coll_op->data.scatter);
+		break;
+	case UTIL_COLL_BROADCAST_OP:
+		free(coll_op->data.broadcast.chunk);
+		free(coll_op->data.broadcast.scatter);
+		break;
+	case UTIL_COLL_JOIN_OP:
+	case UTIL_COLL_BARRIER_OP:
+	case UTIL_COLL_ALLGATHER_OP:
+	default:
+		//nothing to clean up
+		break;
+	}
 }
 
 static int util_coll_proc_reduce_item(struct util_coll_reduce_item *reduce_item)
@@ -606,6 +871,7 @@ int util_coll_process_xfer_item(struct util_coll_xfer_item *item) {
 	struct iovec iov;
 	struct fi_msg_tagged msg;
 	struct util_coll_mc *mc = item->hdr.coll_op->mc;
+	int ret;
 
 	msg.msg_iov = &iov;
 	msg.desc = NULL;
@@ -620,9 +886,23 @@ int util_coll_process_xfer_item(struct util_coll_xfer_item *item) {
 	iov.iov_len = (item->count * ofi_datatype_size(item->datatype));
 
 	if (item->hdr.type == UTIL_COLL_SEND) {
-		return fi_tsendmsg(mc->ep, &msg, FI_COLLECTIVE);
+		ret = fi_tsendmsg(mc->ep, &msg, FI_COLLECTIVE);
+		if (!ret)
+			FI_DBG(mc->av_set->av->prov, FI_LOG_CQ,
+			       "%p SEND [0x%02lx] -> [0x%02x] cnt: %d sz: %ld\n", item,
+			       item->hdr.coll_op->mc->local_rank, item->remote_rank,
+			       item->count,
+			       item->count * ofi_datatype_size(item->datatype));
+		return ret;
 	} else if (item->hdr.type == UTIL_COLL_RECV) {
-		return fi_trecvmsg(mc->ep, &msg, FI_COLLECTIVE);
+		ret = fi_trecvmsg(mc->ep, &msg, FI_COLLECTIVE);
+		if (!ret)
+			FI_DBG(mc->av_set->av->prov, FI_LOG_CQ,
+			       "%p RECV [0x%02lx] <- [0x%02x] cnt: %d sz: %ld\n", item,
+			       item->hdr.coll_op->mc->local_rank, item->remote_rank,
+			       item->count,
+			       item->count * ofi_datatype_size(item->datatype));
+		return ret;
 	}
 
 	return -FI_ENOSYS;
@@ -976,12 +1256,135 @@ err1:
 	return ret;
 }
 
+ssize_t ofi_ep_allgather(struct fid_ep *ep, const void *buf, size_t count, void *desc,
+			 void *result, void *result_desc, fi_addr_t coll_addr,
+			 enum fi_datatype datatype, uint64_t flags, void *context)
+{
+	struct util_coll_mc *coll_mc;
+	struct util_coll_operation *allgather_op;
+	struct util_ep *util_ep;
+	int ret;
+
+	coll_mc = (struct util_coll_mc *) ((uintptr_t) coll_addr);
+	ret = util_coll_op_create(&allgather_op, coll_mc, UTIL_COLL_ALLGATHER_OP, context,
+				  util_coll_collective_comp);
+	if (ret)
+		return ret;
+
+	ret = util_coll_allgather(allgather_op, buf, result, count, datatype);
+	if (ret)
+		goto err;
+
+	ret = util_coll_sched_comp(allgather_op);
+	if (ret)
+		goto err;
+
+	util_ep = container_of(ep, struct util_ep, ep_fid);
+	util_coll_op_progress_work(util_ep, allgather_op);
+
+	return FI_SUCCESS;
+err:
+	free(allgather_op);
+	return ret;
+}
+
+ssize_t ofi_ep_scatter(struct fid_ep *ep, const void *buf, size_t count, void *desc,
+		       void *result, void *result_desc, fi_addr_t coll_addr,
+		       fi_addr_t root_addr, enum fi_datatype datatype, uint64_t flags,
+		       void *context)
+{
+	struct util_coll_mc *coll_mc;
+	struct util_coll_operation *scatter_op;
+	struct util_ep *util_ep;
+	int ret;
+
+	coll_mc = (struct util_coll_mc *) ((uintptr_t) coll_addr);
+	ret = util_coll_op_create(&scatter_op, coll_mc, UTIL_COLL_SCATTER_OP, context,
+				  util_coll_collective_comp);
+	if (ret)
+		return ret;
+
+	ret = util_coll_scatter(scatter_op, buf, result, &scatter_op->data.scatter, count, root_addr, datatype);
+	if (ret)
+		goto err;
+
+	ret = util_coll_sched_comp(scatter_op);
+	if (ret)
+		goto err;
+
+	util_ep = container_of(ep, struct util_ep, ep_fid);
+	util_coll_op_progress_work(util_ep, scatter_op);
+
+	return FI_SUCCESS;
+err:
+	free(scatter_op);
+	return ret;
+}
+
+ssize_t ofi_ep_broadcast(struct fid_ep *ep, void *buf, size_t count, void *desc,
+			 fi_addr_t coll_addr, fi_addr_t root_addr,
+			 enum fi_datatype datatype, uint64_t flags, void *context)
+{
+	struct util_coll_mc *coll_mc;
+	struct util_coll_operation *broadcast_op;
+	struct util_ep *util_ep;
+	int ret, chunk_cnt, numranks, local;
+
+	coll_mc = (struct util_coll_mc *) ((uintptr_t) coll_addr);
+	ret = util_coll_op_create(&broadcast_op, coll_mc, UTIL_COLL_BROADCAST_OP, context,
+				  util_coll_collective_comp);
+	if (ret)
+		return ret;
+
+	local = broadcast_op->mc->local_rank;
+	numranks = broadcast_op->mc->av_set->fi_addr_count;
+	chunk_cnt = (count + numranks - 1) / numranks;
+	if (chunk_cnt * local > count && chunk_cnt * local - (int) count > chunk_cnt)
+		chunk_cnt = 0;
+
+	broadcast_op->data.broadcast.chunk = malloc(chunk_cnt * ofi_datatype_size(datatype));
+	if (!broadcast_op->data.broadcast.chunk) {
+		ret = -FI_ENOMEM;
+		goto err1;
+	}
+
+	ret = util_coll_scatter(broadcast_op, buf, broadcast_op->data.broadcast.chunk,
+				&broadcast_op->data.broadcast.scatter, chunk_cnt,
+				root_addr, datatype);
+	if (ret)
+		goto err2;
+
+	ret = util_coll_allgather(broadcast_op, broadcast_op->data.broadcast.chunk, buf,
+				  chunk_cnt, datatype);
+	if (ret)
+		goto err2;
+
+	ret = util_coll_sched_comp(broadcast_op);
+	if (ret)
+		goto err2;
+
+	util_ep = container_of(ep, struct util_ep, ep_fid);
+	util_coll_op_progress_work(util_ep, broadcast_op);
+
+	return FI_SUCCESS;
+err2:
+	free(broadcast_op->data.broadcast.chunk);
+err1:
+	free(broadcast_op);
+	return ret;
+}
+
 void ofi_coll_handle_xfer_comp(uint64_t tag, void *ctx)
 {
 	struct util_ep *util_ep;
 	struct util_coll_xfer_item *xfer_item = (struct util_coll_xfer_item *) ctx;
 	xfer_item->hdr.state = UTIL_COLL_COMPLETE;
 
+	FI_DBG(xfer_item->hdr.coll_op->mc->av_set->av->prov, FI_LOG_CQ,
+	       "\tXfer complete: { %p %s Remote: 0x%02x Local: 0x%02lx cnt: %d typesize: %ld }\n",
+	       xfer_item, xfer_item->hdr.type == UTIL_COLL_SEND ? "SEND" : "RECV",
+	       xfer_item->remote_rank, xfer_item->hdr.coll_op->mc->local_rank,
+	       xfer_item->count, ofi_datatype_size(xfer_item->datatype));
 	util_ep = container_of(xfer_item->hdr.coll_op->mc->ep, struct util_ep, ep_fid);
 	util_coll_op_progress_work(util_ep, xfer_item->hdr.coll_op);
 }
@@ -996,6 +1399,9 @@ int ofi_query_collective(struct fid_domain *domain, enum fi_collective_op coll,
 
 	switch (coll) {
 	case FI_BARRIER:
+	case FI_ALLGATHER:
+	case FI_SCATTER:
+	case FI_BROADCAST:
 		ret = FI_SUCCESS;
 		break;
 	case FI_ALLREDUCE:
@@ -1005,12 +1411,9 @@ int ofi_query_collective(struct fid_domain *domain, enum fi_collective_op coll,
 		else
 			return -FI_ENOSYS;
 		break;
-	case FI_BROADCAST:
 	case FI_ALLTOALL:
-	case FI_ALLGATHER:
 	case FI_REDUCE_SCATTER:
 	case FI_REDUCE:
-	case FI_SCATTER:
 	case FI_GATHER:
 	default:
 		return -FI_ENOSYS;
