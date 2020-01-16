@@ -181,13 +181,14 @@ void ofi_mr_cache_delete(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 	cache->delete_cnt++;
 
 	if (--entry->use_cnt == 0) {
-		if (entry->storage_context) {
-			dlist_insert_tail(&entry->lru_entry, &cache->lru_list);
-		} else {
+		if (!entry->storage_context) {
 			cache->uncached_cnt--;
 			cache->uncached_size -= entry->info.iov.iov_len;
+			pthread_mutex_unlock(&cache->monitor->lock);
 			util_mr_free_entry(cache, entry);
+			return;
 		}
+		dlist_insert_tail(&entry->lru_entry, &cache->lru_list);
 	}
 	pthread_mutex_unlock(&cache->monitor->lock);
 }
