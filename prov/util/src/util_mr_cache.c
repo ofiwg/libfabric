@@ -410,7 +410,6 @@ buf_free:
 void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache)
 {
 	struct ofi_mr_entry *entry;
-	struct dlist_entry *tmp;
 
 	/* If we don't have a domain, initialization failed */
 	if (!cache->domain)
@@ -422,10 +421,16 @@ void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache)
 		cache->notify_cnt);
 
 	pthread_mutex_lock(&cache->monitor->lock);
-	dlist_foreach_container_safe(&cache->lru_list, struct ofi_mr_entry,
-				     entry, lru_entry, tmp) {
+	while (!dlist_empty(&cache->lru_list)) {
+		dlist_pop_front(&cache->lru_list, struct ofi_mr_entry,
+				entry, lru_entry);
 		assert(entry->use_cnt == 0);
-		util_mr_uncache_entry(cache, entry);
+		dlist_init(&entry->lru_entry);
+		util_mr_uncache_entry_storage(cache, entry);
+		pthread_mutex_unlock(&cache->monitor->lock);
+
+		util_mr_free_entry(cache, entry);
+		pthread_mutex_lock(&cache->monitor->lock);
 	}
 	pthread_mutex_unlock(&cache->monitor->lock);
 
