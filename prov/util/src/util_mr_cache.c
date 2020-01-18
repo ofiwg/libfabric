@@ -127,8 +127,8 @@ static void util_mr_uncache_entry(struct ofi_mr_cache *cache,
 	util_mr_uncache_entry_storage(cache, entry);
 
 	if (entry->use_cnt == 0) {
-		dlist_remove_init(&entry->lru_entry);
-		util_mr_free_entry(cache, entry);
+		dlist_remove(&entry->list_entry);
+		dlist_insert_tail(&entry->list_entry, &cache->flush_list);
 	} else {
 		cache->uncached_cnt++;
 		cache->uncached_size += entry->info.iov.iov_len;
@@ -155,6 +155,17 @@ bool ofi_mr_cache_flush(struct ofi_mr_cache *cache)
 	struct ofi_mr_entry *entry;
 
 	pthread_mutex_lock(&cache->monitor->lock);
+	while (!dlist_empty(&cache->flush_list)) {
+		dlist_pop_front(&cache->flush_list, struct ofi_mr_entry,
+				entry, list_entry);
+		FI_DBG(cache->domain->prov, FI_LOG_MR, "flush %p (len: %zu)\n",
+		       entry->info.iov.iov_base, entry->info.iov.iov_len);
+		pthread_mutex_unlock(&cache->monitor->lock);
+
+		util_mr_free_entry(cache, entry);
+		pthread_mutex_lock(&cache->monitor->lock);
+	}
+
 	if (dlist_empty(&cache->lru_list)) {
 		pthread_mutex_unlock(&cache->monitor->lock);
 		return false;
@@ -162,8 +173,8 @@ bool ofi_mr_cache_flush(struct ofi_mr_cache *cache)
 
 	do {
 		dlist_pop_front(&cache->lru_list, struct ofi_mr_entry,
-				entry, lru_entry);
-		dlist_init(&entry->lru_entry);
+				entry, list_entry);
+		dlist_init(&entry->list_entry);
 		FI_DBG(cache->domain->prov, FI_LOG_MR, "flush %p (len: %zu)\n",
 		       entry->info.iov.iov_base, entry->info.iov.iov_len);
 
@@ -197,7 +208,7 @@ void ofi_mr_cache_delete(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 			util_mr_free_entry(cache, entry);
 			return;
 		}
-		dlist_insert_tail(&entry->lru_entry, &cache->lru_list);
+		dlist_insert_tail(&entry->list_entry, &cache->lru_list);
 	}
 	pthread_mutex_unlock(&cache->monitor->lock);
 }
@@ -333,7 +344,7 @@ retry:
 
 	cache->hit_cnt++;
 	if ((*entry)->use_cnt++ == 0)
-		dlist_remove_init(&(*entry)->lru_entry);
+		dlist_remove_init(&(*entry)->list_entry);
 
 unlock:
 	pthread_mutex_unlock(&cache->monitor->lock);
@@ -366,7 +377,7 @@ struct ofi_mr_entry *ofi_mr_cache_find(struct ofi_mr_cache *cache,
 
 	cache->hit_cnt++;
 	if ((entry)->use_cnt++ == 0)
-		dlist_remove_init(&(entry)->lru_entry);
+		dlist_remove_init(&(entry)->list_entry);
 
 unlock:
 	pthread_mutex_unlock(&cache->monitor->lock);
@@ -423,19 +434,8 @@ void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache)
 		cache->search_cnt, cache->delete_cnt, cache->hit_cnt,
 		cache->notify_cnt);
 
-	pthread_mutex_lock(&cache->monitor->lock);
-	while (!dlist_empty(&cache->lru_list)) {
-		dlist_pop_front(&cache->lru_list, struct ofi_mr_entry,
-				entry, lru_entry);
-		assert(entry->use_cnt == 0);
-		dlist_init(&entry->lru_entry);
-		util_mr_uncache_entry_storage(cache, entry);
-		pthread_mutex_unlock(&cache->monitor->lock);
-
-		util_mr_free_entry(cache, entry);
-		pthread_mutex_lock(&cache->monitor->lock);
-	}
-	pthread_mutex_unlock(&cache->monitor->lock);
+	while (ofi_mr_cache_flush(cache))
+		;
 
 	pthread_mutex_destroy(&cache->lock);
 	ofi_monitor_del_cache(cache);
@@ -548,6 +548,7 @@ int ofi_mr_cache_init(struct util_domain *domain,
 
 	pthread_mutex_init(&cache->lock, NULL);
 	dlist_init(&cache->lru_list);
+	dlist_init(&cache->flush_list);
 	cache->cached_cnt = 0;
 	cache->cached_size = 0;
 	cache->uncached_cnt = 0;
