@@ -478,13 +478,36 @@ void rxr_pkt_handle_eor_send_completion(struct rxr_ep *ep,
 void rxr_pkt_handle_eor_recv(struct rxr_ep *ep,
 			     struct rxr_pkt_entry *pkt_entry)
 {
+	int i;
 	struct rxr_eor_hdr *shm_eor;
 	struct rxr_tx_entry *tx_entry;
+	struct rxr_peer *peer;
+	ssize_t err;
 
 	shm_eor = (struct rxr_eor_hdr *)pkt_entry->pkt;
 
 	/* pre-post buf used here, so can NOT track back to tx_entry with x_entry */
+	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+	assert(peer);
+
 	tx_entry = ofi_bufpool_get_ibuf(ep->tx_entry_pool, shm_eor->tx_id);
+	if (!peer->is_local) {
+		for (i = 0; i < tx_entry->iov_count; ++i) {
+			if (tx_entry->mr[i]) {
+				err = fi_close((struct fid *)tx_entry->mr[i]);
+				if (OFI_UNLIKELY(err)) {
+					FI_WARN(&rxr_prov, FI_LOG_CQ, "mr dereg failed. err=%ld\n", err);
+					if (rxr_cq_handle_tx_error(ep, tx_entry, err))
+						assert(0 && "failed to write err cq entry");
+					rxr_release_tx_entry(ep, tx_entry);
+					return;
+				}
+
+				tx_entry->mr[i] = NULL;
+			}
+		}
+	}
+
 	rxr_cq_write_tx_completion(ep, tx_entry);
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
 }

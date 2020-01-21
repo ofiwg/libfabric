@@ -433,6 +433,7 @@ void rxr_tx_entry_init(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	else
 		memset(&tx_entry->desc[0], 0, sizeof(*msg->desc) * msg->iov_count);
 
+	memset(tx_entry->mr, 0, sizeof(*tx_entry->mr) * msg->iov_count);
 	/* set flags */
 	assert(ep->util_ep.tx_msg_flags == 0 ||
 	       ep->util_ep.tx_msg_flags == FI_COMPLETION);
@@ -485,7 +486,6 @@ struct rxr_tx_entry *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
 	}
 
 	rxr_tx_entry_init(rxr_ep, tx_entry, msg, op, flags);
-
 	if (op == ofi_op_tagged) {
 		tx_entry->cq_entry.tag = tag;
 		tx_entry->tag = tag;

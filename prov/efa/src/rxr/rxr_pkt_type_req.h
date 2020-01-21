@@ -199,6 +199,28 @@ struct rxr_long_tagrtm_hdr {
 	uint64_t tag;
 };
 
+struct rxr_read_rtm_base_hdr {
+	struct rxr_rtm_base_hdr hdr;
+	uint64_t data_len;
+	uint32_t tx_id;
+	uint32_t read_iov_count;
+};
+
+static inline
+struct rxr_read_rtm_base_hdr *rxr_get_read_rtm_base_hdr(void *pkt)
+{
+	return (struct rxr_read_rtm_base_hdr *)pkt;
+}
+
+struct rxr_read_msgrtm_hdr {
+	struct rxr_read_rtm_base_hdr hdr;
+};
+
+struct rxr_read_tagrtm_hdr {
+	struct rxr_read_rtm_base_hdr hdr;
+	uint64_t tag;
+};
+
 /*
  *  init() functions for RTM packets
  */
@@ -226,6 +248,13 @@ ssize_t rxr_pkt_init_long_tagrtm(struct rxr_ep *ep,
 				 struct rxr_tx_entry *tx_entry,
 				 struct rxr_pkt_entry *pkt_entry);
 
+ssize_t rxr_pkt_init_read_msgrtm(struct rxr_ep *ep,
+				 struct rxr_tx_entry *tx_entry,
+				 struct rxr_pkt_entry *pkt_entry);
+
+ssize_t rxr_pkt_init_read_tagrtm(struct rxr_ep *ep,
+				 struct rxr_tx_entry *tx_entry,
+				 struct rxr_pkt_entry *pkt_entry);
 /*
  *   handle_sent() functions for RTM packets
  */
@@ -238,6 +267,12 @@ void rxr_pkt_handle_eager_rtm_sent(struct rxr_ep *ep,
 void rxr_pkt_handle_long_rtm_sent(struct rxr_ep *ep,
 				  struct rxr_pkt_entry *pkt_entry);
 
+static inline
+void rxr_pkt_handle_read_rtm_sent(struct rxr_ep *ep,
+				  struct rxr_pkt_entry *pkt_entry)
+{
+}
+
 /*
  *   handle_send_completion() functions for RTM packet types
  */
@@ -246,6 +281,12 @@ void rxr_pkt_handle_eager_rtm_send_completion(struct rxr_ep *ep,
 
 void rxr_pkt_handle_long_rtm_send_completion(struct rxr_ep *ep,
 					     struct rxr_pkt_entry *pkt_entry);
+
+static inline
+void rxr_pkt_handle_read_rtm_send_completion(struct rxr_ep *ep,
+					     struct rxr_pkt_entry *pkt_entry)
+{
+}
 
 /*
  *   proc() functions for RTM packet types

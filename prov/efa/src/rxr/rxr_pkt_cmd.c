@@ -124,6 +124,12 @@ int rxr_pkt_init_ctrl(struct rxr_ep *rxr_ep, int entry_type, void *x_entry,
 	case RXR_LONG_TAGRTM_PKT:
 		ret = rxr_pkt_init_long_tagrtm(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
 		break;
+	case RXR_READ_MSGRTM_PKT:
+		ret = rxr_pkt_init_read_msgrtm(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
+		break;
+	case RXR_READ_TAGRTM_PKT:
+		ret = rxr_pkt_init_read_tagrtm(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
+		break;
 	case RXR_EAGER_RTW_PKT:
 		ret = rxr_pkt_init_eager_rtw(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
 		break;
@@ -173,6 +179,10 @@ void rxr_pkt_handle_ctrl_sent(struct rxr_ep *rxr_ep, struct rxr_pkt_entry *pkt_e
 	case RXR_LONG_MSGRTM_PKT:
 	case RXR_LONG_TAGRTM_PKT:
 		rxr_pkt_handle_long_rtm_sent(rxr_ep, pkt_entry);
+		break;
+	case RXR_READ_MSGRTM_PKT:
+	case RXR_READ_TAGRTM_PKT:
+		rxr_pkt_handle_read_rtm_sent(rxr_ep, pkt_entry);
 		break;
 	case RXR_EAGER_RTW_PKT:
 		rxr_pkt_handle_eager_rtw_sent(rxr_ep, pkt_entry);
@@ -315,6 +325,10 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct fi_cq_data_entry *
 	case RXR_LONG_MSGRTM_PKT:
 	case RXR_LONG_TAGRTM_PKT:
 		rxr_pkt_handle_long_rtm_send_completion(ep, pkt_entry);
+		break;
+	case RXR_READ_MSGRTM_PKT:
+	case RXR_READ_TAGRTM_PKT:
+		rxr_pkt_handle_read_rtm_send_completion(ep, pkt_entry);
 		break;
 	case RXR_EAGER_RTW_PKT:
 		rxr_pkt_handle_eager_rtw_send_completion(ep, pkt_entry);
@@ -462,6 +476,8 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 	case RXR_EAGER_TAGRTM_PKT:
 	case RXR_LONG_MSGRTM_PKT:
 	case RXR_LONG_TAGRTM_PKT:
+	case RXR_READ_MSGRTM_PKT:
+	case RXR_READ_TAGRTM_PKT:
 		rxr_pkt_handle_rtm_recv(ep, pkt_entry);
 		return;
 	case RXR_EAGER_RTW_PKT:
