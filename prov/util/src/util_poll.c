@@ -141,6 +141,9 @@ static int util_poll_close(struct fid *fid)
 
 	if (pollset->domain)
 		ofi_atomic_dec32(&pollset->domain->ref);
+
+	fastlock_destroy(&pollset->lock);
+
 	free(pollset);
 	return 0;
 }
