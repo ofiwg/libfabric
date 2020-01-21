@@ -124,7 +124,8 @@ pipeline {
                             )                              
                           """
                         }
-                     } 
+                     }
+                 } 
                  stage('eth-udp-rxd-shm') {
                      agent {node {label 'eth'}}
                      steps{
@@ -488,6 +489,7 @@ pipeline {
             }
         }
     }
-}
+  }
 
 }
+
