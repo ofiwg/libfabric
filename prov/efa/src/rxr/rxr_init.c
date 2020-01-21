@@ -66,6 +66,7 @@ struct rxr_env rxr_env = {
 	.timeout_interval = 0, /* 0 is random timeout */
 	.efa_cq_read_size = 50,
 	.shm_cq_read_size = 50,
+	.efa_min_read_msg_size = 65536,
 	.efa_max_emulated_read_size = 0,
 	.efa_max_emulated_write_size = 65536,
 	.efa_read_segment_size = 1073741824,
@@ -110,6 +111,8 @@ static void rxr_init_env(void)
 			 &rxr_env.efa_cq_read_size);
 	fi_param_get_size_t(&rxr_prov, "shm_cq_read_size",
 			 &rxr_env.shm_cq_read_size);
+	fi_param_get_size_t(&rxr_prov, "inter_min_read_message_size",
+			    &rxr_env.efa_min_read_msg_size);
 	fi_param_get_size_t(&rxr_prov, "inter_max_emulated_read_size",
 			    &rxr_env.efa_max_emulated_read_size);
 	fi_param_get_size_t(&rxr_prov, "inter_max_emulated_write_size",
@@ -677,10 +680,12 @@ EFA_INI
 			"Set the number of EFA completion entries to read for one loop for one iteration of the progress engine. (Default: 50)");
 	fi_param_define(&rxr_prov, "shm_cq_read_size", FI_PARAM_SIZE_T,
 			"Set the number of SHM completion entries to read for one loop for one iteration of the progress engine. (Default: 50)");
+	fi_param_define(&rxr_prov, "inter_min_read_message_size", FI_PARAM_INT,
+			"The minimal message size for inter EFA read message protocol (if firmware support), (Default 65536).");
 	fi_param_define(&rxr_prov, "inter_max_emulated_read_size", FI_PARAM_INT,
-			"The maximum size for inter EFA emulated read protocol. Read requests whose size is larger than this value will be implemented via RDMA read (if firmware support), (Default 0 [RDMA read is always used]).");
+			"The maximum message size for inter EFA emulated read protocol. Read requests whose size is larger than this value will be implemented via RDMA read (if firmware support), (Default 0 [RDMA read is always used]).");
 	fi_param_define(&rxr_prov, "inter_max_emulated_write_size", FI_PARAM_INT,
-			"The maximum size for inter EFA emulated write protocol. Write requests whose size is larger than this value will be implemented via read write protocol (write by read).");
+			"The maximum message size for inter EFA emulated write protocol. Write requests whose size is larger than this value will be implemented via read write protocol (write by read).");
 	fi_param_define(&rxr_prov, "efa_read_segment_size", FI_PARAM_INT,
 			"Calls to RDMA read is segmented using this value.");
 	rxr_init_env();

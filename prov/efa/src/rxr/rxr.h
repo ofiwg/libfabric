@@ -220,6 +220,7 @@ struct rxr_env {
 	int timeout_interval;
 	size_t efa_cq_read_size;
 	size_t shm_cq_read_size;
+	size_t efa_min_read_msg_size;
 	size_t efa_max_emulated_read_size;
 	size_t efa_max_emulated_write_size;
 	size_t efa_read_segment_size;
@@ -699,6 +700,8 @@ struct rxr_tx_entry *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
 					   uint32_t op,
 					   uint64_t tag,
 					   uint64_t flags);
+
+int rxr_tx_entry_mr_dereg(struct rxr_tx_entry *tx_entry);
 
 static inline void rxr_release_tx_entry(struct rxr_ep *ep,
 					struct rxr_tx_entry *tx_entry)
