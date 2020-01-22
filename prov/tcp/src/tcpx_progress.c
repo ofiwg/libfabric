@@ -592,7 +592,7 @@ static inline int tcpx_get_next_rx_hdr(struct tcpx_ep *ep)
 	if (ep->rx_detect.hdr_len == ep->rx_detect.done_len)
 		return FI_SUCCESS;
 
-	ret = tcpx_recv_hdr(ep->conn_fd, &ep->stage_buf, &ep->rx_detect);
+	ret = tcpx_comm_recv_hdr(ep->conn_fd, &ep->stage_buf, &ep->rx_detect);
 	if (ret)
 		return ret;
 
