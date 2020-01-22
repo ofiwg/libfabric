@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2013-2015 Intel Corporation, Inc.  All rights reserved.
- * Copyright (c) 2017-2018 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * Copyright (c) 2017-2020 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -35,7 +35,6 @@
 
 #include <ofi_util.h>
 #include "efa.h"
-#include "efa_verbs.h"
 
 static int efa_domain_close(fid_t fid)
 {
@@ -48,13 +47,13 @@ static int efa_domain_close(fid_t fid)
 	if (efa_mr_cache_enable)
 		ofi_mr_cache_cleanup(&domain->cache);
 
-	if (domain->pd) {
-		ret = efa_cmd_dealloc_pd(domain->pd);
+	if (domain->ibv_pd) {
+		ret = -ibv_dealloc_pd(domain->ibv_pd);
 		if (ret) {
-			EFA_INFO_ERRNO(FI_LOG_DOMAIN, "efa_cmd_dealloc_pd", ret);
+			EFA_INFO_ERRNO(FI_LOG_DOMAIN, "ibv_dealloc_pd", ret);
 			return ret;
 		}
-		domain->pd = NULL;
+		domain->ibv_pd = NULL;
 	}
 
 	ret = ofi_domain_close(&domain->util_domain);
@@ -62,6 +61,7 @@ static int efa_domain_close(fid_t fid)
 		return ret;
 
 	fi_freeinfo(domain->info);
+	free(domain->qp_table);
 	free(domain);
 	return 0;
 }
@@ -86,7 +86,7 @@ static int efa_open_device_by_name(struct efa_domain *domain, const char *name)
 		name_len = strlen(name) - strlen(efa_dgrm_domain.suffix);
 
 	for (i = 0; i < num_ctx; i++) {
-		ret = strncmp(name, ctx_list[i]->ibv_ctx.device->name, name_len);
+		ret = strncmp(name, ctx_list[i]->ibv_ctx->device->name, name_len);
 		if (!ret) {
 			domain->ctx = ctx_list[i];
 			break;
@@ -125,6 +125,7 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	struct efa_domain *domain;
 	struct efa_fabric *fabric;
 	const struct fi_info *fi;
+	size_t qp_table_size;
 	int ret;
 
 	fi = efa_get_efa_info(info->domain_attr->name);
@@ -142,10 +143,18 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	if (!domain)
 		return -FI_ENOMEM;
 
+	qp_table_size = roundup_power_of_two(info->domain_attr->ep_cnt);
+	domain->qp_table_sz_m1 = qp_table_size - 1;
+	domain->qp_table = calloc(qp_table_size, sizeof(*domain->qp_table));
+	if (!domain->qp_table) {
+		ret = -FI_ENOMEM;
+		goto err_free_domain;
+	}
+
 	ret = ofi_domain_init(fabric_fid, info, &domain->util_domain,
 			      context);
 	if (ret)
-		goto err_free_domain;
+		goto err_free_qp_table;
 
 	domain->info = fi_dupinfo(info);
 	if (!domain->info) {
@@ -159,13 +168,11 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	if (ret)
 		goto err_free_info;
 
-	domain->pd = efa_cmd_alloc_pd(domain->ctx);
-	if (!domain->pd) {
+	domain->ibv_pd = ibv_alloc_pd(domain->ctx->ibv_ctx);
+	if (!domain->ibv_pd) {
 		ret = -errno;
 		goto err_free_info;
 	}
-
-	EFA_INFO(FI_LOG_DOMAIN, "Allocated pd[%u].\n", domain->pd->pdn);
 
 	domain->util_domain.domain_fid.fid.ops = &efa_fid_ops;
 	domain->util_domain.domain_fid.ops = &efa_domain_ops;
@@ -206,6 +213,8 @@ err_free_info:
 	fi_freeinfo(domain->info);
 err_close_domain:
 	ofi_domain_close(&domain->util_domain);
+err_free_qp_table:
+	free(domain->qp_table);
 err_free_domain:
 	free(domain);
 	return ret;
