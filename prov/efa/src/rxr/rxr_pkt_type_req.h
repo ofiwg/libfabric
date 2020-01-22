@@ -371,6 +371,18 @@ struct rxr_long_rtw_hdr {
 	struct fi_rma_iov rma_iov[0];
 };
 
+struct rxr_read_rtw_hdr {
+	uint8_t type;
+	uint8_t version;
+	uint16_t flags;
+	/* end of rxr_base_hdr */
+	uint32_t rma_iov_count;
+	uint64_t data_len;
+	uint32_t tx_id;
+	uint32_t read_iov_count;
+	struct fi_rma_iov rma_iov[0];
+};
+
 /*
  *     init() functions for each RTW packet types
  */
@@ -382,6 +394,9 @@ ssize_t rxr_pkt_init_long_rtw(struct rxr_ep *ep,
 			      struct rxr_tx_entry *tx_entry,
 			      struct rxr_pkt_entry *pkt_entry);
 
+ssize_t rxr_pkt_init_read_rtw(struct rxr_ep *ep,
+			      struct rxr_tx_entry *tx_entry,
+			      struct rxr_pkt_entry *pkt_entry);
 /*
  *     handle_sent() functions
  */
@@ -396,6 +411,12 @@ void rxr_pkt_handle_eager_rtw_sent(struct rxr_ep *ep,
 void rxr_pkt_handle_long_rtw_sent(struct rxr_ep *ep,
 				  struct rxr_pkt_entry *pkt_entry);
 
+static inline
+void rxr_pkt_handle_read_rtw_sent(struct rxr_ep *ep,
+				  struct rxr_pkt_entry *pkt_entry)
+{
+}
+
 /*
  *     handle_send_completion() functions
  */
@@ -405,6 +426,12 @@ void rxr_pkt_handle_eager_rtw_send_completion(struct rxr_ep *ep,
 void rxr_pkt_handle_long_rtw_send_completion(struct rxr_ep *ep,
 					     struct rxr_pkt_entry *pkt_entry);
 
+static inline
+void rxr_pkt_handle_read_rtw_send_completion(struct rxr_ep *ep,
+					     struct rxr_pkt_entry *pkt_entry)
+{
+}
+
 /*
  *     handle_recv() functions
  */
@@ -412,6 +439,9 @@ void rxr_pkt_handle_eager_rtw_recv(struct rxr_ep *ep,
 				   struct rxr_pkt_entry *pkt_entry);
 
 void rxr_pkt_handle_long_rtw_recv(struct rxr_ep *ep,
+				  struct rxr_pkt_entry *pkt_entry);
+
+void rxr_pkt_handle_read_rtw_recv(struct rxr_ep *ep,
 				  struct rxr_pkt_entry *pkt_entry);
 
 /* Structs and functions for RTR packet types

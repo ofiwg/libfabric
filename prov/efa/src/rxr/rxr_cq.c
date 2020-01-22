@@ -782,7 +782,7 @@ int rxr_tx_entry_mr_dereg(struct rxr_tx_entry *tx_entry)
 		if (tx_entry->mr[i]) {
 			err = fi_close((struct fid *)tx_entry->mr[i]);
 			if (OFI_UNLIKELY(err)) {
-				FI_WARN(&rxr_prov, FI_LOG_CQ, "mr dereg failed. err=%ld\n", err);
+				FI_WARN(&rxr_prov, FI_LOG_CQ, "mr dereg failed. err=%d\n", err);
 				return err;
 			}
 

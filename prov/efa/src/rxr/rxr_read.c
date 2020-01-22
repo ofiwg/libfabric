@@ -185,18 +185,92 @@ void rxr_read_release_entry(struct rxr_ep *ep, struct rxr_read_entry *read_entry
 	ofi_buf_free(read_entry);
 }
 
-int rxr_read_post_or_queue(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
+int rxr_read_post_or_queue(struct rxr_ep *ep, int entry_type, void *x_entry)
 {
-	int ret;
+	struct rxr_peer *peer;
+	struct rxr_read_entry *read_entry;
+	int err, lower_ep_type;
 
-	ret = rxr_read_post(ep, read_entry);
-	if (ret == -FI_EAGAIN) {
-		dlist_insert_tail(&read_entry->pending_entry, &ep->read_pending_list);
-		read_entry->state = RXR_RDMA_ENTRY_PENDING;
-		ret = 0;
+	if (entry_type == RXR_TX_ENTRY) {
+		peer = rxr_ep_get_peer(ep, ((struct rxr_tx_entry *)x_entry)->addr);
+	} else {
+		assert(entry_type == RXR_RX_ENTRY);
+		peer = rxr_ep_get_peer(ep, ((struct rxr_rx_entry *)x_entry)->addr);
 	}
 
-	return ret;
+	assert(peer);
+	lower_ep_type = (peer->is_local) ? SHM_EP : EFA_EP;
+	read_entry = rxr_read_alloc_entry(ep, entry_type, x_entry, lower_ep_type);
+	if (!read_entry) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ,
+			"RDMA entries exhausted.\n");
+		return -FI_ENOBUFS;
+	}
+
+	err = rxr_read_post(ep, read_entry);
+	if (err == -FI_EAGAIN) {
+		dlist_insert_tail(&read_entry->pending_entry, &ep->read_pending_list);
+		read_entry->state = RXR_RDMA_ENTRY_PENDING;
+		err = 0;
+	} else if(err) {
+		rxr_read_release_entry(ep, read_entry);
+		FI_WARN(&rxr_prov, FI_LOG_CQ,
+			"RDMA post read failed. errno=%d.\n", err);
+	}
+
+	return err;
+}
+
+int rxr_read_init_iov(struct rxr_ep *ep,
+		      struct rxr_tx_entry *tx_entry,
+		      struct fi_rma_iov *read_iov)
+{
+	int i, err;
+	struct fid_mr *mr;
+	struct rxr_peer *peer;
+
+	peer = rxr_ep_get_peer(ep, tx_entry->addr);
+	if (peer->is_local) {
+		for (i = 0; i < tx_entry->iov_count; ++i) {
+			assert(!tx_entry->mr[i]);
+			read_iov[i].addr = (uint64_t)tx_entry->iov[i].iov_base;
+			read_iov[i].len = tx_entry->iov[i].iov_len;
+			read_iov[i].key = 0;
+		}
+	} else if (tx_entry->desc[0]) {
+		for (i = 0; i < tx_entry->iov_count; ++i) {
+			mr = (struct fid_mr *)tx_entry->desc[i];
+			read_iov[i].addr = (uint64_t)tx_entry->iov[i].iov_base;
+			read_iov[i].len = tx_entry->iov[i].iov_len;
+			read_iov[i].key = fi_mr_key(mr);
+		}
+	} else {
+		/* note mr could be been set by an unsucessful rxr_ep_post_ctrl */
+		if (!tx_entry->mr[0]) {
+			for (i = 0; i < tx_entry->iov_count; ++i) {
+				assert(!tx_entry->mr[i]);
+				err = fi_mr_regv(rxr_ep_domain(ep)->rdm_domain,
+						 tx_entry->iov + i, 1,
+						 FI_REMOTE_READ,
+						 0, 0, 0, &tx_entry->mr[i], NULL);
+				if (err) {
+					FI_WARN(&rxr_prov, FI_LOG_MR,
+						"Unable to register MR buf %p as FI_REMOTE_READ",
+						tx_entry->iov[i].iov_base);
+					return err;
+				}
+			}
+		}
+
+		for (i = 0; i < tx_entry->iov_count; ++i) {
+			assert(tx_entry->mr[i]);
+			read_iov[i].addr = (uint64_t)tx_entry->iov[i].iov_base;
+			read_iov[i].len = tx_entry->iov[i].iov_len;
+			read_iov[i].key = fi_mr_key(tx_entry->mr[i]);
+		}
+	}
+
+	return 0;
 }
 
 int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
