@@ -78,7 +78,12 @@ struct rxr_rdma_entry *rxr_rdma_alloc_entry(struct rxr_ep *ep, int entry_type, v
 
 void rxr_rdma_release_entry(struct rxr_ep *ep, struct rxr_rdma_entry *rdma_entry);
 
-int rxr_rdma_post_read_or_queue(struct rxr_ep *ep, struct rxr_rdma_entry *pkt_entry);
+/* used by read message protcol and read write protocol */
+int rxr_rdma_init_read_iov(struct rxr_ep *ep,
+			   struct rxr_tx_entry *tx_entry,
+			   struct fi_rma_iov *read_iov);
+
+int rxr_rdma_post_read_or_queue(struct rxr_ep *ep, int entry_type, void *x_entry);
 
 int rxr_rdma_post_read(struct rxr_ep *ep, struct rxr_rdma_entry *rdma_entry);
 

@@ -483,7 +483,6 @@ void rxr_pkt_proc_shm_long_msg_rts(struct rxr_ep *ep,
 				   char *data)
 {
 	struct iovec *iovec_ptr;
-	struct rxr_rdma_entry *rdma_entry;
 	int err, i;
 
 
@@ -507,26 +506,13 @@ void rxr_pkt_proc_shm_long_msg_rts(struct rxr_ep *ep,
 		rx_entry->rma_iov[i].key = 0;
 	}
 
-	rdma_entry = rxr_rdma_alloc_entry(ep, RXR_RX_ENTRY, rx_entry,
-					  SHM_EP);
-	if (!rdma_entry) {
-		err = -FI_ENOMEM;
-		goto err;
-	}
-
-	err = rxr_rdma_post_read_or_queue(ep, rdma_entry);
+	err = rxr_rdma_post_read_or_queue(ep, RXR_RX_ENTRY, rx_entry);
 	if (OFI_UNLIKELY(err)) {
-		rxr_rdma_release_entry(ep, rdma_entry);
-		goto err;
+		FI_WARN(&rxr_prov, FI_LOG_CQ,
+			"A large message RMA READ failed over shm provider.\n");
+		if (rxr_cq_handle_rx_error(ep, rx_entry, err))
+			assert(0 && "failed to write err cq entry");
 	}
-
-	return;
-
-err:
-	FI_WARN(&rxr_prov, FI_LOG_CQ,
-		"A large message RMA READ failed over shm provider.\n");
-	if (rxr_cq_handle_rx_error(ep, rx_entry, err))
-		assert(0 && "failed to write err cq entry");
 }
 
 ssize_t rxr_pkt_proc_matched_msg_rts(struct rxr_ep *ep,

@@ -136,6 +136,9 @@ int rxr_pkt_init_ctrl(struct rxr_ep *rxr_ep, int entry_type, void *x_entry,
 	case RXR_LONG_RTW_PKT:
 		ret = rxr_pkt_init_long_rtw(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
 		break;
+	case RXR_READ_RTW_PKT:
+		ret = rxr_pkt_init_read_rtw(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
+		break;
 	case RXR_SHORT_RTR_PKT:
 		ret = rxr_pkt_init_short_rtr(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
 		break;
@@ -189,6 +192,9 @@ void rxr_pkt_handle_ctrl_sent(struct rxr_ep *rxr_ep, struct rxr_pkt_entry *pkt_e
 		break;
 	case RXR_LONG_RTW_PKT:
 		rxr_pkt_handle_long_rtw_sent(rxr_ep, pkt_entry);
+		break;
+	case RXR_READ_RTW_PKT:
+		rxr_pkt_handle_read_rtw_sent(rxr_ep, pkt_entry);
 		break;
 	case RXR_SHORT_RTR_PKT:
 	case RXR_LONG_RTR_PKT:
@@ -335,6 +341,9 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct fi_cq_data_entry *
 		break;
 	case RXR_LONG_RTW_PKT:
 		rxr_pkt_handle_long_rtw_send_completion(ep, pkt_entry);
+		break;
+	case RXR_READ_RTW_PKT:
+		rxr_pkt_handle_read_rtw_send_completion(ep, pkt_entry);
 		break;
 	case RXR_SHORT_RTR_PKT:
 	case RXR_LONG_RTR_PKT:
@@ -485,6 +494,9 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 		return;
 	case RXR_LONG_RTW_PKT:
 		rxr_pkt_handle_long_rtw_recv(ep, pkt_entry);
+		return;
+	case RXR_READ_RTW_PKT:
+		rxr_pkt_handle_read_rtw_recv(ep, pkt_entry);
 		return;
 	case RXR_SHORT_RTR_PKT:
 	case RXR_LONG_RTR_PKT:

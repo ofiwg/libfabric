@@ -53,6 +53,7 @@ static const size_t REQ_HDR_SIZE_LIST[] = {
 	/* rtw header */
 	[RXR_EAGER_RTW_PKT] = sizeof(struct rxr_eager_rtw_hdr),
 	[RXR_LONG_RTW_PKT] = sizeof(struct rxr_long_rtw_hdr),
+	[RXR_READ_RTW_PKT] = sizeof(struct rxr_read_rtw_hdr),
 	/* rtr header */
 	[RXR_SHORT_RTR_PKT] = sizeof(struct rxr_rtr_hdr),
 	[RXR_LONG_RTR_PKT] = sizeof(struct rxr_rtr_hdr),
@@ -130,6 +131,7 @@ size_t rxr_pkt_req_base_hdr_size(struct rxr_pkt_entry *pkt_entry)
 		return REQ_HDR_SIZE_LIST[base_hdr->type];
 	case RXR_EAGER_RTW_PKT:
 	case RXR_LONG_RTW_PKT:
+	case RXR_READ_RTW_PKT:
 		return REQ_HDR_SIZE_LIST[base_hdr->type] +
 		       rxr_get_rtw_base_hdr(pkt_entry->pkt)->rma_iov_count * sizeof(struct fi_rma_iov);
 	case RXR_SHORT_RTR_PKT:
@@ -314,16 +316,12 @@ ssize_t rxr_pkt_init_read_rtm(struct rxr_ep *ep,
 			      int pkt_type,
 			      struct rxr_pkt_entry *pkt_entry)
 {
-	ssize_t err;
-	int i;
-	struct rxr_peer *peer;
-	struct fid_mr *mr;
 	struct rxr_read_rtm_base_hdr *rtm_hdr;
 	struct fi_rma_iov *read_iov;
+	int err;
 
 	rxr_pkt_init_req_hdr(ep, tx_entry, pkt_type, pkt_entry);
 
-	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 	rtm_hdr = rxr_get_read_rtm_base_hdr(pkt_entry->pkt);
 	rtm_hdr->hdr.flags |= RXR_REQ_MSG;
 	rtm_hdr->hdr.msg_id = tx_entry->msg_id;
@@ -332,45 +330,9 @@ ssize_t rxr_pkt_init_read_rtm(struct rxr_ep *ep,
 	rtm_hdr->read_iov_count = tx_entry->iov_count;
 
 	read_iov = (struct fi_rma_iov *)((char *)pkt_entry->pkt + pkt_entry->hdr_size);
-	if (tx_entry->desc[0]) {
-		for (i = 0; i < tx_entry->iov_count; ++i) {
-			mr = (struct fid_mr *)tx_entry->desc[i];
-			read_iov[i].addr = (uint64_t)tx_entry->iov[i].iov_base;
-			read_iov[i].len = tx_entry->iov[i].iov_len;
-			read_iov[i].key = fi_mr_key(mr);
-		}
-	} else if (peer->is_local) {
-		for (i = 0; i < tx_entry->iov_count; ++i) {
-			assert(!tx_entry->mr[i]);
-			read_iov[i].addr = (uint64_t)tx_entry->iov[i].iov_base;
-			read_iov[i].len = tx_entry->iov[i].iov_len;
-			read_iov[i].key = 0;
-		}
-	} else {
-		/* note mr could be been set by an unsucessful rxr_ep_post_ctrl */
-		if (!tx_entry->mr[0]) {
-			for (i = 0; i < tx_entry->iov_count; ++i) {
-				assert(!tx_entry->mr[i]);
-				err = fi_mr_regv(rxr_ep_domain(ep)->rdm_domain,
-						 tx_entry->iov + i, 1,
-						 FI_REMOTE_READ,
-						 0, 0, 0, &tx_entry->mr[i], NULL);
-				if (err) {
-					FI_WARN(&rxr_prov, FI_LOG_MR,
-						"Unable to register MR buf %p as FI_REMOTE_READ",
-						tx_entry->iov[i].iov_base);
-					return err;
-				}
-			}
-		}
-
-		for (i = 0; i < tx_entry->iov_count; ++i) {
-			assert(tx_entry->mr[i]);
-			read_iov[i].addr = (uint64_t)tx_entry->iov[i].iov_base;
-			read_iov[i].len = tx_entry->iov[i].iov_len;
-			read_iov[i].key = fi_mr_key(tx_entry->mr[i]);
-		}
-	}
+	err = rxr_rdma_init_read_iov(ep, tx_entry, read_iov);
+	if (OFI_UNLIKELY(err))
+		return err;
 
 	pkt_entry->pkt_size = pkt_entry->hdr_size + tx_entry->iov_count * sizeof(struct fi_rma_iov);
 	return 0;
@@ -596,9 +558,6 @@ ssize_t rxr_pkt_proc_matched_read_rtm(struct rxr_ep *ep,
 				      struct rxr_rx_entry *rx_entry,
 				      struct rxr_pkt_entry *pkt_entry)
 {
-	int err, lower_ep_type;
-	struct rxr_peer *peer;
-	struct rxr_rdma_entry *rdma_entry;
 	struct rxr_read_rtm_base_hdr *rtm_hdr;
 	struct fi_rma_iov *read_iov;
 
@@ -616,27 +575,7 @@ ssize_t rxr_pkt_proc_matched_read_rtm(struct rxr_ep *ep,
 		rx_entry->cq_entry.len = rx_entry->total_len;
 
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
-
-	peer = rxr_ep_get_peer(ep, rx_entry->addr);
-	assert(peer);
-	lower_ep_type = (peer->is_local) ? SHM_EP : EFA_EP;
-	rdma_entry = rxr_rdma_alloc_entry(ep, RXR_RX_ENTRY,
-					  rx_entry, lower_ep_type);
-	if (!rdma_entry) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
-			"RDMA entries exhausted.\n");
-		efa_eq_write_error(&ep->util_ep, FI_ENOBUFS, -FI_ENOBUFS);
-		return -FI_ENOBUFS;
-	}
-
-	err = rxr_rdma_post_read_or_queue(ep, rdma_entry);
-	if (OFI_UNLIKELY(err)) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
-			"post RDMA read failed.\n");
-		rxr_rdma_release_entry(ep, rdma_entry);
-	}
-
-	return err;
+	return rxr_rdma_post_read_or_queue(ep, RXR_RX_ENTRY, rx_entry);
 }
 
 ssize_t rxr_pkt_proc_matched_rtm(struct rxr_ep *ep,
@@ -866,6 +805,39 @@ ssize_t rxr_pkt_init_long_rtw(struct rxr_ep *ep,
 	return 0;
 }
 
+ssize_t rxr_pkt_init_read_rtw(struct rxr_ep *ep,
+			      struct rxr_tx_entry *tx_entry,
+			      struct rxr_pkt_entry *pkt_entry)
+{
+	struct rxr_read_rtw_hdr *rtw_hdr;
+	struct fi_rma_iov *rma_iov, *read_iov;
+	int i, err;
+
+	assert(tx_entry->op == ofi_op_write);
+
+	rtw_hdr = (struct rxr_read_rtw_hdr *)pkt_entry->pkt;
+	rtw_hdr->rma_iov_count = tx_entry->rma_iov_count;
+	rtw_hdr->data_len = tx_entry->total_len;
+	rtw_hdr->tx_id = tx_entry->tx_id;
+	rtw_hdr->read_iov_count = tx_entry->iov_count;
+	rxr_pkt_init_req_hdr(ep, tx_entry, RXR_READ_RTW_PKT, pkt_entry);
+
+	rma_iov = rtw_hdr->rma_iov;
+	for (i=0; i < tx_entry->rma_iov_count; ++i) {
+		rma_iov[i].addr = tx_entry->rma_iov[i].addr;
+		rma_iov[i].len = tx_entry->rma_iov[i].len;
+		rma_iov[i].key = tx_entry->rma_iov[i].key;
+	}
+
+	read_iov =(struct fi_rma_iov *)((char *)pkt_entry->pkt + pkt_entry->hdr_size);
+	err = rxr_rdma_init_read_iov(ep, tx_entry, read_iov);
+	if (OFI_UNLIKELY(err))
+		return err;
+
+	pkt_entry->pkt_size = pkt_entry->hdr_size + tx_entry->iov_count * sizeof(struct fi_rma_iov);
+	return 0;
+}
+
 /*
  *     handle_sent() functions for RTW packet types
  *
@@ -1034,6 +1006,52 @@ void rxr_pkt_handle_long_rtw_recv(struct rxr_ep *ep,
 		rxr_cq_handle_rx_error(ep, rx_entry, err);
 	}
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
+}
+
+void rxr_pkt_handle_read_rtw_recv(struct rxr_ep *ep,
+				  struct rxr_pkt_entry *pkt_entry)
+{
+	struct rxr_rx_entry *rx_entry;
+	struct rxr_read_rtw_hdr *rtw_hdr;
+	struct fi_rma_iov *read_iov;
+	ssize_t err;
+
+	rx_entry = rxr_pkt_alloc_rtw_rx_entry(ep, pkt_entry);
+	if (!rx_entry) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ,
+			"RX entries exhausted.\n");
+		efa_eq_write_error(&ep->util_ep, FI_ENOBUFS, -FI_ENOBUFS);
+		return;
+	}
+
+	rtw_hdr = (struct rxr_read_rtw_hdr *)pkt_entry->pkt;
+	rx_entry->iov_count = rtw_hdr->rma_iov_count;
+	err = rxr_rma_verified_copy_iov(ep, rtw_hdr->rma_iov, rtw_hdr->rma_iov_count,
+					FI_RECV, rx_entry->iov);
+	if (err) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ, "RMA address verify failed!\n");
+		rxr_cq_handle_rx_error(ep, rx_entry, err);
+	}
+
+	rx_entry->cq_entry.flags |= (FI_RMA | FI_WRITE);
+	rx_entry->cq_entry.len = ofi_total_iov_len(rx_entry->iov, rx_entry->iov_count);
+	rx_entry->cq_entry.buf = rx_entry->iov[0].iov_base;
+	rx_entry->total_len = rx_entry->cq_entry.len;
+
+	read_iov = (struct fi_rma_iov *)((char *)pkt_entry->pkt + pkt_entry->hdr_size);
+	rx_entry->addr = pkt_entry->addr;
+	rx_entry->tx_id = rtw_hdr->tx_id;
+	rx_entry->rma_iov_count = rtw_hdr->read_iov_count;
+	memcpy(rx_entry->rma_iov, read_iov,
+	       rx_entry->rma_iov_count * sizeof(struct fi_rma_iov));
+
+	rxr_pkt_entry_release_rx(ep, pkt_entry);
+	err = rxr_rdma_post_read_or_queue(ep, RXR_RX_ENTRY, rx_entry);
+	if (OFI_UNLIKELY(err)) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ,
+			"RDMA post read or queue failed.\n");
+		efa_eq_write_error(&ep->util_ep, err, err);
+	}
 }
 
 /*

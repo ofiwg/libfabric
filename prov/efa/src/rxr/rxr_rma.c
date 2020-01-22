@@ -273,9 +273,7 @@ ssize_t rxr_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_
 	struct rxr_ep *rxr_ep;
 	struct rxr_peer *peer;
 	struct rxr_tx_entry *tx_entry;
-	struct rxr_rdma_entry *rdma_entry;
 	bool use_lower_ep_read;
-	enum rxr_lower_ep_type lower_ep_type;
 
 	FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
 	       "read iov_len: %lu flags: %lx\n",
@@ -304,28 +302,20 @@ ssize_t rxr_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_
 	use_lower_ep_read = false;
 	if (rxr_env.enable_shm_transfer && peer->is_local) {
 		use_lower_ep_read = true;
-		lower_ep_type = SHM_EP;
 	} else if (efa_support_rdma_read(rxr_ep->rdm_ep) &&
 		   tx_entry->total_len >= rxr_env.efa_max_emulated_read_size) {
 		use_lower_ep_read = true;
-		lower_ep_type = EFA_EP;
 	}
 
 	if (use_lower_ep_read) {
-		rdma_entry = rxr_rdma_alloc_entry(rxr_ep, RXR_TX_ENTRY, tx_entry,
-						  lower_ep_type);
-		if (!rdma_entry) {
+		err = rxr_rdma_post_read_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry);
+		if (OFI_UNLIKELY(err == -FI_ENOBUFS)) {
 			rxr_release_tx_entry(rxr_ep, tx_entry);
 			err = -FI_EAGAIN;
 			rxr_ep_progress_internal(rxr_ep);
 			goto out;
 		}
 
-		err = rxr_rdma_post_read_or_queue(rxr_ep, rdma_entry);
-		if (OFI_UNLIKELY(err)) {
-			rxr_rdma_release_entry(rxr_ep, rdma_entry);
-			rxr_release_tx_entry(rxr_ep, tx_entry);
-		}
 	} else {
 		err = rxr_ep_set_tx_credit_request(rxr_ep, tx_entry);
 		if (OFI_UNLIKELY(err)) {
@@ -415,7 +405,8 @@ ssize_t rxr_rma_writemsg(struct fid_ep *ep,
 		err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry, RXR_EAGER_RTW_PKT, 0);
 		if (OFI_UNLIKELY(err))
 			rxr_release_tx_entry(rxr_ep, tx_entry);
-	} else {
+	} else if (!efa_support_rdma_read(rxr_ep->rdm_ep) ||
+		   tx_entry->total_len < rxr_env.efa_max_emulated_write_size) {
 		err = rxr_ep_set_tx_credit_request(rxr_ep, tx_entry);
 		if (OFI_UNLIKELY(err)) {
 			rxr_release_tx_entry(rxr_ep, tx_entry);
@@ -423,6 +414,10 @@ ssize_t rxr_rma_writemsg(struct fid_ep *ep,
 		}
 
 		err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry, RXR_LONG_RTW_PKT, 0);
+		if (OFI_UNLIKELY(err))
+			rxr_release_tx_entry(rxr_ep, tx_entry);
+	} else {
+		err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry, RXR_READ_RTW_PKT, 0);
 		if (OFI_UNLIKELY(err))
 			rxr_release_tx_entry(rxr_ep, tx_entry);
 	}
