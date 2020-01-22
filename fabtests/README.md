@@ -1,7 +1,3 @@
-[![Build Status](https://travis-ci.org/ofiwg/fabtests.svg?branch=master)](https://travis-ci.org/ofiwg/fabtests)
-[![fabtests Coverity scan suild status](https://scan.coverity.com/projects/ofiwg-fabtests/badge.svg)](https://scan.coverity.com/projects/ofiwg-fabtests)
-[![fabtests release version](https://img.shields.io/github/release/ofiwg/fabtests.svg)](https://github.com/ofiwg/fabtests/releases/latest)
-
 # fabtests
 
 Fabtests provides a set of examples that uses
