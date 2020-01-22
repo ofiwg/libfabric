@@ -62,6 +62,35 @@ static inline char* strsep(char **stringp, const char *delim)
 
 	return ptr;
 }
+
+char *strcasestr(const char *haystack, const char *needle)
+{
+	char *uneedle, *uhaystack, *pos = NULL;
+	int i;
+
+	uneedle = malloc(strlen(needle) + 1);
+	uhaystack = malloc(strlen(haystack) + 1);
+	if (!uneedle || !uhaystack)
+		goto out;
+
+	for (i = 0; i < strlen(needle); i++)
+		uneedle[i] = toupper(needle[i]);
+	uneedle[i] = '\0';
+
+	for (i = 0; i < strlen(haystack); i++)
+		uhaystack[i] = toupper(haystack[i]);
+	uhaystack[i] = '\0';
+
+	pos = strstr(uhaystack, uneedle);
+	if (pos)
+		pos = (char *) ((uintptr_t) haystack + (uintptr_t) pos -
+				(uintptr_t) uhaystack);
+out:
+	free(uneedle);
+	free(uhaystack);
+	return pos;
+}
+
 #endif
 
 /* String utility functions */
