@@ -133,9 +133,6 @@ void tcpx_cq_report_error(struct util_cq *cq,
 	struct fi_cq_err_entry err_entry;
 	uint64_t data = 0;
 
-	if (!(xfer_entry->flags & FI_COMPLETION))
-		return;
-
 	if (xfer_entry->hdr.base_hdr.flags & OFI_REMOTE_CQ_DATA) {
 		xfer_entry->flags |= FI_REMOTE_CQ_DATA;
 		data = xfer_entry->hdr.cq_data_hdr.cq_data;
