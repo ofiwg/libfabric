@@ -506,16 +506,19 @@ static int efa_get_device_attrs(struct efa_context *ctx, struct fi_info *info)
 
 	info->tx_attr->iov_limit = efadv_attr.max_sq_sge;
 	info->tx_attr->size = align_down_to_power_of_2(efadv_attr.max_sq_wr);
+	info->tx_attr->inject_size = efadv_attr.inline_buf_size;
 	info->rx_attr->iov_limit = efadv_attr.max_rq_sge;
 	info->rx_attr->size = align_down_to_power_of_2(efadv_attr.max_rq_wr / info->rx_attr->iov_limit);
 
 	EFA_DBG(FI_LOG_DOMAIN, "Tx/Rx attribute :\n"
 				"\t info->tx_attr->iov_limit		= %zu\n"
 				"\t info->tx_attr->size			= %zu\n"
+				"\t info->tx_attr->inject_size		= %zu\n"
 				"\t info->rx_attr->iov_limit		= %zu\n"
 				"\t info->rx_attr->size			= %zu\n",
 				info->tx_attr->iov_limit,
 				info->tx_attr->size,
+				info->tx_attr->inject_size,
 				info->rx_attr->iov_limit,
 				info->rx_attr->size);
 
