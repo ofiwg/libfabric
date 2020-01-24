@@ -446,14 +446,8 @@ int tcpx_get_rx_entry_op_msg(struct tcpx_ep *tcpx_ep)
 
 		rx_entry->rem_len = ofi_total_iov_len(rx_entry->iov,
 						      rx_entry->iov_cnt) - msg_len;
-
-		if (!(rx_entry->flags & FI_MULTI_RECV) ||
-		    rx_entry->rem_len < tcpx_ep->min_multi_recv_size) {
-			slist_remove_head(&tcpx_ep->rx_queue);
-			rx_entry->rx_msg_release_fn = tcpx_rx_msg_release;
-		} else {
-			rx_entry->rx_msg_release_fn = tcpx_rx_multi_recv_release;
-		}
+		slist_remove_head(&tcpx_ep->rx_queue);
+		rx_entry->rx_msg_release_fn = tcpx_rx_msg_release;
 	}
 
 	memcpy(&rx_entry->hdr, &tcpx_ep->rx_detect.hdr,
