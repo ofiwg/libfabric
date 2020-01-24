@@ -218,20 +218,22 @@ int ofi_check_rx_mode(const struct fi_info *info, uint64_t flags)
 	return (info->mode & flags) ? 1 : 0;
 }
 
-uint64_t fi_gettime_ms(void)
+uint64_t fi_gettime_ns(void)
 {
-	struct timeval now;
+	struct timespec now;
 
-	gettimeofday(&now, NULL);
-	return now.tv_sec * 1000 + now.tv_usec / 1000;
+	clock_gettime(CLOCK_MONOTONIC, &now);
+	return now.tv_sec * 1000000000 + now.tv_nsec;
 }
 
 uint64_t fi_gettime_us(void)
 {
-	struct timeval now;
+	return fi_gettime_ns() / 1000000;
+}
 
-	gettimeofday(&now, NULL);
-	return now.tv_sec * 1000000 + now.tv_usec;
+uint64_t fi_gettime_ms(void)
+{
+	return fi_gettime_ns() / 1000;
 }
 
 uint16_t ofi_get_sa_family(const struct fi_info *info)

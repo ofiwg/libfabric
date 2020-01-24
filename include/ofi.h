@@ -275,8 +275,9 @@ int ofi_ep_bind_valid(const struct fi_provider *prov, struct fid *bfid,
 		      uint64_t flags);
 int ofi_check_rx_mode(const struct fi_info *info, uint64_t flags);
 
-uint64_t fi_gettime_ms(void);
+uint64_t fi_gettime_ns(void);
 uint64_t fi_gettime_us(void);
+uint64_t fi_gettime_ms(void);
 
 static inline uint64_t ofi_timeout_time(int timeout)
 {

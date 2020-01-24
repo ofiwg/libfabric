@@ -62,6 +62,20 @@ typedef cpuset_t ofi_cpu_set_t;
 typedef cpu_set_t ofi_cpu_set_t;
 #endif
 
+#if !HAVE_CLOCK_GETTIME
+int clock_gettime(clockid_t clk_id, struct timespec *tp) {
+	int retval;
+	struct timeval tv;
+
+	retval = gettimeofday(&tv, NULL);
+
+	tp->tv_sec = tv.tv_sec;
+	tp->tv_nsec = tv.tv_usec * 1000;
+
+	return retval;
+}
+#endif /* !HAVE_CLOCK_GETTIME */
+
 int fi_fd_nonblock(int fd)
 {
 	long flags = 0;

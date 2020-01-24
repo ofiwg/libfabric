@@ -457,6 +457,17 @@ AC_DEFINE_UNQUOTED([HAVE_UFFD_UNMAP], [$have_uffd],
 dnl Check support to intercept syscalls
 AC_CHECK_HEADERS_ONCE(elf.h sys/auxv.h)
 
+dnl Check support to clock_gettime
+have_clock_gettime=0
+
+AC_SEARCH_LIBS([clock_gettime],[rt],
+         [have_clock_gettime=1],
+         [])
+
+AC_DEFINE_UNQUOTED(HAVE_CLOCK_GETTIME, [$have_clock_gettime],
+       [Define to 1 if clock_gettime is available.])
+AM_CONDITIONAL(HAVE_CLOCK_GETTIME, [test $have_clock_gettime -eq 1])
+
 dnl Provider-specific checks
 FI_PROVIDER_INIT
 FI_PROVIDER_SETUP([psm])

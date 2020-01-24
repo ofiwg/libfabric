@@ -107,4 +107,5 @@ fi_wait_cond() - wait on a mutex
 fi_datatype_size() - return size of an atomic datatype
 fi_[capability]_allowed() - routines to check caps bits
 fi_gettime_ms() - return current time in milliseconds
+fi_gettime_us() - return current time in microseconds
 fi_fd_nonblock() - set fd to nonblocking
