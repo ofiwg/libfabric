@@ -12,6 +12,7 @@ multi_mr
 atomic
 inj_complete -e msg
 unexpected_msg -e msg
+multi_recv
 
 # TODO. Following fails with macOS. will fix them later
 cq_data -e rdm
