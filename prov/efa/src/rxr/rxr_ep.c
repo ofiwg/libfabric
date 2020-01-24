@@ -165,46 +165,6 @@ struct rxr_pkt_entry *rxr_ep_get_unexp_pkt_entry(struct rxr_ep *ep,
 	return unexp_pkt_entry;
 }
 
-struct rxr_rx_entry *rxr_ep_alloc_unexp_rx_entry_for_rts(struct rxr_ep *ep,
-							 struct rxr_pkt_entry *pkt_entry)
-{
-	struct rxr_rx_entry *rx_entry;
-	struct rxr_pkt_entry *unexp_entry;
-	struct rxr_rts_hdr *rts_hdr;
-
-	unexp_entry = rxr_ep_get_unexp_pkt_entry(ep, pkt_entry);
-	if (OFI_UNLIKELY(!unexp_entry)) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
-				"pkt entries exhausted.\n");
-		efa_eq_write_error(&ep->util_ep, FI_ENOBUFS, -FI_ENOBUFS);
-		return NULL;
-	}
-
-	rx_entry = rxr_ep_get_rx_entry(ep, NULL, 0, 0, ~0, NULL,
-				       unexp_entry->addr, ofi_op_msg, 0);
-	if (OFI_UNLIKELY(!rx_entry))
-		return NULL;
-
-	rts_hdr = rxr_get_rts_hdr(unexp_entry->pkt);
-	if (rts_hdr->flags & RXR_TAGGED)
-		rx_entry->op = ofi_op_tagged;
-	else
-		rx_entry->op = ofi_op_msg;
-
-	rx_entry->tag = rts_hdr->tag;
-	rx_entry->rxr_flags = rts_hdr->flags;
-	rx_entry->total_len = rts_hdr->data_len;
-	if (rx_entry->op == ofi_op_tagged)
-		dlist_insert_tail(&rx_entry->entry, &ep->rx_unexp_tagged_list);
-	else
-		dlist_insert_tail(&rx_entry->entry, &ep->rx_unexp_list);
-
-	rx_entry->state = RXR_RX_UNEXP;
-	rx_entry->unexp_pkt = unexp_entry;
-
-	return rx_entry;
-}
-
 struct rxr_rx_entry *rxr_ep_alloc_unexp_rx_entry_for_msgrtm(struct rxr_ep *ep,
 							    struct rxr_pkt_entry **pkt_entry)
 {
@@ -275,20 +235,9 @@ struct rxr_rx_entry *rxr_ep_split_rx_entry(struct rxr_ep *ep,
 	struct rxr_rx_entry *rx_entry;
 	size_t buf_len, consumed_len, data_len;
 	uint64_t tag;
-	struct rxr_base_hdr *base_hdr;
 
-	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
-	if (base_hdr->type == RXR_RTS_PKT) {
-		struct rxr_rts_hdr *rts_hdr = NULL;
-
-		rts_hdr = rxr_get_rts_hdr(pkt_entry->pkt);
-		tag = rts_hdr->tag;
-		data_len = rts_hdr->data_len;
-	} else {
-		assert(base_hdr->type >= RXR_REQ_PKT_BEGIN);
-		tag = 0;
-		data_len = 0;
-	}
+	assert(rxr_get_base_hdr(pkt_entry->pkt)->type >= RXR_REQ_PKT_BEGIN);
+	tag = 0;
 
 	if (!consumer_entry) {
 		rx_entry = rxr_ep_get_rx_entry(ep, posted_entry->iov,
@@ -309,11 +258,8 @@ struct rxr_rx_entry *rxr_ep_split_rx_entry(struct rxr_ep *ep,
 		rx_entry->iov_count = posted_entry->iov_count;
 	}
 
-	if (base_hdr->type >= RXR_REQ_PKT_BEGIN) {
-		rxr_pkt_rtm_init_rx_entry(pkt_entry, rx_entry);
-		data_len = rx_entry->total_len;
-	}
-
+	rxr_pkt_rtm_init_rx_entry(pkt_entry, rx_entry);
+	data_len = rx_entry->total_len;
 	buf_len = ofi_total_iov_len(rx_entry->iov,
 				    rx_entry->iov_count);
 	consumed_len = MIN(buf_len, data_len);
@@ -429,7 +375,7 @@ void rxr_tx_entry_init(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	tx_entry->type = RXR_TX_ENTRY;
 	tx_entry->op = op;
 	tx_entry->tx_id = ofi_buf_index(tx_entry);
-	tx_entry->state = RXR_TX_RTS;
+	tx_entry->state = RXR_TX_REQ;
 	tx_entry->addr = msg->addr;
 
 	tx_entry->send_flags = 0;
@@ -589,7 +535,7 @@ int rxr_ep_set_tx_credit_request(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_
 	if (peer->tx_credits >= tx_entry->credit_request)
 		peer->tx_credits -= tx_entry->credit_request;
 
-	/* Queue this RTS for later if there are too many outstanding packets */
+	/* Queue this REQ for later if there are too many outstanding packets */
 	if (!tx_entry->credit_request)
 		return -FI_EAGAIN;
 
@@ -1516,8 +1462,8 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 
 		dlist_remove(&tx_entry->queued_entry);
 
-		if (tx_entry->state == RXR_TX_QUEUED_RTS_RNR)
-			tx_entry->state = RXR_TX_RTS;
+		if (tx_entry->state == RXR_TX_QUEUED_REQ_RNR)
+			tx_entry->state = RXR_TX_REQ;
 		else if (tx_entry->state == RXR_TX_QUEUED_DATA_RNR) {
 			tx_entry->state = RXR_TX_SEND;
 			dlist_insert_tail(&tx_entry->entry,
@@ -1681,13 +1627,13 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (rxr_ep->mtu_size > RXR_MTU_MAX_LIMIT)
 		rxr_ep->mtu_size = RXR_MTU_MAX_LIMIT;
 
-	rxr_ep->max_data_payload_size = rxr_ep->mtu_size - RXR_DATA_HDR_SIZE;
+	rxr_ep->max_data_payload_size = rxr_ep->mtu_size - sizeof(struct rxr_data_hdr);
 	/*
 	 * Assume our eager message size is the largest control header size
 	 * without the source address. Use that value to set the default
 	 * receive release threshold.
 	 */
-	rxr_ep->min_multi_recv_size = rxr_ep->mtu_size - RXR_CTRL_HDR_SIZE;
+	rxr_ep->min_multi_recv_size = rxr_ep->mtu_size - sizeof(struct rxr_eager_tagrtm_hdr) - sizeof(struct rxr_req_opt_cq_data_hdr);
 
 	if (rxr_env.tx_queue_size > 0 &&
 	    rxr_env.tx_queue_size < rxr_ep->max_outstanding_tx)

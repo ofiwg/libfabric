@@ -68,7 +68,7 @@ static const char *rxr_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
 
 /*
  * Teardown rx_entry and write an error cq entry. With our current protocol we
- * will only encounter an RX error when sending a queued RTS or CTS packet or
+ * will only encounter an RX error when sending a queued REQ or CTS packet or
  * if we are sending a CTS message. Because of this, the sender will not send
  * any additional data packets if the receiver encounters an error. If there is
  * a scenario in the future where the sender will continue to send data packets
@@ -107,7 +107,6 @@ int rxr_cq_handle_rx_error(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
 		break;
 	case RXR_RX_QUEUED_CTRL:
 	case RXR_RX_QUEUED_CTS_RNR:
-	case RXR_RX_QUEUED_SHM_LARGE_READ:
 	case RXR_RX_QUEUED_EOR:
 		dlist_remove(&rx_entry->queued_entry);
 		break;
@@ -183,15 +182,14 @@ int rxr_cq_handle_tx_error(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	err_entry.prov_errno = (int)prov_errno;
 
 	switch (tx_entry->state) {
-	case RXR_TX_RTS:
-	case RXR_TX_SHM_RMA:
+	case RXR_TX_REQ:
 		break;
 	case RXR_TX_SEND:
 		dlist_remove(&tx_entry->entry);
 		break;
 	case RXR_TX_QUEUED_CTRL:
 	case RXR_TX_QUEUED_SHM_RMA:
-	case RXR_TX_QUEUED_RTS_RNR:
+	case RXR_TX_QUEUED_REQ_RNR:
 	case RXR_TX_QUEUED_DATA_RNR:
 		dlist_remove(&tx_entry->queued_entry);
 		break;
@@ -351,7 +349,7 @@ int rxr_cq_handle_cq_error(struct rxr_ep *ep, ssize_t err)
 
 	/*
 	 * A connack send could fail at the core provider if the peer endpoint
-	 * is shutdown soon after it receives a send completion for the RTS
+	 * is shutdown soon after it receives a send completion for the REQ
 	 * packet that included src_address. The connack itself is irrelevant if
 	 * that happens, so just squelch this error entry and move on without
 	 * writing an error completion or event to the application.
@@ -407,8 +405,8 @@ int rxr_cq_handle_cq_error(struct rxr_ep *ep, ssize_t err)
 			tx_entry->state = RXR_TX_QUEUED_DATA_RNR;
 			dlist_insert_tail(&tx_entry->queued_entry,
 					  &ep->tx_entry_queued_list);
-		} else if (tx_entry->state == RXR_TX_RTS) {
-			tx_entry->state = RXR_TX_QUEUED_RTS_RNR;
+		} else if (tx_entry->state == RXR_TX_REQ) {
+			tx_entry->state = RXR_TX_QUEUED_REQ_RNR;
 			dlist_insert_tail(&tx_entry->queued_entry,
 					  &ep->tx_entry_queued_list);
 		}
@@ -543,11 +541,11 @@ void rxr_cq_handle_rx_completion(struct rxr_ep *ep,
 		 * The following shows the sequence of events that
 		 * is happening
 		 *
-		 * Initiator side                    Remote side
+		 * Initiator side                 Remote side
 		 * create tx_entry
 		 * create rx_entry
-		 * send rts(with rx_id)
-		 *                                receive rts
+		 * send rtr(with rx_id)
+		 *                                receive rtr
 		 *                                create rx_entry
 		 *                                create tx_entry
 		 *                                tx_entry sending data
@@ -593,20 +591,11 @@ int rxr_cq_reorder_msg(struct rxr_ep *ep,
 		       struct rxr_peer *peer,
 		       struct rxr_pkt_entry *pkt_entry)
 {
-	struct rxr_base_hdr *base_hdr;
 	struct rxr_pkt_entry *ooo_entry;
 	uint32_t msg_id;
 
-	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
-	if (base_hdr->type == RXR_RTS_PKT) {
-		struct rxr_rts_hdr *rts_hdr;
-
-		rts_hdr = rxr_get_rts_hdr(pkt_entry->pkt);
-		msg_id = rts_hdr->msg_id;
-	} else {
-		assert(base_hdr->type >= RXR_REQ_PKT_BEGIN);
-		msg_id = rxr_pkt_msg_id(pkt_entry);
-	}
+	assert(rxr_get_base_hdr(pkt_entry->pkt)->type >= RXR_REQ_PKT_BEGIN);
+	msg_id = rxr_pkt_msg_id(pkt_entry);
 	/*
 	 * TODO: Initialize peer state  at the time of AV insertion
 	 * where duplicate detection is available.
@@ -648,8 +637,6 @@ void rxr_cq_proc_pending_items_in_recvwin(struct rxr_ep *ep,
 					  struct rxr_peer *peer)
 {
 	struct rxr_pkt_entry *pending_pkt;
-	struct rxr_rts_hdr *rts_hdr;
-	struct rxr_base_hdr *base_hdr;
 	int ret = 0;
 	uint32_t msg_id;
 
@@ -658,21 +645,11 @@ void rxr_cq_proc_pending_items_in_recvwin(struct rxr_ep *ep,
 		if (!pending_pkt || !pending_pkt->pkt)
 			return;
 
-		base_hdr = rxr_get_base_hdr(pending_pkt->pkt);
-		if (base_hdr->type == RXR_RTS_PKT) {
-			rts_hdr = rxr_get_rts_hdr(pending_pkt->pkt);
-			msg_id = rts_hdr->msg_id;
-			FI_DBG(&rxr_prov, FI_LOG_EP_CTRL,
-			       "Processing msg_id %d from robuf\n", msg_id);
-			/* rxr_pkt_proc_rts will write error cq entry if needed */
-			ret = rxr_pkt_proc_rts(ep, pending_pkt);
-		} else {
-			msg_id = rxr_pkt_msg_id(pending_pkt);
-			FI_DBG(&rxr_prov, FI_LOG_EP_CTRL,
-			       "Processing msg_id %d from robuf\n", msg_id);
-			/* rxr_pkt_proc_rtm_rta() will write error cq entry if needed */
-			ret = rxr_pkt_proc_rtm_rta(ep, pending_pkt);
-		}
+		msg_id = rxr_pkt_msg_id(pending_pkt);
+		FI_DBG(&rxr_prov, FI_LOG_EP_CTRL,
+		       "Processing msg_id %d from robuf\n", msg_id);
+		/* rxr_pkt_proc_rtm_rta will write error cq entry if needed */
+		ret = rxr_pkt_proc_rtm_rta(ep, pending_pkt);
 
 		*ofi_recvwin_get_next_msg(peer->robuf) = NULL;
 

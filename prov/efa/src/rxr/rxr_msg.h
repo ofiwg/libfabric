@@ -32,7 +32,7 @@
  */
 
 /**
- * This following functions are used in rxr_cq_process_msg_rts()
+ * multi recv related functions
  */
 bool rxr_msg_multi_recv_buffer_available(struct rxr_ep *ep,
 					 struct rxr_rx_entry *rx_entry);
@@ -44,7 +44,7 @@ void rxr_msg_multi_recv_free_posted_entry(struct rxr_ep *ep,
 					  struct rxr_rx_entry *rx_entry);
 
 /*
- * The following 2 OP structures are defined in rxr_msg_ops.c and is
+ * The following 2 OP structures are defined in rxr_msg.c and is
  * used by rxr_endpoint()
  */
 extern struct fi_ops_msg rxr_ops_msg;

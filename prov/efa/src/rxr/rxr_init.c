@@ -322,10 +322,8 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 	*info->ep_attr = *rxr_info.ep_attr;
 	*info->domain_attr = *rxr_info.domain_attr;
 
-	info->tx_attr->inject_size =
-		core_info->tx_attr->inject_size > RXR_CTRL_HDR_SIZE_NO_CQ ?
-		core_info->tx_attr->inject_size - RXR_CTRL_HDR_SIZE_NO_CQ
-		: 0;
+	/* TODO: update inject_size when we implement inject */
+	info->tx_attr->inject_size = 0;
 	rxr_info.tx_attr->inject_size = info->tx_attr->inject_size;
 
 	info->addr_format = core_info->addr_format;
@@ -682,7 +680,7 @@ EFA_INI
 	fi_param_define(&rxr_prov, "rx_copy_unexp", FI_PARAM_BOOL,
 			"Enables the use of a separate pool of bounce-buffers to copy unexpected messages out of the pre-posted receive buffers. (Default: 1)");
 	fi_param_define(&rxr_prov, "rx_copy_ooo", FI_PARAM_BOOL,
-			"Enables the use of a separate pool of bounce-buffers to copy out-of-order RTS packets out of the pre-posted receive buffers. (Default: 1)");
+			"Enables the use of a separate pool of bounce-buffers to copy out-of-order RTM packets out of the pre-posted receive buffers. (Default: 1)");
 	fi_param_define(&rxr_prov, "max_timeout", FI_PARAM_INT,
 			"Set the maximum timeout (us) for backoff to a peer after a receiver not ready error. (Default: 1000000)");
 	fi_param_define(&rxr_prov, "timeout_interval", FI_PARAM_INT,

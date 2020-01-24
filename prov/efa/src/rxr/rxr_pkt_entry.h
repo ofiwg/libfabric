@@ -47,7 +47,7 @@ enum rxr_pkt_entry_state {
 enum rxr_pkt_entry_type {
 	RXR_PKT_ENTRY_POSTED = 1,   /* entries that are posted to the core */
 	RXR_PKT_ENTRY_UNEXP,        /* entries used to stage unexpected msgs */
-	RXR_PKT_ENTRY_OOO	    /* entries used to stage out-of-order RTS */
+	RXR_PKT_ENTRY_OOO	    /* entries used to stage out-of-order RTM or RTA */
 };
 
 struct rxr_pkt_entry {
@@ -78,6 +78,11 @@ struct rxr_pkt_entry {
 	uint8_t pad[24];
 #endif
 };
+
+static inline void *rxr_pkt_start(struct rxr_pkt_entry *pkt_entry)
+{
+	return (void *)((char *)pkt_entry + sizeof(*pkt_entry));
+}
 
 #if defined(static_assert) && defined(__x86_64__)
 static_assert(sizeof(struct rxr_pkt_entry) == 128, "rxr_pkt_entry check");

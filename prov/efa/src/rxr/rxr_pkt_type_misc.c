@@ -59,7 +59,7 @@ ssize_t rxr_pkt_init_connack(struct rxr_ep *ep,
 	connack_hdr->version = RXR_PROTOCOL_VERSION;
 	connack_hdr->flags = 0;
 
-	pkt_entry->pkt_size = RXR_CONNACK_HDR_SIZE;
+	pkt_entry->pkt_size = sizeof(struct rxr_connack_hdr);
 	pkt_entry->addr = addr;
 	return 0;
 }
@@ -88,7 +88,7 @@ void rxr_pkt_post_connack(struct rxr_ep *ep,
 
 	/*
 	 * Skip sending this connack on error and try again when processing the
-	 * next RTS from this peer containing the source information
+	 * next REQ from this peer containing the source information
 	 */
 	if (OFI_UNLIKELY(ret)) {
 		rxr_pkt_entry_release_tx(ep, pkt_entry);
@@ -167,7 +167,7 @@ ssize_t rxr_pkt_init_cts(struct rxr_ep *ep,
 	cts_hdr->flags = 0;
 
 	if (rx_entry->cq_entry.flags & FI_READ)
-		cts_hdr->flags |= RXR_READ_REQ;
+		cts_hdr->flags |= RXR_CTS_READ_REQ;
 
 	cts_hdr->tx_id = rx_entry->tx_id;
 	cts_hdr->rx_id = rx_entry->rx_id;
@@ -178,7 +178,7 @@ ssize_t rxr_pkt_init_cts(struct rxr_ep *ep,
 					rx_entry->credit_request,
 					&window, &rx_entry->credit_cts);
 	cts_hdr->window = window;
-	pkt_entry->pkt_size = RXR_CTS_HDR_SIZE;
+	pkt_entry->pkt_size = sizeof(struct rxr_cts_hdr);
 	pkt_entry->addr = rx_entry->addr;
 	pkt_entry->x_entry = (void *)rx_entry;
 	return 0;
@@ -210,7 +210,7 @@ void rxr_pkt_handle_cts_recv(struct rxr_ep *ep,
 	struct rxr_tx_entry *tx_entry;
 
 	cts_pkt = (struct rxr_cts_hdr *)pkt_entry->pkt;
-	if (cts_pkt->flags & RXR_READ_REQ)
+	if (cts_pkt->flags & RXR_CTS_READ_REQ)
 		tx_entry = ofi_bufpool_get_ibuf(ep->readrsp_tx_entry_pool, cts_pkt->tx_id);
 	else
 		tx_entry = ofi_bufpool_get_ibuf(ep->tx_entry_pool, cts_pkt->tx_id);

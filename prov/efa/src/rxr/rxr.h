@@ -151,19 +151,6 @@ static inline void rxr_poison_mem_region(uint32_t *ptr, size_t size)
 #define RXR_MULTI_RECV_CONSUMER	BIT_ULL(5)
 
 /*
- * for RMA
- */
-#define RXR_WRITE		(1 << 6)
-#define RXR_READ_REQ		(1 << 7)
-#define RXR_READ_DATA		(1 << 8)
-
-/*
- * Used to provide protocol compatibility across versions that include a
- * credit request along with the RTS and those that do not
- */
-#define RXR_CREDIT_REQUEST	BIT_ULL(9)
-
-/*
  * OFI flags
  * The 64-bit flag field is used as follows:
  * 1-grow up    common (usable with multiple operations)
@@ -181,11 +168,6 @@ static inline void rxr_poison_mem_region(uint32_t *ptr, size_t size)
 #define RXR_MTU_MAX_LIMIT	BIT_ULL(15)
 
 
-/*
- * Specific flags and attributes for shm provider
- */
-#define RXR_SHM_HDR		BIT_ULL(10)
-#define RXR_SHM_HDR_DATA	BIT_ULL(11)
 
 extern struct fi_info *shm_info;
 
@@ -239,12 +221,11 @@ enum rxr_x_entry_type {
 
 enum rxr_tx_comm_type {
 	RXR_TX_FREE = 0,	/* tx_entry free state */
-	RXR_TX_SHM_RMA,		/* tx_entry issuing read operation over shm provider */
-	RXR_TX_RTS,		/* tx_entry sending RTS message */
+	RXR_TX_REQ,		/* tx_entry sending REQ packet */
 	RXR_TX_SEND,		/* tx_entry sending data in progress */
 	RXR_TX_QUEUED_SHM_RMA,	/* tx_entry was unable to send RMA operations over shm provider */
 	RXR_TX_QUEUED_CTRL,	/* tx_entry was unable to send ctrl packet */
-	RXR_TX_QUEUED_RTS_RNR,  /* tx_entry RNR sending RTS packet */
+	RXR_TX_QUEUED_REQ_RNR,  /* tx_entry RNR sending REQ packet */
 	RXR_TX_QUEUED_DATA_RNR,	/* tx_entry RNR sending data packets */
 	RXR_TX_SENT_READRSP,	/* tx_entry (on remote EP) sent
 				 * read response (FI_READ only)
@@ -261,12 +242,11 @@ enum rxr_tx_comm_type {
 
 enum rxr_rx_comm_type {
 	RXR_RX_FREE = 0,	/* rx_entry free state */
-	RXR_RX_INIT,		/* rx_entry ready to recv RTS */
+	RXR_RX_INIT,		/* rx_entry ready to recv RTM */
 	RXR_RX_UNEXP,		/* rx_entry unexp msg waiting for post recv */
-	RXR_RX_MATCHED,		/* rx_entry matched with RTS msg */
+	RXR_RX_MATCHED,		/* rx_entry matched with RTM */
 	RXR_RX_RECV,		/* rx_entry large msg recv data pkts */
 	RXR_RX_QUEUED_CTRL,	/* rx_entry was unable to send ctrl packet */
-	RXR_RX_QUEUED_SHM_LARGE_READ,	/* rx_entry was unable to issue RMA Read for large message over shm */
 	RXR_RX_QUEUED_EOR,	/* rx_entry was unable to send EOR over shm */
 	RXR_RX_QUEUED_CTS_RNR,	/* rx_entry RNR sending CTS */
 	RXR_RX_WAIT_READ_FINISH, /* rx_entry wait for send to finish, FI_READ */
@@ -275,7 +255,7 @@ enum rxr_rx_comm_type {
 
 enum rxr_peer_state {
 	RXR_PEER_FREE = 0,	/* rxr_peer free state */
-	RXR_PEER_CONNREQ,	/* RTS with endpoint address sent to peer */
+	RXR_PEER_CONNREQ,	/* REQ with endpoint address sent to peer */
 	RXR_PEER_ACKED,		/* RXR_CONNACK_PKT received from peer */
 };
 
@@ -647,6 +627,11 @@ struct rxr_ep {
 #define rxr_rx_flags(rxr_ep) ((rxr_ep)->util_ep.rx_op_flags)
 #define rxr_tx_flags(rxr_ep) ((rxr_ep)->util_ep.tx_op_flags)
 
+/*
+ * Control header with completion data. CQ data length is static.
+ */
+#define RXR_CQ_DATA_SIZE (8)
+
 static inline void rxr_copy_shm_cq_entry(struct fi_cq_tagged_entry *cq_tagged_entry,
 					 struct fi_cq_data_entry *shm_cq_entry)
 {
@@ -741,21 +726,6 @@ static inline void rxr_release_rx_entry(struct rxr_ep *ep,
 	ofi_buf_free(rx_entry);
 }
 
-static inline void *rxr_pkt_start(struct rxr_pkt_entry *pkt_entry)
-{
-	return (void *)((char *)pkt_entry + sizeof(*pkt_entry));
-}
-
-static inline struct rxr_ctrl_cq_pkt *rxr_get_ctrl_cq_pkt(void *pkt)
-{
-	return (struct rxr_ctrl_cq_pkt *)pkt;
-}
-
-static inline struct rxr_ctrl_pkt *rxr_get_ctrl_pkt(void *pkt)
-{
-	return (struct rxr_ctrl_pkt *)pkt;
-}
-
 static inline int rxr_match_addr(fi_addr_t addr, fi_addr_t match_addr)
 {
 	return (addr == FI_ADDR_UNSPEC || addr == match_addr);
@@ -802,7 +772,7 @@ static inline size_t rxr_get_tx_pool_chunk_cnt(struct rxr_ep *ep)
 static inline int rxr_need_sas_ordering(struct rxr_ep *ep)
 {
 	/*
-	 * RxR needs to reorder RTS packets for send-after-send guarantees
+	 * RxR needs to reorder RTM packets for send-after-send guarantees
 	 * only if the application requested it and the core provider does not
 	 * support it.
 	 */
@@ -848,9 +818,6 @@ int rxr_ep_set_tx_credit_request(struct rxr_ep *rxr_ep,
 
 void rxr_inline_mr_reg(struct rxr_domain *rxr_domain,
 		       struct rxr_tx_entry *tx_entry);
-
-struct rxr_rx_entry *rxr_ep_alloc_unexp_rx_entry_for_rts(struct rxr_ep *ep,
-							 struct rxr_pkt_entry *pkt_entry);
 
 struct rxr_rx_entry *rxr_ep_alloc_unexp_rx_entry_for_msgrtm(struct rxr_ep *ep,
 							    struct rxr_pkt_entry **pkt_entry);
