@@ -227,7 +227,7 @@ ssize_t rxr_msg_inject(struct fid_ep *ep, const void *buf, size_t len,
 
 #if ENABLE_DEBUG
 	rxr_ep = container_of(ep, struct rxr_ep, util_ep.ep_fid.fid);
-	assert(len <= rxr_ep->core_inject_size - RXR_CTRL_HDR_SIZE_NO_CQ);
+	assert(len <= rxr_ep->core_inject_size - sizeof(struct rxr_eager_msgrtm_hdr));
 #endif
 
 	return rxr_msg_generic_send(ep, &msg, 0, ofi_op_msg,
@@ -261,7 +261,7 @@ ssize_t rxr_msg_injectdata(struct fid_ep *ep, const void *buf,
 	 * source address. This means that we may end up not using the core
 	 * providers inject for this send.
 	 */
-	assert(len <= rxr_ep->core_inject_size - RXR_CTRL_HDR_SIZE_NO_CQ);
+	assert(len <= rxr_ep->core_inject_size - sizeof(struct rxr_eager_msgrtm_hdr));
 #endif
 
 	return rxr_msg_generic_send(ep, &msg, 0, ofi_op_msg,
@@ -360,7 +360,7 @@ ssize_t rxr_msg_tinject(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 #if ENABLE_DEBUG
 	rxr_ep = container_of(ep_fid, struct rxr_ep, util_ep.ep_fid.fid);
-	assert(len <= rxr_ep->core_inject_size - RXR_CTRL_HDR_SIZE_NO_CQ);
+	assert(len <= rxr_ep->core_inject_size - sizeof(struct rxr_eager_tagrtm_hdr));
 #endif
 
 	return rxr_msg_generic_send(ep_fid, &msg, tag, ofi_op_tagged,
@@ -393,7 +393,7 @@ ssize_t rxr_msg_tinjectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
 	 * source address. This means that we may end up not using the core
 	 * providers inject for this send.
 	 */
-	assert(len <= rxr_ep->core_inject_size - RXR_CTRL_HDR_SIZE_NO_CQ);
+	assert(len <= rxr_ep->core_inject_size - sizeof(struct rxr_eager_tagrtm_hdr));
 #endif
 
 	return rxr_msg_generic_send(ep_fid, &msg, tag, ofi_op_tagged,
@@ -444,7 +444,6 @@ int rxr_msg_handle_unexp_match(struct rxr_ep *ep,
 			       void *context, fi_addr_t addr,
 			       uint32_t op, uint64_t flags)
 {
-	struct rxr_base_hdr *base_hdr;
 	struct rxr_pkt_entry *pkt_entry;
 	uint64_t data_len;
 
@@ -453,10 +452,7 @@ int rxr_msg_handle_unexp_match(struct rxr_ep *ep,
 	rx_entry->state = RXR_RX_MATCHED;
 
 	pkt_entry = rx_entry->unexp_pkt;
-	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
-	data_len = (base_hdr->type == RXR_RTS_PKT) ?
-			rxr_get_rts_hdr(pkt_entry->pkt)->data_len :
-			rxr_pkt_rtm_total_len(pkt_entry);
+	data_len = rxr_pkt_rtm_total_len(pkt_entry);
 
 	rx_entry->cq_entry.op_context = context;
 	/*
@@ -483,9 +479,6 @@ int rxr_msg_handle_unexp_match(struct rxr_ep *ep,
 		rx_entry->cq_entry.tag = 0;
 		rx_entry->ignore = ~0;
 	}
-
-	if (base_hdr->type == RXR_RTS_PKT)
-		return rxr_pkt_proc_matched_msg_rts(ep, rx_entry, pkt_entry);
 
 	return rxr_pkt_proc_matched_rtm(ep, rx_entry, pkt_entry);
 }
@@ -840,7 +833,6 @@ ssize_t rxr_msg_peek_trecv(struct fid_ep *ep_fid,
 	struct rxr_rx_entry *rx_entry;
 	struct fi_context *context;
 	struct rxr_pkt_entry *pkt_entry;
-	struct rxr_base_hdr *base_hdr;
 	size_t data_len;
 	int64_t tag;
 
@@ -891,25 +883,8 @@ ssize_t rxr_msg_peek_trecv(struct fid_ep *ep_fid,
 	}
 
 	pkt_entry = rx_entry->unexp_pkt;
-	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
-	if (base_hdr->type == RXR_RTS_PKT) {
-		struct rxr_rts_hdr *rts_hdr;
-
-		rts_hdr = rxr_get_rts_hdr(pkt_entry->pkt);
-		if (rts_hdr->flags & RXR_REMOTE_CQ_DATA) {
-			rx_entry->cq_entry.data =
-				rxr_get_ctrl_cq_pkt(rts_hdr)->hdr.cq_data;
-			rx_entry->cq_entry.flags |= FI_REMOTE_CQ_DATA;
-		}
-
-		data_len = rts_hdr->data_len;
-		tag = rts_hdr->tag;
-
-	} else {
-		assert(base_hdr->type == RXR_EAGER_TAGRTM_PKT);
-		data_len = rxr_pkt_rtm_total_len(pkt_entry);
-		tag = rxr_pkt_rtm_tag(pkt_entry);
-	}
+	data_len = rxr_pkt_rtm_total_len(pkt_entry);
+	tag = rxr_pkt_rtm_tag(pkt_entry);
 
 	if (ep->util_ep.caps & FI_SOURCE)
 		ret = ofi_cq_write_src(ep->util_ep.rx_cq, context,

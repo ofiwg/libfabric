@@ -79,6 +79,11 @@ struct rxr_pkt_entry {
 #endif
 };
 
+static inline void *rxr_pkt_start(struct rxr_pkt_entry *pkt_entry)
+{
+	return (void *)((char *)pkt_entry + sizeof(*pkt_entry));
+}
+
 #if defined(static_assert) && defined(__x86_64__)
 static_assert(sizeof(struct rxr_pkt_entry) == 128, "rxr_pkt_entry check");
 #endif

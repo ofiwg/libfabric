@@ -321,10 +321,7 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 	*info->ep_attr = *rxr_info.ep_attr;
 	*info->domain_attr = *rxr_info.domain_attr;
 
-	info->tx_attr->inject_size =
-		core_info->tx_attr->inject_size > RXR_CTRL_HDR_SIZE_NO_CQ ?
-		core_info->tx_attr->inject_size - RXR_CTRL_HDR_SIZE_NO_CQ
-		: 0;
+	info->tx_attr->inject_size = 0;
 	rxr_info.tx_attr->inject_size = info->tx_attr->inject_size;
 
 	info->addr_format = core_info->addr_format;

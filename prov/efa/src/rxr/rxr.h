@@ -653,6 +653,11 @@ struct rxr_ep {
 #define rxr_rx_flags(rxr_ep) ((rxr_ep)->util_ep.rx_op_flags)
 #define rxr_tx_flags(rxr_ep) ((rxr_ep)->util_ep.tx_op_flags)
 
+/*
+ * Control header with completion data. CQ data length is static.
+ */
+#define RXR_CQ_DATA_SIZE (8)
+
 static inline void rxr_copy_shm_cq_entry(struct fi_cq_tagged_entry *cq_tagged_entry,
 					 struct fi_cq_data_entry *shm_cq_entry)
 {
@@ -745,21 +750,6 @@ static inline void rxr_release_rx_entry(struct rxr_ep *ep,
 #endif
 	rx_entry->state = RXR_RX_FREE;
 	ofi_buf_free(rx_entry);
-}
-
-static inline void *rxr_pkt_start(struct rxr_pkt_entry *pkt_entry)
-{
-	return (void *)((char *)pkt_entry + sizeof(*pkt_entry));
-}
-
-static inline struct rxr_ctrl_cq_pkt *rxr_get_ctrl_cq_pkt(void *pkt)
-{
-	return (struct rxr_ctrl_cq_pkt *)pkt;
-}
-
-static inline struct rxr_ctrl_pkt *rxr_get_ctrl_pkt(void *pkt)
-{
-	return (struct rxr_ctrl_pkt *)pkt;
 }
 
 static inline int rxr_match_addr(fi_addr_t addr, fi_addr_t match_addr)

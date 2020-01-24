@@ -165,42 +165,6 @@ struct rxr_pkt_entry *rxr_ep_get_unexp_pkt_entry(struct rxr_ep *ep,
 	return unexp_pkt_entry;
 }
 
-struct rxr_rx_entry *rxr_ep_alloc_unexp_rx_entry_for_rts(struct rxr_ep *ep,
-							 struct rxr_pkt_entry *pkt_entry)
-{
-	struct rxr_rx_entry *rx_entry;
-	struct rxr_pkt_entry *unexp_entry;
-	struct rxr_rts_hdr *rts_hdr;
-
-	unexp_entry = rxr_ep_get_unexp_pkt_entry(ep, pkt_entry);
-	if (OFI_UNLIKELY(!unexp_entry))
-		return NULL;
-
-	rx_entry = rxr_ep_get_rx_entry(ep, NULL, 0, 0, ~0, NULL,
-				       unexp_entry->addr, ofi_op_msg, 0);
-	if (OFI_UNLIKELY(!rx_entry))
-		return NULL;
-
-	rts_hdr = rxr_get_rts_hdr(unexp_entry->pkt);
-	if (rts_hdr->flags & RXR_TAGGED)
-		rx_entry->op = ofi_op_tagged;
-	else
-		rx_entry->op = ofi_op_msg;
-
-	rx_entry->tag = rts_hdr->tag;
-	rx_entry->rxr_flags = rts_hdr->flags;
-	rx_entry->total_len = rts_hdr->data_len;
-	if (rx_entry->op == ofi_op_tagged)
-		dlist_insert_tail(&rx_entry->entry, &ep->rx_unexp_tagged_list);
-	else
-		dlist_insert_tail(&rx_entry->entry, &ep->rx_unexp_list);
-
-	rx_entry->state = RXR_RX_UNEXP;
-	rx_entry->unexp_pkt = unexp_entry;
-
-	return rx_entry;
-}
-
 struct rxr_rx_entry *rxr_ep_alloc_unexp_rx_entry_for_msgrtm(struct rxr_ep *ep,
 							    struct rxr_pkt_entry **pkt_entry)
 {
@@ -270,17 +234,8 @@ struct rxr_rx_entry *rxr_ep_split_rx_entry(struct rxr_ep *ep,
 	struct rxr_base_hdr *base_hdr;
 
 	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
-	if (base_hdr->type == RXR_RTS_PKT) {
-		struct rxr_rts_hdr *rts_hdr = NULL;
-
-		rts_hdr = rxr_get_rts_hdr(pkt_entry->pkt);
-		tag = rts_hdr->tag;
-		data_len = rts_hdr->data_len;
-	} else {
-		assert(base_hdr->type >= RXR_REQ_PKT_BEGIN);
-		tag = 0;
-		data_len = 0;
-	}
+	assert(base_hdr->type >= RXR_REQ_PKT_BEGIN);
+	tag = 0;
 
 	if (!consumer_entry) {
 		rx_entry = rxr_ep_get_rx_entry(ep, posted_entry->iov,
@@ -1662,13 +1617,13 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (rxr_ep->mtu_size > RXR_MTU_MAX_LIMIT)
 		rxr_ep->mtu_size = RXR_MTU_MAX_LIMIT;
 
-	rxr_ep->max_data_payload_size = rxr_ep->mtu_size - RXR_DATA_HDR_SIZE;
+	rxr_ep->max_data_payload_size = rxr_ep->mtu_size - sizeof(struct rxr_data_hdr);
 	/*
 	 * Assume our eager message size is the largest control header size
 	 * without the source address. Use that value to set the default
 	 * receive release threshold.
 	 */
-	rxr_ep->min_multi_recv_size = rxr_ep->mtu_size - RXR_CTRL_HDR_SIZE;
+	rxr_ep->min_multi_recv_size = rxr_ep->mtu_size;
 
 	if (rxr_env.tx_queue_size > 0 &&
 	    rxr_env.tx_queue_size < rxr_ep->max_outstanding_tx)

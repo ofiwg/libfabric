@@ -59,7 +59,7 @@ ssize_t rxr_pkt_init_connack(struct rxr_ep *ep,
 	connack_hdr->version = RXR_PROTOCOL_VERSION;
 	connack_hdr->flags = 0;
 
-	pkt_entry->pkt_size = RXR_CONNACK_HDR_SIZE;
+	pkt_entry->pkt_size = sizeof(struct rxr_connack_hdr);
 	pkt_entry->addr = addr;
 	return 0;
 }
@@ -178,7 +178,7 @@ ssize_t rxr_pkt_init_cts(struct rxr_ep *ep,
 					rx_entry->credit_request,
 					&window, &rx_entry->credit_cts);
 	cts_hdr->window = window;
-	pkt_entry->pkt_size = RXR_CTS_HDR_SIZE;
+	pkt_entry->pkt_size = sizeof(struct rxr_cts_hdr);
 	pkt_entry->addr = rx_entry->addr;
 	pkt_entry->x_entry = (void *)rx_entry;
 	return 0;

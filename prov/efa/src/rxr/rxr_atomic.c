@@ -407,10 +407,9 @@ int rxr_query_atomic(struct fid_domain *domain,
 	rxr_domain = container_of(domain, struct rxr_domain,
 				  util_domain.domain_fid);
 
-	max_atomic_size = rxr_domain->mtu_size - RXR_CTRL_HDR_SIZE
+	max_atomic_size = rxr_domain->mtu_size - sizeof(struct rxr_rta_hdr)
 			  - rxr_domain->addrlen
-			  - RXR_IOV_LIMIT * sizeof(struct fi_rma_iov)
-			  - sizeof(struct rxr_atomic_hdr);
+			  - RXR_IOV_LIMIT * sizeof(struct fi_rma_iov);
 
 	if (flags & FI_COMPARE_ATOMIC)
 		max_atomic_size /= 2;

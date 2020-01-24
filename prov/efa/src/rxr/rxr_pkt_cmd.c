@@ -100,9 +100,6 @@ int rxr_pkt_init_ctrl(struct rxr_ep *rxr_ep, int entry_type, void *x_entry,
 	int ret = 0;
 
 	switch (ctrl_type) {
-	case RXR_RTS_PKT:
-		ret = rxr_pkt_init_rts(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
-		break;
 	case RXR_READRSP_PKT:
 		ret = rxr_pkt_init_readrsp(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
 		break;
@@ -175,9 +172,6 @@ void rxr_pkt_handle_ctrl_sent(struct rxr_ep *rxr_ep, struct rxr_pkt_entry *pkt_e
 	int ctrl_type = rxr_get_base_hdr(pkt_entry->pkt)->type;
 
 	switch (ctrl_type) {
-	case RXR_RTS_PKT:
-		rxr_pkt_handle_rts_sent(rxr_ep, pkt_entry);
-		break;
 	case RXR_READRSP_PKT:
 		rxr_pkt_handle_readrsp_sent(rxr_ep, pkt_entry);
 		break;
@@ -325,9 +319,6 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct fi_cq_data_entry *
 	       RXR_PROTOCOL_VERSION);
 
 	switch (rxr_get_base_hdr(pkt_entry->pkt)->type) {
-	case RXR_RTS_PKT:
-		rxr_pkt_handle_rts_send_completion(ep, pkt_entry);
-		break;
 	case RXR_CONNACK_PKT:
 		break;
 	case RXR_CTS_PKT:
@@ -428,20 +419,8 @@ fi_addr_t rxr_pkt_insert_addr(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 		abort();
 	}
 
-	if (base_hdr->type == RXR_RTS_PKT) {
-		struct rxr_rts_hdr *rts_hdr;
-
-		rts_hdr = rxr_get_rts_hdr(pkt_entry->pkt);
-		assert(rts_hdr->flags & RXR_REMOTE_SRC_ADDR);
-		assert(rts_hdr->addrlen > 0);
-
-		raw_addr = (rts_hdr->flags & RXR_REMOTE_CQ_DATA) ?
-			      rxr_get_ctrl_cq_pkt(rts_hdr)->data
-			      : rxr_get_ctrl_pkt(rts_hdr)->data;
-	} else {
-		assert(base_hdr->type >= RXR_REQ_PKT_BEGIN);
-		raw_addr = pkt_entry->raw_addr;
-	}
+	assert(base_hdr->type >= RXR_REQ_PKT_BEGIN);
+	raw_addr = pkt_entry->raw_addr;
 
 	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
 	ret = efa_av_insert_addr(efa_ep->av, (struct efa_ep_addr *)raw_addr,
@@ -495,9 +474,6 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 		ep->posted_bufs_efa--;
 
 	switch (base_hdr->type) {
-	case RXR_RTS_PKT:
-		rxr_pkt_handle_rts_recv(ep, pkt_entry);
-		return;
 	case RXR_EOR_PKT:
 		rxr_pkt_handle_eor_recv(ep, pkt_entry);
 		return;
@@ -559,61 +535,6 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 #define RXR_PKT_DUMP_DATA_LEN 64
 
 static
-void rxr_pkt_print_rts(struct rxr_ep *ep,
-		       char *prefix, struct rxr_rts_hdr *rts_hdr)
-{
-	char str[RXR_PKT_DUMP_DATA_LEN * 4];
-	size_t str_len = RXR_PKT_DUMP_DATA_LEN * 4, l;
-	uint8_t *src;
-	uint8_t *data;
-	int i;
-
-	str[str_len - 1] = '\0';
-
-	FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
-	       "%s RxR RTS packet - version: %"	PRIu8
-	       " flags: %"	PRIu16
-	       " tx_id: %"	PRIu32
-	       " msg_id: %"	PRIu32
-	       " tag: %lx data_len: %"	PRIu64 "\n",
-	       prefix, rts_hdr->version, rts_hdr->flags, rts_hdr->tx_id,
-	       rts_hdr->msg_id, rts_hdr->tag, rts_hdr->data_len);
-
-	if ((rts_hdr->flags & RXR_REMOTE_CQ_DATA) &&
-	    (rts_hdr->flags & RXR_REMOTE_SRC_ADDR)) {
-		src = (uint8_t *)((struct rxr_ctrl_cq_pkt *)rts_hdr)->data;
-		data = src + rts_hdr->addrlen;
-	} else if (!(rts_hdr->flags & RXR_REMOTE_CQ_DATA) &&
-		   (rts_hdr->flags & RXR_REMOTE_SRC_ADDR)) {
-		src = (uint8_t *)((struct rxr_ctrl_pkt *)rts_hdr)->data;
-		data = src + rts_hdr->addrlen;
-	} else if ((rts_hdr->flags & RXR_REMOTE_CQ_DATA) &&
-		   !(rts_hdr->flags & RXR_REMOTE_SRC_ADDR)) {
-		data = (uint8_t *)((struct rxr_ctrl_cq_pkt *)rts_hdr)->data;
-	} else {
-		data = (uint8_t *)((struct rxr_ctrl_pkt *)rts_hdr)->data;
-	}
-
-	if (rts_hdr->flags & RXR_REMOTE_CQ_DATA)
-		FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
-		       "\tcq_data: %08lx\n",
-		       ((struct rxr_ctrl_cq_hdr *)rts_hdr)->cq_data);
-
-	if (rts_hdr->flags & RXR_REMOTE_SRC_ADDR) {
-		l = snprintf(str, str_len, "\tsrc_addr: ");
-		for (i = 0; i < rts_hdr->addrlen; i++)
-			l += snprintf(str + l, str_len - l, "%02x ", src[i]);
-		FI_DBG(&rxr_prov, FI_LOG_EP_DATA, "%s\n", str);
-	}
-
-	l = snprintf(str, str_len, ("\tdata:    "));
-	for (i = 0; i < MIN(rxr_get_rts_data_size(ep, rts_hdr),
-			    RXR_PKT_DUMP_DATA_LEN); i++)
-		l += snprintf(str + l, str_len - l, "%02x ", data[i]);
-	FI_DBG(&rxr_prov, FI_LOG_EP_DATA, "%s\n", str);
-}
-
-static
 void rxr_pkt_print_connack(char *prefix,
 			   struct rxr_connack_hdr *connack_hdr)
 {
@@ -664,9 +585,6 @@ void rxr_pkt_print_data(char *prefix, struct rxr_data_pkt *data_pkt)
 void rxr_pkt_print(char *prefix, struct rxr_ep *ep, struct rxr_base_hdr *hdr)
 {
 	switch (hdr->type) {
-	case RXR_RTS_PKT:
-		rxr_pkt_print_rts(ep, prefix, (struct rxr_rts_hdr *)hdr);
-		break;
 	case RXR_CONNACK_PKT:
 		rxr_pkt_print_connack(prefix, (struct rxr_connack_hdr *)hdr);
 		break;

@@ -68,7 +68,7 @@ ssize_t rxr_pkt_send_data(struct rxr_ep *ep,
 						tx_entry->bytes_sent);
 	assert(pkt_entry->pkt_size == payload_size);
 
-	pkt_entry->pkt_size += RXR_DATA_HDR_SIZE;
+	pkt_entry->pkt_size += sizeof(struct rxr_data_hdr);
 	pkt_entry->addr = tx_entry->addr;
 
 	return rxr_pkt_entry_send_with_flags(ep, pkt_entry, pkt_entry->addr,
@@ -146,7 +146,7 @@ ssize_t rxr_pkt_send_data_mr_cache(struct rxr_ep *ep,
 	data_pkt = (struct rxr_data_pkt *)pkt_entry->pkt;
 	/* Assign packet header in constructed iov */
 	iov[i].iov_base = rxr_pkt_start(pkt_entry);
-	iov[i].iov_len = RXR_DATA_HDR_SIZE;
+	iov[i].iov_len = sizeof(struct rxr_data_hdr);
 	desc[i] = rxr_ep_mr_local(ep) ? fi_mr_desc(pkt_entry->mr) : NULL;
 	i++;
 
@@ -202,6 +202,7 @@ ssize_t rxr_pkt_send_data_mr_cache(struct rxr_ep *ep,
 	}
 	data_pkt->hdr.seg_size = (uint16_t)payload_size;
 	pkt_entry->pkt_size = payload_size + RXR_DATA_HDR_SIZE;
+	pkt_entry->x_entry = tx_entry;
 	pkt_entry->addr = tx_entry->addr;
 
 	FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
