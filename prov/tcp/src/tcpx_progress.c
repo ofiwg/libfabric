@@ -155,7 +155,7 @@ static int tcpx_prepare_rx_entry_resp(struct tcpx_xfer_entry *rx_entry)
 	tcpx_tx_queue_insert(resp_entry->ep, resp_entry);
 	tcpx_cq_report_success(rx_entry->ep->util_ep.rx_cq, rx_entry);
 
-	rx_entry->rx_msg_release_fn(rx_entry);
+	tcpx_rx_msg_release(rx_entry);
 	return FI_SUCCESS;
 }
 
@@ -174,13 +174,13 @@ static int process_rx_entry(struct tcpx_xfer_entry *rx_entry)
 		tcpx_ep_shutdown_report(rx_entry->ep,
 					&rx_entry->ep->util_ep.ep_fid.fid);
 		tcpx_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, -ret);
-		rx_entry->rx_msg_release_fn(rx_entry);
+		tcpx_rx_msg_release(rx_entry);
 	} else if (rx_entry->hdr.base_hdr.flags & OFI_DELIVERY_COMPLETE) {
 		if (tcpx_prepare_rx_entry_resp(rx_entry))
 			rx_entry->ep->cur_rx_proc_fn = tcpx_prepare_rx_entry_resp;
 	} else {
 		tcpx_cq_report_success(rx_entry->ep->util_ep.rx_cq, rx_entry);
-		rx_entry->rx_msg_release_fn(rx_entry);
+		tcpx_rx_msg_release(rx_entry);
 	}
 	return ret;
 }
@@ -447,7 +447,6 @@ int tcpx_get_rx_entry_op_msg(struct tcpx_ep *tcpx_ep)
 		rx_entry->rem_len = ofi_total_iov_len(rx_entry->iov,
 						      rx_entry->iov_cnt) - msg_len;
 		slist_remove_head(&tcpx_ep->rx_queue);
-		rx_entry->rx_msg_release_fn = tcpx_rx_msg_release;
 	}
 
 	memcpy(&rx_entry->hdr, &tcpx_ep->rx_detect.hdr,
@@ -462,7 +461,7 @@ int tcpx_get_rx_entry_op_msg(struct tcpx_ep *tcpx_ep)
 			"posted rx buffer size is not big enough\n");
 		tcpx_cq_report_error(rx_entry->ep->util_ep.rx_cq,
 				     rx_entry, -ret);
-		rx_entry->rx_msg_release_fn(rx_entry);
+		tcpx_rx_msg_release(rx_entry);
 		return ret;
 	}
 

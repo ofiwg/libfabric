@@ -216,8 +216,6 @@ struct tcpx_fabric {
 	struct util_fabric	util_fabric;
 };
 
-typedef void (*release_func_t)(struct tcpx_xfer_entry *xfer_entry);
-
 struct tcpx_xfer_entry {
 	struct slist_entry	entry;
 	union {
@@ -232,7 +230,6 @@ struct tcpx_xfer_entry {
 	void			*context;
 	uint64_t		rem_len;
 	void			*mrecv_msg_start;
-	release_func_t		rx_msg_release_fn;
 };
 
 struct tcpx_domain {
