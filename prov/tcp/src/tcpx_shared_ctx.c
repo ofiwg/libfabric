@@ -78,7 +78,6 @@ tcpx_srx_next_xfer_entry(struct tcpx_rx_ctx *srx_ctx,
 	xfer_entry->rem_len = ofi_total_iov_len(xfer_entry->iov,
 						xfer_entry->iov_cnt) - entry_size;
 	slist_remove_head(&srx_ctx->rx_queue);
-	xfer_entry->rx_msg_release_fn = tcpx_rx_msg_release;
 out:
 	fastlock_release(&srx_ctx->lock);
 	return xfer_entry;
