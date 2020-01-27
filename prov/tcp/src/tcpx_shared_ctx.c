@@ -49,20 +49,6 @@ void tcpx_srx_xfer_release(struct tcpx_rx_ctx *srx_ctx,
 	fastlock_release(&srx_ctx->lock);
 }
 
-static inline void tcpx_srx_recv_init(struct tcpx_xfer_entry *recv_entry,
-				      uint64_t base_flags, void *context)
-{
-	recv_entry->flags = base_flags | FI_MSG | FI_RECV;
-	recv_entry->context = context;
-}
-
-static inline void tcpx_srx_recv_init_iov(struct tcpx_xfer_entry *recv_entry,
-					  size_t count, const struct iovec *iov)
-{
-	recv_entry->iov_cnt = count;
-	memcpy(&recv_entry->iov[0], iov, count * sizeof(*iov));
-}
-
 struct tcpx_xfer_entry *
 tcpx_srx_next_xfer_entry(struct tcpx_rx_ctx *srx_ctx,
 			struct tcpx_ep *ep, size_t entry_size)
@@ -100,8 +86,11 @@ static ssize_t tcpx_srx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		goto unlock;
 	}
 
-	tcpx_srx_recv_init(recv_entry, flags, msg->context);
-	tcpx_srx_recv_init_iov(recv_entry, msg->iov_count, msg->msg_iov);
+	recv_entry->flags = flags | FI_MSG | FI_RECV;
+	recv_entry->context = msg->context;
+	recv_entry->iov_cnt = msg->iov_count;
+	memcpy(&recv_entry->iov[0], msg->msg_iov,
+	       msg->iov_count * sizeof(*msg->msg_iov));
 
 	slist_insert_tail(&recv_entry->entry, &srx_ctx->rx_queue);
 unlock:
@@ -125,7 +114,8 @@ static ssize_t tcpx_srx_recv(struct fid_ep *ep, void *buf, size_t len, void *des
 		goto unlock;
 	}
 
-	tcpx_srx_recv_init(recv_entry, 0, context);
+	recv_entry->flags = FI_MSG | FI_RECV;
+	recv_entry->context = context;
 	recv_entry->iov_cnt = 1;
 	recv_entry->iov[0].iov_base = buf;
 	recv_entry->iov[0].iov_len = len;
@@ -154,8 +144,10 @@ static ssize_t tcpx_srx_recvv(struct fid_ep *ep, const struct iovec *iov, void *
 		goto unlock;
 	}
 
-	tcpx_srx_recv_init(recv_entry, 0, context);
-	tcpx_srx_recv_init_iov(recv_entry, count, iov);
+	recv_entry->flags = FI_MSG | FI_RECV;
+	recv_entry->context = context;
+	recv_entry->iov_cnt = count;
+	memcpy(&recv_entry->iov[0], iov, count * sizeof(*iov));
 
 	slist_insert_tail(&recv_entry->entry, &srx_ctx->rx_queue);
 unlock:
