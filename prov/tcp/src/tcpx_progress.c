@@ -629,23 +629,18 @@ err:
 		tcpx_report_error(ep, ret);
 }
 
-static void process_tx_queue(struct tcpx_ep *ep)
+void tcpx_ep_progress(struct tcpx_ep *ep)
 {
 	struct tcpx_xfer_entry *tx_entry;
 	struct slist_entry *entry;
 
-	if (slist_empty(&ep->tx_queue))
-		return;
+	if (!slist_empty(&ep->tx_queue)) {
+		entry = ep->tx_queue.head;
+		tx_entry = container_of(entry, struct tcpx_xfer_entry, entry);
+		process_tx_entry(tx_entry);
+	}
 
-	entry = ep->tx_queue.head;
-	tx_entry = container_of(entry, struct tcpx_xfer_entry, entry);
-	process_tx_entry(tx_entry);
-}
-
-void tcpx_ep_progress(struct tcpx_ep *ep)
-{
 	tcpx_process_rx_msg(ep);
-	process_tx_queue(ep);
 }
 
 void tcpx_progress(struct util_ep *util_ep)
