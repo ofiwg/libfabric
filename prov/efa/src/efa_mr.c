@@ -87,6 +87,9 @@ void efa_mr_cache_entry_dereg(struct ofi_mr_cache *cache,
 			      struct ofi_mr_entry *entry)
 {
 	struct efa_mem_desc *md = (struct efa_mem_desc *)entry->data;
+	if (!md->mr)
+		return;
+
 	int ret = -ibv_dereg_mr(md->mr);
 	if (ret)
 		EFA_WARN(FI_LOG_MR, "Unable to dereg mr: %d\n", ret);
