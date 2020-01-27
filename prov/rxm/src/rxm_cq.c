@@ -59,43 +59,6 @@ static const char *rxm_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
 	return fi_cq_strerror(rxm_ep->msg_cq, prov_errno, err_data, buf, len);
 }
 
-/* Get a match_iov derived from iov whose size matches given length */
-static int rxm_match_iov(const struct iovec *iov, void **desc,
-			 uint8_t count, uint64_t offset, size_t match_len,
-			 struct rxm_iov *match_iov)
-{
-	uint8_t i;
-
-	assert(count <= RXM_IOV_LIMIT);
-
-	for (i = 0; i < count; i++) {
-		if (offset >= iov[i].iov_len) {
-			offset -= iov[i].iov_len;
-			continue;
-		}
-
-		match_iov->iov[i].iov_base = (char *)iov[i].iov_base + offset;
-		match_iov->iov[i].iov_len = MIN(iov[i].iov_len - offset, match_len);
-		if (desc)
-			match_iov->desc[i] = desc[i];
-
-		match_len -= match_iov->iov[i].iov_len;
-		if (!match_len)
-			break;
-		offset = 0;
-	}
-
-	if (match_len) {
-		FI_WARN(&rxm_prov, FI_LOG_CQ,
-			"Given iov size (%zu) < match_len (remained match_len = %zu)!\n",
-			ofi_total_iov_len(iov, count), match_len);
-		return -FI_ETOOSMALL;
-	}
-
-	match_iov->count = i + 1;
-	return FI_SUCCESS;
-}
-
 static inline uint64_t
 rxm_cq_get_rx_comp_and_op_flags(struct rxm_rx_buf *rx_buf)
 {
@@ -198,7 +161,6 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 	}
 
 	if (rx_buf->recv_entry->flags & FI_MULTI_RECV) {
-		struct rxm_iov rxm_iov;
 		size_t recv_size = rx_buf->pkt.hdr.size;
 		struct rxm_ep *rxm_ep = rx_buf->ep;
 
@@ -207,10 +169,6 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 		recv_entry->total_len -= recv_size;
 
 		if (recv_entry->total_len <= rxm_ep->min_multi_recv_size) {
-			FI_DBG(&rxm_prov, FI_LOG_CQ,
-			       "Buffer %p has been completely consumed. "
-			       "Reporting Multi-Recv completion\n",
-			       recv_entry->multi_recv.buf);
 			ret = ofi_cq_write(rxm_ep->util_ep.rx_cq, recv_entry->context,
 					   FI_MULTI_RECV, 0, NULL, 0, 0);
 
@@ -230,14 +188,9 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 		       "consumed len = %zu, remain len = %zu\n",
 		       recv_entry, recv_size, recv_entry->total_len);
 
-		rxm_iov = recv_entry->rxm_iov;
-		ret = rxm_match_iov(/* prev iovecs */
-				    rxm_iov.iov, rxm_iov.desc, rxm_iov.count,
-				    recv_size,			/* offset */
-				    recv_entry->total_len,	/* match_len */
-				    &recv_entry->rxm_iov);	/* match_iov */
-		if (OFI_UNLIKELY(ret))
-			return ret;
+		recv_entry->rxm_iov.iov[0].iov_base = (uint8_t *)
+				recv_entry->rxm_iov.iov[0].iov_base + recv_size;
+		recv_entry->rxm_iov.iov[0].iov_len -= recv_size;
 
 		return rxm_process_recv_entry(recv_entry->recv_queue, recv_entry);
 	} else {
