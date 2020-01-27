@@ -211,7 +211,9 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 			       "Buffer %p has been completely consumed. "
 			       "Reporting Multi-Recv completion\n",
 			       recv_entry->multi_recv.buf);
-			ret = rxm_cq_write_multi_recv_comp(rxm_ep, recv_entry);
+			ret = ofi_cq_write(rxm_ep->util_ep.rx_cq, recv_entry->context,
+					   FI_MULTI_RECV, 0, NULL, 0, 0);
+
 			if (OFI_UNLIKELY(ret)) {
 				FI_WARN(&rxm_prov, FI_LOG_CQ,
 					"Unable to write FI_MULTI_RECV completion\n");
