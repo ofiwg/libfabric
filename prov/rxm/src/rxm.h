@@ -586,10 +586,6 @@ struct rxm_recv_entry {
 	uint64_t comp_flags;
 	size_t total_len;
 	struct rxm_recv_queue *recv_queue;
-	struct {
-		void	*buf;
-		size_t	len;
-	} multi_recv;
 
 	/* Used for SAR protocol */
 	struct {
