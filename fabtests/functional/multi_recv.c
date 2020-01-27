@@ -121,18 +121,6 @@ int wait_for_recv_completion(int num_completions)
 	return 0;
 }
 
-static int sync_test(void)
-{
-	int ret;
-
-	ret = opts.dst_addr ? ft_tx(ep, remote_fi_addr, 1, &tx_ctx) : wait_for_recv_completion(1);
-	if (ret)
-		return ret;
-
-	ret = opts.dst_addr ? wait_for_recv_completion(1) : ft_tx(ep, remote_fi_addr, 1, &tx_ctx);
-	return ret;
-}
-
 /*
  * Post buffer as two halves, so that we can repost one half
  * when the other half is full.
@@ -154,23 +142,21 @@ static int run_test(void)
 {
 	int ret, i;
 
-	ret = sync_test();
-	if (ret) {
-		fprintf(stderr, "sync_test failed!\n");
-		goto out;
-	}
+	ret = ft_sync();
+	if (ret)
+		return ret;
 
 	ft_start();
 	if (opts.dst_addr) {
 		for (i = 0; i < opts.iterations; i++) {
 			ret = ft_tx(ep, remote_fi_addr, opts.transfer_size, &tx_ctx);
 			if (ret)
-				goto out;
+				return ret;
 		}
 	} else {
 		ret = wait_for_recv_completion(opts.iterations);
 		if (ret)
-			goto out;
+			return ret;
 	}
 	ft_stop();
 
@@ -178,10 +164,9 @@ static int run_test(void)
 		show_perf_mr(opts.transfer_size, opts.iterations,
 			&start, &end, 1, opts.argc, opts.argv);
 	else
-		show_perf(test_name, opts.transfer_size, opts.iterations,
+		show_perf(NULL, opts.transfer_size, opts.iterations,
 			&start, &end, 1);
 
-out:
 	return ret;
 }
 
@@ -237,214 +222,36 @@ static int alloc_ep_res(struct fi_info *fi)
 		return ret;
 	}
 
-	ret = ft_alloc_active_res(fi);
-	if (ret)
-		return ret;
-
 	return 0;
-}
-
-static int init_fabric(void)
-{
-	int ret;
-
-	ret = ft_getinfo(hints, &fi);
-	if (ret)
-		return ret;
-
-	// set FI_MULTI_RECV flag for all recv operations
-	fi->rx_attr->op_flags = FI_MULTI_RECV;
-
-	ret = ft_open_fabric_res();
-	if (ret)
-		return ret;
-
-	ret = alloc_ep_res(fi);
-	if (ret)
-		return ret;
-
-	ret = ft_enable_ep_recv();
-	if (ret)
-		return ret;
-
-	ret = fi_setopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_MIN_MULTI_RECV,
-			&tx_size, sizeof(tx_size));
-	if (ret)
-		return ret;
-
-	ret = post_multi_recv_buffer();
-	return ret;
-}
-
-static int init_av(void)
-{
-	size_t addrlen;
-	int ret;
-
-	if (opts.dst_addr) {
-		ret = ft_av_insert(av, fi->dest_addr, 1, &remote_fi_addr, 0, NULL);
-		if (ret)
-			return ret;
-
-		addrlen = 64;
-		ret = fi_getname(&ep->fid, tx_buf, &addrlen);
-		if (ret) {
-			FT_PRINTERR("fi_getname", ret);
-			return ret;
-		}
-
-		ret = ft_tx(ep, remote_fi_addr, addrlen, &tx_ctx);
-		if (ret)
-			return ret;
-	} else {
-		ret = wait_for_recv_completion(1);
-		if (ret)
-			return ret;
-
-		ret = ft_av_insert(av, rx_buf, 1, &remote_fi_addr, 0, NULL);
-		if (ret)
-			return ret;
-	}
-
-	return 0;
-}
-
-int start_server(void)
-{
-	int ret;
-
-	tx_seq = 0;
-	rx_seq = 0;
-	tx_cq_cntr = 0;
-	rx_cq_cntr = 0;
-
-
-	ret = ft_getinfo(hints, &fi_pep);
-	if (ret)
-		return ret;
-
-	// set FI_MULTI_RECV flag for all recv operations
-	fi_pep->rx_attr->op_flags = FI_MULTI_RECV;
-
-	ret = fi_fabric(fi_pep->fabric_attr, &fabric, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_fabric", ret);
-		return ret;
-	}
-
-	ret = fi_eq_open(fabric, &eq_attr, &eq, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_eq_open", ret);
-		return ret;
-	}
-
-	ret = fi_passive_ep(fabric, fi_pep, &pep, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_passive_ep", ret);
-		return ret;
-	}
-
-	ret = fi_pep_bind(pep, &eq->fid, 0);
-	if (ret) {
-		FT_PRINTERR("fi_pep_bind", ret);
-		return ret;
-	}
-
-	ret = fi_listen(pep);
-	if (ret) {
-		FT_PRINTERR("fi_listen", ret);
-		return ret;
-	}
-
-	return 0;
-}
-
-int server_connect(void)
-{
-	int ret;
-
-	ret = ft_retrieve_conn_req(eq, &fi);
-	if (ret)
-		goto err;
-
-	ret = fi_domain(fabric, fi, &domain, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_domain", ret);
-		goto err;
-	}
-
-	ret = alloc_ep_res(fi);
-	if (ret)
-		goto err;
-
-	ret = ft_enable_ep_recv();
-	if (ret)
-		goto err;
-
-	ret = fi_setopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_MIN_MULTI_RECV,
-			&tx_size, sizeof(tx_size));
-	if (ret)
-		goto err;
-
-	ret = post_multi_recv_buffer();
-	if (ret)
-		goto err;
-
-	ret = ft_accept_connection(ep, eq);
-	if (ret)
-		goto err;
-
-	return 0;
-err:
-	fi_reject(pep, fi->handle, NULL, 0);
-	return ret;
-}
-
-static int client_connect(void)
-{
-	int ret;
-
-	ret =  init_fabric();
-	if (ret)
-		return ret;
-
-	return ft_connect_ep(ep, eq, fi->dest_addr);
 }
 
 static int run(void)
 {
 	int ret = 0;
 
-	if (hints->ep_attr->type == FI_EP_MSG) {
-		if (!opts.dst_addr) {
-			ret = start_server();
-			if (ret)
-				goto out;
-		}
+	ret = hints->ep_attr->type == FI_EP_MSG ?
+		ft_init_fabric_cm() : ft_init_fabric();
+	if (ret)
+		return ret;
 
-		ret = opts.dst_addr ? client_connect() : server_connect();
-		if (ret)
-			goto out;
-	} else {
-		ret = ft_init_oob();
-		if (ret)
-			goto out;
+	ret = alloc_ep_res(fi);
+	if (ret)
+		return ret;
 
-		ret = init_fabric();
-		if (ret)
-			goto out;
+	ret = fi_setopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_MIN_MULTI_RECV,
+			&tx_size, sizeof(tx_size));
+	if (ret)
+		return ret;
 
-		ret = (opts.options & (FT_OPT_OOB_SYNC | FT_OPT_OOB_CTRL)) ?
-			ft_init_av() : init_av();
-		if (ret)
-			goto out;
-	}
+	ret = post_multi_recv_buffer();
+	if (ret)
+		return ret;
 
 	ret = run_test();
 
 	rx_seq++;
 	ft_finalize();
-out:
+
 	return ret;
 }
 
@@ -453,7 +260,8 @@ int main(int argc, char **argv)
 	int op, ret;
 
 	opts = INIT_OPTS;
-	opts.options |= FT_OPT_SIZE | FT_OPT_SKIP_MSG_ALLOC;
+	opts.options |= FT_OPT_SIZE | FT_OPT_SKIP_MSG_ALLOC | FT_OPT_OOB_SYNC |
+			FT_OPT_OOB_ADDR_EXCH | FT_OPT_SKIP_MSG_ALLOC;
 	use_recvmsg = 0;
 
 	hints = fi_allocinfo();
@@ -486,6 +294,7 @@ int main(int argc, char **argv)
 	hints->caps = FI_MSG | FI_MULTI_RECV;
 	hints->mode = FI_CONTEXT;
 	hints->domain_attr->mr_mode = opts.mr_mode;
+	hints->rx_attr->op_flags = FI_MULTI_RECV;
 
 	cq_attr.format = FI_CQ_FORMAT_DATA;
 

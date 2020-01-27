@@ -1331,7 +1331,7 @@ int ft_exchange_raw_keys(struct fi_rma_iov *peer_iov)
 		if (ret)
 			return ret;
 
-               ret = ft_tx(ep, remote_fi_addr, len, &tx_ctx);
+		ret = ft_tx(ep, remote_fi_addr, len, &tx_ctx);
 		if (ret)
 			return ret;
 
