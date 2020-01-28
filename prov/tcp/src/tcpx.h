@@ -302,12 +302,12 @@ tcpx_srx_next_xfer_entry(struct tcpx_rx_ctx *srx_ctx,
 
 void tcpx_progress(struct util_ep *util_ep);
 void tcpx_ep_progress(struct tcpx_ep *ep);
+int tcpx_try_func(void *util_ep);
 
 void tcpx_hdr_none(struct tcpx_base_hdr *hdr);
 void tcpx_hdr_bswap(struct tcpx_base_hdr *hdr);
 
 int tcpx_ep_shutdown_report(struct tcpx_ep *ep, fid_t fid);
-int tcpx_cq_wait_ep_add(struct tcpx_ep *ep);
 void tcpx_tx_queue_insert(struct tcpx_ep *tcpx_ep,
 			  struct tcpx_xfer_entry *tx_entry);
 

@@ -654,7 +654,7 @@ void tcpx_progress(struct util_ep *util_ep)
 	return;
 }
 
-static int tcpx_try_func(void *util_ep)
+int tcpx_try_func(void *util_ep)
 {
 	uint32_t events;
 	struct util_wait_fd *wait_fd;
@@ -685,16 +685,6 @@ epoll_mod:
 			"invalid op type\n");
 	fastlock_release(&ep->lock);
 	return ret;
-}
-
-int tcpx_cq_wait_ep_add(struct tcpx_ep *ep)
-{
-	if (!ep->util_ep.rx_cq->wait)
-		return FI_SUCCESS;
-
-	return ofi_wait_fd_add(ep->util_ep.rx_cq->wait,
-			       ep->conn_fd, FI_EPOLL_IN,
-			       tcpx_try_func, (void *) &ep->util_ep, NULL);
 }
 
 void tcpx_tx_queue_insert(struct tcpx_ep *tcpx_ep,
