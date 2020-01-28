@@ -37,25 +37,22 @@
 
 #include <shared.h>
 
-// MULTI_BUF_SIZE_FACTOR defines how large the multi recv buffer will be.
-// The minimum value of the factor is 2 which will set the multi recv buffer
-// size to be twice the size of the send buffer. In order to use FI_MULTI_RECV
-// feature efficiently, we need to have a large recv buffer so that we don't
-// to repost the buffer often to get the remaining data when the buffer is full
-#define MULTI_BUF_SIZE_FACTOR 4
-#define DEFAULT_MULTI_BUF_SIZE (1024 * 1024)
+#define MAX_XFER_SIZE (1 << 20)
 
 static struct fid_mr *mr_multi_recv;
 struct fi_context ctx_multi_recv[2];
-static int use_recvmsg;
+static int use_recvmsg, comp_per_buf;
 
-static int repost_recv(int iteration) {
+static int repost_recv(int iteration)
+{
 	struct fi_msg msg;
 	struct iovec msg_iov;
+	void *buf_addr;
 	int ret;
 
+	buf_addr = rx_buf + (rx_size / 2) * iteration;
 	if (use_recvmsg) {
-		msg_iov.iov_base = rx_buf + (rx_size / 2) * iteration;
+		msg_iov.iov_base = buf_addr;
 		msg_iov.iov_len = rx_size / 2;
 		msg.msg_iov = &msg_iov;
 		msg.desc = fi_mr_desc(mr_multi_recv);
@@ -69,9 +66,9 @@ static int repost_recv(int iteration) {
 			return ret;
 		}
 	} else {
-		ret = fi_recv(ep, rx_buf + (rx_size / 2) * iteration,
-				rx_size / 2, fi_mr_desc(mr_multi_recv),
-				0, &ctx_multi_recv[iteration]);
+		ret = fi_recv(ep, buf_addr, rx_size / 2,
+			      fi_mr_desc(mr_multi_recv), 0,
+			      &ctx_multi_recv[iteration]);
 		if (ret) {
 			FT_PRINTERR("fi_recv", ret);
 			return ret;
@@ -82,9 +79,9 @@ static int repost_recv(int iteration) {
 }
 
 
-int wait_for_recv_completion(int num_completions)
+static int wait_for_recv_completion(int num_completions)
 {
-	int i, ret;
+	int i, ret, per_buf_cnt = 0;
 	struct fi_cq_data_entry comp;
 
 	while (num_completions > 0) {
@@ -97,21 +94,27 @@ int wait_for_recv_completion(int num_completions)
 			return ret;
 		}
 
-		if (comp.len)
-			num_completions--;
-
-		if (ft_check_opts(FT_OPT_VERIFY_DATA | FT_OPT_ACTIVE)) {
+		if (comp.flags & FI_RECV) {
 			if (comp.len != opts.transfer_size) {
-				FT_ERR("comp.len != opts.transfer_size");
-				return -FI_EOTHER;
+				FT_ERR("completion length %lu, expected %lu",
+					comp.len, opts.transfer_size);
+				return -FI_EIO;
 			}
-			ret = ft_check_buf(comp.buf, opts.transfer_size);
-			if (ret)
-				return ret;
+			if (ft_check_opts(FT_OPT_VERIFY_DATA | FT_OPT_ACTIVE) &&
+			    ft_check_buf(comp.buf, opts.transfer_size))
+				return -FI_EIO;
+			per_buf_cnt++;
+			num_completions--;
 		}
 
 		if (comp.flags & FI_MULTI_RECV) {
-			i = (comp.op_context == &ctx_multi_recv[0]) ? 0 : 1;
+			if (per_buf_cnt != comp_per_buf) {
+				FT_ERR("Received %d completions per buffer, expected %d",
+					per_buf_cnt, comp_per_buf);
+				return -FI_EIO;
+			}
+			per_buf_cnt = 0;
+			i = comp.op_context == &ctx_multi_recv[1];
 
 			ret = repost_recv(i);
 			if (ret)
@@ -187,7 +190,7 @@ static int alloc_ep_res(struct fi_info *fi)
 {
 	int ret;
 
-	tx_size = MAX(FT_MAX_CTRL_MSG, opts.transfer_size);
+	tx_size = opts.transfer_size;
 	if (tx_size > fi->ep_attr->max_msg_size) {
 		fprintf(stderr, "transfer size is larger than the maximum size "
 				"of the data transfer supported by the provider\n");
@@ -207,8 +210,11 @@ static int alloc_ep_res(struct fi_info *fi)
 		return ret;
 	}
 
-	// set the multi buffer size to be allocated
-	rx_size = MAX(tx_size, DEFAULT_MULTI_BUF_SIZE) * MULTI_BUF_SIZE_FACTOR;
+	//Each multi recv buffer will be able to hold at least 2 and
+	//up to 64 messages, allowing proper testing of multi recv
+	//completions and reposting
+	rx_size = MIN(tx_size * 128, MAX_XFER_SIZE * 4);
+	comp_per_buf = rx_size / 2 / opts.transfer_size;
 	rx_buf = malloc(rx_size);
 	if (!rx_buf) {
 		fprintf(stderr, "Cannot allocate rx_buf\n");
@@ -290,6 +296,11 @@ int main(int argc, char **argv)
 
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
+
+	if (opts.transfer_size > MAX_XFER_SIZE) {
+		FT_ERR("Use smaller transfer size (max %d)", MAX_XFER_SIZE);
+		return EIO;
+	}
 
 	hints->caps = FI_MSG | FI_MULTI_RECV;
 	hints->mode = FI_CONTEXT;
