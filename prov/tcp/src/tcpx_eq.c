@@ -42,13 +42,8 @@ static ssize_t tcpx_eq_read(struct fid_eq *eq_fid, uint32_t *event,
 
 	eq = container_of(eq_fid, struct util_eq, eq_fid);
 
-	fastlock_acquire(&eq->lock);
-	if (slist_empty(&eq->list)) {
-		fastlock_release(&eq->lock);
-		tcpx_conn_mgr_run(eq);
-	} else {
-		fastlock_release(&eq->lock);
-	}
+	tcpx_conn_mgr_run(eq);
+
 	return ofi_eq_read(eq_fid, event, buf, len, flags);
 }
 
