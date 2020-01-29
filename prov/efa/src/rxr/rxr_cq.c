@@ -38,6 +38,7 @@
 #include <ofi_recvwin.h>
 #include "rxr.h"
 #include "rxr_rma.h"
+#include "rxr_msg.h"
 #include "rxr_cntr.h"
 #include "efa.h"
 
@@ -126,7 +127,7 @@ int rxr_cq_handle_rx_error(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
 	}
 
 	if (rx_entry->fi_flags & FI_MULTI_RECV)
-		rxr_cq_handle_multi_recv_completion(ep, rx_entry);
+		rxr_msg_multi_recv_handle_completion(ep, rx_entry);
 
 	err_entry.flags = rx_entry->cq_entry.flags;
 	if (rx_entry->state != RXR_RX_UNEXP)
@@ -135,7 +136,7 @@ int rxr_cq_handle_rx_error(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
 	err_entry.data = rx_entry->cq_entry.data;
 	err_entry.tag = rx_entry->cq_entry.tag;
 
-	rxr_multi_recv_free_posted_entry(ep, rx_entry);
+	rxr_msg_multi_recv_free_posted_entry(ep, rx_entry);
 
         FI_WARN(&rxr_prov, FI_LOG_CQ,
 		"rxr_cq_handle_rx_error: err: %d, prov_err: %s (%d)\n",
@@ -641,7 +642,7 @@ void rxr_cq_handle_rx_completion(struct rxr_ep *ep,
 	}
 
 	if (rx_entry->fi_flags & FI_MULTI_RECV)
-		rxr_cq_handle_multi_recv_completion(ep, rx_entry);
+		rxr_msg_multi_recv_handle_completion(ep, rx_entry);
 
 	rxr_cq_write_rx_completion(ep, rx_entry);
 	rxr_release_rx_pkt_entry(ep, pkt_entry);
@@ -834,7 +835,7 @@ int rxr_cq_process_msg_rts(struct rxr_ep *ep,
 	rx_entry->state = RXR_RX_MATCHED;
 
 	if (!(rx_entry->fi_flags & FI_MULTI_RECV) ||
-	    !rxr_multi_recv_buffer_available(ep, rx_entry->master_entry))
+	    !rxr_msg_multi_recv_buffer_available(ep, rx_entry->master_entry))
 		dlist_remove(match);
 
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
@@ -1127,7 +1128,7 @@ int rxr_cq_handle_rts_with_data(struct rxr_ep *ep,
 		 * we do not release it here.
 		 */
 		rxr_cq_handle_rx_completion(ep, pkt_entry, rx_entry);
-		rxr_multi_recv_free_posted_entry(ep, rx_entry);
+		rxr_msg_multi_recv_free_posted_entry(ep, rx_entry);
 		rxr_release_rx_entry(ep, rx_entry);
 		return 0;
 	}
@@ -1198,7 +1199,7 @@ int rxr_cq_handle_pkt_with_data(struct rxr_ep *ep,
 #endif
 		rxr_cq_handle_rx_completion(ep, pkt_entry, rx_entry);
 
-		rxr_multi_recv_free_posted_entry(ep, rx_entry);
+		rxr_msg_multi_recv_free_posted_entry(ep, rx_entry);
 		rxr_release_rx_entry(ep, rx_entry);
 		return 0;
 	}
@@ -1498,9 +1499,9 @@ void rxr_cq_handle_rma_context_pkt(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_
 		}
 
 		if (rx_entry->fi_flags & FI_MULTI_RECV)
-			rxr_cq_handle_multi_recv_completion(ep, rx_entry);
+			rxr_msg_multi_recv_handle_completion(ep, rx_entry);
 		rxr_cq_write_rx_completion(ep, rx_entry);
-		rxr_multi_recv_free_posted_entry(ep, rx_entry);
+		rxr_msg_multi_recv_free_posted_entry(ep, rx_entry);
 		if (OFI_LIKELY(!ret))
 			rxr_release_rx_entry(ep, rx_entry);
 		rxr_release_rx_pkt_entry(ep, pkt_entry);
