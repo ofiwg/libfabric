@@ -335,6 +335,7 @@ struct rxm_atomic_resp_hdr {
 	FUNC(RXM_RMA),			\
 	FUNC(RXM_RX),			\
 	FUNC(RXM_SAR_TX),		\
+	FUNC(RXM_CREDIT_TX),		\
 	FUNC(RXM_RNDV_TX),		\
 	FUNC(RXM_RNDV_ACK_WAIT),	\
 	FUNC(RXM_RNDV_READ),		\
@@ -357,6 +358,7 @@ enum {
 	rxm_ctrl_rndv_ack,
 	rxm_ctrl_atomic,
 	rxm_ctrl_atomic_resp,
+	rxm_ctrl_credit
 };
 
 struct rxm_pkt {
@@ -416,6 +418,7 @@ enum rxm_buf_pool_type {
 	RXM_BUF_POOL_TX_ACK,
 	RXM_BUF_POOL_TX_RNDV,
 	RXM_BUF_POOL_TX_ATOMIC,
+	RXM_BUF_POOL_TX_CREDIT,
 	RXM_BUF_POOL_TX_SAR,
 	RXM_BUF_POOL_TX_END	= RXM_BUF_POOL_TX_SAR,
 	RXM_BUF_POOL_RMA,
@@ -658,7 +661,6 @@ struct rxm_ep {
 	uint64_t		msg_cq_last_poll;
 	struct fid_ep 		*srx_ctx;
 	size_t 			comp_per_progress;
-	ofi_atomic32_t		atomic_tx_credits;
 
 	bool			msg_mr_local;
 	bool			rdm_mr_local;
@@ -675,6 +677,7 @@ struct rxm_ep {
 
 	struct dlist_entry	repost_ready_list;
 	struct dlist_entry	deferred_tx_conn_queue;
+	struct dlist_entry	credit_check_queue;
 
 	struct rxm_recv_queue	recv_queue;
 	struct rxm_recv_queue	trecv_queue;
@@ -698,8 +701,16 @@ struct rxm_conn {
 	struct dlist_entry deferred_tx_queue;
 	struct dlist_entry sar_rx_msg_list;
 	struct dlist_entry sar_deferred_rx_msg_list;
+	struct dlist_entry credit_check_entry;
 
 	uint32_t rndv_tx_credits;
+
+	uint32_t		tx_cred_max;
+	uint32_t		tx_cred_min;
+	uint32_t		tx_cred_threshold;
+	uint32_t		remote_tx_credits;
+	uint32_t		tx_credits;
+	fastlock_t		credit_lock;
 };
 
 extern struct fi_provider rxm_prov;
@@ -733,6 +744,9 @@ ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 void rxm_ep_progress(struct util_ep *util_ep);
 void rxm_ep_progress_coll(struct util_ep *util_ep);
 void rxm_ep_do_progress(struct util_ep *util_ep);
+ssize_t rxm_ep_msg_normal_send(struct rxm_conn *rxm_conn, struct rxm_pkt *tx_pkt,
+			       size_t pkt_size, void *desc, void *context);
+ssize_t rxm_check_and_send_credits(struct rxm_conn *rxm_conn);
 
 ssize_t rxm_cq_handle_eager(struct rxm_rx_buf *rx_buf);
 ssize_t rxm_cq_handle_coll_eager(struct rxm_rx_buf *rx_buf);
@@ -886,6 +900,7 @@ rxm_tx_buf_alloc(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
 	       (type == RXM_BUF_POOL_TX_ACK) ||
 	       (type == RXM_BUF_POOL_TX_RNDV) ||
 	       (type == RXM_BUF_POOL_TX_ATOMIC) ||
+	       (type == RXM_BUF_POOL_TX_CREDIT) ||
 	       (type == RXM_BUF_POOL_TX_SAR));
 	return ofi_buf_alloc(rxm_ep->buf_pools[type].pool);
 }
@@ -953,4 +968,33 @@ static inline int rxm_cq_write_recv_comp(struct rxm_rx_buf *rx_buf,
 		return ofi_cq_write(rx_buf->ep->util_ep.rx_cq, context,
 				    flags, len, buf, rx_buf->pkt.hdr.data,
 				    rx_buf->pkt.hdr.tag);
+}
+
+static inline size_t rxm_reserve_credits(struct rxm_conn *rxm_conn, uint32_t creds)
+{
+	size_t ret = 0;
+	ofi_fastlock_acquire(&rxm_conn->credit_lock);
+	size_t total = rxm_conn->tx_credits - creds;
+
+	// we don't want to completely consume available credits with data messages
+	// so that we can still send a credit ctrl message
+	if (total <= rxm_conn->tx_cred_min || total > rxm_conn->tx_cred_max)
+		goto unlock;
+
+
+	rxm_conn->tx_credits = total;
+	ret = creds;
+unlock:
+	ofi_fastlock_release(&rxm_conn->credit_lock);
+	return ret;
+}
+
+static inline void rxm_release_credits(struct rxm_conn *rxm_conn, uint32_t creds)
+{
+	ofi_fastlock_acquire(&rxm_conn->credit_lock);
+	rxm_conn->tx_credits += creds;
+
+	assert(rxm_conn->tx_credits <= rxm_conn->tx_cred_max);
+
+	ofi_fastlock_release(&rxm_conn->credit_lock);
 }

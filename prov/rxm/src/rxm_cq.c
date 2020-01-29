@@ -711,6 +711,21 @@ static ssize_t rxm_rndv_send_ack_inject(struct rxm_rx_buf *rx_buf)
 	return fi_sendmsg(rx_buf->conn->msg_ep, &msg, FI_INJECT);
 }
 
+static ssize_t rxm_rndv_defer_ack(struct rxm_rx_buf *rx_buf)
+{
+	struct rxm_deferred_tx_entry *def_tx_entry = rxm_ep_alloc_deferred_tx_entry(
+		rx_buf->ep, rx_buf->conn, RXM_DEFERRED_TX_RNDV_ACK);
+	if (!def_tx_entry) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ,
+			"unable to allocate TX entry for deferred ACK\n");
+		return -FI_EAGAIN;
+	}
+
+	def_tx_entry->rndv_ack.rx_buf = rx_buf;
+	rxm_ep_enqueue_deferred_tx_queue(def_tx_entry);
+	return 0;
+}
+
 static ssize_t rxm_rndv_send_ack(struct rxm_rx_buf *rx_buf)
 {
 	ssize_t ret;
@@ -718,17 +733,21 @@ static ssize_t rxm_rndv_send_ack(struct rxm_rx_buf *rx_buf)
 	assert(rx_buf->conn);
 
 	if (sizeof(rx_buf->pkt) <= rx_buf->ep->inject_limit) {
+		if (!rxm_reserve_credits(rx_buf->conn, 1))
+			goto send;
+
 		ret = rxm_rndv_send_ack_inject(rx_buf);
 		if (!ret)
 			goto out;
 
+		rxm_release_credits(rx_buf->conn, 1);
 		if (OFI_UNLIKELY(ret != -FI_EAGAIN)) {
 			FI_WARN(&rxm_prov, FI_LOG_CQ,
 				"send ack via inject failed for MSG provider\n");
 			return ret;
 		}
 	}
-
+send:
 	rx_buf->recv_entry->rndv.tx_buf = (struct rxm_tx_base_buf *)
 		rxm_tx_buf_alloc(rx_buf->ep, RXM_BUF_POOL_TX_ACK);
 	if (OFI_UNLIKELY(!rx_buf->recv_entry->rndv.tx_buf)) {
@@ -745,25 +764,24 @@ static ssize_t rxm_rndv_send_ack(struct rxm_rx_buf *rx_buf)
 	rx_buf->recv_entry->rndv.tx_buf->pkt.ctrl_hdr.msg_id =
 		rx_buf->pkt.ctrl_hdr.msg_id;
 
+	if (!rxm_reserve_credits(rx_buf->conn, 1)) {
+		ret = rxm_rndv_defer_ack(rx_buf);
+		if (!ret)
+			return 0;
+		goto err;
+	}
+
 	ret = fi_send(rx_buf->conn->msg_ep, &rx_buf->recv_entry->rndv.tx_buf->pkt,
 		      sizeof(rx_buf->recv_entry->rndv.tx_buf->pkt),
 		      rx_buf->recv_entry->rndv.tx_buf->hdr.desc, 0, rx_buf);
-	if (OFI_UNLIKELY(ret)) {
-		if (OFI_LIKELY(ret == -FI_EAGAIN)) {
-			struct rxm_deferred_tx_entry *def_tx_entry =
-				rxm_ep_alloc_deferred_tx_entry(
-					rx_buf->ep, rx_buf->conn,
-					RXM_DEFERRED_TX_RNDV_ACK);
-			if (OFI_UNLIKELY(!def_tx_entry)) {
-				FI_WARN(&rxm_prov, FI_LOG_CQ, "unable to "
-					"allocate TX entry for deferred ACK\n");
-				ret = -FI_EAGAIN;
-				goto err;
-			}
 
-			def_tx_entry->rndv_ack.rx_buf = rx_buf;
-			rxm_ep_enqueue_deferred_tx_queue(def_tx_entry);
-			return 0;
+	if (ret) {
+		rxm_release_credits(rx_buf->conn, 1);
+
+		if (ret == -FI_EAGAIN) {
+			ret = rxm_rndv_defer_ack(rx_buf);
+			if (!ret)
+				return 0;
 		} else {
 			FI_WARN(&rxm_prov, FI_LOG_CQ,
 				"unable to send ACK: %zd\n", ret);
@@ -813,12 +831,28 @@ static inline void rxm_ep_format_atomic_resp_pkt_hdr(struct rxm_conn *rxm_conn,
 	tx_buf->pkt.hdr.atomic.ioc_count = 0;
 }
 
+static ssize_t rxm_atomic_defer_resp(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_buf,
+				     struct rxm_tx_atomic_buf *resp_buf, ssize_t resp_len)
+{
+	struct rxm_deferred_tx_entry *def_tx_entry = rxm_ep_alloc_deferred_tx_entry(
+		rxm_ep, rx_buf->conn, RXM_DEFERRED_TX_ATOMIC_RESP);
+	if (!def_tx_entry) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ,
+			"Unable to allocate deferred Atomic Response\n");
+		return -FI_ENOMEM;
+	}
+
+	def_tx_entry->atomic_resp.tx_buf = resp_buf;
+	def_tx_entry->atomic_resp.len = resp_len;
+	rxm_ep_enqueue_deferred_tx_queue(def_tx_entry);
+	return 0;
+}
+
 static ssize_t rxm_atomic_send_resp(struct rxm_ep *rxm_ep,
 				    struct rxm_rx_buf *rx_buf,
 				    struct rxm_tx_atomic_buf *resp_buf,
 				    ssize_t result_len, uint32_t status)
 {
-	struct rxm_deferred_tx_entry *def_tx_entry;
 	struct rxm_atomic_resp_hdr *atomic_hdr;
 	ssize_t ret;
 	ssize_t resp_len = result_len + sizeof(struct rxm_atomic_resp_hdr) +
@@ -837,6 +871,8 @@ static ssize_t rxm_atomic_send_resp(struct rxm_ep *rxm_ep,
 	atomic_hdr->status = htonl(status);
 	atomic_hdr->result_len = htonl(result_len);
 
+	if (!rxm_reserve_credits(rx_buf->conn, 1))
+		return rxm_atomic_defer_resp(rxm_ep, rx_buf, resp_buf, resp_len);
 	if (resp_len < rxm_ep->inject_limit) {
 		ret = fi_inject(rx_buf->conn->msg_ep, &resp_buf->pkt,
 				resp_len, 0);
@@ -846,29 +882,15 @@ static ssize_t rxm_atomic_send_resp(struct rxm_ep *rxm_ep,
 		ret = rxm_atomic_send_respmsg(rxm_ep, rx_buf->conn, resp_buf,
 					      resp_len);
 	}
-	if (OFI_UNLIKELY(ret)) {
+	if (ret) {
+		rxm_release_credits(rx_buf->conn, 1);
 		FI_WARN(&rxm_prov, FI_LOG_CQ,
 			"Unable to send Atomic Response\n");
-		if (OFI_LIKELY(ret == -FI_EAGAIN)) {
-			def_tx_entry =
-				rxm_ep_alloc_deferred_tx_entry(rxm_ep,
-						rx_buf->conn,
-						RXM_DEFERRED_TX_ATOMIC_RESP);
-			if (OFI_UNLIKELY(!def_tx_entry)) {
-				FI_WARN(&rxm_prov, FI_LOG_CQ,
-					"Unable to allocate deferred Atomic "
-					"Response\n");
-				return -FI_ENOMEM;
-			}
-
-			def_tx_entry->atomic_resp.tx_buf = resp_buf;
-			def_tx_entry->atomic_resp.len = resp_len;
-			rxm_ep_enqueue_deferred_tx_queue(def_tx_entry);
-			ret = 0;
+		if (ret == -FI_EAGAIN) {
+			ret = rxm_atomic_defer_resp(rxm_ep, rx_buf, resp_buf, resp_len);
 		}
 	}
 	rxm_rx_buf_free(rx_buf);
-
 	return ret;
 }
 
@@ -1039,11 +1061,26 @@ static inline ssize_t rxm_handle_atomic_resp(struct rxm_ep *rxm_ep,
 err:
 	rxm_rx_buf_free(rx_buf);
 	ofi_buf_free(tx_buf);
-	ofi_atomic_inc32(&rxm_ep->atomic_tx_credits);
-	assert(ofi_atomic_get32(&rxm_ep->atomic_tx_credits) <=
-				rxm_ep->rxm_info->tx_attr->size);
-
 	return ret;
+}
+
+static inline ssize_t rxm_handle_credit(struct rxm_rx_buf *rx_buf)
+{
+	assert(!(rx_buf->comp_flags &
+		 ~(FI_RECV | FI_RECV | FI_REMOTE_CQ_DATA)));
+
+	ofi_fastlock_acquire(&rx_buf->conn->credit_lock);
+
+	rx_buf->conn->tx_credits += rx_buf->pkt.ctrl_hdr.ctrl_data;
+
+	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "%p reclaimed tx_credits, [new:%ld tot:%d]\n",
+	       rx_buf->conn, rx_buf->pkt.ctrl_hdr.ctrl_data, rx_buf->conn->tx_credits);
+
+	assert(rx_buf->conn->tx_credits <= rx_buf->conn->tx_cred_max);
+
+	rxm_rx_buf_free(rx_buf);
+	ofi_fastlock_release(&rx_buf->conn->credit_lock);
+	return FI_SUCCESS;
 }
 
 int rxm_finish_coll_eager_send(struct rxm_ep *rxm_ep, struct rxm_tx_eager_buf *tx_eager_buf)
@@ -1082,6 +1119,9 @@ ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 		ret = rxm_ep->txrx_ops->comp_eager_tx(rxm_ep, tx_eager_buf);
 		ofi_buf_free(tx_eager_buf);
 		return ret;
+	case RXM_CREDIT_TX:
+		assert(comp->flags & FI_SEND);
+		return 0;
 	case RXM_INJECT_TX:
 		assert(0);
 		return -FI_EOPBADSTATE;
@@ -1099,20 +1139,36 @@ ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 		switch (rx_buf->pkt.ctrl_hdr.type) {
 		case rxm_ctrl_eager:
 		case rxm_ctrl_rndv:
-			return rxm_handle_recv_comp(rx_buf);
+			ret = rxm_handle_recv_comp(rx_buf);
+			break;
 		case rxm_ctrl_rndv_ack:
-			return rxm_rndv_handle_ack(rxm_ep, rx_buf);
+			ret = rxm_rndv_handle_ack(rxm_ep, rx_buf);
+			break;
 		case rxm_ctrl_seg:
-			return rxm_sar_handle_segment(rx_buf);
+			ret = rxm_sar_handle_segment(rx_buf);
+			break;
 		case rxm_ctrl_atomic:
-			return rxm_handle_atomic_req(rxm_ep, rx_buf);
+			ret = rxm_handle_atomic_req(rxm_ep, rx_buf);
+			break;
 		case rxm_ctrl_atomic_resp:
-			return rxm_handle_atomic_resp(rxm_ep, rx_buf);
+			ret = rxm_handle_atomic_resp(rxm_ep, rx_buf);
+			break;
+		case rxm_ctrl_credit:
+			ret = rxm_handle_credit(rx_buf);
+			break;
 		default:
 			FI_WARN(&rxm_prov, FI_LOG_CQ, "Unknown message type\n");
 			assert(0);
-			return -FI_EINVAL;
+			ret = -FI_EINVAL;
+			break;
 		}
+		assert(rx_buf->conn->remote_tx_credits > 0);
+		rx_buf->conn->remote_tx_credits--;
+		if (rxm_check_and_send_credits(rx_buf->conn) &&
+		    dlist_empty(&rx_buf->conn->credit_check_entry))
+			dlist_insert_tail(&rx_buf->conn->credit_check_entry,
+					  &rxm_ep->credit_check_queue);
+		return ret;
 	case RXM_SAR_TX:
 		tx_sar_buf = comp->op_context;
 		assert(comp->flags & FI_SEND);
@@ -1212,6 +1268,7 @@ void rxm_cq_write_error_all(struct rxm_ep *rxm_ep, int err)
 
 void rxm_cq_read_write_error(struct rxm_ep *rxm_ep)
 {
+	struct rxm_tx_base_buf *base_buf;
 	struct rxm_tx_eager_buf *eager_buf;
 	struct rxm_tx_sar_buf *sar_buf;
 	struct rxm_tx_rndv_buf *rndv_buf;
@@ -1262,6 +1319,11 @@ void rxm_cq_read_write_error(struct rxm_ep *rxm_ep)
 		err_entry.op_context = sar_buf->app_context;
 		err_entry.flags = ofi_tx_cq_flags(sar_buf->pkt.hdr.op);
 		rxm_finish_sar_segment_send(rxm_ep, sar_buf, true);
+		break;
+	case RXM_CREDIT_TX:
+		base_buf = err_entry.op_context;
+		err_entry.op_context = 0;
+		err_entry.flags = ofi_tx_cq_flags(base_buf->pkt.hdr.op);
 		break;
 	case RXM_RNDV_TX:
 		rndv_buf = err_entry.op_context;
@@ -1413,6 +1475,18 @@ void rxm_ep_do_progress(struct util_ep *util_ep)
 					     struct rxm_conn, rxm_conn,
 					     deferred_conn_entry, conn_entry_tmp)
 			rxm_ep_progress_deferred_queue(rxm_ep, rxm_conn);
+	}
+
+	if (!dlist_empty(&rxm_ep->credit_check_queue)) {
+		dlist_foreach_container_safe(&rxm_ep->credit_check_queue, struct rxm_conn,
+					     rxm_conn, credit_check_entry, conn_entry_tmp) {
+			dlist_remove_init(&rxm_conn->credit_check_entry);
+
+			if (rxm_check_and_send_credits(rxm_conn) &&
+			    dlist_empty(&rxm_conn->credit_check_entry))
+				dlist_insert_tail(&rxm_conn->credit_check_entry,
+						  &rxm_ep->credit_check_queue);
+		}
 	}
 }
 

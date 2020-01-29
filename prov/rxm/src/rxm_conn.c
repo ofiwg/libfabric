@@ -236,6 +236,7 @@ static int rxm_conn_res_alloc(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn)
 {
 	dlist_init(&rxm_conn->deferred_conn_entry);
 	dlist_init(&rxm_conn->deferred_tx_queue);
+	dlist_init(&rxm_conn->credit_check_entry);
 	dlist_init(&rxm_conn->sar_rx_msg_list);
 	dlist_init(&rxm_conn->sar_deferred_rx_msg_list);
 
@@ -261,6 +262,13 @@ static int rxm_conn_res_alloc(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn)
 			return -FI_ENOMEM;
 		}
 	}
+
+	fastlock_init(&rxm_conn->credit_lock);
+	rxm_conn->tx_cred_min = 4;
+	rxm_conn->tx_cred_max = rxm_ep->msg_info->rx_attr->size;
+	rxm_conn->tx_cred_threshold = rxm_conn->tx_cred_max / 4;
+	rxm_conn->tx_credits = rxm_conn->tx_cred_max;
+	rxm_conn->remote_tx_credits = rxm_conn->tx_cred_max;
 	return 0;
 }
 

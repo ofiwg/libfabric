@@ -63,6 +63,9 @@ rxm_ep_send_atomic_req(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 {
 	int ret;
 
+	if (!rxm_reserve_credits(rxm_conn, 1))
+		return -FI_EAGAIN;
+
 	/* Atomic request TX completion processing is performed when the
 	 * software generated atomic response message is received. */
 	tx_buf->hdr.state = RXM_ATOMIC_RESP_WAIT;
@@ -71,17 +74,20 @@ rxm_ep_send_atomic_req(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	else
 		ret = fi_send(rxm_conn->msg_ep, &tx_buf->pkt, len,
 			      tx_buf->hdr.desc, 0, tx_buf);
-	if (ret == -FI_EAGAIN)
-		rxm_ep_do_progress(&rxm_ep->util_ep);
 
-	if (OFI_LIKELY(!ret))
-		FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "sent atomic request: op: %"
-		       PRIu8 " msg_id: 0x%" PRIx64 "\n", tx_buf->pkt.hdr.op,
-		       tx_buf->pkt.ctrl_hdr.msg_id);
-	else if (OFI_UNLIKELY(ret != -FI_EAGAIN))
-		FI_WARN(&rxm_prov, FI_LOG_EP_DATA, "unable to send atomic "
-			"request: op: %" PRIu8 " msg_id: 0x%" PRIx64 "\n",
-			tx_buf->pkt.hdr.op, tx_buf->pkt.ctrl_hdr.msg_id);
+	if (ret) {
+		rxm_release_credits(rxm_conn, 1);
+		if (ret == -FI_EAGAIN)
+			rxm_ep_do_progress(&rxm_ep->util_ep);
+		else
+			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+				"unable to send atomic "
+				"request: op: %" PRIu8 " msg_id: 0x%" PRIx64 "\n",
+				tx_buf->pkt.hdr.op, tx_buf->pkt.ctrl_hdr.msg_id);
+	} else
+		FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
+		       "sent atomic request: op: %" PRIu8 " msg_id: 0x%" PRIx64 "\n",
+		       tx_buf->pkt.hdr.op, tx_buf->pkt.ctrl_hdr.msg_id);
 	return ret;
 }
 
@@ -135,18 +141,12 @@ rxm_ep_atomic_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		return -FI_EINVAL;
 	}
 
-	if (ofi_atomic_dec32(&rxm_ep->atomic_tx_credits) < 0) {
-		ret = -FI_EAGAIN;
-		goto restore_credit;
-	}
-
 	tx_buf = (struct rxm_tx_atomic_buf *)
 		 rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_ATOMIC);
 	if (OFI_UNLIKELY(!tx_buf)) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 			"Ran out of buffers from Atomic buffer pool\n");
-		ret = -FI_EAGAIN;
-		goto restore_credit;
+		return -FI_EAGAIN;
 	}
 
 	rxm_ep_format_atomic_pkt_hdr(rxm_conn, tx_buf, tot_len, op,
@@ -173,8 +173,6 @@ rxm_ep_atomic_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		return ret;
 
 	ofi_buf_free(tx_buf);
-restore_credit:
-	ofi_atomic_inc32(&rxm_ep->atomic_tx_credits);
 	return ret;
 }
 
