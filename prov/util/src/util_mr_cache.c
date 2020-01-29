@@ -423,8 +423,6 @@ buf_free:
 
 void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache)
 {
-	struct ofi_mr_entry *entry;
-
 	/* If we don't have a domain, initialization failed */
 	if (!cache->domain)
 		return;
