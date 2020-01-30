@@ -255,7 +255,7 @@ static inline void rxr_cq_queue_pkt(struct rxr_ep *ep,
 	 * a retransmitted packet is received while waiting for the timer to
 	 * expire.
 	 */
-	peer->rnr_ts = fi_gettime_us();
+	peer->rnr_ts = ofi_gettime_us();
 	if (peer->rnr_state & RXR_PEER_IN_BACKOFF)
 		goto queue_pkt;
 

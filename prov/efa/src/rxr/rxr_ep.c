@@ -889,7 +889,7 @@ void rxr_ep_handle_cts_sent(struct rxr_ep *ep,
 	 * to replenish the credits.
 	 */
 	if (OFI_UNLIKELY(ep->available_data_bufs == 0))
-		ep->available_data_bufs_ts = fi_gettime_us();
+		ep->available_data_bufs_ts = ofi_gettime_us();
 }
 
 void rxr_ep_init_connack_pkt_entry(struct rxr_ep *ep,
@@ -1981,7 +1981,7 @@ static inline void rxr_ep_check_available_data_bufs_timer(struct rxr_ep *ep)
 	if (OFI_LIKELY(ep->available_data_bufs != 0))
 		return;
 
-	if (fi_gettime_us() - ep->available_data_bufs_ts >=
+	if (ofi_gettime_us() - ep->available_data_bufs_ts >=
 	    RXR_AVAILABLE_DATA_BUFS_TIMEOUT) {
 		ep->available_data_bufs = rxr_get_rx_pool_chunk_cnt(ep);
 		ep->available_data_bufs_ts = 0;
@@ -2001,7 +2001,7 @@ static inline void rxr_ep_check_peer_backoff_timer(struct rxr_ep *ep)
 	dlist_foreach_container_safe(&ep->peer_backoff_list, struct rxr_peer,
 				     peer, rnr_entry, tmp) {
 		peer->rnr_state &= ~RXR_PEER_BACKED_OFF;
-		if (!rxr_peer_timeout_expired(ep, peer, fi_gettime_us()))
+		if (!rxr_peer_timeout_expired(ep, peer, ofi_gettime_us()))
 			continue;
 		peer->rnr_state = 0;
 		dlist_remove(&peer->rnr_entry);

@@ -2538,7 +2538,7 @@ static int sock_pe_wait_ok(struct sock_pe *pe)
 	struct sock_tx_ctx *tx_ctx;
 	struct sock_rx_ctx *rx_ctx;
 
-	if (pe->waittime && ((fi_gettime_ms() - pe->waittime) < (uint64_t)sock_pe_waittime))
+	if (pe->waittime && ((ofi_gettime_ms() - pe->waittime) < (uint64_t)sock_pe_waittime))
 		return 0;
 
 	if (dlist_empty(&pe->tx_list) && dlist_empty(&pe->rx_list))
@@ -2589,7 +2589,7 @@ static void sock_pe_wait(struct sock_pe *pe)
 			SOCK_LOG_ERROR("Invalid signal\n");
 	}
 	fastlock_release(&pe->signal_lock);
-	pe->waittime = fi_gettime_ms();
+	pe->waittime = ofi_gettime_ms();
 }
 
 static void sock_pe_set_affinity(void)

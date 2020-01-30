@@ -349,7 +349,7 @@ static ssize_t sock_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 	else
 		threshold = count;
 
-	start_ms = (timeout >= 0) ? fi_gettime_ms() : 0;
+	start_ms = (timeout >= 0) ? ofi_gettime_ms() : 0;
 
 	if (sock_cq->domain->progress_mode == FI_PROGRESS_MANUAL) {
 		while (1) {
@@ -366,7 +366,7 @@ static ssize_t sock_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 				return ret;
 
 			if (timeout >= 0) {
-				timeout -= (int) (fi_gettime_ms() - start_ms);
+				timeout -= (int) (ofi_gettime_ms() - start_ms);
 				if (timeout <= 0)
 					return -FI_EAGAIN;
 			}
@@ -393,7 +393,7 @@ static ssize_t sock_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 				return ret;
 
 			if (timeout >= 0) {
-				timeout -= (int) (fi_gettime_ms() - start_ms);
+				timeout -= (int) (ofi_gettime_ms() - start_ms);
 				if (timeout <= 0)
 					return -FI_EAGAIN;
 			}
