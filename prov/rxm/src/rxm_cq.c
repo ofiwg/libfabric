@@ -192,7 +192,7 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 				recv_entry->rxm_iov.iov[0].iov_base + recv_size;
 		recv_entry->rxm_iov.iov[0].iov_len -= recv_size;
 
-		return rxm_process_recv_entry(recv_entry->recv_queue, recv_entry);
+		return rxm_check_unexp_list(recv_entry->recv_queue, recv_entry);
 	} else {
 		rxm_rx_buf_finish(rx_buf);
 		rxm_recv_entry_release(recv_entry->recv_queue, recv_entry);
