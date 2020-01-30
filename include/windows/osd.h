@@ -828,6 +828,8 @@ static inline char * strndup(char const *src, size_t n)
 	return dst;
 }
 
+char *strcasestr(const char *haystack, const char *needle);
+
 #ifndef _SC_PAGESIZE
 #define _SC_PAGESIZE	0
 #endif

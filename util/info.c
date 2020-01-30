@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013-2020 Intel Corporation.  All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
  *
  * This software is available to you under the BSD license below:
@@ -45,6 +45,7 @@ static char *node, *port;
 static int ver = 0;
 static int list_providers = 0;
 static int verbose = 0, env = 0;
+static char *envstr;
 
 /* options and matching help strings need to be kept in sync */
 
@@ -60,6 +61,7 @@ static const struct option longopts[] = {
 	{"addr_format", required_argument, NULL, 'a'},
 	{"provider", required_argument, NULL, 'p'},
 	{"env", no_argument, NULL, 'e'},
+	{"getenv", required_argument, NULL, 'g'},
 	{"list", no_argument, NULL, 'l'},
 	{"verbose", no_argument, NULL, 'v'},
 	{"version", no_argument, &ver, 1},
@@ -78,6 +80,7 @@ static const char *help_strings[][2] = {
 	{"FMT", "\t\tspecify accepted address format: FI_FORMAT_UNSPEC, FI_SOCKADDR..."},
 	{"PROV", "\t\tspecify provider explicitly"},
 	{"", "\t\tprint libfabric environment variables"},
+	{"", "\t\tprint libfabric environment variables with substr"},
 	{"", "\t\tlist available libfabric providers"},
 	{"", "\t\tverbose output"},
 	{"", "\t\tprint version info and exit"},
@@ -231,38 +234,18 @@ static const char *param_type(enum fi_param_type type)
 	}
 }
 
-static char * get_var_prefix(const char *prov_name)
-{
-	int i;
-	char *prefix;
-
-	if (!prov_name) {
-		return NULL;
-	} else {
-		if (asprintf(&prefix, "FI_%s", prov_name) < 0)
-			return NULL;
-		for (i = 0; i < strlen(prefix); ++i)
-			prefix[i] = toupper((unsigned char) prefix[i]);
-	}
-
-	return prefix;
-}
-
 static int print_vars(void)
 {
 	int ret, count, i;
 	struct fi_param *params;
 	char delim;
-	char *var_prefix;
 
 	ret = fi_getparams(&params, &count);
 	if (ret)
 		return ret;
 
-	var_prefix = get_var_prefix(hints->fabric_attr->prov_name);
-
 	for (i = 0; i < count; ++i) {
-		if (var_prefix && strncmp(params[i].name, var_prefix, strlen(var_prefix)))
+		if (envstr && !strcasestr(params[i].name, envstr))
 			continue;
 
 		printf("# %s: %s\n", params[i].name, param_type(params[i].type));
@@ -277,7 +260,6 @@ static int print_vars(void)
 		printf("\n");
 	}
 
-	free(var_prefix);
 	fi_freeparams(params);
 	return ret;
 }
@@ -361,7 +343,7 @@ int main(int argc, char **argv)
 	hints->domain_attr->mode = ~0;
 	hints->domain_attr->mr_mode = ~(FI_MR_BASIC | FI_MR_SCALABLE);
 
-	while ((op = getopt_long(argc, argv, "n:P:c:m:t:a:p:d:f:elhv", longopts,
+	while ((op = getopt_long(argc, argv, "n:P:c:m:t:a:p:d:f:eg:lhv", longopts,
 				 &option_index)) != -1) {
 		switch (op) {
 		case 0:
@@ -422,6 +404,9 @@ int main(int argc, char **argv)
 			hints->fabric_attr->name = strdup(optarg);
 			use_hints = 1;
 			break;
+		case 'g':
+			envstr = optarg;
+			/* fall through */
 		case 'e':
 			env = 1;
 			break;

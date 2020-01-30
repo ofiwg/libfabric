@@ -70,8 +70,12 @@ providers, see the `--list` option.
 ## Discovery
 
 *-e, --env*
-: List libfabric related environment levels which can be used to enable extra
+: List libfabric related environment variables which can be used to enable extra
 configuration or tuning.
+
+*-g [filter]
+: Same as -e option, with output limited to environment variables containing
+filter as a substring.
 
 *-l, --list*
 : List available libfabric providers.

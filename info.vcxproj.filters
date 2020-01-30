@@ -18,6 +18,9 @@
     <ClCompile Include="util\info.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\shared\ofi_str.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="util\windows\getopt\getopt.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
