@@ -138,67 +138,54 @@ static int rxm_cq_write_error_trunc(struct rxm_rx_buf *rx_buf, size_t done_len)
 
 static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 {
-	int ret;
 	struct rxm_recv_entry *recv_entry = rx_buf->recv_entry;
+	size_t recv_size;
+	int ret = FI_SUCCESS;
 
-	if (OFI_UNLIKELY(done_len < rx_buf->pkt.hdr.size)) {
+	if (done_len < rx_buf->pkt.hdr.size) {
 		ret = rxm_cq_write_error_trunc(rx_buf, done_len);
-		if (ret)
-			return ret;
-	} else {
-		if (rx_buf->recv_entry->flags & FI_COMPLETION ||
-		    rx_buf->ep->rxm_info->mode & FI_BUFFERED_RECV) {
-			ret = rxm_cq_write_recv_comp(
-					rx_buf, rx_buf->recv_entry->context,
-					rx_buf->recv_entry->comp_flags |
-					rxm_cq_get_rx_comp_flags(rx_buf),
-					rx_buf->pkt.hdr.size,
-					rx_buf->recv_entry->rxm_iov.iov[0].iov_base);
-			if (ret)
-				return ret;
-		}
-		ofi_ep_rx_cntr_inc(&rx_buf->ep->util_ep);
+		goto release;
 	}
 
-	if (rx_buf->recv_entry->flags & FI_MULTI_RECV) {
-		size_t recv_size = rx_buf->pkt.hdr.size;
-		struct rxm_ep *rxm_ep = rx_buf->ep;
+	if (rx_buf->recv_entry->flags & FI_COMPLETION ||
+	    rx_buf->ep->rxm_info->mode & FI_BUFFERED_RECV) {
+		ret = rxm_cq_write_recv_comp(rx_buf, rx_buf->recv_entry->context,
+				rx_buf->recv_entry->comp_flags |
+					rxm_cq_get_rx_comp_flags(rx_buf),
+				rx_buf->pkt.hdr.size,
+				rx_buf->recv_entry->rxm_iov.iov[0].iov_base);
+		if (ret)
+			goto release;
+	}
+	ofi_ep_rx_cntr_inc(&rx_buf->ep->util_ep);
 
-		rxm_rx_buf_finish(rx_buf);
+	if (rx_buf->recv_entry->flags & FI_MULTI_RECV) {
+		recv_size = rx_buf->pkt.hdr.size;
 
 		recv_entry->total_len -= recv_size;
 
-		if (recv_entry->total_len <= rxm_ep->min_multi_recv_size) {
-			ret = ofi_cq_write(rxm_ep->util_ep.rx_cq, recv_entry->context,
+		if (recv_entry->total_len < rx_buf->ep->min_multi_recv_size) {
+			ret = ofi_cq_write(rx_buf->ep->util_ep.rx_cq, recv_entry->context,
 					   FI_MULTI_RECV, 0, NULL, 0, 0);
-
-			if (OFI_UNLIKELY(ret)) {
-				FI_WARN(&rxm_prov, FI_LOG_CQ,
-					"Unable to write FI_MULTI_RECV completion\n");
-				return ret;
-			}
-			/* Since buffer is elapsed, release recv_entry */
-			rxm_recv_entry_release(recv_entry->recv_queue,
-					       recv_entry);
-			return ret;
+			goto release;
 		}
-
-		FI_DBG(&rxm_prov, FI_LOG_CQ,
-		       "Repost Multi-Recv entry: %p "
-		       "consumed len = %zu, remain len = %zu\n",
-		       recv_entry, recv_size, recv_entry->total_len);
 
 		recv_entry->rxm_iov.iov[0].iov_base = (uint8_t *)
 				recv_entry->rxm_iov.iov[0].iov_base + recv_size;
 		recv_entry->rxm_iov.iov[0].iov_len -= recv_size;
 
-		return rxm_check_unexp_list(recv_entry->recv_queue, recv_entry);
-	} else {
-		rxm_rx_buf_finish(rx_buf);
-		rxm_recv_entry_release(recv_entry->recv_queue, recv_entry);
+		dlist_insert_head(&recv_entry->entry,
+				  &recv_entry->recv_queue->recv_list);
+		goto free_buf;
 	}
 
-	return FI_SUCCESS;
+release:
+	rxm_recv_entry_release(recv_entry->recv_queue, recv_entry);
+free_buf:
+	rxm_rx_buf_finish(rx_buf);
+	if (ret)
+		FI_WARN(&rxm_prov, FI_LOG_CQ, "Error writing CQ entry\n");
+	return ret;
 }
 
 static inline int
