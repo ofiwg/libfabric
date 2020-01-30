@@ -147,7 +147,7 @@ int rxr_rma_proc_write_rts(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 	if (OFI_UNLIKELY(!rx_entry)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"RX entries exhausted.\n");
-		rxr_eq_write_error(ep, FI_ENOBUFS, -FI_ENOBUFS);
+		efa_eq_write_error(&ep->util_ep, FI_ENOBUFS, -FI_ENOBUFS);
 		return -FI_ENOBUFS;
 	}
 
@@ -200,7 +200,7 @@ int rxr_rma_proc_read_rts(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 	if (OFI_UNLIKELY(!rx_entry)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"RX entries exhausted.\n");
-		rxr_eq_write_error(ep, FI_ENOBUFS, -FI_ENOBUFS);
+		efa_eq_write_error(&ep->util_ep, FI_ENOBUFS, -FI_ENOBUFS);
 		return -FI_ENOBUFS;
 	}
 

@@ -60,7 +60,7 @@ trigger
 # Exclude all atomic tests
 atomic
 
-rdm_cntr_pingpong
+#rdm_cntr_pingpong
 
 
 # This test requires ENA IPs for the OOB sync

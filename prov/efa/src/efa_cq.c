@@ -50,15 +50,15 @@ static uint64_t efa_cq_wc_to_fi_flags(struct efa_wc *wc)
 	}
 }
 
-static ssize_t efa_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
-			      uint64_t flags)
+ssize_t efa_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
+		       uint64_t flags)
 {
 	struct efa_cq *cq;
 	struct efa_wce *wce;
 	struct slist_entry *slist_entry;
 	uint32_t api_version;
 
-	cq = container_of(cq_fid, struct efa_cq, cq_fid);
+	cq = container_of(cq_fid, struct efa_cq, util_cq.cq_fid);
 
 	fastlock_acquire(&cq->lock);
 	if (slist_empty(&cq->wcq))
@@ -117,8 +117,8 @@ static void efa_cq_read_data_entry(struct efa_wc *wc, int i, void *buf)
 	entry[i].len = 0;
 }
 
-static ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
-			       fi_addr_t *src_addr)
+ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
+			fi_addr_t *src_addr)
 {
 	struct efa_cq *cq;
 	struct efa_wce *wce;
@@ -127,7 +127,7 @@ static ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 	struct efa_wc wc;
 	ssize_t ret = 0, i;
 
-	cq = container_of(cq_fid, struct efa_cq, cq_fid);
+	cq = container_of(cq_fid, struct efa_cq, util_cq.cq_fid);
 
 	fastlock_acquire(&cq->lock);
 
@@ -181,11 +181,6 @@ static ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 	return i ? i : ret;
 }
 
-static ssize_t efa_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
-{
-	return efa_cq_readfrom(cq_fid, buf, count, NULL);
-}
-
 static const char *efa_cq_strerror(struct fid_cq *cq_fid,
 				   int prov_errno,
 				   const void *err_data,
@@ -197,9 +192,9 @@ static const char *efa_cq_strerror(struct fid_cq *cq_fid,
 
 static struct fi_ops_cq efa_cq_ops = {
 	.size = sizeof(struct fi_ops_cq),
-	.read = efa_cq_read,
-	.readfrom = efa_cq_readfrom,
-	.readerr = efa_cq_readerr,
+	.read = ofi_cq_read,
+	.readfrom = ofi_cq_readfrom,
+	.readerr = ofi_cq_readerr,
 	.sread = fi_no_cq_sread,
 	.sreadfrom = fi_no_cq_sreadfrom,
 	.signal = fi_no_cq_signal,
@@ -226,7 +221,7 @@ static int efa_cq_close(fid_t fid)
 	struct slist_entry *entry;
 	int ret;
 
-	cq = container_of(fid, struct efa_cq, cq_fid.fid);
+	cq = container_of(fid, struct efa_cq, util_cq.cq_fid.fid);
 
 	fastlock_acquire(&cq->lock);
 	while (!slist_empty(&cq->wcq)) {
@@ -244,7 +239,12 @@ static int efa_cq_close(fid_t fid)
 	if (ret)
 		return ret;
 
+	ret = ofi_cq_cleanup(&cq->util_cq);
+	if (ret)
+		return ret;
+
 	free(cq);
+
 	return 0;
 }
 
@@ -263,27 +263,29 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	size_t size;
 	int ret;
 
+	if (attr->wait_obj != FI_WAIT_NONE)
+		return -FI_ENOSYS;
+
 	cq = calloc(1, sizeof(*cq));
 	if (!cq)
 		return -FI_ENOMEM;
 
-	cq->domain = container_of(domain_fid, struct efa_domain,
-				  util_domain.domain_fid);
-
-	switch (attr->wait_obj) {
-	case FI_WAIT_NONE:
-		break;
-	default:
-		ret = -FI_ENOSYS;
+	ret = ofi_cq_init(&efa_prov, domain_fid, attr, &cq->util_cq,
+			  &ofi_cq_progress, context);
+	if (ret) {
+		EFA_WARN(FI_LOG_CQ, "Unable to create UTIL_CQ\n");
 		goto err_free_cq;
 	}
+
+	cq->domain = container_of(domain_fid, struct efa_domain,
+				  util_domain.domain_fid);
 
 	size = attr->size ? attr->size : EFA_DEF_CQ_SIZE;
 	cq->ibv_cq = ibv_create_cq(cq->domain->ctx->ibv_ctx, size, NULL, NULL, 0);
 	if (!cq->ibv_cq) {
 		EFA_WARN(FI_LOG_CQ, "Unable to create CQ\n");
 		ret = -FI_EINVAL;
-		goto err_free_cq;
+		goto err_free_util_cq;
 	}
 
 	ret = ofi_bufpool_create(&cq->wce_pool, sizeof(struct efa_wce), 16, 0,
@@ -292,11 +294,6 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 		EFA_WARN(FI_LOG_CQ, "Failed to create wce_pool\n");
 		goto err_destroy_cq;
 	}
-
-	cq->cq_fid.fid.fclass = FI_CLASS_CQ;
-	cq->cq_fid.fid.context = context;
-	cq->cq_fid.fid.ops = &efa_cq_fi_ops;
-	cq->cq_fid.ops = &efa_cq_ops;
 
 	switch (attr->format) {
 	case FI_CQ_FORMAT_UNSPEC:
@@ -322,13 +319,20 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 
 	slist_init(&cq->wcq);
 
-	*cq_fid = &cq->cq_fid;
+	*cq_fid = &cq->util_cq.cq_fid;
+	(*cq_fid)->fid.fclass = FI_CLASS_CQ;
+	(*cq_fid)->fid.context = context;
+	(*cq_fid)->fid.ops = &efa_cq_fi_ops;
+	(*cq_fid)->ops = &efa_cq_ops;
+
 	return 0;
 
 err_destroy_pool:
 	ofi_bufpool_destroy(cq->wce_pool);
 err_destroy_cq:
 	ibv_destroy_cq(cq->ibv_cq);
+err_free_util_cq:
+	ofi_cq_cleanup(&cq->util_cq);
 err_free_cq:
 	free(cq);
 	return ret;

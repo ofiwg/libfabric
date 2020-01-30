@@ -150,7 +150,7 @@ int rxr_cq_handle_rx_error(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
 	 */
 	//rxr_release_rx_entry(ep, rx_entry);
 
-	rxr_cntr_report_error(ep, err_entry.flags);
+	efa_cntr_report_error(&ep->util_ep, err_entry.flags);
 	return ofi_cq_write_error(util_cq, &err_entry);
 }
 
@@ -225,7 +225,7 @@ int rxr_cq_handle_tx_error(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	 */
 	//rxr_release_tx_entry(ep, tx_entry);
 
-	rxr_cntr_report_error(ep, tx_entry->cq_entry.flags);
+	efa_cntr_report_error(&ep->util_ep, tx_entry->cq_entry.flags);
 	return ofi_cq_write_error(util_cq, &err_entry);
 }
 
@@ -432,7 +432,7 @@ int rxr_cq_handle_cq_error(struct rxr_ep *ep, ssize_t err)
 		__func__, RXR_GET_X_ENTRY_TYPE(pkt_entry));
 	assert(0 && "unknown x_entry state");
 write_err:
-	rxr_eq_write_error(ep, err_entry.err, err_entry.prov_errno);
+	efa_eq_write_error(&ep->util_ep, err_entry.err, err_entry.prov_errno);
 	return 0;
 }
 
@@ -528,7 +528,7 @@ void rxr_cq_write_rx_completion(struct rxr_ep *ep,
 				"Unable to write recv error cq: %s\n",
 				fi_strerror(-ret));
 
-		rxr_cntr_report_error(ep, rx_entry->cq_entry.flags);
+		efa_cntr_report_error(&ep->util_ep, rx_entry->cq_entry.flags);
 		return;
 	}
 
@@ -572,7 +572,7 @@ void rxr_cq_write_rx_completion(struct rxr_ep *ep,
 		}
 	}
 
-	rxr_cntr_report_rx_completion(ep, rx_entry);
+	efa_cntr_report_rx_completion(&ep->util_ep, rx_entry->cq_entry.flags);
 }
 
 void rxr_cq_handle_rx_completion(struct rxr_ep *ep,
@@ -589,7 +589,7 @@ void rxr_cq_handle_rx_completion(struct rxr_ep *ep,
 		if (rx_entry->cq_entry.flags & FI_REMOTE_CQ_DATA)
 			rxr_cq_write_rx_completion(ep, rx_entry);
 		else if (ep->util_ep.caps & FI_RMA_EVENT)
-			rxr_cntr_report_rx_completion(ep, rx_entry);
+			efa_cntr_report_rx_completion(&ep->util_ep, rx_entry->cq_entry.flags);
 
 		rxr_release_rx_pkt_entry(ep, pkt_entry);
 		return;
@@ -629,7 +629,7 @@ void rxr_cq_handle_rx_completion(struct rxr_ep *ep,
 			/* Note write_tx_completion() will release tx_entry */
 			rxr_cq_write_tx_completion(ep, tx_entry);
 		} else {
-			rxr_cntr_report_tx_completion(ep, tx_entry);
+			efa_cntr_report_tx_completion(&ep->util_ep, tx_entry->cq_entry.flags);
 			rxr_release_tx_entry(ep, tx_entry);
 		}
 
@@ -807,7 +807,7 @@ int rxr_cq_process_msg_rts(struct rxr_ep *ep,
 		if (!rx_entry) {
 			FI_WARN(&rxr_prov, FI_LOG_CQ,
 				"RX entries exhausted.\n");
-			rxr_eq_write_error(ep, FI_ENOBUFS, -FI_ENOBUFS);
+			efa_eq_write_error(&ep->util_ep, FI_ENOBUFS, -FI_ENOBUFS);
 			return -FI_ENOBUFS;
 		}
 
@@ -827,7 +827,7 @@ int rxr_cq_process_msg_rts(struct rxr_ep *ep,
 		if (OFI_UNLIKELY(!rx_entry)) {
 			FI_WARN(&rxr_prov, FI_LOG_CQ,
 				"RX entries exhausted.\n");
-			rxr_eq_write_error(ep, FI_ENOBUFS, -FI_ENOBUFS);
+			efa_eq_write_error(&ep->util_ep, FI_ENOBUFS, -FI_ENOBUFS);
 			return -FI_ENOBUFS;
 		}
 	}
@@ -984,7 +984,7 @@ void rxr_cq_handle_shm_rma_write_data(struct rxr_ep *ep, struct fi_cq_data_entry
 		if (rxr_cq_handle_rx_error(ep, rx_entry, ret))
 			assert(0 && "failed to write err cq entry");
 	}
-	rxr_cntr_report_rx_completion(ep, rx_entry);
+	efa_cntr_report_rx_completion(&ep->util_ep, rx_entry->cq_entry.flags);
 	rxr_release_rx_entry(ep, rx_entry);
 }
 
@@ -1042,17 +1042,17 @@ static void rxr_cq_handle_rts(struct rxr_ep *ep,
 				" robuf->exp_msg_id: %" PRIu32 "\n",
 			       rts_hdr->msg_id, peer->robuf->exp_msg_id);
 			if (!rts_hdr->addrlen)
-				rxr_eq_write_error(ep, FI_EIO, ret);
+				efa_eq_write_error(&ep->util_ep, FI_EIO, ret);
 			rxr_release_rx_pkt_entry(ep, pkt_entry);
 			return;
 		} else if (OFI_UNLIKELY(ret == -FI_ENOMEM)) {
-			rxr_eq_write_error(ep, FI_ENOBUFS, -FI_ENOBUFS);
+			efa_eq_write_error(&ep->util_ep, FI_ENOBUFS, -FI_ENOBUFS);
 			return;
 		} else if (OFI_UNLIKELY(ret < 0)) {
 			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 				"Unknown error %d processing RTS packet msg_id: %"
 				PRIu32 "\n", ret, rts_hdr->msg_id);
-			rxr_eq_write_error(ep, FI_EIO, ret);
+			efa_eq_write_error(&ep->util_ep, FI_EIO, ret);
 			return;
 		}
 
@@ -1327,7 +1327,7 @@ void rxr_cq_write_tx_completion(struct rxr_ep *ep,
 		}
 	}
 
-	rxr_cntr_report_tx_completion(ep, tx_entry);
+	efa_cntr_report_tx_completion(&ep->util_ep, tx_entry->cq_entry.flags);
 	rxr_release_tx_entry(ep, tx_entry);
 	return;
 }
@@ -1342,7 +1342,7 @@ fi_addr_t rxr_cq_insert_addr_from_rts(struct rxr_ep *ep, struct rxr_pkt_entry *p
 
 	assert(rxr_get_base_hdr(pkt_entry->pkt)->type == RXR_RTS_PKT);
 
-	efa_ep = container_of(ep->rdm_ep, struct efa_ep, ep_fid);
+	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
 	rts_hdr = rxr_get_rts_hdr(pkt_entry->pkt);
 	assert(rts_hdr->flags & RXR_REMOTE_SRC_ADDR);
 	assert(rts_hdr->addrlen > 0);
@@ -1359,7 +1359,7 @@ fi_addr_t rxr_cq_insert_addr_from_rts(struct rxr_ep *ep, struct rxr_pkt_entry *p
 			buffer,
 			rxr_get_base_hdr(pkt_entry->pkt)->version,
 			RXR_PROTOCOL_VERSION);
-		rxr_eq_write_error(ep, FI_EIO, -FI_EINVAL);
+		efa_eq_write_error(&ep->util_ep, FI_EIO, -FI_EINVAL);
 		fprintf(stderr, "Invalid protocol version %d. Expected protocol version %d. %s:%d\n",
 			rxr_get_base_hdr(pkt_entry->pkt)->version,
 			RXR_PROTOCOL_VERSION, __FILE__, __LINE__);
@@ -1373,7 +1373,7 @@ fi_addr_t rxr_cq_insert_addr_from_rts(struct rxr_ep *ep, struct rxr_pkt_entry *p
 	ret = efa_av_insert_addr(efa_ep->av, (struct efa_ep_addr *)raw_address,
 				&rdm_addr, 0, NULL);
 	if (OFI_UNLIKELY(ret != 0)) {
-		rxr_eq_write_error(ep, FI_EINVAL, ret);
+		efa_eq_write_error(&ep->util_ep, FI_EINVAL, ret);
 		return -1;
 	}
 
@@ -1475,7 +1475,7 @@ void rxr_cq_handle_rma_context_pkt(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_
 		if (tx_entry->fi_flags & FI_COMPLETION) {
 			rxr_cq_write_tx_completion(ep, tx_entry);
 		} else {
-			rxr_cntr_report_tx_completion(ep, tx_entry);
+			efa_cntr_report_tx_completion(&ep->util_ep, tx_entry->cq_entry.flags);
 			rxr_release_tx_entry(ep, tx_entry);
 		}
 		rxr_release_tx_pkt_entry(ep, pkt_entry);
@@ -1608,7 +1608,7 @@ void rxr_cq_handle_pkt_send_completion(struct rxr_ep *ep, struct fi_cq_data_entr
 			if (ep->util_ep.caps & FI_RMA_EVENT) {
 				rx_entry->cq_entry.len = rx_entry->total_len;
 				rx_entry->bytes_done = rx_entry->total_len;
-				rxr_cntr_report_rx_completion(ep, rx_entry);
+				efa_cntr_report_rx_completion(&ep->util_ep, rx_entry->cq_entry.flags);
 			}
 
 			rxr_release_rx_entry(ep, rx_entry);
@@ -1618,7 +1618,7 @@ void rxr_cq_handle_pkt_send_completion(struct rxr_ep *ep, struct fi_cq_data_entr
 			if (tx_entry->fi_flags & FI_COMPLETION) {
 				rxr_cq_write_tx_completion(ep, tx_entry);
 			} else {
-				rxr_cntr_report_tx_completion(ep, tx_entry);
+				efa_cntr_report_tx_completion(&ep->util_ep, tx_entry->cq_entry.flags);
 				rxr_release_tx_entry(ep, tx_entry);
 			}
 		} else {

@@ -1293,7 +1293,7 @@ void rxr_cq_handle_shm_rma_write_data(struct rxr_ep *ep,
 				      fi_addr_t src_addr);
 
 /* Aborts if unable to write to the eq */
-static inline void rxr_eq_write_error(struct rxr_ep *ep, ssize_t err,
+static inline void efa_eq_write_error(struct util_ep *ep, ssize_t err,
 				      ssize_t prov_errno)
 {
 	struct fi_eq_err_entry err_entry;
@@ -1301,11 +1301,11 @@ static inline void rxr_eq_write_error(struct rxr_ep *ep, ssize_t err,
 
 	FI_WARN(&rxr_prov, FI_LOG_EQ, "Writing error %s to EQ.\n",
 		fi_strerror(err));
-	if (ep->util_ep.eq) {
+	if (ep->eq) {
 		memset(&err_entry, 0, sizeof(err_entry));
 		err_entry.err = err;
 		err_entry.prov_errno = prov_errno;
-		ret = fi_eq_write(&ep->util_ep.eq->eq_fid, FI_NOTIFY,
+		ret = fi_eq_write(&ep->eq->eq_fid, FI_NOTIFY,
 				  &err_entry, sizeof(err_entry),
 				  UTIL_FLAG_ERROR);
 

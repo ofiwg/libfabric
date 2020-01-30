@@ -36,7 +36,7 @@
 #include "rxr.h"
 #include "rxr_cntr.h"
 
-static int rxr_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int timeout)
+static int efa_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int timeout)
 {
 	struct util_cntr *cntr;
 	uint64_t start, errcnt;
@@ -74,7 +74,7 @@ static int rxr_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int time
 	return ret;
 }
 
-int rxr_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
+int efa_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		  struct fid_cntr **cntr_fid, void *context)
 {
 	int ret;
@@ -90,7 +90,7 @@ int rxr_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		goto free;
 
 	*cntr_fid = &cntr->cntr_fid;
-	cntr->cntr_fid.ops->wait = rxr_cntr_wait;
+	cntr->cntr_fid.ops->wait = efa_cntr_wait;
 	return FI_SUCCESS;
 
 free:
@@ -98,20 +98,19 @@ free:
 	return ret;
 }
 
-void rxr_cntr_report_tx_completion(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
+void efa_cntr_report_tx_completion(struct util_ep *ep, uint64_t flags)
 {
-	uint64_t flags = tx_entry->cq_entry.flags &
-			 (FI_SEND | FI_WRITE | FI_READ);
+	flags = flags & (FI_SEND | FI_WRITE | FI_READ);
 	struct util_cntr *cntr;
 
 	assert(flags == FI_SEND || flags == FI_WRITE || flags == FI_READ);
 
 	if (flags == FI_SEND)
-		cntr = ep->util_ep.tx_cntr;
+		cntr = ep->tx_cntr;
 	else if (flags == FI_WRITE)
-		cntr = ep->util_ep.wr_cntr;
+		cntr = ep->wr_cntr;
 	else if (flags == FI_READ)
-		cntr = ep->util_ep.rd_cntr;
+		cntr = ep->rd_cntr;
 	else
 		cntr = NULL;
 
@@ -119,21 +118,20 @@ void rxr_cntr_report_tx_completion(struct rxr_ep *ep, struct rxr_tx_entry *tx_en
 		cntr->cntr_fid.ops->add(&cntr->cntr_fid, 1);
 }
 
-void rxr_cntr_report_rx_completion(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry)
+void efa_cntr_report_rx_completion(struct util_ep *ep, uint64_t flags)
 {
-	uint64_t flags = rx_entry->cq_entry.flags &
-			(FI_RECV | FI_REMOTE_WRITE | FI_REMOTE_READ);
+	flags = flags & (FI_RECV | FI_REMOTE_WRITE | FI_REMOTE_READ);
 
 	assert(flags == FI_RECV || flags == FI_REMOTE_WRITE || flags == FI_REMOTE_READ);
 
 	struct util_cntr *cntr;
 
 	if (flags == FI_RECV)
-		cntr = ep->util_ep.rx_cntr;
+		cntr = ep->rx_cntr;
 	else if (flags == FI_REMOTE_READ)
-		cntr = ep->util_ep.rem_rd_cntr;
+		cntr = ep->rem_rd_cntr;
 	else if (flags == FI_REMOTE_WRITE)
-		cntr = ep->util_ep.rem_wr_cntr;
+		cntr = ep->rem_wr_cntr;
 	else
 		cntr = NULL;
 
@@ -141,7 +139,7 @@ void rxr_cntr_report_rx_completion(struct rxr_ep *ep, struct rxr_rx_entry *rx_en
 		cntr->cntr_fid.ops->add(&cntr->cntr_fid, 1);
 }
 
-void rxr_cntr_report_error(struct rxr_ep *ep, uint64_t flags)
+void efa_cntr_report_error(struct util_ep *ep, uint64_t flags)
 {
 	flags = flags & (FI_SEND | FI_READ | FI_WRITE | FI_ATOMIC |
 			 FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE);
@@ -149,17 +147,17 @@ void rxr_cntr_report_error(struct rxr_ep *ep, uint64_t flags)
 	struct util_cntr *cntr;
 
 	if (flags == FI_WRITE || flags == FI_ATOMIC)
-		cntr = ep->util_ep.wr_cntr;
+		cntr = ep->wr_cntr;
 	else if (flags == FI_READ)
-		cntr = ep->util_ep.rd_cntr;
+		cntr = ep->rd_cntr;
 	else if (flags == FI_SEND)
-		cntr = ep->util_ep.tx_cntr;
+		cntr = ep->tx_cntr;
 	else if (flags == FI_RECV)
-		cntr = ep->util_ep.rx_cntr;
+		cntr = ep->rx_cntr;
 	else if (flags == FI_REMOTE_READ)
-		cntr = ep->util_ep.rem_rd_cntr;
+		cntr = ep->rem_rd_cntr;
 	else if (flags == FI_REMOTE_WRITE)
-		cntr = ep->util_ep.rem_wr_cntr;
+		cntr = ep->rem_wr_cntr;
 	else
 		cntr = NULL;
 

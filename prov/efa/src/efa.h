@@ -168,7 +168,7 @@ struct efa_wce {
 typedef void (*efa_cq_read_entry)(struct efa_wc *wc, int index, void *buf);
 
 struct efa_cq {
-	struct fid_cq		cq_fid;
+	struct util_cq		util_cq;
 	struct efa_domain	*domain;
 	size_t			entry_size;
 	efa_cq_read_entry	read_entry;
@@ -200,7 +200,7 @@ struct efa_mem_desc {
 };
 
 struct efa_ep {
-	struct fid_ep		ep_fid;
+	struct util_ep		util_ep;
 	struct efa_domain	*domain;
 	struct efa_qp		*qp;
 	struct efa_cq		*rcq;
@@ -327,5 +327,9 @@ void efa_cq_dec_ref_cnt(struct efa_cq *cq, uint8_t sub_cq_idx);
 fi_addr_t efa_ahn_qpn_to_addr(struct efa_av *av, uint16_t ahn, uint16_t qpn);
 
 struct fi_provider *init_lower_efa_prov();
+
+ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count, fi_addr_t *src_addr);
+
+ssize_t efa_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry, uint64_t flags);
 
 #endif /* EFA_H */
