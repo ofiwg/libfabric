@@ -327,10 +327,6 @@ struct ft_msg {
 	uint8_t		data[124];
 };
 
-int ft_fw_send(int fd, void *msg, size_t len);
-int ft_fw_recv(int fd, void *msg, size_t len);
-
-
 int ft_open_control();
 ssize_t ft_get_event(uint32_t *event, void *buf, size_t len,
 		     uint32_t event_check, size_t len_check);
