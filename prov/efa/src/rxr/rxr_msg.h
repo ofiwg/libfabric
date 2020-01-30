@@ -51,3 +51,6 @@ extern struct fi_ops_msg rxr_ops_msg;
 
 extern struct fi_ops_tagged rxr_ops_tagged;
 
+ssize_t rxr_msg_post_medium_rtm(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry);
+
+ssize_t rxr_msg_post_medium_rtm_or_queue(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry);

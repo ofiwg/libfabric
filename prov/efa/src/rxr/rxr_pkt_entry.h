@@ -104,10 +104,16 @@ void rxr_pkt_entry_release_tx(struct rxr_ep *ep,
 void rxr_pkt_entry_release_rx(struct rxr_ep *ep,
 			      struct rxr_pkt_entry *pkt_entry);
 
-void rxr_pkt_entry_copy(struct rxr_ep *ep,
-			struct rxr_pkt_entry *dest,
-			struct rxr_pkt_entry *src,
-			enum rxr_pkt_entry_type type);
+void rxr_pkt_entry_append(struct rxr_pkt_entry *dst,
+			  struct rxr_pkt_entry *src);
+
+struct rxr_pkt_entry *rxr_pkt_entry_clone(struct rxr_ep *ep,
+					  struct ofi_bufpool *pkt_pool,
+					  struct rxr_pkt_entry *src,
+					  int new_entry_type);
+
+struct rxr_pkt_entry *rxr_pkt_get_unexp(struct rxr_ep *ep,
+					struct rxr_pkt_entry **pkt_entry_ptr);
 
 ssize_t rxr_pkt_entry_send_with_flags(struct rxr_ep *ep,
 				      struct rxr_pkt_entry *pkt_entry,
@@ -126,5 +132,26 @@ ssize_t rxr_pkt_entry_inject(struct rxr_ep *ep,
 			     struct rxr_pkt_entry *pkt_entry,
 			     fi_addr_t addr);
 
-#endif
+struct rxr_pkt_rx_key {
+	uint64_t msg_id;
+	fi_addr_t addr;
+};
 
+struct rxr_pkt_rx_map {
+	struct rxr_pkt_rx_key key;
+	struct rxr_rx_entry *rx_entry;
+	UT_hash_handle hh;
+};
+
+struct rxr_rx_entry *rxr_pkt_rx_map_lookup(struct rxr_ep *ep,
+					   struct rxr_pkt_entry *pkt_entry);
+
+void rxr_pkt_rx_map_insert(struct rxr_ep *ep,
+			   struct rxr_pkt_entry *pkt_entry,
+			   struct rxr_rx_entry *rx_entry);
+
+void rxr_pkt_rx_map_remove(struct rxr_ep *pkt_rx_map,
+			   struct rxr_pkt_entry *pkt_entry,
+			   struct rxr_rx_entry *rx_entry);
+
+#endif

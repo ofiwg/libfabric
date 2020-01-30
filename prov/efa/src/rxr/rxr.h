@@ -203,7 +203,7 @@ struct rxr_env {
 	int timeout_interval;
 	size_t efa_cq_read_size;
 	size_t shm_cq_read_size;
-	size_t efa_min_read_msg_size;
+	size_t efa_max_medium_msg_size;
 	size_t efa_max_emulated_read_size;
 	size_t efa_max_emulated_write_size;
 	size_t efa_read_segment_size;
@@ -559,9 +559,12 @@ struct rxr_ep {
 	struct ofi_bufpool *rx_entry_pool;
 	/* datastructure to maintain read response */
 	struct ofi_bufpool *readrsp_tx_entry_pool;
-	/* data structure to maintain RDMA */
+	/* data structure to maintain read */
 	struct ofi_bufpool *read_entry_pool;
-
+	/* data structure to maintain pkt rx map */
+	struct ofi_bufpool *map_entry_pool;
+	/* rxr medium message pkt_entry to rx_entry map */
+	struct rxr_pkt_rx_map *pkt_rx_map;
 	/* rx_entries with recv buf */
 	struct dlist_entry rx_list;
 	/* rx_entries without recv buf (unexpected message) */
@@ -818,6 +821,13 @@ int rxr_ep_set_tx_credit_request(struct rxr_ep *rxr_ep,
 
 void rxr_inline_mr_reg(struct rxr_domain *rxr_domain,
 		       struct rxr_tx_entry *tx_entry);
+
+struct rxr_rx_entry *rxr_ep_lookup_mediumrtm_rx_entry(struct rxr_ep *ep,
+						      struct rxr_pkt_entry *pkt_entry);
+
+void rxr_ep_record_mediumrtm_rx_entry(struct rxr_ep *ep,
+				      struct rxr_pkt_entry *pkt_entry,
+				      struct rxr_rx_entry *rx_entry);
 
 struct rxr_rx_entry *rxr_ep_alloc_unexp_rx_entry_for_msgrtm(struct rxr_ep *ep,
 							    struct rxr_pkt_entry **pkt_entry);

@@ -138,47 +138,17 @@ struct rxr_rx_entry *rxr_ep_get_rx_entry(struct rxr_ep *ep,
 	return rx_entry;
 }
 
-/*
- * Create a new rx_entry for an unexpected message. Store the packet for later
- * processing and put the rx_entry on the appropriate unexpected list.
- */
-
-struct rxr_pkt_entry *rxr_ep_get_unexp_pkt_entry(struct rxr_ep *ep,
-						 struct rxr_pkt_entry *pkt_entry)
-{
-	struct rxr_pkt_entry *unexp_pkt_entry;
-
-	if (rxr_env.rx_copy_unexp && pkt_entry->type == RXR_PKT_ENTRY_POSTED) {
-		unexp_pkt_entry = rxr_pkt_entry_alloc(ep, ep->rx_unexp_pkt_pool);
-		if (OFI_UNLIKELY(!unexp_pkt_entry)) {
-			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
-				"Unable to allocate rx_pkt_entry for unexp msg\n");
-			return NULL;
-		}
-		rxr_pkt_entry_copy(ep, unexp_pkt_entry, pkt_entry,
-				   RXR_PKT_ENTRY_UNEXP);
-		rxr_pkt_entry_release_rx(ep, pkt_entry);
-	} else {
-		unexp_pkt_entry = pkt_entry;
-	}
-
-	return unexp_pkt_entry;
-}
-
 struct rxr_rx_entry *rxr_ep_alloc_unexp_rx_entry_for_msgrtm(struct rxr_ep *ep,
-							    struct rxr_pkt_entry **pkt_entry)
+							    struct rxr_pkt_entry **pkt_entry_ptr)
 {
 	struct rxr_rx_entry *rx_entry;
 	struct rxr_pkt_entry *unexp_pkt_entry;
 
-	unexp_pkt_entry = rxr_ep_get_unexp_pkt_entry(ep, *pkt_entry);
+	unexp_pkt_entry = rxr_pkt_get_unexp(ep, pkt_entry_ptr);
 	if (OFI_UNLIKELY(!unexp_pkt_entry)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "packet entries exhausted.\n");
 		return NULL;
 	}
-
-	if (unexp_pkt_entry != *pkt_entry)
-		*pkt_entry = unexp_pkt_entry;
 
 	rx_entry = rxr_ep_get_rx_entry(ep, NULL, 0, 0, ~0, NULL,
 				       unexp_pkt_entry->addr, ofi_op_msg, 0);
@@ -190,28 +160,25 @@ struct rxr_rx_entry *rxr_ep_alloc_unexp_rx_entry_for_msgrtm(struct rxr_ep *ep,
 	rx_entry->rxr_flags = 0;
 	rx_entry->state = RXR_RX_UNEXP;
 	rx_entry->unexp_pkt = unexp_pkt_entry;
-	rxr_pkt_rtm_init_rx_entry(*pkt_entry, rx_entry);
+	rxr_pkt_rtm_init_rx_entry(unexp_pkt_entry, rx_entry);
 	dlist_insert_tail(&rx_entry->entry, &ep->rx_unexp_list);
 	return rx_entry;
 }
 
 struct rxr_rx_entry *rxr_ep_alloc_unexp_rx_entry_for_tagrtm(struct rxr_ep *ep,
-							    struct rxr_pkt_entry **pkt_entry)
+							    struct rxr_pkt_entry **pkt_entry_ptr)
 {
 	uint64_t tag;
 	struct rxr_rx_entry *rx_entry;
 	struct rxr_pkt_entry *unexp_pkt_entry;
 
-	unexp_pkt_entry = rxr_ep_get_unexp_pkt_entry(ep, *pkt_entry);
+	unexp_pkt_entry = rxr_pkt_get_unexp(ep, pkt_entry_ptr);
 	if (OFI_UNLIKELY(!unexp_pkt_entry)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "packet entries exhausted.\n");
 		return NULL;
 	}
 
-	if (unexp_pkt_entry != *pkt_entry)
-		*pkt_entry = unexp_pkt_entry;
-
-	tag = rxr_pkt_rtm_tag(*pkt_entry);
+	tag = rxr_pkt_rtm_tag(unexp_pkt_entry);
 	rx_entry = rxr_ep_get_rx_entry(ep, NULL, 0, tag, ~0, NULL,
 				       unexp_pkt_entry->addr, ofi_op_tagged, 0);
 	if (OFI_UNLIKELY(!rx_entry)) {
@@ -222,7 +189,7 @@ struct rxr_rx_entry *rxr_ep_alloc_unexp_rx_entry_for_tagrtm(struct rxr_ep *ep,
 	rx_entry->rxr_flags = 0;
 	rx_entry->state = RXR_RX_UNEXP;
 	rx_entry->unexp_pkt = unexp_pkt_entry;
-	rxr_pkt_rtm_init_rx_entry(*pkt_entry, rx_entry);
+	rxr_pkt_rtm_init_rx_entry(unexp_pkt_entry, rx_entry);
 	dlist_insert_tail(&rx_entry->entry, &ep->rx_unexp_tagged_list);
 	return rx_entry;
 }
@@ -1147,6 +1114,15 @@ int rxr_ep_init(struct rxr_ep *ep)
 	if (ret)
 		goto err_free_readrsp_tx_entry_pool;
 
+	ret = ofi_bufpool_create(&ep->map_entry_pool,
+				 sizeof(struct rxr_pkt_rx_map),
+				 RXR_BUF_POOL_ALIGNMENT,
+				 RXR_MAX_RX_QUEUE_SIZE,
+				 ep->rx_size, 0);
+
+	if (ret)
+		goto err_free_rx_entry_pool;
+
 	/* create pkt pool for shm */
 	if (rxr_env.enable_shm_transfer) {
 		ret = ofi_bufpool_create(&ep->tx_pkt_shm_pool,
@@ -1155,7 +1131,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 					 shm_info->tx_attr->size,
 					 shm_info->tx_attr->size, 0);
 		if (ret)
-			goto err_free_rx_entry_pool;
+			goto err_free_map_entry_pool;
 
 		ret = ofi_bufpool_create(&ep->rx_pkt_shm_pool,
 					 entry_sz,
@@ -1187,12 +1163,16 @@ int rxr_ep_init(struct rxr_ep *ep)
 	dlist_init(&ep->rx_entry_list);
 	dlist_init(&ep->tx_entry_list);
 #endif
-
+	/* Initialize pkt to rx map */
+	ep->pkt_rx_map = NULL;
 	return 0;
 
 err_free_tx_pkt_shm_pool:
 	if (ep->tx_pkt_shm_pool)
 		ofi_bufpool_destroy(ep->tx_pkt_shm_pool);
+err_free_map_entry_pool:
+	if (ep->map_entry_pool)
+		ofi_bufpool_destroy(ep->map_entry_pool);
 err_free_rx_entry_pool:
 	if (ep->rx_entry_pool)
 		ofi_bufpool_destroy(ep->rx_entry_pool);
@@ -1452,8 +1432,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 						tx_entry->queued_ctrl.type,
 						tx_entry->queued_ctrl.inject);
 		else
-			ret = rxr_ep_send_queued_pkts(ep,
-						      &tx_entry->queued_pkts);
+			ret = rxr_ep_send_queued_pkts(ep, &tx_entry->queued_pkts);
 
 		if (ret == -FI_EAGAIN)
 			break;

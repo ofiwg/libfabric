@@ -58,7 +58,69 @@
 /**
  *   Utility functions used by both non-tagged and tagged send.
  */
-static
+ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
+{
+	/*
+	 * For performance consideration, this function assume the tagged rtm packet type id is
+	 * always the correspondent message rtm packet type id + 1, thus the assertion here.
+	 */
+	assert(RXR_EAGER_MSGRTM_PKT + 1 == RXR_EAGER_TAGRTM_PKT);
+	assert(RXR_READ_MSGRTM_PKT + 1 == RXR_READ_TAGRTM_PKT);
+	assert(RXR_LONG_MSGRTM_PKT + 1 == RXR_LONG_TAGRTM_PKT);
+	assert(RXR_MEDIUM_MSGRTM_PKT + 1 == RXR_MEDIUM_TAGRTM_PKT);
+
+	int tagged;
+	size_t max_rtm_data_size;
+	ssize_t err;
+	struct rxr_peer *peer;
+
+	assert(tx_entry->op == ofi_op_msg || tx_entry->op == ofi_op_tagged);
+	tagged = (tx_entry->op == ofi_op_tagged);
+	assert(tagged == 0 || tagged == 1);
+
+	max_rtm_data_size = rxr_pkt_req_max_data_size(rxr_ep,
+						      tx_entry->addr,
+						      RXR_EAGER_MSGRTM_PKT + tagged);
+
+	peer = rxr_ep_get_peer(rxr_ep, tx_entry->addr);
+	if (peer->is_local) {
+		/* intra instance message */
+		int rtm_type = (tx_entry->total_len <= max_rtm_data_size) ? RXR_EAGER_MSGRTM_PKT
+									  : RXR_READ_MSGRTM_PKT;
+
+		return rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry, rtm_type + tagged, 0);
+	}
+
+	/* inter instance message */
+	if (tx_entry->total_len <= max_rtm_data_size)
+		return rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
+						  RXR_EAGER_MSGRTM_PKT + tagged, 0);
+
+	if (tx_entry->total_len <= rxr_env.efa_max_medium_msg_size)
+		return rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
+						  RXR_MEDIUM_MSGRTM_PKT + tagged, 0);
+
+	if (efa_support_rdma_read(rxr_ep->rdm_ep)) {
+		/* use read message protocol */
+		err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
+						 RXR_READ_MSGRTM_PKT + tagged, 0);
+
+		if (err == -FI_ENOMEM) {
+			/*
+			 * If memory registration failed, fall back to use long
+			 * message protocol
+			 */
+			err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
+							 RXR_LONG_MSGRTM_PKT + tagged, 0);
+		}
+
+		return err;
+	}
+
+	return rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
+					  RXR_LONG_MSGRTM_PKT + tagged, 0);
+}
+
 ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 			     uint64_t tag, uint32_t op, uint64_t flags)
 {
@@ -102,42 +164,12 @@ ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 		}
 	}
 
-	if (!(rxr_env.enable_shm_transfer && peer->is_local) &&
-	    rxr_need_sas_ordering(rxr_ep))
-		tx_entry->msg_id = peer->next_msg_id++;
+	tx_entry->msg_id = peer->next_msg_id++;
 
-	int eager_pkt_type = (op == ofi_op_tagged) ? RXR_EAGER_TAGRTM_PKT : RXR_EAGER_MSGRTM_PKT;
-	int long_pkt_type = (op == ofi_op_tagged) ? RXR_LONG_TAGRTM_PKT : RXR_LONG_MSGRTM_PKT;
-
-	size_t max_pkt_data_size = rxr_pkt_req_max_data_size(rxr_ep,
-							     tx_entry->addr,
-							     eager_pkt_type);
-	if (peer->is_local) {
-		if (tx_entry->total_len <= max_pkt_data_size)
-			err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
-							 eager_pkt_type, 0);
-		else
-			err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
-							 rxr_read_rtm_pkt_type(op), 0);
-	} else {
-		if (tx_entry->total_len <= max_pkt_data_size) {
-			err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
-							 eager_pkt_type, 0);
-		} else if (efa_support_rdma_read(rxr_ep->rdm_ep) &&
-			   tx_entry->total_len >= rxr_env.efa_min_read_msg_size) {
-			err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
-							 rxr_read_rtm_pkt_type(op), 0);
-		} else {
-			err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
-							 long_pkt_type, 0);
-		}
-	}
-
+	err = rxr_msg_post_rtm(rxr_ep, tx_entry);
 	if (OFI_UNLIKELY(err)) {
 		rxr_release_tx_entry(rxr_ep, tx_entry);
-		if (!(rxr_env.enable_shm_transfer && peer->is_local) &&
-		    rxr_need_sas_ordering(rxr_ep))
-			peer->next_msg_id--;
+		peer->next_msg_id--;
 	}
 
 out:
@@ -451,6 +483,7 @@ int rxr_msg_handle_unexp_match(struct rxr_ep *ep,
 	rx_entry->state = RXR_RX_MATCHED;
 
 	pkt_entry = rx_entry->unexp_pkt;
+	rx_entry->unexp_pkt = NULL;
 	data_len = rxr_pkt_rtm_total_len(pkt_entry);
 
 	rx_entry->cq_entry.op_context = context;
