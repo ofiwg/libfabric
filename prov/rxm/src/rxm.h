@@ -586,10 +586,6 @@ struct rxm_recv_entry {
 	uint64_t comp_flags;
 	size_t total_len;
 	struct rxm_recv_queue *recv_queue;
-	struct {
-		void	*buf;
-		size_t	len;
-	} multi_recv;
 
 	/* Used for SAR protocol */
 	struct {
@@ -1060,18 +1056,4 @@ static inline int rxm_cq_write_recv_comp(struct rxm_rx_buf *rx_buf,
 		return ofi_cq_write(rx_buf->ep->util_ep.rx_cq, context,
 				    flags, len, buf, rx_buf->pkt.hdr.data,
 				    rx_buf->pkt.hdr.tag);
-}
-
-static inline int
-rxm_cq_write_multi_recv_comp(struct rxm_ep *rxm_ep, struct rxm_recv_entry *recv_entry)
-{
-	if (rxm_ep->rxm_info->caps & FI_SOURCE)
-		return ofi_cq_write_src(rxm_ep->util_ep.rx_cq, recv_entry->context,
-					FI_MULTI_RECV, recv_entry->multi_recv.len,
-					recv_entry->multi_recv.buf, 0, 0,
-					recv_entry->addr);
-	else
-		return ofi_cq_write(rxm_ep->util_ep.rx_cq, recv_entry->context,
-				    FI_MULTI_RECV, recv_entry->multi_recv.len,
-				    recv_entry->multi_recv.buf, 0, 0);
 }

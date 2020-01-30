@@ -702,7 +702,7 @@ rxm_ep_format_rx_res(struct rxm_ep *rxm_ep, const struct iovec *iov,
 
 	assert(!(*recv_entry)->rndv.tx_buf);
 
-	(*recv_entry)->rxm_iov.count 	= (uint8_t)count;
+	(*recv_entry)->rxm_iov.count 	= (uint8_t) count;
 	(*recv_entry)->addr 		= src_addr;
 	(*recv_entry)->context 		= context;
 	(*recv_entry)->flags 		= flags;
@@ -710,15 +710,11 @@ rxm_ep_format_rx_res(struct rxm_ep *rxm_ep, const struct iovec *iov,
 	(*recv_entry)->tag		= tag;
 
 	for (i = 0; i < count; i++) {
-		(*recv_entry)->rxm_iov.iov[i].iov_base = iov[i].iov_base;
-		(*recv_entry)->total_len +=
-			(*recv_entry)->rxm_iov.iov[i].iov_len = iov[i].iov_len;
+		(*recv_entry)->rxm_iov.iov[i] = iov[i];
+		(*recv_entry)->total_len += iov[i].iov_len;
 		if (desc)
 			(*recv_entry)->rxm_iov.desc[i] = desc[i];
 	}
-
-	(*recv_entry)->multi_recv.len	= (*recv_entry)->total_len;
-	(*recv_entry)->multi_recv.buf	= iov[0].iov_base;
 
 	return FI_SUCCESS;
 }

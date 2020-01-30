@@ -116,7 +116,7 @@ static int tx_cm_data(SOCKET fd, uint8_t type, struct tcpx_cm_context *cm_ctx)
 	return FI_SUCCESS;
 }
 
-static int tcpx_ep_msg_xfer_enable(struct tcpx_ep *ep)
+static int tcpx_ep_enable_xfers(struct tcpx_ep *ep)
 {
 	int ret;
 
@@ -138,7 +138,13 @@ static int tcpx_ep_msg_xfer_enable(struct tcpx_ep *ep)
 	ep->cm_state = TCPX_EP_CONNECTED;
 	fastlock_release(&ep->lock);
 
-	return tcpx_cq_wait_ep_add(ep);
+	if (ep->util_ep.rx_cq->wait) {
+		ret = ofi_wait_fd_add(ep->util_ep.rx_cq->wait,
+				      ep->conn_fd, FI_EPOLL_IN,
+				      tcpx_try_func, (void *) &ep->util_ep,
+				      NULL);
+	}
+	return ret;
 }
 
 static int proc_conn_resp(struct tcpx_cm_context *cm_ctx,
@@ -166,7 +172,7 @@ static int proc_conn_resp(struct tcpx_cm_context *cm_ctx,
 	ep->hdr_bswap = (conn_resp.conn_data == 1) ?
 			tcpx_hdr_none : tcpx_hdr_bswap;
 
-	ret = tcpx_ep_msg_xfer_enable(ep);
+	ret = tcpx_ep_enable_xfers(ep);
 	if (ret)
 		goto err;
 
@@ -260,7 +266,7 @@ static void server_send_cm_accept(struct util_wait *wait,
 		goto err;
 	}
 
-	ret = tcpx_ep_msg_xfer_enable(ep);
+	ret = tcpx_ep_enable_xfers(ep);
 	if (ret)
 		goto err;
 

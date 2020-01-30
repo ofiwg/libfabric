@@ -155,7 +155,7 @@ static int tcpx_prepare_rx_entry_resp(struct tcpx_xfer_entry *rx_entry)
 	tcpx_tx_queue_insert(resp_entry->ep, resp_entry);
 	tcpx_cq_report_success(rx_entry->ep->util_ep.rx_cq, rx_entry);
 
-	rx_entry->rx_msg_release_fn(rx_entry);
+	tcpx_rx_msg_release(rx_entry);
 	return FI_SUCCESS;
 }
 
@@ -174,13 +174,13 @@ static int process_rx_entry(struct tcpx_xfer_entry *rx_entry)
 		tcpx_ep_shutdown_report(rx_entry->ep,
 					&rx_entry->ep->util_ep.ep_fid.fid);
 		tcpx_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, -ret);
-		rx_entry->rx_msg_release_fn(rx_entry);
+		tcpx_rx_msg_release(rx_entry);
 	} else if (rx_entry->hdr.base_hdr.flags & OFI_DELIVERY_COMPLETE) {
 		if (tcpx_prepare_rx_entry_resp(rx_entry))
 			rx_entry->ep->cur_rx_proc_fn = tcpx_prepare_rx_entry_resp;
 	} else {
 		tcpx_cq_report_success(rx_entry->ep->util_ep.rx_cq, rx_entry);
-		rx_entry->rx_msg_release_fn(rx_entry);
+		tcpx_rx_msg_release(rx_entry);
 	}
 	return ret;
 }
@@ -446,14 +446,7 @@ int tcpx_get_rx_entry_op_msg(struct tcpx_ep *tcpx_ep)
 
 		rx_entry->rem_len = ofi_total_iov_len(rx_entry->iov,
 						      rx_entry->iov_cnt) - msg_len;
-
-		if (!(rx_entry->flags & FI_MULTI_RECV) ||
-		    rx_entry->rem_len < tcpx_ep->min_multi_recv_size) {
-			slist_remove_head(&tcpx_ep->rx_queue);
-			rx_entry->rx_msg_release_fn = tcpx_rx_msg_release;
-		} else {
-			rx_entry->rx_msg_release_fn = tcpx_rx_multi_recv_release;
-		}
+		slist_remove_head(&tcpx_ep->rx_queue);
 	}
 
 	memcpy(&rx_entry->hdr, &tcpx_ep->rx_detect.hdr,
@@ -468,7 +461,7 @@ int tcpx_get_rx_entry_op_msg(struct tcpx_ep *tcpx_ep)
 			"posted rx buffer size is not big enough\n");
 		tcpx_cq_report_error(rx_entry->ep->util_ep.rx_cq,
 				     rx_entry, -ret);
-		rx_entry->rx_msg_release_fn(rx_entry);
+		tcpx_rx_msg_release(rx_entry);
 		return ret;
 	}
 
@@ -636,23 +629,18 @@ err:
 		tcpx_report_error(ep, ret);
 }
 
-static void process_tx_queue(struct tcpx_ep *ep)
+void tcpx_ep_progress(struct tcpx_ep *ep)
 {
 	struct tcpx_xfer_entry *tx_entry;
 	struct slist_entry *entry;
 
-	if (slist_empty(&ep->tx_queue))
-		return;
+	if (!slist_empty(&ep->tx_queue)) {
+		entry = ep->tx_queue.head;
+		tx_entry = container_of(entry, struct tcpx_xfer_entry, entry);
+		process_tx_entry(tx_entry);
+	}
 
-	entry = ep->tx_queue.head;
-	tx_entry = container_of(entry, struct tcpx_xfer_entry, entry);
-	process_tx_entry(tx_entry);
-}
-
-void tcpx_ep_progress(struct tcpx_ep *ep)
-{
 	tcpx_process_rx_msg(ep);
-	process_tx_queue(ep);
 }
 
 void tcpx_progress(struct util_ep *util_ep)
@@ -666,7 +654,7 @@ void tcpx_progress(struct util_ep *util_ep)
 	return;
 }
 
-static int tcpx_try_func(void *util_ep)
+int tcpx_try_func(void *util_ep)
 {
 	uint32_t events;
 	struct util_wait_fd *wait_fd;
@@ -697,16 +685,6 @@ epoll_mod:
 			"invalid op type\n");
 	fastlock_release(&ep->lock);
 	return ret;
-}
-
-int tcpx_cq_wait_ep_add(struct tcpx_ep *ep)
-{
-	if (!ep->util_ep.rx_cq->wait)
-		return FI_SUCCESS;
-
-	return ofi_wait_fd_add(ep->util_ep.rx_cq->wait,
-			       ep->conn_fd, FI_EPOLL_IN,
-			       tcpx_try_func, (void *) &ep->util_ep, NULL);
 }
 
 void tcpx_tx_queue_insert(struct tcpx_ep *tcpx_ep,

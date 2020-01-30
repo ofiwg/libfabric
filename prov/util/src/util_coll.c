@@ -631,7 +631,7 @@ static int util_coll_scatter(struct util_coll_operation *coll_op, const void *da
 {
 	// scatter implemented with binomial tree algorithm
 	uint64_t local_rank, relative_rank;
-	size_t nbytes, numranks, send_cnt, cur_cnt;
+	size_t nbytes, numranks, send_cnt, cur_cnt = 0;
 	int ret, mask, remote_rank;
 	void *send_data;
 
