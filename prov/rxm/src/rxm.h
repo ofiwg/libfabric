@@ -709,9 +709,6 @@ extern struct fi_domain_attr rxm_domain_attr;
 extern struct fi_tx_attr rxm_tx_attr;
 extern struct fi_rx_attr rxm_rx_attr;
 
-#define rxm_ep_rx_flags(rxm_ep)	((rxm_ep)->util_ep.rx_op_flags)
-#define rxm_ep_tx_flags(rxm_ep)	((rxm_ep)->util_ep.tx_op_flags)
-
 int rxm_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 			void *context);
 int rxm_info_to_core(uint32_t version, const struct fi_info *rxm_info,
