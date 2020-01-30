@@ -235,7 +235,8 @@ rxm_ep_atomic_writev(struct fid_ep *ep_fid, const struct fi_ioc *iov,
 		.data = 0,
 	};
 
-	return rxm_ep_generic_atomic_writemsg(rxm_ep, &msg, rxm_ep_tx_flags(rxm_ep));
+	return rxm_ep_generic_atomic_writemsg(rxm_ep, &msg,
+					      rxm_ep->util_ep.tx_op_flags);
 }
 
 static ssize_t
@@ -352,7 +353,7 @@ rxm_ep_atomic_readwritev(struct fid_ep *ep_fid, const struct fi_ioc *iov,
 	};
 
 	return rxm_ep_generic_atomic_readwritemsg(rxm_ep, &msg, resultv,
-			result_desc, result_count, rxm_ep_tx_flags(rxm_ep));
+			result_desc, result_count, rxm_ep->util_ep.tx_op_flags);
 }
 
 static ssize_t
@@ -452,7 +453,7 @@ rxm_ep_atomic_compwritev(struct fid_ep *ep_fid, const struct fi_ioc *iov,
 
 	return rxm_ep_generic_atomic_compwritemsg(rxm_ep, &msg, comparev,
 			compare_desc, compare_count, resultv, result_desc,
-			result_count, rxm_ep_tx_flags(rxm_ep));
+			result_count, rxm_ep->util_ep.tx_op_flags);
 }
 
 static ssize_t

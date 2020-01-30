@@ -870,7 +870,7 @@ static ssize_t rxm_ep_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *d
 	};
 
 	return rxm_ep_recv_common(rxm_ep, &iov, &desc, 1, src_addr, 0, 0,
-				  context, rxm_ep_rx_flags(rxm_ep),
+				  context, rxm_ep->util_ep.rx_op_flags,
 				  &rxm_ep->recv_queue);
 }
 
@@ -881,7 +881,7 @@ static ssize_t rxm_ep_recvv(struct fid_ep *ep_fid, const struct iovec *iov,
 					     util_ep.ep_fid.fid);
 
 	return rxm_ep_recv_common(rxm_ep, iov, desc, count, src_addr, 0, 0,
-				  context, rxm_ep_rx_flags(rxm_ep),
+				  context, rxm_ep->util_ep.rx_op_flags,
 				  &rxm_ep->recv_queue);
 }
 
@@ -1522,7 +1522,7 @@ static ssize_t rxm_ep_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 		goto unlock;
 
 	ret = rxm_ep_send_common(rxm_ep, rxm_conn, &iov, &desc, 1, context,
-				  0, rxm_ep_tx_flags(rxm_ep), 0, ofi_op_msg,
+				  0, rxm_ep->util_ep.tx_op_flags, 0, ofi_op_msg,
 				  rxm_conn->inject_pkt);
 unlock:
 	ofi_ep_lock_release(&rxm_ep->util_ep);
@@ -1544,7 +1544,7 @@ static ssize_t rxm_ep_sendv(struct fid_ep *ep_fid, const struct iovec *iov,
 		goto unlock;
 
 	ret = rxm_ep_send_common(rxm_ep, rxm_conn, iov, desc, count, context,
-				  0, rxm_ep_tx_flags(rxm_ep), 0, ofi_op_msg,
+				  0, rxm_ep->util_ep.tx_op_flags, 0, ofi_op_msg,
 				  rxm_conn->inject_pkt);
 unlock:
 	ofi_ep_lock_release(&rxm_ep->util_ep);
@@ -1607,8 +1607,8 @@ static ssize_t rxm_ep_senddata(struct fid_ep *ep_fid, const void *buf, size_t le
 		goto unlock;
 
 	ret = rxm_ep_send_common(rxm_ep, rxm_conn, &iov, &desc, 1, context, data,
-				  rxm_ep_tx_flags(rxm_ep) | FI_REMOTE_CQ_DATA,
-				  0, ofi_op_msg, rxm_conn->inject_data_pkt);
+				 rxm_ep->util_ep.tx_op_flags | FI_REMOTE_CQ_DATA,
+				 0, ofi_op_msg, rxm_conn->inject_data_pkt);
 unlock:
 	ofi_ep_lock_release(&rxm_ep->util_ep);
 	return ret;
@@ -1703,7 +1703,7 @@ static ssize_t rxm_ep_trecv(struct fid_ep *ep_fid, void *buf, size_t len,
 	};
 
 	return rxm_ep_recv_common(rxm_ep, &iov, &desc, 1, src_addr, tag, ignore,
-				  context, rxm_ep_rx_flags(rxm_ep),
+				  context, rxm_ep->util_ep.rx_op_flags,
 				  &rxm_ep->trecv_queue);
 }
 
@@ -1715,7 +1715,7 @@ static ssize_t rxm_ep_trecvv(struct fid_ep *ep_fid, const struct iovec *iov,
 					     util_ep.ep_fid.fid);
 
 	return rxm_ep_recv_common(rxm_ep, iov, desc, count, src_addr, tag, ignore,
-				  context, rxm_ep_rx_flags(rxm_ep),
+				  context, rxm_ep->util_ep.rx_op_flags,
 				  &rxm_ep->trecv_queue);
 }
 
@@ -1761,8 +1761,8 @@ static ssize_t rxm_ep_tsend(struct fid_ep *ep_fid, const void *buf, size_t len,
 		goto unlock;
 
 	ret = rxm_ep_send_common(rxm_ep, rxm_conn, &iov, &desc, 1, context, 0,
-				  rxm_ep_tx_flags(rxm_ep), tag, ofi_op_tagged,
-				  rxm_conn->tinject_pkt);
+				 rxm_ep->util_ep.tx_op_flags, tag, ofi_op_tagged,
+				 rxm_conn->tinject_pkt);
 unlock:
 	ofi_ep_lock_release(&rxm_ep->util_ep);
 	return ret;
@@ -1783,8 +1783,8 @@ static ssize_t rxm_ep_tsendv(struct fid_ep *ep_fid, const struct iovec *iov,
 		goto unlock;
 
 	ret = rxm_ep_send_common(rxm_ep, rxm_conn, iov, desc, count, context, 0,
-				  rxm_ep_tx_flags(rxm_ep), tag, ofi_op_tagged,
-				  rxm_conn->tinject_pkt);
+				 rxm_ep->util_ep.tx_op_flags, tag, ofi_op_tagged,
+				 rxm_conn->tinject_pkt);
 unlock:
 	ofi_ep_lock_release(&rxm_ep->util_ep);
 	return ret;
@@ -1848,8 +1848,8 @@ static ssize_t rxm_ep_tsenddata(struct fid_ep *ep_fid, const void *buf, size_t l
 		goto unlock;
 
 	ret = rxm_ep_send_common(rxm_ep, rxm_conn, &iov, &desc, 1, context, data,
-				  rxm_ep_tx_flags(rxm_ep) | FI_REMOTE_CQ_DATA,
-				  tag, ofi_op_tagged, rxm_conn->tinject_data_pkt);
+				 rxm_ep->util_ep.tx_op_flags | FI_REMOTE_CQ_DATA,
+				 tag, ofi_op_tagged, rxm_conn->tinject_data_pkt);
 unlock:
 	ofi_ep_lock_release(&rxm_ep->util_ep);
 	return ret;
