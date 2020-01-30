@@ -182,7 +182,7 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 release:
 	rxm_recv_entry_release(recv_entry->recv_queue, recv_entry);
 free_buf:
-	rxm_rx_buf_finish(rx_buf);
+	rxm_rx_buf_free(rx_buf);
 	if (ret)
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "Error writing CQ entry\n");
 	return ret;
@@ -314,7 +314,7 @@ static int rxm_rndv_handle_ack(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_buf)
 
 	assert(tx_buf->pkt.ctrl_hdr.msg_id == rx_buf->pkt.ctrl_hdr.msg_id);
 
-	rxm_rx_buf_finish(rx_buf);
+	rxm_rx_buf_free(rx_buf);
 
 	if (tx_buf->hdr.state == RXM_RNDV_ACK_WAIT) {
 		return rxm_rndv_tx_finish(rxm_ep, tx_buf);
@@ -371,7 +371,7 @@ ssize_t rxm_cq_copy_seg_data(struct rxm_rx_buf *rx_buf, int *done)
 
 		/* The RX buffer can be reposted for further re-use */
 		rx_buf->recv_entry = NULL;
-		rxm_rx_buf_finish(rx_buf);
+		rxm_rx_buf_free(rx_buf);
 
 		*done = 0;
 		return FI_SUCCESS;
@@ -556,7 +556,7 @@ ssize_t rxm_cq_handle_coll_eager(struct rxm_rx_buf *rx_buf)
 	if (rx_buf->pkt.hdr.tag & OFI_COLL_TAG_FLAG) {
 		ofi_coll_handle_xfer_comp(rx_buf->pkt.hdr.tag,
 				rx_buf->recv_entry->context);
-		rxm_rx_buf_finish(rx_buf);
+		rxm_rx_buf_free(rx_buf);
 		rxm_recv_entry_release(rx_buf->recv_entry->recv_queue,
 				rx_buf->recv_entry);
 		return FI_SUCCESS;
@@ -797,7 +797,7 @@ static int rxm_handle_remote_write(struct rxm_ep *rxm_ep,
 	}
 	ofi_ep_rem_wr_cntr_inc(&rxm_ep->util_ep);
 	if (comp->op_context)
-		rxm_rx_buf_finish(comp->op_context);
+		rxm_rx_buf_free(comp->op_context);
 	return 0;
 }
 
@@ -869,7 +869,7 @@ static ssize_t rxm_atomic_send_resp(struct rxm_ep *rxm_ep,
 			ret = 0;
 		}
 	}
-	rxm_rx_buf_finish(rx_buf);
+	rxm_rx_buf_free(rx_buf);
 
 	return ret;
 }
@@ -1039,7 +1039,7 @@ static inline ssize_t rxm_handle_atomic_resp(struct rxm_ep *rxm_ep,
 		assert(0);
 	}
 err:
-	rxm_rx_buf_finish(rx_buf);
+	rxm_rx_buf_free(rx_buf);
 	ofi_buf_free(tx_buf);
 	ofi_atomic_inc32(&rxm_ep->atomic_tx_credits);
 	assert(ofi_atomic_get32(&rxm_ep->atomic_tx_credits) <=

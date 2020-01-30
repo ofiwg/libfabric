@@ -913,7 +913,7 @@ rxm_rx_buf_alloc(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep, uint8_t repost)
 }
 
 static inline void
-rxm_rx_buf_finish(struct rxm_rx_buf *rx_buf)
+rxm_rx_buf_free(struct rxm_rx_buf *rx_buf)
 {
 	if (rx_buf->repost) {
 		dlist_insert_tail(&rx_buf->repost_entry,
