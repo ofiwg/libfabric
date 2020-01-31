@@ -838,9 +838,6 @@ static inline void rxm_cq_log_comp(uint64_t flags)
 #endif
 }
 
-int rxm_check_unexp_list(struct rxm_recv_queue *recv_queue,
-			 struct rxm_recv_entry *recv_entry);
-
 static inline ssize_t
 rxm_ep_prepare_tx(struct rxm_ep *rxm_ep, fi_addr_t dest_addr,
 		  struct rxm_conn **rxm_conn)
@@ -934,12 +931,6 @@ struct rxm_tx_atomic_buf *rxm_tx_atomic_buf_alloc(struct rxm_ep *rxm_ep)
 {
 	return (struct rxm_tx_atomic_buf *)
 		rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_ATOMIC);
-}
-
-static inline struct rxm_recv_entry *rxm_recv_entry_get(struct rxm_recv_queue *queue)
-{
-	return (freestack_isempty(queue->fs) ?
-		NULL : freestack_pop(queue->fs));
 }
 
 static inline void
