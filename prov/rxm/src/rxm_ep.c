@@ -712,29 +712,6 @@ static int rxm_handle_unexp_sar(struct rxm_recv_queue *recv_queue,
 
 }
 
-static int rxm_check_unexp_recv(struct rxm_ep *rxm_ep,
-				struct rxm_recv_entry *recv_entry)
-{
-	struct rxm_rx_buf *rx_buf;
-
-	/* TODO: handle multi-recv */
-	rx_buf = rxm_get_unexp_msg(&rxm_ep->recv_queue, recv_entry->addr, 0,  0);
-	if (!rx_buf) {
-		dlist_insert_tail(&recv_entry->entry,
-				  &rxm_ep->recv_queue.recv_list);
-		return FI_SUCCESS;
-	}
-
-	dlist_remove(&rx_buf->unexp_msg.entry);
-	rx_buf->recv_entry = recv_entry;
-
-	if (rx_buf->pkt.ctrl_hdr.type != rxm_ctrl_seg)
-		return rxm_cq_handle_rx_buf(rx_buf);
-	else
-		return rxm_handle_unexp_sar(&rxm_ep->recv_queue, recv_entry,
-					    rx_buf);
-}
-
 static int rxm_ep_discard_recv(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_buf,
 			       void *context)
 {
@@ -820,7 +797,7 @@ rxm_ep_post_recv(struct rxm_ep *rxm_ep, const struct iovec *iov,
 		 void *context, uint64_t op_flags)
 {
 	struct rxm_recv_entry *recv_entry;
-	ssize_t ret;
+	struct rxm_rx_buf *rx_buf;
 
 	assert(count <= rxm_ep->rxm_info->rx_attr->iov_limit);
 
@@ -830,8 +807,22 @@ rxm_ep_post_recv(struct rxm_ep *rxm_ep, const struct iovec *iov,
 	if (!recv_entry)
 		return -FI_EAGAIN;
 
-	ret = rxm_check_unexp_recv(rxm_ep, recv_entry);
-	return ret;
+	rx_buf = rxm_get_unexp_msg(&rxm_ep->recv_queue, recv_entry->addr, 0,  0);
+	if (!rx_buf) {
+		dlist_insert_tail(&recv_entry->entry,
+				  &rxm_ep->recv_queue.recv_list);
+		return FI_SUCCESS;
+	}
+
+	/* TODO: handle multi-recv */
+	dlist_remove(&rx_buf->unexp_msg.entry);
+	rx_buf->recv_entry = recv_entry;
+
+	if (rx_buf->pkt.ctrl_hdr.type != rxm_ctrl_seg)
+		return rxm_cq_handle_rx_buf(rx_buf);
+	else
+		return rxm_handle_unexp_sar(&rxm_ep->recv_queue, recv_entry,
+					    rx_buf);
 }
 
 static ssize_t
@@ -1726,10 +1717,22 @@ static struct fi_ops_msg rxm_ops_msg_thread_unsafe = {
 	.injectdata = rxm_ep_injectdata_fast,
 };
 
-static int rxm_check_unexp_trecv(struct rxm_ep *rxm_ep,
-				 struct rxm_recv_entry *recv_entry)
+static ssize_t
+rxm_ep_post_trecv(struct rxm_ep *rxm_ep, const struct iovec *iov,
+		 void **desc, size_t count, fi_addr_t src_addr,
+		 uint64_t tag, uint64_t ignore, void *context,
+		 uint64_t op_flags)
 {
+	struct rxm_recv_entry *recv_entry;
 	struct rxm_rx_buf *rx_buf;
+
+	assert(count <= rxm_ep->rxm_info->rx_attr->iov_limit);
+
+	recv_entry = rxm_recv_entry_get(rxm_ep, iov, desc, count, src_addr,
+					tag, ignore, context, op_flags,
+					&rxm_ep->trecv_queue);
+	if (!recv_entry)
+		return -FI_EAGAIN;
 
 	rx_buf = rxm_get_unexp_msg(&rxm_ep->trecv_queue, recv_entry->addr,
 				   recv_entry->tag, recv_entry->ignore);
@@ -1747,27 +1750,6 @@ static int rxm_check_unexp_trecv(struct rxm_ep *rxm_ep,
 	else
 		return rxm_handle_unexp_sar(&rxm_ep->trecv_queue, recv_entry,
 					    rx_buf);
-}
-
-static ssize_t
-rxm_ep_post_trecv(struct rxm_ep *rxm_ep, const struct iovec *iov,
-		 void **desc, size_t count, fi_addr_t src_addr,
-		 uint64_t tag, uint64_t ignore, void *context,
-		 uint64_t op_flags)
-{
-	struct rxm_recv_entry *recv_entry;
-	ssize_t ret;
-
-	assert(count <= rxm_ep->rxm_info->rx_attr->iov_limit);
-
-	recv_entry = rxm_recv_entry_get(rxm_ep, iov, desc, count, src_addr,
-					tag, ignore, context, op_flags,
-					&rxm_ep->trecv_queue);
-	if (!recv_entry)
-		return -FI_EAGAIN;
-
-	ret = rxm_check_unexp_trecv(rxm_ep, recv_entry);
-	return ret;
 }
 
 static ssize_t
