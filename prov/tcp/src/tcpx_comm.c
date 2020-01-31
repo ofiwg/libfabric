@@ -74,14 +74,14 @@ static ssize_t tcpx_read_from_buffer(struct stage_buf *sbuf,
 }
 
 static int tcpx_recv_hdr(SOCKET sock, struct stage_buf *sbuf,
-			  struct tcpx_rx_detect *rx_detect)
+			  struct tcpx_cur_rx_msg *cur_rx_msg)
 {
 	void *rem_buf;
 	size_t rem_len;
 	ssize_t bytes_recvd;
 
-	rem_buf = (uint8_t *) &rx_detect->hdr + rx_detect->done_len;
-	rem_len = rx_detect->hdr_len - rx_detect->done_len;
+	rem_buf = (uint8_t *) &cur_rx_msg->hdr + cur_rx_msg->done_len;
+	rem_len = cur_rx_msg->hdr_len - cur_rx_msg->done_len;
 
 	if (sbuf->len != sbuf->off)
 		bytes_recvd = tcpx_read_from_buffer(sbuf, rem_buf, rem_len);
@@ -94,28 +94,28 @@ static int tcpx_recv_hdr(SOCKET sock, struct stage_buf *sbuf,
 }
 
 int tcpx_comm_recv_hdr(SOCKET sock, struct stage_buf *sbuf,
-		        struct tcpx_rx_detect *rx_detect)
+		        struct tcpx_cur_rx_msg *cur_rx_msg)
 {
 	ssize_t bytes_recvd;
-	bytes_recvd = tcpx_recv_hdr(sock, sbuf, rx_detect);
+	bytes_recvd = tcpx_recv_hdr(sock, sbuf, cur_rx_msg);
 	if (bytes_recvd < 0)
 		return bytes_recvd;
-	rx_detect->done_len += bytes_recvd;
+	cur_rx_msg->done_len += bytes_recvd;
 
-	if (rx_detect->done_len == sizeof(rx_detect->hdr.base_hdr)) {
-		rx_detect->hdr_len = (size_t) rx_detect->hdr.base_hdr.payload_off;
+	if (cur_rx_msg->done_len == sizeof(cur_rx_msg->hdr.base_hdr)) {
+		cur_rx_msg->hdr_len = (size_t) cur_rx_msg->hdr.base_hdr.payload_off;
 
-		if (rx_detect->hdr_len > rx_detect->done_len) {
-			bytes_recvd = tcpx_recv_hdr(sock, sbuf, rx_detect);
+		if (cur_rx_msg->hdr_len > cur_rx_msg->done_len) {
+			bytes_recvd = tcpx_recv_hdr(sock, sbuf, cur_rx_msg);
 			if (bytes_recvd < 0)
 				return bytes_recvd;
-			rx_detect->done_len += bytes_recvd;
-			return (rx_detect->done_len == rx_detect->hdr_len) ?
+			cur_rx_msg->done_len += bytes_recvd;
+			return (cur_rx_msg->done_len == cur_rx_msg->hdr_len) ?
 				FI_SUCCESS : -FI_EAGAIN;
 		}
 	}
 
-	return (rx_detect->done_len == rx_detect->hdr_len) ?
+	return (cur_rx_msg->done_len == cur_rx_msg->hdr_len) ?
 		FI_SUCCESS : -FI_EAGAIN;
 }
 
