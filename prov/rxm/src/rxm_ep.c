@@ -791,6 +791,66 @@ rxm_recv_entry_get(struct rxm_ep *rxm_ep, const struct iovec *iov,
 	return recv_entry;
 }
 
+/*
+ * We don't expect to have unexpected messages when the app is using
+ * multi-recv buffers.  Optimize for that case.
+ *
+ * If there are unexpected messages waiting when we post a mult-recv buffer,
+ * we trim off the start of the buffer, treat it as a normal buffer, and pair
+ * it with an unexpected message.  We continue doing this until either no
+ * unexpected messages are left or the multi-recv buffer has been consumed.
+ */
+static ssize_t
+rxm_ep_post_mrecv(struct rxm_ep *ep, const struct iovec *iov,
+		 void **desc, void *context, uint64_t op_flags)
+{
+	struct rxm_recv_entry *recv_entry;
+	struct rxm_rx_buf *rx_buf;
+	struct iovec cur_iov = *iov;
+	int ret;
+
+	do {
+		recv_entry = rxm_recv_entry_get(ep, &cur_iov, desc, 1,
+						FI_ADDR_UNSPEC, 0, 0, context,
+						op_flags, &ep->recv_queue);
+		if (!recv_entry) {
+			ret = -FI_ENOMEM;
+			break;
+		}
+
+		rx_buf = rxm_get_unexp_msg(&ep->recv_queue, recv_entry->addr, 0,  0);
+		if (!rx_buf) {
+			dlist_insert_tail(&recv_entry->entry,
+					  &ep->recv_queue.recv_list);
+			return 0;
+		}
+
+		dlist_remove(&rx_buf->unexp_msg.entry);
+		rx_buf->recv_entry = recv_entry;
+		recv_entry->flags &= ~FI_MULTI_RECV;
+		recv_entry->total_len = MIN(cur_iov.iov_len, rx_buf->pkt.hdr.size);
+		recv_entry->rxm_iov.iov[0].iov_len = recv_entry->total_len;
+
+		cur_iov.iov_base = (uint8_t *) cur_iov.iov_base + recv_entry->total_len;
+		cur_iov.iov_len -= recv_entry->total_len;
+
+		if (rx_buf->pkt.ctrl_hdr.type != rxm_ctrl_seg)
+			ret = rxm_cq_handle_rx_buf(rx_buf);
+		else
+			ret = rxm_handle_unexp_sar(&ep->recv_queue, recv_entry,
+						   rx_buf);
+
+	} while (!ret && cur_iov.iov_len >= ep->min_multi_recv_size);
+
+	if ((cur_iov.iov_len < ep->min_multi_recv_size) ||
+	    (ret && cur_iov.iov_len != iov->iov_len)) {
+		ofi_cq_write(ep->util_ep.rx_cq, context, FI_MULTI_RECV,
+			     0, NULL, 0, 0);
+	}
+
+	return ret;
+}
+
 static ssize_t
 rxm_ep_post_recv(struct rxm_ep *rxm_ep, const struct iovec *iov,
 		 void **desc, size_t count, fi_addr_t src_addr,
@@ -800,6 +860,8 @@ rxm_ep_post_recv(struct rxm_ep *rxm_ep, const struct iovec *iov,
 	struct rxm_rx_buf *rx_buf;
 
 	assert(count <= rxm_ep->rxm_info->rx_attr->iov_limit);
+	if (op_flags & FI_MULTI_RECV)
+		return rxm_ep_post_mrecv(rxm_ep, iov, desc, context, op_flags);
 
 	recv_entry = rxm_recv_entry_get(rxm_ep, iov, desc, count, src_addr,
 					0, 0, context, op_flags,
