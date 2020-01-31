@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 Amazon.com, Inc. or its affiliates.
+ * Copyright (c) 2019-2020 Amazon.com, Inc. or its affiliates.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -30,41 +30,8 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-#if HAVE_CONFIG_H
-#include <config.h>
-#endif /* HAVE_CONFIG_H */
 
-#ifndef _RXR_RMA_H_
-#define _RXR_RMA_H_
+#include "rxr_pkt_entry.h"
+#include "rxr_pkt_type.h"
+#include "rxr_pkt_cmd.h"
 
-#include <rdma/fi_rma.h>
-
-int rxr_rma_verified_copy_iov(struct rxr_ep *ep, struct fi_rma_iov *rma,
-			      size_t count, uint32_t flags, struct iovec *iov);
-
-/* read response related functions */
-struct rxr_tx_entry *
-rxr_rma_alloc_readrsp_tx_entry(struct rxr_ep *rxr_ep,
-			       struct rxr_rx_entry *rx_entry);
-
-int rxr_rma_init_readrsp_pkt(struct rxr_ep *ep,
-			     struct rxr_tx_entry *tx_entry,
-			     struct rxr_pkt_entry *pkt_entry);
-
-void rxr_rma_handle_readrsp_sent(struct rxr_ep *ep,
-				 struct rxr_pkt_entry *pkt_entry);
-
-/* EOR related functions */
-int rxr_rma_init_eor_pkt(struct rxr_ep *ep,
-			 struct rxr_rx_entry *rx_entry,
-			 struct rxr_pkt_entry *pkt_entry);
-
-void rxr_rma_handle_eor_sent(struct rxr_ep *ep,
-			     struct rxr_pkt_entry *pkt_entry);
-
-size_t rxr_rma_post_shm_rma(struct rxr_ep *rxr_ep,
-			    struct rxr_tx_entry *tx_entry);
-
-extern struct fi_ops_rma rxr_ops_rma;
-
-#endif

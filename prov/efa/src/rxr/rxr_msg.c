@@ -104,7 +104,7 @@ ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 	    rxr_need_sas_ordering(rxr_ep))
 		tx_entry->msg_id = peer->next_msg_id++;
 
-	err = rxr_ep_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry, RXR_RTS_PKT, 0);
+	err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry, RXR_RTS_PKT, 0);
 	if (OFI_UNLIKELY(err)) {
 		rxr_release_tx_entry(rxr_ep, tx_entry);
 		if (!(rxr_env.enable_shm_transfer && peer->is_local) &&
@@ -415,12 +415,9 @@ int rxr_msg_handle_unexp_match(struct rxr_ep *ep,
 			       void *context, fi_addr_t addr,
 			       uint32_t op, uint64_t flags)
 {
-	struct rxr_peer *peer;
-	struct rxr_pkt_entry *pkt_entry;
 	struct rxr_rts_hdr *rts_hdr;
+	struct rxr_pkt_entry *pkt_entry;
 	uint64_t len;
-	char *data;
-	size_t data_size;
 
 	rx_entry->fi_flags = flags;
 	rx_entry->ignore = ignore;
@@ -456,18 +453,7 @@ int rxr_msg_handle_unexp_match(struct rxr_ep *ep,
 		rx_entry->ignore = ~0;
 	}
 
-	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
-	data = rxr_cq_read_rts_hdr(ep, rx_entry, pkt_entry);
-	if (peer->is_local && !(rts_hdr->flags & RXR_SHM_HDR_DATA)) {
-		rxr_cq_process_shm_large_message(ep, rx_entry, rts_hdr, data);
-		rxr_release_rx_pkt_entry(ep, pkt_entry);
-		return 0;
-	}
-
-	data_size = rxr_get_rts_data_size(ep, rts_hdr);
-	return rxr_cq_handle_rts_with_data(ep, rx_entry,
-					   pkt_entry, data,
-					   data_size);
+	return rxr_pkt_proc_matched_msg_rts(ep, rx_entry, pkt_entry);
 }
 
 /*
