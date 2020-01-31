@@ -106,5 +106,7 @@ fi_poll_fd() - call poll() on an fd
 fi_wait_cond() - wait on a mutex
 fi_datatype_size() - return size of an atomic datatype
 fi_[capability]_allowed() - routines to check caps bits
-fi_gettime_ms() - return current time in milliseconds
+ofi_gettime_ns() - return current time in nanoseconds
+ofi_gettime_us() - return current time in microseconds
+ofi_gettime_ms() - return current time in milliseconds
 fi_fd_nonblock() - set fd to nonblocking

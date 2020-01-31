@@ -62,6 +62,20 @@ typedef cpuset_t ofi_cpu_set_t;
 typedef cpu_set_t ofi_cpu_set_t;
 #endif
 
+#if !HAVE_CLOCK_GETTIME
+int clock_gettime(clockid_t clk_id, struct timespec *tp) {
+	int retval;
+	struct timeval tv;
+
+	retval = gettimeofday(&tv, NULL);
+
+	tp->tv_sec = tv.tv_sec;
+	tp->tv_nsec = tv.tv_usec * 1000;
+
+	return retval;
+}
+#endif /* !HAVE_CLOCK_GETTIME */
+
 int fi_fd_nonblock(int fd)
 {
 	long flags = 0;
@@ -85,7 +99,7 @@ int fi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout_ms)
 	if (timeout_ms < 0)
 		return pthread_cond_wait(cond, mut);
 
-	t = fi_gettime_ms() + timeout_ms;
+	t = ofi_gettime_ms() + timeout_ms;
 	ts.tv_sec = t / 1000;
 	ts.tv_nsec = (t % 1000) * 1000000;
 	return pthread_cond_timedwait(cond, mut, &ts);

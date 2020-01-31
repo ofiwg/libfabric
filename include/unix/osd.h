@@ -237,6 +237,17 @@ static inline int ofi_is_loopback_addr(struct sockaddr *addr) {
 		((struct sockaddr_in6 *)addr)->sin6_addr.s6_addr32[3] == htonl(1));
 }
 
+#if !HAVE_CLOCK_GETTIME
+
+#define CLOCK_REALTIME 0
+#define CLOCK_REALTIME_COARSE 0
+#define CLOCK_MONOTONIC 0
+
+typedef int clockid_t;
+
+int clock_gettime(clockid_t clk_id, struct timespec *tp);
+
+#endif /* !HAVE_CLOCK_GETTIME */
 
 /* complex operations implementation */
 

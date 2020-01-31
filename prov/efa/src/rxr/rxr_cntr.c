@@ -48,7 +48,7 @@ static int efa_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int time
 	cntr = container_of(cntr_fid, struct util_cntr, cntr_fid);
 	assert(cntr->wait);
 	errcnt = ofi_atomic_get64(&cntr->err);
-	start = (timeout >= 0) ? fi_gettime_ms() : 0;
+	start = (timeout >= 0) ? ofi_gettime_ms() : 0;
 
 	for (tryid = 0; tryid < numtry; ++tryid) {
 		cntr->progress(cntr);
@@ -59,7 +59,7 @@ static int efa_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int time
 			return -FI_EAVAIL;
 
 		if (timeout >= 0) {
-			timeout -= (int)(fi_gettime_ms() - start);
+			timeout -= (int)(ofi_gettime_ms() - start);
 			if (timeout <= 0)
 				return -FI_ETIMEDOUT;
 		}

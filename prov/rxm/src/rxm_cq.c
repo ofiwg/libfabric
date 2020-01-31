@@ -1399,7 +1399,7 @@ void rxm_ep_do_progress(struct util_ep *util_ep)
 			else
 				rxm_cq_write_error_all(rxm_ep, ret);
 		} else {
-			timestamp = fi_gettime_us();
+			timestamp = ofi_gettime_us();
 			if (timestamp - rxm_ep->msg_cq_last_poll >
 				rxm_cm_progress_interval) {
 				rxm_ep->msg_cq_last_poll = timestamp;

@@ -32,6 +32,7 @@
 #include "pthread.h"
 
 #include <sys/uio.h>
+#include <time.h>
 
 #include <rdma/fi_errno.h>
 #include <rdma/fabric.h>
@@ -900,6 +901,25 @@ static inline int ofi_is_loopback_addr(struct sockaddr *addr) {
 }
 
 size_t ofi_ifaddr_get_speed(struct ifaddrs *ifa);
+
+#define file2unix_time	10000000i64
+#define win2unix_epoch	116444736000000000i64
+#define CLOCK_MONOTONIC 1
+
+/* Own implementation of clock_gettime*/
+static inline
+int clock_gettime(int which_clock, struct timespec *spec)
+{
+	__int64 wintime;
+
+	GetSystemTimeAsFileTime((FILETIME*)&wintime);
+	wintime -= win2unix_epoch;
+
+	spec->tv_sec = wintime / file2unix_time;
+	spec->tv_nsec = wintime % file2unix_time * 100;
+
+	return 0;
+}
 
 /* complex operations implementation */
 

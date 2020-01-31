@@ -325,7 +325,7 @@ static int sock_cntr_wait(struct fid_cntr *fid_cntr, uint64_t threshold,
 	ofi_atomic_inc32(&cntr->num_waiting);
 
 	if (timeout >= 0) {
-		start_ms = fi_gettime_ms();
+		start_ms = ofi_gettime_ms();
 		end_ms = start_ms + timeout;
 	}
 
@@ -341,7 +341,7 @@ static int sock_cntr_wait(struct fid_cntr *fid_cntr, uint64_t threshold,
 			ret = fi_wait_cond(&cntr->cond, &cntr->mut, remaining_ms);
 		}
 
-		uint64_t curr_ms = fi_gettime_ms();
+		uint64_t curr_ms = ofi_gettime_ms();
 		if (timeout >= 0) {
 			if (curr_ms >= end_ms) {
 				ret = -FI_ETIMEDOUT;
