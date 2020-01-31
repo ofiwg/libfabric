@@ -105,15 +105,18 @@ static int tx_cm_data(SOCKET fd, uint8_t type, struct tcpx_cm_context *cm_ctx)
 
 	ret = ofi_send_socket(fd, &hdr, sizeof(hdr), MSG_NOSIGNAL);
 	if (ret != sizeof(hdr))
-		return ofi_sockerr() ? -ofi_sockerr() : -FI_EIO;
+		goto err;
 
 	if (cm_ctx->cm_data_sz) {
 		ret = ofi_send_socket(fd, cm_ctx->cm_data,
 				      cm_ctx->cm_data_sz, MSG_NOSIGNAL);
 		if ((size_t) ret != cm_ctx->cm_data_sz)
-			return ofi_sockerr() ? -ofi_sockerr() : -FI_EIO;
+			goto err;
 	}
+
 	return FI_SUCCESS;
+err:
+	return ofi_sockerr() ? -ofi_sockerr() : -FI_EIO;
 }
 
 static int tcpx_ep_enable_xfers(struct tcpx_ep *ep)
@@ -122,18 +125,17 @@ static int tcpx_ep_enable_xfers(struct tcpx_ep *ep)
 
 	fastlock_acquire(&ep->lock);
 	if (ep->cm_state != TCPX_EP_CONNECTING) {
-		fastlock_release(&ep->lock);
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"ep is in invalid state\n");
-		return -FI_EINVAL;
+		ret = -FI_EINVAL;
+		goto unlock;
 	}
 	ep->progress_func = tcpx_ep_progress;
 	ret = fi_fd_nonblock(ep->conn_fd);
 	if (ret) {
-		fastlock_release(&ep->lock);
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"failed to set socket to nonblocking\n");
-		return ret;
+		goto unlock;
 	}
 	ep->cm_state = TCPX_EP_CONNECTED;
 	fastlock_release(&ep->lock);
@@ -144,6 +146,9 @@ static int tcpx_ep_enable_xfers(struct tcpx_ep *ep)
 				      tcpx_try_func, (void *) &ep->util_ep,
 				      NULL);
 	}
+	return ret;
+unlock:
+	fastlock_release(&ep->lock);
 	return ret;
 }
 
