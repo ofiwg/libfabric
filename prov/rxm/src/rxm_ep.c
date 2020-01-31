@@ -671,12 +671,11 @@ static int rxm_handle_unexp_sar(struct rxm_recv_queue *recv_queue,
 				struct rxm_rx_buf *rx_buf)
 {
 	struct dlist_entry *entry;
-	enum rxm_sar_seg_type last =
-		(rxm_sar_get_seg_type(&rx_buf->pkt.ctrl_hdr)
-						== RXM_SAR_SEG_LAST);
+	bool last;
 	ssize_t ret = rxm_cq_handle_rx_buf(rx_buf);
 	struct rxm_recv_match_attr match_attr;
 
+	last = rxm_sar_get_seg_type(&rx_buf->pkt.ctrl_hdr) == RXM_SAR_SEG_LAST;
 	if (ret || last)
 		return ret;
 
@@ -703,8 +702,8 @@ static int rxm_handle_unexp_sar(struct rxm_recv_queue *recv_queue,
 			continue;
 		rx_buf->recv_entry = recv_entry;
 		dlist_remove(&rx_buf->unexp_msg.entry);
-		last = (rxm_sar_get_seg_type(&rx_buf->pkt.ctrl_hdr)
-						== RXM_SAR_SEG_LAST);
+		last = rxm_sar_get_seg_type(&rx_buf->pkt.ctrl_hdr) ==
+		       RXM_SAR_SEG_LAST;
 		ret = rxm_cq_handle_rx_buf(rx_buf);
 		if (ret || last)
 			break;
@@ -1420,7 +1419,8 @@ rxm_ep_progress_sar_deferred_segments(struct rxm_deferred_tx_entry *def_tx_entry
 		def_tx_entry->sar_seg.remain_len -= rxm_eager_limit;
 
 		if (def_tx_entry->sar_seg.next_seg_no == def_tx_entry->sar_seg.segs_cnt) {
-			assert(rxm_sar_get_seg_type(&tx_buf->pkt.ctrl_hdr) == RXM_SAR_SEG_LAST);
+			assert(rxm_sar_get_seg_type(&tx_buf->pkt.ctrl_hdr) ==
+			       RXM_SAR_SEG_LAST);
 			goto sar_finish;
 		}
 	}
