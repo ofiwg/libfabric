@@ -1798,6 +1798,13 @@ static ssize_t rxm_ep_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged
 
 	flags |= rxm_ep->util_ep.rx_msg_flags;
 
+	if (!(flags & (FI_CLAIM | FI_PEEK)) &&
+	    !(rxm_ep->rxm_info->mode & FI_BUFFERED_RECV)) {
+		return rxm_ep_post_trecv(rxm_ep, msg->msg_iov, msg->desc,
+					 msg->iov_count, msg->addr,
+					 msg->tag, msg->ignore, context, flags);
+	}
+
 	ofi_ep_lock_acquire(&rxm_ep->util_ep);
 	if (rxm_ep->rxm_info->mode & FI_BUFFERED_RECV) {
 		recv_ctx = msg->context;
@@ -1823,13 +1830,6 @@ static ssize_t rxm_ep_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged
 		goto unlock;
 	}
 
-	if (!(flags & FI_CLAIM)) {
-		ret = rxm_ep_post_trecv(rxm_ep, msg->msg_iov, msg->desc,
-					msg->iov_count, msg->addr,
-					msg->tag, msg->ignore, context, flags);
-		goto unlock;
-	}
-
 	rx_buf = ((struct fi_context *) context)->internal[0];
 	assert(rx_buf);
 	FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Claim message\n");
@@ -1840,6 +1840,7 @@ static ssize_t rxm_ep_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged
 	}
 
 claim:
+	assert (flags & FI_CLAIM);
 	recv_entry = rxm_recv_entry_get(rxm_ep, msg->msg_iov, msg->desc,
 					msg->iov_count, msg->addr,
 					msg->tag, msg->ignore, context, flags,
