@@ -1331,7 +1331,7 @@ int ft_exchange_raw_keys(struct fi_rma_iov *peer_iov)
 		if (ret)
 			return ret;
 
-               ret = ft_tx(ep, remote_fi_addr, len, &tx_ctx);
+		ret = ft_tx(ep, remote_fi_addr, len, &tx_ctx);
 		if (ret)
 			return ret;
 
@@ -3179,7 +3179,7 @@ int ft_sock_recv(int fd, void *msg, size_t len)
 	} else if (ret == 0) {
 		return -FI_ENOTCONN;
 	} else if (ret < 0) {
-		FT_PRINTERR("ft_fw_recv", ret);
+		FT_PRINTERR("ft_sock_recv", -errno);
 		perror("recv");
 		return -errno;
 	} else {

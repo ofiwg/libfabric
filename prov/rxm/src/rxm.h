@@ -709,9 +709,6 @@ extern struct fi_domain_attr rxm_domain_attr;
 extern struct fi_tx_attr rxm_tx_attr;
 extern struct fi_rx_attr rxm_rx_attr;
 
-#define rxm_ep_rx_flags(rxm_ep)	((rxm_ep)->util_ep.rx_op_flags)
-#define rxm_ep_tx_flags(rxm_ep)	((rxm_ep)->util_ep.tx_op_flags)
-
 int rxm_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 			void *context);
 int rxm_info_to_core(uint32_t version, const struct fi_info *rxm_info,
@@ -841,100 +838,6 @@ static inline void rxm_cq_log_comp(uint64_t flags)
 #endif
 }
 
-/* Caller must hold recv_queue->lock */
-static inline struct rxm_rx_buf *
-rxm_check_unexp_msg_list(struct rxm_recv_queue *recv_queue, fi_addr_t addr,
-			 uint64_t tag, uint64_t ignore)
-{
-	struct rxm_recv_match_attr match_attr;
-	struct dlist_entry *entry;
-
-	if (dlist_empty(&recv_queue->unexp_msg_list))
-		return NULL;
-
-	match_attr.addr 	= addr;
-	match_attr.tag 		= tag;
-	match_attr.ignore 	= ignore;
-
-	entry = dlist_find_first_match(&recv_queue->unexp_msg_list,
-				       recv_queue->match_unexp, &match_attr);
-	if (!entry)
-		return NULL;
-
-	RXM_DBG_ADDR_TAG(FI_LOG_EP_DATA, "Match for posted recv found in unexp"
-			 " msg list\n", match_attr.addr, match_attr.tag);
-
-	return container_of(entry, struct rxm_rx_buf, unexp_msg.entry);
-}
-
-static inline int
-rxm_process_recv_entry(struct rxm_recv_queue *recv_queue,
-		       struct rxm_recv_entry *recv_entry)
-{
-	struct rxm_rx_buf *rx_buf;
-
-	rx_buf = rxm_check_unexp_msg_list(recv_queue, recv_entry->addr,
-					  recv_entry->tag, recv_entry->ignore);
-	if (rx_buf) {
-		assert((recv_queue->type == RXM_RECV_QUEUE_MSG &&
-			rx_buf->pkt.hdr.op == ofi_op_msg) ||
-		       (recv_queue->type == RXM_RECV_QUEUE_TAGGED &&
-			rx_buf->pkt.hdr.op == ofi_op_tagged));
-		dlist_remove(&rx_buf->unexp_msg.entry);
-		rx_buf->recv_entry = recv_entry;
-
-		if (rx_buf->pkt.ctrl_hdr.type != rxm_ctrl_seg) {
-			return rxm_cq_handle_rx_buf(rx_buf);
-		} else {
-			struct dlist_entry *entry;
-			enum rxm_sar_seg_type last =
-				(rxm_sar_get_seg_type(&rx_buf->pkt.ctrl_hdr)
-								== RXM_SAR_SEG_LAST);
-			ssize_t ret = rxm_cq_handle_rx_buf(rx_buf);
-			struct rxm_recv_match_attr match_attr;
-
-			if (ret || last)
-				return ret;
-
-			match_attr.addr = recv_entry->addr;
-			match_attr.tag = recv_entry->tag;
-			match_attr.ignore = recv_entry->ignore;
-
-			dlist_foreach_container_safe(&recv_queue->unexp_msg_list,
-						     struct rxm_rx_buf, rx_buf,
-						     unexp_msg.entry, entry) {
-				if (!recv_queue->match_unexp(&rx_buf->unexp_msg.entry,
-							     &match_attr))
-					continue;
-				/* Handle unordered completions from MSG provider */
-				if ((rx_buf->pkt.ctrl_hdr.msg_id != recv_entry->sar.msg_id) ||
-				    ((rx_buf->pkt.ctrl_hdr.type != rxm_ctrl_seg)))
-					continue;
-
-				if (!rx_buf->conn) {
-					rx_buf->conn = rxm_key2conn(rx_buf->ep,
-								    rx_buf->pkt.ctrl_hdr.conn_id);
-				}
-				if (recv_entry->sar.conn != rx_buf->conn)
-					continue;
-				rx_buf->recv_entry = recv_entry;
-				dlist_remove(&rx_buf->unexp_msg.entry);
-				last = (rxm_sar_get_seg_type(&rx_buf->pkt.ctrl_hdr)
-								== RXM_SAR_SEG_LAST);
-				ret = rxm_cq_handle_rx_buf(rx_buf);
-				if (ret || last)
-					break;
-			}
-			return ret;
-		}
-	}
-
-	FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Enqueuing recv\n");
-	dlist_insert_tail(&recv_entry->entry, &recv_queue->recv_list);
-
-	return FI_SUCCESS;
-}
-
 static inline ssize_t
 rxm_ep_prepare_tx(struct rxm_ep *rxm_ep, fi_addr_t dest_addr,
 		  struct rxm_conn **rxm_conn)
@@ -1007,7 +910,7 @@ rxm_rx_buf_alloc(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep, uint8_t repost)
 }
 
 static inline void
-rxm_rx_buf_finish(struct rxm_rx_buf *rx_buf)
+rxm_rx_buf_free(struct rxm_rx_buf *rx_buf)
 {
 	if (rx_buf->repost) {
 		dlist_insert_tail(&rx_buf->repost_entry,
@@ -1028,12 +931,6 @@ struct rxm_tx_atomic_buf *rxm_tx_atomic_buf_alloc(struct rxm_ep *rxm_ep)
 {
 	return (struct rxm_tx_atomic_buf *)
 		rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_ATOMIC);
-}
-
-static inline struct rxm_recv_entry *rxm_recv_entry_get(struct rxm_recv_queue *queue)
-{
-	return (freestack_isempty(queue->fs) ?
-		NULL : freestack_pop(queue->fs));
 }
 
 static inline void
