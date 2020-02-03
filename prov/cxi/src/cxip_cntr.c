@@ -293,8 +293,10 @@ int cxip_cntr_enable(struct cxip_cntr *cxi_cntr)
 
 	fastlock_acquire(&cxi_cntr->lock);
 
-	if (cxi_cntr->enabled)
+	if (cxi_cntr->enabled) {
+		ret = FI_SUCCESS;
 		goto unlock;
+	}
 
 	ret = cxil_alloc_ct(cxi_cntr->domain->dev_if->if_lni,
 			    &cxi_cntr->wb, &cxi_cntr->ct);
