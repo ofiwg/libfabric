@@ -3161,7 +3161,7 @@ static ssize_t cxip_trecvv(struct fid_ep *ep, const struct iovec *iov,
 			  src_addr, tag, ignore, context, 0, true);
 }
 
-#define CXIP_TRECVMSG_ALLOWED_FLAGS 0
+#define CXIP_TRECVMSG_ALLOWED_FLAGS FI_COMPLETION
 
 static ssize_t cxip_trecvmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 			     uint64_t flags)
@@ -3306,7 +3306,7 @@ static ssize_t cxip_recvv(struct fid_ep *ep, const struct iovec *iov,
 			  src_addr, 0, 0, context, 0, false);
 }
 
-#define CXIP_RECVMSG_ALLOWED_FLAGS FI_MULTI_RECV
+#define CXIP_RECVMSG_ALLOWED_FLAGS (FI_MULTI_RECV | FI_COMPLETION)
 
 static ssize_t cxip_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 			    uint64_t flags)

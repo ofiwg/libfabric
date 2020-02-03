@@ -66,7 +66,7 @@ struct fi_tx_attr cxip_tx_attr = {
 
 struct fi_rx_attr cxip_rx_attr = {
 	.caps = CXIP_EP_CAPS,
-	.op_flags = 0,
+	.op_flags = FI_COMPLETION,
 	.msg_order = CXIP_EP_MSG_ORDER,
 	.comp_order = FI_ORDER_NONE,
 	.total_buffered_recv = CXIP_UX_BUFFER_SIZE,
