@@ -872,7 +872,7 @@ int cxip_if_domain_lep_free(struct cxip_if_domain *if_dom, uint64_t pid_idx);
 void cxip_if_init(void);
 void cxip_if_fini(void);
 
-int cxip_pte_append(struct cxil_pte *pte, uint64_t iova, size_t len,
+int cxip_pte_append(struct cxip_pte *pte, uint64_t iova, size_t len,
 		    unsigned int lac, enum c_ptl_list list,
 		    uint32_t buffer_id, uint64_t match_bits,
 		    uint64_t ignore_bits, uint32_t match_id,
@@ -882,8 +882,9 @@ int cxip_pte_append(struct cxil_pte *pte, uint64_t iova, size_t len,
 		    bool unexpected_hdr_disable,
 		    bool unrestricted_body_ro,
 		    bool unrestricted_end_ro,
+		    bool event_ct_comm, struct cxip_cntr *cntr,
 		    bool op_put, bool op_get, struct cxip_cmdq *cmdq);
-int cxip_pte_unlink(struct cxil_pte *pte, enum c_ptl_list list,
+int cxip_pte_unlink(struct cxip_pte *pte, enum c_ptl_list list,
 		    int buffer_id, struct cxip_cmdq *cmdq);
 int cxip_pte_alloc(struct cxip_if_domain *if_dom, struct cxi_evtq *evtq,
 		   uint64_t pid_idx, struct cxi_pt_alloc_opts *opts,

@@ -1062,14 +1062,14 @@ static int eager_buf_add(struct cxip_rxc *rxc)
 			dom->dev_if->if_dev->info.min_free_shift);
 
 	/* Issue Append command */
-	ret = cxip_pte_append(rxc->rx_pte->pte,
+	ret = cxip_pte_append(rxc->rx_pte,
 			      CXI_VA_TO_IOVA(oflow_buf->md->md,
 					     oflow_buf->buf),
 			      rxc->oflow_buf_size, oflow_buf->md->md->lac,
 			      C_PTL_LIST_OVERFLOW, req->req_id, mb.raw, ib.raw,
 			      CXI_MATCH_ID_ANY, min_free, false, false,
 			      false, false, true, true, false, true, true,
-			      true, false, rxc->rx_cmdq);
+			      false, NULL, true, false, rxc->rx_cmdq);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
 		goto oflow_req_free;
@@ -1133,7 +1133,7 @@ static int cxip_rxc_eager_fini(struct cxip_rxc *rxc)
 	/* Manually unlink each overflow buffer */
 	dlist_foreach_container(&rxc->oflow_bufs, struct cxip_oflow_buf,
 				oflow_buf, list) {
-		ret = cxip_pte_unlink(rxc->rx_pte->pte, C_PTL_LIST_OVERFLOW,
+		ret = cxip_pte_unlink(rxc->rx_pte, C_PTL_LIST_OVERFLOW,
 				      oflow_buf->buffer_id, rxc->rx_cmdq);
 		if (ret != FI_SUCCESS) {
 			/* TODO handle error */
@@ -1177,10 +1177,10 @@ static int cxip_rxc_sink_init(struct cxip_rxc *rxc)
 		return -FI_ENOMEM;
 	}
 
-	ret = cxip_pte_append(rxc->rx_pte->pte, 0, 0, 0,
+	ret = cxip_pte_append(rxc->rx_pte, 0, 0, 0,
 			      C_PTL_LIST_OVERFLOW, req->req_id, mb.raw, ib.raw,
 			      CXI_MATCH_ID_ANY, 0, false, false, false, false,
-			      true, false, false, true, true,
+			      true, false, false, true, true, false, NULL,
 			      true, false, rxc->rx_cmdq);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to write UX Append command: %d\n", ret);
@@ -1211,7 +1211,7 @@ static int cxip_rxc_sink_fini(struct cxip_rxc *rxc)
 {
 	int ret;
 
-	ret = cxip_pte_unlink(rxc->rx_pte->pte, C_PTL_LIST_OVERFLOW,
+	ret = cxip_pte_unlink(rxc->rx_pte, C_PTL_LIST_OVERFLOW,
 			      rxc->sink_le.buffer_id, rxc->rx_cmdq);
 	if (ret) {
 		/* TODO handle error */
@@ -1318,10 +1318,10 @@ int cxip_msg_zbp_init(struct cxip_txc *txc)
 		return -FI_ENOMEM;
 	}
 
-	ret = cxip_pte_append(txc->rdzv_pte->pte, 0, 0, 0,
+	ret = cxip_pte_append(txc->rdzv_pte, 0, 0, 0,
 			      C_PTL_LIST_PRIORITY, req->req_id, mb.raw, ib.raw,
 			      CXI_MATCH_ID_ANY, 0, false, false, false, false,
-			      false, false, false, true, true,
+			      false, false, false, true, true, false, NULL,
 			      true, false, txc->rx_cmdq);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
@@ -1360,7 +1360,7 @@ int cxip_msg_zbp_fini(struct cxip_txc *txc)
 {
 	int ret;
 
-	ret = cxip_pte_unlink(txc->rdzv_pte->pte, C_PTL_LIST_PRIORITY,
+	ret = cxip_pte_unlink(txc->rdzv_pte, C_PTL_LIST_PRIORITY,
 			      txc->zbp_le.buffer_id, txc->rx_cmdq);
 	if (ret) {
 		/* TODO handle error */
@@ -1998,7 +1998,7 @@ int cxip_msg_recv_cancel(struct cxip_req *req)
 	int ret;
 	struct cxip_rxc *rxc = req->recv.rxc;
 
-	ret = cxip_pte_unlink(rxc->rx_pte->pte, C_PTL_LIST_PRIORITY,
+	ret = cxip_pte_unlink(rxc->rx_pte, C_PTL_LIST_PRIORITY,
 			      req->req_id, rxc->rx_cmdq);
 	if (ret == FI_SUCCESS)
 		req->recv.canceled = true;
@@ -2134,7 +2134,7 @@ static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	req->recv.rdzv_events = 0;
 
 	/* Issue Append command */
-	ret = cxip_pte_append(rxc->rx_pte->pte,
+	ret = cxip_pte_append(rxc->rx_pte,
 			      recv_md ? CXI_VA_TO_IOVA(recv_md->md, buf) : 0,
 			      len,
 			      recv_md ? recv_md->md->lac : 0,
@@ -2143,7 +2143,8 @@ static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 			      rxc->min_multi_recv, false, true, true,
 			      !req->recv.multi_recv,
 			      req->recv.multi_recv,
-			      false, false, true, true, true, false,
+			      false, false, true, true, false, NULL,
+			      true, false,
 			      rxc->rx_cmdq);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
@@ -2416,7 +2417,7 @@ static int cxip_send_long_cb(struct cxip_req *req, const union c_event *event)
 				       req, cxi_rc_to_str(event_rc));
 
 			if (!offload) {
-				ret = cxip_pte_unlink_f(txc->rdzv_pte->pte,
+				ret = cxip_pte_unlink_f(txc->rdzv_pte,
 							C_PTL_LIST_PRIORITY,
 							req->req_id,
 							txc->rx_cmdq);
@@ -2441,7 +2442,7 @@ static int cxip_send_long_cb(struct cxip_req *req, const union c_event *event)
 			/* No Get is expected when a long eager Send matches in
 			 * the Priority list. Unlink the source LE manually.
 			 */
-			ret = cxip_pte_unlink_f(txc->rdzv_pte->pte,
+			ret = cxip_pte_unlink_f(txc->rdzv_pte,
 						C_PTL_LIST_PRIORITY,
 						req->req_id,
 						txc->rx_cmdq);
@@ -2577,12 +2578,12 @@ int cxip_txc_prep_rdzv_src(struct cxip_txc *txc, unsigned int lac)
 
 	mb.rdzv_lac = lac;
 	ib.rdzv_lac = 0;
-	ret = cxip_pte_append(txc->rdzv_pte->pte, 0, -1ULL, lac,
+	ret = cxip_pte_append(txc->rdzv_pte, 0, -1ULL, lac,
 			      C_PTL_LIST_PRIORITY, req->req_id,
 			      mb.raw, ib.raw, CXI_MATCH_ID_ANY, 0,
 			      false, false, false, false, false, false,
-			      false, true, true, false, true,
-			      txc->rx_cmdq);
+			      false, true, true, false, NULL,
+			      false, true, txc->rx_cmdq);
 	if (ret != FI_SUCCESS)
 		return -FI_EAGAIN;
 
@@ -2782,15 +2783,15 @@ static ssize_t _cxip_send_long(struct cxip_txc *txc, const void *buf,
 		 */
 		req->send.cmd = cmd;
 
-		ret = cxip_pte_append(txc->rdzv_pte->pte,
+		ret = cxip_pte_append(txc->rdzv_pte,
 				      CXI_VA_TO_IOVA(send_md->md, buf),
 				      req->send.length,
 				      req->send.send_md->md->lac,
 				      C_PTL_LIST_PRIORITY, req->req_id,
 				      le_mb.raw, ~le_ib.raw, CXI_MATCH_ID_ANY,
 				      0, false, false, false, true, false,
-				      true, false, true, true, false, true,
-				      txc->rx_cmdq);
+				      true, false, true, true, false, NULL,
+				      false, true, txc->rx_cmdq);
 		if (ret) {
 			CXIP_LOG_DBG("Failed append source buffer: %d\n", ret);
 			goto err_id_free;

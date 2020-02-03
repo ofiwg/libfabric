@@ -386,7 +386,7 @@ int cxip_if_domain_lep_free(struct cxip_if_domain *if_dom, uint64_t pid_idx)
 /*
  * cxip_pte_append() - Append a buffer to a PtlTE.
  */
-int cxip_pte_append(struct cxil_pte *pte, uint64_t iova, size_t len,
+int cxip_pte_append(struct cxip_pte *pte, uint64_t iova, size_t len,
 		    unsigned int lac, enum c_ptl_list list,
 		    uint32_t buffer_id, uint64_t match_bits,
 		    uint64_t ignore_bits, uint32_t match_id,
@@ -396,6 +396,7 @@ int cxip_pte_append(struct cxil_pte *pte, uint64_t iova, size_t len,
 		    bool unexpected_hdr_disable,
 		    bool unrestricted_body_ro,
 		    bool unrestricted_end_ro,
+		    bool event_ct_comm, struct cxip_cntr *cntr,
 		    bool op_put, bool op_get, struct cxip_cmdq *cmdq)
 {
 	union c_cmdu cmd = {};
@@ -403,7 +404,7 @@ int cxip_pte_append(struct cxil_pte *pte, uint64_t iova, size_t len,
 
 	cmd.command.opcode                = C_CMD_TGT_APPEND;
 	cmd.target.ptl_list               = list;
-	cmd.target.ptlte_index            = pte->ptn;
+	cmd.target.ptlte_index            = pte->pte->ptn;
 	cmd.target.op_put                 = op_put;
 	cmd.target.op_get                 = op_get;
 	cmd.target.manage_local           = manage_local;
@@ -418,6 +419,8 @@ int cxip_pte_append(struct cxil_pte *pte, uint64_t iova, size_t len,
 	cmd.target.event_success_disable  = event_success_disable;
 	cmd.target.event_link_disable     = event_link_disable;
 	cmd.target.event_unlink_disable   = event_unlink_disable;
+	cmd.target.event_ct_comm          = event_ct_comm;
+	cmd.target.ct                     = cntr ? cntr->ct->ctn : 0;
 	cmd.target.use_once               = use_once;
 	cmd.target.match_bits             = match_bits;
 	cmd.target.ignore_bits            = ignore_bits;
@@ -446,7 +449,7 @@ int cxip_pte_append(struct cxil_pte *pte, uint64_t iova, size_t len,
 /*
  * cxip_pte_unlink() - Unlink a buffer from a PtlTE.
  */
-int cxip_pte_unlink(struct cxil_pte *pte, enum c_ptl_list list,
+int cxip_pte_unlink(struct cxip_pte *pte, enum c_ptl_list list,
 		    int buffer_id, struct cxip_cmdq *cmdq)
 {
 	union c_cmdu cmd = {};
@@ -454,7 +457,7 @@ int cxip_pte_unlink(struct cxil_pte *pte, enum c_ptl_list list,
 
 	cmd.command.opcode = C_CMD_TGT_UNLINK;
 	cmd.target.ptl_list = list;
-	cmd.target.ptlte_index  = pte->ptn;
+	cmd.target.ptlte_index  = pte->pte->ptn;
 	cmd.target.buffer_id = buffer_id;
 
 	fastlock_acquire(&cmdq->lock);
