@@ -952,6 +952,7 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 			continue;
 		}
 
+		cur = NULL;
 		ret = prov->provider->getinfo(version, node, service, flags,
 					      hints, &cur);
 		if (ret) {
