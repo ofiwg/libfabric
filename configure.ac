@@ -1,7 +1,7 @@
 dnl
 dnl Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
 dnl Copyright (c) 2019 Intel, Inc.  All rights reserved.
-dnl Copyright (c) 2019 Amazon.com, Inc. or its affiliates. All rights reserved.
+dnl Copyright (c) 2019-2020 Amazon.com, Inc. or its affiliates. All rights reserved.
 dnl
 dnl Process this file with autoconf to produce a configure script.
 
@@ -13,6 +13,7 @@ AC_CONFIG_MACRO_DIR(config)
 AC_CONFIG_HEADERS(config.h)
 AM_INIT_AUTOMAKE([1.11 dist-bzip2 foreign -Wall -Werror subdir-objects parallel-tests tar-ustar])
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
+m4_include(config/fi_check_package.m4)
 
 AC_CANONICAL_HOST
 
@@ -467,6 +468,27 @@ AC_SEARCH_LIBS([clock_gettime],[rt],
 AC_DEFINE_UNQUOTED(HAVE_CLOCK_GETTIME, [$have_clock_gettime],
        [Define to 1 if clock_gettime is available.])
 AM_CONDITIONAL(HAVE_CLOCK_GETTIME, [test $have_clock_gettime -eq 1])
+
+dnl Check for CUDA runtime libraries.
+AC_ARG_WITH([cuda],
+	    [AC_HELP_STRING([--with-cuda=DIR],
+			    [Provide path to where the CUDA development
+			    and runtime libraries are installed.])],
+	    [], [])
+
+FI_CHECK_PACKAGE([cuda],
+		 [cuda_runtime.h],
+		 [cudart],
+		 [cudaMemcpy],
+		 [-lcuda],
+		 [$with_cuda],
+		 [],
+		 [AC_DEFINE([HAVE_LIBCUDA], [1],[CUDA support])],
+		 [], [])
+
+CPPFLAGS="$CPPFLAGS $cuda_CPPFLAGS"
+LDFLAGS="$LD_FLAGS $cuda_LDFLAGS"
+LIBS="$LIBS $cuda_LIBS"
 
 dnl Provider-specific checks
 FI_PROVIDER_INIT
