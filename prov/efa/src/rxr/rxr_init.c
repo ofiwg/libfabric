@@ -637,7 +637,7 @@ EFA_INI
 	fi_param_define(&rxr_prov, "cq_size", FI_PARAM_INT,
 			"Define the size of completion queue. (Default: 8192)");
 	fi_param_define(&rxr_prov, "mr_cache_enable", FI_PARAM_BOOL,
-			"Enables using the mr cache and in-line registration instead of a bounce buffer for iov's larger than max_memcpy_size. Defaults to true. When disabled, only uses a bounce buffer.");
+			"Enables using the mr cache and in-line registration instead of a bounce buffer for iov's larger than max_memcpy_size. Defaults to false. When disabled, only uses a bounce buffer.");
 	fi_param_define(&rxr_prov, "mr_cache_merge_regions", FI_PARAM_BOOL,
 			"Enables merging overlapping and adjacent memory registration regions. Defaults to true.");
 	fi_param_define(&rxr_prov, "mr_max_cached_count", FI_PARAM_SIZE_T,
