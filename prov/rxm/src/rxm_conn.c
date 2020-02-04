@@ -980,7 +980,6 @@ err:
 static size_t rxm_conn_get_rx_size(struct rxm_ep *rxm_ep,
 				   struct fi_info *msg_info)
 {
-	/* TODO add env variable to tune the value for shared context case */
 	if (msg_info->ep_attr->rx_ctx_cnt == FI_SHARED_CONTEXT)
 		return MAX(MIN(16, msg_info->rx_attr->size),
 			   (msg_info->rx_attr->size /

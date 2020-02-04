@@ -2685,7 +2685,7 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 	*ep_fid = &rxm_ep->util_ep.ep_fid;
 	(*ep_fid)->fid.ops = &rxm_ep_fi_ops;
 	(*ep_fid)->ops = &rxm_ops_ep;
-		(*ep_fid)->cm = &rxm_ops_cm;
+	(*ep_fid)->cm = &rxm_ops_cm;
 
 	if(rxm_ep->rxm_info->caps & FI_COLLECTIVE) {
 		(*ep_fid)->collective = &rxm_ops_collective;
