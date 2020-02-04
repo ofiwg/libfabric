@@ -1520,6 +1520,31 @@ static int vrb_resolve_ib_ud_dest_addr(const char *node, const char *service,
 	return 0;
 }
 
+static void vrb_delete_dgram_infos(struct fi_info **info)
+{
+	struct fi_info *check_info = *info;
+	struct fi_info *cur, *prev = NULL;
+
+	*info = NULL;
+
+	while (check_info) {
+		if (check_info->ep_attr->type == FI_EP_DGRAM) {
+			cur = check_info;
+			if (prev)
+				prev->next = check_info->next;
+			check_info = check_info->next;
+
+			cur->next = NULL;
+			fi_freeinfo(cur);
+		} else {
+			prev = check_info;
+			if (!*info)
+				*info = check_info;
+			check_info = check_info->next;
+		}
+	}
+}
+
 static int vrb_handle_ib_ud_addr(const char *node, const char *service,
 				    uint64_t flags, struct fi_info **info)
 {
@@ -1549,7 +1574,8 @@ static int vrb_handle_ib_ud_addr(const char *node, const char *service,
 		if (!src_addr) {
 			VERBS_INFO(FI_LOG_CORE,
 			           "failed to allocate src addr.\n");
-			return -FI_ENODATA;
+			ret = -FI_ENODATA;
+			goto err;
 		}
 
 		if (flags & FI_SOURCE) {
@@ -1558,7 +1584,7 @@ static int vrb_handle_ib_ud_addr(const char *node, const char *service,
 					     &src_addr->service);
 				if (ret != 1) {
 					ret = -errno;
-					goto fn2;
+					goto err;
 				}
 			}
 
@@ -1571,16 +1597,17 @@ static int vrb_handle_ib_ud_addr(const char *node, const char *service,
 	if (!dest_addr && node && !(flags & FI_SOURCE)) {
 		ret = vrb_resolve_ib_ud_dest_addr(node, service, &dest_addr);
 		if (ret)
-			goto fn2; /* Here possible that `src_addr` isn't a NULL */
+			goto err; /* Here possible that `src_addr` isn't a NULL */
 	}
 
 	ret = vrb_set_info_addrs(*info, NULL, fmt, src_addr, dest_addr);
-	if  (ret)
-		goto fn2;
-
+	if  (!ret)
+		goto out;
+err:
+	vrb_delete_dgram_infos(info);
 	/* `fi_info::src_addr` and `fi_info::dest_addr` is freed
 	 * in the `fi_freeinfo` function in case of failure */
-fn2:
+out:
 	if (src_addr)
 		free(src_addr);
 	if (dest_addr)
