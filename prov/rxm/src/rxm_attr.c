@@ -32,10 +32,10 @@
 
 #include "rxm.h"
 
-#define RXM_EP_CAPS (FI_MSG | FI_RMA | FI_TAGGED | FI_ATOMIC |		\
-		     FI_DIRECTED_RECV |	FI_READ | FI_WRITE | FI_RECV |	\
-		     FI_SEND | FI_REMOTE_READ | FI_REMOTE_WRITE | FI_SOURCE)
-
+#define RXM_TX_CAPS (OFI_TX_MSG_CAPS | FI_TAGGED | OFI_TX_RMA_CAPS | FI_ATOMICS)
+#define RXM_RX_CAPS (FI_SOURCE | OFI_RX_MSG_CAPS | FI_TAGGED | \
+		     OFI_RX_RMA_CAPS | FI_ATOMICS | FI_DIRECTED_RECV | \
+		     FI_MULTI_RECV)
 #define RXM_DOMAIN_CAPS (FI_LOCAL_COMM | FI_REMOTE_COMM)
 
 // TODO have a separate "check info" against which app hints would be checked.
@@ -46,7 +46,7 @@
  * requested by the app. */
 
 struct fi_tx_attr rxm_tx_attr = {
-	.caps = RXM_EP_CAPS,
+	.caps = RXM_TX_CAPS,
 	.op_flags = RXM_PASSTHRU_TX_OP_FLAGS | RXM_TX_OP_FLAGS,
 	.msg_order = ~0x0ULL,
 	.comp_order = FI_ORDER_NONE,
@@ -56,7 +56,7 @@ struct fi_tx_attr rxm_tx_attr = {
 };
 
 struct fi_rx_attr rxm_rx_attr = {
-	.caps = RXM_EP_CAPS | FI_MULTI_RECV,
+	.caps = RXM_RX_CAPS,
 	.op_flags = RXM_PASSTHRU_RX_OP_FLAGS | RXM_RX_OP_FLAGS,
 	.msg_order = ~0x0ULL,
 	.comp_order = FI_ORDER_NONE,
@@ -103,7 +103,7 @@ struct fi_fabric_attr rxm_fabric_attr = {
 };
 
 struct fi_info rxm_info = {
-	.caps = RXM_EP_CAPS | RXM_DOMAIN_CAPS | FI_MULTI_RECV | FI_COLLECTIVE,
+	.caps = RXM_TX_CAPS | RXM_RX_CAPS | RXM_DOMAIN_CAPS | FI_COLLECTIVE,
 	.addr_format = FI_SOCKADDR,
 	.tx_attr = &rxm_tx_attr,
 	.rx_attr = &rxm_rx_attr,
