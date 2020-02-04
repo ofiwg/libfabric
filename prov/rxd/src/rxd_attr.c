@@ -32,17 +32,16 @@
 
 #include "rxd.h"
 
-#define RXD_EP_CAPS (FI_MSG | FI_TAGGED | FI_RMA | FI_ATOMIC | FI_SOURCE |  \
-			FI_DIRECTED_RECV | FI_MULTI_RECV | FI_RMA_EVENT)
-#define RXD_TX_CAPS (FI_SEND | FI_WRITE | FI_READ)
-#define RXD_RX_CAPS (FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE)
-#define RXD_DOMAIN_CAPS (FI_LOCAL_COMM | FI_REMOTE_COMM)
+#define RXD_TX_CAPS (OFI_TX_MSG_CAPS | FI_TAGGED | OFI_TX_RMA_CAPS | FI_ATOMICS)
+#define RXD_RX_CAPS (FI_SOURCE | FI_RMA_EVENT | OFI_RX_MSG_CAPS | FI_TAGGED | \
+		     OFI_RX_RMA_CAPS | FI_ATOMICS | FI_DIRECTED_RECV | FI_MULTI_RECV)
 #define RXD_TX_OP_FLAGS (FI_INJECT | FI_INJECT_COMPLETE | FI_COMPLETION	|   \
 			 FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)
 #define RXD_RX_OP_FLAGS (FI_MULTI_RECV | FI_COMPLETION)
+#define RXD_DOMAIN_CAPS (FI_LOCAL_COMM | FI_REMOTE_COMM)
 
 struct fi_tx_attr rxd_tx_attr = {
-	.caps = RXD_EP_CAPS | RXD_TX_CAPS,
+	.caps = RXD_TX_CAPS,
 	.op_flags = RXD_TX_OP_FLAGS,
 	.comp_order = FI_ORDER_NONE,
 	.msg_order = FI_ORDER_SAS,
@@ -53,7 +52,7 @@ struct fi_tx_attr rxd_tx_attr = {
 };
 
 struct fi_rx_attr rxd_rx_attr = {
-	.caps = RXD_EP_CAPS | RXD_RX_CAPS,
+	.caps = RXD_RX_CAPS,
 	.op_flags = RXD_RX_OP_FLAGS,
 	.comp_order = FI_ORDER_NONE,
 	.msg_order = FI_ORDER_SAS,
@@ -98,7 +97,7 @@ struct fi_fabric_attr rxd_fabric_attr = {
 };
 
 struct fi_info rxd_info = {
-	.caps = RXD_DOMAIN_CAPS | RXD_EP_CAPS | RXD_TX_CAPS | RXD_RX_CAPS,
+	.caps = RXD_DOMAIN_CAPS | RXD_TX_CAPS | RXD_RX_CAPS,
 	.addr_format = FI_FORMAT_UNSPEC,
 	.tx_attr = &rxd_tx_attr,
 	.rx_attr = &rxd_rx_attr,
