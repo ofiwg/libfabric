@@ -136,9 +136,9 @@ static int validate_msg_ordering_bits(char *node, char *service, uint64_t flags,
 			goto failed_getinfo;
 		}
 
-		ft_foreach_info(fi, *info) {
+		for (fi = *info; fi; fi = fi->next) {
 			FT_DEBUG("\nTesting for fabric: %s, domain: %s, endpoint type: %d",
-					fi->fabric_attr->name, fi->domain_attr->name,
+					fi->fabric_attr->prov_name, fi->domain_attr->name,
 					fi->ep_attr->type);
 			if (hints->tx_attr->msg_order) {
 				if ((fi->tx_attr->msg_order & hints->tx_attr->msg_order) !=
@@ -167,9 +167,9 @@ static int validate_msg_ordering_bits(char *node, char *service, uint64_t flags,
 			FT_UNIT_STRERR(err_buf, "fi_getinfo failed", ret);
 			goto failed_getinfo;
 		}
-		ft_foreach_info(fi, *info) {
+		for (fi = *info; fi; fi = fi->next) {
 			FT_DEBUG("\nTesting for fabric: %s, domain: %s, endpoint type: %d",
-					fi->fabric_attr->name, fi->domain_attr->name,
+					fi->fabric_attr->prov_name, fi->domain_attr->name,
 					fi->ep_attr->type);
 			if (hints->rx_attr->msg_order) {
 				if ((fi->rx_attr->msg_order & hints->rx_attr->msg_order) !=
@@ -218,7 +218,8 @@ static int init_valid_rma_RAW_ordering_set_size(struct fi_info *hints)
 
 	ret = fi_getinfo(FT_FIVERSION, NULL, NULL, 0, hints, &fi);
 	if (ret) {
-		sprintf(err_buf, "fi_getinfo failed %s(%d)", fi_strerror(-ret), -ret);
+		sprintf(err_buf, "fi_getinfo returned %d - %s",
+			-ret, fi_strerror(-ret));
 		return ret;
 	}
 	if (fi->ep_attr->max_order_raw_size > 0)
@@ -250,7 +251,8 @@ static int init_valid_rma_WAR_ordering_set_size(struct fi_info *hints)
 
 	ret = fi_getinfo(FT_FIVERSION, NULL, NULL, 0, hints, &fi);
 	if (ret) {
-		sprintf(err_buf, "fi_getinfo failed %s(%d)", fi_strerror(-ret), -ret);
+		sprintf(err_buf, "fi_getinfo returned %d - %s",
+			-ret, fi_strerror(-ret));
 		return ret;
 	}
 	if (fi->ep_attr->max_order_war_size > 0)
@@ -281,7 +283,8 @@ static int init_valid_rma_WAW_ordering_set_size(struct fi_info *hints)
 	hints->rx_attr->msg_order = FI_ORDER_WAW;
 	ret = fi_getinfo(FT_FIVERSION, NULL, NULL, 0, hints, &fi);
 	if (ret) {
-		sprintf(err_buf, "fi_getinfo failed %s(%d)", fi_strerror(-ret), -ret);
+		sprintf(err_buf, "fi_getinfo returned %d - %s",
+			-ret, fi_strerror(-ret));
 		return ret;
 	}
 	if (fi->ep_attr->max_order_waw_size > 0)
@@ -338,7 +341,8 @@ static int init_invalid_rma_RAW_ordering_size(struct fi_info *hints)
 
 	ret = fi_getinfo(FT_FIVERSION, NULL, NULL, 0, hints, &fi);
 	if (ret) {
-		sprintf(err_buf, "fi_getinfo failed %s(%d)", fi_strerror(-ret), -ret);
+		sprintf(err_buf, "fi_getinfo returned %d - %s",
+			-ret, fi_strerror(-ret));
 		return ret;
 	}
 
@@ -363,7 +367,8 @@ static int init_invalid_rma_WAR_ordering_size(struct fi_info *hints)
 
 	ret = fi_getinfo(FT_FIVERSION, NULL, NULL, 0, hints, &fi);
 	if (ret) {
-		sprintf(err_buf, "fi_getinfo failed %s(%d)", fi_strerror(-ret), -ret);
+		sprintf(err_buf, "fi_getinfo returned %d - %s",
+			-ret, fi_strerror(-ret));
 		return ret;
 	}
 
@@ -388,7 +393,8 @@ static int init_invalid_rma_WAW_ordering_size(struct fi_info *hints)
 
 	ret = fi_getinfo(FT_FIVERSION, NULL, NULL, 0, hints, &fi);
 	if (ret) {
-		sprintf(err_buf, "fi_getinfo failed %s(%d)", fi_strerror(-ret), -ret);
+		sprintf(err_buf, "fi_getinfo returned %d - %s",
+			-ret, fi_strerror(-ret));
 		return ret;
 	}
 
@@ -473,7 +479,7 @@ static int test_mr_modes(char *node, char *service, uint64_t flags,
 			goto out;
 		}
 
-		ft_foreach_info(fi, *info) {
+		for (fi = *info; fi; fi = fi->next) {
 			if (fi->domain_attr->mr_mode & ~hints->domain_attr->mr_mode) {
 				ret = -FI_EOTHER;
 				fi_freeinfo(*info);
@@ -591,18 +597,19 @@ static int getinfo_unit_test(char *node, char *service, uint64_t flags,
 			ret = 0;
 			goto out;
 		}
-		sprintf(err_buf, "fi_getinfo failed %s(%d)", fi_strerror(-ret), -ret);
+		sprintf(err_buf, "fi_getinfo returned %d - %s",
+			-ret, fi_strerror(-ret));
 		goto out;
 	}
 
 	if (!info || !check)
 		goto out;
 
-	ft_foreach_info(fi, info) {
+	for (fi = info; fi; fi = fi->next) {
 		FT_DEBUG("\nTesting for fabric: %s, domain: %s, endpoint type: %d",
-				fi->fabric_attr->name, fi->domain_attr->name,
+				fi->fabric_attr->prov_name, fi->domain_attr->name,
 				fi->ep_attr->type);
-		ret = check(info);
+		ret = check(fi);
 		if (ret)
 			break;
 	}
@@ -861,6 +868,7 @@ int main(int argc, char **argv)
 		opts.src_port = "9228";
 
 	hints->mode = ~0;
+	hints->domain_attr->mr_mode = opts.mr_mode;
 
 	if (hints->fabric_attr->prov_name) {
 		if (set_prov(hints->fabric_attr->prov_name))
