@@ -55,15 +55,32 @@
 
 struct pattern_ops *pattern;
 struct multinode_xfer_state state;
+struct multi_xfer_method method;
+struct multi_xfer_method multi_xfer_methods[] = {
+	{
+		.name = "send/recv",
+		.send = multi_msg_send,
+		.recv = multi_msg_recv,
+		.wait = multi_msg_wait,
+	}
+};
 
-static int multinode_setup_fabric(int argc, char **argv)
+static int multi_setup_fabric(int argc, char **argv)
 {
 	char my_name[FT_MAX_CTRL_MSG];
 	size_t len;
 	int ret;
 
+	if (pm_job.transfer_method == multi_msg) {
+		hints->caps = FI_MSG;
+	} else {
+		printf("Not a valid cabability\n");
+		return -FI_ENODATA;
+	}
+
+	method = multi_xfer_methods[pm_job.transfer_method];
+
 	hints->ep_attr->type = FI_EP_RDM;
-	hints->caps = FI_MSG;
 	hints->mode = FI_CONTEXT;
 	hints->domain_attr->mr_mode = opts.mr_mode;
 
@@ -136,7 +153,7 @@ err:
 	return ft_exit_code(ret);
 }
 
-static int multinode_post_rx()
+int multi_msg_recv()
 {
 	int ret, offset;
 
@@ -171,7 +188,7 @@ static int multinode_post_rx()
 	return 0;
 }
 
-static int multinode_post_tx()
+int multi_msg_send()
 {
 	int ret, offset;
 	fi_addr_t dest;
@@ -209,7 +226,7 @@ static int multinode_post_tx()
 	return 0;
 }
 
-static int multinode_wait_for_comp()
+int multi_msg_wait()
 {
 	int ret, i;
 
@@ -235,7 +252,7 @@ static int multinode_wait_for_comp()
 	return 0;
 }
 
-static inline void multinode_init_state()
+static inline void multi_init_state()
 {
 	state.cur_source = PATTERN_NO_CURRENT;
 	state.cur_target = PATTERN_NO_CURRENT;
@@ -248,26 +265,26 @@ static inline void multinode_init_state()
 	state.tx_window = opts.window_size;
 }
 
-static int multinode_run_test()
+static int multi_run_test()
 {
 	int ret;
 	int iter;
 
 	for (iter = 0; iter < opts.iterations; iter++) {
 
-		multinode_init_state();
+		multi_init_state();
 		while (!state.all_completions_done ||
 				!state.all_recvs_posted ||
 				!state.all_sends_posted) {
-			ret = multinode_post_rx();
+			ret = method.recv();
 			if (ret)
 				return ret;
 
-			ret = multinode_post_tx();
+			ret = method.send();
 			if (ret)
 				return ret;
 
-			ret = multinode_wait_for_comp();
+			ret = method.wait();
 			if (ret)
 				return ret;
 
@@ -290,14 +307,14 @@ int multinode_run_tests(int argc, char **argv)
 	int ret = FI_SUCCESS;
 	int i;
 
-	ret = multinode_setup_fabric(argc, argv);
+	ret = multi_setup_fabric(argc, argv);
 	if (ret)
 		return ret;
 
 	for (i = 0; i < NUM_TESTS && !ret; i++) {
 		printf("starting %s... ", patterns[i].name);
 		pattern = &patterns[i];
-		ret = multinode_run_test();
+		ret = multi_run_test();
 		if (ret)
 			printf("failed\n");
 		else

@@ -45,6 +45,16 @@
 #include <core.h>
 struct pm_job_info pm_job;
 
+static int parse_caps(char* caps)
+{
+	if (strcmp(caps, "msg") == 0) {
+		return multi_msg;
+	} else {
+		printf("Warn: Invalid capability, defaulting to msg\n");
+		return multi_msg;
+	}
+}
+
 static inline ssize_t socket_send(int sock, void *buf, size_t len, int flags)
 {
 	ssize_t ret;
@@ -281,7 +291,7 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((c = getopt(argc, argv, "n:h" CS_OPTS INFO_OPTS)) != -1) {
+	while ((c = getopt(argc, argv, "n:C:h" CS_OPTS INFO_OPTS)) != -1) {
 		switch (c) {
 		default:
 			ft_parse_addr_opts(c, optarg, &opts);
@@ -290,6 +300,9 @@ int main(int argc, char **argv)
 			break;
 		case 'n':
 			pm_job.num_ranks = atoi(optarg);
+			break;
+		case 'C':
+			pm_job.transfer_method = parse_caps(optarg);
 			break;
 		case '?':
 		case 'h':

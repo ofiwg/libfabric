@@ -454,11 +454,12 @@ This will run "fi_rdm_atomic" for all atomic operations with
 
 ## Run multinode tests
 
-	server and clients are invoked with the same command: 
-		fi_multinode -n <number of processes> -s <server_addr> 
+	Server and clients are invoked with the same command: 
+		fi_multinode -n <number of processes> -s <server_addr> -C <mode>
 	
-	a process on the server must be started before any of the clients can be started 
-	succesfully. 
+	A process on the server must be started before any of the clients can be started 
+	succesfully. -C lists the mode that the tests will run in. Currently the options are
+  for rma and msg. If not provided, the test will default to msg. 
 
 ## Run fi_ubertest
 

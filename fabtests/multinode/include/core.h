@@ -44,6 +44,17 @@
 
 #define PM_DEFAULT_OOB_PORT (8228)
 
+enum multi_xfer{
+	multi_msg,
+};
+
+struct multi_xfer_method {
+	char* name;
+	int (*send)();
+	int (*recv)();
+	int (*wait)();
+};
+
 struct pm_job_info {
 	size_t		my_rank;
 	size_t		num_ranks;
@@ -55,8 +66,8 @@ struct pm_job_info {
 	void		*names;
 	size_t		name_len;
 	fi_addr_t	*fi_addrs;
+	enum multi_xfer transfer_method;
 };
-
 
 struct multinode_xfer_state {
 	int 			iteration;
@@ -82,3 +93,6 @@ extern struct pm_job_info pm_job;
 int multinode_run_tests(int argc, char **argv);
 int pm_allgather(void *my_item, void *items, int item_size);
 void pm_barrier();
+int multi_msg_send();
+int multi_msg_recv();
+int multi_msg_wait();
