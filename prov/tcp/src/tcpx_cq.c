@@ -242,8 +242,9 @@ err:
 int tcpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq_fid, void *context)
 {
-	int ret;
 	struct tcpx_cq *tcpx_cq;
+	struct fi_cq_attr cq_attr;
+	int ret;
 
 	tcpx_cq = calloc(1, sizeof(*tcpx_cq));
 	if (!tcpx_cq)
@@ -255,6 +256,12 @@ int tcpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	ret = tcpx_buf_pools_create(tcpx_cq->buf_pools);
 	if (ret)
 		goto free_cq;
+
+	if (attr->wait_obj == FI_WAIT_NONE) {
+		cq_attr = *attr;
+		cq_attr.wait_obj = FI_WAIT_FD;
+		attr = &cq_attr;
+	}
 
 	ret = ofi_cq_init(&tcpx_prov, domain, attr, &tcpx_cq->util_cq,
 			  &ofi_cq_progress, context);
