@@ -46,6 +46,7 @@
 
 enum multi_xfer{
 	multi_msg,
+	multi_rma,
 };
 
 struct multi_xfer_method {
@@ -60,6 +61,7 @@ struct pm_job_info {
 	size_t		num_ranks;
 	int		sock;
 	int		*clients; //only valid for server
+	struct fi_rma_iov 	*multi_iovs;
 
 	struct sockaddr_storage oob_server_addr;
 	size_t 		server_addr_len;
@@ -96,3 +98,6 @@ void pm_barrier();
 int multi_msg_send();
 int multi_msg_recv();
 int multi_msg_wait();
+int multi_rma_write();
+int multi_rma_recv();
+int multi_rma_wait();

@@ -49,6 +49,8 @@ static int parse_caps(char* caps)
 {
 	if (strcmp(caps, "msg") == 0) {
 		return multi_msg;
+	} else if (strcmp(caps, "rma") == 0) {
+		return multi_rma;
 	} else {
 		printf("Warn: Invalid capability, defaulting to msg\n");
 		return multi_msg;
@@ -283,7 +285,7 @@ int main(int argc, char **argv)
 	int c, ret;
 
 	opts = INIT_OPTS;
-	opts.options |= (FT_OPT_SIZE | FT_OPT_ALLOC_MULT_MR);
+	opts.options |= FT_OPT_SIZE;
 
 	pm_job.clients = NULL;
 
