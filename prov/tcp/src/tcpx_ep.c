@@ -548,8 +548,8 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 	slist_init(&ep->rma_read_queue);
 	slist_init(&ep->tx_rsp_pend_queue);
 
-	ep->rx_detect.done_len = 0;
-	ep->rx_detect.hdr_len = sizeof(ep->rx_detect.hdr.base_hdr);
+	ep->cur_rx_msg.done_len = 0;
+	ep->cur_rx_msg.hdr_len = sizeof(ep->cur_rx_msg.hdr.base_hdr);
 	ep->min_multi_recv_size = TCPX_MIN_MULTI_RECV;
 
 	*ep_fid = &ep->util_ep.ep_fid;
@@ -563,7 +563,7 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 	ep->get_rx_entry[ofi_op_tagged] = tcpx_get_rx_entry_op_invalid;
 	ep->get_rx_entry[ofi_op_read_req] = tcpx_get_rx_entry_op_read_req;
 	ep->get_rx_entry[ofi_op_read_rsp] = tcpx_get_rx_entry_op_read_rsp;
-	ep->get_rx_entry[ofi_op_write] =tcpx_get_rx_entry_op_write;
+	ep->get_rx_entry[ofi_op_write] = tcpx_get_rx_entry_op_write;
 	return 0;
 err3:
 	ofi_close_socket(ep->conn_fd);

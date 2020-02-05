@@ -161,7 +161,7 @@ struct tcpx_cq_data_hdr {
 			 TCPX_IOV_LIMIT +			\
 			 TCPX_MAX_INJECT_SZ)
 
-struct tcpx_rx_detect {
+struct tcpx_cur_rx_msg {
 	union {
 		struct tcpx_base_hdr	base_hdr;
 		uint8_t		       	max_hdr[TCPX_MAX_HDR_SZ];
@@ -192,7 +192,7 @@ struct stage_buf {
 struct tcpx_ep {
 	struct util_ep		util_ep;
 	SOCKET			conn_fd;
-	struct tcpx_rx_detect	rx_detect;
+	struct tcpx_cur_rx_msg	cur_rx_msg;
 	struct tcpx_xfer_entry	*cur_rx_entry;
 	tcpx_rx_process_fn_t 	cur_rx_proc_fn;
 	struct dlist_entry	ep_entry;
@@ -285,7 +285,7 @@ void tcpx_cq_report_error(struct util_cq *cq,
 int tcpx_recv_msg_data(struct tcpx_xfer_entry *recv_entry);
 int tcpx_send_msg(struct tcpx_xfer_entry *tx_entry);
 int tcpx_comm_recv_hdr(SOCKET sock, struct stage_buf *sbuf,
-		        struct tcpx_rx_detect *rx_detect);
+		        struct tcpx_cur_rx_msg *cur_rx_msg);
 int tcpx_read_to_buffer(SOCKET sock, struct stage_buf *stage_buf);
 
 struct tcpx_xfer_entry *tcpx_xfer_entry_alloc(struct tcpx_cq *cq,
