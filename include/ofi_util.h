@@ -980,6 +980,9 @@ int ofi_ns_del_local_name(struct util_ns *ns, void *service, void *name);
 void *ofi_ns_resolve_name(struct util_ns *ns, const char *server,
 			  void *service);
 
+void ofi_alter_mr_mode(int *mr_mode, int hints_mr_mode, uint64_t info_caps,
+		       uint32_t api_version);
+
 #ifdef __cplusplus
 }
 #endif

@@ -183,6 +183,9 @@ int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
 			return -FI_ENOMEM;
 	}
 
+	ofi_alter_mr_mode(&info->domain_attr->mr_mode,
+			  core_info->domain_attr->mr_mode, info->caps, version);
+
 	return 0;
 }
 

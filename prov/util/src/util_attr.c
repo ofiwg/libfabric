@@ -1075,24 +1075,30 @@ static uint64_t ofi_get_caps(uint64_t info_caps, uint64_t hint_caps,
 	return caps;
 }
 
+void ofi_alter_mr_mode(int *mr_mode, int hints_mr_mode, uint64_t info_caps,
+		       uint32_t api_version)
+{
+	assert(mr_mode);
+
+	if (hints_mr_mode & (FI_MR_BASIC | FI_MR_SCALABLE)) {
+		*mr_mode = hints_mr_mode;
+	} else if (FI_VERSION_LT(api_version, FI_VERSION(1, 5))) {
+		*mr_mode = (*mr_mode && *mr_mode != FI_MR_SCALABLE) ?
+			FI_MR_BASIC : FI_MR_SCALABLE;
+	} else {
+		if ((hints_mr_mode & *mr_mode) != *mr_mode) {
+			*mr_mode = ofi_cap_mr_mode(info_caps,
+						   *mr_mode & hints_mr_mode);
+		}
+	}
+}
+
 static void fi_alter_domain_attr(struct fi_domain_attr *attr,
 				 const struct fi_domain_attr *hints,
 				 uint64_t info_caps, uint32_t api_version)
 {
-	int hints_mr_mode;
-
-	hints_mr_mode = hints ? hints->mr_mode : 0;
-	if (hints_mr_mode & (FI_MR_BASIC | FI_MR_SCALABLE)) {
-		attr->mr_mode = hints_mr_mode;
-	} else if (FI_VERSION_LT(api_version, FI_VERSION(1, 5))) {
-		attr->mr_mode = (attr->mr_mode && attr->mr_mode != FI_MR_SCALABLE) ?
-				FI_MR_BASIC : FI_MR_SCALABLE;
-	} else {
-		if ((hints_mr_mode & attr->mr_mode) != attr->mr_mode) {
-			attr->mr_mode = ofi_cap_mr_mode(info_caps,
-						attr->mr_mode & hints_mr_mode);
-		}
-	}
+	ofi_alter_mr_mode(&attr->mr_mode, hints ? hints->mr_mode : 0, info_caps,
+			  api_version);
 
 	attr->caps = ofi_get_caps(info_caps, hints ? hints->caps : 0, attr->caps);
 	if (!hints)
