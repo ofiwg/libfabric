@@ -12,6 +12,8 @@
 #include "cxip.h"
 #include "cxip_test_common.h"
 
+#define RMA_WIN_KEY 0x1f
+
 TestSuite(rma, .init = cxit_setup_rma, .fini = cxit_teardown_rma,
 	  .timeout = CXIT_DEFAULT_TIMEOUT);
 
@@ -23,7 +25,45 @@ Test(rma, simple_write)
 	int win_len = 16 * 1024;
 	int send_len = 8;
 	struct mem_region mem_window;
-	int key_val = 0x1f;
+	int key_val = RMA_WIN_KEY;
+	struct fi_cq_tagged_entry cqe;
+
+	send_buf = calloc(1, win_len);
+	cr_assert_not_null(send_buf, "send_buf alloc failed");
+
+	mr_create(win_len, FI_REMOTE_WRITE, 0xa0, key_val, &mem_window);
+
+	for (send_len = 1; send_len <= win_len; send_len <<= 1) {
+		ret = fi_write(cxit_ep, send_buf, send_len, NULL,
+			       cxit_ep_fi_addr, 0, key_val, NULL);
+		cr_assert(ret == FI_SUCCESS);
+
+		/* Wait for async event indicating data has been sent */
+		ret = cxit_await_completion(cxit_tx_cq, &cqe);
+		cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+
+		validate_tx_event(&cqe, FI_RMA | FI_WRITE, NULL);
+
+		/* Validate sent data */
+		for (int i = 0; i < send_len; i++)
+			cr_assert_eq(mem_window.mem[i], send_buf[i],
+				     "data mismatch, element: (%d) %02x != %02x\n", i,
+				     mem_window.mem[i], send_buf[i]);
+	}
+
+	mr_destroy(&mem_window);
+	free(send_buf);
+}
+
+/* Test simple writes to a standard MR. */
+Test(rma, simple_write_std_mr)
+{
+	int ret;
+	uint8_t *send_buf;
+	int win_len = 16 * 1024;
+	int send_len = 8;
+	struct mem_region mem_window;
+	uint64_t key_val = 0xabcdef;
 	struct fi_cq_tagged_entry cqe;
 
 	send_buf = calloc(1, win_len);
@@ -61,7 +101,7 @@ Test(rma, simple_writev)
 	int win_len = 0x1000;
 	int send_len = 8;
 	struct mem_region mem_window;
-	int key_val = 0x1f;
+	int key_val = RMA_WIN_KEY;
 	struct fi_cq_tagged_entry cqe;
 	struct iovec iov[1];
 
@@ -102,7 +142,7 @@ Test(rma, simple_writemsg)
 	int win_len = 0x1000;
 	int send_len = 8;
 	struct mem_region mem_window;
-	int key_val = 0x1f;
+	int key_val = RMA_WIN_KEY;
 	struct fi_cq_tagged_entry cqe;
 	struct fi_msg_rma msg = {};
 	struct iovec iov[1];
@@ -161,7 +201,7 @@ Test(rma, flush)
 	int win_len = 0x1000;
 	int send_len = 8;
 	struct mem_region mem_window;
-	int key_val = 0x1f;
+	int key_val = RMA_WIN_KEY;
 	struct fi_cq_tagged_entry cqe;
 	struct fi_msg_rma msg = {};
 	struct iovec iov[1];
@@ -216,7 +256,7 @@ Test(rma, simple_writemsg_inject)
 	int win_len = 0x1000;
 	int send_len = 8;
 	struct mem_region mem_window;
-	int key_val = 0x1f;
+	int key_val = RMA_WIN_KEY;
 	struct fi_cq_tagged_entry cqe;
 	struct fi_msg_rma msg = {};
 	struct iovec iov[1];
@@ -271,7 +311,7 @@ Test(rma, simple_inject_write)
 	int win_len = 0x1000;
 	int send_len = 8;
 	struct mem_region mem_window;
-	int key_val = 0x1f;
+	int key_val = RMA_WIN_KEY;
 	struct fi_cq_tagged_entry cqe;
 
 	send_buf = calloc(1, win_len);
@@ -560,7 +600,7 @@ Test(rma, write_spanning_page)
 	int win_len = 0x2000;
 	int send_len = 8;
 	struct mem_region mem_window;
-	int key_val = 0x1f;
+	int key_val = RMA_WIN_KEY;
 	struct fi_cq_tagged_entry cqe;
 
 	send_buf = calloc(1, win_len);
@@ -601,7 +641,7 @@ Test(rma, rma_cleanup)
 	int win_len = 0x1000;
 	int send_len = 8;
 	struct mem_region mem_window;
-	int key_val = 0x1f;
+	int key_val = RMA_WIN_KEY;
 	int writes = 50;
 
 	send_buf = calloc(1, win_len);
@@ -643,7 +683,7 @@ Test(rma_sel, selective_completion,
 	int win_len = 0x1000;
 	int loc_len = 8;
 	struct mem_region mem_window;
-	int key_val = 0x1f;
+	int key_val = RMA_WIN_KEY;
 	struct fi_cq_tagged_entry cqe;
 	struct fi_msg_rma msg = {};
 	struct iovec iov;
@@ -675,6 +715,7 @@ Test(rma_sel, selective_completion,
 		ret = fi_write(cxit_ep, loc_buf, loc_len, NULL,
 			       cxit_ep_fi_addr, 0, key_val, NULL);
 		cr_assert(ret == FI_SUCCESS);
+		count++;
 
 		/* Wait for async event indicating data has been sent */
 		ret = cxit_await_completion(cxit_tx_cq, &cqe);
@@ -694,6 +735,7 @@ Test(rma_sel, selective_completion,
 		iov.iov_len = loc_len;
 		ret = fi_writemsg(cxit_ep, &msg, FI_COMPLETION);
 		cr_assert(ret == FI_SUCCESS);
+		count++;
 
 		/* Wait for async event indicating data has been sent */
 		ret = cxit_await_completion(cxit_tx_cq, &cqe);
@@ -713,6 +755,10 @@ Test(rma_sel, selective_completion,
 		iov.iov_len = loc_len;
 		ret = fi_writemsg(cxit_ep, &msg, 0);
 		cr_assert(ret == FI_SUCCESS);
+		count++;
+
+		while (fi_cntr_read(cxit_write_cntr) != count)
+			sched_yield();
 
 		/* Validate sent data */
 		for (int i = 0; i < loc_len; i++)
@@ -745,6 +791,7 @@ Test(rma_sel, selective_completion,
 
 	/* Completion requested by default. */
 	for (loc_len = 1; loc_len <= win_len; loc_len <<= 1) {
+		memset(loc_buf, 0, loc_len);
 		ret = fi_read(cxit_ep, loc_buf, loc_len, NULL,
 			      cxit_ep_fi_addr, 0, key_val, NULL);
 		cr_assert(ret == FI_SUCCESS);
@@ -765,6 +812,7 @@ Test(rma_sel, selective_completion,
 
 	/* Completion explicitly requested. */
 	for (loc_len = 1; loc_len <= win_len; loc_len <<= 1) {
+		memset(loc_buf, 0, loc_len);
 		iov.iov_len = loc_len;
 		ret = fi_readmsg(cxit_ep, &msg, FI_COMPLETION);
 		cr_assert(ret == FI_SUCCESS);
@@ -785,6 +833,7 @@ Test(rma_sel, selective_completion,
 
 	/* Suppress completion. */
 	for (loc_len = 1; loc_len <= win_len; loc_len <<= 1) {
+		memset(loc_buf, 0, loc_len);
 		iov.iov_len = loc_len;
 		ret = fi_readmsg(cxit_ep, &msg, 0);
 		cr_assert(ret == FI_SUCCESS);
@@ -827,11 +876,12 @@ Test(rma_sel, selective_completion_suppress,
 	int win_len = 0x1000;
 	int send_len = 8;
 	struct mem_region mem_window;
-	int key_val = 0x1f;
+	int key_val = RMA_WIN_KEY;
 	struct fi_cq_tagged_entry cqe;
 	struct fi_msg_rma msg = {};
 	struct iovec iov;
 	struct fi_rma_iov rma;
+	int write_count = 0;
 
 	send_buf = calloc(1, win_len);
 	cr_assert_not_null(send_buf, "send_buf alloc failed");
@@ -852,9 +902,14 @@ Test(rma_sel, selective_completion_suppress,
 
 	/* Normal writes do not generate completions */
 	for (send_len = 1; send_len <= win_len; send_len <<= 1) {
+		memset(mem_window.mem, 0, send_len);
 		ret = fi_write(cxit_ep, send_buf, send_len, NULL,
 			       cxit_ep_fi_addr, 0, key_val, NULL);
 		cr_assert(ret == FI_SUCCESS);
+		write_count++;
+
+		while (fi_cntr_read(cxit_write_cntr) != write_count)
+			sched_yield();
 
 		/* Validate sent data */
 		for (int i = 0; i < send_len; i++)
@@ -868,9 +923,11 @@ Test(rma_sel, selective_completion_suppress,
 
 	/* Request completions from fi_writemsg */
 	for (send_len = 1; send_len <= win_len; send_len <<= 1) {
+		memset(mem_window.mem, 0, send_len);
 		iov.iov_len = send_len;
 		ret = fi_writemsg(cxit_ep, &msg, FI_COMPLETION);
 		cr_assert(ret == FI_SUCCESS);
+		write_count++;
 
 		/* Wait for async event indicating data has been sent */
 		ret = cxit_await_completion(cxit_tx_cq, &cqe);
@@ -887,9 +944,14 @@ Test(rma_sel, selective_completion_suppress,
 
 	/* Suppress completions using fi_writemsg */
 	for (send_len = 1; send_len <= win_len; send_len <<= 1) {
+		memset(mem_window.mem, 0, send_len);
 		iov.iov_len = send_len;
 		ret = fi_writemsg(cxit_ep, &msg, 0);
 		cr_assert(ret == FI_SUCCESS);
+		write_count++;
+
+		while (fi_cntr_read(cxit_write_cntr) != write_count)
+			sched_yield();
 
 		/* Validate sent data */
 		for (int i = 0; i < send_len; i++)
@@ -903,9 +965,14 @@ Test(rma_sel, selective_completion_suppress,
 
 	/* Inject never generates an event */
 	send_len = 8;
+	memset(mem_window.mem, 0, send_len);
 	ret = fi_inject_write(cxit_ep, send_buf, send_len, cxit_ep_fi_addr, 0,
 			      key_val);
 	cr_assert(ret == FI_SUCCESS);
+	write_count++;
+
+	while (fi_cntr_read(cxit_write_cntr) != write_count)
+		sched_yield();
 
 	/* Validate sent data */
 	for (int i = 0; i < send_len; i++)
@@ -928,7 +995,7 @@ Test(rma, rem_cntr)
 	int win_len = 16 * 1024;
 	int send_len = 8;
 	struct mem_region mem_window;
-	int key_val = 0x1f;
+	int key_val = RMA_WIN_KEY;
 	struct fi_cq_tagged_entry cqe;
 	int count = 0;
 

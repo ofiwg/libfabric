@@ -295,6 +295,12 @@ static int _cxip_amo_cb(struct cxip_req *req, const union c_event *event)
 	int event_rc;
 	int success_event = (req->flags & FI_COMPLETION);
 
+	if (req->amo.result_md)
+		cxip_unmap(req->amo.result_md);
+
+	if (req->amo.oper1_md)
+		cxip_unmap(req->amo.oper1_md);
+
 	req->flags &= (FI_ATOMIC | FI_READ | FI_WRITE);
 
 	event_rc = cxi_init_event_rc(event);
@@ -313,24 +319,6 @@ static int _cxip_amo_cb(struct cxip_req *req, const union c_event *event)
 
 	ofi_atomic_dec32(&req->amo.txc->otx_reqs);
 	cxip_cq_req_free(req);
-
-	return FI_SUCCESS;
-}
-
-/**
- * Callback for fetching and swap AMO operations.
- *
- * @param req AMO request structure
- * @param event resulting event
- */
-static int _cxip_famo_cb(struct cxip_req *req, const union c_event *event)
-{
-	/* Free the temporary result buffer, if allocated (free is NULL-safe) */
-	free(req->amo.result_buf);
-
-	cxip_unmap(req->amo.local_md);
-
-	_cxip_amo_cb(req, event);
 
 	return FI_SUCCESS;
 }
@@ -386,16 +374,15 @@ static inline bool _rma_vector_valid(size_t vn, const struct fi_rma_ioc *v)
  *
  * @return int FI_SUCCESS on success, negative value on failure
  */
-static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
-			 const struct fi_msg_atomic *msg,
-			 const struct fi_ioc *comparev, void **comparedesc,
-			 size_t compare_count,
-			 const struct fi_ioc *resultv, void **resultdesc,
-			 size_t result_count,
-			 uint64_t flags)
+static int _cxip_amo(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
+		     const struct fi_msg_atomic *msg,
+		     const struct fi_ioc *comparev, void **comparedesc,
+		     size_t compare_count,
+		     const struct fi_ioc *resultv, void **resultdesc,
+		     size_t result_count,
+		     uint64_t flags)
 {
 	struct cxip_if *dev_if;
-	struct cxip_md *result_md = NULL;
 	struct cxip_addr caddr;
 	struct cxip_req *req = NULL;
 	enum c_atomic_op opcode;
@@ -406,18 +393,15 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	uint8_t idx_ext;
 	uint32_t pid_bits;
 	uint32_t pid_idx;
-	uint32_t result_lac = 0;
-	uint64_t result_iova = 0;
-	void *local_result = NULL;
 	void *compare = NULL;
 	void *result = NULL;
 	void *oper1 = NULL;
-	uint64_t local_oper1[2];
 	uint64_t local_compare[2];
 	uint64_t off = 0;
 	uint64_t key = 0;
 	int len;
 	int ret;
+	bool idc;
 
 	if (!txc->enabled)
 		return -FI_EOPBADSTATE;
@@ -457,22 +441,72 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		return -FI_EINVAL;
 	}
 
+	/* IDCs cannot be used to target standard MRs. */
+	idc = cxip_mr_key_opt(key);
+
+	/* TODO support inject without IDCs */
+	if ((flags & FI_INJECT) && !idc)
+		return -FI_EMSGSIZE;
+
 	/* Convert FI to CXI codes, fail if operation not supported */
 	ret = _cxip_atomic_opcode(req_type, msg->datatype, msg->op,
 				  &opcode, &dtcode, &swpcode, &len);
 	if (ret < 0)
 		return ret;
 
-	/* Fetching Atomic Write is implemented with a Swap command.
-	 * Non-fetching Atomic Write is implemented with an AXOR command for
-	 * datatypes less than or equal to 8 bytes wide. With larger datatypes,
-	 * a Swap is used with a throwaway buffer.
+	/* Look up target CXI address */
+	ret = _cxip_av_lookup(txc->ep_obj->av, msg->addr, &caddr);
+	if (ret != FI_SUCCESS) {
+		CXIP_LOG_DBG("Failed to look up dst FI addr: %d\n", ret);
+		return ret;
+	}
+
+	/* Allocate a CQ request if:
+	 * 1. Performing a fetching transfer
+	 * 2. Not using an IDC
+	 * 3. Tracking completion for the user
+	 * 4. Implementing Atomic Write in software (using a fetching swap)
+	 *
+	 * State is not tracked for non-fetching, inject-style transfers that
+	 * can be implemented with an IDC.
 	 */
+	if (result || !idc || (flags & FI_COMPLETION) ||
+	    msg->op == FI_ATOMIC_WRITE) {
+		req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
+		if (!req) {
+			CXIP_LOG_DBG("Failed to allocate request\n");
+			return -FI_ENOMEM;
+		}
+
+		/* Values set here are passed back to the user through the CQ */
+		if (flags & FI_COMPLETION)
+			req->context = (uint64_t)msg->context;
+		else
+			req->context = (uint64_t)txc->fid.ctx.fid.context;
+		req->flags = FI_ATOMIC;
+		req->flags |= (req_type == CXIP_RQ_AMO ? FI_WRITE : FI_READ);
+		req->flags |= (flags & FI_COMPLETION);
+		req->data_len = 0;
+		req->buf = 0;
+		req->data = 0;
+		req->tag = 0;
+		req->cb = _cxip_amo_cb;
+		req->amo.txc = txc;
+		req->amo.oper1_md = NULL;
+		req->amo.result_md = NULL;
+	}
+
+	/* Prepare special case AMOs. */
 	if (msg->op == FI_ATOMIC_WRITE && !result) {
-		/* AXOR for float, double, and float complex are not supported
+		/* Non-fetching Atomic Write is implemented with an AXOR
+		 * command for datatypes less than or equal to 8 bytes wide.
+		 * With larger datatypes, a Swap is used with a throwaway
+		 * buffer.
+		 *
+		 * AXOR for float, double, and float complex are not supported
 		 * by Cassini, but since we are only trying to write the value
-		 * unchanged, we can pretend these are arbitrary bit patterns in
-		 * UINT32 or UINT64, and take advantage of AXOR.
+		 * unchanged, we can pretend these are arbitrary bit patterns
+		 * in UINT32 or UINT64, and take advantage of AXOR.
 		 */
 		switch (dtcode) {
 		case C_AMO_TYPE_FLOAT_T:
@@ -490,12 +524,8 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		case C_AMO_TYPE_DOUBLE_COMPLEX_T:
 		case C_AMO_TYPE_UINT128_T:
 			/* 128-bit quantities must be SWAPPED */
-			local_result = calloc(1, len);
-			if (!local_result) {
-				CXIP_LOG_ERROR("Failed local result alloc\n");
-				return -FI_ENOMEM;
-			}
-			result = local_result;
+			result = &req->amo.result;
+			memset(result, 0, len);
 			break;
 		default:
 			/* Anything else can use AXOR with a set mask */
@@ -504,167 +534,196 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 			compare = local_compare;
 			break;
 		}
-	}
-
-	/* Atomic Read is implemented with an Add-zero command. */
-	if (msg->op == FI_ATOMIC_READ) {
-		memset(local_oper1, 0, len);
-		oper1 = local_oper1;
-	}
-
-	/* Atomic MSWAP is implemented using an AXOR command. See:
-	 *   (*addr & ~mask) | (data & mask) == (*addr & ~mask) ^ (data & mask)
-	 * where:
-	 *   data = oper1
-	 *   mask = compare
-	 */
-	if (msg->op == FI_MSWAP) {
+	} else if (msg->op == FI_ATOMIC_READ) {
+		/* Atomic Read is implemented with an Add-zero command. */
+		memset(req->amo.oper1, 0, len);
+		oper1 = &req->amo.oper1;
+	} else if (msg->op == FI_MSWAP) {
+		/* Atomic MSWAP is implemented using an AXOR command. See:
+		 *   (*addr & ~mask) | (data & mask) ==
+		 *      (*addr & ~mask) ^ (data & mask)
+		 * where:
+		 *   data = oper1
+		 *   mask = compare
+		 */
 		uint64_t *mask = compare;
+		uint64_t *tmp_oper = (uint64_t *)&req->amo.oper1;
 
-		memcpy(local_oper1, oper1, len);
-		local_oper1[0] &= mask[0];
+		memcpy(tmp_oper, oper1, len);
+		tmp_oper[0] &= mask[0];
 		if (len > sizeof(uint64_t))
-			local_oper1[1] &= mask[1];
-		oper1 = local_oper1;
+			tmp_oper[1] &= mask[1];
+		oper1 = tmp_oper;
 	}
 
-	dev_if = txc->domain->dev_if;
-	pid_bits = dev_if->if_dev->info.pid_bits;
-
-	/* Do not allow an invalid memory key */
-	if (key >= CXIP_PID_MR_CNT(dev_if->if_dev->info.pid_granule))
-		return -FI_EINVAL;
-
-	/* Look up target CXI address */
-	ret = _cxip_av_lookup(txc->ep_obj->av, msg->addr, &caddr);
-	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("Failed to look up dst FI addr: %d\n", ret);
-		return ret;
+	/* Map local buffer if using a DMA command. */
+	if (!idc) {
+		ret = cxip_map(txc->domain, oper1, len, &req->amo.oper1_md);
+		if (ret) {
+			CXIP_LOG_DBG("Failed to map operand buffer: %d\n",
+				     ret);
+			goto free_req;
+		}
 	}
 
-	/* Map local buffer for fetching AMO */
+	/* Map result buffer for fetching AMOs. */
 	if (result) {
 		/* Map local buffer */
-		ret = cxip_map(txc->domain, result, len, &result_md);
+		ret = cxip_map(txc->domain, result, len, &req->amo.result_md);
 		if (ret) {
 			CXIP_LOG_DBG("Failed to map result buffer: %d\n", ret);
-			return ret;
+			goto unmap_oper1;
 		}
-		result_iova = CXI_VA_TO_IOVA(result_md->md, result);
-		result_lac = result_md->md->lac;
 	}
 
-	/* Allocate a CQ request */
-	if (result || flags & FI_COMPLETION) {
-		req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
-		if (!req) {
-			CXIP_LOG_DBG("Failed to allocate request\n");
-			ret = -FI_ENOMEM;
-			goto unmap_amo;
-		}
-
-		/* Values set here are passed back to the user through the CQ */
-		if (flags & FI_COMPLETION)
-			req->context = (uint64_t)msg->context;
-		else
-			req->context = (uint64_t)txc->fid.ctx.fid.context;
-		req->flags = FI_ATOMIC;
-		req->flags |= (req_type == CXIP_RQ_AMO ? FI_WRITE : FI_READ);
-		req->flags |= (flags & FI_COMPLETION);
-		req->data_len = 0;
-		req->buf = 0;
-		req->data = 0;
-		req->tag = 0;
-		req->cb = (result ? _cxip_famo_cb : _cxip_amo_cb);
-		req->amo.local_md = result_md;
-		req->amo.result_buf = local_result;
-		req->amo.txc = txc;
-	}
-
-	/* Build AMO command descriptor */
-	pid_idx = CXIP_MR_TO_IDX(key);
+	/* Build destination fabric address. */
+	dev_if = txc->domain->dev_if;
+	pid_bits = dev_if->if_dev->info.pid_bits;
+	pid_idx = cxip_mr_key_to_ptl_idx(key);
 	cxi_build_dfa(caddr.nic, caddr.pid, pid_bits, pid_idx, &dfa,
 		      &idx_ext);
 
-	cmd.c_state.write_lac = result_lac;
-	cmd.c_state.event_send_disable = 1;
-	/* Reliable AMOs must use unrestricted commands. */
-	cmd.c_state.restricted = 0;
-	cmd.c_state.index_ext = idx_ext;
-	cmd.c_state.eq = txc->send_cq->evtq->eqn;
-
-	if (req) {
-		cmd.c_state.user_ptr = (uint64_t)req;
-	} else {
-		void *inject_req = cxip_amo_inject_req(txc);
-		if (!inject_req) {
-			ret = -FI_ENOMEM;
-			goto unlock_amo;
-		}
-
-		cmd.c_state.user_ptr = (uint64_t)inject_req;
-		cmd.c_state.event_success_disable = 1;
-	}
-
-	if (req_type == CXIP_RQ_AMO) {
-		if (txc->write_cntr) {
-			cmd.c_state.event_ct_ack = 1;
-			cmd.c_state.ct = txc->write_cntr->ct->ctn;
-		}
-	} else {
-		if (txc->read_cntr) {
-			cmd.c_state.event_ct_reply = 1;
-			cmd.c_state.ct = txc->read_cntr->ct->ctn;
-		}
-	}
-
-	if ((flags & FI_COMPLETION) &&
-	    (flags & (FI_DELIVERY_COMPLETE | FI_MATCH_COMPLETE)))
-		cmd.c_state.flush = 1;
-
 	fastlock_acquire(&txc->tx_cmdq->lock);
 
-	if (memcmp(&txc->tx_cmdq->c_state, &cmd.c_state,
-		   sizeof(cmd.c_state))) {
-		/* Update TXQ C_STATE */
-		txc->tx_cmdq->c_state = cmd.c_state;
+	/* Build AMO command descriptor and write command. */
+	if (idc) {
+		if (result)
+			cmd.c_state.write_lac = req->amo.result_md->md->lac;
 
-		ret = cxi_cq_emit_c_state(txc->tx_cmdq->dev_cmdq,
-					  &cmd.c_state);
+		cmd.c_state.event_send_disable = 1;
+		cmd.c_state.index_ext = idx_ext;
+		cmd.c_state.eq = txc->send_cq->evtq->eqn;
+
+		if (req) {
+			cmd.c_state.user_ptr = (uint64_t)req;
+		} else {
+			void *inject_req = cxip_amo_inject_req(txc);
+
+			if (!inject_req) {
+				ret = -FI_ENOMEM;
+				goto unlock_cmdq;
+			}
+
+			cmd.c_state.user_ptr = (uint64_t)inject_req;
+			cmd.c_state.event_success_disable = 1;
+		}
+
+		if (req_type == CXIP_RQ_AMO) {
+			if (txc->write_cntr) {
+				cmd.c_state.event_ct_ack = 1;
+				cmd.c_state.ct = txc->write_cntr->ct->ctn;
+			}
+		} else {
+			if (txc->read_cntr) {
+				cmd.c_state.event_ct_reply = 1;
+				cmd.c_state.ct = txc->read_cntr->ct->ctn;
+			}
+		}
+
+		if ((flags & FI_COMPLETION) &&
+		    (flags & (FI_DELIVERY_COMPLETE | FI_MATCH_COMPLETE)))
+			cmd.c_state.flush = 1;
+
+		if (memcmp(&txc->tx_cmdq->c_state, &cmd.c_state,
+			   sizeof(cmd.c_state))) {
+			/* Update TXQ C_STATE */
+			txc->tx_cmdq->c_state = cmd.c_state;
+
+			ret = cxi_cq_emit_c_state(txc->tx_cmdq->dev_cmdq,
+						  &cmd.c_state);
+			if (ret) {
+				CXIP_LOG_DBG("Failed to issue C_STATE command: %d\n",
+					     ret);
+
+				/* Return error according to Domain Resource
+				 * Management
+				 */
+				ret = -FI_EAGAIN;
+				goto unlock_cmdq;
+			}
+
+			CXIP_LOG_DBG("Updated C_STATE: %p\n", req);
+		}
+
+		memset(&cmd.idc_amo, 0, sizeof(cmd.idc_amo));
+		cmd.idc_amo.idc_header.dfa = dfa;
+		cmd.idc_amo.idc_header.remote_offset = off;
+		cmd.idc_amo.atomic_op = opcode;
+		cmd.idc_amo.atomic_type = dtcode;
+		cmd.idc_amo.cswap_op = swpcode;
+
+		if (result)
+			cmd.idc_amo.local_addr =
+				CXI_VA_TO_IOVA(req->amo.result_md->md, result);
+
+		/* Note: 16-byte value will overflow into op1_word2 */
+		memcpy(&cmd.idc_amo.op1_word1, oper1, len);
+		if (compare)
+			memcpy(&cmd.idc_amo.op2_word1, compare, len);
+
+		/* Issue IDC AMO command */
+		ret = cxi_cq_emit_idc_amo(txc->tx_cmdq->dev_cmdq, &cmd.idc_amo,
+					  result != NULL);
 		if (ret) {
-			CXIP_LOG_DBG("Failed to issue C_STATE command: %d\n",
+			CXIP_LOG_DBG("Failed to issue IDC AMO command: %d\n",
+				     ret);
+
+			/* Return error according to Domain Resource Mgmt */
+			ret = -FI_EAGAIN;
+			goto unlock_cmdq;
+		}
+	} else {
+		struct c_dma_amo_cmd cmd = {};
+
+		cmd.index_ext = idx_ext;
+		cmd.event_send_disable = 1;
+		cmd.dfa = dfa;
+		cmd.remote_offset = off;
+		cmd.local_read_addr = CXI_VA_TO_IOVA(req->amo.oper1_md->md,
+						     oper1);
+		cmd.lac = req->amo.oper1_md->md->lac;
+
+		if (result) {
+			cmd.local_write_addr =
+				CXI_VA_TO_IOVA(req->amo.result_md->md, result);
+			cmd.write_lac = req->amo.result_md->md->lac;
+		}
+
+		cmd.request_len = len;
+		cmd.eq = txc->send_cq->evtq->eqn;
+		cmd.user_ptr = (uint64_t)req;
+		cmd.match_bits = key;
+		cmd.atomic_op = opcode;
+		cmd.atomic_type = dtcode;
+		cmd.cswap_op = swpcode;
+
+		/* Note: 16-byte value will overflow into op2_word2 */
+		if (compare)
+			memcpy(&cmd.op2_word1, compare, len);
+
+		if (req_type == CXIP_RQ_AMO) {
+			if (txc->write_cntr) {
+				cmd.event_ct_ack = 1;
+				cmd.ct = txc->write_cntr->ct->ctn;
+			}
+		} else {
+			if (txc->read_cntr) {
+				cmd.event_ct_reply = 1;
+				cmd.ct = txc->read_cntr->ct->ctn;
+			}
+		}
+
+		ret = cxi_cq_emit_dma_amo(txc->tx_cmdq->dev_cmdq, &cmd,
+					  result);
+		if (ret) {
+			CXIP_LOG_DBG("Failed to write DMA AMO command: %d\n",
 				     ret);
 
 			/* Return error according to Domain Resource Management
 			 */
 			ret = -FI_EAGAIN;
-			goto unlock_amo;
+			goto unlock_cmdq;
 		}
-
-		CXIP_LOG_DBG("Updated C_STATE: %p\n", req);
-	}
-
-	memset(&cmd.idc_amo, 0, sizeof(cmd.idc_amo));
-	cmd.idc_amo.idc_header.dfa = dfa;
-	cmd.idc_amo.idc_header.remote_offset = off;
-	cmd.idc_amo.atomic_op = opcode;
-	cmd.idc_amo.atomic_type = dtcode;
-	cmd.idc_amo.cswap_op = swpcode;
-	cmd.idc_amo.local_addr = result_iova;
-	/* Note: 16-byte value will overflow into op1_word2 */
-	memcpy(&cmd.idc_amo.op1_word1, oper1, len);
-	if (compare)
-		memcpy(&cmd.idc_amo.op2_word1, compare, len);
-
-	/* Issue IDC AMO command */
-	ret = cxi_cq_emit_idc_amo(txc->tx_cmdq->dev_cmdq, &cmd.idc_amo,
-				  result != NULL);
-	if (ret) {
-		CXIP_LOG_DBG("Failed to issue IDC AMO command: %d\n", ret);
-
-		/* Return error according to Domain Resource Management */
-		ret = -FI_EAGAIN;
-		goto unlock_amo;
 	}
 
 	cxi_cq_ring(txc->tx_cmdq->dev_cmdq);
@@ -680,21 +739,25 @@ static int _cxip_idc_amo(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	char *static_str = fi_tostr(&msg->op, FI_TYPE_ATOMIC_OP);
 
 	strcpy(op_str, static_str);
-	CXIP_LOG_DBG("req: %p op: %s type: %s buf: %p dest_addr: %ld context %p\n",
-		     req, op_str,
+	CXIP_LOG_DBG("%sreq: %p op: %s type: %s buf: %p dest_addr: %ld context %p\n",
+		     idc ? "IDC " : "", req, op_str,
 		     fi_tostr(&msg->datatype, FI_TYPE_ATOMIC_TYPE),
 		     oper1, msg->addr, msg->context);
 #endif
 
 	return FI_SUCCESS;
 
-unlock_amo:
+unlock_cmdq:
 	fastlock_release(&txc->tx_cmdq->lock);
+
+	if (result)
+		cxip_unmap(req->amo.result_md);
+unmap_oper1:
+	if (!idc)
+		cxip_unmap(req->amo.oper1_md);
+free_req:
 	if (req)
 		cxip_cq_req_free(req);
-unmap_amo:
-	if (result_count)
-		cxip_unmap(result_md);
 
 	return ret;
 }
@@ -735,10 +798,10 @@ static ssize_t cxip_ep_atomic_write(struct fid_ep *ep, const void *buf,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return _cxip_idc_amo(CXIP_RQ_AMO, txc, &msg,
-			     NULL, NULL, 0,
-			     NULL, NULL, 0,
-			     txc->attr.op_flags);
+	return _cxip_amo(CXIP_RQ_AMO, txc, &msg,
+			 NULL, NULL, 0,
+			 NULL, NULL, 0,
+			 txc->attr.op_flags);
 }
 
 static ssize_t cxip_ep_atomic_writev(struct fid_ep *ep,
@@ -770,10 +833,10 @@ static ssize_t cxip_ep_atomic_writev(struct fid_ep *ep,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return _cxip_idc_amo(CXIP_RQ_AMO, txc, &msg,
-			     NULL, NULL, 0,
-			     NULL, NULL, 0,
-			     txc->attr.op_flags);
+	return _cxip_amo(CXIP_RQ_AMO, txc, &msg,
+			 NULL, NULL, 0,
+			 NULL, NULL, 0,
+			 txc->attr.op_flags);
 }
 
 #define CXIP_ATOMIC_WRITEMSG_ALLOWED_FLAGS (FI_INJECT | FI_COMPLETION | \
@@ -797,10 +860,10 @@ static ssize_t cxip_ep_atomic_writemsg(struct fid_ep *ep,
 	if (!txc->selective_completion)
 		flags |= FI_COMPLETION;
 
-	return _cxip_idc_amo(CXIP_RQ_AMO, txc, msg,
-			     NULL, NULL, 0,
-			     NULL, NULL, 0,
-			     flags);
+	return _cxip_amo(CXIP_RQ_AMO, txc, msg,
+			 NULL, NULL, 0,
+			 NULL, NULL, 0,
+			 flags);
 }
 
 static ssize_t cxip_ep_atomic_inject(struct fid_ep *ep, const void *buf,
@@ -834,13 +897,10 @@ static ssize_t cxip_ep_atomic_inject(struct fid_ep *ep, const void *buf,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	/* The FI_INJECT flag is actually a NOP since all AMOs fit in an IDC
-	 * (the source buffer is always immediately reusable).
-	 */
-	return _cxip_idc_amo(CXIP_RQ_AMO, txc, &msg,
-			     NULL, NULL, 0,
-			     NULL, NULL, 0,
-			     FI_INJECT);
+	return _cxip_amo(CXIP_RQ_AMO, txc, &msg,
+			 NULL, NULL, 0,
+			 NULL, NULL, 0,
+			 FI_INJECT);
 }
 
 static ssize_t cxip_ep_atomic_readwrite(struct fid_ep *ep, const void *buf,
@@ -880,10 +940,10 @@ static ssize_t cxip_ep_atomic_readwrite(struct fid_ep *ep, const void *buf,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return _cxip_idc_amo(CXIP_RQ_AMO_FETCH, txc, &msg,
-			     NULL, NULL, 0,
-			     &resultv, &result_desc, 1,
-			     txc->attr.op_flags);
+	return _cxip_amo(CXIP_RQ_AMO_FETCH, txc, &msg,
+			 NULL, NULL, 0,
+			 &resultv, &result_desc, 1,
+			 txc->attr.op_flags);
 }
 
 static ssize_t cxip_ep_atomic_readwritev(struct fid_ep *ep,
@@ -919,10 +979,10 @@ static ssize_t cxip_ep_atomic_readwritev(struct fid_ep *ep,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return _cxip_idc_amo(CXIP_RQ_AMO_FETCH, txc, &msg,
-			     NULL, NULL, 0,
-			     resultv, result_desc, result_count,
-			     txc->attr.op_flags);
+	return _cxip_amo(CXIP_RQ_AMO_FETCH, txc, &msg,
+			 NULL, NULL, 0,
+			 resultv, result_desc, result_count,
+			 txc->attr.op_flags);
 }
 
 #define CXIP_ATOMIC_READMSG_ALLOWED_FLAGS (FI_COMPLETION | CXIP_TX_COMP_MODES)
@@ -947,10 +1007,10 @@ static ssize_t cxip_ep_atomic_readwritemsg(struct fid_ep *ep,
 	if (!txc->selective_completion)
 		flags |= FI_COMPLETION;
 
-	return _cxip_idc_amo(CXIP_RQ_AMO_FETCH, txc, msg,
-			     NULL, NULL, 0,
-			     resultv, result_desc, result_count,
-			     flags);
+	return _cxip_amo(CXIP_RQ_AMO_FETCH, txc, msg,
+			 NULL, NULL, 0,
+			 resultv, result_desc, result_count,
+			 flags);
 }
 
 static ssize_t cxip_ep_atomic_compwrite(struct fid_ep *ep, const void *buf,
@@ -995,10 +1055,10 @@ static ssize_t cxip_ep_atomic_compwrite(struct fid_ep *ep, const void *buf,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return _cxip_idc_amo(CXIP_RQ_AMO_SWAP, txc, &msg,
-			     &comparev, &result_desc, 1,
-			     &resultv, &result_desc, 1,
-			     txc->attr.op_flags);
+	return _cxip_amo(CXIP_RQ_AMO_SWAP, txc, &msg,
+			 &comparev, &result_desc, 1,
+			 &resultv, &result_desc, 1,
+			 txc->attr.op_flags);
 }
 
 static ssize_t cxip_ep_atomic_compwritev(struct fid_ep *ep,
@@ -1037,10 +1097,10 @@ static ssize_t cxip_ep_atomic_compwritev(struct fid_ep *ep,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return _cxip_idc_amo(CXIP_RQ_AMO_SWAP, txc, &msg,
-			     comparev, compare_desc, compare_count,
-			     resultv, result_desc, result_count,
-			     txc->attr.op_flags);
+	return _cxip_amo(CXIP_RQ_AMO_SWAP, txc, &msg,
+			 comparev, compare_desc, compare_count,
+			 resultv, result_desc, result_count,
+			 txc->attr.op_flags);
 }
 
 #define CXIP_ATOMIC_COMPMSG_ALLOWED_FLAGS (FI_COMPLETION | CXIP_TX_COMP_MODES)
@@ -1066,10 +1126,10 @@ cxip_ep_atomic_compwritemsg(struct fid_ep *ep, const struct fi_msg_atomic *msg,
 	if (!txc->selective_completion)
 		flags |= FI_COMPLETION;
 
-	return _cxip_idc_amo(CXIP_RQ_AMO_SWAP, txc, msg,
-			     comparev, compare_desc, compare_count,
-			     resultv, result_desc, result_count,
-			     flags);
+	return _cxip_amo(CXIP_RQ_AMO_SWAP, txc, msg,
+			 comparev, compare_desc, compare_count,
+			 resultv, result_desc, result_count,
+			 flags);
 }
 
 static int cxip_ep_atomic_valid(struct fid_ep *ep,

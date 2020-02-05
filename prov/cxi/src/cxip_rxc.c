@@ -143,7 +143,7 @@ static int rxc_msg_init(struct cxip_rxc *rxc)
 	}
 
 	/* Select the LEP where the queue will be mapped */
-	pid_idx = CXIP_RXC_TO_IDX(rxc->rx_id);
+	pid_idx = CXIP_PTL_IDX_RXC(rxc->rx_id);
 
 	/* If applications AVs are symmetric, use logical FI addresses for
 	 * matching. Otherwise, physical addresses will be used.

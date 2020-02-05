@@ -22,9 +22,10 @@
 #define RMA_WIN_LEN	64
 #define RMA_WIN_KEY	2
 #define RMA_WIN_ACCESS	(FI_REMOTE_READ | FI_REMOTE_WRITE)
+#define MR_KEY_STD	200
 
 /* Create MR -- works like a "remote_calloc()" */
-static void *_cxit_create_mr(struct mem_region *mr)
+static void *_cxit_create_mr(struct mem_region *mr, uint64_t key)
 {
 	int ret;
 
@@ -32,7 +33,7 @@ static void *_cxit_create_mr(struct mem_region *mr)
 	cr_assert_not_null(mr->mem);
 
 	ret = fi_mr_reg(cxit_domain, mr->mem, RMA_WIN_LEN, RMA_WIN_ACCESS, 0,
-			RMA_WIN_KEY, 0, &mr->mr, NULL);
+			key, 0, &mr->mr, NULL);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_reg failed %d", ret);
 
 	ret = fi_mr_bind(mr->mr, &cxit_ep->fid, 0);
@@ -378,55 +379,63 @@ Test(atomic, simple_amo)
 	struct mem_region mr;
 	struct fi_cq_tagged_entry cqe;
 	uint64_t operand1;
-	uint64_t exp_remote = 0;
+	uint64_t exp_remote;
 	uint64_t *rma;
 	int ret;
+	int i;
+	uint64_t key;
 
-	rma = _cxit_create_mr(&mr);
-	cr_assert_eq(*rma, exp_remote,
-		     "Result = %ld, expected = %ld",
-		     *rma, exp_remote);
+	/* Test standard and optimized MRs. */
+	for (i = 0; i < 2; i++) {
+		key = 199 + i;
 
-	operand1 = 1;
-	exp_remote += operand1;
-	ret = fi_atomic(cxit_ep, &operand1, 1, 0,
-			cxit_ep_fi_addr, 0, RMA_WIN_KEY,
-			FI_UINT64, FI_SUM, NULL);
-	cr_assert(ret == FI_SUCCESS, "Return code  = %d", ret);
-	ret = cxit_await_completion(cxit_tx_cq, &cqe);
-	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
-	validate_tx_event(&cqe, FI_ATOMIC | FI_WRITE, NULL);
-	cr_assert_eq(*rma, exp_remote,
-		     "Result = %ld, expected = %ld",
-		     *rma, exp_remote);
+		rma = _cxit_create_mr(&mr, key);
+		exp_remote = 0;
+		cr_assert_eq(*rma, exp_remote,
+			     "Result = %ld, expected = %ld",
+			     *rma, exp_remote);
 
-	operand1 = 3;
-	exp_remote += operand1;
-	ret = fi_atomic(cxit_ep, &operand1, 1, 0,
-			cxit_ep_fi_addr, 0, RMA_WIN_KEY,
-			FI_UINT64, FI_SUM, NULL);
-	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
-	ret = cxit_await_completion(cxit_tx_cq, &cqe);
-	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
-	validate_tx_event(&cqe, FI_ATOMIC | FI_WRITE, NULL);
-	cr_assert_eq(*rma, exp_remote,
-		     "Result = %ld, expected = %ld",
-		     *rma, exp_remote);
+		operand1 = 1;
+		exp_remote += operand1;
+		ret = fi_atomic(cxit_ep, &operand1, 1, 0,
+				cxit_ep_fi_addr, 0, key,
+				FI_UINT64, FI_SUM, NULL);
+		cr_assert(ret == FI_SUCCESS, "Return code  = %d", ret);
+		ret = cxit_await_completion(cxit_tx_cq, &cqe);
+		cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+		validate_tx_event(&cqe, FI_ATOMIC | FI_WRITE, NULL);
+		cr_assert_eq(*rma, exp_remote,
+			     "Result = %ld, expected = %ld",
+			     *rma, exp_remote);
 
-	operand1 = 9;
-	exp_remote += operand1;
-	ret = fi_atomic(cxit_ep, &operand1, 1, 0,
-			cxit_ep_fi_addr, 0, RMA_WIN_KEY,
-			FI_UINT64, FI_SUM, NULL);
-	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
-	ret = cxit_await_completion(cxit_tx_cq, &cqe);
-	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
-	validate_tx_event(&cqe, FI_ATOMIC | FI_WRITE, NULL);
-	cr_assert_eq(*rma, exp_remote,
-		     "Result = %ld, expected = %ld",
-		     *rma, exp_remote);
+		operand1 = 3;
+		exp_remote += operand1;
+		ret = fi_atomic(cxit_ep, &operand1, 1, 0,
+				cxit_ep_fi_addr, 0, key,
+				FI_UINT64, FI_SUM, NULL);
+		cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
+		ret = cxit_await_completion(cxit_tx_cq, &cqe);
+		cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+		validate_tx_event(&cqe, FI_ATOMIC | FI_WRITE, NULL);
+		cr_assert_eq(*rma, exp_remote,
+			     "Result = %ld, expected = %ld",
+			     *rma, exp_remote);
 
-	_cxit_destroy_mr(&mr);
+		operand1 = 9;
+		exp_remote += operand1;
+		ret = fi_atomic(cxit_ep, &operand1, 1, 0,
+				cxit_ep_fi_addr, 0, key,
+				FI_UINT64, FI_SUM, NULL);
+		cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
+		ret = cxit_await_completion(cxit_tx_cq, &cqe);
+		cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+		validate_tx_event(&cqe, FI_ATOMIC | FI_WRITE, NULL);
+		cr_assert_eq(*rma, exp_remote,
+			     "Result = %ld, expected = %ld",
+			     *rma, exp_remote);
+
+		_cxit_destroy_mr(&mr);
+	}
 }
 
 /* Test atomic inject interface */
@@ -440,7 +449,7 @@ Test(atomic, simple_inject)
 	int ret;
 	int count = 0;
 
-	rma = _cxit_create_mr(&mr);
+	rma = _cxit_create_mr(&mr, RMA_WIN_KEY);
 	cr_assert_eq(*rma, exp_remote,
 		     "Result = %ld, expected = %ld",
 		     *rma, exp_remote);
@@ -496,84 +505,93 @@ Test(atomic, simple_fetch)
 	struct mem_region mr;
 	struct fi_cq_tagged_entry cqe;
 	uint64_t operand1;
-	uint64_t exp_remote = 0;
-	uint64_t exp_result = 0;
+	uint64_t exp_remote;
+	uint64_t exp_result;
 	uint64_t *rma;
 	uint64_t *loc;
 	int ret;
+	int i;
+	uint64_t key;
 
-	rma = _cxit_create_mr(&mr);
-	cr_assert_eq(*rma, exp_remote,
-		     "Result = %ld, expected = %ld",
-		     *rma, exp_remote);
+	for (i = 0; i < 2; i++) {
+		key = 199 + i;
 
-	loc = calloc(1, RMA_WIN_LEN);
-	cr_assert_not_null(loc);
+		rma = _cxit_create_mr(&mr, key);
+		exp_remote = 0;
+		exp_result = 0;
+		cr_assert_eq(*rma, exp_remote,
+			     "Result = %ld, expected = %ld",
+			     *rma, exp_remote);
 
-	cr_assert(!fi_cntr_read(cxit_read_cntr));
+		loc = calloc(1, RMA_WIN_LEN);
+		cr_assert_not_null(loc);
 
-	operand1 = 1;
-	*loc = -1;
-	exp_result = exp_remote;
-	exp_remote += operand1;
-	ret = fi_fetch_atomic(cxit_ep, &operand1, 1, 0,
-			      loc, 0,
-			      cxit_ep_fi_addr, 0, RMA_WIN_KEY,
-			      FI_UINT64, FI_SUM, NULL);
-	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
-	ret = cxit_await_completion(cxit_tx_cq, &cqe);
-	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
-	validate_tx_event(&cqe, FI_ATOMIC | FI_READ, NULL);
-	cr_assert_eq(*rma, exp_remote,
-		     "Add Result = %ld, expected = %ld",
-		     *rma, exp_remote);
-	cr_assert_eq(*loc, exp_result,
-		     "Fetch Result = %016lx, expected = %016lx",
-		     *loc, exp_result);
+		fi_cntr_set(cxit_read_cntr, 0);
+		while (fi_cntr_read(cxit_read_cntr));
 
-	operand1 = 3;
-	*loc = -1;
-	exp_result = exp_remote;
-	exp_remote += operand1;
-	ret = fi_fetch_atomic(cxit_ep, &operand1, 1, 0,
-			      loc, 0,
-			      cxit_ep_fi_addr, 0, RMA_WIN_KEY,
-			      FI_UINT64, FI_SUM, NULL);
-	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
-	ret = cxit_await_completion(cxit_tx_cq, &cqe);
-	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
-	validate_tx_event(&cqe, FI_ATOMIC | FI_READ, NULL);
-	cr_assert_eq(*rma, exp_remote,
-		     "Add Result = %ld, expected = %ld",
-		     *rma, exp_remote);
-	cr_assert_eq(*loc, exp_result,
-		     "Fetch Result = %016lx, expected = %016lx",
-		     *loc, exp_result);
+		operand1 = 1;
+		*loc = -1;
+		exp_result = exp_remote;
+		exp_remote += operand1;
+		ret = fi_fetch_atomic(cxit_ep, &operand1, 1, 0,
+				      loc, 0,
+				      cxit_ep_fi_addr, 0, key,
+				      FI_UINT64, FI_SUM, NULL);
+		cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
+		ret = cxit_await_completion(cxit_tx_cq, &cqe);
+		cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+		validate_tx_event(&cqe, FI_ATOMIC | FI_READ, NULL);
+		cr_assert_eq(*rma, exp_remote,
+			     "Add Result = %ld, expected = %ld",
+			     *rma, exp_remote);
+		cr_assert_eq(*loc, exp_result,
+			     "Fetch Result = %016lx, expected = %016lx",
+			     *loc, exp_result);
 
-	operand1 = 9;
-	*loc = -1;
-	exp_result = exp_remote;
-	exp_remote += operand1;
-	ret = fi_fetch_atomic(cxit_ep, &operand1, 1, 0,
-			      loc, 0,
-			      cxit_ep_fi_addr, 0, RMA_WIN_KEY,
-			      FI_UINT64, FI_SUM, NULL);
-	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
-	ret = cxit_await_completion(cxit_tx_cq, &cqe);
-	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
-	validate_tx_event(&cqe, FI_ATOMIC | FI_READ, NULL);
-	cr_assert_eq(*rma, exp_remote,
-		     "Add Result = %ld, expected = %ld",
-		     *rma, exp_remote);
-	cr_assert_eq(*loc, exp_result,
-		     "Fetch Result = %016lx, expected = %016lx",
-		     *loc, exp_result);
+		operand1 = 3;
+		*loc = -1;
+		exp_result = exp_remote;
+		exp_remote += operand1;
+		ret = fi_fetch_atomic(cxit_ep, &operand1, 1, 0,
+				      loc, 0,
+				      cxit_ep_fi_addr, 0, key,
+				      FI_UINT64, FI_SUM, NULL);
+		cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
+		ret = cxit_await_completion(cxit_tx_cq, &cqe);
+		cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+		validate_tx_event(&cqe, FI_ATOMIC | FI_READ, NULL);
+		cr_assert_eq(*rma, exp_remote,
+			     "Add Result = %ld, expected = %ld",
+			     *rma, exp_remote);
+		cr_assert_eq(*loc, exp_result,
+			     "Fetch Result = %016lx, expected = %016lx",
+			     *loc, exp_result);
 
-	while (fi_cntr_read(cxit_read_cntr) != 3)
-		sched_yield();
+		operand1 = 9;
+		*loc = -1;
+		exp_result = exp_remote;
+		exp_remote += operand1;
+		ret = fi_fetch_atomic(cxit_ep, &operand1, 1, 0,
+				      loc, 0,
+				      cxit_ep_fi_addr, 0, key,
+				      FI_UINT64, FI_SUM, NULL);
+		cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
+		ret = cxit_await_completion(cxit_tx_cq, &cqe);
+		cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+		validate_tx_event(&cqe, FI_ATOMIC | FI_READ, NULL);
+		cr_assert_eq(*rma, exp_remote,
+			     "Add Result = %ld, expected = %ld",
+			     *rma, exp_remote);
+		cr_assert_eq(*loc, exp_result,
+			     "Fetch Result = %016lx, expected = %016lx",
+			     *loc, exp_result);
 
-	free(loc);
-	_cxit_destroy_mr(&mr);
+		while (fi_cntr_read(cxit_read_cntr) != 3)
+			sched_yield();
+
+		free(loc);
+		_cxit_destroy_mr(&mr);
+	}
 }
 
 Test(atomic, simple_swap)
@@ -582,68 +600,76 @@ Test(atomic, simple_swap)
 	struct fi_cq_tagged_entry cqe;
 	uint64_t operand1;
 	uint64_t compare;
-	uint64_t exp_remote = 0;
-	uint64_t exp_result = 0;
+	uint64_t exp_remote;
+	uint64_t exp_result;
 	uint64_t *rma;
 	uint64_t *loc;
 	int ret;
+	int i;
+	uint64_t key;
 
-	rma = _cxit_create_mr(&mr);
-	cr_assert_eq(*rma, exp_remote,
-		     "Result = %ld, expected = %ld",
-		     *rma, exp_remote);
+	for (i = 0; i < 2; i++) {
+		key = 199 + i;
 
-	loc = calloc(1, RMA_WIN_LEN);
-	cr_assert_not_null(loc);
+		rma = _cxit_create_mr(&mr, key);
+			exp_remote = 0;
+			exp_result = 0;
+		cr_assert_eq(*rma, exp_remote,
+			     "Result = %ld, expected = %ld",
+			     *rma, exp_remote);
 
-	*rma = 0;	/* remote == 0 */
-	operand1 = 1;	/* change remote to 1 */
-	compare = 2;	/* if remote != 2 (true) */
-	*loc = -1;	/* initialize result */
-	exp_remote = 1;	/* expect remote == 1 */
-	exp_result = 0;	/* expect result == 0 */
-	ret = fi_compare_atomic(cxit_ep,
-				&operand1, 1, 0,
-				&compare, 0,
-				loc, 0,
-				cxit_ep_fi_addr, 0, RMA_WIN_KEY,
-				FI_UINT64, FI_CSWAP_NE, NULL);
-	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
-	ret = cxit_await_completion(cxit_tx_cq, &cqe);
-	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
-	validate_tx_event(&cqe, FI_ATOMIC | FI_READ, NULL);
-	cr_assert_eq(*rma, exp_remote,
-		     "Add Result = %ld, expected = %ld",
-		     *rma, exp_remote);
-	cr_assert_eq(*loc, exp_result,
-		     "Fetch Result = %016lx, expected = %016lx",
-		     *loc, exp_result);
+		loc = calloc(1, RMA_WIN_LEN);
+		cr_assert_not_null(loc);
 
-	*rma = 2;	/* remote == 2 */
-	operand1 = 1;	/* change remote to 1 */
-	compare = 2;	/* if remote != 2 (false) */
-	*loc = -1;	/* initialize result */
-	exp_remote = 2;	/* expect remote == 2 (no op) */
-	exp_result = 2;	/* expect result == 2 (does return value) */
-	ret = fi_compare_atomic(cxit_ep,
-				&operand1, 1, 0,
-				&compare, 0,
-				loc, 0,
-				cxit_ep_fi_addr, 0, RMA_WIN_KEY,
-				FI_UINT64, FI_CSWAP_NE, NULL);
-	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
-	ret = cxit_await_completion(cxit_tx_cq, &cqe);
-	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
-	validate_tx_event(&cqe, FI_ATOMIC | FI_READ, NULL);
-	cr_assert_eq(*rma, exp_remote,
-		     "Add Result = %ld, expected = %ld",
-		     *rma, exp_remote);
-	cr_assert_eq(*loc, exp_result,
-		     "Fetch Result = %016lx, expected = %016lx",
-		     *loc, exp_result);
+		*rma = 0;	/* remote == 0 */
+		operand1 = 1;	/* change remote to 1 */
+		compare = 2;	/* if remote != 2 (true) */
+		*loc = -1;	/* initialize result */
+		exp_remote = 1;	/* expect remote == 1 */
+		exp_result = 0;	/* expect result == 0 */
+		ret = fi_compare_atomic(cxit_ep,
+					&operand1, 1, 0,
+					&compare, 0,
+					loc, 0,
+					cxit_ep_fi_addr, 0, key,
+					FI_UINT64, FI_CSWAP_NE, NULL);
+		cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
+		ret = cxit_await_completion(cxit_tx_cq, &cqe);
+		cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+		validate_tx_event(&cqe, FI_ATOMIC | FI_READ, NULL);
+		cr_assert_eq(*rma, exp_remote,
+			     "Add Result = %ld, expected = %ld",
+			     *rma, exp_remote);
+		cr_assert_eq(*loc, exp_result,
+			     "Fetch Result = %016lx, expected = %016lx",
+			     *loc, exp_result);
 
-	free(loc);
-	_cxit_destroy_mr(&mr);
+		*rma = 2;	/* remote == 2 */
+		operand1 = 1;	/* change remote to 1 */
+		compare = 2;	/* if remote != 2 (false) */
+		*loc = -1;	/* initialize result */
+		exp_remote = 2;	/* expect remote == 2 (no op) */
+		exp_result = 2;	/* expect result == 2 (does return value) */
+		ret = fi_compare_atomic(cxit_ep,
+					&operand1, 1, 0,
+					&compare, 0,
+					loc, 0,
+					cxit_ep_fi_addr, 0, key,
+					FI_UINT64, FI_CSWAP_NE, NULL);
+		cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
+		ret = cxit_await_completion(cxit_tx_cq, &cqe);
+		cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+		validate_tx_event(&cqe, FI_ATOMIC | FI_READ, NULL);
+		cr_assert_eq(*rma, exp_remote,
+			     "Add Result = %ld, expected = %ld",
+			     *rma, exp_remote);
+		cr_assert_eq(*loc, exp_result,
+			     "Fetch Result = %016lx, expected = %016lx",
+			     *loc, exp_result);
+
+		free(loc);
+		_cxit_destroy_mr(&mr);
+	}
 }
 
 /* Perform a full combinatorial test suite.
@@ -767,7 +793,8 @@ static void _test_amo(int index, enum fi_datatype dt, enum fi_op op, int err,
 		      void *operand1,
 		      void *compare,
 		      void *loc, void *loc_init,
-		      void *rma, void *rma_init, void *rma_expect)
+		      void *rma, void *rma_init, void *rma_expect,
+		      uint64_t key)
 {
 	struct fi_cq_tagged_entry cqe;
 	char msgbuf[128];
@@ -800,17 +827,17 @@ static void _test_amo(int index, enum fi_datatype dt, enum fi_op op, int err,
 		/* This is a compare command */
 		ret = fi_compare_atomic(cxit_ep, operand1, 1, 0,
 					compare, 0, loc, 0,
-					cxit_ep_fi_addr, 0, RMA_WIN_KEY, dt,
+					cxit_ep_fi_addr, 0, key, dt,
 					op, NULL);
 	} else if (loc) {
 		/* This is a fetch command */
 		ret = fi_fetch_atomic(cxit_ep, operand1, 1, 0, loc, 0,
-				      cxit_ep_fi_addr, 0, RMA_WIN_KEY, dt, op,
+				      cxit_ep_fi_addr, 0, key, dt, op,
 				      NULL);
 	} else {
 		/* This is a simple command */
 		ret = fi_atomic(cxit_ep, operand1, 1, 0,
-				cxit_ep_fi_addr, 0, RMA_WIN_KEY, dt, op, NULL);
+				cxit_ep_fi_addr, 0, key, dt, op, NULL);
 	}
 
 	if (err) {
@@ -867,6 +894,7 @@ struct test_int_parms {
 	uint64_t o1;
 	uint64_t rini;
 	uint64_t rexp;
+	uint64_t key;
 };
 
 static struct test_int_parms int_parms[] = {
@@ -936,8 +964,24 @@ static struct test_int_parms int_parms[] = {
 
 ParameterizedTestParameters(atomic, test_int)
 {
-	return cr_make_param_array(struct test_int_parms, int_parms,
-				   ARRAY_SIZE(int_parms));
+	struct test_int_parms *params;
+	int tests = ARRAY_SIZE(int_parms);
+	int i;
+
+	params = malloc(sizeof(int_parms) * 2);
+
+	memcpy(params, int_parms, sizeof(int_parms));
+	memcpy((uint8_t *)params + sizeof(int_parms), int_parms,
+	       sizeof(int_parms));
+
+	/* Make duplicate tests that use a standard MR key */
+	for (i = 0; i < tests; i++) {
+		params[tests + i].key = MR_KEY_STD;
+		params[tests + i].index += 1000;
+	}
+
+	return cr_make_param_array(struct test_int_parms, params,
+				   tests * 2);
 }
 
 ParameterizedTest(struct test_int_parms *p, atomic, test_int)
@@ -948,7 +992,7 @@ ParameterizedTest(struct test_int_parms *p, atomic, test_int)
 	uint64_t *loc;
 	uint64_t lini = -1;
 
-	rma = _cxit_create_mr(&mr);
+	rma = _cxit_create_mr(&mr, p->key);
 
 	loc = calloc(1, RMA_WIN_LEN);
 	cr_assert_not_null(loc);
@@ -957,14 +1001,16 @@ ParameterizedTest(struct test_int_parms *p, atomic, test_int)
 		for (dt = FI_INT8; dt <= FI_UINT64; dt++) {
 			_test_amo(p->index, dt, p->op, p->err, &p->o1,
 				  0, 0, 0,
-				  rma, &p->rini, &p->rexp);
+				  rma, &p->rini, &p->rexp,
+				  p->key);
 		}
 	}
 
 	if (p->opmask & _FAMO) {
 		for (dt = FI_INT8; dt <= FI_UINT64; dt++) {
 			_test_amo(p->index, dt, p->op, p->err, &p->o1,
-				  0, loc, &lini, rma, &p->rini, &p->rexp);
+				  0, loc, &lini, rma, &p->rini, &p->rexp,
+				  p->key);
 		}
 	}
 
@@ -972,7 +1018,8 @@ ParameterizedTest(struct test_int_parms *p, atomic, test_int)
 		for (dt = FI_INT8; dt <= FI_UINT64; dt++) {
 			_test_amo(p->index, dt, p->op, p->err, &p->o1,
 				  &p->comp, loc, &lini, rma, &p->rini,
-				  &p->rexp);
+				  &p->rexp,
+				  p->key);
 		}
 	}
 
@@ -991,6 +1038,7 @@ struct test_flt_parms {
 	float o1;
 	float rini;
 	float rexp;
+	uint64_t key;
 };
 
 static struct test_flt_parms flt_parms[] = {
@@ -1030,8 +1078,24 @@ static struct test_flt_parms flt_parms[] = {
 
 ParameterizedTestParameters(atomic, test_flt)
 {
-	return cr_make_param_array(struct test_flt_parms, flt_parms,
-				   ARRAY_SIZE(flt_parms));
+	struct test_flt_parms *params;
+	int tests = ARRAY_SIZE(flt_parms);
+	int i;
+
+	params = malloc(sizeof(flt_parms) * 2);
+
+	memcpy(params, flt_parms, sizeof(flt_parms));
+	memcpy((uint8_t *)params + sizeof(flt_parms), flt_parms,
+	       sizeof(flt_parms));
+
+	/* Make duplicate tests that use a standard MR key */
+	for (i = 0; i < tests; i++) {
+		params[tests + i].key = MR_KEY_STD;
+		params[tests + i].index += 1000;
+	}
+
+	return cr_make_param_array(struct test_flt_parms, params,
+				   tests * 2);
 }
 
 ParameterizedTest(struct test_flt_parms *p, atomic, test_flt)
@@ -1042,7 +1106,7 @@ ParameterizedTest(struct test_flt_parms *p, atomic, test_flt)
 	uint64_t *loc;
 	uint64_t lini = -1;
 
-	rma = _cxit_create_mr(&mr);
+	rma = _cxit_create_mr(&mr, p->key);
 
 	loc = calloc(1, RMA_WIN_LEN);
 	cr_assert_not_null(loc);
@@ -1050,18 +1114,21 @@ ParameterizedTest(struct test_flt_parms *p, atomic, test_flt)
 	if (p->opmask & _AMO) {
 		_test_amo(p->index, dt, p->op, p->err, &p->o1,
 			  0, 0, 0,
-			  rma, &p->rini, &p->rexp);
+			  rma, &p->rini, &p->rexp,
+			  p->key);
 	}
 
 	if (p->opmask & _FAMO) {
 		_test_amo(p->index, dt, p->op, p->err, &p->o1,
-			  0, loc, &lini, rma, &p->rini, &p->rexp);
+			  0, loc, &lini, rma, &p->rini, &p->rexp,
+			  p->key);
 	}
 
 	if (p->opmask & _CAMO) {
 		_test_amo(p->index, dt, p->op, p->err, &p->o1,
 			  &p->comp, loc, &lini, rma, &p->rini,
-			  &p->rexp);
+			  &p->rexp,
+			  p->key);
 	}
 
 	free(loc);
@@ -1079,6 +1146,7 @@ struct test_dbl_parms {
 	double o1;
 	double rini;
 	double rexp;
+	uint64_t key;
 };
 
 static struct test_dbl_parms dbl_parms[] = {
@@ -1118,8 +1186,24 @@ static struct test_dbl_parms dbl_parms[] = {
 
 ParameterizedTestParameters(atomic, test_dbl)
 {
-	return cr_make_param_array(struct test_dbl_parms, dbl_parms,
-				   ARRAY_SIZE(dbl_parms));
+	struct test_dbl_parms *params;
+	int tests = ARRAY_SIZE(dbl_parms);
+	int i;
+
+	params = malloc(sizeof(dbl_parms) * 2);
+
+	memcpy(params, dbl_parms, sizeof(dbl_parms));
+	memcpy((uint8_t *)params + sizeof(dbl_parms), dbl_parms,
+	       sizeof(dbl_parms));
+
+	/* Make duplicate tests that use a standard MR key */
+	for (i = 0; i < tests; i++) {
+		params[tests + i].key = MR_KEY_STD;
+		params[tests + i].index += 1000;
+	}
+
+	return cr_make_param_array(struct test_dbl_parms, params,
+				   tests * 2);
 }
 
 ParameterizedTest(struct test_dbl_parms *p, atomic, test_dbl)
@@ -1130,7 +1214,7 @@ ParameterizedTest(struct test_dbl_parms *p, atomic, test_dbl)
 	uint64_t *loc;
 	uint64_t lini = -1;
 
-	rma = _cxit_create_mr(&mr);
+	rma = _cxit_create_mr(&mr, p->key);
 
 	loc = calloc(1, RMA_WIN_LEN);
 	cr_assert_not_null(loc);
@@ -1138,18 +1222,21 @@ ParameterizedTest(struct test_dbl_parms *p, atomic, test_dbl)
 	if (p->opmask & _AMO) {
 		_test_amo(p->index, dt, p->op, p->err, &p->o1,
 			  0, 0, 0,
-			  rma, &p->rini, &p->rexp);
+			  rma, &p->rini, &p->rexp,
+			  p->key);
 	}
 
 	if (p->opmask & _FAMO) {
 		_test_amo(p->index, dt, p->op, p->err, &p->o1,
-			  0, loc, &lini, rma, &p->rini, &p->rexp);
+			  0, loc, &lini, rma, &p->rini, &p->rexp,
+			  p->key);
 	}
 
 	if (p->opmask & _CAMO) {
 		_test_amo(p->index, dt, p->op, p->err, &p->o1,
 			  &p->comp, loc, &lini, rma, &p->rini,
-			  &p->rexp);
+			  &p->rexp,
+			  p->key);
 	}
 
 	free(loc);
@@ -1168,7 +1255,7 @@ struct test_cplx_parms {
 	float complex o1;
 	float complex rini;
 	float complex rexp;
-
+	uint64_t key;
 };
 
 static struct test_cplx_parms cplx_parms[] = {
@@ -1208,8 +1295,24 @@ static struct test_cplx_parms cplx_parms[] = {
 
 ParameterizedTestParameters(atomic, test_cplx)
 {
-	return cr_make_param_array(struct test_cplx_parms, cplx_parms,
-				   ARRAY_SIZE(cplx_parms));
+	struct test_cplx_parms *params;
+	int tests = ARRAY_SIZE(cplx_parms);
+	int i;
+
+	params = malloc(sizeof(cplx_parms) * 2);
+
+	memcpy(params, cplx_parms, sizeof(cplx_parms));
+	memcpy((uint8_t *)params + sizeof(cplx_parms), cplx_parms,
+	       sizeof(cplx_parms));
+
+	/* Make duplicate tests that use a standard MR key */
+	for (i = 0; i < tests; i++) {
+		params[tests + i].key = MR_KEY_STD;
+		params[tests + i].index += 1000;
+	}
+
+	return cr_make_param_array(struct test_cplx_parms, params,
+				   tests * 2);
 }
 
 ParameterizedTest(struct test_cplx_parms *p, atomic, test_cplx)
@@ -1219,8 +1322,9 @@ ParameterizedTest(struct test_cplx_parms *p, atomic, test_cplx)
 	uint64_t *rma;
 	uint64_t *loc;
 	uint64_t lini = -1;
+	uint64_t key = 0;
 
-	rma = _cxit_create_mr(&mr);
+	rma = _cxit_create_mr(&mr, key);
 
 	loc = calloc(1, RMA_WIN_LEN);
 	cr_assert_not_null(loc);
@@ -1228,18 +1332,21 @@ ParameterizedTest(struct test_cplx_parms *p, atomic, test_cplx)
 	if (p->opmask & _AMO) {
 		_test_amo(p->index, dt, p->op, p->err, &p->o1,
 			  0, 0, 0,
-			  rma, &p->rini, &p->rexp);
+			  rma, &p->rini, &p->rexp,
+			  key);
 	}
 
 	if (p->opmask & _FAMO) {
 		_test_amo(p->index, dt, p->op, p->err, &p->o1,
-			  0, loc, &lini, rma, &p->rini, &p->rexp);
+			  0, loc, &lini, rma, &p->rini, &p->rexp,
+			  key);
 	}
 
 	if (p->opmask & _CAMO) {
 		_test_amo(p->index, dt, p->op, p->err, &p->o1,
 			  &p->comp, loc, &lini, rma, &p->rini,
-			  &p->rexp);
+			  &p->rexp,
+			  key);
 	}
 
 	free(loc);
@@ -1259,7 +1366,7 @@ struct test_dcplx_parms {
 	double complex o1;
 	double complex rini;
 	double complex rexp;
-
+	uint64_t key;
 };
 
 static struct test_dcplx_parms dcplx_parms[] = {
@@ -1297,8 +1404,24 @@ static struct test_dcplx_parms dcplx_parms[] = {
 
 ParameterizedTestParameters(atomic, test_dcplx)
 {
-	return cr_make_param_array(struct test_dcplx_parms, dcplx_parms,
-				   ARRAY_SIZE(dcplx_parms));
+	struct test_dcplx_parms *params;
+	int tests = ARRAY_SIZE(dcplx_parms);
+	int i;
+
+	params = malloc(sizeof(dcplx_parms) * 2);
+
+	memcpy(params, dcplx_parms, sizeof(dcplx_parms));
+	memcpy((uint8_t *)params + sizeof(dcplx_parms), dcplx_parms,
+	       sizeof(dcplx_parms));
+
+	/* Make duplicate tests that use a standard MR key */
+	for (i = 0; i < tests; i++) {
+		params[tests + i].key = MR_KEY_STD;
+		params[tests + i].index += 1000;
+	}
+
+	return cr_make_param_array(struct test_dcplx_parms, params,
+				   tests * 2);
 }
 
 ParameterizedTest(struct test_dcplx_parms *p, atomic, test_dcplx)
@@ -1309,7 +1432,7 @@ ParameterizedTest(struct test_dcplx_parms *p, atomic, test_dcplx)
 	uint64_t *loc;
 	uint64_t lini = -1;
 
-	rma = _cxit_create_mr(&mr);
+	rma = _cxit_create_mr(&mr, p->key);
 
 	loc = calloc(1, RMA_WIN_LEN);
 	cr_assert_not_null(loc);
@@ -1317,18 +1440,21 @@ ParameterizedTest(struct test_dcplx_parms *p, atomic, test_dcplx)
 	if (p->opmask & _AMO) {
 		_test_amo(p->index, dt, p->op, p->err, &p->o1,
 			  0, 0, 0,
-			  rma, &p->rini, &p->rexp);
+			  rma, &p->rini, &p->rexp,
+			  p->key);
 	}
 
 	if (p->opmask & _FAMO) {
 		_test_amo(p->index, dt, p->op, p->err, &p->o1,
-			  0, loc, &lini, rma, &p->rini, &p->rexp);
+			  0, loc, &lini, rma, &p->rini, &p->rexp,
+			  p->key);
 	}
 
 	if (p->opmask & _CAMO) {
 		_test_amo(p->index, dt, p->op, p->err, &p->o1,
 			  &p->comp, loc, &lini, rma, &p->rini,
-			  &p->rexp);
+			  &p->rexp,
+			  p->key);
 	}
 
 	free(loc);
@@ -1351,7 +1477,7 @@ Test(atomic, amo_cleanup)
 	for (i = 0; i < win_len; i++)
 		send_buf[i] = 0xb1 * i;
 
-	_cxit_create_mr(&mr);
+	_cxit_create_mr(&mr, RMA_WIN_KEY);
 
 	/* Send 8 bytes from send buffer data to RMA window 0 */
 	for (i = 0; i < writes; i++) {
@@ -1377,7 +1503,7 @@ Test(atomic, amo_batch)
 	int ret;
 	int i;
 
-	_cxit_create_mr(&mr);
+	_cxit_create_mr(&mr, RMA_WIN_KEY);
 
 	cr_assert(!fi_cntr_read(cxit_write_cntr));
 
@@ -1442,7 +1568,7 @@ Test(atomic_sel, selective_completion,
 	struct fi_rma_ioc rma_ioc;
 	int count = 0;
 
-	rma = _cxit_create_mr(&mr);
+	rma = _cxit_create_mr(&mr, RMA_WIN_KEY);
 	cr_assert_eq(*rma, exp_remote,
 		     "Result = %ld, expected = %ld",
 		     *rma, exp_remote);
@@ -1659,7 +1785,7 @@ Test(atomic_sel, selective_completion_suppress,
 	struct fi_rma_ioc rma_ioc;
 	int count = 0;
 
-	rma = _cxit_create_mr(&mr);
+	rma = _cxit_create_mr(&mr, RMA_WIN_KEY);
 	cr_assert_eq(*rma, exp_remote,
 		     "Result = %ld, expected = %ld",
 		     *rma, exp_remote);
@@ -1867,7 +1993,7 @@ Test(atomic, rem_cntr)
 	int ret;
 	int count = 0;
 
-	rma = _cxit_create_mr(&mr);
+	rma = _cxit_create_mr(&mr, RMA_WIN_KEY);
 	cr_assert_eq(*rma, exp_remote,
 		     "Result = %ld, expected = %ld",
 		     *rma, exp_remote);
@@ -1951,7 +2077,7 @@ Test(atomic, flush)
 	struct fi_rma_ioc rma_ioc;
 	int count = 0;
 
-	rma = _cxit_create_mr(&mr);
+	rma = _cxit_create_mr(&mr, RMA_WIN_KEY);
 	cr_assert_eq(*rma, exp_remote,
 		     "Result = %ld, expected = %ld",
 		     *rma, exp_remote);

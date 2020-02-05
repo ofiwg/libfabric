@@ -423,15 +423,19 @@ void validate_rx_event(struct fi_cq_tagged_entry *cqe, void *context,
 	cr_assert(cqe->tag == tag, "Invalid CQE tag");
 }
 
-void mr_create(size_t len, uint64_t access, uint8_t seed, uint64_t key,
-	       struct mem_region *mr)
+int mr_create(size_t len, uint64_t access, uint8_t seed, uint64_t key,
+	      struct mem_region *mr)
 {
 	int ret;
 
 	cr_assert_not_null(mr);
 
-	mr->mem = calloc(1, len);
-	cr_assert_not_null(mr->mem, "Error allocating memory window");
+	if (len) {
+		mr->mem = calloc(1, len);
+		cr_assert_not_null(mr->mem, "Error allocating memory window");
+	} else {
+		mr->mem = 0;
+	}
 
 	for (size_t i = 0; i < len; i++)
 		mr->mem[i] = i + seed;
@@ -446,8 +450,7 @@ void mr_create(size_t len, uint64_t access, uint8_t seed, uint64_t key,
 	ret = fi_mr_bind(mr->mr, &cxit_rem_cntr->fid, FI_REMOTE_WRITE);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_bind(cntr) failed %d", ret);
 
-	ret = fi_mr_enable(mr->mr);
-	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_enable failed %d", ret);
+	return fi_mr_enable(mr->mr);
 }
 
 void mr_destroy(struct mem_region *mr)

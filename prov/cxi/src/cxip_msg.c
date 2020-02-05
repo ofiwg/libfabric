@@ -2715,7 +2715,7 @@ static ssize_t _cxip_send_long(struct cxip_txc *txc, const void *buf,
 	/* Calculate DFA */
 	rx_id = CXIP_AV_ADDR_RXC(txc->ep_obj->av, dest_addr);
 	pid_bits = dom->dev_if->if_dev->info.pid_bits;
-	pid_idx = CXIP_RXC_TO_IDX(rx_id);
+	pid_idx = CXIP_PTL_IDX_RXC(rx_id);
 	cxi_build_dfa(caddr.nic, caddr.pid, pid_bits, pid_idx, &dfa,
 		      &idx_ext);
 
@@ -2880,7 +2880,7 @@ static ssize_t _cxip_send_eager(struct cxip_txc *txc, const void *buf,
 	int tx_id;
 
 	/* Always use IDCs when the payload fits */
-	idc = (len <= C_MAX_IDC_PAYLOAD_UNR);
+	idc = (len <= CXIP_INJECT_SIZE);
 
 	if ((flags & FI_INJECT) && !idc)
 		return -FI_EMSGSIZE;
@@ -2944,7 +2944,7 @@ static ssize_t _cxip_send_eager(struct cxip_txc *txc, const void *buf,
 	/* Build Put command descriptor */
 	rx_id = CXIP_AV_ADDR_RXC(txc->ep_obj->av, dest_addr);
 	pid_bits = dom->dev_if->if_dev->info.pid_bits;
-	pid_idx = CXIP_RXC_TO_IDX(rx_id);
+	pid_idx = CXIP_PTL_IDX_RXC(rx_id);
 	cxi_build_dfa(caddr.nic, caddr.pid, pid_bits, pid_idx, &dfa,
 		      &idx_ext);
 

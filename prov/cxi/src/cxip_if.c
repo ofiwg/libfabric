@@ -145,6 +145,8 @@ int cxip_get_if(uint32_t nic_addr, struct cxip_if **dev_if)
 			goto free_evtq_md;
 		}
 
+		memset(&if_entry->mr_table, 0, sizeof(if_entry->mr_table));
+
 		CXIP_LOG_DBG("Allocated IF, NIC: %u ID: %u\n", if_entry->if_nic,
 			     if_entry->if_idx);
 	} else {
@@ -196,6 +198,8 @@ void cxip_put_if(struct cxip_if *dev_if)
 	fastlock_acquire(&dev_if->lock);
 
 	if (!ofi_atomic_dec32(&dev_if->ref)) {
+		ofi_idx_reset(&dev_if->mr_table);
+
 		ret = cxil_destroy_evtq(dev_if->mr_evtq);
 		if (ret)
 			CXIP_LOG_ERROR("Failed to destroy EVTQ: %d\n", ret);

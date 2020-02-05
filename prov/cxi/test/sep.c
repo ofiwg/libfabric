@@ -314,17 +314,14 @@ Test(sep, ctx_rx)
 	cxit_destroy_sep();
 }
 
-/* Default and maximum -- pid_granule can be < 256 */
-#define	CXIP_MAX_MR_CNT	CXIP_PID_MR_CNT(256)
-
 struct fid_ep *cxit_sep_tx[CXIP_EP_MAX_TX_CNT] = {};
 struct fid_ep *cxit_sep_rx[CXIP_EP_MAX_RX_CNT] = {};
 struct fid_cq *cxit_sep_tx_cq[CXIP_EP_MAX_TX_CNT] = {};
 struct fid_cq *cxit_sep_rx_cq[CXIP_EP_MAX_RX_CNT] = {};
 fi_addr_t cxit_sep_rx_addr[CXIP_EP_MAX_RX_CNT] = {};
 uint8_t *cxit_sep_rx_buf[CXIP_EP_MAX_RX_CNT] = {};
-uint8_t *cxit_sep_mr_buf[CXIP_MAX_MR_CNT] = {};
-struct fid_mr *cxit_sep_mr[CXIP_MAX_MR_CNT] = {};
+uint8_t *cxit_sep_mr_buf[CXIP_EP_MAX_RX_CNT] = {};
+struct fid_mr *cxit_sep_mr[CXIP_EP_MAX_RX_CNT] = {};
 int cxit_sep_tx_cnt;
 int cxit_sep_rx_cnt;
 int cxit_sep_mr_cnt;

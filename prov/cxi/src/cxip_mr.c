@@ -17,19 +17,332 @@
 #define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_MR, __VA_ARGS__)
 #define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_MR, __VA_ARGS__)
 
-#define MR_LINK_EVENT_ID 0x1e21
+/*
+ * cxip_ep_mr_insert() - Insert an MR key into the EP key space.
+ *
+ * Called during MR enable. The key space is a sparse 64 bits.
+ */
+static int cxip_ep_mr_insert(struct cxip_ep_obj *ep_obj, struct cxip_mr *mr)
+{
+	struct cxip_mr *tmp_mr;
+
+	fastlock_acquire(&ep_obj->lock);
+
+	dlist_foreach_container(&ep_obj->mr_list, struct cxip_mr, tmp_mr,
+				ep_entry) {
+		if (tmp_mr->key == mr->key) {
+			fastlock_release(&ep_obj->lock);
+			return -FI_ENOKEY;
+		}
+	}
+
+	dlist_insert_tail(&mr->ep_entry, &ep_obj->mr_list);
+
+	fastlock_release(&ep_obj->lock);
+
+	return FI_SUCCESS;
+}
 
 /*
- * cxip_mr_enable() - Assign HW resources to the MR.
+ * cxip_ep_mr_insert() - Remove an MR key from the EP key space.
+ */
+static void cxip_ep_mr_remove(struct cxip_mr *mr)
+{
+	fastlock_acquire(&mr->ep->ep_obj->lock);
+
+	dlist_remove(&mr->ep_entry);
+
+	fastlock_release(&mr->ep->ep_obj->lock);
+}
+
+/*
+ * cxip_ep_mr_enable() - Initialize the endpoint for the use of standard MRs.
+ */
+static int cxip_ep_mr_enable(struct cxip_ep_obj *ep_obj)
+{
+	struct cxi_pt_alloc_opts opts = {
+		.use_long_event = 1,
+		.is_matching = 1,
+		.pe_num = CXI_PE_NUM_ANY,
+		.le_pool = CXI_LE_POOL_ANY
+	};
+	union c_cmdu cmd = {};
+	const union c_event *event;
+	int ret;
+
+	fastlock_acquire(&ep_obj->lock);
+
+	if (ep_obj->mr_init) {
+		fastlock_release(&ep_obj->lock);
+		return FI_SUCCESS;
+	}
+
+	ret = cxip_pte_alloc(ep_obj->if_dom, ep_obj->domain->dev_if->mr_evtq,
+			     CXIP_PTL_IDX_MR_STD, &opts, &ep_obj->mr_pte);
+	if (ret != FI_SUCCESS) {
+		CXIP_LOG_DBG("Failed to allocate PTE: %d\n", ret);
+		ret = -FI_ENOSPC;
+		goto err_unlock_ep;
+	}
+
+	fastlock_acquire(&ep_obj->domain->dev_if->lock);
+
+	/* Enable the PTE */
+	cmd.command.opcode = C_CMD_TGT_SETSTATE;
+	cmd.set_state.ptlte_index = ep_obj->mr_pte->pte->ptn;
+	cmd.set_state.ptlte_state = C_PTLTE_ENABLED;
+
+	ret = cxi_cq_emit_target(ep_obj->domain->dev_if->mr_cmdq->dev_cmdq,
+				 &cmd);
+	if (ret) {
+		/* This is a bug, we have exclusive access to this CMDQ. */
+		CXIP_LOG_ERROR("Failed to enqueue command: %d\n", ret);
+		goto err_pte_free;
+	}
+
+	cxi_cq_ring(ep_obj->domain->dev_if->mr_cmdq->dev_cmdq);
+
+	/* Wait for Enable event */
+	while (!(event = cxi_eq_get_event(ep_obj->domain->dev_if->mr_evtq)))
+		sched_yield();
+
+	if (event->hdr.event_type != C_EVENT_STATE_CHANGE ||
+	    event->tgt_long.return_code != C_RC_OK ||
+	    event->tgt_long.initiator.state_change.ptlte_state !=
+		    C_PTLTE_ENABLED ||
+	    event->tgt_long.ptlte_index != ep_obj->mr_pte->pte->ptn) {
+		/* This is a device malfunction */
+		CXIP_LOG_ERROR("Invalid Enable EQE\n");
+		ret = -FI_EIO;
+		goto err_pte_free;
+	}
+
+	cxi_eq_ack_events(ep_obj->domain->dev_if->mr_evtq);
+
+	ep_obj->mr_init = true;
+
+	CXIP_LOG_DBG("Standard MRs enabled: %p\n", ep_obj);
+
+	fastlock_release(&ep_obj->domain->dev_if->lock);
+
+	fastlock_release(&ep_obj->lock);
+
+	return FI_SUCCESS;
+
+err_pte_free:
+	fastlock_release(&ep_obj->domain->dev_if->lock);
+
+	cxip_pte_free(ep_obj->mr_pte);
+err_unlock_ep:
+	fastlock_release(&ep_obj->lock);
+
+	return ret;
+}
+
+/*
+ * cxip_ep_mr_disable() - Free endpoint resources used for standard MRs.
+ */
+void cxip_ep_mr_disable(struct cxip_ep_obj *ep_obj)
+{
+	fastlock_acquire(&ep_obj->lock);
+
+	if (!ep_obj->mr_init) {
+		fastlock_release(&ep_obj->lock);
+		return;
+	}
+
+	cxip_pte_free(ep_obj->mr_pte);
+
+	ep_obj->mr_init = false;
+
+	fastlock_release(&ep_obj->lock);
+
+	CXIP_LOG_DBG("Standard MRs disabled: %p\n", ep_obj);
+}
+
+/*
+ * cxip_mr_enable_std() - Assign HW resources to the standard MR.
+ *
+ * Standard MRs are implemented by linking an LE describing the registered
+ * buffer to a shared, matching PtlTE. The MR key is encoded in the LE match
+ * bits. One PtlTE supports many standard MRs. The number of standard MR
+ * supported is limited by the total number of NIC LEs. Because a matching LE
+ * is used, unrestricted commands must be used to target standard MRs.
  *
  * Caller must hold mr->lock.
  */
-int cxip_mr_enable(struct cxip_mr *mr)
+static int cxip_mr_enable_std(struct cxip_mr *mr)
+{
+	const union c_event *event;
+	int buffer_id;
+	int ret;
+
+	ret = cxip_ep_mr_enable(mr->ep->ep_obj);
+	if (ret != FI_SUCCESS)
+		return ret;
+
+	if (mr->cntr) {
+		ret = cxip_cntr_enable(mr->cntr);
+		if (ret != FI_SUCCESS) {
+			CXIP_LOG_DBG("cxip_cntr_enable() returned: %d\n",
+				     ret);
+			return ret;
+		}
+	}
+
+	buffer_id = ofi_idx_insert(&mr->domain->dev_if->mr_table, mr);
+	if (buffer_id < 0 || buffer_id >= CXIP_BUFFER_ID_MAX) {
+		CXIP_LOG_ERROR("Failed to allocate MR buffer ID: %d\n",
+			       buffer_id);
+		return -FI_ENOSPC;
+	}
+	mr->buffer_id = buffer_id;
+
+	if (mr->len) {
+		ret = cxip_map(mr->domain, (void *)mr->buf, mr->len, &mr->md);
+		if (ret) {
+			CXIP_LOG_DBG("Failed to map MR buffer: %d\n", ret);
+			goto err_free_idx;
+		}
+	}
+
+	fastlock_acquire(&mr->domain->dev_if->lock);
+
+	ret = cxip_pte_append(mr->ep->ep_obj->mr_pte,
+			      mr->len ? CXI_VA_TO_IOVA(mr->md->md, mr->buf) : 0,
+			      mr->len,
+			      mr->len ? mr->md->md->lac : 0,
+			      C_PTL_LIST_PRIORITY, mr->buffer_id,
+			      mr->key, 0, CXI_MATCH_ID_ANY,
+			      0, true, false, false, false, false, false,
+			      false, false, false,
+			      mr->cntr, mr->cntr,
+			      mr->attr.access & FI_REMOTE_WRITE,
+			      mr->attr.access & FI_REMOTE_READ,
+			      mr->domain->dev_if->mr_cmdq);
+	if (ret != FI_SUCCESS) {
+		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
+		goto err_unmap;
+	}
+
+	/* Wait for link EQ event */
+	while (!(event = cxi_eq_get_event(mr->domain->dev_if->mr_evtq)))
+		sched_yield();
+
+	if (event->hdr.event_type != C_EVENT_LINK ||
+	    event->tgt_long.buffer_id != mr->buffer_id) {
+		/* This is a device malfunction */
+		CXIP_LOG_ERROR("Invalid Link EQE %u %u %u %u\n",
+				event->hdr.event_type,
+				event->tgt_long.return_code,
+				event->tgt_long.buffer_id, mr->buffer_id);
+		ret = -FI_EIO;
+		goto err_unmap;
+	}
+
+	if (cxi_event_rc(event) != C_RC_OK) {
+		CXIP_LOG_ERROR("Append failed: %s\n",
+			       cxi_rc_to_str(cxi_event_rc(event)));
+		ret = -FI_ENOSPC;
+		goto err_unmap;
+	}
+
+	cxi_eq_ack_events(mr->domain->dev_if->mr_evtq);
+
+	fastlock_release(&mr->domain->dev_if->lock);
+
+	mr->enabled = true;
+
+	CXIP_LOG_DBG("Standard MR enabled: %p (key: %lu)\n", mr, mr->key);
+
+	return FI_SUCCESS;
+
+err_unmap:
+	fastlock_release(&mr->domain->dev_if->lock);
+
+	if (mr->len)
+		cxip_unmap(mr->md);
+err_free_idx:
+	ofi_idx_remove(&mr->domain->dev_if->mr_table, mr->buffer_id);
+
+	return ret;
+}
+
+/*
+ * cxip_mr_disable_std() - Free HW resources from the standard MR.
+ *
+ * Caller must hold mr->lock.
+ */
+static int cxip_mr_disable_std(struct cxip_mr *mr)
+{
+	int ret;
+	const union c_event *event;
+
+	if (!mr->enabled)
+		return FI_SUCCESS;
+
+	fastlock_acquire(&mr->domain->dev_if->lock);
+
+	ret = cxip_pte_unlink(mr->ep->ep_obj->mr_pte, C_PTL_LIST_PRIORITY,
+			      mr->buffer_id, mr->domain->dev_if->mr_cmdq);
+	if (ret) {
+		CXIP_LOG_ERROR("Failed to enqueue Unlink: %d\n", ret);
+		goto unlock;
+	}
+
+	/* Wait for unlink EQ event */
+	while (!(event = cxi_eq_get_event(mr->domain->dev_if->mr_evtq)))
+		sched_yield();
+
+	if (event->hdr.event_type != C_EVENT_UNLINK ||
+	    event->tgt_long.return_code != C_RC_OK ||
+	    event->tgt_long.buffer_id != mr->buffer_id) {
+		/* This is a device malfunction */
+		CXIP_LOG_ERROR("Invalid Unlink EQE %s rc: %s (id: 0x%x)\n",
+			       cxi_event_to_str(event),
+			       cxi_rc_to_str(cxi_event_rc(event)),
+			       event->tgt_long.buffer_id);
+	}
+
+	cxi_eq_ack_events(mr->domain->dev_if->mr_evtq);
+
+	ret = cxil_invalidate_pte_le(mr->ep->ep_obj->mr_pte->pte, mr->key,
+				     C_PTL_LIST_PRIORITY);
+	if (ret)
+		CXIP_LOG_ERROR("MR invalidate failed: %d (mr: %p key %lu)\n",
+			       ret, mr, mr->key);
+
+unlock:
+	fastlock_release(&mr->domain->dev_if->lock);
+
+	if (mr->len)
+		cxip_unmap(mr->md);
+
+	ofi_idx_remove(&mr->domain->dev_if->mr_table, mr->buffer_id);
+
+	mr->enabled = false;
+
+	CXIP_LOG_DBG("Standard MR disabled: %p (key: %lu)\n", mr, mr->key);
+
+	return FI_SUCCESS;
+}
+
+/*
+ * cxip_mr_enable_opt() - Assign HW resources to the optimized MR.
+ *
+ * Optimized MRs are implemented by allocating a dedicated, non-matching PtlTE
+ * and linking an LE describing the registered buffer. The MR key is used to
+ * derive the PtlTE index. One PtlTE and one LE is required for each optimized
+ * MR. Because a non-matching interface is used, optimized MRs can be targeted
+ * with restricted commands. This may result in better performance.
+ *
+ * Caller must hold mr->lock.
+ */
+static int cxip_mr_enable_opt(struct cxip_mr *mr)
 {
 	int ret;
 	union c_cmdu cmd = {};
 	const union c_event *event;
-	uint32_t buffer_id = MR_LINK_EVENT_ID;
 	struct cxi_pt_alloc_opts opts = {
 		.pe_num = CXI_PE_NUM_ANY,
 		.le_pool = CXI_LE_POOL_ANY
@@ -47,61 +360,35 @@ int cxip_mr_enable(struct cxip_mr *mr)
 		}
 	}
 
-	/* Allocate a PTE */
-	ret = cxil_alloc_pte(mr->domain->dev_if->if_lni,
-			     mr->domain->dev_if->mr_evtq, &opts, &mr->pte);
-	if (ret) {
-		CXIP_LOG_DBG("Failed to allocate PTE: %d\n", ret);
-		return -FI_ENOSPC;
+	if (mr->len) {
+		ret = cxip_map(mr->domain, (void *)mr->buf, mr->len, &mr->md);
+		if (ret) {
+			CXIP_LOG_DBG("Failed to map MR buffer: %d\n", ret);
+			return ret;
+		}
 	}
 
-	/* Reserve the logical endpoint (LEP) where the MR will be mapped */
-	mr->pid_idx = CXIP_MR_TO_IDX(mr->key);
-
-	ret = cxip_if_domain_lep_alloc(mr->ep->ep_obj->if_dom, mr->pid_idx);
+	ret = cxip_pte_alloc(mr->ep->ep_obj->if_dom,
+			     mr->domain->dev_if->mr_evtq,
+			     CXIP_PTL_IDX_MR_OPT(mr->key), &opts, &mr->pte);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("Failed to reserve LEP (%d): %d\n", mr->pid_idx,
-			     ret);
-		goto free_pte;
-	}
-
-	/* Map the PTE to the LEP */
-	ret = cxil_map_pte(mr->pte, mr->ep->ep_obj->if_dom->cxil_if_dom,
-			   mr->pid_idx, 0, &mr->pte_map);
-	if (ret) {
 		CXIP_LOG_DBG("Failed to allocate PTE: %d\n", ret);
-		ret = -FI_EADDRINUSE;
-		goto free_lep;
+		goto err_unmap;
 	}
 
-	/* Map the window buffer into IO address space */
-	ret = cxil_map(mr->domain->dev_if->if_lni, mr->buf, mr->len,
-		       CXI_MAP_PIN | CXI_MAP_NTA | CXI_MAP_READ | CXI_MAP_WRITE,
-		       NULL, &mr->md);
-	if (ret) {
-		CXIP_LOG_DBG("Failed to IO map MR buffer: %d\n", ret);
-		ret = -FI_EFAULT;
-		goto unmap_pte;
-	}
-
-	/* Use the device CMDQ and EQ to enable the PTE and append an LE.
-	 * This serializes creation of all MRs in the process.  We need to
-	 * revisit.
-	 *
-	 * TODO: revisit this, deserialize MR enabling
-	 */
 	fastlock_acquire(&mr->domain->dev_if->lock);
 
 	/* Enable the PTE */
 	cmd.command.opcode = C_CMD_TGT_SETSTATE;
-	cmd.set_state.ptlte_index = mr->pte->ptn;
+	cmd.set_state.ptlte_index = mr->pte->pte->ptn;
 	cmd.set_state.ptlte_state = C_PTLTE_ENABLED;
 
-	ret = cxi_cq_emit_target(mr->domain->dev_if->mr_cmdq->dev_cmdq, &cmd);
+	ret = cxi_cq_emit_target(mr->domain->dev_if->mr_cmdq->dev_cmdq,
+				 &cmd);
 	if (ret) {
 		/* This is a bug, we have exclusive access to this CMDQ. */
 		CXIP_LOG_ERROR("Failed to enqueue command: %d\n", ret);
-		goto unmap_buf;
+		goto err_pte_free;
 	}
 
 	cxi_cq_ring(mr->domain->dev_if->mr_cmdq->dev_cmdq);
@@ -114,57 +401,47 @@ int cxip_mr_enable(struct cxip_mr *mr)
 	    event->tgt_long.return_code != C_RC_OK ||
 	    event->tgt_long.initiator.state_change.ptlte_state !=
 		    C_PTLTE_ENABLED ||
-	    event->tgt_long.ptlte_index != mr->pte->ptn) {
+	    event->tgt_long.ptlte_index != mr->pte->pte->ptn) {
 		/* This is a device malfunction */
 		CXIP_LOG_ERROR("Invalid Enable EQE\n");
 		ret = -FI_EIO;
-		goto unmap_buf;
+		goto err_pte_free;
 	}
 
-	cxi_eq_ack_events(mr->domain->dev_if->mr_evtq);
-
-	/* Link Persistent LE */
-	memset(&cmd, 0, sizeof(cmd));
-	cmd.command.opcode     = C_CMD_TGT_APPEND;
-	cmd.target.ptl_list    = C_PTL_LIST_PRIORITY;
-	cmd.target.ptlte_index = mr->pte->ptn;
-	cmd.target.buffer_id   = buffer_id;
-	cmd.target.lac         = mr->md->lac;
-	cmd.target.start       = CXI_VA_TO_IOVA(mr->md, mr->buf);
-	cmd.target.length      = mr->len;
-
-	cmd.target.event_comm_disable = 1;
-
-	if (mr->cntr) {
-		cmd.target.event_ct_comm = 1;
-		cmd.target.ct = mr->cntr->ct->ctn;
+	ret = cxip_pte_append(mr->pte,
+			      mr->len ? CXI_VA_TO_IOVA(mr->md->md, mr->buf) : 0,
+			      mr->len,
+			      mr->len ? mr->md->md->lac : 0,
+			      C_PTL_LIST_PRIORITY, mr->key,
+			      mr->key, 0, CXI_MATCH_ID_ANY,
+			      0, true, false, false, false, false, false,
+			      false, false, false,
+			      mr->cntr, mr->cntr,
+			      mr->attr.access & FI_REMOTE_WRITE,
+			      mr->attr.access & FI_REMOTE_READ,
+			      mr->domain->dev_if->mr_cmdq);
+	if (ret != FI_SUCCESS) {
+		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
+		goto err_pte_free;
 	}
-
-	if (mr->attr.access & FI_REMOTE_WRITE)
-		cmd.target.op_put = 1;
-	if (mr->attr.access & FI_REMOTE_READ)
-		cmd.target.op_get = 1;
-
-	ret = cxi_cq_emit_target(mr->domain->dev_if->mr_cmdq->dev_cmdq, &cmd);
-	if (ret) {
-		/* This is a bug, we have exclusive access to this CMDQ. */
-		CXIP_LOG_ERROR("Failed to enqueue command: %d\n", ret);
-		goto unmap_buf;
-	}
-
-	cxi_cq_ring(mr->domain->dev_if->mr_cmdq->dev_cmdq);
 
 	/* Wait for link EQ event */
 	while (!(event = cxi_eq_get_event(mr->domain->dev_if->mr_evtq)))
 		sched_yield();
 
 	if (event->hdr.event_type != C_EVENT_LINK ||
-	    event->tgt_long.return_code != C_RC_OK ||
-	    event->tgt_long.buffer_id != buffer_id) {
+	    event->tgt_long.buffer_id != mr->key) {
 		/* This is a device malfunction */
 		CXIP_LOG_ERROR("Invalid Link EQE\n");
 		ret = -FI_EIO;
-		goto unmap_buf;
+		goto err_pte_free;
+	}
+
+	if (cxi_event_rc(event) != C_RC_OK) {
+		CXIP_LOG_ERROR("Append failed: %s\n",
+			       cxi_rc_to_str(cxi_event_rc(event)));
+		ret = -FI_ENOSPC;
+		goto err_pte_free;
 	}
 
 	cxi_eq_ack_events(mr->domain->dev_if->mr_evtq);
@@ -173,59 +450,42 @@ int cxip_mr_enable(struct cxip_mr *mr)
 
 	mr->enabled = true;
 
+	CXIP_LOG_DBG("Optimized MR enabled: %p (key: %lu)\n", mr, mr->key);
+
 	return FI_SUCCESS;
 
-unmap_buf:
-	cxi_eq_ack_events(mr->domain->dev_if->mr_evtq);
+err_pte_free:
 	fastlock_release(&mr->domain->dev_if->lock);
 
-	cxil_unmap(mr->md);
-unmap_pte:
-	cxil_unmap_pte(mr->pte_map);
-free_lep:
-	cxip_if_domain_lep_free(mr->ep->ep_obj->if_dom, mr->pid_idx);
-free_pte:
-	cxil_destroy_pte(mr->pte);
+	cxip_pte_free(mr->pte);
+err_unmap:
+	if (mr->len)
+		cxip_unmap(mr->md);
 
 	return ret;
 }
 
 /*
- * cxip_mr_disable() - Free hardware resources from the MR.
+ * cxip_mr_disable_opt() - Free hardware resources from the optimized MR.
  *
  * Caller must hold mr->lock.
  */
-int cxip_mr_disable(struct cxip_mr *mr)
+static int cxip_mr_disable_opt(struct cxip_mr *mr)
 {
 	int ret;
-	union c_cmdu cmd = {};
 	const union c_event *event;
-	uint32_t buffer_id = MR_LINK_EVENT_ID;
 
 	if (!mr->enabled)
 		return FI_SUCCESS;
 
-	/* Use the device CMDQ and EQ to unlink the LE.  This serializes
-	 * enable/disable of all MRs in the process.  We need to revisit.
-	 */
 	fastlock_acquire(&mr->domain->dev_if->lock);
 
-	/* Unlink persistent LE */
-	cmd.command.opcode = C_CMD_TGT_UNLINK;
-	cmd.target.ptl_list = C_PTL_LIST_PRIORITY;
-	cmd.target.ptlte_index = mr->pte->ptn;
-	cmd.target.buffer_id = buffer_id;
-
-	ret = cxi_cq_emit_target(mr->domain->dev_if->mr_cmdq->dev_cmdq, &cmd);
+	ret = cxip_pte_unlink(mr->pte, C_PTL_LIST_PRIORITY,
+			      mr->key, mr->domain->dev_if->mr_cmdq);
 	if (ret) {
-		/* This is a provider bug, we have exclusive access to this
-		 * CMDQ.
-		 */
-		CXIP_LOG_ERROR("Failed to enqueue command: %d\n", ret);
+		CXIP_LOG_ERROR("Failed to enqueue Unlink: %d\n", ret);
 		goto unlock;
 	}
-
-	cxi_cq_ring(mr->domain->dev_if->mr_cmdq->dev_cmdq);
 
 	/* Wait for unlink EQ event */
 	while (!(event = cxi_eq_get_event(mr->domain->dev_if->mr_evtq)))
@@ -233,7 +493,7 @@ int cxip_mr_disable(struct cxip_mr *mr)
 
 	if (event->hdr.event_type != C_EVENT_UNLINK ||
 	    event->tgt_long.return_code != C_RC_OK ||
-	    event->tgt_long.buffer_id != buffer_id) {
+	    event->tgt_long.buffer_id != mr->key) {
 		/* This is a device malfunction */
 		CXIP_LOG_ERROR("Invalid Unlink EQE %s rc: %s (id: 0x%x)\n",
 			       cxi_event_to_str(event),
@@ -246,25 +506,42 @@ int cxip_mr_disable(struct cxip_mr *mr)
 unlock:
 	fastlock_release(&mr->domain->dev_if->lock);
 
-	ret = cxil_unmap(mr->md);
-	if (ret)
-		CXIP_LOG_ERROR("Failed to unmap MR buffer: %d\n", ret);
+	cxip_pte_free(mr->pte);
 
-	ret = cxil_unmap_pte(mr->pte_map);
-	if (ret)
-		CXIP_LOG_ERROR("Failed to unmap PTE: %d\n", ret);
-
-	ret = cxip_if_domain_lep_free(mr->ep->ep_obj->if_dom, mr->pid_idx);
-	if (ret)
-		CXIP_LOG_ERROR("Failed to free LEP: %d\n", ret);
-
-	ret = cxil_destroy_pte(mr->pte);
-	if (ret)
-		CXIP_LOG_ERROR("Failed to free PTE: %d\n", ret);
+	if (mr->len)
+		cxip_unmap(mr->md);
 
 	mr->enabled = false;
 
+	CXIP_LOG_DBG("Optimized MR disabled: %p (key: %lu)\n", mr, mr->key);
+
 	return FI_SUCCESS;
+}
+
+int cxip_mr_enable(struct cxip_mr *mr)
+{
+	int ret;
+
+	ret = cxip_ep_mr_insert(mr->ep->ep_obj, mr);
+	if (ret) {
+		CXIP_LOG_ERROR("Failed to insert MR key: %lu\n", mr->key);
+		return ret;
+	}
+
+	if (cxip_mr_key_opt(mr->key))
+		return cxip_mr_enable_opt(mr);
+	else
+		return cxip_mr_enable_std(mr);
+}
+
+int cxip_mr_disable(struct cxip_mr *mr)
+{
+	if (cxip_mr_key_opt(mr->key))
+		return cxip_mr_disable_opt(mr);
+	else
+		return cxip_mr_disable_std(mr);
+
+	cxip_ep_mr_remove(mr);
 }
 
 /*
@@ -416,7 +693,6 @@ static int cxip_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	//struct fi_eq_entry eq_entry;
 	struct cxip_domain *dom;
 	struct cxip_mr *_mr;
-	uint32_t pid_granule;
 
 	if (fid->fclass != FI_CLASS_DOMAIN || !attr || attr->iov_count <= 0)
 		return -FI_EINVAL;
@@ -426,10 +702,6 @@ static int cxip_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		return -FI_ENOSYS;
 
 	dom = container_of(fid, struct cxip_domain, util_domain.domain_fid);
-	pid_granule = dom->dev_if->if_dev->info.pid_granule;
-
-	if (attr->requested_key >= CXIP_PID_MR_CNT(pid_granule))
-		return -FI_EINVAL;
 
 	_mr = calloc(1, sizeof(*_mr));
 	if (!_mr)

@@ -177,7 +177,7 @@ struct cxip_req *cxip_cq_req_alloc(struct cxip_cq *cq, int remap,
 		req->req_id = ofi_idx_insert(&cq->req_table, req);
 
 		/* Target command buffer IDs are 16 bits wide. */
-		if (req->req_id < 0 || req->req_id >= (1 << 16)) {
+		if (req->req_id < 0 || req->req_id >= CXIP_BUFFER_ID_MAX) {
 			CXIP_LOG_ERROR("Failed to map request: %d\n",
 				       req->req_id);
 			if (req->req_id > 0)

@@ -140,22 +140,19 @@ static ssize_t _cxip_rma_op(enum fi_op_type op, struct cxip_txc *txc,
 	if (!ofi_rma_initiate_allowed(txc->attr.caps & ~FI_ATOMIC))
 		return -FI_ENOPROTOOPT;
 
-	if (!buf)
+	if (len && !buf)
 		return -FI_EINVAL;
 
-	/* Always use IDCs when the payload fits */
-	idc = (op == FI_OP_WRITE && len <= C_MAX_IDC_PAYLOAD_RES);
+	/* Use IDCs if the payload fits and targeting an optimized MR. */
+	idc = (op == FI_OP_WRITE && len <= C_MAX_IDC_PAYLOAD_RES &&
+	       cxip_mr_key_opt(key));
 
+	/* TODO support inject without IDCs */
 	if (((flags & FI_INJECT) && !idc) || len > CXIP_EP_MAX_MSG_SZ)
 		return -FI_EMSGSIZE;
 
 	dom = txc->domain;
 	pid_bits = dom->dev_if->if_dev->info.pid_bits;
-
-	if (key >= CXIP_PID_MR_CNT(dom->dev_if->if_dev->info.pid_granule)) {
-		CXIP_LOG_DBG("Invalid key: %lu\n", key);
-		return -FI_EINVAL;
-	}
 
 	/* Look up target CXI address */
 	ret = _cxip_av_lookup(txc->ep_obj->av, tgt_addr, &caddr);
@@ -164,7 +161,7 @@ static ssize_t _cxip_rma_op(enum fi_op_type op, struct cxip_txc *txc,
 		return ret;
 	}
 
-	if (!idc) {
+	if (len && !idc) {
 		/* Map local buffer */
 		ret = cxip_map(dom, buf, len, &md);
 		if (ret) {
@@ -201,7 +198,7 @@ static ssize_t _cxip_rma_op(enum fi_op_type op, struct cxip_txc *txc,
 	}
 
 	/* Generate the destination fabric address */
-	pid_idx = CXIP_MR_TO_IDX(key);
+	pid_idx = cxip_mr_key_to_ptl_idx(key);
 	cxi_build_dfa(caddr.nic, caddr.pid, pid_bits, pid_idx, &dfa,
 		      &idx_ext);
 
@@ -222,9 +219,10 @@ static ssize_t _cxip_rma_op(enum fi_op_type op, struct cxip_txc *txc,
 
 		/* Reliable, unordered Puts are optimally supported with
 		 * restricted commands. When ordering or remote events are
-		 * required, use unrestricted commands.
+		 * required, or when targeting a standard MR, use unrestricted
+		 * commands.
 		 */
-		if (!(txc->attr.caps & FI_RMA_EVENT))
+		if (cxip_mr_key_opt(key) && !(txc->attr.caps & FI_RMA_EVENT))
 			cmd.c_state.restricted = 1;
 
 		if (txc->write_cntr) {
@@ -287,14 +285,17 @@ static ssize_t _cxip_rma_op(enum fi_op_type op, struct cxip_txc *txc,
 				(op == FI_OP_READ ? C_CMD_GET : C_CMD_PUT);
 		cmd.command.cmd_type = C_CMD_TYPE_DMA;
 		cmd.index_ext = idx_ext;
-		cmd.lac = md->md->lac;
+		if (len) {
+			cmd.lac = md->md->lac;
+			cmd.local_addr = CXI_VA_TO_IOVA(md->md, buf);
+		}
 		cmd.event_send_disable = 1;
 		cmd.dfa = dfa;
 		cmd.remote_offset = addr;
-		cmd.local_addr = CXI_VA_TO_IOVA(md->md, buf);
 		cmd.request_len = len;
 		cmd.eq = txc->send_cq->evtq->eqn;
 		cmd.user_ptr = (uint64_t)req;
+		cmd.match_bits = key;
 
 		if ((op == FI_OP_WRITE) && (flags & FI_COMPLETION) &&
 		    (flags & (FI_DELIVERY_COMPLETE | FI_MATCH_COMPLETE)))
@@ -302,9 +303,10 @@ static ssize_t _cxip_rma_op(enum fi_op_type op, struct cxip_txc *txc,
 
 		/* Reliable, unordered Puts are optimally supported with
 		 * restricted commands. When ordering or remote events are
-		 * required, use unrestricted commands.
+		 * required, or when targeting a standard MR, use unrestricted
+		 * commands.
 		 */
-		if (!(txc->attr.caps & FI_RMA_EVENT))
+		if (cxip_mr_key_opt(key) && !(txc->attr.caps & FI_RMA_EVENT))
 			cmd.restricted = 1;
 
 		if (op == FI_OP_WRITE) {
@@ -337,8 +339,8 @@ static ssize_t _cxip_rma_op(enum fi_op_type op, struct cxip_txc *txc,
 
 	fastlock_release(&txc->tx_cmdq->lock);
 
-	CXIP_LOG_DBG("req: %p op: %s buf: %p len: %lu tgt_addr: %ld context %p\n",
-		     req, fi_tostr(&op, FI_TYPE_OP_TYPE),
+	CXIP_LOG_DBG("%sreq: %p op: %s buf: %p len: %lu tgt_addr: %ld context %p\n",
+		     idc ? "IDC " : "", req, fi_tostr(&op, FI_TYPE_OP_TYPE),
 		     buf, len, tgt_addr, context);
 
 	return FI_SUCCESS;
@@ -348,7 +350,7 @@ unlock_op:
 	if (req)
 		cxip_cq_req_free(req);
 unmap_op:
-	if (!idc)
+	if (md)
 		cxip_unmap(md);
 
 	return ret;

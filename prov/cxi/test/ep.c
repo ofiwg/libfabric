@@ -261,7 +261,6 @@ Test(ep, ep_bind_cntr)
 	cxit_destroy_cntrs();
 	cxit_destroy_av();
 	cxit_destroy_cqs();
-	cxit_teardown_ep();
 }
 
 Test(ep, ep_bind_stx_ctx)

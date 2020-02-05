@@ -52,7 +52,9 @@
 #define CEILING(a, b) ((long long)(a) <= 0LL ? 0 : (FLOOR((a)-1, b) + (b)))
 #endif
 
-#define CXIP_REQ_CLEANUP_TO 3000
+#define CXIP_REQ_CLEANUP_TO		3000
+
+#define CXIP_BUFFER_ID_MAX		(1 << 16)
 
 #define CXIP_EP_MAX_MSG_SZ		(1 << 30)
 #define CXIP_EP_MAX_TX_CNT		16
@@ -91,6 +93,8 @@
 #define CXIP_EP_CNTR_FLAGS \
 	(FI_SEND | FI_RECV | FI_READ | FI_WRITE | FI_REMOTE_READ | \
 	 FI_REMOTE_WRITE)
+
+#define CXIP_INJECT_SIZE		C_MAX_IDC_PAYLOAD_UNR
 
 #define CXIP_MAJOR_VERSION		0
 #define CXIP_MINOR_VERSION		0
@@ -145,30 +149,39 @@ struct cxip_addr {
 	};
 };
 
-/* A PID contains "pid_granule" logical endpoints. The PID granule is set per
- * device and can be found in libCXI devinfo. These endpoints are partitioned
- * by the provider for the following use:
- *
- * 0-MAX_RXC       RX context queues
- * MAX_RXC-(MAX-1) MR key values
- * MAX             Rendezvous read queue
- *
- * The default pid_granule is 256. The default maximum RXC count is 16.
- * Therefore, the mapping is usually:
- *
- * 0-15   RX context queues 0-15
- * 16-254 MR keys 0-238
- * 255    Rendezvous read queue
- */
-#define CXIP_PID_RXC_CNT CXIP_EP_MAX_RX_CNT
-#define CXIP_PID_MR_CNT(pid_granule) ((pid_granule) - CXIP_PID_RXC_CNT - 1)
-
-#define CXIP_MR_TO_IDX(key) (CXIP_PID_RXC_CNT + (key))
-#define CXIP_RXC_TO_IDX(rx_id) (rx_id)
-
 #define CXIP_AV_ADDR_IDX(av, fi_addr) ((uint64_t)fi_addr & av->mask)
 #define CXIP_AV_ADDR_RXC(av, fi_addr) \
 	(av->rxc_bits ? ((uint64_t)fi_addr >> (64 - av->rxc_bits)) : 0)
+
+/* A PID contains "pid_granule" logical endpoints. The PID granule is set per
+ * device and can be found in libCXI devinfo. The default pid_granule is 256.
+ * The default maximum RXC count is 16. These endpoints are partitioned by the
+ * provider for the following use:
+ *
+ * 0-15   RX Queue PtlTEs 0-15
+ * 50-250 Optimized MR PtlTEs 0-199
+ * 254    Standard MR PtlTE
+ * 255    Rendezvous source PtlTE
+ */
+#define CXIP_PTL_IDX_MR_OPT_BASE	50
+#define CXIP_PTL_IDX_MR_OPT_CNT		200
+
+#define CXIP_PTL_IDX_RXC(rx_id)		(rx_id)
+#define CXIP_PTL_IDX_MR_OPT(key)	(CXIP_PTL_IDX_MR_OPT_BASE + (key))
+#define CXIP_PTL_IDX_MR_STD		254
+#define CXIP_PTL_IDX_RDZV_SRC		255
+
+static inline int cxip_mr_key_to_ptl_idx(int key)
+{
+	if (key < CXIP_PTL_IDX_MR_OPT_CNT)
+		return CXIP_PTL_IDX_MR_OPT((key));
+	return CXIP_PTL_IDX_MR_STD;
+}
+
+static inline bool cxip_mr_key_opt(int key)
+{
+	return key < CXIP_PTL_IDX_MR_OPT_CNT;
+}
 
 /* Messaging Match Bit layout */
 #define CXIP_TAG_WIDTH		48
@@ -277,6 +290,7 @@ struct cxip_if {
 	void *evtq_buf;
 	size_t evtq_buf_len;
 	struct cxi_md *evtq_buf_md;
+	struct indexer mr_table;	// MR Buffer ID table
 	fastlock_t lock;
 };
 
@@ -390,8 +404,12 @@ struct cxip_req_rma {
 
 struct cxip_req_amo {
 	struct cxip_txc *txc;
-	struct cxip_md *local_md;	// RMA target buffer
-	void *result_buf;		// local buffer for fetch
+	struct cxip_md *result_md;
+	struct cxip_md *oper1_md;
+	char result[16];
+	char oper1[16];
+	bool tmp_result;
+	bool tmp_oper1;
 };
 
 struct cxip_req_recv {
@@ -712,6 +730,10 @@ struct cxip_ep_obj {
 	struct cxip_av *av;		// target AV (network address vector)
 	struct cxip_domain *domain;	// parent domain
 
+	struct cxip_pte *mr_pte;
+	bool mr_init;
+	struct dlist_entry mr_list;
+
 	/* TX/RX contexts. Standard EPs have 1 of each. SEPs have many. */
 	struct cxip_rxc **rxcs;		// RX contexts
 	struct cxip_txc **txcs;		// TX contexts
@@ -770,26 +792,16 @@ struct cxip_mr {
 	uint64_t flags;			// special flags
 	struct fi_mr_attr attr;		// attributes
 	struct cxip_cntr *cntr;		// if bound to cntr
-	struct cxip_cq *cq;		// if bound to cq
 	fastlock_t lock;
 
-	/*
-	 * A standard MR is implemented as a single persistent, non-matching
-	 * list entry (LE) on the PTE mapped to the logical endpoint
-	 * addressed with the four-tuple:
-	 *
-	 *    ( if_dom->dev_if->if_nic, if_dom->pid, vni, pid_idx )
-	 */
-	uint32_t pid_idx;
-
 	bool enabled;
-	struct cxil_pte *pte;
-	unsigned int pte_hw_id;
-	struct cxil_pte_map *pte_map;
+	struct cxip_pte *pte;
 
 	void *buf;			// memory buffer VA
 	uint64_t len;			// memory length
-	struct cxi_md *md;		// buffer IO descriptor
+	struct cxip_md *md;		// buffer IO descriptor
+	uint16_t buffer_id;
+	struct dlist_entry ep_entry;
 };
 
 /**
@@ -976,6 +988,8 @@ void cxip_iomm_fini(struct cxip_domain *dom);
 int cxip_map(struct cxip_domain *dom, const void *buf, unsigned long len,
 	     struct cxip_md **md);
 void cxip_unmap(struct cxip_md *md);
+
+void cxip_ep_mr_disable(struct cxip_ep_obj *ep_obj);
 
 /*
  * cxip_fid_to_txc() - Return TXC from FID provided to a transmit API.

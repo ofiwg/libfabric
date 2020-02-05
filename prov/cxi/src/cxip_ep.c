@@ -918,6 +918,7 @@ static int cxip_ep_enable(struct fid_ep *ep)
 static void cxip_ep_disable(struct cxip_ep *cxi_ep)
 {
 	if (cxi_ep->ep_obj->enabled) {
+		cxip_ep_mr_disable(cxi_ep->ep_obj);
 		cxip_put_if_domain(cxi_ep->ep_obj->if_dom);
 		cxi_ep->ep_obj->enabled = false;
 	}
@@ -1667,6 +1668,7 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 	fastlock_init(&cxi_ep->ep_obj->rdzv_id_lock);
 	memset(&cxi_ep->ep_obj->tx_ids, 0, sizeof(cxi_ep->ep_obj->tx_ids));
 	fastlock_init(&cxi_ep->ep_obj->tx_id_lock);
+	dlist_init(&cxi_ep->ep_obj->mr_list);
 
 	switch (fclass) {
 	case FI_CLASS_EP:
