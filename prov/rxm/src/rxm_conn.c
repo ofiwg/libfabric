@@ -1347,10 +1347,7 @@ static void *rxm_conn_atomic_progress(void *arg)
 
 	FI_INFO(&rxm_prov, FI_LOG_EP_CTRL, "Starting auto-progress thread\n");
 	while (ep->do_progress) {
-		/* TODO: Remove this lock, it can't protect anything */
-		ofi_ep_lock_acquire(&ep->util_ep);
 		ret = fi_trywait(fabric->msg_fabric, fids, 2);
-		ofi_ep_lock_release(&ep->util_ep);
 
 		if (!ret) {
 			fds[0].revents = 0;
