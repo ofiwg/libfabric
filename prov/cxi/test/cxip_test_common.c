@@ -351,7 +351,7 @@ void cxit_setup_enabled_ep(void)
 	cxit_bind_av();
 
 	ret = fi_enable(cxit_ep);
-	cr_assert(ret == FI_SUCCESS);
+	cr_assert(ret == FI_SUCCESS, "ret is: %d\n", ret);
 
 	/* Find assigned Endpoint address. Address is assigned during enable. */
 	ret = fi_getname(&cxit_ep->fid, &cxit_ep_addr, &addrlen);

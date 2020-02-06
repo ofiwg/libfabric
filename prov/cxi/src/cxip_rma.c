@@ -390,9 +390,6 @@ static ssize_t cxip_rma_writev(struct fid_ep *ep, const struct iovec *iov,
 			    txc->attr.op_flags, context);
 }
 
-#define CXIP_WRITEMSG_ALLOWED_FLAGS (FI_INJECT | FI_COMPLETION | \
-				     CXIP_TX_COMP_MODES)
-
 static ssize_t cxip_rma_writemsg(struct fid_ep *ep,
 				 const struct fi_msg_rma *msg, uint64_t flags)
 {
@@ -462,8 +459,6 @@ static ssize_t cxip_rma_readv(struct fid_ep *ep, const struct iovec *iov,
 			    desc ? desc[0] : NULL, src_addr, addr, key, 0,
 			    txc->attr.op_flags, context);
 }
-
-#define CXIP_READMSG_ALLOWED_FLAGS (FI_COMPLETION | CXIP_TX_COMP_MODES)
 
 static ssize_t cxip_rma_readmsg(struct fid_ep *ep,
 				const struct fi_msg_rma *msg, uint64_t flags)

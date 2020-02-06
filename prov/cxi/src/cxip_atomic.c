@@ -839,16 +839,13 @@ static ssize_t cxip_ep_atomic_writev(struct fid_ep *ep,
 			 txc->attr.op_flags);
 }
 
-#define CXIP_ATOMIC_WRITEMSG_ALLOWED_FLAGS (FI_INJECT | FI_COMPLETION | \
-					    CXIP_TX_COMP_MODES)
-
 static ssize_t cxip_ep_atomic_writemsg(struct fid_ep *ep,
 				       const struct fi_msg_atomic *msg,
 				       uint64_t flags)
 {
 	struct cxip_txc *txc;
 
-	if (flags & ~CXIP_ATOMIC_WRITEMSG_ALLOWED_FLAGS)
+	if (flags & ~CXIP_WRITEMSG_ALLOWED_FLAGS)
 		return -FI_EBADFLAGS;
 
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
@@ -985,8 +982,6 @@ static ssize_t cxip_ep_atomic_readwritev(struct fid_ep *ep,
 			 txc->attr.op_flags);
 }
 
-#define CXIP_ATOMIC_READMSG_ALLOWED_FLAGS (FI_COMPLETION | CXIP_TX_COMP_MODES)
-
 static ssize_t cxip_ep_atomic_readwritemsg(struct fid_ep *ep,
 					   const struct fi_msg_atomic *msg,
 					   struct fi_ioc *resultv,
@@ -995,7 +990,7 @@ static ssize_t cxip_ep_atomic_readwritemsg(struct fid_ep *ep,
 {
 	struct cxip_txc *txc;
 
-	if (flags & ~CXIP_ATOMIC_READMSG_ALLOWED_FLAGS)
+	if (flags & ~CXIP_READMSG_ALLOWED_FLAGS)
 		return -FI_EBADFLAGS;
 
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
@@ -1103,8 +1098,6 @@ static ssize_t cxip_ep_atomic_compwritev(struct fid_ep *ep,
 			 txc->attr.op_flags);
 }
 
-#define CXIP_ATOMIC_COMPMSG_ALLOWED_FLAGS (FI_COMPLETION | CXIP_TX_COMP_MODES)
-
 static ssize_t
 cxip_ep_atomic_compwritemsg(struct fid_ep *ep, const struct fi_msg_atomic *msg,
 			    const struct fi_ioc *comparev, void **compare_desc,
@@ -1114,7 +1107,7 @@ cxip_ep_atomic_compwritemsg(struct fid_ep *ep, const struct fi_msg_atomic *msg,
 {
 	struct cxip_txc *txc;
 
-	if (flags & ~CXIP_ATOMIC_COMPMSG_ALLOWED_FLAGS)
+	if (flags & ~CXIP_READMSG_ALLOWED_FLAGS)
 		return -FI_EBADFLAGS;
 
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)

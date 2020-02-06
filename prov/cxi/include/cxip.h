@@ -61,10 +61,23 @@
 #define CXIP_EP_MAX_RX_CNT		16
 #define CXIP_EP_MIN_MULTI_RECV		64
 #define CXIP_EP_MAX_CTX_BITS		4
+
 #define CXIP_TX_COMP_MODES		(FI_INJECT_COMPLETE | \
 					 FI_TRANSMIT_COMPLETE | \
 					 FI_DELIVERY_COMPLETE | \
 					 FI_MATCH_COMPLETE)
+#define CXIP_TX_OP_FLAGS		(FI_INJECT | \
+					 FI_COMPLETION | \
+					 CXIP_TX_COMP_MODES | \
+					 FI_REMOTE_CQ_DATA)
+#define CXIP_RX_OP_FLAGS		(FI_COMPLETION | \
+					 FI_MULTI_RECV)
+#define CXIP_WRITEMSG_ALLOWED_FLAGS	(FI_INJECT | \
+					 FI_COMPLETION | \
+					 CXIP_TX_COMP_MODES)
+#define CXIP_READMSG_ALLOWED_FLAGS	(FI_COMPLETION | \
+					 CXIP_TX_COMP_MODES)
+
 #define CXIP_AMO_MAX_IOV		1
 #define CXIP_EQ_DEF_SZ			(1 << 8)
 #define CXIP_CQ_DEF_SZ			(1 << 8)
@@ -1012,6 +1025,34 @@ static inline int cxip_fid_to_txc(struct fid_ep *ep, struct cxip_txc **txc)
 
 	case FI_CLASS_TX_CTX:
 		*txc = container_of(ep, struct cxip_txc, fid.ctx);
+		return FI_SUCCESS;
+
+	default:
+		return -FI_EINVAL;
+	}
+}
+
+/*
+ * cxip_fid_to_rxc() - Return RXC from FID provided to a Receive API.
+ */
+static inline int cxip_fid_to_rxc(struct fid_ep *ep, struct cxip_rxc **rxc)
+{
+	struct cxip_ep *cxi_ep;
+
+	if (!ep)
+		return -FI_EINVAL;
+
+	/* The input FID could be a standard endpoint (containing an RX
+	 * context), or an RX context itself.
+	 */
+	switch (ep->fid.fclass) {
+	case FI_CLASS_EP:
+		cxi_ep = container_of(ep, struct cxip_ep, ep);
+		*rxc = cxi_ep->ep_obj->rxcs[0];
+		return FI_SUCCESS;
+
+	case FI_CLASS_RX_CTX:
+		*rxc = container_of(ep, struct cxip_rxc, ctx);
 		return FI_SUCCESS;
 
 	default:

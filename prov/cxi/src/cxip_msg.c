@@ -157,6 +157,9 @@ static void recv_req_report(struct cxip_req *req)
 	int truncated;
 	int err;
 	fi_addr_t src_addr;
+	int success_event = (req->flags & FI_COMPLETION);
+
+	req->flags &= (FI_MSG | FI_TAGGED | FI_RECV);
 
 	if (req->recv.parent) {
 		struct cxip_req *parent = req->recv.parent;
@@ -177,11 +180,13 @@ static void recv_req_report(struct cxip_req *req)
 	if (req->recv.rc == C_RC_OK && !truncated) {
 		CXIP_LOG_DBG("Request success: %p\n", req);
 
-		src_addr = recv_req_src_addr(req);
-		ret = cxip_cq_req_complete_addr(req, src_addr);
-		if (ret != FI_SUCCESS)
-			CXIP_LOG_ERROR("Failed to report completion: %d\n",
-				       ret);
+		if (success_event) {
+			src_addr = recv_req_src_addr(req);
+			ret = cxip_cq_req_complete_addr(req, src_addr);
+			if (ret != FI_SUCCESS)
+				CXIP_LOG_ERROR("Failed to report completion: %d\n",
+					       ret);
+		}
 
 		if (req->recv.rxc->recv_cntr) {
 			ret = cxip_cntr_mod(req->recv.rxc->recv_cntr, 1, false,
@@ -2010,12 +2015,11 @@ int cxip_msg_recv_cancel(struct cxip_req *req)
  * _cxip_recv() - Common message receive function. Used for tagged and untagged
  * sends of all sizes.
  */
-static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
-			  fi_addr_t src_addr, uint64_t tag, uint64_t ignore,
-			  void *context, uint64_t flags, bool tagged)
+static ssize_t _cxip_recv(struct cxip_rxc *rxc, void *buf, size_t len,
+			  void *desc, fi_addr_t src_addr, uint64_t tag,
+			  uint64_t ignore, void *context, uint64_t flags,
+			  bool tagged)
 {
-	struct cxip_ep *cxi_ep;
-	struct cxip_rxc *rxc;
 	struct cxip_domain *dom;
 	int ret;
 	struct cxip_md *recv_md = NULL;
@@ -2030,26 +2034,8 @@ static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 		.le_type = ~0,
 	};
 
-	if (!ep || (len && !buf))
+	if (len && !buf)
 		return -FI_EINVAL;
-
-	/* The input FID could be a standard endpoint (containing a RX
-	 * context), or a RX context itself.
-	 */
-	switch (ep->fid.fclass) {
-	case FI_CLASS_EP:
-		cxi_ep = container_of(ep, struct cxip_ep, ep);
-		rxc = cxi_ep->ep_obj->rxcs[0];
-		break;
-
-	case FI_CLASS_RX_CTX:
-		rxc = container_of(ep, struct cxip_rxc, ctx);
-		break;
-
-	default:
-		CXIP_LOG_ERROR("Invalid EP type\n");
-		return -FI_EINVAL;
-	}
 
 	if (!rxc->enabled)
 		return -FI_EOPBADSTATE;
@@ -2106,7 +2092,7 @@ static ssize_t _cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	 */
 	req->context = (uint64_t)context;
 
-	req->flags = FI_RECV;
+	req->flags = FI_RECV | (flags & FI_COMPLETION);
 	if (tagged) {
 		req->flags |= FI_TAGGED;
 		mb.tagged = 1;
@@ -3146,34 +3132,55 @@ static ssize_t cxip_trecv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 			  fi_addr_t src_addr, uint64_t tag, uint64_t ignore,
 			  void *context)
 {
-	return _cxip_recv(ep, buf, len, desc, src_addr, tag, ignore, context,
-			  0, true);
+	struct cxip_rxc *rxc;
+
+	if (cxip_fid_to_rxc(ep, &rxc) != FI_SUCCESS)
+		return -FI_EINVAL;
+
+	return _cxip_recv(rxc, buf, len, desc, src_addr, tag, ignore, context,
+			  rxc->attr.op_flags, true);
 }
 
 static ssize_t cxip_trecvv(struct fid_ep *ep, const struct iovec *iov,
 			   void **desc, size_t count, fi_addr_t src_addr,
 			   uint64_t tag, uint64_t ignore, void *context)
 {
+	struct cxip_rxc *rxc;
+
 	if (!iov || count != 1)
 		return -FI_EINVAL;
 
-	return _cxip_recv(ep, iov[0].iov_base, iov[0].iov_len,
-			  desc ? desc[0] : NULL,
-			  src_addr, tag, ignore, context, 0, true);
-}
+	if (cxip_fid_to_rxc(ep, &rxc) != FI_SUCCESS)
+		return -FI_EINVAL;
 
-#define CXIP_TRECVMSG_ALLOWED_FLAGS FI_COMPLETION
+	return _cxip_recv(rxc, iov[0].iov_base, iov[0].iov_len,
+			  desc ? desc[0] : NULL,
+			  src_addr, tag, ignore, context, rxc->attr.op_flags,
+			  true);
+}
 
 static ssize_t cxip_trecvmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 			     uint64_t flags)
 {
+	struct cxip_rxc *rxc;
+
 	if (!msg || !msg->msg_iov || msg->iov_count != 1)
 		return -FI_EINVAL;
 
-	if (flags & ~CXIP_TRECVMSG_ALLOWED_FLAGS)
+	if (flags & ~CXIP_RX_OP_FLAGS)
 		return -FI_EBADFLAGS;
 
-	return _cxip_recv(ep, msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len,
+	if (cxip_fid_to_rxc(ep, &rxc) != FI_SUCCESS)
+		return -FI_EINVAL;
+
+	/* If selective completion is not requested, always generate
+	 * completions.
+	 */
+	if (!rxc->selective_completion)
+		flags |= FI_COMPLETION;
+
+	return _cxip_recv(rxc, msg->msg_iov[0].iov_base,
+			  msg->msg_iov[0].iov_len,
 			  msg->desc ? msg->desc[0] : NULL, msg->addr,
 			  msg->tag, msg->ignore, msg->context, flags, true);
 }
@@ -3208,9 +3215,6 @@ static ssize_t cxip_tsendv(struct fid_ep *ep, const struct iovec *iov,
 			  dest_addr, tag, context, txc->attr.op_flags, true);
 }
 
-#define CXIP_TSENDMSG_ALLOWED_FLAGS (FI_INJECT | FI_COMPLETION | \
-				     CXIP_TX_COMP_MODES | FI_REMOTE_CQ_DATA)
-
 static ssize_t cxip_tsendmsg(struct fid_ep *ep,
 			     const struct fi_msg_tagged *msg, uint64_t flags)
 {
@@ -3219,7 +3223,7 @@ static ssize_t cxip_tsendmsg(struct fid_ep *ep,
 	if (!msg || !msg->msg_iov || msg->iov_count != 1)
 		return -FI_EINVAL;
 
-	if (flags & ~CXIP_TSENDMSG_ALLOWED_FLAGS)
+	if (flags & ~CXIP_TX_OP_FLAGS)
 		return -FI_EBADFLAGS;
 
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
@@ -3291,34 +3295,54 @@ struct fi_ops_tagged cxip_ep_tagged_ops = {
 static ssize_t cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 			 fi_addr_t src_addr, void *context)
 {
-	return _cxip_recv(ep, buf, len, desc, src_addr, 0, 0, context, 0,
-			  false);
+	struct cxip_rxc *rxc;
+
+	if (cxip_fid_to_rxc(ep, &rxc) != FI_SUCCESS)
+		return -FI_EINVAL;
+
+	return _cxip_recv(rxc, buf, len, desc, src_addr, 0, 0, context,
+			  rxc->attr.op_flags, false);
 }
 
 static ssize_t cxip_recvv(struct fid_ep *ep, const struct iovec *iov,
 			  void **desc, size_t count, fi_addr_t src_addr,
 			  void *context)
 {
+	struct cxip_rxc *rxc;
+
 	if (!iov || count != 1)
 		return -FI_EINVAL;
 
-	return _cxip_recv(ep, iov[0].iov_base, iov[0].iov_len,
-			  desc ? desc[0] : NULL,
-			  src_addr, 0, 0, context, 0, false);
-}
+	if (cxip_fid_to_rxc(ep, &rxc) != FI_SUCCESS)
+		return -FI_EINVAL;
 
-#define CXIP_RECVMSG_ALLOWED_FLAGS (FI_MULTI_RECV | FI_COMPLETION)
+	return _cxip_recv(rxc, iov[0].iov_base, iov[0].iov_len,
+			  desc ? desc[0] : NULL,
+			  src_addr, 0, 0, context, rxc->attr.op_flags, false);
+}
 
 static ssize_t cxip_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 			    uint64_t flags)
 {
+	struct cxip_rxc *rxc;
+
 	if (!msg || !msg->msg_iov || msg->iov_count != 1)
 		return -FI_EINVAL;
 
-	if (flags & ~CXIP_RECVMSG_ALLOWED_FLAGS)
+	if (flags & ~CXIP_RX_OP_FLAGS)
 		return -FI_EBADFLAGS;
 
-	return _cxip_recv(ep, msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len,
+	if (cxip_fid_to_rxc(ep, &rxc) != FI_SUCCESS)
+		return -FI_EINVAL;
+
+	/* If selective completion is not requested, always generate
+	 * completions.
+	 */
+	if (!rxc->selective_completion)
+		flags |= FI_COMPLETION;
+
+	return _cxip_recv(rxc, msg->msg_iov[0].iov_base,
+			  msg->msg_iov[0].iov_len,
 			  msg->desc ? msg->desc[0] : NULL, msg->addr, 0, 0,
 			  msg->context, flags, false);
 }
@@ -3352,9 +3376,6 @@ static ssize_t cxip_sendv(struct fid_ep *ep, const struct iovec *iov,
 			  txc->attr.op_flags, false);
 }
 
-#define CXIP_SENDMSG_ALLOWED_FLAGS (FI_INJECT | FI_COMPLETION | \
-				    CXIP_TX_COMP_MODES | FI_REMOTE_CQ_DATA)
-
 static ssize_t cxip_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 			    uint64_t flags)
 {
@@ -3363,7 +3384,7 @@ static ssize_t cxip_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	if (!msg || !msg->msg_iov || msg->iov_count != 1)
 		return -FI_EINVAL;
 
-	if (flags & ~CXIP_SENDMSG_ALLOWED_FLAGS)
+	if (flags & ~CXIP_TX_OP_FLAGS)
 		return -FI_EBADFLAGS;
 
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)

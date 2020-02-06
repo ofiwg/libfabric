@@ -327,6 +327,9 @@ static int cxip_ctx_bind_cq(struct fid *fid, struct fid *bfid, uint64_t flags)
 				rxc->selective_completion = 1;
 		}
 
+		if (!rxc->selective_completion)
+			rxc->attr.op_flags |= FI_COMPLETION;
+
 		ofi_atomic_inc32(&cxi_cq->ref);
 		break;
 
