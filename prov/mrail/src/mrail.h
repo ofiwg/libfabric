@@ -218,7 +218,7 @@ struct mrail_recv {
 	uint64_t 		ignore;
 	struct mrail_rndv_recv	rndv;
 };
-DECLARE_FREESTACK(struct mrail_recv, mrail_recv_fs);
+DECLARE_FREESTACK(struct mrail_recv, mrail_recv_fs)
 
 int mrail_cq_process_buf_recv(struct fi_cq_tagged_entry *comp,
 			      struct mrail_recv *recv);

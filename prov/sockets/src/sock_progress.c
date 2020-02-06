@@ -132,7 +132,7 @@ static inline void sock_pe_discard_field(struct sock_pe_entry *pe_entry)
 	if (!pe_entry->rem)
 		goto out;
 
-	SOCK_LOG_DBG("Remaining for %p: %" PRId64 "\n", pe_entry, pe_entry->rem);
+	SOCK_LOG_DBG("Remaining for %p: %" PRId64 "\n", (void *)pe_entry, pe_entry->rem);
 	ret = sock_comm_discard(pe_entry, pe_entry->rem);
 	SOCK_LOG_DBG("Discarded %ld\n", ret);
 
@@ -142,7 +142,7 @@ static inline void sock_pe_discard_field(struct sock_pe_entry *pe_entry)
 
  out:
 	if (pe_entry->done_len == pe_entry->total_len && !pe_entry->rem) {
-		SOCK_LOG_DBG("Discard complete for %p\n", pe_entry);
+		SOCK_LOG_DBG("Discard complete for %p\n", (void *)pe_entry);
 		pe_entry->is_complete = 1;
 	}
 }
@@ -196,7 +196,7 @@ static void sock_pe_release_entry(struct sock_pe *pe,
 
 	dlist_remove(&pe_entry->entry);
 	dlist_insert_head(&pe_entry->entry, &pe->free_list);
-	SOCK_LOG_DBG("progress entry %p released\n", pe_entry);
+	SOCK_LOG_DBG("progress entry %p released\n", (void *)pe_entry);
 }
 
 static struct sock_pe_entry *sock_pe_acquire_entry(struct sock_pe *pe)
@@ -223,7 +223,7 @@ static struct sock_pe_entry *sock_pe_acquire_entry(struct sock_pe *pe)
 		assert(ofi_rbempty(&pe_entry->comm_buf));
 		dlist_remove(&pe_entry->entry);
 		dlist_insert_tail(&pe_entry->entry, &pe->busy_list);
-		SOCK_LOG_DBG("progress entry %p acquired : %lu\n", pe_entry,
+		SOCK_LOG_DBG("progress entry %p acquired : %lu\n", (void *)pe_entry,
 			     PE_INDEX(pe, pe_entry));
 	}
 	return pe_entry;
@@ -242,7 +242,7 @@ static void sock_pe_report_send_cq_completion(struct sock_pe_entry *pe_entry)
 
 	if (ret < 0) {
 		SOCK_LOG_ERROR("Failed to report completion %p\n",
-			       pe_entry);
+			       (void *)pe_entry);
 		if (pe_entry->comp->eq) {
 			sock_eq_report_error(
 				pe_entry->comp->eq,
@@ -282,7 +282,7 @@ static void sock_pe_report_recv_cq_completion(struct sock_pe_entry *pe_entry)
 			pe_entry);
 
 	if (ret < 0) {
-		SOCK_LOG_ERROR("Failed to report completion %p\n", pe_entry);
+		SOCK_LOG_ERROR("Failed to report completion %p\n", (void *)pe_entry);
 		if (pe_entry->comp->eq) {
 			sock_eq_report_error(
 				pe_entry->comp->eq,
@@ -470,12 +470,12 @@ static void sock_pe_progress_pending_ack(struct sock_pe *pe,
 
 	if (conn->tx_pe_entry != NULL && conn->tx_pe_entry != pe_entry) {
 		SOCK_LOG_DBG("Cannot progress %p as conn %p is being used by %p\n",
-			      pe_entry, conn, conn->tx_pe_entry);
+			      (void *)pe_entry, (void *)conn, (void *)conn->tx_pe_entry);
 		return;
 	}
 
 	if (conn->tx_pe_entry == NULL) {
-		SOCK_LOG_DBG("Connection %p grabbed by %p\n", conn, pe_entry);
+		SOCK_LOG_DBG("Connection %p grabbed by %p\n", (void *)conn, (void *)pe_entry);
 		conn->tx_pe_entry = pe_entry;
 	}
 
@@ -580,7 +580,7 @@ static int sock_pe_handle_ack(struct sock_pe *pe,
 	assert(response->pe_entry_id <= SOCK_PE_MAX_ENTRIES);
 	waiting_entry = &pe->pe_table[response->pe_entry_id];
 	SOCK_LOG_DBG("Received ack for PE entry %p (index: %d)\n",
-		      waiting_entry, response->pe_entry_id);
+		      (void *)waiting_entry, response->pe_entry_id);
 
 	assert(waiting_entry->type == SOCK_PE_TX);
 	sock_pe_report_send_completion(waiting_entry);
@@ -602,7 +602,7 @@ static int sock_pe_handle_error(struct sock_pe *pe,
 	assert(response->pe_entry_id <= SOCK_PE_MAX_ENTRIES);
 	waiting_entry = &pe->pe_table[response->pe_entry_id];
 	SOCK_LOG_ERROR("Received error for PE entry %p (index: %d)\n",
-		      waiting_entry, response->pe_entry_id);
+		      (void *)waiting_entry, response->pe_entry_id);
 
 	assert(waiting_entry->type == SOCK_PE_TX);
 
@@ -638,7 +638,7 @@ static int sock_pe_handle_read_complete(struct sock_pe *pe,
 	assert(response->pe_entry_id <= SOCK_PE_MAX_ENTRIES);
 	waiting_entry = &pe->pe_table[response->pe_entry_id];
 	SOCK_LOG_DBG("Received read complete for PE entry %p (index: %d)\n",
-		      waiting_entry, response->pe_entry_id);
+		      (void *)waiting_entry, response->pe_entry_id);
 
 	waiting_entry = &pe->pe_table[response->pe_entry_id];
 	assert(waiting_entry->type == SOCK_PE_TX);
@@ -672,7 +672,7 @@ static int sock_pe_handle_write_complete(struct sock_pe *pe,
 	assert(response->pe_entry_id <= SOCK_PE_MAX_ENTRIES);
 	waiting_entry = &pe->pe_table[response->pe_entry_id];
 	SOCK_LOG_DBG("Received ack for PE entry %p (index: %d)\n",
-		      waiting_entry, response->pe_entry_id);
+		      (void *)waiting_entry, response->pe_entry_id);
 
 	assert(waiting_entry->type == SOCK_PE_TX);
 	sock_pe_report_write_completion(waiting_entry);
@@ -696,7 +696,7 @@ static int sock_pe_handle_atomic_complete(struct sock_pe *pe,
 	assert(response->pe_entry_id <= SOCK_PE_MAX_ENTRIES);
 	waiting_entry = &pe->pe_table[response->pe_entry_id];
 	SOCK_LOG_DBG("Received atomic complete for PE entry %p (index: %d)\n",
-		      waiting_entry, response->pe_entry_id);
+		      (void *)waiting_entry, response->pe_entry_id);
 
 	waiting_entry = &pe->pe_table[response->pe_entry_id];
 	assert(waiting_entry->type == SOCK_PE_TX);
@@ -1205,9 +1205,9 @@ static int sock_pe_progress_buffered_rx(struct sock_rx_ctx *rx_ctx)
 			continue;
 
 		SOCK_LOG_DBG("Consuming buffered entry: %p, ctx: %p\n",
-			      rx_buffered, rx_ctx);
+			      (void *)rx_buffered, (void *)rx_ctx);
 		SOCK_LOG_DBG("Consuming posted entry: %p, ctx: %p\n",
-			      rx_posted, rx_ctx);
+			      (void *)rx_posted, (void *)rx_ctx);
 
 		datatype_sz = (rx_buffered->flags & FI_ATOMIC) ?
 			ofi_datatype_size(rx_buffered->rx_op.atomic.datatype) : 0;
@@ -1329,11 +1329,11 @@ static int sock_pe_process_rx_send(struct sock_pe *pe,
 
 		rx_entry = sock_rx_get_entry(rx_ctx, pe_entry->addr, pe_entry->tag,
 					     pe_entry->msg_hdr.op_type == SOCK_OP_TSEND ? 1 : 0);
-		SOCK_LOG_DBG("Consuming posted entry: %p\n", rx_entry);
+		SOCK_LOG_DBG("Consuming posted entry: %p\n", (void *)rx_entry);
 
 		if (!rx_entry) {
 			SOCK_LOG_DBG("%p: No matching recv, buffering recv (len = %llu)\n",
-				      pe_entry, (long long unsigned int)data_len);
+				      (void *)pe_entry, (long long unsigned int)data_len);
 
 			rx_entry = sock_rx_new_buffered_entry(rx_ctx, data_len);
 			if (!rx_entry) {
@@ -1942,12 +1942,12 @@ static int sock_pe_progress_tx_entry(struct sock_pe *pe,
 
 	if (conn->tx_pe_entry != NULL && conn->tx_pe_entry != pe_entry) {
 		SOCK_LOG_DBG("Cannot progress %p as conn %p is being used by %p\n",
-			      pe_entry, conn, conn->tx_pe_entry);
+			      (void *)pe_entry, (void *)conn, (void *)conn->tx_pe_entry);
 		goto out;
 	}
 
 	if (conn->tx_pe_entry == NULL) {
-		SOCK_LOG_DBG("Connection %p grabbed by %p\n", conn, pe_entry);
+		SOCK_LOG_DBG("Connection %p grabbed by %p\n", (void *)conn, (void *)pe_entry);
 		conn->tx_pe_entry = pe_entry;
 	}
 
@@ -1990,7 +1990,7 @@ static int sock_pe_progress_tx_entry(struct sock_pe *pe,
 out:
 	if (pe_entry->is_complete) {
 		sock_pe_release_entry(pe, pe_entry);
-		SOCK_LOG_DBG("[%p] TX done\n", pe_entry);
+		SOCK_LOG_DBG("[%p] TX done\n", (void *)pe_entry);
 	}
 	return ret;
 }
@@ -2044,7 +2044,7 @@ out:
 
 	if (pe_entry->is_complete && !pe_entry->pe.rx.pending_send) {
 		sock_pe_release_entry(pe, pe_entry);
-		SOCK_LOG_DBG("[%p] RX done\n", pe_entry);
+		SOCK_LOG_DBG("[%p] RX done\n", (void *)pe_entry);
 	}
 	return 0;
 }
@@ -2077,10 +2077,10 @@ static void sock_pe_new_rx_entry(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx,
 		pe_entry->comp = &rx_ctx->comp;
 
 	SOCK_LOG_DBG("New RX on PE entry %p (%ld)\n",
-		      pe_entry, PE_INDEX(pe, pe_entry));
+		      (void *)pe_entry, PE_INDEX(pe, pe_entry));
 
 	SOCK_LOG_DBG("Inserting rx_entry to PE entry %p, conn: %p\n",
-		      pe_entry, pe_entry->conn);
+		      (void *)pe_entry, (void *)pe_entry->conn);
 
 	dlist_insert_tail(&pe_entry->ctx_entry, &rx_ctx->pe_entry_list);
 }
@@ -2112,7 +2112,7 @@ static int sock_pe_new_tx_entry(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 
 	msg_hdr->pe_entry_id = PE_INDEX(pe, pe_entry);
 	SOCK_LOG_DBG("New TX on PE entry %p (%d)\n",
-		      pe_entry, msg_hdr->pe_entry_id);
+		      (void *)pe_entry, msg_hdr->pe_entry_id);
 
 	sock_tx_ctx_read_op_send(tx_ctx, &pe_entry->pe.tx.tx_op,
 			&pe_entry->flags, &pe_entry->context, &pe_entry->addr,
@@ -2236,7 +2236,7 @@ static int sock_pe_new_tx_entry(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 		return -FI_EINVAL;
 	}
 	SOCK_LOG_DBG("Inserting TX-entry to PE entry %p, conn: %p\n",
-		      pe_entry, pe_entry->conn);
+		      (void *)pe_entry, (void *)pe_entry->conn);
 
 	/* prepare message header */
 	msg_hdr->version = SOCK_WIRE_PROTO_VERSION;
@@ -2511,7 +2511,7 @@ int sock_pe_progress_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 
 		ret = sock_pe_progress_tx_entry(pe, tx_ctx, pe_entry);
 		if (ret < 0) {
-			SOCK_LOG_ERROR("Error in progressing %p\n", pe_entry);
+			SOCK_LOG_ERROR("Error in progressing %p\n", (void *)pe_entry);
 			goto out;
 		}
 	}
@@ -2697,7 +2697,7 @@ struct sock_pe *sock_pe_init(struct sock_domain *domain)
 	pthread_mutex_init(&pe->list_lock, NULL);
 	pe->domain = domain;
 
-	
+
 	ret = ofi_bufpool_create(&pe->pe_rx_pool,
 				 sizeof(struct sock_pe_entry), 16, 0, 1024, 0);
 	if (ret) {

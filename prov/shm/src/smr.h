@@ -135,9 +135,9 @@ struct smr_unexp_msg {
 	struct smr_cmd cmd;
 };
 
-DECLARE_FREESTACK(struct smr_ep_entry, smr_recv_fs);
-DECLARE_FREESTACK(struct smr_unexp_msg, smr_unexp_fs);
-DECLARE_FREESTACK(struct smr_cmd, smr_pend_fs);
+DECLARE_FREESTACK(struct smr_ep_entry, smr_recv_fs)
+DECLARE_FREESTACK(struct smr_unexp_msg, smr_unexp_fs)
+DECLARE_FREESTACK(struct smr_cmd, smr_pend_fs)
 
 struct smr_queue {
 	struct dlist_entry list;

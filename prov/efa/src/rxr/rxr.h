@@ -828,8 +828,8 @@ static_assert(sizeof(struct rxr_pkt_entry) == 64, "rxr_pkt_entry check");
 #endif
 #endif
 
-OFI_DECL_RECVWIN_BUF(struct rxr_pkt_entry*, rxr_robuf, uint32_t);
-DECLARE_FREESTACK(struct rxr_robuf, rxr_robuf_fs);
+OFI_DECL_RECVWIN_BUF(struct rxr_pkt_entry*, rxr_robuf, uint32_t)
+DECLARE_FREESTACK(struct rxr_robuf, rxr_robuf_fs)
 
 #define RXR_CTRL_HDR_SIZE		(sizeof(struct rxr_ctrl_cq_hdr))
 

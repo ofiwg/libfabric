@@ -170,7 +170,7 @@ int ofi_wait_fd_del(struct util_wait *wait, int fd)
 	if (!entry) {
 		FI_INFO(wait->prov, FI_LOG_FABRIC,
 			"Given fd (%d) not found in wait list - %p\n",
-			fd, wait_fd);
+			fd, (void *)wait_fd);
 		ret = -FI_EINVAL;
 		goto out;
 	}
@@ -199,7 +199,7 @@ int ofi_wait_fd_add(struct util_wait *wait, int fd, uint32_t events,
 	if (entry) {
 		FI_DBG(wait->prov, FI_LOG_EP_CTRL,
 		       "Given fd (%d) already added to wait list - %p \n",
-		       fd, wait_fd);
+		       fd, (void *)wait_fd);
 		fd_entry = container_of(entry, struct ofi_wait_fd_entry, entry);
 		ofi_atomic_inc32(&fd_entry->ref);
 		goto out;
@@ -585,7 +585,7 @@ int ofi_wait_fid_del(struct util_wait *wait, void *fid)
 	if (!entry) {
 		FI_INFO(wait->prov, FI_LOG_FABRIC,
 			"Given fid (%p) not found in wait list - %p\n",
-			fid, wait_yield);
+			fid, (void *)wait_yield);
 		ret = -FI_EINVAL;
 		goto out;
 	}
@@ -614,7 +614,7 @@ int ofi_wait_fid_add(struct util_wait *wait, ofi_wait_try_func wait_try,
 	if (entry) {
 		FI_DBG(wait->prov, FI_LOG_EP_CTRL,
 		       "Given fid (%p) already added to wait list - %p \n",
-		       fid, wait_yield);
+		       fid, (void *)wait_yield);
 		fid_entry = container_of(entry, struct ofi_wait_fid_entry, entry);
 		ofi_atomic_inc32(&fid_entry->ref);
 		goto out;

@@ -183,7 +183,7 @@ void mrail_progress_deferred_reqs(struct mrail_ep *mrail_ep)
 static ssize_t mrail_prepare_rma_subreqs(struct mrail_ep *mrail_ep,
 		const struct fi_msg_rma *msg, struct mrail_req *req)
 {
-	ssize_t ret;
+	ssize_t ret = 0;
 	struct mrail_subreq *subreq;
 	size_t subreq_count;
 	size_t total_len;
@@ -200,7 +200,7 @@ static ssize_t mrail_prepare_rma_subreqs(struct mrail_ep *mrail_ep,
 	 */
 	subreq_count = mrail_ep->num_eps;
 
-	total_len = ofi_total_iov_len(msg->msg_iov, msg->iov_count); 
+	total_len = ofi_total_iov_len(msg->msg_iov, msg->iov_count);
 	chunk_len = total_len / subreq_count;
 
 	/* The first chunk is the longest */

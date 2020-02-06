@@ -1655,7 +1655,7 @@ static int pp_server_connect(struct ct_pingpong *ct)
 
 	if (event != FI_CONNECTED || entry.fid != &(ct->ep->fid)) {
 		fprintf(stderr, "Unexpected CM event %d fid %p (ep %p)\n",
-			event, entry.fid, ct->ep);
+			event, (void *)entry.fid, (void *)ct->ep);
 		ret = -FI_EOTHER;
 		goto err;
 	}
@@ -1707,7 +1707,7 @@ static int pp_client_connect(struct ct_pingpong *ct)
 
 	if (event != FI_CONNECTED || entry.fid != &(ct->ep->fid)) {
 		fprintf(stderr, "Unexpected CM event %d fid %p (ep %p)\n",
-			event, entry.fid, ct->ep);
+			event, (void *)entry.fid, (void *)ct->ep);
 		ret = -FI_EOTHER;
 		return ret;
 	}
@@ -1829,7 +1829,7 @@ static void pp_free_res(struct ct_pingpong *ct)
 
 	free(ct->rem_name);
 	free(ct->local_name);
-	
+
 	if (ct->buf) {
 		ofi_freealign(ct->buf);
 		ct->buf = ct->rx_buf = ct->tx_buf = NULL;

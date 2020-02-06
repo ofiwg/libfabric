@@ -79,7 +79,7 @@ struct sock_rx_entry *sock_rx_new_entry(struct sock_rx_ctx *rx_ctx)
 	}
 
 	rx_entry->is_tagged = 0;
-	SOCK_LOG_DBG("New rx_entry: %p, ctx: %p\n", rx_entry, rx_ctx);
+	SOCK_LOG_DBG("New rx_entry: %p, ctx: %p\n", (void *)rx_entry, (void *)rx_ctx);
 	dlist_init(&rx_entry->entry);
 	rx_ctx->num_left--;
 	return rx_entry;
@@ -88,7 +88,7 @@ struct sock_rx_entry *sock_rx_new_entry(struct sock_rx_ctx *rx_ctx)
 void sock_rx_release_entry(struct sock_rx_entry *rx_entry)
 {
 	struct sock_rx_ctx *rx_ctx;
-	SOCK_LOG_DBG("Releasing rx_entry: %p\n", rx_entry);
+	SOCK_LOG_DBG("Releasing rx_entry: %p\n", (void *)rx_entry);
 	if (rx_entry->is_pool_entry) {
 		rx_ctx = rx_entry->rx_ctx;
 		memset(rx_entry, 0, sizeof(*rx_entry));
@@ -113,7 +113,7 @@ struct sock_rx_entry *sock_rx_new_buffered_entry(struct sock_rx_ctx *rx_ctx,
 		return NULL;
 
 	SOCK_LOG_DBG("New buffered entry:%p len: %lu, ctx: %p\n",
-		       rx_entry, len, rx_ctx);
+		       (void *)rx_entry, len, (void *)rx_ctx);
 
 	rx_entry->is_busy = 1;
 	rx_entry->is_buffered = 1;

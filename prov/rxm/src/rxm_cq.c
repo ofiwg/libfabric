@@ -677,7 +677,7 @@ ssize_t rxm_sar_handle_segment(struct rxm_rx_buf *rx_buf)
 		return -FI_EOTHER;
 	FI_DBG(&rxm_prov, FI_LOG_CQ,
 	       "Got incoming recv with msg_id: 0x%" PRIx64 "for conn - %p\n",
-	       rx_buf->pkt.ctrl_hdr.msg_id, rx_buf->conn);
+	       rx_buf->pkt.ctrl_hdr.msg_id, (void *)rx_buf->conn);
 	sar_entry = dlist_find_first_match(&rx_buf->conn->sar_rx_msg_list,
 					   rxm_sar_match_msg_id,
 					   &rx_buf->pkt.ctrl_hdr.msg_id);
@@ -1061,7 +1061,7 @@ int rxm_finish_coll_eager_send(struct rxm_ep *rxm_ep, struct rxm_tx_eager_buf *t
 	}
 
 	return ret;
-};
+}
 
 ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 {

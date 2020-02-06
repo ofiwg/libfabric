@@ -476,7 +476,7 @@ struct util_cq_oflow_err_entry {
 	struct slist_entry		list_entry;
 };
 
-OFI_DECLARE_CIRQUE(struct fi_cq_tagged_entry, util_comp_cirq);
+OFI_DECLARE_CIRQUE(struct fi_cq_tagged_entry, util_comp_cirq)
 
 typedef void (*ofi_cq_progress_func)(struct util_cq *cq);
 
@@ -674,7 +674,7 @@ static inline void ofi_cntr_inc(struct util_cntr *cntr)
 struct util_av_entry {
 	ofi_atomic32_t	use_cnt;
 	UT_hash_handle	hh;
-	char		addr[0];
+	char		addr[];
 };
 
 struct util_av {
@@ -796,7 +796,7 @@ struct util_event {
 	int			size;
 	int			event;
 	int			err;
-	uint8_t			data[0];
+	uint8_t			data[];
 };
 
 int ofi_eq_create(struct fid_fabric *fabric, struct fi_eq_attr *attr,

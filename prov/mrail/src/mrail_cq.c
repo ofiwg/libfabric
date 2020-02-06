@@ -436,7 +436,7 @@ static int mrail_handle_recv_completion(struct fi_cq_tagged_entry *comp,
 	peer_info = ofi_av_get_addr(mrail_ep->util_ep.av, (int) src_addr);
 	FI_DBG(&mrail_prov, FI_LOG_CQ,
 			"ep=%p peer=%d received seq=%d, expected=%d\n",
-			mrail_ep, (int)peer_info->addr, seq_no,
+			(void *)mrail_ep, (int)peer_info->addr, seq_no,
 			peer_info->expected_seq_no);
 	ofi_ep_lock_acquire(&mrail_ep->util_ep);
 	if (seq_no == peer_info->expected_seq_no) {

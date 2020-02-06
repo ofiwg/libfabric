@@ -50,7 +50,7 @@
 #include <ofi_rbuf.h>
 
 #define OFI_DECL_RECVWIN_BUF(entrytype, name, id_type)			\
-OFI_DECLARE_CIRQUE(entrytype, recvwin_cirq);				\
+OFI_DECLARE_CIRQUE(entrytype, recvwin_cirq)				\
 struct name {								\
 	id_type exp_msg_id;						\
 	id_type win_size;						\

@@ -80,7 +80,7 @@ enum {
 #define SMR_RX_COMPLETION	(1 << 3)
 #define SMR_MULTI_RECV		(1 << 4)
 
-/* 
+/*
  * Unique smr_op_hdr for smr message protocol:
  * 	addr - local fi_addr of peer sending msg (for shm lookup)
  * 	op - type of op (ex. ofi_op_msg, defined in ofi_proto.h)
@@ -217,9 +217,9 @@ struct smr_inject_buf {
 	};
 };
 
-OFI_DECLARE_CIRQUE(struct smr_cmd, smr_cmd_queue);
-OFI_DECLARE_CIRQUE(struct smr_resp, smr_resp_queue);
-DECLARE_SMR_FREESTACK(struct smr_inject_buf, smr_inject_pool);
+OFI_DECLARE_CIRQUE(struct smr_cmd, smr_cmd_queue)
+OFI_DECLARE_CIRQUE(struct smr_resp, smr_resp_queue)
+DECLARE_SMR_FREESTACK(struct smr_inject_buf, smr_inject_pool)
 
 static inline struct smr_region *smr_peer_region(struct smr_region *smr, int i)
 {
@@ -239,7 +239,7 @@ static inline struct smr_inject_pool *smr_inject_pool(struct smr_region *smr)
 }
 static inline struct smr_addr *smr_peer_addr(struct smr_region *smr)
 {
-	return (struct smr_addr *) ((char *) smr + smr->peer_addr_offset); 
+	return (struct smr_addr *) ((char *) smr + smr->peer_addr_offset);
 }
 static inline const char *smr_name(struct smr_region *smr)
 {

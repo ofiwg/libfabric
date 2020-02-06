@@ -165,7 +165,7 @@ extern char *rxm_cm_state_str[];
 #define RXM_CM_UPDATE_STATE(handle, new_state)				\
 	do {								\
 		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "[CM] handle: "	\
-		       "%p %s -> %s\n",	handle,				\
+		       "%p %s -> %s\n",	(void *)handle,				\
 		       rxm_cm_state_str[handle->state],			\
 		       rxm_cm_state_str[new_state]);			\
 		handle->state = new_state;				\
@@ -600,7 +600,7 @@ struct rxm_recv_entry {
 		struct rxm_tx_base_buf *tx_buf;
 	} rndv;
 };
-DECLARE_FREESTACK(struct rxm_recv_entry, rxm_recv_fs);
+DECLARE_FREESTACK(struct rxm_recv_entry, rxm_recv_fs)
 
 enum rxm_recv_queue_type {
 	RXM_RECV_QUEUE_UNSPEC,

@@ -156,7 +156,7 @@ static int rxm_cmap_del_handle(struct rxm_cmap_handle *handle)
 	int ret;
 
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
-	       "marking connection handle: %p for deletion\n", handle);
+	       "marking connection handle: %p for deletion\n", (void *)handle);
 	rxm_cmap_clear_key(handle);
 
 	RXM_CM_UPDATE_STATE(handle, RXM_CMAP_SHUTDOWN);
@@ -298,7 +298,7 @@ static int rxm_cmap_alloc_handle(struct rxm_cmap *cmap, fi_addr_t fi_addr,
 		return -FI_ENOMEM;
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 	       "Allocated handle: %p for fi_addr: %" PRIu64 "\n",
-	       *handle, fi_addr);
+	       (void *)*handle, fi_addr);
 	ret = rxm_cmap_check_and_realloc_handles_table(cmap, fi_addr);
 	if (OFI_UNLIKELY(ret)) {
 		rxm_conn_free(*handle);
@@ -325,7 +325,7 @@ static int rxm_cmap_alloc_handle_peer(struct rxm_cmap *cmap, void *addr,
 	}
 	ofi_straddr_dbg(cmap->av->prov, FI_LOG_AV, "Allocated handle for addr",
 			addr);
-	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "handle: %p\n", *handle);
+	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "handle: %p\n", (void *)*handle);
 	rxm_cmap_init_handle(*handle, cmap, state, FI_ADDR_NOTAVAIL, peer);
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "Adding handle to peer list\n");
 	peer->handle = *handle;
@@ -426,7 +426,7 @@ void rxm_cmap_process_shutdown(struct rxm_cmap *cmap,
 			       struct rxm_cmap_handle *handle)
 {
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
-		"Processing shutdown for handle: %p\n", handle);
+		"Processing shutdown for handle: %p\n", (void *)handle);
 	if (handle->state > RXM_CMAP_SHUTDOWN) {
 		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL,
 			"Invalid handle on shutdown event\n");
@@ -445,7 +445,7 @@ void rxm_cmap_process_connect(struct rxm_cmap *cmap,
 	struct rxm_conn *rxm_conn = container_of(handle, struct rxm_conn, handle);
 
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
-	       "processing FI_CONNECTED event for handle: %p\n", handle);
+	       "processing FI_CONNECTED event for handle: %p\n", (void *)handle);
 	if (cm_data) {
 		assert(handle->state == RXM_CMAP_CONNREQ_SENT);
 		handle->remote_key = cm_data->accept.server_conn_id;
@@ -469,7 +469,7 @@ void rxm_cmap_process_reject(struct rxm_cmap *cmap,
 			     enum rxm_cmap_reject_reason reject_reason)
 {
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
-		"Processing reject for handle: %p\n", handle);
+		"Processing reject for handle: %p\n", (void *)handle);
 	switch (handle->state) {
 	case RXM_CMAP_CONNREQ_RECV:
 	case RXM_CMAP_CONNECTED:
@@ -549,7 +549,7 @@ int rxm_cmap_process_connreq(struct rxm_cmap *cmap, void *addr,
 		} else if (cmp > 0) {
 			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 				"Re-using handle: %p to accept remote "
-				"connection\n", handle);
+				"connection\n", (void *)handle);
 			*reject_reason = RXM_CMAP_REJECT_GENUINE;
 			rxm_conn_close(handle);
 		} else {
@@ -573,7 +573,7 @@ int rxm_cmap_process_connreq(struct rxm_cmap *cmap, void *addr,
 		break;
 	case RXM_CMAP_SHUTDOWN:
 		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL, "handle :%p marked for "
-			"deletion / shutdown, reject connection\n", handle);
+			"deletion / shutdown, reject connection\n", (void *)handle);
 		*reject_reason = RXM_CMAP_REJECT_GENUINE;
 		ret = -FI_EOPBADSTATE;
 		break;
@@ -1100,7 +1100,7 @@ static int rxm_conn_handle_notify(struct fi_eq_entry *eq_entry)
 
 	handle = eq_entry->context;
 	assert(handle->state == RXM_CMAP_SHUTDOWN);
-	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "freeing handle: %p\n", handle);
+	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "freeing handle: %p\n", (void *)handle);
 	cmap = handle->cmap;
 
 	rxm_conn_close(handle);

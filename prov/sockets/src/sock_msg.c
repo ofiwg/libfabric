@@ -132,7 +132,7 @@ ssize_t sock_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		rx_entry->total_len += rx_entry->iov[i].iov.len;
 	}
 
-	SOCK_LOG_DBG("New rx_entry: %p (ctx: %p)\n", rx_entry, rx_ctx);
+	SOCK_LOG_DBG("New rx_entry: %p (ctx: %p)\n", (void *)rx_entry, (void *)rx_ctx);
 	fastlock_acquire(&rx_ctx->lock);
 	dlist_insert_tail(&rx_entry->entry, &rx_ctx->rx_entry_list);
 	fastlock_release(&rx_ctx->lock);
@@ -221,7 +221,7 @@ ssize_t sock_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		return ret;
 
 	SOCK_LOG_DBG("New sendmsg on TX: %p using conn: %p\n",
-		      tx_ctx, conn);
+		      (void *)tx_ctx, (void *)conn);
 
 	SOCK_EP_SET_TX_OP_FLAGS(flags);
 	if (flags & SOCK_USE_OP_FLAGS)
@@ -477,7 +477,7 @@ ssize_t sock_ep_trecvmsg(struct fid_ep *ep,
 	}
 
 	fastlock_acquire(&rx_ctx->lock);
-	SOCK_LOG_DBG("New rx_entry: %p (ctx: %p)\n", rx_entry, rx_ctx);
+	SOCK_LOG_DBG("New rx_entry: %p (ctx: %p)\n", (void *)rx_entry, (void *)rx_ctx);
 	dlist_insert_tail(&rx_entry->entry, &rx_ctx->rx_entry_list);
 	fastlock_release(&rx_ctx->lock);
 	return 0;
@@ -755,4 +755,3 @@ struct fi_ops_tagged sock_ep_tagged = {
 	.senddata = sock_ep_tsenddata,
 	.injectdata = sock_ep_tinjectdata,
 };
-

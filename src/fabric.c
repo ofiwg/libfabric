@@ -585,7 +585,7 @@ static void ofi_ini_dir(const char *dir)
 		}
 		free(lib);
 
-		inif = dlsym(dlhandle, "fi_prov_ini");
+		*(void **) &inif = dlsym(dlhandle, "fi_prov_ini");
 		if (inif == NULL) {
 			FI_WARN(&core_prov, FI_LOG_CORE, "dlsym: %s\n", dlerror());
 			dlclose(dlhandle);

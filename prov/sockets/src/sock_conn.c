@@ -66,7 +66,7 @@ ssize_t sock_conn_send_src_addr(struct sock_ep_attr *ep_attr, struct sock_tx_ctx
 	struct sock_op tx_op = { 0 };
 
 	tx_op.op = SOCK_OP_CONN_MSG;
-	SOCK_LOG_DBG("New conn msg on TX: %p using conn: %p\n", tx_ctx, conn);
+	SOCK_LOG_DBG("New conn msg on TX: %p using conn: %p\n", (void *)tx_ctx, (void *)conn);
 
 	total_len = 0;
 	tx_op.src_iov_len = sizeof(union ofi_sock_ip);

@@ -1137,7 +1137,7 @@ static void *sock_pep_listener_thread(void *data)
 	int ret = 0, conn_fd;
 	char tmp = 0;
 
-	SOCK_LOG_DBG("Starting listener thread for PEP: %p\n", pep);
+	SOCK_LOG_DBG("Starting listener thread for PEP: %p\n", (void *)pep);
 	poll_fds[0].fd = pep->cm.sock;
 	poll_fds[1].fd = pep->cm.signal_fds[1];
 	poll_fds[0].events = poll_fds[1].events = POLLIN;

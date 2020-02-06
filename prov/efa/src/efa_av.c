@@ -97,7 +97,7 @@ fi_addr_t efa_ahn_qpn_to_addr(struct efa_av *av, uint16_t ahn, uint16_t qpn)
 
 static inline int efa_av_is_valid_address(struct efa_ep_addr *addr)
 {
-	struct efa_ep_addr all_zeros = {};
+	struct efa_ep_addr all_zeros = {0};
 
 	return memcmp(addr->raw, all_zeros.raw, sizeof(addr->raw));
 }
@@ -226,7 +226,7 @@ static int efa_av_insert_ah(struct efa_av *av, struct efa_ep_addr *addr,
 	}
 
 	EFA_INFO(FI_LOG_AV, "av successfully inserted conn[%p] fi_addr[%" PRIu64 "]\n",
-		 conn, *fi_addr);
+		 (void *)conn, *fi_addr);
 
 	av->used++;
 	return FI_SUCCESS;
@@ -480,7 +480,7 @@ static int efa_av_remove_ah(struct fid_av *av_fid, fi_addr_t *fi_addr,
 
 	memset(str, 0, sizeof(str));
 	inet_ntop(AF_INET6, conn->ep_addr.raw, str, INET6_ADDRSTRLEN);
-	EFA_INFO(FI_LOG_AV, "av_remove conn[%p] with GID[%s] QP[%u]\n", conn,
+	EFA_INFO(FI_LOG_AV, "av_remove conn[%p] with GID[%s] QP[%u]\n", (void *)conn,
 			str, conn->ep_addr.qpn);
 	av->used--;
 
