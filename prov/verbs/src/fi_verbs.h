@@ -72,6 +72,8 @@
 #include "ofi_util.h"
 #include "ofi_tree.h"
 #include "ofi_indexer.h"
+#include "ofi_iov.h"
+#include "ofi_hmem.h"
 
 #include "ofi_verbs_priv.h"
 
@@ -98,6 +100,8 @@
 #define VERBS_INJECT_FLAGS(ep, len, flags) ((((flags) & FI_INJECT) || \
 		len <= (ep)->inject_limit) ? IBV_SEND_INLINE : 0)
 #define VERBS_INJECT(ep, len) VERBS_INJECT_FLAGS(ep, len, (ep)->info->tx_attr->op_flags)
+#define VERBS_INJECT_DESC(ep, len, desc) \
+	(MR_DESC_IFACE(desc) == FI_HMEM_SYSTEM ? VERBS_INJECT(ep, len) : 0)
 
 #define VERBS_COMP_FLAGS(ep, flags, context)		\
 	(((ep)->util_ep.tx_op_flags | (flags)) &		\
@@ -427,6 +431,9 @@ struct vrb_mem_desc {
 	struct ofi_mr_entry	*entry;
 	enum fi_hmem_iface	iface;
 };
+
+#define MR_DESC_LKEY(desc) (((struct vrb_mem_desc *)(desc))->mr->lkey)
+#define MR_DESC_IFACE(desc) (((struct vrb_mem_desc *)(desc))->iface)
 
 extern struct fi_ops_mr vrb_mr_ops;
 
@@ -851,7 +858,7 @@ int vrb_save_wc(struct vrb_cq *cq, struct ibv_wc *wc);
 #define vrb_init_sge(buf, len, desc) (struct ibv_sge)	\
 	{ .addr = (uintptr_t) buf,			\
 	  .length = (uint32_t) len,			\
-	  .lkey = (uint32_t) (uintptr_t) desc }
+	  .lkey = (desc) ? MR_DESC_LKEY(desc) : 0 }
 
 #define vrb_set_sge_iov(sg_list, iov, count, desc)	\
 ({							\
@@ -941,11 +948,17 @@ vrb_send_iov_flags(struct vrb_ep *ep, struct ibv_send_wr *wr,
 		      uint64_t flags)
 {
 	size_t len = 0;
+	enum fi_hmem_iface hmem;
+	void *bounce_buf = NULL;
+	ssize_t ret;
 
-	if (!desc)
+	if (!desc) {
 		vrb_set_sge_iov_inline(wr->sg_list, iov, count, len);
-	else
+		hmem = FI_HMEM_SYSTEM;
+	} else {
 		vrb_set_sge_iov_count_len(wr->sg_list, iov, count, desc, len);
+		hmem = MR_DESC_IFACE(desc[0]);
+	}
 
 	wr->num_sge = count;
 	wr->send_flags = VERBS_INJECT_FLAGS(ep, len, flags);
@@ -954,7 +967,34 @@ vrb_send_iov_flags(struct vrb_ep *ep, struct ibv_send_wr *wr,
 	if (flags & FI_FENCE)
 		wr->send_flags |= IBV_SEND_FENCE;
 
-	return vrb_post_send(ep, wr, flags);
+	if (wr->send_flags == IBV_SEND_INLINE && hmem != FI_HMEM_SYSTEM) {
+		bounce_buf = malloc(len);
+		if (!bounce_buf)
+			return -FI_ENOMEM;
+
+		ret = ofi_copy_from_hmem_iov(bounce_buf, len, iov, hmem, count,
+					     0);
+		if (OFI_UNLIKELY(ret != len)) {
+			if (ret >= 0) {
+				VERBS_WARN(FI_LOG_EP_DATA,
+					   "Unexpected short copy");
+				ret = -FI_EIO;
+			}
+
+			goto out;
+		}
+
+		wr->sg_list[0] = vrb_init_sge(bounce_buf, len, NULL);
+		wr->num_sge = 1;
+	}
+
+	ret = vrb_post_send(ep, wr, flags);
+
+out:
+	if (bounce_buf)
+		free(bounce_buf);
+
+	return ret;
 }
 
 void vrb_add_credits(struct fid_ep *ep, size_t credits);

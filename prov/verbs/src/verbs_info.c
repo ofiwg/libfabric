@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2015 Intel Corporation, Inc.  All rights reserved.
+ * (C) Copyright 2020 Hewlett Packard Enterprise Development LP.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -44,11 +45,13 @@
 
 #define VERBS_DOMAIN_CAPS (FI_LOCAL_COMM | FI_REMOTE_COMM)
 
-#define VERBS_MSG_TX_CAPS (OFI_TX_MSG_CAPS | OFI_TX_RMA_CAPS | FI_ATOMICS)
-#define VERBS_MSG_RX_CAPS (OFI_RX_MSG_CAPS | OFI_RX_RMA_CAPS | FI_ATOMICS)
+#define VERBS_MSG_TX_CAPS (OFI_TX_MSG_CAPS | OFI_TX_RMA_CAPS | FI_ATOMICS | \
+			   FI_HMEM)
+#define VERBS_MSG_RX_CAPS (OFI_RX_MSG_CAPS | OFI_RX_RMA_CAPS | FI_ATOMICS | \
+			   FI_HMEM)
 #define VERBS_MSG_CAPS (VERBS_MSG_TX_CAPS | VERBS_MSG_RX_CAPS | VERBS_DOMAIN_CAPS)
-#define VERBS_DGRAM_TX_CAPS (OFI_TX_MSG_CAPS)
-#define VERBS_DGRAM_RX_CAPS (OFI_RX_MSG_CAPS)
+#define VERBS_DGRAM_TX_CAPS (OFI_TX_MSG_CAPS | FI_HMEM)
+#define VERBS_DGRAM_RX_CAPS (OFI_RX_MSG_CAPS | FI_HMEM)
 #define VERBS_DGRAM_CAPS (VERBS_DGRAM_TX_CAPS | VERBS_DGRAM_RX_CAPS | \
 			  VERBS_DOMAIN_CAPS)
 
@@ -79,7 +82,8 @@ const struct fi_domain_attr verbs_domain_attr = {
 	.control_progress	= FI_PROGRESS_AUTO,
 	.data_progress		= FI_PROGRESS_AUTO,
 	.resource_mgmt		= FI_RM_ENABLED,
-	.mr_mode		= OFI_MR_BASIC_MAP | FI_MR_LOCAL | FI_MR_BASIC,
+	.mr_mode		= OFI_MR_BASIC_MAP | FI_MR_LOCAL | FI_MR_BASIC |
+				  FI_MR_HMEM,
 	.mr_key_size		= sizeof_field(struct ibv_sge, lkey),
 	.cq_data_size		= sizeof_field(struct ibv_send_wr, imm_data),
 	.tx_ctx_cnt		= 1024,
@@ -775,6 +779,72 @@ static int vrb_have_device(void)
 	return ret;
 }
 
+static void vrb_disable_hmem(struct fi_info *info)
+{
+	info->caps &= ~FI_HMEM;
+	info->tx_attr->caps &= ~FI_HMEM;
+	info->rx_attr->caps &= ~FI_HMEM;
+	info->domain_attr->mr_mode &= ~FI_MR_HMEM;
+}
+
+static void vrb_alter_hmem_attrs(struct fi_info *info)
+{
+	static const char *hmem_devices[] = {
+		"mlx4",
+		"mlx5",
+	};
+	static const char *kallsyms = "/proc/kallsyms";
+	static const char *hmem_symbol = "ib_register_peer_memory_client";
+	char *line = NULL;
+	size_t line_size = 0;
+	ssize_t bytes;
+	FILE *kallsyms_fd;
+	bool hmem_symbol_exists = false;
+	int i;
+
+	kallsyms_fd = fopen("/proc/kallsyms", "r");
+	if (!kallsyms_fd) {
+		vrb_disable_hmem(info);
+
+		VERBS_INFO(FI_LOG_CORE,
+			   "Failed to open %s: errno=%d. No HMEM support\n",
+			   kallsyms, -errno);
+		return;
+	}
+
+	while ((bytes = getline(&line, &line_size, kallsyms_fd)) != -1) {
+		if (strstr(line, hmem_symbol)) {
+			hmem_symbol_exists = true;
+			break;
+		}
+	}
+
+	free(line);
+	fclose(kallsyms_fd);
+
+	if (!hmem_symbol_exists) {
+		vrb_disable_hmem(info);
+
+		VERBS_INFO(FI_LOG_CORE,
+			   "Missing HMEM kernel symbols. No HMEM support\n");
+		return;
+	}
+
+	for (i = 0; i < ARRAY_SIZE(hmem_devices); i++) {
+		if (strstr(info->nic->device_attr->name, hmem_devices[i])) {
+			VERBS_INFO(FI_LOG_CORE, "HMEM supported for %s\n",
+				   info->nic->device_attr->name);
+
+			return;
+		}
+	}
+
+	vrb_disable_hmem(info);
+
+	VERBS_INFO(FI_LOG_CORE, "HMEM not supported for %s\n",
+		   info->nic->device_attr->name);
+}
+
 static int vrb_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 			     const struct verbs_ep_domain *ep_dom)
 {
@@ -835,6 +905,8 @@ static int vrb_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 	ret = vrb_get_device_attrs(ctx, fi, ep_dom->protocol);
 	if (ret)
 		goto err;
+
+	vrb_alter_hmem_attrs(fi);
 
 	switch (ctx->device->transport_type) {
 	case IBV_TRANSPORT_IB:

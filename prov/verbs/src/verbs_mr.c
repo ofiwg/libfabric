@@ -66,7 +66,7 @@ int vrb_mr_reg_common(struct vrb_mem_desc *md, int vrb_access,
 	md->mr_fid.fid.fclass = FI_CLASS_MR;
 	md->mr_fid.fid.context = context;
 
-	if (md->domain->flags & VRB_USE_ODP)
+	if (md->domain->flags & VRB_USE_ODP && iface == FI_HMEM_SYSTEM)
 		vrb_access |= VRB_ACCESS_ON_DEMAND;
 
 	md->mr = ibv_reg_mr(md->domain->pd, (void *) buf, len, vrb_access);
@@ -77,9 +77,11 @@ int vrb_mr_reg_common(struct vrb_mem_desc *md, int vrb_access,
 			/* Ignore failure for zero length memory registration */
 			assert(errno == FI_EINVAL);
 	} else {
-		md->mr_fid.mem_desc = (void *)(uintptr_t)md->mr->lkey;
+		md->mr_fid.mem_desc = (void *)md;
 		md->mr_fid.key = md->mr->rkey;
 	}
+
+	md->iface = iface;
 
 	if (md->domain->eq_flags & FI_REG_MR) {
 		struct fi_eq_entry entry = {
