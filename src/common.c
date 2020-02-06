@@ -228,12 +228,12 @@ uint64_t ofi_gettime_ns(void)
 
 uint64_t ofi_gettime_us(void)
 {
-	return ofi_gettime_ns() / 1000000;
+	return ofi_gettime_ns() / 1000;
 }
 
 uint64_t ofi_gettime_ms(void)
 {
-	return ofi_gettime_ns() / 1000;
+	return ofi_gettime_ns() / 1000000;
 }
 
 uint16_t ofi_get_sa_family(const struct fi_info *info)
