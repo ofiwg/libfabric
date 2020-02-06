@@ -487,7 +487,7 @@ FI_CHECK_PACKAGE([cuda],
 		 [], [])
 
 CPPFLAGS="$CPPFLAGS $cuda_CPPFLAGS"
-LDFLAGS="$LD_FLAGS $cuda_LDFLAGS"
+LDFLAGS="$LDFLAGS $cuda_LDFLAGS"
 LIBS="$LIBS $cuda_LIBS"
 
 dnl Provider-specific checks
