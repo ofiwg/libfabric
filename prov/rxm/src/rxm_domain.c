@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2016 Intel Corporation, Inc.  All rights reserved.
+ * (C) Copyright 2020 Hewlett Packard Enterprise Development LP.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -233,10 +234,7 @@ static void rxm_mr_init(struct rxm_mr *rxm_mr, struct rxm_domain *domain,
 	rxm_mr->mr_fid.fid.fclass = FI_CLASS_MR;
 	rxm_mr->mr_fid.fid.context = context;
 	rxm_mr->mr_fid.fid.ops = &rxm_mr_ops;
-	/* Store msg_mr as rxm_mr descriptor so that we can get its key when
-	 * the app passes msg_mr as the descriptor in fi_send and friends.
-	 * The key would be used in large message transfer protocol and RMA. */
-	rxm_mr->mr_fid.mem_desc = rxm_mr->msg_mr;
+	rxm_mr->mr_fid.mem_desc = rxm_mr;
 	rxm_mr->mr_fid.key = fi_mr_key(rxm_mr->msg_mr);
 	rxm_mr->domain = domain;
 	ofi_atomic_inc32(&domain->util_domain.ref);

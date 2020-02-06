@@ -2,6 +2,7 @@
  * Copyright (c) 2013-2016 Intel Corporation. All rights reserved.
  * Copyright (c) 2018 Cray Inc. All rights reserved.
  * Copyright (c) 2019 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * (C) Copyright 2020 Hewlett Packard Enterprise Development LP.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -486,7 +487,7 @@ ssize_t rxm_cq_handle_rndv(struct rxm_rx_buf *rx_buf)
 	} else {
 		for (i = 0; i < rx_buf->recv_entry->rxm_iov.count; i++)
 			rx_buf->recv_entry->rxm_iov.desc[i] =
-				fi_mr_desc(rx_buf->recv_entry->rxm_iov.desc[i]);
+				fi_mr_desc(((struct rxm_mr *)rx_buf->recv_entry->rxm_iov.desc[i])->msg_mr);
 		total_recv_len = MIN(rx_buf->recv_entry->total_len,
 				     rx_buf->pkt.hdr.size);
 	}
