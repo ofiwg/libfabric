@@ -36,6 +36,8 @@
 #include "smr.h"
 #include "smr_signal.h"
 
+extern struct sigaction *old_action;
+
 struct smr_env smr_env = {
 	.disable_cma	= 0,
 };
@@ -153,6 +155,7 @@ static int smr_getinfo(uint32_t version, const char *node, const char *service,
 static void smr_fini(void)
 {
 	smr_cleanup();
+	free(old_action);
 }
 
 struct fi_provider smr_prov = {
@@ -177,7 +180,12 @@ SHM_INI
 			copying data directly between processes (default: no)");
 	smr_init_env();
 
+	old_action = calloc(SIGRTMIN, sizeof(*old_action));
+	if (!old_action)
+		return NULL;
 	/* Signal handlers to cleanup tmpfs files on an unclean shutdown */
+	assert(SIGBUS < SIGRTMIN && SIGSEGV < SIGRTMIN
+	       && SIGTERM < SIGRTMIN && SIGINT < SIGRTMIN);
 	smr_reg_sig_hander(SIGBUS);
 	smr_reg_sig_hander(SIGSEGV);
 	smr_reg_sig_hander(SIGTERM);
