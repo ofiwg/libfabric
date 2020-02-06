@@ -82,8 +82,7 @@ int pingpong(void)
 		for (i = 0; i < opts.iterations + opts.warmup_iterations; i++) {
 			if (i == opts.warmup_iterations)
 				ft_start();
-
-			if (opts.transfer_size < fi->tx_attr->inject_size)
+			if ((opts.transfer_size < fi->tx_attr->inject_size) && (fi->tx_attr->op_flags & FI_INJECT))
 				ret = ft_inject(ep, remote_fi_addr, opts.transfer_size);
 			else
 				ret = ft_tx(ep, remote_fi_addr, opts.transfer_size, &tx_ctx);
@@ -103,7 +102,7 @@ int pingpong(void)
 			if (ret)
 				return ret;
 
-			if (opts.transfer_size < fi->tx_attr->inject_size)
+			if ((opts.transfer_size < fi->tx_attr->inject_size) && (fi->tx_attr->op_flags & FI_INJECT))
 				ret = ft_inject(ep, remote_fi_addr, opts.transfer_size);
 			else
 				ret = ft_tx(ep, remote_fi_addr, opts.transfer_size, &tx_ctx);
