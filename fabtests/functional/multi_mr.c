@@ -303,9 +303,10 @@ int main(int argc, char **argv)
 		case '?':
 		case 'h':
 			ft_usage(argv[0], "Ping-pong multi memory region test");
-			FT_PRINT_OPTS_USAGE("-c <int>", "number of memory regions to create and test");
+			FT_PRINT_OPTS_USAGE("-c <int>",
+				"number of memory regions to create and test");
 			FT_PRINT_OPTS_USAGE("-V", "Enable verbose printing");
-			FT_PRINT_OPTS_USAGE("-v", "Enable DataCheck testing");
+			FT_PRINT_OPTS_USAGE("-v", "Enable data verification");
 			return EXIT_FAILURE;
 		}
 	}

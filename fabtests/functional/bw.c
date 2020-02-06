@@ -218,6 +218,11 @@ int main(int argc, char **argv)
 		case '?':
 		case 'h':
 			ft_usage(argv[0], "A bandwidth test with data verification.");
+			FT_PRINT_OPTS_USAGE("-T sleep_time",
+				"Receive side delay before starting");
+			FT_PRINT_OPTS_USAGE("-v", "Enable data verification");
+			FT_PRINT_OPTS_USAGE("-W window_size",
+				"Set transmit window size before waiting for completion");
 			return EXIT_FAILURE;
 		}
 	}

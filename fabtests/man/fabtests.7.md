@@ -428,6 +428,9 @@ the list available for that test.
 *-M <mcast_addr>*
 : For multicast tests, specifies the address of the multicast group to join.
 
+*-v*
+: Add data verification check to data transfers.
+
 # USAGE EXAMPLES
 
 ## A simple example
