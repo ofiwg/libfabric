@@ -3,6 +3,7 @@
  * Copyright (c) 2018 Cray Inc. All rights reserved.
  * Copyright (c) 2018 System Fabric Works, Inc. All rights reserved.
  * Copyright (c) 2019 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -622,10 +623,12 @@ static ssize_t rxm_handle_rndv(struct rxm_rx_buf *rx_buf)
 						fi_mr_desc(rx_buf->mr[i]);
 		}
 	} else {
+		struct rxm_mr *mr;
+
 		for (i = 0; i < rx_buf->recv_entry->rxm_iov.count; i++) {
-			rx_buf->mr[i] = rx_buf->recv_entry->rxm_iov.desc[i];
+			mr = rx_buf->recv_entry->rxm_iov.desc[i];
 			rx_buf->recv_entry->rxm_iov.desc[i] =
-				fi_mr_desc(rx_buf->mr[i]);
+				fi_mr_desc(mr->msg_mr);
 		}
 	}
 

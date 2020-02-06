@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2017-2020 Intel Corporation. All rights reserved.
+ * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -54,7 +55,8 @@ rxm_ep_rma_reg_iov(struct rxm_ep *rxm_ep, const struct iovec *msg_iov,
 		rma_buf->mr.count = iov_count;
 	} else {
 		for (i = 0; i < iov_count; i++)
-			desc_storage[i] = fi_mr_desc(desc[i]);
+			desc_storage[i] =
+				fi_mr_desc(((struct rxm_mr *) desc[i])->msg_mr);
 	}
 	return FI_SUCCESS;
 }

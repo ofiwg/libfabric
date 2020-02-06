@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2013-2020 Intel Corporation. All rights reserved.
  * Copyright (c) 2020 Cisco Systems, Inc.  All rights reserved.
+ * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -1071,6 +1072,7 @@ rxm_ep_alloc_rndv_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 			 uint64_t flags, uint64_t tag, uint8_t op,
 			 struct rxm_tx_rndv_buf **tx_rndv_buf)
 {
+	struct fid_mr *rxm_mr_msg_mr[RXM_IOV_LIMIT];
 	struct fid_mr **mr_iov;
 	ssize_t ret;
 	struct rxm_tx_rndv_buf *tx_buf;
@@ -1097,8 +1099,10 @@ rxm_ep_alloc_rndv_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 			goto err;
 		mr_iov = tx_buf->mr;
 	} else {
-		/* desc is msg fid_mr * array */
-		mr_iov = (struct fid_mr **)desc;
+		for (i = 0; i < count; i++)
+			rxm_mr_msg_mr[i] = ((struct rxm_mr *) desc[i])->msg_mr;
+
+		mr_iov = rxm_mr_msg_mr;
 	}
 
 	if (rxm_ep->rndv_ops == &rxm_rndv_ops_write) {
