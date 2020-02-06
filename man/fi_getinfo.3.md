@@ -254,6 +254,43 @@ Applications may use this feature to request a minimal set of
 requirements, then check the returned capabilities to enable
 additional optimizations.
 
+*FI_ATOMIC*
+: Specifies that the endpoint supports some set of atomic operations.
+  Endpoints supporting this capability support operations defined by
+  struct fi_ops_atomic.  In the absence of any relevant flags,
+  FI_ATOMIC implies the ability to initiate and be the target of
+  remote atomic reads and writes.  Applications can use the FI_READ,
+  FI_WRITE, FI_REMOTE_READ, and FI_REMOTE_WRITE flags to restrict the
+  types of atomic operations supported by an endpoint.
+
+*FI_DIRECTED_RECV*
+: Requests that the communication endpoint use the source address of
+  an incoming message when matching it with a receive buffer.  If this
+  capability is not set, then the src_addr parameter for msg and tagged
+  receive operations is ignored.
+
+*FI_FENCE*
+: Indicates that the endpoint support the FI_FENCE flag on data
+  transfer operations.  Support requires tracking that all previous
+  transmit requests to a specified remote endpoint complete prior
+  to initiating the fenced operation.  Fenced operations are often
+  used to enforce ordering between operations that are not otherwise
+  guaranteed by the underlying provider or protocol.
+
+*FI_HMEM*
+: Specifies that the endpoint should support transfers to and from
+  device memory. 
+
+*FI_LOCAL_COMM*
+: Indicates that the endpoint support host local communication.  This
+  flag may be used in conjunction with FI_REMOTE_COMM to indicate that
+  local and remote communication are required.  If neither FI_LOCAL_COMM
+  or FI_REMOTE_COMM are specified, then the provider will indicate
+  support for the configuration that minimally affects performance.
+  Providers that set FI_LOCAL_COMM but not FI_REMOTE_COMM, for example
+  a shared memory provider, may only be used to communication between
+  processes on the same system.
+
 *FI_MSG*
 : Specifies that an endpoint should support sending and receiving
   messages or datagrams.  Message capabilities imply support for send
@@ -266,83 +303,36 @@ additional optimizations.
   Applications can use the FI_SEND and FI_RECV flags to optimize an
   endpoint as send-only or receive-only.
 
-*FI_RMA*
-: Specifies that the endpoint should support RMA read and write
-  operations.  Endpoints supporting this capability support operations
-  defined by struct fi_ops_rma.  In the absence of any relevant flags,
-  FI_RMA implies the ability to initiate and be the target of remote
-  memory reads and writes.  Applications can use the FI_READ,
-  FI_WRITE, FI_REMOTE_READ, and FI_REMOTE_WRITE flags to restrict the
-  types of RMA operations supported by an endpoint.
-
-*FI_TAGGED*
-: Specifies that the endpoint should handle tagged message transfers.
-  Tagged message transfers associate a user-specified key or tag with
-  each message that is used for matching purposes at the remote side.
-  Endpoints supporting this capability support operations defined by
-  struct fi_ops_tagged.  In the absence of any relevant flags,
-  FI_TAGGED implies the ability to send and receive tagged messages.
-  Applications can use the FI_SEND and FI_RECV flags to optimize an
-  endpoint as send-only or receive-only.
-
-*FI_ATOMIC*
-: Specifies that the endpoint supports some set of atomic operations.
-  Endpoints supporting this capability support operations defined by
-  struct fi_ops_atomic.  In the absence of any relevant flags,
-  FI_ATOMIC implies the ability to initiate and be the target of
-  remote atomic reads and writes.  Applications can use the FI_READ,
-  FI_WRITE, FI_REMOTE_READ, and FI_REMOTE_WRITE flags to restrict the
-  types of atomic operations supported by an endpoint.
-
 *FI_MULTICAST*
 : Indicates that the endpoint support multicast data transfers.  This
   capability must be paired with FI_MSG.  Aplications can use FI_SEND
   and FI_RECV to optimize multicast as send-only or receive-only.
+
+*FI_MULTI_RECV*
+: Specifies that the endpoint must support the FI_MULTI_RECV flag when
+  posting receive buffers.
 
 *FI_NAMED_RX_CTX*
 : Requests that endpoints which support multiple receive contexts
   allow an initiator to target (or name) a specific receive context as
   part of a data transfer operation.
 
-*FI_DIRECTED_RECV*
-: Requests that the communication endpoint use the source address of
-  an incoming message when matching it with a receive buffer.  If this
-  capability is not set, then the src_addr parameter for msg and tagged
-  receive operations is ignored.
-
-*FI_MULTI_RECV*
-: Specifies that the endpoint must support the FI_MULTI_RECV flag when
-  posting receive buffers.
-
-*FI_SOURCE*
-: Requests that the endpoint return source addressing data as part of
-  its completion data.  This capability only applies to connectionless
-  endpoints.  Note that returning source address information may
-  require that the provider perform address translation and/or look-up
-  based on data available in the underlying protocol in order to
-  provide the requested data, which may adversely affect performance.
-  The performance impact may be greater for address vectors of type
-  FI_AV_TABLE.
-
 *FI_READ*
 : Indicates that the user requires an endpoint capable of initiating
   reads against remote memory regions.  This flag requires that FI_RMA
   and/or FI_ATOMIC be set.
 
-*FI_WRITE*
-: Indicates that the user requires an endpoint capable of initiating
-  writes against remote memory regions.  This flag requires that FI_RMA
-  and/or FI_ATOMIC be set.
-
-*FI_SEND*
-: Indicates that the user requires an endpoint capable of sending
-  message data transfers.  Message transfers include base message
-  operations as well as tagged message functionality.
-
 *FI_RECV*
 : Indicates that the user requires an endpoint capable of receiving
   message data transfers.  Message transfers include base message
   operations as well as tagged message functionality.
+
+*FI_REMOTE_COMM*
+: Indicates that the endpoint support communication with endpoints
+  located at remote nodes (across the fabric).  See FI_LOCAL_COMM for
+  additional details.  Providers that set FI_REMOTE_COMM but not
+  FI_LOCAL_COMM, for example NICs that lack loopback support, cannot
+  be used to communicate with processes on the same system.
 
 *FI_REMOTE_READ*
 : Indicates that the user requires an endpoint capable of receiving
@@ -354,45 +344,47 @@ additional optimizations.
   write memory operations from remote endpoints.  This flag requires
   that FI_RMA and/or FI_ATOMIC be set.
 
+*FI_RMA*
+: Specifies that the endpoint should support RMA read and write
+  operations.  Endpoints supporting this capability support operations
+  defined by struct fi_ops_rma.  In the absence of any relevant flags,
+  FI_RMA implies the ability to initiate and be the target of remote
+  memory reads and writes.  Applications can use the FI_READ,
+  FI_WRITE, FI_REMOTE_READ, and FI_REMOTE_WRITE flags to restrict the
+  types of RMA operations supported by an endpoint.
+
 *FI_RMA_EVENT*
 : Requests that an endpoint support the generation of completion events
   when it is the target of an RMA and/or atomic operation.  This
   flag requires that FI_REMOTE_READ and/or FI_REMOTE_WRITE be enabled on
   the endpoint.
 
+*FI_RMA_PMEM*
+: Indicates that the provider is 'persistent memory aware' and supports
+  RMA operations to and from persistent memory.  Persistent memory aware
+  providers must support registration of memory that is backed by non-
+  volatile memory, RMA transfers to/from persistent memory, and enhanced
+  completion semantics.  This flag requires that FI_RMA be set.
+  This capability is experimental.
+
+*FI_SEND*
+: Indicates that the user requires an endpoint capable of sending
+  message data transfers.  Message transfers include base message
+  operations as well as tagged message functionality.
+
 *FI_SHARED_AV*
 : Requests or indicates support for address vectors which may be shared
   among multiple processes.
 
-*FI_TRIGGER*
-: Indicates that the endpoint should support triggered operations.
-  Endpoints support this capability must meet the usage model as
-  described by fi_trigger.3.
-
-*FI_FENCE*
-: Indicates that the endpoint support the FI_FENCE flag on data
-  transfer operations.  Support requires tracking that all previous
-  transmit requests to a specified remote endpoint complete prior
-  to initiating the fenced operation.  Fenced operations are often
-  used to enforce ordering between operations that are not otherwise
-  guaranteed by the underlying provider or protocol.
-
-*FI_LOCAL_COMM*
-: Indicates that the endpoint support host local communication.  This
-  flag may be used in conjunction with FI_REMOTE_COMM to indicate that
-  local and remote communication are required.  If neither FI_LOCAL_COMM
-  or FI_REMOTE_COMM are specified, then the provider will indicate
-  support for the configuration that minimally affects performance.
-  Providers that set FI_LOCAL_COMM but not FI_REMOTE_COMM, for example
-  a shared memory provider, may only be used to communication between
-  processes on the same system.
-
-*FI_REMOTE_COMM*
-: Indicates that the endpoint support communication with endpoints
-  located at remote nodes (across the fabric).  See FI_LOCAL_COMM for
-  additional details.  Providers that set FI_REMOTE_COMM but not
-  FI_LOCAL_COMM, for example NICs that lack loopback support, cannot
-  be used to communicate with processes on the same system.
+*FI_SOURCE*
+: Requests that the endpoint return source addressing data as part of
+  its completion data.  This capability only applies to connectionless
+  endpoints.  Note that returning source address information may
+  require that the provider perform address translation and/or look-up
+  based on data available in the underlying protocol in order to
+  provide the requested data, which may adversely affect performance.
+  The performance impact may be greater for address vectors of type
+  FI_AV_TABLE.
 
 *FI_SOURCE_ERR*
 : Must be paired with FI_SOURCE.  When specified, this requests that
@@ -402,13 +394,20 @@ additional optimizations.
   validate incoming source address data against addresses stored in
   the local address vector, which may adversely affect performance.
 
-*FI_RMA_PMEM*
-: Indicates that the provider is 'persistent memory aware' and supports
-  RMA operations to and from persistent memory.  Persistent memory aware
-  providers must support registration of memory that is backed by non-
-  volatile memory, RMA transfers to/from persistent memory, and enhanced
-  completion semantics.  This flag requires that FI_RMA be set.
-  This capability is experimental.
+*FI_TAGGED*
+: Specifies that the endpoint should handle tagged message transfers.
+  Tagged message transfers associate a user-specified key or tag with
+  each message that is used for matching purposes at the remote side.
+  Endpoints supporting this capability support operations defined by
+  struct fi_ops_tagged.  In the absence of any relevant flags,
+  FI_TAGGED implies the ability to send and receive tagged messages.
+  Applications can use the FI_SEND and FI_RECV flags to optimize an
+  endpoint as send-only or receive-only.
+
+*FI_TRIGGER*
+: Indicates that the endpoint should support triggered operations.
+  Endpoints support this capability must meet the usage model as
+  described by fi_trigger.3.
 
 *FI_VARIABLE_MSG*
 
@@ -420,9 +419,10 @@ additional optimizations.
   are any messages larger than an endpoint configurable size.  This
   flag requires that FI_MSG and/or FI_TAGGED be set.
 
-*FI_HMEM*
-: Specifies that the endpoint should support transfers to and from
-  device memory. 
+*FI_WRITE*
+: Indicates that the user requires an endpoint capable of initiating
+  writes against remote memory regions.  This flag requires that FI_RMA
+  and/or FI_ATOMIC be set.
 
 Capabilities may be grouped into three general categories: primary,
 secondary, and primary modifiers.  Primary capabilities must explicitly
@@ -465,6 +465,30 @@ indicate application requirements for using the fabric interfaces
 created using the returned fi_info.  The set of modes are listed
 below.  If a NULL hints structure is provided, then the provider's
 supported set of modes will be returned in the info structure(s).
+
+*FI_ASYNC_IOV*
+: Applications can reference multiple data buffers as part of a single
+  operation through the use of IO vectors (SGEs).  Typically,
+  the contents of an IO vector are copied by the provider into an
+  internal buffer area, or directly to the underlying hardware.
+  However, when a large number of IOV entries are supported,
+  IOV buffering may have a negative impact on performance and memory
+  consumption.  The FI_ASYNC_IOV mode indicates that the application
+  must provide the buffering needed for the IO vectors.  When set,
+  an application must not modify an IO vector of length > 1, including any
+  related memory descriptor array, until the associated
+  operation has completed.
+
+*FI_BUFFERED_RECV*
+: The buffered receive mode bit indicates that the provider owns the
+  data buffer(s) that are accessed by the networking layer for received
+  messages.  Typically, this implies that data must be copied from the
+  provider buffer into the application buffer.  Applications that can
+  handle message processing from network allocated data buffers can set
+  this mode bit to avoid copies.  For full details on application
+  requirements to support this mode, see the 'Buffered Receives' section
+  in [`fi_msg`(3)](fi_msg.3.html).  This mode bit applies to FI_MSG and
+  FI_TAGGED receive operations.
 
 *FI_CONTEXT*
 : Specifies that the provider requires that applications use struct
@@ -542,25 +566,6 @@ supported set of modes will be returned in the info structure(s).
   must be a contiguous region, though it may or may not be directly
   adjacent to the payload portion of the buffer.
 
-*FI_ASYNC_IOV*
-: Applications can reference multiple data buffers as part of a single
-  operation through the use of IO vectors (SGEs).  Typically,
-  the contents of an IO vector are copied by the provider into an
-  internal buffer area, or directly to the underlying hardware.
-  However, when a large number of IOV entries are supported,
-  IOV buffering may have a negative impact on performance and memory
-  consumption.  The FI_ASYNC_IOV mode indicates that the application
-  must provide the buffering needed for the IO vectors.  When set,
-  an application must not modify an IO vector of length > 1, including any
-  related memory descriptor array, until the associated
-  operation has completed.
-
-*FI_RX_CQ_DATA*
-: This mode bit only applies to data transfers that set FI_REMOTE_CQ_DATA.
-  When set, a data transfer that carries remote CQ data will consume a
-  receive buffer at the target.  This is true even for operations that would
-  normally not consume posted receive buffers, such as RMA write operations.
-
 *FI_NOTIFY_FLAGS_ONLY*
 : This bit indicates that general completion flags may not be set by
   the provider, and are not needed by the application.  If specified,
@@ -575,16 +580,11 @@ supported set of modes will be returned in the info structure(s).
   and counters among endpoints, transmit contexts, and receive contexts that
   have the same set of capability flags.
 
-*FI_BUFFERED_RECV*
-: The buffered receive mode bit indicates that the provider owns the
-  data buffer(s) that are accessed by the networking layer for received
-  messages.  Typically, this implies that data must be copied from the
-  provider buffer into the application buffer.  Applications that can
-  handle message processing from network allocated data buffers can set
-  this mode bit to avoid copies.  For full details on application
-  requirements to support this mode, see the 'Buffered Receives' section
-  in [`fi_msg`(3)](fi_msg.3.html).  This mode bit applies to FI_MSG and
-  FI_TAGGED receive operations.
+*FI_RX_CQ_DATA*
+: This mode bit only applies to data transfers that set FI_REMOTE_CQ_DATA.
+  When set, a data transfer that carries remote CQ data will consume a
+  receive buffer at the target.  This is true even for operations that would
+  normally not consume posted receive buffers, such as RMA write operations.
 
 # ADDRESSING FORMATS
 
@@ -599,37 +599,24 @@ formats.  In some cases, a selected addressing format may need to be
 translated or mapped into an address which is native to the
 fabric.  See [`fi_av`(3)](fi_av.3.html).
 
-*FI_FORMAT_UNSPEC*
-: FI_FORMAT_UNSPEC indicates that a provider specific address format
-  should be selected.  Provider specific addresses may be protocol
-  specific or a vendor proprietary format.  Applications that select
-  FI_FORMAT_UNSPEC should be prepared to treat returned addressing
-  data as opaque.  FI_FORMAT_UNSPEC targets apps which make use of an
-  out of band address exchange.  Applications which use FI_FORMAT_UNSPEC
-  may use fi_getname() to obtain a provider specific address assigned
-  to an allocated endpoint.
+*FI_ADDR_BGQ*
+: Address is an IBM proprietary format that is used with their Blue Gene Q
+  systems.
 
-*FI_SOCKADDR*
-: Address is of type sockaddr.  The specific socket address format
-  will be determined at run time by interfaces examining the sa_family
-  field.
-
-*FI_SOCKADDR_IN*
-: Address is of type sockaddr_in (IPv4).
-
-*FI_SOCKADDR_IN6*
-: Address is of type sockaddr_in6 (IPv6).
-
-*FI_SOCKADDR_IB*
-: Address is of type sockaddr_ib (defined in Linux kernel source)
-
-*FI_ADDR_PSMX*
-: Address is an Intel proprietary format that is used with their PSMX
-  (extended performance scaled messaging) protocol.
+*FI_ADDR_EFA*
+: Address is an Amazon Elastic Fabric Adapter (EFA) proprietary format.
 
 *FI_ADDR_GNI*
 : Address is a Cray proprietary format that is used with their GNI
   protocol.
+
+*FI_ADDR_PSMX*
+: Address is an Intel proprietary format used with their Performance Scaled
+  Messaging protocol.
+
+*FI_ADDR_PSMX2*
+: Address is an Intel proprietary format used with their Performance Scaled
+  Messaging protocol version 2.
 
 *FI_ADDR_STR*
 : Address is a formatted character string.  The length and content of
@@ -649,6 +636,34 @@ address_format[://[node][:[service][/[field3]...][?[key=value][&k2=v2]...]]]
   information, the prov_name field of the fabric attribute structure should
   be used to filter by provider if necessary.
 
+*FI_FORMAT_UNSPEC*
+: FI_FORMAT_UNSPEC indicates that a provider specific address format
+  should be selected.  Provider specific addresses may be protocol
+  specific or a vendor proprietary format.  Applications that select
+  FI_FORMAT_UNSPEC should be prepared to treat returned addressing
+  data as opaque.  FI_FORMAT_UNSPEC targets apps which make use of an
+  out of band address exchange.  Applications which use FI_FORMAT_UNSPEC
+  may use fi_getname() to obtain a provider specific address assigned
+  to an allocated endpoint.
+
+*FI_SOCKADDR*
+: Address is of type sockaddr.  The specific socket address format
+  will be determined at run time by interfaces examining the sa_family
+  field.
+
+*FI_SOCKADDR_IB*
+: Address is of type sockaddr_ib (defined in Linux kernel source)
+
+*FI_SOCKADDR_IN*
+: Address is of type sockaddr_in (IPv4).
+
+*FI_SOCKADDR_IN6*
+: Address is of type sockaddr_in6 (IPv6).
+
+*FI_ADDR_PSMX*
+: Address is an Intel proprietary format that is used with their PSMX
+  (extended performance scaled messaging) protocol.
+
 # FLAGS
 
 The operation of the fi_getinfo call may be controlled through the use of
@@ -659,12 +674,6 @@ input flags.  Valid flags include the following.
   of a fabric address, such as a dotted decimal IP address.  Use of
   this flag will suppress any lengthy name resolution protocol.
 
-*FI_SOURCE*
-: Indicates that the node and service parameters specify the local
-  source address to associate with an endpoint.  If specified, either
-  the node and/or service parameter must be non-NULL.  This flag is
-  often used with passive endpoints.
-
 *FI_PROV_ATTR_ONLY*
 : Indicates that the caller is only querying for what providers are
   potentially available.  All providers will return exactly one
@@ -673,6 +682,12 @@ input flags.  Valid flags include the following.
   default values for all members, with the exception of fabric_attr.
   The fabric_attr member will have the prov_name and prov_version
   values filled in.
+
+*FI_SOURCE*
+: Indicates that the node and service parameters specify the local
+  source address to associate with an endpoint.  If specified, either
+  the node and/or service parameter must be non-NULL.  This flag is
+  often used with passive endpoints.
 
 # RETURN VALUE
 
@@ -693,12 +708,12 @@ via fi_freeinfo().
 : The specified endpoint or domain capability or operation flags are
   invalid.
 
-*FI_ENOMEM*
-: Indicates that there was insufficient memory to complete the operation.
-
 *FI_ENODATA*
 : Indicates that no providers could be found which support the requested
   fabric information.
+
+*FI_ENOMEM*
+: Indicates that there was insufficient memory to complete the operation.
 
 # NOTES
 
