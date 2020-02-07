@@ -209,7 +209,7 @@ struct tcpx_ep {
 	void (*hdr_bswap)(struct tcpx_base_hdr *hdr);
 	struct stage_buf	stage_buf;
 	size_t			min_multi_recv_size;
-	bool			send_ready_monitor;
+	bool			epoll_out_set;
 };
 
 struct tcpx_fabric {

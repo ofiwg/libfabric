@@ -666,12 +666,12 @@ int tcpx_try_func(void *util_ep)
 			       struct util_wait_fd, util_wait);
 
 	fastlock_acquire(&ep->lock);
-	if (!slist_empty(&ep->tx_queue) && !ep->send_ready_monitor) {
-		ep->send_ready_monitor = true;
+	if (!slist_empty(&ep->tx_queue) && !ep->epoll_out_set) {
+		ep->epoll_out_set = true;
 		events = OFI_EPOLL_IN | OFI_EPOLL_OUT;
 		goto epoll_mod;
-	} else if (slist_empty(&ep->tx_queue) && ep->send_ready_monitor) {
-		ep->send_ready_monitor = false;
+	} else if (slist_empty(&ep->tx_queue) && ep->epoll_out_set) {
+		ep->epoll_out_set = false;
 		events = OFI_EPOLL_IN;
 		goto epoll_mod;
 	}
