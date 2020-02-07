@@ -108,8 +108,14 @@ EPs must be bound to both RX and TX CQs.
 No support for counters.
 
 # RUNTIME PARAMETERS
-
-No runtime parameters are currently defined.
+*FI_SHM_DISABLE_CMA*
+: Force disable use of CMA (Cross Memory Attach) in shm environment. CMA is a
+  Linux feature for copying data directly between two processes without the use
+  of intermediate buffering. This requires the processes to have full access to
+  the peer's address space (the same permissions required to perform a ptrace).
+  CMA is enabled by default but checked for availability during run-time.
+  For more information see the CMA [`man pages`]
+  (https://linux.die.net/man/2/process_vm_writev)
 
 # SEE ALSO
 
