@@ -380,6 +380,9 @@ static struct cxip_req *
 rdzv_mrecv_req_event(struct cxip_req *mrecv_req, const union c_event *event)
 {
 	struct cxip_req *req = rdzv_mrecv_req_lookup(mrecv_req, event);
+	union cxip_match_bits mb = {
+		.raw = event->tgt_long.match_bits
+	};
 
 	if (!req) {
 		req = mrecv_req_dup(mrecv_req, event);
@@ -401,7 +404,7 @@ rdzv_mrecv_req_event(struct cxip_req *mrecv_req, const union c_event *event)
 	 */
 	if (event->hdr.event_type == C_EVENT_PUT ||
 	    event->hdr.event_type == C_EVENT_PUT_OVERFLOW)
-		req->tag = event->tgt_long.match_bits;
+		req->tag = mb.tag;
 
 	return req;
 }

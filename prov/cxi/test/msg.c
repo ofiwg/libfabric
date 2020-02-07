@@ -948,7 +948,7 @@ void validate_mr_rx_event(struct fi_cq_tagged_entry *cqe, void *context,
 		  "CQE flags mismatch (%#llx %#lx)",
 		  (cqe->flags & ~FI_MULTI_RECV), flags);
 	cr_assert(cqe->data == data, "Invalid CQE data");
-	cr_assert(cqe->tag == tag, "Invalid CQE tag");
+	cr_assert(cqe->tag == tag, "Invalid CQE tag %#lx %#lx", cqe->tag, tag);
 }
 
 void do_multi_recv(uint8_t *send_buf, size_t send_len,
