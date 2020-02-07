@@ -286,11 +286,6 @@ CQs, based on the type of operation.  This is specified using
 fi_ep_bind flags.  The following flags may be OR'ed together when
 binding an endpoint to a completion domain CQ.
 
-*FI_TRANSMIT*
-: Directs the completion of outbound data transfer requests to the
-  specified completion queue.  This includes send message, RMA, and
-  atomic operations.
-
 *FI_RECV*
 : Directs the notification of inbound data transfers to the specified
   completion queue.  This includes received messages.  This binding
@@ -317,28 +312,24 @@ binding an endpoint to a completion domain CQ.
   See Notes section below for additional information on how this flag
   interacts with the FI_CONTEXT and FI_CONTEXT2 mode bits.
 
+*FI_TRANSMIT*
+: Directs the completion of outbound data transfer requests to the
+  specified completion queue.  This includes send message, RMA, and
+  atomic operations.
+
 An endpoint may optionally be bound to a completion counter.  Associating
 an endpoint with a counter is in addition to binding the EP with a CQ.  When
 binding an endpoint to a counter, the following flags may be specified.
-
-*FI_SEND*
-: Increments the specified counter whenever a message transfer initiated
-  over the endpoint has completed successfully or in error.  Sent messages
-  include both tagged and normal message operations.
-
-*FI_RECV*
-: Increments the specified counter whenever a message is
-  received over the endpoint.  Received messages include both tagged
-  and normal message operations.
 
 *FI_READ*
 : Increments the specified counter whenever an RMA read, atomic fetch,
   or atomic compare operation initiated from the endpoint has completed
   successfully or in error.
 
-*FI_WRITE*
-: Increments the specified counter whenever an RMA write or base atomic
-  operation initiated from the endpoint has completed successfully or in error.
+*FI_RECV*
+: Increments the specified counter whenever a message is
+  received over the endpoint.  Received messages include both tagged
+  and normal message operations.
 
 *FI_REMOTE_READ*
 : Increments the specified counter whenever an RMA read, atomic fetch, or
@@ -351,6 +342,15 @@ binding an endpoint to a counter, the following flags may be specified.
   atomic operation is initiated from a remote endpoint that targets
   the given endpoint.  Use of this flag requires that the
   endpoint be created using FI_RMA_EVENT.
+
+*FI_SEND*
+: Increments the specified counter whenever a message transfer initiated
+  over the endpoint has completed successfully or in error.  Sent messages
+  include both tagged and normal message operations.
+
+*FI_WRITE*
+: Increments the specified counter whenever an RMA write or base atomic
+  operation initiated from the endpoint has completed successfully or in error.
 
 An endpoint may only be bound to a single CQ or counter for a given
 type of operation.  For example, a EP may not bind to two counters
@@ -436,12 +436,24 @@ The base operation of an endpoint is selected during creation using
 struct fi_info.  The following control commands and arguments may be
 assigned to an endpoint.
 
+**FI_BACKLOG - int *value**
+: This option only applies to passive endpoints.  It is used to set the
+  connection request backlog for listening endpoints.
+
 **FI_GETOPSFLAG -- uint64_t *flags**
 : Used to retrieve the current value of flags associated with the data
   transfer operations initiated on the endpoint. The control argument must
   include FI_TRANSMIT or FI_RECV (not both) flags to indicate the type of
   data transfer flags to be returned.
   See below for a list of control flags.
+
+**FI_GETWAIT -- void \*\***
+: This command allows the user to retrieve the file descriptor associated
+  with a socket endpoint.  The fi_control arg parameter should be an address
+  where a pointer to the returned file descriptor will be written.  See fi_eq.3
+  for addition details using fi_control with FI_GETWAIT.  The file descriptor
+  may be used for notification that the endpoint is ready to send or receive
+  data.
 
 **FI_SETOPSFLAG -- uint64_t *flags**
 : Used to change the data transfer operation flags associated with an
@@ -450,18 +462,6 @@ assigned to an endpoint.
   flags OR'ed in. The given flags will override the previous transmit and receive
   attributes that were set when the endpoint was created.
   Valid control flags are defined below.
-
-**FI_BACKLOG - int *value**
-: This option only applies to passive endpoints.  It is used to set the
-  connection request backlog for listening endpoints.
-
-*FI_GETWAIT (void \*\*)*
-: This command allows the user to retrieve the file descriptor associated
-  with a socket endpoint.  The fi_control arg parameter should be an address
-  where a pointer to the returned file descriptor will be written.  See fi_eq.3
-  for addition details using fi_control with FI_GETWAIT.  The file descriptor
-  may be used for notification that the endpoint is ready to send or receive
-  data.
 
 ## fi_getopt / fi_setopt
 
@@ -474,23 +474,6 @@ low-level protocol and implementation specific details of an endpoint.
 The following option levels and option names and parameters are defined.
 
 *FI_OPT_ENDPOINT*
-
-- *FI_OPT_MIN_MULTI_RECV - size_t*
-: Defines the minimum receive buffer space available when the receive
-  buffer is released by the provider (see FI_MULTI_RECV).  Modifying this
-  value is only guaranteed to set the minimum buffer space needed on
-  receives posted after the value has been changed.  It is recommended
-  that applications that want to override the default MIN_MULTI_RECV
-  value set this option before enabling the corresponding endpoint.
-
-- *FI_OPT_CM_DATA_SIZE - size_t*
-: Defines the size of available space in CM messages for user-defined
-  data.  This value limits the amount of data that applications can exchange
-  between peer endpoints using the fi_connect, fi_accept, and fi_reject
-  operations.  The size returned is dependent upon the properties of the
-  endpoint, except in the case of passive endpoints, in which the size reflects
-  the maximum size of the data that may be present as part of a connection
-  request event. This option is read only.
 
 - *FI_OPT_BUFFERED_LIMIT - size_t*
 : Defines the maximum size of a buffered message that will be reported
@@ -519,6 +502,23 @@ The following option levels and option names and parameters are defined.
   atleast FI_OPT_BUFFERED_MIN bytes of application data along with it. A smaller
   sized renedezvous protocol message usually results in better latency for the
   overall transfer of a large message.
+
+- *FI_OPT_CM_DATA_SIZE - size_t*
+: Defines the size of available space in CM messages for user-defined
+  data.  This value limits the amount of data that applications can exchange
+  between peer endpoints using the fi_connect, fi_accept, and fi_reject
+  operations.  The size returned is dependent upon the properties of the
+  endpoint, except in the case of passive endpoints, in which the size reflects
+  the maximum size of the data that may be present as part of a connection
+  request event. This option is read only.
+
+- *FI_OPT_MIN_MULTI_RECV - size_t*
+: Defines the minimum receive buffer space available when the receive
+  buffer is released by the provider (see FI_MULTI_RECV).  Modifying this
+  value is only guaranteed to set the minimum buffer space needed on
+  receives posted after the value has been changed.  It is recommended
+  that applications that want to override the default MIN_MULTI_RECV
+  value set this option before enabling the corresponding endpoint.
 
 ## fi_tc_dscp_set
 
@@ -584,24 +584,25 @@ struct fi_ep_attr {
 If specified, indicates the type of fabric interface communication
 desired.  Supported types are:
 
-*FI_EP_UNSPEC*
-: The type of endpoint is not specified.  This is usually provided as
-  input, with other attributes of the endpoint or the provider
-  selecting the type.
-
-*FI_EP_MSG*
-: Provides a reliable, connection-oriented data transfer service with
-  flow control that maintains message boundaries.
-
 *FI_EP_DGRAM*
 : Supports a connectionless, unreliable datagram communication.
   Message boundaries are maintained, but the maximum message size may
   be limited to the fabric MTU.  Flow control is not guaranteed.
 
+*FI_EP_MSG*
+: Provides a reliable, connection-oriented data transfer service with
+  flow control that maintains message boundaries.
+
 *FI_EP_RDM*
 : Reliable datagram message.  Provides a reliable, unconnected data
   transfer service with flow control that maintains message
   boundaries.
+
+*FI_EP_SOCK_DGRAM*
+: A connectionless, unreliable datagram endpoint with UDP socket-like
+  semantics.  FI_EP_SOCK_DGRAM is most useful for applications designed
+  around using UDP sockets.  See the SOCKET ENDPOINT section for additional
+  details and restrictions that apply to datagram socket endpoints.
 
 *FI_EP_SOCK_STREAM*
 : Data streaming endpoint with TCP socket-like semantics.  Provides
@@ -611,11 +612,10 @@ desired.  Supported types are:
   ENDPOINT section for additional details and restrictions that apply
   to stream endpoints.
 
-*FI_EP_SOCK_DGRAM*
-: A connectionless, unreliable datagram endpoint with UDP socket-like
-  semantics.  FI_EP_SOCK_DGRAM is most useful for applications designed
-  around using UDP sockets.  See the SOCKET ENDPOINT section for additional
-  details and restrictions that apply to datagram socket endpoints.
+*FI_EP_UNSPEC*
+: The type of endpoint is not specified.  This is usually provided as
+  input, with other attributes of the endpoint or the provider
+  selecting the type.
 
 ## Protocol
 
@@ -626,25 +626,54 @@ Provider specific protocols are also allowed.  Provider specific
 protocols will be indicated by having the upper bit of the
 protocol value set to one.
 
-*FI_PROTO_UNSPEC*
-: The protocol is not specified.  This is usually provided as input,
-  with other attributes of the socket or the provider selecting the
-  actual protocol.
+*FI_PROTO_GNI*
+: Protocol runs over Cray GNI low-level interface.
 
-*FI_PROTO_RDMA_CM_IB_RC*
-: The protocol runs over Infiniband reliable-connected queue pairs,
-  using the RDMA CM protocol for connection establishment.
+*FI_PROTO_IB_RDM*
+: Reliable-datagram protocol implemented over InfiniBand reliable-connected
+  queue pairs.
+
+*FI_PROTO_IB_UD*
+: The protocol runs over Infiniband unreliable datagram queue pairs.
 
 *FI_PROTO_IWARP*
 : The protocol runs over the Internet wide area RDMA protocol transport.
 
-*FI_PROTO_IB_UD*
-: The protocol runs over Infiniband unreliable datagram queue pairs.
+*FI_PROTO_IWARP_RDM*
+: Reliable-datagram protocol implemented over iWarp reliable-connected
+  queue pairs.
+
+*FI_PROTO_NETWORKDIRECT*
+: Protocol runs over Microsoft NetworkDirect service provider interface.
+  This adds reliable-datagram semantics over the NetworkDirect connection-
+  oriented endpoint semantics.
 
 *FI_PROTO_PSMX*
 : The protocol is based on an Intel proprietary protocol known as PSM,
   performance scaled messaging.  PSMX is an extended version of the
   PSM protocol to support the libfabric interfaces.
+
+*FI_PROTO_PSMX2*
+: The protocol is based on an Intel proprietary protocol known as PSM2,
+  performance scaled messaging version 2.  PSMX2 is an extended version of the
+  PSM2 protocol to support the libfabric interfaces.
+
+*FI_PROTO_RDMA_CM_IB_RC*
+: The protocol runs over Infiniband reliable-connected queue pairs,
+  using the RDMA CM protocol for connection establishment.
+
+*FI_PROTO_RXD*
+: Reliable-datagram protocol implemented over datagram endpoints.  RXD is
+  a libfabric utility component that adds RDM endpoint semantics over
+  DGRAM endpoint semantics.
+
+*FI_PROTO_RXM*
+: Reliable-datagram protocol implemented over message endpoints.  RXM is
+  a libfabric utility component that adds RDM endpoint semantics over
+  MSG endpoint semantics.
+
+*FI_PROTO_SOCK_TCP*
+: The protocol is layered over TCP packets.
 
 *FI_PROTO_UDP*
 : The protocol sends and receives UDP datagrams.  For example, an
@@ -652,39 +681,10 @@ protocol value set to one.
   remote peer that is using Berkeley *SOCK_DGRAM* sockets using
   *IPPROTO_UDP*.
 
-*FI_PROTO_SOCK_TCP*
-: The protocol is layered over TCP packets.
-
-*FI_PROTO_IWARP_RDM*
-: Reliable-datagram protocol implemented over iWarp reliable-connected
-  queue pairs.
-
-*FI_PROTO_IB_RDM*
-: Reliable-datagram protocol implemented over InfiniBand reliable-connected
-  queue pairs.
-
-*FI_PROTO_GNI*
-: Protocol runs over Cray GNI low-level interface.
-
-*FI_PROTO_RXM*
-: Reliable-datagram protocol implemented over message endpoints.  RXM is
-  a libfabric utility component that adds RDM endpoint semantics over
-  MSG endpoint semantics.
-
-*FI_PROTO_RXD*
-: Reliable-datagram protocol implemented over datagram endpoints.  RXD is
-  a libfabric utility component that adds RDM endpoint semantics over
-  DGRAM endpoint semantics.
-
-*FI_PROTO_NETWORKDIRECT*
-: Protocol runs over Microsoft NetworkDirect service provider interface.
-  This adds reliable-datagram semantics over the NetworkDirect connection-
-  oriented endpoint semantics.
-
-*FI_PROTO_PSMX2*
-: The protocol is based on an Intel proprietary protocol known as PSM2,
-  performance scaled messaging version 2.  PSMX2 is an extended version of the
-  PSM2 protocol to support the libfabric interfaces.
+*FI_PROTO_UNSPEC*
+: The protocol is not specified.  This is usually provided as input,
+  with other attributes of the socket or the provider selecting the
+  actual protocol.
 
 ## protocol_version - Protocol Version
 
@@ -922,6 +922,30 @@ which message data is sent or received by the transport layer.  Message
 ordering requires matching ordering semantics on the receiving side of a data
 transfer operation in order to guarantee that ordering is met.
 
+*FI_ORDER_ATOMIC_RAR*
+: Atomic read after read.  If set, atomic fetch operations are
+  transmitted in the order submitted relative to other
+  atomic fetch operations.  If not set, atomic fetches
+  may be transmitted out of order from their submission.
+
+*FI_ORDER_ATOMIC_RAW*
+: Atomic read after write.  If set, atomic fetch operations are
+  transmitted in the order submitted relative to atomic update
+  operations.  If not set, atomic fetches may be transmitted ahead
+  of atomic updates.
+
+*FI_ORDER_ATOMIC_WAR*
+: RMA write after read.  If set, atomic update operations are
+  transmitted in the order submitted relative to atomic fetch
+  operations.  If not set, atomic updates may be transmitted
+  ahead of atomic fetches.
+
+*FI_ORDER_ATOMIC_WAW*
+: RMA write after write.  If set, atomic update operations are
+  transmitted in the order submitted relative to other atomic
+  update operations.  If not atomic updates may be
+  transmitted out of order from their submission.
+
 *FI_ORDER_NONE*
 : No ordering is specified.  This value may be used as input in order
   to obtain the default message order supported by the provider. FI_ORDER_NONE
@@ -933,53 +957,17 @@ transfer operation in order to guarantee that ordering is met.
   RMA and atomic read operations.  If not set, RMA and atomic reads
   may be transmitted out of order from their submission.
 
-*FI_ORDER_RAW*
-: Read after write.  If set, RMA and atomic read operations are
-  transmitted in the order submitted relative to RMA and atomic write
-  operations.  If not set, RMA and atomic reads may be transmitted ahead
-  of RMA and atomic writes.
-
 *FI_ORDER_RAS*
 : Read after send.  If set, RMA and atomic read operations are
   transmitted in the order submitted relative to message send
   operations, including tagged sends.  If not set, RMA and atomic
   reads may be transmitted ahead of sends.
 
-*FI_ORDER_WAR*
-: Write after read.  If set, RMA and atomic write operations are
-  transmitted in the order submitted relative to RMA and atomic read
-  operations.  If not set, RMA and atomic writes may be transmitted
-  ahead of RMA and atomic reads.
-
-*FI_ORDER_WAW*
-: Write after write.  If set, RMA and atomic write operations are
-  transmitted in the order submitted relative to other RMA and atomic
-  write operations.  If not set, RMA and atomic writes may be
-  transmitted out of order from their submission.
-
-*FI_ORDER_WAS*
-: Write after send.  If set, RMA and atomic write operations are
-  transmitted in the order submitted relative to message send
-  operations, including tagged sends.  If not set, RMA and atomic
-  writes may be transmitted ahead of sends.
-
-*FI_ORDER_SAR*
-: Send after read.  If set, message send operations, including tagged
-  sends, are transmitted in order submitted relative to RMA and atomic
-  read operations.  If not set, message sends may be transmitted ahead
-  of RMA and atomic reads.
-
-*FI_ORDER_SAW*
-: Send after write.  If set, message send operations, including tagged
-  sends, are transmitted in order submitted relative to RMA and atomic
-  write operations.  If not set, message sends may be transmitted ahead
+*FI_ORDER_RAW*
+: Read after write.  If set, RMA and atomic read operations are
+  transmitted in the order submitted relative to RMA and atomic write
+  operations.  If not set, RMA and atomic reads may be transmitted ahead
   of RMA and atomic writes.
-
-*FI_ORDER_SAS*
-: Send after send.  If set, message send operations, including tagged
-  sends, are transmitted in the order submitted relative to other
-  message send.  If not set, message sends may be transmitted out of
-  order from their submission.
 
 *FI_ORDER_RMA_RAR*
 : RMA read after read.  If set, RMA read operations are
@@ -1005,28 +993,40 @@ transfer operation in order to guarantee that ordering is met.
   write operations.  If not set, RMA writes may be
   transmitted out of order from their submission.
 
-*FI_ORDER_ATOMIC_RAR*
-: Atomic read after read.  If set, atomic fetch operations are
-  transmitted in the order submitted relative to other
-  atomic fetch operations.  If not set, atomic fetches
-  may be transmitted out of order from their submission.
+*FI_ORDER_SAR*
+: Send after read.  If set, message send operations, including tagged
+  sends, are transmitted in order submitted relative to RMA and atomic
+  read operations.  If not set, message sends may be transmitted ahead
+  of RMA and atomic reads.
 
-*FI_ORDER_ATOMIC_RAW*
-: Atomic read after write.  If set, atomic fetch operations are
-  transmitted in the order submitted relative to atomic update
-  operations.  If not set, atomic fetches may be transmitted ahead
-  of atomic updates.
+*FI_ORDER_SAS*
+: Send after send.  If set, message send operations, including tagged
+  sends, are transmitted in the order submitted relative to other
+  message send.  If not set, message sends may be transmitted out of
+  order from their submission.
 
-*FI_ORDER_ATOMIC_WAR*
-: RMA write after read.  If set, atomic update operations are
-  transmitted in the order submitted relative to atomic fetch
-  operations.  If not set, atomic updates may be transmitted
-  ahead of atomic fetches.
+*FI_ORDER_SAW*
+: Send after write.  If set, message send operations, including tagged
+  sends, are transmitted in order submitted relative to RMA and atomic
+  write operations.  If not set, message sends may be transmitted ahead
+  of RMA and atomic writes.
 
-*FI_ORDER_ATOMIC_WAW*
-: RMA write after write.  If set, atomic update operations are
-  transmitted in the order submitted relative to other atomic
-  update operations.  If not atomic updates may be
+*FI_ORDER_WAR*
+: Write after read.  If set, RMA and atomic write operations are
+  transmitted in the order submitted relative to RMA and atomic read
+  operations.  If not set, RMA and atomic writes may be transmitted
+  ahead of RMA and atomic reads.
+
+*FI_ORDER_WAS*
+: Write after send.  If set, RMA and atomic write operations are
+  transmitted in the order submitted relative to message send
+  operations, including tagged sends.  If not set, RMA and atomic
+  writes may be transmitted ahead of sends.
+
+*FI_ORDER_WAW*
+: Write after write.  If set, RMA and atomic write operations are
+  transmitted in the order submitted relative to other RMA and atomic
+  write operations.  If not set, RMA and atomic writes may be
   transmitted out of order from their submission.
 
 ## comp_order - Completion Ordering
@@ -1106,6 +1106,16 @@ domain.
   network capacity and resource allocation are distributed fairly across the
   applications.
 
+*FI_TC_BULK_DATA*
+: This class is intended for large data transfers associated with I/O and
+  is present to separate sustained I/O transfers from other application
+  inter-process communications.
+
+*FI_TC_DEDICATED_ACCESS*
+: This class operates at the highest priority, except the management class.
+  It carries a high bandwidth allocation, minimum latency targets, and the
+  highest scheduling and arbitration priority.
+
 *FI_TC_LOW_LATENCY*
 : This class supports low latency, low jitter data patterns typically caused by
   transactional data exchanges, barrier synchronizations, and collective
@@ -1115,26 +1125,16 @@ domain.
   typically require accompanying bandwidth and message size limitations so
   as not to consume excessive bandwidth at high priority.
 
-*FI_TC_DEDICATED_ACCESS*
-: This class operates at the highest priority, except the management class.
-  It carries a high bandwidth allocation, minimum latency targets, and the
-  highest scheduling and arbitration priority.
-
-*FI_TC_BULK_DATA*
-: This class is intended for large data transfers associated with I/O and
-  is present to separate sustained I/O transfers from other application
-  inter-process communications.
+*FI_TC_NETWORK_CTRL*
+: This class is intended for traffic directly related to fabric (network)
+  management, which is critical to the correct operation of the network.
+  Its use is typically restricted to privileged network management applications.
 
 *FI_TC_SCAVENGER*
 : This class is used for data that is desired but does not have strict delivery
   requirements, such as in-band network or application level monitoring data.
   Use of this class indicates that the traffic is considered lower priority
   and should not interfere with higher priority workflows.
-
-*FI_TC_NETWORK_CTRL*
-: This class is intended for traffic directly related to fabric (network)
-  management, which is critical to the correct operation of the network.
-  Its use is typically restricted to privileged network management applications.
 
 *fi_tc_dscp_set / fi_tc_dscp_get*
 : DSCP values are supported via the DSCP get and set functions.  The
@@ -1219,6 +1219,11 @@ FI_ORDER_ATOMIC_RAW, FI_ORDER_ATOMIC_WAR, and FI_ORDER_ATOMIC_WAW.
 For a description of completion ordering, see the comp_order field in
 the _Transmit Context Attribute_ section.
 
+*FI_ORDER_DATA*
+: When set, this bit indicates that received data is written into memory
+  in order.  Data ordering applies to memory accessed as part of a single
+  operation and between operations if message ordering is guaranteed.
+
 *FI_ORDER_NONE*
 : No ordering is defined for completed operations.  Receive operations may
   complete in any order, regardless of their submission order.
@@ -1226,11 +1231,6 @@ the _Transmit Context Attribute_ section.
 *FI_ORDER_STRICT*
 : Receive operations complete in the order in which they are processed by
   the receive context, based on the receive side msg_order attribute.
-
-*FI_ORDER_DATA*
-: When set, this bit indicates that received data is written into memory
-  in order.  Data ordering applies to memory accessed as part of a single
-  operation and between operations if message ordering is guaranteed.
 
 ## total_buffered_recv
 
@@ -1432,6 +1432,24 @@ transfer operations, where a flags parameter is not available.  Data
 transfer operations that take flags as input override the op_flags
 value of transmit or receive context attributes of an endpoint.
 
+*FI_COMMIT_COMPLETE*
+: Indicates that a completion should not be generated (locally or at the
+  peer) until the result of an operation have been made persistent.
+  See [`fi_cq`(3)](fi_cq.3.html) for additional details on completion
+  semantics.
+
+*FI_COMPLETION*
+: Indicates that a completion queue entry should be written for data
+  transfer operations. This flag only applies to operations issued on an
+  endpoint that was bound to a completion queue with the
+  FI_SELECTIVE_COMPLETION flag set, otherwise, it is ignored.  See the
+  fi_ep_bind section above for more detail.
+
+*FI_DELIVERY_COMPLETE*
+: Indicates that a completion should be generated when the operation has been
+  processed by the destination endpoint(s).  See [`fi_cq`(3)](fi_cq.3.html)
+  for additional details on completion semantics.
+
 *FI_INJECT*
 : Indicates that all outbound data buffers should be returned to the
   user's control immediately after a data transfer call returns, even
@@ -1441,6 +1459,16 @@ value of transmit or receive context attributes of an endpoint.
   that may be buffered and/or the size of a single send that can use
   this flag. This limit is indicated using inject_size (see inject_size
   above).
+
+*FI_INJECT_COMPLETE*
+: Indicates that a completion should be generated when the
+  source buffer(s) may be reused.  See [`fi_cq`(3)](fi_cq.3.html) for
+  additional details on completion semantics.
+
+*FI_MULTICAST*
+: Indicates that data transfers will target multicast addresses by default.
+  Any fi_addr_t passed into a data transfer operation will be treated as a
+  multicast address.
 
 *FI_MULTI_RECV*
 : Applies to posted receive operations.  This flag allows the user to
@@ -1454,38 +1482,10 @@ value of transmit or receive context attributes of an endpoint.
   available buffer space falls below the specified minimum (see
   FI_OPT_MIN_MULTI_RECV).
 
-*FI_COMPLETION*
-: Indicates that a completion queue entry should be written for data
-  transfer operations. This flag only applies to operations issued on an
-  endpoint that was bound to a completion queue with the
-  FI_SELECTIVE_COMPLETION flag set, otherwise, it is ignored.  See the
-  fi_ep_bind section above for more detail.
-
-*FI_INJECT_COMPLETE*
-: Indicates that a completion should be generated when the
-  source buffer(s) may be reused.  See [`fi_cq`(3)](fi_cq.3.html) for
-  additional details on completion semantics.
-
 *FI_TRANSMIT_COMPLETE*
 : Indicates that a completion should be generated when the transmit
   operation has completed relative to the local provider.  See
   [`fi_cq`(3)](fi_cq.3.html) for additional details on completion semantics.
-
-*FI_DELIVERY_COMPLETE*
-: Indicates that a completion should be generated when the operation has been
-  processed by the destination endpoint(s).  See [`fi_cq`(3)](fi_cq.3.html)
-  for additional details on completion semantics.
-
-*FI_COMMIT_COMPLETE*
-: Indicates that a completion should not be generated (locally or at the
-  peer) until the result of an operation have been made persistent.
-  See [`fi_cq`(3)](fi_cq.3.html) for additional details on completion
-  semantics.
-
-*FI_MULTICAST*
-: Indicates that data transfers will target multicast addresses by default.
-  Any fi_addr_t passed into a data transfer operation will be treated as a
-  multicast address.
 
 # NOTES
 
