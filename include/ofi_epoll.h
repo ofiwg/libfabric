@@ -46,18 +46,18 @@
 #ifdef HAVE_EPOLL
 #include <sys/epoll.h>
 
-#define FI_EPOLL_IN  EPOLLIN
-#define FI_EPOLL_OUT EPOLLOUT
+#define OFI_EPOLL_IN  EPOLLIN
+#define OFI_EPOLL_OUT EPOLLOUT
 
-typedef int fi_epoll_t;
+typedef int ofi_epoll_t;
 
-static inline int fi_epoll_create(int *ep)
+static inline int ofi_epoll_create(int *ep)
 {
 	*ep = epoll_create(4);
 	return *ep < 0 ? -ofi_syserr() : 0;
 }
 
-static inline int fi_epoll_add(int ep, int fd, uint32_t events, void *context)
+static inline int ofi_epoll_add(int ep, int fd, uint32_t events, void *context)
 {
 	struct epoll_event event;
 	int ret;
@@ -70,7 +70,7 @@ static inline int fi_epoll_add(int ep, int fd, uint32_t events, void *context)
 	return 0;
 }
 
-static inline int fi_epoll_mod(int ep, int fd, uint32_t events, void *context)
+static inline int ofi_epoll_mod(int ep, int fd, uint32_t events, void *context)
 {
 	struct epoll_event event;
 
@@ -79,12 +79,12 @@ static inline int fi_epoll_mod(int ep, int fd, uint32_t events, void *context)
 	return epoll_ctl(ep, EPOLL_CTL_MOD, fd, &event) ? -ofi_syserr() : 0;
 }
 
-static inline int fi_epoll_del(int ep, int fd)
+static inline int ofi_epoll_del(int ep, int fd)
 {
 	return epoll_ctl(ep, EPOLL_CTL_DEL, fd, NULL) ? -ofi_syserr() : 0;
 }
 
-static inline int fi_epoll_wait(int ep, void **contexts, int max_contexts,
+static inline int ofi_epoll_wait(int ep, void **contexts, int max_contexts,
                                 int timeout)
 {
 	struct epoll_event events[max_contexts];
@@ -100,7 +100,7 @@ static inline int fi_epoll_wait(int ep, void **contexts, int max_contexts,
 	return ret;
 }
 
-static inline void fi_epoll_close(int ep)
+static inline void ofi_epoll_close(int ep)
 {
 	close(ep);
 }
@@ -108,20 +108,20 @@ static inline void fi_epoll_close(int ep)
 #else
 #include <poll.h>
 
-#define FI_EPOLL_IN  POLLIN
-#define FI_EPOLL_OUT POLLOUT
+#define OFI_EPOLL_IN  POLLIN
+#define OFI_EPOLL_OUT POLLOUT
 
-enum fi_epoll_ctl {
+enum ofi_epoll_ctl {
 	EPOLL_CTL_ADD,
 	EPOLL_CTL_DEL,
 	EPOLL_CTL_MOD,
 };
 
-struct fi_epoll_work_item {
+struct ofi_epoll_work_item {
 	int		fd;
 	uint32_t	events;
 	void		*context;
-	enum fi_epoll_ctl type;
+	enum ofi_epoll_ctl type;
 	struct slist_entry entry;
 };
 
@@ -134,15 +134,15 @@ typedef struct fi_epoll {
 	struct fd_signal signal;
 	struct slist	work_item_list;
 	fastlock_t	lock;
-} *fi_epoll_t;
+} *ofi_epoll_t;
 
-int fi_epoll_create(struct fi_epoll **ep);
-int fi_epoll_add(struct fi_epoll *ep, int fd, uint32_t events, void *context);
-int fi_epoll_mod(struct fi_epoll *ep, int fd, uint32_t events, void *context);
-int fi_epoll_del(struct fi_epoll *ep, int fd);
-int fi_epoll_wait(struct fi_epoll *ep, void **contexts, int max_contexts,
+int ofi_epoll_create(struct fi_epoll **ep);
+int ofi_epoll_add(struct fi_epoll *ep, int fd, uint32_t events, void *context);
+int ofi_epoll_mod(struct fi_epoll *ep, int fd, uint32_t events, void *context);
+int ofi_epoll_del(struct fi_epoll *ep, int fd);
+int ofi_epoll_wait(struct fi_epoll *ep, void **contexts, int max_contexts,
                   int timeout);
-void fi_epoll_close(struct fi_epoll *ep);
+void ofi_epoll_close(struct fi_epoll *ep);
 
 #endif /* HAVE_EPOLL */
 

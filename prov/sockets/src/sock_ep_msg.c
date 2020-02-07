@@ -418,7 +418,7 @@ static void sock_ep_cm_monitor_handle(struct sock_ep_cm_head *cm_head,
 
 	/* Mark the handle as monitored before adding it to the pollset */
 	handle->monitored = 1;
-	ret = fi_epoll_add(cm_head->emap, handle->sock_fd,
+	ret = ofi_epoll_add(cm_head->emap, handle->sock_fd,
 	                   events, handle);
 	if (ret) {
 		SOCK_LOG_ERROR("failed to monitor fd %d: %d\n",
@@ -439,7 +439,7 @@ sock_ep_cm_unmonitor_handle_locked(struct sock_ep_cm_head *cm_head,
 	int ret;
 
 	if (handle->monitored) {
-		ret = fi_epoll_del(cm_head->emap, handle->sock_fd);
+		ret = ofi_epoll_del(cm_head->emap, handle->sock_fd);
 		if (ret)
 			SOCK_LOG_ERROR("failed to unmonitor fd %d: %d\n",
 			               handle->sock_fd, ret);
@@ -717,7 +717,7 @@ static int sock_ep_cm_connect(struct fid_ep *ep, const void *addr,
 	/* Monitor the connection */
 	_ep->attr->cm.state = SOCK_CM_STATE_REQUESTED;
 	handle->sock_fd = sock_fd;
-	sock_ep_cm_monitor_handle(cm_head, handle, FI_EPOLL_IN);
+	sock_ep_cm_monitor_handle(cm_head, handle, OFI_EPOLL_IN);
 
 	return 0;
 close_socket:
@@ -782,7 +782,7 @@ static int sock_ep_cm_accept(struct fid_ep *ep, const void *param, size_t paraml
 		}
 	}
 	/* Monitor the handle prior to report the event */
-	sock_ep_cm_monitor_handle(cm_head, handle, FI_EPOLL_IN);
+	sock_ep_cm_monitor_handle(cm_head, handle, OFI_EPOLL_IN);
 	sock_ep_enable(ep);
 
 	memset(&cm_entry, 0, sizeof(cm_entry));
@@ -1172,7 +1172,7 @@ static void *sock_pep_listener_thread(void *data)
 		handle->pep = pep;
 
 		/* Monitor the connection */
-		sock_ep_cm_monitor_handle(&pep->cm_head, handle, FI_EPOLL_IN);
+		sock_ep_cm_monitor_handle(&pep->cm_head, handle, OFI_EPOLL_IN);
 	}
 
 	SOCK_LOG_DBG("PEP listener thread exiting\n");
@@ -1410,7 +1410,7 @@ static void *sock_ep_cm_thread(void *arg)
 	while (cm_head->do_listen) {
 		sock_ep_cm_check_closing_rejected_list(cm_head);
 
-		num_fds = fi_epoll_wait(cm_head->emap, ep_contexts,
+		num_fds = ofi_epoll_wait(cm_head->emap, ep_contexts,
 		                        SOCK_EPOLL_WAIT_EVENTS, -1);
 		if (num_fds < 0) {
 			SOCK_LOG_ERROR("poll failed : %s\n", strerror(errno));
@@ -1452,7 +1452,7 @@ int sock_ep_cm_start_thread(struct sock_ep_cm_head *cm_head)
 	fastlock_init(&cm_head->signal_lock);
 	dlist_init(&cm_head->msg_list);
 
-	int ret = fi_epoll_create(&cm_head->emap);
+	int ret = ofi_epoll_create(&cm_head->emap);
 	if (ret < 0) {
 		SOCK_LOG_ERROR("failed to create epoll set\n");
 		goto err1;
@@ -1465,9 +1465,9 @@ int sock_ep_cm_start_thread(struct sock_ep_cm_head *cm_head)
 		goto err2;
 	}
 
-	ret = fi_epoll_add(cm_head->emap,
+	ret = ofi_epoll_add(cm_head->emap,
 	                   cm_head->signal.fd[FI_READ_FD],
-	                   FI_EPOLL_IN, NULL);
+	                   OFI_EPOLL_IN, NULL);
 	if (ret != 0){
 		SOCK_LOG_ERROR("failed to add signal fd to epoll\n");
 		goto err3;
@@ -1486,7 +1486,7 @@ err3:
 	cm_head->do_listen = 0;
 	fd_signal_free(&cm_head->signal);
 err2:
-	fi_epoll_close(cm_head->emap);
+	ofi_epoll_close(cm_head->emap);
 err1:
 	return ret;
 }
@@ -1519,7 +1519,7 @@ void sock_ep_cm_stop_thread(struct sock_ep_cm_head *cm_head)
 			pthread_join(cm_head->listener_thread, NULL)) {
 		SOCK_LOG_DBG("pthread join failed\n");
 	}
-	fi_epoll_close(cm_head->emap);
+	ofi_epoll_close(cm_head->emap);
 	fd_signal_free(&cm_head->signal);
 	fastlock_destroy(&cm_head->signal_lock);
 }

@@ -2277,7 +2277,7 @@ void sock_pe_signal(struct sock_pe *pe)
 void sock_pe_poll_add(struct sock_pe *pe, int fd)
 {
         fastlock_acquire(&pe->signal_lock);
-        if (fi_epoll_add(pe->epoll_set, fd, FI_EPOLL_IN, NULL))
+        if (ofi_epoll_add(pe->epoll_set, fd, OFI_EPOLL_IN, NULL))
 			SOCK_LOG_ERROR("failed to add to epoll set: %d\n", fd);
         fastlock_release(&pe->signal_lock);
 }
@@ -2285,7 +2285,7 @@ void sock_pe_poll_add(struct sock_pe *pe, int fd)
 void sock_pe_poll_del(struct sock_pe *pe, int fd)
 {
         fastlock_acquire(&pe->signal_lock);
-        if (fi_epoll_del(pe->epoll_set, fd))
+        if (ofi_epoll_del(pe->epoll_set, fd))
 			SOCK_LOG_DBG("failed to del from epoll set: %d\n", fd);
         fastlock_release(&pe->signal_lock);
 }
@@ -2366,7 +2366,7 @@ static int sock_pe_progress_rx_ep(struct sock_pe *pe,
 		}
 	}
 
-	num_fds = fi_epoll_wait(map->epoll_set, map->epoll_ctxs,
+	num_fds = ofi_epoll_wait(map->epoll_set, map->epoll_ctxs,
 	                        MIN(map->used, map->epoll_ctxs_sz), 0);
 	if (num_fds < 0 || num_fds == 0) {
 		if (num_fds < 0)
@@ -2577,7 +2577,7 @@ static void sock_pe_wait(struct sock_pe *pe)
 	int ret;
 	void *ep_contexts[1];
 
-	ret = fi_epoll_wait(pe->epoll_set, ep_contexts, 1, -1);
+	ret = ofi_epoll_wait(pe->epoll_set, ep_contexts, 1, -1);
 	if (ret < 0)
 		SOCK_LOG_ERROR("poll failed : %s\n", strerror(ofi_sockerr()));
 
@@ -2712,7 +2712,7 @@ struct sock_pe *sock_pe_init(struct sock_domain *domain)
 		goto err2;
 	}
 
-	if (fi_epoll_create(&pe->epoll_set) < 0) {
+	if (ofi_epoll_create(&pe->epoll_set) < 0) {
                 SOCK_LOG_ERROR("failed to create epoll set\n");
                 goto err3;
 	}
@@ -2722,9 +2722,9 @@ struct sock_pe *sock_pe_init(struct sock_domain *domain)
 			goto err4;
 
 		if (fd_set_nonblock(pe->signal_fds[SOCK_SIGNAL_RD_FD]) ||
-		    fi_epoll_add(pe->epoll_set,
+		    ofi_epoll_add(pe->epoll_set,
 				 pe->signal_fds[SOCK_SIGNAL_RD_FD],
-				 FI_EPOLL_IN, NULL))
+				 OFI_EPOLL_IN, NULL))
 			goto err5;
 
 		pe->do_progress = 1;
@@ -2741,7 +2741,7 @@ err5:
 	ofi_close_socket(pe->signal_fds[0]);
 	ofi_close_socket(pe->signal_fds[1]);
 err4:
-	fi_epoll_close(pe->epoll_set);
+	ofi_epoll_close(pe->epoll_set);
 err3:
 	ofi_bufpool_destroy(pe->atomic_rx_pool);
 err2:
@@ -2788,7 +2788,7 @@ void sock_pe_finalize(struct sock_pe *pe)
 	fastlock_destroy(&pe->lock);
 	fastlock_destroy(&pe->signal_lock);
 	pthread_mutex_destroy(&pe->list_lock);
-	fi_epoll_close(pe->epoll_set);
+	ofi_epoll_close(pe->epoll_set);
 	free(pe);
 	SOCK_LOG_DBG("Progress engine finalize: OK\n");
 }

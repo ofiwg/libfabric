@@ -142,7 +142,7 @@ static int tcpx_ep_enable_xfers(struct tcpx_ep *ep)
 
 	if (ep->util_ep.rx_cq->wait) {
 		ret = ofi_wait_fd_add(ep->util_ep.rx_cq->wait,
-				      ep->conn_fd, FI_EPOLL_IN,
+				      ep->conn_fd, OFI_EPOLL_IN,
 				      tcpx_try_func, (void *) &ep->util_ep,
 				      NULL);
 	}
@@ -382,7 +382,7 @@ static void client_send_connreq(struct util_wait *wait,
 		goto err;
 
 	cm_ctx->type = CLIENT_RECV_CONNRESP;
-	ret = ofi_wait_fd_add(wait, ep->conn_fd, FI_EPOLL_IN,
+	ret = ofi_wait_fd_add(wait, ep->conn_fd, OFI_EPOLL_IN,
 			      tcpx_eq_wait_try_func, NULL, cm_ctx);
 	if (ret)
 		goto err;
@@ -437,7 +437,7 @@ static void server_sock_accept(struct util_wait *wait,
 	rx_req_cm_ctx->fid = &handle->handle;
 	rx_req_cm_ctx->type = SERVER_RECV_CONNREQ;
 
-	ret = ofi_wait_fd_add(wait, sock, FI_EPOLL_IN,
+	ret = ofi_wait_fd_add(wait, sock, OFI_EPOLL_IN,
 			      tcpx_eq_wait_try_func,
 			      NULL, (void *) rx_req_cm_ctx);
 	if (ret)
@@ -491,7 +491,7 @@ void tcpx_conn_mgr_run(struct util_eq *eq)
 
 	tcpx_eq = container_of(eq, struct tcpx_eq, util_eq);
 	fastlock_acquire(&tcpx_eq->close_lock);
-	num_fds = fi_epoll_wait(wait_fd->epoll_fd, wait_contexts,
+	num_fds = ofi_epoll_wait(wait_fd->epoll_fd, wait_contexts,
 				MAX_EPOLL_EVENTS, 0);
 	if (num_fds < 0) {
 		fastlock_release(&tcpx_eq->close_lock);

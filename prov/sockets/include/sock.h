@@ -212,7 +212,7 @@ struct sock_conn {
 
 struct sock_conn_map {
 	struct sock_conn *table;
-	fi_epoll_t epoll_set;
+	ofi_epoll_t epoll_set;
 	void **epoll_ctxs;
 	int epoll_ctxs_sz;
 	int used;
@@ -221,7 +221,7 @@ struct sock_conn_map {
 };
 
 struct sock_conn_listener {
-	fi_epoll_t emap;
+	ofi_epoll_t emap;
 	struct fd_signal signal;
 	fastlock_t signal_lock; /* acquire before map lock */
 	pthread_t listener_thread;
@@ -229,7 +229,7 @@ struct sock_conn_listener {
 };
 
 struct sock_ep_cm_head {
-	fi_epoll_t emap;
+	ofi_epoll_t emap;
 	struct fd_signal signal;
 	fastlock_t signal_lock;
 	pthread_t listener_thread;
@@ -878,7 +878,7 @@ struct sock_pe {
 	pthread_t progress_thread;
 	volatile int do_progress;
 	struct sock_pe_entry *pe_atomic;
-	fi_epoll_t epoll_set;
+	ofi_epoll_t epoll_set;
 };
 
 typedef int (*sock_cq_report_fn) (struct sock_cq *cq, fi_addr_t addr,

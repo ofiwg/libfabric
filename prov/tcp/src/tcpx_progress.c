@@ -668,18 +668,18 @@ int tcpx_try_func(void *util_ep)
 	fastlock_acquire(&ep->lock);
 	if (!slist_empty(&ep->tx_queue) && !ep->send_ready_monitor) {
 		ep->send_ready_monitor = true;
-		events = FI_EPOLL_IN | FI_EPOLL_OUT;
+		events = OFI_EPOLL_IN | OFI_EPOLL_OUT;
 		goto epoll_mod;
 	} else if (slist_empty(&ep->tx_queue) && ep->send_ready_monitor) {
 		ep->send_ready_monitor = false;
-		events = FI_EPOLL_IN;
+		events = OFI_EPOLL_IN;
 		goto epoll_mod;
 	}
 	fastlock_release(&ep->lock);
 	return FI_SUCCESS;
 
 epoll_mod:
-	ret = fi_epoll_mod(wait_fd->epoll_fd, ep->conn_fd, events, NULL);
+	ret = ofi_epoll_mod(wait_fd->epoll_fd, ep->conn_fd, events, NULL);
 	if (ret)
 		FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
 			"invalid op type\n");
