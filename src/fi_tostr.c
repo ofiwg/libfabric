@@ -104,7 +104,7 @@ static void ofi_tostr_opflags(char *buf, uint64_t flags)
 	ofi_remove_comma(buf);
 }
 
-static void oofi_tostr_addr_format(char *buf, uint32_t addr_format)
+static void ofi_tostr_addr_format(char *buf, uint32_t addr_format)
 {
 	switch (addr_format) {
 	CASEENUMSTR(FI_FORMAT_UNSPEC);
@@ -551,7 +551,7 @@ static void ofi_tostr_info(char *buf, const struct fi_info *info)
 	ofi_strcatf(buf, " ]\n");
 
 	ofi_strcatf(buf, "%saddr_format: ", TAB);
-	oofi_tostr_addr_format(buf, info->addr_format);
+	ofi_tostr_addr_format(buf, info->addr_format);
 	ofi_strcatf(buf, "\n");
 
 	ofi_strcatf(buf, "%ssrc_addrlen: %zu\n", TAB, info->src_addrlen);
@@ -718,7 +718,7 @@ char *DEFAULT_SYMVER_PRE(fi_tostr)(const void *data, enum fi_type datatype)
 		ofi_tostr_opflags(buf, *val64);
 		break;
 	case FI_TYPE_ADDR_FORMAT:
-		oofi_tostr_addr_format(buf, *val32);
+		ofi_tostr_addr_format(buf, *val32);
 		break;
 	case FI_TYPE_TX_ATTR:
 		ofi_tostr_tx_attr(buf, data, "");
