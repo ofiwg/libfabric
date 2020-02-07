@@ -2,6 +2,7 @@
 /*
  * Copyright (c) 2016 Intel Corporation, Inc.  All rights reserved.
  * Copyright (c) 2019 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * (C) Copyright 2020 Hewlett Packard Enterprise Development LP.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -53,6 +54,7 @@
 #include <ofi_list.h>
 #include <ofi_proto.h>
 #include <ofi_iov.h>
+#include <ofi_hmem.h>
 
 #ifndef _RXM_H_
 #define _RXM_H_
@@ -286,7 +288,19 @@ struct rxm_mr {
 	struct fid_mr mr_fid;
 	struct fid_mr *msg_mr;
 	struct rxm_domain *domain;
+	enum fi_hmem_iface iface;
+	fastlock_t amo_lock;
 };
+
+#define RXM_DESC_IFACE(desc) (((struct rxm_mr *)(desc))->iface)
+
+static inline enum fi_hmem_iface rxm_mr_desc_to_hmem_iface(void **desc,
+							   size_t count)
+{
+	if (!count || !desc || !desc[0])
+		return FI_HMEM_SYSTEM;
+	return RXM_DESC_IFACE(desc[0]);
+}
 
 struct rxm_rndv_hdr {
 	struct ofi_rma_iov iov[RXM_IOV_LIMIT];
@@ -521,8 +535,7 @@ struct rxm_tx_atomic_buf {
 
 	void *app_context;
 	uint64_t flags;
-	struct iovec result_iov[RXM_IOV_LIMIT];
-	uint8_t result_iov_count;
+	struct rxm_iov rxm_iov;
 
 	/* Must stay at bottom */
 	struct rxm_pkt pkt;
@@ -568,6 +581,7 @@ struct rxm_deferred_tx_entry {
 			uint64_t msg_id;
 			void *app_context;
 			uint64_t flags;
+			enum fi_hmem_iface iface;
 		} sar_seg;
 		struct {
 			struct rxm_tx_atomic_buf *tx_buf;
@@ -962,5 +976,7 @@ static inline int rxm_cq_write_recv_comp(struct rxm_rx_buf *rx_buf,
 				    flags, len, buf, rx_buf->pkt.hdr.data,
 				    rx_buf->pkt.hdr.tag);
 }
+
+struct rxm_mr *rxm_mr_get_map_entry(struct rxm_domain *domain, uint64_t key);
 
 #endif

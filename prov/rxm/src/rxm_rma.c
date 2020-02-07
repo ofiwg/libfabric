@@ -178,16 +178,30 @@ static ssize_t rxm_ep_read(struct fid_ep *ep_fid, void *buf, size_t len,
 				 fi_readmsg, FI_READ);
 }
 
-static inline void
+static inline ssize_t
 rxm_ep_format_rma_msg(struct rxm_rma_buf *rma_buf, const struct fi_msg_rma *orig_msg,
 		      struct iovec *rxm_iov, struct fi_msg_rma *rxm_msg)
 {
+	enum fi_hmem_iface iface;
+	ssize_t ret;
+
+	iface = rxm_mr_desc_to_hmem_iface(orig_msg->desc, orig_msg->iov_count);
+
 	rxm_msg->context = rma_buf;
 	rxm_msg->addr = orig_msg->addr;
 	rxm_msg->data = orig_msg->data;
 
-	ofi_copy_from_iov(rma_buf->pkt.data, rma_buf->pkt.hdr.size,
-			  orig_msg->msg_iov, orig_msg->iov_count, 0);
+	ret = ofi_copy_from_hmem_iov(rma_buf->pkt.data, rma_buf->pkt.hdr.size,
+				     orig_msg->msg_iov, iface,
+				     orig_msg->iov_count, 0);
+	if (OFI_UNLIKELY(ret != rma_buf->pkt.hdr.size)) {
+		if (ret >= 0) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+				"Unexpected short copy");
+			ret = -FI_EIO;
+		}
+	}
+
 	rxm_iov->iov_base = &rma_buf->pkt.data;
 	rxm_iov->iov_len = rma_buf->pkt.hdr.size;
 	rxm_msg->msg_iov = rxm_iov;
@@ -196,6 +210,8 @@ rxm_ep_format_rma_msg(struct rxm_rma_buf *rma_buf, const struct fi_msg_rma *orig
 
 	rxm_msg->rma_iov = orig_msg->rma_iov;
 	rxm_msg->rma_iov_count = orig_msg->rma_iov_count;
+
+	return ret;
 }
 
 static inline ssize_t
@@ -216,7 +232,9 @@ rxm_ep_rma_emulate_inject_msg(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, 
 	rma_buf->pkt.hdr.size = total_size;
 	rma_buf->app_context = msg->context;
 	rma_buf->flags = flags;
-	rxm_ep_format_rma_msg(rma_buf, msg, &rxm_msg_iov, &rxm_rma_msg);
+	ret = rxm_ep_format_rma_msg(rma_buf, msg, &rxm_msg_iov, &rxm_rma_msg);
+	if (ret < 0)
+		goto err;
 
 	flags = (flags & ~FI_INJECT) | FI_COMPLETION;
 
@@ -224,8 +242,12 @@ rxm_ep_rma_emulate_inject_msg(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, 
 	if (OFI_UNLIKELY(ret)) {
 		if (ret == -FI_EAGAIN)
 			rxm_ep_do_progress(&rxm_ep->util_ep);
-		ofi_buf_free(rma_buf);
+		goto err;
 	}
+	return ret;
+
+err:
+	ofi_buf_free(rma_buf);
 	return ret;
 }
 

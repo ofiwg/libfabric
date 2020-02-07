@@ -336,12 +336,24 @@ static int rxm_rx_buf_match_msg_id(struct dlist_entry *item, const void *arg)
 static inline
 ssize_t rxm_cq_copy_seg_data(struct rxm_rx_buf *rx_buf, int *done)
 {
-	uint64_t done_len = ofi_copy_to_iov(rx_buf->recv_entry->rxm_iov.iov,
-					    rx_buf->recv_entry->rxm_iov.count,
-					    rx_buf->recv_entry->sar.total_recv_len,
-					    rx_buf->pkt.data,
-					    rx_buf->pkt.ctrl_hdr.seg_size);
-	rx_buf->recv_entry->sar.total_recv_len += done_len;
+	enum fi_hmem_iface iface;
+	ssize_t done_len;
+
+	iface = rxm_mr_desc_to_hmem_iface(rx_buf->recv_entry->rxm_iov.desc,
+					  rx_buf->recv_entry->rxm_iov.count);
+
+	done_len = ofi_copy_to_hmem_iov(rx_buf->recv_entry->rxm_iov.iov, iface,
+					rx_buf->recv_entry->rxm_iov.count,
+					rx_buf->recv_entry->sar.total_recv_len,
+					rx_buf->pkt.data,
+					rx_buf->pkt.ctrl_hdr.seg_size);
+
+	if (OFI_UNLIKELY(done_len < 0))
+		FI_WARN(&rxm_prov, FI_LOG_CQ,
+			"Failed to copy segment: ret=%ld. "
+			"Receive will truncate.\n", done_len);
+	else
+		rx_buf->recv_entry->sar.total_recv_len += done_len;
 
 	if ((rxm_sar_get_seg_type(&rx_buf->pkt.ctrl_hdr) == RXM_SAR_SEG_LAST) ||
 	    (done_len != rx_buf->pkt.ctrl_hdr.seg_size)) {
@@ -540,19 +552,49 @@ readv_err:
 
 ssize_t rxm_cq_handle_eager(struct rxm_rx_buf *rx_buf)
 {
-	uint64_t done_len = ofi_copy_to_iov(rx_buf->recv_entry->rxm_iov.iov,
-					    rx_buf->recv_entry->rxm_iov.count,
-					    0, rx_buf->pkt.data,
-					    rx_buf->pkt.hdr.size);
+	enum fi_hmem_iface iface;
+	ssize_t done_len;
+
+	iface = rxm_mr_desc_to_hmem_iface(rx_buf->recv_entry->rxm_iov.desc,
+					  rx_buf->recv_entry->rxm_iov.count);
+
+	done_len = ofi_copy_to_hmem_iov(rx_buf->recv_entry->rxm_iov.iov, iface,
+					rx_buf->recv_entry->rxm_iov.count,
+					rx_buf->recv_entry->sar.total_recv_len,
+					rx_buf->pkt.data, rx_buf->pkt.hdr.size);
+
+	if (OFI_UNLIKELY(done_len < 0)) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ,
+			"Failed to copy eager payload: ret=%ld. "
+			"Receive will truncate.\n", done_len);
+
+		done_len = 0;
+	}
+
 	return rxm_finish_recv(rx_buf, done_len);
 }
 
 ssize_t rxm_cq_handle_coll_eager(struct rxm_rx_buf *rx_buf)
 {
-	uint64_t done_len = ofi_copy_to_iov(rx_buf->recv_entry->rxm_iov.iov,
-					    rx_buf->recv_entry->rxm_iov.count,
-					    0, rx_buf->pkt.data,
-					    rx_buf->pkt.hdr.size);
+	enum fi_hmem_iface iface;
+	ssize_t done_len;
+
+	iface = rxm_mr_desc_to_hmem_iface(rx_buf->recv_entry->rxm_iov.desc,
+					  rx_buf->recv_entry->rxm_iov.count);
+
+	done_len = ofi_copy_to_hmem_iov(rx_buf->recv_entry->rxm_iov.iov, iface,
+					rx_buf->recv_entry->rxm_iov.count,
+					rx_buf->recv_entry->sar.total_recv_len,
+					rx_buf->pkt.data, rx_buf->pkt.hdr.size);
+
+	if (OFI_UNLIKELY(done_len < 0)) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ,
+			"Failed to copy eager payload: ret=%ld. "
+			"Receive will truncate.\n", done_len);
+
+		done_len = 0;
+	}
+
 	if (rx_buf->pkt.hdr.tag & OFI_COLL_TAG_FLAG) {
 		ofi_coll_handle_xfer_comp(rx_buf->pkt.hdr.tag,
 				rx_buf->recv_entry->context);
@@ -908,7 +950,7 @@ static inline ssize_t rxm_handle_atomic_req(struct rxm_ep *rxm_ep,
 	ssize_t result_len;
 	uint64_t offset;
 	int i;
-	int ret = 0;
+	ssize_t ret = 0;
 	struct rxm_tx_atomic_buf *resp_buf;
 	struct rxm_atomic_resp_hdr *resp_hdr;
 	struct rxm_domain *domain = container_of(rxm_ep->util_ep.domain,
@@ -945,7 +987,7 @@ static inline ssize_t rxm_handle_atomic_req(struct rxm_ep *rxm_ep,
 							atomic_op));
 		if (ret) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
-				"Atomic RMA MR verify error %d\n", ret);
+				"Atomic RMA MR verify error %ld\n", ret);
 			ret = -FI_EACCES;
 			goto send_nak;
 		}
@@ -956,13 +998,90 @@ static inline ssize_t rxm_handle_atomic_req(struct rxm_ep *rxm_ep,
 	resp_hdr = (struct rxm_atomic_resp_hdr *) resp_buf->pkt.data;
 
 	for (i = 0, offset = 0; i < rx_buf->pkt.hdr.atomic.ioc_count; i++) {
+		struct rxm_mr *mr =
+			rxm_mr_get_map_entry(domain, req_hdr->rma_ioc[i].key);
+		size_t amo_op_size = req_hdr->rma_ioc[i].count * datatype_sz;
+		struct iovec iov = {
+			.iov_base = (void *)req_hdr->rma_ioc[i].addr,
+			.iov_len = amo_op_size,
+		};
+		void *dest_buf = NULL;
+
+		/* All AMO operations are done in host memory. Allocate a bounce
+		 * buffer to perform the AMO operation.
+		 */
+		if (mr->iface != FI_HMEM_SYSTEM) {
+			dest_buf = malloc(amo_op_size);
+			if (OFI_UNLIKELY(!dest_buf)) {
+				FI_WARN(&rxm_prov, FI_LOG_CQ,
+					"Failed to allocated bounce buffer");
+				ret = -FI_ENOMEM;
+				goto send_nak;
+			}
+
+			/* For non-host memory, force required atomic behavior
+			 * by serializing AMO access to the MR.
+			 */
+			fastlock_acquire(&mr->amo_lock);
+
+			ret = ofi_copy_from_hmem_iov(dest_buf, amo_op_size,
+						     &iov, mr->iface, 1, 0);
+			if (OFI_UNLIKELY(ret != amo_op_size)) {
+				fastlock_release(&mr->amo_lock);
+
+				if (ret >= 0) {
+					FI_WARN(&rxm_prov, FI_LOG_CQ,
+						"Unexpected short copy of atomic data: expected=%lu actual=%lu\n",
+						amo_op_size, ret);
+					ret = -FI_EIO;
+				} else {
+					FI_WARN(&rxm_prov, FI_LOG_CQ,
+						"Failed to copy atomic data: ret=%ld\n",
+						ret);
+				}
+
+				free(dest_buf);
+				goto send_nak;
+			}
+		} else {
+			dest_buf = (void *)req_hdr->rma_ioc[i].addr;
+		}
+
 		rxm_do_atomic(&rx_buf->pkt,
-			      (uintptr_t *) req_hdr->rma_ioc[i].addr,
+			      dest_buf,
 			      req_hdr->data + offset,
 			      req_hdr->data + len + offset,
 			      resp_hdr->data + offset,
 			      req_hdr->rma_ioc[i].count, datatype, atomic_op);
-		offset += req_hdr->rma_ioc[i].count * datatype_sz;
+
+		/* Flush the bounce buffer AMO operation back out to device
+		 * memory.
+		 */
+		if (mr->iface != FI_HMEM_SYSTEM) {
+			ret = ofi_copy_to_hmem_iov(&iov, mr->iface, 1, 0,
+						   dest_buf, amo_op_size);
+
+			fastlock_release(&mr->amo_lock);
+
+			/* Done with bounce buffer. */
+			free(dest_buf);
+
+			if (OFI_UNLIKELY(ret != amo_op_size)) {
+				if (ret >= 0) {
+					FI_WARN(&rxm_prov, FI_LOG_CQ,
+						"Unexpected short copy of atomic data: expected=%lu actual=%lu\n",
+						amo_op_size, ret);
+					ret = -FI_EIO;
+				} else {
+					FI_WARN(&rxm_prov, FI_LOG_CQ,
+						"Failed to copy atomic data: ret=%ld\n",
+						ret);
+				}
+				goto send_nak;
+			}
+		}
+
+		offset += amo_op_size;
 	}
 	result_len = rx_buf->pkt.hdr.op == ofi_op_atomic ? 0 : offset;
 
@@ -977,15 +1096,35 @@ send_nak:
 	return rxm_atomic_send_resp(rxm_ep, rx_buf, resp_buf, 0, ret);
 }
 
+static inline
+struct util_cntr *rxm_get_atomic_resp_cntr(struct rxm_ep *rxm_ep,
+					   struct rxm_tx_atomic_buf *tx_buf)
+{
+	struct util_cntr *cntr = NULL;
+
+	if (tx_buf->pkt.hdr.op == ofi_op_atomic) {
+		cntr = rxm_ep->util_ep.wr_cntr;
+	} else if (tx_buf->pkt.hdr.op == ofi_op_atomic_compare ||
+			tx_buf->pkt.hdr.op == ofi_op_atomic_fetch) {
+		cntr = rxm_ep->util_ep.rd_cntr;
+	} else {
+		FI_WARN(&rxm_prov, FI_LOG_CQ,
+			"unknown atomic request op!\n");
+		assert(0);
+	}
+
+	return cntr;
+}
 
 static inline ssize_t rxm_handle_atomic_resp(struct rxm_ep *rxm_ep,
 					     struct rxm_rx_buf *rx_buf)
 {
-	struct rxm_tx_atomic_buf *tx_buf;
+	struct rxm_tx_atomic_buf *tx_buf = NULL;
 	struct rxm_atomic_resp_hdr *resp_hdr =
 			(struct rxm_atomic_resp_hdr *) rx_buf->pkt.data;
 	uint64_t len;
-	int ret = 0;
+	ssize_t ret = 0;
+	enum fi_hmem_iface iface;
 
 	tx_buf = ofi_bufpool_get_ibuf(rxm_ep->buf_pools[RXM_BUF_POOL_TX_ATOMIC].pool,
 				      rx_buf->pkt.ctrl_hdr.msg_id);
@@ -993,32 +1132,46 @@ static inline ssize_t rxm_handle_atomic_resp(struct rxm_ep *rxm_ep,
 	       " msg_id: 0x%" PRIx64 "\n", rx_buf->pkt.hdr.op,
 	       rx_buf->pkt.ctrl_hdr.msg_id);
 
+	iface = rxm_mr_desc_to_hmem_iface(tx_buf->rxm_iov.desc,
+					  tx_buf->rxm_iov.count);
+
 	assert(!(rx_buf->comp_flags & ~(FI_RECV | FI_REMOTE_CQ_DATA)));
 
 	if (OFI_UNLIKELY(resp_hdr->status)) {
-		struct util_cntr *cntr = NULL;
+		struct util_cntr *cntr =
+			rxm_get_atomic_resp_cntr(rxm_ep, tx_buf);
+
 		FI_WARN(&rxm_prov, FI_LOG_CQ,
 		       "bad atomic response status %d\n", ntohl(resp_hdr->status));
 
-		if (tx_buf->pkt.hdr.op == ofi_op_atomic) {
-			cntr = rxm_ep->util_ep.wr_cntr;
-		} else if (tx_buf->pkt.hdr.op == ofi_op_atomic_compare ||
-			   tx_buf->pkt.hdr.op == ofi_op_atomic_fetch) {
-			cntr = rxm_ep->util_ep.rd_cntr;
-		} else {
-			FI_WARN(&rxm_prov, FI_LOG_CQ,
-				"unknown atomic request op!\n");
-			assert(0);
-		}
 		rxm_cq_write_error(rxm_ep->util_ep.tx_cq, cntr,
 				   tx_buf->app_context, ntohl(resp_hdr->status));
 		goto err;
 	}
 
-	len = ofi_total_iov_len(tx_buf->result_iov, tx_buf->result_iov_count);
+	len = ofi_total_iov_len(tx_buf->rxm_iov.iov, tx_buf->rxm_iov.count);
 	assert(ntohl(resp_hdr->result_len) == len);
-	ofi_copy_to_iov(tx_buf->result_iov, tx_buf->result_iov_count, 0,
-			resp_hdr->data, len);
+
+	ret = ofi_copy_to_hmem_iov(tx_buf->rxm_iov.iov, iface,
+				   tx_buf->rxm_iov.count, 0, resp_hdr->data,
+				   len);
+	if (OFI_UNLIKELY(ret != len)) {
+		struct util_cntr *cntr =
+			rxm_get_atomic_resp_cntr(rxm_ep, tx_buf);
+
+		if (ret > 0) {
+			FI_WARN(&rxm_prov, FI_LOG_CQ,
+				"Unexpected short copy of atomic payload");
+			ret = -FI_EIO;
+		} else {
+			FI_WARN(&rxm_prov, FI_LOG_CQ,
+				"Failed to copy atomic payload: ret=%ld", ret);
+		}
+
+		rxm_cq_write_error(rxm_ep->util_ep.tx_cq, cntr,
+				   tx_buf->app_context, ret);
+		goto err;
+	}
 
 	if (!(tx_buf->flags & FI_INJECT))
 		ret = rxm_cq_tx_comp_write(rxm_ep,

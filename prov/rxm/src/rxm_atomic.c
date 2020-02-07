@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2018 Cray Inc. All rights reserved.
+ * (C) Copyright 2020 Hewlett Packard Enterprise Development LP.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -96,6 +97,8 @@ rxm_ep_atomic_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	struct rxm_atomic_hdr *atomic_hdr;
 	struct iovec buf_iov[RXM_IOV_LIMIT];
 	struct iovec cmp_iov[RXM_IOV_LIMIT];
+	enum fi_hmem_iface buf_iface;
+	enum fi_hmem_iface cmp_iface;
 	size_t datatype_sz = ofi_datatype_size(msg->datatype);
 	size_t buf_len = 0;
 	size_t cmp_len = 0;
@@ -116,6 +119,9 @@ rxm_ep_atomic_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		ofi_ioc_to_iov(msg->msg_iov, buf_iov, msg->iov_count,
 			       datatype_sz);
 		buf_len = ofi_total_iov_len(buf_iov, msg->iov_count);
+
+		buf_iface = rxm_mr_desc_to_hmem_iface(msg->desc,
+						      msg->iov_count);
 	}
 
 	if (op == ofi_op_atomic_compare) {
@@ -124,6 +130,9 @@ rxm_ep_atomic_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 			       datatype_sz);
 		cmp_len = ofi_total_iov_len(cmp_iov, compare_iov_count);
 		assert(buf_len == cmp_len);
+
+		cmp_iface = rxm_mr_desc_to_hmem_iface(compare_desc,
+						      compare_iov_count);
 	}
 
 	tot_len = buf_len + cmp_len + sizeof(struct rxm_atomic_hdr) +
@@ -157,21 +166,49 @@ rxm_ep_atomic_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 	atomic_hdr = (struct rxm_atomic_hdr *) tx_buf->pkt.data;
 
-	ofi_copy_from_iov(atomic_hdr->data, buf_len, buf_iov,
-			  msg->iov_count, 0);
-	if (cmp_len)
-		ofi_copy_from_iov(atomic_hdr->data + buf_len, cmp_len,
-				  cmp_iov, compare_iov_count, 0);
+	ret = ofi_copy_from_hmem_iov(atomic_hdr->data, buf_len, buf_iov, buf_iface,
+				     msg->iov_count, 0);
+	if (OFI_UNLIKELY(ret != buf_len)) {
+		if (ret >= 0) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+				"Unexpected short copy");
+			ret = -FI_EIO;
+			goto free_tx_buf;
+		}
+	}
 
-	tx_buf->result_iov_count = result_iov_count;
-	if (resultv)
-		ofi_ioc_to_iov(resultv, tx_buf->result_iov, result_iov_count,
+	if (cmp_len) {
+		ret = ofi_copy_from_hmem_iov(atomic_hdr->data + buf_len,
+					     cmp_len, cmp_iov, cmp_iface,
+					     compare_iov_count, 0);
+		if (OFI_UNLIKELY(ret != cmp_len)) {
+			if (ret >= 0) {
+				FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+					"Unexpected short copy");
+				ret = -FI_EIO;
+				goto free_tx_buf;
+			}
+		}
+	}
+
+	tx_buf->rxm_iov.count = result_iov_count;
+	if (resultv) {
+		ofi_ioc_to_iov(resultv, tx_buf->rxm_iov.iov, result_iov_count,
 			       datatype_sz);
+
+		if (rxm_ep->rdm_mr_local) {
+			size_t i;
+
+			for (i = 0; i < result_iov_count; i++)
+				tx_buf->rxm_iov.desc[i] = result_desc[i];
+		}
+	}
 
 	ret = rxm_ep_send_atomic_req(rxm_ep, rxm_conn, tx_buf, tot_len);
 	if (OFI_LIKELY(!ret))
 		return ret;
 
+free_tx_buf:
 	ofi_buf_free(tx_buf);
 restore_credit:
 	ofi_atomic_inc32(&rxm_ep->atomic_tx_credits);

@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015-2016 Intel Corporation. All rights reserved.
+ * (C) Copyright 2020 Hewlett Packard Enterprise Development LP.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -32,10 +33,11 @@
 
 #include "rxm.h"
 
-#define RXM_TX_CAPS (OFI_TX_MSG_CAPS | FI_TAGGED | OFI_TX_RMA_CAPS | FI_ATOMICS)
+#define RXM_TX_CAPS (OFI_TX_MSG_CAPS | FI_TAGGED | OFI_TX_RMA_CAPS | \
+		     FI_ATOMICS | FI_HMEM)
 #define RXM_RX_CAPS (FI_SOURCE | OFI_RX_MSG_CAPS | FI_TAGGED | \
 		     OFI_RX_RMA_CAPS | FI_ATOMICS | FI_DIRECTED_RECV | \
-		     FI_MULTI_RECV)
+		     FI_MULTI_RECV | FI_HMEM)
 #define RXM_DOMAIN_CAPS (FI_LOCAL_COMM | FI_REMOTE_COMM)
 
 // TODO have a separate "check info" against which app hints would be checked.

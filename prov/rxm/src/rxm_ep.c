@@ -1044,11 +1044,13 @@ static inline ssize_t
 rxm_ep_alloc_rndv_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void *context,
 			uint8_t count, const struct iovec *iov, void **desc, size_t data_len,
 			uint64_t data, uint64_t flags, uint64_t tag, uint8_t op,
-			struct rxm_tx_rndv_buf **tx_rndv_buf)
+			struct rxm_tx_rndv_buf **tx_rndv_buf,
+			enum fi_hmem_iface iface)
 {
 	struct fid_mr *rxm_mr_msg_mr[RXM_IOV_LIMIT];
 	struct fid_mr **mr_iov;
 	ssize_t ret;
+	size_t len;
 	int i;
 	struct rxm_tx_rndv_buf *tx_buf = (struct rxm_tx_rndv_buf *)
 			rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_RNDV);
@@ -1080,16 +1082,30 @@ rxm_ep_alloc_rndv_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void 
 
 	rxm_rndv_hdr_init(rxm_ep, &tx_buf->pkt.data, iov, tx_buf->count, mr_iov);
 
-	ret = sizeof(struct rxm_pkt) + sizeof(struct rxm_rndv_hdr);
+	len = sizeof(struct rxm_pkt) + sizeof(struct rxm_rndv_hdr);
 
 	if (rxm_ep->rxm_info->mode & FI_BUFFERED_RECV) {
-		ofi_copy_from_iov(rxm_pkt_rndv_data(&tx_buf->pkt),
-				  rxm_ep->buffered_min, iov, count, 0);
-		ret += rxm_ep->buffered_min;
+		ret = ofi_copy_from_hmem_iov(rxm_pkt_rndv_data(&tx_buf->pkt),
+					     rxm_ep->buffered_min, iov, iface,
+					     count, 0);
+		if (OFI_UNLIKELY(ret != rxm_ep->buffered_min)) {
+			if (ret >= 0) {
+				FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+					"Unexpected short copy");
+				ret = -FI_EIO;
+			}
+
+			goto err_free_mr;
+		}
+
+		len += rxm_ep->buffered_min;
 	}
 
 	*tx_rndv_buf = tx_buf;
-	return ret;
+	return len;
+err_free_mr:
+	if (!rxm_ep->rdm_mr_local)
+		fi_close(&(*(tx_buf->mr))->fid);
 err:
 	*tx_rndv_buf = NULL;
 	ofi_buf_free(tx_buf);
@@ -1181,10 +1197,12 @@ rxm_ep_sar_tx_prepare_and_send_segment(struct rxm_ep *rxm_ep, struct rxm_conn *r
 				       uint64_t msg_id, size_t seg_len, size_t seg_no, size_t segs_cnt,
 				       uint64_t data, uint64_t flags, uint64_t tag, uint8_t op,
 				       const struct iovec *iov, uint8_t count, size_t *iov_offset,
-				       struct rxm_tx_sar_buf **out_tx_buf)
+				       struct rxm_tx_sar_buf **out_tx_buf,
+				       enum fi_hmem_iface iface)
 {
 	struct rxm_tx_sar_buf *tx_buf;
 	enum rxm_sar_seg_type seg_type = RXM_SAR_SEG_MIDDLE;
+	ssize_t ret;
 
 	if (seg_no == (segs_cnt - 1)) {
 		seg_type = RXM_SAR_SEG_LAST;
@@ -1199,20 +1217,37 @@ rxm_ep_sar_tx_prepare_and_send_segment(struct rxm_ep *rxm_ep, struct rxm_conn *r
 		return -FI_EAGAIN;
 	}
 
-	ofi_copy_from_iov(tx_buf->pkt.data, seg_len, iov, count, *iov_offset);
+	ret = ofi_copy_from_hmem_iov(tx_buf->pkt.data, seg_len, iov, iface,
+				     count, *iov_offset);
+	if (OFI_UNLIKELY(ret != seg_len)) {
+		if (ret >= 0) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+				"Unexpected short copy");
+			ret = -FI_EIO;
+		}
+
+		goto err;
+	}
+
 	*iov_offset += seg_len;
 
 	*out_tx_buf = tx_buf;
 
 	return fi_send(rxm_conn->msg_ep, &tx_buf->pkt, sizeof(struct rxm_pkt) +
 		       tx_buf->pkt.ctrl_hdr.seg_size, tx_buf->hdr.desc, 0, tx_buf);
+
+err:
+	*out_tx_buf = NULL;
+	ofi_buf_free(tx_buf);
+	return ret;
 }
 
 static inline ssize_t
 rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		   void *context, uint8_t count, const struct iovec *iov,
 		   size_t data_len, size_t segs_cnt, uint64_t data,
-		   uint64_t flags, uint64_t tag, uint8_t op)
+		   uint64_t flags, uint64_t tag, uint8_t op,
+		   enum fi_hmem_iface iface)
 {
 	struct rxm_tx_sar_buf *tx_buf, *first_tx_buf;
 	size_t i, iov_offset = 0, remain_len = data_len;
@@ -1228,8 +1263,18 @@ rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	if (OFI_UNLIKELY(!first_tx_buf))
 		return -FI_EAGAIN;
 
-	ofi_copy_from_iov(first_tx_buf->pkt.data, rxm_eager_limit,
-			  iov, count, iov_offset);
+	ret = ofi_copy_from_hmem_iov(first_tx_buf->pkt.data, rxm_eager_limit,
+				     iov, iface, count, iov_offset);
+	if (OFI_UNLIKELY(ret != rxm_eager_limit)) {
+		if (ret >= 0) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+				"Unexpected short copy");
+			ret = -FI_EIO;
+		}
+
+		goto err;
+	}
+
 	iov_offset += rxm_eager_limit;
 
 	ret = fi_send(rxm_conn->msg_ep, &first_tx_buf->pkt, sizeof(struct rxm_pkt) +
@@ -1237,8 +1282,7 @@ rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	if (OFI_UNLIKELY(ret)) {
 		if (OFI_LIKELY(ret == -FI_EAGAIN))
 			rxm_ep_do_progress(&rxm_ep->util_ep);
-		ofi_buf_free(first_tx_buf);
-		return ret;
+		goto err;
 	}
 
 	remain_len -= rxm_eager_limit;
@@ -1247,7 +1291,8 @@ rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		ret = rxm_ep_sar_tx_prepare_and_send_segment(
 					rxm_ep, rxm_conn, context, data_len, remain_len,
 					msg_id, rxm_eager_limit, i, segs_cnt, data,
-					flags, tag, op, iov, count, &iov_offset, &tx_buf);
+					flags, tag, op, iov, count, &iov_offset, &tx_buf,
+					iface);
 		if (OFI_UNLIKELY(ret)) {
 			if (OFI_LIKELY(ret == -FI_EAGAIN)) {
 				def_tx_entry = rxm_ep_alloc_deferred_tx_entry(rxm_ep, rxm_conn,
@@ -1271,17 +1316,21 @@ rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 				def_tx_entry->sar_seg.total_len = data_len;
 				def_tx_entry->sar_seg.remain_len = remain_len;
 				def_tx_entry->sar_seg.msg_id = msg_id;
+				def_tx_entry->sar_seg.iface = iface;
 				rxm_ep_enqueue_deferred_tx_queue(def_tx_entry);
 				return 0;
 			}
 
-			ofi_buf_free(first_tx_buf);
-			return ret;
+			goto err;
 		}
 		remain_len -= rxm_eager_limit;
 	}
 
 	return 0;
+
+err:
+	ofi_buf_free(first_tx_buf);
+	return ret;
 }
 
 static inline ssize_t
@@ -1292,6 +1341,11 @@ rxm_ep_emulate_inject(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 {
 	struct rxm_tx_eager_buf *tx_buf;
 	ssize_t ret;
+	enum fi_hmem_iface iface = FI_HMEM_SYSTEM;
+	const struct iovec iov = {
+		.iov_base = (void *)buf,
+		.iov_len = len,
+	};
 
 	tx_buf = (struct rxm_tx_eager_buf *)
 		  rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX);
@@ -1304,7 +1358,19 @@ rxm_ep_emulate_inject(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	tx_buf->app_context = NULL;
 
 	rxm_ep_format_tx_buf_pkt(rxm_conn, len, op, data, tag, flags, &tx_buf->pkt);
-	memcpy(tx_buf->pkt.data, buf, len);
+
+	ret = ofi_copy_from_hmem_iov(tx_buf->pkt.data, len, &iov, iface, 1, 0);
+	if (OFI_UNLIKELY(ret != len)) {
+		if (ret >= 0) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+				"Unexpected short copy");
+			ret = -FI_EIO;
+		}
+
+		ofi_buf_free(tx_buf);
+		return ret;
+	}
+
 	tx_buf->flags = flags;
 
 	ret = rxm_ep_msg_normal_send(rxm_conn, &tx_buf->pkt, pkt_size,
@@ -1326,8 +1392,7 @@ rxm_ep_inject_send_fast(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 	assert(len <= rxm_ep->rxm_info->tx_attr->inject_size);
 
-	if (pkt_size <= rxm_ep->inject_limit &&
-	    !rxm_ep->util_ep.tx_cntr) {
+	if (pkt_size <= rxm_ep->inject_limit && !rxm_ep->util_ep.tx_cntr) {
 		inject_pkt->hdr.size = len;
 		memcpy(inject_pkt->data, buf, len);
 		ret = rxm_ep_msg_inject_send(rxm_ep, rxm_conn, inject_pkt,
@@ -1350,8 +1415,7 @@ rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 	assert(len <= rxm_ep->rxm_info->tx_attr->inject_size);
 
-	if (pkt_size <= rxm_ep->inject_limit &&
-	    !rxm_ep->util_ep.tx_cntr) {
+	if (pkt_size <= rxm_ep->inject_limit && !rxm_ep->util_ep.tx_cntr) {
 		struct rxm_tx_base_buf *tx_buf = (struct rxm_tx_base_buf *)
 			rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_INJECT);
 		if (OFI_UNLIKELY(!tx_buf)) {
@@ -1385,11 +1449,14 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	size_t data_len = ofi_total_iov_len(iov, count);
 	size_t total_len = sizeof(struct rxm_pkt) + data_len;
 	ssize_t ret;
+	enum fi_hmem_iface iface;
 
 	assert(count <= rxm_ep->rxm_info->tx_attr->iov_limit);
 	assert((!(flags & FI_INJECT) &&
 		(data_len > rxm_ep->rxm_info->tx_attr->inject_size)) ||
 	       (data_len <= rxm_ep->rxm_info->tx_attr->inject_size));
+
+	iface = rxm_mr_desc_to_hmem_iface(desc, count);
 
 	if (data_len <= rxm_eager_limit) {
 		struct rxm_tx_eager_buf *tx_buf = (struct rxm_tx_eager_buf *)
@@ -1404,8 +1471,21 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 		rxm_ep_format_tx_buf_pkt(rxm_conn, data_len, op, data, tag,
 					 flags, &tx_buf->pkt);
-		ofi_copy_from_iov(tx_buf->pkt.data, tx_buf->pkt.hdr.size,
-				  iov, count, 0);
+
+		ret = ofi_copy_from_hmem_iov(tx_buf->pkt.data,
+					     tx_buf->pkt.hdr.size, iov, iface,
+					     count, 0);
+		if (OFI_UNLIKELY(ret != tx_buf->pkt.hdr.size)) {
+			if (ret >= 0) {
+				FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+					"Unexpected short copy");
+				ret = -FI_EIO;
+			}
+
+			ofi_buf_free(tx_buf);
+			goto unlock;
+		}
+
 		tx_buf->app_context = context;
 		tx_buf->flags = flags;
 
@@ -1423,13 +1503,13 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		ret = rxm_ep_sar_tx_send(rxm_ep, rxm_conn, context,
 					 count, iov, data_len,
 					 rxm_ep_sar_calc_segs_cnt(rxm_ep, data_len),
-					 data, flags, tag, op);
+					 data, flags, tag, op, iface);
 	} else {
 		struct rxm_tx_rndv_buf *tx_buf;
 
 		ret = rxm_ep_alloc_rndv_tx_res(rxm_ep, rxm_conn, context, (uint8_t)count,
 					      iov, desc, data_len, data, flags, tag, op,
-					      &tx_buf);
+					      &tx_buf, iface);
 		if (OFI_LIKELY(ret >= 0))
 			ret = rxm_ep_rndv_tx_send(rxm_ep, rxm_conn, tx_buf, ret);
 	}
@@ -1505,7 +1585,8 @@ rxm_ep_progress_sar_deferred_segments(struct rxm_deferred_tx_entry *def_tx_entry
 				def_tx_entry->sar_seg.payload.iov,
 				def_tx_entry->sar_seg.payload.count,
 				&def_tx_entry->sar_seg.payload.cur_iov_offset,
-				&def_tx_entry->sar_seg.cur_seg_tx_buf);
+				&def_tx_entry->sar_seg.cur_seg_tx_buf,
+				def_tx_entry->sar_seg.iface);
 		if (OFI_UNLIKELY(ret)) {
 			if (OFI_LIKELY(ret != -FI_EAGAIN)) {
 				rxm_ep_sar_handle_segment_failure(def_tx_entry, ret);

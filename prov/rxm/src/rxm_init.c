@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2016 Intel Corporation. All rights reserved.
+ * (C) Copyright 2020 Hewlett Packard Enterprise Development LP.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -47,7 +48,7 @@
 
 #define RXM_PASSTHRU_CAPS (FI_MSG | FI_RMA | FI_SEND | FI_RECV |	\
 			   FI_READ | FI_WRITE | FI_REMOTE_READ |	\
-			   FI_REMOTE_WRITE)
+			   FI_REMOTE_WRITE | FI_HMEM)
 
 size_t rxm_msg_tx_size		= 128;
 size_t rxm_msg_rx_size		= 128;
@@ -87,6 +88,12 @@ void rxm_info_to_core_mr_modes(uint32_t version, const struct fi_info *hints,
 			core_info->domain_attr->mr_mode |=
 				hints->domain_attr->mr_mode;
 	}
+
+	/* RxM is setup to support FI_HMEM with the core provider requiring
+	 * FI_MR_HMEM. Always set this MR mode bit.
+	 */
+	if (hints && hints->caps & FI_HMEM)
+		core_info->domain_attr->mr_mode |= FI_MR_HMEM;
 }
 
 int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
@@ -182,6 +189,16 @@ int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
 		info->nic = ofi_nic_dup(core_info->nic);
 		if (!info->nic)
 			return -FI_ENOMEM;
+	}
+
+	if (core_info->caps & FI_HMEM) {
+		info->caps &= ~FI_COLLECTIVE;
+		info->tx_attr->caps &= ~FI_COLLECTIVE;
+		info->rx_attr->caps &= ~FI_COLLECTIVE;
+	} else {
+		info->caps &= ~FI_HMEM;
+		info->tx_attr->caps &= ~FI_HMEM;
+		info->rx_attr->caps &= ~FI_HMEM;
 	}
 
 	return 0;

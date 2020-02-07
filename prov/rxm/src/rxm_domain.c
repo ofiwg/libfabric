@@ -107,6 +107,17 @@ static int rxm_mr_add_map_entry(struct util_domain *domain,
 	return ret;
 }
 
+struct rxm_mr *rxm_mr_get_map_entry(struct rxm_domain *domain, uint64_t key)
+{
+	struct rxm_mr *mr;
+
+	fastlock_acquire(&domain->util_domain.lock);
+	mr = ofi_mr_map_get(&domain->util_domain.mr_map, key);
+	fastlock_release(&domain->util_domain.lock);
+
+	return mr;
+}
+
 static int rxm_domain_close(fid_t fid)
 {
 	struct rxm_domain *rxm_domain;
@@ -264,6 +275,8 @@ static int rxm_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		goto err;
 	}
 	rxm_mr_init(rxm_mr, rxm_domain, attr->context);
+	fastlock_init(&rxm_mr->amo_lock);
+	rxm_mr->iface = msg_attr.iface;
 	*mr = &rxm_mr->mr_fid;
 
 	if (rxm_domain->util_domain.info_domain_caps & FI_ATOMIC) {
