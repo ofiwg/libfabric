@@ -360,8 +360,11 @@ static int tcpx_ep_close(struct fid *fid)
 
 	/* eq->close_lock protects from processing stale connection events */
 	fastlock_acquire(&eq->close_lock);
-	if (ep->util_ep.rx_cq->wait)
+	if (ep->util_ep.rx_cq)
 		ofi_wait_fd_del(ep->util_ep.rx_cq->wait, ep->sock);
+
+	if (ep->util_ep.tx_cq)
+		ofi_wait_fd_del(ep->util_ep.tx_cq->wait, ep->sock);
 
 	if (ep->util_ep.eq->wait)
 		ofi_wait_fd_del(ep->util_ep.eq->wait, ep->sock);
@@ -480,11 +483,6 @@ static struct fi_ops_ep tcpx_ep_ops = {
 	.tx_size_left = fi_no_tx_size_left,
 };
 
-static void tcpx_empty_progress(struct tcpx_ep *ep)
-{
-	/* no-op */
-}
-
 int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep_fid, void *context)
 {
@@ -498,7 +496,7 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 		return -FI_ENOMEM;
 
 	ret = ofi_endpoint_init(domain, &tcpx_util_prov, info, &ep->util_ep,
-				context, tcpx_progress);
+				context, NULL);
 	if (ret)
 		goto err1;
 
@@ -534,7 +532,6 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 	}
 
 	ep->cm_state = TCPX_EP_CONNECTING;
-	ep->progress_func = tcpx_empty_progress;
 	ret = fastlock_init(&ep->lock);
 	if (ret)
 		goto err3;

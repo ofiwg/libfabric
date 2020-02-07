@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 201-2020 Intel Corporation, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -179,7 +179,6 @@ struct tcpx_rx_ctx {
 };
 
 typedef int (*tcpx_rx_process_fn_t)(struct tcpx_xfer_entry *rx_entry);
-typedef void (*tcpx_ep_progress_func_t)(struct tcpx_ep *ep);
 typedef int (*tcpx_get_rx_func_t)(struct tcpx_ep *ep);
 
 struct stage_buf {
@@ -204,7 +203,6 @@ struct tcpx_ep {
 	enum tcpx_cm_state	cm_state;
 	/* lock for protecting tx/rx queues,rma list,cm_state*/
 	fastlock_t		lock;
-	tcpx_ep_progress_func_t progress_func;
 	tcpx_get_rx_func_t	get_rx_entry[ofi_op_write + 1];
 	void (*hdr_bswap)(struct tcpx_base_hdr *hdr);
 	struct stage_buf	stage_buf;
@@ -300,8 +298,8 @@ struct tcpx_xfer_entry *
 tcpx_srx_next_xfer_entry(struct tcpx_rx_ctx *srx_ctx,
 			struct tcpx_ep *ep, size_t entry_size);
 
-void tcpx_progress(struct util_ep *util_ep);
-void tcpx_ep_progress(struct tcpx_ep *ep);
+void tcpx_progress_tx(struct tcpx_ep *ep);
+void tcpx_progress_rx(struct tcpx_ep *ep);
 int tcpx_try_func(void *util_ep);
 
 void tcpx_hdr_none(struct tcpx_base_hdr *hdr);

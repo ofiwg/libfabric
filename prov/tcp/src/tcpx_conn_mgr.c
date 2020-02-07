@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 Intel Corporation. All rights reserved.
+ * Copyright (c) 2017-2020 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -130,7 +130,7 @@ static int tcpx_ep_enable_xfers(struct tcpx_ep *ep)
 		ret = -FI_EINVAL;
 		goto unlock;
 	}
-	ep->progress_func = tcpx_ep_progress;
+
 	ret = fi_fd_nonblock(ep->sock);
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
@@ -140,12 +140,20 @@ static int tcpx_ep_enable_xfers(struct tcpx_ep *ep)
 	ep->cm_state = TCPX_EP_CONNECTED;
 	fastlock_release(&ep->lock);
 
-	if (ep->util_ep.rx_cq->wait) {
+	if (ep->util_ep.rx_cq) {
 		ret = ofi_wait_fd_add(ep->util_ep.rx_cq->wait,
-				      ep->sock, OFI_EPOLL_IN,
-				      tcpx_try_func, (void *) &ep->util_ep,
-				      NULL);
+				      ep->sock, OFI_EPOLL_IN, tcpx_try_func,
+				      (void *) &ep->util_ep,
+				      &ep->util_ep.ep_fid.fid);
 	}
+
+	if (ep->util_ep.tx_cq) {
+		ret = ofi_wait_fd_add(ep->util_ep.tx_cq->wait,
+				      ep->sock, OFI_EPOLL_IN, tcpx_try_func,
+				      (void *) &ep->util_ep,
+				      &ep->util_ep.ep_fid.fid);
+	}
+
 	return ret;
 unlock:
 	fastlock_release(&ep->lock);
@@ -477,6 +485,11 @@ static void process_cm_ctx(struct util_wait *wait,
 	}
 }
 
+/* The implementation assumes that the EQ does not share a wait set with
+ * a CQ.  This is true for internally created wait sets, but not if the
+ * application manages the wait set.  To fix, we need to distinguish
+ * whether the wait_context references a fid or tcpx_cm_context.
+ */
 void tcpx_conn_mgr_run(struct util_eq *eq)
 {
 	struct util_wait_fd *wait_fd;
@@ -492,7 +505,7 @@ void tcpx_conn_mgr_run(struct util_eq *eq)
 	tcpx_eq = container_of(eq, struct tcpx_eq, util_eq);
 	fastlock_acquire(&tcpx_eq->close_lock);
 	num_fds = ofi_epoll_wait(wait_fd->epoll_fd, wait_contexts,
-				MAX_EPOLL_EVENTS, 0);
+				 MAX_EPOLL_EVENTS, 0);
 	if (num_fds < 0) {
 		fastlock_release(&tcpx_eq->close_lock);
 		return;

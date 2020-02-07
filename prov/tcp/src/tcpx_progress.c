@@ -593,7 +593,8 @@ static inline int tcpx_get_next_rx_hdr(struct tcpx_ep *ep)
 	return FI_SUCCESS;
 }
 
-static void tcpx_process_rx_msg(struct tcpx_ep *ep)
+/* Must hold ep lock */
+void tcpx_progress_rx(struct tcpx_ep *ep)
 {
 	int ret;
 
@@ -629,7 +630,8 @@ err:
 		tcpx_report_error(ep, ret);
 }
 
-void tcpx_ep_progress(struct tcpx_ep *ep)
+/* Must hold ep lock */
+void tcpx_progress_tx(struct tcpx_ep *ep)
 {
 	struct tcpx_xfer_entry *tx_entry;
 	struct slist_entry *entry;
@@ -639,19 +641,6 @@ void tcpx_ep_progress(struct tcpx_ep *ep)
 		tx_entry = container_of(entry, struct tcpx_xfer_entry, entry);
 		process_tx_entry(tx_entry);
 	}
-
-	tcpx_process_rx_msg(ep);
-}
-
-void tcpx_progress(struct util_ep *util_ep)
-{
-	struct tcpx_ep *ep;
-
-	ep = container_of(util_ep, struct tcpx_ep, util_ep);
-	fastlock_acquire(&ep->lock);
-	ep->progress_func(ep);
-	fastlock_release(&ep->lock);
-	return;
 }
 
 int tcpx_try_func(void *util_ep)
@@ -662,8 +651,6 @@ int tcpx_try_func(void *util_ep)
 	int ret;
 
 	ep = container_of(util_ep, struct tcpx_ep, util_ep);
-	wait_fd = container_of(((struct util_ep *)util_ep)->rx_cq->wait,
-			       struct util_wait_fd, util_wait);
 
 	fastlock_acquire(&ep->lock);
 	if (!slist_empty(&ep->tx_queue) && !ep->epoll_out_set) {
@@ -679,10 +666,13 @@ int tcpx_try_func(void *util_ep)
 	return FI_SUCCESS;
 
 epoll_mod:
-	ret = ofi_epoll_mod(wait_fd->epoll_fd, ep->sock, events, NULL);
+	wait_fd = container_of(((struct util_ep *) util_ep)->tx_cq->wait,
+			       struct util_wait_fd, util_wait);
+	ret = ofi_epoll_mod(wait_fd->epoll_fd, ep->sock, events,
+			    &ep->util_ep.ep_fid.fid);
 	if (ret)
 		FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
-			"invalid op type\n");
+			"epoll modify failed\n");
 	fastlock_release(&ep->lock);
 	return ret;
 }
