@@ -52,6 +52,9 @@
 #include <ofi_util.h>
 
 #include "efa.h"
+#if HAVE_EFA_DL
+#include <ofi_shm.h>
+#endif
 
 #define EFA_FABRIC_PREFIX "EFA-"
 
