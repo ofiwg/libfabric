@@ -506,7 +506,19 @@ static int efa_get_device_attrs(struct efa_context *ctx, struct fi_info *info)
 
 	info->tx_attr->iov_limit = efadv_attr.max_sq_sge;
 	info->tx_attr->size = align_down_to_power_of_2(efadv_attr.max_sq_wr);
-	info->tx_attr->inject_size = efadv_attr.inline_buf_size;
+	if (info->ep_attr->type == FI_EP_RDM) {
+		info->tx_attr->inject_size = efadv_attr.inline_buf_size;
+	} else if (info->ep_attr->type == FI_EP_DGRAM) {
+                /*
+                 * Currently, there is no mechanism for EFA layer (lower layer)
+                 * to discard completions internally and FI_INJECT is not optional,
+                 * it can only be disabled by setting inject_size to 0. RXR
+                 * layer does not have this issue as completions can be read from
+                 * the EFA layer and discarded in the RXR layer. For dgram
+                 * endpoint, inject size needs to be set to 0
+                 */
+		info->tx_attr->inject_size = 0;
+	}
 	info->rx_attr->iov_limit = efadv_attr.max_rq_sge;
 	info->rx_attr->size = align_down_to_power_of_2(efadv_attr.max_rq_wr / info->rx_attr->iov_limit);
 
