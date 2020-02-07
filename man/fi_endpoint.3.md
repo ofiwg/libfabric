@@ -870,8 +870,20 @@ struct fi_tx_attr {
 The requested capabilities of the context.  The capabilities must be
 a subset of those requested of the associated endpoint.  See the
 CAPABILITIES section of fi_getinfo(3) for capability details.  If
-the caps field is 0 on input to fi_getinfo(3), the caps value from the
-fi_info structure will be used.
+the caps field is 0 on input to fi_getinfo(3), the applicable
+capability bits from the fi_info structure will be used.
+
+The following capabilities apply to the transmit attributes: FI_MSG,
+FI_RMA, FI_TAGGED, FI_ATOMIC, FI_READ, FI_WRITE, FI_SEND, FI_HMEM,
+FI_TRIGGER, FI_FENCE, FI_MULTICAST, FI_RMA_PMEM, and FI_NAMED_RX_CTX.
+
+Many applications will be able to ignore this field and rely solely
+on the fi_info::caps field.  Use of this field provides fine grained
+control over the transmit capabilities associated with an endpoint.
+It is useful when handling scalable endpoints, with multiple transmit
+contexts, for example, and allows configuring a specific transmit
+context with fewer capabilities than that supported by the endpoint
+or other transmit contexts.
 
 ## mode
 
@@ -1153,8 +1165,21 @@ struct fi_rx_attr {
 The requested capabilities of the context.  The capabilities must be
 a subset of those requested of the associated endpoint.  See the
 CAPABILITIES section if fi_getinfo(3) for capability details.  If
-the caps field is 0 on input to fi_getinfo(3), the caps value from the
-fi_info structure will be used.
+the caps field is 0 on input to fi_getinfo(3), the applicable
+capability bits from the fi_info structure will be used.
+
+The following capabilities apply to the receive attributes: FI_MSG,
+FI_RMA, FI_TAGGED, FI_ATOMIC, FI_REMOTE_READ, FI_REMOTE_WRITE, FI_RECV,
+FI_HMEM, FI_TRIGGER, FI_RMA_PMEM, FI_DIRECTED_RECV, FI_VARIABLE_MSG,
+FI_MULTI_RECV, FI_SOURCE, FI_RMA_EVENT, and FI_SOURCE_ERROR.
+
+Many applications will be able to ignore this field and rely solely
+on the fi_info::caps field.  Use of this field provides fine grained
+control over the receive capabilities associated with an endpoint.
+It is useful when handling scalable endpoints, with multiple receive
+contexts, for example, and allows configuring a specific receive
+context with fewer capabilities than that supported by the endpoint
+or other receive contexts.
 
 ## mode
 
