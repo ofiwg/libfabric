@@ -300,7 +300,7 @@ int main(int argc, char **argv)
 			ft_usage(argv[0], "Multi endpoint test");
 			FT_PRINT_OPTS_USAGE("-c <int>",
 				"number of endpoints to create and test (def 3)");
-			FT_PRINT_OPTS_USAGE("-v", "Enable DataCheck testing");
+			FT_PRINT_OPTS_USAGE("-v", "Enable data verification");
 			return EXIT_FAILURE;
 		}
 	}

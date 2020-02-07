@@ -474,8 +474,10 @@ int main(int argc, char **argv)
 			break;
 		case '?':
 		case 'h':
-			ft_csusage(argv[0], "Streaming RDM client-server using multi recv buffer.");
+			ft_csusage(argv[0],
+				"Streaming RDM client-server using multi recv buffer.");
 			FT_PRINT_OPTS_USAGE("-M", "enable testing with fi_recvmsg");
+			FT_PRINT_OPTS_USAGE("-v", "Enable data verification");
 			return EXIT_FAILURE;
 		}
 	}
