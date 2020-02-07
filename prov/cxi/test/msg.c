@@ -953,16 +953,20 @@ void validate_mr_rx_event(struct fi_cq_tagged_entry *cqe, void *context,
 
 void do_multi_recv(uint8_t *send_buf, size_t send_len,
 		   uint8_t *recv_buf, size_t recv_len,
-		   bool send_first, size_t sends, size_t olen)
+		   bool send_first, size_t sends, size_t olen,
+		   bool tagged)
 {
 	int i, j, ret;
 	int err = 0;
 	fi_addr_t from;
 	struct fi_msg rmsg = {};
+	struct fi_msg_tagged trmsg = {};
 	struct fi_msg smsg = {};
+	struct fi_msg_tagged tsmsg = {};
 	struct iovec riovec;
 	struct iovec siovec;
 	uint64_t rxe_flags;
+	uint64_t txe_flags;
 	size_t sent = 0;
 	size_t recved = 0;
 	size_t err_recved = 0;
@@ -988,6 +992,11 @@ void do_multi_recv(uint8_t *send_buf, size_t send_len,
 	rmsg.addr = FI_ADDR_UNSPEC;
 	rmsg.context = NULL;
 
+	trmsg.msg_iov = &riovec;
+	trmsg.iov_count = 1;
+	trmsg.addr = FI_ADDR_UNSPEC;
+	trmsg.context = NULL;
+
 	siovec.iov_base = send_buf;
 	siovec.iov_len = send_len;
 	smsg.msg_iov = &siovec;
@@ -995,11 +1004,22 @@ void do_multi_recv(uint8_t *send_buf, size_t send_len,
 	smsg.addr = cxit_ep_fi_addr;
 	smsg.context = NULL;
 
+	tsmsg.msg_iov = &siovec;
+	tsmsg.iov_count = 1;
+	tsmsg.addr = cxit_ep_fi_addr;
+	tsmsg.context = NULL;
+
 	if (send_first) {
 		for (i = 0; i < sends; i++) {
-			ret = fi_sendmsg(cxit_ep, &smsg, 0);
-			cr_assert_eq(ret, FI_SUCCESS, "fi_send failed %d",
-				     ret);
+			if (tagged) {
+				ret = fi_tsendmsg(cxit_ep, &tsmsg, 0);
+				cr_assert_eq(ret, FI_SUCCESS,
+					     "fi_tsendmsg failed %d", ret);
+			} else {
+				ret = fi_sendmsg(cxit_ep, &smsg, 0);
+				cr_assert_eq(ret, FI_SUCCESS,
+					     "fi_sendmsg failed %d", ret);
+			}
 		}
 
 		/* Progress send to ensure it arrives unexpected */
@@ -1015,15 +1035,26 @@ void do_multi_recv(uint8_t *send_buf, size_t send_len,
 		} while (i++ < 10000);
 	}
 
-	ret = fi_recvmsg(cxit_ep, &rmsg, FI_MULTI_RECV);
-	cr_assert_eq(ret, FI_SUCCESS, "fi_recv failed %d", ret);
+	if (tagged) {
+		ret = fi_trecvmsg(cxit_ep, &trmsg, FI_MULTI_RECV);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_trecvmsg failed %d", ret);
+	} else {
+		ret = fi_recvmsg(cxit_ep, &rmsg, FI_MULTI_RECV);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_recvmsg failed %d", ret);
+	}
 
 	if (!send_first) {
 		sleep(1);
 		for (i = 0; i < sends; i++) {
-			ret = fi_sendmsg(cxit_ep, &smsg, 0);
-			cr_assert_eq(ret, FI_SUCCESS, "fi_send failed %d",
-				     ret);
+			if (tagged) {
+				ret = fi_tsendmsg(cxit_ep, &tsmsg, 0);
+				cr_assert_eq(ret, FI_SUCCESS,
+					     "fi_tsendmsg failed %d", ret);
+			} else {
+				ret = fi_sendmsg(cxit_ep, &smsg, 0);
+				cr_assert_eq(ret, FI_SUCCESS,
+					     "fi_sendmsg failed %d", ret);
+			}
 		}
 	}
 
@@ -1031,7 +1062,7 @@ void do_multi_recv(uint8_t *send_buf, size_t send_len,
 	do {
 		ret = fi_cq_readfrom(cxit_rx_cq, &rx_cqe, 1, &from);
 		if (ret == 1) {
-			rxe_flags = FI_MSG | FI_RECV;
+			rxe_flags = (tagged ? FI_TAGGED : FI_MSG) | FI_RECV;
 
 			validate_mr_rx_event(&rx_cqe, NULL, send_len,
 					     rxe_flags, 0, 0);
@@ -1068,7 +1099,7 @@ void do_multi_recv(uint8_t *send_buf, size_t send_len,
 			/* The truncated transfer is always the last, which
 			 * dequeued the multi-recv buffer.
 			 */
-			rxe_flags = FI_MSG | FI_RECV;
+			rxe_flags = (tagged ? FI_TAGGED : FI_MSG) | FI_RECV;
 
 			cr_assert(err_cqe.op_context == NULL,
 				  "Error RX CQE Context mismatch");
@@ -1118,8 +1149,9 @@ void do_multi_recv(uint8_t *send_buf, size_t send_len,
 
 		ret = fi_cq_read(cxit_tx_cq, &tx_cqe, 1);
 		if (ret == 1) {
+			txe_flags = (tagged ? FI_TAGGED : FI_MSG) | FI_SEND;
 			sent++;
-			validate_tx_event(&tx_cqe, FI_MSG | FI_SEND, NULL);
+			validate_tx_event(&tx_cqe, txe_flags, NULL);
 		} else {
 			cr_assert_eq(ret, -FI_EAGAIN,
 				     "fi_cq_read unexpected value %d",
@@ -1214,7 +1246,11 @@ ParameterizedTest(struct msg_multi_recv_params *param, msg, multi_recv)
 
 	do_multi_recv(send_buf, param->send_len, recv_buf,
 		      param->recv_len, param->ux, param->sends,
-		      param->olen);
+		      param->olen, false);
+
+	do_multi_recv(send_buf, param->send_len, recv_buf,
+		      param->recv_len, param->ux, param->sends,
+		      param->olen, true);
 
 	free(send_buf);
 	free(recv_buf);
