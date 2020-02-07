@@ -394,10 +394,16 @@ static int rxm_rx_buf_match_msg_id(struct dlist_entry *item, const void *arg)
 
 static ssize_t rxm_process_seg_data(struct rxm_rx_buf *rx_buf, int *done)
 {
+	enum fi_hmem_iface iface;
+	uint64_t device;
 	ssize_t done_len;
 	ssize_t ret;
 
-	done_len = ofi_copy_to_hmem_iov(FI_HMEM_SYSTEM, 0,
+	iface = rxm_mr_desc_to_hmem_iface_dev(rx_buf->recv_entry->rxm_iov.desc,
+					      rx_buf->recv_entry->rxm_iov.count,
+					      &device);
+
+	done_len = ofi_copy_to_hmem_iov(iface, device,
 					rx_buf->recv_entry->rxm_iov.iov,
 					rx_buf->recv_entry->rxm_iov.count,
 					rx_buf->recv_entry->sar.total_recv_len,
@@ -643,9 +649,15 @@ static ssize_t rxm_handle_rndv(struct rxm_rx_buf *rx_buf)
 
 ssize_t rxm_handle_eager(struct rxm_rx_buf *rx_buf)
 {
+	enum fi_hmem_iface iface;
+	uint64_t device;
 	ssize_t done_len;
 
-	done_len = ofi_copy_to_hmem_iov(FI_HMEM_SYSTEM, 0,
+	iface = rxm_mr_desc_to_hmem_iface_dev(rx_buf->recv_entry->rxm_iov.desc,
+					      rx_buf->recv_entry->rxm_iov.count,
+					      &device);
+
+	done_len = ofi_copy_to_hmem_iov(iface, device,
 					rx_buf->recv_entry->rxm_iov.iov,
 					rx_buf->recv_entry->rxm_iov.count, 0,
 					rx_buf->pkt.data, rx_buf->pkt.hdr.size);
@@ -656,10 +668,16 @@ ssize_t rxm_handle_eager(struct rxm_rx_buf *rx_buf)
 
 ssize_t rxm_handle_coll_eager(struct rxm_rx_buf *rx_buf)
 {
+	enum fi_hmem_iface iface;
+	uint64_t device;
 	ssize_t done_len;
 	ssize_t ret;
 
-	done_len = ofi_copy_to_hmem_iov(FI_HMEM_SYSTEM, 0,
+	iface = rxm_mr_desc_to_hmem_iface_dev(rx_buf->recv_entry->rxm_iov.desc,
+					      rx_buf->recv_entry->rxm_iov.count,
+					      &device);
+
+	done_len = ofi_copy_to_hmem_iov(iface, device,
 					rx_buf->recv_entry->rxm_iov.iov,
 					rx_buf->recv_entry->rxm_iov.count, 0,
 					rx_buf->pkt.data, rx_buf->pkt.hdr.size);
@@ -1169,27 +1187,65 @@ static ssize_t rxm_atomic_send_resp(struct rxm_ep *rxm_ep,
 	return ret;
 }
 
-static void rxm_do_atomic(struct rxm_pkt *pkt, void *dst, void *src,
-			  void *cmp, void *res, size_t count,
-			  enum fi_datatype datatype, enum fi_op op)
+static void rxm_do_atomic(uint8_t op, void *dst, void *src, void *cmp,
+			  void *res, size_t count, enum fi_datatype datatype,
+			  enum fi_op amo_op)
 {
-	switch (pkt->hdr.op) {
+	switch (op) {
 	case ofi_op_atomic:
-		assert(ofi_atomic_iswrite_op(op));
-		ofi_atomic_write_handler(op, datatype, dst, src, count);
+		assert(ofi_atomic_iswrite_op(amo_op));
+		ofi_atomic_write_handler(amo_op, datatype, dst, src, count);
 		break;
 	case ofi_op_atomic_fetch:
-		assert(ofi_atomic_isreadwrite_op(op));
-		ofi_atomic_readwrite_handler(op, datatype, dst, src, res, count);
+		assert(ofi_atomic_isreadwrite_op(amo_op));
+		ofi_atomic_readwrite_handler(amo_op, datatype, dst, src, res,
+					     count);
 		break;
 	case ofi_op_atomic_compare:
-		assert(ofi_atomic_isswap_op(op));
-		ofi_atomic_swap_handler(op, datatype, dst, src, cmp, res, count);
+		assert(ofi_atomic_isswap_op(amo_op));
+		ofi_atomic_swap_handler(amo_op, datatype, dst, src, cmp, res,
+					count);
 		break;
 	default:
 		/* Validated prior to calling function */
 		break;
 	}
+}
+
+static int rxm_do_device_mem_atomic(struct rxm_mr *dev_mr, uint8_t op,
+				    void *dev_dst, void *src, void *cmp,
+				    void *res, size_t amo_count,
+				    enum fi_datatype datatype,
+				    enum fi_op amo_op, size_t amo_op_size)
+{
+	void *bounce_buf;
+	ssize_t ret __attribute__((unused));
+	struct iovec iov = {
+		.iov_base = dev_dst,
+		.iov_len = amo_op_size,
+	};
+
+	bounce_buf = malloc(amo_op_size);
+	if (!bounce_buf)
+		return -FI_ENOMEM;
+
+	fastlock_acquire(&dev_mr->amo_lock);
+	ret = ofi_copy_from_hmem_iov(bounce_buf, amo_op_size, dev_mr->iface, 0,
+				    &iov, 1, 0);
+	assert(ret == amo_op_size);
+
+	rxm_do_atomic(op, bounce_buf, src, cmp, res, amo_count, datatype,
+		      amo_op);
+
+	ret = ofi_copy_to_hmem_iov(dev_mr->iface, 0, &iov, 1, 0, bounce_buf,
+				   amo_op_size);
+	assert(ret == amo_op_size);
+
+	fastlock_release(&dev_mr->amo_lock);
+
+	free(bounce_buf);
+
+	return FI_SUCCESS;
 }
 
 static ssize_t rxm_handle_atomic_req(struct rxm_ep *rxm_ep,
@@ -1204,17 +1260,17 @@ static ssize_t rxm_handle_atomic_req(struct rxm_ep *rxm_ep,
 	ssize_t result_len;
 	uint64_t offset;
 	int i;
-	int ret = 0;
+	ssize_t ret = 0;
 	struct rxm_tx_atomic_buf *resp_buf;
 	struct rxm_atomic_resp_hdr *resp_hdr;
 	struct rxm_domain *domain = container_of(rxm_ep->util_ep.domain,
 					 struct rxm_domain, util_domain);
+	uint8_t op = rx_buf->pkt.hdr.op;
 
 	assert(!(rx_buf->comp_flags &
 		 ~(FI_RECV | FI_RECV | FI_REMOTE_CQ_DATA)));
-	assert(rx_buf->pkt.hdr.op == ofi_op_atomic ||
-	       rx_buf->pkt.hdr.op == ofi_op_atomic_fetch ||
-	       rx_buf->pkt.hdr.op == ofi_op_atomic_compare);
+	assert(op == ofi_op_atomic || op == ofi_op_atomic_fetch ||
+	       op == ofi_op_atomic_compare);
 
 	if (rx_buf->ep->srx_ctx)
 		rx_buf->conn = rxm_key2conn(rx_buf->ep,
@@ -1240,7 +1296,7 @@ static ssize_t rxm_handle_atomic_req(struct rxm_ep *rxm_ep,
 							atomic_op));
 		if (ret) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
-				"Atomic RMA MR verify error %d\n", ret);
+				"Atomic RMA MR verify error %ld\n", ret);
 			return rxm_atomic_send_resp(rxm_ep, rx_buf, resp_buf, 0,
 						    -FI_EACCES);
 		}
@@ -1251,17 +1307,37 @@ static ssize_t rxm_handle_atomic_req(struct rxm_ep *rxm_ep,
 	resp_hdr = (struct rxm_atomic_resp_hdr *) resp_buf->pkt.data;
 
 	for (i = 0, offset = 0; i < rx_buf->pkt.hdr.atomic.ioc_count; i++) {
-		rxm_do_atomic(&rx_buf->pkt,
-			      (uintptr_t *) req_hdr->rma_ioc[i].addr,
-			      req_hdr->data + offset,
-			      req_hdr->data + len + offset,
-			      resp_hdr->data + offset,
-			      req_hdr->rma_ioc[i].count, datatype, atomic_op);
-		offset += req_hdr->rma_ioc[i].count * datatype_sz;
-	}
-	result_len = rx_buf->pkt.hdr.op == ofi_op_atomic ? 0 : offset;
+		struct rxm_mr *mr =
+			rxm_mr_get_map_entry(domain, req_hdr->rma_ioc[i].key);
+		size_t amo_count = req_hdr->rma_ioc[i].count;
+		size_t amo_op_size = amo_count * datatype_sz;
+		void *src_buf = req_hdr->data + offset;
+		void *cmp_buf = req_hdr->data + len + offset;
+		void *res_buf = resp_hdr->data + offset;
+		void *dst_buf = (void *) req_hdr->rma_ioc[i].addr;
 
-	if (rx_buf->pkt.hdr.op == ofi_op_atomic)
+		if (mr->iface != FI_HMEM_SYSTEM) {
+			ret = rxm_do_device_mem_atomic(mr, op, dst_buf, src_buf,
+						       cmp_buf, res_buf,
+						       amo_count, datatype,
+						       atomic_op, amo_op_size);
+			if (ret) {
+				FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+					"Atomic operation failed %ld\n", ret);
+
+				return rxm_atomic_send_resp(rxm_ep, rx_buf,
+							    resp_buf, 0, ret);
+			}
+		} else {
+			rxm_do_atomic(op, dst_buf, src_buf, cmp_buf, res_buf,
+				      amo_count, datatype, atomic_op);
+		}
+
+		offset += amo_op_size;
+	}
+	result_len = op == ofi_op_atomic ? 0 : offset;
+
+	if (op == ofi_op_atomic)
 		ofi_ep_rem_wr_cntr_inc(&rxm_ep->util_ep);
 	else
 		ofi_ep_rem_rd_cntr_inc(&rxm_ep->util_ep);
@@ -1277,6 +1353,8 @@ static ssize_t rxm_handle_atomic_resp(struct rxm_ep *rxm_ep,
 	struct rxm_atomic_resp_hdr *resp_hdr;
 	uint64_t len;
 	ssize_t ret = 0;
+	enum fi_hmem_iface iface;
+	uint64_t device;
 
 	resp_hdr = (struct rxm_atomic_resp_hdr *) rx_buf->pkt.data;
 	tx_buf = ofi_bufpool_get_ibuf(rxm_ep->buf_pools[RXM_BUF_POOL_TX_ATOMIC].pool,
@@ -1284,6 +1362,10 @@ static ssize_t rxm_handle_atomic_resp(struct rxm_ep *rxm_ep,
 	FI_DBG(&rxm_prov, FI_LOG_CQ, "received atomic response: op: %" PRIu8
 	       " msg_id: 0x%" PRIx64 "\n", rx_buf->pkt.hdr.op,
 	       rx_buf->pkt.ctrl_hdr.msg_id);
+
+	iface = rxm_mr_desc_to_hmem_iface_dev(tx_buf->result_iov.desc,
+					      tx_buf->result_iov.count,
+					      &device);
 
 	assert(!(rx_buf->comp_flags & ~(FI_RECV | FI_REMOTE_CQ_DATA)));
 
@@ -1312,7 +1394,7 @@ static ssize_t rxm_handle_atomic_resp(struct rxm_ep *rxm_ep,
 				tx_buf->result_iov.count);
 	assert(ntohl(resp_hdr->result_len) == len);
 
-	ret = ofi_copy_to_hmem_iov(FI_HMEM_SYSTEM, 0, tx_buf->result_iov.iov,
+	ret = ofi_copy_to_hmem_iov(iface, device, tx_buf->result_iov.iov,
 				   tx_buf->result_iov.count, 0, resp_hdr->data,
 				   len);
 	assert(ret == len);

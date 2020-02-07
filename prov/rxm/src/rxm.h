@@ -289,7 +289,22 @@ struct rxm_mr {
 	struct fid_mr mr_fid;
 	struct fid_mr *msg_mr;
 	struct rxm_domain *domain;
+	enum fi_hmem_iface iface;
+	uint64_t device;
+	fastlock_t amo_lock;
 };
+
+static inline enum fi_hmem_iface
+rxm_mr_desc_to_hmem_iface_dev(void **desc, size_t count, uint64_t *device)
+{
+	if (!count || !desc || !desc[0]) {
+		*device = 0;
+		return FI_HMEM_SYSTEM;
+	}
+
+	*device = ((struct rxm_mr *) desc[0])->device;
+	return ((struct rxm_mr *) desc[0])->iface;
+}
 
 struct rxm_rndv_hdr {
 	struct ofi_rma_iov iov[RXM_IOV_LIMIT];
@@ -603,6 +618,8 @@ struct rxm_deferred_tx_entry {
 			uint64_t msg_id;
 			void *app_context;
 			uint64_t flags;
+			enum fi_hmem_iface iface;
+			uint64_t device;
 		} sar_seg;
 		struct {
 			struct rxm_tx_atomic_buf *tx_buf;

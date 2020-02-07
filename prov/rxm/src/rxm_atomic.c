@@ -98,6 +98,10 @@ rxm_ep_atomic_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	struct rxm_atomic_hdr *atomic_hdr;
 	struct iovec buf_iov[RXM_IOV_LIMIT];
 	struct iovec cmp_iov[RXM_IOV_LIMIT];
+	enum fi_hmem_iface buf_iface = FI_HMEM_SYSTEM;
+	enum fi_hmem_iface cmp_iface;
+	uint64_t buf_device = 0;
+	uint64_t cmp_device;
 	size_t datatype_sz = ofi_datatype_size(msg->datatype);
 	size_t buf_len = 0;
 	size_t cmp_len = 0;
@@ -119,6 +123,10 @@ rxm_ep_atomic_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		ofi_ioc_to_iov(msg->msg_iov, buf_iov, msg->iov_count,
 			       datatype_sz);
 		buf_len = ofi_total_iov_len(buf_iov, msg->iov_count);
+
+		buf_iface = rxm_mr_desc_to_hmem_iface_dev(msg->desc,
+							  msg->iov_count,
+							  &buf_device);
 	}
 
 	if (op == ofi_op_atomic_compare) {
@@ -127,6 +135,10 @@ rxm_ep_atomic_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 			       datatype_sz);
 		cmp_len = ofi_total_iov_len(cmp_iov, compare_iov_count);
 		assert(buf_len == cmp_len);
+
+		cmp_iface = rxm_mr_desc_to_hmem_iface_dev(compare_desc,
+							  compare_iov_count,
+							  &cmp_device);
 	}
 
 	tot_len = buf_len + cmp_len + sizeof(struct rxm_atomic_hdr) +
@@ -159,13 +171,13 @@ rxm_ep_atomic_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 	atomic_hdr = (struct rxm_atomic_hdr *) tx_buf->pkt.data;
 
-	ret = ofi_copy_from_hmem_iov(atomic_hdr->data, buf_len, FI_HMEM_SYSTEM,
-				     0, buf_iov, msg->iov_count, 0);
+	ret = ofi_copy_from_hmem_iov(atomic_hdr->data, buf_len, buf_iface,
+				     buf_device, buf_iov, msg->iov_count, 0);
 	assert(ret == buf_len);
 
 	if (cmp_len) {
 		ret = ofi_copy_from_hmem_iov(atomic_hdr->data + buf_len,
-					     cmp_len, FI_HMEM_SYSTEM, 0,
+					     cmp_len, cmp_iface, cmp_device,
 					     cmp_iov, compare_iov_count, 0);
 		assert(ret == cmp_len);
 	}
