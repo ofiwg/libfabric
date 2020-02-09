@@ -44,10 +44,13 @@
 
 #define VERBS_DOMAIN_CAPS (FI_LOCAL_COMM | FI_REMOTE_COMM)
 
-#define VERBS_MSG_CAPS (FI_MSG | FI_RMA | FI_ATOMICS | FI_READ | FI_WRITE |	\
-			FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE |	\
-			VERBS_DOMAIN_CAPS)
-#define VERBS_DGRAM_CAPS (FI_MSG | FI_RECV | FI_SEND | VERBS_DOMAIN_CAPS)
+#define VERBS_MSG_TX_CAPS (OFI_TX_MSG_CAPS | OFI_TX_RMA_CAPS | FI_ATOMICS)
+#define VERBS_MSG_RX_CAPS (OFI_RX_MSG_CAPS | OFI_RX_RMA_CAPS | FI_ATOMICS)
+#define VERBS_MSG_CAPS (VERBS_MSG_TX_CAPS | VERBS_MSG_RX_CAPS | VERBS_DOMAIN_CAPS)
+#define VERBS_DGRAM_TX_CAPS (OFI_TX_MSG_CAPS)
+#define VERBS_DGRAM_RX_CAPS (OFI_RX_MSG_CAPS)
+#define VERBS_DGRAM_CAPS (VERBS_DGRAM_TX_CAPS | VERBS_DGRAM_RX_CAPS | \
+			  VERBS_DOMAIN_CAPS)
 
 #define VERBS_DGRAM_RX_MODE (FI_MSG_PREFIX)
 
@@ -99,6 +102,7 @@ const struct fi_ep_attr verbs_ep_attr = {
 };
 
 const struct fi_rx_attr verbs_rx_attr = {
+	.caps			= VERBS_MSG_RX_CAPS,
 	.mode			= VERBS_RX_MODE,
 	.op_flags		= FI_COMPLETION,
 	.msg_order		= VERBS_MSG_ORDER,
@@ -107,6 +111,7 @@ const struct fi_rx_attr verbs_rx_attr = {
 };
 
 const struct fi_rx_attr verbs_dgram_rx_attr = {
+	.caps			= VERBS_DGRAM_RX_CAPS,
 	.mode			= VERBS_DGRAM_RX_MODE | VERBS_RX_MODE,
 	.op_flags		= FI_COMPLETION,
 	.msg_order		= VERBS_MSG_ORDER,
@@ -115,6 +120,7 @@ const struct fi_rx_attr verbs_dgram_rx_attr = {
 };
 
 const struct fi_tx_attr verbs_tx_attr = {
+	.caps			= VERBS_MSG_TX_CAPS,
 	.mode			= 0,
 	.op_flags		= VERBS_TX_OP_FLAGS,
 	.msg_order		= VERBS_MSG_ORDER,
@@ -124,6 +130,7 @@ const struct fi_tx_attr verbs_tx_attr = {
 };
 
 const struct fi_tx_attr verbs_dgram_tx_attr = {
+	.caps			= VERBS_DGRAM_TX_CAPS,
 	.mode			= 0,
 	.op_flags		= VERBS_TX_OP_FLAGS,
 	.msg_order		= VERBS_MSG_ORDER,
@@ -136,21 +143,18 @@ const struct verbs_ep_domain verbs_msg_domain = {
 	.suffix			= "",
 	.type			= FI_EP_MSG,
 	.protocol		= FI_PROTO_UNSPEC,
-	.caps			= VERBS_MSG_CAPS,
 };
 
 const struct verbs_ep_domain verbs_msg_xrc_domain = {
 	.suffix			= "-xrc",
 	.type			= FI_EP_MSG,
 	.protocol		= FI_PROTO_RDMA_CM_IB_XRC,
-	.caps			= VERBS_MSG_CAPS,
 };
 
 const struct verbs_ep_domain verbs_dgram_domain = {
 	.suffix			= "-dgram",
 	.type			= FI_EP_DGRAM,
 	.protocol		= FI_PROTO_UNSPEC,
-	.caps			= VERBS_DGRAM_CAPS,
 };
 
 /* The list (not thread safe) is populated once when the provider is initialized */
@@ -768,17 +772,18 @@ static int vrb_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 	if (!fi)
 		return -FI_ENOMEM;
 
-	fi->caps = ep_dom->caps;
 	fi->handle = NULL;
 	*(fi->ep_attr) = verbs_ep_attr;
 	*(fi->domain_attr) = verbs_domain_attr;
 
 	switch (ep_dom->type) {
 	case FI_EP_MSG:
+		fi->caps = VERBS_MSG_CAPS;
 		*(fi->tx_attr) = verbs_tx_attr;
 		*(fi->rx_attr) = verbs_rx_attr;
 		break;
 	case FI_EP_DGRAM:
+		fi->caps = VERBS_DGRAM_CAPS;
 		fi->mode = VERBS_DGRAM_RX_MODE;
 		*(fi->tx_attr) = verbs_dgram_tx_attr;
 		*(fi->rx_attr) = verbs_dgram_rx_attr;
@@ -793,8 +798,6 @@ static int vrb_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 	*(fi->fabric_attr) = verbs_fabric_attr;
 
 	fi->ep_attr->type = ep_dom->type;
-	fi->tx_attr->caps = ep_dom->caps;
-	fi->rx_attr->caps = ep_dom->caps;
 
 	fi->nic = ofi_nic_dup(NULL);
 	if (!fi->nic) {
