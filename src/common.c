@@ -1199,9 +1199,7 @@ void ofi_get_list_of_addr(struct fi_provider *prov, const char *env_name,
 
 			memcpy(&addr_entry->ipaddr, ifa->ifa_addr,
 			       ofi_sizeofaddr(ifa->ifa_addr));
-			ofi_straddr_log(prov, FI_LOG_INFO, FI_LOG_CORE,
-					"available addr: ", ifa->ifa_addr);
-
+			
 			if (!inet_ntop(ifa->ifa_addr->sa_family,
 					ofi_get_ipaddr(ifa->ifa_addr),
 					addr_entry->ipstr,
@@ -1213,6 +1211,9 @@ void ofi_get_list_of_addr(struct fi_provider *prov, const char *env_name,
 			}
 
 			addr_entry->speed = ofi_ifaddr_get_speed(ifa);
+			FI_INFO(prov, FI_LOG_CORE, "Available addr: %s, "
+				"iface name: %s, speed: %zu\n",
+				addr_entry->ipstr, ifa->ifa_name, addr_entry->speed);
 
 			slist_insert_before_first_match(addr_list, ofi_addr_list_entry_comp_speed,
 							&addr_entry->entry);
