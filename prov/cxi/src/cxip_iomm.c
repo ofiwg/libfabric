@@ -8,6 +8,7 @@
 
 #define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_MR, __VA_ARGS__)
 #define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_MR, __VA_ARGS__)
+#define CXIP_LOG_INFO(...) _CXIP_LOG_INFO(FI_LOG_MR, __VA_ARGS__)
 
 /**
  * cxip_do_map() - IO map a buffer.
@@ -17,8 +18,7 @@ static int cxip_do_map(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 	int ret;
 	struct cxip_md *md = (struct cxip_md *)entry->data;
 	struct cxip_domain *dom;
-	uint32_t map_flags = CXI_MAP_READ | CXI_MAP_WRITE |
-			     CXI_MAP_NTA;
+	uint32_t map_flags = CXI_MAP_READ | CXI_MAP_WRITE | CXI_MAP_NTA;
 
 	dom = container_of(cache, struct cxip_domain, iomm);
 
@@ -51,6 +51,44 @@ static void cxip_do_unmap(struct ofi_mr_cache *cache,
 		CXIP_LOG_ERROR("cxil_unmap failed: %d\n", ret);
 }
 
+static struct cxip_md *cxip_dom_ats_md(struct cxip_domain *dom)
+{
+	int ret;
+	uint32_t map_flags = (CXI_MAP_READ | CXI_MAP_WRITE | CXI_MAP_ATS);
+
+	if (dom->ats_init)
+		goto noinit;
+
+	/* Initialize ATS */
+	fastlock_acquire(&dom->iomm_lock);
+
+	if (!dom->ats_init) {
+		ret = cxil_map(dom->dev_if->if_lni, 0, -1,
+			       map_flags, NULL, &dom->ats_md.md);
+		if (!ret) {
+			dom->ats_md.dom = dom;
+			dom->ats_enabled = true;
+		} else {
+			CXIP_LOG_INFO("PCIe ATS unsupported.\n");
+		}
+
+		dom->ats_init = true;
+	}
+
+	fastlock_release(&dom->iomm_lock);
+
+noinit:
+	if (dom->ats_enabled)
+		return &dom->ats_md;
+	return NULL;
+}
+
+static void cxip_dom_ats_cleanup(struct cxip_domain *dom)
+{
+	if (dom->ats_enabled)
+		cxil_unmap(dom->ats_md.md);
+}
+
 /*
  * cxip_iomm_init() - Initialize domain IO memory map.
  */
@@ -78,6 +116,7 @@ void cxip_iomm_fini(struct cxip_domain *dom)
 {
 	fastlock_destroy(&dom->iomm_lock);
 	ofi_mr_cache_cleanup(&dom->iomm);
+	cxip_dom_ats_cleanup(dom);
 }
 
 /*
@@ -97,6 +136,9 @@ int cxip_map(struct cxip_domain *dom, const void *buf, unsigned long len,
 		.mr_iov = &iov,
 	};
 	struct ofi_mr_entry *entry;
+
+	if ((*md = cxip_dom_ats_md(dom)))
+		return FI_SUCCESS;
 
 	/* TODO align buffer inside cache so driver can control mapping
 	 * size.
@@ -131,6 +173,9 @@ void cxip_unmap(struct cxip_md *md)
 	struct ofi_mr_entry *entry;
 
 	entry = container_of(md, struct ofi_mr_entry, data);
+
+	if (md == &md->dom->ats_md)
+		return;
 
 	fastlock_acquire(&md->dom->iomm_lock);
 	ofi_mr_cache_delete(&md->dom->iomm, entry);

@@ -194,6 +194,12 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 	src_addr = (struct cxip_addr *)info->src_addr;
 	cxi_domain->nic_addr = src_addr->nic;
 
+	if (cxip_env.odp)
+		cxi_domain->odp = true;
+
+	if (cxip_env.ats)
+		cxi_domain->ats_init = true;
+
 	cxi_domain->util_domain.domain_fid.fid.ops = &cxip_dom_fi_ops;
 	cxi_domain->util_domain.domain_fid.ops = &cxip_dom_ops;
 	cxi_domain->util_domain.domain_fid.mr = &cxip_dom_mr_ops;
@@ -201,11 +207,6 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 	fastlock_init(&cxi_domain->lock);
 	ofi_atomic_initialize32(&cxi_domain->ref, 0);
 	cxi_domain->fab = fab;
-
-	if (getenv("CXIP_ODP_ENABLE")) {
-		cxi_domain->odp = true;
-		fprintf(stderr, "ODP enabled\n");
-	}
 
 	*dom = &cxi_domain->util_domain.domain_fid;
 

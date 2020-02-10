@@ -11,6 +11,7 @@
 
 #define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_FABRIC, __VA_ARGS__)
 #define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_FABRIC, __VA_ARGS__)
+#define CXIP_LOG_INFO(...) _CXIP_LOG_INFO(FI_LOG_FABRIC, __VA_ARGS__)
 
 char cxip_prov_name[] = "cxi";
 
@@ -195,12 +196,35 @@ static int cxip_info_init(void)
 	return ret;
 }
 
+struct cxip_environment cxip_env = {
+	.rdzv_offload = true,
+	.odp = false,
+	.ats = true,
+};
+
+static void cxip_env_init(void)
+{
+	fi_param_define(&cxip_prov, "rdzv_offload", FI_PARAM_BOOL,
+			"Enables offloaded rendezvous messaging protocol.");
+	fi_param_get_bool(&cxip_prov, "rdzv_offload", &cxip_env.rdzv_offload);
+
+	fi_param_define(&cxip_prov, "odp", FI_PARAM_BOOL,
+			"Enables on-demand paging.");
+	fi_param_get_bool(&cxip_prov, "odp", &cxip_env.odp);
+
+	fi_param_define(&cxip_prov, "ats", FI_PARAM_BOOL,
+			"Enables PCIe ATS.");
+	fi_param_get_bool(&cxip_prov, "ats", &cxip_env.ats);
+}
+
 /*
  * CXI_INI - Provider constructor.
  */
 CXI_INI
 {
 	cxip_if_init();
+
+	cxip_env_init();
 
 	cxip_info_init();
 

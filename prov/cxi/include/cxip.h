@@ -136,6 +136,14 @@ extern struct fi_ep_attr cxip_ep_attr;
 extern struct fi_tx_attr cxip_tx_attr;
 extern struct fi_rx_attr cxip_rx_attr;
 
+struct cxip_environment {
+	int rdzv_offload;
+	int odp;
+	int ats;
+};
+
+extern struct cxip_environment cxip_env;
+
 /**
  * The CXI Provider Address format.
  *
@@ -356,6 +364,14 @@ struct cxip_fabric {
 	ofi_atomic32_t ref;
 };
 
+struct cxip_domain;
+
+/* CXI Provider Memory Descriptor */
+struct cxip_md {
+	struct cxip_domain *dom;
+	struct cxi_md *md;
+};
+
 /**
  * Domain object
  *
@@ -372,6 +388,9 @@ struct cxip_domain {
 	struct cxip_eq *eq;		// linked during cxip_dom_bind()
 	struct cxip_eq *mr_eq;		// == eq || == NULL
 	struct ofi_mr_cache iomm;	// IO Memory Map
+	struct cxip_md ats_md;
+	bool ats_init;
+	bool ats_enabled;
 	struct cxip_cmdq *trig_cmdq;
 	fastlock_t iomm_lock;
 
@@ -380,12 +399,6 @@ struct cxip_domain {
 	struct cxip_if *dev_if;		// looked when domain is enabled
 
 	bool odp;
-};
-
-/* CXI Provider Memory Descriptor */
-struct cxip_md {
-	struct cxip_domain *dom;
-	struct cxi_md *md;
 };
 
 // Apparently not yet in use (??)
@@ -1062,5 +1075,6 @@ static inline int cxip_fid_to_rxc(struct fid_ep *ep, struct cxip_rxc **rxc)
 
 #define _CXIP_LOG_DBG(subsys, ...) FI_DBG(&cxip_prov, subsys, __VA_ARGS__)
 #define _CXIP_LOG_ERROR(subsys, ...) FI_WARN(&cxip_prov, subsys, __VA_ARGS__)
+#define _CXIP_LOG_INFO(subsys, ...) FI_INFO(&cxip_prov, subsys, __VA_ARGS__)
 
 #endif

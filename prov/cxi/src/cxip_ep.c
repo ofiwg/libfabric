@@ -481,11 +481,6 @@ static int ep_enable(struct cxip_ep_obj *ep_obj)
 	CXIP_LOG_DBG("EP assigned PID: %u\n", ep_obj->if_dom->pid);
 	ep_obj->src_addr.pid = ep_obj->if_dom->pid;
 
-	if (getenv("RDZV_OFFLOAD")) {
-		ep_obj->rdzv_offload = 1;
-		fprintf(stderr, "Rendezvous offload enabled\n");
-	}
-
 	ep_obj->enabled = true;
 
 	fastlock_release(&ep_obj->lock);
@@ -1672,6 +1667,9 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 	memset(&cxi_ep->ep_obj->tx_ids, 0, sizeof(cxi_ep->ep_obj->tx_ids));
 	fastlock_init(&cxi_ep->ep_obj->tx_id_lock);
 	dlist_init(&cxi_ep->ep_obj->mr_list);
+
+	if (cxip_env.rdzv_offload)
+		cxi_ep->ep_obj->rdzv_offload = true;
 
 	switch (fclass) {
 	case FI_CLASS_EP:
