@@ -63,8 +63,11 @@ static void tcpx_getinfo_ifs(struct fi_info **info)
 		if (!cur)
 			break;
 
-		if (!head)
+		if (!head) {
 			head = cur;
+			FI_INFO(&tcpx_prov, FI_LOG_CORE, "Chosen addr for using: %s,"
+				" speed %zu\n", addr_entry->ipstr, addr_entry->speed);
+		}
 		else
 			tail->next = cur;
 		tail = cur;
