@@ -309,8 +309,11 @@ int efa_av_insert_addr(struct efa_av *av, struct efa_ep_addr *addr,
 			"Insert %s to shm provider's av. addr = %" PRIu64
 			" rdm_fiaddr = %" PRIu64 " shm_rdm_fiaddr = %" PRIu64
 			"\n", smr_name, *(uint64_t *)addr, *fi_addr, shm_fiaddr);
+
+		assert(shm_fiaddr < EFA_SHM_MAX_AV_COUNT);
 		av_entry->local_mapping = 1;
 		av_entry->shm_rdm_addr = shm_fiaddr;
+		av->shm_rdm_addr_map[shm_fiaddr] = av_entry->rdm_addr;
 
 		/*
 		 * Walk through all the EPs that bound to the AV,
@@ -520,6 +523,9 @@ static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 				ret = fi_av_remove(av->shm_rdm_av, &av_entry->shm_rdm_addr, 1, flags);
 				if (ret)
 					goto err_free_av_entry;
+
+				assert(av_entry->shm_rdm_addr < EFA_SHM_MAX_AV_COUNT);
+				av->shm_rdm_addr_map[av_entry->shm_rdm_addr] = FI_ADDR_UNSPEC;
 			}
 			HASH_DEL(av->av_map, av_entry);
 			free(av_entry);
@@ -624,7 +630,7 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	struct util_av_attr util_attr;
 	size_t universe_size;
 	struct fi_av_attr av_attr;
-	int ret, retv;
+	int i, ret, retv;
 
 	if (!attr)
 		return -FI_EINVAL;
@@ -684,9 +690,13 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 				goto err_close_rdm_av;
 			}
 			av_attr.count = rxr_env.shm_av_size;
+			assert(av_attr.type == FI_AV_TABLE);
 			ret = fi_av_open(rxr_domain->shm_domain, &av_attr, &av->shm_rdm_av, context);
 			if (ret)
 				goto err_close_rdm_av;
+
+			for (i = 0; i < EFA_SHM_MAX_AV_COUNT; ++i)
+				av->shm_rdm_addr_map[i] = FI_ADDR_UNSPEC;
 		}
 	} else {
 		// Currently the domain is set to efa for only dgram
