@@ -64,31 +64,6 @@ extern struct fi_ops_ep sock_ep_ops;
 extern struct fi_ops sock_ep_fi_ops;
 extern struct fi_ops_ep sock_ctx_ep_ops;
 
-extern const struct fi_domain_attr sock_domain_attr;
-extern const struct fi_fabric_attr sock_fabric_attr;
-
-const struct fi_tx_attr sock_stx_attr = {
-	.caps = SOCK_EP_RDM_CAP_BASE,
-	.mode = SOCK_MODE,
-	.op_flags = FI_TRANSMIT_COMPLETE,
-	.msg_order = SOCK_EP_MSG_ORDER,
-	.inject_size = SOCK_EP_MAX_INJECT_SZ,
-	.size = SOCK_EP_TX_SZ,
-	.iov_limit = SOCK_EP_MAX_IOV_LIMIT,
-	.rma_iov_limit = SOCK_EP_MAX_IOV_LIMIT,
-};
-
-const struct fi_rx_attr sock_srx_attr = {
-	.caps = SOCK_EP_RDM_CAP_BASE,
-	.mode = SOCK_MODE,
-	.op_flags = 0,
-	.msg_order = SOCK_EP_MSG_ORDER,
-	.comp_order = SOCK_EP_COMP_ORDER,
-	.total_buffered_recv = 0,
-	.size = SOCK_EP_MAX_MSG_SZ,
-	.iov_limit = SOCK_EP_MAX_IOV_LIMIT,
-};
-
 static void sock_tx_ctx_close(struct sock_tx_ctx *tx_ctx)
 {
 	if (tx_ctx->comp.send_cq)

@@ -5,6 +5,7 @@ if HAVE_SOCKETS
 AM_CPPFLAGS += -I$(top_srcdir)/prov/sockets/include -I$(top_srcdir)/prov/sockets
 
 _sockets_files =				\
+	prov/sockets/src/sock_attr.c		\
 	prov/sockets/src/sock_av.c		\
 	prov/sockets/src/sock_dom.c		\
 	prov/sockets/src/sock_mr.c		\

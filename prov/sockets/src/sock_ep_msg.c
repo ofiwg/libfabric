@@ -59,48 +59,12 @@
 #define SOCK_LOG_DBG(...) _SOCK_LOG_DBG(FI_LOG_EP_CTRL, __VA_ARGS__)
 #define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_EP_CTRL, __VA_ARGS__)
 
-static const struct fi_ep_attr sock_msg_ep_attr = {
-	.type = FI_EP_MSG,
-	.protocol = FI_PROTO_SOCK_TCP,
-	.protocol_version = SOCK_WIRE_PROTO_VERSION,
-	.max_msg_size = SOCK_EP_MAX_MSG_SZ,
-	.msg_prefix_size = SOCK_EP_MSG_PREFIX_SZ,
-	.max_order_raw_size = SOCK_EP_MAX_ORDER_RAW_SZ,
-	.max_order_war_size = SOCK_EP_MAX_ORDER_WAR_SZ,
-	.max_order_waw_size = SOCK_EP_MAX_ORDER_WAW_SZ,
-	.mem_tag_format = SOCK_EP_MEM_TAG_FMT,
-	.tx_ctx_cnt = SOCK_EP_MAX_TX_CNT,
-	.rx_ctx_cnt = SOCK_EP_MAX_RX_CNT,
-};
-
-static const struct fi_tx_attr sock_msg_tx_attr = {
-	.caps = SOCK_EP_MSG_CAP_BASE,
-	.mode = SOCK_MODE,
-	.op_flags = SOCK_EP_DEFAULT_OP_FLAGS,
-	.msg_order = SOCK_EP_MSG_ORDER,
-	.inject_size = SOCK_EP_MAX_INJECT_SZ,
-	.size = SOCK_EP_TX_SZ,
-	.iov_limit = SOCK_EP_MAX_IOV_LIMIT,
-	.rma_iov_limit = SOCK_EP_MAX_IOV_LIMIT,
-};
-
-static const struct fi_rx_attr sock_msg_rx_attr = {
-	.caps = SOCK_EP_MSG_CAP_BASE,
-	.mode = SOCK_MODE,
-	.op_flags = 0,
-	.msg_order = SOCK_EP_MSG_ORDER,
-	.comp_order = SOCK_EP_COMP_ORDER,
-	.total_buffered_recv = SOCK_EP_MAX_BUFF_RECV,
-	.size = SOCK_EP_RX_SZ,
-	.iov_limit = SOCK_EP_MAX_IOV_LIMIT,
-};
-
 static int sock_msg_verify_rx_attr(const struct fi_rx_attr *attr)
 {
 	if (!attr)
 		return 0;
 
-	if ((attr->caps | SOCK_EP_MSG_CAP) != SOCK_EP_MSG_CAP)
+	if ((attr->caps | sock_msg_rx_attr.caps) != sock_msg_rx_attr.caps)
 		return -FI_ENODATA;
 
 	if ((attr->msg_order | SOCK_EP_MSG_ORDER) != SOCK_EP_MSG_ORDER)
@@ -127,7 +91,7 @@ static int sock_msg_verify_tx_attr(const struct fi_tx_attr *attr)
 	if (!attr)
 		return 0;
 
-	if ((attr->caps | SOCK_EP_MSG_CAP) != SOCK_EP_MSG_CAP)
+	if ((attr->caps | sock_msg_tx_attr.caps) != sock_msg_tx_attr.caps)
 		return -FI_ENODATA;
 
 	if ((attr->msg_order | SOCK_EP_MSG_ORDER) != SOCK_EP_MSG_ORDER)
@@ -200,52 +164,6 @@ int sock_msg_verify_ep_attr(const struct fi_ep_attr *ep_attr,
 	if (sock_msg_verify_tx_attr(tx_attr) || sock_msg_verify_rx_attr(rx_attr))
 		return -FI_ENODATA;
 
-	return 0;
-}
-
-int sock_msg_fi_info(uint32_t version, void *src_addr, void *dest_addr,
-		     const struct fi_info *hints, struct fi_info **info)
-{
-	*info = sock_fi_info(version, FI_EP_MSG, hints, src_addr, dest_addr);
-	if (!*info)
-		return -FI_ENOMEM;
-
-	*(*info)->tx_attr = sock_msg_tx_attr;
-	(*info)->tx_attr->size = sock_get_tx_size(sock_msg_tx_attr.size);
-	*(*info)->rx_attr = sock_msg_rx_attr;
-	(*info)->rx_attr->size = sock_get_tx_size(sock_msg_rx_attr.size);
-	*(*info)->ep_attr = sock_msg_ep_attr;
-
-	if (hints && hints->ep_attr) {
-		if (hints->ep_attr->rx_ctx_cnt)
-			(*info)->ep_attr->rx_ctx_cnt = hints->ep_attr->rx_ctx_cnt;
-		if (hints->ep_attr->tx_ctx_cnt)
-			(*info)->ep_attr->tx_ctx_cnt = hints->ep_attr->tx_ctx_cnt;
-	}
-
-	if (hints && hints->rx_attr) {
-		(*info)->rx_attr->op_flags |= hints->rx_attr->op_flags;
-		if (hints->rx_attr->caps)
-			(*info)->rx_attr->caps = SOCK_EP_MSG_SEC_CAP |
-							hints->rx_attr->caps;
-	}
-
-	if (hints && hints->tx_attr) {
-		(*info)->tx_attr->op_flags |= hints->tx_attr->op_flags;
-		if (hints->tx_attr->caps)
-			(*info)->tx_attr->caps = SOCK_EP_MSG_SEC_CAP |
-							hints->tx_attr->caps;
-	}
-
-	(*info)->caps = SOCK_EP_MSG_CAP |
-		(*info)->rx_attr->caps | (*info)->tx_attr->caps;
-	if (hints && hints->caps) {
-		(*info)->caps = SOCK_EP_MSG_SEC_CAP | hints->caps;
-		(*info)->rx_attr->caps = SOCK_EP_MSG_SEC_CAP |
-			((*info)->rx_attr->caps & (*info)->caps);
-		(*info)->tx_attr->caps = SOCK_EP_MSG_SEC_CAP |
-			((*info)->tx_attr->caps & (*info)->caps);
-	}
 	return 0;
 }
 
@@ -945,8 +863,8 @@ static struct fi_info *sock_ep_msg_get_info(struct sock_pep *pep,
 	struct fi_info hints;
 	uint64_t requested, supported;
 
-	requested = req->caps & SOCK_EP_MSG_PRI_CAP;
-	supported = pep->info.caps & SOCK_EP_MSG_PRI_CAP;
+	requested = req->caps & sock_msg_info.caps;
+	supported = pep->info.caps & sock_msg_info.caps;
 	supported = (supported & FI_RMA) ?
 		(supported | FI_REMOTE_READ | FI_REMOTE_WRITE) : supported;
 	if ((requested | supported) != supported)
