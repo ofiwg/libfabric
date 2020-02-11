@@ -8,8 +8,7 @@ AM_CPPFLAGS += \
 	-I$(top_srcdir)/prov/cxi/include \
 	-I$(top_srcdir)/prov/cxi \
 	-I$(srcdir)/../cxi-driver/include \
-	-I$(srcdir)/../nic-emu \
-	-I$(srcdir)/../cassini-headers/src/csrdef/ \
+	-I$(srcdir)/../cassini-headers/install/include \
 	-D__user=
 
 _cxi_files = \
