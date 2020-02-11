@@ -131,7 +131,7 @@ static int tcpx_ep_enable_xfers(struct tcpx_ep *ep)
 		goto unlock;
 	}
 	ep->progress_func = tcpx_ep_progress;
-	ret = fi_fd_nonblock(ep->conn_fd);
+	ret = fi_fd_nonblock(ep->sock);
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"failed to set socket to nonblocking\n");
@@ -142,7 +142,7 @@ static int tcpx_ep_enable_xfers(struct tcpx_ep *ep)
 
 	if (ep->util_ep.rx_cq->wait) {
 		ret = ofi_wait_fd_add(ep->util_ep.rx_cq->wait,
-				      ep->conn_fd, OFI_EPOLL_IN,
+				      ep->sock, OFI_EPOLL_IN,
 				      tcpx_try_func, (void *) &ep->util_ep,
 				      NULL);
 	}
@@ -160,7 +160,7 @@ static int proc_conn_resp(struct tcpx_cm_context *cm_ctx,
 	ssize_t len;
 	int ret = FI_SUCCESS;
 
-	ret = rx_cm_data(ep->conn_fd, &conn_resp, ofi_ctrl_connresp, cm_ctx);
+	ret = rx_cm_data(ep->sock, &conn_resp, ofi_ctrl_connresp, cm_ctx);
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"Failed to receive connect response\n");
@@ -207,7 +207,7 @@ static void client_recv_connresp(struct util_wait *wait,
 	assert(cm_ctx->fid->fclass == FI_CLASS_EP);
 	ep = container_of(cm_ctx->fid, struct tcpx_ep, util_ep.ep_fid.fid);
 
-	ret = ofi_wait_fd_del(wait, ep->conn_fd);
+	ret = ofi_wait_fd_del(wait, ep->sock);
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"Could not remove fd from wait\n");
@@ -254,7 +254,7 @@ static void server_send_cm_accept(struct util_wait *wait,
 	ep = container_of(cm_ctx->fid, struct tcpx_ep, util_ep.ep_fid.fid);
 
 	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "Send connect (accept) response\n");
-	ret = tx_cm_data(ep->conn_fd, ofi_ctrl_connresp, cm_ctx);
+	ret = tx_cm_data(ep->sock, ofi_ctrl_connresp, cm_ctx);
 	if (ret)
 		goto err;
 
@@ -264,7 +264,7 @@ static void server_send_cm_accept(struct util_wait *wait,
 	if (ret < 0)
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
 
-	ret = ofi_wait_fd_del(wait, ep->conn_fd);
+	ret = ofi_wait_fd_del(wait, ep->sock);
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"Could not remove fd from wait\n");
@@ -302,7 +302,7 @@ static void server_recv_connreq(struct util_wait *wait,
 	handle  = container_of(cm_ctx->fid, struct tcpx_conn_handle, handle);
 
 	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "Server receive connect request\n");
-	ret = rx_cm_data(handle->conn_fd, &conn_req, ofi_ctrl_connreq, cm_ctx);
+	ret = rx_cm_data(handle->sock, &conn_req, ofi_ctrl_connreq, cm_ctx);
 	if (ret)
 		goto err1;
 
@@ -320,7 +320,7 @@ static void server_recv_connreq(struct util_wait *wait,
 	if (!cm_entry->info->dest_addr)
 		goto err3;
 
-	ret = ofi_getpeername(handle->conn_fd, cm_entry->info->dest_addr, &len);
+	ret = ofi_getpeername(handle->sock, cm_entry->info->dest_addr, &len);
 	if (ret)
 		goto err3;
 
@@ -334,7 +334,7 @@ static void server_recv_connreq(struct util_wait *wait,
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
 		goto err3;
 	}
-	ret = ofi_wait_fd_del(wait, handle->conn_fd);
+	ret = ofi_wait_fd_del(wait, handle->sock);
 	if (ret)
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"fd deletion from ofi_wait failed\n");
@@ -346,8 +346,8 @@ err3:
 err2:
 	free(cm_entry);
 err1:
-	ofi_wait_fd_del(wait, handle->conn_fd);
-	ofi_close_socket(handle->conn_fd);
+	ofi_wait_fd_del(wait, handle->sock);
+	ofi_close_socket(handle->sock);
 	free(cm_ctx);
 	free(handle);
 }
@@ -366,23 +366,23 @@ static void client_send_connreq(struct util_wait *wait,
 	ep = container_of(cm_ctx->fid, struct tcpx_ep, util_ep.ep_fid.fid);
 
 	len = sizeof(status);
-	ret = getsockopt(ep->conn_fd, SOL_SOCKET, SO_ERROR, (char *) &status, &len);
+	ret = getsockopt(ep->sock, SOL_SOCKET, SO_ERROR, (char *) &status, &len);
 	if (ret < 0 || status) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "connection failure\n");
 		ret = (ret < 0)? -ofi_sockerr() : status;
 		goto err;
 	}
 
-	ret = tx_cm_data(ep->conn_fd, ofi_ctrl_connreq, cm_ctx);
+	ret = tx_cm_data(ep->sock, ofi_ctrl_connreq, cm_ctx);
 	if (ret)
 		goto err;
 
-	ret = ofi_wait_fd_del(wait, ep->conn_fd);
+	ret = ofi_wait_fd_del(wait, ep->sock);
 	if (ret)
 		goto err;
 
 	cm_ctx->type = CLIENT_RECV_CONNRESP;
-	ret = ofi_wait_fd_add(wait, ep->conn_fd, OFI_EPOLL_IN,
+	ret = ofi_wait_fd_add(wait, ep->sock, OFI_EPOLL_IN,
 			      tcpx_eq_wait_try_func, NULL, cm_ctx);
 	if (ret)
 		goto err;
@@ -431,7 +431,7 @@ static void server_sock_accept(struct util_wait *wait,
 	if (!rx_req_cm_ctx)
 		goto err2;
 
-	handle->conn_fd = sock;
+	handle->sock = sock;
 	handle->handle.fclass = FI_CLASS_CONNREQ;
 	handle->pep = pep;
 	rx_req_cm_ctx->fid = &handle->handle;

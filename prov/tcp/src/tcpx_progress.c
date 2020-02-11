@@ -585,7 +585,7 @@ static inline int tcpx_get_next_rx_hdr(struct tcpx_ep *ep)
 	if (ep->cur_rx_msg.hdr_len == ep->cur_rx_msg.done_len)
 		return FI_SUCCESS;
 
-	ret = tcpx_comm_recv_hdr(ep->conn_fd, &ep->stage_buf, &ep->cur_rx_msg);
+	ret = tcpx_comm_recv_hdr(ep->sock, &ep->stage_buf, &ep->cur_rx_msg);
 	if (ret)
 		return ret;
 
@@ -598,7 +598,7 @@ static void tcpx_process_rx_msg(struct tcpx_ep *ep)
 	int ret;
 
 	if (!ep->cur_rx_entry && (ep->stage_buf.len == ep->stage_buf.off)) {
-		ret = tcpx_read_to_buffer(ep->conn_fd, &ep->stage_buf);
+		ret = tcpx_read_to_buffer(ep->sock, &ep->stage_buf);
 		if (ret)
 			goto err;
 	}
@@ -679,7 +679,7 @@ int tcpx_try_func(void *util_ep)
 	return FI_SUCCESS;
 
 epoll_mod:
-	ret = ofi_epoll_mod(wait_fd->epoll_fd, ep->conn_fd, events, NULL);
+	ret = ofi_epoll_mod(wait_fd->epoll_fd, ep->sock, events, NULL);
 	if (ret)
 		FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
 			"invalid op type\n");

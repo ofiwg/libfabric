@@ -121,7 +121,7 @@ struct tcpx_port_range {
 struct tcpx_conn_handle {
 	struct fid		handle;
 	struct tcpx_pep		*pep;
-	SOCKET			conn_fd;
+	SOCKET			sock;
 	bool			endian_match;
 };
 
@@ -191,7 +191,7 @@ struct stage_buf {
 
 struct tcpx_ep {
 	struct util_ep		util_ep;
-	SOCKET			conn_fd;
+	SOCKET			sock;
 	struct tcpx_cur_rx_msg	cur_rx_msg;
 	struct tcpx_xfer_entry	*cur_rx_entry;
 	tcpx_rx_process_fn_t 	cur_rx_proc_fn;
