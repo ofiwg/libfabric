@@ -36,6 +36,16 @@
 #include "smr.h"
 #include "smr_signal.h"
 
+extern struct sigaction *old_action;
+
+struct smr_env smr_env = {
+	.disable_cma	= 0,
+};
+
+static void smr_init_env(void)
+{
+	fi_param_get_bool(&smr_prov, "disable_cma", &smr_env.disable_cma);
+}
 
 static void smr_resolve_addr(const char *node, const char *service,
 			     char **addr, size_t *addrlen)
@@ -63,10 +73,14 @@ static void smr_resolve_addr(const char *node, const char *service,
 	(*addr)[*addrlen - 1]  = '\0';
 }
 
-static int smr_get_ptrace_scope(void)
+static void smr_check_ptrace_scope(void)
 {
+	static bool init = 0;
 	FILE *file;
 	int scope, ret;
+
+	if (smr_env.disable_cma || init)
+		return;
 
 	scope = 0;
 	file = fopen("/proc/sys/kernel/yama/ptrace_scope", "r");
@@ -75,16 +89,21 @@ static int smr_get_ptrace_scope(void)
 		if (ret != 1) {
 			FI_WARN(&smr_prov, FI_LOG_CORE,
 				"Error getting value from ptrace_scope\n");
-			return -FI_EINVAL;
+			scope = 1;
+			goto out;
 		}
 		ret = fclose(file);
 		if (ret) {
 			FI_WARN(&smr_prov, FI_LOG_CORE,
 				"Error closing ptrace_scope file\n");
-			return -FI_EINVAL;
+			scope = 1;
+			goto out;
 		}
 	}
-	return scope;
+
+out:
+	smr_env.disable_cma = scope;
+	init = 1;
 }
 
 static int smr_getinfo(uint32_t version, const char *node, const char *service,
@@ -94,19 +113,18 @@ static int smr_getinfo(uint32_t version, const char *node, const char *service,
 	struct fi_info *cur;
 	uint64_t mr_mode, msg_order;
 	int fast_rma;
-	int ptrace_scope, ret;
+	int ret;
 
 	mr_mode = hints && hints->domain_attr ? hints->domain_attr->mr_mode :
 						FI_MR_VIRT_ADDR;
 	msg_order = hints && hints->tx_attr ? hints->tx_attr->msg_order : 0;
+	smr_check_ptrace_scope();
 	fast_rma = smr_fast_rma_enabled(mr_mode, msg_order);
 
 	ret = util_getinfo(&smr_util_prov, version, node, service, flags,
 			   hints, info);
 	if (ret)
 		return ret;
-
-	ptrace_scope = smr_get_ptrace_scope();
 
 	for (cur = *info; cur; cur = cur->next) {
 		if (!(flags & FI_SOURCE) && !cur->dest_addr)
@@ -128,7 +146,7 @@ static int smr_getinfo(uint32_t version, const char *node, const char *service,
 			cur->ep_attr->max_order_waw_size = 0;
 			cur->ep_attr->max_order_war_size = 0;
 		}
-		if (ptrace_scope != 0)
+		if (smr_env.disable_cma)
 			cur->ep_attr->max_msg_size = SMR_INJECT_SIZE;
 	}
 	return 0;
@@ -137,6 +155,7 @@ static int smr_getinfo(uint32_t version, const char *node, const char *service,
 static void smr_fini(void)
 {
 	smr_cleanup();
+	free(old_action);
 }
 
 struct fi_provider smr_prov = {
@@ -156,8 +175,17 @@ struct util_prov smr_util_prov = {
 
 SHM_INI
 {
+	fi_param_define(&smr_prov, "disable_cma", FI_PARAM_BOOL,
+			"Disable use of CMA (Cross Memory Attach) for \
+			copying data directly between processes (default: no)");
+	smr_init_env();
 
+	old_action = calloc(SIGRTMIN, sizeof(*old_action));
+	if (!old_action)
+		return NULL;
 	/* Signal handlers to cleanup tmpfs files on an unclean shutdown */
+	assert(SIGBUS < SIGRTMIN && SIGSEGV < SIGRTMIN
+	       && SIGTERM < SIGRTMIN && SIGINT < SIGRTMIN);
 	smr_reg_sig_hander(SIGBUS);
 	smr_reg_sig_hander(SIGSEGV);
 	smr_reg_sig_hander(SIGTERM);

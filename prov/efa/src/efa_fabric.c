@@ -53,6 +53,9 @@
 #include "efa_ib.h"
 #include "efa_io_defs.h"
 #include "efa_verbs.h"
+#if HAVE_EFA_DL
+#include <ofi_shm.h>
+#endif
 
 #define EFA_FABRIC_PREFIX "EFA-"
 

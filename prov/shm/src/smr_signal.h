@@ -36,7 +36,7 @@
 #include <signal.h>
 #include <ofi_shm.h>
 
-struct sigaction old_action;
+struct sigaction *old_action;
 
 static void smr_handle_signal(int signum, siginfo_t *info, void *ucontext)
 {
@@ -49,7 +49,7 @@ static void smr_handle_signal(int signum, siginfo_t *info, void *ucontext)
 	}
 
 	/* Register the original signum handler, SIG_DFL or otherwise */
-	ret = sigaction(signum, &old_action, NULL);
+	ret = sigaction(signum, &old_action[signum], NULL);
 	if (ret)
 		return;
 
@@ -66,7 +66,7 @@ static void smr_reg_sig_hander(int signum)
 	action.sa_sigaction = smr_handle_signal;
 	action.sa_flags |= SA_SIGINFO;
 
-	ret = sigaction(signum, &action, &old_action);
+	ret = sigaction(signum, &action, &old_action[signum]);
 	if (ret)
 		FI_WARN(&smr_prov, FI_LOG_FABRIC,
 			"Unable to register handler for sig %d\n", signum);
