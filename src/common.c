@@ -987,10 +987,9 @@ static void ofi_epoll_process_work_item_list(struct fi_epoll *ep)
 		case EPOLL_CTL_MOD:
 			for (i = 0; i < ep->nfds; i++) {
 				if (ep->fds[i].fd == item->fd) {
-
 					ep->fds[i].events = item->events;
 					ep->fds[i].revents &= item->events;
-					ep->context = item->context;
+					ep->context[i] = item->context;
 					break;
 				}
 			}
@@ -1028,6 +1027,7 @@ int ofi_epoll_wait(struct fi_epoll *ep, void **contexts, int max_contexts,
 
 		fastlock_release(&ep->lock);
 
+		/* Index 0 is the internal signaling fd, skip it */
 		for (i = ep->index; i < ep->nfds && found < max_contexts; i++) {
 			if (ep->fds[i].revents && i) {
 				contexts[found++] = ep->context[i];
