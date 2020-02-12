@@ -1141,7 +1141,7 @@ vrb_eq_sread(struct fid_eq *eq_fid, uint32_t *event,
 		void *buf, size_t len, int timeout, uint64_t flags)
 {
 	struct vrb_eq *eq;
-	struct epoll_event events[2];
+	void *contexts;
 	ssize_t ret;
 
 	eq = container_of(eq_fid, struct vrb_eq, eq_fid.fid);
@@ -1151,7 +1151,7 @@ vrb_eq_sread(struct fid_eq *eq_fid, uint32_t *event,
 		if (ret && (ret != -FI_EAGAIN))
 			return ret;
 
-		ret = epoll_wait(eq->epfd, events, 2, timeout);
+		ret = ofi_epoll_wait(eq->epollfd, &contexts, 1, timeout);
 		if (ret == 0)
 			return -FI_EAGAIN;
 		else if (ret < 0)
@@ -1180,16 +1180,17 @@ static struct fi_ops_eq vrb_eq_ops = {
 static int vrb_eq_control(fid_t fid, int command, void *arg)
 {
 	struct vrb_eq *eq;
-	int ret = 0;
+	int ret;
 
 	eq = container_of(fid, struct vrb_eq, eq_fid.fid);
 	switch (command) {
 	case FI_GETWAIT:
-		if (!eq->epfd) {
-			ret = -FI_ENODATA;
-			break;
-		}
-		*(int *) arg = eq->epfd;
+#ifdef HAVE_EPOLL
+		*(int *) arg = eq->epollfd;
+		ret = 0;
+#else
+		ret = -FI_ENOSYS;
+#endif
 		break;
 	default:
 		ret = -FI_ENOSYS;
@@ -1215,7 +1216,7 @@ static int vrb_eq_close(fid_t fid)
 	if (eq->channel)
 		rdma_destroy_event_channel(eq->channel);
 
-	close(eq->epfd);
+	ofi_epoll_close(eq->epollfd);
 
 	while (!dlistfd_empty(&eq->list_head)) {
 		entry = container_of(eq->list_head.list.next,
@@ -1247,7 +1248,6 @@ int vrb_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		   struct fid_eq **eq, void *context)
 {
 	struct vrb_eq *_eq;
-	struct epoll_event event;
 	int ret;
 
 	_eq = calloc(1, sizeof *_eq);
@@ -1272,17 +1272,12 @@ int vrb_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		goto err1;
 	}
 
-	_eq->epfd = epoll_create1(0);
-	if (_eq->epfd < 0) {
-		ret = -errno;
+	ret = ofi_epoll_create(&_eq->epollfd);
+	if (ret)
 		goto err2;
-	}
 
-	memset(&event, 0, sizeof(event));
-	event.events = EPOLLIN;
-
-	if (epoll_ctl(_eq->epfd, EPOLL_CTL_ADD,
-		      _eq->list_head.signal.fd[FI_READ_FD], &event)) {
+	if (ofi_epoll_add(_eq->epollfd, _eq->list_head.signal.fd[FI_READ_FD],
+			  OFI_EPOLL_IN, NULL)) {
 		ret = -errno;
 		goto err3;
 	}
@@ -1301,7 +1296,8 @@ int vrb_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		if (ret)
 			goto err4;
 
-		if (epoll_ctl(_eq->epfd, EPOLL_CTL_ADD, _eq->channel->fd, &event)) {
+		if (ofi_epoll_add(_eq->epollfd, _eq->channel->fd, OFI_EPOLL_IN,
+				  NULL)) {
 			ret = -errno;
 			goto err4;
 		}
@@ -1324,7 +1320,7 @@ err4:
 	if (_eq->channel)
 		rdma_destroy_event_channel(_eq->channel);
 err3:
-	close(_eq->epfd);
+	ofi_epoll_close(_eq->epollfd);
 err2:
 	dlistfd_head_free(&_eq->list_head);
 err1:
