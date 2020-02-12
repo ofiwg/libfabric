@@ -78,6 +78,11 @@ This distribution of libfabric contains the following providers
   endpoints emulated over MSG endpoints of a core provider.
   See [`fi_rxm`(7)](fi_rxm.7.html) for more information.
 
+*RxD*
+: The RxD provider (ofi_rxd) is a utility provider that supports RDM
+  endpoints emulated over DGRAM endpoints of a core provider.
+  See [`fi_rxd`(7)](fi_rxd.7.html) for more information.
+
 ## Special providers
 
 *Hook*
