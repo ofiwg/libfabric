@@ -64,6 +64,13 @@ This distribution of libfabric contains the following providers
   hardware interface for inter-instance communication on EC2.
   See [`fi_efa`(7)](fi_efa.7.html) for more information.
 
+*SHM*
+: A provider for intranode communication using shared memory.
+  The provider makes use of the Linux kernel feature Cross Memory
+  Attach (CMA) which allows processes to have full access to another
+  process' address space.
+  See [`fi_shm`(7)](fi_shm.7.html) for more information. 
+
 ## Utility providers
 
 *RxM*
