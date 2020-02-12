@@ -130,8 +130,8 @@ static int multi_setup_fabric(int argc, char **argv)
 		goto err;
 	}
 
-	pm_job.name_len = len;
-	pm_job.names = malloc(len * pm_job.num_ranks);
+	pm_job.name_len = 256;
+	pm_job.names = malloc(pm_job.name_len * pm_job.num_ranks);
 	if (!pm_job.names) {
 		FT_ERR("error allocating memory for address exchange\n");
 		ret = -FI_ENOMEM;
@@ -154,12 +154,14 @@ static int multi_setup_fabric(int argc, char **argv)
 		goto err;
 	}
 
-	ret = fi_av_insert(av, pm_job.names, pm_job.num_ranks,
-			   pm_job.fi_addrs, 0, NULL);
-	if (ret != pm_job.num_ranks) {
-		FT_ERR("unable to insert all addresses into AV table\n");
-		ret = -1;
-		goto err;
+	for (i = 0; i < pm_job.num_ranks; i++) {
+		ret = fi_av_insert(av, (char*)pm_job.names + i * pm_job.name_len, 1,
+			   &pm_job.fi_addrs[i], 0, NULL);
+		if (ret != 1) {
+			FT_ERR("unable to insert all addresses into AV table\n");
+			ret = -1;
+			goto err;
+		}
 	}
 
 	pm_job.multi_iovs = malloc(sizeof(*(pm_job.multi_iovs)) * pm_job.num_ranks);
@@ -381,18 +383,19 @@ int send_recv_barrier(int sync)
 {
 	int ret, i;
 
-	for (i = 0; i < pm_job.num_ranks; i++) {
-		ret = ft_post_tx_buf(ep, pm_job.fi_addrs[i], 0, 
-				     NO_CQ_DATA, &barrier_tx_ctx[i],
-		                     tx_buf, mr_desc, 0);
-		if (ret)
-			return ret;
-	}
 	for(i = 0; i < pm_job.num_ranks; i++) {
 
 		ret = ft_post_rx_buf(ep, opts.transfer_size,
 			     &barrier_rx_ctx[i],
 			     rx_buf, mr_desc, 0);
+		if (ret)
+			return ret;
+	}
+
+	for (i = 0; i < pm_job.num_ranks; i++) {
+		ret = ft_post_tx_buf(ep, pm_job.fi_addrs[i], 0, 
+				     NO_CQ_DATA, &barrier_tx_ctx[i],
+		                     tx_buf, mr_desc, 0);
 		if (ret)
 			return ret;
 	}
