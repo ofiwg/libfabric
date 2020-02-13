@@ -60,8 +60,12 @@
 
 #define EFA_DOMAIN_CAPS (FI_LOCAL_COMM | FI_REMOTE_COMM)
 
-#define EFA_RDM_CAPS (FI_MSG | FI_RECV | FI_SEND | FI_SOURCE | EFA_DOMAIN_CAPS)
-#define EFA_DGRM_CAPS (FI_MSG | FI_RECV | FI_SEND | FI_SOURCE | EFA_DOMAIN_CAPS)
+#define EFA_RDM_TX_CAPS (OFI_TX_MSG_CAPS)
+#define EFA_RDM_RX_CAPS (OFI_RX_MSG_CAPS | FI_SOURCE)
+#define EFA_DGRM_TX_CAPS (OFI_TX_MSG_CAPS)
+#define EFA_DGRM_RX_CAPS (OFI_RX_MSG_CAPS | FI_SOURCE)
+#define EFA_RDM_CAPS (EFA_RDM_TX_CAPS | EFA_RDM_RX_CAPS | EFA_DOMAIN_CAPS)
+#define EFA_DGRM_CAPS (EFA_DGRM_TX_CAPS | EFA_DGRM_RX_CAPS | EFA_DOMAIN_CAPS)
 
 #define EFA_TX_OP_FLAGS (FI_TRANSMIT_COMPLETE)
 
@@ -120,6 +124,7 @@ const struct fi_ep_attr efa_ep_attr = {
 };
 
 const struct fi_rx_attr efa_dgrm_rx_attr = {
+	.caps			= EFA_DGRM_RX_CAPS,
 	.mode			= FI_MSG_PREFIX | EFA_RX_MODE,
 	.op_flags		= EFA_RX_DGRM_OP_FLAGS,
 	.msg_order		= EFA_MSG_ORDER,
@@ -129,6 +134,7 @@ const struct fi_rx_attr efa_dgrm_rx_attr = {
 };
 
 const struct fi_rx_attr efa_rdm_rx_attr = {
+	.caps			= EFA_RDM_RX_CAPS,
 	.mode			= EFA_RX_MODE,
 	.op_flags		= EFA_RX_RDM_OP_FLAGS,
 	.msg_order		= EFA_MSG_ORDER,
@@ -138,6 +144,7 @@ const struct fi_rx_attr efa_rdm_rx_attr = {
 };
 
 const struct fi_tx_attr efa_dgrm_tx_attr = {
+	.caps			= EFA_DGRM_TX_CAPS,
 	.mode			= FI_MSG_PREFIX,
 	.op_flags		= EFA_TX_OP_FLAGS,
 	.msg_order		= EFA_MSG_ORDER,
@@ -147,6 +154,7 @@ const struct fi_tx_attr efa_dgrm_tx_attr = {
 };
 
 const struct fi_tx_attr efa_rdm_tx_attr = {
+	.caps			= EFA_RDM_TX_CAPS,
 	.mode			= 0,
 	.op_flags		= EFA_TX_OP_FLAGS,
 	.msg_order		= EFA_MSG_ORDER,
@@ -632,8 +640,6 @@ static int efa_alloc_info(struct efa_context *ctx, struct fi_info **info,
 
 	fi->ep_attr->protocol	= FI_PROTO_EFA;
 	fi->ep_attr->type	= ep_dom->type;
-	fi->tx_attr->caps	= ep_dom->caps;
-	fi->rx_attr->caps	= ep_dom->caps;
 
 	ret = efa_get_device_attrs(ctx, fi);
 	if (ret)

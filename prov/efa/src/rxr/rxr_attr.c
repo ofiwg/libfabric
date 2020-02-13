@@ -37,10 +37,10 @@
 const uint32_t rxr_poison_value = 0xdeadbeef;
 #endif
 
-#define RXR_EP_CAPS (FI_MSG | FI_TAGGED | FI_RECV | FI_SEND | FI_READ \
-		     | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE \
-		     | FI_DIRECTED_RECV | FI_SOURCE | FI_MULTI_RECV \
-		     | FI_RMA | FI_LOCAL_COMM | FI_REMOTE_COMM)
+#define RXR_TX_CAPS (OFI_TX_MSG_CAPS | FI_TAGGED | OFI_TX_RMA_CAPS)
+#define RXR_RX_CAPS (OFI_RX_MSG_CAPS | FI_TAGGED | OFI_RX_RMA_CAPS | \
+		     FI_SOURCE | FI_MULTI_RECV | FI_DIRECTED_RECV)
+#define RXR_DOM_CAPS (FI_LOCAL_COMM | FI_REMOTE_COMM)
 
 /* TODO: Add support for true FI_DELIVERY_COMPLETE */
 #define RXR_TX_OP_FLAGS (FI_INJECT | FI_COMPLETION | FI_TRANSMIT_COMPLETE | \
@@ -48,7 +48,7 @@ const uint32_t rxr_poison_value = 0xdeadbeef;
 #define RXR_RX_OP_FLAGS (FI_COMPLETION)
 
 struct fi_tx_attr rxr_tx_attr = {
-	.caps = RXR_EP_CAPS,
+	.caps = RXR_TX_CAPS,
 	.msg_order = FI_ORDER_SAS,
 	.op_flags = RXR_TX_OP_FLAGS,
 	.comp_order = FI_ORDER_NONE,
@@ -58,7 +58,7 @@ struct fi_tx_attr rxr_tx_attr = {
 };
 
 struct fi_rx_attr rxr_rx_attr = {
-	.caps = RXR_EP_CAPS,
+	.caps = RXR_RX_CAPS,
 	.msg_order = FI_ORDER_SAS,
 	.op_flags = RXR_RX_OP_FLAGS,
 	.comp_order = FI_ORDER_NONE,
@@ -95,7 +95,7 @@ struct fi_domain_attr rxr_domain_attr = {
 	.max_ep_tx_ctx = 1,
 	.max_ep_rx_ctx = 1,
 	.cq_data_size = RXR_CQ_DATA_SIZE,
-	.caps = FI_LOCAL_COMM | FI_REMOTE_COMM
+	.caps = RXR_DOM_CAPS
 };
 
 struct fi_fabric_attr rxr_fabric_attr = {
@@ -103,7 +103,7 @@ struct fi_fabric_attr rxr_fabric_attr = {
 };
 
 struct fi_info rxr_info = {
-	.caps = RXR_EP_CAPS,
+	.caps = RXR_TX_CAPS | RXR_RX_CAPS | RXR_DOM_CAPS,
 	.addr_format = FI_FORMAT_UNSPEC,
 	.tx_attr = &rxr_tx_attr,
 	.rx_attr = &rxr_rx_attr,
