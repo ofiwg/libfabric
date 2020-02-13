@@ -126,6 +126,8 @@ int rxr_av_insert_rdm_addr(struct rxr_av *av, const void *addr,
 			" shm_rdm_fiaddr = %" PRIu64 "\n", smr_name, *(uint64_t *)addr, *rdm_fiaddr, shm_fiaddr);
 		av_entry->local_mapping = 1;
 		av_entry->shm_rdm_addr = shm_fiaddr;
+		assert(av_entry->shm_rdm_addr < RXR_SHM_MAX_AV_COUNT);
+		av->shm_rdm_addr_map[shm_fiaddr] = av_entry->rdm_addr;
 
 		/*
 		 * Walk through all the EPs that bound to the AV,
@@ -259,6 +261,9 @@ static int rxr_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 			ret = fi_av_remove(av->shm_rdm_av, &av_entry->shm_rdm_addr, 1, flags);
 			if (ret)
 				break;
+
+			assert(av_entry->shm_rdm_addr < RXR_SHM_MAX_AV_COUNT);
+			av->shm_rdm_addr_map[av_entry->shm_rdm_addr] = FI_ADDR_UNSPEC;
 		}
 
 		if (av_entry) {

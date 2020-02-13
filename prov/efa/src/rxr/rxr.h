@@ -329,6 +329,7 @@ struct rxr_av {
 	struct util_av util_av;
 	struct fid_av *rdm_av;
 	struct fid_av *shm_rdm_av;
+	fi_addr_t shm_rdm_addr_map[RXR_SHM_MAX_AV_COUNT];
 	struct rxr_av_entry *av_map;
 
 	int rdm_av_used;
