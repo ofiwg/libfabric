@@ -370,7 +370,7 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq)
 
 	ret = cxil_map(cxi_cq->domain->dev_if->if_lni,
 		       cxi_cq->evtq_buf, cxi_cq->evtq_buf_len,
-		       CXI_MAP_NTA | CXI_MAP_PIN | CXI_MAP_WRITE,
+		       CXI_MAP_PIN | CXI_MAP_WRITE,
 		       NULL, &cxi_cq->evtq_buf_md);
 	if (ret) {
 		CXIP_LOG_DBG("Unable to MAP MR EVTQ buffer, ret: %d\n",

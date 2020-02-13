@@ -123,7 +123,7 @@ int cxip_get_if(uint32_t nic_addr, struct cxip_if **dev_if)
 
 		ret = cxil_map(if_entry->if_lni, if_entry->evtq_buf,
 			       if_entry->evtq_buf_len,
-			       CXI_MAP_NTA | CXI_MAP_PIN | CXI_MAP_WRITE,
+			       CXI_MAP_PIN | CXI_MAP_WRITE,
 			       NULL, &if_entry->evtq_buf_md);
 		if (ret) {
 			CXIP_LOG_DBG("Unable to MAP MR EVTQ buffer, ret: %d\n",
