@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 Intel Corporation. All rights reserved.
+ * Copyright (c) 2017-2020 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -36,6 +36,49 @@
 #include "tcpx.h"
 
 #define TCPX_DEF_CQ_SIZE (1024)
+
+
+void tcpx_cq_progress(struct util_cq *cq)
+{
+	void *wait_contexts[MAX_EPOLL_EVENTS];
+	struct fid_list_entry *fid_entry;
+	struct util_wait_fd *fdwait;
+	struct dlist_entry *item;
+	struct tcpx_ep *ep;
+	struct fid *fid;
+	int nfds, i;
+
+	fdwait = container_of(cq->wait, struct util_wait_fd, util_wait);
+
+	cq->cq_fastlock_acquire(&cq->ep_list_lock);
+	dlist_foreach(&cq->ep_list, item) {
+		fid_entry = container_of(item, struct fid_list_entry, entry);
+		ep = container_of(fid_entry->fid, struct tcpx_ep,
+				  util_ep.ep_fid.fid);
+		tcpx_try_func(&ep->util_ep);
+		tcpx_progress_tx(ep);
+		if (ep->stage_buf.off != ep->stage_buf.len)
+			tcpx_progress_rx(ep);
+	}
+
+	nfds = ofi_epoll_wait(fdwait->epoll_fd, wait_contexts,
+			      MAX_EPOLL_EVENTS, 0);
+	if (nfds <= 0)
+		goto unlock;
+
+	for (i = 0; i < nfds; i++) {
+		fid = wait_contexts[i];
+		if (fid->fclass != FI_CLASS_EP) {
+			fd_signal_reset(&fdwait->signal);
+			continue;
+		}
+
+		ep = container_of(fid, struct tcpx_ep, util_ep.ep_fid.fid);
+		tcpx_progress_rx(ep);
+	}
+unlock:
+	cq->cq_fastlock_release(&cq->ep_list_lock);
+}
 
 static void tcpx_buf_pools_destroy(struct tcpx_buf_pool *buf_pools)
 {
@@ -242,8 +285,9 @@ err:
 int tcpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq_fid, void *context)
 {
-	int ret;
 	struct tcpx_cq *tcpx_cq;
+	struct fi_cq_attr cq_attr;
+	int ret;
 
 	tcpx_cq = calloc(1, sizeof(*tcpx_cq));
 	if (!tcpx_cq)
@@ -256,8 +300,14 @@ int tcpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	if (ret)
 		goto free_cq;
 
+	if (attr->wait_obj == FI_WAIT_NONE) {
+		cq_attr = *attr;
+		cq_attr.wait_obj = FI_WAIT_FD;
+		attr = &cq_attr;
+	}
+
 	ret = ofi_cq_init(&tcpx_prov, domain, attr, &tcpx_cq->util_cq,
-			  &ofi_cq_progress, context);
+			  &tcpx_cq_progress, context);
 	if (ret)
 		goto destroy_pool;
 

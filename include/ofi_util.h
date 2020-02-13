@@ -415,7 +415,7 @@ int fi_wait_cleanup(struct util_wait *wait);
 struct util_wait_fd {
 	struct util_wait	util_wait;
 	struct fd_signal	signal;
-	fi_epoll_t		epoll_fd;
+	ofi_epoll_t		epoll_fd;
 	struct dlist_entry	fd_list;
 	fastlock_t		lock;
 };

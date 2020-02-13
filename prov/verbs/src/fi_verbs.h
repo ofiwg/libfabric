@@ -48,7 +48,7 @@
 #include <unistd.h>
 #include <assert.h>
 #include <pthread.h>
-#include <sys/epoll.h>
+#include <ofi_epoll.h>
 
 #include <infiniband/ib.h>
 #include <infiniband/verbs.h>
@@ -274,7 +274,7 @@ struct vrb_eq {
 	struct rdma_event_channel *channel;
 	uint64_t		flags;
 	struct fi_eq_err_entry	err;
-	int			epfd;
+	ofi_epoll_t		epollfd;
 
 	struct {
 		/* The connection key map is used during the XRC connection

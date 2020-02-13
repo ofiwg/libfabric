@@ -561,7 +561,7 @@ static int udpx_ep_close(struct fid *fid)
 		if (ep->util_ep.rx_cq->wait) {
 			wait = container_of(ep->util_ep.rx_cq->wait,
 					    struct util_wait_fd, util_wait);
-			fi_epoll_del(wait->epoll_fd, (int)ep->sock);
+			ofi_epoll_del(wait->epoll_fd, (int)ep->sock);
 		}
 		fid_list_remove(&ep->util_ep.rx_cq->ep_list,
 				&ep->util_ep.rx_cq->ep_list_lock,
@@ -604,8 +604,8 @@ static int udpx_ep_bind_cq(struct udpx_ep *ep, struct util_cq *cq,
 
 			wait = container_of(cq->wait,
 					    struct util_wait_fd, util_wait);
-			ret = fi_epoll_add(wait->epoll_fd, (int)ep->sock,
-					   FI_EPOLL_IN, &ep->util_ep.ep_fid.fid);
+			ret = ofi_epoll_add(wait->epoll_fd, (int)ep->sock,
+					   OFI_EPOLL_IN, &ep->util_ep.ep_fid.fid);
 			if (ret)
 				return ret;
 		} else {

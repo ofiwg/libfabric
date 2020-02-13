@@ -174,18 +174,18 @@ int ofi_ep_bind(struct util_ep *util_ep, struct fid *fid, uint64_t flags)
 		return ret;
 
 	switch (fid->fclass) {
-		case FI_CLASS_CQ:
-			cq = container_of(fid, struct util_cq, cq_fid.fid);
-			return ofi_ep_bind_cq(util_ep, cq, flags);
-		case FI_CLASS_EQ:
-			eq = container_of(fid, struct util_eq, eq_fid.fid);
-			return ofi_ep_bind_eq(util_ep, eq);
-		case FI_CLASS_AV:
-			av = container_of(fid, struct util_av, av_fid.fid);
-			return ofi_ep_bind_av(util_ep, av);
-		case FI_CLASS_CNTR:
-			cntr = container_of(fid, struct util_cntr, cntr_fid.fid);
-			return ofi_ep_bind_cntr(util_ep, cntr, flags);
+	case FI_CLASS_CQ:
+		cq = container_of(fid, struct util_cq, cq_fid.fid);
+		return ofi_ep_bind_cq(util_ep, cq, flags);
+	case FI_CLASS_EQ:
+		eq = container_of(fid, struct util_eq, eq_fid.fid);
+		return ofi_ep_bind_eq(util_ep, eq);
+	case FI_CLASS_AV:
+		av = container_of(fid, struct util_av, av_fid.fid);
+		return ofi_ep_bind_av(util_ep, av);
+	case FI_CLASS_CNTR:
+		cntr = container_of(fid, struct util_cntr, cntr_fid.fid);
+		return ofi_ep_bind_cntr(util_ep, cntr, flags);
 	}
 
 	return -FI_EINVAL;

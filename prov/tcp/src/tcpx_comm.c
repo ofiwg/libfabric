@@ -45,8 +45,7 @@ int tcpx_send_msg(struct tcpx_xfer_entry *tx_entry)
 	msg.msg_iov = tx_entry->iov;
 	msg.msg_iovlen = tx_entry->iov_cnt;
 
-	bytes_sent = ofi_sendmsg_tcp(tx_entry->ep->conn_fd,
-	                             &msg, MSG_NOSIGNAL);
+	bytes_sent = ofi_sendmsg_tcp(tx_entry->ep->sock, &msg, MSG_NOSIGNAL);
 	if (bytes_sent < 0)
 		return ofi_sockerr() == EPIPE ? -FI_ENOTCONN : -ofi_sockerr();
 
@@ -154,7 +153,7 @@ int tcpx_recv_msg_data(struct tcpx_xfer_entry *rx_entry)
 						     rx_entry->iov,
 						     rx_entry->iov_cnt);
 	else
-		bytes_recvd = ofi_readv_socket(rx_entry->ep->conn_fd,
+		bytes_recvd = ofi_readv_socket(rx_entry->ep->sock,
 					       rx_entry->iov,
 					       rx_entry->iov_cnt);
 	if (bytes_recvd <= 0)

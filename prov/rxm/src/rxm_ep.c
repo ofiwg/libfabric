@@ -2271,7 +2271,7 @@ static int rxm_ep_wait_fd_add(struct rxm_ep *rxm_ep, struct util_wait *wait)
 		return ret;
 	}
 
-	ret = ofi_wait_fd_add(wait, msg_cq_fd, FI_EPOLL_IN,
+	ret = ofi_wait_fd_add(wait, msg_cq_fd, OFI_EPOLL_IN,
 			      rxm_ep_trywait_cq, rxm_ep,
 			      &rxm_ep->util_ep.ep_fid.fid);
 	if (ret)
@@ -2288,7 +2288,7 @@ static int rxm_ep_wait_fd_add(struct rxm_ep *rxm_ep, struct util_wait *wait)
 		return ret;
 	}
 
-	return ofi_wait_fd_add(wait, msg_eq_fd, FI_EPOLL_IN, rxm_ep_trywait_eq,
+	return ofi_wait_fd_add(wait, msg_eq_fd, OFI_EPOLL_IN, rxm_ep_trywait_eq,
 			       rxm_ep, &rxm_ep->util_ep.ep_fid.fid);
 }
 

@@ -585,7 +585,7 @@ static inline int tcpx_get_next_rx_hdr(struct tcpx_ep *ep)
 	if (ep->cur_rx_msg.hdr_len == ep->cur_rx_msg.done_len)
 		return FI_SUCCESS;
 
-	ret = tcpx_comm_recv_hdr(ep->conn_fd, &ep->stage_buf, &ep->cur_rx_msg);
+	ret = tcpx_comm_recv_hdr(ep->sock, &ep->stage_buf, &ep->cur_rx_msg);
 	if (ret)
 		return ret;
 
@@ -593,12 +593,13 @@ static inline int tcpx_get_next_rx_hdr(struct tcpx_ep *ep)
 	return FI_SUCCESS;
 }
 
-static void tcpx_process_rx_msg(struct tcpx_ep *ep)
+/* Must hold ep lock */
+void tcpx_progress_rx(struct tcpx_ep *ep)
 {
 	int ret;
 
 	if (!ep->cur_rx_entry && (ep->stage_buf.len == ep->stage_buf.off)) {
-		ret = tcpx_read_to_buffer(ep->conn_fd, &ep->stage_buf);
+		ret = tcpx_read_to_buffer(ep->sock, &ep->stage_buf);
 		if (ret)
 			goto err;
 	}
@@ -629,7 +630,8 @@ err:
 		tcpx_report_error(ep, ret);
 }
 
-void tcpx_ep_progress(struct tcpx_ep *ep)
+/* Must hold ep lock */
+void tcpx_progress_tx(struct tcpx_ep *ep)
 {
 	struct tcpx_xfer_entry *tx_entry;
 	struct slist_entry *entry;
@@ -639,19 +641,6 @@ void tcpx_ep_progress(struct tcpx_ep *ep)
 		tx_entry = container_of(entry, struct tcpx_xfer_entry, entry);
 		process_tx_entry(tx_entry);
 	}
-
-	tcpx_process_rx_msg(ep);
-}
-
-void tcpx_progress(struct util_ep *util_ep)
-{
-	struct tcpx_ep *ep;
-
-	ep = container_of(util_ep, struct tcpx_ep, util_ep);
-	fastlock_acquire(&ep->lock);
-	ep->progress_func(ep);
-	fastlock_release(&ep->lock);
-	return;
 }
 
 int tcpx_try_func(void *util_ep)
@@ -662,27 +651,28 @@ int tcpx_try_func(void *util_ep)
 	int ret;
 
 	ep = container_of(util_ep, struct tcpx_ep, util_ep);
-	wait_fd = container_of(((struct util_ep *)util_ep)->rx_cq->wait,
-			       struct util_wait_fd, util_wait);
 
 	fastlock_acquire(&ep->lock);
-	if (!slist_empty(&ep->tx_queue) && !ep->send_ready_monitor) {
-		ep->send_ready_monitor = true;
-		events = FI_EPOLL_IN | FI_EPOLL_OUT;
+	if (!slist_empty(&ep->tx_queue) && !ep->epoll_out_set) {
+		ep->epoll_out_set = true;
+		events = OFI_EPOLL_IN | OFI_EPOLL_OUT;
 		goto epoll_mod;
-	} else if (slist_empty(&ep->tx_queue) && ep->send_ready_monitor) {
-		ep->send_ready_monitor = false;
-		events = FI_EPOLL_IN;
+	} else if (slist_empty(&ep->tx_queue) && ep->epoll_out_set) {
+		ep->epoll_out_set = false;
+		events = OFI_EPOLL_IN;
 		goto epoll_mod;
 	}
 	fastlock_release(&ep->lock);
 	return FI_SUCCESS;
 
 epoll_mod:
-	ret = fi_epoll_mod(wait_fd->epoll_fd, ep->conn_fd, events, NULL);
+	wait_fd = container_of(((struct util_ep *) util_ep)->tx_cq->wait,
+			       struct util_wait_fd, util_wait);
+	ret = ofi_epoll_mod(wait_fd->epoll_fd, ep->sock, events,
+			    &ep->util_ep.ep_fid.fid);
 	if (ret)
 		FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
-			"invalid op type\n");
+			"epoll modify failed\n");
 	fastlock_release(&ep->lock);
 	return ret;
 }

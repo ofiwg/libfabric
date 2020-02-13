@@ -178,7 +178,7 @@ int ofi_wait_fd_del(struct util_wait *wait, int fd)
 	if (ofi_atomic_dec32(&fd_entry->ref))
 		goto out;
 	dlist_remove(&fd_entry->entry);
-	fi_epoll_del(wait_fd->epoll_fd, fd_entry->fd);
+	ofi_epoll_del(wait_fd->epoll_fd, fd_entry->fd);
 	free(fd_entry);
 out:
 	fastlock_release(&wait_fd->lock);
@@ -205,7 +205,7 @@ int ofi_wait_fd_add(struct util_wait *wait, int fd, uint32_t events,
 		goto out;
 	}
 
-	ret = fi_epoll_add(wait_fd->epoll_fd, fd, events, context);
+	ret = ofi_epoll_add(wait_fd->epoll_fd, fd, events, context);
 	if (ret) {
 		FI_WARN(wait->prov, FI_LOG_FABRIC, "Unable to add fd to epoll\n");
 		goto out;
@@ -214,7 +214,7 @@ int ofi_wait_fd_add(struct util_wait *wait, int fd, uint32_t events,
 	fd_entry = calloc(1, sizeof *fd_entry);
 	if (!fd_entry) {
 		ret = -FI_ENOMEM;
-		fi_epoll_del(wait_fd->epoll_fd, fd);
+		ofi_epoll_del(wait_fd->epoll_fd, fd);
 		goto out;
 	}
 	fd_entry->fd = fd;
@@ -276,7 +276,7 @@ static int util_wait_fd_run(struct fid_wait *wait_fid, int timeout)
 		if (ofi_adjust_timeout(endtime, &timeout))
 			return -FI_ETIMEDOUT;
 
-		ret = fi_epoll_wait(wait->epoll_fd, ep_context, 1, timeout);
+		ret = ofi_epoll_wait(wait->epoll_fd, ep_context, 1, timeout);
 		if (ret > 0)
 			return FI_SUCCESS;
 
@@ -327,14 +327,14 @@ static int util_wait_fd_close(struct fid *fid)
 	while (!dlist_empty(&wait->fd_list)) {
 		dlist_pop_front(&wait->fd_list, struct ofi_wait_fd_entry,
 				fd_entry, entry);
-		fi_epoll_del(wait->epoll_fd, fd_entry->fd);
+		ofi_epoll_del(wait->epoll_fd, fd_entry->fd);
 		free(fd_entry);
 	}
 	fastlock_release(&wait->lock);
 
-	fi_epoll_del(wait->epoll_fd, wait->signal.fd[FI_READ_FD]);
+	ofi_epoll_del(wait->epoll_fd, wait->signal.fd[FI_READ_FD]);
 	fd_signal_free(&wait->signal);
-	fi_epoll_close(wait->epoll_fd);
+	ofi_epoll_close(wait->epoll_fd);
 	fastlock_destroy(&wait->lock);
 	free(wait);
 	return 0;
@@ -400,12 +400,12 @@ int ofi_wait_fd_open(struct fid_fabric *fabric_fid, struct fi_wait_attr *attr,
 	if (ret)
 		goto err2;
 
-	ret = fi_epoll_create(&wait->epoll_fd);
+	ret = ofi_epoll_create(&wait->epoll_fd);
 	if (ret)
 		goto err3;
 
-	ret = fi_epoll_add(wait->epoll_fd, wait->signal.fd[FI_READ_FD],
-	                   FI_EPOLL_IN, &wait->util_wait.wait_fid.fid);
+	ret = ofi_epoll_add(wait->epoll_fd, wait->signal.fd[FI_READ_FD],
+	                   OFI_EPOLL_IN, &wait->util_wait.wait_fid.fid);
 	if (ret)
 		goto err4;
 
@@ -419,7 +419,7 @@ int ofi_wait_fd_open(struct fid_fabric *fabric_fid, struct fi_wait_attr *attr,
 	return 0;
 
 err4:
-	fi_epoll_close(wait->epoll_fd);
+	ofi_epoll_close(wait->epoll_fd);
 err3:
 	fd_signal_free(&wait->signal);
 err2:

@@ -184,10 +184,19 @@ fi
 AC_DEFINE_UNQUOTED([PT_LOCK_SPIN], [$have_spinlock],
 	[Define to 1 if pthread_spin_init is available.])
 
-AC_CHECK_FUNCS([epoll_create])
-if test "$ac_cv_func_epoll_create" = yes; then
-  AC_DEFINE([HAVE_EPOLL], [1], [Define if you have epoll support.])
-fi
+AC_ARG_ENABLE([epoll],
+    [AS_HELP_STRING([--disable-epoll],
+        [Disable epoll if available@<:@default=no@:>@])],
+    [],
+    [enable_epoll=auto]
+)
+
+AS_IF([test x"$enable_epoll" != x"no"],
+    [AC_CHECK_FUNCS([epoll_create])
+     if test "$ac_cv_func_epoll_create" = yes; then
+        AC_DEFINE([HAVE_EPOLL], [1], [Define if you have epoll support.])
+     fi]
+)
 
 AC_CHECK_HEADER([linux/perf_event.h],
     [AC_CHECK_DECL([__builtin_ia32_rdpmc],
