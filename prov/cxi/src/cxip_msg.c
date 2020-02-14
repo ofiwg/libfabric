@@ -228,13 +228,13 @@ static void recv_req_report(struct cxip_req *req)
 }
 
 /*
- * recv_req_put_event() - Update common receive request fields
+ * recv_req_tgt_event() - Update common receive request fields
  *
  * Populate a receive request with information found in all receive event
  * types.
  */
 static void
-recv_req_put_event(struct cxip_req *req, const union c_event *event)
+recv_req_tgt_event(struct cxip_req *req, const union c_event *event)
 {
 	union cxip_match_bits mb = {
 		.raw = event->tgt_long.match_bits
@@ -285,7 +285,9 @@ recv_req_put_event(struct cxip_req *req, const union c_event *event)
  * child request.
  */
 static struct cxip_req *rdzv_mrecv_req_lookup(struct cxip_req *req,
-					      const union c_event *event)
+					      const union c_event *event,
+					      uint32_t *initiator,
+					      uint32_t *rdzv_id)
 {
 	struct cxip_rxc *rxc = req->recv.rxc;
 	uint32_t pid_bits = rxc->domain->dev_if->if_dev->info.pid_bits;
@@ -319,6 +321,9 @@ static struct cxip_req *rdzv_mrecv_req_lookup(struct cxip_req *req,
 		ev_init = event->tgt_long.initiator.initiator.process;
 		ev_rdzv_id = event->tgt_long.rendezvous_id;
 	}
+
+	*initiator = ev_init;
+	*rdzv_id = ev_rdzv_id;
 
 	/* Events for hardware-issued operations will return a rendezvous_id
 	 * and initiator data. Use these fields to find a matching child
@@ -359,7 +364,6 @@ mrecv_req_dup(struct cxip_req *mrecv_req, const union c_event *event)
 	req->recv = mrecv_req->recv;
 
 	/* Update fields specific to this Send */
-	recv_req_put_event(req, event);
 	req->recv.parent = mrecv_req;
 
 	/* Start pointer and data_len must be set elsewhere! */
@@ -379,16 +383,29 @@ mrecv_req_dup(struct cxip_req *mrecv_req, const union c_event *event)
 static struct cxip_req *
 rdzv_mrecv_req_event(struct cxip_req *mrecv_req, const union c_event *event)
 {
-	struct cxip_req *req = rdzv_mrecv_req_lookup(mrecv_req, event);
+	uint32_t ev_init;
+	uint32_t ev_rdzv_id;
+	struct cxip_req *req;
 	union cxip_match_bits mb = {
 		.raw = event->tgt_long.match_bits
 	};
 
+	assert(event->hdr.event_type == C_EVENT_REPLY ||
+	       event->hdr.event_type == C_EVENT_PUT ||
+	       event->hdr.event_type == C_EVENT_PUT_OVERFLOW ||
+	       event->hdr.event_type == C_EVENT_RENDEZVOUS);
+
+	req = rdzv_mrecv_req_lookup(mrecv_req, event, &ev_init, &ev_rdzv_id);
 	if (!req) {
 		req = mrecv_req_dup(mrecv_req, event);
 		if (!req)
 			return NULL;
 
+		/* Store event initiator and rdzv_id for matching. */
+		if (event->hdr.event_type == C_EVENT_REPLY) {
+			req->recv.rdzv_id = ev_rdzv_id;
+			req->recv.initiator = ev_init;
+		}
 		dlist_insert_tail(&req->recv.children,
 				  &mrecv_req->recv.children);
 
@@ -397,6 +414,13 @@ rdzv_mrecv_req_event(struct cxip_req *mrecv_req, const union c_event *event)
 	} else {
 		CXIP_LOG_DBG("Found child: %p parent: %p event: %s\n",
 			     req, mrecv_req, cxi_event_to_str(event));
+	}
+
+	if (event->hdr.event_type != C_EVENT_REPLY &&
+	    !req->recv.rdzv_tgt_event) {
+		/* Populate common fields with the first target event. */
+		recv_req_tgt_event(req, event);
+		req->recv.rdzv_tgt_event = true;
 	}
 
 	/* Rendezvous events contain the wrong match bits. Make sure the tag is
@@ -1587,7 +1611,7 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 				 * request when the Put event arrives.
 				 */
 			} else {
-				recv_req_put_event(req, event);
+				recv_req_tgt_event(req, event);
 
 				req->data_len = event->tgt_long.rlength;
 				if (req->data_len > req->recv.ulen)
@@ -1621,7 +1645,7 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 			 */
 			mrecv_req_oflow_event(req, event);
 		} else {
-			recv_req_put_event(req, event);
+			recv_req_tgt_event(req, event);
 
 			req->data_len = event->tgt_long.rlength;
 			if (req->data_len > req->recv.ulen)
@@ -1658,7 +1682,7 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 			 * unexpected).
 			 */
 		} else {
-			recv_req_put_event(req, event);
+			recv_req_tgt_event(req, event);
 		}
 
 		/* Count the rendezvous event. */
@@ -1829,6 +1853,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 					fastlock_release(&rxc->rx_lock);
 					return -FI_EAGAIN;
 				}
+				recv_req_tgt_event(req, event);
 
 				/* Set start and length uniquely for an
 				 * unexpected mrecv request.
@@ -1840,7 +1865,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 				 * Put event arrives.
 				 */
 			} else {
-				recv_req_put_event(req, event);
+				recv_req_tgt_event(req, event);
 
 				req->data_len = event->tgt_long.rlength;
 				if (req->data_len > req->recv.ulen)
@@ -1869,13 +1894,14 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 					fastlock_release(&rxc->rx_lock);
 					return -FI_EAGAIN;
 				}
+				recv_req_tgt_event(req, event);
 
 				/* Set start and length uniquely for an
 				 * unexpected mrecv request.
 				 */
 				mrecv_req_oflow_event(req, event);
 			} else {
-				recv_req_put_event(req, event);
+				recv_req_tgt_event(req, event);
 
 				if (event->tgt_long.rlength > req->recv.ulen)
 					req->data_len = req->recv.ulen;
@@ -1907,13 +1933,14 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 			req = mrecv_req_dup(req, event);
 			if (!req)
 				return -FI_EAGAIN;
+			recv_req_tgt_event(req, event);
 
 			/* Set start and length uniquely for an unexpected
 			 * mrecv request.
 			 */
 			mrecv_req_oflow_event(req, event);
 		} else {
-			recv_req_put_event(req, event);
+			recv_req_tgt_event(req, event);
 
 			if (event->tgt_long.mlength > req->recv.ulen)
 				req->data_len = req->recv.ulen;
@@ -1965,6 +1992,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 			req = mrecv_req_dup(req, event);
 			if (!req)
 				return -FI_EAGAIN;
+			recv_req_tgt_event(req, event);
 
 			req->buf = (uint64_t)(CXI_IOVA_TO_VA(
 					req->recv.recv_md->md,
@@ -1975,7 +2003,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 			cxip_cq_req_free(req);
 		} else {
 			req->data_len = event->tgt_long.mlength;
-			recv_req_put_event(req, event);
+			recv_req_tgt_event(req, event);
 			recv_req_report(req);
 			recv_req_complete(req);
 		}

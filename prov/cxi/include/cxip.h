@@ -452,6 +452,7 @@ struct cxip_req_recv {
 	int rdzv_events;		// Processed rdzv event count
 	bool canceled;			// Request canceled?
 	bool multi_recv;
+	bool rdzv_tgt_event;
 	uint64_t start_offset;
 	uint64_t mrecv_bytes;
 	struct cxip_req *parent;
