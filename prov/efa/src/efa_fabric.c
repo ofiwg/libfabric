@@ -771,6 +771,7 @@ static int efa_set_fi_address(const char *node, const char *service, uint64_t fl
 	struct efa_ep_addr tmp_addr;
 	void *dest_addr = NULL;
 	int ret = FI_SUCCESS;
+	struct fi_info *cur;
 
 	if (flags & FI_SOURCE) {
 		if (hints && hints->dest_addr)
@@ -787,15 +788,17 @@ static int efa_set_fi_address(const char *node, const char *service, uint64_t fl
 	}
 
 	if (dest_addr) {
-		fi->dest_addr = malloc(EFA_EP_ADDR_LEN);
-		if (!fi->dest_addr)
-			return -FI_ENOMEM;
-		memcpy(fi->dest_addr, dest_addr, EFA_EP_ADDR_LEN);
+		for (cur = fi; cur; cur = cur->next) {
+			cur->dest_addr = malloc(EFA_EP_ADDR_LEN);
+			if (!cur->dest_addr) {
+				for (; fi->dest_addr; fi = fi->next)
+					free(fi->dest_addr);
+				return -FI_ENOMEM;
+			}
+			memcpy(cur->dest_addr, dest_addr, EFA_EP_ADDR_LEN);
+			cur->dest_addrlen = EFA_EP_ADDR_LEN;
+		}
 	}
-
-	if (fi->dest_addr)
-		fi->dest_addrlen = EFA_EP_ADDR_LEN;
-
 	return ret;
 }
 
