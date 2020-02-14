@@ -64,6 +64,7 @@
 
 #include <sys/wait.h>
 #include "rxr_pkt_entry.h"
+#include "rxr_pkt_type.h"
 
 #define RXR_MAJOR_VERSION	(2)
 #define RXR_MINOR_VERSION	(0)
@@ -224,16 +225,6 @@ struct rxr_env {
 enum rxr_lower_ep_type {
 	EFA_EP = 1,
 	SHM_EP,
-};
-
-enum rxr_pkt_type {
-	RXR_RTS_PKT = 1,
-	RXR_CONNACK_PKT,
-	RXR_CTS_PKT,
-	RXR_DATA_PKT,
-	RXR_READRSP_PKT,
-	RXR_RMA_CONTEXT_PKT,
-	RXR_EOR_PKT,
 };
 
 /* RMA context packet types which are used only on local EP */
@@ -634,176 +625,6 @@ struct rxr_ep {
 #define rxr_rx_flags(rxr_ep) ((rxr_ep)->util_ep.rx_op_flags)
 #define rxr_tx_flags(rxr_ep) ((rxr_ep)->util_ep.tx_op_flags)
 
-/*
- * Packet fields common to all rxr packets. The other packet headers below must
- * be changed if this is updated.
- */
-struct rxr_base_hdr {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
-};
-
-#if defined(static_assert) && defined(__x86_64__)
-static_assert(sizeof(struct rxr_base_hdr) == 4, "rxr_base_hdr check");
-#endif
-
-/*
- * RTS packet structure: rts_hdr, cq_data (optional), src_addr(optional),  data.
- */
-struct rxr_rts_hdr {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
-	/* end of rxr_base_hdr */
-	/* TODO: need to add msg_id -> tx_id mapping to remove tx_id */
-	uint16_t credit_request;
-	uint8_t addrlen;
-	uint8_t rma_iov_count;
-	uint32_t tx_id;
-	uint32_t msg_id;
-	uint64_t tag;
-	uint64_t data_len;
-};
-
-#if defined(static_assert) && defined(__x86_64__)
-static_assert(sizeof(struct rxr_rts_hdr) == 32, "rxr_rts_hdr check");
-#endif
-
-/*
- * EOR packet, used to acknowledge the sender that large message
- * copy has been finished.
- */
-struct rxr_eor_hdr {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
-	/* end of rxr_base_hdr */
-	uint32_t tx_id;
-	uint32_t rx_id;
-};
-
-#if defined(static_assert) && defined(__x86_64__)
-static_assert(sizeof(struct rxr_eor_hdr) == 12, "rxr_eor_hdr check");
-#endif
-
-
-struct rxr_connack_hdr {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
-	/* end of rxr_base_hdr */
-}; /* 4 bytes */
-
-#if defined(static_assert) && defined(__x86_64__)
-static_assert(sizeof(struct rxr_base_hdr) == 4, "rxr_connack_hdr check");
-#endif
-
-struct rxr_cts_hdr {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
-	/* end of rxr_base_hdr */
-	uint8_t pad[4];
-	/* TODO: need to add msg_id -> tx_id/rx_id mapping */
-	uint32_t tx_id;
-	uint32_t rx_id;
-	uint64_t window;
-};
-
-#if defined(static_assert) && defined(__x86_64__)
-static_assert(sizeof(struct rxr_cts_hdr) == 24, "rxr_cts_hdr check");
-#endif
-
-struct rxr_data_hdr {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
-	/* end of rxr_base_hdr */
-	/* TODO: need to add msg_id -> tx_id/rx_id mapping */
-	uint32_t rx_id;
-	uint64_t seg_size;
-	uint64_t seg_offset;
-};
-
-#if defined(static_assert) && defined(__x86_64__)
-static_assert(sizeof(struct rxr_data_hdr) == 24, "rxr_data_hdr check");
-#endif
-
-/*
- * Control header without completion data. We will send more data with the RTS
- * packet if RXR_REMOTE_CQ_DATA is not set.
- */
-struct rxr_ctrl_hdr {
-	union {
-		struct rxr_base_hdr base_hdr;
-		struct rxr_rts_hdr rts_hdr;
-		struct rxr_connack_hdr connack_hdr;
-		struct rxr_cts_hdr cts_hdr;
-	};
-};
-
-/*
- * Control header with completion data. CQ data length is static.
- */
-#define RXR_CQ_DATA_SIZE (8)
-struct rxr_ctrl_cq_hdr {
-	union {
-		struct rxr_base_hdr base_hdr;
-		struct rxr_rts_hdr rts_hdr;
-		struct rxr_connack_hdr connack_hdr;
-		struct rxr_cts_hdr cts_hdr;
-	};
-	uint64_t cq_data;
-};
-
-/*
- * There are three packet types:
- * - Control packet with completion queue data
- * - Control packet without completion queue data
- * - Data packet
- *
- * All start with rxr_base_hdr so it is safe to cast between them to check
- * values in that structure.
- */
-struct rxr_ctrl_cq_pkt {
-	struct rxr_ctrl_cq_hdr hdr;
-	char data[];
-};
-
-struct rxr_ctrl_pkt {
-	struct rxr_ctrl_hdr hdr;
-	char data[];
-};
-
-struct rxr_data_pkt {
-	struct rxr_data_hdr hdr;
-	char data[];
-};
-
-/*
- * RMA context packet, used to differentiate the normal RMA read, normal RMA
- * write, and the RMA read in two-sided large message transfer
- */
-struct rxr_rma_context_pkt {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
-	/* end of rxr_base_hdr */
-	uint32_t tx_id;
-	uint8_t rma_context_type;
-};
-
-#define RXR_CTRL_HDR_SIZE		(sizeof(struct rxr_ctrl_cq_hdr))
-
-#define RXR_CTRL_HDR_SIZE_NO_CQ		(sizeof(struct rxr_ctrl_hdr))
-
-#define RXR_CONNACK_HDR_SIZE		(sizeof(struct rxr_connack_hdr))
-
-#define RXR_CTS_HDR_SIZE		(sizeof(struct rxr_cts_hdr))
-
-#define RXR_DATA_HDR_SIZE		(sizeof(struct rxr_data_hdr))
-
 static inline void rxr_copy_shm_cq_entry(struct fi_cq_tagged_entry *cq_tagged_entry,
 					 struct fi_cq_data_entry *shm_cq_entry)
 {
@@ -901,26 +722,6 @@ static inline void *rxr_pkt_start(struct rxr_pkt_entry *pkt_entry)
 	return (void *)((char *)pkt_entry + sizeof(*pkt_entry));
 }
 
-static inline struct rxr_base_hdr *rxr_get_base_hdr(void *pkt)
-{
-	return (struct rxr_base_hdr *)pkt;
-}
-
-static inline struct rxr_rts_hdr *rxr_get_rts_hdr(void *pkt)
-{
-	return (struct rxr_rts_hdr *)pkt;
-}
-
-static inline struct rxr_connack_hdr *rxr_get_connack_hdr(void *pkt)
-{
-	return (struct rxr_connack_hdr *)pkt;
-}
-
-static inline struct rxr_cts_hdr *rxr_get_cts_hdr(void *pkt)
-{
-	return (struct rxr_cts_hdr *)pkt;
-}
-
 static inline struct rxr_ctrl_cq_pkt *rxr_get_ctrl_cq_pkt(void *pkt)
 {
 	return (struct rxr_ctrl_cq_pkt *)pkt;
@@ -929,11 +730,6 @@ static inline struct rxr_ctrl_cq_pkt *rxr_get_ctrl_cq_pkt(void *pkt)
 static inline struct rxr_ctrl_pkt *rxr_get_ctrl_pkt(void *pkt)
 {
 	return (struct rxr_ctrl_pkt *)pkt;
-}
-
-static inline struct rxr_data_pkt *rxr_get_data_pkt(void *pkt)
-{
-	return (struct rxr_data_pkt *)pkt;
 }
 
 static inline int rxr_match_addr(fi_addr_t addr, fi_addr_t match_addr)
@@ -967,41 +763,6 @@ static inline void rxr_ep_dec_tx_pending(struct rxr_ep *ep,
 	if (failed)
 		ep->failed_send_comps++;
 #endif
-}
-
-/*
- * Helper function to compute the maximum payload of the RTS header based on
- * the RTS header flags. The header may have a length greater than the possible
- * RTS payload size if it is a large message.
- */
-static inline uint64_t rxr_get_rts_data_size(struct rxr_ep *ep,
-					     struct rxr_rts_hdr *rts_hdr)
-{
-	/*
-	 * read RTS contain no data, because data is on remote EP.
-	 */
-	if (rts_hdr->flags & RXR_READ_REQ)
-		return 0;
-
-	if (rts_hdr->flags & RXR_SHM_HDR)
-		return (rts_hdr->flags & RXR_SHM_HDR_DATA) ? rts_hdr->data_len : 0;
-
-	size_t max_payload_size;
-
-	if (rts_hdr->flags & RXR_REMOTE_CQ_DATA)
-		max_payload_size = ep->mtu_size - RXR_CTRL_HDR_SIZE;
-	else
-		max_payload_size = ep->mtu_size - RXR_CTRL_HDR_SIZE_NO_CQ;
-
-	if (rts_hdr->flags & RXR_REMOTE_SRC_ADDR)
-		max_payload_size -= rts_hdr->addrlen;
-
-	if (rts_hdr->flags & RXR_WRITE)
-		max_payload_size -= rts_hdr->rma_iov_count *
-					sizeof(struct fi_rma_iov);
-
-	return (rts_hdr->data_len > max_payload_size)
-		? max_payload_size : rts_hdr->data_len;
 }
 
 static inline size_t rxr_get_rx_pool_chunk_cnt(struct rxr_ep *ep)

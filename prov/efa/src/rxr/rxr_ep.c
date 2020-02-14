@@ -810,9 +810,9 @@ void rxr_ep_calc_cts_window_credits(struct rxr_ep *ep, struct rxr_peer *peer,
 		peer->rx_credits -= ofi_div_ceil(*window, ep->max_data_payload_size);
 }
 
-int rxr_ep_init_cts_pkt(struct rxr_ep *ep,
-			struct rxr_rx_entry *rx_entry,
-			struct rxr_pkt_entry *pkt_entry)
+ssize_t rxr_pkt_init_cts(struct rxr_ep *ep,
+			 struct rxr_rx_entry *rx_entry,
+			 struct rxr_pkt_entry *pkt_entry)
 {
 	int window = 0;
 	struct rxr_cts_hdr *cts_hdr;
@@ -842,8 +842,8 @@ int rxr_ep_init_cts_pkt(struct rxr_ep *ep,
 	return 0;
 }
 
-void rxr_ep_handle_cts_sent(struct rxr_ep *ep,
-			    struct rxr_pkt_entry *pkt_entry)
+void rxr_pkt_handle_cts_sent(struct rxr_ep *ep,
+			     struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_rx_entry *rx_entry;
 
@@ -877,9 +877,9 @@ void rxr_ep_init_connack_pkt_entry(struct rxr_ep *ep,
 }
 
 /* RTS related functions */
-char *rxr_ep_init_rts_hdr(struct rxr_ep *ep,
-			  struct rxr_tx_entry *tx_entry,
-			  struct rxr_pkt_entry *pkt_entry)
+char *rxr_pkt_init_rts_base_hdr(struct rxr_ep *ep,
+				struct rxr_tx_entry *tx_entry,
+				struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_rts_hdr *rts_hdr;
 	struct rxr_peer *peer;
@@ -937,9 +937,9 @@ char *rxr_ep_init_rts_hdr(struct rxr_ep *ep,
 	return src;
 }
 
-static size_t rxr_ep_init_rts_pkt(struct rxr_ep *ep,
-				  struct rxr_tx_entry *tx_entry,
-				  struct rxr_pkt_entry *pkt_entry)
+ssize_t rxr_pkt_init_rts(struct rxr_ep *ep,
+			 struct rxr_tx_entry *tx_entry,
+			 struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_peer *peer;
 	struct rxr_rts_hdr *rts_hdr;
@@ -950,9 +950,9 @@ static size_t rxr_ep_init_rts_pkt(struct rxr_ep *ep,
 	if (tx_entry->op == ofi_op_read_req)
 		return rxr_rma_init_read_rts(ep, tx_entry, pkt_entry);
 
-	src = rxr_ep_init_rts_hdr(ep, tx_entry, pkt_entry);
+	src = rxr_pkt_init_rts_base_hdr(ep, tx_entry, pkt_entry);
 	if (tx_entry->op == ofi_op_write)
-		src = rxr_rma_init_rts_hdr(ep, tx_entry, pkt_entry, src);
+		src = rxr_pkt_init_rts_rma_hdr(ep, tx_entry, pkt_entry, src);
 
 	peer = rxr_ep_get_peer(ep, tx_entry->addr);
 	assert(peer);
@@ -991,7 +991,37 @@ static size_t rxr_ep_init_rts_pkt(struct rxr_ep *ep,
 	return 0;
 }
 
-void rxr_ep_handle_rts_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
+uint64_t rxr_get_rts_data_size(struct rxr_ep *ep,
+			       struct rxr_rts_hdr *rts_hdr)
+{
+	/*
+	 * read RTS contain no data, because data is on remote EP.
+	 */
+	if (rts_hdr->flags & RXR_READ_REQ)
+		return 0;
+
+	if (rts_hdr->flags & RXR_SHM_HDR)
+		return (rts_hdr->flags & RXR_SHM_HDR_DATA) ? rts_hdr->data_len : 0;
+
+	size_t max_payload_size;
+
+	if (rts_hdr->flags & RXR_REMOTE_CQ_DATA)
+		max_payload_size = ep->mtu_size - RXR_CTRL_HDR_SIZE;
+	else
+		max_payload_size = ep->mtu_size - RXR_CTRL_HDR_SIZE_NO_CQ;
+
+	if (rts_hdr->flags & RXR_REMOTE_SRC_ADDR)
+		max_payload_size -= rts_hdr->addrlen;
+
+	if (rts_hdr->flags & RXR_WRITE)
+		max_payload_size -= rts_hdr->rma_iov_count *
+					sizeof(struct fi_rma_iov);
+
+	return (rts_hdr->data_len > max_payload_size)
+		? max_payload_size : rts_hdr->data_len;
+}
+
+void rxr_pkt_handle_rts_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_peer *peer;
 	struct rxr_tx_entry *tx_entry;
@@ -1032,16 +1062,16 @@ int rxr_ep_init_ctrl_pkt(struct rxr_ep *rxr_ep, int entry_type, void *x_entry,
 
 	switch (ctrl_type) {
 	case RXR_RTS_PKT:
-		ret = rxr_ep_init_rts_pkt(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_rts(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
 		break;
 	case RXR_READRSP_PKT:
-		ret = rxr_rma_init_readrsp_pkt(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_readrsp(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
 		break;
 	case RXR_CTS_PKT:
-		ret = rxr_ep_init_cts_pkt(rxr_ep, (struct rxr_rx_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_cts(rxr_ep, (struct rxr_rx_entry *)x_entry, pkt_entry);
 		break;
 	case RXR_EOR_PKT:
-		ret = rxr_rma_init_eor_pkt(rxr_ep, (struct rxr_rx_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_eor(rxr_ep, (struct rxr_rx_entry *)x_entry, pkt_entry);
 		break;
 	default:
 		ret = -FI_EINVAL;
@@ -1058,16 +1088,16 @@ void rxr_ep_handle_ctrl_sent(struct rxr_ep *rxr_ep, struct rxr_pkt_entry *pkt_en
 
 	switch (ctrl_type) {
 	case RXR_RTS_PKT:
-		rxr_ep_handle_rts_sent(rxr_ep, pkt_entry);
+		rxr_pkt_handle_rts_sent(rxr_ep, pkt_entry);
 		break;
 	case RXR_READRSP_PKT:
-		rxr_rma_handle_readrsp_sent(rxr_ep, pkt_entry);
+		rxr_pkt_handle_readrsp_sent(rxr_ep, pkt_entry);
 		break;
 	case RXR_CTS_PKT:
-		rxr_ep_handle_cts_sent(rxr_ep, pkt_entry);
+		rxr_pkt_handle_cts_sent(rxr_ep, pkt_entry);
 		break;
 	case RXR_EOR_PKT:
-		rxr_rma_handle_eor_sent(rxr_ep, pkt_entry);
+		rxr_pkt_handle_eor_sent(rxr_ep, pkt_entry);
 		break;
 	default:
 		assert(0 && "Unknown packet type to handle sent");

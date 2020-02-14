@@ -39,10 +39,10 @@
 #include "rxr.h"
 #include "rxr_rma.h"
 
-char *rxr_rma_init_rts_hdr(struct rxr_ep *ep,
-			   struct rxr_tx_entry *tx_entry,
-			   struct rxr_pkt_entry *pkt_entry,
-			   char *hdr)
+char *rxr_pkt_init_rts_rma_hdr(struct rxr_ep *ep,
+			       struct rxr_tx_entry *tx_entry,
+			       struct rxr_pkt_entry *pkt_entry,
+			       char *hdr)
 {
 	int rmalen;
 	struct rxr_rts_hdr *rts_hdr;
@@ -168,8 +168,8 @@ int rxr_rma_init_read_rts(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	struct rxr_rma_read_info *read_info;
 	char *hdr;
 
-	hdr = rxr_ep_init_rts_hdr(ep, tx_entry, pkt_entry);
-	hdr = rxr_rma_init_rts_hdr(ep, tx_entry, pkt_entry, hdr);
+	hdr = rxr_pkt_init_rts_base_hdr(ep, tx_entry, pkt_entry);
+	hdr = rxr_pkt_init_rts_rma_hdr(ep, tx_entry, pkt_entry, hdr);
 
 	/* no data to send, but need to send rx_id and window */
 	read_info = (struct rxr_rma_read_info *)hdr;
@@ -285,9 +285,9 @@ rxr_rma_alloc_readrsp_tx_entry(struct rxr_ep *rxr_ep,
 	return tx_entry;
 }
 
-int rxr_rma_init_readrsp_pkt(struct rxr_ep *ep,
-			     struct rxr_tx_entry *tx_entry,
-			     struct rxr_pkt_entry *pkt_entry)
+int rxr_pkt_init_readrsp(struct rxr_ep *ep,
+			 struct rxr_tx_entry *tx_entry,
+			 struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_readrsp_pkt *readrsp_pkt;
 	struct rxr_readrsp_hdr *readrsp_hdr;
@@ -310,7 +310,7 @@ int rxr_rma_init_readrsp_pkt(struct rxr_ep *ep,
 	return 0;
 }
 
-void rxr_rma_handle_readrsp_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
+void rxr_pkt_handle_readrsp_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_tx_entry *tx_entry;
 	size_t data_len;
@@ -332,7 +332,7 @@ void rxr_rma_handle_readrsp_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_en
 }
 
 /* EOR packet functions */
-int rxr_rma_init_eor_pkt(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry, struct rxr_pkt_entry *pkt_entry)
+int rxr_pkt_init_eor(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry, struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_eor_hdr *eor_hdr;
 
@@ -346,10 +346,6 @@ int rxr_rma_init_eor_pkt(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry, struc
 	pkt_entry->addr = rx_entry->addr;
 	pkt_entry->x_entry = rx_entry;
 	return 0;
-}
-
-void rxr_rma_handle_eor_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
-{
 }
 
 struct rxr_tx_entry *
