@@ -63,6 +63,7 @@
 #include <ofi_perf.h>
 
 #include <sys/wait.h>
+#include "rxr_pkt_entry.h"
 
 #define RXR_MAJOR_VERSION	(2)
 #define RXR_MINOR_VERSION	(0)
@@ -73,6 +74,13 @@
 
 #ifdef ENABLE_EFA_POISONING
 extern const uint32_t rxr_poison_value;
+static inline void rxr_poison_mem_region(uint32_t *ptr, size_t size)
+{
+	int i;
+
+	for (i = 0; i < size / sizeof(rxr_poison_value); i++)
+		memcpy(ptr + i, &rxr_poison_value, sizeof(rxr_poison_value));
+}
 #endif
 
 /*
@@ -233,20 +241,6 @@ enum rxr_rma_context_pkt_type {
 	RXR_SHM_RMA_READ = 1,
 	RXR_SHM_RMA_WRITE,
 	RXR_SHM_LARGE_READ,
-};
-
-/* pkt_entry types for rx pkts */
-enum rxr_pkt_entry_type {
-	RXR_PKT_ENTRY_POSTED = 1,   /* entries that are posted to the core */
-	RXR_PKT_ENTRY_UNEXP,        /* entries used to stage unexpected msgs */
-	RXR_PKT_ENTRY_OOO	    /* entries used to stage out-of-order RTS */
-};
-
-/* pkt_entry state for retransmit tracking */
-enum rxr_pkt_entry_state {
-	RXR_PKT_ENTRY_FREE = 0,
-	RXR_PKT_ENTRY_IN_USE,
-	RXR_PKT_ENTRY_RNR_RETRANSMIT,
 };
 
 enum rxr_x_entry_type {
@@ -800,37 +794,6 @@ struct rxr_rma_context_pkt {
 	uint8_t rma_context_type;
 };
 
-struct rxr_pkt_entry {
-	/* for rx/tx_entry queued_pkts list */
-	struct dlist_entry entry;
-#if ENABLE_DEBUG
-	/* for tx/rx debug list or posted buf list */
-	struct dlist_entry dbg_entry;
-#endif
-	void *x_entry; /* pointer to rxr rx/tx entry */
-	size_t pkt_size;
-	struct fid_mr *mr;
-	fi_addr_t addr;
-	void *pkt; /* rxr_ctrl_*_pkt, or rxr_data_pkt */
-	enum rxr_pkt_entry_type type;
-	enum rxr_pkt_entry_state state;
-#if ENABLE_DEBUG
-/* pad to cache line size of 64 bytes */
-	uint8_t pad[48];
-#endif
-};
-
-#if defined(static_assert) && defined(__x86_64__)
-#if ENABLE_DEBUG
-static_assert(sizeof(struct rxr_pkt_entry) == 128, "rxr_pkt_entry check");
-#else
-static_assert(sizeof(struct rxr_pkt_entry) == 64, "rxr_pkt_entry check");
-#endif
-#endif
-
-OFI_DECL_RECVWIN_BUF(struct rxr_pkt_entry*, rxr_robuf, uint32_t);
-DECLARE_FREESTACK(struct rxr_robuf, rxr_robuf_fs);
-
 #define RXR_CTRL_HDR_SIZE		(sizeof(struct rxr_ctrl_cq_hdr))
 
 #define RXR_CTRL_HDR_SIZE_NO_CQ		(sizeof(struct rxr_ctrl_hdr))
@@ -902,94 +865,6 @@ struct rxr_tx_entry *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
 					   uint32_t op,
 					   uint64_t tag,
 					   uint64_t flags);
-
-static inline void
-rxr_copy_pkt_entry(struct rxr_ep *ep,
-		   struct rxr_pkt_entry *dest,
-		   struct rxr_pkt_entry *src,
-		   enum rxr_pkt_entry_type type)
-{
-	FI_DBG(&rxr_prov, FI_LOG_EP_CTRL,
-	       "Copying packet (type %d) out of posted buffer\n", type);
-	assert(src->type == RXR_PKT_ENTRY_POSTED);
-	memcpy(dest, src, sizeof(struct rxr_pkt_entry));
-	dest->pkt = (struct rxr_pkt *)((char *)dest + sizeof(*dest));
-	memcpy(dest->pkt, src->pkt, ep->mtu_size);
-	dest->type = type;
-	dlist_init(&dest->entry);
-#if ENABLE_DEBUG
-	dlist_init(&dest->dbg_entry);
-#endif
-	dest->state = RXR_PKT_ENTRY_IN_USE;
-}
-
-static inline struct rxr_pkt_entry*
-rxr_get_pkt_entry(struct rxr_ep *ep, struct ofi_bufpool *pkt_pool)
-{
-	struct rxr_pkt_entry *pkt_entry;
-	void *mr = NULL;
-
-	pkt_entry = ofi_buf_alloc_ex(pkt_pool, &mr);
-	if (!pkt_entry)
-		return NULL;
-#ifdef ENABLE_EFA_POISONING
-	memset(pkt_entry, 0, sizeof(*pkt_entry));
-#endif
-	dlist_init(&pkt_entry->entry);
-#if ENABLE_DEBUG
-	dlist_init(&pkt_entry->dbg_entry);
-#endif
-	pkt_entry->mr = (struct fid_mr *)mr;
-	pkt_entry->pkt = (struct rxr_pkt *)((char *)pkt_entry +
-			  sizeof(*pkt_entry));
-#ifdef ENABLE_EFA_POISONING
-	memset(pkt_entry->pkt, 0, ep->mtu_size);
-#endif
-	pkt_entry->state = RXR_PKT_ENTRY_IN_USE;
-
-	return pkt_entry;
-}
-
-#ifdef ENABLE_EFA_POISONING
-static inline void rxr_poison_mem_region(uint32_t *ptr, size_t size)
-{
-	int i;
-
-	for (i = 0; i < size / sizeof(rxr_poison_value); i++)
-		memcpy(ptr + i, &rxr_poison_value, sizeof(rxr_poison_value));
-}
-#endif
-
-static inline void rxr_release_tx_pkt_entry(struct rxr_ep *ep,
-					    struct rxr_pkt_entry *pkt)
-{
-	struct rxr_peer *peer;
-
-#if ENABLE_DEBUG
-	dlist_remove(&pkt->dbg_entry);
-#endif
-	/*
-	 * Decrement rnr_queued_pkts counter and reset backoff for this peer if
-	 * we get a send completion for a retransmitted packet.
-	 */
-	if (OFI_UNLIKELY(pkt->state == RXR_PKT_ENTRY_RNR_RETRANSMIT)) {
-		peer = rxr_ep_get_peer(ep, pkt->addr);
-		peer->rnr_queued_pkt_cnt--;
-		peer->timeout_interval = 0;
-		peer->rnr_timeout_exp = 0;
-		if (peer->rnr_state & RXR_PEER_IN_BACKOFF)
-			dlist_remove(&peer->rnr_entry);
-		peer->rnr_state = 0;
-		FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
-		       "reset backoff timer for peer: %" PRIu64 "\n",
-		       pkt->addr);
-	}
-#ifdef ENABLE_EFA_POISONING
-	rxr_poison_mem_region((uint32_t *)pkt, ep->tx_pkt_pool_entry_sz);
-#endif
-	pkt->state = RXR_PKT_ENTRY_FREE;
-	ofi_buf_free(pkt);
-}
 
 static inline void rxr_release_tx_entry(struct rxr_ep *ep,
 					struct rxr_tx_entry *tx_entry)
@@ -1197,8 +1072,6 @@ void rxr_ep_progress_internal(struct rxr_ep *rxr_ep);
 struct rxr_pkt_entry *rxr_ep_get_pkt_entry(struct rxr_ep *rxr_ep,
 					   struct ofi_bufpool *pkt_pool);
 int rxr_ep_post_buf(struct rxr_ep *ep, uint64_t flags, enum rxr_lower_ep_type lower_ep);
-ssize_t rxr_ep_send_msg(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
-			const struct fi_msg *msg, uint64_t flags);
 ssize_t rxr_ep_post_data(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry);
 void rxr_ep_init_connack_pkt_entry(struct rxr_ep *ep,
 				   struct rxr_pkt_entry *pkt_entry,
@@ -1371,66 +1244,6 @@ static inline void rxr_rm_tx_cq_check(struct rxr_ep *ep, struct util_cq *tx_cq)
 	fastlock_release(&tx_cq->cq_lock);
 }
 
-static inline ssize_t rxr_ep_sendv_pkt(struct rxr_ep *ep,
-				       struct rxr_pkt_entry *pkt_entry,
-				       fi_addr_t addr, const struct iovec *iov,
-				       void **desc, size_t count,
-				       uint64_t flags)
-{
-	struct fi_msg msg;
-	struct rxr_peer *peer;
-
-	msg.msg_iov = iov;
-	msg.desc = desc;
-	msg.iov_count = count;
-	peer = rxr_ep_get_peer(ep, addr);
-	msg.addr = peer->is_local ? peer->shm_fiaddr : addr;
-	msg.context = pkt_entry;
-	msg.data = 0;
-
-	return rxr_ep_send_msg(ep, pkt_entry, &msg, flags);
-}
-
-/* rxr_pkt_start currently expects data pkt right after pkt hdr */
-static inline ssize_t rxr_ep_send_pkt_flags(struct rxr_ep *ep,
-					    struct rxr_pkt_entry *pkt_entry,
-					    fi_addr_t addr, uint64_t flags)
-{
-	struct iovec iov;
-	void *desc;
-
-	iov.iov_base = rxr_pkt_start(pkt_entry);
-	iov.iov_len = pkt_entry->pkt_size;
-
-	if (rxr_ep_get_peer(ep, addr)->is_local)
-		desc = NULL;
-	else
-		desc = rxr_ep_mr_local(ep) ? fi_mr_desc(pkt_entry->mr) : NULL;
-
-	return rxr_ep_sendv_pkt(ep, pkt_entry, addr, &iov, &desc, 1, flags);
-}
-
-static inline ssize_t rxr_ep_inject_pkt(struct rxr_ep *ep,
-					struct rxr_pkt_entry *pkt_entry,
-					fi_addr_t addr)
-{
-	struct rxr_peer *peer;
-
-	/* currently only EOR packet is injected using shm ep */
-	peer = rxr_ep_get_peer(ep, addr);
-	assert(peer);
-	assert(rxr_env.enable_shm_transfer && peer->is_local);
-	return fi_inject(ep->shm_ep, rxr_pkt_start(pkt_entry), pkt_entry->pkt_size,
-			 peer->shm_fiaddr);
-}
-
-static inline ssize_t rxr_ep_send_pkt(struct rxr_ep *ep,
-				      struct rxr_pkt_entry *pkt_entry,
-				      fi_addr_t addr)
-{
-	return rxr_ep_send_pkt_flags(ep, pkt_entry, addr, 0);
-}
-
 static inline bool rxr_peer_timeout_expired(struct rxr_ep *ep,
 					    struct rxr_peer *peer,
 					    uint64_t ts)
@@ -1439,7 +1252,6 @@ static inline bool rxr_peer_timeout_expired(struct rxr_ep *ep,
 					  peer->timeout_interval *
 					  (1 << peer->rnr_timeout_exp))));
 }
-
 
 /* Performance counter declarations */
 #ifdef RXR_PERF_ENABLED

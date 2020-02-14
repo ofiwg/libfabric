@@ -119,10 +119,10 @@ int rxr_cq_handle_rx_error(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
 	dlist_foreach_container_safe(&rx_entry->queued_pkts,
 				     struct rxr_pkt_entry,
 				     pkt_entry, entry, tmp)
-		rxr_release_tx_pkt_entry(ep, pkt_entry);
+		rxr_pkt_entry_release_tx(ep, pkt_entry);
 
 	if (rx_entry->unexp_rts_pkt) {
-		rxr_release_rx_pkt_entry(ep, rx_entry->unexp_rts_pkt);
+		rxr_pkt_entry_release_rx(ep, rx_entry->unexp_rts_pkt);
 		rx_entry->unexp_rts_pkt = NULL;
 	}
 
@@ -203,7 +203,7 @@ int rxr_cq_handle_tx_error(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	dlist_foreach_container_safe(&tx_entry->queued_pkts,
 				     struct rxr_pkt_entry,
 				     pkt_entry, entry, tmp)
-		rxr_release_tx_pkt_entry(ep, pkt_entry);
+		rxr_pkt_entry_release_tx(ep, pkt_entry);
 
 	err_entry.flags = tx_entry->cq_entry.flags;
 	err_entry.op_context = tx_entry->cq_entry.op_context;
@@ -361,9 +361,9 @@ int rxr_cq_handle_cq_error(struct rxr_ep *ep, ssize_t err)
 		 */
 		if (err_entry.flags & FI_SEND) {
 			rxr_ep_dec_tx_pending(ep, peer, 1);
-			rxr_release_tx_pkt_entry(ep, pkt_entry);
+			rxr_pkt_entry_release_tx(ep, pkt_entry);
 		} else if (err_entry.flags & FI_RECV) {
-			rxr_release_rx_pkt_entry(ep, pkt_entry);
+			rxr_pkt_entry_release_rx(ep, pkt_entry);
 		} else {
 			assert(0 && "unknown err_entry flags in CONNACK packet");
 		}
@@ -376,7 +376,7 @@ int rxr_cq_handle_cq_error(struct rxr_ep *ep, ssize_t err)
 		 * Since we don't have any context besides the error code,
 		 * we will write to the eq instead.
 		 */
-		rxr_release_rx_pkt_entry(ep, pkt_entry);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		goto write_err;
 	}
 
@@ -393,7 +393,7 @@ int rxr_cq_handle_cq_error(struct rxr_ep *ep, ssize_t err)
 		    rxr_ep_domain(ep)->resource_mgmt == FI_RM_ENABLED) {
 			ret = rxr_cq_handle_tx_error(ep, tx_entry,
 						     err_entry.prov_errno);
-			rxr_release_tx_pkt_entry(ep, pkt_entry);
+			rxr_pkt_entry_release_tx(ep, pkt_entry);
 			return ret;
 		}
 
@@ -415,7 +415,7 @@ int rxr_cq_handle_cq_error(struct rxr_ep *ep, ssize_t err)
 		    rxr_ep_domain(ep)->resource_mgmt == FI_RM_ENABLED) {
 			ret = rxr_cq_handle_rx_error(ep, rx_entry,
 						     err_entry.prov_errno);
-			rxr_release_tx_pkt_entry(ep, pkt_entry);
+			rxr_pkt_entry_release_tx(ep, pkt_entry);
 			return ret;
 		}
 		rxr_cq_queue_pkt(ep, &rx_entry->queued_pkts, pkt_entry);
@@ -471,7 +471,7 @@ static void rxr_cq_post_connack(struct rxr_ep *ep,
 	if (peer->state == RXR_PEER_ACKED)
 		return;
 
-	pkt_entry = rxr_get_pkt_entry(ep, ep->tx_pkt_efa_pool);
+	pkt_entry = rxr_pkt_entry_alloc(ep, ep->tx_pkt_efa_pool);
 	if (OFI_UNLIKELY(!pkt_entry))
 		return;
 
@@ -481,14 +481,14 @@ static void rxr_cq_post_connack(struct rxr_ep *ep,
 	 * TODO: Once we start using a core's selective completion capability,
 	 * post the CONNACK packets without FI_COMPLETION.
 	 */
-	ret = rxr_ep_send_pkt(ep, pkt_entry, addr);
+	ret = rxr_pkt_entry_send(ep, pkt_entry, addr);
 
 	/*
 	 * Skip sending this connack on error and try again when processing the
 	 * next RTS from this peer containing the source information
 	 */
 	if (OFI_UNLIKELY(ret)) {
-		rxr_release_tx_pkt_entry(ep, pkt_entry);
+		rxr_pkt_entry_release_tx(ep, pkt_entry);
 		if (ret == -FI_EAGAIN)
 			return;
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
@@ -591,7 +591,7 @@ void rxr_cq_handle_rx_completion(struct rxr_ep *ep,
 		else if (ep->util_ep.caps & FI_RMA_EVENT)
 			efa_cntr_report_rx_completion(&ep->util_ep, rx_entry->cq_entry.flags);
 
-		rxr_release_rx_pkt_entry(ep, pkt_entry);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
 	}
 
@@ -637,7 +637,7 @@ void rxr_cq_handle_rx_completion(struct rxr_ep *ep,
 		 * do not call rxr_release_rx_entry here because
 		 * caller will release
 		 */
-		rxr_release_rx_pkt_entry(ep, pkt_entry);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
 	}
 
@@ -645,7 +645,7 @@ void rxr_cq_handle_rx_completion(struct rxr_ep *ep,
 		rxr_msg_multi_recv_handle_completion(ep, rx_entry);
 
 	rxr_cq_write_rx_completion(ep, rx_entry);
-	rxr_release_rx_pkt_entry(ep, pkt_entry);
+	rxr_pkt_entry_release_rx(ep, pkt_entry);
 	return;
 }
 
@@ -664,7 +664,7 @@ ssize_t rxr_cq_recv_shm_large_message(struct rxr_ep *ep, struct rxr_rx_entry *rx
 	if (rx_entry->state == RXR_RX_QUEUED_SHM_LARGE_READ)
 		return 0;
 
-	pkt_entry = rxr_get_pkt_entry(ep, ep->tx_pkt_shm_pool);
+	pkt_entry = rxr_pkt_entry_alloc(ep, ep->tx_pkt_shm_pool);
 	assert(pkt_entry);
 
 	pkt_entry->x_entry = (void *)rx_entry;
@@ -844,7 +844,7 @@ int rxr_cq_process_msg_rts(struct rxr_ep *ep,
 	data = rxr_cq_read_rts_hdr(ep, rx_entry, pkt_entry);
 	if (peer->is_local && !(rts_hdr->flags & RXR_SHM_HDR_DATA)) {
 		rxr_cq_process_shm_large_message(ep, rx_entry, rts_hdr, data);
-		rxr_release_rx_pkt_entry(ep, pkt_entry);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return 0;
 	}
 
@@ -900,15 +900,15 @@ static int rxr_cq_reorder_msg(struct rxr_ep *ep,
 
 	if (OFI_LIKELY(rxr_env.rx_copy_ooo)) {
 		assert(pkt_entry->type == RXR_PKT_ENTRY_POSTED);
-		ooo_entry = rxr_get_pkt_entry(ep, ep->rx_ooo_pkt_pool);
+		ooo_entry = rxr_pkt_entry_alloc(ep, ep->rx_ooo_pkt_pool);
 		if (OFI_UNLIKELY(!ooo_entry)) {
 			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 				"Unable to allocate rx_pkt_entry for OOO msg\n");
 			return -FI_ENOMEM;
 		}
-		rxr_copy_pkt_entry(ep, ooo_entry, pkt_entry, RXR_PKT_ENTRY_OOO);
+		rxr_pkt_entry_copy(ep, ooo_entry, pkt_entry, RXR_PKT_ENTRY_OOO);
 		rts_hdr = rxr_get_rts_hdr(ooo_entry->pkt);
-		rxr_release_rx_pkt_entry(ep, pkt_entry);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
 	} else {
 		ooo_entry = pkt_entry;
 	}
@@ -1004,7 +1004,7 @@ static void rxr_cq_handle_eor(struct rxr_ep *ep,
 	/* pre-post buf used here, so can NOT track back to tx_entry with x_entry */
 	tx_entry = ofi_bufpool_get_ibuf(ep->tx_entry_pool, shm_eor->tx_id);
 	rxr_cq_write_tx_completion(ep, tx_entry);
-	rxr_release_rx_pkt_entry(ep, pkt_entry);
+	rxr_pkt_entry_release_rx(ep, pkt_entry);
 }
 
 static void rxr_cq_handle_rts(struct rxr_ep *ep,
@@ -1043,7 +1043,7 @@ static void rxr_cq_handle_rts(struct rxr_ep *ep,
 			       rts_hdr->msg_id, peer->robuf->exp_msg_id);
 			if (!rts_hdr->addrlen)
 				efa_eq_write_error(&ep->util_ep, FI_EIO, ret);
-			rxr_release_rx_pkt_entry(ep, pkt_entry);
+			rxr_pkt_entry_release_rx(ep, pkt_entry);
 			return;
 		} else if (OFI_UNLIKELY(ret == -FI_ENOMEM)) {
 			efa_eq_write_error(&ep->util_ep, FI_ENOBUFS, -FI_ENOBUFS);
@@ -1086,7 +1086,7 @@ static void rxr_cq_handle_connack(struct rxr_ep *ep,
 	peer->state = RXR_PEER_ACKED;
 	FI_DBG(&rxr_prov, FI_LOG_CQ,
 	       "CONNACK received from %" PRIu64 "\n", src_addr);
-	rxr_release_rx_pkt_entry(ep, pkt_entry);
+	rxr_pkt_entry_release_rx(ep, pkt_entry);
 }
 
 int rxr_cq_handle_rts_with_data(struct rxr_ep *ep,
@@ -1144,7 +1144,7 @@ int rxr_cq_handle_rts_with_data(struct rxr_ep *ep,
 	else
 		rx_entry->credit_request = rxr_env.tx_min_credits;
 	ret = rxr_ep_post_ctrl_or_queue(ep, RXR_RX_ENTRY, rx_entry, RXR_CTS_PKT, 0);
-	rxr_release_rx_pkt_entry(ep, pkt_entry);
+	rxr_pkt_entry_release_rx(ep, pkt_entry);
 	return ret;
 }
 
@@ -1209,7 +1209,7 @@ int rxr_cq_handle_pkt_with_data(struct rxr_ep *ep,
 		ret = rxr_ep_post_ctrl_or_queue(ep, RXR_RX_ENTRY, rx_entry, RXR_CTS_PKT, 0);
 	}
 
-	rxr_release_rx_pkt_entry(ep, pkt_entry);
+	rxr_pkt_entry_release_rx(ep, pkt_entry);
 	return ret;
 }
 
@@ -1254,7 +1254,7 @@ static void rxr_cq_handle_cts(struct rxr_ep *ep,
 	if (tx_entry->credit_allocated < tx_entry->credit_request)
 		peer->tx_credits += tx_entry->credit_request - tx_entry->credit_allocated;
 
-	rxr_release_rx_pkt_entry(ep, pkt_entry);
+	rxr_pkt_entry_release_rx(ep, pkt_entry);
 
 	if (tx_entry->state != RXR_TX_SEND) {
 		tx_entry->state = RXR_TX_SEND;
@@ -1478,7 +1478,7 @@ void rxr_cq_handle_rma_context_pkt(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_
 			efa_cntr_report_tx_completion(&ep->util_ep, tx_entry->cq_entry.flags);
 			rxr_release_tx_entry(ep, tx_entry);
 		}
-		rxr_release_tx_pkt_entry(ep, pkt_entry);
+		rxr_pkt_entry_release_tx(ep, pkt_entry);
 		break;
 	case RXR_SHM_LARGE_READ:
 		/*
@@ -1504,7 +1504,7 @@ void rxr_cq_handle_rma_context_pkt(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_
 		rxr_msg_multi_recv_free_posted_entry(ep, rx_entry);
 		if (OFI_LIKELY(!ret))
 			rxr_release_rx_entry(ep, rx_entry);
-		rxr_release_rx_pkt_entry(ep, pkt_entry);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		break;
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "invalid rma_context_type in RXR_RMA_CONTEXT_PKT %d\n",
@@ -1627,7 +1627,7 @@ void rxr_cq_handle_pkt_send_completion(struct rxr_ep *ep, struct fi_cq_data_entr
 		}
 	}
 
-	rxr_release_tx_pkt_entry(ep, pkt_entry);
+	rxr_pkt_entry_release_tx(ep, pkt_entry);
 	if (!peer->is_local)
 		rxr_ep_dec_tx_pending(ep, peer, 0);
 	return;

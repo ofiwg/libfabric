@@ -400,7 +400,7 @@ size_t rxr_rma_post_shm_rma(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry
 
 	peer = rxr_ep_get_peer(rxr_ep, tx_entry->addr);
 	shm_fiaddr = peer->shm_fiaddr;
-	pkt_entry = rxr_get_pkt_entry(rxr_ep, rxr_ep->tx_pkt_shm_pool);
+	pkt_entry = rxr_pkt_entry_alloc(rxr_ep, rxr_ep->tx_pkt_shm_pool);
 	if (OFI_UNLIKELY(!pkt_entry))
 		return -FI_EAGAIN;
 

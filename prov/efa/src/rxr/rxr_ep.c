@@ -265,15 +265,15 @@ struct rxr_rx_entry *rxr_ep_get_new_unexp_rx_entry(struct rxr_ep *ep,
 	uint32_t op;
 
 	if (rxr_env.rx_copy_unexp && pkt_entry->type == RXR_PKT_ENTRY_POSTED) {
-		unexp_entry = rxr_get_pkt_entry(ep, ep->rx_unexp_pkt_pool);
+		unexp_entry = rxr_pkt_entry_alloc(ep, ep->rx_unexp_pkt_pool);
 		if (OFI_UNLIKELY(!unexp_entry)) {
 			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 				"Unable to allocate rx_pkt_entry for unexp msg\n");
 			return NULL;
 		}
-		rxr_copy_pkt_entry(ep, unexp_entry, pkt_entry,
+		rxr_pkt_entry_copy(ep, unexp_entry, pkt_entry,
 				   RXR_PKT_ENTRY_UNEXP);
-		rxr_release_rx_pkt_entry(ep, pkt_entry);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
 	} else {
 		unexp_entry = pkt_entry;
 	}
@@ -364,10 +364,10 @@ int rxr_ep_post_buf(struct rxr_ep *ep, uint64_t flags, enum rxr_lower_ep_type lo
 
 	switch (lower_ep_type) {
 	case SHM_EP:
-		rx_pkt_entry = rxr_get_pkt_entry(ep, ep->rx_pkt_shm_pool);
+		rx_pkt_entry = rxr_pkt_entry_alloc(ep, ep->rx_pkt_shm_pool);
 		break;
 	case EFA_EP:
-		rx_pkt_entry = rxr_get_pkt_entry(ep, ep->rx_pkt_efa_pool);
+		rx_pkt_entry = rxr_pkt_entry_alloc(ep, ep->rx_pkt_efa_pool);
 		break;
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
@@ -403,7 +403,7 @@ int rxr_ep_post_buf(struct rxr_ep *ep, uint64_t flags, enum rxr_lower_ep_type lo
 		msg.desc = &desc;
 		ret = fi_recvmsg(ep->shm_ep, &msg, flags);
 		if (OFI_UNLIKELY(ret)) {
-			rxr_release_rx_pkt_entry(ep, rx_pkt_entry);
+			rxr_pkt_entry_release_rx(ep, rx_pkt_entry);
 			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 				"failed to post buf for shm  %d (%s)\n", -ret,
 				fi_strerror(-ret));
@@ -421,7 +421,7 @@ int rxr_ep_post_buf(struct rxr_ep *ep, uint64_t flags, enum rxr_lower_ep_type lo
 		msg.desc = &desc;
 		ret = fi_recvmsg(ep->rdm_ep, &msg, flags);
 		if (OFI_UNLIKELY(ret)) {
-			rxr_release_rx_pkt_entry(ep, rx_pkt_entry);
+			rxr_pkt_entry_release_rx(ep, rx_pkt_entry);
 			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 				"failed to post buf %d (%s)\n", -ret,
 				fi_strerror(-ret));
@@ -574,38 +574,6 @@ static size_t rxr_copy_from_iov(void *buf, uint64_t remaining_len,
 	return done;
 }
 
-ssize_t rxr_ep_send_msg(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
-			const struct fi_msg *msg, uint64_t flags)
-{
-	struct rxr_peer *peer;
-	size_t ret;
-
-	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
-	assert(ep->tx_pending <= ep->max_outstanding_tx);
-
-	if (ep->tx_pending == ep->max_outstanding_tx)
-		return -FI_EAGAIN;
-
-	if (peer->rnr_state & RXR_PEER_IN_BACKOFF)
-		return -FI_EAGAIN;
-
-#if ENABLE_DEBUG
-	dlist_insert_tail(&pkt_entry->dbg_entry, &ep->tx_pkt_list);
-#ifdef ENABLE_RXR_PKT_DUMP
-	rxr_ep_print_pkt("Sent", ep, (struct rxr_base_hdr *)pkt_entry->pkt);
-#endif
-#endif
-	if (rxr_env.enable_shm_transfer && peer->is_local) {
-		ret = fi_sendmsg(ep->shm_ep, msg, flags);
-	} else {
-		ret = fi_sendmsg(ep->rdm_ep, msg, flags);
-		if (OFI_LIKELY(!ret))
-			rxr_ep_inc_tx_pending(ep, peer);
-	}
-
-	return ret;
-}
-
 static ssize_t rxr_ep_send_data_pkt_entry(struct rxr_ep *ep,
 					  struct rxr_tx_entry *tx_entry,
 					  struct rxr_pkt_entry *pkt_entry,
@@ -628,8 +596,8 @@ static ssize_t rxr_ep_send_data_pkt_entry(struct rxr_ep *ep,
 	pkt_entry->pkt_size += RXR_DATA_HDR_SIZE;
 	pkt_entry->addr = tx_entry->addr;
 
-	return rxr_ep_send_pkt_flags(ep, pkt_entry, tx_entry->addr,
-				     tx_entry->send_flags);
+	return rxr_pkt_entry_send_with_flags(ep, pkt_entry, tx_entry->addr,
+					     tx_entry->send_flags);
 }
 
 /* If mr local is not set, will skip copying and only send user buffers */
@@ -721,9 +689,9 @@ static ssize_t rxr_ep_mr_send_data_pkt_entry(struct rxr_ep *ep,
 	FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
 	       "Sending an iov count, %zu with payload size: %lu.\n",
 	       i, payload_size);
-	ret = rxr_ep_sendv_pkt(ep, pkt_entry, tx_entry->addr,
-			       (const struct iovec *)iov,
-			       desc, i, tx_entry->send_flags);
+	ret = rxr_pkt_entry_sendv(ep, pkt_entry, tx_entry->addr,
+				  (const struct iovec *)iov,
+				  desc, i, tx_entry->send_flags);
 	return ret;
 }
 
@@ -734,7 +702,7 @@ ssize_t rxr_ep_post_data(struct rxr_ep *rxr_ep,
 	struct rxr_data_pkt *data_pkt;
 	ssize_t ret;
 
-	pkt_entry = rxr_get_pkt_entry(rxr_ep, rxr_ep->tx_pkt_efa_pool);
+	pkt_entry = rxr_pkt_entry_alloc(rxr_ep, rxr_ep->tx_pkt_efa_pool);
 
 	if (OFI_UNLIKELY(!pkt_entry))
 		return -FI_ENOMEM;
@@ -764,7 +732,7 @@ ssize_t rxr_ep_post_data(struct rxr_ep *rxr_ep,
 	}
 
 	if (OFI_UNLIKELY(ret)) {
-		rxr_release_tx_pkt_entry(rxr_ep, pkt_entry);
+		rxr_pkt_entry_release_tx(rxr_ep, pkt_entry);
 		return ret;
 	}
 	data_pkt = rxr_get_data_pkt(pkt_entry->pkt);
@@ -1127,16 +1095,16 @@ static size_t rxr_ep_post_ctrl(struct rxr_ep *rxr_ep, int entry_type, void *x_en
 
 	peer = rxr_ep_get_peer(rxr_ep, addr);
 	if (peer->is_local)
-		pkt_entry = rxr_get_pkt_entry(rxr_ep, rxr_ep->tx_pkt_shm_pool);
+		pkt_entry = rxr_pkt_entry_alloc(rxr_ep, rxr_ep->tx_pkt_shm_pool);
 	else
-		pkt_entry = rxr_get_pkt_entry(rxr_ep, rxr_ep->tx_pkt_efa_pool);
+		pkt_entry = rxr_pkt_entry_alloc(rxr_ep, rxr_ep->tx_pkt_efa_pool);
 
 	if (!pkt_entry)
 		return -FI_EAGAIN;
 
 	err = rxr_ep_init_ctrl_pkt(rxr_ep, entry_type, x_entry, ctrl_type, pkt_entry);
 	if (OFI_UNLIKELY(err)) {
-		rxr_release_tx_pkt_entry(rxr_ep, pkt_entry);
+		rxr_pkt_entry_release_tx(rxr_ep, pkt_entry);
 		return err;
 	}
 
@@ -1145,19 +1113,19 @@ static size_t rxr_ep_post_ctrl(struct rxr_ep *rxr_ep, int entry_type, void *x_en
 	 * released here
 	 */
 	if (inject)
-		err = rxr_ep_inject_pkt(rxr_ep, pkt_entry, addr);
+		err = rxr_pkt_entry_inject(rxr_ep, pkt_entry, addr);
 	else
-		err = rxr_ep_send_pkt(rxr_ep, pkt_entry, addr);
+		err = rxr_pkt_entry_send(rxr_ep, pkt_entry, addr);
 
 	if (OFI_UNLIKELY(err)) {
-		rxr_release_tx_pkt_entry(rxr_ep, pkt_entry);
+		rxr_pkt_entry_release_tx(rxr_ep, pkt_entry);
 		return err;
 	}
 
 	rxr_ep_handle_ctrl_sent(rxr_ep, pkt_entry);
 
 	if (inject)
-		rxr_release_tx_pkt_entry(rxr_ep, pkt_entry);
+		rxr_pkt_entry_release_tx(rxr_ep, pkt_entry);
 
 	return 0;
 }
@@ -1271,12 +1239,12 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 
 	dlist_foreach(&rxr_ep->rx_unexp_list, entry) {
 		rx_entry = container_of(entry, struct rxr_rx_entry, entry);
-		rxr_release_rx_pkt_entry(rxr_ep, rx_entry->unexp_rts_pkt);
+		rxr_pkt_entry_release_rx(rxr_ep, rx_entry->unexp_rts_pkt);
 	}
 
 	dlist_foreach(&rxr_ep->rx_unexp_tagged_list, entry) {
 		rx_entry = container_of(entry, struct rxr_rx_entry, entry);
-		rxr_release_rx_pkt_entry(rxr_ep, rx_entry->unexp_rts_pkt);
+		rxr_pkt_entry_release_rx(rxr_ep, rx_entry->unexp_rts_pkt);
 	}
 
 	dlist_foreach(&rxr_ep->rx_entry_queued_list, entry) {
@@ -1285,7 +1253,7 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 		dlist_foreach_container_safe(&rx_entry->queued_pkts,
 					     struct rxr_pkt_entry,
 					     pkt, entry, tmp)
-			rxr_release_tx_pkt_entry(rxr_ep, pkt);
+			rxr_pkt_entry_release_tx(rxr_ep, pkt);
 	}
 
 	dlist_foreach(&rxr_ep->tx_entry_queued_list, entry) {
@@ -1294,17 +1262,17 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 		dlist_foreach_container_safe(&tx_entry->queued_pkts,
 					     struct rxr_pkt_entry,
 					     pkt, entry, tmp)
-			rxr_release_tx_pkt_entry(rxr_ep, pkt);
+			rxr_pkt_entry_release_tx(rxr_ep, pkt);
 	}
 
 	dlist_foreach_safe(&rxr_ep->rx_pkt_list, entry, tmp) {
 		pkt = container_of(entry, struct rxr_pkt_entry, dbg_entry);
-		rxr_release_rx_pkt_entry(rxr_ep, pkt);
+		rxr_pkt_entry_release_rx(rxr_ep, pkt);
 	}
 
 	dlist_foreach_safe(&rxr_ep->tx_pkt_list, entry, tmp) {
 		pkt = container_of(entry, struct rxr_pkt_entry, dbg_entry);
-		rxr_release_tx_pkt_entry(rxr_ep, pkt);
+		rxr_pkt_entry_release_tx(rxr_ep, pkt);
 	}
 
 	dlist_foreach_safe(&rxr_ep->rx_posted_buf_list, entry, tmp) {
@@ -1968,7 +1936,7 @@ static inline int rxr_ep_send_queued_pkts(struct rxr_ep *ep,
 			dlist_remove(&pkt_entry->entry);
 			continue;
 		}
-		ret = rxr_ep_send_pkt(ep, pkt_entry, pkt_entry->addr);
+		ret = rxr_pkt_entry_send(ep, pkt_entry, pkt_entry->addr);
 		if (ret)
 			return ret;
 		dlist_remove(&pkt_entry->entry);
