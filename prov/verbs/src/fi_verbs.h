@@ -244,9 +244,9 @@ struct fi_ibv_eq_entry {
 	uint32_t		event;
 	size_t			len;
 	union {
-		char 			entry[0];
 		struct fi_eq_entry 	*eq_entry;
 		struct fi_eq_cm_entry	*cm_entry;
+		uint8_t 		data[0];
 	};
 };
 
@@ -351,18 +351,12 @@ struct fi_ibv_domain {
 
 	/* MR stuff */
 	struct ofi_mr_cache		cache;
-	int 				(*post_send)(struct ibv_qp *qp,
-						     struct ibv_send_wr *wr,
-						     struct ibv_send_wr **bad_wr);
-	int				(*poll_cq)(struct ibv_cq *cq,
-						   int num_entries,
-						   struct ibv_wc *wc);
 };
 
 struct fi_ibv_cq;
 typedef void (*fi_ibv_cq_read_entry)(struct ibv_wc *wc, void *buf);
 
-struct fi_ibv_wce {
+struct vrb_wc_entry {
 	struct slist_entry	entry;
 	struct ibv_wc		wc;
 };
@@ -378,7 +372,7 @@ struct fi_ibv_cq {
 	struct ibv_wc		wc;
 	int			signal_fd[2];
 	fi_ibv_cq_read_entry	read_entry;
-	struct slist		wcq;
+	struct slist		saved_wc_list;
 	ofi_atomic32_t		nevents;
 	struct ofi_bufpool	*wce_pool;
 
@@ -387,10 +381,12 @@ struct fi_ibv_cq {
 		fastlock_t		srq_list_lock;
 		struct dlist_entry	srq_list;
 	} xrc;
-	/* Track tx credits for verbs devices that can free-up send queue
-	 * space after processing WRs even if the app hasn't read the CQ.
-	 * Without this tracking we might overrun the CQ */
-	ofi_atomic32_t		credits;
+
+	size_t			credits;
+	/* As a future optimization, we can use the app's context
+	 * if they set FI_CONTEXT.
+	 */
+	struct ofi_bufpool	*ctx_pool;
 };
 
 int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
@@ -459,11 +455,6 @@ static inline int fi_ibv_is_xrc(struct fi_info *info)
 {
 	return (FI_IBV_EP_TYPE(info) == FI_EP_MSG) &&
 	       (FI_IBV_EP_PROTO(info) == FI_PROTO_RDMA_CM_IB_XRC);
-}
-
-static inline int fi_ibv_is_xrc_send_qp(enum ibv_qp_type qp_type)
-{
-	return qp_type == IBV_QPT_XRC_SEND;
 }
 
 int fi_ibv_domain_xrc_init(struct fi_ibv_domain *domain);
@@ -556,6 +547,10 @@ struct fi_ibv_xrc_ep_conn_setup {
 struct fi_ibv_ep {
 	struct util_ep			util_ep;
 	struct ibv_qp			*ibv_qp;
+
+	/* Protected by send CQ lock */
+	size_t				tx_credits;
+
 	union {
 		struct rdma_cm_id		*id;
 		struct {
@@ -575,10 +570,18 @@ struct fi_ibv_ep {
 		struct ibv_send_wr	msg_wr;
 		struct ibv_sge		sge;
 	} *wrs;
-	size_t				rx_size;
+	size_t				rx_cq_size;
 	struct rdma_conn_param		conn_param;
 	struct fi_ibv_cm_data_hdr	*cm_hdr;
 };
+
+
+/* Must be cast-able to struct fi_context */
+struct vrb_context {
+	struct fi_ibv_ep		*ep;
+	void				*user_ctx;
+};
+
 
 #define VERBS_XRC_EP_MAGIC		0x1F3D5B79
 struct fi_ibv_xrc_ep {
@@ -753,6 +756,8 @@ static inline int fi_ibv_cmp_xrc_domain_name(const char *domain_name,
 
 int fi_ibv_cq_signal(struct fid_cq *cq);
 
+struct fi_ibv_eq_entry *fi_ibv_eq_alloc_entry(uint32_t event,
+					      const void *buf, size_t len);
 ssize_t fi_ibv_eq_write_event(struct fi_ibv_eq *eq, uint32_t event,
 		const void *buf, size_t len);
 
@@ -786,65 +791,21 @@ fi_ibv_dgram_av_lookup_av_entry(fi_addr_t fi_addr)
  * Deal with non-compliant libibverbs drivers which set errno
  * instead of directly returning the error value
  */
-static inline ssize_t fi_ibv_handle_post(int ret)
+static inline ssize_t vrb_convert_ret(int ret)
 {
-	switch (ret) {
-		case -ENOMEM:
-		case ENOMEM:
-			ret = -FI_EAGAIN;
-			break;
-		case -1:
-			ret = (errno == ENOMEM) ? -FI_EAGAIN :
-						  -errno;
-			break;
-		default:
-			ret = -abs(ret);
-			break;
-	}
-	return ret;
+	if (!ret)
+		return 0;
+	else if (ret == -ENOMEM || ret == ENOMEM)
+		return -FI_EAGAIN;
+	else if (ret == -1)
+		return (errno == ENOMEM) ? -FI_EAGAIN : -errno;
+	else
+		return -abs(ret);
 }
 
-/* Returns 0 if it processes WR entry for which user
- * doesn't request the completion */
-static inline int
-fi_ibv_process_wc(struct fi_ibv_cq *cq, struct ibv_wc *wc)
-{
-	return (wc->wr_id == VERBS_NO_COMP_FLAG) ? 0 : 1;
-}
 
-/* Returns 0 and tries read new completions if it processes
- * WR entry for which user doesn't request the completion */
-static inline int
-fi_ibv_process_wc_poll_new(struct fi_ibv_cq *cq, struct ibv_wc *wc)
-{
-	struct fi_ibv_domain *domain = container_of(cq->util_cq.domain,
-						    struct fi_ibv_domain,
-						    util_domain);
-	if (wc->wr_id == VERBS_NO_COMP_FLAG) {
-		int ret;
-
-		while ((ret = domain->poll_cq(cq->cq, 1, wc)) > 0) {
-			if (wc->wr_id != VERBS_NO_COMP_FLAG)
-				return 1;
-		}
-		return ret;
-	}
-	return 1;
-}
-
-static inline int fi_ibv_wc_2_wce(struct fi_ibv_cq *cq,
-				  struct ibv_wc *wc,
-				  struct fi_ibv_wce **wce)
-
-{
-	*wce = ofi_buf_alloc(cq->wce_pool);
-	if (OFI_UNLIKELY(!*wce))
-		return -FI_ENOMEM;
-	memset(*wce, 0, sizeof(**wce));
-	(*wce)->wc = *wc;
-
-	return FI_SUCCESS;
-}
+int vrb_poll_cq(struct fi_ibv_cq *cq, struct ibv_wc *wc);
+int vrb_save_wc(struct fi_ibv_cq *cq, struct ibv_wc *wc);
 
 #define fi_ibv_init_sge(buf, len, desc) (struct ibv_sge)		\
 	{ .addr = (uintptr_t)buf,					\
@@ -899,57 +860,8 @@ static inline int fi_ibv_wc_2_wce(struct fi_ibv_cq *cq,
 			      (msg)->iov_count, flags)
 
 
-static inline int fi_ibv_poll_reap_unsig_cq(struct fi_ibv_ep *ep)
-{
-	struct fi_ibv_wce *wce;
-	struct ibv_wc wc[10];
-	int ret, i;
-	struct fi_ibv_cq *cq =
-		container_of(ep->util_ep.tx_cq, struct fi_ibv_cq, util_cq);
-	struct fi_ibv_domain *domain = container_of(cq->util_cq.domain,
-						    struct fi_ibv_domain,
-						    util_domain);
-
-	cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
-	while (1) {
-		ret = domain->poll_cq(cq->cq, 10, wc);
-		if (ret <= 0)
-			break;
-
-		for (i = 0; i < ret; i++) {
-			if (fi_ibv_process_wc(cq, &wc[i]) &&
-			    (!fi_ibv_wc_2_wce(cq, &wc[i], &wce)))
-				slist_insert_tail(&wce->entry, &cq->wcq);
-		}
-	}
-
-	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
-	return ret;
-}
-
-/* WR must be filled out by now except for context */
-static inline ssize_t
-fi_ibv_send_poll_cq_if_needed(struct fi_ibv_ep *ep, struct ibv_send_wr *wr)
-{
-	struct ibv_send_wr *bad_wr;
-	struct fi_ibv_domain *domain =
-		container_of(ep->util_ep.domain, struct fi_ibv_domain, util_domain);
-	int ret;
-
-	ret = domain->post_send(ep->ibv_qp, wr, &bad_wr);
-	if (OFI_UNLIKELY(ret)) {
-		ret = fi_ibv_handle_post(ret);
-		if (OFI_LIKELY(ret == -FI_EAGAIN)) {
-			ret = fi_ibv_poll_reap_unsig_cq(ep);
-			if (OFI_UNLIKELY(ret))
-				return -FI_EAGAIN;
-			/* Try again and return control to a caller */
-			ret = fi_ibv_handle_post(
-				domain->post_send(ep->ibv_qp, wr, &bad_wr));
-		}
-	}
-	return ret;
-}
+ssize_t vrb_post_send(struct fi_ibv_ep *ep, struct ibv_send_wr *wr);
+ssize_t vrb_post_recv(struct fi_ibv_ep *ep, struct ibv_recv_wr *wr);
 
 static inline ssize_t
 fi_ibv_send_buf(struct fi_ibv_ep *ep, struct ibv_send_wr *wr,
@@ -962,7 +874,7 @@ fi_ibv_send_buf(struct fi_ibv_ep *ep, struct ibv_send_wr *wr,
 	wr->sg_list = &sge;
 	wr->num_sge = 1;
 
-	return fi_ibv_send_poll_cq_if_needed(ep, wr);
+	return vrb_post_send(ep, wr);
 }
 
 static inline ssize_t
@@ -976,7 +888,7 @@ fi_ibv_send_buf_inline(struct fi_ibv_ep *ep, struct ibv_send_wr *wr,
 	wr->sg_list = &sge;
 	wr->num_sge = 1;
 
-	return fi_ibv_send_poll_cq_if_needed(ep, wr);
+	return vrb_post_send(ep, wr);
 }
 
 static inline ssize_t
@@ -998,7 +910,7 @@ fi_ibv_send_iov_flags(struct fi_ibv_ep *ep, struct ibv_send_wr *wr,
 	if (flags & FI_FENCE)
 		wr->send_flags |= IBV_SEND_FENCE;
 
-	return fi_ibv_send_poll_cq_if_needed(ep, wr);
+	return vrb_post_send(ep, wr);
 }
 
 int fi_ibv_get_rai_id(const char *node, const char *service, uint64_t flags,

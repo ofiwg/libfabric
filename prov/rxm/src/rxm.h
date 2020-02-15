@@ -134,6 +134,9 @@ extern size_t rxm_def_univ_size;
 extern size_t rxm_cm_progress_interval;
 extern int force_auto_progress;
 
+struct rxm_ep;
+
+
 /*
  * Connection Map
  */
@@ -192,7 +195,7 @@ struct rxm_cmap_attr {
 };
 
 struct rxm_cmap {
-	struct util_ep		*ep;
+	struct rxm_ep		*ep;
 	struct util_av		*av;
 
 	/* cmap handles that correspond to addresses in AV */
@@ -212,8 +215,6 @@ struct rxm_cmap {
 	ofi_fastlock_release_t	release;
 	fastlock_t		lock;
 };
-
-struct rxm_ep;
 
 enum rxm_cmap_reject_reason {
 	RXM_CMAP_REJECT_UNSPEC,
@@ -585,10 +586,6 @@ struct rxm_recv_entry {
 	uint64_t comp_flags;
 	size_t total_len;
 	struct rxm_recv_queue *recv_queue;
-	struct {
-		void	*buf;
-		size_t	len;
-	} multi_recv;
 
 	/* Used for SAR protocol */
 	struct {
@@ -662,12 +659,14 @@ struct rxm_ep {
 	struct fid_ep 		*srx_ctx;
 	size_t 			comp_per_progress;
 	ofi_atomic32_t		atomic_tx_credits;
-	int			msg_mr_local;
-	int			rxm_mr_local;
+
+	bool			msg_mr_local;
+	bool			rdm_mr_local;
+	bool			do_progress;
+
 	size_t			min_multi_recv_size;
 	size_t			buffered_min;
 	size_t			buffered_limit;
-
 	size_t			inject_limit;
 	size_t			eager_limit;
 	size_t			sar_limit;
@@ -709,9 +708,6 @@ extern struct fi_fabric_attr rxm_fabric_attr;
 extern struct fi_domain_attr rxm_domain_attr;
 extern struct fi_tx_attr rxm_tx_attr;
 extern struct fi_rx_attr rxm_rx_attr;
-
-#define rxm_ep_rx_flags(rxm_ep)	((rxm_ep)->util_ep.rx_op_flags)
-#define rxm_ep_tx_flags(rxm_ep)	((rxm_ep)->util_ep.tx_op_flags)
 
 int rxm_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 			void *context);
@@ -842,100 +838,6 @@ static inline void rxm_cq_log_comp(uint64_t flags)
 #endif
 }
 
-/* Caller must hold recv_queue->lock */
-static inline struct rxm_rx_buf *
-rxm_check_unexp_msg_list(struct rxm_recv_queue *recv_queue, fi_addr_t addr,
-			 uint64_t tag, uint64_t ignore)
-{
-	struct rxm_recv_match_attr match_attr;
-	struct dlist_entry *entry;
-
-	if (dlist_empty(&recv_queue->unexp_msg_list))
-		return NULL;
-
-	match_attr.addr 	= addr;
-	match_attr.tag 		= tag;
-	match_attr.ignore 	= ignore;
-
-	entry = dlist_find_first_match(&recv_queue->unexp_msg_list,
-				       recv_queue->match_unexp, &match_attr);
-	if (!entry)
-		return NULL;
-
-	RXM_DBG_ADDR_TAG(FI_LOG_EP_DATA, "Match for posted recv found in unexp"
-			 " msg list\n", match_attr.addr, match_attr.tag);
-
-	return container_of(entry, struct rxm_rx_buf, unexp_msg.entry);
-}
-
-static inline int
-rxm_process_recv_entry(struct rxm_recv_queue *recv_queue,
-		       struct rxm_recv_entry *recv_entry)
-{
-	struct rxm_rx_buf *rx_buf;
-
-	rx_buf = rxm_check_unexp_msg_list(recv_queue, recv_entry->addr,
-					  recv_entry->tag, recv_entry->ignore);
-	if (rx_buf) {
-		assert((recv_queue->type == RXM_RECV_QUEUE_MSG &&
-			rx_buf->pkt.hdr.op == ofi_op_msg) ||
-		       (recv_queue->type == RXM_RECV_QUEUE_TAGGED &&
-			rx_buf->pkt.hdr.op == ofi_op_tagged));
-		dlist_remove(&rx_buf->unexp_msg.entry);
-		rx_buf->recv_entry = recv_entry;
-
-		if (rx_buf->pkt.ctrl_hdr.type != rxm_ctrl_seg) {
-			return rxm_cq_handle_rx_buf(rx_buf);
-		} else {
-			struct dlist_entry *entry;
-			enum rxm_sar_seg_type last =
-				(rxm_sar_get_seg_type(&rx_buf->pkt.ctrl_hdr)
-								== RXM_SAR_SEG_LAST);
-			ssize_t ret = rxm_cq_handle_rx_buf(rx_buf);
-			struct rxm_recv_match_attr match_attr;
-
-			if (ret || last)
-				return ret;
-
-			match_attr.addr = recv_entry->addr;
-			match_attr.tag = recv_entry->tag;
-			match_attr.ignore = recv_entry->ignore;
-
-			dlist_foreach_container_safe(&recv_queue->unexp_msg_list,
-						     struct rxm_rx_buf, rx_buf,
-						     unexp_msg.entry, entry) {
-				if (!recv_queue->match_unexp(&rx_buf->unexp_msg.entry,
-							     &match_attr))
-					continue;
-				/* Handle unordered completions from MSG provider */
-				if ((rx_buf->pkt.ctrl_hdr.msg_id != recv_entry->sar.msg_id) ||
-				    ((rx_buf->pkt.ctrl_hdr.type != rxm_ctrl_seg)))
-					continue;
-
-				if (!rx_buf->conn) {
-					rx_buf->conn = rxm_key2conn(rx_buf->ep,
-								    rx_buf->pkt.ctrl_hdr.conn_id);
-				}
-				if (recv_entry->sar.conn != rx_buf->conn)
-					continue;
-				rx_buf->recv_entry = recv_entry;
-				dlist_remove(&rx_buf->unexp_msg.entry);
-				last = (rxm_sar_get_seg_type(&rx_buf->pkt.ctrl_hdr)
-								== RXM_SAR_SEG_LAST);
-				ret = rxm_cq_handle_rx_buf(rx_buf);
-				if (ret || last)
-					break;
-			}
-			return ret;
-		}
-	}
-
-	FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Enqueuing recv\n");
-	dlist_insert_tail(&recv_entry->entry, &recv_queue->recv_list);
-
-	return FI_SUCCESS;
-}
-
 static inline ssize_t
 rxm_ep_prepare_tx(struct rxm_ep *rxm_ep, fi_addr_t dest_addr,
 		  struct rxm_conn **rxm_conn)
@@ -1008,7 +910,7 @@ rxm_rx_buf_alloc(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep, uint8_t repost)
 }
 
 static inline void
-rxm_rx_buf_finish(struct rxm_rx_buf *rx_buf)
+rxm_rx_buf_free(struct rxm_rx_buf *rx_buf)
 {
 	if (rx_buf->repost) {
 		dlist_insert_tail(&rx_buf->repost_entry,
@@ -1031,12 +933,6 @@ struct rxm_tx_atomic_buf *rxm_tx_atomic_buf_alloc(struct rxm_ep *rxm_ep)
 		rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_ATOMIC);
 }
 
-static inline struct rxm_recv_entry *rxm_recv_entry_get(struct rxm_recv_queue *queue)
-{
-	return (freestack_isempty(queue->fs) ?
-		NULL : freestack_pop(queue->fs));
-}
-
 static inline void
 rxm_recv_entry_release(struct rxm_recv_queue *queue, struct rxm_recv_entry *entry)
 {
@@ -1057,18 +953,4 @@ static inline int rxm_cq_write_recv_comp(struct rxm_rx_buf *rx_buf,
 		return ofi_cq_write(rx_buf->ep->util_ep.rx_cq, context,
 				    flags, len, buf, rx_buf->pkt.hdr.data,
 				    rx_buf->pkt.hdr.tag);
-}
-
-static inline int
-rxm_cq_write_multi_recv_comp(struct rxm_ep *rxm_ep, struct rxm_recv_entry *recv_entry)
-{
-	if (rxm_ep->rxm_info->caps & FI_SOURCE)
-		return ofi_cq_write_src(rxm_ep->util_ep.rx_cq, recv_entry->context,
-					FI_MULTI_RECV, recv_entry->multi_recv.len,
-					recv_entry->multi_recv.buf, 0, 0,
-					recv_entry->addr);
-	else
-		return ofi_cq_write(rxm_ep->util_ep.rx_cq, recv_entry->context,
-				    FI_MULTI_RECV, recv_entry->multi_recv.len,
-				    recv_entry->multi_recv.buf, 0, 0);
 }

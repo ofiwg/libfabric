@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2018-2019 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2020 Cisco Systems, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -533,7 +534,7 @@ mrail_send_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	if (total_len < mrail_ep->rails[rail].info->tx_attr->inject_size)
 		flags |= FI_INJECT;
 
-	FI_DBG(&mrail_prov, FI_LOG_EP_DATA, "Posting send of length: %" PRIu64
+	FI_DBG(&mrail_prov, FI_LOG_EP_DATA, "Posting send of length: %zu"
 	       " dest_addr: 0x%" PRIx64 " tag: 0x%" PRIx64 " seq: %d"
 	       " on rail: %d\n", len, dest_addr, tag, peer_info->seq_no - 1, rail);
 

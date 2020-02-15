@@ -47,8 +47,27 @@
 #include <assert.h>
 
 #include <ofi_tree.h>
+#include <ofi_osd.h>
 #include <rdma/fi_errno.h>
 
+
+static struct ofi_rbnode *ofi_rbnode_alloc(struct ofi_rbmap *map)
+{
+	struct ofi_rbnode *node;
+
+	if (!map->free_list)
+		return malloc(sizeof(*node));
+
+	node = map->free_list;
+	map->free_list = node->right;
+	return node;
+}
+
+static void ofi_rbnode_free(struct ofi_rbmap *map, struct ofi_rbnode *node)
+{
+	node->right = map->free_list ? map->free_list : NULL;
+	map->free_list = node;
+}
 
 void ofi_rbmap_init(struct ofi_rbmap *map,
 		int (*compare)(struct ofi_rbmap *map, void *key, void *data))
@@ -210,7 +229,7 @@ int ofi_rbmap_insert(struct ofi_rbmap *map, void *key, void *data,
 		current = (ret < 0) ? current->left : current->right;
 	}
 
-	node = malloc(sizeof(*node));
+	node = ofi_rbnode_alloc(map);
 	if (!node)
 		return -FI_ENOMEM;
 
@@ -349,7 +368,7 @@ void ofi_rbmap_delete(struct ofi_rbmap *map, struct ofi_rbnode *node)
 
 	/* swap y in for node, so we can free node */
 	ofi_rbmap_replace_node_ptr(map, node, y);
-	free(node);
+	ofi_rbnode_free(map, node);
 }
 
 struct ofi_rbnode *ofi_rbmap_find(struct ofi_rbmap *map, void *key)

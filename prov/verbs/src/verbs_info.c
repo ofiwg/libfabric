@@ -450,7 +450,7 @@ static inline int fi_ibv_get_qp_cap(struct ibv_context *ctx,
 	init_attr.cap.max_send_sge = MIN(fi_ibv_gl_data.def_tx_iov_limit,
 					 info->tx_attr->iov_limit);
 
-	if (!fi_ibv_is_xrc_send_qp(qp_type)) {
+	if (qp_type != IBV_QPT_XRC_SEND) {
 		init_attr.recv_cq = cq;
 		init_attr.cap.max_recv_wr = MIN(fi_ibv_gl_data.def_rx_size,
 						info->rx_attr->size);

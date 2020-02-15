@@ -49,26 +49,11 @@ void tcpx_srx_xfer_release(struct tcpx_rx_ctx *srx_ctx,
 	fastlock_release(&srx_ctx->lock);
 }
 
-static inline void tcpx_srx_recv_init(struct tcpx_xfer_entry *recv_entry,
-				      uint64_t base_flags, void *context)
-{
-	recv_entry->flags = base_flags | FI_MSG | FI_RECV;
-	recv_entry->context = context;
-}
-
-static inline void tcpx_srx_recv_init_iov(struct tcpx_xfer_entry *recv_entry,
-					  size_t count, const struct iovec *iov)
-{
-	recv_entry->iov_cnt = count;
-	memcpy(&recv_entry->iov[0], iov, count * sizeof(*iov));
-}
-
 struct tcpx_xfer_entry *
 tcpx_srx_next_xfer_entry(struct tcpx_rx_ctx *srx_ctx,
 			struct tcpx_ep *ep, size_t entry_size)
 {
 	struct tcpx_xfer_entry *xfer_entry = NULL;
-	struct tcpx_xfer_entry *new_entry;
 
 	fastlock_acquire(&srx_ctx->lock);
 	if (slist_empty(&srx_ctx->rx_queue))
@@ -78,20 +63,7 @@ tcpx_srx_next_xfer_entry(struct tcpx_rx_ctx *srx_ctx,
 				  struct tcpx_xfer_entry, entry);
 	xfer_entry->rem_len = ofi_total_iov_len(xfer_entry->iov,
 						xfer_entry->iov_cnt) - entry_size;
-	if (!(xfer_entry->flags & FI_MULTI_RECV) &&
-	    xfer_entry->rem_len < ep->min_multi_recv_size) {
-		slist_remove_head(&srx_ctx->rx_queue);
-		xfer_entry->rx_msg_release_fn = tcpx_rx_msg_release;
-	} else {
-		new_entry = ofi_buf_alloc(srx_ctx->buf_pool);
-		if (new_entry) {
-			memcpy(new_entry, xfer_entry, sizeof(*new_entry));
-			ofi_consume_iov(xfer_entry->iov, &xfer_entry->iov_cnt,
-					entry_size);
-			new_entry->rx_msg_release_fn = tcpx_rx_msg_release;
-		}
-		xfer_entry = new_entry;
-	}
+	slist_remove_head(&srx_ctx->rx_queue);
 out:
 	fastlock_release(&srx_ctx->lock);
 	return xfer_entry;
@@ -106,8 +78,6 @@ static ssize_t tcpx_srx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 
 	srx_ctx = container_of(ep, struct tcpx_rx_ctx, rx_fid);
 	assert(msg->iov_count <= TCPX_IOV_LIMIT);
-	assert(!(srx_ctx->op_flags & flags & FI_MULTI_RECV) ||
-	       msg->iov_count == 1);
 
 	fastlock_acquire(&srx_ctx->lock);
 	recv_entry = ofi_buf_alloc(srx_ctx->buf_pool);
@@ -116,8 +86,11 @@ static ssize_t tcpx_srx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		goto unlock;
 	}
 
-	tcpx_srx_recv_init(recv_entry, flags, msg->context);
-	tcpx_srx_recv_init_iov(recv_entry, msg->iov_count, msg->msg_iov);
+	recv_entry->flags = flags | FI_MSG | FI_RECV;
+	recv_entry->context = msg->context;
+	recv_entry->iov_cnt = msg->iov_count;
+	memcpy(&recv_entry->iov[0], msg->msg_iov,
+	       msg->iov_count * sizeof(*msg->msg_iov));
 
 	slist_insert_tail(&recv_entry->entry, &srx_ctx->rx_queue);
 unlock:
@@ -141,8 +114,8 @@ static ssize_t tcpx_srx_recv(struct fid_ep *ep, void *buf, size_t len, void *des
 		goto unlock;
 	}
 
-	tcpx_srx_recv_init(recv_entry, srx_ctx->op_flags & FI_MULTI_RECV,
-			   context);
+	recv_entry->flags = FI_MSG | FI_RECV;
+	recv_entry->context = context;
 	recv_entry->iov_cnt = 1;
 	recv_entry->iov[0].iov_base = buf;
 	recv_entry->iov[0].iov_len = len;
@@ -163,7 +136,6 @@ static ssize_t tcpx_srx_recvv(struct fid_ep *ep, const struct iovec *iov, void *
 
 	srx_ctx = container_of(ep, struct tcpx_rx_ctx, rx_fid);
 	assert(count <= TCPX_IOV_LIMIT);
-	assert(!(srx_ctx->op_flags & FI_MULTI_RECV) || count == 1);
 
 	fastlock_acquire(&srx_ctx->lock);
 	recv_entry = ofi_buf_alloc(srx_ctx->buf_pool);
@@ -172,9 +144,10 @@ static ssize_t tcpx_srx_recvv(struct fid_ep *ep, const struct iovec *iov, void *
 		goto unlock;
 	}
 
-	tcpx_srx_recv_init(recv_entry, srx_ctx->op_flags & FI_MULTI_RECV,
-			   context);
-	tcpx_srx_recv_init_iov(recv_entry, count, iov);
+	recv_entry->flags = FI_MSG | FI_RECV;
+	recv_entry->context = context;
+	recv_entry->iov_cnt = count;
+	memcpy(&recv_entry->iov[0], iov, count * sizeof(*iov));
 
 	slist_insert_tail(&recv_entry->entry, &srx_ctx->rx_queue);
 unlock:

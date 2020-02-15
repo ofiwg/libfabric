@@ -216,8 +216,6 @@ struct tcpx_fabric {
 	struct util_fabric	util_fabric;
 };
 
-typedef void (*release_func_t)(struct tcpx_xfer_entry *xfer_entry);
-
 struct tcpx_xfer_entry {
 	struct slist_entry	entry;
 	union {
@@ -232,7 +230,6 @@ struct tcpx_xfer_entry {
 	void			*context;
 	uint64_t		rem_len;
 	void			*mrecv_msg_start;
-	release_func_t		rx_msg_release_fn;
 };
 
 struct tcpx_domain {
@@ -287,8 +284,8 @@ void tcpx_cq_report_error(struct util_cq *cq,
 
 int tcpx_recv_msg_data(struct tcpx_xfer_entry *recv_entry);
 int tcpx_send_msg(struct tcpx_xfer_entry *tx_entry);
-int tcpx_recv_hdr(SOCKET sock, struct stage_buf *sbuf,
-		  struct tcpx_rx_detect *rx_detect);
+int tcpx_comm_recv_hdr(SOCKET sock, struct stage_buf *sbuf,
+		        struct tcpx_rx_detect *rx_detect);
 int tcpx_read_to_buffer(SOCKET sock, struct stage_buf *stage_buf);
 
 struct tcpx_xfer_entry *tcpx_xfer_entry_alloc(struct tcpx_cq *cq,
@@ -299,19 +296,18 @@ void tcpx_srx_xfer_release(struct tcpx_rx_ctx *srx_ctx,
 			   struct tcpx_xfer_entry *xfer_entry);
 
 void tcpx_rx_msg_release(struct tcpx_xfer_entry *rx_entry);
-void tcpx_rx_multi_recv_release(struct tcpx_xfer_entry *rx_entry);
 struct tcpx_xfer_entry *
 tcpx_srx_next_xfer_entry(struct tcpx_rx_ctx *srx_ctx,
 			struct tcpx_ep *ep, size_t entry_size);
 
 void tcpx_progress(struct util_ep *util_ep);
 void tcpx_ep_progress(struct tcpx_ep *ep);
+int tcpx_try_func(void *util_ep);
 
 void tcpx_hdr_none(struct tcpx_base_hdr *hdr);
 void tcpx_hdr_bswap(struct tcpx_base_hdr *hdr);
 
 int tcpx_ep_shutdown_report(struct tcpx_ep *ep, fid_t fid);
-int tcpx_cq_wait_ep_add(struct tcpx_ep *ep);
 void tcpx_tx_queue_insert(struct tcpx_ep *tcpx_ep,
 			  struct tcpx_xfer_entry *tx_entry);
 

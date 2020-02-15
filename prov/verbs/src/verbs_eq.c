@@ -784,10 +784,22 @@ int fi_ibv_eq_trywait(struct fi_ibv_eq *eq)
 
 int fi_ibv_eq_match_event(struct dlist_entry *item, const void *arg)
 {
-	struct fi_ibv_eq_entry *entry =
-		container_of(item, struct fi_ibv_eq_entry, item);
+	struct fi_ibv_eq_entry *entry;
 	const struct fid *fid = arg;
-	return entry->eq_entry->fid == fid;
+
+	entry = container_of(item, struct fi_ibv_eq_entry, item);
+	switch (entry->event) {
+	case FI_CONNREQ:
+	case FI_CONNECTED:
+	case FI_SHUTDOWN:
+		return entry->cm_entry->fid == fid;
+	case FI_MR_COMPLETE:
+	case FI_AV_COMPLETE:
+	case FI_JOIN_COMPLETE:
+		return entry->eq_entry->fid == fid;
+	default:
+		return 0;
+	}
 }
 
 /* Caller must hold eq->lock */
@@ -806,20 +818,30 @@ void fi_ibv_eq_remove_events(struct fi_ibv_eq *eq, struct fid *fid)
 	}
 }
 
+struct fi_ibv_eq_entry  *
+fi_ibv_eq_alloc_entry(uint32_t event, const void *buf, size_t len)
+{
+	struct fi_ibv_eq_entry *entry;
+
+	entry = calloc(1, sizeof(struct fi_ibv_eq_entry) + len);
+	if (!entry)
+		return NULL;
+
+	entry->event = event;
+	entry->len = len;
+	memcpy(entry->data, buf, len);
+
+	return entry;
+}
+
 ssize_t fi_ibv_eq_write_event(struct fi_ibv_eq *eq, uint32_t event,
 			      const void *buf, size_t len)
 {
 	struct fi_ibv_eq_entry *entry;
 
-	entry = calloc(1, sizeof(struct fi_ibv_eq_entry) + len);
-	if (!entry) {
-		VERBS_WARN(FI_LOG_EP_CTRL, "Unable to allocate EQ entry\n");
+	entry = fi_ibv_eq_alloc_entry(event, buf, len);
+	if (!entry)
 		return -FI_ENOMEM;
-	}
-
-	entry->event = event;
-	entry->len = len;
-	memcpy(entry->entry, buf, len);
 
 	fastlock_acquire(&eq->lock);
 	dlistfd_insert_tail(&entry->item, &eq->list_head);
@@ -864,7 +886,7 @@ static size_t fi_ibv_eq_read_event(struct fi_ibv_eq *eq, uint32_t *event,
 
 	ret = entry->len;
 	*event = entry->event;
-	memcpy(buf, entry->entry, entry->len);
+	memcpy(buf, entry->data, entry->len);
 
 	if (!(flags & FI_PEEK)) {
 		dlistfd_remove(eq->list_head.list.next, &eq->list_head);

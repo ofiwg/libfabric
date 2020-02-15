@@ -296,8 +296,8 @@ additional optimizations.
 
 *FI_MULTICAST*
 : Indicates that the endpoint support multicast data transfers.  This
-  capability must be paired with at least one other data transfer capability,
-  (e.g. FI_MSG, FI_SEND, FI_RECV, ...).
+  capability must be paired with FI_MSG.  Aplications can use FI_SEND
+  and FI_RECV to optimize multicast as send-only or receive-only.
 
 *FI_NAMED_RX_CTX*
 : Requests that endpoints which support multiple receive contexts
@@ -424,18 +424,26 @@ additional optimizations.
 : Specifies that the endpoint should support transfers to and from
   device memory. 
 
-Capabilities may be grouped into two general categories: primary and
-secondary.  Primary capabilities must explicitly be requested by an
-application, and a provider must enable support for only those primary
-capabilities which were selected.  Secondary capabilities may optionally
-be requested by an application.  If requested, a provider must support
-the capability or fail the fi_getinfo request (FI_ENODATA).  A provider
+Capabilities may be grouped into three general categories: primary,
+secondary, and primary modifiers.  Primary capabilities must explicitly
+be requested by an application, and a provider must enable support for
+only those primary capabilities which were selected.  Primary modifiers
+are used to limit a primary capability, such as restricting an endpoint
+to being send-only.  If no modifiers are specified for an applicable
+capability, all relevant modifiers are assumed.  See above definitions
+for details.
+
+Secondary capabilities may optionally be requested by an application.
+If requested, a provider must support the capability or fail the
+fi_getinfo request (FI_ENODATA).  A provider
 may optionally report non-selected secondary capabilities if doing so
 would not compromise performance or security.
 
 Primary capabilities: FI_MSG, FI_RMA, FI_TAGGED, FI_ATOMIC, FI_MULTICAST,
-FI_NAMED_RX_CTX, FI_DIRECTED_RECV, FI_READ, FI_WRITE, FI_RECV, FI_SEND,
-FI_REMOTE_READ, FI_REMOTE_WRITE, FI_VARIABLE_MSG, FI_HMEM.
+FI_NAMED_RX_CTX, FI_DIRECTED_RECV, FI_VARIABLE_MSG, FI_HMEM
+
+Primary modifiers: FI_READ, FI_WRITE, FI_RECV, FI_SEND,
+FI_REMOTE_READ, FI_REMOTE_WRITE
 
 Secondary capabilities: FI_MULTI_RECV, FI_SOURCE, FI_RMA_EVENT, FI_SHARED_AV,
 FI_TRIGGER, FI_FENCE, FI_LOCAL_COMM, FI_REMOTE_COMM, FI_SOURCE_ERR, FI_RMA_PMEM.

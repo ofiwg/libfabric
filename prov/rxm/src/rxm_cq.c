@@ -59,43 +59,6 @@ static const char *rxm_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
 	return fi_cq_strerror(rxm_ep->msg_cq, prov_errno, err_data, buf, len);
 }
 
-/* Get a match_iov derived from iov whose size matches given length */
-static int rxm_match_iov(const struct iovec *iov, void **desc,
-			 uint8_t count, uint64_t offset, size_t match_len,
-			 struct rxm_iov *match_iov)
-{
-	uint8_t i;
-
-	assert(count <= RXM_IOV_LIMIT);
-
-	for (i = 0; i < count; i++) {
-		if (offset >= iov[i].iov_len) {
-			offset -= iov[i].iov_len;
-			continue;
-		}
-
-		match_iov->iov[i].iov_base = (char *)iov[i].iov_base + offset;
-		match_iov->iov[i].iov_len = MIN(iov[i].iov_len - offset, match_len);
-		if (desc)
-			match_iov->desc[i] = desc[i];
-
-		match_len -= match_iov->iov[i].iov_len;
-		if (!match_len)
-			break;
-		offset = 0;
-	}
-
-	if (match_len) {
-		FI_WARN(&rxm_prov, FI_LOG_CQ,
-			"Given iov size (%zu) < match_len (remained match_len = %zu)!\n",
-			ofi_total_iov_len(iov, count), match_len);
-		return -FI_ETOOSMALL;
-	}
-
-	match_iov->count = i + 1;
-	return FI_SUCCESS;
-}
-
 static inline uint64_t
 rxm_cq_get_rx_comp_and_op_flags(struct rxm_rx_buf *rx_buf)
 {
@@ -175,75 +138,54 @@ static int rxm_cq_write_error_trunc(struct rxm_rx_buf *rx_buf, size_t done_len)
 
 static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 {
-	int ret;
 	struct rxm_recv_entry *recv_entry = rx_buf->recv_entry;
+	size_t recv_size;
+	int ret = FI_SUCCESS;
 
-	if (OFI_UNLIKELY(done_len < rx_buf->pkt.hdr.size)) {
+	if (done_len < rx_buf->pkt.hdr.size) {
 		ret = rxm_cq_write_error_trunc(rx_buf, done_len);
-		if (ret)
-			return ret;
-	} else {
-		if (rx_buf->recv_entry->flags & FI_COMPLETION ||
-		    rx_buf->ep->rxm_info->mode & FI_BUFFERED_RECV) {
-			ret = rxm_cq_write_recv_comp(
-					rx_buf, rx_buf->recv_entry->context,
-					rx_buf->recv_entry->comp_flags |
-					rxm_cq_get_rx_comp_flags(rx_buf),
-					rx_buf->pkt.hdr.size,
-					rx_buf->recv_entry->rxm_iov.iov[0].iov_base);
-			if (ret)
-				return ret;
-		}
-		ofi_ep_rx_cntr_inc(&rx_buf->ep->util_ep);
+		goto release;
 	}
 
-	if (rx_buf->recv_entry->flags & FI_MULTI_RECV) {
-		struct rxm_iov rxm_iov;
-		size_t recv_size = rx_buf->pkt.hdr.size;
-		struct rxm_ep *rxm_ep = rx_buf->ep;
+	if (rx_buf->recv_entry->flags & FI_COMPLETION ||
+	    rx_buf->ep->rxm_info->mode & FI_BUFFERED_RECV) {
+		ret = rxm_cq_write_recv_comp(rx_buf, rx_buf->recv_entry->context,
+				rx_buf->recv_entry->comp_flags |
+					rxm_cq_get_rx_comp_flags(rx_buf),
+				rx_buf->pkt.hdr.size,
+				rx_buf->recv_entry->rxm_iov.iov[0].iov_base);
+		if (ret)
+			goto release;
+	}
+	ofi_ep_rx_cntr_inc(&rx_buf->ep->util_ep);
 
-		rxm_rx_buf_finish(rx_buf);
+	if (rx_buf->recv_entry->flags & FI_MULTI_RECV) {
+		recv_size = rx_buf->pkt.hdr.size;
 
 		recv_entry->total_len -= recv_size;
 
-		if (recv_entry->total_len <= rxm_ep->min_multi_recv_size) {
-			FI_DBG(&rxm_prov, FI_LOG_CQ,
-			       "Buffer %p has been completely consumed. "
-			       "Reporting Multi-Recv completion\n",
-			       recv_entry->multi_recv.buf);
-			ret = rxm_cq_write_multi_recv_comp(rxm_ep, recv_entry);
-			if (OFI_UNLIKELY(ret)) {
-				FI_WARN(&rxm_prov, FI_LOG_CQ,
-					"Unable to write FI_MULTI_RECV completion\n");
-				return ret;
-			}
-			/* Since buffer is elapsed, release recv_entry */
-			rxm_recv_entry_release(recv_entry->recv_queue,
-					       recv_entry);
-			return ret;
+		if (recv_entry->total_len < rx_buf->ep->min_multi_recv_size) {
+			ret = ofi_cq_write(rx_buf->ep->util_ep.rx_cq, recv_entry->context,
+					   FI_MULTI_RECV, 0, NULL, 0, 0);
+			goto release;
 		}
 
-		FI_DBG(&rxm_prov, FI_LOG_CQ,
-		       "Repost Multi-Recv entry: %p "
-		       "consumed len = %zu, remain len = %zu\n",
-		       recv_entry, recv_size, recv_entry->total_len);
+		recv_entry->rxm_iov.iov[0].iov_base = (uint8_t *)
+				recv_entry->rxm_iov.iov[0].iov_base + recv_size;
+		recv_entry->rxm_iov.iov[0].iov_len -= recv_size;
 
-		rxm_iov = recv_entry->rxm_iov;
-		ret = rxm_match_iov(/* prev iovecs */
-				    rxm_iov.iov, rxm_iov.desc, rxm_iov.count,
-				    recv_size,			/* offset */
-				    recv_entry->total_len,	/* match_len */
-				    &recv_entry->rxm_iov);	/* match_iov */
-		if (OFI_UNLIKELY(ret))
-			return ret;
-
-		return rxm_process_recv_entry(recv_entry->recv_queue, recv_entry);
-	} else {
-		rxm_rx_buf_finish(rx_buf);
-		rxm_recv_entry_release(recv_entry->recv_queue, recv_entry);
+		dlist_insert_head(&recv_entry->entry,
+				  &recv_entry->recv_queue->recv_list);
+		goto free_buf;
 	}
 
-	return FI_SUCCESS;
+release:
+	rxm_recv_entry_release(recv_entry->recv_queue, recv_entry);
+free_buf:
+	rxm_rx_buf_free(rx_buf);
+	if (ret)
+		FI_WARN(&rxm_prov, FI_LOG_CQ, "Error writing CQ entry\n");
+	return ret;
 }
 
 static inline int
@@ -277,7 +219,7 @@ static inline int rxm_finish_rma(struct rxm_ep *rxm_ep, struct rxm_rma_buf *rma_
 	else
 		ofi_ep_rd_cntr_inc(&rxm_ep->util_ep);
 
-	if (!(rma_buf->flags & FI_INJECT) && !rxm_ep->rxm_mr_local &&
+	if (!(rma_buf->flags & FI_INJECT) && !rxm_ep->rdm_mr_local &&
 	    rxm_ep->msg_mr_local) {
 		rxm_msg_mr_closev(rma_buf->mr.mr, rma_buf->mr.count);
 	}
@@ -334,7 +276,7 @@ static inline int rxm_finish_send_rndv_ack(struct rxm_rx_buf *rx_buf)
 		rx_buf->recv_entry->rndv.tx_buf = NULL;
 	}
 
-	if (!rx_buf->ep->rxm_mr_local)
+	if (!rx_buf->ep->rdm_mr_local)
 		rxm_msg_mr_closev(rx_buf->mr, rx_buf->recv_entry->rxm_iov.count);
 
 	return rxm_finish_recv(rx_buf, rx_buf->recv_entry->total_len);
@@ -346,7 +288,7 @@ static int rxm_rndv_tx_finish(struct rxm_ep *rxm_ep, struct rxm_tx_rndv_buf *tx_
 
 	RXM_UPDATE_STATE(FI_LOG_CQ, tx_buf, RXM_RNDV_FINISH);
 
-	if (!rxm_ep->rxm_mr_local)
+	if (!rxm_ep->rdm_mr_local)
 		rxm_msg_mr_closev(tx_buf->mr, tx_buf->count);
 
 	ret = rxm_cq_tx_comp_write(rxm_ep, ofi_tx_cq_flags(tx_buf->pkt.hdr.op),
@@ -372,7 +314,7 @@ static int rxm_rndv_handle_ack(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_buf)
 
 	assert(tx_buf->pkt.ctrl_hdr.msg_id == rx_buf->pkt.ctrl_hdr.msg_id);
 
-	rxm_rx_buf_finish(rx_buf);
+	rxm_rx_buf_free(rx_buf);
 
 	if (tx_buf->hdr.state == RXM_RNDV_ACK_WAIT) {
 		return rxm_rndv_tx_finish(rxm_ep, tx_buf);
@@ -429,7 +371,7 @@ ssize_t rxm_cq_copy_seg_data(struct rxm_rx_buf *rx_buf, int *done)
 
 		/* The RX buffer can be reposted for further re-use */
 		rx_buf->recv_entry = NULL;
-		rxm_rx_buf_finish(rx_buf);
+		rxm_rx_buf_free(rx_buf);
 
 		*done = 0;
 		return FI_SUCCESS;
@@ -528,7 +470,7 @@ ssize_t rxm_cq_handle_rndv(struct rxm_rx_buf *rx_buf)
 	rx_buf->rndv_hdr = (struct rxm_rndv_hdr *)rx_buf->pkt.data;
 	rx_buf->rndv_rma_index = 0;
 
-	if (!rx_buf->ep->rxm_mr_local) {
+	if (!rx_buf->ep->rdm_mr_local) {
 		total_recv_len = MIN(rx_buf->recv_entry->total_len,
 				     rx_buf->pkt.hdr.size);
 		ret = rxm_msg_mr_regv(rx_buf->ep,
@@ -611,9 +553,10 @@ ssize_t rxm_cq_handle_coll_eager(struct rxm_rx_buf *rx_buf)
 					    rx_buf->recv_entry->rxm_iov.count,
 					    0, rx_buf->pkt.data,
 					    rx_buf->pkt.hdr.size);
-	if(rx_buf->pkt.hdr.tag & OFI_COLL_TAG_FLAG) {
+	if (rx_buf->pkt.hdr.tag & OFI_COLL_TAG_FLAG) {
 		ofi_coll_handle_xfer_comp(rx_buf->pkt.hdr.tag,
 				rx_buf->recv_entry->context);
+		rxm_rx_buf_free(rx_buf);
 		rxm_recv_entry_release(rx_buf->recv_entry->recv_queue,
 				rx_buf->recv_entry);
 		return FI_SUCCESS;
@@ -854,7 +797,7 @@ static int rxm_handle_remote_write(struct rxm_ep *rxm_ep,
 	}
 	ofi_ep_rem_wr_cntr_inc(&rxm_ep->util_ep);
 	if (comp->op_context)
-		rxm_rx_buf_finish(comp->op_context);
+		rxm_rx_buf_free(comp->op_context);
 	return 0;
 }
 
@@ -926,7 +869,7 @@ static ssize_t rxm_atomic_send_resp(struct rxm_ep *rxm_ep,
 			ret = 0;
 		}
 	}
-	rxm_rx_buf_finish(rx_buf);
+	rxm_rx_buf_free(rx_buf);
 
 	return ret;
 }
@@ -1096,7 +1039,7 @@ static inline ssize_t rxm_handle_atomic_resp(struct rxm_ep *rxm_ep,
 		assert(0);
 	}
 err:
-	rxm_rx_buf_finish(rx_buf);
+	rxm_rx_buf_free(rx_buf);
 	ofi_buf_free(tx_buf);
 	ofi_atomic_inc32(&rxm_ep->atomic_tx_credits);
 	assert(ofi_atomic_get32(&rxm_ep->atomic_tx_credits) <=
@@ -1288,10 +1231,7 @@ void rxm_cq_read_write_error(struct rxm_ep *rxm_ep)
 		return;
 	}
 
-	if (err_entry.err == FI_ECANCELED)
-		OFI_CQ_STRERROR(&rxm_prov, FI_LOG_DEBUG, FI_LOG_CQ,
-				rxm_ep->msg_cq, &err_entry);
-	else
+	if (err_entry.err != FI_ECANCELED)
 		OFI_CQ_STRERROR(&rxm_prov, FI_LOG_WARN, FI_LOG_CQ,
 				rxm_ep->msg_cq, &err_entry);
 

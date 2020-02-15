@@ -45,13 +45,9 @@ fi_ibv_msg_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t 
 		.num_sge = msg->iov_count,
 		.next = NULL,
 	};
-	struct ibv_recv_wr *bad_wr;
-
-	assert(ep->util_ep.rx_cq);
 
 	fi_ibv_set_sge_iov(wr.sg_list, msg->msg_iov, msg->iov_count, msg->desc);
-
-	return fi_ibv_handle_post(ibv_post_recv(ep->ibv_qp, &wr, &bad_wr));
+	return vrb_post_recv(ep, &wr);
 }
 
 static ssize_t
@@ -67,11 +63,8 @@ fi_ibv_msg_ep_recv(struct fid_ep *ep_fid, void *buf, size_t len,
 		.sg_list = &sge,
 		.next = NULL,
 	};
-	struct ibv_recv_wr *bad_wr;
 
-	assert(ep->util_ep.rx_cq);
-
-	return fi_ibv_handle_post(ibv_post_recv(ep->ibv_qp, &wr, &bad_wr));
+	return vrb_post_recv(ep, &wr);
 }
 
 static ssize_t
@@ -192,7 +185,7 @@ fi_ibv_msg_inject_fast(struct fid_ep *ep_fid, const void *buf, size_t len,
 	ep->wrs->sge.addr = (uintptr_t) buf;
 	ep->wrs->sge.length = (uint32_t) len;
 
-	return fi_ibv_send_poll_cq_if_needed(ep, &ep->wrs->msg_wr);
+	return vrb_post_send(ep, &ep->wrs->msg_wr);
 }
 
 static ssize_t fi_ibv_msg_ep_injectdata_fast(struct fid_ep *ep_fid, const void *buf, size_t len,
@@ -208,7 +201,7 @@ static ssize_t fi_ibv_msg_ep_injectdata_fast(struct fid_ep *ep_fid, const void *
 	ep->wrs->sge.addr = (uintptr_t) buf;
 	ep->wrs->sge.length = (uint32_t) len;
 
-	ret = fi_ibv_send_poll_cq_if_needed(ep, &ep->wrs->msg_wr);
+	ret = vrb_post_send(ep, &ep->wrs->msg_wr);
 	ep->wrs->msg_wr.opcode = IBV_WR_SEND;
 	return ret;
 }
