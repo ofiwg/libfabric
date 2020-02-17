@@ -276,8 +276,8 @@ int DEFAULT_SYMVER_PRE(fi_param_get)(struct fi_provider *provider,
 
 	str_value = getenv(param->env_var_name);
 	if (!str_value) {
-		FI_INFO(provider, FI_LOG_CORE,
-			"variable %s=<not set>\n", param_name);
+		FI_DBG(provider, FI_LOG_CORE,
+		       "variable %s=<not set>\n", param_name);
 		ret = -FI_ENODATA;
 		goto out;
 	}
@@ -285,25 +285,25 @@ int DEFAULT_SYMVER_PRE(fi_param_get)(struct fi_provider *provider,
 	switch (param->type) {
 	case FI_PARAM_STRING:
 		* ((char **) value) = str_value;
-		FI_INFO(provider, FI_LOG_CORE,
-			"read string var %s=%s\n", param_name, *(char **) value);
+		FI_DBG(provider, FI_LOG_CORE,
+		       "read string var %s=%s\n", param_name, *(char **) value);
 		break;
 	case FI_PARAM_INT:
 		* ((int *) value) = strtol(str_value, NULL, 0);
-		FI_INFO(provider, FI_LOG_CORE,
-			"read int var %s=%d\n", param_name, *(int *) value);
+		FI_DBG(provider, FI_LOG_CORE,
+		       "read int var %s=%d\n", param_name, *(int *) value);
 		break;
 	case FI_PARAM_BOOL:
 		* ((int *) value) = fi_parse_bool(str_value);
-		FI_INFO(provider, FI_LOG_CORE,
-			"read bool var %s=%d\n", param_name, *(int *) value);
+		FI_DBG(provider, FI_LOG_CORE,
+		       "read bool var %s=%d\n", param_name, *(int *) value);
 		if (*(int *) value == -1)
 			ret = -FI_EINVAL;
 		break;
 	case FI_PARAM_SIZE_T:
 		* ((size_t *) value) = strtol(str_value, NULL, 0);
-		FI_INFO(provider, FI_LOG_CORE,
-			"read long var %s=%zu\n", param_name, *(size_t *) value);
+		FI_DBG(provider, FI_LOG_CORE,
+		       "read long var %s=%zu\n", param_name, *(size_t *) value);
 		break;
 	}
 
