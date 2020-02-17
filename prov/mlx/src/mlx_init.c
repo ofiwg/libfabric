@@ -254,7 +254,7 @@ static int mlx_getinfo (
 
 void mlx_cleanup(void)
 {
-	FI_INFO(&mlx_prov, FI_LOG_CORE, "provider goes cleanup sequence\n");
+	FI_DBG(&mlx_prov, FI_LOG_CORE, "provider goes cleanup sequence\n");
 	if (mlx_descriptor.config) {
 		ucp_config_release(mlx_descriptor.config);
 		mlx_descriptor.config = NULL;

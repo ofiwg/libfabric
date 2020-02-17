@@ -1206,7 +1206,9 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 	struct fi_info *tail, *cur;
 	char **prov_vec = NULL;
 	size_t count = 0;
+#if !defined I_MPI
 	enum fi_log_level level;
+#endif /* I_MPI */
 	int ret;
 
 	fi_ini();
@@ -1259,19 +1261,32 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 		ret = prov->provider->getinfo(version, node, service, flags,
 					      hints, &cur);
 		if (ret) {
+#if !defined I_MPI
 			level = ((hints && hints->fabric_attr &&
 				  hints->fabric_attr->prov_name &&
 				  !strcmp(hints->fabric_attr->prov_name, prov->provider->name)) ?
 				 FI_LOG_WARN : FI_LOG_INFO);
 
 			FI_LOG(&core_prov, level, FI_LOG_CORE,
+#else /* !I_MPI */
+			FI_DBG(&core_prov, FI_LOG_CORE,
+#endif /* !I_MPI */
 			       "fi_getinfo: provider %s returned -%d (%s)\n",
 			       prov->provider->name, -ret, fi_strerror(-ret));
+#if defined I_MPI
+			FI_INFO(&core_prov, FI_LOG_CORE,
+				"Now it is being used by %s provider\n",
+				prov->provider->name);
+#endif /* I_MPI */
 			continue;
 		}
 
 		if (!cur) {
+#if defined I_MPI
+			FI_DBG(&core_prov, FI_LOG_CORE,
+#else /* I_MPI */
 			FI_WARN(&core_prov, FI_LOG_CORE,
+#endif /* I_MPI */
 				"fi_getinfo: provider %s output empty list\n",
 				prov->provider->name);
 			continue;

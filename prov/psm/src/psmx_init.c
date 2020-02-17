@@ -705,8 +705,11 @@ struct fi_provider psmx_prov = {
 
 PROVIDER_INI
 {
+#ifdef I_MPI
+	FI_DBG(&psmx_prov, FI_LOG_CORE, "\n");
+#else /* I_MPI */
 	FI_INFO(&psmx_prov, FI_LOG_CORE, "\n");
-
+#endif /* I_MPI */
 	fi_param_define(&psmx_prov, "name_server", FI_PARAM_BOOL,
 			"Whether to turn on the name server or not "
 			"(default: yes)");

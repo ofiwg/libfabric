@@ -369,8 +369,12 @@ int DEFAULT_SYMVER_PRE(fi_param_get)(struct fi_provider *provider,
 		str_value = conf->value;
 
 	if (!str_value) {
+#ifdef I_MPI
+		FI_DBG(provider, FI_LOG_CORE,
+#else /* I_MPI */
 		FI_INFO(provider, FI_LOG_CORE,
-			"variable %s=<not set>\n", param_name);
+#endif /* I_MPI */
+		       "variable %s=<not set>\n", param_name);
 		ret = -FI_ENODATA;
 		goto out;
 	}
@@ -378,13 +382,21 @@ int DEFAULT_SYMVER_PRE(fi_param_get)(struct fi_provider *provider,
 	switch (param->type) {
 	case FI_PARAM_STRING:
 		* ((char **) value) = str_value;
+#ifdef I_MPI
+		FI_DBG(provider, FI_LOG_CORE,
+#else /* I_MPI */
 		FI_INFO(provider, FI_LOG_CORE,
-			"read string var %s=%s\n", param_name, *(char **) value);
+#endif /* I_MPI */
+		       "read string var %s=%s\n", param_name, *(char **) value);
 		break;
 	case FI_PARAM_INT:
 		* ((int *) value) = strtol(str_value, NULL, 0);
+#ifdef I_MPI
+		FI_DBG(provider, FI_LOG_CORE,
+#else /* I_MPI */
 		FI_INFO(provider, FI_LOG_CORE,
-			"read int var %s=%d\n", param_name, *(int *) value);
+#endif /* I_MPI */
+		       "read int var %s=%d\n", param_name, *(int *) value);
 		break;
 	case FI_PARAM_BOOL:
 		parsed_boolean = fi_parse_bool(str_value);
@@ -396,12 +408,19 @@ int DEFAULT_SYMVER_PRE(fi_param_get)(struct fi_provider *provider,
 		}
 
 		* ((int *) value) = parsed_boolean;
+#ifdef I_MPI
+		FI_DBG(provider, FI_LOG_CORE,
+#else /* I_MPI */
 		FI_INFO(provider, FI_LOG_CORE,
-			"read bool var %s=%d\n", param_name, *(int *) value);
+#endif /* I_MPI */
+		       "read bool var %s=%d\n", param_name, *(int *) value);
+		if (*(int *) value == -1)
+			ret = -FI_EINVAL;
 		break;
 	case FI_PARAM_SIZE_T:
 		* ((size_t *) value) = strtol(str_value, NULL, 0);
 		FI_INFO(provider, FI_LOG_CORE,
+#endif /* I_MPI */
 			"read long var %s=%zu\n", param_name, *(size_t *) value);
 		break;
 	}

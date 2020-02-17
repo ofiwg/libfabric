@@ -740,9 +740,13 @@ RXM_INI
 	rxm_get_def_wait();
 
 	if (force_auto_progress)
+#ifdef I_MPI
+		FI_DBG(&rxm_prov, FI_LOG_CORE, "auto-progress for data requested "
+#else /* I_MPI */
 		FI_INFO(&rxm_prov, FI_LOG_CORE, "auto-progress for data requested "
-			"(FI_OFI_RXM_DATA_AUTO_PROGRESS = 1), domain threading "
-			"level would be set to FI_THREAD_SAFE\n");
+#endif /* I_MPI */
+		       "(FI_OFI_RXM_DATA_AUTO_PROGRESS = 1), domain threading "
+		       "level would be set to FI_THREAD_SAFE\n");
 
 #if HAVE_RXM_DL
 	ofi_mem_init();
