@@ -88,8 +88,6 @@ int psmx_fabric(struct fi_fabric_attr *attr,
 	struct psmx_fid_fabric *fabric_priv;
 	int ret;
 
-	FI_INFO(&psmx_prov, FI_LOG_CORE, "\n");
-
 	if (strcmp(attr->name, PSMX_FABRIC_NAME))
 		return -FI_ENODATA;
 

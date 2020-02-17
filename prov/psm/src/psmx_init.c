@@ -674,8 +674,6 @@ err_out:
 
 static void psmx_fini(void)
 {
-	FI_INFO(&psmx_prov, FI_LOG_CORE, "\n");
-
 	if (! --psmx_init_count && psmx_lib_initialized) {
 		/* This function is called from a library destructor, which is called
 		 * automatically when exit() is called. The call to psm_finalize()
@@ -705,8 +703,6 @@ struct fi_provider psmx_prov = {
 
 PROVIDER_INI
 {
-	FI_INFO(&psmx_prov, FI_LOG_CORE, "\n");
-
 	fi_param_define(&psmx_prov, "name_server", FI_PARAM_BOOL,
 			"Whether to turn on the name server or not "
 			"(default: yes)");

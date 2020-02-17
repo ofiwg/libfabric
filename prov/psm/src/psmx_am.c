@@ -127,8 +127,6 @@ int psmx_am_init(struct psmx_fid_domain *domain)
 	size_t size;
 	int err = 0;
 
-	FI_INFO(&psmx_prov, FI_LOG_CORE, "\n");
-
 	psmx_atomic_init();
 
 	if (!psmx_am_handlers_initialized) {
