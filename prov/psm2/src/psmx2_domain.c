@@ -107,8 +107,6 @@ static void *psmx2_progress_func(void *args)
 	int sleep_usec;
 	struct timespec ts;
 
-	FI_INFO(&psmx2_prov, FI_LOG_CORE, "\n");
-
 	affinity_set = psmx2_progress_set_affinity(psmx2_env.prog_affinity);
 
 	/* Negative sleep time means let the system choose the default.
@@ -303,8 +301,6 @@ int psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	struct psmx2_ep_name *src_addr = info->src_addr;
 	int mr_mode = (info->domain_attr->mr_mode & FI_MR_BASIC) ? FI_MR_BASIC : 0;
 	int err, tmp;
-
-	FI_INFO(&psmx2_prov, FI_LOG_DOMAIN, "\n");
 
 	fabric_priv = container_of(fabric, struct psmx2_fid_fabric,
 				   util_fabric.fabric_fid);

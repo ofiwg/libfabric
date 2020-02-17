@@ -629,8 +629,6 @@ err_out:
 
 static void psmx2_fini(void)
 {
-	FI_INFO(&psmx2_prov, FI_LOG_CORE, "\n");
-
 	if (! --psmx2_init_count && psmx2_lib_initialized) {
 		/* This function is called from a library destructor, which is called
 		 * automatically when exit() is called. The call to psm2_finalize()

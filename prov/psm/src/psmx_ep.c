@@ -531,8 +531,6 @@ int psmx_stx_ctx(struct fid_domain *domain, struct fi_tx_attr *attr,
 	struct psmx_fid_domain *domain_priv;
 	struct psmx_fid_stx *stx_priv;
 
-	FI_INFO(&psmx_prov, FI_LOG_EP_DATA, "\n");
-
 	domain_priv = container_of(domain, struct psmx_fid_domain,
 				   util_domain.domain_fid.fid);
 
