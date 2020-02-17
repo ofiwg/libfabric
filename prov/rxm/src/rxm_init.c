@@ -433,9 +433,9 @@ RXM_INI
 	fi_param_get_bool(&rxm_prov, "data_auto_progress", &force_auto_progress);
 
 	if (force_auto_progress)
-		FI_INFO(&rxm_prov, FI_LOG_CORE, "auto-progress for data requested "
-			"(FI_OFI_RXM_DATA_AUTO_PROGRESS = 1), domain threading "
-			"level would be set to FI_THREAD_SAFE\n");
+		FI_DBG(&rxm_prov, FI_LOG_CORE, "auto-progress for data requested "
+		       "(FI_OFI_RXM_DATA_AUTO_PROGRESS = 1), domain threading "
+		       "level would be set to FI_THREAD_SAFE\n");
 
 	if (rxm_init_info()) {
 		FI_WARN(&rxm_prov, FI_LOG_CORE, "Unable to initialize rxm_info\n");

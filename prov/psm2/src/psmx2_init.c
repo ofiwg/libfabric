@@ -660,7 +660,7 @@ struct fi_provider psmx2_prov = {
 
 PROVIDER_INI
 {
-	FI_INFO(&psmx2_prov, FI_LOG_CORE, "build options: HAVE_PSM2_SRC=%d, "
+	FI_DBG(&psmx2_prov, FI_LOG_CORE, "build options: HAVE_PSM2_SRC=%d, "
 			"HAVE_PSM2_AM_REGISTER_HANDLERS_2=%d, "
 			"HAVE_PSM2_MQ_FP_MSG=%d, "
 			"PSMX2_USE_REQ_CONTEXT=%d\n", HAVE_PSM2_SRC,

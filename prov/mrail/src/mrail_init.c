@@ -112,8 +112,8 @@ static int mrail_parse_env_vars(void)
 	if (ret)
 		ret = fi_param_get_str(&mrail_prov, "addr_strc", &addr_strc);
 	if (ret) {
-		FI_INFO(&mrail_prov, FI_LOG_CORE, "unable to read "
-			"FI_OFI_MRAIL_ADDR env variable\n");
+		FI_DBG(&mrail_prov, FI_LOG_CORE, "unable to read "
+		       "FI_OFI_MRAIL_ADDR env variable\n");
 		return ret;
 	}
 	mrail_addr_strv = mrail_split_addr_strc(addr_strc);
