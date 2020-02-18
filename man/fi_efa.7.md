@@ -118,7 +118,7 @@ These OFI runtime parameters apply only to the RDM endpoint.
 
 *FI_EFA_MR_CACHE_ENABLE*
 : Enables using the mr cache and in-line registration instead of a bounce
-  buffer for iov's larger than max_memcpy_size. Defaults to false. When
+  buffer for iov's larger than max_memcpy_size. Defaults to true. When
   disabled, only uses a bounce buffer
 
 *FI_EFA_MR_CACHE_MERGE_REGIONS*
