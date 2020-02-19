@@ -1299,6 +1299,11 @@ int vrb_init_info(const struct fi_info **all_infos)
 					ctx_list[i]->device->name);
 				continue;
 			}
+			if (vrb_gl_data.device_name &&
+			    strncasecmp(ctx_list[i]->device->name,
+					vrb_gl_data.device_name,
+					strlen(vrb_gl_data.device_name)))
+				continue;
 
 			ret = vrb_alloc_info(ctx_list[i], &fi, ep_type[j]);
 			if (!ret) {

@@ -187,6 +187,9 @@ The verbs provider checks for the following environment variables.
 *FI_VERBS_GID_IDX*
 : The GID index to use (default: 0)
 
+*FI_VERBS_DEVICE_NAME*
+: Specify a specific verbs device to use by name
+
 ### Variables specific to MSG endpoints
 
 *FI_VERBS_IFACE*

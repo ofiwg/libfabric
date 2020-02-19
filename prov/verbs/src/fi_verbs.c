@@ -605,6 +605,14 @@ static int vrb_read_params(void)
 		return -FI_EINVAL;
 	}
 
+	if (vrb_get_param_str("device_name", "The prefix or the full name of the "
+			      "verbs device to use",
+			      &vrb_gl_data.device_name)) {
+		VERBS_WARN(FI_LOG_CORE,
+			   "Invalid value of device_name\n");
+		return -FI_EINVAL;
+	}
+
 	/* MSG-specific parameter */
 	if (vrb_get_param_str("iface", "The prefix or the full name of the "
 				 "network interface associated with the verbs device",
