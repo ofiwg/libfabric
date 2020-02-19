@@ -2570,7 +2570,9 @@ int ft_finalize_ep(struct fid_ep *ep)
 		tmsg.ignore = 0;
 		tmsg.context = &ctx;
 
-		ret = fi_tsendmsg(ep, &tmsg, FI_INJECT | FI_TRANSMIT_COMPLETE);
+		FT_POST(fi_tsendmsg, ft_progress, txcq, tx_seq,
+			&tx_cq_cntr, "tsendmsg", ep, &tmsg,
+			FI_INJECT | FI_TRANSMIT_COMPLETE);
 	} else {
 		struct fi_msg msg;
 
@@ -2581,15 +2583,12 @@ int ft_finalize_ep(struct fid_ep *ep)
 		msg.addr = remote_fi_addr;
 		msg.context = &ctx;
 
-		ret = fi_sendmsg(ep, &msg, FI_INJECT | FI_TRANSMIT_COMPLETE);
-	}
-	if (ret) {
-		FT_PRINTERR("transmit", ret);
-		return ret;
+		FT_POST(fi_sendmsg, ft_progress, txcq, tx_seq,
+			&tx_cq_cntr, "sendmsg", ep, &msg,
+			FI_INJECT | FI_TRANSMIT_COMPLETE);
 	}
 
-
-	ret = ft_get_tx_comp(++tx_seq);
+	ret = ft_get_tx_comp(tx_seq);
 	if (ret)
 		return ret;
 
