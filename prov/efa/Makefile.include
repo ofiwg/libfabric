@@ -49,7 +49,8 @@ _efa_files = \
 	prov/efa/src/rxr/rxr_cntr.c	\
 	prov/efa/src/rxr/rxr_rma.c	\
 	prov/efa/src/rxr/rxr_msg.c	\
-	prov/efa/src/rxr/rxr_pkt_entry.c
+	prov/efa/src/rxr/rxr_pkt_entry.c \
+	prov/efa/src/rxr/rxr_pkt_type_rts.c
 
 _efa_headers = \
 	prov/efa/src/efa.h \

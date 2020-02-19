@@ -48,25 +48,8 @@ struct rxr_rma_read_info {
 static_assert(sizeof(struct rxr_rma_read_info) == 16, "rxr_rma_read_hdr check");
 #endif
 
-char *rxr_pkt_init_rts_rma_hdr(struct rxr_ep *ep,
-			       struct rxr_tx_entry *tx_entry,
-			       struct rxr_pkt_entry *pkt_entry,
-			       char *hdr);
-
 int rxr_rma_verified_copy_iov(struct rxr_ep *ep, struct fi_rma_iov *rma,
 			      size_t count, uint32_t flags, struct iovec *iov);
-
-char *rxr_rma_read_rts_hdr(struct rxr_ep *ep,
-			   struct rxr_rx_entry *rx_entry,
-			   struct rxr_pkt_entry *pkt_entry,
-			   char *hdr);
-
-int rxr_rma_proc_write_rts(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
-
-int rxr_rma_init_read_rts(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
-			  struct rxr_pkt_entry *pkt_entry);
-
-int rxr_rma_proc_read_rts(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
 
 /* read response related functions */
 struct rxr_tx_entry *

@@ -847,10 +847,6 @@ int rxr_ep_set_tx_credit_request(struct rxr_ep *rxr_ep,
 void rxr_inline_mr_reg(struct rxr_domain *rxr_domain,
 		       struct rxr_tx_entry *tx_entry);
 
-char *rxr_ep_init_rts_hdr(struct rxr_ep *ep,
-			  struct rxr_tx_entry *tx_entry,
-			  struct rxr_pkt_entry *pkt_entry);
-
 void rxr_ep_init_cts_pkt_entry(struct rxr_ep *ep,
 			       struct rxr_rx_entry *rx_entry,
 			       struct rxr_pkt_entry *pkt_entry,
@@ -893,27 +889,18 @@ void rxr_cq_handle_rx_completion(struct rxr_ep *ep,
 void rxr_cq_write_tx_completion(struct rxr_ep *ep,
 				struct rxr_tx_entry *tx_entry);
 
-ssize_t rxr_cq_recv_shm_large_message(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry);
-void rxr_cq_process_shm_large_message(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
-				      struct rxr_rts_hdr *rts_hdr, char *data);
-
-void rxr_cq_process_shm_large_message(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
-				      struct rxr_rts_hdr *rts_hdr, char *data);
-
-char *rxr_cq_read_rts_hdr(struct rxr_ep *ep,
-			  struct rxr_rx_entry *rx_entry,
-			  struct rxr_pkt_entry *pkt_entry);
-
-int rxr_cq_handle_rts_with_data(struct rxr_ep *ep,
-				struct rxr_rx_entry *rx_entry,
-				struct rxr_pkt_entry *pkt_entry,
-				char *data, size_t data_size);
-
 int rxr_cq_handle_pkt_with_data(struct rxr_ep *ep,
 				struct rxr_rx_entry *rx_entry,
 				struct rxr_pkt_entry *pkt_entry,
 				char *data, size_t seg_offset,
 				size_t seg_size);
+
+int rxr_cq_reorder_msg(struct rxr_ep *ep,
+		       struct rxr_peer *peer,
+		       struct rxr_pkt_entry *pkt_entry);
+
+void rxr_cq_proc_pending_items_in_recvwin(struct rxr_ep *ep,
+					  struct rxr_peer *peer);
 
 void rxr_cq_handle_pkt_recv_completion(struct rxr_ep *ep,
 				       struct fi_cq_data_entry *comp,

@@ -457,17 +457,17 @@ int rxr_msg_handle_unexp_match(struct rxr_ep *ep,
 	}
 
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
-	data = rxr_cq_read_rts_hdr(ep, rx_entry, pkt_entry);
+	data = rxr_pkt_proc_rts_base_hdr(ep, rx_entry, pkt_entry);
 	if (peer->is_local && !(rts_hdr->flags & RXR_SHM_HDR_DATA)) {
-		rxr_cq_process_shm_large_message(ep, rx_entry, rts_hdr, data);
+		rxr_pkt_proc_shm_long_msg_rts(ep, rx_entry, rts_hdr, data);
 		rxr_release_rx_pkt_entry(ep, pkt_entry);
 		return 0;
 	}
 
 	data_size = rxr_get_rts_data_size(ep, rts_hdr);
-	return rxr_cq_handle_rts_with_data(ep, rx_entry,
-					   pkt_entry, data,
-					   data_size);
+	return rxr_pkt_proc_rts_data(ep, rx_entry,
+				     pkt_entry, data,
+				     data_size);
 }
 
 /*
