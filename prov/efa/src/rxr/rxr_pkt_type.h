@@ -128,15 +128,23 @@ char *rxr_pkt_init_rts_base_hdr(struct rxr_ep *ep,
 				struct rxr_tx_entry *tx_entry,
 				struct rxr_pkt_entry *pkt_entry);
 
+char *rxr_pkt_proc_rts_base_hdr(struct rxr_ep *ep,
+				struct rxr_rx_entry *rx_entry,
+				struct rxr_pkt_entry *pkt_entry);
+
 void rxr_pkt_handle_rts_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
 
-ssize_t rxr_pkt_post_shm_read(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry);
+void rxr_pkt_proc_shm_long_msg_rts(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
+				   struct rxr_rts_hdr *rts_hdr, char *data);
 
-ssize_t rxr_pkt_proc_matched_msg_rts(struct rxr_ep *ep,
-				     struct rxr_rx_entry *rx_entry,
-				     struct rxr_pkt_entry *pkt_entry);
+ssize_t rxr_pkt_post_shm_rndzv_read(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry);
 
 ssize_t rxr_pkt_proc_rts(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
+
+int rxr_pkt_proc_rts_data(struct rxr_ep *ep,
+			  struct rxr_rx_entry *rx_entry,
+			  struct rxr_pkt_entry *pkt_entry,
+			  char *data, size_t data_size);
 
 void rxr_pkt_handle_rts_recv(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
 
