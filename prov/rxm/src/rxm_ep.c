@@ -1844,9 +1844,9 @@ static ssize_t rxm_ep_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged
 
 	if (!(flags & (FI_CLAIM | FI_PEEK)) &&
 	    !(rxm_ep->rxm_info->mode & FI_BUFFERED_RECV)) {
-		return rxm_ep_post_trecv(rxm_ep, msg->msg_iov, msg->desc,
-					 msg->iov_count, msg->addr,
-					 msg->tag, msg->ignore, context, flags);
+		return rxm_ep_trecv_common(rxm_ep, msg->msg_iov, msg->desc,
+					   msg->iov_count, msg->addr,
+					   msg->tag, msg->ignore, context, flags);
 	}
 
 	ofi_ep_lock_acquire(&rxm_ep->util_ep);
