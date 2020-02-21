@@ -40,12 +40,34 @@ static struct fi_ops_msg vrb_srq_msg_ops;
 /* Receive CQ credits are pre-allocated */
 ssize_t vrb_post_recv(struct vrb_ep *ep, struct ibv_recv_wr *wr)
 {
+	struct vrb_context *ctx;
+	struct vrb_cq *cq;
 	struct ibv_recv_wr *bad_wr;
 	int ret;
 
-	assert(ep->util_ep.rx_cq);
+	cq = container_of(ep->util_ep.rx_cq, struct vrb_cq, util_cq);
+	cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
+	ctx = ofi_buf_alloc(cq->ctx_pool);
+	if (!ctx)
+		goto unlock;
+
+	ctx->ep = ep;
+	ctx->user_ctx = (void *) (uintptr_t) wr->wr_id;
+	ctx->flags = FI_RECV;
+	wr->wr_id = (uintptr_t) ctx;
+
 	ret = ibv_post_recv(ep->ibv_qp, wr, &bad_wr);
-	return vrb_convert_ret(ret);
+	wr->wr_id = (uintptr_t) ctx->user_ctx;
+	if (ret)
+		goto freebuf;
+	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
+	return 0;
+
+freebuf:
+	ofi_buf_free(ctx);
+unlock:
+	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
+	return -FI_EAGAIN;
 }
 
 ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr)
@@ -76,6 +98,7 @@ ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr)
 
 	ctx->ep = ep;
 	ctx->user_ctx = (void *) (uintptr_t) wr->wr_id;
+	ctx->flags = FI_TRANSMIT;
 	wr->wr_id = (uintptr_t) ctx;
 
 	ret = ibv_post_send(ep->ibv_qp, wr, &bad_wr);
@@ -1267,41 +1290,65 @@ static struct fi_ops_atomic vrb_srq_atomic_ops = {
 	.compwritevalid = fi_no_atomic_compwritevalid,
 };
 
+/* Receive CQ credits are pre-allocated */
+ssize_t vrb_post_srq(struct vrb_srq_ep *ep, struct ibv_recv_wr *wr)
+{
+	struct vrb_context *ctx;
+	struct ibv_recv_wr *bad_wr;
+	int ret;
+
+	fastlock_acquire(&ep->ctx_lock);
+	ctx = ofi_buf_alloc(ep->ctx_pool);
+	if (!ctx)
+		goto unlock;
+
+	ctx->srx = ep;
+	ctx->user_ctx = (void *) (uintptr_t) wr->wr_id;
+	ctx->flags = FI_RECV;
+	wr->wr_id = (uintptr_t) ctx;
+
+	ret = ibv_post_srq_recv(ep->srq, wr, &bad_wr);
+	wr->wr_id = (uintptr_t) ctx->user_ctx;
+	if (ret)
+		goto freebuf;
+	fastlock_release(&ep->ctx_lock);
+	return 0;
+
+freebuf:
+	ofi_buf_free(ctx);
+unlock:
+	fastlock_release(&ep->ctx_lock);
+	return -FI_EAGAIN;
+}
+
 static inline ssize_t
 vrb_srq_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
 {
-	struct vrb_srq_ep *ep =
-		container_of(ep_fid, struct vrb_srq_ep, ep_fid);
+	struct vrb_srq_ep *ep = container_of(ep_fid, struct vrb_srq_ep, ep_fid);
 	struct ibv_recv_wr wr = {
-		.wr_id = (uintptr_t)msg->context,
+		.wr_id = (uintptr_t )msg->context,
 		.num_sge = msg->iov_count,
 		.next = NULL,
 	};
-	struct ibv_recv_wr *bad_wr;
-
-	assert(ep->srq);
 
 	vrb_set_sge_iov(wr.sg_list, msg->msg_iov, msg->iov_count, msg->desc);
-
-	return vrb_convert_ret(ibv_post_srq_recv(ep->srq, &wr, &bad_wr));
+	return vrb_post_srq(ep, &wr);
 }
 
 static ssize_t
 vrb_srq_ep_recv(struct fid_ep *ep_fid, void *buf, size_t len,
 		void *desc, fi_addr_t src_addr, void *context)
 {
-	struct vrb_srq_ep *ep =
-		container_of(ep_fid, struct vrb_srq_ep, ep_fid);
+	struct vrb_srq_ep *ep = container_of(ep_fid, struct vrb_srq_ep, ep_fid);
 	struct ibv_sge sge = vrb_init_sge(buf, len, desc);
 	struct ibv_recv_wr wr = {
-		.wr_id = (uintptr_t)context,
+		.wr_id = (uintptr_t) context,
 		.num_sge = 1,
 		.sg_list = &sge,
 		.next = NULL,
 	};
-	struct ibv_recv_wr *bad_wr;
 
-	return vrb_convert_ret(ibv_post_srq_recv(ep->srq, &wr, &bad_wr));
+	return vrb_post_srq(ep, &wr);
 }
 
 static ssize_t
@@ -1434,7 +1481,7 @@ int vrb_xrc_close_srq(struct vrb_srq_ep *srq_ep)
 static int vrb_srq_close(fid_t fid)
 {
 	struct vrb_srq_ep *srq_ep = container_of(fid, struct vrb_srq_ep,
-						    ep_fid.fid);
+						 ep_fid.fid);
 	int ret;
 
 	if (srq_ep->domain->flags & VRB_USE_XRC) {
@@ -1451,6 +1498,9 @@ static int vrb_srq_close(fid_t fid)
 		if (ret)
 			goto err;
 	}
+
+	ofi_bufpool_destroy(srq_ep->ctx_pool);
+	fastlock_destroy(&srq_ep->ctx_lock);
 	free(srq_ep);
 	return FI_SUCCESS;
 
@@ -1479,10 +1529,14 @@ int vrb_srq_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 		return -FI_EINVAL;
 
 	srq_ep = calloc(1, sizeof(*srq_ep));
-	if (!srq_ep) {
-		ret = -FI_ENOMEM;
-		goto err1;
-	}
+	if (!srq_ep)
+		return -FI_ENOMEM;
+
+	fastlock_init(&srq_ep->ctx_lock);
+	ret = ofi_bufpool_create(&srq_ep->ctx_pool, sizeof(struct fi_context),
+				 16, attr->size, 1024, OFI_BUFPOOL_NO_TRACK);
+	if (ret)
+		goto free_ep;
 
 	dom = container_of(domain, struct vrb_domain,
 			   util_domain.domain_fid);
@@ -1516,18 +1570,18 @@ int vrb_srq_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 	if (!srq_ep->srq) {
 		VERBS_INFO_ERRNO(FI_LOG_DOMAIN, "ibv_create_srq", errno);
 		ret = -errno;
-		goto err2;
+		goto free_bufs;
 	}
 
 done:
 	*srq_ep_fid = &srq_ep->ep_fid;
-
 	return FI_SUCCESS;
 
-err2:
-	/* Only basic SRQ can take this path */
+free_bufs:
+	ofi_bufpool_destroy(srq_ep->ctx_pool);
+free_ep:
+	fastlock_destroy(&srq_ep->ctx_lock);
 	free(srq_ep);
-err1:
 	return ret;
 }
 
