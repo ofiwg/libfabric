@@ -49,7 +49,10 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 				[$efa_PREFIX],
 				[$efa_LIBDIR],
 				[efa_happy=1],
-				[efa_happy=0])
+				[
+					efa_happy=0
+					AC_MSG_WARN([The EFA provider requires rdma-core v27 or newer.])
+				])
 	      ])
 
 	AS_IF([test x"$enable_efa" != x"no"],
