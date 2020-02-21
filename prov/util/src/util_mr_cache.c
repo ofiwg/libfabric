@@ -296,6 +296,7 @@ int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *att
 	       attr->mr_iov->iov_base, attr->mr_iov->iov_len);
 
 	info.iov = *attr->mr_iov;
+	info.iface = attr->iface;
 
 	do {
 		pthread_mutex_lock(&cache->monitor->lock);

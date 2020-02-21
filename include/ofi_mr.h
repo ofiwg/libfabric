@@ -49,6 +49,7 @@
 
 struct ofi_mr_info {
 	struct iovec iov;
+	enum fi_hmem_iface iface;
 };
 
 
