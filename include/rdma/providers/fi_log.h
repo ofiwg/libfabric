@@ -100,6 +100,15 @@ void fi_log(const struct fi_provider *prov, enum fi_log_level level,
 	do {} while (0)
 #endif
 
+#define FI_WARN_ONCE(prov, subsystem, ...) ({				\
+	static int warned;						\
+	if (!warned && fi_log_enabled(prov, FI_LOG_WARN, subsystem)) {	\
+		fi_log(prov, FI_LOG_WARN, subsystem,			\
+			__func__, __LINE__, __VA_ARGS__);		\
+		warned = 1;						\
+	}								\
+})
+
 #ifdef __cplusplus
 }
 #endif

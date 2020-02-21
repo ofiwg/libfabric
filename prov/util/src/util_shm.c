@@ -185,7 +185,7 @@ int smr_map_to_region(const struct fi_provider *prov, struct smr_peer *peer_buf)
 
 	fd = shm_open(peer_buf->peer.name, O_RDWR, S_IRUSR | S_IWUSR);
 	if (fd < 0) {
-		FI_WARN(prov, FI_LOG_AV, "shm_open error\n");
+		FI_WARN_ONCE(prov, FI_LOG_AV, "shm_open error\n");
 		return -errno;
 	}
 
