@@ -780,71 +780,6 @@ static void rxr_cq_handle_connack(struct rxr_ep *ep,
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
 }
 
-int rxr_cq_handle_pkt_with_data(struct rxr_ep *ep,
-				struct rxr_rx_entry *rx_entry,
-				struct rxr_pkt_entry *pkt_entry,
-				char *data, size_t seg_offset,
-				size_t seg_size)
-{
-	struct rxr_peer *peer;
-	int64_t bytes_left, bytes_copied;
-	ssize_t ret = 0;
-
-#if ENABLE_DEBUG
-	int pkt_type = rxr_get_base_hdr(pkt_entry->pkt)->type;
-	assert(pkt_type == RXR_DATA_PKT || pkt_type == RXR_READRSP_PKT);
-#endif
-	/* we are sinking message for CANCEL/DISCARD entry */
-	if (OFI_LIKELY(!(rx_entry->rxr_flags & RXR_RECV_CANCEL)) &&
-	    rx_entry->cq_entry.len > seg_offset) {
-		bytes_copied = ofi_copy_to_iov(rx_entry->iov, rx_entry->iov_count,
-					       seg_offset, data, seg_size);
-		if (bytes_copied != MIN(seg_size, rx_entry->cq_entry.len - seg_offset)) {
-			FI_WARN(&rxr_prov, FI_LOG_CQ, "wrong size! bytes_copied: %ld\n",
-				bytes_copied);
-			if (rxr_cq_handle_rx_error(ep, rx_entry, -FI_EINVAL))
-				assert(0 && "error writing error cq entry for EOR\n");
-		}
-	}
-
-	rx_entry->bytes_done += seg_size;
-
-	peer = rxr_ep_get_peer(ep, rx_entry->addr);
-	peer->rx_credits += ofi_div_ceil(seg_size, ep->max_data_payload_size);
-
-	rx_entry->window -= seg_size;
-	if (ep->available_data_bufs < rxr_get_rx_pool_chunk_cnt(ep))
-		ep->available_data_bufs++;
-
-	/* bytes_done is total bytes sent/received, which could be larger than
-	 * to bytes copied to recv buffer (for truncated messages).
-	 * rx_entry->total_len is from rts_hdr and is the size of send buffer,
-	 * thus we always have:
-	 *             rx_entry->total >= rx_entry->bytes_done
-	 */
-	bytes_left = rx_entry->total_len - rx_entry->bytes_done;
-	assert(bytes_left >= 0);
-	if (!bytes_left) {
-#if ENABLE_DEBUG
-		dlist_remove(&rx_entry->rx_pending_entry);
-		ep->rx_pending--;
-#endif
-		rxr_cq_handle_rx_completion(ep, pkt_entry, rx_entry);
-
-		rxr_msg_multi_recv_free_posted_entry(ep, rx_entry);
-		rxr_release_rx_entry(ep, rx_entry);
-		return 0;
-	}
-
-	if (!rx_entry->window) {
-		assert(rx_entry->state == RXR_RX_RECV);
-		ret = rxr_ep_post_ctrl_or_queue(ep, RXR_RX_ENTRY, rx_entry, RXR_CTS_PKT, 0);
-	}
-
-	rxr_pkt_entry_release_rx(ep, pkt_entry);
-	return ret;
-}
-
 static void rxr_cq_handle_readrsp(struct rxr_ep *ep,
 				  struct fi_cq_data_entry *comp,
 				  struct rxr_pkt_entry *pkt_entry)
@@ -858,9 +793,9 @@ static void rxr_cq_handle_readrsp(struct rxr_ep *ep,
 	rx_entry = ofi_bufpool_get_ibuf(ep->rx_entry_pool, readrsp_hdr->rx_id);
 	assert(rx_entry->cq_entry.flags & FI_READ);
 	rx_entry->tx_id = readrsp_hdr->tx_id;
-	rxr_cq_handle_pkt_with_data(ep, rx_entry, pkt_entry,
-				    readrsp_pkt->data,
-				    0, readrsp_hdr->seg_size);
+	rxr_pkt_proc_data(ep, rx_entry, pkt_entry,
+			  readrsp_pkt->data,
+			  0, readrsp_hdr->seg_size);
 }
 
 static void rxr_cq_handle_cts(struct rxr_ep *ep,
@@ -893,24 +828,6 @@ static void rxr_cq_handle_cts(struct rxr_ep *ep,
 		dlist_insert_tail(&tx_entry->entry, &ep->tx_pending_list);
 	}
 	return;
-}
-
-static void rxr_cq_handle_data(struct rxr_ep *ep,
-			       struct fi_cq_data_entry *comp,
-			       struct rxr_pkt_entry *pkt_entry)
-{
-	struct rxr_data_pkt *data_pkt;
-	struct rxr_rx_entry *rx_entry;
-	data_pkt = (struct rxr_data_pkt *)pkt_entry->pkt;
-
-	rx_entry = ofi_bufpool_get_ibuf(ep->rx_entry_pool,
-					 data_pkt->hdr.rx_id);
-
-	rxr_cq_handle_pkt_with_data(ep, rx_entry,
-				    pkt_entry,
-				    data_pkt->data,
-				    data_pkt->hdr.seg_offset,
-				    data_pkt->hdr.seg_size);
 }
 
 void rxr_cq_write_tx_completion(struct rxr_ep *ep,
@@ -1057,7 +974,7 @@ void rxr_cq_handle_pkt_recv_completion(struct rxr_ep *ep,
 		rxr_cq_handle_cts(ep, cq_entry, pkt_entry);
 		return;
 	case RXR_DATA_PKT:
-		rxr_cq_handle_data(ep, cq_entry, pkt_entry);
+		rxr_pkt_handle_data_recv(ep, pkt_entry);
 		return;
 	case RXR_READRSP_PKT:
 		rxr_cq_handle_readrsp(ep, cq_entry, pkt_entry);
