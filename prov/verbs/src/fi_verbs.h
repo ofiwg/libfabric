@@ -580,6 +580,7 @@ struct fi_ibv_ep {
 struct vrb_context {
 	struct fi_ibv_ep		*ep;
 	void				*user_ctx;
+	uint64_t			flags;
 };
 
 

@@ -40,12 +40,34 @@ static struct fi_ops_msg fi_ibv_srq_msg_ops;
 /* Receive CQ credits are pre-allocated */
 ssize_t vrb_post_recv(struct fi_ibv_ep *ep, struct ibv_recv_wr *wr)
 {
+	struct vrb_context *ctx;
+	struct fi_ibv_cq *cq;
 	struct ibv_recv_wr *bad_wr;
 	int ret;
 
-	assert(ep->util_ep.rx_cq);
+	cq = container_of(ep->util_ep.rx_cq, struct fi_ibv_cq, util_cq);
+	cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
+	ctx = ofi_buf_alloc(cq->ctx_pool);
+	if (!ctx)
+		goto unlock;
+
+	ctx->ep = ep;
+	ctx->user_ctx = (void *) (uintptr_t) wr->wr_id;
+	ctx->flags = FI_RECV;
+	wr->wr_id = (uintptr_t) ctx;
+
 	ret = ibv_post_recv(ep->ibv_qp, wr, &bad_wr);
-	return vrb_convert_ret(ret);
+	wr->wr_id = (uintptr_t) ctx->user_ctx;
+	if (ret)
+		goto freebuf;
+	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
+	return 0;
+
+freebuf:
+	ofi_buf_free(ctx);
+unlock:
+	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
+	return -FI_EAGAIN;
 }
 
 ssize_t vrb_post_send(struct fi_ibv_ep *ep, struct ibv_send_wr *wr)
@@ -76,6 +98,7 @@ ssize_t vrb_post_send(struct fi_ibv_ep *ep, struct ibv_send_wr *wr)
 
 	ctx->ep = ep;
 	ctx->user_ctx = (void *) (uintptr_t) wr->wr_id;
+	ctx->flags = FI_TRANSMIT;
 	wr->wr_id = (uintptr_t) ctx;
 
 	ret = ibv_post_send(ep->ibv_qp, wr, &bad_wr);
