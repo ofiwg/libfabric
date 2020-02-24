@@ -146,8 +146,6 @@ static int smr_getinfo(uint32_t version, const char *node, const char *service,
 			cur->ep_attr->max_order_waw_size = 0;
 			cur->ep_attr->max_order_war_size = 0;
 		}
-		if (smr_env.disable_cma)
-			cur->ep_attr->max_msg_size = SMR_INJECT_SIZE;
 	}
 	return 0;
 }
