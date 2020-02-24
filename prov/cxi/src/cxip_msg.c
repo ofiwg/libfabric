@@ -118,7 +118,7 @@ static fi_addr_t recv_req_src_addr(struct cxip_req *req)
 	 * event to logical FI address.
 	 */
 	if (rxc->attr.caps & FI_SOURCE) {
-		uint32_t pid_bits = rxc->domain->dev_if->if_dev->info.pid_bits;
+		uint32_t pid_bits = rxc->domain->iface->dev->info.pid_bits;
 		uint32_t nic;
 		uint32_t pid;
 
@@ -268,7 +268,7 @@ recv_req_tgt_event(struct cxip_req *req, const union c_event *event)
 	/* Initiator is provided in completion events. */
 	if (event->hdr.event_type == C_EVENT_RENDEZVOUS) {
 		struct cxip_rxc *rxc = req->recv.rxc;
-		uint32_t pid_bits = rxc->domain->dev_if->if_dev->info.pid_bits;
+		uint32_t pid_bits = rxc->domain->iface->dev->info.pid_bits;
 		uint32_t dfa = event->tgt_long.initiator.initiator.process;
 
 		req->recv.initiator = cxi_dfa_to_init(dfa, pid_bits);
@@ -290,7 +290,7 @@ static struct cxip_req *rdzv_mrecv_req_lookup(struct cxip_req *req,
 					      uint32_t *rdzv_id)
 {
 	struct cxip_rxc *rxc = req->recv.rxc;
-	uint32_t pid_bits = rxc->domain->dev_if->if_dev->info.pid_bits;
+	uint32_t pid_bits = rxc->domain->iface->dev->info.pid_bits;
 	struct cxip_req *child_req;
 	uint32_t ev_init;
 	uint32_t ev_rdzv_id;
@@ -312,7 +312,7 @@ static struct cxip_req *rdzv_mrecv_req_lookup(struct cxip_req *req,
 		ev_rdzv_id = user_ptr->rendezvous_id;
 	} else if (event->hdr.event_type == C_EVENT_RENDEZVOUS) {
 		struct cxip_rxc *rxc = req->recv.rxc;
-		uint32_t pid_bits = rxc->domain->dev_if->if_dev->info.pid_bits;
+		uint32_t pid_bits = rxc->domain->iface->dev->info.pid_bits;
 		uint32_t dfa = event->tgt_long.initiator.initiator.process;
 
 		ev_init = cxi_dfa_to_init(dfa, pid_bits);
@@ -500,8 +500,8 @@ static int issue_rdzv_get(struct cxip_req *req, const union c_event *event)
 	const struct c_event_target_long *tev = &event->tgt_long;
 	union c_cmdu cmd = {};
 	struct cxip_rxc *rxc = req->recv.rxc;
-	uint32_t pid_bits = rxc->domain->dev_if->if_dev->info.pid_bits;
-	uint32_t pid_idx = rxc->domain->dev_if->if_dev->info.rdzv_get_idx;
+	uint32_t pid_bits = rxc->domain->iface->dev->info.pid_bits;
+	uint32_t pid_idx = rxc->domain->iface->dev->info.rdzv_get_idx;
 	uint8_t idx_ext;
 	uint32_t init = tev->initiator.initiator.process;
 	int ret;
@@ -600,8 +600,8 @@ cxip_notify_match_cb(struct cxip_req *req, const union c_event *event)
 static int cxip_notify_match(struct cxip_req *req, const union c_event *event)
 {
 	struct cxip_rxc *rxc = req->recv.rxc;
-	uint32_t pid_bits = rxc->domain->dev_if->if_dev->info.pid_bits;
-	uint32_t pid_idx = rxc->domain->dev_if->if_dev->info.rdzv_get_idx;
+	uint32_t pid_bits = rxc->domain->iface->dev->info.pid_bits;
+	uint32_t pid_idx = rxc->domain->iface->dev->info.rdzv_get_idx;
 	uint32_t init = event->tgt_long.initiator.initiator.process;
 	uint32_t nic = CXI_MATCH_ID_EP(pid_bits, init);
 	uint32_t pid = CXI_MATCH_ID_PID(pid_bits, init);
@@ -1103,7 +1103,7 @@ static int eager_buf_add(struct cxip_rxc *rxc)
 	req->oflow.oflow_buf = oflow_buf;
 
 	min_free = (rxc->rdzv_threshold >>
-			dom->dev_if->if_dev->info.min_free_shift);
+			dom->iface->dev->info.min_free_shift);
 
 	/* Issue Append command */
 	ret = cxip_pte_append(rxc->rx_pte,
@@ -2093,7 +2093,7 @@ static ssize_t _cxip_recv(struct cxip_rxc *rxc, void *buf, size_t len,
 	 * in the LE for matching. If application AVs are symmetric, use
 	 * logical FI address for matching. Otherwise, use physical address.
 	 */
-	pid_bits = dom->dev_if->if_dev->info.pid_bits;
+	pid_bits = dom->iface->dev->info.pid_bits;
 	if (rxc->attr.caps & FI_DIRECTED_RECV &&
 	    src_addr != FI_ADDR_UNSPEC) {
 		if (!rxc->ep_obj->rdzv_offload &&
@@ -2237,7 +2237,7 @@ static fi_addr_t _txc_fi_addr(struct cxip_txc *txc)
  */
 static uint32_t cxip_msg_match_id(struct cxip_txc *txc)
 {
-	int pid_bits = txc->domain->dev_if->if_dev->info.pid_bits;
+	int pid_bits = txc->domain->iface->dev->info.pid_bits;
 
 	if (!txc->ep_obj->rdzv_offload &&
 	    txc->ep_obj->av->attr.flags & FI_SYMMETRIC)
@@ -2644,7 +2644,7 @@ static ssize_t _cxip_send_long(struct cxip_txc *txc, const void *buf,
 
 	/* Calculate DFA */
 	rx_id = CXIP_AV_ADDR_RXC(txc->ep_obj->av, dest_addr);
-	pid_bits = dom->dev_if->if_dev->info.pid_bits;
+	pid_bits = dom->iface->dev->info.pid_bits;
 	pid_idx = CXIP_PTL_IDX_RXC(rx_id);
 	cxi_build_dfa(caddr.nic, caddr.pid, pid_bits, pid_idx, &dfa,
 		      &idx_ext);
@@ -2853,7 +2853,7 @@ static ssize_t _cxip_send_eager(struct cxip_txc *txc, const void *buf,
 
 	/* Build Put command descriptor */
 	rx_id = CXIP_AV_ADDR_RXC(txc->ep_obj->av, dest_addr);
-	pid_bits = dom->dev_if->if_dev->info.pid_bits;
+	pid_bits = dom->iface->dev->info.pid_bits;
 	pid_idx = CXIP_PTL_IDX_RXC(rx_id);
 	cxi_build_dfa(caddr.nic, caddr.pid, pid_bits, pid_idx, &dfa,
 		      &idx_ext);

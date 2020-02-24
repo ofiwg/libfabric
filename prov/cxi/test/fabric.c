@@ -57,7 +57,7 @@ Test(getinfo, dom_name)
 		infos = 0;
 
 		cxit_fi_hints->domain_attr->name =
-				get_dom_name(if_entry->if_idx);
+				get_dom_name(if_entry->info.dev_id);
 
 		cxit_create_fabric_info();
 		cr_assert(cxit_fi != NULL);

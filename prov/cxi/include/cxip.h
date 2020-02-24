@@ -249,107 +249,68 @@ union cxip_match_bits {
 	uint64_t raw;
 };
 
-// TODO: comments are not yet complete, and may not be entirely correct
-//       complete documentation and review thoroughly
+
+/* libcxi Wrapper Structures */
 
 /**
- * Local Interface Domain
+ * CXI Device wrapper
  *
- * Support structure.
- *
- * Create/lookup in cxip_get_if_domain(), during EP creation.
- *
- * These are associated with the local Cassini chip referenced in the parent
- * dev_if. There must be one for every 'pid' that is active for communicating
- * with other devices on the network.
- *
- * This structure wraps a libcxi domain, or Cassini "granule" (of 256 soft
- * endpoints) for the local CXI chip.
- *
- * The vni value specifies a Cassini VNI, as supplied by the privileged WLM that
- * started the job/service that has activated this 'pid'.
- *
- * The pid value specifies the libcxi domain, or VNI granule, and is supplied
- * by the application. Each pid has its own set of RX and MR resources for
- * receiving data.
- *
- * Every EP will use one of these for the RX context.
- */
-struct cxip_if_domain {
-	struct dlist_entry if_dom_entry; // attach to cxip_if->if_doms
-	struct cxip_if *dev_if;		// local Cassini device
-	struct cxil_domain *cxil_if_dom; // cxil domain (dev, vni, pid)
-	uint32_t vni;			// vni value (namespace)
-	uint32_t pid;			// pid value (granule index)
-	struct index_map lep_map;	// Cassini Logical EP bitmap
-	ofi_atomic32_t ref;
-	fastlock_t lock;
-};
-
-/**
- * Local Interface
- *
- * Support structure.
- *
- * Created by cxip_get_if().
- *
- * There will be one of these for every local Cassini device on the node,
- * typically 1 to 4 interfaces.
- *
- * This implements a single, dedicated Cassini cmdq for creating memory regions
- * and attaching them to Cassini PTEs.
- *
- * Statically initialized at library initialization, based on information from
- * the libcxi layer.
+ * There will be one of these for every local Cassini device on the node.
  */
 struct cxip_if {
-	struct slist_entry if_entry;	// attach to global cxip_if_list
-	uint32_t if_nic;		// cxil NIC identifier
-	uint32_t if_idx;		// cxil NIC index
-	uint32_t if_fabric;		// cxil NIC fabric address
-	struct cxil_devinfo if_info;	// cxil NIC DEV Info structure
-	struct cxil_dev *if_dev;	// cxil NIC DEV structure
-	struct cxil_lni *if_lni;	// cxil NIC LNI structure
-	struct cxi_cp *cps[16];		// Cassini communication profiles
-	int n_cps;
-	struct dlist_entry if_doms;	// if_domain list
-	struct dlist_entry ptes;	// PTE list
+	struct slist_entry if_entry;
+
+	/* Device description */
+	struct cxil_devinfo info;
+	struct cxil_dev *dev;
+
+	/* PtlTEs (searched during state change events) */
+	struct dlist_entry ptes;
+
 	ofi_atomic32_t ref;
-	struct cxip_cmdq *mr_cmdq;	// used for all MR activation
-	struct cxi_evtq *mr_evtq;	// used for async completion
-	void *evtq_buf;
-	size_t evtq_buf_len;
-	struct cxi_md *evtq_buf_md;
-	struct indexer mr_table;	// MR Buffer ID table
 	fastlock_t lock;
 };
 
 /**
- * Portal Table Entry
+ * CXI Logical Network Interface (LNI) wrapper
  *
- * Support structure.
- *
- * Created in cxip_pte_alloc().
- *
- * When the PTE object is created, the user specifies the desired pid_idx to
- * use, which implicitly defines the function of this PTE. It is an error to
- * attempt to multiply allocate the same pid_idx.
+ * An LNI is a container used allocate resources from a NIC.
  */
-struct cxip_pte {
-	struct dlist_entry pte_entry;	// attaches to cxip_if->ptes
-	struct cxip_if_domain *if_dom;	// parent domain
-	uint64_t pid_idx;
-	struct cxil_pte *pte;		// cxil PTE object
-	struct cxil_pte_map *pte_map;	// cxil PTE mapped object
-	enum c_ptlte_state state;	// Cassini PTE state
+struct cxip_lni {
+	struct cxip_if *iface;
+	struct cxil_lni *lni;
+
+	/* Resource cache */
 };
 
 /**
- * Command Queue
+ * CXI Device Domain wrapper
  *
- * Support structure.
+ * A CXI domain is conceptually equivalent to a Portals table. The provider
+ * assigns a unique domain to each OFI Endpoint. A domain is addressed using
+ * the tuple { NIC, VNI, PID }.
+ */
+struct cxip_if_domain {
+	struct cxip_lni *lni;
+	struct cxil_domain *dom;
+};
+
+/**
+ * CXI Portal Table Entry (PtlTE) wrapper
  *
- * Created in cxip_cmdq_alloc().
+ * Represents PtlTE mapped in a CXI domain.
+ */
+struct cxip_pte {
+	struct dlist_entry pte_entry;
+	struct cxip_if_domain *if_dom;
+	uint64_t pid_idx;
+	struct cxil_pte *pte;
+	struct cxil_pte_map *pte_map;
+	enum c_ptlte_state state;
+};
+
+/**
+ * CXI Command Queue wrapper
  */
 struct cxip_cmdq {
 	struct cxi_cmdq *dev_cmdq;
@@ -357,16 +318,11 @@ struct cxip_cmdq {
 	struct c_cstate_cmd c_state;
 };
 
+
+/* OFI Provider Structures */
+
 /**
- * Fabric object
- *
- * libfabric if_fabric implementation.
- *
- * Created in cxip_fabric().
- *
- * This is an anchor for all remote EPs on this fabric, and allows domains to
- * find common services.
- *
+ * CXI Provider Fabric object
  */
 struct cxip_fabric {
 	struct util_fabric util_fabric;
@@ -375,39 +331,55 @@ struct cxip_fabric {
 
 struct cxip_domain;
 
-/* CXI Provider Memory Descriptor */
+/*
+ * CXI Provider Memory Descriptor
+ */
 struct cxip_md {
 	struct cxip_domain *dom;
 	struct cxi_md *md;
 };
 
-/**
- * Domain object
- *
- * libfabric if_domain implementation.
- *
- * Created in cxip_domain().
+/*
+ * CXI Provider Domain object
  */
 struct cxip_domain {
 	struct util_domain util_domain;
-	struct cxip_fabric *fab;	// parent cxip_fabric
+	struct cxip_fabric *fab;
 	fastlock_t lock;
 	ofi_atomic32_t ref;
 
-	struct cxip_eq *eq;		// linked during cxip_dom_bind()
-	struct cxip_eq *mr_eq;		// == eq || == NULL
-	struct ofi_mr_cache iomm;	// IO Memory Map
+	struct cxip_eq *eq; //unused
+	struct cxip_eq *mr_eq; //unused
+
+	/* Assigned NIC address */
+	uint32_t nic_addr;
+
+	/* Device info */
+	struct cxip_if *iface;
+
+	/* Device partition */
+	struct cxip_lni *lni;
+
+	/* Communication Profiles */
+	struct cxi_cp *cps[16];
+	int n_cps;
+
+	/* Trigger and CT support */
+	struct cxip_cmdq *trig_cmdq;
+	bool cntr_init;
+
+	/* Translation cache */
+	struct ofi_mr_cache iomm;
+	fastlock_t iomm_lock;
+	bool odp;
+
+	/* ATS translation support */
 	struct cxip_md ats_md;
 	bool ats_init;
 	bool ats_enabled;
-	struct cxip_cmdq *trig_cmdq;
-	fastlock_t iomm_lock;
 
-	uint32_t nic_addr;		// dev address of source NIC
-	bool enabled;			// set when domain is enabled
-	struct cxip_if *dev_if;		// looked when domain is enabled
-
-	bool odp;
+	/* Domain state */
+	bool enabled;
 };
 
 // Apparently not yet in use (??)
@@ -776,6 +748,12 @@ struct cxip_ep_obj {
 	ofi_atomic32_t num_rxc;		// num RX contexts (>= 1)
 	ofi_atomic32_t num_txc;		// num TX contexts (>= 1)
 
+	/* Shared context resources */
+	struct cxip_cmdq *txqs[CXIP_EP_MAX_TX_CNT];
+	ofi_atomic32_t txq_refs[CXIP_EP_MAX_TX_CNT];
+	struct cxip_cmdq *tgqs[CXIP_EP_MAX_TX_CNT];
+	ofi_atomic32_t tgq_refs[CXIP_EP_MAX_TX_CNT];
+
 	struct fi_ep_attr ep_attr;
 
 	bool enabled;
@@ -784,14 +762,23 @@ struct cxip_ep_obj {
 	struct cxip_addr src_addr;	// address of this NIC
 	fi_addr_t fi_addr;		// AV address of this EP
 	uint32_t vni;			// VNI all EP addressing
-	struct cxip_if_domain *if_dom;
 	int rdzv_offload;
+
+	struct cxip_if_domain *if_dom;
 
 	struct indexer rdzv_ids;
 	fastlock_t rdzv_id_lock;
 
 	struct indexer tx_ids;
 	fastlock_t tx_id_lock;
+
+	/* Control Resources (for MRs/FC recovery) */
+	struct cxip_cmdq *tgq;
+	struct cxi_evtq *evtq;
+	void *evtq_buf;
+	size_t evtq_buf_len;
+	struct cxi_md *evtq_buf_md;
+	struct indexer mr_table;
 };
 
 /**
@@ -912,11 +899,11 @@ struct cxip_wait {
 struct cxip_if *cxip_if_lookup(uint32_t nic_addr);
 int cxip_get_if(uint32_t nic_addr, struct cxip_if **dev_if);
 void cxip_put_if(struct cxip_if *dev_if);
-int cxip_get_if_domain(struct cxip_if *dev_if, uint32_t vni, uint32_t pid,
-		       struct cxip_if_domain **if_dom);
-void cxip_put_if_domain(struct cxip_if_domain *if_dom);
-int cxip_if_domain_lep_alloc(struct cxip_if_domain *if_dom, uint64_t pid_idx);
-int cxip_if_domain_lep_free(struct cxip_if_domain *if_dom, uint64_t pid_idx);
+int cxip_alloc_lni(struct cxip_if *iface, struct cxip_lni **if_lni);
+void cxip_free_lni(struct cxip_lni *lni);
+int cxip_alloc_if_domain(struct cxip_lni *lni, uint32_t vni, uint32_t pid,
+			 struct cxip_if_domain **if_dom);
+void cxip_free_if_domain(struct cxip_if_domain *if_dom);
 void cxip_if_init(void);
 void cxip_if_fini(void);
 
@@ -942,7 +929,7 @@ void cxip_pte_free(struct cxip_pte *pte);
 int cxip_pte_state_change(struct cxip_if *dev_if, uint32_t pte_num,
 			  enum c_ptlte_state new_state);
 
-int cxip_cmdq_alloc(struct cxip_if *dev_if, struct cxi_evtq *evtq,
+int cxip_cmdq_alloc(struct cxip_lni *lni, struct cxi_evtq *evtq,
 		    struct cxi_cq_alloc_opts *cq_opts,
 		    struct cxip_cmdq **cmdq);
 void cxip_cmdq_free(struct cxip_cmdq *cmdq);
@@ -979,6 +966,11 @@ void *cxip_tx_id_lookup(struct cxip_ep_obj *ep_obj, int id);
 int cxip_rdzv_id_alloc(struct cxip_ep_obj *ep_obj, void *ctx);
 int cxip_rdzv_id_free(struct cxip_ep_obj *ep_obj, int id);
 void *cxip_rdzv_id_lookup(struct cxip_ep_obj *ep_obj, int id);
+int cxip_ep_cmdq(struct cxip_ep_obj *ep_obj,
+		 uint32_t ctx_id, uint32_t size, bool transmit,
+		 struct cxip_cmdq **cmdq);
+void cxip_ep_cmdq_put(struct cxip_ep_obj *ep_obj,
+		      uint32_t ctx_id, bool transmit);
 
 int cxip_msg_oflow_init(struct cxip_rxc *rxc);
 void cxip_msg_oflow_fini(struct cxip_rxc *rxc);
@@ -1014,6 +1006,7 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq);
 int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq, void *context);
 
+void cxip_dom_cntr_disable(struct cxip_domain *dom);
 int cxip_cntr_mod(struct cxip_cntr *cxi_cntr, uint64_t value, bool set,
 		  bool err);
 int cxip_cntr_enable(struct cxip_cntr *cxi_cntr);

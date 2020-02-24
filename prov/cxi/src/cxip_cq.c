@@ -273,7 +273,7 @@ static struct cxip_req *cxip_cq_event_req(struct cxip_cq *cq,
 		pte_num = event->tgt_long.ptlte_index;
 		pte_state = event->tgt_long.initiator.state_change.ptlte_state;
 
-		cxip_pte_state_change(cq->domain->dev_if, pte_num, pte_state);
+		cxip_pte_state_change(cq->domain->iface, pte_num, pte_state);
 
 		req = NULL;
 		break;
@@ -368,7 +368,7 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq)
 		goto unlock;
 	}
 
-	ret = cxil_map(cxi_cq->domain->dev_if->if_lni,
+	ret = cxil_map(cxi_cq->domain->lni->lni,
 		       cxi_cq->evtq_buf, cxi_cq->evtq_buf_len,
 		       CXI_MAP_PIN | CXI_MAP_WRITE,
 		       NULL, &cxi_cq->evtq_buf_md);
@@ -383,7 +383,7 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq)
 	eq_attr.queue_md = cxi_cq->evtq_buf_md,
 	eq_attr.flags = CXI_EQ_TGT_LONG;
 
-	ret = cxil_alloc_evtq(cxi_cq->domain->dev_if->if_lni, &eq_attr,
+	ret = cxil_alloc_evtq(cxi_cq->domain->lni->lni, &eq_attr,
 			      NULL, NULL, &cxi_cq->evtq);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Unable to allocate EVTQ, ret: %d\n", ret);

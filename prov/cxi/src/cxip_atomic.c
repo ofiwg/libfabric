@@ -382,7 +382,7 @@ static int _cxip_amo(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		     size_t result_count,
 		     uint64_t flags)
 {
-	struct cxip_if *dev_if;
+	struct cxip_if *iface;
 	struct cxip_addr caddr;
 	struct cxip_req *req = NULL;
 	enum c_atomic_op opcode;
@@ -577,8 +577,8 @@ static int _cxip_amo(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	}
 
 	/* Build destination fabric address. */
-	dev_if = txc->domain->dev_if;
-	pid_bits = dev_if->if_dev->info.pid_bits;
+	iface = txc->domain->iface;
+	pid_bits = iface->dev->info.pid_bits;
 	pid_idx = cxip_mr_key_to_ptl_idx(key);
 	cxi_build_dfa(caddr.nic, caddr.pid, pid_bits, pid_idx, &dfa,
 		      &idx_ext);

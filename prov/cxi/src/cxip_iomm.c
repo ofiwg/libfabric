@@ -25,7 +25,7 @@ static int cxip_do_map(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 	if (!dom->odp)
 		map_flags |= CXI_MAP_PIN;
 
-	ret = cxil_map(dom->dev_if->if_lni, entry->info.iov.iov_base,
+	ret = cxil_map(dom->lni->lni, entry->info.iov.iov_base,
 		       entry->info.iov.iov_len, map_flags, NULL, &md->md);
 	if (ret)
 		CXIP_LOG_ERROR("cxil_map() failed: %d\n", ret);
@@ -61,7 +61,7 @@ static struct cxip_md *cxip_dom_ats_md(struct cxip_domain *dom)
 	fastlock_acquire(&dom->iomm_lock);
 
 	if (!dom->ats_init) {
-		ret = cxil_map(dom->dev_if->if_lni, 0, -1,
+		ret = cxil_map(dom->lni->lni, 0, -1,
 			       map_flags, NULL, &dom->ats_md.md);
 		if (!ret) {
 			dom->ats_md.dom = dom;

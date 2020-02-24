@@ -19,6 +19,45 @@
 #define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_EP_DATA, __VA_ARGS__)
 #define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_EP_DATA, __VA_ARGS__)
 
+static int cxip_dom_cntr_enable(struct cxip_domain *dom)
+{
+	struct cxi_cq_alloc_opts cq_opts = {};
+	int ret;
+
+	fastlock_acquire(&dom->lock);
+
+	if (dom->cntr_init) {
+		fastlock_release(&dom->lock);
+		return FI_SUCCESS;
+	}
+
+	cq_opts.count = 64;
+	cq_opts.is_transmit = 1;
+	cq_opts.with_trig_cmds = 1;
+
+	ret = cxip_cmdq_alloc(dom->lni, NULL, &cq_opts, &dom->trig_cmdq);
+	if (ret != FI_SUCCESS) {
+		CXIP_LOG_DBG("Failed to allocate trig_cmdq: %d\n", ret);
+
+		fastlock_release(&dom->lock);
+		return -FI_ENOSPC;
+	}
+
+	dom->cntr_init = true;
+
+	CXIP_LOG_DBG("Domain counters enabled: %p\n", dom);
+
+	fastlock_release(&dom->lock);
+
+	return FI_SUCCESS;
+}
+
+void cxip_dom_cntr_disable(struct cxip_domain *dom)
+{
+	if (dom->cntr_init)
+		cxip_cmdq_free(dom->trig_cmdq);
+}
+
 const struct fi_cntr_attr cxip_cntr_attr = {
 	.events = FI_CNTR_EVENTS_COMP,
 	.wait_obj = FI_WAIT_NONE,
@@ -298,7 +337,11 @@ int cxip_cntr_enable(struct cxip_cntr *cxi_cntr)
 		goto unlock;
 	}
 
-	ret = cxil_alloc_ct(cxi_cntr->domain->dev_if->if_lni,
+	ret = cxip_dom_cntr_enable(cxi_cntr->domain);
+	if (ret != FI_SUCCESS)
+		goto unlock;
+
+	ret = cxil_alloc_ct(cxi_cntr->domain->lni->lni,
 			    &cxi_cntr->wb, &cxi_cntr->ct);
 	if (ret) {
 		CXIP_LOG_DBG("Unable to allocate CT, ret: %d\n", ret);

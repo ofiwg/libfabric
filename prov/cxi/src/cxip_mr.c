@@ -60,50 +60,93 @@ static void cxip_ep_mr_remove(struct cxip_mr *mr)
  */
 static int cxip_ep_mr_enable(struct cxip_ep_obj *ep_obj)
 {
-	struct cxi_pt_alloc_opts opts = {
+	struct cxi_pt_alloc_opts pt_opts = {
 		.use_long_event = 1,
 		.is_matching = 1,
 		.pe_num = CXI_PE_NUM_ANY,
 		.le_pool = CXI_LE_POOL_ANY
 	};
+	struct cxi_eq_attr eq_attr = {};
 	union c_cmdu cmd = {};
 	const union c_event *event;
+	struct cxi_cq_alloc_opts cq_opts = {};
 	int ret;
+	int tmp;
 
 	fastlock_acquire(&ep_obj->lock);
 
 	if (ep_obj->mr_init) {
-		fastlock_release(&ep_obj->lock);
-		return FI_SUCCESS;
+		ret = FI_SUCCESS;
+		goto unlock_ep;
 	}
 
-	ret = cxip_pte_alloc(ep_obj->if_dom, ep_obj->domain->dev_if->mr_evtq,
-			     CXIP_PTL_IDX_MR_STD, &opts, &ep_obj->mr_pte);
+	cq_opts.count = 64;
+	cq_opts.is_transmit = 0;
+	ret = cxip_cmdq_alloc(ep_obj->domain->lni, NULL, &cq_opts,
+			      &ep_obj->tgq);
+	if (ret != FI_SUCCESS) {
+		CXIP_LOG_DBG("Unable to allocate MR CMDQ, ret: %d\n",
+			     ret);
+		ret = -FI_ENODEV;
+		goto unlock_ep;
+	}
+
+	ep_obj->evtq_buf_len = C_PAGE_SIZE;
+	ep_obj->evtq_buf = aligned_alloc(C_PAGE_SIZE, ep_obj->evtq_buf_len);
+	if (!ep_obj->evtq_buf) {
+		CXIP_LOG_DBG("Unable to allocate EVTQ buffer\n");
+		goto free_tgq;
+	}
+
+	ret = cxil_map(ep_obj->domain->lni->lni, ep_obj->evtq_buf,
+		       ep_obj->evtq_buf_len,
+		       CXI_MAP_PIN | CXI_MAP_WRITE,
+		       NULL, &ep_obj->evtq_buf_md);
+	if (ret) {
+		CXIP_LOG_DBG("Unable to map EVTQ buffer, ret: %d\n",
+			     ret);
+		goto free_evtq_buf;
+	}
+
+	eq_attr.queue = ep_obj->evtq_buf;
+	eq_attr.queue_len = ep_obj->evtq_buf_len;
+	eq_attr.queue_md = ep_obj->evtq_buf_md;
+	eq_attr.flags = CXI_EQ_TGT_LONG;
+
+	ret = cxil_alloc_evtq(ep_obj->domain->lni->lni, &eq_attr,
+			      NULL, NULL, &ep_obj->evtq);
+	if (ret != FI_SUCCESS) {
+		CXIP_LOG_DBG("Unable to allocate EVTQ, ret: %d\n", ret);
+		ret = -FI_ENODEV;
+		goto free_evtq_md;
+	}
+
+	memset(&ep_obj->mr_table, 0, sizeof(ep_obj->mr_table));
+
+	ret = cxip_pte_alloc(ep_obj->if_dom, ep_obj->evtq,
+			     CXIP_PTL_IDX_MR_STD, &pt_opts, &ep_obj->mr_pte);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Failed to allocate PTE: %d\n", ret);
 		ret = -FI_ENOSPC;
-		goto err_unlock_ep;
+		goto free_evtq;
 	}
-
-	fastlock_acquire(&ep_obj->domain->dev_if->lock);
 
 	/* Enable the PTE */
 	cmd.command.opcode = C_CMD_TGT_SETSTATE;
 	cmd.set_state.ptlte_index = ep_obj->mr_pte->pte->ptn;
 	cmd.set_state.ptlte_state = C_PTLTE_ENABLED;
 
-	ret = cxi_cq_emit_target(ep_obj->domain->dev_if->mr_cmdq->dev_cmdq,
-				 &cmd);
+	ret = cxi_cq_emit_target(ep_obj->tgq->dev_cmdq, &cmd);
 	if (ret) {
 		/* This is a bug, we have exclusive access to this CMDQ. */
 		CXIP_LOG_ERROR("Failed to enqueue command: %d\n", ret);
-		goto err_pte_free;
+		goto free_pte;
 	}
 
-	cxi_cq_ring(ep_obj->domain->dev_if->mr_cmdq->dev_cmdq);
+	cxi_cq_ring(ep_obj->tgq->dev_cmdq);
 
 	/* Wait for Enable event */
-	while (!(event = cxi_eq_get_event(ep_obj->domain->dev_if->mr_evtq)))
+	while (!(event = cxi_eq_get_event(ep_obj->evtq)))
 		sched_yield();
 
 	if (event->hdr.event_type != C_EVENT_STATE_CHANGE ||
@@ -114,26 +157,34 @@ static int cxip_ep_mr_enable(struct cxip_ep_obj *ep_obj)
 		/* This is a device malfunction */
 		CXIP_LOG_ERROR("Invalid Enable EQE\n");
 		ret = -FI_EIO;
-		goto err_pte_free;
+		goto free_pte;
 	}
 
-	cxi_eq_ack_events(ep_obj->domain->dev_if->mr_evtq);
+	cxi_eq_ack_events(ep_obj->evtq);
 
 	ep_obj->mr_init = true;
 
 	CXIP_LOG_DBG("Standard MRs enabled: %p\n", ep_obj);
 
-	fastlock_release(&ep_obj->domain->dev_if->lock);
-
 	fastlock_release(&ep_obj->lock);
 
 	return FI_SUCCESS;
 
-err_pte_free:
-	fastlock_release(&ep_obj->domain->dev_if->lock);
-
+free_pte:
 	cxip_pte_free(ep_obj->mr_pte);
-err_unlock_ep:
+free_evtq:
+	ret = cxil_destroy_evtq(ep_obj->evtq);
+	if (ret)
+		CXIP_LOG_ERROR("Failed to destroy EVTQ: %d\n", ret);
+free_evtq_md:
+	tmp = cxil_unmap(ep_obj->evtq_buf_md);
+	if (tmp)
+		CXIP_LOG_ERROR("Failed to unmap EVTQ buffer: %d\n", ret);
+free_evtq_buf:
+	free(ep_obj->evtq_buf);
+free_tgq:
+	cxip_cmdq_free(ep_obj->tgq);
+unlock_ep:
 	fastlock_release(&ep_obj->lock);
 
 	return ret;
@@ -144,6 +195,8 @@ err_unlock_ep:
  */
 void cxip_ep_mr_disable(struct cxip_ep_obj *ep_obj)
 {
+	int ret;
+
 	fastlock_acquire(&ep_obj->lock);
 
 	if (!ep_obj->mr_init) {
@@ -152,6 +205,21 @@ void cxip_ep_mr_disable(struct cxip_ep_obj *ep_obj)
 	}
 
 	cxip_pte_free(ep_obj->mr_pte);
+
+	ofi_idx_reset(&ep_obj->mr_table);
+
+	ret = cxil_destroy_evtq(ep_obj->evtq);
+	if (ret)
+		CXIP_LOG_ERROR("Failed to destroy EVTQ: %d\n", ret);
+
+	ret = cxil_unmap(ep_obj->evtq_buf_md);
+	if (ret)
+		CXIP_LOG_ERROR("Failed to unmap EVTQ buffer: %d\n",
+			       ret);
+
+	free(ep_obj->evtq_buf);
+
+	cxip_cmdq_free(ep_obj->tgq);
 
 	ep_obj->mr_init = false;
 
@@ -176,10 +244,7 @@ static int cxip_mr_enable_std(struct cxip_mr *mr)
 	const union c_event *event;
 	int buffer_id;
 	int ret;
-
-	ret = cxip_ep_mr_enable(mr->ep->ep_obj);
-	if (ret != FI_SUCCESS)
-		return ret;
+	struct cxip_ep_obj *ep_obj = mr->ep->ep_obj;
 
 	if (mr->cntr) {
 		ret = cxip_cntr_enable(mr->cntr);
@@ -190,7 +255,7 @@ static int cxip_mr_enable_std(struct cxip_mr *mr)
 		}
 	}
 
-	buffer_id = ofi_idx_insert(&mr->domain->dev_if->mr_table, mr);
+	buffer_id = ofi_idx_insert(&ep_obj->mr_table, mr);
 	if (buffer_id < 0 || buffer_id >= CXIP_BUFFER_ID_MAX) {
 		CXIP_LOG_ERROR("Failed to allocate MR buffer ID: %d\n",
 			       buffer_id);
@@ -206,9 +271,9 @@ static int cxip_mr_enable_std(struct cxip_mr *mr)
 		}
 	}
 
-	fastlock_acquire(&mr->domain->dev_if->lock);
+	fastlock_acquire(&ep_obj->lock);
 
-	ret = cxip_pte_append(mr->ep->ep_obj->mr_pte,
+	ret = cxip_pte_append(ep_obj->mr_pte,
 			      mr->len ? CXI_VA_TO_IOVA(mr->md->md, mr->buf) : 0,
 			      mr->len,
 			      mr->len ? mr->md->md->lac : 0,
@@ -219,14 +284,14 @@ static int cxip_mr_enable_std(struct cxip_mr *mr)
 			      mr->cntr, mr->cntr,
 			      mr->attr.access & FI_REMOTE_WRITE,
 			      mr->attr.access & FI_REMOTE_READ,
-			      mr->domain->dev_if->mr_cmdq);
+			      ep_obj->tgq);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
 		goto err_unmap;
 	}
 
 	/* Wait for link EQ event */
-	while (!(event = cxi_eq_get_event(mr->domain->dev_if->mr_evtq)))
+	while (!(event = cxi_eq_get_event(ep_obj->evtq)))
 		sched_yield();
 
 	if (event->hdr.event_type != C_EVENT_LINK ||
@@ -247,9 +312,9 @@ static int cxip_mr_enable_std(struct cxip_mr *mr)
 		goto err_unmap;
 	}
 
-	cxi_eq_ack_events(mr->domain->dev_if->mr_evtq);
+	cxi_eq_ack_events(ep_obj->evtq);
 
-	fastlock_release(&mr->domain->dev_if->lock);
+	fastlock_release(&ep_obj->lock);
 
 	mr->enabled = true;
 
@@ -258,12 +323,12 @@ static int cxip_mr_enable_std(struct cxip_mr *mr)
 	return FI_SUCCESS;
 
 err_unmap:
-	fastlock_release(&mr->domain->dev_if->lock);
+	fastlock_release(&ep_obj->lock);
 
 	if (mr->len)
 		cxip_unmap(mr->md);
 err_free_idx:
-	ofi_idx_remove(&mr->domain->dev_if->mr_table, mr->buffer_id);
+	ofi_idx_remove(&ep_obj->mr_table, mr->buffer_id);
 
 	return ret;
 }
@@ -277,21 +342,22 @@ static int cxip_mr_disable_std(struct cxip_mr *mr)
 {
 	int ret;
 	const union c_event *event;
+	struct cxip_ep_obj *ep_obj = mr->ep->ep_obj;
 
 	if (!mr->enabled)
 		return FI_SUCCESS;
 
-	fastlock_acquire(&mr->domain->dev_if->lock);
+	fastlock_acquire(&ep_obj->lock);
 
-	ret = cxip_pte_unlink(mr->ep->ep_obj->mr_pte, C_PTL_LIST_PRIORITY,
-			      mr->buffer_id, mr->domain->dev_if->mr_cmdq);
+	ret = cxip_pte_unlink(ep_obj->mr_pte, C_PTL_LIST_PRIORITY,
+			      mr->buffer_id, ep_obj->tgq);
 	if (ret) {
 		CXIP_LOG_ERROR("Failed to enqueue Unlink: %d\n", ret);
 		goto unlock;
 	}
 
 	/* Wait for unlink EQ event */
-	while (!(event = cxi_eq_get_event(mr->domain->dev_if->mr_evtq)))
+	while (!(event = cxi_eq_get_event(ep_obj->evtq)))
 		sched_yield();
 
 	if (event->hdr.event_type != C_EVENT_UNLINK ||
@@ -304,21 +370,21 @@ static int cxip_mr_disable_std(struct cxip_mr *mr)
 			       event->tgt_long.buffer_id);
 	}
 
-	cxi_eq_ack_events(mr->domain->dev_if->mr_evtq);
+	cxi_eq_ack_events(ep_obj->evtq);
 
-	ret = cxil_invalidate_pte_le(mr->ep->ep_obj->mr_pte->pte, mr->key,
+	ret = cxil_invalidate_pte_le(ep_obj->mr_pte->pte, mr->key,
 				     C_PTL_LIST_PRIORITY);
 	if (ret)
 		CXIP_LOG_ERROR("MR invalidate failed: %d (mr: %p key %lu)\n",
 			       ret, mr, mr->key);
 
 unlock:
-	fastlock_release(&mr->domain->dev_if->lock);
+	fastlock_release(&ep_obj->lock);
 
 	if (mr->len)
 		cxip_unmap(mr->md);
 
-	ofi_idx_remove(&mr->domain->dev_if->mr_table, mr->buffer_id);
+	ofi_idx_remove(&ep_obj->mr_table, mr->buffer_id);
 
 	mr->enabled = false;
 
@@ -347,6 +413,7 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 		.pe_num = CXI_PE_NUM_ANY,
 		.le_pool = CXI_LE_POOL_ANY
 	};
+	struct cxip_ep_obj *ep_obj = mr->ep->ep_obj;
 
 	if (mr->enabled)
 		return FI_SUCCESS;
@@ -368,33 +435,31 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 		}
 	}
 
-	ret = cxip_pte_alloc(mr->ep->ep_obj->if_dom,
-			     mr->domain->dev_if->mr_evtq,
+	ret = cxip_pte_alloc(ep_obj->if_dom, ep_obj->evtq,
 			     CXIP_PTL_IDX_MR_OPT(mr->key), &opts, &mr->pte);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Failed to allocate PTE: %d\n", ret);
 		goto err_unmap;
 	}
 
-	fastlock_acquire(&mr->domain->dev_if->lock);
+	fastlock_acquire(&ep_obj->lock);
 
 	/* Enable the PTE */
 	cmd.command.opcode = C_CMD_TGT_SETSTATE;
 	cmd.set_state.ptlte_index = mr->pte->pte->ptn;
 	cmd.set_state.ptlte_state = C_PTLTE_ENABLED;
 
-	ret = cxi_cq_emit_target(mr->domain->dev_if->mr_cmdq->dev_cmdq,
-				 &cmd);
+	ret = cxi_cq_emit_target(ep_obj->tgq->dev_cmdq, &cmd);
 	if (ret) {
 		/* This is a bug, we have exclusive access to this CMDQ. */
 		CXIP_LOG_ERROR("Failed to enqueue command: %d\n", ret);
 		goto err_pte_free;
 	}
 
-	cxi_cq_ring(mr->domain->dev_if->mr_cmdq->dev_cmdq);
+	cxi_cq_ring(ep_obj->tgq->dev_cmdq);
 
 	/* Wait for Enable event */
-	while (!(event = cxi_eq_get_event(mr->domain->dev_if->mr_evtq)))
+	while (!(event = cxi_eq_get_event(ep_obj->evtq)))
 		sched_yield();
 
 	if (event->hdr.event_type != C_EVENT_STATE_CHANGE ||
@@ -419,14 +484,14 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 			      mr->cntr, mr->cntr,
 			      mr->attr.access & FI_REMOTE_WRITE,
 			      mr->attr.access & FI_REMOTE_READ,
-			      mr->domain->dev_if->mr_cmdq);
+			      ep_obj->tgq);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
 		goto err_pte_free;
 	}
 
 	/* Wait for link EQ event */
-	while (!(event = cxi_eq_get_event(mr->domain->dev_if->mr_evtq)))
+	while (!(event = cxi_eq_get_event(ep_obj->evtq)))
 		sched_yield();
 
 	if (event->hdr.event_type != C_EVENT_LINK ||
@@ -444,9 +509,9 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 		goto err_pte_free;
 	}
 
-	cxi_eq_ack_events(mr->domain->dev_if->mr_evtq);
+	cxi_eq_ack_events(ep_obj->evtq);
 
-	fastlock_release(&mr->domain->dev_if->lock);
+	fastlock_release(&ep_obj->lock);
 
 	mr->enabled = true;
 
@@ -455,7 +520,7 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 	return FI_SUCCESS;
 
 err_pte_free:
-	fastlock_release(&mr->domain->dev_if->lock);
+	fastlock_release(&ep_obj->lock);
 
 	cxip_pte_free(mr->pte);
 err_unmap:
@@ -474,21 +539,22 @@ static int cxip_mr_disable_opt(struct cxip_mr *mr)
 {
 	int ret;
 	const union c_event *event;
+	struct cxip_ep_obj *ep_obj = mr->ep->ep_obj;
 
 	if (!mr->enabled)
 		return FI_SUCCESS;
 
-	fastlock_acquire(&mr->domain->dev_if->lock);
+	fastlock_acquire(&ep_obj->lock);
 
 	ret = cxip_pte_unlink(mr->pte, C_PTL_LIST_PRIORITY,
-			      mr->key, mr->domain->dev_if->mr_cmdq);
+			      mr->key, ep_obj->tgq);
 	if (ret) {
 		CXIP_LOG_ERROR("Failed to enqueue Unlink: %d\n", ret);
 		goto unlock;
 	}
 
 	/* Wait for unlink EQ event */
-	while (!(event = cxi_eq_get_event(mr->domain->dev_if->mr_evtq)))
+	while (!(event = cxi_eq_get_event(ep_obj->evtq)))
 		sched_yield();
 
 	if (event->hdr.event_type != C_EVENT_UNLINK ||
@@ -501,10 +567,10 @@ static int cxip_mr_disable_opt(struct cxip_mr *mr)
 			       event->tgt_long.buffer_id);
 	}
 
-	cxi_eq_ack_events(mr->domain->dev_if->mr_evtq);
+	cxi_eq_ack_events(ep_obj->evtq);
 
 unlock:
-	fastlock_release(&mr->domain->dev_if->lock);
+	fastlock_release(&ep_obj->lock);
 
 	cxip_pte_free(mr->pte);
 
@@ -521,6 +587,10 @@ unlock:
 int cxip_mr_enable(struct cxip_mr *mr)
 {
 	int ret;
+
+	ret = cxip_ep_mr_enable(mr->ep->ep_obj);
+	if (ret != FI_SUCCESS)
+		return ret;
 
 	ret = cxip_ep_mr_insert(mr->ep->ep_obj, mr);
 	if (ret) {
@@ -725,17 +795,6 @@ static int cxip_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	_mr->mr_fid.mem_desc = (void *)_mr;
 
 	ofi_atomic_inc32(&dom->ref);
-
-/* TODO EQs */
-#if 0
-	if (dom->mr_eq) {
-		eq_entry.fid = &dom->dom_fid;
-		eq_entry.context = attr->context;
-
-		return cxi_eq_report_event(dom->mr_eq, FI_MR_COMPLETE,
-					   &eq_entry, sizeof(eq_entry), 0);
-	}
-#endif
 
 	*mr = &_mr->mr_fid;
 

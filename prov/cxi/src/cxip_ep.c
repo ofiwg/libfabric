@@ -146,6 +146,93 @@ void *cxip_rdzv_id_lookup(struct cxip_ep_obj *ep_obj, int id)
 	return entry;
 }
 
+int cxip_ep_cmdq(struct cxip_ep_obj *ep_obj,
+		 uint32_t ctx_id, uint32_t size, bool transmit,
+		 struct cxip_cmdq **cmdq)
+{
+	struct cxi_cq_alloc_opts cq_opts = {};
+	struct cxip_cmdq **cmdqs;
+	ofi_atomic32_t *cmdq_refs;
+	int ret;
+
+	if (transmit) {
+		cmdqs = ep_obj->txqs;
+		cmdq_refs = ep_obj->txq_refs;
+	} else {
+		cmdqs = ep_obj->tgqs;
+		cmdq_refs = ep_obj->tgq_refs;
+	}
+
+	fastlock_acquire(&ep_obj->lock);
+
+	if (cmdqs[ctx_id]) {
+		ofi_atomic_inc32(&cmdq_refs[ctx_id]);
+		fastlock_release(&ep_obj->lock);
+
+		CXIP_LOG_DBG("Reusing %s CMDQ[%d]: %p\n",
+			     transmit ? "TX" : "RX", ctx_id, cmdqs[ctx_id]);
+		*cmdq = cmdqs[ctx_id];
+		return FI_SUCCESS;
+	}
+
+	/* An IDC command can use up to 4 64 byte slots. */
+	cq_opts.count = size * 4;
+	cq_opts.is_transmit = transmit;
+	cq_opts.lcid = ep_obj->domain->cps[0]->lcid;
+
+	ret = cxip_cmdq_alloc(ep_obj->domain->lni, NULL, &cq_opts, cmdq);
+	if (ret != FI_SUCCESS) {
+		CXIP_LOG_DBG("Unable to allocate CMDQ, ret: %d\n", ret);
+		ret = -FI_ENOSPC;
+		goto unlock;
+	}
+
+	cmdqs[ctx_id] = *cmdq;
+	ofi_atomic_inc32(&cmdq_refs[ctx_id]);
+
+	CXIP_LOG_DBG("Allocated %s CMDQ[%d]: %p\n",
+		     transmit ? "TX" : "RX", ctx_id, cmdqs[ctx_id]);
+
+	fastlock_release(&ep_obj->lock);
+
+	return FI_SUCCESS;
+
+unlock:
+	fastlock_release(&ep_obj->lock);
+
+	return ret;
+}
+
+void cxip_ep_cmdq_put(struct cxip_ep_obj *ep_obj,
+		      uint32_t ctx_id, bool transmit)
+{
+	struct cxip_cmdq **cmdqs;
+	ofi_atomic32_t *cmdq_ref;
+
+	if (transmit) {
+		cmdqs = ep_obj->txqs;
+		cmdq_ref = &ep_obj->txq_refs[ctx_id];
+	} else {
+		cmdqs = ep_obj->tgqs;
+		cmdq_ref = &ep_obj->tgq_refs[ctx_id];
+	}
+
+	fastlock_acquire(&ep_obj->lock);
+
+	if (!ofi_atomic_dec32(cmdq_ref)) {
+		cxip_cmdq_free(cmdqs[ctx_id]);
+
+		CXIP_LOG_DBG("Freed %s CMDQ[%d]: %p\n",
+			     transmit ? "TX" : "RX", ctx_id, cmdqs[ctx_id]);
+		cmdqs[ctx_id] = NULL;
+	} else {
+		CXIP_LOG_DBG("Put %s CMDQ[%d]: %p\n",
+			     transmit ? "TX" : "RX", ctx_id, cmdqs[ctx_id]);
+	}
+
+	fastlock_release(&ep_obj->lock);
+}
+
 static int cxip_ep_cm_getname(fid_t fid, void *addr, size_t *addrlen)
 {
 	struct cxip_ep *cxip_ep;
@@ -467,19 +554,19 @@ static int ep_enable(struct cxip_ep_obj *ep_obj)
 		goto unlock;
 	}
 
-	/* Get reference to a CXI domain. */
-	ret = cxip_get_if_domain(ep_obj->domain->dev_if,
-				 ep_obj->vni,
-				 ep_obj->src_addr.pid,
-				 &ep_obj->if_dom);
+	ret = cxip_alloc_if_domain(ep_obj->domain->lni,
+				   ep_obj->vni,
+				   ep_obj->src_addr.pid,
+				   &ep_obj->if_dom);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Failed to get IF Domain: %d\n", ret);
 		goto unlock;
 	}
 
 	/* Store PID in case it was automatically assigned. */
-	CXIP_LOG_DBG("EP assigned PID: %u\n", ep_obj->if_dom->pid);
-	ep_obj->src_addr.pid = ep_obj->if_dom->pid;
+	CXIP_LOG_DBG("EP assigned PID: %u\n",
+		     ep_obj->if_dom->dom->pid);
+	ep_obj->src_addr.pid = ep_obj->if_dom->dom->pid;
 
 	ep_obj->enabled = true;
 
@@ -917,7 +1004,7 @@ static void cxip_ep_disable(struct cxip_ep *cxi_ep)
 {
 	if (cxi_ep->ep_obj->enabled) {
 		cxip_ep_mr_disable(cxi_ep->ep_obj);
-		cxip_put_if_domain(cxi_ep->ep_obj->if_dom);
+		cxip_free_if_domain(cxi_ep->ep_obj->if_dom);
 		cxi_ep->ep_obj->enabled = false;
 	}
 }
@@ -1593,6 +1680,7 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 	struct cxip_rxc *rxc = NULL;
 	uint32_t nic;
 	uint32_t pid;
+	int i;
 
 	if (!domain || !hints || !hints->ep_attr || !hints->tx_attr ||
 	    !hints->rx_attr)
@@ -1667,6 +1755,11 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 	memset(&cxi_ep->ep_obj->tx_ids, 0, sizeof(cxi_ep->ep_obj->tx_ids));
 	fastlock_init(&cxi_ep->ep_obj->tx_id_lock);
 	dlist_init(&cxi_ep->ep_obj->mr_list);
+
+	for (i = 0; i < CXIP_EP_MAX_TX_CNT; i++) {
+		ofi_atomic_initialize32(&cxi_ep->ep_obj->txq_refs[i], 0);
+		ofi_atomic_initialize32(&cxi_ep->ep_obj->tgq_refs[i], 0);
+	}
 
 	if (cxip_env.rdzv_offload)
 		cxi_ep->ep_obj->rdzv_offload = true;

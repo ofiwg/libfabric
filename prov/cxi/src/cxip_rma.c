@@ -152,7 +152,7 @@ static ssize_t _cxip_rma_op(enum fi_op_type op, struct cxip_txc *txc,
 		return -FI_EMSGSIZE;
 
 	dom = txc->domain;
-	pid_bits = dom->dev_if->if_dev->info.pid_bits;
+	pid_bits = dom->iface->dev->info.pid_bits;
 
 	/* Look up target CXI address */
 	ret = _cxip_av_lookup(txc->ep_obj->av, tgt_addr, &caddr);

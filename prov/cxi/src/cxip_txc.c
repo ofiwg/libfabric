@@ -28,7 +28,6 @@ static int txc_msg_init(struct cxip_txc *txc)
 {
 	int ret;
 	union c_cmdu cmd = {};
-	struct cxi_cq_alloc_opts cq_opts = {};
 	struct cxi_pt_alloc_opts pt_opts = {
 		.is_matching = 1,
 		.pe_num = CXI_PE_NUM_ANY,
@@ -37,10 +36,8 @@ static int txc_msg_init(struct cxip_txc *txc)
 	uint64_t pid_idx;
 
 	/* Allocate TGQ for posting source data */
-	cq_opts.count = txc->attr.size;
-	cq_opts.is_transmit = 0;
-	ret = cxip_cmdq_alloc(txc->domain->dev_if, NULL, &cq_opts,
-			      &txc->rx_cmdq);
+	ret = cxip_ep_cmdq(txc->ep_obj, txc->tx_id, txc->attr.size, false,
+			   &txc->rx_cmdq);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Unable to allocate TGQ, ret: %d\n", ret);
 		return -FI_EDOMAIN;
@@ -52,12 +49,12 @@ static int txc_msg_init(struct cxip_txc *txc)
 	}
 
 	/* Reserve the Rendezvous Send PTE */
-	pid_idx = txc->domain->dev_if->if_dev->info.rdzv_get_idx;
+	pid_idx = txc->domain->iface->dev->info.rdzv_get_idx;
 	ret = cxip_pte_alloc(txc->ep_obj->if_dom, txc->send_cq->evtq,
 			     pid_idx, &pt_opts, &txc->rdzv_pte);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Failed to allocate RDZV PTE: %d\n", ret);
-		goto free_rx_cmdq;
+		goto put_rx_cmdq;
 	}
 
 	/* Enable the Rendezvous PTE */
@@ -92,8 +89,8 @@ static int txc_msg_init(struct cxip_txc *txc)
 
 free_rdzv_pte:
 	cxip_pte_free(txc->rdzv_pte);
-free_rx_cmdq:
-	cxip_cmdq_free(txc->rx_cmdq);
+put_rx_cmdq:
+	cxip_ep_cmdq_put(txc->ep_obj, txc->tx_id, false);
 
 	return ret;
 }
@@ -110,7 +107,7 @@ static int txc_msg_fini(struct cxip_txc *txc)
 {
 	cxip_msg_zbp_fini(txc);
 	cxip_pte_free(txc->rdzv_pte);
-	cxip_cmdq_free(txc->rx_cmdq);
+	cxip_ep_cmdq_put(txc->ep_obj, txc->tx_id, false);
 
 	return FI_SUCCESS;
 }
@@ -124,7 +121,6 @@ static int txc_msg_fini(struct cxip_txc *txc)
 int cxip_txc_enable(struct cxip_txc *txc)
 {
 	int ret = FI_SUCCESS;
-	struct cxi_cq_alloc_opts cq_opts = {};
 
 	fastlock_acquire(&txc->lock);
 
@@ -170,12 +166,8 @@ int cxip_txc_enable(struct cxip_txc *txc)
 		}
 	}
 
-	/* An IDC command can use up to 4 64 byte slots. */
-	cq_opts.count = txc->attr.size * 4;
-	cq_opts.is_transmit = 1;
-	cq_opts.lcid = txc->domain->dev_if->cps[0]->lcid;
-	ret = cxip_cmdq_alloc(txc->domain->dev_if, NULL, &cq_opts,
-			      &txc->tx_cmdq);
+	ret = cxip_ep_cmdq(txc->ep_obj, txc->tx_id, txc->attr.size, true,
+			   &txc->tx_cmdq);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Unable to allocate TX CMDQ, ret: %d\n", ret);
 		ret = -FI_EDOMAIN;
@@ -186,7 +178,7 @@ int cxip_txc_enable(struct cxip_txc *txc)
 		ret = txc_msg_init(txc);
 		if (ret != FI_SUCCESS) {
 			CXIP_LOG_DBG("Unable to init TX CTX, ret: %d\n", ret);
-			goto free_tx_cmdq;
+			goto put_tx_cmdq;
 		}
 	}
 
@@ -195,8 +187,8 @@ int cxip_txc_enable(struct cxip_txc *txc)
 
 	return FI_SUCCESS;
 
-free_tx_cmdq:
-	cxip_cmdq_free(txc->tx_cmdq);
+put_tx_cmdq:
+	cxip_ep_cmdq_put(txc->ep_obj, txc->tx_id, true);
 unlock:
 	fastlock_release(&txc->lock);
 
@@ -259,7 +251,7 @@ static void txc_disable(struct cxip_txc *txc)
 				       ret);
 	}
 
-	cxip_cmdq_free(txc->tx_cmdq);
+	cxip_ep_cmdq_put(txc->ep_obj, txc->tx_id, true);
 unlock:
 	fastlock_release(&txc->lock);
 }

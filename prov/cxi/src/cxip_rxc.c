@@ -113,7 +113,6 @@ static int rxc_msg_disable(struct cxip_rxc *rxc)
 static int rxc_msg_init(struct cxip_rxc *rxc)
 {
 	int ret;
-	struct cxi_cq_alloc_opts cq_opts = {};
 	struct cxi_pt_alloc_opts pt_opts = {
 		.use_long_event = 1,
 		.is_matching = 1,
@@ -122,24 +121,19 @@ static int rxc_msg_init(struct cxip_rxc *rxc)
 	};
 	uint64_t pid_idx;
 
-	cq_opts.count = rxc->attr.size;
-	cq_opts.is_transmit = 0;
-	ret = cxip_cmdq_alloc(rxc->domain->dev_if, NULL, &cq_opts,
-			      &rxc->rx_cmdq);
+	ret = cxip_ep_cmdq(rxc->ep_obj, rxc->rx_id, rxc->attr.size, false,
+			   &rxc->rx_cmdq);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Unable to allocate RX CMDQ, ret: %d\n", ret);
 		return -FI_EDOMAIN;
 	}
 
-	cq_opts.count = rxc->attr.size;
-	cq_opts.is_transmit = 1;
-	cq_opts.lcid = rxc->domain->dev_if->cps[0]->lcid;
-	ret = cxip_cmdq_alloc(rxc->domain->dev_if, NULL, &cq_opts,
-			      &rxc->tx_cmdq);
+	ret = cxip_ep_cmdq(rxc->ep_obj, rxc->rx_id, rxc->attr.size, true,
+			   &rxc->tx_cmdq);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Unable to allocate TX CMDQ, ret: %d\n", ret);
 		ret = -FI_EDOMAIN;
-		goto free_rx_cmdq;
+		goto put_rx_cmdq;
 	}
 
 	/* Select the LEP where the queue will be mapped */
@@ -157,15 +151,15 @@ static int rxc_msg_init(struct cxip_rxc *rxc)
 			     pid_idx, &pt_opts, &rxc->rx_pte);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Failed to allocate RX PTE: %d\n", ret);
-		goto free_tx_cmdq;
+		goto put_tx_cmdq;
 	}
 
 	return FI_SUCCESS;
 
-free_tx_cmdq:
-	cxip_cmdq_free(rxc->tx_cmdq);
-free_rx_cmdq:
-	cxip_cmdq_free(rxc->rx_cmdq);
+put_tx_cmdq:
+	cxip_ep_cmdq_put(rxc->ep_obj, rxc->rx_id, true);
+put_rx_cmdq:
+	cxip_ep_cmdq_put(rxc->ep_obj, rxc->rx_id, false);
 
 	return ret;
 }
@@ -182,9 +176,9 @@ static int rxc_msg_fini(struct cxip_rxc *rxc)
 {
 	cxip_pte_free(rxc->rx_pte);
 
-	cxip_cmdq_free(rxc->rx_cmdq);
+	cxip_ep_cmdq_put(rxc->ep_obj, rxc->rx_id, false);
 
-	cxip_cmdq_free(rxc->tx_cmdq);
+	cxip_ep_cmdq_put(rxc->ep_obj, rxc->rx_id, true);
 
 	return FI_SUCCESS;
 }

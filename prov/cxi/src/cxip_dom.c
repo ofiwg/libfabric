@@ -28,49 +28,65 @@ extern struct fi_ops_mr cxip_dom_mr_ops;
  */
 int cxip_domain_enable(struct cxip_domain *dom)
 {
-	struct cxi_cq_alloc_opts cq_opts = {};
 	int ret = FI_SUCCESS;
+	int tmp;
 
 	fastlock_acquire(&dom->lock);
 
 	if (dom->enabled)
 		goto unlock;
 
-	ret = cxip_get_if(dom->nic_addr, &dom->dev_if);
+	ret = cxip_get_if(dom->nic_addr, &dom->iface);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Unable to get IF\n");
 		ret = -FI_EDOMAIN;
 		goto unlock;
 	}
 
+	ret = cxip_alloc_lni(dom->iface, &dom->lni);
+	if (ret) {
+		CXIP_LOG_DBG("cxip_alloc_lni returned: %d\n", ret);
+		ret = -FI_ENODEV;
+		goto put_if;
+	}
+
+	/* TODO Temporary CP setup, needed for CMDQ allocation */
+	ret = cxil_alloc_cp(dom->lni->lni, 0, CXI_TC_LOW_LATENCY,
+			    &dom->cps[0]);
+	if (ret) {
+		CXIP_LOG_DBG("Unable to allocate CP, ret: %d\n", ret);
+		ret = -FI_ENODEV;
+		goto free_lni;
+	}
+	dom->n_cps++;
+
 	ret = cxip_iomm_init(dom);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Failed to initialize IOMM: %d\n", ret);
 		ret = -FI_EDOMAIN;
-		goto put_if;
-	}
-
-	cq_opts.count = 64;
-	cq_opts.is_transmit = 1;
-	cq_opts.with_trig_cmds = 1;
-
-	ret = cxip_cmdq_alloc(dom->dev_if, NULL, &cq_opts, &dom->trig_cmdq);
-	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("Failed to allocate trig_cmdq: %d\n", ret);
-		ret = -FI_EDOMAIN;
-		goto iomm_fini;
+		goto free_cp;
 	}
 
 	dom->enabled = true;
 	fastlock_release(&dom->lock);
 
+	CXIP_LOG_DBG("Allocated interface, NIC[%u]: %u RGID: %u\n",
+		     dom->iface->info.dev_id,
+		     dom->iface->info.nic_addr,
+		     dom->lni->lni->id);
+
 	return FI_SUCCESS;
 
-iomm_fini:
-	cxip_iomm_fini(dom);
+free_cp:
+	tmp = cxil_destroy_cp(dom->cps[0]);
+	if (tmp)
+		CXIP_LOG_ERROR("Failed to destroy CP: %d\n", tmp);
+free_lni:
+	cxip_free_lni(dom->lni);
+	dom->lni = NULL;
 put_if:
-	cxip_put_if(dom->dev_if);
-	dom->dev_if = NULL;
+	cxip_put_if(dom->iface);
+	dom->iface = NULL;
 unlock:
 	fastlock_release(&dom->lock);
 
@@ -82,18 +98,32 @@ unlock:
  */
 static void cxip_domain_disable(struct cxip_domain *dom)
 {
+	int ret;
+
 	fastlock_acquire(&dom->lock);
 
 	if (!dom->enabled)
 		goto unlock;
 
-	cxip_cmdq_free(dom->trig_cmdq);
+	cxip_dom_cntr_disable(dom);
 
 	cxip_iomm_fini(dom);
 
-	cxip_put_if(dom->dev_if);
+	ret = cxil_destroy_cp(dom->cps[0]);
+	if (ret)
+		CXIP_LOG_ERROR("Failed to destroy CP: %d\n", ret);
+
+	CXIP_LOG_DBG("Releasing interface, NIC[%u]: %u RGID: %u\n",
+		     dom->iface->info.dev_id,
+		     dom->iface->info.nic_addr,
+		     dom->lni->lni->id);
+
+	cxip_free_lni(dom->lni);
+
+	cxip_put_if(dom->iface);
 
 	dom->enabled = false;
+
 unlock:
 	fastlock_release(&dom->lock);
 }
