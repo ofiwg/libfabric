@@ -234,14 +234,29 @@ int vrb_poll_cq(struct fi_ibv_cq *cq, struct ibv_wc *wc)
 
 	do {
 		ret = ibv_poll_cq(cq->cq, 1, wc);
-		if (ret <= 0 || (wc->opcode & IBV_WC_RECV))
+		if (ret <= 0)
 			break;
 
 		ctx = (struct vrb_context *) (uintptr_t) wc->wr_id;
-		cq->credits++;
-		ctx->ep->tx_credits++;
 		wc->wr_id = (uintptr_t) ctx->user_ctx;
-		ofi_buf_free(ctx);
+		if (ctx->flags & FI_TRANSMIT) {
+			cq->credits++;
+			ctx->ep->tx_credits++;
+		}
+
+		if (wc->status) {
+			if (ctx->flags & FI_RECV)
+				wc->opcode |= IBV_WC_RECV;
+			else
+				wc->opcode &= ~IBV_WC_RECV;
+		}
+		if (ctx->srx) {
+			fastlock_acquire(&ctx->srx->ctx_lock);
+			ofi_buf_free(ctx);
+			fastlock_release(&ctx->srx->ctx_lock);
+		} else {
+			ofi_buf_free(ctx);
+		}
 
 	} while (wc->wr_id == VERBS_NO_COMP_FLAG);
 
@@ -640,8 +655,7 @@ int fi_ibv_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	}
 
 	ret = ofi_bufpool_create(&cq->ctx_pool, sizeof(struct fi_context),
-				 16, size, fi_ibv_gl_data.def_tx_size,
-				 OFI_BUFPOOL_NO_TRACK);
+				 16, 0, size, OFI_BUFPOOL_NO_TRACK);
 	if (ret)
 		goto err6;
 

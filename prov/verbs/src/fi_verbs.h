@@ -428,6 +428,8 @@ struct fi_ibv_srq_ep {
 	struct fid_ep		ep_fid;
 	struct ibv_srq		*srq;
 	struct fi_ibv_domain	*domain;
+	struct ofi_bufpool	*ctx_pool;
+	fastlock_t		ctx_lock;
 
 	/* For XRC SRQ only */
 	struct {
@@ -579,7 +581,9 @@ struct fi_ibv_ep {
 /* Must be cast-able to struct fi_context */
 struct vrb_context {
 	struct fi_ibv_ep		*ep;
+	struct fi_ibv_srq_ep		*srx;
 	void				*user_ctx;
+	uint32_t			flags;
 };
 
 
