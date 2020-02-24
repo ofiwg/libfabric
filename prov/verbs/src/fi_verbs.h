@@ -379,6 +379,11 @@ struct vrb_domain {
 	/* MR stuff */
 	struct ofi_mr_cache		cache;
 	bool				cache_enabled;
+
+#ifdef HAVE_LIBCUDA
+	struct ofi_mr_cache		cuda_cache;
+	bool				cuda_cache_enabled;
+#endif
 };
 
 struct vrb_cq;

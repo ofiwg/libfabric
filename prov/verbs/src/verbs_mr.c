@@ -180,6 +180,10 @@ struct ofi_mr_cache *vrb_mr_get_cache(struct vrb_domain *domain,
 {
 	if (iface == FI_HMEM_SYSTEM)
 		return &domain->cache;
+#ifdef HAVE_LIBCUDA
+	else if (iface == FI_HMEM_CUDA)
+		return &domain->cuda_cache;
+#endif
 	return NULL;
 }
 
@@ -274,6 +278,10 @@ bool vrb_mr_iface_cache_enabled(struct vrb_domain *domain,
 {
 	if (iface == FI_HMEM_SYSTEM)
 		return domain->cache_enabled;
+#ifdef HAVE_LIBCUDA
+	else if (iface == FI_HMEM_CUDA)
+		return domain->cuda_cache_enabled;
+#endif
 	return false;
 }
 

@@ -176,6 +176,10 @@ static int vrb_domain_close(fid_t fid)
 
 	ofi_mr_cache_cleanup(&domain->cache);
 
+#ifdef HAVE_LIBCUDA
+	ofi_mr_cache_cleanup(&domain->cuda_cache);
+#endif
+
 	if (domain->pd) {
 		ret = ibv_dealloc_pd(domain->pd);
 		if (ret)
@@ -327,6 +331,16 @@ vrb_domain(struct fid_fabric *fabric, struct fi_info *info,
 	if (!ret)
 		_domain->cache_enabled = true;
 
+#ifdef HAVE_LIBCUDA
+	_domain->cuda_cache.entry_data_size = sizeof(struct vrb_mem_desc);
+	_domain->cuda_cache.add_region = vrb_mr_cache_add_region;
+	_domain->cuda_cache.delete_region = vrb_mr_cache_delete_region;
+	ret = ofi_mr_cache_init(&_domain->util_domain, cuda_monitor,
+				&_domain->cuda_cache);
+	if (!ret)
+		_domain->cuda_cache_enabled = true;
+#endif
+
 	switch (_domain->ep_type) {
 	case FI_EP_DGRAM:
 		if (vrb_gl_data.dgram.use_name_server) {
@@ -364,6 +378,9 @@ vrb_domain(struct fid_fabric *fabric, struct fi_info *info,
 	*domain = &_domain->util_domain.domain_fid;
 	return FI_SUCCESS;
 err4:
+#ifdef HAVE_LIBCUDA
+	ofi_mr_cache_cleanup(&_domain->cuda_cache);
+#endif
 	ofi_mr_cache_cleanup(&_domain->cache);
 	if (ibv_dealloc_pd(_domain->pd))
 		VERBS_INFO_ERRNO(FI_LOG_DOMAIN,
