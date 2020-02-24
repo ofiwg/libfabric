@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2015 Intel Corporation, Inc.  All rights reserved.
+ * (C) Copyright 2020 Hewlett Packard Enterprise Development LP.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -316,6 +317,7 @@ vrb_domain(struct fid_fabric *fabric, struct fi_info *info,
 	_domain->util_domain.domain_fid.fid.fclass = FI_CLASS_DOMAIN;
 	_domain->util_domain.domain_fid.fid.context = context;
 	_domain->util_domain.domain_fid.fid.ops = &vrb_fid_ops;
+	_domain->util_domain.domain_fid.mr = &vrb_mr_ops;
 
 	_domain->cache.entry_data_size = sizeof(struct vrb_mem_desc);
 	_domain->cache.add_region = vrb_mr_cache_add_region;
@@ -323,9 +325,7 @@ vrb_domain(struct fid_fabric *fabric, struct fi_info *info,
 	ret = ofi_mr_cache_init(&_domain->util_domain, default_monitor,
 				&_domain->cache);
 	if (!ret)
-		_domain->util_domain.domain_fid.mr = &vrb_mr_cache_ops;
-	else
-		_domain->util_domain.domain_fid.mr = &vrb_mr_ops;
+		_domain->cache_enabled = true;
 
 	switch (_domain->ep_type) {
 	case FI_EP_DGRAM:

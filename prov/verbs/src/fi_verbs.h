@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2013-2018 Intel Corporation, Inc.  All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
+ * (C) Copyright 2020 Hewlett Packard Enterprise Development LP.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -373,6 +374,7 @@ struct vrb_domain {
 
 	/* MR stuff */
 	struct ofi_mr_cache		cache;
+	bool				cache_enabled;
 };
 
 struct vrb_cq;
@@ -423,10 +425,10 @@ struct vrb_mem_desc {
 	size_t			len;
 	/* this field is used only by MR cache operations */
 	struct ofi_mr_entry	*entry;
+	enum fi_hmem_iface	iface;
 };
 
 extern struct fi_ops_mr vrb_mr_ops;
-extern struct fi_ops_mr vrb_mr_cache_ops;
 
 int vrb_mr_cache_add_region(struct ofi_mr_cache *cache,
 			       struct ofi_mr_entry *entry);
