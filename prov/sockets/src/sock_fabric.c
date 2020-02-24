@@ -66,19 +66,6 @@ int sock_keepalive_time = INT_MAX;
 int sock_keepalive_intvl = INT_MAX;
 int sock_keepalive_probes = INT_MAX;
 
-uint64_t SOCK_EP_RDM_SEC_CAP = SOCK_EP_RDM_SEC_CAP_BASE;
-uint64_t SOCK_EP_RDM_CAP = SOCK_EP_RDM_CAP_BASE;
-uint64_t SOCK_EP_MSG_SEC_CAP = SOCK_EP_MSG_SEC_CAP_BASE;
-uint64_t SOCK_EP_MSG_CAP = SOCK_EP_MSG_CAP_BASE;
-
-
-const struct fi_fabric_attr sock_fabric_attr = {
-	.fabric = NULL,
-	.name = NULL,
-	.prov_name = NULL,
-	.prov_version = FI_VERSION(SOCK_MAJOR_VERSION, SOCK_MINOR_VERSION),
-};
-
 static struct dlist_entry sock_fab_list;
 static struct dlist_entry sock_dom_list;
 static fastlock_t sock_list_lock;
@@ -235,19 +222,19 @@ int sock_verify_info(uint32_t version, const struct fi_info *hints)
 	switch (ep_type) {
 	case FI_EP_UNSPEC:
 	case FI_EP_MSG:
-		caps = SOCK_EP_MSG_CAP;
+		caps = sock_msg_info.caps;
 		ret = sock_msg_verify_ep_attr(hints->ep_attr,
 					      hints->tx_attr,
 					      hints->rx_attr);
 		break;
 	case FI_EP_DGRAM:
-		caps = SOCK_EP_DGRAM_CAP;
+		caps = sock_dgram_info.caps;
 		ret = sock_dgram_verify_ep_attr(hints->ep_attr,
 						hints->tx_attr,
 						hints->rx_attr);
 		break;
 	case FI_EP_RDM:
-		caps = SOCK_EP_RDM_CAP;
+		caps = sock_rdm_info.caps;
 		ret = sock_rdm_verify_ep_attr(hints->ep_attr,
 					      hints->tx_attr,
 					      hints->rx_attr);
@@ -441,6 +428,26 @@ static int sock_ep_getinfo(uint32_t version, const char *node,
 	union ofi_sock_ip sip;
 	int ret;
 
+	switch (ep_type) {
+	case FI_EP_MSG:
+		ret = util_getinfo(&sock_msg_util_prov, version, node, service,
+				   flags, hints, info);
+		break;
+	case FI_EP_RDM:
+		ret = util_getinfo(&sock_rdm_util_prov, version, node, service,
+				   flags, hints, info);
+		break;
+	case FI_EP_DGRAM:
+		ret = util_getinfo(&sock_dgram_util_prov, version, node, service,
+				   flags, hints, info);
+		break;
+	default:
+		ret = -FI_ENODATA;
+		break;
+	}
+	if (ret)
+		return ret;
+
 	memset(&ai, 0, sizeof(ai));
 	ai.ai_socktype = SOCK_STREAM;
 	ai.ai_family = ofi_get_sa_family(hints);
@@ -486,20 +493,6 @@ static int sock_ep_getinfo(uint32_t version, const char *node,
 	if (src_addr) {
 		ofi_straddr_log(&sock_prov, FI_LOG_INFO, FI_LOG_CORE,
 				"src addr: ", src_addr);
-	}
-	switch (ep_type) {
-	case FI_EP_MSG:
-		ret = sock_msg_fi_info(version, src_addr, dest_addr, hints, info);
-		break;
-	case FI_EP_DGRAM:
-		ret = sock_dgram_fi_info(version, src_addr, dest_addr, hints, info);
-		break;
-	case FI_EP_RDM:
-		ret = sock_rdm_fi_info(version, src_addr, dest_addr, hints, info);
-		break;
-	default:
-		ret = -FI_ENODATA;
-		break;
 	}
 
 	if (rai)
@@ -553,6 +546,7 @@ int sock_node_getinfo(uint32_t version, const char *node, const char *service,
 			break;
 		}
 	}
+
 	for (ep_type = FI_EP_MSG; ep_type <= FI_EP_RDM; ep_type++) {
 		ret = sock_ep_getinfo(version, node, service, flags, hints,
 				      ep_type, &cur);
@@ -698,6 +692,24 @@ struct fi_provider sock_prov = {
 	.cleanup = fi_sockets_fini
 };
 
+struct util_prov sock_msg_util_prov = {
+	.prov = &sock_prov,
+	.info = &sock_msg_info,
+	.flags = 0,
+};
+
+struct util_prov sock_rdm_util_prov = {
+	.prov = &sock_prov,
+	.info = &sock_rdm_info,
+	.flags = 0,
+};
+
+struct util_prov sock_dgram_util_prov = {
+	.prov = &sock_prov,
+	.info = &sock_dgram_info,
+	.flags = 0,
+};
+
 SOCKETS_INI
 {
 #if HAVE_SOCKETS_DL
@@ -748,10 +760,6 @@ SOCKETS_INI
 	dlist_init(&sock_fab_list);
 	dlist_init(&sock_dom_list);
 	slist_init(&sock_addr_list);
-	SOCK_EP_RDM_SEC_CAP |= OFI_RMA_PMEM;
-	SOCK_EP_RDM_CAP |= OFI_RMA_PMEM;
-	SOCK_EP_MSG_SEC_CAP |= OFI_RMA_PMEM;
-	SOCK_EP_MSG_CAP |= OFI_RMA_PMEM;
 #if ENABLE_DEBUG
 	fi_param_define(&sock_prov, "dgram_drop_rate", FI_PARAM_INT,
 			"Drop every Nth dgram frame (debug only)");

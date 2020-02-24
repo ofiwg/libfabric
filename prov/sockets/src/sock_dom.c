@@ -46,30 +46,6 @@
 
 extern struct fi_ops_mr sock_dom_mr_ops;
 
-const struct fi_domain_attr sock_domain_attr = {
-	.name = NULL,
-	.threading = FI_THREAD_SAFE,
-	.control_progress = FI_PROGRESS_AUTO,
-	.data_progress = FI_PROGRESS_AUTO,
-	.resource_mgmt = FI_RM_ENABLED,
-	/* Provider supports basic memory registration mode */
-	.mr_mode = FI_MR_BASIC | FI_MR_SCALABLE,
-	.mr_key_size = sizeof(uint64_t),
-	.cq_data_size = sizeof(uint64_t),
-	.cq_cnt = SOCK_EP_MAX_CQ_CNT,
-	.ep_cnt = SOCK_EP_MAX_EP_CNT,
-	.tx_ctx_cnt = SOCK_EP_MAX_TX_CNT,
-	.rx_ctx_cnt = SOCK_EP_MAX_RX_CNT,
-	.max_ep_tx_ctx = SOCK_EP_MAX_TX_CNT,
-	.max_ep_rx_ctx = SOCK_EP_MAX_RX_CNT,
-	.max_ep_stx_ctx = SOCK_EP_MAX_EP_CNT,
-	.max_ep_srx_ctx = SOCK_EP_MAX_EP_CNT,
-	.cntr_cnt = SOCK_EP_MAX_CNTR_CNT,
-	.mr_iov_limit = SOCK_EP_MAX_IOV_LIMIT,
-	.max_err_data = SOCK_MAX_ERR_CQ_EQ_DATA_SZ,
-	.mr_cnt = SOCK_DOMAIN_MR_CNT,
-};
-
 int sock_verify_domain_attr(uint32_t version, const struct fi_info *info)
 {
 	const struct fi_domain_attr *attr = info->domain_attr;

@@ -46,7 +46,7 @@
  */
 
 static struct fi_tx_attr psmx2_tx_attr = {
-	.caps			= PSMX2_CAPS, /* PSMX2_RMA_CAPS */
+	.caps			= PSMX2_TX_CAPS, /* PSMX2_RMA_TX_CAPS */
 	.mode			= FI_CONTEXT, /* 0 */
 	.op_flags		= PSMX2_OP_FLAGS,
 	.msg_order		= PSMX2_MSG_ORDER,
@@ -58,7 +58,7 @@ static struct fi_tx_attr psmx2_tx_attr = {
 };
 
 static struct fi_rx_attr psmx2_rx_attr = {
-	.caps			= PSMX2_CAPS, /* PSMX2_RMA_CAPS */
+	.caps			= PSMX2_RX_CAPS, /* PSMX2_RMA_RX_CAPS */
 	.mode			= FI_CONTEXT, /* 0 */
 	.op_flags		= PSMX2_OP_FLAGS,
 	.msg_order		= PSMX2_MSG_ORDER,
@@ -244,9 +244,9 @@ alloc_info:
 			info_new->ep_attr->type = ep_type;
 			info_new->caps = PSMX2_RMA_CAPS;
 			info_new->mode = 0;
-			info_new->tx_attr->caps = PSMX2_RMA_CAPS;
+			info_new->tx_attr->caps = PSMX2_RMA_TX_CAPS;
 			info_new->tx_attr->mode = 0;
-			info_new->rx_attr->caps = PSMX2_RMA_CAPS;
+			info_new->rx_attr->caps = PSMX2_RMA_RX_CAPS;
 			info_new->rx_attr->mode = 0;
 			info_new->domain_attr->cq_data_size = 8;
 			info_out = info_new;
@@ -272,13 +272,12 @@ alloc_info:
 	 * Special arrangement to help auto tag layout selection.
 	 * See psmx2_alter_prov_info().
 	 */
-	if (!hints || !(hints->caps & FI_REMOTE_CQ_DATA)) {
+	if (!hints) {
 		info_new = fi_dupinfo(&psmx2_prov_info);
 		if (info_new) {
 			/* 64 bit tag, no CQ data */
 			info_new->addr_format = addr_format;
 			info_new->ep_attr->type = ep_type;
-			info_new->caps &= ~FI_REMOTE_CQ_DATA;
 			info_new->next = info_out;
 			info_out = info_new;
 			FI_INFO(&psmx2_prov, FI_LOG_CORE,
@@ -450,10 +449,8 @@ void psmx2_alter_prov_info(uint32_t api_version,
 		 * setting the cq_data_size field. Notice that the flag
 		 * may be cleared by ofi_alter_info().
 		 */
-		if (info->domain_attr->cq_data_size) {
-			info->caps |= FI_REMOTE_CQ_DATA;
+		if (info->domain_attr->cq_data_size)
 			cq_data_cnt++;
-		}
 
 		cnt++;
 	}

@@ -65,9 +65,6 @@ static inline int ft_exit_code(int ret)
 	return absret > 255 ? EXIT_FAILURE : absret;
 }
 
-#define ft_foreach_info(fi, info) \
-	for (fi = info; fi; fi = fi->next)
-
 #define ft_sa_family(addr) (((struct sockaddr *)(addr))->sa_family)
 
 struct test_size_param {

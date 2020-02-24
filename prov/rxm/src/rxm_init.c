@@ -220,14 +220,19 @@ static void rxm_alter_info(const struct fi_info *hints, struct fi_info *info)
 		if (!hints) {
 			cur->caps &= ~(FI_DIRECTED_RECV | FI_SOURCE |
 				       FI_ATOMIC);
-			cur->tx_attr->caps &= ~FI_ATOMIC;
-			cur->rx_attr->caps &= ~FI_ATOMIC;
+			cur->tx_attr->caps &= ~(FI_ATOMIC);
+			cur->rx_attr->caps &= ~(FI_DIRECTED_RECV | FI_ATOMIC |
+						FI_SOURCE);
 			cur->domain_attr->data_progress = FI_PROGRESS_MANUAL;
 		} else {
-			if (!(hints->caps & FI_DIRECTED_RECV))
+			if (!(hints->caps & FI_DIRECTED_RECV)) {
 				cur->caps &= ~FI_DIRECTED_RECV;
-			if (!(hints->caps & FI_SOURCE))
+				cur->rx_attr->caps &= ~FI_DIRECTED_RECV;
+			}
+			if (!(hints->caps & FI_SOURCE)) {
 				cur->caps &= ~FI_SOURCE;
+				cur->rx_attr->caps &= ~FI_SOURCE;
+			}
 
 			if (hints->mode & FI_BUFFERED_RECV)
 				cur->mode |= FI_BUFFERED_RECV;

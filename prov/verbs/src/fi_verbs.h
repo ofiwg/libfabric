@@ -756,7 +756,6 @@ struct verbs_ep_domain {
 	char			*suffix;
 	enum fi_ep_type		type;
 	uint32_t		protocol;
-	uint64_t		caps;
 };
 
 extern const struct verbs_ep_domain verbs_dgram_domain;
