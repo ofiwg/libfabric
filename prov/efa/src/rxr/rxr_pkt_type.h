@@ -312,7 +312,6 @@ void rxr_pkt_handle_readrsp_sent(struct rxr_ep *ep,
 				 struct rxr_pkt_entry *pkt_entry);
 
 void rxr_pkt_handle_readrsp_recv(struct rxr_ep *ep,
-				 struct fi_cq_data_entry *comp,
 				 struct rxr_pkt_entry *pkt_entry);
 
 /*

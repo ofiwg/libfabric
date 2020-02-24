@@ -38,6 +38,7 @@
 #include "efa.h"
 #include "rxr.h"
 #include "rxr_rma.h"
+#include "rxr_pkt_cmd.h"
 
 int rxr_rma_verified_copy_iov(struct rxr_ep *ep, struct fi_rma_iov *rma,
 			      size_t count, uint32_t flags, struct iovec *iov)
@@ -287,7 +288,7 @@ ssize_t rxr_rma_post_efa_read(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 
 	tx_entry->msg_id = peer->next_msg_id++;
 
-	err = rxr_ep_post_ctrl_or_queue(ep, RXR_TX_ENTRY, tx_entry, RXR_RTS_PKT, 0);
+	err = rxr_pkt_post_ctrl_or_queue(ep, RXR_TX_ENTRY, tx_entry, RXR_RTS_PKT, 0);
 	if (OFI_UNLIKELY(err)) {
 		rxr_release_tx_entry(ep, tx_entry);
 		peer->next_msg_id--;
@@ -420,7 +421,7 @@ ssize_t rxr_rma_writemsg(struct fid_ep *ep,
 
 		tx_entry->msg_id = peer->next_msg_id++;
 
-		err = rxr_ep_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry, RXR_RTS_PKT, 0);
+		err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry, RXR_RTS_PKT, 0);
 		if (OFI_UNLIKELY(err)) {
 			rxr_release_tx_entry(rxr_ep, tx_entry);
 			peer->next_msg_id--;

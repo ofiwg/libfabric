@@ -35,6 +35,7 @@
 #include "rxr.h"
 #include "rxr_msg.h"
 #include "rxr_cntr.h"
+#include "rxr_pkt_cmd.h"
 
 /* This file define functons for the following packet type:
  *       CONNACK
@@ -278,7 +279,6 @@ void rxr_pkt_handle_readrsp_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_en
 }
 
 void rxr_pkt_handle_readrsp_recv(struct rxr_ep *ep,
-				 struct fi_cq_data_entry *comp,
 				 struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_readrsp_pkt *readrsp_pkt = NULL;
@@ -334,7 +334,7 @@ void rxr_pkt_handle_rma_context_send_completion(struct rxr_ep *ep,
 		rx_entry->cq_entry.len = rx_entry->total_len;
 		rx_entry->bytes_done = rx_entry->total_len;
 
-		ret = rxr_ep_post_ctrl_or_queue(ep, RXR_TX_ENTRY, rx_entry, RXR_EOR_PKT, 1);
+		ret = rxr_pkt_post_ctrl_or_queue(ep, RXR_TX_ENTRY, rx_entry, RXR_EOR_PKT, 1);
 		if (ret) {
 			if (rxr_cq_handle_rx_error(ep, rx_entry, ret))
 				assert(0 && "error writing error cq entry for EOR\n");

@@ -35,6 +35,7 @@
 #include "rxr.h"
 #include "rxr_msg.h"
 #include "rxr_rma.h"
+#include "rxr_pkt_cmd.h"
 
 /* This file contains RTS packet related functions.
  * RTS is used to post send, emulated read and emulated
@@ -439,7 +440,7 @@ int rxr_pkt_proc_rts_data(struct rxr_ep *ep,
 		rx_entry->credit_request = rts_hdr->credit_request;
 	else
 		rx_entry->credit_request = rxr_env.tx_min_credits;
-	ret = rxr_ep_post_ctrl_or_queue(ep, RXR_RX_ENTRY, rx_entry, RXR_CTS_PKT, 0);
+	ret = rxr_pkt_post_ctrl_or_queue(ep, RXR_RX_ENTRY, rx_entry, RXR_CTS_PKT, 0);
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
 	return ret;
 }
@@ -688,7 +689,7 @@ int rxr_pkt_proc_read_rts(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 	 * a data packet is that read response packet has remote EP tx_id
 	 * which initiator EP rx_entry need to send CTS back
 	 */
-	err = rxr_ep_post_ctrl_or_queue(ep, RXR_TX_ENTRY, tx_entry, RXR_READRSP_PKT, 0);
+	err = rxr_pkt_post_ctrl_or_queue(ep, RXR_TX_ENTRY, tx_entry, RXR_READRSP_PKT, 0);
 	if (OFI_UNLIKELY(err)) {
 		if (rxr_cq_handle_tx_error(ep, tx_entry, err))
 			assert(0 && "failed to write err cq entry");

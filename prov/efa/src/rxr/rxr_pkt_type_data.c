@@ -33,6 +33,7 @@
 
 #include "rxr.h"
 #include "rxr_msg.h"
+#include "rxr_pkt_cmd.h"
 
 /*
  * This function contains data packet related functions
@@ -274,7 +275,7 @@ int rxr_pkt_proc_data(struct rxr_ep *ep,
 
 	if (!rx_entry->window) {
 		assert(rx_entry->state == RXR_RX_RECV);
-		ret = rxr_ep_post_ctrl_or_queue(ep, RXR_RX_ENTRY, rx_entry, RXR_CTS_PKT, 0);
+		ret = rxr_pkt_post_ctrl_or_queue(ep, RXR_RX_ENTRY, rx_entry, RXR_CTS_PKT, 0);
 	}
 
 	rxr_pkt_entry_release_rx(ep, pkt_entry);

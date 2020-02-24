@@ -40,6 +40,7 @@
 
 #include "rxr.h"
 #include "rxr_msg.h"
+#include "rxr_pkt_cmd.h"
 
 /**
  * This file define the msg ops functions.
@@ -104,7 +105,7 @@ ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 	    rxr_need_sas_ordering(rxr_ep))
 		tx_entry->msg_id = peer->next_msg_id++;
 
-	err = rxr_ep_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry, RXR_RTS_PKT, 0);
+	err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry, RXR_RTS_PKT, 0);
 	if (OFI_UNLIKELY(err)) {
 		rxr_release_tx_entry(rxr_ep, tx_entry);
 		if (!(rxr_env.enable_shm_transfer && peer->is_local) &&
