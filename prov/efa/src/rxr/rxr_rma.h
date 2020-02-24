@@ -39,15 +39,6 @@
 
 #include <rdma/fi_rma.h>
 
-struct rxr_rma_read_info {
-	uint64_t rma_initiator_rx_id;
-	uint64_t window;
-};
-
-#if defined(static_assert) && defined(__x86_64__)
-static_assert(sizeof(struct rxr_rma_read_info) == 16, "rxr_rma_read_hdr check");
-#endif
-
 int rxr_rma_verified_copy_iov(struct rxr_ep *ep, struct fi_rma_iov *rma,
 			      size_t count, uint32_t flags, struct iovec *iov);
 
@@ -55,21 +46,6 @@ int rxr_rma_verified_copy_iov(struct rxr_ep *ep, struct fi_rma_iov *rma,
 struct rxr_tx_entry *
 rxr_rma_alloc_readrsp_tx_entry(struct rxr_ep *rxr_ep,
 			       struct rxr_rx_entry *rx_entry);
-
-int rxr_pkt_init_readrsp(struct rxr_ep *ep,
-			 struct rxr_tx_entry *tx_entry,
-			 struct rxr_pkt_entry *pkt_entry);
-
-void rxr_pkt_handle_readrsp_sent(struct rxr_ep *ep,
-				 struct rxr_pkt_entry *pkt_entry);
-
-/* EOR related functions */
-int rxr_pkt_init_eor(struct rxr_ep *ep,
-		     struct rxr_rx_entry *rx_entry,
-		     struct rxr_pkt_entry *pkt_entry);
-
-void rxr_pkt_handle_eor_sent(struct rxr_ep *ep,
-			     struct rxr_pkt_entry *pkt_entry);
 
 size_t rxr_rma_post_shm_rma(struct rxr_ep *rxr_ep,
 			    struct rxr_tx_entry *tx_entry);

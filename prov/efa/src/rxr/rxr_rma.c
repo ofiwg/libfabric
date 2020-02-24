@@ -116,69 +116,6 @@ rxr_rma_alloc_readrsp_tx_entry(struct rxr_ep *rxr_ep,
 	return tx_entry;
 }
 
-int rxr_pkt_init_readrsp(struct rxr_ep *ep,
-			 struct rxr_tx_entry *tx_entry,
-			 struct rxr_pkt_entry *pkt_entry)
-{
-	struct rxr_readrsp_pkt *readrsp_pkt;
-	struct rxr_readrsp_hdr *readrsp_hdr;
-	size_t mtu = ep->mtu_size;
-
-	readrsp_pkt = (struct rxr_readrsp_pkt *)pkt_entry->pkt;
-	readrsp_hdr = &readrsp_pkt->hdr;
-	readrsp_hdr->type = RXR_READRSP_PKT;
-	readrsp_hdr->version = RXR_PROTOCOL_VERSION;
-	readrsp_hdr->flags = 0;
-	readrsp_hdr->tx_id = tx_entry->tx_id;
-	readrsp_hdr->rx_id = tx_entry->rx_id;
-	readrsp_hdr->seg_size = ofi_copy_from_iov(readrsp_pkt->data,
-						  mtu - RXR_READRSP_HDR_SIZE,
-						  tx_entry->iov,
-						  tx_entry->iov_count, 0);
-	pkt_entry->pkt_size = RXR_READRSP_HDR_SIZE + readrsp_hdr->seg_size;
-	pkt_entry->addr = tx_entry->addr;
-	pkt_entry->x_entry = tx_entry;
-	return 0;
-}
-
-void rxr_pkt_handle_readrsp_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
-{
-	struct rxr_tx_entry *tx_entry;
-	size_t data_len;
-
-	tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
-	data_len = rxr_get_readrsp_hdr(pkt_entry->pkt)->seg_size;
-	tx_entry->state = RXR_TX_SENT_READRSP;
-	tx_entry->bytes_sent += data_len;
-	tx_entry->window -= data_len;
-	assert(tx_entry->window >= 0);
-	if (tx_entry->bytes_sent < tx_entry->total_len) {
-		if (efa_mr_cache_enable && rxr_ep_mr_local(ep))
-			rxr_inline_mr_reg(rxr_ep_domain(ep), tx_entry);
-
-		tx_entry->state = RXR_TX_SEND;
-		dlist_insert_tail(&tx_entry->entry,
-				  &ep->tx_pending_list);
-	}
-}
-
-/* EOR packet functions */
-int rxr_pkt_init_eor(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry, struct rxr_pkt_entry *pkt_entry)
-{
-	struct rxr_eor_hdr *eor_hdr;
-
-	eor_hdr = (struct rxr_eor_hdr *)pkt_entry->pkt;
-	eor_hdr->type = RXR_EOR_PKT;
-	eor_hdr->version = RXR_PROTOCOL_VERSION;
-	eor_hdr->flags = 0;
-	eor_hdr->tx_id = rx_entry->tx_id;
-	eor_hdr->rx_id = rx_entry->rx_id;
-	pkt_entry->pkt_size = sizeof(struct rxr_eor_hdr);
-	pkt_entry->addr = rx_entry->addr;
-	pkt_entry->x_entry = rx_entry;
-	return 0;
-}
-
 struct rxr_tx_entry *
 rxr_rma_alloc_tx_entry(struct rxr_ep *rxr_ep,
 		       const struct fi_msg_rma *msg_rma,
@@ -320,11 +257,11 @@ ssize_t rxr_rma_post_efa_read(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 
 	peer = rxr_ep_get_peer(ep, tx_entry->addr);
 	assert(peer);
-	rxr_ep_calc_cts_window_credits(ep, peer,
-				       tx_entry->total_len,
-				       tx_entry->credit_request,
-				       &window,
-				       &credits);
+	rxr_pkt_calc_cts_window_credits(ep, peer,
+					tx_entry->total_len,
+					tx_entry->credit_request,
+					&window,
+					&credits);
 
 	rx_entry->window = window;
 	rx_entry->credit_cts = credits;
