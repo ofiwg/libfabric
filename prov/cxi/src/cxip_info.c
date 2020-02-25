@@ -197,17 +197,16 @@ static int cxip_info_init(void)
 }
 
 struct cxip_environment cxip_env = {
-	.rdzv_offload = true,
 	.odp = false,
 	.ats = true,
+	.rdzv_offload = true,
+	.rdzv_threshold = CXIP_RDZV_THRESHOLD,
+	.oflow_buf_size = CXIP_OFLOW_BUF_SIZE,
+	.oflow_buf_count = CXIP_OFLOW_BUF_COUNT,
 };
 
 static void cxip_env_init(void)
 {
-	fi_param_define(&cxip_prov, "rdzv_offload", FI_PARAM_BOOL,
-			"Enables offloaded rendezvous messaging protocol.");
-	fi_param_get_bool(&cxip_prov, "rdzv_offload", &cxip_env.rdzv_offload);
-
 	fi_param_define(&cxip_prov, "odp", FI_PARAM_BOOL,
 			"Enables on-demand paging.");
 	fi_param_get_bool(&cxip_prov, "odp", &cxip_env.odp);
@@ -215,6 +214,25 @@ static void cxip_env_init(void)
 	fi_param_define(&cxip_prov, "ats", FI_PARAM_BOOL,
 			"Enables PCIe ATS.");
 	fi_param_get_bool(&cxip_prov, "ats", &cxip_env.ats);
+
+	fi_param_define(&cxip_prov, "rdzv_offload", FI_PARAM_BOOL,
+			"Enables offloaded rendezvous messaging protocol.");
+	fi_param_get_bool(&cxip_prov, "rdzv_offload", &cxip_env.rdzv_offload);
+
+	fi_param_define(&cxip_prov, "rdzv_threshold", FI_PARAM_SIZE_T,
+			"Message size threshold for rendezvous protocol.");
+	fi_param_get_size_t(&cxip_prov, "rdzv_threshold",
+			    &cxip_env.rdzv_threshold);
+
+	fi_param_define(&cxip_prov, "oflow_buf_size", FI_PARAM_SIZE_T,
+			"Overflow buffer size.");
+	fi_param_get_size_t(&cxip_prov, "oflow_buf_size",
+			    &cxip_env.oflow_buf_size);
+
+	fi_param_define(&cxip_prov, "oflow_buf_count", FI_PARAM_SIZE_T,
+			"Overflow buffer count.");
+	fi_param_get_size_t(&cxip_prov, "oflow_buf_count",
+			    &cxip_env.oflow_buf_count);
 }
 
 /*

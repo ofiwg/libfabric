@@ -1090,7 +1090,7 @@ static int eager_buf_add(struct cxip_rxc *rxc)
 	req->oflow.rxc = rxc;
 	req->oflow.oflow_buf = oflow_buf;
 
-	min_free = (rxc->eager_threshold >>
+	min_free = (rxc->rdzv_threshold >>
 			dom->dev_if->if_dev->info.min_free_shift);
 
 	/* Issue Append command */
@@ -2760,7 +2760,7 @@ static ssize_t _cxip_send_long(struct cxip_txc *txc, const void *buf,
 
 	if (txc->ep_obj->rdzv_offload) {
 		cmd.command.opcode = C_CMD_RENDEZVOUS_PUT;
-		cmd.eager_length = txc->eager_threshold;
+		cmd.eager_length = txc->rdzv_threshold;
 		cmd.remote_offset = CXI_VA_TO_IOVA(send_md->md, buf);
 		cmd.use_offset_for_get = 1;
 
@@ -3145,7 +3145,7 @@ static ssize_t _cxip_send(struct cxip_txc *txc, const void *buf, size_t len,
 	if (len > CXIP_EP_MAX_MSG_SZ)
 		return -FI_EMSGSIZE;
 
-	if (len > txc->eager_threshold)
+	if (len > txc->rdzv_threshold)
 		ret = _cxip_send_long(txc, buf, len, desc, data, dest_addr,
 				      tag, context, flags, tagged);
 	else

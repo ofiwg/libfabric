@@ -85,12 +85,11 @@
 #define CXIP_CQ_DEF_SZ			(1 << 8)
 #define CXIP_AV_DEF_SZ			(1 << 8)
 
-#define CXIP_EAGER_THRESHOLD		2048
-#define CXIP_MAX_OFLOW_BUFS		3
-#define CXIP_MAX_OFLOW_MSGS		1024
-#define CXIP_UX_BUFFER_SIZE		(CXIP_EAGER_THRESHOLD * \
-					 CXIP_MAX_OFLOW_BUFS * \
-					 CXIP_MAX_OFLOW_MSGS)
+#define CXIP_RDZV_THRESHOLD		2048
+#define CXIP_OFLOW_BUF_SIZE		(2*1024*1024)
+#define CXIP_OFLOW_BUF_COUNT		3
+#define CXIP_UX_BUFFER_SIZE		(CXIP_OFLOW_BUF_COUNT * \
+					 CXIP_OFLOW_BUF_SIZE)
 
 #define CXIP_EP_PRI_CAPS \
 	(FI_RMA | FI_ATOMICS | FI_TAGGED | FI_RECV | FI_SEND | \
@@ -139,9 +138,15 @@ extern struct fi_tx_attr cxip_tx_attr;
 extern struct fi_rx_attr cxip_rx_attr;
 
 struct cxip_environment {
-	int rdzv_offload;
+	/* Translation */
 	int odp;
 	int ats;
+
+	/* Messaging */
+	int rdzv_offload;
+	size_t rdzv_threshold;
+	size_t oflow_buf_size;
+	size_t oflow_buf_count;
 };
 
 extern struct cxip_environment cxip_env;
@@ -656,16 +661,15 @@ struct cxip_rxc {
 	ofi_atomic32_t orx_reqs;	// outstanding receive requests
 
 	int min_multi_recv;
-	int eager_threshold;
+	int rdzv_threshold;
 
 	/* Unexpected message handling */
 	fastlock_t rx_lock;			// RX message lock
 	ofi_atomic32_t oflow_bufs_submitted;
 	ofi_atomic32_t oflow_bufs_linked;
 	ofi_atomic32_t oflow_bufs_in_use;
-	int oflow_bufs_max;
-	int oflow_msgs_max;
 	int oflow_buf_size;
+	int oflow_bufs_max;
 	struct dlist_entry oflow_bufs;		// Overflow buffers
 	struct dlist_entry ux_sends;		// UX sends records
 	struct dlist_entry ux_recvs;		// UX recv records
@@ -725,7 +729,7 @@ struct cxip_txc {
 
 	/* Software Rendezvous related structures */
 	struct cxip_pte *rdzv_pte;	// PTE for SW Rendezvous commands
-	int eager_threshold;		// Threshold for eager IOs
+	int rdzv_threshold;
 	struct cxip_cmdq *rx_cmdq;	// Target cmdq for Rendezvous buffers
 	unsigned int rdzv_src_lacs;
 

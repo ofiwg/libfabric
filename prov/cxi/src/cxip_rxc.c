@@ -379,12 +379,12 @@ struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr, void *context,
 	dlist_init(&rxc->ux_rdzv_recvs);
 	ofi_atomic_initialize32(&rxc->sink_le_linked, 0);
 
+	rxc->rdzv_threshold = cxip_env.rdzv_threshold;
+	rxc->oflow_buf_size = cxip_env.oflow_buf_size;
+	rxc->oflow_bufs_max = cxip_env.oflow_buf_count;
+
 	/* TODO make configurable */
-	rxc->eager_threshold = CXIP_EAGER_THRESHOLD;
 	rxc->min_multi_recv = CXIP_EP_MIN_MULTI_RECV;
-	rxc->oflow_bufs_max = CXIP_MAX_OFLOW_BUFS;
-	rxc->oflow_msgs_max = CXIP_MAX_OFLOW_MSGS;
-	rxc->oflow_buf_size = CXIP_MAX_OFLOW_MSGS * CXIP_EAGER_THRESHOLD;
 
 	return rxc;
 }
