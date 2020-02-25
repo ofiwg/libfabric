@@ -68,10 +68,10 @@ void ofi_monitor_init(void)
 	pthread_mutex_init(&memhooks_monitor->lock, NULL);
 	dlist_init(&memhooks_monitor->list);
 
-#if HAVE_UFFD_UNMAP
-        default_monitor = uffd_monitor;
-#elif defined(HAVE_ELF_H) && defined(HAVE_SYS_AUXV_H)
+#if defined(HAVE_ELF_H) && defined(HAVE_SYS_AUXV_H)
         default_monitor = memhooks_monitor;
+#elif HAVE_UFFD_UNMAP
+        default_monitor = uffd_monitor;
 #else
         default_monitor = NULL;
 #endif
