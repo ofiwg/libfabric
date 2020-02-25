@@ -396,6 +396,7 @@ int cxip_pte_append(struct cxip_pte *pte, uint64_t iova, size_t len,
 		    uint64_t ignore_bits, uint32_t match_id,
 		    uint64_t min_free, bool event_success_disable,
 		    bool event_link_disable, bool event_unlink_disable,
+		    bool event_comm_disable,
 		    bool use_once, bool manage_local, bool no_truncate,
 		    bool unexpected_hdr_disable,
 		    bool unrestricted_body_ro,
@@ -423,6 +424,7 @@ int cxip_pte_append(struct cxip_pte *pte, uint64_t iova, size_t len,
 	cmd.target.event_success_disable  = event_success_disable;
 	cmd.target.event_link_disable     = event_link_disable;
 	cmd.target.event_unlink_disable   = event_unlink_disable;
+	cmd.target.event_comm_disable     = event_comm_disable;
 	cmd.target.event_ct_comm          = event_ct_comm;
 	cmd.target.ct                     = cntr ? cntr->ct->ctn : 0;
 	cmd.target.use_once               = use_once;

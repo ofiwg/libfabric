@@ -1100,8 +1100,8 @@ static int eager_buf_add(struct cxip_rxc *rxc)
 			      rxc->oflow_buf_size, oflow_buf->md->md->lac,
 			      C_PTL_LIST_OVERFLOW, req->req_id, mb.raw, ib.raw,
 			      CXI_MATCH_ID_ANY, min_free, false, false,
-			      false, false, true, true, false, true, true,
-			      false, NULL, true, false, rxc->rx_cmdq);
+			      false, false, false, true, true, false, true,
+			      true, false, NULL, true, false, rxc->rx_cmdq);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
 		goto oflow_req_free;
@@ -1212,8 +1212,8 @@ static int cxip_rxc_sink_init(struct cxip_rxc *rxc)
 	ret = cxip_pte_append(rxc->rx_pte, 0, 0, 0,
 			      C_PTL_LIST_OVERFLOW, req->req_id, mb.raw, ib.raw,
 			      CXI_MATCH_ID_ANY, 0, false, false, false, false,
-			      true, false, false, true, true, false, NULL,
-			      true, false, rxc->rx_cmdq);
+			      false, true, false, false, true, true, false,
+			      NULL, true, false, rxc->rx_cmdq);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to write UX Append command: %d\n", ret);
 		goto req_free;
@@ -1353,8 +1353,8 @@ int cxip_msg_zbp_init(struct cxip_txc *txc)
 	ret = cxip_pte_append(txc->rdzv_pte, 0, 0, 0,
 			      C_PTL_LIST_PRIORITY, req->req_id, mb.raw, ib.raw,
 			      CXI_MATCH_ID_ANY, 0, false, false, false, false,
-			      false, false, false, true, true, false, NULL,
-			      true, false, txc->rx_cmdq);
+			      false, false, false, false, true, true, false,
+			      NULL, true, false, txc->rx_cmdq);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
 		goto req_free;
@@ -2157,7 +2157,7 @@ static ssize_t _cxip_recv(struct cxip_rxc *rxc, void *buf, size_t len,
 			      recv_md ? recv_md->md->lac : 0,
 			      C_PTL_LIST_PRIORITY, req->req_id,
 			      mb.raw, ib.raw, match_id,
-			      rxc->min_multi_recv, false, true, true,
+			      rxc->min_multi_recv, false, true, true, false,
 			      !req->recv.multi_recv,
 			      req->recv.multi_recv,
 			      false, false, true, true, false, NULL,
@@ -2598,7 +2598,7 @@ int cxip_txc_prep_rdzv_src(struct cxip_txc *txc, unsigned int lac)
 	ret = cxip_pte_append(txc->rdzv_pte, 0, -1ULL, lac,
 			      C_PTL_LIST_PRIORITY, req->req_id,
 			      mb.raw, ib.raw, CXI_MATCH_ID_ANY, 0,
-			      false, false, false, false, false, false,
+			      false, false, false, false, false, false, false,
 			      false, true, true, false, NULL,
 			      false, true, txc->rx_cmdq);
 	if (ret != FI_SUCCESS)
@@ -2806,9 +2806,9 @@ static ssize_t _cxip_send_long(struct cxip_txc *txc, const void *buf,
 				      req->send.send_md->md->lac,
 				      C_PTL_LIST_PRIORITY, req->req_id,
 				      le_mb.raw, ~le_ib.raw, CXI_MATCH_ID_ANY,
-				      0, false, false, false, true, false,
-				      true, false, true, true, false, NULL,
-				      false, true, txc->rx_cmdq);
+				      0, false, false, false, false, true,
+				      false, true, false, true, true, false,
+				      NULL, false, true, txc->rx_cmdq);
 		if (ret) {
 			CXIP_LOG_DBG("Failed append source buffer: %d\n", ret);
 			goto err_id_free;
