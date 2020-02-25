@@ -147,6 +147,8 @@ struct cxip_environment {
 	size_t rdzv_threshold;
 	size_t oflow_buf_size;
 	size_t oflow_buf_count;
+
+	int optimized_mrs;
 };
 
 extern struct cxip_environment cxip_env;
@@ -199,16 +201,16 @@ struct cxip_addr {
 #define CXIP_PTL_IDX_MR_STD		254
 #define CXIP_PTL_IDX_RDZV_SRC		255
 
-static inline int cxip_mr_key_to_ptl_idx(int key)
-{
-	if (key < CXIP_PTL_IDX_MR_OPT_CNT)
-		return CXIP_PTL_IDX_MR_OPT((key));
-	return CXIP_PTL_IDX_MR_STD;
-}
-
 static inline bool cxip_mr_key_opt(int key)
 {
-	return key < CXIP_PTL_IDX_MR_OPT_CNT;
+	return cxip_env.optimized_mrs && key < CXIP_PTL_IDX_MR_OPT_CNT;
+}
+
+static inline int cxip_mr_key_to_ptl_idx(int key)
+{
+	if (cxip_mr_key_opt(key))
+		return CXIP_PTL_IDX_MR_OPT((key));
+	return CXIP_PTL_IDX_MR_STD;
 }
 
 /* Messaging Match Bit layout */

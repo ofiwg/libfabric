@@ -203,6 +203,7 @@ struct cxip_environment cxip_env = {
 	.rdzv_threshold = CXIP_RDZV_THRESHOLD,
 	.oflow_buf_size = CXIP_OFLOW_BUF_SIZE,
 	.oflow_buf_count = CXIP_OFLOW_BUF_COUNT,
+	.optimized_mrs = true,
 };
 
 static void cxip_env_init(void)
@@ -233,6 +234,11 @@ static void cxip_env_init(void)
 			"Overflow buffer count.");
 	fi_param_get_size_t(&cxip_prov, "oflow_buf_count",
 			    &cxip_env.oflow_buf_count);
+
+	fi_param_define(&cxip_prov, "optimized_mrs", FI_PARAM_BOOL,
+			"Enables optimized memory regions.");
+	fi_param_get_bool(&cxip_prov, "optimized_mrs",
+			  &cxip_env.optimized_mrs);
 }
 
 /*
