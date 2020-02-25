@@ -692,6 +692,17 @@ configure registration caches.
   transfers (such as sending elements of an array to peer(s)), and the larger
   region is access infrequently.  By default merging regions is disabled.
 
+*FI_MR_CACHE_MONITOR*
+: The cache monitor is responsible for detecting changes made between the
+  virtual addresses used by an application and the underlying physical pages.
+  Valid monitor options are: userfaultfd, memhooks, and disabled.  Selecting
+  disabled will turn off the registration cache.  Userfaultfd is a Linux
+  kernel feature used to report virtual to physical address mapping changes
+  to user space.  Memhooks operates by intercepting relevant memory
+  allocation and deallocation calls which may result in the mappings changing,
+  such as malloc, mmap, free, etc.  Note that memhooks operates at the elf
+  linker layer, and does not use glibc memory hooks.
+
 # SEE ALSO
 
 [`fi_getinfo`(3)](fi_getinfo.3.html),
