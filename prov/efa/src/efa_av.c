@@ -162,7 +162,7 @@ static int efa_av_insert_ah(struct efa_av *av, struct efa_ep_addr *addr,
 
 	memset(&ah_attr, 0, sizeof(struct ibv_ah_attr));
 	inet_ntop(AF_INET6, addr->raw, str, INET6_ADDRSTRLEN);
-	EFA_INFO(FI_LOG_AV, "Insert address: GID[%s] QP[%u]\n", str, addr->qpn);
+	EFA_INFO(FI_LOG_AV, "Insert address: GID[%s] QP[%u] QKEY[%u]\n", str, addr->qpn, addr->qkey);
 	if (!efa_av_is_valid_address(addr)) {
 		EFA_WARN(FI_LOG_AV, "Failed to insert bad addr");
 		err = -FI_EADDRNOTAVAIL;
