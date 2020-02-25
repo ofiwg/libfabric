@@ -385,17 +385,15 @@ static void ofi_set_prov_type(struct fi_prov_context *ctx,
 		ctx->type = OFI_PROV_CORE;
 }
 
-static int ofi_register_provider(struct fi_provider *provider, void *dlhandle)
+static void ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 {
 	struct fi_prov_context *ctx;
 	struct ofi_prov *prov = NULL;
 	bool hidden = false;
-	int ret;
 
 	if (!provider || !provider->name) {
 		FI_DBG(&core_prov, FI_LOG_CORE,
 		       "no provider structure or name\n");
-		ret = -FI_EINVAL;
 		goto cleanup;
 	}
 
@@ -406,7 +404,6 @@ static int ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 	if (!provider->fabric) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"provider missing mandatory entry points\n");
-		ret = -FI_EINVAL;
 		goto cleanup;
 	}
 
@@ -421,8 +418,6 @@ static int ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 			FI_MAJOR(provider->fi_version),
 			FI_MINOR(provider->fi_version), FI_MAJOR_VERSION,
 			FI_MINOR_VERSION);
-
-		ret = -FI_ENOSYS;
 		goto cleanup;
 	}
 
@@ -433,7 +428,6 @@ static int ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 		FI_INFO(&core_prov, FI_LOG_CORE,
 			"\"%s\" filtered by provider include/exclude "
 			"list, skipping\n", provider->name);
-		ret = -FI_ENODEV;
 		hidden = true;
 	}
 
@@ -455,7 +449,6 @@ static int ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 			FI_INFO(&core_prov, FI_LOG_CORE,
 				"a newer %s provider was already loaded; "
 				"ignoring this one\n", provider->name);
-			ret = -FI_EALREADY;
 			goto cleanup;
 		}
 
@@ -470,10 +463,8 @@ static int ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 		cleanup_provider(prov->provider, prov->dlhandle);
 	} else {
 		prov = ofi_create_prov_entry(provider->name);
-		if (!prov) {
-			ret = -FI_EOTHER;
+		if (!prov)
 			goto cleanup;
-		}
 	}
 
 	if (hidden)
@@ -482,11 +473,10 @@ static int ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 update_prov_registry:
 	prov->dlhandle = dlhandle;
 	prov->provider = provider;
-	return 0;
+	return;
 
 cleanup:
 	cleanup_provider(provider, dlhandle);
-	return ret;
 }
 
 #ifdef HAVE_LIBDL
