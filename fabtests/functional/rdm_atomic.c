@@ -435,6 +435,10 @@ static int init_fabric(void)
 {
 	int ret;
 
+	ret  = ft_init_oob();
+	if (ret)
+		return ret;
+
 	ret = ft_getinfo(hints, &fi);
 	if (ret)
 		return ret;
