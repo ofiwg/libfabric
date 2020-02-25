@@ -443,6 +443,8 @@ struct vrb_srq_ep {
 	struct fid_ep		ep_fid;
 	struct ibv_srq		*srq;
 	struct vrb_domain	*domain;
+	struct ofi_bufpool	*ctx_pool;
+	fastlock_t		ctx_lock;
 
 	/* For XRC SRQ only */
 	struct {
@@ -456,7 +458,7 @@ struct vrb_srq_ep {
 		/* The RX CQ associated with this XRC SRQ. This field
 		 * and the srq_entry should only be modified while holding
 		 * the associted cq::xrc.srq_list_lock. */
-		struct vrb_cq	*cq;
+		struct vrb_cq		*cq;
 
 		/* The CQ maintains a list of XRC SRQ associated with it */
 		struct dlist_entry	srq_entry;
@@ -580,8 +582,10 @@ struct vrb_ep {
 
 /* Must be cast-able to struct fi_context */
 struct vrb_context {
-	struct vrb_ep		*ep;
+	struct vrb_ep			*ep;
+	struct vrb_srq_ep		*srx;
 	void				*user_ctx;
+	uint32_t			flags;
 };
 
 
