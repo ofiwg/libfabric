@@ -213,8 +213,7 @@ static ssize_t _cxip_rma_op(enum fi_op_type op, struct cxip_txc *txc,
 		cmd.c_state.index_ext = idx_ext;
 		cmd.c_state.eq = txc->send_cq->evtq->eqn;
 
-		if ((flags & FI_COMPLETION) &&
-		    (flags & (FI_DELIVERY_COMPLETE | FI_MATCH_COMPLETE)))
+		if (flags & (FI_DELIVERY_COMPLETE | FI_MATCH_COMPLETE))
 			cmd.c_state.flush = 1;
 
 		/* Reliable, unordered Puts are optimally supported with
@@ -297,7 +296,7 @@ static ssize_t _cxip_rma_op(enum fi_op_type op, struct cxip_txc *txc,
 		cmd.user_ptr = (uint64_t)req;
 		cmd.match_bits = key;
 
-		if ((op == FI_OP_WRITE) && (flags & FI_COMPLETION) &&
+		if ((op == FI_OP_WRITE) &&
 		    (flags & (FI_DELIVERY_COMPLETE | FI_MATCH_COMPLETE)))
 			cmd.flush = 1;
 

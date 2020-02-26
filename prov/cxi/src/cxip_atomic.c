@@ -620,8 +620,7 @@ static int _cxip_amo(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 			}
 		}
 
-		if ((flags & FI_COMPLETION) &&
-		    (flags & (FI_DELIVERY_COMPLETE | FI_MATCH_COMPLETE)))
+		if (flags & (FI_DELIVERY_COMPLETE | FI_MATCH_COMPLETE))
 			cmd.c_state.flush = 1;
 
 		if (memcmp(&txc->tx_cmdq->c_state, &cmd.c_state,
@@ -700,6 +699,9 @@ static int _cxip_amo(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		/* Note: 16-byte value will overflow into op2_word2 */
 		if (compare)
 			memcpy(&cmd.op2_word1, compare, len);
+
+		if (flags & (FI_DELIVERY_COMPLETE | FI_MATCH_COMPLETE))
+			cmd.flush = 1;
 
 		if (req_type == CXIP_RQ_AMO) {
 			if (txc->write_cntr) {
