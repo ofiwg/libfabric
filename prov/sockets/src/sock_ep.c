@@ -1598,16 +1598,10 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 	struct sock_rx_ctx *rx_ctx;
 	struct sock_domain *sock_dom;
 
+	assert(info);
 	sock_dom = container_of(domain, struct sock_domain, dom_fid);
-	if (info) {
-		ret = sock_verify_info(sock_dom->fab->fab_fid.api_version, info);
-		if (ret) {
-			SOCK_LOG_DBG("Cannot support requested options!\n");
-			return -FI_EINVAL;
-		}
-	}
 
-	sock_ep = (struct sock_ep *) calloc(1, sizeof(*sock_ep));
+	sock_ep = calloc(1, sizeof(*sock_ep));
 	if (!sock_ep)
 		return -FI_ENOMEM;
 
@@ -1647,51 +1641,49 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 	sock_ep->attr->fclass = fclass;
 	*ep = sock_ep;
 
-	if (info) {
-		sock_ep->attr->info.caps = info->caps;
-		sock_ep->attr->info.addr_format = FI_SOCKADDR_IN;
+	sock_ep->attr->info.caps = info->caps;
+	sock_ep->attr->info.addr_format = info->addr_format;
 
-		if (info->ep_attr) {
-			sock_ep->attr->ep_type = info->ep_attr->type;
-			sock_ep->attr->ep_attr.tx_ctx_cnt = info->ep_attr->tx_ctx_cnt;
-			sock_ep->attr->ep_attr.rx_ctx_cnt = info->ep_attr->rx_ctx_cnt;
-		}
-
-		if (info->src_addr) {
-			sock_ep->attr->src_addr = calloc(1, sizeof(*sock_ep->
-							 attr->src_addr));
-			if (!sock_ep->attr->src_addr) {
-				ret = -FI_ENOMEM;
-				goto err2;
-			}
-			memcpy(sock_ep->attr->src_addr, info->src_addr,
-			       info->src_addrlen);
-		}
-
-		if (info->dest_addr) {
-			sock_ep->attr->dest_addr = calloc(1, sizeof(*sock_ep->
-							  attr->dest_addr));
-			if (!sock_ep->attr->dest_addr) {
-				ret = -FI_ENOMEM;
-				goto err2;
-			}
-			memcpy(sock_ep->attr->dest_addr, info->dest_addr,
-			       info->dest_addrlen);
-		}
-
-		if (info->tx_attr) {
-			sock_ep->tx_attr = *info->tx_attr;
-			if (!(sock_ep->tx_attr.op_flags & (FI_INJECT_COMPLETE |
-			     FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)))
-                        	sock_ep->tx_attr.op_flags |= FI_TRANSMIT_COMPLETE;
-			sock_ep->tx_attr.size = sock_ep->tx_attr.size ?
-				sock_ep->tx_attr.size : SOCK_EP_TX_SZ;
-		}
-
-		if (info->rx_attr)
-			sock_ep->rx_attr = *info->rx_attr;
-		sock_ep->attr->info.handle = info->handle;
+	if (info->ep_attr) {
+		sock_ep->attr->ep_type = info->ep_attr->type;
+		sock_ep->attr->ep_attr.tx_ctx_cnt = info->ep_attr->tx_ctx_cnt;
+		sock_ep->attr->ep_attr.rx_ctx_cnt = info->ep_attr->rx_ctx_cnt;
 	}
+
+	if (info->src_addr) {
+		sock_ep->attr->src_addr = calloc(1, sizeof(*sock_ep->
+							   attr->src_addr));
+		if (!sock_ep->attr->src_addr) {
+			ret = -FI_ENOMEM;
+			goto err2;
+		}
+		memcpy(sock_ep->attr->src_addr, info->src_addr,
+			info->src_addrlen);
+	}
+
+	if (info->dest_addr) {
+		sock_ep->attr->dest_addr = calloc(1, sizeof(*sock_ep->
+							    attr->dest_addr));
+		if (!sock_ep->attr->dest_addr) {
+			ret = -FI_ENOMEM;
+			goto err2;
+		}
+		memcpy(sock_ep->attr->dest_addr, info->dest_addr,
+			info->dest_addrlen);
+	}
+
+	if (info->tx_attr) {
+		sock_ep->tx_attr = *info->tx_attr;
+		if (!(sock_ep->tx_attr.op_flags & (FI_INJECT_COMPLETE |
+			FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)))
+			sock_ep->tx_attr.op_flags |= FI_TRANSMIT_COMPLETE;
+		sock_ep->tx_attr.size = sock_ep->tx_attr.size ?
+			sock_ep->tx_attr.size : SOCK_EP_TX_SZ;
+	}
+
+	if (info->rx_attr)
+		sock_ep->rx_attr = *info->rx_attr;
+	sock_ep->attr->info.handle = info->handle;
 
 	if (!sock_ep->attr->src_addr && sock_ep_assign_src_addr(sock_ep, info)) {
 		SOCK_LOG_ERROR("failed to get src_address\n");

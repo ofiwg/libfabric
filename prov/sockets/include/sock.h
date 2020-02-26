@@ -151,12 +151,10 @@ enum {
 
 #define SOCK_WIRE_PROTO_VERSION (2)
 
-extern struct fi_info sock_msg_info;
-extern struct fi_info sock_rdm_info;
 extern struct fi_info sock_dgram_info;
-extern struct util_prov sock_msg_util_prov;
-extern struct util_prov sock_rdm_util_prov;
-extern struct util_prov sock_dgram_util_prov;
+extern struct fi_info sock_msg_info;
+
+extern struct util_prov sock_util_prov;
 extern struct fi_domain_attr sock_domain_attr;
 extern struct fi_fabric_attr sock_fabric_attr;
 extern struct fi_tx_attr sock_msg_tx_attr;
@@ -989,20 +987,7 @@ union sock_tx_op {
 };
 #define SOCK_EP_TX_ENTRY_SZ (sizeof(union sock_tx_op))
 
-int sock_verify_info(uint32_t version, const struct fi_info *hints);
-int sock_verify_fabric_attr(const struct fi_fabric_attr *attr);
-int sock_verify_domain_attr(uint32_t version, const struct fi_info *info);
-
 size_t sock_get_tx_size(size_t size);
-int sock_rdm_verify_ep_attr(const struct fi_ep_attr *ep_attr,
-			    const struct fi_tx_attr *tx_attr,
-			    const struct fi_rx_attr *rx_attr);
-int sock_dgram_verify_ep_attr(const struct fi_ep_attr *ep_attr,
-			      const struct fi_tx_attr *tx_attr,
-			      const struct fi_rx_attr *rx_attr);
-int sock_msg_verify_ep_attr(const struct fi_ep_attr *ep_attr,
-			    const struct fi_tx_attr *tx_attr,
-			    const struct fi_rx_attr *rx_attr);
 int sock_get_src_addr(union ofi_sock_ip *dest_addr,
 		      union ofi_sock_ip *src_addr);
 int sock_get_src_addr_from_hostname(union ofi_sock_ip *src_addr,

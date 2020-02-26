@@ -230,6 +230,7 @@ struct fi_info sock_msg_info = {
 };
 
 struct fi_info sock_rdm_info = {
+	.next = &sock_msg_info,
 	.caps = SOCK_RDM_TX_CAPS | SOCK_RDM_RX_CAPS | SOCK_DOMAIN_CAPS,
 	.addr_format = FI_SOCKADDR,
 	.tx_attr = &sock_rdm_tx_attr,
@@ -240,6 +241,7 @@ struct fi_info sock_rdm_info = {
 };
 
 struct fi_info sock_dgram_info = {
+	.next = &sock_rdm_info,
 	.caps = SOCK_DGRAM_TX_CAPS | SOCK_DGRAM_RX_CAPS | SOCK_DOMAIN_CAPS,
 	.addr_format = FI_SOCKADDR,
 	.tx_attr = &sock_dgram_tx_attr,
