@@ -595,6 +595,17 @@ static int vrb_read_params(void)
 			   "Invalid value of cqread_bunch_size\n");
 		return -FI_EINVAL;
 	}
+	if (vrb_get_param_int("gid_idx", "Set which gid index to use "
+				 "attribute (0 - 255)",
+				 &vrb_gl_data.gid_idx) ||
+	    (vrb_gl_data.gid_idx < 0 ||
+	     vrb_gl_data.gid_idx > 255)) {
+		VERBS_WARN(FI_LOG_CORE,
+			   "Invalid value of gid index\n");
+		return -FI_EINVAL;
+	}
+
+	/* MSG-specific parameter */
 	if (vrb_get_param_str("iface", "The prefix or the full name of the "
 				 "network interface associated with the verbs device",
 				 &vrb_gl_data.iface)) {
@@ -622,15 +633,6 @@ static int vrb_read_params(void)
 	     vrb_gl_data.dgram.name_server_port > 65535)) {
 		VERBS_WARN(FI_LOG_CORE,
 			   "Invalid value of dgram_name_server_port\n");
-		return -FI_EINVAL;
-	}
-	if (vrb_get_param_int("gid_idx", "Set which gid index to use "
-				 "attribute (0 - 255)",
-				 &vrb_gl_data.gid_idx) ||
-	    (vrb_gl_data.gid_idx < 0 ||
-	     vrb_gl_data.gid_idx > 255)) {
-		VERBS_WARN(FI_LOG_CORE,
-			   "Invalid value of gid index\n");
 		return -FI_EINVAL;
 	}
 
