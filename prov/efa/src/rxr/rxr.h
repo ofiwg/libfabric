@@ -787,30 +787,6 @@ static inline int rxr_need_sas_ordering(struct rxr_ep *ep)
 		rxr_env.enable_sas_ordering);
 }
 
-static inline void rxr_release_rx_pkt_entry(struct rxr_ep *ep,
-					    struct rxr_pkt_entry *pkt_entry)
-{
-	if (pkt_entry->type == RXR_PKT_ENTRY_POSTED) {
-		struct rxr_peer *peer;
-
-		peer = rxr_ep_get_peer(ep, pkt_entry->addr);
-		assert(peer);
-		if (peer->is_local)
-			ep->rx_bufs_shm_to_post++;
-		else
-			ep->rx_bufs_efa_to_post++;
-	}
-#if ENABLE_DEBUG
-	dlist_remove(&pkt_entry->dbg_entry);
-#endif
-#ifdef ENABLE_EFA_POISONING
-	/* the same pool size is used for all types of rx pkt_entries */
-	rxr_poison_mem_region((uint32_t *)pkt_entry, ep->rx_pkt_pool_entry_sz);
-#endif
-	pkt_entry->state = RXR_PKT_ENTRY_FREE;
-	ofi_buf_free(pkt_entry);
-}
-
 /* Initialization functions */
 void rxr_reset_rx_tx_to_core(const struct fi_info *user_info,
 			     struct fi_info *core_info);
@@ -846,21 +822,12 @@ struct rxr_rx_entry *rxr_ep_split_rx_entry(struct rxr_ep *ep,
 					   struct rxr_pkt_entry *pkt_entry);
 int rxr_ep_efa_addr_to_str(const void *addr, char *temp_name);
 
-#if ENABLE_DEBUG
-void rxr_ep_print_pkt(char *prefix,
-		      struct rxr_ep *ep,
-		      struct rxr_base_hdr *hdr);
-#endif
-
 /* CQ sub-functions */
 int rxr_cq_handle_rx_error(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
 			   ssize_t prov_errno);
 int rxr_cq_handle_tx_error(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 			   ssize_t prov_errno);
 int rxr_cq_handle_cq_error(struct rxr_ep *ep, ssize_t err);
-ssize_t rxr_cq_post_cts(struct rxr_ep *ep,
-			struct rxr_rx_entry *rx_entry,
-			uint64_t size);
 
 void rxr_cq_write_rx_completion(struct rxr_ep *ep,
 				struct rxr_rx_entry *rx_entry);
