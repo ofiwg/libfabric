@@ -416,12 +416,9 @@ int rxr_msg_handle_unexp_match(struct rxr_ep *ep,
 			       void *context, fi_addr_t addr,
 			       uint32_t op, uint64_t flags)
 {
-	struct rxr_peer *peer;
-	struct rxr_pkt_entry *pkt_entry;
 	struct rxr_rts_hdr *rts_hdr;
+	struct rxr_pkt_entry *pkt_entry;
 	uint64_t len;
-	char *data;
-	size_t data_size;
 
 	rx_entry->fi_flags = flags;
 	rx_entry->ignore = ignore;
@@ -457,18 +454,7 @@ int rxr_msg_handle_unexp_match(struct rxr_ep *ep,
 		rx_entry->ignore = ~0;
 	}
 
-	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
-	data = rxr_pkt_proc_rts_base_hdr(ep, rx_entry, pkt_entry);
-	if (peer->is_local && !(rts_hdr->flags & RXR_SHM_HDR_DATA)) {
-		rxr_pkt_proc_shm_long_msg_rts(ep, rx_entry, rts_hdr, data);
-		rxr_pkt_entry_release_rx(ep, pkt_entry);
-		return 0;
-	}
-
-	data_size = rxr_get_rts_data_size(ep, rts_hdr);
-	return rxr_pkt_proc_rts_data(ep, rx_entry,
-				     pkt_entry, data,
-				     data_size);
+	return rxr_pkt_proc_matched_msg_rts(ep, rx_entry, pkt_entry);
 }
 
 /*
