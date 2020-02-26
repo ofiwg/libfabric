@@ -291,6 +291,7 @@ static void ft_fw_update_info(struct ft_info *test_info, struct fi_info *info)
 	if (info->domain_attr) {
 		test_info->progress = info->domain_attr->data_progress;
 		test_info->threading = info->domain_attr->threading;
+		test_info->mr_mode = info->domain_attr->mr_mode;
 	}
 
 	test_info->mode = info->mode;
