@@ -1032,7 +1032,7 @@ void do_multi_recv(uint8_t *send_buf, size_t send_len,
 			}
 			cr_assert_eq(ret, -FI_EAGAIN,
 				     "send failed %d", ret);
-		} while (i++ < 10000);
+		} while (i++ < 100000);
 	}
 
 	if (tagged) {

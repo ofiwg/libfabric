@@ -1318,7 +1318,7 @@ void do_msg(uint8_t *send_buf, size_t send_len, uint64_t send_tag,
 			}
 			cr_assert_eq(ret, -FI_EAGAIN,
 				     "send failed %d", ret);
-		} while (i++ < 10000);
+		} while (i++ < 100000);
 	}
 
 	/* Post RX buffer */

@@ -466,6 +466,7 @@ struct cxip_req_recv {
 	uint64_t mrecv_bytes;
 	struct cxip_req *parent;
 	struct dlist_entry children;
+	uint64_t src_offset;
 };
 
 struct cxip_req_send {
@@ -479,7 +480,6 @@ struct cxip_req_send {
 	};
 	int rc;				// DMA return code
 	int long_send_events;		// Processed event count
-	struct c_full_dma_cmd cmd;	// Rendezvous Put command
 };
 
 struct cxip_req_oflow {
@@ -607,6 +607,7 @@ struct cxip_ux_send {
 	uint64_t start;
 	uint32_t initiator;
 	uint32_t rdzv_id;
+	uint64_t src_offset;
 	int eager_bytes;
 };
 
