@@ -180,7 +180,6 @@ void rxr_pkt_post_connack(struct rxr_ep *ep,
 			  fi_addr_t addr);
 
 void rxr_pkt_handle_connack_recv(struct rxr_ep *ep,
-				 struct fi_cq_data_entry *comp,
 				 struct rxr_pkt_entry *pkt_entry,
 				 fi_addr_t addr);
 /*
@@ -211,6 +210,10 @@ struct rxr_cts_hdr *rxr_get_cts_hdr(void *pkt)
 	return (struct rxr_cts_hdr *)pkt;
 }
 
+void rxr_pkt_calc_cts_window_credits(struct rxr_ep *ep, struct rxr_peer *peer,
+				     uint64_t size, int request,
+				     int *window, int *credits);
+
 ssize_t rxr_pkt_init_cts(struct rxr_ep *ep,
 			 struct rxr_rx_entry *rx_entry,
 			 struct rxr_pkt_entry *pkt_entry);
@@ -219,7 +222,6 @@ void rxr_pkt_handle_cts_sent(struct rxr_ep *ep,
 			     struct rxr_pkt_entry *pkt_entry);
 
 void rxr_pkt_handle_cts_recv(struct rxr_ep *ep,
-			     struct fi_cq_data_entry *comp,
 			     struct rxr_pkt_entry *pkt_entry);
 
 /*
@@ -262,11 +264,11 @@ ssize_t rxr_pkt_send_data_mr_cache(struct rxr_ep *ep,
 				   struct rxr_tx_entry *tx_entry,
 				   struct rxr_pkt_entry *pkt_entry);
 
-int rxr_pkt_handle_data(struct rxr_ep *ep,
-			struct rxr_rx_entry *rx_entry,
-			struct rxr_pkt_entry *pkt_entry,
-			char *data, size_t seg_offset,
-			size_t seg_size);
+int rxr_pkt_proc_data(struct rxr_ep *ep,
+		      struct rxr_rx_entry *rx_entry,
+		      struct rxr_pkt_entry *pkt_entry,
+		      char *data, size_t seg_offset,
+		      size_t seg_size);
 
 void rxr_pkt_handle_data_recv(struct rxr_ep *ep,
 			      struct rxr_pkt_entry *pkt_entry);
@@ -310,7 +312,6 @@ void rxr_pkt_handle_readrsp_sent(struct rxr_ep *ep,
 				 struct rxr_pkt_entry *pkt_entry);
 
 void rxr_pkt_handle_readrsp_recv(struct rxr_ep *ep,
-				 struct fi_cq_data_entry *comp,
 				 struct rxr_pkt_entry *pkt_entry);
 
 /*

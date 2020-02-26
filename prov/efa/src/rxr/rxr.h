@@ -830,16 +830,7 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 /* EP sub-functions */
 void rxr_ep_progress(struct util_ep *util_ep);
 void rxr_ep_progress_internal(struct rxr_ep *rxr_ep);
-struct rxr_pkt_entry *rxr_ep_get_pkt_entry(struct rxr_ep *rxr_ep,
-					   struct ofi_bufpool *pkt_pool);
 int rxr_ep_post_buf(struct rxr_ep *ep, uint64_t flags, enum rxr_lower_ep_type lower_ep);
-ssize_t rxr_ep_post_data(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry);
-void rxr_ep_init_connack_pkt_entry(struct rxr_ep *ep,
-				   struct rxr_pkt_entry *pkt_entry,
-				   fi_addr_t addr);
-void rxr_ep_calc_cts_window_credits(struct rxr_ep *ep, struct rxr_peer *peer,
-				    uint64_t size, int request,
-				    int *window, int *credits);
 
 int rxr_ep_set_tx_credit_request(struct rxr_ep *rxr_ep,
 				 struct rxr_tx_entry *tx_entry);
@@ -847,11 +838,6 @@ int rxr_ep_set_tx_credit_request(struct rxr_ep *rxr_ep,
 void rxr_inline_mr_reg(struct rxr_domain *rxr_domain,
 		       struct rxr_tx_entry *tx_entry);
 
-void rxr_ep_init_cts_pkt_entry(struct rxr_ep *ep,
-			       struct rxr_rx_entry *rx_entry,
-			       struct rxr_pkt_entry *pkt_entry,
-			       uint64_t size,
-			       int *credits);
 struct rxr_rx_entry *rxr_ep_get_new_unexp_rx_entry(struct rxr_ep *ep,
 						   struct rxr_pkt_entry *unexp_entry);
 struct rxr_rx_entry *rxr_ep_split_rx_entry(struct rxr_ep *ep,
@@ -859,9 +845,6 @@ struct rxr_rx_entry *rxr_ep_split_rx_entry(struct rxr_ep *ep,
 					   struct rxr_rx_entry *consumer_entry,
 					   struct rxr_pkt_entry *pkt_entry);
 int rxr_ep_efa_addr_to_str(const void *addr, char *temp_name);
-
-int rxr_ep_post_ctrl_or_queue(struct rxr_ep *ep, int entry_type, void *x_entry,
-			      int ctrl_type, bool inject);
 
 #if ENABLE_DEBUG
 void rxr_ep_print_pkt(char *prefix,
@@ -889,25 +872,12 @@ void rxr_cq_handle_rx_completion(struct rxr_ep *ep,
 void rxr_cq_write_tx_completion(struct rxr_ep *ep,
 				struct rxr_tx_entry *tx_entry);
 
-int rxr_cq_handle_pkt_with_data(struct rxr_ep *ep,
-				struct rxr_rx_entry *rx_entry,
-				struct rxr_pkt_entry *pkt_entry,
-				char *data, size_t seg_offset,
-				size_t seg_size);
-
 int rxr_cq_reorder_msg(struct rxr_ep *ep,
 		       struct rxr_peer *peer,
 		       struct rxr_pkt_entry *pkt_entry);
 
 void rxr_cq_proc_pending_items_in_recvwin(struct rxr_ep *ep,
 					  struct rxr_peer *peer);
-
-void rxr_cq_handle_pkt_recv_completion(struct rxr_ep *ep,
-				       struct fi_cq_data_entry *comp,
-				       fi_addr_t src_addr);
-
-void rxr_cq_handle_pkt_send_completion(struct rxr_ep *rxr_ep,
-				       struct fi_cq_data_entry *comp);
 
 void rxr_cq_handle_shm_rma_write_data(struct rxr_ep *ep,
 				      struct fi_cq_data_entry *shm_comp,
