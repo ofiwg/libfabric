@@ -150,6 +150,7 @@ extern struct vrb_gl_data {
 	int	use_odp;
 	char	*iface;
 	int	gid_idx;
+	char	*device_name;
 
 	struct {
 		int	buffer_num;

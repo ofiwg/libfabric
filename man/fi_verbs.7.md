@@ -181,12 +181,20 @@ The verbs provider checks for the following environment variables.
 *FI_VERBS_CQREAD_BUNCH_SIZE*
 : The number of entries to be read from the verbs completion queue at a time (default: 8).
 
+*FI_VERBS_PREFER_XRC*
+: Prioritize XRC transport fi_info before RC transport fi_info (default: 0, RC fi_info will be before XRC fi_info)
+
+*FI_VERBS_GID_IDX*
+: The GID index to use (default: 0)
+
+*FI_VERBS_DEVICE_NAME*
+: Specify a specific verbs device to use by name
+
+### Variables specific to MSG endpoints
+
 *FI_VERBS_IFACE*
 : The prefix or the full name of the network interface associated with the verbs
   device (default: ib)
-
-*FI_VERBS_PREFER_XRC*
-: Prioritize XRC transport fi_info before RC transport fi_info (default: 0, RC fi_info will be before XRC fi_info)
 
 ### Variables specific to DGRAM endpoints
 
@@ -197,9 +205,6 @@ The verbs provider checks for the following environment variables.
 
 *FI_VERBS_NAME_SERVER_PORT*
 : The port on which Name Server thread listens incoming connections and requests (default: 5678)
-
-*FI_VERBS_GID_IDX*
-: The GID index to use (default: 0)
 
 ### Environment variables notes
 The fi_info utility would give the up-to-date information on environment variables:
