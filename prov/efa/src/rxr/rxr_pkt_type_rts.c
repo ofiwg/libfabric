@@ -89,6 +89,7 @@ uint64_t rxr_get_rts_data_size(struct rxr_ep *ep,
 /*
  *  rxr_pkt_init_rts() and related functions.
  */
+static
 char *rxr_pkt_init_rts_base_hdr(struct rxr_ep *ep,
 				struct rxr_tx_entry *tx_entry,
 				struct rxr_pkt_entry *pkt_entry)
@@ -290,6 +291,7 @@ void rxr_pkt_handle_rts_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
  *  The following section are rxr_pkt_handle_rts_recv() and
  *  its related functions.
  */
+static
 char *rxr_pkt_proc_rts_base_hdr(struct rxr_ep *ep,
 				struct rxr_rx_entry *rx_entry,
 				struct rxr_pkt_entry *pkt_entry)
@@ -544,16 +546,39 @@ void rxr_pkt_proc_shm_long_msg_rts(struct rxr_ep *ep, struct rxr_rx_entry *rx_en
 	}
 }
 
-static
-int rxr_pkt_proc_msg_rts(struct rxr_ep *ep,
-			struct rxr_pkt_entry *pkt_entry)
+ssize_t rxr_pkt_proc_matched_msg_rts(struct rxr_ep *ep,
+				     struct rxr_rx_entry *rx_entry,
+				     struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_peer *peer;
 	struct rxr_rts_hdr *rts_hdr;
-	struct dlist_entry *match;
-	struct rxr_rx_entry *rx_entry;
 	char *data;
 	size_t data_size;
+
+	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+	assert(peer);
+
+	rts_hdr = rxr_get_rts_hdr(pkt_entry->pkt);
+	data = rxr_pkt_proc_rts_base_hdr(ep, rx_entry, pkt_entry);
+	if (peer->is_local && !(rts_hdr->flags & RXR_SHM_HDR_DATA)) {
+		rxr_pkt_proc_shm_long_msg_rts(ep, rx_entry, rts_hdr, data);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
+		return 0;
+	}
+
+	data_size = rxr_get_rts_data_size(ep, rts_hdr);
+	return rxr_pkt_proc_rts_data(ep, rx_entry,
+				     pkt_entry, data,
+				     data_size);
+}
+
+static
+int rxr_pkt_proc_msg_rts(struct rxr_ep *ep,
+			 struct rxr_pkt_entry *pkt_entry)
+{
+	struct rxr_rts_hdr *rts_hdr;
+	struct dlist_entry *match;
+	struct rxr_rx_entry *rx_entry;
 
 	rts_hdr = rxr_get_rts_hdr(pkt_entry->pkt);
 
@@ -603,20 +628,7 @@ int rxr_pkt_proc_msg_rts(struct rxr_ep *ep,
 	    !rxr_msg_multi_recv_buffer_available(ep, rx_entry->master_entry))
 		dlist_remove(match);
 
-	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
-	assert(peer);
-
-	data = rxr_pkt_proc_rts_base_hdr(ep, rx_entry, pkt_entry);
-	if (peer->is_local && !(rts_hdr->flags & RXR_SHM_HDR_DATA)) {
-		rxr_pkt_proc_shm_long_msg_rts(ep, rx_entry, rts_hdr, data);
-		rxr_pkt_entry_release_rx(ep, pkt_entry);
-		return 0;
-	}
-
-	data_size = rxr_get_rts_data_size(ep, rts_hdr);
-	return rxr_pkt_proc_rts_data(ep, rx_entry,
-				     pkt_entry, data,
-				     data_size);
+	return rxr_pkt_proc_matched_msg_rts(ep, rx_entry, pkt_entry);
 }
 
 static
