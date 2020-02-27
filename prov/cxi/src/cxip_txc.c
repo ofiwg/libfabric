@@ -106,6 +106,7 @@ put_rx_cmdq:
 static int txc_msg_fini(struct cxip_txc *txc)
 {
 	cxip_msg_zbp_fini(txc);
+	cxip_txc_rdzv_src_fini(txc);
 	cxip_pte_free(txc->rdzv_pte);
 	cxip_ep_cmdq_put(txc->ep_obj, txc->tx_id, false);
 
@@ -274,6 +275,8 @@ static struct cxip_txc *txc_alloc(const struct fi_tx_attr *attr, void *context,
 	fastlock_init(&txc->lock);
 	ofi_atomic_initialize32(&txc->otx_reqs, 0);
 	ofi_atomic_initialize32(&txc->zbp_le_linked, 0);
+	ofi_atomic_initialize32(&txc->rdzv_src_lacs, 0);
+	dlist_init(&txc->rdzv_src_reqs);
 
 	switch (fclass) {
 	case FI_CLASS_TX_CTX:

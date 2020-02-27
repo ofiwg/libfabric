@@ -463,7 +463,9 @@ struct cxip_req_oflow {
 };
 
 struct cxip_req_rdzv_src {
+	struct dlist_entry list;
 	struct cxip_txc *txc;
+	uint32_t lac;
 	int rc;
 };
 
@@ -706,7 +708,8 @@ struct cxip_txc {
 	struct cxip_pte *rdzv_pte;	// PTE for SW Rendezvous commands
 	int rdzv_threshold;
 	struct cxip_cmdq *rx_cmdq;	// Target cmdq for Rendezvous buffers
-	unsigned int rdzv_src_lacs;
+	ofi_atomic32_t rdzv_src_lacs;	// Bitmask of LACs
+	struct dlist_entry rdzv_src_reqs;
 
 	/* Header message handling */
 	ofi_atomic32_t zbp_le_linked;
@@ -978,6 +981,7 @@ int cxip_msg_recv_cancel(struct cxip_req *req);
 
 int cxip_msg_zbp_init(struct cxip_txc *txc);
 int cxip_msg_zbp_fini(struct cxip_txc *txc);
+int cxip_txc_rdzv_src_fini(struct cxip_txc *txc);
 
 struct cxip_txc *cxip_txc_alloc(const struct fi_tx_attr *attr, void *context,
 				int use_shared);

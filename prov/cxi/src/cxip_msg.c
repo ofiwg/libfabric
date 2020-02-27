@@ -2439,6 +2439,11 @@ static int cxip_send_long_cb(struct cxip_req *req, const union c_event *event)
 	}
 }
 
+/*
+ * rdzv_src_cb() - Process rendezvous source buffer events.
+ *
+ * A Get event is generated for each rendezvous Send indicating Send completion.
+ */
 static int rdzv_src_cb(struct cxip_req *req, const union c_event *event)
 {
 	struct cxip_txc *txc = req->rdzv_src.txc;
@@ -2460,8 +2465,13 @@ static int rdzv_src_cb(struct cxip_req *req, const union c_event *event)
 		req->rdzv_src.rc = cxi_tgt_event_rc(event);
 		return FI_SUCCESS;
 	case C_EVENT_UNLINK:
-		/* TODO cleanup rdzv source LEs. */
-		assert(0);
+		dlist_remove(&req->rdzv_src.list);
+		cxip_cq_req_free(req);
+		ofi_atomic_sub32(&txc->rdzv_src_lacs, 1 << req->rdzv_src.lac);
+
+		CXIP_LOG_DBG("RDZV source window unlinked (LAC: %u)\n",
+			     req->rdzv_src.lac);
+		return FI_SUCCESS;
 	case C_EVENT_GET:
 		mb.raw = event->tgt_long.match_bits;
 		get_req = cxip_rdzv_id_lookup(txc->ep_obj, mb.rdzv_id_lo);
@@ -2492,22 +2502,35 @@ static int rdzv_src_cb(struct cxip_req *req, const union c_event *event)
 	}
 }
 
-int cxip_txc_prep_rdzv_src(struct cxip_txc *txc, unsigned int lac)
+/*
+ * cxip_txc_prep_rdzv_src() - Prepare an LAC for use with the rendezvous
+ * protocol.
+ *
+ * Synchronously append an LE describing every address in the specified LAC.
+ * Each rendezvous Send uses this LE to access source buffer data.
+ */
+static int cxip_txc_prep_rdzv_src(struct cxip_txc *txc, unsigned int lac)
 {
 	int ret;
 	struct cxip_req *req;
 	union cxip_match_bits mb = {};
 	union cxip_match_bits ib = { .raw = ~0 };
+	uint32_t lac_mask = 1 << lac;
 
-	if (txc->rdzv_src_lacs & (1 << lac))
+	if (ofi_atomic_get32(&txc->rdzv_src_lacs) & lac_mask)
 		return FI_SUCCESS;
 
+	fastlock_acquire(&txc->lock);
+
 	req = cxip_cq_req_alloc(txc->send_cq, 1, txc);
-	if (!req)
-		return -FI_EAGAIN;
+	if (!req) {
+		ret = -FI_EAGAIN;
+		goto unlock;
+	}
 
 	req->cb = rdzv_src_cb;
 	req->rdzv_src.txc = txc;
+	req->rdzv_src.lac = lac;
 	req->rdzv_src.rc = 0;
 
 	mb.rdzv_lac = lac;
@@ -2518,8 +2541,10 @@ int cxip_txc_prep_rdzv_src(struct cxip_txc *txc, unsigned int lac)
 			      false, false, false, false, false, false, false,
 			      false, true, true, false, NULL,
 			      false, true, txc->rx_cmdq);
-	if (ret != FI_SUCCESS)
-		return -FI_EAGAIN;
+	if (ret != FI_SUCCESS) {
+		ret = -FI_EAGAIN;
+		goto req_free;
+	}
 
 	do {
 		sched_yield();
@@ -2527,11 +2552,52 @@ int cxip_txc_prep_rdzv_src(struct cxip_txc *txc, unsigned int lac)
 	} while (!req->rdzv_src.rc);
 
 	if (req->rdzv_src.rc == C_RC_OK) {
-		txc->rdzv_src_lacs |= (1 << lac);
+		ofi_atomic_add32(&txc->rdzv_src_lacs, lac_mask);
+		dlist_insert_tail(&req->rdzv_src.list, &txc->rdzv_src_reqs);
+
 		CXIP_LOG_DBG("RDZV source window linked (LAC: %u)\n", lac);
+	} else {
+		ret = -FI_EAGAIN;
+		goto req_free;
 	}
 
+	fastlock_release(&txc->lock);
+
+	return FI_SUCCESS;
+
+req_free:
+	cxip_cq_req_free(req);
+unlock:
+	fastlock_release(&txc->lock);
+
 	return ret;
+}
+
+/*
+ * cxip_txc_rdzv_src_fini() - Unlink rendezvous source LEs.
+ */
+int cxip_txc_rdzv_src_fini(struct cxip_txc *txc)
+{
+	struct cxip_req *req;
+	int ret;
+
+	dlist_foreach_container(&txc->rdzv_src_reqs, struct cxip_req, req,
+				     rdzv_src.list) {
+		ret = cxip_pte_unlink(txc->rdzv_pte, C_PTL_LIST_PRIORITY,
+				      req->req_id, txc->rx_cmdq);
+		if (ret) {
+			CXIP_LOG_ERROR("Failed to enqueue Unlink: %d\n", ret);
+			return ret;
+		}
+	}
+
+	/* Wait for unlink events */
+	do {
+		sched_yield();
+		cxip_cq_progress(txc->send_cq);
+	} while (ofi_atomic_get32(&txc->rdzv_src_lacs));
+
+	return FI_SUCCESS;
 }
 
 /*
