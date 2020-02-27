@@ -77,7 +77,7 @@ static int txc_msg_init(struct cxip_txc *txc)
 		cxip_cq_progress(txc->send_cq);
 	} while (txc->rdzv_pte->state != C_PTLTE_ENABLED);
 
-	ret = cxip_msg_zbp_init(txc);
+	ret = cxip_txc_zbp_init(txc);
 	if (ret) {
 		CXIP_LOG_ERROR("Failed to initialize ZBP: %d\n", ret);
 		goto free_rdzv_pte;
@@ -105,7 +105,7 @@ put_rx_cmdq:
  */
 static int txc_msg_fini(struct cxip_txc *txc)
 {
-	cxip_msg_zbp_fini(txc);
+	cxip_txc_zbp_fini(txc);
 	cxip_txc_rdzv_src_fini(txc);
 	cxip_pte_free(txc->rdzv_pte);
 	cxip_ep_cmdq_put(txc->ep_obj, txc->tx_id, false);

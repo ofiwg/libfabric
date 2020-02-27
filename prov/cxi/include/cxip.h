@@ -975,12 +975,11 @@ int cxip_ep_cmdq(struct cxip_ep_obj *ep_obj,
 void cxip_ep_cmdq_put(struct cxip_ep_obj *ep_obj,
 		      uint32_t ctx_id, bool transmit);
 
-int cxip_msg_oflow_init(struct cxip_rxc *rxc);
-void cxip_msg_oflow_fini(struct cxip_rxc *rxc);
-int cxip_msg_recv_cancel(struct cxip_req *req);
-
-int cxip_msg_zbp_init(struct cxip_txc *txc);
-int cxip_msg_zbp_fini(struct cxip_txc *txc);
+int cxip_recv_cancel(struct cxip_req *req);
+int cxip_rxc_oflow_init(struct cxip_rxc *rxc);
+void cxip_rxc_oflow_fini(struct cxip_rxc *rxc);
+int cxip_txc_zbp_init(struct cxip_txc *txc);
+int cxip_txc_zbp_fini(struct cxip_txc *txc);
 int cxip_txc_rdzv_src_fini(struct cxip_txc *txc);
 
 struct cxip_txc *cxip_txc_alloc(const struct fi_tx_attr *attr, void *context,

@@ -46,7 +46,7 @@ int cxip_cq_req_cancel(struct cxip_cq *cq, void *req_ctx, void *op_ctx,
 		    !req->recv.canceled &&
 		    !req->recv.parent &&
 		    (!match || (void *)req->context == op_ctx)) {
-			ret = cxip_msg_recv_cancel(req);
+			ret = cxip_recv_cancel(req);
 			break;
 		}
 	}

@@ -1339,9 +1339,9 @@ cxip_zbp_cb(struct cxip_req *req, const union c_event *event)
 }
 
 /*
- * cxip_msg_zbp_init() - Initialize zero-byte Put LE.
+ * cxip_txc_zbp_init() - Initialize zero-byte Put LE.
  */
-int cxip_msg_zbp_init(struct cxip_txc *txc)
+int cxip_txc_zbp_init(struct cxip_txc *txc)
 {
 	int ret;
 	struct cxip_req *req;
@@ -1398,9 +1398,9 @@ req_free:
 }
 
 /*
- * cxip_msg_zbp_fini() - Tear down zero-byte Put LE.
+ * cxip_txc_zbp_fini() - Tear down zero-byte Put LE.
  */
-int cxip_msg_zbp_fini(struct cxip_txc *txc)
+int cxip_txc_zbp_fini(struct cxip_txc *txc)
 {
 	int ret;
 
@@ -1423,11 +1423,11 @@ int cxip_msg_zbp_fini(struct cxip_txc *txc)
 }
 
 /*
- * cxip_msg_oflow_init() - Initialize overflow buffers used for messaging.
+ * cxip_rxc_oflow_init() - Initialize overflow buffers used for messaging.
  *
  * Must be called with the RX PtlTE disabled.
  */
-int cxip_msg_oflow_init(struct cxip_rxc *rxc)
+int cxip_rxc_oflow_init(struct cxip_rxc *rxc)
 {
 	int ret;
 
@@ -1456,11 +1456,11 @@ int cxip_msg_oflow_init(struct cxip_rxc *rxc)
 }
 
 /*
- * cxip_msg_oflow_fini() - Finalize overflow buffers used for messaging.
+ * cxip_rxc_oflow_fini() - Finalize overflow buffers used for messaging.
  *
  * Must be called with the RX PtlTE disabled.
  */
-void cxip_msg_oflow_fini(struct cxip_rxc *rxc)
+void cxip_rxc_oflow_fini(struct cxip_rxc *rxc)
 {
 	int ret;
 	struct cxip_ux_send *ux_send;
@@ -2042,7 +2042,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 	return FI_SUCCESS;
 }
 
-int cxip_msg_recv_cancel(struct cxip_req *req)
+int cxip_recv_cancel(struct cxip_req *req)
 {
 	int ret;
 	struct cxip_rxc *rxc = req->recv.rxc;
@@ -2608,16 +2608,14 @@ int cxip_txc_rdzv_src_fini(struct cxip_txc *txc)
  *
  * The eager (long) protocol works as follows:
  *
- * 1. The Initiator prepares an LE describing the source buffer.
- * 2. The Initiator performs a Put of the entire source buffer.
- * 3. An Ack event is generated indicating the Put completed. The Ack indicates
+ * 1. The Initiator performs a Put of the entire source buffer.
+ * 2. An Ack event is generated indicating the Put completed. The Ack indicates
  *    whether it matched in the Priority or Overflow list at the target.
- * 4a. If the Put matched in the Priority list, the entire payload was copied
+ * 3a. If the Put matched in the Priority list, the entire payload was copied
  *     directly to a receive buffer at the target. The operation is complete.
- *     The source buffer LE was unused.
- * 4b. If the Put matched in the Overflow list, the payload was truncated to
+ * 3b. If the Put matched in the Overflow list, the payload was truncated to
  *     zero. The Target receives events describing the Put attempt.
- * 5b. The Target performs a Get of the entire source buffer using the source
+ * 4b. The Target performs a Get of the entire source buffer using the source
  *     buffer LE.
  *
  * The rendezvous protocol works as follows:
@@ -2789,7 +2787,7 @@ err_req_free:
 err_unmap:
 	cxip_unmap(send_md);
 
-	return FI_EAGAIN;
+	return -FI_EAGAIN;
 }
 
 /*

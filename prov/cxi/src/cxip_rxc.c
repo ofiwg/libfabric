@@ -227,9 +227,9 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 			goto unlock;
 		}
 
-		ret = cxip_msg_oflow_init(rxc);
+		ret = cxip_rxc_oflow_init(rxc);
 		if (ret != FI_SUCCESS) {
-			CXIP_LOG_DBG("cxip_msg_oflow_init returned: %d\n",
+			CXIP_LOG_DBG("cxip_rxc_oflow_init returned: %d\n",
 				     ret);
 			goto msg_fini;
 		}
@@ -249,7 +249,7 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 	return FI_SUCCESS;
 
 oflow_fini:
-	cxip_msg_oflow_fini(rxc);
+	cxip_rxc_oflow_fini(rxc);
 msg_fini:
 	ret = rxc_msg_fini(rxc);
 	if (ret != FI_SUCCESS)
@@ -327,7 +327,7 @@ static void rxc_disable(struct cxip_rxc *rxc)
 		rxc_cleanup(rxc);
 
 		/* Clean up overflow buffers. */
-		cxip_msg_oflow_fini(rxc);
+		cxip_rxc_oflow_fini(rxc);
 
 		/* Free hardware resources. */
 		ret = rxc_msg_fini(rxc);
