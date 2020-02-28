@@ -90,49 +90,6 @@ static struct fi_ops rxr_domain_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-static int rxr_mr_close(fid_t fid)
-{
-	struct rxr_domain *rxr_domain;
-	struct efa_domain *efa_domain;
-	struct rxr_mr *rxr_mr;
-	int ret;
-
-	rxr_mr = container_of(fid, struct rxr_mr, mr_fid.fid);
-	rxr_domain = rxr_mr->domain;
-
-	efa_domain = container_of(rxr_domain->rdm_domain, struct efa_domain,
-			util_domain.domain_fid);
-	ret = ofi_mr_map_remove(&efa_domain->util_domain.mr_map,
-				rxr_mr->mr_fid.key);
-	if (ret && ret != -FI_ENOKEY)
-		FI_WARN(&rxr_prov, FI_LOG_MR,
-			"Unable to remove MR entry from util map (%s)\n",
-			fi_strerror(-ret));
-
-	ret = fi_close(&rxr_mr->msg_mr->fid);
-	if (ret)
-		FI_WARN(&rxr_prov, FI_LOG_MR,
-			"Unable to close MR\n");
-
-	if (rxr_env.enable_shm_transfer && rxr_mr->shm_msg_mr
-	    && rxr_mr->peer.iface == FI_HMEM_SYSTEM) {
-		ret = fi_close(&rxr_mr->shm_msg_mr->fid);
-		if (ret)
-			FI_WARN(&rxr_prov, FI_LOG_MR,
-				"Unable to close shm MR\n");
-	}
-	free(rxr_mr);
-	return ret;
-}
-
-static struct fi_ops rxr_mr_ops = {
-	.size = sizeof(struct fi_ops),
-	.close = rxr_mr_close,
-	.bind = fi_no_bind,
-	.control = fi_no_control,
-	.ops_open = fi_no_ops_open,
-};
-
 /*
  * The mr key generated in lower EFA registration will be used in SHM
  * registration and mr_map in an unified way
@@ -144,7 +101,7 @@ int rxr_mr_regattr(struct fid *domain_fid, const struct fi_mr_attr *attr,
 	struct efa_domain *efa_domain;
 	struct fi_mr_attr *core_attr;
 	struct fi_mr_attr *shm_attr;
-	struct rxr_mr *rxr_mr;
+	struct efa_mr *efa_mr;
 	uint64_t user_attr_access, core_attr_access;
 	int ret;
 	bool key_exists;
@@ -154,11 +111,7 @@ int rxr_mr_regattr(struct fid *domain_fid, const struct fi_mr_attr *attr,
 	efa_domain = container_of(rxr_domain->rdm_domain, struct efa_domain,
 				  util_domain.domain_fid);
 
-	rxr_mr = calloc(1, sizeof(*rxr_mr));
-	if (!rxr_mr)
-		return -FI_ENOMEM;
-
-	/* recorde the memory access permission requested by user */
+	/* record the memory access permission requested by user */
 	user_attr_access = attr->access;
 	shm_attr = (struct fi_mr_attr *)attr;
 
@@ -168,32 +121,22 @@ int rxr_mr_regattr(struct fid *domain_fid, const struct fi_mr_attr *attr,
 	core_attr->access = core_attr_access;
 
 	ret = fi_mr_regattr(rxr_domain->rdm_domain, core_attr, flags,
-			    &rxr_mr->msg_mr);
+			    mr);
 	if (ret) {
 		FI_WARN(&rxr_prov, FI_LOG_MR,
 			"Unable to register MR buf (%s): %p len: %zu\n",
 			fi_strerror(-ret), attr->mr_iov->iov_base,
 			attr->mr_iov->iov_len);
-		goto err;
+		goto close_efa_mr;
 	}
 
-	rxr_mr->mr_fid.fid.fclass = FI_CLASS_MR;
-	rxr_mr->mr_fid.fid.context = attr->context;
-	rxr_mr->mr_fid.fid.ops = &rxr_mr_ops;
-	rxr_mr->mr_fid.mem_desc = rxr_mr->msg_mr;
-	rxr_mr->mr_fid.key = fi_mr_key(rxr_mr->msg_mr);
-	rxr_mr->domain = rxr_domain;
-	rxr_mr->peer.iface = attr->iface;
-	if (attr->iface == FI_HMEM_CUDA)
-		rxr_mr->peer.device.cuda = attr->device.cuda;
-	*mr = &rxr_mr->mr_fid;
-
-	assert(rxr_mr->mr_fid.key != FI_KEY_NOTAVAIL);
+	efa_mr = container_of(*mr, struct efa_mr, mr_fid);
+	assert(efa_mr->mr_fid.key != FI_KEY_NOTAVAIL);
 	key_exists = false;
-	core_attr->requested_key = rxr_mr->mr_fid.key;
+	core_attr->requested_key = efa_mr->mr_fid.key;
 	core_attr->access = core_attr_access;
 	ret = ofi_mr_map_insert(&efa_domain->util_domain.mr_map, core_attr,
-				&rxr_mr->mr_fid.key, mr);
+				&efa_mr->mr_fid.key, mr);
 	if (ret) {
 		if (efa_mr_cache_enable && ret == -FI_ENOKEY) {
 			key_exists = true;
@@ -202,7 +145,7 @@ int rxr_mr_regattr(struct fid *domain_fid, const struct fi_mr_attr *attr,
 				"Unable to add MR to map buf (%s): %p len: %zu\n",
 				fi_strerror(-ret), attr->mr_iov->iov_base,
 				attr->mr_iov->iov_len);
-			goto err;
+			goto close_efa_mr;
 		}
 	}
 
@@ -211,24 +154,24 @@ int rxr_mr_regattr(struct fid *domain_fid, const struct fi_mr_attr *attr,
 	    && !key_exists
 	    && attr->iface == FI_HMEM_SYSTEM) {
 		shm_attr->access = user_attr_access;
-		shm_attr->requested_key = rxr_mr->mr_fid.key;
+		shm_attr->requested_key = efa_mr->mr_fid.key;
 		ret = fi_mr_regattr(rxr_domain->shm_domain, shm_attr, flags,
-				    &rxr_mr->shm_msg_mr);
+				    &efa_mr->shm_mr);
 		if (ret) {
 			FI_WARN(&rxr_prov, FI_LOG_MR,
 				"Unable to register shm MR buf (%s): %p len: %zu\n",
 				fi_strerror(-ret), attr->mr_iov->iov_base,
 				attr->mr_iov->iov_len);
-			fi_close(&rxr_mr->msg_mr->fid);
+			fi_close(&efa_mr->mr_fid.fid);
 			ofi_mr_map_remove(&efa_domain->util_domain.mr_map,
-					  rxr_mr->mr_fid.key);
-			goto err;
+					  efa_mr->mr_fid.key);
+			goto close_efa_mr;
 		}
 	}
 
 	return 0;
-err:
-	free(rxr_mr);
+close_efa_mr:
+	free(efa_mr);
 	return ret;
 }
 

@@ -196,12 +196,26 @@ struct efa_qp {
 	uint32_t	qp_num;
 };
 
-struct efa_mem_desc {
+/*
+ * Descriptor returned for FI_HMEM peer memory registrations
+ */
+struct efa_mr_peer {
+	enum fi_hmem_iface      iface;
+	union {
+		uint64_t        reserved;
+		int             cuda;
+	} device;
+};
+
+struct efa_mr {
 	struct fid_mr		mr_fid;
 	struct ibv_mr		*mr;
 	struct efa_domain	*domain;
 	/* Used only in MR cache */
 	struct ofi_mr_entry	*entry;
+	/* Used only in rdm */
+	struct fid_mr		*shm_mr;
+	struct efa_mr_peer	peer;
 };
 
 struct efa_ep {

@@ -37,10 +37,11 @@
 static int efa_mr_reg(struct fid *fid, const void *buf, size_t len,
 		      uint64_t access, uint64_t offset, uint64_t requested_key,
 		      uint64_t flags, struct fid_mr **mr_fid, void *context);
+static int efa_mr_release(struct efa_mr *mr);
 
 static int efa_mr_cache_close(fid_t fid)
 {
-	struct efa_mem_desc *mr = container_of(fid, struct efa_mem_desc,
+	struct efa_mr *mr = container_of(fid, struct efa_mr,
 					       mr_fid.fid);
 
 	ofi_mr_cache_delete(&mr->domain->cache, mr->entry);
@@ -61,7 +62,7 @@ int efa_mr_cache_entry_reg(struct ofi_mr_cache *cache,
 {
 	int fi_ibv_access = IBV_ACCESS_LOCAL_WRITE;
 
-	struct efa_mem_desc *md = (struct efa_mem_desc *)entry->data;
+	struct efa_mr *md = (struct efa_mr *)entry->data;
 
 	md->domain = container_of(cache->domain, struct efa_domain,
 				  util_domain);
@@ -88,11 +89,12 @@ int efa_mr_cache_entry_reg(struct ofi_mr_cache *cache,
 void efa_mr_cache_entry_dereg(struct ofi_mr_cache *cache,
 			      struct ofi_mr_entry *entry)
 {
-	struct efa_mem_desc *md = (struct efa_mem_desc *)entry->data;
+	struct efa_mr *md = (struct efa_mr *)entry->data;
+	int ret;
+
 	if (!md->mr)
 		return;
-
-	int ret = -ibv_dereg_mr(md->mr);
+	ret = efa_mr_release(md);
 	if (ret)
 		EFA_WARN(FI_LOG_MR, "Unable to dereg mr: %d\n", ret);
 }
@@ -103,7 +105,7 @@ static int efa_mr_cache_reg(struct fid *fid, const void *buf, size_t len,
 			    struct fid_mr **mr_fid, void *context)
 {
 	struct efa_domain *domain;
-	struct efa_mem_desc *md;
+	struct efa_mr *md;
 	struct ofi_mr_entry *entry;
 	int ret;
 
@@ -141,7 +143,7 @@ static int efa_mr_cache_reg(struct fid *fid, const void *buf, size_t len,
 	if (OFI_UNLIKELY(ret))
 		return ret;
 
-	md = (struct efa_mem_desc *)entry->data;
+	md = (struct efa_mr *)entry->data;
 	md->entry = entry;
 
 	*mr_fid = &md->mr_fid;
@@ -178,19 +180,54 @@ struct fi_ops_mr efa_domain_mr_cache_ops = {
 	.regattr = efa_mr_cache_regattr,
 };
 
-static int efa_mr_close(fid_t fid)
+static int efa_mr_release(struct efa_mr *mr)
 {
-	struct efa_mem_desc *mr;
-	int ret;
+	struct efa_domain *efa_domain;
+	int ret = 0;
+	int err;
 
-	mr = container_of(fid, struct efa_mem_desc, mr_fid.fid);
-	ret = -ibv_dereg_mr(mr->mr);
-	if (!ret)
-		free(mr);
+	efa_domain = mr->domain;
+	err = -ibv_dereg_mr(mr->mr);
+	if (err) {
+		FI_WARN(&rxr_prov, FI_LOG_MR,
+			"Unable to deregister memory registration\n");
+		ret = err;
+	}
+	err = ofi_mr_map_remove(&efa_domain->util_domain.mr_map,
+				mr->mr_fid.key);
+	if (err && err != -FI_ENOKEY) {
+		FI_WARN(&rxr_prov, FI_LOG_MR,
+			"Unable to remove MR entry from util map (%s)\n",
+			fi_strerror(-ret));
+		ret = err;
+	}
+	if (rxr_env.enable_shm_transfer && mr->shm_mr
+		&& mr->peer.iface == FI_HMEM_SYSTEM) {
+		err = fi_close(&mr->shm_mr->fid);
+		if (err) {
+			FI_WARN(&rxr_prov, FI_LOG_MR,
+				"Unable to close shm MR\n");
+			ret = err;
+		}
+	}
 	return ret;
 }
 
-static struct fi_ops efa_mr_ops = {
+static int efa_mr_close(fid_t fid)
+
+{
+	struct efa_mr *mr;
+	int ret;
+
+	mr = container_of(fid, struct efa_mr, mr_fid.fid);
+	ret = efa_mr_release(mr);
+	if (ret)
+		EFA_WARN(FI_LOG_MR, "Unable to close MR\n");
+	free(mr);
+	return ret;
+}
+
+struct fi_ops efa_mr_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = efa_mr_close,
 	.bind = fi_no_bind,
@@ -203,7 +240,7 @@ static int efa_mr_reg(struct fid *fid, const void *buf, size_t len,
 		      uint64_t flags, struct fid_mr **mr_fid, void *context)
 {
 	struct fid_domain *domain_fid;
-	struct efa_mem_desc *md = NULL;
+	struct efa_mr *md = NULL;
 	int fi_ibv_access = 0;
 	int ret;
 
@@ -262,6 +299,9 @@ static int efa_mr_reg(struct fid *fid, const void *buf, size_t len,
 
 	md->mr_fid.mem_desc = md->mr;
 	md->mr_fid.key = md->mr->rkey;
+	md->peer.iface = attr->iface;
+	if (attr->iface == FI_HMEM_CUDA)
+		md->peer.device.cuda = attr->device.cuda;
 	*mr_fid = &md->mr_fid;
 	return 0;
 

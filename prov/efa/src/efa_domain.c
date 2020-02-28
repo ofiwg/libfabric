@@ -202,7 +202,7 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		cache_params.max_cnt = efa_mr_max_cached_count;
 		cache_params.max_size = efa_mr_max_cached_size;
 		cache_params.merge_regions = efa_mr_cache_merge_regions;
-		domain->cache.entry_data_size = sizeof(struct efa_mem_desc);
+		domain->cache.entry_data_size = sizeof(struct efa_mr);
 		domain->cache.add_region = efa_mr_cache_entry_reg;
 		domain->cache.delete_region = efa_mr_cache_entry_dereg;
 		ret = ofi_mr_cache_init(&domain->util_domain, uffd_monitor,
