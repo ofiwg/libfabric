@@ -462,7 +462,6 @@ struct rxr_tx_entry {
 struct rxr_domain {
 	struct util_domain util_domain;
 	struct fid_domain *rdm_domain;
-	struct fid_domain *shm_domain;
 
 	size_t addrlen;
 	uint8_t mr_local;

@@ -1595,6 +1595,7 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 {
 	struct fi_info *rdm_info;
 	struct rxr_domain *rxr_domain;
+	struct efa_domain *efa_domain;
 	struct rxr_ep *rxr_ep;
 	struct fi_cq_attr cq_attr;
 	int ret, retv;
@@ -1627,10 +1628,12 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		goto err_free_rdm_info;
 
+	efa_domain = container_of(rxr_domain->rdm_domain, struct efa_domain,
+				  util_domain.domain_fid);
 	/* Open shm provider's endpoint */
 	if (rxr_env.enable_shm_transfer) {
 		assert(!strcmp(shm_info->fabric_attr->name, "shm"));
-		ret = fi_endpoint(rxr_domain->shm_domain, shm_info,
+		ret = fi_endpoint(efa_domain->shm_domain, shm_info,
 				  &rxr_ep->shm_ep, rxr_ep);
 		if (ret)
 			goto err_close_core_ep;
@@ -1700,7 +1703,7 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	/* Bind ep with shm provider's cq */
 	if (rxr_env.enable_shm_transfer) {
-		ret = fi_cq_open(rxr_domain->shm_domain, &cq_attr,
+		ret = fi_cq_open(efa_domain->shm_domain, &cq_attr,
 				 &rxr_ep->shm_cq, rxr_ep);
 		if (ret)
 			goto err_close_core_cq;

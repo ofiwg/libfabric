@@ -138,6 +138,7 @@ struct efa_conn {
 
 struct efa_domain {
 	struct util_domain	util_domain;
+	struct fid_domain	*shm_domain;
 	struct efa_context	*ctx;
 	struct ibv_pd		*ibv_pd;
 	struct fi_info		*info;

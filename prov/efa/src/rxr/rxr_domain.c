@@ -60,9 +60,12 @@ static int rxr_domain_close(fid_t fid)
 {
 	int ret;
 	struct rxr_domain *rxr_domain;
+	struct efa_domain *efa_domain;
 
 	rxr_domain = container_of(fid, struct rxr_domain,
 				  util_domain.domain_fid.fid);
+	efa_domain = container_of(rxr_domain->rdm_domain, struct efa_domain,
+				  util_domain.domain_fid);
 
 	ret = fi_close(&rxr_domain->rdm_domain->fid);
 	if (ret)
@@ -73,7 +76,7 @@ static int rxr_domain_close(fid_t fid)
 		return ret;
 
 	if (rxr_env.enable_shm_transfer) {
-		ret = fi_close(&rxr_domain->shm_domain->fid);
+		ret = fi_close(&efa_domain->shm_domain->fid);
 		if (ret)
 			return ret;
 	}
@@ -155,7 +158,7 @@ int rxr_mr_regattr(struct fid *domain_fid, const struct fi_mr_attr *attr,
 	    && attr->iface == FI_HMEM_SYSTEM) {
 		shm_attr->access = user_attr_access;
 		shm_attr->requested_key = efa_mr->mr_fid.key;
-		ret = fi_mr_regattr(rxr_domain->shm_domain, shm_attr, flags,
+		ret = fi_mr_regattr(efa_domain->shm_domain, shm_attr, flags,
 				    &efa_mr->shm_mr);
 		if (ret) {
 			FI_WARN(&rxr_prov, FI_LOG_MR,
@@ -218,6 +221,7 @@ int rxr_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	int ret, retv;
 	struct fi_info *rdm_info;
 	struct rxr_domain *rxr_domain;
+	struct efa_domain *efa_domain;
 	struct rxr_fabric *rxr_fabric;
 
 	rxr_fabric = container_of(fabric, struct rxr_fabric,
@@ -255,11 +259,14 @@ int rxr_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	if (ret)
 		goto err_free_core_info;
 
+	efa_domain = container_of(rxr_domain->rdm_domain, struct efa_domain,
+				  util_domain.domain_fid);
+
 	/* Open shm provider's access domain */
 	if (rxr_env.enable_shm_transfer) {
 		assert(!strcmp(shm_info->fabric_attr->name, "shm"));
 		ret = fi_domain(rxr_fabric->shm_fabric, shm_info,
-				&rxr_domain->shm_domain, context);
+				&efa_domain->shm_domain, context);
 		if (ret)
 			goto err_close_core_domain;
 	}
@@ -294,7 +301,7 @@ int rxr_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 err_close_shm_domain:
 	if (rxr_env.enable_shm_transfer) {
-		retv = fi_close(&rxr_domain->shm_domain->fid);
+		retv = fi_close(&efa_domain->shm_domain->fid);
 		if (retv)
 			FI_WARN(&rxr_prov, FI_LOG_DOMAIN,
 				"Unable to close shm domain: %s\n", fi_strerror(-retv));
