@@ -43,27 +43,45 @@
  * Utility constants and funnctions shared by all REQ packe
  * types.
  */
-static const size_t REQ_HDR_SIZE_LIST[] = {
+struct rxr_req_inf {
+	uint64_t protover;
+	uint64_t base_hdr_size;
+	uint64_t ex_feature_flag;
+};
+
+/*
+ * starting from protocol version 4, each REQ packet type will be assigned a
+ * version number, and once assigned, the version number will not change.
+ *
+ * Baseline features will always be version 4 features, baseline and
+ * not have a ex_feature_flag.
+ *
+ * Each extra feature will be assign a version and an ex_feature_flag.
+ * Each extra feature will correspond to 1 or more REQ packet types.
+ */
+static const
+struct rxr_req_inf REQ_INF_LIST[] = {
 	/* rtm header */
-	[RXR_EAGER_MSGRTM_PKT] = sizeof(struct rxr_eager_msgrtm_hdr),
-	[RXR_EAGER_TAGRTM_PKT] = sizeof(struct rxr_eager_tagrtm_hdr),
-	[RXR_MEDIUM_MSGRTM_PKT] = sizeof(struct rxr_medium_msgrtm_hdr),
-	[RXR_MEDIUM_TAGRTM_PKT] = sizeof(struct rxr_medium_tagrtm_hdr),
-	[RXR_LONG_MSGRTM_PKT] = sizeof(struct rxr_long_msgrtm_hdr),
-	[RXR_LONG_TAGRTM_PKT] = sizeof(struct rxr_long_tagrtm_hdr),
-	[RXR_READ_MSGRTM_PKT] = sizeof(struct rxr_read_msgrtm_hdr),
-	[RXR_READ_TAGRTM_PKT] = sizeof(struct rxr_read_tagrtm_hdr),
+	[RXR_EAGER_MSGRTM_PKT] = {4, sizeof(struct rxr_eager_msgrtm_hdr), 0},
+	[RXR_EAGER_TAGRTM_PKT] = {4, sizeof(struct rxr_eager_tagrtm_hdr), 0},
+	[RXR_MEDIUM_MSGRTM_PKT] = {4, sizeof(struct rxr_medium_msgrtm_hdr), 0},
+	[RXR_MEDIUM_TAGRTM_PKT] = {4, sizeof(struct rxr_medium_tagrtm_hdr), 0},
+	[RXR_LONG_MSGRTM_PKT] = {4, sizeof(struct rxr_long_msgrtm_hdr), 0},
+	[RXR_LONG_TAGRTM_PKT] = {4, sizeof(struct rxr_long_tagrtm_hdr), 0},
+	[RXR_READ_MSGRTM_PKT] = {4, sizeof(struct rxr_read_msgrtm_hdr), RXR_REQ_FEATURE_RDMA_READ},
+	[RXR_READ_TAGRTM_PKT] = {4, sizeof(struct rxr_read_tagrtm_hdr), RXR_REQ_FEATURE_RDMA_READ},
 	/* rtw header */
-	[RXR_EAGER_RTW_PKT] = sizeof(struct rxr_eager_rtw_hdr),
-	[RXR_LONG_RTW_PKT] = sizeof(struct rxr_long_rtw_hdr),
-	[RXR_READ_RTW_PKT] = sizeof(struct rxr_read_rtw_hdr),
+	[RXR_EAGER_RTW_PKT] = {4, sizeof(struct rxr_eager_rtw_hdr), 0},
+	[RXR_LONG_RTW_PKT] = {4, sizeof(struct rxr_long_rtw_hdr), 0},
+	[RXR_READ_RTW_PKT] = {4, sizeof(struct rxr_read_rtw_hdr), RXR_REQ_FEATURE_RDMA_READ},
 	/* rtr header */
-	[RXR_SHORT_RTR_PKT] = sizeof(struct rxr_rtr_hdr),
-	[RXR_LONG_RTR_PKT] = sizeof(struct rxr_rtr_hdr),
+	[RXR_SHORT_RTR_PKT] = {4, sizeof(struct rxr_rtr_hdr), 0},
+	[RXR_LONG_RTR_PKT] = {4, sizeof(struct rxr_rtr_hdr), 0},
+	[RXR_READ_RTR_PKT] = {4, sizeof(struct rxr_base_hdr), RXR_REQ_FEATURE_RDMA_READ},
 	/* rta header */
-	[RXR_WRITE_RTA_PKT] = sizeof(struct rxr_rta_hdr),
-	[RXR_FETCH_RTA_PKT] = sizeof(struct rxr_rta_hdr),
-	[RXR_COMPARE_RTA_PKT] = sizeof(struct rxr_rta_hdr)
+	[RXR_WRITE_RTA_PKT] = {4, sizeof(struct rxr_rta_hdr), 0},
+	[RXR_FETCH_RTA_PKT] = {4, sizeof(struct rxr_rta_hdr), 0},
+	[RXR_COMPARE_RTA_PKT] = {4, sizeof(struct rxr_rta_hdr), 0},
 };
 
 size_t rxr_pkt_req_data_size(struct rxr_pkt_entry *pkt_entry)
@@ -84,12 +102,12 @@ void rxr_pkt_init_req_hdr(struct rxr_ep *ep,
 	/* init the base header */
 	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
 	base_hdr->type = pkt_type;
-	base_hdr->version = RXR_PROTOCOL_VERSION;
+	base_hdr->version = REQ_INF_LIST[pkt_type].protover;
 	base_hdr->flags = 0;
 
 	peer = rxr_ep_get_peer(ep, tx_entry->addr);
 	assert(peer);
-	if (OFI_UNLIKELY(peer->state != RXR_PEER_ACKED)) {
+	if (OFI_UNLIKELY(!(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED))) {
 		/*
 		 * This is the first communication with this peer on this
 		 * endpoint, so send the core's address for this EP in the REQ
@@ -133,7 +151,7 @@ size_t rxr_pkt_req_base_hdr_size(struct rxr_pkt_entry *pkt_entry)
 	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
 	assert(base_hdr->type >= RXR_REQ_PKT_BEGIN);
 
-	hdr_size = REQ_HDR_SIZE_LIST[base_hdr->type];
+	hdr_size = REQ_INF_LIST[base_hdr->type].base_hdr_size;
 	if (base_hdr->type == RXR_EAGER_RTW_PKT ||
 	    base_hdr->type == RXR_LONG_RTW_PKT ||
 	    base_hdr->type == RXR_READ_RTW_PKT)
@@ -186,7 +204,7 @@ size_t rxr_pkt_req_max_data_size(struct rxr_ep *ep, fi_addr_t addr, int pkt_type
 	if (rxr_env.enable_shm_transfer && peer->is_local)
 		return rxr_env.shm_max_medium_size;
 
-	int max_hdr_size = REQ_HDR_SIZE_LIST[pkt_type]
+	int max_hdr_size = REQ_INF_LIST[pkt_type].base_hdr_size
 		+ sizeof(struct rxr_req_opt_raw_addr_hdr)
 		+ sizeof(struct rxr_req_opt_cq_data_hdr);
 
@@ -816,12 +834,6 @@ void rxr_pkt_handle_rtm_rta_recv(struct rxr_ep *ep,
 	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
 	assert(base_hdr->type >= RXR_BASELINE_REQ_PKT_BEGIN);
 
-	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
-	assert(peer);
-
-	if (ep->core_caps & FI_SOURCE)
-		rxr_pkt_post_connack(ep, peer, pkt_entry->addr);
-
 	if (base_hdr->type == RXR_MEDIUM_MSGRTM_PKT || base_hdr->type == RXR_MEDIUM_TAGRTM_PKT) {
 		struct rxr_rx_entry *rx_entry;
 		struct rxr_pkt_entry *unexp_pkt_entry;
@@ -841,8 +853,10 @@ void rxr_pkt_handle_rtm_rta_recv(struct rxr_ep *ep,
 	}
 
 	need_ordering = false;
+	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+	assert(peer);
 	if (!peer->is_local) {
-		/* 
+		/*
  		 * only need to reorder msg for efa_ep
 		 */
 		base_hdr = (struct rxr_base_hdr *)pkt_entry->pkt;
@@ -1076,10 +1090,6 @@ void rxr_pkt_handle_eager_rtw_recv(struct rxr_ep *ep,
 	size_t data_size;
 	ssize_t err, bytes_left;
 
-	if (ep->core_caps & FI_SOURCE)
-		rxr_pkt_post_connack(ep, rxr_ep_get_peer(ep, pkt_entry->addr),
-				     pkt_entry->addr);
-
 	rx_entry = rxr_pkt_alloc_rtw_rx_entry(ep, pkt_entry);
 	if (!rx_entry) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
@@ -1131,10 +1141,6 @@ void rxr_pkt_handle_long_rtw_recv(struct rxr_ep *ep,
 	char *data;
 	size_t data_size;
 	ssize_t err, bytes_left;
-
-	if (ep->core_caps & FI_SOURCE)
-		rxr_pkt_post_connack(ep, rxr_ep_get_peer(ep, pkt_entry->addr),
-				     pkt_entry->addr);
 
 	rx_entry = rxr_pkt_alloc_rtw_rx_entry(ep, pkt_entry);
 	if (!rx_entry) {
@@ -1196,10 +1202,6 @@ void rxr_pkt_handle_read_rtw_recv(struct rxr_ep *ep,
 	struct rxr_read_rtw_hdr *rtw_hdr;
 	struct fi_rma_iov *read_iov;
 	ssize_t err;
-
-	if (ep->core_caps & FI_SOURCE)
-		rxr_pkt_post_connack(ep, rxr_ep_get_peer(ep, pkt_entry->addr),
-				     pkt_entry->addr);
 
 	rx_entry = rxr_pkt_alloc_rtw_rx_entry(ep, pkt_entry);
 	if (!rx_entry) {
@@ -1324,10 +1326,6 @@ void rxr_pkt_handle_rtr_recv(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 	struct rxr_tx_entry *tx_entry;
 	ssize_t err;
 	struct fi_msg msg = {0};
-
-	if (ep->core_caps & FI_SOURCE)
-		rxr_pkt_post_connack(ep, rxr_ep_get_peer(ep, pkt_entry->addr),
-				     pkt_entry->addr);
 
 	msg.addr = pkt_entry->addr;
 	rx_entry = rxr_ep_get_rx_entry(ep, &msg, 0, ~0, ofi_op_read_rsp, 0);

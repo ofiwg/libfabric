@@ -112,8 +112,6 @@ ssize_t rxr_atomic_generic_efa(struct rxr_ep *rxr_ep,
 	}
 
 	peer = rxr_ep_get_peer(rxr_ep, msg->addr);
-	if (!peer->rx_init)
-		rxr_ep_peer_init(rxr_ep, peer);
 
 	tx_entry = rxr_atomic_alloc_tx_entry(rxr_ep, msg, atomic_ex, op, flags);
 	if (OFI_UNLIKELY(!tx_entry)) {

@@ -68,7 +68,16 @@
 
 #define RXR_MAJOR_VERSION	(2)
 #define RXR_MINOR_VERSION	(0)
-#define RXR_PROTOCOL_VERSION	(4)
+
+/*
+ * EFA support interoperability between protocol version 4 and above,
+ * and version 4 is considered the base version.
+ */
+#define RXR_BASE_PROTOCOL_VERSION	(4)
+#define RXR_CUR_PROTOCOL_VERSION	(4)
+#define RXR_NUM_PROTOCOL_VERSION	(RXR_CUR_PROTOCOL_VERSION - RXR_BASE_PROTOCOL_VERSION + 1)
+#define RXR_MAX_PROTOCOL_VERSION	(100)
+
 #define RXR_FI_VERSION		OFI_VERSION_LATEST
 
 #define RXR_IOV_LIMIT		(4)
@@ -253,16 +262,13 @@ enum rxr_rx_comm_type {
 	RXR_RX_WAIT_ATOMRSP_SENT, /* rx_entry wait for atomrsp packet sent completion */
 };
 
-enum rxr_peer_state {
-	RXR_PEER_FREE = 0,	/* rxr_peer free state */
-	RXR_PEER_CONNREQ,	/* REQ with endpoint address sent to peer */
-	RXR_PEER_ACKED,		/* RXR_CONNACK_PKT received from peer */
-};
-
 /* peer is in backoff, not allowed to send */
 #define RXR_PEER_IN_BACKOFF (1ULL << 0)
 /* peer backoff was increased during this loop of the progress engine */
 #define RXR_PEER_BACKED_OFF (1ULL << 1)
+#define RXR_PEER_REQ_SENT BIT_ULL(0)
+#define RXR_PEER_HANDSHAKE_SENT BIT_ULL(1)
+#define RXR_PEER_HANDSHAKE_RECEIVED BIT_ULL(2)
 
 struct rxr_fabric {
 	struct util_fabric util_fabric;
@@ -273,6 +279,8 @@ struct rxr_fabric {
 #endif
 };
 
+#define RXR_MAX_NUM_PROTOCOLS (RXR_MAX_PROTOCOL_VERSION - RXR_BASE_PROTOCOL_VERSION + 1)
+
 struct rxr_peer {
 	bool tx_init;			/* tracks initialization of tx state */
 	bool rx_init;			/* tracks initialization of rx state */
@@ -280,7 +288,9 @@ struct rxr_peer {
 	fi_addr_t shm_fiaddr;		/* fi_addr_t addr from shm provider */
 	struct rxr_robuf *robuf;	/* tracks expected msg_id on rx */
 	uint32_t next_msg_id;		/* sender's view of msg_id */
-	enum rxr_peer_state state;	/* state of CM protocol with peer */
+	uint32_t flags;
+	uint32_t maxproto;		/* maximum supported protocol version by this peer */
+	uint64_t features[RXR_MAX_NUM_PROTOCOLS]; /* the feature flag for each version */
 	unsigned int rnr_state;		/* tracks RNR backoff for peer */
 	size_t tx_pending;		/* tracks pending tx ops to this peer */
 	uint16_t tx_credits;		/* available send credits */
@@ -292,6 +302,17 @@ struct rxr_peer {
 	struct dlist_entry rnr_entry;	/* linked to rxr_ep peer_backoff_list */
 	struct dlist_entry entry;	/* linked to rxr_ep peer_list */
 };
+
+static inline
+bool rxr_peer_support_rdma_read(struct rxr_peer *peer)
+{
+	/* RDMA READ is an extra feature defined in version 4 (the base version).
+	 * Because it is an extra feature, an EP will assume the peer does not support
+	 * it before a handshake packet was received.
+	 */
+	return (peer->flags & RXR_PEER_HANDSHAKE_RECEIVED) &&
+	       (peer->features[0] & RXR_REQ_FEATURE_RDMA_READ);
+}
 
 struct rxr_queued_ctrl_info {
 	int type;
@@ -489,6 +510,9 @@ struct rxr_ep {
 	uint8_t core_addr[RXR_MAX_NAME_LENGTH];
 	size_t core_addrlen;
 
+	/* per-version feature flag */
+	uint64_t features[RXR_NUM_PROTOCOL_VERSION];
+
 	/* per-peer information */
 	struct rxr_peer *peer;
 
@@ -655,9 +679,10 @@ static inline struct rxr_peer *rxr_ep_get_peer(struct rxr_ep *ep,
 	return &ep->peer[addr];
 }
 
-static inline void rxr_ep_peer_init(struct rxr_ep *ep, struct rxr_peer *peer)
+static inline void rxr_ep_peer_init_rx(struct rxr_ep *ep, struct rxr_peer *peer)
 {
 	assert(!peer->rx_init);
+
 	peer->robuf = freestack_pop(ep->robuf_fs);
 	peer->robuf = ofi_recvwin_buf_alloc(peer->robuf,
 					    rxr_env.recvwin_size);
@@ -665,15 +690,13 @@ static inline void rxr_ep_peer_init(struct rxr_ep *ep, struct rxr_peer *peer)
 	dlist_insert_tail(&peer->entry, &ep->peer_list);
 	peer->rx_credits = rxr_env.rx_window_size;
 	peer->rx_init = 1;
+}
 
-	/*
-	 * If the endpoint has never sent a message to this peer thus far,
-	 * initialize tx state as well.
-	 */
-	if (!peer->tx_init) {
-		peer->tx_credits = rxr_env.tx_max_credits;
-		peer->tx_init = 1;
-	}
+static inline void rxr_ep_peer_init_tx(struct rxr_peer *peer)
+{
+	assert(!peer->tx_init);
+	peer->tx_credits = rxr_env.tx_max_credits;
+	peer->tx_init = 1;
 }
 
 struct rxr_rx_entry *rxr_ep_get_rx_entry(struct rxr_ep *ep,
