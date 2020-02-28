@@ -45,13 +45,13 @@
 int rxr_rma_verified_copy_iov(struct rxr_ep *ep, struct fi_rma_iov *rma,
 			      size_t count, uint32_t flags, struct iovec *iov)
 {
-	struct util_domain *util_domain;
+	struct efa_ep *efa_ep;
 	int i, ret;
 
-	util_domain = &rxr_ep_domain(ep)->util_domain;
+	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
 
 	for (i = 0; i < count; i++) {
-		ret = ofi_mr_verify(&util_domain->mr_map,
+		ret = ofi_mr_verify(&efa_ep->domain->util_domain.mr_map,
 				    rma[i].len,
 				    (uintptr_t *)(&rma[i].addr),
 				    rma[i].key,

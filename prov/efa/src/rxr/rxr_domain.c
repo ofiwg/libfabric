@@ -93,13 +93,16 @@ static struct fi_ops rxr_domain_fi_ops = {
 static int rxr_mr_close(fid_t fid)
 {
 	struct rxr_domain *rxr_domain;
+	struct efa_domain *efa_domain;
 	struct rxr_mr *rxr_mr;
 	int ret;
 
 	rxr_mr = container_of(fid, struct rxr_mr, mr_fid.fid);
 	rxr_domain = rxr_mr->domain;
 
-	ret = ofi_mr_map_remove(&rxr_domain->util_domain.mr_map,
+	efa_domain = container_of(rxr_domain->rdm_domain, struct efa_domain,
+			util_domain.domain_fid);
+	ret = ofi_mr_map_remove(&efa_domain->util_domain.mr_map,
 				rxr_mr->mr_fid.key);
 	if (ret && ret != -FI_ENOKEY)
 		FI_WARN(&rxr_prov, FI_LOG_MR,
@@ -138,6 +141,7 @@ int rxr_mr_regattr(struct fid *domain_fid, const struct fi_mr_attr *attr,
 		   uint64_t flags, struct fid_mr **mr)
 {
 	struct rxr_domain *rxr_domain;
+	struct efa_domain *efa_domain;
 	struct fi_mr_attr *core_attr;
 	struct fi_mr_attr *shm_attr;
 	struct rxr_mr *rxr_mr;
@@ -147,6 +151,8 @@ int rxr_mr_regattr(struct fid *domain_fid, const struct fi_mr_attr *attr,
 
 	rxr_domain = container_of(domain_fid, struct rxr_domain,
 				  util_domain.domain_fid.fid);
+	efa_domain = container_of(rxr_domain->rdm_domain, struct efa_domain,
+				  util_domain.domain_fid);
 
 	rxr_mr = calloc(1, sizeof(*rxr_mr));
 	if (!rxr_mr)
@@ -186,7 +192,7 @@ int rxr_mr_regattr(struct fid *domain_fid, const struct fi_mr_attr *attr,
 	key_exists = false;
 	core_attr->requested_key = rxr_mr->mr_fid.key;
 	core_attr->access = core_attr_access;
-	ret = ofi_mr_map_insert(&rxr_domain->util_domain.mr_map, core_attr,
+	ret = ofi_mr_map_insert(&efa_domain->util_domain.mr_map, core_attr,
 				&rxr_mr->mr_fid.key, mr);
 	if (ret) {
 		if (efa_mr_cache_enable && ret == -FI_ENOKEY) {
@@ -214,7 +220,7 @@ int rxr_mr_regattr(struct fid *domain_fid, const struct fi_mr_attr *attr,
 				fi_strerror(-ret), attr->mr_iov->iov_base,
 				attr->mr_iov->iov_len);
 			fi_close(&rxr_mr->msg_mr->fid);
-			ofi_mr_map_remove(&rxr_domain->util_domain.mr_map,
+			ofi_mr_map_remove(&efa_domain->util_domain.mr_map,
 					  rxr_mr->mr_fid.key);
 			goto err;
 		}
