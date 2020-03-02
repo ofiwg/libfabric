@@ -1052,7 +1052,6 @@ static int eager_buf_add(struct cxip_rxc *rxc)
 	int ret;
 	struct cxip_oflow_buf *oflow_buf;
 	struct cxip_req *req;
-	uint64_t min_free;
 	uint32_t le_flags;
 
 	/* Match all eager, long sends */
@@ -1103,9 +1102,6 @@ static int eager_buf_add(struct cxip_rxc *rxc)
 	req->oflow.rxc = rxc;
 	req->oflow.oflow_buf = oflow_buf;
 
-	min_free = (rxc->rdzv_threshold >>
-			dom->iface->dev->info.min_free_shift);
-
 	le_flags = C_LE_MANAGE_LOCAL | C_LE_NO_TRUNCATE |
 		   C_LE_UNRESTRICTED_BODY_RO | C_LE_UNRESTRICTED_END_RO |
 		   C_LE_OP_PUT;
@@ -1116,7 +1112,7 @@ static int eager_buf_add(struct cxip_rxc *rxc)
 					     oflow_buf->buf),
 			      rxc->oflow_buf_size, oflow_buf->md->md->lac,
 			      C_PTL_LIST_OVERFLOW, req->req_id, mb.raw, ib.raw,
-			      CXI_MATCH_ID_ANY, min_free, le_flags,
+			      CXI_MATCH_ID_ANY, rxc->rdzv_threshold, le_flags,
 			      NULL, rxc->rx_cmdq);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
@@ -1126,7 +1122,7 @@ static int eager_buf_add(struct cxip_rxc *rxc)
 	/* Initialize oflow_buf structure */
 	dlist_insert_tail(&oflow_buf->list, &rxc->oflow_bufs);
 	oflow_buf->rxc = rxc;
-	oflow_buf->min_bytes = rxc->oflow_buf_size - min_free;
+	oflow_buf->min_bytes = rxc->oflow_buf_size - rxc->rdzv_threshold;
 	oflow_buf->buffer_id = req->req_id;
 	oflow_buf->type = CXIP_LE_TYPE_RX;
 

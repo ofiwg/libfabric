@@ -533,6 +533,12 @@ static void cxip_query_if_list(struct slist *if_list)
 		return;
 	}
 
+	if (dev_list->info[0].min_free_shift) {
+		CXIP_LOG_DBG("Non-zero min_free_shift not supported\n");
+		cxil_free_device_list(dev_list);
+		return;
+	}
+
 	/* Pick first device */
 	if_entry = calloc(1, sizeof(struct cxip_if));
 	if_entry->info = dev_list->info[0];

@@ -734,7 +734,7 @@ struct ep_getopt_args {
 };
 
 static size_t optvalue;
-static size_t optlength;
+static size_t optlength = sizeof(size_t);
 static struct ep_getopt_args ep_null_params[] = {
 	{.level = -1,
 	 .retval = -FI_ENOPROTOOPT},
@@ -832,6 +832,10 @@ ParameterizedTestParameters(ep, setopt_args)
 		.optname = FI_OPT_MIN_MULTI_RECV,
 		.optval = 90001,
 		.retval = FI_SUCCESS},
+		{.level = FI_OPT_ENDPOINT,
+		.optname = FI_OPT_MIN_MULTI_RECV,
+		.optval = 1<<24,
+		.retval = -FI_EINVAL},
 	};
 
 	param_sz = ARRAY_SIZE(ep_null_params);

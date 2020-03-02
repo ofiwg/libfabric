@@ -809,11 +809,17 @@ static int cxip_ctx_getopt(fid_t fid, int level, int optname, void *optval,
 
 	switch (optname) {
 	case FI_OPT_MIN_MULTI_RECV:
+
+		if (!optval || !optlen)
+			return -FI_EINVAL;
+
 		if (*optlen < sizeof(size_t))
 			return -FI_ETOOSMALL;
+
 		*(size_t *)optval = rxc->min_multi_recv;
 		*optlen = sizeof(size_t);
 		break;
+
 	default:
 		return -FI_ENOPROTOOPT;
 	}
@@ -838,6 +844,7 @@ static int cxip_ctx_setopt(fid_t fid, int level, int optname,
 			   const void *optval, size_t optlen)
 {
 	struct cxip_rxc *rxc;
+	size_t min_multi_recv;
 
 	rxc = container_of(fid, struct cxip_rxc, ctx.fid);
 
@@ -846,12 +853,21 @@ static int cxip_ctx_setopt(fid_t fid, int level, int optname,
 
 	switch (optname) {
 	case FI_OPT_MIN_MULTI_RECV:
-		/* TODO: this has a maximum value based on min_free_shift, which
-		 * is a configurable cxi-driver kernel parameter. Currently
-		 * incomplete implementation, limit when complete.
-		 */
-		rxc->min_multi_recv = *(size_t *)optval;
+
+		if (!optval)
+			return -FI_EINVAL;
+
+		min_multi_recv = *(size_t *)optval;
+
+		if (min_multi_recv > CXIP_EP_MAX_MULTI_RECV) {
+			CXIP_LOG_ERROR("Maximum min_multi_recv value is: %u\n",
+				       CXIP_EP_MAX_MULTI_RECV);
+			return -FI_EINVAL;
+		}
+
+		rxc->min_multi_recv = min_multi_recv;
 		break;
+
 	default:
 		return -FI_ENOPROTOOPT;
 	}
@@ -1362,6 +1378,9 @@ static int cxip_ep_getopt(fid_t fid, int level, int optname, void *optval,
 		if (!optval || !optlen)
 			return -FI_EINVAL;
 
+		if (*optlen < sizeof(size_t))
+			return -FI_ETOOSMALL;
+
 		*(size_t *)optval = cxi_ep->ep_obj->min_multi_recv;
 		*optlen = sizeof(size_t);
 		break;
@@ -1391,6 +1410,7 @@ static int cxip_ep_setopt(fid_t fid, int level, int optname, const void *optval,
 {
 	size_t i;
 	struct cxip_ep *cxi_ep;
+	size_t min_multi_recv;
 
 	cxi_ep = container_of(fid, struct cxip_ep, ep.fid);
 
@@ -1403,7 +1423,15 @@ static int cxip_ep_setopt(fid_t fid, int level, int optname, const void *optval,
 		if (!optval)
 			return -FI_EINVAL;
 
-		cxi_ep->ep_obj->min_multi_recv = *(size_t *)optval;
+		min_multi_recv = *(size_t *)optval;
+
+		if (min_multi_recv > CXIP_EP_MAX_MULTI_RECV) {
+			CXIP_LOG_ERROR("Maximum min_multi_recv value is: %u\n",
+				       CXIP_EP_MAX_MULTI_RECV);
+			return -FI_EINVAL;
+		}
+
+		cxi_ep->ep_obj->min_multi_recv = min_multi_recv;
 		for (i = 0; i < cxi_ep->ep_obj->ep_attr.rx_ctx_cnt; i++) {
 			if (cxi_ep->ep_obj->rxcs[i] != NULL) {
 				cxi_ep->ep_obj->rxcs[i]->min_multi_recv =
