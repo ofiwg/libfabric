@@ -839,6 +839,9 @@ void rxr_cq_handle_rx_completion(struct rxr_ep *ep,
 void rxr_cq_write_tx_completion(struct rxr_ep *ep,
 				struct rxr_tx_entry *tx_entry);
 
+void rxr_cq_handle_tx_completion(struct rxr_ep *ep,
+				 struct rxr_tx_entry *tx_entry);
+
 int rxr_cq_reorder_msg(struct rxr_ep *ep,
 		       struct rxr_peer *peer,
 		       struct rxr_pkt_entry *pkt_entry);

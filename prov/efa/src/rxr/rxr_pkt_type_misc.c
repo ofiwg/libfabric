@@ -278,6 +278,22 @@ void rxr_pkt_handle_readrsp_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_en
 	}
 }
 
+void rxr_pkt_handle_readrsp_send_completion(struct rxr_ep *ep,
+					    struct rxr_pkt_entry *pkt_entry)
+{
+	struct rxr_tx_entry *tx_entry;
+	struct rxr_readrsp_hdr *readrsp_hdr;
+
+	readrsp_hdr = (struct rxr_readrsp_hdr *)pkt_entry->pkt;
+
+	tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
+	assert(tx_entry->cq_entry.flags & FI_READ);
+
+	tx_entry->bytes_acked += readrsp_hdr->seg_size;
+	if (tx_entry->total_len == tx_entry->bytes_acked)
+		rxr_cq_handle_tx_completion(ep, tx_entry);
+}
+
 void rxr_pkt_handle_readrsp_recv(struct rxr_ep *ep,
 				 struct rxr_pkt_entry *pkt_entry)
 {

@@ -130,6 +130,9 @@ ssize_t rxr_pkt_proc_matched_msg_rts(struct rxr_ep *ep,
 				     struct rxr_rx_entry *rx_entry,
 				     struct rxr_pkt_entry *pkt_entry);
 
+void rxr_pkt_handle_rts_send_completion(struct rxr_ep *ep,
+					struct rxr_pkt_entry *pkt_entry);
+
 ssize_t rxr_pkt_post_shm_rndzv_read(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry);
 
 ssize_t rxr_pkt_proc_rts(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
@@ -259,6 +262,10 @@ int rxr_pkt_proc_data(struct rxr_ep *ep,
 		      char *data, size_t seg_offset,
 		      size_t seg_size);
 
+void rxr_pkt_handle_data_send_completion(struct rxr_ep *ep,
+					 struct rxr_pkt_entry *pkt_entry);
+
+
 void rxr_pkt_handle_data_recv(struct rxr_ep *ep,
 			      struct rxr_pkt_entry *pkt_entry);
 
@@ -299,6 +306,9 @@ int rxr_pkt_init_readrsp(struct rxr_ep *ep,
 
 void rxr_pkt_handle_readrsp_sent(struct rxr_ep *ep,
 				 struct rxr_pkt_entry *pkt_entry);
+
+void rxr_pkt_handle_readrsp_send_completion(struct rxr_ep *ep,
+					    struct rxr_pkt_entry *pkt_entry);
 
 void rxr_pkt_handle_readrsp_recv(struct rxr_ep *ep,
 				 struct rxr_pkt_entry *pkt_entry);

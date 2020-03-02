@@ -287,6 +287,36 @@ void rxr_pkt_handle_rts_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 		rxr_inline_mr_reg(rxr_ep_domain(ep), tx_entry);
 }
 
+void rxr_pkt_handle_rts_send_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
+{
+	struct rxr_rts_hdr *rts_hdr;
+	struct rxr_tx_entry *tx_entry;
+
+	/*
+	 * for FI_READ, it is possible (though does not happen very often) that at the point
+	 * tx_entry has been released. The reason is, for FI_READ:
+	 *     1. only the initator side will send a RTS.
+	 *     2. the initator side will receive data packet. When all data was received,
+	 *        it will release the tx_entry
+	 * Therefore, if it so happens that all data was received before we got the send
+	 * completion notice, we will have a released tx_entry at this point.
+	 * Nonetheless, because for FI_READ tx_entry will be release in rxr_handle_rx_completion,
+	 * we will ignore it here.
+	 */
+	rts_hdr = rxr_get_rts_hdr(pkt_entry->pkt);
+	if (rts_hdr->flags & RXR_READ_REQ)
+		return;
+
+	/*
+	 * For shm provider, we will write completion for small & medium  message, as data has
+	 * been sent in the RTS packet; for large message, will wait for the EOR packet
+	 */
+	tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
+	tx_entry->bytes_acked += rxr_get_rts_data_size(ep, rts_hdr);
+	if (tx_entry->total_len == tx_entry->bytes_acked)
+		rxr_cq_handle_tx_completion(ep, tx_entry);
+}
+
 /*
  *  The following section are rxr_pkt_handle_rts_recv() and
  *  its related functions.
