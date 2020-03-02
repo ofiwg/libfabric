@@ -2012,6 +2012,15 @@ Test(tagged, cancel_recvs)
 	}
 }
 
+/* Test cancel with no matching recv */
+Test(tagged, cancel_nomatch)
+{
+	int ret;
+
+	ret = fi_cancel(&cxit_ep->fid, NULL);
+	cr_assert_eq(ret, -FI_ENOENT, "fi_cancel failed to fail %d", ret);
+}
+
 /* Test outstanding recv cancel events */
 Test(tagged, cancel_recvs_sync)
 {
@@ -2035,6 +2044,9 @@ Test(tagged, cancel_recvs_sync)
 		ret = fi_cancel(&cxit_ep->fid, NULL);
 		cr_assert_eq(ret, FI_SUCCESS, "fi_cancel failed %d", ret);
 	}
+
+	ret = fi_cancel(&cxit_ep->fid, NULL);
+	cr_assert_eq(ret, -FI_ENOENT, "fi_cancel failed to fail %d", ret);
 
 	for (i = 0; i < recvs; i++) {
 		do {
