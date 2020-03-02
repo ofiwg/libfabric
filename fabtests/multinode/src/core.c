@@ -53,19 +53,50 @@
 #include <arpa/inet.h>
 #include <assert.h>
 
+char *tx_barrier;
+char *rx_barrier;
+struct fid_mr *mr_barrier;
+struct fi_context2 *barrier_tx_ctx, *barrier_rx_ctx;
+
 struct pattern_ops *pattern;
 struct multinode_xfer_state state;
+struct multi_xfer_method method;
+struct multi_xfer_method multi_xfer_methods[] = {
+	{
+		.name = "send/recv",
+		.send = multi_msg_send,
+		.recv = multi_msg_recv,
+		.wait = multi_msg_wait,
+	},
+	{
+		.name = "rma",
+		.send = multi_rma_write,
+		.recv = multi_rma_recv,
+		.wait = multi_rma_wait,
+	}
+};
 
-static int multinode_setup_fabric(int argc, char **argv)
+static int multi_setup_fabric(int argc, char **argv)
 {
 	char my_name[FT_MAX_CTRL_MSG];
 	size_t len;
-	int ret;
+	int i, ret;
+	struct fi_rma_iov *remote = malloc(sizeof(*remote));
 
 	hints->ep_attr->type = FI_EP_RDM;
-	hints->caps = FI_MSG;
 	hints->mode = FI_CONTEXT;
 	hints->domain_attr->mr_mode = opts.mr_mode;
+
+	if (pm_job.transfer_method == multi_msg) {
+		hints->caps = FI_MSG;
+	} else if (pm_job.transfer_method == multi_rma) {
+		hints->caps = FI_MSG | FI_RMA;
+	} else {
+		printf("Not a valid cabability\n");
+		return -FI_ENODATA;
+	}
+
+	method = multi_xfer_methods[pm_job.transfer_method];
 
 	tx_seq = 0;
 	rx_seq = 0;
@@ -99,8 +130,8 @@ static int multinode_setup_fabric(int argc, char **argv)
 		goto err;
 	}
 
-	pm_job.name_len = len;
-	pm_job.names = malloc(len * pm_job.num_ranks);
+	pm_job.name_len = 256;
+	pm_job.names = malloc(pm_job.name_len * pm_job.num_ranks);
 	if (!pm_job.names) {
 		FT_ERR("error allocating memory for address exchange\n");
 		ret = -FI_ENOMEM;
@@ -123,28 +154,72 @@ static int multinode_setup_fabric(int argc, char **argv)
 		goto err;
 	}
 
-	ret = fi_av_insert(av, pm_job.names, pm_job.num_ranks,
-			   pm_job.fi_addrs, 0, NULL);
-	if (ret != pm_job.num_ranks) {
-		FT_ERR("unable to insert all addresses into AV table\n");
-		ret = -1;
+	for (i = 0; i < pm_job.num_ranks; i++) {
+		ret = fi_av_insert(av, (char*)pm_job.names + i * pm_job.name_len, 1,
+			   &pm_job.fi_addrs[i], 0, NULL);
+		if (ret != 1) {
+			FT_ERR("unable to insert all addresses into AV table\n");
+			ret = -1;
+			goto err;
+		}
+	}
+
+	pm_job.multi_iovs = malloc(sizeof(*(pm_job.multi_iovs)) * pm_job.num_ranks);
+	if (!pm_job.multi_iovs) {
+		FT_ERR("error allocation memory for rma_iovs\n");
 		goto err;
 	}
+
+	if (fi->domain_attr->mr_mode & FI_MR_VIRT_ADDR) 
+		remote->addr = (uintptr_t) rx_buf;
+	else
+		remote->addr = 0;
+
+	remote->key = fi_mr_key(mr);
+	remote->len = rx_size;
+
+	ret = pm_allgather(remote, pm_job.multi_iovs, sizeof(*remote));
+	if (ret) {
+		FT_ERR("error exchanging rma_iovs\n");
+		goto err;
+	}
+	for (i = 0; i < pm_job.num_ranks; i++) {
+		pm_job.multi_iovs[i].addr += (tx_size * pm_job.my_rank);
+	}
+
 	return 0;
 err:
 	ft_free_res();
 	return ft_exit_code(ret);
 }
 
-static int multinode_post_rx()
+static int ft_progress(struct fid_cq *cq, uint64_t total, uint64_t *cq_cntr)
+{
+	struct fi_cq_err_entry comp;
+	int ret;
+
+	ret = fi_cq_read(cq, &comp, 1);
+	if (ret > 0)
+		(*cq_cntr)++;
+
+	if (ret >= 0 || ret == -FI_EAGAIN)
+		return 0;
+
+	if (ret == -FI_EAVAIL) {
+		ret = ft_cq_readerr(cq);
+		(*cq_cntr)++;
+	} else {
+		FT_PRINTERR("fi_cq_read/sread", ret);
+	}
+	return ret;
+}
+
+int multi_msg_recv()
 {
 	int ret, offset;
 
 	/* post receives */
-	while (!state.all_recvs_posted) {
-
-		if (state.rx_window == 0)
-			break;
+	while (!state.all_recvs_posted && state.rx_window) {
 
 		ret = pattern->next_source(&state.cur_source);
 		if (ret == -FI_ENODATA) {
@@ -167,19 +242,16 @@ static int multinode_post_rx()
 		rx_ctx_arr[offset].state = OP_PENDING;
 		state.recvs_posted++;
 		state.rx_window--;
-	};
+	}
 	return 0;
 }
 
-static int multinode_post_tx()
+int multi_msg_send()
 {
 	int ret, offset;
 	fi_addr_t dest;
 
-	while (!state.all_sends_posted) {
-
-		if (state.tx_window == 0)
-			break;
+	while (!state.all_sends_posted && state.tx_window) {
 
 		ret = pattern->next_target(&state.cur_target);
 		if (ret == -FI_ENODATA) {
@@ -209,7 +281,7 @@ static int multinode_post_tx()
 	return 0;
 }
 
-static int multinode_wait_for_comp()
+int multi_msg_wait()
 {
 	int ret, i;
 
@@ -235,7 +307,109 @@ static int multinode_wait_for_comp()
 	return 0;
 }
 
-static inline void multinode_init_state()
+int multi_rma_write()
+{
+	int ret, rc;
+
+	while (!state.all_sends_posted && state.tx_window) {
+
+		ret = pattern->next_target(&state.cur_target);
+		if (ret == -FI_ENODATA) {
+			state.all_sends_posted = true;
+			break;
+		} else if (ret < 0) {
+			return ret;
+		}
+
+		snprintf((char*) tx_buf + tx_size * state.cur_target, tx_size,
+		        "Hello World! from %zu to %i on the %zuth iteration, %s test",
+		        pm_job.my_rank, state.cur_target, 
+		        (size_t) tx_seq, pattern->name);
+
+		while (1) {
+			ret = fi_write(ep, 
+				tx_buf + tx_size * state.cur_target,
+				opts.transfer_size, mr_desc, 
+				pm_job.fi_addrs[state.cur_target], 
+				pm_job.multi_iovs[state.cur_target].addr,
+				pm_job.multi_iovs[state.cur_target].key, 
+				&tx_ctx_arr[state.tx_window].context);
+			if (!ret)
+				break;
+		
+			if (ret != -FI_EAGAIN) {
+				printf("RMA write failed");
+				return ret;
+			}
+
+			rc = ft_progress(txcq, tx_seq, &tx_cq_cntr);
+			if (rc && rc != -FI_EAGAIN) {
+				printf("Failed to get rma completion");
+				return rc;
+			}
+		}
+		tx_seq++;
+	
+		state.sends_posted++;
+		state.tx_window--;
+	}
+	return 0;
+}
+
+int multi_rma_recv()
+{
+	state.all_recvs_posted = true;
+	return 0;
+}
+
+int multi_rma_wait()
+{
+	int ret;
+
+	ret = ft_get_tx_comp(tx_seq);
+	if (ret)
+		return ret;
+
+	state.rx_window = opts.window_size;
+	state.tx_window = opts.window_size;
+
+	if (state.all_recvs_posted && state.all_sends_posted)
+		state.all_completions_done = true;
+
+	return 0;
+}
+
+int send_recv_barrier(int sync)
+{
+	int ret, i;
+
+	for(i = 0; i < pm_job.num_ranks; i++) {
+
+		ret = ft_post_rx_buf(ep, opts.transfer_size,
+			     &barrier_rx_ctx[i],
+			     rx_buf, mr_desc, 0);
+		if (ret)
+			return ret;
+	}
+
+	for (i = 0; i < pm_job.num_ranks; i++) {
+		ret = ft_post_tx_buf(ep, pm_job.fi_addrs[i], 0, 
+				     NO_CQ_DATA, &barrier_tx_ctx[i],
+		                     tx_buf, mr_desc, 0);
+		if (ret)
+			return ret;
+	}
+
+	ret = ft_get_tx_comp(tx_seq);
+	if (ret)
+		return ret;
+
+	ret = ft_get_rx_comp(rx_seq);	
+
+	return ret;
+}
+
+static inline void multi_init_state()
 {
 	state.cur_source = PATTERN_NO_CURRENT;
 	state.cur_target = PATTERN_NO_CURRENT;
@@ -248,41 +422,47 @@ static inline void multinode_init_state()
 	state.tx_window = opts.window_size;
 }
 
-static int multinode_run_test()
+static int multi_run_test()
 {
 	int ret;
 	int iter;
 
 	for (iter = 0; iter < opts.iterations; iter++) {
 
-		multinode_init_state();
+		multi_init_state();
 		while (!state.all_completions_done ||
 				!state.all_recvs_posted ||
 				!state.all_sends_posted) {
-			ret = multinode_post_rx();
+			ret = method.recv();
 			if (ret)
 				return ret;
 
-			ret = multinode_post_tx();
+			ret = method.send();
 			if (ret)
 				return ret;
 
-			ret = multinode_wait_for_comp();
+			ret = method.wait();
 			if (ret)
 				return ret;
-
-			pm_barrier();
 		}
+
+		ret = send_recv_barrier(iter);
+		if (ret)
+			return ret;
 	}
 	return 0;
 }
 
 static void pm_job_free_res()
 {
-
 	free(pm_job.names);
-
 	free(pm_job.fi_addrs);
+	free(pm_job.multi_iovs);
+
+	free(barrier_tx_ctx);
+	free(barrier_rx_ctx);
+
+	FT_CLOSE_FID(mr_barrier);
 }
 
 int multinode_run_tests(int argc, char **argv)
@@ -290,21 +470,34 @@ int multinode_run_tests(int argc, char **argv)
 	int ret = FI_SUCCESS;
 	int i;
 
-	ret = multinode_setup_fabric(argc, argv);
+
+	barrier_tx_ctx = malloc(sizeof(*barrier_tx_ctx) * pm_job.num_ranks);
+	if (!barrier_tx_ctx)
+		return -FI_ENOMEM;
+
+	barrier_rx_ctx = malloc(sizeof(*barrier_rx_ctx) * pm_job.num_ranks);
+	if (!barrier_rx_ctx)
+		return -FI_ENOMEM;
+
+	ret = multi_setup_fabric(argc, argv);
 	if (ret)
 		return ret;
+	
 
 	for (i = 0; i < NUM_TESTS && !ret; i++) {
 		printf("starting %s... ", patterns[i].name);
 		pattern = &patterns[i];
-		ret = multinode_run_test();
+		ret = multi_run_test();
 		if (ret)
 			printf("failed\n");
 		else
 			printf("passed\n");
+
+		fflush(stdout);
 	}
 
 	pm_job_free_res();
 	ft_free_res();
 	return ft_exit_code(ret);
 }
+
