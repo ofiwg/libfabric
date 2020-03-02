@@ -920,15 +920,8 @@ int cxip_pte_append(struct cxip_pte *pte, uint64_t iova, size_t len,
 		    unsigned int lac, enum c_ptl_list list,
 		    uint32_t buffer_id, uint64_t match_bits,
 		    uint64_t ignore_bits, uint32_t match_id,
-		    uint64_t min_free, bool event_success_disable,
-		    bool event_link_disable, bool event_unlink_disable,
-		    bool event_comm_disable,
-		    bool use_once, bool manage_local, bool no_truncate,
-		    bool unexpected_hdr_disable,
-		    bool unrestricted_body_ro,
-		    bool unrestricted_end_ro,
-		    bool event_ct_comm, struct cxip_cntr *cntr,
-		    bool op_put, bool op_get, struct cxip_cmdq *cmdq);
+		    uint64_t min_free, uint32_t flags,
+		    struct cxip_cntr *cntr, struct cxip_cmdq *cmdq);
 int cxip_pte_unlink(struct cxip_pte *pte, enum c_ptl_list list,
 		    int buffer_id, struct cxip_cmdq *cmdq);
 int cxip_pte_alloc(struct cxip_if_domain *if_dom, struct cxi_evtq *evtq,

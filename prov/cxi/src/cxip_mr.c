@@ -245,6 +245,7 @@ static int cxip_mr_enable_std(struct cxip_mr *mr)
 	int buffer_id;
 	int ret;
 	struct cxip_ep_obj *ep_obj = mr->ep->ep_obj;
+	uint32_t le_flags;
 
 	if (mr->cntr) {
 		ret = cxip_cntr_enable(mr->cntr);
@@ -273,18 +274,20 @@ static int cxip_mr_enable_std(struct cxip_mr *mr)
 
 	fastlock_acquire(&ep_obj->lock);
 
+	le_flags = C_LE_EVENT_SUCCESS_DISABLE;
+	if (mr->attr.access & FI_REMOTE_WRITE)
+		le_flags |= C_LE_OP_PUT;
+	if (mr->attr.access & FI_REMOTE_READ)
+		le_flags |= C_LE_OP_GET;
+	if (mr->cntr)
+		le_flags |= C_LE_EVENT_CT_COMM;
+
 	ret = cxip_pte_append(ep_obj->mr_pte,
 			      mr->len ? CXI_VA_TO_IOVA(mr->md->md, mr->buf) : 0,
-			      mr->len,
-			      mr->len ? mr->md->md->lac : 0,
+			      mr->len, mr->len ? mr->md->md->lac : 0,
 			      C_PTL_LIST_PRIORITY, mr->buffer_id,
 			      mr->key, 0, CXI_MATCH_ID_ANY,
-			      0, true, false, false, true, false, false, false,
-			      false, false, false,
-			      mr->cntr, mr->cntr,
-			      mr->attr.access & FI_REMOTE_WRITE,
-			      mr->attr.access & FI_REMOTE_READ,
-			      ep_obj->tgq);
+			      0, le_flags, mr->cntr, ep_obj->tgq);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
 		goto err_unmap;
@@ -414,6 +417,7 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 		.le_pool = CXI_LE_POOL_ANY
 	};
 	struct cxip_ep_obj *ep_obj = mr->ep->ep_obj;
+	uint32_t le_flags;
 
 	if (mr->enabled)
 		return FI_SUCCESS;
@@ -473,18 +477,20 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 		goto err_pte_free;
 	}
 
+	le_flags = C_LE_EVENT_SUCCESS_DISABLE;
+	if (mr->attr.access & FI_REMOTE_WRITE)
+		le_flags |= C_LE_OP_PUT;
+	if (mr->attr.access & FI_REMOTE_READ)
+		le_flags |= C_LE_OP_GET;
+	if (mr->cntr)
+		le_flags |= C_LE_EVENT_CT_COMM;
+
 	ret = cxip_pte_append(mr->pte,
 			      mr->len ? CXI_VA_TO_IOVA(mr->md->md, mr->buf) : 0,
-			      mr->len,
-			      mr->len ? mr->md->md->lac : 0,
+			      mr->len, mr->len ? mr->md->md->lac : 0,
 			      C_PTL_LIST_PRIORITY, mr->key,
 			      mr->key, 0, CXI_MATCH_ID_ANY,
-			      0, true, false, false, true, false, false, false,
-			      false, false, false,
-			      mr->cntr, mr->cntr,
-			      mr->attr.access & FI_REMOTE_WRITE,
-			      mr->attr.access & FI_REMOTE_READ,
-			      ep_obj->tgq);
+			      0, le_flags, mr->cntr, ep_obj->tgq);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
 		goto err_pte_free;

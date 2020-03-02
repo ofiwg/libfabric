@@ -1053,6 +1053,7 @@ static int eager_buf_add(struct cxip_rxc *rxc)
 	struct cxip_oflow_buf *oflow_buf;
 	struct cxip_req *req;
 	uint64_t min_free;
+	uint32_t le_flags;
 
 	/* Match all eager, long sends */
 	union cxip_match_bits mb = {
@@ -1105,15 +1106,18 @@ static int eager_buf_add(struct cxip_rxc *rxc)
 	min_free = (rxc->rdzv_threshold >>
 			dom->iface->dev->info.min_free_shift);
 
+	le_flags = C_LE_MANAGE_LOCAL | C_LE_NO_TRUNCATE |
+		   C_LE_UNRESTRICTED_BODY_RO | C_LE_UNRESTRICTED_END_RO |
+		   C_LE_OP_PUT;
+
 	/* Issue Append command */
 	ret = cxip_pte_append(rxc->rx_pte,
 			      CXI_VA_TO_IOVA(oflow_buf->md->md,
 					     oflow_buf->buf),
 			      rxc->oflow_buf_size, oflow_buf->md->md->lac,
 			      C_PTL_LIST_OVERFLOW, req->req_id, mb.raw, ib.raw,
-			      CXI_MATCH_ID_ANY, min_free, false, false,
-			      false, false, false, true, true, false, true,
-			      true, false, NULL, true, false, rxc->rx_cmdq);
+			      CXI_MATCH_ID_ANY, min_free, le_flags,
+			      NULL, rxc->rx_cmdq);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
 		goto oflow_req_free;
@@ -1202,6 +1206,7 @@ static int cxip_rxc_sink_init(struct cxip_rxc *rxc)
 {
 	int ret;
 	struct cxip_req *req;
+	uint32_t le_flags;
 
 	/* Match all eager, long sends */
 	union cxip_match_bits mb = {
@@ -1221,11 +1226,13 @@ static int cxip_rxc_sink_init(struct cxip_rxc *rxc)
 		return -FI_ENOMEM;
 	}
 
+	le_flags = C_LE_MANAGE_LOCAL | C_LE_UNRESTRICTED_BODY_RO |
+		   C_LE_UNRESTRICTED_END_RO | C_LE_OP_PUT;
+
 	ret = cxip_pte_append(rxc->rx_pte, 0, 0, 0,
 			      C_PTL_LIST_OVERFLOW, req->req_id, mb.raw, ib.raw,
-			      CXI_MATCH_ID_ANY, 0, false, false, false, false,
-			      false, true, false, false, true, true, false,
-			      NULL, true, false, rxc->rx_cmdq);
+			      CXI_MATCH_ID_ANY, 0,  le_flags, NULL,
+			      rxc->rx_cmdq);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to write UX Append command: %d\n", ret);
 		goto req_free;
@@ -1345,6 +1352,7 @@ int cxip_txc_zbp_init(struct cxip_txc *txc)
 {
 	int ret;
 	struct cxip_req *req;
+	uint32_t le_flags;
 	union cxip_match_bits mb = {
 		.le_type = CXIP_LE_TYPE_ZBP,
 	};
@@ -1362,11 +1370,13 @@ int cxip_txc_zbp_init(struct cxip_txc *txc)
 		return -FI_ENOMEM;
 	}
 
+	le_flags = C_LE_UNRESTRICTED_BODY_RO | C_LE_UNRESTRICTED_END_RO |
+		   C_LE_OP_PUT;
+
 	ret = cxip_pte_append(txc->rdzv_pte, 0, 0, 0,
 			      C_PTL_LIST_PRIORITY, req->req_id, mb.raw, ib.raw,
-			      CXI_MATCH_ID_ANY, 0, false, false, false, false,
-			      false, false, false, false, true, true, false,
-			      NULL, true, false, txc->rx_cmdq);
+			      CXI_MATCH_ID_ANY, 0, le_flags, NULL,
+			      txc->rx_cmdq);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
 		goto req_free;
@@ -2071,6 +2081,7 @@ static ssize_t _cxip_recv(struct cxip_rxc *rxc, void *buf, size_t len,
 	struct cxip_addr caddr;
 	uint32_t match_id;
 	uint32_t pid_bits;
+	uint32_t le_flags;
 	union cxip_match_bits mb = {};
 	union cxip_match_bits ib = {
 		.tx_id = ~0,
@@ -2168,20 +2179,20 @@ static ssize_t _cxip_recv(struct cxip_rxc *rxc, void *buf, size_t len,
 	 * events can be used by the initiator for protocol data. The behavior
 	 * of use_once is not impacted by manage_local.
 	 */
+	le_flags = C_LE_EVENT_LINK_DISABLE | C_LE_EVENT_UNLINK_DISABLE |
+		   C_LE_MANAGE_LOCAL |
+		   C_LE_UNRESTRICTED_BODY_RO | C_LE_UNRESTRICTED_END_RO |
+		   C_LE_OP_PUT;
+	if (!req->recv.multi_recv)
+		le_flags |= C_LE_USE_ONCE;
 
 	/* Issue Append command */
 	ret = cxip_pte_append(rxc->rx_pte,
 			      recv_md ? CXI_VA_TO_IOVA(recv_md->md, buf) : 0,
-			      len,
-			      recv_md ? recv_md->md->lac : 0,
+			      len, recv_md ? recv_md->md->lac : 0,
 			      C_PTL_LIST_PRIORITY, req->req_id,
-			      mb.raw, ib.raw, match_id,
-			      rxc->min_multi_recv, false, true, true, false,
-			      !req->recv.multi_recv,
-			      true, /* Always set manage_local */
-			      false, false, true, true, false, NULL,
-			      true, false,
-			      rxc->rx_cmdq);
+			      mb.raw, ib.raw, match_id, rxc->min_multi_recv,
+			      le_flags, NULL, rxc->rx_cmdq);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
 		goto req_free;
@@ -2513,6 +2524,7 @@ static int cxip_txc_prep_rdzv_src(struct cxip_txc *txc, unsigned int lac)
 {
 	int ret;
 	struct cxip_req *req;
+	uint32_t le_flags;
 	union cxip_match_bits mb = {};
 	union cxip_match_bits ib = { .raw = ~0 };
 	uint32_t lac_mask = 1 << lac;
@@ -2535,12 +2547,14 @@ static int cxip_txc_prep_rdzv_src(struct cxip_txc *txc, unsigned int lac)
 
 	mb.rdzv_lac = lac;
 	ib.rdzv_lac = 0;
+
+	le_flags = C_LE_UNRESTRICTED_BODY_RO | C_LE_UNRESTRICTED_END_RO |
+		   C_LE_OP_GET;
+
 	ret = cxip_pte_append(txc->rdzv_pte, 0, -1ULL, lac,
 			      C_PTL_LIST_PRIORITY, req->req_id,
 			      mb.raw, ib.raw, CXI_MATCH_ID_ANY, 0,
-			      false, false, false, false, false, false, false,
-			      false, true, true, false, NULL,
-			      false, true, txc->rx_cmdq);
+			      le_flags, NULL, txc->rx_cmdq);
 	if (ret != FI_SUCCESS) {
 		ret = -FI_EAGAIN;
 		goto req_free;
