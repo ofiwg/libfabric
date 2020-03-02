@@ -133,6 +133,7 @@ static ssize_t _cxip_rma_op(enum fi_op_type op, struct cxip_txc *txc,
 	uint32_t pid_bits;
 	uint32_t pid_idx;
 	bool idc;
+	bool unr = false; /* use unrestricted command? */
 
 	if (!txc->enabled)
 		return -FI_EOPBADSTATE;
@@ -202,6 +203,15 @@ static ssize_t _cxip_rma_op(enum fi_op_type op, struct cxip_txc *txc,
 	cxi_build_dfa(caddr.nic, caddr.pid, pid_bits, pid_idx, &dfa,
 		      &idx_ext);
 
+	/* Unordered Puts are optimally supported with restricted commands.
+	 * When Put ordering or remote events are required, or when targeting a
+	 * standard MR, use unrestricted commands. Ordered Gets are never
+	 * supported.
+	 */
+	unr = cxip_mr_key_opt(key) || txc->attr.caps & FI_RMA_EVENT;
+	if (!unr && op == FI_OP_WRITE)
+		unr = txc->attr.msg_order & (FI_ORDER_WAW | FI_ORDER_RMA_WAW);
+
 	/* Issue command */
 
 	fastlock_acquire(&txc->tx_cmdq->lock);
@@ -216,12 +226,7 @@ static ssize_t _cxip_rma_op(enum fi_op_type op, struct cxip_txc *txc,
 		if (flags & (FI_DELIVERY_COMPLETE | FI_MATCH_COMPLETE))
 			cmd.c_state.flush = 1;
 
-		/* Reliable, unordered Puts are optimally supported with
-		 * restricted commands. When ordering or remote events are
-		 * required, or when targeting a standard MR, use unrestricted
-		 * commands.
-		 */
-		if (cxip_mr_key_opt(key) && !(txc->attr.caps & FI_RMA_EVENT))
+		if (!unr)
 			cmd.c_state.restricted = 1;
 
 		if (txc->write_cntr) {
@@ -300,12 +305,7 @@ static ssize_t _cxip_rma_op(enum fi_op_type op, struct cxip_txc *txc,
 		    (flags & (FI_DELIVERY_COMPLETE | FI_MATCH_COMPLETE)))
 			cmd.flush = 1;
 
-		/* Reliable, unordered Puts are optimally supported with
-		 * restricted commands. When ordering or remote events are
-		 * required, or when targeting a standard MR, use unrestricted
-		 * commands.
-		 */
-		if (cxip_mr_key_opt(key) && !(txc->attr.caps & FI_RMA_EVENT))
+		if (!unr)
 			cmd.restricted = 1;
 
 		if (op == FI_OP_WRITE) {
