@@ -1113,7 +1113,7 @@ static int eager_buf_add(struct cxip_rxc *rxc)
 			      rxc->oflow_buf_size, oflow_buf->md->md->lac,
 			      C_PTL_LIST_OVERFLOW, req->req_id, mb.raw, ib.raw,
 			      CXI_MATCH_ID_ANY, rxc->rdzv_threshold, le_flags,
-			      NULL, rxc->rx_cmdq);
+			      NULL, rxc->rx_cmdq, true);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
 		goto oflow_req_free;
@@ -1228,7 +1228,7 @@ static int cxip_rxc_sink_init(struct cxip_rxc *rxc)
 	ret = cxip_pte_append(rxc->rx_pte, 0, 0, 0,
 			      C_PTL_LIST_OVERFLOW, req->req_id, mb.raw, ib.raw,
 			      CXI_MATCH_ID_ANY, 0,  le_flags, NULL,
-			      rxc->rx_cmdq);
+			      rxc->rx_cmdq, true);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to write UX Append command: %d\n", ret);
 		goto req_free;
@@ -1372,7 +1372,7 @@ int cxip_txc_zbp_init(struct cxip_txc *txc)
 	ret = cxip_pte_append(txc->rdzv_pte, 0, 0, 0,
 			      C_PTL_LIST_PRIORITY, req->req_id, mb.raw, ib.raw,
 			      CXI_MATCH_ID_ANY, 0, le_flags, NULL,
-			      txc->rx_cmdq);
+			      txc->rx_cmdq, true);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
 		goto req_free;
@@ -2188,7 +2188,7 @@ static ssize_t _cxip_recv(struct cxip_rxc *rxc, void *buf, size_t len,
 			      len, recv_md ? recv_md->md->lac : 0,
 			      C_PTL_LIST_PRIORITY, req->req_id,
 			      mb.raw, ib.raw, match_id, rxc->min_multi_recv,
-			      le_flags, NULL, rxc->rx_cmdq);
+			      le_flags, NULL, rxc->rx_cmdq, !(flags & FI_MORE));
 	if (ret) {
 		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
 		goto req_free;
@@ -2550,7 +2550,7 @@ static int cxip_txc_prep_rdzv_src(struct cxip_txc *txc, unsigned int lac)
 	ret = cxip_pte_append(txc->rdzv_pte, 0, -1ULL, lac,
 			      C_PTL_LIST_PRIORITY, req->req_id,
 			      mb.raw, ib.raw, CXI_MATCH_ID_ANY, 0,
-			      le_flags, NULL, txc->rx_cmdq);
+			      le_flags, NULL, txc->rx_cmdq, true);
 	if (ret != FI_SUCCESS) {
 		ret = -FI_EAGAIN;
 		goto req_free;
@@ -2778,7 +2778,8 @@ static ssize_t _cxip_send_long(struct cxip_txc *txc, const void *buf,
 		goto err_id_free;
 	}
 
-	cxi_cq_ring(txc->tx_cmdq->dev_cmdq);
+	if (!(flags & FI_MORE))
+		cxi_cq_ring(txc->tx_cmdq->dev_cmdq);
 
 	fastlock_release(&txc->tx_cmdq->lock);
 
@@ -3062,7 +3063,8 @@ static ssize_t _cxip_send_eager(struct cxip_txc *txc, const void *buf,
 		}
 	}
 
-	cxi_cq_ring(txc->tx_cmdq->dev_cmdq);
+	if (!(flags & FI_MORE))
+		cxi_cq_ring(txc->tx_cmdq->dev_cmdq);
 
 	if (req)
 		ofi_atomic_inc32(&txc->otx_reqs);

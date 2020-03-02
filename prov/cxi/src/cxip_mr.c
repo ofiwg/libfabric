@@ -287,7 +287,7 @@ static int cxip_mr_enable_std(struct cxip_mr *mr)
 			      mr->len, mr->len ? mr->md->md->lac : 0,
 			      C_PTL_LIST_PRIORITY, mr->buffer_id,
 			      mr->key, 0, CXI_MATCH_ID_ANY,
-			      0, le_flags, mr->cntr, ep_obj->tgq);
+			      0, le_flags, mr->cntr, ep_obj->tgq, true);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
 		goto err_unmap;
@@ -490,7 +490,7 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 			      mr->len, mr->len ? mr->md->md->lac : 0,
 			      C_PTL_LIST_PRIORITY, mr->key,
 			      mr->key, 0, CXI_MATCH_ID_ANY,
-			      0, le_flags, mr->cntr, ep_obj->tgq);
+			      0, le_flags, mr->cntr, ep_obj->tgq, true);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
 		goto err_pte_free;

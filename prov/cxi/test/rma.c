@@ -1030,3 +1030,74 @@ Test(rma, rem_cntr)
 	mr_destroy(&mem_window);
 	free(send_buf);
 }
+
+/* Test RMA FI_MORE */
+Test(rma, more)
+{
+	int ret;
+	uint8_t *send_buf;
+	int win_len = 16;
+	int send_len = 8;
+	struct mem_region mem_window;
+	int key_val = RMA_WIN_KEY;
+	struct fi_cq_tagged_entry cqe;
+	struct fi_msg_rma msg = {};
+	struct iovec iov[1];
+	struct fi_rma_iov rma[1];
+	int i;
+
+	send_buf = calloc(1, win_len);
+	cr_assert_not_null(send_buf, "send_buf alloc failed");
+	for (i = 0; i < win_len; i++)
+		send_buf[i] = 0xa + i;
+
+	mr_create(win_len, FI_REMOTE_WRITE, 0x44, key_val, &mem_window);
+
+	iov[0].iov_base = send_buf;
+	iov[0].iov_len = send_len;
+
+	rma[0].addr = 0;
+	rma[0].len = send_len;
+	rma[0].key = key_val;
+
+	msg.msg_iov = iov;
+	msg.iov_count = 1;
+	msg.rma_iov = rma;
+	msg.rma_iov_count = 1;
+	msg.addr = cxit_ep_fi_addr;
+
+	ret = fi_writemsg(cxit_ep, &msg, FI_MORE);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_writemsg failed %d", ret);
+
+	/* Ensure no completion before the doorbell ring */
+	do {
+		ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+		cr_assert_eq(ret, -FI_EAGAIN,
+			     "write failed %d", ret);
+	} while (i++ < 100000);
+
+	iov[0].iov_base = send_buf + send_len;
+	rma[0].addr += send_len;
+	ret = fi_writemsg(cxit_ep, &msg, 0);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_writemsg failed %d", ret);
+
+	/* Wait for two events. */
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+
+	validate_tx_event(&cqe, FI_RMA | FI_WRITE, NULL);
+
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+
+	validate_tx_event(&cqe, FI_RMA | FI_WRITE, NULL);
+
+	/* Validate sent data */
+	for (int i = 0; i < send_len; i++)
+		cr_assert_eq(mem_window.mem[i], send_buf[i],
+			     "data mismatch, element: (%d) %02x != %02x\n", i,
+			     mem_window.mem[i], send_buf[i]);
+
+	mr_destroy(&mem_window);
+	free(send_buf);
+}

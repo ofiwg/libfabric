@@ -77,8 +77,10 @@
 					 FI_MORE)
 #define CXIP_WRITEMSG_ALLOWED_FLAGS	(FI_INJECT | \
 					 FI_COMPLETION | \
+					 FI_MORE | \
 					 CXIP_TX_COMP_MODES)
 #define CXIP_READMSG_ALLOWED_FLAGS	(FI_COMPLETION | \
+					 FI_MORE | \
 					 CXIP_TX_COMP_MODES)
 
 #define CXIP_AMO_MAX_IOV		1
@@ -922,7 +924,8 @@ int cxip_pte_append(struct cxip_pte *pte, uint64_t iova, size_t len,
 		    uint32_t buffer_id, uint64_t match_bits,
 		    uint64_t ignore_bits, uint32_t match_id,
 		    uint64_t min_free, uint32_t flags,
-		    struct cxip_cntr *cntr, struct cxip_cmdq *cmdq);
+		    struct cxip_cntr *cntr, struct cxip_cmdq *cmdq,
+		    bool ring);
 int cxip_pte_unlink(struct cxip_pte *pte, enum c_ptl_list list,
 		    int buffer_id, struct cxip_cmdq *cmdq);
 int cxip_pte_alloc(struct cxip_if_domain *if_dom, struct cxi_evtq *evtq,

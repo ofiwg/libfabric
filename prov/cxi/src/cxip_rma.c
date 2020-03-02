@@ -331,7 +331,8 @@ static ssize_t _cxip_rma_op(enum fi_op_type op, struct cxip_txc *txc,
 		}
 	}
 
-	cxi_cq_ring(txc->tx_cmdq->dev_cmdq);
+	if (!(flags & FI_MORE))
+		cxi_cq_ring(txc->tx_cmdq->dev_cmdq);
 
 	if (req)
 		ofi_atomic_inc32(&txc->otx_reqs);

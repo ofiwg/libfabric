@@ -284,7 +284,8 @@ int cxip_pte_append(struct cxip_pte *pte, uint64_t iova, size_t len,
 		    uint32_t buffer_id, uint64_t match_bits,
 		    uint64_t ignore_bits, uint32_t match_id,
 		    uint64_t min_free, uint32_t flags,
-		    struct cxip_cntr *cntr, struct cxip_cmdq *cmdq)
+		    struct cxip_cntr *cntr, struct cxip_cmdq *cmdq,
+		    bool ring)
 {
 	union c_cmdu cmd = {};
 	int rc;
@@ -316,7 +317,8 @@ int cxip_pte_append(struct cxip_pte *pte, uint64_t iova, size_t len,
 		return -FI_EAGAIN;
 	}
 
-	cxi_cq_ring(cmdq->dev_cmdq);
+	if (ring)
+		cxi_cq_ring(cmdq->dev_cmdq);
 
 	fastlock_release(&cmdq->lock);
 

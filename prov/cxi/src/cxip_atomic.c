@@ -728,7 +728,8 @@ static int _cxip_amo(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		}
 	}
 
-	cxi_cq_ring(txc->tx_cmdq->dev_cmdq);
+	if (!(flags & FI_MORE))
+		cxi_cq_ring(txc->tx_cmdq->dev_cmdq);
 
 	if (req)
 		ofi_atomic_inc32(&txc->otx_reqs);
