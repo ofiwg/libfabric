@@ -117,7 +117,8 @@ static int rxc_msg_init(struct cxip_rxc *rxc)
 		.use_long_event = 1,
 		.is_matching = 1,
 		.pe_num = CXI_PE_NUM_ANY,
-		.le_pool = CXI_LE_POOL_ANY
+		.le_pool = CXI_LE_POOL_ANY,
+		.en_flowctrl = 1,
 	};
 	uint64_t pid_idx;
 

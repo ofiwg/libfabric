@@ -2977,3 +2977,47 @@ Test(tagged, recv_more)
 	free(send_buf);
 	free(recv_buf);
 }
+
+/* Test flow control */
+Test(tagged, fc, .disabled = true)
+{
+	int i, ret, tx_ret;
+	uint8_t *send_buf;
+	int send_len = 64;
+	struct fi_cq_tagged_entry tx_cqe;
+	struct fi_cq_tagged_entry rx_cqe;
+	int sends = 0;
+
+	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	cr_assert(send_buf);
+
+	for (i = 0; i < send_len; i++)
+		send_buf[i] = i + 0xa0;
+
+	while (1) {
+		/* Send 64 bytes to self */
+		ret = fi_tsend(cxit_ep, send_buf, send_len, NULL,
+			       cxit_ep_fi_addr, 0, NULL);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_tsend failed %d", ret);
+
+		do {
+			tx_ret = fi_cq_read(cxit_tx_cq, &tx_cqe, 1);
+
+			/* Progress RX to avoid EQ drops */
+			ret = fi_cq_read(cxit_rx_cq, &rx_cqe, 1);
+			cr_assert_eq(ret, -FI_EAGAIN,
+				     "fi_cq_read unexpected value %d",
+				     ret);
+		} while (tx_ret == -FI_EAGAIN);
+
+		cr_assert_eq(tx_ret, 1, "fi_cq_read unexpected value %d",
+			     tx_ret);
+
+		validate_tx_event(&tx_cqe, FI_TAGGED | FI_SEND, NULL);
+
+		if (!(++sends % 1000))
+			printf("%u Sends complete.\n", sends);
+	}
+
+	free(send_buf);
+}
