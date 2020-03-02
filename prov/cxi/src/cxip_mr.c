@@ -274,7 +274,7 @@ static int cxip_mr_enable_std(struct cxip_mr *mr)
 
 	fastlock_acquire(&ep_obj->lock);
 
-	le_flags = C_LE_EVENT_SUCCESS_DISABLE;
+	le_flags = C_LE_EVENT_SUCCESS_DISABLE | C_LE_UNRESTRICTED_BODY_RO;
 	if (mr->attr.access & FI_REMOTE_WRITE)
 		le_flags |= C_LE_OP_PUT;
 	if (mr->attr.access & FI_REMOTE_READ)
@@ -477,7 +477,7 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 		goto err_pte_free;
 	}
 
-	le_flags = C_LE_EVENT_SUCCESS_DISABLE;
+	le_flags = C_LE_EVENT_SUCCESS_DISABLE | C_LE_UNRESTRICTED_BODY_RO;
 	if (mr->attr.access & FI_REMOTE_WRITE)
 		le_flags |= C_LE_OP_PUT;
 	if (mr->attr.access & FI_REMOTE_READ)
