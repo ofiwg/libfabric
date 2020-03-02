@@ -330,7 +330,36 @@ static int mrail_get_core_info(uint32_t version, const char *node, const char *s
 		FI_DBG(&mrail_prov, FI_LOG_CORE,
 		       "--- Begin fi_getinfo for rail: %zd ---\n", i);
 
-		ret = fi_getinfo(version, NULL, NULL, OFI_GETINFO_INTERNAL, core_hints, &rail_info[i]);
+		if (!hints || !hints->caps) {
+			struct fi_info *tmp_info = NULL;
+			uint64_t saved_core_hints_caps = core_hints->caps;
+			/*
+			 * Get the default caps that would be returned for empty
+			 * hints, otherwise the returned caps would only contain
+			 * those specifed in the hints (FI_SOURCE) and secondary
+			 * capabilities.
+			 */
+			core_hints->caps = 0;
+			ret = fi_getinfo(version, NULL, NULL,
+					 OFI_GETINFO_INTERNAL, core_hints,
+					 &tmp_info);
+			if (tmp_info) {
+				core_hints->caps = tmp_info->caps |
+						   saved_core_hints_caps;
+				fi_freeinfo(tmp_info);
+			} else {
+				core_hints->caps = saved_core_hints_caps;
+			}
+
+			ret = fi_getinfo(version, NULL, NULL,
+					 OFI_GETINFO_INTERNAL, core_hints,
+					 &rail_info[i]);
+			core_hints->caps = saved_core_hints_caps;
+		} else {
+			ret = fi_getinfo(version, NULL, NULL,
+					 OFI_GETINFO_INTERNAL, core_hints,
+					 &rail_info[i]);
+		}
 
 		FI_DBG(&mrail_prov, FI_LOG_CORE,
 		       "--- End fi_getinfo for rail: %zd ---\n", i);
