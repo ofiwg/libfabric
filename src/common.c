@@ -1083,7 +1083,7 @@ void ofi_free_list_of_addr(struct slist *addr_list)
 }
 
 static inline
-void ofi_insert_loopback_addr(struct fi_provider *prov, struct slist *addr_list)
+void ofi_insert_loopback_addr(const struct fi_provider *prov, struct slist *addr_list)
 {
 	struct ofi_addr_list_entry *addr_entry;
 
@@ -1184,7 +1184,7 @@ void ofi_set_netmask_str(char *netstr, size_t len, struct ifaddrs *ifa)
 	netstr[len - 1] = '\0';
 }
 
-void ofi_get_list_of_addr(struct fi_provider *prov, const char *env_name,
+void ofi_get_list_of_addr(const struct fi_provider *prov, const char *env_name,
 			  struct slist *addr_list)
 {
 	int ret;
@@ -1192,7 +1192,7 @@ void ofi_get_list_of_addr(struct fi_provider *prov, const char *env_name,
 	struct ofi_addr_list_entry *addr_entry;
 	struct ifaddrs *ifaddrs, *ifa;
 
-	fi_param_get_str(prov, env_name, &iface);
+	fi_param_get_str((struct fi_provider *) prov, env_name, &iface);
 
 	ret = ofi_getifaddrs(&ifaddrs);
 	if (ret)
@@ -1264,7 +1264,7 @@ insert_lo:
 
 #elif defined HAVE_MIB_IPADDRTABLE
 
-void ofi_get_list_of_addr(struct fi_provider *prov, const char *env_name,
+void ofi_get_list_of_addr(const struct fi_provider *prov, const char *env_name,
 			  struct slist *addr_list)
 {
 	struct ofi_addr_list_entry *addr_entry;
@@ -1313,7 +1313,7 @@ out:
 
 #else /* !HAVE_MIB_IPADDRTABLE && !HAVE_MIB_IPADDRTABLE */
 
-void ofi_get_list_of_addr(struct fi_provider *prov, const char *env_name,
+void ofi_get_list_of_addr(const struct fi_provider *prov, const char *env_name,
 			  struct slist *addr_list)
 {
 	ofi_insert_loopback_addr(prov, addr_list);

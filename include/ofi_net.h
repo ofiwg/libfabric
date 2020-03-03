@@ -149,7 +149,7 @@ int ofi_getifaddrs(struct ifaddrs **ifap);
 
 void ofi_set_netmask_str(char *netstr, size_t len, struct ifaddrs *ifa);
 
-void ofi_get_list_of_addr(struct fi_provider *prov, const char *env_name,
+void ofi_get_list_of_addr(const struct fi_provider *prov, const char *env_name,
 			  struct slist *addr_list);
 void ofi_free_list_of_addr(struct slist *addr_list);
 
