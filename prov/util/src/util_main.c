@@ -351,11 +351,22 @@ static void util_getinfo_ifs(const struct util_prov *prov, struct fi_info *src_i
 }
 #endif
 
+static int util_match_addr(struct slist_entry *entry, const void *addr)
+{
+	struct ofi_addr_list_entry *addr_entry;
+
+	addr_entry = container_of(entry, struct ofi_addr_list_entry, entry);
+	return ofi_equals_ipaddr(&addr_entry->ipaddr.sa, addr);
+}
+
 int ofi_ip_getinfo(const struct util_prov *prov, uint32_t version,
 		   const char *node, const char *service, uint64_t flags,
 		   const struct fi_info *hints, struct fi_info **info)
 {
 	struct fi_info *head, *tail, *cur, **prev;
+	struct ofi_addr_list_entry *addr_entry;
+	struct slist addr_list;
+	struct slist_entry *entry;
 	int ret;
 
 	ret = util_getinfo(prov, version, node, service, flags,
@@ -375,6 +386,18 @@ int ofi_ip_getinfo(const struct util_prov *prov, uint32_t version,
 				fi_freeinfo(cur);
 				cur = tail;
 			}
+		} else if (cur->src_addr) {
+			slist_init(&addr_list);
+			ofi_get_list_of_addr(prov->prov, "iface", &addr_list);
+
+			entry = slist_find_first_match(&addr_list, util_match_addr,
+						(*info)->src_addr);
+			if (entry) {
+				addr_entry = container_of(entry,
+						struct ofi_addr_list_entry, entry);
+				util_set_netif_names(cur, addr_entry);
+			}
+			ofi_free_list_of_addr(&addr_list);
 		}
 		prev = &cur->next;
 	}
