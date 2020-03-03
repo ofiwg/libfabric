@@ -347,16 +347,17 @@ static void tcpx_ep_tx_rx_queues_release(struct tcpx_ep *ep)
 	fastlock_release(&ep->lock);
 }
 
-static int tcpx_ep_close(struct fid *fid)
+/**
+ * Release the ep from polling
+ */
+void tcpx_ep_wait_fd_del(struct tcpx_ep *ep)
 {
+	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "releasing ep=%p\n", ep);
+
 	struct tcpx_eq *eq;
-	struct tcpx_ep *ep = container_of(fid, struct tcpx_ep,
-					  util_ep.ep_fid.fid);
 
 	eq = container_of(ep->util_ep.eq, struct tcpx_eq,
 			  util_eq);
-
-	tcpx_ep_tx_rx_queues_release(ep);
 
 	/* eq->close_lock protects from processing stale connection events */
 	fastlock_acquire(&eq->close_lock);
@@ -370,6 +371,17 @@ static int tcpx_ep_close(struct fid *fid)
 		ofi_wait_fd_del(ep->util_ep.eq->wait, ep->sock);
 
 	fastlock_release(&eq->close_lock);
+}
+
+static int tcpx_ep_close(struct fid *fid)
+{
+	struct tcpx_ep *ep = container_of(fid, struct tcpx_ep,
+					  util_ep.ep_fid.fid);
+
+	tcpx_ep_tx_rx_queues_release(ep);
+
+	tcpx_ep_wait_fd_del(ep); /* ensure that everything is really released */
+
 	ofi_eq_remove_fid_events(ep->util_ep.eq, &ep->util_ep.ep_fid.fid);
 	ofi_close_socket(ep->sock);
 	ofi_endpoint_close(&ep->util_ep);
@@ -532,6 +544,7 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 	}
 
 	ep->cm_state = TCPX_EP_CONNECTING;
+	ep->poll_released = false;
 	ret = fastlock_init(&ep->lock);
 	if (ret)
 		goto err3;

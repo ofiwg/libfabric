@@ -641,6 +641,18 @@ void tcpx_progress_tx(struct tcpx_ep *ep)
 		tx_entry = container_of(entry, struct tcpx_xfer_entry, entry);
 		process_tx_entry(tx_entry);
 	}
+	bool is_shutdown = false;
+
+	if (ep->cm_state == TCPX_EP_SHUTDOWN && !ep->poll_released)
+		is_shutdown = true; /* let it progress once more */
+
+
+	if (is_shutdown)
+	{
+		tcpx_ep_wait_fd_del(ep);
+		ep->poll_released = true; /* just an optimization */
+	}
+
 }
 
 int tcpx_try_func(void *util_ep)
