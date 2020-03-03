@@ -902,7 +902,7 @@ int ofi_check_tx_attr(const struct fi_provider *prov,
 	return 0;
 }
 
-/* if there are multiple fi_info in the provider:
+/* Use if there are multiple fi_info in the provider:
  * check provider's info */
 int ofi_prov_check_info(const struct util_prov *util_prov,
 			uint32_t api_version,
@@ -925,7 +925,7 @@ int ofi_prov_check_info(const struct util_prov *util_prov,
 	return (!success_info ? -FI_ENODATA : FI_SUCCESS);
 }
 
-/* if there are multiple fi_info in the provider:
+/* Use if there are multiple fi_info in the provider:
  * check and duplicate provider's info */
 int ofi_prov_check_dup_info(const struct util_prov *util_prov,
 			    uint32_t api_version,
@@ -958,7 +958,7 @@ int ofi_prov_check_dup_info(const struct util_prov *util_prov,
 		tail = fi;
 	}
 
-	return (!*info ? -FI_ENODATA : FI_SUCCESS);
+	return !*info ? -FI_ENODATA : FI_SUCCESS;
 err:
 	fi_freeinfo(*info);
 	FI_INFO(prov, FI_LOG_CORE,
@@ -966,7 +966,7 @@ err:
 	return ret;
 }
 
-/* if there is only single fi_info in the provider */
+/* Use if there is only single fi_info in the provider */
 int ofi_check_info(const struct util_prov *util_prov,
 		   const struct fi_info *prov_info, uint32_t api_version,
 		   const struct fi_info *user_info)

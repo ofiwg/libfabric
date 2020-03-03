@@ -36,81 +36,14 @@
 #include "udpx.h"
 
 #include <sys/types.h>
-#include <ifaddrs.h>
-#include <net/if.h>
 
-
-#if HAVE_GETIFADDRS
-static void udpx_getinfo_ifs(struct fi_info **info)
-{
-	struct fi_info *head = NULL, *tail = NULL, *cur;
-	struct slist addr_list;
-	size_t addrlen;
-	uint32_t addr_format;
-	struct slist_entry *entry, *prev;
-	struct ofi_addr_list_entry *addr_entry;
-
-	slist_init(&addr_list);
-
-	ofi_get_list_of_addr(&udpx_prov, "iface", &addr_list);
-
-	(void) prev; /* Makes compiler happy */
-	slist_foreach(&addr_list, entry, prev) {
-		addr_entry = container_of(entry, struct ofi_addr_list_entry, entry);
-
-		cur = fi_dupinfo(*info);
-		if (!cur)
-			break;
-
-		if (!head)
-			head = cur;
-		else
-			tail->next = cur;
-		tail = cur;
-
-		switch (addr_entry->ipaddr.sin.sin_family) {
-		case AF_INET:
-			addrlen = sizeof(struct sockaddr_in);
-			addr_format = FI_SOCKADDR_IN;
-			break;
-		case AF_INET6:
-			addrlen = sizeof(struct sockaddr_in6);
-			addr_format = FI_SOCKADDR_IN6;
-			break;
-		default:
-			continue;
-		}
-
-		cur->src_addr = mem_dup(&addr_entry->ipaddr, addrlen);
-		if (cur->src_addr) {
-			cur->src_addrlen = addrlen;
-			cur->addr_format = addr_format;
-		}
-	}
-
-	ofi_free_list_of_addr(&addr_list);
-	fi_freeinfo(*info);
-	*info = head;
-}
-#else
-#define udpx_getinfo_ifs(info) do{}while(0)
-#endif
 
 static int udpx_getinfo(uint32_t version, const char *node, const char *service,
 			uint64_t flags, const struct fi_info *hints,
 			struct fi_info **info)
 {
-	int ret;
-
-	ret = util_getinfo(&udpx_util_prov, version, node, service, flags,
-			   hints, info);
-	if (ret)
-		return ret;
-
-	if (!(*info)->src_addr && !(*info)->dest_addr)
-		udpx_getinfo_ifs(info);
-
-	return 0;
+	return ofi_ip_getinfo(&udpx_util_prov, version, node, service, flags,
+			      hints, info);
 }
 
 static void udpx_fini(void)
