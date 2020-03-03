@@ -12,6 +12,20 @@ v1.9.1, Fri Mar 6, 2020
 
 ## EFA
 
+- Change MR cache count and size limits
+- Fixes to 32-bit msg_id wraparound handling
+- Adds address map to look up EFA address from shm address
+- Remove unnecessary EFA device name check
+- Detect availability of CMA directly from EFA provider
+- Use OFI_GETINFO_HIDDEN flag when querying for shm
+- Allow use of EFA when shm is unavailable
+- Fixes info and domain capabilities for RDM endpoint
+- Fixes to dest_addr returned with info objects
+- Fixes segfault in efa_mr_cache_entry_dereg()
+- Fixes compilation warning in DSO build of the provider
+- Fixes compilation errors with -fno-common
+- Fixes to send-side control path
+
 ## PSM2
 
 ## RxD
