@@ -520,13 +520,6 @@ int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
 {
 	const struct fi_domain_attr *user_attr = user_info->domain_attr;
 
-	if (prov_attr->name && user_attr->name &&
-	    strcasecmp(user_attr->name, prov_attr->name)) {
-		FI_INFO(prov, FI_LOG_CORE, "Unknown domain name\n");
-		FI_INFO_NAME(prov, prov_attr, user_attr);
-		return -FI_ENODATA;
-	}
-
 	if (fi_thread_level(user_attr->threading) <
 	    fi_thread_level(prov_attr->threading)) {
 		FI_INFO(prov, FI_LOG_CORE, "Invalid threading model\n");
