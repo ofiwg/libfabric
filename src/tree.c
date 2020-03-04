@@ -111,6 +111,7 @@ void ofi_rbmap_cleanup(struct ofi_rbmap *map)
 void ofi_rbmap_destroy(struct ofi_rbmap *map)
 {
 	ofi_rbmap_cleanup(map);
+	free(map->free_list);
 	free(map);
 }
 
