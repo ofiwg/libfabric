@@ -253,8 +253,7 @@ uint64_t smr_rx_cq_flags(uint32_t op, uint16_t op_flags);
 
 void smr_ep_progress(struct util_ep *util_ep);
 
-int smr_progress_unexp(struct smr_ep *ep,
-		       struct smr_ep_entry *entry,
-		       struct smr_queue *unexp_queue);
+int smr_progress_unexp_queue(struct smr_ep *ep, struct smr_ep_entry *entry,
+			     struct smr_queue *unexp_queue);
 
 #endif

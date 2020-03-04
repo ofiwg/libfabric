@@ -120,7 +120,6 @@ int smr_setopt(fid_t fid, int level, int optname,
 	return FI_SUCCESS;
 }
 
-
 static int smr_match_recv_ctx(struct dlist_entry *item, const void *args)
 {
 	struct smr_ep_entry *pending_recv;
