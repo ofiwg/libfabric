@@ -1054,9 +1054,9 @@ static uint64_t ofi_get_caps(uint64_t info_caps, uint64_t hint_caps,
 	}
 
 	if (caps & (FI_MSG | FI_TAGGED) && !(caps & OFI_MSG_DIRECTION_CAPS))
-		caps |= OFI_MSG_DIRECTION_CAPS;
+		caps |= (attr_caps & OFI_MSG_DIRECTION_CAPS);
 	if (caps & (FI_RMA | FI_ATOMICS) && !(caps & OFI_RMA_DIRECTION_CAPS))
-		caps |= OFI_RMA_DIRECTION_CAPS;
+		caps |= (attr_caps & OFI_RMA_DIRECTION_CAPS);
 
 	return caps;
 }
