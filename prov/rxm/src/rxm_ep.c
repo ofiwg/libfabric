@@ -120,7 +120,7 @@ static int rxm_buf_reg(struct ofi_bufpool_region *region)
 	rxm_domain = container_of(pool->rxm_ep->util_ep.domain,
 				  struct rxm_domain, util_domain);
 	ret = rxm_msg_mr_reg_internal(rxm_domain, region->mem_region,
-				      region->pool->region_size,
+				      FI_HMEM_SYSTEM, region->pool->region_size,
 				      FI_SEND | FI_RECV | FI_READ | FI_WRITE,
 				      OFI_MR_NOCACHE,
 				      (struct fid_mr **) &region->context);
@@ -1068,8 +1068,8 @@ rxm_ep_alloc_rndv_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void 
 	tx_buf->count = count;
 
 	if (!rxm_ep->rdm_mr_local) {
-		ret = rxm_msg_mr_regv(rxm_ep, iov, tx_buf->count, data_len,
-				      FI_REMOTE_READ, tx_buf->mr);
+		ret = rxm_msg_mr_regv(rxm_ep, iov, iface, tx_buf->count,
+				      data_len, FI_REMOTE_READ, tx_buf->mr);
 		if (ret)
 			goto err;
 		mr_iov = tx_buf->mr;
@@ -1341,7 +1341,7 @@ rxm_ep_emulate_inject(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 {
 	struct rxm_tx_eager_buf *tx_buf;
 	ssize_t ret;
-	enum fi_hmem_iface iface = FI_HMEM_SYSTEM;
+	enum fi_hmem_iface iface;
 	const struct iovec iov = {
 		.iov_base = (void *)buf,
 		.iov_len = len,
@@ -1356,6 +1356,8 @@ rxm_ep_emulate_inject(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	}
 	/* This is needed so that we don't report bogus context in fi_cq_err_entry */
 	tx_buf->app_context = NULL;
+
+	iface = rxm_init_hmem_iface(rxm_ep, &iov, NULL, 1, true);
 
 	rxm_ep_format_tx_buf_pkt(rxm_conn, len, op, data, tag, flags, &tx_buf->pkt);
 
@@ -1392,7 +1394,12 @@ rxm_ep_inject_send_fast(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 	assert(len <= rxm_ep->rxm_info->tx_attr->inject_size);
 
-	if (pkt_size <= rxm_ep->inject_limit && !rxm_ep->util_ep.tx_cntr) {
+	/* If HMEM was request, always emulate injects. This is due to the
+	 * underlying message provider requiring FI_MR_HMEM and the inject
+	 * interfaces not support a desc field.
+	 */
+	if (pkt_size <= rxm_ep->inject_limit && !rxm_ep->util_ep.tx_cntr &&
+	    !(rxm_ep->rxm_info->caps & FI_HMEM)) {
 		inject_pkt->hdr.size = len;
 		memcpy(inject_pkt->data, buf, len);
 		ret = rxm_ep_msg_inject_send(rxm_ep, rxm_conn, inject_pkt,
@@ -1415,7 +1422,12 @@ rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 	assert(len <= rxm_ep->rxm_info->tx_attr->inject_size);
 
-	if (pkt_size <= rxm_ep->inject_limit && !rxm_ep->util_ep.tx_cntr) {
+	/* If HMEM was request, always emulate injects. This is due to the
+	 * underlying message provider requiring FI_MR_HMEM and the inject
+	 * interfaces not support a desc field.
+	 */
+	if (pkt_size <= rxm_ep->inject_limit && !rxm_ep->util_ep.tx_cntr &&
+	    !(rxm_ep->rxm_info->caps & FI_HMEM)) {
 		struct rxm_tx_base_buf *tx_buf = (struct rxm_tx_base_buf *)
 			rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_INJECT);
 		if (OFI_UNLIKELY(!tx_buf)) {
@@ -1456,7 +1468,8 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		(data_len > rxm_ep->rxm_info->tx_attr->inject_size)) ||
 	       (data_len <= rxm_ep->rxm_info->tx_attr->inject_size));
 
-	iface = rxm_mr_desc_to_hmem_iface(desc, count);
+	iface = rxm_init_hmem_iface(rxm_ep, iov, desc, count,
+				    !!(flags & FI_INJECT));
 
 	if (data_len <= rxm_eager_limit) {
 		struct rxm_tx_eager_buf *tx_buf = (struct rxm_tx_eager_buf *)

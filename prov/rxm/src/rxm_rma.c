@@ -42,13 +42,16 @@ rxm_ep_rma_reg_iov(struct rxm_ep *rxm_ep, const struct iovec *msg_iov,
 		   uint64_t comp_flags, struct rxm_rma_buf *rma_buf)
 {
 	size_t i, ret;
+	enum fi_hmem_iface iface;
 
 	if (!rxm_ep->msg_mr_local)
 		return FI_SUCCESS;
 
+	iface = rxm_init_hmem_iface(rxm_ep, msg_iov, desc, iov_count, false);
+
 	if (!rxm_ep->rdm_mr_local) {
-		ret = rxm_msg_mr_regv(rxm_ep, msg_iov, iov_count, SIZE_MAX,
-				      comp_flags, rma_buf->mr.mr);
+		ret = rxm_msg_mr_regv(rxm_ep, msg_iov, iface, iov_count,
+				      SIZE_MAX, comp_flags, rma_buf->mr.mr);
 		if (OFI_UNLIKELY(ret))
 			return ret;
 
@@ -179,13 +182,15 @@ static ssize_t rxm_ep_read(struct fid_ep *ep_fid, void *buf, size_t len,
 }
 
 static inline ssize_t
-rxm_ep_format_rma_msg(struct rxm_rma_buf *rma_buf, const struct fi_msg_rma *orig_msg,
-		      struct iovec *rxm_iov, struct fi_msg_rma *rxm_msg)
+rxm_ep_format_rma_msg(struct rxm_ep *rxm_ep, struct rxm_rma_buf *rma_buf,
+		      const struct fi_msg_rma *orig_msg, struct iovec *rxm_iov,
+		      struct fi_msg_rma *rxm_msg)
 {
 	enum fi_hmem_iface iface;
 	ssize_t ret;
 
-	iface = rxm_mr_desc_to_hmem_iface(orig_msg->desc, orig_msg->iov_count);
+	iface = rxm_init_hmem_iface(rxm_ep, orig_msg->msg_iov, orig_msg->desc,
+				    orig_msg->iov_count, true);
 
 	rxm_msg->context = rma_buf;
 	rxm_msg->addr = orig_msg->addr;
@@ -232,7 +237,8 @@ rxm_ep_rma_emulate_inject_msg(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, 
 	rma_buf->pkt.hdr.size = total_size;
 	rma_buf->app_context = msg->context;
 	rma_buf->flags = flags;
-	ret = rxm_ep_format_rma_msg(rma_buf, msg, &rxm_msg_iov, &rxm_rma_msg);
+	ret = rxm_ep_format_rma_msg(rxm_ep, rma_buf, msg, &rxm_msg_iov,
+				    &rxm_rma_msg);
 	if (ret < 0)
 		goto err;
 
@@ -295,10 +301,14 @@ rxm_ep_rma_inject_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg, ui
 	if (OFI_UNLIKELY(ret))
 		goto unlock;
 
+	/* If HMEM was request, always emulate injects. This is due to the
+	 * underlying message provider requiring FI_MR_HMEM and the inject
+	 * interfaces not support a desc field.
+	 */
 	if ((total_size > rxm_ep->msg_info->tx_attr->inject_size) ||
 	    rxm_ep->util_ep.wr_cntr ||
 	    (flags & FI_COMPLETION) || (msg->iov_count > 1) ||
-	    (msg->rma_iov_count > 1)) {
+	    (msg->rma_iov_count > 1) || (rxm_ep->rxm_info->caps & FI_HMEM)) {
 		ret = rxm_ep_rma_emulate_inject_msg(rxm_ep, rxm_conn, total_size,
 						    msg, flags);
 		goto unlock;
@@ -450,8 +460,12 @@ static ssize_t rxm_ep_inject_write(struct fid_ep *ep_fid, const void *buf,
 	if (OFI_UNLIKELY(ret))
 		goto unlock;
 
+	/* If HMEM was request, always emulate injects. This is due to the
+	 * underlying message provider requiring FI_MR_HMEM and the inject
+	 * interfaces not support a desc field.
+	 */
 	if (len > rxm_ep->msg_info->tx_attr->inject_size ||
-	    rxm_ep->util_ep.wr_cntr) {
+	    rxm_ep->util_ep.wr_cntr || (rxm_ep->rxm_info->caps & FI_HMEM)) {
 		ret = rxm_ep_rma_emulate_inject(
 			rxm_ep, rxm_conn, buf, len, 0,
 			dest_addr, addr, key, FI_INJECT);

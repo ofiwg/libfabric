@@ -275,6 +275,11 @@ static void rxm_alter_info(const struct fi_info *hints, struct fi_info *info)
 				cur->tx_attr->mode &= ~FI_LOCAL_MR;
 				cur->rx_attr->mode &= ~FI_LOCAL_MR;
 				cur->domain_attr->mr_mode &= ~FI_MR_LOCAL;
+
+				/* If MR local was not requested, FI_MR_HMEM is
+				 * always disabled.
+				 */
+				cur->domain_attr->mr_mode &= ~FI_MR_HMEM;
 			}
 
 			if (!hints->domain_attr ||

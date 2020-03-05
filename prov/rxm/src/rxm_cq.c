@@ -339,8 +339,9 @@ ssize_t rxm_cq_copy_seg_data(struct rxm_rx_buf *rx_buf, int *done)
 	enum fi_hmem_iface iface;
 	ssize_t done_len;
 
-	iface = rxm_mr_desc_to_hmem_iface(rx_buf->recv_entry->rxm_iov.desc,
-					  rx_buf->recv_entry->rxm_iov.count);
+	iface = rxm_init_hmem_iface(rx_buf->ep, rx_buf->recv_entry->rxm_iov.iov,
+				    rx_buf->recv_entry->rxm_iov.desc,
+				    rx_buf->recv_entry->rxm_iov.count, false);
 
 	done_len = ofi_copy_to_hmem_iov(rx_buf->recv_entry->rxm_iov.iov, iface,
 					rx_buf->recv_entry->rxm_iov.count,
@@ -453,6 +454,7 @@ ssize_t rxm_cq_handle_rndv(struct rxm_rx_buf *rx_buf)
 	size_t i, index = 0, offset = 0, count, total_recv_len;
 	struct iovec iov[RXM_IOV_LIMIT];
 	void *desc[RXM_IOV_LIMIT];
+	enum fi_hmem_iface iface;
 	struct rxm_rx_buf *new_rx_buf;
 	int ret = 0;
 
@@ -482,11 +484,15 @@ ssize_t rxm_cq_handle_rndv(struct rxm_rx_buf *rx_buf)
 	rx_buf->rndv_hdr = (struct rxm_rndv_hdr *)rx_buf->pkt.data;
 	rx_buf->rndv_rma_index = 0;
 
+	iface = rxm_init_hmem_iface(rx_buf->ep, rx_buf->recv_entry->rxm_iov.iov,
+				    rx_buf->recv_entry->rxm_iov.desc,
+				    rx_buf->recv_entry->rxm_iov.count, false);
+
 	if (!rx_buf->ep->rdm_mr_local) {
 		total_recv_len = MIN(rx_buf->recv_entry->total_len,
 				     rx_buf->pkt.hdr.size);
 		ret = rxm_msg_mr_regv(rx_buf->ep,
-				      rx_buf->recv_entry->rxm_iov.iov,
+				      rx_buf->recv_entry->rxm_iov.iov, iface,
 				      rx_buf->recv_entry->rxm_iov.count,
 				      total_recv_len, FI_READ, rx_buf->mr);
 		if (OFI_UNLIKELY(ret))
@@ -555,8 +561,9 @@ ssize_t rxm_cq_handle_eager(struct rxm_rx_buf *rx_buf)
 	enum fi_hmem_iface iface;
 	ssize_t done_len;
 
-	iface = rxm_mr_desc_to_hmem_iface(rx_buf->recv_entry->rxm_iov.desc,
-					  rx_buf->recv_entry->rxm_iov.count);
+	iface = rxm_init_hmem_iface(rx_buf->ep, rx_buf->recv_entry->rxm_iov.iov,
+				    rx_buf->recv_entry->rxm_iov.desc,
+				    rx_buf->recv_entry->rxm_iov.count, false);
 
 	done_len = ofi_copy_to_hmem_iov(rx_buf->recv_entry->rxm_iov.iov, iface,
 					rx_buf->recv_entry->rxm_iov.count,
@@ -579,8 +586,9 @@ ssize_t rxm_cq_handle_coll_eager(struct rxm_rx_buf *rx_buf)
 	enum fi_hmem_iface iface;
 	ssize_t done_len;
 
-	iface = rxm_mr_desc_to_hmem_iface(rx_buf->recv_entry->rxm_iov.desc,
-					  rx_buf->recv_entry->rxm_iov.count);
+	iface = rxm_init_hmem_iface(rx_buf->ep, rx_buf->recv_entry->rxm_iov.iov,
+				    rx_buf->recv_entry->rxm_iov.desc,
+				    rx_buf->recv_entry->rxm_iov.count, false);
 
 	done_len = ofi_copy_to_hmem_iov(rx_buf->recv_entry->rxm_iov.iov, iface,
 					rx_buf->recv_entry->rxm_iov.count,
@@ -1132,8 +1140,9 @@ static inline ssize_t rxm_handle_atomic_resp(struct rxm_ep *rxm_ep,
 	       " msg_id: 0x%" PRIx64 "\n", rx_buf->pkt.hdr.op,
 	       rx_buf->pkt.ctrl_hdr.msg_id);
 
-	iface = rxm_mr_desc_to_hmem_iface(tx_buf->rxm_iov.desc,
-					  tx_buf->rxm_iov.count);
+	iface = rxm_init_hmem_iface(rxm_ep, tx_buf->rxm_iov.iov,
+				    tx_buf->rxm_iov.desc, tx_buf->rxm_iov.count,
+				    false);
 
 	assert(!(rx_buf->comp_flags & ~(FI_RECV | FI_REMOTE_CQ_DATA)));
 

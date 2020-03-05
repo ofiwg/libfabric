@@ -120,8 +120,9 @@ rxm_ep_atomic_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 			       datatype_sz);
 		buf_len = ofi_total_iov_len(buf_iov, msg->iov_count);
 
-		buf_iface = rxm_mr_desc_to_hmem_iface(msg->desc,
-						      msg->iov_count);
+		buf_iface = rxm_init_hmem_iface(rxm_ep, buf_iov, msg->desc,
+						msg->iov_count,
+						!!(flags & FI_INJECT));
 	}
 
 	if (op == ofi_op_atomic_compare) {
@@ -131,8 +132,9 @@ rxm_ep_atomic_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		cmp_len = ofi_total_iov_len(cmp_iov, compare_iov_count);
 		assert(buf_len == cmp_len);
 
-		cmp_iface = rxm_mr_desc_to_hmem_iface(compare_desc,
-						      compare_iov_count);
+		cmp_iface = rxm_init_hmem_iface(rxm_ep, cmp_iov, compare_desc,
+						compare_iov_count,
+						!!(flags & FI_INJECT));
 	}
 
 	tot_len = buf_len + cmp_len + sizeof(struct rxm_atomic_hdr) +

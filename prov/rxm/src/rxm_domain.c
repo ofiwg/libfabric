@@ -173,15 +173,27 @@ static struct fi_ops rxm_mr_ops = {
 };
 
 int rxm_msg_mr_reg_internal(struct rxm_domain *rxm_domain, const void *buf,
-	size_t len, uint64_t acs, uint64_t flags, struct fid_mr **mr)
+			    enum fi_hmem_iface iface, size_t len, uint64_t acs,
+			    uint64_t flags, struct fid_mr **mr)
 {
 	int ret, tries = 0;
+	const struct iovec iov = {
+		.iov_base = (void *)buf,
+		.iov_len = len,
+	};
+	struct fi_mr_attr mr_attr = {
+		.mr_iov = &iov,
+		.iov_count = 1,
+		.access = acs,
+		.iface = iface,
+	};
 
 	/* If we can't get a key within 1024 tries, give up */
 	do {
-		ret = fi_mr_reg(rxm_domain->msg_domain, buf, len, acs, 0,
-				rxm_domain->mr_key++ | FI_PROV_SPECIFIC,
-				flags, mr, NULL);
+		mr_attr.requested_key = rxm_domain->mr_key++ | FI_PROV_SPECIFIC;
+
+		ret = fi_mr_regattr(rxm_domain->msg_domain, &mr_attr, flags,
+				    mr);
 	} while (ret == -FI_ENOKEY && tries++ < 1024);
 
 	return ret;
@@ -204,8 +216,8 @@ void rxm_msg_mr_closev(struct fid_mr **mr, size_t count)
 }
 
 int rxm_msg_mr_regv(struct rxm_ep *rxm_ep, const struct iovec *iov,
-		    size_t count, size_t reg_limit, uint64_t access,
-		    struct fid_mr **mr)
+		    enum fi_hmem_iface iface, size_t count, size_t reg_limit,
+		    uint64_t access, struct fid_mr **mr)
 {
 	struct rxm_domain *rxm_domain;
 	size_t i;
@@ -217,7 +229,7 @@ int rxm_msg_mr_regv(struct rxm_ep *rxm_ep, const struct iovec *iov,
 	for (i = 0; i < count && reg_limit; i++) {
 		size_t len = MIN(iov[i].iov_len, reg_limit);
 		ret = rxm_msg_mr_reg_internal(rxm_domain, iov[i].iov_base,
-					      len, access, 0, &mr[i]);
+					      iface, len, access, 0, &mr[i]);
 		if (ret)
 			goto err;
 		reg_limit -= len;
@@ -234,7 +246,7 @@ rxm_mr_get_msg_access(struct rxm_domain *rxm_domain, uint64_t access)
 	/* Additional flags to use RMA read for large message transfers */
 	access |= FI_READ | FI_REMOTE_READ;
 
-	if (rxm_domain->mr_local)
+	if (rxm_domain->msg_mr_local)
 		access |= FI_WRITE;
 	return access;
 }
@@ -261,6 +273,10 @@ static int rxm_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 
 	rxm_domain = container_of(fid, struct rxm_domain,
 				  util_domain.domain_fid.fid);
+
+	if (!rxm_domain->rdm_mr_local)
+		msg_attr.iface = rxm_iov_to_hmem_iface(msg_attr.mr_iov,
+						       msg_attr.iov_count);
 
 	rxm_mr = calloc(1, sizeof(*rxm_mr));
 	if (!rxm_mr)
@@ -301,9 +317,6 @@ static int rxm_mr_regv(struct fid *fid, const struct iovec *iov, size_t count,
 		       uint64_t access, uint64_t offset, uint64_t requested_key,
 		       uint64_t flags, struct fid_mr **mr, void *context)
 {
-	struct rxm_domain *rxm_domain;
-	struct rxm_mr *rxm_mr;
-	int ret;
 	struct fi_mr_attr msg_attr = {
 		.mr_iov = iov,
 		.iov_count = count,
@@ -311,40 +324,10 @@ static int rxm_mr_regv(struct fid *fid, const struct iovec *iov, size_t count,
 		.offset = offset,
 		.requested_key = requested_key,
 		.context = context,
+		.iface = FI_HMEM_SYSTEM,
 	};
 
-	rxm_domain = container_of(fid, struct rxm_domain,
-				  util_domain.domain_fid.fid);
-
-	rxm_mr = calloc(1, sizeof(*rxm_mr));
-	if (!rxm_mr)
-		return -FI_ENOMEM;
-
-	access = rxm_mr_get_msg_access(rxm_domain, access);
-
-	ret = fi_mr_regv(rxm_domain->msg_domain, iov, count, access, offset,
-			 requested_key, flags, &rxm_mr->msg_mr, context);
-	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_DOMAIN, "Unable to register MSG MR\n");
-		goto err;
-	}
-	rxm_mr_init(rxm_mr, rxm_domain, context);
-	*mr = &rxm_mr->mr_fid;
-
-	if (rxm_domain->util_domain.info_domain_caps & FI_ATOMIC) {
-		ret = rxm_mr_add_map_entry(&rxm_domain->util_domain,
-					   &msg_attr, rxm_mr);
-		if (ret)
-			goto map_err;
-	}
-
-	return 0;
-map_err:
-	fi_close(&rxm_mr->mr_fid.fid);
-	return ret;
-err:
-	free(rxm_mr);
-	return ret;
+	return rxm_mr_regattr(fid, &msg_attr, 0, mr);
 }
 
 static int rxm_mr_reg(struct fid *fid, const void *buf, size_t len,
@@ -408,7 +391,8 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	(*domain)->mr = &rxm_domain_mr_ops;
 	(*domain)->ops = &rxm_domain_ops;
 
-	rxm_domain->mr_local = ofi_mr_local(msg_info) && !ofi_mr_local(info);
+	rxm_domain->msg_mr_local = ofi_mr_local(msg_info);
+	rxm_domain->rdm_mr_local = ofi_mr_local(info);
 
 	fi_freeinfo(msg_info);
 	return 0;

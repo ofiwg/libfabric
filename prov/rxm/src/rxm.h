@@ -278,7 +278,8 @@ struct rxm_domain {
 	struct fid_domain *msg_domain;
 	size_t max_atomic_size;
 	uint64_t mr_key;
-	uint8_t mr_local;
+	bool rdm_mr_local;
+	bool msg_mr_local;
 };
 
 int rxm_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
@@ -835,11 +836,11 @@ int rxm_conn_process_eq_events(struct rxm_ep *rxm_ep);
 
 void rxm_msg_mr_closev(struct fid_mr **mr, size_t count);
 int rxm_msg_mr_regv(struct rxm_ep *rxm_ep, const struct iovec *iov,
-		    size_t count, size_t reg_limit, uint64_t access,
-		    struct fid_mr **mr);
+		    enum fi_hmem_iface iface, size_t count, size_t reg_limit,
+		    uint64_t access, struct fid_mr **mr);
 int rxm_msg_mr_reg_internal(struct rxm_domain *rxm_domain, const void *buf,
-			    size_t len, uint64_t acs, uint64_t flags,
-			    struct fid_mr **mr);
+			    enum fi_hmem_iface iface, size_t len, uint64_t acs,
+			    uint64_t flags, struct fid_mr **mr);
 
 static inline void rxm_cntr_incerr(struct util_cntr *cntr)
 {
@@ -976,6 +977,36 @@ static inline int rxm_cq_write_recv_comp(struct rxm_rx_buf *rx_buf,
 				    flags, len, buf, rx_buf->pkt.hdr.data,
 				    rx_buf->pkt.hdr.tag);
 }
+
+static inline enum fi_hmem_iface rxm_iov_to_hmem_iface(const struct iovec *iov,
+						       size_t count)
+{
+	int ret;
+	enum fi_hmem_iface iface;
+
+	if (!count)
+		return FI_HMEM_SYSTEM;
+
+	ret = ofi_get_hmem_iface(iov[0].iov_base, &iface);
+	assert(ret == FI_SUCCESS);
+
+	return iface;
+}
+
+static inline enum fi_hmem_iface rxm_init_hmem_iface(struct rxm_ep *rxm_ep,
+						     const struct iovec *iov,
+						     void **desc, size_t count,
+						     bool inject)
+{
+	if (rxm_ep->rxm_info->caps & FI_HMEM) {
+		if (rxm_ep->rdm_mr_local && !inject)
+			return rxm_mr_desc_to_hmem_iface(desc, count);
+		else
+			return rxm_iov_to_hmem_iface(iov, count);
+	}
+	return FI_HMEM_SYSTEM;
+}
+
 
 struct rxm_mr *rxm_mr_get_map_entry(struct rxm_domain *domain, uint64_t key);
 
