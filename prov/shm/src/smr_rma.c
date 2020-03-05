@@ -123,7 +123,8 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 	if (ret)
 		return ret;
 
-	cmds = 1 + !(domain->fast_rma && !(op_flags & FI_REMOTE_CQ_DATA) &&
+	cmds = 1 + !(domain->fast_rma && !(op_flags &
+		    (FI_REMOTE_CQ_DATA | FI_DELIVERY_COMPLETE)) &&
 		     rma_count == 1);
 
 	peer_smr = smr_peer_region(ep->region, peer_id);
@@ -150,15 +151,8 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 
 	total_len = ofi_total_iov_len(iov, iov_count);
 
-	if (total_len <= SMR_MSG_DATA_LEN && op == ofi_op_write) {
-		smr_format_inline(cmd, smr_peer_addr(ep->region)[peer_id].addr,
-				  iov, iov_count, op, 0, data, op_flags);
-	} else if (total_len <= SMR_INJECT_SIZE && op == ofi_op_write) {
-		tx_buf = smr_freestack_pop(smr_inject_pool(peer_smr));
-		smr_format_inject(cmd, smr_peer_addr(ep->region)[peer_id].addr,
-				  iov, iov_count, op, 0, data, op_flags,
-				  peer_smr, tx_buf);
-	} else {
+	if (total_len > SMR_INJECT_SIZE || op != ofi_op_write ||
+	    op_flags & FI_DELIVERY_COMPLETE) {
 		if (ofi_cirque_isfull(smr_resp_queue(ep->region))) {
 			ret = -FI_EAGAIN;
 			goto unlock_cq;
@@ -170,6 +164,14 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 			       op_flags, context, ep->region, resp, pend);
 		ofi_cirque_commit(smr_resp_queue(ep->region));
 		comp = 0;
+	} else if (total_len > SMR_MSG_DATA_LEN) {
+		tx_buf = smr_freestack_pop(smr_inject_pool(peer_smr));
+		smr_format_inject(cmd, smr_peer_addr(ep->region)[peer_id].addr,
+				  iov, iov_count, op, 0, data, op_flags,
+				  peer_smr, tx_buf);
+	} else {
+		smr_format_inline(cmd, smr_peer_addr(ep->region)[peer_id].addr,
+				  iov, iov_count, op, 0, data, op_flags);
 	}
 
 	comp_flags = cmd->msg.hdr.op_flags;
