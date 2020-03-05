@@ -1171,7 +1171,7 @@ capability bits from the fi_info structure will be used.
 The following capabilities apply to the receive attributes: FI_MSG,
 FI_RMA, FI_TAGGED, FI_ATOMIC, FI_REMOTE_READ, FI_REMOTE_WRITE, FI_RECV,
 FI_HMEM, FI_TRIGGER, FI_RMA_PMEM, FI_DIRECTED_RECV, FI_VARIABLE_MSG,
-FI_MULTI_RECV, FI_SOURCE, FI_RMA_EVENT, and FI_SOURCE_ERROR.
+FI_MULTI_RECV, FI_SOURCE, FI_RMA_EVENT, and FI_SOURCE_ERR.
 
 Many applications will be able to ignore this field and rely solely
 on the fi_info::caps field.  Use of this field provides fine grained
