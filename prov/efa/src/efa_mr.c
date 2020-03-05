@@ -70,6 +70,9 @@ int efa_mr_cache_entry_reg(struct ofi_mr_cache *cache,
 	md->mr_fid.fid.fclass = FI_CLASS_MR;
 	md->mr_fid.fid.context = NULL;
 
+	if (md->domain->ctx->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ)
+		fi_ibv_access |= IBV_ACCESS_REMOTE_READ;
+
 	md->mr = ibv_reg_mr(md->domain->ibv_pd, entry->info.iov.iov_base,
 			    entry->info.iov.iov_len, fi_ibv_access);
 	if (!md->mr) {
@@ -77,9 +80,8 @@ int efa_mr_cache_entry_reg(struct ofi_mr_cache *cache,
 		return -errno;
 	}
 
-	md->mr_fid.mem_desc = (void *)(uintptr_t)md->mr->lkey;
+	md->mr_fid.mem_desc = md->mr;
 	md->mr_fid.key = md->mr->rkey;
-
 	return 0;
 }
 
@@ -247,7 +249,7 @@ static int efa_mr_reg(struct fid *fid, const void *buf, size_t len,
 	if (access & FI_RECV)
 		fi_ibv_access |= IBV_ACCESS_LOCAL_WRITE;
 
-	if (access & FI_REMOTE_READ)
+	if (md->domain->ctx->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ)
 		fi_ibv_access |= IBV_ACCESS_REMOTE_READ;
 
 	md->mr = ibv_reg_mr(md->domain->ibv_pd, (void *)buf, len,
@@ -258,10 +260,9 @@ static int efa_mr_reg(struct fid *fid, const void *buf, size_t len,
 		goto err;
 	}
 
-	md->mr_fid.mem_desc = (void *)(uintptr_t)md->mr->lkey;
+	md->mr_fid.mem_desc = md->mr;
 	md->mr_fid.key = md->mr->rkey;
 	*mr_fid = &md->mr_fid;
-
 	return 0;
 
 err:

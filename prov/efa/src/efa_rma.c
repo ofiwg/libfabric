@@ -41,8 +41,8 @@ static
 ssize_t efa_rma_post_read(struct efa_ep *ep, const struct fi_msg_rma *msg, uint64_t flags)
 {
 	struct efa_qp *qp;
+	struct ibv_mr *ibv_mr;
 	struct efa_conn *conn;
-	int lkey;
 
 	if (OFI_UNLIKELY(msg->iov_count > ep->domain->ctx->max_wr_rdma_sge)) {
 		EFA_WARN(FI_LOG_CQ, "invalid iov_count!\n");
@@ -68,8 +68,8 @@ ssize_t efa_rma_post_read(struct efa_ep *ep, const struct fi_msg_rma *msg, uint6
 	qp->ibv_qp_ex->wr_id = (uintptr_t)msg->context;
 	ibv_wr_rdma_read(qp->ibv_qp_ex, msg->rma_iov[0].key, msg->rma_iov[0].addr);
 
-	lkey = (uint32_t)(uintptr_t)msg->desc[0];
-	ibv_wr_set_sge(qp->ibv_qp_ex, lkey, (uint64_t)msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len);
+	ibv_mr = (struct ibv_mr *)msg->desc[0];
+	ibv_wr_set_sge(qp->ibv_qp_ex, ibv_mr->lkey, (uint64_t)msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len);
 	conn = ep->av->addr_to_conn(ep->av, msg->addr);
 	ibv_wr_set_ud_addr(qp->ibv_qp_ex, conn->ah.ibv_ah, conn->ep_addr.qpn, EFA_QKEY);
 	return ibv_wr_complete(qp->ibv_qp_ex);
