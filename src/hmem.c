@@ -41,16 +41,19 @@
 struct ofi_hmem_ops {
 	int (*copy_to_hmem)(void *dest, const void *src, size_t size);
 	int (*copy_from_hmem)(void *dest, const void *src, size_t size);
+	bool (*is_hmem_iface)(const void *addr);
 };
 
 static struct ofi_hmem_ops hmem_ops[] = {
 	[FI_HMEM_SYSTEM] = {
 		.copy_to_hmem = ofi_memcpy,
 		.copy_from_hmem = ofi_memcpy,
+		.is_hmem_iface = ofi_is_hmem_iface,
 	},
 	[FI_HMEM_CUDA] = {
 		.copy_to_hmem = cuda_copy_to_dev,
 		.copy_from_hmem = cuda_copy_from_dev,
+		.is_hmem_iface = cuda_is_hmem_iface,
 	},
 };
 
@@ -125,4 +128,17 @@ ssize_t ofi_copy_to_hmem_iov(const struct iovec *hmem_iov,
 	return ofi_copy_hmem_iov_buf(hmem_iov, hmem_iface, hmem_iov_count,
 				     hmem_iov_offset, src, size,
 				     OFI_COPY_BUF_TO_IOV);
+}
+
+enum fi_hmem_iface ofi_get_hmem_iface(const void *addr)
+{
+	enum fi_hmem_iface iface;
+
+	for (iface = ARRAY_SIZE(hmem_ops) - 1; iface > FI_HMEM_SYSTEM;
+	     iface--) {
+		if (hmem_ops[iface].is_hmem_iface(addr))
+			return iface;
+	}
+
+	return FI_HMEM_SYSTEM;
 }

@@ -72,6 +72,52 @@ int cuda_copy_from_dev(void *host, const void *dev, size_t size)
 	return -FI_EIO;
 }
 
+bool cuda_is_hmem_iface(const void *buf)
+{
+	CUresult cuda_ret;
+	unsigned int data;
+
+	cuda_ret = cuPointerGetAttribute(&data,
+					 CU_POINTER_ATTRIBUTE_MEMORY_TYPE,
+					 (CUdeviceptr)buf);
+	switch (cuda_ret) {
+	case CUDA_SUCCESS:
+		if (data == CU_MEMORYTYPE_DEVICE)
+			return true;
+		break;
+
+	/* Returned if the buffer is not associated with the CUcontext support
+	 * unified virtual addressing. Since host buffers may fall into this
+	 * category, this is not treated as an error.
+	 */
+	case CUDA_ERROR_INVALID_VALUE:
+		break;
+
+	/* Returned if cuInit() has not been called. This can happen if support
+	 * for CUDA is enabled but the user has not made a CUDA call. This is
+	 * not treated as an error.
+	 */
+	case CUDA_ERROR_NOT_INITIALIZED:
+		break;
+
+	/* Returned if the CUcontext does not support unified virtual
+	 * addressing.
+	 */
+	case CUDA_ERROR_INVALID_CONTEXT:
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"CUcontext does not support unified virtual addressining\n");
+		break;
+
+	default:
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Unhandle cuPointerGetAttribute return code: ret=%d\n",
+			cuda_ret);
+		break;
+	}
+
+	return false;
+}
+
 #else
 
 int cuda_copy_to_dev(void *dev, const void *host, size_t size)
@@ -82,6 +128,11 @@ int cuda_copy_to_dev(void *dev, const void *host, size_t size)
 int cuda_copy_from_dev(void *host, const void *dev, size_t size)
 {
 	return -FI_ENOSYS;
+}
+
+bool cuda_is_hmem_iface(const void *buf)
+{
+	return false;
 }
 
 #endif /* HAVE_LIBCUDA */
