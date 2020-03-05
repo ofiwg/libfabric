@@ -39,6 +39,14 @@
 #define OFI_MSG_CAPS	(FI_SEND | FI_RECV)
 #define OFI_RMA_CAPS	(FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE)
 
+#define OFI_IGNORED_TX_CAPS /* older Rx caps not applicable to Tx */ \
+	(FI_REMOTE_READ | FI_REMOTE_WRITE | FI_RECV | FI_DIRECTED_RECV | \
+	 FI_VARIABLE_MSG | FI_MULTI_RECV | FI_SOURCE | FI_RMA_EVENT | \
+	 FI_SOURCE_ERR)
+#define OFI_IGNORED_RX_CAPS /* Older Tx caps not applicable to Rx */ \
+	(FI_READ | FI_WRITE | FI_SEND | FI_FENCE | FI_MULTICAST | \
+	 FI_NAMED_RX_CTX)
+
 static int fi_valid_addr_format(uint32_t prov_format, uint32_t user_format)
 {
 	if (user_format == FI_FORMAT_UNSPEC || prov_format == FI_FORMAT_UNSPEC)
@@ -745,7 +753,10 @@ int ofi_check_rx_attr(const struct fi_provider *prov,
 	const struct fi_rx_attr *prov_attr = prov_info->rx_attr;
 	int rm_enabled = (prov_info->domain_attr->resource_mgmt == FI_RM_ENABLED);
 
-	if (user_attr->caps & ~(prov_attr->caps)) {
+	if (user_attr->caps & ~OFI_IGNORED_RX_CAPS)
+		FI_INFO(prov, FI_LOG_CORE, "Tx only caps ignored in Rx caps\n");
+
+	if ((user_attr->caps & ~OFI_IGNORED_RX_CAPS) & ~(prov_attr->caps)) {
 		FI_INFO(prov, FI_LOG_CORE, "caps not supported\n");
 		FI_INFO_CHECK(prov, prov_attr, user_attr, caps, FI_TYPE_CAPS);
 		return -FI_ENODATA;
@@ -848,7 +859,10 @@ int ofi_check_tx_attr(const struct fi_provider *prov,
 		      const struct fi_tx_attr *prov_attr,
 		      const struct fi_tx_attr *user_attr, uint64_t info_mode)
 {
-	if (user_attr->caps & ~(prov_attr->caps)) {
+	if (user_attr->caps & ~OFI_IGNORED_TX_CAPS)
+		FI_INFO(prov, FI_LOG_CORE, "Rx only caps ignored in Tx caps\n");
+
+	if ((user_attr->caps & ~OFI_IGNORED_TX_CAPS) & ~(prov_attr->caps)) {
 		FI_INFO(prov, FI_LOG_CORE, "caps not supported\n");
 		FI_INFO_CHECK(prov, prov_attr, user_attr, caps, FI_TYPE_CAPS);
 		return -FI_ENODATA;
