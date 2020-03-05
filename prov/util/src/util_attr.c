@@ -804,32 +804,26 @@ int ofi_check_rx_attr(const struct fi_provider *prov,
 	return 0;
 }
 
-static uint64_t ofi_expand_caps(uint64_t base_caps)
-{
-	uint64_t expanded_caps = base_caps;
-
-	if (base_caps & (FI_MSG | FI_TAGGED))
-		if (!(base_caps & OFI_MSG_DIRECTION_CAPS))
-			expanded_caps |= OFI_MSG_DIRECTION_CAPS;
-
-	if (base_caps & (FI_RMA | FI_ATOMIC))
-		if (!(base_caps & OFI_RMA_DIRECTION_CAPS))
-			expanded_caps |= OFI_RMA_DIRECTION_CAPS;
-
-	return expanded_caps;
-}
-
 int ofi_check_attr_subset(const struct fi_provider *prov,
 		uint64_t base_caps, uint64_t requested_caps)
 {
-	uint64_t expanded_base_caps;
+	uint64_t expanded_caps;
 
-	expanded_base_caps = ofi_expand_caps(base_caps);
+	expanded_caps = base_caps;
+	if (base_caps & (FI_MSG | FI_TAGGED)) {
+		if (!(base_caps & OFI_MSG_DIRECTION_CAPS))
+			expanded_caps |= OFI_MSG_DIRECTION_CAPS;
+	}
+	if (base_caps & (FI_RMA | FI_ATOMIC)) {
+		if (!(base_caps & OFI_RMA_DIRECTION_CAPS))
+			expanded_caps |= OFI_RMA_DIRECTION_CAPS;
+	}
 
-	if (~expanded_base_caps & requested_caps) {
-		FI_INFO(prov, FI_LOG_CORE, "requested caps not subset of base endpoint caps\n");
-		FI_INFO_FIELD(prov, expanded_base_caps, requested_caps, "Supported",
-				"Requested", FI_TYPE_CAPS);
+	if (~expanded_caps & requested_caps) {
+		FI_INFO(prov, FI_LOG_CORE,
+			"requested caps not subset of base endpoint caps\n");
+		FI_INFO_FIELD(prov, expanded_caps, requested_caps,
+			"Supported", "Requested", FI_TYPE_CAPS);
 		return -FI_ENODATA;
 	}
 
