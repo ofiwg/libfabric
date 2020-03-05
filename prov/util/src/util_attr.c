@@ -36,8 +36,9 @@
 #include <shared/ofi_str.h>
 #include <ofi_util.h>
 
-#define OFI_MSG_CAPS	(FI_SEND | FI_RECV)
-#define OFI_RMA_CAPS	(FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE)
+#define OFI_MSG_DIRECTION_CAPS	(FI_SEND | FI_RECV)
+#define OFI_RMA_DIRECTION_CAPS	(FI_READ | FI_WRITE | \
+				 FI_REMOTE_READ | FI_REMOTE_WRITE)
 
 static int fi_valid_addr_format(uint32_t prov_format, uint32_t user_format)
 {
@@ -806,16 +807,14 @@ int ofi_check_rx_attr(const struct fi_provider *prov,
 static uint64_t ofi_expand_caps(uint64_t base_caps)
 {
 	uint64_t expanded_caps = base_caps;
-	uint64_t msg_caps = FI_SEND | FI_RECV;
-	uint64_t rma_caps = FI_WRITE | FI_READ | FI_REMOTE_WRITE | FI_REMOTE_READ;
 
 	if (base_caps & (FI_MSG | FI_TAGGED))
-		if (!(base_caps & msg_caps))
-			expanded_caps |= msg_caps;
+		if (!(base_caps & OFI_MSG_DIRECTION_CAPS))
+			expanded_caps |= OFI_MSG_DIRECTION_CAPS;
 
 	if (base_caps & (FI_RMA | FI_ATOMIC))
-		if (!(base_caps & rma_caps))
-			expanded_caps |= rma_caps;
+		if (!(base_caps & OFI_RMA_DIRECTION_CAPS))
+			expanded_caps |= OFI_RMA_DIRECTION_CAPS;
 
 	return expanded_caps;
 }
@@ -1060,10 +1059,10 @@ static uint64_t ofi_get_caps(uint64_t info_caps, uint64_t hint_caps,
 		       (attr_caps & FI_SECONDARY_CAPS);
 	}
 
-	if (caps & (FI_MSG | FI_TAGGED) && !(caps & OFI_MSG_CAPS))
-		caps |= OFI_MSG_CAPS;
-	if (caps & (FI_RMA | FI_ATOMICS) && !(caps & OFI_RMA_CAPS))
-		caps |= OFI_RMA_CAPS;
+	if (caps & (FI_MSG | FI_TAGGED) && !(caps & OFI_MSG_DIRECTION_CAPS))
+		caps |= OFI_MSG_DIRECTION_CAPS;
+	if (caps & (FI_RMA | FI_ATOMICS) && !(caps & OFI_RMA_DIRECTION_CAPS))
+		caps |= OFI_RMA_DIRECTION_CAPS;
 
 	return caps;
 }
