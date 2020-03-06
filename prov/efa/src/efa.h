@@ -57,6 +57,7 @@
 #include <rdma/fi_errno.h>
 
 #include <infiniband/verbs.h>
+#include <infiniband/efadv.h>
 
 #include "ofi.h"
 #include "ofi_enosys.h"
@@ -88,7 +89,7 @@
 
 #define EFA_DEF_CQ_SIZE 1024
 #define EFA_MR_IOV_LIMIT 1
-#define EFA_MR_SUPPORTED_PERMISSIONS (FI_SEND | FI_RECV)
+#define EFA_MR_SUPPORTED_PERMISSIONS (FI_SEND | FI_RECV | FI_REMOTE_READ)
 
 /*
  * Multiplier to give some room in the device memory registration limits
@@ -183,10 +184,14 @@ struct efa_context {
 	struct ibv_context	*ibv_ctx;
 	uint64_t		max_mr_size;
 	uint16_t		inline_buf_size;
+	uint16_t		max_wr_rdma_sge;
+	uint32_t		max_rdma_size;
+	uint32_t		device_caps;
 };
 
 struct efa_qp {
 	struct ibv_qp	*ibv_qp;
+	struct ibv_qp_ex *ibv_qp_ex;
 	struct efa_ep	*ep;
 	uint32_t	qp_num;
 };
@@ -299,6 +304,7 @@ extern const struct efa_ep_domain efa_dgrm_domain;
 
 extern struct fi_ops_cm efa_ep_cm_ops;
 extern struct fi_ops_msg efa_ep_msg_ops;
+extern struct fi_ops_rma efa_ep_rma_ops;
 
 int efa_device_init(void);
 void efa_device_free(void);
@@ -332,5 +338,23 @@ struct fi_provider *init_lower_efa_prov();
 ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count, fi_addr_t *src_addr);
 
 ssize_t efa_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry, uint64_t flags);
+
+static inline
+bool efa_support_rdma_read(struct fid_ep *ep_fid)
+{
+	struct efa_ep *efa_ep;
+
+	efa_ep = container_of(ep_fid, struct efa_ep, util_ep.ep_fid);
+	return efa_ep->domain->ctx->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ;
+}
+
+static inline
+size_t efa_max_rdma_size(struct fid_ep *ep_fid)
+{
+	struct efa_ep *efa_ep;
+
+	efa_ep = container_of(ep_fid, struct efa_ep, util_ep.ep_fid);
+	return efa_ep->domain->ctx->max_rdma_size;
+}
 
 #endif /* EFA_H */

@@ -67,6 +67,13 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 				[efa_happy=0])
 	      ])
 
+	AS_IF([test x"$enable_efa" != x"no"],
+	      [AC_CHECK_MEMBER(struct efadv_device_attr.max_rdma_size,
+			      [AC_DEFINE([HAVE_RDMA_SIZE], [1], [efadv_device_attr has max_rdma_size])],
+			      [],
+			      [[#include <infiniband/efadv.h>]])
+	      ])
+
 	AS_IF([test $efa_happy -eq 1 ], [$1], [$2])
 
 	efa_CPPFLAGS="$efa_ibverbs_CPPFLAGS $efadv_CPPFLAGS"

@@ -91,28 +91,36 @@ static int efa_ep_modify_qp_rst2rts(struct efa_qp *qp)
 				      IBV_QP_STATE | IBV_QP_SQ_PSN);
 }
 
-static int efa_ep_create_qp(struct efa_ep *ep,
-			    struct ibv_pd *ibv_pd,
-			    struct ibv_qp_init_attr *init_attr)
+static int efa_ep_create_qp_ex(struct efa_ep *ep,
+			       struct ibv_pd *ibv_pd,
+			       struct ibv_qp_init_attr_ex *init_attr_ex)
 {
-	struct efa_domain *domain = ep->domain;
+	struct efa_domain *domain;
 	struct efa_qp *qp;
+	struct efadv_qp_init_attr efa_attr = {};
 	int err;
 
+	domain = ep->domain;
 	qp = calloc(1, sizeof(*qp));
 	if (!qp)
 		return -FI_ENOMEM;
 
-	if (init_attr->qp_type == IBV_QPT_UD)
-		qp->ibv_qp = ibv_create_qp(ibv_pd, init_attr);
-	else
-		qp->ibv_qp = efadv_create_driver_qp(ibv_pd, init_attr,
-						    EFADV_QP_DRIVER_TYPE_SRD);
+	if (init_attr_ex->qp_type == IBV_QPT_UD) {
+		qp->ibv_qp = ibv_create_qp_ex(ibv_pd->context, init_attr_ex);
+	} else {
+		assert(init_attr_ex->qp_type == IBV_QPT_DRIVER);
+		efa_attr.driver_qp_type = EFADV_QP_DRIVER_TYPE_SRD;
+		qp->ibv_qp = efadv_create_qp_ex(ibv_pd->context, init_attr_ex, &efa_attr,
+						sizeof(struct efadv_qp_init_attr));
+	}
+
 	if (!qp->ibv_qp) {
 		EFA_WARN(FI_LOG_EP_CTRL, "ibv_create_qp failed\n");
 		err = -EINVAL;
 		goto err_free_qp;
 	}
+
+	qp->ibv_qp_ex = ibv_qp_to_qp_ex(qp->ibv_qp);
 
 	err = efa_ep_modify_qp_rst2rts(qp);
 	if (err)
@@ -337,7 +345,7 @@ static int efa_ep_setflags(struct fid_ep *ep_fid, uint64_t flags)
 
 static int efa_ep_enable(struct fid_ep *ep_fid)
 {
-	struct ibv_qp_init_attr attr = { 0 };
+	struct ibv_qp_init_attr_ex attr_ex = { 0 };
 	const struct fi_info *efa_info;
 	struct ibv_pd *ibv_pd;
 	struct efa_ep *ep;
@@ -369,29 +377,42 @@ static int efa_ep_enable(struct fid_ep *ep_fid)
 	}
 
 	if (ep->scq) {
-		attr.cap.max_send_wr = ep->info->tx_attr->size;
-		attr.cap.max_send_sge = ep->info->tx_attr->iov_limit;
-		attr.send_cq = ep->scq->ibv_cq;
+		attr_ex.cap.max_send_wr = ep->info->tx_attr->size;
+		attr_ex.cap.max_send_sge = ep->info->tx_attr->iov_limit;
+		attr_ex.send_cq = ep->scq->ibv_cq;
 		ibv_pd = ep->scq->domain->ibv_pd;
 	} else {
-		attr.send_cq = ep->rcq->ibv_cq;
+		attr_ex.send_cq = ep->rcq->ibv_cq;
 		ibv_pd = ep->rcq->domain->ibv_pd;
 	}
 
 	if (ep->rcq) {
-		attr.cap.max_recv_wr = ep->info->rx_attr->size;
-		attr.cap.max_recv_sge = ep->info->rx_attr->iov_limit;
-		attr.recv_cq = ep->rcq->ibv_cq;
+		attr_ex.cap.max_recv_wr = ep->info->rx_attr->size;
+		attr_ex.cap.max_recv_sge = ep->info->rx_attr->iov_limit;
+		attr_ex.recv_cq = ep->rcq->ibv_cq;
 	} else {
-		attr.recv_cq = ep->scq->ibv_cq;
+		attr_ex.recv_cq = ep->scq->ibv_cq;
 	}
 
-	attr.cap.max_inline_data = ep->domain->ctx->inline_buf_size;
-	attr.qp_type = ep->domain->rdm ? IBV_QPT_DRIVER : IBV_QPT_UD;
-	attr.qp_context = ep;
-	attr.sq_sig_all = 1;
+	attr_ex.cap.max_inline_data = ep->domain->ctx->inline_buf_size;
 
-	return efa_ep_create_qp(ep, ibv_pd, &attr);
+	if (ep->domain->rdm) {
+		attr_ex.qp_type = IBV_QPT_DRIVER;
+		attr_ex.comp_mask = IBV_QP_INIT_ATTR_PD | IBV_QP_INIT_ATTR_SEND_OPS_FLAGS;
+		attr_ex.send_ops_flags = IBV_QP_EX_WITH_SEND;
+		if (efa_support_rdma_read(&ep->util_ep.ep_fid))
+			attr_ex.send_ops_flags |= IBV_QP_EX_WITH_RDMA_READ;
+		attr_ex.pd = ibv_pd;
+	} else {
+		attr_ex.qp_type = IBV_QPT_UD;
+		attr_ex.comp_mask = IBV_QP_INIT_ATTR_PD;
+		attr_ex.pd = ibv_pd;
+	}
+
+	attr_ex.qp_context = ep;
+	attr_ex.sq_sig_all = 1;
+
+	return efa_ep_create_qp_ex(ep, ibv_pd, &attr_ex);
 }
 
 static int efa_ep_control(struct fid *fid, int command, void *arg)
@@ -500,19 +521,6 @@ void efa_ep_progress(struct util_ep *ep)
 
 	fastlock_release(&ep->lock);
 }
-
-static struct fi_ops_rma efa_ep_rma_ops = {
-	.size = sizeof(struct fi_ops_rma),
-	.read = fi_no_rma_read,
-	.readv = fi_no_rma_readv,
-	.readmsg = fi_no_rma_readmsg,
-	.write = fi_no_rma_write,
-	.writev = fi_no_rma_writev,
-	.writemsg = fi_no_rma_writemsg,
-	.inject = fi_no_rma_inject,
-	.writedata = fi_no_rma_writedata,
-	.injectdata = fi_no_rma_injectdata,
-};
 
 static struct fi_ops_atomic efa_ep_atomic_ops = {
 	.size = sizeof(struct fi_ops_atomic),

@@ -40,6 +40,7 @@ _efa_files = \
 	prov/efa/src/efa_fabric.c \
 	prov/efa/src/efa_msg.c \
 	prov/efa/src/efa_mr.c \
+	prov/efa/src/efa_rma.c \
 	prov/efa/src/rxr/rxr_attr.c	\
 	prov/efa/src/rxr/rxr_init.c	\
 	prov/efa/src/rxr/rxr_fabric.c	\
