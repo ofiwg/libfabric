@@ -80,6 +80,13 @@ enum {
 #define SMR_RX_COMPLETION	(1 << 3)
 #define SMR_MULTI_RECV		(1 << 4)
 
+/* CMA capability */
+enum {
+	SMR_CMA_CAP_NA,
+	SMR_CMA_CAP_ON,
+	SMR_CMA_CAP_OFF,
+};
+
 /* 
  * Unique smr_op_hdr for smr message protocol:
  * 	addr - local fi_addr of peer sending msg (for shm lookup)
@@ -181,6 +188,8 @@ struct smr_region {
 	uint8_t		resv;
 	uint16_t	flags;
 	int		pid;
+	uint8_t		cma_cap;
+	void		*base_addr;
 	fastlock_t	lock; /* lock for shm access
 				 Must hold smr->lock before tx/rx cq locks
 				 in order to progress or post recv */
@@ -257,6 +266,7 @@ struct smr_attr {
 	size_t		tx_count;
 };
 
+void	smr_cma_check(struct smr_region *region, struct smr_region *peer_region);
 void	smr_cleanup(void);
 int	smr_map_create(const struct fi_provider *prov, int peer_count,
 		       struct smr_map **map);
