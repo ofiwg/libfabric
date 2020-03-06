@@ -262,11 +262,10 @@ free_dom:
  */
 void cxip_free_if_domain(struct cxip_if_domain *if_dom)
 {
-	struct cxip_lni *lni = if_dom->lni;
 	int ret;
 
 	CXIP_LOG_DBG("Freeing IF Domain, cxi%u VNI: %u PID: %u\n",
-		     lni->iface->info.dev_id, if_dom->dom->vni,
+		     if_dom->lni->iface->info.dev_id, if_dom->dom->vni,
 		     if_dom->dom->pid);
 
 	ret = cxil_destroy_domain(if_dom->dom);

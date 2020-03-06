@@ -2122,7 +2122,7 @@ Test(atomic, more)
 	uint64_t exp_remote;
 	uint64_t *rma;
 	int ret;
-	int i;
+	int i = 0;
 	uint64_t key = 0xa;
 	struct fi_msg_atomic msg = {};
 	struct fi_ioc ioc;
