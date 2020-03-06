@@ -270,10 +270,11 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct fi_cq_data_entry *
 		rxr_cq_handle_cq_error(ep, -FI_EIO);
 		return;
 	}
-	rxr_pkt_entry_release_tx(ep, pkt_entry);
+
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 	if (!peer->is_local)
 		rxr_ep_dec_tx_pending(ep, peer, 0);
+	rxr_pkt_entry_release_tx(ep, pkt_entry);
 }
 
 /*
