@@ -37,8 +37,8 @@
 #include "ofi_iov.h"
 #include "smr.h"
 
-static int smr_progress_fetch(struct smr_ep *ep, struct smr_cmd *pending,
-			      uint64_t *ret)
+static int smr_progress_atomic_resp(struct smr_ep *ep, struct smr_cmd *pending,
+				    uint64_t *ret)
 {
 	struct smr_region *peer_smr;
 	size_t inj_offset, size;
@@ -49,12 +49,15 @@ static int smr_progress_fetch(struct smr_ep *ep, struct smr_cmd *pending,
 	if (fastlock_tryacquire(&peer_smr->lock))
 		return -FI_EAGAIN;
 
+	if (!(pending->msg.hdr.op_flags & SMR_RMA_REQ))
+		goto out;
+
 	inj_offset = (size_t) pending->msg.hdr.src_data;
 	tx_buf = (struct smr_inject_buf *) ((char **) peer_smr +
 					    inj_offset);
 
 	if (*ret)
-		goto out;
+		goto push;
 
 	src = pending->msg.hdr.op == ofi_op_atomic_compare ?
 	      tx_buf->buf : tx_buf->data;
@@ -67,9 +70,9 @@ static int smr_progress_fetch(struct smr_ep *ep, struct smr_cmd *pending,
 			"Incomplete atomic fetch buffer copied\n");
 		*ret = FI_EIO;
 	}
-
-out:
+push:
 	smr_freestack_push(smr_inject_pool(peer_smr), tx_buf);
+out:
 	peer_smr->cmd_cnt++;
 	fastlock_release(&peer_smr->lock);
 	return 0;
@@ -90,8 +93,9 @@ static void smr_progress_resp(struct smr_ep *ep)
 			break;
 
 		pending = (struct smr_cmd *) resp->msg_id;
-		if (pending->msg.hdr.op_flags & SMR_RMA_REQ &&
-			smr_progress_fetch(ep, pending, &resp->status))
+		if (pending->msg.hdr.op >= ofi_op_atomic &&
+		    pending->msg.hdr.op <= ofi_op_atomic_compare &&
+		    smr_progress_atomic_resp(ep, pending, &resp->status))
 				break;
 
 		ret = smr_complete_tx(ep, (void *) (uintptr_t) pending->msg.hdr.msg_id,
@@ -519,14 +523,15 @@ static int smr_progress_cmd_atomic(struct smr_ep *ep, struct smr_cmd *cmd)
 			"unidentified operation type\n");
 		err = -FI_EINVAL;
 	}
-	if (!(cmd->msg.hdr.op_flags & SMR_RMA_REQ)) {
-		ep->region->cmd_cnt++;
-	} else {
+	if (cmd->msg.hdr.data) {
 		peer_smr = smr_peer_region(ep->region, cmd->msg.hdr.addr);
 		resp = (struct smr_resp *) ((char **) peer_smr +
 			    (size_t) cmd->msg.hdr.data);
 		resp->status = -err;
+	} else {
+		ep->region->cmd_cnt++;
 	}
+
 	if (err)
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"error processing atomic op\n");

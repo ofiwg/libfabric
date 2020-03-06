@@ -149,8 +149,8 @@ static int smr_fetch_result(struct smr_ep *ep, struct smr_region *peer_smr,
 	return 0; 
 }
 
-static void smr_post_fetch_resp(struct smr_ep *ep, struct smr_cmd *cmd,
-				const struct iovec *result_iov, size_t count)
+static void smr_post_atomic_resp(struct smr_ep *ep, struct smr_cmd *cmd,
+				 const struct iovec *result_iov, size_t count)
 {
 	struct smr_cmd *pend;
 	struct smr_resp *resp;
@@ -268,13 +268,12 @@ static ssize_t smr_generic_atomic(struct smr_ep *ep,
 	ofi_cirque_commit(smr_cmd_queue(peer_smr));
 	peer_smr->cmd_cnt--;
 
-	if (op != ofi_op_atomic) {
-		if (flags & SMR_RMA_REQ) {
-			smr_post_fetch_resp(ep, cmd,
-				(const struct iovec *) result_iov,
-				result_count);
-			goto format_rma;
-		}
+	if (flags & SMR_RMA_REQ || op_flags & FI_DELIVERY_COMPLETE) {
+		smr_post_atomic_resp(ep, cmd,
+			(const struct iovec *) result_iov,
+			result_count);
+		goto format_rma;
+	} else if (op != ofi_op_atomic) {
 		err = smr_fetch_result(ep, peer_smr, result_iov, result_count,
 				       rma_ioc, rma_count, datatype, msg_len);
 		if (err)
