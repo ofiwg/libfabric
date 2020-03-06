@@ -10,6 +10,11 @@ v1.9.1, Fri Mar 6, 2020
 
 ## Core
 
+- Fix gcc 9.2 warnings
+- Fix thread hangs in MR cache when using userfaultfd monitor
+- Add missing header for FreeBSD build
+- Allow a core provider to discover and use filtered providers
+
 ## EFA
 
 - Change MR cache count and size limits
@@ -28,15 +33,42 @@ v1.9.1, Fri Mar 6, 2020
 
 ## PSM2
 
-## RxD
+- Clean up of AV entries that have been removed
 
 ## RxM
 
+- Fix multi-recv buffer handling to use entire buffer
+- Consume entire multi-recv buffer before using buffer
+- Continue execution after handling transfer errors
+- Properly cleanup CM progress thread
+- Minor code cleanups and restructuring
+
 ## SHM
+
+- Properly restore captured signals
+- Track ptrace_scope globally, and allow disabling
+- Properly initialize endpoint name list
+- Fix potential deadlock resulting from missed handling of unexpected messages
+- Fix multi-threading issue accessing unexpected messages
+- Handle multiple addresses passed to fi_av_insert
+- NULL terminate address strings
+- Pass correct pointer to ofi_cq_init
 
 ## TCP
 
+- Removed incorrect implementation for multi-recv buffer support
+- Always report error completions
+- Report correct EQ event for aborted connection requests
+- Improve connection data corner cases
+
 ## Verbs
+
+- Fix segfault handling error completions
+- Avoid null derefence handling EQ events
+- Remove possible deadlock in XRC error path
+- Enable credit tracking to avoid SQ, RQ, and CQ overruns
+- Verify that CQ space is available for bound EPs
+- Minor code cleanups and restructuring
 
 
 v1.9.0, Fri Nov 22, 2019
