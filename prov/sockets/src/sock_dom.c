@@ -46,109 +46,6 @@
 
 extern struct fi_ops_mr sock_dom_mr_ops;
 
-int sock_verify_domain_attr(uint32_t version, const struct fi_info *info)
-{
-	const struct fi_domain_attr *attr = info->domain_attr;
-
-	if (!attr)
-		return 0;
-
-	switch (attr->threading) {
-	case FI_THREAD_UNSPEC:
-	case FI_THREAD_SAFE:
-	case FI_THREAD_FID:
-	case FI_THREAD_DOMAIN:
-	case FI_THREAD_COMPLETION:
-	case FI_THREAD_ENDPOINT:
-		break;
-	default:
-		SOCK_LOG_DBG("Invalid threading model!\n");
-		return -FI_ENODATA;
-	}
-
-	switch (attr->control_progress) {
-	case FI_PROGRESS_UNSPEC:
-	case FI_PROGRESS_AUTO:
-	case FI_PROGRESS_MANUAL:
-		break;
-
-	default:
-		SOCK_LOG_DBG("Control progress mode not supported!\n");
-		return -FI_ENODATA;
-	}
-
-	switch (attr->data_progress) {
-	case FI_PROGRESS_UNSPEC:
-	case FI_PROGRESS_AUTO:
-	case FI_PROGRESS_MANUAL:
-		break;
-
-	default:
-		SOCK_LOG_DBG("Data progress mode not supported!\n");
-		return -FI_ENODATA;
-	}
-
-	switch (attr->resource_mgmt) {
-	case FI_RM_UNSPEC:
-	case FI_RM_DISABLED:
-	case FI_RM_ENABLED:
-		break;
-
-	default:
-		SOCK_LOG_DBG("Resource mgmt not supported!\n");
-		return -FI_ENODATA;
-	}
-
-	switch (attr->av_type) {
-	case FI_AV_UNSPEC:
-	case FI_AV_MAP:
-	case FI_AV_TABLE:
-		break;
-
-	default:
-		SOCK_LOG_DBG("AV type not supported!\n");
-		return -FI_ENODATA;
-	}
-
-	if (ofi_check_mr_mode(&sock_prov, version,
-			      sock_domain_attr.mr_mode, info)) {
-		FI_INFO(&sock_prov, FI_LOG_CORE,
-			"Invalid memory registration mode\n");
-		return -FI_ENODATA;
-	}
-
-	if (attr->mr_key_size > sock_domain_attr.mr_key_size)
-		return -FI_ENODATA;
-
-	if (attr->cq_data_size > sock_domain_attr.cq_data_size)
-		return -FI_ENODATA;
-
-	if (attr->cq_cnt > sock_domain_attr.cq_cnt)
-		return -FI_ENODATA;
-
-	if (attr->ep_cnt > sock_domain_attr.ep_cnt)
-		return -FI_ENODATA;
-
-	if (attr->max_ep_tx_ctx > sock_domain_attr.max_ep_tx_ctx)
-		return -FI_ENODATA;
-
-	if (attr->max_ep_rx_ctx > sock_domain_attr.max_ep_rx_ctx)
-		return -FI_ENODATA;
-
-	if (attr->cntr_cnt > sock_domain_attr.cntr_cnt)
-		return -FI_ENODATA;
-
-	if (attr->mr_iov_limit > sock_domain_attr.mr_iov_limit)
-		return -FI_ENODATA;
-
-	if (attr->max_err_data > sock_domain_attr.max_err_data)
-		return -FI_ENODATA;
-
-	if (attr->mr_cnt > sock_domain_attr.mr_cnt)
-		return -FI_ENODATA;
-
-	return 0;
-}
 
 static int sock_dom_close(struct fid *fid)
 {
@@ -258,12 +155,8 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 	struct sock_fabric *fab;
 	int ret;
 
+	assert(info && info->domain_attr);
 	fab = container_of(fabric, struct sock_fabric, fab_fid);
-	if (info && info->domain_attr) {
-		ret = sock_verify_domain_attr(fabric->api_version, info);
-		if (ret)
-			return -FI_EINVAL;
-	}
 
 	sock_domain = calloc(1, sizeof(*sock_domain));
 	if (!sock_domain)
@@ -272,12 +165,8 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 	fastlock_init(&sock_domain->lock);
 	ofi_atomic_initialize32(&sock_domain->ref, 0);
 
-	if (info) {
-		sock_domain->info = *info;
-	} else {
-		SOCK_LOG_ERROR("invalid fi_info\n");
-		goto err1;
-	}
+	sock_domain->info = *info;
+	sock_domain->info.domain_attr = NULL;
 
 	sock_domain->dom_fid.fid.fclass = FI_CLASS_DOMAIN;
 	sock_domain->dom_fid.fid.context = context;
@@ -285,8 +174,7 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 	sock_domain->dom_fid.ops = &sock_dom_ops;
 	sock_domain->dom_fid.mr = &sock_dom_mr_ops;
 
-	if (!info->domain_attr ||
-	    info->domain_attr->data_progress == FI_PROGRESS_UNSPEC)
+	if (info->domain_attr->data_progress == FI_PROGRESS_UNSPEC)
 		sock_domain->progress_mode = FI_PROGRESS_AUTO;
 	else
 		sock_domain->progress_mode = info->domain_attr->data_progress;
@@ -300,10 +188,7 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 	sock_domain->fab = fab;
 	*dom = &sock_domain->dom_fid;
 
-	if (info->domain_attr)
-		sock_domain->attr = *(info->domain_attr);
-	else
-		sock_domain->attr = sock_domain_attr;
+	sock_domain->attr = *(info->domain_attr);
 
 	ret = ofi_mr_map_init(&sock_prov, sock_domain->attr.mr_mode,
 			      &sock_domain->mr_map);

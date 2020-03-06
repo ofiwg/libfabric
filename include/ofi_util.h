@@ -892,6 +892,9 @@ struct fi_info *ofi_allocinfo_internal(void);
 int util_getinfo(const struct util_prov *util_prov, uint32_t version,
 		 const char *node, const char *service, uint64_t flags,
 		 const struct fi_info *hints, struct fi_info **info);
+int ofi_ip_getinfo(const struct util_prov *prov, uint32_t version,
+		   const char *node, const char *service, uint64_t flags,
+		   const struct fi_info *hints, struct fi_info **info);
 
 
 struct fid_list_entry {

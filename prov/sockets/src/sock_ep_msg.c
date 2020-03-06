@@ -59,113 +59,6 @@
 #define SOCK_LOG_DBG(...) _SOCK_LOG_DBG(FI_LOG_EP_CTRL, __VA_ARGS__)
 #define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_EP_CTRL, __VA_ARGS__)
 
-static int sock_msg_verify_rx_attr(const struct fi_rx_attr *attr)
-{
-	if (!attr)
-		return 0;
-
-	if ((attr->caps | sock_msg_rx_attr.caps) != sock_msg_rx_attr.caps)
-		return -FI_ENODATA;
-
-	if ((attr->msg_order | SOCK_EP_MSG_ORDER) != SOCK_EP_MSG_ORDER)
-		return -FI_ENODATA;
-
-	if ((attr->comp_order | SOCK_EP_COMP_ORDER) != SOCK_EP_COMP_ORDER)
-		return -FI_ENODATA;
-
-	if (attr->total_buffered_recv > sock_msg_rx_attr.total_buffered_recv)
-		return -FI_ENODATA;
-
-	if (sock_get_tx_size(attr->size) >
-	     sock_get_tx_size(sock_msg_rx_attr.size))
-		return -FI_ENODATA;
-
-	if (attr->iov_limit > sock_msg_rx_attr.iov_limit)
-		return -FI_ENODATA;
-
-	return 0;
-}
-
-static int sock_msg_verify_tx_attr(const struct fi_tx_attr *attr)
-{
-	if (!attr)
-		return 0;
-
-	if ((attr->caps | sock_msg_tx_attr.caps) != sock_msg_tx_attr.caps)
-		return -FI_ENODATA;
-
-	if ((attr->msg_order | SOCK_EP_MSG_ORDER) != SOCK_EP_MSG_ORDER)
-		return -FI_ENODATA;
-
-	if (attr->inject_size > sock_msg_tx_attr.inject_size)
-		return -FI_ENODATA;
-
-	if (sock_get_tx_size(attr->size) >
-	     sock_get_tx_size(sock_msg_tx_attr.size))
-		return -FI_ENODATA;
-
-	if (attr->iov_limit > sock_msg_tx_attr.iov_limit)
-		return -FI_ENODATA;
-
-	if (attr->rma_iov_limit > sock_msg_tx_attr.rma_iov_limit)
-		return -FI_ENODATA;
-
-	return 0;
-}
-
-int sock_msg_verify_ep_attr(const struct fi_ep_attr *ep_attr,
-			    const struct fi_tx_attr *tx_attr,
-			    const struct fi_rx_attr *rx_attr)
-{
-	if (ep_attr) {
-		switch (ep_attr->protocol) {
-		case FI_PROTO_UNSPEC:
-		case FI_PROTO_SOCK_TCP:
-			break;
-		default:
-			return -FI_ENODATA;
-		}
-
-		if (ep_attr->protocol_version &&
-		    (ep_attr->protocol_version != sock_msg_ep_attr.protocol_version))
-			return -FI_ENODATA;
-
-		if (ep_attr->max_msg_size > sock_msg_ep_attr.max_msg_size)
-			return -FI_ENODATA;
-
-		if (ep_attr->msg_prefix_size > sock_msg_ep_attr.msg_prefix_size)
-			return -FI_ENODATA;
-
-		if (ep_attr->max_order_raw_size >
-		   sock_msg_ep_attr.max_order_raw_size)
-			return -FI_ENODATA;
-
-		if (ep_attr->max_order_war_size >
-		   sock_msg_ep_attr.max_order_war_size)
-			return -FI_ENODATA;
-
-		if (ep_attr->max_order_waw_size >
-		   sock_msg_ep_attr.max_order_waw_size)
-			return -FI_ENODATA;
-
-		if ((ep_attr->tx_ctx_cnt > SOCK_EP_MAX_TX_CNT) &&
-		    ep_attr->tx_ctx_cnt != FI_SHARED_CONTEXT)
-			return -FI_ENODATA;
-
-		if ((ep_attr->rx_ctx_cnt > SOCK_EP_MAX_RX_CNT) &&
-		    ep_attr->rx_ctx_cnt != FI_SHARED_CONTEXT)
-			return -FI_ENODATA;
-
-		if (ep_attr->auth_key_size &&
-		    (ep_attr->auth_key_size != sock_msg_ep_attr.auth_key_size))
-			return -FI_ENODATA;
-	}
-
-	if (sock_msg_verify_tx_attr(tx_attr) || sock_msg_verify_rx_attr(rx_attr))
-		return -FI_ENODATA;
-
-	return 0;
-}
 
 static int sock_ep_cm_getname(fid_t fid, void *addr, size_t *addrlen)
 {
@@ -741,64 +634,21 @@ struct fi_ops_cm sock_ep_cm_ops = {
 	.join = fi_no_join,
 };
 
-static int sock_msg_endpoint(struct fid_domain *domain, struct fi_info *info,
-		struct sock_ep **ep, void *context, size_t fclass)
+int sock_msg_ep(struct fid_domain *domain, struct fi_info *info,
+		struct fid_ep **ep, void *context)
 {
-	int ret;
+	struct sock_ep *endpoint;
 	struct sock_pep *pep;
+	int ret;
 
-	if (info) {
-		if (info->ep_attr) {
-			ret = sock_msg_verify_ep_attr(info->ep_attr,
-						      info->tx_attr,
-						      info->rx_attr);
-			if (ret)
-				return -FI_EINVAL;
-		}
-
-		if (info->tx_attr) {
-			ret = sock_msg_verify_tx_attr(info->tx_attr);
-			if (ret)
-				return -FI_EINVAL;
-		}
-
-		if (info->rx_attr) {
-			ret = sock_msg_verify_rx_attr(info->rx_attr);
-			if (ret)
-				return -FI_EINVAL;
-		}
-	}
-
-	ret = sock_alloc_endpoint(domain, info, ep, context, fclass);
+	ret = sock_alloc_endpoint(domain, info, &endpoint, context, FI_CLASS_EP);
 	if (ret)
 		return ret;
 
 	if (info && info->handle && info->handle->fclass == FI_CLASS_PEP) {
 		pep = container_of(info->handle, struct sock_pep, pep.fid);
-		memcpy((*ep)->attr->src_addr, &pep->src_addr, sizeof *(*ep)->attr->src_addr);
+		*endpoint->attr->src_addr = pep->src_addr;
 	}
-
-	if (!info || !info->ep_attr)
-		(*ep)->attr->ep_attr = sock_msg_ep_attr;
-
-	if (!info || !info->tx_attr)
-		(*ep)->tx_attr = sock_msg_tx_attr;
-
-	if (!info || !info->rx_attr)
-		(*ep)->rx_attr = sock_msg_rx_attr;
-
-	return 0;
-}
-
-int sock_msg_ep(struct fid_domain *domain, struct fi_info *info,
-		struct fid_ep **ep, void *context)
-{
-	int ret;
-	struct sock_ep *endpoint;
-
-	ret = sock_msg_endpoint(domain, info, &endpoint, context, FI_CLASS_EP);
-	if (ret)
-		return ret;
 
 	*ep = &endpoint->ep;
 	return 0;
@@ -1202,7 +1052,7 @@ int sock_msg_sep(struct fid_domain *domain, struct fi_info *info,
 	int ret;
 	struct sock_ep *endpoint;
 
-	ret = sock_msg_endpoint(domain, info, &endpoint, context, FI_CLASS_SEP);
+	ret = sock_alloc_endpoint(domain, info, &endpoint, context, FI_CLASS_SEP);
 	if (ret)
 		return ret;
 
@@ -1217,52 +1067,40 @@ int sock_msg_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	struct sock_pep *_pep;
 	struct addrinfo hints, *result;
 
-	if (info) {
-		ret = sock_verify_info(fabric->api_version, info);
-		if (ret) {
-			SOCK_LOG_DBG("Cannot support requested options!\n");
-			return ret;
-		}
-	}
-
+	assert(info);
 	_pep = calloc(1, sizeof(*_pep));
 	if (!_pep)
 		return -FI_ENOMEM;
 
-	if (info) {
-		if (info->src_addr) {
-			memcpy(&_pep->src_addr, info->src_addr,
-				info->src_addrlen);
-		} else {
-			memset(&hints, 0, sizeof(hints));
-			hints.ai_socktype = SOCK_STREAM;
-			hints.ai_family = ofi_get_sa_family(info);
-			if (!hints.ai_family)
-				hints.ai_family = AF_INET;
-
-			if (hints.ai_family == AF_INET) {
-				ret = getaddrinfo("127.0.0.1", NULL, &hints,
-						  &result);
-			} else if (hints.ai_family == AF_INET6) {
-				ret = getaddrinfo("::1", NULL, &hints, &result);
-			} else {
-				ret = getaddrinfo("localhost", NULL, &hints,
-						  &result);
-			}
-			if (ret) {
-				ret = -FI_EINVAL;
-				SOCK_LOG_DBG("getaddrinfo failed!\n");
-				goto err;
-			}
-			memcpy(&_pep->src_addr, result->ai_addr,
-				result->ai_addrlen);
-			freeaddrinfo(result);
-		}
-		_pep->info = *info;
+	if (info->src_addr) {
+		memcpy(&_pep->src_addr, info->src_addr,
+			info->src_addrlen);
 	} else {
-		SOCK_LOG_ERROR("invalid fi_info\n");
-		goto err;
+		memset(&hints, 0, sizeof(hints));
+		hints.ai_socktype = SOCK_STREAM;
+		hints.ai_family = ofi_get_sa_family(info);
+		if (!hints.ai_family)
+			hints.ai_family = AF_INET;
+
+		if (hints.ai_family == AF_INET) {
+			ret = getaddrinfo("127.0.0.1", NULL, &hints,
+						&result);
+		} else if (hints.ai_family == AF_INET6) {
+			ret = getaddrinfo("::1", NULL, &hints, &result);
+		} else {
+			ret = getaddrinfo("localhost", NULL, &hints,
+						&result);
+		}
+		if (ret) {
+			ret = -FI_EINVAL;
+			SOCK_LOG_DBG("getaddrinfo failed!\n");
+			goto err;
+		}
+		memcpy(&_pep->src_addr, result->ai_addr,
+			result->ai_addrlen);
+		freeaddrinfo(result);
 	}
+	_pep->info = *info;
 
 	ret = socketpair(AF_UNIX, SOCK_STREAM, 0, _pep->cm.signal_fds);
 	if (ret) {

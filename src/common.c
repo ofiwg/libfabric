@@ -1083,7 +1083,7 @@ void ofi_free_list_of_addr(struct slist *addr_list)
 }
 
 static inline
-void ofi_insert_loopback_addr(struct fi_provider *prov, struct slist *addr_list)
+void ofi_insert_loopback_addr(const struct fi_provider *prov, struct slist *addr_list)
 {
 	struct ofi_addr_list_entry *addr_entry;
 
@@ -1097,6 +1097,8 @@ void ofi_insert_loopback_addr(struct fi_provider *prov, struct slist *addr_list)
 			"available addr: ", &addr_entry->ipaddr);
 
 	strncpy(addr_entry->ipstr, "127.0.0.1", sizeof(addr_entry->ipstr));
+	strncpy(addr_entry->net_name, "127.0.0.1/32", sizeof(addr_entry->net_name));
+	strncpy(addr_entry->ifa_name, "lo", sizeof(addr_entry->ifa_name));
 	slist_insert_tail(&addr_entry->entry, addr_list);
 
 	addr_entry = calloc(1, sizeof(struct ofi_addr_list_entry));
@@ -1109,6 +1111,8 @@ void ofi_insert_loopback_addr(struct fi_provider *prov, struct slist *addr_list)
 			"available addr: ", &addr_entry->ipaddr);
 
 	strncpy(addr_entry->ipstr, "::1", sizeof(addr_entry->ipstr));
+	strncpy(addr_entry->net_name, "::1/128", sizeof(addr_entry->net_name));
+	strncpy(addr_entry->ifa_name, "lo", sizeof(addr_entry->ifa_name));
 	slist_insert_tail(&addr_entry->entry, addr_list);
 }
 
@@ -1154,7 +1158,33 @@ ofi_addr_list_entry_comp_speed(struct slist_entry *cur, const void *insert)
 	return (cur_addr->speed < insert_addr->speed);
 }
 
-void ofi_get_list_of_addr(struct fi_provider *prov, const char *env_name,
+void ofi_set_netmask_str(char *netstr, size_t len, struct ifaddrs *ifa)
+{
+	union ofi_sock_ip addr;
+	size_t prefix_len;
+
+	netstr[0] = '\0';
+	prefix_len = ofi_mask_addr(&addr.sa, ifa->ifa_addr, ifa->ifa_netmask);
+
+	switch (addr.sa.sa_family) {
+	case AF_INET:
+		inet_ntop(AF_INET, &addr.sin.sin_addr, netstr, len);
+		break;
+	case AF_INET6:
+		inet_ntop(AF_INET6, &addr.sin6.sin6_addr, netstr, len);
+		break;
+	default:
+		snprintf(netstr, len, "%s", "<unknown>");
+		netstr[len - 1] = '\0';
+		break;
+	}
+
+	snprintf(netstr + strlen(netstr), len - strlen(netstr),
+		 "%s%d", "/", (int) prefix_len);
+	netstr[len - 1] = '\0';
+}
+
+void ofi_get_list_of_addr(const struct fi_provider *prov, const char *env_name,
 			  struct slist *addr_list)
 {
 	int ret;
@@ -1162,73 +1192,79 @@ void ofi_get_list_of_addr(struct fi_provider *prov, const char *env_name,
 	struct ofi_addr_list_entry *addr_entry;
 	struct ifaddrs *ifaddrs, *ifa;
 
-	fi_param_get_str(prov, env_name, &iface);
+	fi_param_get_str((struct fi_provider *) prov, env_name, &iface);
 
 	ret = ofi_getifaddrs(&ifaddrs);
-	if (!ret) {
-		if (iface) {
-			for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
-				if (strncmp(iface, ifa->ifa_name,
-					    strlen(iface)) == 0) {
-					break;
-				}
-			}
-			if (ifa == NULL) {
-				FI_INFO(prov, FI_LOG_CORE,
-					"Can't set filter to unknown interface: (%s)\n",
-					iface);
-				iface = NULL;
-			}
-		}
+	if (ret)
+		goto insert_lo;
+
+	if (iface) {
 		for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
-			if (ifa->ifa_addr == NULL ||
-			    !(ifa->ifa_flags & IFF_UP) ||
-			    (ifa->ifa_flags & IFF_LOOPBACK) ||
-			    ((ifa->ifa_addr->sa_family != AF_INET) &&
-			     (ifa->ifa_addr->sa_family != AF_INET6)))
-				continue;
-			if (iface && strncmp(iface, ifa->ifa_name, strlen(iface)) != 0) {
-				FI_DBG(prov, FI_LOG_CORE,
-				       "Skip (%s) interface\n", ifa->ifa_name);
-				continue;
+			if (strncmp(iface, ifa->ifa_name,
+					strlen(iface)) == 0) {
+				break;
 			}
-
-			addr_entry = calloc(1, sizeof(struct ofi_addr_list_entry));
-			if (!addr_entry)
-				continue;
-
-			memcpy(&addr_entry->ipaddr, ifa->ifa_addr,
-			       ofi_sizeofaddr(ifa->ifa_addr));
-			
-			if (!inet_ntop(ifa->ifa_addr->sa_family,
-					ofi_get_ipaddr(ifa->ifa_addr),
-					addr_entry->ipstr,
-					sizeof(addr_entry->ipstr))) {
-				FI_DBG(prov, FI_LOG_CORE,
-				       "inet_ntop failed: %d\n", errno);
-				free(addr_entry);
-				continue;
-			}
-
-			addr_entry->speed = ofi_ifaddr_get_speed(ifa);
-			FI_INFO(prov, FI_LOG_CORE, "Available addr: %s, "
-				"iface name: %s, speed: %zu\n",
-				addr_entry->ipstr, ifa->ifa_name, addr_entry->speed);
-
-			slist_insert_before_first_match(addr_list, ofi_addr_list_entry_comp_speed,
-							&addr_entry->entry);
+		}
+		if (ifa == NULL) {
+			FI_INFO(prov, FI_LOG_CORE,
+				"Can't set filter to unknown interface: (%s)\n",
+				iface);
+			iface = NULL;
+		}
+	}
+	for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
+		if (ifa->ifa_addr == NULL ||
+			!(ifa->ifa_flags & IFF_UP) ||
+			(ifa->ifa_flags & IFF_LOOPBACK) ||
+			((ifa->ifa_addr->sa_family != AF_INET) &&
+			(ifa->ifa_addr->sa_family != AF_INET6)))
+			continue;
+		if (iface && strncmp(iface, ifa->ifa_name, strlen(iface)) != 0) {
+			FI_DBG(prov, FI_LOG_CORE,
+				"Skip (%s) interface\n", ifa->ifa_name);
+			continue;
 		}
 
-		freeifaddrs(ifaddrs);
+		addr_entry = calloc(1, sizeof(*addr_entry));
+		if (!addr_entry)
+			continue;
+
+		memcpy(&addr_entry->ipaddr, ifa->ifa_addr,
+			ofi_sizeofaddr(ifa->ifa_addr));
+		strncpy(addr_entry->ifa_name, ifa->ifa_name,
+			sizeof(addr_entry->ifa_name));
+		ofi_set_netmask_str(addr_entry->net_name,
+				    sizeof(addr_entry->net_name), ifa);
+
+		if (!inet_ntop(ifa->ifa_addr->sa_family,
+				ofi_get_ipaddr(ifa->ifa_addr),
+				addr_entry->ipstr,
+				sizeof(addr_entry->ipstr))) {
+			FI_DBG(prov, FI_LOG_CORE,
+				"inet_ntop failed: %d\n", errno);
+			free(addr_entry);
+			continue;
+		}
+
+		addr_entry->speed = ofi_ifaddr_get_speed(ifa);
+		FI_INFO(prov, FI_LOG_CORE, "Available addr: %s, "
+			"iface name: %s, speed: %zu\n",
+			addr_entry->ipstr, ifa->ifa_name, addr_entry->speed);
+
+		slist_insert_before_first_match(addr_list, ofi_addr_list_entry_comp_speed,
+						&addr_entry->entry);
 	}
 
+	freeifaddrs(ifaddrs);
+
+insert_lo:
 	/* Always add loopback address at the end */
 	ofi_insert_loopback_addr(prov, addr_list);
 }
 
 #elif defined HAVE_MIB_IPADDRTABLE
 
-void ofi_get_list_of_addr(struct fi_provider *prov, const char *env_name,
+void ofi_get_list_of_addr(const struct fi_provider *prov, const char *env_name,
 			  struct slist *addr_list)
 {
 	struct ofi_addr_list_entry *addr_entry;
@@ -1277,7 +1313,7 @@ out:
 
 #else /* !HAVE_MIB_IPADDRTABLE && !HAVE_MIB_IPADDRTABLE */
 
-void ofi_get_list_of_addr(struct fi_provider *prov, const char *env_name,
+void ofi_get_list_of_addr(const struct fi_provider *prov, const char *env_name,
 			  struct slist *addr_list)
 {
 	ofi_insert_loopback_addr(prov, addr_list);
