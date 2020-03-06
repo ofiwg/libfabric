@@ -2256,74 +2256,6 @@ static uint32_t cxip_msg_match_id(struct cxip_txc *txc)
 }
 
 /*
- * cxip_inject_cb() - Message inject event callback.
- */
-static int cxip_inject_cb(struct cxip_req *req, const union c_event *event)
-{
-	return cxip_cq_req_error(req, 0, FI_EIO, cxi_event_rc(event), NULL, 0);
-}
-
-/*
- * cxip_inject_req() - Return request state associated with all inject
- * transactions on the transmit context.
- *
- * The request is freed when the TXC send CQ is closed.
- */
-static struct cxip_req *cxip_inject_req(struct cxip_txc *txc)
-{
-	if (!txc->inject_req) {
-		struct cxip_req *req;
-
-		req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
-		if (!req)
-			return NULL;
-
-		req->cb = cxip_inject_cb;
-		req->context = (uint64_t)txc->fid.ctx.fid.context;
-		req->flags = FI_MSG | FI_SEND;
-		req->data_len = 0;
-		req->buf = 0;
-		req->data = 0;
-		req->tag = 0;
-		req->addr = FI_ADDR_UNSPEC;
-
-		txc->inject_req = req;
-	}
-
-	return txc->inject_req;
-}
-
-/*
- * cxip_tinject_req() - Return request state associated with all tagged inject
- * transactions on the transmit context.
- *
- * The request is freed when the TXC send CQ is closed.
- */
-static struct cxip_req *cxip_tinject_req(struct cxip_txc *txc)
-{
-	if (!txc->tinject_req) {
-		struct cxip_req *req;
-
-		req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
-		if (!req)
-			return NULL;
-
-		req->cb = cxip_inject_cb;
-		req->context = (uint64_t)txc->fid.ctx.fid.context;
-		req->flags = FI_TAGGED | FI_SEND;
-		req->data_len = 0;
-		req->buf = 0;
-		req->data = 0;
-		req->tag = 0;
-		req->addr = FI_ADDR_UNSPEC;
-
-		txc->tinject_req = req;
-	}
-
-	return txc->tinject_req;
-}
-
-/*
  * report_send_completion() - Report the completion of a send operation.
  */
 static void report_send_completion(struct cxip_req *req, bool sw_cntr)
@@ -2369,14 +2301,15 @@ static void report_send_completion(struct cxip_req *req, bool sw_cntr)
 }
 
 /*
- * rdzv_send_req_free() - Clean up a long send request.
+ * rdzv_send_req_complete() - Complete long send request.
  */
-static void rdzv_send_req_free(struct cxip_req *req)
+static void rdzv_send_req_complete(struct cxip_req *req)
 {
 	cxip_rdzv_id_free(req->send.txc->ep_obj, req->send.rdzv_id);
 
 	cxip_unmap(req->send.send_md);
 
+	report_send_completion(req, true);
 	ofi_atomic_dec32(&req->send.txc->otx_reqs);
 
 	cxip_cq_req_free(req);
@@ -2396,10 +2329,8 @@ static void rdzv_send_req_free(struct cxip_req *req)
  */
 static void long_send_req_event(struct cxip_req *req)
 {
-	if (++req->send.long_send_events == 2) {
-		report_send_completion(req, true);
-		rdzv_send_req_free(req);
-	}
+	if (++req->send.long_send_events == 2)
+		rdzv_send_req_complete(req);
 }
 
 /*
@@ -2432,8 +2363,7 @@ static int cxip_send_long_cb(struct cxip_req *req, const union c_event *event)
 		    (!req->send.txc->ep_obj->rdzv_offload &&
 		     event->init_short.ptl_list == C_PTL_LIST_PRIORITY)) {
 			req->send.rc = event_rc;
-			report_send_completion(req, true);
-			rdzv_send_req_free(req);
+			rdzv_send_req_complete(req);
 		} else {
 			/* Count the event, another may be expected. */
 			long_send_req_event(req);
@@ -2635,14 +2565,11 @@ int cxip_txc_rdzv_src_fini(struct cxip_txc *txc)
  * 2. Once the Put is matched to a user receive buffer (in the Priority list),
  *    a Get of the remaining source data is performed.
  */
-static ssize_t _cxip_send_long(struct cxip_txc *txc, const void *buf,
-			       size_t len, void *desc, uint64_t data,
-			       fi_addr_t dest_addr, uint64_t tag,
-			       void *context, uint64_t flags, bool tagged)
+static ssize_t _cxip_send_long(struct cxip_req *req)
 {
+	struct cxip_txc *txc = req->send.txc;
 	struct cxip_domain *dom;
 	struct cxip_md *send_md;
-	struct cxip_req *req;
 	struct cxip_addr caddr;
 	union c_fab_addr dfa;
 	uint8_t idx_ext;
@@ -2654,25 +2581,36 @@ static ssize_t _cxip_send_long(struct cxip_txc *txc, const void *buf,
 	int rdzv_id;
 	int ret;
 
-	if (flags & FI_INJECT)
+	if (req->send.flags & FI_INJECT) {
+		CXIP_LOG_DBG("Invalid inject\n");
 		return -FI_EMSGSIZE;
+	}
 
 	dom = txc->domain;
 
 	/* Look up target CXI address */
-	ret = _cxip_av_lookup(txc->ep_obj->av, dest_addr, &caddr);
+	ret = _cxip_av_lookup(txc->ep_obj->av, req->send.dest_addr, &caddr);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Failed to look up FI addr: %d\n", ret);
 		return ret;
 	}
 
+	/* Calculate DFA */
+	rx_id = CXIP_AV_ADDR_RXC(txc->ep_obj->av, req->send.dest_addr);
+	pid_bits = dom->iface->dev->info.pid_bits;
+	pid_idx = CXIP_PTL_IDX_RXC(rx_id);
+	cxi_build_dfa(caddr.nic, caddr.pid, pid_bits, pid_idx, &dfa,
+		      &idx_ext);
+
 	/* Map local buffer */
-	ret = cxip_map(dom, (void *)buf, len, &send_md);
+	ret = cxip_map(dom, req->send.buf, req->send.len, &send_md);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to map send buffer: %d\n", ret);
 		return ret;
 	}
+	req->send.send_md = send_md;
 
+	/* Prepare rendezvous source buffer */
 	ret = cxip_txc_prep_rdzv_src(txc, send_md->md->lac);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Failed to prepare source window: %d\n",
@@ -2680,55 +2618,20 @@ static ssize_t _cxip_send_long(struct cxip_txc *txc, const void *buf,
 		goto err_unmap;
 	}
 
-	/* Allocate and populate request */
-	req = cxip_cq_req_alloc(txc->send_cq, true, txc);
-	if (!req) {
-		CXIP_LOG_DBG("Failed to allocate request\n");
-		ret = -FI_ENOMEM;
-		goto err_unmap;
-	}
-
-	if (flags & FI_COMPLETION)
-		req->context = (uint64_t)context;
-	else
-		req->context = (uint64_t)txc->fid.ctx.fid.context;
-
-	req->flags = FI_SEND | (flags & FI_COMPLETION);
-
-	if (tagged) {
-		req->flags |= FI_TAGGED;
-		put_mb.tagged = 1;
-		put_mb.tag = tag;
-	} else {
-		req->flags |= FI_MSG;
-	}
-
-	req->data_len = 0;
-	req->buf = 0;
-	req->data = 0;
-	req->tag = 0;
-
-	req->send.txc = txc;
-	req->send.buf = (void *)buf;
-	req->send.send_md = send_md;
-	req->send.length = len;
-	req->cb = cxip_send_long_cb;
-
-	req->send.long_send_events = 0;
-
-	/* Calculate DFA */
-	rx_id = CXIP_AV_ADDR_RXC(txc->ep_obj->av, dest_addr);
-	pid_bits = dom->iface->dev->info.pid_bits;
-	pid_idx = CXIP_PTL_IDX_RXC(rx_id);
-	cxi_build_dfa(caddr.nic, caddr.pid, pid_bits, pid_idx, &dfa,
-		      &idx_ext);
-
 	/* Allocate rendezvous ID */
 	rdzv_id = cxip_rdzv_id_alloc(txc->ep_obj, req);
 	if (rdzv_id < 0)
-		goto err_req_free;
+		goto err_unmap;
+
+	/* Build match bits */
+	if (req->send.tagged) {
+		put_mb.tagged = 1;
+		put_mb.tag = req->send.tag;
+	}
 
 	req->send.rdzv_id = rdzv_id;
+	req->cb = cxip_send_long_cb;
+	req->send.long_send_events = 0;
 
 	/* Build Put command descriptor */
 	cmd.command.cmd_type = C_CMD_TYPE_DMA;
@@ -2737,13 +2640,13 @@ static ssize_t _cxip_send_long(struct cxip_txc *txc, const void *buf,
 	cmd.event_send_disable = 1;
 	cmd.restricted = 0;
 	cmd.dfa = dfa;
-	cmd.local_addr = CXI_VA_TO_IOVA(send_md->md, buf);
-	cmd.request_len = len;
+	cmd.local_addr = CXI_VA_TO_IOVA(send_md->md, req->send.buf);
+	cmd.request_len = req->send.len;
 	cmd.eq = txc->send_cq->evtq->eqn;
 	cmd.user_ptr = (uint64_t)req;
 	cmd.initiator = cxip_msg_match_id(txc);
-	cmd.header_data = data;
-	cmd.remote_offset = CXI_VA_TO_IOVA(send_md->md, buf);
+	cmd.header_data = req->send.data;
+	cmd.remote_offset = CXI_VA_TO_IOVA(send_md->md, req->send.buf);
 
 	fastlock_acquire(&txc->tx_cmdq->lock);
 
@@ -2774,27 +2677,26 @@ static ssize_t _cxip_send_long(struct cxip_txc *txc, const void *buf,
 
 	if (ret) {
 		CXIP_LOG_ERROR("Failed to enqueue Put: %d\n", ret);
-		fastlock_release(&txc->tx_cmdq->lock);
-		goto err_id_free;
+		goto err_unlock;
 	}
 
-	if (!(flags & FI_MORE))
+	if (!(req->send.flags & FI_MORE))
 		cxi_cq_ring(txc->tx_cmdq->dev_cmdq);
-
-	fastlock_release(&txc->tx_cmdq->lock);
 
 	ofi_atomic_inc32(&txc->otx_reqs);
 
-	CXIP_LOG_DBG("req: %p buf: %p len: %lu dest_addr: %ld tag(%c): 0x%lx context %p\n",
-		     req, buf, len, dest_addr, tagged ? '*' : '-', tag,
-		     context);
+	fastlock_release(&txc->tx_cmdq->lock);
+
+	CXIP_LOG_DBG("req: %p buf: %p len: %lu dest_addr: %ld tag(%c): 0x%lx context %#lx\n",
+		     req, req->send.buf, req->send.len, req->send.dest_addr,
+		     req->send.tagged ? '*' : '-', req->send.tag,
+		     req->context);
 
 	return FI_SUCCESS;
 
-err_id_free:
+err_unlock:
+	fastlock_release(&txc->tx_cmdq->lock);
 	cxip_rdzv_id_free(txc->ep_obj, rdzv_id);
-err_req_free:
-	cxip_cq_req_free(req);
 err_unmap:
 	cxip_unmap(send_md);
 
@@ -2831,9 +2733,11 @@ static int cxip_send_eager_cb(struct cxip_req *req,
 		cxip_tx_id_free(req->send.txc->ep_obj, req->send.tx_id);
 	}
 
+	ofi_atomic_dec32(&req->send.txc->otx_reqs);
+
 	/* If MATCH_COMPLETE was requested, software must manage counters. */
 	report_send_completion(req, match_complete);
-	ofi_atomic_dec32(&req->send.txc->otx_reqs);
+
 	cxip_cq_req_free(req);
 
 	return FI_SUCCESS;
@@ -2842,14 +2746,11 @@ static int cxip_send_eager_cb(struct cxip_req *req,
 /*
  * _cxip_send_eager() - Enqueue eager send command.
  */
-static ssize_t _cxip_send_eager(struct cxip_txc *txc, const void *buf,
-				size_t len, void *desc, uint64_t data,
-				fi_addr_t dest_addr, uint64_t tag,
-				void *context, uint64_t flags, bool tagged)
+static ssize_t _cxip_send_eager(struct cxip_req *req)
 {
+	struct cxip_txc *txc = req->send.txc;
 	struct cxip_domain *dom;
 	struct cxip_md *send_md = NULL;
-	struct cxip_req *req = NULL;
 	struct cxip_addr caddr;
 	union c_fab_addr dfa;
 	uint8_t idx_ext;
@@ -2861,88 +2762,56 @@ static ssize_t _cxip_send_eager(struct cxip_txc *txc, const void *buf,
 	};
 	int idc;
 	int ret;
-	int match_complete = flags & FI_MATCH_COMPLETE;
+	int match_complete = req->send.flags & FI_MATCH_COMPLETE;
 	int tx_id;
 
 	/* Always use IDCs when the payload fits */
-	idc = (len <= CXIP_INJECT_SIZE);
+	idc = (req->send.len <= CXIP_INJECT_SIZE);
 
-	if ((flags & FI_INJECT) && !idc)
+	if ((req->send.flags & FI_INJECT) && !idc) {
+		CXIP_LOG_DBG("Invalid inject\n");
 		return -FI_EMSGSIZE;
+	}
 
 	dom = txc->domain;
 
 	/* Look up target CXI address */
-	ret = _cxip_av_lookup(txc->ep_obj->av, dest_addr, &caddr);
+	ret = _cxip_av_lookup(txc->ep_obj->av, req->send.dest_addr, &caddr);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Failed to look up FI addr: %d\n", ret);
 		return ret;
 	}
 
-	/* Map local buffer */
-	if (!idc) {
-		ret = cxip_map(dom, (void *)buf, len, &send_md);
-		if (ret) {
-			CXIP_LOG_DBG("Failed to map send buffer: %d\n", ret);
-			return ret;
-		}
-	}
-
-	/* DMA commands must always be tracked. IDCs must be tracked if the
-	 * user requested a completion event.
-	 */
-	if (!idc || (flags & FI_COMPLETION)) {
-		req = cxip_cq_req_alloc(txc->send_cq, false, txc);
-		if (!req) {
-			CXIP_LOG_DBG("Failed to allocate request\n");
-			ret = -FI_ENOMEM;
-			goto err_unmap;
-		}
-
-		if (flags & FI_COMPLETION)
-			req->context = (uint64_t)context;
-		else
-			req->context = (uint64_t)txc->fid.ctx.fid.context;
-
-		req->flags = FI_SEND | (flags & (FI_COMPLETION |
-						 FI_MATCH_COMPLETE));
-
-		if (tagged)
-			req->flags |= FI_TAGGED;
-		else
-			req->flags |= FI_MSG;
-
-		req->data_len = 0;
-		req->buf = 0;
-		req->data = 0;
-		req->tag = 0;
-
-		req->send.txc = txc;
-		req->send.buf = (void *)buf;
-		req->send.send_md = send_md;
-		req->send.length = len;
-		req->cb = cxip_send_eager_cb;
-
-		req->send.long_send_events = 0;
-	}
-
-	/* Build Put command descriptor */
-	rx_id = CXIP_AV_ADDR_RXC(txc->ep_obj->av, dest_addr);
+	/* Calculate DFA */
+	rx_id = CXIP_AV_ADDR_RXC(txc->ep_obj->av, req->send.dest_addr);
 	pid_bits = dom->iface->dev->info.pid_bits;
 	pid_idx = CXIP_PTL_IDX_RXC(rx_id);
 	cxi_build_dfa(caddr.nic, caddr.pid, pid_bits, pid_idx, &dfa,
 		      &idx_ext);
 
+	/* Map local buffer */
+	if (!idc) {
+		ret = cxip_map(dom, req->send.buf, req->send.len, &send_md);
+		if (ret) {
+			CXIP_LOG_DBG("Failed to map send buffer: %d\n", ret);
+			return ret;
+		}
+	}
+	req->send.send_md = send_md;
+
 	/* Build match bits */
-	if (tagged) {
+	if (req->send.tagged) {
 		mb.tagged = 1;
-		mb.tag = tag;
+		mb.tag = req->send.tag;
 	}
 
-	if (req && match_complete) {
+	/* Allocate a TX ID if match completion guarantees are required */
+	if (match_complete) {
 		tx_id = cxip_tx_id_alloc(txc->ep_obj, req);
-		if (tx_id < 0)
-			goto err_req_free;
+		if (tx_id < 0) {
+			CXIP_LOG_DBG("Failed to allocate TX ID: %d\n", ret);
+			goto err_unmap;
+		}
 
 		req->send.tx_id = tx_id;
 
@@ -2950,6 +2819,9 @@ static ssize_t _cxip_send_eager(struct cxip_txc *txc, const void *buf,
 		mb.tx_id = tx_id;
 	}
 
+	req->cb = cxip_send_eager_cb;
+
+	/* Submit command */
 	fastlock_acquire(&txc->tx_cmdq->lock);
 
 	if (idc) {
@@ -2959,9 +2831,6 @@ static ssize_t _cxip_send_eager(struct cxip_txc *txc, const void *buf,
 		cmd.c_state.index_ext = idx_ext;
 		cmd.c_state.eq = txc->send_cq->evtq->eqn;
 		cmd.c_state.initiator = cxip_msg_match_id(txc);
-
-		if (!req)
-			cmd.c_state.event_success_disable = 1;
 
 		/* If MATCH_COMPLETE was requested, software must manage
 		 * counters.
@@ -2995,28 +2864,11 @@ static ssize_t _cxip_send_eager(struct cxip_txc *txc, const void *buf,
 		memset(&cmd.idc_msg, 0, sizeof(cmd.idc_msg));
 		cmd.idc_msg.dfa = dfa;
 		cmd.idc_msg.match_bits = mb.raw;
-		cmd.idc_msg.header_data = data;
-
-		if (req) {
-			cmd.idc_msg.user_ptr = (uint64_t)req;
-		} else {
-			void *inject_req;
-
-			if (tagged)
-				inject_req = cxip_tinject_req(txc);
-			else
-				inject_req = cxip_inject_req(txc);
-
-			if (!inject_req) {
-				ret = -FI_ENOMEM;
-				goto err_unlock;
-			}
-
-			cmd.idc_msg.user_ptr = (uint64_t)inject_req;
-		}
+		cmd.idc_msg.header_data = req->send.data;
+		cmd.idc_msg.user_ptr = (uint64_t)req;
 
 		ret = cxi_cq_emit_idc_msg(txc->tx_cmdq->dev_cmdq, &cmd.idc_msg,
-					  buf, len);
+					  req->send.buf, req->send.len);
 		if (ret) {
 			CXIP_LOG_DBG("Failed to write IDC: %d\n", ret);
 
@@ -3036,13 +2888,13 @@ static ssize_t _cxip_send_eager(struct cxip_txc *txc, const void *buf,
 		cmd.restricted = 0;
 		cmd.dfa = dfa;
 		cmd.remote_offset = 0;
-		cmd.local_addr = CXI_VA_TO_IOVA(send_md->md, buf);
-		cmd.request_len = len;
+		cmd.local_addr = CXI_VA_TO_IOVA(send_md->md, req->send.buf);
+		cmd.request_len = req->send.len;
 		cmd.eq = txc->send_cq->evtq->eqn;
 		cmd.user_ptr = (uint64_t)req;
 		cmd.initiator = cxip_msg_match_id(txc);
 		cmd.match_bits = mb.raw;
-		cmd.header_data = data;
+		cmd.header_data = req->send.data;
 
 		/* If MATCH_COMPLETE was requested, software must manage
 		 * counters.
@@ -3063,32 +2915,37 @@ static ssize_t _cxip_send_eager(struct cxip_txc *txc, const void *buf,
 		}
 	}
 
-	if (!(flags & FI_MORE))
+	if (!(req->send.flags & FI_MORE))
 		cxi_cq_ring(txc->tx_cmdq->dev_cmdq);
 
-	if (req)
-		ofi_atomic_inc32(&txc->otx_reqs);
+	ofi_atomic_inc32(&txc->otx_reqs);
 
 	fastlock_release(&txc->tx_cmdq->lock);
 
-	CXIP_LOG_DBG("req: %p buf: %p len: %lu dest_addr: %ld tag(%c): 0x%lx context %p\n",
-		     req, buf, len, dest_addr, tagged ? '*' : '-', tag,
-		     context);
+	CXIP_LOG_DBG("req: %p buf: %p len: %lu dest_addr: %ld tag(%c): 0x%lx context %#lx\n",
+		     req, req->send.buf, req->send.len, req->send.dest_addr,
+		     req->send.tagged ? '*' : '-', req->send.tag,
+		     req->context);
 
 	return FI_SUCCESS;
 
 err_unlock:
 	fastlock_release(&txc->tx_cmdq->lock);
-	if (req && match_complete)
+	if (match_complete)
 		cxip_tx_id_free(txc->ep_obj, req->send.tx_id);
-err_req_free:
-	if (req)
-		cxip_cq_req_free(req);
 err_unmap:
 	if (!idc)
 		cxip_unmap(send_md);
 
 	return ret;
+}
+
+static ssize_t _cxip_send_req(struct cxip_req *req)
+{
+	if (req->send.len > req->send.txc->rdzv_threshold)
+		return _cxip_send_long(req);
+	else
+		return _cxip_send_eager(req);
 }
 
 /*
@@ -3100,6 +2957,7 @@ static ssize_t _cxip_send(struct cxip_txc *txc, const void *buf, size_t len,
 			  uint64_t tag, void *context, uint64_t flags,
 			  bool tagged)
 {
+	struct cxip_req *req;
 	int ret;
 
 	if (!txc->enabled)
@@ -3114,12 +2972,44 @@ static ssize_t _cxip_send(struct cxip_txc *txc, const void *buf, size_t len,
 	if (len > CXIP_EP_MAX_MSG_SZ)
 		return -FI_EMSGSIZE;
 
-	if (len > txc->rdzv_threshold)
-		ret = _cxip_send_long(txc, buf, len, desc, data, dest_addr,
-				      tag, context, flags, tagged);
+	req = cxip_cq_req_alloc(txc->send_cq, false, txc);
+	if (!req) {
+		CXIP_LOG_DBG("Failed to allocate request\n");
+		return -FI_EAGAIN;
+	}
+
+	/* Save Send parameters to replay */
+	req->send.txc = txc;
+	req->send.buf = buf;
+	req->send.len = len;
+	req->send.dest_addr = dest_addr;
+	req->send.tagged = tagged;
+	req->send.tag = tag;
+	req->send.data = data;
+	req->send.flags = flags;
+
+	/* Set completion parameters */
+	req->context = (uint64_t)context;
+	req->flags = FI_SEND | (flags & (FI_COMPLETION | FI_MATCH_COMPLETE));
+	if (tagged)
+		req->flags |= FI_TAGGED;
 	else
-		ret = _cxip_send_eager(txc, buf, len, desc, data, dest_addr,
-				       tag, context, flags, tagged);
+		req->flags |= FI_MSG;
+
+	req->data_len = 0;
+	req->buf = 0;
+	req->data = 0;
+	req->tag = 0;
+
+	/* Try Send */
+	ret = _cxip_send_req(req);
+	if (ret != FI_SUCCESS)
+		goto req_free;
+
+	return FI_SUCCESS;
+
+req_free:
+	cxip_cq_req_free(req);
 
 	return ret;
 }

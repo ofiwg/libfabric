@@ -451,10 +451,18 @@ struct cxip_req_recv {
 };
 
 struct cxip_req_send {
-	void *buf;			// local send buffer
-	struct cxip_md *send_md;	// send buffer memory descriptor
+	/* Send parameters */
 	struct cxip_txc *txc;
-	size_t length;			// request length
+	const void *buf;		// local send buffer
+	size_t len;			// request length
+	struct cxip_md *send_md;	// send buffer memory descriptor
+	fi_addr_t dest_addr;
+	bool tagged;
+	uint64_t tag;
+	uint64_t data;
+	uint64_t flags;
+
+	/* Control info */
 	union {
 		int rdzv_id;		// SW RDZV ID for long messages
 		int tx_id;
@@ -708,8 +716,6 @@ struct cxip_txc {
 	struct cxip_cmdq *tx_cmdq;	// added during cxip_txc_enable()
 
 	ofi_atomic32_t otx_reqs;	// outstanding transmit requests
-	struct cxip_req *inject_req;
-	struct cxip_req *tinject_req;
 	struct cxip_req *rma_inject_req;
 	struct cxip_req *amo_inject_req;
 
