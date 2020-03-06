@@ -110,7 +110,14 @@ void ofi_rbmap_cleanup(struct ofi_rbmap *map)
 
 void ofi_rbmap_destroy(struct ofi_rbmap *map)
 {
+	struct ofi_rbnode *node;
+
 	ofi_rbmap_cleanup(map);
+	while (map->free_list) {
+		node = map->free_list;
+		map->free_list = node->right;
+		free(node);
+	}
 	free(map);
 }
 
