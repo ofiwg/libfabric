@@ -68,7 +68,8 @@ uint64_t ofi_copy_iov_buf(const struct iovec *iov, size_t iov_count, uint64_t io
 	return done;
 }
 
-void ofi_consume_iov(struct iovec *iov, size_t *iov_count, size_t consumed)
+void ofi_consume_iov_desc(struct iovec *iov, void **desc,
+			  size_t *iov_count, size_t to_consume)
 {
 	size_t i;
 
@@ -76,15 +77,44 @@ void ofi_consume_iov(struct iovec *iov, size_t *iov_count, size_t consumed)
 		goto out;
 
 	for (i = 0; i < *iov_count; i++) {
-		if (consumed < iov[i].iov_len)
+		if (to_consume < iov[i].iov_len)
 			break;
-		consumed -= iov[i].iov_len;
+		to_consume -= iov[i].iov_len;
 	}
 	memmove(iov, &iov[i], sizeof(*iov) * (*iov_count - i));
+	if (desc)
+		memmove(desc, &desc[i],
+			sizeof(*desc) * (*iov_count - i));
 	*iov_count -= i;
 out:
-	iov[0].iov_base = (uint8_t *)iov[0].iov_base + consumed;
-	iov[0].iov_len -= consumed;
+	iov[0].iov_base = (uint8_t *)iov[0].iov_base + to_consume;
+	iov[0].iov_len -= to_consume;
+}
+
+void ofi_consume_iov(struct iovec *iov, size_t *iov_count, size_t to_consume)
+{
+	ofi_consume_iov_desc(iov, NULL, iov_count, to_consume);
+}
+
+void ofi_consume_rma_iov(struct fi_rma_iov *rma_iov, size_t *rma_iov_count,
+			 size_t to_consume)
+{
+	size_t i;
+
+	if (*rma_iov_count == 1)
+		goto out;
+
+	for (i = 0; i < *rma_iov_count; i++) {
+		if (to_consume < rma_iov[i].len)
+			break;
+		to_consume -= rma_iov[i].len;
+	}
+	memmove(rma_iov, &rma_iov[i],
+		sizeof(*rma_iov) * (*rma_iov_count - i));
+	*rma_iov_count -= i;
+out:
+	rma_iov[0].addr += to_consume;
+	rma_iov[0].len -= to_consume;
 }
 
 int ofi_truncate_iov(struct iovec *iov, size_t *iov_count, size_t new_size)
