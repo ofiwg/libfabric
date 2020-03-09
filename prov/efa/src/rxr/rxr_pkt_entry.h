@@ -79,14 +79,15 @@ struct rxr_pkt_entry {
 #endif
 };
 
-static inline void *rxr_pkt_start(struct rxr_pkt_entry *pkt_entry)
-{
-	return (void *)((char *)pkt_entry + sizeof(*pkt_entry));
-}
-
 #if defined(static_assert) && defined(__x86_64__)
 static_assert(sizeof(struct rxr_pkt_entry) == 128, "rxr_pkt_entry check");
 #endif
+
+static inline
+void *rxr_pkt_start(struct rxr_pkt_entry *pkt_entry)
+{
+	return (void *)((char *)pkt_entry + sizeof(*pkt_entry));
+}
 
 OFI_DECL_RECVWIN_BUF(struct rxr_pkt_entry*, rxr_robuf, uint32_t);
 DECLARE_FREESTACK(struct rxr_robuf, rxr_robuf_fs);

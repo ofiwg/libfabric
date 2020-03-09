@@ -184,15 +184,16 @@ ssize_t rxr_rma_post_efa_emulated_read(struct rxr_ep *ep, struct rxr_tx_entry *t
 	int err, window, credits;
 	struct rxr_peer *peer;
 	struct rxr_rx_entry *rx_entry;
+	struct fi_msg msg = {0};
 
 	/* create a rx_entry to receve data
 	 * use ofi_op_msg for its op.
 	 * it does not write a rx completion.
 	 */
-	rx_entry = rxr_ep_get_rx_entry(ep, tx_entry->iov,
-				       tx_entry->iov_count,
-				       0, ~0, NULL,
-				       tx_entry->addr, ofi_op_msg, 0);
+	msg.msg_iov = tx_entry->iov;
+	msg.iov_count = tx_entry->iov_count;
+	msg.addr = tx_entry->addr;
+	rx_entry = rxr_ep_get_rx_entry(ep, &msg, 0, ~0, ofi_op_msg, 0);
 	if (!rx_entry) {
 		rxr_release_tx_entry(ep, tx_entry);
 		FI_WARN(&rxr_prov, FI_LOG_CQ,

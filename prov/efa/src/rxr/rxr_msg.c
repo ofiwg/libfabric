@@ -488,12 +488,8 @@ int rxr_msg_handle_unexp_match(struct rxr_ep *ep,
  *    Returns 0 if the message is processed, -FI_ENOMSG if no match is found.
  */
 static
-int rxr_msg_proc_unexp_msg_list(struct rxr_ep *ep,
-				const struct iovec *iov,
-				size_t iov_count, uint64_t tag,
-				uint64_t ignore, void *context,
-				fi_addr_t addr, uint32_t op,
-				uint64_t flags,
+int rxr_msg_proc_unexp_msg_list(struct rxr_ep *ep, const struct fi_msg *msg,
+				uint64_t tag, uint64_t ignore, uint32_t op, uint64_t flags,
 				struct rxr_rx_entry *posted_entry)
 {
 	struct rxr_match_info match_info;
@@ -502,14 +498,14 @@ int rxr_msg_proc_unexp_msg_list(struct rxr_ep *ep,
 	int ret;
 
 	if (op == ofi_op_tagged) {
-		match_info.addr = addr;
+		match_info.addr = msg->addr;
 		match_info.tag = tag;
 		match_info.ignore = ignore;
 		match = dlist_remove_first_match(&ep->rx_unexp_tagged_list,
 						 &rxr_msg_match_unexp_tagged,
 						 (void *)&match_info);
 	} else {
-		match_info.addr = addr;
+		match_info.addr = msg->addr;
 		match = dlist_remove_first_match(&ep->rx_unexp_list,
 						 &rxr_msg_match_unexp,
 						 (void *)&match_info);
@@ -536,8 +532,8 @@ int rxr_msg_proc_unexp_msg_list(struct rxr_ep *ep,
 			return -FI_ENOBUFS;
 		}
 	} else {
-		memcpy(rx_entry->iov, iov, sizeof(*rx_entry->iov) * iov_count);
-		rx_entry->iov_count = iov_count;
+		memcpy(rx_entry->iov, msg->msg_iov, sizeof(*rx_entry->iov) * msg->iov_count);
+		rx_entry->iov_count = msg->iov_count;
 	}
 
 	FI_DBG(&rxr_prov, FI_LOG_EP_CTRL,
@@ -546,7 +542,7 @@ int rxr_msg_proc_unexp_msg_list(struct rxr_ep *ep,
 	       rx_entry->msg_id, rx_entry->total_len, rx_entry->tag);
 
 	ret = rxr_msg_handle_unexp_match(ep, rx_entry, tag, ignore,
-					 context, addr, op, flags);
+					 msg->context, msg->addr, op, flags);
 	return ret;
 }
 
@@ -582,15 +578,13 @@ void rxr_msg_multi_recv_free_posted_entry(struct rxr_ep *ep,
 }
 
 static
-ssize_t rxr_msg_multi_recv(struct rxr_ep *rxr_ep, const struct iovec *iov,
-			   size_t iov_count, fi_addr_t addr, uint64_t tag,
-			   uint64_t ignore, void *context, uint32_t op,
-			   uint64_t flags)
+ssize_t rxr_msg_multi_recv(struct rxr_ep *rxr_ep, const struct fi_msg *msg,
+			   uint64_t tag, uint64_t ignore, uint32_t op, uint64_t flags)
 {
 	struct rxr_rx_entry *rx_entry;
 	int ret = 0;
 
-	if ((ofi_total_iov_len(iov, iov_count)
+	if ((ofi_total_iov_len(msg->msg_iov, msg->iov_count)
 	     < rxr_ep->min_multi_recv_size) || op != ofi_op_msg)
 		return -FI_EINVAL;
 
@@ -600,11 +594,7 @@ ssize_t rxr_msg_multi_recv(struct rxr_ep *rxr_ep, const struct iovec *iov,
 	 * messages but will be used for tracking the application's buffer and
 	 * when to write the completion to release the buffer.
 	 */
-	rx_entry = rxr_ep_get_rx_entry(rxr_ep, iov, iov_count, tag,
-				       ignore, context,
-				       (rxr_ep->util_ep.caps &
-					FI_DIRECTED_RECV) ? addr :
-				       FI_ADDR_UNSPEC, op, flags);
+	rx_entry = rxr_ep_get_rx_entry(rxr_ep, msg, tag, ignore, op, flags);
 	if (OFI_UNLIKELY(!rx_entry)) {
 		rxr_ep_progress_internal(rxr_ep);
 		return -FI_EAGAIN;
@@ -615,12 +605,8 @@ ssize_t rxr_msg_multi_recv(struct rxr_ep *rxr_ep, const struct iovec *iov,
 	dlist_init(&rx_entry->multi_recv_entry);
 
 	while (!dlist_empty(&rxr_ep->rx_unexp_list)) {
-		ret = rxr_msg_proc_unexp_msg_list(rxr_ep, NULL, 0, tag,
-						  ignore, context,
-						  (rxr_ep->util_ep.caps
-						   & FI_DIRECTED_RECV) ?
-						   addr : FI_ADDR_UNSPEC,
-						  op, flags, rx_entry);
+		ret = rxr_msg_proc_unexp_msg_list(rxr_ep, msg, tag,
+						  ignore, op, flags, rx_entry);
 
 		if (!rxr_msg_multi_recv_buffer_available(rxr_ep, rx_entry)) {
 			/*
@@ -681,9 +667,8 @@ void rxr_msg_multi_recv_handle_completion(struct rxr_ep *ep,
  *     else add to posted recv list
  */
 static
-ssize_t rxr_msg_generic_recv(struct fid_ep *ep, const struct iovec *iov,
-			     size_t iov_count, fi_addr_t addr, uint64_t tag,
-			     uint64_t ignore, void *context, uint32_t op,
+ssize_t rxr_msg_generic_recv(struct fid_ep *ep, const struct fi_msg *msg,
+			     uint64_t tag, uint64_t ignore, uint32_t op,
 			     uint64_t flags)
 {
 	ssize_t ret = 0;
@@ -694,12 +679,12 @@ ssize_t rxr_msg_generic_recv(struct fid_ep *ep, const struct iovec *iov,
 
 	FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
 	       "%s: iov_len: %lu tag: %lx ignore: %lx op: %x flags: %lx\n",
-	       __func__, ofi_total_iov_len(iov, iov_count), tag, ignore,
+	       __func__, ofi_total_iov_len(msg->msg_iov, msg->iov_count), tag, ignore,
 	       op, flags);
 
 	rxr_ep = container_of(ep, struct rxr_ep, util_ep.ep_fid.fid);
 
-	assert(iov_count <= rxr_ep->rx_iov_limit);
+	assert(msg->iov_count <= rxr_ep->rx_iov_limit);
 
 	rxr_perfset_start(rxr_ep, perf_rxr_recv);
 
@@ -716,32 +701,28 @@ ssize_t rxr_msg_generic_recv(struct fid_ep *ep, const struct iovec *iov,
 	}
 
 	if (flags & FI_MULTI_RECV) {
-		ret = rxr_msg_multi_recv(rxr_ep, iov, iov_count, addr, tag, ignore,
-					 context, op, flags);
+		ret = rxr_msg_multi_recv(rxr_ep, msg, tag, ignore, op, flags);
 		goto out;
 	}
 
 	unexp_list = (op == ofi_op_tagged) ? &rxr_ep->rx_unexp_tagged_list :
 		     &rxr_ep->rx_unexp_list;
 
+	//msg->addr =   (rxr_ep->util_ep.caps
+	//					   & FI_DIRECTED_RECV) ?
+	//					   addr : FI_ADDR_UNSPEC
+
 	if (!dlist_empty(unexp_list)) {
-		ret = rxr_msg_proc_unexp_msg_list(rxr_ep, iov, iov_count, tag,
-						  ignore, context,
-						  (rxr_ep->util_ep.caps
-						   & FI_DIRECTED_RECV) ?
-						   addr : FI_ADDR_UNSPEC,
-						  op, flags, NULL);
+		ret = rxr_msg_proc_unexp_msg_list(rxr_ep, msg, tag,
+						  ignore, op, flags, NULL);
 
 		if (ret != -FI_ENOMSG)
 			goto out;
 		ret = 0;
 	}
 
-	rx_entry = rxr_ep_get_rx_entry(rxr_ep, iov, iov_count, tag,
-				       ignore, context,
-				       (rxr_ep->util_ep.caps &
-					FI_DIRECTED_RECV) ? addr :
-				       FI_ADDR_UNSPEC, op, flags);
+	rx_entry = rxr_ep_get_rx_entry(rxr_ep, msg, tag,
+				       ignore, op, flags);
 
 	if (OFI_UNLIKELY(!rx_entry)) {
 		ret = -FI_EAGAIN;
@@ -910,8 +891,7 @@ static
 ssize_t rxr_msg_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 			uint64_t flags)
 {
-	return rxr_msg_generic_recv(ep_fid, msg->msg_iov, msg->iov_count, msg->addr,
-				    0, 0, msg->context, ofi_op_msg, flags);
+	return rxr_msg_generic_recv(ep_fid, msg, 0, 0, ofi_op_msg, flags);
 }
 
 static
@@ -961,13 +941,19 @@ ssize_t rxr_msg_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 		      fi_addr_t src_addr, uint64_t tag, uint64_t ignore,
 		      void *context)
 {
+	struct fi_msg msg;
 	struct iovec msg_iov;
 
 	msg_iov.iov_base = (void *)buf;
 	msg_iov.iov_len = len;
 
-	return rxr_msg_generic_recv(ep_fid, &msg_iov, 1, src_addr, tag, ignore,
-				    context, ofi_op_tagged, 0);
+	msg.msg_iov = &msg_iov;
+	msg.iov_count = 1;
+	msg.addr = src_addr;
+	msg.context = context;
+	msg.desc = &desc;
+
+	return rxr_msg_generic_recv(ep_fid, &msg, tag, ignore, ofi_op_tagged, 0);
 }
 
 static
@@ -975,26 +961,39 @@ ssize_t rxr_msg_trecvv(struct fid_ep *ep_fid, const struct iovec *iov,
 		       void **desc, size_t count, fi_addr_t src_addr,
 		       uint64_t tag, uint64_t ignore, void *context)
 {
-	return rxr_msg_generic_recv(ep_fid, iov, count, src_addr, tag, ignore,
-				    context, ofi_op_tagged, 0);
+	struct fi_msg msg;
+
+	msg.msg_iov = iov;
+	msg.iov_count = count;
+	msg.addr = src_addr;
+	msg.desc = desc;
+	msg.context = context;
+
+	return rxr_msg_generic_recv(ep_fid, &msg, tag, ignore, ofi_op_tagged, 0);
 }
 
 static
-ssize_t rxr_msg_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
+ssize_t rxr_msg_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *tagmsg,
 			 uint64_t flags)
 {
 	ssize_t ret;
+	struct fi_msg msg;
 
 	if (flags & FI_PEEK) {
-		ret = rxr_msg_peek_trecv(ep_fid, msg, flags);
+		ret = rxr_msg_peek_trecv(ep_fid, tagmsg, flags);
 		goto out;
 	} else if (flags & FI_CLAIM) {
-		ret = rxr_msg_claim_trecv(ep_fid, msg, flags);
+		ret = rxr_msg_claim_trecv(ep_fid, tagmsg, flags);
 		goto out;
 	}
 
-	ret = rxr_msg_generic_recv(ep_fid, msg->msg_iov, msg->iov_count, msg->addr,
-				   msg->tag, msg->ignore, msg->context,
+	msg.msg_iov = tagmsg->msg_iov;
+	msg.iov_count = tagmsg->iov_count;
+	msg.addr = tagmsg->addr;
+	msg.desc = tagmsg->desc;
+	msg.context = tagmsg->context;
+
+	ret = rxr_msg_generic_recv(ep_fid, &msg, tagmsg->tag, tagmsg->ignore,
 				   ofi_op_tagged, flags);
 
 out:

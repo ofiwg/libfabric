@@ -77,6 +77,7 @@ ssize_t rxr_pkt_post_data(struct rxr_ep *rxr_ep,
 	else
 		ret = rxr_pkt_send_data(rxr_ep, tx_entry, pkt_entry);
 
+
 	if (OFI_UNLIKELY(ret)) {
 		rxr_pkt_entry_release_tx(rxr_ep, pkt_entry);
 		return ret;

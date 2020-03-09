@@ -383,6 +383,7 @@ struct rxr_rx_entry {
 
 	size_t iov_count;
 	struct iovec iov[RXR_IOV_LIMIT];
+	void *desc[RXR_IOV_LIMIT];
 
 	/* iov_count on sender side, used for large message READ over shm */
 	size_t rma_iov_count;
@@ -697,18 +698,18 @@ static inline void rxr_ep_peer_init(struct rxr_ep *ep, struct rxr_peer *peer)
 }
 
 struct rxr_rx_entry *rxr_ep_get_rx_entry(struct rxr_ep *ep,
-					 const struct iovec *iov,
-					 size_t iov_count, uint64_t tag,
-					 uint64_t ignore, void *context,
-					 fi_addr_t addr, uint32_t op,
+					 const struct fi_msg *msg,
+					 uint64_t tag,
+					 uint64_t ignore,
+					 uint32_t op,
 					 uint64_t flags);
 
 struct rxr_rx_entry *rxr_ep_rx_entry_init(struct rxr_ep *ep,
 					  struct rxr_rx_entry *rx_entry,
-					  const struct iovec *iov,
-					  size_t iov_count, uint64_t tag,
-					  uint64_t ignore, void *context,
-					  fi_addr_t addr, uint32_t op,
+					  const struct fi_msg *msg,
+					  uint64_t tag,
+					  uint64_t ignore,
+					  uint32_t op,
 					  uint64_t flags);
 
 void rxr_tx_entry_init(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry,
@@ -719,8 +720,6 @@ struct rxr_tx_entry *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
 					   uint32_t op,
 					   uint64_t tag,
 					   uint64_t flags);
-
-
 
 static inline void rxr_release_tx_entry(struct rxr_ep *ep,
 					struct rxr_tx_entry *tx_entry)
