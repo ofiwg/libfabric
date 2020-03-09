@@ -72,21 +72,35 @@ static void tcpx_report_error(struct tcpx_ep *tcpx_ep, int err)
 		    &err_entry, sizeof(err_entry), UTIL_FLAG_ERROR);
 }
 
+/**
+ * Shutdown is done in two phases, phase1 writes the FI_SHUTDOWN event, which
+ * a polling thread still needs to handle, phase2 removes the fd
+ * of the ep from polling, so that a polling thread won't spin
+ * if it does not close the connection immediately after it handled
+ * FI_SHUTDOWN
+ */
 int tcpx_ep_shutdown_report(struct tcpx_ep *ep, fid_t fid)
 {
 	struct fi_eq_cm_entry cm_entry = {0};
 	ssize_t len;
 
-	if (ep->cm_state == TCPX_EP_SHUTDOWN)
-		return FI_SUCCESS;
-
-	tcpx_cq_report_xfer_fail(ep, -FI_ENOTCONN);
-	ep->cm_state = TCPX_EP_SHUTDOWN;
-	cm_entry.fid = fid;
-	len =  fi_eq_write(&ep->util_ep.eq->eq_fid, FI_SHUTDOWN,
-			   &cm_entry, sizeof(cm_entry), 0);
-	if (len < 0)
-		return (int) len;
+	switch (ep->cm_state) {
+	case TCPX_EP_POLL_REMOVED:
+		break;
+	case TCPX_EP_SHUTDOWN:
+		tcpx_ep_wait_fd_del(ep);
+		ep->cm_state = TCPX_EP_POLL_REMOVED;
+		break;
+	default:
+		tcpx_cq_report_xfer_fail(ep, -FI_ENOTCONN);
+		ep->cm_state = TCPX_EP_SHUTDOWN;
+		cm_entry.fid = fid;
+		len =  fi_eq_write(&ep->util_ep.eq->eq_fid, FI_SHUTDOWN,
+				   &cm_entry, sizeof(cm_entry), 0);
+		if (len < 0)
+			return (int) len;
+		break;
+	}
 
 	return FI_SUCCESS;
 }

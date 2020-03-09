@@ -136,6 +136,7 @@ enum tcpx_cm_state {
 	TCPX_EP_CONNECTING,
 	TCPX_EP_CONNECTED,
 	TCPX_EP_SHUTDOWN,
+	TCPX_EP_POLL_REMOVED,
 	TCPX_EP_ERROR,
 };
 
@@ -288,6 +289,8 @@ int tcpx_read_to_buffer(SOCKET sock, struct stage_buf *stage_buf);
 
 struct tcpx_xfer_entry *tcpx_xfer_entry_alloc(struct tcpx_cq *cq,
 					      enum tcpx_xfer_op_codes type);
+
+void tcpx_ep_wait_fd_del(struct tcpx_ep *ep);
 void tcpx_xfer_entry_release(struct tcpx_cq *tcpx_cq,
 			     struct tcpx_xfer_entry *xfer_entry);
 void tcpx_srx_xfer_release(struct tcpx_rx_ctx *srx_ctx,
