@@ -69,6 +69,17 @@ int vrb_mr_reg_common(struct vrb_mem_desc *md, int vrb_access,
 	if (md->domain->flags & VRB_USE_ODP && iface == FI_HMEM_SYSTEM)
 		vrb_access |= VRB_ACCESS_ON_DEMAND;
 
+#ifdef HAVE_LIBCUDA
+	if (iface == FI_HMEM_CUDA) {
+		/* Workaround a bug where if a CUDA MR is mapped as REMOTE_READ
+		 * only, the thread can get stuck in the kernel on some systems.
+		 * Setting LOCAL_WRITE prevents this.
+		 */
+		if (vrb_access & IBV_ACCESS_REMOTE_READ)
+			vrb_access |= IBV_ACCESS_LOCAL_WRITE;
+	}
+#endif
+
 	md->mr = ibv_reg_mr(md->domain->pd, (void *) buf, len, vrb_access);
 	if (!md->mr) {
 		if (len)
