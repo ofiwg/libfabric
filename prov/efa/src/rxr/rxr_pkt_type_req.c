@@ -211,9 +211,14 @@ size_t rxr_pkt_req_copy_data(struct rxr_rx_entry *rx_entry,
 	 */
 	if (rx_entry->cq_entry.len > rx_entry->total_len)
 		rx_entry->cq_entry.len = rx_entry->total_len;
-
-	bytes_copied = ofi_copy_to_iov(rx_entry->iov, rx_entry->iov_count,
-				       0, data, data_size);
+#ifdef HAVE_LIBCUDA
+	if (rxr_ep_is_cuda_mr(rx_entry->desc[0]))
+		bytes_copied = ofi_copy_to_cuda_iov(rx_entry->iov, rx_entry->iov_count,
+					            0, data, data_size);
+	else
+#endif
+		bytes_copied = ofi_copy_to_iov(rx_entry->iov, rx_entry->iov_count,
+					       0, data, data_size);
 
 	if (OFI_UNLIKELY(bytes_copied < data_size)) {
 		/* recv buffer is not big enough to hold req, this must be a truncated message */
@@ -679,7 +684,13 @@ ssize_t rxr_pkt_proc_matched_medium_rtm(struct rxr_ep *ep,
 		data = (char *)cur->pkt + cur->hdr_size;
 		offset = rxr_get_medium_rtm_base_hdr(cur->pkt)->offset;
 		data_size = cur->pkt_size - cur->hdr_size;
-		ofi_copy_to_iov(rx_entry->iov, rx_entry->iov_count, offset, data, data_size);
+#ifdef HAVE_LIBCUDA
+		if (rxr_ep_is_cuda_mr(rx_entry->desc[0]))
+			ofi_copy_to_cuda_iov(rx_entry->iov, rx_entry->iov_count, offset, data, data_size);
+		else
+#endif
+			ofi_copy_to_iov(rx_entry->iov, rx_entry->iov_count, offset, data, data_size);
+
 		rx_entry->bytes_done += data_size;
 		cur = cur->next;
 	}
