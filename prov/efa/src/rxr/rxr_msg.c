@@ -101,7 +101,8 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 		 * because medium message works even if MR registration failed
 		 */
 		if (efa_mr_cache_enable)
-			rxr_ep_tx_init_mr_desc(rxr_ep, tx_entry, 0, FI_SEND);
+			rxr_ep_tx_init_mr_desc(rxr_ep_domain(rxr_ep),
+					       tx_entry, 0, FI_SEND);
 		return rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
 						  RXR_MEDIUM_MSGRTM_PKT + tagged, 0);
 	}

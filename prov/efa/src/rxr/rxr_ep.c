@@ -440,7 +440,8 @@ struct rxr_tx_entry *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
 	return tx_entry;
 }
 
-int rxr_ep_tx_init_mr_desc(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
+int rxr_ep_tx_init_mr_desc(struct rxr_domain *rxr_domain,
+			   struct rxr_tx_entry *tx_entry,
 			   int mr_iov_start, uint64_t access)
 {
 	int i, err, ret;
@@ -457,7 +458,7 @@ int rxr_ep_tx_init_mr_desc(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 			continue;
 		}
 
-		err = fi_mr_reg(rxr_ep_domain(ep)->rdm_domain,
+		err = fi_mr_reg(rxr_domain->rdm_domain,
 				tx_entry->iov[i].iov_base,
 				tx_entry->iov[i].iov_len,
 				access, 0, 0, 0,
@@ -478,7 +479,8 @@ int rxr_ep_tx_init_mr_desc(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	return ret;
 }
 
-void rxr_prepare_mr_send(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
+void rxr_prepare_desc_send(struct rxr_domain *rxr_domain,
+			   struct rxr_tx_entry *tx_entry)
 {
 	size_t offset;
 	int index;
@@ -500,7 +502,7 @@ void rxr_prepare_mr_send(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 	 * because the long message protocol would work with or without
 	 * memory registration and descriptor.
 	 */
-	rxr_ep_tx_init_mr_desc(ep, tx_entry, index, FI_SEND);
+	rxr_ep_tx_init_mr_desc(rxr_domain, tx_entry, index, FI_SEND);
 }
 
 /* Generic send */
