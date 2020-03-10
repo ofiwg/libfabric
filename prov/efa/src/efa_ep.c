@@ -446,35 +446,43 @@ static struct fi_ops efa_ep_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-static void efa_ep_progress_internal(struct efa_cq *efa_cq, uint64_t flags)
+static void efa_ep_progress_internal(struct efa_ep *ep, struct efa_cq *efa_cq)
 {
-	struct util_cq *cq = &efa_cq->util_cq;
-	int i;
-	ssize_t ret;
+	struct util_cq *cq;
 	struct fi_cq_tagged_entry cq_entry[EFA_CQ_PROGRESS_ENTRIES];
 	struct fi_cq_tagged_entry *temp_cq_entry;
 	struct fi_cq_err_entry cq_err_entry;
 	fi_addr_t src_addr[EFA_CQ_PROGRESS_ENTRIES];
+	uint64_t flags;
+	int i;
+	ssize_t ret, err;
+
+	cq = &efa_cq->util_cq;
+	flags = ep->util_ep.caps;
 
 	VALGRIND_MAKE_MEM_DEFINED(&cq_entry, sizeof(cq_entry));
 
 	ret = efa_cq_readfrom(&cq->cq_fid, cq_entry, EFA_CQ_PROGRESS_ENTRIES,
 			      (flags & FI_SOURCE) ? src_addr : NULL);
 	if (ret == -FI_EAGAIN)
-		goto err_cq;
+		return;
 
 	if (OFI_UNLIKELY(ret < 0)) {
-		ret = (ret == FI_EAVAIL) ?
-			efa_cq_readerr(&cq->cq_fid, &cq_err_entry, flags) :
-			-FI_EAVAIL;
-		if (OFI_UNLIKELY(ret < 0)) {
-			if (OFI_UNLIKELY(ret != -FI_EAGAIN))
-				EFA_WARN(FI_LOG_CQ,
-					 "failed to read cq error: %ld\n", ret);
-			goto err_cq;
+		if (OFI_UNLIKELY(ret != -FI_EAVAIL)) {
+			EFA_WARN(FI_LOG_CQ, "no error available errno: %ld\n", ret);
+			efa_eq_write_error(&ep->util_ep, FI_EOTHER, ret);
+			return;
 		}
+
+		err = efa_cq_readerr(&cq->cq_fid, &cq_err_entry, flags);
+		if (OFI_UNLIKELY(err < 0)) {
+			EFA_WARN(FI_LOG_CQ, "unable to read error entry errno: %ld\n", err);
+			efa_eq_write_error(&ep->util_ep, FI_EOTHER, err);
+			return;
+		}
+
 		ofi_cq_write_error(cq, &cq_err_entry);
-		goto err_cq;
+		return;
 	}
 
 	temp_cq_entry = (struct fi_cq_tagged_entry *)cq_entry;
@@ -497,7 +505,6 @@ static void efa_ep_progress_internal(struct efa_cq *efa_cq, uint64_t flags)
 		temp_cq_entry = (struct fi_cq_tagged_entry *)
 				((uint8_t *)temp_cq_entry + efa_cq->entry_size);
 	}
-err_cq:
 	return;
 }
 
@@ -514,10 +521,10 @@ void efa_ep_progress(struct util_ep *ep)
 	fastlock_acquire(&ep->lock);
 
 	if (rcq)
-		efa_ep_progress_internal(rcq, ep->caps);
+		efa_ep_progress_internal(efa_ep, rcq);
 
 	if (scq && scq != rcq)
-		efa_ep_progress_internal(scq, ep->caps);
+		efa_ep_progress_internal(efa_ep, scq);
 
 	fastlock_release(&ep->lock);
 }
