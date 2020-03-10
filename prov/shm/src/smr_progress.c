@@ -49,14 +49,12 @@ static int smr_progress_atomic_resp(struct smr_ep *ep, struct smr_tx_entry *pend
 	if (fastlock_tryacquire(&peer_smr->lock))
 		return -FI_EAGAIN;
 
-	if (!(pending->cmd.msg.hdr.op_flags & SMR_RMA_REQ))
-		goto out;
-
 	inj_offset = (size_t) pending->cmd.msg.hdr.src_data;
 	tx_buf = (struct smr_inject_buf *) ((char **) peer_smr +
 					    inj_offset);
-	if (*ret)
-		goto push;
+
+	if (*ret || !(pending->cmd.msg.hdr.op_flags & SMR_RMA_REQ))
+		goto out;
 
 	src = pending->cmd.msg.hdr.op == ofi_op_atomic_compare ?
 	      tx_buf->buf : tx_buf->data;
@@ -68,9 +66,8 @@ static int smr_progress_atomic_resp(struct smr_ep *ep, struct smr_tx_entry *pend
 			"Incomplete atomic fetch buffer copied\n");
 		*ret = FI_EIO;
 	}
-push:
-	smr_freestack_push(smr_inject_pool(peer_smr), tx_buf);
 out:
+	smr_freestack_push(smr_inject_pool(peer_smr), tx_buf);
 	peer_smr->cmd_cnt++;
 	fastlock_release(&peer_smr->lock);
 	return 0;
