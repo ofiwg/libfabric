@@ -38,6 +38,7 @@
 #include "rxr_msg.h"
 #include "rxr_pkt_cmd.h"
 #include "rxr_read.h"
+#include "efa_cuda.h"
 
 /*
  * Utility constants and funnctions shared by all REQ packe
@@ -252,8 +253,16 @@ void rxr_pkt_init_rtm(struct rxr_ep *ep,
 	rtm_hdr->msg_id = tx_entry->msg_id;
 
 	data = (char *)pkt_entry->pkt + pkt_entry->hdr_size;
-	data_size = ofi_copy_from_iov(data, ep->mtu_size - pkt_entry->hdr_size,
-				      tx_entry->iov, tx_entry->iov_count, data_offset);
+#ifdef HAVE_LIBCUDA
+	if (rxr_ep_is_cuda_mr(tx_entry->desc[0]))
+		data_size = ofi_copy_from_cuda_iov(data,
+						   ep->mtu_size - pkt_entry->hdr_size,
+						   tx_entry->iov,
+						   tx_entry->iov_count, data_offset);
+	else
+#endif
+		data_size = ofi_copy_from_iov(data, ep->mtu_size - pkt_entry->hdr_size,
+					      tx_entry->iov, tx_entry->iov_count, data_offset);
 
 	pkt_entry->pkt_size = pkt_entry->hdr_size + data_size;
 	pkt_entry->x_entry = tx_entry;
@@ -421,7 +430,12 @@ void rxr_pkt_handle_long_rtm_sent(struct rxr_ep *ep,
 	tx_entry->bytes_sent += rxr_pkt_req_data_size(pkt_entry);
 	assert(tx_entry->bytes_sent < tx_entry->total_len);
 
+#ifdef HAVE_LIBCUDA
+	if (efa_mr_cache_enable
+	    || rxr_ep_is_cuda_mr(tx_entry->desc[0]))
+#else
 	if (efa_mr_cache_enable)
+#endif
 		rxr_prepare_mr_send(rxr_ep_domain(ep), tx_entry);
 }
 
@@ -1010,7 +1024,12 @@ void rxr_pkt_handle_long_rtw_sent(struct rxr_ep *ep,
 	tx_entry->bytes_sent += rxr_pkt_req_data_size(pkt_entry);
 	assert(tx_entry->bytes_sent < tx_entry->total_len);
 
+#ifdef HAVE_LIBCUDA
+	if (efa_mr_cache_enable
+	    || rxr_ep_is_cuda_mr(tx_entry->desc[0]))
+#else
 	if (efa_mr_cache_enable)
+#endif
 		rxr_prepare_mr_send(rxr_ep_domain(ep), tx_entry);
 }
 

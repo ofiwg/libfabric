@@ -34,6 +34,7 @@
 #include "rxr.h"
 #include "rxr_msg.h"
 #include "rxr_pkt_cmd.h"
+#include "efa_cuda.h"
 
 /*
  * This function contains data packet related functions
@@ -61,11 +62,21 @@ ssize_t rxr_pkt_send_data(struct rxr_ep *ep,
 	data_pkt = (struct rxr_data_pkt *)pkt_entry->pkt;
 	data_pkt->hdr.seg_size = payload_size;
 
-	pkt_entry->pkt_size = ofi_copy_from_iov(data_pkt->data,
-						payload_size,
-						tx_entry->iov,
-						tx_entry->iov_count,
-						tx_entry->bytes_sent);
+#ifdef HAVE_LIBCUDA
+	if (rxr_ep_is_cuda_mr(tx_entry->desc[0]))
+		pkt_entry->pkt_size = ofi_copy_from_cuda_iov(data_pkt->data,
+							     payload_size,
+							     tx_entry->iov,
+							     tx_entry->iov_count,
+							     tx_entry->bytes_sent);
+       else
+#endif
+		pkt_entry->pkt_size = ofi_copy_from_iov(data_pkt->data,
+							payload_size,
+							tx_entry->iov,
+							tx_entry->iov_count,
+							tx_entry->bytes_sent);
+
 	assert(pkt_entry->pkt_size == payload_size);
 
 	pkt_entry->pkt_size += sizeof(struct rxr_data_hdr);
@@ -187,10 +198,20 @@ ssize_t rxr_pkt_send_data_mr_cache(struct rxr_ep *ep,
 			 * written while updating iov index and offset
 			 */
 
-			len = rxr_copy_from_iov((char *)data_pkt->data +
-						 pkt_used,
-						 remaining_len,
-						 tx_entry);
+#ifdef HAVE_LIBCUDA
+			if (rxr_ep_is_cuda_mr(tx_entry->desc[0]))
+				len = ofi_copy_from_cuda_iov((char *)data_pkt->data +
+							     pkt_used,
+							     remaining_len,
+							     tx_entry->iov,
+							     tx_entry->iov_count,
+							     tx_entry->bytes_sent);
+			else
+#endif
+				len = rxr_copy_from_iov((char *)data_pkt->data +
+							 pkt_used,
+							 remaining_len,
+							 tx_entry);
 
 			iov[i].iov_base = (char *)data_pkt->data + pkt_used;
 			iov[i].iov_len = len;
