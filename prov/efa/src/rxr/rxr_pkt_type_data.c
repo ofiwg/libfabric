@@ -242,8 +242,8 @@ int rxr_pkt_proc_data(struct rxr_ep *ep,
 	/* we are sinking message for CANCEL/DISCARD entry */
 	if (OFI_LIKELY(!(rx_entry->rxr_flags & RXR_RECV_CANCEL)) &&
 	    rx_entry->cq_entry.len > seg_offset) {
-		bytes_copied = ofi_copy_to_iov(rx_entry->iov, rx_entry->iov_count,
-					       seg_offset, data, seg_size);
+		bytes_copied = rxr_copy_to_rx(data, seg_size, rx_entry, seg_offset);
+
 		if (bytes_copied != MIN(seg_size, rx_entry->cq_entry.len - seg_offset)) {
 			FI_WARN(&rxr_prov, FI_LOG_CQ, "wrong size! bytes_copied: %ld\n",
 				bytes_copied);
