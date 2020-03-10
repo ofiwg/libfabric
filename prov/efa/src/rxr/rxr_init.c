@@ -173,6 +173,9 @@ void rxr_info_to_core_mr_modes(uint32_t version,
 		else if (hints->domain_attr)
 			core_info->domain_attr->mr_mode |=
 				hints->domain_attr->mr_mode & OFI_MR_BASIC_MAP;
+#ifdef HAVE_LIBCUDA
+		core_info->domain_attr->mr_mode |= FI_MR_HMEM;
+#endif
 	}
 }
 
@@ -363,6 +366,35 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 		/* Use a table for AV if the app has no strong requirement */
 		if (!hints->domain_attr || hints->domain_attr->av_type == FI_AV_UNSPEC)
 			info->domain_attr->av_type = FI_AV_TABLE;
+
+#ifdef HAVE_LIBCUDA
+		/* If the application requires HMEM support, we will add FI_MR_HMEM
+		 * to mr_mode, because we need application to provide descriptor
+		 * for cuda buffer.
+		 * Note we did not add FI_MR_LOCAL here because according
+		 * to FI_MR man page:
+		 *
+		 *     "If FI_MR_HMEM is set, but FI_MR_LOCAL is unset,
+		 *      only device buffers must be registered when used locally.
+		 *      "
+		 * which means FI_MR_HMEM implies FI_MR_LOCAL for cuda buffer
+		 */
+		if (hints->caps & FI_HMEM) {
+			info->domain_attr->mr_mode |= FI_MR_HMEM;
+
+			/*
+			 * If in this case application add FI_MR_LOCAL to hints,
+			 * it would mean that application want provide descriptor
+			 * for system memory too, which we are able to use, so
+			 * we add FI_MR_LOCAL to mr_mode.
+			 *
+			 * TODO: add FI_MR_LOCAL to mr_mode for any applcations
+			 * the requested it, not just CUDA application.
+			 */
+			if (hints->domain_attr->mr_mode & FI_MR_LOCAL)
+				info->domain_attr->mr_mode |= FI_MR_LOCAL;
+		}
+#endif
 	}
 
 	rxr_set_rx_tx_size(info, core_info);
