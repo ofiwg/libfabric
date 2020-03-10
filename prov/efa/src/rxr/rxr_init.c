@@ -170,6 +170,9 @@ void rxr_info_to_core_mr_modes(uint32_t version,
 		else if (hints->domain_attr)
 			core_info->domain_attr->mr_mode |=
 				hints->domain_attr->mr_mode & OFI_MR_BASIC_MAP;
+#ifdef HAVE_LIBCUDA
+		core_info->domain_attr->mr_mode |= FI_MR_HMEM;
+#endif
 	}
 }
 
@@ -360,6 +363,11 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 		/* Use a table for AV if the app has no strong requirement */
 		if (!hints->domain_attr || hints->domain_attr->av_type == FI_AV_UNSPEC)
 			info->domain_attr->av_type = FI_AV_TABLE;
+
+		/* If the application requires HMEM support, require registrations */
+		if (hints->caps & FI_HMEM) {
+			info->domain_attr->mr_mode |= FI_MR_HMEM;
+		}
 	}
 
 	rxr_set_rx_tx_size(info, core_info);
