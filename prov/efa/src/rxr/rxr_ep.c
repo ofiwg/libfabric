@@ -438,8 +438,8 @@ struct rxr_tx_entry *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
 	return tx_entry;
 }
 
-void rxr_inline_mr_reg(struct rxr_domain *rxr_domain,
-		       struct rxr_tx_entry *tx_entry)
+void rxr_prepare_mr_send(struct rxr_domain *rxr_domain,
+			 struct rxr_tx_entry *tx_entry)
 {
 	ssize_t ret;
 	size_t offset;
@@ -459,7 +459,8 @@ void rxr_inline_mr_reg(struct rxr_domain *rxr_domain,
 
 	tx_entry->iov_mr_start = index;
 	while (index < tx_entry->iov_count) {
-		if (tx_entry->iov[index].iov_len > rxr_env.max_memcpy_size) {
+		if (!tx_entry->desc[index]
+		    && tx_entry->iov[index].iov_len > rxr_env.max_memcpy_size) {
 			ret = fi_mr_reg(rxr_domain->rdm_domain,
 					tx_entry->iov[index].iov_base,
 					tx_entry->iov[index].iov_len,
