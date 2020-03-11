@@ -126,9 +126,11 @@ void tcpx_xfer_entry_release(struct tcpx_cq *tcpx_cq,
 
 	xfer_entry->hdr.base_hdr.flags = 0;
 
+	xfer_entry->iov_cnt = 0;
 	xfer_entry->flags = 0;
 	xfer_entry->context = 0;
 	xfer_entry->rem_len = 0;
+	xfer_entry->mrecv_msg_start = 0;
 
 	tcpx_cq->util_cq.cq_fastlock_acquire(&tcpx_cq->util_cq.cq_lock);
 	ofi_buf_free(xfer_entry);
