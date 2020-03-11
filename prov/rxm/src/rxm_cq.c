@@ -65,12 +65,6 @@ rxm_cq_get_rx_comp_and_op_flags(struct rxm_rx_buf *rx_buf)
 	return (rx_buf->pkt.hdr.flags | ofi_rx_flags[rx_buf->pkt.hdr.op]);
 }
 
-static inline uint64_t
-rxm_cq_get_rx_comp_flags(struct rxm_rx_buf *rx_buf)
-{
-	return (rx_buf->pkt.hdr.flags);
-}
-
 static int rxm_finish_buf_recv(struct rxm_rx_buf *rx_buf)
 {
 	uint64_t flags;
@@ -123,7 +117,7 @@ static int rxm_cq_write_error_trunc(struct rxm_rx_buf *rx_buf, size_t done_len)
 	ret = ofi_cq_write_error_trunc(rx_buf->ep->util_ep.rx_cq,
 				       rx_buf->recv_entry->context,
 				       rx_buf->recv_entry->comp_flags |
-				       rxm_cq_get_rx_comp_flags(rx_buf),
+				       rx_buf->pkt.hdr.flags,
 				       rx_buf->pkt.hdr.size,
 				       rx_buf->recv_entry->rxm_iov.iov[0].iov_base,
 				       rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag,
@@ -151,7 +145,7 @@ static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 	    rx_buf->ep->rxm_info->mode & FI_BUFFERED_RECV) {
 		ret = rxm_cq_write_recv_comp(rx_buf, rx_buf->recv_entry->context,
 				rx_buf->recv_entry->comp_flags |
-					rxm_cq_get_rx_comp_flags(rx_buf),
+				rx_buf->pkt.hdr.flags,
 				rx_buf->pkt.hdr.size,
 				rx_buf->recv_entry->rxm_iov.iov[0].iov_base);
 		if (ret)
@@ -1279,8 +1273,7 @@ void rxm_cq_read_write_error(struct rxm_ep *rxm_ep)
 		err_entry.flags = rx_buf->recv_entry->comp_flags;
 		break;
 	default:
-		FI_WARN(&rxm_prov, FI_LOG_CQ, "Invalid state!\n");
-		FI_WARN(&rxm_prov, FI_LOG_CQ, "msg cq error info: %s\n",
+		FI_WARN(&rxm_prov, FI_LOG_CQ, "Invalid state!\nmsg cq error info: %s\n",
 			fi_cq_strerror(rxm_ep->msg_cq, err_entry.prov_errno,
 				       err_entry.err_data, NULL, 0));
 		rxm_cq_write_error_all(rxm_ep, -FI_EOPBADSTATE);

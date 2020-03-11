@@ -980,7 +980,6 @@ err:
 static size_t rxm_conn_get_rx_size(struct rxm_ep *rxm_ep,
 				   struct fi_info *msg_info)
 {
-	/* TODO add env variable to tune the value for shared context case */
 	if (msg_info->ep_attr->rx_ctx_cnt == FI_SHARED_CONTEXT)
 		return MAX(MIN(16, msg_info->rx_attr->size),
 			   (msg_info->rx_attr->size /
@@ -1348,10 +1347,7 @@ static void *rxm_conn_atomic_progress(void *arg)
 
 	FI_INFO(&rxm_prov, FI_LOG_EP_CTRL, "Starting auto-progress thread\n");
 	while (ep->do_progress) {
-		/* TODO: Remove this lock, it can't protect anything */
-		ofi_ep_lock_acquire(&ep->util_ep);
 		ret = fi_trywait(fabric->msg_fabric, fids, 2);
-		ofi_ep_lock_release(&ep->util_ep);
 
 		if (!ret) {
 			fds[0].revents = 0;
