@@ -1,7 +1,10 @@
 
 pipeline {
     agent any
-    options {timestamps()}
+    options {
+    timestamps()             
+    timeout(activity: true, time: 4, unit: 'HOURS')
+    }
     
     stages {
         stage ('fetch-opa-psm2')  {
