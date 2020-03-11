@@ -409,16 +409,16 @@ static int rxm_ep_rx_queue_init(struct rxm_ep *rxm_ep)
 				  rxm_ep->rxm_info->rx_attr->size,
 				  RXM_RECV_QUEUE_MSG);
 	if (ret)
-		return ret;
+		goto err_recv;
 
 	ret = rxm_recv_queue_init(rxm_ep, &rxm_ep->trecv_queue,
 				  rxm_ep->rxm_info->rx_attr->size,
 				  RXM_RECV_QUEUE_TAGGED);
 	if (ret)
-		goto err_recv_tag;
+		goto err_recv;
 
 	return FI_SUCCESS;
-err_recv_tag:
+err_recv:
 	rxm_recv_queue_close(&rxm_ep->recv_queue);
 	return ret;
 }
