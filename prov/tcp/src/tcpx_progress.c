@@ -59,19 +59,6 @@ static void tcpx_cq_report_xfer_fail(struct tcpx_ep *tcpx_ep, int err)
 	}
 }
 
-static void tcpx_report_error(struct tcpx_ep *tcpx_ep, int err)
-{
-	struct fi_eq_err_entry err_entry = {0};
-
-	tcpx_cq_report_xfer_fail(tcpx_ep, err);
-	err_entry.fid = &tcpx_ep->util_ep.ep_fid.fid;
-	err_entry.context = tcpx_ep->util_ep.ep_fid.fid.context;
-	err_entry.err = -err;
-
-	fi_eq_write(&tcpx_ep->util_ep.eq->eq_fid, FI_SHUTDOWN,
-		    &err_entry, sizeof(err_entry), UTIL_FLAG_ERROR);
-}
-
 /**
  * Shutdown is done in two phases, phase1 writes the FI_SHUTDOWN event, which
  * a polling thread still needs to handle, phase2 removes the fd
@@ -638,10 +625,11 @@ err:
 	if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
 		return;
 
+	/* Failed current RX entry should clean itself */
+	assert(!ep->cur_rx_entry);
+
 	if (ret == -FI_ENOTCONN)
 		tcpx_ep_shutdown_report(ep, &ep->util_ep.ep_fid.fid);
-	else
-		tcpx_report_error(ep, ret);
 }
 
 /* Must hold ep lock */
