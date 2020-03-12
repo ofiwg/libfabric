@@ -290,11 +290,23 @@ struct rxr_fabric {
 #endif
 };
 
+/*
+ * Descriptor returned for FI_HMEM peer memory registrations
+ */
+struct rxr_mr_peer {
+	enum fi_hmem_iface      iface;
+	union {
+		uint64_t        reserved;
+		int             cuda;
+	} device;
+};
+
 struct rxr_mr {
 	struct fid_mr mr_fid;
 	struct fid_mr *msg_mr;
 	struct fid_mr *shm_msg_mr;
 	struct rxr_domain *domain;
+	struct rxr_mr_peer peer;
 };
 
 struct rxr_peer {

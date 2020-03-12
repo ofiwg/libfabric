@@ -111,7 +111,8 @@ static int rxr_mr_close(fid_t fid)
 		FI_WARN(&rxr_prov, FI_LOG_MR,
 			"Unable to close MR\n");
 
-	if (rxr_env.enable_shm_transfer && rxr_mr->shm_msg_mr) {
+	if (rxr_env.enable_shm_transfer && rxr_mr->shm_msg_mr
+	    && rxr_mr->peer.iface == FI_HMEM_SYSTEM) {
 		ret = fi_close(&rxr_mr->shm_msg_mr->fid);
 		if (ret)
 			FI_WARN(&rxr_prov, FI_LOG_MR,
@@ -176,6 +177,9 @@ int rxr_mr_regattr(struct fid *domain_fid, const struct fi_mr_attr *attr,
 	rxr_mr->mr_fid.mem_desc = rxr_mr->msg_mr;
 	rxr_mr->mr_fid.key = fi_mr_key(rxr_mr->msg_mr);
 	rxr_mr->domain = rxr_domain;
+	rxr_mr->peer.iface = attr->iface;
+	if (attr->iface == FI_HMEM_CUDA)
+		rxr_mr->peer.device.cuda = attr->device.cuda;
 	*mr = &rxr_mr->mr_fid;
 
 	assert(rxr_mr->mr_fid.key != FI_KEY_NOTAVAIL);
@@ -197,7 +201,9 @@ int rxr_mr_regattr(struct fid *domain_fid, const struct fi_mr_attr *attr,
 	}
 
 	/* Call shm provider to register memory */
-	if (rxr_env.enable_shm_transfer && !key_exists) {
+	if (rxr_env.enable_shm_transfer
+	    && !key_exists
+	    && attr->iface == FI_HMEM_SYSTEM) {
 		shm_attr->access = user_attr_access;
 		shm_attr->requested_key = rxr_mr->mr_fid.key;
 		ret = fi_mr_regattr(rxr_domain->shm_domain, shm_attr, flags,
@@ -233,6 +239,7 @@ int rxr_mr_regv(struct fid *domain_fid, const struct iovec *iov,
 	attr.offset = offset;
 	attr.requested_key = requested_key;
 	attr.context = context;
+	attr.iface = FI_HMEM_SYSTEM;
 	return rxr_mr_regattr(domain_fid, &attr, flags, mr_fid);
 }
 
