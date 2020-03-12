@@ -88,12 +88,6 @@ void ofi_monitor_init(void)
 			" reduce the number of registered regions, regardless"
 			" of their size, stored in the cache.  Setting this"
 			" to zero will disable MR caching.  (default: 1024)");
-	fi_param_define(NULL, "mr_cache_merge_regions", FI_PARAM_BOOL,
-			"If set to true, overlapping or adjacent memory"
-			" regions will be combined into a single, larger"
-			" region.  Merging regions can reduce the cache"
-			" memory footprint, but can negatively impact"
-			" performance in some situations.  (default: false)");
 	fi_param_define(NULL, "mr_cache_monitor", FI_PARAM_STRING,
 			"Define a default memory registration monitor."
 			" The monitor checks for virtual to physical memory"
@@ -106,8 +100,6 @@ void ofi_monitor_init(void)
 
 	fi_param_get_size_t(NULL, "mr_cache_max_size", &cache_params.max_size);
 	fi_param_get_size_t(NULL, "mr_cache_max_count", &cache_params.max_cnt);
-	fi_param_get_bool(NULL, "mr_cache_merge_regions",
-			  &cache_params.merge_regions);
 	fi_param_get_str(NULL, "mr_cache_monitor", &cache_params.monitor);
 
 	if (!cache_params.max_size)
