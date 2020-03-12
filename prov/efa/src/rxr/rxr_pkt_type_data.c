@@ -221,6 +221,7 @@ void rxr_pkt_handle_data_send_completion(struct rxr_ep *ep,
 	tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
 	tx_entry->bytes_acked +=
 		rxr_get_data_pkt(pkt_entry->pkt)->hdr.seg_size;
+
 	if (tx_entry->total_len == tx_entry->bytes_acked)
 		rxr_cq_handle_tx_completion(ep, tx_entry);
 }

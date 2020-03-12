@@ -114,7 +114,7 @@ static void efa_cq_read_data_entry(struct efa_wc *wc, int i, void *buf)
 	entry[i].op_context = (void *)(uintptr_t)wc->ibv_wc.wr_id;
 	entry[i].flags = efa_cq_wc_to_fi_flags(wc);
 	entry[i].data = 0;
-	entry[i].len = 0;
+	entry[i].len = (uint64_t)wc->ibv_wc.byte_len;
 }
 
 ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,

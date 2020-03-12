@@ -54,15 +54,43 @@
  *     rxr_pkt_handle_recv_completion().
  */
 
-enum rxr_pkt_type {
-	RXR_RTS_PKT = 1,
-	RXR_CONNACK_PKT,
-	RXR_CTS_PKT,
-	RXR_DATA_PKT,
-	RXR_READRSP_PKT,
-	RXR_RMA_CONTEXT_PKT,
-	RXR_EOR_PKT,
-};
+/* ID of each packet type. Changing ID would break inter
+ * operability thus is strictly prohibited.
+ */
+
+#define RXR_RTS_PKT		1
+#define RXR_CONNACK_PKT		2
+#define RXR_CTS_PKT		3
+#define RXR_DATA_PKT		4
+#define RXR_READRSP_PKT		5
+#define RXR_RMA_CONTEXT_PKT	6
+#define RXR_EOR_PKT		7
+/*
+ * The following packet types are part of protocol version 4
+ */
+#define RXR_HANDSHAKE_PKT	8
+
+#define RXR_REQ_PKT_BEGIN		64
+#define RXR_BASELINE_REQ_PKT_BEGIN	64
+#define RXR_EAGER_MSGRTM_PKT		64
+#define RXR_EAGER_TAGRTM_PKT		65
+#define RXR_MEDIUM_MSGRTM_PKT		66
+#define RXR_MEDIUM_TAGRTM_PKT		67
+#define RXR_LONG_MSGRTM_PKT		68
+#define RXR_LONG_TAGRTM_PKT		69
+#define RXR_EAGER_RTW_PKT		70
+#define RXR_LONG_RTW_PKT		71
+#define RXR_SHORT_RTR_PKT		72
+#define RXR_LONG_RTR_PKT		73
+#define RXR_WRITE_RTA_PKT		74
+#define RXR_READFETCH_RTA_PKT		75
+#define RXR_BASELINE_REQ_PKT_END	76
+
+#define RXR_EXTRA_REQ_PKT_BEGIN		76
+#define RXR_READ_MSGRTM_PKT		76
+#define RXR_READ_TAGRTM_PKT		77
+#define RXR_READ_RTW_PKT		78
+#define RXR_READ_RTR_PKT		79
 
 /*
  *  Packet fields common to all rxr packets. The other packet headers below must
@@ -87,6 +115,7 @@ struct rxr_ep;
 struct rxr_peer;
 struct rxr_tx_entry;
 struct rxr_rx_entry;
+struct rxr_read_entry;
 
 /*
  *  RTS packet data structures and functions. the implementation of
@@ -323,12 +352,27 @@ struct rxr_rma_context_pkt {
 	uint8_t version;
 	uint16_t flags;
 	/* end of rxr_base_hdr */
-	uint32_t tx_id;
-	uint8_t rma_context_type;
+	uint32_t context_type;
+	uint32_t tx_id; /* used by write context */
+	uint32_t read_id; /* used by read context */
+	size_t seg_size; /* used by read context */
 };
 
-void rxr_pkt_handle_rma_context_send_completion(struct rxr_ep *ep,
-						struct rxr_pkt_entry *pkt_entry);
+enum rxr_rma_context_pkt_type {
+	RXR_READ_CONTEXT = 1,
+	RXR_WRITE_CONTEXT,
+};
+
+void rxr_pkt_init_write_context(struct rxr_tx_entry *tx_entry,
+				struct rxr_pkt_entry *pkt_entry);
+
+void rxr_pkt_init_read_context(struct rxr_ep *rxr_ep,
+			       struct rxr_read_entry *read_entry,
+			       size_t seg_size,
+			       struct rxr_pkt_entry *pkt_entry);
+
+void rxr_pkt_handle_rma_completion(struct rxr_ep *ep,
+				   struct rxr_pkt_entry *pkt_entry);
 
 /*
  *  EOR packet, used to acknowledge the sender that large message
@@ -356,6 +400,9 @@ static inline
 void rxr_pkt_handle_eor_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
 }
+
+void rxr_pkt_handle_eor_send_completion(struct rxr_ep *ep,
+					struct rxr_pkt_entry *pkt_entry);
 
 void rxr_pkt_handle_eor_recv(struct rxr_ep *ep,
 			     struct rxr_pkt_entry *pkt_entry);
@@ -403,3 +450,4 @@ struct rxr_ctrl_cq_pkt {
 
 #endif
 
+#include "rxr_pkt_type_req.h"
