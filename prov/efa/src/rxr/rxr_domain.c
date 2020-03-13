@@ -101,83 +101,20 @@ int rxr_mr_regattr(struct fid *domain_fid, const struct fi_mr_attr *attr,
 		   uint64_t flags, struct fid_mr **mr)
 {
 	struct rxr_domain *rxr_domain;
-	struct efa_domain *efa_domain;
-	struct fi_mr_attr *core_attr;
-	struct fi_mr_attr *shm_attr;
-	struct efa_mr *efa_mr;
-	uint64_t user_attr_access, core_attr_access;
-	int ret;
-	bool key_exists;
+	int ret = 0;
 
 	rxr_domain = container_of(domain_fid, struct rxr_domain,
 				  util_domain.domain_fid.fid);
-	efa_domain = container_of(rxr_domain->rdm_domain, struct efa_domain,
-				  util_domain.domain_fid);
 
-	/* record the memory access permission requested by user */
-	user_attr_access = attr->access;
-	shm_attr = (struct fi_mr_attr *)attr;
-
-	/* discard const qualifier to override access registered with EFA */
-	core_attr = (struct fi_mr_attr *)attr;
-	core_attr_access = FI_SEND | FI_RECV;
-	core_attr->access = core_attr_access;
-
-	ret = fi_mr_regattr(rxr_domain->rdm_domain, core_attr, flags,
-			    mr);
+	ret = fi_mr_regattr(rxr_domain->rdm_domain, attr, flags, mr);
 	if (ret) {
 		FI_WARN(&rxr_prov, FI_LOG_MR,
 			"Unable to register MR buf (%s): %p len: %zu\n",
 			fi_strerror(-ret), attr->mr_iov->iov_base,
 			attr->mr_iov->iov_len);
-		goto close_efa_mr;
 	}
-
-	efa_mr = container_of(*mr, struct efa_mr, mr_fid);
-	assert(efa_mr->mr_fid.key != FI_KEY_NOTAVAIL);
-	key_exists = false;
-	core_attr->requested_key = efa_mr->mr_fid.key;
-	core_attr->access = core_attr_access;
-	ret = ofi_mr_map_insert(&efa_domain->util_domain.mr_map, core_attr,
-				&efa_mr->mr_fid.key, mr);
-	if (ret) {
-		if (efa_mr_cache_enable && ret == -FI_ENOKEY) {
-			key_exists = true;
-		} else {
-			FI_WARN(&rxr_prov, FI_LOG_MR,
-				"Unable to add MR to map buf (%s): %p len: %zu\n",
-				fi_strerror(-ret), attr->mr_iov->iov_base,
-				attr->mr_iov->iov_len);
-			goto close_efa_mr;
-		}
-	}
-
-	/* Call shm provider to register memory */
-	if (rxr_env.enable_shm_transfer
-	    && !key_exists
-	    && attr->iface == FI_HMEM_SYSTEM) {
-		shm_attr->access = user_attr_access;
-		shm_attr->requested_key = efa_mr->mr_fid.key;
-		ret = fi_mr_regattr(efa_domain->shm_domain, shm_attr, flags,
-				    &efa_mr->shm_mr);
-		if (ret) {
-			FI_WARN(&rxr_prov, FI_LOG_MR,
-				"Unable to register shm MR buf (%s): %p len: %zu\n",
-				fi_strerror(-ret), attr->mr_iov->iov_base,
-				attr->mr_iov->iov_len);
-			fi_close(&efa_mr->mr_fid.fid);
-			ofi_mr_map_remove(&efa_domain->util_domain.mr_map,
-					  efa_mr->mr_fid.key);
-			goto close_efa_mr;
-		}
-	}
-
-	return 0;
-close_efa_mr:
-	free(efa_mr);
 	return ret;
 }
-
 int rxr_mr_regv(struct fid *domain_fid, const struct iovec *iov,
 		size_t count, uint64_t access, uint64_t offset,
 		uint64_t requested_key, uint64_t flags,

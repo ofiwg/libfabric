@@ -210,7 +210,7 @@ struct efa_mr_peer {
 
 struct efa_mr {
 	struct fid_mr		mr_fid;
-	struct ibv_mr		*mr;
+	struct ibv_mr		*ibv_mr;
 	struct efa_domain	*domain;
 	/* Used only in MR cache */
 	struct ofi_mr_entry	*entry;
