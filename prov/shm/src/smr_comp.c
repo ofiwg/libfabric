@@ -108,6 +108,11 @@ int smr_rx_comp(struct smr_ep *ep, void *context, uint32_t op,
 	struct fi_cq_tagged_entry *comp;
 	struct util_cq_oflow_err_entry *entry;
 
+	if (ofi_cirque_isfull(ep->util_ep.rx_cq->cirq))
+		return ofi_cq_write_overflow(ep->util_ep.rx_cq, context,
+					     smr_rx_cq_flags(op, flags),
+					     len, buf, data, tag, addr);
+
 	comp = ofi_cirque_tail(ep->util_ep.rx_cq->cirq);
 	if (err) {
 		if (!(entry = calloc(1, sizeof(*entry))))

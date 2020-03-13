@@ -63,8 +63,9 @@ atomic
 #rdm_cntr_pingpong
 
 
-# This test requires ENA IPs for the OOB sync
+# These tests require ENA IPs for the OOB sync
 av_xfer
+multi_recv
 
 # Connection manager isn't supported
 cm_data
