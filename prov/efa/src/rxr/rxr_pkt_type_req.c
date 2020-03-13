@@ -79,7 +79,6 @@ void rxr_pkt_init_req_hdr(struct rxr_ep *ep,
 			  int pkt_type,
 			  struct rxr_pkt_entry *pkt_entry)
 {
-	int i;
 	char *opt_hdr;
 	struct rxr_peer *peer;
 	struct rxr_base_hdr *base_hdr;
@@ -90,8 +89,6 @@ void rxr_pkt_init_req_hdr(struct rxr_ep *ep,
 	base_hdr->version = RXR_PROTOCOL_VERSION;
 	base_hdr->flags = 0;
 
-	/* init the opt header */
-	opt_hdr = (char *)base_hdr + RXR_REQ_HDR_SIZE_LIST[base_hdr->type];
 	peer = rxr_ep_get_peer(ep, tx_entry->addr);
 	assert(peer);
 	if (OFI_UNLIKELY(peer->state != RXR_PEER_ACKED)) {
@@ -100,19 +97,27 @@ void rxr_pkt_init_req_hdr(struct rxr_ep *ep,
 		 * endpoint, so send the core's address for this EP in the REQ
 		 * so the remote side can insert it into its address vector.
 		 */
+		base_hdr->flags |= RXR_REQ_OPT_RAW_ADDR_HDR;
+	}
+
+	if (tx_entry->fi_flags & FI_REMOTE_CQ_DATA) {
+		base_hdr->flags |= RXR_REQ_OPT_CQ_DATA_HDR;
+	}
+
+	/* init the opt header */
+	opt_hdr = (char *)pkt_entry->pkt + RXR_REQ_HDR_SIZE_LIST[base_hdr->type];
+	if (base_hdr->flags & RXR_REQ_OPT_RAW_ADDR_HDR) {
 		struct rxr_req_opt_raw_addr_hdr *raw_addr_hdr;
 
 		raw_addr_hdr = (struct rxr_req_opt_raw_addr_hdr *)opt_hdr;
 		raw_addr_hdr->addr_len = ep->core_addrlen;
-		base_hdr->flags |= RXR_REQ_OPT_RAW_ADDR_HDR;
 		memcpy(raw_addr_hdr->raw_addr, ep->core_addr, raw_addr_hdr->addr_len);
 		opt_hdr += sizeof(*raw_addr_hdr) + raw_addr_hdr->addr_len;
 	}
 
-	if (tx_entry->fi_flags & FI_REMOTE_CQ_DATA) {
+	if (base_hdr->flags & RXR_REQ_OPT_CQ_DATA_HDR) {
 		struct rxr_req_opt_cq_data_hdr *cq_data_hdr;
 
-		base_hdr->flags |= RXR_REQ_OPT_CQ_DATA_HDR;
 		cq_data_hdr = (struct rxr_req_opt_cq_data_hdr *)opt_hdr;
 		cq_data_hdr->cq_data = tx_entry->cq_entry.data;
 		opt_hdr += sizeof(*cq_data_hdr);
