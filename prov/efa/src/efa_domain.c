@@ -177,7 +177,17 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 
 	domain->util_domain.domain_fid.fid.ops = &efa_fid_ops;
 	domain->util_domain.domain_fid.ops = &efa_domain_ops;
-
+	/* RMA mr_modes are being removed, since EFA layer
+	 * does not have RMA capabilities. Hence, adding FI_MR_VIRT_ADDR
+	 * until RMA capabilities are added to EFA layer
+	 */
+	domain->util_domain.mr_map.mode |= FI_MR_VIRT_ADDR;
+	/*
+	 * ofi_domain_init() would have stored the EFA mr_modes in the mr_map,
+	 * but we need the rbtree insertions and lookups to use EFA provider's
+	 * specific key, so unset the FI_MR_PROV_KEY bit for mr_map.
+	 */
+	domain->util_domain.mr_map.mode &= ~FI_MR_PROV_KEY;
 	domain->fab = fabric;
 
 	*domain_fid = &domain->util_domain.domain_fid;
@@ -192,7 +202,7 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		cache_params.max_cnt = efa_mr_max_cached_count;
 		cache_params.max_size = efa_mr_max_cached_size;
 		cache_params.merge_regions = efa_mr_cache_merge_regions;
-		domain->cache.entry_data_size = sizeof(struct efa_mem_desc);
+		domain->cache.entry_data_size = sizeof(struct efa_mr);
 		domain->cache.add_region = efa_mr_cache_entry_reg;
 		domain->cache.delete_region = efa_mr_cache_entry_dereg;
 		ret = ofi_mr_cache_init(&domain->util_domain, uffd_monitor,

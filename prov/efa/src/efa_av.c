@@ -691,7 +691,8 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 			}
 			av_attr.count = rxr_env.shm_av_size;
 			assert(av_attr.type == FI_AV_TABLE);
-			ret = fi_av_open(rxr_domain->shm_domain, &av_attr, &av->shm_rdm_av, context);
+			ret = fi_av_open(efa_domain->shm_domain, &av_attr,
+					&av->shm_rdm_av, context);
 			if (ret)
 				goto err_close_rdm_av;
 

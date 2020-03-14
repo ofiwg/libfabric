@@ -138,6 +138,7 @@ struct efa_conn {
 
 struct efa_domain {
 	struct util_domain	util_domain;
+	struct fid_domain	*shm_domain;
 	struct efa_context	*ctx;
 	struct ibv_pd		*ibv_pd;
 	struct fi_info		*info;
@@ -196,12 +197,26 @@ struct efa_qp {
 	uint32_t	qp_num;
 };
 
-struct efa_mem_desc {
+/*
+ * Descriptor returned for FI_HMEM peer memory registrations
+ */
+struct efa_mr_peer {
+	enum fi_hmem_iface      iface;
+	union {
+		uint64_t        reserved;
+		int             cuda;
+	} device;
+};
+
+struct efa_mr {
 	struct fid_mr		mr_fid;
-	struct ibv_mr		*mr;
+	struct ibv_mr		*ibv_mr;
 	struct efa_domain	*domain;
 	/* Used only in MR cache */
 	struct ofi_mr_entry	*entry;
+	/* Used only in rdm */
+	struct fid_mr		*shm_mr;
+	struct efa_mr_peer	peer;
 };
 
 struct efa_ep {
