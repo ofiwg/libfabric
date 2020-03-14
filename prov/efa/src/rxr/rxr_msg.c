@@ -38,6 +38,7 @@
 #include <ofi_util.h>
 #include <ofi_iov.h>
 
+#include "efa.h"
 #include "rxr.h"
 #include "rxr_msg.h"
 #include "rxr_pkt_cmd.h"
@@ -111,17 +112,25 @@ ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 	size_t max_pkt_data_size = rxr_pkt_req_max_data_size(rxr_ep,
 							     tx_entry->addr,
 							     eager_pkt_type);
-
-	if (tx_entry->total_len <= max_pkt_data_size) {
-		err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
-						 eager_pkt_type, 0);
-	} else if (peer->is_local) {
-		err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
-						 RXR_RTS_PKT, 0);
-
+	if (peer->is_local) {
+		if (tx_entry->total_len <= max_pkt_data_size)
+			err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
+							 eager_pkt_type, 0);
+		else
+			err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
+							 rxr_read_rtm_pkt_type(op), 0);
 	} else {
-		err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
-						 long_pkt_type, 0);
+		if (tx_entry->total_len <= max_pkt_data_size) {
+			err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
+							 eager_pkt_type, 0);
+		} else if (efa_support_rdma_read(rxr_ep->rdm_ep) &&
+			   tx_entry->total_len >= rxr_env.efa_min_read_msg_size) {
+			err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
+							 rxr_read_rtm_pkt_type(op), 0);
+		} else {
+			err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
+							 long_pkt_type, 0);
+		}
 	}
 
 	if (OFI_UNLIKELY(err)) {
@@ -446,7 +455,7 @@ int rxr_msg_handle_unexp_match(struct rxr_ep *ep,
 	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
 	data_len = (base_hdr->type == RXR_RTS_PKT) ?
 			rxr_get_rts_hdr(pkt_entry->pkt)->data_len :
-			rxr_pkt_req_total_len(pkt_entry);
+			rxr_pkt_rtm_total_len(pkt_entry);
 
 	rx_entry->cq_entry.op_context = context;
 	/*
@@ -897,7 +906,7 @@ ssize_t rxr_msg_peek_trecv(struct fid_ep *ep_fid,
 
 	} else {
 		assert(base_hdr->type == RXR_EAGER_TAGRTM_PKT);
-		data_len = rxr_pkt_req_total_len(pkt_entry);
+		data_len = rxr_pkt_rtm_total_len(pkt_entry);
 		tag = rxr_pkt_rtm_tag(pkt_entry);
 	}
 

@@ -60,7 +60,11 @@ struct rxr_pkt_entry {
 	void *x_entry; /* pointer to rxr rx/tx entry */
 	size_t pkt_type;
 	size_t pkt_size;
+
 	size_t hdr_size;
+	void *raw_addr;
+	uint64_t cq_data;
+
 	struct fid_mr *mr;
 	fi_addr_t addr;
 	void *pkt; /* rxr_ctrl_*_pkt, or rxr_data_pkt */
@@ -69,9 +73,9 @@ struct rxr_pkt_entry {
 	struct rxr_pkt_entry *next;
 #if ENABLE_DEBUG
 /* pad to cache line size of 64 bytes */
-	uint8_t pad[24];
+	uint8_t pad[8];
 #else
-	uint8_t pad[40];
+	uint8_t pad[24];
 #endif
 };
 

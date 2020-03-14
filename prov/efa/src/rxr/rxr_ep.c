@@ -219,9 +219,9 @@ struct rxr_rx_entry *rxr_ep_alloc_unexp_rx_entry_for_msgrtm(struct rxr_ep *ep,
 	}
 
 	rx_entry->rxr_flags = 0;
-	rxr_pkt_read_req_hdr(*pkt_entry, rx_entry);
 	rx_entry->state = RXR_RX_UNEXP;
 	rx_entry->unexp_pkt = unexp_pkt_entry;
+	rxr_pkt_rtm_init_rx_entry(*pkt_entry, rx_entry);
 	dlist_insert_tail(&rx_entry->entry, &ep->rx_unexp_list);
 	return rx_entry;
 }
@@ -251,9 +251,9 @@ struct rxr_rx_entry *rxr_ep_alloc_unexp_rx_entry_for_tagrtm(struct rxr_ep *ep,
 	}
 
 	rx_entry->rxr_flags = 0;
-	rxr_pkt_read_req_hdr(*pkt_entry, rx_entry);
 	rx_entry->state = RXR_RX_UNEXP;
 	rx_entry->unexp_pkt = unexp_pkt_entry;
+	rxr_pkt_rtm_init_rx_entry(*pkt_entry, rx_entry);
 	dlist_insert_tail(&rx_entry->entry, &ep->rx_unexp_tagged_list);
 	return rx_entry;
 }
@@ -301,7 +301,7 @@ struct rxr_rx_entry *rxr_ep_split_rx_entry(struct rxr_ep *ep,
 	}
 
 	if (base_hdr->type >= RXR_REQ_PKT_BEGIN) {
-		rxr_pkt_read_req_hdr(pkt_entry, rx_entry);
+		rxr_pkt_rtm_init_rx_entry(pkt_entry, rx_entry);
 		data_len = rx_entry->total_len;
 	}
 
@@ -441,6 +441,7 @@ void rxr_tx_entry_init(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	else
 		memset(&tx_entry->desc[0], 0, sizeof(*msg->desc) * msg->iov_count);
 
+	memset(tx_entry->mr, 0, sizeof(*tx_entry->mr) * msg->iov_count);
 	/* set flags */
 	assert(ep->util_ep.tx_msg_flags == 0 ||
 	       ep->util_ep.tx_msg_flags == FI_COMPLETION);
@@ -493,7 +494,6 @@ struct rxr_tx_entry *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
 	}
 
 	rxr_tx_entry_init(rxr_ep, tx_entry, msg, op, flags);
-
 	if (op == ofi_op_tagged) {
 		tx_entry->cq_entry.tag = tag;
 		tx_entry->tag = tag;

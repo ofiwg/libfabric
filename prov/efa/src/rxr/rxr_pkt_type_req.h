@@ -80,12 +80,9 @@ struct rxr_req_opt_cq_data_hdr {
 	int64_t cq_data;
 };
 
-extern size_t RXR_REQ_HDR_SIZE_LIST[];
+void rxr_pkt_proc_req_common_hdr(struct rxr_pkt_entry *pkt_entry);
 
-void rxr_pkt_read_req_hdr(struct rxr_pkt_entry *pkt_entry,
-			  struct rxr_rx_entry *rx_entry);
-
-size_t rxr_pkt_req_total_len(struct rxr_pkt_entry *pkt_entry);
+size_t rxr_pkt_req_base_hdr_size(struct rxr_pkt_entry *pkt_entry);
 
 size_t rxr_pkt_req_max_data_size(struct rxr_ep *ep, fi_addr_t addr, int pkt_type);
 
@@ -127,20 +124,20 @@ uint32_t rxr_pkt_rtm_msg_id(struct rxr_pkt_entry *pkt_entry)
 	return rtm_hdr->msg_id;
 }
 
+size_t rxr_pkt_rtm_total_len(struct rxr_pkt_entry *pkt_entry);
+
 static inline
 uint64_t rxr_pkt_rtm_tag(struct rxr_pkt_entry *pkt_entry)
 {
-	int pkt_type;
 	size_t offset;
 	uint64_t *tagptr;
 
-	pkt_type = rxr_get_base_hdr(pkt_entry->pkt)->type;
-	offset = RXR_REQ_HDR_SIZE_LIST[pkt_type] - sizeof(uint64_t);
 	/*
 	 * In consideration of performance, this function did not cast header
 	 * into different header types to get tag, but assume tag is always
 	 * the last member of header.
 	 */
+	offset = rxr_pkt_req_base_hdr_size(pkt_entry) - sizeof(uint64_t);
 	tagptr = (uint64_t *)((char *)pkt_entry->pkt + offset);
 	return *tagptr;
 }
@@ -148,12 +145,10 @@ uint64_t rxr_pkt_rtm_tag(struct rxr_pkt_entry *pkt_entry)
 static inline
 void rxr_pkt_rtm_settag(struct rxr_pkt_entry *pkt_entry, uint64_t tag)
 {
-	int pkt_type;
 	size_t offset;
 	uint64_t *tagptr;
 
-	pkt_type = rxr_get_base_hdr(pkt_entry->pkt)->type;
-	offset = RXR_REQ_HDR_SIZE_LIST[pkt_type] - sizeof(uint64_t);
+	offset = rxr_pkt_req_base_hdr_size(pkt_entry) - sizeof(uint64_t);
 	/* tag is always the last member */
 	tagptr = (uint64_t *)((char *)pkt_entry->pkt + offset);
 	*tagptr = tag;
@@ -208,6 +203,36 @@ struct rxr_long_tagrtm_hdr {
 	uint64_t tag;
 };
 
+struct rxr_read_rtm_base_hdr {
+	struct rxr_rtm_base_hdr hdr;
+	uint64_t data_len;
+	uint32_t tx_id;
+	uint32_t read_iov_count;
+};
+
+static inline
+struct rxr_read_rtm_base_hdr *rxr_get_read_rtm_base_hdr(void *pkt)
+{
+	return (struct rxr_read_rtm_base_hdr *)pkt;
+}
+
+struct rxr_read_msgrtm_hdr {
+	struct rxr_read_rtm_base_hdr hdr;
+};
+
+struct rxr_read_tagrtm_hdr {
+	struct rxr_read_rtm_base_hdr hdr;
+	uint64_t tag;
+};
+
+static inline
+int rxr_read_rtm_pkt_type(int op)
+{
+	assert(op == ofi_op_tagged || op == ofi_op_msg);
+	return (op == ofi_op_tagged) ? RXR_READ_TAGRTM_PKT
+				     : RXR_READ_MSGRTM_PKT;
+}
+
 /*
  *  init() functions for RTM packets
  */
@@ -235,6 +260,13 @@ ssize_t rxr_pkt_init_long_tagrtm(struct rxr_ep *ep,
 				 struct rxr_tx_entry *tx_entry,
 				 struct rxr_pkt_entry *pkt_entry);
 
+ssize_t rxr_pkt_init_read_msgrtm(struct rxr_ep *ep,
+				 struct rxr_tx_entry *tx_entry,
+				 struct rxr_pkt_entry *pkt_entry);
+
+ssize_t rxr_pkt_init_read_tagrtm(struct rxr_ep *ep,
+				 struct rxr_tx_entry *tx_entry,
+				 struct rxr_pkt_entry *pkt_entry);
 /*
  *   handle_sent() functions for RTM packets
  */
@@ -249,6 +281,12 @@ void rxr_pkt_handle_eager_rtm_sent(struct rxr_ep *ep,
 void rxr_pkt_handle_long_rtm_sent(struct rxr_ep *ep,
 				  struct rxr_pkt_entry *pkt_entry);
 
+static inline
+void rxr_pkt_handle_read_rtm_sent(struct rxr_ep *ep,
+				  struct rxr_pkt_entry *pkt_entry)
+{
+}
+
 /*
  *   handle_send_completion() functions for RTM packet types
  */
@@ -258,8 +296,21 @@ void rxr_pkt_handle_eager_rtm_send_completion(struct rxr_ep *ep,
 void rxr_pkt_handle_long_rtm_send_completion(struct rxr_ep *ep,
 					     struct rxr_pkt_entry *pkt_entry);
 
+static inline
+void rxr_pkt_handle_read_rtm_send_completion(struct rxr_ep *ep,
+					     struct rxr_pkt_entry *pkt_entry)
+{
+}
+
 /*
  *   proc() functions for RTM packet types
+ */
+void rxr_pkt_rtm_init_rx_entry(struct rxr_pkt_entry *pkt_entry,
+			       struct rxr_rx_entry *rx_entry);
+
+/*         This function is called by both
+ *            rxr_pkt_handle_rtm_recv() and
+ *            rxr_msg_handle_unexp_match()
  */
 ssize_t rxr_pkt_proc_matched_rtm(struct rxr_ep *ep,
 				 struct rxr_rx_entry *rx_entry,
@@ -267,9 +318,187 @@ ssize_t rxr_pkt_proc_matched_rtm(struct rxr_ep *ep,
 
 ssize_t rxr_pkt_proc_rtm(struct rxr_ep *ep,
 			 struct rxr_pkt_entry *pkt_entry);
-
+/*
+ *         This function is shared by all RTM packet types which handle
+ *         reordering
+ */
 void rxr_pkt_handle_rtm_recv(struct rxr_ep *ep,
 			     struct rxr_pkt_entry *pkt_entry);
 
-#endif
+/* Structs and functions for RTW packet types
+ * There are 3 write protocols
+ *         Eager write protocol,
+ *         Long write protocol and
+ *         Read write protocol (write by read)
+ * Each protocol correspond to a packet type
+ */
 
+/*
+ *     Header structs
+ */
+struct rxr_rtw_base_hdr {
+	uint8_t type;
+	uint8_t version;
+	uint16_t flags;
+	/* end of rxr_base_hdr */
+	uint32_t rma_iov_count;
+};
+
+static inline
+struct rxr_rtw_base_hdr *rxr_get_rtw_base_hdr(void *pkt)
+{
+	return (struct rxr_rtw_base_hdr *)pkt;
+}
+
+struct rxr_eager_rtw_hdr {
+	uint8_t type;
+	uint8_t version;
+	uint16_t flags;
+	/* end of rxr_base_hdr */
+	uint32_t rma_iov_count;
+	struct fi_rma_iov rma_iov[0];
+};
+
+struct rxr_long_rtw_hdr {
+	uint8_t type;
+	uint8_t version;
+	uint16_t flags;
+	/* end of rxr_base_hdr */
+	uint32_t rma_iov_count;
+	uint64_t data_len;
+	uint32_t tx_id;
+	uint32_t credit_request;
+	struct fi_rma_iov rma_iov[0];
+};
+
+struct rxr_read_rtw_hdr {
+	uint8_t type;
+	uint8_t version;
+	uint16_t flags;
+	/* end of rxr_base_hdr */
+	uint32_t rma_iov_count;
+	uint64_t data_len;
+	uint32_t tx_id;
+	uint32_t read_iov_count;
+	struct fi_rma_iov rma_iov[0];
+};
+
+/*
+ *     init() functions for each RTW packet types
+ */
+ssize_t rxr_pkt_init_eager_rtw(struct rxr_ep *ep,
+			       struct rxr_tx_entry *tx_entry,
+			       struct rxr_pkt_entry *pkt_entry);
+
+ssize_t rxr_pkt_init_long_rtw(struct rxr_ep *ep,
+			      struct rxr_tx_entry *tx_entry,
+			      struct rxr_pkt_entry *pkt_entry);
+
+ssize_t rxr_pkt_init_read_rtw(struct rxr_ep *ep,
+			      struct rxr_tx_entry *tx_entry,
+			      struct rxr_pkt_entry *pkt_entry);
+/*
+ *     handle_sent() functions
+ */
+static inline
+void rxr_pkt_handle_eager_rtw_sent(struct rxr_ep *ep,
+				   struct rxr_pkt_entry *pkt_entry)
+{
+	/* For eager RTW, there is nothing to be done here */
+	return;
+}
+
+void rxr_pkt_handle_long_rtw_sent(struct rxr_ep *ep,
+				  struct rxr_pkt_entry *pkt_entry);
+
+static inline
+void rxr_pkt_handle_read_rtw_sent(struct rxr_ep *ep,
+				  struct rxr_pkt_entry *pkt_entry)
+{
+}
+
+/*
+ *     handle_send_completion() functions
+ */
+void rxr_pkt_handle_eager_rtw_send_completion(struct rxr_ep *ep,
+					      struct rxr_pkt_entry *pkt_entry);
+
+void rxr_pkt_handle_long_rtw_send_completion(struct rxr_ep *ep,
+					     struct rxr_pkt_entry *pkt_entry);
+
+static inline
+void rxr_pkt_handle_read_rtw_send_completion(struct rxr_ep *ep,
+					     struct rxr_pkt_entry *pkt_entry)
+{
+}
+
+/*
+ *     handle_recv() functions
+ */
+void rxr_pkt_handle_eager_rtw_recv(struct rxr_ep *ep,
+				   struct rxr_pkt_entry *pkt_entry);
+
+void rxr_pkt_handle_long_rtw_recv(struct rxr_ep *ep,
+				  struct rxr_pkt_entry *pkt_entry);
+
+void rxr_pkt_handle_read_rtw_recv(struct rxr_ep *ep,
+				  struct rxr_pkt_entry *pkt_entry);
+
+/* Structs and functions for RTR packet types
+ * There are 3 read protocols
+ *         Short protocol,
+ *         Long read protocol and
+ *         RDMA read protocol
+ * Each protocol correspond to a packet type
+ */
+
+/*
+ *     Header structs
+ */
+struct rxr_rtr_hdr {
+	uint8_t type;
+	uint8_t version;
+	uint16_t flags;
+	/* end of rxr_base_hdr */
+	uint32_t rma_iov_count;
+	uint64_t data_len;
+	uint32_t read_req_rx_id;
+	uint32_t read_req_window;
+	struct fi_rma_iov rma_iov[0];
+};
+
+static inline
+struct rxr_rtr_hdr *rxr_get_rtr_hdr(void *pkt)
+{
+	return (struct rxr_rtr_hdr *)pkt;
+}
+
+/*
+ *     init() functions for each RTW packet types
+ */
+ssize_t rxr_pkt_init_short_rtr(struct rxr_ep *ep,
+			       struct rxr_tx_entry *tx_entry,
+			       struct rxr_pkt_entry *pkt_entry);
+
+ssize_t rxr_pkt_init_long_rtr(struct rxr_ep *ep,
+			      struct rxr_tx_entry *tx_entry,
+			      struct rxr_pkt_entry *pkt_entry);
+
+/*
+ *     handle_sent() functions
+ */
+void rxr_pkt_handle_rtr_sent(struct rxr_ep *ep,
+			     struct rxr_pkt_entry *pkt_entry);
+
+/*
+ *     handle_send_completion() functions
+ */
+void rxr_pkt_handle_rtr_send_completion(struct rxr_ep *ep,
+					struct rxr_pkt_entry *pkt_entry);
+/*
+ *     handle_recv() functions
+ */
+void rxr_pkt_handle_rtr_recv(struct rxr_ep *ep,
+			     struct rxr_pkt_entry *pkt_entry);
+
+#endif

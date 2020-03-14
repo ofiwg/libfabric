@@ -78,9 +78,14 @@ struct rxr_read_entry *rxr_read_alloc_entry(struct rxr_ep *ep, int entry_type, v
 
 void rxr_read_release_entry(struct rxr_ep *ep, struct rxr_read_entry *read_entry);
 
-int rxr_read_post_or_queue(struct rxr_ep *ep, struct rxr_read_entry *pkt_entry);
+/* used by read message protocol and read write protocol */
+int rxr_read_init_iov(struct rxr_ep *ep,
+		      struct rxr_tx_entry *tx_entry,
+		      struct fi_rma_iov *read_iov);
 
 int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry);
+
+int rxr_read_post_or_queue(struct rxr_ep *ep, int entry_type, void *x_entry);
 
 void rxr_read_handle_read_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
 
