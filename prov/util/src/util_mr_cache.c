@@ -265,37 +265,6 @@ err:
 	return ret;
 }
 
-static int
-util_mr_cache_merge(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
-		    struct ofi_mr_entry *old_entry, struct ofi_mr_entry **entry)
-{
-	struct ofi_mr_info info, *old_info;
-
-	info.iov = *attr->mr_iov;
-	do {
-		FI_DBG(cache->domain->prov, FI_LOG_MR,
-		       "merging %p (len: %zu) with %p (len: %zu)\n",
-		       info.iov.iov_base, info.iov.iov_len,
-		       old_entry->info.iov.iov_base, old_entry->info.iov.iov_len);
-		old_info = &old_entry->info;
-
-		info.iov.iov_len = ((uintptr_t)
-			MAX(ofi_iov_end(&info.iov), ofi_iov_end(&old_info->iov))) + 1 -
-			((uintptr_t) MIN(info.iov.iov_base, old_info->iov.iov_base));
-		info.iov.iov_base = MIN(info.iov.iov_base, old_info->iov.iov_base);
-		FI_DBG(cache->domain->prov, FI_LOG_MR, "merged %p (len: %zu)\n",
-		       info.iov.iov_base, info.iov.iov_len);
-
-		/* New entry will expand range of subscription */
-		old_entry->subscribed = 0;
-
-		util_mr_uncache_entry(cache, old_entry);
-
-	} while ((old_entry = cache->storage.find(&cache->storage, &info)));
-
-	return util_mr_cache_create(cache, &info.iov, attr->access, entry);
-}
-
 int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
 			struct ofi_mr_entry **entry)
 {
@@ -333,12 +302,19 @@ retry:
 		goto unlock;
 	}
 
-	/* This branch may be taken even if user hasn't enabled merging regions.
-	 * e.g. a new region encloses previously cached smaller region. Cache
-	 * find function (util_mr_find_within) would match the enclosed region.
+	/* This branch may be taken even if the new region encloses a previously
+	 * cached smaller region.  In this case, we need to see if other smaller
+	 * regions may also be enclosed and release them all.
 	 */
 	if (!ofi_iov_within(attr->mr_iov, &(*entry)->info.iov)) {
-		ret = util_mr_cache_merge(cache, attr, *entry, entry);
+		do {
+			/* New entry will expand range of subscription */
+			(*entry)->subscribed = 0;
+			util_mr_uncache_entry(cache, *entry);
+		} while ((*entry = cache->storage.find(&cache->storage, &info)));
+
+		ret = util_mr_cache_create(cache, attr->mr_iov,
+					   attr->access, entry);
 		goto unlock;
 	}
 
@@ -497,9 +473,7 @@ static int ofi_mr_rbt_erase(struct ofi_mr_storage *storage,
 
 static int ofi_mr_cache_init_rbt(struct ofi_mr_cache *cache)
 {
-	cache->storage.storage = ofi_rbmap_create(cache_params.merge_regions ?
-						  util_mr_find_overlap :
-						  util_mr_find_within);
+	cache->storage.storage = ofi_rbmap_create(util_mr_find_within);
 	if (!cache->storage.storage)
 		return -FI_ENOMEM;
 
