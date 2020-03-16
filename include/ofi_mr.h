@@ -215,7 +215,6 @@ int ofi_mr_verify(struct ofi_mr_map *map, ssize_t len,
 struct ofi_mr_cache_params {
 	size_t				max_cnt;
 	size_t				max_size;
-	int				merge_regions;
 	char *				monitor;
 };
 

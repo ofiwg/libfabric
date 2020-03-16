@@ -213,42 +213,60 @@ void ofi_mr_cache_delete(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 	pthread_mutex_unlock(&cache->monitor->lock);
 }
 
+/*
+ * We cannot hold the monitor lock when allocating and registering the
+ * mr_entry without creating a potential deadlock situation with the
+ * memory monitor needing to acquire the same lock.  The underlying
+ * calls may allocate memory, which can result in the monitor needing
+ * to handle address mapping changes.  To handle this, we build the
+ * new entry, then check under lock that a conflict with another thread
+ * hasn't occurred.  If a conflict occurred, we return -EAGAIN and
+ * restart the entire operation.
+ */
 static int
-util_mr_cache_create(struct ofi_mr_cache *cache, const struct iovec *iov,
-		     uint64_t access, struct ofi_mr_entry **entry)
+util_mr_cache_create(struct ofi_mr_cache *cache, const struct ofi_mr_info *info,
+		     struct ofi_mr_entry **entry)
 {
+	struct ofi_mr_entry *cur;
 	int ret;
 
 	FI_DBG(cache->domain->prov, FI_LOG_MR, "create %p (len: %zu)\n",
-	       iov->iov_base, iov->iov_len);
+	       info->iov.iov_base, info->iov.iov_len);
 
 	*entry = util_mr_entry_alloc(cache);
 	if (!*entry)
 		return -FI_ENOMEM;
 
 	(*entry)->storage_context = NULL;
-	(*entry)->info.iov = *iov;
+	(*entry)->info = *info;
 	(*entry)->use_cnt = 1;
 
 	ret = cache->add_region(cache, *entry);
 	if (ret)
-		goto err;
+		goto free;
+
+	pthread_mutex_lock(&cache->monitor->lock);
+	cur = cache->storage.find(&cache->storage, info);
+	if (cur) {
+		ret = -FI_EAGAIN;
+		goto unlock;
+	}
 
 	if ((cache->cached_cnt >= cache_params.max_cnt) ||
 	    (cache->cached_size >= cache_params.max_size)) {
 		cache->uncached_cnt++;
-		cache->uncached_size += iov->iov_len;
+		cache->uncached_size += info->iov.iov_len;
 	} else {
 		if (cache->storage.insert(&cache->storage,
 					  &(*entry)->info, *entry)) {
 			ret = -FI_ENOMEM;
-			goto err;
+			goto unlock;
 		}
 		cache->cached_cnt++;
-		cache->cached_size += iov->iov_len;
+		cache->cached_size += info->iov.iov_len;
 
-		ret = ofi_monitor_subscribe(cache->monitor, iov->iov_base,
-					    iov->iov_len);
+		ret = ofi_monitor_subscribe(cache->monitor, info->iov.iov_base,
+					    info->iov.iov_len);
 		if (ret) {
 			util_mr_uncache_entry_storage(cache, *entry);
 			cache->uncached_cnt++;
@@ -257,98 +275,67 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct iovec *iov,
 			(*entry)->subscribed = 1;
 		}
 	}
-
+	pthread_mutex_unlock(&cache->monitor->lock);
 	return 0;
 
-err:
+unlock:
+	pthread_mutex_unlock(&cache->monitor->lock);
+free:
 	util_mr_free_entry(cache, *entry);
 	return ret;
-}
-
-static int
-util_mr_cache_merge(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
-		    struct ofi_mr_entry *old_entry, struct ofi_mr_entry **entry)
-{
-	struct ofi_mr_info info, *old_info;
-
-	info.iov = *attr->mr_iov;
-	do {
-		FI_DBG(cache->domain->prov, FI_LOG_MR,
-		       "merging %p (len: %zu) with %p (len: %zu)\n",
-		       info.iov.iov_base, info.iov.iov_len,
-		       old_entry->info.iov.iov_base, old_entry->info.iov.iov_len);
-		old_info = &old_entry->info;
-
-		info.iov.iov_len = ((uintptr_t)
-			MAX(ofi_iov_end(&info.iov), ofi_iov_end(&old_info->iov))) + 1 -
-			((uintptr_t) MIN(info.iov.iov_base, old_info->iov.iov_base));
-		info.iov.iov_base = MIN(info.iov.iov_base, old_info->iov.iov_base);
-		FI_DBG(cache->domain->prov, FI_LOG_MR, "merged %p (len: %zu)\n",
-		       info.iov.iov_base, info.iov.iov_len);
-
-		/* New entry will expand range of subscription */
-		old_entry->subscribed = 0;
-
-		util_mr_uncache_entry(cache, old_entry);
-
-	} while ((old_entry = cache->storage.find(&cache->storage, &info)));
-
-	return util_mr_cache_create(cache, &info.iov, attr->access, entry);
 }
 
 int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
 			struct ofi_mr_entry **entry)
 {
 	struct ofi_mr_info info;
-	int ret = 0;
+	int ret;
 
 	assert(attr->iov_count == 1);
 	FI_DBG(cache->domain->prov, FI_LOG_MR, "search %p (len: %zu)\n",
 	       attr->mr_iov->iov_base, attr->mr_iov->iov_len);
 
-	pthread_mutex_lock(&cache->monitor->lock);
-	cache->search_cnt++;
-
-	if ((cache->cached_cnt >= cache_params.max_cnt) ||
-	    (cache->cached_size >= cache_params.max_size)) {
-		pthread_mutex_unlock(&cache->monitor->lock);
-		ofi_mr_cache_flush(cache);
-		pthread_mutex_lock(&cache->monitor->lock);
-	}
-
 	info.iov = *attr->mr_iov;
-retry:
-	*entry = cache->storage.find(&cache->storage, &info);
-	if (!*entry) {
-		ret = util_mr_cache_create(cache, attr->mr_iov,
-					   attr->access, entry);
-		if (ret) {
+
+	do {
+		pthread_mutex_lock(&cache->monitor->lock);
+
+		if ((cache->cached_cnt >= cache_params.max_cnt) ||
+		    (cache->cached_size >= cache_params.max_size)) {
 			pthread_mutex_unlock(&cache->monitor->lock);
-			if (!ofi_mr_cache_flush(cache))
-				return ret;
-
+			ofi_mr_cache_flush(cache);
 			pthread_mutex_lock(&cache->monitor->lock);
-			goto retry;
 		}
-		goto unlock;
-	}
 
-	/* This branch may be taken even if user hasn't enabled merging regions.
-	 * e.g. a new region encloses previously cached smaller region. Cache
-	 * find function (util_mr_find_within) would match the enclosed region.
-	 */
-	if (!ofi_iov_within(attr->mr_iov, &(*entry)->info.iov)) {
-		ret = util_mr_cache_merge(cache, attr, *entry, entry);
-		goto unlock;
-	}
+		cache->search_cnt++;
+		*entry = cache->storage.find(&cache->storage, &info);
+		if (*entry && ofi_iov_within(attr->mr_iov, &(*entry)->info.iov))
+			goto hit;
 
+		/* Purge regions that overlap with new region */
+		while (*entry) {
+			/* New entry will expand range of subscription */
+			(*entry)->subscribed = 0;
+			util_mr_uncache_entry(cache, *entry);
+			*entry = cache->storage.find(&cache->storage, &info);
+		}
+		pthread_mutex_unlock(&cache->monitor->lock);
+
+		ret = util_mr_cache_create(cache, &info, entry);
+		if (ret && ret != -FI_EAGAIN) {
+			if (ofi_mr_cache_flush(cache))
+				ret = -FI_EAGAIN;
+		}
+	} while (ret == -FI_EAGAIN);
+
+	return ret;
+
+hit:
 	cache->hit_cnt++;
 	if ((*entry)->use_cnt++ == 0)
 		dlist_remove_init(&(*entry)->list_entry);
-
-unlock:
 	pthread_mutex_unlock(&cache->monitor->lock);
-	return ret;
+	return 0;
 }
 
 struct ofi_mr_entry *ofi_mr_cache_find(struct ofi_mr_cache *cache,
@@ -497,9 +484,7 @@ static int ofi_mr_rbt_erase(struct ofi_mr_storage *storage,
 
 static int ofi_mr_cache_init_rbt(struct ofi_mr_cache *cache)
 {
-	cache->storage.storage = ofi_rbmap_create(cache_params.merge_regions ?
-						  util_mr_find_overlap :
-						  util_mr_find_within);
+	cache->storage.storage = ofi_rbmap_create(util_mr_find_within);
 	if (!cache->storage.storage)
 		return -FI_ENOMEM;
 
