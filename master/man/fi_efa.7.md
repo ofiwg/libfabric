@@ -121,10 +121,6 @@ These OFI runtime parameters apply only to the RDM endpoint.
   buffer for iov's larger than max_memcpy_size. Defaults to true. When
   disabled, only uses a bounce buffer
 
-*FI_EFA_MR_CACHE_MERGE_REGIONS*
-: Enables merging overlapping and adjacent memory registration regions.
-  Defaults to true.
-
 *FI_EFA_MR_MAX_CACHED_COUNT*
 : Sets the maximum number of memory registrations that can be cached at
   any time.
