@@ -941,7 +941,7 @@ void rxr_pkt_handle_eager_rtw_recv(struct rxr_ep *ep,
 	rtw_hdr = (struct rxr_eager_rtw_hdr *)pkt_entry->pkt;
 	rx_entry->iov_count = rtw_hdr->rma_iov_count;
 	err = rxr_rma_verified_copy_iov(ep, rtw_hdr->rma_iov, rtw_hdr->rma_iov_count,
-					FI_RECV, rx_entry->iov);
+					FI_REMOTE_WRITE, rx_entry->iov);
 	if (err) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "RMA address verify failed!\n");
 		efa_eq_write_error(&ep->util_ep, FI_EIO, err);
@@ -997,7 +997,7 @@ void rxr_pkt_handle_long_rtw_recv(struct rxr_ep *ep,
 	rtw_hdr = (struct rxr_long_rtw_hdr *)pkt_entry->pkt;
 	rx_entry->iov_count = rtw_hdr->rma_iov_count;
 	err = rxr_rma_verified_copy_iov(ep, rtw_hdr->rma_iov, rtw_hdr->rma_iov_count,
-					FI_RECV, rx_entry->iov);
+					FI_REMOTE_WRITE, rx_entry->iov);
 	if (err) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "RMA address verify failed!\n");
 		efa_eq_write_error(&ep->util_ep, FI_EIO, err);
@@ -1062,7 +1062,7 @@ void rxr_pkt_handle_read_rtw_recv(struct rxr_ep *ep,
 	rtw_hdr = (struct rxr_read_rtw_hdr *)pkt_entry->pkt;
 	rx_entry->iov_count = rtw_hdr->rma_iov_count;
 	err = rxr_rma_verified_copy_iov(ep, rtw_hdr->rma_iov, rtw_hdr->rma_iov_count,
-					FI_RECV, rx_entry->iov);
+					FI_REMOTE_WRITE, rx_entry->iov);
 	if (err) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "RMA address verify failed!\n");
 		efa_eq_write_error(&ep->util_ep, FI_EINVAL, -FI_EINVAL);
@@ -1199,7 +1199,7 @@ void rxr_pkt_handle_rtr_recv(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 	rx_entry->window = rtr_hdr->read_req_window;
 	rx_entry->iov_count = rtr_hdr->rma_iov_count;
 	err = rxr_rma_verified_copy_iov(ep, rtr_hdr->rma_iov, rtr_hdr->rma_iov_count,
-					FI_SEND, rx_entry->iov);
+					FI_REMOTE_READ, rx_entry->iov);
 	if (OFI_UNLIKELY(err)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "RMA address verification failed!\n");
 		efa_eq_write_error(&ep->util_ep, FI_EINVAL, -FI_EINVAL);
