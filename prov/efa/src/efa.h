@@ -104,8 +104,6 @@
  */
 #define EFA_SHM_MAX_AV_COUNT       (256)
 
-#define EFA_QKEY 0x11111111
-
 extern int efa_mr_cache_enable;
 extern size_t efa_mr_max_cached_count;
 extern size_t efa_mr_max_cached_size;
@@ -120,6 +118,8 @@ struct efa_fabric {
 struct efa_ep_addr {
 	uint8_t			raw[16];
 	uint16_t		qpn;
+	uint16_t		pad;
+	uint32_t		qkey;
 	struct efa_ep_addr	*next;
 };
 
@@ -194,6 +194,7 @@ struct efa_qp {
 	struct ibv_qp_ex *ibv_qp_ex;
 	struct efa_ep	*ep;
 	uint32_t	qp_num;
+	uint32_t	qkey;
 };
 
 /*

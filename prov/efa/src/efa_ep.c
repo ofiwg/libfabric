@@ -67,7 +67,7 @@ static int efa_ep_modify_qp_state(struct efa_qp *qp, enum ibv_qp_state qp_state,
 		attr.port_num = 1;
 
 	if (attr_mask & IBV_QP_QKEY)
-		attr.qkey = EFA_QKEY;
+		attr.qkey = qp->qkey;
 
 	return -ibv_modify_qp(qp->ibv_qp, &attr, attr_mask);
 
@@ -121,7 +121,8 @@ static int efa_ep_create_qp_ex(struct efa_ep *ep,
 	}
 
 	qp->ibv_qp_ex = ibv_qp_to_qp_ex(qp->ibv_qp);
-
+	srandom(time(NULL));
+	qp->qkey = random() & 0x7fffffff;
 	err = efa_ep_modify_qp_rst2rts(qp);
 	if (err)
 		goto err_destroy_qp;
@@ -130,7 +131,7 @@ static int efa_ep_create_qp_ex(struct efa_ep *ep,
 	ep->qp = qp;
 	qp->ep = ep;
 	domain->qp_table[ep->qp->qp_num & domain->qp_table_sz_m1] = ep->qp;
-	EFA_INFO(FI_LOG_EP_CTRL, "%s(): create QP %d\n", __func__, qp->qp_num);
+	EFA_INFO(FI_LOG_EP_CTRL, "%s(): create QP %d qkey: %d\n", __func__, qp->qp_num, qp->qkey);
 
 	return 0;
 

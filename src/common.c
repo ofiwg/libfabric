@@ -311,8 +311,8 @@ sa_sin6:
 		memset(str, 0, sizeof(str));
 		if (!inet_ntop(AF_INET6, addr, str, INET6_ADDRSTRLEN))
 			return NULL;
-		size = snprintf(buf, *len, "fi_addr_efa://[%s]:%" PRIu16,
-				str, *((uint16_t *)addr + 8));
+		size = snprintf(buf, *len, "fi_addr_efa://[%s]:%" PRIu16 ":%" PRIu32,
+				str, *((uint16_t *)addr + 8), *((uint32_t *)addr + 5));
 		break;
 	case FI_SOCKADDR_IB:
 		size = snprintf(buf, *len, "fi_sockaddr_ib://%p", addr);
@@ -463,17 +463,18 @@ static int ofi_str_to_efa(const char *str, void **addr, size_t *len)
 {
 	char gid[INET6_ADDRSTRLEN];
 	uint16_t *qpn;
+	uint32_t *qkey;
 	int ret;
 
 	memset(gid, 0, sizeof(gid));
 
-	*len = 18;
+	*len = 24;
 	*addr = calloc(1, *len);
 	if (!*addr)
 		return -FI_ENOMEM;
 	qpn = (uint16_t *)*addr + 8;
-
-	ret = sscanf(str, "%*[^:]://[%64[^]]]:%" SCNu16, gid, qpn);
+	qkey = (uint32_t *)*addr + 5;
+	ret = sscanf(str, "%*[^:]://[%64[^]]]:%" SCNu16 ":%" SCNu32, gid, qpn, qkey);
 	if (ret < 1)
 		goto err;
 
