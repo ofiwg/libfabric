@@ -258,10 +258,10 @@ static inline void rxr_cq_queue_pkt(struct rxr_ep *ep,
 	 * expire.
 	 */
 	peer->rnr_ts = ofi_gettime_us();
-	if (peer->rnr_state & RXR_PEER_IN_BACKOFF)
+	if (peer->flags & RXR_PEER_IN_BACKOFF)
 		goto queue_pkt;
 
-	peer->rnr_state |= RXR_PEER_IN_BACKOFF;
+	peer->flags |= RXR_PEER_IN_BACKOFF;
 
 	if (!peer->timeout_interval) {
 		if (rxr_env.timeout_interval)
@@ -279,8 +279,8 @@ static inline void rxr_cq_queue_pkt(struct rxr_ep *ep,
 		       peer->rnr_queued_pkt_cnt);
 	} else {
 		/* Only backoff once per peer per progress thread loop. */
-		if (!(peer->rnr_state & RXR_PEER_BACKED_OFF)) {
-			peer->rnr_state |= RXR_PEER_BACKED_OFF;
+		if (!(peer->flags & RXR_PEER_BACKED_OFF)) {
+			peer->flags |= RXR_PEER_BACKED_OFF;
 			peer->rnr_timeout_exp++;
 			FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
 			       "increasing backoff for peer: %" PRIu64

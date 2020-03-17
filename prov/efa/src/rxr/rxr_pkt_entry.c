@@ -91,9 +91,9 @@ void rxr_pkt_entry_release_single_tx(struct rxr_ep *ep,
 		peer->rnr_queued_pkt_cnt--;
 		peer->timeout_interval = 0;
 		peer->rnr_timeout_exp = 0;
-		if (peer->rnr_state & RXR_PEER_IN_BACKOFF)
+		if (peer->flags & RXR_PEER_IN_BACKOFF)
 			dlist_remove(&peer->rnr_entry);
-		peer->rnr_state = 0;
+		peer->flags &= ~RXR_PEER_IN_BACKOFF;
 		FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
 		       "reset backoff timer for peer: %" PRIu64 "\n",
 		       pkt->addr);
@@ -274,7 +274,7 @@ ssize_t rxr_pkt_entry_sendmsg(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 	if (ep->tx_pending == ep->max_outstanding_tx)
 		return -FI_EAGAIN;
 
-	if (peer->rnr_state & RXR_PEER_IN_BACKOFF)
+	if (peer->flags & RXR_PEER_IN_BACKOFF)
 		return -FI_EAGAIN;
 
 #if ENABLE_DEBUG

@@ -262,13 +262,11 @@ enum rxr_rx_comm_type {
 	RXR_RX_WAIT_ATOMRSP_SENT, /* rx_entry wait for atomrsp packet sent completion */
 };
 
-/* peer is in backoff, not allowed to send */
-#define RXR_PEER_IN_BACKOFF (1ULL << 0)
-/* peer backoff was increased during this loop of the progress engine */
-#define RXR_PEER_BACKED_OFF (1ULL << 1)
-#define RXR_PEER_REQ_SENT BIT_ULL(0)
+#define RXR_PEER_REQ_SENT BIT_ULL(0) /* sent a REQ to the peer, peer should send a handshake back */
 #define RXR_PEER_HANDSHAKE_SENT BIT_ULL(1)
 #define RXR_PEER_HANDSHAKE_RECEIVED BIT_ULL(2)
+#define RXR_PEER_IN_BACKOFF BIT_ULL(3) /* peer is in backoff, not allowed to send */
+#define RXR_PEER_BACKED_OFF BIT_ULL(4) /* peer backoff was increased during this loop of the progress engine */
 
 struct rxr_fabric {
 	struct util_fabric util_fabric;
@@ -291,7 +289,6 @@ struct rxr_peer {
 	uint32_t flags;
 	uint32_t maxproto;		/* maximum supported protocol version by this peer */
 	uint64_t features[RXR_MAX_NUM_PROTOCOLS]; /* the feature flag for each version */
-	unsigned int rnr_state;		/* tracks RNR backoff for peer */
 	size_t tx_pending;		/* tracks pending tx ops to this peer */
 	uint16_t tx_credits;		/* available send credits */
 	uint16_t rx_credits;		/* available credits to allocate */
