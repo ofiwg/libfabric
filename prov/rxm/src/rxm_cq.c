@@ -233,10 +233,11 @@ int rxm_finish_eager_send(struct rxm_ep *rxm_ep, struct rxm_tx_eager_buf *tx_buf
 	return ret;
 }
 
-static inline int rxm_finish_sar_segment_send(struct rxm_ep *rxm_ep, struct rxm_tx_sar_buf *tx_buf)
+static int rxm_finish_sar_segment_send(struct rxm_ep *rxm_ep,
+				       struct rxm_tx_sar_buf *tx_buf, bool err)
 {
-	int ret = FI_SUCCESS;
 	struct rxm_tx_sar_buf *first_tx_buf;
+	int ret = FI_SUCCESS;
 
 	switch (rxm_sar_get_seg_type(&tx_buf->pkt.ctrl_hdr)) {
 	case RXM_SAR_SEG_FIRST:
@@ -245,11 +246,14 @@ static inline int rxm_finish_sar_segment_send(struct rxm_ep *rxm_ep, struct rxm_
 		ofi_buf_free(tx_buf);
 		break;
 	case RXM_SAR_SEG_LAST:
-		ret = rxm_cq_tx_comp_write(rxm_ep, ofi_tx_cq_flags(tx_buf->pkt.hdr.op),
-					   tx_buf->app_context, tx_buf->flags);
+		if (!err) {
+			ret = rxm_cq_tx_comp_write(rxm_ep,
+					ofi_tx_cq_flags(tx_buf->pkt.hdr.op),
+					tx_buf->app_context, tx_buf->flags);
 
-		assert(ofi_tx_cq_flags(tx_buf->pkt.hdr.op) & FI_SEND);
-		ofi_ep_tx_cntr_inc(&rxm_ep->util_ep);
+			assert(ofi_tx_cq_flags(tx_buf->pkt.hdr.op) & FI_SEND);
+			ofi_ep_tx_cntr_inc(&rxm_ep->util_ep);
+		}
 		first_tx_buf = ofi_bufpool_get_ibuf(rxm_ep->
 					buf_pools[RXM_BUF_POOL_TX_SAR].pool,
 					tx_buf->pkt.ctrl_hdr.msg_id);
@@ -1072,18 +1076,15 @@ ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 	if (comp->flags & FI_REMOTE_WRITE)
 		return rxm_handle_remote_write(rxm_ep, comp);
 
-	assert(RXM_GET_PROTO_STATE(comp->op_context) != RXM_INJECT_TX);
-
 	switch (RXM_GET_PROTO_STATE(comp->op_context)) {
 	case RXM_TX:
 		tx_eager_buf = comp->op_context;
 		ret = rxm_ep->txrx_ops->comp_eager_tx(rxm_ep, tx_eager_buf);
 		ofi_buf_free(tx_eager_buf);
 		return ret;
-	case RXM_SAR_TX:
-		tx_sar_buf = comp->op_context;
-		assert(comp->flags & FI_SEND);
-		return rxm_finish_sar_segment_send(rxm_ep, tx_sar_buf);
+	case RXM_INJECT_TX:
+		assert(0);
+		return -FI_EOPBADSTATE;
 	case RXM_RMA:
 		rma_buf = comp->op_context;
 		assert((comp->flags & (FI_WRITE | FI_RMA)) ||
@@ -1112,15 +1113,18 @@ ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 			assert(0);
 			return -FI_EINVAL;
 		}
+	case RXM_SAR_TX:
+		tx_sar_buf = comp->op_context;
+		assert(comp->flags & FI_SEND);
+		return rxm_finish_sar_segment_send(rxm_ep, tx_sar_buf, false);
 	case RXM_RNDV_TX:
 		tx_rndv_buf = comp->op_context;
 		assert(comp->flags & FI_SEND);
 		RXM_UPDATE_STATE(FI_LOG_CQ, tx_rndv_buf, RXM_RNDV_ACK_WAIT);
 		return 0;
-	case RXM_RNDV_ACK_RECVD:
-		tx_rndv_buf = comp->op_context;
-		assert(comp->flags & FI_SEND);
-		return rxm_rndv_tx_finish(rxm_ep, tx_rndv_buf);
+	case RXM_RNDV_ACK_WAIT:
+		assert(0);
+		return -FI_EOPBADSTATE;
 	case RXM_RNDV_READ:
 		rx_buf = comp->op_context;
 		assert(comp->flags & FI_READ);
@@ -1131,18 +1135,24 @@ ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 	case RXM_RNDV_ACK_SENT:
 		assert(comp->flags & FI_SEND);
 		return rxm_finish_send_rndv_ack(comp->op_context);
-	case RXM_ATOMIC_RESP_SENT:
-		tx_atomic_buf = comp->op_context;
+	case RXM_RNDV_ACK_RECVD:
+		tx_rndv_buf = comp->op_context;
 		assert(comp->flags & FI_SEND);
-		ofi_buf_free(tx_atomic_buf);
-		return 0;
+		return rxm_rndv_tx_finish(rxm_ep, tx_rndv_buf);
+	case RXM_RNDV_FINISH:
+		assert(0);
+		return -FI_EOPBADSTATE;
 	case RXM_ATOMIC_RESP_WAIT:
 		/* Optional atomic request completion; TX completion
 		 * processing is performed when atomic response is received */
 		assert(comp->flags & FI_SEND);
 		return 0;
+	case RXM_ATOMIC_RESP_SENT:
+		tx_atomic_buf = comp->op_context;
+		assert(comp->flags & FI_SEND);
+		ofi_buf_free(tx_atomic_buf);
+		return 0;
 	default:
-		FI_WARN(&rxm_prov, FI_LOG_CQ, "Invalid state!\n");
 		assert(0);
 		return -FI_EOPBADSTATE;
 	}
@@ -1200,21 +1210,16 @@ void rxm_cq_write_error_all(struct rxm_ep *rxm_ep, int err)
 		rxm_cntr_incerr(rxm_ep->util_ep.rd_cntr);
 }
 
-#define RXM_IS_PROTO_STATE_TX(state)	\
-	((state == RXM_SAR_TX) ||	\
-	 (state == RXM_TX) ||		\
-	 (state == RXM_RNDV_TX))
-
 void rxm_cq_read_write_error(struct rxm_ep *rxm_ep)
 {
 	struct rxm_tx_eager_buf *eager_buf;
 	struct rxm_tx_sar_buf *sar_buf;
 	struct rxm_tx_rndv_buf *rndv_buf;
 	struct rxm_rx_buf *rx_buf;
+	struct rxm_rma_buf *rma_buf;
+	struct util_cq *cq;
+	struct util_cntr *cntr;
 	struct fi_cq_err_entry err_entry = {0};
-	struct util_cq *util_cq = NULL;
-	struct util_cntr *util_cntr = NULL;
-	enum rxm_proto_state state;
 	ssize_t ret;
 
 	ret = fi_cq_readerr(rxm_ep->msg_cq, &err_entry, 0);
@@ -1229,28 +1234,42 @@ void rxm_cq_read_write_error(struct rxm_ep *rxm_ep)
 		OFI_CQ_STRERROR(&rxm_prov, FI_LOG_WARN, FI_LOG_CQ,
 				rxm_ep->msg_cq, &err_entry);
 
-	state = RXM_GET_PROTO_STATE(err_entry.op_context);
-	if (RXM_IS_PROTO_STATE_TX(state)) {
-		util_cq = rxm_ep->util_ep.tx_cq;
-		util_cntr = rxm_ep->util_ep.tx_cntr;
-	}
+	cq = rxm_ep->util_ep.tx_cq;
+	cntr = rxm_ep->util_ep.tx_cntr;
 
-	switch (state) {
-	case RXM_SAR_TX:
-		sar_buf = err_entry.op_context;
-		err_entry.op_context = sar_buf->app_context;
-		err_entry.flags = ofi_tx_cq_flags(sar_buf->pkt.hdr.op);
-		break;
+	switch (RXM_GET_PROTO_STATE(err_entry.op_context)) {
 	case RXM_TX:
 		eager_buf = err_entry.op_context;
 		err_entry.op_context = eager_buf->app_context;
 		err_entry.flags = ofi_tx_cq_flags(eager_buf->pkt.hdr.op);
+		ofi_buf_free(eager_buf);
+		break;
+	case RXM_INJECT_TX:
+		assert(0);
+		return;
+	case RXM_RMA:
+		rma_buf = err_entry.op_context;
+		err_entry.op_context = rma_buf->app_context;
+		err_entry.flags = err_entry.flags;
+		if (!(rma_buf->flags & FI_INJECT) && !rxm_ep->rdm_mr_local &&
+		    rxm_ep->msg_mr_local) {
+			rxm_msg_mr_closev(rma_buf->mr.mr, rma_buf->mr.count);
+		}
+		ofi_buf_free(rma_buf);
+		break;
+	case RXM_SAR_TX:
+		sar_buf = err_entry.op_context;
+		err_entry.op_context = sar_buf->app_context;
+		err_entry.flags = ofi_tx_cq_flags(sar_buf->pkt.hdr.op);
+		rxm_finish_sar_segment_send(rxm_ep, sar_buf, true);
 		break;
 	case RXM_RNDV_TX:
 		rndv_buf = err_entry.op_context;
 		err_entry.op_context = rndv_buf->app_context;
 		err_entry.flags = ofi_tx_cq_flags(rndv_buf->pkt.hdr.op);
 		break;
+
+	/* Application receive related error */
 	case RXM_RX:
 		/* Silently drop any MSG CQ error entries for canceled receive
 		 * operations as these are internal to RxM. This situation can
@@ -1265,28 +1284,29 @@ void rxm_cq_read_write_error(struct rxm_ep *rxm_ep)
 	case RXM_RNDV_ACK_SENT:
 		/* fall through */
 	case RXM_RNDV_READ:
-		rx_buf = (struct rxm_rx_buf *)err_entry.op_context;
-		util_cq = rx_buf->ep->util_ep.rx_cq;
-		util_cntr = rx_buf->ep->util_ep.rx_cntr;
+		rx_buf = (struct rxm_rx_buf *) err_entry.op_context;
 		assert(rx_buf->recv_entry);
 		err_entry.op_context = rx_buf->recv_entry->context;
 		err_entry.flags = rx_buf->recv_entry->comp_flags;
+
+		cq = rx_buf->ep->util_ep.rx_cq;
+		cntr = rx_buf->ep->util_ep.rx_cntr;
 		break;
 	default:
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "Invalid state!\nmsg cq error info: %s\n",
 			fi_cq_strerror(rxm_ep->msg_cq, err_entry.prov_errno,
 				       err_entry.err_data, NULL, 0));
 		rxm_cq_write_error_all(rxm_ep, -FI_EOPBADSTATE);
+		return;
 	}
-	if (util_cntr)
-		rxm_cntr_incerr(util_cntr);
-	if (util_cq) {
-		ret = ofi_cq_write_error(util_cq, &err_entry);
-		if (ret) {
-			FI_WARN(&rxm_prov, FI_LOG_CQ, "Unable to ofi_cq_write_error\n");
-			assert(0);
-		}
-	}
+
+	if (cntr)
+		rxm_cntr_incerr(cntr);
+
+	assert(cq);
+	ret = ofi_cq_write_error(cq, &err_entry);
+	if (ret)
+		FI_WARN(&rxm_prov, FI_LOG_CQ, "Unable to ofi_cq_write_error\n");
 }
 
 static inline int rxm_msg_ep_recv(struct rxm_rx_buf *rx_buf)
