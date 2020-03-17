@@ -98,7 +98,6 @@
 extern int efa_mr_cache_enable;
 extern size_t efa_mr_max_cached_count;
 extern size_t efa_mr_max_cached_size;
-extern int efa_mr_cache_merge_regions;
 
 extern struct fi_provider efa_prov;
 extern struct util_prov efa_util_prov;

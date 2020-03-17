@@ -84,8 +84,6 @@ static void rxr_init_env(void)
 			    &rxr_env.max_memcpy_size);
 	fi_param_get_bool(&rxr_prov, "mr_cache_enable",
 			  &efa_mr_cache_enable);
-	fi_param_get_bool(&rxr_prov, "mr_cache_merge_regions",
-			  &efa_mr_cache_merge_regions);
 	fi_param_get_size_t(&rxr_prov, "mr_max_cached_count",
 			    &efa_mr_max_cached_count);
 	fi_param_get_size_t(&rxr_prov, "mr_max_cached_size",
@@ -638,8 +636,6 @@ EFA_INI
 			"Define the size of completion queue. (Default: 8192)");
 	fi_param_define(&rxr_prov, "mr_cache_enable", FI_PARAM_BOOL,
 			"Enables using the mr cache and in-line registration instead of a bounce buffer for iov's larger than max_memcpy_size. Defaults to true. When disabled, only uses a bounce buffer.");
-	fi_param_define(&rxr_prov, "mr_cache_merge_regions", FI_PARAM_BOOL,
-			"Enables merging overlapping and adjacent memory registration regions. Defaults to true.");
 	fi_param_define(&rxr_prov, "mr_max_cached_count", FI_PARAM_SIZE_T,
 			"Sets the maximum number of memory registrations that can be cached at any time.");
 	fi_param_define(&rxr_prov, "mr_max_cached_size", FI_PARAM_SIZE_T,

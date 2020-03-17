@@ -683,15 +683,6 @@ configure registration caches.
   are not actively being used as part of a data transfer.  Setting this to
   zero will disable registration caching.
 
-*FI_MR_CACHE_MERGE_REGIONS*
-: If this variable is set to true, yes, or 1, then memory regions that are
-  adjacent or overlapping will be merged into a single larger region.  Merging
-  regions reduces the total cache size and the number of regions managed by
-  the cache.  However, merging regions can have a negative impact on
-  performance if a large number of adjacent regions are sent as separate data
-  transfers (such as sending elements of an array to peer(s)), and the larger
-  region is access infrequently.  By default merging regions is disabled.
-
 *FI_MR_CACHE_MONITOR*
 : The cache monitor is responsible for detecting changes made between the
   virtual addresses used by an application and the underlying physical pages.
