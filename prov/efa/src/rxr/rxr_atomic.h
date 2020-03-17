@@ -30,27 +30,17 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+#if HAVE_CONFIG_H
+#include <config.h>
+#endif /* HAVE_CONFIG_H */
 
-/**
- * multi recv related functions
- */
-bool rxr_msg_multi_recv_buffer_available(struct rxr_ep *ep,
-					 struct rxr_rx_entry *rx_entry);
+#ifndef _RXR_ATOMIC_H_
+#define _RXR_ATOMIC_H_
 
-void rxr_msg_multi_recv_handle_completion(struct rxr_ep *ep,
-					  struct rxr_rx_entry *rx_entry);
+int rxr_query_atomic(struct fid_domain *domain,
+		     enum fi_datatype datatype, enum fi_op op,
+		     struct fi_atomic_attr *attr, uint64_t flags);
 
-void rxr_msg_multi_recv_free_posted_entry(struct rxr_ep *ep,
-					  struct rxr_rx_entry *rx_entry);
+extern struct fi_ops_atomic rxr_ops_atomic;
 
-/*
- * The following 2 OP structures are defined in rxr_msg.c and is
- * used by rxr_endpoint()
- */
-extern struct fi_ops_msg rxr_ops_msg;
-
-extern struct fi_ops_tagged rxr_ops_tagged;
-
-ssize_t rxr_msg_post_medium_rtm(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry);
-
-ssize_t rxr_msg_post_medium_rtm_or_queue(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry);
+#endif

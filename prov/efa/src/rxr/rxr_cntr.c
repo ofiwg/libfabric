@@ -100,9 +100,9 @@ free:
 
 void efa_cntr_report_tx_completion(struct util_ep *ep, uint64_t flags)
 {
-	flags = flags & (FI_SEND | FI_WRITE | FI_READ);
 	struct util_cntr *cntr;
 
+	flags &= (FI_SEND | FI_WRITE | FI_READ);
 	assert(flags == FI_SEND || flags == FI_WRITE || flags == FI_READ);
 
 	if (flags == FI_SEND)
@@ -120,11 +120,10 @@ void efa_cntr_report_tx_completion(struct util_ep *ep, uint64_t flags)
 
 void efa_cntr_report_rx_completion(struct util_ep *ep, uint64_t flags)
 {
-	flags = flags & (FI_RECV | FI_REMOTE_WRITE | FI_REMOTE_READ);
-
-	assert(flags == FI_RECV || flags == FI_REMOTE_WRITE || flags == FI_REMOTE_READ);
-
 	struct util_cntr *cntr;
+
+	flags &= (FI_RECV | FI_REMOTE_WRITE | FI_REMOTE_READ);
+	assert(flags == FI_RECV || flags == FI_REMOTE_WRITE || flags == FI_REMOTE_READ);
 
 	if (flags == FI_RECV)
 		cntr = ep->rx_cntr;

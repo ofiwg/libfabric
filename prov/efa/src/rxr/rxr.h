@@ -151,19 +151,6 @@ static inline void rxr_poison_mem_region(uint32_t *ptr, size_t size)
 #define RXR_MULTI_RECV_CONSUMER	BIT_ULL(5)
 
 /*
- * for RMA
- */
-#define RXR_WRITE		(1 << 6)
-#define RXR_READ_REQ		(1 << 7)
-#define RXR_READ_DATA		(1 << 8)
-
-/*
- * Used to provide protocol compatibility across versions that include a
- * credit request along with the RTS and those that do not
- */
-#define RXR_CREDIT_REQUEST	BIT_ULL(9)
-
-/*
  * OFI flags
  * The 64-bit flag field is used as follows:
  * 1-grow up    common (usable with multiple operations)
@@ -181,11 +168,6 @@ static inline void rxr_poison_mem_region(uint32_t *ptr, size_t size)
 #define RXR_MTU_MAX_LIMIT	BIT_ULL(15)
 
 
-/*
- * Specific flags and attributes for shm provider
- */
-#define RXR_SHM_HDR		BIT_ULL(10)
-#define RXR_SHM_HDR_DATA	BIT_ULL(11)
 
 extern struct fi_info *shm_info;
 
@@ -203,6 +185,7 @@ struct rxr_env {
 	int tx_max_credits;
 	int tx_queue_size;
 	int enable_sas_ordering;
+	int enable_atomic_ordering;
 	int enable_shm_transfer;
 	int shm_av_size;
 	int shm_max_medium_size;
@@ -220,7 +203,7 @@ struct rxr_env {
 	int timeout_interval;
 	size_t efa_cq_read_size;
 	size_t shm_cq_read_size;
-	size_t efa_min_read_msg_size;
+	size_t efa_max_medium_msg_size;
 	size_t efa_max_emulated_read_size;
 	size_t efa_max_emulated_write_size;
 	size_t efa_read_segment_size;
@@ -238,12 +221,11 @@ enum rxr_x_entry_type {
 
 enum rxr_tx_comm_type {
 	RXR_TX_FREE = 0,	/* tx_entry free state */
-	RXR_TX_SHM_RMA,		/* tx_entry issuing read operation over shm provider */
-	RXR_TX_RTS,		/* tx_entry sending RTS message */
+	RXR_TX_REQ,		/* tx_entry sending REQ packet */
 	RXR_TX_SEND,		/* tx_entry sending data in progress */
 	RXR_TX_QUEUED_SHM_RMA,	/* tx_entry was unable to send RMA operations over shm provider */
 	RXR_TX_QUEUED_CTRL,	/* tx_entry was unable to send ctrl packet */
-	RXR_TX_QUEUED_RTS_RNR,  /* tx_entry RNR sending RTS packet */
+	RXR_TX_QUEUED_REQ_RNR,  /* tx_entry RNR sending REQ packet */
 	RXR_TX_QUEUED_DATA_RNR,	/* tx_entry RNR sending data packets */
 	RXR_TX_SENT_READRSP,	/* tx_entry (on remote EP) sent
 				 * read response (FI_READ only)
@@ -260,20 +242,20 @@ enum rxr_tx_comm_type {
 
 enum rxr_rx_comm_type {
 	RXR_RX_FREE = 0,	/* rx_entry free state */
-	RXR_RX_INIT,		/* rx_entry ready to recv RTS */
+	RXR_RX_INIT,		/* rx_entry ready to recv RTM */
 	RXR_RX_UNEXP,		/* rx_entry unexp msg waiting for post recv */
-	RXR_RX_MATCHED,		/* rx_entry matched with RTS msg */
+	RXR_RX_MATCHED,		/* rx_entry matched with RTM */
 	RXR_RX_RECV,		/* rx_entry large msg recv data pkts */
 	RXR_RX_QUEUED_CTRL,	/* rx_entry was unable to send ctrl packet */
-	RXR_RX_QUEUED_SHM_LARGE_READ,	/* rx_entry was unable to issue RMA Read for large message over shm */
 	RXR_RX_QUEUED_EOR,	/* rx_entry was unable to send EOR over shm */
 	RXR_RX_QUEUED_CTS_RNR,	/* rx_entry RNR sending CTS */
 	RXR_RX_WAIT_READ_FINISH, /* rx_entry wait for send to finish, FI_READ */
+	RXR_RX_WAIT_ATOMRSP_SENT, /* rx_entry wait for atomrsp packet sent completion */
 };
 
 enum rxr_peer_state {
 	RXR_PEER_FREE = 0,	/* rxr_peer free state */
-	RXR_PEER_CONNREQ,	/* RTS with endpoint address sent to peer */
+	RXR_PEER_CONNREQ,	/* REQ with endpoint address sent to peer */
 	RXR_PEER_ACKED,		/* RXR_CONNACK_PKT received from peer */
 };
 
@@ -316,6 +298,24 @@ struct rxr_queued_ctrl_info {
 	int inject;
 };
 
+struct rxr_atomic_hdr {
+	/* atomic_op is different from tx_op */
+	uint32_t atomic_op;
+	uint32_t datatype;
+};
+
+/* extra information that is not included in fi_msg_atomic
+ * used by fetch atomic and compare atomic.
+ *     resp stands for response
+ *     comp stands for compare
+ */
+struct rxr_atomic_ex {
+	struct iovec resp_iov[RXR_IOV_LIMIT];
+	int resp_iov_count;
+	struct iovec comp_iov[RXR_IOV_LIMIT];
+	int comp_iov_count;
+};
+
 struct rxr_rx_entry {
 	/* Must remain at the top */
 	enum rxr_x_entry_type type;
@@ -334,6 +334,8 @@ struct rxr_rx_entry {
 	 */
 	uint32_t rma_loc_tx_id;
 	uint32_t rma_initiator_rx_id;
+
+	struct rxr_atomic_hdr atomic_hdr;
 
 	uint32_t msg_id;
 
@@ -383,6 +385,8 @@ struct rxr_rx_entry {
 	struct rxr_rx_entry *master_entry;
 
 	struct rxr_pkt_entry *unexp_pkt;
+	struct rxr_pkt_entry *atomrsp_pkt;
+	char *atomrsp_buf;
 
 #if ENABLE_DEBUG
 	/* linked with rx_pending_list in rxr_ep */
@@ -435,6 +439,10 @@ struct rxr_tx_entry {
 	/* App-provided reg descriptor */
 	void *desc[RXR_IOV_LIMIT];
 
+	/* atomic related variables */
+	struct rxr_atomic_hdr atomic_hdr;
+	struct rxr_atomic_ex atomic_ex;
+
 	/* Only used with mr threshold switch from memcpy */
 	size_t iov_mr_start;
 	struct fid_mr *mr[RXR_IOV_LIMIT];
@@ -463,7 +471,7 @@ struct rxr_tx_entry {
 struct rxr_domain {
 	struct util_domain util_domain;
 	struct fid_domain *rdm_domain;
-
+	size_t mtu_size;
 	size_t addrlen;
 	uint8_t mr_local;
 	uint64_t rdm_mode;
@@ -551,9 +559,12 @@ struct rxr_ep {
 	struct ofi_bufpool *rx_entry_pool;
 	/* datastructure to maintain read response */
 	struct ofi_bufpool *readrsp_tx_entry_pool;
-	/* data structure to maintain RDMA */
+	/* data structure to maintain read */
 	struct ofi_bufpool *read_entry_pool;
-
+	/* data structure to maintain pkt rx map */
+	struct ofi_bufpool *map_entry_pool;
+	/* rxr medium message pkt_entry to rx_entry map */
+	struct rxr_pkt_rx_map *pkt_rx_map;
 	/* rx_entries with recv buf */
 	struct dlist_entry rx_list;
 	/* rx_entries without recv buf (unexpected message) */
@@ -618,6 +629,11 @@ struct rxr_ep {
 
 #define rxr_rx_flags(rxr_ep) ((rxr_ep)->util_ep.rx_op_flags)
 #define rxr_tx_flags(rxr_ep) ((rxr_ep)->util_ep.tx_op_flags)
+
+/*
+ * Control header with completion data. CQ data length is static.
+ */
+#define RXR_CQ_DATA_SIZE (8)
 
 static inline void rxr_copy_shm_cq_entry(struct fi_cq_tagged_entry *cq_tagged_entry,
 					 struct fi_cq_data_entry *shm_cq_entry)
@@ -713,21 +729,6 @@ static inline void rxr_release_rx_entry(struct rxr_ep *ep,
 	ofi_buf_free(rx_entry);
 }
 
-static inline void *rxr_pkt_start(struct rxr_pkt_entry *pkt_entry)
-{
-	return (void *)((char *)pkt_entry + sizeof(*pkt_entry));
-}
-
-static inline struct rxr_ctrl_cq_pkt *rxr_get_ctrl_cq_pkt(void *pkt)
-{
-	return (struct rxr_ctrl_cq_pkt *)pkt;
-}
-
-static inline struct rxr_ctrl_pkt *rxr_get_ctrl_pkt(void *pkt)
-{
-	return (struct rxr_ctrl_pkt *)pkt;
-}
-
 static inline int rxr_match_addr(fi_addr_t addr, fi_addr_t match_addr)
 {
 	return (addr == FI_ADDR_UNSPEC || addr == match_addr);
@@ -774,13 +775,24 @@ static inline size_t rxr_get_tx_pool_chunk_cnt(struct rxr_ep *ep)
 static inline int rxr_need_sas_ordering(struct rxr_ep *ep)
 {
 	/*
-	 * RxR needs to reorder RTS packets for send-after-send guarantees
+	 * RxR needs to reorder RTM packets for send-after-send guarantees
 	 * only if the application requested it and the core provider does not
 	 * support it.
 	 */
 	return ((ep->msg_order & FI_ORDER_SAS) &&
 		!(ep->core_msg_order & FI_ORDER_SAS) &&
 		rxr_env.enable_sas_ordering);
+}
+
+static inline int rxr_need_atomic_ordering(struct rxr_ep *ep)
+{
+	uint64_t atomic_ordering;
+
+	atomic_ordering = FI_ORDER_ATOMIC_RAR | FI_ORDER_ATOMIC_RAW |
+			  FI_ORDER_ATOMIC_WAR | FI_ORDER_ATOMIC_WAW;
+
+	return ((ep->msg_order & atomic_ordering) &&
+		rxr_env.enable_atomic_ordering);
 }
 
 /* Initialization functions */
@@ -810,8 +822,12 @@ int rxr_ep_set_tx_credit_request(struct rxr_ep *rxr_ep,
 void rxr_inline_mr_reg(struct rxr_domain *rxr_domain,
 		       struct rxr_tx_entry *tx_entry);
 
-struct rxr_rx_entry *rxr_ep_alloc_unexp_rx_entry_for_rts(struct rxr_ep *ep,
-							 struct rxr_pkt_entry *pkt_entry);
+struct rxr_rx_entry *rxr_ep_lookup_mediumrtm_rx_entry(struct rxr_ep *ep,
+						      struct rxr_pkt_entry *pkt_entry);
+
+void rxr_ep_record_mediumrtm_rx_entry(struct rxr_ep *ep,
+				      struct rxr_pkt_entry *pkt_entry,
+				      struct rxr_rx_entry *rx_entry);
 
 struct rxr_rx_entry *rxr_ep_alloc_unexp_rx_entry_for_msgrtm(struct rxr_ep *ep,
 							    struct rxr_pkt_entry **pkt_entry);
@@ -844,6 +860,10 @@ void rxr_cq_write_tx_completion(struct rxr_ep *ep,
 
 void rxr_cq_handle_tx_completion(struct rxr_ep *ep,
 				 struct rxr_tx_entry *tx_entry);
+
+void rxr_cq_handle_shm_completion(struct rxr_ep *ep,
+				  struct fi_cq_data_entry *cq_entry,
+				  fi_addr_t src_addr);
 
 int rxr_cq_reorder_msg(struct rxr_ep *ep,
 		       struct rxr_peer *peer,

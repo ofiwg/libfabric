@@ -57,8 +57,6 @@ inj_complete
 # Exclude trigger ops
 trigger
 
-# Exclude all atomic tests
-atomic
 
 #rdm_cntr_pingpong
 

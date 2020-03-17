@@ -58,17 +58,15 @@
  * operability thus is strictly prohibited.
  */
 
-#define RXR_RTS_PKT		1
+#define RXR_RETIRED_RTS_PKT	1
 #define RXR_CONNACK_PKT		2
 #define RXR_CTS_PKT		3
 #define RXR_DATA_PKT		4
 #define RXR_READRSP_PKT		5
 #define RXR_RMA_CONTEXT_PKT	6
 #define RXR_EOR_PKT		7
-/*
- * The following packet types are part of protocol version 4
- */
-#define RXR_HANDSHAKE_PKT	8
+#define RXR_ATOMRSP_PKT         8
+#define RXR_HANDSHAKE_PKT	9
 
 #define RXR_REQ_PKT_BEGIN		64
 #define RXR_BASELINE_REQ_PKT_BEGIN	64
@@ -83,14 +81,15 @@
 #define RXR_SHORT_RTR_PKT		72
 #define RXR_LONG_RTR_PKT		73
 #define RXR_WRITE_RTA_PKT		74
-#define RXR_READFETCH_RTA_PKT		75
-#define RXR_BASELINE_REQ_PKT_END	76
+#define RXR_FETCH_RTA_PKT		75
+#define RXR_COMPARE_RTA_PKT		76
+#define RXR_BASELINE_REQ_PKT_END	77
 
-#define RXR_EXTRA_REQ_PKT_BEGIN		76
-#define RXR_READ_MSGRTM_PKT		76
-#define RXR_READ_TAGRTM_PKT		77
-#define RXR_READ_RTW_PKT		78
-#define RXR_READ_RTR_PKT		79
+#define RXR_EXTRA_REQ_PKT_BEGIN		128
+#define RXR_READ_MSGRTM_PKT		128
+#define RXR_READ_TAGRTM_PKT		129
+#define RXR_READ_RTW_PKT		130
+#define RXR_READ_RTR_PKT		131
 
 /*
  *  Packet fields common to all rxr packets. The other packet headers below must
@@ -116,58 +115,6 @@ struct rxr_peer;
 struct rxr_tx_entry;
 struct rxr_rx_entry;
 struct rxr_read_entry;
-
-/*
- *  RTS packet data structures and functions. the implementation of
- *  these functions are in rxr_pkt_type_rts.c
- */
-struct rxr_rts_hdr {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
-	/* end of rxr_base_hdr */
-	/* TODO: need to add msg_id -> tx_id mapping to remove tx_id */
-	uint16_t credit_request;
-	uint8_t addrlen;
-	uint8_t rma_iov_count;
-	uint32_t tx_id;
-	uint32_t msg_id;
-	uint64_t tag;
-	uint64_t data_len;
-};
-
-#if defined(static_assert) && defined(__x86_64__)
-static_assert(sizeof(struct rxr_rts_hdr) == 32, "rxr_rts_hdr check");
-#endif
-
-static inline
-struct rxr_rts_hdr *rxr_get_rts_hdr(void *pkt)
-{
-	return (struct rxr_rts_hdr *)pkt;
-}
-
-uint64_t rxr_get_rts_data_size(struct rxr_ep *ep,
-			       struct rxr_rts_hdr *rts_hdr);
-
-ssize_t rxr_pkt_init_rts(struct rxr_ep *ep,
-			 struct rxr_tx_entry *tx_entry,
-			 struct rxr_pkt_entry *pkt_entry);
-
-void rxr_pkt_handle_rts_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
-
-ssize_t rxr_pkt_proc_matched_msg_rts(struct rxr_ep *ep,
-				     struct rxr_rx_entry *rx_entry,
-				     struct rxr_pkt_entry *pkt_entry);
-
-void rxr_pkt_handle_rts_send_completion(struct rxr_ep *ep,
-					struct rxr_pkt_entry *pkt_entry);
-
-ssize_t rxr_pkt_post_shm_rndzv_read(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry);
-
-ssize_t rxr_pkt_proc_rts(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
-
-
-void rxr_pkt_handle_rts_recv(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
 
 /*
  *  CONNACK packet header and functions
@@ -223,6 +170,8 @@ struct rxr_cts_hdr {
 static_assert(sizeof(struct rxr_cts_hdr) == 24, "rxr_cts_hdr check");
 #endif
 
+/* this flag is to indicated the CTS is the response of a RTR packet */
+#define RXR_CTS_READ_REQ		BIT_ULL(7)
 #define RXR_CTS_HDR_SIZE		(sizeof(struct rxr_cts_hdr))
 
 static inline
@@ -407,46 +356,43 @@ void rxr_pkt_handle_eor_send_completion(struct rxr_ep *ep,
 void rxr_pkt_handle_eor_recv(struct rxr_ep *ep,
 			     struct rxr_pkt_entry *pkt_entry);
 
-/*
- * Control header without completion data. We will send more data with the RTS
- * packet if RXR_REMOTE_CQ_DATA is not set.
- */
-struct rxr_ctrl_hdr {
-	union {
-		struct rxr_base_hdr base_hdr;
-		struct rxr_rts_hdr rts_hdr;
-		struct rxr_connack_hdr connack_hdr;
-		struct rxr_cts_hdr cts_hdr;
-	};
+/* atomrsp types */
+struct rxr_atomrsp_hdr {
+	uint8_t type;
+	uint8_t version;
+	uint16_t flags;
+	/* end of rxr_base_hdr */
+	uint8_t pad[4];
+	uint32_t rx_id;
+	uint32_t tx_id;
+	uint64_t seg_size;
 };
 
-#define RXR_CTRL_HDR_SIZE              (sizeof(struct rxr_ctrl_cq_hdr))
+#if defined(static_assert) && defined(__x86_64__)
+static_assert(sizeof(struct rxr_atomrsp_hdr) == 24, "rxr_atomrsp_hdr check");
+#endif
 
-struct rxr_ctrl_pkt {
-	struct rxr_ctrl_hdr hdr;
+#define RXR_ATOMRSP_HDR_SIZE	(sizeof(struct rxr_atomrsp_hdr))
+
+struct rxr_atomrsp_pkt {
+	struct rxr_atomrsp_hdr hdr;
 	char data[];
 };
 
-/*
- * Control header with completion data. CQ data length is static.
- */
-#define RXR_CQ_DATA_SIZE (8)
-struct rxr_ctrl_cq_hdr {
-	union {
-		struct rxr_base_hdr base_hdr;
-		struct rxr_rts_hdr rts_hdr;
-		struct rxr_connack_hdr connack_hdr;
-		struct rxr_cts_hdr cts_hdr;
-	};
-	uint64_t cq_data;
-};
+static inline struct rxr_atomrsp_hdr *rxr_get_atomrsp_hdr(void *pkt)
+{
+	return (struct rxr_atomrsp_hdr *)pkt;
+}
 
-#define RXR_CTRL_HDR_SIZE_NO_CQ                (sizeof(struct rxr_ctrl_hdr))
+/* atomrsp functions: init, handle_sent, handle_send_completion, recv */
+int rxr_pkt_init_atomrsp(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
+			 struct rxr_pkt_entry *pkt_entry);
 
-struct rxr_ctrl_cq_pkt {
-	struct rxr_ctrl_cq_hdr hdr;
-	char data[];
-};
+void rxr_pkt_handle_atomrsp_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
+
+void rxr_pkt_handle_atomrsp_send_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
+
+void rxr_pkt_handle_atomrsp_recv(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
 
 #endif
 

@@ -49,6 +49,7 @@ struct rxr_env rxr_env = {
 	.tx_min_credits = RXR_DEF_MIN_TX_CREDITS,
 	.tx_queue_size = 0,
 	.enable_sas_ordering = 1,
+	.enable_atomic_ordering = 1,
 	.enable_shm_transfer = 1,
 	.shm_av_size = 128,
 	.shm_max_medium_size = 4096,
@@ -66,7 +67,7 @@ struct rxr_env rxr_env = {
 	.timeout_interval = 0, /* 0 is random timeout */
 	.efa_cq_read_size = 50,
 	.shm_cq_read_size = 50,
-	.efa_min_read_msg_size = 65536,
+	.efa_max_medium_msg_size = 131072,
 	.efa_max_emulated_read_size = 0,
 	.efa_max_emulated_write_size = 65536,
 	.efa_read_segment_size = 1073741824,
@@ -109,8 +110,8 @@ static void rxr_init_env(void)
 			 &rxr_env.efa_cq_read_size);
 	fi_param_get_size_t(&rxr_prov, "shm_cq_read_size",
 			 &rxr_env.shm_cq_read_size);
-	fi_param_get_size_t(&rxr_prov, "inter_min_read_message_size",
-			    &rxr_env.efa_min_read_msg_size);
+	fi_param_get_size_t(&rxr_prov, "inter_max_medium_message_size",
+			    &rxr_env.efa_max_medium_msg_size);
 	fi_param_get_size_t(&rxr_prov, "inter_max_emulated_read_size",
 			    &rxr_env.efa_max_emulated_read_size);
 	fi_param_get_size_t(&rxr_prov, "inter_max_emulated_write_size",
@@ -311,6 +312,8 @@ static int rxr_dgram_info_to_rxr(uint32_t version,
 static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 			   struct fi_info *info, const struct fi_info *hints)
 {
+	uint64_t atomic_ordering;
+
 	info->caps = rxr_info.caps;
 	info->mode = rxr_info.mode;
 
@@ -319,10 +322,8 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 	*info->ep_attr = *rxr_info.ep_attr;
 	*info->domain_attr = *rxr_info.domain_attr;
 
-	info->tx_attr->inject_size =
-		core_info->tx_attr->inject_size > RXR_CTRL_HDR_SIZE_NO_CQ ?
-		core_info->tx_attr->inject_size - RXR_CTRL_HDR_SIZE_NO_CQ
-		: 0;
+	/* TODO: update inject_size when we implement inject */
+	info->tx_attr->inject_size = 0;
 	rxr_info.tx_attr->inject_size = info->tx_attr->inject_size;
 
 	info->addr_format = core_info->addr_format;
@@ -335,10 +336,20 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 	 * based on EFA-specific constraints.
 	 */
 	if (hints) {
-		/* Disable packet reordering if the app doesn't need it */
-		if (hints->tx_attr)
+		if (hints->tx_attr) {
+
+			/* Disable packet reordering if the app doesn't need it */
 			if (!(hints->tx_attr->msg_order & FI_ORDER_SAS))
 				rxr_env.enable_sas_ordering = 0;
+
+			/* Disable atomic ordering if the app doesn't need it */
+
+			atomic_ordering = FI_ORDER_ATOMIC_RAR | FI_ORDER_ATOMIC_RAW |
+					  FI_ORDER_ATOMIC_WAR | FI_ORDER_ATOMIC_WAW;
+
+			if (!(hints->tx_attr->msg_order & atomic_ordering))
+				rxr_env.enable_atomic_ordering = 0;
+		}
 
 		/* We only support manual progress for RMA operations */
 		if (hints->caps & FI_RMA) {
@@ -636,6 +647,8 @@ EFA_INI
 			"Defines the maximum number of unacknowledged sends with the NIC.");
 	fi_param_define(&rxr_prov, "enable_sas_ordering", FI_PARAM_INT,
 			"Enable packet reordering for the RDM endpoint. This is always enabled when FI_ORDER_SAS is requested by the application. (Default: 1)");
+	fi_param_define(&rxr_prov, "enable_atomic_ordering", FI_PARAM_INT,
+			"Enable atomic reordering for the RDM endpoint. This is always enabled when FI_ORDER_ATOMIC_RAW or FI_ORDER_ATOMIC_RAR or FI_ORDER_ATOMIC_WAR or FI_ORDER_ATOMIC_WAW is requested by the application. (Default: 1)");
 	fi_param_define(&rxr_prov, "enable_shm_transfer", FI_PARAM_INT,
 			"Enable using SHM provider to provide the communication between processes on the same system. (Default: 1)");
 	fi_param_define(&rxr_prov, "shm_av_size", FI_PARAM_INT,
@@ -667,7 +680,7 @@ EFA_INI
 	fi_param_define(&rxr_prov, "rx_copy_unexp", FI_PARAM_BOOL,
 			"Enables the use of a separate pool of bounce-buffers to copy unexpected messages out of the pre-posted receive buffers. (Default: 1)");
 	fi_param_define(&rxr_prov, "rx_copy_ooo", FI_PARAM_BOOL,
-			"Enables the use of a separate pool of bounce-buffers to copy out-of-order RTS packets out of the pre-posted receive buffers. (Default: 1)");
+			"Enables the use of a separate pool of bounce-buffers to copy out-of-order RTM packets out of the pre-posted receive buffers. (Default: 1)");
 	fi_param_define(&rxr_prov, "max_timeout", FI_PARAM_INT,
 			"Set the maximum timeout (us) for backoff to a peer after a receiver not ready error. (Default: 1000000)");
 	fi_param_define(&rxr_prov, "timeout_interval", FI_PARAM_INT,
@@ -676,8 +689,8 @@ EFA_INI
 			"Set the number of EFA completion entries to read for one loop for one iteration of the progress engine. (Default: 50)");
 	fi_param_define(&rxr_prov, "shm_cq_read_size", FI_PARAM_SIZE_T,
 			"Set the number of SHM completion entries to read for one loop for one iteration of the progress engine. (Default: 50)");
-	fi_param_define(&rxr_prov, "inter_min_read_message_size", FI_PARAM_INT,
-			"The minimal message size for inter EFA read message protocol (if firmware support), (Default 65536).");
+	fi_param_define(&rxr_prov, "inter_max_medium_message_size", FI_PARAM_INT,
+			"The maximal message size for inter EFA medium message protocol, messages whose size is larger than this value will be sent either by read message protocol (depend on firmware support), or long message protocol (Default 131072).");
 	fi_param_define(&rxr_prov, "inter_max_emulated_read_size", FI_PARAM_INT,
 			"The maximum message size for inter EFA emulated read protocol. Read requests whose size is larger than this value will be implemented via RDMA read (if firmware support), (Default 0 [RDMA read is always used]).");
 	fi_param_define(&rxr_prov, "inter_max_emulated_write_size", FI_PARAM_INT,

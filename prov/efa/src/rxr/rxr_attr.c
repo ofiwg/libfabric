@@ -37,9 +37,9 @@
 const uint32_t rxr_poison_value = 0xdeadbeef;
 #endif
 
-#define RXR_TX_CAPS (OFI_TX_MSG_CAPS | FI_TAGGED | OFI_TX_RMA_CAPS)
+#define RXR_TX_CAPS (OFI_TX_MSG_CAPS | FI_TAGGED | OFI_TX_RMA_CAPS | FI_ATOMIC)
 #define RXR_RX_CAPS (OFI_RX_MSG_CAPS | FI_TAGGED | OFI_RX_RMA_CAPS | \
-		     FI_SOURCE | FI_MULTI_RECV | FI_DIRECTED_RECV)
+		     FI_SOURCE | FI_MULTI_RECV | FI_DIRECTED_RECV | FI_ATOMIC)
 #define RXR_DOM_CAPS (FI_LOCAL_COMM | FI_REMOTE_COMM)
 
 /* TODO: Add support for true FI_DELIVERY_COMPLETE */
@@ -49,7 +49,9 @@ const uint32_t rxr_poison_value = 0xdeadbeef;
 
 struct fi_tx_attr rxr_tx_attr = {
 	.caps = RXR_TX_CAPS,
-	.msg_order = FI_ORDER_SAS,
+	.msg_order = FI_ORDER_SAS |
+		     FI_ORDER_ATOMIC_RAR | FI_ORDER_ATOMIC_RAW |
+		     FI_ORDER_ATOMIC_WAR | FI_ORDER_ATOMIC_WAW,
 	.op_flags = RXR_TX_OP_FLAGS,
 	.comp_order = FI_ORDER_NONE,
 	.inject_size = 0,
@@ -59,7 +61,9 @@ struct fi_tx_attr rxr_tx_attr = {
 
 struct fi_rx_attr rxr_rx_attr = {
 	.caps = RXR_RX_CAPS,
-	.msg_order = FI_ORDER_SAS,
+	.msg_order = FI_ORDER_SAS |
+		     FI_ORDER_ATOMIC_RAR | FI_ORDER_ATOMIC_RAW |
+		     FI_ORDER_ATOMIC_WAR | FI_ORDER_ATOMIC_WAW,
 	.op_flags = RXR_RX_OP_FLAGS,
 	.comp_order = FI_ORDER_NONE,
 	.total_buffered_recv = 0,
