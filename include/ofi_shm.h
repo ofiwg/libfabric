@@ -156,6 +156,7 @@ struct smr_cmd {
 
 #define SMR_INJECT_SIZE		4096
 #define SMR_COMP_INJECT_SIZE	(SMR_INJECT_SIZE / 2)
+#define SMR_SAR_SIZE		16384
 
 struct smr_addr {
 	char		name[NAME_MAX];
@@ -164,6 +165,7 @@ struct smr_addr {
 
 struct smr_peer_data {
 	struct smr_addr		addr;
+	uint64_t		sar_status;
 };
 
 struct smr_ep_name {
@@ -206,11 +208,13 @@ struct smr_region {
 				    Might not always be paired consistently with
 				    cmd alloc/free depending on protocol
 				    (Ex. unexpected messages, RMA requests) */
+	size_t		sar_cnt;
 
 	/* offsets from start of smr_region */
 	size_t		cmd_queue_offset;
 	size_t		resp_queue_offset;
 	size_t		inject_pool_offset;
+	size_t		sar_pool_offset;
 	size_t		peer_data_offset;
 	size_t		name_offset;
 };
@@ -230,9 +234,24 @@ struct smr_inject_buf {
 	};
 };
 
+enum {
+	SMR_SAR_FREE = 0, /* buffer can be used */
+	SMR_SAR_READY, /* buffer has data in it */
+};
+
+struct smr_sar_buf {
+	uint64_t	status;
+	uint8_t		buf[SMR_SAR_SIZE];
+};
+
+struct smr_sar_msg {
+	struct smr_sar_buf	sar[2];
+};
+
 OFI_DECLARE_CIRQUE(struct smr_cmd, smr_cmd_queue);
 OFI_DECLARE_CIRQUE(struct smr_resp, smr_resp_queue);
 DECLARE_SMR_FREESTACK(struct smr_inject_buf, smr_inject_pool);
+DECLARE_SMR_FREESTACK(struct smr_sar_msg, smr_sar_pool);
 
 static inline struct smr_region *smr_peer_region(struct smr_region *smr, int i)
 {
@@ -253,6 +272,10 @@ static inline struct smr_inject_pool *smr_inject_pool(struct smr_region *smr)
 static inline struct smr_peer_data *smr_peer_data(struct smr_region *smr)
 {
 	return (struct smr_peer_data *) ((char *) smr + smr->peer_data_offset); 
+}
+static inline struct smr_sar_pool *smr_sar_pool(struct smr_region *smr)
+{
+	return (struct smr_sar_pool *) ((char *) smr + smr->sar_pool_offset); 
 }
 static inline const char *smr_name(struct smr_region *smr)
 {

@@ -89,6 +89,7 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	struct smr_ep_name *ep_name;
 	size_t total_size, cmd_queue_offset, peer_data_offset;
 	size_t resp_queue_offset, inject_pool_offset, name_offset;
+	size_t sar_pool_offset;
 	int fd, ret, i;
 	void *mapped_addr;
 	size_t tx_size, rx_size;
@@ -101,8 +102,10 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 			sizeof(struct smr_cmd) * rx_size;
 	inject_pool_offset = resp_queue_offset + sizeof(struct smr_resp_queue) +
 			sizeof(struct smr_resp) * tx_size;
-	peer_data_offset = inject_pool_offset + sizeof(struct smr_inject_pool) +
+	sar_pool_offset = inject_pool_offset + sizeof(struct smr_inject_pool) +
 			sizeof(struct smr_inject_pool_entry) * rx_size;
+	peer_data_offset = sar_pool_offset + sizeof(struct smr_sar_pool) +
+			sizeof(struct smr_sar_pool_entry) * SMR_MAX_PEERS;
 	name_offset = peer_data_offset + sizeof(struct smr_peer_data) * SMR_MAX_PEERS;
 	total_size = name_offset + strlen(attr->name) + 1;
 	total_size = roundup_power_of_two(total_size);
@@ -152,15 +155,21 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	(*smr)->cmd_queue_offset = cmd_queue_offset;
 	(*smr)->resp_queue_offset = resp_queue_offset;
 	(*smr)->inject_pool_offset = inject_pool_offset;
+	(*smr)->sar_pool_offset = sar_pool_offset;
 	(*smr)->peer_data_offset = peer_data_offset;
 	(*smr)->name_offset = name_offset;
 	(*smr)->cmd_cnt = rx_size;
+	/* Limit of 1 outstanding SAR message per peer */
+	(*smr)->sar_cnt = SMR_MAX_PEERS;
 
 	smr_cmd_queue_init(smr_cmd_queue(*smr), rx_size);
 	smr_resp_queue_init(smr_resp_queue(*smr), tx_size);
 	smr_inject_pool_init(smr_inject_pool(*smr), rx_size);
-	for (i = 0; i < SMR_MAX_PEERS; i++)
+	smr_sar_pool_init(smr_sar_pool(*smr), SMR_MAX_PEERS); 
+	for (i = 0; i < SMR_MAX_PEERS; i++) {
 		smr_peer_addr_init(&smr_peer_data(*smr)[i].addr);
+		smr_peer_data(*smr)[i].sar_status = 0;
+	}
 
 	strncpy((char *) smr_name(*smr), attr->name, total_size - name_offset);
 	fastlock_release(&(*smr)->lock);
