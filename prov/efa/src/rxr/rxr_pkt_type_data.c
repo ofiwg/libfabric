@@ -186,6 +186,7 @@ ssize_t rxr_pkt_send_data_mr_cache(struct rxr_ep *ep,
 			 * Copies any consecutive small iov's, returning size
 			 * written while updating iov index and offset
 			 */
+
 			len = rxr_copy_from_iov((char *)data_pkt->data +
 						 pkt_used,
 						 remaining_len,

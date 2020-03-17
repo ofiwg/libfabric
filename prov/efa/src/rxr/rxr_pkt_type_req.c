@@ -421,8 +421,8 @@ void rxr_pkt_handle_long_rtm_sent(struct rxr_ep *ep,
 	tx_entry->bytes_sent += rxr_pkt_req_data_size(pkt_entry);
 	assert(tx_entry->bytes_sent < tx_entry->total_len);
 
-	if (efa_mr_cache_enable && !tx_entry->desc[0])
-		rxr_inline_mr_reg(rxr_ep_domain(ep), tx_entry);
+	if (efa_mr_cache_enable)
+		rxr_prepare_mr_send(rxr_ep_domain(ep), tx_entry);
 }
 
 /*
@@ -1010,8 +1010,8 @@ void rxr_pkt_handle_long_rtw_sent(struct rxr_ep *ep,
 	tx_entry->bytes_sent += rxr_pkt_req_data_size(pkt_entry);
 	assert(tx_entry->bytes_sent < tx_entry->total_len);
 
-	if (efa_mr_cache_enable && !tx_entry->desc[0])
-		rxr_inline_mr_reg(rxr_ep_domain(ep), tx_entry);
+	if (efa_mr_cache_enable)
+		rxr_prepare_mr_send(rxr_ep_domain(ep), tx_entry);
 }
 
 /*
@@ -1048,9 +1048,10 @@ struct rxr_rx_entry *rxr_pkt_alloc_rtw_rx_entry(struct rxr_ep *ep,
 {
 	struct rxr_rx_entry *rx_entry;
 	struct rxr_base_hdr *base_hdr;
-	uint64_t tag = 0; /* RMA is not tagged */
+	struct fi_msg msg = {0};
 
-	rx_entry = rxr_ep_get_rx_entry(ep, NULL, 0, tag, 0, NULL, pkt_entry->addr, ofi_op_write, 0);
+	msg.addr = pkt_entry->addr;
+	rx_entry = rxr_ep_get_rx_entry(ep, &msg, 0, ~0, ofi_op_write, 0);
 	if (OFI_UNLIKELY(!rx_entry))
 		return NULL;
 
@@ -1322,13 +1323,14 @@ void rxr_pkt_handle_rtr_recv(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 	struct rxr_rx_entry *rx_entry;
 	struct rxr_tx_entry *tx_entry;
 	ssize_t err;
-	uint64_t tag = 0; /* RMA is not tagged */
+	struct fi_msg msg = {0};
 
 	if (ep->core_caps & FI_SOURCE)
 		rxr_pkt_post_connack(ep, rxr_ep_get_peer(ep, pkt_entry->addr),
 				     pkt_entry->addr);
 
-	rx_entry = rxr_ep_get_rx_entry(ep, NULL, 0, tag, 0, NULL, pkt_entry->addr, ofi_op_read_rsp, 0);
+	msg.addr = pkt_entry->addr;
+	rx_entry = rxr_ep_get_rx_entry(ep, &msg, 0, ~0, ofi_op_read_rsp, 0);
 	if (OFI_UNLIKELY(!rx_entry)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"RX entries exhausted.\n");
@@ -1492,8 +1494,10 @@ struct rxr_rx_entry *rxr_pkt_alloc_rta_rx_entry(struct rxr_ep *ep, struct rxr_pk
 {
 	struct rxr_rx_entry *rx_entry;
 	struct rxr_rta_hdr *rta_hdr;
+	struct fi_msg msg = {0};
 
-	rx_entry = rxr_ep_get_rx_entry(ep, NULL, 0, 0, 0, NULL, pkt_entry->addr, op, 0);
+	msg.addr = pkt_entry->addr;
+	rx_entry = rxr_ep_get_rx_entry(ep, &msg, 0, ~0, op, 0);
 	if (OFI_UNLIKELY(!rx_entry)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"RX entries exhausted.\n");
