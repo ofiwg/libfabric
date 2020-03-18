@@ -691,11 +691,29 @@ vrb_eq_xrc_rej_event(struct vrb_eq *eq, struct rdma_cm_event *cma_event)
 
 /* Caller must hold eq:lock */
 static inline int
+vrb_eq_xrc_connect_retry(struct vrb_xrc_ep *ep,
+			 struct rdma_cm_event *cma_event, int *acked)
+{
+	*acked = 1;
+	rdma_ack_cm_event(cma_event);
+	rdma_destroy_id(ep->base_ep.id);
+	ep->base_ep.id = NULL;
+	vrb_eq_clear_xrc_conn_tag(ep);
+
+	ep->conn_setup->retry_count++;
+	return vrb_connect_xrc(ep, NULL, ep->conn_setup->pending_recip,
+			       ep->conn_setup->pending_param,
+			       ep->conn_setup->pending_paramlen);
+}
+
+/* Caller must hold eq:lock */
+static inline int
 vrb_eq_xrc_cm_err_event(struct vrb_eq *eq,
-                           struct rdma_cm_event *cma_event)
+                           struct rdma_cm_event *cma_event, int *acked)
 {
 	struct vrb_xrc_ep *ep;
 	fid_t fid = cma_event->id->context;
+	int ret;
 
 	ep = container_of(fid, struct vrb_xrc_ep, base_ep.util_ep.ep_fid);
 	if (ep->magic != VERBS_XRC_EP_MAGIC) {
@@ -710,6 +728,21 @@ vrb_eq_xrc_cm_err_event(struct vrb_eq *eq,
 	     ep->tgt_id != cma_event->id)) {
 		VERBS_WARN(FI_LOG_EP_CTRL, "CM error not valid for EP\n");
 		return -FI_EAGAIN;
+	}
+
+	if (ep->base_ep.id == cma_event->id) {
+		vrb_put_shared_ini_conn(ep);
+
+		/* Active side connect errors are retried */
+		if (ep->conn_setup && (ep->conn_setup->retry_count <
+				       VRB_MAX_XRC_CONNECT_RETRIES)) {
+			ret = vrb_eq_xrc_connect_retry(ep, cma_event, acked);
+			if (!ret) {
+				VERBS_DBG(FI_LOG_EP_CTRL,
+					  "XRC connection retry initiated\n");
+				return -FI_EAGAIN;
+			}
+		}
 	}
 
 	VERBS_WARN(FI_LOG_EP_CTRL, "CM error event %s, status %d\n",
@@ -900,9 +933,13 @@ vrb_eq_cm_process_event(struct vrb_eq *eq,
 			    cma_event->event == RDMA_CM_EVENT_UNREACHABLE)
 				goto xrc_shared_reject;
 
-			ret = vrb_eq_xrc_cm_err_event(eq, cma_event);
+			ret = vrb_eq_xrc_cm_err_event(eq, cma_event, &acked);
 			if (ret == -FI_EAGAIN)
 				goto ack;
+
+			*event = FI_SHUTDOWN;
+			entry->info = NULL;
+			break;
 		}
 		eq->err.err = ETIMEDOUT;
 		eq->err.prov_errno = -cma_event->status;
