@@ -1460,7 +1460,6 @@ void rxr_pkt_handle_write_rta_send_completion(struct rxr_ep *ep, struct rxr_pkt_
 	rxr_cq_handle_tx_completion(ep, tx_entry);
 }
 
-
 int rxr_pkt_proc_write_rta(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
 	struct iovec iov[RXR_IOV_LIMIT];
@@ -1476,7 +1475,7 @@ int rxr_pkt_proc_write_rta(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 	
 	data = (char *)pkt_entry->pkt + pkt_entry->hdr_size;
 	iov_count = rta_hdr->rma_iov_count;
-	rxr_rma_verified_copy_iov(ep, rta_hdr->rma_iov, iov_count, FI_SEND, iov);
+	rxr_rma_verified_copy_iov(ep, rta_hdr->rma_iov, iov_count, FI_REMOTE_WRITE, iov);
 
 	offset = 0;
 	for (i = 0; i < iov_count; ++i) {
@@ -1509,7 +1508,7 @@ struct rxr_rx_entry *rxr_pkt_alloc_rta_rx_entry(struct rxr_ep *ep, struct rxr_pk
 	rx_entry->atomic_hdr.datatype = rta_hdr->atomic_datatype;
 
 	rx_entry->iov_count = rta_hdr->rma_iov_count;
-	rxr_rma_verified_copy_iov(ep, rta_hdr->rma_iov, rx_entry->iov_count, FI_RECV, rx_entry->iov);
+	rxr_rma_verified_copy_iov(ep, rta_hdr->rma_iov, rx_entry->iov_count, FI_REMOTE_READ, rx_entry->iov);
 	rx_entry->tx_id = rta_hdr->tx_id;
 	rx_entry->total_len = ofi_total_iov_len(rx_entry->iov, rx_entry->iov_count);
 	/*
