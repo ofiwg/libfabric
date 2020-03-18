@@ -2,6 +2,7 @@ dnl
 dnl Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
 dnl Copyright (c) 2019 Intel, Inc.  All rights reserved.
 dnl Copyright (c) 2019-2020 Amazon.com, Inc. or its affiliates. All rights reserved.
+dnl (C) Copyright 2020 Hewlett Packard Enterprise Development LP.
 dnl
 dnl Process this file with autoconf to produce a configure script.
 
@@ -498,6 +499,27 @@ FI_CHECK_PACKAGE([cuda],
 CPPFLAGS="$CPPFLAGS $cuda_CPPFLAGS"
 LDFLAGS="$LDFLAGS $cuda_LDFLAGS"
 LIBS="$LIBS $cuda_LIBS"
+
+dnl Check for ROCr runtime libraries.
+AC_ARG_WITH([rocr],
+	    [AC_HELP_STRING([--with-rocr=DIR],
+			    [Provide path to where the ROCr/HSA development
+			    and runtime libraries are installed.])],
+	    [], [])
+
+FI_CHECK_PACKAGE([rocr],
+		 [hsa/hsa_ext_amd.h],
+		 [hsa-runtime64],
+		 [hsa_amd_pointer_info],
+		 [],
+		 [$with_rocr],
+		 [$with_rocr/lib],
+		 [AC_DEFINE([HAVE_ROCR], [1], [ROCr HSA support])],
+		 [], [])
+
+CPPFLAGS="$CPPFLAGS $rocr_CPPFLAGS"
+LDFLAGS="$LDFLAGS $rocr_LDFLAGS"
+LIBS="$LIBS $rocr_LIBS"
 
 dnl Provider-specific checks
 FI_PROVIDER_INIT
