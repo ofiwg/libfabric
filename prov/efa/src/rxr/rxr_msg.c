@@ -568,6 +568,9 @@ int rxr_msg_proc_unexp_msg_list(struct rxr_ep *ep, const struct fi_msg *msg,
 		rx_entry->iov_count = msg->iov_count;
 	}
 
+	if (msg->desc)
+		memcpy(rx_entry->desc, msg->desc, sizeof(void*) * msg->iov_count);
+
 	FI_DBG(&rxr_prov, FI_LOG_EP_CTRL,
 	       "Match found in unexp list for a posted recv msg_id: %" PRIu32
 	       " total_len: %" PRIu64 " tag: %lx\n",
