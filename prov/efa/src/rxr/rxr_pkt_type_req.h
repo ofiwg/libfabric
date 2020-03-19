@@ -59,7 +59,7 @@
 /*
  * Utilities shared by all REQ packets
  *
- *     Flags
+ *     Packet Header Flags
  */
 #define RXR_REQ_OPT_RAW_ADDR_HDR	BIT_ULL(0)
 #define RXR_REQ_OPT_CQ_DATA_HDR		BIT_ULL(1)
@@ -67,6 +67,11 @@
 #define RXR_REQ_TAGGED			BIT_ULL(3)
 #define RXR_REQ_RMA			BIT_ULL(4)
 #define RXR_REQ_ATOMIC			BIT_ULL(5)
+
+/*
+ *     Extra Feature Flags
+ */
+#define RXR_REQ_FEATURE_RDMA_READ	BIT_ULL(0)
 
 /*
  *     Utility struct and functions for

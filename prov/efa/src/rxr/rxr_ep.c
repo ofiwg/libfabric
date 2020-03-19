@@ -488,10 +488,8 @@ int rxr_ep_set_tx_credit_request(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_
 	 * initialized on the first recv so as to not allocate resources unless
 	 * necessary.
 	 */
-	if (!peer->tx_init) {
-		peer->tx_credits = rxr_env.tx_max_credits;
-		peer->tx_init = 1;
-	}
+	if (!peer->tx_init)
+		rxr_ep_peer_init_tx(peer);
 
 	/*
 	 * Divy up available credits to outstanding transfers and request the
@@ -546,9 +544,8 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 		 * complete a data operation or an internal RxR transfer after
 		 * the EP is shutdown.
 		 */
-		if (peer->state == RXR_PEER_CONNREQ)
-			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
-				"Closing EP with unacked CONNREQs in flight\n");
+		if ((peer->flags & RXR_PEER_REQ_SENT) && !(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED))
+			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "Closing EP with unacked CONNREQs in flight\n");
 	}
 
 	dlist_foreach(&rxr_ep->rx_unexp_list, entry) {
@@ -787,6 +784,16 @@ static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 	return ret;
 }
 
+static
+void rxr_ep_set_features(struct rxr_ep *ep)
+{
+	memset(ep->features, 0, sizeof(ep->features));
+
+	/* RDMA read is an extra feature defined in protocol version 4 (the base version) */
+	if (efa_ep_support_rdma_read(ep->rdm_ep))
+		ep->features[0] |= RXR_REQ_FEATURE_RDMA_READ;
+}
+
 static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 {
 	ssize_t ret;
@@ -807,6 +814,9 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 			return ret;
 
 		fastlock_acquire(&ep->util_ep.lock);
+
+		rxr_ep_set_features(ep);
+
 		for (i = 0; i < rx_size; i++) {
 			if (i == rx_size - 1)
 				flags = 0;
@@ -1310,10 +1320,10 @@ static inline void rxr_ep_check_peer_backoff_timer(struct rxr_ep *ep)
 
 	dlist_foreach_container_safe(&ep->peer_backoff_list, struct rxr_peer,
 				     peer, rnr_entry, tmp) {
-		peer->rnr_state &= ~RXR_PEER_BACKED_OFF;
+		peer->flags &= ~RXR_PEER_BACKED_OFF;
 		if (!rxr_peer_timeout_expired(ep, peer, ofi_gettime_us()))
 			continue;
-		peer->rnr_state = 0;
+		peer->flags &= ~RXR_PEER_IN_BACKOFF;
 		dlist_remove(&peer->rnr_entry);
 	}
 }

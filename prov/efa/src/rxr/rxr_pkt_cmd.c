@@ -62,7 +62,7 @@ ssize_t rxr_pkt_post_data(struct rxr_ep *rxr_ep,
 	data_pkt = (struct rxr_data_pkt *)pkt_entry->pkt;
 
 	data_pkt->hdr.type = RXR_DATA_PKT;
-	data_pkt->hdr.version = RXR_PROTOCOL_VERSION;
+	data_pkt->hdr.version = RXR_BASE_PROTOCOL_VERSION;
 	data_pkt->hdr.flags = 0;
 
 	data_pkt->hdr.rx_id = tx_entry->rx_id;
@@ -277,8 +277,8 @@ ssize_t rxr_pkt_post_ctrl_once(struct rxr_ep *rxr_ep, int entry_type, void *x_en
 		return err;
 	}
 
+	peer->flags |= RXR_PEER_REQ_SENT;
 	rxr_pkt_handle_ctrl_sent(rxr_ep, pkt_entry);
-
 	if (inject)
 		rxr_pkt_entry_release_tx(rxr_ep, pkt_entry);
 
@@ -348,11 +348,9 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct fi_cq_data_entry *
 	struct rxr_peer *peer;
 
 	pkt_entry = (struct rxr_pkt_entry *)comp->op_context;
-	assert(rxr_get_base_hdr(pkt_entry->pkt)->version ==
-	       RXR_PROTOCOL_VERSION);
 
 	switch (rxr_get_base_hdr(pkt_entry->pkt)->type) {
-	case RXR_CONNACK_PKT:
+	case RXR_HANDSHAKE_PKT:
 		break;
 	case RXR_CTS_PKT:
 		break;
@@ -437,22 +435,21 @@ fi_addr_t rxr_pkt_insert_addr(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 	struct rxr_base_hdr *base_hdr;
 
 	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
-	if (base_hdr->version != RXR_PROTOCOL_VERSION) {
-		char buffer[ep->core_addrlen * 3];
+	if (base_hdr->version < RXR_BASE_PROTOCOL_VERSION) {
+		char host_gid[ep->core_addrlen * 3];
 		int length = 0;
 
 		for (i = 0; i < ep->core_addrlen; i++)
-			length += sprintf(&buffer[length], "%02x ",
+			length += sprintf(&host_gid[length], "%02x ",
 					  ep->core_addr[i]);
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
-			"Host %s:Invalid protocol version %d. Expected protocol version %d.\n",
-			buffer,
-			rxr_get_base_hdr(pkt_entry->pkt)->version,
-			RXR_PROTOCOL_VERSION);
+			"Host %s received a packet with invalid protocol version %d.\n"
+			"This host can only support protocol version %d and above.\n",
+			host_gid, base_hdr->version, RXR_BASE_PROTOCOL_VERSION);
 		efa_eq_write_error(&ep->util_ep, FI_EIO, -FI_EINVAL);
-		fprintf(stderr, "Invalid protocol version %d. Expected protocol version %d. %s:%d\n",
-			rxr_get_base_hdr(pkt_entry->pkt)->version,
-			RXR_PROTOCOL_VERSION, __FILE__, __LINE__);
+		fprintf(stderr, "Host %s received a packet with invalid protocol version %d.\n"
+			"This host can only support protocol version %d and above. %s:%d\n",
+			host_gid, base_hdr->version, RXR_BASE_PROTOCOL_VERSION, __FILE__, __LINE__);
 		abort();
 	}
 
@@ -500,10 +497,10 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 	else
 		pkt_entry->addr = src_addr;
 
-	assert(rxr_get_base_hdr(pkt_entry->pkt)->version ==
-	       RXR_PROTOCOL_VERSION);
-
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+	if (!(peer->flags & RXR_PEER_HANDSHAKE_SENT)) {
+		rxr_pkt_post_handshake(ep, peer, pkt_entry->addr);
+	}
 
 	if (rxr_env.enable_shm_transfer && peer->is_local)
 		ep->posted_bufs_shm--;
@@ -517,11 +514,17 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 		assert(0 && "deprecated RTS pakcet received");
 		rxr_cq_handle_cq_error(ep, -FI_EIO);
 		return;
+	case RXR_RETIRED_CONNACK_PKT:
+		FI_WARN(&rxr_prov, FI_LOG_CQ,
+			"Received a CONNACK packet, which has been retired since protocol version 4\n");
+		assert(0 && "deprecated CONNACK pakcet received");
+		rxr_cq_handle_cq_error(ep, -FI_EIO);
+		return;
 	case RXR_EOR_PKT:
 		rxr_pkt_handle_eor_recv(ep, pkt_entry);
 		return;
-	case RXR_CONNACK_PKT:
-		rxr_pkt_handle_connack_recv(ep, pkt_entry, src_addr);
+	case RXR_HANDSHAKE_PKT:
+		rxr_pkt_handle_handshake_recv(ep, pkt_entry);
 		return;
 	case RXR_CTS_PKT:
 		rxr_pkt_handle_cts_recv(ep, pkt_entry);
@@ -562,11 +565,19 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 		rxr_pkt_handle_rtr_recv(ep, pkt_entry);
 		return;
 	default:
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
-			"invalid control pkt type %d\n",
-			rxr_get_base_hdr(pkt_entry->pkt)->type);
-		assert(0 && "invalid control pkt type");
-		rxr_cq_handle_cq_error(ep, -FI_EIO);
+		if (base_hdr->type >= RXR_EXTRA_REQ_PKT_END) {
+			FI_WARN(&rxr_prov, FI_LOG_CQ,
+				"Peer %d is requesting feature %d, which this EP does not support.\n"
+				"The EP informed the peer about this issue via a handshake packet.\n"
+				"This packet is therefore ignored\n", (int)pkt_entry->addr, base_hdr->type);
+		} else {
+			FI_WARN(&rxr_prov, FI_LOG_CQ,
+				"invalid control pkt type %d\n",
+				rxr_get_base_hdr(pkt_entry->pkt)->type);
+			assert(0 && "invalid control pkt type");
+			rxr_cq_handle_cq_error(ep, -FI_EIO);
+		}
+
 		return;
 	}
 }
@@ -580,13 +591,17 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 #define RXR_PKT_DUMP_DATA_LEN 64
 
 static
-void rxr_pkt_print_connack(char *prefix,
-			   struct rxr_connack_hdr *connack_hdr)
+void rxr_pkt_print_handshake(char *prefix,
+			     struct rxr_handshake_hdr *handshake_hdr)
 {
 	FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
-	       "%s RxR CONNACK packet - version: %" PRIu8
-	       " flags: %x\n", prefix, connack_hdr->version,
-	       connack_hdr->flags);
+	       "%s RxR HANDSHAKE packet - version: %" PRIu8
+	       " flags: %x\n", prefix, handshake_hdr->version,
+	       handshake_hdr->flags);
+
+	FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
+	       "%s RxR HANDSHAKE packet, maxproto: %d\n",
+	       prefix, handshake_hdr->maxproto);
 }
 
 static
@@ -630,8 +645,8 @@ void rxr_pkt_print_data(char *prefix, struct rxr_data_pkt *data_pkt)
 void rxr_pkt_print(char *prefix, struct rxr_ep *ep, struct rxr_base_hdr *hdr)
 {
 	switch (hdr->type) {
-	case RXR_CONNACK_PKT:
-		rxr_pkt_print_connack(prefix, (struct rxr_connack_hdr *)hdr);
+	case RXR_HANDSHAKE_PKT:
+		rxr_pkt_print_handshake(prefix, (struct rxr_handshake_hdr *)hdr);
 		break;
 	case RXR_CTS_PKT:
 		rxr_pkt_print_cts(prefix, (struct rxr_cts_hdr *)hdr);

@@ -100,22 +100,23 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 		return rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
 						  RXR_MEDIUM_MSGRTM_PKT + tagged, 0);
 
-	if (efa_support_rdma_read(rxr_ep->rdm_ep)) {
+	if (efa_ep_support_rdma_read(rxr_ep->rdm_ep) && rxr_peer_support_rdma_read(peer)) {
 		/* use read message protocol */
 		err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
 						 RXR_READ_MSGRTM_PKT + tagged, 0);
 
-		if (err == -FI_ENOMEM) {
-			/*
-			 * If memory registration failed, fall back to use long
-			 * message protocol
-			 */
-			err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
-							 RXR_LONG_MSGRTM_PKT + tagged, 0);
-		}
+		if (err != -FI_ENOMEM)
+			return err;
 
-		return err;
+		/*
+		 * If memory registration failed, we continue here
+		 * and fall back to use long message protocol
+		 */
 	}
+
+	err = rxr_ep_set_tx_credit_request(rxr_ep, tx_entry);
+	if (OFI_UNLIKELY(err))
+		return err;
 
 	return rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
 					  RXR_LONG_MSGRTM_PKT + tagged, 0);
@@ -153,19 +154,11 @@ ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 		goto out;
 	}
 
-	peer = rxr_ep_get_peer(rxr_ep, msg->addr);
 	assert(tx_entry->op == ofi_op_msg || tx_entry->op == ofi_op_tagged);
 
-	if (!(rxr_env.enable_shm_transfer && peer->is_local)) {
-		err = rxr_ep_set_tx_credit_request(rxr_ep, tx_entry);
-		if (OFI_UNLIKELY(err)) {
-			rxr_release_tx_entry(rxr_ep, tx_entry);
-			goto out;
-		}
-	}
-
+	peer = rxr_ep_get_peer(rxr_ep, tx_entry->addr);
+	assert(peer);
 	tx_entry->msg_id = peer->next_msg_id++;
-
 	err = rxr_msg_post_rtm(rxr_ep, tx_entry);
 	if (OFI_UNLIKELY(err)) {
 		rxr_release_tx_entry(rxr_ep, tx_entry);

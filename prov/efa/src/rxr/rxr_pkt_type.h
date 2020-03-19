@@ -59,7 +59,7 @@
  */
 
 #define RXR_RETIRED_RTS_PKT	1
-#define RXR_CONNACK_PKT		2
+#define RXR_RETIRED_CONNACK_PKT	2
 #define RXR_CTS_PKT		3
 #define RXR_DATA_PKT		4
 #define RXR_READRSP_PKT		5
@@ -90,6 +90,7 @@
 #define RXR_READ_TAGRTM_PKT		129
 #define RXR_READ_RTW_PKT		130
 #define RXR_READ_RTR_PKT		131
+#define RXR_EXTRA_REQ_PKT_END		132
 
 /*
  *  Packet fields common to all rxr packets. The other packet headers below must
@@ -117,39 +118,38 @@ struct rxr_rx_entry;
 struct rxr_read_entry;
 
 /*
- *  CONNACK packet header and functions
+ *  HANDSHAKE packet header and functions
  *  implementation of the functions are in rxr_pkt_type_misc.c
  */
-struct rxr_connack_hdr {
+struct rxr_handshake_hdr {
 	uint8_t type;
 	uint8_t version;
 	uint16_t flags;
 	/* end of rxr_base_hdr */
+	uint32_t maxproto;
+	uint64_t features[0];
 };
 
 #if defined(static_assert) && defined(__x86_64__)
-static_assert(sizeof(struct rxr_connack_hdr) == 4, "rxr_connack_hdr check");
+static_assert(sizeof(struct rxr_handshake_hdr) == 8, "rxr_handshake_hdr check");
 #endif
 
-#define RXR_CONNACK_HDR_SIZE		(sizeof(struct rxr_connack_hdr))
-
 static inline
-struct rxr_connack_hdr *rxr_get_connack_hdr(void *pkt)
+struct rxr_handshake_hdr *rxr_get_handshake_hdr(void *pkt)
 {
-	return (struct rxr_connack_hdr *)pkt;
+	return (struct rxr_handshake_hdr *)pkt;
 }
 
-ssize_t rxr_pkt_init_connack(struct rxr_ep *ep,
-			     struct rxr_pkt_entry *pkt_entry,
-			     fi_addr_t addr);
+ssize_t rxr_pkt_init_handshake(struct rxr_ep *ep,
+			       struct rxr_pkt_entry *pkt_entry,
+			       fi_addr_t addr);
 
-void rxr_pkt_post_connack(struct rxr_ep *ep,
-			  struct rxr_peer *peer,
-			  fi_addr_t addr);
+void rxr_pkt_post_handshake(struct rxr_ep *ep,
+			    struct rxr_peer *peer,
+			    fi_addr_t addr);
 
-void rxr_pkt_handle_connack_recv(struct rxr_ep *ep,
-				 struct rxr_pkt_entry *pkt_entry,
-				 fi_addr_t addr);
+void rxr_pkt_handle_handshake_recv(struct rxr_ep *ep,
+				   struct rxr_pkt_entry *pkt_entry);
 /*
  *  CTS packet data structures and functions.
  *  Definition of the functions is in rxr_pkt_type_misc.c

@@ -282,7 +282,6 @@ ssize_t rxr_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_
 	       flags);
 
 	rxr_ep = container_of(ep, struct rxr_ep, util_ep.ep_fid.fid);
-
 	assert(msg->iov_count <= rxr_ep->tx_iov_limit);
 
 	rxr_perfset_start(rxr_ep, perf_rxr_tx);
@@ -303,7 +302,8 @@ ssize_t rxr_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_
 	use_lower_ep_read = false;
 	if (rxr_env.enable_shm_transfer && peer->is_local) {
 		use_lower_ep_read = true;
-	} else if (efa_support_rdma_read(rxr_ep->rdm_ep) &&
+	} else if (efa_ep_support_rdma_read(rxr_ep->rdm_ep) &&
+		   rxr_peer_support_rdma_read(peer) &&
 		   tx_entry->total_len >= rxr_env.efa_max_emulated_read_size) {
 		use_lower_ep_read = true;
 	}
@@ -367,13 +367,44 @@ ssize_t rxr_rma_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
 }
 
 /* rma_write functions */
+ssize_t rxr_rma_post_rtw(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
+{
+	ssize_t err;
+	struct rxr_peer *peer;
+
+	peer = rxr_ep_get_peer(ep, tx_entry->addr);
+	assert(peer);
+	if (peer->is_local)
+		return rxr_rma_post_shm_write(ep, tx_entry);
+
+	/* Inter instance */
+	if (tx_entry->total_len < rxr_pkt_req_max_data_size(ep, tx_entry->addr, RXR_EAGER_RTW_PKT))
+		return rxr_pkt_post_ctrl_or_queue(ep, RXR_TX_ENTRY, tx_entry, RXR_EAGER_RTW_PKT, 0);
+
+	if (tx_entry->total_len >= rxr_env.efa_max_emulated_write_size &&
+	    efa_ep_support_rdma_read(ep->rdm_ep) && rxr_peer_support_rdma_read(peer)) {
+		err = rxr_pkt_post_ctrl_or_queue(ep, RXR_TX_ENTRY, tx_entry, RXR_READ_RTW_PKT, 0);
+		if (err != -FI_ENOMEM)
+			return err;
+		/*
+		 * If read write protocol failed due to memory registration, fall back to use long
+		 * message protocol
+		 */
+	}
+
+	err = rxr_ep_set_tx_credit_request(ep, tx_entry);
+	if (OFI_UNLIKELY(err))
+		return err;
+
+	return rxr_pkt_post_ctrl_or_queue(ep, RXR_TX_ENTRY, tx_entry, RXR_LONG_RTW_PKT, 0);
+}
+
 ssize_t rxr_rma_writemsg(struct fid_ep *ep,
 			 const struct fi_msg_rma *msg,
 			 uint64_t flags)
 {
 	ssize_t err;
 	struct rxr_ep *rxr_ep;
-	struct rxr_peer *peer;
 	struct rxr_tx_entry *tx_entry;
 
 	FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
@@ -387,9 +418,6 @@ ssize_t rxr_rma_writemsg(struct fid_ep *ep,
 	rxr_perfset_start(rxr_ep, perf_rxr_tx);
 	fastlock_acquire(&rxr_ep->util_ep.lock);
 
-	peer = rxr_ep_get_peer(rxr_ep, msg->addr);
-	assert(peer);
-
 	tx_entry = rxr_rma_alloc_tx_entry(rxr_ep, msg, ofi_op_write, flags);
 	if (OFI_UNLIKELY(!tx_entry)) {
 		rxr_ep_progress_internal(rxr_ep);
@@ -397,31 +425,9 @@ ssize_t rxr_rma_writemsg(struct fid_ep *ep,
 		goto out;
 	}
 
-	if (rxr_env.enable_shm_transfer && peer->is_local) {
-		err = rxr_rma_post_shm_write(rxr_ep, tx_entry);
-		if (OFI_UNLIKELY(err))
-			rxr_release_tx_entry(rxr_ep, tx_entry);
-	}  else if (tx_entry->total_len < rxr_pkt_req_max_data_size(rxr_ep, tx_entry->addr, RXR_EAGER_RTW_PKT)) {
-		err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry, RXR_EAGER_RTW_PKT, 0);
-		if (OFI_UNLIKELY(err))
-			rxr_release_tx_entry(rxr_ep, tx_entry);
-	} else if (!efa_support_rdma_read(rxr_ep->rdm_ep) ||
-		   tx_entry->total_len < rxr_env.efa_max_emulated_write_size) {
-		err = rxr_ep_set_tx_credit_request(rxr_ep, tx_entry);
-		if (OFI_UNLIKELY(err)) {
-			rxr_release_tx_entry(rxr_ep, tx_entry);
-			goto out;
-		}
-
-		err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry, RXR_LONG_RTW_PKT, 0);
-		if (OFI_UNLIKELY(err))
-			rxr_release_tx_entry(rxr_ep, tx_entry);
-	} else {
-		err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry, RXR_READ_RTW_PKT, 0);
-		if (OFI_UNLIKELY(err))
-			rxr_release_tx_entry(rxr_ep, tx_entry);
-	}
-
+	err = rxr_rma_post_rtw(rxr_ep, tx_entry);
+	if (OFI_UNLIKELY(err))
+		rxr_release_tx_entry(rxr_ep, tx_entry);
 out:
 	fastlock_release(&rxr_ep->util_ep.lock);
 	rxr_perfset_end(rxr_ep, perf_rxr_tx);

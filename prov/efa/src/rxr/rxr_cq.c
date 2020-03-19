@@ -258,10 +258,10 @@ static inline void rxr_cq_queue_pkt(struct rxr_ep *ep,
 	 * expire.
 	 */
 	peer->rnr_ts = ofi_gettime_us();
-	if (peer->rnr_state & RXR_PEER_IN_BACKOFF)
+	if (peer->flags & RXR_PEER_IN_BACKOFF)
 		goto queue_pkt;
 
-	peer->rnr_state |= RXR_PEER_IN_BACKOFF;
+	peer->flags |= RXR_PEER_IN_BACKOFF;
 
 	if (!peer->timeout_interval) {
 		if (rxr_env.timeout_interval)
@@ -279,8 +279,8 @@ static inline void rxr_cq_queue_pkt(struct rxr_ep *ep,
 		       peer->rnr_queued_pkt_cnt);
 	} else {
 		/* Only backoff once per peer per progress thread loop. */
-		if (!(peer->rnr_state & RXR_PEER_BACKED_OFF)) {
-			peer->rnr_state |= RXR_PEER_BACKED_OFF;
+		if (!(peer->flags & RXR_PEER_BACKED_OFF)) {
+			peer->flags |= RXR_PEER_BACKED_OFF;
 			peer->rnr_timeout_exp++;
 			FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
 			       "increasing backoff for peer: %" PRIu64
@@ -348,17 +348,17 @@ int rxr_cq_handle_cq_error(struct rxr_ep *ep, ssize_t err)
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 
 	/*
-	 * A connack send could fail at the core provider if the peer endpoint
+	 * A handshake send could fail at the core provider if the peer endpoint
 	 * is shutdown soon after it receives a send completion for the REQ
-	 * packet that included src_address. The connack itself is irrelevant if
+	 * packet that included src_address. The handshake itself is irrelevant if
 	 * that happens, so just squelch this error entry and move on without
 	 * writing an error completion or event to the application.
 	 */
-	if (rxr_get_base_hdr(pkt_entry->pkt)->type == RXR_CONNACK_PKT) {
+	if (rxr_get_base_hdr(pkt_entry->pkt)->type == RXR_HANDSHAKE_PKT) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
-			"Squelching error CQE for RXR_CONNACK_PKT\n");
+			"Squelching error CQE for RXR_HANDSHAKE_PKT\n");
 		/*
-		 * CONNACK packets do not have an associated rx/tx entry. Use
+		 * HANDSHAKE packets do not have an associated rx/tx entry. Use
 		 * the flags instead to determine if this is a send or recv.
 		 */
 		if (err_entry.flags & FI_SEND) {
@@ -367,7 +367,7 @@ int rxr_cq_handle_cq_error(struct rxr_ep *ep, ssize_t err)
 		} else if (err_entry.flags & FI_RECV) {
 			rxr_pkt_entry_release_rx(ep, pkt_entry);
 		} else {
-			assert(0 && "unknown err_entry flags in CONNACK packet");
+			assert(0 && "unknown err_entry flags in HANDSHAKE packet");
 		}
 		return 0;
 	}
@@ -603,7 +603,7 @@ int rxr_cq_reorder_msg(struct rxr_ep *ep,
 	 * where duplicate detection is available.
 	 */
 	if (!peer->rx_init)
-		rxr_ep_peer_init(ep, peer);
+		rxr_ep_peer_init_rx(ep, peer);
 
 #if ENABLE_DEBUG
 	if (msg_id != ofi_recvwin_next_exp_id(peer->robuf))
