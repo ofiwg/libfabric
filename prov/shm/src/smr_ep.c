@@ -299,6 +299,78 @@ void smr_format_iov(struct smr_cmd *cmd, const struct iovec *iov, size_t count,
 	memcpy(cmd->msg.data.iov, iov, sizeof(*iov) * count);
 }
 
+int smr_format_mmap(struct smr_ep *ep, struct smr_cmd *cmd,
+		    const struct iovec *iov, size_t count, size_t total_len,
+		    struct smr_tx_entry *pend, struct smr_resp *resp)
+{
+	void *mapped_ptr;
+	int fd, ret, num;
+	uint64_t msg_id;
+	struct smr_ep_name *map_name;
+
+	msg_id = ep->msg_id++;
+	map_name = calloc(1, sizeof(*map_name));
+	if (!map_name) {
+		FI_WARN(&smr_prov, FI_LOG_EP_CTRL, "calloc error\n");
+		return -FI_ENOMEM;
+	}
+	dlist_insert_tail(&map_name->entry, &ep_name_list);
+	num = smr_mmap_name(map_name->name, ep->name, msg_id);
+	if (num < 0) {
+		FI_WARN(&smr_prov, FI_LOG_AV, "generating shm file name failed\n");
+		ret = -errno;
+		goto remove_entry;
+	}
+
+	fd = shm_open(map_name->name, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+	if (fd < 0) {
+		FI_WARN(&smr_prov, FI_LOG_EP_CTRL, "shm_open error\n");
+		ret = -errno;
+		goto remove_entry;
+	}
+
+	ret = ftruncate(fd, total_len);
+	if (ret < 0) {
+		FI_WARN(&smr_prov, FI_LOG_EP_CTRL, "ftruncate error\n");
+		goto unlink_close;
+	}
+
+	mapped_ptr = mmap(NULL, total_len, PROT_READ | PROT_WRITE,
+			  MAP_SHARED, fd, 0);
+	if (mapped_ptr == MAP_FAILED) {
+		FI_WARN(&smr_prov, FI_LOG_EP_CTRL, "mmap error\n");
+		ret = -errno;
+		goto unlink_close;
+	}
+
+	if (ofi_copy_from_iov(mapped_ptr, total_len, iov, count, 0)
+	    != total_len) {
+		FI_WARN(&smr_prov, FI_LOG_EP_CTRL, "copy from iov error\n");
+		ret = -FI_EIO;
+		goto munmap;
+	}
+
+	cmd->msg.hdr.op_src = smr_src_mmap;
+	cmd->msg.hdr.msg_id = msg_id;
+	cmd->msg.hdr.src_data = (uintptr_t) ((char *) resp - (char *) ep->region);
+	cmd->msg.hdr.size = total_len;
+	pend->map_name = map_name;
+
+	munmap(mapped_ptr, total_len);
+	close(fd);
+	return 0;
+
+munmap:
+	munmap(mapped_ptr, total_len);
+unlink_close:
+	shm_unlink(map_name->name);
+	close(fd);
+remove_entry:
+	dlist_remove(&map_name->entry);
+	free(map_name);
+	return ret;
+}
+
 static int smr_ep_close(struct fid *fid)
 {
 	struct smr_ep *ep;

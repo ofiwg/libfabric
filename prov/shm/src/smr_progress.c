@@ -49,25 +49,36 @@ static int smr_progress_resp_entry(struct smr_ep *ep, struct smr_tx_entry *pendi
 	if (fastlock_tryacquire(&peer_smr->lock))
 		return -FI_EAGAIN;
 
-	if (pending->cmd.msg.hdr.op_src == smr_src_iov)
+	switch (pending->cmd.msg.hdr.op_src) {
+	case smr_src_iov:
 		goto out;
+	case smr_src_mmap:
+		shm_unlink(pending->map_name->name);
+		dlist_remove(&pending->map_name->entry);
+		free(pending->map_name);
+		goto out;
+	case smr_src_inject:
+		inj_offset = (size_t) pending->cmd.msg.hdr.src_data;
+		tx_buf = (struct smr_inject_buf *) ((char **) peer_smr +
+						    inj_offset);
+		if (*ret)
+			goto push;
 
-	inj_offset = (size_t) pending->cmd.msg.hdr.src_data;
-	tx_buf = (struct smr_inject_buf *) ((char **) peer_smr +
-					    inj_offset);
+		src = pending->cmd.msg.hdr.op == ofi_op_atomic_compare ?
+		      tx_buf->buf : tx_buf->data;
+		size = ofi_copy_to_iov(pending->iov, pending->iov_count,
+				       0, src, pending->cmd.msg.hdr.size);
 
-	if (*ret)
-		goto push;
-
-	src = pending->cmd.msg.hdr.op == ofi_op_atomic_compare ?
-	      tx_buf->buf : tx_buf->data;
-	size = ofi_copy_to_iov(pending->iov, pending->iov_count,
-			       0, src, pending->cmd.msg.hdr.size);
-
-	if (size != pending->cmd.msg.hdr.size) {
+		if (size != pending->cmd.msg.hdr.size) {
+			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+				"Incomplete rma read/fetch buffer copied\n");
+			*ret = FI_EIO;
+		}
+		break;
+	default:
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-			"Incomplete rma read/fetch buffer copied\n");
-		*ret = FI_EIO;
+			"unidentified operation type\n");
+		goto out;
 	}
 push:
 	smr_freestack_push(smr_inject_pool(peer_smr), tx_buf);
@@ -204,6 +215,74 @@ out:
 	resp->status = ret;
 
 	return -ret;
+}
+
+static int smr_mmap_peer_copy(struct smr_ep *ep, struct smr_cmd *cmd,
+				 struct iovec *iov, size_t iov_count,
+				 size_t *total_len)
+{
+	char shm_name[NAME_MAX];
+	void *mapped_ptr;
+	int peer_id, fd, num;
+	int ret = 0;
+
+	peer_id = (int) cmd->msg.hdr.addr;
+
+	num = smr_mmap_name(shm_name, ep->region->map->peers[peer_id].peer.name,
+			    cmd->msg.hdr.msg_id);
+	if (num < 0) {
+		FI_WARN(&smr_prov, FI_LOG_AV, "generating shm file name failed\n");
+		return -errno;
+	}
+
+	fd = shm_open(shm_name, O_RDWR, S_IRUSR | S_IWUSR);
+	if (fd < 0) {
+		FI_WARN(&smr_prov, FI_LOG_AV, "shm_open error\n");
+		return -errno;
+	}
+
+	mapped_ptr = mmap(NULL, cmd->msg.hdr.size, PROT_READ | PROT_WRITE,
+			  MAP_SHARED, fd, 0);
+	if (mapped_ptr == MAP_FAILED) {
+		FI_WARN(&smr_prov, FI_LOG_AV, "mmap error %s\n", strerror(errno));
+		ret = -errno;
+		goto unlink_close;
+	}
+	*total_len = ofi_copy_to_iov(iov, iov_count, 0, mapped_ptr, cmd->msg.hdr.size);
+	if (*total_len != cmd->msg.hdr.size) {
+		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+			"mmap iov copy out error\n");
+		ret = -FI_EIO;
+		goto munmap;
+	}
+
+munmap:
+	munmap(mapped_ptr, cmd->msg.hdr.size);
+unlink_close:
+	shm_unlink(shm_name);
+	close(fd);
+	return ret;
+}
+
+static int smr_progress_mmap(struct smr_cmd *cmd, struct iovec *iov,
+			     size_t iov_count, size_t *total_len,
+			     struct smr_ep *ep)
+{
+	struct smr_region *peer_smr;
+	struct smr_resp *resp;
+	int peer_id, ret;
+
+	peer_id = (int) cmd->msg.hdr.addr;
+	peer_smr = smr_peer_region(ep->region, peer_id);
+	resp = (struct smr_resp *) ((char *) peer_smr +
+				    (uintptr_t) cmd->msg.hdr.src_data);
+
+	ret = smr_mmap_peer_copy(ep, cmd, iov, iov_count, total_len);
+
+	//Status must be set last (signals peer: op done, valid resp entry)
+	resp->status = ret;
+
+	return ret;
 }
 
 static bool smr_progress_multi_recv(struct smr_ep *ep,
@@ -344,6 +423,10 @@ static int smr_progress_msg_common(struct smr_ep *ep, struct smr_cmd *cmd,
 	case smr_src_iov:
 		entry->err = smr_progress_iov(cmd, entry->iov, entry->iov_count,
 					      &total_len, ep, 0);
+		break;
+	case smr_src_mmap:
+		entry->err = smr_progress_mmap(cmd, entry->iov, entry->iov_count,
+					       &total_len, ep);
 		break;
 	default:
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,

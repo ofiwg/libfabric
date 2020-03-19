@@ -116,6 +116,7 @@ struct smr_tx_entry {
 	void		*context;
 	struct iovec	iov[SMR_IOV_LIMIT];
 	uint32_t	iov_count;
+	struct smr_ep_name *map_name;
 };
 
 struct smr_ep;
@@ -194,6 +195,7 @@ struct smr_ep {
 	size_t			rx_size;
 	size_t			min_multi_recv_size;
 	const char		*name;
+	uint64_t		msg_id;
 	struct smr_region	*region;
 	struct smr_recv_fs	*recv_fs; /* protected by rx_cq lock */
 	struct smr_queue	recv_queue;
@@ -206,6 +208,13 @@ struct smr_ep {
 
 #define smr_ep_rx_flags(smr_ep) ((smr_ep)->util_ep.rx_op_flags)
 #define smr_ep_tx_flags(smr_ep) ((smr_ep)->util_ep.tx_op_flags)
+
+static inline int smr_mmap_name(char *shm_name, const char *ep_name,
+				uint64_t msg_id)
+{
+	return snprintf(shm_name, NAME_MAX - 1, "%s_%ld",
+			ep_name, msg_id);
+}
 
 int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep, void *context);
@@ -231,6 +240,9 @@ void smr_format_inject(struct smr_cmd *cmd, const struct iovec *iov,
 void smr_format_iov(struct smr_cmd *cmd, const struct iovec *iov, size_t count,
 		    size_t total_len, struct smr_region *smr,
 		    struct smr_resp *resp);
+int smr_format_mmap(struct smr_ep *ep, struct smr_cmd *cmd,
+		    const struct iovec *iov, size_t count, size_t total_len,
+		    struct smr_tx_entry *pend, struct smr_resp *resp);
 
 int smr_complete_tx(struct smr_ep *ep, void *context, uint32_t op,
 		uint16_t flags, uint64_t err);

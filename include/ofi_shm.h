@@ -72,6 +72,7 @@ enum {
 	smr_src_inline,	/* command data */
 	smr_src_inject,	/* inject buffers */
 	smr_src_iov,	/* reference iovec via CMA */
+	smr_src_mmap,	/* mmap-based fallback protocol */
 };
 
 #define SMR_REMOTE_CQ_DATA	(1 << 0)
