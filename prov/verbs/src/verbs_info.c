@@ -256,6 +256,13 @@ static int vrb_check_hints(uint32_t version, const struct fi_info *hints,
 	}
 
 	if (hints->domain_attr) {
+		if (hints->domain_attr->name &&
+		    strcasecmp(hints->domain_attr->name, info->domain_attr->name)) {
+			VERBS_INFO(FI_LOG_CORE, "skipping device %s (want %s)\n",
+				   info->domain_attr->name, hints->domain_attr->name);
+			return -FI_ENODATA;
+		}
+
 		ret = ofi_check_domain_attr(&vrb_prov, version,
 					    info->domain_attr,
 					    hints);
