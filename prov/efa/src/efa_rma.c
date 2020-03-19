@@ -43,13 +43,15 @@ ssize_t efa_rma_post_read(struct efa_ep *ep, const struct fi_msg_rma *msg, uint6
 	struct efa_qp *qp;
 	struct ibv_mr *ibv_mr;
 	struct efa_conn *conn;
+	struct ibv_sge sge_list[msg->iov_count];
+	int i;
 
 	if (OFI_UNLIKELY(msg->iov_count > ep->domain->ctx->max_wr_rdma_sge)) {
 		EFA_WARN(FI_LOG_CQ, "invalid iov_count!\n");
 		return -FI_EINVAL;
 	}
 
-	if (OFI_UNLIKELY(msg->rma_iov_count > ep->domain->ctx->max_wr_rdma_sge)) {
+	if (OFI_UNLIKELY(msg->rma_iov_count > ep->domain->info->tx_attr->rma_iov_limit)) {
 		EFA_WARN(FI_LOG_CQ, "invalid rma_iov_count!\n");
 		return -FI_EINVAL;
 	}
@@ -61,15 +63,23 @@ ssize_t efa_rma_post_read(struct efa_ep *ep, const struct fi_msg_rma *msg, uint6
 	}
 
 	/* caller must provide desc because EFA require FI_MR_LOCAL */
-	assert(msg->desc && msg->desc[0]);
+	assert(msg->desc);
 
+	/* ep->domain->info->tx_attr->rma_iov_limit is set to 1 */
 	qp = ep->qp;
 	ibv_wr_start(qp->ibv_qp_ex);
 	qp->ibv_qp_ex->wr_id = (uintptr_t)msg->context;
 	ibv_wr_rdma_read(qp->ibv_qp_ex, msg->rma_iov[0].key, msg->rma_iov[0].addr);
 
-	ibv_mr = (struct ibv_mr *)msg->desc[0];
-	ibv_wr_set_sge(qp->ibv_qp_ex, ibv_mr->lkey, (uint64_t)msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len);
+	for (i = 0; i < msg->iov_count; ++i) {
+		sge_list[i].addr = (uint64_t)msg->msg_iov[i].iov_base;
+		sge_list[i].length = msg->msg_iov[i].iov_len;
+		assert(msg->desc[i]);
+		ibv_mr = (struct ibv_mr *)msg->desc[i];
+		sge_list[i].lkey = ibv_mr->lkey;
+	}
+
+	ibv_wr_set_sge_list(qp->ibv_qp_ex, msg->iov_count, sge_list);
 	conn = ep->av->addr_to_conn(ep->av, msg->addr);
 	ibv_wr_set_ud_addr(qp->ibv_qp_ex, conn->ah.ibv_ah, conn->ep_addr.qpn, conn->ep_addr.qkey);
 	return ibv_wr_complete(qp->ibv_qp_ex);
