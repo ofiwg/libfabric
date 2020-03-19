@@ -39,6 +39,8 @@
 
 #include <netdb.h>
 #include <inttypes.h>
+#include <sys/time.h>
+#include <stdlib.h>
 
 #include <infiniband/efadv.h>
 
@@ -1014,8 +1016,19 @@ static int efa_init_info(const struct fi_info **all_infos)
 
 struct fi_provider *init_lower_efa_prov()
 {
+	int err;
+	struct timeval tv;
+	struct timezone tz;
+
 	if (efa_init_info(&efa_util_prov.info))
 		return NULL;
 
+	err = gettimeofday(&tv, &tz);
+	if (err) {
+		EFA_WARN(FI_LOG_FABRIC, "Unable to get time, which is used as random seed.\n");
+		return NULL;
+	}
+
+	srandom(tv.tv_usec);
 	return &efa_prov;
 }

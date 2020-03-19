@@ -121,7 +121,6 @@ static int efa_ep_create_qp_ex(struct efa_ep *ep,
 	}
 
 	qp->ibv_qp_ex = ibv_qp_to_qp_ex(qp->ibv_qp);
-	srandom(time(NULL));
 	qp->qkey = random() & 0x7fffffff;
 	err = efa_ep_modify_qp_rst2rts(qp);
 	if (err)
