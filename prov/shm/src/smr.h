@@ -116,6 +116,7 @@ struct smr_tx_entry {
 	void		*context;
 	struct iovec	iov[SMR_IOV_LIMIT];
 	uint32_t	iov_count;
+	void		*map_ptr;
 	struct smr_ep_name *map_name;
 };
 

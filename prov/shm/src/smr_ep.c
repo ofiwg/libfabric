@@ -343,11 +343,16 @@ int smr_format_mmap(struct smr_ep *ep, struct smr_cmd *cmd,
 		goto unlink_close;
 	}
 
-	if (ofi_copy_from_iov(mapped_ptr, total_len, iov, count, 0)
-	    != total_len) {
-		FI_WARN(&smr_prov, FI_LOG_EP_CTRL, "copy from iov error\n");
-		ret = -FI_EIO;
-		goto munmap;
+	if (cmd->msg.hdr.op != ofi_op_read_req) {
+		if (ofi_copy_from_iov(mapped_ptr, total_len, iov, count, 0)
+		    != total_len) {
+			FI_WARN(&smr_prov, FI_LOG_EP_CTRL, "copy from iov error\n");
+			ret = -FI_EIO;
+			goto munmap;
+		}
+		munmap(mapped_ptr, total_len);
+	} else {
+		pend->map_ptr = mapped_ptr;
 	}
 
 	cmd->msg.hdr.op_src = smr_src_mmap;
@@ -356,7 +361,6 @@ int smr_format_mmap(struct smr_ep *ep, struct smr_cmd *cmd,
 	cmd->msg.hdr.size = total_len;
 	pend->map_name = map_name;
 
-	munmap(mapped_ptr, total_len);
 	close(fd);
 	return 0;
 
