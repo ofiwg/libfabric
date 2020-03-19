@@ -158,7 +158,7 @@ const struct fi_tx_attr efa_rdm_tx_attr = {
 	.msg_order		= EFA_MSG_ORDER,
 	.comp_order		= FI_ORDER_NONE,
 	.inject_size		= 0,
-	.rma_iov_limit		= 0,
+	.rma_iov_limit		= 1,
 };
 
 const struct efa_ep_domain efa_rdm_domain = {
