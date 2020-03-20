@@ -122,6 +122,8 @@ struct fi_av_set_attr {
 *count*
 : Indicates the expected the number of members that will be a part of
   the AV set.  The provider uses this to optimize resource allocations.
+  If count is 0, the provider will select a size based on
+  available system configuration data or underlying limitations.
 
 *start_addr / end_addr*
 : The starting and ending addresses, inclusive, to
@@ -132,6 +134,9 @@ struct fi_av_set_attr {
   The start_addr and end_addr must be set to FI_ADDR_NOTAVAIL if creating an
   empty AV set, a communication key is being provided, or the AV is of
   type FI_AV_MAP.
+
+  The number of addresses between start_addr and end_addr must be less than
+  or equal to the specified count value.
 
 *stride*
 : The number of entries between successive addresses included in the
@@ -192,6 +197,12 @@ communication.  The returned address may be used as input into
 fi_join_collective.  Note that attempting to use the address returned from
 fi_av_set_addr (e.g. passing it to fi_join_collective) while simultaneously
 modifying the addresses stored in an AV set results in undefined behavior.
+
+## fi_close
+
+Closes an AV set and releases all resources associated with it.  Any
+operations active at the time an AV set is closed will be aborted, with
+the result of the collective undefined.
 
 # NOTES
 
