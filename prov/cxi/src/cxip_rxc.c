@@ -53,7 +53,7 @@ static int rxc_msg_enable(struct cxip_rxc *rxc)
 	do {
 		sched_yield();
 		cxip_cq_progress(rxc->recv_cq);
-	} while (rxc->rx_pte->state != C_PTLTE_ENABLED);
+	} while (rxc->pte_state != CXIP_PTE_ENABLED);
 
 	CXIP_LOG_DBG("RXC PtlTE enabled: %p\n", rxc);
 
@@ -95,7 +95,7 @@ static int rxc_msg_disable(struct cxip_rxc *rxc)
 	do {
 		sched_yield();
 		cxip_cq_progress(rxc->recv_cq);
-	} while (rxc->rx_pte->state != C_PTLTE_DISABLED);
+	} while (rxc->pte_state != CXIP_PTE_DISABLED);
 
 	CXIP_LOG_DBG("RXC PtlTE disabled: %p\n", rxc);
 
@@ -149,7 +149,8 @@ static int rxc_msg_init(struct cxip_rxc *rxc)
 	}
 
 	ret = cxip_pte_alloc(rxc->ep_obj->if_dom, rxc->recv_cq->evtq,
-			     pid_idx, &pt_opts, &rxc->rx_pte);
+			     pid_idx, &pt_opts, cxip_recv_pte_cb, rxc,
+			     &rxc->rx_pte);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Failed to allocate RX PTE: %d\n", ret);
 		goto put_tx_cmdq;
@@ -373,6 +374,7 @@ struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr, void *context,
 	dlist_init(&rxc->ux_rdzv_sends);
 	dlist_init(&rxc->ux_rdzv_recvs);
 	ofi_atomic_initialize32(&rxc->sink_le_linked, 0);
+	rxc->pte_state = CXIP_PTE_DISABLED;
 
 	rxc->rdzv_threshold = cxip_env.rdzv_threshold;
 	rxc->oflow_buf_size = cxip_env.oflow_buf_size;

@@ -343,6 +343,9 @@ void cxip_util_cq_progress(struct util_cq *util_cq)
 	struct cxip_cq *cq = container_of(util_cq, struct cxip_cq, util_cq);
 
 	cxip_cq_progress(cq);
+
+	/* TODO support multiple EPs/CQ */
+	cxip_ep_ctrl_progress(cq->ep_obj);
 }
 
 /*

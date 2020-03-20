@@ -362,7 +362,9 @@ int cxip_pte_unlink(struct cxip_pte *pte, enum c_ptl_list list,
  */
 int cxip_pte_alloc(struct cxip_if_domain *if_dom, struct cxi_evtq *evtq,
 		   uint64_t pid_idx, struct cxi_pt_alloc_opts *opts,
-		   struct cxip_pte **pte)
+		   void (*state_change_cb)(struct cxip_pte *pte,
+					   enum c_ptlte_state state),
+		   void *ctx, struct cxip_pte **pte)
 {
 	struct cxip_pte *new_pte;
 	int ret, tmp;
@@ -397,7 +399,8 @@ int cxip_pte_alloc(struct cxip_if_domain *if_dom, struct cxi_evtq *evtq,
 
 	new_pte->if_dom = if_dom;
 	new_pte->pid_idx = pid_idx;
-	new_pte->state = C_PTLTE_DISABLED;
+	new_pte->state_change_cb = state_change_cb;
+	new_pte->ctx = ctx;
 
 	*pte = new_pte;
 
@@ -449,7 +452,9 @@ int cxip_pte_state_change(struct cxip_if *dev_if, uint32_t pte_num,
 	dlist_foreach_container(&dev_if->ptes,
 				struct cxip_pte, pte, pte_entry) {
 		if (pte->pte->ptn == pte_num) {
-			pte->state = new_state;
+			if (pte->state_change_cb)
+				pte->state_change_cb(pte, new_state);
+
 			fastlock_release(&dev_if->lock);
 			return FI_SUCCESS;
 		}

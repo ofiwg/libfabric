@@ -2048,6 +2048,9 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 	return FI_SUCCESS;
 }
 
+/*
+ * cxip_recv_cancel() - Cancel outstanding receive request.
+ */
 int cxip_recv_cancel(struct cxip_req *req)
 {
 	int ret;
@@ -2059,6 +2062,25 @@ int cxip_recv_cancel(struct cxip_req *req)
 		req->recv.canceled = true;
 
 	return ret;
+}
+
+/*
+ * cxip_recv_pte_cb() - Process receive PTE state change events.
+ */
+void cxip_recv_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
+{
+	struct cxip_rxc *rxc = (struct cxip_rxc *)pte->ctx;
+
+	switch (state) {
+	case C_PTLTE_ENABLED:
+		rxc->pte_state = CXIP_PTE_ENABLED;
+		break;
+	case C_PTLTE_DISABLED:
+		rxc->pte_state = CXIP_PTE_DISABLED;
+		break;
+	default:
+		CXIP_LOG_ERROR("Unexpected state received: %u\n", state);
+	}
 }
 
 /*

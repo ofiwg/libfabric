@@ -384,13 +384,25 @@ static int cxip_ctx_bind_cq(struct fid *fid, struct fid *bfid, uint64_t flags)
 	struct cxip_rxc *rxc;
 
 	if ((flags | CXIP_EP_CQ_FLAGS) != CXIP_EP_CQ_FLAGS) {
-		CXIP_LOG_ERROR("Invalid cq flag\n");
+		CXIP_LOG_ERROR("Invalid CQ flags\n");
 		return -FI_EINVAL;
 	}
+
 	cxi_cq = container_of(bfid, struct cxip_cq, util_cq.cq_fid.fid);
+
 	switch (fid->fclass) {
 	case FI_CLASS_TX_CTX:
 		txc = container_of(fid, struct cxip_txc, fid.ctx);
+
+		if (cxi_cq->ep_obj) {
+			if (cxi_cq->ep_obj != txc->ep_obj) {
+				CXIP_LOG_ERROR("Binding CQ to multiple EPs not yet supported\n");
+				return -FI_EINVAL;
+			}
+		} else {
+			cxi_cq->ep_obj = txc->ep_obj;
+		}
+
 		if (flags & FI_SEND) {
 			txc->send_cq = cxi_cq;
 			if (flags & FI_SELECTIVE_COMPLETION)
@@ -408,6 +420,16 @@ static int cxip_ctx_bind_cq(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 	case FI_CLASS_RX_CTX:
 		rxc = container_of(fid, struct cxip_rxc, ctx.fid);
+
+		if (cxi_cq->ep_obj) {
+			if (cxi_cq->ep_obj != rxc->ep_obj) {
+				CXIP_LOG_ERROR("Binding CQ to multiple EPs not yet supported\n");
+				return -FI_EINVAL;
+			}
+		} else {
+			cxi_cq->ep_obj = rxc->ep_obj;
+		}
+
 		if (flags & FI_RECV) {
 			rxc->recv_cq = cxi_cq;
 			if (flags & FI_SELECTIVE_COMPLETION)
@@ -563,6 +585,12 @@ static int ep_enable(struct cxip_ep_obj *ep_obj)
 		goto unlock;
 	}
 
+	ret = cxip_ep_ctrl_init(ep_obj);
+	if (ret != FI_SUCCESS) {
+		CXIP_LOG_ERROR("cxip_ep_ctrl_init returned: %u\n", ret);
+		goto free_if_domain;
+	}
+
 	/* Store PID in case it was automatically assigned. */
 	CXIP_LOG_DBG("EP assigned PID: %u\n",
 		     ep_obj->if_dom->dom->pid);
@@ -574,6 +602,8 @@ static int ep_enable(struct cxip_ep_obj *ep_obj)
 
 	return FI_SUCCESS;
 
+free_if_domain:
+	cxip_free_if_domain(ep_obj->if_dom);
 unlock:
 	fastlock_release(&ep_obj->lock);
 
@@ -1019,7 +1049,7 @@ static int cxip_ep_enable(struct fid_ep *ep)
 static void cxip_ep_disable(struct cxip_ep *cxi_ep)
 {
 	if (cxi_ep->ep_obj->enabled) {
-		cxip_ep_mr_disable(cxi_ep->ep_obj);
+		cxip_ep_ctrl_fini(cxi_ep->ep_obj);
 		cxip_free_if_domain(cxi_ep->ep_obj->if_dom);
 		cxi_ep->ep_obj->enabled = false;
 	}

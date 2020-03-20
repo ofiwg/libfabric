@@ -18,6 +18,25 @@
 #define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_EP_CTRL, __VA_ARGS__)
 
 /*
+ * cxip_rdzv_pte_cb() - Process rendezvous source PTE state change events.
+ */
+void cxip_rdzv_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
+{
+	struct cxip_txc *txc = (struct cxip_txc *)pte->ctx;
+
+	switch (state) {
+	case C_PTLTE_ENABLED:
+		txc->pte_state = CXIP_PTE_ENABLED;
+		break;
+	case C_PTLTE_DISABLED:
+		txc->pte_state = CXIP_PTE_DISABLED;
+		break;
+	default:
+		CXIP_LOG_ERROR("Unexpected state received: %u\n", state);
+	}
+}
+
+/*
  * txc_msg_init() - Initialize an RX context for messaging.
  *
  * Allocates and initializes hardware resources used for transmitting messages.
@@ -51,7 +70,8 @@ static int txc_msg_init(struct cxip_txc *txc)
 	/* Reserve the Rendezvous Send PTE */
 	pid_idx = txc->domain->iface->dev->info.rdzv_get_idx;
 	ret = cxip_pte_alloc(txc->ep_obj->if_dom, txc->send_cq->evtq,
-			     pid_idx, &pt_opts, &txc->rdzv_pte);
+			     pid_idx, &pt_opts, cxip_rdzv_pte_cb, txc,
+			     &txc->rdzv_pte);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Failed to allocate RDZV PTE: %d\n", ret);
 		goto put_rx_cmdq;
@@ -75,7 +95,7 @@ static int txc_msg_init(struct cxip_txc *txc)
 	do {
 		sched_yield();
 		cxip_cq_progress(txc->send_cq);
-	} while (txc->rdzv_pte->state != C_PTLTE_ENABLED);
+	} while (txc->pte_state != CXIP_PTE_ENABLED);
 
 	ret = cxip_txc_zbp_init(txc);
 	if (ret) {
