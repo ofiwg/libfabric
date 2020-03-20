@@ -326,7 +326,7 @@ int rxr_cq_handle_cq_error(struct rxr_ep *ep, ssize_t err)
 	}
 
 	ret = fi_cq_readerr(ep->rdm_cq, &err_entry, 0);
-	if (ret != sizeof(err_entry)) {
+	if (ret != 1) {
 		if (ret < 0) {
 			FI_WARN(&rxr_prov, FI_LOG_CQ, "fi_cq_readerr: %s\n",
 				fi_strerror(-ret));
