@@ -122,7 +122,7 @@ void rxr_pkt_handle_handshake_recv(struct rxr_ep *ep,
 	       (handshake_pkt->maxproto - RXR_BASE_PROTOCOL_VERSION + 1) * sizeof(uint64_t));
 	peer->flags |= RXR_PEER_HANDSHAKE_RECEIVED;
 	FI_DBG(&rxr_prov, FI_LOG_CQ,
-	       "HANDSHAKE received from %" PRIu64 "\n", (int)pkt_entry->addr);
+	       "HANDSHAKE received from %" PRIu64 "\n", pkt_entry->addr);
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
 
 }
