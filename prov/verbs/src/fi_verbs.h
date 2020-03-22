@@ -117,10 +117,10 @@
 #define VERBS_CM_DATA_SIZE	(VRB_CM_DATA_SIZE -		\
 				 sizeof(struct vrb_cm_data_hdr))
 
-#define VRB_CM_REJ_CONSUMER_DEFINED	28
+#define VRB_CM_REJ_CONSUMER_DEFINED		28
 #define VRB_CM_REJ_SIDR_CONSUMER_DEFINED	2
 
-#define VERBS_DGRAM_MSG_PREFIX_SIZE	(40)
+#define VERBS_DGRAM_MSG_PREFIX_SIZE		(40)
 
 #define VRB_EP_TYPE(info)						\
 	((info && info->ep_attr) ? info->ep_attr->type : FI_EP_MSG)
@@ -210,17 +210,18 @@ struct ofi_ib_ud_ep_name {
 static inline
 int vrb_dgram_ns_is_service_wildcard(void *svc)
 {
-	return (*(int *)svc == VERBS_IB_UD_NS_ANY_SERVICE);
+	return (*(int *) svc == VERBS_IB_UD_NS_ANY_SERVICE);
 }
 
 static inline
 int vrb_dgram_ns_service_cmp(void *svc1, void *svc2)
 {
-	int service1 = *(int *)svc1, service2 = *(int *)svc2;
+	int service1 = *(int *) svc1, service2 = *(int *) svc2;
 
 	if (vrb_dgram_ns_is_service_wildcard(svc1) ||
 	    vrb_dgram_ns_is_service_wildcard(svc2))
 		return 0;
+
 	return (service1 < service2) ? -1 : (service1 > service2);
 }
 
@@ -311,7 +312,7 @@ int vrb_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 
 struct vrb_pep {
 	struct fid_pep		pep_fid;
-	struct vrb_eq	*eq;
+	struct vrb_eq		*eq;
 	struct rdma_cm_id	*id;
 
 	/* XRC uses SIDR based RDMA CM exchanges for setting up
@@ -347,7 +348,7 @@ struct vrb_domain {
 	enum fi_ep_type			ep_type;
 	struct fi_info			*info;
 	/* The EQ is utilized by verbs/MSG */
-	struct vrb_eq		*eq;
+	struct vrb_eq			*eq;
 	uint64_t			eq_flags;
 
 	/* Indicates that MSG endpoints should use the XRC transport.
@@ -496,14 +497,14 @@ enum vrb_ini_qp_state {
 struct vrb_ini_shared_conn {
 	/* To share, EP must have same remote peer host addr and TX CQ */
 	struct sockaddr			*peer_addr;
-	struct vrb_cq		*tx_cq;
+	struct vrb_cq			*tx_cq;
 
 	/* The physical INI/TGT QPN connection. Virtual connections to the
 	 * same remote peer and TGT QPN will share this connection, with
 	 * the remote end opening the specified XRC TGT QPN for sharing
 	 * During the physical connection setup, phys_conn_id identifies
 	 * the RDMA CM ID (and MSG_EP) associated with the operation. */
-	enum vrb_ini_qp_state	state;
+	enum vrb_ini_qp_state		state;
 	struct rdma_cm_id		*phys_conn_id;
 	struct ibv_qp			*ini_qp;
 	uint32_t			tgt_qpn;
@@ -557,7 +558,7 @@ struct vrb_ep {
 	size_t				tx_credits;
 
 	union {
-		struct rdma_cm_id		*id;
+		struct rdma_cm_id	*id;
 		struct {
 			struct ofi_ib_ud_ep_name	ep_name;
 			int				service;
@@ -566,7 +567,7 @@ struct vrb_ep {
 
 	size_t				inject_limit;
 
-	struct vrb_eq		*eq;
+	struct vrb_eq			*eq;
 	struct vrb_srq_ep		*srq_ep;
 	struct fi_info			*info;
 
@@ -577,7 +578,7 @@ struct vrb_ep {
 	} *wrs;
 	size_t				rx_cq_size;
 	struct rdma_conn_param		conn_param;
-	struct vrb_cm_data_hdr	*cm_hdr;
+	struct vrb_cm_data_hdr		*cm_hdr;
 };
 
 
@@ -593,7 +594,7 @@ struct vrb_context {
 #define VERBS_XRC_EP_MAGIC		0x1F3D5B79
 struct vrb_xrc_ep {
 	/* Must be first */
-	struct vrb_ep		base_ep;
+	struct vrb_ep			base_ep;
 
 	/* XRC only fields */
 	struct rdma_cm_id		*tgt_id;
@@ -835,10 +836,10 @@ static inline ssize_t vrb_convert_ret(int ret)
 int vrb_poll_cq(struct vrb_cq *cq, struct ibv_wc *wc);
 int vrb_save_wc(struct vrb_cq *cq, struct ibv_wc *wc);
 
-#define vrb_init_sge(buf, len, desc) (struct ibv_sge)		\
-	{ .addr = (uintptr_t)buf,					\
-	  .length = (uint32_t)len,					\
-	  .lkey = (uint32_t)(uintptr_t)desc }
+#define vrb_init_sge(buf, len, desc) (struct ibv_sge)	\
+	{ .addr = (uintptr_t) buf,			\
+	  .length = (uint32_t) len,			\
+	  .lkey = (uint32_t) (uintptr_t) desc }
 
 #define vrb_set_sge_iov(sg_list, iov, count, desc)	\
 ({							\
