@@ -348,9 +348,13 @@ struct vrb_domain {
 
 	enum fi_ep_type			ep_type;
 	struct fi_info			*info;
+
 	/* The EQ is utilized by verbs/MSG */
 	struct vrb_eq			*eq;
 	uint64_t			eq_flags;
+
+	uint64_t	threshold;
+	ssize_t		(*send_credits)(struct fid_ep *ep, uint64_t credits);
 
 	/* Indicates that MSG endpoints should use the XRC transport.
 	 * TODO: Move selection of XRC/RC to endpoint info from domain */
@@ -562,6 +566,9 @@ struct vrb_ep {
 
 	/* Protected by send CQ lock */
 	uint64_t			sq_credits;
+	uint64_t			peer_rq_credits;
+	/* Protected by recv CQ lock */
+	uint64_t			rq_credits_avail;
 
 	union {
 		struct rdma_cm_id	*id;
@@ -748,7 +755,6 @@ int vrb_ep_destroy_xrc_qp(struct vrb_xrc_ep *ep);
 int vrb_xrc_close_srq(struct vrb_srq_ep *srq_ep);
 int vrb_sockaddr_len(struct sockaddr *addr);
 
-
 int vrb_init_info(const struct fi_info **all_infos);
 int vrb_getinfo(uint32_t version, const char *node, const char *service,
 		   uint64_t flags, const struct fi_info *hints,
@@ -894,8 +900,11 @@ int vrb_save_wc(struct vrb_cq *cq, struct ibv_wc *wc);
 	vrb_send_iov_flags(ep, wr, (msg)->msg_iov, (msg)->desc,	\
 			      (msg)->iov_count, flags)
 
+#define vrb_wr_consumes_recv(wr)						\
+	( wr->opcode == IBV_WR_SEND || wr->opcode == IBV_WR_SEND_WITH_IMM	\
+	|| wr->opcode == IBV_WR_RDMA_WRITE_WITH_IMM )
 
-ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr);
+ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr, uint64_t flags);
 ssize_t vrb_post_recv(struct vrb_ep *ep, struct ibv_recv_wr *wr);
 
 static inline ssize_t
@@ -909,7 +918,7 @@ vrb_send_buf(struct vrb_ep *ep, struct ibv_send_wr *wr,
 	wr->sg_list = &sge;
 	wr->num_sge = 1;
 
-	return vrb_post_send(ep, wr);
+	return vrb_post_send(ep, wr, 0);
 }
 
 static inline ssize_t
@@ -923,7 +932,7 @@ vrb_send_buf_inline(struct vrb_ep *ep, struct ibv_send_wr *wr,
 	wr->sg_list = &sge;
 	wr->num_sge = 1;
 
-	return vrb_post_send(ep, wr);
+	return vrb_post_send(ep, wr, 0);
 }
 
 static inline ssize_t
@@ -945,8 +954,10 @@ vrb_send_iov_flags(struct vrb_ep *ep, struct ibv_send_wr *wr,
 	if (flags & FI_FENCE)
 		wr->send_flags |= IBV_SEND_FENCE;
 
-	return vrb_post_send(ep, wr);
+	return vrb_post_send(ep, wr, flags);
 }
+
+void vrb_add_credits(struct fid_ep *ep, size_t credits);
 
 int vrb_get_rai_id(const char *node, const char *service, uint64_t flags,
 		      const struct fi_info *hints, struct rdma_addrinfo **rai,
