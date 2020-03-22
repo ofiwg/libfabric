@@ -561,7 +561,7 @@ struct vrb_ep {
 	struct ibv_qp			*ibv_qp;
 
 	/* Protected by send CQ lock */
-	size_t				tx_credits;
+	uint64_t			sq_credits;
 
 	union {
 		struct rdma_cm_id	*id;
