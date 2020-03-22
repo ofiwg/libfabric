@@ -37,15 +37,32 @@
 static struct fi_ops_msg vrb_srq_msg_ops;
 
 
+void vrb_add_credits(struct fid_ep *ep_fid, size_t credits)
+{
+	struct vrb_ep *ep;
+	struct util_cq *cq;
+
+	ep = container_of(ep_fid, struct vrb_ep, util_ep.ep_fid);
+	cq = ep->util_ep.rx_cq;
+
+	cq->cq_fastlock_acquire(&cq->cq_lock);
+	ep->peer_rq_credits += credits;
+	cq->cq_fastlock_release(&cq->cq_lock);
+}
+
 /* Receive CQ credits are pre-allocated */
 ssize_t vrb_post_recv(struct vrb_ep *ep, struct ibv_recv_wr *wr)
 {
+	struct vrb_domain *domain;
 	struct vrb_context *ctx;
 	struct vrb_cq *cq;
 	struct ibv_recv_wr *bad_wr;
+	uint64_t credits_to_give;
 	int ret;
 
 	cq = container_of(ep->util_ep.rx_cq, struct vrb_cq, util_cq);
+	domain = vrb_ep_to_domain(ep);
+
 	cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
 	ctx = ofi_buf_alloc(cq->ctx_pool);
 	if (!ctx)
@@ -60,7 +77,18 @@ ssize_t vrb_post_recv(struct vrb_ep *ep, struct ibv_recv_wr *wr)
 	wr->wr_id = (uintptr_t) ctx->user_ctx;
 	if (ret)
 		goto freebuf;
+
+	if (++ep->rq_credits_avail > domain->threshold) {
+		credits_to_give = ep->rq_credits_avail;
+		ep->rq_credits_avail = 0;
+	} else {
+		credits_to_give = 0;
+	}
 	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
+
+	if (credits_to_give)
+		domain->send_credits(&ep->util_ep.ep_fid, credits_to_give);
+
 	return 0;
 
 freebuf:
@@ -93,6 +121,13 @@ ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr)
 			goto freebuf;
 	}
 
+	if ((wr->opcode == IBV_WR_SEND || wr->opcode == IBV_WR_SEND_WITH_IMM ||
+	    wr->opcode == IBV_WR_RDMA_WRITE_WITH_IMM) && !--ep->peer_rq_credits) {
+		/* Last credit is reserved for credit update */
+		ep->peer_rq_credits++;
+		goto freebuf;
+	}
+
 	cq->credits--;
 	ep->sq_credits--;
 
@@ -113,6 +148,9 @@ ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr)
 	return 0;
 
 credits:
+	if (wr->opcode == IBV_WR_SEND || wr->opcode == IBV_WR_SEND_WITH_IMM ||
+	    wr->opcode == IBV_WR_RDMA_WRITE_WITH_IMM)
+		ep->peer_rq_credits++;
 	cq->credits++;
 	ep->sq_credits++;
 freebuf:
@@ -1039,7 +1077,7 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 	if (info->ep_attr->rx_ctx_cnt == 0 || 
 	    info->ep_attr->rx_ctx_cnt == 1)
 		ep->rx_cq_size = info->rx_attr->size;
-	
+
 	if (info->ep_attr->tx_ctx_cnt == 0 || 
 	    info->ep_attr->tx_ctx_cnt == 1)
 		ep->sq_credits = info->tx_attr->size;

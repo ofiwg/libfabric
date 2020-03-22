@@ -347,9 +347,13 @@ struct vrb_domain {
 
 	enum fi_ep_type			ep_type;
 	struct fi_info			*info;
+
 	/* The EQ is utilized by verbs/MSG */
 	struct vrb_eq			*eq;
 	uint64_t			eq_flags;
+
+	uint64_t	threshold;
+	void		(*send_credits)(struct fid_ep *ep, uint64_t credits);
 
 	/* Indicates that MSG endpoints should use the XRC transport.
 	 * TODO: Move selection of XRC/RC to endpoint info from domain */
@@ -556,6 +560,9 @@ struct vrb_ep {
 
 	/* Protected by send CQ lock */
 	uint64_t			sq_credits;
+	uint64_t			peer_rq_credits;
+	/* Protected by recv CQ lock */
+	uint64_t			rq_credits_avail;
 
 	union {
 		struct rdma_cm_id	*id;
@@ -941,6 +948,8 @@ vrb_send_iov_flags(struct vrb_ep *ep, struct ibv_send_wr *wr,
 
 	return vrb_post_send(ep, wr);
 }
+
+void vrb_add_credits(struct fid_ep *ep, size_t credits);
 
 int vrb_get_rai_id(const char *node, const char *service, uint64_t flags,
 		      const struct fi_info *hints, struct rdma_addrinfo **rai,

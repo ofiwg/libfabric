@@ -984,6 +984,26 @@ int ofi_ns_del_local_name(struct util_ns *ns, void *service, void *name);
 void *ofi_ns_resolve_name(struct util_ns *ns, const char *server,
 			  void *service);
 
+
+/* Setup coordination for credit based flow control between core and util.
+ * threshold - When number of available RQ credits > threshold, the send
+ *     handler will be invoked
+ * add_credits - Increments the number of peer RQ credits available
+ * send_handler - Called to have util code send credit message.  If the
+ *     credit message cannot be sent, the credits should be returned to
+ *     the core by calling add_credits.
+ */
+#define OFI_OPS_FLOW_CTRL "ofix_flow_ctrl_v1"
+
+struct ofi_ops_flow_ctrl {
+	size_t	size;
+	void	(*set_threshold)(struct fid_domain *domain, uint64_t threshold);
+	void	(*add_credits)(struct fid_ep *ep, uint64_t credits);
+	void	(*set_send_handler)(struct fid_domain *domain,
+			void (*send_handler)(struct fid_ep *ep, uint64_t credits));
+};
+
+
 #ifdef __cplusplus
 }
 #endif

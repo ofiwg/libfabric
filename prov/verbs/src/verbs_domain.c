@@ -38,6 +38,49 @@
 #include <malloc.h>
 
 
+
+static void vrb_set_threshold(struct fid_domain *domain_fid, size_t threshold)
+{
+	struct vrb_domain *domain;
+
+	domain = container_of(domain_fid, struct vrb_domain,
+			      util_domain.domain_fid.fid);
+	domain->threshold = threshold;
+}
+
+static void vrb_set_credit_handler(struct fid_domain *domain_fid,
+		void (*credit_handler)(struct fid_ep *ep, size_t credits))
+{
+	struct vrb_domain *domain;
+
+	domain = container_of(domain_fid, struct vrb_domain,
+			      util_domain.domain_fid.fid);
+	domain->send_credits = credit_handler;
+}
+
+struct ofi_ops_flow_ctrl vrb_ops_flow_ctrl = {
+	.size = sizeof(struct ofi_ops_flow_ctrl),
+	.set_threshold = vrb_set_threshold,
+	.add_credits = vrb_add_credits,
+	.set_send_handler = vrb_set_credit_handler,
+};
+
+static int
+vrb_domain_ops_open(struct fid *fid, const char *name, uint64_t flags,
+		    void **ops, void *context)
+{
+	if (flags)
+		return -FI_EBADFLAGS;
+
+	if (!strcasecmp(name, OFI_OPS_FLOW_CTRL)) {
+		*ops = &vrb_ops_flow_ctrl;
+		return 0;
+	}
+
+	return -FI_ENOSYS;
+}
+
+
 #if VERBS_HAVE_QUERY_EX
 static int vrb_odp_flag(struct ibv_context *verbs)
 {
@@ -190,7 +233,7 @@ static struct fi_ops vrb_fid_ops = {
 	.close = vrb_domain_close,
 	.bind = vrb_domain_bind,
 	.control = fi_no_control,
-	.ops_open = fi_no_ops_open,
+	.ops_open = vrb_domain_ops_open,
 };
 
 static struct fi_ops_domain vrb_msg_domain_ops = {
@@ -254,6 +297,7 @@ vrb_domain(struct fid_fabric *fabric, struct fi_info *info,
 
 	_domain->ep_type = VRB_EP_TYPE(info);
 	_domain->flags |= vrb_is_xrc(info) ? VRB_USE_XRC : 0;
+	_domain->threshold = UINT64_MAX; /* disables RQ flow control */
 
 	ret = vrb_open_device_by_name(_domain, info->domain_attr->name);
 	if (ret)
