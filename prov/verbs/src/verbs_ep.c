@@ -84,17 +84,17 @@ ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr)
 	if (!ctx)
 		goto unlock;
 
-	if (!cq->credits || !ep->tx_credits) {
+	if (!cq->credits || !ep->sq_credits) {
 		ret = vrb_poll_cq(cq, &wc);
 		if (ret > 0)
 			vrb_save_wc(cq, &wc);
 
-		if (!cq->credits || !ep->tx_credits)
+		if (!cq->credits || !ep->sq_credits)
 			goto freebuf;
 	}
 
 	cq->credits--;
-	ep->tx_credits--;
+	ep->sq_credits--;
 
 	ctx->ep = ep;
 	ctx->user_ctx = (void *) (uintptr_t) wr->wr_id;
@@ -114,7 +114,7 @@ ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr)
 
 credits:
 	cq->credits++;
-	ep->tx_credits++;
+	ep->sq_credits++;
 freebuf:
 	ofi_buf_free(ctx);
 unlock:
@@ -1042,7 +1042,7 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 	
 	if (info->ep_attr->tx_ctx_cnt == 0 || 
 	    info->ep_attr->tx_ctx_cnt == 1)
-		ep->tx_credits = info->tx_attr->size;
+		ep->sq_credits = info->tx_attr->size;
 
 	*ep_fid = &ep->util_ep.ep_fid;
 	ep->util_ep.ep_fid.fid.ops = &vrb_ep_ops;
