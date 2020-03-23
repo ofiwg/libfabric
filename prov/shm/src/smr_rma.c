@@ -145,7 +145,8 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 
 	if (cmds == 1) {
 		err = smr_rma_fast(peer_smr, cmd, iov, iov_count, rma_iov,
-				   rma_count, desc, peer_id, context, op, op_flags);
+				   rma_count, desc, smr_peer_addr(ep->region)[peer_id],
+				   context, op, op_flags);
 		comp_flags = cmd->msg.hdr.op_flags;
 		goto commit_comp;
 	}
@@ -348,7 +349,8 @@ ssize_t smr_generic_rma_inject(struct fid_ep *ep_fid, const void *buf,
 
 	if (cmds == 1) {
 		ret = smr_rma_fast(peer_smr, cmd, &iov, 1, &rma_iov, 1, NULL,
-				   peer_id, NULL, ofi_op_write, flags);
+				   smr_peer_addr(ep->region)[peer_id], NULL,
+				   ofi_op_write, flags);
 		if (ret)
 			goto unlock_region;
 		goto commit;
