@@ -483,14 +483,14 @@ static struct rxm_handle_txrx_ops rxm_rx_ops = {
 	.comp_eager_tx = rxm_finish_eager_send,
 	.handle_eager_rx = rxm_cq_handle_eager,
 	.handle_rndv_rx = rxm_cq_handle_rndv,
-	.handle_seg_data_rx =rxm_cq_handle_seg_data,
+	.handle_seg_data_rx = rxm_cq_handle_seg_data,
 };
 
 static struct rxm_handle_txrx_ops rxm_coll_rx_ops = {
 	.comp_eager_tx = rxm_finish_coll_eager_send,
 	.handle_eager_rx = rxm_cq_handle_coll_eager,
 	.handle_rndv_rx = rxm_cq_handle_rndv,
-	.handle_seg_data_rx =rxm_cq_handle_seg_data,
+	.handle_seg_data_rx = rxm_cq_handle_seg_data,
 };
 
 static int rxm_ep_cancel_recv(struct rxm_ep *rxm_ep,
