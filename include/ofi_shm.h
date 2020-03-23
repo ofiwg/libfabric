@@ -108,13 +108,13 @@ struct smr_msg_hdr {
 	};
 };
 
-#define SMR_MSG_DATA_LEN	(128 - sizeof(struct smr_msg_hdr))
+#define SMR_MSG_DATA_LEN	(SMR_CMD_SIZE - sizeof(struct smr_msg_hdr))
 #define SMR_COMP_DATA_LEN	(SMR_MSG_DATA_LEN / 2)
 union smr_cmd_data {
 	uint8_t			msg[SMR_MSG_DATA_LEN];
 	struct {
-		uint8_t		iov_count;
-		struct iovec	iov[(SMR_MSG_DATA_LEN - 8) /
+		size_t		iov_count;
+		struct iovec	iov[(SMR_MSG_DATA_LEN - sizeof(size_t)) /
 				    sizeof(struct iovec)];
 	};
 	struct {
