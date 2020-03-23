@@ -50,11 +50,11 @@ static inline uint16_t smr_convert_rx_flags(uint64_t fi_flags)
 	return flags;
 }
 
-static struct smr_ep_entry *smr_get_recv_entry(struct smr_ep *ep,
+static struct smr_rx_entry *smr_get_recv_entry(struct smr_ep *ep,
 		const struct iovec *iov, size_t count, fi_addr_t addr,
 		void *context, uint64_t tag, uint64_t ignore, uint64_t flags)
 {
-	struct smr_ep_entry *entry;
+	struct smr_rx_entry *entry;
 
 	if (ofi_cirque_isfull(ep->util_ep.rx_cq->cirq) ||
 	    freestack_isempty(ep->recv_fs)) {
@@ -83,7 +83,7 @@ ssize_t smr_generic_recv(struct smr_ep *ep, const struct iovec *iov,
 			 struct smr_queue *recv_queue,
 			 struct smr_queue *unexp_queue)
 {
-	struct smr_ep_entry *entry;
+	struct smr_rx_entry *entry;
 	ssize_t ret = -FI_EAGAIN;
 
 	assert(iov_count <= SMR_IOV_LIMIT);
@@ -154,7 +154,8 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 	struct smr_region *peer_smr;
 	struct smr_inject_buf *tx_buf;
 	struct smr_resp *resp;
-	struct smr_cmd *cmd, *pend;
+	struct smr_cmd *cmd;
+	struct smr_tx_entry *pend;
 	int peer_id;
 	ssize_t ret = 0;
 	size_t total_len;

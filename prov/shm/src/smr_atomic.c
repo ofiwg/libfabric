@@ -152,7 +152,7 @@ static int smr_fetch_result(struct smr_ep *ep, struct smr_region *peer_smr,
 static void smr_post_atomic_resp(struct smr_ep *ep, struct smr_cmd *cmd,
 				 const struct iovec *result_iov, size_t count)
 {
-	struct smr_cmd *pend;
+	struct smr_tx_entry *pend;
 	struct smr_resp *resp;
 
 	assert(!ofi_cirque_isfull(smr_resp_queue(ep->region)));
@@ -162,10 +162,7 @@ static void smr_post_atomic_resp(struct smr_ep *ep, struct smr_cmd *cmd,
 			    (char **) ep->region);
 
 	pend = freestack_pop(ep->pend_fs);
-	smr_post_pend_resp(cmd, pend, resp);
-	memcpy(pend->msg.data.iov, result_iov,
-	       sizeof(*result_iov) * count);
-	pend->msg.data.iov_count = count;
+	smr_post_pend_resp(pend, cmd, NULL, result_iov, count, resp);
 
 	ofi_cirque_commit(smr_resp_queue(ep->region));
 }

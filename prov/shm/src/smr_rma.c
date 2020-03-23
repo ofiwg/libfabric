@@ -107,7 +107,8 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 	struct smr_region *peer_smr;
 	struct smr_inject_buf *tx_buf;
 	struct smr_resp *resp;
-	struct smr_cmd *cmd, *pend;
+	struct smr_cmd *cmd;
+	struct smr_tx_entry *pend;
 	int peer_id, cmds, err = 0, comp = 1;
 	uint16_t comp_flags;
 	ssize_t ret = 0;
