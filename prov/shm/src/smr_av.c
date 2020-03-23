@@ -154,8 +154,8 @@ static int smr_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 		return -FI_ADDR_NOTAVAIL;
 
 	strncpy((char *)addr, smr_name(peer_smr), *addrlen);
-	((char *) addr)[*addrlen] = '\0';
-	*addrlen = sizeof(struct smr_addr);
+	((char *) addr)[MIN(*addrlen - 1, strlen(smr_name(peer_smr)))] = '\0';
+	*addrlen = strlen(smr_name(addr) + 1);
 	return 0;
 }
 
