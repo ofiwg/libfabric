@@ -75,7 +75,7 @@ static void smr_format_inline_atomic(struct smr_cmd *cmd,
 					      comp_count, 0);
 		if (comp_size != cmd->msg.hdr.size)
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-				"atomic and compare buffer size mimatch\n");
+				"atomic and compare buffer size mismatch\n");
 		break;
 	default:
 		break;
@@ -109,7 +109,7 @@ static void smr_format_inject_atomic(struct smr_cmd *cmd,
 					      compv, comp_count, 0);
 		if (comp_size != cmd->msg.hdr.size)
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-				"atomic and compare buffer size mimatch\n");
+				"atomic and compare buffer size mismatch\n");
 		break;
 	default:
 		break;
