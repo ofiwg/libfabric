@@ -81,6 +81,15 @@ extern "C" {
 #define OFI_ORDER_WAW_SET	(FI_ORDER_WAW | FI_ORDER_RMA_WAW | \
 				 FI_ORDER_ATOMIC_WAW)
 
+#define OFI_IGNORED_TX_CAPS /* older Rx caps not applicable to Tx */ \
+	(FI_REMOTE_READ | FI_REMOTE_WRITE | FI_RECV | FI_DIRECTED_RECV | \
+	 FI_VARIABLE_MSG | FI_MULTI_RECV | FI_SOURCE | FI_RMA_EVENT | \
+	 FI_SOURCE_ERR)
+#define OFI_IGNORED_RX_CAPS /* Older Tx caps not applicable to Rx */ \
+	(FI_READ | FI_WRITE | FI_SEND | FI_FENCE | FI_MULTICAST | \
+	 FI_NAMED_RX_CTX)
+
+
 #define sizeof_field(type, field) sizeof(((type *)0)->field)
 
 #ifndef MIN
