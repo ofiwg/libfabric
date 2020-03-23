@@ -204,7 +204,7 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		domain->cache.entry_data_size = sizeof(struct efa_mr);
 		domain->cache.add_region = efa_mr_cache_entry_reg;
 		domain->cache.delete_region = efa_mr_cache_entry_dereg;
-		ret = ofi_mr_cache_init(&domain->util_domain, default_monitor,
+		ret = ofi_mr_cache_init(&domain->util_domain, uffd_monitor,
 					&domain->cache);
 		if (!ret) {
 			domain->util_domain.domain_fid.mr = &efa_domain_mr_cache_ops;
