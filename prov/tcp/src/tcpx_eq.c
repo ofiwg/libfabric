@@ -108,7 +108,7 @@ int tcpx_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
 
 	if (!eq->util_eq.wait) {
 		memset(&wait_attr, 0, sizeof wait_attr);
-		wait_attr.wait_obj = FI_WAIT_FD;
+		wait_attr.wait_obj = FI_WAIT_POLLFD;
 		ret = fi_wait_open(fabric_fid, &wait_attr, &wait);
 		if (ret) {
 			FI_WARN(&tcpx_prov, FI_LOG_EQ,
