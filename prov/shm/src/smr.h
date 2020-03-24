@@ -188,6 +188,9 @@ static inline const char *smr_no_prefix(const char *addr)
 			(mode & FI_MR_VIRT_ADDR) && \
 			!(order & SMR_RMA_ORDER))
 
+#define smr_get_offset(base, addr) ((uintptr_t) ((char *) addr - (char *) base))
+#define smr_get_addr(base, offset) ((char *) base + (uintptr_t) offset)
+
 struct smr_ep {
 	struct util_ep		util_ep;
 	smr_rx_comp_func	rx_comp;

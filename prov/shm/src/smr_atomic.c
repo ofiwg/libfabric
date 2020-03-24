@@ -91,7 +91,7 @@ static void smr_format_inject_atomic(struct smr_cmd *cmd,
 	size_t comp_size;
 
 	cmd->msg.hdr.op_src = smr_src_inject;
-	cmd->msg.hdr.src_data = (char **) tx_buf - (char **) smr;
+	cmd->msg.hdr.src_data = smr_get_offset(smr, tx_buf);
 
 	switch (cmd->msg.hdr.op) {
 	case ofi_op_atomic:
@@ -214,8 +214,7 @@ static ssize_t smr_generic_atomic(struct smr_ep *ep,
 			pend = freestack_pop(ep->pend_fs);
 			smr_format_pend_resp(pend, cmd, context, result_iov,
 					     result_count, id, resp);
-			cmd->msg.hdr.data = (uintptr_t) ((char **) resp -
-						(char **) ep->region);
+			cmd->msg.hdr.data = smr_get_offset(ep->region, resp);
 			ofi_cirque_commit(smr_resp_queue(ep->region));
 		}
 	} else {

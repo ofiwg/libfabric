@@ -73,8 +73,8 @@ static int smr_progress_resp_entry(struct smr_ep *ep, struct smr_tx_entry *pendi
 		goto out;
 	case smr_src_inject:
 		inj_offset = (size_t) pending->cmd.msg.hdr.src_data;
-		tx_buf = (struct smr_inject_buf *) ((char **) peer_smr +
-						    inj_offset);
+		tx_buf = (struct smr_inject_buf *) smr_get_addr(peer_smr, inj_offset);
+
 		if (*ret)
 			goto push;
 
@@ -156,8 +156,8 @@ static int smr_progress_inject(struct smr_cmd *cmd, struct iovec *iov,
 	size_t inj_offset;
 
 	inj_offset = (size_t) cmd->msg.hdr.src_data;
-	tx_buf = (struct smr_inject_buf *) ((char **) ep->region +
-					    inj_offset);
+	tx_buf = (struct smr_inject_buf *) smr_get_addr(ep->region, inj_offset);
+
 	if (err) {
 		smr_freestack_push(smr_inject_pool(ep->region), tx_buf);
 		return err;
@@ -191,8 +191,7 @@ static int smr_progress_iov(struct smr_cmd *cmd, struct iovec *iov,
 
 	peer_id = (int) cmd->msg.hdr.addr;
 	peer_smr = smr_peer_region(ep->region, peer_id);
-	resp = (struct smr_resp *) ((char **) peer_smr +
-				    (size_t) cmd->msg.hdr.src_data);
+	resp = (struct smr_resp *) smr_get_addr(peer_smr, cmd->msg.hdr.src_data);
 
 	if (err) {
 		ret = -err;
@@ -301,8 +300,7 @@ static int smr_progress_mmap(struct smr_cmd *cmd, struct iovec *iov,
 
 	peer_id = (int) cmd->msg.hdr.addr;
 	peer_smr = smr_peer_region(ep->region, peer_id);
-	resp = (struct smr_resp *) ((char *) peer_smr +
-				    (uintptr_t) cmd->msg.hdr.src_data);
+	resp = (struct smr_resp *) smr_get_addr(peer_smr, cmd->msg.hdr.src_data);
 
 	ret = smr_mmap_peer_copy(ep, cmd, iov, iov_count, total_len);
 
@@ -391,8 +389,7 @@ static int smr_progress_inject_atomic(struct smr_cmd *cmd, struct fi_ioc *ioc,
 	int i;
 
 	inj_offset = (size_t) cmd->msg.hdr.src_data;
-	tx_buf = (struct smr_inject_buf *) ((char **) ep->region +
-					    inj_offset);
+	tx_buf = (struct smr_inject_buf *) smr_get_addr(ep->region, inj_offset);
 	if (err)
 		goto out;
 
@@ -593,8 +590,7 @@ static int smr_progress_cmd_rma(struct smr_ep *ep, struct smr_cmd *cmd)
 
 	if (cmd->msg.hdr.op == ofi_op_read_req && cmd->msg.hdr.data) {
 		peer_smr = smr_peer_region(ep->region, cmd->msg.hdr.addr);
-		resp = (struct smr_resp *) ((char **) peer_smr +
-			    (size_t) cmd->msg.hdr.data);
+		resp = (struct smr_resp *) smr_get_addr(peer_smr, cmd->msg.hdr.data);
 		resp->status = -err;
 	} else {
 		ep->region->cmd_cnt++;
@@ -664,8 +660,7 @@ static int smr_progress_cmd_atomic(struct smr_ep *ep, struct smr_cmd *cmd)
 	}
 	if (cmd->msg.hdr.data) {
 		peer_smr = smr_peer_region(ep->region, cmd->msg.hdr.addr);
-		resp = (struct smr_resp *) ((char **) peer_smr +
-			    (size_t) cmd->msg.hdr.data);
+		resp = (struct smr_resp *) smr_get_addr(peer_smr, cmd->msg.hdr.data);
 		resp->status = -err;
 	} else {
 		ep->region->cmd_cnt++;

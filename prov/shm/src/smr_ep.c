@@ -283,7 +283,7 @@ void smr_format_inject(struct smr_cmd *cmd, const struct iovec *iov,
 		       struct smr_inject_buf *tx_buf)
 {
 	cmd->msg.hdr.op_src = smr_src_inject;
-	cmd->msg.hdr.src_data = (char **) tx_buf - (char **) smr;
+	cmd->msg.hdr.src_data = smr_get_offset(smr, tx_buf);
 	cmd->msg.hdr.size = ofi_copy_from_iov(tx_buf->data, SMR_INJECT_SIZE,
 					      iov, count, 0);
 }
@@ -293,7 +293,7 @@ void smr_format_iov(struct smr_cmd *cmd, const struct iovec *iov, size_t count,
 		    struct smr_resp *resp)
 {
 	cmd->msg.hdr.op_src = smr_src_iov;
-	cmd->msg.hdr.src_data = (uintptr_t) ((char **) resp - (char **) smr);
+	cmd->msg.hdr.src_data = smr_get_offset(smr, resp);
 	cmd->msg.data.iov_count = count;
 	cmd->msg.hdr.size = total_len;
 	memcpy(cmd->msg.data.iov, iov, sizeof(*iov) * count);
@@ -357,7 +357,7 @@ int smr_format_mmap(struct smr_ep *ep, struct smr_cmd *cmd,
 
 	cmd->msg.hdr.op_src = smr_src_mmap;
 	cmd->msg.hdr.msg_id = msg_id;
-	cmd->msg.hdr.src_data = (uintptr_t) ((char *) resp - (char *) ep->region);
+	cmd->msg.hdr.src_data = smr_get_offset(ep->region, resp);
 	cmd->msg.hdr.size = total_len;
 	pend->map_name = map_name;
 
