@@ -122,16 +122,16 @@ int smr_setopt(fid_t fid, int level, int optname,
 
 static int smr_match_recv_ctx(struct dlist_entry *item, const void *args)
 {
-	struct smr_ep_entry *pending_recv;
+	struct smr_rx_entry *pending_recv;
 
-	pending_recv = container_of(item, struct smr_ep_entry, entry);
+	pending_recv = container_of(item, struct smr_rx_entry, entry);
 	return pending_recv->context == args;
 }
 
 static int smr_ep_cancel_recv(struct smr_ep *ep, struct smr_queue *queue,
 			      void *context)
 {
-	struct smr_ep_entry *recv_entry;
+	struct smr_rx_entry *recv_entry;
 	struct dlist_entry *entry;
 	int ret = 0;
 
@@ -139,7 +139,7 @@ static int smr_ep_cancel_recv(struct smr_ep *ep, struct smr_queue *queue,
 	entry = dlist_remove_first_match(&queue->list, smr_match_recv_ctx,
 					 context);
 	if (entry) {
-		recv_entry = container_of(entry, struct smr_ep_entry, entry);
+		recv_entry = container_of(entry, struct smr_rx_entry, entry);
 		ret = smr_complete_rx(ep, (void *) recv_entry->context, ofi_op_msg,
 				  recv_entry->flags, 0,
 				  NULL, recv_entry->addr,
@@ -193,18 +193,18 @@ int smr_verify_peer(struct smr_ep *ep, int peer_id)
 static int smr_match_msg(struct dlist_entry *item, const void *args)
 {
 	struct smr_match_attr *attr = (struct smr_match_attr *)args;
-	struct smr_ep_entry *recv_entry;
+	struct smr_rx_entry *recv_entry;
 
-	recv_entry = container_of(item, struct smr_ep_entry, entry);
+	recv_entry = container_of(item, struct smr_rx_entry, entry);
 	return smr_match_addr(recv_entry->addr, attr->addr);
 }
 
 static int smr_match_tagged(struct dlist_entry *item, const void *args)
 {
 	struct smr_match_attr *attr = (struct smr_match_attr *)args;
-	struct smr_ep_entry *recv_entry;
+	struct smr_rx_entry *recv_entry;
 
-	recv_entry = container_of(item, struct smr_ep_entry, entry);
+	recv_entry = container_of(item, struct smr_rx_entry, entry);
 	return smr_match_addr(recv_entry->addr, attr->addr) &&
 	       smr_match_tag(recv_entry->tag, recv_entry->ignore, attr->tag); 
 } 
@@ -241,78 +241,61 @@ static void smr_init_queue(struct smr_queue *queue,
 	queue->match_func = match_func;
 }
 
-void smr_post_pend_resp(struct smr_cmd *cmd, struct smr_cmd *pend,
-			struct smr_resp *resp)
+void smr_format_pend_resp(struct smr_tx_entry *pend, struct smr_cmd *cmd,
+			  void *context, const struct iovec *iov,
+			  uint32_t iov_count, struct smr_resp *resp)
 {
-	*pend = *cmd;
+	pend->cmd = *cmd;
+	pend->context = context;
+	memcpy(pend->iov, iov, sizeof(*iov) * iov_count);
+	pend->iov_count = iov_count;
+
 	resp->msg_id = (uint64_t) (uintptr_t) pend;
 	resp->status = FI_EBUSY;
 }
 
-void smr_generic_format(struct smr_cmd *cmd, fi_addr_t peer_id,
-			uint32_t op, uint64_t tag, uint8_t datatype,
-			uint8_t atomic_op, uint64_t data,
-			uint64_t op_flags)
+void smr_generic_format(struct smr_cmd *cmd, fi_addr_t peer_id, uint32_t op,
+			uint64_t tag, uint64_t data, uint64_t op_flags)
 {
 	cmd->msg.hdr.op = op;
 	cmd->msg.hdr.op_flags = 0;
+	cmd->msg.hdr.tag = tag;
+	cmd->msg.hdr.addr = peer_id;
+	cmd->msg.hdr.data = data;
 
 	if (op_flags & FI_REMOTE_CQ_DATA)
 		cmd->msg.hdr.op_flags |= SMR_REMOTE_CQ_DATA;
 	if (op_flags & FI_COMPLETION)
 		cmd->msg.hdr.op_flags |= SMR_TX_COMPLETION;
-
-	if (op == ofi_op_tagged) {
-		cmd->msg.hdr.tag = tag;
-	} else if (op == ofi_op_atomic ||
-		 op == ofi_op_atomic_fetch ||
-		 op == ofi_op_atomic_compare) {
-		cmd->msg.hdr.datatype = datatype;
-		cmd->msg.hdr.atomic_op = atomic_op;
-	}
-	cmd->msg.hdr.addr = peer_id;
-	cmd->msg.hdr.data = data;
 }
 
-void smr_format_inline(struct smr_cmd *cmd, fi_addr_t peer_id,
-		       const struct iovec *iov, size_t count,
-		       uint32_t op, uint64_t tag, uint64_t data,
-		       uint64_t op_flags)
+void smr_format_inline(struct smr_cmd *cmd, const struct iovec *iov,
+		       size_t count)
 {
-	smr_generic_format(cmd, peer_id, op, tag, 0, 0, data, op_flags);
 	cmd->msg.hdr.op_src = smr_src_inline;
 	cmd->msg.hdr.size = ofi_copy_from_iov(cmd->msg.data.msg,
 					      SMR_MSG_DATA_LEN, iov, count, 0);
 }
 
-void smr_format_inject(struct smr_cmd *cmd, fi_addr_t peer_id,
-		       const struct iovec *iov, size_t count,
-		       uint32_t op, uint64_t tag, uint64_t data,
-		       uint64_t op_flags, struct smr_region *smr,
+void smr_format_inject(struct smr_cmd *cmd, const struct iovec *iov,
+		       size_t count, struct smr_region *smr,
 		       struct smr_inject_buf *tx_buf)
 {
-	smr_generic_format(cmd, peer_id, op, tag, 0, 0, data, op_flags);
 	cmd->msg.hdr.op_src = smr_src_inject;
 	cmd->msg.hdr.src_data = (char **) tx_buf - (char **) smr;
 	cmd->msg.hdr.size = ofi_copy_from_iov(tx_buf->data, SMR_INJECT_SIZE,
 					      iov, count, 0);
 }
 
-void smr_format_iov(struct smr_cmd *cmd, fi_addr_t peer_id,
-		    const struct iovec *iov, size_t count, size_t total_len,
-		    uint32_t op, uint64_t tag, uint64_t data, uint64_t op_flags,
-		    void *context, struct smr_region *smr,
-		    struct smr_resp *resp, struct smr_cmd *pend_cmd)
+void smr_format_iov(struct smr_cmd *cmd, const struct iovec *iov, size_t count,
+		    size_t total_len, struct smr_region *smr,
+		    struct smr_resp *resp)
 {
-	smr_generic_format(cmd, peer_id, op, tag, 0, 0, data, op_flags);
 	cmd->msg.hdr.op_src = smr_src_iov;
 	cmd->msg.hdr.src_data = (uintptr_t) ((char **) resp - (char **) smr);
 	cmd->msg.data.iov_count = count;
 	cmd->msg.hdr.size = total_len;
-	cmd->msg.hdr.msg_id = (uint64_t) (uintptr_t) context;
 	memcpy(cmd->msg.data.iov, iov, sizeof(*iov) * count);
-
-	smr_post_pend_resp(cmd, pend_cmd, resp);
 }
 
 static int smr_ep_close(struct fid *fid)

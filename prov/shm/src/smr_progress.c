@@ -37,7 +37,7 @@
 #include "ofi_iov.h"
 #include "smr.h"
 
-static int smr_progress_atomic_resp(struct smr_ep *ep, struct smr_cmd *pending,
+static int smr_progress_atomic_resp(struct smr_ep *ep, struct smr_tx_entry *pending,
 				    uint64_t *ret)
 {
 	struct smr_region *peer_smr;
@@ -45,27 +45,25 @@ static int smr_progress_atomic_resp(struct smr_ep *ep, struct smr_cmd *pending,
 	struct smr_inject_buf *tx_buf;
 	uint8_t *src;
 
-	peer_smr = smr_peer_region(ep->region, pending->msg.hdr.addr);
+	peer_smr = smr_peer_region(ep->region, pending->cmd.msg.hdr.addr);
 	if (fastlock_tryacquire(&peer_smr->lock))
 		return -FI_EAGAIN;
 
-	if (!(pending->msg.hdr.op_flags & SMR_RMA_REQ))
+	if (!(pending->cmd.msg.hdr.op_flags & SMR_RMA_REQ))
 		goto out;
 
-	inj_offset = (size_t) pending->msg.hdr.src_data;
+	inj_offset = (size_t) pending->cmd.msg.hdr.src_data;
 	tx_buf = (struct smr_inject_buf *) ((char **) peer_smr +
 					    inj_offset);
-
 	if (*ret)
 		goto push;
 
-	src = pending->msg.hdr.op == ofi_op_atomic_compare ?
+	src = pending->cmd.msg.hdr.op == ofi_op_atomic_compare ?
 	      tx_buf->buf : tx_buf->data;
-	size = ofi_copy_to_iov(pending->msg.data.iov,
-			       pending->msg.data.iov_count,
-			       0, src, pending->msg.hdr.size);
+	size = ofi_copy_to_iov(pending->iov, pending->iov_count,
+			       0, src, pending->cmd.msg.hdr.size);
 
-	if (size != pending->msg.hdr.size) {
+	if (size != pending->cmd.msg.hdr.size) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"Incomplete atomic fetch buffer copied\n");
 		*ret = FI_EIO;
@@ -81,7 +79,7 @@ out:
 static void smr_progress_resp(struct smr_ep *ep)
 {
 	struct smr_resp *resp;
-	struct smr_cmd *pending;
+	struct smr_tx_entry *pending;
 	int ret;
 
 	fastlock_acquire(&ep->region->lock);
@@ -92,14 +90,14 @@ static void smr_progress_resp(struct smr_ep *ep)
 		if (resp->status == FI_EBUSY)
 			break;
 
-		pending = (struct smr_cmd *) resp->msg_id;
-		if (pending->msg.hdr.op >= ofi_op_atomic &&
-		    pending->msg.hdr.op <= ofi_op_atomic_compare &&
-		    smr_progress_atomic_resp(ep, pending, &resp->status))
+		pending = (struct smr_tx_entry *) resp->msg_id;
+		if (pending->cmd.msg.hdr.op >= ofi_op_atomic &&
+		    pending->cmd.msg.hdr.op <= ofi_op_atomic_compare &&
+			smr_progress_atomic_resp(ep, pending, &resp->status))
 				break;
 
-		ret = smr_complete_tx(ep, (void *) (uintptr_t) pending->msg.hdr.msg_id,
-				  pending->msg.hdr.op, pending->msg.hdr.op_flags,
+		ret = smr_complete_tx(ep, pending->context,
+				  pending->cmd.msg.hdr.op, pending->cmd.msg.hdr.op_flags,
 				  -(resp->status));
 		if (ret) {
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
@@ -203,7 +201,7 @@ out:
 }
 
 static bool smr_progress_multi_recv(struct smr_ep *ep,
-				    struct smr_ep_entry *entry, size_t len)
+				    struct smr_rx_entry *entry, size_t len)
 {
 	size_t left;
 	void *new_base;
@@ -318,7 +316,7 @@ out:
 }
 
 static int smr_progress_msg_common(struct smr_ep *ep, struct smr_cmd *cmd,
-				   struct smr_ep_entry *entry)
+				   struct smr_rx_entry *entry)
 {
 	size_t total_len = 0;
 	uint16_t comp_flags;
@@ -409,7 +407,7 @@ static int smr_progress_cmd_msg(struct smr_ep *ep, struct smr_cmd *cmd)
 		return 0;
 	}
 	ret = smr_progress_msg_common(ep, cmd,
-			container_of(dlist_entry, struct smr_ep_entry, entry));
+			container_of(dlist_entry, struct smr_rx_entry, entry));
 	ofi_cirque_discard(smr_cmd_queue(ep->region));
 	return ret < 0 ? ret : 0;
 }
@@ -612,7 +610,7 @@ void smr_ep_progress(struct util_ep *util_ep)
 	smr_progress_cmd(ep);
 }
 
-int smr_progress_unexp_queue(struct smr_ep *ep, struct smr_ep_entry *entry,
+int smr_progress_unexp_queue(struct smr_ep *ep, struct smr_rx_entry *entry,
 			     struct smr_queue *unexp_queue)
 {
 	struct smr_match_attr match_attr;
