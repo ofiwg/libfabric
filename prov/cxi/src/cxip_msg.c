@@ -361,10 +361,8 @@ static struct cxip_req *rdzv_mrecv_req_lookup(struct cxip_req *req,
  * multi-recv buffer.
  *
  * @mrecv_req: A previously posted multi-recv buffer request.
- * @event: A Put, Put Overflow or Rendezvous event associated with mrecv_req.
  */
-static struct cxip_req *
-mrecv_req_dup(struct cxip_req *mrecv_req, const union c_event *event)
+static struct cxip_req *mrecv_req_dup(struct cxip_req *mrecv_req)
 {
 	struct cxip_rxc *rxc = mrecv_req->recv.rxc;
 	struct cxip_req *req;
@@ -412,7 +410,7 @@ rdzv_mrecv_req_event(struct cxip_req *mrecv_req, const union c_event *event)
 
 	req = rdzv_mrecv_req_lookup(mrecv_req, event, &ev_init, &ev_rdzv_id);
 	if (!req) {
-		req = mrecv_req_dup(mrecv_req, event);
+		req = mrecv_req_dup(mrecv_req);
 		if (!req)
 			return NULL;
 
@@ -1869,7 +1867,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 			 * event arrives.
 			 */
 			if (req->recv.multi_recv) {
-				req = mrecv_req_dup(req, event);
+				req = mrecv_req_dup(req);
 				if (!req) {
 					fastlock_release(&rxc->rx_lock);
 					return -FI_EAGAIN;
@@ -1910,7 +1908,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 
 		if (oflow_buf->type == CXIP_LE_TYPE_SINK) {
 			if (req->recv.multi_recv) {
-				req = mrecv_req_dup(req, event);
+				req = mrecv_req_dup(req);
 				if (!req) {
 					fastlock_release(&rxc->rx_lock);
 					return -FI_EAGAIN;
@@ -1952,7 +1950,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		}
 
 		if (req->recv.multi_recv) {
-			req = mrecv_req_dup(req, event);
+			req = mrecv_req_dup(req);
 			if (!req)
 				return -FI_EAGAIN;
 			recv_req_tgt_event(req, event);
@@ -2011,7 +2009,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		 * request.
 		 */
 		if (req->recv.multi_recv) {
-			req = mrecv_req_dup(req, event);
+			req = mrecv_req_dup(req);
 			if (!req)
 				return -FI_EAGAIN;
 			recv_req_tgt_event(req, event);
