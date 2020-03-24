@@ -845,8 +845,6 @@ int ofi_discard_socket(SOCKET sock, size_t len)
 }
 
 
-#ifndef HAVE_EPOLL
-
 int ofi_pollfds_create(struct ofi_pollfds **pfds)
 {
 	int ret;
@@ -869,7 +867,7 @@ int ofi_pollfds_create(struct ofi_pollfds **pfds)
 		goto err2;
 
 	(*pfds)->fds[(*pfds)->nfds].fd = (*pfds)->signal.fd[FI_READ_FD];
-	(*pfds)->fds[(*pfds)->nfds].events = OFI_EPOLL_IN;
+	(*pfds)->fds[(*pfds)->nfds].events = POLLIN;
 	(*pfds)->context[(*pfds)->nfds++] = NULL;
 	slist_init(&(*pfds)->work_item_list);
 	fastlock_init(&(*pfds)->lock);
@@ -1070,8 +1068,6 @@ void ofi_pollfds_close(struct ofi_pollfds *pfds)
 		free(pfds);
 	}
 }
-
-#endif
 
 
 void ofi_free_list_of_addr(struct slist *addr_list)

@@ -37,11 +37,48 @@
 #include <unistd.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 
 #include <ofi_list.h>
 #include <ofi_signal.h>
+
+enum ofi_pollfds_ctl {
+	POLLFDS_CTL_ADD,
+	POLLFDS_CTL_DEL,
+	POLLFDS_CTL_MOD,
+};
+
+struct ofi_pollfds_work_item {
+	int		fd;
+	uint32_t	events;
+	void		*context;
+	enum ofi_pollfds_ctl type;
+	struct slist_entry entry;
+};
+
+struct ofi_pollfds {
+	int		size;
+	int		nfds;
+	struct pollfd	*fds;
+	void		**context;
+	int		index;
+	struct fd_signal signal;
+	struct slist	work_item_list;
+	fastlock_t	lock;
+};
+
+int ofi_pollfds_create(struct ofi_pollfds **pfds);
+int ofi_pollfds_add(struct ofi_pollfds *pfds, int fd, uint32_t events,
+		    void *context);
+int ofi_pollfds_mod(struct ofi_pollfds *pfds, int fd, uint32_t events,
+		    void *context);
+int ofi_pollfds_del(struct ofi_pollfds *pfds, int fd);
+int ofi_pollfds_wait(struct ofi_pollfds *pfds, void **contexts,
+		     int max_contexts, int timeout);
+void ofi_pollfds_close(struct ofi_pollfds *pfds);
+
 
 #ifdef HAVE_EPOLL
 #include <sys/epoll.h>
@@ -107,47 +144,12 @@ static inline void ofi_epoll_close(int ep)
 }
 
 #else
-#include <poll.h>
 
 #define OFI_EPOLL_IN  POLLIN
 #define OFI_EPOLL_OUT POLLOUT
 
+typedef struct ofi_pollfds *ofi_epoll_t;
 #define OFI_EPOLL_INVALID NULL
-
-enum ofi_pollfds_ctl {
-	POLLFDS_CTL_ADD,
-	POLLFDS_CTL_DEL,
-	POLLFDS_CTL_MOD,
-};
-
-struct ofi_pollfds_work_item {
-	int		fd;
-	uint32_t	events;
-	void		*context;
-	enum ofi_pollfds_ctl type;
-	struct slist_entry entry;
-};
-
-typedef struct ofi_pollfds {
-	int		size;
-	int		nfds;
-	struct pollfd	*fds;
-	void		**context;
-	int		index;
-	struct fd_signal signal;
-	struct slist	work_item_list;
-	fastlock_t	lock;
-} *ofi_epoll_t;
-
-int ofi_pollfds_create(struct ofi_pollfds **pfds);
-int ofi_pollfds_add(struct ofi_pollfds *pfds, int fd, uint32_t events,
-		  void *context);
-int ofi_pollfds_mod(struct ofi_pollfds *pfds, int fd, uint32_t events,
-		  void *context);
-int ofi_pollfds_del(struct ofi_pollfds *pfds, int fd);
-int ofi_pollfds_wait(struct ofi_pollfds *pfds, void **contexts,
-		   int max_contexts, int timeout);
-void ofi_pollfds_close(struct ofi_pollfds *pfds);
 
 #define ofi_epoll_create ofi_pollfds_create
 #define ofi_epoll_add ofi_pollfds_add
