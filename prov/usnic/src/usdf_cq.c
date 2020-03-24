@@ -46,7 +46,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/queue.h>
-#include <sys/epoll.h>
+#include <ofi_epoll.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_cm.h>
@@ -735,7 +735,6 @@ static int usdf_cq_unbind_wait(struct usdf_cq *cq)
 {
 	int ret;
 	struct usdf_wait *wait_priv;
-	struct epoll_event event = {0};
 
 	if (!cq->cq_attr.wait_set) {
 		USDF_DBG_SYS(CQ, "can't unbind from non-existent wait set\n");
@@ -744,12 +743,10 @@ static int usdf_cq_unbind_wait(struct usdf_cq *cq)
 
 	wait_priv = wait_ftou(cq->cq_attr.wait_set);
 
-	ret = epoll_ctl(wait_priv->object.epfd, EPOLL_CTL_DEL,
-			cq->object.fd, &event);
+	ret = ofi_epoll_del(wait_priv->object.epfd, cq->object.fd);
 	if (ret) {
-		USDF_WARN_SYS(CQ,
-				"failed to remove FD from wait set\n");
-		return -errno;
+		USDF_WARN_SYS(CQ, "failed to remove FD from wait set\n");
+		return ret;
 	}
 
 	fid_list_remove(&wait_priv->list, &wait_priv->lock, &cq->cq_fid.fid);
@@ -1166,7 +1163,6 @@ static int usdf_cq_bind_wait(struct usdf_cq *cq)
 {
 	int ret;
 	struct usdf_wait *wait_priv;
-	struct epoll_event event = {0};
 
 	if (!cq->cq_attr.wait_set) {
 		USDF_DBG_SYS(CQ, "can't bind to non-existent wait set\n");
@@ -1181,9 +1177,6 @@ static int usdf_cq_bind_wait(struct usdf_cq *cq)
 	 */
 	wait_priv = wait_ftou(cq->cq_attr.wait_set);
 
-	event.data.ptr = cq;
-	event.events = EPOLLIN;
-
 	ret = fid_list_insert(&wait_priv->list, &wait_priv->lock,
 			&cq->cq_fid.fid);
 	if (ret) {
@@ -1192,8 +1185,8 @@ static int usdf_cq_bind_wait(struct usdf_cq *cq)
 		return ret;
 	}
 
-	ret = epoll_ctl(wait_priv->object.epfd, EPOLL_CTL_ADD, cq->object.fd,
-			&event);
+	ret = ofi_epoll_add(wait_priv->object.epfd, cq->object.fd,
+			    OFI_EPOLL_IN, cq);
 	if (ret) {
 		USDF_WARN_SYS(CQ, "failed to associate FD with wait set\n");
 		goto err;

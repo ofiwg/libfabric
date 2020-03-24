@@ -40,6 +40,7 @@
 #include <pthread.h>
 
 #include <rdma/providers/fi_log.h>
+#include <ofi_epoll.h>
 
 #include "usdf_progress.h"
 #include "usd.h"
@@ -120,7 +121,7 @@ struct usdf_fabric {
 	/* progression */
 	pthread_t fab_thread;
 	int fab_exit;
-	int fab_epollfd;
+	ofi_epoll_t fab_epollfd;
 	int fab_eventfd;
 	struct usdf_poll_item fab_poll_item;
 
