@@ -362,8 +362,8 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq)
 	if (cxi_cq->enabled)
 		goto unlock;
 
-	/* TODO set EVTQ size with CQ attrs */
-	cxi_cq->evtq_buf_len = C_PAGE_SIZE * 64;
+	/* TODO set EQ size based on usage. */
+	cxi_cq->evtq_buf_len = 2*1024*1024;
 	cxi_cq->evtq_buf = aligned_alloc(C_PAGE_SIZE,
 					 cxi_cq->evtq_buf_len);
 	if (!cxi_cq->evtq_buf) {
