@@ -2083,6 +2083,59 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
 	}
 }
 
+static ssize_t _cxip_recv_req(struct cxip_req *req)
+{
+	struct cxip_rxc *rxc = req->recv.rxc;
+	uint32_t le_flags;
+	union cxip_match_bits mb = {};
+	union cxip_match_bits ib = {
+		.tx_id = ~0,
+		.match_comp = 1,
+		.le_type = ~0,
+	};
+	int ret;
+	struct cxip_md *recv_md = req->recv.recv_md;
+	uint64_t recv_iova = 0;
+
+	if (req->recv.tagged) {
+		mb.tagged = 1;
+		mb.tag = req->recv.tag;
+		ib.tag = req->recv.ignore;
+	}
+
+	/* Always set manage_local in Receive LEs. This makes Cassini ignore
+	 * initiator remote_offset in all Puts. With this, remote_offset in Put
+	 * events can be used by the initiator for protocol data. The behavior
+	 * of use_once is not impacted by manage_local.
+	 */
+	le_flags = C_LE_EVENT_LINK_DISABLE | C_LE_EVENT_UNLINK_DISABLE |
+		   C_LE_MANAGE_LOCAL |
+		   C_LE_UNRESTRICTED_BODY_RO | C_LE_UNRESTRICTED_END_RO |
+		   C_LE_OP_PUT;
+	if (!req->recv.multi_recv)
+		le_flags |= C_LE_USE_ONCE;
+
+	if (recv_md)
+		recv_iova = CXI_VA_TO_IOVA(recv_md->md, req->recv.recv_buf);
+
+	/* Issue Append command */
+	ret = cxip_pte_append(rxc->rx_pte, recv_iova, req->recv.ulen,
+			      recv_md ? recv_md->md->lac : 0,
+			      C_PTL_LIST_PRIORITY, req->req_id,
+			      mb.raw, ib.raw, req->recv.match_id,
+			      rxc->min_multi_recv,
+			      le_flags, NULL, rxc->rx_cmdq,
+			      !(req->recv.flags & FI_MORE));
+	if (ret != FI_SUCCESS) {
+		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
+		return ret;
+	}
+
+	ofi_atomic_inc32(&rxc->orx_reqs);
+
+	return FI_SUCCESS;
+}
+
 /*
  * _cxip_recv() - Common message receive function. Used for tagged and untagged
  * sends of all sizes.
@@ -2092,20 +2145,13 @@ static ssize_t _cxip_recv(struct cxip_rxc *rxc, void *buf, size_t len,
 			  uint64_t ignore, void *context, uint64_t flags,
 			  bool tagged)
 {
-	struct cxip_domain *dom;
+	struct cxip_domain *dom = rxc->domain;
 	int ret;
 	struct cxip_md *recv_md = NULL;
 	struct cxip_req *req;
 	struct cxip_addr caddr;
 	uint32_t match_id;
 	uint32_t pid_bits;
-	uint32_t le_flags;
-	union cxip_match_bits mb = {};
-	union cxip_match_bits ib = {
-		.tx_id = ~0,
-		.match_comp = 1,
-		.le_type = ~0,
-	};
 
 	if (len && !buf)
 		return -FI_EINVAL;
@@ -2115,8 +2161,6 @@ static ssize_t _cxip_recv(struct cxip_rxc *rxc, void *buf, size_t len,
 
 	if (!ofi_recv_allowed(rxc->attr.caps))
 		return -FI_ENOPROTOOPT;
-
-	dom = rxc->domain;
 
 	/* If FI_DIRECTED_RECV and a src_addr is specified, encode the address
 	 * in the LE for matching. If application AVs are symmetric, use
@@ -2160,29 +2204,29 @@ static ssize_t _cxip_recv(struct cxip_rxc *rxc, void *buf, size_t len,
 		goto recv_unmap;
 	}
 
-	/* req->data_len, req->tag must be set later.  req->buf and req->data
-	 * may be overwritten later.
+	/* req->data_len, req->tag, req->data must be set later. req->buf may
+	 * be overwritten later.
 	 */
 	req->context = (uint64_t)context;
 
 	req->flags = FI_RECV | (flags & FI_COMPLETION);
-	if (tagged) {
+	if (tagged)
 		req->flags |= FI_TAGGED;
-		mb.tagged = 1;
-		mb.tag = tag;
-		ib.tag = ignore;
-	} else {
+	else
 		req->flags |= FI_MSG;
-	}
 
 	req->buf = 0;
-	req->data = 0;
 	req->cb = cxip_recv_cb;
 
 	req->recv.rxc = rxc;
 	req->recv.recv_buf = buf;
 	req->recv.recv_md = recv_md;
 	req->recv.ulen = len;
+	req->recv.match_id = match_id;
+	req->recv.tag = tag & CXIP_TAG_MASK;
+	req->recv.ignore = ignore & CXIP_TAG_MASK;
+	req->recv.flags = flags;
+	req->recv.tagged = tagged;
 	req->recv.start_offset = 0;
 	req->recv.multi_recv = (flags & FI_MULTI_RECV ? true : false);
 	req->recv.mrecv_bytes = len;
@@ -2192,31 +2236,9 @@ static ssize_t _cxip_recv(struct cxip_rxc *rxc, void *buf, size_t len,
 	/* Count Put, Rendezvous, and Reply events during offloaded RPut. */
 	req->recv.rdzv_events = 0;
 
-	/* Always set manage_local in Receive LEs. This makes Cassini ignore
-	 * initiator remote_offset in all Puts. With this, remote_offset in Put
-	 * events can be used by the initiator for protocol data. The behavior
-	 * of use_once is not impacted by manage_local.
-	 */
-	le_flags = C_LE_EVENT_LINK_DISABLE | C_LE_EVENT_UNLINK_DISABLE |
-		   C_LE_MANAGE_LOCAL |
-		   C_LE_UNRESTRICTED_BODY_RO | C_LE_UNRESTRICTED_END_RO |
-		   C_LE_OP_PUT;
-	if (!req->recv.multi_recv)
-		le_flags |= C_LE_USE_ONCE;
-
-	/* Issue Append command */
-	ret = cxip_pte_append(rxc->rx_pte,
-			      recv_md ? CXI_VA_TO_IOVA(recv_md->md, buf) : 0,
-			      len, recv_md ? recv_md->md->lac : 0,
-			      C_PTL_LIST_PRIORITY, req->req_id,
-			      mb.raw, ib.raw, match_id, rxc->min_multi_recv,
-			      le_flags, NULL, rxc->rx_cmdq, !(flags & FI_MORE));
-	if (ret) {
-		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
+	ret = _cxip_recv_req(req);
+	if (ret != FI_SUCCESS)
 		goto req_free;
-	}
-
-	ofi_atomic_inc32(&rxc->orx_reqs);
 
 	CXIP_LOG_DBG("req: %p buf: %p len: %lu src_addr: %ld tag(%c): 0x%lx ignore: 0x%lx context: %p\n",
 		     req, buf, len, src_addr, tagged ? '*' : '-', tag, ignore,

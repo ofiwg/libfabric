@@ -226,6 +226,7 @@ static inline int cxip_mr_key_to_ptl_idx(int key)
 #define CXIP_TAG_WIDTH		48
 #define CXIP_RDZV_ID_WIDTH	8
 #define CXIP_TX_ID_WIDTH	12
+#define CXIP_TAG_MASK		((1UL << CXIP_TAG_WIDTH) - 1)
 
 /* Define several types of LEs */
 enum cxip_le_type {
@@ -441,12 +442,20 @@ struct cxip_req_amo {
 };
 
 struct cxip_req_recv {
+	/* Receive parameters */
 	struct dlist_entry ux_entry;	// UX event list entry
 	struct cxip_rxc *rxc;		// receive context
 	void *recv_buf;			// local receive buffer
 	struct cxip_md *recv_md;	// local receive MD
-	int rc;				// DMA return code
 	uint32_t ulen;			// User buffer length
+	bool tagged;
+	uint64_t tag;
+	uint64_t ignore;
+	uint32_t match_id;
+	uint64_t flags;
+
+	/* Control info */
+	int rc;				// DMA return code
 	uint32_t rlen;			// Send length
 	uint64_t oflow_start;		// Overflow buffer address
 	uint32_t initiator;		// DMA initiator address
