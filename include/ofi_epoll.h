@@ -50,6 +50,7 @@
 #define OFI_EPOLL_OUT EPOLLOUT
 
 typedef int ofi_epoll_t;
+#define OFI_EPOLL_INVALID -1
 
 static inline int ofi_epoll_create(int *ep)
 {
@@ -110,6 +111,8 @@ static inline void ofi_epoll_close(int ep)
 
 #define OFI_EPOLL_IN  POLLIN
 #define OFI_EPOLL_OUT POLLOUT
+
+#define OFI_EPOLL_INVALID NULL
 
 enum ofi_epoll_ctl {
 	EPOLL_CTL_ADD,
