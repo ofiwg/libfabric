@@ -847,7 +847,7 @@ int ofi_discard_socket(SOCKET sock, size_t len)
 
 #ifndef HAVE_EPOLL
 
-int ofi_epoll_create(struct ofi_pollfds **pfds)
+int ofi_pollfds_create(struct ofi_pollfds **pfds)
 {
 	int ret;
 
@@ -881,11 +881,10 @@ err1:
 	return ret;
 }
 
-
-static int ofi_epoll_ctl(struct ofi_pollfds *pfds, enum ofi_epoll_ctl op,
-			int fd, uint32_t events, void *context)
+static int ofi_pollfds_ctl(struct ofi_pollfds *pfds, enum ofi_pollfds_ctl op,
+			   int fd, uint32_t events, void *context)
 {
-	struct ofi_epoll_work_item *item;
+	struct ofi_pollfds_work_item *item;
 
 	item = calloc(1,sizeof(*item));
 	if (!item)
@@ -902,22 +901,24 @@ static int ofi_epoll_ctl(struct ofi_pollfds *pfds, enum ofi_epoll_ctl op,
 	return 0;
 }
 
-int ofi_epoll_add(struct ofi_pollfds *pfds, int fd, uint32_t events, void *context)
+int ofi_pollfds_add(struct ofi_pollfds *pfds, int fd, uint32_t events,
+		    void *context)
 {
-	return ofi_epoll_ctl(pfds, EPOLL_CTL_ADD, fd, events, context);
+	return ofi_pollfds_ctl(pfds, POLLFDS_CTL_ADD, fd, events, context);
 }
 
-int ofi_epoll_mod(struct ofi_pollfds *pfds, int fd, uint32_t events, void *context)
+int ofi_pollfds_mod(struct ofi_pollfds *pfds, int fd, uint32_t events,
+		    void *context)
 {
-	return ofi_epoll_ctl(pfds, EPOLL_CTL_MOD, fd, events, context);
+	return ofi_pollfds_ctl(pfds, POLLFDS_CTL_MOD, fd, events, context);
 }
 
-int ofi_epoll_del(struct ofi_pollfds *pfds, int fd)
+int ofi_pollfds_del(struct ofi_pollfds *pfds, int fd)
 {
-	return ofi_epoll_ctl(pfds, EPOLL_CTL_DEL, fd, 0, NULL);
+	return ofi_pollfds_ctl(pfds, POLLFDS_CTL_DEL, fd, 0, NULL);
 }
 
-static int ofi_epoll_fd_array_grow(struct ofi_pollfds *pfds)
+static int ofi_pollfds_array(struct ofi_pollfds *pfds)
 {
 	struct pollfd *fds;
 	void *contexts;
@@ -938,7 +939,7 @@ static int ofi_epoll_fd_array_grow(struct ofi_pollfds *pfds)
 	return FI_SUCCESS;
 }
 
-static void ofi_epoll_cleanup_array(struct ofi_pollfds *pfds)
+static void ofi_pollfds_cleanup(struct ofi_pollfds *pfds)
 {
 	int i;
 
@@ -955,29 +956,29 @@ static void ofi_epoll_cleanup_array(struct ofi_pollfds *pfds)
 	}
 }
 
-static void ofi_epoll_process_work_item_list(struct ofi_pollfds *pfds)
+static void ofi_pollfds_process_work(struct ofi_pollfds *pfds)
 {
 	struct slist_entry *entry;
-	struct ofi_epoll_work_item *item;
+	struct ofi_pollfds_work_item *item;
 	int i;
 
 	while (!slist_empty(&pfds->work_item_list)) {
 		if ((pfds->nfds == pfds->size) &&
-		    ofi_epoll_fd_array_grow(pfds))
+		    ofi_pollfds_array(pfds))
 			continue;
 
 		entry = slist_remove_head(&pfds->work_item_list);
-		item = container_of(entry, struct ofi_epoll_work_item, entry);
+		item = container_of(entry, struct ofi_pollfds_work_item, entry);
 
 		switch (item->type) {
-		case EPOLL_CTL_ADD:
+		case POLLFDS_CTL_ADD:
 			pfds->fds[pfds->nfds].fd = item->fd;
 			pfds->fds[pfds->nfds].events = item->events;
 			pfds->fds[pfds->nfds].revents = 0;
 			pfds->context[pfds->nfds] = item->context;
 			pfds->nfds++;
 			break;
-		case EPOLL_CTL_DEL:
+		case POLLFDS_CTL_DEL:
 			for (i = 0; i < pfds->nfds; i++) {
 				if (pfds->fds[i].fd == item->fd) {
 					pfds->fds[i].fd = INVALID_SOCKET;
@@ -985,7 +986,7 @@ static void ofi_epoll_process_work_item_list(struct ofi_pollfds *pfds)
 				}
 			}
 			break;
-		case EPOLL_CTL_MOD:
+		case POLLFDS_CTL_MOD:
 			for (i = 0; i < pfds->nfds; i++) {
 				if (pfds->fds[i].fd == item->fd) {
 					pfds->fds[i].events = item->events;
@@ -1002,11 +1003,11 @@ static void ofi_epoll_process_work_item_list(struct ofi_pollfds *pfds)
 		free(item);
 	}
 out:
-	ofi_epoll_cleanup_array(pfds);
+	ofi_pollfds_cleanup(pfds);
 }
 
-int ofi_epoll_wait(struct ofi_pollfds *pfds, void **contexts, int max_contexts,
-                   int timeout)
+int ofi_pollfds_wait(struct ofi_pollfds *pfds, void **contexts,
+		     int max_contexts, int timeout)
 {
 	int i, ret;
 	int found = 0;
@@ -1024,7 +1025,7 @@ int ofi_epoll_wait(struct ofi_pollfds *pfds, void **contexts, int max_contexts,
 
 		fastlock_acquire(&pfds->lock);
 		if (!slist_empty(&pfds->work_item_list))
-			ofi_epoll_process_work_item_list(pfds);
+			ofi_pollfds_process_work(pfds);
 
 		fastlock_release(&pfds->lock);
 
@@ -1050,15 +1051,16 @@ int ofi_epoll_wait(struct ofi_pollfds *pfds, void **contexts, int max_contexts,
 	return found;
 }
 
-void ofi_epoll_close(struct ofi_pollfds *pfds)
+void ofi_pollfds_close(struct ofi_pollfds *pfds)
 {
-	struct ofi_epoll_work_item *item;
+	struct ofi_pollfds_work_item *item;
 	struct slist_entry *entry;
+
 	if (pfds) {
 		while (!slist_empty(&pfds->work_item_list)) {
 			entry = slist_remove_head(&pfds->work_item_list);
 			item = container_of(entry,
-					    struct ofi_epoll_work_item,
+					    struct ofi_pollfds_work_item,
 					    entry);
 			free(item);
 		}
