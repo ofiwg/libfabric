@@ -128,7 +128,7 @@ struct ofi_epoll_work_item {
 	struct slist_entry entry;
 };
 
-typedef struct fi_epoll {
+typedef struct ofi_pollfds {
 	int		size;
 	int		nfds;
 	struct pollfd	*fds;
@@ -139,13 +139,15 @@ typedef struct fi_epoll {
 	fastlock_t	lock;
 } *ofi_epoll_t;
 
-int ofi_epoll_create(struct fi_epoll **ep);
-int ofi_epoll_add(struct fi_epoll *ep, int fd, uint32_t events, void *context);
-int ofi_epoll_mod(struct fi_epoll *ep, int fd, uint32_t events, void *context);
-int ofi_epoll_del(struct fi_epoll *ep, int fd);
-int ofi_epoll_wait(struct fi_epoll *ep, void **contexts, int max_contexts,
-                  int timeout);
-void ofi_epoll_close(struct fi_epoll *ep);
+int ofi_epoll_create(struct ofi_pollfds **pfds);
+int ofi_epoll_add(struct ofi_pollfds *pfds, int fd, uint32_t events,
+		  void *context);
+int ofi_epoll_mod(struct ofi_pollfds *pfds, int fd, uint32_t events,
+		  void *context);
+int ofi_epoll_del(struct ofi_pollfds *pfds, int fd);
+int ofi_epoll_wait(struct ofi_pollfds *pfds, void **contexts,
+		   int max_contexts, int timeout);
+void ofi_epoll_close(struct ofi_pollfds *pfds);
 
 #endif /* HAVE_EPOLL */
 
