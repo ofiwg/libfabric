@@ -127,18 +127,16 @@ static fi_addr_t recv_req_src_addr(struct cxip_req *req)
 
 	/* If the FI_SOURCE capability is enabled, convert the initiator's
 	 * address to an FI address to be reported in a CQ event. If
-	 * application AVs are symmetric and offloaded rendezvous is not
-	 * used, the match_id in the EQ event is logical and translation is
-	 * not needed.  Otherwise, translate the physical address in the EQ
-	 * event to logical FI address.
+	 * application AVs are symmetric, the match_id in the EQ event is
+	 * logical and translation is not needed. Otherwise, translate the
+	 * physical address in the EQ event to logical FI address.
 	 */
 	if (rxc->attr.caps & FI_SOURCE) {
 		uint32_t pid_bits = rxc->domain->iface->dev->info.pid_bits;
 		uint32_t nic;
 		uint32_t pid;
 
-		if (!rxc->ep_obj->rdzv_offload &&
-		    rxc->ep_obj->av->attr.flags & FI_SYMMETRIC)
+		if (rxc->ep_obj->av->attr.flags & FI_SYMMETRIC)
 			return CXI_MATCH_ID_EP(pid_bits, req->recv.initiator);
 
 		nic = CXI_MATCH_ID_EP(pid_bits, req->recv.initiator);
@@ -2170,8 +2168,7 @@ static ssize_t _cxip_recv(struct cxip_rxc *rxc, void *buf, size_t len,
 	pid_bits = dom->iface->dev->info.pid_bits;
 	if (rxc->attr.caps & FI_DIRECTED_RECV &&
 	    src_addr != FI_ADDR_UNSPEC) {
-		if (!rxc->ep_obj->rdzv_offload &&
-		    rxc->ep_obj->av->attr.flags & FI_SYMMETRIC) {
+		if (rxc->ep_obj->av->attr.flags & FI_SYMMETRIC) {
 			match_id = CXI_MATCH_ID(pid_bits, C_PID_ANY, src_addr);
 		} else {
 			ret = _cxip_av_lookup(rxc->ep_obj->av, src_addr,
@@ -2291,8 +2288,7 @@ static uint32_t cxip_msg_match_id(struct cxip_txc *txc)
 {
 	int pid_bits = txc->domain->iface->dev->info.pid_bits;
 
-	if (!txc->ep_obj->rdzv_offload &&
-	    txc->ep_obj->av->attr.flags & FI_SYMMETRIC)
+	if (txc->ep_obj->av->attr.flags & FI_SYMMETRIC)
 		return CXI_MATCH_ID(pid_bits, txc->ep_obj->src_addr.pid,
 				    _txc_fi_addr(txc));
 
