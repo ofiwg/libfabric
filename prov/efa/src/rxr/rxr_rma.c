@@ -159,6 +159,7 @@ size_t rxr_rma_post_shm_write(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_ent
 	struct rxr_pkt_entry *pkt_entry;
 	struct fi_msg_rma msg;
 	struct rxr_peer *peer;
+	int i;
 
 	assert(tx_entry->op == ofi_op_write);
 	peer = rxr_ep_get_peer(rxr_ep, tx_entry->addr);
@@ -168,6 +169,11 @@ size_t rxr_rma_post_shm_write(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_ent
 
 	rxr_pkt_init_write_context(tx_entry, pkt_entry);
 
+	/* If no FI_MR_VIRT_ADDR being set, have to use 0-based offset */
+	if (!(shm_info->domain_attr->mr_mode & FI_MR_VIRT_ADDR)) {
+		for (i = 0; i < tx_entry->iov_count; i++)
+			tx_entry->rma_iov[i].addr = 0;
+	}
 	msg.msg_iov = tx_entry->iov;
 	msg.iov_count = tx_entry->iov_count;
 	msg.addr = peer->shm_fiaddr;
