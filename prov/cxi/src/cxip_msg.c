@@ -23,6 +23,21 @@
 #define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_EP_DATA, __VA_ARGS__)
 
 /*
+ * init_ux_send() - Initialize the unexpected Send record using a target event.
+ */
+void init_ux_send(struct cxip_ux_send *ux_send, const union c_event *event)
+{
+	ux_send->start = event->tgt_long.start;
+	ux_send->initiator = event->tgt_long.initiator.initiator.process;
+	ux_send->rdzv_id = event->tgt_long.rendezvous_id;
+	ux_send->src_offset = event->tgt_long.remote_offset;
+	ux_send->rlen = event->tgt_long.rlength;
+	ux_send->mlen = event->tgt_long.mlength;
+	ux_send->mb.raw = event->tgt_long.match_bits;
+	ux_send->data = event->tgt_long.header_data;
+}
+
+/*
  * match_ux_send() - Search for an unexpected Put that matches a Put Overflow
  * event.
  *
@@ -739,8 +754,7 @@ cxip_oflow_sink_cb(struct cxip_req *req, const union c_event *event)
 
 		/* Use start pointer for matching. */
 		ux_send->req = req;
-		ux_send->start = event->tgt_long.start;
-		ux_send->src_offset = event->tgt_long.remote_offset;
+		init_ux_send(ux_send, event);
 
 		dlist_insert_tail(&ux_send->ux_entry, &rxc->ux_sends);
 
@@ -819,16 +833,8 @@ cxip_oflow_rdzv_cb(struct cxip_req *req, const union c_event *event)
 			goto err_put;
 		}
 
-		/* Use initiator and rdzv_id for matching. Store start pointer
-		 * since this is the only place that it's available for
-		 * offloaded rendezvous operations.
-		 */
 		ux_send->req = req;
-		ux_send->start = event->tgt_long.start;
-		ux_send->initiator =
-				event->tgt_long.initiator.initiator.process;
-		ux_send->rdzv_id = event->tgt_long.rendezvous_id;
-		ux_send->eager_bytes = event->tgt_long.mlength;
+		init_ux_send(ux_send, event);
 
 		dlist_insert_tail(&ux_send->ux_entry, &rxc->ux_rdzv_sends);
 
@@ -978,10 +984,8 @@ static int cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 			goto err_put;
 		}
 
-		/* Use start pointer for matching. */
 		ux_send->req = req;
-		ux_send->start = event->tgt_long.start;
-		ux_send->eager_bytes = event->tgt_long.mlength;
+		init_ux_send(ux_send, event);
 
 		dlist_insert_tail(&ux_send->ux_entry, &rxc->ux_sends);
 
@@ -1482,8 +1486,7 @@ void cxip_rxc_oflow_fini(struct cxip_rxc *rxc)
 		 * removed from the RXC list and freed.
 		 */
 		if (ux_send->req->oflow.oflow_buf->type == CXIP_LE_TYPE_RX)
-			oflow_req_put_bytes(ux_send->req,
-					    ux_send->eager_bytes);
+			oflow_req_put_bytes(ux_send->req, ux_send->mlen);
 
 		dlist_remove(&ux_send->ux_entry);
 		free(ux_send);

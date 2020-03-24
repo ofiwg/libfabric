@@ -636,7 +636,10 @@ struct cxip_ux_send {
 	uint32_t initiator;
 	uint32_t rdzv_id;
 	uint64_t src_offset;
-	int eager_bytes;
+	uint32_t rlen;
+	uint32_t mlen;
+	union cxip_match_bits mb;
+	uint64_t data;
 };
 
 /**
