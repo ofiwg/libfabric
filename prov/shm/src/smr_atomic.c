@@ -119,36 +119,6 @@ static void smr_format_inject_atomic(struct smr_cmd *cmd, fi_addr_t peer_id,
 	}
 }
 
-static int smr_fetch_result(struct smr_ep *ep, struct smr_region *peer_smr,
-			    struct iovec *iov, size_t iov_count,
-			    const struct fi_rma_ioc *rma_ioc, size_t rma_count,
-			    enum fi_datatype datatype, size_t total_len)
-{
-	int ret, i;
-	struct iovec rma_iov[SMR_IOV_LIMIT];
-
-	for (i = 0; i < rma_count; i++) {
-		rma_iov[i].iov_base = (void *) rma_ioc[i].addr;
-		rma_iov[i].iov_len = rma_ioc[i].count * ofi_datatype_size(datatype);
-	}
-
-	ret = process_vm_readv(peer_smr->pid, iov, iov_count,
-			       rma_iov, rma_count, 0);
-	if (ret != total_len) {
-		if (ret < 0) {
-			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-				"CMA write error\n");
-			return -errno;
-		} else { 
-			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-				"partial read occurred\n");
-			return -FI_EIO;
-		}
-	}
-
-	return 0; 
-}
-
 static void smr_post_fetch_resp(struct smr_ep *ep, struct smr_cmd *cmd,
 				const struct iovec *result_iov, size_t count)
 {
@@ -180,7 +150,6 @@ static ssize_t smr_generic_atomic(struct smr_ep *ep,
 			enum fi_op atomic_op, void *context, uint32_t op,
 			uint64_t op_flags)
 {
-	struct smr_domain *domain;
 	struct smr_region *peer_smr;
 	struct smr_inject_buf *tx_buf;
 	struct smr_cmd *cmd;
@@ -190,14 +159,12 @@ static ssize_t smr_generic_atomic(struct smr_ep *ep,
 	int peer_id, err = 0;
 	uint16_t flags = 0;
 	ssize_t ret = 0;
-	size_t msg_len, total_len;
+	size_t total_len;
 
 	assert(count <= SMR_IOV_LIMIT);
 	assert(result_count <= SMR_IOV_LIMIT);
 	assert(compare_count <= SMR_IOV_LIMIT);
 	assert(rma_count <= SMR_IOV_LIMIT);
-
-	domain = container_of(ep->util_ep.domain, struct smr_domain, util_domain);
 
 	peer_id = (int) addr;
 	ret = smr_verify_peer(ep, peer_id);
@@ -218,8 +185,7 @@ static ssize_t smr_generic_atomic(struct smr_ep *ep,
 	}
 
 	cmd = ofi_cirque_tail(smr_cmd_queue(peer_smr));
-	msg_len = total_len = ofi_datatype_size(datatype) *
-			      ofi_total_ioc_cnt(ioc, count);
+	total_len = ofi_datatype_size(datatype) * ofi_total_ioc_cnt(ioc, count);
 	
 	switch (op) {
 	case ofi_op_atomic_compare:
@@ -232,8 +198,7 @@ static ssize_t smr_generic_atomic(struct smr_ep *ep,
 		assert(result_ioc);
 		ofi_ioc_to_iov(result_ioc, result_iov, result_count,
 			       ofi_datatype_size(datatype));
-		if (!domain->fast_rma)
-			flags |= SMR_RMA_REQ;
+		flags |= SMR_RMA_REQ;
 		/* fall through */
 	case ofi_op_atomic:
 		if (atomic_op != FI_ATOMIC_READ) {
@@ -247,7 +212,8 @@ static ssize_t smr_generic_atomic(struct smr_ep *ep,
 		break;
 	}
 
-	if (total_len <= SMR_MSG_DATA_LEN && !(flags & SMR_RMA_REQ)) {
+	if (total_len <= SMR_MSG_DATA_LEN && !(flags & SMR_RMA_REQ) &&
+	    !(op_flags & FI_DELIVERY_COMPLETE)) {
 		smr_format_inline_atomic(cmd, smr_peer_addr(ep->region)[peer_id].addr,
 					 iov, count, compare_iov, compare_count,
 					 op, datatype, atomic_op, op_flags);
@@ -257,6 +223,8 @@ static ssize_t smr_generic_atomic(struct smr_ep *ep,
 					 iov, count, result_iov, result_count,
 					 compare_iov, compare_count, op, datatype,
 					 atomic_op, peer_smr, tx_buf, op_flags);
+		if (flags & SMR_RMA_REQ || op_flags & FI_DELIVERY_COMPLETE)
+			smr_post_fetch_resp(ep, cmd, result_iov, result_count);
 	} else {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"message too large\n");
@@ -268,27 +236,15 @@ static ssize_t smr_generic_atomic(struct smr_ep *ep,
 	ofi_cirque_commit(smr_cmd_queue(peer_smr));
 	peer_smr->cmd_cnt--;
 
-	if (op != ofi_op_atomic) {
-		if (flags & SMR_RMA_REQ) {
-			smr_post_fetch_resp(ep, cmd,
-				(const struct iovec *) result_iov,
-				result_count);
-			goto format_rma;
-		}
-		err = smr_fetch_result(ep, peer_smr, result_iov, result_count,
-				       rma_ioc, rma_count, datatype, msg_len);
-		if (err)
+	if (!(flags & SMR_RMA_REQ) && !(op_flags & FI_DELIVERY_COMPLETE)) {
+		ret = smr_complete_tx(ep, context, op, cmd->msg.hdr.op_flags,
+				      err);
+		if (ret) {
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-				"unable to fetch results");
+				"unable to process tx completion\n");
+		}
 	}
 
-	ret = smr_complete_tx(ep, context, op, cmd->msg.hdr.op_flags, err);
-	if (ret) {
-		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-			"unable to process tx completion\n");
-	}
-
-format_rma:
 	cmd = ofi_cirque_tail(smr_cmd_queue(peer_smr));
 	smr_format_rma_ioc(cmd, rma_ioc, rma_count);
 	ofi_cirque_commit(smr_cmd_queue(peer_smr));

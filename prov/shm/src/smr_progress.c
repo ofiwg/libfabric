@@ -53,7 +53,7 @@ static int smr_progress_fetch(struct smr_ep *ep, struct smr_cmd *pending,
 	tx_buf = (struct smr_inject_buf *) ((char **) peer_smr +
 					    inj_offset);
 
-	if (*ret)
+	if (*ret || !(pending->msg.hdr.op_flags & SMR_RMA_REQ))
 		goto out;
 
 	src = pending->msg.hdr.op == ofi_op_atomic_compare ?
