@@ -300,6 +300,8 @@ static struct cxip_txc *txc_alloc(const struct fi_tx_attr *attr, void *context,
 	ofi_atomic_initialize32(&txc->zbp_le_linked, 0);
 	ofi_atomic_initialize32(&txc->rdzv_src_lacs, 0);
 	dlist_init(&txc->rdzv_src_reqs);
+	dlist_init(&txc->msg_queue);
+	dlist_init(&txc->fc_peers);
 
 	switch (fclass) {
 	case FI_CLASS_TX_CTX:

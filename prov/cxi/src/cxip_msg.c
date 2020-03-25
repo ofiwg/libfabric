@@ -22,6 +22,9 @@
 #define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_EP_DATA, __VA_ARGS__)
 #define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_EP_DATA, __VA_ARGS__)
 
+static int cxip_send_req_dropped(struct cxip_txc *txc, struct cxip_req *req);
+static void cxip_send_req_dequeue(struct cxip_txc *txc, struct cxip_req *req);
+
 /*
  * init_ux_send() - Initialize the unexpected Send record using a target event.
  */
@@ -1331,6 +1334,8 @@ cxip_zbp_cb(struct cxip_req *req, const union c_event *event)
 		 */
 		report_send_completion(put_req, true);
 		ofi_atomic_dec32(&put_req->send.txc->otx_reqs);
+
+		cxip_send_req_dequeue(put_req->send.txc, put_req);
 		cxip_cq_req_free(put_req);
 
 		return FI_SUCCESS;
@@ -2382,6 +2387,7 @@ static void long_send_req_event(struct cxip_req *req)
 static int cxip_send_long_cb(struct cxip_req *req, const union c_event *event)
 {
 	int event_rc;
+	int ret;
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_ACK:
@@ -2394,6 +2400,27 @@ static int cxip_send_long_cb(struct cxip_req *req, const union c_event *event)
 		else
 			CXIP_LOG_ERROR("Ack error: %p rc: %s\n",
 				       req, cxi_rc_to_str(event_rc));
+
+		/* If the message was dropped, mark the peer as disabled. Do
+		 * not generate a completion. Free associated resources. Do not
+		 * free the request (it will be used to replay the Send).
+		 */
+		if (event_rc == C_RC_PT_DISABLED) {
+			ofi_atomic_dec32(&req->send.txc->otx_reqs);
+
+			ret = cxip_send_req_dropped(req->send.txc, req);
+			if (ret != FI_SUCCESS)
+				ret = -FI_EAGAIN;
+
+			return ret;
+		}
+
+		/* Message was accepted by the peer. Match order is preserved.
+		 * The request can be dequeued from the SW message queue. This
+		 * allows flow-control recovery to be performed before
+		 * outstanding long Send operations have completed.
+		 */
+		cxip_send_req_dequeue(req->send.txc, req);
 
 		/* The transaction is complete if:
 		 * 1. The Put failed
@@ -2616,12 +2643,10 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 	struct cxip_txc *txc = req->send.txc;
 	struct cxip_domain *dom;
 	struct cxip_md *send_md;
-	struct cxip_addr caddr;
 	union c_fab_addr dfa;
 	uint8_t idx_ext;
 	uint32_t pid_bits;
 	uint32_t pid_idx;
-	uint64_t rx_id;
 	struct c_full_dma_cmd cmd = {};
 	union cxip_match_bits put_mb = {};
 	int rdzv_id;
@@ -2634,19 +2659,11 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 
 	dom = txc->domain;
 
-	/* Look up target CXI address */
-	ret = _cxip_av_lookup(txc->ep_obj->av, req->send.dest_addr, &caddr);
-	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("Failed to look up FI addr: %d\n", ret);
-		return ret;
-	}
-
 	/* Calculate DFA */
-	rx_id = CXIP_AV_ADDR_RXC(txc->ep_obj->av, req->send.dest_addr);
 	pid_bits = dom->iface->dev->info.pid_bits;
-	pid_idx = CXIP_PTL_IDX_RXC(rx_id);
-	cxi_build_dfa(caddr.nic, caddr.pid, pid_bits, pid_idx, &dfa,
-		      &idx_ext);
+	pid_idx = CXIP_PTL_IDX_RXC(req->send.rxc_id);
+	cxi_build_dfa(req->send.caddr.nic, req->send.caddr.pid, pid_bits,
+		      pid_idx, &dfa, &idx_ext);
 
 	/* Map local buffer */
 	ret = cxip_map(dom, req->send.buf, req->send.len, &send_md);
@@ -2733,11 +2750,6 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 
 	fastlock_release(&txc->tx_cmdq->lock);
 
-	CXIP_LOG_DBG("req: %p buf: %p len: %lu dest_addr: %ld tag(%c): 0x%lx context %#lx\n",
-		     req, req->send.buf, req->send.len, req->send.dest_addr,
-		     req->send.tagged ? '*' : '-', req->send.tag,
-		     req->context);
-
 	return FI_SUCCESS;
 
 err_unlock:
@@ -2757,10 +2769,13 @@ static int cxip_send_eager_cb(struct cxip_req *req,
 			      const union c_event *event)
 {
 	int match_complete = req->flags & FI_MATCH_COMPLETE;
+	int ret;
 
 	/* IDCs don't have an MD */
-	if (req->send.send_md)
+	if (req->send.send_md) {
 		cxip_unmap(req->send.send_md);
+		req->send.send_md = NULL;
+	}
 
 	req->send.rc = cxi_init_event_rc(event);
 
@@ -2781,9 +2796,22 @@ static int cxip_send_eager_cb(struct cxip_req *req,
 
 	ofi_atomic_dec32(&req->send.txc->otx_reqs);
 
+	/* If the message was dropped, mark the peer as disabled. Do not
+	 * generate a completion. Free associated resources. Do not free the
+	 * request (it will be used to replay the Send).
+	 */
+	if (req->send.rc == C_RC_PT_DISABLED) {
+		ret = cxip_send_req_dropped(req->send.txc, req);
+		if (ret != FI_SUCCESS)
+			ret = -FI_EAGAIN;
+
+		return ret;
+	}
+
 	/* If MATCH_COMPLETE was requested, software must manage counters. */
 	report_send_completion(req, match_complete);
 
+	cxip_send_req_dequeue(req->send.txc, req);
 	cxip_cq_req_free(req);
 
 	return FI_SUCCESS;
@@ -2797,12 +2825,10 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 	struct cxip_txc *txc = req->send.txc;
 	struct cxip_domain *dom;
 	struct cxip_md *send_md = NULL;
-	struct cxip_addr caddr;
 	union c_fab_addr dfa;
 	uint8_t idx_ext;
 	uint32_t pid_bits;
 	uint32_t pid_idx;
-	uint64_t rx_id;
 	union cxip_match_bits mb = {
 		.le_type = CXIP_LE_TYPE_RX
 	};
@@ -2821,24 +2847,16 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 
 	dom = txc->domain;
 
-	/* Look up target CXI address */
-	ret = _cxip_av_lookup(txc->ep_obj->av, req->send.dest_addr, &caddr);
-	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("Failed to look up FI addr: %d\n", ret);
-		return ret;
-	}
-
 	/* Calculate DFA */
-	rx_id = CXIP_AV_ADDR_RXC(txc->ep_obj->av, req->send.dest_addr);
 	pid_bits = dom->iface->dev->info.pid_bits;
-	pid_idx = CXIP_PTL_IDX_RXC(rx_id);
-	cxi_build_dfa(caddr.nic, caddr.pid, pid_bits, pid_idx, &dfa,
-		      &idx_ext);
+	pid_idx = CXIP_PTL_IDX_RXC(req->send.rxc_id);
+	cxi_build_dfa(req->send.caddr.nic, req->send.caddr.pid, pid_bits,
+		      pid_idx, &dfa, &idx_ext);
 
 	/* Map local buffer */
 	if (!idc) {
 		ret = cxip_map(dom, req->send.buf, req->send.len, &send_md);
-		if (ret) {
+		if (ret != FI_SUCCESS) {
 			CXIP_LOG_DBG("Failed to map send buffer: %d\n", ret);
 			return ret;
 		}
@@ -2968,11 +2986,6 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 
 	fastlock_release(&txc->tx_cmdq->lock);
 
-	CXIP_LOG_DBG("req: %p buf: %p len: %lu dest_addr: %ld tag(%c): 0x%lx context %#lx\n",
-		     req, req->send.buf, req->send.len, req->send.dest_addr,
-		     req->send.tagged ? '*' : '-', req->send.tag,
-		     req->context);
-
 	return FI_SUCCESS;
 
 err_unlock:
@@ -2994,6 +3007,208 @@ static ssize_t _cxip_send_req(struct cxip_req *req)
 		return _cxip_send_eager(req);
 }
 
+struct cxip_fc_peer {
+	struct dlist_entry txc_entry;
+	struct cxip_txc *txc;
+	struct cxip_addr caddr;
+	uint8_t rxc_id;
+	struct dlist_entry msg_queue;
+	uint32_t pending;
+	uint32_t dropped;
+};
+
+/*
+ * cxip_fc_peer_lookup() - Check if a peer is disabled.
+ *
+ * Look up disabled peer state and return it, if available.
+ *
+ * Caller must hold txc->lock.
+ */
+static struct cxip_fc_peer *cxip_fc_peer_lookup(struct cxip_txc *txc,
+						struct cxip_addr caddr,
+						uint8_t rxc_id)
+{
+	struct cxip_fc_peer *peer;
+
+	dlist_foreach_container(&txc->fc_peers, struct cxip_fc_peer,
+				peer, txc_entry) {
+		if (CXIP_ADDR_EQUAL(peer->caddr, caddr) &&
+		    peer->rxc_id == rxc_id) {
+			return peer;
+		}
+	}
+
+	return NULL;
+}
+
+/*
+ * cxip_fc_peer_put() - Account for completion of an outstanding Send targeting
+ * a disabled peer.
+ *
+ * Drop a reference to a disabled peer. When the last reference is dropped,
+ * attempt flow-control recovery.
+ *
+ * Caller must hold txc->lock.
+ */
+static void cxip_fc_peer_put(struct cxip_fc_peer *peer)
+{
+	/* Account for the completed Send */
+	if (!--peer->pending) {
+#if 0
+		int ret;
+
+		ret = cxip_fc_peer_notify(peer);
+		if (ret)
+			abort();
+#endif
+
+		CXIP_LOG_DBG("Notifying disabled peer, TXC: %p NIC: %#x PID: %u dropped: %u\n",
+			     peer->txc, peer->caddr.nic, peer->caddr.pid,
+			     peer->dropped);
+	}
+}
+
+/*
+ * cxip_fc_peer_init() - Mark a peer as disabled.
+ *
+ * Allocate state to track the disabled peer. Locate all outstanding Sends
+ * targeting the peer.
+ *
+ * Caller must hold txc->lock.
+ */
+static int cxip_fc_peer_init(struct cxip_txc *txc, struct cxip_addr caddr,
+			     uint8_t rxc_id, struct cxip_fc_peer **peer)
+{
+	struct cxip_fc_peer *p;
+	struct cxip_req *req;
+	struct dlist_entry *tmp;
+
+	p = calloc(1, sizeof(*p));
+	if (!p) {
+		CXIP_LOG_ERROR("Failed to allocate FC Peer\n");
+		return -FI_ENOMEM;
+	}
+
+	p->caddr = caddr;
+	p->rxc_id = rxc_id;
+	p->txc = txc;
+	dlist_init(&p->msg_queue);
+	dlist_insert_tail(&p->txc_entry, &txc->fc_peers);
+
+	/* Queue all Sends to the FC'ed peer */
+	dlist_foreach_container_safe(&txc->msg_queue, struct cxip_req,
+				     req, send.txc_entry, tmp) {
+		if (CXIP_ADDR_EQUAL(req->send.caddr, caddr) &&
+		     req->send.rxc_id == rxc_id) {
+			dlist_remove(&req->send.txc_entry);
+			dlist_insert_tail(&req->send.txc_entry, &p->msg_queue);
+			p->pending++;
+			req->send.fc_peer = p;
+		}
+	}
+
+	*peer = p;
+
+	return FI_SUCCESS;
+}
+
+/*
+ * cxip_send_req_dropped() - Mark the Send request dropped.
+ *
+ * Mark the Send request dropped. Mark the target peer as disabled. Track all
+ * outstanding Sends targeting the disabled peer. When all outstanding Sends
+ * are completed, recovery will be performed.
+ */
+static int cxip_send_req_dropped(struct cxip_txc *txc, struct cxip_req *req)
+{
+	struct cxip_fc_peer *peer;
+	int ret;
+
+	fastlock_acquire(&txc->lock);
+
+	/* Check if peer is already disabled */
+	peer = cxip_fc_peer_lookup(txc, req->send.caddr, req->send.rxc_id);
+	if (!peer) {
+		ret = cxip_fc_peer_init(txc, req->send.caddr, req->send.rxc_id,
+					&peer);
+		if (ret != FI_SUCCESS) {
+			fastlock_release(&txc->lock);
+			return ret;
+		}
+
+		CXIP_LOG_DBG("Disabled peer detected, TXC: %p NIC: %#x PID: %u pending: %u\n",
+			     txc, peer->caddr.nic, peer->caddr.pid,
+			     peer->pending);
+	}
+
+	peer->dropped++;
+	CXIP_LOG_DBG("Send dropped, req: %p NIC: %#x PID: %u pending: %u dropped: %u\n",
+		     req, peer->caddr.nic, peer->caddr.pid, peer->pending,
+		     peer->dropped);
+
+	/* Account for the dropped message. */
+	cxip_fc_peer_put(peer);
+
+	fastlock_release(&txc->lock);
+
+	return FI_SUCCESS;
+}
+
+/*
+ * cxip_send_req_queue() - Queue Send request on TXC.
+ *
+ * Place the Send request in an ordered SW queue. Return error if the target
+ * peer is disabled.
+ */
+static int cxip_send_req_queue(struct cxip_txc *txc, struct cxip_req *req)
+{
+	struct cxip_fc_peer *peer;
+
+	fastlock_acquire(&txc->lock);
+
+	if (!dlist_empty(&txc->fc_peers)) {
+		peer = cxip_fc_peer_lookup(txc, req->send.caddr,
+					   req->send.rxc_id);
+		if (peer) {
+			/* Peer is disabled */
+			fastlock_release(&txc->lock);
+			return -FI_EAGAIN;
+		}
+	}
+
+	dlist_insert_tail(&req->send.txc_entry, &txc->msg_queue);
+
+	fastlock_release(&txc->lock);
+
+	return FI_SUCCESS;
+}
+
+/*
+ * cxip_send_req_dequeue() - Dequeue Send request from TXC.
+ *
+ * Remove the Send requst from the ordered message queue. Update peer
+ * flow-control state, if necessary.
+ */
+static void cxip_send_req_dequeue(struct cxip_txc *txc, struct cxip_req *req)
+{
+	fastlock_acquire(&txc->lock);
+
+	if (req->send.fc_peer) {
+		/* The peer was disabled after this message arrived. */
+		CXIP_LOG_DBG("Send not dropped, req: %p NIC: %#x PID: %u pending: %u dropped: %u\n",
+			     req, req->send.fc_peer->caddr.nic,
+			     req->send.fc_peer->caddr.pid,
+			     req->send.fc_peer->pending,
+			     req->send.fc_peer->dropped);
+
+		cxip_fc_peer_put(req->send.fc_peer);
+	}
+
+	dlist_remove(&req->send.txc_entry);
+
+	fastlock_release(&txc->lock);
+}
+
 /*
  * _cxip_send() - Common message send function. Used for tagged and untagged
  * sends of all sizes.
@@ -3004,6 +3219,7 @@ static ssize_t _cxip_send(struct cxip_txc *txc, const void *buf, size_t len,
 			  bool tagged)
 {
 	struct cxip_req *req;
+	struct cxip_addr caddr;
 	int ret;
 
 	if (!txc->enabled)
@@ -3028,7 +3244,6 @@ static ssize_t _cxip_send(struct cxip_txc *txc, const void *buf, size_t len,
 	req->send.txc = txc;
 	req->send.buf = buf;
 	req->send.len = len;
-	req->send.dest_addr = dest_addr;
 	req->send.tagged = tagged;
 	req->send.tag = tag;
 	req->send.data = data;
@@ -3047,13 +3262,36 @@ static ssize_t _cxip_send(struct cxip_txc *txc, const void *buf, size_t len,
 	req->data = 0;
 	req->tag = 0;
 
+	/* Look up target CXI address */
+	ret = _cxip_av_lookup(txc->ep_obj->av, dest_addr, &caddr);
+	if (ret != FI_SUCCESS) {
+		CXIP_LOG_DBG("Failed to look up FI addr: %d\n", ret);
+		goto req_free;
+	}
+	req->send.caddr = caddr;
+	req->send.rxc_id = CXIP_AV_ADDR_RXC(txc->ep_obj->av, dest_addr);
+
+	/* Check if target peer is disabled */
+	ret = cxip_send_req_queue(req->send.txc, req);
+	if (ret != FI_SUCCESS) {
+		CXIP_LOG_DBG("Target peer disabled\n");
+		goto req_free;
+	}
+
 	/* Try Send */
 	ret = _cxip_send_req(req);
 	if (ret != FI_SUCCESS)
-		goto req_free;
+		goto req_dequeue;
+
+	CXIP_LOG_DBG("req: %p buf: %p len: %lu dest_addr: %ld tag(%c): 0x%lx context %#lx\n",
+		     req, req->send.buf, req->send.len, dest_addr,
+		     req->send.tagged ? '*' : '-', req->send.tag,
+		     req->context);
 
 	return FI_SUCCESS;
 
+req_dequeue:
+	cxip_send_req_dequeue(req->send.txc, req);
 req_free:
 	cxip_cq_req_free(req);
 

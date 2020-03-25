@@ -188,6 +188,8 @@ struct cxip_addr {
 	};
 };
 
+#define CXIP_ADDR_EQUAL(a, b) ((a).nic == (b).nic && (a).pid == (b).pid)
+
 #define CXIP_AV_ADDR_IDX(av, fi_addr) ((uint64_t)fi_addr & av->mask)
 #define CXIP_AV_ADDR_RXC(av, fi_addr) \
 	(av->rxc_bits ? ((uint64_t)fi_addr >> (64 - av->rxc_bits)) : 0)
@@ -477,13 +479,16 @@ struct cxip_req_send {
 	const void *buf;		// local send buffer
 	size_t len;			// request length
 	struct cxip_md *send_md;	// send buffer memory descriptor
-	fi_addr_t dest_addr;
+	struct cxip_addr caddr;
+	uint8_t rxc_id;
 	bool tagged;
 	uint64_t tag;
 	uint64_t data;
 	uint64_t flags;
 
 	/* Control info */
+	struct dlist_entry txc_entry;
+	struct cxip_fc_peer *fc_peer;
 	union {
 		int rdzv_id;		// SW RDZV ID for long messages
 		int tx_id;
@@ -777,6 +782,10 @@ struct cxip_txc {
 	/* Header message handling */
 	ofi_atomic32_t zbp_le_linked;
 	struct cxip_oflow_buf zbp_le;	// Zero-byte Put LE
+
+	/* Flow Control recovery */
+	struct dlist_entry msg_queue;
+	struct dlist_entry fc_peers;
 };
 
 /**
