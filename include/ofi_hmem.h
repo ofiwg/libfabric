@@ -55,6 +55,30 @@ CUresult ofi_cuPointerGetAttribute(void *data, CUpointer_attribute attribute,
 
 #endif /* HAVE_LIBCUDA */
 
+#ifdef HAVE_ROCR
+
+#include <hsa/hsa_ext_amd.h>
+
+/* Libfabric support ROCr operations. */
+
+hsa_status_t ofi_hsa_memory_copy(void *dst, const void *src, size_t size);
+hsa_status_t ofi_hsa_amd_pointer_info(void *ptr, hsa_amd_pointer_info_t *info,
+				      void *(*alloc)(size_t),
+				      uint32_t *num_agents_accessible,
+				      hsa_agent_t **accessible);
+hsa_status_t ofi_hsa_init(void);
+hsa_status_t ofi_hsa_shut_down(void);
+hsa_status_t ofi_hsa_status_string(hsa_status_t status,
+				   const char **status_string);
+const char *ofi_hsa_status_to_string(hsa_status_t status);
+
+#endif /* HAVE_ROCR */
+
+int rocr_memcpy(void *dest, const void *src, size_t size);
+int rocr_hmem_init(void);
+int rocr_hmem_cleanup(void);
+bool rocr_is_addr_valid(const void *addr);
+
 int cuda_copy_to_dev(void *dev, const void *host, size_t size);
 int cuda_copy_from_dev(void *host, const void *dev, size_t size);
 int cuda_hmem_init(void);

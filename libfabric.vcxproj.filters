@@ -144,6 +144,9 @@
     <ClCompile Include="src\hmem_cuda.c">
       <Filter>Source Files\src</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmem_rocr.c">
+      <Filter>Source Files\src</Filter>
+    </ClCompile>
     <ClCompile Include="src\rbtree.c">
       <Filter>Source Files\src</Filter>
     </ClCompile>

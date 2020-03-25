@@ -63,6 +63,14 @@ static struct ofi_hmem_ops hmem_ops[] = {
 		.copy_from_hmem = cuda_copy_from_dev,
 		.is_addr_valid = cuda_is_addr_valid,
 	},
+	[FI_HMEM_ROCR] = {
+		.initialized = false,
+		.init = rocr_hmem_init,
+		.cleanup = rocr_hmem_cleanup,
+		.copy_to_hmem = rocr_memcpy,
+		.copy_from_hmem = rocr_memcpy,
+		.is_addr_valid = rocr_is_addr_valid,
+	},
 };
 
 static inline int ofi_copy_to_hmem(void *dest, const void *src, size_t size,
