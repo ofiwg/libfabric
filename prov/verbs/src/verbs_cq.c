@@ -444,8 +444,9 @@ static struct fi_ops_cq vrb_cq_ops = {
 
 static int vrb_cq_control(fid_t fid, int command, void *arg)
 {
+	struct fi_wait_pollfd *pollfd;
 	struct vrb_cq *cq;
-	int ret = 0;
+	int ret;
 
 	cq = container_of(fid, struct vrb_cq, util_cq.cq_fid);
 	switch(command) {
@@ -454,7 +455,21 @@ static int vrb_cq_control(fid_t fid, int command, void *arg)
 			ret = -FI_ENODATA;
 			break;
 		}
-		*(int *) arg = cq->channel->fd;
+
+		if (cq->wait_obj == FI_WAIT_FD) {
+			*(int *) arg = cq->channel->fd;
+			return 0;
+		}
+
+		pollfd = arg;
+		if (pollfd->nfds >= 1) {
+			pollfd->fd[0].fd = cq->channel->fd;
+			pollfd->fd[0].events = POLLIN;
+			ret = 0;
+		} else {
+			ret = -FI_ETOOSMALL;
+		}
+		pollfd->nfds = 1;
 		break;
 	default:
 		ret = -FI_ENOSYS;
@@ -563,7 +578,19 @@ int vrb_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 
 	switch (attr->wait_obj) {
 	case FI_WAIT_UNSPEC:
+		cq->wait_obj = FI_WAIT_FD;
+		break;
 	case FI_WAIT_FD:
+	case FI_WAIT_POLLFD:
+	case FI_WAIT_NONE:
+		cq->wait_obj = attr->wait_obj;
+		break;
+	default:
+		ret = -FI_ENOSYS;
+		goto err4;
+	}
+
+	if (cq->wait_obj != FI_WAIT_NONE) {
 		cq->channel = ibv_create_comp_channel(domain->verbs);
 		if (!cq->channel) {
 			ret = -errno;
@@ -584,13 +611,6 @@ int vrb_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 		ret = fi_fd_nonblock(cq->signal_fd[0]);
 		if (ret)
 			goto err4;
-
-		break;
-	case FI_WAIT_NONE:
-		break;
-	default:
-		ret = -FI_ENOSYS;
-		goto err4;
 	}
 
 	size = attr->size ? attr->size : VERBS_DEF_CQ_SIZE;

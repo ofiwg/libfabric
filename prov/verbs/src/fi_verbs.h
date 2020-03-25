@@ -275,7 +275,9 @@ struct vrb_eq {
 	struct rdma_event_channel *channel;
 	uint64_t		flags;
 	struct fi_eq_err_entry	err;
+
 	ofi_epoll_t		epollfd;
+	enum fi_wait_obj	wait_obj;
 
 	struct {
 		/* The connection key map is used during the XRC connection
@@ -384,6 +386,7 @@ struct vrb_cq {
 	struct ibv_cq		*cq;
 	size_t			entry_size;
 	uint64_t		flags;
+	enum fi_wait_obj	wait_obj;
 	enum fi_cq_wait_cond	wait_cond;
 	struct ibv_wc		wc;
 	int			signal_fd[2];
