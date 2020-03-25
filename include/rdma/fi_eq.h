@@ -33,6 +33,8 @@
 #ifndef FI_EQ_H
 #define FI_EQ_H
 
+#include <poll.h>
+
 #ifndef _WIN32
 #include <pthread.h>
 #endif /* _WIN32 */
@@ -60,6 +62,7 @@ enum fi_wait_obj {
 	FI_WAIT_FD,
 	FI_WAIT_MUTEX_COND,	/* pthread mutex & cond */
 	FI_WAIT_YIELD,
+	FI_WAIT_POLLFD,
 };
 
 struct fi_wait_attr {
@@ -84,6 +87,11 @@ struct fi_mutex_cond {
 };
 #endif /* _WIN32 */
 
+struct fi_wait_pollfd {
+	uint64_t		change_index;
+	size_t			nfds;
+	struct pollfd		*fd;
+};
 
 /*
  * Poll Set
