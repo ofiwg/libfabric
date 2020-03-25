@@ -239,7 +239,7 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 		/* Start accepting Puts. */
 		ret = rxc_msg_enable(rxc);
 		if (ret != FI_SUCCESS) {
-			CXIP_LOG_DBG("rxc_msg_disable returned: %d\n", ret);
+			CXIP_LOG_DBG("rxc_msg_enable returned: %d\n", ret);
 			goto oflow_fini;
 		}
 	}
@@ -315,10 +315,14 @@ static void rxc_disable(struct cxip_rxc *rxc)
 
 	fastlock_acquire(&rxc->lock);
 
-	if (!rxc->enabled)
-		goto unlock;
+	if (!rxc->enabled) {
+		fastlock_release(&rxc->lock);
+		return;
+	}
 
 	rxc->enabled = false;
+
+	fastlock_release(&rxc->lock);
 
 	if (ofi_recv_allowed(rxc->attr.caps)) {
 		/* Stop accepting Puts. */
@@ -336,9 +340,6 @@ static void rxc_disable(struct cxip_rxc *rxc)
 		if (ret != FI_SUCCESS)
 			CXIP_LOG_ERROR("rxc_msg_fini returned: %d\n", ret);
 	}
-
-unlock:
-	fastlock_release(&rxc->lock);
 }
 
 /*

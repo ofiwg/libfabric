@@ -258,10 +258,14 @@ static void txc_disable(struct cxip_txc *txc)
 
 	fastlock_acquire(&txc->lock);
 
-	if (!txc->enabled)
-		goto unlock;
+	if (!txc->enabled) {
+		fastlock_release(&txc->lock);
+		return;
+	}
 
 	txc->enabled = false;
+
+	fastlock_release(&txc->lock);
 
 	txc_cleanup(txc);
 
@@ -273,8 +277,6 @@ static void txc_disable(struct cxip_txc *txc)
 	}
 
 	cxip_ep_cmdq_put(txc->ep_obj, txc->tx_id, true);
-unlock:
-	fastlock_release(&txc->lock);
 }
 
 /*
