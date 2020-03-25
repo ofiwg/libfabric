@@ -59,6 +59,7 @@ static int ofi_check_cntr_attr(const struct fi_provider *prov,
 		/* fall through */
 	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
+	case FI_WAIT_POLLFD:
 		break;
 	default:
 		FI_WARN(prov, FI_LOG_CNTR, "unsupported wait object\n");
@@ -290,6 +291,7 @@ int ofi_cntr_init(const struct fi_provider *prov, struct fid_domain *domain,
 		break;
 	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
+	case FI_WAIT_POLLFD:
 	case FI_WAIT_MUTEX_COND:
 	case FI_WAIT_YIELD:
 		memset(&wait_attr, 0, sizeof wait_attr);

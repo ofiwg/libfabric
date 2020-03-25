@@ -152,6 +152,7 @@ int ofi_check_cq_attr(const struct fi_provider *prov,
 		/* fall through */
 	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
+	case FI_WAIT_POLLFD:
 		switch (attr->wait_cond) {
 		case FI_CQ_COND_NONE:
 		case FI_CQ_COND_THRESHOLD:
@@ -537,6 +538,7 @@ static int fi_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
 		break;
 	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
+	case FI_WAIT_POLLFD:
 	case FI_WAIT_MUTEX_COND:
 	case FI_WAIT_YIELD:
 		memset(&wait_attr, 0, sizeof wait_attr);
