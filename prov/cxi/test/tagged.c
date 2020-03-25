@@ -3063,3 +3063,122 @@ Test(tagged, fc, .disabled = true)
 
 	free(send_buf);
 }
+
+static void *fc_sender(void *data)
+{
+	int i, tx_ret;
+	uint8_t *send_buf;
+	int send_len = 64;
+	struct fi_cq_tagged_entry tx_cqe;
+	int sends = 0;
+
+	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	cr_assert(send_buf);
+
+	for (i = 0; i < 100; i++) {
+		memset(send_buf, i, send_len);
+
+		/* Send 64 bytes to self */
+		do {
+			tx_ret = fi_tsend(cxit_ep, send_buf, send_len, NULL,
+				       cxit_ep_fi_addr, 0xa, NULL);
+		} while (tx_ret == -FI_EAGAIN);
+
+		cr_assert_eq(tx_ret, FI_SUCCESS, "fi_tsend failed %d", tx_ret);
+
+		do {
+			tx_ret = fi_cq_read(cxit_tx_cq, &tx_cqe, 1);
+		} while (tx_ret == -FI_EAGAIN);
+
+		cr_assert_eq(tx_ret, 1, "fi_cq_read unexpected value %d",
+			     tx_ret);
+
+		validate_tx_event(&tx_cqe, FI_TAGGED | FI_SEND, NULL);
+
+		if (!(++sends % 1000))
+			printf("%u Sends complete.\n", sends);
+	}
+
+	free(send_buf);
+
+	pthread_exit(NULL);
+}
+
+static void *fc_recver(void *data)
+{
+	int i, j, ret;
+	uint8_t *recv_buf;
+	int recv_len = 64;
+	struct fi_cq_tagged_entry rx_cqe;
+
+	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	cr_assert(recv_buf);
+
+	for (i = 0; i < 5; i++) {
+		sleep(1);
+
+		/* Progress RX to avoid EQ drops */
+		ret = fi_cq_read(cxit_rx_cq, &rx_cqe, 1);
+		cr_assert_eq(ret, -FI_EAGAIN,
+			     "fi_cq_read unexpected value %d",
+			     ret);
+	}
+
+	for (i = 0; i < 100; i++) {
+		memset(recv_buf, 0, recv_len);
+
+		/* Send 64 bytes to self */
+		ret = fi_trecv(cxit_ep, recv_buf, recv_len, NULL,
+			       FI_ADDR_UNSPEC, 0xa, 0, NULL);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_trecv failed %d", ret);
+
+		do {
+			ret = fi_cq_read(cxit_rx_cq, &rx_cqe, 1);
+		} while (ret == -FI_EAGAIN);
+
+		cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
+
+		validate_rx_event(&rx_cqe, NULL, recv_len, FI_TAGGED | FI_RECV,
+				  NULL, 0, 0xa);
+
+		for (j = 0; j < recv_len; j++) {
+			cr_expect_eq(recv_buf[j], i,
+				     "data mismatch, element[%d], exp=%d saw=%d\n",
+				     j, i, recv_buf[j]);
+		}
+	}
+
+	free(recv_buf);
+
+	pthread_exit(NULL);
+}
+
+/*
+ * Multi-threaded flow control test.
+ *
+ * Run with driver le_pool_max set below 100.
+ */
+Test(tagged, fc_mt)
+{
+	pthread_t send_thread;
+	pthread_t recv_thread;
+	pthread_attr_t attr;
+	int ret;
+
+	pthread_attr_init(&attr);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+
+	ret = pthread_create(&send_thread, &attr, fc_sender, NULL);
+	cr_assert_eq(ret, 0);
+
+	ret = pthread_create(&recv_thread, &attr, fc_recver, NULL);
+	cr_assert_eq(ret, 0);
+
+	ret = pthread_join(recv_thread, NULL);
+	cr_assert_eq(ret, 0);
+
+	ret = pthread_join(send_thread, NULL);
+	cr_assert_eq(ret, 0);
+
+	pthread_attr_destroy(&attr);
+}
