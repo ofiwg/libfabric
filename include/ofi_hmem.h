@@ -72,6 +72,12 @@ hsa_status_t ofi_hsa_status_string(hsa_status_t status,
 				   const char **status_string);
 const char *ofi_hsa_status_to_string(hsa_status_t status);
 
+hsa_status_t ofi_hsa_amd_dereg_dealloc_cb(void *ptr,
+					  hsa_amd_deallocation_callback_t cb);
+hsa_status_t ofi_hsa_amd_reg_dealloc_cb(void *ptr,
+					hsa_amd_deallocation_callback_t cb,
+					void *user_data);
+
 #endif /* HAVE_ROCR */
 
 int rocr_memcpy(void *dest, const void *src, size_t size);
