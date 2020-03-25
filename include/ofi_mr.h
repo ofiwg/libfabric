@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2017-2019 Intel Corporation, Inc. All rights reserved.
  * Copyright (c) 2019 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * (C) Copyright 2020 Hewlett Packard Enterprise Development LP.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -154,6 +155,12 @@ void ofi_memhooks_cleanup(void);
 
 extern struct ofi_mem_monitor *memhooks_monitor;
 
+
+/* ROCr memory monitor. */
+extern struct ofi_mem_monitor *rocr_monitor;
+void ofi_rocr_monitor_init(void);
+void ofi_rocr_monitor_cleanup(void);
+void ofi_rocr_monitor_teardown(void);
 
 /*
  * Used to store registered memory regions into a lookup map.  This

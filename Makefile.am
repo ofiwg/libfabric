@@ -2,6 +2,7 @@
 # Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
 # Copyright (c) 2017-2018 Intel Corporation, Inc. All right reserved.
 # Copyright (c) 2018 Amazon.com, Inc. or its affiliates. All rights reserved.
+# (C) Copyright 2020 Hewlett Packard Enterprise Development LP.
 #
 # Makefile.am for libfabric
 
@@ -68,6 +69,7 @@ common_srcs =				\
 	prov/util/src/util_mem_monitor.c\
 	prov/util/src/util_mem_hooks.c	\
 	prov/util/src/util_mr_cache.c	\
+	prov/util/src/util_rocr_mem_monitor.c \
 	prov/util/src/util_coll.c
 
 

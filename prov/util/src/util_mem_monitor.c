@@ -2,6 +2,7 @@
  * Copyright (c) 2017 Cray Inc. All rights reserved.
  * Copyright (c) 2017-2019 Intel Inc. All rights reserved.
  * Copyright (c) 2019 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * (C) Copyright 2020 Hewlett Packard Enterprise Development LP.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -68,6 +69,8 @@ void ofi_monitor_init(void)
 	pthread_mutex_init(&memhooks_monitor->lock, NULL);
 	dlist_init(&memhooks_monitor->list);
 
+	ofi_rocr_monitor_init();
+
 #if defined(HAVE_ELF_H) && defined(HAVE_SYS_AUXV_H)
         default_monitor = memhooks_monitor;
 #elif HAVE_UFFD_UNMAP
@@ -123,6 +126,8 @@ void ofi_monitor_cleanup(void)
 
 	assert(dlist_empty(&memhooks_monitor->list));
 	pthread_mutex_destroy(&memhooks_monitor->lock);
+
+	ofi_rocr_monitor_teardown();
 }
 
 int ofi_monitor_add_cache(struct ofi_mem_monitor *monitor,
@@ -139,6 +144,8 @@ int ofi_monitor_add_cache(struct ofi_mem_monitor *monitor,
 			ret = ofi_uffd_init();
 		else if (monitor == memhooks_monitor)
 			ret = ofi_memhooks_init();
+		else if (monitor == rocr_monitor)
+			ret = FI_SUCCESS;
 		else
 			ret = -FI_ENOSYS;
 
@@ -165,6 +172,8 @@ void ofi_monitor_del_cache(struct ofi_mr_cache *cache)
 			ofi_uffd_cleanup();
 		else if (monitor == memhooks_monitor)
 			ofi_memhooks_cleanup();
+		else if (monitor == rocr_monitor)
+			ofi_rocr_monitor_cleanup();
 	}
 
 	pthread_mutex_unlock(&monitor->lock);
