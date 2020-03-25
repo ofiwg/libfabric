@@ -366,7 +366,9 @@ void rxr_tx_entry_init(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	memcpy(&tx_entry->iov[0], msg->msg_iov, sizeof(struct iovec) * msg->iov_count);
 	memset(tx_entry->mr, 0, sizeof(*tx_entry->mr) * msg->iov_count);
 	if (msg->desc)
-		memcpy(&tx_entry->desc[0], msg->desc, sizeof(*msg->desc) * msg->iov_count);
+		memcpy(tx_entry->desc, msg->desc, sizeof(*msg->desc) * msg->iov_count);
+	else
+		memset(tx_entry->desc, 0, sizeof(tx_entry->desc));
 
 	/* set flags */
 	assert(ep->util_ep.tx_msg_flags == 0 ||
@@ -438,10 +440,46 @@ struct rxr_tx_entry *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
 	return tx_entry;
 }
 
-void rxr_prepare_mr_send(struct rxr_domain *rxr_domain,
-			 struct rxr_tx_entry *tx_entry)
+int rxr_ep_tx_init_mr_desc(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
+			   int mr_iov_start, uint64_t access)
 {
-	ssize_t ret;
+	int i, err, ret;
+
+	ret = 0;
+	for (i = mr_iov_start; i < tx_entry->iov_count; ++i) {
+		if (tx_entry->desc[i]) {
+			assert(!tx_entry->mr[i]);
+			continue;
+		}
+
+		if (tx_entry->iov[i].iov_len <= rxr_env.max_memcpy_size) {
+			assert(!tx_entry->mr[i]);
+			continue;
+		}
+
+		err = fi_mr_reg(rxr_ep_domain(ep)->rdm_domain,
+				tx_entry->iov[i].iov_base,
+				tx_entry->iov[i].iov_len,
+				access, 0, 0, 0,
+				&tx_entry->mr[i], NULL);
+		if (err) {
+			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+				"fi_mr_reg failed! buf: %p len: %ld access: %lx",
+				tx_entry->iov[i].iov_base, tx_entry->iov[i].iov_len,
+				access);
+
+			tx_entry->mr[i] = NULL;
+			ret = err;
+		} else {
+			tx_entry->desc[i] = fi_mr_desc(tx_entry->mr[i]);
+		}
+	}
+
+	return ret;
+}
+
+void rxr_prepare_mr_send(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
+{
 	size_t offset;
 	int index;
 
@@ -458,21 +496,11 @@ void rxr_prepare_mr_send(struct rxr_domain *rxr_domain,
 	}
 
 	tx_entry->iov_mr_start = index;
-	while (index < tx_entry->iov_count) {
-		if (!tx_entry->desc[index]
-		    && tx_entry->iov[index].iov_len > rxr_env.max_memcpy_size) {
-			ret = fi_mr_reg(rxr_domain->rdm_domain,
-					tx_entry->iov[index].iov_base,
-					tx_entry->iov[index].iov_len,
-					FI_SEND, 0, 0, 0,
-					&tx_entry->mr[index], NULL);
-			if (ret)
-				tx_entry->mr[index] = NULL;
-		}
-		index++;
-	}
-
-	return;
+	/* the return value of rxr_ep_tx_init_mr_desc() is not checked
+	 * because the long message protocol would work with or without
+	 * memory registration and descriptor.
+	 */
+	rxr_ep_tx_init_mr_desc(ep, tx_entry, index, FI_SEND);
 }
 
 /* Generic send */

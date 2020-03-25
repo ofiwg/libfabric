@@ -802,8 +802,7 @@ void rxr_cq_handle_tx_completion(struct rxr_ep *ep, struct rxr_tx_entry *tx_entr
 	if (tx_entry->state == RXR_TX_SEND)
 		dlist_remove(&tx_entry->entry);
 
-	if (tx_entry->state == RXR_TX_SEND &&
-	    efa_mr_cache_enable && rxr_ep_mr_local(ep)) {
+	if (efa_mr_cache_enable && rxr_ep_mr_local(ep)) {
 		ret = rxr_tx_entry_mr_dereg(tx_entry);
 		if (OFI_UNLIKELY(ret)) {
 			FI_WARN(&rxr_prov, FI_LOG_MR,

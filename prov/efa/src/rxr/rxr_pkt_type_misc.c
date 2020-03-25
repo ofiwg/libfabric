@@ -279,7 +279,7 @@ void rxr_pkt_handle_readrsp_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_en
 	assert(tx_entry->window >= 0);
 	if (tx_entry->bytes_sent < tx_entry->total_len) {
 		if (efa_mr_cache_enable && rxr_ep_mr_local(ep))
-			rxr_prepare_mr_send(rxr_ep_domain(ep), tx_entry);
+			rxr_prepare_mr_send(ep, tx_entry);
 
 		tx_entry->state = RXR_TX_SEND;
 		dlist_insert_tail(&tx_entry->entry,
