@@ -73,6 +73,9 @@ static int rxc_msg_disable(struct cxip_rxc *rxc)
 	int ret;
 	union c_cmdu cmd = {};
 
+	/* Don't treat the state change as flow control */
+	rxc->disabling = true;
+
 	cmd.command.opcode = C_CMD_TGT_SETSTATE;
 	cmd.set_state.ptlte_index = rxc->rx_pte->pte->ptn;
 	cmd.set_state.ptlte_state = C_PTLTE_DISABLED;
@@ -375,7 +378,9 @@ struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr, void *context,
 	dlist_init(&rxc->ux_rdzv_sends);
 	dlist_init(&rxc->ux_rdzv_recvs);
 	ofi_atomic_initialize32(&rxc->sink_le_linked, 0);
+	dlist_init(&rxc->sw_ux_list);
 	rxc->pte_state = CXIP_PTE_DISABLED;
+	rxc->disabling = false;
 
 	rxc->rdzv_threshold = cxip_env.rdzv_threshold;
 	rxc->oflow_buf_size = cxip_env.oflow_buf_size;

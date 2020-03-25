@@ -248,6 +248,7 @@ static struct cxip_req *cxip_cq_event_req(struct cxip_cq *cq,
 	case C_EVENT_PUT:
 	case C_EVENT_PUT_OVERFLOW:
 	case C_EVENT_RENDEZVOUS:
+	case C_EVENT_SEARCH:
 		req = cxip_cq_req_find(cq, event->tgt_long.buffer_id);
 		if (!req)
 			CXIP_LOG_ERROR("Invalid buffer_id: %d (%s)\n",

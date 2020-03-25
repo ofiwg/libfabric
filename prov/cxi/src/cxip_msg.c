@@ -2069,24 +2069,133 @@ int cxip_recv_cancel(struct cxip_req *req)
 }
 
 /*
+ * cxip_ux_onload_cb() - Process SEARCH_AND_DELETE command events.
+ */
+static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
+{
+	struct cxip_rxc *rxc = req->search.rxc;
+	struct cxip_ux_send *ux_send;
+
+	switch (event->hdr.event_type) {
+	case C_EVENT_PUT_OVERFLOW:
+		assert(cxi_event_rc(event) == C_RC_OK);
+
+		fastlock_acquire(&rxc->lock);
+		ux_send = match_ux_send(rxc, event);
+		if (!ux_send) {
+			CXIP_LOG_ERROR("Matching Put event not found\n");
+			abort();
+		}
+		dlist_remove(&ux_send->ux_entry);
+
+		dlist_insert_tail(&ux_send->ux_entry, &rxc->sw_ux_list);
+		rxc->sw_ux_list_len++;
+
+		fastlock_release(&rxc->lock);
+
+		CXIP_LOG_DBG("Onloaded ux_send: %p\n", ux_send);
+
+		return FI_SUCCESS;
+	case C_EVENT_SEARCH:
+		CXIP_LOG_ERROR("UX list empty (SW UX list len: %d): %p\n",
+			       rxc->sw_ux_list_len, rxc);
+
+		rxc->pte_state = CXIP_PTE_ONLOADED;
+		return FI_SUCCESS;
+	default:
+		CXIP_LOG_ERROR("Unexpected event type: %d\n",
+			       event->hdr.event_type);
+	}
+
+	return FI_SUCCESS;
+}
+
+/*
+ * cxip_ux_onload() - Issue SEARCH_AND_DELETE command to on-load unexpected
+ * Send headers queued on the RXC message queue.
+ */
+static int cxip_ux_onload(struct cxip_rxc *rxc)
+{
+	struct cxip_req *req;
+	union c_cmdu cmd = {};
+	int ret;
+
+	/* Populate request */
+	req = cxip_cq_req_alloc(rxc->recv_cq, 1, rxc);
+	if (!req) {
+		CXIP_LOG_DBG("Failed to allocate request\n");
+		ret = -FI_ENOMEM;
+		return ret;
+	}
+
+	req->cb = cxip_ux_onload_cb;
+	req->search.rxc = rxc;
+
+	cmd.command.opcode = C_CMD_TGT_SEARCH_AND_DELETE;
+	cmd.target.ptl_list = C_PTL_LIST_UNEXPECTED;
+	cmd.target.ptlte_index = rxc->rx_pte->pte->ptn;
+	cmd.target.buffer_id = req->req_id;
+	cmd.target.length = -1U;
+	cmd.target.ignore_bits = -1UL;
+	cmd.target.match_id = CXI_MATCH_ID_ANY;
+
+	fastlock_acquire(&rxc->rx_cmdq->lock);
+
+	ret = cxi_cq_emit_target(rxc->rx_cmdq->dev_cmdq, &cmd);
+	if (ret) {
+		CXIP_LOG_DBG("Failed to write Search command: %d\n", ret);
+
+		fastlock_release(&rxc->rx_cmdq->lock);
+
+		return -FI_EAGAIN;
+	}
+
+	cxi_cq_ring(rxc->rx_cmdq->dev_cmdq);
+
+	fastlock_release(&rxc->rx_cmdq->lock);
+
+	return FI_SUCCESS;
+}
+
+/*
  * cxip_recv_pte_cb() - Process receive PTE state change events.
  */
 void cxip_recv_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
 {
 	struct cxip_rxc *rxc = (struct cxip_rxc *)pte->ctx;
+	int ret;
 
 	switch (state) {
 	case C_PTLTE_ENABLED:
 		rxc->pte_state = CXIP_PTE_ENABLED;
 		break;
 	case C_PTLTE_DISABLED:
-		rxc->pte_state = CXIP_PTE_DISABLED;
+		if (rxc->disabling) {
+			rxc->pte_state = CXIP_PTE_DISABLED;
+		} else {
+			/* Flow control triggered */
+			assert(rxc->pte_state == CXIP_PTE_ENABLED);
+
+			CXIP_LOG_ERROR("Flow control detected: %p\n", rxc);
+
+			ret = cxip_ux_onload(rxc);
+			assert(ret == FI_SUCCESS);
+
+			rxc->pte_state = CXIP_PTE_ONLOADING;
+
+			/* Wait for search events capped by one with a RC
+			 * NO_MATCH.
+			 */
+		}
 		break;
 	default:
 		CXIP_LOG_ERROR("Unexpected state received: %u\n", state);
 	}
 }
 
+/*
+ * _cxip_recv_req() - Submit Receive request to hardware.
+ */
 static ssize_t _cxip_recv_req(struct cxip_req *req)
 {
 	struct cxip_rxc *rxc = req->recv.rxc;

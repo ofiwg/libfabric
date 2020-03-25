@@ -512,6 +512,10 @@ struct cxip_req_rdzv_src {
 	int rc;
 };
 
+struct cxip_req_search {
+	struct cxip_rxc *rxc;
+};
+
 /**
  * Async Request
  *
@@ -557,6 +561,7 @@ struct cxip_req {
 		struct cxip_req_recv recv;
 		struct cxip_req_send send;
 		struct cxip_req_rdzv_src rdzv_src;
+		struct cxip_req_search search;
 	};
 };
 
@@ -668,6 +673,8 @@ struct cxip_oflow_buf {
 enum cxip_pte_state {
 	CXIP_PTE_DISABLED = 1,
 	CXIP_PTE_ENABLED,
+	CXIP_PTE_ONLOADING,
+	CXIP_PTE_ONLOADED,
 };
 
 /**
@@ -700,6 +707,7 @@ struct cxip_rxc {
 
 	struct cxip_pte *rx_pte;	// HW RX Queue
 	enum cxip_pte_state pte_state;
+	bool disabling;
 	struct cxip_cmdq *rx_cmdq;	// RX CMDQ for posting receive buffers
 	struct cxip_cmdq *tx_cmdq;	// TX CMDQ for Message Gets
 
@@ -724,6 +732,9 @@ struct cxip_rxc {
 	/* Long eager send handling */
 	ofi_atomic32_t sink_le_linked;
 	struct cxip_oflow_buf sink_le;		// Long UX sink buffer
+
+	struct dlist_entry sw_ux_list;
+	int sw_ux_list_len;
 };
 
 #define CXIP_RDZV_IDS	(1 << CXIP_RDZV_ID_WIDTH)
