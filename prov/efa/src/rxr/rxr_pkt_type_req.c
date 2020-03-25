@@ -757,14 +757,28 @@ ssize_t rxr_pkt_proc_matched_rtm(struct rxr_ep *ep,
 ssize_t rxr_pkt_proc_msgrtm(struct rxr_ep *ep,
 			    struct rxr_pkt_entry *pkt_entry)
 {
+	ssize_t err;
 	struct rxr_rx_entry *rx_entry;
 
 	rx_entry = rxr_pkt_get_msgrtm_rx_entry(ep, &pkt_entry);
-	if (OFI_UNLIKELY(!rx_entry))
+	if (OFI_UNLIKELY(!rx_entry)) {
+		efa_eq_write_error(&ep->util_ep, FI_ENOBUFS, -FI_ENOBUFS);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return -FI_ENOBUFS;
+	}
 
-	if (rx_entry->state == RXR_RX_MATCHED)
-		return rxr_pkt_proc_matched_rtm(ep, rx_entry, pkt_entry);
+	if (rx_entry->state == RXR_RX_MATCHED) {
+		err = rxr_pkt_proc_matched_rtm(ep, rx_entry, pkt_entry);
+		if (OFI_UNLIKELY(err)) {
+			if (rxr_cq_handle_rx_error(ep, rx_entry, err)) {
+				assert(0 && "cannot write cq error entry");
+				efa_eq_write_error(&ep->util_ep, -err, err);
+			}
+			rxr_pkt_entry_release_rx(ep, pkt_entry);
+			rxr_release_rx_entry(ep, rx_entry);
+			return err;
+		}
+	}
 
 	return 0;
 }
@@ -772,14 +786,28 @@ ssize_t rxr_pkt_proc_msgrtm(struct rxr_ep *ep,
 ssize_t rxr_pkt_proc_tagrtm(struct rxr_ep *ep,
 			    struct rxr_pkt_entry *pkt_entry)
 {
+	ssize_t err;
 	struct rxr_rx_entry *rx_entry;
 
 	rx_entry = rxr_pkt_get_tagrtm_rx_entry(ep, &pkt_entry);
-	if (OFI_UNLIKELY(!rx_entry))
+	if (OFI_UNLIKELY(!rx_entry)) {
+		efa_eq_write_error(&ep->util_ep, FI_ENOBUFS, -FI_ENOBUFS);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return -FI_ENOBUFS;
+	}
 
-	if (rx_entry->state == RXR_RX_MATCHED)
-		return rxr_pkt_proc_matched_rtm(ep, rx_entry, pkt_entry);
+	if (rx_entry->state == RXR_RX_MATCHED) {
+		err = rxr_pkt_proc_matched_rtm(ep, rx_entry, pkt_entry);
+		if (OFI_UNLIKELY(err)) {
+			if (rxr_cq_handle_rx_error(ep, rx_entry, err)) {
+				assert(0 && "cannot write error cq entry");
+				efa_eq_write_error(&ep->util_ep, -err, err);
+			}
+			rxr_pkt_entry_release_rx(ep, pkt_entry);
+			rxr_release_rx_entry(ep, rx_entry);
+			return err;
+		}
+	}
 
 	return 0;
 }
@@ -1095,6 +1123,7 @@ void rxr_pkt_handle_eager_rtw_recv(struct rxr_ep *ep,
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"RX entries exhausted.\n");
 		efa_eq_write_error(&ep->util_ep, FI_ENOBUFS, -FI_ENOBUFS);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
 	}
 
@@ -1102,7 +1131,7 @@ void rxr_pkt_handle_eager_rtw_recv(struct rxr_ep *ep,
 	rx_entry->iov_count = rtw_hdr->rma_iov_count;
 	err = rxr_rma_verified_copy_iov(ep, rtw_hdr->rma_iov, rtw_hdr->rma_iov_count,
 					FI_REMOTE_WRITE, rx_entry->iov);
-	if (err) {
+	if (OFI_UNLIKELY(err)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "RMA address verify failed!\n");
 		efa_eq_write_error(&ep->util_ep, FI_EIO, err);
 		rxr_release_rx_entry(ep, rx_entry);
@@ -1124,6 +1153,9 @@ void rxr_pkt_handle_eager_rtw_recv(struct rxr_ep *ep,
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "target buffer: %p length: %ld", rx_entry->iov[0].iov_base,
 			rx_entry->iov[0].iov_len);
 		efa_eq_write_error(&ep->util_ep, FI_EINVAL, -FI_EINVAL);
+		rxr_release_rx_entry(ep, rx_entry);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
+		return;
 	}
 
 	if (rx_entry->cq_entry.flags & FI_REMOTE_CQ_DATA)
@@ -1147,6 +1179,7 @@ void rxr_pkt_handle_long_rtw_recv(struct rxr_ep *ep,
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"RX entries exhausted.\n");
 		efa_eq_write_error(&ep->util_ep, FI_ENOBUFS, -FI_ENOBUFS);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
 	}
 
@@ -1154,7 +1187,7 @@ void rxr_pkt_handle_long_rtw_recv(struct rxr_ep *ep,
 	rx_entry->iov_count = rtw_hdr->rma_iov_count;
 	err = rxr_rma_verified_copy_iov(ep, rtw_hdr->rma_iov, rtw_hdr->rma_iov_count,
 					FI_REMOTE_WRITE, rx_entry->iov);
-	if (err) {
+	if (OFI_UNLIKELY(err)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "RMA address verify failed!\n");
 		efa_eq_write_error(&ep->util_ep, FI_EIO, err);
 		rxr_release_rx_entry(ep, rx_entry);
@@ -1175,8 +1208,10 @@ void rxr_pkt_handle_long_rtw_recv(struct rxr_ep *ep,
 			bytes_left);
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "target buffer: %p length: %ld", rx_entry->iov[0].iov_base,
 			rx_entry->iov[0].iov_len);
-		rxr_cq_handle_rx_error(ep, rx_entry, -FI_EINVAL);
+		efa_eq_write_error(&ep->util_ep, FI_EINVAL, -FI_EINVAL);
 		rxr_release_rx_entry(ep, rx_entry);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
+		return;
 	}
 
 #if ENABLE_DEBUG
@@ -1208,6 +1243,7 @@ void rxr_pkt_handle_read_rtw_recv(struct rxr_ep *ep,
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"RX entries exhausted.\n");
 		efa_eq_write_error(&ep->util_ep, FI_ENOBUFS, -FI_ENOBUFS);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
 	}
 
@@ -1215,7 +1251,7 @@ void rxr_pkt_handle_read_rtw_recv(struct rxr_ep *ep,
 	rx_entry->iov_count = rtw_hdr->rma_iov_count;
 	err = rxr_rma_verified_copy_iov(ep, rtw_hdr->rma_iov, rtw_hdr->rma_iov_count,
 					FI_REMOTE_WRITE, rx_entry->iov);
-	if (err) {
+	if (OFI_UNLIKELY(err)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "RMA address verify failed!\n");
 		efa_eq_write_error(&ep->util_ep, FI_EINVAL, -FI_EINVAL);
 		rxr_release_rx_entry(ep, rx_entry);
@@ -1241,6 +1277,8 @@ void rxr_pkt_handle_read_rtw_recv(struct rxr_ep *ep,
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"RDMA post read or queue failed.\n");
 		efa_eq_write_error(&ep->util_ep, err, err);
+		rxr_release_rx_entry(ep, rx_entry);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
 	}
 }
 
@@ -1333,6 +1371,7 @@ void rxr_pkt_handle_rtr_recv(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"RX entries exhausted.\n");
 		efa_eq_write_error(&ep->util_ep, FI_ENOBUFS, -FI_ENOBUFS);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
 	}
 
@@ -1360,7 +1399,7 @@ void rxr_pkt_handle_rtr_recv(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 	tx_entry = rxr_rma_alloc_readrsp_tx_entry(ep, rx_entry);
 	if (OFI_UNLIKELY(!tx_entry)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "Readrsp tx entry exhausted!\n");
-		efa_eq_write_error(&ep->util_ep, FI_EINVAL, -FI_EINVAL);
+		efa_eq_write_error(&ep->util_ep, FI_ENOBUFS, -FI_ENOBUFS);
 		rxr_release_rx_entry(ep, rx_entry);
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
@@ -1369,7 +1408,7 @@ void rxr_pkt_handle_rtr_recv(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 	err = rxr_pkt_post_ctrl_or_queue(ep, RXR_TX_ENTRY, tx_entry, RXR_READRSP_PKT, 0);
 	if (OFI_UNLIKELY(err)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "Posting of readrsp packet failed! err=%ld\n", err);
-		efa_eq_write_error(&ep->util_ep, FI_EIO, -FI_EIO);
+		efa_eq_write_error(&ep->util_ep, FI_EIO, err);
 		rxr_release_tx_entry(ep, tx_entry);
 		rxr_release_rx_entry(ep, rx_entry);
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
@@ -1563,7 +1602,7 @@ int rxr_pkt_proc_fetch_rta(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 	}
 
 	err = rxr_pkt_post_ctrl_or_queue(ep, RXR_RX_ENTRY, rx_entry, RXR_ATOMRSP_PKT, 0);
-	if (err) {
+	if (OFI_UNLIKELY(err)) {
 		if (rxr_cq_handle_rx_error(ep, rx_entry, err))
 			assert(0 && "Cannot handle rx error");
 	}
@@ -1583,6 +1622,7 @@ int rxr_pkt_proc_compare_rta(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 	rx_entry = rxr_pkt_alloc_rta_rx_entry(ep, pkt_entry, ofi_op_atomic_compare);
 	if(OFI_UNLIKELY(!rx_entry)) {
 		efa_eq_write_error(&ep->util_ep, FI_ENOBUFS, -FI_ENOBUFS);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return -FI_ENOBUFS;
 	}
 
@@ -1605,10 +1645,12 @@ int rxr_pkt_proc_compare_rta(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 	}
 
 	err = rxr_pkt_post_ctrl_or_queue(ep, RXR_RX_ENTRY, rx_entry, RXR_ATOMRSP_PKT, 0);
-	if (err) {
-		efa_eq_write_error(&ep->util_ep, FI_EIO, -FI_EIO);
+	if (OFI_UNLIKELY(err)) {
+		efa_eq_write_error(&ep->util_ep, FI_EIO, err);
 		rxr_pkt_entry_release_tx(ep, rx_entry->atomrsp_pkt);
 		rxr_release_rx_entry(ep, rx_entry);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
+		return err;
 	}
 
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
