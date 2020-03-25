@@ -278,7 +278,7 @@ struct ofi_mr_storage {
 	void				(*destroy)(struct ofi_mr_storage *storage);
 };
 
-#define OFI_HMEM_MAX 2
+#define OFI_HMEM_MAX 3
 
 struct ofi_mr_cache {
 	struct util_domain		*domain;
