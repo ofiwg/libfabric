@@ -36,6 +36,7 @@
 
 #include <ofi_enosys.h>
 #include <ofi_util.h>
+#include <ofi_epoll.h>
 
 
 int ofi_trywait(struct fid_fabric *fabric, struct fid **fids, int count)
@@ -80,6 +81,7 @@ int ofi_check_wait_attr(const struct fi_provider *prov,
 	switch (attr->wait_obj) {
 	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
+	case FI_WAIT_POLLFD:
 	case FI_WAIT_MUTEX_COND:
 	case FI_WAIT_YIELD:
 		break;
@@ -124,14 +126,13 @@ int ofi_wait_init(struct util_fabric *fabric, struct fi_wait_attr *attr,
 
 	switch (attr->wait_obj) {
 	case FI_WAIT_UNSPEC:
-	case FI_WAIT_FD:
 		wait->wait_obj = FI_WAIT_FD;
 		break;
+	case FI_WAIT_FD:
+	case FI_WAIT_POLLFD:
 	case FI_WAIT_MUTEX_COND:
-		wait->wait_obj = FI_WAIT_MUTEX_COND;
-		break;
 	case FI_WAIT_YIELD:
-		wait->wait_obj = FI_WAIT_YIELD;
+		wait->wait_obj = attr->wait_obj;
 		break;
 	default:
 		assert(0);
@@ -154,17 +155,17 @@ static int ofi_wait_fd_match(struct dlist_entry *item, const void *arg)
 	struct ofi_wait_fd_entry *fd_entry;
 
 	fd_entry = container_of(item, struct ofi_wait_fd_entry, entry);
-	return fd_entry->fd == *(int *)arg;
+	return fd_entry->fd == *(int *) arg;
 }
 
 int ofi_wait_fd_del(struct util_wait *wait, int fd)
 {
-	int ret = 0;
 	struct ofi_wait_fd_entry *fd_entry;
 	struct dlist_entry *entry;
-	struct util_wait_fd *wait_fd = container_of(wait, struct util_wait_fd,
-						    util_wait);
+	struct util_wait_fd *wait_fd;
+	int ret = 0;
 
+	wait_fd = container_of(wait, struct util_wait_fd, util_wait);
 	fastlock_acquire(&wait_fd->lock);
 	entry = dlist_find_first_match(&wait_fd->fd_list, ofi_wait_fd_match, &fd);
 	if (!entry) {
@@ -174,12 +175,19 @@ int ofi_wait_fd_del(struct util_wait *wait, int fd)
 		ret = -FI_EINVAL;
 		goto out;
 	}
+
 	fd_entry = container_of(entry, struct ofi_wait_fd_entry, entry);
 	if (ofi_atomic_dec32(&fd_entry->ref))
 		goto out;
+
 	dlist_remove(&fd_entry->entry);
-	ofi_epoll_del(wait_fd->epoll_fd, fd_entry->fd);
+
+	if (wait->wait_obj == FI_WAIT_FD)
+		ofi_epoll_del(wait_fd->epoll_fd, fd_entry->fd);
+	else
+		ofi_pollfds_del(wait_fd->pollfds, fd_entry->fd);
 	free(fd_entry);
+	wait_fd->change_index++;
 out:
 	fastlock_release(&wait_fd->lock);
 	return ret;
@@ -190,10 +198,10 @@ int ofi_wait_fd_add(struct util_wait *wait, int fd, uint32_t events,
 {
 	struct ofi_wait_fd_entry *fd_entry;
 	struct dlist_entry *entry;
-	struct util_wait_fd *wait_fd = container_of(wait, struct util_wait_fd,
-						    util_wait);
+	struct util_wait_fd *wait_fd;
 	int ret = 0;
 
+	wait_fd = container_of(wait, struct util_wait_fd, util_wait);
 	fastlock_acquire(&wait_fd->lock);
 	entry = dlist_find_first_match(&wait_fd->fd_list, ofi_wait_fd_match, &fd);
 	if (entry) {
@@ -205,7 +213,9 @@ int ofi_wait_fd_add(struct util_wait *wait, int fd, uint32_t events,
 		goto out;
 	}
 
-	ret = ofi_epoll_add(wait_fd->epoll_fd, fd, events, context);
+	ret = (wait->wait_obj == FI_WAIT_FD) ?
+	      ofi_epoll_add(wait_fd->epoll_fd, fd, events, context) :
+	      ofi_pollfds_add(wait_fd->pollfds, fd, events, context);
 	if (ret) {
 		FI_WARN(wait->prov, FI_LOG_FABRIC, "Unable to add fd to epoll\n");
 		goto out;
@@ -214,15 +224,20 @@ int ofi_wait_fd_add(struct util_wait *wait, int fd, uint32_t events,
 	fd_entry = calloc(1, sizeof *fd_entry);
 	if (!fd_entry) {
 		ret = -FI_ENOMEM;
-		ofi_epoll_del(wait_fd->epoll_fd, fd);
+		if (wait->wait_obj == FI_WAIT_FD)
+			ofi_epoll_del(wait_fd->epoll_fd, fd);
+		else
+			ofi_pollfds_del(wait_fd->pollfds, fd);
 		goto out;
 	}
+
 	fd_entry->fd = fd;
 	fd_entry->wait_try = wait_try;
 	fd_entry->arg = arg;
 	ofi_atomic_initialize32(&fd_entry->ref, 1);
 
 	dlist_insert_tail(&fd_entry->entry, &wait_fd->fd_list);
+	wait_fd->change_index++;
 out:
 	fastlock_release(&wait_fd->lock);
 	return ret;
@@ -276,7 +291,9 @@ static int util_wait_fd_run(struct fid_wait *wait_fid, int timeout)
 		if (ofi_adjust_timeout(endtime, &timeout))
 			return -FI_ETIMEDOUT;
 
-		ret = ofi_epoll_wait(wait->epoll_fd, ep_context, 1, timeout);
+		ret = (wait->util_wait.wait_obj == FI_WAIT_FD) ?
+		      ofi_epoll_wait(wait->epoll_fd, ep_context, 1, timeout) :
+		      ofi_pollfds_wait(wait->pollfds, ep_context, 1, timeout);
 		if (ret > 0)
 			return FI_SUCCESS;
 
@@ -291,17 +308,33 @@ static int util_wait_fd_run(struct fid_wait *wait_fid, int timeout)
 static int util_wait_fd_control(struct fid *fid, int command, void *arg)
 {
 	struct util_wait_fd *wait;
+	struct fi_wait_pollfd *pollfd;
 	int ret;
 
 	wait = container_of(fid, struct util_wait_fd, util_wait.wait_fid.fid);
 	switch (command) {
 	case FI_GETWAIT:
+		if (wait->util_wait.wait_obj == FI_WAIT_FD) {
 #ifdef HAVE_EPOLL
-		*(int *) arg = wait->epoll_fd;
-		ret = 0;
+			*(int *) arg = wait->epoll_fd;
+			return 0;
 #else
-		ret = -FI_ENOSYS;
+			return -FI_ENOSYS;
 #endif
+		}
+
+		pollfd = arg;
+		fastlock_acquire(&wait->lock);
+		if (pollfd->nfds >= wait->pollfds->nfds) {
+			memcpy(pollfd->fd, &wait->pollfds->fds[0],
+			       wait->pollfds->nfds * sizeof(*wait->pollfds->fds));
+			ret = 0;
+		} else {
+			ret = -FI_ETOOSMALL;
+		}
+		pollfd->change_index = wait->change_index;
+		pollfd->nfds = wait->pollfds->nfds;
+		fastlock_release(&wait->lock);
 		break;
 	default:
 		FI_INFO(wait->util_wait.prov, FI_LOG_FABRIC,
@@ -327,14 +360,21 @@ static int util_wait_fd_close(struct fid *fid)
 	while (!dlist_empty(&wait->fd_list)) {
 		dlist_pop_front(&wait->fd_list, struct ofi_wait_fd_entry,
 				fd_entry, entry);
-		ofi_epoll_del(wait->epoll_fd, fd_entry->fd);
+		if (wait->util_wait.wait_obj == FI_WAIT_FD)
+			ofi_epoll_del(wait->epoll_fd, fd_entry->fd);
+		else
+			ofi_pollfds_del(wait->pollfds, fd_entry->fd);
 		free(fd_entry);
 	}
 	fastlock_release(&wait->lock);
 
 	ofi_epoll_del(wait->epoll_fd, wait->signal.fd[FI_READ_FD]);
 	fd_signal_free(&wait->signal);
-	ofi_epoll_close(wait->epoll_fd);
+
+	if (wait->util_wait.wait_obj == FI_WAIT_FD)
+		ofi_epoll_close(wait->epoll_fd);
+	else
+		ofi_epoll_close(wait->epoll_fd);
 	fastlock_destroy(&wait->lock);
 	free(wait);
 	return 0;
@@ -365,6 +405,7 @@ static int util_verify_wait_fd_attr(const struct fi_provider *prov,
 	switch (attr->wait_obj) {
 	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
+	case FI_WAIT_POLLFD:
 		break;
 	default:
 		FI_WARN(prov, FI_LOG_FABRIC, "unsupported wait object\n");
@@ -400,12 +441,17 @@ int ofi_wait_fd_open(struct fid_fabric *fabric_fid, struct fi_wait_attr *attr,
 	if (ret)
 		goto err2;
 
-	ret = ofi_epoll_create(&wait->epoll_fd);
+	ret = (wait->util_wait.wait_obj == FI_WAIT_FD) ?
+	      ofi_epoll_create(&wait->epoll_fd) :
+	      ofi_pollfds_create(&wait->pollfds);
 	if (ret)
 		goto err3;
 
-	ret = ofi_epoll_add(wait->epoll_fd, wait->signal.fd[FI_READ_FD],
-	                   OFI_EPOLL_IN, &wait->util_wait.wait_fid.fid);
+	ret = (wait->util_wait.wait_obj == FI_WAIT_FD) ?
+	      ofi_epoll_add(wait->epoll_fd, wait->signal.fd[FI_READ_FD],
+			OFI_EPOLL_IN, &wait->util_wait.wait_fid.fid) :
+	      ofi_pollfds_add(wait->pollfds, wait->signal.fd[FI_READ_FD],
+			POLLIN, &wait->util_wait.wait_fid.fid);
 	if (ret)
 		goto err4;
 
@@ -419,7 +465,10 @@ int ofi_wait_fd_open(struct fid_fabric *fabric_fid, struct fi_wait_attr *attr,
 	return 0;
 
 err4:
-	ofi_epoll_close(wait->epoll_fd);
+	if (wait->util_wait.wait_obj == FI_WAIT_FD)
+		ofi_epoll_close(wait->epoll_fd);
+	else
+		ofi_pollfds_close(wait->pollfds);
 err3:
 	fd_signal_free(&wait->signal);
 err2:

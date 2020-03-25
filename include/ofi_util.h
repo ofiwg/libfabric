@@ -415,9 +415,14 @@ int fi_wait_cleanup(struct util_wait *wait);
 struct util_wait_fd {
 	struct util_wait	util_wait;
 	struct fd_signal	signal;
-	ofi_epoll_t		epoll_fd;
 	struct dlist_entry	fd_list;
 	fastlock_t		lock;
+
+	union {
+		ofi_epoll_t		epoll_fd;
+		struct ofi_pollfds	*pollfds;
+	};
+	uint64_t		change_index;
 };
 
 typedef int (*ofi_wait_try_func)(void *arg);
