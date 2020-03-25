@@ -102,7 +102,7 @@ pipeline {
                         }
                      }
                  }
-                 stage('eth-udp-dbg') {
+                 stage('eth-udp-shm-dbg') {
                      agent {node {label 'eth'}}
                      steps{
                         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
