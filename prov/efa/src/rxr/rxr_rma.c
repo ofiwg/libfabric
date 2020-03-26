@@ -381,7 +381,7 @@ ssize_t rxr_rma_post_rtw(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 	if (tx_entry->total_len < rxr_pkt_req_max_data_size(ep, tx_entry->addr, RXR_EAGER_RTW_PKT))
 		return rxr_pkt_post_ctrl_or_queue(ep, RXR_TX_ENTRY, tx_entry, RXR_EAGER_RTW_PKT, 0);
 
-	if (tx_entry->total_len >= rxr_env.efa_max_emulated_write_size &&
+	if (tx_entry->total_len >= rxr_env.efa_max_long_write_size &&
 	    efa_ep_support_rdma_read(ep->rdm_ep) && rxr_peer_support_rdma_read(peer)) {
 		err = rxr_pkt_post_ctrl_or_queue(ep, RXR_TX_ENTRY, tx_entry, RXR_READ_RTW_PKT, 0);
 		if (err != -FI_ENOMEM)
