@@ -2499,7 +2499,12 @@ static int cxip_txc_prep_rdzv_src(struct cxip_txc *txc, unsigned int lac)
 	if (ofi_atomic_get32(&txc->rdzv_src_lacs) & lac_mask)
 		return FI_SUCCESS;
 
-	fastlock_acquire(&txc->lock);
+	fastlock_acquire(&txc->rdzv_src_lock);
+
+	if (ofi_atomic_get32(&txc->rdzv_src_lacs) & lac_mask) {
+		ret = FI_SUCCESS;
+		goto unlock;
+	}
 
 	req = cxip_cq_req_alloc(txc->send_cq, 1, txc);
 	if (!req) {
@@ -2542,14 +2547,14 @@ static int cxip_txc_prep_rdzv_src(struct cxip_txc *txc, unsigned int lac)
 		goto req_free;
 	}
 
-	fastlock_release(&txc->lock);
+	fastlock_release(&txc->rdzv_src_lock);
 
 	return FI_SUCCESS;
 
 req_free:
 	cxip_cq_req_free(req);
 unlock:
-	fastlock_release(&txc->lock);
+	fastlock_release(&txc->rdzv_src_lock);
 
 	return ret;
 }

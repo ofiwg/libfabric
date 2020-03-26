@@ -295,6 +295,7 @@ static struct cxip_txc *txc_alloc(const struct fi_tx_attr *attr, void *context,
 
 	dlist_init(&txc->ep_list);
 	fastlock_init(&txc->lock);
+	fastlock_init(&txc->rdzv_src_lock);
 	ofi_atomic_initialize32(&txc->otx_reqs, 0);
 	ofi_atomic_initialize32(&txc->zbp_le_linked, 0);
 	ofi_atomic_initialize32(&txc->rdzv_src_lacs, 0);

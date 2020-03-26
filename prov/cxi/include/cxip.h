@@ -772,6 +772,7 @@ struct cxip_txc {
 	struct cxip_cmdq *rx_cmdq;	// Target cmdq for Rendezvous buffers
 	ofi_atomic32_t rdzv_src_lacs;	// Bitmask of LACs
 	struct dlist_entry rdzv_src_reqs;
+	fastlock_t rdzv_src_lock;
 
 	/* Header message handling */
 	ofi_atomic32_t zbp_le_linked;
