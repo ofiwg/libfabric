@@ -558,6 +558,12 @@ struct rxr_rx_entry *rxr_pkt_get_rtm_matched_rx_entry(struct rxr_ep *ep,
 }
 
 static
+int rxr_pkt_rtm_match_recv_anyaddr(struct dlist_entry *item, const void *arg)
+{
+	return 1;
+}
+
+static
 int rxr_pkt_rtm_match_recv(struct dlist_entry *item, const void *arg)
 {
 	const struct rxr_pkt_entry *pkt_entry = arg;
@@ -565,6 +571,20 @@ int rxr_pkt_rtm_match_recv(struct dlist_entry *item, const void *arg)
 
 	rx_entry = container_of(item, struct rxr_rx_entry, entry);
 	return rxr_match_addr(rx_entry->addr, pkt_entry->addr);
+}
+
+static
+int rxr_pkt_rtm_match_trecv_anyaddr(struct dlist_entry *item, const void *arg)
+{
+	struct rxr_pkt_entry *pkt_entry = (struct rxr_pkt_entry *)arg;
+	struct rxr_rx_entry *rx_entry;
+	uint64_t match_tag;
+
+	rx_entry = container_of(item, struct rxr_rx_entry, entry);
+	match_tag = rxr_pkt_rtm_tag(pkt_entry);
+
+	return rxr_match_tag(rx_entry->cq_entry.tag, rx_entry->ignore,
+			     match_tag);
 }
 
 static
@@ -588,9 +608,16 @@ struct rxr_rx_entry *rxr_pkt_get_msgrtm_rx_entry(struct rxr_ep *ep,
 {
 	struct rxr_rx_entry *rx_entry;
 	struct dlist_entry *match;
+	dlist_func_t *match_func;
 	int pkt_type;
 
-	match = dlist_find_first_match(&ep->rx_list, &rxr_pkt_rtm_match_recv, *pkt_entry_ptr);
+	if (ep->util_ep.caps & FI_DIRECTED_RECV)
+		match_func = &rxr_pkt_rtm_match_recv;
+	else
+		match_func = &rxr_pkt_rtm_match_recv_anyaddr;
+
+	match = dlist_find_first_match(&ep->rx_list, match_func,
+	                               *pkt_entry_ptr);
 	if (OFI_UNLIKELY(!match)) {
 		/*
 		 * rxr_ep_alloc_unexp_rx_entry_for_msgrtm() might release pkt_entry,
@@ -621,9 +648,16 @@ struct rxr_rx_entry *rxr_pkt_get_tagrtm_rx_entry(struct rxr_ep *ep,
 {
 	struct rxr_rx_entry *rx_entry;
 	struct dlist_entry *match;
+	dlist_func_t *match_func;
 	int pkt_type;
 
-	match = dlist_find_first_match(&ep->rx_tagged_list, &rxr_pkt_rtm_match_trecv, *pkt_entry_ptr);
+	if (ep->util_ep.caps & FI_DIRECTED_RECV)
+		match_func = &rxr_pkt_rtm_match_trecv;
+	else
+		match_func = &rxr_pkt_rtm_match_trecv_anyaddr;
+
+	match = dlist_find_first_match(&ep->rx_tagged_list, match_func,
+	                               *pkt_entry_ptr);
 	if (OFI_UNLIKELY(!match)) {
 		/*
 		 * rxr_ep_alloc_unexp_rx_entry_for_tagrtm() might release pkt_entry,
