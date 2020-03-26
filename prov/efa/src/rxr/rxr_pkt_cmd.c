@@ -483,6 +483,18 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 	if (base_hdr->type >= RXR_REQ_PKT_BEGIN) {
 		rxr_pkt_proc_req_common_hdr(pkt_entry);
 		assert(pkt_entry->hdr_size > 0);
+		/*
+		 * as long as the REQ packet contain raw address
+		 * we will need to call insert because it might be a new
+		 * EP with new Q-Key.
+		 */
+		if (OFI_UNLIKELY(pkt_entry->raw_addr != NULL))
+			pkt_entry->addr = rxr_pkt_insert_addr(ep, pkt_entry);
+		else
+			pkt_entry->addr = src_addr;
+	} else {
+		assert(src_addr != FI_ADDR_NOTAVAIL);
+		pkt_entry->addr = src_addr;
 	}
 
 #if ENABLE_DEBUG
@@ -492,15 +504,9 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 	rxr_ep_print_pkt("Received", ep, (struct rxr_base_hdr *)pkt_entry->pkt);
 #endif
 #endif
-	if (OFI_UNLIKELY(src_addr == FI_ADDR_NOTAVAIL))
-		pkt_entry->addr = rxr_pkt_insert_addr(ep, pkt_entry);
-	else
-		pkt_entry->addr = src_addr;
-
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
-	if (!(peer->flags & RXR_PEER_HANDSHAKE_SENT)) {
+	if (!(peer->flags & RXR_PEER_HANDSHAKE_SENT))
 		rxr_pkt_post_handshake(ep, peer, pkt_entry->addr);
-	}
 
 	if (rxr_env.enable_shm_transfer && peer->is_local)
 		ep->posted_bufs_shm--;

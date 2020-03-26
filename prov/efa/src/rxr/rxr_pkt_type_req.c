@@ -181,6 +181,8 @@ void rxr_pkt_proc_req_common_hdr(struct rxr_pkt_entry *pkt_entry)
 		raw_addr_hdr = (struct rxr_req_opt_raw_addr_hdr *)opt_hdr;
 		pkt_entry->raw_addr = raw_addr_hdr->raw_addr;
 		opt_hdr += sizeof(*raw_addr_hdr) + raw_addr_hdr->addr_len;
+	} else {
+		pkt_entry->raw_addr = NULL;
 	}
 
 	if (base_hdr->flags & RXR_REQ_OPT_CQ_DATA_HDR) {
