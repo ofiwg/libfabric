@@ -168,7 +168,8 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 		smr_format_pend_resp(pend, cmd, context, iov, iov_count, id, resp);
 		ofi_cirque_commit(smr_resp_queue(ep->region));
 		comp = 0;
-	} else if (total_len > SMR_MSG_DATA_LEN || smr_env.disable_cma) {
+	} else if (total_len > SMR_MSG_DATA_LEN ||
+		   (smr_env.disable_cma && op == ofi_op_read_req)) {
 		tx_buf = smr_freestack_pop(smr_inject_pool(peer_smr));
 		smr_format_inject(cmd, iov, iov_count, peer_smr, tx_buf);
 		if (op == ofi_op_read_req) {
