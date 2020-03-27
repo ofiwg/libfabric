@@ -688,7 +688,14 @@ ssize_t rxm_sar_handle_segment(struct rxm_rx_buf *rx_buf)
 
 static ssize_t rxm_rndv_send_ack_inject(struct rxm_rx_buf *rx_buf)
 {
-	struct rxm_pkt pkt;
+	struct rxm_pkt pkt = {
+		.hdr.op = ofi_op_msg,
+		.hdr.version = OFI_OP_VERSION,
+		.ctrl_hdr.version = RXM_CTRL_VERSION,
+		.ctrl_hdr.type = rxm_ctrl_rndv_ack,
+		.ctrl_hdr.conn_id = rx_buf->conn->handle.remote_key,
+		.ctrl_hdr.msg_id = rx_buf->pkt.ctrl_hdr.msg_id
+	};
 	struct iovec iov = {
 		.iov_base = &pkt,
 		.iov_len = sizeof(pkt),
@@ -698,15 +705,6 @@ static ssize_t rxm_rndv_send_ack_inject(struct rxm_rx_buf *rx_buf)
 		.iov_count = 1,
 		.context = rx_buf,
 	};
-
-	assert(rx_buf->conn);
-
-	pkt.hdr.op		= ofi_op_msg;
-	pkt.hdr.version		= OFI_OP_VERSION;
-	pkt.ctrl_hdr.version	= RXM_CTRL_VERSION;
-	pkt.ctrl_hdr.type	= rxm_ctrl_rndv_ack;
-	pkt.ctrl_hdr.conn_id 	= rx_buf->conn->handle.remote_key;
-	pkt.ctrl_hdr.msg_id 	= rx_buf->pkt.ctrl_hdr.msg_id;
 
 	return fi_sendmsg(rx_buf->conn->msg_ep, &msg, FI_INJECT);
 }
