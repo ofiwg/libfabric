@@ -439,6 +439,12 @@ struct rxr_match_info {
 };
 
 static
+int rxr_msg_match_unexp_anyaddr(struct dlist_entry *item, const void *arg)
+{
+	return 1;
+}
+
+static
 int rxr_msg_match_unexp(struct dlist_entry *item, const void *arg)
 {
 	const struct rxr_match_info *match_info = arg;
@@ -447,6 +453,18 @@ int rxr_msg_match_unexp(struct dlist_entry *item, const void *arg)
 	rx_entry = container_of(item, struct rxr_rx_entry, entry);
 
 	return rxr_match_addr(match_info->addr, rx_entry->addr);
+}
+
+static
+int rxr_msg_match_unexp_tagged_anyaddr(struct dlist_entry *item, const void *arg)
+{
+	const struct rxr_match_info *match_info = arg;
+	struct rxr_rx_entry *rx_entry;
+
+	rx_entry = container_of(item, struct rxr_rx_entry, entry);
+
+	return rxr_match_tag(rx_entry->tag, match_info->ignore,
+			     match_info->tag);
 }
 
 static
@@ -521,19 +539,30 @@ int rxr_msg_proc_unexp_msg_list(struct rxr_ep *ep, const struct fi_msg *msg,
 	struct rxr_match_info match_info;
 	struct dlist_entry *match;
 	struct rxr_rx_entry *rx_entry;
+	dlist_func_t *match_func;
 	int ret;
 
 	if (op == ofi_op_tagged) {
+		if (ep->util_ep.caps & FI_DIRECTED_RECV)
+			match_func = &rxr_msg_match_unexp_tagged;
+		else
+			match_func = &rxr_msg_match_unexp_tagged_anyaddr;
+
 		match_info.addr = msg->addr;
 		match_info.tag = tag;
 		match_info.ignore = ignore;
 		match = dlist_remove_first_match(&ep->rx_unexp_tagged_list,
-						 &rxr_msg_match_unexp_tagged,
+		                                 match_func,
 						 (void *)&match_info);
 	} else {
+		if (ep->util_ep.caps & FI_DIRECTED_RECV)
+			match_func = &rxr_msg_match_unexp;
+		else
+			match_func = &rxr_msg_match_unexp_anyaddr;
+
 		match_info.addr = msg->addr;
 		match = dlist_remove_first_match(&ep->rx_unexp_list,
-						 &rxr_msg_match_unexp,
+		                                 match_func,
 						 (void *)&match_info);
 	}
 
@@ -832,6 +861,7 @@ ssize_t rxr_msg_peek_trecv(struct fid_ep *ep_fid,
 	ssize_t ret = 0;
 	struct rxr_ep *ep;
 	struct dlist_entry *match;
+	dlist_func_t *match_func;
 	struct rxr_match_info match_info;
 	struct rxr_rx_entry *rx_entry;
 	struct fi_context *context;
@@ -848,8 +878,13 @@ ssize_t rxr_msg_peek_trecv(struct fid_ep *ep_fid,
 	match_info.tag = msg->tag;
 	match_info.ignore = msg->ignore;
 
+	if (ep->util_ep.caps & FI_DIRECTED_RECV)
+		match_func = &rxr_msg_match_unexp_tagged;
+	else
+		match_func = &rxr_msg_match_unexp_tagged_anyaddr;
+
 	match = dlist_find_first_match(&ep->rx_unexp_tagged_list,
-				       &rxr_msg_match_unexp_tagged,
+	                               match_func,
 				       (void *)&match_info);
 	if (!match) {
 		FI_DBG(&rxr_prov, FI_LOG_EP_CTRL,
