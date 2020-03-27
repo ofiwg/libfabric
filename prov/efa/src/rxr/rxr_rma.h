@@ -47,9 +47,6 @@ struct rxr_tx_entry *
 rxr_rma_alloc_readrsp_tx_entry(struct rxr_ep *rxr_ep,
 			       struct rxr_rx_entry *rx_entry);
 
-size_t rxr_rma_post_shm_rma(struct rxr_ep *rxr_ep,
-			    struct rxr_tx_entry *tx_entry);
-
 extern struct fi_ops_rma rxr_ops_rma;
 
 #endif
