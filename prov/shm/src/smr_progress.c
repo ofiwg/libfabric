@@ -45,7 +45,7 @@ static int smr_progress_resp_entry(struct smr_ep *ep, struct smr_tx_entry *pendi
 	struct smr_inject_buf *tx_buf;
 	uint8_t *src;
 
-	peer_smr = smr_peer_region(ep->region, pending->cmd.msg.hdr.addr);
+	peer_smr = smr_peer_region(ep->region, pending->addr);
 	if (fastlock_tryacquire(&peer_smr->lock))
 		return -FI_EAGAIN;
 

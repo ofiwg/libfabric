@@ -112,6 +112,7 @@ struct smr_rx_entry {
 
 struct smr_tx_entry {
 	struct smr_cmd	cmd;
+	fi_addr_t	addr;
 	void		*context;
 	struct iovec	iov[SMR_IOV_LIMIT];
 	uint32_t	iov_count;
@@ -218,7 +219,8 @@ int smr_verify_peer(struct smr_ep *ep, int peer_id);
 
 void smr_format_pend_resp(struct smr_tx_entry *pend, struct smr_cmd *cmd,
 			  void *context, const struct iovec *iov,
-			  uint32_t iov_count, struct smr_resp *resp);
+			  uint32_t iov_count, fi_addr_t id,
+			  struct smr_resp *resp);
 void smr_generic_format(struct smr_cmd *cmd, fi_addr_t peer_id, uint32_t op,
 			uint64_t tag, uint64_t data, uint64_t op_flags);
 void smr_format_inline(struct smr_cmd *cmd, const struct iovec *iov,
