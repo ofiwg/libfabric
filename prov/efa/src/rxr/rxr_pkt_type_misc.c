@@ -496,11 +496,11 @@ void rxr_pkt_handle_eor_send_completion(struct rxr_ep *ep,
 void rxr_pkt_handle_eor_recv(struct rxr_ep *ep,
 			     struct rxr_pkt_entry *pkt_entry)
 {
-	struct rxr_eor_hdr *shm_eor;
+	struct rxr_eor_hdr *eor_hdr;
 	struct rxr_tx_entry *tx_entry;
 	ssize_t err;
 
-	shm_eor = (struct rxr_eor_hdr *)pkt_entry->pkt;
+	eor_hdr = (struct rxr_eor_hdr *)pkt_entry->pkt;
 
 	/* pre-post buf used here, so can NOT track back to tx_entry with x_entry */
 	tx_entry = ofi_bufpool_get_ibuf(ep->tx_entry_pool, eor_hdr->tx_id);
