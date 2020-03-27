@@ -243,12 +243,13 @@ static void smr_init_queue(struct smr_queue *queue,
 
 void smr_format_pend_resp(struct smr_tx_entry *pend, struct smr_cmd *cmd,
 			  void *context, const struct iovec *iov,
-			  uint32_t iov_count, struct smr_resp *resp)
+			  uint32_t iov_count, fi_addr_t id, struct smr_resp *resp)
 {
 	pend->cmd = *cmd;
 	pend->context = context;
 	memcpy(pend->iov, iov, sizeof(*iov) * iov_count);
 	pend->iov_count = iov_count;
+	pend->addr = id;
 
 	resp->msg_id = (uint64_t) (uintptr_t) pend;
 	resp->status = FI_EBUSY;

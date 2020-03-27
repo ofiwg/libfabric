@@ -213,7 +213,7 @@ static ssize_t smr_generic_atomic(struct smr_ep *ep,
 			resp = ofi_cirque_tail(smr_resp_queue(ep->region));
 			pend = freestack_pop(ep->pend_fs);
 			smr_format_pend_resp(pend, cmd, context, result_iov,
-					     result_count, resp);
+					     result_count, id, resp);
 			cmd->msg.hdr.data = (uintptr_t) ((char **) resp -
 						(char **) ep->region);
 			ofi_cirque_commit(smr_resp_queue(ep->region));

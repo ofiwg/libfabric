@@ -165,7 +165,7 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 		resp = ofi_cirque_tail(smr_resp_queue(ep->region));
 		pend = freestack_pop(ep->pend_fs);
 		smr_format_iov(cmd, iov, iov_count, total_len, ep->region, resp);
-		smr_format_pend_resp(pend, cmd, context, iov, iov_count, resp);
+		smr_format_pend_resp(pend, cmd, context, iov, iov_count, id, resp);
 		ofi_cirque_commit(smr_resp_queue(ep->region));
 		comp = 0;
 	} else if (total_len > SMR_MSG_DATA_LEN || smr_env.disable_cma) {
@@ -181,7 +181,7 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 			resp = ofi_cirque_tail(smr_resp_queue(ep->region));
 			pend = freestack_pop(ep->pend_fs);
 			smr_format_pend_resp(pend, cmd, context, iov,
-					     iov_count, resp);
+					     iov_count, id, resp);
 			cmd->msg.hdr.data = (uintptr_t) ((char **) resp -
 						(char **) ep->region);
 			ofi_cirque_commit(smr_resp_queue(ep->region));
