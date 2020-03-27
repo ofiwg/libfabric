@@ -38,14 +38,6 @@
 
 extern struct sigaction *old_action;
 
-struct smr_env smr_env = {
-	.disable_cma	= 0,
-};
-
-static void smr_init_env(void)
-{
-	fi_param_get_bool(&smr_prov, "disable_cma", &smr_env.disable_cma);
-}
 
 static void smr_resolve_addr(const char *node, const char *service,
 			     char **addr, size_t *addrlen)
@@ -73,39 +65,6 @@ static void smr_resolve_addr(const char *node, const char *service,
 	(*addr)[*addrlen - 1]  = '\0';
 }
 
-static void smr_check_ptrace_scope(void)
-{
-	static bool init = 0;
-	FILE *file;
-	int scope, ret;
-
-	if (smr_env.disable_cma || init)
-		return;
-
-	scope = 0;
-	file = fopen("/proc/sys/kernel/yama/ptrace_scope", "r");
-	if (file) {
-		ret = fscanf(file, "%d", &scope);
-		if (ret != 1) {
-			FI_WARN(&smr_prov, FI_LOG_CORE,
-				"Error getting value from ptrace_scope\n");
-			scope = 1;
-			goto out;
-		}
-		ret = fclose(file);
-		if (ret) {
-			FI_WARN(&smr_prov, FI_LOG_CORE,
-				"Error closing ptrace_scope file\n");
-			scope = 1;
-			goto out;
-		}
-	}
-
-out:
-	smr_env.disable_cma = scope;
-	init = 1;
-}
-
 static int smr_getinfo(uint32_t version, const char *node, const char *service,
 		       uint64_t flags, const struct fi_info *hints,
 		       struct fi_info **info)
@@ -118,7 +77,6 @@ static int smr_getinfo(uint32_t version, const char *node, const char *service,
 	mr_mode = hints && hints->domain_attr ? hints->domain_attr->mr_mode :
 						FI_MR_VIRT_ADDR;
 	msg_order = hints && hints->tx_attr ? hints->tx_attr->msg_order : 0;
-	smr_check_ptrace_scope();
 	fast_rma = smr_fast_rma_enabled(mr_mode, msg_order);
 
 	ret = util_getinfo(&smr_util_prov, version, node, service, flags,
@@ -173,11 +131,6 @@ struct util_prov smr_util_prov = {
 
 SHM_INI
 {
-	fi_param_define(&smr_prov, "disable_cma", FI_PARAM_BOOL,
-			"Disable use of CMA (Cross Memory Attach) for \
-			copying data directly between processes (default: no)");
-	smr_init_env();
-
 	old_action = calloc(SIGRTMIN, sizeof(*old_action));
 	if (!old_action)
 		return NULL;

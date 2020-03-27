@@ -67,11 +67,7 @@
 #define SMR_MAJOR_VERSION 1
 #define SMR_MINOR_VERSION 1
 
-struct smr_env {
-	int disable_cma;
-};
 
-extern struct smr_env smr_env;
 extern struct fi_provider smr_prov;
 extern struct fi_info smr_info;
 extern struct util_prov smr_util_prov;
@@ -184,8 +180,7 @@ static inline const char *smr_no_prefix(const char *addr)
 #define SMR_RMA_ORDER (OFI_ORDER_RAR_SET | OFI_ORDER_RAW_SET | FI_ORDER_RAS |	\
 		       OFI_ORDER_WAR_SET | OFI_ORDER_WAW_SET | FI_ORDER_WAS |	\
 		       FI_ORDER_SAR | FI_ORDER_SAW)
-#define smr_fast_rma_enabled(mode, order) (!smr_env.disable_cma && \
-			(mode & FI_MR_VIRT_ADDR) && \
+#define smr_fast_rma_enabled(mode, order) ((mode & FI_MR_VIRT_ADDR) && \
 			!(order & SMR_RMA_ORDER))
 
 #define smr_get_offset(base, addr) ((uintptr_t) ((char *) addr - (char *) base))
