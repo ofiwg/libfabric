@@ -529,7 +529,11 @@ enum vrb_xrc_ep_conn_state {
  * establishment and can be freed once bidirectional connectivity
  * is established.
  */
+#define VRB_MAX_XRC_CONNECT_RETRIES	16
+
 struct vrb_xrc_ep_conn_setup {
+	int				retry_count;
+
 	/* The connection tag is used to associate the reciprocal
 	 * XRC INI/TGT QP connection request in the reverse direction
 	 * with the original request. The tag is created by the
