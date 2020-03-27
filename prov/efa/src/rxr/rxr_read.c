@@ -145,6 +145,20 @@ struct rxr_read_entry *rxr_read_alloc_entry(struct rxr_ep *ep, int entry_type, v
 				err = fi_mr_reg(rxr_ep_domain(ep)->rdm_domain,
 						read_entry->iov[i].iov_base, read_entry->iov[i].iov_len,
 						FI_RECV, 0, 0, 0, &read_entry->mr[i], NULL);
+
+				if (err == -FI_ENOMEM && efa_mr_cache_enable) {
+					/* In this case, we will try registration one more time because
+					 * mr cache will try to release MR when encountered error
+					 */
+					FI_WARN(&rxr_prov, FI_LOG_MR, "Unable to register MR buf for FI_ENOMEM!\n");
+					FI_WARN(&rxr_prov, FI_LOG_MR, "Try again because MR cache will try release to release unused MR entry.\n");
+					err = fi_mr_reg(rxr_ep_domain(ep)->rdm_domain,
+							read_entry->iov[i].iov_base, read_entry->iov[i].iov_len,
+							FI_RECV, 0, 0, 0, &read_entry->mr[i], NULL);
+					if (!err)
+						FI_WARN(&rxr_prov, FI_LOG_MR, "The 2nd attemp was successful!");
+				}
+
 				if (err) {
 					FI_WARN(&rxr_prov, FI_LOG_MR, "Unable to register MR buf\n");
 					return NULL;
