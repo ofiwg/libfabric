@@ -120,8 +120,8 @@ static void smr_format_inject_atomic(struct smr_cmd *cmd, fi_addr_t peer_id,
 }
 
 static void smr_post_fetch_resp(struct smr_ep *ep, struct smr_cmd *cmd,
-				const struct iovec *result_iov, size_t count,
-				uint16_t flags)
+				fi_addr_t id, const struct iovec *result_iov,
+				size_t count, uint16_t flags)
 {
 	struct smr_cmd *pend;
 	struct smr_resp *resp;
@@ -133,7 +133,7 @@ static void smr_post_fetch_resp(struct smr_ep *ep, struct smr_cmd *cmd,
 			    (char **) ep->region);
 
 	pend = freestack_pop(ep->pend_fs);
-	smr_post_pend_resp(cmd, pend, resp);
+	smr_post_pend_resp(cmd, pend, resp, id);
 	memcpy(pend->msg.data.iov, result_iov,
 	       sizeof(*result_iov) * count);
 	pend->msg.data.iov_count = count;
@@ -226,7 +226,8 @@ static ssize_t smr_generic_atomic(struct smr_ep *ep,
 					 compare_iov, compare_count, op, datatype,
 					 atomic_op, peer_smr, tx_buf, op_flags);
 		if (flags & SMR_RMA_REQ || op_flags & FI_DELIVERY_COMPLETE)
-			smr_post_fetch_resp(ep, cmd, result_iov, result_count, flags);
+			smr_post_fetch_resp(ep, cmd, peer_id, result_iov,
+					    result_count, flags);
 	} else {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"message too large\n");
