@@ -96,9 +96,15 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 		return rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
 						  RXR_EAGER_MSGRTM_PKT + tagged, 0);
 
-	if (tx_entry->total_len <= rxr_env.efa_max_medium_msg_size)
+	if (tx_entry->total_len <= rxr_env.efa_max_medium_msg_size) {
+		/* we do not check the return value of rxr_ep_init_mr_desc()
+		 * because medium message works even if MR registration failed
+		 */
+		if (efa_mr_cache_enable)
+			rxr_ep_tx_init_mr_desc(rxr_ep, tx_entry, 0, FI_SEND);
 		return rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
 						  RXR_MEDIUM_MSGRTM_PKT + tagged, 0);
+	}
 
 	if (efa_ep_support_rdma_read(rxr_ep->rdm_ep) && rxr_peer_support_rdma_read(peer) &&
 	    tx_entry->total_len > rxr_env.efa_max_long_msg_size) {

@@ -65,6 +65,16 @@ struct rxr_pkt_entry {
 	void *raw_addr;
 	uint64_t cq_data;
 
+	/* Because core EP current only support 2 iov,
+	 * and for the sake of code simplicity, we use 2 iov.
+	 * One for header, and the other for data.
+	 * iov_count here is used as an indication
+	 * of whether iov is used, it is either 0 or 2.
+	 */
+	int iov_count;
+	struct iovec iov[2];
+	void *desc[2];
+
 	struct fid_mr *mr;
 	fi_addr_t addr;
 	void *pkt; /* rxr_ctrl_*_pkt, or rxr_data_pkt */
@@ -73,9 +83,9 @@ struct rxr_pkt_entry {
 	struct rxr_pkt_entry *next;
 #if ENABLE_DEBUG
 /* pad to cache line size of 64 bytes */
-	uint8_t pad[8];
+	uint8_t pad[16];
 #else
-	uint8_t pad[24];
+	uint8_t pad[32];
 #endif
 };
 
@@ -85,7 +95,7 @@ static inline void *rxr_pkt_start(struct rxr_pkt_entry *pkt_entry)
 }
 
 #if defined(static_assert) && defined(__x86_64__)
-static_assert(sizeof(struct rxr_pkt_entry) == 128, "rxr_pkt_entry check");
+static_assert(sizeof(struct rxr_pkt_entry) == 192, "rxr_pkt_entry check");
 #endif
 
 OFI_DECL_RECVWIN_BUF(struct rxr_pkt_entry*, rxr_robuf, uint32_t);

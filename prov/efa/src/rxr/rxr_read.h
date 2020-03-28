@@ -79,6 +79,9 @@ struct rxr_read_entry *rxr_read_alloc_entry(struct rxr_ep *ep, int entry_type, v
 void rxr_read_release_entry(struct rxr_ep *ep, struct rxr_read_entry *read_entry);
 
 /* used by read message protocol and read write protocol */
+int rxr_locate_iov_pos(struct iovec *iov, int iov_count, size_t offset,
+		       int *iov_idx, size_t *iov_offset);
+
 int rxr_read_init_iov(struct rxr_ep *ep,
 		      struct rxr_tx_entry *tx_entry,
 		      struct fi_rma_iov *read_iov);

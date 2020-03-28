@@ -269,6 +269,10 @@ ssize_t rxr_pkt_post_ctrl_once(struct rxr_ep *rxr_ep, int entry_type, void *x_en
 	 */
 	if (inject)
 		err = rxr_pkt_entry_inject(rxr_ep, pkt_entry, addr);
+	else if (pkt_entry->iov_count > 0)
+		err = rxr_pkt_entry_sendv(rxr_ep, pkt_entry, addr,
+					  pkt_entry->iov, pkt_entry->desc,
+					  pkt_entry->iov_count, 0);
 	else
 		err = rxr_pkt_entry_send(rxr_ep, pkt_entry, addr);
 
