@@ -223,13 +223,6 @@ size_t rxr_pkt_req_copy_data(struct rxr_rx_entry *rx_entry,
 {
 	size_t bytes_copied;
 	int bytes_left;
-	/* rx_entry->cq_entry.len is total recv buffer size.
-	 * rx_entry->total_len is from REQ packet and is total send buffer size.
-	 * if send buffer size < recv buffer size, we adjust value of rx_entry->cq_entry.len.
-	 * if send buffer size > recv buffer size, we have a truncated message.
-	 */
-	if (rx_entry->cq_entry.len > rx_entry->total_len)
-		rx_entry->cq_entry.len = rx_entry->total_len;
 
 	bytes_copied = ofi_copy_to_iov(rx_entry->iov, rx_entry->iov_count,
 				       0, data, data_size);
@@ -689,17 +682,17 @@ ssize_t rxr_pkt_proc_matched_read_rtm(struct rxr_ep *ep,
 	rtm_hdr = rxr_get_read_rtm_base_hdr(pkt_entry->pkt);
 	read_iov = (struct fi_rma_iov *)((char *)pkt_entry->pkt + pkt_entry->hdr_size);
 
-	rx_entry->addr = pkt_entry->addr;
 	rx_entry->tx_id = rtm_hdr->tx_id;
 	rx_entry->rma_iov_count = rtm_hdr->read_iov_count;
 	memcpy(rx_entry->rma_iov, read_iov,
 	       rx_entry->rma_iov_count * sizeof(struct fi_rma_iov));
 
-	rx_entry->total_len = rtm_hdr->data_len;
-	if (rx_entry->cq_entry.len > rx_entry->total_len)
-		rx_entry->cq_entry.len = rx_entry->total_len;
-
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
+
+	/* truncate rx_entry->iov to save memory registration pages because we
+	 * need to do memory registration for the receiving buffer.
+	 */
+	ofi_truncate_iov(rx_entry->iov, &rx_entry->iov_count, rx_entry->total_len);
 	return rxr_read_post_or_queue(ep, RXR_RX_ENTRY, rx_entry);
 }
 
@@ -710,9 +703,6 @@ ssize_t rxr_pkt_proc_matched_medium_rtm(struct rxr_ep *ep,
 	struct rxr_pkt_entry *cur;
 	char *data;
 	size_t offset, data_size;
-
-	if (rx_entry->cq_entry.len > rx_entry->total_len)
-		rx_entry->cq_entry.len = rx_entry->total_len;
 
 	cur = pkt_entry;
 	while (cur) {
@@ -750,6 +740,16 @@ ssize_t rxr_pkt_proc_matched_rtm(struct rxr_ep *ep,
 	ssize_t ret;
 
 	assert(rx_entry->state == RXR_RX_MATCHED);
+
+	/* Adjust rx_entry->cq_entry.len as needed.
+	 * Initialy rx_entry->cq_entry.len is total recv buffer size.
+	 * rx_entry->total_len is from REQ packet and is total send buffer size.
+	 * if send buffer size < recv buffer size, we adjust value of rx_entry->cq_entry.len
+	 * if send buffer size > recv buffer size, we have a truncated message and will
+	 * write error CQ entry.
+	 */
+	if (rx_entry->cq_entry.len > rx_entry->total_len)
+		rx_entry->cq_entry.len = rx_entry->total_len;
 
 	pkt_type = rxr_get_base_hdr(pkt_entry->pkt)->type;
 	if (pkt_type == RXR_READ_MSGRTM_PKT || pkt_type == RXR_READ_TAGRTM_PKT)
