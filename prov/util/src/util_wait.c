@@ -619,18 +619,17 @@ static int ofi_wait_match_fid(struct dlist_entry *item, const void *arg)
 	return fid_entry->fid == arg;
 }
 
-int ofi_wait_del_fid(struct util_wait *wait, void *fid)
+int ofi_wait_del_fid(struct util_wait *wait, fid_t fid)
 {
-	int ret = 0;
 	struct ofi_wait_fid_entry *fid_entry;
 	struct dlist_entry *entry;
-	struct util_wait_yield *wait_yield = container_of(wait,
-						struct util_wait_yield,
-						util_wait);
+	struct util_wait_yield *wait_yield;
+	int ret = 0;
 
+	wait_yield = container_of(wait, struct util_wait_yield, util_wait);
 	fastlock_acquire(&wait_yield->wait_lock);
-	entry = dlist_find_first_match(&wait_yield->fid_list, ofi_wait_match_fid,
-				       fid);
+	entry = dlist_find_first_match(&wait_yield->fid_list,
+				       ofi_wait_match_fid, fid);
 	if (!entry) {
 		FI_INFO(wait->prov, FI_LOG_FABRIC,
 			"Given fid (%p) not found in wait list - %p\n",
@@ -638,9 +637,11 @@ int ofi_wait_del_fid(struct util_wait *wait, void *fid)
 		ret = -FI_EINVAL;
 		goto out;
 	}
+
 	fid_entry = container_of(entry, struct ofi_wait_fid_entry, entry);
 	if (ofi_atomic_dec32(&fid_entry->ref))
 		goto out;
+
 	dlist_remove(&fid_entry->entry);
 	free(fid_entry);
 out:
@@ -648,18 +649,18 @@ out:
 	return ret;
 }
 
-int ofi_wait_add_fid(struct util_wait *wait, ofi_wait_try_func wait_try,
-		     void *fid)
+int ofi_wait_add_fid(struct util_wait *wait, fid_t fid, uint32_t events,
+		     ofi_wait_try_func wait_try)
 {
 	struct ofi_wait_fid_entry *fid_entry;
 	struct dlist_entry *entry;
-	struct util_wait_yield *wait_yield = container_of(wait,
-					struct util_wait_yield, util_wait);
+	struct util_wait_yield *wait_yield;
 	int ret = 0;
 
+	wait_yield = container_of(wait, struct util_wait_yield, util_wait);
 	fastlock_acquire(&wait_yield->wait_lock);
-	entry = dlist_find_first_match(&wait_yield->fid_list, ofi_wait_match_fid,
-				       fid);
+	entry = dlist_find_first_match(&wait_yield->fid_list,
+				       ofi_wait_match_fid, fid);
 	if (entry) {
 		FI_DBG(wait->prov, FI_LOG_EP_CTRL,
 		       "Given fid (%p) already added to wait list - %p \n",
