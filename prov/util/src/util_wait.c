@@ -150,7 +150,7 @@ int ofi_wait_init(struct util_fabric *fabric, struct fi_wait_attr *attr,
 	return 0;
 }
 
-static int ofi_wait_fd_match(struct dlist_entry *item, const void *arg)
+static int ofi_wait_match_fd(struct dlist_entry *item, const void *arg)
 {
 	struct ofi_wait_fd_entry *fd_entry;
 
@@ -158,7 +158,7 @@ static int ofi_wait_fd_match(struct dlist_entry *item, const void *arg)
 	return fd_entry->fd == *(int *) arg;
 }
 
-int ofi_wait_fd_del(struct util_wait *wait, int fd)
+int ofi_wait_del_fd(struct util_wait *wait, int fd)
 {
 	struct ofi_wait_fd_entry *fd_entry;
 	struct dlist_entry *entry;
@@ -167,7 +167,7 @@ int ofi_wait_fd_del(struct util_wait *wait, int fd)
 
 	wait_fd = container_of(wait, struct util_wait_fd, util_wait);
 	fastlock_acquire(&wait_fd->lock);
-	entry = dlist_find_first_match(&wait_fd->fd_list, ofi_wait_fd_match, &fd);
+	entry = dlist_find_first_match(&wait_fd->fd_list, ofi_wait_match_fd, &fd);
 	if (!entry) {
 		FI_INFO(wait->prov, FI_LOG_FABRIC,
 			"Given fd (%d) not found in wait list - %p\n",
@@ -193,7 +193,7 @@ out:
 	return ret;
 }
 
-int ofi_wait_fd_add(struct util_wait *wait, int fd, uint32_t events,
+int ofi_wait_add_fd(struct util_wait *wait, int fd, uint32_t events,
 		    ofi_wait_try_func wait_try, void *arg, void *context)
 {
 	struct ofi_wait_fd_entry *fd_entry;
@@ -203,7 +203,7 @@ int ofi_wait_fd_add(struct util_wait *wait, int fd, uint32_t events,
 
 	wait_fd = container_of(wait, struct util_wait_fd, util_wait);
 	fastlock_acquire(&wait_fd->lock);
-	entry = dlist_find_first_match(&wait_fd->fd_list, ofi_wait_fd_match, &fd);
+	entry = dlist_find_first_match(&wait_fd->fd_list, ofi_wait_match_fd, &fd);
 	if (entry) {
 		FI_DBG(wait->prov, FI_LOG_EP_CTRL,
 		       "Given fd (%d) already added to wait list - %p \n",
@@ -611,7 +611,7 @@ int ofi_wait_yield_open(struct fid_fabric *fabric_fid, struct fi_wait_attr *attr
 	return 0;
 }
 
-static int ofi_wait_fid_match(struct dlist_entry *item, const void *arg)
+static int ofi_wait_match_fid(struct dlist_entry *item, const void *arg)
 {
 	struct ofi_wait_fid_entry *fid_entry;
 
@@ -619,7 +619,7 @@ static int ofi_wait_fid_match(struct dlist_entry *item, const void *arg)
 	return fid_entry->fid == arg;
 }
 
-int ofi_wait_fid_del(struct util_wait *wait, void *fid)
+int ofi_wait_del_fid(struct util_wait *wait, void *fid)
 {
 	int ret = 0;
 	struct ofi_wait_fid_entry *fid_entry;
@@ -629,7 +629,7 @@ int ofi_wait_fid_del(struct util_wait *wait, void *fid)
 						util_wait);
 
 	fastlock_acquire(&wait_yield->wait_lock);
-	entry = dlist_find_first_match(&wait_yield->fid_list, ofi_wait_fid_match,
+	entry = dlist_find_first_match(&wait_yield->fid_list, ofi_wait_match_fid,
 				       fid);
 	if (!entry) {
 		FI_INFO(wait->prov, FI_LOG_FABRIC,
@@ -648,7 +648,7 @@ out:
 	return ret;
 }
 
-int ofi_wait_fid_add(struct util_wait *wait, ofi_wait_try_func wait_try,
+int ofi_wait_add_fid(struct util_wait *wait, ofi_wait_try_func wait_try,
 		     void *fid)
 {
 	struct ofi_wait_fid_entry *fid_entry;
@@ -658,7 +658,7 @@ int ofi_wait_fid_add(struct util_wait *wait, ofi_wait_try_func wait_try,
 	int ret = 0;
 
 	fastlock_acquire(&wait_yield->wait_lock);
-	entry = dlist_find_first_match(&wait_yield->fid_list, ofi_wait_fid_match,
+	entry = dlist_find_first_match(&wait_yield->fid_list, ofi_wait_match_fid,
 				       fid);
 	if (entry) {
 		FI_DBG(wait->prov, FI_LOG_EP_CTRL,

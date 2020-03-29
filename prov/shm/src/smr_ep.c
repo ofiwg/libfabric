@@ -368,7 +368,7 @@ static int smr_ep_bind_cq(struct smr_ep *ep, struct util_cq *cq, uint64_t flags)
 	}
 
 	if (cq->wait) {
-		ret = ofi_wait_fid_add(cq->wait, smr_ep_trywait,
+		ret = ofi_wait_add_fid(cq->wait, smr_ep_trywait,
 				       &ep->util_ep.ep_fid.fid);
 		if (ret)
 			return ret;
@@ -390,7 +390,7 @@ static int smr_ep_bind_cntr(struct smr_ep *ep, struct util_cntr *cntr, uint64_t 
 		return ret;
 
 	if (cntr->wait) {	
-		ret = ofi_wait_fid_add(cntr->wait, smr_ep_trywait,
+		ret = ofi_wait_add_fid(cntr->wait, smr_ep_trywait,
 				       &ep->util_ep.ep_fid.fid);
 		if (ret)
 			return ret;

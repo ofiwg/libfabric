@@ -437,9 +437,9 @@ struct ofi_wait_fd_entry {
 
 int ofi_wait_fd_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 		struct fid_wait **waitset);
-int ofi_wait_fd_add(struct util_wait *wait, int fd, uint32_t events,
+int ofi_wait_add_fd(struct util_wait *wait, int fd, uint32_t events,
 		    ofi_wait_try_func wait_try, void *arg, void *context);
-int ofi_wait_fd_del(struct util_wait *wait, int fd);
+int ofi_wait_del_fd(struct util_wait *wait, int fd);
 
 struct util_wait_yield {
 	struct util_wait	util_wait;
@@ -458,9 +458,9 @@ struct ofi_wait_fid_entry {
 
 int ofi_wait_yield_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 			struct fid_wait **waitset);
-int ofi_wait_fid_add(struct util_wait *wait, ofi_wait_try_func wait_try,
+int ofi_wait_add_fid(struct util_wait *wait, ofi_wait_try_func wait_try,
 		       void *arg);
-int ofi_wait_fid_del(struct util_wait *wait, void *fid);
+int ofi_wait_del_fid(struct util_wait *wait, void *fid);
 
 /*
  * Completion queue

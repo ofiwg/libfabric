@@ -122,7 +122,7 @@ static int tcpx_ep_connect(struct fid_ep *ep, const void *addr,
 		memcpy(cm_ctx->cm_data, param, paramlen);
 	}
 
-	ret = ofi_wait_fd_add(tcpx_ep->util_ep.eq->wait, tcpx_ep->sock,
+	ret = ofi_wait_add_fd(tcpx_ep->util_ep.eq->wait, tcpx_ep->sock,
 			      OFI_EPOLL_OUT, tcpx_eq_wait_try_func, NULL,cm_ctx);
 	if (ret)
 		goto err;
@@ -157,7 +157,7 @@ static int tcpx_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 		memcpy(cm_ctx->cm_data, param, paramlen);
 	}
 
-	ret = ofi_wait_fd_add(tcpx_ep->util_ep.eq->wait, tcpx_ep->sock,
+	ret = ofi_wait_add_fd(tcpx_ep->util_ep.eq->wait, tcpx_ep->sock,
 			      OFI_EPOLL_OUT, tcpx_eq_wait_try_func, NULL, cm_ctx);
 	if (ret) {
 		free(cm_ctx);
@@ -362,13 +362,13 @@ void tcpx_ep_wait_fd_del(struct tcpx_ep *ep)
 	/* eq->close_lock protects from processing stale connection events */
 	fastlock_acquire(&eq->close_lock);
 	if (ep->util_ep.rx_cq)
-		ofi_wait_fd_del(ep->util_ep.rx_cq->wait, ep->sock);
+		ofi_wait_del_fd(ep->util_ep.rx_cq->wait, ep->sock);
 
 	if (ep->util_ep.tx_cq)
-		ofi_wait_fd_del(ep->util_ep.tx_cq->wait, ep->sock);
+		ofi_wait_del_fd(ep->util_ep.tx_cq->wait, ep->sock);
 
 	if (ep->util_ep.eq->wait)
-		ofi_wait_fd_del(ep->util_ep.eq->wait, ep->sock);
+		ofi_wait_del_fd(ep->util_ep.eq->wait, ep->sock);
 
 	fastlock_release(&eq->close_lock);
 }
@@ -589,7 +589,7 @@ static int tcpx_pep_fi_close(struct fid *fid)
 
 	pep = container_of(fid, struct tcpx_pep, util_pep.pep_fid.fid);
 	if (pep->util_pep.eq)
-		ofi_wait_fd_del(pep->util_pep.eq->wait, pep->sock);
+		ofi_wait_del_fd(pep->util_pep.eq->wait, pep->sock);
 
 	ofi_close_socket(pep->sock);
 	ofi_pep_close(&pep->util_pep);
@@ -679,7 +679,7 @@ static int tcpx_pep_listen(struct fid_pep *pep)
 		return -ofi_sockerr();
 	}
 
-	ret = ofi_wait_fd_add(tcpx_pep->util_pep.eq->wait, tcpx_pep->sock,
+	ret = ofi_wait_add_fd(tcpx_pep->util_pep.eq->wait, tcpx_pep->sock,
 			      OFI_EPOLL_IN, tcpx_eq_wait_try_func,
 			      NULL, &tcpx_pep->cm_ctx);
 
