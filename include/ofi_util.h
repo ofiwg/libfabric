@@ -406,6 +406,9 @@ struct util_wait {
 	enum fi_wait_obj	wait_obj;
 	fi_wait_signal_func	signal;
 	fi_wait_try_func	wait_try;
+
+	struct dlist_entry	fid_list;
+	fastlock_t		lock;
 };
 
 int ofi_wait_init(struct util_fabric *fabric, struct fi_wait_attr *attr,
@@ -416,7 +419,6 @@ struct util_wait_fd {
 	struct util_wait	util_wait;
 	struct fd_signal	signal;
 	struct dlist_entry	fd_list;
-	fastlock_t		lock;
 
 	union {
 		ofi_epoll_t		epoll_fd;
@@ -454,8 +456,6 @@ int ofi_wait_del_fid(struct util_wait *wait, fid_t fid);
 struct util_wait_yield {
 	struct util_wait	util_wait;
 	int			signal;
-	struct dlist_entry	fid_list;
-	fastlock_t		wait_lock;
 	fastlock_t		signal_lock;
 };
 
