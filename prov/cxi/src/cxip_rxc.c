@@ -378,6 +378,8 @@ struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr, void *context,
 	dlist_init(&rxc->ux_rdzv_sends);
 	dlist_init(&rxc->ux_rdzv_recvs);
 	ofi_atomic_initialize32(&rxc->sink_le_linked, 0);
+	dlist_init(&rxc->msg_queue);
+	dlist_init(&rxc->replay_queue);
 	dlist_init(&rxc->sw_ux_list);
 	rxc->pte_state = CXIP_PTE_DISABLED;
 	rxc->disabling = false;

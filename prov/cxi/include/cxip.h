@@ -733,6 +733,8 @@ struct cxip_rxc {
 	ofi_atomic32_t sink_le_linked;
 	struct cxip_oflow_buf sink_le;		// Long UX sink buffer
 
+	struct dlist_entry msg_queue;
+	struct dlist_entry replay_queue;
 	struct dlist_entry sw_ux_list;
 	int sw_ux_list_len;
 };

@@ -22,6 +22,10 @@
 #define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_EP_DATA, __VA_ARGS__)
 #define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_EP_DATA, __VA_ARGS__)
 
+static void cxip_recv_req_dequeue_nolock(struct cxip_req *req);
+static void cxip_recv_req_dequeue(struct cxip_req *req);
+static ssize_t _cxip_recv_req(struct cxip_req *req, bool restart_seq);
+
 static int cxip_send_req_dropped(struct cxip_txc *txc, struct cxip_req *req);
 static void cxip_send_req_dequeue(struct cxip_txc *txc, struct cxip_req *req);
 
@@ -1639,6 +1643,7 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 				if (req->data_len > req->recv.ulen)
 					req->data_len = req->recv.ulen;
 			}
+			cxip_recv_req_dequeue_nolock(req);
 			dlist_insert_tail(&req->recv.rxc_entry,
 					  &rxc->ux_rdzv_recvs);
 
@@ -1686,6 +1691,8 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 		dlist_remove(&ux_send->ux_entry);
 		free(ux_send);
 
+		cxip_recv_req_dequeue_nolock(req);
+
 		fastlock_release(&rxc->rx_lock);
 
 		/* Count the rendezvous event. */
@@ -1694,6 +1701,8 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 		return FI_SUCCESS;
 	case C_EVENT_PUT:
 		/* Eager data was delivered directly to the user buffer. */
+		cxip_recv_req_dequeue(req);
+
 		if (req->recv.multi_recv) {
 			req = rdzv_mrecv_req_event(req, event);
 			if (!req)
@@ -1893,6 +1902,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 				if (req->data_len > req->recv.ulen)
 					req->data_len = req->recv.ulen;
 			}
+			cxip_recv_req_dequeue_nolock(req);
 			dlist_insert_tail(&req->recv.rxc_entry, &rxc->ux_recvs);
 
 			CXIP_LOG_DBG("Queued recv req, data: 0x%lx\n",
@@ -1948,6 +1958,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 				cxip_cq_req_free(req);
 			}
 
+			cxip_recv_req_dequeue_nolock(req);
 			fastlock_release(&rxc->rx_lock);
 			return ret;
 		}
@@ -1980,13 +1991,16 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		dlist_remove(&ux_send->ux_entry);
 		free(ux_send);
 
+		mb.raw = event->tgt_long.match_bits;
+		if (!mb.match_comp)
+			cxip_recv_req_dequeue_nolock(req);
+
 		fastlock_release(&rxc->rx_lock);
 
 		/* Check if the initiator requires match completion guarantees.
 		 * If so, notify the initiator that the match is now complete.
 		 * Delay the Receive event until the notification is complete.
 		 */
-		mb.raw = event->tgt_long.match_bits;
 		if (mb.match_comp) {
 			ret = cxip_notify_match(req, event);
 			if (ret != FI_SUCCESS) {
@@ -1996,6 +2010,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 				return -FI_EAGAIN;
 			}
 
+			cxip_recv_req_dequeue(req);
 			return FI_SUCCESS;
 		}
 
@@ -2011,6 +2026,8 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		/* Data was delivered directly to the user buffer. Complete the
 		 * request.
 		 */
+		cxip_recv_req_dequeue(req);
+
 		if (req->recv.multi_recv) {
 			req = mrecv_req_dup(req);
 			if (!req)
@@ -2081,6 +2098,7 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 		assert(cxi_event_rc(event) == C_RC_OK);
 
 		fastlock_acquire(&rxc->lock);
+
 		ux_send = match_ux_send(rxc, event);
 		if (!ux_send) {
 			CXIP_LOG_ERROR("Matching Put event not found\n");
@@ -2100,7 +2118,10 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 		CXIP_LOG_ERROR("UX list empty (SW UX list len: %d): %p\n",
 			       rxc->sw_ux_list_len, rxc);
 
+		fastlock_acquire(&rxc->lock);
 		rxc->pte_state = CXIP_PTE_ONLOADED;
+		fastlock_release(&rxc->lock);
+
 		return FI_SUCCESS;
 	default:
 		CXIP_LOG_ERROR("Unexpected event type: %d\n",
@@ -2113,6 +2134,8 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 /*
  * cxip_ux_onload() - Issue SEARCH_AND_DELETE command to on-load unexpected
  * Send headers queued on the RXC message queue.
+ *
+ * Caller must hold rxc->lock.
  */
 static int cxip_ux_onload(struct cxip_rxc *rxc)
 {
@@ -2154,6 +2177,8 @@ static int cxip_ux_onload(struct cxip_rxc *rxc)
 
 	fastlock_release(&rxc->rx_cmdq->lock);
 
+	rxc->pte_state = CXIP_PTE_ONLOADING;
+
 	return FI_SUCCESS;
 }
 
@@ -2170,6 +2195,8 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
 		rxc->pte_state = CXIP_PTE_ENABLED;
 		break;
 	case C_PTLTE_DISABLED:
+		fastlock_acquire(&rxc->lock);
+
 		if (rxc->disabling) {
 			rxc->pte_state = CXIP_PTE_DISABLED;
 		} else {
@@ -2180,23 +2207,224 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
 
 			ret = cxip_ux_onload(rxc);
 			assert(ret == FI_SUCCESS);
-
-			rxc->pte_state = CXIP_PTE_ONLOADING;
-
-			/* Wait for search events capped by one with a RC
-			 * NO_MATCH.
-			 */
 		}
+
+		fastlock_release(&rxc->lock);
+
 		break;
 	default:
 		CXIP_LOG_ERROR("Unexpected state received: %u\n", state);
 	}
 }
 
+#if 1
+/*
+ * tag_match() - Compare UX Send tag and Receive tags in SW.
+ */
+static bool tag_match(uint64_t init_mb, uint64_t mb, uint64_t ib)
+{
+	return !((init_mb ^ mb) & ~ib);
+}
+
+/*
+ * tag_match() - Compare UX Send initiator and Receive initiator in SW.
+ */
+static bool init_match(uint32_t init, uint32_t match_id)
+{
+	if (match_id == CXI_MATCH_ID_ANY)
+		return true;
+
+	return init == match_id;
+}
+
+/*
+ * cxip_recv_sw_match() - Progress the SW Receive match.
+ *
+ * Progress the operation which matched in SW.
+ */
+static int cxip_recv_sw_match(struct cxip_req *req,
+			      struct cxip_ux_send *ux_send)
+{
+	struct cxip_oflow_buf *oflow_buf;
+	void *oflow_va;
+
+	oflow_buf = ux_send->req->oflow.oflow_buf;
+
+	req->tag = ux_send->mb.tag;
+	req->data = ux_send->data;
+	req->recv.src_offset = ux_send->src_offset;
+	req->recv.rc = C_RC_OK;
+
+	req->data_len = req->recv.rlen = ux_send->rlen;
+	if (req->data_len > req->recv.ulen)
+		req->data_len = req->recv.ulen;
+
+	/* TODO support long Send SW matching */
+	assert(ux_send->rlen < req->recv.rxc->rdzv_threshold);
+
+	oflow_va = (void *)CXI_IOVA_TO_VA(oflow_buf->md->md,
+					  ux_send->start);
+	memcpy(req->recv.recv_buf, oflow_va, req->data_len);
+	oflow_req_put_bytes(ux_send->req, ux_send->mlen);
+
+	recv_req_report(req);
+	cxip_cq_req_free(req);
+
+	return FI_SUCCESS;
+}
+
+/*
+ * cxip_recv_sw_matcher() - Attempt to match the Receive in SW.
+ *
+ * Loop through all onloaded UX Sends looking for a match for the Receive
+ * request. If a match is found, progress the operation.
+ *
+ * Caller must hold req->recv.rxc->lock.
+ */
+static int cxip_recv_sw_matcher(struct cxip_req *req)
+{
+	struct cxip_rxc *rxc = req->recv.rxc;
+	struct cxip_ux_send *ux_send;
+	struct dlist_entry *tmp;
+	int ret = FI_ENOMSG;
+
+	if (dlist_empty(&rxc->sw_ux_list))
+		return -FI_ENOMSG;
+
+	/* TODO support multi-recv SW matching */
+	assert(!req->recv.multi_recv);
+
+	dlist_foreach_container_safe(&rxc->sw_ux_list, struct cxip_ux_send,
+				     ux_send, ux_entry, tmp) {
+		if (req->recv.tagged) {
+			if (!ux_send->mb.tagged)
+				continue;
+
+			if (!tag_match(ux_send->mb.tag, req->recv.tag,
+				       req->recv.ignore))
+				continue;
+
+			if (!init_match(ux_send->initiator, req->recv.match_id))
+				continue;
+		} else {
+			if (ux_send->mb.tagged)
+				continue;
+
+			if (!init_match(ux_send->initiator, req->recv.match_id))
+				continue;
+		}
+
+		ret = cxip_recv_sw_match(req, ux_send);
+		if (ret == FI_SUCCESS) {
+			CXIP_LOG_DBG("Software match, req: %p ux_send: %p\n",
+				     req, ux_send);
+			dlist_remove(&ux_send->ux_entry);
+			free(ux_send);
+			rxc->sw_ux_list_len--;
+			ret = FI_SUCCESS;
+		} else {
+			ret = -FI_EAGAIN;
+		}
+
+		break;
+	}
+
+	return ret;
+}
+
+/*
+ * cxip_recv_req_queue() - Queue Receive request on RXC.
+ *
+ * Place the Receive request in an ordered SW queue. There are a couple
+ * temporary conditions that prevent queuing new Receives.
+ *
+ * 1. Appends have been disabled by HW. Previous Receives must be replayed
+ *    first.
+ * 2. SW is in the process of onloading UX Sends.
+ *
+ * Before appending a new Receive request to a HW list, attempt to match the
+ * Receive to any onloaded UX Sends.
+ */
+static int cxip_recv_req_queue(struct cxip_req *req)
+{
+	struct cxip_rxc *rxc = req->recv.rxc;
+	int ret;
+
+	fastlock_acquire(&rxc->lock);
+
+	/* Don't accept new Receives while there are message that need to be
+	 * replayed.
+	 */
+	if (!dlist_empty(&rxc->replay_queue)) {
+		ret = -FI_EAGAIN;
+		goto unlock;
+	}
+
+	/* Matching can't be performed while in the intermediate onloading
+	 * state. Wait until software completes building the UX Send list.
+	 */
+	if (rxc->pte_state == CXIP_PTE_ONLOADING) {
+		ret = -FI_EAGAIN;
+		goto unlock;
+	}
+
+	/* Try to match against onloaded Sends first. */
+	ret = cxip_recv_sw_matcher(req);
+	if (ret == FI_SUCCESS) {
+		ret = -FI_EALREADY;
+		goto unlock;
+	} else if (ret != -FI_ENOMSG) {
+		goto unlock;
+	}
+
+	dlist_insert_tail(&req->recv.rxc_entry, &rxc->msg_queue);
+
+	fastlock_release(&rxc->lock);
+
+	return FI_SUCCESS;
+
+unlock:
+	fastlock_release(&rxc->lock);
+
+	return ret;
+}
+
+/*
+ * cxip_recv_req_dequeue_nolock() - Dequeue Receive request from RXC.
+ *
+ * Caller must hold req->recv.rxc->lock.
+ */
+static void cxip_recv_req_dequeue_nolock(struct cxip_req *req)
+{
+	dlist_remove(&req->recv.rxc_entry);
+}
+
+/*
+ * cxip_recv_req_dequeue() - Dequeue Receive request from RXC.
+ *
+ * A Receive request may be dequeued from the RXC as soon as there is evidence
+ * that the append command has been accepted.
+ */
+static void cxip_recv_req_dequeue(struct cxip_req *req)
+{
+	struct cxip_rxc *rxc = req->recv.rxc;
+
+	fastlock_acquire(&rxc->lock);
+
+	cxip_recv_req_dequeue_nolock(req);
+
+	fastlock_release(&rxc->lock);
+}
+#else
+static int cxip_recv_req_queue(struct cxip_req *req)  {return FI_SUCCESS;}
+static void cxip_recv_req_dequeue_nolock(struct cxip_req *req) {}
+static void cxip_recv_req_dequeue(struct cxip_req *req) {}
+#endif
+
 /*
  * _cxip_recv_req() - Submit Receive request to hardware.
  */
-static ssize_t _cxip_recv_req(struct cxip_req *req)
+static ssize_t _cxip_recv_req(struct cxip_req *req, bool restart_seq)
 {
 	struct cxip_rxc *rxc = req->recv.rxc;
 	uint32_t le_flags;
@@ -2227,6 +2455,8 @@ static ssize_t _cxip_recv_req(struct cxip_req *req)
 		   C_LE_OP_PUT;
 	if (!req->recv.multi_recv)
 		le_flags |= C_LE_USE_ONCE;
+	if (restart_seq)
+		le_flags |= C_LE_RESTART_SEQ;
 
 	if (recv_md)
 		recv_iova = CXI_VA_TO_IOVA(recv_md->md, req->recv.recv_buf);
@@ -2283,7 +2513,7 @@ static ssize_t _cxip_recv(struct cxip_rxc *rxc, void *buf, size_t len,
 	if (rxc->attr.caps & FI_DIRECTED_RECV &&
 	    src_addr != FI_ADDR_UNSPEC) {
 		if (rxc->ep_obj->av->attr.flags & FI_SYMMETRIC) {
-			match_id = CXI_MATCH_ID(pid_bits, C_PID_ANY, src_addr);
+			match_id = CXI_MATCH_ID(pid_bits, 0, src_addr);
 		} else {
 			ret = _cxip_av_lookup(rxc->ep_obj->av, src_addr,
 					      &caddr);
@@ -2296,7 +2526,7 @@ static ssize_t _cxip_recv(struct cxip_rxc *rxc, void *buf, size_t len,
 			match_id = CXI_MATCH_ID(pid_bits, caddr.pid, caddr.nic);
 		}
 	} else {
-		match_id = CXI_MATCH_ID(pid_bits, C_PID_ANY, C_NID_ANY);
+		match_id = CXI_MATCH_ID_ANY;
 	}
 
 	/* Map local buffer */
@@ -2348,9 +2578,19 @@ static ssize_t _cxip_recv(struct cxip_rxc *rxc, void *buf, size_t len,
 	/* Count Put, Rendezvous, and Reply events during offloaded RPut. */
 	req->recv.rdzv_events = 0;
 
-	ret = _cxip_recv_req(req);
+	ret = cxip_recv_req_queue(req);
+
+	/* Match made is software? */
+	if (ret == -FI_EALREADY)
+		return FI_SUCCESS;
+
+	/* RXC busy (onloading Sends or full CQ)? */
 	if (ret != FI_SUCCESS)
 		goto req_free;
+
+	ret = _cxip_recv_req(req, false);
+	if (ret != FI_SUCCESS)
+		goto req_dequeue;
 
 	CXIP_LOG_DBG("req: %p buf: %p len: %lu src_addr: %ld tag(%c): 0x%lx ignore: 0x%lx context: %p\n",
 		     req, buf, len, src_addr, tagged ? '*' : '-', tag, ignore,
@@ -2358,6 +2598,8 @@ static ssize_t _cxip_recv(struct cxip_rxc *rxc, void *buf, size_t len,
 
 	return FI_SUCCESS;
 
+req_dequeue:
+	cxip_recv_req_dequeue(req);
 req_free:
 	cxip_cq_req_free(req);
 recv_unmap:
@@ -2403,8 +2645,7 @@ static uint32_t cxip_msg_match_id(struct cxip_txc *txc)
 	int pid_bits = txc->domain->iface->dev->info.pid_bits;
 
 	if (txc->ep_obj->av->attr.flags & FI_SYMMETRIC)
-		return CXI_MATCH_ID(pid_bits, txc->ep_obj->src_addr.pid,
-				    _txc_fi_addr(txc));
+		return CXI_MATCH_ID(pid_bits, 0, _txc_fi_addr(txc));
 
 	return CXI_MATCH_ID(pid_bits, txc->ep_obj->src_addr.pid,
 			    txc->ep_obj->src_addr.nic);
