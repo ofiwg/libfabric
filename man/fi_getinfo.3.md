@@ -237,8 +237,8 @@ struct fi_info {
 : Optional attributes related to the hardware NIC associated with
   the specified fabric, domain, and endpoint data.  This field is
   only valid for providers where the corresponding attributes are
-  closely associated with a hardware NIC.  See [`fi_nic`(3)]
-  (fi_nic.3.html) for details.
+  closely associated with a hardware NIC.  See
+  [`fi_nic`(3)](fi_nic.3.html) for details.
 
 # CAPABILITIES
 
