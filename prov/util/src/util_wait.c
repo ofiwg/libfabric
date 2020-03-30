@@ -39,6 +39,17 @@
 #include <ofi_epoll.h>
 
 
+static uint32_t ofi_poll_to_epoll(uint32_t events)
+{
+	uint32_t epoll_events = 0;
+
+	if (events & POLLIN)
+		epoll_events |= OFI_EPOLL_IN;
+	if (events & POLLOUT)
+		epoll_events |= OFI_EPOLL_OUT;
+	return epoll_events;
+}
+
 int ofi_trywait(struct fid_fabric *fabric, struct fid **fids, int count)
 {
 	struct util_cq *cq;
@@ -223,11 +234,15 @@ int ofi_wait_add_fd(struct util_wait *wait, int fd, uint32_t events,
 		goto out;
 	}
 
-	ret = (wait->wait_obj == FI_WAIT_FD) ?
-	      ofi_epoll_add(wait_fd->epoll_fd, fd, events, context) :
-	      ofi_pollfds_add(wait_fd->pollfds, fd, events, context);
+	if (wait->wait_obj == FI_WAIT_FD) {
+		ret = ofi_epoll_add(wait_fd->epoll_fd, fd,
+				    ofi_poll_to_epoll(events), context);
+	} else {
+		ret = ofi_pollfds_add(wait_fd->pollfds, fd, events, context);
+	}
 	if (ret) {
-		FI_WARN(wait->prov, FI_LOG_FABRIC, "Unable to add fd to epoll\n");
+		FI_WARN(wait->prov, FI_LOG_FABRIC,
+			"Unable to add fd to epoll\n");
 		goto out;
 	}
 
@@ -749,7 +764,8 @@ int ofi_wait_add_fid(struct util_wait *wait, fid_t fid, uint32_t events,
 
 	fid_entry->fid = fid;
 	fid_entry->wait_try = wait_try;
-	fid_entry->events = events;
+	fid_entry->events = (wait->wait_obj == FI_WAIT_FD) ?
+			    ofi_poll_to_epoll(events) : events;
 	ofi_atomic_initialize32(&fid_entry->ref, 1);
 
 	if (wait->wait_obj == FI_WAIT_FD || wait->wait_obj == FI_WAIT_POLLFD) {
