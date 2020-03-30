@@ -1244,6 +1244,10 @@ static int vrb_eq_control(fid_t fid, int command, void *arg)
 		pollfd->nfds = 1;
 #endif
 		break;
+	case FI_GETWAITOBJ:
+		*(enum fi_wait_obj *) arg = eq->wait_obj;
+		ret = 0;
+		break;
 	default:
 		ret = -FI_ENOSYS;
 		break;

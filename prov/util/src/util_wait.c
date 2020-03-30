@@ -340,7 +340,7 @@ static int util_wait_fd_control(struct fid *fid, int command, void *arg)
 			*(int *) arg = wait->epoll_fd;
 			return 0;
 #else
-			return -FI_ENOSYS;
+			return -FI_ENODATA;
 #endif
 		}
 
@@ -356,6 +356,10 @@ static int util_wait_fd_control(struct fid *fid, int command, void *arg)
 		pollfd->change_index = wait->change_index;
 		pollfd->nfds = wait->pollfds->nfds;
 		fastlock_release(&wait->util_wait.lock);
+		break;
+	case FI_GETWAITOBJ:
+		*(enum fi_wait_obj *) arg = wait->util_wait.wait_obj;
+		ret = 0;
 		break;
 	default:
 		FI_INFO(wait->util_wait.prov, FI_LOG_FABRIC,

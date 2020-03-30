@@ -205,11 +205,11 @@ static int tcpx_cq_control(struct fid *fid, int command, void *arg)
 
 	switch(command) {
 	case FI_GETWAIT:
+	case FI_GETWAITOBJ:
 		if (!cq->wait)
-			return -FI_ENOSYS;
+			return -FI_ENODATA;
 
-		ret = fi_control(&cq->wait->wait_fid.fid,
-				 command, arg);
+		ret = fi_control(&cq->wait->wait_fid.fid, command, arg);
 		break;
 	default:
 		return -FI_ENOSYS;
