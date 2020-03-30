@@ -243,9 +243,10 @@ static void smr_init_queue(struct smr_queue *queue,
 }
 
 void smr_post_pend_resp(struct smr_cmd *cmd, struct smr_cmd *pend,
-			struct smr_resp *resp)
+			struct smr_resp *resp, fi_addr_t id)
 {
 	*pend = *cmd;
+	pend->msg.hdr.addr = id;
 	resp->msg_id = (uint64_t) (uintptr_t) pend;
 	resp->status = FI_EBUSY;
 }
@@ -299,7 +300,7 @@ void smr_format_inject(struct smr_cmd *cmd, fi_addr_t peer_id,
 					      iov, count, 0);
 }
 
-void smr_format_iov(struct smr_cmd *cmd, fi_addr_t peer_id,
+void smr_format_iov(struct smr_cmd *cmd, fi_addr_t my_id, fi_addr_t peer_id,
 		    const struct iovec *iov, size_t count, size_t total_len,
 		    uint32_t op, uint64_t tag, uint64_t data, uint64_t op_flags,
 		    void *context, struct smr_region *smr,
@@ -313,7 +314,7 @@ void smr_format_iov(struct smr_cmd *cmd, fi_addr_t peer_id,
 	cmd->msg.hdr.msg_id = (uint64_t) (uintptr_t) context;
 	memcpy(cmd->msg.data.iov, iov, sizeof(*iov) * count);
 
-	smr_post_pend_resp(cmd, pend_cmd, resp);
+	smr_post_pend_resp(cmd, pend_cmd, resp, my_id);
 }
 
 static int smr_ep_close(struct fid *fid)
