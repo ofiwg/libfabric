@@ -124,6 +124,7 @@ int fi_wait_cleanup(struct util_wait *wait)
 	while (!dlist_empty(&wait->fid_list)) {
 		dlist_pop_front(&wait->fid_list, struct ofi_wait_fid_entry,
 				fid_entry, entry);
+		free(fid_entry->pollfds.fd);
 		free(fid_entry);
 	}
 
@@ -179,6 +180,30 @@ static int ofi_wait_match_fd(struct dlist_entry *item, const void *arg)
 	return fd_entry->fd == *(int *) arg;
 }
 
+static int ofi_wait_fdset_del(struct util_wait_fd *wait_fd, int fd)
+{
+	wait_fd->change_index++;
+
+	return (wait_fd->util_wait.wait_obj == FI_WAIT_FD) ?
+		ofi_epoll_del(wait_fd->epoll_fd, fd) :
+		ofi_pollfds_del(wait_fd->pollfds, fd);
+}
+
+static int ofi_wait_fdset_add(struct util_wait_fd *wait_fd, int fd,
+			       uint32_t events, void *context)
+{
+	int ret;
+
+	wait_fd->change_index++;
+	if (wait_fd->util_wait.wait_obj == FI_WAIT_FD) {
+		ret = ofi_epoll_add(wait_fd->epoll_fd, fd,
+				    ofi_poll_to_epoll(events), context);
+	} else {
+		ret = ofi_pollfds_add(wait_fd->pollfds, fd, events, context);
+	}
+	return ret;
+}
+
 int ofi_wait_del_fd(struct util_wait *wait, int fd)
 {
 	struct ofi_wait_fd_entry *fd_entry;
@@ -202,13 +227,8 @@ int ofi_wait_del_fd(struct util_wait *wait, int fd)
 		goto out;
 
 	dlist_remove(&fd_entry->entry);
-
-	if (wait->wait_obj == FI_WAIT_FD)
-		ofi_epoll_del(wait_fd->epoll_fd, fd_entry->fd);
-	else
-		ofi_pollfds_del(wait_fd->pollfds, fd_entry->fd);
+	ofi_wait_fdset_del(wait_fd, fd_entry->fd);
 	free(fd_entry);
-	wait_fd->change_index++;
 out:
 	fastlock_release(&wait->lock);
 	return ret;
@@ -234,12 +254,7 @@ int ofi_wait_add_fd(struct util_wait *wait, int fd, uint32_t events,
 		goto out;
 	}
 
-	if (wait->wait_obj == FI_WAIT_FD) {
-		ret = ofi_epoll_add(wait_fd->epoll_fd, fd,
-				    ofi_poll_to_epoll(events), context);
-	} else {
-		ret = ofi_pollfds_add(wait_fd->pollfds, fd, events, context);
-	}
+	ret = ofi_wait_fdset_add(wait_fd, fd, events, context);
 	if (ret) {
 		FI_WARN(wait->prov, FI_LOG_FABRIC,
 			"Unable to add fd to epoll\n");
@@ -249,10 +264,7 @@ int ofi_wait_add_fd(struct util_wait *wait, int fd, uint32_t events,
 	fd_entry = calloc(1, sizeof *fd_entry);
 	if (!fd_entry) {
 		ret = -FI_ENOMEM;
-		if (wait->wait_obj == FI_WAIT_FD)
-			ofi_epoll_del(wait_fd->epoll_fd, fd);
-		else
-			ofi_pollfds_del(wait_fd->pollfds, fd);
+		ofi_wait_fdset_del(wait_fd, fd);
 		goto out;
 	}
 
@@ -262,7 +274,6 @@ int ofi_wait_add_fd(struct util_wait *wait, int fd, uint32_t events,
 	ofi_atomic_initialize32(&fd_entry->ref, 1);
 
 	dlist_insert_tail(&fd_entry->entry, &wait_fd->fd_list);
-	wait_fd->change_index++;
 out:
 	fastlock_release(&wait->lock);
 	return ret;
@@ -273,6 +284,61 @@ static void util_wait_fd_signal(struct util_wait *util_wait)
 	struct util_wait_fd *wait;
 	wait = container_of(util_wait, struct util_wait_fd, util_wait);
 	fd_signal_set(&wait->signal);
+}
+
+static int util_wait_update_pollfd(struct util_wait_fd *wait_fd,
+				   struct ofi_wait_fid_entry *fid_entry)
+{
+	struct fi_wait_pollfd pollfds = { 0 };
+	struct pollfd *fds;
+	size_t i;
+	int ret;
+
+	ret = fi_control(fid_entry->fid, FI_GETWAIT, &pollfds);
+	if (ret != FI_ETOOSMALL)
+		return ret;
+
+	if (pollfds.change_index == fid_entry->pollfds.change_index)
+		return 0;
+
+	fds = fid_entry->pollfds.fd;
+	for (i = 0; i < fid_entry->pollfds.nfds; i++) {
+		ret = ofi_wait_fdset_del(wait_fd, fds->fd);
+		if (ret) {
+			FI_WARN(wait_fd->util_wait.prov, FI_LOG_EP_CTRL,
+				"epoll_del failed %s\n", fi_strerror(ret));
+		}
+	}
+
+	if (fid_entry->pollfds.nfds < pollfds.nfds) {
+		fds = calloc(pollfds.nfds, sizeof(*fds));
+		if (!fds)
+			return -FI_ENOMEM;
+
+		free(fid_entry->pollfds.fd);
+		fid_entry->pollfds.fd = fds;
+		fid_entry->pollfds.nfds = pollfds.nfds;
+	}
+
+	ret = fi_control(fid_entry->fid, FI_GETWAIT, &fid_entry->pollfds);
+	if (ret) {
+		FI_WARN(wait_fd->util_wait.prov, FI_LOG_EP_CTRL,
+			"unable to get wait pollfd %s\n", fi_strerror(ret));
+		return ret;
+	}
+
+	fds = fid_entry->pollfds.fd;
+	for (i = 0; i < fid_entry->pollfds.nfds; i++) {
+		ret = ofi_wait_fdset_add(wait_fd, fds[i].fd, fds[i].events,
+					 fid_entry->fid->context);
+		if (ret) {
+			FI_WARN(wait_fd->util_wait.prov, FI_LOG_EP_CTRL,
+				"unable to add fd %s\n", fi_strerror(ret));
+			return ret;
+		}
+	}
+
+	return -FI_EAGAIN;
 }
 
 static int util_wait_fd_try(struct util_wait *wait)
@@ -289,24 +355,30 @@ static int util_wait_fd_try(struct util_wait *wait)
 	dlist_foreach_container(&wait_fd->fd_list, struct ofi_wait_fd_entry,
 				fd_entry, entry) {
 		ret = fd_entry->wait_try(fd_entry->arg);
-		if (ret != FI_SUCCESS) {
-			fastlock_release(&wait->lock);
-			return ret;
-		}
+		if (ret != FI_SUCCESS)
+			goto release;
 	}
 
 	dlist_foreach_container(&wait->fid_list,
 				struct ofi_wait_fid_entry, fid_entry, entry) {
-		ret = fid_entry->wait_try(fid_entry->fid);
-		if (ret != FI_SUCCESS) {
-			fastlock_release(&wait->lock);
-			return ret;
+		if (fid_entry->wait_obj == FI_WAIT_POLLFD) {
+			ret = util_wait_update_pollfd(wait_fd, fid_entry);
+			if (ret)
+				goto release;
 		}
+
+		ret = fid_entry->wait_try(fid_entry->fid);
+		if (ret != FI_SUCCESS)
+			goto release;
 	}
 
 	fastlock_release(&wait->lock);
 	ret = fi_poll(&wait->pollset->poll_fid, &context, 1);
 	return (ret > 0) ? -FI_EAGAIN : (ret == -FI_EAGAIN) ? FI_SUCCESS : ret;
+
+release:
+	fastlock_release(&wait->lock);
+	return ret;
 }
 
 static int util_wait_fd_run(struct fid_wait *wait_fid, int timeout)
@@ -397,10 +469,7 @@ static int util_wait_fd_close(struct fid *fid)
 	while (!dlist_empty(&wait->fd_list)) {
 		dlist_pop_front(&wait->fd_list, struct ofi_wait_fd_entry,
 				fd_entry, entry);
-		if (wait->util_wait.wait_obj == FI_WAIT_FD)
-			ofi_epoll_del(wait->epoll_fd, fd_entry->fd);
-		else
-			ofi_pollfds_del(wait->pollfds, fd_entry->fd);
+		ofi_wait_fdset_del(wait, fd_entry->fd);
 		free(fd_entry);
 	}
 	fastlock_release(&wait->util_wait.lock);
@@ -409,7 +478,7 @@ static int util_wait_fd_close(struct fid *fid)
 	if (ret)
 		return ret;
 
-	ofi_epoll_del(wait->epoll_fd, wait->signal.fd[FI_READ_FD]);
+	ofi_wait_fdset_del(wait, wait->signal.fd[FI_READ_FD]);
 	fd_signal_free(&wait->signal);
 
 	if (wait->util_wait.wait_obj == FI_WAIT_FD)
@@ -487,11 +556,8 @@ int ofi_wait_fd_open(struct fid_fabric *fabric_fid, struct fi_wait_attr *attr,
 	if (ret)
 		goto err3;
 
-	ret = (wait->util_wait.wait_obj == FI_WAIT_FD) ?
-	      ofi_epoll_add(wait->epoll_fd, wait->signal.fd[FI_READ_FD],
-			OFI_EPOLL_IN, &wait->util_wait.wait_fid.fid) :
-	      ofi_pollfds_add(wait->pollfds, wait->signal.fd[FI_READ_FD],
-			POLLIN, &wait->util_wait.wait_fid.fid);
+	ret = ofi_wait_fdset_add(wait, wait->signal.fd[FI_READ_FD],
+				 POLLIN, &wait->util_wait.wait_fid.fid);
 	if (ret)
 		goto err4;
 
@@ -650,32 +716,13 @@ static int ofi_wait_match_fid(struct dlist_entry *item, const void *arg)
 	return fid_entry->fid == arg;
 }
 
-static int ofi_wait_del_fds(struct util_wait *wait,
-			    struct ofi_wait_fid_entry *fid_entry)
-{
-	struct util_wait_fd *wait_fd;
-	int fd, ret;
-
-	/* TODO: support fid being a pollfd wait set */
-	ret = fi_control(fid_entry->fid, FI_GETWAIT, &fd);
-	if (ret) {
-		FI_WARN(wait->prov, FI_LOG_EP_CTRL,
-			"unable to get wait fd %d\n", ret);
-		return ret;
-	}
-
-	wait_fd = container_of(wait, struct util_wait_fd, util_wait);
-	ret = (wait->wait_obj == FI_WAIT_FD) ?
-	      ofi_epoll_del(wait_fd->epoll_fd, fd) :
-	      ofi_pollfds_del(wait_fd->pollfds, fd);
-
-	return ret;
-}
-
 int ofi_wait_del_fid(struct util_wait *wait, fid_t fid)
 {
 	struct ofi_wait_fid_entry *fid_entry;
+	struct util_wait_fd *wait_fd;
 	struct dlist_entry *entry;
+	struct pollfd *fds;
+	size_t i;
 	int ret = 0;
 
 	fastlock_acquire(&wait->lock);
@@ -693,48 +740,91 @@ int ofi_wait_del_fid(struct util_wait *wait, fid_t fid)
 	if (ofi_atomic_dec32(&fid_entry->ref))
 		goto out;
 
-	if (wait->wait_obj == FI_WAIT_FD || wait->wait_obj == FI_WAIT_POLLFD) {
-		ret = ofi_wait_del_fds(wait, fid_entry);
+	wait_fd = container_of(wait, struct util_wait_fd, util_wait);
+	fds = fid_entry->pollfds.fd;
+	for (i = 0; i < fid_entry->pollfds.nfds; i++) {
+		assert(fds);
+		ret = ofi_wait_fdset_del(wait_fd, fds->fd);
 		if (ret) {
 			FI_WARN(wait->prov, FI_LOG_EP_CTRL,
-				"Failed to delete fd's\n");
-			ofi_atomic_inc32(&fid_entry->ref);
-			goto out;
+				"epoll_del failed %s\n", fi_strerror(ret));
 		}
 	}
 
 	dlist_remove(&fid_entry->entry);
+	free(fid_entry->pollfds.fd);
 	free(fid_entry);
 out:
 	fastlock_release(&wait->lock);
 	return ret;
 }
 
-static int ofi_wait_add_fds(struct util_wait *wait,
-			    struct ofi_wait_fid_entry *fid_entry)
+static int ofi_wait_get_fd(struct util_wait_fd *wait_fd,
+			   struct ofi_wait_fid_entry *fid_entry)
+{
+	struct pollfd *fds;
+	int ret;
+
+	fds = calloc(1, sizeof(*fds));
+	if (!fds)
+		return -FI_ENOMEM;
+
+	ret = fi_control(fid_entry->fid, FI_GETWAIT, &fds->fd);
+	if (ret) {
+		FI_WARN(wait_fd->util_wait.prov, FI_LOG_EP_CTRL,
+			"unable to get wait fd %s\n", fi_strerror(ret));
+		goto free;
+	}
+
+	fds->events = fid_entry->events;
+	fid_entry->pollfds.fd = fds;
+	fid_entry->pollfds.nfds = 1;
+	return 0;
+
+free:
+	free(fds);
+	return ret;
+}
+
+static int ofi_wait_get_fid_fds(struct util_wait *wait,
+				struct ofi_wait_fid_entry *fid_entry)
 {
 	struct util_wait_fd *wait_fd;
-	int fd, ret;
+	struct pollfd *fds;
+	size_t i;
+	int ret;
 
-	/* TODO: support fid being a pollfd wait set */
-	ret = fi_control(fid_entry->fid, FI_GETWAIT, &fd);
-	if (ret) {
+	ret = fi_control(fid_entry->fid, FI_GETWAITOBJ,
+			 &fid_entry->wait_obj);
+	if ((fid_entry->wait_obj != FI_WAIT_FD) &&
+	    (fid_entry->wait_obj != FI_WAIT_POLLFD)) {
 		FI_WARN(wait->prov, FI_LOG_EP_CTRL,
-			"unable to get wait fd %d\n", ret);
+			"unsupported wait object %d (ret: %s)\n",
+			fid_entry->wait_obj, fi_strerror(ret));
 		return ret;
 	}
 
+	/* pollfd is updated during trywait */
+	if (fid_entry->wait_obj == FI_WAIT_POLLFD)
+		return 0;
+
 	wait_fd = container_of(wait, struct util_wait_fd, util_wait);
-	if (wait->wait_obj == FI_WAIT_FD) {
-		ret = ofi_epoll_add(wait_fd->epoll_fd, fd,
-				    fid_entry->events, fid_entry->fid->context);
-	} else {
-		ret = ofi_pollfds_add(wait_fd->pollfds, fd,
-				      fid_entry->events,
-				      fid_entry->fid->context);
+	ret = ofi_wait_get_fd(wait_fd, fid_entry);
+	if (ret)
+		return ret;
+
+	fds = fid_entry->pollfds.fd;
+	for (i = 0; i < fid_entry->pollfds.nfds; i++) {
+		ret = ofi_wait_fdset_add(wait_fd, fds[i].fd, fds[i].events,
+					 fid_entry->fid->context);
+		if (ret) {
+			FI_WARN(wait->prov, FI_LOG_EP_CTRL,
+				"unable to add fd %s\n", fi_strerror(ret));
+			return ret;
+		}
 	}
 
-	return ret;
+	return 0;
 }
 
 int ofi_wait_add_fid(struct util_wait *wait, fid_t fid, uint32_t events,
@@ -764,12 +854,11 @@ int ofi_wait_add_fid(struct util_wait *wait, fid_t fid, uint32_t events,
 
 	fid_entry->fid = fid;
 	fid_entry->wait_try = wait_try;
-	fid_entry->events = (wait->wait_obj == FI_WAIT_FD) ?
-			    ofi_poll_to_epoll(events) : events;
+	fid_entry->events = events;
 	ofi_atomic_initialize32(&fid_entry->ref, 1);
 
 	if (wait->wait_obj == FI_WAIT_FD || wait->wait_obj == FI_WAIT_POLLFD) {
-		ret = ofi_wait_add_fds(wait, fid_entry);
+		ret = ofi_wait_get_fid_fds(wait, fid_entry);
 		if (ret) {
 			free(fid_entry);
 			goto out;
