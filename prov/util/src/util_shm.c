@@ -62,6 +62,26 @@ static void smr_peer_addr_init(struct smr_addr *peer)
 	peer->addr = FI_ADDR_UNSPEC;
 }
 
+void smr_cma_check(struct smr_region *smr, struct smr_region *peer_smr)
+{
+	struct iovec local_iov, remote_iov;
+	int ret;
+
+	if (peer_smr->cma_cap != SMR_CMA_CAP_NA) {
+		smr->cma_cap = peer_smr->cma_cap;
+		return;
+	}
+	local_iov.iov_base = &smr->cma_cap;
+	local_iov.iov_len = sizeof(smr->cma_cap);
+	remote_iov.iov_base = (char *)peer_smr->base_addr +
+			      ((char *)&peer_smr->cma_cap - (char *)peer_smr);
+	remote_iov.iov_len = sizeof(peer_smr->cma_cap);
+	ret = process_vm_writev(peer_smr->pid, &local_iov, 1,
+				&remote_iov, 1, 0);
+	smr->cma_cap = (ret == -1) ? SMR_CMA_CAP_OFF : SMR_CMA_CAP_ON;
+	peer_smr->cma_cap = smr->cma_cap;
+}
+
 /* TODO: Determine if aligning SMR data helps performance */
 int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	       const struct smr_attr *attr, struct smr_region **smr)
@@ -125,6 +145,8 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	(*smr)->version = SMR_VERSION;
 	(*smr)->flags = SMR_FLAG_ATOMIC | SMR_FLAG_DEBUG;
 	(*smr)->pid = getpid();
+	(*smr)->cma_cap = SMR_CMA_CAP_NA;
+	(*smr)->base_addr = *smr;
 
 	(*smr)->total_size = total_size;
 	(*smr)->cmd_queue_offset = cmd_queue_offset;
@@ -231,6 +253,9 @@ void smr_map_to_endpoint(struct smr_region *region, int index)
 
 	peer_smr = smr_peer_region(region, index);
 	peer_peers = smr_peer_addr(peer_smr);
+
+	if (region->cma_cap == SMR_CMA_CAP_NA)
+		smr_cma_check(region, peer_smr);
 
 	for (peer_index = 0; peer_index < SMR_MAX_PEERS; peer_index++) {
 		if (!strncmp(smr_name(region),

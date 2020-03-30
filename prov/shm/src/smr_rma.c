@@ -128,7 +128,8 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 
 	cmds = 1 + !(domain->fast_rma && !(op_flags &
 		    (FI_REMOTE_CQ_DATA | FI_DELIVERY_COMPLETE)) &&
-		     rma_count == 1);
+		     rma_count == 1 &&
+		     ep->region->cma_cap == SMR_CMA_CAP_ON);
 
 	peer_smr = smr_peer_region(ep->region, id);
 	fastlock_acquire(&peer_smr->lock);
@@ -156,19 +157,11 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 	total_len = ofi_total_iov_len(iov, iov_count);
 
 	smr_generic_format(cmd, peer_id, op, 0, data, op_flags);
-	if (!smr_env.disable_cma && (total_len > SMR_INJECT_SIZE ||
-	    op != ofi_op_write || op_flags & FI_DELIVERY_COMPLETE)) {
-		if (ofi_cirque_isfull(smr_resp_queue(ep->region))) {
-			ret = -FI_EAGAIN;
-			goto unlock_cq;
-		}
-		resp = ofi_cirque_tail(smr_resp_queue(ep->region));
-		pend = freestack_pop(ep->pend_fs);
-		smr_format_iov(cmd, iov, iov_count, total_len, ep->region, resp);
-		smr_format_pend_resp(pend, cmd, context, iov, iov_count, id, resp);
-		ofi_cirque_commit(smr_resp_queue(ep->region));
-		comp = 0;
-	} else if (total_len > SMR_MSG_DATA_LEN || smr_env.disable_cma) {
+	if (total_len <= SMR_MSG_DATA_LEN && op == ofi_op_write &&
+	    !(op_flags & FI_DELIVERY_COMPLETE)) {
+		smr_format_inline(cmd, iov, iov_count);
+	} else if (total_len <= SMR_INJECT_SIZE &&
+		   !(op_flags & FI_DELIVERY_COMPLETE)) {
 		tx_buf = smr_freestack_pop(smr_inject_pool(peer_smr));
 		smr_format_inject(cmd, iov, iov_count, peer_smr, tx_buf);
 		if (op == ofi_op_read_req) {
@@ -182,13 +175,35 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 			pend = freestack_pop(ep->pend_fs);
 			smr_format_pend_resp(pend, cmd, context, iov,
 					     iov_count, id, resp);
-			cmd->msg.hdr.data = (uintptr_t) ((char **) resp -
-						(char **) ep->region);
+			cmd->msg.hdr.data = smr_get_offset(ep->region, resp);
 			ofi_cirque_commit(smr_resp_queue(ep->region));
 			comp = 0;
 		}
 	} else {
-		smr_format_inline(cmd, iov, iov_count);
+		if (ofi_cirque_isfull(smr_resp_queue(ep->region))) {
+			ret = -FI_EAGAIN;
+			goto unlock_cq;
+		}
+		resp = ofi_cirque_tail(smr_resp_queue(ep->region));
+		pend = freestack_pop(ep->pend_fs);
+		if (ep->region->cma_cap == SMR_CMA_CAP_ON) {
+			smr_format_iov(cmd, iov, iov_count, total_len, ep->region, resp);
+		} else {
+			/*
+			 * TODO: Add a threshold for switching from SAR to mmap
+			 * once SAR protocol gets merged
+			 */
+			ret = smr_format_mmap(ep, cmd, iov, iov_count, total_len,
+					      pend, resp);
+			if (ret) {
+				freestack_push(ep->pend_fs, pend);
+				ret = -FI_EAGAIN;
+				goto unlock_cq;
+			}
+		}
+		smr_format_pend_resp(pend, cmd, context, iov, iov_count, id, resp);
+		ofi_cirque_commit(smr_resp_queue(ep->region));
+		comp = 0;
 	}
 
 	comp_flags = cmd->msg.hdr.op_flags;
@@ -347,7 +362,8 @@ ssize_t smr_generic_rma_inject(struct fid_ep *ep_fid, const void *buf,
 	if (ret)
 		return ret;
 
-	cmds = 1 + !(domain->fast_rma && !(flags & FI_REMOTE_CQ_DATA));
+	cmds = 1 + !(domain->fast_rma && !(flags & FI_REMOTE_CQ_DATA) &&
+		     ep->region->cma_cap == SMR_CMA_CAP_ON);
 
 	peer_smr = smr_peer_region(ep->region, id);
 	fastlock_acquire(&peer_smr->lock);

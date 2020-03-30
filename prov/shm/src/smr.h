@@ -67,11 +67,7 @@
 #define SMR_MAJOR_VERSION 1
 #define SMR_MINOR_VERSION 1
 
-struct smr_env {
-	int disable_cma;
-};
 
-extern struct smr_env smr_env;
 extern struct fi_provider smr_prov;
 extern struct fi_info smr_info;
 extern struct util_prov smr_util_prov;
@@ -116,6 +112,8 @@ struct smr_tx_entry {
 	void		*context;
 	struct iovec	iov[SMR_IOV_LIMIT];
 	uint32_t	iov_count;
+	void		*map_ptr;
+	struct smr_ep_name *map_name;
 };
 
 struct smr_ep;
@@ -182,9 +180,11 @@ static inline const char *smr_no_prefix(const char *addr)
 #define SMR_RMA_ORDER (OFI_ORDER_RAR_SET | OFI_ORDER_RAW_SET | FI_ORDER_RAS |	\
 		       OFI_ORDER_WAR_SET | OFI_ORDER_WAW_SET | FI_ORDER_WAS |	\
 		       FI_ORDER_SAR | FI_ORDER_SAW)
-#define smr_fast_rma_enabled(mode, order) (!smr_env.disable_cma && \
-			(mode & FI_MR_VIRT_ADDR) && \
+#define smr_fast_rma_enabled(mode, order) ((mode & FI_MR_VIRT_ADDR) && \
 			!(order & SMR_RMA_ORDER))
+
+#define smr_get_offset(base, addr) ((uintptr_t) ((char *) addr - (char *) base))
+#define smr_get_addr(base, offset) ((char *) base + (uintptr_t) offset)
 
 struct smr_ep {
 	struct util_ep		util_ep;
@@ -194,6 +194,7 @@ struct smr_ep {
 	size_t			rx_size;
 	size_t			min_multi_recv_size;
 	const char		*name;
+	uint64_t		msg_id;
 	struct smr_region	*region;
 	struct smr_recv_fs	*recv_fs; /* protected by rx_cq lock */
 	struct smr_queue	recv_queue;
@@ -206,6 +207,13 @@ struct smr_ep {
 
 #define smr_ep_rx_flags(smr_ep) ((smr_ep)->util_ep.rx_op_flags)
 #define smr_ep_tx_flags(smr_ep) ((smr_ep)->util_ep.tx_op_flags)
+
+static inline int smr_mmap_name(char *shm_name, const char *ep_name,
+				uint64_t msg_id)
+{
+	return snprintf(shm_name, NAME_MAX - 1, "%s_%ld",
+			ep_name, msg_id);
+}
 
 int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep, void *context);
@@ -231,6 +239,9 @@ void smr_format_inject(struct smr_cmd *cmd, const struct iovec *iov,
 void smr_format_iov(struct smr_cmd *cmd, const struct iovec *iov, size_t count,
 		    size_t total_len, struct smr_region *smr,
 		    struct smr_resp *resp);
+int smr_format_mmap(struct smr_ep *ep, struct smr_cmd *cmd,
+		    const struct iovec *iov, size_t count, size_t total_len,
+		    struct smr_tx_entry *pend, struct smr_resp *resp);
 
 int smr_complete_tx(struct smr_ep *ep, void *context, uint32_t op,
 		uint16_t flags, uint64_t err);

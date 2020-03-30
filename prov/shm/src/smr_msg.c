@@ -187,22 +187,36 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 	cmd = ofi_cirque_tail(smr_cmd_queue(peer_smr));
 	smr_generic_format(cmd, peer_id, op, tag, data, op_flags);
 
-	if (total_len > SMR_INJECT_SIZE || op_flags & FI_DELIVERY_COMPLETE) {
+	if (total_len <= SMR_MSG_DATA_LEN && !(op_flags & FI_DELIVERY_COMPLETE)) {
+		smr_format_inline(cmd, iov, iov_count);
+	} else if (total_len <= SMR_INJECT_SIZE &&
+		   !(op_flags & FI_DELIVERY_COMPLETE)) {
+		tx_buf = smr_freestack_pop(smr_inject_pool(peer_smr));
+		smr_format_inject(cmd, iov, iov_count, peer_smr, tx_buf);
+	} else {
 		if (ofi_cirque_isfull(smr_resp_queue(ep->region))) {
 			ret = -FI_EAGAIN;
 			goto unlock_cq;
 		}
 		resp = ofi_cirque_tail(smr_resp_queue(ep->region));
 		pend = freestack_pop(ep->pend_fs);
-		smr_format_iov(cmd, iov, iov_count, total_len, ep->region, resp);
+		if (ep->region->cma_cap == SMR_CMA_CAP_ON) {
+			smr_format_iov(cmd, iov, iov_count, total_len, ep->region, resp);
+		} else {
+			/*
+			 * TODO: Add a threshold for switching from SAR to mmap,
+			 * once SAR protocol gets merged.
+			 */
+			ret = smr_format_mmap(ep, cmd, iov, iov_count, total_len, pend, resp);
+			if (ret) {
+				freestack_push(ep->pend_fs, pend);
+				ret = -FI_EAGAIN;
+				goto unlock_cq;
+			}
+		}
 		smr_format_pend_resp(pend, cmd, context, iov, iov_count, id, resp);
 		ofi_cirque_commit(smr_resp_queue(ep->region));
 		goto commit;
-	} else if (total_len > SMR_MSG_DATA_LEN) {
-		tx_buf = smr_freestack_pop(smr_inject_pool(peer_smr));
-		smr_format_inject(cmd, iov, iov_count, peer_smr, tx_buf);
-	} else {
-		smr_format_inline(cmd, iov, iov_count);
 	}
 	ret = smr_complete_tx(ep, context, op, cmd->msg.hdr.op_flags, 0);
 	if (ret) {
