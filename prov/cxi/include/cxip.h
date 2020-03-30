@@ -445,7 +445,7 @@ struct cxip_req_amo {
 
 struct cxip_req_recv {
 	/* Receive parameters */
-	struct dlist_entry ux_entry;	// UX event list entry
+	struct dlist_entry rxc_entry;
 	struct cxip_rxc *rxc;		// receive context
 	void *recv_buf;			// local receive buffer
 	struct cxip_md *recv_md;	// local receive MD

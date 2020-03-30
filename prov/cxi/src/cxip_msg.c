@@ -100,7 +100,7 @@ match_ux_recv(struct cxip_rxc *rxc, const union c_event *event)
 		 * initiator.
 		 */
 		dlist_foreach_container(&rxc->ux_rdzv_recvs, struct cxip_req,
-					req, recv.ux_entry) {
+					req, recv.rxc_entry) {
 			if ((req->recv.rdzv_id == ev_rdzv_id) &&
 			    (req->recv.initiator == process))
 				return req;
@@ -112,7 +112,7 @@ match_ux_recv(struct cxip_rxc *rxc, const union c_event *event)
 		 * all start pointers are unique.
 		 */
 		dlist_foreach_container(&rxc->ux_recvs, struct cxip_req, req,
-					recv.ux_entry) {
+					recv.rxc_entry) {
 			if (req->recv.oflow_start == event->tgt_long.start)
 				return req;
 		}
@@ -777,7 +777,7 @@ cxip_oflow_sink_cb(struct cxip_req *req, const union c_event *event)
 	if (ret != FI_SUCCESS)
 		goto err_put;
 
-	dlist_remove(&ux_recv->recv.ux_entry);
+	dlist_remove(&ux_recv->recv.rxc_entry);
 
 	fastlock_release(&rxc->rx_lock);
 
@@ -857,7 +857,7 @@ cxip_oflow_rdzv_cb(struct cxip_req *req, const union c_event *event)
 	memcpy(ux_recv->recv.recv_buf, oflow_va, oflow_bytes);
 	oflow_req_put_bytes(req, event->tgt_long.mlength);
 
-	dlist_remove(&ux_recv->recv.ux_entry);
+	dlist_remove(&ux_recv->recv.rxc_entry);
 
 	fastlock_release(&rxc->rx_lock);
 
@@ -1008,7 +1008,7 @@ static int cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 	memcpy(ux_recv->recv.recv_buf, oflow_va, ux_recv->data_len);
 	oflow_req_put_bytes(req, event->tgt_long.mlength);
 
-	dlist_remove(&ux_recv->recv.ux_entry);
+	dlist_remove(&ux_recv->recv.rxc_entry);
 
 	fastlock_release(&rxc->rx_lock);
 
@@ -1639,7 +1639,7 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 				if (req->data_len > req->recv.ulen)
 					req->data_len = req->recv.ulen;
 			}
-			dlist_insert_tail(&req->recv.ux_entry,
+			dlist_insert_tail(&req->recv.rxc_entry,
 					  &rxc->ux_rdzv_recvs);
 
 			CXIP_LOG_DBG("Queued recv req, data: 0x%lx\n",
@@ -1893,7 +1893,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 				if (req->data_len > req->recv.ulen)
 					req->data_len = req->recv.ulen;
 			}
-			dlist_insert_tail(&req->recv.ux_entry, &rxc->ux_recvs);
+			dlist_insert_tail(&req->recv.rxc_entry, &rxc->ux_recvs);
 
 			CXIP_LOG_DBG("Queued recv req, data: 0x%lx\n",
 				     req->recv.oflow_start);
