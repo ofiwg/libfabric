@@ -406,6 +406,9 @@ struct util_wait {
 	enum fi_wait_obj	wait_obj;
 	fi_wait_signal_func	signal;
 	fi_wait_try_func	wait_try;
+
+	struct dlist_entry	fid_list;
+	fastlock_t		lock;
 };
 
 int ofi_wait_init(struct util_fabric *fabric, struct fi_wait_attr *attr,
@@ -416,7 +419,6 @@ struct util_wait_fd {
 	struct util_wait	util_wait;
 	struct fd_signal	signal;
 	struct dlist_entry	fd_list;
-	fastlock_t		lock;
 
 	union {
 		ofi_epoll_t		epoll_fd;
@@ -435,32 +437,30 @@ struct ofi_wait_fd_entry {
 	ofi_atomic32_t		ref;
 };
 
+struct ofi_wait_fid_entry {
+	struct dlist_entry	entry;
+	ofi_wait_try_func	wait_try;
+	fid_t			fid;
+	ofi_atomic32_t		ref;
+};
+
 int ofi_wait_fd_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 		struct fid_wait **waitset);
-int ofi_wait_fd_add(struct util_wait *wait, int fd, uint32_t events,
+int ofi_wait_add_fd(struct util_wait *wait, int fd, uint32_t events,
 		    ofi_wait_try_func wait_try, void *arg, void *context);
-int ofi_wait_fd_del(struct util_wait *wait, int fd);
+int ofi_wait_del_fd(struct util_wait *wait, int fd);
+int ofi_wait_add_fid(struct util_wait *wat, fid_t fid, uint32_t events,
+		     ofi_wait_try_func wait_try);
+int ofi_wait_del_fid(struct util_wait *wait, fid_t fid);
 
 struct util_wait_yield {
 	struct util_wait	util_wait;
 	int			signal;
-	struct dlist_entry	fid_list;
-	fastlock_t		wait_lock;
 	fastlock_t		signal_lock;
-};
-
-struct ofi_wait_fid_entry {
-	struct dlist_entry	entry;
-	ofi_wait_try_func	wait_try;
-	void			*fid;
-	ofi_atomic32_t		ref;
 };
 
 int ofi_wait_yield_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 			struct fid_wait **waitset);
-int ofi_wait_fid_add(struct util_wait *wait, ofi_wait_try_func wait_try,
-		       void *arg);
-int ofi_wait_fid_del(struct util_wait *wait, void *fid);
 
 /*
  * Completion queue
