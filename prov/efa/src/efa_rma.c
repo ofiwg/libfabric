@@ -41,7 +41,7 @@ static
 ssize_t efa_rma_post_read(struct efa_ep *ep, const struct fi_msg_rma *msg, uint64_t flags)
 {
 	struct efa_qp *qp;
-	struct ibv_mr *ibv_mr;
+	struct efa_mr *efa_mr;
 	struct efa_conn *conn;
 	struct ibv_sge sge_list[msg->iov_count];
 	int i;
@@ -75,8 +75,8 @@ ssize_t efa_rma_post_read(struct efa_ep *ep, const struct fi_msg_rma *msg, uint6
 		sge_list[i].addr = (uint64_t)msg->msg_iov[i].iov_base;
 		sge_list[i].length = msg->msg_iov[i].iov_len;
 		assert(msg->desc[i]);
-		ibv_mr = (struct ibv_mr *)msg->desc[i];
-		sge_list[i].lkey = ibv_mr->lkey;
+		efa_mr = (struct efa_mr *)msg->desc[i];
+		sge_list[i].lkey = efa_mr->ibv_mr->lkey;
 	}
 
 	ibv_wr_set_sge_list(qp->ibv_qp_ex, msg->iov_count, sge_list);

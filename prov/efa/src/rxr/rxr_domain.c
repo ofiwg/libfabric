@@ -107,6 +107,9 @@ int rxr_mr_regattr(struct fid *domain_fid, const struct fi_mr_attr *attr,
 	rxr_domain = container_of(domain_fid, struct rxr_domain,
 				  util_domain.domain_fid.fid);
 
+	if (attr->iface == FI_HMEM_CUDA)
+		flags |= OFI_MR_NOCACHE;
+
 	ret = fi_mr_regattr(rxr_domain->rdm_domain, attr, flags, mr);
 	if (ret) {
 		FI_WARN(&rxr_prov, FI_LOG_MR,

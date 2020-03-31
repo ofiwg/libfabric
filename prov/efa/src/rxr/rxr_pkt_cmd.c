@@ -34,6 +34,7 @@
 #include "efa.h"
 #include "rxr.h"
 #include "rxr_cntr.h"
+#include "efa_cuda.h"
 
 /* This file implements 4 actions that can be applied to a packet:
  *          posting,
@@ -72,8 +73,15 @@ ssize_t rxr_pkt_post_data(struct rxr_ep *rxr_ep,
 	 */
 	data_pkt->hdr.seg_offset = tx_entry->bytes_sent;
 
-	if (efa_mr_cache_enable)
-		ret = rxr_pkt_send_data_mr_cache(rxr_ep, tx_entry, pkt_entry);
+	/*
+	 * TODO: Check to see if underlying device can support CUDA
+	 * registrations and fallback to rxr_ep_send_data_pkt_entry() if it does
+	 * not. This should be done at init time with a CUDA reg-and-fail flag.
+	 * For now, always send CUDA buffers through
+	 * rxr_pkt_send_data_desc().
+	 */
+	if (efa_mr_cache_enable || rxr_ep_is_cuda_mr(tx_entry->desc[0]))
+		ret = rxr_pkt_send_data_desc(rxr_ep, tx_entry, pkt_entry);
 	else
 		ret = rxr_pkt_send_data(rxr_ep, tx_entry, pkt_entry);
 

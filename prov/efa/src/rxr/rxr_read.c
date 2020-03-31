@@ -129,7 +129,7 @@ struct rxr_read_entry *rxr_read_alloc_entry(struct rxr_ep *ep, int entry_type, v
 		read_entry->rma_iov_count = rx_entry->rma_iov_count;
 		read_entry->rma_iov = rx_entry->rma_iov;
 
-		mr_desc = NULL;
+		mr_desc = rx_entry->desc;
 		total_iov_len = ofi_total_iov_len(rx_entry->iov, rx_entry->iov_count);
 		total_rma_iov_len = ofi_total_rma_iov_len(rx_entry->rma_iov, rx_entry->rma_iov_count);
 		read_entry->total_len = MIN(total_iov_len, total_rma_iov_len);

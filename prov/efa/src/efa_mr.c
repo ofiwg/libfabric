@@ -267,7 +267,7 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, void *attr)
 		return -errno;
 	}
 
-	efa_mr->mr_fid.mem_desc = efa_mr->ibv_mr;
+	efa_mr->mr_fid.mem_desc = efa_mr;
 	efa_mr->mr_fid.key = efa_mr->ibv_mr->rkey;
 	efa_mr->peer.iface = mr_attr->iface;
 	if (mr_attr->iface == FI_HMEM_CUDA)
