@@ -56,9 +56,11 @@ void tcpx_cq_progress(struct util_cq *cq)
 		ep = container_of(fid_entry->fid, struct tcpx_ep,
 				  util_ep.ep_fid.fid);
 		tcpx_try_func(&ep->util_ep);
+		fastlock_acquire(&ep->lock);
 		tcpx_progress_tx(ep);
 		if (ep->stage_buf.off != ep->stage_buf.len)
 			tcpx_progress_rx(ep);
+		fastlock_release(&ep->lock);
 	}
 
 	nfds = (wait_fd->util_wait.wait_obj == FI_WAIT_FD) ?
@@ -77,7 +79,9 @@ void tcpx_cq_progress(struct util_cq *cq)
 		}
 
 		ep = container_of(fid, struct tcpx_ep, util_ep.ep_fid.fid);
+		fastlock_acquire(&ep->lock);
 		tcpx_progress_rx(ep);
+		fastlock_release(&ep->lock);
 	}
 unlock:
 	cq->cq_fastlock_release(&cq->ep_list_lock);
