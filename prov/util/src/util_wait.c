@@ -511,8 +511,10 @@ static int util_wait_yield_run(struct fid_wait *wait_fid, int timeout)
 					struct ofi_wait_fid_entry,
 					fid_entry, entry) {
 			ret = fid_entry->wait_try(fid_entry->fid);
-			if (ret)
+			if (ret) {
+				fastlock_release(&wait->util_wait.lock);
 				return ret;
+			}
 		}
 		fastlock_release(&wait->util_wait.lock);
 		pthread_yield();
