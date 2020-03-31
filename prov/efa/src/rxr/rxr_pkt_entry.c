@@ -69,6 +69,7 @@ struct rxr_pkt_entry *rxr_pkt_entry_alloc(struct rxr_ep *ep,
 	memset(pkt_entry->pkt, 0, ep->mtu_size);
 #endif
 	pkt_entry->state = RXR_PKT_ENTRY_IN_USE;
+	pkt_entry->iov_count = 0;
 	pkt_entry->next = NULL;
 	return pkt_entry;
 }
