@@ -433,7 +433,6 @@ usdf_eq_control(fid_t fid, int command, void *arg)
 static int usdf_eq_bind_wait(struct usdf_eq *eq)
 {
 	int ret;
-	struct epoll_event event = {0};
 	struct usdf_wait *wait_priv;
 
 	if (!eq->eq_attr.wait_set) {
@@ -443,9 +442,6 @@ static int usdf_eq_bind_wait(struct usdf_eq *eq)
 
 	wait_priv = wait_ftou(eq->eq_attr.wait_set);
 
-	event.data.ptr = eq;
-	event.events = EPOLLIN;
-
 	ret = fid_list_insert(&wait_priv->list, &wait_priv->lock,
 			&eq->eq_fid.fid);
 	if (ret) {
@@ -454,8 +450,7 @@ static int usdf_eq_bind_wait(struct usdf_eq *eq)
 		return ret;
 	}
 
-	ret = epoll_ctl(wait_priv->object.epfd, EPOLL_CTL_ADD, eq->eq_fd,
-			&event);
+	ret = ofi_epoll_add(wait_priv->object.epfd, eq->eq_fd, OFI_EPOLL_IN, eq);
 	if (ret) {
 		USDF_WARN_SYS(EQ, "failed to associate FD with wait set\n");
 		goto err;
@@ -475,7 +470,6 @@ static int usdf_eq_unbind_wait(struct usdf_eq *eq)
 {
 	int ret;
 	struct usdf_wait *wait_priv;
-	struct epoll_event event = {0};
 
 	if (!eq->eq_attr.wait_set) {
 		USDF_DBG_SYS(EQ, "can't unbind from non-existent wait set\n");
@@ -484,12 +478,11 @@ static int usdf_eq_unbind_wait(struct usdf_eq *eq)
 
 	wait_priv = wait_ftou(eq->eq_attr.wait_set);
 
-	ret = epoll_ctl(wait_priv->object.epfd, EPOLL_CTL_DEL,
-			eq->eq_fd, &event);
+	ret = ofi_epoll_del(wait_priv->object.epfd, eq->eq_fd);
 	if (ret) {
 		USDF_WARN_SYS(EQ,
 				"failed to remove FD from wait set\n");
-		return -errno;
+		return ret;
 	}
 
 	fid_list_remove(&wait_priv->list, &wait_priv->lock, &eq->eq_fid.fid);

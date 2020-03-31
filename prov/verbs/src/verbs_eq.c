@@ -1216,17 +1216,32 @@ static struct fi_ops_eq vrb_eq_ops = {
 
 static int vrb_eq_control(fid_t fid, int command, void *arg)
 {
+	struct fi_wait_pollfd *pollfd;
 	struct vrb_eq *eq;
 	int ret;
 
 	eq = container_of(fid, struct vrb_eq, eq_fid.fid);
 	switch (command) {
 	case FI_GETWAIT:
-#ifdef HAVE_EPOLL
-		*(int *) arg = eq->epollfd;
-		ret = 0;
+#ifndef HAVE_EPOLL
+		/* We expect verbs to only run on systems with epoll */
+		return -FI_ENOSYS;
 #else
-		ret = -FI_ENOSYS;
+		if (eq->wait_obj == FI_WAIT_FD) {
+			*(int *) arg = eq->epollfd;
+			return 0;
+		}
+
+		pollfd = arg;
+		if (pollfd->nfds >= 1) {
+			pollfd->fd[0].fd = eq->epollfd;
+			pollfd->fd[0].events = POLLIN;
+			ret = 0;
+		} else {
+			ret = -FI_ETOOSMALL;
+		}
+		pollfd->change_index = 1;
+		pollfd->nfds = 1;
 #endif
 		break;
 	default:
@@ -1323,26 +1338,29 @@ int vrb_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	case FI_WAIT_NONE:
 	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
-		_eq->channel = rdma_create_event_channel();
-		if (!_eq->channel) {
-			ret = -errno;
-			goto err3;
-		}
-
-		ret = fi_fd_nonblock(_eq->channel->fd);
-		if (ret)
-			goto err4;
-
-		if (ofi_epoll_add(_eq->epollfd, _eq->channel->fd, OFI_EPOLL_IN,
-				  NULL)) {
-			ret = -errno;
-			goto err4;
-		}
-
+		_eq->wait_obj = FI_WAIT_FD;
+		break;
+	case FI_WAIT_POLLFD:
+		_eq->wait_obj = FI_WAIT_POLLFD;
 		break;
 	default:
 		ret = -FI_ENOSYS;
 		goto err1;
+	}
+
+	_eq->channel = rdma_create_event_channel();
+	if (!_eq->channel) {
+		ret = -errno;
+		goto err3;
+	}
+
+	ret = fi_fd_nonblock(_eq->channel->fd);
+	if (ret)
+		goto err4;
+
+	if (ofi_epoll_add(_eq->epollfd, _eq->channel->fd, OFI_EPOLL_IN, NULL)) {
+		ret = -errno;
+		goto err4;
 	}
 
 	_eq->flags = attr->flags;

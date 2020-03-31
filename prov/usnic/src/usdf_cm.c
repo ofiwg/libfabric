@@ -45,7 +45,7 @@
 #include <netinet/ip.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/epoll.h>
+#include <ofi_epoll.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_cm.h>

@@ -40,7 +40,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
-#include <sys/epoll.h>
+#include <ofi_epoll.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_cm.h>
@@ -88,12 +88,12 @@ void *
 usdf_fabric_progression_thread(void *v)
 {
 	struct usdf_fabric *fp;
-	struct epoll_event ev;
 	struct usdf_poll_item *pip;
 	struct usdf_domain *dom;
 	int num_blocked_waiting;
 	int sleep_time;
-	int epfd;
+	ofi_epoll_t epfd;
+	void *context;
 	int ret;
 	int n;
 
@@ -111,14 +111,14 @@ usdf_fabric_progression_thread(void *v)
 			sleep_time = -1;
 		}
 
-		n = epoll_wait(epfd, &ev, 1, sleep_time);
-		if (fp->fab_exit || (n == -1 && errno != EINTR)) {
+		n = ofi_epoll_wait(epfd, &context, 1, sleep_time);
+		if (fp->fab_exit || (n < 0 && n != EINTR)) {
 			pthread_exit(NULL);
 		}
 
 		/* consume event if there was one */
 		if (n == 1) {
-			pip = ev.data.ptr;
+			pip = context;
 			ret = pip->pi_rtn(pip->pi_context);
 			if (ret != 0) {
 				pthread_exit(NULL);

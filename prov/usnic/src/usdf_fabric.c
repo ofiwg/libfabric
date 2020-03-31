@@ -42,7 +42,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <netinet/in.h>
-#include <sys/epoll.h>
+#include <ofi_epoll.h>
 #include <sys/eventfd.h>
 #include <sys/socket.h>
 #include <stdio.h>
@@ -878,8 +878,8 @@ usdf_fabric_close(fid_t fid)
 		pthread_join(fp->fab_thread, &rv);
 	}
 	usdf_timer_deinit(fp);
-	if (fp->fab_epollfd != -1) {
-		close(fp->fab_epollfd);
+	if (fp->fab_epollfd != OFI_EPOLL_INVALID) {
+		ofi_epoll_close(fp->fab_epollfd);
 	}
 	if (fp->fab_eventfd != -1) {
 		close(fp->fab_eventfd);
@@ -917,7 +917,6 @@ usdf_fabric_open(struct fi_fabric_attr *fattrp, struct fid_fabric **fabric,
 	struct usdf_fabric *fp;
 	struct usdf_usnic_info *dp;
 	struct usdf_dev_entry *dep;
-	struct epoll_event ev;
 	struct sockaddr_in sin;
 	int ret;
 	int d;
@@ -944,7 +943,7 @@ usdf_fabric_open(struct fi_fabric_attr *fattrp, struct fid_fabric **fabric,
 		USDF_INFO("unable to allocate memory for fabric\n");
 		return -FI_ENOMEM;
 	}
-	fp->fab_epollfd = -1;
+	fp->fab_epollfd = OFI_EPOLL_INVALID;
 	fp->fab_arp_sockfd = -1;
 	LIST_INIT(&fp->fab_domain_list);
 
@@ -965,9 +964,8 @@ usdf_fabric_open(struct fi_fabric_attr *fattrp, struct fid_fabric **fabric,
 
 	fp->fab_dev_attrs = &dep->ue_dattr;
 
-	fp->fab_epollfd = epoll_create(1024);
-	if (fp->fab_epollfd == -1) {
-		ret = -errno;
+	ret = ofi_epoll_create(&fp->fab_epollfd);
+	if (ret) {
 		USDF_INFO("unable to allocate epoll fd\n");
 		goto fail;
 	}
@@ -980,11 +978,9 @@ usdf_fabric_open(struct fi_fabric_attr *fattrp, struct fid_fabric **fabric,
 	}
 	fp->fab_poll_item.pi_rtn = usdf_fabric_progression_cb;
 	fp->fab_poll_item.pi_context = fp;
-	ev.events = EPOLLIN;
-	ev.data.ptr = &fp->fab_poll_item;
-	ret = epoll_ctl(fp->fab_epollfd, EPOLL_CTL_ADD, fp->fab_eventfd, &ev);
-	if (ret == -1) {
-		ret = -errno;
+	ret = ofi_epoll_add(fp->fab_epollfd, fp->fab_eventfd, OFI_EPOLL_IN,
+			    &fp->fab_poll_item);
+	if (ret) {
 		USDF_INFO("unable to EPOLL_CTL_ADD\n");
 		goto fail;
 	}

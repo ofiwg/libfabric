@@ -653,25 +653,30 @@ int tcpx_try_func(void *util_ep)
 	int ret;
 
 	ep = container_of(util_ep, struct tcpx_ep, util_ep);
+	wait_fd = container_of(((struct util_ep *) util_ep)->tx_cq->wait,
+			       struct util_wait_fd, util_wait);
 
 	fastlock_acquire(&ep->lock);
-	if (!slist_empty(&ep->tx_queue) && !ep->epoll_out_set) {
-		ep->epoll_out_set = true;
-		events = OFI_EPOLL_IN | OFI_EPOLL_OUT;
+	if (!slist_empty(&ep->tx_queue) && !ep->pollout_set) {
+		ep->pollout_set = true;
+		events = (wait_fd->util_wait.wait_obj == FI_WAIT_FD) ?
+			 (OFI_EPOLL_IN | OFI_EPOLL_OUT) : (POLLIN | POLLOUT);
 		goto epoll_mod;
-	} else if (slist_empty(&ep->tx_queue) && ep->epoll_out_set) {
-		ep->epoll_out_set = false;
-		events = OFI_EPOLL_IN;
+	} else if (slist_empty(&ep->tx_queue) && ep->pollout_set) {
+		ep->pollout_set = false;
+		events = (wait_fd->util_wait.wait_obj == FI_WAIT_FD) ?
+			 OFI_EPOLL_IN : POLLIN;
 		goto epoll_mod;
 	}
 	fastlock_release(&ep->lock);
 	return FI_SUCCESS;
 
 epoll_mod:
-	wait_fd = container_of(((struct util_ep *) util_ep)->tx_cq->wait,
-			       struct util_wait_fd, util_wait);
-	ret = ofi_epoll_mod(wait_fd->epoll_fd, ep->sock, events,
-			    &ep->util_ep.ep_fid.fid);
+	ret = (wait_fd->util_wait.wait_obj == FI_WAIT_FD) ?
+	      ofi_epoll_mod(wait_fd->epoll_fd, ep->sock, events,
+			    &ep->util_ep.ep_fid.fid) :
+	      ofi_pollfds_mod(wait_fd->pollfds, ep->sock, events,
+			      &ep->util_ep.ep_fid.fid);
 	if (ret)
 		FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
 			"epoll modify failed\n");

@@ -72,7 +72,7 @@
 #define TCPX_IOV_LIMIT		(4)
 #define TCPX_MAX_INJECT_SZ	(64)
 
-#define MAX_EPOLL_EVENTS	100
+#define MAX_POLL_EVENTS		100
 #define STAGE_BUF_SIZE		512
 
 #define TCPX_MIN_MULTI_RECV	16384
@@ -208,7 +208,7 @@ struct tcpx_ep {
 	void (*hdr_bswap)(struct tcpx_base_hdr *hdr);
 	struct stage_buf	stage_buf;
 	size_t			min_multi_recv_size;
-	bool			epoll_out_set;
+	bool			pollout_set;
 };
 
 struct tcpx_fabric {

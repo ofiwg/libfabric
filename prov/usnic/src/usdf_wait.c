@@ -172,7 +172,7 @@ int usdf_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 {
 	struct usdf_wait *wait_priv;
 	struct usdf_fabric *fabric_priv;
-	int epfd;
+	ofi_epoll_t epfd;
 	int ret;
 
 	USDF_TRACE_SYS(FABRIC, "\n");
@@ -192,10 +192,9 @@ int usdf_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 	if (ret)
 		goto error;
 
-	epfd = epoll_create1(0);
-	if (epfd < 0) {
+	ret = ofi_epoll_create(&epfd);
+	if (ret) {
 		USDF_WARN_SYS(FABRIC, "failed to create epoll fd[%d]\n", errno);
-		ret = -errno;
 		goto error;
 	}
 
@@ -228,7 +227,7 @@ int usdf_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 	return FI_SUCCESS;
 
 calloc_fail:
-	close(epfd);
+	ofi_epoll_close(epfd);
 error:
 	*waitset = NULL;
 	return ret;
@@ -258,7 +257,7 @@ static int usdf_wait_close(struct fid *waitset)
 	switch (wait_priv->wait_obj) {
 	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
-		close(wait_priv->object.epfd);
+		ofi_epoll_close(wait_priv->object.epfd);
 		break;
 	default:
 		USDF_WARN_SYS(FABRIC,
@@ -275,7 +274,7 @@ static int usdf_wait_close(struct fid *waitset)
 static int usdf_wait_wait(struct fid_wait *fwait, int timeout)
 {
 	struct usdf_wait *wait;
-	struct epoll_event event;
+	void *context;
 	int ret = FI_SUCCESS;
 	int nevents;
 
@@ -290,12 +289,12 @@ static int usdf_wait_wait(struct fid_wait *fwait, int timeout)
 		return ret;
 	}
 
-	nevents = epoll_wait(wait->object.epfd, &event, 1, timeout);
+	nevents = ofi_epoll_wait(wait->object.epfd, &context, 1, timeout);
 	if (nevents == 0) {
 		ret = -FI_ETIMEDOUT;
 	} else if (nevents < 0) {
 		USDF_DBG_SYS(FABRIC, "epoll wait failed\n");
-		ret = -errno;
+		ret = nevents;
 	}
 
 	return ret;
@@ -313,7 +312,11 @@ static int usdf_wait_get_wait(struct usdf_wait *wait_priv, void *arg)
 	switch (wait_priv->wait_obj) {
 	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
+#ifdef HAVE_EPOLL
 		*(int *) arg = wait_priv->object.epfd;
+#else
+		return -FI_ENOSYS;
+#endif
 		break;
 	default:
 		USDF_DBG_SYS(FABRIC, "unsupported wait type\n");

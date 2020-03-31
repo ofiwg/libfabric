@@ -39,7 +39,7 @@
 #include <errno.h>
 #include <stdint.h>
 #include <sys/socket.h>
-#include <sys/epoll.h>
+#include <ofi_epoll.h>
 
 #include <rdma/fi_errno.h>
 

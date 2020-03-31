@@ -37,11 +37,48 @@
 #include <unistd.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 
 #include <ofi_list.h>
 #include <ofi_signal.h>
+
+enum ofi_pollfds_ctl {
+	POLLFDS_CTL_ADD,
+	POLLFDS_CTL_DEL,
+	POLLFDS_CTL_MOD,
+};
+
+struct ofi_pollfds_work_item {
+	int		fd;
+	uint32_t	events;
+	void		*context;
+	enum ofi_pollfds_ctl type;
+	struct slist_entry entry;
+};
+
+struct ofi_pollfds {
+	int		size;
+	int		nfds;
+	struct pollfd	*fds;
+	void		**context;
+	int		index;
+	struct fd_signal signal;
+	struct slist	work_item_list;
+	fastlock_t	lock;
+};
+
+int ofi_pollfds_create(struct ofi_pollfds **pfds);
+int ofi_pollfds_add(struct ofi_pollfds *pfds, int fd, uint32_t events,
+		    void *context);
+int ofi_pollfds_mod(struct ofi_pollfds *pfds, int fd, uint32_t events,
+		    void *context);
+int ofi_pollfds_del(struct ofi_pollfds *pfds, int fd);
+int ofi_pollfds_wait(struct ofi_pollfds *pfds, void **contexts,
+		     int max_contexts, int timeout);
+void ofi_pollfds_close(struct ofi_pollfds *pfds);
+
 
 #ifdef HAVE_EPOLL
 #include <sys/epoll.h>
@@ -50,6 +87,7 @@
 #define OFI_EPOLL_OUT EPOLLOUT
 
 typedef int ofi_epoll_t;
+#define OFI_EPOLL_INVALID -1
 
 static inline int ofi_epoll_create(int *ep)
 {
@@ -106,43 +144,23 @@ static inline void ofi_epoll_close(int ep)
 }
 
 #else
-#include <poll.h>
 
 #define OFI_EPOLL_IN  POLLIN
 #define OFI_EPOLL_OUT POLLOUT
 
-enum ofi_epoll_ctl {
-	EPOLL_CTL_ADD,
-	EPOLL_CTL_DEL,
-	EPOLL_CTL_MOD,
-};
+typedef struct ofi_pollfds *ofi_epoll_t;
+#define OFI_EPOLL_INVALID NULL
 
-struct ofi_epoll_work_item {
-	int		fd;
-	uint32_t	events;
-	void		*context;
-	enum ofi_epoll_ctl type;
-	struct slist_entry entry;
-};
+#define ofi_epoll_create ofi_pollfds_create
+#define ofi_epoll_add ofi_pollfds_add
+#define ofi_epoll_mod ofi_pollfds_mod
+#define ofi_epoll_del ofi_pollfds_del
+#define ofi_epoll_wait ofi_pollfds_wait
+#define ofi_epoll_close ofi_pollfds_close
 
-typedef struct fi_epoll {
-	int		size;
-	int		nfds;
-	struct pollfd	*fds;
-	void		**context;
-	int		index;
-	struct fd_signal signal;
-	struct slist	work_item_list;
-	fastlock_t	lock;
-} *ofi_epoll_t;
-
-int ofi_epoll_create(struct fi_epoll **ep);
-int ofi_epoll_add(struct fi_epoll *ep, int fd, uint32_t events, void *context);
-int ofi_epoll_mod(struct fi_epoll *ep, int fd, uint32_t events, void *context);
-int ofi_epoll_del(struct fi_epoll *ep, int fd);
-int ofi_epoll_wait(struct fi_epoll *ep, void **contexts, int max_contexts,
-                  int timeout);
-void ofi_epoll_close(struct fi_epoll *ep);
+#define EPOLL_CTL_ADD POLLFDS_CTL_ADD
+#define EPOLL_CTL_DEL POLLFDS_CTL_DEL
+#define EPOLL_CTL_MOD POLLFDS_CTL_MOD
 
 #endif /* HAVE_EPOLL */
 
