@@ -170,9 +170,12 @@ void rxr_info_to_core_mr_modes(uint32_t version,
 			FI_MR_LOCAL | FI_MR_ALLOCATED;
 		if (!hints)
 			core_info->domain_attr->mr_mode |= OFI_MR_BASIC_MAP;
-		else if (hints->domain_attr)
-			core_info->domain_attr->mr_mode |=
-				hints->domain_attr->mr_mode & OFI_MR_BASIC_MAP;
+		else {
+			if (hints->domain_attr)
+				core_info->domain_attr->mr_mode |=
+					hints->domain_attr->mr_mode & OFI_MR_BASIC_MAP;
+			core_info->addr_format = hints->addr_format;
+		}
 #ifdef HAVE_LIBCUDA
 		core_info->domain_attr->mr_mode |= FI_MR_HMEM;
 #endif
@@ -231,8 +234,6 @@ static int rxr_info_to_core(uint32_t version, const struct fi_info *rxr_info,
 	(*core_info)->caps = FI_MSG;
 	(*core_info)->ep_attr->type = FI_EP_RDM;
 	(*core_info)->tx_attr->op_flags = FI_TRANSMIT_COMPLETE;
-
-	(*core_info)->addr_format = FI_ADDR_EFA;
 
 	/*
 	 * Skip copying address, domain, fabric info.
