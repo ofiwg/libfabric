@@ -70,7 +70,7 @@
 		   (ib_ud_addr)->lid, (ib_ud_addr)->service)
 
 const struct fi_fabric_attr verbs_fabric_attr = {
-	.prov_version		= VERBS_PROV_VERS,
+	.prov_version		= OFI_VERSION_DEF_PROV,
 };
 
 const struct fi_domain_attr verbs_domain_attr = {

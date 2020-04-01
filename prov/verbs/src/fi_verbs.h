@@ -86,7 +86,6 @@
 #define VERBS_RESOLVE_TIMEOUT 2000	// ms
 
 #define VERBS_PROV_NAME "verbs"
-#define VERBS_PROV_VERS FI_VERSION(1,0)
 
 #define VERBS_DBG(subsys, ...) FI_DBG(&vrb_prov, subsys, __VA_ARGS__)
 #define VERBS_INFO(subsys, ...) FI_INFO(&vrb_prov, subsys, __VA_ARGS__)

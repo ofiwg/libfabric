@@ -57,10 +57,6 @@
 #ifndef _RXM_H_
 #define _RXM_H_
 
-#endif
-
-#define RXM_MAJOR_VERSION 1
-#define RXM_MINOR_VERSION 0
 
 #define RXM_CM_DATA_VERSION	1
 #define RXM_OP_VERSION		3
@@ -954,3 +950,5 @@ static inline int rxm_cq_write_recv_comp(struct rxm_rx_buf *rx_buf,
 				    flags, len, buf, rx_buf->pkt.hdr.data,
 				    rx_buf->pkt.hdr.tag);
 }
+
+#endif

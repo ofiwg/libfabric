@@ -146,9 +146,6 @@ enum {
 	SOCK_OPTS_KEEPALIVE = 1<<1
 };
 
-#define SOCK_MAJOR_VERSION 2
-#define SOCK_MINOR_VERSION 0
-
 #define SOCK_WIRE_PROTO_VERSION (2)
 
 extern struct fi_info sock_dgram_info;

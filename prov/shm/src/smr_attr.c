@@ -95,7 +95,7 @@ struct fi_domain_attr smr_domain_attr = {
 
 struct fi_fabric_attr smr_fabric_attr = {
 	.name = "shm",
-	.prov_version = FI_VERSION(SMR_MAJOR_VERSION, SMR_MINOR_VERSION)
+	.prov_version = OFI_VERSION_DEF_PROV
 };
 
 struct fi_info smr_info = {

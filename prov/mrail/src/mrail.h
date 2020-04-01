@@ -54,9 +54,6 @@
 #include <ofi_prov.h>
 #include <ofi_enosys.h>
 
-#define MRAIL_MAJOR_VERSION 1
-#define MRAIL_MINOR_VERSION 0
-
 #define MRAIL_MAX_INFO 100
 
 #define MRAIL_PASSTHRU_TX_OP_FLAGS	(FI_INJECT_COMPLETE | \

@@ -353,7 +353,7 @@ static void rxm_fini(void)
 
 struct fi_provider rxm_prov = {
 	.name = OFI_UTIL_PREFIX "rxm",
-	.version = FI_VERSION(RXM_MAJOR_VERSION, RXM_MINOR_VERSION),
+	.version = OFI_VERSION_DEF_PROV,
 	.fi_version = OFI_VERSION_LATEST,
 	.getinfo = rxm_getinfo,
 	.fabric = rxm_fabric,

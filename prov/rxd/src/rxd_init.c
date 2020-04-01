@@ -130,7 +130,7 @@ static void rxd_fini(void)
 
 struct fi_provider rxd_prov = {
 	.name = OFI_UTIL_PREFIX "rxd",
-	.version = FI_VERSION(RXD_MAJOR_VERSION, RXD_MINOR_VERSION),
+	.version = OFI_VERSION_DEF_PROV,
 	.fi_version = OFI_VERSION_LATEST,
 	.getinfo = rxd_getinfo,
 	.fabric = rxd_fabric,

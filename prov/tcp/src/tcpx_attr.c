@@ -104,7 +104,7 @@ static struct fi_domain_attr tcpx_domain_attr = {
 
 static struct fi_fabric_attr tcpx_fabric_attr = {
 	.name = "TCP-IP",
-	.prov_version = FI_VERSION(TCPX_MAJOR_VERSION, TCPX_MINOR_VERSION),
+	.prov_version = OFI_VERSION_DEF_PROV,
 };
 
 struct fi_info tcpx_info = {

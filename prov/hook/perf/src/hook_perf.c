@@ -898,9 +898,9 @@ static int hook_perf_fabric(struct fi_fabric_attr *attr,
 
 struct hook_prov_ctx hook_perf_ctx = {
 	.prov = {
-		.version = FI_VERSION(1,0),
+		.version = OFI_VERSION_DEF_PROV,
 		/* We're a pass-through provider, so the fi_version is always the latest */
-		.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+		.fi_version = OFI_VERSION_LATEST,
 		.name = "ofi_hook_perf",
 		.getinfo = NULL,
 		.fabric = hook_perf_fabric,

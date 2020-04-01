@@ -78,6 +78,7 @@ extern "C" {
 
 #define FI_MAJOR_VERSION 1
 #define FI_MINOR_VERSION 10
+#define FI_REVISION_VERSION 0
 
 enum {
 	FI_PATH_MAX		= 256,
@@ -85,7 +86,7 @@ enum {
 	FI_VERSION_MAX		= 64
 };
 
-#define FI_VERSION(major, minor) ((major << 16) | (minor))
+#define FI_VERSION(major, minor) (((major) << 16) | (minor))
 #define FI_MAJOR(version)	(version >> 16)
 #define FI_MINOR(version)	(version & 0xFFFF)
 #define FI_VERSION_GE(v1, v2)   ((FI_MAJOR(v1) > FI_MAJOR(v2)) || \
