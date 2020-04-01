@@ -224,6 +224,8 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 		goto unlock;
 	}
 
+	fastlock_release(&rxc->lock);
+
 	if (ofi_recv_allowed(rxc->attr.caps)) {
 		ret = rxc_msg_init(rxc);
 		if (ret != FI_SUCCESS) {
@@ -248,8 +250,6 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 	}
 
 	rxc->enabled = true;
-
-	fastlock_release(&rxc->lock);
 
 	return FI_SUCCESS;
 

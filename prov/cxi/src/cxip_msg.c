@@ -1337,9 +1337,10 @@ cxip_zbp_cb(struct cxip_req *req, const union c_event *event)
 		 * counters.
 		 */
 		report_send_completion(put_req, true);
-		ofi_atomic_dec32(&put_req->send.txc->otx_reqs);
 
 		cxip_send_req_dequeue(put_req->send.txc, put_req);
+
+		ofi_atomic_dec32(&put_req->send.txc->otx_reqs);
 		cxip_cq_req_free(put_req);
 
 		return FI_SUCCESS;
@@ -2093,11 +2094,11 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 	struct cxip_rxc *rxc = req->search.rxc;
 	struct cxip_ux_send *ux_send;
 
+	fastlock_acquire(&rxc->lock);
+
 	switch (event->hdr.event_type) {
 	case C_EVENT_PUT_OVERFLOW:
 		assert(cxi_event_rc(event) == C_RC_OK);
-
-		fastlock_acquire(&rxc->lock);
 
 		ux_send = match_ux_send(rxc, event);
 		if (!ux_send) {
@@ -2109,24 +2110,27 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 		dlist_insert_tail(&ux_send->ux_entry, &rxc->sw_ux_list);
 		rxc->sw_ux_list_len++;
 
-		fastlock_release(&rxc->lock);
-
 		CXIP_LOG_DBG("Onloaded ux_send: %p\n", ux_send);
 
-		return FI_SUCCESS;
+		break;
 	case C_EVENT_SEARCH:
+		assert(rxc->pte_state == CXIP_PTE_ONLOADING);
+
 		CXIP_LOG_ERROR("UX list empty (SW UX list len: %d): %p\n",
 			       rxc->sw_ux_list_len, rxc);
 
-		fastlock_acquire(&rxc->lock);
 		rxc->pte_state = CXIP_PTE_ONLOADED;
-		fastlock_release(&rxc->lock);
 
-		return FI_SUCCESS;
+		ofi_atomic_dec32(&rxc->orx_reqs);
+		cxip_cq_req_free(req);
+
+		break;
 	default:
 		CXIP_LOG_ERROR("Unexpected event type: %d\n",
 			       event->hdr.event_type);
 	}
+
+	fastlock_release(&rxc->lock);
 
 	return FI_SUCCESS;
 }
@@ -2144,12 +2148,13 @@ static int cxip_ux_onload(struct cxip_rxc *rxc)
 	int ret;
 
 	/* Populate request */
-	req = cxip_cq_req_alloc(rxc->recv_cq, 1, rxc);
+	req = cxip_cq_req_alloc(rxc->recv_cq, 1, NULL);
 	if (!req) {
 		CXIP_LOG_DBG("Failed to allocate request\n");
 		ret = -FI_ENOMEM;
 		return ret;
 	}
+	ofi_atomic_inc32(&rxc->orx_reqs);
 
 	req->cb = cxip_ux_onload_cb;
 	req->search.rxc = rxc;
@@ -2168,6 +2173,9 @@ static int cxip_ux_onload(struct cxip_rxc *rxc)
 	if (ret) {
 		CXIP_LOG_DBG("Failed to write Search command: %d\n", ret);
 
+		ofi_atomic_dec32(&rxc->orx_reqs);
+		cxip_cq_req_free(req);
+
 		fastlock_release(&rxc->rx_cmdq->lock);
 
 		return -FI_EAGAIN;
@@ -2176,8 +2184,6 @@ static int cxip_ux_onload(struct cxip_rxc *rxc)
 	cxi_cq_ring(rxc->rx_cmdq->dev_cmdq);
 
 	fastlock_release(&rxc->rx_cmdq->lock);
-
-	rxc->pte_state = CXIP_PTE_ONLOADING;
 
 	return FI_SUCCESS;
 }
@@ -2190,31 +2196,35 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
 	struct cxip_rxc *rxc = (struct cxip_rxc *)pte->ctx;
 	int ret;
 
+	fastlock_acquire(&rxc->lock);
+
 	switch (state) {
 	case C_PTLTE_ENABLED:
 		rxc->pte_state = CXIP_PTE_ENABLED;
+
+		CXIP_LOG_DBG("Enabled RXC: %p\n", rxc);
+
 		break;
 	case C_PTLTE_DISABLED:
-		fastlock_acquire(&rxc->lock);
+		assert(rxc->pte_state == CXIP_PTE_ENABLED);
 
 		if (rxc->disabling) {
 			rxc->pte_state = CXIP_PTE_DISABLED;
 		} else {
-			/* Flow control triggered */
-			assert(rxc->pte_state == CXIP_PTE_ENABLED);
-
 			CXIP_LOG_ERROR("Flow control detected: %p\n", rxc);
 
 			ret = cxip_ux_onload(rxc);
 			assert(ret == FI_SUCCESS);
-		}
 
-		fastlock_release(&rxc->lock);
+			rxc->pte_state = CXIP_PTE_ONLOADING;
+		}
 
 		break;
 	default:
 		CXIP_LOG_ERROR("Unexpected state received: %u\n", state);
 	}
+
+	fastlock_release(&rxc->lock);
 }
 
 #if 1
@@ -2268,7 +2278,7 @@ static int cxip_recv_sw_match(struct cxip_req *req,
 	oflow_req_put_bytes(ux_send->req, ux_send->mlen);
 
 	recv_req_report(req);
-	cxip_cq_req_free(req);
+	recv_req_complete(req);
 
 	return FI_SUCCESS;
 }
@@ -2474,8 +2484,6 @@ static ssize_t _cxip_recv_req(struct cxip_req *req, bool restart_seq)
 		return ret;
 	}
 
-	ofi_atomic_inc32(&rxc->orx_reqs);
-
 	return FI_SUCCESS;
 }
 
@@ -2545,6 +2553,7 @@ static ssize_t _cxip_recv(struct cxip_rxc *rxc, void *buf, size_t len,
 		ret = -FI_ENOMEM;
 		goto recv_unmap;
 	}
+	ofi_atomic_inc32(&rxc->orx_reqs);
 
 	/* req->data_len, req->tag, req->data must be set later. req->buf may
 	 * be overwritten later.
@@ -2601,6 +2610,7 @@ static ssize_t _cxip_recv(struct cxip_rxc *rxc, void *buf, size_t len,
 req_dequeue:
 	cxip_recv_req_dequeue(req);
 req_free:
+	ofi_atomic_dec32(&rxc->orx_reqs);
 	cxip_cq_req_free(req);
 recv_unmap:
 	if (recv_md)
@@ -2707,8 +2717,8 @@ static void rdzv_send_req_complete(struct cxip_req *req)
 	cxip_unmap(req->send.send_md);
 
 	report_send_completion(req, true);
-	ofi_atomic_dec32(&req->send.txc->otx_reqs);
 
+	ofi_atomic_dec32(&req->send.txc->otx_reqs);
 	cxip_cq_req_free(req);
 }
 
@@ -2757,8 +2767,6 @@ static int cxip_send_long_cb(struct cxip_req *req, const union c_event *event)
 		 * free the request (it will be used to replay the Send).
 		 */
 		if (event_rc == C_RC_PT_DISABLED) {
-			ofi_atomic_dec32(&req->send.txc->otx_reqs);
-
 			ret = cxip_send_req_dropped(req->send.txc, req);
 			if (ret != FI_SUCCESS)
 				ret = -FI_EAGAIN;
@@ -2884,7 +2892,7 @@ static int cxip_txc_prep_rdzv_src(struct cxip_txc *txc, unsigned int lac)
 		goto unlock;
 	}
 
-	req = cxip_cq_req_alloc(txc->send_cq, 1, txc);
+	req = cxip_cq_req_alloc(txc->send_cq, 1, NULL);
 	if (!req) {
 		ret = -FI_EAGAIN;
 		goto unlock;
@@ -3097,8 +3105,6 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 	if (!(req->send.flags & FI_MORE))
 		cxi_cq_ring(txc->tx_cmdq->dev_cmdq);
 
-	ofi_atomic_inc32(&txc->otx_reqs);
-
 	fastlock_release(&txc->tx_cmdq->lock);
 
 	return FI_SUCCESS;
@@ -3145,8 +3151,6 @@ static int cxip_send_eager_cb(struct cxip_req *req,
 		cxip_tx_id_free(req->send.txc->ep_obj, req->send.tx_id);
 	}
 
-	ofi_atomic_dec32(&req->send.txc->otx_reqs);
-
 	/* If the message was dropped, mark the peer as disabled. Do not
 	 * generate a completion. Free associated resources. Do not free the
 	 * request (it will be used to replay the Send).
@@ -3163,6 +3167,8 @@ static int cxip_send_eager_cb(struct cxip_req *req,
 	report_send_completion(req, match_complete);
 
 	cxip_send_req_dequeue(req->send.txc, req);
+
+	ofi_atomic_dec32(&req->send.txc->otx_reqs);
 	cxip_cq_req_free(req);
 
 	return FI_SUCCESS;
@@ -3332,8 +3338,6 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 
 	if (!(req->send.flags & FI_MORE))
 		cxi_cq_ring(txc->tx_cmdq->dev_cmdq);
-
-	ofi_atomic_inc32(&txc->otx_reqs);
 
 	fastlock_release(&txc->tx_cmdq->lock);
 
@@ -3590,6 +3594,7 @@ static ssize_t _cxip_send(struct cxip_txc *txc, const void *buf, size_t len,
 		CXIP_LOG_DBG("Failed to allocate request\n");
 		return -FI_EAGAIN;
 	}
+	ofi_atomic_inc32(&txc->otx_reqs);
 
 	/* Save Send parameters to replay */
 	req->send.txc = txc;
@@ -3644,6 +3649,7 @@ static ssize_t _cxip_send(struct cxip_txc *txc, const void *buf, size_t len,
 req_dequeue:
 	cxip_send_req_dequeue(req->send.txc, req);
 req_free:
+	ofi_atomic_dec32(&txc->otx_reqs);
 	cxip_cq_req_free(req);
 
 	return ret;
