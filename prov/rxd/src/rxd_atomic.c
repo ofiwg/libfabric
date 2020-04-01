@@ -115,6 +115,7 @@ static ssize_t rxd_generic_atomic(struct rxd_ep *rxd_ep,
 	struct fi_rma_iov rma_iov[RXD_IOV_LIMIT]; 
 	fi_addr_t rxd_addr;
 	ssize_t ret = -FI_EAGAIN;
+	struct rxd_peer *peer_entry;
 
 	assert(count <= RXD_IOV_LIMIT);
 	assert(rma_count <= RXD_IOV_LIMIT);
@@ -134,8 +135,11 @@ static ssize_t rxd_generic_atomic(struct rxd_ep *rxd_ep,
 	if (ofi_cirque_isfull(rxd_ep->util_ep.tx_cq->cirq))
 		goto out;
 
-	rxd_addr = rxd_ep_av(rxd_ep)->fi_addr_table[addr];
-	ret = rxd_send_rts_if_needed(rxd_ep, rxd_addr);
+	peer_entry = rxd_get_peer_by_fiaddr(rxd_ep, addr, &rxd_addr);
+	if(!peer_entry)
+		goto out;
+
+	ret = rxd_send_rts_if_needed(rxd_ep, peer_entry);
 	if (ret)
 		goto out;
 
@@ -145,7 +149,7 @@ static ssize_t rxd_generic_atomic(struct rxd_ep *rxd_ep,
 	if (!tx_entry)
 		goto out;
 
-	if (rxd_ep->peers[rxd_addr].peer_addr != FI_ADDR_UNSPEC)
+	if (peer_entry->peer_addr != FI_ADDR_UNSPEC)
 		(void) rxd_start_xfer(rxd_ep, tx_entry);
 
 out:
@@ -221,6 +225,7 @@ static ssize_t rxd_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 	struct fi_rma_iov rma_iov; 
 	fi_addr_t rxd_addr;
 	ssize_t ret = -FI_EAGAIN;
+	struct rxd_peer *peer_entry;
 
 	iov.iov_base = (void *) buf;
 	iov.iov_len = count * ofi_datatype_size(datatype);
@@ -235,8 +240,11 @@ static ssize_t rxd_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 	if (ofi_cirque_isfull(rxd_ep->util_ep.tx_cq->cirq))
 		goto out;
 
-	rxd_addr = rxd_ep_av(rxd_ep)->fi_addr_table[dest_addr];
-	ret = rxd_send_rts_if_needed(rxd_ep, rxd_addr);
+	peer_entry = rxd_get_peer_by_fiaddr(rxd_ep, addr, &rxd_addr);
+	if(!peer_entry)
+		goto out;
+
+	ret = rxd_send_rts_if_needed(rxd_ep, peer_entry);
 	if (ret)
 		goto out;
 
@@ -245,8 +253,7 @@ static ssize_t rxd_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 			0, NULL, 0, datatype, op);
 	if (!tx_entry)
 		goto out;
-
-	if (rxd_ep->peers[rxd_addr].peer_addr == FI_ADDR_UNSPEC)
+	if (peer_entry->peer_addr == FI_ADDR_UNSPEC)
 		goto out;
 
 	(void) rxd_start_xfer(rxd_ep, tx_entry);

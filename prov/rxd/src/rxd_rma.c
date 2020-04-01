@@ -92,6 +92,7 @@ static ssize_t rxd_generic_write_inject(struct rxd_ep *rxd_ep,
 	struct rxd_x_entry *tx_entry;
 	fi_addr_t rxd_addr;
 	ssize_t ret = -FI_EAGAIN;
+	struct rxd_peer *peer_entry;
 
 	assert(iov_count <= RXD_IOV_LIMIT && rma_count <= RXD_IOV_LIMIT);
 	assert(ofi_total_iov_len(iov, iov_count) <= rxd_ep_domain(rxd_ep)->max_inline_rma);
@@ -100,9 +101,11 @@ static ssize_t rxd_generic_write_inject(struct rxd_ep *rxd_ep,
 
 	if (ofi_cirque_isfull(rxd_ep->util_ep.tx_cq->cirq))
 		goto out;
+	peer_entry = rxd_get_peer_by_fiaddr(rxd_ep, addr, &rxd_addr);
+	if(!peer_entry)
+		goto out;
 
-	rxd_addr = rxd_ep_av(rxd_ep)->fi_addr_table[addr];
-	ret = rxd_send_rts_if_needed(rxd_ep, rxd_addr);
+	ret = rxd_send_rts_if_needed(rxd_ep, peer_entry);
 	if (ret)
 		goto out;
 
@@ -114,7 +117,7 @@ static ssize_t rxd_generic_write_inject(struct rxd_ep *rxd_ep,
 		goto out;
 	}
 
-	if (rxd_ep->peers[rxd_addr].peer_addr == FI_ADDR_UNSPEC)
+	if (peer_entry->peer_addr == FI_ADDR_UNSPEC)
 		goto out;
 
 	ret = rxd_start_xfer(rxd_ep, tx_entry);
@@ -135,6 +138,7 @@ ssize_t rxd_generic_rma(struct rxd_ep *rxd_ep, const struct iovec *iov,
 	struct rxd_x_entry *tx_entry;
 	fi_addr_t rxd_addr;
 	ssize_t ret = -FI_EAGAIN;
+	struct rxd_peer *peer_entry;
 
 	if (rxd_flags & RXD_INJECT)
 		return rxd_generic_write_inject(rxd_ep, iov, iov_count, rma_iov,
@@ -148,8 +152,11 @@ ssize_t rxd_generic_rma(struct rxd_ep *rxd_ep, const struct iovec *iov,
 	if (ofi_cirque_isfull(rxd_ep->util_ep.tx_cq->cirq))
 		goto out;
 
-	rxd_addr = rxd_ep_av(rxd_ep)->fi_addr_table[addr];
-	ret = rxd_send_rts_if_needed(rxd_ep, rxd_addr);
+	peer_entry = rxd_get_peer_by_fiaddr(rxd_ep, addr, &rxd_addr);
+	if (!peer_entry)
+		goto out;
+	
+	ret = rxd_send_rts_if_needed(rxd_ep, peer_entry);
 	if (ret)
 		goto out;
 
@@ -161,7 +168,7 @@ ssize_t rxd_generic_rma(struct rxd_ep *rxd_ep, const struct iovec *iov,
 		goto out;
 	}
 
-	if (rxd_ep->peers[rxd_addr].peer_addr == FI_ADDR_UNSPEC)
+	if (peer_entry->peer_addr == FI_ADDR_UNSPEC)
 		goto out;
 
 	ret = rxd_start_xfer(rxd_ep, tx_entry);
@@ -263,7 +270,6 @@ ssize_t rxd_writev(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 			       dest_addr, context, RXD_WRITE, 0,
 			       ep->tx_flags);
 }
-
 
 ssize_t rxd_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 	uint64_t flags)
