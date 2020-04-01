@@ -595,47 +595,6 @@ out:
 	return ret;
 }
 
-static void rxr_child_cma_write(pid_t ppid, void *remote_base, size_t remote_len)
-{
-	struct iovec local;
-	struct iovec remote;
-	int cflag = 1;
-	int ret = 0;
-
-	local.iov_base = &cflag;
-	local.iov_len = sizeof(cflag);
-	remote.iov_base = remote_base;
-	remote.iov_len = remote_len;
-	ret = process_vm_writev(ppid, &local, 1, &remote, 1, 0);
-	if (ret == -1) {
-		FI_WARN(&rxr_prov, FI_LOG_CORE,
-			"Error when child tries CMA write on its parent: %s\n",
-			strerror(errno));
-	}
-}
-
-static void rxr_check_cma_capability(void)
-{
-	pid_t pid;
-	int flag = 0;
-
-	pid = fork();
-	if (pid == 0) {
-		// child tries to CMA write on parent's memory and exits
-		rxr_child_cma_write(getppid(), (void *) &flag, sizeof(flag));
-		exit(0);
-	} else {
-		// parent waits child to exit, and check flag bit
-		wait(NULL);
-		if (flag == 0) {
-			fprintf(stderr, "shm transfer will fallback to mmap-based solution as CMA\n"
-				"is not available, which could lead to performance degradation.\n"
-				"To enable CMA-based shm transfer, you can turn off ptrace protection.\n"
-				"Please note that turning off ptrace protection has security implications.\n");
-		}
-	}
-}
-
 static void rxr_fini(void)
 {
 	struct efa_ep_addr *cur;
@@ -743,9 +702,6 @@ EFA_INI
 	lower_efa_prov = init_lower_efa_prov();
 	if (!lower_efa_prov)
 		return NULL;
-
-	if (rxr_env.enable_shm_transfer)
-		rxr_check_cma_capability();
 
 	if (rxr_env.enable_shm_transfer && rxr_get_local_gids(lower_efa_prov))
 		return NULL;
