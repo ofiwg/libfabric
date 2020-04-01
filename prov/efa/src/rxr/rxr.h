@@ -62,7 +62,6 @@
 #include <ofi_recvwin.h>
 #include <ofi_perf.h>
 
-#include <sys/wait.h>
 #include "rxr_pkt_entry.h"
 #include "rxr_pkt_type.h"
 
