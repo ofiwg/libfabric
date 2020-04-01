@@ -625,6 +625,7 @@ enum {
 	FI_FLUSH_WORK,		/* NULL */
 	FI_REFRESH,		/* mr: fi_mr_modify */
 	FI_DUP,			/* struct fid ** */
+	FI_GETWAITOBJ,		/*enum fi_wait_obj * */
 };
 
 static inline int fi_control(struct fid *fid, int command, void *arg)

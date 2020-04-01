@@ -123,7 +123,7 @@ static int tcpx_ep_connect(struct fid_ep *ep, const void *addr,
 	}
 
 	ret = ofi_wait_add_fd(tcpx_ep->util_ep.eq->wait, tcpx_ep->sock,
-			      OFI_EPOLL_OUT, tcpx_eq_wait_try_func, NULL,cm_ctx);
+			      POLLOUT, tcpx_eq_wait_try_func, NULL,cm_ctx);
 	if (ret)
 		goto err;
 
@@ -158,7 +158,7 @@ static int tcpx_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 	}
 
 	ret = ofi_wait_add_fd(tcpx_ep->util_ep.eq->wait, tcpx_ep->sock,
-			      OFI_EPOLL_OUT, tcpx_eq_wait_try_func, NULL, cm_ctx);
+			      POLLOUT, tcpx_eq_wait_try_func, NULL, cm_ctx);
 	if (ret) {
 		free(cm_ctx);
 		return ret;
@@ -680,7 +680,7 @@ static int tcpx_pep_listen(struct fid_pep *pep)
 	}
 
 	ret = ofi_wait_add_fd(tcpx_pep->util_pep.eq->wait, tcpx_pep->sock,
-			      OFI_EPOLL_IN, tcpx_eq_wait_try_func,
+			      POLLIN, tcpx_eq_wait_try_func,
 			      NULL, &tcpx_pep->cm_ctx);
 
 	tcpx_pep->util_pep.eq->wait->signal(tcpx_pep->util_pep.eq->wait);

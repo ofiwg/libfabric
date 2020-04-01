@@ -142,14 +142,14 @@ static int tcpx_ep_enable_xfers(struct tcpx_ep *ep)
 
 	if (ep->util_ep.rx_cq) {
 		ret = ofi_wait_add_fd(ep->util_ep.rx_cq->wait,
-				      ep->sock, OFI_EPOLL_IN, tcpx_try_func,
+				      ep->sock, POLLIN, tcpx_try_func,
 				      (void *) &ep->util_ep,
 				      &ep->util_ep.ep_fid.fid);
 	}
 
 	if (ep->util_ep.tx_cq) {
 		ret = ofi_wait_add_fd(ep->util_ep.tx_cq->wait,
-				      ep->sock, OFI_EPOLL_IN, tcpx_try_func,
+				      ep->sock, POLLIN, tcpx_try_func,
 				      (void *) &ep->util_ep,
 				      &ep->util_ep.ep_fid.fid);
 	}
@@ -390,7 +390,7 @@ static void client_send_connreq(struct util_wait *wait,
 		goto err;
 
 	cm_ctx->type = CLIENT_RECV_CONNRESP;
-	ret = ofi_wait_add_fd(wait, ep->sock, OFI_EPOLL_IN,
+	ret = ofi_wait_add_fd(wait, ep->sock, POLLIN,
 			      tcpx_eq_wait_try_func, NULL, cm_ctx);
 	if (ret)
 		goto err;
@@ -445,7 +445,7 @@ static void server_sock_accept(struct util_wait *wait,
 	rx_req_cm_ctx->fid = &handle->handle;
 	rx_req_cm_ctx->type = SERVER_RECV_CONNREQ;
 
-	ret = ofi_wait_add_fd(wait, sock, OFI_EPOLL_IN,
+	ret = ofi_wait_add_fd(wait, sock, POLLIN,
 			      tcpx_eq_wait_try_func,
 			      NULL, (void *) rx_req_cm_ctx);
 	if (ret)

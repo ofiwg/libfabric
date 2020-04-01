@@ -473,9 +473,10 @@ int ofi_cq_control(struct fid *fid, int command, void *arg)
 
 	switch (command) {
 	case FI_GETWAIT:
+	case FI_GETWAITOBJ:
 		if (!cq->wait)
 			return -FI_ENODATA;
-		return fi_control(&cq->wait->wait_fid.fid, FI_GETWAIT, arg);
+		return fi_control(&cq->wait->wait_fid.fid, command, arg);
 	default:
 		FI_INFO(cq->wait->prov, FI_LOG_CQ, "Unsupported command\n");
 		return -FI_ENOSYS;

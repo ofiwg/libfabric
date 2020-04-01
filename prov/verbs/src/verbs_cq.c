@@ -471,6 +471,10 @@ static int vrb_cq_control(fid_t fid, int command, void *arg)
 		}
 		pollfd->nfds = 1;
 		break;
+	case FI_GETWAITOBJ:
+		*(enum fi_wait_obj *) arg = cq->wait_obj;
+		ret = 0;
+		break;
 	default:
 		ret = -FI_ENOSYS;
 		break;

@@ -777,7 +777,7 @@ static int rxd_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		}
 
 		if (cq->wait)
-			ret = ofi_wait_add_fd(cq->wait, ep->dg_cq_fd, OFI_EPOLL_IN,
+			ret = ofi_wait_add_fd(cq->wait, ep->dg_cq_fd, POLLIN,
 					      rxd_ep_trywait, ep,
 					      &ep->util_ep.ep_fid.fid);
 		break;
@@ -810,7 +810,7 @@ static int rxd_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 
 		if (cntr->wait)
 			ret = ofi_wait_add_fd(cntr->wait, ep->dg_cq_fd,
-					      OFI_EPOLL_IN, rxd_ep_trywait, ep,
+					      POLLIN, rxd_ep_trywait, ep,
 					      &ep->util_ep.ep_fid.fid);
 		break;
 	default:

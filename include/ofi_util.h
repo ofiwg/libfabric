@@ -441,6 +441,7 @@ struct ofi_wait_fid_entry {
 	struct dlist_entry	entry;
 	ofi_wait_try_func	wait_try;
 	fid_t			fid;
+	uint32_t		events;
 	ofi_atomic32_t		ref;
 };
 

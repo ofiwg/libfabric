@@ -202,6 +202,7 @@ int ofi_eq_control(struct fid *fid, int command, void *arg)
 
 	switch (command) {
 	case FI_GETWAIT:
+	case FI_GETWAITOBJ:
 		ret = fi_control(&eq->wait->wait_fid.fid, command, arg);
 		break;
 	default:
