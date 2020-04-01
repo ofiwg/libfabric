@@ -77,7 +77,7 @@ extern "C" {
 #endif
 
 #define FI_MAJOR_VERSION 1
-#define FI_MINOR_VERSION 9
+#define FI_MINOR_VERSION 10
 
 enum {
 	FI_PATH_MAX		= 256,
