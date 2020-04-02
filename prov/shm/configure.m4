@@ -14,9 +14,12 @@ AC_DEFUN([FI_SHM_CONFIGURE],[
 	AS_IF([test x"$enable_shm" != x"no"],
 	      [
 	       # check if CMA support are present
-	       AC_CHECK_FUNC([process_vm_readv],
-			     [cma_happy=1],
-			     [cma_happy=0])
+	       AS_IF([test x$linux = x1 && test x$host_cpu = xx86_64],
+		     [cma_happy=1],
+		     [AC_CHECK_FUNC([process_vm_readv],
+				    [cma_happy=1],
+				    [cma_happy=0])]
+	       )
 
 	       # check if SHM support are present
 	       AC_CHECK_FUNC([shm_open],
