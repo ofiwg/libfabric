@@ -68,6 +68,12 @@ static bool efa_is_local_peer(struct efa_av *av, const void *addr)
 	return 0;
 }
 
+static bool efa_is_same_addr(struct efa_ep_addr *lhs, struct efa_ep_addr *rhs)
+{
+	return !memcmp(lhs->raw, rhs->raw, sizeof(lhs->raw)) &&
+	       lhs->qpn == rhs->qpn && lhs->qkey == rhs->qkey;
+}
+
 static inline struct efa_conn *efa_av_tbl_idx_to_conn(struct efa_av *av, fi_addr_t addr)
 {
 	if (OFI_UNLIKELY(addr == FI_ADDR_UNSPEC))
@@ -288,6 +294,19 @@ int efa_av_insert_addr(struct efa_av *av, struct efa_ep_addr *addr,
 	}
 	memcpy((void *)&av_entry->ep_addr, addr, EFA_EP_ADDR_LEN);
 	av_entry->rdm_addr = *fi_addr;
+
+	/*
+	 * Walk through all the EPs that bound to the AV,
+	 * update is_self flag corresponding peer structure
+	 */
+	dlist_foreach(&av->util_av.ep_list, ep_list_entry) {
+		util_ep = container_of(ep_list_entry, struct util_ep, av_entry);
+		rxr_ep = container_of(util_ep, struct rxr_ep, util_ep);
+		peer = rxr_ep_get_peer(rxr_ep, *fi_addr);
+		assert(peer);
+		peer->is_self = efa_is_same_addr((struct efa_ep_addr *)rxr_ep->core_addr,
+						 addr);
+	}
 
 	/* If peer is local, insert the address into shm provider's av */
 	if (rxr_env.enable_shm_transfer && efa_is_local_peer(av, addr)) {
