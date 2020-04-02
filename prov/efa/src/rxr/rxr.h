@@ -282,6 +282,7 @@ struct rxr_fabric {
 struct rxr_peer {
 	bool tx_init;			/* tracks initialization of tx state */
 	bool rx_init;			/* tracks initialization of rx state */
+	bool is_self;			/* self flag */
 	bool is_local;			/* local/remote peer flag */
 	fi_addr_t shm_fiaddr;		/* fi_addr_t addr from shm provider */
 	struct rxr_robuf *robuf;	/* tracks expected msg_id on rx */
@@ -299,17 +300,6 @@ struct rxr_peer {
 	struct dlist_entry rnr_entry;	/* linked to rxr_ep peer_backoff_list */
 	struct dlist_entry entry;	/* linked to rxr_ep peer_list */
 };
-
-static inline
-bool rxr_peer_support_rdma_read(struct rxr_peer *peer)
-{
-	/* RDMA READ is an extra feature defined in version 4 (the base version).
-	 * Because it is an extra feature, an EP will assume the peer does not support
-	 * it before a handshake packet was received.
-	 */
-	return (peer->flags & RXR_PEER_HANDSHAKE_RECEIVED) &&
-	       (peer->features[0] & RXR_REQ_FEATURE_RDMA_READ);
-}
 
 struct rxr_queued_ctrl_info {
 	int type;

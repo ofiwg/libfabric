@@ -364,6 +364,24 @@ bool efa_ep_support_rdma_read(struct fid_ep *ep_fid)
 }
 
 static inline
+bool efa_peer_support_rdma_read(struct rxr_peer *peer)
+{
+	/* RDMA READ is an extra feature defined in version 4 (the base version).
+	 * Because it is an extra feature, an EP will assume the peer does not support
+	 * it before a handshake packet was received.
+	 */
+	return (peer->flags & RXR_PEER_HANDSHAKE_RECEIVED) &&
+	       (peer->features[0] & RXR_REQ_FEATURE_RDMA_READ);
+}
+
+static inline
+bool efa_both_support_rdma_read(struct rxr_ep *ep, struct rxr_peer *peer)
+{
+	return efa_ep_support_rdma_read(ep->rdm_ep) &&
+	       (peer->is_self || efa_peer_support_rdma_read(peer));
+}
+
+static inline
 size_t efa_max_rdma_size(struct fid_ep *ep_fid)
 {
 	struct efa_ep *efa_ep;
