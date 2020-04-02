@@ -429,6 +429,29 @@ int rxr_get_lower_rdm_info(uint32_t version, const char *node,
 	return ret;
 }
 
+static int rxr_shm_space_check(void)
+{
+	struct statvfs stat;
+	char shm_fs[] = "/dev/shm";
+	uint64_t size;
+	int err;
+
+	err = statvfs(shm_fs, &stat);
+	if (err) {
+		FI_WARN(&rxr_prov, FI_LOG_CORE,
+			"Get filesystem %s statistics failed %d (%s)\n",
+			shm_fs, err, fi_strerror(-err));
+		return err;
+	}
+	size = stat.f_bsize * stat.f_bavail;
+	if (size < RXR_SHM_FS_LIMIT) {
+		FI_WARN(&rxr_prov, FI_LOG_CORE,
+			"Not enough available space in %s.\n", shm_fs);
+		return -FI_ENOSPC;
+	}
+	return 0;
+}
+
 /*
  * Call getinfo on lower efa provider to get all locally qualified fi_info
  * structure, then store the corresponding efa nic GIDs
@@ -631,6 +654,8 @@ struct fi_provider rxr_prov = {
 
 EFA_INI
 {
+	int err;
+
 	fi_param_define(&rxr_prov, "rx_window_size", FI_PARAM_INT,
 			"Defines the maximum window size that a receiver will return for matched large messages. (Default: 128).");
 	fi_param_define(&rxr_prov, "tx_max_credits", FI_PARAM_INT,
@@ -703,6 +728,15 @@ EFA_INI
 	lower_efa_prov = init_lower_efa_prov();
 	if (!lower_efa_prov)
 		return NULL;
+
+	if (rxr_env.enable_shm_transfer) {
+		err = rxr_shm_space_check();
+		if (err) {
+			FI_WARN(&rxr_prov, FI_LOG_CORE,
+				"shm transfer will be disabled.\n");
+			rxr_env.enable_shm_transfer = 0;
+		}
+	}
 
 	if (rxr_env.enable_shm_transfer && rxr_get_local_gids(lower_efa_prov))
 		return NULL;

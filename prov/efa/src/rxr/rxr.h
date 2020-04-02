@@ -61,6 +61,7 @@
 #include <uthash.h>
 #include <ofi_recvwin.h>
 #include <ofi_perf.h>
+#include <sys/statvfs.h>
 
 #include "rxr_pkt_entry.h"
 #include "rxr_pkt_type.h"
@@ -175,6 +176,14 @@ static inline void rxr_poison_mem_region(uint32_t *ptr, size_t size)
 
 #define RXR_MTU_MAX_LIMIT	BIT_ULL(15)
 
+/*
+ * Tentatively estimated shm space limit, 64GB
+ * If available shm space is less than this limit,
+ * shm transfer will be disabled
+ * Once shm segmentation protocol merges, we can
+ * have a better calculated limit
+ */
+#define RXR_SHM_FS_LIMIT	(64 * 1024UL * 1024UL * 1024UL)
 
 
 extern struct fi_info *shm_info;
