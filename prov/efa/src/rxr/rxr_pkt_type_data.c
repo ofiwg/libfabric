@@ -49,7 +49,7 @@ ssize_t rxr_pkt_send_data(struct rxr_ep *ep,
 			  struct rxr_tx_entry *tx_entry,
 			  struct rxr_pkt_entry *pkt_entry)
 {
-	uint64_t payload_size;
+	uint64_t payload_size, copied_size;
 	struct rxr_data_pkt *data_pkt;
 
 	pkt_entry->x_entry = (void *)tx_entry;
@@ -62,10 +62,10 @@ ssize_t rxr_pkt_send_data(struct rxr_ep *ep,
 	data_pkt = (struct rxr_data_pkt *)pkt_entry->pkt;
 	data_pkt->hdr.seg_size = payload_size;
 
-	rxr_copy_from_tx(data_pkt->data, payload_size, tx_entry, tx_entry->bytes_sent);
-	assert(pkt_entry->pkt_size == payload_size);
+	copied_size = rxr_copy_from_tx(data_pkt->data, payload_size, tx_entry, tx_entry->bytes_sent);
+	assert(copied_size == payload_size);
 
-	pkt_entry->pkt_size += sizeof(struct rxr_data_hdr);
+	pkt_entry->pkt_size = copied_size + sizeof(struct rxr_data_hdr);
 	pkt_entry->addr = tx_entry->addr;
 
 	return rxr_pkt_entry_send_with_flags(ep, pkt_entry, pkt_entry->addr,
