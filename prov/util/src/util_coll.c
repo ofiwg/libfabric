@@ -772,15 +772,14 @@ static int util_coll_find_local_rank(struct fid_ep *ep, struct util_coll_mc *col
 {
 	size_t addrlen;
 	char *addr;
-	int ret, mem;
+	int ret;
+	fi_addr_t my_addr;
+	int i;
 
-	addrlen = sizeof(mem);
-	addr = (char *) &mem;
-
-	ret = fi_getname(&ep->fid, addr, &addrlen);
-	if (ret != -FI_ETOOSMALL) {
+	addrlen = 0;
+	ret = fi_getname(&ep->fid, NULL, &addrlen);
+	if (ret != FI_SUCCESS && addrlen == 0)
 		return ret;
-	}
 
 	addr = calloc(1, addrlen);
 	if (!addr)
@@ -791,8 +790,16 @@ static int util_coll_find_local_rank(struct fid_ep *ep, struct util_coll_mc *col
 		free(addr);
 		return ret;
 	}
-	coll_mc->local_rank =
-		ofi_av_lookup_fi_addr(coll_mc->av_set->av, addr);
+	my_addr = ofi_av_lookup_fi_addr(coll_mc->av_set->av, addr);
+
+	coll_mc->local_rank = FI_ADDR_NOTAVAIL;
+	if (my_addr != FI_ADDR_NOTAVAIL) {
+		for (i=0; i<coll_mc->av_set->fi_addr_count; i++)
+			if (coll_mc->av_set->fi_addr_array[i] == my_addr) {
+				coll_mc->local_rank = i;
+				break;
+			}
+	}
 
 	free(addr);
 
