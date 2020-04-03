@@ -808,7 +808,7 @@ static int util_coll_find_local_rank(struct fid_ep *ep, struct util_coll_mc *col
 
 void util_coll_join_comp(struct util_coll_operation *coll_op)
 {
-	struct fi_eq_err_entry entry;
+	struct fi_eq_entry entry;
 	struct util_ep *ep = container_of(coll_op->mc->ep, struct util_ep, ep_fid);
 
 	coll_op->data.join.new_mc->seq = 0;
@@ -819,7 +819,7 @@ void util_coll_join_comp(struct util_coll_operation *coll_op)
 	/* write to the eq  */
 	memset(&entry, 0, sizeof(entry));
 	entry.fid = &coll_op->mc->mc_fid.fid;
-	entry.context = coll_op->mc->mc_fid.fid.context;
+	entry.context = coll_op->context;
 
 	if (ofi_eq_write(&ep->eq->eq_fid, FI_JOIN_COMPLETE, &entry,
 			 sizeof(struct fi_eq_entry), FI_COLLECTIVE) < 0)
