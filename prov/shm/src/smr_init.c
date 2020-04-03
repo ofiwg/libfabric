@@ -37,7 +37,14 @@
 #include "smr_signal.h"
 
 extern struct sigaction *old_action;
+struct smr_env smr_env = {
+	.sar_threshold = SIZE_MAX,
+};
 
+static void smr_init_env(void)
+{
+	fi_param_get_size_t(&smr_prov, "sar_threshold", &smr_env.sar_threshold);
+}
 
 static void smr_resolve_addr(const char *node, const char *service,
 			     char **addr, size_t *addrlen)
@@ -131,6 +138,13 @@ struct util_prov smr_util_prov = {
 
 SHM_INI
 {
+	fi_param_define(&smr_prov, "sar_threshold", FI_PARAM_SIZE_T,
+			"Max size to use for alternate SAR protocol if CMA \
+			 is not available before switching to mmap protocol \
+			 Default: SIZE_MAX (18446744073709551615)");
+
+	smr_init_env();
+
 	old_action = calloc(SIGRTMIN, sizeof(*old_action));
 	if (!old_action)
 		return NULL;

@@ -63,7 +63,11 @@
 #ifndef _SMR_H_
 #define _SMR_H_
 
+struct smr_env {
+	size_t sar_threshold;
+};
 
+extern struct smr_env smr_env;
 extern struct fi_provider smr_prov;
 extern struct fi_info smr_info;
 extern struct util_prov smr_util_prov;

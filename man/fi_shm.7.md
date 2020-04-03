@@ -107,6 +107,15 @@ EPs must be bound to both RX and TX CQs.
 
 No support for counters.
 
+# RUNTIME PARAMETERS
+
+The *shm* provider checks for the following environment variables:
+
+*FI_SHM_SAR_THRESHOLD*
+: Maximum message size to use segmentation protocol before switching
+  to mmap (only valid when CMA is not available). Default: SIZE_MAX
+  (18446744073709551615)
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),
