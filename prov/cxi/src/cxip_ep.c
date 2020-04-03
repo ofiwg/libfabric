@@ -146,28 +146,30 @@ void *cxip_rdzv_id_lookup(struct cxip_ep_obj *ep_obj, int id)
 	return entry;
 }
 
-int cxip_ep_cmdq(struct cxip_ep_obj *ep_obj,
-		 uint32_t ctx_id, uint32_t size, bool transmit,
+int cxip_ep_cmdq(struct cxip_ep_obj *ep_obj, uint32_t ctx_id, bool transmit,
 		 struct cxip_cmdq **cmdq)
 {
 	struct cxi_cq_alloc_opts cq_opts = {};
 	struct cxip_cmdq **cmdqs;
 	ofi_atomic32_t *cmdq_refs;
 	int ret;
+	size_t size;
 
 	if (transmit) {
 		cmdqs = ep_obj->txqs;
 		cmdq_refs = ep_obj->txq_refs;
+		size = ep_obj->txq_size;
 	} else {
 		cmdqs = ep_obj->tgqs;
 		cmdq_refs = ep_obj->tgq_refs;
+		size = ep_obj->tgq_size;
 	}
 
-	fastlock_acquire(&ep_obj->lock);
+	fastlock_acquire(&ep_obj->cmdq_lock);
 
 	if (cmdqs[ctx_id]) {
 		ofi_atomic_inc32(&cmdq_refs[ctx_id]);
-		fastlock_release(&ep_obj->lock);
+		fastlock_release(&ep_obj->cmdq_lock);
 
 		CXIP_LOG_DBG("Reusing %s CMDQ[%d]: %p\n",
 			     transmit ? "TX" : "RX", ctx_id, cmdqs[ctx_id]);
@@ -193,12 +195,12 @@ int cxip_ep_cmdq(struct cxip_ep_obj *ep_obj,
 	CXIP_LOG_DBG("Allocated %s CMDQ[%d]: %p\n",
 		     transmit ? "TX" : "RX", ctx_id, cmdqs[ctx_id]);
 
-	fastlock_release(&ep_obj->lock);
+	fastlock_release(&ep_obj->cmdq_lock);
 
 	return FI_SUCCESS;
 
 unlock:
-	fastlock_release(&ep_obj->lock);
+	fastlock_release(&ep_obj->cmdq_lock);
 
 	return ret;
 }
@@ -217,7 +219,7 @@ void cxip_ep_cmdq_put(struct cxip_ep_obj *ep_obj,
 		cmdq_ref = &ep_obj->tgq_refs[ctx_id];
 	}
 
-	fastlock_acquire(&ep_obj->lock);
+	fastlock_acquire(&ep_obj->cmdq_lock);
 
 	if (!ofi_atomic_dec32(cmdq_ref)) {
 		cxip_cmdq_free(cmdqs[ctx_id]);
@@ -230,7 +232,7 @@ void cxip_ep_cmdq_put(struct cxip_ep_obj *ep_obj,
 			     transmit ? "TX" : "RX", ctx_id, cmdqs[ctx_id]);
 	}
 
-	fastlock_release(&ep_obj->lock);
+	fastlock_release(&ep_obj->cmdq_lock);
 }
 
 static int cxip_ep_cm_getname(fid_t fid, void *addr, size_t *addrlen)
@@ -1787,6 +1789,8 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 
 	/* Copy EP attributes from hints */
 	cxi_ep->ep_obj->ep_attr = *hints->ep_attr;
+	cxi_ep->ep_obj->txq_size = hints->tx_attr->size;
+	cxi_ep->ep_obj->tgq_size = hints->rx_attr->size;
 	cxi_ep->tx_attr = *hints->tx_attr;
 	cxi_ep->rx_attr = *hints->rx_attr;
 
@@ -1800,6 +1804,7 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 	ofi_atomic_initialize32(&cxi_ep->ep_obj->num_txc, 0);
 	ofi_atomic_initialize32(&cxi_ep->ep_obj->num_rxc, 0);
 	fastlock_init(&cxi_ep->ep_obj->lock);
+	fastlock_init(&cxi_ep->ep_obj->cmdq_lock);
 
 	cxi_ep->ep_obj->fclass = fclass;
 	cxi_ep->ep_obj->domain = cxi_dom;

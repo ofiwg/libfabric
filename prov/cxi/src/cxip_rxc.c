@@ -125,15 +125,13 @@ static int rxc_msg_init(struct cxip_rxc *rxc)
 	};
 	uint64_t pid_idx;
 
-	ret = cxip_ep_cmdq(rxc->ep_obj, rxc->rx_id, rxc->attr.size, false,
-			   &rxc->rx_cmdq);
+	ret = cxip_ep_cmdq(rxc->ep_obj, rxc->rx_id, false, &rxc->rx_cmdq);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Unable to allocate RX CMDQ, ret: %d\n", ret);
 		return -FI_EDOMAIN;
 	}
 
-	ret = cxip_ep_cmdq(rxc->ep_obj, rxc->rx_id, rxc->attr.size, true,
-			   &rxc->tx_cmdq);
+	ret = cxip_ep_cmdq(rxc->ep_obj, rxc->rx_id, true, &rxc->tx_cmdq);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Unable to allocate TX CMDQ, ret: %d\n", ret);
 		ret = -FI_EDOMAIN;

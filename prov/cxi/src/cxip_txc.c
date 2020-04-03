@@ -55,8 +55,7 @@ static int txc_msg_init(struct cxip_txc *txc)
 	uint64_t pid_idx;
 
 	/* Allocate TGQ for posting source data */
-	ret = cxip_ep_cmdq(txc->ep_obj, txc->tx_id, txc->attr.size, false,
-			   &txc->rx_cmdq);
+	ret = cxip_ep_cmdq(txc->ep_obj, txc->tx_id, false, &txc->rx_cmdq);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Unable to allocate TGQ, ret: %d\n", ret);
 		return -FI_EDOMAIN;
@@ -187,8 +186,7 @@ int cxip_txc_enable(struct cxip_txc *txc)
 		}
 	}
 
-	ret = cxip_ep_cmdq(txc->ep_obj, txc->tx_id, txc->attr.size, true,
-			   &txc->tx_cmdq);
+	ret = cxip_ep_cmdq(txc->ep_obj, txc->tx_id, true, &txc->tx_cmdq);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Unable to allocate TX CMDQ, ret: %d\n", ret);
 		ret = -FI_EDOMAIN;

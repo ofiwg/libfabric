@@ -116,18 +116,20 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 	struct cxi_eq_attr eq_attr = {};
 	union c_cmdu cmd = {};
 	const union c_event *event;
-	struct cxi_cq_alloc_opts cq_opts = {};
 	int ret;
 	int tmp;
 
-	cq_opts.count = 64;
-	cq_opts.is_transmit = 0;
-	ret = cxip_cmdq_alloc(ep_obj->domain->lni, NULL, &cq_opts,
-			      &ep_obj->ctrl_tgq);
+	ret = cxip_ep_cmdq(ep_obj, 0, true, &ep_obj->ctrl_txq);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("Unable to allocate control CMDQ, ret: %d\n",
-			     ret);
-		return -FI_ENODEV;
+		CXIP_LOG_DBG("Unable to allocate control TXQ, ret: %d\n", ret);
+		return -FI_EDOMAIN;
+	}
+
+	ret = cxip_ep_cmdq(ep_obj, 0, false, &ep_obj->ctrl_tgq);
+	if (ret != FI_SUCCESS) {
+		CXIP_LOG_DBG("Unable to allocate control TGQ, ret: %d\n", ret);
+		ret = -FI_EDOMAIN;
+		goto free_txq;
 	}
 
 	ep_obj->ctrl_evtq_buf_len = C_PAGE_SIZE;
@@ -221,7 +223,9 @@ free_evtq_md:
 free_evtq_buf:
 	free(ep_obj->ctrl_evtq_buf);
 free_tgq:
-	cxip_cmdq_free(ep_obj->ctrl_tgq);
+	cxip_ep_cmdq_put(ep_obj, 0, false);
+free_txq:
+	cxip_ep_cmdq_put(ep_obj, 0, true);
 
 	return ret;
 }
@@ -250,7 +254,8 @@ void cxip_ep_ctrl_fini(struct cxip_ep_obj *ep_obj)
 
 	free(ep_obj->ctrl_evtq_buf);
 
-	cxip_cmdq_free(ep_obj->ctrl_tgq);
+	cxip_ep_cmdq_put(ep_obj, 0, false);
+	cxip_ep_cmdq_put(ep_obj, 0, true);
 
 	CXIP_LOG_DBG("EP control finalized: %p\n", ep_obj);
 }

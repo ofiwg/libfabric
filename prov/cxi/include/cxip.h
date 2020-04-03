@@ -837,8 +837,11 @@ struct cxip_ep_obj {
 	ofi_atomic32_t txq_refs[CXIP_EP_MAX_TX_CNT];
 	struct cxip_cmdq *tgqs[CXIP_EP_MAX_TX_CNT];
 	ofi_atomic32_t tgq_refs[CXIP_EP_MAX_TX_CNT];
+	fastlock_t cmdq_lock;
 
 	struct fi_ep_attr ep_attr;
+	size_t txq_size;
+	size_t tgq_size;
 
 	bool enabled;
 	fastlock_t lock;
@@ -858,6 +861,7 @@ struct cxip_ep_obj {
 
 	/* Control resources */
 	struct cxip_cmdq *ctrl_tgq;
+	struct cxip_cmdq *ctrl_txq;
 	struct cxi_evtq *ctrl_evtq;
 	void *ctrl_evtq_buf;
 	size_t ctrl_evtq_buf_len;
@@ -1057,11 +1061,10 @@ void *cxip_tx_id_lookup(struct cxip_ep_obj *ep_obj, int id);
 int cxip_rdzv_id_alloc(struct cxip_ep_obj *ep_obj, void *ctx);
 int cxip_rdzv_id_free(struct cxip_ep_obj *ep_obj, int id);
 void *cxip_rdzv_id_lookup(struct cxip_ep_obj *ep_obj, int id);
-int cxip_ep_cmdq(struct cxip_ep_obj *ep_obj,
-		 uint32_t ctx_id, uint32_t size, bool transmit,
+int cxip_ep_cmdq(struct cxip_ep_obj *ep_obj, uint32_t ctx_id, bool transmit,
 		 struct cxip_cmdq **cmdq);
-void cxip_ep_cmdq_put(struct cxip_ep_obj *ep_obj,
-		      uint32_t ctx_id, bool transmit);
+void cxip_ep_cmdq_put(struct cxip_ep_obj *ep_obj, uint32_t ctx_id,
+		      bool transmit);
 
 int cxip_recv_cancel(struct cxip_req *req);
 void cxip_recv_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state);
