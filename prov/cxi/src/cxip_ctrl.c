@@ -18,6 +18,221 @@
 #define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_EP_CTRL, __VA_ARGS__)
 
 /*
+ * cxip_ctrl_msg_cb() - Process control message target events.
+ */
+int cxip_ctrl_msg_cb(struct cxip_ctrl_req *req, const union c_event *event)
+{
+	uint32_t pid_bits = req->ep_obj->domain->iface->dev->info.pid_bits;
+	uint32_t nic_addr;
+	uint32_t pid;
+	union cxip_match_bits mb = {
+		.raw = event->tgt_long.match_bits,
+	};
+	uint32_t init = event->tgt_long.initiator.initiator.process;
+	int ret;
+
+	switch (event->hdr.event_type) {
+	case C_EVENT_PUT:
+		assert(cxi_event_rc(event) == C_RC_OK);
+
+		nic_addr = CXI_MATCH_ID_EP(pid_bits, init);
+		pid = CXI_MATCH_ID_PID(pid_bits, init);
+
+		switch (mb.ctrl_msg_type) {
+		case CXIP_CTRL_MSG_FC_NOTIFY:
+			ret = cxip_fc_process_drops(req->ep_obj, mb.rxc_id,
+						    nic_addr, pid, mb.txc_id,
+						    mb.drops);
+			assert(ret == FI_SUCCESS);
+
+			break;
+		case CXIP_CTRL_MSG_FC_RESUME:
+			ret = cxip_fc_resume(req->ep_obj, mb.txc_id, nic_addr,
+					     pid, mb.rxc_id);
+			assert(ret == FI_SUCCESS);
+
+			break;
+		default:
+			CXIP_LOG_ERROR("Unexpected msg type: %d\n",
+				       mb.ctrl_msg_type);
+		}
+
+		break;
+	default:
+		CXIP_LOG_ERROR("Unexpected event type: %d\n",
+			       event->hdr.event_type);
+	}
+
+	CXIP_LOG_DBG("got event: %s rc: %s (req: %p)\n",
+		     cxi_event_to_str(event),
+		     cxi_rc_to_str(cxi_event_rc(event)),
+		     req);
+
+	return FI_SUCCESS;
+}
+
+/*
+ * cxip_ctrl_msg_send() - Send a control message.
+ */
+int cxip_ctrl_msg_send(struct cxip_ctrl_req *req)
+{
+	struct cxip_cmdq *txq = req->ep_obj->ctrl_txq;
+	union c_fab_addr dfa;
+	uint8_t idx_ext;
+	uint32_t pid_bits;
+	union c_cmdu cmd = {};
+	uint32_t match_id;
+	int ret;
+
+	pid_bits = req->ep_obj->domain->iface->dev->info.pid_bits;
+	cxi_build_dfa(req->send.nic_addr, req->send.pid, pid_bits,
+		      CXIP_PTL_IDX_CTRL, &dfa, &idx_ext);
+	match_id = CXI_MATCH_ID(pid_bits, req->send.pid, req->send.nic_addr);
+
+	cmd.c_state.event_send_disable = 1;
+	cmd.c_state.index_ext = idx_ext;
+	cmd.c_state.eq = req->ep_obj->ctrl_evtq->eqn;
+	cmd.c_state.initiator = match_id;
+
+	fastlock_acquire(&txq->lock);
+
+	if (memcmp(&txq->c_state, &cmd.c_state, sizeof(cmd.c_state))) {
+		/* Update TXQ C_STATE */
+		txq->c_state = cmd.c_state;
+
+		ret = cxi_cq_emit_c_state(txq->dev_cmdq, &cmd.c_state);
+		if (ret) {
+			CXIP_LOG_DBG("Failed to issue C_STATE command: %d\n",
+				     ret);
+
+			/* Return error according to Domain Resource
+			 * Management
+			 */
+			ret = -FI_EAGAIN;
+			goto err_unlock;
+		}
+
+		CXIP_LOG_DBG("Updated C_STATE: %p\n", req);
+	}
+
+	memset(&cmd.idc_msg, 0, sizeof(cmd.idc_msg));
+	cmd.idc_msg.dfa = dfa;
+	cmd.idc_msg.match_bits = req->send.mb.raw;
+	cmd.idc_msg.user_ptr = (uint64_t)req;
+
+	ret = cxi_cq_emit_idc_msg(txq->dev_cmdq, &cmd.idc_msg, NULL, 0);
+	if (ret) {
+		CXIP_LOG_DBG("Failed to write IDC: %d\n", ret);
+
+		/* Return error according to Domain Resource Management
+		 */
+		ret = -FI_EAGAIN;
+		goto err_unlock;
+	}
+
+	cxi_cq_ring(txq->dev_cmdq);
+
+	fastlock_release(&txq->lock);
+
+	CXIP_LOG_DBG("Queued control message: %p\n", req);
+
+	return FI_SUCCESS;
+
+err_unlock:
+	fastlock_release(&txq->lock);
+
+	return ret;
+}
+
+/*
+ * cxip_ctrl_msg_init() - Initialize control messaging resources.
+ *
+ * Caller must hold ep_obj->lock.
+ */
+int cxip_ctrl_msg_init(struct cxip_ep_obj *ep_obj)
+{
+	const union c_event *event;
+	int buffer_id;
+	int ret;
+	uint32_t le_flags;
+	union cxip_match_bits mb = {
+		.ctrl_le_type = CXIP_CTRL_LE_TYPE_CTRL_MSG,
+	};
+	union cxip_match_bits ib = {
+		.raw = ~0,
+	};
+
+	buffer_id = ofi_idx_insert(&ep_obj->req_ids, &ep_obj->ctrl_msg_req);
+	if (buffer_id < 0 || buffer_id >= CXIP_BUFFER_ID_MAX) {
+		CXIP_LOG_ERROR("Failed to allocate MR buffer ID: %d\n",
+			       buffer_id);
+		return -FI_ENOSPC;
+	}
+	ep_obj->ctrl_msg_req.ep_obj = ep_obj;
+	ep_obj->ctrl_msg_req.req_id = buffer_id;
+	ep_obj->ctrl_msg_req.cb = cxip_ctrl_msg_cb;
+
+	le_flags = C_LE_UNRESTRICTED_BODY_RO | C_LE_UNRESTRICTED_END_RO |
+		   C_LE_OP_PUT;
+
+	ib.ctrl_le_type = 0;
+
+	ret = cxip_pte_append(ep_obj->ctrl_pte, 0, 0, 0,
+			      C_PTL_LIST_PRIORITY, buffer_id, mb.raw, ib.raw,
+			      CXI_MATCH_ID_ANY, 0, le_flags, NULL,
+			      ep_obj->ctrl_tgq, true);
+	if (ret) {
+		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
+		goto err_free_id;
+	}
+
+	/* Wait for link EQ event */
+	while (!(event = cxi_eq_get_event(ep_obj->ctrl_evtq)))
+		sched_yield();
+
+	if (event->hdr.event_type != C_EVENT_LINK ||
+	    event->tgt_long.buffer_id != buffer_id) {
+		/* This is a device malfunction */
+		CXIP_LOG_ERROR("Invalid Link EQE %u %u %u %u\n",
+				event->hdr.event_type,
+				event->tgt_long.return_code,
+				event->tgt_long.buffer_id, buffer_id);
+		ret = -FI_EIO;
+		goto err_free_id;
+	}
+
+	if (cxi_event_rc(event) != C_RC_OK) {
+		CXIP_LOG_ERROR("Append failed: %s\n",
+			       cxi_rc_to_str(cxi_event_rc(event)));
+		ret = -FI_ENOSPC;
+		goto err_free_id;
+	}
+
+	cxi_eq_ack_events(ep_obj->ctrl_evtq);
+
+	CXIP_LOG_DBG("Control messaging initialized: %p\n", ep_obj);
+
+	return FI_SUCCESS;
+
+err_free_id:
+	ofi_idx_remove(&ep_obj->req_ids, buffer_id);
+
+	return ret;
+}
+
+/*
+ * cxip_ctrl_msg_fini() - Finalize control messaging resources.
+ *
+ * Caller must hold ep_obj->lock.
+ */
+void cxip_ctrl_msg_fini(struct cxip_ep_obj *ep_obj)
+{
+	ofi_idx_remove(&ep_obj->req_ids, ep_obj->ctrl_msg_req.req_id);
+
+	CXIP_LOG_DBG("Control messaging finalized: %p\n", ep_obj);
+}
+
+/*
  * cxip_ep_ctrl_event_req() - Look up a control request using Cassini event.
  */
 static struct cxip_ctrl_req *cxip_ep_ctrl_event_req(struct cxip_ep_obj *ep_obj,
@@ -206,6 +421,10 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 
 	memset(&ep_obj->req_ids, 0, sizeof(ep_obj->req_ids));
 
+	ret = cxip_ctrl_msg_init(ep_obj);
+	if (ret != FI_SUCCESS)
+		goto free_pte;
+
 	CXIP_LOG_DBG("EP control initialized: %p\n", ep_obj);
 
 	return FI_SUCCESS;
@@ -238,6 +457,8 @@ free_txq:
 void cxip_ep_ctrl_fini(struct cxip_ep_obj *ep_obj)
 {
 	int ret;
+
+	cxip_ctrl_msg_fini(ep_obj);
 
 	cxip_pte_free(ep_obj->ctrl_pte);
 

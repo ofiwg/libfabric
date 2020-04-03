@@ -22,6 +22,8 @@
 #define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_EP_DATA, __VA_ARGS__)
 #define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_EP_DATA, __VA_ARGS__)
 
+static int cxip_recv_req_queue(struct cxip_req *req);
+static int cxip_recv_req_dropped(struct cxip_req *req);
 static void cxip_recv_req_dequeue_nolock(struct cxip_req *req);
 static void cxip_recv_req_dequeue(struct cxip_req *req);
 static ssize_t _cxip_recv_req(struct cxip_req *req, bool restart_seq);
@@ -1598,8 +1600,9 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_LINK:
-		/* TODO Handle append errors. */
-		assert(cxi_event_rc(event) == C_RC_OK);
+		assert(cxi_tgt_event_rc(event) == C_RC_NO_SPACE);
+
+		cxip_recv_req_dropped(req);
 		return FI_SUCCESS;
 	case C_EVENT_UNLINK:
 		/* TODO Handle unlink errors. */
@@ -1851,8 +1854,9 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_LINK:
-		/* TODO Handle append errors. */
-		assert(cxi_event_rc(event) == C_RC_OK);
+		assert(cxi_tgt_event_rc(event) == C_RC_NO_SPACE);
+
+		cxip_recv_req_dropped(req);
 		return FI_SUCCESS;
 	case C_EVENT_UNLINK:
 		if (!event->tgt_long.auto_unlinked) {
@@ -2087,18 +2091,219 @@ int cxip_recv_cancel(struct cxip_req *req)
 }
 
 /*
+ * cxip_recv_reenable() - Attempt to re-enable the RX queue.
+ *
+ * Called by disabled EP ready to re-enable.
+ *
+ * Determine if the RX queue can be re-enabled and perform a state change
+ * command if necessary. The Endpoint must receive dropped Send notifications
+ * from all peers who experienced drops before re-enabling the RX queue.
+ *
+ * Caller must hold rxc->lock.
+ */
+int cxip_recv_reenable(struct cxip_rxc *rxc)
+{
+	int total_drops = -1;
+	struct cxi_pte_status pte_status;
+	struct cxip_fc_drops *fc_drops;
+	int ret;
+
+	if (rxc->pte_state == C_PTLTE_ENABLED || rxc->enable_pending)
+		return FI_SUCCESS;
+
+	/* Check if we're ready to re-enable the RX queue */
+	dlist_foreach_container(&rxc->fc_drops, struct cxip_fc_drops,
+				fc_drops, rxc_entry) {
+		total_drops += fc_drops->drops;
+	}
+
+	ret = cxil_pte_status(rxc->rx_pte->pte, &pte_status);
+	assert(!ret);
+
+	CXIP_LOG_DBG("Processed %d/%d drops\n",
+		     total_drops+1, pte_status.drop_count+1);
+
+	if (total_drops != pte_status.drop_count)
+		return -FI_EAGAIN;
+
+	CXIP_LOG_DBG("Re-enabling PTE\n");
+
+	ret = cxip_rxc_msg_enable(rxc, total_drops);
+	assert(ret == FI_SUCCESS);
+
+	return FI_SUCCESS;
+}
+
+/*
+ * cxip_fc_resume_cb() - Process FC resume completion events.
+ */
+int cxip_fc_resume_cb(struct cxip_ctrl_req *req, const union c_event *event)
+{
+	struct cxip_fc_drops *fc_drops = container_of(req,
+			struct cxip_fc_drops, req);
+
+	switch (event->hdr.event_type) {
+	case C_EVENT_ACK:
+		/* TODO handle error. Drops can happen. */
+		assert(cxi_event_rc(event) == C_RC_OK);
+
+		free(fc_drops);
+		break;
+	default:
+		CXIP_LOG_ERROR("Unexpected event type: %d\n",
+			       event->hdr.event_type);
+	}
+
+	return FI_SUCCESS;
+}
+
+/*
+ * cxip_fc_process_drops() - Process a dropped Send notification from a peer.
+ *
+ * Called by disabled EP waiting to re-enable.
+ *
+ * When a peer detects dropped Sends it follows up by sending a message to the
+ * disabled Endpoint indicating the number of drops experienced. The disabled
+ * Endpoint peer must count all drops before re-enabling its RX queue.
+ */
+int cxip_fc_process_drops(struct cxip_ep_obj *ep_obj, uint8_t rxc_id,
+			  uint32_t nic_addr, uint32_t pid, uint8_t txc_id,
+			  uint16_t drops)
+{
+	struct cxip_rxc *rxc = ep_obj->rxcs[rxc_id];
+	struct cxip_fc_drops *fc_drops;
+	int ret;
+
+	fc_drops = calloc(1, sizeof(*fc_drops));
+	if (!fc_drops) {
+		CXIP_LOG_DBG("Failed to allocate drops\n");
+		return -FI_ENOMEM;
+	}
+
+	fc_drops->rxc = rxc;
+	fc_drops->nic_addr = nic_addr;
+	fc_drops->pid = pid;
+	fc_drops->txc_id = txc_id;
+	fc_drops->rxc_id = rxc_id;
+	fc_drops->drops = drops;
+
+	fc_drops->req.send.nic_addr = nic_addr;
+	fc_drops->req.send.pid = pid;
+	fc_drops->req.send.mb.txc_id = txc_id;
+	fc_drops->req.send.mb.rxc_id = rxc_id;
+	fc_drops->req.send.mb.drops = drops;
+
+	fc_drops->req.send.mb.ctrl_le_type = CXIP_CTRL_LE_TYPE_CTRL_MSG;
+	fc_drops->req.send.mb.ctrl_msg_type = CXIP_CTRL_MSG_FC_RESUME;
+	fc_drops->req.cb = cxip_fc_resume_cb;
+	fc_drops->req.ep_obj = rxc->ep_obj;
+
+	fastlock_acquire(&rxc->lock);
+
+	dlist_insert_tail(&fc_drops->rxc_entry, &rxc->fc_drops);
+
+	CXIP_LOG_DBG("Processed drops: %d NIC: %#x TXC: %d RXC: %p\n",
+		     drops, nic_addr, txc_id, rxc);
+
+	ret = cxip_recv_reenable(rxc);
+	assert(ret == FI_SUCCESS || ret == -FI_EAGAIN);
+
+	fastlock_release(&rxc->lock);
+
+	return FI_SUCCESS;
+}
+
+/*
+ * cxip_recv_replay() - Replay dropped Receive requests.
+ *
+ * When no LE is available while processing an Append command, the command is
+ * dropped and future appends are disabled. After all outstanding commands are
+ * dropped and resources are recovered, replayed all Receive requests in order.
+ *
+ * Caller must hold rxc->lock.
+ */
+static int cxip_recv_replay(struct cxip_rxc *rxc)
+{
+	struct cxip_req *req;
+	struct dlist_entry *tmp;
+	bool restart_seq = true;
+	int ret;
+
+	/* Wait until all outstanding Receives complete before replaying. */
+	if (!dlist_empty(&rxc->msg_queue))
+		return -FI_EAGAIN;
+
+	rxc->append_disabled = false;
+
+	dlist_foreach_container_safe(&rxc->replay_queue,
+				     struct cxip_req, req,
+				     recv.rxc_entry, tmp) {
+		dlist_remove(&req->recv.rxc_entry);
+
+		CXIP_LOG_DBG("Replaying: %p\n", req);
+
+		ret = cxip_recv_req_queue(req);
+
+		/* Match made in software? */
+		if (ret == -FI_EALREADY)
+			continue;
+
+		assert(ret == FI_SUCCESS);
+
+		ret = _cxip_recv_req(req, restart_seq);
+		assert(ret == FI_SUCCESS);
+
+		restart_seq = false;
+	}
+
+	return FI_SUCCESS;
+}
+
+/*
+ * cxip_recv_resume() - Send a resume message to all peers who reported dropped
+ * Sends.
+ *
+ * Called by disabled EP after re-enable.
+ *
+ * After counting all dropped sends targeting a disabled RX queue and
+ * re-enabling the queue, notify all peers who experienced dropped Sends so
+ * they can be replayed.
+ *
+ * Caller must hold rxc->lock.
+ */
+int cxip_recv_resume(struct cxip_rxc *rxc)
+{
+	struct cxip_fc_drops *fc_drops;
+	struct dlist_entry *tmp;
+	int ret;
+
+	dlist_foreach_container_safe(&rxc->fc_drops,
+				     struct cxip_fc_drops, fc_drops,
+				     rxc_entry, tmp) {
+		ret = cxip_ctrl_msg_send(&fc_drops->req);
+		assert(ret == FI_SUCCESS);
+
+		dlist_remove(&fc_drops->rxc_entry);
+	}
+
+	return FI_SUCCESS;
+}
+
+/*
  * cxip_ux_onload_cb() - Process SEARCH_AND_DELETE command events.
  */
 static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 {
 	struct cxip_rxc *rxc = req->search.rxc;
 	struct cxip_ux_send *ux_send;
+	int ret;
 
 	fastlock_acquire(&rxc->lock);
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_PUT_OVERFLOW:
 		assert(cxi_event_rc(event) == C_RC_OK);
+		assert(rxc->searches_pending);
 
 		ux_send = match_ux_send(rxc, event);
 		if (!ux_send) {
@@ -2114,15 +2319,21 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 
 		break;
 	case C_EVENT_SEARCH:
-		assert(rxc->pte_state == CXIP_PTE_ONLOADING);
+		assert(rxc->searches_pending);
 
-		CXIP_LOG_ERROR("UX list empty (SW UX list len: %d): %p\n",
-			       rxc->sw_ux_list_len, rxc);
-
-		rxc->pte_state = CXIP_PTE_ONLOADED;
+		CXIP_LOG_DBG("UX list empty (sw_ux_list_len: %d): %p\n",
+			     rxc->sw_ux_list_len, rxc);
 
 		ofi_atomic_dec32(&rxc->orx_reqs);
 		cxip_cq_req_free(req);
+		rxc->searches_pending--;
+
+		/* Check if the RX queue can be re-enabled now */
+		ret = cxip_recv_reenable(rxc);
+		assert(ret == FI_SUCCESS || ret == -FI_EAGAIN);
+
+		ret = cxip_recv_replay(rxc);
+		assert(ret == FI_SUCCESS || ret == -FI_EAGAIN);
 
 		break;
 	default:
@@ -2185,6 +2396,8 @@ static int cxip_ux_onload(struct cxip_rxc *rxc)
 
 	fastlock_release(&rxc->rx_cmdq->lock);
 
+	rxc->searches_pending++;
+
 	return FI_SUCCESS;
 }
 
@@ -2200,23 +2413,28 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
 
 	switch (state) {
 	case C_PTLTE_ENABLED:
-		rxc->pte_state = CXIP_PTE_ENABLED;
+		assert(rxc->pte_state == C_PTLTE_DISABLED);
+		assert(rxc->enable_pending);
 
-		CXIP_LOG_DBG("Enabled RXC: %p\n", rxc);
+		rxc->enable_pending = false;
+		rxc->pte_state = C_PTLTE_ENABLED;
+
+		CXIP_LOG_DBG("Enabled Receive PTE: %p\n", rxc);
+
+		ret = cxip_recv_resume(rxc);
+		assert(ret == FI_SUCCESS);
 
 		break;
 	case C_PTLTE_DISABLED:
-		assert(rxc->pte_state == CXIP_PTE_ENABLED);
+		assert(rxc->pte_state == C_PTLTE_ENABLED);
 
-		if (rxc->disabling) {
-			rxc->pte_state = CXIP_PTE_DISABLED;
-		} else {
-			CXIP_LOG_ERROR("Flow control detected: %p\n", rxc);
+		rxc->pte_state = C_PTLTE_DISABLED;
+
+		if (!rxc->disabling) {
+			CXIP_LOG_DBG("Flow control detected: %p\n", rxc);
 
 			ret = cxip_ux_onload(rxc);
 			assert(ret == FI_SUCCESS);
-
-			rxc->pte_state = CXIP_PTE_ONLOADING;
 		}
 
 		break;
@@ -2326,11 +2544,13 @@ static int cxip_recv_sw_matcher(struct cxip_req *req)
 
 		ret = cxip_recv_sw_match(req, ux_send);
 		if (ret == FI_SUCCESS) {
-			CXIP_LOG_DBG("Software match, req: %p ux_send: %p\n",
-				     req, ux_send);
 			dlist_remove(&ux_send->ux_entry);
 			free(ux_send);
 			rxc->sw_ux_list_len--;
+
+			CXIP_LOG_DBG("Software match, req: %p ux_send: %p (sw_ux_list_len: %u)\n",
+				     req, ux_send, rxc->sw_ux_list_len);
+
 			ret = FI_SUCCESS;
 		} else {
 			ret = -FI_EAGAIN;
@@ -2340,6 +2560,37 @@ static int cxip_recv_sw_matcher(struct cxip_req *req)
 	}
 
 	return ret;
+}
+
+/*
+ * cxip_recv_req_dropped() - Mark the Received request dropped.
+ *
+ * If HW does not have sufficient LEs to perform an append, the command is
+ * dropped. Queue the request for replay. When all outstanding append commands
+ * complete, replay all Receives.
+ */
+static int cxip_recv_req_dropped(struct cxip_req *req)
+{
+	struct cxip_rxc *rxc = req->recv.rxc;
+	int ret;
+
+	fastlock_acquire(&rxc->lock);
+
+	rxc->append_disabled = true;
+
+	dlist_remove(&req->recv.rxc_entry);
+	dlist_insert_tail(&req->recv.rxc_entry, &rxc->replay_queue);
+
+	CXIP_LOG_DBG("Receive dropped: %p\n", req);
+
+	if (dlist_empty(&rxc->msg_queue)) {
+		ret = cxip_ux_onload(rxc);
+		assert(ret == FI_SUCCESS);
+	}
+
+	fastlock_release(&rxc->lock);
+
+	return FI_SUCCESS;
 }
 
 /*
@@ -2360,43 +2611,32 @@ static int cxip_recv_req_queue(struct cxip_req *req)
 	struct cxip_rxc *rxc = req->recv.rxc;
 	int ret;
 
-	fastlock_acquire(&rxc->lock);
+	/* Try to match against onloaded Sends first. */
+	ret = cxip_recv_sw_matcher(req);
+
+	if (ret == FI_SUCCESS) {
+		ret = -FI_EALREADY;
+		return ret;
+	}
+
+	if (ret != -FI_ENOMSG)
+		return ret;
 
 	/* Don't accept new Receives while there are message that need to be
 	 * replayed.
 	 */
-	if (!dlist_empty(&rxc->replay_queue)) {
-		ret = -FI_EAGAIN;
-		goto unlock;
-	}
+	if (rxc->append_disabled)
+		return -FI_EAGAIN;
 
 	/* Matching can't be performed while in the intermediate onloading
 	 * state. Wait until software completes building the UX Send list.
 	 */
-	if (rxc->pte_state == CXIP_PTE_ONLOADING) {
-		ret = -FI_EAGAIN;
-		goto unlock;
-	}
-
-	/* Try to match against onloaded Sends first. */
-	ret = cxip_recv_sw_matcher(req);
-	if (ret == FI_SUCCESS) {
-		ret = -FI_EALREADY;
-		goto unlock;
-	} else if (ret != -FI_ENOMSG) {
-		goto unlock;
-	}
+	if (rxc->searches_pending)
+		return -FI_EAGAIN;
 
 	dlist_insert_tail(&req->recv.rxc_entry, &rxc->msg_queue);
 
-	fastlock_release(&rxc->lock);
-
 	return FI_SUCCESS;
-
-unlock:
-	fastlock_release(&rxc->lock);
-
-	return ret;
 }
 
 /*
@@ -2426,6 +2666,7 @@ static void cxip_recv_req_dequeue(struct cxip_req *req)
 	fastlock_release(&rxc->lock);
 }
 #else
+static int cxip_recv_req_dropped(struct cxip_req *req) {return FI_SUCCESS;}
 static int cxip_recv_req_queue(struct cxip_req *req)  {return FI_SUCCESS;}
 static void cxip_recv_req_dequeue_nolock(struct cxip_req *req) {}
 static void cxip_recv_req_dequeue(struct cxip_req *req) {}
@@ -2587,9 +2828,11 @@ static ssize_t _cxip_recv(struct cxip_rxc *rxc, void *buf, size_t len,
 	/* Count Put, Rendezvous, and Reply events during offloaded RPut. */
 	req->recv.rdzv_events = 0;
 
+	fastlock_acquire(&rxc->lock);
 	ret = cxip_recv_req_queue(req);
+	fastlock_release(&rxc->lock);
 
-	/* Match made is software? */
+	/* Match made in software? */
 	if (ret == -FI_EALREADY)
 		return FI_SUCCESS;
 
@@ -3362,16 +3605,6 @@ static ssize_t _cxip_send_req(struct cxip_req *req)
 		return _cxip_send_eager(req);
 }
 
-struct cxip_fc_peer {
-	struct dlist_entry txc_entry;
-	struct cxip_txc *txc;
-	struct cxip_addr caddr;
-	uint8_t rxc_id;
-	struct dlist_entry msg_queue;
-	uint32_t pending;
-	uint32_t dropped;
-};
-
 /*
  * cxip_fc_peer_lookup() - Check if a peer is disabled.
  *
@@ -3407,24 +3640,45 @@ static struct cxip_fc_peer *cxip_fc_peer_lookup(struct cxip_txc *txc,
  */
 static void cxip_fc_peer_put(struct cxip_fc_peer *peer)
 {
+	int ret;
+
 	/* Account for the completed Send */
 	if (!--peer->pending) {
-#if 0
-		int ret;
+		peer->req.send.mb.drops = peer->dropped;
 
-		ret = cxip_fc_peer_notify(peer);
+		ret = cxip_ctrl_msg_send(&peer->req);
 		if (ret)
 			abort();
-#endif
 
-		CXIP_LOG_DBG("Notifying disabled peer, TXC: %p NIC: %#x PID: %u dropped: %u\n",
+		CXIP_LOG_DBG("Notified disabled peer, TXC: %p NIC: %#x PID: %u dropped: %u\n",
 			     peer->txc, peer->caddr.nic, peer->caddr.pid,
 			     peer->dropped);
 	}
 }
 
 /*
+ * cxip_fc_notify_cb() - Process FC notify completion events.
+ */
+int cxip_fc_notify_cb(struct cxip_ctrl_req *req, const union c_event *event)
+{
+	switch (event->hdr.event_type) {
+	case C_EVENT_ACK:
+		/* TODO handle error. Drops can happen. */
+		assert(cxi_event_rc(event) == C_RC_OK);
+		break;
+	default:
+		CXIP_LOG_ERROR("Unexpected event type: %d\n",
+			       event->hdr.event_type);
+		return FI_SUCCESS;
+	}
+
+	return FI_SUCCESS;
+}
+
+/*
  * cxip_fc_peer_init() - Mark a peer as disabled.
+ *
+ * Called by sending EP after experiencing first dropped Send to a peer.
  *
  * Allocate state to track the disabled peer. Locate all outstanding Sends
  * targeting the peer.
@@ -3450,6 +3704,16 @@ static int cxip_fc_peer_init(struct cxip_txc *txc, struct cxip_addr caddr,
 	dlist_init(&p->msg_queue);
 	dlist_insert_tail(&p->txc_entry, &txc->fc_peers);
 
+	p->req.send.nic_addr = caddr.nic;
+	p->req.send.pid = caddr.pid;
+	p->req.send.mb.txc_id = txc->tx_id;
+	p->req.send.mb.rxc_id = rxc_id;
+
+	p->req.send.mb.ctrl_le_type = CXIP_CTRL_LE_TYPE_CTRL_MSG;
+	p->req.send.mb.ctrl_msg_type = CXIP_CTRL_MSG_FC_NOTIFY;
+	p->req.cb = cxip_fc_notify_cb;
+	p->req.ep_obj = txc->ep_obj;
+
 	/* Queue all Sends to the FC'ed peer */
 	dlist_foreach_container_safe(&txc->msg_queue, struct cxip_req,
 				     req, send.txc_entry, tmp) {
@@ -3463,6 +3727,71 @@ static int cxip_fc_peer_init(struct cxip_txc *txc, struct cxip_addr caddr,
 	}
 
 	*peer = p;
+
+	return FI_SUCCESS;
+}
+
+/*
+ * cxip_fc_peer_fini() - Remove disabled peer state.
+ *
+ * Caller must hold txc->lock.
+ */
+static void cxip_fc_peer_fini(struct cxip_fc_peer *peer)
+{
+	assert(dlist_empty(&peer->msg_queue));
+	dlist_remove(&peer->txc_entry);
+	free(peer);
+}
+
+/*
+ * cxip_fc_resume() - Replay dropped Sends.
+ *
+ * Called by sending EP after being notified disabled peer was re-enabled.
+ *
+ * Replay all dropped Sends in order.
+ */
+int cxip_fc_resume(struct cxip_ep_obj *ep_obj, uint8_t txc_id,
+		   uint32_t nic_addr, uint32_t pid, uint8_t rxc_id)
+{
+	struct cxip_txc *txc = ep_obj->txcs[txc_id];
+	struct cxip_fc_peer *peer;
+	struct cxip_addr caddr = {
+		.nic = nic_addr,
+		.pid = pid,
+	};
+	struct cxip_req *req;
+	struct dlist_entry *tmp;
+	int ret;
+
+	fastlock_acquire(&txc->lock);
+
+	peer = cxip_fc_peer_lookup(txc, caddr, rxc_id);
+	if (!peer) {
+		CXIP_LOG_ERROR("FC peer not found: TXC: %u NIC: %#x PID: %d\n",
+			       txc_id, nic_addr, pid);
+		fastlock_release(&txc->lock);
+		return -FI_ENOENT;
+	}
+
+	CXIP_LOG_DBG("Replaying dropped sends, TXC: %u NIC: %#x PID: %d\n",
+		     txc_id, nic_addr, pid);
+
+	dlist_foreach_container_safe(&peer->msg_queue, struct cxip_req,
+				     req, send.txc_entry, tmp) {
+		ret = _cxip_send_req(req);
+		assert(ret == FI_SUCCESS);
+
+		/* Move request back to the message queue. */
+		dlist_remove(&req->send.txc_entry);
+		req->send.fc_peer = NULL;
+		dlist_insert_tail(&req->send.txc_entry, &txc->msg_queue);
+
+		CXIP_LOG_DBG("Replayed %p\n", req);
+	}
+
+	cxip_fc_peer_fini(peer);
+
+	fastlock_release(&txc->lock);
 
 	return FI_SUCCESS;
 }

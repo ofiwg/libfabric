@@ -243,6 +243,12 @@ enum cxip_le_type {
 
 enum cxip_ctrl_le_type {
 	CXIP_CTRL_LE_TYPE_MR = 0,	/* Memory Region LE */
+	CXIP_CTRL_LE_TYPE_CTRL_MSG,	/* Control Message LE */
+};
+
+enum cxip_ctrl_msg_type {
+	CXIP_CTRL_MSG_FC_NOTIFY = 0,
+	CXIP_CTRL_MSG_FC_RESUME,
 };
 
 union cxip_match_bits {
@@ -264,8 +270,15 @@ union cxip_match_bits {
 	};
 	/* Control LE match bit format */
 	struct {
-		uint64_t mr_key       : 63;
+		uint64_t txc_id       : 8;
+		uint64_t rxc_id       : 8;
+		uint64_t drops        : 16;
+		uint64_t pad1         : 30;
 		uint64_t ctrl_le_type : 1;
+		uint64_t ctrl_msg_type: 1;
+	};
+	struct {
+		uint64_t mr_key       : 63;
 	};
 	uint64_t raw;
 };
@@ -569,6 +582,12 @@ struct cxip_ctrl_req_mr {
 	struct cxip_mr *mr;
 };
 
+struct cxip_ctrl_send {
+	uint32_t nic_addr;
+	uint32_t pid;
+	union cxip_match_bits mb;
+};
+
 struct cxip_ctrl_req {
 	struct dlist_entry ep_entry;
 	struct cxip_ep_obj *ep_obj;
@@ -577,7 +596,30 @@ struct cxip_ctrl_req {
 
 	union {
 		struct cxip_ctrl_req_mr mr;
+		struct cxip_ctrl_send send;
 	};
+};
+
+struct cxip_fc_peer {
+	struct dlist_entry txc_entry;
+	struct cxip_txc *txc;
+	struct cxip_ctrl_req req;
+	struct cxip_addr caddr;
+	uint8_t rxc_id;
+	struct dlist_entry msg_queue;
+	uint32_t pending;
+	uint32_t dropped;
+};
+
+struct cxip_fc_drops {
+	struct dlist_entry rxc_entry;
+	struct cxip_rxc *rxc;
+	struct cxip_ctrl_req req;
+	uint32_t nic_addr;
+	uint32_t pid;
+	uint8_t txc_id;
+	uint8_t rxc_id;
+	uint16_t drops;
 };
 
 /**
@@ -670,13 +712,6 @@ struct cxip_oflow_buf {
 	int buffer_id;
 };
 
-enum cxip_pte_state {
-	CXIP_PTE_DISABLED = 1,
-	CXIP_PTE_ENABLED,
-	CXIP_PTE_ONLOADING,
-	CXIP_PTE_ONLOADED,
-};
-
 /**
  * Receive Context
  *
@@ -706,7 +741,7 @@ struct cxip_rxc {
 	bool selective_completion;
 
 	struct cxip_pte *rx_pte;	// HW RX Queue
-	enum cxip_pte_state pte_state;
+	enum c_ptlte_state pte_state;
 	bool disabling;
 	struct cxip_cmdq *rx_cmdq;	// RX CMDQ for posting receive buffers
 	struct cxip_cmdq *tx_cmdq;	// TX CMDQ for Message Gets
@@ -733,8 +768,12 @@ struct cxip_rxc {
 	ofi_atomic32_t sink_le_linked;
 	struct cxip_oflow_buf sink_le;		// Long UX sink buffer
 
+	struct dlist_entry fc_drops;
 	struct dlist_entry msg_queue;
 	struct dlist_entry replay_queue;
+	bool append_disabled;
+	bool enable_pending;
+	int searches_pending;
 	struct dlist_entry sw_ux_list;
 	int sw_ux_list_len;
 };
@@ -785,7 +824,7 @@ struct cxip_txc {
 
 	/* Software Rendezvous related structures */
 	struct cxip_pte *rdzv_pte;	// PTE for SW Rendezvous commands
-	enum cxip_pte_state pte_state;
+	enum c_ptlte_state pte_state;
 	int rdzv_threshold;
 	struct cxip_cmdq *rx_cmdq;	// Target cmdq for Rendezvous buffers
 	ofi_atomic32_t rdzv_src_lacs;	// Bitmask of LACs
@@ -869,6 +908,7 @@ struct cxip_ep_obj {
 	struct cxip_pte *ctrl_pte;
 	struct indexer req_ids;
 	struct dlist_entry mr_list;
+	struct cxip_ctrl_req ctrl_msg_req;
 };
 
 /**
@@ -1067,12 +1107,17 @@ void cxip_ep_cmdq_put(struct cxip_ep_obj *ep_obj, uint32_t ctx_id,
 		      bool transmit);
 
 int cxip_recv_cancel(struct cxip_req *req);
+int cxip_fc_process_drops(struct cxip_ep_obj *ep_obj, uint8_t rxc_id,
+			  uint32_t nic_addr, uint32_t pid, uint8_t txc_id,
+			  uint16_t drops);
 void cxip_recv_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state);
 int cxip_rxc_oflow_init(struct cxip_rxc *rxc);
 void cxip_rxc_oflow_fini(struct cxip_rxc *rxc);
 int cxip_txc_zbp_init(struct cxip_txc *txc);
 int cxip_txc_zbp_fini(struct cxip_txc *txc);
 int cxip_txc_rdzv_src_fini(struct cxip_txc *txc);
+int cxip_fc_resume(struct cxip_ep_obj *ep_obj, uint8_t txc_id,
+		   uint32_t nic_addr, uint32_t pid, uint8_t rxc_id);
 
 struct cxip_txc *cxip_txc_alloc(const struct fi_tx_attr *attr, void *context,
 				int use_shared);
@@ -1080,9 +1125,10 @@ int cxip_txc_enable(struct cxip_txc *txc);
 struct cxip_txc *cxip_stx_alloc(const struct fi_tx_attr *attr, void *context);
 void cxip_txc_free(struct cxip_txc *txc);
 
+int cxip_rxc_msg_enable(struct cxip_rxc *rxc, uint32_t drop_count);
+int cxip_rxc_enable(struct cxip_rxc *rxc);
 struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr,
 				      void *context, int use_shared);
-int cxip_rxc_enable(struct cxip_rxc *rxc);
 void cxip_rxc_free(struct cxip_rxc *rxc);
 
 int cxip_cq_req_cancel(struct cxip_cq *cq, void *req_ctx, void *op_ctx,
@@ -1114,6 +1160,7 @@ int cxip_map(struct cxip_domain *dom, const void *buf, unsigned long len,
 	     struct cxip_md **md);
 void cxip_unmap(struct cxip_md *md);
 
+int cxip_ctrl_msg_send(struct cxip_ctrl_req *req);
 void cxip_ep_ctrl_progress(struct cxip_ep_obj *ep_obj);
 int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj);
 void cxip_ep_ctrl_fini(struct cxip_ep_obj *ep_obj);

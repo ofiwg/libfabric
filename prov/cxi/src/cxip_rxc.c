@@ -26,7 +26,7 @@
  *
  * Caller must hold rxc->lock.
  */
-static int rxc_msg_enable(struct cxip_rxc *rxc)
+int cxip_rxc_msg_enable(struct cxip_rxc *rxc, uint32_t drop_count)
 {
 	int ret;
 	union c_cmdu cmd = {};
@@ -34,6 +34,7 @@ static int rxc_msg_enable(struct cxip_rxc *rxc)
 	cmd.command.opcode = C_CMD_TGT_SETSTATE;
 	cmd.set_state.ptlte_index = rxc->rx_pte->pte->ptn;
 	cmd.set_state.ptlte_state = C_PTLTE_ENABLED;
+	cmd.set_state.drop_count = drop_count;
 
 	fastlock_acquire(&rxc->rx_cmdq->lock);
 
@@ -49,13 +50,7 @@ static int rxc_msg_enable(struct cxip_rxc *rxc)
 
 	fastlock_release(&rxc->rx_cmdq->lock);
 
-	/* Wait for PTE state change */
-	do {
-		sched_yield();
-		cxip_cq_progress(rxc->recv_cq);
-	} while (rxc->pte_state != CXIP_PTE_ENABLED);
-
-	CXIP_LOG_DBG("RXC PtlTE enabled: %p\n", rxc);
+	rxc->enable_pending = true;
 
 	return FI_SUCCESS;
 }
@@ -98,7 +93,7 @@ static int rxc_msg_disable(struct cxip_rxc *rxc)
 	do {
 		sched_yield();
 		cxip_cq_progress(rxc->recv_cq);
-	} while (rxc->pte_state != CXIP_PTE_DISABLED);
+	} while (rxc->pte_state != C_PTLTE_DISABLED);
 
 	CXIP_LOG_DBG("RXC PtlTE disabled: %p\n", rxc);
 
@@ -240,11 +235,20 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 		}
 
 		/* Start accepting Puts. */
-		ret = rxc_msg_enable(rxc);
+		ret = cxip_rxc_msg_enable(rxc, 0);
 		if (ret != FI_SUCCESS) {
-			CXIP_LOG_DBG("rxc_msg_enable returned: %d\n", ret);
+			CXIP_LOG_DBG("cxip_rxc_msg_enable returned: %d\n",
+				     ret);
 			goto oflow_fini;
 		}
+
+		/* Wait for PTE state change */
+		do {
+			sched_yield();
+			cxip_cq_progress(rxc->recv_cq);
+		} while (rxc->pte_state != C_PTLTE_ENABLED);
+
+		CXIP_LOG_DBG("RXC messaging enabled: %p\n", rxc);
 	}
 
 	rxc->enabled = true;
@@ -276,6 +280,8 @@ static void rxc_cleanup(struct cxip_rxc *rxc)
 	int ret;
 	uint64_t start;
 	int canceled = 0;
+	struct cxip_fc_drops *fc_drops;
+	struct dlist_entry *tmp;
 
 	if (!ofi_atomic_get32(&rxc->orx_reqs))
 		return;
@@ -300,6 +306,12 @@ static void rxc_cleanup(struct cxip_rxc *rxc)
 			CXIP_LOG_ERROR("Timeout waiting for outstanding requests.\n");
 			break;
 		}
+	}
+
+	dlist_foreach_container_safe(&rxc->fc_drops, struct cxip_fc_drops,
+				     fc_drops, rxc_entry, tmp) {
+		dlist_remove(&fc_drops->rxc_entry);
+		free(fc_drops);
 	}
 }
 
@@ -376,10 +388,11 @@ struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr, void *context,
 	dlist_init(&rxc->ux_rdzv_sends);
 	dlist_init(&rxc->ux_rdzv_recvs);
 	ofi_atomic_initialize32(&rxc->sink_le_linked, 0);
+	dlist_init(&rxc->fc_drops);
 	dlist_init(&rxc->msg_queue);
 	dlist_init(&rxc->replay_queue);
 	dlist_init(&rxc->sw_ux_list);
-	rxc->pte_state = CXIP_PTE_DISABLED;
+	rxc->pte_state = C_PTLTE_DISABLED;
 	rxc->disabling = false;
 
 	rxc->rdzv_threshold = cxip_env.rdzv_threshold;
