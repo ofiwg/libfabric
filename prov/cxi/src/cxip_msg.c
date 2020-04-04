@@ -2513,7 +2513,7 @@ static ssize_t _cxip_recv(struct cxip_rxc *rxc, void *buf, size_t len,
 	if (rxc->attr.caps & FI_DIRECTED_RECV &&
 	    src_addr != FI_ADDR_UNSPEC) {
 		if (rxc->ep_obj->av->attr.flags & FI_SYMMETRIC) {
-			match_id = CXI_MATCH_ID(pid_bits, 0, src_addr);
+			match_id = CXI_MATCH_ID(pid_bits, caddr.pid, src_addr);
 		} else {
 			ret = _cxip_av_lookup(rxc->ep_obj->av, src_addr,
 					      &caddr);
@@ -2645,7 +2645,8 @@ static uint32_t cxip_msg_match_id(struct cxip_txc *txc)
 	int pid_bits = txc->domain->iface->dev->info.pid_bits;
 
 	if (txc->ep_obj->av->attr.flags & FI_SYMMETRIC)
-		return CXI_MATCH_ID(pid_bits, 0, _txc_fi_addr(txc));
+		return CXI_MATCH_ID(pid_bits, txc->ep_obj->src_addr.pid,
+				    _txc_fi_addr(txc));
 
 	return CXI_MATCH_ID(pid_bits, txc->ep_obj->src_addr.pid,
 			    txc->ep_obj->src_addr.nic);
