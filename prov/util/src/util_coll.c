@@ -1030,18 +1030,13 @@ int ofi_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 
 	join_op->data.join.new_mc = new_coll_mc;
 
-	if (new_coll_mc->local_rank != FI_ADDR_NOTAVAIL) {
-		ret = ofi_bitmask_create(&join_op->data.join.data, OFI_MAX_GROUP_ID);
-		if (ret)
-			goto err2;
+	ret = ofi_bitmask_create(&join_op->data.join.data, OFI_MAX_GROUP_ID);
+	if (ret)
+		goto err2;
 
-		ret = ofi_bitmask_create(&join_op->data.join.tmp, OFI_MAX_GROUP_ID);
-		if (ret)
-			goto err3;
-
-	} else {
-		ofi_bitmask_set_all(&join_op->data.join.data);
-	}
+	ret = ofi_bitmask_create(&join_op->data.join.tmp, OFI_MAX_GROUP_ID);
+	if (ret)
+		goto err3;
 
 	ret = util_coll_allreduce(join_op, util_ep->coll_cid_mask->bytes,
 				  join_op->data.join.data.bytes,
