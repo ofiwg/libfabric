@@ -42,7 +42,7 @@ static int smr_progress_resp_entry(struct smr_ep *ep, struct smr_tx_entry *pendi
 {
 	struct smr_region *peer_smr;
 	size_t inj_offset, size;
-	struct smr_inject_buf *tx_buf;
+	struct smr_inject_buf *tx_buf = NULL;
 	uint8_t *src;
 
 	peer_smr = smr_peer_region(ep->region, pending->addr);
@@ -51,7 +51,7 @@ static int smr_progress_resp_entry(struct smr_ep *ep, struct smr_tx_entry *pendi
 
 	switch (pending->cmd.msg.hdr.op_src) {
 	case smr_src_iov:
-		goto out;
+		break;
 	case smr_src_mmap:
 		if (pending->cmd.msg.hdr.op == ofi_op_read_req) {
 			if (!*ret) {
@@ -70,13 +70,12 @@ static int smr_progress_resp_entry(struct smr_ep *ep, struct smr_tx_entry *pendi
 		shm_unlink(pending->map_name->name);
 		dlist_remove(&pending->map_name->entry);
 		free(pending->map_name);
-		goto out;
+		break;
 	case smr_src_inject:
 		inj_offset = (size_t) pending->cmd.msg.hdr.src_data;
 		tx_buf = smr_get_ptr(peer_smr, inj_offset);
-
 		if (*ret)
-			goto push;
+			break;
 
 		src = pending->cmd.msg.hdr.op == ofi_op_atomic_compare ?
 		      tx_buf->buf : tx_buf->data;
@@ -92,12 +91,11 @@ static int smr_progress_resp_entry(struct smr_ep *ep, struct smr_tx_entry *pendi
 	default:
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"unidentified operation type\n");
-		goto out;
 	}
-push:
-	smr_freestack_push(smr_inject_pool(peer_smr), tx_buf);
-out:
+
 	peer_smr->cmd_cnt++;
+	if (tx_buf)
+		smr_freestack_push(smr_inject_pool(peer_smr), tx_buf);
 	fastlock_release(&peer_smr->lock);
 	return 0;
 }
