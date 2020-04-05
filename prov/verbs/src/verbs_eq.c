@@ -928,9 +928,11 @@ vrb_eq_cm_process_event(struct vrb_eq *eq,
 		ep = container_of(fid, struct vrb_ep, util_ep.ep_fid);
 		assert(ep->info);
 		if (vrb_is_xrc(ep->info)) {
-			/* SIDR Reject is reported as UNREACHABLE */
+			/* SIDR Reject is reported as UNREACHABLE unless
+			 * status is negative */
 			if (cma_event->id->ps == RDMA_PS_UDP &&
-			    cma_event->event == RDMA_CM_EVENT_UNREACHABLE)
+			    (cma_event->event == RDMA_CM_EVENT_UNREACHABLE &&
+			     cma_event->status >= 0))
 				goto xrc_shared_reject;
 
 			ret = vrb_eq_xrc_cm_err_event(eq, cma_event, &acked);
