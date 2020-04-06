@@ -250,6 +250,8 @@ void smr_format_pend_resp(struct smr_tx_entry *pend, struct smr_cmd *cmd,
 	memcpy(pend->iov, iov, sizeof(*iov) * iov_count);
 	pend->iov_count = iov_count;
 	pend->addr = id;
+	if (cmd->msg.hdr.op_src != smr_src_sar)
+		pend->bytes_done = 0;
 
 	resp->msg_id = (uint64_t) (uintptr_t) pend;
 	resp->status = FI_EBUSY;

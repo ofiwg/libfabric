@@ -62,7 +62,7 @@ static int smr_progress_resp_entry(struct smr_ep *ep, struct smr_resp *resp,
 				   struct smr_tx_entry *pending, uint64_t *err)
 {
 	struct smr_region *peer_smr;
-	size_t inj_offset, size;
+	size_t inj_offset;
 	struct smr_inject_buf *tx_buf = NULL;
 	struct smr_sar_msg *sar_msg = NULL;
 	uint8_t *src;
@@ -97,11 +97,11 @@ static int smr_progress_resp_entry(struct smr_ep *ep, struct smr_resp *resp,
 	case smr_src_mmap:
 		if (pending->cmd.msg.hdr.op == ofi_op_read_req) {
 			if (!*err) {
-				size = ofi_copy_to_iov(pending->iov,
+				pending->bytes_done = ofi_copy_to_iov(pending->iov,
 						pending->iov_count, 0,
 						pending->map_ptr,
 						pending->cmd.msg.hdr.size);
-				if (size != pending->cmd.msg.hdr.size) {
+				if (pending->bytes_done != pending->cmd.msg.hdr.size) {
 					FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 						"Incomplete copy from mmapped file\n");
 					*err = -FI_EIO;
@@ -121,10 +121,10 @@ static int smr_progress_resp_entry(struct smr_ep *ep, struct smr_resp *resp,
 
 		src = pending->cmd.msg.hdr.op == ofi_op_atomic_compare ?
 		      tx_buf->buf : tx_buf->data;
-		size = ofi_copy_to_iov(pending->iov, pending->iov_count,
+		pending->bytes_done = ofi_copy_to_iov(pending->iov, pending->iov_count,
 				       0, src, pending->cmd.msg.hdr.size);
 
-		if (size != pending->cmd.msg.hdr.size) {
+		if (pending->bytes_done != pending->cmd.msg.hdr.size) {
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 				"Incomplete rma read/fetch buffer copied\n");
 			*err = FI_EIO;
