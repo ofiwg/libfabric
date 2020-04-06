@@ -199,13 +199,13 @@ static int smr_progress_iov(struct smr_cmd *cmd, struct iovec *iov,
 	}
 
 	if (cmd->msg.hdr.op == ofi_op_read_req) {
-		ret = process_vm_writev(peer_smr->pid, iov, iov_count,
-					cmd->msg.data.iov,
-					cmd->msg.data.iov_count, 0);
+		ret = ofi_process_vm_writev(peer_smr->pid, iov, iov_count,
+					    cmd->msg.data.iov,
+					    cmd->msg.data.iov_count, 0);
 	} else {
-		ret = process_vm_readv(peer_smr->pid, iov, iov_count,
-				       cmd->msg.data.iov,
-				       cmd->msg.data.iov_count, 0);
+		ret = ofi_process_vm_readv(peer_smr->pid, iov, iov_count,
+					   cmd->msg.data.iov,
+					   cmd->msg.data.iov_count, 0);
 	}
 
 	if (ret != cmd->msg.hdr.size) {

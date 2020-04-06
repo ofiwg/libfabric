@@ -9,7 +9,7 @@ dnl $2: action if not configured successfully
 dnl
 AC_DEFUN([FI_PSM2_CONFIGURE],[
 	 # Determine if we can support the psm2 provider
-	 psm2_ARCH=`uname -m | sed -e 's,\(i[456]86\|athlon$$\),i386,'`
+	 psm2_ARCH=$host_cpu
 	 AM_CONDITIONAL([HAVE_PSM2_X86_64], [test x$psm2_ARCH = xx86_64])
 	 AC_SUBST([HAVE_PSM2_X86_64])
 	 AC_SUBST([psm2_ARCH])

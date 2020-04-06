@@ -71,11 +71,11 @@ ssize_t smr_rma_fast(struct smr_region *peer_smr, struct smr_cmd *cmd,
 	total_len = ofi_total_iov_len(iov, iov_count);
 
 	if (op == ofi_op_write) {
-		ret = process_vm_writev(peer_smr->pid, iov, iov_count,
-					rma_iovec, rma_count, 0);
+		ret = ofi_process_vm_writev(peer_smr->pid, iov, iov_count,
+					    rma_iovec, rma_count, 0);
 	} else {
-		ret = process_vm_readv(peer_smr->pid, iov, iov_count,
-				       rma_iovec, rma_count, 0);
+		ret = ofi_process_vm_readv(peer_smr->pid, iov, iov_count,
+					   rma_iovec, rma_count, 0);
 	}
 
 	if (ret != total_len) {

@@ -95,4 +95,34 @@ static inline int ofi_hugepage_enabled(void)
 
 size_t ofi_ifaddr_get_speed(struct ifaddrs *ifa);
 
+#ifndef __NR_process_vm_readv
+# define __NR_process_vm_readv 310
+#endif
+
+#ifndef __NR_process_vm_writev
+# define __NR_process_vm_writev 311
+#endif
+
+static inline ssize_t ofi_process_vm_readv(pid_t pid,
+			const struct iovec *local_iov,
+			unsigned long liovcnt,
+			const struct iovec *remote_iov,
+			unsigned long riovcnt,
+			unsigned long flags)
+{
+	return syscall(__NR_process_vm_readv, pid, local_iov, liovcnt,
+		       remote_iov, riovcnt, flags);
+}
+
+static inline size_t ofi_process_vm_writev(pid_t pid,
+			 const struct iovec *local_iov,
+			 unsigned long liovcnt,
+			 const struct iovec *remote_iov,
+			 unsigned long riovcnt,
+			 unsigned long flags)
+{
+	return syscall(__NR_process_vm_writev, pid, local_iov, liovcnt,
+		       remote_iov, riovcnt, flags);
+}
+
 #endif /* _LINUX_OSD_H_ */

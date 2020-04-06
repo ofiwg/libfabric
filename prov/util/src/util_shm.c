@@ -76,8 +76,8 @@ void smr_cma_check(struct smr_region *smr, struct smr_region *peer_smr)
 	remote_iov.iov_base = (char *)peer_smr->base_addr +
 			      ((char *)&peer_smr->cma_cap - (char *)peer_smr);
 	remote_iov.iov_len = sizeof(peer_smr->cma_cap);
-	ret = process_vm_writev(peer_smr->pid, &local_iov, 1,
-				&remote_iov, 1, 0);
+	ret = ofi_process_vm_writev(peer_smr->pid, &local_iov, 1,
+				    &remote_iov, 1, 0);
 	smr->cma_cap = (ret == -1) ? SMR_CMA_CAP_OFF : SMR_CMA_CAP_ON;
 	peer_smr->cma_cap = smr->cma_cap;
 }
