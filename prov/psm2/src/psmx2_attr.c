@@ -115,7 +115,7 @@ static struct fi_domain_attr psmx2_domain_attr = {
 
 static struct fi_fabric_attr psmx2_fabric_attr = {
 	.name			= PSMX2_FABRIC_NAME,
-	.prov_version		= PSMX2_VERSION,
+	.prov_version		= OFI_VERSION_DEF_PROV,
 };
 
 static struct fi_info psmx2_prov_info = {

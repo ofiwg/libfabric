@@ -78,7 +78,7 @@ static struct fi_ops_fabric psmx2_fabric_ops = {
 
 static struct fi_fabric_attr psmx2_fabric_attr = {
 	.name = PSMX2_FABRIC_NAME,
-	.prov_version = PSMX2_VERSION,
+	.prov_version = OFI_VERSION_DEF_PROV,
 };
 
 int psmx2_fabric(struct fi_fabric_attr *attr,

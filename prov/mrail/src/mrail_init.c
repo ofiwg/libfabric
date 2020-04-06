@@ -426,8 +426,7 @@ static struct fi_info *mrail_get_prefix_info(struct fi_info *core_info, int id)
 
 	fi->ep_attr->protocol		= mrail_info.ep_attr->protocol;
 	fi->ep_attr->protocol_version	= mrail_info.ep_attr->protocol_version;
-	fi->fabric_attr->prov_version	= FI_VERSION(MRAIL_MAJOR_VERSION,
-						     MRAIL_MINOR_VERSION);
+	fi->fabric_attr->prov_version	= OFI_VERSION_DEF_PROV;
 	fi->domain_attr->mr_key_size	= (num_rails *
 					   sizeof(struct mrail_addr_key));
 	fi->domain_attr->mr_mode	|= FI_MR_RAW;
@@ -525,7 +524,7 @@ static void mrail_fini(void)
 
 struct fi_provider mrail_prov = {
 	.name = OFI_UTIL_PREFIX "mrail",
-	.version = FI_VERSION(MRAIL_MAJOR_VERSION, MRAIL_MINOR_VERSION),
+	.version = OFI_VERSION_DEF_PROV,
 	.fi_version = OFI_VERSION_LATEST,
 	.getinfo = mrail_getinfo,
 	.fabric = mrail_fabric_open,

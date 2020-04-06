@@ -48,8 +48,6 @@
 extern "C" {
 #endif /* __cplusplus */
 
-#define OFI_ND_MAJOR_VERSION 1
-#define OFI_ND_MINOR_VERSION 0
 
 #define ND_MSG_IOV_LIMIT		(256)
 #define ND_MSG_INTERNAL_IOV_LIMIT	(512)

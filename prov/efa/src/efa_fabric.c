@@ -91,7 +91,7 @@ const struct fi_fabric_attr efa_fabric_attr = {
 	.fabric		= NULL,
 	.name		= NULL,
 	.prov_name	= NULL,
-	.prov_version	= EFA_PROV_VERS,
+	.prov_version	= OFI_VERSION_DEF_PROV,
 };
 
 const struct fi_domain_attr efa_domain_attr = {
@@ -960,7 +960,7 @@ static void fi_efa_fini(void)
 
 struct fi_provider efa_prov = {
 	.name = EFA_PROV_NAME,
-	.version = EFA_PROV_VERS,
+	.version = OFI_VERSION_DEF_PROV,
 	.fi_version = OFI_VERSION_LATEST,
 	.getinfo = efa_getinfo,
 	.fabric = efa_fabric,

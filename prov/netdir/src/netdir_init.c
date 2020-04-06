@@ -47,7 +47,7 @@ const char ofi_nd_prov_name[] = "netdir";
 
 struct fi_provider ofi_nd_prov = {
 	.name = ofi_nd_prov_name,
-	.version = FI_VERSION(OFI_ND_MAJOR_VERSION, OFI_ND_MINOR_VERSION),
+	.version = OFI_VERSION_DEF_PROV,
 	.fi_version = OFI_VERSION_LATEST,
 	.getinfo = ofi_nd_getinfo,
 	.fabric = ofi_nd_fabric,
@@ -138,7 +138,7 @@ static int ofi_nd_adapter_cb(const ND2_ADAPTER_INFO *adapter, const char *name)
 	info->domain_attr->mr_cnt = OFI_ND_MAX_MR_CNT;
 
 	info->fabric_attr->name = strdup(ofi_nd_prov_name);
-	info->fabric_attr->prov_version = FI_VERSION(OFI_ND_MAJOR_VERSION, OFI_ND_MINOR_VERSION);
+	info->fabric_attr->prov_version = OFI_VERSION_DEF_PROV;
 
 	info->caps = OFI_ND_EP_CAPS | OFI_ND_DOMAIN_CAPS;
 	info->addr_format = FI_SOCKADDR;

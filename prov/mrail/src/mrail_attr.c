@@ -94,7 +94,7 @@ struct fi_domain_attr mrail_domain_attr = {
 };
 
 struct fi_fabric_attr mrail_fabric_attr = {
-	.prov_version = FI_VERSION(MRAIL_MAJOR_VERSION, MRAIL_MINOR_VERSION),
+	.prov_version = OFI_VERSION_DEF_PROV,
 	.name = "ofi_mrail_fabric",
 };
 

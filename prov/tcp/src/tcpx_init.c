@@ -78,7 +78,7 @@ static void fi_tcp_fini(void)
 
 struct fi_provider tcpx_prov = {
 	.name = "tcp",
-	.version = FI_VERSION(TCPX_MAJOR_VERSION,TCPX_MINOR_VERSION),
+	.version = OFI_VERSION_DEF_PROV,
 	.fi_version = OFI_VERSION_LATEST,
 	.getinfo = tcpx_getinfo,
 	.fabric = tcpx_create_fabric,

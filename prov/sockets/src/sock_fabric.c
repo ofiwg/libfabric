@@ -323,7 +323,7 @@ static void fi_sockets_fini(void)
 
 struct fi_provider sock_prov = {
 	.name = sock_prov_name,
-	.version = FI_VERSION(SOCK_MAJOR_VERSION, SOCK_MINOR_VERSION),
+	.version = OFI_VERSION_DEF_PROV,
 	.fi_version = OFI_VERSION_LATEST,
 	.getinfo = sock_getinfo,
 	.fabric = sock_fabric,

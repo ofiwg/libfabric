@@ -70,8 +70,8 @@
 
 struct fi_provider core_prov = {
 	.name = "core",
-	.version = 1,
-	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION)
+	.version = OFI_VERSION_DEF_PROV,
+	.fi_version = OFI_VERSION_LATEST
 };
 
 struct ofi_common_locks common_locks = {

@@ -81,7 +81,7 @@ struct fi_domain_attr udpx_domain_attr = {
 
 struct fi_fabric_attr udpx_fabric_attr = {
 	.name = "UDP-IP",
-	.prov_version = FI_VERSION(UDPX_MAJOR_VERSION, UDPX_MINOR_VERSION)
+	.prov_version = OFI_VERSION_DEF_PROV
 };
 
 struct fi_info udpx_info = {

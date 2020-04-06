@@ -99,7 +99,7 @@ struct fi_domain_attr rxm_domain_attr = {
 };
 
 struct fi_fabric_attr rxm_fabric_attr = {
-	.prov_version = FI_VERSION(RXM_MAJOR_VERSION, RXM_MINOR_VERSION),
+	.prov_version = OFI_VERSION_DEF_PROV,
 };
 
 struct fi_info rxm_info = {

@@ -67,7 +67,6 @@
 
 #include "rxr.h"
 #define EFA_PROV_NAME "efa"
-#define EFA_PROV_VERS FI_VERSION(3, 0)
 
 #define EFA_WARN(subsys, ...) FI_WARN(&efa_prov, subsys, __VA_ARGS__)
 #define EFA_TRACE(subsys, ...) FI_TRACE(&efa_prov, subsys, __VA_ARGS__)

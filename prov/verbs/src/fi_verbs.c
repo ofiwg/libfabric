@@ -78,7 +78,7 @@ struct vrb_dev_preset {
 
 struct fi_provider vrb_prov = {
 	.name = VERBS_PROV_NAME,
-	.version = VERBS_PROV_VERS,
+	.version = OFI_VERSION_DEF_PROV,
 	.fi_version = OFI_VERSION_LATEST,
 	.getinfo = vrb_getinfo,
 	.fabric = vrb_fabric,
