@@ -104,7 +104,15 @@ install:
     - make install
     - make test
     - make distcheck
-    - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then make rpm; fi
+    # We don't want to use LIBFABRIC_CONFIGURE_ARGS here as the standard
+    # prefix should be tested when building the RPM.
+    - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
+        make dist;
+        config_options="--enable-efa=$RDMA_CORE_PATH
+                        --enable-verbs=$RDMA_CORE_PATH --enable-usnic";
+        LDFLAGS=-Wl,--build-id rpmbuild -ta
+          --define "configopts $config_options" libfabric-*.tar.bz2;
+      fi
 
 script:
     - cd fabtests
