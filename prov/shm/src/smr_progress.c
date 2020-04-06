@@ -66,17 +66,19 @@ static int smr_progress_resp_entry(struct smr_ep *ep, struct smr_resp *resp,
 	struct smr_inject_buf *tx_buf = NULL;
 	struct smr_sar_msg *sar_msg = NULL;
 	uint8_t *src;
-	int ret = 0;
 
 	peer_smr = smr_peer_region(ep->region, pending->addr);
-	if (fastlock_tryacquire(&peer_smr->lock))
-		return -FI_EAGAIN;
 
 	switch (pending->cmd.msg.hdr.op_src) {
 	case smr_src_iov:
 		break;
 	case smr_src_sar:
 		sar_msg = smr_get_ptr(peer_smr, pending->cmd.msg.data.sar);
+		if (pending->bytes_done == pending->cmd.msg.hdr.size &&
+		    sar_msg->sar[0].status == SMR_SAR_FREE &&
+		    sar_msg->sar[1].status == SMR_SAR_FREE)
+			break;
+
 		if (pending->cmd.msg.hdr.op == ofi_op_read_req)
 			smr_try_progress_from_sar(sar_msg, resp,
 					&pending->cmd, pending->iov,
@@ -89,12 +91,12 @@ static int smr_progress_resp_entry(struct smr_ep *ep, struct smr_resp *resp,
 					&pending->next);
 		if (pending->bytes_done != pending->cmd.msg.hdr.size ||
 		    sar_msg->sar[0].status != SMR_SAR_FREE ||
-		    sar_msg->sar[1].status != SMR_SAR_FREE) {
-			ret = -FI_EAGAIN;
-			goto out;
-		}
+		    sar_msg->sar[1].status != SMR_SAR_FREE)
+			return -FI_EAGAIN;
 		break;
 	case smr_src_mmap:
+		if (!pending->map_name)
+			break;
 		if (pending->cmd.msg.hdr.op == ofi_op_read_req) {
 			if (!*err) {
 				pending->bytes_done = ofi_copy_to_iov(pending->iov,
@@ -112,11 +114,12 @@ static int smr_progress_resp_entry(struct smr_ep *ep, struct smr_resp *resp,
 		shm_unlink(pending->map_name->name);
 		dlist_remove(&pending->map_name->entry);
 		free(pending->map_name);
+		pending->map_name = NULL;
 		break;
 	case smr_src_inject:
 		inj_offset = (size_t) pending->cmd.msg.hdr.src_data;
 		tx_buf = smr_get_ptr(peer_smr, inj_offset);
-		if (*err)
+		if (*err || pending->bytes_done == pending->cmd.msg.hdr.size)
 			break;
 
 		src = pending->cmd.msg.hdr.op == ofi_op_atomic_compare ?
@@ -134,6 +137,10 @@ static int smr_progress_resp_entry(struct smr_ep *ep, struct smr_resp *resp,
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"unidentified operation type\n");
 	}
+
+	if (fastlock_tryacquire(&peer_smr->lock))
+		return -FI_EAGAIN;
+
 	peer_smr->cmd_cnt++;
 	if (tx_buf) {
 		smr_freestack_push(smr_inject_pool(peer_smr), tx_buf);
@@ -142,9 +149,9 @@ static int smr_progress_resp_entry(struct smr_ep *ep, struct smr_resp *resp,
 		peer_smr->sar_cnt++;
 		smr_peer_data(ep->region)[pending->addr].sar_status = 0;
 	}
-out:
+
 	fastlock_release(&peer_smr->lock);
-	return ret;
+	return 0;
 }
 
 static void smr_progress_resp(struct smr_ep *ep)
