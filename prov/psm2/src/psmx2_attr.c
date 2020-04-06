@@ -268,11 +268,8 @@ alloc_info:
 			"TAG60 instance included\n");
 	}
 
-	/*
-	 * Special arrangement to help auto tag layout selection.
-	 * See psmx2_alter_prov_info().
-	 */
-	if (!hints) {
+	if (!hints || !hints->domain_attr ||
+	    !hints->domain_attr->cq_data_size) {
 		info_new = fi_dupinfo(&psmx2_prov_info);
 		if (info_new) {
 			/* 64 bit tag, no CQ data */
@@ -441,14 +438,6 @@ void psmx2_alter_prov_info(uint32_t api_version,
 		if (hints && hints->caps && !(hints->caps & FI_TRIGGER))
 			info->caps &= ~FI_TRIGGER;
 
-		/*
-		 * Special arrangement for auto tag layout selection.
-		 * See psmx2_init_prov_info(). Set this flag to allow
-		 * follow-up fi_getinfo() calls to pick the same tag
-		 * layout by copying caps from this instance without
-		 * setting the cq_data_size field. Notice that the flag
-		 * may be cleared by ofi_alter_info().
-		 */
 		if (info->domain_attr->cq_data_size)
 			cq_data_cnt++;
 
