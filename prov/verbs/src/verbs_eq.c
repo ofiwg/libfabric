@@ -694,12 +694,20 @@ static inline int
 vrb_eq_xrc_connect_retry(struct vrb_xrc_ep *ep,
 			 struct rdma_cm_event *cma_event, int *acked)
 {
+	if (ep->base_ep.info->src_addr)
+		ofi_straddr_dbg(&vrb_prov, FI_LOG_EP_CTRL,
+				"Connect retry src ",
+				ep->base_ep.info->src_addr);
+	if (ep->base_ep.info->dest_addr)
+		ofi_straddr_dbg(&vrb_prov, FI_LOG_EP_CTRL,
+				"Connect retry dest ",
+				ep->base_ep.info->dest_addr);
+
 	*acked = 1;
 	rdma_ack_cm_event(cma_event);
 	rdma_destroy_id(ep->base_ep.id);
 	ep->base_ep.id = NULL;
 	vrb_eq_clear_xrc_conn_tag(ep);
-
 	ep->conn_setup->retry_count++;
 	return vrb_connect_xrc(ep, NULL, ep->conn_setup->pending_recip,
 			       ep->conn_setup->pending_param,
@@ -737,11 +745,8 @@ vrb_eq_xrc_cm_err_event(struct vrb_eq *eq,
 		if (ep->conn_setup && (ep->conn_setup->retry_count <
 				       VRB_MAX_XRC_CONNECT_RETRIES)) {
 			ret = vrb_eq_xrc_connect_retry(ep, cma_event, acked);
-			if (!ret) {
-				VERBS_DBG(FI_LOG_EP_CTRL,
-					  "XRC connection retry initiated\n");
+			if (!ret)
 				return -FI_EAGAIN;
-			}
 		}
 	}
 
