@@ -772,15 +772,14 @@ static int util_coll_find_local_rank(struct fid_ep *ep, struct util_coll_mc *col
 {
 	size_t addrlen;
 	char *addr;
-	int ret, mem;
+	int ret;
+	fi_addr_t my_addr;
+	int i;
 
-	addrlen = sizeof(mem);
-	addr = (char *) &mem;
-
-	ret = fi_getname(&ep->fid, addr, &addrlen);
-	if (ret != -FI_ETOOSMALL) {
+	addrlen = 0;
+	ret = fi_getname(&ep->fid, NULL, &addrlen);
+	if (ret != FI_SUCCESS && addrlen == 0)
 		return ret;
-	}
 
 	addr = calloc(1, addrlen);
 	if (!addr)
@@ -791,8 +790,16 @@ static int util_coll_find_local_rank(struct fid_ep *ep, struct util_coll_mc *col
 		free(addr);
 		return ret;
 	}
-	coll_mc->local_rank =
-		ofi_av_lookup_fi_addr(coll_mc->av_set->av, addr);
+	my_addr = ofi_av_lookup_fi_addr(coll_mc->av_set->av, addr);
+
+	coll_mc->local_rank = FI_ADDR_NOTAVAIL;
+	if (my_addr != FI_ADDR_NOTAVAIL) {
+		for (i=0; i<coll_mc->av_set->fi_addr_count; i++)
+			if (coll_mc->av_set->fi_addr_array[i] == my_addr) {
+				coll_mc->local_rank = i;
+				break;
+			}
+	}
 
 	free(addr);
 
@@ -801,7 +808,7 @@ static int util_coll_find_local_rank(struct fid_ep *ep, struct util_coll_mc *col
 
 void util_coll_join_comp(struct util_coll_operation *coll_op)
 {
-	struct fi_eq_err_entry entry;
+	struct fi_eq_entry entry;
 	struct util_ep *ep = container_of(coll_op->mc->ep, struct util_ep, ep_fid);
 
 	coll_op->data.join.new_mc->seq = 0;
@@ -812,7 +819,7 @@ void util_coll_join_comp(struct util_coll_operation *coll_op)
 	/* write to the eq  */
 	memset(&entry, 0, sizeof(entry));
 	entry.fid = &coll_op->mc->mc_fid.fid;
-	entry.context = coll_op->mc->mc_fid.fid.context;
+	entry.context = coll_op->context;
 
 	if (ofi_eq_write(&ep->eq->eq_fid, FI_JOIN_COMPLETE, &entry,
 			 sizeof(struct fi_eq_entry), FI_COLLECTIVE) < 0)
@@ -1023,18 +1030,13 @@ int ofi_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 
 	join_op->data.join.new_mc = new_coll_mc;
 
-	if (new_coll_mc->local_rank != FI_ADDR_NOTAVAIL) {
-		ret = ofi_bitmask_create(&join_op->data.join.data, OFI_MAX_GROUP_ID);
-		if (ret)
-			goto err2;
+	ret = ofi_bitmask_create(&join_op->data.join.data, OFI_MAX_GROUP_ID);
+	if (ret)
+		goto err2;
 
-		ret = ofi_bitmask_create(&join_op->data.join.tmp, OFI_MAX_GROUP_ID);
-		if (ret)
-			goto err3;
-
-	} else {
-		ofi_bitmask_set_all(&join_op->data.join.data);
-	}
+	ret = ofi_bitmask_create(&join_op->data.join.tmp, OFI_MAX_GROUP_ID);
+	if (ret)
+		goto err3;
 
 	ret = util_coll_allreduce(join_op, util_ep->coll_cid_mask->bytes,
 				  join_op->data.join.data.bytes,
