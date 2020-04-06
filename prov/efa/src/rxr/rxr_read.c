@@ -246,10 +246,23 @@ int rxr_read_init_iov(struct rxr_ep *ep,
 {
 	int i, err;
 	struct fid_mr *mr;
+	struct rxr_peer *peer;
 
 	for (i = 0; i < tx_entry->iov_count; ++i) {
 		read_iov[i].addr = (uint64_t)tx_entry->iov[i].iov_base;
 		read_iov[i].len = tx_entry->iov[i].iov_len;
+	}
+
+	peer = rxr_ep_get_peer(ep, tx_entry->addr);
+	assert(peer);
+	if (peer->is_local && (shm_info->domain_attr->mr_mode & FI_MR_VIRT_ADDR)) {
+		/* shm with FI_MR_VIRT_ADDR mr_mode means the CMA implementation was
+		 * used, this implementation does not need key, so we can skip
+		 * memory registration.
+		 */
+		for (i = 0; i < tx_entry->iov_count; ++i)
+			read_iov[i].key = tx_entry->iov[i].iov_len;
+		return 0;
 	}
 
 	if (tx_entry->desc[0]) {
