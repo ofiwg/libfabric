@@ -570,9 +570,17 @@ static int smr_progress_cmd_rma(struct smr_ep *ep, struct smr_cmd *cmd)
 	switch (cmd->msg.hdr.op_src) {
 	case smr_src_inline:
 		err = smr_progress_inline(cmd, iov, iov_count, &total_len);
+		ep->region->cmd_cnt++;
 		break;
 	case smr_src_inject:
 		err = smr_progress_inject(cmd, iov, iov_count, &total_len, ep, ret);
+		if (cmd->msg.hdr.op == ofi_op_read_req && cmd->msg.hdr.data) {
+			peer_smr = smr_peer_region(ep->region, cmd->msg.hdr.addr);
+			resp = smr_get_ptr(peer_smr, cmd->msg.hdr.data);
+			resp->status = -err;
+		} else {
+			ep->region->cmd_cnt++;
+		}
 		break;
 	case smr_src_iov:
 		err = smr_progress_iov(cmd, iov, iov_count, &total_len, ep, ret);
@@ -584,14 +592,6 @@ static int smr_progress_cmd_rma(struct smr_ep *ep, struct smr_cmd *cmd)
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"unidentified operation type\n");
 		err = -FI_EINVAL;
-	}
-
-	if (cmd->msg.hdr.op == ofi_op_read_req && cmd->msg.hdr.data) {
-		peer_smr = smr_peer_region(ep->region, cmd->msg.hdr.addr);
-		resp = smr_get_ptr(peer_smr, cmd->msg.hdr.data);
-		resp->status = -err;
-	} else {
-		ep->region->cmd_cnt++;
 	}
 
 	ret = smr_complete_rx(ep, (void *) cmd->msg.hdr.msg_id,
