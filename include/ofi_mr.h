@@ -226,6 +226,9 @@ struct ofi_mr_entry {
 	unsigned int			subscribed:1;
 	int				use_cnt;
 	struct dlist_entry		list_entry;
+#ifdef HAVE_LIBCUDA
+	uint64_t			cuda_buf_id;
+#endif
 	uint8_t				data[];
 };
 

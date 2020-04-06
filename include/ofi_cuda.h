@@ -107,5 +107,50 @@ ofi_copy_to_cuda_iov(const struct iovec *iov, size_t iov_count, uint64_t iov_off
 	}
 }
 
+static inline int
+ofi_cuda_get_buf_id(struct ofi_mr_entry *entry, const struct iovec *iov)
+{
+	int ret;
+
+	ret = cuPointerGetAttribute(&entry->cuda_buf_id,
+				    CU_POINTER_ATTRIBUTE_BUFFER_ID,
+				    iov->iov_base);
+	if (ret != CUDA_SUCCESS) {
+		/*
+		 * TODO: Handle CUDA_ERROR_INVALID_VALUE or other CUDA errors.
+		 */
+		return -1;
+	}
+	return 0;
+}
+
+static inline bool
+ofi_cuda_valid_reg(struct ofi_mr_entry *entry,
+		   const struct iovec *iov)
+{
+	uint64_t buffer_id;
+	int ret;
+
+	ret = cuPointerGetAttribute(&buffer_id, CU_POINTER_ATTRIBUTE_BUFFER_ID,
+				    iov->iov_base);
+	if (ret == CUDA_ERROR_INVALID_VALUE) {
+		/* IOV must have been deallocated by the app */
+		return 0;
+	} else if (ret != CUDA_SUCCESS) {
+		/* Fatal CUDA error, assume registration is not safe to use */
+		return 0;
+	}
+
+	/*
+	 * Make sure the buffer ID matches to the original registration. If it
+	 * doesn't, the caller needs to invalidate the entry from the cache and
+	 * re-register the buffer.
+	 */
+	if (buffer_id != entry->cuda_buf_id)
+		return 0;
+
+	return 1;
+}
+
 #endif /* HAVE_LIBCUDA */
 #endif /* _OFI_CUDA_H_ */

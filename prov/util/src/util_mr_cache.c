@@ -40,6 +40,7 @@
 #include <ofi_mr.h>
 #include <ofi_list.h>
 #include <ofi_tree.h>
+#include <ofi_cuda.h>
 
 
 struct ofi_mr_cache_params cache_params = {
@@ -133,6 +134,18 @@ static void util_mr_uncache_entry(struct ofi_mr_cache *cache,
 		cache->uncached_cnt++;
 		cache->uncached_size += entry->info.iov.iov_len;
 	}
+}
+
+static bool ofi_mr_cache_entry_usable(struct ofi_mr_entry *entry,
+				      const struct fi_mr_attr *attr,
+				      struct iovec *iov)
+{
+#ifdef HAVE_LIBCUDA
+	return (ofi_cuda_valid_reg(entry, iov)
+		&& ofi_iov_within(attr->mr_iov, iov));
+#else
+	return ofi_iov_within(attr->mr_iov, iov);
+#endif
 }
 
 /* Caller must hold ofi_mem_monitor lock as well as unsubscribe from the region */
@@ -245,6 +258,12 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct ofi_mr_info *info,
 	if (ret)
 		goto free;
 
+#ifdef HAVE_LIBCUDA
+	ret = ofi_cuda_get_buf_id(*entry, &info->iov);
+	if (ret < 0)
+		goto free;
+#endif
+
 	pthread_mutex_lock(&cache->monitor->lock);
 	cur = cache->storage.find(&cache->storage, info);
 	if (cur) {
@@ -309,7 +328,8 @@ int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *att
 
 		cache->search_cnt++;
 		*entry = cache->storage.find(&cache->storage, &info);
-		if (*entry && ofi_iov_within(attr->mr_iov, &(*entry)->info.iov))
+		if (*entry && ofi_mr_cache_entry_usable(*entry, attr,
+							&(*entry)->info.iov))
 			goto hit;
 
 		/* Purge regions that overlap with new region */
@@ -357,7 +377,7 @@ struct ofi_mr_entry *ofi_mr_cache_find(struct ofi_mr_cache *cache,
 		goto unlock;
 	}
 
-	if (!ofi_iov_within(attr->mr_iov, &entry->info.iov)) {
+	if (!ofi_mr_cache_entry_usable(entry, attr, &entry->info.iov)) {
 		entry = NULL;
 		goto unlock;
 	}
