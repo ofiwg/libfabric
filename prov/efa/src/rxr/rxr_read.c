@@ -246,6 +246,10 @@ int rxr_read_init_iov(struct rxr_ep *ep,
 {
 	int i, err;
 	struct fid_mr *mr;
+	struct rxr_peer *peer;
+
+	peer = rxr_ep_get_peer(ep, tx_entry->addr);
+	assert(peer);
 
 	for (i = 0; i < tx_entry->iov_count; ++i) {
 		read_iov[i].addr = (uint64_t)tx_entry->iov[i].iov_base;
@@ -262,10 +266,16 @@ int rxr_read_init_iov(struct rxr_ep *ep,
 		if (!tx_entry->mr[0]) {
 			for (i = 0; i < tx_entry->iov_count; ++i) {
 				assert(!tx_entry->mr[i]);
-				err = fi_mr_regv(rxr_ep_domain(ep)->rdm_domain,
-						 tx_entry->iov + i, 1,
-						 FI_REMOTE_READ,
-						 0, 0, 0, &tx_entry->mr[i], NULL);
+
+				if (peer->is_local)
+					err = efa_mr_reg_shm(rxr_ep_domain(ep)->rdm_domain,
+							     tx_entry->iov + i,
+							     FI_REMOTE_READ, &tx_entry->mr[i]);
+				else
+					err = fi_mr_regv(rxr_ep_domain(ep)->rdm_domain,
+							 tx_entry->iov + i, 1,
+							 FI_REMOTE_READ,
+							 0, 0, 0, &tx_entry->mr[i], NULL);
 				if (err) {
 					FI_WARN(&rxr_prov, FI_LOG_MR,
 						"Unable to register MR buf %p as FI_REMOTE_READ",

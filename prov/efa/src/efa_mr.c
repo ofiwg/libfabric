@@ -103,6 +103,47 @@ void efa_mr_cache_entry_dereg(struct ofi_mr_cache *cache,
 		EFA_WARN(FI_LOG_MR, "Unable to dereg mr: %d\n", ret);
 }
 
+/*
+ * efa_mr_reg_shm() is called by rxr_read_init_iov to used to generate
+ * shm only memory registrations. Such memory registrations were used
+ * when read message protocol was applied to SHM EP. In which case,
+ * we need to register the send iov as FI_REMOTE_READ.
+ *
+ * Note when we open the SHM domain we did not specify FI_MR_PROV_KEY
+ * therefore the SHM domain require us to proivde a key when calling
+ * fi_mr_reg on it. (rxr_set_shm_hints())
+ *
+ * The reason we did not specify FI_MR_PROV_KEY when opening SHM
+ * domain is because we want ibv_mr and shm_mr to use the same
+ * key. For that, we first call ibv_reg_mr() to register memory
+ * and get a key, and use that key to register shm. (efa_m_reg_impl())
+ *
+ * However, for SHM's read message protocol, we do not want to call
+ * ibv_reg_mr() because it is expensive, so we use a static variable
+ * SHM_MR_KEYGEN to generate key.
+ *
+ * It is initialized as 0x100000000, and each call to efa_mr_reg_shm()
+ * will use shm_mr_keygen as current key and increase it by 1.
+ *
+ * Note SHM_MR_KEYGEN starts from 0x100000000 because the key
+ * returned from ibv_reg_mr() is a 32 bits integer, thus is always
+ * smaller than 0x100000000. By starting from 0x100000000, we avoid
+ * key collision.
+ */
+int efa_mr_reg_shm(struct fid_domain *domain_fid, struct iovec *iov,
+		   uint64_t access, struct fid_mr **mr_fid)
+{
+	static uint64_t SHM_MR_KEYGEN = 0x100000000;
+	uint64_t requested_key;
+	struct efa_domain *efa_domain;
+
+	efa_domain = container_of(domain_fid, struct efa_domain, util_domain.domain_fid.fid);
+	assert(efa_domain->shm_domain);
+
+	requested_key = SHM_MR_KEYGEN++;
+	return fi_mr_regv(efa_domain->shm_domain, iov, 1, access, 0, requested_key, 0, mr_fid, NULL);
+}
+
 static int efa_mr_cache_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 				uint64_t flags, struct fid_mr **mr_fid)
 {
