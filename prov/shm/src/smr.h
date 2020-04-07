@@ -179,8 +179,15 @@ static inline const char *smr_no_prefix(const char *addr)
 #define smr_fast_rma_enabled(mode, order) ((mode & FI_MR_VIRT_ADDR) && \
 			!(order & SMR_RMA_ORDER))
 
-#define smr_get_offset(base, addr) ((uintptr_t) ((char *) addr - (char *) base))
-#define smr_get_addr(base, offset) ((char *) base + (uintptr_t) offset)
+static inline uint64_t smr_get_offset(void *base, void *addr)
+{
+	return (uintptr_t) ((char *) addr - (char *) base);
+}
+
+static inline void *smr_get_ptr(void *base, uint64_t offset)
+{
+	return (char *) base + (uintptr_t) offset;
+}
 
 struct smr_ep {
 	struct util_ep		util_ep;
