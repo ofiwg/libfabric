@@ -54,6 +54,8 @@ static int efa_generate_qkey()
 	/* tv_usec is in range [0,1,000,000), shift it by 12 to [0,4,096,000,000 */
 	val = (tv.tv_usec << 12) + tv.tv_sec;
 
+	val = ofi_xorshift_random(val);
+
 	/* 0x80000000 and up is privileged Q Key range. */
 	val &= 0x7fffffff;
 
