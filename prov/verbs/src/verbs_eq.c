@@ -881,7 +881,12 @@ vrb_eq_cm_process_event(struct vrb_eq *eq,
 			ret = vrb_eq_xrc_connreq_event(eq, entry, len, event,
 							  cma_event, &acked,
 							  &priv_data, &priv_datalen);
-			if (ret == -FI_EAGAIN || *event == FI_CONNECTED)
+			if (ret == -FI_EAGAIN) {
+				fi_freeinfo(entry->info);
+				entry->info = NULL;
+				goto ack;
+			}
+			if (*event == FI_CONNECTED)
 				goto ack;
 		}
 		break;
