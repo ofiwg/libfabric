@@ -345,6 +345,25 @@ static inline uint64_t ofi_key2idx(struct ofi_key_idx *key_idx, uint64_t key)
 	return key & ((1ULL << key_idx->idx_bits) - 1);
 }
 
+static inline uint32_t ofi_xorshift_random(uint32_t val)
+{
+	/*
+	 * Xorshift Random Number Generators are from 224.
+	 * R. P. Brent, Some long-period random number
+	 * generators using shifts and xors, ANZIAM
+	 * Journal 48 (CTAC2006), C188-C202, 2007.
+	 * Presented at the 13th Biennial Computational
+	 * Techniques and Applications
+	 * Conference (CTAC06), Townsville, 2-5 July 2006.
+	 * arXiv:1004.3115v1
+	 */
+	val ^= val << 13;
+	val ^= val >> 17;
+	val ^= val << 5;
+
+	return val;
+}
+
 
 #ifdef __cplusplus
 }
