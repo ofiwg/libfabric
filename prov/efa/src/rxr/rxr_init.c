@@ -531,6 +531,21 @@ static int rxr_getinfo(uint32_t version, const char *node,
 	if (hints && hints->ep_attr && hints->ep_attr->type == FI_EP_DGRAM)
 		goto dgram_info;
 
+	/*
+	 * Using the shm provider comes with some overheads, particularly in the
+	 * progress engine when polling an empty completion queue, so avoid
+	 * initializing the provider if the app provides a hint that it does not
+	 * require node-local communication. We can still loopback over the EFA
+	 * device in cases where the app violates the hint and continues
+	 * communicating with node-local peers.
+	 */
+	if (hints
+	    /* If the app requires explicitly remote communication */
+	    && (hints->caps & FI_REMOTE_COMM)
+	    /* but not local communication */
+	    && !(hints->caps & FI_LOCAL_COMM))
+		rxr_env.enable_shm_transfer = 0;
+
 	ret = rxr_get_lower_rdm_info(version, node, service, flags,
 				     &rxr_util_prov, hints, &core_info);
 
