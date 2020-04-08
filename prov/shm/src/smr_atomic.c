@@ -148,12 +148,12 @@ static ssize_t smr_generic_atomic(struct smr_ep *ep,
 	peer_id = smr_peer_data(ep->region)[id].addr.addr;
 
 	ret = smr_verify_peer(ep, id);
-	if(ret)
+	if (ret)
 		return ret;
 
 	peer_smr = smr_peer_region(ep->region, id);
 	fastlock_acquire(&peer_smr->lock);
-	if (peer_smr->cmd_cnt < 2) {
+	if (peer_smr->cmd_cnt < 2 || smr_peer_data(ep->region)[id].sar_status) {
 		ret = -FI_EAGAIN;
 		goto unlock_region;
 	}
@@ -326,12 +326,12 @@ static ssize_t smr_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 	peer_id = smr_peer_data(ep->region)[id].addr.addr;
 
 	ret = smr_verify_peer(ep, id);
-	if(ret)
+	if (ret)
 		return ret;
 
 	peer_smr = smr_peer_region(ep->region, id);
 	fastlock_acquire(&peer_smr->lock);
-	if (peer_smr->cmd_cnt < 2) {
+	if (peer_smr->cmd_cnt < 2 || smr_peer_data(ep->region)[id].sar_status) {
 		ret = -FI_EAGAIN;
 		goto unlock_region;
 	}

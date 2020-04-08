@@ -73,6 +73,7 @@ enum {
 	smr_src_inject,	/* inject buffers */
 	smr_src_iov,	/* reference iovec via CMA */
 	smr_src_mmap,	/* mmap-based fallback protocol */
+	smr_src_sar,	/* segmentation fallback protocol */
 };
 
 #define SMR_REMOTE_CQ_DATA	(1 << 0)
@@ -128,6 +129,9 @@ union smr_cmd_data {
 	struct {
 		uint8_t		buf[SMR_COMP_DATA_LEN];
 		uint8_t		comp[SMR_COMP_DATA_LEN];
+	};
+	struct {
+		uint64_t	sar;
 	};
 };
 
