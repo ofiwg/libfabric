@@ -2163,19 +2163,18 @@ static struct fi_ops_collective rxm_ops_collective_none = {
 
 static int rxm_ep_msg_res_close(struct rxm_ep *rxm_ep)
 {
-	int ret, retv = 0;
+	int ret = 0;
 
 	if (rxm_ep->srx_ctx) {
 		ret = fi_close(&rxm_ep->srx_ctx->fid);
 		if (ret) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, \
 				"Unable to close msg shared ctx\n");
-			retv = ret;
 		}
 	}
 
 	fi_freeinfo(rxm_ep->msg_info);
-	return retv;
+	return ret;
 }
 
 static int rxm_listener_close(struct rxm_ep *rxm_ep)
