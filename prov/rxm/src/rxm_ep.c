@@ -2311,7 +2311,7 @@ static int rxm_ep_msg_cq_open(struct rxm_ep *rxm_ep)
 			rxm_ep->msg_info->rx_attr->size) * rxm_def_univ_size;
 	cq_attr.format = FI_CQ_FORMAT_DATA;
 	cq_attr.wait_obj = (rxm_msg_cq_fd_needed(rxm_ep) ?
-			    FI_WAIT_FD : FI_WAIT_NONE);
+			    def_wait_obj : FI_WAIT_NONE);
 
 	rxm_domain = container_of(rxm_ep->util_ep.domain, struct rxm_domain,
 				  util_domain);
