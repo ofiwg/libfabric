@@ -120,7 +120,7 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 	domain = container_of(ep->util_ep.domain, struct smr_domain, util_domain);
 
 	id = (int) addr;
-	peer_id = smr_peer_addr(ep->region)[id].addr;
+	peer_id = smr_peer_data(ep->region)[id].addr.addr;
 
 	ret = smr_verify_peer(ep, id);
 	if (ret)
@@ -356,7 +356,7 @@ ssize_t smr_generic_rma_inject(struct fid_ep *ep_fid, const void *buf,
 	domain = container_of(ep->util_ep.domain, struct smr_domain, util_domain);
 
 	id = (int) dest_addr;
-	peer_id = smr_peer_addr(ep->region)[id].addr;
+	peer_id = smr_peer_data(ep->region)[id].addr.addr;
 
 	ret = smr_verify_peer(ep, id);
 	if (ret)

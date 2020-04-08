@@ -162,6 +162,9 @@ struct smr_addr {
 	fi_addr_t	addr;
 };
 
+struct smr_peer_data {
+	struct smr_addr		addr;
+};
 
 struct smr_ep_name {
 	char name[NAME_MAX];
@@ -208,7 +211,7 @@ struct smr_region {
 	size_t		cmd_queue_offset;
 	size_t		resp_queue_offset;
 	size_t		inject_pool_offset;
-	size_t		peer_addr_offset;
+	size_t		peer_data_offset;
 	size_t		name_offset;
 };
 
@@ -247,9 +250,9 @@ static inline struct smr_inject_pool *smr_inject_pool(struct smr_region *smr)
 {
 	return (struct smr_inject_pool *) ((char *) smr + smr->inject_pool_offset);
 }
-static inline struct smr_addr *smr_peer_addr(struct smr_region *smr)
+static inline struct smr_peer_data *smr_peer_data(struct smr_region *smr)
 {
-	return (struct smr_addr *) ((char *) smr + smr->peer_addr_offset); 
+	return (struct smr_peer_data *) ((char *) smr + smr->peer_data_offset); 
 }
 static inline const char *smr_name(struct smr_region *smr)
 {
