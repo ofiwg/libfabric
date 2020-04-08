@@ -154,6 +154,9 @@ int efa_mr_cache_entry_reg(struct ofi_mr_cache *cache,
 void efa_mr_cache_entry_dereg(struct ofi_mr_cache *cache,
 			      struct ofi_mr_entry *entry);
 
+int efa_mr_reg_shm(struct fid_domain *domain_fid, struct iovec *iov,
+		   uint64_t access, struct fid_mr **mr_fid);
+
 struct efa_wc {
 	struct ibv_wc		ibv_wc;
 	/* Source address */
