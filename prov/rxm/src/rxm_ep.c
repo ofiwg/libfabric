@@ -2345,6 +2345,7 @@ static int rxm_ep_msg_cq_open(struct rxm_ep *rxm_ep)
 	return 0;
 err:
 	fi_close(&rxm_ep->msg_cq->fid);
+	rxm_ep->msg_cq = NULL;
 	return ret;
 }
 
@@ -2624,8 +2625,10 @@ static int rxm_ep_msg_res_open(struct rxm_ep *rxm_ep)
 
 	return 0;
 err2:
-	if (rxm_ep->srx_ctx)
+	if (rxm_ep->srx_ctx) {
 		fi_close(&rxm_ep->srx_ctx->fid);
+		rxm_ep->srx_ctx = NULL;
+	}
 err1:
 	fi_freeinfo(rxm_ep->msg_info);
 	return ret;
