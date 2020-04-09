@@ -381,6 +381,13 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 		 * which means FI_MR_HMEM implies FI_MR_LOCAL for cuda buffer
 		 */
 		if (hints->caps & FI_HMEM) {
+			if (hints->domain_attr &&
+			    !(hints->domain_attr->mr_mode & FI_MR_HMEM)) {
+				FI_INFO(&rxr_prov, FI_LOG_CORE,
+				        "FI_HMEM capability requires device registrations (FI_MR_HMEM)\n");
+				return -FI_ENODATA;
+			}
+
 			info->domain_attr->mr_mode |= FI_MR_HMEM;
 
 			/*
@@ -559,19 +566,16 @@ static int rxr_getinfo(uint32_t version, const char *node,
 		util_info = fi_allocinfo();
 		if (!util_info) {
 			ret = -FI_ENOMEM;
-			fi_freeinfo(*info);
-			goto out;
+			goto free_info;
 		}
 
-		rxr_info_to_rxr(version, cur, util_info, hints);
+		ret = rxr_info_to_rxr(version, cur, util_info, hints);
+		if (ret)
+			goto free_info;
 
 		ret = rxr_copy_attr(cur, util_info);
-		if (ret) {
-			fi_freeinfo(util_info);
-			fi_freeinfo(*info);
-			goto out;
-		}
-
+		if (ret)
+			goto free_info;
 
 		ofi_alter_info(util_info, hints, version);
 		if (!*info)
@@ -606,8 +610,14 @@ dgram_info:
 			assert(!strcmp(shm_info->fabric_attr->name, "shm"));
 		}
 	}
-out:
+
 	fi_freeinfo(core_info);
+	return ret;
+free_info:
+	fi_freeinfo(core_info);
+	fi_freeinfo(util_info);
+	fi_freeinfo(*info);
+	*info = NULL;
 	return ret;
 }
 
