@@ -5,6 +5,7 @@
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  * Copyright (c) 2017 DataDirect Networks, Inc. All rights reserved.
  * Copyright (c) 2018 Cray Inc. All rights reserved.
+ * Copyright (c) 2020 Cray Inc. All rights reserved.
  */
 
 #ifndef _CXIP_PROV_H_
@@ -1007,6 +1008,34 @@ struct cxip_av {
 };
 
 /**
+ * AV Set
+ *
+ * libfabric fi_av_set implementation.
+ *
+ * Created in cxip_av_set().
+ */
+struct cxip_av_set {
+	struct fid_av_set av_set_fid;
+	struct cxip_av *cxi_av;		// associated AV
+	struct cxip_coll_mc *cxi_mc;	// reference MC
+	fi_addr_t *fi_addr_ary;		// addresses in set
+	size_t fi_addr_cnt;		// count of addresses
+	uint64_t flags;
+	ofi_atomic32_t ref;
+};
+
+/**
+ * Collective Multicast Address
+ *
+ * Support structure.
+ *
+ * Created in fi_join_collective().
+ */
+struct cxip_coll_mc {			// TODO: placeholder
+	struct fid_mc mc_fid;
+};
+
+/**
  * CNTR/CQ wait object file list element
  *
  * Support structure.
@@ -1168,6 +1197,9 @@ int cxip_ctrl_msg_send(struct cxip_ctrl_req *req);
 void cxip_ep_ctrl_progress(struct cxip_ep_obj *ep_obj);
 int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj);
 void cxip_ep_ctrl_fini(struct cxip_ep_obj *ep_obj);
+
+int cxip_av_set(struct fid_av *av, struct fi_av_set_attr *attr,
+	        struct fid_av_set **av_set_fid, void * context);
 
 /*
  * cxip_fid_to_txc() - Return TXC from FID provided to a transmit API.

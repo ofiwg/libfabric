@@ -19,6 +19,7 @@ _cxi_files = \
 	prov/cxi/src/cxip_txc.c \
 	prov/cxi/src/cxip_rxc.c \
 	prov/cxi/src/cxip_av.c \
+	prov/cxi/src/cxip_avset.c \
 	prov/cxi/src/cxip_cq.c \
 	prov/cxi/src/cxip_cntr.c \
 	prov/cxi/src/cxip_wait.c \
@@ -43,6 +44,7 @@ nodist_prov_cxi_test_cxitest_SOURCES = \
 	prov/cxi/test/ep.c \
 	prov/cxi/test/cq.c \
 	prov/cxi/test/av.c \
+	prov/cxi/test/avset.c \
 	prov/cxi/test/rma.c \
 	prov/cxi/test/sep.c \
 	prov/cxi/test/tagged.c \

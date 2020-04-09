@@ -6,6 +6,7 @@
  * Copyright (c) 2017 Los Alamos National Security, LLC.
  *                    All rights reserved.
  * Copyright (c) 2018 Cray Inc. All rights reserved.
+ * Copyright (c) 2020 Cray Inc. All rights reserved.
  */
 
 #include "config.h"
@@ -55,6 +56,7 @@
 		}					\
 	} while (0)
 
+/* Note: FI_READ means "read-only" for AV, see fi_av.3 */
 #define	READONLY(av)	(av->attr.flags & FI_READ)
 
 #define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_AV, __VA_ARGS__)
@@ -573,7 +575,8 @@ static struct fi_ops_av cxip_am_ops = {
 	.insertsym = fi_no_av_insertsym,
 	.remove = cxip_av_remove,
 	.lookup = cxip_av_lookup,
-	.straddr = cxip_av_straddr
+	.straddr = cxip_av_straddr,
+	.av_set = cxip_av_set
 };
 
 static struct fi_ops_av cxip_at_ops = {
@@ -583,7 +586,8 @@ static struct fi_ops_av cxip_at_ops = {
 	.insertsym = fi_no_av_insertsym,
 	.remove = cxip_av_remove,
 	.lookup = cxip_av_lookup,
-	.straddr = cxip_av_straddr
+	.straddr = cxip_av_straddr,
+	.av_set = cxip_av_set
 };
 
 /**
