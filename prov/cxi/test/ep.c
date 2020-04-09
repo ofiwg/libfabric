@@ -164,13 +164,15 @@ Test(ep, ep_bind_av)
 Test(ep, ep_bind_eq)
 {
 	int ret;
-	struct fi_eq_attr *attr = NULL;
-	struct fid_eq *eq = NULL;
-	void *context = NULL;
 
-	ret = fi_eq_open(cxit_fabric, attr, &eq, context);
-	cr_assert_eq(ret, -FI_ENOSYS,
-		     "TODO Add test for EQs binding to the endpoint when implemented");
+	cxit_create_ep();
+	cxit_create_eq();
+
+	ret = fi_ep_bind(cxit_ep, &cxit_eq->fid, 0);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_eq_bind EQ failed %d", ret);
+
+	cxit_destroy_eq();
+	cxit_destroy_ep();
 }
 
 Test(ep, ep_bind_mr)

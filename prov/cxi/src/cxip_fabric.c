@@ -4,7 +4,7 @@
  * Copyright (c) 2014 Intel Corporation, Inc. All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  * Copyright (c) 2017 DataDirect Networks, Inc. All rights reserved.
- * Copyright (c) 2018 Cray Inc. All rights reserved.
+ * Copyright (c) 2018,2020 Cray Inc. All rights reserved.
  */
 
 #include "config.h"
@@ -32,7 +32,7 @@ static struct fi_ops_fabric cxip_fab_ops = {
 	.size = sizeof(struct fi_ops_fabric),
 	.domain = cxip_domain,
 	.passive_ep = fi_no_passive_ep,
-	.eq_open = fi_no_eq_open,
+	.eq_open = cxip_eq_open,
 	.wait_open = fi_no_wait_open,
 	.trywait = fi_no_trywait
 };

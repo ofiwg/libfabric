@@ -4,7 +4,7 @@
  * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  * Copyright (c) 2017 DataDirect Networks, Inc. All rights reserved.
- * Copyright (c) 2018 Cray Inc. All rights reserved.
+ * Copyright (c) 2018,2020 Cray Inc. All rights reserved.
  */
 
 #include "config.h"
@@ -1170,7 +1170,7 @@ static int cxip_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 	switch (bfid->fclass) {
 	case FI_CLASS_EQ:
-		eq = container_of(bfid, struct cxip_eq, eq.fid);
+		eq = container_of(bfid, struct cxip_eq, util_eq.eq_fid.fid);
 		ep->ep_obj->eq = eq;
 		break;
 

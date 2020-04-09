@@ -3,7 +3,7 @@
  *
  * Copyright (c) 2014 Intel Corporation, Inc. All rights reserved.
  * Copyright (c) 2017 DataDirect Networks, Inc. All rights reserved.
- * Copyright (c) 2018 Cray Inc. All rights reserved.
+ * Copyright (c) 2018,2020 Cray Inc. All rights reserved.
  */
 
 #include "config.h"
@@ -158,7 +158,7 @@ static int cxip_dom_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	struct cxip_eq *eq;
 
 	dom = container_of(fid, struct cxip_domain, util_domain.domain_fid);
-	eq = container_of(bfid, struct cxip_eq, eq.fid);
+	eq = container_of(bfid, struct cxip_eq, util_eq.eq_fid.fid);
 
 	if (dom->eq)
 		return -FI_EINVAL;

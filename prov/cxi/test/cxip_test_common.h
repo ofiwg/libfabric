@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: GPL-2.0
  *
- * Copyright (c) 2018 Cray Inc. All rights reserved.
+ * Copyright (c) 2018,2020 Cray Inc. All rights reserved.
  */
 
 #ifndef _CXIP_TEST_COMMON_H_
@@ -19,6 +19,7 @@ extern struct fid_ep *cxit_ep;
 extern struct cxip_addr cxit_ep_addr;
 extern fi_addr_t cxit_ep_fi_addr;
 extern struct fid_ep *cxit_sep;
+extern struct fid_eq *cxit_eq;
 extern struct fi_cq_attr cxit_tx_cq_attr, cxit_rx_cq_attr;
 extern uint64_t cxit_tx_cq_bind_flags;
 extern uint64_t cxit_rx_cq_bind_flags;
@@ -43,6 +44,8 @@ void cxit_create_ep(void);
 void cxit_destroy_ep(void);
 void cxit_create_sep(void);
 void cxit_destroy_sep(void);
+void cxit_create_eq(void);
+void cxit_destroy_eq(void);
 void cxit_create_cqs(void);
 void cxit_destroy_cqs(void);
 void cxit_bind_cqs(void);
@@ -61,6 +64,8 @@ void cxit_setup_domain(void);
 void cxit_teardown_domain(void);
 void cxit_setup_ep(void);
 void cxit_teardown_ep(void);
+#define cxit_setup_eq cxit_setup_ep
+#define cxit_teardown_eq cxit_teardown_ep
 #define cxit_setup_cq cxit_setup_ep
 #define cxit_teardown_cq cxit_teardown_ep
 #define cxit_setup_av cxit_setup_ep

@@ -4,8 +4,7 @@
  * Copyright (c) 2014 Intel Corporation, Inc. All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  * Copyright (c) 2017 DataDirect Networks, Inc. All rights reserved.
- * Copyright (c) 2018 Cray Inc. All rights reserved.
- * Copyright (c) 2020 Cray Inc. All rights reserved.
+ * Copyright (c) 2018,2020 Cray Inc. All rights reserved.
  */
 
 #ifndef _CXIP_PROV_H_
@@ -420,21 +419,16 @@ struct cxip_domain {
 	bool enabled;
 };
 
-// Apparently not yet in use (??)
-// No reference count (?)
+/**
+ *  Event Queue
+ *
+ *  libfabric fi_eq implementation.
+ *
+ *  Created in cxip_eq_open().
+ */
 struct cxip_eq {
-	struct fid_eq eq;
+	struct util_eq util_eq;
 	struct fi_eq_attr attr;
-	struct cxip_fabric *cxi_fab;
-
-	struct dlistfd_head list;
-	struct dlistfd_head err_list;
-	struct dlist_entry err_data_list;
-	fastlock_t lock;
-
-	struct fid_wait *waitset;
-	int signal;
-	int wait_fd;
 };
 
 /**
@@ -1163,6 +1157,9 @@ int cxip_rxc_enable(struct cxip_rxc *rxc);
 struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr,
 				      void *context, int use_shared);
 void cxip_rxc_free(struct cxip_rxc *rxc);
+
+int cxip_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
+		 struct fid_eq **eq, void *context);
 
 int cxip_cq_req_cancel(struct cxip_cq *cq, void *req_ctx, void *op_ctx,
 		       bool match);

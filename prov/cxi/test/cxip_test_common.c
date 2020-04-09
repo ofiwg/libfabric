@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: GPL-2.0
  *
- * Copyright (c) 2018 Cray Inc. All rights reserved.
+ * Copyright (c) 2018,2020 Cray Inc. All rights reserved.
  */
 
 #include <stdio.h>
@@ -19,6 +19,8 @@ struct fid_ep *cxit_ep;
 struct cxip_addr cxit_ep_addr;
 fi_addr_t cxit_ep_fi_addr;
 struct fid_ep *cxit_sep;
+struct fi_eq_attr cxit_eq_attr = {};
+struct fid_eq *cxit_eq;
 struct fi_cq_attr cxit_tx_cq_attr = { .format = FI_CQ_FORMAT_TAGGED };
 struct fi_cq_attr cxit_rx_cq_attr = { .format = FI_CQ_FORMAT_TAGGED };
 uint64_t cxit_tx_cq_bind_flags = FI_TRANSMIT;
@@ -124,6 +126,29 @@ void cxit_destroy_sep(void)
 	ret = fi_close(&cxit_sep->fid);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_close scalable ep");
 	cxit_sep = NULL;
+}
+
+void cxit_create_eq(void)
+{
+	struct fi_eq_attr attr = {
+		.size = 32,
+		.flags = FI_WRITE,
+		.wait_obj = FI_WAIT_NONE
+	};
+	int ret;
+
+	ret = fi_eq_open(cxit_fabric, &attr, &cxit_eq, NULL);
+	cr_assert(ret == FI_SUCCESS, "fi_eq_open failed %d", ret);
+	cr_assert_not_null(cxit_eq, "fi_eq_open returned NULL eq");
+}
+
+void cxit_destroy_eq(void)
+{
+	int ret;
+
+	ret = fi_close(&cxit_eq->fid);
+	cr_assert(ret == FI_SUCCESS, "fi_close EQ failed %d", ret);
+	cxit_eq = NULL;
 }
 
 void cxit_create_cqs(void)
