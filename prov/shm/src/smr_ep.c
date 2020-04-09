@@ -250,6 +250,8 @@ void smr_format_pend_resp(struct smr_tx_entry *pend, struct smr_cmd *cmd,
 	memcpy(pend->iov, iov, sizeof(*iov) * iov_count);
 	pend->iov_count = iov_count;
 	pend->addr = id;
+	if (cmd->msg.hdr.op_src != smr_src_sar)
+		pend->bytes_done = 0;
 
 	resp->msg_id = (uint64_t) (uintptr_t) pend;
 	resp->status = FI_EBUSY;
@@ -373,6 +375,79 @@ remove_entry:
 	dlist_remove(&map_name->entry);
 	free(map_name);
 	return ret;
+}
+
+size_t smr_copy_to_sar(struct smr_sar_msg *sar_msg, struct smr_resp *resp,
+		       struct smr_cmd *cmd, const struct iovec *iov, size_t count,
+		       size_t *bytes_done, int *next)
+{
+	size_t start = *bytes_done;
+
+	if (sar_msg->sar[0].status == SMR_SAR_FREE && !*next) {
+		*bytes_done += ofi_copy_from_iov(sar_msg->sar[0].buf, SMR_SAR_SIZE,
+						 iov, count, *bytes_done);
+		sar_msg->sar[0].status = SMR_SAR_READY;
+		if (cmd->msg.hdr.op == ofi_op_read_req)
+			resp->status = FI_SUCCESS;
+		*next = 1;
+	}
+
+	if (*bytes_done < cmd->msg.hdr.size &&
+	    sar_msg->sar[1].status == SMR_SAR_FREE && *next) {
+		*bytes_done += ofi_copy_from_iov(sar_msg->sar[1].buf, SMR_SAR_SIZE,
+						 iov, count, *bytes_done);
+		sar_msg->sar[1].status = SMR_SAR_READY;
+		if (cmd->msg.hdr.op == ofi_op_read_req)
+			resp->status = FI_SUCCESS;
+		*next = 0;
+	}
+	return *bytes_done - start;
+}
+
+size_t smr_copy_from_sar(struct smr_sar_msg *sar_msg, struct smr_resp *resp,
+			 struct smr_cmd *cmd, const struct iovec *iov, size_t count,
+			 size_t *bytes_done, int *next)
+{
+	size_t start = *bytes_done;
+
+	if (sar_msg->sar[0].status == SMR_SAR_READY && !*next) {
+		*bytes_done += ofi_copy_to_iov(iov, count, *bytes_done,
+					       sar_msg->sar[0].buf, SMR_SAR_SIZE);
+		sar_msg->sar[0].status = SMR_SAR_FREE;
+		if (cmd->msg.hdr.op != ofi_op_read_req)
+			resp->status = FI_SUCCESS;
+		*next = 1;
+	}
+
+	if (*bytes_done < cmd->msg.hdr.size &&
+	    sar_msg->sar[1].status == SMR_SAR_READY && *next) {
+		*bytes_done += ofi_copy_to_iov(iov, count, *bytes_done,
+					       sar_msg->sar[1].buf, SMR_SAR_SIZE);
+		sar_msg->sar[1].status = SMR_SAR_FREE;
+		if (cmd->msg.hdr.op != ofi_op_read_req)
+			resp->status = FI_SUCCESS;
+		*next = 0;
+	}
+	return *bytes_done - start;
+}
+
+void smr_format_sar(struct smr_cmd *cmd, const struct iovec *iov, size_t count,
+		    size_t total_len, struct smr_region *smr,
+		    struct smr_region *peer_smr, struct smr_sar_msg *sar_msg,
+		    struct smr_tx_entry *pending, struct smr_resp *resp)
+{
+	cmd->msg.hdr.op_src = smr_src_sar;
+	cmd->msg.hdr.src_data = smr_get_offset(smr, resp);
+	cmd->msg.data.sar = smr_get_offset(peer_smr, sar_msg);
+	cmd->msg.hdr.size = total_len;
+
+	pending->bytes_done = 0;
+	pending->next = 0;
+	sar_msg->sar[0].status = SMR_SAR_FREE;
+	sar_msg->sar[1].status = SMR_SAR_FREE;
+	if (cmd->msg.hdr.op != ofi_op_read_req)
+		smr_copy_to_sar(sar_msg, NULL, cmd, iov, count,
+				&pending->bytes_done, &pending->next);
 }
 
 static int smr_ep_close(struct fid *fid)
@@ -588,10 +663,12 @@ int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	ep->recv_fs = smr_recv_fs_create(info->rx_attr->size, NULL, NULL);
 	ep->unexp_fs = smr_unexp_fs_create(info->rx_attr->size, NULL, NULL);
 	ep->pend_fs = smr_pend_fs_create(info->tx_attr->size, NULL, NULL);
+	ep->sar_fs = smr_sar_fs_create(info->rx_attr->size, NULL, NULL);
 	smr_init_queue(&ep->recv_queue, smr_match_msg);
 	smr_init_queue(&ep->trecv_queue, smr_match_tagged);
 	smr_init_queue(&ep->unexp_msg_queue, smr_match_unexp_msg);
 	smr_init_queue(&ep->unexp_tagged_queue, smr_match_unexp_tagged);
+	dlist_init(&ep->sar_list);
 
 	ep->min_multi_recv_size = SMR_INJECT_SIZE;
 

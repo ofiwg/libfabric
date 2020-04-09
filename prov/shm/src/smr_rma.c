@@ -106,6 +106,7 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 	struct smr_domain *domain;
 	struct smr_region *peer_smr;
 	struct smr_inject_buf *tx_buf;
+	struct smr_sar_msg *sar;
 	struct smr_resp *resp;
 	struct smr_cmd *cmd;
 	struct smr_tx_entry *pend;
@@ -120,7 +121,7 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 	domain = container_of(ep->util_ep.domain, struct smr_domain, util_domain);
 
 	id = (int) addr;
-	peer_id = smr_peer_addr(ep->region)[id].addr;
+	peer_id = smr_peer_data(ep->region)[id].addr.addr;
 
 	ret = smr_verify_peer(ep, id);
 	if (ret)
@@ -133,7 +134,8 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 
 	peer_smr = smr_peer_region(ep->region, id);
 	fastlock_acquire(&peer_smr->lock);
-	if (peer_smr->cmd_cnt < cmds) {
+	if (peer_smr->cmd_cnt < cmds ||
+	    smr_peer_data(ep->region)[id].sar_status) {
 		ret = -FI_EAGAIN;
 		goto unlock_region;
 	}
@@ -189,12 +191,21 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 		if (ep->region->cma_cap == SMR_CMA_CAP_ON) {
 			smr_format_iov(cmd, iov, iov_count, total_len, ep->region, resp);
 		} else {
-			/*
-			 * TODO: Add a threshold for switching from SAR to mmap
-			 * once SAR protocol gets merged
-			 */
-			ret = smr_format_mmap(ep, cmd, iov, iov_count, total_len,
-					      pend, resp);
+			if (total_len <= smr_env.sar_threshold) {
+				if (!peer_smr->sar_cnt) {
+					ret = -FI_EAGAIN;
+				} else {
+					sar = smr_freestack_pop(smr_sar_pool(peer_smr));
+					smr_format_sar(cmd, iov, iov_count, total_len,
+						       ep->region, peer_smr, sar,
+						       pend, resp);
+					peer_smr->sar_cnt--;
+					smr_peer_data(ep->region)[id].sar_status = 1;
+				}
+			} else {
+				ret = smr_format_mmap(ep, cmd, iov, iov_count,
+						      total_len, pend, resp);
+			}
 			if (ret) {
 				freestack_push(ep->pend_fs, pend);
 				ret = -FI_EAGAIN;
@@ -356,7 +367,7 @@ ssize_t smr_generic_rma_inject(struct fid_ep *ep_fid, const void *buf,
 	domain = container_of(ep->util_ep.domain, struct smr_domain, util_domain);
 
 	id = (int) dest_addr;
-	peer_id = smr_peer_addr(ep->region)[id].addr;
+	peer_id = smr_peer_data(ep->region)[id].addr.addr;
 
 	ret = smr_verify_peer(ep, id);
 	if (ret)
@@ -367,7 +378,8 @@ ssize_t smr_generic_rma_inject(struct fid_ep *ep_fid, const void *buf,
 
 	peer_smr = smr_peer_region(ep->region, id);
 	fastlock_acquire(&peer_smr->lock);
-	if (peer_smr->cmd_cnt < cmds) {
+	if (peer_smr->cmd_cnt < cmds ||
+	    smr_peer_data(ep->region)[id].sar_status) {
 		ret = -FI_EAGAIN;
 		goto unlock_region;
 	}

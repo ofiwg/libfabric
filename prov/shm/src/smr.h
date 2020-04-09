@@ -63,7 +63,11 @@
 #ifndef _SMR_H_
 #define _SMR_H_
 
+struct smr_env {
+	size_t sar_threshold;
+};
 
+extern struct smr_env smr_env;
 extern struct fi_provider smr_prov;
 extern struct fi_info smr_info;
 extern struct util_prov smr_util_prov;
@@ -108,8 +112,20 @@ struct smr_tx_entry {
 	void		*context;
 	struct iovec	iov[SMR_IOV_LIMIT];
 	uint32_t	iov_count;
+	size_t		bytes_done;
+	int		next;
 	void		*map_ptr;
 	struct smr_ep_name *map_name;
+};
+
+struct smr_sar_entry {
+	struct dlist_entry	entry;
+	struct smr_cmd		cmd;
+	struct smr_rx_entry	rx_entry;
+	size_t			bytes_done;
+	int			next;
+	struct iovec		iov[SMR_IOV_LIMIT];
+	size_t			iov_count;
 };
 
 struct smr_ep;
@@ -145,6 +161,7 @@ struct smr_unexp_msg {
 DECLARE_FREESTACK(struct smr_rx_entry, smr_recv_fs);
 DECLARE_FREESTACK(struct smr_unexp_msg, smr_unexp_fs);
 DECLARE_FREESTACK(struct smr_tx_entry, smr_pend_fs);
+DECLARE_FREESTACK(struct smr_sar_entry, smr_sar_fs);
 
 struct smr_queue {
 	struct dlist_entry list;
@@ -179,8 +196,15 @@ static inline const char *smr_no_prefix(const char *addr)
 #define smr_fast_rma_enabled(mode, order) ((mode & FI_MR_VIRT_ADDR) && \
 			!(order & SMR_RMA_ORDER))
 
-#define smr_get_offset(base, addr) ((uintptr_t) ((char *) addr - (char *) base))
-#define smr_get_addr(base, offset) ((char *) base + (uintptr_t) offset)
+static inline uint64_t smr_get_offset(void *base, void *addr)
+{
+	return (uintptr_t) ((char *) addr - (char *) base);
+}
+
+static inline void *smr_get_ptr(void *base, uint64_t offset)
+{
+	return (char *) base + (uintptr_t) offset;
+}
 
 struct smr_ep {
 	struct util_ep		util_ep;
@@ -197,8 +221,10 @@ struct smr_ep {
 	struct smr_queue	trecv_queue;
 	struct smr_unexp_fs	*unexp_fs;
 	struct smr_pend_fs	*pend_fs;
+	struct smr_sar_fs	*sar_fs;
 	struct smr_queue	unexp_msg_queue;
 	struct smr_queue	unexp_tagged_queue;
+	struct dlist_entry	sar_list;
 };
 
 #define smr_ep_rx_flags(smr_ep) ((smr_ep)->util_ep.rx_op_flags)
@@ -238,6 +264,16 @@ void smr_format_iov(struct smr_cmd *cmd, const struct iovec *iov, size_t count,
 int smr_format_mmap(struct smr_ep *ep, struct smr_cmd *cmd,
 		    const struct iovec *iov, size_t count, size_t total_len,
 		    struct smr_tx_entry *pend, struct smr_resp *resp);
+void smr_format_sar(struct smr_cmd *cmd, const struct iovec *iov, size_t count,
+		    size_t total_len, struct smr_region *smr,
+		    struct smr_region *peer_smr, struct smr_sar_msg *sar_msg,
+		    struct smr_tx_entry *pending, struct smr_resp *resp);
+size_t smr_copy_to_sar(struct smr_sar_msg *sar_msg, struct smr_resp *resp,
+		       struct smr_cmd *cmd, const struct iovec *iov, size_t count,
+		       size_t *bytes_done, int *next);
+size_t smr_copy_from_sar(struct smr_sar_msg *sar_msg, struct smr_resp *resp,
+			 struct smr_cmd *cmd, const struct iovec *iov, size_t count,
+			 size_t *bytes_done, int *next);
 
 int smr_complete_tx(struct smr_ep *ep, void *context, uint32_t op,
 		uint16_t flags, uint64_t err);
