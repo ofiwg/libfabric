@@ -734,6 +734,7 @@ static int util_coll_close(struct fid *fid)
 	coll_mc = container_of(fid, struct util_coll_mc, mc_fid.fid);
 
 	free(coll_mc);
+
 	return FI_SUCCESS;
 }
 
@@ -745,36 +746,26 @@ static struct fi_ops util_coll_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-static inline int util_coll_mc_alloc(struct util_coll_mc **coll_mc)
+static inline void util_coll_mc_init(struct util_coll_mc *coll_mc,
+				   struct util_av_set *av_set,
+				   struct fid_ep *ep, void *context)
 {
-	*coll_mc = calloc(1, sizeof(**coll_mc));
-	if (!*coll_mc)
-		return -FI_ENOMEM;
-
-	(*coll_mc)->mc_fid.fid.fclass = FI_CLASS_MC;
-	(*coll_mc)->mc_fid.fid.context = NULL;
-	(*coll_mc)->mc_fid.fid.ops = &util_coll_fi_ops;
-	(*coll_mc)->mc_fid.fi_addr = (uintptr_t)* coll_mc;
-
-	return FI_SUCCESS;
+	coll_mc->mc_fid.fid.fclass = FI_CLASS_MC;
+	coll_mc->mc_fid.fid.context = context;
+	coll_mc->mc_fid.fid.ops = &util_coll_fi_ops;
+	coll_mc->mc_fid.fi_addr = (uintptr_t) coll_mc;
+	coll_mc->ep = ep;
+	assert(av_set != NULL);
+	coll_mc->av_set = av_set;
 }
 
-
-int ofi_av_set_addr(struct fid_av_set *set, fi_addr_t *coll_addr)
+static int ofi_av_set_addr(struct fid_av_set *set, fi_addr_t *coll_addr)
 {
 	struct util_av_set *av_set;
-	struct util_coll_mc *coll_mc;
-        int ret;
 
 	av_set = container_of(set, struct util_av_set, av_set_fid);
 
-	ret = util_coll_mc_alloc(&coll_mc);
-	if (ret)
-		return ret;
-
-	coll_mc->av_set = av_set;
-
-	*coll_addr = (uintptr_t)coll_mc;
+	*coll_addr = (uintptr_t) &av_set->coll_mc;
 
 	return FI_SUCCESS;
 }
@@ -1018,18 +1009,16 @@ int ofi_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 		coll_mc = (struct util_coll_mc*) ((uintptr_t) coll_addr);
 	}
 
-	ret = util_coll_mc_alloc(&new_coll_mc);
-	if (ret)
-		return ret;
-
-	util_ep = container_of(ep, struct util_ep, ep_fid);
+	new_coll_mc = calloc(1, sizeof(*new_coll_mc));
+	if (!new_coll_mc)
+		return -FI_ENOMEM;
 
 	// set up the new mc for future collectives
-	new_coll_mc->mc_fid.fid.context = context;
-	new_coll_mc->av_set = av_set;
-	new_coll_mc->ep = ep;
+	util_coll_mc_init(new_coll_mc, av_set, ep, context);
 
 	coll_mc->ep = ep;
+
+	util_ep = container_of(ep, struct util_ep, ep_fid);
 
 	/* get the rank */
 	util_coll_find_local_rank(ep, new_coll_mc);
@@ -1096,15 +1085,14 @@ static int util_coll_copy_from_av(struct util_av *av, void *addr,
 
 static int util_coll_av_init(struct util_av *av)
 {
-
 	struct util_coll_mc *coll_mc;
 	int ret;
 
 	assert(!av->coll_mc);
 
-	ret = util_coll_mc_alloc(&coll_mc);
-	if (ret)
-		return ret;
+	coll_mc = calloc(1, sizeof(*coll_mc));
+	if (!coll_mc)
+		return -FI_ENOMEM;
 
 	coll_mc->av_set = calloc(1, sizeof(*coll_mc->av_set));
 	if (!coll_mc->av_set) {
@@ -1131,6 +1119,8 @@ static int util_coll_av_init(struct util_av *av)
 
 	coll_mc->av_set->av_set_fid.fid.fclass = FI_CLASS_AV_SET;
 	coll_mc->av_set->av_set_fid.ops = &util_av_set_ops;
+
+	util_coll_mc_init(coll_mc, coll_mc->av_set, NULL, NULL);
 
 	av->coll_mc = coll_mc;
 	return FI_SUCCESS;
@@ -1176,6 +1166,8 @@ int ofi_av_set(struct fid_av *av, struct fi_av_set_attr *attr,
 			util_av->coll_mc->av_set->fi_addr_array[iter * attr->stride];
 		av_set->fi_addr_count++;
 	}
+
+	util_coll_mc_init(&av_set->coll_mc, av_set, NULL, context);
 
 	av_set->av = util_av;
 	av_set->av_set_fid.ops = &util_av_set_ops;
