@@ -1540,7 +1540,7 @@ void cxip_rxc_oflow_fini(struct cxip_rxc *rxc)
  * buffer offset using ordered Put Overflow events.
  */
 static void
-mrecv_req_oflow_event(struct cxip_req *req, const union c_event *event)
+mrecv_req_oflow_event(struct cxip_req *req, uint32_t rlen)
 {
 	struct cxip_req *parent = req->recv.parent;
 	uintptr_t rtail;
@@ -1550,10 +1550,10 @@ mrecv_req_oflow_event(struct cxip_req *req, const union c_event *event)
 			parent->recv.start_offset;
 	req->buf = (uint64_t)req->recv.recv_buf;
 
-	rtail = req->buf + event->tgt_long.rlength;
+	rtail = req->buf + rlen;
 	mrecv_tail = (uint64_t)parent->recv.recv_buf + parent->recv.ulen;
 
-	req->data_len = event->tgt_long.rlength;
+	req->data_len = rlen;
 	if (rtail > mrecv_tail)
 		req->data_len -= rtail - mrecv_tail;
 
@@ -1634,7 +1634,8 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 				/* Set start and length uniquely for an
 				 * unexpected mrecv request.
 				 */
-				mrecv_req_oflow_event(req, event);
+				mrecv_req_oflow_event(req,
+						event->tgt_long.rlength);
 
 				/* The Child request is placed on the
 				 * ux_rdzv_recvs list. Don't look up a child
@@ -1674,7 +1675,8 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 			/* Set start and length uniquely for an unexpected
 			 * mrecv request.
 			 */
-			mrecv_req_oflow_event(req, event);
+			mrecv_req_oflow_event(req,
+					event->tgt_long.rlength);
 		} else {
 			recv_req_tgt_event(req, event);
 
@@ -1894,7 +1896,8 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 				/* Set start and length uniquely for an
 				 * unexpected mrecv request.
 				 */
-				mrecv_req_oflow_event(req, event);
+				mrecv_req_oflow_event(req,
+						event->tgt_long.rlength);
 
 				/* The Child request is placed on the ux_recvs
 				 * list. Don't look up a child request when the
@@ -1936,7 +1939,8 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 				/* Set start and length uniquely for an
 				 * unexpected mrecv request.
 				 */
-				mrecv_req_oflow_event(req, event);
+				mrecv_req_oflow_event(req,
+						event->tgt_long.rlength);
 			} else {
 				recv_req_tgt_event(req, event);
 
@@ -1977,7 +1981,8 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 			/* Set start and length uniquely for an unexpected
 			 * mrecv request.
 			 */
-			mrecv_req_oflow_event(req, event);
+			mrecv_req_oflow_event(req,
+					event->tgt_long.rlength);
 		} else {
 			recv_req_tgt_event(req, event);
 
@@ -2466,6 +2471,22 @@ static bool init_match(uint32_t init, uint32_t match_id)
 }
 
 /*
+ * recv_req_sw_match() - Fill Receive request fields for a SW match
+ *
+ * Substitute for recv_req_tgt_event() during SW matches.
+ */
+static void recv_req_sw_match(struct cxip_req *req,
+			      struct cxip_ux_send *ux_send)
+{
+	req->recv.rlen = ux_send->rlen;
+	req->recv.rc = C_RC_OK;
+	req->tag = ux_send->mb.tag;
+	req->data = ux_send->data;
+	req->recv.src_offset = ux_send->src_offset;
+	req->recv.initiator = ux_send->initiator;
+}
+
+/*
  * cxip_recv_sw_match() - Progress the SW Receive match.
  *
  * Progress the operation which matched in SW.
@@ -2475,17 +2496,28 @@ static int cxip_recv_sw_match(struct cxip_req *req,
 {
 	struct cxip_oflow_buf *oflow_buf;
 	void *oflow_va;
+	int ret;
 
 	oflow_buf = ux_send->req->oflow.oflow_buf;
 
-	req->tag = ux_send->mb.tag;
-	req->data = ux_send->data;
-	req->recv.src_offset = ux_send->src_offset;
-	req->recv.rc = C_RC_OK;
+	if (req->recv.multi_recv) {
+		req = mrecv_req_dup(req);
+		if (!req)
+			return -FI_EAGAIN;
 
-	req->data_len = req->recv.rlen = ux_send->rlen;
-	if (req->data_len > req->recv.ulen)
-		req->data_len = req->recv.ulen;
+		recv_req_sw_match(req, ux_send);
+
+		/* Set start and length uniquely for an unexpected
+		 * mrecv request.
+		 */
+		mrecv_req_oflow_event(req, ux_send->rlen);
+	} else {
+		recv_req_sw_match(req, ux_send);
+
+		req->data_len = ux_send->rlen;
+		if (req->data_len > req->recv.ulen)
+			req->data_len = req->recv.ulen;
+	}
 
 	/* TODO support long Send SW matching */
 	assert(ux_send->rlen < req->recv.rxc->rdzv_threshold);
@@ -2495,10 +2527,23 @@ static int cxip_recv_sw_match(struct cxip_req *req,
 	memcpy(req->recv.recv_buf, oflow_va, req->data_len);
 	oflow_req_put_bytes(ux_send->req, ux_send->mlen);
 
-	recv_req_report(req);
-	recv_req_complete(req);
+	CXIP_LOG_DBG("Software match, req: %p ux_send: %p (sw_ux_list_len: %u)\n",
+		     req, ux_send, req->recv.rxc->sw_ux_list_len);
 
-	return FI_SUCCESS;
+	recv_req_report(req);
+
+	ret = FI_SUCCESS;
+	if (req->recv.multi_recv) {
+		if ((req->recv.mrecv_bytes - req->data_len) >=
+				req->recv.rxc->min_multi_recv)
+			ret = -FI_EINPROGRESS;
+
+		cxip_cq_req_free(req);
+	} else {
+		recv_req_complete(req);
+	}
+
+	return ret;
 }
 
 /*
@@ -2518,9 +2563,6 @@ static int cxip_recv_sw_matcher(struct cxip_req *req)
 
 	if (dlist_empty(&rxc->sw_ux_list))
 		return -FI_ENOMSG;
-
-	/* TODO support multi-recv SW matching */
-	assert(!req->recv.multi_recv);
 
 	dlist_foreach_container_safe(&rxc->sw_ux_list, struct cxip_ux_send,
 				     ux_send, ux_entry, tmp) {
@@ -2543,19 +2585,22 @@ static int cxip_recv_sw_matcher(struct cxip_req *req)
 		}
 
 		ret = cxip_recv_sw_match(req, ux_send);
-		if (ret == FI_SUCCESS) {
-			dlist_remove(&ux_send->ux_entry);
-			free(ux_send);
-			rxc->sw_ux_list_len--;
-
-			CXIP_LOG_DBG("Software match, req: %p ux_send: %p (sw_ux_list_len: %u)\n",
-				     req, ux_send, rxc->sw_ux_list_len);
-
-			ret = FI_SUCCESS;
-		} else {
-			ret = -FI_EAGAIN;
+		if (ret == -FI_EAGAIN) {
+			/* Couldn't process match, try again */
+			break;
 		}
 
+		dlist_remove(&ux_send->ux_entry);
+		free(ux_send);
+		rxc->sw_ux_list_len--;
+
+		if (ret == -FI_EINPROGRESS) {
+			/* Multi-recv, keep matching */
+			ret = -FI_ENOMSG;
+			continue;
+		}
+
+		ret = FI_SUCCESS;
 		break;
 	}
 
@@ -2710,10 +2755,13 @@ static ssize_t _cxip_recv_req(struct cxip_req *req, bool restart_seq)
 		le_flags |= C_LE_RESTART_SEQ;
 
 	if (recv_md)
-		recv_iova = CXI_VA_TO_IOVA(recv_md->md, req->recv.recv_buf);
+		recv_iova = CXI_VA_TO_IOVA(recv_md->md,
+					   (uint64_t)req->recv.recv_buf +
+					   req->recv.start_offset);
 
 	/* Issue Append command */
-	ret = cxip_pte_append(rxc->rx_pte, recv_iova, req->recv.ulen,
+	ret = cxip_pte_append(rxc->rx_pte, recv_iova,
+			      req->recv.ulen - req->recv.start_offset,
 			      recv_md ? recv_md->md->lac : 0,
 			      C_PTL_LIST_PRIORITY, req->req_id,
 			      mb.raw, ib.raw, req->recv.match_id,

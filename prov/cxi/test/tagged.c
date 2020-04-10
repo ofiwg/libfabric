@@ -3042,6 +3042,7 @@ Test(tagged, fc, .timeout = 30)
 	int nsends = 14000;
 	int sends = 0;
 	uint64_t tag = 0xbeef;
+	fi_addr_t from;
 
 	send_bufs = aligned_alloc(C_PAGE_SIZE, send_len * nsends_concurrent);
 	cr_assert(send_bufs);
@@ -3129,18 +3130,168 @@ Test(tagged, fc, .timeout = 30)
 		cr_assert_eq(ret, FI_SUCCESS, "fi_trecv failed %d", ret);
 
 		do {
-			ret = fi_cq_read(cxit_rx_cq, &rx_cqe, 1);
+			ret = fi_cq_readfrom(cxit_rx_cq, &rx_cqe, 1, &from);
 		} while (ret == -FI_EAGAIN);
 
 		cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
 
 		validate_rx_event(&rx_cqe, NULL, recv_len, FI_TAGGED | FI_RECV,
 				  NULL, 0, tag);
+		cr_assert(from == cxit_ep_fi_addr, "Invalid source address");
 
 		for (j = 0; j < recv_len; j++) {
 			cr_assert_eq(recv_buf[j], (uint8_t)i,
 				     "data mismatch, recv: %d element[%d], exp=%d saw=%d\n",
 				     i, j, (uint8_t)i, recv_buf[j]);
+		}
+	}
+
+	free(send_bufs);
+	free(recv_buf);
+}
+
+Test(tagged, fc_multi_recv, .timeout = 30)
+{
+	int i, j, k, ret, tx_ret;
+	uint8_t *send_bufs;
+	uint8_t *send_buf;
+	int send_len = 64;
+	uint8_t *recv_buf;
+	int recv_len = 64;
+	int mrecv_msgs = 10;
+	struct fi_msg_tagged trmsg = {};
+	struct iovec riovec;
+	struct fi_cq_tagged_entry tx_cqe;
+	struct fi_cq_tagged_entry rx_cqe;
+	int nsends_concurrent = 3; /* must be less than the LE pool min. */
+	int nsends = 20;
+	int sends = 0;
+	uint64_t tag = 0xbeef;
+	fi_addr_t from;
+
+	cr_assert(!(nsends % mrecv_msgs));
+
+	send_bufs = aligned_alloc(C_PAGE_SIZE, send_len * nsends_concurrent);
+	cr_assert(send_bufs);
+
+	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len * mrecv_msgs);
+	cr_assert(recv_buf);
+
+	for (i = 0; i < nsends_concurrent - 1; i++) {
+		send_buf = send_bufs + (i % nsends_concurrent) * send_len;
+		memset(send_buf, i, send_len);
+
+		tx_ret = fi_tsend(cxit_ep, send_buf, send_len, NULL,
+			       cxit_ep_fi_addr, tag, NULL);
+	}
+
+	for (i = nsends_concurrent - 1; i < nsends; i++) {
+		send_buf = send_bufs + (i % nsends_concurrent) * send_len;
+		memset(send_buf, i, send_len);
+
+		do {
+			tx_ret = fi_tsend(cxit_ep, send_buf, send_len, NULL,
+				       cxit_ep_fi_addr, tag, NULL);
+
+			/* Progress RX to avoid EQ drops */
+			ret = fi_cq_read(cxit_rx_cq, &rx_cqe, 1);
+			cr_assert_eq(ret, -FI_EAGAIN,
+				     "fi_cq_read unexpected value %d",
+				     ret);
+
+			/* Just progress */
+			fi_cq_read(cxit_tx_cq, NULL, 0);
+		} while (tx_ret == -FI_EAGAIN);
+
+		cr_assert_eq(tx_ret, FI_SUCCESS, "fi_tsend failed %d", tx_ret);
+
+		do {
+			tx_ret = fi_cq_read(cxit_tx_cq, &tx_cqe, 1);
+
+			/* Progress RX to avoid EQ drops */
+			ret = fi_cq_read(cxit_rx_cq, &rx_cqe, 1);
+			cr_assert_eq(ret, -FI_EAGAIN,
+				     "fi_cq_read unexpected value %d",
+				     ret);
+		} while (tx_ret == -FI_EAGAIN);
+
+		cr_assert_eq(tx_ret, 1, "fi_cq_read unexpected value %d",
+			     tx_ret);
+
+		validate_tx_event(&tx_cqe, FI_TAGGED | FI_SEND, NULL);
+
+		if (!(++sends % 1000))
+			printf("%u Sends complete.\n", sends);
+	}
+
+
+	for (i = 0; i < nsends_concurrent - 1; i++) {
+		do {
+			tx_ret = fi_cq_read(cxit_tx_cq, &tx_cqe, 1);
+
+			/* Progress RX to avoid EQ drops */
+			ret = fi_cq_read(cxit_rx_cq, &rx_cqe, 1);
+			cr_assert_eq(ret, -FI_EAGAIN,
+				     "fi_cq_read unexpected value %d",
+				     ret);
+		} while (tx_ret == -FI_EAGAIN);
+
+		cr_assert_eq(tx_ret, 1, "fi_cq_read unexpected value %d",
+			     tx_ret);
+
+		validate_tx_event(&tx_cqe, FI_TAGGED | FI_SEND, NULL);
+
+		if (!(++sends % 1000))
+			printf("%u Sends complete.\n", sends);
+	}
+
+	riovec.iov_base = recv_buf;
+	riovec.iov_len = recv_len * mrecv_msgs;
+	trmsg.msg_iov = &riovec;
+	trmsg.iov_count = 1;
+	trmsg.addr = FI_ADDR_UNSPEC;
+	trmsg.context = NULL;
+	trmsg.tag = tag;
+
+	for (i = 0; i < nsends / mrecv_msgs; i++) {
+		memset(recv_buf, 0, recv_len * mrecv_msgs);
+		do {
+			ret = fi_cq_read(cxit_rx_cq, &rx_cqe, 0);
+			assert(ret == FI_SUCCESS || ret == -FI_EAGAIN);
+
+			ret = fi_trecvmsg(cxit_ep, &trmsg, FI_MULTI_RECV);
+			cr_assert_eq(ret, FI_SUCCESS, "fi_trecvmsg failed %d",
+				     ret);
+		} while (ret == -FI_EAGAIN);
+
+		cr_assert_eq(ret, FI_SUCCESS, "fi_trecv failed %d", ret);
+
+		for (k = 0; k < mrecv_msgs; k++) {
+			do {
+				ret = fi_cq_readfrom(cxit_rx_cq, &rx_cqe, 1,
+						     &from);
+			} while (ret == -FI_EAGAIN);
+
+			cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d",
+				     ret);
+
+			validate_multi_recv_rx_event(&rx_cqe, NULL, recv_len,
+						     FI_TAGGED | FI_RECV, 0,
+						     tag);
+			cr_assert(from == cxit_ep_fi_addr,
+				  "Invalid source address");
+			bool last_msg = (k == (mrecv_msgs - 1));
+			bool dequeued = rx_cqe.flags & FI_MULTI_RECV;
+			cr_assert(!(last_msg ^ dequeued));
+
+			for (j = 0; j < recv_len; j++) {
+				cr_assert_eq(recv_buf[k * recv_len + j],
+					     (uint8_t)i * mrecv_msgs + k,
+					     "data mismatch, recv: %d,%d element[%d], exp=%d saw=%d\n",
+					     i, k, j,
+					     (uint8_t)i * mrecv_msgs + k,
+					     recv_buf[k * recv_len + j]);
+			}
 		}
 	}
 

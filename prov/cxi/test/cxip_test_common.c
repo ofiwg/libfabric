@@ -423,6 +423,19 @@ void validate_rx_event(struct fi_cq_tagged_entry *cqe, void *context,
 	cr_assert(cqe->tag == tag, "Invalid CQE tag");
 }
 
+void validate_multi_recv_rx_event(struct fi_cq_tagged_entry *cqe, void
+				  *context, size_t len, uint64_t flags,
+				  uint64_t data, uint64_t tag)
+{
+	cr_assert(cqe->op_context == context, "CQE Context mismatch");
+	cr_assert(cqe->len == len, "Invalid CQE length");
+	cr_assert((cqe->flags & ~FI_MULTI_RECV) == flags,
+		  "CQE flags mismatch (%#llx %#lx)",
+		  (cqe->flags & ~FI_MULTI_RECV), flags);
+	cr_assert(cqe->data == data, "Invalid CQE data");
+	cr_assert(cqe->tag == tag, "Invalid CQE tag %#lx %#lx", cqe->tag, tag);
+}
+
 int mr_create(size_t len, uint64_t access, uint8_t seed, uint64_t key,
 	      struct mem_region *mr)
 {

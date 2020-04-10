@@ -938,19 +938,6 @@ Test(msg, tagged_interop)
 	free(recv_buf);
 }
 
-void validate_mr_rx_event(struct fi_cq_tagged_entry *cqe, void *context,
-			  size_t len, uint64_t flags, uint64_t data,
-			  uint64_t tag)
-{
-	cr_assert(cqe->op_context == context, "CQE Context mismatch");
-	cr_assert(cqe->len == len, "Invalid CQE length");
-	cr_assert((cqe->flags & ~FI_MULTI_RECV) == flags,
-		  "CQE flags mismatch (%#llx %#lx)",
-		  (cqe->flags & ~FI_MULTI_RECV), flags);
-	cr_assert(cqe->data == data, "Invalid CQE data");
-	cr_assert(cqe->tag == tag, "Invalid CQE tag %#lx %#lx", cqe->tag, tag);
-}
-
 void do_multi_recv(uint8_t *send_buf, size_t send_len,
 		   uint8_t *recv_buf, size_t recv_len,
 		   bool send_first, size_t sends, size_t olen,
@@ -1064,8 +1051,8 @@ void do_multi_recv(uint8_t *send_buf, size_t send_len,
 		if (ret == 1) {
 			rxe_flags = (tagged ? FI_TAGGED : FI_MSG) | FI_RECV;
 
-			validate_mr_rx_event(&rx_cqe, NULL, send_len,
-					     rxe_flags, 0, 0);
+			validate_multi_recv_rx_event(&rx_cqe, NULL, send_len,
+						     rxe_flags, 0, 0);
 			cr_assert(from == cxit_ep_fi_addr,
 				  "Invalid source address");
 
