@@ -310,6 +310,13 @@ int efa_av_insert_addr(struct efa_av *av, struct efa_ep_addr *addr,
 
 	/* If peer is local, insert the address into shm provider's av */
 	if (rxr_env.enable_shm_transfer && efa_is_local_peer(av, addr)) {
+		if (av->shm_used >= rxr_env.shm_av_size) {
+			ret = -FI_ENOMEM;
+			EFA_WARN(FI_LOG_AV,
+				 "Max number of shm AV entry %d has been reached.\n",
+				 rxr_env.shm_av_size);
+			goto err_free_av_entry;
+		}
 		ret = rxr_ep_efa_addr_to_str(addr, smr_name);
 		if (ret != FI_SUCCESS)
 			goto err_free_av_entry;
@@ -329,7 +336,8 @@ int efa_av_insert_addr(struct efa_av *av, struct efa_ep_addr *addr,
 			" rdm_fiaddr = %" PRIu64 " shm_rdm_fiaddr = %" PRIu64
 			"\n", smr_name, *(uint64_t *)addr, *fi_addr, shm_fiaddr);
 
-		assert(shm_fiaddr < EFA_SHM_MAX_AV_COUNT);
+		assert(shm_fiaddr < rxr_env.shm_av_size);
+		av->shm_used++;
 		av_entry->local_mapping = 1;
 		av_entry->shm_rdm_addr = shm_fiaddr;
 		av->shm_rdm_addr_map[shm_fiaddr] = av_entry->rdm_addr;
@@ -543,7 +551,8 @@ static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 				if (ret)
 					goto err_free_av_entry;
 
-				assert(av_entry->shm_rdm_addr < EFA_SHM_MAX_AV_COUNT);
+				av->shm_used--;
+				assert(av_entry->shm_rdm_addr < rxr_env.shm_av_size);
 				av->shm_rdm_addr_map[av_entry->shm_rdm_addr] = FI_ADDR_UNSPEC;
 			}
 			HASH_DEL(av->av_map, av_entry);
@@ -732,6 +741,7 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	av->type = attr->type;
 	av->used = 0;
 	av->next = 0;
+	av->shm_used = 0;
 
 	if (av->type == FI_AV_TABLE && av->util_av.count > 0) {
 		av->conn_table = calloc(av->util_av.count, sizeof(*av->conn_table));

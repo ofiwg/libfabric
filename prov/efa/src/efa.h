@@ -259,6 +259,7 @@ struct efa_av {
 	struct efa_ep           *ep;
 	size_t			used;
 	size_t			next;
+	size_t			shm_used;
 	enum fi_av_type		type;
 	efa_addr_to_conn_func	addr_to_conn;
 	struct efa_reverse_av	*reverse_av;
