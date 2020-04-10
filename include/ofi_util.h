@@ -441,8 +441,10 @@ struct ofi_wait_fid_entry {
 	struct dlist_entry	entry;
 	ofi_wait_try_func	wait_try;
 	fid_t			fid;
+	enum fi_wait_obj	wait_obj;
 	uint32_t		events;
 	ofi_atomic32_t		ref;
+	struct fi_wait_pollfd	pollfds;
 };
 
 int ofi_wait_fd_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,

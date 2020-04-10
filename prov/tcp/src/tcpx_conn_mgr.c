@@ -395,7 +395,6 @@ static void client_send_connreq(struct util_wait *wait,
 	if (ret)
 		goto err;
 
-	wait->signal(wait);
 	return;
 err:
 	memset(&err_entry, 0, sizeof err_entry);
@@ -450,7 +449,7 @@ static void server_sock_accept(struct util_wait *wait,
 			      NULL, (void *) rx_req_cm_ctx);
 	if (ret)
 		goto err3;
-	wait->signal(wait);
+
 	return;
 err3:
 	free(rx_req_cm_ctx);

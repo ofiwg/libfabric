@@ -2163,19 +2163,18 @@ static struct fi_ops_collective rxm_ops_collective_none = {
 
 static int rxm_ep_msg_res_close(struct rxm_ep *rxm_ep)
 {
-	int ret, retv = 0;
+	int ret = 0;
 
 	if (rxm_ep->srx_ctx) {
 		ret = fi_close(&rxm_ep->srx_ctx->fid);
 		if (ret) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, \
 				"Unable to close msg shared ctx\n");
-			retv = ret;
 		}
 	}
 
 	fi_freeinfo(rxm_ep->msg_info);
-	return retv;
+	return ret;
 }
 
 static int rxm_listener_close(struct rxm_ep *rxm_ep)
@@ -2312,7 +2311,7 @@ static int rxm_ep_msg_cq_open(struct rxm_ep *rxm_ep)
 			rxm_ep->msg_info->rx_attr->size) * rxm_def_univ_size;
 	cq_attr.format = FI_CQ_FORMAT_DATA;
 	cq_attr.wait_obj = (rxm_msg_cq_fd_needed(rxm_ep) ?
-			    FI_WAIT_FD : FI_WAIT_NONE);
+			    def_wait_obj : FI_WAIT_NONE);
 
 	rxm_domain = container_of(rxm_ep->util_ep.domain, struct rxm_domain,
 				  util_domain);
@@ -2345,6 +2344,7 @@ static int rxm_ep_msg_cq_open(struct rxm_ep *rxm_ep)
 	return 0;
 err:
 	fi_close(&rxm_ep->msg_cq->fid);
+	rxm_ep->msg_cq = NULL;
 	return ret;
 }
 
@@ -2624,8 +2624,10 @@ static int rxm_ep_msg_res_open(struct rxm_ep *rxm_ep)
 
 	return 0;
 err2:
-	if (rxm_ep->srx_ctx)
+	if (rxm_ep->srx_ctx) {
 		fi_close(&rxm_ep->srx_ctx->fid);
+		rxm_ep->srx_ctx = NULL;
+	}
 err1:
 	fi_freeinfo(rxm_ep->msg_info);
 	return ret;

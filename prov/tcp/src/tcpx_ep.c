@@ -127,7 +127,6 @@ static int tcpx_ep_connect(struct fid_ep *ep, const void *addr,
 	if (ret)
 		goto err;
 
-	tcpx_ep->util_ep.eq->wait->signal(tcpx_ep->util_ep.eq->wait);
 	return 0;
 err:
 	free(cm_ctx);
@@ -159,12 +158,10 @@ static int tcpx_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 
 	ret = ofi_wait_add_fd(tcpx_ep->util_ep.eq->wait, tcpx_ep->sock,
 			      POLLOUT, tcpx_eq_wait_try_func, NULL, cm_ctx);
-	if (ret) {
+	if (ret)
 		free(cm_ctx);
-		return ret;
-	}
-	tcpx_ep->util_ep.eq->wait->signal(tcpx_ep->util_ep.eq->wait);
-	return 0;
+
+	return ret;
 }
 
 static int tcpx_ep_shutdown(struct fid_ep *ep, uint64_t flags)
@@ -683,7 +680,6 @@ static int tcpx_pep_listen(struct fid_pep *pep)
 			      POLLIN, tcpx_eq_wait_try_func,
 			      NULL, &tcpx_pep->cm_ctx);
 
-	tcpx_pep->util_pep.eq->wait->signal(tcpx_pep->util_pep.eq->wait);
 	return ret;
 }
 

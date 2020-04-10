@@ -53,6 +53,7 @@ size_t rxm_msg_rx_size		= 128;
 size_t rxm_def_univ_size	= 256;
 size_t rxm_eager_limit		= RXM_BUF_SIZE - sizeof(struct rxm_pkt);
 int force_auto_progress		= 0;
+enum fi_wait_obj def_wait_obj	= FI_WAIT_FD;
 
 char *rxm_proto_state_str[] = {
 	RXM_PROTO_STATES(OFI_STR)
@@ -360,6 +361,15 @@ struct fi_provider rxm_prov = {
 	.cleanup = rxm_fini
 };
 
+static void rxm_param_get_def_wait(void)
+{
+	char *wait_str = NULL;
+
+	fi_param_get_str(&rxm_prov, "def_wait_obj", &wait_str);
+	if (wait_str && !strcasecmp(wait_str, "pollfd"))
+		def_wait_obj = FI_WAIT_POLLFD;
+}
+
 RXM_INI
 {
 	fi_param_define(&rxm_prov, "buffer_size", FI_PARAM_SIZE_T,
@@ -420,7 +430,12 @@ RXM_INI
 
 	fi_param_define(&rxm_prov, "data_auto_progress", FI_PARAM_BOOL,
 			"Force auto-progress for data transfers even if app "
-			"requested manual progress (default: false/no) \n");
+			"requested manual progress (default: false/no).");
+
+	fi_param_define(&rxm_prov, "def_wait_obj", FI_PARAM_STRING,
+			"Specifies the default wait object used for blocking "
+			"operations (e.g. fi_cq_sread).  Supported values "
+			"are: fd and pollfd (default: fd).");
 
 	fi_param_get_size_t(&rxm_prov, "tx_size", &rxm_info.tx_attr->size);
 	fi_param_get_size_t(&rxm_prov, "rx_size", &rxm_info.rx_attr->size);
@@ -431,6 +446,7 @@ RXM_INI
 				(int *) &rxm_cm_progress_interval))
 		rxm_cm_progress_interval = 10000;
 	fi_param_get_bool(&rxm_prov, "data_auto_progress", &force_auto_progress);
+	rxm_param_get_def_wait();
 
 	if (force_auto_progress)
 		FI_INFO(&rxm_prov, FI_LOG_CORE, "auto-progress for data requested "
