@@ -733,6 +733,7 @@ static int util_coll_close(struct fid *fid)
 
 	coll_mc = container_of(fid, struct util_coll_mc, mc_fid.fid);
 
+	ofi_atomic_dec32(&coll_mc->av_set->ref);
 	free(coll_mc);
 
 	return FI_SUCCESS;
@@ -756,6 +757,7 @@ static inline void util_coll_mc_init(struct util_coll_mc *coll_mc,
 	coll_mc->mc_fid.fi_addr = (uintptr_t) coll_mc;
 	coll_mc->ep = ep;
 	assert(av_set != NULL);
+	ofi_atomic_inc32(&av_set->ref);
 	coll_mc->av_set = av_set;
 }
 
@@ -1119,6 +1121,7 @@ static int util_coll_av_init(struct util_av *av)
 
 	coll_mc->av_set->av_set_fid.fid.fclass = FI_CLASS_AV_SET;
 	coll_mc->av_set->av_set_fid.ops = &util_av_set_ops;
+	ofi_atomic_initialize32(&coll_mc->av_set->ref, 0);
 
 	util_coll_mc_init(coll_mc, coll_mc->av_set, NULL, NULL);
 
@@ -1136,6 +1139,30 @@ err1:
 	return ret;
 }
 
+static int util_av_set_close(struct fid *fid)
+{
+	struct util_av_set *av_set;
+
+	av_set = container_of(fid, struct util_av_set, av_set_fid.fid);
+
+	// release reference taken by internal coll_mc embedded in av_set
+	ofi_atomic_dec32(&av_set->ref);
+	if (ofi_atomic_get32(&av_set->ref) > 0)
+		return -FI_EBUSY;
+
+	free(av_set);
+
+	return FI_SUCCESS;
+}
+
+static struct fi_ops util_av_set_fi_ops = {
+	.size = sizeof(struct fi_ops),
+	.close = util_av_set_close,
+	.bind = fi_no_bind,
+	.control = fi_no_control,
+	.ops_open = fi_no_ops_open,
+};
+
 int ofi_av_set(struct fid_av *av, struct fi_av_set_attr *attr,
 	       struct fid_av_set **av_set_fid, void * context)
 {
@@ -1152,6 +1179,8 @@ int ofi_av_set(struct fid_av *av, struct fi_av_set_attr *attr,
 	av_set = calloc(1,sizeof(*av_set));
 	if (!av_set)
 		return -FI_ENOMEM;
+
+	ofi_atomic_initialize32(&av_set->ref, 0);
 
 	ret = fastlock_init(&av_set->lock);
 	if (ret)
@@ -1173,6 +1202,7 @@ int ofi_av_set(struct fid_av *av, struct fi_av_set_attr *attr,
 	av_set->av_set_fid.ops = &util_av_set_ops;
 	av_set->av_set_fid.fid.fclass = FI_CLASS_AV_SET;
 	av_set->av_set_fid.fid.context = context;
+	av_set->av_set_fid.fid.ops = &util_av_set_fi_ops;
 	(*av_set_fid) = &av_set->av_set_fid;
 	return FI_SUCCESS;
 err2:
