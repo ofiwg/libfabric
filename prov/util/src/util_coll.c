@@ -171,25 +171,6 @@ int ofi_av_set_remove(struct fid_av_set *set, fi_addr_t addr)
 	return -FI_EINVAL;
 }
 
-int ofi_av_set_addr(struct fid_av_set *set, fi_addr_t *coll_addr)
-{
-	struct util_av_set *av_set;
-
-	av_set = container_of(set, struct util_av_set, av_set_fid);
-	*coll_addr = (uintptr_t)av_set->av->coll_mc;
-
-	return FI_SUCCESS;
-}
-
-static inline int util_coll_mc_alloc(struct util_coll_mc **coll_mc)
-{
-	*coll_mc = calloc(1, sizeof(**coll_mc));
-	if (!*coll_mc)
-		return -FI_ENOMEM;
-
-	return FI_SUCCESS;
-}
-
 static inline uint64_t util_coll_form_tag(uint32_t coll_id, uint32_t rank)
 {
 	uint64_t tag;
@@ -764,6 +745,40 @@ static struct fi_ops util_coll_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
+static inline int util_coll_mc_alloc(struct util_coll_mc **coll_mc)
+{
+	*coll_mc = calloc(1, sizeof(**coll_mc));
+	if (!*coll_mc)
+		return -FI_ENOMEM;
+
+	(*coll_mc)->mc_fid.fid.fclass = FI_CLASS_MC;
+	(*coll_mc)->mc_fid.fid.context = NULL;
+	(*coll_mc)->mc_fid.fid.ops = &util_coll_fi_ops;
+	(*coll_mc)->mc_fid.fi_addr = (uintptr_t)* coll_mc;
+
+	return FI_SUCCESS;
+}
+
+
+int ofi_av_set_addr(struct fid_av_set *set, fi_addr_t *coll_addr)
+{
+	struct util_av_set *av_set;
+	struct util_coll_mc *coll_mc;
+        int ret;
+
+	av_set = container_of(set, struct util_av_set, av_set_fid);
+
+	ret = util_coll_mc_alloc(&coll_mc);
+	if (ret)
+		return ret;
+
+	coll_mc->av_set = av_set;
+
+	*coll_addr = (uintptr_t)coll_mc;
+
+	return FI_SUCCESS;
+}
+
 /* TODO: Figure out requirements for using collectives.
  * e.g. require local address to be in AV?
  * Determine best way to handle first join request
@@ -1010,10 +1025,7 @@ int ofi_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 	util_ep = container_of(ep, struct util_ep, ep_fid);
 
 	// set up the new mc for future collectives
-	new_coll_mc->mc_fid.fid.fclass = FI_CLASS_MC;
 	new_coll_mc->mc_fid.fid.context = context;
-	new_coll_mc->mc_fid.fid.ops = &util_coll_fi_ops;
-	new_coll_mc->mc_fid.fi_addr = (uintptr_t) new_coll_mc;
 	new_coll_mc->av_set = av_set;
 	new_coll_mc->ep = ep;
 
@@ -1120,10 +1132,6 @@ static int util_coll_av_init(struct util_av *av)
 	coll_mc->av_set->av_set_fid.fid.fclass = FI_CLASS_AV_SET;
 	coll_mc->av_set->av_set_fid.ops = &util_av_set_ops;
 
-	coll_mc->mc_fid.fi_addr = (uintptr_t) coll_mc;
-	coll_mc->mc_fid.fid.fclass = FI_CLASS_MC;
-	coll_mc->mc_fid.fid.context = NULL;
-	coll_mc->mc_fid.fid.ops = &util_coll_fi_ops;
 	av->coll_mc = coll_mc;
 	return FI_SUCCESS;
 
