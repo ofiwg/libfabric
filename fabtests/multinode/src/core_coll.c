@@ -153,7 +153,7 @@ static int coll_setup()
 static void coll_teardown()
 {
 	fi_close(&coll_mc->fid);
-	free(av_set);
+	fi_close(&av_set->fid);
 }
 
 static int join_test_run()
