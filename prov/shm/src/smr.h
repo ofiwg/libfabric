@@ -35,6 +35,7 @@
 #endif /* HAVE_CONFIG_H */
 
 #include <sys/types.h>
+#include <sys/statvfs.h>
 #include <pthread.h>
 #include <stdint.h>
 #include <stddef.h>
