@@ -1085,60 +1085,6 @@ static int util_coll_copy_from_av(struct util_av *av, void *addr,
 	return FI_SUCCESS;
 }
 
-static int util_coll_av_init(struct util_av *av)
-{
-	struct util_coll_mc *coll_mc;
-	int ret;
-
-	assert(!av->coll_mc);
-
-	coll_mc = calloc(1, sizeof(*coll_mc));
-	if (!coll_mc)
-		return -FI_ENOMEM;
-
-	coll_mc->av_set = calloc(1, sizeof(*coll_mc->av_set));
-	if (!coll_mc->av_set) {
-		ret = -FI_ENOMEM;
-		goto err1;
-	}
-
-	coll_mc->av_set->fi_addr_array =
-		calloc(av->count, sizeof(*coll_mc->av_set->fi_addr_array));
-	if (!coll_mc->av_set->fi_addr_array) {
-		ret = -FI_ENOMEM;
-		goto err2;
-	}
-
-	ret = fastlock_init(&coll_mc->av_set->lock);
-	if (ret)
-		goto err3;
-
-	coll_mc->av_set->av = av;
-	ret = ofi_av_elements_iter(av, util_coll_copy_from_av,
-				   (void *)coll_mc->av_set);
-	if (ret)
-		goto err4;
-
-	coll_mc->av_set->av_set_fid.fid.fclass = FI_CLASS_AV_SET;
-	coll_mc->av_set->av_set_fid.ops = &util_av_set_ops;
-	ofi_atomic_initialize32(&coll_mc->av_set->ref, 0);
-
-	util_coll_mc_init(coll_mc, coll_mc->av_set, NULL, NULL);
-
-	av->coll_mc = coll_mc;
-	return FI_SUCCESS;
-
-err4:
-	fastlock_destroy(&coll_mc->av_set->lock);
-err3:
-	free(coll_mc->av_set->fi_addr_array);
-err2:
-	free(coll_mc->av_set);
-err1:
-	free(coll_mc);
-	return ret;
-}
-
 static int util_av_set_close(struct fid *fid)
 {
 	struct util_av_set *av_set;
@@ -1163,6 +1109,71 @@ static struct fi_ops util_av_set_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
+static inline int util_av_set_init(struct util_av_set *av_set,
+				   struct util_av *util_av,
+				   void *context)
+{
+	int ret = FI_SUCCESS;
+
+	av_set->av_set_fid.ops = &util_av_set_ops;
+	av_set->av_set_fid.fid.fclass = FI_CLASS_AV_SET;
+	av_set->av_set_fid.fid.context = context;
+	av_set->av_set_fid.fid.ops = &util_av_set_fi_ops;
+	av_set->av = util_av;
+	ofi_atomic_initialize32(&av_set->ref, 0);
+	ret = fastlock_init(&av_set->lock);
+
+	return ret;
+}
+
+static int util_coll_av_init(struct util_av *av)
+{
+	struct util_coll_mc *coll_mc;
+	int ret;
+
+	assert(!av->coll_mc);
+
+	coll_mc = calloc(1, sizeof(*coll_mc));
+	if (!coll_mc)
+		return -FI_ENOMEM;
+
+	coll_mc->av_set = calloc(1, sizeof(*coll_mc->av_set));
+	if (!coll_mc->av_set) {
+		ret = -FI_ENOMEM;
+		goto err1;
+	}
+	ret = util_av_set_init(coll_mc->av_set, av, NULL);
+	if (ret)
+		goto err3;
+
+	coll_mc->av_set->fi_addr_array =
+		calloc(av->count, sizeof(*coll_mc->av_set->fi_addr_array));
+	if (!coll_mc->av_set->fi_addr_array) {
+		ret = -FI_ENOMEM;
+		goto err2;
+	}
+
+	ret = ofi_av_elements_iter(av, util_coll_copy_from_av,
+				   (void *)coll_mc->av_set);
+	if (ret)
+		goto err4;
+
+	util_coll_mc_init(coll_mc, coll_mc->av_set, NULL, NULL);
+
+	av->coll_mc = coll_mc;
+	return FI_SUCCESS;
+
+err4:
+	fastlock_destroy(&coll_mc->av_set->lock);
+err3:
+	free(coll_mc->av_set->fi_addr_array);
+err2:
+	free(coll_mc->av_set);
+err1:
+	free(coll_mc);
+	return ret;
+}
+
 int ofi_av_set(struct fid_av *av, struct fi_av_set_attr *attr,
 	       struct fid_av_set **av_set_fid, void * context)
 {
@@ -1180,9 +1191,7 @@ int ofi_av_set(struct fid_av *av, struct fi_av_set_attr *attr,
 	if (!av_set)
 		return -FI_ENOMEM;
 
-	ofi_atomic_initialize32(&av_set->ref, 0);
-
-	ret = fastlock_init(&av_set->lock);
+	ret = util_av_set_init(av_set, util_av, context);
 	if (ret)
 		goto err1;
 
@@ -1198,11 +1207,6 @@ int ofi_av_set(struct fid_av *av, struct fi_av_set_attr *attr,
 
 	util_coll_mc_init(&av_set->coll_mc, av_set, NULL, context);
 
-	av_set->av = util_av;
-	av_set->av_set_fid.ops = &util_av_set_ops;
-	av_set->av_set_fid.fid.fclass = FI_CLASS_AV_SET;
-	av_set->av_set_fid.fid.context = context;
-	av_set->av_set_fid.fid.ops = &util_av_set_fi_ops;
 	(*av_set_fid) = &av_set->av_set_fid;
 	return FI_SUCCESS;
 err2:
