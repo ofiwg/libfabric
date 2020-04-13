@@ -463,9 +463,9 @@ attributes.
 struct fi_collective_attr {
     enum fi_op op;
     enum fi_datatype datatype;
-	struct fi_atomic_attr datatype_attr;
-	size_t max_members;
-	uint64_t mode;
+    struct fi_atomic_attr datatype_attr;
+    size_t max_members;
+      uint64_t mode;
 };
 {% endhighlight %}
 
