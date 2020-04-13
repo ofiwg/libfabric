@@ -320,6 +320,7 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 			   struct fi_info *info, const struct fi_info *hints)
 {
 	uint64_t atomic_ordering;
+	uint64_t max_atomic_size;
 
 	info->caps = rxr_info.caps;
 	info->mode = rxr_info.mode;
@@ -354,8 +355,32 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 			atomic_ordering = FI_ORDER_ATOMIC_RAR | FI_ORDER_ATOMIC_RAW |
 					  FI_ORDER_ATOMIC_WAR | FI_ORDER_ATOMIC_WAW;
 
-			if (!(hints->tx_attr->msg_order & atomic_ordering))
+			if (hints->tx_attr->msg_order & atomic_ordering) {
+				rxr_env.enable_atomic_ordering = 1;
+
+				max_atomic_size = core_info->ep_attr->max_msg_size
+						  - sizeof(struct rxr_rta_hdr)
+						  - core_info->src_addrlen
+						  - RXR_IOV_LIMIT * sizeof(struct fi_rma_iov);
+
+				if (hints->tx_attr->msg_order & FI_ORDER_ATOMIC_RAW) {
+					info->ep_attr->max_order_raw_size = max_atomic_size;
+					rxr_info.ep_attr->max_order_raw_size = max_atomic_size;
+				}
+
+				if (hints->tx_attr->msg_order & FI_ORDER_ATOMIC_WAR) {
+					info->ep_attr->max_order_war_size = max_atomic_size;
+					rxr_info.ep_attr->max_order_war_size = max_atomic_size;
+				}
+
+				if (hints->tx_attr->msg_order & FI_ORDER_ATOMIC_WAW) {
+					info->ep_attr->max_order_waw_size = max_atomic_size;
+					rxr_info.ep_attr->max_order_waw_size = max_atomic_size;
+				}
+
+			} else {
 				rxr_env.enable_atomic_ordering = 0;
+			}
 		}
 
 		/* We only support manual progress for RMA operations */
