@@ -471,10 +471,10 @@ struct fi_mr_attr {
 	void               *context;
 	size_t             auth_key_size;
 	uint8_t            *auth_key;
-	enum fi_hmem_iface  iface;
+	enum fi_hmem_iface iface;
 	union {
-		uint64_t	reserved;
-		int		cuda;
+		uint64_t         reserved;
+		int              cuda;
 	} device;
 };
 ```
@@ -656,7 +656,7 @@ Fabric errno values are defined in
 Many hardware NICs accessed by libfabric require that data buffers be
 registered with the hardware while the hardware accesses it.  This ensures
 that the virtual to physical address mappings for those buffers do not change
-while the transfer is ocurring.  The performance impact of registering
+while the transfer is occurring.  The performance impact of registering
 memory regions can be significant.  As a result, some providers make use
 of a registration cache, particularly when working with applications that
 are unable to manage their own network buffers.  A registration cache avoids

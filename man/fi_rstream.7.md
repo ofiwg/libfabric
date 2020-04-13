@@ -42,8 +42,8 @@ supported: *fi_msg*.
 : The provider supports FI_THREAD_SAFE
 
 *Verbs-iWarp*
-: The provider has added features to enable iWarp. To use this feature, the ep protocol
- IWARP must be requested in a getinfo call.
+: The provider has added features to enable iWarp. To use this feature, the
+  ep protocol iWarp must be requested in an fi_getinfo call.
 
 # LIMITATIONS
 
@@ -53,8 +53,6 @@ The rstream provider is experimental and lacks performance validation and
  hooks into the core provider verbs. It is not interoperable with the previous rsockets(v1)
  protocol. There are default settings that limit the message stream (provider
  memory region size and CQ size). These can be modified by fi_setopt.
-
-
 
 # SETTINGS
 
@@ -76,8 +74,8 @@ The *rstream* provider settings can be modified via fi_setopt on the
 # OFI EXTENSIONS
 
 The rstream provider has extended the current OFI API set in order to enable a
- user implemenation of Poll. Specifically sendmsg(FI_PEEK) is supported which replicates
- the behavior of the recvmsg(FI_PEEK) feature.
+ user implementation of Poll. Specifically sendmsg(FI_PEEK) is supported
+ which replicates the behavior of the recvmsg(FI_PEEK) feature.
 
 # SEE ALSO
 

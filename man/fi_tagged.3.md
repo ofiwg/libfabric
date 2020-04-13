@@ -368,7 +368,7 @@ receiving endpoint.
 
 For discussion purposes, the completion queue is assumed to be configured
 for FI_CQ_FORMAT_TAGGED.  The op_context field will point to a struct
-fi_recv_contex.
+fi_recv_context.
 
 {% highlight c %}
 struct fi_recv_context {
