@@ -61,12 +61,23 @@ static const char * const log_util_coll_op_type[] = {
 	[UTIL_COLL_SCATTER_OP] = "COLL_SCATTER"
 };
 
+struct util_coll_mc {
+	struct fid_mc		mc_fid;
+	struct fid_ep		*ep;
+	struct util_av_set	*av_set;
+	uint64_t		local_rank;
+	uint16_t		group_id;
+	uint16_t		seq;
+	ofi_atomic32_t		ref;
+};
+
 struct util_av_set {
 	struct fid_av_set	av_set_fid;
 	struct util_av		*av;
 	fi_addr_t		*fi_addr_array;
 	size_t			fi_addr_count;
 	uint64_t		flags;
+	struct util_coll_mc     coll_mc;
 	ofi_atomic32_t		ref;
 	fastlock_t		lock;
 };
@@ -126,16 +137,6 @@ struct util_coll_reduce_item {
 	int				count;
 	enum fi_datatype		datatype;
 	enum fi_op			op;
-};
-
-struct util_coll_mc {
-	struct fid_mc		mc_fid;
-	struct fid_ep		*ep;
-	struct util_av_set	*av_set;
-	uint64_t		local_rank;
-	uint16_t		group_id;
-	uint16_t		seq;
-	ofi_atomic32_t		ref;
 };
 
 struct join_data {
