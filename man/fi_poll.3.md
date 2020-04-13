@@ -186,17 +186,26 @@ struct fi_wait_attr {
   retrieve the underlying wait object.
 
 - *FI_WAIT_FD*
-: Indicates that the wait set should use file descriptor(s) as its wait
-  mechanism. It may not always be possible for a wait set to be implemented
-  using a single underlying file descriptor, but all wait objects will be file
-  descriptors. File descriptor wait objects must be usable in the
-  POSIX select(2), poll(2), and epoll(7) routines (if
-  available). However, a provider may signal an FD wait object by
-  marking it as readable or with an error.
+: Indicates that the wait set should use a single file descriptor as
+  its wait mechanism, as exposed to the application.  Internally, this
+  may require the use of epoll in order to support waiting on a single
+  file descriptor.  File descriptor wait objects must be usable in the
+  POSIX select(2) and poll(2), and Linux epoll(7) routines (if
+  available).  Provider signal an FD wait object by marking it as
+  readable or with an error.
 
 - *FI_WAIT_MUTEX_COND*
 : Specifies that the wait set should use a pthread mutex and cond
   variable as a wait object.
+
+- *FI_WAIT_POLLFD*
+: This option is similar to FI_WAIT_FD, but allows the wait mechanism to use
+  multiple file descriptors as its wait mechanism, as viewed by the
+  application.  The use of FI_WAIT_POLLFD can eliminate the need to use
+  epoll to abstract away needing to check multiple file descriptors when
+  waiting for events.  The file descriptors must be usable in the POSIX
+  select(2) and poll(2) routines, and match directly to being used with
+  poll.  See the NOTES section below for details on using pollfd.
 
 - *FI_WAIT_YIELD*
 : Indicates that the wait set will wait without a wait object but instead
@@ -277,20 +286,24 @@ processing.
 ## fi_control
 
 The fi_control call is used to access provider or implementation specific
-details of the wait set. Access to the wait set should be serialized across
-all calls when fi_control is invoked, as it may redirect the implementation
-of wait set operations. The following control commands are usable with a
-wait set.
+details of a fids that support blocking calls, such as wait sets, completion
+queues, counters, and event queues.  Access to the wait set or fid should be
+serialized across all calls when fi_control is invoked, as it may redirect
+the implementation of wait set operations. The following control commands
+are usable with a wait set or fid.
 
 *FI_GETWAIT (void \*\*)*
 : This command allows the user to retrieve the low-level wait object
-  associated with the wait set. The format of the wait set is specified
+  associated with a wait set or fid. The format of the wait set is specified
   during wait set creation, through the wait set attributes. The fi_control
   arg parameter should be an address where a pointer to the returned wait
   object will be written. This should be an 'int *' for FI_WAIT_FD,
-  or 'struct fi_mutex_cond' for FI_WAIT_MUTEX_COND. Support for FI_GETWAIT
-  is provider specific and may fail if not supported or if the wait set is
-  implemented using more than one wait object.
+  'struct fi_mutex_cond' for FI_WAIT_MUTEX_COND, or 'struct fi_wait_pollfd'
+  for FI_WAIT_POLLFD. Support for FI_GETWAIT is provider specific.
+
+*FI_GETWAITOBJ (enum fi_wait_obj \*)*
+: This command returns the type of wait object associated with a wait set
+  or fid.
 
 # RETURN VALUES
 
@@ -306,6 +319,65 @@ fi_poll
 
 # NOTES
 
+In many situations, blocking calls may need to wait on signals sent
+to a number of file descriptors.  For example, this is the case for
+socket based providers, such as tcp and udp, as well as utility providers
+such as multi-rail.  For simplicity, when epoll is available, it can
+be used to limit the number of file descriptors that an application
+must monitor.  The use of epoll may also be required in order
+to support FI_WAIT_FD.
+
+However, in order to support waiting on multiple file descriptors on systems
+where epoll support is not available, or where epoll performance may
+negatively impact performance, FI_WAIT_POLLFD provides this mechanism.
+A significant different between using POLLFD versus FD wait objects
+is that with FI_WAIT_POLLFD, the file descriptors may change dynamically.
+As an example, the file descriptors associated with a completion queues'
+wait set may change as endpoint associations with the CQ are added and
+removed.
+
+Struct fi_wait_pollfd is used to retrieve all file descriptors for fids
+using FI_WAIT_POLLFD to support blocking calls.
+
+```c
+struct fi_wait_pollfd {
+    uint64_t      change_index;
+    size_t        nfds;
+    struct pollfd *fd;
+};
+```
+
+*change_index*
+: The change_index may be used to determine if there have been any changes
+  to the file descriptor list.  Anytime a file descriptor is added, removed,
+  or its events are updated, this field is incremented by the provider.
+  Applications wishing to wait on file descriptors directly should cache
+  the change_index value.  Before blocking on file descriptor events, the
+  app should use fi_control() to retrieve the current change_index and
+  compare that against its cached value.  If the values differ, then the
+  app should update its file descriptor list prior to blocking.
+
+*nfds*
+: On input to fi_control(), this indicates the number of entries in the
+  struct pollfd * array.  On output, this will be set to the number of
+  entries needed to store the current number of file descriptors.  If
+  the input value is smaller than the output value, fi_control() will
+  return the error -FI_ETOOSMALL.  Note that setting nfds = 0 allows
+  an efficient way of checking the change_index.
+
+*fd*
+: This points to an array of struct pollfd entries.  The number of entries
+  is specified through the nfds field.  If the number of needed entries
+  is less than or equal to the number of entries available, the struct
+  pollfd array will be filled out with a list of file descriptors and
+  corresponding events that can be used in the select(2) and poll(2)
+  calls.
+
+The change_index is updated only when the file descriptors associated with
+the pollfd file set has changed.  Checking the change_index is an additional
+step needed when working with FI_WAIT_POLLFD wait ojects directly.  The use
+of the fi_trywait() function is still required if accessing wait objects
+directly.
 
 # SEE ALSO
 
