@@ -23,10 +23,11 @@ The following features are supported
 
 *Endpoint types*
 : *FI_EP_MSG* is the only supported endpoint type. Reliable
-datagram endpoint over TCP sockets can be achieved by layering RxM over
-tcp provider.
+  datagram endpoint over TCP sockets can be achieved by layering RxM over
+  tcp provider.
 
-: *FI_EP_RDM* is supported by layering ofi_rxm provider on top of the tcp provider.
+: *FI_EP_RDM* is supported by layering ofi_rxm provider on top of the
+  tcp provider.
 
 *Endpoint capabilities*
 : The tcp provider currently supports *FI_MSG*, *FI_RMA*
@@ -40,7 +41,6 @@ tcp provider.
 *Multi recv buffers*
 : The tcp provider supports multi recv buffers
 
-
 # RUNTIME PARAMETERS
 
 The tcp provider check for the following enviroment variables -
@@ -49,14 +49,16 @@ The tcp provider check for the following enviroment variables -
 : A specific can be requested with this variable
 
 *FI_TCP_PORT_LOW_RANGE/FI_TCP_PORT_HIGH_RANGE*
-: These variables are used to set the range of ports to be used by the tcp provider for its passive endpoint creation. This is useful where only a range of ports are allowed by firewall for tcp connections.
-
+: These variables are used to set the range of ports to be used by the
+  tcp provider for its passive endpoint creation. This is useful where
+  only a range of ports are allowed by firewall for tcp connections.
 
 # LIMITATIONS
 
-tcp provider is implemented over TCP sockets to emulate libfabric API. Hence
-the performance is lower than what an application might see implementing to
-sockets directly.
+The tcp provider is implemented over TCP sockets to emulate libfabric API.
+Hence the performance may be lower than what an application might see
+implementing to sockets directly, depending on the types of data transfers
+the application is trying to achieve.
 
 # SEE ALSO
 

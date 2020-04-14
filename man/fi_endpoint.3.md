@@ -499,8 +499,8 @@ The following option levels and option names and parameters are defined.
   to discard or claim a buffered receive or when to claim a buffered receive
   on getting a buffered receive completion. The value is typically used by a
   provider when sending a rendezvous protocol request where it would send
-  atleast FI_OPT_BUFFERED_MIN bytes of application data along with it. A smaller
-  sized renedezvous protocol message usually results in better latency for the
+  at least FI_OPT_BUFFERED_MIN bytes of application data along with it. A smaller
+  sized rendezvous protocol message usually results in better latency for the
   overall transfer of a large message.
 
 - *FI_OPT_CM_DATA_SIZE - size_t*
