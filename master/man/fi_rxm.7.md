@@ -196,7 +196,6 @@ of memory. The workaround is to use shared receive contexts for the MSG provider
 (FI_OFI_RXM_USE_SRX=1) or reduce eager message size (FI_OFI_RXM_BUFFER_SIZE) and
 MSG provider TX/RX queue sizes (FI_OFI_RXM_MSG_TX_SIZE / FI_OFI_RXM_MSG_RX_SIZE).
 
-
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),

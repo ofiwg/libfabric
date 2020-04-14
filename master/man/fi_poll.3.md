@@ -375,7 +375,7 @@ struct fi_wait_pollfd {
 
 The change_index is updated only when the file descriptors associated with
 the pollfd file set has changed.  Checking the change_index is an additional
-step needed when working with FI_WAIT_POLLFD wait ojects directly.  The use
+step needed when working with FI_WAIT_POLLFD wait objects directly.  The use
 of the fi_trywait() function is still required if accessing wait objects
 directly.
 

@@ -13,7 +13,7 @@ fi_mrail \- The Multi-Rail Utility Provider
 
 The mrail provider (ofi_mrail) is an utility provider that layers over an underlying
 provider to enable the use of multiple network ports (rails). This increases
-the total available bandwidth of an underlying proivder. The current status of
+the total available bandwidth of an underlying provider. The current status of
 mrail provider is experimental - not all libfabric features are supported and
 performance is not guaranteed.
 

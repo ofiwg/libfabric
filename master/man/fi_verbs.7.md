@@ -167,22 +167,27 @@ The verbs provider checks for the following environment variables.
 :  Default maximum rx context size (default: 384)
 
 *FI_VERBS_TX_IOV_LIMIT*
-: Default maximum tx iov_limit (default: 4). Note: RDM (internal - deprecated) EP type supports only 1
+: Default maximum tx iov_limit (default: 4). Note: RDM (internal -
+  deprecated) EP type supports only 1
 
 *FI_VERBS_RX_IOV_LIMIT*
-: Default maximum rx iov_limit (default: 4). Note: RDM (internal - deprecated) EP type supports only 1
+: Default maximum rx iov_limit (default: 4). Note: RDM (internal -
+  deprecated) EP type supports only 1
 
 *FI_VERBS_INLINE_SIZE*
-:  Default maximum inline size. Actual inject size returned in fi_info may be greater (default: 64)
+: Default maximum inline size. Actual inject size returned in fi_info
+  may be greater (default: 64)
 
 *FI_VERBS_MIN_RNR_TIMER*
 : Set min_rnr_timer QP attribute (0 - 31) (default: 12)
 
 *FI_VERBS_CQREAD_BUNCH_SIZE*
-: The number of entries to be read from the verbs completion queue at a time (default: 8).
+: The number of entries to be read from the verbs completion queue
+  at a time (default: 8).
 
 *FI_VERBS_PREFER_XRC*
-: Prioritize XRC transport fi_info before RC transport fi_info (default: 0, RC fi_info will be before XRC fi_info)
+: Prioritize XRC transport fi_info before RC transport fi_info (default:
+  0, RC fi_info will be before XRC fi_info)
 
 *FI_VERBS_GID_IDX*
 : The GID index to use (default: 0)
@@ -199,12 +204,13 @@ The verbs provider checks for the following environment variables.
 ### Variables specific to DGRAM endpoints
 
 *FI_VERBS_DGRAM_USE_NAME_SERVER*
-: The option that enables/disables OFI Name Server thread. The NS thread is used to
-  resolve IP-addresses to provider specific addresses (default: 1, if "OMPI_COMM_WORLD_RANK"
-  and "PMI_RANK" environment variables aren't defined)
+: The option that enables/disables OFI Name Server thread. The NS thread is
+  used to resolve IP-addresses to provider specific addresses (default: 1,
+  if "OMPI_COMM_WORLD_RANK" and "PMI_RANK" environment variables aren't defined)
 
 *FI_VERBS_NAME_SERVER_PORT*
-: The port on which Name Server thread listens incoming connections and requests (default: 5678)
+: The port on which Name Server thread listens incoming connections and
+  requests (default: 5678)
 
 ### Environment variables notes
 The fi_info utility would give the up-to-date information on environment variables:
@@ -217,7 +223,7 @@ fi_info -p verbs -e
 - Set FI_LOG_LEVEL=info or FI_LOG_LEVEL=debug (if debug build of libfabric is
   available) and check if there any errors because of incorrect input parameters
   to fi_getinfo.
-- Check if "fi_info -p verbs" is successful. If that fails the following chkecklist
+- Check if "fi_info -p verbs" is successful. If that fails the following checklist
   may help in ensuring that the RDMA verbs stack is functional:
   - If libfabric was compiled, check if verbs provider was built. Building verbs
    provider would be skipped if its dependencies (listed in requirements) aren't
