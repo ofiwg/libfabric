@@ -612,7 +612,8 @@ static int efa_av_close(struct fid *fid)
 	}
 	free(av->conn_table);
 	if (av->ep_type == FI_EP_RDM) {
-		if (rxr_env.enable_shm_transfer) {
+		if (rxr_env.enable_shm_transfer && av->shm_rdm_av &&
+		    &av->shm_rdm_av->fid) {
 			ret = fi_close(&av->shm_rdm_av->fid);
 			if (ret) {
 				err = ret;
@@ -714,15 +715,18 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 			 * the need of the instances with more CPUs.
 			 */
 			if (rxr_env.shm_av_size > EFA_SHM_MAX_AV_COUNT) {
-				ret = -FI_ENOMEM;
-				goto err_close_rdm_av;
+				ret = -FI_ENOSYS;
+				EFA_WARN(FI_LOG_AV, "The requested av size is beyond"
+					 " shm supported maximum av size: %s\n",
+					 fi_strerror(-ret));
+				goto err_close_util_av;
 			}
 			av_attr.count = rxr_env.shm_av_size;
 			assert(av_attr.type == FI_AV_TABLE);
 			ret = fi_av_open(efa_domain->shm_domain, &av_attr,
 					&av->shm_rdm_av, context);
 			if (ret)
-				goto err_close_rdm_av;
+				goto err_close_util_av;
 
 			for (i = 0; i < EFA_SHM_MAX_AV_COUNT; ++i)
 				av->shm_rdm_addr_map[i] = FI_ADDR_UNSPEC;
@@ -748,7 +752,7 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		if (!av->conn_table) {
 			ret = -FI_ENOMEM;
 			if (av->ep_type == FI_EP_DGRAM)
-				goto err;
+				goto err_close_util_av;
 			else
 				goto err_close_shm_av;
 		}
@@ -774,11 +778,11 @@ err_close_shm_av:
 			EFA_WARN(FI_LOG_AV, "Unable to close shm av: %s\n",
 				fi_strerror(ret));
 	}
-err_close_rdm_av:
-	retv = fi_close(&av->util_av.av_fid.fid);
+err_close_util_av:
+	retv = ofi_av_close(&av->util_av);
 	if (retv)
 		EFA_WARN(FI_LOG_AV,
-			 "Unable to close rdm av: %s\n", fi_strerror(-retv));
+			 "Unable to close util_av: %s\n", fi_strerror(-retv));
 err:
 	free(av);
 	return ret;
