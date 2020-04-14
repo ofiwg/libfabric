@@ -128,6 +128,7 @@ extern size_t rxm_msg_tx_size;
 extern size_t rxm_msg_rx_size;
 extern size_t rxm_def_univ_size;
 extern size_t rxm_cm_progress_interval;
+extern size_t rxm_cq_eq_fairness;
 extern int force_auto_progress;
 extern enum fi_wait_obj def_wait_obj;
 
@@ -656,6 +657,7 @@ struct rxm_ep {
 	struct fid_ep 		*srx_ctx;
 	size_t 			comp_per_progress;
 	ofi_atomic32_t		atomic_tx_credits;
+	int			cq_eq_fairness;
 
 	bool			msg_mr_local;
 	bool			rdm_mr_local;

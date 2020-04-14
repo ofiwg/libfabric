@@ -428,6 +428,12 @@ RXM_INI
 			"decrease noise during cq polling, but may result in "
 			"longer connection establishment times. (default: 10000).");
 
+	fi_param_define(&rxm_prov, "cq_eq_fairness", FI_PARAM_INT,
+			"Defines the maximum number of message provider CQ entries"
+			" that can be consecutively read across progress calls "
+			"without checking to see if the CM progress interval has "
+			"been reached. (default: 128).");
+
 	fi_param_define(&rxm_prov, "data_auto_progress", FI_PARAM_BOOL,
 			"Force auto-progress for data transfers even if app "
 			"requested manual progress (default: false/no).");
@@ -445,6 +451,9 @@ RXM_INI
 	if (fi_param_get_int(&rxm_prov, "cm_progress_interval",
 				(int *) &rxm_cm_progress_interval))
 		rxm_cm_progress_interval = 10000;
+	if (fi_param_get_int(&rxm_prov, "cq_eq_fairness",
+				(int *) &rxm_cq_eq_fairness))
+		rxm_cq_eq_fairness = 128;
 	fi_param_get_bool(&rxm_prov, "data_auto_progress", &force_auto_progress);
 	rxm_param_get_def_wait();
 
