@@ -11,7 +11,14 @@ v1.10.0, Fri Apr 17, 2020
 
 ## Core
 
-- TODO
+- Added new pollfd wait object to API
+- Added ability to query for a fid's wait object type
+- Updated most providers to a new provider versioning format
+- Support using multiple fds for blocking calls, in place of epoll
+- Fix memory leak when destroying rbtrees
+- Record interface names and network names for IP addressable providers
+- Improved performance of timing calculations
+- Improvements to MR caching mechanism
 
 ## EFA
 
@@ -19,7 +26,16 @@ v1.10.0, Fri Apr 17, 2020
 
 ## RxM
 
-- TODO
+- Add support for pollfd wait objects
+- Fix double free in error path
+- Report CQ errors for failed RMA transfers
+- Fixing locking in tagged receive path
+- Remove incorrect rx_attr capability bits
+- Handle unexpected messages when posting multi-recv buffers
+- Repost multi-recv buffers to the receive queue head
+- Fix unexpected message handling
+- Fix stall in collective progress caused by lost receive buffers
+- Add support for collection operations
 
 ## RxD
 
@@ -64,12 +80,25 @@ v1.10.0, Fri Apr 17, 2020
 
 ## TCP
 
-- TODO
+- Fix incorrect signaling of fd waking up thread in fi_cq_sread
+- Switch to using pollfd wait object instead of epoll as default
+- Add missing ep lock to fix possible ep list corruption
+- Remove incorrectly reported CQ events posted to EQ
+- Update domain name to IP network name
+- Improved socket processing to improve scalability and performance
+- Remove incorrect implementation of FI_MULTI_RECV support
+- Report error completions even if successful completion is suppressed
+- Report correct EQ event for aborted connections
 
 ## Verbs
 
--TODO
-
+- Fix XRC request identification
+- Fix small memory leak for XRC connections
+- Add retry logic for XRC connections
+- Fix mapping of domains to NICs when multiple NICs are present
+- Allow filtering of device names via environment variable
+- Fix compilation with -fno-common option
+- Code restructuring to improve maintenance
 
 v1.9.1, Fri Mar 6, 2020
 =======================
@@ -130,7 +159,7 @@ v1.9.1, Fri Mar 6, 2020
 ## Verbs
 
 - Fix segfault handling error completions
-- Avoid null derefence handling EQ events
+- Avoid null dereference handling EQ events
 - Remove possible deadlock in XRC error path
 - Enable credit tracking to avoid SQ, RQ, and CQ overruns
 - Verify that CQ space is available for bound EPs
@@ -195,7 +224,7 @@ v1.9.0, Fri Nov 22, 2019
 - Report correct value for max_order_raw_size
 - Report max_msg_size as a page aligned value
 - Fix potential multi-threaded race condition
-- Avoid potentia deadlock in disconnect protocol
+- Avoid potential deadlock in disconnect protocol
 
 ## RxD
 
@@ -431,7 +460,7 @@ v1.7.2, Fri Jun 14, 2019
 - Fix message windowing
 - Limit number of transfer entries that can be active
 - Use utility CQ calls to handle CQ overflow
-- Set correct opcde when completing read completions
+- Set correct opcode when completing read completions
 - Preset and fix tx and rx transfer flags
 - Fix segfault
 
