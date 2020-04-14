@@ -21,6 +21,12 @@ v1.10.0, Fri Apr 17, 2020
 
 - TODO
 
+## RxD
+
+- Replace rxd_ep_wait_fd_add with direct call to ofi_wait_fd_add
+- Reorganize attr caps
+- Add rxd to fi_provider man page
+
 ## SHM
 
 - Fix pointer ofi_cq_init progress pointer
