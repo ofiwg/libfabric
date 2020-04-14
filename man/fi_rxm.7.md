@@ -161,6 +161,11 @@ with (default: 256).
   functions when using manual progress. Higher values may provide less noise for 
   calls to fi_cq read functions, but may increase connection setup time (default: 10000)
 
+*FI_OFI_RXM_CQ_EQ_FAIRNESS*
+: Defines the maximum number of message provider CQ entries that can be
+  consecutively read across progress calls without checking to see if the
+  CM progress interval has been reached (default: 128)
+
 # Tuning
 
 ## Bandwidth

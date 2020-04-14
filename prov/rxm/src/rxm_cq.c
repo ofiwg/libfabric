@@ -44,6 +44,7 @@
 #include "rxm.h"
 
 size_t rxm_cm_progress_interval;
+size_t rxm_cq_eq_fairness;
 
 static const char *rxm_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
 		const void *err_data, char *buf, size_t len)
@@ -1396,7 +1397,10 @@ void rxm_ep_do_progress(struct util_ep *util_ep)
 				rxm_cq_read_write_error(rxm_ep);
 			else
 				rxm_cq_write_error_all(rxm_ep, ret);
-		} else {
+		}
+
+		if (ret == -FI_EAGAIN || --rxm_ep->cq_eq_fairness <= 0) {
+			rxm_ep->cq_eq_fairness = rxm_cq_eq_fairness;
 			timestamp = ofi_gettime_us();
 			if (timestamp - rxm_ep->msg_cq_last_poll >
 				rxm_cm_progress_interval) {
