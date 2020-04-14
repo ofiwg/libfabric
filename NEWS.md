@@ -23,7 +23,38 @@ v1.10.0, Fri Apr 17, 2020
 
 ## SHM
 
-- TODO
+- Fix pointer ofi_cq_init progress pointer
+- Add CQ wait object support with new FI_WAIT_YIELD wait type
+- Include string terminator in addrlen
+- Fix av_insert address cast
+- Fix unexpected messaging processing on empty receive queue
+- Fix unexpected messaging locking
+- Progress unexpected queue for non-tagged receives
+- Move ep_name_list initialization/cleanup and fix signal handling
+- Reorganize attr caps
+- Warn once on peer mapping failures
+- Add FI_DELIVERY_COMPLETE support
+- Fix FI_MULTI_RECV reporting and allow writing to overflow CQ for unexpected MULTI_RECV
+- Refactor and simplify msg processing, formating, and recv posting
+- Rename ep_entry to rx_entry and add tx_entry for pending outgoing messages
+- Properly align cmd data
+- Return correct addrlen on av lookup
+- Fix id passed into rma fast path
+- Fix typo
+- Fix potential data ordering issue in atomic fetch path
+- Add proper RMA read protocol without CMA
+- Add runtime CMA check during mapping
+- Add mmap-based fallback protocol for large messages without CMA
+- Add large message segmentation fallback protocol for large messages without CMA and
+  add FI_SHM_SAR_THRESHOLD to control switching between segmentation and mmap
+- Define macros for address translation
+- Allow building of shm provider on older kernels with x86 arch
+- Rename peer_addr to peer_data
+- Change locking when progressing response entries
+- Fix cmd_cnt increment on RMA ops
+- Add error handling when inserting more than SMR_MAX_PEERS
+- Add shm size space check
+
 
 ## TCP
 
