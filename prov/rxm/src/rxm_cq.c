@@ -1430,7 +1430,7 @@ void rxm_ep_do_progress(struct util_ep *util_ep)
 		}
 	} while ((ret > 0) && (++comp_read < rxm_ep->comp_per_progress));
 
-	if (OFI_UNLIKELY(!dlist_empty(&rxm_ep->deferred_tx_conn_queue))) {
+	if (!dlist_empty(&rxm_ep->deferred_tx_conn_queue)) {
 		dlist_foreach_container_safe(&rxm_ep->deferred_tx_conn_queue,
 					     struct rxm_conn, rxm_conn,
 					     deferred_conn_entry, conn_entry_tmp)

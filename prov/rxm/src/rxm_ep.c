@@ -1526,6 +1526,9 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 	struct rxm_deferred_tx_entry *def_tx_entry;
 	ssize_t ret = 0;
 
+	if (rxm_conn->handle.state != RXM_CMAP_CONNECTED)
+		return;
+
 	while (!dlist_empty(&rxm_conn->deferred_tx_queue) && !ret) {
 		def_tx_entry = container_of(rxm_conn->deferred_tx_queue.next,
 					    struct rxm_deferred_tx_entry, entry);
