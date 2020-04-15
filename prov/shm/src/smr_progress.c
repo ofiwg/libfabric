@@ -138,8 +138,12 @@ static int smr_progress_resp_entry(struct smr_ep *ep, struct smr_resp *resp,
 			"unidentified operation type\n");
 	}
 
-	if (fastlock_tryacquire(&peer_smr->lock))
-		return -FI_EAGAIN;
+	//Skip locking on transfers from self since we already have
+	//the ep->region->lock
+	if (peer_smr != ep->region) {
+		if (fastlock_tryacquire(&peer_smr->lock))
+			return -FI_EAGAIN;
+	}
 
 	peer_smr->cmd_cnt++;
 	if (tx_buf) {
@@ -150,7 +154,9 @@ static int smr_progress_resp_entry(struct smr_ep *ep, struct smr_resp *resp,
 		smr_peer_data(ep->region)[pending->addr].sar_status = 0;
 	}
 
-	fastlock_release(&peer_smr->lock);
+	if (peer_smr != ep->region)
+		fastlock_release(&peer_smr->lock);
+
 	return 0;
 }
 

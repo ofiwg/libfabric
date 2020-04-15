@@ -140,6 +140,7 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 
 	close(fd);
 
+	ep_name->region = mapped_addr;
 	*smr = mapped_addr;
 	fastlock_init(&(*smr)->lock);
 	fastlock_acquire(&(*smr)->lock);
@@ -208,11 +209,26 @@ int smr_map_create(const struct fi_provider *prov, int peer_count,
 	return 0;
 }
 
+static int smr_match_name(struct dlist_entry *item, const void *args)
+{
+	return !strcmp(container_of(item, struct smr_ep_name, entry)->name,
+		       (char *) args);
+}
+
 int smr_map_to_region(const struct fi_provider *prov, struct smr_peer *peer_buf)
 {
 	struct smr_region *peer;
 	size_t size;
 	int fd, ret = 0;
+	struct dlist_entry *entry;
+
+	entry = dlist_find_first_match(&ep_name_list, smr_match_name,
+				       peer_buf->peer.name);
+	if (entry) {
+		peer_buf->region = container_of(entry, struct smr_ep_name,
+						entry)->region;
+		return FI_SUCCESS;
+	}
 
 	fd = shm_open(peer_buf->peer.name, O_RDWR, S_IRUSR | S_IWUSR);
 	if (fd < 0) {
@@ -321,11 +337,17 @@ int smr_map_add(const struct fi_provider *prov, struct smr_map *map,
 
 void smr_map_del(struct smr_map *map, int id)
 {
+	struct dlist_entry *entry;
+
 	if (id >= SMR_MAX_PEERS || id < 0 ||
 	    map->peers[id].peer.addr == FI_ADDR_UNSPEC)
 		return;
 
-	munmap(map->peers[id].region, map->peers[id].region->total_size);
+	entry = dlist_find_first_match(&ep_name_list, smr_match_name,
+				       map->peers[id].peer.name);
+	if (!entry)
+		munmap(map->peers[id].region, map->peers[id].region->total_size);
+
 	map->peers[id].peer.addr = FI_ADDR_UNSPEC;
 }
 
