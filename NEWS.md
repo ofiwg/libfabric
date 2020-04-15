@@ -76,7 +76,8 @@ v1.10.0, Fri Apr 17, 2020
 - Fix cmd_cnt increment on RMA ops
 - Add error handling when inserting more than SMR_MAX_PEERS
 - Add shm size space check
-
+- Fix locking when processing response from self
+- Add locking around the ep_name_list
 
 ## TCP
 
