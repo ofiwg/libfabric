@@ -69,8 +69,9 @@ static inline ssize_t rxm_eq_readerr(struct rxm_ep *rxm_ep,
 
 	ret = fi_eq_readerr(rxm_ep->msg_eq, &entry->err_entry, 0);
 	if (ret != sizeof(entry->err_entry)) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-			"unable to fi_eq_readerr: %zd\n", ret);
+		if (ret != -FI_EAGAIN)
+			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+				"unable to fi_eq_readerr: %zd\n", ret);
 		return ret < 0 ? ret : -FI_EINVAL;
 	}
 
