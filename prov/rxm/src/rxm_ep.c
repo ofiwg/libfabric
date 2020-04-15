@@ -1055,9 +1055,9 @@ rxm_ep_alloc_rndv_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 {
 	struct fid_mr **mr_iov;
 	ssize_t ret;
-	struct rxm_tx_rndv_buf *tx_buf = (struct rxm_tx_rndv_buf *)
-			rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_RNDV);
-
+	struct rxm_tx_rndv_buf *tx_buf;
+	
+	tx_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_RNDV);
 	if (!tx_buf) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 			"Ran out of buffers from RNDV buffer pool\n");
@@ -1143,9 +1143,9 @@ rxm_ep_sar_tx_prepare_segment(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 			      uint64_t flags, uint64_t tag, uint8_t op,
 			      enum rxm_sar_seg_type seg_type, uint64_t *msg_id)
 {
-	struct rxm_tx_sar_buf *tx_buf = (struct rxm_tx_sar_buf *)
-		rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_SAR);
-
+	struct rxm_tx_sar_buf *tx_buf;
+	
+	tx_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_SAR);
 	if (!tx_buf) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 			"Ran out of buffers from SAR buffer pool\n");
@@ -1308,8 +1308,7 @@ rxm_ep_emulate_inject(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	struct rxm_tx_eager_buf *tx_buf;
 	ssize_t ret;
 
-	tx_buf = (struct rxm_tx_eager_buf *)
-		  rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX);
+	tx_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX);
 	if (!tx_buf) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 			"Ran out of buffers from Eager buffer pool\n");
@@ -1363,6 +1362,7 @@ rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		   const void *buf, size_t len, uint64_t data,
 		   uint64_t flags, uint64_t tag, uint8_t op)
 {
+	struct rxm_tx_base_buf *tx_buf;
 	size_t pkt_size = sizeof(struct rxm_pkt) + len;
 	ssize_t ret;
 
@@ -1370,8 +1370,7 @@ rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 	if (pkt_size <= rxm_ep->inject_limit &&
 	    !rxm_ep->util_ep.tx_cntr) {
-		struct rxm_tx_base_buf *tx_buf = (struct rxm_tx_base_buf *)
-			rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_INJECT);
+		tx_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_INJECT);
 		if (!tx_buf) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 				"Ran out of eager inject buffers\n");
@@ -1401,6 +1400,7 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		   void *context, uint64_t data, uint64_t flags, uint64_t tag,
 		   uint8_t op, struct rxm_pkt *inject_pkt)
 {
+	struct rxm_tx_eager_buf *tx_buf;
 	size_t data_len = ofi_total_iov_len(iov, count);
 	size_t total_len = sizeof(struct rxm_pkt) + data_len;
 	ssize_t ret;
@@ -1411,9 +1411,7 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	       (data_len <= rxm_ep->rxm_info->tx_attr->inject_size));
 
 	if (data_len <= rxm_eager_limit) {
-		struct rxm_tx_eager_buf *tx_buf = (struct rxm_tx_eager_buf *)
-			rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX);
-
+		tx_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX);
 		if (!tx_buf) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 				"Ran out of buffers from Eager buffer pool\n");
@@ -1461,8 +1459,9 @@ struct rxm_deferred_tx_entry *
 rxm_ep_alloc_deferred_tx_entry(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 			       enum rxm_deferred_tx_entry_type type)
 {
-	struct rxm_deferred_tx_entry *def_tx_entry =
-			calloc(1, sizeof(*def_tx_entry));
+	struct rxm_deferred_tx_entry *def_tx_entry;
+	
+	def_tx_entry = calloc(1, sizeof(*def_tx_entry));
 	if (!def_tx_entry)
 		return NULL;
 
@@ -1476,7 +1475,7 @@ rxm_ep_alloc_deferred_tx_entry(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 static void
 rxm_ep_sar_handle_segment_failure(struct rxm_deferred_tx_entry *def_tx_entry,
-				  ssize_t ret)
+				ssize_t ret)
 {
 	rxm_ep_sar_tx_cleanup(def_tx_entry->rxm_ep, def_tx_entry->rxm_conn,
 			      def_tx_entry->sar_seg.cur_seg_tx_buf);

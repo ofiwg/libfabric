@@ -79,8 +79,8 @@ rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg,
 	if (OFI_UNLIKELY(ret))
 		goto unlock;
 
-	rma_buf = rxm_rma_buf_alloc(rxm_ep);
-	if (OFI_UNLIKELY(!rma_buf)) {
+	rma_buf = ofi_buf_alloc(rxm_ep->buf_pools[RXM_BUF_POOL_RMA].pool);
+	if (!rma_buf) {
 		ret = -FI_EAGAIN;
 		goto unlock;
 	}
@@ -209,8 +209,8 @@ rxm_ep_rma_emulate_inject_msg(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 	assert(msg->rma_iov_count <= rxm_ep->rxm_info->tx_attr->rma_iov_limit);
 
-	rma_buf = rxm_rma_buf_alloc(rxm_ep);
-	if (OFI_UNLIKELY(!rma_buf))
+	rma_buf = ofi_buf_alloc(rxm_ep->buf_pools[RXM_BUF_POOL_RMA].pool);
+	if (!rma_buf)
 		return -FI_EAGAIN;
 
 	rma_buf->pkt.hdr.size = total_size;

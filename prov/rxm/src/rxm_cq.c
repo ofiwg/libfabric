@@ -753,8 +753,8 @@ static ssize_t rxm_rndv_send_ack(struct rxm_rx_buf *rx_buf)
 		}
 	}
 
-	rx_buf->recv_entry->rndv.tx_buf = (struct rxm_tx_base_buf *)
-		rxm_tx_buf_alloc(rx_buf->ep, RXM_BUF_POOL_TX_ACK);
+	rx_buf->recv_entry->rndv.tx_buf = rxm_tx_buf_alloc(rx_buf->ep,
+							   RXM_BUF_POOL_TX_ACK);
 	if (!rx_buf->recv_entry->rndv.tx_buf) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ,
 			"ran out of buffers from ACK buffer pool\n");
@@ -949,8 +949,7 @@ static ssize_t rxm_handle_atomic_req(struct rxm_ep *rxm_ep,
 	if (!rx_buf->conn)
 		return -FI_EOTHER;
 
-	resp_buf = (struct rxm_tx_atomic_buf *)
-		   rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_ATOMIC);
+	resp_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_ATOMIC);
 	if (!resp_buf) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 			"Unable to allocate from Atomic buffer pool\n");

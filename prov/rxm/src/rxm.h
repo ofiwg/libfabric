@@ -885,7 +885,7 @@ rxm_ep_format_tx_buf_pkt(struct rxm_conn *rxm_conn, size_t len, uint8_t op,
 }
 
 
-static inline struct rxm_buf *
+static inline void *
 rxm_tx_buf_alloc(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
 {
 	assert((type == RXM_BUF_POOL_TX) ||
@@ -926,19 +926,6 @@ rxm_rx_buf_free(struct rxm_rx_buf *rx_buf)
 	} else {
 		ofi_buf_free(rx_buf);
 	}
-}
-
-static inline struct rxm_rma_buf *rxm_rma_buf_alloc(struct rxm_ep *rxm_ep)
-{
-	return (struct rxm_rma_buf *)
-		ofi_buf_alloc(rxm_ep->buf_pools[RXM_BUF_POOL_RMA].pool);
-}
-
-static inline
-struct rxm_tx_atomic_buf *rxm_tx_atomic_buf_alloc(struct rxm_ep *rxm_ep)
-{
-	return (struct rxm_tx_atomic_buf *)
-		rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_ATOMIC);
 }
 
 static inline void
