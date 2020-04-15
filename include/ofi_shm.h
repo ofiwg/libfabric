@@ -173,6 +173,7 @@ struct smr_peer_data {
 };
 
 extern struct dlist_entry ep_name_list;
+extern pthread_mutex_t ep_list_lock;
 
 struct smr_region;
 
