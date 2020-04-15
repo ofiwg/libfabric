@@ -3,6 +3,7 @@
  * Copyright (c) 2015-2018 Los Alamos National Security, LLC.
  *                         All rights reserved.
  * Copyright (c) 2015-2016 Cisco Systems, Inc.  All rights reserved.
+ * Copyright (c) 2020      Triad National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -178,7 +179,7 @@
 
 /* No overhead secondary capabilities.  These can be silently enabled by the
  * provider. */
-#define GNIX_EP_SEC_CAPS (FI_MULTI_RECV | FI_TRIGGER | FI_FENCE)
+#define GNIX_EP_SEC_CAPS (FI_MULTI_RECV | FI_TRIGGER | FI_FENCE | FI_LOCAL_COMM | FI_REMOTE_COMM)
 
 /* Secondary capabilities that introduce overhead.  Must be requested. */
 #define GNIX_EP_SEC_CAPS_OH (FI_SOURCE | FI_RMA_EVENT | FI_SOURCE_ERR)
