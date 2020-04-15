@@ -82,6 +82,53 @@ void smr_cma_check(struct smr_region *smr, struct smr_region *peer_smr)
 	peer_smr->cma_cap = smr->cma_cap;
 }
 
+size_t smr_calculate_size_offsets(size_t tx_count, size_t rx_count,
+				  size_t *cmd_offset, size_t *resp_offset,
+				  size_t *inject_offset, size_t *sar_offset,
+				  size_t *peer_offset, size_t *name_offset)
+{
+	size_t cmd_queue_offset, resp_queue_offset, inject_pool_offset;
+	size_t sar_pool_offset, peer_data_offset, ep_name_offset;
+	size_t tx_size, rx_size, total_size;
+
+	tx_size = roundup_power_of_two(tx_count);
+	rx_size = roundup_power_of_two(rx_count);
+
+	cmd_queue_offset = sizeof(struct smr_region);
+	resp_queue_offset = cmd_queue_offset + sizeof(struct smr_cmd_queue) +
+			    sizeof(struct smr_cmd) * rx_size;
+	inject_pool_offset = resp_queue_offset + sizeof(struct smr_resp_queue) +
+			     sizeof(struct smr_resp) * tx_size;
+	sar_pool_offset = inject_pool_offset + sizeof(struct smr_inject_pool) +
+			  sizeof(struct smr_inject_pool_entry) * rx_size;
+	peer_data_offset = sar_pool_offset + sizeof(struct smr_sar_pool) +
+			   sizeof(struct smr_sar_pool_entry) * SMR_MAX_PEERS;
+	ep_name_offset = peer_data_offset + sizeof(struct smr_peer_data) * SMR_MAX_PEERS;
+
+	if (cmd_offset)
+		*cmd_offset = cmd_queue_offset;
+	if (resp_offset)
+		*resp_offset = resp_queue_offset;
+	if (inject_offset)
+		*inject_offset = inject_pool_offset;
+	if (sar_offset)
+		*sar_offset = sar_pool_offset;
+	if (peer_offset)
+		*peer_offset = peer_data_offset;
+	if (name_offset)
+		*name_offset = ep_name_offset;
+
+	total_size = ep_name_offset + NAME_MAX;
+
+	/* 
+ 	 * Revisit later to see if we really need the size adjustment, or
+ 	 * at most align to a multiple of a page size.
+ 	 */
+	total_size = roundup_power_of_two(total_size);
+
+	return total_size;
+}
+
 /* TODO: Determine if aligning SMR data helps performance */
 int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	       const struct smr_attr *attr, struct smr_region **smr)
@@ -94,21 +141,12 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	void *mapped_addr;
 	size_t tx_size, rx_size;
 
-	cmd_queue_offset = sizeof(**smr);
-
 	tx_size = roundup_power_of_two(attr->tx_count);
 	rx_size = roundup_power_of_two(attr->rx_count);
-	resp_queue_offset = cmd_queue_offset + sizeof(struct smr_cmd_queue) +
-			sizeof(struct smr_cmd) * rx_size;
-	inject_pool_offset = resp_queue_offset + sizeof(struct smr_resp_queue) +
-			sizeof(struct smr_resp) * tx_size;
-	sar_pool_offset = inject_pool_offset + sizeof(struct smr_inject_pool) +
-			sizeof(struct smr_inject_pool_entry) * rx_size;
-	peer_data_offset = sar_pool_offset + sizeof(struct smr_sar_pool) +
-			sizeof(struct smr_sar_pool_entry) * SMR_MAX_PEERS;
-	name_offset = peer_data_offset + sizeof(struct smr_peer_data) * SMR_MAX_PEERS;
-	total_size = name_offset + strlen(attr->name) + 1;
-	total_size = roundup_power_of_two(total_size);
+	total_size = smr_calculate_size_offsets(tx_size, rx_size, &cmd_queue_offset,
+					&resp_queue_offset, &inject_pool_offset,
+					&sar_pool_offset, &peer_data_offset,
+					&name_offset);
 
 	fd = shm_open(attr->name, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
 	if (fd < 0) {

@@ -72,6 +72,47 @@ static void smr_resolve_addr(const char *node, const char *service,
 	(*addr)[*addrlen - 1]  = '\0';
 }
 
+/*
+ * The smr_shm_space_check is to check if there's enough shm space we
+ * need under /dev/shm.
+ * Here we use #core instead of SMR_MAX_PEERS, as it is the most likely
+ * value and has less possibility of failing fi_getinfo calls that are
+ * currently passing, and breaking currently working app
+ */
+static int smr_shm_space_check(size_t tx_count, size_t rx_count)
+{
+	struct statvfs stat;
+	char shm_fs[] = "/dev/shm";
+	uint64_t available_size, shm_size_needed;
+	int num_of_core, err;
+
+	num_of_core = ofi_sysconf(_SC_NPROCESSORS_ONLN);
+	if (num_of_core < 0) {
+		FI_WARN(&smr_prov, FI_LOG_CORE,
+			"Get number of processor failed (%s)\n",
+			strerror(errno));
+		return -errno;
+	}
+	shm_size_needed = num_of_core *
+			  smr_calculate_size_offsets(tx_count, rx_count,
+						     NULL, NULL, NULL,
+						     NULL, NULL, NULL);
+	err = statvfs(shm_fs, &stat);
+	if (err) {
+		FI_WARN(&smr_prov, FI_LOG_CORE,
+			"Get filesystem %s statistics failed (%s)\n",
+			shm_fs, strerror(errno));
+	} else {
+		available_size = stat.f_bsize * stat.f_bavail;
+		if (available_size < shm_size_needed) {
+			FI_WARN(&smr_prov, FI_LOG_CORE,
+				"Not enough available space in %s.\n", shm_fs);
+			return -FI_ENOSPC;
+		}
+	}
+	return 0;
+}
+
 static int smr_getinfo(uint32_t version, const char *node, const char *service,
 		       uint64_t flags, const struct fi_info *hints,
 		       struct fi_info **info)
@@ -90,6 +131,12 @@ static int smr_getinfo(uint32_t version, const char *node, const char *service,
 			   hints, info);
 	if (ret)
 		return ret;
+
+	ret = smr_shm_space_check((*info)->tx_attr->size, (*info)->rx_attr->size);
+	if (ret) {
+		fi_freeinfo(*info);
+		return ret;
+	}
 
 	for (cur = *info; cur; cur = cur->next) {
 		if (!(flags & FI_SOURCE) && !cur->dest_addr)

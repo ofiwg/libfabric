@@ -35,6 +35,7 @@
 #endif /* HAVE_CONFIG_H */
 
 #include <sys/types.h>
+#include <sys/statvfs.h>
 #include <pthread.h>
 #include <stdint.h>
 #include <stddef.h>
@@ -78,6 +79,7 @@ int smr_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 struct smr_av {
 	struct util_av		util_av;
 	struct smr_map		*smr_map;
+	size_t			used;
 };
 
 int smr_domain_open(struct fid_fabric *fabric, struct fi_info *info,
