@@ -447,7 +447,7 @@ ssize_t rxm_cq_handle_rndv(struct rxm_rx_buf *rx_buf)
 	/* En-queue new rx buf to be posted ASAP so that we don't block any
 	 * incoming messages. RNDV processing can take a while. */
 	new_rx_buf = rxm_rx_buf_alloc(rx_buf->ep, rx_buf->msg_ep, 1);
-	if (OFI_UNLIKELY(!new_rx_buf))
+	if (!new_rx_buf)
 		return -FI_ENOMEM;
 	dlist_insert_tail(&new_rx_buf->repost_entry,
 			  &new_rx_buf->ep->repost_ready_list);
@@ -1044,6 +1044,16 @@ err:
 	return ret;
 }
 
+static inline ssize_t rxm_handle_credit(struct rxm_ep *rxm_ep,
+					struct rxm_rx_buf *rx_buf)
+{
+	assert(rx_buf->comp_flags == FI_RECV);
+	rxm_ep->flow_ctrl_ops->add_credits(rx_buf->msg_ep,
+					   rx_buf->pkt.ctrl_hdr.ctrl_data);
+	rxm_rx_buf_free(rx_buf);
+	return FI_SUCCESS;
+}
+
 int rxm_finish_coll_eager_send(struct rxm_ep *rxm_ep, struct rxm_tx_eager_buf *tx_eager_buf)
 {
 	int ret;
@@ -1063,6 +1073,7 @@ ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 {
 	ssize_t ret;
 	struct rxm_rx_buf *rx_buf;
+	struct rxm_tx_base_buf *tx_buf;
 	struct rxm_tx_sar_buf *tx_sar_buf;
 	struct rxm_tx_eager_buf *tx_eager_buf;
 	struct rxm_tx_rndv_buf *tx_rndv_buf;
@@ -1080,6 +1091,11 @@ ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 		ret = rxm_ep->txrx_ops->comp_eager_tx(rxm_ep, tx_eager_buf);
 		ofi_buf_free(tx_eager_buf);
 		return ret;
+	case RXM_CREDIT_TX:
+		tx_buf = comp->op_context;
+		assert(comp->flags & FI_SEND);
+		ofi_buf_free(tx_buf);
+		return 0;
 	case RXM_INJECT_TX:
 		assert(0);
 		return -FI_EOPBADSTATE;
@@ -1106,6 +1122,8 @@ ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 			return rxm_handle_atomic_req(rxm_ep, rx_buf);
 		case rxm_ctrl_atomic_resp:
 			return rxm_handle_atomic_resp(rxm_ep, rx_buf);
+		case rxm_ctrl_credit:
+			return rxm_handle_credit(rxm_ep, rx_buf);
 		default:
 			FI_WARN(&rxm_prov, FI_LOG_CQ, "Unknown message type\n");
 			assert(0);
@@ -1210,6 +1228,7 @@ void rxm_cq_write_error_all(struct rxm_ep *rxm_ep, int err)
 
 void rxm_cq_read_write_error(struct rxm_ep *rxm_ep)
 {
+	struct rxm_tx_base_buf *base_buf;
 	struct rxm_tx_eager_buf *eager_buf;
 	struct rxm_tx_sar_buf *sar_buf;
 	struct rxm_tx_rndv_buf *rndv_buf;
@@ -1260,6 +1279,11 @@ void rxm_cq_read_write_error(struct rxm_ep *rxm_ep)
 		err_entry.op_context = sar_buf->app_context;
 		err_entry.flags = ofi_tx_cq_flags(sar_buf->pkt.hdr.op);
 		rxm_finish_sar_segment_send(rxm_ep, sar_buf, true);
+		break;
+	case RXM_CREDIT_TX:
+		base_buf = err_entry.op_context;
+		err_entry.op_context = 0;
+		err_entry.flags = ofi_tx_cq_flags(base_buf->pkt.hdr.op);
 		break;
 	case RXM_RNDV_TX:
 		rndv_buf = err_entry.op_context;

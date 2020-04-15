@@ -179,6 +179,14 @@ static void rxm_buf_init(struct ofi_bufpool_region *region, void *buf)
 		pkt = &tx_sar_buf->pkt;
 		type = rxm_ctrl_seg;
 		break;
+	case RXM_BUF_POOL_TX_CREDIT:
+		tx_base_buf = buf;
+		tx_base_buf->hdr.state = RXM_CREDIT_TX;
+
+		tx_base_buf->hdr.desc = mr_desc;
+		pkt = &tx_base_buf->pkt;
+		type = rxm_ctrl_credit;
+		break;
 	case RXM_BUF_POOL_TX_RNDV:
 		tx_rndv_buf = buf;
 
@@ -342,6 +350,7 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 		[RXM_BUF_POOL_TX_RNDV] = rxm_ep->msg_info->tx_attr->size,
 		[RXM_BUF_POOL_TX_ATOMIC] = rxm_ep->msg_info->tx_attr->size,
 		[RXM_BUF_POOL_TX_SAR] = rxm_ep->msg_info->tx_attr->size,
+		[RXM_BUF_POOL_TX_CREDIT] = rxm_ep->msg_info->tx_attr->size,
 		[RXM_BUF_POOL_RMA] = rxm_ep->msg_info->tx_attr->size,
 	};
 	size_t entry_sizes[] = {
@@ -359,6 +368,7 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 					 sizeof(struct rxm_tx_atomic_buf),
 		[RXM_BUF_POOL_TX_SAR] = rxm_eager_limit +
 					sizeof(struct rxm_tx_sar_buf),
+		[RXM_BUF_POOL_TX_CREDIT] = sizeof(struct rxm_tx_base_buf),
 		[RXM_BUF_POOL_RMA] = rxm_eager_limit +
 				     sizeof(struct rxm_rma_buf),
 	};
@@ -1577,6 +1587,35 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 			rxm_ep_dequeue_deferred_tx_queue(def_tx_entry);
 			free(def_tx_entry);
 			break;
+		case RXM_DEFERRED_TX_CREDIT_SEND: {
+			struct iovec iov = {
+				.iov_base = &def_tx_entry->credit_msg.tx_buf->pkt,
+				.iov_len = sizeof(
+					def_tx_entry->credit_msg.tx_buf->pkt),
+			};
+			struct fi_msg msg = {
+				.msg_iov = &iov,
+				.iov_count = 1,
+				.context = def_tx_entry->credit_msg.tx_buf,
+				.desc = &def_tx_entry->credit_msg.tx_buf->hdr.desc
+			};
+
+			ret = fi_sendmsg(def_tx_entry->rxm_conn->msg_ep, &msg,
+					 FI_PRIORITY);
+			if (ret) {
+				if (ret == -FI_EAGAIN)
+					break;
+				rxm_cq_write_error(
+					def_tx_entry->rxm_ep->util_ep.rx_cq,
+					def_tx_entry->rxm_ep->util_ep.rx_cntr,
+					def_tx_entry->rndv_read.rx_buf->recv_entry
+						->context,
+					ret);
+				break;
+			}
+			rxm_ep_dequeue_deferred_tx_queue(def_tx_entry);
+			free(def_tx_entry);
+		} break;
 		}
 	}
 }
