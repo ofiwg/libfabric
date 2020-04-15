@@ -22,7 +22,31 @@ v1.10.0, Fri Apr 17, 2020
 
 ## EFA
 
-- TODO
+- Replaces custom admin commands with native use of rdma-core APIs
+- Added support for FI_RMA using RDMA Reads
+- Added rendezvous protocol for long messages using RDMA Reads
+- Added support for CUDA buffers (FI_HMEM)
+- Added medium-message protocol
+- Added support for atomic operations
+- Added randomized Queue Key assignment to endpoints
+- Improved support for client-server applications
+- Disables use of shared-memory if FI_LOCAL_COMM is not required
+- Updated protocol to v4
+- Refactor packet handling functions and headers for better extensibility
+- Added handshake protocol to negotiate protocol features with peers
+- Refactor send/recv paths for improved memory descriptor handling
+- Use inlined device sends for FI_INJECT
+- Removes fork() to detect CMA support from the init path
+- Better reuse of MRs keys across EFA and SHM control path
+- Squashes the MR functions in the RxR and EFA layers
+- Squashes the AV functions in the RxR and EFA layers
+- Use 0-based offset if FI_MR_VIRT_ADDR not set
+- Retries memory registration in MR cache error paths
+- Fixes to addr_format handling in the RDM endpoint
+- Fixes memory leaks
+- Fixes AV error handling paths
+- Fixes shm error handling paths
+- Fixes compiler warnings
 
 ## RxM
 
