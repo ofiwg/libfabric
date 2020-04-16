@@ -316,7 +316,10 @@ int smr_format_mmap(struct smr_ep *ep, struct smr_cmd *cmd,
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL, "calloc error\n");
 		return -FI_ENOMEM;
 	}
+
+	pthread_mutex_lock(&ep_list_lock);
 	dlist_insert_tail(&map_name->entry, &ep_name_list);
+	pthread_mutex_unlock(&ep_list_lock);
 	num = smr_mmap_name(map_name->name, ep->name, msg_id);
 	if (num < 0) {
 		FI_WARN(&smr_prov, FI_LOG_AV, "generating shm file name failed\n");

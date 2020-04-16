@@ -172,14 +172,16 @@ struct smr_peer_data {
 	uint64_t		sar_status;
 };
 
-struct smr_ep_name {
-	char name[NAME_MAX];
-	struct dlist_entry entry;
-};
-
 extern struct dlist_entry ep_name_list;
+extern pthread_mutex_t ep_list_lock;
 
 struct smr_region;
+
+struct smr_ep_name {
+	char name[NAME_MAX];
+	struct smr_region *region;
+	struct dlist_entry entry;
+};
 
 struct smr_peer {
 	struct smr_addr		peer;

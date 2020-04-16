@@ -43,17 +43,19 @@
 #include <ofi_shm.h>
 
 struct dlist_entry ep_name_list;
-
 DEFINE_LIST(ep_name_list);
+pthread_mutex_t ep_list_lock = PTHREAD_MUTEX_INITIALIZER;
 
 void smr_cleanup(void)
 {
 	struct smr_ep_name *ep_name;
 	struct dlist_entry *tmp;
 
+	pthread_mutex_lock(&ep_list_lock);
 	dlist_foreach_container_safe(&ep_name_list, struct smr_ep_name,
 				     ep_name, entry, tmp)
 		free(ep_name);
+	pthread_mutex_unlock(&ep_list_lock);
 }
 
 static void smr_peer_addr_init(struct smr_addr *peer)
@@ -161,6 +163,8 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	}
 	strncpy(ep_name->name, (char *)attr->name, NAME_MAX - 1);
 	ep_name->name[NAME_MAX - 1] = '\0';
+
+	pthread_mutex_lock(&ep_list_lock);
 	dlist_insert_tail(&ep_name->entry, &ep_name_list);
 
 	ret = ftruncate(fd, total_size);
@@ -177,6 +181,9 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	}
 
 	close(fd);
+
+	ep_name->region = mapped_addr;
+	pthread_mutex_unlock(&ep_list_lock);
 
 	*smr = mapped_addr;
 	fastlock_init(&(*smr)->lock);
@@ -217,6 +224,7 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 err2:
 	shm_unlink(attr->name);
 	close(fd);
+	pthread_mutex_unlock(&ep_list_lock);
 err1:
 	return -errno;
 }
@@ -246,11 +254,29 @@ int smr_map_create(const struct fi_provider *prov, int peer_count,
 	return 0;
 }
 
+static int smr_match_name(struct dlist_entry *item, const void *args)
+{
+	return !strcmp(container_of(item, struct smr_ep_name, entry)->name,
+		       (char *) args);
+}
+
 int smr_map_to_region(const struct fi_provider *prov, struct smr_peer *peer_buf)
 {
 	struct smr_region *peer;
 	size_t size;
 	int fd, ret = 0;
+	struct dlist_entry *entry;
+
+	pthread_mutex_lock(&ep_list_lock);
+	entry = dlist_find_first_match(&ep_name_list, smr_match_name,
+				       peer_buf->peer.name);
+	if (entry) {
+		peer_buf->region = container_of(entry, struct smr_ep_name,
+						entry)->region;
+		pthread_mutex_unlock(&ep_list_lock);
+		return FI_SUCCESS;
+	}
+	pthread_mutex_unlock(&ep_list_lock);
 
 	fd = shm_open(peer_buf->peer.name, O_RDWR, S_IRUSR | S_IWUSR);
 	if (fd < 0) {
@@ -359,11 +385,19 @@ int smr_map_add(const struct fi_provider *prov, struct smr_map *map,
 
 void smr_map_del(struct smr_map *map, int id)
 {
+	struct dlist_entry *entry;
+
 	if (id >= SMR_MAX_PEERS || id < 0 ||
 	    map->peers[id].peer.addr == FI_ADDR_UNSPEC)
 		return;
 
-	munmap(map->peers[id].region, map->peers[id].region->total_size);
+	pthread_mutex_lock(&ep_list_lock);
+	entry = dlist_find_first_match(&ep_name_list, smr_match_name,
+				       map->peers[id].peer.name);
+	pthread_mutex_unlock(&ep_list_lock);
+	if (!entry)
+		munmap(map->peers[id].region, map->peers[id].region->total_size);
+
 	map->peers[id].peer.addr = FI_ADDR_UNSPEC;
 }
 
