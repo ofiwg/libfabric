@@ -1927,28 +1927,26 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 
 		oflow_buf = ux_send->req->oflow.oflow_buf;
 
+		if (req->recv.multi_recv) {
+			req = mrecv_req_dup(req);
+			if (!req)
+				return -FI_EAGAIN;
+			recv_req_tgt_event(req, event);
+
+			/* Set start and length uniquely for an unexpected
+			 * mrecv request.
+			 */
+			mrecv_req_oflow_event(req,
+					event->tgt_long.rlength);
+		} else {
+			recv_req_tgt_event(req, event);
+
+			req->data_len = ux_send->rlen;
+			if (req->data_len > req->recv.ulen)
+				req->data_len = req->recv.ulen;
+		}
+
 		if (oflow_buf->type == CXIP_LE_TYPE_SINK) {
-			if (req->recv.multi_recv) {
-				req = mrecv_req_dup(req);
-				if (!req) {
-					fastlock_release(&rxc->rx_lock);
-					return -FI_EAGAIN;
-				}
-				recv_req_tgt_event(req, event);
-
-				/* Set start and length uniquely for an
-				 * unexpected mrecv request.
-				 */
-				mrecv_req_oflow_event(req,
-						event->tgt_long.rlength);
-			} else {
-				recv_req_tgt_event(req, event);
-
-				if (event->tgt_long.rlength > req->recv.ulen)
-					req->data_len = req->recv.ulen;
-				else
-					req->data_len = event->tgt_long.rlength;
-			}
 			req->recv.src_offset = ux_send->src_offset;
 
 			/* For unexpected, long, eager messages, issue a Get to
@@ -1970,26 +1968,6 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 			cxip_recv_req_dequeue_nolock(req);
 			fastlock_release(&rxc->rx_lock);
 			return ret;
-		}
-
-		if (req->recv.multi_recv) {
-			req = mrecv_req_dup(req);
-			if (!req)
-				return -FI_EAGAIN;
-			recv_req_tgt_event(req, event);
-
-			/* Set start and length uniquely for an unexpected
-			 * mrecv request.
-			 */
-			mrecv_req_oflow_event(req,
-					event->tgt_long.rlength);
-		} else {
-			recv_req_tgt_event(req, event);
-
-			if (event->tgt_long.mlength > req->recv.ulen)
-				req->data_len = req->recv.ulen;
-			else
-				req->data_len = event->tgt_long.mlength;
 		}
 
 		/* Copy data out of overflow buffer. */
