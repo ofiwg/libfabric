@@ -565,6 +565,7 @@ destroy:
 	cache->storage.destroy(&cache->storage);
 dec:
 	ofi_atomic_dec32(&cache->domain->ref);
+	pthread_mutex_destroy(&cache->lock);
 	cache->domain = NULL;
 	return ret;
 }
