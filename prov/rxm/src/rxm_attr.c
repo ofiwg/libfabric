@@ -77,6 +77,19 @@ struct fi_ep_attr rxm_ep_attr = {
 	.mem_tag_format = FI_TAG_GENERIC,
 };
 
+struct fi_ep_attr rxm_ep_attr_coll = {
+	.type = FI_EP_RDM,
+	.protocol = FI_PROTO_RXM,
+	.protocol_version = 1,
+	.max_msg_size = SIZE_MAX,
+	.tx_ctx_cnt = 1,
+	.rx_ctx_cnt = 1,
+	.max_order_raw_size = SIZE_MAX,
+	.max_order_war_size = SIZE_MAX,
+	.max_order_waw_size = SIZE_MAX,
+	.mem_tag_format = FI_TAG_GENERIC >> 1,
+};
+
 struct fi_domain_attr rxm_domain_attr = {
 	.caps = RXM_DOMAIN_CAPS,
 	.threading = FI_THREAD_SAFE,
@@ -102,14 +115,25 @@ struct fi_fabric_attr rxm_fabric_attr = {
 	.prov_version = OFI_VERSION_DEF_PROV,
 };
 
-struct fi_info rxm_info = {
+struct fi_info rxm_info_coll = {
 	.caps = RXM_TX_CAPS | RXM_RX_CAPS | RXM_DOMAIN_CAPS | FI_COLLECTIVE,
+	.addr_format = FI_SOCKADDR,
+	.tx_attr = &rxm_tx_attr,
+	.rx_attr = &rxm_rx_attr,
+	.ep_attr = &rxm_ep_attr_coll,
+	.domain_attr = &rxm_domain_attr,
+	.fabric_attr = &rxm_fabric_attr
+};
+
+struct fi_info rxm_info = {
+	.caps = RXM_TX_CAPS | RXM_RX_CAPS | RXM_DOMAIN_CAPS,
 	.addr_format = FI_SOCKADDR,
 	.tx_attr = &rxm_tx_attr,
 	.rx_attr = &rxm_rx_attr,
 	.ep_attr = &rxm_ep_attr,
 	.domain_attr = &rxm_domain_attr,
-	.fabric_attr = &rxm_fabric_attr
+	.fabric_attr = &rxm_fabric_attr,
+	.next = &rxm_info_coll,
 };
 
 struct util_prov rxm_util_prov = {
