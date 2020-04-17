@@ -274,9 +274,6 @@ void rxr_reset_rx_tx_to_core(const struct fi_info *user_info,
 	core_info->rx_attr->size =
 		user_info->rx_attr->size < core_info->rx_attr->size ?
 		user_info->rx_attr->size : core_info->rx_attr->size;
-	core_info->rx_attr->iov_limit =
-		user_info->rx_attr->iov_limit < core_info->rx_attr->iov_limit ?
-		user_info->rx_attr->iov_limit : core_info->rx_attr->iov_limit;
 	/* tx attr */
 	core_info->tx_attr->inject_size =
 		user_info->tx_attr->inject_size < core_info->tx_attr->inject_size ?
@@ -284,9 +281,6 @@ void rxr_reset_rx_tx_to_core(const struct fi_info *user_info,
 	core_info->tx_attr->size =
 		user_info->tx_attr->size < core_info->tx_attr->size ?
 		user_info->tx_attr->size : core_info->tx_attr->size;
-	core_info->tx_attr->iov_limit =
-		user_info->tx_attr->iov_limit < core_info->tx_attr->iov_limit ?
-		user_info->tx_attr->iov_limit : core_info->tx_attr->iov_limit;
 }
 
 void rxr_set_rx_tx_size(struct fi_info *info,
