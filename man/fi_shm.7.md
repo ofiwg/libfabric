@@ -116,6 +116,12 @@ The *shm* provider checks for the following environment variables:
   to mmap (only valid when CMA is not available). Default: SIZE_MAX
   (18446744073709551615)
 
+*FI_SHM_TX_SIZE*
+: Maximum number of outstanding tx operations. Default 1024
+
+*FI_SHM_RX_SIZE*
+: Maximum number of outstanding rx operations. Default 1024
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),
