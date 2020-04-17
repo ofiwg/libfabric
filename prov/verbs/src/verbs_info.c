@@ -742,6 +742,8 @@ static int vrb_have_device(void)
 {
 	struct ibv_device **devs;
 	struct ibv_context *verbs;
+	struct ibv_device_attr attr;
+	const int AWS_VENDOR_ID = 0x1d0f;
 	int i, ret = 0;
 
 	devs = ibv_get_device_list(NULL);
@@ -751,9 +753,21 @@ static int vrb_have_device(void)
 	for (i = 0; devs[i]; i++) {
 		verbs = ibv_open_device(devs[i]);
 		if (verbs) {
+			ret = ibv_query_device(verbs, &attr);
 			ibv_close_device(verbs);
-			ret = 1;
-			break;
+			/*
+			 * According to the librdmacm library interface,
+			 * rdma_get_devices() in vrb_init_info leaves devices
+			 * open even after rdma_free_devices() is called,
+			 * causing failure in efa provider.
+			 * Also, efa and verb devices are not expected to
+			 * co-exist on a system. If its an efa device, then it
+			 * should be handled by the efa provider.
+			 */
+			if (!ret && (attr.vendor_id != AWS_VENDOR_ID)) {
+				ret = 1;
+				break;
+			}
 		}
 	}
 
