@@ -240,7 +240,7 @@ static int efa_av_insert_ah(struct efa_av *av, struct efa_ep_addr *addr,
 err_destroy_ah:
 	ibv_destroy_ah(conn->ah.ibv_ah);
 err_free_conn:
-	free(conn);
+	ofi_freealign(conn);
 err_invalid:
 	*fi_addr = FI_ADDR_NOTAVAIL;
 	return err;
@@ -515,7 +515,7 @@ static int efa_av_remove_ah(struct fid_av *av_fid, fi_addr_t *fi_addr,
 	av->used--;
 
 err_free_conn:
-	free(conn);
+	ofi_freealign(conn);
 	return ret;
 }
 
