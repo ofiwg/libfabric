@@ -36,6 +36,10 @@ static void cxip_send_req_dequeue(struct cxip_txc *txc, struct cxip_req *req);
  */
 void init_ux_send(struct cxip_ux_send *ux_send, const union c_event *event)
 {
+	union cxip_match_bits mb = {
+		.raw = event->tgt_long.match_bits
+	};
+
 	ux_send->start = event->tgt_long.start;
 	ux_send->initiator = event->tgt_long.initiator.initiator.process;
 	ux_send->rdzv_id = event->tgt_long.rendezvous_id;
@@ -44,6 +48,12 @@ void init_ux_send(struct cxip_ux_send *ux_send, const union c_event *event)
 	ux_send->mlen = event->tgt_long.mlength;
 	ux_send->mb.raw = event->tgt_long.match_bits;
 	ux_send->data = event->tgt_long.header_data;
+
+	if (event->tgt_long.rendezvous)
+		ux_send->rdzv_id = event->tgt_long.rendezvous_id;
+	else
+		ux_send->rdzv_id = mb.rdzv_id_hi;
+	ux_send->rdzv_lac = mb.rdzv_lac;
 }
 
 /*
@@ -145,8 +155,8 @@ static fi_addr_t recv_req_src_addr(struct cxip_req *req)
 		uint32_t nic;
 		uint32_t pid;
 
-		if (rxc->ep_obj->av->attr.flags & FI_SYMMETRIC)
-			return CXI_MATCH_ID_EP(pid_bits, req->recv.initiator);
+		if (req->recv.init_logical)
+			return req->recv.initiator;
 
 		nic = CXI_MATCH_ID_EP(pid_bits, req->recv.initiator);
 		pid = CXI_MATCH_ID_PID(pid_bits, req->recv.initiator);
@@ -258,22 +268,34 @@ static void recv_req_report(struct cxip_req *req)
 static void
 recv_req_tgt_event(struct cxip_req *req, const union c_event *event)
 {
+	struct cxip_rxc *rxc = req->recv.rxc;
 	union cxip_match_bits mb = {
 		.raw = event->tgt_long.match_bits
 	};
+	uint32_t pid_bits = rxc->domain->iface->dev->info.pid_bits;
 
 	assert(event->hdr.event_type == C_EVENT_PUT ||
 	       event->hdr.event_type == C_EVENT_PUT_OVERFLOW ||
 	       event->hdr.event_type == C_EVENT_RENDEZVOUS);
+
+	/* Rendezvous events contain the wrong match bits. */
+	if (event->hdr.event_type != C_EVENT_RENDEZVOUS)
+		req->tag = mb.tag;
+
+	/* remote_offset is not provided in Overflow events. */
+	if (event->hdr.event_type != C_EVENT_PUT_OVERFLOW)
+		req->recv.src_offset = event->tgt_long.remote_offset;
+
+	/* Only need one event to set remaining fields. */
+	if (req->recv.tgt_event)
+		return;
+	req->recv.tgt_event = true;
 
 	/* rlen is used to detect truncation. */
 	req->recv.rlen = event->tgt_long.rlength;
 
 	/* RC is used when generating completion events. */
 	req->recv.rc = cxi_tgt_event_rc(event);
-
-	/* Tag is provided in completion events. */
-	req->tag = mb.tag;
 
 	/* Header data is provided in all completion events. */
 	req->data = event->tgt_long.header_data;
@@ -282,21 +304,30 @@ recv_req_tgt_event(struct cxip_req *req, const union c_event *event)
 	 * offloaded RPut. Otherwise, Overflow buffer start address is used to
 	 * correlate events.
 	 */
-	if (event->tgt_long.rendezvous)
+	if (event->tgt_long.rendezvous) {
 		req->recv.rdzv_id = event->tgt_long.rendezvous_id;
-	else
+	} else {
 		req->recv.oflow_start = event->tgt_long.start;
+		req->recv.rdzv_id = mb.rdzv_id_hi;
+	}
+	req->recv.rdzv_lac = mb.rdzv_lac;
+	req->recv.rdzv_mlen = event->tgt_long.mlength;
 
 	/* Initiator is provided in completion events. */
 	if (event->hdr.event_type == C_EVENT_RENDEZVOUS) {
-		struct cxip_rxc *rxc = req->recv.rxc;
-		uint32_t pid_bits = rxc->domain->iface->dev->info.pid_bits;
 		uint32_t dfa = event->tgt_long.initiator.initiator.process;
 
 		req->recv.initiator = cxi_dfa_to_init(dfa, pid_bits);
 	} else {
-		req->recv.initiator =
-				event->tgt_long.initiator.initiator.process;
+		uint32_t init = event->tgt_long.initiator.initiator.process;
+
+		if (rxc->ep_obj->av->attr.flags & FI_SYMMETRIC) {
+			/* Take PID out of logical address. */
+			req->recv.initiator = CXI_MATCH_ID_EP(pid_bits, init);
+			req->recv.init_logical = true;
+		} else {
+			req->recv.initiator = init;
+		}
 	}
 
 	/* data_len must be set uniquely for each protocol! */
@@ -406,9 +437,6 @@ rdzv_mrecv_req_event(struct cxip_req *mrecv_req, const union c_event *event)
 	uint32_t ev_init;
 	uint32_t ev_rdzv_id;
 	struct cxip_req *req;
-	union cxip_match_bits mb = {
-		.raw = event->tgt_long.match_bits
-	};
 
 	assert(event->hdr.event_type == C_EVENT_REPLY ||
 	       event->hdr.event_type == C_EVENT_PUT ||
@@ -436,19 +464,9 @@ rdzv_mrecv_req_event(struct cxip_req *mrecv_req, const union c_event *event)
 			     req, mrecv_req, cxi_event_to_str(event));
 	}
 
-	if (event->hdr.event_type != C_EVENT_REPLY &&
-	    !req->recv.rdzv_tgt_event) {
-		/* Populate common fields with the first target event. */
+	/* Populate common fields with target events. */
+	if (event->hdr.event_type != C_EVENT_REPLY)
 		recv_req_tgt_event(req, event);
-		req->recv.rdzv_tgt_event = true;
-	}
-
-	/* Rendezvous events contain the wrong match bits. Make sure the tag is
-	 * pulled from a Put event.
-	 */
-	if (event->hdr.event_type == C_EVENT_PUT ||
-	    event->hdr.event_type == C_EVENT_PUT_OVERFLOW)
-		req->tag = mb.tag;
 
 	return req;
 }
@@ -515,62 +533,64 @@ static void oflow_req_put_bytes(struct cxip_req *req, size_t bytes)
  * issue_rdzv_get() - Perform a Get to pull source data from the Initiator of a
  * Send operation.
  */
-static int issue_rdzv_get(struct cxip_req *req, const union c_event *event)
+static int issue_rdzv_get(struct cxip_req *req)
 {
-	const struct c_event_target_long *tev = &event->tgt_long;
 	union c_cmdu cmd = {};
 	struct cxip_rxc *rxc = req->recv.rxc;
 	uint32_t pid_bits = rxc->domain->iface->dev->info.pid_bits;
 	uint32_t pid_idx = rxc->domain->iface->dev->info.rdzv_get_idx;
 	uint8_t idx_ext;
-	uint32_t init = tev->initiator.initiator.process;
+	union cxip_match_bits mb = {};
 	int ret;
+	uint32_t nic;
+	uint32_t pid;
+	union c_fab_addr dfa;
+
+	if (req->recv.init_logical) {
+		struct cxip_addr caddr;
+
+		CXIP_LOG_DBG("Translating inititiator: %x, req: %p\n",
+			     req->recv.initiator, req);
+
+		ret = _cxip_av_lookup(rxc->ep_obj->av, req->recv.initiator,
+				      &caddr);
+		if (ret != FI_SUCCESS) {
+			CXIP_LOG_ERROR("Failed to look up FI addr: %d\n",
+				       ret);
+			abort();
+		}
+		nic = caddr.nic;
+		pid = caddr.pid;
+	} else {
+		nic = CXI_MATCH_ID_EP(pid_bits, req->recv.initiator);
+		pid = CXI_MATCH_ID_PID(pid_bits, req->recv.initiator);
+	}
 
 	cmd.full_dma.command.cmd_type = C_CMD_TYPE_DMA;
 	cmd.full_dma.command.opcode = C_CMD_GET;
 	cmd.full_dma.lac = req->recv.recv_md->md->lac;
 	cmd.full_dma.event_send_disable = 1;
 	cmd.full_dma.eq = rxc->recv_cq->evtq->eqn;
-	cmd.full_dma.initiator = CXI_MATCH_ID(pid_bits,
-					      rxc->ep_obj->src_addr.pid,
-					      rxc->ep_obj->src_addr.nic);
-	cmd.full_dma.match_bits = tev->match_bits;
+
+	mb.rdzv_lac = req->recv.rdzv_lac;
+	mb.rdzv_id_lo = req->recv.rdzv_id;
+	cmd.full_dma.match_bits = mb.raw;
+
 	cmd.full_dma.user_ptr = (uint64_t)req;
+	cmd.full_dma.remote_offset = req->recv.src_offset;
 
-	if (tev->rendezvous) {
-		cmd.full_dma.dfa.unicast.nid = cxi_dfa_nid(init);
-		cmd.full_dma.dfa.unicast.endpoint_defined = cxi_dfa_ep(init);
-		cmd.full_dma.index_ext = cxi_build_dfa_ext(pid_idx);
-		if (req->data_len < tev->mlength)
-			cmd.full_dma.request_len = 0;
-		else
-			cmd.full_dma.request_len =
-				req->data_len - tev->mlength;
-		cmd.full_dma.local_addr = tev->start;
-		cmd.full_dma.remote_offset = tev->remote_offset;
-	} else {
-		/* TODO translate initiator if logical */
-		uint32_t nic = CXI_MATCH_ID_EP(pid_bits, init);
-		uint32_t pid = CXI_MATCH_ID_PID(pid_bits, init);
-		union c_fab_addr dfa;
-		union cxip_match_bits mb = {};
+	cxi_build_dfa(nic, pid, pid_bits, pid_idx, &dfa, &idx_ext);
+	cmd.full_dma.dfa = dfa;
+	cmd.full_dma.index_ext = idx_ext;
 
-		cxi_build_dfa(nic, pid, pid_bits, pid_idx, &dfa, &idx_ext);
-		cmd.full_dma.dfa = dfa;
-		cmd.full_dma.index_ext = idx_ext;
-		cmd.full_dma.request_len = req->data_len;
-		cmd.full_dma.local_addr = CXI_VA_TO_IOVA(req->recv.recv_md->md,
-							 req->recv.recv_buf);
+	if (req->data_len < req->recv.rdzv_mlen)
+		cmd.full_dma.request_len = 0;
+	else
+		cmd.full_dma.request_len = req->data_len - req->recv.rdzv_mlen;
 
-		/* Set remote_offset, match_bits lac and rdzv_id_lo to match
-		 * rendezvous source buffer.
-		 */
-		mb.raw = tev->match_bits;
-		mb.rdzv_id_lo = mb.rdzv_id_hi;
-		cmd.full_dma.match_bits = mb.raw;
-
-		cmd.full_dma.remote_offset = req->recv.src_offset;
-	}
+	cmd.full_dma.local_addr = CXI_VA_TO_IOVA(req->recv.recv_md->md,
+						 req->recv.recv_buf);
+	cmd.full_dma.local_addr += req->recv.rdzv_mlen;
 
 	fastlock_acquire(&rxc->tx_cmdq->lock);
 
@@ -773,13 +793,14 @@ cxip_oflow_sink_cb(struct cxip_req *req, const union c_event *event)
 	CXIP_LOG_DBG("Matched ux_recv, data: 0x%lx\n",
 		     ux_recv->recv.oflow_start);
 
+	/* src_offset must come from a Put event. */
 	ux_recv->recv.src_offset = event->tgt_long.remote_offset;
 
 	/* For long eager messages, issue a Get to retrieve data
 	 * from the initiator.
 	 */
 
-	ret = issue_rdzv_get(ux_recv, event);
+	ret = issue_rdzv_get(ux_recv);
 	if (ret != FI_SUCCESS)
 		goto err_put;
 
@@ -1738,10 +1759,11 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 			uintptr_t rtail;
 			uintptr_t mrecv_tail;
 
-			req->buf = (uint64_t)(CXI_IOVA_TO_VA(
-						parent->recv.recv_md->md,
-						event->tgt_long.start) -
-					event->tgt_long.mlength);
+			req->buf = CXI_IOVA_TO_VA(
+					parent->recv.recv_md->md,
+					event->tgt_long.start) -
+					event->tgt_long.mlength;
+			req->recv.recv_buf = (void *)req->buf;
 			rtail = req->buf + event->tgt_long.rlength;
 			mrecv_tail = (uint64_t)parent->recv.recv_buf +
 				parent->recv.ulen;
@@ -1750,13 +1772,15 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 			if (rtail > mrecv_tail)
 				req->data_len -= rtail - mrecv_tail;
 		} else {
+			recv_req_tgt_event(req, event);
+
 			req->data_len = event->tgt_long.rlength;
 			if (req->data_len > req->recv.ulen)
 				req->data_len = req->recv.ulen;
 		}
 
 		if (!event->tgt_long.get_issued) {
-			int ret = issue_rdzv_get(req, event);
+			int ret = issue_rdzv_get(req);
 			if (ret != FI_SUCCESS) {
 				/* Undo multi-recv event processing. */
 				if (req->recv.multi_recv &&
@@ -1947,12 +1971,13 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		}
 
 		if (oflow_buf->type == CXIP_LE_TYPE_SINK) {
+			/* src_offset must come from a Put event. */
 			req->recv.src_offset = ux_send->src_offset;
 
 			/* For unexpected, long, eager messages, issue a Get to
 			 * retrieve data from the initiator.
 			 */
-			ret = issue_rdzv_get(req, event);
+			ret = issue_rdzv_get(req);
 			if (ret == FI_SUCCESS) {
 				dlist_remove(&ux_send->ux_entry);
 				free(ux_send);
@@ -2462,6 +2487,9 @@ static void recv_req_sw_match(struct cxip_req *req,
 	req->data = ux_send->data;
 	req->recv.src_offset = ux_send->src_offset;
 	req->recv.initiator = ux_send->initiator;
+	req->recv.rdzv_lac = ux_send->rdzv_lac;
+	req->recv.rdzv_id = ux_send->rdzv_id;
+	req->recv.rdzv_mlen = ux_send->mlen;
 }
 
 /*

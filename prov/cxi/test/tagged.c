@@ -793,7 +793,7 @@ void directed_recv(bool logical)
 
 	validate_rx_event(&rx_cqe, NULL, send_len, FI_TAGGED | FI_RECV, NULL,
 			  0, 0);
-	cr_assert(from == 3, "Invalid source address");
+	cr_assert(from == 3, "Invalid source address, exp: 3 got: %lu", from);
 
 	/* Wait for async event indicating data has been sent */
 	do {
@@ -829,7 +829,52 @@ void directed_recv(bool logical)
 
 	validate_rx_event(&rx_cqe, NULL, send_len, FI_TAGGED | FI_RECV, NULL,
 			  0, 0);
-	cr_assert(from == 3, "Invalid source address");
+	cr_assert(from == 3, "Invalid source address, exp: 3 got: %lu", from);
+
+	/* Wait for async event indicating data has been sent */
+	do {
+		ret = fi_cq_read(cxit_tx_cq, &tx_cqe, 1);
+	} while (ret == -FI_EAGAIN);
+	cr_assert(ret == 1);
+
+	validate_tx_event(&tx_cqe, FI_TAGGED | FI_SEND, NULL);
+
+	/* Validate sent data */
+	for (i = 0; i < send_len; i++) {
+		cr_expect_eq(recv_buf[i], send_buf[i],
+			     "data mismatch, element[%d], exp=%d saw=%d, err=%d\n",
+			     i, send_buf[i], recv_buf[i], err++);
+		cr_expect_eq(fake_recv_buf[i], 0,
+			     "fake data corrupted, element[%d] err=%d\n",
+			     i, err++);
+	}
+	cr_assert_eq(err, 0, "Data errors seen\n");
+
+	/* Send long UX message to self (FI address 3)  */
+	memset(recv_buf, 0, recv_len);
+	send_len = 0x1000;
+
+	ret = fi_tsend(cxit_ep, send_buf, send_len, NULL, 3, 0, NULL);
+	cr_assert(ret == FI_SUCCESS);
+
+	sleep(1);
+
+	/* Post long RX buffer matching EP name 3 */
+	ret = fi_trecv(cxit_ep, recv_buf, recv_len, NULL, 3, 0, 0, NULL);
+	cr_assert(ret == FI_SUCCESS);
+
+	/* Wait for async event indicating data has been received */
+	do {
+		ret = fi_cq_readfrom(cxit_rx_cq, &rx_cqe, 1, &from);
+
+		/* Progress */
+		fi_cq_read(cxit_tx_cq, &tx_cqe, 0);
+	} while (ret == -FI_EAGAIN);
+	cr_assert(ret == 1);
+
+	validate_rx_event(&rx_cqe, NULL, send_len, FI_TAGGED | FI_RECV, NULL,
+			  0, 0);
+	cr_assert(from == 3, "Invalid source address, exp: 3 got: %lu", from);
 
 	/* Wait for async event indicating data has been sent */
 	do {
@@ -3097,7 +3142,6 @@ Test(tagged, fc, .timeout = 30)
 			printf("%u Sends complete.\n", sends);
 	}
 
-
 	for (i = 0; i < nsends_concurrent - 1; i++) {
 		do {
 			tx_ret = fi_cq_read(cxit_tx_cq, &tx_cqe, 1);
@@ -3223,7 +3267,6 @@ Test(tagged, fc_multi_recv, .timeout = 30)
 		if (!(++sends % 1000))
 			printf("%u Sends complete.\n", sends);
 	}
-
 
 	for (i = 0; i < nsends_concurrent - 1; i++) {
 		do {

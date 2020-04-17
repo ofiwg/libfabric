@@ -10,15 +10,16 @@ export FI_LOG_LEVEL=warn
 # Run unit tests.  $(CWD) should be writeable.
 ./cxitest --verbose --tap=cxitest.tap
 
-# Run tests again with RPut disabled
-FI_CXI_RDZV_OFFLOAD=0 ./cxitest --verbose --tap=cxitest-swrdzv.tap
+# Re-run messaging tests with RPut disabled
+FI_CXI_RDZV_OFFLOAD=0 ./cxitest --verbose --filter="@(tagged|msg)/*" --tap=cxitest-swrdzv.tap
 
 PYCXI="../../../../pycxi"
 CSRUTIL="$PYCXI/utils/csrutil"
 
 if [ -e $CSRUTIL ]; then
-	# Run tests with RPut and SW Gets
 	. $PYCXI/.venv/bin/activate
+
+	# Run tests with RPut and SW Gets
 	$CSRUTIL store csr get_ctrl get_en=0
 	./cxitest --verbose --filter="@(tagged|msg)/*" --tap=cxitest-swget.tap
 	$CSRUTIL store csr get_ctrl get_en=1

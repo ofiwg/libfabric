@@ -474,16 +474,19 @@ struct cxip_req_recv {
 	uint32_t rlen;			// Send length
 	uint64_t oflow_start;		// Overflow buffer address
 	uint32_t initiator;		// DMA initiator address
+	bool init_logical;
 	uint32_t rdzv_id;		// DMA initiator rendezvous ID
+	uint8_t rdzv_lac;		// Rendezvous source LAC
 	int rdzv_events;		// Processed rdzv event count
 	bool canceled;			// Request canceled?
 	bool multi_recv;
-	bool rdzv_tgt_event;
+	bool tgt_event;
 	uint64_t start_offset;
 	uint64_t mrecv_bytes;
 	struct cxip_req *parent;
 	struct dlist_entry children;
 	uint64_t src_offset;
+	uint16_t rdzv_mlen;
 };
 
 struct cxip_req_send {
@@ -687,6 +690,7 @@ struct cxip_ux_send {
 	uint64_t start;
 	uint32_t initiator;
 	uint32_t rdzv_id;
+	uint32_t rdzv_lac;
 	uint64_t src_offset;
 	uint32_t rlen;
 	uint32_t mlen;
