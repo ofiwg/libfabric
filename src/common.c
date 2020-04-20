@@ -79,6 +79,8 @@ struct ofi_common_locks common_locks = {
 	.util_fabric_lock = PTHREAD_MUTEX_INITIALIZER,
 };
 
+size_t ofi_universe_size = 1024;
+
 int fi_poll_fd(int fd, int timeout)
 {
 	struct pollfd fds;

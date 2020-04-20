@@ -126,7 +126,6 @@ extern struct fi_ops_atomic rxm_ops_atomic;
 
 extern size_t rxm_msg_tx_size;
 extern size_t rxm_msg_rx_size;
-extern size_t rxm_def_univ_size;
 extern size_t rxm_cm_progress_interval;
 extern size_t rxm_cq_eq_fairness;
 extern int force_auto_progress;
