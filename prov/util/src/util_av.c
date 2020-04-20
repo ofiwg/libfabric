@@ -53,7 +53,6 @@
 
 enum {
 	UTIL_NO_ENTRY = -1,
-	UTIL_DEFAULT_AV_SIZE = 1024,
 };
 
 static int fi_get_src_sockaddr(const struct sockaddr *dest_addr, size_t dest_addrlen,
@@ -442,16 +441,8 @@ static int util_av_init(struct util_av *av, const struct fi_av_attr *attr,
 	if (ret)
 		return ret;
 
-	if (attr->count) {
-		max_count = attr->count;
-	} else {
-		if (fi_param_get_size_t(NULL, "universe_size", &max_count))
-			max_count = UTIL_DEFAULT_AV_SIZE;
-	}
-
-	av->count = roundup_power_of_two(max_count ?
-					 max_count :
-					 UTIL_DEFAULT_AV_SIZE);
+	max_count = attr->count ? attr->count : ofi_universe_size;
+	av->count = roundup_power_of_two(max_count);
 	FI_INFO(av->prov, FI_LOG_AV, "AV size %zu\n", av->count);
 
 	av->addrlen = util_attr->addrlen;

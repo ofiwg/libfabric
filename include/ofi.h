@@ -280,6 +280,8 @@ uint64_t ofi_tag_format(uint64_t max_tag);
 uint8_t ofi_msb(uint64_t num);
 uint8_t ofi_lsb(uint64_t num);
 
+extern size_t ofi_universe_size;
+
 int ofi_send_allowed(uint64_t caps);
 int ofi_recv_allowed(uint64_t caps);
 int ofi_rma_initiate_allowed(uint64_t caps);

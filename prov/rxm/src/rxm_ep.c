@@ -2308,7 +2308,7 @@ static int rxm_ep_msg_cq_open(struct rxm_ep *rxm_ep)
 	int i, ret;
 
 	cq_attr.size = (rxm_ep->msg_info->tx_attr->size +
-			rxm_ep->msg_info->rx_attr->size) * rxm_def_univ_size;
+			rxm_ep->msg_info->rx_attr->size) * ofi_universe_size;
 	cq_attr.format = FI_CQ_FORMAT_DATA;
 	cq_attr.wait_obj = (rxm_msg_cq_fd_needed(rxm_ep) ?
 			    def_wait_obj : FI_WAIT_NONE);
