@@ -1032,6 +1032,8 @@ int psmx2_sep_open(struct fid_domain *domain, struct fi_info *info,
 				   ((uintptr_t)sep_priv & 0xFFFF);
 
 	sep_priv->id = ofi_atomic_inc32(&domain_priv->sep_cnt);
+	for (i = 0; i < ctxt_cnt; i++)
+		sep_priv->ctxts[i].ep->sep_id = sep_priv->id;
 
 	domain_priv->sep_lock_fn(&domain_priv->sep_lock, 1);
 	dlist_insert_before(&sep_priv->entry, &domain_priv->sep_list);

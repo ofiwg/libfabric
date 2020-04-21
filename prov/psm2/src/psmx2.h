@@ -628,7 +628,8 @@ struct psmx2_cq_event {
 		struct fi_cq_err_entry		err;
 	} cqe;
 	int			error;
-	int			source_is_valid;
+	int8_t			source_is_valid;
+	uint8_t			source_sep_id;
 	psm2_epaddr_t		source;
 	struct psmx2_fid_av	*source_av;
 	struct slist_entry	list_entry;
@@ -766,6 +767,7 @@ struct psmx2_fid_ep {
 	size_t			min_multi_recv;
 	uint32_t		iov_seq_num;
 	int			service;
+	int			sep_id;
 };
 
 struct psmx2_sep_ctxt {
@@ -1158,22 +1160,29 @@ static inline void psmx2_cntr_inc(struct psmx2_fid_cntr *cntr, int error)
 		cntr->wait->signal(cntr->wait);
 }
 
-fi_addr_t psmx2_av_translate_source(struct psmx2_fid_av *av, psm2_epaddr_t source);
+fi_addr_t psmx2_av_translate_source(struct psmx2_fid_av *av,
+				    psm2_epaddr_t source, int source_sep_id);
 
-static inline void psmx2_get_source_name(psm2_epaddr_t source, struct psmx2_ep_name *name)
+static inline void psmx2_get_source_name(psm2_epaddr_t source,
+					 int source_sep_id,
+					 struct psmx2_ep_name *name)
 {
 	memset(name, 0, sizeof(*name));
 	psm2_epaddr_to_epid(source, &name->epid);
-	name->type = PSMX2_EP_REGULAR;
+	name->sep_id = source_sep_id;
+	name->type = source_sep_id ? PSMX2_EP_SCALABLE : PSMX2_EP_REGULAR;
 }
 
-static inline void psmx2_get_source_string_name(psm2_epaddr_t source, char *name, size_t *len)
+static inline void psmx2_get_source_string_name(psm2_epaddr_t source,
+						int source_sep_id,
+						char *name, size_t *len)
 {
 	struct psmx2_ep_name ep_name;
 
 	memset(&ep_name, 0, sizeof(ep_name));
 	psm2_epaddr_to_epid(source, &ep_name.epid);
-	ep_name.type = PSMX2_EP_REGULAR;
+	ep_name.sep_id = source_sep_id;
+	ep_name.type = source_sep_id ? PSMX2_EP_SCALABLE : PSMX2_EP_REGULAR;
 
 	ofi_straddr(name, len, FI_ADDR_PSMX2, &ep_name);
 }
