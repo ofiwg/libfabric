@@ -70,7 +70,6 @@
 #define TCPX_MAX_INJECT_SZ	(64)
 
 #define MAX_POLL_EVENTS		100
-#define STAGE_BUF_SIZE		512
 
 #define TCPX_MIN_MULTI_RECV	16384
 
@@ -179,11 +178,14 @@ struct tcpx_rx_ctx {
 typedef int (*tcpx_rx_process_fn_t)(struct tcpx_xfer_entry *rx_entry);
 typedef int (*tcpx_get_rx_func_t)(struct tcpx_ep *ep);
 
+enum {
+	STAGE_BUF_SIZE = 512
+};
+
 struct stage_buf {
 	uint8_t			buf[STAGE_BUF_SIZE];
-	size_t			size;
-	size_t			len;
-	size_t			off;
+	size_t			bytes_avail;
+	size_t			cur_pos;
 };
 
 struct tcpx_ep {
@@ -280,7 +282,7 @@ void tcpx_cq_report_error(struct util_cq *cq,
 
 int tcpx_recv_msg_data(struct tcpx_xfer_entry *recv_entry);
 int tcpx_send_msg(struct tcpx_xfer_entry *tx_entry);
-int tcpx_comm_recv_hdr(SOCKET sock, struct stage_buf *sbuf,
+int tcpx_comm_recv_hdr(SOCKET sock, struct stage_buf *stage_buf,
 		        struct tcpx_cur_rx_msg *cur_rx_msg);
 int tcpx_read_to_buffer(SOCKET sock, struct stage_buf *stage_buf);
 
