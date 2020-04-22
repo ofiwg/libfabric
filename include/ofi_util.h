@@ -931,6 +931,7 @@ static inline int ofi_has_util_prefix(const char *str)
 }
 
 typedef int (*ofi_alter_info_t)(uint32_t version, const struct fi_info *src_info,
+				const struct fi_info *base_info,
 				struct fi_info *dest_info);
 
 int ofi_get_core_info(uint32_t version, const char *node, const char *service,
