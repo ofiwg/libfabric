@@ -350,7 +350,7 @@ struct cxip_pte {
  * CXI Command Queue wrapper
  */
 struct cxip_cmdq {
-	struct cxi_cmdq *dev_cmdq;
+	struct cxi_cq *dev_cmdq;
 	fastlock_t lock;
 	struct c_cstate_cmd c_state;
 };
@@ -639,7 +639,7 @@ struct cxip_cq {
 	struct cxip_ep_obj *ep_obj;
 	fastlock_t lock;
 	bool enabled;
-	struct cxi_evtq *evtq;
+	struct cxi_eq *evtq;
 	void *evtq_buf;
 	size_t evtq_buf_len;
 	struct cxi_md *evtq_buf_md;
@@ -901,7 +901,7 @@ struct cxip_ep_obj {
 	/* Control resources */
 	struct cxip_cmdq *ctrl_tgq;
 	struct cxip_cmdq *ctrl_txq;
-	struct cxi_evtq *ctrl_evtq;
+	struct cxi_eq *ctrl_evtq;
 	void *ctrl_evtq_buf;
 	size_t ctrl_evtq_buf_len;
 	struct cxi_md *ctrl_evtq_buf_md;
@@ -1055,7 +1055,7 @@ int cxip_pte_append(struct cxip_pte *pte, uint64_t iova, size_t len,
 		    bool ring);
 int cxip_pte_unlink(struct cxip_pte *pte, enum c_ptl_list list,
 		    int buffer_id, struct cxip_cmdq *cmdq);
-int cxip_pte_alloc(struct cxip_if_domain *if_dom, struct cxi_evtq *evtq,
+int cxip_pte_alloc(struct cxip_if_domain *if_dom, struct cxi_eq *evtq,
 		   uint64_t pid_idx, struct cxi_pt_alloc_opts *opts,
 		   void (*state_change_cb)(struct cxip_pte *pte,
 					   enum c_ptlte_state state),
@@ -1064,7 +1064,7 @@ void cxip_pte_free(struct cxip_pte *pte);
 int cxip_pte_state_change(struct cxip_if *dev_if, uint32_t pte_num,
 			  enum c_ptlte_state new_state);
 
-int cxip_cmdq_alloc(struct cxip_lni *lni, struct cxi_evtq *evtq,
+int cxip_cmdq_alloc(struct cxip_lni *lni, struct cxi_eq *evtq,
 		    struct cxi_cq_alloc_opts *cq_opts,
 		    struct cxip_cmdq **cmdq);
 void cxip_cmdq_free(struct cxip_cmdq *cmdq);

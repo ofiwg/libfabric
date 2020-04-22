@@ -360,7 +360,7 @@ int cxip_pte_unlink(struct cxip_pte *pte, enum c_ptl_list list,
 /*
  * cxip_pte_alloc() - Allocate and map a PTE for use.
  */
-int cxip_pte_alloc(struct cxip_if_domain *if_dom, struct cxi_evtq *evtq,
+int cxip_pte_alloc(struct cxip_if_domain *if_dom, struct cxi_eq *evtq,
 		   uint64_t pid_idx, struct cxi_pt_alloc_opts *opts,
 		   void (*state_change_cb)(struct cxip_pte *pte,
 					   enum c_ptlte_state state),
@@ -468,12 +468,12 @@ int cxip_pte_state_change(struct cxip_if *dev_if, uint32_t pte_num,
 /*
  * cxip_cmdq_alloc() - Allocate a command queue.
  */
-int cxip_cmdq_alloc(struct cxip_lni *lni, struct cxi_evtq *evtq,
+int cxip_cmdq_alloc(struct cxip_lni *lni, struct cxi_eq *evtq,
 		    struct cxi_cq_alloc_opts *cq_opts,
 		    struct cxip_cmdq **cmdq)
 {
 	int ret;
-	struct cxi_cmdq *dev_cmdq;
+	struct cxi_cq *dev_cmdq;
 	struct cxip_cmdq *new_cmdq;
 
 	new_cmdq = calloc(1, sizeof(*new_cmdq));
