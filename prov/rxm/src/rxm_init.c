@@ -90,7 +90,7 @@ void rxm_info_to_core_mr_modes(uint32_t version, const struct fi_info *hints,
 }
 
 int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
-		     struct fi_info *core_info)
+		     const struct fi_info *base_info, struct fi_info *core_info)
 {
 	int use_srx = 0;
 
@@ -141,7 +141,7 @@ int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 }
 
 int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
-		    struct fi_info *info)
+		    const struct fi_info *base_info, struct fi_info *info)
 {
 	info->caps = rxm_info.caps;
 	// TODO find which other modes should be filtered
