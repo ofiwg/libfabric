@@ -192,8 +192,6 @@ struct rxr_env {
 	int tx_min_credits;
 	int tx_max_credits;
 	int tx_queue_size;
-	int enable_sas_ordering;
-	int enable_atomic_ordering;
 	int enable_shm_transfer;
 	int shm_av_size;
 	int shm_max_medium_size;
@@ -787,25 +785,7 @@ static inline size_t rxr_get_tx_pool_chunk_cnt(struct rxr_ep *ep)
 
 static inline int rxr_need_sas_ordering(struct rxr_ep *ep)
 {
-	/*
-	 * RxR needs to reorder RTM packets for send-after-send guarantees
-	 * only if the application requested it and the core provider does not
-	 * support it.
-	 */
-	return ((ep->msg_order & FI_ORDER_SAS) &&
-		!(ep->core_msg_order & FI_ORDER_SAS) &&
-		rxr_env.enable_sas_ordering);
-}
-
-static inline int rxr_need_atomic_ordering(struct rxr_ep *ep)
-{
-	uint64_t atomic_ordering;
-
-	atomic_ordering = FI_ORDER_ATOMIC_RAR | FI_ORDER_ATOMIC_RAW |
-			  FI_ORDER_ATOMIC_WAR | FI_ORDER_ATOMIC_WAW;
-
-	return ((ep->msg_order & atomic_ordering) &&
-		rxr_env.enable_atomic_ordering);
+	return ep->msg_order & FI_ORDER_SAS;
 }
 
 /* Initialization functions */
