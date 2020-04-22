@@ -106,9 +106,10 @@ vrb_get_rdma_rai(const char *node, const char *service, uint64_t flags,
 		 const struct fi_info *hints, struct rdma_addrinfo **rai)
 {
 	struct rdma_addrinfo rai_hints, *_rai;
-	struct rdma_addrinfo **rai_current;
-	int ret = vrb_fi_to_rai(hints, flags, &rai_hints);
-
+	struct rdma_addrinfo **cur, *next;
+	int ret;
+	
+	ret = vrb_fi_to_rai(hints, flags, &rai_hints);
 	if (ret)
 		goto out;
 
@@ -118,37 +119,32 @@ vrb_get_rdma_rai(const char *node, const char *service, uint64_t flags,
 		rai_hints.ai_flags |= RAI_PASSIVE;
 	}
 
-	ret = rdma_getaddrinfo((char *) node, (char *) service,
-				&rai_hints, &_rai);
+	ret = rdma_getaddrinfo(node, service, &rai_hints, &_rai);
 	if (ret) {
 		VERBS_INFO_ERRNO(FI_LOG_FABRIC, "rdma_getaddrinfo", errno);
-		if (errno) {
+		if (errno)
 			ret = -errno;
-		}
 		goto out;
 	}
 
 	/*
-	 * If caller requested rai, remove ib_rai entries added by IBACM to
+	 * Remove ib_rai entries added by IBACM to
 	 * prevent wrong ib_connect_hdr from being sent in connect request.
 	 */
-	if (rai && hints && (hints->addr_format != FI_SOCKADDR_IB)) {
-		for (rai_current = &_rai; *rai_current;) {
-			struct rdma_addrinfo *rai_next;
-			if ((*rai_current)->ai_family == AF_IB) {
-				rai_next = (*rai_current)->ai_next;
-				(*rai_current)->ai_next = NULL;
-				rdma_freeaddrinfo(*rai_current);
-				*rai_current = rai_next;
-				continue;
+	if (hints && (hints->addr_format != FI_SOCKADDR_IB)) {
+		for (cur = &_rai; *cur; ) {
+			if ((*cur)->ai_family == AF_IB) {
+				next = (*cur)->ai_next;
+				(*cur)->ai_next = NULL;
+				rdma_freeaddrinfo(*cur);
+				*cur = next;
+			} else {
+				cur = &(*cur)->ai_next;
 			}
-			rai_current = &(*rai_current)->ai_next;
 		}
 	}
 
-	if (rai)
-		*rai = _rai;
-
+	*rai = _rai;
 out:
 	if (rai_hints.ai_src_addr)
 		free(rai_hints.ai_src_addr);
