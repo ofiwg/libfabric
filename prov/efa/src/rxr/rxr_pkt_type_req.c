@@ -967,7 +967,7 @@ void rxr_pkt_handle_rtm_rta_recv(struct rxr_ep *ep,
 		base_hdr = (struct rxr_base_hdr *)pkt_entry->pkt;
 		if ((base_hdr->flags & RXR_REQ_MSG) && rxr_need_sas_ordering(ep))
 			need_ordering = true;
-		else if ((base_hdr->flags & RXR_REQ_ATOMIC) && rxr_need_atomic_ordering(ep))
+		else if (base_hdr->flags & RXR_REQ_ATOMIC)
 			need_ordering = true;
 	}
 

@@ -48,8 +48,6 @@ struct rxr_env rxr_env = {
 	.tx_max_credits = RXR_DEF_MAX_TX_CREDITS,
 	.tx_min_credits = RXR_DEF_MIN_TX_CREDITS,
 	.tx_queue_size = 0,
-	.enable_sas_ordering = 1,
-	.enable_atomic_ordering = 1,
 	.enable_shm_transfer = 1,
 	.shm_av_size = 128,
 	.shm_max_medium_size = 4096,
@@ -80,7 +78,6 @@ static void rxr_init_env(void)
 	fi_param_get_int(&rxr_prov, "tx_max_credits", &rxr_env.tx_max_credits);
 	fi_param_get_int(&rxr_prov, "tx_min_credits", &rxr_env.tx_min_credits);
 	fi_param_get_int(&rxr_prov, "tx_queue_size", &rxr_env.tx_queue_size);
-	fi_param_get_int(&rxr_prov, "enable_sas_ordering", &rxr_env.enable_sas_ordering);
 	fi_param_get_int(&rxr_prov, "enable_shm_transfer", &rxr_env.enable_shm_transfer);
 	fi_param_get_int(&rxr_prov, "shm_av_size", &rxr_env.shm_av_size);
 	fi_param_get_int(&rxr_prov, "shm_max_medium_size", &rxr_env.shm_max_medium_size);
@@ -340,18 +337,9 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 	if (hints) {
 		if (hints->tx_attr) {
 
-			/* Disable packet reordering if the app doesn't need it */
-			if (!(hints->tx_attr->msg_order & FI_ORDER_SAS))
-				rxr_env.enable_sas_ordering = 0;
-
-			/* Disable atomic ordering if the app doesn't need it */
-
 			atomic_ordering = FI_ORDER_ATOMIC_RAR | FI_ORDER_ATOMIC_RAW |
 					  FI_ORDER_ATOMIC_WAR | FI_ORDER_ATOMIC_WAW;
-
 			if (hints->tx_attr->msg_order & atomic_ordering) {
-				rxr_env.enable_atomic_ordering = 1;
-
 				max_atomic_size = core_info->ep_attr->max_msg_size
 						  - sizeof(struct rxr_rta_hdr)
 						  - core_info->src_addrlen
@@ -371,9 +359,6 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 					info->ep_attr->max_order_waw_size = max_atomic_size;
 					rxr_info.ep_attr->max_order_waw_size = max_atomic_size;
 				}
-
-			} else {
-				rxr_env.enable_atomic_ordering = 0;
 			}
 		}
 
@@ -683,10 +668,6 @@ EFA_INI
 			"Defines the minimum number of credits a sender requests from a receiver (Default: 32).");
 	fi_param_define(&rxr_prov, "tx_queue_size", FI_PARAM_INT,
 			"Defines the maximum number of unacknowledged sends with the NIC.");
-	fi_param_define(&rxr_prov, "enable_sas_ordering", FI_PARAM_INT,
-			"Enable packet reordering for the RDM endpoint. This is always enabled when FI_ORDER_SAS is requested by the application. (Default: 1)");
-	fi_param_define(&rxr_prov, "enable_atomic_ordering", FI_PARAM_INT,
-			"Enable atomic reordering for the RDM endpoint. This is always enabled when FI_ORDER_ATOMIC_RAW or FI_ORDER_ATOMIC_RAR or FI_ORDER_ATOMIC_WAR or FI_ORDER_ATOMIC_WAW is requested by the application. (Default: 1)");
 	fi_param_define(&rxr_prov, "enable_shm_transfer", FI_PARAM_INT,
 			"Enable using SHM provider to provide the communication between processes on the same system. (Default: 1)");
 	fi_param_define(&rxr_prov, "shm_av_size", FI_PARAM_INT,
