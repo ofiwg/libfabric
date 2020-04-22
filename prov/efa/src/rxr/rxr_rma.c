@@ -314,8 +314,10 @@ ssize_t rxr_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_
 	use_lower_ep_read = false;
 	if (rxr_env.enable_shm_transfer && peer->is_local) {
 		use_lower_ep_read = true;
-	} else if (efa_both_support_rdma_read(rxr_ep, peer) &&
-		   tx_entry->total_len >= rxr_env.efa_max_emulated_read_size) {
+	} else if (efa_both_support_rdma_read(rxr_ep, peer)) {
+		/* efa_both_support_rdma_read also check rxr_env.use_device_rdma,
+		 * so we do not check it here
+		 */
 		use_lower_ep_read = true;
 	}
 
@@ -392,7 +394,7 @@ ssize_t rxr_rma_post_write(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 	if (tx_entry->total_len < rxr_pkt_req_max_data_size(ep, tx_entry->addr, RXR_EAGER_RTW_PKT))
 		return rxr_pkt_post_ctrl_or_queue(ep, RXR_TX_ENTRY, tx_entry, RXR_EAGER_RTW_PKT, 0);
 
-	if (tx_entry->total_len >= rxr_env.efa_max_long_write_size &&
+	if (tx_entry->total_len >= rxr_env.efa_min_read_write_size &&
 	    efa_both_support_rdma_read(ep, peer) &&
 	    (tx_entry->desc[0] || efa_mr_cache_enable)) {
 		err = rxr_pkt_post_ctrl_or_queue(ep, RXR_TX_ENTRY, tx_entry, RXR_READ_RTW_PKT, 0);

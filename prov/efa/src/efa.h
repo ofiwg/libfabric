@@ -380,6 +380,9 @@ bool efa_peer_support_rdma_read(struct rxr_peer *peer)
 static inline
 bool efa_both_support_rdma_read(struct rxr_ep *ep, struct rxr_peer *peer)
 {
+	if (!rxr_env.use_device_rdma)
+		return 0;
+
 	return efa_ep_support_rdma_read(ep->rdm_ep) &&
 	       (peer->is_self || efa_peer_support_rdma_read(peer));
 }
