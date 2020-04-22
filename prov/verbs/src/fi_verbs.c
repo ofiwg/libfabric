@@ -240,7 +240,9 @@ int vrb_create_ep(const struct fi_info *hints, enum rdma_port_space ps,
 				"dst addr", rai->ai_dst_addr);
 		goto err2;
 	}
+	rdma_freeaddrinfo(rai);
 	return 0;
+
 err2:
 	rdma_destroy_id(*id);
 err1:
