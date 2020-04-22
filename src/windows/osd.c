@@ -509,11 +509,14 @@ ofi_sendv_socket(SOCKET fd, const struct iovec *iovec, size_t iov_cnt, int flags
 	ssize_t size = 0;
 	int ret, i;
 
-	if (iov_cnt == 1)
-		return send(fd, iovec[0].iov_base, iovec[0].iov_len, flags);
+	if (iov_cnt == 1) {
+		return ofi_send_socket(fd, iovec[0].iov_base,
+				       iovec[0].iov_len, flags);
+	}
 
 	for (i = 0; i < iov_cnt; i++) {
-		ret = send(fd, iovec[i].iov_base, iovec[i].iov_len, flags);
+		ret = ofi_send_socket(fd, iovec[i].iov_base,
+				      iovec[i].iov_len, flags);
 		if (ret >= 0) {
 			size += ret;
 			if (ret != iovec[i].iov_len)
@@ -531,11 +534,14 @@ ofi_recvv_socket(SOCKET fd, const struct iovec *iovec, size_t iov_cnt, int flags
 	ssize_t size = 0;
 	int ret, i;
 
-	if (iov_cnt == 1)
-		return recv(fd, iovec[0].iov_base, iovec[0].iov_len, flags);
+	if (iov_cnt == 1) {
+		return ofi_recv_socket(fd, iovec[0].iov_base,
+				       iovec[0].iov_len, flags);
+	}
 
 	for (i = 0; i < iov_cnt; i++) {
-		ret = recv(fd, iovec[i].iov_base, iovec[i].iov_len, flags);
+		ret = ofi_recv_socket(fd, iovec[i].iov_base,
+				      iovec[i].iov_len, flags);
 		if (ret >= 0) {
 			size += ret;
 			if (ret != iovec[i].iov_len)

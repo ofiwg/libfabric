@@ -709,40 +709,53 @@ static inline SOCKET ofi_socket(int domain, int type, int protocol)
 	return socket(domain, type, protocol);
 }
 
+/*
+ * The windows API limits socket send/recv transfers to INT_MAX.
+ * For nonblocking, stream sockets, we limit send/recv calls to that
+ * size, since the sockets aren't guaranteed to send the full amount
+ * requested.  For datagram sockets, we don't expect any transfers to
+ * be larger than a few KB.
+ * We do not handle blocking sockets that attempt to transfer more
+ * than INT_MAX data at a time.
+ */
+static inline ssize_t
+ofi_recv_socket(SOCKET fd, void *buf, size_t count, int flags)
+{
+	int len = count > INT_MAX ? INT_MAX : (int) count;
+	return (ssize_t) recv(fd, (char *) buf, len, flags);
+}
+
+static inline ssize_t
+ofi_send_socket(SOCKET fd, const void *buf, size_t count, int flags)
+{
+	int len = count > INT_MAX ? INT_MAX : (int) count;
+	return (ssize_t) send(fd, (const char*) buf, len, flags);
+}
+
 static inline ssize_t ofi_read_socket(SOCKET fd, void *buf, size_t count)
 {
-	return recv(fd, (char *)buf, (int)count, 0);
+	return ofi_recv_socket(fd, buf, count, 0);
 }
 
 static inline ssize_t ofi_write_socket(SOCKET fd, const void *buf, size_t count)
 {
-	return send(fd, (const char*)buf, (int)count, 0);
-}
-
-static inline ssize_t ofi_recv_socket(SOCKET fd, void *buf, size_t count,
-				      int flags)
-{
-	return recv(fd, (char *)buf, (int)count, flags);
+	return ofi_send_socket(fd, buf, count, 0);
 }
 
 static inline ssize_t
 ofi_recvfrom_socket(SOCKET fd, void *buf, size_t count, int flags,
 		    struct sockaddr *from, socklen_t *fromlen)
 {
-	return recvfrom(fd, (char*)buf, (int)count, flags, from, fromlen);
-}
-
-static inline ssize_t ofi_send_socket(SOCKET fd, const void *buf, size_t count,
-				      int flags)
-{
-	return send(fd, (const char*)buf, (int)count, flags);
+	int len = count > INT_MAX ? INT_MAX : (int) count;
+	return recvfrom(fd, (char*) buf, len, flags, from, (int *) fromlen);
 }
 
 static inline ssize_t
 ofi_sendto_socket(SOCKET fd, const void *buf, size_t count, int flags,
 		  const struct sockaddr *to, socklen_t tolen)
 {
-	return sendto(fd, (const char*)buf, (int)count, flags, to, tolen);
+	int len = count > INT_MAX ? INT_MAX : (int) count;
+	return sendto(fd, (const char*) buf, len, flags, to, (int) tolen);
 }
 
 ssize_t ofi_writev_socket(SOCKET fd, const struct iovec *iovec, size_t iov_cnt);
