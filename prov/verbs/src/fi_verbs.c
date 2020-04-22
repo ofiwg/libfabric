@@ -101,8 +101,9 @@ int vrb_sockaddr_len(struct sockaddr *addr)
 		return ofi_sizeofaddr(addr);
 }
 
-int vrb_get_rdma_rai(const char *node, const char *service, uint64_t flags,
-		   const struct fi_info *hints, struct rdma_addrinfo **rai)
+static int
+vrb_get_rdma_rai(const char *node, const char *service, uint64_t flags,
+		 const struct fi_info *hints, struct rdma_addrinfo **rai)
 {
 	struct rdma_addrinfo rai_hints, *_rai;
 	struct rdma_addrinfo **rai_current;
