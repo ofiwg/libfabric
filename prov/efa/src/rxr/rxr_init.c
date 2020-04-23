@@ -49,6 +49,7 @@ struct rxr_env rxr_env = {
 	.tx_min_credits = RXR_DEF_MIN_TX_CREDITS,
 	.tx_queue_size = 0,
 	.enable_shm_transfer = 1,
+	.use_device_rdma = 0,
 	.shm_av_size = 128,
 	.shm_max_medium_size = 4096,
 	.recvwin_size = RXR_RECVWIN_SIZE,
@@ -66,9 +67,7 @@ struct rxr_env rxr_env = {
 	.efa_cq_read_size = 50,
 	.shm_cq_read_size = 50,
 	.efa_max_medium_msg_size = 65536,
-	.efa_max_long_msg_size = 131072,
-	.efa_max_emulated_read_size = 0,
-	.efa_max_long_write_size = 65536,
+	.efa_min_read_write_size = 65536,
 	.efa_read_segment_size = 1073741824,
 };
 
@@ -79,6 +78,7 @@ static void rxr_init_env(void)
 	fi_param_get_int(&rxr_prov, "tx_min_credits", &rxr_env.tx_min_credits);
 	fi_param_get_int(&rxr_prov, "tx_queue_size", &rxr_env.tx_queue_size);
 	fi_param_get_int(&rxr_prov, "enable_shm_transfer", &rxr_env.enable_shm_transfer);
+	fi_param_get_int(&rxr_prov, "use_device_rdma", &rxr_env.use_device_rdma);
 	fi_param_get_int(&rxr_prov, "shm_av_size", &rxr_env.shm_av_size);
 	fi_param_get_int(&rxr_prov, "shm_max_medium_size", &rxr_env.shm_max_medium_size);
 	fi_param_get_int(&rxr_prov, "recvwin_size", &rxr_env.recvwin_size);
@@ -110,13 +110,9 @@ static void rxr_init_env(void)
 			 &rxr_env.shm_cq_read_size);
 	fi_param_get_size_t(&rxr_prov, "inter_max_medium_message_size",
 			    &rxr_env.efa_max_medium_msg_size);
-	fi_param_get_size_t(&rxr_prov, "inter_max_long_message_size",
-			    &rxr_env.efa_max_long_msg_size);
-	fi_param_get_size_t(&rxr_prov, "inter_max_emulated_read_size",
-			    &rxr_env.efa_max_emulated_read_size);
-	fi_param_get_size_t(&rxr_prov, "inter_max_long_write_size",
-			    &rxr_env.efa_max_long_write_size);
-	fi_param_get_size_t(&rxr_prov, "read_segment_size",
+	fi_param_get_size_t(&rxr_prov, "inter_min_read_write_size",
+			    &rxr_env.efa_min_read_write_size);
+	fi_param_get_size_t(&rxr_prov, "inter_read_segment_size",
 			    &rxr_env.efa_read_segment_size);
 }
 
@@ -670,6 +666,8 @@ EFA_INI
 			"Defines the maximum number of unacknowledged sends with the NIC.");
 	fi_param_define(&rxr_prov, "enable_shm_transfer", FI_PARAM_INT,
 			"Enable using SHM provider to provide the communication between processes on the same system. (Default: 1)");
+	fi_param_define(&rxr_prov, "use_device_rdma", FI_PARAM_INT,
+			"whether to use device's RDMA functionality for one-sided and two-sided transfer.");
 	fi_param_define(&rxr_prov, "shm_av_size", FI_PARAM_INT,
 			"Defines the maximum number of entries in SHM provider's address vector (Default 128).");
 	fi_param_define(&rxr_prov, "shm_max_medium_size", FI_PARAM_INT,
@@ -710,13 +708,9 @@ EFA_INI
 			"Set the number of SHM completion entries to read for one loop for one iteration of the progress engine. (Default: 50)");
 	fi_param_define(&rxr_prov, "inter_max_medium_message_size", FI_PARAM_INT,
 			"The maximum message size for inter EFA medium message protocol, messages whose size is larger than this value will be sent either by read message protocol (depend on firmware support), or long message protocol (Default 65536).");
-	fi_param_define(&rxr_prov, "inter_max_long_message_size", FI_PARAM_INT,
-			"The maximum message size for inter EFA long message protocol, messages whose size is larger than this value will be sent either by read message protocol (if firmware support) (Default 131072).");
-	fi_param_define(&rxr_prov, "inter_max_emulated_read_size", FI_PARAM_INT,
-			"The maximum message size for inter EFA emulated read protocol. Read requests whose size is larger than this value will be implemented via RDMA read (if firmware support), (Default 0 [RDMA read is always used]).");
-	fi_param_define(&rxr_prov, "inter_max_long_write_size", FI_PARAM_INT,
-			"The maximum message size for inter EFA emulated write protocol. Write requests whose size is larger than this value will be implemented via read write protocol (write by read).");
-	fi_param_define(&rxr_prov, "efa_read_segment_size", FI_PARAM_INT,
+	fi_param_define(&rxr_prov, "inter_min_read_write_size", FI_PARAM_INT,
+			"The mimimum message size for inter EFA write to use read write protocol. If firmware support RDMA read, and FI_EFA_USE_DEVICE_RDMA is 1, write requests whose size is larger than this value will use the read write protocol (Default 65536).");
+	fi_param_define(&rxr_prov, "inter_read_segment_size", FI_PARAM_INT,
 			"Calls to RDMA read is segmented using this value.");
 	rxr_init_env();
 

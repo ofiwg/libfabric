@@ -192,6 +192,7 @@ struct rxr_env {
 	int tx_min_credits;
 	int tx_max_credits;
 	int tx_queue_size;
+	int use_device_rdma;
 	int enable_shm_transfer;
 	int shm_av_size;
 	int shm_max_medium_size;
@@ -210,9 +211,7 @@ struct rxr_env {
 	size_t efa_cq_read_size;
 	size_t shm_cq_read_size;
 	size_t efa_max_medium_msg_size;
-	size_t efa_max_long_msg_size;
-	size_t efa_max_emulated_read_size;
-	size_t efa_max_long_write_size;
+	size_t efa_min_read_write_size;
 	size_t efa_read_segment_size;
 };
 
