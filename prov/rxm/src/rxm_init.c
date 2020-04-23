@@ -192,13 +192,13 @@ static int rxm_init_info(void)
 	size_t param;
 
 	if (!fi_param_get_size_t(&rxm_prov, "buffer_size", &param)) {
-		if (param > sizeof(struct rxm_pkt)) {
-			rxm_eager_limit = param - sizeof(struct rxm_pkt);
-		} else {
+		if (param < sizeof(struct rxm_pkt) + sizeof(struct rxm_rndv_hdr)) {
 			FI_WARN(&rxm_prov, FI_LOG_CORE,
 				"Requested buffer size too small\n");
 			return -FI_EINVAL;
 		}
+
+		rxm_eager_limit = param - sizeof(struct rxm_pkt);
 	}
 	rxm_info.tx_attr->inject_size = rxm_eager_limit;
 	rxm_util_prov.info = &rxm_info;
