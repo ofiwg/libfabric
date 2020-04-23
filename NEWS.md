@@ -6,7 +6,7 @@ bug fixes (and other actions) for each version of Libfabric since
 version 1.0.
 
 
-v1.10.0, Fri Apr 17, 2020
+v1.10.0, Fri Apr 24, 2020
 =========================
 
 ## Core
