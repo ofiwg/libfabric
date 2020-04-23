@@ -179,7 +179,8 @@ int cxip_alloc_lni(struct cxip_if *iface, struct cxip_lni **if_lni)
 		return -FI_ENOMEM;
 	}
 
-	ret = cxil_alloc_lni(iface->dev, &lni->lni);
+	/* TODO update after implementing service allocation */
+	ret = cxil_alloc_lni(iface->dev, &lni->lni, CXI_DEFAULT_SVC_ID);
 	if (ret) {
 		CXIP_LOG_DBG("cxil_alloc_lni returned: %d\n", ret);
 		ret = -FI_ENOSPC;
