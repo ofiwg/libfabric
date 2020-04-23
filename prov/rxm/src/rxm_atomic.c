@@ -508,6 +508,9 @@ int rxm_ep_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 	attr->size = ofi_datatype_size(datatype);
 	attr->count = tot_size / attr->size;
 
+	if (attr->count == 0)
+		return -FI_EOPNOTSUPP;
+
 	return FI_SUCCESS;
 }
 
