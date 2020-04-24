@@ -134,7 +134,7 @@ vrb_msg_ep_rma_readv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc
 
 	vrb_set_sge_iov(wr.sg_list, iov, count, desc);
 
-	return vrb_post_send(ep, &wr);
+	return vrb_post_send(ep, &wr, 0);
 }
 
 static ssize_t
@@ -153,7 +153,7 @@ vrb_msg_ep_rma_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 
 	vrb_set_sge_iov(wr.sg_list, msg->msg_iov, msg->iov_count, msg->desc);
 
-	return vrb_post_send(ep, &wr);
+	return vrb_post_send(ep, &wr, 0);
 }
 
 static ssize_t
@@ -206,7 +206,7 @@ vrb_rma_write_fast(struct fid_ep *ep_fid, const void *buf, size_t len,
 	ep->wrs->sge.addr = (uintptr_t) buf;
 	ep->wrs->sge.length = (uint32_t) len;
 
-	return vrb_post_send(ep, &ep->wrs->rma_wr);
+	return vrb_post_send(ep, &ep->wrs->rma_wr, 0);
 }
 
 static ssize_t
@@ -245,7 +245,7 @@ vrb_msg_ep_rma_inject_writedata_fast(struct fid_ep *ep_fid, const void *buf, siz
 	ep->wrs->sge.addr = (uintptr_t) buf;
 	ep->wrs->sge.length = (uint32_t) len;
 
-	ret = vrb_post_send(ep, &ep->wrs->rma_wr);
+	ret = vrb_post_send(ep, &ep->wrs->rma_wr, 0);
 	ep->wrs->rma_wr.opcode = IBV_WR_RDMA_WRITE;
 	return ret;
 }
@@ -377,7 +377,7 @@ vrb_msg_xrc_ep_rma_readv(struct fid_ep *ep_fid, const struct iovec *iov,
 
 	vrb_set_sge_iov(wr.sg_list, iov, count, desc);
 
-	return vrb_post_send(&ep->base_ep, &wr);
+	return vrb_post_send(&ep->base_ep, &wr, 0);
 }
 
 static ssize_t
@@ -399,7 +399,7 @@ vrb_msg_xrc_ep_rma_readmsg(struct fid_ep *ep_fid,
 
 	vrb_set_sge_iov(wr.sg_list, msg->msg_iov, msg->iov_count, msg->desc);
 
-	return vrb_post_send(&ep->base_ep, &wr);
+	return vrb_post_send(&ep->base_ep, &wr, flags);
 }
 
 static ssize_t
@@ -456,7 +456,7 @@ vrb_xrc_rma_write_fast(struct fid_ep *ep_fid, const void *buf,
 	ep->base_ep.wrs->sge.addr = (uintptr_t) buf;
 	ep->base_ep.wrs->sge.length = (uint32_t) len;
 
-	return vrb_post_send(&ep->base_ep, &ep->base_ep.wrs->rma_wr);
+	return vrb_post_send(&ep->base_ep, &ep->base_ep.wrs->rma_wr, 0);
 }
 
 static ssize_t
@@ -499,7 +499,7 @@ vrb_msg_xrc_ep_rma_inject_writedata_fast(struct fid_ep *ep_fid,
 	ep->base_ep.wrs->sge.addr = (uintptr_t) buf;
 	ep->base_ep.wrs->sge.length = (uint32_t) len;
 
-	ret = vrb_post_send(&ep->base_ep, &ep->base_ep.wrs->rma_wr);
+	ret = vrb_post_send(&ep->base_ep, &ep->base_ep.wrs->rma_wr, 0);
 	ep->base_ep.wrs->rma_wr.opcode = IBV_WR_RDMA_WRITE;
 	return ret;
 }

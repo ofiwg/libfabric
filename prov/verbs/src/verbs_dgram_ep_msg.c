@@ -206,7 +206,7 @@ vrb_dgram_ep_injectdata_fast(struct fid_ep *ep_fid, const void *buf, size_t len,
 	if (vrb_dgram_ep_set_addr(ep, dest_addr, &ep->wrs->msg_wr))
 		return -FI_ENOENT;
 
-	ret = vrb_post_send(ep, &ep->wrs->msg_wr);
+	ret = vrb_post_send(ep, &ep->wrs->msg_wr, 0);
 	ep->wrs->msg_wr.opcode = IBV_WR_SEND;
 	return ret;
 }
@@ -242,7 +242,7 @@ vrb_dgram_ep_inject_fast(struct fid_ep *ep_fid, const void *buf, size_t len,
 	if (vrb_dgram_ep_set_addr(ep, dest_addr, &ep->wrs->msg_wr))
 		return -FI_ENOENT;
 
-	return vrb_post_send(ep, &ep->wrs->msg_wr);
+	return vrb_post_send(ep, &ep->wrs->msg_wr, 0);
 }
 
 const struct fi_ops_msg vrb_dgram_msg_ops = {

@@ -333,6 +333,7 @@ struct rxm_atomic_resp_hdr {
 	FUNC(RXM_RMA),			\
 	FUNC(RXM_RX),			\
 	FUNC(RXM_SAR_TX),		\
+	FUNC(RXM_CREDIT_TX),		\
 	FUNC(RXM_RNDV_TX),		\
 	FUNC(RXM_RNDV_ACK_WAIT),	\
 	FUNC(RXM_RNDV_READ),		\
@@ -355,6 +356,7 @@ enum {
 	rxm_ctrl_rndv_ack,
 	rxm_ctrl_atomic,
 	rxm_ctrl_atomic_resp,
+	rxm_ctrl_credit
 };
 
 struct rxm_pkt {
@@ -414,6 +416,7 @@ enum rxm_buf_pool_type {
 	RXM_BUF_POOL_TX_ACK,
 	RXM_BUF_POOL_TX_RNDV,
 	RXM_BUF_POOL_TX_ATOMIC,
+	RXM_BUF_POOL_TX_CREDIT,
 	RXM_BUF_POOL_TX_SAR,
 	RXM_BUF_POOL_TX_END	= RXM_BUF_POOL_TX_SAR,
 	RXM_BUF_POOL_RMA,
@@ -531,6 +534,7 @@ enum rxm_deferred_tx_entry_type {
 	RXM_DEFERRED_TX_RNDV_READ,
 	RXM_DEFERRED_TX_SAR_SEG,
 	RXM_DEFERRED_TX_ATOMIC_RESP,
+	RXM_DEFERRED_TX_CREDIT_SEND,
 };
 
 struct rxm_deferred_tx_entry {
@@ -570,6 +574,9 @@ struct rxm_deferred_tx_entry {
 			struct rxm_tx_atomic_buf *tx_buf;
 			ssize_t len;
 		} atomic_resp;
+		struct {
+			struct rxm_tx_base_buf *tx_buf;
+		} credit_msg;
 	};
 };
 
@@ -678,7 +685,8 @@ struct rxm_ep {
 	struct rxm_recv_queue	recv_queue;
 	struct rxm_recv_queue	trecv_queue;
 
-	struct rxm_handle_txrx_ops *txrx_ops;
+	struct rxm_handle_txrx_ops	*txrx_ops;
+	struct ofi_ops_flow_ctrl	*flow_ctrl_ops;
 };
 
 struct rxm_conn {
@@ -885,6 +893,7 @@ rxm_tx_buf_alloc(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
 	       (type == RXM_BUF_POOL_TX_ACK) ||
 	       (type == RXM_BUF_POOL_TX_RNDV) ||
 	       (type == RXM_BUF_POOL_TX_ATOMIC) ||
+	       (type == RXM_BUF_POOL_TX_CREDIT) ||
 	       (type == RXM_BUF_POOL_TX_SAR));
 	return ofi_buf_alloc(rxm_ep->buf_pools[type].pool);
 }
