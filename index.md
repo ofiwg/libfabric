@@ -16,8 +16,7 @@ data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_orange_
 Latest releases
 ===============
 
-* The libfabric library itself (including documentation): [libfabric v1.9.1](https://github.com/ofiwg/libfabric/releases/tag/v1.9.1) (or [see all prior releases](https://github.com/ofiwg/libfabric/releases/)).
-* Examples and unit tests: [fabtests v1.9.1](https://github.com/ofiwg/libfabric/releases/tag/v1.9.1) (or [see all prior releases](https://github.com/ofiwg/fabtests/releases/)).
+* The libfabric library, unit tests, and documentation: [libfabric v1.10.0](https://github.com/ofiwg/libfabric/releases/tag/v1.10.0) (or [see all prior releases](https://github.com/ofiwg/libfabric/releases/)).
 
 
 Overview
@@ -27,7 +26,7 @@ OpenFabrics Interfaces (OFI) is a framework focused on exporting fabric communic
 
 <img align="left" src="images/ofa-logo.png">Libfabric is a core component of OFI.  It is the library that defines and exports the user-space API of OFI, and is typically the only software that applications deal with directly.  It works in conjunction with provider libraries, which are often integrated directly into libfabric.
 
-Libfabric is being developed by the OFI Working Group (OFIWG, pronounced "ofee-wig"), a subgroup of the [OpenFabrics Alliance - OFA](http://www.openfabrics.org/).  Participation in the OFIWG is open to anyone, and not restricted to only members of OFA.
+Libfabric is being developed by the OFI Working Group (OFIWG, pronounced "o-fee-wig"), a subgroup of the [OpenFabrics Alliance - OFA](http://www.openfabrics.org/).  Participation in the OFIWG is open to anyone, and not restricted to only members of OFA.
 
 The goal of OFI, and libfabric specifically, is to define interfaces that enable a tight semantic map between applications and underlying fabric services.  Specifically, libfabric software interfaces have been co-designed with fabric hardware providers and application developers, with a focus on the needs of HPC users.  Libfabric supports multiple interface semantics, is fabric and hardware implementation agnostic, and leverages and expands the existing RDMA open source community.
 
@@ -46,7 +45,8 @@ A comprehensive developer's guide is being developed.  Some sections are incompl
 
 A set of man pages have been carefully written to specify the libfabric API.
 
-* [Man pages for v1.9.1](v1.9.1/man/)
+* [Man pages for v1.10.0](v1.10.0/man/)
+  * Older: [Man pages for v1.9.1](v1.9.1/man/)
   * Older: [Man pages for v1.9.0](v1.9.0/man/)
   * Older: [Man pages for v1.8.1](v1.8.1/man/)
   * Older: [Man pages for v1.8.0](v1.8.0/man/)
