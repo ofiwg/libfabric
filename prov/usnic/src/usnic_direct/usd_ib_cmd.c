@@ -903,7 +903,7 @@ enum ib_port_speed {
 
 
 /*
- * Issue query commands for device and port and interpret the resaults
+ * Issue query commands for device and port and interpret the results
  */
 int
 usd_ib_query_dev(
