@@ -886,8 +886,8 @@ struct sock_cq {
 	struct ofi_ringbuffd cq_rbfd;
 	struct ofi_ringbuf cqerr_rb;
 	struct dlist_entry overflow_list;
-	fastlock_t lock;
-	fastlock_t list_lock;
+	pthread_mutex_t lock;
+	pthread_mutex_t list_lock;
 
 	struct fid_wait *waitset;
 	int signal;

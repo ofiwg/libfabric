@@ -50,7 +50,6 @@
 
 size_t rxm_msg_tx_size		= 128;
 size_t rxm_msg_rx_size		= 128;
-size_t rxm_def_univ_size	= 256;
 size_t rxm_eager_limit		= RXM_BUF_SIZE - sizeof(struct rxm_pkt);
 int force_auto_progress		= 0;
 enum fi_wait_obj def_wait_obj	= FI_WAIT_FD;
@@ -447,7 +446,6 @@ RXM_INI
 	fi_param_get_size_t(&rxm_prov, "rx_size", &rxm_info.rx_attr->size);
 	fi_param_get_size_t(&rxm_prov, "msg_tx_size", &rxm_msg_tx_size);
 	fi_param_get_size_t(&rxm_prov, "msg_rx_size", &rxm_msg_rx_size);
-	fi_param_get_size_t(NULL, "universe_size", &rxm_def_univ_size);
 	if (fi_param_get_int(&rxm_prov, "cm_progress_interval",
 				(int *) &rxm_cm_progress_interval))
 		rxm_cm_progress_interval = 10000;
