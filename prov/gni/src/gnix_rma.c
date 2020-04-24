@@ -1602,7 +1602,7 @@ err_auto_reg:
  *        -FI_EINVAL for invalid parameter
  *        other return values from lower level functions
  */
-ssize_t _gnix_commit(struct gnix_fid_ep *ep, const struct fi_rma_iov *iov, size_t count, 
+ssize_t _gnix_commit(struct gnix_fid_ep *ep, const struct fi_rma_iov *iov, size_t count,
                      uint64_t peer_addr, uint64_t cflags, void *context)
 {
         struct fi_cq_tagged_entry buf = {0}; // TODO see __gnix_cq_readfrom for type/size
@@ -1626,14 +1626,14 @@ ssize_t _gnix_commit(struct gnix_fid_ep *ep, const struct fi_rma_iov *iov, size_
 
         gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
         assert(GNIX_EP_RDM_DGM_MSG(gnix_ep->type));
-        
-	/* This is a simple, proof-of-concept only, implementation of a fi_commit. It is based 
+
+	/* This is a simple, proof-of-concept only, implementation of a fi_commit. It is based
 	 * on a tagged send targeting the Target Memory Manager, followed by a tagged receive,
-	 * followed by a CQE creation for the caller. Future supported implementations in 
+	 * followed by a CQE creation for the caller. Future supported implementations in
 	 * different providers should be more elegant and efficient. */
 
         /* Send tagged message with agreed upon (with TMM) commit request tag and no content. */
-        rc = _gnix_send(gnix_ep, (uint64_t)NULL, 0, NULL, peer_addr, context, 
+        rc = _gnix_send(gnix_ep, (uint64_t)NULL, 0, NULL, peer_addr, context,
                         gnix_ep->op_flags | FI_INJECT | FI_TAGGED | GNIX_SUPPRESS_COMPLETION,
                         0, sendtag);
         if (rc != FI_SUCCESS) {
@@ -1644,14 +1644,14 @@ ssize_t _gnix_commit(struct gnix_fid_ep *ep, const struct fi_rma_iov *iov, size_
 
         /* Receive tagged empty message with agreed upon (with TMM) commit response tag.
            Context is set to 500 for debugging purposes; consider eliminating later. */
-        rc = _gnix_recv(gnix_ep, 0L, 0, NULL, peer_addr, (void *)500, 
+        rc = _gnix_recv(gnix_ep, 0L, 0, NULL, peer_addr, (void *)500,
                         gnix_ep->op_flags | FI_TAGGED, recvtag, ignore, NULL);
         if (rc != FI_SUCCESS) {
                 fprintf(stderr, "Error occurred in _gnix_recv(): %ld\n", rc);
                 GNIX_WARN(FI_LOG_EP_DATA, "_gnix_recv() in _gnix_commit() failed: %d\n", rc);
 		//return rc;
         }
-        
+
         /* Wait for completion of recv. Strictly, libfabric has no blocking data transfer
 	   interfaces. However, we cannot create the commit CQE unless we know that data has
 	   been committed. Thus, under the covers we wait for the recv CQE after all. */
@@ -1660,7 +1660,7 @@ ssize_t _gnix_commit(struct gnix_fid_ep *ep, const struct fi_rma_iov *iov, size_
         while (num_completions > 0) {
                 rc = gnix_cq_readfrom(&gnix_cq->cq_fid, &buf, 1, &peer_addr);
                 if (rc > 0L) {
-#ifdef DEMO                        
+#ifdef DEMO
                         //fprintf(stderr, "GNI provider: got cq entry w/ context %p\n", buf.op_context);
 #endif
                         num_completions--;

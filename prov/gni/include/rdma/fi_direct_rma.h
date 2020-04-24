@@ -75,8 +75,8 @@ extern ssize_t gnix_ep_rma_injectdata(struct fid_ep *ep, const void *buf,
 				      fi_addr_t dest_addr, uint64_t addr,
 				      uint64_t key);
 
-extern ssize_t gnix_ep_commit(struct fid_ep *ep, const struct fi_rma_iov *iov, 
-                              size_t count, uint64_t dest_addr, uint64_t flags, 
+extern ssize_t gnix_ep_commit(struct fid_ep *ep, const struct fi_rma_iov *iov,
+                              size_t count, uint64_t dest_addr, uint64_t flags,
                               void *context);
 
 /*******************************************************************************

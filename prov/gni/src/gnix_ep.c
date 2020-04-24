@@ -976,7 +976,7 @@ gnix_ep_rma_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 }
 
 DIRECT_FN STATIC ssize_t
-gnix_ep_commit(struct fid_ep *ep, const struct fi_rma_iov *iov, size_t count, 
+gnix_ep_commit(struct fid_ep *ep, const struct fi_rma_iov *iov, size_t count,
                uint64_t dest_addr, uint64_t flags, void *context)
 {
         struct gnix_fid_ep *gnix_ep;

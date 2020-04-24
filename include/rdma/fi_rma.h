@@ -161,8 +161,8 @@ fi_inject_writedata(struct fid_ep *ep, const void *buf, size_t len,
 	return ep->rma->injectdata(ep, buf, len, data, dest_addr, addr, key);
 }
 
-static inline ssize_t 
-fi_commit(struct fid_ep *ep, const struct fi_rma_iov *iov, size_t count, 
+static inline ssize_t
+fi_commit(struct fid_ep *ep, const struct fi_rma_iov *iov, size_t count,
           uint64_t dest_addr, uint64_t flags, void *context)
 {
         return ep->rma->commit(ep, iov, count, dest_addr, flags, context);
