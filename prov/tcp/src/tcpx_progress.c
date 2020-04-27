@@ -599,7 +599,7 @@ void tcpx_progress_rx(struct tcpx_ep *ep)
 {
 	int ret;
 
-	if (!ep->cur_rx_entry && (ep->stage_buf.len == ep->stage_buf.off)) {
+	if (!ep->cur_rx_entry && (ep->stage_buf.cur_pos == ep->stage_buf.bytes_avail)) {
 		ret = tcpx_read_to_buffer(ep->sock, &ep->stage_buf);
 		if (ret)
 			goto err;
@@ -618,7 +618,7 @@ void tcpx_progress_rx(struct tcpx_ep *ep)
 		assert(ep->cur_rx_proc_fn != NULL);
 		ep->cur_rx_proc_fn(ep->cur_rx_entry);
 
-	} while (ep->stage_buf.len != ep->stage_buf.off);
+	} while (ep->stage_buf.cur_pos < ep->stage_buf.bytes_avail);
 
 	return;
 err:

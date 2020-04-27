@@ -58,7 +58,7 @@ void tcpx_cq_progress(struct util_cq *cq)
 		tcpx_try_func(&ep->util_ep);
 		fastlock_acquire(&ep->lock);
 		tcpx_progress_tx(ep);
-		if (ep->stage_buf.off != ep->stage_buf.len)
+		if (ep->stage_buf.cur_pos < ep->stage_buf.bytes_avail)
 			tcpx_progress_rx(ep);
 		fastlock_release(&ep->lock);
 	}
