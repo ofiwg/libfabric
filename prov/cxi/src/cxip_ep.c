@@ -179,7 +179,7 @@ int cxip_ep_cmdq(struct cxip_ep_obj *ep_obj, uint32_t ctx_id, bool transmit,
 
 	/* An IDC command can use up to 4 64 byte slots. */
 	cq_opts.count = size * 4;
-	cq_opts.is_transmit = transmit;
+	cq_opts.flags = transmit ? CXI_CQ_IS_TX : 0;
 	cq_opts.lcid = ep_obj->domain->cps[0]->lcid;
 
 	ret = cxip_cmdq_alloc(ep_obj->domain->lni, NULL, &cq_opts, cmdq);

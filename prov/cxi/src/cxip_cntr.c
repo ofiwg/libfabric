@@ -32,8 +32,7 @@ static int cxip_dom_cntr_enable(struct cxip_domain *dom)
 	}
 
 	cq_opts.count = 64;
-	cq_opts.is_transmit = 1;
-	cq_opts.with_trig_cmds = 1;
+	cq_opts.flags = CXI_CQ_IS_TX | CXI_CQ_TX_WITH_TRIG_CMDS;
 
 	ret = cxip_cmdq_alloc(dom->lni, NULL, &cq_opts, &dom->trig_cmdq);
 	if (ret != FI_SUCCESS) {
