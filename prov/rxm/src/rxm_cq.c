@@ -76,7 +76,7 @@ static int rxm_finish_buf_recv(struct rxm_rx_buf *rx_buf)
 		dlist_insert_tail(&rx_buf->unexp_msg.entry,
 				  &rx_buf->conn->sar_deferred_rx_msg_list);
 		rx_buf = rxm_rx_buf_alloc(rx_buf->ep, rx_buf->msg_ep, 1);
-		if (OFI_UNLIKELY(!rx_buf)) {
+		if (!rx_buf) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 				"ran out of buffers from RX buffer pool\n");
 			return -FI_ENOMEM;
@@ -123,12 +123,9 @@ static int rxm_cq_write_error_trunc(struct rxm_rx_buf *rx_buf, size_t done_len)
 				       rx_buf->recv_entry->rxm_iov.iov[0].iov_base,
 				       rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag,
 				       rx_buf->pkt.hdr.size - done_len);
-	if (OFI_UNLIKELY(ret)) {
-		FI_WARN(&rxm_prov, FI_LOG_CQ,
-			"Unable to write recv error CQ\n");
-		return ret;
-	}
-	return 0;
+	if (ret)
+		FI_WARN(&rxm_prov, FI_LOG_CQ, "Unable to write recv error CQ\n");
+	return ret;
 }
 
 static int rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
@@ -189,8 +186,8 @@ rxm_cq_tx_comp_write(struct rxm_ep *rxm_ep, uint64_t comp_flags,
 {
 	if (flags & FI_COMPLETION) {
 		int ret = ofi_cq_write(rxm_ep->util_ep.tx_cq, app_context,
-				       comp_flags, 0, NULL, 0, 0);
-		if (OFI_UNLIKELY(ret)) {
+				   comp_flags, 0, NULL, 0, 0);
+		if (ret) {
 			FI_WARN(&rxm_prov, FI_LOG_CQ,
 				"Unable to report completion\n");
 			return ret;
@@ -418,7 +415,7 @@ rxm_cq_rndv_read_prepare_deferred(struct rxm_deferred_tx_entry **def_tx_entry, s
 
 	*def_tx_entry = rxm_ep_alloc_deferred_tx_entry(rx_buf->ep, rx_buf->conn,
 						       RXM_DEFERRED_TX_RNDV_READ);
-	if (OFI_UNLIKELY(!*def_tx_entry))
+	if (!*def_tx_entry)
 		return -FI_ENOMEM;
 
 	(*def_tx_entry)->rndv_read.rx_buf = rx_buf;
@@ -457,7 +454,7 @@ ssize_t rxm_cq_handle_rndv(struct rxm_rx_buf *rx_buf)
 		assert(rx_buf->ep->srx_ctx);
 		rx_buf->conn = rxm_key2conn(rx_buf->ep,
 					    rx_buf->pkt.ctrl_hdr.conn_id);
-		if (OFI_UNLIKELY(!rx_buf->conn))
+		if (!rx_buf->conn)
 			return -FI_EOTHER;
 	}
 	assert(rx_buf->conn);
@@ -476,7 +473,7 @@ ssize_t rxm_cq_handle_rndv(struct rxm_rx_buf *rx_buf)
 				      rx_buf->recv_entry->rxm_iov.iov,
 				      rx_buf->recv_entry->rxm_iov.count,
 				      total_recv_len, FI_READ, rx_buf->mr);
-		if (OFI_UNLIKELY(ret))
+		if (ret)
 			return ret;
 
 		for (i = 0; (i < rx_buf->recv_entry->rxm_iov.count &&
@@ -514,8 +511,8 @@ ssize_t rxm_cq_handle_rndv(struct rxm_rx_buf *rx_buf)
 		ret = fi_readv(rx_buf->conn->msg_ep, iov, desc, count, 0,
 			       rx_buf->rndv_hdr->iov[i].addr,
 			       rx_buf->rndv_hdr->iov[i].key, rx_buf);
-		if (OFI_UNLIKELY(ret)) {
-			if (OFI_LIKELY(ret == -FI_EAGAIN)) {
+		if (ret) {
+			if (ret == -FI_EAGAIN) {
 				struct rxm_deferred_tx_entry *def_tx_entry;
 
 				ret = rxm_cq_rndv_read_prepare_deferred(
@@ -607,7 +604,7 @@ rxm_cq_match_rx_buf(struct rxm_rx_buf *rx_buf,
 		rxm_ep = rx_buf->ep;
 
 		rx_buf = rxm_rx_buf_alloc(rxm_ep, msg_ep, 1);
-		if (OFI_UNLIKELY(!rx_buf)) {
+		if (!rx_buf) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 				"ran out of buffers from RX buffer pool\n");
 			return -FI_ENOMEM;
@@ -632,7 +629,7 @@ static inline ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 		if (rx_buf->ep->srx_ctx)
 			rx_buf->conn =
 				rxm_key2conn(rx_buf->ep, rx_buf->pkt.ctrl_hdr.conn_id);
-		if (OFI_UNLIKELY(!rx_buf->conn))
+		if (!rx_buf->conn)
 			return -FI_EOTHER;
 		match_attr.addr = rx_buf->conn->handle.fi_addr;
 	}
@@ -672,7 +669,7 @@ ssize_t rxm_sar_handle_segment(struct rxm_rx_buf *rx_buf)
 
 	rx_buf->conn = rxm_key2conn(rx_buf->ep,
 				    rx_buf->pkt.ctrl_hdr.conn_id);
-	if (OFI_UNLIKELY(!rx_buf->conn))
+	if (!rx_buf->conn)
 		return -FI_EOTHER;
 	FI_DBG(&rxm_prov, FI_LOG_CQ,
 	       "Got incoming recv with msg_id: 0x%" PRIx64 "for conn - %p\n",
@@ -721,7 +718,7 @@ static ssize_t rxm_rndv_send_ack(struct rxm_rx_buf *rx_buf)
 		if (!ret)
 			goto out;
 
-		if (OFI_UNLIKELY(ret != -FI_EAGAIN)) {
+		if (ret != -FI_EAGAIN) {
 			FI_WARN(&rxm_prov, FI_LOG_CQ,
 				"send ack via inject failed for MSG provider\n");
 			return ret;
@@ -730,7 +727,7 @@ static ssize_t rxm_rndv_send_ack(struct rxm_rx_buf *rx_buf)
 
 	rx_buf->recv_entry->rndv.tx_buf = (struct rxm_tx_base_buf *)
 		rxm_tx_buf_alloc(rx_buf->ep, RXM_BUF_POOL_TX_ACK);
-	if (OFI_UNLIKELY(!rx_buf->recv_entry->rndv.tx_buf)) {
+	if (!rx_buf->recv_entry->rndv.tx_buf) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ,
 			"ran out of buffers from ACK buffer pool\n");
 		return -FI_EAGAIN;
@@ -747,13 +744,13 @@ static ssize_t rxm_rndv_send_ack(struct rxm_rx_buf *rx_buf)
 	ret = fi_send(rx_buf->conn->msg_ep, &rx_buf->recv_entry->rndv.tx_buf->pkt,
 		      sizeof(rx_buf->recv_entry->rndv.tx_buf->pkt),
 		      rx_buf->recv_entry->rndv.tx_buf->hdr.desc, 0, rx_buf);
-	if (OFI_UNLIKELY(ret)) {
-		if (OFI_LIKELY(ret == -FI_EAGAIN)) {
+	if (ret) {
+		if (ret == -FI_EAGAIN) {
 			struct rxm_deferred_tx_entry *def_tx_entry =
 				rxm_ep_alloc_deferred_tx_entry(
 					rx_buf->ep, rx_buf->conn,
 					RXM_DEFERRED_TX_RNDV_ACK);
-			if (OFI_UNLIKELY(!def_tx_entry)) {
+			if (!def_tx_entry) {
 				FI_WARN(&rxm_prov, FI_LOG_CQ, "unable to "
 					"allocate TX entry for deferred ACK\n");
 				ret = -FI_EAGAIN;
@@ -839,21 +836,21 @@ static ssize_t rxm_atomic_send_resp(struct rxm_ep *rxm_ep,
 	if (resp_len < rxm_ep->inject_limit) {
 		ret = fi_inject(rx_buf->conn->msg_ep, &resp_buf->pkt,
 				resp_len, 0);
-		if (OFI_LIKELY(!ret))
+		if (!ret)
 			ofi_buf_free(resp_buf);
 	} else {
 		ret = rxm_atomic_send_respmsg(rxm_ep, rx_buf->conn, resp_buf,
 					      resp_len);
 	}
-	if (OFI_UNLIKELY(ret)) {
+	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ,
 			"Unable to send Atomic Response\n");
-		if (OFI_LIKELY(ret == -FI_EAGAIN)) {
+		if (ret == -FI_EAGAIN) {
 			def_tx_entry =
 				rxm_ep_alloc_deferred_tx_entry(rxm_ep,
 						rx_buf->conn,
 						RXM_DEFERRED_TX_ATOMIC_RESP);
-			if (OFI_UNLIKELY(!def_tx_entry)) {
+			if (!def_tx_entry) {
 				FI_WARN(&rxm_prov, FI_LOG_CQ,
 					"Unable to allocate deferred Atomic "
 					"Response\n");
@@ -922,12 +919,12 @@ static inline ssize_t rxm_handle_atomic_req(struct rxm_ep *rxm_ep,
 	if (rx_buf->ep->srx_ctx)
 		rx_buf->conn = rxm_key2conn(rx_buf->ep,
 					    rx_buf->pkt.ctrl_hdr.conn_id);
-	if (OFI_UNLIKELY(!rx_buf->conn))
+	if (!rx_buf->conn)
 		return -FI_EOTHER;
 
 	resp_buf = (struct rxm_tx_atomic_buf *)
 		   rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_ATOMIC);
-	if (OFI_UNLIKELY(!resp_buf)) {
+	if (!resp_buf) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 			"Unable to allocate from Atomic buffer pool\n");
 		/* TODO: Should this be -FI_ENOMEM - how does it get
@@ -994,7 +991,7 @@ static inline ssize_t rxm_handle_atomic_resp(struct rxm_ep *rxm_ep,
 
 	assert(!(rx_buf->comp_flags & ~(FI_RECV | FI_REMOTE_CQ_DATA)));
 
-	if (OFI_UNLIKELY(resp_hdr->status)) {
+	if (resp_hdr->status) {
 		struct util_cntr *cntr = NULL;
 		FI_WARN(&rxm_prov, FI_LOG_CQ,
 		       "bad atomic response status %d\n", ntohl(resp_hdr->status));
@@ -1341,9 +1338,9 @@ static inline int rxm_msg_ep_recv(struct rxm_rx_buf *rx_buf)
 	rx_buf->hdr.state = RXM_RX;
 
 	ret = (int)fi_recv(rx_buf->msg_ep, &rx_buf->pkt,
-			   rxm_eager_limit + sizeof(struct rxm_pkt),
-			   rx_buf->hdr.desc, FI_ADDR_UNSPEC, rx_buf);
-	if (OFI_LIKELY(!ret))
+			    rxm_eager_limit + sizeof(struct rxm_pkt),
+			    rx_buf->hdr.desc, FI_ADDR_UNSPEC, rx_buf);
+	if (!ret)
 		return 0;
 
 	if (ret != -FI_EAGAIN) {
@@ -1364,11 +1361,11 @@ int rxm_msg_ep_prepost_recv(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep)
 
 	for (i = 0; i < rxm_ep->msg_info->rx_attr->size; i++) {
 		rx_buf = rxm_rx_buf_alloc(rxm_ep, msg_ep, 1);
-		if (OFI_UNLIKELY(!rx_buf))
+		if (!rx_buf)
 			return -FI_ENOMEM;
 
 		ret = rxm_msg_ep_recv(rx_buf);
-		if (OFI_UNLIKELY(ret)) {
+		if (ret) {
 			ofi_buf_free(&rx_buf->hdr);
 			return ret;
 		}
@@ -1399,7 +1396,7 @@ void rxm_ep_do_progress(struct util_ep *util_ep)
 
 		ret = rxm_msg_ep_recv(buf);
 		if (ret) {
-			if (OFI_LIKELY(ret == -FI_EAGAIN))
+			if (ret == -FI_EAGAIN)
 				ofi_buf_free(&buf->hdr);
 		}
 	}
@@ -1411,7 +1408,7 @@ void rxm_ep_do_progress(struct util_ep *util_ep)
 			// We don't have enough info to write a good
 			// error entry to the CQ at this point
 			ret = rxm_cq_handle_comp(rxm_ep, &comp);
-			if (OFI_UNLIKELY(ret)) {
+			if (ret) {
 				rxm_cq_write_error_all(rxm_ep, ret);
 			} else {
 				ret = 1;
