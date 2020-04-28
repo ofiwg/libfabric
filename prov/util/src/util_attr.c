@@ -161,7 +161,7 @@ static int ofi_info_to_core(uint32_t version, const struct fi_provider *prov,
 	if (!(*core_hints = fi_allocinfo()))
 		return -FI_ENOMEM;
 
-	if (info_to_core(version, util_info, *core_hints))
+	if (info_to_core(version, util_info, NULL, *core_hints))
 		goto err;
 
 	if (!util_info)
@@ -214,14 +214,14 @@ err:
 }
 
 static int ofi_info_to_util(uint32_t version, const struct fi_provider *prov,
-			    struct fi_info *core_info,
+			    struct fi_info *core_info, const struct fi_info *base_info,
 			    ofi_alter_info_t info_to_util,
 			    struct fi_info **util_info)
 {
 	if (!(*util_info = fi_allocinfo()))
 		return -FI_ENOMEM;
 
-	if (info_to_util(version, core_info, *util_info))
+	if (info_to_util(version, core_info, base_info, *util_info))
 		goto err;
 
 	if (ofi_dup_addr(core_info, *util_info))
@@ -274,10 +274,6 @@ int ofi_get_core_info(uint32_t version, const char *node, const char *service,
 	struct fi_info *core_hints = NULL;
 	int ret;
 
-	ret = ofi_prov_check_info(util_prov, version, util_hints);
-	if (ret)
-		return ret;
-
 	ret = ofi_info_to_core(version, util_prov->prov, util_hints, info_to_core,
 			       &core_hints);
 	if (ret)
@@ -299,31 +295,38 @@ int ofix_getinfo(uint32_t version, const char *node, const char *service,
 		 const struct fi_info *hints, ofi_alter_info_t info_to_core,
 		 ofi_alter_info_t info_to_util, struct fi_info **info)
 {
-	struct fi_info *core_info, *util_info, *cur, *tail;
-	int ret;
-
-	ret = ofi_get_core_info(version, node, service, flags, util_prov,
-				hints, info_to_core, &core_info);
-	if (ret)
-		return ret;
+	struct fi_info *core_info, *base_info, *util_info, *cur, *tail;
+	int ret = -FI_ENODATA;
 
 	*info = tail = NULL;
-	for (cur = core_info; cur; cur = cur->next) {
-		ret = ofi_info_to_util(version, util_prov->prov, cur,
-				       info_to_util, &util_info);
-		if (ret) {
-			fi_freeinfo(*info);
-			break;
-		}
+	for (base_info = (struct fi_info *) util_prov->info; base_info;
+	     base_info = base_info->next) {
+		if (ofi_check_info(util_prov, base_info, version, hints))
+			continue;
 
-		ofi_alter_info(util_info, hints, version);
-		if (!*info)
-			*info = util_info;
-		else
-			tail->next = util_info;
-		tail = util_info;
+		ret = ofi_get_core_info(version, node, service, flags, util_prov,
+					hints, info_to_core, &core_info);
+		if (ret)
+			return ret;
+
+		for (cur = core_info; cur; cur = cur->next) {
+			ret = ofi_info_to_util(version, util_prov->prov, cur,
+					       base_info, info_to_util,
+					       &util_info);
+			if (ret) {
+				fi_freeinfo(*info);
+				break;
+			}
+
+			ofi_alter_info(util_info, hints, version);
+			if (!*info)
+				*info = util_info;
+			else
+				tail->next = util_info;
+			tail = util_info;
+		}
+		fi_freeinfo(core_info);
 	}
-	fi_freeinfo(core_info);
 	return ret;
 }
 
@@ -726,6 +729,14 @@ int ofi_check_ep_attr(const struct util_prov *util_prov, uint32_t api_version,
 	    (user_attr->auth_key_size != prov_attr->auth_key_size)) {
 		FI_INFO(prov, FI_LOG_CORE, "Unsupported authentication size.");
 		FI_INFO_CHECK_VAL(prov, prov_attr, user_attr, auth_key_size);
+		return -FI_ENODATA;
+	}
+
+	if ((user_info->caps & FI_TAGGED) && user_attr->mem_tag_format &&
+	    ofi_max_tag(user_attr->mem_tag_format) >
+		    ofi_max_tag(prov_attr->mem_tag_format)) {
+		FI_INFO(prov, FI_LOG_CORE, "Tag size exceeds supported size\n");
+		FI_INFO_CHECK_VAL(prov, prov_attr, user_attr, mem_tag_format);
 		return -FI_ENODATA;
 	}
 
@@ -1181,7 +1192,7 @@ static uint64_t ofi_get_info_caps(const struct fi_info *prov_info,
 	if ((FI_VERSION_LT(api_version, FI_VERSION(1,5)) &&
 	    (user_mode == FI_MR_UNSPEC)) ||
 	    (user_mode == FI_MR_BASIC) ||
-	    ((user_mode & prov_mode & OFI_MR_MODE_RMA_TARGET) == 
+	    ((user_mode & prov_mode & OFI_MR_MODE_RMA_TARGET) ==
 	     (prov_mode & OFI_MR_MODE_RMA_TARGET)))
 		return caps;
 

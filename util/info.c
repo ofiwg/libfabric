@@ -119,6 +119,7 @@ static int str2cap(char *inputstr, uint64_t *value)
 	ORCASE(FI_TAGGED);
 	ORCASE(FI_ATOMIC);
 	ORCASE(FI_MULTICAST);
+	ORCASE(FI_COLLECTIVE);
 
 	ORCASE(FI_READ);
 	ORCASE(FI_WRITE);

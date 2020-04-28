@@ -37,6 +37,7 @@
 
 #include <ofi_prov.h>
 #include "rxm.h"
+#include "ofi_coll.h"
 
 #define RXM_ATOMIC_UNSUPPORTED_MSG_ORDER (FI_ORDER_RAW | FI_ORDER_ATOMIC_RAW | \
 					  FI_ORDER_RAR | FI_ORDER_ATOMIC_RAR | \
@@ -89,7 +90,7 @@ void rxm_info_to_core_mr_modes(uint32_t version, const struct fi_info *hints,
 }
 
 int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
-		     struct fi_info *core_info)
+		     const struct fi_info *base_info, struct fi_info *core_info)
 {
 	int use_srx = 0;
 
@@ -140,41 +141,41 @@ int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 }
 
 int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
-		    struct fi_info *info)
+		    const struct fi_info *base_info, struct fi_info *info)
 {
-	info->caps = rxm_info.caps;
+	info->caps = base_info->caps;
 	// TODO find which other modes should be filtered
-	info->mode = (core_info->mode & ~FI_RX_CQ_DATA) | rxm_info.mode;
+	info->mode = (core_info->mode & ~FI_RX_CQ_DATA) | base_info->mode;
 
-	info->tx_attr->caps		= rxm_info.tx_attr->caps;
+	info->tx_attr->caps		= base_info->tx_attr->caps;
 	info->tx_attr->mode		= info->mode;
 	info->tx_attr->msg_order 	= core_info->tx_attr->msg_order;
-	info->tx_attr->comp_order 	= rxm_info.tx_attr->comp_order;
-	info->tx_attr->inject_size	= rxm_info.tx_attr->inject_size;
-	info->tx_attr->size 		= rxm_info.tx_attr->size;
-	info->tx_attr->iov_limit 	= MIN(rxm_info.tx_attr->iov_limit,
+	info->tx_attr->comp_order 	= base_info->tx_attr->comp_order;
+	info->tx_attr->inject_size	= base_info->tx_attr->inject_size;
+	info->tx_attr->size 		= base_info->tx_attr->size;
+	info->tx_attr->iov_limit 	= MIN(base_info->tx_attr->iov_limit,
 					      core_info->tx_attr->iov_limit);
-	info->tx_attr->rma_iov_limit	= MIN(rxm_info.tx_attr->rma_iov_limit,
+	info->tx_attr->rma_iov_limit	= MIN(base_info->tx_attr->rma_iov_limit,
 					      core_info->tx_attr->rma_iov_limit);
 
-	info->rx_attr->caps		= rxm_info.rx_attr->caps;
+	info->rx_attr->caps		= base_info->rx_attr->caps;
 	info->rx_attr->mode		= info->rx_attr->mode & ~FI_RX_CQ_DATA;
 	info->rx_attr->msg_order 	= core_info->rx_attr->msg_order;
-	info->rx_attr->comp_order 	= rxm_info.rx_attr->comp_order;
-	info->rx_attr->size 		= rxm_info.rx_attr->size;
-	info->rx_attr->iov_limit 	= MIN(rxm_info.rx_attr->iov_limit,
+	info->rx_attr->comp_order 	= base_info->rx_attr->comp_order;
+	info->rx_attr->size 		= base_info->rx_attr->size;
+	info->rx_attr->iov_limit 	= MIN(base_info->rx_attr->iov_limit,
 					      core_info->rx_attr->iov_limit);
 
-	*info->ep_attr = *rxm_info.ep_attr;
+	*info->ep_attr = *base_info->ep_attr;
 	info->ep_attr->max_msg_size = core_info->ep_attr->max_msg_size;
 	info->ep_attr->max_order_raw_size = core_info->ep_attr->max_order_raw_size;
 	info->ep_attr->max_order_war_size = core_info->ep_attr->max_order_war_size;
 	info->ep_attr->max_order_waw_size = core_info->ep_attr->max_order_waw_size;
 
-	*info->domain_attr = *rxm_info.domain_attr;
+	*info->domain_attr = *base_info->domain_attr;
 	info->domain_attr->mr_mode |= core_info->domain_attr->mr_mode;
 	info->domain_attr->cq_data_size = MIN(core_info->domain_attr->cq_data_size,
-					      rxm_info.domain_attr->cq_data_size);
+					      base_info->domain_attr->cq_data_size);
 	info->domain_attr->mr_key_size = core_info->domain_attr->mr_key_size;
 
 	if (core_info->nic) {
@@ -200,6 +201,7 @@ static int rxm_init_info(void)
 		rxm_eager_limit = param - sizeof(struct rxm_pkt);
 	}
 	rxm_info.tx_attr->inject_size = rxm_eager_limit;
+	rxm_info_coll.tx_attr->inject_size = rxm_eager_limit;
 	rxm_util_prov.info = &rxm_info;
 	return 0;
 }
@@ -263,7 +265,7 @@ static void rxm_alter_info(const struct fi_info *hints, struct fi_info *info)
 				cur->domain_attr->data_progress = FI_PROGRESS_MANUAL;
 
 			if (hints->ep_attr && hints->ep_attr->mem_tag_format &&
-			    (info->caps & FI_TAGGED)) {
+			    (info->caps & (FI_TAGGED | FI_COLLECTIVE))) {
 				FI_INFO(&rxm_prov, FI_LOG_CORE,
 					"mem_tag_format requested: 0x%" PRIx64
 					" (note: provider doesn't optimize "
@@ -273,6 +275,7 @@ static void rxm_alter_info(const struct fi_info *hints, struct fi_info *info)
 					hints->ep_attr->mem_tag_format;
 			}
 		}
+
 		if (cur->domain_attr->data_progress == FI_PROGRESS_AUTO ||
 		    force_auto_progress)
 			cur->domain_attr->threading = FI_THREAD_SAFE;
