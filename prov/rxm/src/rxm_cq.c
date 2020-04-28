@@ -1048,7 +1048,6 @@ err:
 static inline ssize_t rxm_handle_credit(struct rxm_ep *rxm_ep,
 					struct rxm_rx_buf *rx_buf)
 {
-	assert(rx_buf->comp_flags == FI_RECV);
 	rxm_ep->flow_ctrl_ops->add_credits(rx_buf->msg_ep,
 					   rx_buf->pkt.ctrl_hdr.ctrl_data);
 	rxm_rx_buf_free(rx_buf);

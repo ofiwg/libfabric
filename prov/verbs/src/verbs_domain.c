@@ -75,7 +75,7 @@ vrb_domain_ops_open(struct fid *fid, const char *name, uint64_t flags,
 
 	if (!strcasecmp(name, OFI_OPS_FLOW_CTRL)) {
 		*ops = &vrb_ops_flow_ctrl;
-		ep = container_of(fid, struct vrb_ep, util_ep.ep_fid);
+		ep = container_of(context, struct vrb_ep, util_ep.ep_fid);
 		ep->peer_rq_credits = 1;
 		return 0;
 	}
