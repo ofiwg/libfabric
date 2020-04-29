@@ -194,6 +194,7 @@ ssize_t rxr_msg_sendv(struct fid_ep *ep, const struct iovec *iov,
 		      void **desc, size_t count, fi_addr_t dest_addr,
 		      void *context)
 {
+	struct rxr_ep *rxr_ep;
 	struct fi_msg msg;
 
 	memset(&msg, 0, sizeof(msg));
@@ -203,7 +204,8 @@ ssize_t rxr_msg_sendv(struct fid_ep *ep, const struct iovec *iov,
 	msg.addr = dest_addr;
 	msg.context = context;
 
-	return rxr_msg_sendmsg(ep, &msg, 0);
+	rxr_ep = container_of(ep, struct rxr_ep, util_ep.ep_fid.fid);
+	return rxr_msg_sendmsg(ep, &msg, rxr_tx_flags(rxr_ep));
 }
 
 static
@@ -224,6 +226,7 @@ ssize_t rxr_msg_senddata(struct fid_ep *ep, const void *buf, size_t len,
 {
 	struct fi_msg msg;
 	struct iovec iov;
+	struct rxr_ep *rxr_ep;
 
 	iov.iov_base = (void *)buf;
 	iov.iov_len = len;
@@ -236,16 +239,16 @@ ssize_t rxr_msg_senddata(struct fid_ep *ep, const void *buf, size_t len,
 	msg.context = context;
 	msg.data = data;
 
-	return rxr_msg_generic_send(ep, &msg, 0, ofi_op_msg, FI_REMOTE_CQ_DATA);
+	rxr_ep = container_of(ep, struct rxr_ep, util_ep.ep_fid.fid);
+	return rxr_msg_generic_send(ep, &msg, 0, ofi_op_msg,
+				    rxr_tx_flags(rxr_ep) | FI_REMOTE_CQ_DATA);
 }
 
 static
 ssize_t rxr_msg_inject(struct fid_ep *ep, const void *buf, size_t len,
 		       fi_addr_t dest_addr)
 {
-#if ENABLE_DEBUG
 	struct rxr_ep *rxr_ep;
-#endif
 	struct fi_msg msg;
 	struct iovec iov;
 
@@ -257,13 +260,11 @@ ssize_t rxr_msg_inject(struct fid_ep *ep, const void *buf, size_t len,
 	msg.iov_count = 1;
 	msg.addr = dest_addr;
 
-#if ENABLE_DEBUG
 	rxr_ep = container_of(ep, struct rxr_ep, util_ep.ep_fid.fid);
 	assert(len <= rxr_ep->core_inject_size - sizeof(struct rxr_eager_msgrtm_hdr));
-#endif
 
 	return rxr_msg_generic_send(ep, &msg, 0, ofi_op_msg,
-				    RXR_NO_COMPLETION | FI_INJECT);
+				    rxr_tx_flags(rxr_ep) | RXR_NO_COMPLETION | FI_INJECT);
 }
 
 static
@@ -271,9 +272,7 @@ ssize_t rxr_msg_injectdata(struct fid_ep *ep, const void *buf,
 			   size_t len, uint64_t data,
 			   fi_addr_t dest_addr)
 {
-#if ENABLE_DEBUG
 	struct rxr_ep *rxr_ep;
-#endif
 	struct fi_msg msg;
 	struct iovec iov;
 
@@ -286,7 +285,6 @@ ssize_t rxr_msg_injectdata(struct fid_ep *ep, const void *buf,
 	msg.addr = dest_addr;
 	msg.data = data;
 
-#if ENABLE_DEBUG
 	rxr_ep = container_of(ep, struct rxr_ep, util_ep.ep_fid.fid);
 	/*
 	 * We advertise the largest possible inject size with no cq data or
@@ -294,10 +292,9 @@ ssize_t rxr_msg_injectdata(struct fid_ep *ep, const void *buf,
 	 * providers inject for this send.
 	 */
 	assert(len <= rxr_ep->core_inject_size - sizeof(struct rxr_eager_msgrtm_hdr));
-#endif
-
 	return rxr_msg_generic_send(ep, &msg, 0, ofi_op_msg,
-				    RXR_NO_COMPLETION | FI_REMOTE_CQ_DATA | FI_INJECT);
+				    rxr_tx_flags(rxr_ep) | RXR_NO_COMPLETION |
+				    FI_REMOTE_CQ_DATA | FI_INJECT);
 }
 
 /**
@@ -315,7 +312,6 @@ ssize_t rxr_msg_tsendmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *tmsg
 	msg.addr = tmsg->addr;
 	msg.context = tmsg->context;
 	msg.data = tmsg->data;
-
 	return rxr_msg_generic_send(ep_fid, &msg, tmsg->tag, ofi_op_tagged, flags);
 }
 
@@ -324,6 +320,7 @@ ssize_t rxr_msg_tsendv(struct fid_ep *ep_fid, const struct iovec *iov,
 		       void **desc, size_t count, fi_addr_t dest_addr,
 		       uint64_t tag, void *context)
 {
+	struct rxr_ep *rxr_ep;
 	struct fi_msg_tagged msg;
 
 	memset(&msg, 0, sizeof(msg));
@@ -334,7 +331,8 @@ ssize_t rxr_msg_tsendv(struct fid_ep *ep_fid, const struct iovec *iov,
 	msg.context = context;
 	msg.tag = tag;
 
-	return rxr_msg_tsendmsg(ep_fid, &msg, 0);
+	rxr_ep = container_of(ep_fid, struct rxr_ep, util_ep.ep_fid.fid);
+	return rxr_msg_tsendmsg(ep_fid, &msg, rxr_tx_flags(rxr_ep));
 }
 
 static
@@ -347,7 +345,7 @@ ssize_t rxr_msg_tsend(struct fid_ep *ep_fid, const void *buf, size_t len,
 	msg_iov.iov_base = (void *)buf;
 	msg_iov.iov_len = len;
 	return rxr_msg_tsendv(ep_fid, &msg_iov, &desc, 1, dest_addr, tag,
-			     context);
+			      context);
 }
 
 static
@@ -357,6 +355,7 @@ ssize_t rxr_msg_tsenddata(struct fid_ep *ep_fid, const void *buf, size_t len,
 {
 	struct fi_msg msg;
 	struct iovec iov;
+	struct rxr_ep *rxr_ep;
 
 	iov.iov_base = (void *)buf;
 	iov.iov_len = len;
@@ -368,17 +367,16 @@ ssize_t rxr_msg_tsenddata(struct fid_ep *ep_fid, const void *buf, size_t len,
 	msg.context = context;
 	msg.data = data;
 
+	rxr_ep = container_of(ep_fid, struct rxr_ep, util_ep.ep_fid.fid);
 	return rxr_msg_generic_send(ep_fid, &msg, tag, ofi_op_tagged,
-				FI_REMOTE_CQ_DATA);
+				    rxr_tx_flags(rxr_ep) | FI_REMOTE_CQ_DATA);
 }
 
 static
 ssize_t rxr_msg_tinject(struct fid_ep *ep_fid, const void *buf, size_t len,
 			fi_addr_t dest_addr, uint64_t tag)
 {
-#if ENABLE_DEBUG
 	struct rxr_ep *rxr_ep;
-#endif
 	struct fi_msg msg;
 	struct iovec iov;
 
@@ -390,22 +388,18 @@ ssize_t rxr_msg_tinject(struct fid_ep *ep_fid, const void *buf, size_t len,
 	msg.iov_count = 1;
 	msg.addr = dest_addr;
 
-#if ENABLE_DEBUG
 	rxr_ep = container_of(ep_fid, struct rxr_ep, util_ep.ep_fid.fid);
 	assert(len <= rxr_ep->core_inject_size - sizeof(struct rxr_eager_tagrtm_hdr));
-#endif
 
 	return rxr_msg_generic_send(ep_fid, &msg, tag, ofi_op_tagged,
-				RXR_NO_COMPLETION | FI_INJECT);
+				    rxr_tx_flags(rxr_ep) | RXR_NO_COMPLETION | FI_INJECT);
 }
 
 static
 ssize_t rxr_msg_tinjectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
 			    uint64_t data, fi_addr_t dest_addr, uint64_t tag)
 {
-#if ENABLE_DEBUG
 	struct rxr_ep *rxr_ep;
-#endif
 	struct fi_msg msg;
 	struct iovec iov;
 
@@ -418,7 +412,6 @@ ssize_t rxr_msg_tinjectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
 	msg.addr = dest_addr;
 	msg.data = data;
 
-#if ENABLE_DEBUG
 	rxr_ep = container_of(ep_fid, struct rxr_ep, util_ep.ep_fid.fid);
 	/*
 	 * We advertise the largest possible inject size with no cq data or
@@ -426,10 +419,10 @@ ssize_t rxr_msg_tinjectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
 	 * providers inject for this send.
 	 */
 	assert(len <= rxr_ep->core_inject_size - sizeof(struct rxr_eager_tagrtm_hdr));
-#endif
 
 	return rxr_msg_generic_send(ep_fid, &msg, tag, ofi_op_tagged,
-				    RXR_NO_COMPLETION | FI_REMOTE_CQ_DATA | FI_INJECT);
+				    rxr_tx_flags(rxr_ep) | RXR_NO_COMPLETION |
+				    FI_REMOTE_CQ_DATA | FI_INJECT);
 }
 
 /**
