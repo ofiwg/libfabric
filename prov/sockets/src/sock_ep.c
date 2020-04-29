@@ -1795,12 +1795,22 @@ struct sock_conn *sock_ep_lookup_conn(struct sock_ep_attr *attr, fi_addr_t index
 {
 	int i;
 	uint16_t idx;
+	char buf[8];
 	struct sock_conn *conn;
 
 	idx = (attr->ep_type == FI_EP_MSG) ? index : index & attr->av->mask;
 
 	conn = ofi_idm_lookup(&attr->av_idm, idx);
 	if (conn && conn != SOCK_CM_CONN_IN_PROGRESS) {
+		if (conn->connected == 0)
+			return NULL;
+		/* Verify that the existing connection is still usable, and
+		 * that the peer didn't restart.
+		 */
+		if (sock_comm_peek(conn, buf, 8) == 0 && conn->connected == 0) {
+			SOCK_LOG_DBG("Disconnected\n");
+			return NULL;
+		}
 		if (conn->av_index == FI_ADDR_NOTAVAIL)
 			conn->av_index = idx;
 		return conn;
@@ -1815,6 +1825,14 @@ struct sock_conn *sock_ep_lookup_conn(struct sock_ep_attr *attr, fi_addr_t index
 			if (conn->av_index == FI_ADDR_NOTAVAIL)
 				conn->av_index = idx;
 			break;
+		}
+	}
+	if (conn && conn != SOCK_CM_CONN_IN_PROGRESS) {
+		if (conn->connected == 0)
+			return NULL;
+		if (sock_comm_peek(conn, buf, 8) == 0 && conn->connected == 0) {
+			SOCK_LOG_DBG("Disconnected\n");
+			return NULL;
 		}
 	}
 	return conn;
