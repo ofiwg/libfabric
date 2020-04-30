@@ -396,12 +396,15 @@ int tcpx_get_rx_entry_op_invalid(struct tcpx_ep *tcpx_ep)
 	return -FI_EINVAL;
 }
 
-static inline void
-tcpx_rx_detect_init(struct tcpx_cur_rx_msg *cur_rx_msg)
-
+static void tcpx_rx_setup(struct tcpx_ep *ep, struct tcpx_xfer_entry *rx_entry,
+			  tcpx_rx_process_fn_t rx_process_fn)
 {
-	cur_rx_msg->hdr_len = sizeof(cur_rx_msg->hdr.base_hdr);
-	cur_rx_msg->done_len = 0;
+	ep->cur_rx_entry = rx_entry;
+	ep->cur_rx_proc_fn = rx_process_fn;
+
+	/* Reset to receive next message */
+	ep->cur_rx_msg.hdr_len = sizeof(ep->cur_rx_msg.hdr.base_hdr);
+	ep->cur_rx_msg.done_len = 0;
 }
 
 int tcpx_get_rx_entry_op_msg(struct tcpx_ep *tcpx_ep)
@@ -424,7 +427,7 @@ int tcpx_get_rx_entry_op_msg(struct tcpx_ep *tcpx_ep)
 
 		slist_remove_head(&tx_entry->ep->tx_rsp_pend_queue);
 		tcpx_xfer_entry_release(tcpx_cq, tx_entry);
-		tcpx_rx_detect_init(cur_rx_msg);
+		tcpx_rx_setup(tcpx_ep, NULL, NULL);
 		return -FI_EAGAIN;
 	}
 
@@ -466,12 +469,10 @@ int tcpx_get_rx_entry_op_msg(struct tcpx_ep *tcpx_ep)
 		return ret;
 	}
 
-	tcpx_ep->cur_rx_proc_fn = process_rx_entry;
 	if (cur_rx_msg->hdr.base_hdr.flags & OFI_REMOTE_CQ_DATA)
 		rx_entry->flags |= FI_REMOTE_CQ_DATA;
 
-	tcpx_rx_detect_init(cur_rx_msg);
-	tcpx_ep->cur_rx_entry = rx_entry;
+	tcpx_rx_setup(tcpx_ep, rx_entry, process_rx_entry);
 	return FI_SUCCESS;
 }
 
@@ -507,9 +508,7 @@ int tcpx_get_rx_entry_op_read_req(struct tcpx_ep *tcpx_ep)
 		return ret;
 	}
 
-	tcpx_rx_detect_init(&tcpx_ep->cur_rx_msg);
-	tcpx_ep->cur_rx_entry = rx_entry;
-	tcpx_ep->cur_rx_proc_fn = tcpx_prepare_rx_remote_read_resp;
+	tcpx_rx_setup(tcpx_ep, rx_entry, tcpx_prepare_rx_remote_read_resp);
 	return FI_SUCCESS;
 }
 
@@ -547,9 +546,7 @@ int tcpx_get_rx_entry_op_write(struct tcpx_ep *tcpx_ep)
 	}
 
 	tcpx_copy_rma_iov_to_msg_iov(rx_entry);
-	tcpx_rx_detect_init(&tcpx_ep->cur_rx_msg);
-	tcpx_ep->cur_rx_entry = rx_entry;
-	tcpx_ep->cur_rx_proc_fn = process_rx_remote_write_entry;
+	tcpx_rx_setup(tcpx_ep, rx_entry, process_rx_remote_write_entry);
 	return FI_SUCCESS;
 
 }
@@ -572,9 +569,7 @@ int tcpx_get_rx_entry_op_read_rsp(struct tcpx_ep *tcpx_ep)
 	rx_entry->rem_len = (rx_entry->hdr.base_hdr.size -
 			     tcpx_ep->cur_rx_msg.done_len);
 
-	tcpx_rx_detect_init(&tcpx_ep->cur_rx_msg);
-	tcpx_ep->cur_rx_entry = rx_entry;
-	tcpx_ep->cur_rx_proc_fn = process_rx_read_entry;
+	tcpx_rx_setup(tcpx_ep, rx_entry, process_rx_read_entry);
 	return FI_SUCCESS;
 }
 
