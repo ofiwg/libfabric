@@ -190,6 +190,8 @@ int rxr_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	if (!rxr_domain)
 		return -FI_ENOMEM;
 
+	rxr_domain->type = EFA_DOMAIN_RDM;
+
 	ret = rxr_get_lower_rdm_info(fabric->api_version, NULL, NULL, 0,
 				     &rxr_util_prov, info, &rdm_info);
 	if (ret)
