@@ -176,7 +176,6 @@ struct tcpx_rx_ctx {
 };
 
 typedef int (*tcpx_rx_process_fn_t)(struct tcpx_xfer_entry *rx_entry);
-typedef int (*tcpx_get_rx_func_t)(struct tcpx_ep *ep);
 
 enum {
 	STAGE_BUF_SIZE = 512
@@ -203,7 +202,7 @@ struct tcpx_ep {
 	enum tcpx_cm_state	cm_state;
 	/* lock for protecting tx/rx queues,rma list,cm_state*/
 	fastlock_t		lock;
-	tcpx_get_rx_func_t	get_rx_entry[ofi_op_write + 1];
+	int (*start_op[ofi_op_write + 1])(struct tcpx_ep *ep);
 	void (*hdr_bswap)(struct tcpx_base_hdr *hdr);
 	struct stage_buf	stage_buf;
 	size_t			min_multi_recv_size;
@@ -316,10 +315,10 @@ int tcpx_eq_wait_try_func(void *arg);
 int tcpx_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
 		   struct fid_eq **eq_fid, void *context);
 
-int tcpx_get_rx_entry_op_invalid(struct tcpx_ep *tcpx_ep);
-int tcpx_get_rx_entry_op_msg(struct tcpx_ep *tcpx_ep);
-int tcpx_get_rx_entry_op_read_req(struct tcpx_ep *tcpx_ep);
-int tcpx_get_rx_entry_op_write(struct tcpx_ep *tcpx_ep);
-int tcpx_get_rx_entry_op_read_rsp(struct tcpx_ep *tcpx_ep);
+int tcpx_op_invalid(struct tcpx_ep *tcpx_ep);
+int tcpx_op_msg(struct tcpx_ep *tcpx_ep);
+int tcpx_op_read_req(struct tcpx_ep *tcpx_ep);
+int tcpx_op_write(struct tcpx_ep *tcpx_ep);
+int tcpx_op_read_rsp(struct tcpx_ep *tcpx_ep);
 
 #endif //_TCP_H_
