@@ -420,7 +420,7 @@ static int efa_ep_enable(struct fid_ep *ep_fid)
 
 	attr_ex.cap.max_inline_data = ep->domain->ctx->inline_buf_size;
 
-	if (ep->domain->rdm) {
+	if (ep->domain->type == EFA_DOMAIN_RDM) {
 		attr_ex.qp_type = IBV_QPT_DRIVER;
 		attr_ex.comp_mask = IBV_QP_INIT_ATTR_PD | IBV_QP_INIT_ATTR_SEND_OPS_FLAGS;
 		attr_ex.send_ops_flags = IBV_QP_EX_WITH_SEND;

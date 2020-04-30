@@ -655,6 +655,7 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	struct efa_domain *efa_domain;
 	struct util_domain *util_domain;
 	struct rxr_domain *rxr_domain;
+	struct efa_domain_base *efa_domain_base;
 	struct efa_av *av;
 	struct util_av_attr util_attr;
 	size_t universe_size;
@@ -683,16 +684,19 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	av = calloc(1, sizeof(*av));
 	if (!av)
 		return -FI_ENOMEM;
-	/*
-	 * This needs be revisited once fabric domain is set to efa for both
-	 * dgram and rdm.For rdm need both efa_domain and rxr_domain (for shm_domain)
-	 */
+
 	util_domain = container_of(domain_fid, struct util_domain,
-			domain_fid);
+				   domain_fid);
+	efa_domain_base = container_of(util_domain, struct efa_domain_base,
+				       util_domain.domain_fid);
 	attr->type = FI_AV_TABLE;
-	if (strstr(util_domain->name, "rdm")) {
-		rxr_domain = container_of(domain_fid, struct rxr_domain,
-						util_domain.domain_fid);
+	/*
+	 * An rxr_domain fid was passed to the user if this is an RDM
+	 * endpoint, otherwise it is an efa_domain fid.  This will be
+	 * removed once the rxr and efa domain structures are combined.
+	 */
+	if (efa_domain_base->type == EFA_DOMAIN_RDM) {
+		rxr_domain = (struct rxr_domain *)efa_domain_base;
 		efa_domain = container_of(rxr_domain->rdm_domain, struct efa_domain,
 						util_domain.domain_fid);
 		av->ep_type = FI_EP_RDM;
@@ -732,9 +736,7 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 				av->shm_rdm_addr_map[i] = FI_ADDR_UNSPEC;
 		}
 	} else {
-		// Currently the domain is set to efa for only dgram
-		efa_domain = container_of(domain_fid, struct efa_domain,
-			util_domain.domain_fid);
+		efa_domain = (struct efa_domain *)efa_domain_base;
 		av->ep_type = FI_EP_DGRAM;
 	}
 

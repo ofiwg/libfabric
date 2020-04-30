@@ -134,14 +134,24 @@ struct efa_conn {
 	struct efa_ep_addr	ep_addr;
 };
 
+/*
+ * Common fields for the beginning of the efa_domain and rxr_domain structures.
+ * This structure must be kept in sync with rxr_domain and efa_domain. This
+ * will be removed when the rxr and efa domain structures are combined.
+ */
+struct efa_domain_base {
+	struct util_domain	util_domain;
+	enum efa_domain_type	type;
+};
+
 struct efa_domain {
 	struct util_domain	util_domain;
+	enum efa_domain_type	type;
 	struct fid_domain	*shm_domain;
 	struct efa_context	*ctx;
 	struct ibv_pd		*ibv_pd;
 	struct fi_info		*info;
 	struct efa_fabric	*fab;
-	int			rdm;
 	struct ofi_mr_cache	cache;
 	struct efa_qp		**qp_table;
 	size_t			qp_table_sz_m1;
