@@ -39,6 +39,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <dirent.h>
+#include <ctype.h>
 
 #include <rdma/fi_errno.h>
 #include "ofi_util.h"
@@ -360,7 +361,7 @@ static void ofi_ordered_provs_init(void)
 		 */
 
 		/* Before you add ANYTHING here, read the comment above!!! */
-		"UDP", "tcp", "sockets", /* NOTHING GOES HERE! */
+		"udp", "tcp", "sockets", /* NOTHING GOES HERE! */
 		/* Seriously, read it! */
 
 		/* These are hooking providers only.  Their order
@@ -545,13 +546,34 @@ void ofi_create_filter(struct fi_filter *filter, const char *raw_filter)
 }
 
 #ifdef HAVE_LIBDL
+static void ofi_reg_dl_prov(const char *lib)
+{
+	void *dlhandle;
+	struct fi_provider* (*inif)(void);
+
+	FI_DBG(&core_prov, FI_LOG_CORE, "opening provider lib %s\n", lib);
+
+	dlhandle = dlopen(lib, RTLD_NOW);
+	if (dlhandle == NULL) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"dlopen(%s): %s\n", lib, dlerror());
+		return;
+	}
+
+	inif = dlsym(dlhandle, "fi_prov_ini");
+	if (inif == NULL) {
+		FI_WARN(&core_prov, FI_LOG_CORE, "dlsym: %s\n", dlerror());
+		dlclose(dlhandle);
+	} else {
+		ofi_register_provider((inif)(), dlhandle);
+	}
+}
+
 static void ofi_ini_dir(const char *dir)
 {
 	int n = 0;
 	char *lib;
-	void *dlhandle;
 	struct dirent **liblist = NULL;
-	struct fi_provider* (*inif)(void);
 
 	n = scandir(dir, &liblist, lib_filter, NULL);
 	if (n < 0)
@@ -563,31 +585,49 @@ static void ofi_ini_dir(const char *dir)
 			       "asprintf failed to allocate memory\n");
 			goto libdl_done;
 		}
-		FI_DBG(&core_prov, FI_LOG_CORE, "opening provider lib %s\n", lib);
-
-		dlhandle = dlopen(lib, RTLD_NOW);
+		ofi_reg_dl_prov(lib);
+	
 		free(liblist[n]);
-		if (dlhandle == NULL) {
-			FI_WARN(&core_prov, FI_LOG_CORE,
-			       "dlopen(%s): %s\n", lib, dlerror());
-			free(lib);
-			continue;
-		}
 		free(lib);
-
-		inif = dlsym(dlhandle, "fi_prov_ini");
-		if (inif == NULL) {
-			FI_WARN(&core_prov, FI_LOG_CORE, "dlsym: %s\n", dlerror());
-			dlclose(dlhandle);
-		} else {
-			ofi_register_provider((inif)(), dlhandle);
-		}
 	}
 
 libdl_done:
 	while (n-- > 0)
 		free(liblist[n]);
 	free(liblist);
+}
+
+/* Search standard system library paths (i.e. LD_LIBRARY_PATH) for known DL provider
+ * libraries.
+ */
+static void ofi_find_prov_libs(void)
+{
+	const char* lib_prefix = "lib";
+	struct ofi_prov *prov;
+	char* lib;
+	char* short_prov_name;
+
+	for (prov = prov_head; prov; prov = prov->next) {
+
+		if (!prov->prov_name)
+			continue;
+		
+		if (ofi_has_util_prefix(prov->prov_name)) {
+			short_prov_name = prov->prov_name + strlen(OFI_UTIL_PREFIX);		
+		} else {
+			short_prov_name = prov->prov_name;
+		}
+
+		if (asprintf(&lib, "%s%s%s%s", lib_prefix,
+			short_prov_name, "-", FI_LIB_SUFFIX) < 0) {
+			FI_WARN(&core_prov, FI_LOG_CORE,
+				"asprintf failed to allocate memory\n");
+			continue;
+		}
+
+		ofi_reg_dl_prov(lib);
+		free(lib);
+	}   
 }
 #endif
 
@@ -644,9 +684,10 @@ void fi_ini(void)
 			"Search for providers in specific path (default: "
 			PROVDLDIR ")");
 	fi_param_get_str(NULL, "provider_path", &provdir);
-	if (!provdir)
+	if (!provdir) {
 		provdir = PROVDLDIR;
-
+		ofi_find_prov_libs();
+	}
 	dirs = ofi_split_and_alloc(provdir, ":", NULL);
 	if (dirs) {
 		for (n = 0; dirs[n]; ++n) {
