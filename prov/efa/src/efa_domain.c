@@ -81,7 +81,7 @@ static int efa_open_device_by_name(struct efa_domain *domain, const char *name)
 	if (!ctx_list)
 		return -errno;
 
-	if (domain->rdm)
+	if (domain->type == EFA_DOMAIN_RDM)
 		name_len = strlen(name) - strlen(efa_rdm_domain.suffix);
 	else
 		name_len = strlen(name) - strlen(efa_dgrm_domain.suffix);
@@ -163,7 +163,10 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		goto err_close_domain;
 	}
 
-	domain->rdm = EFA_EP_TYPE_IS_RDM(info);
+	if (EFA_EP_TYPE_IS_RDM(info))
+		domain->type = EFA_DOMAIN_RDM;
+	else
+		domain->type = EFA_DOMAIN_DGRAM;
 
 	ret = efa_open_device_by_name(domain, info->domain_attr->name);
 	if (ret)

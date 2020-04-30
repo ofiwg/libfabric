@@ -476,8 +476,14 @@ struct rxr_tx_entry {
 	(*((enum rxr_x_entry_type *)	\
 	 ((unsigned char *)((pkt_entry)->x_entry))))
 
+enum efa_domain_type {
+	EFA_DOMAIN_DGRAM = 0,
+	EFA_DOMAIN_RDM,
+};
+
 struct rxr_domain {
 	struct util_domain util_domain;
+	enum efa_domain_type type;
 	struct fid_domain *rdm_domain;
 	size_t mtu_size;
 	size_t addrlen;
