@@ -875,11 +875,13 @@ static int rxm_msg_ep_open(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 		return ret;
 	}
 
-	ret = fi_open_ops(&msg_ep->fid, OFI_OPS_FLOW_CTRL, 0, (void **) &flow_ctrl_ops, NULL);
+	ret = fi_open_ops(&rxm_domain->msg_domain->fid, OFI_OPS_FLOW_CTRL, 0,
+			  (void **) &flow_ctrl_ops, &msg_ep->fid);
 	if (!ret && flow_ctrl_ops) {
 		rxm_ep->flow_ctrl_ops = flow_ctrl_ops;
-		rxm_ep->flow_ctrl_ops->set_threshold(rxm_domain->msg_domain,
-						     rxm_ep->msg_info->rx_attr->size / 2);
+		rxm_ep->flow_ctrl_ops->set_threshold(
+			rxm_domain->msg_domain,
+			rxm_ep->msg_info->rx_attr->size / 2);
 		rxm_ep->flow_ctrl_ops->set_send_handler(rxm_domain->msg_domain,
 							rxm_send_credits);
 	} else if (ret == -FI_ENOSYS) {
