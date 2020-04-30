@@ -71,8 +71,8 @@ static ssize_t tcpx_read_from_buffer(struct stage_buf *stage_buf,
 	return ret;
 }
 
-static int tcpx_recv_hdr(SOCKET sock, struct stage_buf *stage_buf,
-			  struct tcpx_cur_rx_msg *cur_rx_msg)
+int tcpx_recv_hdr(SOCKET sock, struct stage_buf *stage_buf,
+		  struct tcpx_cur_rx_msg *cur_rx_msg)
 {
 	void *rem_buf;
 	size_t rem_len;
@@ -89,32 +89,6 @@ static int tcpx_recv_hdr(SOCKET sock, struct stage_buf *stage_buf,
 		return bytes_recvd ? -ofi_sockerr(): -FI_ENOTCONN;
 
 	return bytes_recvd;
-}
-
-int tcpx_comm_recv_hdr(SOCKET sock, struct stage_buf *stage_buf,
-		        struct tcpx_cur_rx_msg *cur_rx_msg)
-{
-	ssize_t bytes_recvd;
-	bytes_recvd = tcpx_recv_hdr(sock, stage_buf, cur_rx_msg);
-	if (bytes_recvd < 0)
-		return bytes_recvd;
-	cur_rx_msg->done_len += bytes_recvd;
-
-	if (cur_rx_msg->done_len == sizeof(cur_rx_msg->hdr.base_hdr)) {
-		cur_rx_msg->hdr_len = (size_t) cur_rx_msg->hdr.base_hdr.payload_off;
-
-		if (cur_rx_msg->hdr_len > cur_rx_msg->done_len) {
-			bytes_recvd = tcpx_recv_hdr(sock, stage_buf, cur_rx_msg);
-			if (bytes_recvd < 0)
-				return bytes_recvd;
-			cur_rx_msg->done_len += bytes_recvd;
-			return (cur_rx_msg->done_len == cur_rx_msg->hdr_len) ?
-				FI_SUCCESS : -FI_EAGAIN;
-		}
-	}
-
-	return (cur_rx_msg->done_len == cur_rx_msg->hdr_len) ?
-		FI_SUCCESS : -FI_EAGAIN;
 }
 
 static ssize_t tcpx_readv_from_buffer(struct stage_buf *stage_buf,

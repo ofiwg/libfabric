@@ -578,17 +578,37 @@ int tcpx_get_rx_entry_op_read_rsp(struct tcpx_ep *tcpx_ep)
 	return FI_SUCCESS;
 }
 
-static inline int tcpx_get_next_rx_hdr(struct tcpx_ep *ep)
+static int tcpx_get_next_rx_hdr(struct tcpx_ep *ep)
 {
 	int ret;
 
 	/* hdr already read from socket in previous call */
-	if (ep->cur_rx_msg.hdr_len == ep->cur_rx_msg.done_len)
+	if (ep->cur_rx_msg.done_len >= ep->cur_rx_msg.hdr_len)
 		return FI_SUCCESS;
 
-	ret = tcpx_comm_recv_hdr(ep->sock, &ep->stage_buf, &ep->cur_rx_msg);
-	if (ret)
+	ret = tcpx_recv_hdr(ep->sock, &ep->stage_buf, &ep->cur_rx_msg);
+	if (ret < 0)
 		return ret;
+
+	ep->cur_rx_msg.done_len += ret;
+	if (ep->cur_rx_msg.done_len >= sizeof(ep->cur_rx_msg.hdr.base_hdr)) {
+		ep->cur_rx_msg.hdr_len = (size_t) ep->cur_rx_msg.hdr.
+						  base_hdr.payload_off;
+
+		if (ep->cur_rx_msg.hdr_len > ep->cur_rx_msg.done_len) {
+			/* Still more header to read */
+			ret = tcpx_recv_hdr(ep->sock, &ep->stage_buf,
+					    &ep->cur_rx_msg);
+			if (ret < 0)
+				return ret;
+
+			ep->cur_rx_msg.done_len += ret;
+		}
+	}
+
+	/* TODO: cur_rx_msg.hdr_len is initialized in some non-obvious place */
+	if (ep->cur_rx_msg.done_len < ep->cur_rx_msg.hdr_len)
+		return -FI_EAGAIN;
 
 	ep->hdr_bswap(&ep->cur_rx_msg.hdr.base_hdr);
 	return FI_SUCCESS;

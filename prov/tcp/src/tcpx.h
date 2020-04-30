@@ -280,10 +280,10 @@ void tcpx_cq_report_error(struct util_cq *cq,
 			  int err);
 
 
+int tcpx_recv_hdr(SOCKET sock, struct stage_buf *stage_buf,
+		  struct tcpx_cur_rx_msg *cur_rx_msg);
 int tcpx_recv_msg_data(struct tcpx_xfer_entry *recv_entry);
 int tcpx_send_msg(struct tcpx_xfer_entry *tx_entry);
-int tcpx_comm_recv_hdr(SOCKET sock, struct stage_buf *stage_buf,
-		        struct tcpx_cur_rx_msg *cur_rx_msg);
 int tcpx_read_to_buffer(SOCKET sock, struct stage_buf *stage_buf);
 
 struct tcpx_xfer_entry *tcpx_xfer_entry_alloc(struct tcpx_cq *cq,
