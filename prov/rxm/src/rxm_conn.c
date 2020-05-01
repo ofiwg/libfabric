@@ -268,6 +268,27 @@ static int rxm_conn_res_alloc(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn)
 static void rxm_conn_close(struct rxm_cmap_handle *handle)
 {
 	struct rxm_conn *rxm_conn = container_of(handle, struct rxm_conn, handle);
+	struct rxm_conn *rxm_conn_tmp;
+	struct rxm_deferred_tx_entry *def_tx_entry;
+	struct dlist_entry *conn_entry_tmp;
+
+	dlist_foreach_container_safe(&handle->cmap->ep->deferred_tx_conn_queue,
+				     struct rxm_conn, rxm_conn_tmp,
+				     deferred_conn_entry, conn_entry_tmp)
+	{
+		if (rxm_conn_tmp->handle.key != handle->key)
+			continue;
+
+		while (!dlist_empty(&rxm_conn_tmp->deferred_tx_queue)) {
+			def_tx_entry =
+				container_of(rxm_conn_tmp->deferred_tx_queue.next,
+					     struct rxm_deferred_tx_entry, entry);
+			FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
+			       "cancelled deferred message\n");
+			rxm_ep_dequeue_deferred_tx_queue(def_tx_entry);
+			free(def_tx_entry);
+		}
+	}
 
 	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "closing msg ep\n");
 	if (!rxm_conn->msg_ep)
