@@ -296,6 +296,8 @@ OFI_DEF_COMPLEX_OPS(long_double)
 #ifdef HAVE_BUILTIN_ATOMICS
 #define ofi_atomic_add_and_fetch(radix, ptr, val) __sync_add_and_fetch((ptr), (val))
 #define ofi_atomic_sub_and_fetch(radix, ptr, val) __sync_sub_and_fetch((ptr), (val))
+#define ofi_atomic_cas_bool(radix, ptr, expected, desired) 	\
+	__sync_bool_compare_and_swap((ptr), (expected), (desired))
 #endif /* HAVE_BUILTIN_ATOMICS */
 
 int ofi_set_thread_affinity(const char *s);
