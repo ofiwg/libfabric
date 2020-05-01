@@ -724,14 +724,34 @@ void rxr_cq_handle_shm_completion(struct rxr_ep *ep, struct fi_cq_data_entry *cq
 	}
 }
 
+static inline
+bool rxr_cq_need_tx_completion(struct rxr_ep *ep,
+			       struct rxr_tx_entry *tx_entry)
+
+{
+	if (tx_entry->fi_flags & RXR_NO_COMPLETION)
+		return false;
+
+	/*
+	 * ep->util_ep.tx_msg_flags is either 0 or FI_COMPLETION, depend on
+	 * whether app specfied FI_SELECTIVE_COMPLETION when binding CQ.
+	 * (ep->util_ep.tx_msg_flags was set in ofi_ep_bind_cq())
+	 *
+	 * If tx_msg_flags is 0, we only write completion when app specify
+	 * FI_COMPLETION in flags.
+	 */
+	return ep->util_ep.tx_msg_flags == FI_COMPLETION ||
+	       tx_entry->fi_flags & FI_COMPLETION;
+}
+
+
 void rxr_cq_write_tx_completion(struct rxr_ep *ep,
 				struct rxr_tx_entry *tx_entry)
 {
 	struct util_cq *tx_cq = ep->util_ep.tx_cq;
 	int ret;
 
-	if (!(tx_entry->fi_flags & RXR_NO_COMPLETION) &&
-	    ofi_need_completion(rxr_tx_flags(ep), tx_entry->fi_flags)) {
+	if (rxr_cq_need_tx_completion(ep, tx_entry)) {
 		FI_DBG(&rxr_prov, FI_LOG_CQ,
 		       "Writing send completion for tx_entry to peer: %" PRIu64
 		       " tx_id: %" PRIu32 " msg_id: %" PRIu32 " tag: %lx len: %"
