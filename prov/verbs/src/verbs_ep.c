@@ -107,6 +107,7 @@ ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr, uint64_t flags)
 	struct vrb_context *ctx;
 	struct vrb_domain *domain;
 	struct vrb_cq *cq;
+	struct vrb_cq *cq_rx;
 	struct ibv_send_wr *bad_wr;
 	struct ibv_wc wc;
 	size_t credits_to_give = 0;
@@ -162,12 +163,15 @@ credits:
 	ep->sq_credits++;
 freebuf:
 	ofi_buf_free(ctx);
+unlock:
+	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
+	cq_rx = container_of(ep->util_ep.rx_cq, struct vrb_cq, util_cq);
+	cq_rx->util_cq.cq_fastlock_acquire(&cq_rx->util_cq.cq_lock);
 	if (ep->rq_credits_avail >= domain->threshold) {
 		credits_to_give = ep->rq_credits_avail;
 		ep->rq_credits_avail = 0;
 	}
-unlock:
-	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
+	cq_rx->util_cq.cq_fastlock_release(&cq_rx->util_cq.cq_lock);
 	if (credits_to_give &&
 	    domain->send_credits(&ep->util_ep.ep_fid, credits_to_give)) {
 		cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);

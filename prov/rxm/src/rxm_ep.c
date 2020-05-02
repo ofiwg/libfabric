@@ -732,13 +732,14 @@ static int rxm_handle_unexp_sar(struct rxm_recv_queue *recv_queue,
 static int rxm_ep_discard_recv(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_buf,
 			       void *context)
 {
+	int ret;
 	RXM_DBG_ADDR_TAG(FI_LOG_EP_DATA, "Discarding message",
 			 rx_buf->unexp_msg.addr, rx_buf->unexp_msg.tag);
 
-	dlist_insert_tail(&rx_buf->repost_entry,
-			  &rx_buf->ep->repost_ready_list);
-	return ofi_cq_write(rxm_ep->util_ep.rx_cq, context, FI_TAGGED | FI_RECV,
+	ret = ofi_cq_write(rxm_ep->util_ep.rx_cq, context, FI_TAGGED | FI_RECV,
 			    0, NULL, rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
+	rxm_rx_buf_free(rx_buf);
+	return ret;
 }
 
 static int rxm_ep_peek_recv(struct rxm_ep *rxm_ep, fi_addr_t addr, uint64_t tag,
@@ -951,8 +952,7 @@ rxm_ep_buf_recv(struct rxm_ep *rxm_ep, const struct iovec *iov,
 	} else {
 		assert(flags & FI_DISCARD);
 		FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Discarding buffered receive\n");
-		dlist_insert_tail(&rx_buf->repost_entry,
-				  &rx_buf->ep->repost_ready_list);
+		rxm_rx_buf_free(rx_buf);
 	}
 unlock:
 	ofi_ep_lock_release(&rxm_ep->util_ep);
@@ -1938,8 +1938,7 @@ rxm_ep_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 
 		assert(flags & FI_DISCARD);
 		FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Discarding buffered receive\n");
-		dlist_insert_tail(&rx_buf->repost_entry,
-				  &rx_buf->ep->repost_ready_list);
+		rxm_rx_buf_free(rx_buf);
 		goto unlock;
 	}
 
