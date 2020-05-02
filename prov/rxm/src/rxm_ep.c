@@ -533,7 +533,7 @@ static int rxm_ep_cancel_recv(struct rxm_ep *rxm_ep,
 		rxm_recv_entry_release(recv_queue, recv_entry);
 		ret = ofi_cq_write_error(rxm_ep->util_ep.rx_cq, &err_entry);
 	} else {
-		ret = 0;
+		ret = -FI_ENOENT;
 	}
 	ofi_ep_lock_release(&rxm_ep->util_ep);
 	return ret;
@@ -545,14 +545,12 @@ static ssize_t rxm_ep_cancel(fid_t fid_ep, void *context)
 	int ret;
 
 	ret = rxm_ep_cancel_recv(rxm_ep, &rxm_ep->recv_queue, context);
-	if (ret)
+	if (ret && ret != -FI_ENOENT)
 		return ret;
 
 	ret = rxm_ep_cancel_recv(rxm_ep, &rxm_ep->trecv_queue, context);
-	if (ret)
-		return ret;
 
-	return 0;
+	return ret;
 }
 
 static int rxm_ep_getopt(fid_t fid, int level, int optname, void *optval,
