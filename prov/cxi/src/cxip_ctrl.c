@@ -367,11 +367,11 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 
 	eq_attr.queue = ep_obj->ctrl_evtq_buf;
 	eq_attr.queue_len = ep_obj->ctrl_evtq_buf_len;
-	eq_attr.queue_md = ep_obj->ctrl_evtq_buf_md;
 	eq_attr.flags = CXI_EQ_TGT_LONG;
 
-	ret = cxil_alloc_evtq(ep_obj->domain->lni->lni, &eq_attr,
-			      NULL, NULL, &ep_obj->ctrl_evtq);
+	ret = cxil_alloc_evtq(ep_obj->domain->lni->lni,
+			      ep_obj->ctrl_evtq_buf_md,
+			      &eq_attr, NULL, NULL, &ep_obj->ctrl_evtq);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Unable to allocate control EVTQ, ret: %d\n",
 			     ret);

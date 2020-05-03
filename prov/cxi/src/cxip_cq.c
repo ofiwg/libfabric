@@ -384,11 +384,10 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq)
 
 	eq_attr.queue = cxi_cq->evtq_buf,
 	eq_attr.queue_len = cxi_cq->evtq_buf_len,
-	eq_attr.queue_md = cxi_cq->evtq_buf_md,
 	eq_attr.flags = CXI_EQ_TGT_LONG;
 
-	ret = cxil_alloc_evtq(cxi_cq->domain->lni->lni, &eq_attr,
-			      NULL, NULL, &cxi_cq->evtq);
+	ret = cxil_alloc_evtq(cxi_cq->domain->lni->lni, cxi_cq->evtq_buf_md,
+			      &eq_attr, NULL, NULL, &cxi_cq->evtq);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Unable to allocate EVTQ, ret: %d\n", ret);
 		ret = -FI_EDOMAIN;
