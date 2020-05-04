@@ -45,6 +45,7 @@
 #include <ofi_file.h>
 #include <ofi_osd.h>
 #include <rdma/fi_errno.h>
+#include <ofi_lock.h>
 
 
 enum {
@@ -53,6 +54,7 @@ enum {
 };
 
 struct fd_signal {
+	fastlock_t	lock;
 	int		rcnt;
 	int		wcnt;
 	int		fd[2];
@@ -70,6 +72,10 @@ static inline int fd_signal_init(struct fd_signal *signal)
 	if (ret)
 		goto err;
 
+	ret = fastlock_init(&signal->lock);
+	if (ret)
+		goto err;
+
 	return 0;
 
 err:
@@ -82,24 +88,30 @@ static inline void fd_signal_free(struct fd_signal *signal)
 {
 	ofi_close_socket(signal->fd[0]);
 	ofi_close_socket(signal->fd[1]);
+
+	fastlock_destroy(&signal->lock);
 }
 
 static inline void fd_signal_set(struct fd_signal *signal)
 {
 	char c = 0;
+	fastlock_acquire(&signal->lock);
 	if (signal->wcnt == signal->rcnt) {
 		if (ofi_write_socket(signal->fd[FI_WRITE_FD], &c, sizeof c) == sizeof c)
 			signal->wcnt++;
 	}
+	fastlock_release(&signal->lock);
 }
 
 static inline void fd_signal_reset(struct fd_signal *signal)
 {
 	char c;
+	fastlock_acquire(&signal->lock);
 	if (signal->rcnt != signal->wcnt) {
 		if (ofi_read_socket(signal->fd[FI_READ_FD], &c, sizeof c) == sizeof c)
 			signal->rcnt++;
 	}
+	fastlock_release(&signal->lock);
 }
 
 static inline int fd_signal_poll(struct fd_signal *signal, int timeout)
