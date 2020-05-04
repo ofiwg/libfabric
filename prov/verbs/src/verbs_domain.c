@@ -55,11 +55,16 @@ static void vrb_set_credit_handler(struct fid_domain *domain_fid,
 	domain->send_credits = credit_handler;
 }
 
-static ssize_t vrb_enable_ep_flow_ctrl(struct fid_ep *ep_fid)
+static int vrb_enable_ep_flow_ctrl(struct fid_ep *ep_fid)
 {
 	struct vrb_ep *ep = container_of(ep_fid, struct vrb_ep, util_ep.ep_fid);
-	ep->peer_rq_credits = 1;
-	return FI_SUCCESS;
+	// only enable if we are not using SRQ
+	if (!ep->srq_ep && ep->ibv_qp && ep->ibv_qp->qp_type == IBV_QPT_RC) {
+		ep->peer_rq_credits = 1;
+		return FI_SUCCESS;
+	}
+
+	return -FI_ENOSYS;
 }
 
 struct ofi_ops_flow_ctrl vrb_ops_flow_ctrl = {
