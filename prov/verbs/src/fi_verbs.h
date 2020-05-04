@@ -353,7 +353,6 @@ struct vrb_domain {
 	struct vrb_eq			*eq;
 	uint64_t			eq_flags;
 
-	uint64_t	threshold;
 	ssize_t		(*send_credits)(struct fid_ep *ep, uint64_t credits);
 
 	/* Indicates that MSG endpoints should use the XRC transport.
@@ -569,6 +568,7 @@ struct vrb_ep {
 	uint64_t			peer_rq_credits;
 	/* Protected by recv CQ lock */
 	uint64_t			rq_credits_avail;
+	uint64_t			threshold;
 
 	union {
 		struct rdma_cm_id	*id;
