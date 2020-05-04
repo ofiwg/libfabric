@@ -106,13 +106,17 @@ void ofi_monitor_init(void)
 		cache_params.max_size = ofi_default_cache_size();
 
 	if (cache_params.monitor != NULL) {
-		if (!strcmp(cache_params.monitor, "userfaultfd") &&
-		    default_monitor == uffd_monitor)
+		if (!strcmp(cache_params.monitor, "userfaultfd")) {
+#if HAVE_UFFD_UNMAP
 			default_monitor = uffd_monitor;
-		else if (!strcmp(cache_params.monitor, "memhooks"))
+#else
+			FI_WARN(&core_prov, FI_LOG_MR, "userfaultfd monitor not available\n");
+#endif
+		} else if (!strcmp(cache_params.monitor, "memhooks")) {
 			default_monitor = memhooks_monitor;
-		else if (!strcmp(cache_params.monitor, "disabled"))
+		} else if (!strcmp(cache_params.monitor, "disabled")) {
 			default_monitor = NULL;
+		}
 	}
 }
 
