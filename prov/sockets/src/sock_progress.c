@@ -68,8 +68,9 @@
 		(((uint64_t)_addr) >> (64 - _bits)))
 
 
-static int sock_pe_progress_buffered_rx(struct sock_rx_ctx *rx_ctx);
-
+#define SOCK_EP_MAX_PROGRESS_CNT 10
+static int sock_pe_progress_buffered_rx(struct sock_rx_ctx *rx_ctx,
+					bool shallow);
 
 static inline int sock_pe_is_data_msg(int msg_id)
 {
@@ -1059,7 +1060,7 @@ sock_pe_process_rx_tatomic(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx,
 
 	pe_entry->pe.rx.rx_entry = rx_entry;
 
-	sock_pe_progress_buffered_rx(rx_ctx);
+	sock_pe_progress_buffered_rx(rx_ctx, true);
 	fastlock_release(&rx_ctx->lock);
 
 	pe_entry->is_complete = 1;
@@ -1177,21 +1178,36 @@ ssize_t sock_rx_claim_recv(struct sock_rx_ctx *rx_ctx, void *context,
 	return ret;
 }
 
-static int sock_pe_progress_buffered_rx(struct sock_rx_ctx *rx_ctx)
+/* Check buffered msg list against posted list. If shallow is true,
+ * we only check SOCK_EP_MAX_PROGRESS_CNT messages to prevent progress
+ * test taking too long */
+static int sock_pe_progress_buffered_rx(struct sock_rx_ctx *rx_ctx,
+					bool shallow)
 {
 	struct dlist_entry *entry;
 	struct sock_pe_entry pe_entry;
 	struct sock_rx_entry *rx_buffered, *rx_posted;
 	size_t i, rem = 0, offset, len, used_len, dst_offset, datatype_sz;
+	size_t max_cnt;
 	char *src, *dst;
 
 	if (dlist_empty(&rx_ctx->rx_entry_list) ||
 	    dlist_empty(&rx_ctx->rx_buffered_list))
 		return 0;
 
-	for (entry = rx_ctx->rx_buffered_list.next;
-	     entry != &rx_ctx->rx_buffered_list;) {
-
+	if (!shallow) {
+		/* ignoring rx_ctx->progress_start */
+		entry = rx_ctx->rx_buffered_list.next;
+		max_cnt = SIZE_MAX;
+	} else {
+		/* continue where last time left off */
+		entry = rx_ctx->progress_start;
+		if (entry == &rx_ctx->rx_buffered_list) {
+			entry = entry->next;
+		}
+		max_cnt = SOCK_EP_MAX_PROGRESS_CNT;
+	}
+	for (i = 0; i < max_cnt && entry != &rx_ctx->rx_buffered_list; i++) {
 		rx_buffered = container_of(entry, struct sock_rx_entry, entry);
 		entry = entry->next;
 
@@ -1294,6 +1310,8 @@ static int sock_pe_progress_buffered_rx(struct sock_rx_ctx *rx_ctx)
 			rx_ctx->num_left++;
 		}
 	}
+	/* remember where we left off for next shallow progress */
+	rx_ctx->progress_start = entry;
 	return 0;
 }
 
@@ -1325,7 +1343,8 @@ static int sock_pe_process_rx_send(struct sock_pe *pe,
 	data_len = pe_entry->msg_hdr.msg_len - len;
 	if (pe_entry->done_len == len && !pe_entry->pe.rx.rx_entry) {
 		fastlock_acquire(&rx_ctx->lock);
-		sock_pe_progress_buffered_rx(rx_ctx);
+		rx_ctx->progress_start = &rx_ctx->rx_buffered_list;
+		sock_pe_progress_buffered_rx(rx_ctx, false);
 
 		rx_entry = sock_rx_get_entry(rx_ctx, pe_entry->addr, pe_entry->tag,
 					     pe_entry->msg_hdr.op_type == SOCK_OP_TSEND ? 1 : 0);
@@ -2400,7 +2419,7 @@ int sock_pe_progress_rx_ctx(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx)
 	fastlock_acquire(&pe->lock);
 
 	fastlock_acquire(&rx_ctx->lock);
-	sock_pe_progress_buffered_rx(rx_ctx);
+	sock_pe_progress_buffered_rx(rx_ctx, true);
 	fastlock_release(&rx_ctx->lock);
 
 	/* check for incoming data */

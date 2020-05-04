@@ -654,6 +654,8 @@ struct sock_rx_ctx {
 	struct dlist_entry ep_list;
 	fastlock_t lock;
 
+	struct dlist_entry *progress_start;
+
 	struct fi_rx_attr attr;
 	struct sock_rx_entry *rx_entry_pool;
 	struct slist pool_list;
