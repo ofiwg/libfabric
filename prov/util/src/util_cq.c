@@ -687,7 +687,7 @@ uint64_t ofi_rx_flags[] = {
 };
 
 uint64_t ofi_tx_flags[] = {
-	[ofi_op_msg] = FI_SEND,
+	[ofi_op_msg] = FI_SEND | FI_MSG,
 	[ofi_op_tagged] = FI_SEND | FI_TAGGED,
 	[ofi_op_read_req] = FI_RMA | FI_READ,
 	[ofi_op_read_rsp] = FI_RMA | FI_READ,
