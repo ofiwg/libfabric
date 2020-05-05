@@ -821,11 +821,13 @@ STATIC int psmx2_av_map_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 	return 0;
 }
 
-fi_addr_t psmx2_av_translate_source(struct psmx2_fid_av *av, psm2_epaddr_t source)
+fi_addr_t psmx2_av_translate_source(struct psmx2_fid_av *av,
+				    psm2_epaddr_t source, int source_sep_id)
 {
 	psm2_epid_t epid;
 	fi_addr_t ret;
 	int i, j, found;
+	int ep_type = source_sep_id ? PSMX2_EP_SCALABLE : PSMX2_EP_REGULAR;
 
 	if (av->type == FI_AV_MAP)
 		return (fi_addr_t) source;
@@ -841,11 +843,22 @@ fi_addr_t psmx2_av_translate_source(struct psmx2_fid_av *av, psm2_epaddr_t sourc
 			continue;
 
 		if (av->table[i].type == PSMX2_EP_REGULAR) {
+			if (ep_type == PSMX2_EP_SCALABLE)
+				continue;
 			if (av->table[i].epid == epid) {
 				ret = (fi_addr_t)i;
 				found = 1;
 			}
 		} else {
+			/*
+			 * scalable endpoint must match sep_id exactly.
+			 * regular endpoint can match a context of any
+			 * scalable endpoint.
+			 */
+			if (ep_type == PSMX2_EP_SCALABLE &&
+			    av->table[i].sep_id != source_sep_id)
+				continue;
+
 			if (!av->sep_info[i].epids) {
 				for (j = 0; j < av->max_trx_ctxt; j++) {
 					if (av->conn_info[j].trx_ctxt)
@@ -857,6 +870,7 @@ fi_addr_t psmx2_av_translate_source(struct psmx2_fid_av *av, psm2_epaddr_t sourc
 				if (!av->sep_info[i].epids)
 					continue;
 			}
+
 			for (j=0; j<av->sep_info[i].ctxt_cnt; j++) {
 				if (av->sep_info[i].epids[j] == epid) {
 					ret = fi_rx_addr((fi_addr_t)i, j,
