@@ -900,20 +900,22 @@ rxm_tx_buf_alloc(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
 
 
 static inline struct rxm_rx_buf *
-rxm_rx_buf_alloc(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep, uint8_t repost)
+rxm_rx_buf_alloc(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep)
 {
-	struct rxm_rx_buf *rx_buf =
-		ofi_buf_alloc(rxm_ep->buf_pools[RXM_BUF_POOL_RX].pool);
-	if (OFI_LIKELY((long int)rx_buf)) {
-		assert(rx_buf->ep == rxm_ep);
-		rx_buf->hdr.state = RXM_RX;
-		rx_buf->msg_ep = msg_ep;
-		rx_buf->repost = repost;
+	struct rxm_rx_buf *rx_buf;
 
-		if (!rxm_ep->srx_ctx)
-			rx_buf->conn = container_of(msg_ep->fid.context,
-						    struct rxm_conn, handle);
-	}
+	rx_buf = ofi_buf_alloc(rxm_ep->buf_pools[RXM_BUF_POOL_RX].pool);
+	if (!rx_buf)
+		return NULL;
+
+	assert(rx_buf->ep == rxm_ep);
+	rx_buf->hdr.state = RXM_RX;
+	rx_buf->msg_ep = msg_ep;
+	rx_buf->repost = 1;
+
+	if (!rxm_ep->srx_ctx)
+		rx_buf->conn = container_of(msg_ep->fid.context,
+						struct rxm_conn, handle);
 	return rx_buf;
 }
 

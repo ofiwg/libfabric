@@ -46,6 +46,7 @@
 size_t rxm_cm_progress_interval;
 size_t rxm_cq_eq_fairness;
 
+
 static const char *
 rxm_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
 		const void *err_data, char *buf, size_t len)
@@ -67,6 +68,22 @@ rxm_cq_get_rx_comp_and_op_flags(struct rxm_rx_buf *rx_buf)
 	return (rx_buf->pkt.hdr.flags | ofi_rx_flags[rx_buf->pkt.hdr.op]);
 }
 
+static int
+rxm_queue_rx_buf(struct rxm_ep *ep, struct fid_ep *msg_ep)
+{
+	struct rxm_rx_buf *rx_buf;
+
+	rx_buf = rxm_rx_buf_alloc(ep, msg_ep);
+	if (!rx_buf) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+			"ran out of buffers from RX buffer pool\n");
+		return -FI_ENOMEM;
+	}
+
+	dlist_insert_tail(&rx_buf->repost_entry, &ep->repost_ready_list);
+	return 0;
+}
+
 static int rxm_finish_buf_recv(struct rxm_rx_buf *rx_buf)
 {
 	uint64_t flags;
@@ -77,17 +94,8 @@ static int rxm_finish_buf_recv(struct rxm_rx_buf *rx_buf)
 		rx_buf->repost = 0;
 		dlist_insert_tail(&rx_buf->unexp_msg.entry,
 				  &rx_buf->conn->sar_deferred_rx_msg_list);
-		rx_buf = rxm_rx_buf_alloc(rx_buf->ep, rx_buf->msg_ep, 1);
-		if (!rx_buf) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
-				"ran out of buffers from RX buffer pool\n");
-			return -FI_ENOMEM;
-		}
 
-		dlist_insert_tail(&rx_buf->repost_entry,
-				  &rx_buf->ep->repost_ready_list);
-
-		return 0;
+		return rxm_queue_rx_buf(rx_buf->ep, rx_buf->msg_ep);
 	}
 
 	flags = rxm_cq_get_rx_comp_and_op_flags(rx_buf);
@@ -457,19 +465,15 @@ ssize_t rxm_cq_handle_rndv(struct rxm_rx_buf *rx_buf)
 	size_t i, index = 0, offset = 0, count, total_recv_len;
 	struct iovec iov[RXM_IOV_LIMIT];
 	void *desc[RXM_IOV_LIMIT];
-	struct rxm_rx_buf *new_rx_buf;
-	int ret = 0;
+	int ret;
 
 	rx_buf->repost = 0;
 
 	/* En-queue new rx buf to be posted ASAP so that we don't block any
 	 * incoming messages. RNDV processing can take a while. */
-	new_rx_buf = rxm_rx_buf_alloc(rx_buf->ep, rx_buf->msg_ep, 1);
-	if (!new_rx_buf)
-		return -FI_ENOMEM;
-
-	dlist_insert_tail(&new_rx_buf->repost_entry,
-			  &new_rx_buf->ep->repost_ready_list);
+	ret = rxm_queue_rx_buf(rx_buf->ep, rx_buf->msg_ep);
+	if (!ret)
+		return ret;
 
 	if (!rx_buf->conn) {
 		assert(rx_buf->ep->srx_ctx);
@@ -610,8 +614,6 @@ rxm_cq_match_rx_buf(struct rxm_rx_buf *rx_buf,
 		    struct rxm_recv_match_attr *match_attr)
 {
 	struct dlist_entry *entry;
-	struct rxm_ep *rxm_ep;
-	struct fid_ep *msg_ep;
 
 	entry = dlist_remove_first_match(&recv_queue->recv_list,
 					 recv_queue->match_recv, match_attr);
@@ -630,18 +632,7 @@ rxm_cq_match_rx_buf(struct rxm_rx_buf *rx_buf,
 	dlist_insert_tail(&rx_buf->unexp_msg.entry,
 			  &recv_queue->unexp_msg_list);
 
-	msg_ep = rx_buf->msg_ep;
-	rxm_ep = rx_buf->ep;
-
-	rx_buf = rxm_rx_buf_alloc(rxm_ep, msg_ep, 1);
-	if (!rx_buf) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
-			"ran out of buffers from RX buffer pool\n");
-		return -FI_ENOMEM;
-	}
-
-	dlist_insert_tail(&rx_buf->repost_entry, &rxm_ep->repost_ready_list);
-	return 0;
+	return rxm_queue_rx_buf(rx_buf->ep, rx_buf->msg_ep);
 }
 
 static ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
@@ -1383,7 +1374,7 @@ int rxm_msg_ep_prepost_recv(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep)
 	size_t i;
 
 	for (i = 0; i < rxm_ep->msg_info->rx_attr->size; i++) {
-		rx_buf = rxm_rx_buf_alloc(rxm_ep, msg_ep, 1);
+		rx_buf = rxm_rx_buf_alloc(rxm_ep, msg_ep);
 		if (!rx_buf)
 			return -FI_ENOMEM;
 
