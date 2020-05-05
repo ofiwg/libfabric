@@ -37,9 +37,13 @@
 #include "efa.h"
 #include "rxr_cntr.h"
 
+fastlock_t pd_list_lock;
+struct efa_pd *pd_list = NULL;
+
 static int efa_domain_close(fid_t fid)
 {
 	struct efa_domain *domain;
+	struct efa_pd *efa_pd;
 	int ret;
 
 	domain = container_of(fid, struct efa_domain,
@@ -49,12 +53,21 @@ static int efa_domain_close(fid_t fid)
 		ofi_mr_cache_cleanup(&domain->cache);
 
 	if (domain->ibv_pd) {
-		ret = -ibv_dealloc_pd(domain->ibv_pd);
-		if (ret) {
-			EFA_INFO_ERRNO(FI_LOG_DOMAIN, "ibv_dealloc_pd", ret);
-			return ret;
+		fastlock_acquire(&pd_list_lock);
+		efa_pd = &pd_list[domain->ctx->dev_idx];
+		if (efa_pd->use_cnt == 1) {
+			ret = -ibv_dealloc_pd(domain->ibv_pd);
+			if (ret) {
+				fastlock_release(&pd_list_lock);
+				EFA_INFO_ERRNO(FI_LOG_DOMAIN, "ibv_dealloc_pd",
+				               ret);
+				return ret;
+			}
+			efa_pd->ibv_pd = NULL;
 		}
+		efa_pd->use_cnt--;
 		domain->ibv_pd = NULL;
+		fastlock_release(&pd_list_lock);
 	}
 
 	ret = ofi_domain_close(&domain->util_domain);
@@ -93,6 +106,25 @@ static int efa_open_device_by_name(struct efa_domain *domain, const char *name)
 			break;
 		}
 	}
+
+	/*
+	 * Check if a PD has already been allocated for this device and reuse
+	 * it if this is the case.
+	 */
+	fastlock_acquire(&pd_list_lock);
+	if (pd_list[i].ibv_pd) {
+		domain->ibv_pd = pd_list[i].ibv_pd;
+		pd_list[i].use_cnt++;
+	} else {
+		domain->ibv_pd = ibv_alloc_pd(domain->ctx->ibv_ctx);
+		if (!domain->ibv_pd) {
+			ret = -errno;
+		} else {
+			pd_list[i].ibv_pd = domain->ibv_pd;
+			pd_list[i].use_cnt++;
+		}
+	}
+	fastlock_release(&pd_list_lock);
 
 	efa_device_free_context_list(ctx_list);
 	return ret;
@@ -171,12 +203,6 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	ret = efa_open_device_by_name(domain, info->domain_attr->name);
 	if (ret)
 		goto err_free_info;
-
-	domain->ibv_pd = ibv_alloc_pd(domain->ctx->ibv_ctx);
-	if (!domain->ibv_pd) {
-		ret = -errno;
-		goto err_free_info;
-	}
 
 	domain->util_domain.domain_fid.fid.ops = &efa_fid_ops;
 	domain->util_domain.domain_fid.ops = &efa_domain_ops;
