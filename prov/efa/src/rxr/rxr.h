@@ -821,6 +821,9 @@ int rxr_ep_tx_init_mr_desc(struct rxr_domain *rxr_domain,
 			   struct rxr_tx_entry *tx_entry,
 			   int mr_iov_start, uint64_t access);
 
+void rxr_ep_init_tx_mr_desc_by_find(struct rxr_ep *ep,
+				    struct rxr_tx_entry *tx_entry);
+
 void rxr_prepare_desc_send(struct rxr_domain *rxr_domain,
 			   struct rxr_tx_entry *tx_entry);
 

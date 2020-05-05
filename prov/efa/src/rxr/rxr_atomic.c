@@ -32,6 +32,7 @@
  */
 
 #include <ofi_atomic.h>
+#include "efa.h"
 #include "rxr.h"
 #include "rxr_rma.h"
 #include "rxr_cntr.h"
@@ -139,6 +140,9 @@ ssize_t rxr_atomic_generic_efa(struct rxr_ep *rxr_ep,
 
 	tx_entry->msg_id = (peer->next_msg_id != ~0) ?
 			    peer->next_msg_id++ : ++peer->next_msg_id;
+
+	if (efa_mr_cache_enable)
+		rxr_ep_init_tx_mr_desc_by_find(rxr_ep, tx_entry);
 
 	err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY,
 					tx_entry, req_pkt_type_list[op],

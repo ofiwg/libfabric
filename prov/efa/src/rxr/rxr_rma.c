@@ -391,8 +391,11 @@ ssize_t rxr_rma_post_write(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 		return rxr_rma_post_shm_write(ep, tx_entry);
 
 	/* Inter instance */
-	if (tx_entry->total_len < rxr_pkt_req_max_data_size(ep, tx_entry->addr, RXR_EAGER_RTW_PKT))
+	if (tx_entry->total_len < rxr_pkt_req_max_data_size(ep, tx_entry->addr, RXR_EAGER_RTW_PKT)) {
+		if (efa_mr_cache_enable)
+			rxr_ep_init_tx_mr_desc_by_find(ep, tx_entry);
 		return rxr_pkt_post_ctrl_or_queue(ep, RXR_TX_ENTRY, tx_entry, RXR_EAGER_RTW_PKT, 0);
+	}
 
 	if (tx_entry->total_len >= rxr_env.efa_min_read_write_size &&
 	    efa_both_support_rdma_read(ep, peer) &&

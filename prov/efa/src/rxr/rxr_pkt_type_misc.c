@@ -584,6 +584,8 @@ void rxr_pkt_handle_atomrsp_recv(struct rxr_ep *ep,
 			0, atomrsp_pkt->data,
 			atomrsp_hdr->seg_size);
 
+	rxr_tx_entry_mr_dereg(tx_entry);
+
 	if (tx_entry->fi_flags & FI_COMPLETION) {
 		/* Note write_tx_completion() will release tx_entry */
 		rxr_cq_write_tx_completion(ep, tx_entry);

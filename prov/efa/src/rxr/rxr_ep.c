@@ -481,6 +481,55 @@ int rxr_ep_tx_init_mr_desc(struct rxr_domain *rxr_domain,
 	return ret;
 }
 
+/*
+ * This function is only intended to be used when the cache is
+ * enabled. It will loop over the given iov's and check if they are
+ * already registered in the cache. If they are, it will set the
+ * corresponding tx_entry->mr and tx_entry->desc fields.
+ */
+void rxr_ep_init_tx_mr_desc_by_find(struct rxr_ep *ep,
+				    struct rxr_tx_entry *tx_entry)
+{
+	int i;
+	struct ofi_mr_entry *ofi_mr_entry;
+	struct fi_mr_attr fi_mr_attr;
+	struct efa_domain *efa_domain;
+	struct iovec *tx_iov;
+	struct efa_mr *efa_mr;
+
+	tx_iov = tx_entry->iov;
+	fi_mr_attr.iov_count = 1;
+
+	efa_domain = container_of(rxr_ep_domain(ep)->rdm_domain,
+				  struct efa_domain, util_domain.domain_fid);
+
+	/*
+	 * Iterate over tx_entry->iov.
+	 * If the iov is already registered, store the
+	 * registration data in tx_entry->mr
+	 * and tx_entry->desc.
+	 */
+	for (i = 0; i < tx_entry->iov_count; i++) {
+		if (tx_entry->desc[i]) {
+			assert(!tx_entry->mr[i]);
+			continue;
+		}
+
+		fi_mr_attr.mr_iov = &tx_iov[i];
+
+		/* check whether the memory region is registered */
+		ofi_mr_entry = ofi_mr_cache_find(&efa_domain->cache,
+						 &fi_mr_attr);
+
+		if (ofi_mr_entry) {
+			/* cache hit */
+			efa_mr = (struct efa_mr *)ofi_mr_entry->data;
+			tx_entry->mr[i] = &efa_mr->mr_fid;
+			tx_entry->desc[i] = fi_mr_desc(tx_entry->mr[i]);
+		}
+	}
+}
+
 void rxr_prepare_desc_send(struct rxr_domain *rxr_domain,
 			   struct rxr_tx_entry *tx_entry)
 {

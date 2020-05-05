@@ -1031,7 +1031,6 @@ void rxr_pkt_init_rtw_data(struct rxr_ep *ep,
 			   struct rxr_pkt_entry *pkt_entry,
 			   struct fi_rma_iov *rma_iov)
 {
-	char *data;
 	size_t data_size;
 	int i;
 
@@ -1041,10 +1040,9 @@ void rxr_pkt_init_rtw_data(struct rxr_ep *ep,
 		rma_iov[i].key = tx_entry->rma_iov[i].key;
 	}
 
-	data = (char *)pkt_entry->pkt + pkt_entry->hdr_size;
-	data_size = ofi_copy_from_iov(data, ep->mtu_size - pkt_entry->hdr_size,
-				      tx_entry->iov, tx_entry->iov_count, 0);
-
+	data_size = MIN(tx_entry->total_len,
+			ep->mtu_size - pkt_entry->hdr_size);
+	rxr_pkt_data_from_tx(ep, pkt_entry, tx_entry, 0, data_size);
 	pkt_entry->pkt_size = pkt_entry->hdr_size + data_size;
 	pkt_entry->x_entry = tx_entry;
 }
@@ -1503,7 +1501,6 @@ ssize_t rxr_pkt_init_rta(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 {
 	struct fi_rma_iov *rma_iov;
 	struct rxr_rta_hdr *rta_hdr;
-	char *data;
 	size_t data_size;
 	int i;
 
@@ -1522,9 +1519,9 @@ ssize_t rxr_pkt_init_rta(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 		rma_iov[i].key = tx_entry->rma_iov[i].key;
 	}
 
-	data = (char *)pkt_entry->pkt + pkt_entry->hdr_size;
-	data_size = ofi_copy_from_iov(data, ep->mtu_size - pkt_entry->hdr_size,
-				      tx_entry->iov, tx_entry->iov_count, 0);
+	data_size = MIN(tx_entry->total_len,
+			ep->mtu_size - pkt_entry->hdr_size);
+	rxr_pkt_data_from_tx(ep, pkt_entry, tx_entry, 0, data_size);
 
 	pkt_entry->pkt_size = pkt_entry->hdr_size + data_size;
 	pkt_entry->x_entry = tx_entry;
