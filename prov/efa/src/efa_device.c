@@ -87,6 +87,8 @@ int efa_device_init(void)
 	int ctx_idx;
 	int ret;
 
+	fastlock_init(&pd_list_lock);
+
 	device_list = ibv_get_device_list(&dev_cnt);
 	if (dev_cnt <= 0)
 		return -ENODEV;
@@ -97,12 +99,19 @@ int efa_device_init(void)
 		goto err_free_dev_list;
 	}
 
+	pd_list = calloc(dev_cnt, sizeof(*pd_list));
+	if (!pd_list) {
+		ret = -ENOMEM;
+		goto err_free_ctx_list;
+	}
+
 	for (ctx_idx = 0; ctx_idx < dev_cnt; ctx_idx++) {
 		ctx_list[ctx_idx] = efa_device_open(device_list[ctx_idx]);
 		if (!ctx_list[ctx_idx]) {
 			ret = -ENODEV;
 			goto err_close_devs;
 		}
+		ctx_list[ctx_idx]->dev_idx = ctx_idx;
 	}
 
 	ibv_free_device_list(device_list);
@@ -112,6 +121,8 @@ int efa_device_init(void)
 err_close_devs:
 	for (ctx_idx--; ctx_idx >= 0; ctx_idx--)
 		efa_device_close(ctx_list[ctx_idx]);
+	free(pd_list);
+err_free_ctx_list:
 	free(ctx_list);
 err_free_dev_list:
 	ibv_free_device_list(device_list);
@@ -123,11 +134,15 @@ void efa_device_free(void)
 {
 	int i;
 
-	for (i = 0; i < dev_cnt; i++)
+	for (i = 0; i < dev_cnt; i++) {
+		assert(pd_list[i].use_cnt == 0);
 		efa_device_close(ctx_list[i]);
+	}
 
+	free(pd_list);
 	free(ctx_list);
 	dev_cnt = 0;
+	fastlock_destroy(&pd_list_lock);
 }
 
 struct efa_context **efa_device_get_context_list(int *num_ctx)
