@@ -492,6 +492,16 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 	assert(pkt_entry->pkt_size > 0);
 
 	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
+	if (base_hdr->type >= RXR_EXTRA_REQ_PKT_END) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ,
+			"Peer %d is requesting feature %d, which this EP does not support.\n",
+			(int)src_addr, base_hdr->type);
+
+		assert(0 && "invalid REQ packe type");
+		rxr_cq_handle_cq_error(ep, -FI_EIO);
+		return;
+	}
+
 	if (base_hdr->type >= RXR_REQ_PKT_BEGIN) {
 		rxr_pkt_proc_req_common_hdr(pkt_entry);
 		assert(pkt_entry->hdr_size > 0);
@@ -583,19 +593,11 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 		rxr_pkt_handle_rtr_recv(ep, pkt_entry);
 		return;
 	default:
-		if (base_hdr->type >= RXR_EXTRA_REQ_PKT_END) {
-			FI_WARN(&rxr_prov, FI_LOG_CQ,
-				"Peer %d is requesting feature %d, which this EP does not support.\n"
-				"The EP informed the peer about this issue via a handshake packet.\n"
-				"This packet is therefore ignored\n", (int)pkt_entry->addr, base_hdr->type);
-		} else {
-			FI_WARN(&rxr_prov, FI_LOG_CQ,
-				"invalid control pkt type %d\n",
-				rxr_get_base_hdr(pkt_entry->pkt)->type);
-			assert(0 && "invalid control pkt type");
-			rxr_cq_handle_cq_error(ep, -FI_EIO);
-		}
-
+		FI_WARN(&rxr_prov, FI_LOG_CQ,
+			"invalid control pkt type %d\n",
+			rxr_get_base_hdr(pkt_entry->pkt)->type);
+		assert(0 && "invalid control pkt type");
+		rxr_cq_handle_cq_error(ep, -FI_EIO);
 		return;
 	}
 }
