@@ -46,6 +46,7 @@ static int ofi_memhooks_start(struct ofi_mem_monitor *monitor);
 static void ofi_memhooks_stop(struct ofi_mem_monitor *monitor);
 
 struct ofi_memhooks memhooks = {
+	.monitor.iface = FI_HMEM_SYSTEM,
 	.monitor.init = ofi_monitor_init,
 	.monitor.cleanup = ofi_monitor_cleanup,
 	.monitor.start = ofi_memhooks_start,

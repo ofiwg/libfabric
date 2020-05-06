@@ -47,6 +47,7 @@
 #include <ofi_lock.h>
 #include <ofi_list.h>
 #include <ofi_tree.h>
+#include <ofi_hmem.h>
 
 struct ofi_mr_info {
 	struct iovec iov;
@@ -109,6 +110,7 @@ struct ofi_mr_cache;
 
 struct ofi_mem_monitor {
 	struct dlist_entry		list;
+	enum fi_hmem_iface		iface;
 
 	void (*init)(struct ofi_mem_monitor *monitor);
 	void (*cleanup)(struct ofi_mem_monitor *monitor);
@@ -124,9 +126,9 @@ void ofi_monitor_init(struct ofi_mem_monitor *monitor);
 void ofi_monitor_cleanup(struct ofi_mem_monitor *monitor);
 void ofi_monitors_init(void);
 void ofi_monitors_cleanup(void);
-int ofi_monitor_add_cache(struct ofi_mem_monitor *monitor,
+int ofi_monitors_add_cache(struct ofi_mem_monitor **monitors,
 			   struct ofi_mr_cache *cache);
-void ofi_monitor_del_cache(struct ofi_mr_cache *cache);
+void ofi_monitors_del_cache(struct ofi_mr_cache *cache);
 void ofi_monitor_notify(struct ofi_mem_monitor *monitor,
 			const void *addr, size_t len);
 
@@ -255,10 +257,12 @@ struct ofi_mr_storage {
 	void				(*destroy)(struct ofi_mr_storage *storage);
 };
 
+#define OFI_HMEM_MAX 2
+
 struct ofi_mr_cache {
 	struct util_domain		*domain;
-	struct ofi_mem_monitor		*monitor;
-	struct dlist_entry		notify_entry;
+	struct ofi_mem_monitor		*monitors[OFI_HMEM_MAX];
+	struct dlist_entry		notify_entries[OFI_HMEM_MAX];
 	size_t				entry_data_size;
 
 	struct ofi_mr_storage		storage;
@@ -282,7 +286,8 @@ struct ofi_mr_cache {
 							 struct ofi_mr_entry *entry);
 };
 
-int ofi_mr_cache_init(struct util_domain *domain, struct ofi_mem_monitor *monitor,
+int ofi_mr_cache_init(struct util_domain *domain,
+		      struct ofi_mem_monitor **monitors,
 		      struct ofi_mr_cache *cache);
 void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache);
 

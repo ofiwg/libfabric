@@ -2,6 +2,7 @@
  * Copyright (c) 2017 Cray Inc. All rights reserved.
  * Copyright (c) 2017-2019 Intel Inc. All rights reserved.
  * Copyright (c) 2019 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -41,6 +42,7 @@ static int ofi_uffd_start(struct ofi_mem_monitor *monitor);
 static void ofi_uffd_stop(struct ofi_mem_monitor *monitor);
 
 static struct ofi_uffd uffd = {
+	.monitor.iface = FI_HMEM_SYSTEM,
 	.monitor.init = ofi_monitor_init,
 	.monitor.cleanup = ofi_monitor_cleanup,
 	.monitor.start = ofi_uffd_start,
@@ -49,7 +51,6 @@ static struct ofi_uffd uffd = {
 struct ofi_mem_monitor *uffd_monitor = &uffd.monitor;
 
 struct ofi_mem_monitor *default_monitor;
-
 
 static size_t ofi_default_cache_size(void)
 {
@@ -150,37 +151,69 @@ void ofi_monitors_cleanup(void)
 	memhooks_monitor->cleanup(memhooks_monitor);
 }
 
-int ofi_monitor_add_cache(struct ofi_mem_monitor *monitor,
-			  struct ofi_mr_cache *cache)
+/* Monitors array must be of size OFI_HMEM_MAX. */
+int ofi_monitors_add_cache(struct ofi_mem_monitor **monitors,
+			   struct ofi_mr_cache *cache)
 {
 	int ret = 0;
+	enum fi_hmem_iface iface;
+	struct ofi_mem_monitor *monitor;
 
-	if (!monitor)
+	if (!monitors) {
+		for (iface = FI_HMEM_SYSTEM; iface < OFI_HMEM_MAX; iface++)
+			cache->monitors[iface] = NULL;
 		return -FI_ENOSYS;
+	}
 
 	pthread_mutex_lock(&mm_lock);
-	if (dlist_empty(&monitor->list)) {
-		ret = monitor->start(monitor);
-		if (ret)
-			goto out;
+
+	for (iface = FI_HMEM_SYSTEM; iface < OFI_HMEM_MAX; iface++) {
+		monitor = monitors[iface];
+		if (!monitor) {
+			FI_DBG(&core_prov, FI_LOG_MR,
+			       "MR cache disabled for %s memory\n",
+			       fi_tostr(&iface, FI_TYPE_HMEM_IFACE));
+			cache->monitors[iface] = NULL;
+			continue;
+		}
+
+		if (dlist_empty(&monitor->list)) {
+			ret = monitor->start(monitor);
+			if (ret) {
+				cache->monitors[iface] = NULL;
+				goto out;
+			}
+		}
+
+		cache->monitors[iface] = monitor;
+		dlist_insert_tail(&cache->notify_entries[iface],
+				  &monitor->list);
 	}
-	cache->monitor = monitor;
-	dlist_insert_tail(&cache->notify_entry, &monitor->list);
+
 out:
 	pthread_mutex_unlock(&mm_lock);
 	return ret;
 }
 
-void ofi_monitor_del_cache(struct ofi_mr_cache *cache)
+void ofi_monitors_del_cache(struct ofi_mr_cache *cache)
 {
-	struct ofi_mem_monitor *monitor = cache->monitor;
+	struct ofi_mem_monitor *monitor;
+	enum fi_hmem_iface iface;
 
-	assert(monitor);
 	pthread_mutex_lock(&mm_lock);
-	dlist_remove(&cache->notify_entry);
 
-	if (dlist_empty(&monitor->list))
-		monitor->stop(monitor);
+	for (iface = 0; iface < OFI_HMEM_MAX; iface++) {
+		monitor = cache->monitors[iface];
+		if (!monitor)
+			continue;
+
+		dlist_remove(&cache->notify_entries[iface]);
+
+		if (dlist_empty(&monitor->list))
+			monitor->stop(monitor);
+
+		cache->monitors[iface] = NULL;
+	}
 
 	pthread_mutex_unlock(&mm_lock);
 }
@@ -192,7 +225,7 @@ void ofi_monitor_notify(struct ofi_mem_monitor *monitor,
 	struct ofi_mr_cache *cache;
 
 	dlist_foreach_container(&monitor->list, struct ofi_mr_cache,
-				cache, notify_entry) {
+				cache, notify_entries[monitor->iface]) {
 		ofi_mr_cache_notify(cache, addr, len);
 	}
 }
