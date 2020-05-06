@@ -284,7 +284,8 @@ ssize_t rxr_pkt_entry_sendmsg(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 	rxr_pkt_print("Sent", ep, (struct rxr_base_hdr *)pkt_entry->pkt);
 #endif
 #endif
-	if (rxr_env.enable_shm_transfer && peer->is_local) {
+	if (peer->is_local) {
+		assert(ep->use_shm);
 		ret = fi_sendmsg(ep->shm_ep, msg, flags);
 	} else {
 		ret = fi_sendmsg(ep->rdm_ep, msg, flags);
@@ -307,7 +308,7 @@ ssize_t rxr_pkt_entry_sendv(struct rxr_ep *ep,
 	msg.desc = desc;
 	msg.iov_count = count;
 	peer = rxr_ep_get_peer(ep, addr);
-	msg.addr = peer->is_local ? peer->shm_fiaddr : addr;
+	msg.addr = (peer->is_local) ? peer->shm_fiaddr : addr;
 	msg.context = pkt_entry;
 	msg.data = 0;
 
@@ -325,10 +326,12 @@ ssize_t rxr_pkt_entry_send_with_flags(struct rxr_ep *ep,
 	iov.iov_base = rxr_pkt_start(pkt_entry);
 	iov.iov_len = pkt_entry->pkt_size;
 
-	if (rxr_ep_get_peer(ep, addr)->is_local)
+	if (rxr_ep_get_peer(ep, addr)->is_local) {
+		assert(ep->use_shm);
 		desc = NULL;
-	else
+	} else {
 		desc = rxr_ep_mr_local(ep) ? fi_mr_desc(pkt_entry->mr) : NULL;
+	}
 
 	return rxr_pkt_entry_sendv(ep, pkt_entry, addr, &iov, &desc, 1, flags);
 }
@@ -349,7 +352,7 @@ ssize_t rxr_pkt_entry_inject(struct rxr_ep *ep,
 	/* currently only EOR packet is injected using shm ep */
 	peer = rxr_ep_get_peer(ep, addr);
 	assert(peer);
-	assert(rxr_env.enable_shm_transfer && peer->is_local);
+	assert(ep->use_shm && peer->is_local);
 	return fi_inject(ep->shm_ep, rxr_pkt_start(pkt_entry), pkt_entry->pkt_size,
 			 peer->shm_fiaddr);
 }

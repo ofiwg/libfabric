@@ -349,9 +349,11 @@ int efa_av_insert_addr(struct efa_av *av, struct efa_ep_addr *addr,
 		dlist_foreach(&av->util_av.ep_list, ep_list_entry) {
 			util_ep = container_of(ep_list_entry, struct util_ep, av_entry);
 			rxr_ep = container_of(util_ep, struct rxr_ep, util_ep);
-			peer = rxr_ep_get_peer(rxr_ep, *fi_addr);
-			peer->shm_fiaddr = shm_fiaddr;
-			peer->is_local = 1;
+			if (rxr_ep->use_shm) {
+				peer = rxr_ep_get_peer(rxr_ep, *fi_addr);
+				peer->shm_fiaddr = shm_fiaddr;
+				peer->is_local = 1;
+			}
 		}
 	}
 	HASH_ADD(hh, av->av_map, ep_addr,
