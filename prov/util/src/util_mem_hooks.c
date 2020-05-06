@@ -44,6 +44,7 @@
 #include <ofi_mr.h>
 
 struct ofi_memhooks memhooks = {
+	.monitor.iface = FI_HMEM_SYSTEM,
 	.monitor.init = ofi_monitor_init,
 	.monitor.cleanup = ofi_monitor_cleanup
 };
