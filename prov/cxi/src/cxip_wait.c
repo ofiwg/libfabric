@@ -93,7 +93,7 @@ static int cxip_wait_wait(struct fid_wait *wait_fid, int timeout)
 
 	wait = container_of(wait_fid, struct cxip_wait, wait_fid);
 	if (timeout > 0)
-		start_ms = fi_gettime_ms();
+		start_ms = ofi_gettime_ms();
 
 	head = &wait->fid_list;
 	for (p = head->next; p != head; p = p->next) {
@@ -107,7 +107,7 @@ static int cxip_wait_wait(struct fid_wait *wait_fid, int timeout)
 		}
 	}
 	if (timeout > 0) {
-		end_ms = fi_gettime_ms();
+		end_ms = ofi_gettime_ms();
 		timeout -= (int)(end_ms - start_ms);
 		timeout = timeout < 0 ? 0 : timeout;
 	}

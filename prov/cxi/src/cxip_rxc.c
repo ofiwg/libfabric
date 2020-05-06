@@ -297,12 +297,12 @@ static void rxc_cleanup(struct cxip_rxc *rxc)
 	if (canceled)
 		CXIP_LOG_DBG("Canceled %d Receives: %p\n", canceled, rxc);
 
-	start = fi_gettime_ms();
+	start = ofi_gettime_ms();
 	while (ofi_atomic_get32(&rxc->orx_reqs)) {
 		sched_yield();
 		cxip_cq_progress(rxc->recv_cq);
 
-		if (fi_gettime_ms() - start > CXIP_REQ_CLEANUP_TO) {
+		if (ofi_gettime_ms() - start > CXIP_REQ_CLEANUP_TO) {
 			CXIP_LOG_ERROR("Timeout waiting for outstanding requests.\n");
 			break;
 		}

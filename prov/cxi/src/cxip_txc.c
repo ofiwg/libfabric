@@ -232,12 +232,12 @@ static void txc_cleanup(struct cxip_txc *txc)
 
 	cxip_cq_req_discard(txc->send_cq, txc);
 
-	start = fi_gettime_ms();
+	start = ofi_gettime_ms();
 	while (ofi_atomic_get32(&txc->otx_reqs)) {
 		sched_yield();
 		cxip_cq_progress(txc->send_cq);
 
-		if (fi_gettime_ms() - start > CXIP_REQ_CLEANUP_TO) {
+		if (ofi_gettime_ms() - start > CXIP_REQ_CLEANUP_TO) {
 			CXIP_LOG_ERROR("Timeout waiting for outstanding requests.\n");
 			break;
 		}
