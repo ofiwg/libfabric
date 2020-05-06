@@ -83,7 +83,9 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 						      RXR_EAGER_MSGRTM_PKT + tagged);
 
 	peer = rxr_ep_get_peer(rxr_ep, tx_entry->addr);
+
 	if (peer->is_local) {
+		assert(rxr_ep->use_shm);
 		/* intra instance message */
 		int rtm_type = (tx_entry->total_len <= max_rtm_data_size) ? RXR_EAGER_MSGRTM_PKT
 									  : RXR_READ_MSGRTM_PKT;

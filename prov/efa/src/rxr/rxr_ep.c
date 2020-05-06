@@ -632,7 +632,7 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 					tx_entry_entry);
 		rxr_release_tx_entry(rxr_ep, tx_entry);
 	}
-	if (rxr_env.enable_shm_transfer) {
+	if (rxr_ep->use_shm) {
 		dlist_foreach_safe(&rxr_ep->rx_posted_buf_shm_list, entry, tmp) {
 			pkt = container_of(entry, struct rxr_pkt_entry, dbg_entry);
 			ofi_buf_free(pkt);
@@ -664,7 +664,7 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 	if (rxr_ep->tx_pkt_efa_pool)
 		ofi_bufpool_destroy(rxr_ep->tx_pkt_efa_pool);
 
-	if (rxr_env.enable_shm_transfer) {
+	if (rxr_ep->use_shm) {
 		if (rxr_ep->rx_pkt_shm_pool)
 			ofi_bufpool_destroy(rxr_ep->rx_pkt_shm_pool);
 
@@ -693,7 +693,7 @@ static int rxr_ep_close(struct fid *fid)
 	}
 
 	/* Close shm provider's endpoint and cq */
-	if (rxr_env.enable_shm_transfer) {
+	if (rxr_ep->use_shm) {
 		ret = fi_close(&rxr_ep->shm_ep->fid);
 		if (ret) {
 			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "Unable to close shm EP\n");
@@ -757,7 +757,7 @@ static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 			return -FI_ENOMEM;
 
 		/* Bind shm provider endpoint & shm av */
-		if (rxr_env.enable_shm_transfer) {
+		if (rxr_ep->use_shm) {
 			ret = fi_ep_bind(rxr_ep->shm_ep, &av->shm_rdm_av->fid, flags);
 			if (ret)
 				return ret;
@@ -876,7 +876,7 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 		 * In this way, each peer is able to open and map to other local peers'
 		 * shared memory region.
 		 */
-		if (rxr_env.enable_shm_transfer) {
+		if (ep->use_shm) {
 			ret = rxr_ep_efa_addr_to_str(ep->core_addr, shm_ep_name);
 			if (ret < 0)
 				goto out;
@@ -1171,7 +1171,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 		goto err_free_rx_entry_pool;
 
 	/* create pkt pool for shm */
-	if (rxr_env.enable_shm_transfer) {
+	if (ep->use_shm) {
 		ret = ofi_bufpool_create(&ep->tx_pkt_shm_pool,
 					 entry_sz,
 					 RXR_BUF_POOL_ALIGNMENT,
@@ -1293,7 +1293,7 @@ static inline int rxr_ep_bulk_post_recv(struct rxr_ep *ep)
 	}
 	/* bulk post recv buf for shm provider */
 	flags = FI_MORE;
-	while (rxr_env.enable_shm_transfer && ep->rx_bufs_shm_to_post) {
+	while (ep->use_shm && ep->rx_bufs_shm_to_post) {
 		if (ep->rx_bufs_shm_to_post == 1)
 			flags = 0;
 		ret = rxr_ep_post_buf(ep, flags, SHM_EP);
@@ -1315,8 +1315,7 @@ static inline int rxr_ep_send_queued_pkts(struct rxr_ep *ep,
 
 	dlist_foreach_container_safe(pkts, struct rxr_pkt_entry,
 				     pkt_entry, entry, tmp) {
-		if (rxr_env.enable_shm_transfer &&
-				rxr_ep_get_peer(ep, pkt_entry->addr)->is_local) {
+		if (ep->use_shm && rxr_ep_get_peer(ep, pkt_entry->addr)->is_local) {
 			dlist_remove(&pkt_entry->entry);
 			continue;
 		}
@@ -1435,7 +1434,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	rxr_ep_poll_cq(ep, ep->rdm_cq, rxr_env.efa_cq_read_size, 0);
 
 	// Poll the SHM completion queue if enabled
-	if (rxr_env.enable_shm_transfer)
+	if (ep->use_shm)
 		rxr_ep_poll_cq(ep, ep->shm_cq, rxr_env.shm_cq_read_size, 1);
 
 	ret = rxr_ep_bulk_post_recv(ep);
@@ -1578,6 +1577,28 @@ void rxr_ep_progress(struct util_ep *util_ep)
 	fastlock_release(&ep->util_ep.lock);
 }
 
+static
+bool rxr_ep_use_shm(struct fi_info *info)
+{
+	/* App provided hints supercede environmental variables.
+	 *
+	 * Using the shm provider comes with some overheads, particularly in the
+	 * progress engine when polling an empty completion queue, so avoid
+	 * initializing the provider if the app provides a hint that it does not
+	 * require node-local communication. We can still loopback over the EFA
+	 * device in cases where the app violates the hint and continues
+	 * communicating with node-local peers.
+	 */
+	if (info
+	    /* If the app requires explicitly remote communication */
+	    && (info->caps & FI_REMOTE_COMM)
+	    /* but not local communication */
+	    && !(info->caps & FI_LOCAL_COMM))
+		return 0;
+
+	return rxr_env.enable_shm_transfer;
+}
+
 int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		 struct fid_ep **ep, void *context)
 {
@@ -1618,8 +1639,10 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	efa_domain = container_of(rxr_domain->rdm_domain, struct efa_domain,
 				  util_domain.domain_fid);
-	/* Open shm provider's endpoint */
-	if (rxr_env.enable_shm_transfer) {
+
+	rxr_ep->use_shm = rxr_ep_use_shm(info);
+	if (rxr_ep->use_shm) {
+		/* Open shm provider's endpoint */
 		assert(!strcmp(shm_info->fabric_attr->name, "shm"));
 		ret = fi_endpoint(efa_domain->shm_domain, shm_info,
 				  &rxr_ep->shm_ep, rxr_ep);
@@ -1690,7 +1713,7 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		goto err_close_core_cq;
 
 	/* Bind ep with shm provider's cq */
-	if (rxr_env.enable_shm_transfer) {
+	if (rxr_ep->use_shm) {
 		ret = fi_cq_open(efa_domain->shm_domain, &cq_attr,
 				 &rxr_ep->shm_cq, rxr_ep);
 		if (ret)
@@ -1717,7 +1740,7 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	return 0;
 
 err_close_shm_cq:
-	if (rxr_env.enable_shm_transfer && rxr_ep->shm_cq) {
+	if (rxr_ep->use_shm && rxr_ep->shm_cq) {
 		retv = fi_close(&rxr_ep->shm_cq->fid);
 		if (retv)
 			FI_WARN(&rxr_prov, FI_LOG_CQ, "Unable to close shm cq: %s\n",
@@ -1729,7 +1752,7 @@ err_close_core_cq:
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "Unable to close cq: %s\n",
 			fi_strerror(-retv));
 err_close_shm_ep:
-	if (rxr_env.enable_shm_transfer && rxr_ep->shm_ep) {
+	if (rxr_ep->use_shm && rxr_ep->shm_ep) {
 		retv = fi_close(&rxr_ep->shm_ep->fid);
 		if (retv)
 			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "Unable to close shm EP: %s\n",

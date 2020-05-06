@@ -257,10 +257,12 @@ ssize_t rxr_pkt_post_ctrl_once(struct rxr_ep *rxr_ep, int entry_type, void *x_en
 	}
 
 	peer = rxr_ep_get_peer(rxr_ep, addr);
-	if (peer->is_local)
+	if (peer->is_local) {
+		assert(rxr_ep->use_shm);
 		pkt_entry = rxr_pkt_entry_alloc(rxr_ep, rxr_ep->tx_pkt_shm_pool);
-	else
+	} else {
 		pkt_entry = rxr_pkt_entry_alloc(rxr_ep, rxr_ep->tx_pkt_efa_pool);
+	}
 
 	if (!pkt_entry)
 		return -FI_EAGAIN;
@@ -530,10 +532,12 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 	if (!(peer->flags & RXR_PEER_HANDSHAKE_SENT))
 		rxr_pkt_post_handshake(ep, peer, pkt_entry->addr);
 
-	if (rxr_env.enable_shm_transfer && peer->is_local)
+	if (peer->is_local) {
+		assert(ep->use_shm);
 		ep->posted_bufs_shm--;
-	else
+	} else {
 		ep->posted_bufs_efa--;
+	}
 
 	switch (base_hdr->type) {
 	case RXR_RETIRED_RTS_PKT:
