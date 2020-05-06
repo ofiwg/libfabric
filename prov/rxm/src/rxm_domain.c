@@ -355,6 +355,82 @@ static struct fi_ops_mr rxm_domain_mr_ops = {
 	.regattr = rxm_mr_regattr,
 };
 
+static ssize_t rxm_send_credits(struct fid_ep *ep, size_t credits)
+{
+	struct rxm_conn *rxm_conn =
+		container_of(ep->fid.context, struct rxm_conn, handle);
+	struct rxm_ep *rxm_ep = rxm_conn->handle.cmap->ep;
+	struct rxm_deferred_tx_entry *def_tx_entry;
+	struct rxm_tx_base_buf *tx_buf;
+	struct iovec iov;
+	struct fi_msg msg;
+	ssize_t ret;
+
+	tx_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_CREDIT);
+	if (!tx_buf) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+			"Ran out of buffers from TX credit buffer pool.\n");
+		return -FI_ENOMEM;
+	}
+
+	rxm_ep_format_tx_buf_pkt(rxm_conn, 0, rxm_ctrl_credit, 0, 0, FI_SEND,
+				 &tx_buf->pkt);
+	tx_buf->pkt.ctrl_hdr.type = rxm_ctrl_credit;
+	tx_buf->pkt.ctrl_hdr.msg_id = ofi_buf_index(tx_buf);
+	tx_buf->pkt.ctrl_hdr.ctrl_data = credits;
+
+	if (rxm_conn->handle.state != RXM_CMAP_CONNECTED)
+		goto defer;
+
+	iov.iov_base = &tx_buf->pkt;
+	iov.iov_len = sizeof(struct rxm_pkt);
+	msg.msg_iov = &iov;
+	msg.iov_count = 1;
+	msg.context = tx_buf;
+	msg.desc = &tx_buf->hdr.desc;
+
+	ret = fi_sendmsg(ep, &msg, FI_PRIORITY);
+	if (!ret)
+		return FI_SUCCESS;
+
+defer:
+	def_tx_entry = rxm_ep_alloc_deferred_tx_entry(
+		rxm_ep, rxm_conn, RXM_DEFERRED_TX_CREDIT_SEND);
+	if (!def_tx_entry) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ,
+			"unable to allocate TX entry for deferred CREDIT mxg\n");
+		ofi_buf_free(tx_buf);
+		return -FI_ENOMEM;
+	}
+
+	def_tx_entry->credit_msg.tx_buf = tx_buf;
+	rxm_ep_enqueue_deferred_tx_queue(def_tx_entry);
+	return FI_SUCCESS;
+}
+
+static void rxm_no_set_threshold(struct fid_ep *ep_fid, size_t threshold)
+{ }
+
+static void rxm_no_add_credits(struct fid_ep *ep_fid, size_t credits)
+{ }
+
+static void rxm_no_credit_handler(struct fid_domain *domain_fid,
+		ssize_t (*credit_handler)(struct fid_ep *ep, size_t credits))
+{ }
+
+static int rxm_no_enable_flow_ctrl(struct fid_ep *ep_fid)
+{
+	return -FI_ENOSYS;
+}
+
+struct ofi_ops_flow_ctrl rxm_no_ops_flow_ctrl = {
+	.size = sizeof(struct ofi_ops_flow_ctrl),
+	.set_threshold = rxm_no_set_threshold,
+	.add_credits = rxm_no_add_credits,
+	.enable = rxm_no_enable_flow_ctrl,
+	.set_send_handler = rxm_no_credit_handler,
+};
+
 int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_domain **domain, void *context)
 {
@@ -362,6 +438,7 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	struct rxm_domain *rxm_domain;
 	struct rxm_fabric *rxm_fabric;
 	struct fi_info *msg_info;
+	struct ofi_ops_flow_ctrl *flow_ctrl_ops;
 
 	rxm_domain = calloc(1, sizeof(*rxm_domain));
 	if (!rxm_domain)
@@ -398,6 +475,18 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	(*domain)->ops = &rxm_domain_ops;
 
 	rxm_domain->mr_local = ofi_mr_local(msg_info) && !ofi_mr_local(info);
+
+	ret = fi_open_ops(&rxm_domain->msg_domain->fid, OFI_OPS_FLOW_CTRL, 0,
+			  (void **) &flow_ctrl_ops, NULL);
+	if (!ret && flow_ctrl_ops) {
+		rxm_domain->flow_ctrl_ops = flow_ctrl_ops;
+		rxm_domain->flow_ctrl_ops->set_send_handler(
+			rxm_domain->msg_domain, rxm_send_credits);
+	} else if (ret == -FI_ENOSYS) {
+		rxm_domain->flow_ctrl_ops = &rxm_no_ops_flow_ctrl;
+	} else {
+		goto err3;
+	}
 
 	fi_freeinfo(msg_info);
 	return 0;

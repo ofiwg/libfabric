@@ -78,7 +78,7 @@ ssize_t vrb_post_recv(struct vrb_ep *ep, struct ibv_recv_wr *wr)
 	if (ret)
 		goto freebuf;
 
-	if (++ep->rq_credits_avail >= domain->threshold) {
+	if (++ep->rq_credits_avail >= ep->threshold) {
 		credits_to_give = ep->rq_credits_avail;
 		ep->rq_credits_avail = 0;
 	} else {
@@ -167,7 +167,7 @@ unlock:
 	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
 	cq_rx = container_of(ep->util_ep.rx_cq, struct vrb_cq, util_cq);
 	cq_rx->util_cq.cq_fastlock_acquire(&cq_rx->util_cq.cq_lock);
-	if (ep->rq_credits_avail >= domain->threshold) {
+	if (ep->rq_credits_avail >= ep->threshold) {
 		credits_to_give = ep->rq_credits_avail;
 		ep->rq_credits_avail = 0;
 	}
@@ -1007,6 +1007,7 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 
 	ep->inject_limit = ep->info->tx_attr->inject_size;
 	ep->peer_rq_credits = UINT64_MAX;
+	ep->threshold = UINT64_MAX; /* disables RQ flow control */
 
 	switch (info->ep_attr->type) {
 	case FI_EP_MSG:

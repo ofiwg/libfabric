@@ -277,6 +277,7 @@ struct rxm_domain {
 	size_t max_atomic_size;
 	uint64_t mr_key;
 	uint8_t mr_local;
+	struct ofi_ops_flow_ctrl *flow_ctrl_ops;
 };
 
 int rxm_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
@@ -685,7 +686,6 @@ struct rxm_ep {
 	struct rxm_recv_queue	trecv_queue;
 
 	struct rxm_handle_txrx_ops	*txrx_ops;
-	struct ofi_ops_flow_ctrl	*flow_ctrl_ops;
 };
 
 struct rxm_conn {
