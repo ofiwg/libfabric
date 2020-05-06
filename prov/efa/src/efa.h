@@ -194,11 +194,17 @@ struct efa_cq {
 
 struct efa_context {
 	struct ibv_context	*ibv_ctx;
+	int			dev_idx;
 	uint64_t		max_mr_size;
 	uint16_t		inline_buf_size;
 	uint16_t		max_wr_rdma_sge;
 	uint32_t		max_rdma_size;
 	uint32_t		device_caps;
+};
+
+struct efa_pd {
+	struct ibv_pd	   *ibv_pd;
+	int		   use_cnt;
 };
 
 struct efa_qp {
@@ -333,6 +339,10 @@ extern const struct efa_ep_domain efa_dgrm_domain;
 extern struct fi_ops_cm efa_ep_cm_ops;
 extern struct fi_ops_msg efa_ep_msg_ops;
 extern struct fi_ops_rma efa_ep_rma_ops;
+
+extern fastlock_t pd_list_lock;
+// This list has the same indicies as ctx_list.
+extern struct efa_pd *pd_list;
 
 int efa_device_init(void);
 void efa_device_free(void);
