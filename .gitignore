@@ -66,6 +66,7 @@ prov/*/*.spec
 .vs
 fabtests.spec
 
+fabtests/config
 fabtests/ubertest/fabtest
 fabtests/ubertest/fi_ubertest
 
