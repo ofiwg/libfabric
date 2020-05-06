@@ -514,6 +514,7 @@ struct rxr_ep {
 	struct fid_cq *rdm_cq;
 
 	/* shm provider fid */
+	bool use_shm;
 	struct fid_ep *shm_ep;
 	struct fid_cq *shm_cq;
 
