@@ -576,6 +576,8 @@
     <ClCompile Include="src\fabric.c" />
     <ClCompile Include="src\fasthash.c" />
     <ClCompile Include="src\fi_tostr.c" />
+    <ClCompile Include="src\hmem.c" />
+    <ClCompile Include="src\hmem_cuda.c" />
     <ClCompile Include="src\indexer.c" />
     <ClCompile Include="src\iov.c" />
     <ClCompile Include="src\shared\ofi_str.c" />
@@ -593,6 +595,7 @@
     <ClInclude Include="include\ofi_abi.h" />
     <ClInclude Include="include\ofi_atom.h" />
     <ClInclude Include="include\ofi_atomic.h" />
+    <ClInclude Include="include\ofi_hmem.h" />
     <ClInclude Include="include\ofi_hook.h" />
     <ClInclude Include="include\ofi_mr.h" />
     <ClInclude Include="include\ofi_net.h" />

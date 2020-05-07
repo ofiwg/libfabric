@@ -138,6 +138,12 @@
     <ClCompile Include="src\mem.c">
       <Filter>Source Files\src</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmem.c">
+      <Filter>Source Files\src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmem_cuda.c">
+      <Filter>Source Files\src</Filter>
+    </ClCompile>
     <ClCompile Include="src\rbtree.c">
       <Filter>Source Files\src</Filter>
     </ClCompile>
@@ -501,6 +507,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\ofi_enosys.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\ofi_hmem.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\ofi_indexer.h">
