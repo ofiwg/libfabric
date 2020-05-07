@@ -6,6 +6,37 @@ bug fixes (and other actions) for each version of Libfabric since
 version 1.0.
 
 
+v1.10.1, Fri May 8, 2020
+========================
+
+## Core
+
+- Fixed library version
+
+## EFA
+
+- Allow endpoint to choose shm usage
+- Fix handling of REQ packets
+- Fix logic writing a Tx completion entry
+- Use correct Tx operation flags for msg sends
+
+## Fabtests
+
+- Use pax tar format when creating source packages
+
+## RxD
+
+- Use correct peer address for atomic_inject calls
+
+## SHM
+
+- Fix BSD build failure
+
+## TCP
+
+- Add locking around signaling a wait fd
+
+
 v1.10.0, Fri Apr 24, 2020
 =========================
 
