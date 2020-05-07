@@ -1091,6 +1091,8 @@ static void fi_alter_domain_attr(struct fi_domain_attr *attr,
 		attr->mr_mode = (attr->mr_mode && attr->mr_mode != FI_MR_SCALABLE) ?
 				FI_MR_BASIC : FI_MR_SCALABLE;
 	} else {
+		attr->mr_mode &= ~(FI_MR_BASIC | FI_MR_SCALABLE);
+
 		if ((hints_mr_mode & attr->mr_mode) != attr->mr_mode) {
 			attr->mr_mode = ofi_cap_mr_mode(info_caps,
 						attr->mr_mode & hints_mr_mode);
