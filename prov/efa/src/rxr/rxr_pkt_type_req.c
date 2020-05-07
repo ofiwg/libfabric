@@ -204,8 +204,10 @@ size_t rxr_pkt_req_max_data_size(struct rxr_ep *ep, fi_addr_t addr, int pkt_type
 	peer = rxr_ep_get_peer(ep, addr);
 	assert(peer);
 
-	if (rxr_env.enable_shm_transfer && peer->is_local)
+	if (peer->is_local) {
+		assert(ep->use_shm);
 		return rxr_env.shm_max_medium_size;
+	}
 
 	int max_hdr_size = REQ_INF_LIST[pkt_type].base_hdr_size
 		+ sizeof(struct rxr_req_opt_raw_addr_hdr)
