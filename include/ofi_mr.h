@@ -150,6 +150,7 @@ void ofi_monitor_unsubscribe(struct ofi_mem_monitor *monitor,
 			     const union ofi_mr_hmem_info *hmem_info);
 
 extern struct ofi_mem_monitor *default_monitor;
+extern struct ofi_mem_monitor *default_cuda_monitor;
 
 /*
  * Userfault fd memory monitor
@@ -244,6 +245,7 @@ struct ofi_mr_cache_params {
 	size_t				max_cnt;
 	size_t				max_size;
 	char *				monitor;
+	int				cuda_monitor_enabled;
 };
 
 extern struct ofi_mr_cache_params	cache_params;

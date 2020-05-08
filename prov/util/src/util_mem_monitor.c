@@ -44,6 +44,7 @@ static struct ofi_uffd uffd = {
 struct ofi_mem_monitor *uffd_monitor = &uffd.monitor;
 
 struct ofi_mem_monitor *default_monitor;
+struct ofi_mem_monitor *default_cuda_monitor;
 
 const char *hmem_iface_to_str[OFI_HMEM_MAX] = {
 	[FI_HMEM_SYSTEM] = "system",
@@ -86,6 +87,7 @@ void ofi_monitors_init(void)
 {
 	uffd_monitor->init(uffd_monitor);
 	memhooks_monitor->init(memhooks_monitor);
+	cuda_monitor->init(cuda_monitor);
 
 #if defined(HAVE_ELF_H) && defined(HAVE_SYS_AUXV_H)
         default_monitor = memhooks_monitor;
@@ -116,10 +118,15 @@ void ofi_monitors_init(void)
 			" and free calls.  Userfaultfd is the default if"
 			" available on the system. 'disabled' option disables"
 			" memory caching.");
+	fi_param_define(NULL, "mr_cuda_cache_monitor_enabled", FI_PARAM_BOOL,
+			"Enable or disable the CUDA cache memory monitor."
+			"Monitor is enabled by default.");
 
 	fi_param_get_size_t(NULL, "mr_cache_max_size", &cache_params.max_size);
 	fi_param_get_size_t(NULL, "mr_cache_max_count", &cache_params.max_cnt);
 	fi_param_get_str(NULL, "mr_cache_monitor", &cache_params.monitor);
+	fi_param_get_bool(NULL, "mr_cuda_cache_monitor_enabled",
+			  &cache_params.cuda_monitor_enabled);
 
 	if (!cache_params.max_size)
 		cache_params.max_size = ofi_default_cache_size();
@@ -137,12 +144,18 @@ void ofi_monitors_init(void)
 			default_monitor = NULL;
 		}
 	}
+
+	if (cache_params.cuda_monitor_enabled)
+		default_cuda_monitor = cuda_monitor;
+	else
+		default_cuda_monitor = NULL;
 }
 
 void ofi_monitors_cleanup(void)
 {
 	uffd_monitor->cleanup(uffd_monitor);
 	memhooks_monitor->cleanup(memhooks_monitor);
+	cuda_monitor->cleanup(cuda_monitor);
 }
 
 /* Monitors array must be of size OFI_HMEM_MAX. */
@@ -176,6 +189,8 @@ int ofi_monitors_add_cache(struct ofi_mem_monitor **monitors,
 				ret = ofi_uffd_start();
 			else if (monitor == memhooks_monitor)
 				ret = ofi_memhooks_start();
+			else if (monitor == cuda_monitor)
+				ret = cuda_monitor_start();
 			else
 				ret = -FI_ENOSYS;
 
@@ -213,6 +228,8 @@ void ofi_monitors_del_cache(struct ofi_mr_cache *cache)
 				ofi_uffd_stop();
 			else if (monitor == memhooks_monitor)
 				ofi_memhooks_stop();
+			else if (monitor == cuda_monitor)
+				cuda_monitor_stop();
 		}
 
 		pthread_mutex_unlock(&mm_lock);
