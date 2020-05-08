@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2017-2019 Intel Corporation, Inc. All rights reserved.
  * Copyright (c) 2019 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -49,6 +50,7 @@
 
 struct ofi_mr_info {
 	struct iovec iov;
+	enum fi_hmem_iface iface;
 };
 
 

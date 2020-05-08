@@ -3,6 +3,7 @@
  * Copyright (c) 2017-2019 Intel Corporation, Inc.  All rights reserved.
  * Copyright (c) 2019 Amazon.com, Inc. or its affiliates. All rights reserved.
  * Copyright (c) 2020 Cisco Systems, Inc. All rights reserved.
+ * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -296,6 +297,7 @@ int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *att
 	       attr->mr_iov->iov_base, attr->mr_iov->iov_len);
 
 	info.iov = *attr->mr_iov;
+	info.iface = attr->iface;
 
 	do {
 		pthread_mutex_lock(&mm_lock);
