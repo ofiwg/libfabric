@@ -1091,7 +1091,10 @@ static void fi_alter_domain_attr(struct fi_domain_attr *attr,
 		attr->mr_mode = (attr->mr_mode && attr->mr_mode != FI_MR_SCALABLE) ?
 				FI_MR_BASIC : FI_MR_SCALABLE;
 	} else {
-		if ((hints_mr_mode & attr->mr_mode) != attr->mr_mode) {
+		attr->mr_mode &= ~(FI_MR_BASIC | FI_MR_SCALABLE);
+
+		if (hints &&
+		    ((hints_mr_mode & attr->mr_mode) != attr->mr_mode)) {
 			attr->mr_mode = ofi_cap_mr_mode(info_caps,
 						attr->mr_mode & hints_mr_mode);
 		}
@@ -1174,7 +1177,8 @@ static uint64_t ofi_get_info_caps(const struct fi_info *prov_info,
 	int prov_mode, user_mode;
 	uint64_t caps;
 
-	assert(user_info);
+	if (!user_info)
+		return prov_info->caps;
 
 	caps = ofi_get_caps(prov_info->caps, user_info->caps, prov_info->caps);
 
@@ -1208,9 +1212,6 @@ trim_caps:
 void ofi_alter_info(struct fi_info *info, const struct fi_info *hints,
 		    uint32_t api_version)
 {
-	if (!hints)
-		return;
-
 	for (; info; info = info->next) {
 		/* This should stay before call to fi_alter_domain_attr as
 		 * the checks depend on unmodified provider mr_mode attr */
@@ -1222,12 +1223,17 @@ void ofi_alter_info(struct fi_info *info, const struct fi_info *hints,
 		      (hints->domain_attr->mr_mode & (FI_MR_BASIC | FI_MR_SCALABLE)))))
 			info->mode |= FI_LOCAL_MR;
 
-		info->handle = hints->handle;
+		if (hints)
+			info->handle = hints->handle;
 
-		fi_alter_domain_attr(info->domain_attr, hints->domain_attr,
+		fi_alter_domain_attr(info->domain_attr,
+				     hints ? hints->domain_attr : NULL,
 				     info->caps, api_version);
-		fi_alter_ep_attr(info->ep_attr, hints->ep_attr, info->caps);
-		fi_alter_rx_attr(info->rx_attr, hints->rx_attr, info->caps);
-		fi_alter_tx_attr(info->tx_attr, hints->tx_attr, info->caps);
+		fi_alter_ep_attr(info->ep_attr, hints ? hints->ep_attr : NULL,
+				 info->caps);
+		fi_alter_rx_attr(info->rx_attr, hints ? hints->rx_attr : NULL,
+				 info->caps);
+		fi_alter_tx_attr(info->tx_attr, hints ? hints->tx_attr : NULL,
+				 info->caps);
 	}
 }
