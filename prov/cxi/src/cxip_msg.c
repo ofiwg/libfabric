@@ -2112,7 +2112,7 @@ int cxip_recv_cancel(struct cxip_req *req)
 int cxip_recv_reenable(struct cxip_rxc *rxc)
 {
 	int total_drops = -1;
-	struct cxi_pte_status pte_status;
+	struct cxi_pte_status pte_status = {};
 	struct cxip_fc_drops *fc_drops;
 	int ret;
 
