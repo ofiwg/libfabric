@@ -105,7 +105,7 @@ static inline uint64_t ofi_mr_get_prov_mode(uint32_t version,
 struct ofi_mr_cache;
 
 union ofi_mr_hmem_info {
-	uint64_t reserved;
+	uint64_t cuda_id;
 };
 
 struct ofi_mem_monitor {
@@ -178,6 +178,10 @@ void ofi_memhooks_stop(void);
 
 extern struct ofi_mem_monitor *memhooks_monitor;
 
+/* Cuda memory monitor. */
+extern struct ofi_mem_monitor *cuda_monitor;
+int cuda_monitor_start(void);
+void cuda_monitor_stop(void);
 
 /*
  * Used to store registered memory regions into a lookup map.  This
