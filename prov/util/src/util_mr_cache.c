@@ -3,6 +3,7 @@
  * Copyright (c) 2017-2019 Intel Corporation, Inc.  All rights reserved.
  * Copyright (c) 2019 Amazon.com, Inc. or its affiliates. All rights reserved.
  * Copyright (c) 2020 Cisco Systems, Inc. All rights reserved.
+ * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -266,7 +267,8 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct ofi_mr_info *info,
 		cache->cached_size += info->iov.iov_len;
 
 		ret = ofi_monitor_subscribe(cache->monitor, info->iov.iov_base,
-					    info->iov.iov_len);
+					    info->iov.iov_len,
+					    &(*entry)->hmem_info);
 		if (ret) {
 			util_mr_uncache_entry_storage(cache, *entry);
 			cache->uncached_cnt++;

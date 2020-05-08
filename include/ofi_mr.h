@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2017-2019 Intel Corporation, Inc. All rights reserved.
  * Copyright (c) 2019 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -103,6 +104,10 @@ static inline uint64_t ofi_mr_get_prov_mode(uint32_t version,
 
 struct ofi_mr_cache;
 
+union ofi_mr_hmem_info {
+	uint64_t reserved;
+};
+
 struct ofi_mem_monitor {
 	pthread_mutex_t 		lock;
 	struct dlist_entry		list;
@@ -110,9 +115,11 @@ struct ofi_mem_monitor {
 	void (*init)(struct ofi_mem_monitor *monitor);
 	void (*cleanup)(struct ofi_mem_monitor *monitor);
 	int (*subscribe)(struct ofi_mem_monitor *notifier,
-			 const void *addr, size_t len);
+			 const void *addr, size_t len,
+			 union ofi_mr_hmem_info *hmem_info);
 	void (*unsubscribe)(struct ofi_mem_monitor *notifier,
-			    const void *addr, size_t len);
+			    const void *addr, size_t len,
+			    const union ofi_mr_hmem_info *hmem_info);
 };
 
 void ofi_monitor_init(struct ofi_mem_monitor *monitor);
@@ -126,9 +133,11 @@ void ofi_monitor_notify(struct ofi_mem_monitor *monitor,
 			const void *addr, size_t len);
 
 int ofi_monitor_subscribe(struct ofi_mem_monitor *monitor,
-			  const void *addr, size_t len);
+			  const void *addr, size_t len,
+			  union ofi_mr_hmem_info *hmem_info);
 void ofi_monitor_unsubscribe(struct ofi_mem_monitor *monitor,
-			     const void *addr, size_t len);
+			     const void *addr, size_t len,
+			     const union ofi_mr_hmem_info *hmem_info);
 
 extern struct ofi_mem_monitor *default_monitor;
 
@@ -231,6 +240,7 @@ struct ofi_mr_entry {
 	unsigned int			subscribed:1;
 	int				use_cnt;
 	struct dlist_entry		list_entry;
+	union ofi_mr_hmem_info		hmem_info;
 	uint8_t				data[];
 };
 
