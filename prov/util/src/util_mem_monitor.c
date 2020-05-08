@@ -350,6 +350,13 @@ static void ofi_uffd_unsubscribe(struct ofi_mem_monitor *monitor,
 	}
 }
 
+static bool ofi_uffd_valid(struct ofi_mem_monitor *monitor, const void *addr,
+			   size_t len, const union ofi_mr_hmem_info *hmem_info)
+{
+	/* no-op */
+	return true;
+}
+
 int ofi_uffd_start(void)
 {
 	struct uffdio_api api;
@@ -357,6 +364,7 @@ int ofi_uffd_start(void)
 
 	uffd.monitor.subscribe = ofi_uffd_subscribe;
 	uffd.monitor.unsubscribe = ofi_uffd_unsubscribe;
+	uffd.monitor.valid = ofi_uffd_valid;
 
 	if (!num_page_sizes)
 		return -FI_ENODATA;

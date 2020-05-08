@@ -120,6 +120,15 @@ struct ofi_mem_monitor {
 	void (*unsubscribe)(struct ofi_mem_monitor *notifier,
 			    const void *addr, size_t len,
 			    const union ofi_mr_hmem_info *hmem_info);
+
+	/* Valid is a memory monitor operation used to query a memory monitor to
+	 * see if the memory monitor's view of the buffer is still valid. If the
+	 * memory monitor's view of the buffer is no longer valid (e.g. the
+	 * pages behind a given virtual address have changed), the buffer needs
+	 * to be re-registered.
+	 */
+	bool (*valid)(struct ofi_mem_monitor *notifier, const void *addr,
+		      size_t len, const union ofi_mr_hmem_info *hmem_info);
 };
 
 void ofi_monitor_init(struct ofi_mem_monitor *monitor);
