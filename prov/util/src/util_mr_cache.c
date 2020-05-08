@@ -323,7 +323,13 @@ int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *att
 
 		cache->search_cnt++;
 		*entry = cache->storage.find(&cache->storage, &info);
-		if (*entry && ofi_iov_within(attr->mr_iov, &(*entry)->info.iov))
+
+		if (*entry &&
+		    ofi_iov_within(attr->mr_iov, &(*entry)->info.iov) &&
+		    monitor->valid(monitor,
+				   (const void *)(*entry)->info.iov.iov_base,
+				   (*entry)->info.iov.iov_len,
+				   &(*entry)->hmem_info))
 			goto hit;
 
 		/* Purge regions that overlap with new region */
