@@ -109,7 +109,7 @@ extern pthread_mutex_t mm_lock;
 struct ofi_mr_cache;
 
 union ofi_mr_hmem_info {
-	uint64_t reserved;
+	uint64_t cuda_id;
 };
 
 struct ofi_mem_monitor {
@@ -177,6 +177,7 @@ struct ofi_memhooks {
 
 extern struct ofi_mem_monitor *memhooks_monitor;
 
+extern struct ofi_mem_monitor *cuda_monitor;
 
 /*
  * Used to store registered memory regions into a lookup map.  This
