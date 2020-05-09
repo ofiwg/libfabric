@@ -451,7 +451,7 @@ int sock_conn_listen(struct sock_ep_attr *ep_attr)
 
 	ofi_straddr_dbg(&sock_prov, FI_LOG_EP_CTRL, "listening at addr: ",
 			&addr.sa);
-	ret = listen(listen_fd, sock_cm_def_map_sz);
+	ret = listen(listen_fd, SOMAXCONN);
 	if (ret) {
 		SOCK_LOG_ERROR("failed to listen socket: %s\n",
 			       strerror(ofi_sockerr()));

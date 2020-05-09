@@ -122,7 +122,7 @@ static int sock_pep_create_listener(struct sock_pep *pep)
 		goto err;
 	}
 
-	if (listen(pep->cm.sock, sock_cm_def_map_sz)) {
+	if (listen(pep->cm.sock, SOMAXCONN)) {
 		SOCK_LOG_ERROR("failed to listen socket: %s\n",
 			       strerror(ofi_sockerr()));
 		ret = -ofi_sockerr();
