@@ -74,6 +74,12 @@ static int efa_domain_close(fid_t fid)
 	if (ret)
 		return ret;
 
+	if (domain->shm_domain) {
+		ret = fi_close(&domain->shm_domain->fid);
+		if (ret)
+			return ret;
+	}
+
 	fi_freeinfo(domain->info);
 	free(domain->qp_table);
 	free(domain);
