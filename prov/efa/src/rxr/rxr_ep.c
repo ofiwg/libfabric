@@ -776,7 +776,7 @@ static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 				 * Copy the entire peer array, because we may not be able to make the
 				 * assumption that insertions are always indexed in order in the future.
 				 */
-				for (i = 0; i <= av->util_av.count; i++) {
+				for (i = 0; i < av->util_av.count; i++) {
 					first_ep_peer = rxr_ep_get_peer(rxr_first_ep, i);
 					if (first_ep_peer->is_local) {
 						peer = rxr_ep_get_peer(rxr_ep, i);
