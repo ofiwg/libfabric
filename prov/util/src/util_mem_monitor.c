@@ -140,9 +140,9 @@ int ofi_monitor_add_cache(struct ofi_mem_monitor *monitor,
 	pthread_mutex_lock(&monitor->lock);
 	if (dlist_empty(&monitor->list)) {
 		if (monitor == uffd_monitor)
-			ret = ofi_uffd_init();
+			ret = ofi_uffd_start();
 		else if (monitor == memhooks_monitor)
-			ret = ofi_memhooks_init();
+			ret = ofi_memhooks_start();
 		else
 			ret = -FI_ENOSYS;
 
@@ -166,9 +166,9 @@ void ofi_monitor_del_cache(struct ofi_mr_cache *cache)
 
 	if (dlist_empty(&monitor->list)) {
 		if (monitor == uffd_monitor)
-			ofi_uffd_cleanup();
+			ofi_uffd_stop();
 		else if (monitor == memhooks_monitor)
-			ofi_memhooks_cleanup();
+			ofi_memhooks_stop();
 	}
 
 	pthread_mutex_unlock(&monitor->lock);
@@ -334,7 +334,7 @@ static void ofi_uffd_unsubscribe(struct ofi_mem_monitor *monitor,
 	}
 }
 
-int ofi_uffd_init(void)
+int ofi_uffd_start(void)
 {
 	struct uffdio_api api;
 	int ret;
@@ -383,7 +383,7 @@ closefd:
 	return ret;
 }
 
-void ofi_uffd_cleanup(void)
+void ofi_uffd_stop(void)
 {
 	pthread_cancel(uffd.thread);
 	pthread_join(uffd.thread, NULL);
@@ -392,12 +392,12 @@ void ofi_uffd_cleanup(void)
 
 #else /* HAVE_UFFD_UNMAP */
 
-int ofi_uffd_init(void)
+int ofi_uffd_start(void)
 {
 	return -FI_ENOSYS;
 }
 
-void ofi_uffd_cleanup(void)
+void ofi_uffd_stop(void)
 {
 }
 

@@ -468,7 +468,7 @@ static void ofi_memhooks_unsubscribe(struct ofi_mem_monitor *monitor,
 	/* no-op */
 }
 
-int ofi_memhooks_init(void)
+int ofi_memhooks_start(void)
 {
 	int i, ret;
 
@@ -549,7 +549,7 @@ int ofi_memhooks_init(void)
 	return 0;
 }
 
-void ofi_memhooks_cleanup(void)
+void ofi_memhooks_stop(void)
 {
 	ofi_restore_intercepts();
 	memhooks_monitor->subscribe = NULL;
@@ -558,12 +558,12 @@ void ofi_memhooks_cleanup(void)
 
 #else
 
-int ofi_memhooks_init(void)
+int ofi_memhooks_start(void)
 {
 	return -FI_ENOSYS;
 }
 
-void ofi_memhooks_cleanup(void)
+void ofi_memhooks_stop(void)
 {
 }
 

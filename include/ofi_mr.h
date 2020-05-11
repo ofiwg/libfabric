@@ -136,8 +136,8 @@ struct ofi_uffd {
 	int				fd;
 };
 
-int ofi_uffd_init(void);
-void ofi_uffd_cleanup(void);
+int ofi_uffd_start(void);
+void ofi_uffd_stop(void);
 
 extern struct ofi_mem_monitor *uffd_monitor;
 
@@ -149,8 +149,8 @@ struct ofi_memhooks {
 	struct dlist_entry		intercept_list;
 };
 
-int ofi_memhooks_init(void);
-void ofi_memhooks_cleanup(void);
+int ofi_memhooks_start(void);
+void ofi_memhooks_stop(void);
 
 extern struct ofi_mem_monitor *memhooks_monitor;
 
