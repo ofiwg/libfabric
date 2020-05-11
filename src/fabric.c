@@ -586,7 +586,7 @@ static void ofi_ini_dir(const char *dir)
 			goto libdl_done;
 		}
 		ofi_reg_dl_prov(lib);
-	
+
 		free(liblist[n]);
 		free(lib);
 	}
@@ -611,9 +611,9 @@ static void ofi_find_prov_libs(void)
 
 		if (!prov->prov_name)
 			continue;
-		
+
 		if (ofi_has_util_prefix(prov->prov_name)) {
-			short_prov_name = prov->prov_name + strlen(OFI_UTIL_PREFIX);		
+			short_prov_name = prov->prov_name + strlen(OFI_UTIL_PREFIX);
 		} else {
 			short_prov_name = prov->prov_name;
 		}
@@ -627,7 +627,7 @@ static void ofi_find_prov_libs(void)
 
 		ofi_reg_dl_prov(lib);
 		free(lib);
-	}   
+	}
 }
 #endif
 
@@ -648,7 +648,7 @@ void fi_ini(void)
 	ofi_pmem_init();
 	ofi_perf_init();
 	ofi_hook_init();
-	ofi_monitor_init();
+	ofi_monitors_init();
 
 	fi_param_define(NULL, "provider", FI_PARAM_STRING,
 			"Only use specified provider (default: all available)");
@@ -741,7 +741,7 @@ FI_DESTRUCTOR(fi_fini(void))
 	}
 
 	ofi_free_filter(&prov_filter);
-	ofi_monitor_cleanup();
+	ofi_monitors_cleanup();
 	ofi_mem_fini();
 	fi_log_fini();
 	fi_param_fini();

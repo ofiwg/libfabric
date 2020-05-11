@@ -60,7 +60,7 @@ static size_t ofi_default_cache_size(void)
 /*
  * Initialize all available memory monitors
  */
-void ofi_monitor_init(void)
+void ofi_monitors_init(void)
 {
 	ofi_uffd_init();
 	ofi_memhooks_init();
@@ -117,7 +117,7 @@ void ofi_monitor_init(void)
 	}
 }
 
-void ofi_monitor_cleanup(void)
+void ofi_monitors_cleanup(void)
 {
 	ofi_uffd_cleanup();
 	ofi_memhooks_cleanup();
