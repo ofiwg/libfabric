@@ -136,6 +136,8 @@ struct ofi_uffd {
 	int				fd;
 };
 
+void ofi_uffd_init(void);
+void ofi_uffd_cleanup(void);
 int ofi_uffd_start(void);
 void ofi_uffd_stop(void);
 
@@ -149,6 +151,8 @@ struct ofi_memhooks {
 	struct dlist_entry		intercept_list;
 };
 
+void ofi_memhooks_init(void);
+void ofi_memhooks_cleanup(void);
 int ofi_memhooks_start(void);
 void ofi_memhooks_stop(void);
 

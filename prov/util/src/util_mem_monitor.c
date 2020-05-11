@@ -62,11 +62,8 @@ static size_t ofi_default_cache_size(void)
  */
 void ofi_monitor_init(void)
 {
-	pthread_mutex_init(&uffd_monitor->lock, NULL);
-	dlist_init(&uffd_monitor->list);
-
-	pthread_mutex_init(&memhooks_monitor->lock, NULL);
-	dlist_init(&memhooks_monitor->list);
+	ofi_uffd_init();
+	ofi_memhooks_init();
 
 #if defined(HAVE_ELF_H) && defined(HAVE_SYS_AUXV_H)
         default_monitor = memhooks_monitor;
@@ -122,11 +119,8 @@ void ofi_monitor_init(void)
 
 void ofi_monitor_cleanup(void)
 {
-	assert(dlist_empty(&uffd_monitor->list));
-	pthread_mutex_destroy(&uffd_monitor->lock);
-
-	assert(dlist_empty(&memhooks_monitor->list));
-	pthread_mutex_destroy(&memhooks_monitor->lock);
+	ofi_uffd_cleanup();
+	ofi_memhooks_cleanup();
 }
 
 int ofi_monitor_add_cache(struct ofi_mem_monitor *monitor,
@@ -402,3 +396,15 @@ void ofi_uffd_stop(void)
 }
 
 #endif /* HAVE_UFFD_UNMAP */
+
+void ofi_uffd_init(void)
+{
+	pthread_mutex_init(&uffd_monitor->lock, NULL);
+	dlist_init(&uffd_monitor->list);
+}
+
+void ofi_uffd_cleanup(void)
+{
+	assert(dlist_empty(&uffd_monitor->list));
+	pthread_mutex_destroy(&uffd_monitor->lock);
+}

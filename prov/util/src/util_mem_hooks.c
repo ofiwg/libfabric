@@ -46,6 +46,7 @@ struct ofi_memhooks memhooks;
 struct ofi_mem_monitor *memhooks_monitor = &memhooks.monitor;
 
 
+/* memhook support checks */
 #if defined(__linux__) && defined(HAVE_ELF_H) && defined(HAVE_SYS_AUXV_H)
 
 #include <elf.h>
@@ -567,4 +568,16 @@ void ofi_memhooks_stop(void)
 {
 }
 
-#endif
+#endif /* memhook support checks */
+
+void ofi_memhooks_init(void)
+{
+	pthread_mutex_init(&memhooks_monitor->lock, NULL);
+	dlist_init(&memhooks_monitor->list);
+}
+
+void ofi_memhooks_cleanup(void)
+{
+	assert(dlist_empty(&memhooks_monitor->list));
+	pthread_mutex_destroy(&memhooks_monitor->lock);
+}
