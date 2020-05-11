@@ -106,12 +106,16 @@ struct ofi_mem_monitor {
 	pthread_mutex_t 		lock;
 	struct dlist_entry		list;
 
+	void (*init)(struct ofi_mem_monitor *monitor);
+	void (*cleanup)(struct ofi_mem_monitor *monitor);
 	int (*subscribe)(struct ofi_mem_monitor *notifier,
 			 const void *addr, size_t len);
 	void (*unsubscribe)(struct ofi_mem_monitor *notifier,
 			    const void *addr, size_t len);
 };
 
+void ofi_monitor_init(struct ofi_mem_monitor *monitor);
+void ofi_monitor_cleanup(struct ofi_mem_monitor *monitor);
 void ofi_monitors_init(void);
 void ofi_monitors_cleanup(void);
 int ofi_monitor_add_cache(struct ofi_mem_monitor *monitor,
@@ -136,8 +140,6 @@ struct ofi_uffd {
 	int				fd;
 };
 
-void ofi_uffd_init(void);
-void ofi_uffd_cleanup(void);
 int ofi_uffd_start(void);
 void ofi_uffd_stop(void);
 
@@ -151,8 +153,6 @@ struct ofi_memhooks {
 	struct dlist_entry		intercept_list;
 };
 
-void ofi_memhooks_init(void);
-void ofi_memhooks_cleanup(void);
 int ofi_memhooks_start(void);
 void ofi_memhooks_stop(void);
 
