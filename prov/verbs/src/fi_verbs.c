@@ -108,7 +108,7 @@ vrb_get_rdma_rai(const char *node, const char *service, uint64_t flags,
 	struct rdma_addrinfo rai_hints, *_rai;
 	struct rdma_addrinfo **cur, *next;
 	int ret;
-	
+
 	ret = vrb_fi_to_rai(hints, flags, &rai_hints);
 	if (ret)
 		goto out;
@@ -666,7 +666,7 @@ static void verbs_devs_free(void)
 static void vrb_fini(void)
 {
 #if HAVE_VERBS_DL
-	ofi_monitor_cleanup();
+	ofi_monitors_cleanup();
 	ofi_mem_fini();
 #endif
 	fi_freeinfo((void *)vrb_util_prov.info);
@@ -678,7 +678,7 @@ VERBS_INI
 {
 #if HAVE_VERBS_DL
 	ofi_mem_init();
-	ofi_monitor_init();
+	ofi_monitors_init();
 #endif
 	if (vrb_read_params()|| vrb_init_info(&vrb_util_prov.info))
 		return NULL;

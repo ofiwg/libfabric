@@ -42,10 +42,14 @@
 
 #include <ofi_mr.h>
 
-struct ofi_memhooks memhooks;
+struct ofi_memhooks memhooks = {
+	.monitor.init = ofi_monitor_init,
+	.monitor.cleanup = ofi_monitor_cleanup
+};
 struct ofi_mem_monitor *memhooks_monitor = &memhooks.monitor;
 
 
+/* memhook support checks */
 #if defined(__linux__) && defined(HAVE_ELF_H) && defined(HAVE_SYS_AUXV_H)
 
 #include <elf.h>
@@ -468,7 +472,7 @@ static void ofi_memhooks_unsubscribe(struct ofi_mem_monitor *monitor,
 	/* no-op */
 }
 
-int ofi_memhooks_init(void)
+int ofi_memhooks_start(void)
 {
 	int i, ret;
 
@@ -549,7 +553,7 @@ int ofi_memhooks_init(void)
 	return 0;
 }
 
-void ofi_memhooks_cleanup(void)
+void ofi_memhooks_stop(void)
 {
 	ofi_restore_intercepts();
 	memhooks_monitor->subscribe = NULL;
@@ -558,13 +562,13 @@ void ofi_memhooks_cleanup(void)
 
 #else
 
-int ofi_memhooks_init(void)
+int ofi_memhooks_start(void)
 {
 	return -FI_ENOSYS;
 }
 
-void ofi_memhooks_cleanup(void)
+void ofi_memhooks_stop(void)
 {
 }
 
-#endif
+#endif /* memhook support checks */

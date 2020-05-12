@@ -635,7 +635,7 @@ static void rxr_fini(void)
 	}
 
 #if HAVE_EFA_DL
-	ofi_monitor_cleanup();
+	ofi_monitors_cleanup();
 	ofi_mem_fini();
 #endif
 }
@@ -711,7 +711,7 @@ EFA_INI
 
 #if HAVE_EFA_DL
 	ofi_mem_init();
-	ofi_monitor_init();
+	ofi_monitors_init();
 #endif
 
 	lower_efa_prov = init_lower_efa_prov();
