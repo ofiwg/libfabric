@@ -96,6 +96,9 @@ static inline uint64_t ofi_mr_get_prov_mode(uint32_t version,
 }
 
 
+/* Single lock used by all memory monitors and MR caches. */
+extern pthread_mutex_t mm_lock;
+
 /*
  * Memory notifier - Report memory mapping changes to address ranges
  */
@@ -103,7 +106,6 @@ static inline uint64_t ofi_mr_get_prov_mode(uint32_t version,
 struct ofi_mr_cache;
 
 struct ofi_mem_monitor {
-	pthread_mutex_t 		lock;
 	struct dlist_entry		list;
 
 	void (*init)(struct ofi_mem_monitor *monitor);
