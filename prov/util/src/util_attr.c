@@ -451,6 +451,9 @@ static int fi_resource_mgmt_level(enum fi_resource_mgmt rm_model)
  */
 static int ofi_cap_mr_mode(uint64_t info_caps, int mr_mode)
 {
+	if (!(info_caps & FI_HMEM))
+		mr_mode &= ~FI_MR_HMEM;
+
 	if (!ofi_rma_target_allowed(info_caps)) {
 		if (!(mr_mode & (FI_MR_LOCAL | FI_MR_HMEM)))
 			return 0;

@@ -2,6 +2,7 @@
 # Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
 # Copyright (c) 2017-2018 Intel Corporation, Inc. All right reserved.
 # Copyright (c) 2018 Amazon.com, Inc. or its affiliates. All rights reserved.
+# (C) Copyright 2020 Hewlett Packard Enterprise Development LP
 #
 # Makefile.am for libfabric
 
@@ -39,6 +40,8 @@ rdmainclude_HEADERS =
 
 # internal utility functions shared by in-tree providers:
 common_srcs =				\
+	src/hmem.c			\
+	src/hmem_cuda.c			\
 	src/common.c			\
 	src/enosys.c			\
 	src/rbtree.c			\
@@ -118,6 +121,7 @@ util_fi_pingpong_LDADD = $(linkback)
 
 nodist_src_libfabric_la_SOURCES =
 src_libfabric_la_SOURCES =			\
+	include/ofi_hmem.h			\
 	include/ofi.h				\
 	include/ofi_abi.h			\
 	include/ofi_atom.h			\
