@@ -44,6 +44,16 @@ static inline int ofi_memcpy(void *dest, const void *src, size_t size)
 	return FI_SUCCESS;
 }
 
+static inline int ofi_hmem_init_noop(void)
+{
+	return FI_SUCCESS;
+}
+
+static inline int ofi_hmem_cleanup_noop(void)
+{
+	return FI_SUCCESS;
+}
+
 ssize_t ofi_copy_from_hmem_iov(void *dest, size_t size,
 			       const struct iovec *hmem_iov,
 			       enum fi_hmem_iface hmem_iface,

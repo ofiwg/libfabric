@@ -51,6 +51,8 @@ static pthread_mutex_t init_lock = PTHREAD_MUTEX_INITIALIZER;
 static struct ofi_hmem_ops hmem_ops[] = {
 	[FI_HMEM_SYSTEM] = {
 		.initialized = false,
+		.init = ofi_hmem_init_noop,
+		.cleanup = ofi_hmem_cleanup_noop,
 		.copy_to_hmem = ofi_memcpy,
 		.copy_from_hmem = ofi_memcpy,
 	},
