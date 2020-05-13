@@ -190,12 +190,7 @@ err_free_idx:
 static int cxip_mr_disable_std(struct cxip_mr *mr)
 {
 	int ret;
-	struct cxip_ep_obj *ep_obj;
-
-	if (!mr->enabled)
-		return FI_SUCCESS;
-
-	ep_obj = mr->ep->ep_obj;
+	struct cxip_ep_obj *ep_obj = mr->ep->ep_obj;
 
 	ret = cxip_pte_unlink(ep_obj->ctrl_pte, C_PTL_LIST_PRIORITY,
 			      mr->req.req_id, ep_obj->ctrl_tgq);
@@ -271,9 +266,6 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 	};
 	struct cxip_ep_obj *ep_obj = mr->ep->ep_obj;
 	uint32_t le_flags;
-
-	if (mr->enabled)
-		return FI_SUCCESS;
 
 	if (mr->cntr) {
 		ret = cxip_cntr_enable(mr->cntr);
@@ -383,12 +375,7 @@ err_free_idx:
 static int cxip_mr_disable_opt(struct cxip_mr *mr)
 {
 	int ret;
-	struct cxip_ep_obj *ep_obj;
-
-	if (!mr->enabled)
-		return FI_SUCCESS;
-
-	ep_obj = mr->ep->ep_obj;
+	struct cxip_ep_obj *ep_obj = mr->ep->ep_obj;
 
 	ret = cxip_pte_unlink(mr->pte, C_PTL_LIST_PRIORITY,
 			      mr->req.req_id, ep_obj->ctrl_tgq);
@@ -423,6 +410,9 @@ int cxip_mr_enable(struct cxip_mr *mr)
 {
 	int ret;
 
+	if (mr->enabled)
+		return FI_SUCCESS;
+
 	ret = cxip_ep_mr_insert(mr->ep->ep_obj, mr);
 	if (ret) {
 		CXIP_LOG_ERROR("Failed to insert MR key: %lu\n", mr->key);
@@ -442,12 +432,19 @@ int cxip_mr_enable(struct cxip_mr *mr)
 
 int cxip_mr_disable(struct cxip_mr *mr)
 {
+	int ret;
+
+	if (!mr->enabled)
+		return FI_SUCCESS;
+
 	if (mr->optimized)
-		return cxip_mr_disable_opt(mr);
+		ret = cxip_mr_disable_opt(mr);
 	else
-		return cxip_mr_disable_std(mr);
+		ret = cxip_mr_disable_std(mr);
 
 	cxip_ep_mr_remove(mr);
+
+	return ret;
 }
 
 /*
