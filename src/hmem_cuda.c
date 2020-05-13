@@ -72,6 +72,16 @@ int cuda_copy_from_dev(void *host, const void *dev, size_t size)
 	return -FI_EIO;
 }
 
+int cuda_hmem_init(void)
+{
+	return FI_SUCCESS;
+}
+
+int cuda_hmem_cleanup(void)
+{
+	return FI_SUCCESS;
+}
+
 #else
 
 int cuda_copy_to_dev(void *dev, const void *host, size_t size)
@@ -80,6 +90,16 @@ int cuda_copy_to_dev(void *dev, const void *host, size_t size)
 }
 
 int cuda_copy_from_dev(void *host, const void *dev, size_t size)
+{
+	return -FI_ENOSYS;
+}
+
+int cuda_hmem_init(void)
+{
+	return -FI_ENOSYS;
+}
+
+int cuda_hmem_cleanup(void)
 {
 	return -FI_ENOSYS;
 }
