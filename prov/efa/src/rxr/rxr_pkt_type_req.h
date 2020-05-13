@@ -86,7 +86,11 @@ struct rxr_req_opt_cq_data_hdr {
 	int64_t cq_data;
 };
 
-void rxr_pkt_proc_req_common_hdr(struct rxr_pkt_entry *pkt_entry);
+void *rxr_pkt_req_raw_addr(struct rxr_pkt_entry *pkt_entry);
+
+int64_t rxr_pkt_req_cq_data(struct rxr_pkt_entry *pkt_entry);
+
+size_t rxr_pkt_req_hdr_size(struct rxr_pkt_entry *pkt_entry);
 
 size_t rxr_pkt_req_base_hdr_size(struct rxr_pkt_entry *pkt_entry);
 
