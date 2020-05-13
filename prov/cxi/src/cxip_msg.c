@@ -993,6 +993,10 @@ static int cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 		return FI_SUCCESS;
 	}
 
+	/* Drop all unexpected 0-byte Put events. */
+	if (!event->tgt_long.rlength)
+		return FI_SUCCESS;
+
 	/* Handle Put events */
 	fastlock_acquire(&rxc->rx_lock);
 
@@ -1902,6 +1906,13 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 
 		fastlock_acquire(&rxc->rx_lock);
 
+		/* Unexpected 0-byte Put events are dropped. Skip matching. */
+		if (!event->tgt_long.rlength) {
+			recv_req_tgt_event(req, event);
+			req->data_len = 0;
+			goto zbp;
+		}
+
 		/* Check for a previously received unexpected Put event */
 		ux_send = match_ux_send(rxc, event);
 		if (!ux_send) {
@@ -2004,6 +2015,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		dlist_remove(&ux_send->ux_entry);
 		free(ux_send);
 
+zbp:
 		mb.raw = event->tgt_long.match_bits;
 		if (!mb.match_comp)
 			cxip_recv_req_dequeue_nolock(req);
