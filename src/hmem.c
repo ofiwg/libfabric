@@ -39,16 +39,23 @@
 #include "ofi_iov.h"
 
 struct ofi_hmem_ops {
+	bool initialized;
+	int (*init)(void);
+	int (*cleanup)(void);
 	int (*copy_to_hmem)(void *dest, const void *src, size_t size);
 	int (*copy_from_hmem)(void *dest, const void *src, size_t size);
 };
 
+static pthread_mutex_t init_lock = PTHREAD_MUTEX_INITIALIZER;
+
 static struct ofi_hmem_ops hmem_ops[] = {
 	[FI_HMEM_SYSTEM] = {
+		.initialized = false,
 		.copy_to_hmem = ofi_memcpy,
 		.copy_from_hmem = ofi_memcpy,
 	},
 	[FI_HMEM_CUDA] = {
+		.initialized = false,
 		.copy_to_hmem = cuda_copy_to_dev,
 		.copy_from_hmem = cuda_copy_from_dev,
 	},
@@ -125,4 +132,37 @@ ssize_t ofi_copy_to_hmem_iov(const struct iovec *hmem_iov,
 	return ofi_copy_hmem_iov_buf(hmem_iov, hmem_iface, hmem_iov_count,
 				     hmem_iov_offset, src, size,
 				     OFI_COPY_BUF_TO_IOV);
+}
+
+int ofi_hmem_init(enum fi_hmem_iface iface)
+{
+	int ret;
+
+	/* Lockless check to see if iface has been initialized. */
+	if (hmem_ops[iface].initialized)
+		return FI_SUCCESS;
+
+	pthread_mutex_lock(&init_lock);
+	if (hmem_ops[iface].initialized) {
+		pthread_mutex_unlock(&init_lock);
+		return FI_SUCCESS;
+	}
+
+	ret = hmem_ops[iface].init();
+	if (ret == FI_SUCCESS)
+		hmem_ops[iface].initialized = true;
+
+	pthread_mutex_unlock(&init_lock);
+
+	return ret;
+}
+
+void ofi_hmem_cleanup(void)
+{
+	enum fi_hmem_iface iface;
+
+	for (iface = 0; iface < ARRAY_SIZE(hmem_ops); iface++) {
+		if (hmem_ops[iface].initialized)
+			hmem_ops[iface].cleanup();
+	}
 }

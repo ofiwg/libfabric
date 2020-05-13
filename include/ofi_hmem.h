@@ -54,4 +54,8 @@ ssize_t ofi_copy_to_hmem_iov(const struct iovec *hmem_iov,
 			     size_t hmem_iov_count, uint64_t hmem_iov_offset,
 			     void *src, size_t size);
 
+int ofi_hmem_init(enum fi_hmem_iface iface);
+
+void ofi_hmem_cleanup(void);
+
 #endif /* _OFI_HMEM_H_ */
