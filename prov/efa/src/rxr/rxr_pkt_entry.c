@@ -63,13 +63,10 @@ struct rxr_pkt_entry *rxr_pkt_entry_alloc(struct rxr_ep *ep,
 	dlist_init(&pkt_entry->dbg_entry);
 #endif
 	pkt_entry->mr = (struct fid_mr *)mr;
-	pkt_entry->pkt = (struct rxr_pkt *)((char *)pkt_entry +
-			  sizeof(*pkt_entry));
 #ifdef ENABLE_EFA_POISONING
 	memset(pkt_entry->pkt, 0, ep->mtu_size);
 #endif
 	pkt_entry->state = RXR_PKT_ENTRY_IN_USE;
-	pkt_entry->iov_count = 0;
 	pkt_entry->next = NULL;
 	return pkt_entry;
 }
@@ -165,7 +162,6 @@ void rxr_pkt_entry_copy(struct rxr_ep *ep,
 	       "Copying packet out of posted buffer\n");
 	assert(src->type == RXR_PKT_ENTRY_POSTED);
 	memcpy(dest, src, sizeof(struct rxr_pkt_entry));
-	dest->pkt = (struct rxr_pkt *)((char *)dest + sizeof(*dest));
 	memcpy(dest->pkt, src->pkt, ep->mtu_size);
 	dlist_init(&dest->entry);
 #if ENABLE_DEBUG
