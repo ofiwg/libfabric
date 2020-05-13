@@ -167,8 +167,9 @@ void sock_conn_release_entry(struct sock_conn_map *map, struct sock_conn *conn)
 	ofi_close_socket(conn->sock_fd);
 
 	conn->address_published = 0;
-        conn->connected = 0;
-        conn->sock_fd = -1;
+	conn->av_index = FI_ADDR_NOTAVAIL;
+	conn->connected = 0;
+	conn->sock_fd = -1;
 }
 
 static int sock_conn_get_next_index(struct sock_conn_map *map)
@@ -581,6 +582,8 @@ retry:
 
 	SOCK_LOG_ERROR("Connect error, retrying - %s - %d\n",
 		       strerror(ofi_sockerr()), conn_fd);
+	ofi_straddr_log(&sock_prov, FI_LOG_WARN, FI_LOG_EP_CTRL,
+			"Retry connect to peer ", &addr.sa);
         goto do_connect;
 
 out:

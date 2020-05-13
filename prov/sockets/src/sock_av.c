@@ -441,10 +441,12 @@ static int sock_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 	}
 	fastlock_release(&_av->list_lock);
 
+	fastlock_acquire(&_av->table_lock);
 	for (i = 0; i < count; i++) {
 		av_addr = &_av->table[fi_addr[i]];
 		av_addr->valid = 0;
 	}
+	fastlock_release(&_av->table_lock);
 
 	return 0;
 }

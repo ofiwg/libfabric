@@ -1942,13 +1942,12 @@ static int sock_pe_progress_tx_entry(struct sock_pe *pe,
 		goto out;
 
 	if (sock_comm_is_disconnected(pe_entry)) {
-		SOCK_LOG_DBG("conn disconnected: removing fd from pollset\n");
-		if (pe_entry->ep_attr->cmap.used > 0 &&
-		     pe_entry->conn->sock_fd != -1) {
-			fastlock_acquire(&pe_entry->ep_attr->cmap.lock);
-			sock_ep_remove_conn(pe_entry->ep_attr, pe_entry->conn);
-			fastlock_release(&pe_entry->ep_attr->cmap.lock);
-		}
+		ofi_straddr_log(&sock_prov, FI_LOG_WARN, FI_LOG_EP_DATA,
+				"Peer disconnected: removing fd from pollset",
+				&pe_entry->conn->addr.sa);
+		fastlock_acquire(&pe_entry->ep_attr->cmap.lock);
+		sock_ep_remove_conn(pe_entry->ep_attr, pe_entry->conn);
+		fastlock_release(&pe_entry->ep_attr->cmap.lock);
 
 		sock_pe_report_tx_error(pe_entry, 0, FI_EIO);
 		pe_entry->is_complete = 1;
@@ -2021,13 +2020,12 @@ static int sock_pe_progress_rx_pe_entry(struct sock_pe *pe,
 	int ret;
 
 	if (sock_comm_is_disconnected(pe_entry)) {
-		SOCK_LOG_DBG("conn disconnected: removing fd from pollset\n");
-		if (pe_entry->ep_attr->cmap.used > 0 &&
-		     pe_entry->conn->sock_fd != -1) {
-			fastlock_acquire(&pe_entry->ep_attr->cmap.lock);
-			sock_ep_remove_conn(pe_entry->ep_attr, pe_entry->conn);
-			fastlock_release(&pe_entry->ep_attr->cmap.lock);
-		}
+		ofi_straddr_log(&sock_prov, FI_LOG_WARN, FI_LOG_EP_DATA,
+				"Peer disconnected: removing fd from pollset",
+				&pe_entry->conn->addr.sa);
+		fastlock_acquire(&pe_entry->ep_attr->cmap.lock);
+		sock_ep_remove_conn(pe_entry->ep_attr, pe_entry->conn);
+		fastlock_release(&pe_entry->ep_attr->cmap.lock);
 
 		if (pe_entry->pe.rx.header_read)
 			sock_pe_report_rx_error(pe_entry, 0, FI_EIO);
