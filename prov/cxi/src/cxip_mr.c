@@ -44,7 +44,7 @@ static int cxip_ep_mr_insert(struct cxip_ep_obj *ep_obj, struct cxip_mr *mr)
 }
 
 /*
- * cxip_ep_mr_insert() - Remove an MR key from the EP key space.
+ * cxip_ep_mr_remove() - Remove an MR key from the EP key space.
  */
 static void cxip_ep_mr_remove(struct cxip_mr *mr)
 {
@@ -162,7 +162,7 @@ static int cxip_mr_enable_std(struct cxip_mr *mr)
 	/* Wait for Rendezvous PTE state changes */
 	do {
 		sched_yield();
-		cxip_ep_ctrl_progress(mr->ep->ep_obj);
+		cxip_ep_ctrl_progress(ep_obj);
 	} while (mr->mr_state != CXIP_MR_LINKED);
 
 	mr->enabled = true;
@@ -190,10 +190,12 @@ err_free_idx:
 static int cxip_mr_disable_std(struct cxip_mr *mr)
 {
 	int ret;
-	struct cxip_ep_obj *ep_obj = mr->ep->ep_obj;
+	struct cxip_ep_obj *ep_obj;
 
 	if (!mr->enabled)
 		return FI_SUCCESS;
+
+	ep_obj = mr->ep->ep_obj;
 
 	ret = cxip_pte_unlink(ep_obj->ctrl_pte, C_PTL_LIST_PRIORITY,
 			      mr->req.req_id, ep_obj->ctrl_tgq);
@@ -204,7 +206,7 @@ static int cxip_mr_disable_std(struct cxip_mr *mr)
 
 	do {
 		sched_yield();
-		cxip_ep_ctrl_progress(mr->ep->ep_obj);
+		cxip_ep_ctrl_progress(ep_obj);
 	} while (mr->mr_state != CXIP_MR_UNLINKED);
 
 	ret = cxil_invalidate_pte_le(ep_obj->ctrl_pte->pte, mr->key,
@@ -351,7 +353,7 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 	/* Wait for Rendezvous PTE state changes */
 	do {
 		sched_yield();
-		cxip_ep_ctrl_progress(mr->ep->ep_obj);
+		cxip_ep_ctrl_progress(ep_obj);
 	} while (mr->mr_state != CXIP_MR_LINKED);
 
 	mr->enabled = true;
@@ -381,10 +383,12 @@ err_free_idx:
 static int cxip_mr_disable_opt(struct cxip_mr *mr)
 {
 	int ret;
-	struct cxip_ep_obj *ep_obj = mr->ep->ep_obj;
+	struct cxip_ep_obj *ep_obj;
 
 	if (!mr->enabled)
 		return FI_SUCCESS;
+
+	ep_obj = mr->ep->ep_obj;
 
 	ret = cxip_pte_unlink(mr->pte, C_PTL_LIST_PRIORITY,
 			      mr->req.req_id, ep_obj->ctrl_tgq);
@@ -395,7 +399,7 @@ static int cxip_mr_disable_opt(struct cxip_mr *mr)
 
 	do {
 		sched_yield();
-		cxip_ep_ctrl_progress(mr->ep->ep_obj);
+		cxip_ep_ctrl_progress(ep_obj);
 	} while (mr->mr_state != CXIP_MR_UNLINKED);
 
 cleanup:
@@ -426,9 +430,14 @@ int cxip_mr_enable(struct cxip_mr *mr)
 	}
 
 	if (mr->optimized)
-		return cxip_mr_enable_opt(mr);
+		ret = cxip_mr_enable_opt(mr);
 	else
-		return cxip_mr_enable_std(mr);
+		ret = cxip_mr_enable_std(mr);
+
+	if (ret != FI_SUCCESS)
+		cxip_ep_mr_remove(mr);
+
+	return ret;
 }
 
 int cxip_mr_disable(struct cxip_mr *mr)

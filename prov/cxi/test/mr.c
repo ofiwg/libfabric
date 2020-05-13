@@ -138,3 +138,33 @@ Test(mr, mr_unique_key)
 	mr_destroy(&mr);
 	mr_destroy(&mr2);
 }
+
+/* Test creating and destroying an MR that is never bound to an EP. */
+Test(mr, no_bind)
+{
+	int ret;
+	size_t buf_len = 0x1000;
+	void *buf;
+	struct fid_mr *mr;
+
+	buf = malloc(buf_len);
+	cr_assert(buf);
+
+	/* Optimized MR */
+
+	ret = fi_mr_reg(cxit_domain, buf, buf_len, FI_REMOTE_WRITE,
+			0, 0, 0, &mr, NULL);
+	cr_assert_eq(ret, FI_SUCCESS);
+
+	fi_close(&mr->fid);
+
+	/* Standard MR */
+
+	ret = fi_mr_reg(cxit_domain, buf, buf_len, FI_REMOTE_WRITE,
+			0, 200, 0, &mr, NULL);
+	cr_assert_eq(ret, FI_SUCCESS);
+
+	fi_close(&mr->fid);
+
+	free(buf);
+}
