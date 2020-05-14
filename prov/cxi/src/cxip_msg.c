@@ -3074,8 +3074,13 @@ static int cxip_send_long_cb(struct cxip_req *req, const union c_event *event)
 		 */
 		if (event_rc == C_RC_PT_DISABLED) {
 			ret = cxip_send_req_dropped(req->send.txc, req);
-			if (ret != FI_SUCCESS)
+			if (ret == FI_SUCCESS) {
+				cxip_rdzv_id_free(req->send.txc->ep_obj,
+						  req->send.rdzv_id);
+				cxip_unmap(req->send.send_md);
+			} else {
 				ret = -FI_EAGAIN;
+			}
 
 			return ret;
 		}
