@@ -33,7 +33,24 @@
 #ifndef _OFI_HMEM_H_
 #define _OFI_HMEM_H_
 
+#if HAVE_CONFIG_H
+#include <config.h>
+#endif
+
 #include <rdma/fi_domain.h>
+
+#ifdef HAVE_LIBCUDA
+
+#include <cuda.h>
+#include <cuda_runtime.h>
+
+/* Libfabric supported CUDA operations. */
+cudaError_t ofi_cudaMemcpy(void* dst, const void* src, size_t count,
+			   enum cudaMemcpyKind kind);
+const char *ofi_cudaGetErrorName(cudaError_t error);
+const char *ofi_cudaGetErrorString(cudaError_t error);
+
+#endif /* HAVE_LIBCUDA */
 
 int cuda_copy_to_dev(void *dev, const void *host, size_t size);
 int cuda_copy_from_dev(void *host, const void *dev, size_t size);

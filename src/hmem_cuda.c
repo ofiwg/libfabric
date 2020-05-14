@@ -42,17 +42,47 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 
+struct cuda_ops {
+	cudaError_t (*cudaMemcpy)(void *dst, const void *src, size_t count,
+				  enum cudaMemcpyKind kind);
+	const char *(*cudaGetErrorName)(cudaError_t error);
+	const char *(*cudaGetErrorString)(cudaError_t error);
+};
+
+static struct cuda_ops cuda_ops = {
+	.cudaMemcpy = cudaMemcpy,
+	.cudaGetErrorName = cudaGetErrorName,
+	.cudaGetErrorString = cudaGetErrorString,
+};
+
+cudaError_t ofi_cudaMemcpy(void *dst, const void *src, size_t count,
+			   enum cudaMemcpyKind kind)
+{
+	return cuda_ops.cudaMemcpy(dst, src, count, kind);
+}
+
+const char *ofi_cudaGetErrorName(cudaError_t error)
+{
+	return cuda_ops.cudaGetErrorName(error);
+}
+
+const char *ofi_cudaGetErrorString(cudaError_t error)
+{
+	return cuda_ops.cudaGetErrorString(error);
+}
+
 int cuda_copy_to_dev(void *dev, const void *host, size_t size)
 {
 	cudaError_t cuda_ret;
 
-	cuda_ret = cudaMemcpy(dev, host, size, cudaMemcpyHostToDevice);
+	cuda_ret = ofi_cudaMemcpy(dev, host, size, cudaMemcpyHostToDevice);
 	if (cuda_ret == cudaSuccess)
 		return 0;
 
 	FI_WARN(&core_prov, FI_LOG_CORE,
 		"Failed to perform cudaMemcpy: %s:%s\n",
-		cudaGetErrorName(cuda_ret), cudaGetErrorString(cuda_ret));
+		ofi_cudaGetErrorName(cuda_ret),
+		ofi_cudaGetErrorString(cuda_ret));
 
 	return -FI_EIO;
 }
@@ -61,13 +91,14 @@ int cuda_copy_from_dev(void *host, const void *dev, size_t size)
 {
 	cudaError_t cuda_ret;
 
-	cuda_ret = cudaMemcpy(host, dev, size, cudaMemcpyDeviceToHost);
+	cuda_ret = ofi_cudaMemcpy(host, dev, size, cudaMemcpyDeviceToHost);
 	if (cuda_ret == cudaSuccess)
 		return 0;
 
 	FI_WARN(&core_prov, FI_LOG_CORE,
 		"Failed to perform cudaMemcpy: %s:%s\n",
-		cudaGetErrorName(cuda_ret), cudaGetErrorString(cuda_ret));
+		ofi_cudaGetErrorName(cuda_ret),
+		ofi_cudaGetErrorString(cuda_ret));
 
 	return -FI_EIO;
 }
