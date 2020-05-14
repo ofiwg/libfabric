@@ -3063,13 +3063,10 @@ static int cxip_send_long_cb(struct cxip_req *req, const union c_event *event)
 	case C_EVENT_ACK:
 		/* The source Put completed. */
 		event_rc = cxi_init_event_rc(event);
-		if (event_rc == C_RC_OK)
-			CXIP_LOG_DBG("Put Acked (%s): %p\n",
-				     cxi_ptl_list_to_str(event->init_short.ptl_list),
-				     req);
-		else
-			CXIP_LOG_ERROR("Ack error: %p rc: %s\n",
-				       req, cxi_rc_to_str(event_rc));
+
+		CXIP_LOG_DBG("Acked: %p (rc: %s list: %s)\n", req,
+			     cxi_rc_to_str(event_rc),
+			     cxi_ptl_list_to_str(event->init_short.ptl_list));
 
 		/* If the message was dropped, mark the peer as disabled. Do
 		 * not generate a completion. Free associated resources. Do not
@@ -3131,9 +3128,9 @@ static int rdzv_src_cb(struct cxip_req *req, const union c_event *event)
 				       cxi_event_to_str(event), req,
 				       cxi_rc_to_str(event_rc));
 		else
-			CXIP_LOG_ERROR("%s received: %p rc: %s\n",
-				       cxi_event_to_str(event), req,
-				       cxi_rc_to_str(event_rc));
+			CXIP_LOG_DBG("%s received: %p rc: %s\n",
+				     cxi_event_to_str(event), req,
+				     cxi_rc_to_str(event_rc));
 
 		req->rdzv_src.rc = cxi_tgt_event_rc(event);
 		return FI_SUCCESS;
