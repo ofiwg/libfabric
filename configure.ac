@@ -2,6 +2,7 @@ dnl
 dnl Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
 dnl Copyright (c) 2019 Intel, Inc.  All rights reserved.
 dnl Copyright (c) 2019-2020 Amazon.com, Inc. or its affiliates. All rights reserved.
+dnl (C) Copyright 2020 Hewlett Packard Enterprise Development LP
 dnl
 dnl Process this file with autoconf to produce a configure script.
 
@@ -485,6 +486,19 @@ AC_ARG_WITH([cuda],
 			    and runtime libraries are installed.])],
 	    [], [])
 
+AC_ARG_ENABLE([cuda-dlopen],
+    [AS_HELP_STRING([--enable-cuda-dlopen],
+        [Enable dlopen of CUDA libraries @<:@default=no@:>@])
+    ],
+    [
+        AS_IF([test "$freebsd" == "0"], [
+            AC_CHECK_LIB(dl, dlopen, [],
+                [AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
+        ])
+        AC_DEFINE([ENABLE_CUDA_DLOPEN], [1], [dlopen CUDA libraries])
+    ],
+    [enable_cuda_dlopen=no])
+
 FI_CHECK_PACKAGE([cuda],
 		 [cuda_runtime.h],
 		 [cudart],
@@ -497,7 +511,8 @@ FI_CHECK_PACKAGE([cuda],
 
 CPPFLAGS="$CPPFLAGS $cuda_CPPFLAGS"
 LDFLAGS="$LDFLAGS $cuda_LDFLAGS"
-LIBS="$LIBS $cuda_LIBS"
+
+AS_IF([test x"$enable_cuda_dlopen" != x"yes"], [LIBS="$LIBS $cuda_LIBS"])
 
 dnl Provider-specific checks
 FI_PROVIDER_INIT
