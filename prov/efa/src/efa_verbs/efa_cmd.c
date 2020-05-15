@@ -198,11 +198,8 @@ int efa_cmd_dereg_mr(struct ibv_mr *mr)
 	int ret;
 
 	ret = efa_ib_cmd_dereg_mr(mr);
-	if (ret)
-		return ret;
 
 	free(mr);
-
 	return ret;
 }
 
