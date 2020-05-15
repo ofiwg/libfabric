@@ -148,6 +148,9 @@ static int validate_bit_combos(char *node, char *service, uint64_t flags,
 		}
 		if (ret)
 			fail++;
+
+		fi_freeinfo(*info);
+		*info = NULL;
 	}
 	ret = 0;
 	printf("(passed)(skipped) (%d)(%d)/%d combinations\n",
