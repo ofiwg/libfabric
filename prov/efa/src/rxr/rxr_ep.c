@@ -754,10 +754,12 @@ static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		if (!rxr_ep->peer)
 			return -FI_ENOMEM;
 
-		rxr_ep->robuf_fs = rxr_robuf_fs_create(av->util_av.count,
-						       NULL, NULL);
-		if (!rxr_ep->robuf_fs)
-			return -FI_ENOMEM;
+		if (rxr_need_sas_ordering(rxr_ep)) {
+			rxr_ep->robuf_fs = rxr_robuf_fs_create(av->util_av.count,
+							       NULL, NULL);
+			if (!rxr_ep->robuf_fs)
+				return -FI_ENOMEM;
+		}
 
 		/* Bind shm provider endpoint & shm av */
 		if (rxr_ep->use_shm) {
