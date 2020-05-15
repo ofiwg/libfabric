@@ -753,6 +753,7 @@ int rxm_msg_ep_prepost_recv(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep);
 int rxm_ep_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 			enum fi_op op, struct fi_atomic_attr *attr,
 			uint64_t flags);
+int rxm_rx_repost_new(struct rxm_rx_buf *rx_buf);
 
 static inline size_t rxm_ep_max_atomic_size(struct fi_info *info)
 {
