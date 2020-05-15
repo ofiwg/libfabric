@@ -3470,3 +3470,165 @@ Test(tagged, fc_mt)
 
 	pthread_attr_destroy(&attr);
 }
+
+#define RDZV_FC_ITERS 100
+#define RDZV_FC_BATCH 5
+
+static void *rdzv_fc_sender(void *data)
+{
+	int i, j, tx_ret;
+	int send_id;
+	uint8_t *send_bufs;
+	uint8_t *send_buf;
+	long send_len = (long)data;
+	struct fi_cq_tagged_entry tx_cqe;
+	int batch_size = RDZV_FC_BATCH;
+
+	send_bufs = aligned_alloc(C_PAGE_SIZE, send_len * batch_size);
+	cr_assert(send_bufs);
+
+	for (i = 0; i < RDZV_FC_ITERS; i++) {
+		for (j = 0; j < batch_size; j++) {
+			send_id = i * batch_size + j;
+			send_buf = &send_bufs[j * send_len];
+			memset(send_buf, send_id, send_len);
+
+			do {
+				tx_ret = fi_tsend(cxit_ep, send_buf, send_len,
+						  NULL, cxit_ep_fi_addr,
+						  send_id, NULL);
+
+				if (tx_ret == -FI_EAGAIN) {
+					fi_cq_read(cxit_tx_cq, &tx_cqe, 0);
+					sched_yield();
+				}
+			} while (tx_ret == -FI_EAGAIN);
+
+			cr_assert_eq(tx_ret, FI_SUCCESS, "fi_tsend failed %d",
+				     tx_ret);
+		}
+
+		for (j = 0; j < batch_size; j++) {
+			do {
+				tx_ret = fi_cq_read(cxit_tx_cq, &tx_cqe, 1);
+
+				if (tx_ret == -FI_EAGAIN)
+					sched_yield();
+			} while (tx_ret == -FI_EAGAIN);
+
+			cr_assert_eq(tx_ret, 1,
+				     "fi_cq_read unexpected value %d",
+				     tx_ret);
+
+			validate_tx_event(&tx_cqe, FI_TAGGED | FI_SEND, NULL);
+		}
+	}
+
+	free(send_bufs);
+
+	pthread_exit(NULL);
+}
+
+static void *rdzv_fc_recver(void *data)
+{
+	int i, j, k, ret;
+	int recv_id;
+	uint8_t *recv_bufs;
+	uint8_t *recv_buf;
+	long recv_len = (long)data;
+	struct fi_cq_tagged_entry rx_cqe;
+	int batch_size = RDZV_FC_BATCH;
+
+	recv_bufs = aligned_alloc(C_PAGE_SIZE, recv_len * batch_size);
+	cr_assert(recv_bufs);
+
+	/* Let Sender get ahead and land some UX messages */
+	sleep(1);
+
+	for (i = 0; i < RDZV_FC_ITERS; i++) {
+
+		for (j = 0; j < batch_size; j++) {
+			recv_id = i * batch_size + j;
+			recv_buf = &recv_bufs[j * recv_len];
+			memset(recv_buf, -1, recv_len);
+
+			do {
+				ret = fi_trecv(cxit_ep, recv_buf, recv_len,
+					       NULL, FI_ADDR_UNSPEC, recv_id,
+					       0, NULL);
+
+				if (ret == -FI_EAGAIN) {
+					fi_cq_read(cxit_rx_cq, &rx_cqe, 0);
+					sched_yield();
+				}
+			} while (ret == -FI_EAGAIN);
+
+			cr_assert_eq(ret, FI_SUCCESS, "fi_trecv failed %d",
+				     ret);
+
+			do {
+				ret = fi_cq_read(cxit_rx_cq, &rx_cqe, 1);
+
+				if (ret == -FI_EAGAIN)
+					sched_yield();
+			} while (ret == -FI_EAGAIN);
+
+			cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d",
+				     ret);
+
+			validate_rx_event(&rx_cqe, NULL, recv_len,
+					  FI_TAGGED | FI_RECV,
+					  NULL, 0, rx_cqe.tag);
+
+			recv_id = rx_cqe.tag % batch_size;
+			recv_buf = &recv_bufs[recv_id * recv_len];
+			for (k = 0; k < recv_len; k++) {
+				cr_assert_eq(recv_buf[k], (uint8_t)rx_cqe.tag,
+					     "data mismatch, element[%d], exp=%d saw=%d\n",
+					     k, (uint8_t)rx_cqe.tag,
+					     recv_buf[k]);
+			}
+		}
+	}
+
+	free(recv_bufs);
+
+	pthread_exit(NULL);
+}
+
+/*
+ * Rendezvous Send multi-threaded flow control test.
+ *
+ * Run with driver le_pool_max set just above RDZV_FC_BATCH.
+ */
+Test(tagged, rdzv_fc_mt, .timeout = 60)
+{
+	pthread_t send_thread;
+	pthread_t recv_thread;
+	pthread_attr_t attr;
+	int ret;
+	long xfer_len;
+
+	pthread_attr_init(&attr);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+
+	for (xfer_len = 64; xfer_len <= 4*1024; xfer_len <<= 2) {
+		ret = pthread_create(&send_thread, &attr, rdzv_fc_sender,
+				     (void *)xfer_len);
+		cr_assert_eq(ret, 0);
+
+		ret = pthread_create(&recv_thread, &attr, rdzv_fc_recver,
+				     (void *)xfer_len);
+		cr_assert_eq(ret, 0);
+
+		ret = pthread_join(recv_thread, NULL);
+		cr_assert_eq(ret, 0);
+
+		ret = pthread_join(send_thread, NULL);
+		cr_assert_eq(ret, 0);
+
+		printf("%ld byte Sends complete\n", xfer_len);
+	}
+
+	pthread_attr_destroy(&attr);
+}

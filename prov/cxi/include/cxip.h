@@ -528,6 +528,8 @@ struct cxip_req_rdzv_src {
 
 struct cxip_req_search {
 	struct cxip_rxc *rxc;
+	bool complete;
+	int puts_pending;
 };
 
 /**
@@ -679,26 +681,20 @@ struct cxip_cntr {
 	bool wb_pending;
 };
 
-/**
- * Unexpected-Send buffer
- *
- * Support structure.
- *
- * Acts as a record of an unexpected send. Contains the fields from a Put event
- * necessary to correlate the send with an Overflow event.
- */
 struct cxip_ux_send {
-	struct dlist_entry ux_entry;		// UX event list entry
+	struct dlist_entry rxc_entry;
+	struct cxip_req *oflow_req;
+	union c_event put_ev;
+};
+
+struct cxip_deferred_event {
+	struct dlist_entry rxc_entry;
 	struct cxip_req *req;
-	uint64_t start;
-	uint32_t initiator;
-	uint32_t rdzv_id;
-	uint32_t rdzv_lac;
-	uint64_t src_offset;
-	uint32_t rlen;
-	uint32_t mlen;
-	union cxip_match_bits mb;
-	uint64_t data;
+	union c_event ev;
+	uint64_t mrecv_start;
+	uint32_t mrecv_len;
+
+	struct cxip_ux_send *ux_send;
 };
 
 /**
@@ -766,10 +762,7 @@ struct cxip_rxc {
 	int oflow_buf_size;
 	int oflow_bufs_max;
 	struct dlist_entry oflow_bufs;		// Overflow buffers
-	struct dlist_entry ux_sends;		// UX sends records
-	struct dlist_entry ux_recvs;		// UX recv records
-	struct dlist_entry ux_rdzv_sends;	// UX RDZV send records
-	struct dlist_entry ux_rdzv_recvs;	// UX RDZV recv records
+	struct dlist_entry deferred_events;
 
 	/* Long eager send handling */
 	ofi_atomic32_t sink_le_linked;

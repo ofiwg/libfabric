@@ -383,10 +383,7 @@ struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr, void *context,
 	ofi_atomic_initialize32(&rxc->oflow_bufs_linked, 0);
 	ofi_atomic_initialize32(&rxc->oflow_bufs_in_use, 0);
 	dlist_init(&rxc->oflow_bufs);
-	dlist_init(&rxc->ux_sends);
-	dlist_init(&rxc->ux_recvs);
-	dlist_init(&rxc->ux_rdzv_sends);
-	dlist_init(&rxc->ux_rdzv_recvs);
+	dlist_init(&rxc->deferred_events);
 	ofi_atomic_initialize32(&rxc->sink_le_linked, 0);
 	dlist_init(&rxc->fc_drops);
 	dlist_init(&rxc->msg_queue);
