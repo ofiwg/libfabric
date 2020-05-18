@@ -224,6 +224,18 @@ int64_t rxr_pkt_req_cq_data(struct rxr_pkt_entry *pkt_entry)
 	return cq_data_hdr->cq_data;
 }
 
+size_t rxr_pkt_req_max_header_size(int pkt_type)
+{
+	int max_hdr_size = REQ_INF_LIST[pkt_type].base_hdr_size
+		+ sizeof(struct rxr_req_opt_raw_addr_hdr)
+		+ sizeof(struct rxr_req_opt_cq_data_hdr);
+
+	if (pkt_type == RXR_EAGER_RTW_PKT || pkt_type == RXR_LONG_RTW_PKT)
+		max_hdr_size += RXR_IOV_LIMIT * sizeof(struct fi_rma_iov);
+
+	return max_hdr_size;
+}
+
 size_t rxr_pkt_req_max_data_size(struct rxr_ep *ep, fi_addr_t addr, int pkt_type)
 {
 	struct rxr_peer *peer;
@@ -236,14 +248,7 @@ size_t rxr_pkt_req_max_data_size(struct rxr_ep *ep, fi_addr_t addr, int pkt_type
 		return rxr_env.shm_max_medium_size;
 	}
 
-	int max_hdr_size = REQ_INF_LIST[pkt_type].base_hdr_size
-		+ sizeof(struct rxr_req_opt_raw_addr_hdr)
-		+ sizeof(struct rxr_req_opt_cq_data_hdr);
-
-	if (pkt_type == RXR_EAGER_RTW_PKT || pkt_type == RXR_LONG_RTW_PKT)
-		max_hdr_size += RXR_IOV_LIMIT * sizeof(struct fi_rma_iov);
-
-	return ep->mtu_size - max_hdr_size;
+	return ep->mtu_size - rxr_pkt_req_max_header_size(pkt_type);
 }
 
 static

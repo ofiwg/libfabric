@@ -295,6 +295,8 @@ static int efa_alloc_fid_nic(struct fi_info *fi, struct efa_context *ctx,
 	int name_len;
 	char *dbdf;
 	int ret;
+	int max_hdr_size = 0;
+	int pkt_type = RXR_REQ_PKT_BEGIN;
 
 	/* Sets nic ops and allocates basic structure */
 	fi->nic = ofi_nic_dup(NULL);
@@ -427,7 +429,15 @@ static int efa_alloc_fid_nic(struct fi_info *fi, struct efa_context *ctx,
 
 	efa_addr_to_str(src_addr, link_attr->address);
 
-	link_attr->mtu = port_attr->max_msg_sz;
+	while (pkt_type < RXR_EXTRA_REQ_PKT_END) {
+		max_hdr_size = MAX(max_hdr_size,
+				rxr_pkt_req_max_header_size(pkt_type));
+		if (pkt_type == RXR_BASELINE_REQ_PKT_END)
+			pkt_type = RXR_EXTRA_REQ_PKT_BEGIN;
+		else
+			pkt_type += 1;
+	}
+	link_attr->mtu = port_attr->max_msg_sz - max_hdr_size;
 
 	link_attr->speed = 0;
 
