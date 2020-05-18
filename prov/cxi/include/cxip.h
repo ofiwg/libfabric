@@ -183,12 +183,14 @@ struct cxip_addr {
 			uint32_t pid		: C_DFA_PID_BITS_MAX;
 			uint32_t nic		: C_DFA_NIC_BITS;
 			uint32_t valid		: 1;
+			uint32_t multicast	: 1;
 		};
 		uint32_t raw;
 	};
 };
 
-#define CXIP_ADDR_EQUAL(a, b) ((a).nic == (b).nic && (a).pid == (b).pid)
+#define CXIP_ADDR_EQUAL(a, b) ((a).nic == (b).nic && (a).pid == (b).pid && \
+	(a).multicast == (b).multicast)
 
 #define CXIP_AV_ADDR_IDX(av, fi_addr) ((uint64_t)fi_addr & av->mask)
 #define CXIP_AV_ADDR_RXC(av, fi_addr) \

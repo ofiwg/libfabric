@@ -745,3 +745,47 @@ Test(av, insertsvc)
 	test_addrs_fini();
 	cxit_destroy_av();
 }
+
+Test(av, insertmc)
+{
+	struct cxip_addr mc_addr, lookup;
+	size_t addrlen;
+	fi_addr_t fi_addr;
+	uint32_t mcbits;
+	int ret;
+
+	cxit_create_av();
+	test_addrs_init();
+
+	mcbits = rand() & ((1 << C_DFA_MULTICAST_ID_BITS) - 1);
+	mc_addr.pid = 5;	// arbitrary
+	mc_addr.nic = mcbits;
+	ret = fi_av_insert(cxit_av, &mc_addr, 1, &fi_addr, FI_MULTICAST,
+			   NULL);
+	cr_assert(ret == 1, "fi_av_insert addr=%08x failed: ret = %d",
+		  mc_addr.raw, ret);
+
+	addrlen = sizeof(lookup);
+	ret = fi_av_lookup(cxit_av, fi_addr, &lookup, &addrlen);
+	cr_assert(ret == 0, "fi_av_lookup addr %ld failed: ret = %d",
+		  fi_addr, ret);
+	cr_assert(CXIP_ADDR_EQUAL(mc_addr, lookup),
+		  "fi_av_lookup addr %ld failed: %08x != %08x",
+		  fi_addr, mc_addr.raw, lookup.raw);
+	cr_assert(lookup.multicast,
+		  "fi_av_lookup addr %ld not multicast: %08x",
+		  fi_addr, lookup.raw);
+
+	ret = fi_av_remove(cxit_av, &fi_addr, 1, 0);
+	cr_assert(ret == 0, "fi_av_remove addr %ld failed: ret = %d",
+		  fi_addr, ret);
+	ret = fi_av_lookup(cxit_av, fi_addr, &lookup, &addrlen);
+	cr_assert(ret == -FI_EINVAL,
+		  "fi_av_lookup %ld wrong error after remove: %d",
+		  fi_addr, ret);
+
+	test_addrs_fini();
+	cxit_destroy_av();
+}
+
+
