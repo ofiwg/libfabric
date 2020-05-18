@@ -74,20 +74,10 @@ static int rxm_finish_buf_recv(struct rxm_rx_buf *rx_buf)
 
 	if ((rx_buf->pkt.ctrl_hdr.type == rxm_ctrl_seg) &&
 	    rxm_sar_get_seg_type(&rx_buf->pkt.ctrl_hdr) != RXM_SAR_SEG_FIRST) {
-		rx_buf->repost = 0;
 		dlist_insert_tail(&rx_buf->unexp_msg.entry,
 				  &rx_buf->conn->sar_deferred_rx_msg_list);
-		rx_buf = rxm_rx_buf_alloc(rx_buf->ep, rx_buf->msg_ep, 1);
-		if (!rx_buf) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
-				"ran out of buffers from RX buffer pool\n");
-			return -FI_ENOMEM;
-		}
-
-		dlist_insert_tail(&rx_buf->repost_entry,
-				  &rx_buf->ep->repost_ready_list);
-
-		return 0;
+		// repost a new buffer immediately while SAR takes some time to complete
+		return rxm_rx_repost_new(rx_buf);
 	}
 
 	flags = rxm_cq_get_rx_comp_and_op_flags(rx_buf);
@@ -452,24 +442,34 @@ rxm_cq_rndv_read_prepare_deferred(struct rxm_deferred_tx_entry **def_tx_entry,
 	return 0;
 }
 
+int rxm_rx_repost_new(struct rxm_rx_buf *rx_buf)
+{
+	struct rxm_rx_buf *new_rx_buf;
+	if (rx_buf->repost) {
+		rx_buf->repost = 0;
+		new_rx_buf = rxm_rx_buf_alloc(rx_buf->ep, rx_buf->msg_ep, 1);
+		if (!new_rx_buf)
+			return -FI_ENOMEM;
+
+		dlist_insert_tail(&new_rx_buf->repost_entry,
+				  &new_rx_buf->ep->repost_ready_list);
+	}
+	return FI_SUCCESS;
+}
+
 ssize_t rxm_cq_handle_rndv(struct rxm_rx_buf *rx_buf)
 {
 	size_t i, index = 0, offset = 0, count, total_recv_len;
 	struct iovec iov[RXM_IOV_LIMIT];
 	void *desc[RXM_IOV_LIMIT];
-	struct rxm_rx_buf *new_rx_buf;
 	int ret = 0;
 
-	rx_buf->repost = 0;
 
 	/* En-queue new rx buf to be posted ASAP so that we don't block any
-	 * incoming messages. RNDV processing can take a while. */
-	new_rx_buf = rxm_rx_buf_alloc(rx_buf->ep, rx_buf->msg_ep, 1);
-	if (!new_rx_buf)
-		return -FI_ENOMEM;
-
-	dlist_insert_tail(&new_rx_buf->repost_entry,
-			  &new_rx_buf->ep->repost_ready_list);
+	* incoming messages. RNDV processing can take a while. */
+	ret = rxm_rx_repost_new(rx_buf);
+	if (ret)
+		return ret;
 
 	if (!rx_buf->conn) {
 		assert(rx_buf->ep->srx_ctx);
@@ -610,8 +610,6 @@ rxm_cq_match_rx_buf(struct rxm_rx_buf *rx_buf,
 		    struct rxm_recv_match_attr *match_attr)
 {
 	struct dlist_entry *entry;
-	struct rxm_ep *rxm_ep;
-	struct fid_ep *msg_ep;
 
 	entry = dlist_remove_first_match(&recv_queue->recv_list,
 					 recv_queue->match_recv, match_attr);
@@ -625,23 +623,13 @@ rxm_cq_match_rx_buf(struct rxm_rx_buf *rx_buf,
 	FI_DBG(&rxm_prov, FI_LOG_CQ, "Enqueueing msg to unexpected msg queue\n");
 	rx_buf->unexp_msg.addr = match_attr->addr;
 	rx_buf->unexp_msg.tag = match_attr->tag;
-	rx_buf->repost = 0;
 
 	dlist_insert_tail(&rx_buf->unexp_msg.entry,
 			  &recv_queue->unexp_msg_list);
 
-	msg_ep = rx_buf->msg_ep;
-	rxm_ep = rx_buf->ep;
-
-	rx_buf = rxm_rx_buf_alloc(rxm_ep, msg_ep, 1);
-	if (!rx_buf) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
-			"ran out of buffers from RX buffer pool\n");
-		return -FI_ENOMEM;
-	}
-
-	dlist_insert_tail(&rx_buf->repost_entry, &rxm_ep->repost_ready_list);
-	return 0;
+	// repost a new buffer now since we don't know when the unexpected
+	// buffer will be consumed
+	return rxm_rx_repost_new(rx_buf);
 }
 
 static ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
@@ -698,7 +686,7 @@ static ssize_t rxm_sar_handle_segment(struct rxm_rx_buf *rx_buf)
 		return -FI_EOTHER;
 
 	FI_DBG(&rxm_prov, FI_LOG_CQ,
-	       "Got incoming recv with msg_id: 0x%" PRIx64 "for conn - %p\n",
+	       "Got incoming recv with msg_id: 0x%" PRIx64 " for conn - %p\n",
 	       rx_buf->pkt.ctrl_hdr.msg_id, rx_buf->conn);
 	sar_entry = dlist_find_first_match(&rx_buf->conn->sar_rx_msg_list,
 					   rxm_sar_match_msg_id,
