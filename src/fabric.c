@@ -555,7 +555,7 @@ static void ofi_reg_dl_prov(const char *lib)
 
 	dlhandle = dlopen(lib, RTLD_NOW);
 	if (dlhandle == NULL) {
-		FI_WARN(&core_prov, FI_LOG_CORE,
+		FI_DBG(&core_prov, FI_LOG_CORE,
 			"dlopen(%s): %s\n", lib, dlerror());
 		return;
 	}
