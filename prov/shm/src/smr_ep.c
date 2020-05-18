@@ -331,6 +331,7 @@ static int smr_ep_close(struct fid *fid)
 	smr_recv_fs_free(ep->recv_fs);
 	smr_unexp_fs_free(ep->unexp_fs);
 	smr_pend_fs_free(ep->pend_fs);
+	free((void *)ep->name);
 	free(ep);
 	return 0;
 }
