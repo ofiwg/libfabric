@@ -382,7 +382,7 @@ static ssize_t rxm_cq_copy_seg_data(struct rxm_rx_buf *rx_buf, int *done)
 	return ret;
 }
 
-ssize_t rxm_cq_handle_seg_data(struct rxm_rx_buf *rx_buf)
+static ssize_t rxm_handle_seg_data(struct rxm_rx_buf *rx_buf)
 {
 	struct rxm_recv_entry *recv_entry;
 	struct rxm_conn *conn;
@@ -596,7 +596,7 @@ ssize_t rxm_cq_handle_rx_buf(struct rxm_rx_buf *rx_buf)
 	case rxm_ctrl_rndv:
 		return rx_buf->ep->txrx_ops->handle_rndv_rx(rx_buf);
 	case rxm_ctrl_seg:
-		return rx_buf->ep->txrx_ops->handle_seg_data_rx(rx_buf);
+		return rxm_handle_seg_data(rx_buf);
 	default:
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "Unknown message type\n");
 		assert(0);
@@ -696,7 +696,7 @@ static ssize_t rxm_sar_handle_segment(struct rxm_rx_buf *rx_buf)
 
 	rx_buf->recv_entry = container_of(sar_entry, struct rxm_recv_entry,
 					  sar.entry);
-	return rx_buf->ep->txrx_ops->handle_seg_data_rx(rx_buf);
+	return rxm_handle_seg_data(rx_buf);
 }
 
 static ssize_t rxm_rndv_send_ack_inject(struct rxm_rx_buf *rx_buf)

@@ -500,14 +500,12 @@ static struct rxm_handle_txrx_ops rxm_rx_ops = {
 	.comp_eager_tx = rxm_finish_eager_send,
 	.handle_eager_rx = rxm_cq_handle_eager,
 	.handle_rndv_rx = rxm_cq_handle_rndv,
-	.handle_seg_data_rx = rxm_cq_handle_seg_data,
 };
 
 static struct rxm_handle_txrx_ops rxm_coll_rx_ops = {
 	.comp_eager_tx = rxm_finish_coll_eager_send,
 	.handle_eager_rx = rxm_cq_handle_coll_eager,
 	.handle_rndv_rx = rxm_cq_handle_rndv,
-	.handle_seg_data_rx = rxm_cq_handle_seg_data,
 };
 
 static int rxm_ep_cancel_recv(struct rxm_ep *rxm_ep,
@@ -1056,7 +1054,7 @@ rxm_ep_alloc_rndv_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	struct fid_mr **mr_iov;
 	ssize_t ret;
 	struct rxm_tx_rndv_buf *tx_buf;
-	
+
 	tx_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_RNDV);
 	if (!tx_buf) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
@@ -1144,7 +1142,7 @@ rxm_ep_sar_tx_prepare_segment(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 			      enum rxm_sar_seg_type seg_type, uint64_t *msg_id)
 {
 	struct rxm_tx_sar_buf *tx_buf;
-	
+
 	tx_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_SAR);
 	if (!tx_buf) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
@@ -1460,7 +1458,7 @@ rxm_ep_alloc_deferred_tx_entry(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 			       enum rxm_deferred_tx_entry_type type)
 {
 	struct rxm_deferred_tx_entry *def_tx_entry;
-	
+
 	def_tx_entry = calloc(1, sizeof(*def_tx_entry));
 	if (!def_tx_entry)
 		return NULL;
