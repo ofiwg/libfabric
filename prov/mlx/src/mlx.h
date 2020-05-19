@@ -275,6 +275,9 @@ int mlx_av_open(
 int mlx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		  struct fid_cntr **cntr_fid, void *context);
 
+ssize_t mlx_mrecv_repost(struct mlx_ep *ep,
+		  struct mlx_mrecv_ctx *mctx);
+
 int mlx_ns_is_service_wildcard(void *svc);
 int mlx_ns_service_cmp(void *svc1, void *svc2);
 /* Callbacks */

@@ -152,8 +152,6 @@ static int mlx_cm_getname(
 	return ofi_status;
 }
 
-
-
 struct fi_ops_cm mlx_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
 	.getname = mlx_cm_getname,

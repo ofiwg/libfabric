@@ -111,6 +111,7 @@ static int mlx_ep_setopt(fid_t fid, int level, int optname,
 static int mlx_ep_close(fid_t fid)
 {
 	struct mlx_ep *ep;
+	struct mlx_mrecv_ctx *mrecv_ctx;
 	ucs_status_t status = UCS_OK;
 	void *addr_local = NULL;
 	size_t addr_len_local;
@@ -220,10 +221,8 @@ int mlx_ep_open( struct fid_domain *domain, struct fi_info *info,
 	worker_params.field_mask = UCP_WORKER_PARAM_FIELD_THREAD_MODE;
 	worker_params.thread_mode = UCS_THREAD_MODE_SINGLE;
 	u_domain = container_of( domain, struct mlx_domain, u_domain.domain_fid);
-
 	void *addr_local = NULL;
 	size_t addr_len_local;
-
 
 	ep = (struct mlx_ep *) calloc(1, sizeof (struct mlx_ep));
 	if (!ep) {

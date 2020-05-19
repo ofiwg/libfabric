@@ -186,6 +186,16 @@ static int mlx_getinfo (
 		setenv("UCX_TLS", tls, 0);
 	}
 
+	status = fi_param_get( &mlx_prov, "tls", &tls);
+	if (status != FI_SUCCESS) {
+		mlx_descriptor.use_ns = 0;
+	}
+	status = fi_param_get( &mlx_prov, "ns_port",
+			&mlx_descriptor.ns_port);
+	if (status != FI_SUCCESS) {
+		mlx_descriptor.ns_port = FI_MLX_DEFAULT_NS_PORT;
+	}
+
 	status = fi_param_get( &mlx_prov, "ep_flush",
 			&mlx_descriptor.ep_flush);
 	if (status != FI_SUCCESS) {
@@ -292,10 +302,6 @@ MLX_INI
 			"Output transport-level debug information");
 
 	fi_param_define(&mlx_prov,
-			"ep_flush",FI_PARAM_BOOL,
-			"Use EP flush (Disabled by default)");
-
-	fi_param_define(&mlx_prov,
 			"ns_iface",FI_PARAM_STRING,
 			"Specify IPv4 network interface for MLX provider's name server'");
 
@@ -310,6 +316,14 @@ MLX_INI
 	fi_param_define(&mlx_prov,
 			"tls",FI_PARAM_STRING,
 			"Specifies transports available for MLX provider (Default: auto)");
+			"Output transport-level debug information");
 
+	fi_param_define(&mlx_prov,
+			"ns_port", FI_PARAM_INT,
+			"MLX Name server port");
+
+	fi_param_define(&mlx_prov,
+			"ns_enable",FI_PARAM_BOOL,
+			"Enforce usage of name server for MLX provider");
 	return &mlx_prov;
 }

@@ -160,11 +160,17 @@ static int mlx_av_insert(
 				  (&(((struct sockaddr_in *) addr)[i])),
 				(char**) &ep_params.address) != FI_SUCCESS)
 				break;
+                        if (mlx_descriptor.enable_spawn)
+                                memcpy( &avb_addrs->payload[i*av->addr_len],
+                                        &(((const char *) addr)[i * av->addr_len]), av->addr_len);
 		} else {
+			if (mlx_descriptor.enable_spawn) {
+				memcpy( &avb_addrs->payload[i*av->addr_len],
+					&(((const char *) addr)[i * av->addr_len]), av->addr_len);
+			}
 			ep_params.address = (const ucp_address_t *)
 				(&(((const char *) addr)[i * av->addr_len]));
 		}
-
 		ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
 		FI_WARN(&mlx_prov, FI_LOG_CORE,
 			"Try to insert address #%zd, offset=%zd (size=%zd)"
@@ -306,6 +312,8 @@ int mlx_av_open(
 	av->async = is_async;
 	av->type = type;
 	av->eq = NULL;
+	av->addr_blocks = NULL;
+	av->ep_block = NULL;
 
 	if (mlx_descriptor.use_ns) {
 		av->addr_len = sizeof(struct sockaddr_in);
@@ -321,5 +329,3 @@ int mlx_av_open(
 	*fi_av = &av->av;
 	return FI_SUCCESS;
 }
-
-
