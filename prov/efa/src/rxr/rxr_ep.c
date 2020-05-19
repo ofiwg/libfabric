@@ -646,6 +646,9 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 	if (rxr_ep->tx_entry_pool)
 		ofi_bufpool_destroy(rxr_ep->tx_entry_pool);
 
+	if (rxr_ep->map_entry_pool)
+		ofi_bufpool_destroy(rxr_ep->map_entry_pool);
+
 	if (rxr_ep->read_entry_pool)
 		ofi_bufpool_destroy(rxr_ep->read_entry_pool);
 
@@ -751,10 +754,12 @@ static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		if (!rxr_ep->peer)
 			return -FI_ENOMEM;
 
-		rxr_ep->robuf_fs = rxr_robuf_fs_create(av->util_av.count,
-						       NULL, NULL);
-		if (!rxr_ep->robuf_fs)
-			return -FI_ENOMEM;
+		if (rxr_need_sas_ordering(rxr_ep)) {
+			rxr_ep->robuf_fs = rxr_robuf_fs_create(av->util_av.count,
+							       NULL, NULL);
+			if (!rxr_ep->robuf_fs)
+				return -FI_ENOMEM;
+		}
 
 		/* Bind shm provider endpoint & shm av */
 		if (rxr_ep->use_shm) {
@@ -776,7 +781,7 @@ static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 				 * Copy the entire peer array, because we may not be able to make the
 				 * assumption that insertions are always indexed in order in the future.
 				 */
-				for (i = 0; i <= av->util_av.count; i++) {
+				for (i = 0; i < av->util_av.count; i++) {
 					first_ep_peer = rxr_ep_get_peer(rxr_first_ep, i);
 					if (first_ep_peer->is_local) {
 						peer = rxr_ep_get_peer(rxr_ep, i);
@@ -1670,6 +1675,8 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	rxr_ep->core_msg_order = rdm_info->rx_attr->msg_order;
 	rxr_ep->core_inject_size = rdm_info->tx_attr->inject_size;
 	rxr_ep->mtu_size = rdm_info->ep_attr->max_msg_size;
+	fi_freeinfo(rdm_info);
+
 	if (rxr_env.mtu_size > 0 && rxr_env.mtu_size < rxr_ep->mtu_size)
 		rxr_ep->mtu_size = rxr_env.mtu_size;
 

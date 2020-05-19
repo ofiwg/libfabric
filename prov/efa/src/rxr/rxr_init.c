@@ -590,7 +590,7 @@ dgram_info:
 		ret = 0;
 
 	if (!ret && rxr_env.enable_shm_transfer && !shm_info) {
-		shm_info = fi_allocinfo();
+		shm_info = NULL;
 		shm_hints = fi_allocinfo();
 		rxr_set_shm_hints(shm_hints);
 		ret = fi_getinfo(FI_VERSION(1, 8), NULL, NULL,

@@ -265,7 +265,7 @@ int efa_av_insert_addr(struct efa_av *av, struct efa_ep_addr *addr,
 	struct util_ep *util_ep;
 	struct dlist_entry *ep_list_entry;
 	fi_addr_t shm_fiaddr;
-	char smr_name[RXR_MAX_NAME_LENGTH];
+	char smr_name[NAME_MAX];
 
 	fastlock_acquire(&av->util_av.lock);
 
