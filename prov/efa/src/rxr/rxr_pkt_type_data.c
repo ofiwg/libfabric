@@ -31,10 +31,10 @@
  * SOFTWARE.
  */
 
+#include "efa.h"
 #include "rxr.h"
 #include "rxr_msg.h"
 #include "rxr_pkt_cmd.h"
-#include "efa_cuda.h"
 
 /*
  * This function contains data packet related functions
@@ -51,9 +51,11 @@ ssize_t rxr_pkt_send_data(struct rxr_ep *ep,
 {
 	uint64_t payload_size, copied_size;
 	struct rxr_data_pkt *data_pkt;
+	struct efa_mr *desc;
 
 	pkt_entry->x_entry = (void *)tx_entry;
 	pkt_entry->addr = tx_entry->addr;
+	desc = tx_entry->desc[0];
 
 	payload_size = MIN(tx_entry->total_len - tx_entry->bytes_sent,
 			   ep->max_data_payload_size);
@@ -62,7 +64,12 @@ ssize_t rxr_pkt_send_data(struct rxr_ep *ep,
 	data_pkt = (struct rxr_data_pkt *)pkt_entry->pkt;
 	data_pkt->hdr.seg_size = payload_size;
 
-	copied_size = rxr_copy_from_tx(data_pkt->data, payload_size, tx_entry, tx_entry->bytes_sent);
+	copied_size = ofi_copy_from_hmem_iov(data_pkt->data,
+					      payload_size,
+					      tx_entry->iov,
+					      desc ? desc->peer.iface : FI_HMEM_SYSTEM,
+					      tx_entry->iov_count,
+					      tx_entry->bytes_sent);
 	assert(copied_size == payload_size);
 
 	pkt_entry->pkt_size = copied_size + sizeof(struct rxr_data_hdr);
@@ -231,6 +238,7 @@ int rxr_pkt_proc_data(struct rxr_ep *ep,
 		      size_t seg_size)
 {
 	struct rxr_peer *peer;
+	struct efa_mr *desc;
 	int64_t bytes_left, bytes_copied;
 	ssize_t ret = 0;
 
@@ -242,7 +250,13 @@ int rxr_pkt_proc_data(struct rxr_ep *ep,
 	/* we are sinking message for CANCEL/DISCARD entry */
 	if (OFI_LIKELY(!(rx_entry->rxr_flags & RXR_RECV_CANCEL)) &&
 	    rx_entry->cq_entry.len > seg_offset) {
-		bytes_copied = rxr_copy_to_rx(data, seg_size, rx_entry, seg_offset);
+		desc = rx_entry->desc[0];
+		bytes_copied = ofi_copy_to_hmem_iov(rx_entry->iov,
+						    desc ? desc->peer.iface : FI_HMEM_SYSTEM,
+						    rx_entry->iov_count,
+						    seg_offset,
+						    data,
+						    seg_size);
 
 		if (bytes_copied != MIN(seg_size, rx_entry->cq_entry.len - seg_offset)) {
 			FI_WARN(&rxr_prov, FI_LOG_CQ, "wrong size! bytes_copied: %ld\n",

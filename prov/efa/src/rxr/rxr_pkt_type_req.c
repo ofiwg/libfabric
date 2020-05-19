@@ -38,7 +38,6 @@
 #include "rxr_msg.h"
 #include "rxr_pkt_cmd.h"
 #include "rxr_read.h"
-#include "efa_cuda.h"
 
 /*
  * Utility constants and funnctions shared by all REQ packe
@@ -251,10 +250,17 @@ size_t rxr_pkt_req_copy_data(struct rxr_rx_entry *rx_entry,
 			     struct rxr_pkt_entry *pkt_entry,
 			     char *data, size_t data_size)
 {
+	struct efa_mr *desc;
 	size_t bytes_copied;
 	int bytes_left;
 
-	bytes_copied = rxr_copy_to_rx(data, data_size, rx_entry, 0);
+	desc = rx_entry->desc[0];
+	bytes_copied = ofi_copy_to_hmem_iov(rx_entry->iov,
+                                    desc ? desc->peer.iface : FI_HMEM_SYSTEM,
+                                    rx_entry->iov_count,
+                                    0,
+                                    data,
+                                    data_size);
 
 	if (OFI_UNLIKELY(bytes_copied < data_size)) {
 		/* recv buffer is not big enough to hold req, this must be a truncated message */
@@ -289,6 +295,7 @@ void rxr_pkt_data_from_tx(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 	size_t tx_iov_offset;
 	char *data;
 	size_t hdr_size;
+	struct efa_mr *desc;
 
 	assert(pkt_entry->send);
 	hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
@@ -301,11 +308,17 @@ void rxr_pkt_data_from_tx(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 
 	rxr_locate_iov_pos(tx_entry->iov, tx_entry->iov_count, data_offset,
 			   &tx_iov_index, &tx_iov_offset);
+	desc = tx_entry->desc[0];
 	assert(tx_iov_index < tx_entry->iov_count);
 	assert(tx_iov_offset < tx_entry->iov[tx_iov_index].iov_len);
 	if (!tx_entry->desc[tx_iov_index]) {
 		data = (char *)pkt_entry->pkt + hdr_size;
-		data_size = rxr_copy_from_tx(data, data_size, tx_entry, data_offset);
+		data_size = ofi_copy_from_hmem_iov(data,
+                                      data_size,
+                                      tx_entry->iov,
+                                      desc ? desc->peer.iface : FI_HMEM_SYSTEM,
+                                      tx_entry->iov_count,
+                                      data_offset);
 		pkt_entry->send->iov_count = 0;
 		pkt_entry->pkt_size = hdr_size + data_size;
 		return;
@@ -507,7 +520,7 @@ void rxr_pkt_handle_long_rtm_sent(struct rxr_ep *ep,
 	tx_entry->bytes_sent += rxr_pkt_req_data_size(pkt_entry);
 	assert(tx_entry->bytes_sent < tx_entry->total_len);
 
-	if (efa_mr_cache_enable || rxr_ep_is_cuda_mr(tx_entry->desc[0]))
+	if (efa_mr_cache_enable || efa_ep_is_cuda_mr(tx_entry->desc[0]))
 		rxr_prepare_desc_send(rxr_ep_domain(ep), tx_entry);
 }
 
@@ -774,6 +787,7 @@ ssize_t rxr_pkt_proc_matched_medium_rtm(struct rxr_ep *ep,
 					struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_pkt_entry *cur;
+	struct efa_mr *desc;
 	char *data;
 	size_t offset, hdr_size, data_size;
 
@@ -783,7 +797,13 @@ ssize_t rxr_pkt_proc_matched_medium_rtm(struct rxr_ep *ep,
 		data = (char *)cur->pkt + hdr_size;
 		offset = rxr_get_medium_rtm_base_hdr(cur->pkt)->offset;
 		data_size = cur->pkt_size - hdr_size;
-		rxr_copy_to_rx(data, data_size, rx_entry, offset);
+		desc = rx_entry->desc[0];
+		ofi_copy_to_hmem_iov(rx_entry->iov,
+                                    desc ? desc->peer.iface : FI_HMEM_SYSTEM,
+                                    rx_entry->iov_count,
+                                    offset,
+                                    data,
+                                    data_size);
 		rx_entry->bytes_done += data_size;
 		cur = cur->next;
 	}
@@ -1166,7 +1186,7 @@ void rxr_pkt_handle_long_rtw_sent(struct rxr_ep *ep,
 	tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
 	tx_entry->bytes_sent += rxr_pkt_req_data_size(pkt_entry);
 	assert(tx_entry->bytes_sent < tx_entry->total_len);
-	if (efa_mr_cache_enable || rxr_ep_is_cuda_mr(tx_entry->desc[0]))
+	if (efa_mr_cache_enable || efa_ep_is_cuda_mr(tx_entry->desc[0]))
 		rxr_prepare_desc_send(rxr_ep_domain(ep), tx_entry);
 }
 

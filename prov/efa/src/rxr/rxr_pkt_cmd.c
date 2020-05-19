@@ -34,7 +34,6 @@
 #include "efa.h"
 #include "rxr.h"
 #include "rxr_cntr.h"
-#include "efa_cuda.h"
 
 /* This file implements 4 actions that can be applied to a packet:
  *          posting,
@@ -80,7 +79,7 @@ ssize_t rxr_pkt_post_data(struct rxr_ep *rxr_ep,
 	 * For now, always send CUDA buffers through
 	 * rxr_pkt_send_data_desc().
 	 */
-	if (efa_mr_cache_enable || rxr_ep_is_cuda_mr(tx_entry->desc[0]))
+	if (efa_mr_cache_enable || efa_ep_is_cuda_mr(tx_entry->desc[0]))
 		ret = rxr_pkt_send_data_desc(rxr_ep, tx_entry, pkt_entry);
 	else
 		ret = rxr_pkt_send_data(rxr_ep, tx_entry, pkt_entry);

@@ -416,4 +416,9 @@ size_t efa_max_rdma_size(struct fid_ep *ep_fid)
 	return efa_ep->domain->ctx->max_rdma_size;
 }
 
+static inline bool efa_ep_is_cuda_mr(struct efa_mr *efa_mr)
+{
+	return efa_mr ? (efa_mr->peer.iface == FI_HMEM_CUDA): false;
+}
+
 #endif /* EFA_H */
