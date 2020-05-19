@@ -648,7 +648,6 @@ struct rxm_handle_txrx_ops {
 	int (*comp_eager_tx)(struct rxm_ep *rxm_ep,
 				    struct rxm_tx_eager_buf *tx_eager_buf);
 	ssize_t (*handle_eager_rx)(struct rxm_rx_buf *rx_buf);
-	ssize_t (*handle_rndv_rx)(struct rxm_rx_buf *rx_buf);
 };
 
 struct rxm_ep {
@@ -742,7 +741,6 @@ void rxm_ep_do_progress(struct util_ep *util_ep);
 
 ssize_t rxm_cq_handle_eager(struct rxm_rx_buf *rx_buf);
 ssize_t rxm_cq_handle_coll_eager(struct rxm_rx_buf *rx_buf);
-ssize_t rxm_cq_handle_rndv(struct rxm_rx_buf *rx_buf);
 int rxm_finish_eager_send(struct rxm_ep *rxm_ep, struct rxm_tx_eager_buf *tx_eager_buf);
 int rxm_finish_coll_eager_send(struct rxm_ep *rxm_ep, struct rxm_tx_eager_buf *tx_eager_buf);
 

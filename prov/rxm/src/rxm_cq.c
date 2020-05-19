@@ -457,7 +457,7 @@ int rxm_rx_repost_new(struct rxm_rx_buf *rx_buf)
 	return FI_SUCCESS;
 }
 
-ssize_t rxm_cq_handle_rndv(struct rxm_rx_buf *rx_buf)
+static ssize_t rxm_handle_rndv(struct rxm_rx_buf *rx_buf)
 {
 	size_t i, index = 0, offset = 0, count, total_recv_len;
 	struct iovec iov[RXM_IOV_LIMIT];
@@ -594,7 +594,7 @@ ssize_t rxm_cq_handle_rx_buf(struct rxm_rx_buf *rx_buf)
 	case rxm_ctrl_eager:
 		return rx_buf->ep->txrx_ops->handle_eager_rx(rx_buf);
 	case rxm_ctrl_rndv:
-		return rx_buf->ep->txrx_ops->handle_rndv_rx(rx_buf);
+		return rxm_handle_rndv(rx_buf);
 	case rxm_ctrl_seg:
 		return rxm_handle_seg_data(rx_buf);
 	default:

@@ -499,13 +499,11 @@ static struct fi_ops_cm rxm_ops_cm = {
 static struct rxm_handle_txrx_ops rxm_rx_ops = {
 	.comp_eager_tx = rxm_finish_eager_send,
 	.handle_eager_rx = rxm_cq_handle_eager,
-	.handle_rndv_rx = rxm_cq_handle_rndv,
 };
 
 static struct rxm_handle_txrx_ops rxm_coll_rx_ops = {
 	.comp_eager_tx = rxm_finish_coll_eager_send,
 	.handle_eager_rx = rxm_cq_handle_coll_eager,
-	.handle_rndv_rx = rxm_cq_handle_rndv,
 };
 
 static int rxm_ep_cancel_recv(struct rxm_ep *rxm_ep,
