@@ -724,7 +724,7 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 			     struct fid_domain **dom, void *context);
 int rxm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 			 struct fid_cq **cq_fid, void *context);
-ssize_t rxm_cq_handle_rx_buf(struct rxm_rx_buf *rx_buf);
+ssize_t rxm_handle_rx_buf(struct rxm_rx_buf *rx_buf);
 
 int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 			  struct fid_ep **ep, void *context);
@@ -733,14 +733,14 @@ int rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep);
 void rxm_cq_write_error(struct util_cq *cq, struct util_cntr *cntr,
 			void *op_context, int err);
 void rxm_cq_write_error_all(struct rxm_ep *rxm_ep, int err);
-void rxm_cq_read_write_error(struct rxm_ep *rxm_ep);
-ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp);
+void rxm_handle_comp_error(struct rxm_ep *rxm_ep);
+ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp);
 void rxm_ep_progress(struct util_ep *util_ep);
 void rxm_ep_progress_coll(struct util_ep *util_ep);
 void rxm_ep_do_progress(struct util_ep *util_ep);
 
-ssize_t rxm_cq_handle_eager(struct rxm_rx_buf *rx_buf);
-ssize_t rxm_cq_handle_coll_eager(struct rxm_rx_buf *rx_buf);
+ssize_t rxm_handle_eager(struct rxm_rx_buf *rx_buf);
+ssize_t rxm_handle_coll_eager(struct rxm_rx_buf *rx_buf);
 int rxm_finish_eager_send(struct rxm_ep *rxm_ep, struct rxm_tx_eager_buf *tx_eager_buf);
 int rxm_finish_coll_eager_send(struct rxm_ep *rxm_ep, struct rxm_tx_eager_buf *tx_eager_buf);
 
@@ -749,7 +749,6 @@ int rxm_msg_ep_prepost_recv(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep);
 int rxm_ep_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 			enum fi_op op, struct fi_atomic_attr *attr,
 			uint64_t flags);
-int rxm_rx_repost_new(struct rxm_rx_buf *rx_buf);
 
 static inline size_t rxm_ep_max_atomic_size(struct fi_info *info)
 {

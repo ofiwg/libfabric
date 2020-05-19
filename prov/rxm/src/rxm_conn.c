@@ -905,7 +905,7 @@ static int rxm_conn_reprocess_directed_recvs(struct rxm_recv_queue *recv_queue)
 		rx_buf->recv_entry = container_of(entry, struct rxm_recv_entry,
 						  entry);
 
-		ret = rxm_cq_handle_rx_buf(rx_buf);
+		ret = rxm_handle_rx_buf(rx_buf);
 		if (ret) {
 			err_entry.op_context = rx_buf;
 			err_entry.flags = rx_buf->recv_entry->comp_flags;
@@ -1100,14 +1100,14 @@ static void rxm_flush_msg_cq(struct rxm_ep *rxm_ep)
 	do {
 		ret = fi_cq_read(rxm_ep->msg_cq, &comp, 1);
 		if (ret > 0) {
-			ret = rxm_cq_handle_comp(rxm_ep, &comp);
+			ret = rxm_handle_comp(rxm_ep, &comp);
 			if (OFI_UNLIKELY(ret)) {
 				rxm_cq_write_error_all(rxm_ep, ret);
 			} else {
 				ret = 1;
 			}
 		} else if (ret == -FI_EAVAIL) {
-			rxm_cq_read_write_error(rxm_ep);
+			rxm_handle_comp_error(rxm_ep);
 			ret = 1;
 		} else if (ret < 0 && ret != -FI_EAGAIN) {
 			rxm_cq_write_error_all(rxm_ep, ret);
