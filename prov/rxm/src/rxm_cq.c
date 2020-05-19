@@ -592,7 +592,7 @@ ssize_t rxm_cq_handle_rx_buf(struct rxm_rx_buf *rx_buf)
 {
 	switch (rx_buf->pkt.ctrl_hdr.type) {
 	case rxm_ctrl_eager:
-		return rx_buf->ep->txrx_ops->handle_eager_rx(rx_buf);
+		return rx_buf->ep->eager_ops->handle_rx(rx_buf);
 	case rxm_ctrl_rndv:
 		return rxm_handle_rndv(rx_buf);
 	case rxm_ctrl_seg:
@@ -1099,7 +1099,7 @@ ssize_t rxm_cq_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 	switch (RXM_GET_PROTO_STATE(comp->op_context)) {
 	case RXM_TX:
 		tx_eager_buf = comp->op_context;
-		ret = rxm_ep->txrx_ops->comp_eager_tx(rxm_ep, tx_eager_buf);
+		ret = rxm_ep->eager_ops->comp_tx(rxm_ep, tx_eager_buf);
 		ofi_buf_free(tx_eager_buf);
 		return ret;
 	case RXM_CREDIT_TX:
