@@ -1000,11 +1000,15 @@ OFI_DEF_COMPLEX(long_double)
 /* atomics primitives */
 #ifdef HAVE_BUILTIN_ATOMICS
 #define InterlockedAdd32 InterlockedAdd
+#define InterlockedCompareExchange32 InterlockedCompareExchange
 typedef LONG ofi_atomic_int_32_t;
 typedef LONGLONG ofi_atomic_int_64_t;
 
 #define ofi_atomic_add_and_fetch(radix, ptr, val) InterlockedAdd##radix((ofi_atomic_int_##radix##_t *)(ptr), (ofi_atomic_int_##radix##_t)(val))
 #define ofi_atomic_sub_and_fetch(radix, ptr, val) InterlockedAdd##radix((ofi_atomic_int_##radix##_t *)(ptr), -(ofi_atomic_int_##radix##_t)(val))
+#define ofi_atomic_cas_bool(radix, ptr, expected, desired)					\
+	(InterlockedCompareExchange##radix(ptr, desired, expected) == expected)
+
 #endif /* HAVE_BUILTIN_ATOMICS */
 
 static inline int ofi_set_thread_affinity(const char *s)
