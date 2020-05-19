@@ -207,7 +207,6 @@ class MpiTests(Test):
                          fabric, hosts, ofi_build_mode, util_prov)
         self.mpi = mpitype
 
-
     @property
     def cmd(self):
         if (self.mpi == "impi" or self.mpi == "mpich"):
@@ -358,7 +357,76 @@ class MpiTestIMB(MpiTests):
             outputcmd = shlex.split(command + self.rma.imb_cmd)
             common.run_command(outputcmd)
 
+class MpichTestSuite(MpiTests):
+    
+    def __init__(self, jobname, buildno, testname, core_prov, fabric, 
+		     mpitype, hosts, ofi_build_mode, util_prov=None):
+            super().__init__(jobname, buildno, testname, core_prov, fabric,
+			     mpitype,  hosts, ofi_build_mode, util_prov)
+            self.mpichsuitepath =  "{}/{}/mpichsuite/test/mpi/" \
+                                   .format(self.libfab_installpath, self.mpi)
+            self.pwd = os.getcwd()
+
+    def testgroup(self, testgroupname):
         
+        testpath = "{}/{}".format(self.mpichsuitepath, testgroupname)
+        tests = []
+        with open("{}/testlist".format(testpath)) as file:
+            for line in file:
+                if(line[0] != '#' and  line[0] != '\n'):
+                    tests.append((line.rstrip('\n')).split(' '))
+	
+        return tests
+
+    def options(self, nprocs, timeout=None):
+        if (self.mpi == "impi" or self.mpi == "mpich"):
+            if (self.mpi == "impi"):
+                mpiroot = ci_site_config.impi_root
+            else:
+                mpiroot = "{}/mpich".format(self.libfab_installpath)
+            if (self.util_prov):
+                prov = "\"{};{}\"".format(self.core_prov, self.util_prov)
+            else:
+                prov = self.core_prov
+
+            if (timeout != None):
+                os.environ['MPIEXEC_TIMEOUT']=timeout
+
+            opts = "-n {np} -hosts {s},{c} -mpi_root={mpiroot} \
+                    -libfabric_path={installpath}/lib -prov {provider} "  \
+                    .format(np=nprocs, s=self.server, c=self.client, \
+                            provider=prov, mpiroot=mpiroot, \
+                            installpath=self.libfab_installpath)
+
+        elif (self.mpi == "ompi"):
+            print(self.mpi)
+
+        return opts
+
+    @property
+    def execute_condn(self):
+        return True if (self.mpi == 'impi' and  self.core_prov != 'psm2') else False
+ 
+    def execute_cmd(self, testgroupname):
+        print("Running Tests: " + testgroupname)
+        tests = []
+        time = None
+        os.chdir("{}/{}".format(self.mpichsuitepath,testgroupname))
+        tests = self.testgroup(testgroupname)
+        for test in tests:
+            testname = test[0]
+            nprocs = test[1]
+            args = test[2:]
+            for item in args:
+               itemlist =  item.split('=')
+               if (itemlist[0] == 'timelimit'):
+                   time = itemlist[1]
+            opts = self.options(nprocs, timeout=time)
+            testcmd = self.cmd + opts +"./{}".format(testname)
+            outputcmd = shlex.split(testcmd)
+            common.run_command(outputcmd)
+        os.chdir(self.pwd)
+
 class MpiTestStress(MpiTests):
      
     def __init__(self, jobname, buildno, testname, core_prov, fabric, 
