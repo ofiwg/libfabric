@@ -33,6 +33,18 @@ addons:
             - wget
             - abi-compliance-checker
             - abi-dumper
+    coverity_scan:
+      project:
+        name: "ofiwg/libfabric"
+        description: "Libfabric project coverity scans"
+      build_command_prepend: "./autogen.sh; ./configure"
+      build_command: "make -j2"
+      # It might be overkill to run a full scan across the compiler test matrix
+      # for every PR to master. The coverity addon can not selectively run for
+      # certain OSes or compilers. Once a couple runs succeed, change this to a
+      # coverity-scan branch that we push to on-demand during releases or as
+      # needed..
+      branch_pattern: master
 
 env:
     global:
@@ -48,6 +60,8 @@ env:
         #- MAKE_FLAGS="AM_CFLAGS=-Werror"
         - MAKE_FLAGS=
         - ASAN_OPTIONS=detect_leaks=0
+        # Encrypted COVERITY_SCAN_TOKEN
+        - secure: "gDU1pbiuGsuPHezMp0X2DEC9+bBu2F+XDqR93JMkIzHNI7ygQX/kXeJT6ly9MH60paSpIolfQFNA6QotKtpZ62X3a9wrhv3In1viB+EJr1wmsPrKfprI+JfZYevPLTn6LUQM0d2zoclRWNJzY/uldc6bEaXXxDKIaRk8pgmNZR4="
 
 # Brew update GNU Autotools so that autogen can succeed
 before_install:
