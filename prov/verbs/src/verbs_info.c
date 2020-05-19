@@ -534,55 +534,6 @@ static const char *vrb_link_layer_str(uint8_t link_layer)
 	}
 }
 
-static size_t vrb_speed(uint8_t speed, uint8_t width)
-{
-	const size_t gbit_2_bit_coef = 1024 * 1024;
-	size_t width_val, speed_val;
-
-	switch (speed) {
-	case 1:
-		speed_val = (size_t) (2.5 * (float) gbit_2_bit_coef);
-		break;
-	case 2:
-		speed_val = 5 * gbit_2_bit_coef;
-		break;
-	case 4:
-	case 8:
-		speed_val = 8 * gbit_2_bit_coef;
-		break;
-	case 16:
-		speed_val = 14 * gbit_2_bit_coef;
-		break;
-	case 32:
-		speed_val = 25 * gbit_2_bit_coef;
-		break;
-	default:
-		speed_val = 0;
-		break;
-	}
-
-	switch (width) {
-	case 1:
-		width_val = 1;
-		break;
-	case 2:
-		width_val = 4;
-		break;
-	case 4:
-		width_val = 8;
-		break;
-	case 8:
-		width_val = 12;
-		break;
-	default:
-		width_val = 0;
-		break;
-	}
-
-	return width_val * speed_val;
-}
-
-
 static int vrb_get_device_attrs(struct ibv_context *ctx,
 				   struct fi_info *info, uint32_t protocol)
 {
@@ -717,8 +668,8 @@ static int vrb_get_device_attrs(struct ibv_context *ctx,
 
 	mtu_size = vrb_mtu_type_to_len(port_attr.active_mtu);
 	info->nic->link_attr->mtu = (size_t) (mtu_size > 0 ? mtu_size : 0);
-	info->nic->link_attr->speed = vrb_speed(port_attr.active_speed,
-						   port_attr.active_width);
+	info->nic->link_attr->speed = ofi_vrb_speed(port_attr.active_speed,
+						    port_attr.active_width);
 	info->nic->link_attr->state =
 		vrb_pstate_2_lstate(port_attr.state);
 	info->nic->link_attr->network_type =
