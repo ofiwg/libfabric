@@ -430,7 +430,8 @@ static int efa_alloc_fid_nic(struct fi_info *fi, struct efa_context *ctx,
 
 	link_attr->mtu = port_attr->max_msg_sz;
 
-	link_attr->speed = 0;
+	link_attr->speed = ofi_vrb_speed(port_attr->active_speed,
+	                                 port_attr->active_width);
 
 	switch (port_attr->state) {
 	case IBV_PORT_DOWN:
