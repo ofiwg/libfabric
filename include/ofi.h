@@ -366,6 +366,7 @@ static inline uint32_t ofi_xorshift_random(uint32_t val)
 	return val;
 }
 
+size_t ofi_vrb_speed(uint8_t speed, uint8_t width);
 
 #ifdef __cplusplus
 }
