@@ -644,12 +644,10 @@ struct rxm_msg_eq_entry {
 #define RXM_CM_ENTRY_SZ (sizeof(struct fi_eq_cm_entry) + \
 			 sizeof(union rxm_cm_data))
 
-struct rxm_handle_txrx_ops {
-	int (*comp_eager_tx)(struct rxm_ep *rxm_ep,
-				    struct rxm_tx_eager_buf *tx_eager_buf);
-	ssize_t (*handle_eager_rx)(struct rxm_rx_buf *rx_buf);
-	ssize_t (*handle_rndv_rx)(struct rxm_rx_buf *rx_buf);
-	ssize_t (*handle_seg_data_rx)(struct rxm_rx_buf *rx_buf);
+struct rxm_eager_ops {
+	int (*comp_tx)(struct rxm_ep *rxm_ep,
+		       struct rxm_tx_eager_buf *tx_eager_buf);
+	ssize_t (*handle_rx)(struct rxm_rx_buf *rx_buf);
 };
 
 struct rxm_ep {
@@ -685,7 +683,7 @@ struct rxm_ep {
 	struct rxm_recv_queue	recv_queue;
 	struct rxm_recv_queue	trecv_queue;
 
-	struct rxm_handle_txrx_ops	*txrx_ops;
+	struct rxm_eager_ops	*eager_ops;
 };
 
 struct rxm_conn {
@@ -743,8 +741,6 @@ void rxm_ep_do_progress(struct util_ep *util_ep);
 
 ssize_t rxm_cq_handle_eager(struct rxm_rx_buf *rx_buf);
 ssize_t rxm_cq_handle_coll_eager(struct rxm_rx_buf *rx_buf);
-ssize_t rxm_cq_handle_rndv(struct rxm_rx_buf *rx_buf);
-ssize_t rxm_cq_handle_seg_data(struct rxm_rx_buf *rx_buf);
 int rxm_finish_eager_send(struct rxm_ep *rxm_ep, struct rxm_tx_eager_buf *tx_eager_buf);
 int rxm_finish_coll_eager_send(struct rxm_ep *rxm_ep, struct rxm_tx_eager_buf *tx_eager_buf);
 

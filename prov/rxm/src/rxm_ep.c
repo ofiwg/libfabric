@@ -496,18 +496,14 @@ static struct fi_ops_cm rxm_ops_cm = {
 	.join = rxm_join_coll,
 };
 
-static struct rxm_handle_txrx_ops rxm_rx_ops = {
-	.comp_eager_tx = rxm_finish_eager_send,
-	.handle_eager_rx = rxm_cq_handle_eager,
-	.handle_rndv_rx = rxm_cq_handle_rndv,
-	.handle_seg_data_rx = rxm_cq_handle_seg_data,
+static struct rxm_eager_ops def_eager_ops = {
+	.comp_tx = rxm_finish_eager_send,
+	.handle_rx = rxm_cq_handle_eager,
 };
 
-static struct rxm_handle_txrx_ops rxm_coll_rx_ops = {
-	.comp_eager_tx = rxm_finish_coll_eager_send,
-	.handle_eager_rx = rxm_cq_handle_coll_eager,
-	.handle_rndv_rx = rxm_cq_handle_rndv,
-	.handle_seg_data_rx = rxm_cq_handle_seg_data,
+static struct rxm_eager_ops coll_eager_ops = {
+	.comp_tx = rxm_finish_coll_eager_send,
+	.handle_rx = rxm_cq_handle_coll_eager,
 };
 
 static int rxm_ep_cancel_recv(struct rxm_ep *rxm_ep,
@@ -1056,7 +1052,7 @@ rxm_ep_alloc_rndv_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	struct fid_mr **mr_iov;
 	ssize_t ret;
 	struct rxm_tx_rndv_buf *tx_buf;
-	
+
 	tx_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_RNDV);
 	if (!tx_buf) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
@@ -1144,7 +1140,7 @@ rxm_ep_sar_tx_prepare_segment(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 			      enum rxm_sar_seg_type seg_type, uint64_t *msg_id)
 {
 	struct rxm_tx_sar_buf *tx_buf;
-	
+
 	tx_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_SAR);
 	if (!tx_buf) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
@@ -1460,7 +1456,7 @@ rxm_ep_alloc_deferred_tx_entry(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 			       enum rxm_deferred_tx_entry_type type)
 {
 	struct rxm_deferred_tx_entry *def_tx_entry;
-	
+
 	def_tx_entry = calloc(1, sizeof(*def_tx_entry));
 	if (!def_tx_entry)
 		return NULL;
@@ -2756,10 +2752,10 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	if(rxm_ep->rxm_info->caps & FI_COLLECTIVE) {
 		(*ep_fid)->collective = &rxm_ops_collective;
-		rxm_ep->txrx_ops = &rxm_coll_rx_ops;
+		rxm_ep->eager_ops = &coll_eager_ops;
 	} else {
 		(*ep_fid)->collective = &rxm_ops_collective_none;
-		rxm_ep->txrx_ops = &rxm_rx_ops;
+		rxm_ep->eager_ops = &def_eager_ops;
 	}
 
 	if (rxm_ep->util_ep.domain->threading != FI_THREAD_SAFE) {
