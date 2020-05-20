@@ -50,23 +50,20 @@ void tcpx_srx_xfer_release(struct tcpx_rx_ctx *srx_ctx,
 }
 
 struct tcpx_xfer_entry *
-tcpx_srx_next_xfer_entry(struct tcpx_rx_ctx *srx_ctx,
-			struct tcpx_ep *ep, size_t entry_size)
+tcpx_srx_get_entry(struct tcpx_rx_ctx *srx_ctx, struct tcpx_ep *ep)
 {
-	struct tcpx_xfer_entry *xfer_entry = NULL;
+	struct tcpx_xfer_entry *rx_entry = NULL;
 
 	fastlock_acquire(&srx_ctx->lock);
 	if (slist_empty(&srx_ctx->rx_queue))
 		goto out;
 
-	xfer_entry = container_of(srx_ctx->rx_queue.head,
-				  struct tcpx_xfer_entry, entry);
-	xfer_entry->rem_len = ofi_total_iov_len(xfer_entry->iov,
-						xfer_entry->iov_cnt) - entry_size;
+	rx_entry = container_of(srx_ctx->rx_queue.head,
+				struct tcpx_xfer_entry, entry);
 	slist_remove_head(&srx_ctx->rx_queue);
 out:
 	fastlock_release(&srx_ctx->lock);
-	return xfer_entry;
+	return rx_entry;
 }
 
 static ssize_t tcpx_srx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,

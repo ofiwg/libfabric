@@ -297,9 +297,8 @@ void tcpx_srx_xfer_release(struct tcpx_rx_ctx *srx_ctx,
 			   struct tcpx_xfer_entry *xfer_entry);
 
 void tcpx_rx_msg_release(struct tcpx_xfer_entry *rx_entry);
-struct tcpx_xfer_entry *
-tcpx_srx_next_xfer_entry(struct tcpx_rx_ctx *srx_ctx,
-			struct tcpx_ep *ep, size_t entry_size);
+struct tcpx_xfer_entry *tcpx_srx_get_entry(struct tcpx_rx_ctx *srx_ctx,
+					   struct tcpx_ep *ep);
 
 void tcpx_progress_tx(struct tcpx_ep *ep);
 void tcpx_progress_rx(struct tcpx_ep *ep);

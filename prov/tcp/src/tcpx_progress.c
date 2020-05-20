@@ -343,6 +343,21 @@ int tcpx_op_invalid(struct tcpx_ep *tcpx_ep)
 	return -FI_EINVAL;
 }
 
+/* Must hold ep lock */
+struct tcpx_xfer_entry *
+tcpx_rx_get_entry(struct tcpx_ep *ep)
+{
+	struct tcpx_xfer_entry *rx_entry;
+
+	if (slist_empty(&ep->rx_queue))
+		return NULL;
+
+	rx_entry = container_of(ep->rx_queue.head, struct tcpx_xfer_entry,
+				entry);
+	slist_remove_head(&ep->rx_queue);
+	return rx_entry;
+}
+
 static void tcpx_rx_setup(struct tcpx_ep *ep, struct tcpx_xfer_entry *rx_entry,
 			  tcpx_rx_process_fn_t process_fn)
 {
@@ -381,23 +396,16 @@ int tcpx_op_msg(struct tcpx_ep *tcpx_ep)
 	msg_len = (tcpx_ep->cur_rx_msg.hdr.base_hdr.size -
 		   tcpx_ep->cur_rx_msg.hdr.base_hdr.payload_off);
 
-	if (tcpx_ep->srx_ctx){
-		rx_entry = tcpx_srx_next_xfer_entry(tcpx_ep->srx_ctx,
-						    tcpx_ep, msg_len);
+	if (tcpx_ep->srx_ctx) {
+		rx_entry = tcpx_srx_get_entry(tcpx_ep->srx_ctx, tcpx_ep);
 		if (!rx_entry)
 			return -FI_EAGAIN;
 
 		rx_entry->flags |= tcpx_ep->util_ep.rx_op_flags & FI_COMPLETION;
 	} else {
-		if (slist_empty(&tcpx_ep->rx_queue))
+		rx_entry = tcpx_rx_get_entry(tcpx_ep);
+		if (!rx_entry)
 			return -FI_EAGAIN;
-
-		rx_entry = container_of(tcpx_ep->rx_queue.head,
-					struct tcpx_xfer_entry, entry);
-
-		rx_entry->rem_len = ofi_total_iov_len(rx_entry->iov,
-						      rx_entry->iov_cnt) - msg_len;
-		slist_remove_head(&tcpx_ep->rx_queue);
 	}
 
 	memcpy(&rx_entry->hdr, &tcpx_ep->cur_rx_msg.hdr,
@@ -419,6 +427,7 @@ int tcpx_op_msg(struct tcpx_ep *tcpx_ep)
 	if (cur_rx_msg->hdr.base_hdr.flags & OFI_REMOTE_CQ_DATA)
 		rx_entry->flags |= FI_REMOTE_CQ_DATA;
 
+	rx_entry->rem_len = msg_len;
 	tcpx_rx_setup(tcpx_ep, rx_entry, process_rx_entry);
 	return FI_SUCCESS;
 }
