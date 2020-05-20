@@ -427,7 +427,6 @@ int tcpx_op_msg(struct tcpx_ep *tcpx_ep)
 	if (cur_rx_msg->hdr.base_hdr.flags & OFI_REMOTE_CQ_DATA)
 		rx_entry->flags |= FI_REMOTE_CQ_DATA;
 
-	rx_entry->rem_len = msg_len;
 	tcpx_rx_setup(tcpx_ep, rx_entry, tcpx_process_recv);
 	return FI_SUCCESS;
 }
@@ -453,8 +452,6 @@ int tcpx_op_read_req(struct tcpx_ep *tcpx_ep)
 	       (size_t) tcpx_ep->cur_rx_msg.hdr.base_hdr.payload_off);
 	rx_entry->hdr.base_hdr.op_data = TCPX_OP_REMOTE_READ;
 	rx_entry->ep = tcpx_ep;
-	rx_entry->rem_len = (rx_entry->hdr.base_hdr.size -
-			      tcpx_ep->cur_rx_msg.done_len);
 
 	ret = tcpx_validate_rx_rma_data(rx_entry, FI_REMOTE_READ);
 	if (ret) {
@@ -490,8 +487,6 @@ int tcpx_op_write(struct tcpx_ep *tcpx_ep)
 	       (size_t) tcpx_ep->cur_rx_msg.hdr.base_hdr.payload_off);
 	rx_entry->hdr.base_hdr.op_data = TCPX_OP_REMOTE_WRITE;
 	rx_entry->ep = tcpx_ep;
-	rx_entry->rem_len = (rx_entry->hdr.base_hdr.size -
-			      tcpx_ep->cur_rx_msg.done_len);
 
 	ret = tcpx_validate_rx_rma_data(rx_entry, FI_REMOTE_WRITE);
 	if (ret) {
@@ -522,8 +517,6 @@ int tcpx_op_read_rsp(struct tcpx_ep *tcpx_ep)
 	memcpy(&rx_entry->hdr, &tcpx_ep->cur_rx_msg.hdr,
 	       (size_t) tcpx_ep->cur_rx_msg.hdr.base_hdr.payload_off);
 	rx_entry->hdr.base_hdr.op_data = TCPX_OP_READ_RSP;
-	rx_entry->rem_len = (rx_entry->hdr.base_hdr.size -
-			     tcpx_ep->cur_rx_msg.done_len);
 
 	tcpx_rx_setup(tcpx_ep, rx_entry, tcpx_process_remote_read);
 	return FI_SUCCESS;

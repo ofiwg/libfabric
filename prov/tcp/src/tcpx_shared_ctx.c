@@ -116,7 +116,6 @@ static ssize_t tcpx_srx_recv(struct fid_ep *ep, void *buf, size_t len, void *des
 	recv_entry->iov_cnt = 1;
 	recv_entry->iov[0].iov_base = buf;
 	recv_entry->iov[0].iov_len = len;
-	recv_entry->rem_len = len;
 
 	slist_insert_tail(&recv_entry->entry, &srx_ctx->rx_queue);
 unlock:
