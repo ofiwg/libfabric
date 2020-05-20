@@ -498,12 +498,12 @@ static struct fi_ops_cm rxm_ops_cm = {
 
 static struct rxm_eager_ops def_eager_ops = {
 	.comp_tx = rxm_finish_eager_send,
-	.handle_rx = rxm_cq_handle_eager,
+	.handle_rx = rxm_handle_eager,
 };
 
 static struct rxm_eager_ops coll_eager_ops = {
 	.comp_tx = rxm_finish_coll_eager_send,
-	.handle_rx = rxm_cq_handle_coll_eager,
+	.handle_rx = rxm_handle_coll_eager,
 };
 
 static int rxm_ep_cancel_recv(struct rxm_ep *rxm_ep,
@@ -683,11 +683,12 @@ static int rxm_handle_unexp_sar(struct rxm_recv_queue *recv_queue,
 				struct rxm_recv_entry *recv_entry,
 				struct rxm_rx_buf *rx_buf)
 {
+	struct rxm_recv_match_attr match_attr;
 	struct dlist_entry *entry;
 	bool last;
-	ssize_t ret = rxm_cq_handle_rx_buf(rx_buf);
-	struct rxm_recv_match_attr match_attr;
+	ssize_t ret;
 
+	ret = rxm_handle_rx_buf(rx_buf);
 	last = rxm_sar_get_seg_type(&rx_buf->pkt.ctrl_hdr) == RXM_SAR_SEG_LAST;
 	if (ret || last)
 		return ret;
@@ -717,7 +718,7 @@ static int rxm_handle_unexp_sar(struct rxm_recv_queue *recv_queue,
 		dlist_remove(&rx_buf->unexp_msg.entry);
 		last = rxm_sar_get_seg_type(&rx_buf->pkt.ctrl_hdr) ==
 		       RXM_SAR_SEG_LAST;
-		ret = rxm_cq_handle_rx_buf(rx_buf);
+		ret = rxm_handle_rx_buf(rx_buf);
 		if (ret || last)
 			break;
 	}
@@ -849,7 +850,7 @@ rxm_ep_post_mrecv(struct rxm_ep *ep, const struct iovec *iov,
 		cur_iov.iov_len -= recv_entry->total_len;
 
 		if (rx_buf->pkt.ctrl_hdr.type != rxm_ctrl_seg)
-			ret = rxm_cq_handle_rx_buf(rx_buf);
+			ret = rxm_handle_rx_buf(rx_buf);
 		else
 			ret = rxm_handle_unexp_sar(&ep->recv_queue, recv_entry,
 						   rx_buf);
@@ -894,7 +895,7 @@ rxm_ep_post_recv(struct rxm_ep *rxm_ep, const struct iovec *iov,
 	rx_buf->recv_entry = recv_entry;
 
 	if (rx_buf->pkt.ctrl_hdr.type != rxm_ctrl_seg)
-		return rxm_cq_handle_rx_buf(rx_buf);
+		return rxm_handle_rx_buf(rx_buf);
 	else
 		return rxm_handle_unexp_sar(&rxm_ep->recv_queue, recv_entry,
 					    rx_buf);
@@ -944,7 +945,7 @@ rxm_ep_buf_recv(struct rxm_ep *rxm_ep, const struct iovec *iov,
 		recv_entry->comp_flags |= FI_CLAIM;
 
 		rx_buf->recv_entry = recv_entry;
-		ret = rxm_cq_handle_rx_buf(rx_buf);
+		ret = rxm_handle_rx_buf(rx_buf);
 	} else {
 		assert(flags & FI_DISCARD);
 		FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Discarding buffered receive\n");
@@ -1877,7 +1878,7 @@ rxm_ep_post_trecv(struct rxm_ep *rxm_ep, const struct iovec *iov,
 	rx_buf->recv_entry = recv_entry;
 
 	if (rx_buf->pkt.ctrl_hdr.type != rxm_ctrl_seg)
-		return rxm_cq_handle_rx_buf(rx_buf);
+		return rxm_handle_rx_buf(rx_buf);
 	else
 		return rxm_handle_unexp_sar(&rxm_ep->trecv_queue, recv_entry,
 					    rx_buf);
@@ -1968,7 +1969,7 @@ claim:
 		recv_entry->comp_flags |= FI_CLAIM;
 
 	rx_buf->recv_entry = recv_entry;
-	ret = rxm_cq_handle_rx_buf(rx_buf);
+	ret = rxm_handle_rx_buf(rx_buf);
 
 unlock:
 	ofi_ep_lock_release(&rxm_ep->util_ep);
