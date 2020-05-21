@@ -397,9 +397,9 @@ static inline int rxd_match_tag(uint64_t tag, uint64_t ignore, uint64_t match_ta
 }
 
 int rxd_info_to_core(uint32_t version, const struct fi_info *rxd_info,
-		     struct fi_info *core_info);
+		     const struct fi_info *base_info, struct fi_info *core_info);
 int rxd_info_to_rxd(uint32_t version, const struct fi_info *core_info,
-		    struct fi_info *info);
+		    const struct fi_info *base_info, struct fi_info *info);
 
 int rxd_fabric(struct fi_fabric_attr *attr,
 	       struct fid_fabric **fabric, void *context);
@@ -449,7 +449,7 @@ size_t rxd_init_msg(void **ptr, const struct iovec *iov, size_t iov_count,
 		    size_t total_len, size_t avail_len);
 static inline void rxd_check_init_cq_data(void **ptr, struct rxd_x_entry *tx_entry,
 			      		  size_t *max_inline)
-{	
+{
 	if (tx_entry->flags & RXD_REMOTE_CQ_DATA) {
 		rxd_init_data_hdr(ptr, tx_entry);
 		*max_inline -= sizeof(tx_entry->cq_entry.data);
