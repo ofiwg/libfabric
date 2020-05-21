@@ -37,6 +37,7 @@ addons:
       project:
         name: "ofiwg/libfabric"
         description: "Libfabric project coverity scans"
+      notification_email: sean.hefty@intel.com
       build_command_prepend: "./autogen.sh; ./configure"
       build_command: "make -j2"
       # It might be overkill to run a full scan across the compiler test matrix
