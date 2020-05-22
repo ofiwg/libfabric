@@ -50,21 +50,7 @@ enum rxr_pkt_entry_type {
 	RXR_PKT_ENTRY_OOO	    /* entries used to stage out-of-order RTM or RTA */
 };
 
-struct rxr_pkt_entry {
-	/* for rx/tx_entry queued_pkts list */
-	struct dlist_entry entry;
-#if ENABLE_DEBUG
-	/* for tx/rx debug list or posted buf list */
-	struct dlist_entry dbg_entry;
-#endif
-	void *x_entry; /* pointer to rxr rx/tx entry */
-	size_t pkt_type;
-	size_t pkt_size;
-
-	size_t hdr_size;
-	void *raw_addr;
-	uint64_t cq_data;
-
+struct rxr_pkt_sendv {
 	/* Because core EP current only support 2 iov,
 	 * and for the sake of code simplicity, we use 2 iov.
 	 * One for header, and the other for data.
@@ -74,28 +60,50 @@ struct rxr_pkt_entry {
 	int iov_count;
 	struct iovec iov[2];
 	void *desc[2];
+};
+
+struct rxr_pkt_entry {
+	/* for rx/tx_entry queued_pkts list */
+	struct dlist_entry entry;
+#if ENABLE_DEBUG
+	/* for tx/rx debug list or posted buf list */
+	struct dlist_entry dbg_entry;
+#endif
+	void *x_entry; /* pointer to rxr rx/tx entry */
+	size_t pkt_size;
 
 	struct fid_mr *mr;
 	fi_addr_t addr;
-	void *pkt; /* rxr_ctrl_*_pkt, or rxr_data_pkt */
 	enum rxr_pkt_entry_type type;
 	enum rxr_pkt_entry_state state;
-	struct rxr_pkt_entry *next;
+
+	/*
+	 * next is used on receiving end.
+	 * send is used on sending end.
+	 */
+	union {
+		struct rxr_pkt_entry *next;
+		struct rxr_pkt_sendv *send;
+	};
+
 #if ENABLE_DEBUG
-/* pad to cache line size of 64 bytes */
-	uint8_t pad[16];
-#else
-	uint8_t pad[32];
+	/* pad to cache line size of 64 bytes */
+	uint8_t pad[48];
 #endif
+	char pkt[0]; /* rxr_ctrl_*_pkt, or rxr_data_pkt */
 };
 
 static inline void *rxr_pkt_start(struct rxr_pkt_entry *pkt_entry)
 {
-	return (void *)((char *)pkt_entry + sizeof(*pkt_entry));
+	return pkt_entry->pkt;
 }
 
 #if defined(static_assert) && defined(__x86_64__)
-static_assert(sizeof(struct rxr_pkt_entry) == 192, "rxr_pkt_entry check");
+#if ENABLE_DEBUG
+static_assert(sizeof(struct rxr_pkt_entry) == 128, "rxr_pkt_entry check");
+#else
+static_assert(sizeof(struct rxr_pkt_entry) == 64, "rxr_pkt_entry check");
+#endif
 #endif
 
 OFI_DECL_RECVWIN_BUF(struct rxr_pkt_entry*, rxr_robuf, uint32_t);

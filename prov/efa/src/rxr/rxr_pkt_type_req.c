@@ -87,8 +87,11 @@ struct rxr_req_inf REQ_INF_LIST[] = {
 
 size_t rxr_pkt_req_data_size(struct rxr_pkt_entry *pkt_entry)
 {
-	assert(pkt_entry->hdr_size > 0);
-	return pkt_entry->pkt_size - pkt_entry->hdr_size;
+	size_t hdr_size;
+
+	hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
+	assert(hdr_size > 0);
+	return pkt_entry->pkt_size - hdr_size;
 }
 
 void rxr_pkt_init_req_hdr(struct rxr_ep *ep,
@@ -141,7 +144,6 @@ void rxr_pkt_init_req_hdr(struct rxr_ep *ep,
 	}
 
 	pkt_entry->addr = tx_entry->addr;
-	pkt_entry->hdr_size = opt_hdr - (char *)pkt_entry->pkt;
 }
 
 size_t rxr_pkt_req_base_hdr_size(struct rxr_pkt_entry *pkt_entry)
@@ -168,33 +170,58 @@ size_t rxr_pkt_req_base_hdr_size(struct rxr_pkt_entry *pkt_entry)
 	return hdr_size;
 }
 
-void rxr_pkt_proc_req_common_hdr(struct rxr_pkt_entry *pkt_entry)
+void *rxr_pkt_req_raw_addr(struct rxr_pkt_entry *pkt_entry)
 {
 	char *opt_hdr;
 	struct rxr_base_hdr *base_hdr;
+	struct rxr_req_opt_raw_addr_hdr *raw_addr_hdr;
 
 	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
-
 	opt_hdr = (char *)pkt_entry->pkt + rxr_pkt_req_base_hdr_size(pkt_entry);
 	if (base_hdr->flags & RXR_REQ_OPT_RAW_ADDR_HDR) {
-		struct rxr_req_opt_raw_addr_hdr *raw_addr_hdr;
-
 		raw_addr_hdr = (struct rxr_req_opt_raw_addr_hdr *)opt_hdr;
-		pkt_entry->raw_addr = raw_addr_hdr->raw_addr;
-		opt_hdr += sizeof(*raw_addr_hdr) + raw_addr_hdr->addr_len;
-	} else {
-		pkt_entry->raw_addr = NULL;
+		return raw_addr_hdr->raw_addr;
 	}
 
-	if (base_hdr->flags & RXR_REQ_OPT_CQ_DATA_HDR) {
-		struct rxr_req_opt_cq_data_hdr *cq_data_hdr;
+	return NULL;
+}
 
-		cq_data_hdr = (struct rxr_req_opt_cq_data_hdr *)opt_hdr;
-		pkt_entry->cq_data = cq_data_hdr->cq_data;
+size_t rxr_pkt_req_hdr_size(struct rxr_pkt_entry *pkt_entry)
+{
+	char *opt_hdr;
+	struct rxr_base_hdr *base_hdr;
+	struct rxr_req_opt_raw_addr_hdr *raw_addr_hdr;
+
+	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
+	opt_hdr = (char *)pkt_entry->pkt + rxr_pkt_req_base_hdr_size(pkt_entry);
+	if (base_hdr->flags & RXR_REQ_OPT_RAW_ADDR_HDR) {
+		raw_addr_hdr = (struct rxr_req_opt_raw_addr_hdr *)opt_hdr;
+		opt_hdr += sizeof(struct rxr_req_opt_raw_addr_hdr) + raw_addr_hdr->addr_len;
+	}
+
+	if (base_hdr->flags & RXR_REQ_OPT_CQ_DATA_HDR)
 		opt_hdr += sizeof(struct rxr_req_opt_cq_data_hdr);
+
+	return opt_hdr - (char *)pkt_entry->pkt;
+}
+
+int64_t rxr_pkt_req_cq_data(struct rxr_pkt_entry *pkt_entry)
+{
+	char *opt_hdr;
+	struct rxr_base_hdr *base_hdr;
+	struct rxr_req_opt_cq_data_hdr *cq_data_hdr;
+	struct rxr_req_opt_raw_addr_hdr *raw_addr_hdr;
+
+	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
+	opt_hdr = (char *)pkt_entry->pkt + rxr_pkt_req_base_hdr_size(pkt_entry);
+	if (base_hdr->flags & RXR_REQ_OPT_RAW_ADDR_HDR) {
+		raw_addr_hdr = (struct rxr_req_opt_raw_addr_hdr *)opt_hdr;
+		opt_hdr += sizeof(struct rxr_req_opt_raw_addr_hdr) + raw_addr_hdr->addr_len;
 	}
 
-	pkt_entry->hdr_size = opt_hdr - (char *)pkt_entry->pkt;
+	assert(base_hdr->flags & RXR_REQ_OPT_CQ_DATA_HDR);
+	cq_data_hdr = (struct rxr_req_opt_cq_data_hdr *)opt_hdr;
+	return cq_data_hdr->cq_data;
 }
 
 size_t rxr_pkt_req_max_data_size(struct rxr_ep *ep, fi_addr_t addr, int pkt_type)
@@ -252,8 +279,7 @@ size_t rxr_pkt_req_copy_data(struct rxr_rx_entry *rx_entry,
  */
 
 /*
- * this function is called after you have set header in pkt_entry->pkt and
- * pkt_entry->hdr_size
+ * this function is called after you have set header in pkt_entry->pkt
  */
 void rxr_pkt_data_from_tx(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 			  struct rxr_tx_entry *tx_entry, size_t data_offset,
@@ -262,10 +288,14 @@ void rxr_pkt_data_from_tx(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 	int tx_iov_index;
 	size_t tx_iov_offset;
 	char *data;
+	size_t hdr_size;
 
+	assert(pkt_entry->send);
+	hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
+	assert(hdr_size > 0);
 	if (data_size == 0) {
-		pkt_entry->iov_count = 0;
-		pkt_entry->pkt_size = pkt_entry->hdr_size;
+		pkt_entry->send->iov_count = 0;
+		pkt_entry->pkt_size = hdr_size;
 		return;
 	}
 
@@ -273,27 +303,25 @@ void rxr_pkt_data_from_tx(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 			   &tx_iov_index, &tx_iov_offset);
 	assert(tx_iov_index < tx_entry->iov_count);
 	assert(tx_iov_offset < tx_entry->iov[tx_iov_index].iov_len);
-	assert(pkt_entry->hdr_size > 0);
 	if (!tx_entry->desc[tx_iov_index]) {
-		data = (char *)pkt_entry->pkt + pkt_entry->hdr_size;
+		data = (char *)pkt_entry->pkt + hdr_size;
 		data_size = rxr_copy_from_tx(data, data_size, tx_entry, data_offset);
-		pkt_entry->iov_count = 0;
-		pkt_entry->pkt_size = pkt_entry->hdr_size + data_size;
+		pkt_entry->send->iov_count = 0;
+		pkt_entry->pkt_size = hdr_size + data_size;
 		return;
 	}
 
 	/* when desc is available, we use it instead of copying */
 	assert(ep->core_iov_limit >= 2);
-	pkt_entry->iov[0].iov_base = pkt_entry->pkt;
-	pkt_entry->iov[0].iov_len = pkt_entry->hdr_size;
-	pkt_entry->desc[0] = fi_mr_desc(pkt_entry->mr);
+	pkt_entry->send->iov[0].iov_base = pkt_entry->pkt;
+	pkt_entry->send->iov[0].iov_len = hdr_size;
+	pkt_entry->send->desc[0] = fi_mr_desc(pkt_entry->mr);
 
-	pkt_entry->iov[1].iov_base = (char *)tx_entry->iov[tx_iov_index].iov_base + tx_iov_offset;
-	pkt_entry->iov[1].iov_len = MIN(data_size,
-					tx_entry->iov[tx_iov_index].iov_len - tx_iov_offset);
-	pkt_entry->desc[1] = tx_entry->desc[tx_iov_index];
-	pkt_entry->iov_count = 2;
-	pkt_entry->pkt_size = pkt_entry->hdr_size + pkt_entry->iov[1].iov_len;
+	pkt_entry->send->iov[1].iov_base = (char *)tx_entry->iov[tx_iov_index].iov_base + tx_iov_offset;
+	pkt_entry->send->iov[1].iov_len = MIN(data_size, tx_entry->iov[tx_iov_index].iov_len - tx_iov_offset);
+	pkt_entry->send->desc[1] = tx_entry->desc[tx_iov_index];
+	pkt_entry->send->iov_count = 2;
+	pkt_entry->pkt_size = hdr_size + pkt_entry->send->iov[1].iov_len;
 }
 
 void rxr_pkt_init_rtm(struct rxr_ep *ep,
@@ -303,14 +331,14 @@ void rxr_pkt_init_rtm(struct rxr_ep *ep,
 {
 	size_t data_size;
 	struct rxr_rtm_base_hdr *rtm_hdr;
-	/* this function set pkt_entry->hdr_size */
 	rxr_pkt_init_req_hdr(ep, tx_entry, pkt_type, pkt_entry);
 
 	rtm_hdr = (struct rxr_rtm_base_hdr *)pkt_entry->pkt;
 	rtm_hdr->flags |= RXR_REQ_MSG;
 	rtm_hdr->msg_id = tx_entry->msg_id;
 
-	data_size = MIN(tx_entry->total_len - data_offset, ep->mtu_size - pkt_entry->hdr_size);
+	data_size = MIN(tx_entry->total_len - data_offset,
+			ep->mtu_size - rxr_pkt_req_hdr_size(pkt_entry));
 	rxr_pkt_data_from_tx(ep, pkt_entry, tx_entry, data_offset, data_size);
 	pkt_entry->x_entry = tx_entry;
 }
@@ -408,6 +436,7 @@ ssize_t rxr_pkt_init_read_rtm(struct rxr_ep *ep,
 {
 	struct rxr_read_rtm_base_hdr *rtm_hdr;
 	struct fi_rma_iov *read_iov;
+	size_t hdr_size;
 	int err;
 
 	rxr_pkt_init_req_hdr(ep, tx_entry, pkt_type, pkt_entry);
@@ -419,12 +448,13 @@ ssize_t rxr_pkt_init_read_rtm(struct rxr_ep *ep,
 	rtm_hdr->tx_id = tx_entry->tx_id;
 	rtm_hdr->read_iov_count = tx_entry->iov_count;
 
-	read_iov = (struct fi_rma_iov *)((char *)pkt_entry->pkt + pkt_entry->hdr_size);
+	hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
+	read_iov = (struct fi_rma_iov *)((char *)pkt_entry->pkt + hdr_size);
 	err = rxr_read_init_iov(ep, tx_entry, read_iov);
 	if (OFI_UNLIKELY(err))
 		return err;
 
-	pkt_entry->pkt_size = pkt_entry->hdr_size + tx_entry->iov_count * sizeof(struct fi_rma_iov);
+	pkt_entry->pkt_size = hdr_size + tx_entry->iov_count * sizeof(struct fi_rma_iov);
 	return 0;
 }
 
@@ -553,7 +583,7 @@ void rxr_pkt_rtm_init_rx_entry(struct rxr_pkt_entry *pkt_entry,
 	if (base_hdr->flags & RXR_REQ_OPT_CQ_DATA_HDR) {
 		rx_entry->rxr_flags |= RXR_REMOTE_CQ_DATA;
 		rx_entry->cq_entry.flags |= FI_REMOTE_CQ_DATA;
-		rx_entry->cq_entry.data = pkt_entry->cq_data;
+		rx_entry->cq_entry.data = rxr_pkt_req_cq_data(pkt_entry);
 	}
 
 	rx_entry->addr = pkt_entry->addr;
@@ -723,7 +753,7 @@ ssize_t rxr_pkt_proc_matched_read_rtm(struct rxr_ep *ep,
 	struct fi_rma_iov *read_iov;
 
 	rtm_hdr = rxr_get_read_rtm_base_hdr(pkt_entry->pkt);
-	read_iov = (struct fi_rma_iov *)((char *)pkt_entry->pkt + pkt_entry->hdr_size);
+	read_iov = (struct fi_rma_iov *)((char *)pkt_entry->pkt + rxr_pkt_req_hdr_size(pkt_entry));
 
 	rx_entry->tx_id = rtm_hdr->tx_id;
 	rx_entry->rma_iov_count = rtm_hdr->read_iov_count;
@@ -745,13 +775,14 @@ ssize_t rxr_pkt_proc_matched_medium_rtm(struct rxr_ep *ep,
 {
 	struct rxr_pkt_entry *cur;
 	char *data;
-	size_t offset, data_size;
+	size_t offset, hdr_size, data_size;
 
 	cur = pkt_entry;
 	while (cur) {
-		data = (char *)cur->pkt + cur->hdr_size;
+		hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
+		data = (char *)cur->pkt + hdr_size;
 		offset = rxr_get_medium_rtm_base_hdr(cur->pkt)->offset;
-		data_size = cur->pkt_size - cur->hdr_size;
+		data_size = cur->pkt_size - hdr_size;
 		rxr_copy_to_rx(data, data_size, rx_entry, offset);
 		rx_entry->bytes_done += data_size;
 		cur = cur->next;
@@ -779,7 +810,7 @@ ssize_t rxr_pkt_proc_matched_rtm(struct rxr_ep *ep,
 {
 	int pkt_type;
 	char *data;
-	size_t data_size, bytes_left;
+	size_t hdr_size, data_size, bytes_left;
 	ssize_t ret;
 
 	assert(rx_entry->state == RXR_RX_MATCHED);
@@ -801,8 +832,9 @@ ssize_t rxr_pkt_proc_matched_rtm(struct rxr_ep *ep,
 	if (pkt_type == RXR_MEDIUM_MSGRTM_PKT || pkt_type == RXR_MEDIUM_TAGRTM_PKT)
 		return rxr_pkt_proc_matched_medium_rtm(ep, rx_entry, pkt_entry);
 
-	data = (char *)pkt_entry->pkt + pkt_entry->hdr_size;
-	data_size = pkt_entry->pkt_size - pkt_entry->hdr_size;
+	hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
+	data = (char *)pkt_entry->pkt + hdr_size;
+	data_size = pkt_entry->pkt_size - hdr_size;
 	bytes_left = rxr_pkt_req_copy_data(rx_entry, pkt_entry,
 					   data, data_size);
 	if (!bytes_left) {
@@ -1034,6 +1066,7 @@ void rxr_pkt_init_rtw_data(struct rxr_ep *ep,
 			   struct fi_rma_iov *rma_iov)
 {
 	char *data;
+	size_t hdr_size;
 	size_t data_size;
 	int i;
 
@@ -1043,11 +1076,12 @@ void rxr_pkt_init_rtw_data(struct rxr_ep *ep,
 		rma_iov[i].key = tx_entry->rma_iov[i].key;
 	}
 
-	data = (char *)pkt_entry->pkt + pkt_entry->hdr_size;
-	data_size = ofi_copy_from_iov(data, ep->mtu_size - pkt_entry->hdr_size,
+	hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
+	data = (char *)pkt_entry->pkt + hdr_size;
+	data_size = ofi_copy_from_iov(data, ep->mtu_size - hdr_size,
 				      tx_entry->iov, tx_entry->iov_count, 0);
 
-	pkt_entry->pkt_size = pkt_entry->hdr_size + data_size;
+	pkt_entry->pkt_size = hdr_size + data_size;
 	pkt_entry->x_entry = tx_entry;
 }
 
@@ -1090,6 +1124,7 @@ ssize_t rxr_pkt_init_read_rtw(struct rxr_ep *ep,
 {
 	struct rxr_read_rtw_hdr *rtw_hdr;
 	struct fi_rma_iov *rma_iov, *read_iov;
+	size_t hdr_size;
 	int i, err;
 
 	assert(tx_entry->op == ofi_op_write);
@@ -1108,12 +1143,13 @@ ssize_t rxr_pkt_init_read_rtw(struct rxr_ep *ep,
 		rma_iov[i].key = tx_entry->rma_iov[i].key;
 	}
 
-	read_iov = (struct fi_rma_iov *)((char *)pkt_entry->pkt + pkt_entry->hdr_size);
+	hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
+	read_iov = (struct fi_rma_iov *)((char *)pkt_entry->pkt + hdr_size);
 	err = rxr_read_init_iov(ep, tx_entry, read_iov);
 	if (OFI_UNLIKELY(err))
 		return err;
 
-	pkt_entry->pkt_size = pkt_entry->hdr_size + tx_entry->iov_count * sizeof(struct fi_rma_iov);
+	pkt_entry->pkt_size = hdr_size + tx_entry->iov_count * sizeof(struct fi_rma_iov);
 	return 0;
 }
 
@@ -1179,7 +1215,7 @@ struct rxr_rx_entry *rxr_pkt_alloc_rtw_rx_entry(struct rxr_ep *ep,
 	if (base_hdr->flags & RXR_REQ_OPT_CQ_DATA_HDR) {
 		rx_entry->rxr_flags |= RXR_REMOTE_CQ_DATA;
 		rx_entry->cq_entry.flags |= FI_REMOTE_CQ_DATA;
-		rx_entry->cq_entry.data = pkt_entry->cq_data;
+		rx_entry->cq_entry.data = rxr_pkt_req_cq_data(pkt_entry);
 	}
 
 	rx_entry->addr = pkt_entry->addr;
@@ -1193,7 +1229,7 @@ void rxr_pkt_handle_eager_rtw_recv(struct rxr_ep *ep,
 	struct rxr_rx_entry *rx_entry;
 	struct rxr_eager_rtw_hdr *rtw_hdr;
 	char *data;
-	size_t data_size;
+	size_t data_size, hdr_size;
 	ssize_t err, bytes_left;
 
 	rx_entry = rxr_pkt_alloc_rtw_rx_entry(ep, pkt_entry);
@@ -1222,8 +1258,9 @@ void rxr_pkt_handle_eager_rtw_recv(struct rxr_ep *ep,
 	rx_entry->cq_entry.buf = rx_entry->iov[0].iov_base;
 	rx_entry->total_len = rx_entry->cq_entry.len;
 
-	data = (char *)pkt_entry->pkt + pkt_entry->hdr_size;
-	data_size = pkt_entry->pkt_size - pkt_entry->hdr_size;
+	hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
+	data = (char *)pkt_entry->pkt + hdr_size;
+	data_size = pkt_entry->pkt_size - hdr_size;
 	bytes_left = rxr_pkt_req_copy_data(rx_entry, pkt_entry, data, data_size);
 	if (bytes_left != 0) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "Eager RTM bytes_left is %ld, which should be 0.",
@@ -1249,7 +1286,7 @@ void rxr_pkt_handle_long_rtw_recv(struct rxr_ep *ep,
 	struct rxr_rx_entry *rx_entry;
 	struct rxr_long_rtw_hdr *rtw_hdr;
 	char *data;
-	size_t data_size;
+	size_t hdr_size, data_size;
 	ssize_t err, bytes_left;
 
 	rx_entry = rxr_pkt_alloc_rtw_rx_entry(ep, pkt_entry);
@@ -1278,8 +1315,9 @@ void rxr_pkt_handle_long_rtw_recv(struct rxr_ep *ep,
 	rx_entry->cq_entry.buf = rx_entry->iov[0].iov_base;
 	rx_entry->total_len = rx_entry->cq_entry.len;
 
-	data = (char *)pkt_entry->pkt + pkt_entry->hdr_size;
-	data_size = pkt_entry->pkt_size - pkt_entry->hdr_size;
+	hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
+	data = (char *)pkt_entry->pkt + hdr_size;
+	data_size = pkt_entry->pkt_size - hdr_size;
 	bytes_left = rxr_pkt_req_copy_data(rx_entry, pkt_entry, data, data_size);
 	if (OFI_UNLIKELY(bytes_left <= 0)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "Long RTM bytes_left is %ld, which should be > 0.",
@@ -1314,6 +1352,7 @@ void rxr_pkt_handle_read_rtw_recv(struct rxr_ep *ep,
 	struct rxr_rx_entry *rx_entry;
 	struct rxr_read_rtw_hdr *rtw_hdr;
 	struct fi_rma_iov *read_iov;
+	size_t hdr_size;
 	ssize_t err;
 
 	rx_entry = rxr_pkt_alloc_rtw_rx_entry(ep, pkt_entry);
@@ -1342,7 +1381,8 @@ void rxr_pkt_handle_read_rtw_recv(struct rxr_ep *ep,
 	rx_entry->cq_entry.buf = rx_entry->iov[0].iov_base;
 	rx_entry->total_len = rx_entry->cq_entry.len;
 
-	read_iov = (struct fi_rma_iov *)((char *)pkt_entry->pkt + pkt_entry->hdr_size);
+	hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
+	read_iov = (struct fi_rma_iov *)((char *)pkt_entry->pkt + hdr_size);
 	rx_entry->addr = pkt_entry->addr;
 	rx_entry->tx_id = rtw_hdr->tx_id;
 	rx_entry->rma_iov_count = rtw_hdr->read_iov_count;
@@ -1385,7 +1425,7 @@ void rxr_pkt_init_rtr(struct rxr_ep *ep,
 		rtr_hdr->rma_iov[i].key = tx_entry->rma_iov[i].key;
 	}
 
-	pkt_entry->pkt_size = pkt_entry->hdr_size;
+	pkt_entry->pkt_size = rxr_pkt_req_hdr_size(pkt_entry);
 	pkt_entry->x_entry = tx_entry;
 }
 
@@ -1506,7 +1546,7 @@ ssize_t rxr_pkt_init_rta(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	struct fi_rma_iov *rma_iov;
 	struct rxr_rta_hdr *rta_hdr;
 	char *data;
-	size_t data_size;
+	size_t hdr_size, data_size;
 	int i;
 
 	rta_hdr = (struct rxr_rta_hdr *)pkt_entry->pkt;
@@ -1524,11 +1564,12 @@ ssize_t rxr_pkt_init_rta(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 		rma_iov[i].key = tx_entry->rma_iov[i].key;
 	}
 
-	data = (char *)pkt_entry->pkt + pkt_entry->hdr_size;
-	data_size = ofi_copy_from_iov(data, ep->mtu_size - pkt_entry->hdr_size,
+	hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
+	data = (char *)pkt_entry->pkt + hdr_size;
+	data_size = ofi_copy_from_iov(data, ep->mtu_size - hdr_size,
 				      tx_entry->iov, tx_entry->iov_count, 0);
 
-	pkt_entry->pkt_size = pkt_entry->hdr_size + data_size;
+	pkt_entry->pkt_size = hdr_size + data_size;
 	pkt_entry->x_entry = tx_entry;
 	return 0;
 }
@@ -1581,14 +1622,15 @@ int rxr_pkt_proc_write_rta(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 	struct rxr_rta_hdr *rta_hdr;
 	char *data;
 	int iov_count, op, dt, i;
-	size_t dtsize, offset;
+	size_t dtsize, offset, hdr_size;
 
 	rta_hdr = (struct rxr_rta_hdr *)pkt_entry->pkt;
 	op = rta_hdr->atomic_op;
 	dt = rta_hdr->atomic_datatype;
 	dtsize = ofi_datatype_size(dt);
 	
-	data = (char *)pkt_entry->pkt + pkt_entry->hdr_size;
+	hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
+	data = (char *)pkt_entry->pkt + hdr_size;
 	iov_count = rta_hdr->rma_iov_count;
 	rxr_rma_verified_copy_iov(ep, rta_hdr->rma_iov, iov_count, FI_REMOTE_WRITE, iov);
 
@@ -1667,7 +1709,7 @@ int rxr_pkt_proc_fetch_rta(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
  	dt = rx_entry->atomic_hdr.datatype;	
 	dtsize = ofi_datatype_size(rx_entry->atomic_hdr.datatype);
 
-	data = (char *)pkt_entry->pkt + pkt_entry->hdr_size;
+	data = (char *)pkt_entry->pkt + rxr_pkt_req_hdr_size(pkt_entry);
 	rx_entry->atomrsp_buf = (char *)rx_entry->atomrsp_pkt->pkt + sizeof(struct rxr_atomrsp_hdr);
 
 	offset = 0;
@@ -1708,7 +1750,7 @@ int rxr_pkt_proc_compare_rta(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 	dt = rx_entry->atomic_hdr.datatype;
        	dtsize = ofi_datatype_size(rx_entry->atomic_hdr.datatype);
 
-	src_data = (char *)pkt_entry->pkt + pkt_entry->hdr_size;
+	src_data = (char *)pkt_entry->pkt + rxr_pkt_req_hdr_size(pkt_entry);
 	cmp_data = src_data + rx_entry->total_len;
 	rx_entry->atomrsp_buf = (char *)rx_entry->atomrsp_pkt->pkt + sizeof(struct rxr_atomrsp_hdr);
 
