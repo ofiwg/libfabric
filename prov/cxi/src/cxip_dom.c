@@ -157,7 +157,7 @@ static int cxip_dom_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	struct cxip_domain *dom;
 	struct cxip_eq *eq;
 
-	dom = container_of(fid, struct cxip_domain, util_domain.domain_fid);
+	dom = container_of(fid, struct cxip_domain, util_domain.domain_fid.fid);
 	eq = container_of(bfid, struct cxip_eq, util_eq.eq_fid.fid);
 
 	if (dom->eq)
