@@ -3319,6 +3319,8 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 	union cxip_match_bits put_mb = {};
 	int rdzv_id;
 	int ret;
+	struct cxip_cmdq *cmdq =
+		req->triggered ? txc->domain->trig_cmdq : txc->tx_cmdq;
 
 	if (req->send.flags & FI_INJECT) {
 		CXIP_LOG_DBG("Invalid inject\n");
@@ -3379,7 +3381,7 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 	cmd.header_data = req->send.data;
 	cmd.remote_offset = CXI_VA_TO_IOVA(send_md->md, req->send.buf);
 
-	fastlock_acquire(&txc->tx_cmdq->lock);
+	fastlock_acquire(&cmdq->lock);
 
 	if (txc->ep_obj->rdzv_offload) {
 		cmd.command.opcode = C_CMD_RENDEZVOUS_PUT;
@@ -3392,8 +3394,6 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 
 		/* RPut rdzv ID goes in command */
 		cmd.rendezvous_id = rdzv_id;
-
-		ret = cxi_cq_emit_dma(txc->tx_cmdq->dev_cmdq, &cmd);
 	} else {
 		cmd.command.opcode = C_CMD_PUT;
 
@@ -3402,8 +3402,23 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 		/* Use match bits for rdzv_id */
 		put_mb.rdzv_id_hi = rdzv_id;
 		cmd.match_bits = put_mb.raw;
+	}
 
-		ret = cxi_cq_emit_dma(txc->tx_cmdq->dev_cmdq, &cmd);
+	if (req->triggered) {
+		const struct c_ct_cmd ct_cmd = {
+			.trig_ct = req->trig_cntr->ct->ctn,
+			.threshold = req->trig_thresh,
+		};
+
+		/* Clear the triggered flag to prevent retrying of operation,
+		 * due to flow control, from using the triggered path.
+		 */
+		req->triggered = false;
+
+		ret = cxi_cq_emit_trig_full_dma(cmdq->dev_cmdq, &ct_cmd,
+						&cmd);
+	} else {
+		ret = cxi_cq_emit_dma(cmdq->dev_cmdq, &cmd);
 	}
 
 	if (ret) {
@@ -3412,14 +3427,14 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 	}
 
 	if (!(req->send.flags & FI_MORE))
-		cxi_cq_ring(txc->tx_cmdq->dev_cmdq);
+		cxi_cq_ring(cmdq->dev_cmdq);
 
-	fastlock_release(&txc->tx_cmdq->lock);
+	fastlock_release(&cmdq->lock);
 
 	return FI_SUCCESS;
 
 err_unlock:
-	fastlock_release(&txc->tx_cmdq->lock);
+	fastlock_release(&cmdq->lock);
 	cxip_rdzv_id_free(txc->ep_obj, rdzv_id);
 err_unmap:
 	cxip_unmap(send_md);
@@ -3502,9 +3517,11 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 	int ret;
 	int match_complete = req->send.flags & FI_MATCH_COMPLETE;
 	int tx_id;
+	struct cxip_cmdq *cmdq =
+		req->triggered ? txc->domain->trig_cmdq : txc->tx_cmdq;
 
 	/* Always use IDCs when the payload fits */
-	idc = (req->send.len <= CXIP_INJECT_SIZE);
+	idc = (req->send.len <= CXIP_INJECT_SIZE) && !req->triggered;
 
 	if ((req->send.flags & FI_INJECT) && !idc) {
 		CXIP_LOG_DBG("Invalid inject\n");
@@ -3552,7 +3569,7 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 	req->cb = cxip_send_eager_cb;
 
 	/* Submit command */
-	fastlock_acquire(&txc->tx_cmdq->lock);
+	fastlock_acquire(&cmdq->lock);
 
 	if (idc) {
 		union c_cmdu cmd = {};
@@ -3570,10 +3587,9 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 			cmd.c_state.ct = req->send.cntr->ct->ctn;
 		}
 
-		if (memcmp(&txc->tx_cmdq->c_state, &cmd.c_state,
+		if (memcmp(&cmdq->c_state, &cmd.c_state,
 			   sizeof(cmd.c_state))) {
-			ret = cxi_cq_emit_c_state(txc->tx_cmdq->dev_cmdq,
-						  &cmd.c_state);
+			ret = cxi_cq_emit_c_state(cmdq->dev_cmdq, &cmd.c_state);
 			if (ret) {
 				CXIP_LOG_DBG("Failed to issue C_STATE command: %d\n",
 					     ret);
@@ -3586,7 +3602,7 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 			}
 
 			/* Update TXQ C_STATE */
-			txc->tx_cmdq->c_state = cmd.c_state;
+			cmdq->c_state = cmd.c_state;
 
 			CXIP_LOG_DBG("Updated C_STATE: %p\n", req);
 		}
@@ -3597,7 +3613,7 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 		cmd.idc_msg.header_data = req->send.data;
 		cmd.idc_msg.user_ptr = (uint64_t)req;
 
-		ret = cxi_cq_emit_idc_msg(txc->tx_cmdq->dev_cmdq, &cmd.idc_msg,
+		ret = cxi_cq_emit_idc_msg(cmdq->dev_cmdq, &cmd.idc_msg,
 					  req->send.buf, req->send.len);
 		if (ret) {
 			CXIP_LOG_DBG("Failed to write IDC: %d\n", ret);
@@ -3635,25 +3651,40 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 		}
 
 		/* Issue Eager Put command */
-		ret = cxi_cq_emit_dma(txc->tx_cmdq->dev_cmdq, &cmd);
+		if (req->triggered) {
+			const struct c_ct_cmd ct_cmd = {
+				.trig_ct = req->trig_cntr->ct->ctn,
+				.threshold = req->trig_thresh,
+			};
+
+			/* Clear the triggered flag to prevent retrying of
+			 * operation, due to flow control, from using the
+			 * triggered path.
+			 */
+			req->triggered = false;
+
+			ret = cxi_cq_emit_trig_full_dma(cmdq->dev_cmdq, &ct_cmd,
+							&cmd);
+		} else {
+			ret = cxi_cq_emit_dma(cmdq->dev_cmdq, &cmd);
+		}
+
 		if (ret) {
 			CXIP_LOG_DBG("Failed to write DMA command: %d\n", ret);
-
-			/* Return error according to Domain Resource Mgmt */
 			ret = -FI_EAGAIN;
 			goto err_unlock;
 		}
 	}
 
 	if (!(req->send.flags & FI_MORE))
-		cxi_cq_ring(txc->tx_cmdq->dev_cmdq);
+		cxi_cq_ring(cmdq->dev_cmdq);
 
-	fastlock_release(&txc->tx_cmdq->lock);
+	fastlock_release(&cmdq->lock);
 
 	return FI_SUCCESS;
 
 err_unlock:
-	fastlock_release(&txc->tx_cmdq->lock);
+	fastlock_release(&cmdq->lock);
 	if (match_complete)
 		cxip_tx_id_free(txc->ep_obj, req->send.tx_id);
 err_unmap:
@@ -3960,13 +3991,15 @@ static void cxip_send_req_dequeue(struct cxip_txc *txc, struct cxip_req *req)
 }
 
 /*
- * _cxip_send() - Common message send function. Used for tagged and untagged
- * sends of all sizes.
+ * cxip_send_common() - Common message send function. Used for tagged and
+ * untagged sends of all sizes. This includes triggered operations.
  */
-static ssize_t _cxip_send(struct cxip_txc *txc, const void *buf, size_t len,
-			  void *desc, uint64_t data, fi_addr_t dest_addr,
-			  uint64_t tag, void *context, uint64_t flags,
-			  bool tagged)
+ssize_t cxip_send_common(struct cxip_txc *txc, const void *buf, size_t len,
+			 void *desc, uint64_t data, fi_addr_t dest_addr,
+			 uint64_t tag, void *context, uint64_t flags,
+			 bool tagged, bool triggered, uint64_t trig_thresh,
+			 struct cxip_cntr *trig_cntr,
+			 struct cxip_cntr *comp_cntr)
 {
 	struct cxip_req *req;
 	struct cxip_addr caddr;
@@ -3991,9 +4024,13 @@ static ssize_t _cxip_send(struct cxip_txc *txc, const void *buf, size_t len,
 	}
 	ofi_atomic_inc32(&txc->otx_reqs);
 
+	req->triggered = triggered;
+	req->trig_thresh = triggered;
+	req->trig_cntr = trig_cntr;
+
 	/* Save Send parameters to replay */
 	req->send.txc = txc;
-	req->send.cntr = txc->send_cntr;
+	req->send.cntr = triggered ? comp_cntr : txc->send_cntr;
 	req->send.buf = buf;
 	req->send.len = len;
 	req->send.tagged = tagged;
@@ -4121,8 +4158,8 @@ static ssize_t cxip_tsend(struct fid_ep *ep, const void *buf, size_t len,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return _cxip_send(txc, buf, len, desc, 0, dest_addr, tag, context,
-			  txc->attr.op_flags, true);
+	return cxip_send_common(txc, buf, len, desc, 0, dest_addr, tag, context,
+				txc->attr.op_flags, true, false, 0, NULL, NULL);
 }
 
 static ssize_t cxip_tsendv(struct fid_ep *ep, const struct iovec *iov,
@@ -4137,9 +4174,10 @@ static ssize_t cxip_tsendv(struct fid_ep *ep, const struct iovec *iov,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return _cxip_send(txc, iov[0].iov_base, iov[0].iov_len,
-			  desc ? desc[0] : NULL, 0,
-			  dest_addr, tag, context, txc->attr.op_flags, true);
+	return cxip_send_common(txc, iov[0].iov_base, iov[0].iov_len,
+				desc ? desc[0] : NULL, 0, dest_addr, tag,
+				context, txc->attr.op_flags, true, false, 0,
+				NULL, NULL);
 }
 
 static ssize_t cxip_tsendmsg(struct fid_ep *ep,
@@ -4162,10 +4200,11 @@ static ssize_t cxip_tsendmsg(struct fid_ep *ep,
 	if (!txc->selective_completion)
 		flags |= FI_COMPLETION;
 
-	return _cxip_send(txc, msg->msg_iov[0].iov_base,
-			  msg->msg_iov[0].iov_len,
-			  msg->desc ? msg->desc[0] : NULL, msg->data,
-			  msg->addr, msg->tag, msg->context, flags, true);
+	return cxip_send_common(txc, msg->msg_iov[0].iov_base,
+				msg->msg_iov[0].iov_len,
+				msg->desc ? msg->desc[0] : NULL, msg->data,
+				msg->addr, msg->tag, msg->context, flags, true,
+				false, 0, NULL, NULL);
 }
 
 static ssize_t cxip_tinject(struct fid_ep *ep, const void *buf, size_t len,
@@ -4176,8 +4215,8 @@ static ssize_t cxip_tinject(struct fid_ep *ep, const void *buf, size_t len,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return _cxip_send(txc, buf, len, NULL, 0, dest_addr, tag, NULL,
-			  FI_INJECT, true);
+	return cxip_send_common(txc, buf, len, NULL, 0, dest_addr, tag, NULL,
+				FI_INJECT, true, false, 0, NULL, NULL);
 }
 
 static ssize_t cxip_tsenddata(struct fid_ep *ep, const void *buf, size_t len,
@@ -4189,8 +4228,9 @@ static ssize_t cxip_tsenddata(struct fid_ep *ep, const void *buf, size_t len,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return _cxip_send(txc, buf, len, desc, data, dest_addr, tag, context,
-			  txc->attr.op_flags, true);
+	return cxip_send_common(txc, buf, len, desc, data, dest_addr, tag,
+				context, txc->attr.op_flags, true, false, 0,
+				NULL, NULL);
 }
 
 static ssize_t cxip_tinjectdata(struct fid_ep *ep, const void *buf, size_t len,
@@ -4202,8 +4242,8 @@ static ssize_t cxip_tinjectdata(struct fid_ep *ep, const void *buf, size_t len,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return _cxip_send(txc, buf, len, NULL, data, dest_addr, tag, NULL,
-			  FI_INJECT, true);
+	return cxip_send_common(txc, buf, len, NULL, data, dest_addr, tag, NULL,
+				FI_INJECT, true, false, 0, NULL, NULL);
 }
 
 struct fi_ops_tagged cxip_ep_tagged_ops = {
@@ -4282,8 +4322,9 @@ static ssize_t cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return _cxip_send(txc, buf, len, desc, 0, dest_addr, 0, context,
-			  txc->attr.op_flags, false);
+	return cxip_send_common(txc, buf, len, desc, 0, dest_addr, 0, context,
+				txc->attr.op_flags, false, false, 0, NULL,
+				NULL);
 }
 
 static ssize_t cxip_sendv(struct fid_ep *ep, const struct iovec *iov,
@@ -4298,9 +4339,10 @@ static ssize_t cxip_sendv(struct fid_ep *ep, const struct iovec *iov,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return _cxip_send(txc, iov[0].iov_base, iov[0].iov_len,
-			  desc ? desc[0] : NULL, 0, dest_addr, 0, context,
-			  txc->attr.op_flags, false);
+	return cxip_send_common(txc, iov[0].iov_base, iov[0].iov_len,
+				desc ? desc[0] : NULL, 0, dest_addr, 0, context,
+				txc->attr.op_flags, false, false, 0, NULL,
+				NULL);
 }
 
 static ssize_t cxip_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
@@ -4323,10 +4365,11 @@ static ssize_t cxip_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	if (!txc->selective_completion)
 		flags |= FI_COMPLETION;
 
-	return _cxip_send(txc, msg->msg_iov[0].iov_base,
-			  msg->msg_iov[0].iov_len,
-			  msg->desc ? msg->desc[0] : NULL, msg->data,
-			  msg->addr, 0, msg->context, flags, false);
+	return cxip_send_common(txc, msg->msg_iov[0].iov_base,
+				msg->msg_iov[0].iov_len,
+				msg->desc ? msg->desc[0] : NULL, msg->data,
+				msg->addr, 0, msg->context, flags, false, false,
+				0, NULL, NULL);
 }
 
 static ssize_t cxip_inject(struct fid_ep *ep, const void *buf, size_t len,
@@ -4337,8 +4380,8 @@ static ssize_t cxip_inject(struct fid_ep *ep, const void *buf, size_t len,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return _cxip_send(txc, buf, len, NULL, 0, dest_addr, 0, NULL,
-			  FI_INJECT, false);
+	return cxip_send_common(txc, buf, len, NULL, 0, dest_addr, 0, NULL,
+				FI_INJECT, false, false, 0, NULL, NULL);
 }
 
 static ssize_t cxip_senddata(struct fid_ep *ep, const void *buf, size_t len,
@@ -4350,8 +4393,9 @@ static ssize_t cxip_senddata(struct fid_ep *ep, const void *buf, size_t len,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return _cxip_send(txc, buf, len, desc, data, dest_addr, 0, context,
-			  txc->attr.op_flags, false);
+	return cxip_send_common(txc, buf, len, desc, data, dest_addr, 0,
+				context, txc->attr.op_flags, false, false, 0,
+				NULL, NULL);
 }
 
 static ssize_t cxip_injectdata(struct fid_ep *ep, const void *buf, size_t len,
@@ -4362,8 +4406,8 @@ static ssize_t cxip_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return _cxip_send(txc, buf, len, NULL, data, dest_addr, 0, NULL,
-			  FI_INJECT, false);
+	return cxip_send_common(txc, buf, len, NULL, data, dest_addr, 0, NULL,
+				FI_INJECT, false, false, 0, NULL, NULL);
 }
 
 struct fi_ops_msg cxip_ep_msg_ops = {

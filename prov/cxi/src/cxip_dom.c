@@ -170,11 +170,79 @@ static int cxip_dom_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	return 0;
 }
 
+static int cxip_dom_control(struct fid *fid, int command, void *arg)
+{
+	struct cxip_domain *dom;
+	struct fi_deferred_work *work;
+	struct fi_op_msg *msg;
+	struct cxip_txc *txc;
+	struct cxip_cntr *trig_cntr;
+	struct cxip_cntr *comp_cntr;
+	const void *buf;
+	size_t len;
+	int ret;
+
+	dom = container_of(fid, struct cxip_domain, util_domain.domain_fid.fid);
+
+	if (command == FI_QUEUE_WORK) {
+		work = arg;
+
+		if (!work->triggering_cntr)
+			return -FI_EINVAL;
+
+		comp_cntr = work->completion_cntr ?
+			container_of(work->completion_cntr,
+				     struct cxip_cntr, cntr_fid) : NULL;
+		trig_cntr = container_of(work->triggering_cntr,
+					 struct cxip_cntr, cntr_fid);
+
+		if (work->op_type == FI_OP_SEND) {
+			msg = work->op.msg;
+
+			if (msg->msg.iov_count > 1)
+				return -FI_EINVAL;
+
+			ret = cxip_fid_to_txc(msg->ep, &txc);
+			if (ret)
+				return ret;
+
+			buf = msg->msg.iov_count ?
+				msg->msg.msg_iov[0].iov_base : NULL;
+			len = msg->msg.iov_count ?
+				msg->msg.msg_iov[0].iov_len : 0;
+
+			ret = cxip_dom_cntr_enable(dom);
+			if (ret) {
+				CXIP_LOG_DBG("Failed to enable domain for counters, ret=%d\n",
+					     ret);
+				return ret;
+			}
+
+			ret = cxip_send_common(txc, buf, len, NULL,
+					       msg->msg.data, msg->msg.addr,
+					       0, msg->msg.context, msg->flags,
+					       false, true, work->threshold,
+					       trig_cntr, comp_cntr);
+			if (ret)
+				CXIP_LOG_DBG("Failed to emit message triggered op, ret=%d\n",
+					     ret);
+			else
+				CXIP_LOG_DBG("Queued triggered message operation with threshold %lu",
+					     work->threshold);
+
+
+			return ret;
+		}
+	}
+
+	return -FI_EINVAL;
+}
+
 static struct fi_ops cxip_dom_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = cxip_dom_close,
 	.bind = cxip_dom_bind,
-	.control = fi_no_control,
+	.control = cxip_dom_control,
 	.ops_open = fi_no_ops_open,
 };
 

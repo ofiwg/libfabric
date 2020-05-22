@@ -555,6 +555,11 @@ struct cxip_req {
 					// completion event callback
 	bool discard;
 
+	/* Triggered related fields. */
+	bool triggered;
+	uint64_t trig_thresh;
+	struct cxip_cntr *trig_cntr;
+
 	/* CQ event fields, set according to fi_cq.3
 	 *   - set by provider
 	 *   - returned to user in completion event
@@ -1256,6 +1261,15 @@ static inline int cxip_fid_to_rxc(struct fid_ep *ep, struct cxip_rxc **rxc)
 		return -FI_EINVAL;
 	}
 }
+
+int cxip_dom_cntr_enable(struct cxip_domain *dom);
+
+ssize_t cxip_send_common(struct cxip_txc *txc, const void *buf, size_t len,
+			void *desc, uint64_t data, fi_addr_t dest_addr,
+			uint64_t tag, void *context, uint64_t flags,
+			bool tagged, bool triggered, uint64_t trig_thresh,
+			struct cxip_cntr *trig_cntr,
+			struct cxip_cntr *comp_cntr);
 
 #define _CXIP_LOG_DBG(subsys, ...) FI_DBG(&cxip_prov, subsys, __VA_ARGS__)
 #define _CXIP_LOG_ERROR(subsys, ...) FI_WARN(&cxip_prov, subsys, __VA_ARGS__)
