@@ -97,9 +97,6 @@ int cxip_ctrl_msg_send(struct cxip_ctrl_req *req)
 	fastlock_acquire(&txq->lock);
 
 	if (memcmp(&txq->c_state, &cmd.c_state, sizeof(cmd.c_state))) {
-		/* Update TXQ C_STATE */
-		txq->c_state = cmd.c_state;
-
 		ret = cxi_cq_emit_c_state(txq->dev_cmdq, &cmd.c_state);
 		if (ret) {
 			CXIP_LOG_DBG("Failed to issue C_STATE command: %d\n",
@@ -111,6 +108,9 @@ int cxip_ctrl_msg_send(struct cxip_ctrl_req *req)
 			ret = -FI_EAGAIN;
 			goto err_unlock;
 		}
+
+		/* Update TXQ C_STATE */
+		txq->c_state = cmd.c_state;
 
 		CXIP_LOG_DBG("Updated C_STATE: %p\n", req);
 	}

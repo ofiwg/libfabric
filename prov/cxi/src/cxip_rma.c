@@ -249,9 +249,6 @@ static ssize_t _cxip_rma_op(enum fi_op_type op, struct cxip_txc *txc,
 
 		if (memcmp(&txc->tx_cmdq->c_state, &cmd.c_state,
 			   sizeof(cmd.c_state))) {
-			/* Update TXQ C_STATE */
-			txc->tx_cmdq->c_state = cmd.c_state;
-
 			ret = cxi_cq_emit_c_state(txc->tx_cmdq->dev_cmdq,
 						  &cmd.c_state);
 			if (ret) {
@@ -264,6 +261,9 @@ static ssize_t _cxip_rma_op(enum fi_op_type op, struct cxip_txc *txc,
 				ret = -FI_EAGAIN;
 				goto unlock_op;
 			}
+
+			/* Update TXQ C_STATE */
+			txc->tx_cmdq->c_state = cmd.c_state;
 
 			CXIP_LOG_DBG("Updated C_STATE: %p\n", req);
 		}

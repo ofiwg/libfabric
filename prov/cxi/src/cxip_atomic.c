@@ -625,9 +625,6 @@ static int _cxip_amo(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 
 		if (memcmp(&txc->tx_cmdq->c_state, &cmd.c_state,
 			   sizeof(cmd.c_state))) {
-			/* Update TXQ C_STATE */
-			txc->tx_cmdq->c_state = cmd.c_state;
-
 			ret = cxi_cq_emit_c_state(txc->tx_cmdq->dev_cmdq,
 						  &cmd.c_state);
 			if (ret) {
@@ -640,6 +637,9 @@ static int _cxip_amo(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 				ret = -FI_EAGAIN;
 				goto unlock_cmdq;
 			}
+
+			/* Update TXQ C_STATE */
+			txc->tx_cmdq->c_state = cmd.c_state;
 
 			CXIP_LOG_DBG("Updated C_STATE: %p\n", req);
 		}

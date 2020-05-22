@@ -667,9 +667,6 @@ static int cxip_notify_match(struct cxip_req *req, const union c_event *event)
 
 	if (memcmp(&rxc->tx_cmdq->c_state, &cmd.c_state,
 		   sizeof(cmd.c_state))) {
-		/* Update TXQ C_STATE */
-		rxc->tx_cmdq->c_state = cmd.c_state;
-
 		ret = cxi_cq_emit_c_state(rxc->tx_cmdq->dev_cmdq,
 					  &cmd.c_state);
 		if (ret) {
@@ -682,6 +679,9 @@ static int cxip_notify_match(struct cxip_req *req, const union c_event *event)
 			ret = -FI_EAGAIN;
 			goto err_unlock;
 		}
+
+		/* Update TXQ C_STATE */
+		rxc->tx_cmdq->c_state = cmd.c_state;
 
 		CXIP_LOG_DBG("Updated C_STATE: %p\n", req);
 	}
@@ -3574,9 +3574,6 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 
 		if (memcmp(&txc->tx_cmdq->c_state, &cmd.c_state,
 			   sizeof(cmd.c_state))) {
-			/* Update TXQ C_STATE */
-			txc->tx_cmdq->c_state = cmd.c_state;
-
 			ret = cxi_cq_emit_c_state(txc->tx_cmdq->dev_cmdq,
 						  &cmd.c_state);
 			if (ret) {
@@ -3589,6 +3586,9 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 				ret = -FI_EAGAIN;
 				goto err_unlock;
 			}
+
+			/* Update TXQ C_STATE */
+			txc->tx_cmdq->c_state = cmd.c_state;
 
 			CXIP_LOG_DBG("Updated C_STATE: %p\n", req);
 		}
