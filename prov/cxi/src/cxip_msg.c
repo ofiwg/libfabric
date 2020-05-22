@@ -2991,9 +2991,8 @@ static void report_send_completion(struct cxip_req *req, bool sw_cntr)
 					       ret);
 		}
 
-		if (sw_cntr && req->send.txc->send_cntr) {
-			ret = cxip_cntr_mod(req->send.txc->send_cntr, 1, false,
-					    false);
+		if (sw_cntr && req->send.cntr) {
+			ret = cxip_cntr_mod(req->send.cntr, 1, false, false);
 			if (ret)
 				CXIP_LOG_ERROR("cxip_cntr_mod returned: %d\n",
 					       ret);
@@ -3006,9 +3005,8 @@ static void report_send_completion(struct cxip_req *req, bool sw_cntr)
 		if (ret != FI_SUCCESS)
 			CXIP_LOG_ERROR("Failed to report error: %d\n", ret);
 
-		if (sw_cntr && req->send.txc->send_cntr) {
-			ret = cxip_cntr_mod(req->send.txc->send_cntr, 1, false,
-					    true);
+		if (sw_cntr && req->send.cntr) {
+			ret = cxip_cntr_mod(req->send.cntr, 1, false, true);
 			if (ret)
 				CXIP_LOG_ERROR("cxip_cntr_mod returned: %d\n",
 					       ret);
@@ -3567,9 +3565,9 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 		/* If MATCH_COMPLETE was requested, software must manage
 		 * counters.
 		 */
-		if (txc->send_cntr && !match_complete) {
+		if (req->send.cntr && !match_complete) {
 			cmd.c_state.event_ct_ack = 1;
-			cmd.c_state.ct = txc->send_cntr->ct->ctn;
+			cmd.c_state.ct = req->send.cntr->ct->ctn;
 		}
 
 		if (memcmp(&txc->tx_cmdq->c_state, &cmd.c_state,
@@ -3631,9 +3629,9 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 		/* If MATCH_COMPLETE was requested, software must manage
 		 * counters.
 		 */
-		if (txc->send_cntr && !match_complete) {
+		if (req->send.cntr && !match_complete) {
 			cmd.event_ct_ack = 1;
-			cmd.ct = txc->send_cntr->ct->ctn;
+			cmd.ct = req->send.cntr->ct->ctn;
 		}
 
 		/* Issue Eager Put command */
@@ -3995,6 +3993,7 @@ static ssize_t _cxip_send(struct cxip_txc *txc, const void *buf, size_t len,
 
 	/* Save Send parameters to replay */
 	req->send.txc = txc;
+	req->send.cntr = txc->send_cntr;
 	req->send.buf = buf;
 	req->send.len = len;
 	req->send.tagged = tagged;

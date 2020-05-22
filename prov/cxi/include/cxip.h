@@ -489,6 +489,7 @@ struct cxip_req_recv {
 struct cxip_req_send {
 	/* Send parameters */
 	struct cxip_txc *txc;
+	struct cxip_cntr *cntr;
 	const void *buf;		// local send buffer
 	size_t len;			// request length
 	struct cxip_md *send_md;	// send buffer memory descriptor
