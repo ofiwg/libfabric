@@ -317,10 +317,6 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 	*info->ep_attr = *rxr_info.ep_attr;
 	*info->domain_attr = *rxr_info.domain_attr;
 
-	/* TODO: update inject_size when we implement inject */
-	info->tx_attr->inject_size = 0;
-	rxr_info.tx_attr->inject_size = info->tx_attr->inject_size;
-
 	info->addr_format = core_info->addr_format;
 	info->domain_attr->ep_cnt = core_info->domain_attr->ep_cnt;
 	info->domain_attr->cq_cnt = core_info->domain_attr->cq_cnt;
@@ -357,6 +353,20 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 				}
 			}
 		}
+
+		if (hints->caps & FI_TAGGED) {
+			info->tx_attr->inject_size =
+				core_info->tx_attr->inject_size > sizeof(struct rxr_eager_tagrtm_hdr) ?
+				core_info->tx_attr->inject_size - sizeof(struct rxr_eager_tagrtm_hdr)
+				: 0;
+		} else if (hints->caps & FI_MSG) {
+			info->tx_attr->inject_size =
+				core_info->tx_attr->inject_size > sizeof(struct rxr_eager_msgrtm_hdr) ?
+				core_info->tx_attr->inject_size - sizeof(struct rxr_eager_msgrtm_hdr)
+				: 0;
+		}
+
+		rxr_info.tx_attr->inject_size = info->tx_attr->inject_size;
 
 		/* We only support manual progress for RMA operations */
 		if (hints->caps & FI_RMA) {
