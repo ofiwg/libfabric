@@ -129,7 +129,7 @@ extern size_t rxm_msg_rx_size;
 extern size_t rxm_cm_progress_interval;
 extern size_t rxm_cq_eq_fairness;
 extern int force_auto_progress;
-extern enum fi_wait_obj def_wait_obj;
+extern enum fi_wait_obj def_wait_obj, def_tcp_wait_obj;
 
 struct rxm_ep;
 

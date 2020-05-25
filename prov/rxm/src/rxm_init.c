@@ -53,7 +53,7 @@ size_t rxm_msg_tx_size		= 128;
 size_t rxm_msg_rx_size		= 128;
 size_t rxm_eager_limit		= RXM_BUF_SIZE - sizeof(struct rxm_pkt);
 int force_auto_progress		= 0;
-enum fi_wait_obj def_wait_obj	= FI_WAIT_FD;
+enum fi_wait_obj def_wait_obj = FI_WAIT_FD, def_tcp_wait_obj = FI_WAIT_UNSPEC;
 
 char *rxm_proto_state_str[] = {
 	RXM_PROTO_STATES(OFI_STR)
@@ -363,13 +363,30 @@ struct fi_provider rxm_prov = {
 	.cleanup = rxm_fini
 };
 
-static void rxm_param_get_def_wait(void)
+static void rxm_get_def_wait(void)
 {
 	char *wait_str = NULL;
+
+	fi_param_define(&rxm_prov, "def_wait_obj", FI_PARAM_STRING,
+			"Specifies the default wait object used for blocking "
+			"operations (e.g. fi_cq_sread).  Supported values "
+			"are: fd and pollfd (default: fd).");
+
+	fi_param_define(&rxm_prov, "def_tcp_wait_obj", FI_PARAM_STRING,
+			"See def_wait_obj for description.  If set, this "
+			"overrides the def_wait_obj when running over the "
+			"tcp provider.");
 
 	fi_param_get_str(&rxm_prov, "def_wait_obj", &wait_str);
 	if (wait_str && !strcasecmp(wait_str, "pollfd"))
 		def_wait_obj = FI_WAIT_POLLFD;
+
+	wait_str = NULL;
+	fi_param_get_str(&rxm_prov, "def_tcp_wait_obj", &wait_str);
+	if (wait_str) {
+		def_tcp_wait_obj = (!strcasecmp(wait_str, "pollfd")) ?
+				   FI_WAIT_POLLFD : FI_WAIT_FD;
+	}
 }
 
 static void rxm_init_infos(void)
@@ -453,11 +470,6 @@ RXM_INI
 			"Force auto-progress for data transfers even if app "
 			"requested manual progress (default: false/no).");
 
-	fi_param_define(&rxm_prov, "def_wait_obj", FI_PARAM_STRING,
-			"Specifies the default wait object used for blocking "
-			"operations (e.g. fi_cq_sread).  Supported values "
-			"are: fd and pollfd (default: fd).");
-
 	rxm_init_infos();
 	fi_param_get_size_t(&rxm_prov, "msg_tx_size", &rxm_msg_tx_size);
 	fi_param_get_size_t(&rxm_prov, "msg_rx_size", &rxm_msg_rx_size);
@@ -468,7 +480,7 @@ RXM_INI
 				(int *) &rxm_cq_eq_fairness))
 		rxm_cq_eq_fairness = 128;
 	fi_param_get_bool(&rxm_prov, "data_auto_progress", &force_auto_progress);
-	rxm_param_get_def_wait();
+	rxm_get_def_wait();
 
 	if (force_auto_progress)
 		FI_INFO(&rxm_prov, FI_LOG_CORE, "auto-progress for data requested "

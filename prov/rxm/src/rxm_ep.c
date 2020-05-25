@@ -2361,6 +2361,19 @@ static int rxm_msg_cq_fd_needed(struct rxm_ep *rxm_ep)
 		(rxm_ep->util_ep.rem_rd_cntr && rxm_ep->util_ep.rem_rd_cntr->wait));
 }
 
+static enum fi_wait_obj rxm_get_wait_obj(struct rxm_ep *ep)
+{
+	if (!rxm_msg_cq_fd_needed(ep))
+		return FI_WAIT_NONE;
+
+	if ((def_tcp_wait_obj != FI_WAIT_UNSPEC) &&
+	    !strncasecmp(ep->msg_info->fabric_attr->prov_name, "tcp",
+			 strlen("tcp"))) {
+		return def_tcp_wait_obj;
+	}
+	return def_wait_obj;
+}
+
 static int rxm_ep_msg_cq_open(struct rxm_ep *rxm_ep)
 {
 	struct rxm_domain *rxm_domain;
@@ -2382,8 +2395,7 @@ static int rxm_ep_msg_cq_open(struct rxm_ep *rxm_ep)
 	cq_attr.size = (rxm_ep->msg_info->tx_attr->size +
 			rxm_ep->msg_info->rx_attr->size) * ofi_universe_size;
 	cq_attr.format = FI_CQ_FORMAT_DATA;
-	cq_attr.wait_obj = (rxm_msg_cq_fd_needed(rxm_ep) ?
-			    def_wait_obj : FI_WAIT_NONE);
+	cq_attr.wait_obj = rxm_get_wait_obj(rxm_ep);
 
 	rxm_domain = container_of(rxm_ep->util_ep.domain, struct rxm_domain,
 				  util_domain);
