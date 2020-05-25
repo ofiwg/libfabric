@@ -124,6 +124,7 @@ int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 			core_info->rx_attr->comp_order = hints->rx_attr->comp_order;
 		}
 	}
+
 	core_info->ep_attr->type = FI_EP_MSG;
 	if (!fi_param_get_bool(&rxm_prov, "use_srx", &use_srx) && use_srx) {
 		FI_DBG(&rxm_prov, FI_LOG_FABRIC,
@@ -187,23 +188,33 @@ int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
 	return 0;
 }
 
-static int rxm_init_info(void)
+static void rxm_init_infos(void)
 {
-	size_t param;
+	struct fi_info *cur;
+	size_t buf_size, tx_size = 0, rx_size = 0;
 
-	if (!fi_param_get_size_t(&rxm_prov, "buffer_size", &param)) {
-		if (param < sizeof(struct rxm_pkt) + sizeof(struct rxm_rndv_hdr)) {
+	if (!fi_param_get_size_t(&rxm_prov, "buffer_size", &buf_size)) {
+		if (buf_size <
+		    sizeof(struct rxm_pkt) + sizeof(struct rxm_rndv_hdr)) {
 			FI_WARN(&rxm_prov, FI_LOG_CORE,
 				"Requested buffer size too small\n");
-			return -FI_EINVAL;
+			buf_size = sizeof(struct rxm_pkt) +
+				   sizeof(struct rxm_rndv_hdr);
 		}
 
-		rxm_eager_limit = param - sizeof(struct rxm_pkt);
+		rxm_eager_limit = buf_size - sizeof(struct rxm_pkt);
 	}
-	rxm_info.tx_attr->inject_size = rxm_eager_limit;
-	rxm_info_coll.tx_attr->inject_size = rxm_eager_limit;
-	rxm_util_prov.info = &rxm_info;
-	return 0;
+
+	fi_param_get_size_t(&rxm_prov, "tx_size", &tx_size);
+	fi_param_get_size_t(&rxm_prov, "rx_size", &rx_size);
+
+	for (cur = (struct fi_info *) rxm_util_prov.info; cur; cur = cur->next) {
+		cur->tx_attr->inject_size = rxm_eager_limit;
+		if (tx_size)
+			cur->tx_attr->size = tx_size;
+		if (rx_size)
+			cur->rx_attr->size = rx_size;
+	}
 }
 
 static void rxm_alter_info(const struct fi_info *hints, struct fi_info *info)
@@ -389,19 +400,6 @@ static void rxm_get_def_wait(void)
 	}
 }
 
-static void rxm_init_infos(void)
-{
-	struct fi_info *info;
-
-	for (info = (struct fi_info *) rxm_util_prov.info; info;
-	     info = info->next) {
-		fi_param_get_size_t(&rxm_prov, "tx_size",
-				    &rxm_info.tx_attr->size);
-		fi_param_get_size_t(&rxm_prov, "rx_size",
-				    &rxm_info.rx_attr->size);
-	}
-}
-
 RXM_INI
 {
 	fi_param_define(&rxm_prov, "buffer_size", FI_PARAM_SIZE_T,
@@ -486,11 +484,6 @@ RXM_INI
 		FI_INFO(&rxm_prov, FI_LOG_CORE, "auto-progress for data requested "
 			"(FI_OFI_RXM_DATA_AUTO_PROGRESS = 1), domain threading "
 			"level would be set to FI_THREAD_SAFE\n");
-
-	if (rxm_init_info()) {
-		FI_WARN(&rxm_prov, FI_LOG_CORE, "Unable to initialize rxm_info\n");
-		return NULL;
-	}
 
 	return &rxm_prov;
 }

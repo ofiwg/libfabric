@@ -707,8 +707,6 @@ struct rxm_conn {
 };
 
 extern struct fi_provider rxm_prov;
-extern struct fi_info rxm_info;
-extern struct fi_info rxm_info_coll;
 extern struct fi_fabric_attr rxm_fabric_attr;
 extern struct fi_domain_attr rxm_domain_attr;
 extern struct fi_tx_attr rxm_tx_attr;

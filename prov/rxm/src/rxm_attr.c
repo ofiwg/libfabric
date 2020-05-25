@@ -38,7 +38,6 @@
 		     FI_MULTI_RECV)
 #define RXM_DOMAIN_CAPS (FI_LOCAL_COMM | FI_REMOTE_COMM)
 
-// TODO have a separate "check info" against which app hints would be checked.
 
 /* Since we are a layering provider, the attributes for which we rely on the
  * core provider are set to full capability. This ensures that ofix_getinfo
@@ -99,7 +98,8 @@ struct fi_domain_attr rxm_domain_attr = {
 	.av_type = FI_AV_UNSPEC,
 	/* Advertise support for FI_MR_BASIC so that ofi_check_info call
 	 * doesn't fail at RxM level. If an app requires FI_MR_BASIC, it
-	 * would be passed down to core provider. */
+	 * would be passed down to core provider.
+	 */
 	.mr_mode = FI_MR_BASIC | FI_MR_SCALABLE,
 	.cq_data_size = sizeof_field(struct ofi_op_hdr, data),
 	.cq_cnt = (1 << 16),
@@ -115,7 +115,17 @@ struct fi_fabric_attr rxm_fabric_attr = {
 	.prov_version = OFI_VERSION_DEF_PROV,
 };
 
-struct fi_info rxm_info_coll = {
+struct fi_fabric_attr rxm_verbs_fabric_attr = {
+	.prov_version = OFI_VERSION_DEF_PROV,
+	.prov_name = "verbs",
+};
+
+struct fi_fabric_attr rxm_tcp_fabric_attr = {
+	.prov_version = OFI_VERSION_DEF_PROV,
+	.prov_name = "tcp",
+};
+
+struct fi_info rxm_coll_info = {
 	.caps = RXM_TX_CAPS | RXM_RX_CAPS | RXM_DOMAIN_CAPS | FI_COLLECTIVE,
 	.addr_format = FI_SOCKADDR,
 	.tx_attr = &rxm_tx_attr,
@@ -125,7 +135,7 @@ struct fi_info rxm_info_coll = {
 	.fabric_attr = &rxm_fabric_attr
 };
 
-struct fi_info rxm_info = {
+struct fi_info rxm_base_info = {
 	.caps = RXM_TX_CAPS | RXM_RX_CAPS | RXM_DOMAIN_CAPS,
 	.addr_format = FI_SOCKADDR,
 	.tx_attr = &rxm_tx_attr,
@@ -133,10 +143,33 @@ struct fi_info rxm_info = {
 	.ep_attr = &rxm_ep_attr,
 	.domain_attr = &rxm_domain_attr,
 	.fabric_attr = &rxm_fabric_attr,
-	.next = &rxm_info_coll,
+	.next = &rxm_coll_info,
+};
+
+struct fi_info rxm_tcp_info = {
+	.caps = RXM_TX_CAPS | RXM_RX_CAPS | RXM_DOMAIN_CAPS,
+	.addr_format = FI_SOCKADDR,
+	.tx_attr = &rxm_tx_attr,
+	.rx_attr = &rxm_rx_attr,
+	.ep_attr = &rxm_ep_attr,
+	.domain_attr = &rxm_domain_attr,
+	.fabric_attr = &rxm_tcp_fabric_attr,
+	.next = &rxm_base_info,
+};
+
+struct fi_info rxm_verbs_info = {
+	.caps = RXM_TX_CAPS | RXM_RX_CAPS | RXM_DOMAIN_CAPS,
+	.addr_format = FI_SOCKADDR,
+	.tx_attr = &rxm_tx_attr,
+	.rx_attr = &rxm_rx_attr,
+	.ep_attr = &rxm_ep_attr,
+	.domain_attr = &rxm_domain_attr,
+	.fabric_attr = &rxm_verbs_fabric_attr,
+	.next = &rxm_tcp_info,
 };
 
 struct util_prov rxm_util_prov = {
 	.prov = &rxm_prov,
+	.info = &rxm_verbs_info,
 	.flags = 0,
 };
