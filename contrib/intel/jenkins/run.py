@@ -75,7 +75,19 @@ def intel_mpi_benchmark(core, hosts, mpi, mode, util=None):
         print("skipping {} as execute condition fails"\
                     .format(imb_test.testname))
     print("----------------------------------------------------------------------------------------\n")
-    
+
+#mpich_test_suite
+def mpich_test_suite(core, hosts, mpi, mode, util=None):
+    mpich_tests = tests.MpichTestSuite(jobname=jbname,buildno=bno,\
+                  testname="MpichTestSuite",core_prov=core, fabric=fab,\
+                  mpitype=mpi, hosts=hosts, ofi_build_mode=mode, \
+                  util_prov=util)
+    if (mpich_tests.execute_condn == True and \
+        mpich_tests.mpi_gen_execute_condn == True):
+        print("Running mpich test suite: Spawn coll, comm, dt Tests for {}-{}-{}-{}".format(core, util, fab, mpi))
+        os.environ["MPITEST_RETURN_WITH_CODE"] = "1"
+        mpich_tests.execute_cmd("spawn")
+ 
 #mpi_stress benchmark tests
 def mpistress_benchmark(core, hosts, mpi, mode, util=None):
 
