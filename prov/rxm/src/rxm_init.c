@@ -372,6 +372,19 @@ static void rxm_param_get_def_wait(void)
 		def_wait_obj = FI_WAIT_POLLFD;
 }
 
+static void rxm_init_infos(void)
+{
+	struct fi_info *info;
+
+	for (info = (struct fi_info *) rxm_util_prov.info; info;
+	     info = info->next) {
+		fi_param_get_size_t(&rxm_prov, "tx_size",
+				    &rxm_info.tx_attr->size);
+		fi_param_get_size_t(&rxm_prov, "rx_size",
+				    &rxm_info.rx_attr->size);
+	}
+}
+
 RXM_INI
 {
 	fi_param_define(&rxm_prov, "buffer_size", FI_PARAM_SIZE_T,
@@ -445,8 +458,7 @@ RXM_INI
 			"operations (e.g. fi_cq_sread).  Supported values "
 			"are: fd and pollfd (default: fd).");
 
-	fi_param_get_size_t(&rxm_prov, "tx_size", &rxm_info.tx_attr->size);
-	fi_param_get_size_t(&rxm_prov, "rx_size", &rxm_info.rx_attr->size);
+	rxm_init_infos();
 	fi_param_get_size_t(&rxm_prov, "msg_tx_size", &rxm_msg_tx_size);
 	fi_param_get_size_t(&rxm_prov, "msg_rx_size", &rxm_msg_rx_size);
 	if (fi_param_get_int(&rxm_prov, "cm_progress_interval",
