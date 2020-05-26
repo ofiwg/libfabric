@@ -535,6 +535,7 @@ struct rxr_ep {
 	/* rx/tx queue size of core provider */
 	size_t core_rx_size;
 	size_t max_outstanding_tx;
+	size_t core_inject_size;
 	size_t max_data_payload_size;
 
 	/* Resource management flag */
