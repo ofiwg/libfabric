@@ -153,6 +153,7 @@ static int ofi_dup_addr(const struct fi_info *info, struct fi_info *dup)
 
 static int ofi_info_to_core(uint32_t version, const struct fi_provider *prov,
 			    const struct fi_info *util_hints,
+			    const struct fi_info *base_attr,
 			    ofi_alter_info_t info_to_core,
 			    struct fi_info **core_hints)
 {
@@ -161,7 +162,7 @@ static int ofi_info_to_core(uint32_t version, const struct fi_provider *prov,
 	if (!(*core_hints = fi_allocinfo()))
 		return -FI_ENOMEM;
 
-	if (info_to_core(version, util_hints, NULL, *core_hints))
+	if (info_to_core(version, util_hints, base_attr, *core_hints))
 		goto err;
 
 	if (!util_hints)
@@ -268,14 +269,15 @@ err:
 
 int ofi_get_core_info(uint32_t version, const char *node, const char *service,
 		      uint64_t flags, const struct util_prov *util_prov,
-		      const struct fi_info *util_hints, ofi_alter_info_t info_to_core,
-		      struct fi_info **core_info)
+		      const struct fi_info *util_hints,
+		      const struct fi_info *base_attr,
+		      ofi_alter_info_t info_to_core, struct fi_info **core_info)
 {
 	struct fi_info *core_hints = NULL;
 	int ret;
 
-	ret = ofi_info_to_core(version, util_prov->prov, util_hints, info_to_core,
-			       &core_hints);
+	ret = ofi_info_to_core(version, util_prov->prov, util_hints, base_attr,
+			       info_to_core, &core_hints);
 	if (ret)
 		return ret;
 
@@ -304,8 +306,9 @@ int ofix_getinfo(uint32_t version, const char *node, const char *service,
 		if (ofi_check_info(util_prov, base_info, version, hints))
 			continue;
 
-		ret = ofi_get_core_info(version, node, service, flags, util_prov,
-					hints, info_to_core, &core_info);
+		ret = ofi_get_core_info(version, node, service, flags,
+					util_prov, hints, base_info,
+					info_to_core, &core_info);
 		if (ret)
 			return ret;
 

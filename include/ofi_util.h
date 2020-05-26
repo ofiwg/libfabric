@@ -936,7 +936,9 @@ typedef int (*ofi_alter_info_t)(uint32_t version, const struct fi_info *src_info
 
 int ofi_get_core_info(uint32_t version, const char *node, const char *service,
 		      uint64_t flags, const struct util_prov *util_prov,
-		      const struct fi_info *util_hints, ofi_alter_info_t info_to_core,
+		      const struct fi_info *util_hints,
+		      const struct fi_info *base_attr,
+		      ofi_alter_info_t info_to_core,
 		      struct fi_info **core_info);
 int ofix_getinfo(uint32_t version, const char *node, const char *service,
 		 uint64_t flags, const struct util_prov *util_prov,
