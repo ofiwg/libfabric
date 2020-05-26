@@ -1673,6 +1673,7 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	assert(info->tx_attr->msg_order == info->rx_attr->msg_order);
 	rxr_ep->msg_order = info->rx_attr->msg_order;
 	rxr_ep->core_msg_order = rdm_info->rx_attr->msg_order;
+	rxr_ep->core_inject_size = rdm_info->tx_attr->inject_size;
 	rxr_ep->mtu_size = rdm_info->ep_attr->max_msg_size;
 	fi_freeinfo(rdm_info);
 
