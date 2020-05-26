@@ -129,15 +129,24 @@ static fi_addr_t rxd_set_rxd_addr(struct rxd_av *av, fi_addr_t dg_addr)
 
 static fi_addr_t rxd_set_fi_addr(struct rxd_av *av, fi_addr_t rxd_addr)
 {
-	int tries = 0;
+	size_t new_av_size;
+	size_t i;
 
-	while (av->fi_addr_table[av->fi_addr_idx] != FI_ADDR_UNSPEC &&
-	       tries < av->util_av.count) {
-		if (++av->fi_addr_idx == av->util_av.count)
-			av->fi_addr_idx = 0;
-		tries++;
+	if (av->fi_addr_table[av->fi_addr_idx] != FI_ADDR_UNSPEC) {
+		if (++av->fi_addr_idx == av->util_av.count) {
+			new_av_size = av->util_av.count * 2; 
+			assert(new_av_size > av->util_av.count);
+			av->fi_addr_table = realloc(av->fi_addr_table,
+						    new_av_size *
+						    sizeof(fi_addr_t));
+			assert(av->fi_addr_table);
+			for (i = av->fi_addr_idx; i < new_av_size; i++)
+				av->fi_addr_table[i] = FI_ADDR_UNSPEC;
+			av->util_av.count = new_av_size;
+		}
+			
 	}
-	assert(av->fi_addr_idx < av->util_av.count && tries < av->util_av.count);
+	assert(av->fi_addr_idx < av->util_av.count);
 	av->fi_addr_table[av->fi_addr_idx] = rxd_addr;
 	av->rxd_addr_table[rxd_addr].fi_addr = av->fi_addr_idx;
 
