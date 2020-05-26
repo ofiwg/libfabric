@@ -152,7 +152,7 @@ static int ofi_dup_addr(const struct fi_info *info, struct fi_info *dup)
 }
 
 static int ofi_info_to_core(uint32_t version, const struct fi_provider *prov,
-			    const struct fi_info *util_info,
+			    const struct fi_info *util_hints,
 			    ofi_alter_info_t info_to_core,
 			    struct fi_info **core_hints)
 {
@@ -161,19 +161,19 @@ static int ofi_info_to_core(uint32_t version, const struct fi_provider *prov,
 	if (!(*core_hints = fi_allocinfo()))
 		return -FI_ENOMEM;
 
-	if (info_to_core(version, util_info, NULL, *core_hints))
+	if (info_to_core(version, util_hints, NULL, *core_hints))
 		goto err;
 
-	if (!util_info)
+	if (!util_hints)
 		return 0;
 
-	if (ofi_dup_addr(util_info, *core_hints))
+	if (ofi_dup_addr(util_hints, *core_hints))
 		goto err;
 
-	if (util_info->fabric_attr) {
-		if (util_info->fabric_attr->name) {
+	if (util_hints->fabric_attr) {
+		if (util_hints->fabric_attr->name) {
 			(*core_hints)->fabric_attr->name =
-				strdup(util_info->fabric_attr->name);
+				strdup(util_hints->fabric_attr->name);
 			if (!(*core_hints)->fabric_attr->name) {
 				FI_WARN(prov, FI_LOG_FABRIC,
 					"Unable to allocate fabric name\n");
@@ -181,9 +181,9 @@ static int ofi_info_to_core(uint32_t version, const struct fi_provider *prov,
 			}
 		}
 
-		if (util_info->fabric_attr->prov_name) {
+		if (util_hints->fabric_attr->prov_name) {
 			(*core_hints)->fabric_attr->prov_name =
-				strdup(util_info->fabric_attr->prov_name);
+				strdup(util_hints->fabric_attr->prov_name);
 			if (!(*core_hints)->fabric_attr->prov_name) {
 				FI_WARN(prov, FI_LOG_FABRIC,
 					"Unable to alloc prov name\n");
@@ -197,9 +197,9 @@ static int ofi_info_to_core(uint32_t version, const struct fi_provider *prov,
 		}
 	}
 
-	if (util_info->domain_attr && util_info->domain_attr->name) {
+	if (util_hints->domain_attr && util_hints->domain_attr->name) {
 		(*core_hints)->domain_attr->name =
-			strdup(util_info->domain_attr->name);
+			strdup(util_hints->domain_attr->name);
 		if (!(*core_hints)->domain_attr->name) {
 			FI_WARN(prov, FI_LOG_FABRIC,
 				"Unable to allocate domain name\n");
