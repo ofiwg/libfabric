@@ -2286,6 +2286,9 @@ static int rxm_ep_close(struct fid *fid)
 		retv = ret;
 
 	rxm_ep_txrx_res_close(rxm_ep);
+	ret = rxm_ep_msg_res_close(rxm_ep);
+	if (ret)
+		retv = ret;
 
 	if (rxm_ep->msg_cq) {
 		ret = fi_close(&rxm_ep->msg_cq->fid);
@@ -2294,10 +2297,6 @@ static int rxm_ep_close(struct fid *fid)
 			retv = ret;
 		}
 	}
-
-	ret = rxm_ep_msg_res_close(rxm_ep);
-	if (ret)
-		retv = ret;
 
 	ofi_endpoint_close(&rxm_ep->util_ep);
 	fi_freeinfo(rxm_ep->rxm_info);
