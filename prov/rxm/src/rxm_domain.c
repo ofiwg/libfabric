@@ -212,7 +212,7 @@ int rxm_msg_mr_regv(struct rxm_ep *rxm_ep, const struct iovec *iov,
 	}
 	return 0;
 err:
-	rxm_msg_mr_closev(mr, count);
+	rxm_msg_mr_closev(mr, i);
 	return ret;
 }
 
