@@ -2,6 +2,7 @@
  * Copyright (c) 2004, 2005 Topspin Communications.  All rights reserved.
  * Copyright (c) 2006-2016 Cisco Systems, Inc.  All rights reserved.
  * Copyright (c) 2013-2017 Intel Corp., Inc.  All rights reserved.
+ * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -47,6 +48,7 @@
 #include "shared/ofi_str.h"
 #include "ofi_prov.h"
 #include "ofi_perf.h"
+#include "ofi_hmem.h"
 
 #ifdef HAVE_LIBDL
 #include <dlfcn.h>
@@ -742,6 +744,7 @@ FI_DESTRUCTOR(fi_fini(void))
 
 	ofi_free_filter(&prov_filter);
 	ofi_monitors_cleanup();
+	ofi_hmem_cleanup();
 	ofi_mem_fini();
 	fi_log_fini();
 	fi_param_fini();

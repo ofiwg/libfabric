@@ -42,17 +42,58 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 
+struct cuda_ops {
+	cudaError_t (*cudaMemcpy)(void *dst, const void *src, size_t count,
+				  enum cudaMemcpyKind kind);
+	const char *(*cudaGetErrorName)(cudaError_t error);
+	const char *(*cudaGetErrorString)(cudaError_t error);
+};
+
+#ifdef ENABLE_CUDA_DLOPEN
+
+#include <dlfcn.h>
+
+static void *cudart_handle;
+static struct cuda_ops cuda_ops;
+
+#else
+
+static struct cuda_ops cuda_ops = {
+	.cudaMemcpy = cudaMemcpy,
+	.cudaGetErrorName = cudaGetErrorName,
+	.cudaGetErrorString = cudaGetErrorString,
+};
+
+#endif /* ENABLE_CUDA_DLOPEN */
+
+cudaError_t ofi_cudaMemcpy(void *dst, const void *src, size_t count,
+			   enum cudaMemcpyKind kind)
+{
+	return cuda_ops.cudaMemcpy(dst, src, count, kind);
+}
+
+const char *ofi_cudaGetErrorName(cudaError_t error)
+{
+	return cuda_ops.cudaGetErrorName(error);
+}
+
+const char *ofi_cudaGetErrorString(cudaError_t error)
+{
+	return cuda_ops.cudaGetErrorString(error);
+}
+
 int cuda_copy_to_dev(void *dev, const void *host, size_t size)
 {
 	cudaError_t cuda_ret;
 
-	cuda_ret = cudaMemcpy(dev, host, size, cudaMemcpyHostToDevice);
+	cuda_ret = ofi_cudaMemcpy(dev, host, size, cudaMemcpyHostToDevice);
 	if (cuda_ret == cudaSuccess)
 		return 0;
 
 	FI_WARN(&core_prov, FI_LOG_CORE,
 		"Failed to perform cudaMemcpy: %s:%s\n",
-		cudaGetErrorName(cuda_ret), cudaGetErrorString(cuda_ret));
+		ofi_cudaGetErrorName(cuda_ret),
+		ofi_cudaGetErrorString(cuda_ret));
 
 	return -FI_EIO;
 }
@@ -61,15 +102,67 @@ int cuda_copy_from_dev(void *host, const void *dev, size_t size)
 {
 	cudaError_t cuda_ret;
 
-	cuda_ret = cudaMemcpy(host, dev, size, cudaMemcpyDeviceToHost);
+	cuda_ret = ofi_cudaMemcpy(host, dev, size, cudaMemcpyDeviceToHost);
 	if (cuda_ret == cudaSuccess)
 		return 0;
 
 	FI_WARN(&core_prov, FI_LOG_CORE,
 		"Failed to perform cudaMemcpy: %s:%s\n",
-		cudaGetErrorName(cuda_ret), cudaGetErrorString(cuda_ret));
+		ofi_cudaGetErrorName(cuda_ret),
+		ofi_cudaGetErrorString(cuda_ret));
 
 	return -FI_EIO;
+}
+
+int cuda_hmem_init(void)
+{
+#ifdef ENABLE_CUDA_DLOPEN
+	cudart_handle = dlopen("libcudart.so", RTLD_NOW);
+	if (!cudart_handle) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to dlopen libcudart.so\n");
+		goto err;
+	}
+
+	cuda_ops.cudaMemcpy = dlsym(cudart_handle, "cudaMemcpy");
+	if (!cuda_ops.cudaMemcpy) {
+		FI_WARN(&core_prov, FI_LOG_CORE, "Failed to find cudaMemcpy\n");
+		goto err_dlclose;
+	}
+
+	cuda_ops.cudaGetErrorName = dlsym(cudart_handle, "cudaGetErrorName");
+	if (!cuda_ops.cudaGetErrorName) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to find cudaGetErrorName\n");
+		goto err_dlclose;
+	}
+
+	cuda_ops.cudaGetErrorString = dlsym(cudart_handle,
+					    "cudaGetErrorString");
+	if (!cuda_ops.cudaGetErrorString) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to find cudaGetErrorString\n");
+		goto err_dlclose;
+	}
+
+	return FI_SUCCESS;
+
+err_dlclose:
+	dlclose(cudart_handle);
+err:
+	return -FI_ENODATA;
+#else
+	return FI_SUCCESS;
+#endif /* ENABLE_CUDA_DLOPEN */
+}
+
+int cuda_hmem_cleanup(void)
+{
+#ifdef ENABLE_CUDA_DLOPEN
+	dlclose(cudart_handle);
+#endif
+
+	return FI_SUCCESS;
 }
 
 #else
@@ -80,6 +173,16 @@ int cuda_copy_to_dev(void *dev, const void *host, size_t size)
 }
 
 int cuda_copy_from_dev(void *host, const void *dev, size_t size)
+{
+	return -FI_ENOSYS;
+}
+
+int cuda_hmem_init(void)
+{
+	return -FI_ENOSYS;
+}
+
+int cuda_hmem_cleanup(void)
 {
 	return -FI_ENOSYS;
 }
