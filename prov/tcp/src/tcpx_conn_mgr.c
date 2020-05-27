@@ -264,7 +264,7 @@ static void server_send_cm_accept(struct util_wait *wait,
 	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "Send connect (accept) response\n");
 	ret = tx_cm_data(ep->sock, ofi_ctrl_connresp, cm_ctx);
 	if (ret)
-		goto err;
+		goto err_del;
 
 	cm_entry.fid =  cm_ctx->fid;
 	ret = (int) fi_eq_write(&ep->util_ep.eq->eq_fid, FI_CONNECTED,
@@ -276,17 +276,25 @@ static void server_send_cm_accept(struct util_wait *wait,
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"Could not remove fd from wait\n");
-		goto err;
+		goto err_report;
 	}
 
 	ret = tcpx_ep_enable_xfers(ep);
 	if (ret)
-		goto err;
+		goto err_report;
 
 	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "Connection Accept Successful\n");
 	free(cm_ctx);
 	return;
-err:
+
+err_del:
+	ret = ofi_wait_del_fd(wait, ep->sock);
+	if (ret)
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+			"Could not remove fd from wait: %s\n",
+			fi_strerror(-ret));
+
+err_report:
 	memset(&err_entry, 0, sizeof err_entry);
 	err_entry.fid = cm_ctx->fid;
 	err_entry.context = cm_ctx->fid->context;
