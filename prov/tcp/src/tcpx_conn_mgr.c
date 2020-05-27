@@ -384,8 +384,8 @@ static void client_send_connreq(struct util_wait *wait,
 	len = sizeof(status);
 	ret = getsockopt(ep->sock, SOL_SOCKET, SO_ERROR, (char *) &status, &len);
 	if (ret < 0 || status) {
-		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "connection failure\n");
 		ret = (ret < 0)? -ofi_sockerr() : status;
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "connection failure\n");
 		goto err_del;
 	}
 
