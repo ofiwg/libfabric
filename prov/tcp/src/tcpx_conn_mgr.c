@@ -253,6 +253,9 @@ err:
 	}
 	free(cm_ctx);
 
+	FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "Sending shutdown, err: %d (%s)\n",
+		err_entry.err, fi_strerror(err_entry.err));
+
 	/* `err_entry.err_data` must live until it is passed to user */
 	ret = fi_eq_write(&ep->util_ep.eq->eq_fid, FI_SHUTDOWN,
 			  &err_entry, sizeof(err_entry), UTIL_FLAG_ERROR);
@@ -314,6 +317,10 @@ err_report:
 	err_entry.err = -ret;
 
 	free(cm_ctx);
+
+	FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "Sending shutdown, err: %d (%s)\n",
+		err_entry.err, fi_strerror(err_entry.err));
+
 	fi_eq_write(&ep->util_ep.eq->eq_fid, FI_SHUTDOWN,
 		    &err_entry, sizeof(err_entry), UTIL_FLAG_ERROR);
 }
@@ -439,6 +446,9 @@ err_report:
 	 * use-after-free
 	 */
 	free(cm_ctx);
+
+	FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "Sending shutdown, err: %d (%s)\n",
+		err_entry.err, fi_strerror(err_entry.err));
 
 	fi_eq_write(&ep->util_ep.eq->eq_fid, FI_SHUTDOWN,
 		    &err_entry, sizeof(err_entry), UTIL_FLAG_ERROR);
