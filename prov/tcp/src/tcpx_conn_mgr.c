@@ -378,31 +378,47 @@ static void client_send_connreq(struct util_wait *wait,
 	if (ret < 0 || status) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "connection failure\n");
 		ret = (ret < 0)? -ofi_sockerr() : status;
-		goto err;
+		goto err_del;
 	}
 
 	ret = tx_cm_data(ep->sock, ofi_ctrl_connreq, cm_ctx);
 	if (ret)
-		goto err;
+		goto err_del;
 
 	ret = ofi_wait_del_fd(wait, ep->sock);
-	if (ret)
-		goto err;
+	if (ret) {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+			"Could not remove fd from wait: %s\n",
+			fi_strerror(-ret));
+		goto err_report;
+	}
 
 	cm_ctx->type = CLIENT_RECV_CONNRESP;
 	ret = ofi_wait_add_fd(wait, ep->sock, POLLIN,
 			      tcpx_eq_wait_try_func, NULL, cm_ctx);
 	if (ret)
-		goto err;
+		goto err_report;
 
 	return;
-err:
+
+err_del:
+	ret = ofi_wait_del_fd(wait, ep->sock);
+	if (ret)
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+			"Could not remove fd from wait: %s\n",
+			fi_strerror(-ret));
+err_report:
 	memset(&err_entry, 0, sizeof err_entry);
 	err_entry.fid = cm_ctx->fid;
 	err_entry.context = cm_ctx->fid->context;
 	err_entry.err = -ret;
 
+	/* cm_ctx must only be freed once its wait fd was
+	 * removed from polling, otherwise next poll round will trigger a
+	 * use-after-free
+	 */
 	free(cm_ctx);
+
 	fi_eq_write(&ep->util_ep.eq->eq_fid, FI_SHUTDOWN,
 		    &err_entry, sizeof(err_entry), UTIL_FLAG_ERROR);
 }
