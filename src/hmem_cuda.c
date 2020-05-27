@@ -47,6 +47,9 @@ struct cuda_ops {
 				  enum cudaMemcpyKind kind);
 	const char *(*cudaGetErrorName)(cudaError_t error);
 	const char *(*cudaGetErrorString)(cudaError_t error);
+	CUresult (*cuPointerGetAttribute)(void *data,
+					  CUpointer_attribute attribute,
+					  CUdeviceptr ptr);
 };
 
 #ifdef ENABLE_CUDA_DLOPEN
@@ -54,6 +57,7 @@ struct cuda_ops {
 #include <dlfcn.h>
 
 static void *cudart_handle;
+static void *cuda_handle;
 static struct cuda_ops cuda_ops;
 
 #else
@@ -62,6 +66,7 @@ static struct cuda_ops cuda_ops = {
 	.cudaMemcpy = cudaMemcpy,
 	.cudaGetErrorName = cudaGetErrorName,
 	.cudaGetErrorString = cudaGetErrorString,
+	.cuPointerGetAttribute = cuPointerGetAttribute,
 };
 
 #endif /* ENABLE_CUDA_DLOPEN */
@@ -80,6 +85,12 @@ const char *ofi_cudaGetErrorName(cudaError_t error)
 const char *ofi_cudaGetErrorString(cudaError_t error)
 {
 	return cuda_ops.cudaGetErrorString(error);
+}
+
+CUresult ofi_cuPointerGetAttribute(void *data, CUpointer_attribute attribute,
+				   CUdeviceptr ptr)
+{
+	return cuda_ops.cuPointerGetAttribute(data, attribute, ptr);
 }
 
 int cuda_copy_to_dev(void *dev, const void *host, size_t size)
@@ -124,17 +135,24 @@ int cuda_hmem_init(void)
 		goto err;
 	}
 
+	cuda_handle = dlopen("libcuda.so", RTLD_NOW);
+	if (!cuda_handle) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to dlopen libcuda.so\n");
+		goto err_dlclose_cudart;
+	}
+
 	cuda_ops.cudaMemcpy = dlsym(cudart_handle, "cudaMemcpy");
 	if (!cuda_ops.cudaMemcpy) {
 		FI_WARN(&core_prov, FI_LOG_CORE, "Failed to find cudaMemcpy\n");
-		goto err_dlclose;
+		goto err_dlclose_cuda;
 	}
 
 	cuda_ops.cudaGetErrorName = dlsym(cudart_handle, "cudaGetErrorName");
 	if (!cuda_ops.cudaGetErrorName) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find cudaGetErrorName\n");
-		goto err_dlclose;
+		goto err_dlclose_cuda;
 	}
 
 	cuda_ops.cudaGetErrorString = dlsym(cudart_handle,
@@ -142,12 +160,22 @@ int cuda_hmem_init(void)
 	if (!cuda_ops.cudaGetErrorString) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find cudaGetErrorString\n");
-		goto err_dlclose;
+		goto err_dlclose_cuda;
+	}
+
+	cuda_ops.cuPointerGetAttribute = dlsym(cuda_handle,
+					       "cuPointerGetAttribute");
+	if (!cuda_ops.cuPointerGetAttribute) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to find cuPointerGetAttribute\n");
+		goto err_dlclose_cuda;
 	}
 
 	return FI_SUCCESS;
 
-err_dlclose:
+err_dlclose_cuda:
+	dlclose(cuda_handle);
+err_dlclose_cudart:
 	dlclose(cudart_handle);
 err:
 	return -FI_ENODATA;
@@ -159,6 +187,7 @@ err:
 int cuda_hmem_cleanup(void)
 {
 #ifdef ENABLE_CUDA_DLOPEN
+	dlclose(cuda_handle);
 	dlclose(cudart_handle);
 #endif
 
