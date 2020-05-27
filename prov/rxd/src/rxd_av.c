@@ -113,15 +113,25 @@ static fi_addr_t rxd_av_dg_addr(struct rxd_av *av, fi_addr_t fi_addr)
 
 static fi_addr_t rxd_set_rxd_addr(struct rxd_av *av, fi_addr_t dg_addr)
 {
-	int tries = 0;
+	size_t new_max_peers;
+	size_t i;
 
-	while (av->rxd_addr_table[av->rxd_addr_idx].dg_addr != FI_ADDR_UNSPEC &&
-	       tries < av->util_av.count) {
-		if (++av->rxd_addr_idx == av->util_av.count)
-			av->rxd_addr_idx = 0;
-		tries++;
+	if (av->rxd_addr_table[av->rxd_addr_idx].dg_addr != FI_ADDR_UNSPEC) {
+		if (++av->rxd_addr_idx == av->max_peers) {
+			new_max_peers = (2 * av->max_peers);
+			assert(new_max_peers > av->max_peers);
+			av->rxd_addr_table = realloc(av->rxd_addr_table,
+						     new_max_peers * 
+						     sizeof(struct rxd_addr));
+			assert(av->rxd_addr_table);
+			for (i = av->rxd_addr_idx; i < new_max_peers; i++) {
+				av->rxd_addr_table[i].dg_addr = FI_ADDR_UNSPEC;
+				av->rxd_addr_table[i].fi_addr =  FI_ADDR_UNSPEC;
+			}
+			av->max_peers = new_max_peers;
+		}
 	}
-	assert(av->rxd_addr_idx < av->util_av.count && tries < av->util_av.count);
+	assert(av->rxd_addr_idx < av->max_peers);
 	av->rxd_addr_table[av->rxd_addr_idx].dg_addr = dg_addr;
 
 	return av->rxd_addr_idx;
@@ -387,8 +397,9 @@ int rxd_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	av = calloc(1, sizeof(*av));
 	if (!av)
 		return -FI_ENOMEM;
+	av->max_peers =  rxd_env.max_peers;
 	av->fi_addr_table = calloc(1, attr->count * sizeof(fi_addr_t));
-	av->rxd_addr_table = calloc(1, rxd_env.max_peers * sizeof(struct rxd_addr));
+	av->rxd_addr_table = calloc(1, av->max_peers * sizeof(struct rxd_addr));
 	if (!av->fi_addr_table || !av->rxd_addr_table) {
 		ret = -FI_ENOMEM;
 		goto err1;
@@ -408,7 +419,7 @@ int rxd_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	ofi_rbmap_init(&av->rbmap, rxd_tree_compare);
 	for (i = 0; i < attr->count; av->fi_addr_table[i++] = FI_ADDR_UNSPEC)
 		;
-	for (i = 0; i < rxd_env.max_peers; i++) {
+	for (i = 0; i < av->max_peers; i++) {
 		av->rxd_addr_table[i].fi_addr = FI_ADDR_UNSPEC;
 		av->rxd_addr_table[i].dg_addr = FI_ADDR_UNSPEC;
 	}

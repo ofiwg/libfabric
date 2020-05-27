@@ -156,7 +156,7 @@ struct rxd_av {
 
 	int dg_av_used;
 	size_t dg_addrlen;
-
+	size_t max_peers;
 	fi_addr_t *fi_addr_table;
 	struct rxd_addr *rxd_addr_table;
 };
