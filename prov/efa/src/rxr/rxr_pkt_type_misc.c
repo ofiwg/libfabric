@@ -32,7 +32,6 @@
  */
 
 #include "efa.h"
-#include "efa_cuda.h"
 #include "rxr.h"
 #include "rxr_msg.h"
 #include "rxr_cntr.h"
@@ -279,7 +278,7 @@ void rxr_pkt_handle_readrsp_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_en
 	tx_entry->window -= data_len;
 	assert(tx_entry->window >= 0);
 	if (tx_entry->bytes_sent < tx_entry->total_len) {
-		assert(!rxr_ep_is_cuda_mr(tx_entry->desc[0]));
+		assert(!efa_ep_is_cuda_mr(tx_entry->desc[0]));
 		if (efa_mr_cache_enable && rxr_ep_mr_local(ep))
 			rxr_prepare_desc_send(rxr_ep_domain(ep), tx_entry);
 

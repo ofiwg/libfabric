@@ -61,6 +61,7 @@
 #include <uthash.h>
 #include <ofi_recvwin.h>
 #include <ofi_perf.h>
+#include <ofi_hmem.h>
 
 #include "rxr_pkt_entry.h"
 #include "rxr_pkt_type.h"
