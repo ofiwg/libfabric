@@ -126,7 +126,10 @@ int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 	}
 
 	core_info->ep_attr->type = FI_EP_MSG;
-	if (!fi_param_get_bool(&rxm_prov, "use_srx", &use_srx) && use_srx) {
+
+	fi_param_get_bool(&rxm_prov, "use_srx", &use_srx);
+	if (use_srx || (base_info && base_info->fabric_attr->prov_name &&
+	    !strcmp(base_info->fabric_attr->prov_name, "tcp"))) {
 		FI_DBG(&rxm_prov, FI_LOG_FABRIC,
 		       "Requesting shared receive context from core provider\n");
 		core_info->ep_attr->rx_ctx_cnt = FI_SHARED_CONTEXT;
