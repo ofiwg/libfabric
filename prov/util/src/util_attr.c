@@ -309,8 +309,11 @@ int ofix_getinfo(uint32_t version, const char *node, const char *service,
 		ret = ofi_get_core_info(version, node, service, flags,
 					util_prov, hints, base_info,
 					info_to_core, &core_info);
-		if (ret)
-			return ret;
+		if (ret) {
+			if (ret == -FI_ENODATA)
+				continue;
+			break;
+		}
 
 		for (cur = core_info; cur; cur = cur->next) {
 			ret = ofi_info_to_util(version, util_prov->prov, cur,
