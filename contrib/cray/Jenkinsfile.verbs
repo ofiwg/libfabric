@@ -49,7 +49,7 @@ pipeline {
             }
             steps {
                 sh './autogen.sh'
-                sh "./configure --prefix=$LIBFABRIC_INSTALL"
+                sh "./configure --prefix=$LIBFABRIC_INSTALL --disable-memhooks-monitor"
                 sh "make -j 12"
                 sh "make install"
                 dir ("fabtests") {
@@ -329,7 +329,7 @@ pipeline {
             }
             steps {
                 sh './autogen.sh'
-                sh "./configure --prefix=$LIBFABRIC_INSTALL_PATH"
+                sh "./configure --prefix=$LIBFABRIC_INSTALL_PATH --disable-memhooks-monitor"
                 sh "make -j 12"
                 sh "make install"
             }
