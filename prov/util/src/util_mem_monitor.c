@@ -68,9 +68,9 @@ void ofi_monitor_init(void)
 	pthread_mutex_init(&memhooks_monitor->lock, NULL);
 	dlist_init(&memhooks_monitor->list);
 
-#if defined(HAVE_ELF_H) && defined(HAVE_SYS_AUXV_H)
+#if HAVE_MEMHOOKS_MONITOR
         default_monitor = memhooks_monitor;
-#elif HAVE_UFFD_UNMAP
+#elif HAVE_UFFD_MONITOR
         default_monitor = uffd_monitor;
 #else
         default_monitor = NULL;
@@ -107,13 +107,19 @@ void ofi_monitor_init(void)
 
 	if (cache_params.monitor != NULL) {
 		if (!strcmp(cache_params.monitor, "userfaultfd")) {
-#if HAVE_UFFD_UNMAP
+#if HAVE_UFFD_MONITOR
 			default_monitor = uffd_monitor;
 #else
 			FI_WARN(&core_prov, FI_LOG_MR, "userfaultfd monitor not available\n");
+			default_monitor = NULL;
 #endif
 		} else if (!strcmp(cache_params.monitor, "memhooks")) {
+#if HAVE_MEMHOOKS_MONITOR
 			default_monitor = memhooks_monitor;
+#else
+			FI_WARN(&core_prov, FI_LOG_MR, "memhooks monitor not available\n");
+			default_monitor = NULL;
+#endif
 		} else if (!strcmp(cache_params.monitor, "disabled")) {
 			default_monitor = NULL;
 		}
@@ -211,7 +217,7 @@ void ofi_monitor_unsubscribe(struct ofi_mem_monitor *monitor,
 	monitor->unsubscribe(monitor, addr, len);
 }
 
-#if HAVE_UFFD_UNMAP
+#if HAVE_UFFD_MONITOR
 
 #include <poll.h>
 #include <sys/syscall.h>
@@ -390,7 +396,7 @@ void ofi_uffd_cleanup(void)
 	close(uffd.fd);
 }
 
-#else /* HAVE_UFFD_UNMAP */
+#else /* HAVE_UFFD_MONITOR */
 
 int ofi_uffd_init(void)
 {
@@ -401,4 +407,4 @@ void ofi_uffd_cleanup(void)
 {
 }
 
-#endif /* HAVE_UFFD_UNMAP */
+#endif /* HAVE_UFFD_MONITOR */
