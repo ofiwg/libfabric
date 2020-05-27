@@ -145,6 +145,11 @@ static int tcpx_ep_enable_xfers(struct tcpx_ep *ep)
 				      ep->sock, POLLIN, tcpx_try_func,
 				      (void *) &ep->util_ep,
 				      &ep->util_ep.ep_fid.fid);
+		if (ret) {
+			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+				"Failed to add fd to rx_cq\n");
+			return ret;
+		}
 	}
 
 	if (ep->util_ep.tx_cq) {
@@ -152,6 +157,11 @@ static int tcpx_ep_enable_xfers(struct tcpx_ep *ep)
 				      ep->sock, POLLIN, tcpx_try_func,
 				      (void *) &ep->util_ep,
 				      &ep->util_ep.ep_fid.fid);
+		if (ret) {
+			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+				"Failed to add fd to tx_cq\n");
+			return ret;
+		}
 	}
 
 	return ret;
@@ -263,8 +273,11 @@ static void server_send_cm_accept(struct util_wait *wait,
 
 	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "Send connect (accept) response\n");
 	ret = tx_cm_data(ep->sock, ofi_ctrl_connresp, cm_ctx);
-	if (ret)
+	if (ret) {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+			"Failed to send connect (accept) response\n");
 		goto err_del;
+	}
 
 	cm_entry.fid =  cm_ctx->fid;
 	ret = (int) fi_eq_write(&ep->util_ep.eq->eq_fid, FI_CONNECTED,
