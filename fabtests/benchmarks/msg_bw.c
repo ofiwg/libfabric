@@ -107,6 +107,7 @@ int main(int argc, char **argv)
 	hints->domain_attr->resource_mgmt = FI_RM_ENABLED;
 	hints->domain_attr->mr_mode = opts.mr_mode;
 	hints->domain_attr->threading = FI_THREAD_DOMAIN;
+	hints->addr_format = opts.address_format;
 
 	ret = run();
 

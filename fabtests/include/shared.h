@@ -165,13 +165,14 @@ struct ft_opts {
 	char *oob_port;
 	int argc;
 	int num_connections;
+	int address_format;
 
 	uint64_t mr_mode;
 	/* Fail if the selected provider does not support FI_MSG_PREFIX.  */
 	int force_prefix;
 	enum fi_hmem_iface iface;
 	uint64_t device;
-	
+
 	char **argv;
 };
 
@@ -241,7 +242,7 @@ extern int ft_parent_proc;
 extern int ft_socket_pair[2];
 extern int sock;
 extern int listen_sock;
-#define ADDR_OPTS "B:P:s:a:b::E::C:"
+#define ADDR_OPTS "B:P:s:a:b::E::C:F:"
 #define FAB_OPTS "f:d:p:D:i:H"
 #define INFO_OPTS FAB_OPTS "e:M:"
 #define CS_OPTS ADDR_OPTS "I:S:mc:t:w:l"
@@ -265,7 +266,8 @@ extern char default_port[8];
 		.mr_mode = FI_MR_LOCAL | OFI_MR_BASIC_MAP, \
 		.iface = FI_HMEM_SYSTEM, \
 		.device = 0, \
-		.argc = argc, .argv = argv \
+		.argc = argc, .argv = argv, \
+		.address_format = FI_FORMAT_UNSPEC \
 	}
 
 #define FT_STR_LEN 32

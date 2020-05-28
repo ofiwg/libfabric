@@ -95,6 +95,7 @@ int main(int argc, char **argv)
 	hints->domain_attr->resource_mgmt = FI_RM_ENABLED;
 	hints->mode = FI_CONTEXT;
 	hints->domain_attr->threading = FI_THREAD_DOMAIN;
+	hints->addr_format = opts.address_format;
 
 	while ((op = getopt(argc, argv, "ho:" CS_OPTS INFO_OPTS BENCHMARK_OPTS)) != -1) {
 		switch (op) {
