@@ -199,7 +199,7 @@ struct rxd_ep {
 	size_t tx_msg_avail;
 	size_t rx_msg_avail;
 	size_t tx_rma_avail;
-	size_t rx_rma_avail;
+	size_t rx_rma_avail;	
 
 	struct rxd_buf_pool tx_pkt_pool;
 	struct rxd_buf_pool rx_pkt_pool;
@@ -216,7 +216,8 @@ struct rxd_ep {
 	struct dlist_entry rts_sent_list;
 	struct dlist_entry ctrl_pkts;
 
-	struct rxd_peer peers[];
+	size_t max_peers;
+	struct rxd_peer *peers;
 };
 
 static inline struct rxd_domain *rxd_ep_domain(struct rxd_ep *ep)
@@ -420,6 +421,8 @@ int rxd_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 int rxd_av_insert_dg_addr(struct rxd_av *av, const void *addr,
 			  fi_addr_t *dg_fiaddr, uint64_t flags,
 			  void *context);
+/* EP sub functions*/
+void rxd_ep_peers_grow(struct rxd_ep *ep, fi_addr_t rxd_addr);
 
 /* Pkt resource functions */
 int rxd_ep_post_buf(struct rxd_ep *ep);

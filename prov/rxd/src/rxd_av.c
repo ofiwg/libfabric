@@ -167,6 +167,8 @@ int rxd_av_insert_dg_addr(struct rxd_av *av, const void *addr,
 			  fi_addr_t *rxd_addr, uint64_t flags,
 			  void *context)
 {
+	struct dlist_entry *av_entry;
+	struct rxd_ep *rxd_ep;
 	fi_addr_t dg_addr;
 	int ret;
 
@@ -176,7 +178,11 @@ int rxd_av_insert_dg_addr(struct rxd_av *av, const void *addr,
 		return -FI_EINVAL;
 
 	*rxd_addr = rxd_set_rxd_addr(av, dg_addr);
-
+	dlist_foreach(&av->util_av.ep_list, av_entry) {
+		rxd_ep =  container_of(av_entry, struct rxd_ep,
+				       util_ep.av_entry);
+		rxd_ep_peers_grow(rxd_ep, *rxd_addr);
+	}
 	ret = ofi_rbmap_insert(&av->rbmap, (void *) addr, (void *) (*rxd_addr),
 			       NULL);
 	if (ret) {

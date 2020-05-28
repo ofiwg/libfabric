@@ -1155,6 +1155,23 @@ static void rxd_init_peer(struct rxd_ep *ep, uint64_t rxd_addr)
 	dlist_init(&ep->peers[rxd_addr].buf_pkts);
 }
 
+void rxd_ep_peers_grow(struct rxd_ep *ep, fi_addr_t rxd_addr) {
+
+	size_t i;
+	size_t new_max_peers;
+
+	if (rxd_addr == ep->max_peers) {
+		new_max_peers = 2 * ep->max_peers;
+		assert(new_max_peers > ep->max_peers);
+		ep->peers = realloc(ep, sizeof(struct rxd_peer) *
+				    new_max_peers);
+		assert(ep->peers);
+		for(i = ep->max_peers; i < new_max_peers; 
+		    rxd_init_peer(ep, i++));
+		ep->max_peers = new_max_peers;
+	}
+}
+
 int rxd_endpoint(struct fid_domain *domain, struct fi_info *info,
 		 struct fid_ep **ep, void *context)
 {
@@ -1163,8 +1180,8 @@ int rxd_endpoint(struct fid_domain *domain, struct fi_info *info,
 	struct rxd_ep *rxd_ep;
 	int ret, i;
 
-	rxd_ep = calloc(1, sizeof(*rxd_ep) + sizeof(struct rxd_peer) *
-			rxd_env.max_peers);
+	rxd_ep = calloc(1, sizeof(*rxd_ep));
+
 	if (!rxd_ep)
 		return -FI_ENOMEM;
 
@@ -1206,7 +1223,12 @@ int rxd_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		goto err3;
 
-	for (i = 0; i < rxd_env.max_peers; rxd_init_peer(rxd_ep, i++))
+	rxd_ep->max_peers = rxd_env.max_peers;
+	rxd_ep->peers = calloc(1, (sizeof(struct rxd_peer) * 
+			       rxd_ep->max_peers));
+	if (!rxd_ep->peers)
+		return -FI_ENOMEM;
+	for (i = 0; i < rxd_ep->max_peers; rxd_init_peer(rxd_ep, i++))
 		;
 
 	rxd_ep->util_ep.ep_fid.fid.ops = &rxd_ep_fi_ops;
