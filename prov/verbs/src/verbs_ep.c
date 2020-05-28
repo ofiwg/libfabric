@@ -1524,8 +1524,6 @@ int vrb_xrc_close_srq(struct vrb_srq_ep *srq_ep)
 	int ret;
 
 	assert(srq_ep->domain->flags & VRB_USE_XRC);
-	if (!srq_ep->xrc.cq || !srq_ep->srq)
-		return FI_SUCCESS;
 
 	ret = ibv_destroy_srq(srq_ep->srq);
 	if (ret) {
@@ -1533,7 +1531,6 @@ int vrb_xrc_close_srq(struct vrb_srq_ep *srq_ep)
 		return -ret;
 	}
 	srq_ep->srq = NULL;
-	srq_ep->xrc.cq = NULL;
 	dlist_remove(&srq_ep->xrc.srq_entry);
 	vrb_cleanup_prepost_bufs(srq_ep);
 
@@ -1547,13 +1544,11 @@ static int vrb_srq_close(fid_t fid)
 	int ret;
 
 	if (srq_ep->domain->flags & VRB_USE_XRC) {
-		if (srq_ep->xrc.cq) {
-			fastlock_acquire(&srq_ep->xrc.cq->xrc.srq_list_lock);
-			ret = vrb_xrc_close_srq(srq_ep);
-			fastlock_release(&srq_ep->xrc.cq->xrc.srq_list_lock);
-			if (ret)
-				goto err;
-		}
+		fastlock_acquire(&srq_ep->xrc.cq->xrc.srq_list_lock);
+		ret = vrb_xrc_close_srq(srq_ep);
+		fastlock_release(&srq_ep->xrc.cq->xrc.srq_list_lock);
+		if (ret)
+			goto err;
 		fastlock_destroy(&srq_ep->xrc.prepost_lock);
 	} else {
 		ret = ibv_destroy_srq(srq_ep->srq);
