@@ -9,6 +9,11 @@ export DMA_FAULT_RATE=.1
 export MALLOC_FAULT_RATE=.1
 export FI_LOG_LEVEL=warn
 
+if [[ $# -gt 0 ]]; then
+    ./cxitest --verbose --filter="@($1)" --tap=cxitest.tap
+    exit $?
+fi
+
 # Run unit tests.  $(CWD) should be writeable.
 ./cxitest --verbose --tap=cxitest.tap
 
