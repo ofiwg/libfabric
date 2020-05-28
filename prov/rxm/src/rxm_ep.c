@@ -2391,8 +2391,10 @@ static int rxm_ep_msg_cq_open(struct rxm_ep *rxm_ep)
 	};
 	int i, ret;
 
-	cq_attr.size = (rxm_ep->msg_info->tx_attr->size +
-			rxm_ep->msg_info->rx_attr->size) * ofi_universe_size;
+	cq_attr.size = rxm_ep->msg_info->rx_attr->size;
+	if (rxm_ep->msg_info->ep_attr->rx_ctx_cnt != FI_SHARED_CONTEXT)
+		cq_attr.size *= ofi_universe_size;
+	cq_attr.size += rxm_ep->msg_info->tx_attr->size * ofi_universe_size;
 	cq_attr.format = FI_CQ_FORMAT_DATA;
 	cq_attr.wait_obj = rxm_get_wait_obj(rxm_ep);
 
