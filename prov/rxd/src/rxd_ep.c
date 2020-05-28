@@ -1177,7 +1177,7 @@ int rxd_endpoint(struct fid_domain *domain, struct fi_info *info,
 		goto err1;
 
 	ret = ofi_get_core_info(rxd_domain->util_domain.fabric->fabric_fid.api_version,
-				NULL, NULL, 0, &rxd_util_prov, info,
+				NULL, NULL, 0, &rxd_util_prov, info, NULL,
 				rxd_info_to_core, &dg_info);
 	if (ret)
 		goto err2;

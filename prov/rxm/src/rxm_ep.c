@@ -2679,7 +2679,7 @@ static int rxm_ep_msg_res_open(struct rxm_ep *rxm_ep)
 				  util_domain);
  	ret = ofi_get_core_info(rxm_ep->util_ep.domain->fabric->fabric_fid.api_version,
 				NULL, NULL, 0, &rxm_util_prov, rxm_ep->rxm_info,
-				rxm_info_to_core, &rxm_ep->msg_info);
+				NULL, rxm_info_to_core, &rxm_ep->msg_info);
 	if (ret)
 		return ret;
 

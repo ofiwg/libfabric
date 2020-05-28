@@ -151,8 +151,30 @@ static int ofi_dup_addr(const struct fi_info *info, struct fi_info *dup)
 	return 0;
 }
 
+static int ofi_set_prov_name(const struct fi_provider *prov,
+			     const struct fi_fabric_attr *util_hints,
+			     const struct fi_info *base_attr,
+			     struct fi_fabric_attr *core_hints)
+{
+	if (util_hints->prov_name) {
+		core_hints->prov_name = strdup(util_hints->prov_name);
+		if (!core_hints->prov_name)
+			return -FI_ENOMEM;
+	} else if (base_attr && base_attr->fabric_attr &&
+		   base_attr->fabric_attr->prov_name) {
+		core_hints->prov_name = strdup(base_attr->fabric_attr->
+					       prov_name);
+		if (!core_hints->prov_name)
+			return -FI_ENOMEM;
+	}
+
+	return core_hints->prov_name ?
+	       ofi_exclude_prov_name(&core_hints->prov_name, prov->name) : 0;
+}
+
 static int ofi_info_to_core(uint32_t version, const struct fi_provider *prov,
-			    const struct fi_info *util_info,
+			    const struct fi_info *util_hints,
+			    const struct fi_info *base_attr,
 			    ofi_alter_info_t info_to_core,
 			    struct fi_info **core_hints)
 {
@@ -161,19 +183,19 @@ static int ofi_info_to_core(uint32_t version, const struct fi_provider *prov,
 	if (!(*core_hints = fi_allocinfo()))
 		return -FI_ENOMEM;
 
-	if (info_to_core(version, util_info, NULL, *core_hints))
+	if (info_to_core(version, util_hints, base_attr, *core_hints))
 		goto err;
 
-	if (!util_info)
+	if (!util_hints)
 		return 0;
 
-	if (ofi_dup_addr(util_info, *core_hints))
+	if (ofi_dup_addr(util_hints, *core_hints))
 		goto err;
 
-	if (util_info->fabric_attr) {
-		if (util_info->fabric_attr->name) {
+	if (util_hints->fabric_attr) {
+		if (util_hints->fabric_attr->name) {
 			(*core_hints)->fabric_attr->name =
-				strdup(util_info->fabric_attr->name);
+				strdup(util_hints->fabric_attr->name);
 			if (!(*core_hints)->fabric_attr->name) {
 				FI_WARN(prov, FI_LOG_FABRIC,
 					"Unable to allocate fabric name\n");
@@ -181,25 +203,15 @@ static int ofi_info_to_core(uint32_t version, const struct fi_provider *prov,
 			}
 		}
 
-		if (util_info->fabric_attr->prov_name) {
-			(*core_hints)->fabric_attr->prov_name =
-				strdup(util_info->fabric_attr->prov_name);
-			if (!(*core_hints)->fabric_attr->prov_name) {
-				FI_WARN(prov, FI_LOG_FABRIC,
-					"Unable to alloc prov name\n");
-				goto err;
-			}
-			ret = ofi_exclude_prov_name(
-					&(*core_hints)->fabric_attr->prov_name,
-					prov->name);
-			if (ret)
-				goto err;
-		}
+		ret = ofi_set_prov_name(prov, util_hints->fabric_attr,
+					base_attr, (*core_hints)->fabric_attr);
+		if (ret)
+			goto err;
 	}
 
-	if (util_info->domain_attr && util_info->domain_attr->name) {
+	if (util_hints->domain_attr && util_hints->domain_attr->name) {
 		(*core_hints)->domain_attr->name =
-			strdup(util_info->domain_attr->name);
+			strdup(util_hints->domain_attr->name);
 		if (!(*core_hints)->domain_attr->name) {
 			FI_WARN(prov, FI_LOG_FABRIC,
 				"Unable to allocate domain name\n");
@@ -268,14 +280,15 @@ err:
 
 int ofi_get_core_info(uint32_t version, const char *node, const char *service,
 		      uint64_t flags, const struct util_prov *util_prov,
-		      const struct fi_info *util_hints, ofi_alter_info_t info_to_core,
-		      struct fi_info **core_info)
+		      const struct fi_info *util_hints,
+		      const struct fi_info *base_attr,
+		      ofi_alter_info_t info_to_core, struct fi_info **core_info)
 {
 	struct fi_info *core_hints = NULL;
 	int ret;
 
-	ret = ofi_info_to_core(version, util_prov->prov, util_hints, info_to_core,
-			       &core_hints);
+	ret = ofi_info_to_core(version, util_prov->prov, util_hints, base_attr,
+			       info_to_core, &core_hints);
 	if (ret)
 		return ret;
 
@@ -304,10 +317,14 @@ int ofix_getinfo(uint32_t version, const char *node, const char *service,
 		if (ofi_check_info(util_prov, base_info, version, hints))
 			continue;
 
-		ret = ofi_get_core_info(version, node, service, flags, util_prov,
-					hints, info_to_core, &core_info);
-		if (ret)
-			return ret;
+		ret = ofi_get_core_info(version, node, service, flags,
+					util_prov, hints, base_info,
+					info_to_core, &core_info);
+		if (ret) {
+			if (ret == -FI_ENODATA)
+				continue;
+			break;
+		}
 
 		for (cur = core_info; cur; cur = cur->next) {
 			ret = ofi_info_to_util(version, util_prov->prov, cur,
@@ -374,7 +391,18 @@ int ofi_check_fabric_attr(const struct fi_provider *prov,
 			  const struct fi_fabric_attr *prov_attr,
 			  const struct fi_fabric_attr *user_attr)
 {
-	/* Provider names are checked by the framework */
+	/* Provider names are properly checked by the framework.
+	 * Here we only apply a simple filter.  If the util provider has
+	 * supplied a core provider name, verify that it is also in the
+	 * user's hints, if one is specified.
+	 */
+	if (prov_attr->prov_name && user_attr->prov_name &&
+	    !strcasestr(user_attr->prov_name, prov_attr->prov_name)) {
+		FI_INFO(prov, FI_LOG_CORE,
+			"Requesting provider %s, skipping %s\n",
+			prov_attr->prov_name, user_attr->prov_name);
+		return -FI_ENODATA;
+	}
 
 	if (user_attr->prov_version > prov_attr->prov_version) {
 		FI_INFO(prov, FI_LOG_CORE, "Unsupported provider version\n");
