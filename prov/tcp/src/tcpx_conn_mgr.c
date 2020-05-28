@@ -269,7 +269,7 @@ static void server_send_cm_accept(struct util_wait *wait,
 	struct fi_eq_cm_entry cm_entry = {0};
 	struct fi_eq_err_entry err_entry;
 	struct tcpx_ep *ep;
-	int ret;
+	int ret, del_ret;
 
 	assert(cm_ctx->fid->fclass == FI_CLASS_EP);
 	ep = container_of(cm_ctx->fid, struct tcpx_ep, util_ep.ep_fid.fid);
@@ -304,11 +304,11 @@ static void server_send_cm_accept(struct util_wait *wait,
 	return;
 
 err_del:
-	ret = ofi_wait_del_fd(wait, ep->sock);
-	if (ret)
+	del_ret = ofi_wait_del_fd(wait, ep->sock);
+	if (del_ret)
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"Could not remove fd from wait: %s\n",
-			fi_strerror(-ret));
+			fi_strerror(-del_ret));
 
 err_report:
 	memset(&err_entry, 0, sizeof err_entry);
@@ -395,6 +395,7 @@ static void client_send_connreq(struct util_wait *wait,
 	struct fi_eq_err_entry err_entry;
 	socklen_t len;
 	int status, ret = FI_SUCCESS;
+	int del_ret;
 
 	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "client send connreq\n");
 	assert(cm_ctx->fid->fclass == FI_CLASS_EP);
@@ -430,11 +431,11 @@ static void client_send_connreq(struct util_wait *wait,
 	return;
 
 err_del:
-	ret = ofi_wait_del_fd(wait, ep->sock);
-	if (ret)
+	del_ret = ofi_wait_del_fd(wait, ep->sock);
+	if (del_ret)
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"Could not remove fd from wait: %s\n",
-			fi_strerror(-ret));
+			fi_strerror(-del_ret));
 err_report:
 	memset(&err_entry, 0, sizeof err_entry);
 	err_entry.fid = cm_ctx->fid;
