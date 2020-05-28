@@ -145,6 +145,11 @@ static int tcpx_ep_enable_xfers(struct tcpx_ep *ep)
 				      ep->sock, POLLIN, tcpx_try_func,
 				      (void *) &ep->util_ep,
 				      &ep->util_ep.ep_fid.fid);
+		if (ret) {
+			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+				"Failed to add fd to rx_cq\n");
+			return ret;
+		}
 	}
 
 	if (ep->util_ep.tx_cq) {
@@ -152,6 +157,11 @@ static int tcpx_ep_enable_xfers(struct tcpx_ep *ep)
 				      ep->sock, POLLIN, tcpx_try_func,
 				      (void *) &ep->util_ep,
 				      &ep->util_ep.ep_fid.fid);
+		if (ret) {
+			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+				"Failed to add fd to tx_cq\n");
+			return ret;
+		}
 	}
 
 	return ret;
@@ -243,6 +253,9 @@ err:
 	}
 	free(cm_ctx);
 
+	FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "Sending shutdown, err: %d (%s)\n",
+		err_entry.err, fi_strerror(err_entry.err));
+
 	/* `err_entry.err_data` must live until it is passed to user */
 	ret = fi_eq_write(&ep->util_ep.eq->eq_fid, FI_SHUTDOWN,
 			  &err_entry, sizeof(err_entry), UTIL_FLAG_ERROR);
@@ -263,8 +276,11 @@ static void server_send_cm_accept(struct util_wait *wait,
 
 	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "Send connect (accept) response\n");
 	ret = tx_cm_data(ep->sock, ofi_ctrl_connresp, cm_ctx);
-	if (ret)
-		goto err;
+	if (ret) {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+			"Failed to send connect (accept) response\n");
+		goto err_del;
+	}
 
 	cm_entry.fid =  cm_ctx->fid;
 	ret = (int) fi_eq_write(&ep->util_ep.eq->eq_fid, FI_CONNECTED,
@@ -276,23 +292,35 @@ static void server_send_cm_accept(struct util_wait *wait,
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"Could not remove fd from wait\n");
-		goto err;
+		goto err_report;
 	}
 
 	ret = tcpx_ep_enable_xfers(ep);
 	if (ret)
-		goto err;
+		goto err_report;
 
 	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "Connection Accept Successful\n");
 	free(cm_ctx);
 	return;
-err:
+
+err_del:
+	ret = ofi_wait_del_fd(wait, ep->sock);
+	if (ret)
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+			"Could not remove fd from wait: %s\n",
+			fi_strerror(-ret));
+
+err_report:
 	memset(&err_entry, 0, sizeof err_entry);
 	err_entry.fid = cm_ctx->fid;
 	err_entry.context = cm_ctx->fid->context;
 	err_entry.err = -ret;
 
 	free(cm_ctx);
+
+	FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "Sending shutdown, err: %d (%s)\n",
+		err_entry.err, fi_strerror(err_entry.err));
+
 	fi_eq_write(&ep->util_ep.eq->eq_fid, FI_SHUTDOWN,
 		    &err_entry, sizeof(err_entry), UTIL_FLAG_ERROR);
 }
@@ -376,33 +404,52 @@ static void client_send_connreq(struct util_wait *wait,
 	len = sizeof(status);
 	ret = getsockopt(ep->sock, SOL_SOCKET, SO_ERROR, (char *) &status, &len);
 	if (ret < 0 || status) {
-		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "connection failure\n");
 		ret = (ret < 0)? -ofi_sockerr() : status;
-		goto err;
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "connection failure\n");
+		goto err_del;
 	}
 
 	ret = tx_cm_data(ep->sock, ofi_ctrl_connreq, cm_ctx);
 	if (ret)
-		goto err;
+		goto err_del;
 
 	ret = ofi_wait_del_fd(wait, ep->sock);
-	if (ret)
-		goto err;
+	if (ret) {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+			"Could not remove fd from wait: %s\n",
+			fi_strerror(-ret));
+		goto err_report;
+	}
 
 	cm_ctx->type = CLIENT_RECV_CONNRESP;
 	ret = ofi_wait_add_fd(wait, ep->sock, POLLIN,
 			      tcpx_eq_wait_try_func, NULL, cm_ctx);
 	if (ret)
-		goto err;
+		goto err_report;
 
 	return;
-err:
+
+err_del:
+	ret = ofi_wait_del_fd(wait, ep->sock);
+	if (ret)
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+			"Could not remove fd from wait: %s\n",
+			fi_strerror(-ret));
+err_report:
 	memset(&err_entry, 0, sizeof err_entry);
 	err_entry.fid = cm_ctx->fid;
 	err_entry.context = cm_ctx->fid->context;
 	err_entry.err = -ret;
 
+	/* cm_ctx must only be freed once its wait fd was
+	 * removed from polling, otherwise next poll round will trigger a
+	 * use-after-free
+	 */
 	free(cm_ctx);
+
+	FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "Sending shutdown, err: %d (%s)\n",
+		err_entry.err, fi_strerror(err_entry.err));
+
 	fi_eq_write(&ep->util_ep.eq->eq_fid, FI_SHUTDOWN,
 		    &err_entry, sizeof(err_entry), UTIL_FLAG_ERROR);
 }
