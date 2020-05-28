@@ -687,6 +687,14 @@ static int vrb_ep_enable_xrc(struct vrb_ep *ep)
 		goto done;
 	}
 
+	if (cq->credits < srq_ep->xrc.max_recv_wr) {
+		VERBS_WARN(FI_LOG_EP_CTRL,
+			   "CQ credits %" PRId64 " insufficient\n",
+			   cq->credits);
+		ret = -FI_EINVAL;
+		goto done;
+	}
+
 	memset(&attr, 0, sizeof(attr));
 	attr.attr.max_wr = srq_ep->xrc.max_recv_wr;
 	attr.attr.max_sge = srq_ep->xrc.max_sge;
@@ -708,6 +716,7 @@ static int vrb_ep_enable_xrc(struct vrb_ep *ep)
 	cq->util_cq.cq_fastlock_acquire(&cq->xrc.srq_list_lock);
 	dlist_insert_tail(&srq_ep->xrc.srq_entry, &cq->xrc.srq_list);
 	srq_ep->xrc.cq = cq;
+	cq->credits -= srq_ep->xrc.max_recv_wr;
 	cq->util_cq.cq_fastlock_release(&cq->xrc.srq_list_lock);
 
 	ibv_get_srq_num(srq_ep->srq, &xrc_ep->srqn);
@@ -1530,6 +1539,7 @@ int vrb_xrc_close_srq(struct vrb_srq_ep *srq_ep)
 		VERBS_WARN(FI_LOG_EP_CTRL, "Cannot destroy SRQ rc=%d\n", ret);
 		return -ret;
 	}
+	srq_ep->xrc.cq->credits += srq_ep->xrc.max_recv_wr;
 	srq_ep->srq = NULL;
 	dlist_remove(&srq_ep->xrc.srq_entry);
 	vrb_cleanup_prepost_bufs(srq_ep);
