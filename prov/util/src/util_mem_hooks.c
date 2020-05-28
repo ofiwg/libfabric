@@ -50,7 +50,7 @@ struct ofi_mem_monitor *memhooks_monitor = &memhooks.monitor;
 
 
 /* memhook support checks */
-#if defined(__linux__) && defined(HAVE_ELF_H) && defined(HAVE_SYS_AUXV_H)
+#if HAVE_MEMHOOKS_MONITOR
 
 #include <elf.h>
 #include <sys/auxv.h>
