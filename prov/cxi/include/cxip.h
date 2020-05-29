@@ -586,6 +586,11 @@ struct cxip_req {
 	};
 };
 
+static inline bool cxip_is_trig_req(struct cxip_req *req)
+{
+	return req->trig_cntr != NULL;
+}
+
 struct cxip_ctrl_req_mr {
 	struct cxip_mr *mr;
 };
@@ -838,6 +843,8 @@ struct cxip_txc {
 	struct dlist_entry msg_queue;
 	struct dlist_entry fc_peers;
 };
+
+void cxip_txc_flush_trig_reqs(struct cxip_txc *txc);
 
 /**
  * Endpoint Internals

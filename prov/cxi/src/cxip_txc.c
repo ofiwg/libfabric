@@ -362,3 +362,22 @@ void cxip_txc_free(struct cxip_txc *txc)
 	fastlock_destroy(&txc->lock);
 	free(txc);
 }
+
+void cxip_txc_flush_trig_reqs(struct cxip_txc *txc)
+{
+	struct cxip_req *req;
+	struct dlist_entry *tmp;
+
+	fastlock_acquire(&txc->lock);
+
+	/* Drain the message queue. */
+	dlist_foreach_container_safe(&txc->msg_queue, struct cxip_req, req,
+				     send.txc_entry, tmp) {
+		if (cxip_is_trig_req(req)) {
+			ofi_atomic_dec32(&txc->otx_reqs);
+			cxip_cq_req_free(req);
+		}
+	}
+
+	fastlock_release(&txc->lock);
+}
