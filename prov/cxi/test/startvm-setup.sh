@@ -2,7 +2,7 @@
 #
 # Initialize a VM for CXI testing and run a command.
 
-DBS_DIR="../../../.."
+DBS_DIR=$(realpath "../../../..")
 
 if [[ -z $RUNCMD ]]; then
     RUNCMD="$@"
