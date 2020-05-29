@@ -142,7 +142,7 @@ static int mr_regattr()
 	int testret = FAIL;
 	struct fid_mr *mr;
 	struct iovec *iov;
-	struct fi_mr_attr attr;
+	struct fi_mr_attr attr = {0};
 	char *base;
 
 	attr.access = ft_info_to_mr_access(fi);
