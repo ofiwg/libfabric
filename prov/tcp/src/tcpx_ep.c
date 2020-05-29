@@ -77,14 +77,14 @@ static int tcpx_setup_socket(SOCKET sock)
 			 sizeof(optval));
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,"setsockopt reuseaddr failed\n");
-		return ret;
+		return -ofi_sockerr();
 	}
 
 	ret = setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (char *) &optval,
 			 sizeof(optval));
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,"setsockopt nodelay failed\n");
-		return ret;
+		return -ofi_sockerr();
 	}
 
 	return ret;
@@ -199,13 +199,13 @@ static int tcpx_bind_to_port_range(SOCKET sock, void* src_addr, size_t addrlen)
 		ofi_addr_set_port(src_addr, rand_port_number);
 		ret = bind(sock, src_addr, (socklen_t) addrlen);
 		if (ret) {
-			if (errno == EADDRINUSE)
+			if (ofi_sockerr() == EADDRINUSE)
 				continue;
 
 			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 				"failed to bind listener: %s\n",
 				strerror(ofi_sockerr()));
-			return -errno;
+			return -ofi_sockerr();
 		}
 		break;
 	}
@@ -239,12 +239,15 @@ static int tcpx_pep_sock_create(struct tcpx_pep *pep)
 	if (ret) {
 		goto err;
 	}
-	if (ofi_addr_get_port(pep->info->src_addr) != 0 || port_range.high == 0)
+	if (ofi_addr_get_port(pep->info->src_addr) != 0 || port_range.high == 0) {
 		ret = bind(pep->sock, pep->info->src_addr,
 			  (socklen_t) pep->info->src_addrlen);
-	else
+		if (ret)
+			ret = -ofi_sockerr();
+	} else {
 		ret = tcpx_bind_to_port_range(pep->sock, pep->info->src_addr,
 					      pep->info->src_addrlen);
+	}
 
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
@@ -778,8 +781,10 @@ int tcpx_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	_pep->util_pep.pep_fid.ops = &tcpx_pep_ops;
 
 	_pep->info = fi_dupinfo(info);
-	if (!_pep->info)
+	if (!_pep->info) {
+		ret = -FI_ENOMEM;
 		goto err2;
+	}
 
 	_pep->cm_ctx.fid = &_pep->util_pep.pep_fid.fid;
 	_pep->cm_ctx.type = SERVER_SOCK_ACCEPT;
