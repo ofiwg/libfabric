@@ -297,6 +297,8 @@ static void cxip_txc_close(struct cxip_txc *txc)
 
 	if (txc->write_cntr)
 		ofi_atomic_dec32(&txc->write_cntr->ref);
+
+	cxip_domain_remove_txc(txc->domain, txc);
 }
 
 /**
@@ -1544,6 +1546,8 @@ static int cxip_ep_txc(struct fid_ep *ep, int index, struct fi_tx_attr *attr,
 	txc->fid.ctx.rma = &cxip_ep_rma;
 	txc->fid.ctx.atomic = &cxip_ep_atomic;
 
+	cxip_domain_add_txc(txc->domain, txc);
+
 	*tx_ep = &txc->fid.ctx;
 	cxi_ep->ep_obj->txcs[index] = txc;
 	ofi_atomic_inc32(&cxi_ep->ep_obj->num_txc);
@@ -1945,6 +1949,8 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 			txc->domain = cxi_dom;
 			txc->tx_id = 0;
 			cxi_ep->ep_obj->txcs[0] = txc;
+
+			cxip_domain_add_txc(txc->domain, txc);
 		}
 
 		if (!cxi_ep->ep_obj->rx_shared) {

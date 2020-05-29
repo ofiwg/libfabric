@@ -419,6 +419,10 @@ struct cxip_domain {
 
 	/* Domain state */
 	bool enabled;
+
+	/* List of allocated resources used for deferred work queue processing.
+	 */
+	struct dlist_entry txc_list;
 };
 
 /**
@@ -842,6 +846,8 @@ struct cxip_txc {
 	/* Flow Control recovery */
 	struct dlist_entry msg_queue;
 	struct dlist_entry fc_peers;
+
+	struct dlist_entry dom_entry;
 };
 
 void cxip_txc_flush_trig_reqs(struct cxip_txc *txc);
@@ -1242,6 +1248,22 @@ ssize_t cxip_send_common(struct cxip_txc *txc, const void *buf, size_t len,
 			bool tagged, bool triggered, uint64_t trig_thresh,
 			struct cxip_cntr *trig_cntr,
 			struct cxip_cntr *comp_cntr);
+
+static inline void
+cxip_domain_add_txc(struct cxip_domain *dom, struct cxip_txc *txc)
+{
+	fastlock_acquire(&dom->lock);
+	dlist_insert_tail(&txc->dom_entry, &dom->txc_list);
+	fastlock_release(&dom->lock);
+}
+
+static inline void
+cxip_domain_remove_txc(struct cxip_domain *dom, struct cxip_txc *txc)
+{
+	fastlock_acquire(&dom->lock);
+	dlist_remove(&txc->dom_entry);
+	fastlock_release(&dom->lock);
+}
 
 #define _CXIP_LOG_DBG(subsys, ...) FI_DBG(&cxip_prov, subsys, __VA_ARGS__)
 #define _CXIP_LOG_ERROR(subsys, ...) FI_WARN(&cxip_prov, subsys, __VA_ARGS__)
