@@ -423,6 +423,7 @@ struct cxip_domain {
 	/* List of allocated resources used for deferred work queue processing.
 	 */
 	struct dlist_entry txc_list;
+	struct dlist_entry cntr_list;
 };
 
 /**
@@ -687,6 +688,8 @@ struct cxip_cntr {
 	struct cxi_ct *ct;
 	struct c_ct_writeback wb;
 	bool wb_pending;
+
+	struct dlist_entry dom_entry;
 };
 
 struct cxip_ux_send {
@@ -1262,6 +1265,24 @@ cxip_domain_remove_txc(struct cxip_domain *dom, struct cxip_txc *txc)
 {
 	fastlock_acquire(&dom->lock);
 	dlist_remove(&txc->dom_entry);
+	fastlock_release(&dom->lock);
+}
+
+static inline void
+cxip_domain_add_cntr(struct cxip_domain *dom, struct cxip_cntr *cntr)
+{
+	fastlock_acquire(&dom->lock);
+	dlist_insert_tail(&cntr->dom_entry, &dom->cntr_list);
+	ofi_atomic_inc32(&dom->ref);
+	fastlock_release(&dom->lock);
+}
+
+static inline void
+cxip_domain_remove_cntr(struct cxip_domain *dom, struct cxip_cntr *cntr)
+{
+	fastlock_acquire(&dom->lock);
+	dlist_remove(&cntr->dom_entry);
+	ofi_atomic_dec32(&dom->ref);
 	fastlock_release(&dom->lock);
 }
 

@@ -415,7 +415,8 @@ static int cxip_cntr_close(struct fid *fid)
 
 	fastlock_destroy(&cntr->lock);
 
-	ofi_atomic_dec32(&cntr->domain->ref);
+	cxip_domain_remove_cntr(cntr->domain, cntr);
+
 	free(cntr);
 	return 0;
 }
@@ -493,9 +494,10 @@ int cxip_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	_cntr->cntr_fid.fid.ops = &cxip_cntr_fi_ops;
 	_cntr->cntr_fid.ops = &cxip_cntr_ops;
 
-	ofi_atomic_inc32(&dom->ref);
 	_cntr->domain = dom;
 	*cntr = &_cntr->cntr_fid;
+
+	cxip_domain_add_cntr(dom, _cntr);
 
 	return FI_SUCCESS;
 }
