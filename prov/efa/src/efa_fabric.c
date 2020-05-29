@@ -899,6 +899,43 @@ static struct fi_ops_fabric efa_ops_fabric = {
 	.trywait = ofi_trywait
 };
 
+static
+void efa_atfork_callback()
+{
+	static int visited = 0;
+
+	if (visited)
+		return;
+
+	visited = 1;
+	if (getenv("RDMAV_FORK_SAFE") || getenv("IBV_FORK_SAFE") )
+		return;
+
+	fprintf(stderr,
+		"A process has executed an operation involving a call\n"
+		"to the fork() system call to create a child process.\n"
+		"\n"
+		"As a result, the libfabric EFA provider is operating in\n"
+		"a condition that could result in memory corruption or\n"
+		"other system errors.\n"
+		"\n"
+		"For the libfabric EFA provider to work safely when fork()\n"
+		"is called, you will need to set the following environment\n"
+		"variable:\n"
+		"          RDMAV_FORK_SAFE\n"
+		"\n"
+		"However, setting this environment variable can result in\n"
+		"signficant performance impact to your application due to\n"
+		"increased cost of memory registration.\n"
+		"\n"
+		"You may want to check with your application vendor to see\n"
+		"if an application-level alternative (of not using fork)\n"
+		"exists.\n"
+		"\n"
+		"Your job will now abort.\n");
+	abort();
+}
+
 int efa_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric_fid,
 	       void *context)
 {
@@ -907,25 +944,19 @@ int efa_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric_fid,
 	int ret = 0;
 
 	/*
-	 * Enable rdma-core fork support and huge page support. We want call
-	 * this only when the EFA provider is selected. It is safe to call this
-	 * function again if multiple EFA fabrics are opened or if the fabric
-	 * is closed and opened again.
-	 *
-	 * TODO: allow users to disable this once the fork() to check ptrace
-	 * permissions is removed.
+	 * setting RDMAV_HUGEPAGES_SAFE alone will not impact
+	 * application peformance, because rdma-core will only
+	 * check this environment variable when either
+	 * RDMAV_FORK_SAFE or IBV_FORK_SAFE is set.
 	 */
 	ret = setenv("RDMAV_HUGEPAGES_SAFE", "1", 1);
 	if (ret)
 		return -errno;
 
-	ret = ibv_fork_init();
+	ret = pthread_atfork(efa_atfork_callback, NULL, NULL);
 	if (ret) {
-		EFA_WARN(FI_LOG_FABRIC, "Failed to initialize libibverbs "
-					"fork support. Please check your "
-					"application to ensure it is not "
-					"making verbs calls before "
-					"initializing EFA.\n");
+		EFA_WARN(FI_LOG_FABRIC,
+			 "Unable to register atfork callback\n");
 		return -ret;
 	}
 
@@ -966,7 +997,7 @@ static void fi_efa_fini(void)
 	efa_device_free();
 #if HAVE_EFA_DL
 	smr_cleanup();
-#endif 
+#endif
 }
 
 struct fi_provider efa_prov = {
