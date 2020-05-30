@@ -23,7 +23,6 @@ _cxi_files = \
 	prov/cxi/src/cxip_eq.c \
 	prov/cxi/src/cxip_cq.c \
 	prov/cxi/src/cxip_cntr.c \
-	prov/cxi/src/cxip_wait.c \
 	prov/cxi/src/cxip_rma.c \
 	prov/cxi/src/cxip_mr.c \
 	prov/cxi/src/cxip_msg.c \

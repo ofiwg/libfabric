@@ -56,7 +56,7 @@ static struct fi_ops cxi_eq_fi_ops = {
 static struct fi_eq_attr cxip_eq_def_attr = {
 	.size = CXIP_EQ_DEF_SZ,
 	.flags = 0,
-	.wait_obj = FI_WAIT_NONE,
+	.wait_obj = FI_WAIT_FD,
 	.signaling_vector = 0,
 	.wait_set = NULL
 };

@@ -346,7 +346,8 @@ void cxip_util_cq_progress(struct util_cq *util_cq)
 	cxip_cq_progress(cq);
 
 	/* TODO support multiple EPs/CQ */
-	cxip_ep_ctrl_progress(cq->ep_obj);
+	if (cq->ep_obj)
+		cxip_ep_ctrl_progress(cq->ep_obj);
 }
 
 /*
@@ -510,7 +511,7 @@ static struct fi_cq_attr cxip_cq_def_attr = {
 static int cxip_cq_verify_attr(struct fi_cq_attr *attr)
 {
 	if (!attr)
-		return 0;
+		return FI_SUCCESS;
 
 	switch (attr->format) {
 	case FI_CQ_FORMAT_CONTEXT:
@@ -525,23 +526,13 @@ static int cxip_cq_verify_attr(struct fi_cq_attr *attr)
 		return -FI_ENOSYS;
 	}
 
-	switch (attr->wait_obj) {
-	case FI_WAIT_NONE:
-		break;
-	case FI_WAIT_UNSPEC:
-		attr->wait_obj = cxip_cq_def_attr.wait_obj;
-		break;
-	case FI_WAIT_MUTEX_COND:
-	case FI_WAIT_SET:
-	case FI_WAIT_FD:
-	default:
+	if (attr->wait_obj != FI_WAIT_NONE)
 		return -FI_ENOSYS;
-	}
 
 	if (!attr->size)
 		attr->size = cxip_cq_def_attr.size;
 
-	return 0;
+	return FI_SUCCESS;
 }
 
 /*
@@ -561,7 +552,7 @@ int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 			       util_domain.domain_fid);
 
 	ret = cxip_cq_verify_attr(attr);
-	if (ret)
+	if (ret != FI_SUCCESS)
 		return ret;
 
 	cxi_cq = calloc(1, sizeof(*cxi_cq));

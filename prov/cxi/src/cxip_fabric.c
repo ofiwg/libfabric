@@ -33,8 +33,8 @@ static struct fi_ops_fabric cxip_fab_ops = {
 	.domain = cxip_domain,
 	.passive_ep = fi_no_passive_ep,
 	.eq_open = cxip_eq_open,
-	.wait_open = fi_no_wait_open,
-	.trywait = fi_no_trywait
+	.wait_open = ofi_wait_fd_open,
+	.trywait = ofi_trywait,
 };
 
 static int cxip_fabric_close(fid_t fid)

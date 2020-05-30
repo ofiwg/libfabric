@@ -305,23 +305,18 @@ static int cxip_cntr_wait(struct fid_cntr *fid_cntr, uint64_t threshold,
  */
 static int cxip_cntr_control(struct fid *fid, int command, void *arg)
 {
-	int ret = 0;
+	int ret = FI_SUCCESS;
 	struct cxip_cntr *cntr;
 
 	cntr = container_of(fid, struct cxip_cntr, cntr_fid);
 
 	switch (command) {
 	case FI_GETWAIT:
-		switch (cntr->attr.wait_obj) {
-		case FI_WAIT_SET:
-		case FI_WAIT_FD:
-			cxip_wait_get_obj(cntr->waitset, arg);
-			break;
-
-		default:
+		if (cntr->wait)
+			ret = fi_control(&cntr->wait->fid,
+					 FI_GETWAIT, arg);
+		else
 			ret = -FI_EINVAL;
-			break;
-		}
 		break;
 
 	case FI_GETOPSFLAG:
@@ -336,6 +331,7 @@ static int cxip_cntr_control(struct fid *fid, int command, void *arg)
 		ret = -FI_EINVAL;
 		break;
 	}
+
 	return ret;
 }
 
@@ -417,9 +413,6 @@ static int cxip_cntr_close(struct fid *fid)
 
 	cxip_cntr_disable(cntr);
 
-	if (cntr->signal && cntr->attr.wait_obj == FI_WAIT_FD)
-		cxip_wait_close(&cntr->waitset->fid);
-
 	fastlock_destroy(&cntr->lock);
 
 	ofi_atomic_dec32(&cntr->domain->ref);
@@ -433,7 +426,7 @@ static struct fi_ops_cntr cxip_cntr_ops = {
 	.read = cxip_cntr_read,
 	.add = cxip_cntr_add,
 	.set = cxip_cntr_set,
-	.wait = fi_no_cntr_wait, // TODO wait object support: cxip_cntr_wait
+	.wait = fi_no_cntr_wait,
 	.adderr = cxip_cntr_adderr,
 	.seterr = cxip_cntr_seterr,
 };
@@ -451,25 +444,19 @@ static struct fi_ops cxip_cntr_fi_ops = {
  */
 static int cxip_cntr_verify_attr(struct fi_cntr_attr *attr)
 {
-	switch (attr->events) {
-	case FI_CNTR_EVENTS_COMP:
-		break;
-	default:
-		return -FI_ENOSYS;
-	}
+	if (!attr)
+		return FI_SUCCESS;
 
-	switch (attr->wait_obj) {
-	case FI_WAIT_NONE:
-		break;
-	case FI_WAIT_UNSPEC:
-	case FI_WAIT_SET:
-	case FI_WAIT_FD:
-	default:
+	if (attr->events != FI_CNTR_EVENTS_COMP)
 		return -FI_ENOSYS;
-	}
+
+	if (attr->wait_obj != FI_WAIT_NONE)
+		return -FI_ENOSYS;
+
 	if (attr->flags)
-		return -FI_EINVAL;
-	return 0;
+		return -FI_ENOSYS;
+
+	return FI_SUCCESS;
 }
 
 /*
@@ -481,58 +468,21 @@ int cxip_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	int ret;
 	struct cxip_domain *dom;
 	struct cxip_cntr *_cntr;
-	struct fi_wait_attr wait_attr;
-	struct cxip_fid_list *list_entry;
-	struct cxip_wait *wait;
 
 	dom = container_of(domain, struct cxip_domain, util_domain.domain_fid);
-	if (attr && cxip_cntr_verify_attr(attr))
-		return -FI_ENOSYS;
+
+	ret = cxip_cntr_verify_attr(attr);
+	if (ret != FI_SUCCESS)
+		return ret;
 
 	_cntr = calloc(1, sizeof(*_cntr));
 	if (!_cntr)
 		return -FI_ENOMEM;
 
-	if (attr == NULL)
+	if (!attr)
 		memcpy(&_cntr->attr, &cxip_cntr_attr, sizeof(cxip_cntr_attr));
 	else
 		memcpy(&_cntr->attr, attr, sizeof(cxip_cntr_attr));
-
-	switch (_cntr->attr.wait_obj) {
-	case FI_WAIT_FD:
-		wait_attr.flags = 0;
-		wait_attr.wait_obj = FI_WAIT_FD;
-		ret = cxip_wait_open(&dom->fab->util_fabric.fabric_fid,
-				     &wait_attr, &_cntr->waitset);
-		if (ret) {
-			ret = FI_EINVAL;
-			goto err;
-		}
-		_cntr->signal = 1;
-		break;
-
-	case FI_WAIT_SET:
-		if (!attr) {
-			ret = FI_EINVAL;
-			goto err;
-		}
-
-		_cntr->waitset = attr->wait_set;
-		_cntr->signal = 1;
-		wait = container_of(attr->wait_set, struct cxip_wait, wait_fid);
-		list_entry = calloc(1, sizeof(*list_entry));
-		if (!list_entry) {
-			ret = FI_ENOMEM;
-			goto err;
-		}
-		dlist_init(&list_entry->entry);
-		list_entry->fid = &_cntr->cntr_fid.fid;
-		dlist_insert_after(&list_entry->entry, &wait->fid_list);
-		break;
-
-	default:
-		break;
-	}
 
 	ofi_atomic_initialize32(&_cntr->ref, 0);
 
@@ -548,8 +498,4 @@ int cxip_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	*cntr = &_cntr->cntr_fid;
 
 	return FI_SUCCESS;
-
-err:
-	free(_cntr);
-	return -ret;
 }

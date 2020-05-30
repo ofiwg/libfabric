@@ -670,8 +670,7 @@ struct cxip_cntr {
 	ofi_atomic32_t ref;
 	struct fi_cntr_attr attr;	// copy of user or default attributes
 
-	struct fid_wait *waitset;
-	int signal;
+	struct fid_wait *wait;
 
 	fastlock_t lock;
 	bool enabled;
@@ -1042,27 +1041,6 @@ struct cxip_fid_list {
 	struct fid *fid;
 };
 
-/**
- * Wait object
- *
- * Support structure.
- *
- * Created in cxip_wait_get_obj().
- */
-struct cxip_wait {
-	struct fid_wait wait_fid;
-	struct cxip_fabric *fab;
-	struct dlist_entry fid_list;
-	enum fi_wait_obj type;
-	union {
-		int fd[2];
-		struct cxip_mutex_cond {
-			pthread_mutex_t mutex;
-			pthread_cond_t cond;
-		} mutex_cond;
-	} wobj;
-};
-
 struct cxip_if *cxip_if_lookup(uint32_t nic_addr);
 int cxip_get_if(uint32_t nic_addr, struct cxip_if **dev_if);
 void cxip_put_if(struct cxip_if *dev_if);
@@ -1115,12 +1093,6 @@ int cxip_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep, void *context);
 int cxip_scalable_ep(struct fid_domain *domain, struct fi_info *info,
 		     struct fid_ep **sep, void *context);
-
-int cxip_wait_get_obj(struct fid_wait *fid, void *arg);
-void cxip_wait_signal(struct fid_wait *wait_fid);
-int cxip_wait_close(fid_t fid);
-int cxip_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
-		   struct fid_wait **waitset);
 
 int cxip_tx_id_alloc(struct cxip_ep_obj *ep_obj, void *ctx);
 int cxip_tx_id_free(struct cxip_ep_obj *ep_obj, int id);
