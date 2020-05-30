@@ -28,7 +28,7 @@ Test(cntr, mod)
 	cr_assert(ret == FI_SUCCESS, "fi_cntr_open (send)");
 
 	ret = fi_cntr_add(tmp_cntr, 1);
-	cr_assert(ret == -FI_EOPBADSTATE);
+	cr_assert(ret == FI_SUCCESS);
 
 	ret = fi_cntr_read(tmp_cntr);
 	cr_assert(ret == 0);
