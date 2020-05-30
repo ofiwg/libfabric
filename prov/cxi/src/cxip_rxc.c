@@ -196,6 +196,11 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 	if (rxc->enabled)
 		goto unlock;
 
+	if (!ofi_recv_allowed(rxc->attr.caps)) {
+		rxc->enabled = true;
+		goto unlock;
+	}
+
 	if (!rxc->recv_cq) {
 		CXIP_LOG_DBG("Undefined recv CQ\n");
 		ret = -FI_ENOCQ;
@@ -219,37 +224,35 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 
 	fastlock_release(&rxc->lock);
 
-	if (ofi_recv_allowed(rxc->attr.caps)) {
-		ret = rxc_msg_init(rxc);
-		if (ret != FI_SUCCESS) {
-			CXIP_LOG_DBG("rxc_msg_init returned: %d\n", ret);
-			ret = -FI_EDOMAIN;
-			goto unlock;
-		}
-
-		ret = cxip_rxc_oflow_init(rxc);
-		if (ret != FI_SUCCESS) {
-			CXIP_LOG_DBG("cxip_rxc_oflow_init returned: %d\n",
-				     ret);
-			goto msg_fini;
-		}
-
-		/* Start accepting Puts. */
-		ret = cxip_rxc_msg_enable(rxc, 0);
-		if (ret != FI_SUCCESS) {
-			CXIP_LOG_DBG("cxip_rxc_msg_enable returned: %d\n",
-				     ret);
-			goto oflow_fini;
-		}
-
-		/* Wait for PTE state change */
-		do {
-			sched_yield();
-			cxip_cq_progress(rxc->recv_cq);
-		} while (rxc->pte_state != C_PTLTE_ENABLED);
-
-		CXIP_LOG_DBG("RXC messaging enabled: %p\n", rxc);
+	ret = rxc_msg_init(rxc);
+	if (ret != FI_SUCCESS) {
+		CXIP_LOG_DBG("rxc_msg_init returned: %d\n", ret);
+		ret = -FI_EDOMAIN;
+		goto unlock;
 	}
+
+	ret = cxip_rxc_oflow_init(rxc);
+	if (ret != FI_SUCCESS) {
+		CXIP_LOG_DBG("cxip_rxc_oflow_init returned: %d\n",
+			     ret);
+		goto msg_fini;
+	}
+
+	/* Start accepting Puts. */
+	ret = cxip_rxc_msg_enable(rxc, 0);
+	if (ret != FI_SUCCESS) {
+		CXIP_LOG_DBG("cxip_rxc_msg_enable returned: %d\n",
+			     ret);
+		goto oflow_fini;
+	}
+
+	/* Wait for PTE state change */
+	do {
+		sched_yield();
+		cxip_cq_progress(rxc->recv_cq);
+	} while (rxc->pte_state != C_PTLTE_ENABLED);
+
+	CXIP_LOG_DBG("RXC messaging enabled: %p\n", rxc);
 
 	rxc->enabled = true;
 
