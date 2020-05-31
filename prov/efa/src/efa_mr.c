@@ -151,6 +151,7 @@ static int efa_mr_cache_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	struct efa_mr *efa_mr;
 	struct ofi_mr_entry *entry;
 	int ret;
+	static const int EFA_MR_CACHE_FLUSH_CHECK = 512;
 
 	if (flags & OFI_MR_NOCACHE) {
 		ret = efa_mr_regattr(fid, attr, flags, mr_fid);
@@ -165,6 +166,21 @@ static int efa_mr_cache_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 
 	domain = container_of(fid, struct efa_domain,
 			      util_domain.domain_fid.fid);
+
+	if (domain->cache.cached_cnt > 0 && domain->cache.cached_cnt % EFA_MR_CACHE_FLUSH_CHECK==0) {
+		/* ofi_mr_cache_flush() does two things:
+		 *    1. clear all MR entries in cache.flush_list
+		 *    2. try to clear the first entry in cache.lru_list if it is not empty.
+		 * MR entries in flush_list correpsonds to memory regions that have been unmapped,
+		 * therefore it is always good to clear them.
+		 *
+		 * MR entries in lru_list are those whose use_cnt is 0 but memory are still mapped.
+		 * Therefore clear it can hurt application's performance, so we only do it periodically.
+		 *
+		 * TODO: add a function that only flush cache.flush_list() and call it more frequently.
+		 */
+		ofi_mr_cache_flush(&domain->cache);
+	}
 
 	ret = ofi_mr_cache_search(&domain->cache, attr, &entry);
 	if (OFI_UNLIKELY(ret))
