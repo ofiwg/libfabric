@@ -26,6 +26,8 @@
 *.orig
 *.c~
 *.h~
+*.tap
+[nr]0.dbg
 stamp-h?
 Makefile
 Makefile.in

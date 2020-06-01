@@ -298,6 +298,8 @@ static void cxit_init(void)
 	struct fi_info *hints = cxit_allocinfo();
 	struct fi_info *info;
 
+	setlinebuf(stdout);
+
 	/* Force provider init */
 	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
 			 cxit_node, cxit_service, cxit_flags, hints,

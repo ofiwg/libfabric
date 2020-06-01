@@ -30,6 +30,9 @@ extern struct fi_ops_ep cxip_ep_ops;
 extern struct fi_ops cxip_ep_fi_ops;
 extern struct fi_ops_ep cxip_ctx_ep_ops;
 
+extern struct fi_ops_collective cxip_collective_ops;
+extern struct fi_ops_collective cxip_no_collective_ops;
+
 /*
  * cxip_tx_id_alloc() - Allocate a TX ID.
  *
@@ -1121,6 +1124,8 @@ static int cxip_ep_close(struct fid *fid)
 	}
 
 	if (cxi_ep->ep_obj->fclass == FI_CLASS_EP) {
+		cxip_coll_close(cxi_ep->ep_obj);
+
 		if (!cxi_ep->ep_obj->tx_shared) {
 			cxip_txc_close(cxi_ep->ep_obj->txcs[0]);
 			cxip_txc_free(cxi_ep->ep_obj->txcs[0]);
@@ -1914,6 +1919,7 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 		cxi_ep->ep.rma = &cxip_ep_rma;
 		cxi_ep->ep.tagged = &cxip_ep_tagged_ops;
 		cxi_ep->ep.atomic = &cxip_ep_atomic;
+		cxi_ep->ep.collective = &cxip_collective_ops;
 		break;
 
 	case FI_CLASS_SEP:
@@ -1921,6 +1927,7 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 		cxi_ep->ep.ops = &cxip_ep_ops;
 		cxi_ep->ep.cm = &cxip_ep_cm_ops;
 		/* msg, rma, tagged, atomic must use TX context */
+		cxi_ep->ep.collective = &cxip_no_collective_ops;
 		break;
 
 	default:
@@ -2040,6 +2047,10 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 			rxc->rx_id = 0;
 			cxi_ep->ep_obj->rxcs[0] = rxc;
 		}
+
+		ret = cxip_coll_init(cxi_ep->ep_obj);
+		if (ret)
+			goto err;
 	}
 
 	ofi_atomic_inc32(&cxi_dom->ref);

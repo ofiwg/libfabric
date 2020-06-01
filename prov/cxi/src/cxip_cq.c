@@ -4,7 +4,7 @@
  *
  * Copyright (c) 2014 Intel Corporation, Inc. All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
- * Copyright (c) 2018 Cray Inc. All rights reserved.
+ * Copyright (c) 2018-2020 Cray Inc. All rights reserved.
  */
 
 #include "config.h"
@@ -295,6 +295,7 @@ static struct cxip_req *cxip_cq_event_req(struct cxip_cq *cq,
 	struct cxip_req *req;
 	uint32_t pte_num;
 	enum c_ptlte_state pte_state;
+	int return_code;
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_ACK:
@@ -308,10 +309,19 @@ static struct cxip_req *cxip_cq_event_req(struct cxip_cq *cq,
 	case C_EVENT_RENDEZVOUS:
 	case C_EVENT_SEARCH:
 		req = cxip_cq_req_find(cq, event->tgt_long.buffer_id);
-		if (!req)
-			CXIP_LOG_ERROR("Invalid buffer_id: %d (%s)\n",
-				       event->tgt_long.buffer_id,
-				       cxi_event_to_str(event));
+		if (req)
+			break;
+		/* HW error can return zero buffer_id */
+		CXIP_LOG_ERROR(
+			"Invalid buffer_id: %d (%s)\n",
+			event->tgt_long.buffer_id,
+			cxi_event_to_str(event));
+		return_code = cxi_tgt_event_rc(event);
+		if (return_code != C_RC_OK)
+			CXIP_LOG_ERROR(
+				"Hardware return code: %s (%s)\n",
+				cxi_rc_to_str(return_code),
+				cxi_event_to_str(event));
 		break;
 	case C_EVENT_REPLY:
 	case C_EVENT_SEND:
@@ -322,10 +332,19 @@ static struct cxip_req *cxip_cq_event_req(struct cxip_cq *cq,
 					(struct cxi_rdzv_user_ptr *)
 					 &event->init_short.user_ptr;
 			req = cxip_cq_req_find(cq, up->buffer_id);
-			if (!req)
-				CXIP_LOG_ERROR("Invalid buffer_id: %d (%s)\n",
-					       event->tgt_long.buffer_id,
-					       cxi_event_to_str(event));
+			if (req)
+				break;
+			/* HW error can return zero buffer_id */
+			CXIP_LOG_ERROR(
+				"Invalid buffer_id: %d (%s)\n",
+				event->tgt_long.buffer_id,
+				cxi_event_to_str(event));
+			return_code = cxi_tgt_event_rc(event);
+			if (return_code != C_RC_OK)
+				CXIP_LOG_ERROR(
+					"Hardware return code: %s (%s)\n",
+					cxi_rc_to_str(return_code),
+					cxi_event_to_str(event));
 		}
 		break;
 	case C_EVENT_STATE_CHANGE:

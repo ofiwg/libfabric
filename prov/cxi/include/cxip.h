@@ -93,6 +93,7 @@
 #define CXIP_CQ_DEF_SZ			(1 << 8)
 #define CXIP_AV_DEF_SZ			(1 << 8)
 
+#define CXIP_PTE_IGNORE_DROPS		((1 << 24) - 1)
 #define CXIP_RDZV_THRESHOLD		2048
 #define CXIP_OFLOW_BUF_SIZE		(2*1024*1024)
 #define CXIP_OFLOW_BUF_COUNT		3
@@ -132,6 +133,13 @@
 
 #define CXIP_CNTR_SUCCESS_MAX ((1ULL << C_CT_SUCCESS_BITS) - 1)
 #define CXIP_CNTR_FAILURE_MAX ((1ULL << C_CT_FAILURE_BITS) - 1)
+
+#define	CXIP_COLL_MAX_CONCUR		8
+#define	CXIP_COLL_MIN_RX_BUFS		3
+#define	CXIP_COLL_MIN_RX_SIZE		4096
+#define	CXIP_COLL_MIN_FREE		64
+#define	CXIP_COLL_MAX_TX_SIZE		32
+#define	CXIP_COLL_SEQNO_MASK		((1 << 10) - 1)
 
 extern char cxip_prov_name[];
 extern struct fi_provider cxip_prov;
@@ -215,6 +223,7 @@ struct cxip_addr {
 
 #define CXIP_PTL_IDX_RXC(rx_id)		(rx_id)
 #define CXIP_PTL_IDX_MR_OPT(key)	(CXIP_PTL_IDX_MR_OPT_BASE + (key))
+#define	CXIP_PTL_IDX_COLL		253
 #define CXIP_PTL_IDX_CTRL		254
 #define CXIP_PTL_IDX_RDZV_SRC		255
 
@@ -546,6 +555,19 @@ struct cxip_req_search {
 	int puts_pending;
 };
 
+struct cxip_req_coll {
+	struct dlist_entry rxc_entry;
+	struct cxip_ep_obj *ep_obj;
+	struct cxip_coll_buf *msg;
+	struct cxip_coll_mc *cxi_mc;
+	struct cxip_addr caddr;
+	uint8_t rx_id;
+	void *op_context;
+	uint32_t mrecv_space;
+	size_t hw_req_len;
+	int rc;
+};
+
 enum cxip_req_type {
 	CXIP_REQ_RMA,
 	CXIP_REQ_AMO,
@@ -554,6 +576,7 @@ enum cxip_req_type {
 	CXIP_REQ_SEND,
 	CXIP_REQ_RDZV_SRC,
 	CXIP_REQ_SEARCH,
+	CXIP_REQ_COLL,
 };
 
 /*
@@ -608,6 +631,7 @@ struct cxip_req {
 		struct cxip_req_send send;
 		struct cxip_req_rdzv_src rdzv_src;
 		struct cxip_req_search search;
+		struct cxip_req_coll coll;
 	};
 };
 
@@ -746,6 +770,34 @@ struct cxip_oflow_buf {
 	struct cxip_md *md;
 	int min_bytes;
 	int buffer_id;
+};
+
+/*
+ * Collectives context.
+ *
+ * Support structure.
+ *
+ * Initialized in cxip_coll_init() during EP creation.
+ */
+struct cxip_coll_ctx {
+	struct cxip_cmdq *rx_cmdq;	// shared with STD EP
+	struct cxip_cmdq *tx_cmdq;	// shared with STD EP
+	struct cxip_cntr *rx_cntr;	// shared with STD EP
+	struct cxip_cntr *tx_cntr;	// shared with STD EP
+	struct cxip_cq *rx_cq;		// shared with STD EP
+	struct cxip_cq *tx_cq;		// shared with STD EP
+	struct cxip_pte *pte;		// Collectives PTE
+	enum c_ptlte_state pte_state;	// PTE state
+	struct dlist_entry buf_list;	// PTE receive buffers
+	struct dlist_entry mc_list;	// joined MC objects
+	ofi_atomic32_t mc_count;	// count of MC objects
+	fastlock_t lock;		// collectives lock
+	size_t min_multi_recv;		// trigger value to rotate
+	size_t buffer_size;		// size of receive buffers
+	size_t buffer_count;		// count of receive buffers
+	bool enabled;			// enabled
+	bool is_netsim;			// for development
+	uint64_t buf_swap_cnt;		// for diagnostics
 };
 
 /*
@@ -930,6 +982,9 @@ struct cxip_ep_obj {
 
 	struct cxip_if_domain *if_dom;
 
+	/* collectives support */
+	struct cxip_coll_ctx coll;
+
 	struct indexer rdzv_ids;
 	fastlock_t rdzv_id_lock;
 
@@ -1065,6 +1120,22 @@ struct cxip_av_set {
  */
 struct cxip_coll_mc {			// TODO: placeholder
 	struct fid_mc mc_fid;
+};
+
+/*
+ * Collective message structure.
+ *
+ * Used for list of RX buffers on EP.
+ *
+ * Support structure.
+ */
+struct cxip_coll_buf {
+	struct dlist_entry msg_entry;
+	struct cxip_req *req;
+	struct cxip_md *cxi_md;
+	size_t bufsiz;
+	size_t buflen;
+	uint8_t buffer[0];
 };
 
 /*
@@ -1216,6 +1287,12 @@ void cxip_ep_ctrl_fini(struct cxip_ep_obj *ep_obj);
 int cxip_av_set(struct fid_av *av, struct fi_av_set_attr *attr,
 	        struct fid_av_set **av_set_fid, void * context);
 
+int cxip_coll_init(struct cxip_ep_obj *ep_obj);
+int cxip_coll_enable(struct cxip_ep_obj *ep_obj);
+int cxip_coll_close(struct cxip_ep_obj *ep_obj);
+int cxip_coll_send(struct cxip_ep_obj *ep_obj, const void *buf, size_t len,
+		   fi_addr_t dest_addr);
+
 /*
  * cxip_fid_to_txc() - Return TXC from FID provided to a transmit API.
  */
@@ -1314,7 +1391,7 @@ enum cxip_amo_req_type {
 	CXIP_RQ_AMO,
 	CXIP_RQ_AMO_FETCH,
 	CXIP_RQ_AMO_SWAP,
-	CXIP_RQ_AMO_LAST
+	CXIP_RQ_AMO_LAST,
 };
 
 int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
