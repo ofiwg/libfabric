@@ -290,7 +290,8 @@ void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache);
 
 void ofi_mr_cache_notify(struct ofi_mr_cache *cache, const void *addr, size_t len);
 
-bool ofi_mr_cache_flush(struct ofi_mr_cache *cache);
+bool ofi_mr_cache_flush(struct ofi_mr_cache *cache, bool flush_lru);
+
 int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
 			struct ofi_mr_entry **entry);
 /**
