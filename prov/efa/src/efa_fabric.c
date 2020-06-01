@@ -83,6 +83,7 @@
 int efa_mr_cache_enable		= EFA_DEF_MR_CACHE_ENABLE;
 size_t efa_mr_max_cached_count;
 size_t efa_mr_max_cached_size;
+int efa_set_rdmav_hugepages_safe = 0;
 
 static void efa_addr_to_str(const uint8_t *raw_addr, char *str);
 static int efa_get_addr(struct efa_context *ctx, void *src_addr);
@@ -861,7 +862,9 @@ static int efa_fabric_close(fid_t fid)
 	struct efa_fabric *fab;
 	int ret;
 
-	unsetenv("RDMAV_HUGEPAGES_SAFE");
+	if (efa_set_rdmav_hugepages_safe)
+		unsetenv("RDMAV_HUGEPAGES_SAFE");
+
 	fab = container_of(fid, struct efa_fabric, util_fabric.fabric_fid.fid);
 	ret = ofi_fabric_close(&fab->util_fabric);
 	if (ret)
@@ -932,15 +935,19 @@ int efa_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric_fid,
 	struct efa_fabric *fab;
 	int ret = 0;
 
-	/*
-	 * setting RDMAV_HUGEPAGES_SAFE alone will not impact
-	 * application peformance. It is only effective
-	 * when either RDMAV_FORK_SAFE or
-	 * IBV_FORK_SAFE is set.
-	 */
-	ret = setenv("RDMAV_HUGEPAGES_SAFE", "1", 1);
-	if (ret)
-		return -errno;
+	if (!getenv("RDMAV_HUGEPAGES_SAFE")) {
+		/*
+		 * Setting RDMAV_HUGEPAGES_SAFE alone will not impact
+		 * application performance. The impact only happens
+		 * when either RDMAV_FORK_SAFE or IBV_FORK_SAFE was also
+		 * set.
+		 */
+		ret = setenv("RDMAV_HUGEPAGES_SAFE", "1", 1);
+		if (ret)
+			return -errno;
+
+		efa_set_rdmav_hugepages_safe = 1;
+	}
 
 	ret = pthread_atfork(efa_atfork_callback, NULL, NULL);
 	if (ret) {
