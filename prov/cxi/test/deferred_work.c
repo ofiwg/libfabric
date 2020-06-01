@@ -159,3 +159,78 @@ Test(deferred_work, rendezvous_message_no_comp_event)
 {
 	deferred_msg_op_test(false, 1024 * 1024, 123546);
 }
+
+Test(deferred_work, flush_work)
+{
+	int i;
+	int ret;
+	uint8_t *recv_buf;
+	uint8_t *send_buf;
+	struct fi_cq_tagged_entry tx_cqe;
+	struct fi_cq_tagged_entry rx_cqe;
+	struct iovec iov = {};
+	struct fi_op_msg msg = {};
+	struct fi_deferred_work work = {};
+	unsigned int trig_thresh;
+	size_t xfer_size = 1;
+
+	recv_buf = calloc(1, xfer_size);
+	cr_assert(recv_buf);
+
+	send_buf = calloc(1, xfer_size);
+	cr_assert(send_buf);
+
+	for (i = 0; i < xfer_size; i++)
+		send_buf[i] = i + 0xa0;
+
+	/* Post RX buffer */
+	ret = fi_recv(cxit_ep, recv_buf, xfer_size, NULL, FI_ADDR_UNSPEC, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_recv failed %d", ret);
+
+	/* Send deferred 64 bytes to self */
+	msg.ep = cxit_ep;
+	iov.iov_base = send_buf;
+	iov.iov_len = xfer_size;
+	msg.msg.msg_iov = &iov;
+	msg.msg.iov_count = 1;
+	msg.msg.addr = cxit_ep_fi_addr;
+	msg.flags = FI_COMPLETION;
+
+	work.triggering_cntr = cxit_send_cntr;
+	work.completion_cntr = cxit_send_cntr;
+	work.op_type = FI_OP_SEND;
+	work.op.msg = &msg;
+
+	/* Queue up multiple trigger requests to be cancelled. */
+	for (i = 0, trig_thresh = 12345; i < 15; i++, trig_thresh++) {
+		work.threshold = trig_thresh;
+		ret = fi_control(&cxit_domain->fid, FI_QUEUE_WORK, &work);
+		cr_assert_eq(ret, FI_SUCCESS, "FI_QUEUE_WORK failed %d", ret);
+	}
+
+	/* Verify no source or target event has occurred. */
+	ret = fi_cq_read(cxit_rx_cq, &rx_cqe, 1);
+	cr_assert_eq(ret, -FI_EAGAIN, "fi_cq_read unexpected value %d", ret);
+
+	ret = fi_cq_read(cxit_tx_cq, &tx_cqe, 1);
+	cr_assert_eq(ret, -FI_EAGAIN, "fi_cq_read unexpected value %d", ret);
+
+	/* Flush all work requests. */
+	ret = fi_control(&cxit_domain->fid, FI_FLUSH_WORK, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "FI_FLUSH_WORK failed %d", ret);
+
+	ret = fi_cntr_add(cxit_send_cntr, trig_thresh);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_cntr_add failed %d", ret);
+
+	/* Verify no source or target event has occurred. */
+	ret = fi_cq_read(cxit_rx_cq, &rx_cqe, 1);
+	cr_assert_eq(ret, -FI_EAGAIN, "fi_cq_read unexpected value %d", ret);
+
+	ret = fi_cq_read(cxit_tx_cq, &tx_cqe, 1);
+	cr_assert_eq(ret, -FI_EAGAIN, "fi_cq_read unexpected value %d", ret);
+
+	poll_counter_assert(cxit_send_cntr, trig_thresh, 5);
+
+	free(send_buf);
+	free(recv_buf);
+}
