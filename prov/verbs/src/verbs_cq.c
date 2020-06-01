@@ -490,18 +490,25 @@ static int vrb_cq_close(fid_t fid)
 	int ret;
 	struct vrb_cq *cq =
 		container_of(fid, struct vrb_cq, util_cq.cq_fid);
-
-	/* XRC SRQ directly reference the associated CQ,
-	 * make sure the SRQ is closed first. */
-	fastlock_acquire(&cq->xrc.srq_list_lock);
-	if (!dlist_empty(&cq->xrc.srq_list)) {
-		fastlock_release(&cq->xrc.srq_list_lock);
-		return -FI_EBUSY;
-	}
-	fastlock_release(&cq->xrc.srq_list_lock);
+	struct vrb_srq_ep *srq_ep;
+	struct dlist_entry *srq_ep_temp;
 
 	if (ofi_atomic_get32(&cq->nevents))
 		ibv_ack_cq_events(cq->cq, ofi_atomic_get32(&cq->nevents));
+
+	/* Since an RX CQ and SRX context can be destroyed in any order,
+	 * and the XRC SRQ references the RX CQ, we must destroy any
+	 * XRC SRQ using this CQ before destroying the CQ. */
+	fastlock_acquire(&cq->xrc.srq_list_lock);
+	dlist_foreach_container_safe(&cq->xrc.srq_list, struct vrb_srq_ep,
+				     srq_ep, xrc.srq_entry, srq_ep_temp) {
+		ret = vrb_xrc_close_srq(srq_ep);
+		if (ret) {
+			fastlock_release(&cq->xrc.srq_list_lock);
+			return -ret;
+		}
+	}
+	fastlock_release(&cq->xrc.srq_list_lock);
 
 	cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
 	while (!slist_empty(&cq->saved_wc_list)) {
