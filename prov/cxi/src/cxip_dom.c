@@ -170,6 +170,16 @@ static int cxip_dom_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	return 0;
 }
 
+/* Must hold domain lock. */
+static void cxip_dom_progress_all_cqs(struct cxip_domain *dom)
+{
+	struct cxip_cq *cq;
+
+	dlist_foreach_container(&dom->cq_list, struct cxip_cq, cq,
+				dom_entry)
+		cxip_cq_progress(cq);
+}
+
 static int cxip_dom_control(struct fid *fid, int command, void *arg)
 {
 	struct cxip_domain *dom;
@@ -184,7 +194,8 @@ static int cxip_dom_control(struct fid *fid, int command, void *arg)
 
 	dom = container_of(fid, struct cxip_domain, util_domain.domain_fid.fid);
 
-	if (command == FI_QUEUE_WORK) {
+	switch (command) {
+	case FI_QUEUE_WORK:
 		work = arg;
 
 		if (!work->triggering_cntr)
@@ -233,6 +244,77 @@ static int cxip_dom_control(struct fid *fid, int command, void *arg)
 
 			return ret;
 		}
+		break;
+
+	case FI_FLUSH_WORK:
+		fastlock_acquire(&dom->lock);
+		if (!dom->cntr_init) {
+			fastlock_release(&dom->lock);
+			return FI_SUCCESS;
+		}
+
+		fastlock_acquire(&dom->trig_cmdq->lock);
+
+		/* Issue cancels to all allocated counters. */
+		dlist_foreach_container(&dom->cntr_list, struct cxip_cntr,
+					trig_cntr, dom_entry) {
+			struct c_ct_cmd ct_cmd = {};
+
+			if (!trig_cntr->ct)
+				continue;
+
+			ct_cmd.ct = trig_cntr->ct->ctn;
+			ret = cxi_cq_emit_ct(dom->trig_cmdq->dev_cmdq,
+					     C_CMD_CT_CANCEL, &ct_cmd);
+
+			// TODO: Handle this assert. Multiple triggered CQs may
+			// be required.
+			assert(!ret);
+			cxi_cq_ring(dom->trig_cmdq->dev_cmdq);
+		};
+
+		/* Rely on the triggered CQ ack counter to know when there are
+		 * no more pending triggered operations. In-between, progress
+		 * CQs to cleanup internal transaction state.
+		 */
+		while (true) {
+			unsigned int ack_counter;
+
+			ret = cxil_cmdq_ack_counter(dom->trig_cmdq->dev_cmdq,
+						    &ack_counter);
+			assert(!ret);
+
+			if (!ack_counter)
+				break;
+
+			cxip_dom_progress_all_cqs(dom);
+		}
+
+		/* It is possible that the ack counter is zero and there are
+		 * completion events in-flight meaning that the above
+		 * progression may have missed events. Perform a sleep to help
+		 * ensure events have arrived and progress all CQs one more
+		 * time.
+		 *
+		 * TODO: Investigate better way to resolve this race condition.
+		 */
+		sleep(1);
+		cxip_dom_progress_all_cqs(dom);
+
+		/* At this point, all triggered operations should be cancelled
+		 * or have completed. Free any remaining triggered requests
+		 * queued on a TX context.
+		 */
+		dlist_foreach_container(&dom->txc_list, struct cxip_txc, txc,
+					dom_entry)
+			cxip_txc_flush_trig_reqs(txc);
+
+		fastlock_release(&dom->trig_cmdq->lock);
+		fastlock_release(&dom->lock);
+
+		return FI_SUCCESS;
+	default:
+		return -FI_EINVAL;
 	}
 
 	return -FI_EINVAL;
