@@ -424,6 +424,7 @@ struct cxip_domain {
 	 */
 	struct dlist_entry txc_list;
 	struct dlist_entry cntr_list;
+	struct dlist_entry cq_list;
 };
 
 /**
@@ -665,6 +666,8 @@ struct cxip_cq {
 	struct ofi_bufpool *req_pool;
 	struct indexer req_table;
 	struct dlist_entry req_list;
+
+	struct dlist_entry dom_entry;
 };
 
 /**
@@ -1282,6 +1285,24 @@ cxip_domain_remove_cntr(struct cxip_domain *dom, struct cxip_cntr *cntr)
 {
 	fastlock_acquire(&dom->lock);
 	dlist_remove(&cntr->dom_entry);
+	ofi_atomic_dec32(&dom->ref);
+	fastlock_release(&dom->lock);
+}
+
+static inline void
+cxip_domain_add_cq(struct cxip_domain *dom, struct cxip_cq *cq)
+{
+	fastlock_acquire(&dom->lock);
+	dlist_insert_tail(&cq->dom_entry, &dom->cq_list);
+	ofi_atomic_inc32(&dom->ref);
+	fastlock_release(&dom->lock);
+}
+
+static inline void
+cxip_domain_remove_cq(struct cxip_domain *dom, struct cxip_cq *cq)
+{
+	fastlock_acquire(&dom->lock);
+	dlist_remove(&cq->dom_entry);
 	ofi_atomic_dec32(&dom->ref);
 	fastlock_release(&dom->lock);
 }

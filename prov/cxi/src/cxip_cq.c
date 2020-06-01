@@ -480,7 +480,7 @@ static int cxip_cq_close(struct fid *fid)
 	fastlock_destroy(&cq->lock);
 	fastlock_destroy(&cq->req_lock);
 
-	ofi_atomic_dec32(&cq->domain->ref);
+	cxip_domain_remove_cq(cq->domain, cq);
 
 	free(cq);
 
@@ -578,7 +578,7 @@ int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	fastlock_init(&cxi_cq->lock);
 	fastlock_init(&cxi_cq->req_lock);
 
-	ofi_atomic_inc32(&cxi_dom->ref);
+	cxip_domain_add_cq(cxi_dom, cxi_cq);
 
 	*cq = &cxi_cq->util_cq.cq_fid;
 

@@ -304,6 +304,7 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 
 	dlist_init(&cxi_domain->txc_list);
 	dlist_init(&cxi_domain->cntr_list);
+	dlist_init(&cxi_domain->cq_list);
 	fastlock_init(&cxi_domain->lock);
 	ofi_atomic_initialize32(&cxi_domain->ref, 0);
 	cxi_domain->fab = fab;
