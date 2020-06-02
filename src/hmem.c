@@ -61,6 +61,7 @@ static struct ofi_hmem_ops hmem_ops[] = {
 		.cleanup = cuda_hmem_cleanup,
 		.copy_to_hmem = cuda_copy_to_dev,
 		.copy_from_hmem = cuda_copy_from_dev,
+		.is_addr_valid = cuda_is_addr_valid,
 	},
 };
 

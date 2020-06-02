@@ -59,6 +59,7 @@ int cuda_copy_to_dev(void *dev, const void *host, size_t size);
 int cuda_copy_from_dev(void *host, const void *dev, size_t size);
 int cuda_hmem_init(void);
 int cuda_hmem_cleanup(void);
+bool cuda_is_addr_valid(const void *addr);
 
 static inline int ofi_memcpy(void *dest, const void *src, size_t size)
 {
