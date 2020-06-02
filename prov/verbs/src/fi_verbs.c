@@ -35,6 +35,7 @@
 #include <ofi_mem.h>
 
 #include "fi_verbs.h"
+#include "ofi_hmem.h"
 
 static void vrb_fini(void);
 
@@ -667,6 +668,7 @@ static void vrb_fini(void)
 {
 #if HAVE_VERBS_DL
 	ofi_monitors_cleanup();
+	ofi_hmem_cleanup();
 	ofi_mem_fini();
 #endif
 	fi_freeinfo((void *)vrb_util_prov.info);
@@ -678,6 +680,7 @@ VERBS_INI
 {
 #if HAVE_VERBS_DL
 	ofi_mem_init();
+	ofi_hmem_init();
 	ofi_monitors_init();
 #endif
 	if (vrb_read_params()|| vrb_init_info(&vrb_util_prov.info))
