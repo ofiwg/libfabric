@@ -61,13 +61,9 @@ static int rxr_domain_close(fid_t fid)
 {
 	int ret;
 	struct rxr_domain *rxr_domain;
-	struct efa_domain *efa_domain;
 
 	rxr_domain = container_of(fid, struct rxr_domain,
 				  util_domain.domain_fid.fid);
-	efa_domain = container_of(rxr_domain->rdm_domain, struct efa_domain,
-				  util_domain.domain_fid);
-
 	ret = fi_close(&rxr_domain->rdm_domain->fid);
 	if (ret)
 		return ret;
@@ -75,12 +71,6 @@ static int rxr_domain_close(fid_t fid)
 	ret = ofi_domain_close(&rxr_domain->util_domain);
 	if (ret)
 		return ret;
-
-	if (rxr_env.enable_shm_transfer) {
-		ret = fi_close(&efa_domain->shm_domain->fid);
-		if (ret)
-			return ret;
-	}
 
 	free(rxr_domain);
 	return 0;
