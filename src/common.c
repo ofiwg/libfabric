@@ -3,6 +3,7 @@
  * Copyright (c) 2006-2017 Cisco Systems, Inc.  All rights reserved.
  * Copyright (c) 2013-2018 Intel Corp., Inc.  All rights reserved.
  * Copyright (c) 2015 Los Alamos Nat. Security, LLC. All rights reserved.
+ * Copyright (c) 2020 Amazon.com, Inc. or its affiliates.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -78,6 +79,8 @@ struct ofi_common_locks common_locks = {
 	.ini_lock = PTHREAD_MUTEX_INITIALIZER,
 	.util_fabric_lock = PTHREAD_MUTEX_INITIALIZER,
 };
+
+size_t ofi_universe_size = 1024;
 
 int fi_poll_fd(int fd, int timeout)
 {
@@ -1601,4 +1604,55 @@ struct fid_nic *ofi_nic_dup(const struct fid_nic *nic)
 fail:
 	ofi_nic_close(&dup_nic->fid);
 	return NULL;
+}
+
+/*
+ * Calculate bits per second based on verbs port active_speed and active_width.
+ */
+size_t ofi_vrb_speed(uint8_t speed, uint8_t width)
+{
+	const size_t gbit_2_bit_coef = 1000 * 1000 * 1000;
+	size_t width_val, speed_val;
+
+	switch (speed) {
+	case 1:
+		speed_val = (size_t) (2.5 * (float) gbit_2_bit_coef);
+		break;
+	case 2:
+		speed_val = 5 * gbit_2_bit_coef;
+		break;
+	case 4:
+	case 8:
+		speed_val = 8 * gbit_2_bit_coef;
+		break;
+	case 16:
+		speed_val = 14 * gbit_2_bit_coef;
+		break;
+	case 32:
+		speed_val = 25 * gbit_2_bit_coef;
+		break;
+	default:
+		speed_val = 0;
+		break;
+	}
+
+	switch (width) {
+	case 1:
+		width_val = 1;
+		break;
+	case 2:
+		width_val = 4;
+		break;
+	case 4:
+		width_val = 8;
+		break;
+	case 8:
+		width_val = 12;
+		break;
+	default:
+		width_val = 0;
+		break;
+	}
+
+	return width_val * speed_val;
 }

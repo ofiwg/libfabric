@@ -326,6 +326,7 @@ struct ofi_bufpool_region {
 	size_t				index;
 	void 				*context;
 	struct ofi_bufpool 		*pool;
+	int				flags;
 #ifndef NDEBUG
 	size_t 				use_cnt;
 #endif

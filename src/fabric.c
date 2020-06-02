@@ -621,7 +621,8 @@ void fi_ini(void)
 			"Defines the maximum number of processes that will be"
 			" used by distribute OFI application. The provider uses"
 			" this to optimize resource allocations"
-			" (default: OFI service specific)");
+			" (default: provider specific)");
+	fi_param_get_size_t(NULL, "universe_size", &ofi_universe_size);
 	fi_param_get_str(NULL, "provider", &param_val);
 	ofi_create_filter(&prov_filter, param_val);
 
