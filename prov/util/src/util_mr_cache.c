@@ -150,7 +150,7 @@ void ofi_mr_cache_notify(struct ofi_mr_cache *cache, const void *addr, size_t le
 		util_mr_uncache_entry(cache, entry);
 }
 
-bool ofi_mr_cache_flush(struct ofi_mr_cache *cache)
+bool ofi_mr_cache_flush(struct ofi_mr_cache *cache, bool flush_lru)
 {
 	struct ofi_mr_entry *entry;
 
@@ -166,7 +166,7 @@ bool ofi_mr_cache_flush(struct ofi_mr_cache *cache)
 		pthread_mutex_lock(&mm_lock);
 	}
 
-	if (dlist_empty(&cache->lru_list)) {
+	if (!flush_lru || dlist_empty(&cache->lru_list)) {
 		pthread_mutex_unlock(&mm_lock);
 		return false;
 	}
@@ -303,7 +303,7 @@ int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *att
 		if ((cache->cached_cnt >= cache_params.max_cnt) ||
 		    (cache->cached_size >= cache_params.max_size)) {
 			pthread_mutex_unlock(&mm_lock);
-			ofi_mr_cache_flush(cache);
+			ofi_mr_cache_flush(cache, true);
 			pthread_mutex_lock(&mm_lock);
 		}
 
@@ -323,7 +323,7 @@ int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *att
 
 		ret = util_mr_cache_create(cache, &info, entry);
 		if (ret && ret != -FI_EAGAIN) {
-			if (ofi_mr_cache_flush(cache))
+			if (ofi_mr_cache_flush(cache, true))
 				ret = -FI_EAGAIN;
 		}
 	} while (ret == -FI_EAGAIN);
@@ -419,7 +419,7 @@ void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache)
 		cache->search_cnt, cache->delete_cnt, cache->hit_cnt,
 		cache->notify_cnt);
 
-	while (ofi_mr_cache_flush(cache))
+	while (ofi_mr_cache_flush(cache, true))
 		;
 
 	pthread_mutex_destroy(&cache->lock);
