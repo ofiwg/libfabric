@@ -43,13 +43,17 @@ pipeline {
                 }
             }
         }
-        stage('Build') {
+        stage('Build CUDA') {
             options {
                 timeout (time: 5, unit: 'MINUTES')
             }
+            environment {
+                LD_LIBRARY_PATH = "$CUDA_INSTALL_PATH/lib64:$LD_LIBRARY_PATH"
+            }
             steps {
                 sh './autogen.sh'
-                sh "./configure --prefix=$LIBFABRIC_INSTALL --disable-memhooks-monitor"
+                sh """./configure --prefix=$LIBFABRIC_INSTALL --disable-memhooks-monitor \
+                   --with-cuda=$CUDA_INSTALL_PATH"""
                 sh "make -j 12"
                 sh "make install"
                 dir ("fabtests") {
@@ -57,6 +61,48 @@ pipeline {
                     sh "./configure --with-libfabric=$LIBFABRIC_INSTALL --prefix=$FABTEST_PATH"
                     sh "make -j12"
                     sh "make -j12 install"
+                }
+            }
+        }
+        stage("Verify CUDA Build") {
+            steps {
+                script {
+                    cuda_link_count = sh(returnStdout: true,
+                                         script: """objdump -a -x $LIBFABRIC_INSTALL/lib/libfabric.so |
+                                                 grep NEED | grep cuda | wc -l""").trim()
+                    if (cuda_link_count != "2") {
+                        error("libfabric failed to link to CUDA")
+                    }
+                }
+            }
+        }
+        stage('Build CUDA dlopen') {
+            options {
+                timeout (time: 5, unit: 'MINUTES')
+            }
+            steps {
+                sh './autogen.sh'
+                sh """./configure --prefix=$LIBFABRIC_INSTALL --disable-memhooks-monitor \
+                   --with-cuda=$CUDA_INSTALL_PATH --enable-cuda-dlopen"""
+                sh "make -j 12"
+                sh "make install"
+                dir ("fabtests") {
+                    sh './autogen.sh'
+                    sh "./configure --with-libfabric=$LIBFABRIC_INSTALL --prefix=$FABTEST_PATH"
+                    sh "make -j12"
+                    sh "make -j12 install"
+                }
+            }
+        }
+        stage("Verify CUDA Build dlopen") {
+            steps {
+                script {
+                    cuda_link_count = sh(returnStdout: true,
+                                         script: """objdump -a -x $LIBFABRIC_INSTALL/lib/libfabric.so |
+                                                 grep NEED | grep cuda | wc -l""").trim()
+                    if (cuda_link_count != "0") {
+                        error("libfabric failed to link to CUDA")
+                    }
                 }
             }
         }
@@ -412,5 +458,6 @@ pipeline {
         MPICH_PATH = "${ROOT_BUILD_PATH + '/mpich/stable'}"
         SFT_INSTALL_PATH = "${ROOT_BUILD_PATH + '/libfabric-sft/stable'}"
         BATS_INSTALL_PATH = "${ROOT_BUILD_PATH + '/bats/stable/bin'}"
+        CUDA_INSTALL_PATH = "/scratch/opt/cuda"
     }
 }
