@@ -47,6 +47,9 @@ struct ofi_hmem_ops {
 	int (*copy_from_hmem)(uint64_t device, void *dest, const void *src,
 			      size_t size);
 	bool (*is_addr_valid)(const void *addr);
+	int (*get_handle)(void *dev_buf, void **handle);
+	int (*open_handle)(void **handle, uint64_t device, void **ipc_ptr);
+	int (*close_handle)(void *ipc_ptr);
 };
 
 static struct ofi_hmem_ops hmem_ops[] = {
@@ -56,6 +59,9 @@ static struct ofi_hmem_ops hmem_ops[] = {
 		.cleanup = ofi_hmem_cleanup_noop,
 		.copy_to_hmem = ofi_memcpy,
 		.copy_from_hmem = ofi_memcpy,
+		.get_handle = ofi_hmem_no_get_handle,
+		.open_handle = ofi_hmem_no_open_handle,
+		.close_handle = ofi_hmem_no_close_handle,
 	},
 	[FI_HMEM_CUDA] = {
 		.initialized = false,
@@ -64,6 +70,9 @@ static struct ofi_hmem_ops hmem_ops[] = {
 		.copy_to_hmem = cuda_copy_to_dev,
 		.copy_from_hmem = cuda_copy_from_dev,
 		.is_addr_valid = cuda_is_addr_valid,
+		.get_handle = ofi_hmem_no_get_handle,
+		.open_handle = ofi_hmem_no_open_handle,
+		.close_handle = ofi_hmem_no_close_handle,
 	},
 	[FI_HMEM_ROCR] = {
 		.initialized = false,
@@ -72,6 +81,9 @@ static struct ofi_hmem_ops hmem_ops[] = {
 		.copy_to_hmem = rocr_memcpy,
 		.copy_from_hmem = rocr_memcpy,
 		.is_addr_valid = rocr_is_addr_valid,
+		.get_handle = ofi_hmem_no_get_handle,
+		.open_handle = ofi_hmem_no_open_handle,
+		.close_handle = ofi_hmem_no_close_handle,
 	},
 };
 
@@ -147,6 +159,22 @@ ssize_t ofi_copy_to_hmem_iov(enum fi_hmem_iface hmem_iface, uint64_t device,
 	return ofi_copy_hmem_iov_buf(hmem_iface, device, hmem_iov,
 				     hmem_iov_count, hmem_iov_offset,
 				     src, size, OFI_COPY_BUF_TO_IOV);
+}
+
+int ofi_hmem_get_handle(enum fi_hmem_iface iface, void *dev_buf, void **handle)
+{
+	return hmem_ops[iface].get_handle(dev_buf, handle);
+}
+
+int ofi_hmem_open_handle(enum fi_hmem_iface iface, void **handle,
+			 uint64_t device, void **ipc_ptr)
+{
+	return hmem_ops[iface].open_handle(handle, device, ipc_ptr);
+}
+
+int ofi_hmem_close_handle(enum fi_hmem_iface iface, void *ipc_ptr)
+{
+	return hmem_ops[iface].close_handle(ipc_ptr);
 }
 
 void ofi_hmem_init(void)

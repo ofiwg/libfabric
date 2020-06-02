@@ -108,6 +108,21 @@ static inline int ofi_hmem_cleanup_noop(void)
 	return FI_SUCCESS;
 }
 
+static inline int ofi_hmem_no_get_handle(void *dev_buffer, void **handle)
+{
+	return -FI_ENOSYS;
+}
+
+static inline int ofi_hmem_no_open_handle(void **handle, uint64_t device, void **ipc_ptr)
+{
+	return -FI_ENOSYS;
+}
+
+static inline int ofi_hmem_no_close_handle(void *ipc_ptr)
+{
+	return -FI_ENOSYS;
+}
+
 ssize_t ofi_copy_from_hmem_iov(void *dest, size_t size,
 			       enum fi_hmem_iface hmem_iface, uint64_t device,
 			       const struct iovec *hmem_iov,
@@ -117,6 +132,11 @@ ssize_t ofi_copy_to_hmem_iov(enum fi_hmem_iface hmem_iface, uint64_t device,
 			     const struct iovec *hmem_iov,
 			     size_t hmem_iov_count, uint64_t hmem_iov_offset,
 			     void *src, size_t size);
+
+int ofi_hmem_get_handle(enum fi_hmem_iface iface, void *dev_buf, void **handle);
+int ofi_hmem_open_handle(enum fi_hmem_iface iface, void **handle,
+			 uint64_t device, void **ipc_ptr);
+int ofi_hmem_close_handle(enum fi_hmem_iface iface, void *ipc_ptr);
 
 void ofi_hmem_init(void);
 void ofi_hmem_cleanup(void);
