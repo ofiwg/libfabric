@@ -650,6 +650,7 @@ void fi_ini(void)
 	ofi_pmem_init();
 	ofi_perf_init();
 	ofi_hook_init();
+	ofi_hmem_init();
 	ofi_monitors_init();
 
 	fi_param_define(NULL, "provider", FI_PARAM_STRING,

@@ -682,6 +682,17 @@ static void ofi_tostr_cq_event_flags(char *buf, uint64_t flags)
 	ofi_remove_comma(buf);
 }
 
+static void ofi_tostr_hmem_iface(char *buf, enum fi_hmem_iface iface)
+{
+	switch (iface) {
+	CASEENUMSTR(FI_HMEM_SYSTEM);
+	CASEENUMSTR(FI_HMEM_CUDA);
+	default:
+		ofi_strcatf(buf, "Unknown");
+		break;
+	}
+}
+
 __attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 char *DEFAULT_SYMVER_PRE(fi_tostr)(const void *data, enum fi_type datatype)
 {
@@ -780,6 +791,9 @@ char *DEFAULT_SYMVER_PRE(fi_tostr)(const void *data, enum fi_type datatype)
 		break;
 	case FI_TYPE_COLLECTIVE_OP:
 		ofi_tostr_collective_op(buf, *enumval);
+		break;
+	case FI_TYPE_HMEM_IFACE:
+		ofi_tostr_hmem_iface(buf, *enumval);
 		break;
 	default:
 		ofi_strcatf(buf, "Unknown type");

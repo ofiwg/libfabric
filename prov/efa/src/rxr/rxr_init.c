@@ -36,6 +36,7 @@
 #include <ofi_prov.h>
 #include "rxr.h"
 #include "efa.h"
+#include "ofi_hmem.h"
 
 struct fi_info *shm_info;
 
@@ -636,6 +637,7 @@ static void rxr_fini(void)
 
 #if HAVE_EFA_DL
 	ofi_monitors_cleanup();
+	ofi_hmem_cleanup();
 	ofi_mem_fini();
 #endif
 }
@@ -711,6 +713,7 @@ EFA_INI
 
 #if HAVE_EFA_DL
 	ofi_mem_init();
+	ofi_hmem_init();
 	ofi_monitors_init();
 #endif
 
