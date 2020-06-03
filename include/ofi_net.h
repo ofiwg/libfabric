@@ -127,6 +127,10 @@ int ofi_discard_socket(SOCKET sock, size_t len);
 
 #define OFI_ADDRSTRLEN (INET6_ADDRSTRLEN + 50)
 
+/*  values taken from librdmacm/rdma_cma.h */
+#define OFI_IB_IP_PS_MASK   0xFFFFFFFFFFFF0000ULL
+#define OFI_IB_IP_PORT_MASK   0x000000000000FFFFULL
+
 union ofi_sock_ip {
 	struct sockaddr		sa;
 	struct sockaddr_in	sin;
