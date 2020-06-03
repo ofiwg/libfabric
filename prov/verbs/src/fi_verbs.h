@@ -756,6 +756,8 @@ int vrb_ep_destroy_xrc_qp(struct vrb_xrc_ep *ep);
 
 int vrb_xrc_close_srq(struct vrb_srq_ep *srq_ep);
 int vrb_sockaddr_len(struct sockaddr *addr);
+void vrb_set_sid(enum rdma_port_space ps,
+        uint16_t port, struct sockaddr_ib *sib);
 
 int vrb_init_info(const struct fi_info **all_infos);
 int vrb_getinfo(uint32_t version, const char *node, const char *service,

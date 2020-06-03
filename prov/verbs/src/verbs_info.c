@@ -995,6 +995,111 @@ int vrb_get_port_space(const struct fi_info *info)
 		return RDMA_PS_TCP;
 }
 
+void vrb_set_sid(enum rdma_port_space ps,
+        uint16_t port, struct sockaddr_ib *sib)
+{
+	sib->sib_sid = htonll(((uint64_t) ps << 16) + ntohs(port));
+	sib->sib_sid_mask = htonll(OFI_IB_IP_PS_MASK | OFI_IB_IP_PORT_MASK);
+}
+
+static struct rdma_addrinfo *vrb_alloc_ib_addrinfo(uint8_t port_num,
+			const union ibv_gid *gid, uint16_t pkey)
+{
+	struct rdma_addrinfo *rai;
+	struct sockaddr_ib *sib;
+
+	rai = calloc(1, sizeof(struct rdma_addrinfo));
+	if (!rai)
+		return NULL;
+
+	rai->ai_flags = RAI_PASSIVE | RAI_NUMERICHOST | RAI_FAMILY;
+	rai->ai_family = AF_IB;
+	rai->ai_port_space = RDMA_PS_IB;
+
+	sib = calloc(1, sizeof(struct sockaddr_ib));
+	if (!sib) {
+		free(rai);
+		return NULL;
+	}
+	rai->ai_src_addr = (struct sockaddr *) sib;
+	rai->ai_src_len = sizeof(struct sockaddr_ib);
+
+	sib->sib_family = AF_IB;
+	memcpy(&sib->sib_addr.sib_raw, &gid->raw, sizeof(*gid));
+	sib->sib_pkey = pkey;
+	sib->sib_scope_id = port_num;
+
+	vrb_set_sid(RDMA_PS_IB, 0, sib);
+
+	return rai;
+}
+
+static int vrb_get_sib(struct dlist_entry *verbs_devs)
+{
+	struct rdma_addrinfo *rai = NULL;
+	struct ibv_device **devices;
+	char *dev_name = NULL;
+	int num_devices;
+	struct ibv_context *context;
+	int ret, num_verbs_ifs = 0;
+	struct ibv_device_attr device_attr;
+	struct ibv_port_attr port_attr;
+	union ibv_gid gid;
+	uint16_t pkey;
+
+	devices = ibv_get_device_list(&num_devices);
+	if (!devices)
+		return -errno;
+
+	for (int dev = 0; dev < num_devices; dev++) {
+		context = ibv_open_device(devices[dev]);
+
+		ret = ibv_query_device(context, &device_attr);
+		if (ret)
+			continue;
+
+		for (int port = 1; port <= device_attr.phys_port_cnt; port++) {
+			ret = ibv_query_port(context, port, &port_attr);
+			if (ret)
+				continue;
+
+			for (int gidx = 0; gidx < port_attr.gid_tbl_len; gidx++) {
+				/* gid_tbl_len may contain GID entries that are NULL (fe80::),
+				 * so we need to filter them out */
+				ret = ibv_query_gid(context, port, gidx, &gid);
+				if (ret || !gid.global.interface_id || !gid.global.subnet_prefix)
+					continue;
+
+				for (int pidx = 0; pidx < port_attr.pkey_tbl_len; pidx++) {
+					ret = ibv_query_pkey(context, port, pidx, &pkey);
+					if (ret || !pkey)
+						continue;
+
+					rai = vrb_alloc_ib_addrinfo(port, &gid, pkey);
+					if (!rai)
+						continue;
+
+					dev_name = strdup(ibv_get_device_name(context->device));
+					if (!dev_name)
+						return -FI_ENOMEM;
+
+					ret = verbs_devs_add(verbs_devs, dev_name, rai);
+					if (ret) {
+						free(dev_name);
+						rdma_freeaddrinfo(rai);
+						continue;
+					}
+
+					num_verbs_ifs++;
+				}
+			}
+		}
+	}
+
+	ibv_free_device_list(devices);
+	return num_verbs_ifs ? 0 : -FI_ENODATA;
+}
+
 /* Builds a list of interfaces that correspond to active verbs devices */
 static int vrb_getifaddrs(struct dlist_entry *verbs_devs)
 {
@@ -1130,6 +1235,9 @@ static void vrb_sockaddr_set_port(struct sockaddr *sa, uint16_t port)
 	case AF_INET6:
 		((struct sockaddr_in6 *)sa)->sin6_port = port;
 		break;
+	case AF_IB:
+		vrb_set_sid(RDMA_PS_IB, port, (struct sockaddr_ib *)sa);
+		break;
 	}
 }
 
@@ -1248,6 +1356,8 @@ int vrb_init_info(const struct fi_info **all_infos)
 	}
 
 	vrb_getifaddrs(&verbs_devs);
+
+	vrb_get_sib(&verbs_devs);
 
 	if (dlist_empty(&verbs_devs))
 		FI_WARN(&vrb_prov, FI_LOG_FABRIC,
