@@ -131,6 +131,16 @@ int ofi_discard_socket(SOCKET sock, size_t len);
 #define OFI_IB_IP_PS_MASK   0xFFFFFFFFFFFF0000ULL
 #define OFI_IB_IP_PORT_MASK   0x000000000000FFFFULL
 
+struct ofi_sockaddr_ib {
+	unsigned short int  sib_family; /* AF_IB */
+	uint16_t            sib_pkey;
+	uint32_t            sib_flowinfo;
+	uint8_t             sib_addr[16];
+	uint64_t            sib_sid;
+	uint64_t            sib_sid_mask;
+	uint64_t            sib_scope_id;
+};
+
 union ofi_sock_ip {
 	struct sockaddr		sa;
 	struct sockaddr_in	sin;

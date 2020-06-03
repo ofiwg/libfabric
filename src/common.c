@@ -284,6 +284,7 @@ const char *ofi_straddr(char *buf, size_t *len,
 	const struct sockaddr *sock_addr;
 	const struct sockaddr_in6 *sin6;
 	const struct sockaddr_in *sin;
+	const struct ofi_sockaddr_ib *sib;
 	char str[INET6_ADDRSTRLEN + 8];
 	size_t size;
 
@@ -332,7 +333,19 @@ sa_sin6:
 				str, *((uint16_t *)addr + 8), *((uint32_t *)addr + 5));
 		break;
 	case FI_SOCKADDR_IB:
-		size = snprintf(buf, *len, "fi_sockaddr_ib://%p", addr);
+		sib = addr;
+		memset(str, 0, sizeof(str));
+		if (!inet_ntop(AF_INET6, sib->sib_addr, str, INET6_ADDRSTRLEN))
+			return NULL;
+
+		size = snprintf(buf, *len, "fi_sockaddr_ib://[%s]" /* GID */
+			     ":0x%" PRIx16 /* P_Key */
+			     ":0x%" PRIx16 /* port space */
+			     ":0x%" PRIx8 /* Scope ID */,
+			     str, /* GID */
+			     ntohs(sib->sib_pkey), /* P_Key */
+			     (uint16_t)(ntohll(sib->sib_sid) >> 16) & 0xfff, /* port space */
+				 (uint8_t)ntohll(sib->sib_scope_id) & 0xff);
 		break;
 	case FI_ADDR_PSMX:
 		size = snprintf(buf, *len, "fi_addr_psmx://%" PRIx64,
@@ -471,6 +484,101 @@ static int ofi_str_to_ib_ud(const char *str, void **addr, size_t *len)
 		     (uint8_t *)*addr + 26);
 	if ((ret == 5) && (inet_pton(AF_INET6, gid, *addr) > 0))
 		return FI_SUCCESS;
+
+	free(*addr);
+	return -FI_EINVAL;
+}
+
+static int ofi_str_to_sib(const char *str, void **addr, size_t *len)
+{
+	int ret;
+	char *tok, *endptr, *saveptr;
+	struct ofi_sockaddr_ib *sib;
+	uint16_t pkey;
+	uint16_t ps;
+	uint64_t scope_id;
+	uint16_t port;
+	char gid[64 + 1];
+	char extra_str[64 + 1];
+
+	memset(gid, 0, sizeof(gid));
+
+	ret = sscanf(str, "%*[^:]://[%64[^]]]" /* GID */
+		     ":%64s", /* P_Key : port_space : Scope ID : port */
+		     gid, extra_str);
+	if (ret != 2) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Invalid GID in address: %s\n", str);
+		return -FI_EINVAL;
+	}
+
+	tok = strtok_r(extra_str, ":", &saveptr);
+	if (!tok) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Invalid pkey in address: %s\n", str);
+		return -FI_EINVAL;
+	}
+
+	pkey = strtol(tok, &endptr, 0);
+	if (*endptr) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Invalid pkey in address: %s\n", str);
+		return -FI_EINVAL;
+	}
+
+	tok = strtok_r(NULL, ":", &saveptr);
+	if (!tok) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Invalid port space in address: %s\n", str);
+		return -FI_EINVAL;
+	}
+
+	ps = strtol(tok, &endptr, 0);
+	if (*endptr) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Invalid port space in address: %s\n", str);
+		return -FI_EINVAL;
+	}
+
+	tok = strtok_r(NULL, ":", &saveptr);
+	if (!tok) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Invalid scope id in address: %s\n", str);
+		return -FI_EINVAL;
+	}
+
+	scope_id = strtol(tok, &endptr, 0);
+	if (*endptr) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Invalid scope id in address: %s\n", str);
+		return -FI_EINVAL;
+	}
+
+	/* Port is optional */
+	tok = strtok_r(NULL, ":", &saveptr);
+	if (tok)
+		port = strtol(tok, &endptr, 0);
+	else
+		port = 0;
+
+	*len = sizeof(struct ofi_sockaddr_ib);
+	*addr = calloc(1, *len);
+	if (!*addr)
+		return -FI_ENOMEM;
+
+	sib = (struct ofi_sockaddr_ib *)(*addr);
+
+	if (inet_pton(AF_INET6, gid, sib->sib_addr) > 0) {
+		sib->sib_family = AF_IB;
+		sib->sib_pkey = htons(pkey);
+		if (ps && port) {
+			sib->sib_sid = htonll(((uint64_t) ps << 16) + port);
+			sib->sib_sid_mask = htonll(OFI_IB_IP_PS_MASK |
+			                           OFI_IB_IP_PORT_MASK);
+		}
+		sib->sib_scope_id = htonll(scope_id);
+		return FI_SUCCESS;
+	}
 
 	free(*addr);
 	return -FI_EINVAL;
@@ -691,6 +799,7 @@ int ofi_str_toaddr(const char *str, uint32_t *addr_format,
 	case FI_ADDR_EFA:
 		return ofi_str_to_efa(str, addr, len);
 	case FI_SOCKADDR_IB:
+		return ofi_str_to_sib(str, addr, len);
 	case FI_ADDR_GNI:
 	case FI_ADDR_BGQ:
 	case FI_ADDR_MLX:
