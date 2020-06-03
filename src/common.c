@@ -380,7 +380,7 @@ sa_sin6:
 	return buf;
 }
 
-static uint32_t ofi_addr_format(const char *str)
+uint32_t ofi_addr_format(const char *str)
 {
 	char fmt[16];
 	int ret;
