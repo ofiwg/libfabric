@@ -925,7 +925,7 @@ void efa_atfork_callback()
 		"if an application-level alternative (of not using fork)\n"
 		"exists.\n"
 		"\n"
-		"Your job will not abort.\n");
+		"Your job will now abort.\n");
 	abort();
 }
 
@@ -939,9 +939,9 @@ int efa_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric_fid,
 	if (!getenv("RDMAV_HUGEPAGES_SAFE")) {
 		/*
 		 * Setting RDMAV_HUGEPAGES_SAFE alone will not impact
-		 * application performance. The impact only happens
-		 * when either RDMAV_FORK_SAFE or IBV_FORK_SAFE was also
-		 * set.
+		 * application performance, because rdma-core will only
+		 * check this environment variable when either
+		 * RDMAV_FORK_SAFE or IBV_FORK_SAFE is set.
 		 */
 		ret = setenv("RDMAV_HUGEPAGES_SAFE", "1", 1);
 		if (ret)
