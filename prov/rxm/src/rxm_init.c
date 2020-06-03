@@ -92,7 +92,7 @@ void rxm_info_to_core_mr_modes(uint32_t version, const struct fi_info *hints,
 int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 		     const struct fi_info *base_info, struct fi_info *core_info)
 {
-	int use_srx = 0;
+	int ret, use_srx = 0;
 
 	rxm_info_to_core_mr_modes(version, hints, core_info);
 
@@ -127,8 +127,9 @@ int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 
 	core_info->ep_attr->type = FI_EP_MSG;
 
-	fi_param_get_bool(&rxm_prov, "use_srx", &use_srx);
-	if (use_srx || (base_info && base_info->fabric_attr->prov_name &&
+	ret = fi_param_get_bool(&rxm_prov, "use_srx", &use_srx);
+	if (use_srx || ((ret == -FI_ENODATA) && base_info &&
+	    base_info->fabric_attr->prov_name &&
 	    !strcmp(base_info->fabric_attr->prov_name, "tcp"))) {
 		FI_DBG(&rxm_prov, FI_LOG_FABRIC,
 		       "Requesting shared receive context from core provider\n");
