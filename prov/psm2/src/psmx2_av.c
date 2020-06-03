@@ -350,9 +350,12 @@ int psmx2_av_query_sep(struct psmx2_fid_av *av,
 	args[0].u32w1 = av->table[idx].sep_id;
 	args[1].u64 = (uint64_t)(uintptr_t)&av->sep_info[idx];
 	args[2].u64 = (uint64_t)(uintptr_t)&status;
-	psm2_am_request_short(av->conn_info[trx_ctxt->id].epaddrs[idx],
-			      PSMX2_AM_SEP_HANDLER, args, 3, NULL,
-			      0, 0, NULL, NULL);
+	error = psm2_am_request_short(av->conn_info[trx_ctxt->id].epaddrs[idx],
+				      PSMX2_AM_SEP_HANDLER, args, 3, NULL,
+				      0, 0, NULL, NULL);
+
+	if (error)
+		return error;
 
 	/*
 	 * make sure AM is progressed promptly. don't call

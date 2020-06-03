@@ -128,6 +128,7 @@ void psmx2_trx_ctxt_disconnect_peers(struct psmx2_trx_ctxt *trx_ctxt)
 	struct psmx2_epaddr_context *peer;
 	struct dlist_entry peer_list;
 	psm2_amarg_t arg;
+	int err;
 
 	arg.u32w0 = PSMX2_AM_REQ_TRX_CTXT_DISCONNECT;
 
@@ -144,8 +145,14 @@ void psmx2_trx_ctxt_disconnect_peers(struct psmx2_trx_ctxt *trx_ctxt)
 		peer = container_of(item, struct psmx2_epaddr_context, entry);
 		if (psmx2_env.disconnect) {
 			FI_INFO(&psmx2_prov, FI_LOG_CORE, "epaddr: %p\n", peer->epaddr);
-			psm2_am_request_short(peer->epaddr, PSMX2_AM_TRX_CTXT_HANDLER,
-					      &arg, 1, NULL, 0, 0, NULL, NULL);
+			err = psm2_am_request_short(peer->epaddr,
+						    PSMX2_AM_TRX_CTXT_HANDLER,
+						    &arg, 1, NULL, 0, 0, NULL,
+						    NULL);
+			if (err)
+				FI_INFO(&psmx2_prov, FI_LOG_CORE,
+					"failed to send disconnect, err %d\n",
+					err);
 		}
 		psm2_epaddr_setctxt(peer->epaddr, NULL);
 		free(peer);
