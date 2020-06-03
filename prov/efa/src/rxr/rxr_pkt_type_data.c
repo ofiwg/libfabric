@@ -65,11 +65,12 @@ ssize_t rxr_pkt_send_data(struct rxr_ep *ep,
 	data_pkt->hdr.seg_size = payload_size;
 
 	copied_size = ofi_copy_from_hmem_iov(data_pkt->data,
-					      payload_size,
-					      tx_entry->iov,
-					      desc ? desc->peer.iface : FI_HMEM_SYSTEM,
-					      tx_entry->iov_count,
-					      tx_entry->bytes_sent);
+					     payload_size,
+					     desc ? desc->peer.iface : FI_HMEM_SYSTEM,
+					     desc ? desc->peer.device.reserved : NULL,
+					     tx_entry->iov,
+					     tx_entry->iov_count,
+					     tx_entry->bytes_sent);
 	assert(copied_size == payload_size);
 
 	pkt_entry->pkt_size = copied_size + sizeof(struct rxr_data_hdr);
@@ -262,8 +263,9 @@ int rxr_pkt_proc_data(struct rxr_ep *ep,
 	if (OFI_LIKELY(!(rx_entry->rxr_flags & RXR_RECV_CANCEL)) &&
 	    rx_entry->cq_entry.len > seg_offset) {
 		desc = rx_entry->desc[0];
-		bytes_copied = ofi_copy_to_hmem_iov(rx_entry->iov,
-						    desc ? desc->peer.iface : FI_HMEM_SYSTEM,
+		bytes_copied = ofi_copy_to_hmem_iov(desc ? desc->peer.iface : FI_HMEM_SYSTEM,
+						    desc ? desc->peer.device.reserved : NULL,
+						    rx_entry->iov,
 						    rx_entry->iov_count,
 						    seg_offset,
 						    data,

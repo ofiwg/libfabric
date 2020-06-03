@@ -138,7 +138,7 @@ hsa_status_t ofi_hsa_amd_reg_dealloc_cb(void *ptr,
 	return rocr_ops.hsa_amd_reg_dealloc_cb(ptr, cb, user_data);
 }
 
-int rocr_memcpy(void *dest, const void *src, size_t size)
+int rocr_memcpy(uint64_t device, void *dest, const void *src, size_t size)
 {
 	hsa_status_t hsa_ret;
 
@@ -279,7 +279,7 @@ int rocr_hmem_cleanup(void)
 
 #else
 
-int rocr_memcpy(void *dest, const void *src, size_t size)
+int rocr_memcpy(uint64_t device, void *dest, const void *src, size_t size)
 {
 	return -FI_ENOSYS;
 }
