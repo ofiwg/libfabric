@@ -1046,7 +1046,7 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 		if (!info->handle) {
 			/* Only RC, XRC active RDMA CM ID is created at connect */
 			if (!(dom->flags & VRB_USE_XRC)) {
-				ret = vrb_create_ep(info, RDMA_PS_TCP,
+				ret = vrb_create_ep(info, vrb_get_port_space(info),
 						       &ep->id);
 				if (ret)
 					goto err1;
@@ -1252,7 +1252,8 @@ int vrb_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 		_pep->info->dest_addrlen = 0;
 	}
 
-	ret = rdma_create_id(NULL, &_pep->id, &_pep->pep_fid.fid, RDMA_PS_TCP);
+	ret = rdma_create_id(NULL, &_pep->id, &_pep->pep_fid.fid,
+	                     vrb_get_port_space(info));
 	if (ret) {
 		VERBS_INFO(FI_LOG_DOMAIN, "Unable to create PEP rdma_cm_id\n");
 		goto err2;

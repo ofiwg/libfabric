@@ -35,6 +35,7 @@
 #include <ifaddrs.h>
 #include <net/if.h>
 #include <stdint.h>
+#include <rdma/rdma_cma.h>
 
 #include "fi_verbs.h"
 
@@ -302,7 +303,6 @@ int vrb_fi_to_rai(const struct fi_info *fi, uint64_t flags,
 		rai->ai_flags |= RAI_NUMERICHOST;
 
 	rai->ai_qp_type = IBV_QPT_RC;
-	rai->ai_port_space = RDMA_PS_TCP;
 
 	if (!fi)
 		return 0;
@@ -310,18 +310,22 @@ int vrb_fi_to_rai(const struct fi_info *fi, uint64_t flags,
 	switch(fi->addr_format) {
 	case FI_SOCKADDR_IN:
 	case FI_FORMAT_UNSPEC:
+		rai->ai_port_space = RDMA_PS_TCP;
 		rai->ai_family = AF_INET;
 		rai->ai_flags |= RAI_FAMILY;
 		break;
 	case FI_SOCKADDR_IN6:
+		rai->ai_port_space = RDMA_PS_TCP;
 		rai->ai_family = AF_INET6;
 		rai->ai_flags |= RAI_FAMILY;
 		break;
 	case FI_SOCKADDR_IB:
+		rai->ai_port_space = RDMA_PS_IB;
 		rai->ai_family = AF_IB;
 		rai->ai_flags |= RAI_FAMILY;
 		break;
 	case FI_SOCKADDR:
+		rai->ai_port_space = RDMA_PS_TCP;
 		if (fi->src_addrlen) {
 			rai->ai_family = ((struct sockaddr *)fi->src_addr)->sa_family;
 			rai->ai_flags |= RAI_FAMILY;
@@ -981,6 +985,14 @@ err2:
 err1:
 	rdma_destroy_id(id);
 	return ret;
+}
+
+int vrb_get_port_space(const struct fi_info *info)
+{
+	if (info != NULL && info->addr_format == FI_SOCKADDR_IB)
+		return RDMA_PS_IB;
+	else
+		return RDMA_PS_TCP;
 }
 
 /* Builds a list of interfaces that correspond to active verbs devices */

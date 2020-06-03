@@ -768,6 +768,7 @@ int vrb_fi_to_rai(const struct fi_info *fi, uint64_t flags,
 int vrb_get_matching_info(uint32_t version, const struct fi_info *hints,
 			     struct fi_info **info, const struct fi_info *verbs_info,
 			     uint8_t passive);
+int vrb_get_port_space(const struct fi_info *info);
 void vrb_alter_info(const struct fi_info *hints, struct fi_info *info);
 
 struct verbs_ep_domain {
