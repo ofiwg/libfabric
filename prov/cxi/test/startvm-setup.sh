@@ -12,6 +12,7 @@ export LC_ALL=en_US.UTF-8
 
 modprobe ptp
 modprobe amd_iommu_v2
+insmod $DBS_DIR/slingshot_base_link/sbl.ko
 insmod $DBS_DIR/cxi-driver/cxi/cxi-core.ko
 insmod $DBS_DIR/cxi-driver/cxi/cxi-user.ko
 
