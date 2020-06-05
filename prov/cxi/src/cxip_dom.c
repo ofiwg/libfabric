@@ -311,6 +311,7 @@ static int cxip_dom_control(struct fid *fid, int command, void *arg)
 	struct fi_deferred_work *work;
 	struct cxip_cntr *trig_cntr;
 	struct cxip_cntr *comp_cntr;
+	struct cxip_cq *cq;
 	int ret;
 
 	dom = container_of(fid, struct cxip_domain, util_domain.domain_fid.fid);
@@ -415,6 +416,13 @@ static int cxip_dom_control(struct fid *fid, int command, void *arg)
 		dlist_foreach_container(&dom->txc_list, struct cxip_txc, txc,
 					dom_entry)
 			cxip_txc_flush_msg_trig_reqs(txc);
+
+		/* Flush all the CQs of any remaining non-message triggered
+		 * operation requests.
+		 */
+		dlist_foreach_container(&dom->cq_list, struct cxip_cq, cq,
+				dom_entry)
+			cxip_cq_flush_trig_reqs(cq);
 
 		fastlock_release(&dom->trig_cmdq->lock);
 		fastlock_release(&dom->lock);
