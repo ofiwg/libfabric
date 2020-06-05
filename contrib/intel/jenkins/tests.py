@@ -405,7 +405,8 @@ class MpichTestSuite(MpiTests):
 
     @property
     def execute_condn(self):
-        return True if (self.mpi == 'impi' and  self.core_prov != 'psm2') else False
+        return True if (self.mpi == 'impi' and  self.core_prov != 'psm2' \
+                        and self.core_prov != 'sockets') else False
  
     def execute_cmd(self, testgroupname):
         print("Running Tests: " + testgroupname)
