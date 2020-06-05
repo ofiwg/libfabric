@@ -1255,6 +1255,14 @@ ssize_t cxip_send_common(struct cxip_txc *txc, const void *buf, size_t len,
 			struct cxip_cntr *trig_cntr,
 			struct cxip_cntr *comp_cntr);
 
+ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
+			const void *buf, size_t len, void *desc,
+			fi_addr_t tgt_addr, uint64_t addr, uint64_t key,
+			uint64_t data, uint64_t flags, void *context,
+			bool triggered, uint64_t trig_thresh,
+			struct cxip_cntr *trig_cntr,
+			struct cxip_cntr *comp_cntr);
+
 static inline void
 cxip_domain_add_txc(struct cxip_domain *dom, struct cxip_txc *txc)
 {
