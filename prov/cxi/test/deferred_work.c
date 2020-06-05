@@ -215,15 +215,24 @@ Test(deferred_work, flush_work)
 	struct fi_cq_tagged_entry rx_cqe;
 	struct iovec iov = {};
 	struct fi_op_msg msg = {};
-	struct fi_deferred_work work = {};
+	struct fi_deferred_work msg_work = {};
 	unsigned int trig_thresh;
 	size_t xfer_size = 1;
+	uint64_t key = 0xbeef;
+	struct mem_region mem_window;
+	struct fi_rma_iov rma_iov = {};
+	struct fi_op_rma rma = {};
+	struct fi_deferred_work rma_work = {};
 
 	recv_buf = calloc(1, xfer_size);
 	cr_assert(recv_buf);
 
 	send_buf = calloc(1, xfer_size);
 	cr_assert(send_buf);
+
+	ret = mr_create(xfer_size, FI_REMOTE_WRITE | FI_REMOTE_READ, 0xa0, key,
+			&mem_window);
+	cr_assert_eq(ret, FI_SUCCESS, "mr_create failed %d", ret);
 
 	for (i = 0; i < xfer_size; i++)
 		send_buf[i] = i + 0xa0;
@@ -241,15 +250,34 @@ Test(deferred_work, flush_work)
 	msg.msg.addr = cxit_ep_fi_addr;
 	msg.flags = FI_COMPLETION;
 
-	work.triggering_cntr = cxit_send_cntr;
-	work.completion_cntr = cxit_send_cntr;
-	work.op_type = FI_OP_SEND;
-	work.op.msg = &msg;
+	msg_work.triggering_cntr = cxit_send_cntr;
+	msg_work.completion_cntr = cxit_send_cntr;
+	msg_work.op_type = FI_OP_SEND;
+	msg_work.op.msg = &msg;
+
+	/* Deferred RMA op to be cancelled. */
+	rma_iov.key = key;
+
+	rma.ep = cxit_ep;
+	rma.msg.msg_iov = &iov;
+	rma.msg.iov_count = 1;
+	rma.msg.addr = cxit_ep_fi_addr;
+	rma.msg.rma_iov = &rma_iov;
+	rma.msg.rma_iov_count = 1;
+	rma.flags = FI_COMPLETION;
+
+	rma_work.triggering_cntr = cxit_send_cntr;
+	msg_work.completion_cntr = cxit_send_cntr;
+	rma_work.op_type = FI_OP_READ;
+	rma_work.op.rma = &rma;
 
 	/* Queue up multiple trigger requests to be cancelled. */
 	for (i = 0, trig_thresh = 12345; i < 15; i++, trig_thresh++) {
-		work.threshold = trig_thresh;
-		ret = fi_control(&cxit_domain->fid, FI_QUEUE_WORK, &work);
+		struct fi_deferred_work *work = i < 7 ? &msg_work : &rma_work;
+
+		work->threshold = trig_thresh;
+
+		ret = fi_control(&cxit_domain->fid, FI_QUEUE_WORK, work);
 		cr_assert_eq(ret, FI_SUCCESS, "FI_QUEUE_WORK failed %d", ret);
 	}
 
@@ -278,6 +306,7 @@ Test(deferred_work, flush_work)
 
 	free(send_buf);
 	free(recv_buf);
+	mr_destroy(&mem_window);
 }
 
 static void deferred_rma_test(enum fi_op_type op, size_t xfer_size,
