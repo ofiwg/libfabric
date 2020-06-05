@@ -279,3 +279,100 @@ Test(deferred_work, flush_work)
 	free(send_buf);
 	free(recv_buf);
 }
+
+static void deferred_rma_test(enum fi_op_type op, size_t xfer_size,
+			      uint64_t trig_thresh, uint64_t key,
+			      bool comp_event)
+{
+	int ret;
+	struct mem_region mem_window;
+	struct fi_cq_tagged_entry cqe;
+	struct iovec iov = {};
+	struct fi_rma_iov rma_iov = {};
+	struct fi_op_rma rma = {};
+	struct fi_deferred_work work = {};
+	struct fid_cntr *trig_cntr = cxit_write_cntr;
+	struct fid_cntr *comp_cntr = cxit_read_cntr;
+	uint8_t *send_buf;
+	uint64_t expected_flags =
+		op == FI_OP_WRITE ? FI_RMA | FI_WRITE : FI_RMA | FI_READ;
+
+	send_buf = calloc(1, xfer_size);
+	cr_assert_not_null(send_buf, "send_buf alloc failed");
+
+	mr_create(xfer_size, FI_REMOTE_WRITE | FI_REMOTE_READ, 0xa0, key,
+		  &mem_window);
+
+	iov.iov_base = send_buf;
+	iov.iov_len = xfer_size;
+
+	rma_iov.key = key;
+
+	rma.ep = cxit_ep;
+	rma.msg.msg_iov = &iov;
+	rma.msg.iov_count = 1;
+	rma.msg.addr = cxit_ep_fi_addr;
+	rma.msg.rma_iov = &rma_iov;
+	rma.msg.rma_iov_count = 1;
+	rma.flags = comp_event ? FI_COMPLETION : 0;
+
+	work.threshold = trig_thresh;
+	work.triggering_cntr = trig_cntr;
+	work.completion_cntr = comp_cntr;
+	work.op_type = op;
+	work.op.rma = &rma;
+
+	ret = fi_control(&cxit_domain->fid, FI_QUEUE_WORK, &work);
+	cr_assert_eq(ret, FI_SUCCESS, "FI_QUEUE_WORK failed %d", ret);
+
+	/* Verify no target event has occurred. */
+	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	cr_assert_eq(ret, -FI_EAGAIN, "fi_cq_read unexpected value %d", ret);
+
+	ret = fi_cntr_add(trig_cntr, work.threshold);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_cntr_add failed %d", ret);
+
+	if (comp_event) {
+		/* Wait for async event indicating data has been sent */
+		ret = cxit_await_completion(cxit_tx_cq, &cqe);
+		cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
+
+		validate_tx_event(&cqe, expected_flags, NULL);
+	} else {
+		ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+		cr_assert_eq(ret, -FI_EAGAIN, "fi_cq_read unexpected value %d",
+			     ret);
+	}
+
+	poll_counter_assert(trig_cntr, work.threshold, 5);
+	poll_counter_assert(comp_cntr, 1, 5);
+
+	/* Validate RMA data */
+	for (size_t i = 0; i < xfer_size; i++)
+		cr_assert_eq(mem_window.mem[i], send_buf[i],
+			     "data mismatch, element: (%ld) %02x != %02x\n", i,
+			     mem_window.mem[i], send_buf[i]);
+
+	mr_destroy(&mem_window);
+	free(send_buf);
+}
+
+Test(deferred_work, rma_write)
+{
+	deferred_rma_test(FI_OP_WRITE, 12345, 54321, 0xbeef, true);
+}
+
+Test(deferred_work, rma_write_no_event)
+{
+	deferred_rma_test(FI_OP_WRITE, 12345, 54321, 0xbeef, false);
+}
+
+Test(deferred_work, rma_read)
+{
+	deferred_rma_test(FI_OP_READ, 12345, 54321, 0xbeef, true);
+}
+
+Test(deferred_work, rma_read_no_event)
+{
+	deferred_rma_test(FI_OP_READ, 12345, 54321, 0xbeef, false);
+}
