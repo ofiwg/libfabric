@@ -210,6 +210,49 @@ static int cxip_dom_dwq_op_send(struct cxip_domain *dom, struct fi_op_msg *msg,
 	return ret;
 }
 
+static int cxip_dom_dwq_op_tsend(struct cxip_domain *dom,
+				 struct fi_op_tagged *tagged,
+				 struct cxip_cntr *trig_cntr,
+				 struct cxip_cntr *comp_cntr,
+				 uint64_t trig_thresh)
+{
+	struct cxip_txc *txc;
+	const void *buf;
+	size_t len;
+	int ret;
+
+	if (!tagged || tagged->msg.iov_count > 1)
+		return -FI_EINVAL;
+
+	ret = cxip_fid_to_txc(tagged->ep, &txc);
+	if (ret)
+		return ret;
+
+	buf = tagged->msg.iov_count ? tagged->msg.msg_iov[0].iov_base : NULL;
+	len = tagged->msg.iov_count ? tagged->msg.msg_iov[0].iov_len : 0;
+
+	ret = cxip_dom_cntr_enable(dom);
+	if (ret) {
+		CXIP_LOG_DBG("Failed to enable domain for counters, ret=%d\n",
+			     ret);
+		return ret;
+	}
+
+	ret = cxip_send_common(txc, buf, len, NULL, tagged->msg.data,
+			       tagged->msg.addr, tagged->msg.tag,
+			       tagged->msg.context, tagged->flags, true, true,
+			       trig_thresh, trig_cntr, comp_cntr);
+	if (ret)
+		CXIP_LOG_DBG("Failed to emit tagged message triggered op, ret=%d\n",
+			     ret);
+	else
+		CXIP_LOG_DBG("Queued triggered tagged message operation with threshold %lu",
+			     trig_thresh);
+
+	return ret;
+}
+
+
 /* Must hold domain lock. */
 static void cxip_dom_progress_all_cqs(struct cxip_domain *dom)
 {
@@ -249,6 +292,11 @@ static int cxip_dom_control(struct fid *fid, int command, void *arg)
 			return cxip_dom_dwq_op_send(dom, work->op.msg,
 						    trig_cntr, comp_cntr,
 						    work->threshold);
+
+		case FI_OP_TSEND:
+			return cxip_dom_dwq_op_tsend(dom, work->op.tagged,
+						     trig_cntr, comp_cntr,
+						     work->threshold);
 
 		default:
 			CXIP_LOG_ERROR("Invalid FI_QUEUE_WORK op %s\n",
