@@ -47,7 +47,7 @@ static void poll_counter_assert(struct fid_cntr *cntr, uint64_t expected_value,
 }
 
 void deferred_msg_op_test(bool comp_event, size_t xfer_size,
-			  uint64_t trig_thresh)
+			  uint64_t trig_thresh, bool is_tagged, uint64_t tag)
 {
 	int i;
 	int ret;
@@ -59,7 +59,13 @@ void deferred_msg_op_test(bool comp_event, size_t xfer_size,
 	fi_addr_t from;
 	struct iovec iov = {};
 	struct fi_op_msg msg = {};
+	struct fi_op_tagged tagged = {};
 	struct fi_deferred_work work = {};
+	uint64_t expected_rx_flags =
+		is_tagged ? FI_TAGGED | FI_RECV : FI_MSG | FI_RECV;
+	uint64_t expected_rx_tag = is_tagged ? tag : 0;
+	uint64_t expected_tx_flags =
+		is_tagged ? FI_TAGGED | FI_SEND : FI_MSG | FI_SEND;
 
 	recv_buf = calloc(1, xfer_size);
 	cr_assert(recv_buf);
@@ -71,23 +77,42 @@ void deferred_msg_op_test(bool comp_event, size_t xfer_size,
 		send_buf[i] = i + 0xa0;
 
 	/* Post RX buffer */
-	ret = fi_recv(cxit_ep, recv_buf, xfer_size, NULL, FI_ADDR_UNSPEC, NULL);
+	if (is_tagged)
+		ret = fi_trecv(cxit_ep, recv_buf, xfer_size, NULL,
+			       FI_ADDR_UNSPEC, tag, 0, NULL);
+	else
+		ret = fi_recv(cxit_ep, recv_buf, xfer_size, NULL,
+			      FI_ADDR_UNSPEC, NULL);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_recv failed %d", ret);
 
-	/* Send deferred 64 bytes to self */
-	msg.ep = cxit_ep;
+	/* Send deferred op to self */
 	iov.iov_base = send_buf;
 	iov.iov_len = xfer_size;
-	msg.msg.msg_iov = &iov;
-	msg.msg.iov_count = 1;
-	msg.msg.addr = cxit_ep_fi_addr;
-	msg.flags = comp_event ? FI_COMPLETION : 0;
 
 	work.threshold = trig_thresh;
 	work.triggering_cntr = cxit_send_cntr;
 	work.completion_cntr = cxit_send_cntr;
-	work.op_type = FI_OP_SEND;
-	work.op.msg = &msg;
+
+	if (is_tagged) {
+		tagged.ep = cxit_ep;
+		tagged.msg.msg_iov = &iov;
+		tagged.msg.iov_count = 1;
+		tagged.msg.addr = cxit_ep_fi_addr;
+		tagged.msg.tag = tag;
+		tagged.flags = comp_event ? FI_COMPLETION : 0;
+
+		work.op_type = FI_OP_TSEND;
+		work.op.tagged = &tagged;
+	} else {
+		msg.ep = cxit_ep;
+		msg.msg.msg_iov = &iov;
+		msg.msg.iov_count = 1;
+		msg.msg.addr = cxit_ep_fi_addr;
+		msg.flags = comp_event ? FI_COMPLETION : 0;
+
+		work.op_type = FI_OP_SEND;
+		work.op.msg = &msg;
+	}
 
 	ret = fi_control(&cxit_domain->fid, FI_QUEUE_WORK, &work);
 	cr_assert_eq(ret, FI_SUCCESS, "FI_QUEUE_WORK failed %d", ret);
@@ -105,8 +130,8 @@ void deferred_msg_op_test(bool comp_event, size_t xfer_size,
 	} while (ret == -FI_EAGAIN);
 	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
 
-	validate_rx_event(&rx_cqe, NULL, xfer_size, FI_MSG | FI_RECV, NULL,
-			  0, 0);
+	validate_rx_event(&rx_cqe, NULL, xfer_size, expected_rx_flags, NULL, 0,
+			  expected_rx_tag);
 	cr_assert(from == cxit_ep_fi_addr, "Invalid source address");
 
 	if (comp_event) {
@@ -114,7 +139,7 @@ void deferred_msg_op_test(bool comp_event, size_t xfer_size,
 		ret = cxit_await_completion(cxit_tx_cq, &tx_cqe);
 		cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
 
-		validate_tx_event(&tx_cqe, FI_MSG | FI_SEND, NULL);
+		validate_tx_event(&tx_cqe, expected_tx_flags, NULL);
 	} else {
 		ret = fi_cq_read(cxit_tx_cq, &tx_cqe, 1);
 		cr_assert_eq(ret, -FI_EAGAIN, "fi_cq_read unexpected value %d",
@@ -142,22 +167,42 @@ TestSuite(deferred_work, .init = cxit_setup_msg, .fini = cxit_teardown_msg,
 
 Test(deferred_work, eager_message_comp_event)
 {
-	deferred_msg_op_test(true, 1024, 123546);
+	deferred_msg_op_test(true, 1024, 123546, false, 0);
 }
 
 Test(deferred_work, rendezvous_message_comp_event)
 {
-	deferred_msg_op_test(true, 1024 * 1024, 123546);
+	deferred_msg_op_test(true, 1024 * 1024, 123546, false, 0);
 }
 
 Test(deferred_work, eager_message_no_comp_event)
 {
-	deferred_msg_op_test(false, 1024, 123546);
+	deferred_msg_op_test(false, 1024, 123546, false, 0);
 }
 
 Test(deferred_work, rendezvous_message_no_comp_event)
 {
-	deferred_msg_op_test(false, 1024 * 1024, 123546);
+	deferred_msg_op_test(false, 1024 * 1024, 123546, false, 0);
+}
+
+Test(deferred_work, tagged_eager_message_comp_event)
+{
+	deferred_msg_op_test(true, 1024, 123546, true, 987654321);
+}
+
+Test(deferred_work, tagged_rendezvous_message_comp_event)
+{
+	deferred_msg_op_test(true, 1024 * 1024, 123546, true, 987654321);
+}
+
+Test(deferred_work, tagged_eager_message_no_comp_event)
+{
+	deferred_msg_op_test(false, 1024, 123546, true, 987654321);
+}
+
+Test(deferred_work, tagged_rendezvous_message_no_comp_event)
+{
+	deferred_msg_op_test(false, 1024 * 1024, 123546, true, 987654321);
 }
 
 Test(deferred_work, flush_work)
