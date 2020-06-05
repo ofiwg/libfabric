@@ -226,7 +226,7 @@ int64_t rxr_pkt_req_cq_data(struct rxr_pkt_entry *pkt_entry)
 size_t rxr_pkt_req_max_header_size(int pkt_type)
 {
 	int max_hdr_size = REQ_INF_LIST[pkt_type].base_hdr_size
-		+ sizeof(struct rxr_req_opt_raw_addr_hdr)
+		+ sizeof(struct rxr_req_opt_raw_addr_hdr) + RXR_MAX_NAME_LENGTH
 		+ sizeof(struct rxr_req_opt_cq_data_hdr);
 
 	if (pkt_type == RXR_EAGER_RTW_PKT || pkt_type == RXR_LONG_RTW_PKT)
@@ -366,6 +366,7 @@ ssize_t rxr_pkt_init_eager_msgrtm(struct rxr_ep *ep,
 				  struct rxr_pkt_entry *pkt_entry)
 {
 	rxr_pkt_init_rtm(ep, tx_entry, RXR_EAGER_MSGRTM_PKT, 0, pkt_entry);
+	assert(tx_entry->total_len == rxr_pkt_req_data_size(pkt_entry));
 	return 0;
 }
 
@@ -376,6 +377,7 @@ ssize_t rxr_pkt_init_eager_tagrtm(struct rxr_ep *ep,
 	struct rxr_base_hdr *base_hdr;
 
 	rxr_pkt_init_rtm(ep, tx_entry, RXR_EAGER_TAGRTM_PKT, 0, pkt_entry);
+	assert(tx_entry->total_len == rxr_pkt_req_data_size(pkt_entry));
 	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
 	base_hdr->flags |= RXR_REQ_TAGGED;
 	rxr_pkt_rtm_settag(pkt_entry, tx_entry->tag);
