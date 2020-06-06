@@ -757,7 +757,9 @@ Test(av, insertmc)
 	cxit_create_av();
 	test_addrs_init();
 
+	/* Leave multicast bit zero, FI_MULTICAST adds at insertion */
 	mcbits = rand() & ((1 << C_DFA_MULTICAST_ID_BITS) - 1);
+	mc_addr.raw = 0;	// zero the entire object
 	mc_addr.pid = 5;	// arbitrary
 	mc_addr.nic = mcbits;
 	ret = fi_av_insert(cxit_av, &mc_addr, 1, &fi_addr, FI_MULTICAST,
@@ -769,12 +771,13 @@ Test(av, insertmc)
 	ret = fi_av_lookup(cxit_av, fi_addr, &lookup, &addrlen);
 	cr_assert(ret == 0, "fi_av_lookup addr %ld failed: ret = %d",
 		  fi_addr, ret);
-	cr_assert(CXIP_ADDR_EQUAL(mc_addr, lookup),
-		  "fi_av_lookup addr %ld failed: %08x != %08x",
-		  fi_addr, mc_addr.raw, lookup.raw);
 	cr_assert(lookup.multicast,
 		  "fi_av_lookup addr %ld not multicast: %08x",
 		  fi_addr, lookup.raw);
+	mc_addr.multicast = 1;
+	cr_assert(CXIP_ADDR_EQUAL(mc_addr, lookup),
+		  "fi_av_lookup addr %ld failed: %08x != %08x",
+		  fi_addr, mc_addr.raw, lookup.raw);
 
 	ret = fi_av_remove(cxit_av, &fi_addr, 1, 0);
 	cr_assert(ret == 0, "fi_av_remove addr %ld failed: ret = %d",
