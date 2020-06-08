@@ -158,16 +158,13 @@ static inline int ofi_val32_ge(uint32_t x, uint32_t y) {
 #define TAB "    "
 
 #define CASEENUMSTR(SYM) \
-	case SYM: { ofi_strcatf(buf, #SYM); break; }
+	case SYM: { ofi_strncatf(buf, buflen, #SYM); break; }
 #define IFFLAGSTR(flags, SYM) \
-	do { if (flags & SYM) ofi_strcatf(buf, #SYM ", "); } while(0)
+	do { if (flags & SYM) ofi_strncatf(buf, buflen, #SYM ", "); } while(0)
 #define CASEENUMSTRN(SYM, N) \
 	case SYM: { ofi_strncatf(buf, N, #SYM); break; }
 #define IFFLAGSTRN(flags, SYM, N) \
 	do { if (flags & SYM) ofi_strncatf(buf, N, #SYM ", "); } while(0)
-
-#define ofi_strcatf(dest, ...) \
-	ofi_strncatf(dest, OFI_BUFSIZ, __VA_ARGS__)
 
 /*
  * CPU specific features

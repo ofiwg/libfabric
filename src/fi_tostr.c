@@ -72,15 +72,15 @@
 
 #define OFI_BUFSIZ 8192
 
-static void ofi_tostr_fid(const char *label, char *buf, const struct fid *fid)
+static void ofi_tostr_fid(const char *label, char *buf, size_t buflen, const struct fid *fid)
 {
 	if (!fid || !FI_CHECK_OP(fid->ops, struct fi_ops, tostr))
-		ofi_strcatf(buf, "%s%p\n", label, fid);
+		ofi_strncatf(buf, buflen, "%s%p\n", label, fid);
 	else
-		fid->ops->tostr(fid, buf, OFI_BUFSIZ - strnlen(buf, OFI_BUFSIZ));
+		fid->ops->tostr(fid, buf, buflen - strnlen(buf, buflen));
 }
 
-static void ofi_tostr_opflags(char *buf, uint64_t flags)
+static void ofi_tostr_opflags(char *buf, size_t buflen, uint64_t flags)
 {
 	IFFLAGSTR(flags, FI_MULTICAST);
 
@@ -104,7 +104,7 @@ static void ofi_tostr_opflags(char *buf, uint64_t flags)
 	ofi_remove_comma(buf);
 }
 
-static void ofi_tostr_addr_format(char *buf, uint32_t addr_format)
+static void ofi_tostr_addr_format(char *buf, size_t buflen, uint32_t addr_format)
 {
 	switch (addr_format) {
 	CASEENUMSTR(FI_FORMAT_UNSPEC);
@@ -122,26 +122,26 @@ static void ofi_tostr_addr_format(char *buf, uint32_t addr_format)
 	CASEENUMSTR(FI_ADDR_EFA);
 	default:
 		if (addr_format & FI_PROV_SPECIFIC)
-			ofi_strcatf(buf, "Provider specific");
+			ofi_strncatf(buf, buflen, "Provider specific");
 		else
-			ofi_strcatf(buf, "Unknown");
+			ofi_strncatf(buf, buflen, "Unknown");
 		break;
 	}
 }
 
-static void ofi_tostr_progress(char *buf, enum fi_progress progress)
+static void ofi_tostr_progress(char *buf, size_t buflen, enum fi_progress progress)
 {
 	switch (progress) {
 	CASEENUMSTR(FI_PROGRESS_UNSPEC);
 	CASEENUMSTR(FI_PROGRESS_AUTO);
 	CASEENUMSTR(FI_PROGRESS_MANUAL);
 	default:
-		ofi_strcatf(buf, "Unknown");
+		ofi_strncatf(buf, buflen, "Unknown");
 		break;
 	}
 }
 
-static void ofi_tostr_threading(char *buf, enum fi_threading threading)
+static void ofi_tostr_threading(char *buf, size_t buflen, enum fi_threading threading)
 {
 	switch (threading) {
 	CASEENUMSTR(FI_THREAD_UNSPEC);
@@ -151,12 +151,12 @@ static void ofi_tostr_threading(char *buf, enum fi_threading threading)
 	CASEENUMSTR(FI_THREAD_COMPLETION);
 	CASEENUMSTR(FI_THREAD_ENDPOINT);
 	default:
-		ofi_strcatf(buf, "Unknown");
+		ofi_strncatf(buf, buflen, "Unknown");
 		break;
 	}
 }
 
-static void ofi_tostr_msgorder(char *buf, uint64_t flags)
+static void ofi_tostr_msgorder(char *buf, size_t buflen, int64_t flags)
 {
 	IFFLAGSTR(flags, FI_ORDER_RAR);
 	IFFLAGSTR(flags, FI_ORDER_RAW);
@@ -179,12 +179,12 @@ static void ofi_tostr_msgorder(char *buf, uint64_t flags)
 	ofi_remove_comma(buf);
 }
 
-static void ofi_tostr_comporder(char *buf, uint64_t flags)
+static void ofi_tostr_comporder(char *buf, size_t buflen, uint64_t flags)
 {
 	if ((flags & FI_ORDER_STRICT) == FI_ORDER_NONE) {
-		ofi_strcatf(buf, "FI_ORDER_NONE, ");
+		ofi_strncatf(buf, buflen, "FI_ORDER_NONE, ");
 	} else if ((flags & FI_ORDER_STRICT) == FI_ORDER_STRICT) {
-		ofi_strcatf(buf, "FI_ORDER_STRICT, ");
+		ofi_strncatf(buf, buflen, "FI_ORDER_STRICT, ");
 	}
 
 	IFFLAGSTR(flags, FI_ORDER_DATA);
@@ -192,7 +192,7 @@ static void ofi_tostr_comporder(char *buf, uint64_t flags)
 	ofi_remove_comma(buf);
 }
 
-static void ofi_tostr_caps(char *buf, uint64_t caps)
+static void ofi_tostr_caps(char *buf, size_t buflen, uint64_t caps)
 {
 	IFFLAGSTR(caps, FI_MSG);
 	IFFLAGSTR(caps, FI_RMA);
@@ -228,7 +228,7 @@ static void ofi_tostr_caps(char *buf, uint64_t caps)
 	ofi_remove_comma(buf);
 }
 
-static void ofi_tostr_ep_type(char *buf, enum fi_ep_type ep_type)
+static void ofi_tostr_ep_type(char *buf, size_t buflen, enum fi_ep_type ep_type)
 {
 	switch (ep_type) {
 	CASEENUMSTR(FI_EP_UNSPEC);
@@ -238,12 +238,12 @@ static void ofi_tostr_ep_type(char *buf, enum fi_ep_type ep_type)
 	CASEENUMSTR(FI_EP_SOCK_STREAM);
 	CASEENUMSTR(FI_EP_SOCK_DGRAM);
 	default:
-		ofi_strcatf(buf, "Unknown");
+		ofi_strncatf(buf, buflen, "Unknown");
 		break;
 	}
 }
 
-static void ofi_tostr_protocol(char *buf, uint32_t protocol)
+static void ofi_tostr_protocol(char *buf, size_t buflen, uint32_t protocol)
 {
 	switch (protocol) {
 	CASEENUMSTR(FI_PROTO_UNSPEC);
@@ -267,14 +267,14 @@ static void ofi_tostr_protocol(char *buf, uint32_t protocol)
 	CASEENUMSTR(FI_PROTO_EFA);
 	default:
 		if (protocol & FI_PROV_SPECIFIC)
-			ofi_strcatf(buf, "Provider specific");
+			ofi_strncatf(buf, buflen, "Provider specific");
 		else
-			ofi_strcatf(buf, "Unknown");
+			ofi_strncatf(buf, buflen, "Unknown");
 		break;
 	}
 }
 
-static void ofi_tostr_mode(char *buf, uint64_t mode)
+static void ofi_tostr_mode(char *buf, size_t buflen, uint64_t mode)
 {
 	IFFLAGSTR(mode, FI_CONTEXT);
 	IFFLAGSTR(mode, FI_MSG_PREFIX);
@@ -289,7 +289,7 @@ static void ofi_tostr_mode(char *buf, uint64_t mode)
 	ofi_remove_comma(buf);
 }
 
-static void ofi_tostr_addr(char *buf, uint32_t addr_format, void *addr)
+static void ofi_tostr_addr(char *buf, size_t buflen, uint32_t addr_format, void *addr)
 {
 	char *p;
 	size_t len;
@@ -297,7 +297,7 @@ static void ofi_tostr_addr(char *buf, uint32_t addr_format, void *addr)
 	p = buf + strlen(buf);
 
 	if (addr == NULL) {
-		ofi_strcatf(p, "(null)");
+		ofi_strncatf(p, buflen, "(null)");
 		return;
 	}
 
@@ -305,128 +305,128 @@ static void ofi_tostr_addr(char *buf, uint32_t addr_format, void *addr)
 	ofi_straddr(p, &len, addr_format, addr);
 }
 
-static void ofi_tostr_tx_attr(char *buf, const struct fi_tx_attr *attr,
-			     const char *prefix)
+static void ofi_tostr_tx_attr(char *buf, size_t buflen, const struct fi_tx_attr *attr,
+				const char *prefix)
 {
 	if (!attr) {
-		ofi_strcatf(buf, "%sfi_tx_attr: (null)\n", prefix);
+		ofi_strncatf(buf, buflen, "%sfi_tx_attr: (null)\n", prefix);
 		return;
 	}
 
-	ofi_strcatf(buf, "%sfi_tx_attr:\n", prefix);
-	ofi_strcatf(buf, "%s%scaps: [ ", prefix, TAB);
-	ofi_tostr_caps(buf, attr->caps);
-	ofi_strcatf(buf, " ]\n");
+	ofi_strncatf(buf, buflen, "%sfi_tx_attr:\n", prefix);
+	ofi_strncatf(buf, buflen, "%s%scaps: [ ", prefix, TAB);
+	ofi_tostr_caps(buf, buflen, attr->caps);
+	ofi_strncatf(buf, buflen, " ]\n");
 
-	ofi_strcatf(buf, "%s%smode: [ ", prefix, TAB);
-	ofi_tostr_mode(buf, attr->mode);
-	ofi_strcatf(buf, " ]\n");
+	ofi_strncatf(buf, buflen, "%s%smode: [ ", prefix, TAB);
+	ofi_tostr_mode(buf, buflen, attr->mode);
+	ofi_strncatf(buf, buflen, " ]\n");
 
-	ofi_strcatf(buf, "%s%sop_flags: [ ", prefix, TAB);
-	ofi_tostr_opflags(buf, attr->op_flags);
-	ofi_strcatf(buf, " ]\n");
+	ofi_strncatf(buf, buflen, "%s%sop_flags: [ ", prefix, TAB);
+	ofi_tostr_opflags(buf, buflen, attr->op_flags);
+	ofi_strncatf(buf, buflen, " ]\n");
 
-	ofi_strcatf(buf, "%s%smsg_order: [ ", prefix, TAB);
-	ofi_tostr_msgorder(buf, attr->msg_order);
-	ofi_strcatf(buf, " ]\n");
+	ofi_strncatf(buf, buflen, "%s%smsg_order: [ ", prefix, TAB);
+	ofi_tostr_msgorder(buf, buflen, attr->msg_order);
+	ofi_strncatf(buf, buflen, " ]\n");
 
-	ofi_strcatf(buf, "%s%scomp_order: [ ", prefix, TAB);
-	ofi_tostr_comporder(buf, attr->comp_order);
-	ofi_strcatf(buf, " ]\n");
+	ofi_strncatf(buf, buflen, "%s%scomp_order: [ ", prefix, TAB);
+	ofi_tostr_comporder(buf, buflen, attr->comp_order);
+	ofi_strncatf(buf, buflen, " ]\n");
 
-	ofi_strcatf(buf, "%s%sinject_size: %zu\n", prefix, TAB, attr->inject_size);
-	ofi_strcatf(buf, "%s%ssize: %zu\n", prefix, TAB, attr->size);
-	ofi_strcatf(buf, "%s%siov_limit: %zu\n", prefix, TAB, attr->iov_limit);
-	ofi_strcatf(buf, "%s%srma_iov_limit: %zu\n", prefix, TAB, attr->rma_iov_limit);
+	ofi_strncatf(buf, buflen, "%s%sinject_size: %zu\n", prefix, TAB, attr->inject_size);
+	ofi_strncatf(buf, buflen, "%s%ssize: %zu\n", prefix, TAB, attr->size);
+	ofi_strncatf(buf, buflen, "%s%siov_limit: %zu\n", prefix, TAB, attr->iov_limit);
+	ofi_strncatf(buf, buflen, "%s%srma_iov_limit: %zu\n", prefix, TAB, attr->rma_iov_limit);
 }
 
-static void ofi_tostr_rx_attr(char *buf, const struct fi_rx_attr *attr,
-			     const char *prefix)
+static void ofi_tostr_rx_attr(char *buf, size_t buflen, const struct fi_rx_attr *attr,
+				const char *prefix)
 {
 	if (!attr) {
-		ofi_strcatf(buf, "%sfi_rx_attr: (null)\n", prefix);
+		ofi_strncatf(buf, buflen, "%sfi_rx_attr: (null)\n", prefix);
 		return;
 	}
 
-	ofi_strcatf(buf, "%sfi_rx_attr:\n", prefix);
-	ofi_strcatf(buf, "%s%scaps: [ ", prefix, TAB);
-	ofi_tostr_caps(buf, attr->caps);
-	ofi_strcatf(buf, " ]\n");
+	ofi_strncatf(buf, buflen, "%sfi_rx_attr:\n", prefix);
+	ofi_strncatf(buf, buflen ,"%s%scaps: [ ", prefix, TAB);
+	ofi_tostr_caps(buf, buflen, attr->caps);
+	ofi_strncatf(buf, buflen, " ]\n");
 
-	ofi_strcatf(buf, "%s%smode: [ ", prefix, TAB);
-	ofi_tostr_mode(buf, attr->mode);
-	ofi_strcatf(buf, " ]\n");
+	ofi_strncatf(buf, buflen, "%s%smode: [ ", prefix, TAB);
+	ofi_tostr_mode(buf, buflen, attr->mode);
+	ofi_strncatf(buf, buflen, " ]\n");
 
-	ofi_strcatf(buf, "%s%sop_flags: [ ", prefix, TAB);
-	ofi_tostr_opflags(buf, attr->op_flags);
-	ofi_strcatf(buf, " ]\n");
+	ofi_strncatf(buf, buflen, "%s%sop_flags: [ ", prefix, TAB);
+	ofi_tostr_opflags(buf, buflen, attr->op_flags);
+	ofi_strncatf(buf, buflen, " ]\n");
 
-	ofi_strcatf(buf, "%s%smsg_order: [ ", prefix, TAB);
-	ofi_tostr_msgorder(buf, attr->msg_order);
-	ofi_strcatf(buf, " ]\n");
+	ofi_strncatf(buf, buflen, "%s%smsg_order: [ ", prefix, TAB);
+	ofi_tostr_msgorder(buf, buflen, attr->msg_order);
+	ofi_strncatf(buf, buflen, " ]\n");
 
-	ofi_strcatf(buf, "%s%scomp_order: [ ", prefix, TAB);
-	ofi_tostr_comporder(buf, attr->comp_order);
-	ofi_strcatf(buf, " ]\n");
+	ofi_strncatf(buf, buflen, "%s%scomp_order: [ ", prefix, TAB);
+	ofi_tostr_comporder(buf, buflen, attr->comp_order);
+	ofi_strncatf(buf, buflen, " ]\n");
 
-	ofi_strcatf(buf, "%s%stotal_buffered_recv: %zu\n", prefix, TAB, attr->total_buffered_recv);
-	ofi_strcatf(buf, "%s%ssize: %zu\n", prefix, TAB, attr->size);
-	ofi_strcatf(buf, "%s%siov_limit: %zu\n", prefix, TAB, attr->iov_limit);
+	ofi_strncatf(buf, buflen, "%s%stotal_buffered_recv: %zu\n", prefix, TAB, attr->total_buffered_recv);
+	ofi_strncatf(buf, buflen, "%s%ssize: %zu\n", prefix, TAB, attr->size);
+	ofi_strncatf(buf, buflen, "%s%siov_limit: %zu\n", prefix, TAB, attr->iov_limit);
 }
 
-static void ofi_tostr_ep_attr(char *buf, const struct fi_ep_attr *attr, const char *prefix)
+static void ofi_tostr_ep_attr(char *buf, size_t buflen, const struct fi_ep_attr *attr, const char *prefix)
 {
 	if (!attr) {
-		ofi_strcatf(buf, "%sfi_ep_attr: (null)\n", prefix);
+		ofi_strncatf(buf, buflen, "%sfi_ep_attr: (null)\n", prefix);
 		return;
 	}
 
-	ofi_strcatf(buf, "%sfi_ep_attr:\n", prefix);
-	ofi_strcatf(buf, "%s%stype: ", prefix, TAB);
-	ofi_tostr_ep_type(buf, attr->type);
-	ofi_strcatf(buf, "\n");
-	ofi_strcatf(buf, "%s%sprotocol: ", prefix, TAB);
-	ofi_tostr_protocol(buf, attr->protocol);
-	ofi_strcatf(buf, "\n");
-	ofi_strcatf(buf, "%s%sprotocol_version: %d\n", prefix, TAB, attr->protocol_version);
-	ofi_strcatf(buf, "%s%smax_msg_size: %zu\n", prefix, TAB, attr->max_msg_size);
-	ofi_strcatf(buf, "%s%smsg_prefix_size: %zu\n", prefix, TAB, attr->msg_prefix_size);
-	ofi_strcatf(buf, "%s%smax_order_raw_size: %zu\n", prefix, TAB, attr->max_order_raw_size);
-	ofi_strcatf(buf, "%s%smax_order_war_size: %zu\n", prefix, TAB, attr->max_order_war_size);
-	ofi_strcatf(buf, "%s%smax_order_waw_size: %zu\n", prefix, TAB, attr->max_order_waw_size);
-	ofi_strcatf(buf, "%s%smem_tag_format: 0x%016llx\n", prefix, TAB, attr->mem_tag_format);
+	ofi_strncatf(buf, buflen, "%sfi_ep_attr:\n", prefix);
+	ofi_strncatf(buf, buflen, "%s%stype: ", prefix, TAB);
+	ofi_tostr_ep_type(buf, buflen, attr->type);
+	ofi_strncatf(buf, buflen, "\n");
+	ofi_strncatf(buf, buflen, "%s%sprotocol: ", prefix, TAB);
+	ofi_tostr_protocol(buf, buflen, attr->protocol);
+	ofi_strncatf(buf, buflen, "\n");
+	ofi_strncatf(buf, buflen, "%s%sprotocol_version: %d\n", prefix, TAB, attr->protocol_version);
+	ofi_strncatf(buf, buflen, "%s%smax_msg_size: %zu\n", prefix, TAB, attr->max_msg_size);
+	ofi_strncatf(buf, buflen, "%s%smsg_prefix_size: %zu\n", prefix, TAB, attr->msg_prefix_size);
+	ofi_strncatf(buf, buflen, "%s%smax_order_raw_size: %zu\n", prefix, TAB, attr->max_order_raw_size);
+	ofi_strncatf(buf, buflen, "%s%smax_order_war_size: %zu\n", prefix, TAB, attr->max_order_war_size);
+	ofi_strncatf(buf, buflen, "%s%smax_order_waw_size: %zu\n", prefix, TAB, attr->max_order_waw_size);
+	ofi_strncatf(buf, buflen, "%s%smem_tag_format: 0x%016llx\n", prefix, TAB, attr->mem_tag_format);
 
-	ofi_strcatf(buf, "%s%stx_ctx_cnt: %zu\n", prefix, TAB, attr->tx_ctx_cnt);
-	ofi_strcatf(buf, "%s%srx_ctx_cnt: %zu\n", prefix, TAB, attr->rx_ctx_cnt);
+	ofi_strncatf(buf, buflen, "%s%stx_ctx_cnt: %zu\n", prefix, TAB, attr->tx_ctx_cnt);
+	ofi_strncatf(buf, buflen, "%s%srx_ctx_cnt: %zu\n", prefix, TAB, attr->rx_ctx_cnt);
 
-	ofi_strcatf(buf, "%s%sauth_key_size: %zu\n", prefix, TAB, attr->auth_key_size);
+	ofi_strncatf(buf, buflen, "%s%sauth_key_size: %zu\n", prefix, TAB, attr->auth_key_size);
 }
 
-static void ofi_tostr_resource_mgmt(char *buf, enum fi_resource_mgmt rm)
+static void ofi_tostr_resource_mgmt(char *buf, size_t buflen, enum fi_resource_mgmt rm)
 {
 	switch (rm) {
 	CASEENUMSTR(FI_RM_UNSPEC);
 	CASEENUMSTR(FI_RM_DISABLED);
 	CASEENUMSTR(FI_RM_ENABLED);
 	default:
-		ofi_strcatf(buf, "Unknown");
+		ofi_strncatf(buf, buflen, "Unknown");
 		break;
 	}
 }
 
-static void ofi_tostr_av_type(char *buf, enum fi_av_type type)
+static void ofi_tostr_av_type(char *buf, size_t buflen, enum fi_av_type type)
 {
 	switch (type) {
 	CASEENUMSTR(FI_AV_UNSPEC);
 	CASEENUMSTR(FI_AV_MAP);
 	CASEENUMSTR(FI_AV_TABLE);
 	default:
-		ofi_strcatf(buf, "Unknown");
+		ofi_strncatf(buf, buflen, "Unknown");
 		break;
 	}
 }
 
-static void ofi_tostr_mr_mode(char *buf, int mr_mode)
+static void ofi_tostr_mr_mode(char *buf, size_t buflen, int mr_mode)
 {
 	IFFLAGSTR(mr_mode, FI_MR_BASIC);
 	IFFLAGSTR(mr_mode, FI_MR_SCALABLE);
@@ -443,7 +443,7 @@ static void ofi_tostr_mr_mode(char *buf, int mr_mode)
 	ofi_remove_comma(buf);
 }
 
-static void ofi_tostr_op_type(char *buf, int op_type)
+static void ofi_tostr_op_type(char *buf, size_t buflen, int op_type)
 {
 	switch (op_type) {
 	CASEENUMSTR(FI_OP_RECV);
@@ -458,121 +458,122 @@ static void ofi_tostr_op_type(char *buf, int op_type)
 	CASEENUMSTR(FI_OP_CNTR_SET);
 	CASEENUMSTR(FI_OP_CNTR_ADD);
 	default:
-		ofi_strcatf(buf, "Unknown");
+		ofi_strncatf(buf, buflen, "Unknown");
 		break;
 	}
 }
 
-static void ofi_tostr_domain_attr(char *buf, const struct fi_domain_attr *attr,
-				 const char *prefix)
+static void ofi_tostr_domain_attr(char *buf, size_t buflen,
+				 const struct fi_domain_attr *attr, const char *prefix)
 {
 	if (!attr) {
-		ofi_strcatf(buf, "%sfi_domain_attr: (null)\n", prefix);
+		ofi_strncatf(buf, buflen, "%sfi_domain_attr: (null)\n", prefix);
 		return;
 	}
 
-	ofi_strcatf(buf, "%sfi_domain_attr:\n", prefix);
+	ofi_strncatf(buf, buflen, "%sfi_domain_attr:\n", prefix);
 
-	ofi_strcatf(buf, "%s%sdomain: 0x%x\n", prefix, TAB, attr->domain);
+	ofi_strncatf(buf, buflen, "%s%sdomain: 0x%x\n", prefix, TAB, attr->domain);
 
-	ofi_strcatf(buf, "%s%sname: %s\n", prefix, TAB, attr->name);
-	ofi_strcatf(buf, "%s%sthreading: ", prefix, TAB);
-	ofi_tostr_threading(buf, attr->threading);
-	ofi_strcatf(buf, "\n");
+	ofi_strncatf(buf, buflen, "%s%sname: %s\n", prefix, TAB, attr->name);
+	ofi_strncatf(buf, buflen, "%s%sthreading: ", prefix, TAB);
+	ofi_tostr_threading(buf, buflen, attr->threading);
+	ofi_strncatf(buf, buflen, "\n");
 
-	ofi_strcatf(buf, "%s%scontrol_progress: ", prefix,TAB);
-	ofi_tostr_progress(buf, attr->control_progress);
-	ofi_strcatf(buf, "\n");
-	ofi_strcatf(buf, "%s%sdata_progress: ", prefix, TAB);
-	ofi_tostr_progress(buf, attr->data_progress);
-	ofi_strcatf(buf, "\n");
-	ofi_strcatf(buf, "%s%sresource_mgmt: ", prefix, TAB);
-	ofi_tostr_resource_mgmt(buf, attr->resource_mgmt);
-	ofi_strcatf(buf, "\n");
-	ofi_strcatf(buf, "%s%sav_type: ", prefix, TAB);
-	ofi_tostr_av_type(buf, attr->av_type);
-	ofi_strcatf(buf, "\n");
-	ofi_strcatf(buf, "%s%smr_mode: [ ", prefix, TAB);
-	ofi_tostr_mr_mode(buf, attr->mr_mode);
-	ofi_strcatf(buf, " ]\n");
+	ofi_strncatf(buf, buflen, "%s%scontrol_progress: ", prefix,TAB);
+	ofi_tostr_progress(buf, buflen, attr->control_progress);
+	ofi_strncatf(buf, buflen, "\n");
+	ofi_strncatf(buf, buflen, "%s%sdata_progress: ", prefix, TAB);
+	ofi_tostr_progress(buf, buflen, attr->data_progress);
+	ofi_strncatf(buf, buflen, "\n");
+	ofi_strncatf(buf, buflen, "%s%sresource_mgmt: ", prefix, TAB);
+	ofi_tostr_resource_mgmt(buf, buflen, attr->resource_mgmt);
+	ofi_strncatf(buf, buflen, "\n");
+	ofi_strncatf(buf, buflen, "%s%sav_type: ", prefix, TAB);
+	ofi_tostr_av_type(buf, buflen, attr->av_type);
+	ofi_strncatf(buf, buflen, "\n");
+	ofi_strncatf(buf, buflen, "%s%smr_mode: [ ", prefix, TAB);
+	ofi_tostr_mr_mode(buf, buflen, attr->mr_mode);
+	ofi_strncatf(buf, buflen, " ]\n");
 
-	ofi_strcatf(buf, "%s%smr_key_size: %zu\n", prefix, TAB, attr->mr_key_size);
-	ofi_strcatf(buf, "%s%scq_data_size: %zu\n", prefix, TAB, attr->cq_data_size);
-	ofi_strcatf(buf, "%s%scq_cnt: %zu\n", prefix, TAB, attr->cq_cnt);
-	ofi_strcatf(buf, "%s%sep_cnt: %zu\n", prefix, TAB, attr->ep_cnt);
-	ofi_strcatf(buf, "%s%stx_ctx_cnt: %zu\n", prefix, TAB, attr->tx_ctx_cnt);
-	ofi_strcatf(buf, "%s%srx_ctx_cnt: %zu\n", prefix, TAB, attr->rx_ctx_cnt);
-	ofi_strcatf(buf, "%s%smax_ep_tx_ctx: %zu\n", prefix, TAB, attr->max_ep_tx_ctx);
-	ofi_strcatf(buf, "%s%smax_ep_rx_ctx: %zu\n", prefix, TAB, attr->max_ep_rx_ctx);
-	ofi_strcatf(buf, "%s%smax_ep_stx_ctx: %zu\n", prefix, TAB, attr->max_ep_stx_ctx);
-	ofi_strcatf(buf, "%s%smax_ep_srx_ctx: %zu\n", prefix, TAB, attr->max_ep_srx_ctx);
-	ofi_strcatf(buf, "%s%scntr_cnt: %zu\n", prefix, TAB, attr->cntr_cnt);
-	ofi_strcatf(buf, "%s%smr_iov_limit: %zu\n", prefix, TAB, attr->mr_iov_limit);
+	ofi_strncatf(buf, buflen, "%s%smr_key_size: %zu\n", prefix, TAB, attr->mr_key_size);
+	ofi_strncatf(buf, buflen, "%s%scq_data_size: %zu\n", prefix, TAB, attr->cq_data_size);
+	ofi_strncatf(buf, buflen, "%s%scq_cnt: %zu\n", prefix, TAB, attr->cq_cnt);
+	ofi_strncatf(buf, buflen, "%s%sep_cnt: %zu\n", prefix, TAB, attr->ep_cnt);
+	ofi_strncatf(buf, buflen, "%s%stx_ctx_cnt: %zu\n", prefix, TAB, attr->tx_ctx_cnt);
+	ofi_strncatf(buf, buflen, "%s%srx_ctx_cnt: %zu\n", prefix, TAB, attr->rx_ctx_cnt);
+	ofi_strncatf(buf, buflen, "%s%smax_ep_tx_ctx: %zu\n", prefix, TAB, attr->max_ep_tx_ctx);
+	ofi_strncatf(buf, buflen, "%s%smax_ep_rx_ctx: %zu\n", prefix, TAB, attr->max_ep_rx_ctx);
+	ofi_strncatf(buf, buflen, "%s%smax_ep_stx_ctx: %zu\n", prefix, TAB, attr->max_ep_stx_ctx);
+	ofi_strncatf(buf, buflen, "%s%smax_ep_srx_ctx: %zu\n", prefix, TAB, attr->max_ep_srx_ctx);
+	ofi_strncatf(buf, buflen, "%s%scntr_cnt: %zu\n", prefix, TAB, attr->cntr_cnt);
+	ofi_strncatf(buf, buflen, "%s%smr_iov_limit: %zu\n", prefix, TAB, attr->mr_iov_limit);
 
-	ofi_strcatf(buf, "%scaps: [ ", TAB);
-	ofi_tostr_caps(buf, attr->caps);
-	ofi_strcatf(buf, " ]\n");
+	ofi_strncatf(buf, buflen, "%scaps: [ ", TAB);
+	ofi_tostr_caps(buf, buflen, attr->caps);
+	ofi_strncatf(buf, buflen, " ]\n");
 
-	ofi_strcatf(buf, "%smode: [ ", TAB);
-	ofi_tostr_mode(buf, attr->mode);
-	ofi_strcatf(buf, " ]\n");
+	ofi_strncatf(buf, buflen, "%smode: [ ", TAB);
+	ofi_tostr_mode(buf, buflen, attr->mode);
+	ofi_strncatf(buf, buflen, " ]\n");
 
-	ofi_strcatf(buf, "%s%sauth_key_size: %zu\n", prefix, TAB, attr->auth_key_size);
-	ofi_strcatf(buf, "%s%smax_err_data: %zu\n", prefix, TAB, attr->max_err_data);
-	ofi_strcatf(buf, "%s%smr_cnt: %zu\n", prefix, TAB, attr->mr_cnt);
+	ofi_strncatf(buf, buflen, "%s%sauth_key_size: %zu\n", prefix, TAB, attr->auth_key_size);
+	ofi_strncatf(buf, buflen, "%s%smax_err_data: %zu\n", prefix, TAB, attr->max_err_data);
+	ofi_strncatf(buf, buflen, "%s%smr_cnt: %zu\n", prefix, TAB, attr->mr_cnt);
 }
 
-static void ofi_tostr_fabric_attr(char *buf, const struct fi_fabric_attr *attr,
-				 const char *prefix)
+static void ofi_tostr_fabric_attr(char *buf, size_t buflen,
+				 const struct fi_fabric_attr *attr, const char *prefix)
 {
 	if (!attr) {
-		ofi_strcatf(buf, "%sfi_fabric_attr: (null)\n", prefix);
+		ofi_strncatf(buf, buflen, "%sfi_fabric_attr: (null)\n", prefix);
 		return;
 	}
 
-	ofi_strcatf(buf, "%sfi_fabric_attr:\n", prefix);
-	ofi_strcatf(buf, "%s%sname: %s\n", prefix, TAB, attr->name);
-	ofi_strcatf(buf, "%s%sprov_name: %s\n", prefix, TAB, attr->prov_name);
-	ofi_strcatf(buf, "%s%sprov_version: %d.%d\n", prefix, TAB,
+	ofi_strncatf(buf, buflen, "%sfi_fabric_attr:\n", prefix);
+	ofi_strncatf(buf, buflen, "%s%sname: %s\n", prefix, TAB, attr->name);
+	ofi_strncatf(buf, buflen, "%s%sprov_name: %s\n", prefix, TAB, attr->prov_name);
+	ofi_strncatf(buf, buflen, "%s%sprov_version: %d.%d\n", prefix, TAB,
 		FI_MAJOR(attr->prov_version), FI_MINOR(attr->prov_version));
-	ofi_strcatf(buf, "%s%sapi_version: %d.%d\n", prefix, TAB,
+	ofi_strncatf(buf, buflen, "%s%sapi_version: %d.%d\n", prefix, TAB,
 		FI_MAJOR(attr->api_version), FI_MINOR(attr->api_version));
 }
 
-static void ofi_tostr_info(char *buf, const struct fi_info *info)
+static void ofi_tostr_info(char *buf, size_t buflen, const struct fi_info *info)
 {
-	ofi_strcatf(buf, "fi_info:\n");
-	ofi_strcatf(buf, "%scaps: [ ", TAB);
-	ofi_tostr_caps(buf, info->caps);
-	ofi_strcatf(buf, " ]\n");
+	ofi_strncatf(buf, buflen, "fi_info:\n");
+	ofi_strncatf(buf, buflen, "%scaps: [ ", TAB);
+	ofi_tostr_caps(buf, buflen, info->caps);
+	ofi_strncatf(buf, buflen, " ]\n");
 
-	ofi_strcatf(buf, "%smode: [ ", TAB);
-	ofi_tostr_mode(buf, info->mode);
-	ofi_strcatf(buf, " ]\n");
+	ofi_strncatf(buf, buflen, "%smode: [ ", TAB);
+	ofi_tostr_mode(buf, buflen, info->mode);
+	ofi_strncatf(buf, buflen, " ]\n");
 
-	ofi_strcatf(buf, "%saddr_format: ", TAB);
-	ofi_tostr_addr_format(buf, info->addr_format);
-	ofi_strcatf(buf, "\n");
+	ofi_strncatf(buf, buflen, "%saddr_format: ", TAB);
+	ofi_tostr_addr_format(buf, buflen, info->addr_format);
+	ofi_strncatf(buf, buflen, "\n");
 
-	ofi_strcatf(buf, "%ssrc_addrlen: %zu\n", TAB, info->src_addrlen);
-	ofi_strcatf(buf, "%sdest_addrlen: %zu\n", TAB, info->dest_addrlen);
-	ofi_strcatf(buf, "%ssrc_addr: ", TAB);
-	ofi_tostr_addr(buf, info->addr_format, info->src_addr);
-	ofi_strcatf(buf, "\n");
-	ofi_strcatf(buf, "%sdest_addr: ", TAB);
-	ofi_tostr_addr(buf, info->addr_format, info->dest_addr);
-	ofi_strcatf(buf, "\n");
-	ofi_tostr_fid(TAB "handle: ", buf, info->handle);
+	ofi_strncatf(buf, buflen, "%ssrc_addrlen: %zu\n", TAB, info->src_addrlen);
+	ofi_strncatf(buf, buflen, "%sdest_addrlen: %zu\n", TAB, info->dest_addrlen);
+	ofi_strncatf(buf, buflen, "%ssrc_addr: ", TAB);
+	ofi_tostr_addr(buf, buflen, info->addr_format, info->src_addr);
+	ofi_strncatf(buf, buflen, "\n");
+	ofi_strncatf(buf, buflen, "%sdest_addr: ", TAB);
+	ofi_tostr_addr(buf, buflen, info->addr_format, info->dest_addr);
+	ofi_strncatf(buf, buflen, "\n");
+	ofi_tostr_fid(TAB "handle: ", buf, buflen, info->handle);
 
-	ofi_tostr_tx_attr(buf, info->tx_attr, TAB);
-	ofi_tostr_rx_attr(buf, info->rx_attr, TAB);
-	ofi_tostr_ep_attr(buf, info->ep_attr, TAB);
-	ofi_tostr_domain_attr(buf, info->domain_attr, TAB);
-	ofi_tostr_fabric_attr(buf, info->fabric_attr, TAB);
-	ofi_tostr_fid(TAB "nic_fid: ", buf, &info->nic->fid);
+	ofi_tostr_tx_attr(buf, buflen, info->tx_attr, TAB);
+	ofi_tostr_rx_attr(buf, buflen, info->rx_attr, TAB);
+	ofi_tostr_ep_attr(buf, buflen, info->ep_attr, TAB);
+	ofi_tostr_domain_attr(buf, buflen, info->domain_attr, TAB);
+	ofi_tostr_fabric_attr(buf, buflen, info->fabric_attr, TAB);
+	ofi_tostr_fid(TAB "nic_fid: ", buf, buflen, &info->nic->fid);
 }
 
-static void ofi_tostr_atomic_type(char *buf, enum fi_datatype type)
+static void ofi_tostr_atomic_type(char *buf, size_t buflen,
+				 enum fi_datatype type)
 {
 	switch (type) {
 	CASEENUMSTR(FI_INT8);
@@ -590,12 +591,12 @@ static void ofi_tostr_atomic_type(char *buf, enum fi_datatype type)
 	CASEENUMSTR(FI_LONG_DOUBLE);
 	CASEENUMSTR(FI_LONG_DOUBLE_COMPLEX);
 	default:
-		ofi_strcatf(buf, "Unknown");
+		ofi_strncatf(buf, buflen, "Unknown");
 		break;
 	}
 }
 
-static void ofi_tostr_atomic_op(char *buf, enum fi_op op)
+static void ofi_tostr_atomic_op(char *buf, size_t buflen, enum fi_op op)
 {
 	switch (op) {
 	CASEENUMSTR(FI_MIN);
@@ -618,12 +619,13 @@ static void ofi_tostr_atomic_op(char *buf, enum fi_op op)
 	CASEENUMSTR(FI_CSWAP_GT);
 	CASEENUMSTR(FI_MSWAP);
 	default:
-		ofi_strcatf(buf, "Unknown");
+		ofi_strncatf(buf, buflen, "Unknown");
 		break;
 	}
 }
 
-static void ofi_tostr_collective_op(char *buf, enum fi_collective_op op)
+static void ofi_tostr_collective_op(char *buf, size_t buflen,
+				 enum fi_collective_op op)
 {
 	switch (op) {
 	CASEENUMSTR(FI_BARRIER);
@@ -636,18 +638,18 @@ static void ofi_tostr_collective_op(char *buf, enum fi_collective_op op)
 	CASEENUMSTR(FI_SCATTER);
 	CASEENUMSTR(FI_GATHER);
 	default:
-		ofi_strcatf(buf, "Unknown");
+		ofi_strncatf(buf, buflen, "Unknown");
 		break;
 	}
 }
 
-static void ofi_tostr_version(char *buf)
+static void ofi_tostr_version(char *buf, size_t buflen)
 {
-	ofi_strcatf(buf, VERSION);
-	ofi_strcatf(buf, BUILD_ID);
+	ofi_strncatf(buf, buflen, VERSION);
+	ofi_strncatf(buf, buflen, BUILD_ID);
 }
 
-static void ofi_tostr_eq_event(char *buf, int type)
+static void ofi_tostr_eq_event(char *buf, size_t buflen, int type)
 {
 	switch (type) {
 	CASEENUMSTR(FI_NOTIFY);
@@ -658,12 +660,12 @@ static void ofi_tostr_eq_event(char *buf, int type)
 	CASEENUMSTR(FI_AV_COMPLETE);
 	CASEENUMSTR(FI_JOIN_COMPLETE);
 	default:
-		ofi_strcatf(buf, "Unknown");
+		ofi_strncatf(buf, buflen, "Unknown");
 		break;
 	}
 }
 
-static void ofi_tostr_cq_event_flags(char *buf, uint64_t flags)
+static void ofi_tostr_cq_event_flags(char *buf, size_t buflen, uint64_t flags)
 {
 	IFFLAGSTR(flags, FI_SEND);
 	IFFLAGSTR(flags, FI_RECV);
@@ -682,13 +684,14 @@ static void ofi_tostr_cq_event_flags(char *buf, uint64_t flags)
 	ofi_remove_comma(buf);
 }
 
-static void ofi_tostr_hmem_iface(char *buf, enum fi_hmem_iface iface)
+static void ofi_tostr_hmem_iface(char *buf, size_t buflen,
+				 enum fi_hmem_iface iface)
 {
 	switch (iface) {
 	CASEENUMSTR(FI_HMEM_SYSTEM);
 	CASEENUMSTR(FI_HMEM_CUDA);
 	default:
-		ofi_strcatf(buf, "Unknown");
+		ofi_strncatf(buf, buflen, "Unknown");
 		break;
 	}
 }
@@ -717,86 +720,86 @@ char *DEFAULT_SYMVER_PRE(fi_tostr)(const void *data, enum fi_type datatype)
 
 	switch (datatype) {
 	case FI_TYPE_INFO:
-		ofi_tostr_info(buf, data);
+		ofi_tostr_info(buf, buflen, data);
 		break;
 	case FI_TYPE_EP_TYPE:
-		ofi_tostr_ep_type(buf, *enumval);
+		ofi_tostr_ep_type(buf, buflen, *enumval);
 		break;
 	case FI_TYPE_CAPS:
-		ofi_tostr_caps(buf, *val64);
+		ofi_tostr_caps(buf, buflen, *val64);
 		break;
 	case FI_TYPE_OP_FLAGS:
-		ofi_tostr_opflags(buf, *val64);
+		ofi_tostr_opflags(buf, buflen, *val64);
 		break;
 	case FI_TYPE_ADDR_FORMAT:
-		ofi_tostr_addr_format(buf, *val32);
+		ofi_tostr_addr_format(buf, buflen, *val32);
 		break;
 	case FI_TYPE_TX_ATTR:
-		ofi_tostr_tx_attr(buf, data, "");
+		ofi_tostr_tx_attr(buf, buflen, data, "");
 		break;
 	case FI_TYPE_RX_ATTR:
-		ofi_tostr_rx_attr(buf, data, "");
+		ofi_tostr_rx_attr(buf, buflen, data, "");
 		break;
 	case FI_TYPE_EP_ATTR:
-		ofi_tostr_ep_attr(buf, data, "");
+		ofi_tostr_ep_attr(buf, buflen, data, "");
 		break;
 	case FI_TYPE_DOMAIN_ATTR:
-		ofi_tostr_domain_attr(buf, data, "");
+		ofi_tostr_domain_attr(buf, buflen, data, "");
 		break;
 	case FI_TYPE_FABRIC_ATTR:
-		ofi_tostr_fabric_attr(buf, data, "");
+		ofi_tostr_fabric_attr(buf, buflen, data, "");
 		break;
 	case FI_TYPE_THREADING:
-		ofi_tostr_threading(buf, *enumval);
+		ofi_tostr_threading(buf, buflen, *enumval);
 		break;
 	case FI_TYPE_PROGRESS:
-		ofi_tostr_progress(buf, *enumval);
+		ofi_tostr_progress(buf, buflen, *enumval);
 		break;
 	case FI_TYPE_PROTOCOL:
-		ofi_tostr_protocol(buf, *val32);
+		ofi_tostr_protocol(buf, buflen, *val32);
 		break;
 	case FI_TYPE_MSG_ORDER:
-		ofi_tostr_msgorder(buf, *val64);
+		ofi_tostr_msgorder(buf, buflen, *val64);
 		break;
 	case FI_TYPE_MODE:
-		ofi_tostr_mode(buf, *val64);
+		ofi_tostr_mode(buf, buflen, *val64);
 		break;
 	case FI_TYPE_AV_TYPE:
-		ofi_tostr_av_type(buf, *enumval);
+		ofi_tostr_av_type(buf, buflen, *enumval);
 		break;
 	case FI_TYPE_ATOMIC_TYPE:
-		ofi_tostr_atomic_type(buf, *enumval);
+		ofi_tostr_atomic_type(buf, buflen, *enumval);
 		break;
 	case FI_TYPE_ATOMIC_OP:
-		ofi_tostr_atomic_op(buf, *enumval);
+		ofi_tostr_atomic_op(buf, buflen, *enumval);
 		break;
 	case FI_TYPE_VERSION:
-		ofi_tostr_version(buf);
+		ofi_tostr_version(buf, buflen);
 		break;
 	case FI_TYPE_EQ_EVENT:
-		ofi_tostr_eq_event(buf, *enumval);
+		ofi_tostr_eq_event(buf, buflen, *enumval);
 		break;
 	case FI_TYPE_CQ_EVENT_FLAGS:
-		ofi_tostr_cq_event_flags(buf, *val64);
+		ofi_tostr_cq_event_flags(buf, buflen, *val64);
 		break;
 	case FI_TYPE_MR_MODE:
 		/* mr_mode was an enum converted to int flags */
-		ofi_tostr_mr_mode(buf, *enumval);
+		ofi_tostr_mr_mode(buf, buflen, *enumval);
 		break;
 	case FI_TYPE_OP_TYPE:
-		ofi_tostr_op_type(buf, *enumval);
+		ofi_tostr_op_type(buf, buflen, *enumval);
 		break;
 	case FI_TYPE_FID:
-		ofi_tostr_fid("fid: ", buf, data);
+		ofi_tostr_fid("fid: ", buf, buflen, data);
 		break;
 	case FI_TYPE_COLLECTIVE_OP:
-		ofi_tostr_collective_op(buf, *enumval);
+		ofi_tostr_collective_op(buf, buflen, *enumval);
 		break;
 	case FI_TYPE_HMEM_IFACE:
-		ofi_tostr_hmem_iface(buf, *enumval);
+		ofi_tostr_hmem_iface(buf, buflen, *enumval);
 		break;
 	default:
-		ofi_strcatf(buf, "Unknown type");
+		ofi_strncatf(buf, buflen, "Unknown type");
 		break;
 	}
 	return buf;
