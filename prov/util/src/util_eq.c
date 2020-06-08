@@ -41,7 +41,8 @@ void ofi_eq_handle_err_entry(uint32_t api_version, uint64_t flags,
 			     struct fi_eq_err_entry *user_err_entry)
 {
 	if ((FI_VERSION_GE(api_version, FI_VERSION(1, 5)))
-	    && user_err_entry->err_data && user_err_entry->err_data_size) {
+	    && user_err_entry->err_data && user_err_entry->err_data_size
+	    && err_entry->err_data && err_entry->err_data_size) {
 		void *err_data = user_err_entry->err_data;
 		size_t err_data_size = MIN(err_entry->err_data_size,
 					   user_err_entry->err_data_size);
