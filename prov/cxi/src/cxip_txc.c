@@ -363,7 +363,7 @@ void cxip_txc_free(struct cxip_txc *txc)
 	free(txc);
 }
 
-void cxip_txc_flush_trig_reqs(struct cxip_txc *txc)
+void cxip_txc_flush_msg_trig_reqs(struct cxip_txc *txc)
 {
 	struct cxip_req *req;
 	struct dlist_entry *tmp;

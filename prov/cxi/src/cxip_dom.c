@@ -408,12 +408,13 @@ static int cxip_dom_control(struct fid *fid, int command, void *arg)
 		cxip_dom_progress_all_cqs(dom);
 
 		/* At this point, all triggered operations should be cancelled
-		 * or have completed. Free any remaining triggered requests
-		 * queued on a TX context.
+		 * or have completed. Due to special handling of message
+		 * operations, flush any remaining message triggered requests
+		 * from the TX context first.
 		 */
 		dlist_foreach_container(&dom->txc_list, struct cxip_txc, txc,
 					dom_entry)
-			cxip_txc_flush_trig_reqs(txc);
+			cxip_txc_flush_msg_trig_reqs(txc);
 
 		fastlock_release(&dom->trig_cmdq->lock);
 		fastlock_release(&dom->lock);

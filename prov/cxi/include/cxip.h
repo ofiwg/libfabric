@@ -856,7 +856,7 @@ struct cxip_txc {
 	struct dlist_entry dom_entry;
 };
 
-void cxip_txc_flush_trig_reqs(struct cxip_txc *txc);
+void cxip_txc_flush_msg_trig_reqs(struct cxip_txc *txc);
 
 /**
  * Endpoint Internals
