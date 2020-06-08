@@ -15,6 +15,10 @@ fi_fabric / fi_close
 fi_tostr
 : Convert fabric attributes, flags, and capabilities to printable string
 
+fi_tostr_r
+: Convert fabric attributes, flags, and capabilities to printable string
+  (thread-safe version)
+
 # SYNOPSIS
 
 ```c
@@ -26,6 +30,9 @@ int fi_fabric(struct fi_fabric_attr *attr,
 int fi_close(struct fid *fabric);
 
 char * fi_tostr(const void *data, enum fi_type datatype);
+
+char * fi_tostr_r(const void *data, enum fi_type datatype, char *buf,
+    size_t buflen);
 ```
 
 # ARGUMENTS
@@ -60,7 +67,7 @@ The fi_close call is used to release all resources associated with a
 fabric domain or interface.  All items associated with the opened
 fabric must be released prior to calling fi_close.
 
-## fi_tostr
+## fi_tostr, fi_tostr_r
 
 Converts fabric interface attributes, capabilities, flags, and enum
 values into a printable string.  The data parameter accepts a pointer
@@ -150,6 +157,9 @@ datatype or field value.
 fi_tostr() will return a pointer to an internal libfabric buffer that
 should not be modified, and will be overwritten the next time
 fi_tostr() is invoked.  fi_tostr() is not thread safe.
+
+fi_tostr_r() is the reentrant equivalent of fi_tostr(). It uses the
+buffer buf of size buflen to store the output string.
 
 # NOTES
 

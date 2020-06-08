@@ -7,5 +7,6 @@ EXPORTS
     fi_fabric     = fi_fabric
     fi_strerror   = fi_strerror
     fi_tostr      = fi_tostr
+    fi_tostr_r    = fi_tostr_r
     fi_getparams  = fi_getparams
     fi_freeparams = fi_freeparams

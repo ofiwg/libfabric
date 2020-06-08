@@ -696,10 +696,9 @@ static void ofi_tostr_hmem_iface(char *buf, size_t buflen,
 	}
 }
 
-__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
-char *DEFAULT_SYMVER_PRE(fi_tostr)(const void *data, enum fi_type datatype)
+static char *ofi_tostr(const void *data, enum fi_type datatype,
+		char *buf, size_t buflen)
 {
-	static char *buf = NULL;
 	const uint64_t *val64;
 	const uint32_t *val32;
 	const int *enumval;
@@ -711,11 +710,6 @@ char *DEFAULT_SYMVER_PRE(fi_tostr)(const void *data, enum fi_type datatype)
 	val32 = (const uint32_t *) data;
 	enumval = (const int *) data;
 
-	if (!buf) {
-		buf = calloc(OFI_BUFSIZ, 1);
-		if (!buf)
-			return NULL;
-	}
 	buf[0] = '\0';
 
 	switch (datatype) {
@@ -803,8 +797,31 @@ char *DEFAULT_SYMVER_PRE(fi_tostr)(const void *data, enum fi_type datatype)
 		break;
 	}
 	return buf;
+
+}
+
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+char *DEFAULT_SYMVER_PRE(fi_tostr)(const void *data, enum fi_type datatype)
+{
+	static char *buf = NULL;
+
+	if (!buf) {
+		buf = calloc(OFI_BUFSIZ, 1);
+		if (!buf)
+			return NULL;
+	}
+
+	return ofi_tostr(data, datatype, buf, OFI_BUFSIZ);
 }
 DEFAULT_SYMVER(fi_tostr_, fi_tostr, FABRIC_1.0);
+
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+char *DEFAULT_SYMVER_PRE(fi_tostr_r)(const void *data, enum fi_type datatype,
+		char *buf, size_t buflen)
+{
+	return ofi_tostr(data, datatype, buf, buflen);
+}
+DEFAULT_SYMVER(fi_tostr_r_, fi_tostr_r, FABRIC_1.0);
 
 #undef CASEENUMSTR
 #undef IFFLAGSTR

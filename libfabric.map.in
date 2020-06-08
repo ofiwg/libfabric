@@ -7,6 +7,7 @@ FABRIC_1.0 {
 		fi_version;
 		fi_strerror;
 		fi_tostr;
+		fi_tostr_r;
 		fi_log_enabled;
 		fi_log;
 		fi_param_define;

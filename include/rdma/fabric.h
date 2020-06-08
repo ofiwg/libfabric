@@ -680,6 +680,7 @@ enum fi_type {
 };
 
 char *fi_tostr(const void *data, enum fi_type datatype);
+char *fi_tostr_r(const void *data, enum fi_type datatype, char *buf, size_t buflen);
 
 enum fi_param_type {
 	FI_PARAM_STRING,
