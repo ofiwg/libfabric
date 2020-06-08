@@ -60,9 +60,10 @@ static int rx_cm_data(SOCKET fd, struct ofi_ctrl_hdr *hdr,
 		goto out;
 	}
 
-	if (hdr->type != type) {
+	if (hdr->type != type && hdr->type != ofi_ctrl_nack) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-			"unexpected cm message type\n");
+			"unexpected cm message type, expected %d or %d got: %d\n",
+			type, ofi_ctrl_nack, hdr->type);
 		ret = -FI_ECONNREFUSED;
 		goto out;
 	}
@@ -86,6 +87,14 @@ static int rx_cm_data(SOCKET fd, struct ofi_ctrl_hdr *hdr,
 					   TCPX_MAX_CM_DATA_SIZE);
 		}
 	}
+
+	if (hdr->type == ofi_ctrl_nack) {
+		FI_INFO(&tcpx_prov, FI_LOG_EP_CTRL,
+			"Connection refused from remote\n");
+		ret = -FI_ECONNREFUSED;
+		goto out;
+	}
+
 	ret = 0;
 out:
 	cm_ctx->cm_data_sz = data_size;
@@ -180,7 +189,9 @@ static int proc_conn_resp(struct tcpx_cm_context *cm_ctx,
 
 	ret = rx_cm_data(ep->sock, &conn_resp, ofi_ctrl_connresp, cm_ctx);
 	if (ret) {
-		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+		enum fi_log_level level = (ret == -FI_ECONNREFUSED) ?
+				FI_LOG_INFO : FI_LOG_WARN;
+		FI_LOG(&tcpx_prov, level, FI_LOG_EP_CTRL,
 			"Failed to receive connect response\n");
 		return ret;
 	}
