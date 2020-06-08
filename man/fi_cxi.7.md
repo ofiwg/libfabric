@@ -1,0 +1,384 @@
+---
+layout: page
+title: fi_cxi(7)
+tagline: Libfabric Programmer's Manual
+---
+{% include JB/setup %}
+
+# NAME
+
+fi_cxi \- The CXI Fabric Provider
+
+# OVERVIEW
+
+The CXI provider enables libfabric on Cray's Slingshot network. Slingshot is
+comprised of the Rosetta switch and Cassini NIC. Slingshot is an
+Ethernet-compliant network. However, The provider takes advantage of proprietary
+extensions to support HPC applications.
+
+The CXI provider supports reliable, connection-less endpoint semantics. It
+supports two-sided messaging interfaces with message matching offloaded by the
+Cassini NIC. It also supports one-sided RMA and AMO interfaces, light-weight
+counting events, triggered operations (via the deferred work API), and
+fabric-accelerated small reductions.
+
+# REQUIREMENTS
+
+The CXI Provider requires Cassini's optimized HPC protocol which is only
+supported in combination with the Rosetta switch.
+
+The provider uses the libCXI library for control operations and a set of
+Cassini-specific header files to enable direct hardware access in the data path.
+
+# SUPPORTED FEATURES
+
+The CXI provider supports the following features defined for the libfabric API:
+
+*Endpoint types*
+: The provider supports the *FI_EP_RDM* endpoint type, including scalable
+  endpoints.
+
+*Address vectors*
+: The provider implements both the *FI_AV_MAP* and *FI_AV_TABLE*
+  address vector types. FI_EVENT is unsupported.
+
+*Memory registration modes*
+: The provider implements scalable memory registration. The provider requires
+  FI_MR_ENDPOINT.
+
+*Data transfer operations*
+: The following data transfer interfaces are supported: *FI_ATOMIC*, *FI_MSG*,
+  *FI_RMA*, *FI_TAGGED*.  See DATA TRANSFER OPERATIONS below for more details.
+
+*Completion events*
+: The CXI provider supports all CQ event formats. Wait objects are not
+currently supported.
+
+*Modes*
+: The CXI provider does not require any operation modes.
+
+*Progress*
+: The CXI provider currently supports *FI_PROGRESS_MANUAL* data and control
+  progress modes.
+
+*Multi-threading*
+: The CXI provider does not currently optimize for threading model. Data
+  transfer and control interfaces are always considered thread-safe.
+
+*Wait Objects*
+: The CXI provider does not currently support wait objects.
+
+*Additional Features*
+: The CXI provider also supports the following capabilities and features:
+- *FI_MULTI_RECV*
+- *FI_SOURCE*
+- *FI_NAMED_RX_CTX*
+- *FI_SHARED_AV*
+- *FI_RM_ENABLED*
+- *FI_RMA_EVENT*
+- *FI_REMOTE_CQ_DATA*
+- *FI_MORE*
+- *FI_FENCE*
+
+## Addressing Format
+
+The CXI provider uses a proprietary address format. This format includes fields
+for NIC Address and PID. NIC Address is the topological address of the NIC
+endpoint on the fabric. All OFI Endpoints sharing a Domain share the same NIC
+Address. PID (for Port ID or Process ID, adopted from the Portals 4
+specification), is analogous to an IP socket port number.
+
+A third component of Slingshot network addressing is the Virtual Network ID
+(VNI). VNI is a protection key used by the Slingshot network to provide
+isolation between applications. A VNI defines an isolated PID space for a given
+NIC. Therefore, Endpoints must use the same VNI in order to communicate. Note
+that VNI is not a field of the CXI address, but rather is specified as part of
+the OFI Endpoint auth_key (not finalized). The combination of NIC Address, VNI,
+and PID is unique to a single OFI Endpoint within a Slingshot fabric.
+
+The NIC Address of an OFI Endpoint is inherited from the Domain. By default, a
+PID is automatically assigned to an Endpoint when it is enabled. The address of
+an Endpoint can be queried using fi_getname. The address received from
+fi_getname may then be inserted into a peer's Address Vector. The resulting FI
+address may then be used to perform an RDMA operation.
+
+Alternatively, a client may manage PID assignment. fi_getinfo may be used to
+create an fi_info structure that can be used to create an Endpoint with a
+client-specified address. To achieve this, use fi_getinfo with the *FI_SOURCE*
+flag set and set node and service strings to represent the local NIC interface
+and PID to be assigned to the Endpoint. The NIC interface string should match
+the name of an available CXI domain (in the format cxi[0-9]). The PID string
+will be interpreted as a 9-bit integer. Address conflicts will be detected when
+the Endpoint is enabled.
+
+## Authorization Keys
+
+The Endpoint authorization key format is not finalized but will include a
+16-bit VNI. See the Addresing Format section for details on the use of VNI.
+
+## Address Vectors
+
+Currently, the CXI provider supports both FI_AV_TABLE and FI_AV_MAP with the
+same internal implementation. Optimizations are planned for FI_AV_MAP. In the
+future, when using FI_AV_MAP, the CXI address will be encoded in the FI address.
+This will avoid per-operation node address translation and reduce AV memory
+footprint.
+
+The CXI provider uses the FI_SYMMETRIC AV flag for optimization. When a
+client guarantees that all processes have symmetric AV layout, the provider
+uses FI addresses for source address matching (rather than physical addresses).
+This reduces the overhead for source address matching during two-sided Receive
+operations.
+
+## Operation flags
+
+The CXI provider supports the following Operation flags:
+
+*FI_MORE*
+: When FI_MORE is specified in a data transfer operation, the provider will
+  defer submission of RDMA commands to hardware. When one or more data transfer
+  operations is performed using FI_MORE, followed by an operation without
+  FI_MORE, the provider will submit the entire batch of queued operations to
+  hardware using a single PCIe transaction, improving PCIe efficiency.
+
+  When FI_MORE is used, queued commands will not be submitted to hardware until
+  another data transfer operation is performed without FI_MORE.
+
+*FI_TRANSMIT_COMPLETE*
+: By default, all CXI provider completion events satisfy the requirements of the
+  'transmit complete' completion level. Transmit complete events are generated
+  when the intiator receives an Ack from the target NIC. The Ack is generated
+  once all data has been received by the target NIC. Transmit complete events do
+  not guarantee that data is visibile to the target process.
+
+*FI_DELIVERY_COMPLETE*
+: When the 'delivery complete' completion level is used, the event guarantees
+  that data is visible to the target process. To support this, hardware at the
+  target performs a zero-byte read operation to flush data across the PCIe bus
+  before generating an Ack. Flushing reads are performed unconditionally and
+  will lead to higher latency.
+
+*FI_MATCH_COMPLETE*
+: When the 'match complete' completion level is used, the event guarantees that
+  the message has been matched to a client-provided buffer. All messages longer
+  than the eager threshold support this guarantee. When 'match complete' is used
+  with a Send that is shorter than the eager threshold, an additional handshake
+  may be performed by the provider to notify the initiator that the Send has
+  been matched.
+
+The CXI provider also supports the following operational flags:
+
+- *FI_INJECT*
+- *FI_FENCE*
+- *FI_COMPLETION*
+- *FI_REMOTE_CQ_DATA*
+
+## Messaging
+
+The CXI provider supports both tagged (FI_TAGGED) and untagged (FI_MSG)
+two-sided messaging interfaces. In the normal case, message matching is
+performed by hardware. In certain low resource conditions, the responsibility to
+perform message matching may be transferred to software. This is transparently
+handled by the provider.
+
+If a Send operation arrives at a node where there is no matching Receive
+operation posted, it is considered unexpected. Unexpected messages are
+supported. The provider manages buffers to hold unexpected message data.
+
+Unexpected message handling is transparent to clients. Despite that, clients
+should take care to avoid excessive use of unexpected messages by pre-posting
+Receive operations. An unexpected message ties up hardware and memory resources
+until it is matched with a user buffer.
+
+The CXI provider implements several message protocols internally. Message
+protocol is selected based on payload length. Short messages are transferred
+using the eager protocol. In the eager protocol, the entire message payload is
+sent along with the message header. If an eager message arrives unexpectedly,
+the entire message is buffered at the target until it is matched to a Receive
+operation.
+
+Long messages are transferred using a rendezvous protocol. The provider
+implements two rendezvous protocols: offloaded and eager. The threshold at which
+the rendezvous protocol is used is controlled with the FI_CXI_RDZV_THRESHOLD
+environment variable.
+
+In the offloaded rendezvous protocol, a portion of the message payload is sent along
+with the message header. Once the header is matched to a Receive operation, the
+remainder of the payload is pulled from the source using an RDMA Get operation.
+If the message arrives unexpectedly, the eager portion of the payload is
+buffered at the target until it is matched to a Receive operation. In the
+normal case, the Get is performed by hardware and the operation completes without
+software progress.
+
+In the eager rendezvous protocol, the entire payload is sent along with the
+message header. If the message matches a pre-posted Receive operation, the
+entire payload is written directly to the matched Receive buffer. If the message
+arrives unexpectedly, the message header is saved and the entire payload is
+dropped. Later, when the message is matched to a Receive operation, the entire
+payload is pulled from the source using an RDMA Get operation.
+
+The rendezvous protcol is controlled using the FI_CXI_RDZV_OFFLOAD environment
+variable. The provider uses the offloaded rendezvous protocol by default.
+
+## Message Ordering
+
+The CXI provider supports the following ordering rules:
+
+- All message Send operations are always ordered.
+- RMA Writes may be ordered by specifying FI_ORDER_RMA_WAW.
+- AMOs may be ordered by specifying FI_ORDER_AMO_{WAW|WAR|RAW|RAR}.
+- RMA Writes may be ordered with respect to AMOs by specifying FI_ORDER_WAW.
+  Fetching AMOs may be used to perform short reads that are ordered with respect
+  to RMA Writes.
+
+Ordered RMA size limits are set as follows:
+
+- max_order_waw_size is -1. RMA Writes and non-fetching AMOs of any size are
+  ordered with respect to each other.
+- max_order_raw_size is -1. Fetching AMOs of any size are ordered with respect
+  to RMA Writes and non-fetching AMOs.
+- max_order_war_size is -1. RMA Writes and non-fetching AMOs of any size are
+  ordered with respect to fetching AMOs.
+
+## PCIe Ordering
+
+Generally, PCIe writes are strictly ordered. As an optimization, PCIe TLPs may
+have the Relaxed Order (RO) bit set to allow writes to be reordered. Cassini
+sets the RO bit in PCIe TLPs when possible. Cassini sets PCIe RO as follows:
+
+- Ordering of messaging operations is established using completion events.
+  Therefore, all PCIe TLPs related to two-sided message payloads will have RO
+  set.
+- Every PCIe TLP associated with an unordered RMA or AMO operation will have RO
+  cleared.
+- PCIe TLPs associated with the last packet of an ordered RMA or AMO operation
+  will have RO cleared.
+- PCIe TLPs associated with the body packets (all except the last packet of an
+  operation) of an ordered RMA operation will have RO set.
+
+## Translation
+
+The CXI provider supports multiple translation modes including: Pinned,
+On-Demand Paged (ODP), and ATS modes. Pinned and ODP modes are supported using a
+NIC translation unit. ATS mode is supported through integration between the NIC
+and the PCIe root complex on supported host CPUs.
+
+Translation mode is controlled using environment variables. Currently, the
+provider defaults to using the pinned translation mode. In pinned mode, all
+buffers used for data transfers are backed by pinned physical memory. Using
+Pinned mode avoids any overhead due to network page faults but requires all
+buffers to be backed by physical memory.
+
+In ODP mode, buffers used for data transfers are not required to be backed by
+physical memory. An un-populated buffer that is referenced by the NIC will incur
+a network page fault. Nework page faults will significantly impact application
+performance. Clients should take care to pre-populate buffers used for
+data-tranfer operations to avoid network page faults.
+
+In ATS mode, the NIC interfaces with a host CPU's PCIe root complex using PCIe
+rev. 4 ATS, PRI, and PASID features. Conceptually, ATS mode enables the NIC to
+to share a process's view of virtual address space. Addresses are demand-paged
+and copy-on-write semantics work as expected. ATS mode currently supports AMD
+hosts using the iommu_v2 API.
+
+## Translation Cache
+
+Mapping a buffer for use by the NIC is an expensive operation. To avoid this
+penalty for each data transfer operation, the CXI provider maintains an internal
+translation cache.
+
+When using the ATS translation mode, the provider does not maintain translations
+for individual buffers. It follows that translation caching is not required.
+
+## Fork
+
+The CXI provider supports pinned and demand-paged translation modes. When using
+pinned memory, accessing an RDMA buffer from a forked child process is not
+supported and may lead to undefined behavior. To avoid issues, fork safety can
+be enabled by defining the environment variables CXI_FORK_SAFE and
+CXI_FORK_SAFE_HP.
+
+## GPUs
+
+GPU support is planned.
+
+# OPTIMIZATION
+
+## Optimized MRs
+
+The CXI provider has two separate MR implementations: standard and optimized.
+Standard MRs are designed to support applications which require a large number
+of remote memory regions. Optimized MRs are designed to support one-sided
+programming models that allocate a small number of large remote memory windows.
+The CXI provider can achieve higher RMA Write rates when targeting an optimized
+MR.
+
+Both types of MRs are allocated using fi_mr_reg. MRs with client-provided key in
+the range [0-199] are optimized MRs. MRs with key greater or equal to 200 are
+standard MRs. An application may create a mix of standard and optimized MRs. To
+disable the use of optimized MRs, set environment variable
+FI_CXI_OPTIMIZED_MRS=false. When disabled, all MR keys are available and all MRs
+are implemented as standard MRs. All communicating processes must agree on the
+use of optimized MRs.
+
+Optimized MRs are one requirement for the use of low overhead packet formats
+which enable higher RMA Write rates. An RMA Write will use the low overhead
+format when all the following requirements are met:
+
+- The Write targets an optimized MR
+- The target MR does not require remote completion notifications (no
+  FI_RMA_EVENT)
+- The Write does not have ordering requirements (no FI_RMA_WAW)
+
+Theoretically, Cassini has resources to support 64k standard MRs or 2k optimized
+MRs. Practically, the limits are much lower and depend greatly on application
+behavior.
+
+TODO provide method to validate the use of low overhead packets.
+
+## Counters
+
+Cassini offloads light-weight counting events for certain types of operations.
+The rules for offloading are:
+
+- Counting events for RMA and AMO source events are always offloaded.
+- Counting events for RMA and AMO target events are always offloaded.
+- Counting events for Sends are offloaded when message size is less than the
+  rendezvous threshold.
+- Counting events for message Receives are never offloaded by default.
+
+Software progress is required to update counters unless the criteria for
+offloading are met.
+
+# RUNTIME PARAMETERS
+
+The CXI provider checks for the following environment variables:
+
+*FI_CXI_ODP*
+: Enables on-demand paging.
+
+*FI_CXI_ATS*
+: Enables PCIe ATS.
+
+*FI_CXI_RDZV_OFFLOAD*
+: Enables offloaded rendezvous messaging protocol.
+
+*FI_CXI_RDZV_THRESHOLD*
+: Message size threshold for rendezvous protocol.
+
+*FI_CXI_OFLOW_BUF_SIZE*
+: Overflow buffer size.
+
+*FI_CXI_OFLOW_BUF_COUNT*
+: Overflow buffer count.
+
+*FI_CXI_OPTIMIZED_MRS*
+: Enables optimized memory regions.
+
+Note: Use the fi_info utility to query provider environment variables:
+<code>fi_info -p cxi -e</code>
+
+# SEE ALSO
+
+[`fabric`(7)](fabric.7.html),
+[`fi_provider`(7)](fi_provider.7.html),
