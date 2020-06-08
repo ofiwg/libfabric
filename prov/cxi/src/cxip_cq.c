@@ -56,6 +56,57 @@ int cxip_cq_req_cancel(struct cxip_cq *cq, void *req_ctx, void *op_ctx,
 	return ret;
 }
 
+static void cxip_cq_req_free_no_lock(struct cxip_req *req)
+{
+	struct cxip_req *table_req;
+	struct cxip_cq *cq = req->cq;
+
+	CXIP_LOG_DBG("Freeing req: %p (ID: %d)\n", req, req->req_id);
+
+	dlist_remove(&req->cq_entry);
+
+	if (req->req_id >= 0) {
+		table_req = (struct cxip_req *)ofi_idx_remove(
+			&req->cq->req_table, req->req_id);
+		if (table_req != req)
+			CXIP_LOG_ERROR("Failed to unmap request: %p\n", req);
+	}
+
+	ofi_buf_free(req);
+}
+
+/*
+ * cxip_cq_flush_trig_reqs() - Flush all triggered requests on the CQ.
+ *
+ * This function will free all triggered requests associated with a CQ. This
+ * should only be called after cancelling triggered operations against all
+ * counters in use and verifying the cancellations have completed successfully.
+ */
+void cxip_cq_flush_trig_reqs(struct cxip_cq *cq)
+{
+	struct cxip_req *req;
+	struct dlist_entry *tmp;
+	struct cxip_txc *txc;
+
+	fastlock_acquire(&cq->lock);
+
+	dlist_foreach_container_safe(&cq->req_list, struct cxip_req, req,
+				     cq_entry, tmp) {
+
+		if (cxip_is_trig_req(req)) {
+			/* If a request is triggered, the context will only be
+			 * a TX context (never a RX context).
+			 */
+			txc = req->req_ctx;
+			ofi_atomic_dec32(&txc->otx_reqs);
+			cxip_cq_req_free_no_lock(req);
+		}
+
+	}
+
+	fastlock_release(&cq->lock);
+}
+
 /*
  * cxip_cq_req_discard() - Discard all matching requests.
  *
@@ -210,21 +261,8 @@ void cxip_cq_req_free(struct cxip_req *req)
 	struct cxip_req *table_req;
 	struct cxip_cq *cq = req->cq;
 
-	CXIP_LOG_DBG("Freeing req: %p (ID: %d)\n", req, req->req_id);
-
 	fastlock_acquire(&cq->req_lock);
-
-	dlist_remove(&req->cq_entry);
-
-	if (req->req_id >= 0) {
-		table_req = (struct cxip_req *)ofi_idx_remove(
-			&req->cq->req_table, req->req_id);
-		if (table_req != req)
-			CXIP_LOG_ERROR("Failed to unmap request: %p\n", req);
-	}
-
-	ofi_buf_free(req);
-
+	cxip_cq_req_free_no_lock(req);
 	fastlock_release(&cq->req_lock);
 }
 

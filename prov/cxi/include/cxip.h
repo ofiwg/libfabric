@@ -1168,6 +1168,7 @@ void cxip_cq_progress(struct cxip_cq *cq);
 int cxip_cq_enable(struct cxip_cq *cxi_cq);
 int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq, void *context);
+void cxip_cq_flush_trig_reqs(struct cxip_cq *cq);
 
 void cxip_dom_cntr_disable(struct cxip_domain *dom);
 int cxip_cntr_mod(struct cxip_cntr *cxi_cntr, uint64_t value, bool set,
