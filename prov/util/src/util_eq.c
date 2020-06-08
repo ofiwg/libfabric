@@ -104,7 +104,7 @@ ssize_t ofi_eq_read(struct fid_eq *eq_fid, uint32_t *event,
 
 			ofi_eq_handle_err_entry(eq->fabric->fabric_fid.api_version,
 						flags, err_entry, buf);
-			ret = (ssize_t) entry->size;
+			ret = entry->size;
 
 			if (!(flags & FI_PEEK))
 				eq->saved_err_data = err_entry->err_data;
@@ -143,7 +143,7 @@ ssize_t ofi_eq_write(struct fid_eq *eq_fid, uint32_t event,
 	if (!entry)
 		return -FI_ENOMEM;
 
-	entry->size = (int) len;
+	entry->size = len;
 	entry->event = event;
 	entry->err = !!(flags & UTIL_FLAG_ERROR);
 	memcpy(entry->data, buf, len);
