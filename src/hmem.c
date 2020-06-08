@@ -44,6 +44,7 @@ struct ofi_hmem_ops {
 	int (*cleanup)(void);
 	int (*copy_to_hmem)(void *dest, const void *src, size_t size);
 	int (*copy_from_hmem)(void *dest, const void *src, size_t size);
+	bool (*is_addr_valid)(const void *addr);
 };
 
 static struct ofi_hmem_ops hmem_ops[] = {
@@ -60,6 +61,7 @@ static struct ofi_hmem_ops hmem_ops[] = {
 		.cleanup = cuda_hmem_cleanup,
 		.copy_to_hmem = cuda_copy_to_dev,
 		.copy_from_hmem = cuda_copy_from_dev,
+		.is_addr_valid = cuda_is_addr_valid,
 	},
 };
 
@@ -160,4 +162,22 @@ void ofi_hmem_cleanup(void)
 		if (hmem_ops[iface].initialized)
 			hmem_ops[iface].cleanup();
 	}
+}
+
+enum fi_hmem_iface ofi_get_hmem_iface(const void *addr)
+{
+	enum fi_hmem_iface iface;
+
+	/* Since a is_addr_valid function is not implemented for FI_HMEM_SYSTEM,
+	 * HMEM iface is skipped. In addition, if no other HMEM ifaces claim the
+	 * address as valid, it is assumed the address is FI_HMEM_SYSTEM.
+	 */
+	for (iface = ARRAY_SIZE(hmem_ops) - 1; iface > FI_HMEM_SYSTEM;
+	     iface--) {
+		if (hmem_ops[iface].initialized &&
+		    hmem_ops[iface].is_addr_valid(addr))
+			return iface;
+	}
+
+	return FI_HMEM_SYSTEM;
 }

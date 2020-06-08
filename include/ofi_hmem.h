@@ -38,6 +38,7 @@
 #endif
 
 #include <rdma/fi_domain.h>
+#include <stdbool.h>
 
 #ifdef HAVE_LIBCUDA
 
@@ -58,6 +59,7 @@ int cuda_copy_to_dev(void *dev, const void *host, size_t size);
 int cuda_copy_from_dev(void *host, const void *dev, size_t size);
 int cuda_hmem_init(void);
 int cuda_hmem_cleanup(void);
+bool cuda_is_addr_valid(const void *addr);
 
 static inline int ofi_memcpy(void *dest, const void *src, size_t size)
 {
@@ -87,5 +89,6 @@ ssize_t ofi_copy_to_hmem_iov(const struct iovec *hmem_iov,
 
 void ofi_hmem_init(void);
 void ofi_hmem_cleanup(void);
+enum fi_hmem_iface ofi_get_hmem_iface(const void *addr);
 
 #endif /* _OFI_HMEM_H_ */
