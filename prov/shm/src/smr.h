@@ -217,7 +217,7 @@ struct smr_ep {
 	size_t			min_multi_recv_size;
 	const char		*name;
 	uint64_t		msg_id;
-	struct smr_region	*region;
+	struct smr_region	*volatile region;
 	struct smr_recv_fs	*recv_fs; /* protected by rx_cq lock */
 	struct smr_queue	recv_queue;
 	struct smr_queue	trecv_queue;

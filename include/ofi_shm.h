@@ -320,7 +320,7 @@ void	smr_map_free(struct smr_map *map);
 struct smr_region *smr_map_get(struct smr_map *map, int id);
 
 int	smr_create(const struct fi_provider *prov, struct smr_map *map,
-		   const struct smr_attr *attr, struct smr_region **smr);
+		   const struct smr_attr *attr, struct smr_region *volatile *smr);
 void	smr_free(struct smr_region *smr);
 
 #ifdef __cplusplus
