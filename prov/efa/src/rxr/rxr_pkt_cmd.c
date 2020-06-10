@@ -34,6 +34,7 @@
 #include "efa.h"
 #include "rxr.h"
 #include "rxr_cntr.h"
+#include "rxr_pkt_cmd.h"
 
 /* This file implements 4 actions that can be applied to a packet:
  *          posting,
@@ -531,7 +532,7 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 	dlist_remove(&pkt_entry->dbg_entry);
 	dlist_insert_tail(&pkt_entry->dbg_entry, &ep->rx_pkt_list);
 #ifdef ENABLE_RXR_PKT_DUMP
-	rxr_ep_print_pkt("Received", ep, (struct rxr_base_hdr *)pkt_entry->pkt);
+	rxr_pkt_print("Received", ep, (struct rxr_base_hdr *)pkt_entry->pkt);
 #endif
 #endif
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
