@@ -37,9 +37,14 @@
 
 pthread_mutex_t mm_lock = PTHREAD_MUTEX_INITIALIZER;
 
+static int ofi_uffd_start(struct ofi_mem_monitor *monitor);
+static void ofi_uffd_stop(struct ofi_mem_monitor *monitor);
+
 static struct ofi_uffd uffd = {
 	.monitor.init = ofi_monitor_init,
-	.monitor.cleanup = ofi_monitor_cleanup
+	.monitor.cleanup = ofi_monitor_cleanup,
+	.monitor.start = ofi_uffd_start,
+	.monitor.stop = ofi_uffd_stop,
 };
 struct ofi_mem_monitor *uffd_monitor = &uffd.monitor;
 
@@ -155,13 +160,7 @@ int ofi_monitor_add_cache(struct ofi_mem_monitor *monitor,
 
 	pthread_mutex_lock(&mm_lock);
 	if (dlist_empty(&monitor->list)) {
-		if (monitor == uffd_monitor)
-			ret = ofi_uffd_start();
-		else if (monitor == memhooks_monitor)
-			ret = ofi_memhooks_start();
-		else
-			ret = -FI_ENOSYS;
-
+		ret = monitor->start(monitor);
 		if (ret)
 			goto out;
 	}
@@ -180,12 +179,8 @@ void ofi_monitor_del_cache(struct ofi_mr_cache *cache)
 	pthread_mutex_lock(&mm_lock);
 	dlist_remove(&cache->notify_entry);
 
-	if (dlist_empty(&monitor->list)) {
-		if (monitor == uffd_monitor)
-			ofi_uffd_stop();
-		else if (monitor == memhooks_monitor)
-			ofi_memhooks_stop();
-	}
+	if (dlist_empty(&monitor->list))
+		monitor->stop(monitor);
 
 	pthread_mutex_unlock(&mm_lock);
 }
@@ -350,7 +345,7 @@ static void ofi_uffd_unsubscribe(struct ofi_mem_monitor *monitor,
 	}
 }
 
-int ofi_uffd_start(void)
+static int ofi_uffd_start(struct ofi_mem_monitor *monitor)
 {
 	struct uffdio_api api;
 	int ret;
@@ -399,7 +394,7 @@ closefd:
 	return ret;
 }
 
-void ofi_uffd_stop(void)
+static void ofi_uffd_stop(struct ofi_mem_monitor *monitor)
 {
 	pthread_cancel(uffd.thread);
 	pthread_join(uffd.thread, NULL);
@@ -408,12 +403,12 @@ void ofi_uffd_stop(void)
 
 #else /* HAVE_UFFD_MONITOR */
 
-int ofi_uffd_start(void)
+static int ofi_uffd_start(struct ofi_mem_monitor *monitor)
 {
 	return -FI_ENOSYS;
 }
 
-void ofi_uffd_stop(void)
+static void ofi_uffd_stop(struct ofi_mem_monitor *monitor)
 {
 }
 

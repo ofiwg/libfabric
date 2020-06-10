@@ -112,6 +112,8 @@ struct ofi_mem_monitor {
 
 	void (*init)(struct ofi_mem_monitor *monitor);
 	void (*cleanup)(struct ofi_mem_monitor *monitor);
+	int (*start)(struct ofi_mem_monitor *monitor);
+	void (*stop)(struct ofi_mem_monitor *monitor);
 	int (*subscribe)(struct ofi_mem_monitor *notifier,
 			 const void *addr, size_t len);
 	void (*unsubscribe)(struct ofi_mem_monitor *notifier,
@@ -144,9 +146,6 @@ struct ofi_uffd {
 	int				fd;
 };
 
-int ofi_uffd_start(void);
-void ofi_uffd_stop(void);
-
 extern struct ofi_mem_monitor *uffd_monitor;
 
 /*
@@ -156,9 +155,6 @@ struct ofi_memhooks {
 	struct ofi_mem_monitor          monitor;
 	struct dlist_entry		intercept_list;
 };
-
-int ofi_memhooks_start(void);
-void ofi_memhooks_stop(void);
 
 extern struct ofi_mem_monitor *memhooks_monitor;
 
