@@ -223,6 +223,10 @@ Test(deferred_work, flush_work)
 	struct fi_rma_iov rma_iov = {};
 	struct fi_op_rma rma = {};
 	struct fi_deferred_work rma_work = {};
+	struct fi_ioc ioc = {};
+	struct fi_rma_ioc rma_ioc = {};
+	struct fi_op_atomic amo = {};
+	struct fi_deferred_work amo_work = {};
 
 	recv_buf = calloc(1, xfer_size);
 	cr_assert(recv_buf);
@@ -271,9 +275,38 @@ Test(deferred_work, flush_work)
 	rma_work.op_type = FI_OP_READ;
 	rma_work.op.rma = &rma;
 
+	/* Deferred AMO op to be cancelled. */
+	ioc.addr = &send_buf;
+	ioc.count = 1;
+
+	rma_ioc.key = key;
+	rma_ioc.count = 1;
+
+	amo.ep = cxit_ep;
+
+	amo.msg.msg_iov = &ioc;
+	amo.msg.iov_count = 1;
+	amo.msg.addr = cxit_ep_fi_addr;
+	amo.msg.rma_iov = &rma_ioc;
+	amo.msg.rma_iov_count = 1;
+	amo.msg.datatype = FI_UINT8;
+	amo.msg.op = FI_SUM;
+
+	amo_work.triggering_cntr = cxit_send_cntr;
+	amo_work.completion_cntr = cxit_send_cntr;
+	amo_work.op_type = FI_OP_ATOMIC;
+	amo_work.op.atomic = &amo;
+
 	/* Queue up multiple trigger requests to be cancelled. */
-	for (i = 0, trig_thresh = 12345; i < 15; i++, trig_thresh++) {
-		struct fi_deferred_work *work = i < 7 ? &msg_work : &rma_work;
+	for (i = 0, trig_thresh = 12345; i < 9; i++, trig_thresh++) {
+		struct fi_deferred_work *work;
+
+		if (i < 3)
+			work = &msg_work;
+		else if (i < 6)
+			work = &rma_work;
+		else
+			work = &amo_work;
 
 		work->threshold = trig_thresh;
 
@@ -404,4 +437,96 @@ Test(deferred_work, rma_read)
 Test(deferred_work, rma_read_no_event)
 {
 	deferred_rma_test(FI_OP_READ, 12345, 54321, 0xbeef, false);
+}
+
+static void deferred_amo_test(bool comp_event)
+{
+	int ret;
+	struct mem_region mem_window;
+	struct fi_cq_tagged_entry cqe;
+	struct fi_ioc iov = {};
+	struct fi_rma_ioc rma_iov = {};
+	struct fi_op_atomic amo = {};
+	struct fi_deferred_work work = {};
+	struct fid_cntr *trig_cntr = cxit_write_cntr;
+	struct fid_cntr *comp_cntr = cxit_read_cntr;
+	uint64_t expected_flags = FI_ATOMIC | FI_WRITE;
+	uint64_t source_buf = 1;
+	uint64_t *target_buf;
+	uint64_t result;
+	uint64_t key = 0xbbbbb;
+	uint64_t trig_thresh = 12345;
+
+	ret = mr_create(sizeof(*target_buf), FI_REMOTE_WRITE | FI_REMOTE_READ,
+			0, key, &mem_window);
+	assert(ret == FI_SUCCESS);
+
+	target_buf = (uint64_t *)mem_window.mem;
+	*target_buf = 0x7FFFFFFFFFFFFFFF;
+
+	result = source_buf + *target_buf;
+
+	iov.addr = &source_buf;
+	iov.count = 1;
+
+	rma_iov.key = key;
+	rma_iov.count = 1;
+
+	amo.ep = cxit_ep;
+
+	amo.msg.msg_iov = &iov;
+	amo.msg.iov_count = 1;
+	amo.msg.addr = cxit_ep_fi_addr;
+	amo.msg.rma_iov = &rma_iov;
+	amo.msg.rma_iov_count = 1;
+	amo.msg.datatype = FI_UINT64;
+	amo.msg.op = FI_SUM;
+
+	amo.flags = comp_event ? FI_COMPLETION : 0;
+
+	work.threshold = trig_thresh;
+	work.triggering_cntr = trig_cntr;
+	work.completion_cntr = comp_cntr;
+	work.op_type = FI_OP_ATOMIC;
+	work.op.atomic = &amo;
+
+	ret = fi_control(&cxit_domain->fid, FI_QUEUE_WORK, &work);
+	cr_assert_eq(ret, FI_SUCCESS, "FI_QUEUE_WORK failed %d", ret);
+
+	/* Verify no target event has occurred. */
+	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	cr_assert_eq(ret, -FI_EAGAIN, "fi_cq_read unexpected value %d", ret);
+
+	ret = fi_cntr_add(trig_cntr, work.threshold);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_cntr_add failed %d", ret);
+
+	if (comp_event) {
+		/* Wait for async event indicating data has been sent */
+		ret = cxit_await_completion(cxit_tx_cq, &cqe);
+		cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
+
+		validate_tx_event(&cqe, expected_flags, NULL);
+	} else {
+		ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+		cr_assert_eq(ret, -FI_EAGAIN, "fi_cq_read unexpected value %d",
+			     ret);
+	}
+
+	poll_counter_assert(trig_cntr, work.threshold, 5);
+	poll_counter_assert(comp_cntr, 1, 5);
+
+	/* Validate RMA data */
+	cr_assert_eq(*target_buf, result, "Invalid target result");
+
+	mr_destroy(&mem_window);
+}
+
+Test(deferred_work, amo_no_event)
+{
+	deferred_amo_test(false);
+}
+
+Test(deferred_work, amo_event)
+{
+	deferred_amo_test(true);
 }
