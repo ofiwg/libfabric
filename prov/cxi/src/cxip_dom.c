@@ -294,6 +294,42 @@ static int cxip_dom_dwq_op_rma(struct cxip_domain *dom, struct fi_op_rma *rma,
 	return ret;
 }
 
+static int cxip_dom_dwq_op_atomic(struct cxip_domain *dom,
+				  struct fi_op_atomic *amo,
+				  struct cxip_cntr *trig_cntr,
+				  struct cxip_cntr *comp_cntr,
+				  uint64_t trig_thresh)
+{
+	struct cxip_txc *txc;
+	int ret;
+
+	if (!amo)
+		return -FI_EINVAL;
+
+	ret = cxip_fid_to_txc(amo->ep, &txc);
+	if (ret)
+		return ret;
+
+	ret = cxip_dom_cntr_enable(dom);
+	if (ret) {
+		CXIP_LOG_DBG("Failed to enable domain for counters, ret=%d\n",
+			     ret);
+		return ret;
+	}
+
+	ret = cxip_amo_common(CXIP_RQ_AMO, txc, &amo->msg, NULL, NULL, 0, NULL,
+			      NULL, 0, amo->flags, true, trig_thresh, trig_cntr,
+			      comp_cntr);
+	if (ret)
+		CXIP_LOG_DBG("Failed to emit AMO triggered op, ret=%d\n",
+			     ret);
+	else
+		CXIP_LOG_DBG("Queued triggered AMO operation with threshold %lu",
+			     trig_thresh);
+
+	return ret;
+}
+
 /* Must hold domain lock. */
 static void cxip_dom_progress_all_cqs(struct cxip_domain *dom)
 {
@@ -345,6 +381,11 @@ static int cxip_dom_control(struct fid *fid, int command, void *arg)
 			return cxip_dom_dwq_op_rma(dom, work->op.rma,
 						   work->op_type, trig_cntr,
 						   comp_cntr, work->threshold);
+
+		case FI_OP_ATOMIC:
+			return cxip_dom_dwq_op_atomic(dom, work->op.atomic,
+						      trig_cntr, comp_cntr,
+						      work->threshold);
 
 		default:
 			CXIP_LOG_ERROR("Invalid FI_QUEUE_WORK op %s\n",

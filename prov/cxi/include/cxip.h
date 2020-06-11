@@ -1266,6 +1266,39 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 			struct cxip_cntr *trig_cntr,
 			struct cxip_cntr *comp_cntr);
 
+/**
+ * Request variants:
+ *   CXIP_RQ_AMO
+ *      Passes one argument (operand1), and applies that to a remote memory
+ *      address content.
+ *
+ *   CXIP_RQ_AMO_FETCH
+ *      Passes two arguments (operand1, resultptr), applies operand1 to a remote
+ *      memory address content, and returns the prior content of the remote
+ *      memory in resultptr.
+ *
+ *   CXIP_RQ_AMO_SWAP
+ *      Passes three arguments (operand1, compare, resultptr). If remote memory
+ *      address content satisfies the comparison operation with compare,
+ *      replaces the remote memory content with operand1, and returns the prior
+ *      content of the remote memory in resultptr.
+ *
+ */
+enum cxip_amo_req_type {
+	CXIP_RQ_AMO,
+	CXIP_RQ_AMO_FETCH,
+	CXIP_RQ_AMO_SWAP,
+	CXIP_RQ_AMO_LAST
+};
+
+int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
+		    const struct fi_msg_atomic *msg,
+		    const struct fi_ioc *comparev, void **comparedesc,
+		    size_t compare_count, const struct fi_ioc *resultv,
+		    void **resultdesc, size_t result_count, uint64_t flags,
+		    bool triggered, uint64_t trig_thresh,
+		    struct cxip_cntr *trig_cntr, struct cxip_cntr *comp_cntr);
+
 static inline void
 cxip_domain_add_txc(struct cxip_domain *dom, struct cxip_txc *txc)
 {

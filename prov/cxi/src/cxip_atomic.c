@@ -34,31 +34,6 @@ _Static_assert(CXIP_AMO_MAX_IOV == 1, "Unexpected max IOV #");
 #define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_EP_DATA, __VA_ARGS__)
 
 /**
- * Request variants:
- *   CXIP_RQ_AMO
- *      Passes one argument (operand1), and applies that to a remote memory
- *      address content.
- *
- *   CXIP_RQ_AMO_FETCH
- *      Passes two arguments (operand1, resultptr), applies operand1 to a remote
- *      memory address content, and returns the prior content of the remote
- *      memory in resultptr.
- *
- *   CXIP_RQ_AMO_SWAP
- *      Passes three arguments (operand1, compare, resultptr). If remote memory
- *      address content satisfies the comparison operation with compare,
- *      replaces the remote memory content with operand1, and returns the prior
- *      content of the remote memory in resultptr.
- *
- */
-enum cxip_amo_req_type {
-	CXIP_RQ_AMO,
-	CXIP_RQ_AMO_FETCH,
-	CXIP_RQ_AMO_SWAP,
-	CXIP_RQ_AMO_LAST
-};
-
-/**
  * Data type codes for all of the supported fi_datatype values.
  */
 static enum c_atomic_type _cxip_amo_type_code[FI_DATATYPE_LAST] = {
@@ -371,16 +346,20 @@ static inline bool _rma_vector_valid(size_t vn, const struct fi_rma_ioc *v)
  * @param resultdesc result vector descriptors
  * @param result_count result vector count
  * @param flags operation flags
+ * @param triggered is a triggered amo operation
+ * @param trig_thresh triggered threshold
+ * @param trig_cntr triggered counter
+ * @param comp_cntr completion counter for triggered operation
  *
  * @return int FI_SUCCESS on success, negative value on failure
  */
-static int _cxip_amo(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
-		     const struct fi_msg_atomic *msg,
-		     const struct fi_ioc *comparev, void **comparedesc,
-		     size_t compare_count,
-		     const struct fi_ioc *resultv, void **resultdesc,
-		     size_t result_count,
-		     uint64_t flags)
+int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
+		    const struct fi_msg_atomic *msg,
+		    const struct fi_ioc *comparev, void **comparedesc,
+		    size_t compare_count, const struct fi_ioc *resultv,
+		    void **resultdesc, size_t result_count, uint64_t flags,
+		    bool triggered, uint64_t trig_thresh,
+		    struct cxip_cntr *trig_cntr, struct cxip_cntr *comp_cntr)
 {
 	struct cxip_addr caddr;
 	struct cxip_req *req = NULL;
@@ -400,6 +379,8 @@ static int _cxip_amo(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	int len;
 	int ret;
 	bool idc;
+	struct cxip_cmdq *cmdq =
+		triggered ? txc->domain->trig_cmdq : txc->tx_cmdq;
 
 	if (!txc->enabled)
 		return -FI_EOPBADSTATE;
@@ -440,7 +421,7 @@ static int _cxip_amo(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	}
 
 	/* IDCs cannot be used to target standard MRs. */
-	idc = cxip_mr_key_opt(key);
+	idc = cxip_mr_key_opt(key) && !triggered;
 
 	/* TODO support inject without IDCs */
 	if ((flags & FI_INJECT) && !idc)
@@ -492,6 +473,7 @@ static int _cxip_amo(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		req->amo.txc = txc;
 		req->amo.oper1_md = NULL;
 		req->amo.result_md = NULL;
+		req->trig_cntr = trig_cntr;
 	}
 
 	/* Prepare special case AMOs. */
@@ -579,7 +561,7 @@ static int _cxip_amo(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	cxi_build_dfa(caddr.nic, caddr.pid, txc->pid_bits, pid_idx, &dfa,
 		      &idx_ext);
 
-	fastlock_acquire(&txc->tx_cmdq->lock);
+	fastlock_acquire(&cmdq->lock);
 
 	/* Build AMO command descriptor and write command. */
 	if (idc) {
@@ -619,10 +601,8 @@ static int _cxip_amo(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		if (flags & (FI_DELIVERY_COMPLETE | FI_MATCH_COMPLETE))
 			cmd.c_state.flush = 1;
 
-		if (memcmp(&txc->tx_cmdq->c_state, &cmd.c_state,
-			   sizeof(cmd.c_state))) {
-			ret = cxi_cq_emit_c_state(txc->tx_cmdq->dev_cmdq,
-						  &cmd.c_state);
+		if (memcmp(&cmdq->c_state, &cmd.c_state, sizeof(cmd.c_state))) {
+			ret = cxi_cq_emit_c_state(cmdq->dev_cmdq, &cmd.c_state);
 			if (ret) {
 				CXIP_LOG_DBG("Failed to issue C_STATE command: %d\n",
 					     ret);
@@ -635,7 +615,7 @@ static int _cxip_amo(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 			}
 
 			/* Update TXQ C_STATE */
-			txc->tx_cmdq->c_state = cmd.c_state;
+			cmdq->c_state = cmd.c_state;
 
 			CXIP_LOG_DBG("Updated C_STATE: %p\n", req);
 		}
@@ -657,7 +637,7 @@ static int _cxip_amo(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 			memcpy(&cmd.idc_amo.op2_word1, compare, len);
 
 		/* Issue IDC AMO command */
-		ret = cxi_cq_emit_idc_amo(txc->tx_cmdq->dev_cmdq, &cmd.idc_amo,
+		ret = cxi_cq_emit_idc_amo(cmdq->dev_cmdq, &cmd.idc_amo,
 					  result != NULL);
 		if (ret) {
 			CXIP_LOG_DBG("Failed to issue IDC AMO command: %d\n",
@@ -669,6 +649,7 @@ static int _cxip_amo(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		}
 	} else {
 		struct c_dma_amo_cmd cmd = {};
+		struct cxip_cntr *cntr;
 
 		cmd.index_ext = idx_ext;
 		cmd.event_send_disable = 1;
@@ -700,19 +681,33 @@ static int _cxip_amo(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 			cmd.flush = 1;
 
 		if (req_type == CXIP_RQ_AMO) {
-			if (txc->write_cntr) {
+			cntr = triggered ? comp_cntr : txc->write_cntr;
+
+			if (cntr) {
 				cmd.event_ct_ack = 1;
-				cmd.ct = txc->write_cntr->ct->ctn;
+				cmd.ct = cntr->ct->ctn;
 			}
 		} else {
-			if (txc->read_cntr) {
+			cntr = triggered ? comp_cntr : txc->read_cntr;
+
+			if (cntr) {
 				cmd.event_ct_reply = 1;
-				cmd.ct = txc->read_cntr->ct->ctn;
+				cmd.ct = cntr->ct->ctn;
 			}
 		}
 
-		ret = cxi_cq_emit_dma_amo(txc->tx_cmdq->dev_cmdq, &cmd,
-					  result);
+		if (triggered) {
+			const struct c_ct_cmd ct_cmd = {
+				.trig_ct = trig_cntr->ct->ctn,
+				.threshold = trig_thresh,
+			};
+
+			ret = cxi_cq_emit_trig_dma_amo(cmdq->dev_cmdq, &ct_cmd,
+						       &cmd, result);
+		} else {
+			ret = cxi_cq_emit_dma_amo(cmdq->dev_cmdq, &cmd, result);
+		}
+
 		if (ret) {
 			CXIP_LOG_DBG("Failed to write DMA AMO command: %d\n",
 				     ret);
@@ -725,12 +720,12 @@ static int _cxip_amo(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	}
 
 	if (!(flags & FI_MORE))
-		cxi_cq_ring(txc->tx_cmdq->dev_cmdq);
+		cxi_cq_ring(cmdq->dev_cmdq);
 
 	if (req)
 		ofi_atomic_inc32(&txc->otx_reqs);
 
-	fastlock_release(&txc->tx_cmdq->lock);
+	fastlock_release(&cmdq->lock);
 
 #if ENABLE_DEBUG
 	/* TODO better expose tostr API to providers */
@@ -797,10 +792,9 @@ static ssize_t cxip_ep_atomic_write(struct fid_ep *ep, const void *buf,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return _cxip_amo(CXIP_RQ_AMO, txc, &msg,
-			 NULL, NULL, 0,
-			 NULL, NULL, 0,
-			 txc->attr.op_flags);
+	return cxip_amo_common(CXIP_RQ_AMO, txc, &msg, NULL, NULL, 0, NULL,
+			       NULL, 0, txc->attr.op_flags, false, 0, NULL,
+			       NULL);
 }
 
 static ssize_t cxip_ep_atomic_writev(struct fid_ep *ep,
@@ -832,10 +826,9 @@ static ssize_t cxip_ep_atomic_writev(struct fid_ep *ep,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return _cxip_amo(CXIP_RQ_AMO, txc, &msg,
-			 NULL, NULL, 0,
-			 NULL, NULL, 0,
-			 txc->attr.op_flags);
+	return cxip_amo_common(CXIP_RQ_AMO, txc, &msg, NULL, NULL, 0, NULL,
+			       NULL, 0, txc->attr.op_flags, false, 0, NULL,
+			       NULL);
 }
 
 static ssize_t cxip_ep_atomic_writemsg(struct fid_ep *ep,
@@ -856,10 +849,8 @@ static ssize_t cxip_ep_atomic_writemsg(struct fid_ep *ep,
 	if (!txc->selective_completion)
 		flags |= FI_COMPLETION;
 
-	return _cxip_amo(CXIP_RQ_AMO, txc, msg,
-			 NULL, NULL, 0,
-			 NULL, NULL, 0,
-			 flags);
+	return cxip_amo_common(CXIP_RQ_AMO, txc, msg, NULL, NULL, 0, NULL, NULL,
+			       0, flags, false, 0, NULL, NULL);
 }
 
 static ssize_t cxip_ep_atomic_inject(struct fid_ep *ep, const void *buf,
@@ -893,10 +884,8 @@ static ssize_t cxip_ep_atomic_inject(struct fid_ep *ep, const void *buf,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return _cxip_amo(CXIP_RQ_AMO, txc, &msg,
-			 NULL, NULL, 0,
-			 NULL, NULL, 0,
-			 FI_INJECT);
+	return cxip_amo_common(CXIP_RQ_AMO, txc, &msg, NULL, NULL, 0, NULL,
+			       NULL, 0, FI_INJECT, false, 0, NULL, NULL);
 }
 
 static ssize_t cxip_ep_atomic_readwrite(struct fid_ep *ep, const void *buf,
@@ -936,10 +925,9 @@ static ssize_t cxip_ep_atomic_readwrite(struct fid_ep *ep, const void *buf,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return _cxip_amo(CXIP_RQ_AMO_FETCH, txc, &msg,
-			 NULL, NULL, 0,
-			 &resultv, &result_desc, 1,
-			 txc->attr.op_flags);
+	return cxip_amo_common(CXIP_RQ_AMO_FETCH, txc, &msg, NULL, NULL, 0,
+			       &resultv, &result_desc, 1, txc->attr.op_flags,
+			       false, 0, NULL, NULL);
 }
 
 static ssize_t cxip_ep_atomic_readwritev(struct fid_ep *ep,
@@ -975,10 +963,9 @@ static ssize_t cxip_ep_atomic_readwritev(struct fid_ep *ep,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return _cxip_amo(CXIP_RQ_AMO_FETCH, txc, &msg,
-			 NULL, NULL, 0,
-			 resultv, result_desc, result_count,
-			 txc->attr.op_flags);
+	return cxip_amo_common(CXIP_RQ_AMO_FETCH, txc, &msg, NULL, NULL, 0,
+			       resultv, result_desc, result_count,
+			       txc->attr.op_flags, false, 0, NULL, NULL);
 }
 
 static ssize_t cxip_ep_atomic_readwritemsg(struct fid_ep *ep,
@@ -1001,10 +988,9 @@ static ssize_t cxip_ep_atomic_readwritemsg(struct fid_ep *ep,
 	if (!txc->selective_completion)
 		flags |= FI_COMPLETION;
 
-	return _cxip_amo(CXIP_RQ_AMO_FETCH, txc, msg,
-			 NULL, NULL, 0,
-			 resultv, result_desc, result_count,
-			 flags);
+	return cxip_amo_common(CXIP_RQ_AMO_FETCH, txc, msg, NULL, NULL, 0,
+			       resultv, result_desc, result_count, flags, false,
+			       0, NULL, NULL);
 }
 
 static ssize_t cxip_ep_atomic_compwrite(struct fid_ep *ep, const void *buf,
@@ -1049,10 +1035,9 @@ static ssize_t cxip_ep_atomic_compwrite(struct fid_ep *ep, const void *buf,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return _cxip_amo(CXIP_RQ_AMO_SWAP, txc, &msg,
-			 &comparev, &result_desc, 1,
-			 &resultv, &result_desc, 1,
-			 txc->attr.op_flags);
+	return cxip_amo_common(CXIP_RQ_AMO_SWAP, txc, &msg, &comparev,
+			       &result_desc, 1, &resultv, &result_desc, 1,
+			       txc->attr.op_flags, false, 0, NULL, NULL);
 }
 
 static ssize_t cxip_ep_atomic_compwritev(struct fid_ep *ep,
@@ -1091,10 +1076,10 @@ static ssize_t cxip_ep_atomic_compwritev(struct fid_ep *ep,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return _cxip_amo(CXIP_RQ_AMO_SWAP, txc, &msg,
-			 comparev, compare_desc, compare_count,
-			 resultv, result_desc, result_count,
-			 txc->attr.op_flags);
+	return cxip_amo_common(CXIP_RQ_AMO_SWAP, txc, &msg, comparev,
+			       compare_desc, compare_count, resultv,
+			       result_desc, result_count, txc->attr.op_flags,
+			       false, 0, NULL, NULL);
 }
 
 static ssize_t
@@ -1118,10 +1103,10 @@ cxip_ep_atomic_compwritemsg(struct fid_ep *ep, const struct fi_msg_atomic *msg,
 	if (!txc->selective_completion)
 		flags |= FI_COMPLETION;
 
-	return _cxip_amo(CXIP_RQ_AMO_SWAP, txc, msg,
-			 comparev, compare_desc, compare_count,
-			 resultv, result_desc, result_count,
-			 flags);
+	return cxip_amo_common(CXIP_RQ_AMO_SWAP, txc, msg, comparev,
+			       compare_desc, compare_count, resultv,
+			       result_desc, result_count, flags, false, 0, NULL,
+			       NULL);
 }
 
 static int cxip_ep_atomic_valid(struct fid_ep *ep,
