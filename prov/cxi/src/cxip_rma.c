@@ -196,6 +196,7 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 				(flags & FI_COMPLETION);
 		req->rma.local_md = md;
 		req->rma.txc = txc;
+		req->type = CXIP_REQ_RMA;
 		req->trig_cntr = trig_cntr;
 	}
 

@@ -542,6 +542,16 @@ struct cxip_req_search {
 	int puts_pending;
 };
 
+enum cxip_req_type {
+	CXIP_REQ_RMA,
+	CXIP_REQ_AMO,
+	CXIP_REQ_OFLOW,
+	CXIP_REQ_RECV,
+	CXIP_REQ_SEND,
+	CXIP_REQ_RDZV_SRC,
+	CXIP_REQ_SEARCH,
+};
+
 /**
  * Async Request
  *
@@ -585,6 +595,7 @@ struct cxip_req {
 	fi_addr_t addr;
 
 	/* Request parameters */
+	enum cxip_req_type type;
 	union {
 		struct cxip_req_rma rma;
 		struct cxip_req_amo amo;

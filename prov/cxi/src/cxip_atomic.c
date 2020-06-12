@@ -473,6 +473,7 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		req->amo.txc = txc;
 		req->amo.oper1_md = NULL;
 		req->amo.result_md = NULL;
+		req->type = CXIP_REQ_AMO;
 		req->trig_cntr = trig_cntr;
 	}
 

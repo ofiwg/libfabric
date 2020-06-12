@@ -370,6 +370,7 @@ static struct cxip_req *mrecv_req_dup(struct cxip_req *mrecv_req)
 	/* Duplicate the parent request. */
 	req->cb = mrecv_req->cb;
 	req->flags = mrecv_req->flags;
+	req->type = mrecv_req->type;
 	req->recv = mrecv_req->recv;
 
 	/* Update fields specific to this Send */
@@ -1275,6 +1276,7 @@ static int eager_buf_add(struct cxip_rxc *rxc)
 	req->cb = cxip_oflow_cb;
 	req->oflow.rxc = rxc;
 	req->oflow.oflow_buf = oflow_buf;
+	req->type = CXIP_REQ_OFLOW;
 
 	le_flags = C_LE_MANAGE_LOCAL | C_LE_NO_TRUNCATE |
 		   C_LE_UNRESTRICTED_BODY_RO | C_LE_UNRESTRICTED_END_RO |
@@ -1413,6 +1415,7 @@ static int cxip_rxc_sink_init(struct cxip_rxc *rxc)
 	rxc->sink_le.rxc = rxc;
 	rxc->sink_le.buffer_id = req->req_id;
 
+	req->type = CXIP_REQ_OFLOW;
 	req->oflow.rxc = rxc;
 	req->oflow.oflow_buf = &rxc->sink_le;
 	req->cb = cxip_oflow_sink_cb;
@@ -1560,6 +1563,7 @@ int cxip_txc_zbp_init(struct cxip_txc *txc)
 	txc->zbp_le.txc = txc;
 	txc->zbp_le.buffer_id = req->req_id;
 
+	req->type = CXIP_REQ_OFLOW;
 	req->oflow.txc = txc;
 	req->oflow.oflow_buf = &txc->zbp_le;
 	req->cb = cxip_zbp_cb;
@@ -2405,6 +2409,7 @@ static int cxip_ux_onload(struct cxip_rxc *rxc)
 	ofi_atomic_inc32(&rxc->orx_reqs);
 
 	req->cb = cxip_ux_onload_cb;
+	req->type = CXIP_REQ_SEARCH;
 	req->search.rxc = rxc;
 
 	cmd.command.opcode = C_CMD_TGT_SEARCH_AND_DELETE;
@@ -2902,6 +2907,7 @@ static ssize_t _cxip_recv(struct cxip_rxc *rxc, void *buf, size_t len,
 	req->buf = 0;
 	req->cb = cxip_recv_cb;
 
+	req->type = CXIP_REQ_RECV;
 	req->recv.rxc = rxc;
 	req->recv.recv_buf = buf;
 	req->recv.recv_md = recv_md;
@@ -3232,6 +3238,7 @@ static int cxip_txc_prep_rdzv_src(struct cxip_txc *txc, unsigned int lac)
 	}
 
 	req->cb = rdzv_src_cb;
+	req->type = CXIP_REQ_RDZV_SRC;
 	req->rdzv_src.txc = txc;
 	req->rdzv_src.lac = lac;
 	req->rdzv_src.rc = 0;
@@ -4069,6 +4076,7 @@ ssize_t cxip_send_common(struct cxip_txc *txc, const void *buf, size_t len,
 	req->trig_cntr = trig_cntr;
 
 	/* Save Send parameters to replay */
+	req->type = CXIP_REQ_SEND;
 	req->send.txc = txc;
 	req->send.cntr = triggered ? comp_cntr : txc->send_cntr;
 	req->send.buf = buf;
