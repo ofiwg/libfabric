@@ -15,6 +15,7 @@ struct fi_info *cxit_fi_hints;
 struct fi_info *cxit_fi;
 struct fid_fabric *cxit_fabric;
 struct fid_domain *cxit_domain;
+struct fi_cxi_dom_ops *dom_ops;
 struct fid_ep *cxit_ep;
 struct cxip_addr cxit_ep_addr;
 fi_addr_t cxit_ep_fi_addr;
@@ -77,6 +78,10 @@ void cxit_create_domain(void)
 
 	ret = fi_domain(cxit_fabric, cxit_fi, &cxit_domain, NULL);
 	cr_assert(ret == FI_SUCCESS, "fi_domain");
+
+	ret = fi_open_ops(&cxit_domain->fid, FI_CXI_DOM_OPS_1, 0,
+			  (void **)&dom_ops, NULL);
+	cr_assert(ret == FI_SUCCESS, "fi_open_ops");
 }
 
 void cxit_destroy_domain(void)

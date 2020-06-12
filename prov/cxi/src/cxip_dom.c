@@ -476,12 +476,49 @@ static int cxip_dom_control(struct fid *fid, int command, void *arg)
 	return -FI_EINVAL;
 }
 
+static int cxip_domain_cntr_read(struct fid *fid, unsigned int cntr,
+				 uint64_t *value, struct timespec *ts)
+{
+	struct cxip_domain *dom;
+	int ret;
+
+	if (fid->fclass != FI_CLASS_DOMAIN) {
+		CXIP_LOG_DBG("Invalid FID: %p\n", fid);
+		return -FI_EINVAL;
+	}
+
+	dom = container_of(fid, struct cxip_domain,
+			   util_domain.domain_fid.fid);
+
+	if (!dom->enabled)
+		return -FI_EOPBADSTATE;
+
+	ret = cxil_read_cntr(dom->iface->dev, cntr, value, ts);
+
+	return ret ? -FI_EINVAL : FI_SUCCESS;
+}
+
+static struct fi_cxi_dom_ops cxip_dom_ops_ext = {
+	.cntr_read = cxip_domain_cntr_read,
+};
+
+static int cxip_dom_ops_open(struct fid *fid, const char *ops_name,
+			     uint64_t flags, void **ops, void *context)
+{
+	if (!strcmp(ops_name, FI_CXI_DOM_OPS_1)) {
+		*ops = &cxip_dom_ops_ext;
+		return FI_SUCCESS;
+	}
+
+	return -FI_EINVAL;
+}
+
 static struct fi_ops cxip_dom_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = cxip_dom_close,
 	.bind = cxip_dom_bind,
 	.control = cxip_dom_control,
-	.ops_open = fi_no_ops_open,
+	.ops_open = cxip_dom_ops_open,
 };
 
 static struct fi_ops_domain cxip_dom_ops = {

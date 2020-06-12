@@ -24,3 +24,20 @@ Test(domain, simple)
 	cxit_destroy_domain();
 }
 
+TestSuite(domain_cntrs, .init = cxit_setup_rma, .fini = cxit_teardown_rma,
+	  .timeout = CXIT_DEFAULT_TIMEOUT);
+
+/* Test basic counter read */
+Test(domain_cntrs, cntr_read)
+{
+	int ret;
+	uint64_t value;
+	struct timespec ts;
+
+	ret = dom_ops->cntr_read(&cxit_domain->fid, C_CNTR_LPE_SUCCESS_CNTR,
+				 &value, &ts);
+	cr_assert_eq(ret, FI_SUCCESS, "cntr_read failed: %d\n", ret);
+
+	printf("LPE_SUCCESS_CNTR: %lu\n", value);
+}
+

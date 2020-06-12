@@ -39,6 +39,7 @@
 
 #include "libcxi/libcxi.h"
 #include "cxip_faults.h"
+#include "fi_cxi_ext.h"
 
 #ifndef ARRAY_SIZE
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
