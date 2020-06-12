@@ -97,6 +97,30 @@ void cxip_cq_flush_trig_reqs(struct cxip_cq *cq)
 			 * a TX context (never a RX context).
 			 */
 			txc = req->req_ctx;
+
+			/* Since an event will not arrive to progress the
+			 * request, MDs must be cleaned up now.
+			 */
+			switch (req->type) {
+			case CXIP_REQ_RMA:
+				cxip_unmap(req->rma.local_md);
+				break;
+
+			case CXIP_REQ_AMO:
+				cxip_unmap(req->amo.oper1_md);
+				if (req->amo.result_md)
+					cxip_unmap(req->amo.result_md);
+				break;
+
+			case CXIP_REQ_SEND:
+				cxip_unmap(req->send.send_md);
+				break;
+
+			default:
+				CXIP_LOG_ERROR("Invalid trig req type: %d\n",
+					       req->type);
+			}
+
 			ofi_atomic_dec32(&txc->otx_reqs);
 			cxip_cq_req_free_no_lock(req);
 		}
