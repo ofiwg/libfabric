@@ -59,7 +59,6 @@ int cxip_cq_req_cancel(struct cxip_cq *cq, void *req_ctx, void *op_ctx,
 static void cxip_cq_req_free_no_lock(struct cxip_req *req)
 {
 	struct cxip_req *table_req;
-	struct cxip_cq *cq = req->cq;
 
 	CXIP_LOG_DBG("Freeing req: %p (ID: %d)\n", req, req->req_id);
 
@@ -258,12 +257,9 @@ out:
  */
 void cxip_cq_req_free(struct cxip_req *req)
 {
-	struct cxip_req *table_req;
-	struct cxip_cq *cq = req->cq;
-
-	fastlock_acquire(&cq->req_lock);
+	fastlock_acquire(&req->cq->req_lock);
 	cxip_cq_req_free_no_lock(req);
-	fastlock_release(&cq->req_lock);
+	fastlock_release(&req->cq->req_lock);
 }
 
 /*
