@@ -439,16 +439,18 @@ Test(deferred_work, rma_read_no_event)
 	deferred_rma_test(FI_OP_READ, 12345, 54321, 0xbeef, false);
 }
 
-static void deferred_amo_test(bool comp_event, bool fetch)
+static void deferred_amo_test(bool comp_event, bool fetch, bool comp)
 {
 	int ret;
 	struct mem_region mem_window;
 	struct fi_cq_tagged_entry cqe;
 	struct fi_ioc iov = {};
 	struct fi_ioc fetch_iov = {};
+	struct fi_ioc comp_iov = {};
 	struct fi_rma_ioc rma_iov = {};
 	struct fi_op_atomic amo = {};
 	struct fi_op_fetch_atomic fetch_amo = {};
+	struct fi_op_compare_atomic comp_amo = {};
 	struct fi_msg_atomic *amo_msg;
 	struct fi_deferred_work work = {};
 	struct fid_cntr *trig_cntr = cxit_write_cntr;
@@ -461,6 +463,7 @@ static void deferred_amo_test(bool comp_event, bool fetch)
 	uint64_t trig_thresh = 12345;
 	uint64_t init_target_value = 0x7FFFFFFFFFFFFFFF;
 	uint64_t fetch_result = 0;
+	uint64_t compare_value = init_target_value;
 
 	ret = mr_create(sizeof(*target_buf), FI_REMOTE_WRITE | FI_REMOTE_READ,
 			0, key, &mem_window);
@@ -490,6 +493,24 @@ static void deferred_amo_test(bool comp_event, bool fetch)
 
 		fetch_amo.fetch.msg_iov = &fetch_iov;
 		fetch_amo.fetch.iov_count = 1;
+	} else if (comp) {
+		amo_msg = &comp_amo.msg;
+		comp_amo.ep = cxit_ep;
+		comp_amo.flags = comp_event ? FI_COMPLETION : 0;
+		work.op_type = FI_OP_COMPARE_ATOMIC;
+		work.op.compare_atomic = &comp_amo;
+		expected_flags = FI_ATOMIC | FI_READ;
+
+		fetch_iov.addr = &fetch_result;
+		fetch_iov.count = 1;
+
+		comp_iov.addr = &compare_value;
+		comp_iov.count = 1;
+
+		comp_amo.fetch.msg_iov = &fetch_iov;
+		comp_amo.fetch.iov_count = 1;
+		comp_amo.compare.msg_iov = &comp_iov;
+		comp_amo.compare.iov_count = 1;
 	} else {
 		amo_msg = &amo.msg;
 		amo.ep = cxit_ep;
@@ -505,7 +526,7 @@ static void deferred_amo_test(bool comp_event, bool fetch)
 	amo_msg->rma_iov = &rma_iov;
 	amo_msg->rma_iov_count = 1;
 	amo_msg->datatype = FI_UINT64;
-	amo_msg->op = FI_SUM;
+	amo_msg->op = comp ? FI_CSWAP : FI_SUM;
 
 	work.threshold = trig_thresh;
 	work.triggering_cntr = trig_cntr;
@@ -537,9 +558,12 @@ static void deferred_amo_test(bool comp_event, bool fetch)
 	poll_counter_assert(comp_cntr, 1, 5);
 
 	/* Validate AMO data */
-	cr_assert_eq(*target_buf, result, "Invalid target result");
+	if (comp)
+		cr_assert_eq(*target_buf, source_buf, "Invalid target result");
+	else
+		cr_assert_eq(*target_buf, result, "Invalid target result");
 
-	if (fetch)
+	if (fetch || comp)
 		cr_assert_eq(fetch_result, init_target_value,
 			     "Invalid fetch result expected=%lu got=%lu",
 			     init_target_value, fetch_result);
@@ -549,20 +573,30 @@ static void deferred_amo_test(bool comp_event, bool fetch)
 
 Test(deferred_work, amo_no_event)
 {
-	deferred_amo_test(false, false);
+	deferred_amo_test(false, false, false);
 }
 
 Test(deferred_work, amo_event)
 {
-	deferred_amo_test(true, false);
+	deferred_amo_test(true, false, false);
 }
 
 Test(deferred_work, fetch_amo_no_event)
 {
-	deferred_amo_test(false, true);
+	deferred_amo_test(false, true, false);
 }
 
 Test(deferred_work, fetch_amo_event)
 {
-	deferred_amo_test(true, true);
+	deferred_amo_test(true, true, false);
+}
+
+Test(deferred_work, compare_amo_no_event)
+{
+	deferred_amo_test(false, false, true);
+}
+
+Test(deferred_work, compare_amo_event)
+{
+	deferred_amo_test(true, false, true);
 }
