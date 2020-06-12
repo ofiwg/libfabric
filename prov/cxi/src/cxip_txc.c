@@ -200,7 +200,9 @@ int cxip_txc_enable(struct cxip_txc *txc)
 		}
 	}
 
+	txc->pid_bits = txc->domain->iface->dev->info.pid_bits;
 	txc->enabled = true;
+
 	fastlock_release(&txc->lock);
 
 	return FI_SUCCESS;

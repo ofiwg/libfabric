@@ -112,15 +112,14 @@ static fi_addr_t recv_req_src_addr(struct cxip_req *req)
 	 * physical address in the EQ event to logical FI address.
 	 */
 	if (rxc->attr.caps & FI_SOURCE) {
-		uint32_t pid_bits = rxc->domain->iface->dev->info.pid_bits;
 		uint32_t nic;
 		uint32_t pid;
 
 		if (req->recv.init_logical)
 			return req->recv.initiator;
 
-		nic = CXI_MATCH_ID_EP(pid_bits, req->recv.initiator);
-		pid = CXI_MATCH_ID_PID(pid_bits, req->recv.initiator);
+		nic = CXI_MATCH_ID_EP(rxc->pid_bits, req->recv.initiator);
+		pid = CXI_MATCH_ID_PID(rxc->pid_bits, req->recv.initiator);
 
 		return _cxip_av_reverse_lookup(rxc->ep_obj->av, nic, pid);
 	}
@@ -233,7 +232,6 @@ recv_req_tgt_event(struct cxip_req *req, const union c_event *event)
 	union cxip_match_bits mb = {
 		.raw = event->tgt_long.match_bits
 	};
-	uint32_t pid_bits = rxc->domain->iface->dev->info.pid_bits;
 
 	assert(event->hdr.event_type == C_EVENT_PUT ||
 	       event->hdr.event_type == C_EVENT_PUT_OVERFLOW ||
@@ -278,13 +276,14 @@ recv_req_tgt_event(struct cxip_req *req, const union c_event *event)
 	if (event->hdr.event_type == C_EVENT_RENDEZVOUS) {
 		uint32_t dfa = event->tgt_long.initiator.initiator.process;
 
-		req->recv.initiator = cxi_dfa_to_init(dfa, pid_bits);
+		req->recv.initiator = cxi_dfa_to_init(dfa, rxc->pid_bits);
 	} else {
 		uint32_t init = event->tgt_long.initiator.initiator.process;
 
 		if (rxc->ep_obj->av->attr.flags & FI_SYMMETRIC) {
 			/* Take PID out of logical address. */
-			req->recv.initiator = CXI_MATCH_ID_EP(pid_bits, init);
+			req->recv.initiator = CXI_MATCH_ID_EP(rxc->pid_bits,
+							      init);
 			req->recv.init_logical = true;
 		} else {
 			req->recv.initiator = init;
@@ -304,7 +303,6 @@ static struct cxip_req *rdzv_mrecv_req_lookup(struct cxip_req *req,
 					      uint32_t *rdzv_id)
 {
 	struct cxip_rxc *rxc = req->recv.rxc;
-	uint32_t pid_bits = rxc->domain->iface->dev->info.pid_bits;
 	struct cxip_req *child_req;
 	uint32_t ev_init;
 	uint32_t ev_rdzv_id;
@@ -321,15 +319,14 @@ static struct cxip_req *rdzv_mrecv_req_lookup(struct cxip_req *req,
 		user_ptr = (struct cxi_rdzv_user_ptr *)
 				&event->init_short.user_ptr;
 
-		ev_init = CXI_MATCH_ID(pid_bits, user_ptr->src_pid,
+		ev_init = CXI_MATCH_ID(rxc->pid_bits, user_ptr->src_pid,
 					user_ptr->src_nid);
 		ev_rdzv_id = user_ptr->rendezvous_id;
 	} else if (event->hdr.event_type == C_EVENT_RENDEZVOUS) {
 		struct cxip_rxc *rxc = req->recv.rxc;
-		uint32_t pid_bits = rxc->domain->iface->dev->info.pid_bits;
 		uint32_t dfa = event->tgt_long.initiator.initiator.process;
 
-		ev_init = cxi_dfa_to_init(dfa, pid_bits);
+		ev_init = cxi_dfa_to_init(dfa, rxc->pid_bits);
 		ev_rdzv_id = event->tgt_long.rendezvous_id;
 	} else {
 		ev_init = event->tgt_long.initiator.initiator.process;
@@ -498,7 +495,6 @@ static int issue_rdzv_get(struct cxip_req *req)
 {
 	union c_cmdu cmd = {};
 	struct cxip_rxc *rxc = req->recv.rxc;
-	uint32_t pid_bits = rxc->domain->iface->dev->info.pid_bits;
 	uint32_t pid_idx = rxc->domain->iface->dev->info.rdzv_get_idx;
 	uint8_t idx_ext;
 	union cxip_match_bits mb = {};
@@ -523,8 +519,8 @@ static int issue_rdzv_get(struct cxip_req *req)
 		nic = caddr.nic;
 		pid = caddr.pid;
 	} else {
-		nic = CXI_MATCH_ID_EP(pid_bits, req->recv.initiator);
-		pid = CXI_MATCH_ID_PID(pid_bits, req->recv.initiator);
+		nic = CXI_MATCH_ID_EP(rxc->pid_bits, req->recv.initiator);
+		pid = CXI_MATCH_ID_PID(rxc->pid_bits, req->recv.initiator);
 	}
 
 	cmd.full_dma.command.cmd_type = C_CMD_TYPE_DMA;
@@ -540,7 +536,7 @@ static int issue_rdzv_get(struct cxip_req *req)
 	cmd.full_dma.user_ptr = (uint64_t)req;
 	cmd.full_dma.remote_offset = req->recv.src_offset;
 
-	cxi_build_dfa(nic, pid, pid_bits, pid_idx, &dfa, &idx_ext);
+	cxi_build_dfa(nic, pid, rxc->pid_bits, pid_idx, &dfa, &idx_ext);
 	cmd.full_dma.dfa = dfa;
 	cmd.full_dma.index_ext = idx_ext;
 
@@ -601,11 +597,10 @@ cxip_notify_match_cb(struct cxip_req *req, const union c_event *event)
 static int cxip_notify_match(struct cxip_req *req, const union c_event *event)
 {
 	struct cxip_rxc *rxc = req->recv.rxc;
-	uint32_t pid_bits = rxc->domain->iface->dev->info.pid_bits;
 	uint32_t pid_idx = rxc->domain->iface->dev->info.rdzv_get_idx;
 	uint32_t init = event->tgt_long.initiator.initiator.process;
-	uint32_t nic = CXI_MATCH_ID_EP(pid_bits, init);
-	uint32_t pid = CXI_MATCH_ID_PID(pid_bits, init);
+	uint32_t nic = CXI_MATCH_ID_EP(rxc->pid_bits, init);
+	uint32_t pid = CXI_MATCH_ID_PID(rxc->pid_bits, init);
 	union c_fab_addr dfa;
 	uint8_t idx_ext;
 	union cxip_match_bits mb = {
@@ -618,7 +613,7 @@ static int cxip_notify_match(struct cxip_req *req, const union c_event *event)
 	event_mb.raw = event->tgt_long.match_bits;
 	mb.tx_id = event_mb.tx_id;
 
-	cxi_build_dfa(nic, pid, pid_bits, pid_idx, &dfa, &idx_ext);
+	cxi_build_dfa(nic, pid, rxc->pid_bits, pid_idx, &dfa, &idx_ext);
 
 	cmd.c_state.event_send_disable = 1;
 	cmd.c_state.index_ext = idx_ext;
@@ -2837,7 +2832,6 @@ static ssize_t _cxip_recv(struct cxip_rxc *rxc, void *buf, size_t len,
 	struct cxip_req *req;
 	struct cxip_addr caddr;
 	uint32_t match_id;
-	uint32_t pid_bits;
 
 	if (len && !buf)
 		return -FI_EINVAL;
@@ -2852,11 +2846,11 @@ static ssize_t _cxip_recv(struct cxip_rxc *rxc, void *buf, size_t len,
 	 * in the LE for matching. If application AVs are symmetric, use
 	 * logical FI address for matching. Otherwise, use physical address.
 	 */
-	pid_bits = dom->iface->dev->info.pid_bits;
 	if (rxc->attr.caps & FI_DIRECTED_RECV &&
 	    src_addr != FI_ADDR_UNSPEC) {
 		if (rxc->ep_obj->av->attr.flags & FI_SYMMETRIC) {
-			match_id = CXI_MATCH_ID(pid_bits, caddr.pid, src_addr);
+			match_id = CXI_MATCH_ID(rxc->pid_bits, caddr.pid,
+						src_addr);
 		} else {
 			ret = _cxip_av_lookup(rxc->ep_obj->av, src_addr,
 					      &caddr);
@@ -2866,7 +2860,8 @@ static ssize_t _cxip_recv(struct cxip_rxc *rxc, void *buf, size_t len,
 				return -FI_EINVAL;
 			}
 
-			match_id = CXI_MATCH_ID(pid_bits, caddr.pid, caddr.nic);
+			match_id = CXI_MATCH_ID(rxc->pid_bits, caddr.pid,
+						caddr.nic);
 		}
 	} else {
 		match_id = CXI_MATCH_ID_ANY;
@@ -2989,13 +2984,11 @@ static fi_addr_t _txc_fi_addr(struct cxip_txc *txc)
  */
 static uint32_t cxip_msg_match_id(struct cxip_txc *txc)
 {
-	int pid_bits = txc->domain->iface->dev->info.pid_bits;
-
 	if (txc->ep_obj->av->attr.flags & FI_SYMMETRIC)
-		return CXI_MATCH_ID(pid_bits, txc->ep_obj->src_addr.pid,
+		return CXI_MATCH_ID(txc->pid_bits, txc->ep_obj->src_addr.pid,
 				    _txc_fi_addr(txc));
 
-	return CXI_MATCH_ID(pid_bits, txc->ep_obj->src_addr.pid,
+	return CXI_MATCH_ID(txc->pid_bits, txc->ep_obj->src_addr.pid,
 			    txc->ep_obj->src_addr.nic);
 }
 
@@ -3341,7 +3334,6 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 	struct cxip_md *send_md;
 	union c_fab_addr dfa;
 	uint8_t idx_ext;
-	uint32_t pid_bits;
 	uint32_t pid_idx;
 	struct c_full_dma_cmd cmd = {};
 	union cxip_match_bits put_mb = {};
@@ -3358,9 +3350,8 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 	dom = txc->domain;
 
 	/* Calculate DFA */
-	pid_bits = dom->iface->dev->info.pid_bits;
 	pid_idx = CXIP_PTL_IDX_RXC(req->send.rxc_id);
-	cxi_build_dfa(req->send.caddr.nic, req->send.caddr.pid, pid_bits,
+	cxi_build_dfa(req->send.caddr.nic, req->send.caddr.pid, txc->pid_bits,
 		      pid_idx, &dfa, &idx_ext);
 
 	/* Map local buffer */
@@ -3536,7 +3527,6 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 	struct cxip_md *send_md = NULL;
 	union c_fab_addr dfa;
 	uint8_t idx_ext;
-	uint32_t pid_bits;
 	uint32_t pid_idx;
 	union cxip_match_bits mb = {
 		.le_type = CXIP_LE_TYPE_RX
@@ -3559,9 +3549,8 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 	dom = txc->domain;
 
 	/* Calculate DFA */
-	pid_bits = dom->iface->dev->info.pid_bits;
 	pid_idx = CXIP_PTL_IDX_RXC(req->send.rxc_id);
-	cxi_build_dfa(req->send.caddr.nic, req->send.caddr.pid, pid_bits,
+	cxi_build_dfa(req->send.caddr.nic, req->send.caddr.pid, txc->pid_bits,
 		      pid_idx, &dfa, &idx_ext);
 
 	/* Map local buffer */

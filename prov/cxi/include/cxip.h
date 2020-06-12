@@ -751,6 +751,7 @@ struct cxip_rxc {
 
 	struct cxip_ep_obj *ep_obj;	// parent EP object
 	struct cxip_domain *domain;	// parent domain
+	uint8_t pid_bits;
 
 	struct dlist_entry ep_list;	// contains EPs using shared context
 
@@ -823,6 +824,7 @@ struct cxip_txc {
 
 	struct cxip_ep_obj *ep_obj;	// parent EP object
 	struct cxip_domain *domain;	// parent domain
+	uint8_t pid_bits;
 
 	struct dlist_entry ep_list;	// contains EPs using shared context
 	fastlock_t lock;

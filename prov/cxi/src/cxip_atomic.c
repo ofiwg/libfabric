@@ -382,7 +382,6 @@ static int _cxip_amo(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		     size_t result_count,
 		     uint64_t flags)
 {
-	struct cxip_if *iface;
 	struct cxip_addr caddr;
 	struct cxip_req *req = NULL;
 	enum c_atomic_op opcode;
@@ -391,7 +390,6 @@ static int _cxip_amo(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	union c_cmdu cmd = {};
 	union c_fab_addr dfa;
 	uint8_t idx_ext;
-	uint32_t pid_bits;
 	uint32_t pid_idx;
 	void *compare = NULL;
 	void *result = NULL;
@@ -577,10 +575,8 @@ static int _cxip_amo(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	}
 
 	/* Build destination fabric address. */
-	iface = txc->domain->iface;
-	pid_bits = iface->dev->info.pid_bits;
 	pid_idx = cxip_mr_key_to_ptl_idx(key);
-	cxi_build_dfa(caddr.nic, caddr.pid, pid_bits, pid_idx, &dfa,
+	cxi_build_dfa(caddr.nic, caddr.pid, txc->pid_bits, pid_idx, &dfa,
 		      &idx_ext);
 
 	fastlock_acquire(&txc->tx_cmdq->lock);

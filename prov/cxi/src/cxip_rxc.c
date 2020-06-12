@@ -254,6 +254,7 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 
 	CXIP_LOG_DBG("RXC messaging enabled: %p\n", rxc);
 
+	rxc->pid_bits = rxc->domain->iface->dev->info.pid_bits;
 	rxc->enabled = true;
 
 	return FI_SUCCESS;

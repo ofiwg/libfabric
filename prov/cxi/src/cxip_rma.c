@@ -126,14 +126,12 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 			struct cxip_cntr *trig_cntr,
 			struct cxip_cntr *comp_cntr)
 {
-	struct cxip_domain *dom;
 	int ret;
 	struct cxip_md *md = NULL;
 	struct cxip_req *req = NULL;
 	struct cxip_addr caddr;
 	union c_fab_addr dfa;
 	uint8_t idx_ext;
-	uint32_t pid_bits;
 	uint32_t pid_idx;
 	bool idc;
 	bool unr = false; /* use unrestricted command? */
@@ -157,9 +155,6 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 	if (((flags & FI_INJECT) && !idc) || len > CXIP_EP_MAX_MSG_SZ)
 		return -FI_EMSGSIZE;
 
-	dom = txc->domain;
-	pid_bits = dom->iface->dev->info.pid_bits;
-
 	/* Look up target CXI address */
 	ret = _cxip_av_lookup(txc->ep_obj->av, tgt_addr, &caddr);
 	if (ret != FI_SUCCESS) {
@@ -169,7 +164,7 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 
 	if (len && !idc) {
 		/* Map local buffer */
-		ret = cxip_map(dom, buf, len, &md);
+		ret = cxip_map(txc->domain, buf, len, &md);
 		if (ret) {
 			CXIP_LOG_DBG("Failed to map buffer: %d\n", ret);
 			return ret;
@@ -206,7 +201,7 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 
 	/* Generate the destination fabric address */
 	pid_idx = cxip_mr_key_to_ptl_idx(key);
-	cxi_build_dfa(caddr.nic, caddr.pid, pid_bits, pid_idx, &dfa,
+	cxi_build_dfa(caddr.nic, caddr.pid, txc->pid_bits, pid_idx, &dfa,
 		      &idx_ext);
 
 	/* Unordered Puts are optimally supported with restricted commands.
