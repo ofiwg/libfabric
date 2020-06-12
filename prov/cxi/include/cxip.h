@@ -72,16 +72,19 @@
 					 FI_COMPLETION | \
 					 CXIP_TX_COMP_MODES | \
 					 FI_REMOTE_CQ_DATA | \
-					 FI_MORE)
+					 FI_MORE | \
+					 FI_FENCE)
 #define CXIP_RX_OP_FLAGS		(FI_COMPLETION | \
 					 FI_MULTI_RECV | \
 					 FI_MORE)
 #define CXIP_WRITEMSG_ALLOWED_FLAGS	(FI_INJECT | \
 					 FI_COMPLETION | \
 					 FI_MORE | \
+					 FI_FENCE | \
 					 CXIP_TX_COMP_MODES)
 #define CXIP_READMSG_ALLOWED_FLAGS	(FI_COMPLETION | \
 					 FI_MORE | \
+					 FI_FENCE | \
 					 CXIP_TX_COMP_MODES)
 
 #define CXIP_AMO_MAX_IOV		1

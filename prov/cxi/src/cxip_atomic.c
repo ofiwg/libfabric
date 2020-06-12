@@ -563,6 +563,16 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 
 	fastlock_acquire(&cmdq->lock);
 
+	if (flags & FI_FENCE) {
+		ret = cxi_cq_emit_cq_cmd(cmdq->dev_cmdq, C_CMD_CQ_FENCE);
+		if (ret) {
+			CXIP_LOG_DBG("Failed to issue CQ_FENCE command: %d\n",
+				     ret);
+			ret = -FI_EAGAIN;
+			goto unlock_cmdq;
+		}
+	}
+
 	/* Build AMO command descriptor and write command. */
 	if (idc) {
 		if (result)

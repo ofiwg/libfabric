@@ -217,6 +217,16 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 
 	fastlock_acquire(&cmdq->lock);
 
+	if (flags & FI_FENCE) {
+		ret = cxi_cq_emit_cq_cmd(cmdq->dev_cmdq, C_CMD_CQ_FENCE);
+		if (ret) {
+			CXIP_LOG_DBG("Failed to issue CQ_FENCE command: %d\n",
+				     ret);
+			ret = -FI_EAGAIN;
+			goto unlock_op;
+		}
+	}
+
 	if (idc) {
 		union c_cmdu cmd = {};
 

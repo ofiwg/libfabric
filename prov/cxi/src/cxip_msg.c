@@ -3402,6 +3402,16 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 
 	fastlock_acquire(&cmdq->lock);
 
+	if (req->send.flags & FI_FENCE) {
+		ret = cxi_cq_emit_cq_cmd(cmdq->dev_cmdq, C_CMD_CQ_FENCE);
+		if (ret) {
+			CXIP_LOG_DBG("Failed to issue CQ_FENCE command: %d\n",
+				     ret);
+			ret = -FI_EAGAIN;
+			goto err_unlock;
+		}
+	}
+
 	if (txc->ep_obj->rdzv_offload) {
 		cmd.command.opcode = C_CMD_RENDEZVOUS_PUT;
 		cmd.eager_length = txc->rdzv_threshold;
@@ -3587,6 +3597,16 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 
 	/* Submit command */
 	fastlock_acquire(&cmdq->lock);
+
+	if (req->send.flags & FI_FENCE) {
+		ret = cxi_cq_emit_cq_cmd(cmdq->dev_cmdq, C_CMD_CQ_FENCE);
+		if (ret) {
+			CXIP_LOG_DBG("Failed to issue CQ_FENCE command: %d\n",
+				     ret);
+			ret = -FI_EAGAIN;
+			goto err_unlock;
+		}
+	}
 
 	if (idc) {
 		union c_cmdu cmd = {};

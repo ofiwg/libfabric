@@ -134,8 +134,7 @@ Test(rma, simple_writev)
 	free(send_buf);
 }
 
-/* Test fi_writemsg simple case */
-Test(rma, simple_writemsg)
+void do_writemsg(uint64_t flags)
 {
 	int ret;
 	uint8_t *send_buf;
@@ -147,7 +146,6 @@ Test(rma, simple_writemsg)
 	struct fi_msg_rma msg = {};
 	struct iovec iov[1];
 	struct fi_rma_iov rma[1];
-	uint64_t flags = 0;
 
 	send_buf = calloc(1, win_len);
 	cr_assert_not_null(send_buf, "send_buf alloc failed");
@@ -187,6 +185,13 @@ Test(rma, simple_writemsg)
 
 	mr_destroy(&mem_window);
 	free(send_buf);
+}
+
+/* Test fi_writemsg with flags */
+Test(rma, writemsg)
+{
+	do_writemsg(0);
+	do_writemsg(FI_FENCE);
 }
 
 /* Perform a write that uses a flushing ZBR at the target. Validate flush with
