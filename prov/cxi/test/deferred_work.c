@@ -439,30 +439,35 @@ Test(deferred_work, rma_read_no_event)
 	deferred_rma_test(FI_OP_READ, 12345, 54321, 0xbeef, false);
 }
 
-static void deferred_amo_test(bool comp_event)
+static void deferred_amo_test(bool comp_event, bool fetch)
 {
 	int ret;
 	struct mem_region mem_window;
 	struct fi_cq_tagged_entry cqe;
 	struct fi_ioc iov = {};
+	struct fi_ioc fetch_iov = {};
 	struct fi_rma_ioc rma_iov = {};
 	struct fi_op_atomic amo = {};
+	struct fi_op_fetch_atomic fetch_amo = {};
+	struct fi_msg_atomic *amo_msg;
 	struct fi_deferred_work work = {};
 	struct fid_cntr *trig_cntr = cxit_write_cntr;
 	struct fid_cntr *comp_cntr = cxit_read_cntr;
-	uint64_t expected_flags = FI_ATOMIC | FI_WRITE;
+	uint64_t expected_flags;
 	uint64_t source_buf = 1;
 	uint64_t *target_buf;
 	uint64_t result;
 	uint64_t key = 0xbbbbb;
 	uint64_t trig_thresh = 12345;
+	uint64_t init_target_value = 0x7FFFFFFFFFFFFFFF;
+	uint64_t fetch_result = 0;
 
 	ret = mr_create(sizeof(*target_buf), FI_REMOTE_WRITE | FI_REMOTE_READ,
 			0, key, &mem_window);
 	assert(ret == FI_SUCCESS);
 
 	target_buf = (uint64_t *)mem_window.mem;
-	*target_buf = 0x7FFFFFFFFFFFFFFF;
+	*target_buf = init_target_value;
 
 	result = source_buf + *target_buf;
 
@@ -472,23 +477,39 @@ static void deferred_amo_test(bool comp_event)
 	rma_iov.key = key;
 	rma_iov.count = 1;
 
-	amo.ep = cxit_ep;
+	if (fetch) {
+		amo_msg = &fetch_amo.msg;
+		fetch_amo.ep = cxit_ep;
+		fetch_amo.flags = comp_event ? FI_COMPLETION : 0;
+		work.op_type = FI_OP_FETCH_ATOMIC;
+		work.op.fetch_atomic = &fetch_amo;
+		expected_flags = FI_ATOMIC | FI_READ;
 
-	amo.msg.msg_iov = &iov;
-	amo.msg.iov_count = 1;
-	amo.msg.addr = cxit_ep_fi_addr;
-	amo.msg.rma_iov = &rma_iov;
-	amo.msg.rma_iov_count = 1;
-	amo.msg.datatype = FI_UINT64;
-	amo.msg.op = FI_SUM;
+		fetch_iov.addr = &fetch_result;
+		fetch_iov.count = 1;
 
-	amo.flags = comp_event ? FI_COMPLETION : 0;
+		fetch_amo.fetch.msg_iov = &fetch_iov;
+		fetch_amo.fetch.iov_count = 1;
+	} else {
+		amo_msg = &amo.msg;
+		amo.ep = cxit_ep;
+		amo.flags = comp_event ? FI_COMPLETION : 0;
+		work.op_type = FI_OP_ATOMIC;
+		work.op.atomic = &amo;
+		expected_flags = FI_ATOMIC | FI_WRITE;
+	}
+
+	amo_msg->msg_iov = &iov;
+	amo_msg->iov_count = 1;
+	amo_msg->addr = cxit_ep_fi_addr;
+	amo_msg->rma_iov = &rma_iov;
+	amo_msg->rma_iov_count = 1;
+	amo_msg->datatype = FI_UINT64;
+	amo_msg->op = FI_SUM;
 
 	work.threshold = trig_thresh;
 	work.triggering_cntr = trig_cntr;
 	work.completion_cntr = comp_cntr;
-	work.op_type = FI_OP_ATOMIC;
-	work.op.atomic = &amo;
 
 	ret = fi_control(&cxit_domain->fid, FI_QUEUE_WORK, &work);
 	cr_assert_eq(ret, FI_SUCCESS, "FI_QUEUE_WORK failed %d", ret);
@@ -515,18 +536,33 @@ static void deferred_amo_test(bool comp_event)
 	poll_counter_assert(trig_cntr, work.threshold, 5);
 	poll_counter_assert(comp_cntr, 1, 5);
 
-	/* Validate RMA data */
+	/* Validate AMO data */
 	cr_assert_eq(*target_buf, result, "Invalid target result");
+
+	if (fetch)
+		cr_assert_eq(fetch_result, init_target_value,
+			     "Invalid fetch result expected=%lu got=%lu",
+			     init_target_value, fetch_result);
 
 	mr_destroy(&mem_window);
 }
 
 Test(deferred_work, amo_no_event)
 {
-	deferred_amo_test(false);
+	deferred_amo_test(false, false);
 }
 
 Test(deferred_work, amo_event)
 {
-	deferred_amo_test(true);
+	deferred_amo_test(true, false);
+}
+
+Test(deferred_work, fetch_amo_no_event)
+{
+	deferred_amo_test(false, true);
+}
+
+Test(deferred_work, fetch_amo_event)
+{
+	deferred_amo_test(true, true);
 }
