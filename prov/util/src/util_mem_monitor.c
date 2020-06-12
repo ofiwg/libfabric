@@ -231,14 +231,15 @@ void ofi_monitor_notify(struct ofi_mem_monitor *monitor,
 }
 
 int ofi_monitor_subscribe(struct ofi_mem_monitor *monitor,
-			  const void *addr, size_t len)
+			  const void *addr, size_t len,
+			  union ofi_mr_hmem_info *hmem_info)
 {
 	int ret;
 
 	FI_DBG(&core_prov, FI_LOG_MR,
 	       "subscribing addr=%p len=%zu\n", addr, len);
 
-	ret = monitor->subscribe(monitor, addr, len);
+	ret = monitor->subscribe(monitor, addr, len, hmem_info);
 	if (OFI_UNLIKELY(ret)) {
 		FI_WARN(&core_prov, FI_LOG_MR,
 			"Failed (ret = %d) to monitor addr=%p len=%zu\n",
@@ -248,11 +249,12 @@ int ofi_monitor_subscribe(struct ofi_mem_monitor *monitor,
 }
 
 void ofi_monitor_unsubscribe(struct ofi_mem_monitor *monitor,
-			     const void *addr, size_t len)
+			     const void *addr, size_t len,
+			     union ofi_mr_hmem_info *hmem_info)
 {
 	FI_DBG(&core_prov, FI_LOG_MR,
 	       "unsubscribing addr=%p len=%zu\n", addr, len);
-	monitor->unsubscribe(monitor, addr, len);
+	monitor->unsubscribe(monitor, addr, len, hmem_info);
 }
 
 #if HAVE_UFFD_MONITOR
@@ -290,7 +292,7 @@ static void *ofi_uffd_handler(void *arg)
 			ofi_monitor_unsubscribe(&uffd.monitor,
 				(void *) (uintptr_t) msg.arg.remove.start,
 				(size_t) (msg.arg.remove.end -
-					  msg.arg.remove.start));
+					  msg.arg.remove.start), NULL);
 			/* fall through */
 		case UFFD_EVENT_UNMAP:
 			ofi_monitor_notify(&uffd.monitor,
@@ -334,7 +336,8 @@ static int ofi_uffd_register(const void *addr, size_t len, size_t page_size)
 }
 
 static int ofi_uffd_subscribe(struct ofi_mem_monitor *monitor,
-			      const void *addr, size_t len)
+			      const void *addr, size_t len,
+			      union ofi_mr_hmem_info *hmem_info)
 {
 	int i;
 
@@ -367,7 +370,8 @@ static int ofi_uffd_unregister(const void *addr, size_t len, size_t page_size)
 
 /* May be called from mr cache notifier callback */
 static void ofi_uffd_unsubscribe(struct ofi_mem_monitor *monitor,
-				 const void *addr, size_t len)
+				 const void *addr, size_t len,
+				 union ofi_mr_hmem_info *hmem_info)
 {
 	int i;
 

@@ -466,14 +466,16 @@ static int ofi_intercept_brk(const void *brkaddr)
 }
 
 static int ofi_memhooks_subscribe(struct ofi_mem_monitor *monitor,
-				 const void *addr, size_t len)
+				  const void *addr, size_t len,
+				  union ofi_mr_hmem_info *hmem_info)
 {
 	/* no-op */
 	return FI_SUCCESS;
 }
 
 static void ofi_memhooks_unsubscribe(struct ofi_mem_monitor *monitor,
-				    const void *addr, size_t len)
+				     const void *addr, size_t len,
+				     union ofi_mr_hmem_info *hmem_info)
 {
 	/* no-op */
 }

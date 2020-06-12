@@ -108,6 +108,10 @@ extern pthread_mutex_t mm_lock;
 
 struct ofi_mr_cache;
 
+union ofi_mr_hmem_info {
+	uint64_t reserved;
+};
+
 struct ofi_mem_monitor {
 	struct dlist_entry		list;
 	enum fi_hmem_iface		iface;
@@ -117,9 +121,11 @@ struct ofi_mem_monitor {
 	int (*start)(struct ofi_mem_monitor *monitor);
 	void (*stop)(struct ofi_mem_monitor *monitor);
 	int (*subscribe)(struct ofi_mem_monitor *notifier,
-			 const void *addr, size_t len);
+			 const void *addr, size_t len,
+			 union ofi_mr_hmem_info *hmem_info);
 	void (*unsubscribe)(struct ofi_mem_monitor *notifier,
-			    const void *addr, size_t len);
+			    const void *addr, size_t len,
+			    union ofi_mr_hmem_info *hmem_info);
 };
 
 void ofi_monitor_init(struct ofi_mem_monitor *monitor);
@@ -133,9 +139,11 @@ void ofi_monitor_notify(struct ofi_mem_monitor *monitor,
 			const void *addr, size_t len);
 
 int ofi_monitor_subscribe(struct ofi_mem_monitor *monitor,
-			  const void *addr, size_t len);
+			  const void *addr, size_t len,
+			  union ofi_mr_hmem_info *hmem_info);
 void ofi_monitor_unsubscribe(struct ofi_mem_monitor *monitor,
-			     const void *addr, size_t len);
+			     const void *addr, size_t len,
+			     union ofi_mr_hmem_info *hmem_info);
 
 extern struct ofi_mem_monitor *default_monitor;
 
@@ -232,6 +240,7 @@ struct ofi_mr_entry {
 	unsigned int			subscribed:1;
 	int				use_cnt;
 	struct dlist_entry		list_entry;
+	union ofi_mr_hmem_info		hmem_info;
 	uint8_t				data[];
 };
 
