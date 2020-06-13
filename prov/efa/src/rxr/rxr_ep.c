@@ -546,6 +546,7 @@ int rxr_ep_set_tx_credit_request(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_
 
 static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 {
+	size_t i = 0;
 	struct rxr_peer *peer;
 	struct dlist_entry *tmp;
 #if ENABLE_DEBUG
@@ -556,20 +557,18 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 #endif
 
 	if (rxr_need_sas_ordering(rxr_ep)) {
-		dlist_foreach_container_safe(&rxr_ep->peer_list,
-					     struct rxr_peer,
-					     peer, entry, tmp) {
-			ofi_recvwin_free(peer->robuf);
+		for (i = 0; i < rxr_ep->util_ep.av->count; ++i) {
+			peer = rxr_ep_get_peer(rxr_ep, i);
+			if (peer->rx_init)
+				efa_free_robuf(peer);
 		}
-
-		if (rxr_ep->robuf_fs)
-			rxr_robuf_fs_free(rxr_ep->robuf_fs);
+		if (rxr_ep->robuf_pool)
+			ofi_bufpool_destroy(rxr_ep->robuf_pool);
 	}
 
 #if ENABLE_DEBUG
-	dlist_foreach_container_safe(&rxr_ep->peer_list,
-				     struct rxr_peer,
-				     peer, entry, tmp) {
+	for (i = 0; i < rxr_ep->util_ep.av->count; ++i) {
+		peer = rxr_ep_get_peer(rxr_ep, i);
 		/*
 		 * TODO: Add support for wait/signal until all pending messages
 		 * have been sent/received so the core does not attempt to
@@ -755,10 +754,11 @@ static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 			return -FI_ENOMEM;
 
 		if (rxr_need_sas_ordering(rxr_ep)) {
-			rxr_ep->robuf_fs = rxr_robuf_fs_create(av->util_av.count,
-							       NULL, NULL);
-			if (!rxr_ep->robuf_fs)
-				return -FI_ENOMEM;
+			ret = ofi_bufpool_create(&rxr_ep->robuf_pool,
+						 sizeof(struct rxr_robuf), 16,
+						 0, 0, 0);
+			if (ret)
+				return ret;
 		}
 
 		/* Bind shm provider endpoint & shm av */
@@ -1207,7 +1207,6 @@ int rxr_ep_init(struct rxr_ep *ep)
 	dlist_init(&ep->tx_pending_list);
 	dlist_init(&ep->read_pending_list);
 	dlist_init(&ep->peer_backoff_list);
-	dlist_init(&ep->peer_list);
 #if ENABLE_DEBUG
 	dlist_init(&ep->rx_pending_list);
 	dlist_init(&ep->rx_pkt_list);

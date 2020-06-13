@@ -48,7 +48,6 @@
 #include <assert.h>
 #include <pthread.h>
 #include <sys/epoll.h>
-#include <uthash.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_cm.h>
@@ -279,7 +278,6 @@ struct efa_av {
 	enum fi_av_type		type;
 	efa_addr_to_conn_func	addr_to_conn;
 	struct efa_reverse_av	*reverse_av;
-	struct efa_av_entry     *av_map;
 	struct util_av		util_av;
 	enum fi_ep_type         ep_type;
 	/* Used only for FI_AV_TABLE */
@@ -291,7 +289,6 @@ struct efa_av_entry {
 	fi_addr_t		rdm_addr;
 	fi_addr_t		shm_rdm_addr;
 	bool			local_mapping;
-	UT_hash_handle		hh;
 };
 
 struct efa_ah_qpn {
@@ -414,6 +411,51 @@ size_t efa_max_rdma_size(struct fid_ep *ep_fid)
 
 	efa_ep = container_of(ep_fid, struct efa_ep, util_ep.ep_fid);
 	return efa_ep->domain->ctx->max_rdma_size;
+}
+
+static inline
+struct rxr_peer *efa_ep_get_peer(struct dlist_entry *ep_list_entry,
+				 fi_addr_t addr)
+{
+	struct util_ep *util_ep;
+	struct rxr_ep *rxr_ep;
+
+	util_ep = container_of(ep_list_entry, struct util_ep,
+			       av_entry);
+	rxr_ep = container_of(util_ep, struct rxr_ep, util_ep);
+	return rxr_ep_get_peer(rxr_ep, addr);
+}
+
+static inline
+int efa_peer_in_use(struct rxr_peer *peer)
+{
+	struct rxr_pkt_entry *pending_pkt;
+
+	if ((peer->tx_pending) || (peer->flags & RXR_PEER_IN_BACKOFF))
+		return -FI_EBUSY;
+	if (peer->rx_init) {
+		pending_pkt = *ofi_recvwin_peek(peer->robuf);
+		if (pending_pkt && pending_pkt->pkt)
+			return -FI_EBUSY;
+	}
+	return 0;
+}
+static inline
+void efa_free_robuf(struct rxr_peer *peer)
+{
+	ofi_recvwin_free(peer->robuf);
+	ofi_buf_free(peer->robuf);
+}
+
+static inline
+void efa_peer_reset(struct rxr_peer *peer)
+{
+	efa_free_robuf(peer);
+#ifdef ENABLE_EFA_POISONING
+	rxr_poison_mem_region((uint32_t *)peer, sizeof(struct rxr_peer));
+#endif
+	memset(peer, 0, sizeof(struct rxr_peer));
+	dlist_init(&peer->rnr_entry);
 }
 
 static inline bool efa_ep_is_cuda_mr(struct efa_mr *efa_mr)
