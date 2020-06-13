@@ -387,6 +387,7 @@ int rxd_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 
 
 	util_attr.addrlen = sizeof(fi_addr_t);
+	util_attr.context_len = 0;
 	util_attr.flags = 0;
 	attr->type = domain->util_domain.av_type != FI_AV_UNSPEC ?
 		     domain->util_domain.av_type : FI_AV_TABLE;

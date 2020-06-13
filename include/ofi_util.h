@@ -682,7 +682,13 @@ static inline void ofi_cntr_inc(struct util_cntr *cntr)
 struct util_av_entry {
 	ofi_atomic32_t	use_cnt;
 	UT_hash_handle	hh;
-	char		addr[0];
+	/*
+	 * data includes 'addr' and any other additional fields
+	 * associated with av_entry. 'addr' must be the first
+	 * field in 'data' and addr length should be a multiple
+	 * of 8 bytes to ensure alignment of additional fields
+	 */
+	char		data[0];
 };
 
 struct util_av {
@@ -706,7 +712,13 @@ struct util_av {
 };
 
 struct util_av_attr {
+	/* Must be a multiple of 8 bytes */
 	size_t	addrlen;
+	/*
+	 * Specify the length of additional fields to be added
+	 * to av_entry other than struct util_av_entry and addr
+	 */
+	size_t  context_len;
 	int	flags;
 };
 
