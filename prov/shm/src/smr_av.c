@@ -220,7 +220,7 @@ int smr_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	if (!smr_av)
 		return -FI_ENOMEM;
 
-	util_attr.addrlen = NAME_MAX + 1;
+	util_attr.addrlen = NAME_MAX;
 	util_attr.context_len = 0;
 	util_attr.flags = 0;
 	if (attr->count > SMR_MAX_PEERS) {
