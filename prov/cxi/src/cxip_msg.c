@@ -1160,8 +1160,10 @@ static int cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 	}
 
 	/* Drop all unexpected 0-byte Put events. */
-	if (!event->tgt_long.rlength)
+	if (!event->tgt_long.rlength) {
+		fastlock_release(&rxc->rx_lock);
 		return FI_SUCCESS;
+	}
 
 	/* Handle Put events */
 
@@ -1970,6 +1972,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 			if (ret == FI_SUCCESS)
 				cxip_recv_req_dequeue_nolock(req);
 
+			fastlock_release(&rxc->rx_lock);
 			return ret;
 		}
 

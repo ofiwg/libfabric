@@ -83,6 +83,62 @@ Test(tagged, ping)
 	free(recv_buf);
 }
 
+/* Test basic zero-byte send/recv */
+Test(tagged, zbr)
+{
+	int ret;
+	struct fi_cq_tagged_entry tx_cqe,
+				  rx_cqe;
+	fi_addr_t from;
+
+	ret = fi_trecv(cxit_ep, NULL, 0, NULL, FI_ADDR_UNSPEC, 0,
+		       0, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_trecv failed %d", ret);
+
+	ret = fi_tsend(cxit_ep, NULL, 0, NULL, cxit_ep_fi_addr, 0,
+		       NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_tsend failed %d", ret);
+
+	/* Wait for async event indicating data has been received */
+	do {
+		ret = fi_cq_readfrom(cxit_rx_cq, &rx_cqe, 1, &from);
+	} while (ret == -FI_EAGAIN);
+	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
+
+	validate_rx_event(&rx_cqe, NULL, 0, FI_TAGGED | FI_RECV, NULL, 0, 0);
+	cr_assert(from == cxit_ep_fi_addr, "Invalid source address");
+
+	/* Wait for async event indicating data has been sent */
+	ret = cxit_await_completion(cxit_tx_cq, &tx_cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
+
+	validate_tx_event(&tx_cqe, FI_TAGGED | FI_SEND, NULL);
+
+	/* Try an unexpected send */
+	ret = fi_tsend(cxit_ep, NULL, 0, NULL, cxit_ep_fi_addr, 0,
+		       NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_tsend failed %d", ret);
+
+	sleep(1);
+
+	ret = fi_trecv(cxit_ep, NULL, 0, NULL, FI_ADDR_UNSPEC, 0,
+		       0, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_trecv failed %d", ret);
+
+	/* Wait for async event indicating data has been received */
+	do {
+		ret = fi_cq_readfrom(cxit_rx_cq, &rx_cqe, 1, &from);
+	} while (ret == -FI_EAGAIN);
+	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
+
+	validate_rx_event(&rx_cqe, NULL, 0, FI_TAGGED | FI_RECV, NULL, 0, 0);
+	cr_assert(from == cxit_ep_fi_addr, "Invalid source address");
+
+	/* Wait for async event indicating data has been sent */
+	ret = cxit_await_completion(cxit_tx_cq, &tx_cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
+}
+
 /* Test basic rendezvous send */
 Test(tagged, rdzv)
 {
