@@ -801,10 +801,10 @@ struct util_eq {
 
 struct util_event {
 	struct slist_entry	entry;
-	int			size;
+	ssize_t			size;
 	int			event;
 	int			err;
-	uint8_t			data[0];
+	uint8_t			data[0]; /* offset should be 8-byte aligned */
 };
 
 int ofi_eq_create(struct fid_fabric *fabric, struct fi_eq_attr *attr,
