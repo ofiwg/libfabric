@@ -133,7 +133,7 @@ size_t smr_calculate_size_offsets(size_t tx_count, size_t rx_count,
 
 /* TODO: Determine if aligning SMR data helps performance */
 int smr_create(const struct fi_provider *prov, struct smr_map *map,
-	       const struct smr_attr *attr, struct smr_region **smr)
+	       const struct smr_attr *attr, struct smr_region *volatile *smr)
 {
 	struct smr_ep_name *ep_name;
 	size_t total_size, cmd_queue_offset, peer_data_offset;
