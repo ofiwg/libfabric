@@ -42,6 +42,7 @@
 #include "efa.h"
 #include "rxr_msg.h"
 #include "rxr_rma.h"
+#include "rxr_pkt_cmd.h"
 
 /*
  *   General purpose utility functions
