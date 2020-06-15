@@ -279,12 +279,40 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 	     struct fi_info **info)
 {
 	int ret;
+	struct fi_info *fi_ptr;
 
 	/* Find all matching domains, ignoring addresses. */
 	ret = util_getinfo(&cxip_util_prov, version, NULL, NULL,
 			   flags & ~FI_SOURCE, hints, info);
 
-	/* TODO refine info list with node and service. */
+	if (!hints)
+		return ret;
+
+	/* util_getinfo() returns a list of fi_info for each matching OFI
+	 * Domain (physical CXI interface).
+	 *
+	 * Perform fixups:
+	 * -Use input ordering requirements.
+	 * -Remove unrequested secondary caps that impact performance.
+	 */
+
+	fi_ptr = *info;
+	for (; fi_ptr; fi_ptr = fi_ptr->next) {
+		/* Ordering requirements prevent the use of restricted packets.
+		 * If hints exist, copy msg_order settings directly.
+		 */
+		fi_ptr->tx_attr->msg_order = hints->tx_attr->msg_order;
+
+		/* Requesting FI_RMA_EVENT prevents the use of restricted
+		 * packets. Do not set FI_RMA_EVENT unless explicitly
+		 * requested.
+		 */
+		if (hints->caps && !(hints->caps & FI_RMA_EVENT)) {
+			fi_ptr->caps &= ~FI_RMA_EVENT;
+			fi_ptr->tx_attr->caps &= ~FI_RMA_EVENT;
+			fi_ptr->rx_attr->caps &= ~FI_RMA_EVENT;
+		}
+	}
 
 	return ret;
 }

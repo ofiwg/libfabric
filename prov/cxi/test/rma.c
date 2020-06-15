@@ -55,6 +55,88 @@ Test(rma, simple_write)
 	free(send_buf);
 }
 
+void cxit_setup_rma_opt(void)
+{
+	cxit_setup_getinfo();
+
+	/* Explicitly request unordered RMA */
+	cxit_fi_hints->caps = FI_RMA;
+	cxit_fi_hints->tx_attr->msg_order = 0;
+
+	cxit_setup_rma();
+}
+
+TestSuite(rma_opt, .init = cxit_setup_rma_opt, .fini = cxit_teardown_rma,
+	  .timeout = CXIT_DEFAULT_TIMEOUT);
+
+/* Test an optimal fi_write. */
+Test(rma_opt, opt_write)
+{
+	int ret;
+	uint8_t *send_buf;
+	int win_len = 16 * 1024;
+	int send_len = 8;
+	struct mem_region mem_window;
+	int key_val = RMA_WIN_KEY;
+	struct fi_cq_tagged_entry cqe;
+	uint64_t res_start;
+	uint64_t res_end;
+	uint64_t hits_start;
+	uint64_t hits_end;
+
+	ret = dom_ops->cntr_read(&cxit_domain->fid,
+				 C_CNTR_IXE_RX_PTL_RESTRICTED_PKT,
+				 &res_start, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "cntr_read failed: %d\n", ret);
+
+	ret = dom_ops->cntr_read(&cxit_domain->fid,
+				 C_CNTR_LPE_PLEC_HITS,
+				 &hits_start, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "cntr_read failed: %d\n", ret);
+
+	send_buf = calloc(1, win_len);
+	cr_assert_not_null(send_buf, "send_buf alloc failed");
+
+	mr_create(win_len, FI_REMOTE_WRITE, 0xa0, key_val, &mem_window);
+
+	for (send_len = 1; send_len <= win_len; send_len <<= 1) {
+		ret = fi_write(cxit_ep, send_buf, send_len, NULL,
+			       cxit_ep_fi_addr, 0, key_val, NULL);
+		cr_assert(ret == FI_SUCCESS, "ret is: %d\n", ret);
+
+		/* Wait for async event indicating data has been sent */
+		ret = cxit_await_completion(cxit_tx_cq, &cqe);
+		cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+
+		validate_tx_event(&cqe, FI_RMA | FI_WRITE, NULL);
+
+		/* Validate sent data */
+		for (int i = 0; i < send_len; i++)
+			cr_assert_eq(mem_window.mem[i], send_buf[i],
+				     "data mismatch, element: (%d) %02x != %02x\n", i,
+				     mem_window.mem[i], send_buf[i]);
+	}
+
+	mr_destroy(&mem_window);
+	free(send_buf);
+
+	sleep(1);
+
+	ret = dom_ops->cntr_read(&cxit_domain->fid,
+				 C_CNTR_IXE_RX_PTL_RESTRICTED_PKT,
+				 &res_end, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "cntr_read failed: %d\n", ret);
+	cr_expect(res_end > res_start);
+
+	ret = dom_ops->cntr_read(&cxit_domain->fid,
+				 C_CNTR_LPE_PLEC_HITS,
+				 &hits_end, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "cntr_read failed: %d\n", ret);
+	//cr_expect(hits_end > hits_start);
+	if (hits_end == hits_start)
+		printf("PLEC Hits not registered (unsupported on netsim)\n");
+}
+
 /* Test simple writes to a standard MR. */
 Test(rma, simple_write_std_mr)
 {
