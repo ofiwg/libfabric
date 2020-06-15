@@ -173,8 +173,12 @@ static void recv_req_report(struct cxip_req *req)
 		CXIP_LOG_DBG("Request success: %p\n", req);
 
 		if (success_event) {
-			src_addr = recv_req_src_addr(req);
-			ret = cxip_cq_req_complete_addr(req, src_addr);
+			if (req->recv.rxc->attr.caps & FI_SOURCE) {
+				src_addr = recv_req_src_addr(req);
+				ret = cxip_cq_req_complete_addr(req, src_addr);
+			} else {
+				ret = cxip_cq_req_complete(req);
+			}
 			if (ret != FI_SUCCESS)
 				CXIP_LOG_ERROR("Failed to report completion: %d\n",
 					       ret);

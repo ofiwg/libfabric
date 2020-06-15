@@ -312,6 +312,15 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 			fi_ptr->tx_attr->caps &= ~FI_RMA_EVENT;
 			fi_ptr->rx_attr->caps &= ~FI_RMA_EVENT;
 		}
+
+		/* Requesting FI_SOURCE adds overhead to a receive operation.
+		 * Do not set FI_SOURCE unless explicitly requested.
+		 */
+		if (hints->caps && !(hints->caps & FI_SOURCE)) {
+			fi_ptr->caps &= ~FI_SOURCE;
+			fi_ptr->tx_attr->caps &= ~FI_SOURCE;
+			fi_ptr->rx_attr->caps &= ~FI_SOURCE;
+		}
 	}
 
 	return ret;
