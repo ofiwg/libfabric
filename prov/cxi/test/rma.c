@@ -194,11 +194,7 @@ Test(rma, writemsg)
 	do_writemsg(FI_FENCE);
 }
 
-/* Perform a write that uses a flushing ZBR at the target. Validate flush with
- * pycxi:
- *
- *    $ pycxi/utils/csrutil dump csr ixe_cntr | grep dmawr_flush_reqs
- */
+/* Perform a write that uses a flushing ZBR at the target. */
 Test(rma, flush)
 {
 	int ret;
@@ -212,6 +208,13 @@ Test(rma, flush)
 	struct iovec iov[1];
 	struct fi_rma_iov rma[1];
 	uint64_t flags = FI_DELIVERY_COMPLETE;
+	uint64_t flushes_start;
+	uint64_t flushes_end;
+
+	ret = dom_ops->cntr_read(&cxit_domain->fid,
+				 C_CNTR_IXE_DMAWR_FLUSH_REQS,
+				 &flushes_start, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "cntr_read failed: %d\n", ret);
 
 	send_buf = calloc(1, win_len);
 	cr_assert_not_null(send_buf, "send_buf alloc failed");
@@ -251,6 +254,13 @@ Test(rma, flush)
 
 	mr_destroy(&mem_window);
 	free(send_buf);
+
+	sleep(1);
+	ret = dom_ops->cntr_read(&cxit_domain->fid,
+				 C_CNTR_IXE_DMAWR_FLUSH_REQS,
+				 &flushes_end, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "cntr_read failed: %d\n", ret);
+	cr_assert(flushes_end > flushes_start);
 }
 
 /* Test fi_writemsg with FI_INJECT flag */

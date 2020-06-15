@@ -2059,11 +2059,7 @@ Test(atomic, rem_cntr)
 	_cxit_destroy_mr(&mr);
 }
 
-/* Perform an AMO that uses a flushing ZBR at the target. Validate flush with
- * pycxi:
- *
- *    $ pycxi/utils/csrutil dump csr ixe_cntr | grep dmawr_flush_reqs
- */
+/* Perform an AMO that uses a flushing ZBR at the target. */
 Test(atomic, flush)
 {
 	struct mem_region mr;
@@ -2076,6 +2072,14 @@ Test(atomic, flush)
 	struct fi_ioc ioc;
 	struct fi_rma_ioc rma_ioc;
 	int count = 0;
+	uint64_t flushes_start;
+	uint64_t flushes_end;
+
+	ret = dom_ops->cntr_read(&cxit_domain->fid,
+				 C_CNTR_IXE_DMAWR_FLUSH_REQS,
+				 &flushes_start, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "cntr_read failed: %d\n", ret);
+
 
 	rma = _cxit_create_mr(&mr, RMA_WIN_KEY);
 	cr_assert_eq(*rma, exp_remote,
@@ -2111,6 +2115,13 @@ Test(atomic, flush)
 		     *rma, exp_remote);
 
 	_cxit_destroy_mr(&mr);
+
+	sleep(1);
+	ret = dom_ops->cntr_read(&cxit_domain->fid,
+				 C_CNTR_IXE_DMAWR_FLUSH_REQS,
+				 &flushes_end, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "cntr_read failed: %d\n", ret);
+	cr_assert(flushes_end > flushes_start);
 }
 
 /* Test AMO FI_MORE */
