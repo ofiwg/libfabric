@@ -355,7 +355,7 @@ static int vrb_close_free_ep(struct vrb_ep *ep)
 
 	free(ep->util_ep.ep_fid.msg);
 	ep->util_ep.ep_fid.msg = NULL;
-	free(ep->cm_hdr);
+	free(ep->cm_priv_data);
 
 	if (ep->util_ep.rx_cq) {
 		cq = container_of(ep->util_ep.rx_cq, struct vrb_cq, util_cq);

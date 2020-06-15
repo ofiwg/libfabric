@@ -594,6 +594,7 @@ struct vrb_ep {
 	size_t				rx_cq_size;
 	struct rdma_conn_param		conn_param;
 	struct vrb_cm_data_hdr		*cm_hdr;
+	void				*cm_priv_data;
 };
 
 
@@ -698,6 +699,17 @@ struct vrb_connreq {
 	 * non-RDMA CM managed QP. */
 	int				is_xrc;
 	struct vrb_xrc_conn_info	xrc;
+};
+
+/* Structure below is a copy of the RDMA CM header (structure ib_connect_hdr in
+ * file librdmacm/cma.h)
+ * DO NOT MODIFY! */
+struct vrb_rdma_cm_hdr {
+	uint8_t  cma_version; /* Set by the kernel */
+	uint8_t  ip_version; /*  IP version: 7:4 */
+	uint16_t port;
+	uint32_t src_addr[4];
+	uint32_t dst_addr[4];
 };
 
 struct vrb_cm_data_hdr {
