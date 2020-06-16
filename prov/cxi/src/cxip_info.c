@@ -100,7 +100,7 @@ static int cxip_info_alloc(struct cxip_if *nic_if, struct fi_info **info)
 {
 	int ret;
 	struct fi_info *fi;
-	struct cxip_addr addr;
+	struct cxip_addr addr = {};
 
 	fi = fi_dupinfo(&cxip_info);
 	if (!fi)
@@ -283,13 +283,106 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 {
 	int ret;
 	struct fi_info *fi_ptr;
+	struct fi_info *fi_ptr_tmp;
+	struct ether_addr *mac;
+	uint32_t scan_nic;
+	uint32_t scan_pid;
+	struct cxip_addr *addr;
+	struct cxip_if *iface;
+
+	if (flags & FI_SOURCE) {
+		if (!node && !service) {
+			CXIP_LOG_INFO("FI_SOURCE set, but no node or service\n");
+			return -FI_EINVAL;
+		}
+
+		if (node) {
+			iface = cxip_if_lookup_name(node);
+			if (iface) {
+				scan_nic = iface->info->nic_addr;
+			} else if ((mac = ether_aton(node))) {
+				scan_nic = cxip_mac_to_nic(mac);
+			} else if (sscanf(node, "%i", &scan_nic) != 1) {
+				CXIP_LOG_INFO("Invalid node: %s\n", node);
+				return -FI_EINVAL;
+			}
+
+			CXIP_LOG_DBG("Node NIC: %#x\n", scan_nic);
+		}
+
+		if (service) {
+			if (sscanf(service, "%i", &scan_pid) != 1) {
+				CXIP_LOG_INFO("Invalid service: %s\n",
+					      service);
+				return -FI_EINVAL;
+			}
+
+			if (scan_pid >= C_PID_ANY) {
+				CXIP_LOG_INFO("Service out of range [0-%d): %u\n",
+					      C_PID_ANY, scan_pid);
+				return -FI_EINVAL;
+			}
+
+			CXIP_LOG_DBG("Service PID: %u\n", scan_pid);
+		}
+	}
 
 	/* Find all matching domains, ignoring addresses. */
-	ret = util_getinfo(&cxip_util_prov, version, NULL, NULL,
-			   flags & ~FI_SOURCE, hints, info);
-
-	if (!hints)
+	ret = util_getinfo(&cxip_util_prov, version, NULL, NULL, 0, hints,
+			   info);
+	if (ret)
 		return ret;
+
+	/* Search for a specific OFI Domain by name. The CXI Domain name
+	 * matches the NIC device file name (cxi[0-9]).
+	 */
+	if (flags & FI_SOURCE && node) {
+		iface = cxip_if_lookup_addr(scan_nic);
+		if (!iface) {
+			/* This shouldn't fail. */
+			ret = -FI_EINVAL;
+			goto freeinfo;
+		}
+
+		fi_ptr = *info;
+		*info = NULL;
+		while (fi_ptr) {
+			if (strcmp(fi_ptr->domain_attr->name,
+				   iface->info->device_name)) {
+				/* discard entry */
+				fi_ptr_tmp = fi_ptr;
+				fi_ptr = fi_ptr->next;
+
+				fi_ptr_tmp->next = NULL;
+				fi_freeinfo(fi_ptr_tmp);
+				continue;
+			}
+
+			/* Keep the matching info */
+			*info = fi_ptr;
+
+			/* free the rest */
+			fi_freeinfo((*info)->next);
+			(*info)->next = NULL;
+			break;
+		}
+	}
+
+	/* Check if any infos remain. */
+	if (!*info)
+		return FI_SUCCESS;
+
+	/* Set client-assigned PID value in source address. */
+	if (flags & FI_SOURCE && service) {
+		for (fi_ptr = *info; fi_ptr; fi_ptr = fi_ptr->next) {
+			addr = (struct cxip_addr *)fi_ptr->src_addr;
+			addr->pid = scan_pid;
+		}
+	}
+
+	/* Nothing left to do if hints weren't provided. */
+	if (!hints)
+		return FI_SUCCESS;
 
 	/* util_getinfo() returns a list of fi_info for each matching OFI
 	 * Domain (physical CXI interface).
@@ -299,8 +392,7 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 	 * -Remove unrequested secondary caps that impact performance.
 	 */
 
-	fi_ptr = *info;
-	for (; fi_ptr; fi_ptr = fi_ptr->next) {
+	for (fi_ptr = *info; fi_ptr; fi_ptr = fi_ptr->next) {
 		/* Ordering requirements prevent the use of restricted packets.
 		 * If hints exist, copy msg_order settings directly.
 		 */
@@ -325,6 +417,11 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 			fi_ptr->rx_attr->caps &= ~FI_SOURCE;
 		}
 	}
+
+	return FI_SUCCESS;
+
+freeinfo:
+	fi_freeinfo(*info);
 
 	return ret;
 }

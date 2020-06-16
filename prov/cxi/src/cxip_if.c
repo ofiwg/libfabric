@@ -25,10 +25,10 @@ struct slist cxip_if_list;
 static struct cxil_device_list *cxi_dev_list;
 
 /*
- * cxip_if_lookup() - Return a provider NIC interface descriptor associated
- * with a specified NIC address, if available.
+ * cxip_if_lookup_addr() - Return a provider NIC interface descriptor
+ * associated with a specified NIC address, if available.
  */
-struct cxip_if *cxip_if_lookup(uint32_t nic_addr)
+struct cxip_if *cxip_if_lookup_addr(uint32_t nic_addr)
 {
 	struct slist_entry *entry, *prev __attribute__ ((unused));
 	struct cxip_if *if_entry;
@@ -36,6 +36,24 @@ struct cxip_if *cxip_if_lookup(uint32_t nic_addr)
 	slist_foreach(&cxip_if_list, entry, prev) {
 		if_entry = container_of(entry, struct cxip_if, if_entry);
 		if (if_entry->info->nic_addr == nic_addr)
+			return if_entry;
+	}
+
+	return NULL;
+}
+
+/*
+ * cxip_if_lookup() - Return a provider NIC interface descriptor associated
+ * with a specified NIC device name, if available.
+ */
+struct cxip_if *cxip_if_lookup_name(const char *name)
+{
+	struct slist_entry *entry, *prev __attribute__ ((unused));
+	struct cxip_if *if_entry;
+
+	slist_foreach(&cxip_if_list, entry, prev) {
+		if_entry = container_of(entry, struct cxip_if, if_entry);
+		if (!strcmp(if_entry->info->device_name, name))
 			return if_entry;
 	}
 
@@ -116,7 +134,7 @@ int cxip_get_if(uint32_t nic_addr, struct cxip_if **iface)
 	struct cxip_if *if_entry;
 
 	/* The IF list device info is static, no need to lock */
-	if_entry = cxip_if_lookup(nic_addr);
+	if_entry = cxip_if_lookup_addr(nic_addr);
 	if (!if_entry) {
 		CXIP_LOG_DBG("interface not found\n");
 		return -FI_ENODEV;

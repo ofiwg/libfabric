@@ -10,6 +10,7 @@
 #ifndef _CXIP_PROV_H_
 #define _CXIP_PROV_H_
 
+#include <netinet/ether.h>
 #include "config.h"
 
 #include <pthread.h>
@@ -1077,7 +1078,8 @@ struct cxip_fid_list {
 	struct fid *fid;
 };
 
-struct cxip_if *cxip_if_lookup(uint32_t nic_addr);
+struct cxip_if *cxip_if_lookup_addr(uint32_t nic_addr);
+struct cxip_if *cxip_if_lookup_name(const char *name);
 int cxip_get_if(uint32_t nic_addr, struct cxip_if **dev_if);
 void cxip_put_if(struct cxip_if *dev_if);
 int cxip_alloc_lni(struct cxip_if *iface, struct cxip_lni **if_lni);
@@ -1364,6 +1366,13 @@ cxip_domain_remove_cq(struct cxip_domain *dom, struct cxip_cq *cq)
 	dlist_remove(&cq->dom_entry);
 	ofi_atomic_dec32(&dom->ref);
 	fastlock_release(&dom->lock);
+}
+
+static inline uint32_t cxip_mac_to_nic(struct ether_addr *mac)
+{
+	return mac->ether_addr_octet[5] |
+			(mac->ether_addr_octet[4] << 8) |
+			((mac->ether_addr_octet[3] & 0xF) << 16);
 }
 
 #define _CXIP_LOG_DBG(subsys, ...) FI_DBG(&cxip_prov, subsys, __VA_ARGS__)

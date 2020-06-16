@@ -88,10 +88,7 @@ static int cxip_parse_cxi_addr(const char *node, const char *service,
 
 	mac = ether_aton(node);
 	if (mac) {
-		/* TODO where is NIC addr embedded in MAC? */
-		addr->nic = mac->ether_addr_octet[5] |
-			    (mac->ether_addr_octet[4] << 8) |
-			    ((mac->ether_addr_octet[3] & 0xF) << 16);
+		addr->nic = cxip_mac_to_nic(mac);
 	} else if (sscanf(node, "%i", &scan_nic) == 1) {
 		addr->nic = scan_nic;
 	} else {
@@ -347,7 +344,7 @@ static int cxip_av_insertsvc(struct fid_av *avfid, const char *node,
 {
 	int ret;
 	struct cxip_av *av;
-	struct cxip_addr addr;
+	struct cxip_addr addr = {};
 
 	_CHECKNULL(avfid && node && service, return -FI_EINVAL,
 		   "fid=%p, node=%p, service=%p\n",
