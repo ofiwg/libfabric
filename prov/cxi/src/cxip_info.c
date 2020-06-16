@@ -106,11 +106,11 @@ static int cxip_info_alloc(struct cxip_if *nic_if, struct fi_info **info)
 	if (!fi)
 		return -FI_ENOMEM;
 
-	ret = asprintf(&fi->domain_attr->name, cxip_dom_fmt,
-		       nic_if->info.dev_id);
-	assert(ret > 0);
+	fi->domain_attr->name = strdup(nic_if->info->device_name);
+	if (!fi->domain_attr->name)
+		return -ENOMEM;
 
-	addr.nic = nic_if->info.nic_addr;
+	addr.nic = nic_if->info->nic_addr;
 	addr.pid = C_PID_ANY;
 	fi->src_addr = mem_dup(&addr, sizeof(addr));
 	if (!fi->src_addr) {
@@ -125,39 +125,43 @@ static int cxip_info_alloc(struct cxip_if *nic_if, struct fi_info **info)
 		goto err;
 	}
 
-	fi->nic->device_attr->name = strdup(nic_if->info.device_name);
+	fi->nic->device_attr->name = strdup(nic_if->info->device_name);
+	if (!fi->nic->device_attr->name) {
+		ret = -ENOMEM;
+		goto err;
+	}
 
 	ret = asprintf(&fi->nic->device_attr->device_id, "0x%x",
-		       nic_if->info.device_id);
+		       nic_if->info->device_id);
 	if (ret < 0)
 		goto err;
 
 	ret = asprintf(&fi->nic->device_attr->device_version, "%u",
-		       nic_if->info.device_rev);
+		       nic_if->info->device_rev);
 	if (ret < 0)
 		goto err;
 
 	ret = asprintf(&fi->nic->device_attr->vendor_id, "0x%x",
-		       nic_if->info.vendor_id);
+		       nic_if->info->vendor_id);
 	if (ret < 0)
 		goto err;
 
-	fi->nic->device_attr->driver = strdup(nic_if->info.driver_name);
+	fi->nic->device_attr->driver = strdup(nic_if->info->driver_name);
 
 	fi->nic->bus_attr->bus_type = FI_BUS_PCI;
-	fi->nic->bus_attr->attr.pci.domain_id = nic_if->info.pci_domain;
-	fi->nic->bus_attr->attr.pci.bus_id = nic_if->info.pci_bus;
-	fi->nic->bus_attr->attr.pci.device_id = nic_if->info.pci_device;
-	fi->nic->bus_attr->attr.pci.function_id = nic_if->info.pci_function;
+	fi->nic->bus_attr->attr.pci.domain_id = nic_if->info->pci_domain;
+	fi->nic->bus_attr->attr.pci.bus_id = nic_if->info->pci_bus;
+	fi->nic->bus_attr->attr.pci.device_id = nic_if->info->pci_device;
+	fi->nic->bus_attr->attr.pci.function_id = nic_if->info->pci_function;
 
 	ret = asprintf(&fi->nic->link_attr->address, "0x%x",
-		       nic_if->info.nic_addr);
+		       nic_if->info->nic_addr);
 	if (ret < 0)
 		goto err;
 
-	fi->nic->link_attr->mtu = nic_if->info.link_mtu;
-	fi->nic->link_attr->speed = nic_if->info.link_speed * 1000 * 1000;
-	fi->nic->link_attr->state = nic_if->info.link_state ?
+	fi->nic->link_attr->mtu = nic_if->info->link_mtu;
+	fi->nic->link_attr->speed = nic_if->info->link_speed * 1000 * 1000;
+	fi->nic->link_attr->state = nic_if->info->link_state ?
 			FI_LINK_UP : FI_LINK_DOWN;
 	fi->nic->link_attr->network_type = strdup("HPC Ethernet");
 
@@ -187,8 +191,7 @@ static int cxip_info_init(void)
 			fi_freeinfo((void *)cxip_util_prov.info);
 			break;
 		}
-		CXIP_LOG_DBG("NIC: 0x%x info created\n",
-			     nic_if->info.nic_addr);
+		CXIP_LOG_DBG("%s info created\n", nic_if->info->device_name);
 
 		*fi_list = fi;
 		fi_list = &(fi->next);

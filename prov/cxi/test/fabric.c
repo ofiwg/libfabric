@@ -56,16 +56,20 @@ Test(getinfo, dom_name)
 		if_entry = container_of(entry, struct cxip_if, if_entry);
 		infos = 0;
 
-		cxit_fi_hints->domain_attr->name =
-				get_dom_name(if_entry->info.dev_id);
+		cxit_node = get_dom_name(if_entry->info->dev_id);
+		cxit_flags = FI_SOURCE;
+		printf("searching %s\n", cxit_node);
 
 		cxit_create_fabric_info();
 		cr_assert(cxit_fi != NULL);
 
 		/* Make sure we have 1 FI for each IF */
 		do {
-			cr_assert(!strcmp(cxit_fi->domain_attr->name,
-					  cxit_fi_hints->domain_attr->name));
+			cr_expect(!strcmp(cxit_fi->domain_attr->name,
+					  cxit_node),
+					  "%s != %s\n",
+					  cxit_fi->domain_attr->name,
+					  cxit_fi_hints->domain_attr->name);
 
 			cr_assert(!strcmp(cxit_fi->fabric_attr->prov_name,
 					  cxip_prov_name));

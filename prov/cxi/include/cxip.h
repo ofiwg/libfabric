@@ -301,7 +301,7 @@ struct cxip_if {
 	struct slist_entry if_entry;
 
 	/* Device description */
-	struct cxil_devinfo info;
+	struct cxil_devinfo *info;
 	struct cxil_dev *dev;
 
 	/* PtlTEs (searched during state change events) */

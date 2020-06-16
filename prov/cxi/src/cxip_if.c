@@ -22,6 +22,7 @@
 #define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_DOMAIN, __VA_ARGS__)
 
 struct slist cxip_if_list;
+static struct cxil_device_list *cxi_dev_list;
 
 /*
  * cxip_if_lookup() - Return a provider NIC interface descriptor associated
@@ -34,7 +35,7 @@ struct cxip_if *cxip_if_lookup(uint32_t nic_addr)
 
 	slist_foreach(&cxip_if_list, entry, prev) {
 		if_entry = container_of(entry, struct cxip_if, if_entry);
-		if (if_entry->info.nic_addr == nic_addr)
+		if (if_entry->info->nic_addr == nic_addr)
 			return if_entry;
 	}
 
@@ -52,7 +53,7 @@ int cxip_lni_res_cnt(struct cxip_lni *lni, char *res_str, uint32_t *count)
 	DIR *dr;
 
 	sprintf(path, "/sys/kernel/debug/cxi/cxi%u/lni/%u/%s",
-		lni->iface->info.dev_id, lni->lni->id, res_str);
+		lni->iface->info->dev_id, lni->lni->id, res_str);
 
 	dr = opendir(path);
 	if (!dr)
@@ -87,8 +88,8 @@ void cxip_lni_res_dump(struct cxip_lni *lni)
 
 	/* Expect failure if debugfs isn't mounted. */
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("Resource usage info unavailable: cxi%u RGID: %u.\n",
-			     lni->iface->info.dev_id, lni->lni->id);
+		CXIP_LOG_DBG("Resource usage info unavailable: %s RGID: %u.\n",
+			     lni->iface->info->device_name, lni->lni->id);
 		return;
 	}
 
@@ -98,8 +99,8 @@ void cxip_lni_res_dump(struct cxip_lni *lni)
 	cxip_lni_res_cnt(lni, "ct", &ct_count);
 	cxip_lni_res_cnt(lni, "ac", &ac_count);
 
-	CXIP_LOG_INFO("Resource usage: cxi%u RGID: %u TXQ: %u TGQ: %u PTE: %u EQ: %u CT: %u AC: %u\n",
-		      lni->iface->info.dev_id, lni->lni->id, txq_count,
+	CXIP_LOG_INFO("Resource usage: %s RGID: %u TXQ: %u TGQ: %u PTE: %u EQ: %u CT: %u AC: %u\n",
+		      lni->iface->info->device_name, lni->lni->id, txq_count,
 		      tgq_count, pt_count, eq_count, ct_count, ac_count);
 }
 
@@ -125,14 +126,14 @@ int cxip_get_if(uint32_t nic_addr, struct cxip_if **iface)
 	fastlock_acquire(&if_entry->lock);
 
 	if (!if_entry->dev) {
-		ret = cxil_open_device(if_entry->info.dev_id, &if_entry->dev);
+		ret = cxil_open_device(if_entry->info->dev_id, &if_entry->dev);
 		if (ret) {
 			CXIP_LOG_DBG("cxil_open_device returned: %d\n", ret);
 			ret = -FI_ENODEV;
 			goto unlock;
 		}
 
-		CXIP_LOG_DBG("Opened cxi%u\n", if_entry->info.dev_id);
+		CXIP_LOG_DBG("Opened %s\n", if_entry->info->device_name);
 	}
 
 	ofi_atomic_inc32(&if_entry->ref);
@@ -159,7 +160,7 @@ void cxip_put_if(struct cxip_if *iface)
 		cxil_close_device(iface->dev);
 		iface->dev = NULL;
 
-		CXIP_LOG_DBG("Closed cxi%u\n", iface->info.dev_id);
+		CXIP_LOG_DBG("Closed %s\n", iface->info->device_name);
 	}
 
 	fastlock_release(&iface->lock);
@@ -189,8 +190,8 @@ int cxip_alloc_lni(struct cxip_if *iface, struct cxip_lni **if_lni)
 
 	lni->iface = iface;
 
-	CXIP_LOG_DBG("Allocated LNI, cxi%u RGID: %u\n",
-		     lni->iface->info.dev_id, lni->lni->id);
+	CXIP_LOG_DBG("Allocated LNI, %s RGID: %u\n",
+		     lni->iface->info->device_name, lni->lni->id);
 
 	*if_lni = lni;
 
@@ -211,8 +212,8 @@ void cxip_free_lni(struct cxip_lni *lni)
 
 	cxip_lni_res_dump(lni);
 
-	CXIP_LOG_DBG("Freeing LNI, cxi%u RGID: %u\n",
-		     lni->iface->info.dev_id, lni->lni->id);
+	CXIP_LOG_DBG("Freeing LNI, %s RGID: %u\n",
+		     lni->iface->info->device_name, lni->lni->id);
 
 	ret = cxil_destroy_lni(lni->lni);
 	if (ret)
@@ -245,8 +246,8 @@ int cxip_alloc_if_domain(struct cxip_lni *lni, uint32_t vni, uint32_t pid,
 
 	dom->lni = lni;
 
-	CXIP_LOG_DBG("Allocated IF Domain, cxi%u VNI: %u PID: %u\n",
-		     lni->iface->info.dev_id, vni, pid);
+	CXIP_LOG_DBG("Allocated IF Domain, %s VNI: %u PID: %u\n",
+		     lni->iface->info->device_name, vni, pid);
 
 	*if_dom = dom;
 
@@ -265,8 +266,8 @@ void cxip_free_if_domain(struct cxip_if_domain *if_dom)
 {
 	int ret;
 
-	CXIP_LOG_DBG("Freeing IF Domain, cxi%u VNI: %u PID: %u\n",
-		     if_dom->lni->iface->info.dev_id, if_dom->dom->vni,
+	CXIP_LOG_DBG("Freeing IF Domain, %s VNI: %u PID: %u\n",
+		     if_dom->lni->iface->info->device_name, if_dom->dom->vni,
 		     if_dom->dom->pid);
 
 	ret = cxil_destroy_domain(if_dom->dom);
@@ -523,38 +524,38 @@ void cxip_cmdq_free(struct cxip_cmdq *cmdq)
 static void cxip_query_if_list(struct slist *if_list)
 {
 	struct cxip_if *if_entry;
-	struct cxil_device_list *dev_list;
 	int ret;
+	int i;
 
-	slist_init(&cxip_if_list);
+	slist_init(if_list);
 
-	ret = cxil_get_device_list(&dev_list);
+	ret = cxil_get_device_list(&cxi_dev_list);
 	if (ret) {
 		CXIP_LOG_DBG("cxil_get_device_list failed\n");
 		return;
 	}
 
-	if (dev_list->count == 0) {
+	if (cxi_dev_list->count == 0) {
 		CXIP_LOG_DBG("No IFs found\n");
-		cxil_free_device_list(dev_list);
+		cxil_free_device_list(cxi_dev_list);
 		return;
 	}
 
-	if (dev_list->info[0].min_free_shift) {
+	if (cxi_dev_list->info[0].min_free_shift) {
 		CXIP_LOG_DBG("Non-zero min_free_shift not supported\n");
-		cxil_free_device_list(dev_list);
+		cxil_free_device_list(cxi_dev_list);
 		return;
 	}
 
-	/* Pick first device */
-	if_entry = calloc(1, sizeof(struct cxip_if));
-	if_entry->info = dev_list->info[0];
-	ofi_atomic_initialize32(&if_entry->ref, 0);
-	dlist_init(&if_entry->ptes);
-	fastlock_init(&if_entry->lock);
-	slist_insert_tail(&if_entry->if_entry, if_list);
+	for (i = 0; i < cxi_dev_list->count; i++) {
+		if_entry = calloc(1, sizeof(struct cxip_if));
+		if_entry->info = &cxi_dev_list->info[i];
+		ofi_atomic_initialize32(&if_entry->ref, 0);
+		dlist_init(&if_entry->ptes);
+		fastlock_init(&if_entry->lock);
+		slist_insert_tail(&if_entry->if_entry, if_list);
+	}
 
-	cxil_free_device_list(dev_list);
 }
 
 /*
@@ -571,6 +572,8 @@ static void cxip_free_if_list(struct slist *if_list)
 		fastlock_destroy(&if_entry->lock);
 		free(if_entry);
 	}
+
+	cxil_free_device_list(cxi_dev_list);
 }
 
 /*

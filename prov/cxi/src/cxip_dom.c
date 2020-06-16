@@ -70,9 +70,9 @@ int cxip_domain_enable(struct cxip_domain *dom)
 	dom->enabled = true;
 	fastlock_release(&dom->lock);
 
-	CXIP_LOG_DBG("Allocated interface, NIC[%u]: %u RGID: %u\n",
-		     dom->iface->info.dev_id,
-		     dom->iface->info.nic_addr,
+	CXIP_LOG_DBG("Allocated interface, %s: %u RGID: %u\n",
+		     dom->iface->info->device_name,
+		     dom->iface->info->nic_addr,
 		     dom->lni->lni->id);
 
 	return FI_SUCCESS;
@@ -113,9 +113,9 @@ static void cxip_domain_disable(struct cxip_domain *dom)
 	if (ret)
 		CXIP_LOG_ERROR("Failed to destroy CP: %d\n", ret);
 
-	CXIP_LOG_DBG("Releasing interface, NIC[%u]: %u RGID: %u\n",
-		     dom->iface->info.dev_id,
-		     dom->iface->info.nic_addr,
+	CXIP_LOG_DBG("Releasing interface, %s: %u RGID: %u\n",
+		     dom->iface->info->device_name,
+		     dom->iface->info->nic_addr,
 		     dom->lni->lni->id);
 
 	cxip_free_lni(dom->lni);
