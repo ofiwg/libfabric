@@ -189,7 +189,7 @@ static int vrb_mr_cache_close(fid_t fid)
 {
 	struct vrb_mem_desc *md =
 		container_of(fid, struct vrb_mem_desc, mr_fid.fid);
-	
+
 	ofi_mr_cache_delete(&md->domain->cache, md->entry);
 	return FI_SUCCESS;
 }
@@ -259,6 +259,7 @@ vrb_mr_cache_reg(struct fid *fid, const void *buf, size_t len,
 	attr.offset = offset;
 	attr.requested_key = requested_key;
 	attr.auth_key_size = 0;
+	attr.iface = FI_HMEM_SYSTEM;
 
 	ret = (flags & OFI_MR_NOCACHE) ?
 	      ofi_mr_cache_reg(&domain->cache, &attr, &entry) :
