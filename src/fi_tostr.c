@@ -96,6 +96,7 @@ static void ofi_tostr_opflags(char *buf, uint64_t flags)
 	IFFLAGSTR(flags, FI_INJECT_COMPLETE);
 	IFFLAGSTR(flags, FI_TRANSMIT_COMPLETE);
 	IFFLAGSTR(flags, FI_DELIVERY_COMPLETE);
+	IFFLAGSTR(flags, FI_MATCH_COMPLETE);
 	IFFLAGSTR(flags, FI_AFFINITY);
 
 	IFFLAGSTR(flags, FI_CLAIM);
