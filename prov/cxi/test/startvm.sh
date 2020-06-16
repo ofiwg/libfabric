@@ -31,10 +31,18 @@ fi
 # VMs.
 HYP=$(grep -c "^flags.*\ hypervisor" /proc/cpuinfo)
 
+if [[ $NETSIM_NICS -eq 1 ]]; then
+	CCN_OPTS="-device ccn,addr=8"
+elif [[ $NETSIM_NICS -eq 2 ]]; then
+	CCN_OPTS="-device ccn,addr=8 -device ccn,addr=13"
+elif [[ $NETSIM_NICS -eq 4 ]]; then
+	CCN_OPTS="-device ccn,addr=8 -device ccn,addr=0xd -device ccn,addr=0x12 -device ccn,addr=0x17"
+fi
+
 # -M q35 = Standard PC (Q35 + ICH9, 2009) (alias of pc-q35-2.10)
 # MSI-X needs interrupt remapping enabled to fully work.
 # w/ Intel IOMMU. Intremap on requires kernel-irqchip=off OR kernel-irqchip=split
-QEMU_OPTS="--qemu-opts -machine q35,kernel-irqchip=split -machine q35 -global q35-pcihost.pci-hole64-size=64G -device intel-iommu,intremap=on,caching-mode=on -smp 4 -device ccn,addr=10"
+QEMU_OPTS="--qemu-opts -machine q35,kernel-irqchip=split -machine q35 -global q35-pcihost.pci-hole64-size=64G -device intel-iommu,intremap=on,caching-mode=on -smp 4 $CCN_OPTS"
 KERN_OPTS="--kopt iommu=pt --kopt intel_iommu=on --kopt iomem=relaxed"
 KERN_OPTS="$KERN_OPTS --kopt transparent_hugepage=never --kopt hugepagesz=1g --kopt default_hugepagesz=1g --kopt hugepages=1 --kopt pci=realloc"
 KERN_OPTS="$KERN_OPTS --kopt hugepagesz=2M --kopt hugepages=10"
