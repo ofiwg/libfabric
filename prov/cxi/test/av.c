@@ -594,7 +594,7 @@ Test(av, shmem_map_readonly)
 /* Test address conversion to string */
 Test(av, straddr)
 {
-	uint64_t addr = 0xabcd1234abcd1234;
+	uint32_t addr = 0xabcd1234;
 	size_t len = 0;
 	char *buf = NULL;
 	const char *tmp_buf;
@@ -602,15 +602,12 @@ Test(av, straddr)
 	cxit_create_av();
 
 	tmp_buf = fi_av_straddr(cxit_av, &addr, buf, &len);
-	/* "fi_addr_cxi://0x0000000000000000\0" */
-	cr_assert_eq(len, 33, "fi_av_straddr() len failure: %ld", len);
 	cr_assert_null(tmp_buf, "fi_av_straddr() buffer not null %p", tmp_buf);
 
 	buf = malloc(len);
 	cr_assert(buf != NULL);
 
 	tmp_buf = fi_av_straddr(cxit_av, &addr, buf, &len);
-	cr_assert_eq(len, 33, "fi_av_straddr() len failure: %ld", len);
 	cr_assert_not_null(tmp_buf, "fi_av_straddr() buffer is null");
 	cr_assert_str_eq(tmp_buf, buf,
 		"fi_av_straddr() buffer failure: '%s' != '%s'", tmp_buf, buf);
