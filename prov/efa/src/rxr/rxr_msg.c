@@ -109,7 +109,8 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 						  RXR_MEDIUM_MSGRTM_PKT + tagged, 0);
 	}
 
-	if (efa_both_support_rdma_read(rxr_ep, peer) &&
+	if (tx_entry->total_len >= rxr_env.efa_min_read_msg_size &&
+	    efa_both_support_rdma_read(rxr_ep, peer) &&
 	    (tx_entry->desc[0] || efa_mr_cache_enable)) {
 		/* use read message protocol */
 		err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
