@@ -365,6 +365,45 @@ static int cxip_dom_dwq_op_comp_atomic(struct cxip_domain *dom,
 	return ret;
 }
 
+static int cxip_dom_dwq_op_cntr(struct cxip_domain *dom,
+				struct fi_op_cntr *cntr, enum fi_op_type op,
+				struct cxip_cntr *trig_cntr,
+				struct cxip_cntr *comp_cntr,
+				uint64_t trig_thresh)
+{
+	struct cxip_cntr *op_cntr;
+	int ret;
+	struct c_ct_cmd cmd = {};
+	unsigned opcode = op == FI_OP_CNTR_SET ?
+		C_CMD_CT_TRIG_SET : C_CMD_CT_TRIG_INC;
+
+	/* Completion counter must be NULL. */
+	if (!cntr || !cntr->cntr || comp_cntr)
+		return -FI_EINVAL;
+
+	op_cntr = container_of(cntr->cntr, struct cxip_cntr, cntr_fid);
+	ret = cxip_cntr_enable(op_cntr);
+	if (ret) {
+		CXIP_LOG_ERROR("Failed to enable operation counter\n");
+		return ret;
+	}
+
+	cmd.trig_ct = trig_cntr->ct->ctn;
+	cmd.threshold = trig_thresh;
+	cmd.ct = op_cntr->ct->ctn;
+	cmd.set_ct_success = 1;
+	cmd.ct_success = cntr->value;
+
+	fastlock_acquire(&dom->trig_cmdq->lock);
+	ret = cxi_cq_emit_ct(dom->trig_cmdq->dev_cmdq, opcode, &cmd);
+	/* TODO: Handle this assert. */
+	assert(!ret);
+	cxi_cq_ring(dom->trig_cmdq->dev_cmdq);
+	fastlock_release(&dom->trig_cmdq->lock);
+
+	return FI_SUCCESS;
+}
+
 /* Must hold domain lock. */
 static void cxip_dom_progress_all_cqs(struct cxip_domain *dom)
 {
@@ -449,6 +488,12 @@ static int cxip_dom_control(struct fid *fid, int command, void *arg)
 							   work->op.compare_atomic,
 							   trig_cntr, comp_cntr,
 							   work->threshold);
+
+		case FI_OP_CNTR_SET:
+		case FI_OP_CNTR_ADD:
+			return cxip_dom_dwq_op_cntr(dom, work->op.cntr,
+						    work->op_type, trig_cntr,
+						    comp_cntr, work->threshold);
 
 		default:
 			CXIP_LOG_ERROR("Invalid FI_QUEUE_WORK op %s\n",
