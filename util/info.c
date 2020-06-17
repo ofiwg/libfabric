@@ -53,6 +53,7 @@ static const struct option longopts[] = {
 	{"help", no_argument, NULL, 'h'},
 	{"node", required_argument, NULL, 'n'},
 	{"port", required_argument, NULL, 'P'},
+	{"source", no_argument, NULL, 's'},
 	{"caps", required_argument, NULL, 'c'},
 	{"mode", required_argument, NULL, 'm'},
 	{"ep_type", required_argument, NULL, 't'},
@@ -72,6 +73,7 @@ static const char *help_strings[][2] = {
 	{"", "\t\tdisplay this help and exit"},
 	{"NAME", "\t\tnode name or address"},
 	{"PNUM", "\t\tport number"},
+	{"", "\t\tinterpret node and port as the source address"},
 	{"CAP1|CAP2..", "\tone or more capabilities: FI_MSG|FI_RMA..."},
 	{"MOD1|MOD2..", "\tone or more modes, default all modes"},
 	{"EPTYPE", "\t\tspecify single endpoint type: FI_EP_MSG, FI_EP_DGRAM..."},
@@ -304,13 +306,14 @@ static int print_long_info(struct fi_info *info)
 	return EXIT_SUCCESS;
 }
 
-static int run(struct fi_info *hints, char *node, char *port)
+static int run(struct fi_info *hints, char *node, char *port, uint64_t flags)
 {
 	struct fi_info *info;
 	int ret;
-	uint64_t flags;
 
-	flags = list_providers ? FI_PROV_ATTR_ONLY : 0;
+	if (list_providers)
+		flags = FI_PROV_ATTR_ONLY;
+
 	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
 			node, port, flags, hints, &info);
 	if (ret) {
@@ -320,10 +323,10 @@ static int run(struct fi_info *hints, char *node, char *port)
 
 	if (env)
 		ret = print_vars();
-	else if (verbose)
-		ret = print_long_info(info);
 	else if (list_providers)
 		ret = print_providers(info);
+	else if (verbose)
+		ret = print_long_info(info);
 	else
 		ret = print_short_info(info);
 
@@ -335,6 +338,7 @@ int main(int argc, char **argv)
 {
 	int op, ret, option_index;
 	int use_hints = 0;
+	uint64_t flags = 0;
 
 	hints = fi_allocinfo();
 	if (!hints)
@@ -344,7 +348,7 @@ int main(int argc, char **argv)
 	hints->domain_attr->mode = ~0;
 	hints->domain_attr->mr_mode = ~(FI_MR_BASIC | FI_MR_SCALABLE);
 
-	while ((op = getopt_long(argc, argv, "n:P:c:m:t:a:p:d:f:eg:lhv", longopts,
+	while ((op = getopt_long(argc, argv, "n:P:c:m:t:a:p:d:f:eg:lhvs", longopts,
 				 &option_index)) != -1) {
 		switch (op) {
 		case 0:
@@ -362,6 +366,9 @@ int main(int argc, char **argv)
 			break;
 		case 'P':
 			port = optarg;
+			break;
+		case 's':
+			flags |= FI_SOURCE;
 			break;
 		case 'c':
 			ret = tokparse(optarg, str2cap, &hints->caps);
@@ -426,7 +433,7 @@ print_help:
 		}
 	}
 
-	ret = run(use_hints ? hints : NULL, node, port);
+	ret = run(use_hints ? hints : NULL, node, port, flags);
 
 out:
 	fi_freeinfo(hints);
