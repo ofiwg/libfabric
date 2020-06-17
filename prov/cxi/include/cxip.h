@@ -1266,8 +1266,6 @@ static inline int cxip_fid_to_rxc(struct fid_ep *ep, struct cxip_rxc **rxc)
 	}
 }
 
-int cxip_dom_cntr_enable(struct cxip_domain *dom);
-
 ssize_t cxip_send_common(struct cxip_txc *txc, const void *buf, size_t len,
 			void *desc, uint64_t data, fi_addr_t dest_addr,
 			uint64_t tag, void *context, uint64_t flags,

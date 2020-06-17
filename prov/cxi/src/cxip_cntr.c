@@ -19,7 +19,7 @@
 #define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_EP_DATA, __VA_ARGS__)
 #define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_EP_DATA, __VA_ARGS__)
 
-int cxip_dom_cntr_enable(struct cxip_domain *dom)
+static int cxip_dom_cntr_enable(struct cxip_domain *dom)
 {
 	struct cxi_cq_alloc_opts cq_opts = {};
 	int ret;

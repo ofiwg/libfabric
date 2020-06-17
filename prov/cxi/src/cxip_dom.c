@@ -190,13 +190,6 @@ static int cxip_dom_dwq_op_send(struct cxip_domain *dom, struct fi_op_msg *msg,
 	buf = msg->msg.iov_count ? msg->msg.msg_iov[0].iov_base : NULL;
 	len = msg->msg.iov_count ? msg->msg.msg_iov[0].iov_len : 0;
 
-	ret = cxip_dom_cntr_enable(dom);
-	if (ret) {
-		CXIP_LOG_DBG("Failed to enable domain for counters, ret=%d\n",
-			     ret);
-		return ret;
-	}
-
 	ret = cxip_send_common(txc, buf, len, NULL, msg->msg.data,
 			       msg->msg.addr, 0, msg->msg.context, msg->flags,
 			       false, true, trig_thresh, trig_cntr, comp_cntr);
@@ -230,13 +223,6 @@ static int cxip_dom_dwq_op_tsend(struct cxip_domain *dom,
 
 	buf = tagged->msg.iov_count ? tagged->msg.msg_iov[0].iov_base : NULL;
 	len = tagged->msg.iov_count ? tagged->msg.msg_iov[0].iov_len : 0;
-
-	ret = cxip_dom_cntr_enable(dom);
-	if (ret) {
-		CXIP_LOG_DBG("Failed to enable domain for counters, ret=%d\n",
-			     ret);
-		return ret;
-	}
 
 	ret = cxip_send_common(txc, buf, len, NULL, tagged->msg.data,
 			       tagged->msg.addr, tagged->msg.tag,
@@ -273,13 +259,6 @@ static int cxip_dom_dwq_op_rma(struct cxip_domain *dom, struct fi_op_rma *rma,
 	buf = rma->msg.iov_count ? rma->msg.msg_iov[0].iov_base : NULL;
 	len = rma->msg.iov_count ? rma->msg.msg_iov[0].iov_len : 0;
 
-	ret = cxip_dom_cntr_enable(dom);
-	if (ret) {
-		CXIP_LOG_DBG("Failed to enable domain for counters, ret=%d\n",
-			     ret);
-		return ret;
-	}
-
 	ret = cxip_rma_common(op, txc, buf, len, NULL, rma->msg.addr,
 			      rma->msg.rma_iov[0].addr, rma->msg.rma_iov[0].key,
 			      rma->msg.data, rma->flags, rma->msg.context, true,
@@ -310,13 +289,6 @@ static int cxip_dom_dwq_op_atomic(struct cxip_domain *dom,
 	if (ret)
 		return ret;
 
-	ret = cxip_dom_cntr_enable(dom);
-	if (ret) {
-		CXIP_LOG_DBG("Failed to enable domain for counters, ret=%d\n",
-			     ret);
-		return ret;
-	}
-
 	ret = cxip_amo_common(CXIP_RQ_AMO, txc, &amo->msg, NULL, NULL, 0, NULL,
 			      NULL, 0, amo->flags, true, trig_thresh, trig_cntr,
 			      comp_cntr);
@@ -345,13 +317,6 @@ static int cxip_dom_dwq_op_fetch_atomic(struct cxip_domain *dom,
 	ret = cxip_fid_to_txc(fetch_amo->ep, &txc);
 	if (ret)
 		return ret;
-
-	ret = cxip_dom_cntr_enable(dom);
-	if (ret) {
-		CXIP_LOG_DBG("Failed to enable domain for counters, ret=%d\n",
-			     ret);
-		return ret;
-	}
 
 	ret = cxip_amo_common(CXIP_RQ_AMO_FETCH, txc, &fetch_amo->msg, NULL,
 			      NULL, 0, fetch_amo->fetch.msg_iov,
@@ -383,13 +348,6 @@ static int cxip_dom_dwq_op_comp_atomic(struct cxip_domain *dom,
 	ret = cxip_fid_to_txc(comp_amo->ep, &txc);
 	if (ret)
 		return ret;
-
-	ret = cxip_dom_cntr_enable(dom);
-	if (ret) {
-		CXIP_LOG_DBG("Failed to enable domain for counters, ret=%d\n",
-			     ret);
-		return ret;
-	}
 
 	ret = cxip_amo_common(CXIP_RQ_AMO_SWAP, txc, &comp_amo->msg,
 			      comp_amo->compare.msg_iov, comp_amo->compare.desc,
@@ -441,6 +399,21 @@ static int cxip_dom_control(struct fid *fid, int command, void *arg)
 				     struct cxip_cntr, cntr_fid) : NULL;
 		trig_cntr = container_of(work->triggering_cntr,
 					 struct cxip_cntr, cntr_fid);
+
+		/* Ensure all counters are enabled before being used. */
+		if (comp_cntr) {
+			ret = cxip_cntr_enable(comp_cntr);
+			if (ret) {
+				CXIP_LOG_ERROR("Failed to enable completion counter\n");
+				return ret;
+			}
+		}
+
+		ret = cxip_cntr_enable(trig_cntr);
+		if (ret) {
+			CXIP_LOG_ERROR("Failed to enable trigger counter\n");
+			return ret;
+		}
 
 		switch (work->op_type) {
 		case FI_OP_SEND:
