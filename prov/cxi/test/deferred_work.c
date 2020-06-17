@@ -227,6 +227,8 @@ Test(deferred_work, flush_work)
 	struct fi_rma_ioc rma_ioc = {};
 	struct fi_op_atomic amo = {};
 	struct fi_deferred_work amo_work = {};
+	struct fi_op_cntr op_cntr = {};
+	struct fi_deferred_work cntr_work = {};
 
 	recv_buf = calloc(1, xfer_size);
 	cr_assert(recv_buf);
@@ -297,14 +299,24 @@ Test(deferred_work, flush_work)
 	amo_work.op_type = FI_OP_ATOMIC;
 	amo_work.op.atomic = &amo;
 
+	/* Deferred counter op. */
+	op_cntr.cntr = cxit_send_cntr;
+	op_cntr.value = 13546;
+
+	cntr_work.op_type = FI_OP_CNTR_SET;
+	cntr_work.triggering_cntr = cxit_send_cntr;
+	cntr_work.op.cntr = &op_cntr;
+
 	/* Queue up multiple trigger requests to be cancelled. */
-	for (i = 0, trig_thresh = 12345; i < 9; i++, trig_thresh++) {
+	for (i = 0, trig_thresh = 12345; i < 12; i++, trig_thresh++) {
 		struct fi_deferred_work *work;
 
 		if (i < 3)
 			work = &msg_work;
 		else if (i < 6)
 			work = &rma_work;
+		else if (i < 9)
+			work = &cntr_work;
 		else
 			work = &amo_work;
 
@@ -599,4 +611,56 @@ Test(deferred_work, compare_amo_no_event)
 Test(deferred_work, compare_amo_event)
 {
 	deferred_amo_test(true, false, true);
+}
+
+static void deferred_cntr(bool is_inc)
+{
+	struct fi_cntr_attr attr = {};
+	struct fid_cntr *cntr;
+	struct fid_cntr *trig_cntr = cxit_write_cntr;
+	int ret;
+	uint64_t value = 123456;
+	uint64_t thresh = 1234;
+	struct fi_op_cntr op_cntr = {};
+	struct fi_deferred_work work = {};
+
+	ret = fi_cntr_open(cxit_domain, &attr, &cntr, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_cntr_open failed %d", ret);
+
+	/* Ensure success value is non-zero to ensure success and increment
+	 * work.
+	 */
+	ret = fi_cntr_add(cntr, 1);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_cntr_add failed %d", ret);
+
+	op_cntr.cntr = cntr;
+	op_cntr.value = value;
+
+	work.op_type = is_inc ? FI_OP_CNTR_ADD : FI_OP_CNTR_SET;
+	work.triggering_cntr = trig_cntr;
+	work.threshold = thresh;
+	work.op.cntr = &op_cntr;
+
+	ret = fi_control(&cxit_domain->fid, FI_QUEUE_WORK, &work);
+	cr_assert_eq(ret, FI_SUCCESS, "FI_QUEUE_WORK failed %d", ret);
+
+	/* Trigger the operation. */
+	ret = fi_cntr_add(trig_cntr, work.threshold);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_cntr_add failed %d", ret);
+
+	poll_counter_assert(trig_cntr, work.threshold, 5);
+	poll_counter_assert(cntr, is_inc ? 1 + value : value, 5);
+
+	ret = fi_close(&cntr->fid);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_close failed %d", ret);
+}
+
+Test(deferred_work, cntr_add)
+{
+	deferred_cntr(true);
+}
+
+Test(deferred_work, cntr_set)
+{
+	deferred_cntr(false);
 }
