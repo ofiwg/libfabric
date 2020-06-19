@@ -187,19 +187,19 @@ void cxip_put_if(struct cxip_if *iface)
 /*
  * cxip_alloc_lni() - Allocate an LNI
  */
-int cxip_alloc_lni(struct cxip_if *iface, struct cxip_lni **if_lni)
+int cxip_alloc_lni(struct cxip_if *iface, uint32_t svc_id,
+		   struct cxip_lni **if_lni)
 {
 	struct cxip_lni *lni;
 	int ret;
 
-	lni = malloc(sizeof(*lni));
+	lni = calloc(1, sizeof(*lni));
 	if (!lni) {
 		CXIP_LOG_DBG("Unable to allocate LNI\n");
 		return -FI_ENOMEM;
 	}
 
-	/* TODO update after implementing service allocation */
-	ret = cxil_alloc_lni(iface->dev, &lni->lni, CXI_DEFAULT_SVC_ID);
+	ret = cxil_alloc_lni(iface->dev, &lni->lni, svc_id);
 	if (ret) {
 		CXIP_LOG_DBG("cxil_alloc_lni returned: %d\n", ret);
 		ret = -FI_ENOSPC;
@@ -207,6 +207,7 @@ int cxip_alloc_lni(struct cxip_if *iface, struct cxip_lni **if_lni)
 	}
 
 	lni->iface = iface;
+	fastlock_init(&lni->lock);
 
 	CXIP_LOG_DBG("Allocated LNI, %s RGID: %u\n",
 		     lni->iface->info->device_name, lni->lni->id);
@@ -227,17 +228,90 @@ free_lni:
 void cxip_free_lni(struct cxip_lni *lni)
 {
 	int ret;
+	int i;
 
 	cxip_lni_res_dump(lni);
 
 	CXIP_LOG_DBG("Freeing LNI, %s RGID: %u\n",
 		     lni->iface->info->device_name, lni->lni->id);
 
+	for (i = 0; i < lni->n_cps; i++) {
+		ret = cxil_destroy_cp(lni->cps[i]);
+		if (ret)
+			CXIP_LOG_ERROR("Failed to destroy CP: %d\n", ret);
+	}
+
 	ret = cxil_destroy_lni(lni->lni);
 	if (ret)
 		CXIP_LOG_ERROR("Failed to destroy LNI: %d\n", ret);
 
 	free(lni);
+}
+
+static const char * const tc_strs[] = {
+	[CXI_TC_DEDICATED_ACCESS] = "DEDICATED_ACCESS",
+	[CXI_TC_LOW_LATENCY] = "LOW_LATENCY",
+	[CXI_TC_BULK_DATA] = "BUlK_DATA",
+	[CXI_TC_BEST_EFFORT] = "BEST_EFFORT",
+	[CXI_TC_SCAVENGER] = "SCAVENGER",
+};
+
+const char *cxi_tc_str(enum cxi_traffic_class tc)
+{
+	if (tc < CXI_TC_DEDICATED_ACCESS || tc > CXI_TC_MAX)
+		return NULL;
+	return tc_strs[tc];
+}
+
+enum cxi_traffic_class cxip_ofi_to_cxi_tc(uint32_t ofi_tclass)
+{
+	switch (ofi_tclass) {
+	case FI_TC_BULK_DATA:
+		return CXI_TC_BULK_DATA;
+	case FI_TC_DEDICATED_ACCESS:
+		return CXI_TC_DEDICATED_ACCESS;
+	case FI_TC_LOW_LATENCY:
+		return CXI_TC_LOW_LATENCY;
+	case FI_TC_BEST_EFFORT:
+	case FI_TC_NETWORK_CTRL:
+	case FI_TC_SCAVENGER:
+	default:
+		return CXI_TC_BEST_EFFORT;
+	}
+}
+
+int cxip_cp_get(struct cxip_lni *lni, uint16_t vni, enum cxi_traffic_class tc,
+		struct cxi_cp **cp)
+{
+	int ret;
+	int i;
+
+	fastlock_acquire(&lni->lock);
+
+	for (i = 0; i < lni->n_cps; i++) {
+		if (lni->cps[i]->vni == vni && lni->cps[i]->tc == tc) {
+			*cp = lni->cps[i];
+			ret = FI_SUCCESS;
+			goto unlock;
+		}
+	}
+
+	ret = cxil_alloc_cp(lni->lni, vni, tc, &lni->cps[lni->n_cps]);
+	if (!ret) {
+		CXIP_LOG_DBG("Allocated CP: %u VNI: %u TC: %s\n",
+			     lni->cps[lni->n_cps]->lcid, vni, cxi_tc_str(tc));
+		*cp = lni->cps[lni->n_cps++];
+		ret = FI_SUCCESS;
+	} else {
+		CXIP_LOG_DBG("Failed to allocate CP: %d VNI: %u TC: %u\n",
+			     ret, vni, tc);
+		ret = -FI_EINVAL;
+	}
+
+unlock:
+	fastlock_release(&lni->lock);
+
+	return ret;
 }
 
 /*
@@ -265,7 +339,7 @@ int cxip_alloc_if_domain(struct cxip_lni *lni, uint32_t vni, uint32_t pid,
 	dom->lni = lni;
 
 	CXIP_LOG_DBG("Allocated IF Domain, %s VNI: %u PID: %u\n",
-		     lni->iface->info->device_name, vni, pid);
+		     lni->iface->info->device_name, vni, dom->dom->pid);
 
 	*if_dom = dom;
 

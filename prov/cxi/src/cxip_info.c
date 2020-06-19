@@ -42,6 +42,7 @@ struct fi_domain_attr cxip_domain_attr = {
 	.mr_iov_limit = 1,
 	.mr_cnt = 100,
 	.caps = FI_LOCAL_COMM | FI_REMOTE_COMM,
+	.auth_key_size = sizeof(struct cxi_auth_key),
 };
 
 struct fi_ep_attr cxip_ep_attr = {
@@ -53,6 +54,7 @@ struct fi_ep_attr cxip_ep_attr = {
 	.max_order_war_size = -1,
 	.max_order_waw_size = -1,
 	.mem_tag_format = FI_TAG_GENERIC,
+	.auth_key_size = sizeof(struct cxi_auth_key),
 };
 
 struct fi_tx_attr cxip_tx_attr = {
@@ -378,6 +380,15 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 			addr = (struct cxip_addr *)fi_ptr->src_addr;
 			addr->pid = scan_pid;
 		}
+	}
+
+	/* TODO: auth_key can't be set in hints yet. Common code needs to be
+	 * updated to support that. Set auth_key in info before creating Domain
+	 * and/or EPs.
+	 */
+	for (fi_ptr = *info; fi_ptr; fi_ptr = fi_ptr->next) {
+		fi_ptr->domain_attr->auth_key_size = 0;
+		fi_ptr->ep_attr->auth_key_size = 0;
 	}
 
 	/* Nothing left to do if hints weren't provided. */

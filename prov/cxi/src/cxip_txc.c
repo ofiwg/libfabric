@@ -54,7 +54,8 @@ static int txc_msg_init(struct cxip_txc *txc)
 	uint64_t pid_idx;
 
 	/* Allocate TGQ for posting source data */
-	ret = cxip_ep_cmdq(txc->ep_obj, txc->tx_id, false, &txc->rx_cmdq);
+	ret = cxip_ep_cmdq(txc->ep_obj, txc->tx_id, false, FI_TC_UNSPEC,
+			   &txc->rx_cmdq);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Unable to allocate TGQ, ret: %d\n", ret);
 		return -FI_EDOMAIN;
@@ -185,12 +186,30 @@ int cxip_txc_enable(struct cxip_txc *txc)
 		}
 	}
 
-	ret = cxip_ep_cmdq(txc->ep_obj, txc->tx_id, true, &txc->tx_cmdq);
+	ret = cxip_ep_cmdq(txc->ep_obj, txc->tx_id, true, txc->tclass,
+			   &txc->tx_cmdq);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Unable to allocate TX CMDQ, ret: %d\n", ret);
 		ret = -FI_EDOMAIN;
 		goto unlock;
 	}
+
+	/* Make sure the TX CQ TC matches the TXC TC. */
+	ret = cxip_cp_get(txc->domain->lni, txc->ep_obj->auth_key.vni,
+			  cxip_ofi_to_cxi_tc(txc->tclass), &txc->cp);
+	if (ret != FI_SUCCESS) {
+		CXIP_LOG_DBG("Failed to get CP: %d\n", ret);
+		goto put_tx_cmdq;
+	}
+
+	fastlock_acquire(&txc->tx_cmdq->lock);
+	ret = cxi_cq_emit_cq_lcid(txc->tx_cmdq->dev_cmdq, txc->cp->lcid);
+	if (ret)
+		CXIP_LOG_ERROR("Failed to update CMDQ(%p) CP: %d\n",
+			       txc->tx_cmdq, ret);
+	else
+		cxi_cq_ring(txc->tx_cmdq->dev_cmdq);
+	fastlock_release(&txc->tx_cmdq->lock);
 
 	if (ofi_send_allowed(txc->attr.caps)) {
 		ret = txc_msg_init(txc);

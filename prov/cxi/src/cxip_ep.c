@@ -147,13 +147,14 @@ void *cxip_rdzv_id_lookup(struct cxip_ep_obj *ep_obj, int id)
 }
 
 int cxip_ep_cmdq(struct cxip_ep_obj *ep_obj, uint32_t ctx_id, bool transmit,
-		 struct cxip_cmdq **cmdq)
+		 uint32_t tclass, struct cxip_cmdq **cmdq)
 {
 	struct cxi_cq_alloc_opts cq_opts = {};
 	struct cxip_cmdq **cmdqs;
 	ofi_atomic32_t *cmdq_refs;
 	int ret;
 	size_t size;
+	struct cxi_cp *cp = NULL;
 
 	if (transmit) {
 		cmdqs = ep_obj->txqs;
@@ -180,7 +181,18 @@ int cxip_ep_cmdq(struct cxip_ep_obj *ep_obj, uint32_t ctx_id, bool transmit,
 	/* An IDC command can use up to 4 64 byte slots. */
 	cq_opts.count = size * 4;
 	cq_opts.flags = transmit ? CXI_CQ_IS_TX : 0;
-	cq_opts.lcid = ep_obj->domain->cps[0]->lcid;
+
+	if (transmit) {
+		enum cxi_traffic_class tc = cxip_ofi_to_cxi_tc(tclass);
+
+		ret = cxip_cp_get(ep_obj->domain->lni, ep_obj->auth_key.vni,
+				  tc, &cp);
+		if (ret != FI_SUCCESS) {
+			CXIP_LOG_DBG("Failed to allocate CP: %d\n", ret);
+			return ret;
+		}
+		cq_opts.lcid = cp->lcid;
+	}
 
 	ret = cxip_cmdq_alloc(ep_obj->domain->lni, NULL, &cq_opts, cmdq);
 	if (ret != FI_SUCCESS) {
@@ -192,8 +204,9 @@ int cxip_ep_cmdq(struct cxip_ep_obj *ep_obj, uint32_t ctx_id, bool transmit,
 	cmdqs[ctx_id] = *cmdq;
 	ofi_atomic_inc32(&cmdq_refs[ctx_id]);
 
-	CXIP_LOG_DBG("Allocated %s CMDQ[%d]: %p\n",
-		     transmit ? "TX" : "RX", ctx_id, cmdqs[ctx_id]);
+	CXIP_LOG_DBG("Allocated %s CMDQ[%d]: %p CP: %u\n",
+		     transmit ? "TX" : "RX", ctx_id, cmdqs[ctx_id],
+		     cq_opts.lcid);
 
 	fastlock_release(&ep_obj->cmdq_lock);
 
@@ -581,7 +594,7 @@ static int ep_enable(struct cxip_ep_obj *ep_obj)
 	}
 
 	ret = cxip_alloc_if_domain(ep_obj->domain->lni,
-				   ep_obj->vni,
+				   ep_obj->auth_key.vni,
 				   ep_obj->src_addr.pid,
 				   &ep_obj->if_dom);
 	if (ret != FI_SUCCESS) {
@@ -596,9 +609,11 @@ static int ep_enable(struct cxip_ep_obj *ep_obj)
 	}
 
 	/* Store PID in case it was automatically assigned. */
-	CXIP_LOG_DBG("EP assigned PID: %u\n",
-		     ep_obj->if_dom->dom->pid);
 	ep_obj->src_addr.pid = ep_obj->if_dom->dom->pid;
+	CXIP_LOG_DBG("EP assigned NIC: %#x VNI: %u PID: %u\n",
+		     ep_obj->src_addr.nic,
+		     ep_obj->auth_key.vni,
+		     ep_obj->src_addr.pid);
 
 	ep_obj->enabled = true;
 
@@ -1535,6 +1550,19 @@ static int cxip_ep_txc(struct fid_ep *ep, int index, struct fi_tx_attr *attr,
 	if (!txc)
 		return -FI_ENOMEM;
 
+	if (ep_attr->tclass != FI_TC_UNSPEC) {
+		if (ep_attr->tclass >= FI_TC_LABEL &&
+		    ep_attr->tclass <= FI_TC_SCAVENGER) {
+			txc->tclass = ep_attr->tclass;
+		} else {
+			CXIP_LOG_ERROR("Invalid tclass\n");
+			return -FI_EINVAL;
+		}
+	} else {
+		/* Inherit tclass from Domain. */
+		txc->tclass = cxi_ep->ep_obj->domain->tclass;
+	}
+
 	txc->tx_id = index;
 	txc->ep_obj = cxi_ep->ep_obj;
 	txc->domain = cxi_ep->ep_obj->domain;
@@ -1744,6 +1772,7 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 	struct cxip_rxc *rxc = NULL;
 	uint32_t nic;
 	uint32_t pid;
+	uint32_t tclass;
 	int i;
 
 	if (!domain || !hints || !hints->ep_attr || !hints->tx_attr ||
@@ -1797,6 +1826,51 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 	cxi_ep->ep_obj->tgq_size = hints->rx_attr->size;
 	cxi_ep->tx_attr = *hints->tx_attr;
 	cxi_ep->rx_attr = *hints->rx_attr;
+
+	if (hints->ep_attr->auth_key_size) {
+		if (hints->ep_attr->auth_key &&
+		    (hints->ep_attr->auth_key_size ==
+		     sizeof(struct cxi_auth_key))) {
+			memcpy(&cxi_ep->ep_obj->auth_key,
+			       hints->ep_attr->auth_key,
+			       sizeof(struct cxi_auth_key));
+
+			/* All EPs that share a Domain must use the same
+			 * Service ID. VNI may vary.
+			 */
+			if (cxi_ep->ep_obj->auth_key.svc_id !=
+			    cxi_dom->auth_key.svc_id) {
+				CXIP_LOG_ERROR("Invalid svc_id: %u\n",
+					       cxi_ep->ep_obj->auth_key.svc_id);
+				ret = -FI_EINVAL;
+				goto err;
+			}
+		} else {
+			CXIP_LOG_ERROR("Invalid auth_key (%p:%lu)\n",
+				       hints->ep_attr->auth_key,
+				       hints->ep_attr->auth_key_size);
+			ret = -FI_EINVAL;
+			goto err;
+		}
+	} else {
+		/* Inherit auth_key from Domain. */
+		cxi_ep->ep_obj->auth_key = cxi_dom->auth_key;
+		CXIP_LOG_DBG("Inherited domain auth_key\n");
+	}
+
+	if (cxi_ep->tx_attr.tclass != FI_TC_UNSPEC) {
+		if (cxi_ep->tx_attr.tclass >= FI_TC_LABEL &&
+		    cxi_ep->tx_attr.tclass <= FI_TC_SCAVENGER) {
+			tclass = cxi_ep->tx_attr.tclass;
+		} else {
+			CXIP_LOG_ERROR("Invalid tclass\n");
+			ret = -FI_EINVAL;
+			goto err;
+		}
+	} else {
+		/* Inherit tclass from Domain. */
+		tclass = cxi_dom->tclass;
+	}
 
 	/* Complete EP fid initialization */
 	cxi_ep->ep.fid.fclass = fclass;
@@ -1948,6 +2022,7 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 			txc->ep_obj = cxi_ep->ep_obj;
 			txc->domain = cxi_dom;
 			txc->tx_id = 0;
+			txc->tclass = tclass;
 			cxi_ep->ep_obj->txcs[0] = txc;
 
 			cxip_domain_add_txc(txc->domain, txc);

@@ -334,13 +334,13 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 	int ret;
 	int tmp;
 
-	ret = cxip_ep_cmdq(ep_obj, 0, true, &ep_obj->ctrl_txq);
+	ret = cxip_ep_cmdq(ep_obj, 0, true, FI_TC_UNSPEC, &ep_obj->ctrl_txq);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Unable to allocate control TXQ, ret: %d\n", ret);
 		return -FI_EDOMAIN;
 	}
 
-	ret = cxip_ep_cmdq(ep_obj, 0, false, &ep_obj->ctrl_tgq);
+	ret = cxip_ep_cmdq(ep_obj, 0, false, FI_TC_UNSPEC, &ep_obj->ctrl_tgq);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Unable to allocate control TGQ, ret: %d\n", ret);
 		ret = -FI_EDOMAIN;

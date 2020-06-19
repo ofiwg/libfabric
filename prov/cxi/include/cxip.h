@@ -321,7 +321,11 @@ struct cxip_lni {
 	struct cxip_if *iface;
 	struct cxil_lni *lni;
 
-	/* Resource cache */
+	/* Communication Profiles */
+	struct cxi_cp *cps[16];
+	int n_cps;
+
+	fastlock_t lock;
 };
 
 /**
@@ -392,6 +396,9 @@ struct cxip_domain {
 	fastlock_t lock;
 	ofi_atomic32_t ref;
 
+	struct cxi_auth_key auth_key;
+	uint32_t tclass;
+
 	struct cxip_eq *eq; //unused
 	struct cxip_eq *mr_eq; //unused
 
@@ -403,10 +410,6 @@ struct cxip_domain {
 
 	/* Device partition */
 	struct cxip_lni *lni;
-
-	/* Communication Profiles */
-	struct cxi_cp *cps[16];
-	int n_cps;
 
 	/* Trigger and CT support */
 	struct cxip_cmdq *trig_cmdq;
@@ -848,6 +851,8 @@ struct cxip_txc {
 
 	struct fi_tx_attr attr;		// attributes
 	bool selective_completion;
+	uint32_t tclass;
+	struct cxi_cp *cp;
 
 	struct cxip_cmdq *tx_cmdq;	// added during cxip_txc_enable()
 
@@ -919,12 +924,13 @@ struct cxip_ep_obj {
 	size_t txq_size;
 	size_t tgq_size;
 
+	struct cxi_auth_key auth_key;
+
 	bool enabled;
 	fastlock_t lock;
 
 	struct cxip_addr src_addr;	// address of this NIC
 	fi_addr_t fi_addr;		// AV address of this EP
-	uint32_t vni;			// VNI all EP addressing
 	int rdzv_offload;
 
 	struct cxip_if_domain *if_dom;
@@ -1083,8 +1089,13 @@ struct cxip_if *cxip_if_lookup_addr(uint32_t nic_addr);
 struct cxip_if *cxip_if_lookup_name(const char *name);
 int cxip_get_if(uint32_t nic_addr, struct cxip_if **dev_if);
 void cxip_put_if(struct cxip_if *dev_if);
-int cxip_alloc_lni(struct cxip_if *iface, struct cxip_lni **if_lni);
+int cxip_alloc_lni(struct cxip_if *iface, uint32_t svc_id,
+		   struct cxip_lni **if_lni);
 void cxip_free_lni(struct cxip_lni *lni);
+const char *cxi_tc_str(enum cxi_traffic_class tc);
+enum cxi_traffic_class cxip_ofi_to_cxi_tc(uint32_t ofi_tclass);
+int cxip_cp_get(struct cxip_lni *lni, uint16_t vni, enum cxi_traffic_class tc,
+		struct cxi_cp **cp);
 int cxip_alloc_if_domain(struct cxip_lni *lni, uint32_t vni, uint32_t pid,
 			 struct cxip_if_domain **if_dom);
 void cxip_free_if_domain(struct cxip_if_domain *if_dom);
@@ -1141,7 +1152,7 @@ int cxip_rdzv_id_alloc(struct cxip_ep_obj *ep_obj, void *ctx);
 int cxip_rdzv_id_free(struct cxip_ep_obj *ep_obj, int id);
 void *cxip_rdzv_id_lookup(struct cxip_ep_obj *ep_obj, int id);
 int cxip_ep_cmdq(struct cxip_ep_obj *ep_obj, uint32_t ctx_id, bool transmit,
-		 struct cxip_cmdq **cmdq);
+		 uint32_t tclass, struct cxip_cmdq **cmdq);
 void cxip_ep_cmdq_put(struct cxip_ep_obj *ep_obj, uint32_t ctx_id,
 		      bool transmit);
 

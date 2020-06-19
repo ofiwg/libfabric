@@ -29,7 +29,6 @@ extern struct fi_ops_mr cxip_dom_mr_ops;
 int cxip_domain_enable(struct cxip_domain *dom)
 {
 	int ret = FI_SUCCESS;
-	int tmp;
 
 	fastlock_acquire(&dom->lock);
 
@@ -43,28 +42,18 @@ int cxip_domain_enable(struct cxip_domain *dom)
 		goto unlock;
 	}
 
-	ret = cxip_alloc_lni(dom->iface, &dom->lni);
+	ret = cxip_alloc_lni(dom->iface, dom->auth_key.svc_id, &dom->lni);
 	if (ret) {
 		CXIP_LOG_DBG("cxip_alloc_lni returned: %d\n", ret);
 		ret = -FI_ENODEV;
 		goto put_if;
 	}
 
-	/* TODO Temporary CP setup, needed for CMDQ allocation */
-	ret = cxil_alloc_cp(dom->lni->lni, 0, CXI_TC_LOW_LATENCY,
-			    &dom->cps[0]);
-	if (ret) {
-		CXIP_LOG_DBG("Unable to allocate CP, ret: %d\n", ret);
-		ret = -FI_ENODEV;
-		goto free_lni;
-	}
-	dom->n_cps++;
-
 	ret = cxip_iomm_init(dom);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Failed to initialize IOMM: %d\n", ret);
 		ret = -FI_EDOMAIN;
-		goto free_cp;
+		goto free_lni;
 	}
 
 	dom->enabled = true;
@@ -77,10 +66,6 @@ int cxip_domain_enable(struct cxip_domain *dom)
 
 	return FI_SUCCESS;
 
-free_cp:
-	tmp = cxil_destroy_cp(dom->cps[0]);
-	if (tmp)
-		CXIP_LOG_ERROR("Failed to destroy CP: %d\n", tmp);
 free_lni:
 	cxip_free_lni(dom->lni);
 	dom->lni = NULL;
@@ -98,8 +83,6 @@ unlock:
  */
 static void cxip_domain_disable(struct cxip_domain *dom)
 {
-	int ret;
-
 	fastlock_acquire(&dom->lock);
 
 	if (!dom->enabled)
@@ -108,10 +91,6 @@ static void cxip_domain_disable(struct cxip_domain *dom)
 	cxip_dom_cntr_disable(dom);
 
 	cxip_iomm_fini(dom);
-
-	ret = cxil_destroy_cp(dom->cps[0]);
-	if (ret)
-		CXIP_LOG_ERROR("Failed to destroy CP: %d\n", ret);
 
 	CXIP_LOG_DBG("Releasing interface, %s: %u RGID: %u\n",
 		     dom->iface->info->device_name,
@@ -729,14 +708,44 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 	ret = ofi_domain_init(&fab->util_fabric.fabric_fid, info,
 			      &cxi_domain->util_domain, context);
 	if (ret)
-		goto unlock;
+		goto free_dom;
 
 	if (!info || !info->src_addr) {
 		CXIP_LOG_ERROR("Invalid fi_info\n");
-		goto free_util_dom;
+		goto close_util_dom;
 	}
 	src_addr = (struct cxip_addr *)info->src_addr;
 	cxi_domain->nic_addr = src_addr->nic;
+
+	if (info->domain_attr->auth_key_size) {
+		if (info->domain_attr->auth_key &&
+		    (info->domain_attr->auth_key_size ==
+		     sizeof(struct cxi_auth_key))) {
+			memcpy(&cxi_domain->auth_key,
+			       info->domain_attr->auth_key,
+			       sizeof(struct cxi_auth_key));
+		} else {
+			CXIP_LOG_ERROR("Invalid auth_key\n");
+			goto close_util_dom;
+		}
+	} else {
+		/* Use default service and VNI */
+		cxi_domain->auth_key.svc_id = CXI_DEFAULT_SVC_ID;
+		cxi_domain->auth_key.vni = 10;
+	}
+
+	if (info->domain_attr->tclass != FI_TC_UNSPEC) {
+		if (info->domain_attr->tclass >= FI_TC_LABEL &&
+		    info->domain_attr->tclass <= FI_TC_SCAVENGER) {
+			cxi_domain->tclass = info->domain_attr->tclass;
+		} else {
+			CXIP_LOG_ERROR("Invalid tclass\n");
+			goto close_util_dom;
+		}
+	} else {
+		/* Use default tclass */
+		cxi_domain->tclass = FI_TC_BEST_EFFORT;
+	}
 
 	if (cxip_env.odp)
 		cxi_domain->odp = true;
@@ -759,10 +768,9 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 
 	return 0;
 
-free_util_dom:
+close_util_dom:
 	ofi_domain_close(&cxi_domain->util_domain);
-unlock:
-	fastlock_destroy(&cxi_domain->lock);
+free_dom:
 	free(cxi_domain);
 	return -FI_EINVAL;
 }

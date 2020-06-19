@@ -15,4 +15,26 @@ struct fi_cxi_dom_ops {
 		      struct timespec *ts);
 };
 
+/*
+ * CXI Authorization Key
+ */
+struct cxi_auth_key {
+	/* The CXI service assigned to the Domain and Endpoints. A CXI service
+	 * is associated with a set of local resource limits, VNIs, and Traffic
+	 * Classes.
+	 *
+	 * The svc_id used by an OFI Domain must match all Endpoints belonging
+	 * to the Domain.
+	 */
+	uint32_t svc_id;
+
+	/* The Virtual Network ID (VNI) assigned to the Endpoint. Two Endpoints
+	 * must use the same VNI in order to communicate.
+	 *
+	 * Note that while the CXI service may define one or more VNIs which a
+	 * process can access, an Endpoint is assigned to only one.
+	 */
+	uint16_t vni;
+};
+
 #endif /* _FI_CXI_EXT_H_ */

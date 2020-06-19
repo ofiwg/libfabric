@@ -93,8 +93,8 @@ A third component of Slingshot network addressing is the Virtual Network ID
 isolation between applications. A VNI defines an isolated PID space for a given
 NIC. Therefore, Endpoints must use the same VNI in order to communicate. Note
 that VNI is not a field of the CXI address, but rather is specified as part of
-the OFI Endpoint auth_key (not finalized). The combination of NIC Address, VNI,
-and PID is unique to a single OFI Endpoint within a Slingshot fabric.
+the OFI Endpoint auth_key. The combination of NIC Address, VNI, and PID is
+unique to a single OFI Endpoint within a Slingshot fabric.
 
 The NIC Address of an OFI Endpoint is inherited from the Domain. By default, a
 PID is automatically assigned to an Endpoint when it is enabled. The address of
@@ -113,8 +113,48 @@ the Endpoint is enabled.
 
 ## Authorization Keys
 
-The Endpoint authorization key format is not finalized but will include a
-16-bit VNI. See the Addresing Format section for details on the use of VNI.
+The CXI authorization key format includes a VNI and CXI service ID. VNI is a
+component of the CXI Endpoint address that provides isolation. A CXI service is
+a software container which defines a set of local CXI resources, VNIs, and
+Traffic Classes which a process can access.
+
+Generally, a parallel application should be assigned to a unique VNI on the
+fabric in order to achieve network traffic and address isolation. Typically a
+privileged entity, like a job launcher, will allocate one or more VNIs for use
+by an application.
+
+The service API is provided by libCXI. It enables a privileged entity, like an
+application launcher, to control an unprivileged process's access to NIC
+resources. Generally, a parallel application should be assigned to a unique CXI
+service in order to control access to local resources, VNIs, and Traffic Classes.
+
+An application provided authorization key is optional. If an authorization key is
+not provided by the application, a default VNI and service will be assigned.
+Isolation is not guaranteed when using a default VNI and service.
+
+When the application provides an authorization key, a default value must be set
+during Domain allocation. The default value may be overriden during Endpoint
+allocation, however, all Endpoints belonging to a Domain must use the same
+service ID. The VNI used by the Endpoints belonging to the same Domain may
+vary.
+
+The expected application launch workflow for a CXI-integrated launcher is as
+follows:
+
+1. A parallel application is launched.
+2. The launcher allocates one or more VNIs for use by the application.
+3. The launcher communicates with compute node daemons where the application
+   will be run.
+4. The launcher compute node daemon configures local CXI interfaces. libCXI is
+   used to allocate one or more services for the application. The service will
+   define the local resources, VNIs, and Traffic Classes that the application
+   may access. Service allocation policies must be defined by the launcher.
+   libCXI returns an ID to represent a service.
+5. The launcher forks application processes.
+6. The launcher provides one or more service IDs and VNI values to the
+   application processes.
+7. Application processes select from the list of available service IDs and VNIs
+   to form an authorization key to use for Endpoint allocation.
 
 ## Address Vectors
 
