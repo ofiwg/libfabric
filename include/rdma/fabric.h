@@ -36,6 +36,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <sys/types.h>
 #include <sys/uio.h>
 
@@ -716,6 +717,16 @@ struct fi_recv_context {
 	struct fid_ep		*ep;
 	void			*context;
 };
+
+/* XXX should be in rdma/providers/fi_log.h, but header file is not shipped in
+ * distro and would also need to be striped of its current requires
+ * (config.h, ...)
+ */
+void fi_log_set_stream_warn(FILE *log_stream);
+void fi_log_set_stream_trace(FILE *log_stream);
+void fi_log_set_stream_info(FILE *log_stream);
+void fi_log_set_stream_debug(FILE *log_stream);
+void fi_log_set_func(int (*log_func)(FILE *stream, const char *format, ...));
 
 #ifdef __cplusplus
 }
