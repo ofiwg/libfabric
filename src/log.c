@@ -145,6 +145,49 @@ int DEFAULT_SYMVER_PRE(fi_log_enabled)(const struct fi_provider *prov,
 }
 DEFAULT_SYMVER(fi_log_enabled_, fi_log_enabled, FABRIC_1.0);
 
+/* one stream per OFI log level */
+static FILE *fi_log_stream_warn = NULL;
+static FILE *fi_log_stream_trace = NULL;
+static FILE *fi_log_stream_info = NULL;
+static FILE *fi_log_stream_debug = NULL;
+
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+void DEFAULT_SYMVER_PRE(fi_log_set_stream_warn)(FILE *log_stream)
+{
+    fi_log_stream_warn = log_stream;
+}
+DEFAULT_SYMVER(fi_log_set_stream_warn_, fi_log_set_stream_warn, FABRIC_1.0);
+
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+void DEFAULT_SYMVER_PRE(fi_log_set_stream_trace)(FILE *log_stream)
+{
+    fi_log_stream_trace = log_stream;
+}
+DEFAULT_SYMVER(fi_log_set_stream_trace_, fi_log_set_stream_trace, FABRIC_1.0);
+
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+void DEFAULT_SYMVER_PRE(fi_log_set_stream_info)(FILE *log_stream)
+{
+    fi_log_stream_info = log_stream;
+}
+DEFAULT_SYMVER(fi_log_set_stream_info_, fi_log_set_stream_info, FABRIC_1.0);
+
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+void DEFAULT_SYMVER_PRE(fi_log_set_stream_debug)(FILE *log_stream)
+{
+    fi_log_stream_debug = log_stream;
+}
+DEFAULT_SYMVER(fi_log_set_stream_debug_, fi_log_set_stream_debug, FABRIC_1.0);
+
+static int (*fi_log_func)(FILE *stream, const char *format, ...) = fprintf;
+
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+void DEFAULT_SYMVER_PRE(fi_log_set_func)(int (*log_func)(FILE *stream, const char *format, ...))
+{
+    fi_log_func = log_func;
+}
+DEFAULT_SYMVER(fi_log_set_func_, fi_log_set_func, FABRIC_1.0);
+
 __attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 void DEFAULT_SYMVER_PRE(fi_log)(const struct fi_provider *prov, enum fi_log_level level,
 		enum fi_log_subsys subsys, const char *func, int line,
@@ -152,6 +195,7 @@ void DEFAULT_SYMVER_PRE(fi_log)(const struct fi_provider *prov, enum fi_log_leve
 {
 	char buf[1024];
 	int size;
+	FILE *stream = stderr;
 
 	va_list vargs;
 
@@ -163,6 +207,20 @@ void DEFAULT_SYMVER_PRE(fi_log)(const struct fi_provider *prov, enum fi_log_leve
 	vsnprintf(buf + size, sizeof(buf) - size, fmt, vargs);
 	va_end(vargs);
 
-	fprintf(stderr, "%s", buf);
+	switch (level) {
+	case FI_LOG_WARN:
+		stream = fi_log_stream_warn != NULL ? fi_log_stream_warn : stderr;
+		break;
+	case FI_LOG_TRACE:
+		stream = fi_log_stream_trace != NULL ? fi_log_stream_trace : stderr;
+		break;
+	case FI_LOG_INFO:
+		stream = fi_log_stream_info != NULL ? fi_log_stream_info : stderr;
+		break;
+	case FI_LOG_DEBUG:
+		stream = fi_log_stream_debug != NULL ? fi_log_stream_debug : stderr;
+		break;
+	}
+	fi_log_func(stream , "%s", buf);
 }
 DEFAULT_SYMVER(fi_log_, fi_log, FABRIC_1.0);
