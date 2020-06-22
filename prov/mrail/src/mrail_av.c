@@ -195,6 +195,7 @@ int mrail_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	util_attr.addrlen = sizeof(struct mrail_peer_info);
 	/* We just need a table to store the mapping */
 	util_attr.flags = 0;
+	util_attr.context_len = 0;
 
 	if (attr->type == FI_AV_UNSPEC)
 		attr->type = FI_AV_TABLE;

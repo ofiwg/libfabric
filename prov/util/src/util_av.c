@@ -244,7 +244,7 @@ void *ofi_av_get_addr(struct util_av *av, fi_addr_t fi_addr)
 	struct util_av_entry *entry;
 
 	entry = ofi_bufpool_get_ibuf(av->av_entry_pool, fi_addr);
-	return entry->addr;
+	return entry->data;
 }
 
 int ofi_verify_av_insert(struct util_av *av, uint64_t flags)
@@ -281,9 +281,9 @@ int ofi_av_insert_addr(struct util_av *av, const void *addr, fi_addr_t *fi_addr)
 			return -FI_ENOMEM;
 		if (fi_addr)
 			*fi_addr = ofi_buf_index(entry);
-		memcpy(entry->addr, addr, av->addrlen);
+		memcpy(entry->data, addr, av->addrlen);
 		ofi_atomic_initialize32(&entry->use_cnt, 1);
-		HASH_ADD(hh, av->hash, addr, av->addrlen, entry);
+		HASH_ADD(hh, av->hash, data, av->addrlen, entry);
 	}
 	return 0;
 }
@@ -294,7 +294,7 @@ int ofi_av_elements_iter(struct util_av *av, ofi_av_apply_func apply, void *arg)
 	int ret;
 
 	HASH_ITER(hh, av->hash, av_entry, av_entry_tmp) {
-		ret = apply(av, av_entry->addr,
+		ret = apply(av, av_entry->data,
 			    ofi_buf_index(av_entry), arg);
 		if (OFI_UNLIKELY(ret))
 			return ret;
@@ -423,8 +423,11 @@ static int util_av_init(struct util_av *av, const struct fi_av_attr *attr,
 {
 	int ret = 0;
 	size_t max_count;
+
+	assert(util_attr->addrlen % 8 == 0);
 	struct ofi_bufpool_attr pool_attr = {
 		.size		= util_attr->addrlen +
+				  util_attr->context_len +
 				  sizeof(struct util_av_entry),
 		.alignment	= 16,
 		.max_cnt	= 0,
@@ -946,6 +949,7 @@ int ofi_ip_av_create_flags(struct fid_domain *domain_fid, struct fi_av_attr *att
 		util_attr.addrlen = sizeof(struct sockaddr_in6);
 
 	util_attr.flags = flags;
+	util_attr.context_len = 0;
 
 	if (attr->type == FI_AV_UNSPEC)
 		attr->type = FI_AV_MAP;

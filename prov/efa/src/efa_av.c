@@ -708,6 +708,7 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 			attr->count = MAX(attr->count, universe_size);
 
 		util_attr.addrlen = EFA_EP_ADDR_LEN;
+		util_attr.context_len = 0;
 		util_attr.flags = 0;
 		ret = ofi_av_init(&efa_domain->util_domain, attr, &util_attr,
 					&av->util_av, context);
