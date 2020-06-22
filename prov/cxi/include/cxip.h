@@ -468,6 +468,7 @@ struct cxip_req_recv {
 	/* Receive parameters */
 	struct dlist_entry rxc_entry;
 	struct cxip_rxc *rxc;		// receive context
+	struct cxip_cntr *cntr;
 	void *recv_buf;			// local receive buffer
 	struct cxip_md *recv_md;	// local receive MD
 	uint32_t ulen;			// User buffer length
@@ -1272,6 +1273,11 @@ ssize_t cxip_send_common(struct cxip_txc *txc, const void *buf, size_t len,
 			bool tagged, bool triggered, uint64_t trig_thresh,
 			struct cxip_cntr *trig_cntr,
 			struct cxip_cntr *comp_cntr);
+
+ssize_t cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len,
+			 void *desc, fi_addr_t src_addr, uint64_t tag,
+			 uint64_t ignore, void *context, uint64_t flags,
+			 bool tagged, struct cxip_cntr *comp_cntr);
 
 ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 			const void *buf, size_t len, void *desc,

@@ -404,6 +404,31 @@ static int cxip_dom_dwq_op_cntr(struct cxip_domain *dom,
 	return FI_SUCCESS;
 }
 
+static int cxip_dom_dwq_op_recv(struct cxip_domain *dom, struct fi_op_msg *msg,
+				struct cxip_cntr *trig_cntr,
+				struct cxip_cntr *comp_cntr,
+				uint64_t trig_thresh)
+{
+	struct cxip_rxc *rxc;
+	void *buf;
+	size_t len;
+	int ret;
+
+	/* Non-zero thresholds for triggered receives are not supported. */
+	if (!msg || msg->msg.iov_count > 1 || trig_thresh)
+		return -FI_EINVAL;
+
+	ret = cxip_fid_to_rxc(msg->ep, &rxc);
+	if (ret)
+		return ret;
+
+	buf = msg->msg.iov_count ? msg->msg.msg_iov[0].iov_base : NULL;
+	len = msg->msg.iov_count ? msg->msg.msg_iov[0].iov_len : 0;
+
+	return cxip_recv_common(rxc, buf, len, NULL, msg->msg.addr, 0, 0,
+				msg->msg.context, msg->flags, false, comp_cntr);
+}
+
 /* Must hold domain lock. */
 static void cxip_dom_progress_all_cqs(struct cxip_domain *dom)
 {
@@ -464,6 +489,11 @@ static int cxip_dom_control(struct fid *fid, int command, void *arg)
 			return cxip_dom_dwq_op_tsend(dom, work->op.tagged,
 						     trig_cntr, comp_cntr,
 						     work->threshold);
+
+		case FI_OP_RECV:
+			return cxip_dom_dwq_op_recv(dom, work->op.msg,
+						    trig_cntr, comp_cntr,
+						    work->threshold);
 
 		case FI_OP_READ:
 		case FI_OP_WRITE:
