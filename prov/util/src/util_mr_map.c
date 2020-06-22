@@ -243,6 +243,13 @@ int ofi_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	mr->domain = domain;
 	mr->flags = flags;
 
+	if (domain->mr_mode & FI_MR_HMEM) {
+		mr->iface = attr->iface;
+		mr->device = attr->device.reserved;
+	} else {
+		mr->iface = FI_HMEM_SYSTEM;
+	}
+
 	ret = ofi_mr_map_insert(&domain->mr_map, attr, &key, mr);
 	if (ret) {
 		free(mr);
