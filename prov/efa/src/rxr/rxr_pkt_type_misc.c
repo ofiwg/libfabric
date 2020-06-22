@@ -386,8 +386,16 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 			assert(tx_entry && tx_entry->cq_entry.flags & FI_READ);
 			rxr_cq_write_tx_completion(ep, tx_entry);
 		} else {
-			inject = (read_entry->lower_ep_type == SHM_EP);
 			rx_entry = ofi_bufpool_get_ibuf(ep->rx_entry_pool, read_entry->x_entry_id);
+			if (rx_entry->op == ofi_op_msg || rx_entry->op == ofi_op_tagged) {
+				rxr_cq_write_rx_completion(ep, rx_entry);
+			} else {
+				assert(rx_entry->op == ofi_op_write);
+				if (rx_entry->cq_entry.flags & FI_REMOTE_CQ_DATA)
+					rxr_cq_write_rx_completion(ep, rx_entry);
+			}
+
+			inject = (read_entry->lower_ep_type == SHM_EP);
 			ret = rxr_pkt_post_ctrl_or_queue(ep, RXR_RX_ENTRY, rx_entry, RXR_EOR_PKT, inject);
 			if (OFI_UNLIKELY(ret)) {
 				if (rxr_cq_handle_rx_error(ep, rx_entry, ret))
@@ -395,20 +403,11 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 				rxr_release_rx_entry(ep, rx_entry);
 			}
 
-			if (inject) {
-				/* inject will not generate a completion, so we write rx completion here,
-				 * otherwise, rx completion is write in rxr_pkt_handle_eor_send_completion
-				 */
-				if (rx_entry->op == ofi_op_msg || rx_entry->op == ofi_op_tagged) {
-					rxr_cq_write_rx_completion(ep, rx_entry);
-				} else {
-					assert(rx_entry->op == ofi_op_write);
-					if (rx_entry->cq_entry.flags & FI_REMOTE_CQ_DATA)
-						rxr_cq_write_rx_completion(ep, rx_entry);
-				}
-
+			/* inject will not generate a completion, so we release rx_entry here,
+			 * otherwise, rx_entry was released in rxr_pkt_handle_eor_send_completion
+			 */
+			if (inject)
 				rxr_release_rx_entry(ep, rx_entry);
-			}
 		}
 
 		rxr_read_release_entry(ep, read_entry);
@@ -471,22 +470,10 @@ int rxr_pkt_init_eor(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry, struct rx
 void rxr_pkt_handle_eor_send_completion(struct rxr_ep *ep,
 					struct rxr_pkt_entry *pkt_entry)
 {
-	struct rxr_eor_hdr *eor_hdr;
 	struct rxr_rx_entry *rx_entry;
 
-	eor_hdr = (struct rxr_eor_hdr *)pkt_entry->pkt;
-
-	rx_entry = ofi_bufpool_get_ibuf(ep->rx_entry_pool, eor_hdr->rx_id);
-	assert(rx_entry && rx_entry->rx_id == eor_hdr->rx_id);
-
-	if (rx_entry->op == ofi_op_msg || rx_entry->op == ofi_op_tagged) {
-		rxr_cq_write_rx_completion(ep, rx_entry);
-	} else {
-		assert(rx_entry->op == ofi_op_write);
-		if (rx_entry->cq_entry.flags & FI_REMOTE_CQ_DATA)
-			rxr_cq_write_rx_completion(ep, rx_entry);
-	}
-
+	rx_entry = pkt_entry->x_entry;
+	assert(rx_entry && rx_entry->rx_id == rxr_get_eor_hdr(pkt_entry->pkt)->rx_id);
 	rxr_release_rx_entry(ep, rx_entry);
 }
 

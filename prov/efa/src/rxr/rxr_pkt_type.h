@@ -341,6 +341,12 @@ struct rxr_eor_hdr {
 static_assert(sizeof(struct rxr_eor_hdr) == 12, "rxr_eor_hdr check");
 #endif
 
+static inline
+struct rxr_eor_hdr *rxr_get_eor_hdr(void *pkt)
+{
+	return (struct rxr_eor_hdr *)pkt;
+}
+
 int rxr_pkt_init_eor(struct rxr_ep *ep,
 		     struct rxr_rx_entry *rx_entry,
 		     struct rxr_pkt_entry *pkt_entry);
