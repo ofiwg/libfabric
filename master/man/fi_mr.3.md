@@ -663,6 +663,11 @@ are unable to manage their own network buffers.  A registration cache avoids
 the overhead of registering and unregistering a data buffer with each
 transfer.
 
+If a registration cache is going to be used for host and device memory, the
+device must support unified virtual addressing. If the device does not
+support unified virtual addressing, either an additional registration cache
+is required to track this device memory, or device memory cannot be cached.
+
 As a general rule, if hardware requires the FI_MR_LOCAL mode bit described
 above, but this is not supported by the application, a memory registration
 cache _may_ be in use.  The following environment variables may be used to
