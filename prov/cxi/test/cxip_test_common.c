@@ -41,6 +41,9 @@ void cxit_create_fabric_info(void)
 {
 	int ret;
 
+	if (cxit_fi)
+		return;
+
 	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
 			 cxit_node, cxit_service, cxit_flags, cxit_fi_hints,
 			 &cxit_fi);
@@ -59,6 +62,9 @@ void cxit_create_fabric(void)
 {
 	int ret;
 
+	if (cxit_fabric)
+		return;
+
 	ret = fi_fabric(cxit_fi->fabric_attr, &cxit_fabric, NULL);
 	cr_assert(ret == FI_SUCCESS, "fi_fabric");
 }
@@ -75,6 +81,9 @@ void cxit_destroy_fabric(void)
 void cxit_create_domain(void)
 {
 	int ret;
+
+	if (cxit_domain)
+		return;
 
 	ret = fi_domain(cxit_fabric, cxit_fi, &cxit_domain, NULL);
 	cr_assert(ret == FI_SUCCESS, "fi_domain");
@@ -286,31 +295,43 @@ static void cxit_init(void)
 {
 	struct slist_entry *entry, *prev __attribute__ ((unused));
 	int ret;
+	struct fi_info *hints = cxit_allocinfo();
+	struct fi_info *info;
 
 	/* Force provider init */
 	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
-			 cxit_node, cxit_service, cxit_flags, cxit_fi_hints,
-			 &cxit_fi);
+			 cxit_node, cxit_service, cxit_flags, hints,
+			 &info);
 	cr_assert(ret == FI_SUCCESS);
-	fi_freeinfo(cxit_fi);
 
 	slist_foreach(&cxip_if_list, entry, prev) {
 		cxit_n_ifs++;
 	}
+
+	fi_freeinfo(info);
+	fi_freeinfo(hints);
+}
+
+struct fi_info *cxit_allocinfo(void)
+{
+	struct fi_info *info;
+
+	info = fi_allocinfo();
+	cr_assert(info, "fi_allocinfo");
+
+	/* Always select CXI */
+	info->fabric_attr->prov_name = strdup(cxip_prov_name);
+	info->domain_attr->mr_mode = FI_MR_ENDPOINT;
+
+	return info;
 }
 
 void cxit_setup_getinfo(void)
 {
 	cxit_init();
 
-	if (!cxit_fi_hints) {
-		cxit_fi_hints = fi_allocinfo();
-		cr_assert(cxit_fi_hints, "fi_allocinfo");
-
-		/* Always select CXI */
-		cxit_fi_hints->fabric_attr->prov_name = strdup(cxip_prov_name);
-		cxit_fi_hints->domain_attr->mr_mode = FI_MR_ENDPOINT;
-	}
+	if (!cxit_fi_hints)
+		cxit_fi_hints = cxit_allocinfo();
 }
 
 void cxit_teardown_getinfo(void)

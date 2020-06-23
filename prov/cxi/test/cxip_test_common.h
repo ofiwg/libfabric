@@ -57,6 +57,7 @@ void cxit_create_av(void);
 void cxit_destroy_av(void);
 void cxit_bind_av(void);
 
+struct fi_info *cxit_allocinfo(void);
 void cxit_setup_getinfo(void);
 void cxit_teardown_getinfo(void);
 void cxit_setup_fabric(void);

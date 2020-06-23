@@ -991,3 +991,138 @@ Test(ep, srx_ctx)
 	ret = fi_close(&srx->fid);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_close srx_ep. %d", ret);
 }
+
+TestSuite(ep_init, .timeout = CXIT_DEFAULT_TIMEOUT);
+
+Test(ep_init, auth_key)
+{
+	int ret;
+	struct cxi_auth_key auth_key = {
+		.svc_id = CXI_DEFAULT_SVC_ID,
+		.vni = 100,
+	};
+
+	/* Create fabric */
+	cxit_setup_domain();
+
+	/* Try invalid auth key */
+	cxit_fi->domain_attr->auth_key_size = 12345;
+
+	ret = fi_domain(cxit_fabric, cxit_fi, &cxit_domain, NULL);
+	cr_assert_eq(ret, -FI_EINVAL);
+
+	cxit_fi->domain_attr->auth_key_size = sizeof(auth_key);
+
+	ret = fi_domain(cxit_fabric, cxit_fi, &cxit_domain, NULL);
+	cr_assert_eq(ret, -FI_EINVAL);
+
+	/* Set custom auth key in Domain */
+	cxit_fi->domain_attr->auth_key = mem_dup(&auth_key, sizeof(auth_key));
+	cxit_fi->domain_attr->auth_key_size = sizeof(auth_key);
+
+	/* Create enabled Domain/EP */
+	cxit_setup_rma();
+
+	cxit_teardown_rma();
+
+	/*---*/
+
+	cxit_setup_domain();
+	cxit_create_domain();
+
+	/* Try invalid auth key */
+	cxit_fi->ep_attr->auth_key_size = 12345;
+
+	ret = fi_endpoint(cxit_domain, cxit_fi, &cxit_ep, NULL);
+	cr_assert_eq(ret, -FI_ENOPROTOOPT); /* inconsistent error */
+
+	cxit_fi->ep_attr->auth_key_size = sizeof(auth_key);
+
+	ret = fi_endpoint(cxit_domain, cxit_fi, &cxit_ep, NULL);
+	cr_assert_eq(ret, -FI_EINVAL);
+
+	/* Set custom auth key in EP */
+	auth_key.vni = 200;
+	cxit_fi->ep_attr->auth_key = mem_dup(&auth_key, sizeof(auth_key));
+	cxit_fi->ep_attr->auth_key_size = sizeof(auth_key);
+
+	/* Create enabled Domain/EP */
+	cxit_setup_rma();
+
+	cxit_teardown_rma();
+
+	/*---*/
+
+	cxit_setup_domain();
+
+	/* Set custom auth key in Domain */
+	auth_key.svc_id = CXI_DEFAULT_SVC_ID;
+	auth_key.vni = 300;
+	cxit_fi->domain_attr->auth_key = mem_dup(&auth_key, sizeof(auth_key));
+	cxit_fi->domain_attr->auth_key_size = sizeof(auth_key);
+
+	cxit_create_domain();
+
+	/* Try mis-matched svc_id */
+	auth_key.svc_id = 10;
+	auth_key.vni = 301;
+	cxit_fi->ep_attr->auth_key = mem_dup(&auth_key, sizeof(auth_key));
+	cxit_fi->ep_attr->auth_key_size = sizeof(auth_key);
+
+	ret = fi_endpoint(cxit_domain, cxit_fi, &cxit_ep, NULL);
+	cr_assert_eq(ret, -FI_EINVAL);
+
+	free(cxit_fi->ep_attr->auth_key);
+
+	/* override VNI */
+	auth_key.svc_id = CXI_DEFAULT_SVC_ID;
+	auth_key.vni = 302;
+	cxit_fi->ep_attr->auth_key = mem_dup(&auth_key, sizeof(auth_key));
+	cxit_fi->ep_attr->auth_key_size = sizeof(auth_key);
+
+	/* Create enabled Domain/EP */
+	cxit_setup_rma();
+
+	cxit_teardown_rma();
+}
+
+Test(ep_init, tclass)
+{
+	int ret;
+
+	/* Create fabric */
+	cxit_setup_domain();
+
+	/* Try invalid auth key */
+	cxit_fi->domain_attr->tclass = FI_TC_DSCP;
+
+	ret = fi_domain(cxit_fabric, cxit_fi, &cxit_domain, NULL);
+	cr_assert_eq(ret, -FI_EINVAL, "ret is: %d\n", ret);
+
+	/* Set custom TC in Domain */
+	cxit_fi->domain_attr->tclass = FI_TC_LOW_LATENCY;
+
+	/* Create enabled Domain/EP */
+	cxit_setup_rma();
+
+	cxit_teardown_rma();
+
+	/*---*/
+
+	cxit_setup_domain();
+	cxit_create_domain();
+
+	/* Try invalid auth key */
+	cxit_fi->tx_attr->tclass = FI_TC_DSCP;
+
+	ret = fi_endpoint(cxit_domain, cxit_fi, &cxit_ep, NULL);
+	cr_assert_eq(ret, -FI_EINVAL, "ret is: %d\n", ret);
+
+	/* Set custom TC in EP */
+	cxit_fi->tx_attr->tclass = FI_TC_DEDICATED_ACCESS;
+
+	/* Create enabled Domain/EP */
+	cxit_setup_rma();
+
+	cxit_teardown_rma();
+}
