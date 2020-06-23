@@ -235,7 +235,7 @@ struct smr_ep {
 static inline int smr_mmap_name(char *shm_name, const char *ep_name,
 				uint64_t msg_id)
 {
-	return snprintf(shm_name, NAME_MAX - 1, "%s_%ld",
+	return snprintf(shm_name, SMR_NAME_MAX - 1, "%s_%ld",
 			ep_name, msg_id);
 }
 

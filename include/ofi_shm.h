@@ -162,8 +162,10 @@ struct smr_cmd {
 #define SMR_COMP_INJECT_SIZE	(SMR_INJECT_SIZE / 2)
 #define SMR_SAR_SIZE		16384
 
+#define SMR_NAME_MAX		256
+
 struct smr_addr {
-	char		name[NAME_MAX];
+	char		name[SMR_NAME_MAX];
 	fi_addr_t	addr;
 };
 
@@ -178,7 +180,7 @@ extern pthread_mutex_t ep_list_lock;
 struct smr_region;
 
 struct smr_ep_name {
-	char name[NAME_MAX];
+	char name[SMR_NAME_MAX];
 	struct smr_region *region;
 	struct dlist_entry entry;
 };

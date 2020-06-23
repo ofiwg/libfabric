@@ -618,16 +618,16 @@ static int smr_endpoint_name(char *name, char *addr, size_t addrlen,
 			     int dom_idx, int ep_idx)
 {
 	const char *start;
-	memset(name, 0, NAME_MAX);
-	if (!addr || addrlen > NAME_MAX)
+	memset(name, 0, SMR_NAME_MAX);
+	if (!addr || addrlen > SMR_NAME_MAX)
 		return -FI_EINVAL;
 
 	start = smr_no_prefix((const char *) addr);
 	if (strstr(addr, SMR_PREFIX) || dom_idx || ep_idx)
-		snprintf(name, NAME_MAX - 1, "%s:%d:%d:%d", start, getuid(), dom_idx,
-			 ep_idx);
+		snprintf(name, SMR_NAME_MAX - 1, "%s:%d:%d:%d", start, getuid(),
+			 dom_idx, ep_idx);
 	else
-		snprintf(name, NAME_MAX - 1, "%s", start);
+		snprintf(name, SMR_NAME_MAX - 1, "%s", start);
 
 	return 0;
 }
@@ -638,7 +638,7 @@ int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	struct smr_ep *ep;
 	struct smr_domain *smr_domain;
 	int ret, ep_idx;
-	char name[NAME_MAX];
+	char name[SMR_NAME_MAX];
 
 	ep = calloc(1, sizeof(*ep));
 	if (!ep)
@@ -654,7 +654,7 @@ int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		goto err2;
 
-	ret = smr_setname(&ep->util_ep.ep_fid.fid, name, NAME_MAX);
+	ret = smr_setname(&ep->util_ep.ep_fid.fid, name, SMR_NAME_MAX);
 	if (ret)
 		goto err2;
 

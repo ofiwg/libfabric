@@ -51,21 +51,21 @@ static void smr_init_env(void)
 static void smr_resolve_addr(const char *node, const char *service,
 			     char **addr, size_t *addrlen)
 {
-	char temp_name[NAME_MAX];
+	char temp_name[SMR_NAME_MAX];
 
 	if (service) {
 		if (node)
-			snprintf(temp_name, NAME_MAX - 1, "%s%s:%s",
+			snprintf(temp_name, SMR_NAME_MAX - 1, "%s%s:%s",
 				 SMR_PREFIX_NS, node, service);
 		else
-			snprintf(temp_name, NAME_MAX - 1, "%s%s",
+			snprintf(temp_name, SMR_NAME_MAX - 1, "%s%s",
 				 SMR_PREFIX_NS, service);
 	} else {
 		if (node)
-			snprintf(temp_name, NAME_MAX - 1, "%s%s",
+			snprintf(temp_name, SMR_NAME_MAX - 1, "%s%s",
 				 SMR_PREFIX, node);
 		else
-			snprintf(temp_name, NAME_MAX - 1, "%s%d",
+			snprintf(temp_name, SMR_NAME_MAX - 1, "%s%d",
 				 SMR_PREFIX, getpid());
 	}
 
