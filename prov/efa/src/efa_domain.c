@@ -166,6 +166,9 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	const struct fi_info *fi;
 	size_t qp_table_size;
 	int ret;
+	struct ofi_mem_monitor *memory_monitors[OFI_HMEM_MAX] = {
+		[FI_HMEM_SYSTEM] = uffd_monitor,
+	};
 
 	fi = efa_get_efa_info(info->domain_attr->name);
 	if (!fi)
@@ -239,7 +242,7 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		domain->cache.entry_data_size = sizeof(struct efa_mr);
 		domain->cache.add_region = efa_mr_cache_entry_reg;
 		domain->cache.delete_region = efa_mr_cache_entry_dereg;
-		ret = ofi_mr_cache_init(&domain->util_domain, uffd_monitor,
+		ret = ofi_mr_cache_init(&domain->util_domain, memory_monitors,
 					&domain->cache);
 		if (!ret) {
 			domain->util_domain.domain_fid.mr = &efa_domain_mr_cache_ops;

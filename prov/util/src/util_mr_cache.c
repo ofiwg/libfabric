@@ -3,6 +3,7 @@
  * Copyright (c) 2017-2019 Intel Corporation, Inc.  All rights reserved.
  * Copyright (c) 2019 Amazon.com, Inc. or its affiliates. All rights reserved.
  * Copyright (c) 2020 Cisco Systems, Inc. All rights reserved.
+ * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -229,6 +230,9 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct ofi_mr_info *info,
 {
 	struct ofi_mr_entry *cur;
 	int ret;
+	struct ofi_mem_monitor *monitor = cache->monitors[info->iface];
+
+	assert(monitor);
 
 	FI_DBG(cache->domain->prov, FI_LOG_MR, "create %p (len: %zu)\n",
 	       info->iov.iov_base, info->iov.iov_len);
@@ -265,7 +269,7 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct ofi_mr_info *info,
 		cache->cached_cnt++;
 		cache->cached_size += info->iov.iov_len;
 
-		ret = ofi_monitor_subscribe(cache->monitor, info->iov.iov_base,
+		ret = ofi_monitor_subscribe(monitor, info->iov.iov_base,
 					    info->iov.iov_len);
 		if (ret) {
 			util_mr_uncache_entry_storage(cache, *entry);
@@ -290,12 +294,21 @@ int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *att
 {
 	struct ofi_mr_info info;
 	int ret;
+	struct ofi_mem_monitor *monitor = cache->monitors[attr->iface];
+
+	if (!monitor) {
+		FI_WARN(&core_prov, FI_LOG_MR,
+			"MR cache disabled for %s memory\n",
+			fi_tostr(&attr->iface, FI_TYPE_HMEM_IFACE));
+		return -FI_ENOSYS;
+	}
 
 	assert(attr->iov_count == 1);
 	FI_DBG(cache->domain->prov, FI_LOG_MR, "search %p (len: %zu)\n",
 	       attr->mr_iov->iov_base, attr->mr_iov->iov_len);
 
 	info.iov = *attr->mr_iov;
+	info.iface = attr->iface;
 
 	do {
 		pthread_mutex_lock(&mm_lock);
@@ -423,7 +436,7 @@ void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache)
 		;
 
 	pthread_mutex_destroy(&cache->lock);
-	ofi_monitor_del_cache(cache);
+	ofi_monitors_del_cache(cache);
 	cache->storage.destroy(&cache->storage);
 	ofi_atomic_dec32(&cache->domain->ref);
 	ofi_bufpool_destroy(cache->entry_pool);
@@ -519,8 +532,9 @@ static int ofi_mr_cache_init_storage(struct ofi_mr_cache *cache)
 	return ret;
 }
 
+/* Monitors array must be of size OFI_HMEM_MAX. */
 int ofi_mr_cache_init(struct util_domain *domain,
-		      struct ofi_mem_monitor *monitor,
+		      struct ofi_mem_monitor **monitors,
 		      struct ofi_mr_cache *cache)
 {
 	int ret;
@@ -547,9 +561,9 @@ int ofi_mr_cache_init(struct util_domain *domain,
 	if (ret)
 		goto dec;
 
-	ret = ofi_monitor_add_cache(monitor, cache);
+	ret = ofi_monitors_add_cache(monitors, cache);
 	if (ret)
-		goto destroy;
+		goto del;
 
 	ret = ofi_bufpool_create(&cache->entry_pool,
 				 sizeof(struct ofi_mr_entry) +
@@ -560,8 +574,7 @@ int ofi_mr_cache_init(struct util_domain *domain,
 
 	return 0;
 del:
-	ofi_monitor_del_cache(cache);
-destroy:
+	ofi_monitors_del_cache(cache);
 	cache->storage.destroy(&cache->storage);
 dec:
 	ofi_atomic_dec32(&cache->domain->ref);

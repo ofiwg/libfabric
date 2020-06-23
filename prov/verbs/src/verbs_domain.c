@@ -278,6 +278,9 @@ static int
 vrb_domain(struct fid_fabric *fabric, struct fi_info *info,
 	      struct fid_domain **domain, void *context)
 {
+	struct ofi_mem_monitor *memory_monitors[OFI_HMEM_MAX] = {
+		[FI_HMEM_SYSTEM] = default_monitor,
+	};
 	struct vrb_domain *_domain;
 	int ret;
 	struct vrb_fabric *fab =
@@ -326,7 +329,7 @@ vrb_domain(struct fid_fabric *fabric, struct fi_info *info,
 	_domain->cache.entry_data_size = sizeof(struct vrb_mem_desc);
 	_domain->cache.add_region = vrb_mr_cache_add_region;
 	_domain->cache.delete_region = vrb_mr_cache_delete_region;
-	ret = ofi_mr_cache_init(&_domain->util_domain, default_monitor,
+	ret = ofi_mr_cache_init(&_domain->util_domain, memory_monitors,
 				&_domain->cache);
 	if (!ret)
 		_domain->util_domain.domain_fid.mr = &vrb_mr_cache_ops;

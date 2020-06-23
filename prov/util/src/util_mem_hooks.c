@@ -42,9 +42,15 @@
 
 #include <ofi_mr.h>
 
+static int ofi_memhooks_start(struct ofi_mem_monitor *monitor);
+static void ofi_memhooks_stop(struct ofi_mem_monitor *monitor);
+
 struct ofi_memhooks memhooks = {
+	.monitor.iface = FI_HMEM_SYSTEM,
 	.monitor.init = ofi_monitor_init,
-	.monitor.cleanup = ofi_monitor_cleanup
+	.monitor.cleanup = ofi_monitor_cleanup,
+	.monitor.start = ofi_memhooks_start,
+	.monitor.stop = ofi_memhooks_stop,
 };
 struct ofi_mem_monitor *memhooks_monitor = &memhooks.monitor;
 
@@ -472,7 +478,7 @@ static void ofi_memhooks_unsubscribe(struct ofi_mem_monitor *monitor,
 	/* no-op */
 }
 
-int ofi_memhooks_start(void)
+static int ofi_memhooks_start(struct ofi_mem_monitor *monitor)
 {
 	int i, ret;
 
@@ -553,7 +559,7 @@ int ofi_memhooks_start(void)
 	return 0;
 }
 
-void ofi_memhooks_stop(void)
+static void ofi_memhooks_stop(struct ofi_mem_monitor *monitor)
 {
 	ofi_restore_intercepts();
 	memhooks_monitor->subscribe = NULL;
@@ -562,12 +568,12 @@ void ofi_memhooks_stop(void)
 
 #else
 
-int ofi_memhooks_start(void)
+static int ofi_memhooks_start(struct ofi_mem_monitor *monitor)
 {
 	return -FI_ENOSYS;
 }
 
-void ofi_memhooks_stop(void)
+static void ofi_memhooks_stop(struct ofi_mem_monitor *monitor)
 {
 }
 
