@@ -423,10 +423,14 @@ static int util_av_init(struct util_av *av, const struct fi_av_attr *attr,
 {
 	int ret = 0;
 	size_t max_count;
+	size_t offset;
 
-	assert(util_attr->addrlen % 8 == 0);
+	/* offset calculated on a 8-byte boundary */
+	offset = util_attr->addrlen % 8;
+	if (offset != 0)
+		offset = 8 - offset;
 	struct ofi_bufpool_attr pool_attr = {
-		.size		= util_attr->addrlen +
+		.size		= util_attr->addrlen + offset +
 				  util_attr->context_len +
 				  sizeof(struct util_av_entry),
 		.alignment	= 16,
@@ -449,6 +453,7 @@ static int util_av_init(struct util_av *av, const struct fi_av_attr *attr,
 	FI_INFO(av->prov, FI_LOG_AV, "AV size %zu\n", av->count);
 
 	av->addrlen = util_attr->addrlen;
+	av->context_offset = offset + av->addrlen;
 	av->flags = util_attr->flags | attr->flags;
 	av->hash = NULL;
 

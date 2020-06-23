@@ -707,6 +707,11 @@ struct util_av {
 	uint64_t		flags;
 	size_t			count;
 	size_t			addrlen;
+	/*
+	 * context_offset is addrlen + offset (required for alignment),
+	 * if addrlen is a multiple of 8 bytes offset will be 0.
+	 */
+	size_t			context_offset;
 	struct dlist_entry	ep_list;
 	fastlock_t		ep_list_lock;
 };
