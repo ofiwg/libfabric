@@ -4,7 +4,7 @@
  * Copyright (c) 2014 Intel Corporation, Inc. All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  * Copyright (c) 2017 DataDirect Networks, Inc. All rights reserved.
- * Copyright (c) 2018,2020 Cray Inc. All rights reserved.
+ * Copyright (c) 2018-2020 Cray Inc. All rights reserved.
  */
 
 #ifndef _CXIP_PROV_H_
@@ -133,7 +133,6 @@
 #define CXIP_CNTR_SUCCESS_MAX ((1ULL << C_CT_SUCCESS_BITS) - 1)
 #define CXIP_CNTR_FAILURE_MAX ((1ULL << C_CT_FAILURE_BITS) - 1)
 
-static const char cxip_dom_fmt[] = "cxi%d";
 extern char cxip_prov_name[];
 extern struct fi_provider cxip_prov;
 extern struct util_prov cxip_util_prov;
@@ -166,7 +165,7 @@ struct cxip_environment {
 
 extern struct cxip_environment cxip_env;
 
-/**
+/*
  * The CXI Provider Address format.
  *
  * A Cassini NIC Address and PID identify a libfabric Endpoint.  Cassini
@@ -200,7 +199,8 @@ struct cxip_addr {
 #define CXIP_AV_ADDR_RXC(av, fi_addr) \
 	(av->rxc_bits ? ((uint64_t)fi_addr >> (64 - av->rxc_bits)) : 0)
 
-/* A PID contains "pid_granule" logical endpoints. The PID granule is set per
+/*
+ * A PID contains "pid_granule" logical endpoints. The PID granule is set per
  * device and can be found in libCXI devinfo. The default pid_granule is 256.
  * The default maximum RXC count is 16. These endpoints are partitioned by the
  * provider for the following use:
@@ -292,7 +292,7 @@ union cxip_match_bits {
 
 /* libcxi Wrapper Structures */
 
-/**
+/*
  * CXI Device wrapper
  *
  * There will be one of these for every local Cassini device on the node.
@@ -311,7 +311,7 @@ struct cxip_if {
 	fastlock_t lock;
 };
 
-/**
+/*
  * CXI Logical Network Interface (LNI) wrapper
  *
  * An LNI is a container used allocate resources from a NIC.
@@ -327,7 +327,7 @@ struct cxip_lni {
 	fastlock_t lock;
 };
 
-/**
+/*
  * CXI Device Domain wrapper
  *
  * A CXI domain is conceptually equivalent to a Portals table. The provider
@@ -339,7 +339,7 @@ struct cxip_if_domain {
 	struct cxil_domain *dom;
 };
 
-/**
+/*
  * CXI Portal Table Entry (PtlTE) wrapper
  *
  * Represents PtlTE mapped in a CXI domain.
@@ -356,7 +356,7 @@ struct cxip_pte {
 	void *ctx;
 };
 
-/**
+/*
  * CXI Command Queue wrapper
  */
 struct cxip_cmdq {
@@ -368,7 +368,7 @@ struct cxip_cmdq {
 
 /* OFI Provider Structures */
 
-/**
+/*
  * CXI Provider Fabric object
  */
 struct cxip_fabric {
@@ -434,7 +434,7 @@ struct cxip_domain {
 	struct dlist_entry cq_list;
 };
 
-/**
+/*
  *  Event Queue
  *
  *  libfabric fi_eq implementation.
@@ -446,7 +446,7 @@ struct cxip_eq {
 	struct fi_eq_attr attr;
 };
 
-/**
+/*
  * RMA request
  *
  * Support structures, accumulated in a union.
@@ -556,7 +556,7 @@ enum cxip_req_type {
 	CXIP_REQ_SEARCH,
 };
 
-/**
+/*
  * Async Request
  *
  * Support structure.
@@ -567,9 +567,9 @@ enum cxip_req_type {
  * utility pool, which provides a pool of reusable memory objects that supports
  * a fast lookup through the req_id index value, and can be bound to a CQ.
  *
- * The request is allocated and bound to the CQ, and then the command is issued.
- * When the completion queue signals completion, this request is found, and the
- * callback function is called.
+ * The request is allocated and bound to the CQ, and then the command is
+ * issued. When the completion queue signals completion, this request is found,
+ * and the callback function is called.
  */
 struct cxip_req {
 	/* Control info */
@@ -660,7 +660,7 @@ struct cxip_fc_drops {
 	uint16_t drops;
 };
 
-/**
+/*
  * Completion Queue
  *
  * libfabric fi_cq implementation.
@@ -689,7 +689,7 @@ struct cxip_cq {
 	struct dlist_entry dom_entry;
 };
 
-/**
+/*
  * Completion Counter
  *
  * libfabric if_cntr implementation.
@@ -730,7 +730,7 @@ struct cxip_deferred_event {
 	struct cxip_ux_send *ux_send;
 };
 
-/**
+/*
  * Overflow buffer
  *
  * Support structure.
@@ -748,10 +748,8 @@ struct cxip_oflow_buf {
 	int buffer_id;
 };
 
-/**
+/*
  * Receive Context
- *
- * Support structure.
  *
  * Created in cxip_rxc(), during EP creation.
  */
@@ -815,10 +813,8 @@ struct cxip_rxc {
 #define CXIP_RDZV_IDS	(1 << CXIP_RDZV_ID_WIDTH)
 #define CXIP_TX_IDS	(1 << CXIP_TX_ID_WIDTH)
 
-/**
+/*
  * Transmit Context
- *
- * Support structure.
  *
  * Created by cxip_txc_alloc(), during EP creation.
  *
@@ -834,7 +830,7 @@ struct cxip_txc {
 	bool enabled;
 
 	int use_shared;
-	struct cxip_txc *stx;		// shared context (?)
+	struct cxip_txc *stx;
 
 	struct cxip_cq *send_cq;
 	struct cxip_cntr *send_cntr;
@@ -881,7 +877,7 @@ struct cxip_txc {
 
 void cxip_txc_flush_msg_trig_reqs(struct cxip_txc *txc);
 
-/**
+/*
  * Endpoint Internals
  *
  * Support structure, libfabric fi_endpoint implementation.
@@ -953,7 +949,7 @@ struct cxip_ep_obj {
 	struct cxip_ctrl_req ctrl_msg_req;
 };
 
-/**
+/*
  * Endpoint
  *
  * libfabric fi_endpoint implementation.
@@ -978,13 +974,12 @@ enum cxip_mr_state {
 	CXIP_MR_UNLINKED,
 };
 
-/**
+/*
  * Memory Region
  *
  * libfabric fi_mr implementation.
  *
  * Created in cxip_regattr().
- *
  */
 struct cxip_mr {
 	struct fid_mr mr_fid;
@@ -1008,7 +1003,7 @@ struct cxip_mr {
 	struct dlist_entry ep_entry;
 };
 
-/**
+/*
  * Address Vector header
  *
  * Support structure.
@@ -1018,7 +1013,7 @@ struct cxip_av_table_hdr {
 	uint64_t stored;
 };
 
-/**
+/*
  * Address Vector
  *
  * libfabric fi_av implementation.
@@ -1044,7 +1039,7 @@ struct cxip_av {
 	fastlock_t list_lock;
 };
 
-/**
+/*
  * AV Set
  *
  * libfabric fi_av_set implementation.
@@ -1061,7 +1056,7 @@ struct cxip_av_set {
 	ofi_atomic32_t ref;
 };
 
-/**
+/*
  * Collective Multicast Address
  *
  * Support structure.
@@ -1072,7 +1067,7 @@ struct cxip_coll_mc {			// TODO: placeholder
 	struct fid_mc mc_fid;
 };
 
-/**
+/*
  * CNTR/CQ wait object file list element
  *
  * Support structure.
@@ -1297,16 +1292,16 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 			struct cxip_cntr *trig_cntr,
 			struct cxip_cntr *comp_cntr);
 
-/**
+/*
  * Request variants:
  *   CXIP_RQ_AMO
  *      Passes one argument (operand1), and applies that to a remote memory
  *      address content.
  *
  *   CXIP_RQ_AMO_FETCH
- *      Passes two arguments (operand1, resultptr), applies operand1 to a remote
- *      memory address content, and returns the prior content of the remote
- *      memory in resultptr.
+ *      Passes two arguments (operand1, resultptr), applies operand1 to a
+ *      remote memory address content, and returns the prior content of the
+ *      remote memory in resultptr.
  *
  *   CXIP_RQ_AMO_SWAP
  *      Passes three arguments (operand1, compare, resultptr). If remote memory

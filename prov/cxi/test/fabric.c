@@ -12,6 +12,8 @@
 #include "cxip.h"
 #include "cxip_test_common.h"
 
+static const char cxip_dom_fmt[] = "cxi%d";
+
 static char *get_dom_name(int if_idx)
 {
 	char *dom;
