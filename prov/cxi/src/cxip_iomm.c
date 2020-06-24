@@ -92,12 +92,15 @@ static void cxip_dom_ats_cleanup(struct cxip_domain *dom)
  */
 int cxip_iomm_init(struct cxip_domain *dom)
 {
+	struct ofi_mem_monitor *memory_monitors[OFI_HMEM_MAX] = {
+		[FI_HMEM_SYSTEM] = default_monitor,
+	};
 	int ret;
 
 	dom->iomm.entry_data_size = sizeof(struct cxip_md);
 	dom->iomm.add_region = cxip_do_map;
 	dom->iomm.delete_region = cxip_do_unmap;
-	ret = ofi_mr_cache_init(&dom->util_domain, default_monitor,
+	ret = ofi_mr_cache_init(&dom->util_domain, memory_monitors,
 				&dom->iomm);
 	if (ret)
 		CXIP_LOG_ERROR("ofi_mr_cache_init failed: %d\n", ret);
