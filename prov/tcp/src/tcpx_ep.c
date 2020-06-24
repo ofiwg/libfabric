@@ -669,7 +669,8 @@ static int tcpx_pep_listen(struct fid_pep *pep)
 
 	tcpx_pep = container_of(pep,struct tcpx_pep, util_pep.pep_fid);
 
-	if (listen(tcpx_pep->sock, SOMAXCONN)) {
+	/* arbitrary backlog value to support larger scale jobs */
+	if (listen(tcpx_pep->sock, 4096)) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"socket listen failed\n");
 		return -ofi_sockerr();
