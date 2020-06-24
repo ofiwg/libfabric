@@ -292,7 +292,7 @@ static int smr_mmap_peer_copy(struct smr_ep *ep, struct smr_cmd *cmd,
 				 struct iovec *iov, size_t iov_count,
 				 size_t *total_len)
 {
-	char shm_name[NAME_MAX];
+	char shm_name[SMR_NAME_MAX];
 	void *mapped_ptr;
 	int peer_id, fd, num;
 	int ret = 0;

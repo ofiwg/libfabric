@@ -60,7 +60,7 @@ void smr_cleanup(void)
 
 static void smr_peer_addr_init(struct smr_addr *peer)
 {
-	memset(peer->name, 0, NAME_MAX);
+	memset(peer->name, 0, SMR_NAME_MAX);
 	peer->addr = FI_ADDR_UNSPEC;
 }
 
@@ -120,7 +120,7 @@ size_t smr_calculate_size_offsets(size_t tx_count, size_t rx_count,
 	if (name_offset)
 		*name_offset = ep_name_offset;
 
-	total_size = ep_name_offset + NAME_MAX;
+	total_size = ep_name_offset + SMR_NAME_MAX;
 
 	/* 
  	 * Revisit later to see if we really need the size adjustment, or
@@ -161,8 +161,8 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 		FI_WARN(prov, FI_LOG_EP_CTRL, "calloc error\n");
 		return -FI_ENOMEM;
 	}
-	strncpy(ep_name->name, (char *)attr->name, NAME_MAX - 1);
-	ep_name->name[NAME_MAX - 1] = '\0';
+	strncpy(ep_name->name, (char *)attr->name, SMR_NAME_MAX - 1);
+	ep_name->name[SMR_NAME_MAX - 1] = '\0';
 
 	pthread_mutex_lock(&ep_list_lock);
 	dlist_insert_tail(&ep_name->entry, &ep_name_list);
@@ -319,8 +319,8 @@ void smr_map_to_endpoint(struct smr_region *region, int index)
 	local_peers = smr_peer_data(region);
 
 	strncpy(smr_peer_data(region)[index].addr.name,
-		region->map->peers[index].peer.name, NAME_MAX - 1);
-	smr_peer_data(region)[index].addr.name[NAME_MAX - 1] = '\0';
+		region->map->peers[index].peer.name, SMR_NAME_MAX - 1);
+	smr_peer_data(region)[index].addr.name[SMR_NAME_MAX - 1] = '\0';
 	if (region->map->peers[index].peer.addr == FI_ADDR_UNSPEC)
 		return;
 
@@ -332,7 +332,7 @@ void smr_map_to_endpoint(struct smr_region *region, int index)
 
 	for (peer_index = 0; peer_index < SMR_MAX_PEERS; peer_index++) {
 		if (!strncmp(smr_name(region),
-		    peer_peers[peer_index].addr.name, NAME_MAX))
+		    peer_peers[peer_index].addr.name, SMR_NAME_MAX))
 			break;
 	}
 	if (peer_index != SMR_MAX_PEERS) {
@@ -349,7 +349,7 @@ void smr_unmap_from_endpoint(struct smr_region *region, int index)
 
 	local_peers = smr_peer_data(region);
 
-	memset(local_peers[index].addr.name, 0, NAME_MAX);
+	memset(local_peers[index].addr.name, 0, SMR_NAME_MAX);
 	peer_index = region->map->peers[index].peer.addr;
 	if (peer_index == FI_ADDR_UNSPEC)
 		return;
@@ -373,8 +373,8 @@ int smr_map_add(const struct fi_provider *prov, struct smr_map *map,
 	int ret = 0;
 
 	fastlock_acquire(&map->lock);
-	strncpy(map->peers[id].peer.name, name, NAME_MAX);
-	map->peers[id].peer.name[NAME_MAX - 1] = '\0';
+	strncpy(map->peers[id].peer.name, name, SMR_NAME_MAX);
+	map->peers[id].peer.name[SMR_NAME_MAX - 1] = '\0';
 	ret = smr_map_to_region(prov, &map->peers[id]);
 	if (!ret)
 		map->peers[id].peer.addr = id;
