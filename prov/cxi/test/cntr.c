@@ -30,8 +30,8 @@ Test(cntr, mod)
 	ret = fi_cntr_add(tmp_cntr, 1);
 	cr_assert(ret == FI_SUCCESS);
 
-	ret = fi_cntr_read(tmp_cntr);
-	cr_assert(ret == 0);
+	while (fi_cntr_read(tmp_cntr) != 1)
+		sched_yield();
 
 	fi_close(&tmp_cntr->fid);
 
