@@ -581,11 +581,15 @@ static int cxip_cq_verify_attr(struct fi_cq_attr *attr)
 		attr->format = cxip_cq_def_attr.format;
 		break;
 	default:
+		CXIP_LOG_ERROR("Unsupported CQ attribute format: %d\n",
+			       attr->format);
 		return -FI_ENOSYS;
 	}
 
-	if (attr->wait_obj != FI_WAIT_NONE)
+	if (attr->wait_obj != FI_WAIT_NONE) {
+		CXIP_LOG_ERROR("CQ wait objects not supported\n");
 		return -FI_ENOSYS;
+	}
 
 	if (!attr->size)
 		attr->size = cxip_cq_def_attr.size;
