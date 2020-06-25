@@ -897,8 +897,10 @@ static int verbs_devs_add(struct dlist_entry *verbs_devs, char *dev_name,
 	addr->rai = rai;
 
 	dlist_foreach_container(verbs_devs, struct verbs_dev_info, dev, entry)
-		if (!strcmp(dev_name, dev->name))
+		if (!strcmp(dev_name, dev->name)) {
+			free(dev_name);
 			goto add_rai;
+		}
 
 	if (!(dev = malloc(sizeof(*dev))))
 		goto err1;
