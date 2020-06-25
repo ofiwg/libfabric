@@ -141,7 +141,8 @@ class Fabtest(Test):
    
     @property
     def execute_condn(self):     
-        return True
+        return True if (self.core_prov != 'shm' or \
+                        self.ofi_build_mode == 'dbg') else False
 
     def execute_cmd(self):
         curdir = os.getcwd()
