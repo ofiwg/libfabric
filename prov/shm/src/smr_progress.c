@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2018 Intel Corporation. All rights reserved
+ * Copyright (c) 2013-2020 Intel Corporation. All rights reserved
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -271,7 +271,7 @@ static int smr_progress_iov(struct smr_cmd *cmd, struct iovec *iov,
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 				"CMA write error\n");
 			ret = errno;
-		} else { 
+		} else {
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 				"partial read occurred\n");
 			ret = FI_EIO;
@@ -438,14 +438,17 @@ static void smr_do_atomic(void *src, void *dst, void *cmp, enum fi_datatype data
 {
 	char tmp_result[SMR_INJECT_SIZE];
 
-	if (op >= OFI_SWAP_OP_START) {
+	if (op >= OFI_SWAP_OP_START && op < OFI_SWAP_OP_LAST) {
 		ofi_atomic_swap_handlers[op - OFI_SWAP_OP_START][datatype](dst,
 			src, cmp, tmp_result, cnt);
-	} else if (flags & SMR_RMA_REQ) {
+	} else if (flags & SMR_RMA_REQ && op < OFI_READWRITE_OP_LAST) {
 		ofi_atomic_readwrite_handlers[op][datatype](dst, src,
 			tmp_result, cnt);
-	} else if (op != FI_ATOMIC_READ) {
+	} else if (op != FI_ATOMIC_READ && op < OFI_WRITE_OP_LAST) {
 		ofi_atomic_write_handlers[op][datatype](dst, src, cnt);
+	} else {
+		FI_WARN(&smr_prov, FI_LOG_EP_DATA,
+			"invalid atomic operation\n");
 	}
 
 	if (flags & SMR_RMA_REQ)
@@ -796,7 +799,7 @@ static int smr_progress_cmd_atomic(struct smr_ep *ep, struct smr_cmd *cmd)
 	if (ret)
 		return ret;
 
-	return err; 
+	return err;
 }
 
 static void smr_progress_cmd(struct smr_ep *ep)
@@ -856,7 +859,7 @@ static void smr_progress_sar_list(struct smr_ep *ep)
 	struct smr_resp *resp;
 	struct dlist_entry *tmp;
 	int ret;
- 
+
 	fastlock_acquire(&ep->region->lock);
 	fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
 
