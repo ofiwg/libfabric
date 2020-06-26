@@ -987,7 +987,7 @@ static ssize_t cxip_ep_atomic_readwritemsg(struct fid_ep *ep,
 {
 	struct cxip_txc *txc;
 
-	if (flags & ~CXIP_READMSG_ALLOWED_FLAGS)
+	if (flags & ~CXIP_WRITEMSG_ALLOWED_FLAGS)
 		return -FI_EBADFLAGS;
 
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
@@ -1102,7 +1102,7 @@ cxip_ep_atomic_compwritemsg(struct fid_ep *ep, const struct fi_msg_atomic *msg,
 {
 	struct cxip_txc *txc;
 
-	if (flags & ~CXIP_READMSG_ALLOWED_FLAGS)
+	if (flags & ~CXIP_WRITEMSG_ALLOWED_FLAGS)
 		return -FI_EBADFLAGS;
 
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
