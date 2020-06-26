@@ -1704,6 +1704,29 @@ Test(atomic_sel, selective_completion,
 	cr_assert(ret == FI_SUCCESS, "Return code  = %d", ret);
 	count++;
 
+	/* Completion explicitly requested with inject. */
+	operand1 = 1;
+	exp_remote += operand1;
+	ret = fi_fetch_atomicmsg(cxit_ep, &msg, &result_ioc, NULL, 1,
+				 FI_COMPLETION | FI_INJECT);
+	cr_assert(ret == FI_SUCCESS, "Return code  = %d", ret);
+	count++;
+
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+	validate_tx_event(&cqe, FI_ATOMIC | FI_READ, NULL);
+	cr_assert_eq(*rma, exp_remote,
+		     "Result = %ld, expected = %ld",
+		     *rma, exp_remote);
+
+	/* Suppress completion with inject. */
+	operand1 = 1;
+	exp_remote += operand1;
+	ret = fi_fetch_atomicmsg(cxit_ep, &msg, &result_ioc, NULL, 1,
+				 FI_INJECT);
+	cr_assert(ret == FI_SUCCESS, "Return code  = %d", ret);
+	count++;
+
 	while (fi_cntr_read(cxit_read_cntr) != count)
 		sched_yield();
 	cr_assert_eq(*rma, exp_remote,
@@ -1969,6 +1992,24 @@ Test(atomic_sel, selective_completion_suppress,
 	/* Suppress completion. */
 	ret = fi_compare_atomicmsg(cxit_ep, &msg, &compare_ioc, NULL, 1,
 				   &result_ioc, NULL, 1, 0);
+	cr_assert(ret == FI_SUCCESS, "Return code  = %d", ret);
+	count++;
+
+	/* Completion explicitly requested with inject. */
+	msg.op = FI_CSWAP;
+	ret = fi_compare_atomicmsg(cxit_ep, &msg, &compare_ioc, NULL, 1,
+				   &result_ioc, NULL, 1,
+				   FI_COMPLETION | FI_INJECT);
+	cr_assert(ret == FI_SUCCESS, "Return code  = %d", ret);
+	count++;
+
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+	validate_tx_event(&cqe, FI_ATOMIC | FI_READ, NULL);
+
+	/* Suppress completion with inject. */
+	ret = fi_compare_atomicmsg(cxit_ep, &msg, &compare_ioc, NULL, 1,
+				   &result_ioc, NULL, 1, FI_INJECT);
 	cr_assert(ret == FI_SUCCESS, "Return code  = %d", ret);
 	count++;
 
