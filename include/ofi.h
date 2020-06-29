@@ -371,6 +371,8 @@ static inline uint32_t ofi_xorshift_random_r(uint32_t *seed)
 	return *seed = ofi_xorshift_random(*seed);
 }
 
+uint32_t ofi_generate_seed(void);
+
 size_t ofi_vrb_speed(uint8_t speed, uint8_t width);
 
 #ifdef __cplusplus

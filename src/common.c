@@ -221,6 +221,20 @@ int ofi_check_rx_mode(const struct fi_info *info, uint64_t flags)
 	return (info->mode & flags) ? 1 : 0;
 }
 
+uint32_t ofi_generate_seed(void)
+{
+	/* Time returns long; keep the lower and most significant 32 bits */
+	uint32_t rand_seed;
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+	rand_seed = ((getpid() & 0xffffffff) << 16);
+
+	/* Mix the PID into the upper bits */
+	rand_seed |= (uint32_t) tv.tv_usec;
+
+	return rand_seed;
+}
+
 uint64_t ofi_gettime_ns(void)
 {
 	struct timespec now;
