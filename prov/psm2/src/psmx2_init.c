@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2019 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2020 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -559,7 +559,7 @@ static int psmx2_getinfo(uint32_t api_version, const char *node,
 
 	/* Check that the src address contains valid unit */
 	if (src_addr->unit != PSMX2_DEFAULT_UNIT) {
-		if (src_addr->unit < 0 || src_addr->unit > PSMX2_MAX_UNITS) {
+		if (src_addr->unit < 0 || src_addr->unit >= PSMX2_MAX_UNITS) {
 			FI_INFO(&psmx2_prov, FI_LOG_CORE,
 				"invalid source address: unit %d out of range\n", src_addr->unit);
 			goto err_out;
