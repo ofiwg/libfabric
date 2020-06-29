@@ -1274,7 +1274,7 @@ void rxm_handle_comp_error(struct rxm_ep *rxm_ep)
 	case RXM_RMA:
 		rma_buf = err_entry.op_context;
 		err_entry.op_context = rma_buf->app_context;
-		err_entry.flags = err_entry.flags;
+		/* err_entry.flags pass through from msg ep */
 		if (!(rma_buf->flags & FI_INJECT) && !rxm_ep->rdm_mr_local &&
 		    rxm_ep->msg_mr_local) {
 			rxm_msg_mr_closev(rma_buf->mr.mr, rma_buf->mr.count);
