@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017 Intel Corporation. All rights reserved.
+ * Copyright (c) 2015-2020 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -78,11 +78,17 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 			FI_WARN(&smr_prov, FI_LOG_AV,
 				"AV insert failed. The maximum number of AV "
 				"entries shm supported has been reached.\n");
+			index = FI_ADDR_NOTAVAIL;
 			ret = -FI_ENOMEM;
 		}
+
+		if (fi_addr)
+			fi_addr[i] = index;
+
 		if (ret) {
 			if (util_av->eq)
 				ofi_av_write_event(util_av, i, -ret, context);
+			continue;
 		} else {
 			ret = smr_map_add(&smr_prov, smr_av->smr_map,
 					  ep_name, index);
@@ -94,9 +100,6 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 				smr_av->used++;
 			}
 		}
-
-		if (fi_addr)
-			fi_addr[i] = (ret == 0) ? index : FI_ADDR_NOTAVAIL;
 
 		dlist_foreach(&util_av->ep_list, av_entry) {
 			util_ep = container_of(av_entry, struct util_ep, av_entry);
