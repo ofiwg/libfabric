@@ -1108,12 +1108,16 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 	}
 
 	if (info->ep_attr->rx_ctx_cnt == 0 ||
-	    info->ep_attr->rx_ctx_cnt == 1)
-		ep->rx_cq_size = info->rx_attr->size;
+	    info->ep_attr->rx_ctx_cnt == 1) {
+		ep->rx_cq_size = info->rx_attr ? info->rx_attr->size :
+				 fi->rx_attr->size;
+	}
 
 	if (info->ep_attr->tx_ctx_cnt == 0 ||
-	    info->ep_attr->tx_ctx_cnt == 1)
-		ep->sq_credits = info->tx_attr->size;
+	    info->ep_attr->tx_ctx_cnt == 1) {
+		ep->sq_credits = info->tx_attr ? info->tx_attr->size :
+				 fi->tx_attr->size;
+	}
 
 	*ep_fid = &ep->util_ep.ep_fid;
 	ep->util_ep.ep_fid.fid.ops = &vrb_ep_ops;
