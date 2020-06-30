@@ -100,8 +100,7 @@ err1:
 static int vrb_msg_ep_getname(fid_t ep, void *addr, size_t *addrlen)
 {
 	struct sockaddr *sa;
-	struct vrb_ep *_ep =
-		container_of(ep, struct vrb_ep, util_ep.ep_fid);
+	struct vrb_ep *_ep = container_of(ep, struct vrb_ep, util_ep.ep_fid);
 	sa = rdma_get_local_addr(_ep->id);
 	return vrb_copy_addr(addr, addrlen, sa);
 }
@@ -109,8 +108,7 @@ static int vrb_msg_ep_getname(fid_t ep, void *addr, size_t *addrlen)
 static int vrb_msg_ep_getpeer(struct fid_ep *ep, void *addr, size_t *addrlen)
 {
 	struct sockaddr *sa;
-	struct vrb_ep *_ep =
-		container_of(ep, struct vrb_ep, util_ep.ep_fid);
+	struct vrb_ep *_ep = container_of(ep, struct vrb_ep, util_ep.ep_fid);
 	sa = rdma_get_peer_addr(_ep->id);
 	return vrb_copy_addr(addr, addrlen, sa);
 }
@@ -487,9 +485,8 @@ static int vrb_pep_listen(struct fid_pep *pep_fid)
 	pep = container_of(pep_fid, struct vrb_pep, pep_fid);
 
 	addr = rdma_get_local_addr(pep->id);
-	if (addr)
-		ofi_straddr_log(&vrb_prov, FI_LOG_INFO,
-				FI_LOG_EP_CTRL, "listening on", addr);
+	ofi_straddr_log(&vrb_prov, FI_LOG_INFO,
+			FI_LOG_EP_CTRL, "listening on", addr);
 
 	ret = rdma_listen(pep->id, pep->backlog);
 	if (ret)

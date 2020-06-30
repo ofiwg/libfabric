@@ -765,7 +765,7 @@ static int vrb_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 		assert(0);
 		return -FI_EINVAL;
 	}
-		
+
 
 	*(fi->fabric_attr) = verbs_fabric_attr;
 
@@ -1179,14 +1179,10 @@ static int vrb_fill_addr(struct rdma_addrinfo *rai, struct fi_info **info,
 	 * though it fills the destination address (presence of id->verbs
 	 * corresponds to a valid dest addr) */
 	local_addr = rdma_get_local_addr(id);
-	if (!local_addr) {
-		VERBS_WARN(FI_LOG_CORE,
-			   "Unable to get local address\n");
-		return -FI_ENODATA;
-	}
 
 	rai->ai_src_len = vrb_sockaddr_len(local_addr);
-	if (!(rai->ai_src_addr = malloc(rai->ai_src_len)))
+	rai->ai_src_addr = malloc(rai->ai_src_len);
+	if (!rai->ai_src_addr)
 		return -FI_ENOMEM;
 
 	memcpy(rai->ai_src_addr, local_addr, rai->ai_src_len);
