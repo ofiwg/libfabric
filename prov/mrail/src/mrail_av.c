@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2019 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2018-2020 Intel Corporation, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -141,7 +141,6 @@ static int mrail_av_insert(struct fid_av *av_fid, const void *addr, size_t count
 		if (ret) {
 			FI_WARN(&mrail_prov, FI_LOG_AV, \
 				"Unable to get rail fi_addr\n");
-			index = FI_ADDR_NOTAVAIL;
 		} else {
 			assert(index == index_rail0);
 			num_inserted++;

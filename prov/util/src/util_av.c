@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017 Intel Corporation. All rights reserved.
+ * Copyright (c) 2015-2020 Intel Corporation. All rights reserved.
  * Copyright (c) 2017, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -277,8 +277,12 @@ int ofi_av_insert_addr(struct util_av *av, const void *addr, fi_addr_t *fi_addr)
 		return 0;
 	} else {
 		entry = ofi_ibuf_alloc(av->av_entry_pool);
-		if (!entry)
+		if (!entry) {
+			if (fi_addr)
+				*fi_addr = FI_ADDR_NOTAVAIL;
 			return -FI_ENOMEM;
+		}
+
 		if (fi_addr)
 			*fi_addr = ofi_buf_index(entry);
 		memcpy(entry->data, addr, av->addrlen);
@@ -591,19 +595,17 @@ static int ip_av_insert_addr(struct util_av *av, const void *addr,
 			     fi_addr_t *fi_addr, void *context)
 {
 	int ret;
-	fi_addr_t fi_addr_ret;
 
 	if (ip_av_valid_addr(av, addr)) {
 		fastlock_acquire(&av->lock);
-		ret = ofi_av_insert_addr(av, addr, &fi_addr_ret);
+		ret = ofi_av_insert_addr(av, addr, fi_addr);
 		fastlock_release(&av->lock);
 	} else {
 		ret = -FI_EADDRNOTAVAIL;
+		if (fi_addr)
+			*fi_addr = FI_ADDR_NOTAVAIL;
 		FI_WARN(av->prov, FI_LOG_AV, "invalid address\n");
 	}
-
-	if (fi_addr)
-		*fi_addr = !ret ? fi_addr_ret : FI_ADDR_NOTAVAIL;
 
 	ofi_straddr_dbg(av->prov, FI_LOG_AV, "av_insert addr", addr);
 	if (fi_addr)
@@ -895,7 +897,7 @@ int ofi_ip_av_lookup(struct fid_av *av_fid, fi_addr_t fi_addr,
 		container_of(av_fid, struct util_av, av_fid);
 	size_t av_addrlen;
 	void *av_addr = ofi_av_lookup_addr(av, fi_addr, &av_addrlen);
-	
+
 	memcpy(addr, av_addr, MIN(*addrlen, av_addrlen));
 	*addrlen = av->addrlen;
 
