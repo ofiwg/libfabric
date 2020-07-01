@@ -54,8 +54,6 @@ struct tcpx_port_range port_range = {
 
 static void tcpx_init_env(void)
 {
-	srand(getpid());
-
 	fi_param_get_int(&tcpx_prov, "port_high_range", &port_range.high);
 	fi_param_get_int(&tcpx_prov, "port_low_range", &port_range.low);
 

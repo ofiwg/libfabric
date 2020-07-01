@@ -188,9 +188,12 @@ static int tcpx_ep_shutdown(struct fid_ep *ep, uint64_t flags)
 static int tcpx_bind_to_port_range(SOCKET sock, void* src_addr, size_t addrlen)
 {
 	int ret, i, rand_port_number;
+	static uint32_t seed;
+	if (!seed)
+		seed = ofi_generate_seed();
 
-	rand_port_number = rand() % (port_range.high + 1 - port_range.low) +
-			   port_range.low;
+	rand_port_number = ofi_xorshift_random_r(&seed) %
+			   (port_range.high + 1 - port_range.low) + port_range.low;
 
 	for (i = port_range.low; i <= port_range.high; i++, rand_port_number++) {
 		if (rand_port_number > port_range.high)
