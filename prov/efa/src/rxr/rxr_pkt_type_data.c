@@ -138,6 +138,8 @@ ssize_t rxr_pkt_send_data_desc(struct rxr_ep *ep,
 	uint64_t payload_size = 0;
 	/* pkt_entry offset to write data into */
 	uint64_t pkt_used = 0;
+	uint64_t orig_iov_index;
+	uint64_t orig_iov_offset;
 	/* Remaining size that can fit in the constructed iov */
 	uint64_t remaining_len = MIN(tx_entry->window,
 				     ep->max_data_payload_size);
@@ -146,6 +148,9 @@ ssize_t rxr_pkt_send_data_desc(struct rxr_ep *ep,
 	size_t len = 0;
 
 	ssize_t ret;
+
+	orig_iov_index = tx_entry->iov_index;
+	orig_iov_offset = tx_entry->iov_offset;
 
 	data_pkt = (struct rxr_data_pkt *)pkt_entry->pkt;
 	/* Assign packet header in constructed iov */
@@ -212,6 +217,11 @@ ssize_t rxr_pkt_send_data_desc(struct rxr_ep *ep,
 	ret = rxr_pkt_entry_sendv(ep, pkt_entry, tx_entry->addr,
 				  (const struct iovec *)iov,
 				  desc, i, tx_entry->send_flags);
+	if (OFI_UNLIKELY(ret)) {
+		/* Reset tx_entry iov pointer on send failure. */
+		tx_entry->iov_index = orig_iov_index;
+		tx_entry->iov_offset = orig_iov_offset;
+	}
 	return ret;
 }
 
