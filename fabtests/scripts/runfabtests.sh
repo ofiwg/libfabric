@@ -74,12 +74,19 @@ declare -i pass_count=0
 declare -i fail_count=0
 declare -i total_failures=0
 
-if [[ "$(uname)" == "FreeBSD" ]]; then
-    declare -ri FI_ENODATA=$(python -c 'import errno; print(errno.ENOMSG)')
-else
-    declare -ri FI_ENODATA=$(python -c 'import errno; print(errno.ENODATA)')
+python=$(which python3 2>/dev/null) || python=$(which python2 2>/dev/null)
+
+if [ $? -ne 0 ]; then
+	echo "Unable to find python dependency, exiting..."
+	exit 1
 fi
-declare -ri FI_ENOSYS=$(python -c 'import errno; print(errno.ENOSYS)')
+
+if [[ "$(uname)" == "FreeBSD" ]]; then
+    declare -ri FI_ENODATA=$($python -c 'import errno; print(errno.ENOMSG)')
+else
+    declare -ri FI_ENODATA=$($python -c 'import errno; print(errno.ENODATA)')
+fi
+declare -ri FI_ENOSYS=$($python -c 'import errno; print(errno.ENOSYS)')
 
 neg_unit_tests=(
 	"fi_dgram g00n13s"
