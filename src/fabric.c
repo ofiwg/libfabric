@@ -538,11 +538,13 @@ void ofi_create_filter(struct fi_filter *filter, const char *raw_filter)
 	}
 
 	filter->names = ofi_split_and_alloc(raw_filter, ",", NULL);
-	if (!filter->names)
+	if (!filter->names) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"unable to parse filter from: %s\n", raw_filter);
+		return;
+	}
 
-	if(verify_filter_names(filter->names))
+	if (verify_filter_names(filter->names))
 		FI_WARN(&core_prov, FI_LOG_CORE,
 		        "unable to verify filter name\n");
 }
