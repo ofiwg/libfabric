@@ -430,7 +430,7 @@ static void psmx2_update_hfi_nic_info(struct fi_info *info)
 	char buffer[80];
 	char *s;
 	ssize_t n;
-	int a, b, c, d;
+	unsigned int a, b, c, d;
 	int unit;
 
 	for ( ; info; info = info->next) {
@@ -477,10 +477,10 @@ static void psmx2_update_hfi_nic_info(struct fi_info *info)
 		}
 
 		info->nic->bus_attr->bus_type = FI_BUS_PCI;
-		info->nic->bus_attr->attr.pci.domain_id = a;
-		info->nic->bus_attr->attr.pci.bus_id = b;
-		info->nic->bus_attr->attr.pci.device_id = c;
-		info->nic->bus_attr->attr.pci.function_id = d;
+		info->nic->bus_attr->attr.pci.domain_id = (uint16_t) a;
+		info->nic->bus_attr->attr.pci.bus_id =  (uint8_t) b;
+		info->nic->bus_attr->attr.pci.device_id = (uint8_t) c;
+		info->nic->bus_attr->attr.pci.function_id = (uint8_t) d;
 	}
 }
 
