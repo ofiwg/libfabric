@@ -919,7 +919,7 @@ err1:
 static int vrb_ifa_rdma_info(const struct ifaddrs *ifa, char **dev_name,
 				struct rdma_addrinfo **rai)
 {
-	char name[INET6_ADDRSTRLEN];
+	char name[INET6_ADDRSTRLEN + 16];
 	struct rdma_addrinfo rai_hints = {
 		.ai_flags = RAI_PASSIVE | RAI_NUMERICHOST,
 	}, *rai_;
@@ -938,9 +938,8 @@ static int vrb_ifa_rdma_info(const struct ifaddrs *ifa, char **dev_name,
 	 * TODO should we do something similar for IPv4? */
 	if (!strncmp(name, IPV6_LINK_LOCAL_ADDR_PREFIX_STR,
 		     strlen(IPV6_LINK_LOCAL_ADDR_PREFIX_STR))) {
-		assert(strlen(name) + strlen(ifa->ifa_name) < INET6_ADDRSTRLEN);
-		strcat(name, "%");
-		strcat(name, ifa->ifa_name);
+		strncat(name, "%", sizeof(name) - strlen(name) - 1);
+		strncat(name, ifa->ifa_name, sizeof(name) - strlen(name) - 1);
 	}
 
 	ret = rdma_getaddrinfo((char *) name, NULL, &rai_hints, &rai_);
